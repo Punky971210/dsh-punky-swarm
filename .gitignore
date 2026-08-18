@@ -15,3 +15,7 @@ Thumbs.db
 
 # dsh local data
 .agent-presets/
+
+# development docs & CI (not published to the open-source repo)
+docs/
+.github/
