@@ -1,17 +1,15 @@
-# dsh-punky-swarm — 蟛蜞模式（Punky Mode）
+# dsh-punky-swarm — 蟛蜞模式（Punky Swarm 集群治理）
 
-![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![tests](https://img.shields.io/badge/tests-68%2F68%20passing-brightgreen)
+![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green)
 
-> dsh（DeepSeek Harness）**单机多子 agent 集群治理引擎**：wavePlan 三层 DAG + 引擎级门禁（Entry/L0/Exit/Complete）+ 状态机 + 锁/mailbox + 会话隔离。附蟛蜞模式预设与 jiufeng-team 角色指引（三件套）。
+> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG + 引擎级门禁（Entry/L0/Exit/Complete）+ 状态机 + 锁/mailbox + 会话隔离。附蟛蜞模式预设与 jiufeng-team 角色指引。
 
 English: [README.en.md](README.en.md)
 
-## 定位
+## 边界（Scope）
 
-- **能力面**（dsh 承担）：模型/工具/上下文/记忆/技能/MCP——让每个 worker 更强；
-- **治理面**（本插件核心）：上下文卸载（task packets + 状态文件）、状态操作（状态机 + 原子写 + 锁 + 恢复）、任务指派（wavePlan + 并发池 + mailbox + 回写）、**三层门禁（plan/exec/audit 引擎级强制）**。
-
-> ⚠️ **边界**：目标是 **dsh 单机多子 agent 治理**。硬化 / 续跑 / 集群同步 / 成本控制不在范围内（详见 docs/comparison-2026-08-20-punky-vs-community-vs-industry.md）。
+- **目标**：dsh **单机多子 agent 治理**——在同一 dsh 进程内治理一批 worker（批次 / 门禁 / 通信 / 恢复重置派发）；
+- **范围外**：硬化（hardening）、续跑（durable resume）、集群同步、成本控制——不在考虑范围内，请勿按这些需求使用本项目。
 
 ## 三件套
 
@@ -24,17 +22,17 @@ English: [README.en.md](README.en.md)
 ## 安装
 
 ```sh
-# 开发（本地 link）
+# 本地 link（开发 / 个人使用）
 dsh plugin --profile web add link:<repo>/packages/dsh-punky
 
-# 模式预设（当前需手动放置，0.2.0 计划启动自动同步）
-# 将 packages/dsh-punky/presets/jiufeng 拷贝到 ~/.dsh/.agent-presets/jiufeng
-# 将 packages/dsh-punky/skills/jiufeng-team 拷贝到 ~/.agents/skills/jiufeng-team
+# 模式预设（当前需手动放置）
+# packages/dsh-punky/presets/jiufeng      -> ~/.dsh/.agent-presets/jiufeng
+# packages/dsh-punky/skills/jiufeng-team  -> ~/.agents/skills/jiufeng-team
 ```
 
 ## 工具清单（13）
 
-wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack —— 详见 [docs/USAGE.md](docs/USAGE.md)。
+wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack
 
 ## 三层门禁（Tier3）
 
@@ -52,26 +50,6 @@ generic 批次（无 layer）不触发门禁，向后兼容。
 成员：pending -> running -> review -> merged | failed | skipped | conflict（idle=恢复重派；review->running=返工）
 批次：planning -> running -> paused -> aborted | complete（complete 前置三层门禁）
 ```
-
-## 工作台（个人功能，开源包不含）
-
-本地 web UI 的「蟛蜞集群」工作台分页（client.js）为个人需求，**不随 npm 包发布**（files 排除 lib/client.js）。本地 `link:` 挂载时可用。
-
-## 验证
-
-- 单测：68/68（node --test，Node >= 22；状态机/拓扑/锁/mailbox/门禁/契约/返工/13 工具/API）；
-- 集成与端到端：2026-08-17 记录（headless 实例 LLM 治理闭环、真实 subagent 写文件批次 complete）；
-- 社区对标与行业差异：docs/ 下快照、设计、评估、对比文档。
-
-## 文档
-
-| 文档 | 内容 |
-|---|---|
-| docs/USAGE.md | 安装 / 13 工具 / 三层门禁 / 会话隔离 / 治理流程 |
-| docs/OPENSOURCE.md | 开源发布说明与 checklist |
-| docs/open-source-review-2026-08-20.md | 开源前质量评估 |
-| docs/comparison-2026-08-20-punky-vs-community-vs-industry.md | 与社区/行业差异（冷静版） |
-| docs/snapshot-2026-08-20-dsh-punky-swarm-current.md | 实现快照 |
 
 ## 许可与贡献
 
