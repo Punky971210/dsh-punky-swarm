@@ -72,44 +72,91 @@ window.__ModuleLoader__.load({
 
     const inject = ['slots', 'locale'];
 
-    // ---- design tokens: DSH alias vars with dark-dashboard fallbacks ----
+    // ================= theme-aware palette =================
+    // DSH 主题开关：body[data-ds-dark-theme]（深色）vs 默认浅色。令牌 var(--dsw-alias-*)
+    // 会随主题自动切换；这里只负责「令牌缺失时」的兜底色板，并按主题切换重渲染。
+    let CURRENT_THEME = 'dark';
+    function detectTheme() {
+      try {
+        if (typeof document !== 'undefined' && document.body) {
+          return document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light';
+        }
+      } catch {}
+      return 'dark';
+    }
+    try { CURRENT_THEME = detectTheme(); } catch {}
+
+    const P = {
+      light: {
+        card: '#ffffff', border: '#dfe5ee',
+        text: '#1f2937', text2: '#475569', text3: '#64748b', dim: '#7d8ba0',
+        accent: '#3b82f6', success: '#15803d', warn: '#b45309', error: '#dc2626', info: '#2563eb',
+        skeleton: '#eef2f7', selBg: 'rgba(59,130,246,0.10)',
+        chipPending: 'rgba(100,116,139,0.14)', chipRunning: 'rgba(180,83,9,0.12)',
+        chipReview: 'rgba(37,99,235,0.10)', chipMerged: 'rgba(21,128,61,0.12)',
+        chipFailed: 'rgba(220,38,38,0.10)', chipSkipped: 'rgba(100,116,139,0.10)',
+        chipConflict: 'rgba(234,88,12,0.12)', chipIdle: 'rgba(100,116,139,0.08)',
+        haloSuccess: 'rgba(21,128,61,0.16)', haloWarn: 'rgba(180,83,9,0.16)',
+        gateBg: 'rgba(180,83,9,0.12)', escBg: 'rgba(234,88,12,0.12)', escFg: '#c2410c'
+      },
+      dark: {
+        card: '#141d31', border: '#26304a',
+        text: '#e6ebf4', text2: '#a8b3c7', text3: '#7f8ca3', dim: '#6b7688',
+        accent: '#4f8cff', success: '#3fb950', warn: '#d29922', error: '#f85149', info: '#58a6ff',
+        skeleton: '#1d2740', selBg: 'rgba(79,140,255,0.12)',
+        chipPending: 'rgba(127,140,163,0.16)', chipRunning: 'rgba(210,153,34,0.16)',
+        chipReview: 'rgba(88,166,255,0.16)', chipMerged: 'rgba(63,185,80,0.16)',
+        chipFailed: 'rgba(248,81,73,0.16)', chipSkipped: 'rgba(127,140,163,0.12)',
+        chipConflict: 'rgba(224,104,46,0.18)', chipIdle: 'rgba(127,140,163,0.10)',
+        haloSuccess: 'rgba(63,185,80,0.18)', haloWarn: 'rgba(210,153,34,0.18)',
+        gateBg: 'rgba(210,153,34,0.16)', escBg: 'rgba(224,104,46,0.16)', escFg: '#e0682e'
+      }
+    };
+    const pal = () => P[CURRENT_THEME] || P.dark;
+
+    // 令牌优先、兜底随主题：getter 在每次渲染时求值
     const T = {
-      card: 'var(--dsw-alias-bg-layer-3, #141d31)',
-      border: 'var(--dsw-alias-border-l1, #26304a)',
-      text: 'var(--dsw-alias-label-primary, #e6ebf4)',
-      text2: 'var(--dsw-alias-label-secondary, #9aa7bd)',
-      text3: 'var(--dsw-alias-label-dimmed, #5f6b81)',
-      accent: 'var(--dsw-alias-brand-primary, #4f8cff)',
-      success: 'var(--dsw-alias-state-success-primary, #3fb950)',
-      warn: 'var(--dsw-alias-state-warn-primary, #d29922)',
-      error: 'var(--dsw-alias-state-error-primary, #f85149)',
-      info: 'var(--dsw-alias-state-business-primary, #58a6ff)',
-      skeleton: 'var(--dsw-alias-bg-skeleton, #1d2740)',
-      font: 'var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
-      mono: 'var(--dsw-font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace)'
+      get card() { return 'var(--dsw-alias-bg-layer-3, ' + pal().card + ')'; },
+      get border() { return 'var(--dsw-alias-border-l1, ' + pal().border + ')'; },
+      get text() { return 'var(--dsw-alias-label-primary, ' + pal().text + ')'; },
+      get text2() { return 'var(--dsw-alias-label-secondary, ' + pal().text2 + ')'; },
+      get text3() { return 'var(--dsw-alias-label-tertiary, ' + pal().text3 + ')'; },
+      get dim() { return 'var(--dsw-alias-label-dimmed, ' + pal().dim + ')'; },
+      get accent() { return 'var(--dsw-alias-brand-primary, ' + pal().accent + ')'; },
+      get success() { return 'var(--dsw-alias-state-success-primary, ' + pal().success + ')'; },
+      get warn() { return 'var(--dsw-alias-state-warn-primary, ' + pal().warn + ')'; },
+      get error() { return 'var(--dsw-alias-state-error-primary, ' + pal().error + ')'; },
+      get info() { return 'var(--dsw-alias-state-business-primary, ' + pal().info + ')'; },
+      get skeleton() { return 'var(--dsw-alias-bg-skeleton, ' + pal().skeleton + ')'; },
+      get selBg() { return 'var(--dsw-alias-interactive-bg-active, ' + pal().selBg + ')'; },
+      get font() { return 'var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)'; },
+      get mono() { return 'var(--dsw-font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace)'; }
     };
 
-    // ---- semantic status colors (fg token + soft rgba bg) ----
-    function chip(fg, bg) {
-      return { fg: fg, bg: bg };
+    function chip(fgKey, bgKey, fgVar) {
+      return {
+        get fg() { return fgVar ? 'var(' + fgVar + ', ' + pal()[fgKey] + ')' : pal()[fgKey]; },
+        get bg() { return pal()[bgKey]; }
+      };
     }
     const STATE = {
-      pending: chip(T.text3, 'rgba(95,107,129,0.14)'),
-      running: chip(T.warn, 'rgba(210,153,34,0.15)'),
-      review: chip(T.info, 'rgba(88,166,255,0.15)'),
-      merged: chip(T.success, 'rgba(63,185,80,0.15)'),
-      failed: chip(T.error, 'rgba(248,81,73,0.15)'),
-      skipped: chip(T.text3, 'rgba(95,107,129,0.12)'),
-      conflict: chip('#e0682e', 'rgba(224,104,46,0.16)'),
-      idle: chip(T.text3, 'rgba(95,107,129,0.10)')
+      pending: chip('dim', 'chipPending', '--dsw-alias-label-dimmed'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
+      review: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
+      merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary'),
+      failed: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
+      skipped: chip('dim', 'chipSkipped', '--dsw-alias-label-dimmed'),
+      conflict: chip('escFg', 'chipConflict', '--dsw-alias-state-warn-primary'),
+      idle: chip('dim', 'chipIdle', '--dsw-alias-label-dimmed')
     };
     const PHASE = {
-      planning: chip(T.text3, 'rgba(95,107,129,0.12)'),
-      running: chip(T.warn, 'rgba(210,153,34,0.15)'),
-      paused: chip(T.info, 'rgba(88,166,255,0.15)'),
-      aborted: chip(T.error, 'rgba(248,81,73,0.15)'),
-      complete: chip(T.success, 'rgba(63,185,80,0.15)')
+      planning: chip('dim', 'chipSkipped', '--dsw-alias-label-dimmed'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
+      paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
+      aborted: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
+      complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary')
     };
+    // =======================================================
 
     async function api(path, session) {
       const sep = path.includes('?') ? '&' : '?';
@@ -119,10 +166,14 @@ window.__ModuleLoader__.load({
     }
 
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
-    const cardBase = { background: T.card, border: '1px solid ' + T.border, borderRadius: 10 };
+    const cardBase = {
+      get background() { return T.card; },
+      get border() { return '1px solid ' + T.border; },
+      borderRadius: 10
+    };
 
     function Chip({ st, children, style }) {
-      const c = st || chip(T.text2, 'rgba(95,107,129,0.12)');
+      const c = st || chip('text2', 'chipPending', '--dsw-alias-label-secondary');
       return React.createElement('span', {
         style: Object.assign({
           display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -161,7 +212,7 @@ window.__ModuleLoader__.load({
       const missing = (gate.consumeMissing || []).length + (gate.outputsMissing || []).length + (gate.produceMissing || []).length + (gate.contractProblems || []).length;
       if (missing === 0) return null;
       return React.createElement('span', {
-        style: { color: T.warn, background: 'rgba(210,153,34,0.14)', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
+        style: { color: T.warn, background: pal().gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
       }, tt('gate.missing') + ' ' + missing);
     }
 
@@ -170,7 +221,7 @@ window.__ModuleLoader__.load({
       const label = (upgrade ? tt('upgrade') : tt('attempt')) + ' ' + n;
       return React.createElement('span', {
         style: upgrade
-          ? { color: '#e0682e', background: 'rgba(224,104,46,0.14)', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
+          ? { color: pal().escFg, background: pal().escBg, borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
           : { color: T.text2, fontSize: 10.5, fontFamily: T.mono, whiteSpace: 'nowrap' }
       }, label);
     }
@@ -202,7 +253,7 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' } },
         React.createElement(Dot, { color: color }),
         React.createElement('span', { style: { flex: 1, fontSize: 11.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
+        React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
       );
     }
 
@@ -246,7 +297,7 @@ window.__ModuleLoader__.load({
                     textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
                     display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
                     borderColor: sel ? T.accent : undefined,
-                    background: sel ? 'var(--dsw-alias-interactive-bg-active, rgba(79,140,255,0.10))' : T.card,
+                    background: sel ? T.selBg : T.card,
                     boxShadow: sel ? '0 0 0 1px ' + T.accent : undefined
                   })
                 },
@@ -355,7 +406,35 @@ window.__ModuleLoader__.load({
       const [sel, setSel] = useState(null);
       const [detail, setDetail] = useState(null);
       const [updated, setUpdated] = useState(null);
+      const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
+
+      // 跟随 web UI 主题（body[data-ds-dark-theme]）切换兜底色板并重渲染
+      useEffect(() => {
+        const apply = () => {
+          const t = detectTheme();
+          if (t !== CURRENT_THEME) { CURRENT_THEME = t; setThemeTick((x) => x + 1); }
+        };
+        let mo = null;
+        try {
+          if (typeof MutationObserver !== 'undefined' && document.body) {
+            mo = new MutationObserver(apply);
+            mo.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] });
+          }
+        } catch {}
+        let mq = null;
+        try {
+          if (typeof matchMedia !== 'undefined') {
+            mq = matchMedia('(prefers-color-scheme: light)');
+            if (mq.addEventListener) mq.addEventListener('change', apply);
+          }
+        } catch {}
+        return () => {
+          if (mo) mo.disconnect();
+          if (mq && mq.removeEventListener) mq.removeEventListener('change', apply);
+        };
+      }, []);
+
       useEffect(() => {
         if (!sid) return;
         let alive = true;
@@ -394,7 +473,8 @@ window.__ModuleLoader__.load({
         const vals = Object.values(b.lanes || {});
         issues += vals.filter((s) => s === 'failed' || s === 'conflict').length;
       }
-      const liveColor = !batches ? T.text3 : running ? T.warn : T.success;
+      const liveColor = !batches ? T.dim : running ? T.warn : T.success;
+      const halo = !batches ? 'transparent' : running ? pal().haloWarn : pal().haloSuccess;
       const updatedText = updated
         ? updated.toTimeString().slice(0, 8)
         : '--:--:--';
@@ -409,7 +489,7 @@ window.__ModuleLoader__.load({
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 28 } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             React.createElement('span', { style: { fontSize: 15, fontWeight: 700, letterSpacing: 0.2 } }, tt('view.cluster')),
-            React.createElement('span', { className: 'psw-pulse', style: { width: 7, height: 7, borderRadius: 999, background: liveColor, boxShadow: '0 0 0 3px ' + (running ? 'rgba(210,153,34,0.2)' : 'rgba(63,185,80,0.18)') } }),
+            React.createElement('span', { className: 'psw-pulse', style: { width: 7, height: 7, borderRadius: 999, background: liveColor, boxShadow: '0 0 0 3px ' + halo } }),
             React.createElement('span', { style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.8, color: liveColor } }, tt('live'))
           ),
           React.createElement('span', { style: { flex: 1 } }),
@@ -433,7 +513,7 @@ window.__ModuleLoader__.load({
       if (typeof document !== 'undefined' && !document.getElementById('dsh-punky-swarm-ui')) {
         const el = document.createElement('style');
         el.id = 'dsh-punky-swarm-ui';
-        el.textContent = ".psw-scroll::-webkit-scrollbar{width:8px;height:8px}\n.psw-scroll::-webkit-scrollbar-thumb{background:var(--dsw-alias-scrollbar-bg-l1,#2b3550);border-radius:999px}\n.psw-scroll::-webkit-scrollbar-thumb:hover{background:var(--dsw-alias-scrollbar-hover-l1,#3a4a6d)}\n.psw-btn{transition:background .15s ease,border-color .15s ease,transform .15s ease}\n.psw-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,rgba(148,163,184,.09))}\n.psw-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f8cff);outline-offset:2px}\n.psw-card{transition:border-color .15s ease,background .15s ease}\n.psw-pulse{animation:pswPulse 2s ease-in-out infinite}\n@keyframes pswPulse{0%,100%{opacity:1}50%{opacity:.3}}\n.psw-shimmer{background:linear-gradient(90deg,var(--dsw-alias-bg-skeleton,#1d2740) 30%,rgba(148,163,184,.14) 50%,var(--dsw-alias-bg-skeleton,#1d2740) 70%);background-size:200% 100%;animation:pswShimmer 1.4s linear infinite}\n@keyframes pswShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}\n.psw-panes{display:flex;gap:12px;flex:1;min-height:0}\n@media (max-width:760px){.psw-panes{flex-direction:column}.psw-list{width:100%!important;max-height:240px}}\n@media (prefers-reduced-motion:reduce){.psw-pulse,.psw-shimmer{animation:none}.psw-btn,.psw-card{transition:none}}";
+        el.textContent = "body{--psw-shimmer-a:#eef2f7;--psw-shimmer-b:rgba(120,140,170,.16)}\nbody[data-ds-dark-theme]{--psw-shimmer-a:#1d2740;--psw-shimmer-b:rgba(148,163,184,.14)}\n.psw-scroll::-webkit-scrollbar{width:8px;height:8px}\n.psw-scroll::-webkit-scrollbar-thumb{background:var(--dsw-alias-scrollbar-bg-l1,rgba(148,163,184,.35));border-radius:999px}\n.psw-scroll::-webkit-scrollbar-thumb:hover{background:var(--dsw-alias-scrollbar-hover-l1,rgba(148,163,184,.5))}\n.psw-btn{transition:background .15s ease,border-color .15s ease,transform .15s ease}\n.psw-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,rgba(148,163,184,.09))}\n.psw-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f8cff);outline-offset:2px}\n.psw-card{transition:border-color .15s ease,background .15s ease}\n.psw-pulse{animation:pswPulse 2s ease-in-out infinite}\n@keyframes pswPulse{0%,100%{opacity:1}50%{opacity:.3}}\n.psw-shimmer{background:linear-gradient(90deg,var(--psw-shimmer-a) 30%,var(--psw-shimmer-b) 50%,var(--psw-shimmer-a) 70%);background-size:200% 100%;animation:pswShimmer 1.4s linear infinite}\n@keyframes pswShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}\n.psw-panes{display:flex;gap:12px;flex:1;min-height:0}\n@media (max-width:760px){.psw-panes{flex-direction:column}.psw-list{width:100%!important;max-height:240px}}\n@media (prefers-reduced-motion:reduce){.psw-pulse,.psw-shimmer{animation:none}.psw-btn,.psw-card{transition:none}}";
         document.head.appendChild(el);
       }
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-punky-swarm: dictionaries');
