@@ -11,6 +11,18 @@
 - **Goal**: single-machine multi-subagent governance on one dsh process (batching / gates / communication / reset-on-recover);
 - **Out of scope**: hardening, durable resume, cluster sync, cost control — do not use this project for those needs.
 
+## Design purpose and origin
+
+**Purpose**: the gates (Entry/L0/Exit/Complete), batching, locks and mailbox exist first and foremost to **keep the pipeline and the cluster stable** — not to constrain agents. The tool layer is fully open to agents; the mode layer only guides; team assembly is pluggable; work is graded by scale (Leader dispatch → single-agent fallback).
+
+**Origin**: this project grew out of the trade-off between a single agent running the whole loop and graph-based orchestration:
+
+- Single agent, full loop (design → implement → test): heavy human intervention — the human becomes the bottleneck;
+- Graph-based orchestration (LangGraph direction): tried and dropped — the flow is frozen into a graph, expensive to change, squeezes agent freedom;
+- Middle path: the "Jiufeng" work mode (Leader decomposition → multi-role collaboration → gate verdicts) was built on JiuwenSwarm, then migrated to dsh as this plugin.
+
+**Status**: developed to a "personally usable" standard. In degraded single-agent work, following the pipeline norms gives a felt improvement in controllability and stability (benchmarks pending). Effects at real cluster scale are not yet systematically validated; claims are limited to what the code demonstrates (tests, gates, CI).
+
 ## The Three Pieces
 
 | Piece | Location | Content |
