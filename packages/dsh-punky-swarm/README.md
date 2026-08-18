@@ -15,9 +15,9 @@ English: [README.en.md](README.en.md)
 
 | 件 | 位置 | 内容 |
 |---|---|---|
-| 插件 | packages/dsh-punky | 引擎：13 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API |
-| 模式 | packages/dsh-punky/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
-| 指引 | packages/dsh-punky/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
+| 插件 | packages/dsh-punky-swarm | 引擎：13 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API |
+| 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
+| 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
 
 ## 安装
 
@@ -35,9 +35,9 @@ cd dsh-punky-swarm
 
 ```sh
 # POSIX
-dsh plugin --profile web add link:$(pwd)/packages/dsh-punky
+dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
 # Windows PowerShell
-dsh plugin --profile web add link:$PWD\packages\dsh-punky
+dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
 ```
 
 ### 3. 重启 dsh web（首次启动完成预设/技能同步）

@@ -15,9 +15,9 @@
 
 | Piece | Location | Content |
 |---|---|---|
-| Plugin | packages/dsh-punky | Engine: 13 governance tools + Tier3 gates + session v2 + read-only API |
-| Mode | packages/dsh-punky/presets/jiufeng | Punky Mode preset: Leader persona + governance discipline + tool-bootstrap |
-| Guide | packages/dsh-punky/skills/jiufeng-team | 3-layer 8-role × skill assembly table + constitution + templates |
+| Plugin | packages/dsh-punky-swarm | Engine: 13 governance tools + Tier3 gates + session v2 + read-only API |
+| Mode | packages/dsh-punky-swarm/presets/jiufeng | Punky Mode preset: Leader persona + governance discipline + tool-bootstrap |
+| Guide | packages/dsh-punky-swarm/skills/jiufeng-team | 3-layer 8-role × skill assembly table + constitution + templates |
 
 ## Install
 
@@ -35,9 +35,9 @@ cd dsh-punky-swarm
 
 ```sh
 # POSIX
-dsh plugin --profile web add link:$(pwd)/packages/dsh-punky
+dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
 # Windows PowerShell
-dsh plugin --profile web add link:$PWD\packages\dsh-punky
+dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
 ```
 
 ### 3. Restart dsh web (first start runs the preset/skill sync)
