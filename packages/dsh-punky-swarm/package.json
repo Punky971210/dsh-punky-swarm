@@ -60,5 +60,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Punky971210/dsh-punky-swarm"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
   }
 }

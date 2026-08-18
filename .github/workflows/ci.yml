@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Run tests (dsh-punky-swarm)
+      - name: Install dependencies
         working-directory: packages/dsh-punky-swarm
-        run: node --test
+        run: npm ci
+      - name: Run tests
+        working-directory: packages/dsh-punky-swarm
+        run: npm test
