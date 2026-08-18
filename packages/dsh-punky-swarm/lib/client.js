@@ -5,7 +5,7 @@ window.__ModuleLoader__.load({
     var exports = module.exports;
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     "use strict";
-    // dsh-punky-swarm 集群工作台客户端：注册 conversation.view 第三分页（对话/轨迹/蟛蜞集群）
+    // dsh-punky-swarm 蟛蜞集群监控面板客户端（只读）：注册 conversation.view 第三分页（对话/轨迹/蟛蜞集群）
     const React = require('react');
     const { useState, useEffect } = React;
 

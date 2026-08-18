@@ -15,7 +15,7 @@ English: [README.en.md](README.en.md)
 
 | 件 | 位置 | 内容 |
 |---|---|---|
-| 插件 | packages/dsh-punky-swarm | 引擎：13 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API |
+| 插件 | packages/dsh-punky-swarm | 引擎：13 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API + 蟛蜞集群监控面板 |
 | 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
 | 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
 
@@ -51,8 +51,18 @@ dsh web restart
 1. 新建会话，预设选择器出现「蟛蜞模式」；
 2. 工具面含 13 个治理工具：wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；
 3. 预设与技能就位：`ls ~/.dsh/.agent-presets/jiufeng/preset.yml` 与 `ls ~/.agents/skills/jiufeng-team/SKILL.md`。
+4. 会话右上角出现「蟛蜞集群」分页（对话/轨迹/蟛蜞集群第三页），点开可实时查看批次监控（只读）；
 
 > 安装方式即以上 **git 源码 + dsh plugin link**；本项目不另行发布 npm 包。
+
+## 蟛蜞集群监控面板（只读）
+
+插件自带 **蟛蜞集群** 监控面板：会话区头部「对话 / 轨迹 / 蟛蜞集群」第三分页（conversation.view），**安装即得，无需额外配置**。
+
+- **批次列表**：阶段（planning/running/complete…）+ 终态进度 `3/5` + 可自动放行/已完结标记；
+- **统计条**：总批次 / 运行中 / 已完结 / 异常（failed+conflict）；
+- **批次详情**：lane 状态卡（状态 + 任务简述 + 门禁缺件明细 + 层/依赖）、事件时间线、收件箱（派发/广播）计数；
+- **只读**：3s 自动刷新，跟随 Web UI 深浅主题；执行引擎（批次/门禁/状态机）**人工不可修改，只能查看**，治理操作由蟛蜞模式 Leader 执行。
 
 ## 工具清单（13）
 

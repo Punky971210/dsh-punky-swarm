@@ -15,7 +15,7 @@
 
 | Piece | Location | Content |
 |---|---|---|
-| Plugin | packages/dsh-punky-swarm | Engine: 13 governance tools + Tier3 gates + session v2 + read-only API |
+| Plugin | packages/dsh-punky-swarm | Engine: 13 governance tools + Tier3 gates + session v2 + read-only API + Punky swarm monitor |
 | Mode | packages/dsh-punky-swarm/presets/jiufeng | Punky Mode preset: Leader persona + governance discipline + tool-bootstrap |
 | Guide | packages/dsh-punky-swarm/skills/jiufeng-team | 3-layer 8-role × skill assembly table + constitution + templates |
 
@@ -51,8 +51,18 @@ dsh web restart
 1. Create a new session and pick the "蟛蜞模式" preset;
 2. The tool surface includes the 13 governance tools: wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack;
 3. Preset and skill in place: `ls ~/.dsh/.agent-presets/jiufeng/preset.yml` and `ls ~/.agents/skills/jiufeng-team/SKILL.md`.
+4. The conversation header shows a third tab "蟛蜞集群" — the read-only monitor — open it to watch batches;
 
 > This is the only install path — **git source + dsh plugin link**; no npm package is published.
+
+## Punky swarm monitor (read-only)
+
+The plugin ships a **Punky swarm** monitor tab as the third tab of the conversation view header (对话 / 轨迹 / 蟛蜞集群). Available right after install, no extra config.
+
+- **Batch list**: phase (planning/running/complete…) + terminal progress `3/5` + auto-release/done markers;
+- **Stats strip**: total / running / done / issues (failed+conflict);
+- **Batch detail**: lane state cards (status + task summary + gate-missing details + layer/deps), event timeline, mailbox (dispatch/broadcast) counts;
+- **Read-only**: 3s auto-refresh; follows the Web UI light/dark theme. The execution engine (batches / gates / state machine) cannot be modified by humans — view only; governance actions are driven by the Punky Mode Leader.
 
 ## Governance Tools (13)
 
