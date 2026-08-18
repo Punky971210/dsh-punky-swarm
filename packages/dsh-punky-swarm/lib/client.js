@@ -37,7 +37,12 @@ window.__ModuleLoader__.load({
       "gate.missing": "缺",
       "attempt": "返工",
       "upgrade": "升级人工",
-      "task.deps": "依赖"
+      "task.deps": "依赖",
+      "task.layer": "层",
+      "gate.consume": "消费缺失",
+      "gate.outputs": "产物缺失",
+      "gate.produce": "产出缺失",
+      "gate.contract": "契约问题"
     };
     const en = {
       "view.cluster": "Punky swarm",
@@ -66,7 +71,12 @@ window.__ModuleLoader__.load({
       "gate.missing": "missing",
       "attempt": "rework",
       "upgrade": "escalate",
-      "task.deps": "deps"
+      "task.deps": "deps",
+      "task.layer": "layer",
+      "gate.consume": "consume missing",
+      "gate.outputs": "outputs missing",
+      "gate.produce": "produce missing",
+      "gate.contract": "contract problem"
     };
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
@@ -91,25 +101,25 @@ window.__ModuleLoader__.load({
     const P = {
       light: {
         card: '#ffffff', border: '#dfe5ee',
-        text: '#1f2937', text2: '#475569', text3: '#64748b', dim: '#7d8ba0',
+        text: '#1f2937', text2: '#475569', text3: '#64748b', dim: '#64748b',
         accent: '#3b82f6', success: '#15803d', warn: '#b45309', error: '#dc2626', info: '#2563eb',
         skeleton: '#eef2f7', selBg: 'rgba(59,130,246,0.10)',
-        chipPending: 'rgba(100,116,139,0.14)', chipRunning: 'rgba(180,83,9,0.12)',
+        chipPending: 'rgba(100,116,139,0.20)', chipRunning: 'rgba(180,83,9,0.12)',
         chipReview: 'rgba(37,99,235,0.10)', chipMerged: 'rgba(21,128,61,0.12)',
-        chipFailed: 'rgba(220,38,38,0.10)', chipSkipped: 'rgba(100,116,139,0.10)',
-        chipConflict: 'rgba(234,88,12,0.12)', chipIdle: 'rgba(100,116,139,0.08)',
+        chipFailed: 'rgba(220,38,38,0.10)', chipSkipped: 'rgba(100,116,139,0.16)',
+        chipConflict: 'rgba(234,88,12,0.12)', chipIdle: 'rgba(100,116,139,0.14)',
         haloSuccess: 'rgba(21,128,61,0.16)', haloWarn: 'rgba(180,83,9,0.16)',
         gateBg: 'rgba(180,83,9,0.12)', escBg: 'rgba(234,88,12,0.12)', escFg: '#c2410c'
       },
       dark: {
         card: '#141d31', border: '#26304a',
-        text: '#e6ebf4', text2: '#a8b3c7', text3: '#7f8ca3', dim: '#6b7688',
+        text: '#e6ebf4', text2: '#a8b3c7', text3: '#7f8ca3', dim: '#8b96ab',
         accent: '#4f8cff', success: '#3fb950', warn: '#d29922', error: '#f85149', info: '#58a6ff',
         skeleton: '#1d2740', selBg: 'rgba(79,140,255,0.12)',
-        chipPending: 'rgba(127,140,163,0.16)', chipRunning: 'rgba(210,153,34,0.16)',
+        chipPending: 'rgba(127,140,163,0.22)', chipRunning: 'rgba(210,153,34,0.16)',
         chipReview: 'rgba(88,166,255,0.16)', chipMerged: 'rgba(63,185,80,0.16)',
-        chipFailed: 'rgba(248,81,73,0.16)', chipSkipped: 'rgba(127,140,163,0.12)',
-        chipConflict: 'rgba(224,104,46,0.18)', chipIdle: 'rgba(127,140,163,0.10)',
+        chipFailed: 'rgba(248,81,73,0.16)', chipSkipped: 'rgba(127,140,163,0.18)',
+        chipConflict: 'rgba(224,104,46,0.18)', chipIdle: 'rgba(127,140,163,0.16)',
         haloSuccess: 'rgba(63,185,80,0.18)', haloWarn: 'rgba(210,153,34,0.18)',
         gateBg: 'rgba(210,153,34,0.16)', escBg: 'rgba(224,104,46,0.16)', escFg: '#e0682e'
       }
@@ -142,17 +152,17 @@ window.__ModuleLoader__.load({
       };
     }
     const STATE = {
-      pending: chip('dim', 'chipPending', '--dsw-alias-label-dimmed'),
+      pending: chip('text2', 'chipPending', '--dsw-alias-label-secondary'),
       running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
       review: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
       merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary'),
       failed: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
-      skipped: chip('dim', 'chipSkipped', '--dsw-alias-label-dimmed'),
+      skipped: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
       conflict: chip('escFg', 'chipConflict', '--dsw-alias-state-warn-primary'),
-      idle: chip('dim', 'chipIdle', '--dsw-alias-label-dimmed')
+      idle: chip('text2', 'chipIdle', '--dsw-alias-label-secondary')
     };
     const PHASE = {
-      planning: chip('dim', 'chipSkipped', '--dsw-alias-label-dimmed'),
+      planning: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
       running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
       paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
       aborted: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
@@ -170,7 +180,9 @@ window.__ModuleLoader__.load({
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
     const cardBase = {
       get background() { return T.card; },
-      get border() { return '1px solid ' + T.border; },
+      get borderWidth() { return 1; },
+      get borderStyle() { return 'solid'; },
+      get borderColor() { return T.border; },
       borderRadius: 10
     };
 
@@ -211,11 +223,25 @@ window.__ModuleLoader__.load({
 
     function GateBadge({ gate }) {
       if (!gate || !gate.layer) return null;
-      const missing = (gate.consumeMissing || []).length + (gate.outputsMissing || []).length + (gate.produceMissing || []).length + (gate.contractProblems || []).length;
-      if (missing === 0) return null;
-      return React.createElement('span', {
-        style: { color: T.warn, background: pal().gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
-      }, tt('gate.missing') + ' ' + missing);
+      const items = [];
+      const seen = {};
+      const add = (kind, p) => { if (!seen[p]) { seen[p] = 1; items.push({ kind: kind, path: p }); } };
+      for (const p of gate.consumeMissing || []) add('consume', p);
+      for (const p of gate.outputsMissing || []) add('outputs', p);
+      for (const p of gate.produceMissing || []) add('produce', p);
+      for (const p of gate.contractProblems || []) {
+        const m = String(p).match(/^(.+?)\s+missing$/i);
+        if (m) add('contract', m[1]); else add('contract', String(p));
+      }
+      if (!items.length) return null;
+      const KIND = { consume: tt('gate.consume'), outputs: tt('gate.outputs'), produce: tt('gate.produce'), contract: tt('gate.contract') };
+      return React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
+        items.map((it, i) => React.createElement('span', {
+          key: i,
+          title: KIND[it.kind] + ': ' + it.path,
+          style: { color: T.warn, background: pal().gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
+        }, tt('gate.missing') + ' ' + it.path))
+      );
     }
 
     function AttemptBadge({ n, upgrade }) {
@@ -235,7 +261,7 @@ window.__ModuleLoader__.load({
       return React.createElement('div', {
         className: 'psw-card',
         style: Object.assign({}, cardBase, {
-          minWidth: 168, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+          flex: '1 1 168px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
           borderLeft: '3px solid ' + st.fg
         })
       },
@@ -249,7 +275,7 @@ window.__ModuleLoader__.load({
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' } },
           React.createElement(GateBadge, { gate }),
           React.createElement(AttemptBadge, { n: attempt, upgrade }),
-          m.layer ? React.createElement('span', { style: { fontSize: 10, color: T.dim, fontFamily: T.mono } }, m.layer) : null,
+          m.layer ? React.createElement('span', { style: { fontSize: 10, color: T.text3, fontFamily: T.mono } }, tt('task.layer') + ' ' + m.layer) : null,
           deps ? React.createElement('span', { style: { fontSize: 10, color: T.dim, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
         )
       );
@@ -305,9 +331,8 @@ window.__ModuleLoader__.load({
                   style: Object.assign({}, cardBase, {
                     textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
                     display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
-                    borderColor: sel ? T.accent : undefined,
-                    background: sel ? T.selBg : T.card,
-                    boxShadow: sel ? '0 0 0 1px ' + T.accent : undefined
+                    ...(sel ? { borderColor: T.accent, boxShadow: '0 0 0 1px ' + T.accent } : {}),
+                    background: sel ? T.selBg : T.card
                   })
                 },
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
@@ -373,7 +398,7 @@ window.__ModuleLoader__.load({
               : null
           ),
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-            React.createElement(Progress, { value: lanes.length ? (done / lanes.length) * 100 : 0, color: issues ? T.error : done === lanes.length && lanes.length ? T.success : T.warn }),
+            React.createElement(Progress, { value: lanes.length ? (done / lanes.length) * 100 : 0, color: issues ? T.error : (lanes.length && done === lanes.length) ? T.success : (d.phase === 'running' || d.phase === 'paused') ? T.warn : T.dim }),
             React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + lanes.length)
           ),
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text3, flexWrap: 'wrap' } },
