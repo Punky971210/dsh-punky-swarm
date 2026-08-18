@@ -1,0 +1,5 @@
+# dsh-punky-swarm bundle patch — the layer applied when a profile lists this bundle.
+- insert:
+    - id: dsh-punky-swarm
+      name: 'dsh-punky-swarm'
+      config: {}

@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# logs
+*.log
+
+# local rollback anchors (not for distribution)
+backups/
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# dsh local data
+.agent-presets/

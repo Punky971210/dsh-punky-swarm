@@ -1,0 +1,5 @@
+蟛蜞模式（jiufeng 集群治理 on dsh）
+--------------------------------
+来源：dsh-punky-swarm 仓库开发（standard 基底 + Leader persona/治理规则）。
+前置：web profile 需挂载 dsh-punky-swarm 插件（wave_plan/member_status/member_settle/batch_phase/batch_status/lane_claim/lane_release/mailbox_*/assign_check/gate_status 工具）。
+状态：预设 v0.2（2026-08-19）——三层门禁增量已回填 dsh-punky-swarm（Tier3），persona 含纪律 0/0b；待 web 重启实测。回滚锚点：docs/snapshot-2026-08-19-dsh-punky-baseline.md。
