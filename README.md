@@ -52,7 +52,7 @@ dsh web restart
 2. 工具面含 13 个治理工具：wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；
 3. 预设与技能就位：`ls ~/.dsh/.agent-presets/jiufeng/preset.yml` 与 `ls ~/.agents/skills/jiufeng-team/SKILL.md`。
 
-> npm 发布后亦可：`dsh plugin --profile web add dsh-punky-swarm`（预设 / 技能同样自动同步）。
+> 安装方式即以上 **git 源码 + dsh plugin link**；本项目不另行发布 npm 包。
 
 ## 工具清单（13）
 

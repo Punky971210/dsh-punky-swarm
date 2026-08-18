@@ -52,7 +52,7 @@ dsh web restart
 2. The tool surface includes the 13 governance tools: wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack;
 3. Preset and skill in place: `ls ~/.dsh/.agent-presets/jiufeng/preset.yml` and `ls ~/.agents/skills/jiufeng-team/SKILL.md`.
 
-> Once published on npm: `dsh plugin --profile web add dsh-punky-swarm` (preset/skill sync runs the same way).
+> This is the only install path — **git source + dsh plugin link**; no npm package is published.
 
 ## Governance Tools (13)
 
