@@ -48,6 +48,6 @@ member: pending -> running -> review -> merged | failed | skipped | conflict (id
 batch:  planning -> running -> paused -> aborted | complete (complete requires Tier3 gates)
 ```
 
-## License & Contributing
+## License
 
-Apache-2.0. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md).
+Apache-2.0. See [LICENSE](LICENSE).

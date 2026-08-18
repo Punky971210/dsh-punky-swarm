@@ -51,7 +51,6 @@ generic 批次（无 layer）不触发门禁，向后兼容。
 批次：planning -> running -> paused -> aborted | complete（complete 前置三层门禁）
 ```
 
-## 许可与贡献
+## 许可
 
-- License: [Apache-2.0](LICENSE)；
-- 贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)；变更见 [CHANGELOG.md](CHANGELOG.md)。
+Apache-2.0，见 [LICENSE](LICENSE)。
