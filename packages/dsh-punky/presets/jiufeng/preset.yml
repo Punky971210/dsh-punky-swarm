@@ -1,3 +1,3 @@
 name: 蟛蜞模式
-description: jiufeng 集群治理模式（对标 jiuwen-team）：Leader 拆解→wavePlan 派发→成员治理（状态机/黑板/锁/结算回写）→门禁裁决，用于大型模块开发。Tier3：支持三层批次（plan/exec/audit）层间门禁引擎强制 + assign_check/gate_status。需 dsh-punky 插件提供治理工具。
+description: jiufeng 集群治理模式（对标 jiuwen-team）：Leader 拆解→wavePlan 派发→成员治理（状态机/黑板/锁/结算回写）→门禁裁决，用于大型模块开发。Tier3：支持三层批次（plan/exec/audit）层间门禁引擎强制 + assign_check/gate_status。需 dsh-punky-swarm 插件提供治理工具。
 order: 3
