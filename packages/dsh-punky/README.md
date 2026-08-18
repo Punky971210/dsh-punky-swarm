@@ -22,6 +22,7 @@ English: [README.en.md](README.en.md)
 ## 安装
 
 > 以下指引面向 Agent / 自动化执行，命令可直接运行；`web` 为示例 profile，可替换。
+> 插件启动时**自动同步**模式预设（→ `~/.dsh/.agent-presets/jiufeng`）与技能指引（→ `~/.agents/skills/jiufeng-team`），**无需手动放置**；已存在且内容一致则跳过，不一致则覆盖为包内版本。
 
 ### 1. 获取插件（GitHub）
 
@@ -39,28 +40,19 @@ dsh plugin --profile web add link:$(pwd)/packages/dsh-punky
 dsh plugin --profile web add link:$PWD\packages\dsh-punky
 ```
 
-### 3. 放置模式预设（目标已存在则先删除）
+### 3. 重启 dsh web（首次启动完成预设/技能同步）
 
 ```sh
-rm -rf ~/.dsh/.agent-presets/jiufeng
-cp -r packages/dsh-punky/presets/jiufeng ~/.dsh/.agent-presets/jiufeng
-# Windows: robocopy packages\dsh-punky\presets\jiufeng %USERPROFILE%\.dsh\.agent-presets\jiufeng /E
+dsh web restart
 ```
 
-### 4. 放置技能指引
+### 4. 验证
 
-```sh
-rm -rf ~/.agents/skills/jiufeng-team
-cp -r packages/dsh-punky/skills/jiufeng-team ~/.agents/skills/jiufeng-team
-```
-
-### 5. 验证
-
-1. 重启 dsh web，新建会话，预设选择器出现「蟛蜞模式」；
+1. 新建会话，预设选择器出现「蟛蜞模式」；
 2. 工具面含 13 个治理工具：wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；
-3. 技能就位：`ls ~/.agents/skills/jiufeng-team/SKILL.md`。
+3. 预设与技能就位：`ls ~/.dsh/.agent-presets/jiufeng/preset.yml` 与 `ls ~/.agents/skills/jiufeng-team/SKILL.md`。
 
-> npm 发布后亦可：`dsh plugin --profile web add dsh-punky-swarm`（预设 / 技能仍按第 3-4 步放置，源路径为已安装包内的 presets/、skills/）。
+> npm 发布后亦可：`dsh plugin --profile web add dsh-punky-swarm`（预设 / 技能同样自动同步）。
 
 ## 工具清单（13）
 

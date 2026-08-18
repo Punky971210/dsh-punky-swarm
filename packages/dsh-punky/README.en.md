@@ -22,6 +22,7 @@
 ## Install
 
 > Agent-friendly, runnable steps; `web` is an example profile — replace with yours.
+> On startup the plugin **auto-syncs** the mode preset (→ `~/.dsh/.agent-presets/jiufeng`) and the skill guide (→ `~/.agents/skills/jiufeng-team`) — **no manual copy needed**; existing identical targets are skipped, divergent targets are overwritten with the bundled version.
 
 ### 1. Get the plugin (GitHub)
 
@@ -39,28 +40,19 @@ dsh plugin --profile web add link:$(pwd)/packages/dsh-punky
 dsh plugin --profile web add link:$PWD\packages\dsh-punky
 ```
 
-### 3. Install the mode preset (delete target first if it exists)
+### 3. Restart dsh web (first start runs the preset/skill sync)
 
 ```sh
-rm -rf ~/.dsh/.agent-presets/jiufeng
-cp -r packages/dsh-punky/presets/jiufeng ~/.dsh/.agent-presets/jiufeng
-# Windows: robocopy packages\dsh-punky\presets\jiufeng %USERPROFILE%\.dsh\.agent-presets\jiufeng /E
+dsh web restart
 ```
 
-### 4. Install the skill guide
+### 4. Verify
 
-```sh
-rm -rf ~/.agents/skills/jiufeng-team
-cp -r packages/dsh-punky/skills/jiufeng-team ~/.agents/skills/jiufeng-team
-```
-
-### 5. Verify
-
-1. Restart dsh web, create a new session, and pick the "蟛蜞模式" preset;
+1. Create a new session and pick the "蟛蜞模式" preset;
 2. The tool surface includes the 13 governance tools: wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack;
-3. Skill in place: `ls ~/.agents/skills/jiufeng-team/SKILL.md`.
+3. Preset and skill in place: `ls ~/.dsh/.agent-presets/jiufeng/preset.yml` and `ls ~/.agents/skills/jiufeng-team/SKILL.md`.
 
-> Once published on npm: `dsh plugin --profile web add dsh-punky-swarm` (preset/skills still need steps 3–4; source paths are presets/ and skills/ inside the installed package).
+> Once published on npm: `dsh plugin --profile web add dsh-punky-swarm` (preset/skill sync runs the same way).
 
 ## Governance Tools (13)
 

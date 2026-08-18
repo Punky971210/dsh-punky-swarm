@@ -6,6 +6,7 @@ import { mkdirSync } from 'node:fs';
 import { createStore } from './batch-store.js';
 import { createTools } from './tools.js';
 import { createApi } from './api.js';
+import { syncAssets } from './assets.js';
 
 export const name = 'dsh-punky-swarm';
 export const inject = ['tools', 'webServer'];
@@ -27,6 +28,15 @@ export const apply = (ctx, config = {}) => {
       if (moved) ctx.logger?.info?.('[dsh-punky-swarm] migrated ' + moved + ' legacy batch(es) to sessions/legacy');
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] legacy migration failed: ' + String(e));
+    }
+    // 资产同步：预设（~/.dsh/.agent-presets/jiufeng）与技能（~/.agents/skills/jiufeng-team），幂等，参照 dsh-liangshen
+    try {
+      for (const r of syncAssets()) {
+        if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);
+        else if (r.status === 'failed') ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + r.asset + ': ' + r.error);
+      }
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + String(e));
     }
   }
 
