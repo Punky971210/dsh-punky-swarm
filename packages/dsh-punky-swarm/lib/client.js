@@ -36,7 +36,8 @@ window.__ModuleLoader__.load({
       "load.error": "加载失败",
       "gate.missing": "缺",
       "attempt": "返工",
-      "upgrade": "升级人工"
+      "upgrade": "升级人工",
+      "task.deps": "依赖"
     };
     const en = {
       "view.cluster": "Punky swarm",
@@ -64,7 +65,8 @@ window.__ModuleLoader__.load({
       "load.error": "Load failed",
       "gate.missing": "missing",
       "attempt": "rework",
-      "upgrade": "escalate"
+      "upgrade": "escalate",
+      "task.deps": "deps"
     };
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
@@ -226,12 +228,14 @@ window.__ModuleLoader__.load({
       }, label);
     }
 
-    function LaneCard({ lane, state, attempt, upgrade, gate }) {
+    function LaneCard({ lane, state, attempt, upgrade, gate, meta }) {
       const st = STATE[state] || STATE.pending;
+      const m = meta || {};
+      const deps = m.deps && m.deps.length ? m.deps : null;
       return React.createElement('div', {
         className: 'psw-card',
         style: Object.assign({}, cardBase, {
-          minWidth: 148, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+          minWidth: 168, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
           borderLeft: '3px solid ' + st.fg
         })
       },
@@ -239,9 +243,14 @@ window.__ModuleLoader__.load({
           React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, lane),
           React.createElement(Chip, { st: st }, state)
         ),
+        m.cmd ? React.createElement('div', {
+          style: { fontSize: 11, color: T.text2, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+        }, m.cmd) : null,
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' } },
           React.createElement(GateBadge, { gate }),
-          React.createElement(AttemptBadge, { n: attempt, upgrade })
+          React.createElement(AttemptBadge, { n: attempt, upgrade }),
+          m.layer ? React.createElement('span', { style: { fontSize: 10, color: T.dim, fontFamily: T.mono } }, m.layer) : null,
+          deps ? React.createElement('span', { style: { fontSize: 10, color: T.dim, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
         )
       );
     }
@@ -346,6 +355,12 @@ window.__ModuleLoader__.load({
       const st = PHASE[d.phase] || PHASE.planning;
       const evs = (d.recentEvents || []).slice().reverse();
       const mail = d.mail || { inbox: [], broadcast: [] };
+      const laneMeta = {};
+      for (const w of d.wavePlan || []) {
+        for (const t of w.tasks || []) {
+          laneMeta[t.id] = { cmd: t.cmd || '', layer: t.layer || null, role: t.role || null, deps: t.deps || [] };
+        }
+      }
       return React.createElement('div', { className: 'psw-scroll', style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 } },
         React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }) },
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
@@ -371,7 +386,7 @@ window.__ModuleLoader__.load({
           lanes.map((lane) => React.createElement(LaneCard, {
             key: lane, lane: lane, state: d.lanes[lane],
             attempt: (d.laneAttempts || {})[lane], upgrade: (d.upgrades || {})[lane],
-            gate: (d.lanesGate || {})[lane]
+            gate: (d.lanesGate || {})[lane], meta: laneMeta[lane]
           }))
         ),
         React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px' }) },

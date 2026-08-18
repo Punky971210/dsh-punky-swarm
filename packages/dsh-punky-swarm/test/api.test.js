@@ -11,7 +11,7 @@ import * as mailbox from '../lib/mailbox.js';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-'));
 const store = createStore(root);
 const S = 'sess-api';
-const plan = buildWavePlan({ batchId: 'b-api', tasks: [{ id: 't1' }] });
+const plan = buildWavePlan({ batchId: 'b-api', tasks: [{ id: 't1', cmd: '编写计划文档' }] });
 store.createBatch(S, { batchId: 'b-api', wavePlan: plan, phase: 'running' });
 store.setMember(S, 'b-api', 't1', 'running');
 store.setMember(S, 'b-api', 't1', 'review');
@@ -65,6 +65,9 @@ test('GET /batch?batchId= returns detail (session-scoped)', () => {
   assert.equal(r.status, 200);
   assert.equal(r.body.lanes.t1, 'merged');
   assert.equal(r.body.autoReleaseable, true);
+  // 任务简述（cmd）随 wavePlan 暴露——面板据此展示任务内容
+  assert.equal(r.body.wavePlan[0].tasks[0].id, 't1');
+  assert.equal(r.body.wavePlan[0].tasks[0].cmd, '编写计划文档');
   assert.deepEqual(r.body.laneAttempts, {});
   const nf = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batch'), '/api/dsh-punky-swarm/batch?batchId=nope&session=' + S);
   assert.equal(nf.status, 404);
