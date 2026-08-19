@@ -46,11 +46,10 @@ cd dsh-punky-swarm
 ### 2. Install the plugin dependencies (peer deps)
 
 ```sh
-cd packages/dsh-punky-swarm
-npm ci
+npm ci --prefix packages/dsh-punky-swarm
 ```
 
-> After mounting via `link:`, Node resolves dependencies from the plugin directory upward; the repo ships a `package-lock.json`, so `npm ci` installs `@deepseek-ai/dsh-tools` and `@deepseek-ai/cordis` in one command — no manual symlinks needed.
+> After mounting via `link:`, Node resolves dependencies from the plugin directory upward; the repo ships a `package-lock.json`, so `npm ci` installs `@deepseek-ai/dsh-tools` and `@deepseek-ai/cordis` (versions pinned by `package-lock.json`) in one command — no manual symlinks needed.
 
 ### 3. Mount the plugin
 

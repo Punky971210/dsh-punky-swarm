@@ -46,11 +46,10 @@ cd dsh-punky-swarm
 ### 2. 初始化插件依赖（安装 peer 依赖）
 
 ```sh
-cd packages/dsh-punky-swarm
-npm ci
+npm ci --prefix packages/dsh-punky-swarm
 ```
 
-> 插件以 `link:` 方式挂载后，Node 会从插件目录向上解析依赖；仓库已提交 `package-lock.json`，`npm ci` 一条命令装齐 `@deepseek-ai/dsh-tools`、`@deepseek-ai/cordis`，无需手动建链接。
+> 插件以 `link:` 方式挂载后，Node 会从插件目录向上解析依赖；仓库已提交 `package-lock.json`，`npm ci` 一条命令装齐 `@deepseek-ai/dsh-tools`、`@deepseek-ai/cordis`（版本由 `package-lock.json` 固定），无需手动建链接。
 
 ### 3. 挂载插件
 
