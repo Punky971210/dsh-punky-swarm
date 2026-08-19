@@ -76,6 +76,44 @@ test('state file is valid JSON on disk (atomic write)', () => {
   assert.doesNotThrow(() => JSON.parse(raw));
 });
 
+test('claimAsset copies source into batch artifacts and logs asset.claimed', () => {
+  const p = buildWavePlan({ batchId: 'b-asset', tasks: [{ id: 'x' }] });
+  store.createBatch(S, { batchId: 'b-asset', wavePlan: p, phase: 'running' });
+  const src = path.join(root, 'claimed-src.txt');
+  fs.writeFileSync(src, 'content-123');
+  const r = store.claimAsset(S, 'b-asset', { source: src, target: 'explore/findings.txt' });
+  assert.equal(r.ok, true);
+  assert.equal(r.claimedPath, 'explore/findings.txt');
+  assert.equal(r.batchId, 'b-asset');
+  const dest = path.join(root, 'sessions', S, 'artifacts', 'b-asset', 'explore', 'findings.txt');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'content-123'); // 复制正确
+  assert.equal(fs.readFileSync(src, 'utf8'), 'content-123'); // 源保留（不移动）
+  const b = store.readBatch(S, 'b-asset');
+  const ev = b.events.find((e) => e.type === 'asset.claimed');
+  assert.ok(ev, 'asset.claimed event missing');
+  assert.equal(ev.source, src);
+  assert.equal(ev.target, 'explore/findings.txt');
+});
+
+test('claimAsset rejects path escape and bad inputs', () => {
+  const src = path.join(root, 'ok-src.txt');
+  fs.writeFileSync(src, 'x');
+  // 防逃逸：.. / 绝对路径
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: '../evil.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: 'a/../../evil.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: 'C:\\abs.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: '/abs.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: 'C:x.txt' })); // 盘符前缀
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: 'a/./b.txt' })); // . 段
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: src, target: 'a\\..\\b.txt' })); // 反斜杠 ..
+  // 源缺失 / 源是目录 / 批次不存在
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: path.join(root, 'missing.txt'), target: 'a.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-asset', { source: path.join(root), target: 'a.txt' }));
+  assert.throws(() => store.claimAsset(S, 'b-nope', { source: src, target: 'a.txt' }));
+  // 逃逸未写入
+  assert.equal(fs.existsSync(path.join(root, 'sessions', S, 'artifacts', 'b-asset', '..', 'evil.txt')), false);
+});
+
 test('sessions are isolated: same batchId in different sessions coexist', () => {
   const pA = buildWavePlan({ batchId: 'b-iso', tasks: [{ id: 'x' }] });
   const pB = buildWavePlan({ batchId: 'b-iso', tasks: [{ id: 'x' }] });

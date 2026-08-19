@@ -46,6 +46,17 @@ triggers:
 | 审计层 | Supervisor | report-blind-audit + archive（comet-archive 可选：OpenSpec 变更归档） | 验收报告（HITL 门禁） |
 | 审计层 | Doc-Manager | doc-generator + doc-update | 文档/复盘 |
 
+### 任务包最小结构（Leader 派发模板）
+
+wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不预写实现（蟛蜞模式纪律 0e：调用链设计、脚本实现由被指派 worker 全权负责）：
+
+```json
+{ id, role: 'Coder'|'Tester'|'Supervisor', layer: 'plan'|'exec'|'audit',
+  cmd: '加载 <手册技能>，按任务包自行设计实现并落盘产物',
+  consume: [...], produce: [...],
+  验收标准: [...] }
+```
+
 ## 使用方式
 
 1. **查角色**：读 `references/roles/<role>.md`（身份/触发条件/协作模式/Success Criteria/Boundary/输出 schema）。
@@ -53,14 +64,14 @@ triggers:
 3. **治理原则**：`references/constitution.md` 为项目级不可协商原则（编码/安全/合规/架构/门禁 5 章 MUST/SHOULD），角色细则引用格式「参考 Constitution §[章节]：[条目]」。
 4. **工作流蓝图**：`references/workflow.md`（角色 DAG + 11 步流转 + 产物契约表）；Designer 四件套等模板见 `references/templates/`。
 
-## 任务分级（简单任务降级单 Agent）
+## C 类触发后的执行机制（难度判定归蟛蜞模式）
+
+> 分层边界：任务难度判定（A/B/C 路由，default to C）由蟛蜞模式难度门禁负责（preset persona 纪律 0 + assign_check guard），本技能**不参与难度判定**——只描述 C 类任务确定后的执行方式。
 
 | 级别 | 判据 | 执行方式 |
 |---|---|---|
-| 简单任务 | 单步可验证、低风险、无需多角色协作（小改动/单文件生成/快速查询） | **Leader 直接完成**：不建批次、不派发、不写 mailbox，零治理开销 |
-| 复杂/大型任务 | 需并行、多角色、多轮协作或高门禁 | wave_plan 建批次 → member_status 派发 → 治理闭环（状态机/mailbox/锁/结算） |
-
-降级判定优先：拿不准时先按简单任务直接做，做完即交付；确需集群再升级为批次。
+| A（Leader 直做） | 单步可验证、低风险、无需多角色协作（小改动/单文件生成/快速查询） | Leader 直接完成：不建批次、不派发、不写 mailbox，零治理开销（是否判 A 由蟛蜞模式门禁裁决） |
+| C（复杂/大型） | 需并行、多角色、多轮协作或高门禁 | wave_plan 建批次 → member_status 派发 → 治理闭环（状态机/mailbox/锁/结算） |
 
 ## 三层门禁（Tier3，2026-08-19 回填）
 

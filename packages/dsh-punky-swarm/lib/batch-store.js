@@ -234,6 +234,32 @@ export function createStore(root) {
     return batch;
   }
 
+  // asset_claim 归位（设计 6.3/§4）：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
+  // 安全：target 必须是批次内相对路径——拒绝绝对路径、盘符前缀、.. / . / 空段；解析后仍须落在 artifacts 目录内（纵深防御）。
+  function claimAsset(sessionId, batchId, { source, target }) {
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+    if (typeof target !== 'string' || !target.length) throw new Error('invalid target path: ' + target + ' (must be batch-relative)');
+    if (isAbsPath(target) || /^[A-Za-z]:/.test(target)) throw new Error('invalid target path: ' + target + ' (must be batch-relative, no absolute path)');
+    const segments = target.split(/[\\/]+/);
+    if (segments.some((s) => s === '' || s === '.' || s === '..')) {
+      throw new Error('invalid target path: ' + target + ' (must be batch-relative, no .. or empty segment)');
+    }
+    let st;
+    try { st = fs.statSync(source); } catch { throw new Error('source not found: ' + source); }
+    if (!st.isFile()) throw new Error('source is not a file: ' + source);
+    const artifactsDir = artifactsDirOf(sessionId, batchId);
+    const dest = path.join(artifactsDir, ...segments);
+    const base = path.resolve(artifactsDir) + path.sep;
+    if (!path.resolve(dest).startsWith(base)) throw new Error('target escapes artifacts dir: ' + target);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(source, dest); // 保留内容，不移动（避免破坏已引用）
+    batch.events.push(newEvent('asset.claimed', { lane: null, source, target }));
+    batch.updatedAt = new Date().toISOString();
+    atomicWrite(batchFile(sessionId, batchId), batch);
+    return { ok: true, claimedPath: target, batchId };
+  }
+
   function batchSettled(batch) {
     const lanes = Object.values(batch.lanes ?? {});
     return batch.phase === 'running' && lanes.length > 0 && lanes.every(schema.isMemberTerminal);
@@ -293,10 +319,59 @@ export function createStore(root) {
     return all;
   }
 
+  // ---- 会话级治理状态（governance.json v2，design task-difficulty-gate §4）----
+  // 每回合任务难度评估（A/B/C）的事实源：lastAssign + history 审计 + 执行型工具计数 + pendingBatch
+  const GOV_SCHEMA = 2;
+  function govDefaults() {
+    return { schema: GOV_SCHEMA, execToolCount: 0, pendingBatch: false, pendingSince: null, lastAssign: null, history: [] };
+  }
+  function governanceFile(sessionId) {
+    if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
+    return path.join(sessionDir(sessionId), 'governance.json');
+  }
+  // 无文件/损坏 → 返回默认（调用方无需判空）
+  function readGovernance(sessionId) {
+    const file = governanceFile(sessionId);
+    if (!fs.existsSync(file)) return govDefaults();
+    try { return { ...govDefaults(), ...JSON.parse(fs.readFileSync(file, 'utf8')) }; }
+    catch { return govDefaults(); }
+  }
+  // 原子写：读当前（或默认）→ 合并 patch → 落盘
+  function writeGovernance(sessionId, patch) {
+    const next = { ...readGovernance(sessionId), ...patch };
+    atomicWrite(governanceFile(sessionId), next);
+    return next;
+  }
+  // 执行型工具调用计数：execToolCount 累计 + lastAssign.execCallsSince 递增（评估后窗口内调用数）
+  function bumpExecCount(sessionId) {
+    const g = readGovernance(sessionId);
+    g.execToolCount = (g.execToolCount ?? 0) + 1;
+    if (g.lastAssign) g.lastAssign.execCallsSince = (g.lastAssign.execCallsSince ?? 0) + 1;
+    atomicWrite(governanceFile(sessionId), g);
+    return g;
+  }
+  // 评估过期判定：从未评估 / execCallsSince≥maxCalls(20) / 距 lastAssign.at≥maxAgeMs(30min)
+  function stale(sessionId, { maxCalls = 20, maxAgeMs = 30 * 60 * 1000 } = {}) {
+    const g = readGovernance(sessionId);
+    if (!g.lastAssign) return true;
+    if ((g.lastAssign.execCallsSince ?? 0) >= maxCalls) return true;
+    const at = Date.parse(g.lastAssign.at);
+    if (!Number.isFinite(at)) return true; // 时间戳非法按过期处理（宁严勿松）
+    return Date.now() - at >= maxAgeMs;
+  }
+  // 会话内是否有活跃（非终态）批次：pendingBatch 语义基于此（建批后清锁、批次终态后旧锁失效）
+  function hasActiveBatch(sessionId) {
+    return listBatches(sessionId).some((id) => {
+      const b = readBatch(sessionId, id);
+      return b && !schema.isBatchTerminal(b.phase);
+    });
+  }
+
   return {
     createBatch, readBatch, listBatches, listSessions, listAllBatches,
-    setMember, setPhase, appendEvent,
+    setMember, setPhase, appendEvent, claimAsset,
     batchSettled, batchAutoReleaseable,
     recoverBatches, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus,
+    readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
   };
 }

@@ -1,6 +1,6 @@
-// 蟛蜞模式治理工具（13 个），defineTool 规范含 output.schema + output.render
+// 蟛蜞模式治理工具（14 个），defineTool 规范含 output.schema + output.render
 // v2：全部工具感知 session——批次归属当前执行会话（exec.agent.session.id），可被 args.session 覆盖
-// Tier3：wave_plan 支持三层契约字段 + team 装配注入；新增 assign_check（委派形态判定 A/B/C）、gate_status（门禁状态查询）、artifact_types（产物类型注册表）
+// Tier3：wave_plan 支持三层契约字段 + team 装配注入；新增 assign_check（委派形态判定 A/B/C）、gate_status（门禁状态查询）、artifact_types（产物类型注册表）、asset_claim（直做产物归位）
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { buildWavePlan, validateWavePlan } from './wave-plan.js';
 import { resolveAssembly } from './assembly.js';
@@ -11,6 +11,20 @@ import { join } from 'node:path';
 
 const TEXT_OUTPUT = (text) => [{ type: 'text', text }];
 
+// 执行型工具名单（有副作用/写盘/派发执行）：guard 计数与拦截用；可被 config.escalation.execTools 覆盖
+const EXEC_TOOLS = [
+  'pwsh', 'bash', 'write', 'edit', 'run_code', 'workflow', 'ralph',
+  'ssh_exec', 'ssh_cluster', 'ssh_upload', 'ssh_download', 'subagent', 'subagent_fork',
+];
+
+// 清 pendingBatch（wave_plan 建批 / 批次 complete|aborted 后调用；无治理状态时不创建文件）
+function clearPendingBatch(store, sessionId) {
+  const g = store.readGovernance(sessionId);
+  if (g.pendingBatch || g.pendingSince || g.lastAssign) {
+    store.writeGovernance(sessionId, { pendingBatch: false, pendingSince: null });
+  }
+}
+
 function sessionOf(args, exec) {
   if (args && typeof args.session === 'string' && args.session.length) return args.session;
   return exec?.agent?.session?.id ?? 'cli';
@@ -20,6 +34,32 @@ function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions'
 
 export function createTools(ctx, deps) {
   const { store, root, config = {} } = deps;
+
+  // 任务难度值门禁（design task-difficulty-gate §3，引擎强制不依赖自觉）：执行型工具前置 guard
+  // 同步签名 (execution) => string | undefined；execution 含 name / agent.session.id；返回 string 即拒绝
+  if (typeof ctx.tools?.guard === 'function') {
+    ctx.tools.guard((execution) => {
+      const sessionId = execution?.agent?.session?.id;
+      if (!sessionId) return undefined;
+      const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
+      if (!execTools.includes(execution.name)) return undefined; // ① 非执行型：放行（治理/查询，防死锁）
+      const g = store.readGovernance(sessionId);
+      let reason;
+      // 门禁 1：从未评估 或 已过期（execCallsSince≥20 / 距 lastAssign.at≥30min）→ 要求先评估
+      if (!g?.lastAssign?.form || store.stale(sessionId)) {
+        reason = '[task-difficulty-gate] 本回合尚未进行任务难度评估（A/B/C）。请先调用 assign_check(scope=full) 给出难度与执行主体，再执行 ' + execution.name;
+      } else if (g.lastAssign.form === 'C' && g.pendingBatch) {
+        // 门禁 2：判 C 且未建批 → 拒绝执行型（必须先 wave_plan 建批）
+        reason = '[task-difficulty-gate] 任务难度=C（集群方案），必须先 wave_plan 建批。已直做产物用 asset_claim 归位，然后建批派发。';
+      } else if ((execution.name === 'subagent' || execution.name === 'subagent_fork') && g.lastAssign.form === 'A') {
+        // 门禁 3（一致性）：A 类不派发 subagent（需要独立上下文请重评 B）
+        reason = '[task-difficulty-gate] A 类任务不派发 subagent；如确实需要独立上下文请重评 B。';
+      }
+      store.bumpExecCount(sessionId); // 计数与拦截分离：无论是否拦截，执行型调用都计（机制 A 观察）
+      return reason;
+    });
+  }
+
   const tools = [
     defineTool({
       name: "wave_plan",
@@ -35,6 +75,7 @@ export function createTools(ctx, deps) {
         const plan = buildWavePlan({ batchId: args.batchId, tasks: args.tasks, concurrency: args.concurrency ?? 5, team: args.team, assembly });
         validateWavePlan(plan);
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency });
+        clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false（design §4 写入点）
         return { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes };
       },
     }),
@@ -47,7 +88,9 @@ export function createTools(ctx, deps) {
         render: (_args, value) => TEXT_OUTPUT('batch ' + value.batchId + ' phase -> ' + value.phase),
       },
       async execute(args, exec) {
-        const b = store.setPhase(sessionOf(args, exec), args.batchId, args.phase);
+        const sessionId = sessionOf(args, exec);
+        const b = store.setPhase(sessionId, args.batchId, args.phase);
+        if (b.phase === 'complete' || b.phase === 'aborted') clearPendingBatch(store, sessionId); // 兜底清理旧锁
         return { batchId: args.batchId, phase: b.phase };
       },
     }),
@@ -83,20 +126,54 @@ export function createTools(ctx, deps) {
     }),
     defineTool({
       name: "assign_check",
-      description: "委派形态判定（设计 §10/§15.3 N3）：判断任务应由 Leader 直做（A）/ 轻量委派 subagent（B，需独立上下文/工具面时）/ 必须走流水线批次（C）。输入任务特征（并行?/多角色?/门禁?/可恢复?/需独立上下文?），返回判定与原因；C 类任务应走 wave_plan 建批。",
-      parameters: {"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"session":{"type":"string"}},
+      description: "委派形态判定（设计 §10/§15.3 N3）：判断任务应由 Leader 直做（A）/ 轻量委派 subagent（B，需独立上下文/工具面时）/ 必须走流水线批次（C）。输入任务特征（并行?/多角色?/门禁?/可恢复?/需独立上下文?），返回判定与原因；C 类任务应走 wave_plan 建批。每次调用写入会话治理状态（governance.lastAssign+history），guard 依据其做执行型工具门禁。",
+      parameters: {"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"form":{"type":"string","required":true},"allowed":{"type":"boolean","required":true},"reasons":{"type":"array","required":true,"items":{"type":"string"}}}},
-        render: (_args, value) => TEXT_OUTPUT('assign form: ' + value.form + (value.allowed ? ' (allowed)' : ' (must use batch)')),
+        schema: {"type":"object","additionalProperties":false,"properties":{"form":{"type":"string","required":true},"allowed":{"type":"boolean","required":true},"reasons":{"type":"array","required":true,"items":{"type":"string"}},"next":{"type":"array","required":true,"items":{"type":"string"}},"execToolCount":{"type":"integer","required":true},"escalationHint":{"type":"string","required":true},"history":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
+        render: (_args, value) => {
+          let s = 'assign form: ' + value.form + (value.form === 'C' ? ' (must use batch) → next: wave_plan' : ' (allowed)');
+          if (value.escalationHint) s += ' ⚠ ' + value.escalationHint;
+          return TEXT_OUTPUT(s);
+        },
       },
-      async execute(args) {
+      async execute(args, exec) {
+        const sessionId = sessionOf(args, exec);
         const reasons = [];
         if (args.parallel) reasons.push('需要并行或任务依赖（DAG）');
         if (args.multiRole) reasons.push('需要多角色协作（编码+测试+审查分离）');
         if (args.gate) reasons.push('需要门禁/审计（人审、验收、gap-list）');
         if (args.recoverable) reasons.push('需要跨轮治理/可恢复/可审计');
-        if (reasons.length) return { form: 'C', allowed: false, reasons };
-        return { form: args.needIsolation ? 'B' : 'A', allowed: true, reasons: [] };
+        const form = reasons.length ? 'C' : (args.needIsolation ? 'B' : 'A');
+        // 写入治理状态：lastAssign + history 追加（审计：每回合评估留痕）；C 类且无活跃批次 → pendingBatch=true
+        const now = new Date().toISOString();
+        const scope = args.scope ?? 'full';
+        const g0 = store.readGovernance(sessionId);
+        const history = [...(g0.history ?? []), { turn: (g0.history?.length ?? 0) + 1, form, at: now, reasons }];
+        const hasActive = store.hasActiveBatch(sessionId);
+        const patch = { lastAssign: { form, scope, at: now, reasons, execCallsSince: 0 }, history };
+        if (form === 'C' && !hasActive) { patch.pendingBatch = true; patch.pendingSince = now; }
+        else if (hasActive) { patch.pendingBatch = false; patch.pendingSince = null; } // 已有活跃批次：保持解锁
+        const g = store.writeGovernance(sessionId, patch);
+        const execToolCount = g.execToolCount ?? 0;
+        // 升级信号（design escalation-hardgate §2.2 S4）：execToolCount≥5 且无活跃批次 → 软提示
+        const escalationHint = (execToolCount >= 5 && !hasActive)
+          ? 'execToolCount=' + execToolCount + ' ≥5 且无批次：任务已升级为复杂形态，必须 wave_plan 建批'
+          : '';
+        return { form, allowed: form !== 'C', reasons, next: form === 'C' ? ['wave_plan'] : [], execToolCount, escalationHint, history: g.history };
+      },
+    }),
+    defineTool({
+      name: "asset_claim",
+      description: "归位（设计 6.3）：Leader 已直做产物（探索/探测/排障）注册为批次资产——复制 source 进 <artifacts>/<batchId>/<target>（保留内容，不移动），批次事件 asset.claimed 留痕，返回批次内路径供 wave_plan consume/produce 声明。路径防逃逸：target 必须是批次内相对路径，拒绝 .. 与绝对路径。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"source":{"type":"string","required":true,"description":"源文件绝对路径（已直做产物）"},"target":{"type":"string","required":true,"description":"批次内目标路径（相对 artifacts/<batchId>/，不得含 .. 或绝对路径）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"}},
+      output: {
+        schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"claimedPath":{"type":"string"},"batchId":{"type":"string"}}},
+        render: (_args, value) => TEXT_OUTPUT('asset claimed: ' + value.claimedPath),
+      },
+      async execute(args, exec) {
+        const sessionId = sessionOf(args, exec);
+        const r = store.claimAsset(sessionId, args.batchId, { source: args.source, target: args.target });
+        return { ok: r.ok, claimedPath: r.claimedPath, batchId: r.batchId };
       },
     }),
     defineTool({

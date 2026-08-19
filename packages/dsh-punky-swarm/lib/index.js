@@ -51,7 +51,9 @@ export const apply = (ctx, config = {}) => {
     }
   }
 
-  const { register } = createTools(ctx, { store, root });
+  // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
+  // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
+  const { register } = createTools(ctx, { store, root, config });
   register();
 
   // 只读治理 API（工作台用）
