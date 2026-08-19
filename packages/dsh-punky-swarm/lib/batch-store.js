@@ -1,6 +1,6 @@
 // BatchStore：批次状态文件唯一事实源（原子写 + 事件日志 + 状态机迁移 + 恢复语义）
 // v2：批次绑定 session——root/sessions/<sessionId>/batches/*.json；存量 root/batches 迁移到 legacy
-// Tier3：层间门禁（设计 §3.3/§四/§五/§15）——entry（consume 前置）/ exit（outputs/produce 前置 + L0 checkPlanContract）/ complete（audit 验收前置）
+// Tier3：层间门禁（设计 §3.3/§四/§五/§15）——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
 import fs from 'node:fs';
 import path from 'node:path';
 import * as schema from './schema.js';
@@ -78,7 +78,7 @@ export function createStore(root) {
     const missing = t.consume.filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     return missing.length ? { ok: false, code: 'GATE_ENTRY_MISSING', missing } : { ok: true };
   }
-  // L0 产物结构校验（设计 §3.3/§15.3 N5）：仅 plan 产物——spec 必填章节 + task-tree JSON 可解析
+  // Plan 契约产物结构校验（设计 §3.3/§15.3 N5）：仅 plan 产物——spec 必填章节 + task-tree JSON 可解析
   function checkPlanContract(sessionId, batchId, batch, lane) {
     const t = findTask(batch, lane);
     if (!t || t.layer !== 'plan' || !Array.isArray(t.produce)) return { ok: true };
@@ -96,7 +96,7 @@ export function createStore(root) {
     }
     return problems.length ? { ok: false, code: 'GATE_PLAN_CONTRACT', problems } : { ok: true };
   }
-  // Exit Gate（设计 §五）：exec→outputs 存在；audit→produce 存在；plan→L0 契约
+  // Exit Gate（设计 §五）：exec→outputs 存在；audit→produce 存在；plan→Plan 契约
   function checkExitGate(sessionId, batchId, batch, lane) {
     const t = findTask(batch, lane);
     if (!t || !t.layer) return { ok: true };
@@ -176,7 +176,7 @@ export function createStore(root) {
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
     const from = batch.lanes[lane];
     schema.assertMemberTransition(from, to);
-    // Tier3 门禁：派发（entry）与结算（exit/L0）
+    // Tier3 门禁：派发（entry）与结算（exit/Plan 契约）
     if (to === 'running') {
       const g = checkEntryGate(sessionId, batchId, batch, lane);
       if (!g.ok) {

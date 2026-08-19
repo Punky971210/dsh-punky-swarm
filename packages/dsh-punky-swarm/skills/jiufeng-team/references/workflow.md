@@ -49,7 +49,7 @@ graph TD
 | exec ⚡ | 代码（exec/<lane>/...）、测试报告 | audit（consume 产物） |
 | audit 🛡️ | review.md、gap-list.json、acceptance-report.md、retrospective-report.md | 记忆沉淀（dsh-mneme） |
 
-> 引擎只校验存在性 + L0 结构底线（spec 必含 \`## 验收标准\`/\`## 约束\`、task-tree.json 合法）；四件套内部结构见 references/templates/。
+> 引擎只校验存在性 + Plan 契约结构底线（spec 必含 \`## 验收标准\`/\`## 约束\`、task-tree.json 合法）；四件套内部结构见 references/templates/。
 
 ## 四、硬化判定点 ↔ 三层门禁
 

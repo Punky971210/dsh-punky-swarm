@@ -103,7 +103,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 | 层 | 引擎强制语义 |
 |---|---|
-| plan 🎯 | 产物契约：spec.md 必含 `## 验收标准`/`## 约束` 章节 + task-tree.json 合法 JSON——merged 前 L0 校验（GATE_PLAN_CONTRACT） |
+| plan 🎯 | 产物契约：spec.md 必含 `## 验收标准`/`## 约束` 章节 + task-tree.json 合法 JSON——merged 前 Plan 契约校验（GATE_PLAN_CONTRACT） |
 | exec ⚡ | 派发前 consume 产物齐备（缺则拒派 GATE_ENTRY_MISSING）；结算前 outputs 落盘（缺则拒 merged） |
 | audit 🛡️ | 结算前 produce（review.md/gap-list.json）落盘；批次 complete 前置 audit 验收完成（缺则拒 complete） |
 
