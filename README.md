@@ -2,7 +2,7 @@
 
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
 
-> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG + 引擎级门禁（Entry/L0/Exit/Complete）+ 状态机 + 锁/mailbox + 会话隔离。附蟛蜞模式预设与 jiufeng-team 角色指引。
+> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG（固定语义，建批后不重算）+ 引擎级门禁（Entry / Plan 契约 / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 任务难度路由门禁。附蟛蜞模式预设与 jiufeng-team 角色指引。
 
 English: [README.en.md](README.en.md)
 
@@ -13,7 +13,7 @@ English: [README.en.md](README.en.md)
 
 ## 设计目的与由来
 
-**目的**：门禁（Entry/L0/Exit/Complete）与批次、锁、mailbox 等机制的核心目的，是**保障流水线与集群的稳定运行**，而非限制 Agent 自由度——工具层对 Agent 全量开放，模式层只给指引，团队装配可插拔；任务按规模分级（Leader 指派 → 单 Agent 降级）。
+**目的**：门禁（Entry/Plan 契约/Exit/Complete）与批次、锁、mailbox 等机制的核心目的，是**保障流水线与集群的稳定运行**，而非限制 Agent 自由度——工具层对 Agent 全量开放，模式层只给指引，团队装配可插拔；任务按规模分级（Leader 指派 → 单 Agent 降级）。
 
 **由来**：本项目源于单 Agent 全流程与图式编排之间的取舍：
 
@@ -27,7 +27,7 @@ English: [README.en.md](README.en.md)
 
 | 件 | 位置 | 内容 |
 |---|---|---|
-| 插件 | packages/dsh-punky-swarm | 引擎：13 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API + 蟛蜞集群监控面板 |
+| 插件 | packages/dsh-punky-swarm | 引擎：14 治理工具 + Tier3 门禁 + 会话隔离 v2 + 只读 API + 任务难度门禁 + 蟛蜞集群监控面板 |
 | 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
 | 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
 
@@ -36,42 +36,17 @@ English: [README.en.md](README.en.md)
 > 以下指引面向 Agent / 自动化执行，命令可直接运行；`web` 为示例 profile，可替换。
 > 插件启动时**自动同步**模式预设（→ `~/.dsh/.agent-presets/jiufeng`）与技能指引（→ `~/.agents/skills/jiufeng-team`），**无需手动放置**；已存在且内容一致则跳过，不一致则覆盖为包内版本。
 
-### 1. 获取插件（GitHub）
-
 ```sh
 git clone https://github.com/Punky971210/dsh-punky-swarm.git
 cd dsh-punky-swarm
-```
-
-### 2. 初始化插件依赖（安装 peer 依赖）
-
-```sh
+# 安装 peer 依赖（@deepseek-ai/dsh-tools、@deepseek-ai/cordis，版本由 package-lock.json 固定）
 npm ci --prefix packages/dsh-punky-swarm
-```
-
-> 插件以 `link:` 方式挂载后，Node 会从插件目录向上解析依赖；仓库已提交 `package-lock.json`，`npm ci` 一条命令装齐 `@deepseek-ai/dsh-tools`、`@deepseek-ai/cordis`（版本由 `package-lock.json` 固定），无需手动建链接。
-
-### 3. 挂载插件
-
-```sh
 # POSIX
 dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
 # Windows PowerShell
 dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
-```
-
-### 4. 重启 dsh web（首次启动完成预设/技能同步）
-
-```sh
 dsh web restart
 ```
-
-### 5. 验证
-
-1. 新建会话，预设选择器出现「蟛蜞模式」；
-2. 工具面含 13 个治理工具：wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；
-3. 预设与技能就位：`ls ~/.dsh/.agent-presets/jiufeng/preset.yml` 与 `ls ~/.agents/skills/jiufeng-team/SKILL.md`。
-4. 会话右上角出现「蟛蜞集群」分页（对话/轨迹/蟛蜞集群第三页），点开可实时查看批次监控（只读）；
 
 > 安装方式即以上 **git 源码 + dsh plugin link**；本项目不另行发布 npm 包。
 
@@ -84,17 +59,30 @@ dsh web restart
 - **批次详情**：lane 状态卡（状态 + 任务简述 + 门禁缺件明细 + 层/依赖）、事件时间线、收件箱（派发/广播）计数；
 - **只读**：3s 自动刷新，跟随 Web UI 深浅主题；执行引擎（批次/门禁/状态机）**人工不可修改，只能查看**，治理操作由蟛蜞模式 Leader 执行。
 
-## 工具清单（13）
+## 工具清单（14）
 
-wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack
+wave_plan / batch_phase / batch_status / artifact_types / assign_check / asset_claim / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack
+
+## wavePlan（固定语义）
+
+- 建批时按任务依赖 DAG 分层为 waves，**批次创建后绝不中途重算**（wavePlan 固定语义）；
+- 任务可声明 layer（plan/exec/audit）、consume/produce/outputs、role/skills；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）；
+- 同 wave 可并行派发；批次/成员状态以状态文件为唯一事实源（事件日志可审计）。
+
+## 任务难度门禁（Task Difficulty Gate）
+
+- **每轮（user turn）动手执行前**，Leader 须经 assign_check 给出任务难度 A/B/C 与执行主体：A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批；
+- **default to C**：评估对象是完整目标任务（scope=full），任一 C 特征（多环节≥3 / 多角色≥2 / 需门禁 / 外部依赖 / 可恢复性）即判 C；拿不准就填 C；
+- **guard 强制**：判 C 后未建批即调用执行型工具（pwsh/write/edit/run/subagent 等）会被引擎拒绝；未评估/评估过期（20 次执行调用或 30 分钟）同样拒绝，只读查询不受限；
+- **asset_claim**：判 C 前 Leader 已直做的探索/排障产物，可用 asset_claim 归位为批次资产，不返工。
 
 ## 三层门禁（Tier3）
 
 - **建批静态校验**：layer ∈ plan/exec/audit；有 exec 必有 audit；产物路径契约；跨层引用；防篡改；
-- **Entry Gate**：exec 派发前 consume 齐备；
-- **L0**：plan merged 前 spec 必填章节 / JSON 可解析；
-- **Exit Gate**：exec→outputs、audit→produce 存在；
-- **Complete Gate**：audit 全终态且无 failed/conflict，exec 全终态。
+- **Entry（入口门禁）**：exec 派发前 consume 产物齐备，缺则拒派（GATE_ENTRY_MISSING）；
+- **Plan 契约（产物结构门禁）**：plan 产物须含 spec 必填章节（验收标准/约束）+ task-tree 合法 JSON，缺失则拒 merged（GATE_PLAN_CONTRACT）；
+- **Exit（产出门禁）**：exec 结算前 outputs 落盘、audit 结算前 produce 落盘，缺则拒 merged（GATE_EXIT_MISSING_*）；
+- **Complete（收尾门禁）**：批次 complete 前 audit 层验收完成且无 failed/conflict、exec 层全终态（GATE_COMPLETE_*）。
 
 generic 批次（无 layer）不触发门禁，向后兼容。
 
