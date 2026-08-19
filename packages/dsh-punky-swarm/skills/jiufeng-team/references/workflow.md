@@ -14,8 +14,8 @@ graph TD
         DE -->|四件套: plan/spec/coder-tasks/tester-tasks| MA
     end
     subgraph 执行层⚡
-        MA -->|任务包| CR[coder池]
-        MA -->|测试包| TE[tester池]
+        MA -->|lane 任务| CR[coder池]
+        MA -->|测试任务| TE[tester池]
         CR -->|代码| RV[reviewer]
         TE -->|测试报告| RV
         RV -->|PASS/REWORK + gap-list.json| SV[supervisor]
@@ -33,10 +33,10 @@ graph TD
 | ① | 开启任务 + 人工粗拆 | Leader | leader-decision-pack.md + 模块清单（plan/） |
 | ② | 细拆 + 代码摸底 | Coordinator | task-tree.json + codebase-survey.md（plan/） |
 | ③ | 任务规范设计（四件套） | Designer | plan.md + spec.md + coder-tasks.md + tester-tasks.md（plan/） |
-| ④ | 调度分发 | Manager | 任务包/测试包（mailbox inbox） |
+| ④ | 调度分发 | Manager | lane 任务/测试任务（mailbox inbox） |
 | ⑤ | 编码实现 | Coder 池 | 代码（exec/） |
 | ⑥ | 测试验证 | Tester 池 | 测试报告（exec/） |
-| ⑦ | 对抗审查 + Converge | Reviewer | review.md + gap-list.json（audit/） |
+| ⑦ | 对抗审查 + gap-list 对账 | Reviewer | review.md + gap-list.json（audit/） |
 | ⑧ | 验收审计 | Supervisor | acceptance-report.md（audit/） |
 | ⑨ | 复盘沉淀 | Doc-Manager | retrospective-report.md（audit/）→ 记忆库 |
 | ⑩ | 回馈循环 | Doc-Manager → Coordinator | 复盘知识 → 下一子模块 |

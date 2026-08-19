@@ -55,7 +55,7 @@
 |------|------|------|
 | Coder 交付前必须自检（lint + 测试通过） | MUST | Mnemopi SP-05 |
 | Reviewer 打回必须附带 MUST-FIX 清单 | MUST | Mnemopi SP-08 |
-| 同子模块 3 次打回触发 HATL 门禁 | MUST | 现有流水线规则 |
+| 同子模块 3 次打回触发人审门禁 | MUST | 现有流水线规则 |
 | Spec Acceptance Criteria 必须可测试 | MUST | 可用 JSON 断言验证 |
 | 复盘必须阅读 6 类产出物 | MUST | Mnemopi SP-09 |
 
