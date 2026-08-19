@@ -1,6 +1,6 @@
 {
   "name": "dsh-punky-swarm",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "dsh-punky-swarm — dsh 插件（DeepSeek Harness）· punky 署名 · 集群治理（swarm governance）引擎：单机多子 agent 治理，wavePlan 三层 DAG + 引擎级门禁（Entry/L0/Exit/Complete）+ 状态机 + 锁/mailbox + 会话隔离。附蟛蜞模式预设与 jiufeng-team 角色指引。",
   "license": "Apache-2.0",
