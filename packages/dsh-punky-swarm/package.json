@@ -14,7 +14,6 @@
   },
   "files": [
     "lib",
-    "!lib/client.js",
     "presets",
     "skills",
     "cordis.patch.yml",
