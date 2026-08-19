@@ -43,7 +43,16 @@ git clone https://github.com/Punky971210/dsh-punky-swarm.git
 cd dsh-punky-swarm
 ```
 
-### 2. 挂载插件
+### 2. 初始化插件依赖（安装 peer 依赖）
+
+```sh
+cd packages/dsh-punky-swarm
+npm ci
+```
+
+> 插件以 `link:` 方式挂载后，Node 会从插件目录向上解析依赖；仓库已提交 `package-lock.json`，`npm ci` 一条命令装齐 `@deepseek-ai/dsh-tools`、`@deepseek-ai/cordis`，无需手动建链接。
+
+### 3. 挂载插件
 
 ```sh
 # POSIX
@@ -52,13 +61,13 @@ dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
 dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
 ```
 
-### 3. 重启 dsh web（首次启动完成预设/技能同步）
+### 4. 重启 dsh web（首次启动完成预设/技能同步）
 
 ```sh
 dsh web restart
 ```
 
-### 4. 验证
+### 5. 验证
 
 1. 新建会话，预设选择器出现「蟛蜞模式」；
 2. 工具面含 13 个治理工具：wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；

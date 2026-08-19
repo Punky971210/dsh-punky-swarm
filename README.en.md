@@ -43,7 +43,16 @@ git clone https://github.com/Punky971210/dsh-punky-swarm.git
 cd dsh-punky-swarm
 ```
 
-### 2. Mount the plugin
+### 2. Install the plugin dependencies (peer deps)
+
+```sh
+cd packages/dsh-punky-swarm
+npm ci
+```
+
+> After mounting via `link:`, Node resolves dependencies from the plugin directory upward; the repo ships a `package-lock.json`, so `npm ci` installs `@deepseek-ai/dsh-tools` and `@deepseek-ai/cordis` in one command — no manual symlinks needed.
+
+### 3. Mount the plugin
 
 ```sh
 # POSIX
@@ -52,13 +61,13 @@ dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
 dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
 ```
 
-### 3. Restart dsh web (first start runs the preset/skill sync)
+### 4. Restart dsh web (first start runs the preset/skill sync)
 
 ```sh
 dsh web restart
 ```
 
-### 4. Verify
+### 5. Verify
 
 1. Create a new session and pick the "蟛蜞模式" preset;
 2. The tool surface includes the 13 governance tools: wave_plan / batch_phase / batch_status / artifact_types / assign_check / gate_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack;
