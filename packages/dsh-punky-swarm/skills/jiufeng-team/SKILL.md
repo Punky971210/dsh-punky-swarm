@@ -65,9 +65,23 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
 { id, role: 'Coder'|'Tester'|'Supervisor', layer: 'plan'|'exec'|'audit',
   cmd: '加载 <手册技能>，按任务包自行设计实现并落盘产物',
   角色注入: '从 references/roles/<role>.md 取 Persona+权限边界两段内联（见上）',
+  worker 双通道回执: '完成后 report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执）',
   consume: [...], produce: [...],
   验收标准: [...] }
 ```
+
+### Manager 角色派发模板（代劳指挥 · continuable subagent）
+
+Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）时按下方模板注入。**Manager 定位：代劳指挥——只指挥不执行、不派发子代理（worker 由 Leader 派发，depth-1 直系）；Manager 只读黑板/mailbox、做结算裁决，不经 subagent 创建 worker**。
+
+**指挥循环**（每 turn）：
+1. `batch_status` 读黑板 → 发现可派 lane（deps 已满足且 pending）；
+2. `mailbox_send` inbox/broadcast 建议 Leader 派发（lane id + 角色建议）；
+3. `mailbox_read` outbox 收 worker 完成通知；
+4. `member_status` running→review → `member_settle` 结算裁决；
+5. 循环至批次全终态 → report「批次完成」给 Leader。
+
+**Leader 职责对应**：按 Manager 建议 subagent 派发 worker（depth-1 直系，任务包注明双通道回执）；worker report 完成 → `send_message` Manager 事件唤醒（一行，不做调度决策）。
 
 ## 使用方式
 

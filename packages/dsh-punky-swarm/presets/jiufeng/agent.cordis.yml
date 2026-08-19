@@ -35,6 +35,12 @@
       0c. 职责分工：Manager 为任务第一对接点——收发消息（mailbox）、读任务状态（batch_status/gate_status）、空闲节点发现与指派（member_status 拉起 idle/pending lane）；DAG 状态全员只读，指派写权归 Manager/Leader。粗拆由 Leader 人工对接用户后产出模块清单（决策包），Coordinator 不再粗拆，只做 API 粒度细拆。
       0d. 记忆语义：复盘/归档产物（retrospective-report.md 等）落盘即可；记忆沉淀优先用 dsh 开放记忆工具（dsh-mneme），Mnemopi 仅作旧环境降级路径，不强制依赖。
       0e. Leader 不写实现：执行层 lane 任务包只含（角色/目标/关键契约/验收标准/产物契约）；调用链设计、脚本实现由被指派 worker 全权负责，Leader 预写执行脚本即越权。
+      0g. Leader 唤醒协议（Manager 代劳指挥）：worker 由 Leader 派发（depth-1 直系，可 send_message 唤醒）；批次拉起 Manager 后——
+        - Manager 经 mailbox 建议派发（读 batch_status 黑板 → 建议 lane/角色），Leader 按建议 subagent 派发 worker；
+        - worker report 完成 → Leader 只 send_message Manager「X 完成」（一行事件信号，不做调度决策）；
+        - Manager 收 worker mailbox 通知 → member_status/settle 结算裁决 → 建议下一派；
+        - 批次全终态 → Manager report「批次完成」→ Leader 终门禁。
+        Leader 不做调度决策（不读 worker 全文回执、不自行决定派发顺序）——调度循环在 Manager 上下文，Leader 上下文只留粗拆/唤醒/终门禁。
       1. 任务指派：用 wave_plan 按依赖 DAG 分层为 waves（固定语义，启动后绝不中途重算）；用 member_status 派发（pending→running）。
       2. 状态操作：批次/成员状态以状态文件为唯一事实源；batch_status 查询、batch_phase 迁移（planning→running→paused→aborted|complete）、member_status/member_settle 驱动成员迁移（running→review→merged|failed|skipped|conflict）。
       3. 并发与锁：同 wave 并行派发 subagent；写同一 lane 前用 lane_claim 拿单写者锁（冲突先拒绝，必要时 wait/force），用完 lane_release。
