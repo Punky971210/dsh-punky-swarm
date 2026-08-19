@@ -26,25 +26,36 @@ triggers:
 | 层 | 角色 | 职责 | 能力层手册 | 可拓展性 |
 |----|------|------|-----------|:--------:|
 | 任务层 🎯 | Coordinator | 细拆（API 粒度）+ 代码摸底（粗拆已上移 Leader 人工对接） | dev-planner | 固定 |
-| 任务层 🎯 | Manager | 任务池调度 + 双线审查路由 + HATL 返工门禁 | dev-planner | 固定 |
+| 任务层 🎯 | Manager | 任务池调度 + 双线审查路由 + 人审返工门禁 | dev-planner | 固定 |
 | 任务层 🎯 | Designer | 四件套产出（plan/coder-tasks/tester-tasks/spec） | dev-designer, spec-writing | 固定 |
 | 执行层 ⚡ | Coder 池 | spec 驱动编码 + 自检 | dev-coder, efficient-edit 等 | 动态（推荐 3） |
 | 执行层 ⚡ | Tester 池 | spec 驱动测试，不打回约束 | dev-tester | 动态（推荐 2） |
-| 执行层 ⚡ | Reviewer | 对抗式审查 + Converge 差距扫描 | code-review-guideline, report-blind-audit | 固定 |
-| 审计层 🛡️ | Supervisor | CBM 全量验收 + gap-list 对账 → HITL 门禁 | report-blind-audit, archive | 固定 |
+| 执行层 ⚡ | Reviewer | 对抗式审查 + MUST/SHOULD/FYI 分级 | code-review-guideline, report-blind-audit | 固定 |
+| 审计层 🛡️ | Supervisor | CBM 全量验收 + gap-list 对账 → 人审门禁 | report-blind-audit, archive | 固定 |
 | 审计层 🛡️ | Doc-Manager | 复盘 + 记忆沉淀（dsh-mneme 优先；Mnemopi 降级） | doc-generator, doc-update | 固定 |
 
 ## 装配表（角色 → 操作手册）
 
 | 层 | 角色 | 操作手册（skill 工具加载） | 关键产出 |
 |---|---|---|---|
-| 任务层 | Coordinator/Manager | dev-planner | 排期 / 派发 manifest |
+| 任务层 | Coordinator/Manager | dev-planner | 排期 / 派发（wavePlan lane） |
 | 执行层 | Designer | dev-designer + spec-writing | design.md / PRD / spec（to-prd 为 disable-model-invocation 命令式技能，不适用于 worker） |
 | 执行层 | Coder（池） | dev-coder + efficient-edit + codebase-design | 代码 + dev_plan checklist |
 | 执行层 | Tester（池） | dev-tester | 测试集 + 结果 |
 | 执行层 | Reviewer | code-review-guideline + report-blind-audit | review.md + gap-list.json |
-| 审计层 | Supervisor | report-blind-audit + archive（comet-archive 可选：OpenSpec 变更归档） | 验收报告（HITL 门禁） |
+| 审计层 | Supervisor | report-blind-audit + archive（comet-archive 可选：OpenSpec 变更归档） | 验收报告（人审门禁） |
 | 审计层 | Doc-Manager | doc-generator + doc-update | 文档/复盘 |
+
+### 角色注入（Worker 上下文补全）
+
+派发子代理时，Leader 从 `references/roles/<role>.md` 取「## Persona（注入用）」与「## 权限边界（注入用）」两段，内联进任务包 prompt 的『角色注入』段——让 worker 自带角色边界（防越界：Tester 不改码/Reviewer 只读），**不依赖自觉**。
+
+- **注入内容**：仅 Persona + 权限边界 2 段；
+- **不注入全量 role**：职责/协作由 Leader 驱动（任务包已含目标/契约/回执要求），全量注入污染上下文；
+- **示例**：
+  ```
+  **角色注入**：你是 <Role>——<Persona 一句话>；权限：<白名单>；禁止：<边界>。
+  ```
 
 ### 任务包最小结构（Leader 派发模板）
 
@@ -53,13 +64,14 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
 ```json
 { id, role: 'Coder'|'Tester'|'Supervisor', layer: 'plan'|'exec'|'audit',
   cmd: '加载 <手册技能>，按任务包自行设计实现并落盘产物',
+  角色注入: '从 references/roles/<role>.md 取 Persona+权限边界两段内联（见上）',
   consume: [...], produce: [...],
   验收标准: [...] }
 ```
 
 ## 使用方式
 
-1. **查角色**：读 `references/roles/<role>.md`（身份/触发条件/协作模式/Success Criteria/Boundary/输出 schema）。
+1. **查角色**：读 `references/roles/<role>.md`（Persona（注入用）/职责与产出/权限边界（注入用）/协作方式，4 段）。
 2. **装配**：Leader 派发时按上方装配表加载对应能力层手册；角色边界要点可内联进 task.cmd。
 3. **治理原则**：`references/constitution.md` 为项目级不可协商原则（编码/安全/合规/架构/门禁 5 章 MUST/SHOULD），角色细则引用格式「参考 Constitution §[章节]：[条目]」。
 4. **工作流蓝图**：`references/workflow.md`（角色 DAG + 11 步流转 + 产物契约表）；Designer 四件套等模板见 `references/templates/`。
@@ -116,7 +128,7 @@ wave_plan 的 task.cmd 示例：
 ## 边界
 
 - 本技能**不含**操作流程（用 dev-coder 等能力层）与运行时调度（用 dsh-punky-swarm 工具）。
-- roles/*.md 为 v1.3.0 原文保真；其中 jiuwen 协作协议（send_message/manifest/spawn）在蟛蜞模式下按上表映射。
+- roles/*.md 已于 2026-08-19 按 dsh 工具面重写（4 段骨架，删 jiuwen 残留）；上表为历史对照，live 语义以重写后 role 为准。
 
 ## 成员扩展技能推荐（2026-08-18 全量盘点定稿 · 2026-08-19 迁移/弃用更新）
 
@@ -138,7 +150,7 @@ wave_plan 的 task.cmd 示例：
 | Leader / Manager | tech-benchmark-planning ✅ | 技术参考项目对标→机制差距→升级方案（2026-08-19 已迁移） | 高 |
 | Leader / Manager | team-orchestration | 子代理编排指南（派发参考） | 中 |
 | Leader / Manager | competition-analysis ✅ | 竞品系统化对比分析（2026-08-19 已迁移） | 低 |
-| Leader / Manager | grilling | 方案质询压力测试（HITL 对接，已迁移至 dsh 技能库，走 ask_user_question） | 中 |
+| Leader / Manager | grilling | 方案质询压力测试（人审对接，已迁移至 dsh 技能库，走 ask_user_question） | 中 |
 | Leader / Manager | decision-mapping ✅ | 松散想法→调查 ticket 序列→逐项推进（2026-08-19 已迁移） | 低 |
 | Leader / Manager | team-skill-troubleshoot | 装配/角色注册排查 | 低 |
 
