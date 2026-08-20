@@ -1,6 +1,6 @@
 # dsh-punky-swarm — Punky Swarm
 
-![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
+![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
 
 > **Single-machine multi-subagent swarm governance** for DeepSeek Harness (dsh): fixed-semantics wavePlan (3-layer DAG, never recomputed after creation) + engine-enforced gates (Entry / Plan-contract / Exit / Complete) + state machine + locks/mailbox + session isolation + a task-difficulty routing gate. Ships with the Punky Mode preset and the jiufeng-team role assembly guide.
 
@@ -95,4 +95,4 @@ batch:  planning -> running -> paused -> aborted | complete (complete requires T
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+This project is licensed under the [GNU AGPL v3](LICENSE) (SPDX: AGPL-3.0-only). You may use, modify, and distribute it (including commercially) under AGPL-3.0; if you modify it and provide it over a network, you must publish your modifications under AGPL-3.0.

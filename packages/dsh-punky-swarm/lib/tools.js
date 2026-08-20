@@ -1,3 +1,20 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // 蟛蜞模式治理工具（14 个），defineTool 规范含 output.schema + output.render
 // v2：全部工具感知 session——批次归属当前执行会话（exec.agent.session.id），可被 args.session 覆盖
 // Tier3：wave_plan 支持三层契约字段 + team 装配注入；新增 assign_check（委派形态判定 A/B/C）、gate_status（门禁状态查询）、artifact_types（产物类型注册表）、asset_claim（直做产物归位）

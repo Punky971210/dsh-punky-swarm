@@ -1,6 +1,6 @@
 # dsh-punky-swarm — 蟛蜞模式（Punky Swarm 集群治理）
 
-![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
+![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
 
 > dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG（固定语义，建批后不重算）+ 引擎级门禁（Entry / Plan 契约 / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 任务难度路由门禁。附蟛蜞模式预设与 jiufeng-team 角色指引。
 
@@ -95,4 +95,4 @@ generic 批次（无 layer）不触发门禁，向后兼容。
 
 ## 许可
 
-Apache-2.0，见 [LICENSE](LICENSE)。
+本项目采用 [GNU AGPL v3](LICENSE)（SPDX: AGPL-3.0-only）授权。在遵守 AGPL-3.0 的前提下可自由使用、修改与分发（含商用）；若修改后通过网络提供服务，须按 AGPL-3.0 公开修改内容。
