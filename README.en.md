@@ -182,4 +182,4 @@ batch:  planning -> running -> paused -> aborted | complete (complete requires T
 This project is dual-licensed under **AGPL-3.0**:
 
 - **Open source**: Default license is [GNU AGPL v3](LICENSE). You may use, modify, and distribute it (including commercially) under AGPL-3.0; if you modify it and provide it over a network, you must publish your modifications under AGPL-3.0.
-- **Commercial**: For **closed-source** commercial use (private deployment, closed redistribution, paid hosting, etc.), contact the author for a commercial license (template: [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md)). **Granting of a commercial license is at the licensor's sole discretion, without obligation to state reasons.**
+- **Commercial**: For **closed-source** commercial use (private deployment, closed redistribution, paid hosting, etc.), contact the author for a commercial license. **Granting of a commercial license is at the licensor's sole discretion, without obligation to state reasons.**
