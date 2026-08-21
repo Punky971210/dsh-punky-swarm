@@ -1,10 +1,27 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createTools } from '../lib/tools.js';
-import { createStore } from '../lib/batch-store.js';
+import { createTools } from '../lib/tools/register.js';
+import { createStore } from '../lib/state/store.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-tools-'));
 const store = createStore(root);
@@ -196,4 +213,68 @@ test('guard：无 config.escalation 时用缺省 EXEC_TOOLS（向后兼容）', 
   // 缺省名单：write 是执行型 → 未评估时被拒
   assert.ok(g(exec('write')));
   assert.equal(g(exec('read')), undefined);
+});
+
+test('guard：subagent 降级豁免（delegationDepth>0 / parentSession 免难度门禁）', () => {
+  const captured = [];
+  const ctxG = { tools: { register: () => {}, guard: (fn) => { captured.push(fn); return () => {}; } }, logger: console };
+  const rootG = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gov3-'));
+  const storeG = createStore(rootG);
+  createTools(ctxG, { store: storeG, root: rootG, config: {} });
+  const g = captured[0];
+  // subagent 会话（delegationDepth=1）：无任何评估 → 执行型工具放行（修复前门禁 1 拒绝）
+  const sub = (name) => ({ name, agent: { session: { id: 'sess-sub', header: { delegationDepth: 1, parentSession: 'sess-leader' } } } });
+  assert.equal(g(sub('pwsh')), undefined);
+  assert.equal(g(sub('write')), undefined);
+  assert.equal(g(sub('edit')), undefined);
+  // parentSession 存在即豁免（delegationDepth 可为 0）
+  const sub2 = (name) => ({ name, agent: { session: { id: 'sess-sub2', header: { delegationDepth: 0, parentSession: 'sess-leader' } } } });
+  assert.equal(g(sub2('pwsh')), undefined);
+  // 豁免不作用于根代理：无 header 且未评估 → 仍被门禁 1 拒绝
+  const root = (name) => ({ name, agent: { session: { id: 'sess-root' } } });
+  assert.ok(g(root('pwsh')));
+  assert.ok(g(root('write')));
+  // 豁免不放松 C 未建批门禁与 A 不派 subagent 门禁：根代理判 C+pendingBatch 仍拒
+  storeG.writeGovernance('sess-root', { lastAssign: { form: 'C', at: new Date().toISOString(), execCallsSince: 0 }, pendingBatch: true });
+  assert.ok(g(root('pwsh')));
+  assert.ok(g(root('write')));
+});
+
+test('guard：显式 session 对称（arguments.session 与 sessionOf 同序解析）', () => {
+  const captured = [];
+  const ctxG = { tools: { register: () => {}, guard: (fn) => { captured.push(fn); return () => {}; } }, logger: console };
+  const rootG = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gov4-'));
+  const storeG = createStore(rootG);
+  createTools(ctxG, { store: storeG, root: rootG, config: {} });
+  const g = captured[0];
+  // 显式 session='sess-x' 有评估；agent.session 是无评估的 worker 会话 → 修复前只认 agent.session 被拦
+  storeG.writeGovernance('sess-x', { lastAssign: { form: 'B', at: new Date().toISOString(), execCallsSince: 0 } });
+  const execX = (name) => ({ name, arguments: { session: 'sess-x' }, agent: { session: { id: 'sess-worker' } } });
+  assert.equal(g(execX('write')), undefined);
+  assert.equal(g(execX('pwsh')), undefined);
+  // 显式 session 无评估 → 仍拒（对称的另一面：不因 agent.session 有评估而放行）
+  storeG.writeGovernance('sess-x', { lastAssign: { form: 'B', at: new Date().toISOString(), execCallsSince: 20 } });
+  assert.ok(g(execX('pwsh')));
+  // 无显式 session → 回落 agent.session 语义不变
+  const execAgent = (name) => ({ name, agent: { session: { id: 'sess-worker' } } });
+  assert.ok(g(execAgent('pwsh')));
+});
+
+test('guard：评估过期仍拒（stale 语义不因 subagent 豁免而放松于根代理）', () => {
+  const captured = [];
+  const ctxG = { tools: { register: () => {}, guard: (fn) => { captured.push(fn); return () => {}; } }, logger: console };
+  const rootG = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gov5-'));
+  const storeG = createStore(rootG);
+  createTools(ctxG, { store: storeG, root: rootG, config: {} });
+  const g = captured[0];
+  const root = (name) => ({ name, agent: { session: { id: 'sess-stale' } } });
+  // 评估未过期：放行
+  storeG.writeGovernance('sess-stale', { lastAssign: { form: 'A', at: new Date().toISOString(), execCallsSince: 0 } });
+  assert.equal(g(root('pwsh')), undefined);
+  // execCallsSince 达上限（20）→ 过期 → 拒（门禁 1 重评要求）
+  storeG.writeGovernance('sess-stale', { lastAssign: { form: 'A', at: new Date().toISOString(), execCallsSince: 20 } });
+  assert.ok(g(root('pwsh')));
+  // 时间戳过期（30min 前）→ 拒
+  storeG.writeGovernance('sess-stale', { lastAssign: { form: 'A', at: new Date(Date.now() - 31 * 60 * 1000).toISOString(), execCallsSince: 0 } });
+  assert.ok(g(root('pwsh')));
 });

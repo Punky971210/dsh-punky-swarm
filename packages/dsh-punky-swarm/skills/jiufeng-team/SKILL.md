@@ -65,7 +65,10 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
 { id, role: 'Coder'|'Tester'|'Supervisor', layer: 'plan'|'exec'|'audit',
   cmd: '加载 <手册技能>，按任务包自行设计实现并落盘产物',
   角色注入: '从 references/roles/<role>.md 取 Persona+权限边界两段内联（见上）',
-  worker 双通道回执: '完成后 report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执）',
+  产物落盘: '引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/（batchId 见本任务包），产物相对路径须落在该根下。两档写法：
+    ① 推荐——直接写引擎产物根（含 <layer>/ 子目录），免 asset_claim 归位，exit gate 直接判存在；
+    ② 若按工作区/会话路径落盘，结算前必须经 asset_claim 归位（Leader 侧执行，worker 在回执中注明产物路径），否则 exit gate 判 missing 拒 merged。',
+  worker 双通道回执: '完成后 report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执，含产物落盘路径）',
   consume: [...], produce: [...],
   验收标准: [...] }
 ```

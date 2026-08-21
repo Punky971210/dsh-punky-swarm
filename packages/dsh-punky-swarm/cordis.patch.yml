@@ -2,4 +2,54 @@
 - insert:
     - id: dsh-punky-swarm
       name: 'dsh-punky-swarm'
-      config: {}
+      config:
+        # 国标 AIP P0-1 装配开关：enabled=true 时生成 14 工具 6 属性目录并挂载 GET /api/dsh-punky-swarm/tools；
+        # 默认 true（AIP 兼容为主线的发布默认；目录生成 + 只读 /tools 端点，零新增工具、零行为破坏）。
+        # toolVersion 可选覆盖引擎版本。关闭（false）则零运行时开销，行为与既有版本完全一致。
+        aip:
+          enabled: true
+        # 能力补全装配（默认全开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开；显式 enabled:false 可逐键关闭）
+        # C5 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only，不自动结算）；
+        #   autoFail=false（默认）异常不自动 member_settle failed；failConfidence 为 loop_deadlock 自动 failed 的置信阈值。
+        capabilities:
+          trajectory:
+            enabled: true
+            autoFail: false
+            failConfidence: 0.85
+          # C4 mailbox 环防护（budget）：enabled=true 时 outbox/broadcast 发送前经 checkBudget——
+          #   maxChainHops（链跳数上限）/maxChainRoundTrips（有序对往返上限）可配；inbox（Leader→worker 下行派发）永不受限；
+          #   显式 enabled:false 可关闭（关闭时现有 mailbox 调用零感知：不声明 meta.chain = 恒新链，不被拒）。
+          budget:
+            enabled: true
+            maxChainHops: 4
+            maxChainRoundTrips: 2
+          # C1 lane 过期检测（watch/heartbeat）：enabled=true 时挂 watchdog 定时器并注册 lane_heartbeat 工具——
+          #   intervalsMinutes 退避档位（分钟，默认 [10,20,30]，冷场越久追问间隔越长）；maxMissed 硬停拍数
+          #   （默认 3，连续 N 拍无活动 → appendEvent('lane.stalled') 停止追问，只标记不自动处置）；
+          #   scanIntervalMinutes watchdog 扫描间隔（默认 1）；probeTemplate 可选覆写追问模板（{lane}/{batchId}/{missed} 占位）。
+          watch:
+            enabled: true
+          # C2 worktree 物理隔离（lane-tools）：enabled=true 时注册 lane_worktree_create / lane_worktree_merge / lane_checkpoint
+          # （git worktree 隔离 + checkpoint 提交；与 lane_claim 逻辑锁互补——lane_claim 管状态层「写谁的」，
+          #  本组工具管工作区层「写到哪」；全能力默认开 → 工具总数 18（14+heartbeat+worktree 三件+log_export），回归已覆盖）。
+          worktree:
+            enabled: true
+            # merge agent（E2 lane 装配键，由 E3 统一登记）：enabled=true 且宿主注入 mergeAgentSpawner 时，
+            #   lane_worktree_merge 冲突可派 LLM merge agent 语义化解（taskswarm merger 借鉴）；model 可选模型名；
+            #   timeoutMs 超时毫秒（默认 600000）。enabled=false（默认）冲突完全走现状路径（保留现场+冲突清单）；
+            #   解决失败/超时 → lane 保持 conflict 终态（R5，不自动恢复）。
+            mergeAgent:
+              enabled: false
+              model: null
+              timeoutMs: 600000
+          # C3 验收证据（verify）：enabled=true 时引擎级挂 post-execute 证据捕获（<root>/verify/blobs 内容寻址 + ledger-<session>.jsonl）；
+          #   mode advisory（默认，只记录不拦截）/ enforce（显式启用则审计裁决拦截）；audit lane 经 evaluateAcEvidence 消费（DI 路径保留）；
+          #   显式 enabled:false 可关闭（关闭时捕获 hook 不挂、零运行时开销）。
+          verify:
+            enabled: true
+            mode: advisory
+          # 日志导出（log_export，E3 lane）：enabled=true 时注册 log_export 工具——模型可调用的只读事件流投影
+          #   （store.readBatch，零副作用）；支持 lane/type(前缀)/since 过滤 + format json/markdown + writeTo
+          #   落盘到引擎产物根（可审计）；显式 enabled:false 可关闭（关闭时工具不注册）。
+          logs:
+            enabled: true

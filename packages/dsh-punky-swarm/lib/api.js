@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks（全部按 session 隔离）
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import * as mailbox from './mailbox.js';
+import * as mailbox from './comms/mailbox.js';
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -31,7 +31,7 @@ function q(url) {
 }
 
 export function createApi(ctx, deps) {
-  const { store, root } = deps;
+  const { store, root, catalog } = deps;
   const disposers = [];
   const register = (route) => disposers.push(ctx.webServer.register(route));
 
@@ -136,6 +136,22 @@ export function createApi(ctx, deps) {
       } catch (e) { sendJson(res, 500, { error: String(e.message) }); }
     },
   });
+
+  // 国标 AIP P0-1 工具列表同步（方案 A：只读 API 端点）：enabled=true 时 catalog 非空，注册 /tools；
+  // enabled=false（默认）时 catalog 为 null，不注册该路由（保持既有 6 路由契约）。
+  if (catalog) {
+    register({
+      kind: 'exact',
+      path: '/api/dsh-punky-swarm/tools',
+      handler(req, res) {
+        try {
+          const { name } = q(req.url);
+          const tools = name ? catalog.list().filter((d) => d.name === name) : catalog.list();
+          sendJson(res, 200, { count: tools.length, tools, generatedAt: catalog.generatedAt });
+        } catch (e) { sendJson(res, 500, { error: String(e.message) }); }
+      },
+    });
+  }
 
   return { dispose() { for (const d of disposers) { try { d?.(); } catch {} } } };
 }

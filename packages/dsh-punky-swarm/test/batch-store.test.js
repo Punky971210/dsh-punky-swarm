@@ -1,9 +1,26 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createStore } from '../lib/batch-store.js';
+import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-bs-'));
@@ -144,4 +161,89 @@ test('migrateLegacy moves root/batches to sessions/legacy', () => {
 
 test('invalid sessionId rejected', () => {
   assert.throws(() => store.createBatch('../evil', { batchId: 'x', wavePlan: buildWavePlan({ batchId: 'x', tasks: [{ id: 'a' }] }) }));
+});
+
+// ---- B1 恢复审计（punky-resume 决策包 §三 B1）：system.recovered.detail 详情 + 幂等（AC2）----
+
+test('recoverBatches detail: lastActiveAt/produced 审计详情（running→idle + review→idle）', () => {
+  const p = buildWavePlan({
+    batchId: 'b-rec-detail',
+    tasks: [
+      { id: 'x', layer: 'exec', outputs: ['exec/x.md', 'exec/missing.md'] },
+      { id: 'y', layer: 'audit', produce: ['audit/y.md'] },
+      { id: 'z', layer: 'plan', produce: ['plan/z.md', 'plan/absent.md'] },
+    ],
+  });
+  store.createBatch(S, { batchId: 'b-rec-detail', wavePlan: p, phase: 'running' });
+  store.setMember(S, 'b-rec-detail', 'x', 'running');
+  store.setMember(S, 'b-rec-detail', 'y', 'running');
+  store.setMember(S, 'b-rec-detail', 'y', 'review');
+  store.setMember(S, 'b-rec-detail', 'z', 'running');
+  store.setMember(S, 'b-rec-detail', 'z', 'review');
+  // 已产出产物：只写契约中一部分 → produced 只列已存在且非空者
+  const aDir = path.join(root, 'sessions', S, 'artifacts', 'b-rec-detail');
+  for (const sub of ['exec', 'audit', 'plan']) fs.mkdirSync(path.join(aDir, sub), { recursive: true });
+  fs.writeFileSync(path.join(aDir, 'exec', 'x.md'), 'x-out');
+  fs.writeFileSync(path.join(aDir, 'audit', 'y.md'), 'y-out');
+  fs.writeFileSync(path.join(aDir, 'plan', 'z.md'), 'z-out');
+
+  const recovered = store.recoverBatches();
+  assert.ok(recovered.includes(S + '/b-rec-detail'));
+  const b = store.readBatch(S, 'b-rec-detail');
+  assert.equal(b.lanes.x, 'idle');
+  assert.equal(b.lanes.y, 'idle');
+  assert.equal(b.lanes.z, 'idle');
+  const ev = b.events.filter((e) => e.type === 'system.recovered').at(-1);
+  assert.ok(ev, 'system.recovered event missing');
+  assert.deepEqual([...ev.recoveredLanes].sort(), ['x', 'y', 'z']); // 只含本次恢复的 lane
+  assert.equal(ev.detail.length, 3);
+  const byLane = Object.fromEntries(ev.detail.map((d) => [d.lane, d]));
+  assert.equal(byLane.x.from, 'running');
+  assert.equal(byLane.y.from, 'review');
+  assert.equal(byLane.z.from, 'review');
+  // produced：契约中已存在且非空者（缺失产物不列入）
+  assert.deepEqual(byLane.x.produced, ['exec/x.md']);
+  assert.deepEqual(byLane.y.produced, ['audit/y.md']);
+  assert.deepEqual(byLane.z.produced, ['plan/z.md']);
+  // lastActiveAt：ISO 可解析；x 最后一次 lane 事件 = member.settled(running) 的 ts
+  for (const d of ev.detail) {
+    assert.equal(typeof d.lastActiveAt, 'string');
+    assert.ok(Number.isFinite(Date.parse(d.lastActiveAt)), 'lastActiveAt not ISO: ' + d.lastActiveAt);
+  }
+  const xSettled = b.events.filter((e) => e.type === 'member.settled' && e.lane === 'x').at(-1);
+  assert.equal(byLane.x.lastActiveAt, xSettled.ts);
+});
+
+test('recoverBatches detail: 无产物 lane produced=[]；无 lane 事件 lastActiveAt 回退 updatedAt', () => {
+  const p = buildWavePlan({
+    batchId: 'b-rec-empty',
+    tasks: [{ id: 'g', layer: 'exec', outputs: ['exec/none.md'] }, { id: 'h', layer: 'audit' }],
+  });
+  store.createBatch(S, { batchId: 'b-rec-empty', wavePlan: p, phase: 'running' });
+  // 白盒构造 crash 中间态：lane=g 已 running 但无 lane 事件（绕过 setMember，模拟恢复前状态）
+  const file = store.batchFile(S, 'b-rec-empty');
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  raw.lanes.g = 'running';
+  raw.events = raw.events.filter((e) => e.type === 'batch.created');
+  raw.updatedAt = '2026-08-21T00:00:00.000Z';
+  fs.writeFileSync(file, JSON.stringify(raw, null, 2));
+
+  const recovered = store.recoverBatches();
+  assert.ok(recovered.includes(S + '/b-rec-empty'));
+  const b = store.readBatch(S, 'b-rec-empty');
+  const ev = b.events.filter((e) => e.type === 'system.recovered').at(-1);
+  assert.equal(ev.detail.length, 1);
+  assert.equal(ev.detail[0].lane, 'g');
+  assert.equal(ev.detail[0].from, 'running');
+  assert.deepEqual(ev.detail[0].produced, []); // 契约产物不存在 → 空清单
+  assert.equal(ev.detail[0].lastActiveAt, '2026-08-21T00:00:00.000Z'); // 无 lane 事件 → 回退 updatedAt
+});
+
+test('recoverBatches 幂等：二次调用不重复记录 system.recovered', () => {
+  const before = store.readBatch(S, 'b-rec-detail').events.filter((e) => e.type === 'system.recovered').length;
+  const second = store.recoverBatches();
+  assert.equal(second.includes(S + '/b-rec-detail'), false); // 已 idle，不再恢复
+  assert.equal(second.includes(S + '/b-rec-empty'), false);
+  const after = store.readBatch(S, 'b-rec-detail').events.filter((e) => e.type === 'system.recovered').length;
+  assert.equal(after, before); // 未新增事件（幂等）
 });

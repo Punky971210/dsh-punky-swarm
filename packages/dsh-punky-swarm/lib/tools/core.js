@@ -15,48 +15,64 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 蟛蜞模式治理工具（14 个），defineTool 规范含 output.schema + output.render
-// v2：全部工具感知 session——批次归属当前执行会话（exec.agent.session.id），可被 args.session 覆盖
-// Tier3：wave_plan 支持三层契约字段 + team 装配注入；新增 assign_check（委派形态判定 A/B/C）、gate_status（门禁状态查询）、artifact_types（产物类型注册表）、asset_claim（直做产物归位）
+// 蟛蜞模式治理核心工具（11 个），defineTool 规范含 output.schema + output.render
+// 拆分自 lib/tools.js（punky-restructure exec-tools-split lane）：core 域原样搬移，行为不变
+// 导出：createCoreTools(ctx, deps) => Array<defineTool>；installDifficultyGuard(ctx, deps)（难度门禁注册，原样搬移一字不改）
+// 共享辅助（mailbox-tools.js 复用）：TEXT_OUTPUT / sessionOf
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { buildWavePlan, validateWavePlan } from './wave-plan.js';
-import { resolveAssembly } from './assembly.js';
-import { ARTIFACT_TYPES } from './artifact-types.js';
-import * as mailbox from './mailbox.js';
-import * as lock from './lock.js';
+import { buildWavePlan, validateWavePlan } from '../wave-plan.js';
+import { resolveAssembly } from '../assembly.js';
+import { ARTIFACT_TYPES } from '../artifact-types.js';
+import * as lock from '../lock.js';
 import { join } from 'node:path';
 
-const TEXT_OUTPUT = (text) => [{ type: 'text', text }];
+export const TEXT_OUTPUT = (text) => [{ type: 'text', text }];
 
 // 执行型工具名单（有副作用/写盘/派发执行）：guard 计数与拦截用；可被 config.escalation.execTools 覆盖
-const EXEC_TOOLS = [
+export const EXEC_TOOLS = [
   'pwsh', 'bash', 'write', 'edit', 'run_code', 'workflow', 'ralph',
   'ssh_exec', 'ssh_cluster', 'ssh_upload', 'ssh_download', 'subagent', 'subagent_fork',
 ];
 
 // 清 pendingBatch（wave_plan 建批 / 批次 complete|aborted 后调用；无治理状态时不创建文件）
-function clearPendingBatch(store, sessionId) {
+// session-compat：本会话曾把评估镜像到执行会话（mirroredTo）时，解锁同步传播到镜像会话，
+// 避免 C@命名会话建批后，执行会话 guard 残留「先建批」幻觉锁
+export function clearPendingBatch(store, sessionId) {
   const g = store.readGovernance(sessionId);
-  if (g.pendingBatch || g.pendingSince || g.lastAssign) {
-    store.writeGovernance(sessionId, { pendingBatch: false, pendingSince: null });
+  const mirroredTo = g.mirroredTo ?? null;
+  if (g.pendingBatch || g.pendingSince || g.lastAssign || mirroredTo) {
+    store.writeGovernance(sessionId, { pendingBatch: false, pendingSince: null, mirroredTo: null });
+  }
+  if (mirroredTo && mirroredTo !== sessionId) {
+    const gm = store.readGovernance(mirroredTo);
+    if (gm.mirror?.from === sessionId) {
+      store.writeGovernance(mirroredTo, { pendingBatch: false, pendingSince: null, mirror: null });
+    }
   }
 }
 
-function sessionOf(args, exec) {
+export function sessionOf(args, exec) {
   if (args && typeof args.session === 'string' && args.session.length) return args.session;
   return exec?.agent?.session?.id ?? 'cli';
 }
-function boxRoot(root, sessionId, batchId) { return join(root, 'sessions', sessionId, 'mailbox', batchId); }
-function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions', sessionId, '.locks', batchId + '.' + lane + '.lock'); }
+export function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions', sessionId, '.locks', batchId + '.' + lane + '.lock'); }
 
-export function createTools(ctx, deps) {
-  const { store, root, config = {} } = deps;
-
+// 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改，含 Bug3 修复注释），注册顺序保持现状（createTools 开头）
+export function installDifficultyGuard(ctx, deps) {
+  const { store, config = {} } = deps;
   // 任务难度值门禁（design task-difficulty-gate §3，引擎强制不依赖自觉）：执行型工具前置 guard
   // 同步签名 (execution) => string | undefined；execution 含 name / agent.session.id；返回 string 即拒绝
   if (typeof ctx.tools?.guard === 'function') {
     ctx.tools.guard((execution) => {
-      const sessionId = execution?.agent?.session?.id;
+      // ② subagent 降级豁免（Bug3 主修复，决策包 §4.3 ②，guard 开头）：subagent/subagent_fork 派发的 worker 会话
+      //   （delegationDepth>0 或带 parentSession）继承 Leader 侧已评估的任务形态，难度门禁不重复评估——
+      //   会话隔离（worker 无 Leader 侧 lastAssign）+ 同块并行时序下重复评估必然误拦。豁免仅限难度门禁，
+      //   其余 guard 语义（EXEC_TOOLS 名单、计数）不受影响；Leader 会话（无 header）仍走完整门禁。
+      const header = execution?.agent?.session?.header;
+      if (header && (header.delegationDepth > 0 || header.parentSession)) return undefined;
+      // ③′ session 解析对称（Bug3 补充）：与 sessionOf 同序——execution.arguments.session 优先，缺省回退 agent.session.id。
+      // 修复显式传 session 时评估（args.session 落点）与拦截（只认 agent.session）不同步导致的误拦（决策包 Bug3 §4.3 ③′）
+      const sessionId = execution?.arguments?.session ?? execution?.agent?.session?.id;
       if (!sessionId) return undefined;
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
       if (!execTools.includes(execution.name)) return undefined; // ① 非执行型：放行（治理/查询，防死锁）
@@ -76,11 +92,15 @@ export function createTools(ctx, deps) {
       return reason;
     });
   }
+}
 
-  const tools = [
+export function createCoreTools(ctx, deps) {
+  const { store, root, config = {} } = deps;
+
+  return [
     defineTool({
       name: "wave_plan",
-      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）。批次绑定当前会话。",
+      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。",
       parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发上限（默认 5）"},"team":{"type":"string","description":"装配团队（默认 generic；三层批推荐 jiufeng）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true}}},
@@ -143,13 +163,15 @@ export function createTools(ctx, deps) {
     }),
     defineTool({
       name: "assign_check",
-      description: "委派形态判定（设计 §10/§15.3 N3）：判断任务应由 Leader 直做（A）/ 轻量委派 subagent（B，需独立上下文/工具面时）/ 必须走流水线批次（C）。输入任务特征（并行?/多角色?/门禁?/可恢复?/需独立上下文?），返回判定与原因；C 类任务应走 wave_plan 建批。每次调用写入会话治理状态（governance.lastAssign+history），guard 依据其做执行型工具门禁。",
-      parameters: {"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string"}},
+      description: "委派形态判定（设计 §10/§15.3 N3）：判断任务应由 Leader 直做（A）/ 轻量委派 subagent（B，需独立上下文/工具面时）/ 必须走流水线批次（C）。输入任务特征（并行?/多角色?/门禁?/可恢复?/需独立上下文?），返回判定与原因；C 类任务应走 wave_plan 建批。每次调用写入会话治理状态（governance.lastAssign+history），guard 依据其做执行型工具门禁。显式 session 时输出回显 sessionId 并镜像到执行会话（guard 兼容不误拦）；缺省=当前执行会话，cli 兜底并提示。",
+      parameters: {"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string","description":"显式指定评估落点会话（当前会话 ID 或命名黑板）；缺省=当前执行会话，cli 兜底；与执行会话不同时自动镜像到执行会话（guard 兼容）"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"form":{"type":"string","required":true},"allowed":{"type":"boolean","required":true},"reasons":{"type":"array","required":true,"items":{"type":"string"}},"next":{"type":"array","required":true,"items":{"type":"string"}},"execToolCount":{"type":"integer","required":true},"escalationHint":{"type":"string","required":true},"history":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"form":{"type":"string","required":true},"allowed":{"type":"boolean","required":true},"reasons":{"type":"array","required":true,"items":{"type":"string"}},"next":{"type":"array","required":true,"items":{"type":"string"}},"execToolCount":{"type":"integer","required":true},"escalationHint":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"mirroredTo":{"type":"string"},"notice":{"type":"string"},"history":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
         render: (_args, value) => {
-          let s = 'assign form: ' + value.form + (value.form === 'C' ? ' (must use batch) → next: wave_plan' : ' (allowed)');
+          let s = 'assign form: ' + value.form + (value.form === 'C' ? ' (must use batch) → next: wave_plan' : ' (allowed)') + (value.sessionId ? ' @' + value.sessionId : '');
+          if (value.mirroredTo) s += ' [mirror→' + value.mirroredTo + ']';
           if (value.escalationHint) s += ' ⚠ ' + value.escalationHint;
+          if (value.notice) s += ' ⚠ ' + value.notice;
           return TEXT_OUTPUT(s);
         },
       },
@@ -169,19 +191,42 @@ export function createTools(ctx, deps) {
         const hasActive = store.hasActiveBatch(sessionId);
         const patch = { lastAssign: { form, scope, at: now, reasons, execCallsSince: 0 }, history };
         if (form === 'C' && !hasActive) { patch.pendingBatch = true; patch.pendingSince = now; }
-        else if (hasActive) { patch.pendingBatch = false; patch.pendingSince = null; } // 已有活跃批次：保持解锁
+        // Gap D 修复：新评估总是把 pendingBatch 收敛到正确状态——已有活跃批次，或残留 pendingBatch（C 判定后重评为 A/B），一律清锁
+        else if (hasActive || g0.pendingBatch) { patch.pendingBatch = false; patch.pendingSince = null; }
+        // session-compat：显式 session 与执行会话不同 → 镜像到执行会话（guard 落点兼容）。
+        // 镜像只写 lastAssign + pendingBatch + mirror 指针，不污染执行会话 history；解锁经 clearPendingBatch 传播
+        const execSessionId = exec?.agent?.session?.id ?? null;
+        const mirror = Boolean(args?.session && execSessionId && args.session !== execSessionId);
+        if (mirror) patch.mirroredTo = execSessionId;
         const g = store.writeGovernance(sessionId, patch);
+        let mirroredTo = null;
+        if (mirror) {
+          mirroredTo = execSessionId;
+          store.writeGovernance(execSessionId, {
+            lastAssign: { ...patch.lastAssign, mirroredFrom: sessionId },
+            pendingBatch: patch.pendingBatch ?? g.pendingBatch ?? false,
+            pendingSince: patch.pendingSince ?? g.pendingSince ?? null,
+            mirror: { from: sessionId, at: now },
+          });
+        }
         const execToolCount = g.execToolCount ?? 0;
         // 升级信号（design escalation-hardgate §2.2 S4）：execToolCount≥5 且无活跃批次 → 软提示
         const escalationHint = (execToolCount >= 5 && !hasActive)
           ? 'execToolCount=' + execToolCount + ' ≥5 且无批次：任务已升级为复杂形态，必须 wave_plan 建批'
           : '';
-        return { form, allowed: form !== 'C', reasons, next: form === 'C' ? ['wave_plan'] : [], execToolCount, escalationHint, history: g.history };
+        // session-compat：cli 兜底警示（共享黑板跨调用互相覆盖）
+        const notice = sessionId === 'cli'
+          ? 'session 未显式指定且无 agent.session：评估落点 cli 共享黑板，跨调用互相覆盖，建议显式传 session'
+          : '';
+        // 条件构造返回对象：不触发镜像时镜像字段完全缺席——undefined/null 值均会触发 harness lossless JSON 校验拒绝
+        const out = { form, allowed: form !== 'C', reasons, next: form === 'C' ? ['wave_plan'] : [], execToolCount, escalationHint, notice, sessionId, history: g.history };
+        if (mirroredTo) out.mirroredTo = mirroredTo;
+        return out;
       },
     }),
     defineTool({
       name: "asset_claim",
-      description: "归位（设计 6.3）：Leader 已直做产物（探索/探测/排障）注册为批次资产——复制 source 进 <artifacts>/<batchId>/<target>（保留内容，不移动），批次事件 asset.claimed 留痕，返回批次内路径供 wave_plan consume/produce 声明。路径防逃逸：target 必须是批次内相对路径，拒绝 .. 与绝对路径。",
+      description: "归位（设计 6.3）：Leader 已直做产物（探索/探测/排障）注册为批次资产——复制 source 进 <artifacts>/<batchId>/<target>（保留内容，不移动），批次事件 asset.claimed 留痕，返回批次内路径供 wave_plan consume/produce 声明。路径防逃逸：target 必须是批次内相对路径，拒绝 .. 与绝对路径。引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/；worker 按工作区落盘的产物，结算前须经本工具归位到该根下。",
       parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"source":{"type":"string","required":true,"description":"源文件绝对路径（已直做产物）"},"target":{"type":"string","required":true,"description":"批次内目标路径（相对 artifacts/<batchId>/，不得含 .. 或绝对路径）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"claimedPath":{"type":"string"},"batchId":{"type":"string"}}},
@@ -238,7 +283,7 @@ export function createTools(ctx, deps) {
     }),
     defineTool({
       name: "member_settle",
-      description: "成员结算：按状态机迁移（running->review->merged/failed/skipped/conflict），写入 member.settled 事件。Tier3 门禁：plan merged 前 Plan 契约校验（spec 必填章节 + task-tree JSON）、exec merged 前 outputs 校验、audit merged 前 produce 校验。批次按会话隔离。",
+      description: "成员结算：按状态机迁移（running->review->merged/failed/skipped/conflict），写入 member.settled 事件。Tier3 门禁：plan merged 前 Plan 契约校验（spec 必填章节 + task-tree JSON）、exec merged 前 outputs 校验、audit merged 前 produce 校验。needHuman（P1-6）：audit lane 产物含独立行 `needHuman: true` 声明时，merged 须 note 携带人工裁决证据（契约 `human:<裁决人>:<时间>:<结论>`，如 human:user@2026-08-21:accept），缺则拒 GATE_NEEDHUMAN_PENDING；conflict 驳回不强制（评审驳回语义）。批次按会话隔离。",
       parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":["merged","failed","skipped","conflict"]},"note":{"type":"string","description":"简短备注（只留元数据，不复制正文）"},"session":{"type":"string","description":"批次归属会话"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
@@ -262,46 +307,5 @@ export function createTools(ctx, deps) {
         return { batchId: args.batchId, lane: args.lane, status: b.lanes[args.lane], settled: store.batchSettled(b) };
       },
     }),
-    defineTool({
-      name: "mailbox_send",
-      description: "向文件 mailbox 发送消息（原子写 + ackId）：inbox=Leader->worker，outbox=worker->Leader，broadcast=广播。mailbox 按会话隔离。",
-      parameters: {"batchId":{"type":"string","required":true},"box":{"type":"string","required":true,"enum":["inbox","outbox","broadcast"]},"lane":{"type":"string","description":"outbox 必填"},"message":{"type":"object","required":true,"additionalProperties":true},"meta":{"type":"object","description":"元数据","additionalProperties":true},"session":{"type":"string","description":"批次归属会话"}},
-      output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"ackId":{"type":"string","required":true}}},
-        render: (_args, value) => TEXT_OUTPUT('mailbox sent: ' + value.ackId),
-      },
-      async execute(args, exec) {
-        const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return mailbox.send(boxRoot(root, sessionOf(args, exec), args.batchId), b, args.message, args.meta ?? null);
-      },
-    }),
-    defineTool({
-      name: "mailbox_read",
-      description: "读取 mailbox 未确认消息（ack 后不再返回）。mailbox 按会话隔离。",
-      parameters: {"batchId":{"type":"string","required":true},"box":{"type":"string","required":true,"enum":["inbox","outbox","broadcast"]},"lane":{"type":"string","description":"outbox 必填"},"since":{"type":"integer","description":"仅返回此时间戳(ms)之后的消息"},"session":{"type":"string","description":"批次归属会话"}},
-      output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"items":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}}}},
-        render: (_args, value) => TEXT_OUTPUT(value.items.length + ' unacked message(s)'),
-      },
-      async execute(args, exec) {
-        const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return { items: mailbox.readUnacked(boxRoot(root, sessionOf(args, exec), args.batchId), b, { sinceTs: args.since ?? 0 }) };
-      },
-    }),
-    defineTool({
-      name: "mailbox_ack",
-      description: "确认消费一条 mailbox 消息。mailbox 按会话隔离。",
-      parameters: {"batchId":{"type":"string","required":true},"box":{"type":"string","required":true,"enum":["inbox","outbox","broadcast"]},"lane":{"type":"string","description":"outbox 必填"},"ackId":{"type":"string","required":true},"session":{"type":"string","description":"批次归属会话"}},
-      output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"ackId":{"type":"string","required":true}}},
-        render: (_args, value) => TEXT_OUTPUT('acknowledged: ' + value.ackId),
-      },
-      async execute(args, exec) {
-        const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return mailbox.ack(boxRoot(root, sessionOf(args, exec), args.batchId), b, args.ackId);
-      },
-    }),
   ];
-
-  return { tools, register() { for (const t of tools) ctx.tools.register(t); } };
 }

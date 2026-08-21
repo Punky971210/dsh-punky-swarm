@@ -26,7 +26,7 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const { useState, useEffect } = React;
 
-    const NS = 'dsh-punky-swarm';
+// ===== [panel-segment] locales.js =====
     const zh = {
       "view.cluster": "蟛蜞集群",
       "live": "实时",
@@ -98,9 +98,7 @@ window.__ModuleLoader__.load({
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
     function tt(k) { return zh[k] || en[k] || k; }
-
-    const inject = ['slots', 'locale'];
-
+// ===== [panel-segment] theme.js =====
     // ================= theme-aware palette =================
     // DSH 主题开关：body[data-ds-dark-theme]（深色）vs 默认浅色。令牌 var(--dsw-alias-*)
     // 会随主题自动切换；这里只负责「令牌缺失时」的兜底色板，并按主题切换重渲染。
@@ -186,23 +184,7 @@ window.__ModuleLoader__.load({
       complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary')
     };
     // =======================================================
-
-    async function api(path, session) {
-      const sep = path.includes('?') ? '&' : '?';
-      const res = await fetch('/api/dsh-punky-swarm' + path + sep + 'session=' + encodeURIComponent(session));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    }
-
-    const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
-    const cardBase = {
-      get background() { return T.card; },
-      get borderWidth() { return 1; },
-      get borderStyle() { return 'solid'; },
-      get borderColor() { return T.border; },
-      borderRadius: 10
-    };
-
+// ===== [panel-segment] widgets.js =====
     function Chip({ st, children, style }) {
       const c = st || chip('text2', 'chipPending', '--dsw-alias-label-secondary');
       return React.createElement('span', {
@@ -238,6 +220,79 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function SectionTitle({ children }) {
+      return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 } },
+        React.createElement('span', { style: { width: 3, height: 12, borderRadius: 999, background: T.accent } }),
+        React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, color: T.text, letterSpacing: 0.3 } }, children)
+      );
+    }
+
+    function Skeleton({ h, w, style }) {
+      return React.createElement('div', { className: 'psw-shimmer', style: Object.assign({ height: h || 12, width: w || '100%', borderRadius: 6 }, style || null) });
+    }
+// ===== [panel-segment] batch-list.js =====
+    function BatchList({ batches, selected, onSelect, loading }) {
+      return React.createElement('div', {
+        className: 'psw-list psw-scroll',
+        style: { width: 276, flex: 'none', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', paddingRight: 4 }
+      },
+        React.createElement(SectionTitle, null, tt('batch.title') + ' · ' + (batches ? batches.length : 0)),
+        loading && !batches
+          ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+              React.createElement(Skeleton, { h: 52 }),
+              React.createElement(Skeleton, { h: 52 }),
+              React.createElement(Skeleton, { h: 52 })
+            )
+          : batches && batches.length
+            ? batches.map((b) => {
+                const st = PHASE[b.phase] || PHASE.planning;
+                const vals = Object.values(b.lanes || {});
+                const done = vals.filter((s) => TERMINAL.indexOf(s) >= 0).length;
+                const total = vals.length;
+                const sel = b.batchId === selected;
+                return React.createElement('button', {
+                  key: b.batchId,
+                  type: 'button',
+                  className: 'psw-btn',
+                  onClick: () => onSelect(b.batchId),
+                  'aria-pressed': sel,
+                  style: Object.assign({}, cardBase, {
+                    textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
+                    display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
+                    ...(sel ? { borderColor: T.accent, boxShadow: '0 0 0 1px ' + T.accent } : {}),
+                    background: sel ? T.selBg : T.card
+                  })
+                },
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+                    React.createElement(Chip, { st: st }, b.phase),
+                    React.createElement('span', { style: { flex: 1, fontWeight: 700, fontSize: 12.5, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, b.batchId)
+                  ),
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                    React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
+                    React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
+                  ),
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3 } },
+                    b.autoReleaseable
+                      ? React.createElement(React.Fragment, null, React.createElement(Dot, { color: T.success }), React.createElement('span', null, tt('batch.release')))
+                      : b.phase === 'complete' || b.phase === 'aborted'
+                        ? React.createElement('span', null, tt('batch.done'))
+                        : React.createElement('span', null, tt('batch.progress') + ' · ' + (b.concurrency != null ? tt('concurrency') + '=' + b.concurrency : ''))
+                  )
+                );
+              })
+            : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '28px 12px', color: T.text3, textAlign: 'center' } },
+                React.createElement('svg', { width: 36, height: 36, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': 'true' },
+                  React.createElement('rect', { x: 3, y: 3, width: 7, height: 7, rx: 1.5 }),
+                  React.createElement('rect', { x: 14, y: 3, width: 7, height: 7, rx: 1.5 }),
+                  React.createElement('rect', { x: 3, y: 14, width: 7, height: 7, rx: 1.5 }),
+                  React.createElement('rect', { x: 14, y: 14, width: 7, height: 7, rx: 1.5 })
+                ),
+                React.createElement('div', { style: { fontSize: 12.5, fontWeight: 600, color: T.text2 } }, tt('empty')),
+                React.createElement('div', { style: { fontSize: 11, lineHeight: 1.5 } }, tt('empty.hint'))
+              )
+      );
+    }
+// ===== [panel-segment] batch-detail.js =====
     function GateBadge({ gate }) {
       if (!gate || !gate.layer) return null;
       const items = [];
@@ -308,80 +363,6 @@ window.__ModuleLoader__.load({
         React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
       );
     }
-
-    function SectionTitle({ children }) {
-      return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 } },
-        React.createElement('span', { style: { width: 3, height: 12, borderRadius: 999, background: T.accent } }),
-        React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, color: T.text, letterSpacing: 0.3 } }, children)
-      );
-    }
-
-    function Skeleton({ h, w, style }) {
-      return React.createElement('div', { className: 'psw-shimmer', style: Object.assign({ height: h || 12, width: w || '100%', borderRadius: 6 }, style || null) });
-    }
-
-    function BatchList({ batches, selected, onSelect, loading }) {
-      return React.createElement('div', {
-        className: 'psw-list psw-scroll',
-        style: { width: 276, flex: 'none', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', paddingRight: 4 }
-      },
-        React.createElement(SectionTitle, null, tt('batch.title') + ' · ' + (batches ? batches.length : 0)),
-        loading && !batches
-          ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-              React.createElement(Skeleton, { h: 52 }),
-              React.createElement(Skeleton, { h: 52 }),
-              React.createElement(Skeleton, { h: 52 })
-            )
-          : batches && batches.length
-            ? batches.map((b) => {
-                const st = PHASE[b.phase] || PHASE.planning;
-                const vals = Object.values(b.lanes || {});
-                const done = vals.filter((s) => TERMINAL.indexOf(s) >= 0).length;
-                const total = vals.length;
-                const sel = b.batchId === selected;
-                return React.createElement('button', {
-                  key: b.batchId,
-                  type: 'button',
-                  className: 'psw-btn',
-                  onClick: () => onSelect(b.batchId),
-                  'aria-pressed': sel,
-                  style: Object.assign({}, cardBase, {
-                    textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
-                    display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
-                    ...(sel ? { borderColor: T.accent, boxShadow: '0 0 0 1px ' + T.accent } : {}),
-                    background: sel ? T.selBg : T.card
-                  })
-                },
-                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-                    React.createElement(Chip, { st: st }, b.phase),
-                    React.createElement('span', { style: { flex: 1, fontWeight: 700, fontSize: 12.5, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, b.batchId)
-                  ),
-                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-                    React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
-                    React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
-                  ),
-                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3 } },
-                    b.autoReleaseable
-                      ? React.createElement(React.Fragment, null, React.createElement(Dot, { color: T.success }), React.createElement('span', null, tt('batch.release')))
-                      : b.phase === 'complete' || b.phase === 'aborted'
-                        ? React.createElement('span', null, tt('batch.done'))
-                        : React.createElement('span', null, tt('batch.progress') + ' · ' + (b.concurrency != null ? tt('concurrency') + '=' + b.concurrency : ''))
-                  )
-                );
-              })
-            : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '28px 12px', color: T.text3, textAlign: 'center' } },
-                React.createElement('svg', { width: 36, height: 36, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': 'true' },
-                  React.createElement('rect', { x: 3, y: 3, width: 7, height: 7, rx: 1.5 }),
-                  React.createElement('rect', { x: 14, y: 3, width: 7, height: 7, rx: 1.5 }),
-                  React.createElement('rect', { x: 3, y: 14, width: 7, height: 7, rx: 1.5 }),
-                  React.createElement('rect', { x: 14, y: 14, width: 7, height: 7, rx: 1.5 })
-                ),
-                React.createElement('div', { style: { fontSize: 12.5, fontWeight: 600, color: T.text2 } }, tt('empty')),
-                React.createElement('div', { style: { fontSize: 11, lineHeight: 1.5 } }, tt('empty.hint'))
-              )
-      );
-    }
-
     function BatchDetail({ d }) {
       if (!d) {
         return React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' } },
@@ -457,7 +438,24 @@ window.__ModuleLoader__.load({
         )
       );
     }
+// ===== [panel-segment] main.js =====
+    const NS = 'dsh-punky-swarm';
+    const inject = ['slots', 'locale'];
+    async function api(path, session) {
+      const sep = path.includes('?') ? '&' : '?';
+      const res = await fetch('/api/dsh-punky-swarm' + path + sep + 'session=' + encodeURIComponent(session));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
 
+    const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
+    const cardBase = {
+      get background() { return T.card; },
+      get borderWidth() { return 1; },
+      get borderStyle() { return 'solid'; },
+      get borderColor() { return T.border; },
+      borderRadius: 10
+    };
     function ClusterWorkbench({ sessionId }) {
       const [batches, setBatches] = useState(null);
       const [sel, setSel] = useState(null);

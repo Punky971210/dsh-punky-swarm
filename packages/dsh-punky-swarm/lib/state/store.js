@@ -17,12 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // BatchStore：批次状态文件唯一事实源（原子写 + 事件日志 + 状态机迁移 + 恢复语义）
 // v2：批次绑定 session——root/sessions/<sessionId>/batches/*.json；存量 root/batches 迁移到 legacy
-// Tier3：层间门禁（设计 §3.3/§四/§五/§15）——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
+// Tier3：层间门禁（entry/exit/Plan 契约/complete）由 state/gates.js 承担，createStore 经 createGates(root) 注入调用
 import fs from 'node:fs';
 import path from 'node:path';
-import * as schema from './schema.js';
+import * as schema from '../schema.js';
+import { createGates, isAbsPath } from './gates.js';
+import { BATCH_SCHEMA_V3, migrateV2toV3, chainsDefaults, conditionDefaults } from './schema-v3.js';
+import * as machine from './machine.js';
+import { loadRules } from './machine-rules.js';
+import { createArchive } from './archive.js'; // P1-5：done→archive（complete 钩子）
 
-const STORE_SCHEMA = 2;
+const STORE_SCHEMA = BATCH_SCHEMA_V3;
 const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
 
 function atomicWrite(file, data) {
@@ -33,9 +38,14 @@ function atomicWrite(file, data) {
   fs.renameSync(tmp, file); // Windows: MoveFileEx REPLACE_EXISTING
 }
 
-export function createStore(root) {
+export function createStore(root, { rules } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
+  const gates = createGates(root);
+  // P1-7：棘轮规则表（createStore(root, { rules }) 可选注入 loadRules 产物；未注入 = 默认规则 = schema 常量同引用，行为不变）
+  const ratchet = rules ?? loadRules();
+  // P1-5：归档器装配（createStore 签名不变；归档目标 = <root>/sessions/<sid>/archive/<bid>/）
+  const archive = createArchive(root);
 
   function sessionDir(sessionId) {
     if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
@@ -46,6 +56,11 @@ export function createStore(root) {
   }
   function artifactsDirOf(sessionId, batchId) {
     return path.join(sessionDir(sessionId), 'artifacts', batchId);
+  }
+  // P1-4：condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——相对路径解析到批次产物根，绝对路径直接用；存在性判定（existsSync）
+  function conditionFileExists(sessionId, batchId) {
+    const artifactsDir = artifactsDirOf(sessionId, batchId);
+    return (p) => fs.existsSync(isAbsPath(p) ? p : path.join(artifactsDir, p));
   }
 
   // 存量迁移：root/batches/*.json -> sessions/legacy/batches/（一次，幂等）
@@ -72,73 +87,6 @@ export function createStore(root) {
     return { ts: new Date().toISOString(), type, ...fields };
   }
 
-  // ---- Tier3 门禁辅助 ----
-  function isAbsPath(p) {
-    return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
-  }
-  function findTask(batch, lane) {
-    for (const w of batch.wavePlan ?? []) {
-      for (const t of w.tasks) if (t.id === lane) return t;
-    }
-    return null;
-  }
-  function resolveArtifact(sessionId, batchId, rel) {
-    return isAbsPath(rel) ? rel : path.join(artifactsDirOf(sessionId, batchId), rel);
-  }
-  function fileExistsNonEmpty(p) {
-    try { return fs.statSync(p).size > 0; } catch { return false; }
-  }
-  // Entry Gate（设计 §四）：exec lane 派发前 consume 必须全部存在且非空
-  function checkEntryGate(sessionId, batchId, batch, lane) {
-    const t = findTask(batch, lane);
-    if (!t || t.layer !== 'exec' || !Array.isArray(t.consume) || t.consume.length === 0) return { ok: true };
-    const missing = t.consume.filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
-    return missing.length ? { ok: false, code: 'GATE_ENTRY_MISSING', missing } : { ok: true };
-  }
-  // Plan 契约产物结构校验（设计 §3.3/§15.3 N5）：仅 plan 产物——spec 必填章节 + task-tree JSON 可解析
-  function checkPlanContract(sessionId, batchId, batch, lane) {
-    const t = findTask(batch, lane);
-    if (!t || t.layer !== 'plan' || !Array.isArray(t.produce)) return { ok: true };
-    const problems = [];
-    for (const p of t.produce) {
-      const abs = resolveArtifact(sessionId, batchId, p);
-      if (!fileExistsNonEmpty(abs)) { problems.push(p + ' missing'); continue; }
-      const content = fs.readFileSync(abs, 'utf8');
-      if (p.endsWith('spec.md')) {
-        if (!content.includes('## 验收标准')) problems.push(p + ' lacks "## 验收标准"');
-        if (!content.includes('## 约束')) problems.push(p + ' lacks "## 约束"');
-      } else if (p.endsWith('.json')) {
-        try { JSON.parse(content); } catch { problems.push(p + ' invalid JSON'); }
-      }
-    }
-    return problems.length ? { ok: false, code: 'GATE_PLAN_CONTRACT', problems } : { ok: true };
-  }
-  // Exit Gate（设计 §五）：exec→outputs 存在；audit→produce 存在；plan→Plan 契约
-  function checkExitGate(sessionId, batchId, batch, lane) {
-    const t = findTask(batch, lane);
-    if (!t || !t.layer) return { ok: true };
-    if (t.layer === 'plan') return checkPlanContract(sessionId, batchId, batch, lane);
-    const field = t.layer === 'exec' ? 'outputs' : (t.layer === 'audit' ? 'produce' : null);
-    if (!field || !Array.isArray(t[field]) || t[field].length === 0) return { ok: true };
-    const missing = t[field].filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
-    return missing.length ? { ok: false, code: 'GATE_EXIT_MISSING_' + t.layer.toUpperCase(), missing } : { ok: true };
-  }
-  // Complete Gate（设计 §5.2）：audit 层必须存在且全部 settled 且无 failed/conflict；exec 层全部 settled
-  function checkCompleteGate(batch) {
-    const layers = { plan: [], exec: [], audit: [] };
-    for (const w of batch.wavePlan ?? []) {
-      for (const t of w.tasks) if (t.layer && layers[t.layer]) layers[t.layer].push(t.id);
-    }
-    if (layers.exec.length === 0 && layers.audit.length === 0) return { ok: true }; // generic 批次
-    const laneState = (id) => batch.lanes[id];
-    const allTerminal = (ids) => ids.every((id) => schema.isMemberTerminal(laneState(id)));
-    if (layers.audit.length === 0) return { ok: false, code: 'GATE_COMPLETE_NO_AUDIT' };
-    if (!allTerminal(layers.audit)) return { ok: false, code: 'GATE_EXIT_PENDING_AUDIT', pending: layers.audit.filter((id) => !schema.isMemberTerminal(laneState(id))) };
-    if (layers.audit.some((id) => ['failed', 'conflict'].includes(laneState(id)))) return { ok: false, code: 'GATE_COMPLETE_AUDIT_FAILED' };
-    if (layers.exec.length && !allTerminal(layers.exec)) return { ok: false, code: 'GATE_COMPLETE_EXEC_PENDING', pending: layers.exec.filter((id) => !schema.isMemberTerminal(laneState(id))) };
-    return { ok: true };
-  }
-
   function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning' }) {
     schema.assertBatchPhase(phase);
     const file = batchFile(sessionId, batchId);
@@ -156,6 +104,8 @@ export function createStore(root) {
       team: wavePlan.team ?? 'generic',
       wavePlan: wavePlan.wavePlan,
       lanes,
+      chains: chainsDefaults(), // C4：mailbox 环防护记账状态（v3 字段，唯一事实源）
+      archived: false, // P1-5：单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
       events: [newEvent('batch.created', { batchId, sessionId })],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -192,10 +142,27 @@ export function createStore(root) {
     schema.assertMemberState(to);
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
     const from = batch.lanes[lane];
-    schema.assertMemberTransition(from, to);
-    // Tier3 门禁：派发（entry）与结算（exit/Plan 契约）
+    // P1-7：迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
+    const mv = machine.applyMemberTransition(from, to, { rules: ratchet });
+    if (!mv.ok) throw new Error('invalid member transition: ' + from + ' -> ' + to);
+    // Tier3 门禁：派发（condition + entry）与结算（exit/Plan 契约）+ P1-6 needHuman（review 挂起检测 / merged 人工裁决闸）
     if (to === 'running') {
-      const g = checkEntryGate(sessionId, batchId, batch, lane);
+      // P1-4：派发前条件校验（lane.condition 静态声明，DI fileExists）——不满足 → 不派发、自动落 skipped（既有终态迁移）+ lane.skipped 事件；wavePlan 不动不重算
+      const cond = machine.checkDispatchCondition(sessionId, batchId, batch, lane, { fileExists: conditionFileExists(sessionId, batchId) });
+      if (!cond.ok) {
+        // 落 skipped 同样过棘轮表（fail-closed 优先：收紧配置删掉 from→skipped 时拒绝自动跳过，不绕过规则表）
+        const skip = machine.applyMemberTransition(from, 'skipped', { rules: ratchet });
+        if (!skip.ok) {
+          throw new Error('invalid member transition: ' + from + ' -> skipped (condition unmet: ' + cond.missing.join(', ') + '; ratchet forbids auto-skip)');
+        }
+        batch.lanes[lane] = 'skipped'; // pending→skipped 既有合法迁移
+        batch.events.push(newEvent('lane.skipped', { lane, from, note: 'condition unmet: ' + cond.missing.join(', ') }));
+        batch.events.push(newEvent('member.settled', { lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') }));
+        batch.updatedAt = new Date().toISOString();
+        atomicWrite(batchFile(sessionId, batchId), batch);
+        return batch;
+      }
+      const g = gates.checkEntryGate(sessionId, batchId, batch, lane);
       if (!g.ok) {
         batch.events.push(newEvent('gate.entry.missing', { lane, missing: g.missing }));
         batch.updatedAt = new Date().toISOString();
@@ -203,8 +170,13 @@ export function createStore(root) {
         throw new Error(g.code + ': ' + g.missing.join(', '));
       }
     }
+    if (to === 'review') {
+      // P1-6：audit lane 产物含 needHuman 声明 → 事件 lane.needhuman 留痕（Manager 转达人工裁决）
+      const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, null);
+      if (nh.declared) batch.events.push(newEvent('lane.needhuman', { lane, path: nh.path }));
+    }
     if (to === 'merged') {
-      const g = checkExitGate(sessionId, batchId, batch, lane);
+      const g = gates.checkExitGate(sessionId, batchId, batch, lane);
       if (!g.ok) {
         batch.events.push(newEvent('gate.exit.missing', { lane, code: g.code, detail: g.problems ?? g.missing }));
         batch.updatedAt = new Date().toISOString();
@@ -212,6 +184,15 @@ export function createStore(root) {
         throw new Error(g.code + ': ' + (g.problems ?? g.missing).join(', '));
       }
       batch.events.push(newEvent('gate.passed', { lane, gate: 'exit' }));
+      // P1-6：needHuman 人工闸（merged 前置，与 checkExitGate 并列）——声明 lane 缺 human: 证据 → 拒 GATE_NEEDHUMAN_PENDING
+      const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, note);
+      if (!nh.ok) {
+        batch.events.push(newEvent('gate.needhuman_blocked', { lane, code: nh.code, path: nh.path }));
+        batch.updatedAt = new Date().toISOString();
+        atomicWrite(batchFile(sessionId, batchId), batch);
+        throw new Error(nh.code + ': ' + nh.message);
+      }
+      if (nh.declared) batch.events.push(newEvent('human.decision', { lane, note })); // 人工裁决留痕（note 可回溯）
     }
     batch.lanes[lane] = to;
     batch.events.push(newEvent('member.settled', { lane, from, to, note: note ?? null }));
@@ -225,9 +206,11 @@ export function createStore(root) {
     if (!batch) throw new Error('batch not found: ' + batchId);
     schema.assertBatchPhase(to);
     const from = batch.phase;
-    schema.assertBatchTransition(from, to);
+    // P1-7：批次阶段迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
+    const bv = machine.applyBatchTransition(from, to, { rules: ratchet });
+    if (!bv.ok) throw new Error('invalid batch phase transition: ' + from + ' -> ' + to);
     if (to === 'complete') {
-      const g = checkCompleteGate(batch);
+      const g = gates.checkCompleteGate(batch);
       if (!g.ok) {
         batch.events.push(newEvent('gate.complete_blocked', { code: g.code, pending: g.pending }));
         batch.updatedAt = new Date().toISOString();
@@ -239,6 +222,22 @@ export function createStore(root) {
     batch.events.push(newEvent('batch.phase', { from, to }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
+    // P1-5：complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
+    // 失败仅记录 archive.failed（archiveBatch 内部处理），不阻断 complete；try/catch 兜底意外异常（如批次文件不可读）
+    if (to === 'complete') {
+      try {
+        archive.archiveBatch(sessionId, batchId);
+      } catch (err) {
+        try {
+          const b = readBatch(sessionId, batchId);
+          if (b) {
+            b.events.push(newEvent('archive.failed', { reason: String((err && err.message) || err) }));
+            b.updatedAt = new Date().toISOString();
+            atomicWrite(batchFile(sessionId, batchId), b);
+          }
+        } catch { /* 兜底也失败：静默（complete 已置位，审计可经 archive/ 目录状态判断） */ }
+      }
+    }
     return batch;
   }
 
@@ -249,6 +248,24 @@ export function createStore(root) {
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     return batch;
+  }
+
+  // ---- C4 budget：chains 状态读写（批次 v3 字段，原子写复用 atomicWrite）----
+  // readChains：读 batch.chains；v2 存量批次经 migrateV2toV3 幂等补默认（只读不落盘）
+  function readChains(sessionId, batchId) {
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) return null;
+    return migrateV2toV3(batch).chains ?? chainsDefaults();
+  }
+  // updateChains：patch = 完整新 chains 状态（recordChain 纯函数产出），原子写；v2 存量批次迁移落盘（schema 升 3 + chains 补全）
+  function updateChains(sessionId, batchId, patch) {
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+    const next = migrateV2toV3(batch);
+    next.chains = patch ?? chainsDefaults();
+    next.updatedAt = new Date().toISOString();
+    atomicWrite(batchFile(sessionId, batchId), next);
+    return next.chains;
   }
 
   // asset_claim 归位（设计 6.3/§4）：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
@@ -288,21 +305,60 @@ export function createStore(root) {
     return batch.phase === 'running' && lanes.every((s) => s === 'merged');
   }
 
+  // ---- B1 恢复审计辅助（punky-resume 决策包 §三 B1；只读探测，无副作用）----
+  // task 契约查找（与 gates.findTask 同遍历语义：wavePlan[].tasks 按 id 匹配）
+  function findTask(batch, lane) {
+    for (const w of batch.wavePlan ?? []) {
+      for (const t of w.tasks) if (t.id === lane) return t;
+    }
+    return null;
+  }
+  // lastActiveAt（上次活动时间）：events 中该 lane 最近一条带 lane 字段事件（member.settled / worktree.checkpoint /
+  // lane.skipped / lane.needhuman 等）的 ts；无 lane 事件 → 回退 batch.updatedAt
+  function lastActiveAtOf(batch, lane) {
+    const evs = batch.events ?? [];
+    for (let i = evs.length - 1; i >= 0; i--) {
+      if (evs[i].lane === lane && evs[i].ts) return evs[i].ts;
+    }
+    return batch.updatedAt;
+  }
+  // produced（已产出产物清单）：复用 gate 语义（gates.js fileExistsNonEmpty 同款判定：目录或 size>0）——
+  // 契约字段 exec→outputs / plan·audit→produce，逐项探测 artifactsDirOf 下解析路径存在且非空；
+  // 产出清单 = 契约中已存在的相对路径数组（绝对路径契约按 resolveArtifact 语义直接探测）
+  function producedOf(sessionId, batchId, batch, lane) {
+    const t = findTask(batch, lane);
+    if (!t) return [];
+    const field = t.layer === 'exec' ? 'outputs' : (t.layer === 'plan' || t.layer === 'audit' ? 'produce' : null);
+    if (!field || !Array.isArray(t[field])) return [];
+    const artifactsDir = artifactsDirOf(sessionId, batchId);
+    const existsNonEmpty = (p) => {
+      try {
+        const st = fs.statSync(isAbsPath(p) ? p : path.join(artifactsDir, p));
+        return st.isDirectory() || st.size > 0;
+      } catch { return false; }
+    };
+    return t[field].filter(existsNonEmpty);
+  }
+
   function recoverBatches() {
     const recovered = [];
     for (const sessionId of listSessions()) {
       for (const batchId of listBatches(sessionId)) {
         const batch = readBatch(sessionId, batchId);
         if (!batch || schema.isBatchTerminal(batch.phase)) continue;
-        let changed = false;
+        const recoveredLanes = [];
+        const detail = [];
         for (const [lane, state] of Object.entries(batch.lanes)) {
           if (state === 'running' || state === 'review') {
             batch.lanes[lane] = 'idle';
-            changed = true;
+            recoveredLanes.push(lane);
+            // B1 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）
+            detail.push({ lane, from: state, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane) });
           }
         }
-        if (changed) {
-          batch.events.push(newEvent('system.recovered', { batchId, sessionId, recoveredLanes: Object.keys(batch.lanes).filter((l) => batch.lanes[l] === 'idle') }));
+        if (recoveredLanes.length > 0) {
+          // B1 增强：保留 recoveredLanes（向后兼容，既有测试断言其存在），新增 detail 审计详情数组
+          batch.events.push(newEvent('system.recovered', { batchId, sessionId, recoveredLanes, detail }));
           batch.updatedAt = new Date().toISOString();
           atomicWrite(batchFile(sessionId, batchId), batch);
           recovered.push(sessionId + '/' + batchId);
@@ -310,22 +366,6 @@ export function createStore(root) {
       }
     }
     return recovered;
-  }
-
-  // 门禁状态查询（gate_status 工具用，设计 §8 M1）：lane 的 layer/契约字段/缺失清单/plan 契约问题
-  function gateStatus(sessionId, batchId, lane) {
-    const batch = readBatch(sessionId, batchId);
-    if (!batch) throw new Error('batch not found: ' + batchId);
-    const t = findTask(batch, lane);
-    if (!t) return { lane, layer: null, state: batch.lanes[lane], gates: 'generic', team: batch.team };
-    const missing = (field) => (Array.isArray(t[field]) ? t[field] : []).filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
-    const contract = t.layer === 'plan' ? checkPlanContract(sessionId, batchId, batch, lane) : null;
-    return {
-      lane, layer: t.layer ?? null, state: batch.lanes[lane], team: batch.team,
-      consume: t.consume ?? [], produce: t.produce ?? [], outputs: t.outputs ?? [],
-      consumeMissing: missing('consume'), outputsMissing: missing('outputs'), produceMissing: missing('produce'),
-      contractProblems: contract && !contract.ok ? contract.problems : null,
-    };
   }
 
   function listAllBatches() {
@@ -387,8 +427,11 @@ export function createStore(root) {
   return {
     createBatch, readBatch, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
+    readChains, updateChains,
     batchSettled, batchAutoReleaseable,
-    recoverBatches, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus,
+    recoverBatches, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
+    // P1-5：归档只读/幂等面（batch_status 面板与审计查询用）
+    archive: { archiveBatch: archive.archiveBatch, readManifest: archive.readManifest, listArchived: archive.listArchived },
   };
 }

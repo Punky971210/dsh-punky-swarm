@@ -1,11 +1,28 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // 任务难度值门禁（design task-difficulty-gate）：governance.json v2 + assign_check 增强 + guard 三重门禁
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createTools } from '../lib/tools.js';
-import { createStore } from '../lib/batch-store.js';
+import { createTools } from '../lib/tools/register.js';
+import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 
 function freshRoot(prefix) {
@@ -250,4 +267,99 @@ test('wave_plan 建批清 pendingBatch；batch_phase complete/aborted 兜底清�
   await by.batch_phase.execute({ batchId: 'b-wp', phase: 'complete' }, EXEC);
   assert.equal(st.readGovernance('sess-wp').pendingBatch, false);
   assert.equal(st.readGovernance('sess-wp').pendingSince, null);
+});
+
+test('assign_check: C 判定后重评为 A/B → pendingBatch 残留清除（Gap D 修复）', async () => {
+  const root = freshRoot('punky-gov-pbc-');
+  const st = createStore(root);
+  const { tools: tls } = makeGuarded({ store: st, root });
+  const by = Object.fromEntries(tls.map((t) => [t.name, t]));
+  const EXEC = { agent: { session: { id: 'sess-pbc' } } };
+  await by.assign_check.execute({ gate: true }, EXEC); // C → pendingBatch=true
+  assert.equal(st.readGovernance('sess-pbc').pendingBatch, true);
+  await by.assign_check.execute({ needIsolation: true }, EXEC); // 重评 B → 清残留
+  assert.equal(st.readGovernance('sess-pbc').pendingBatch, false);
+  assert.equal(st.readGovernance('sess-pbc').pendingSince, null);
+  // 回归：C+无批仍挂锁；C+活跃批次清锁
+  await by.assign_check.execute({ gate: true }, EXEC);
+  assert.equal(st.readGovernance('sess-pbc').pendingBatch, true);
+  await by.wave_plan.execute({ batchId: 'b-pbc', tasks: [{ id: 'a' }] }, EXEC);
+  await by.assign_check.execute({ gate: true }, EXEC); // C 但已有活跃批次 → 不挂锁
+  assert.equal(st.readGovernance('sess-pbc').pendingBatch, false);
+});
+
+// ---------- 5. session 显式化兼容（session-compat：显式 sessionID + 兼容不填） ----------
+test('assign_check: 显式 session 回显 + 镜像到执行会话，guard 不误拦，建批后双向解锁', async () => {
+  const root = freshRoot('punky-gov-compat1-');
+  const st = createStore(root);
+  const { guardFn, tools: tls } = makeGuarded({ store: st, root });
+  const by = Object.fromEntries(tls.map((t) => [t.name, t]));
+  const execCtx = { agent: { session: { id: 'sess-real' } } };
+  const r = await by.assign_check.execute({ gate: true, session: 'deploy-x' }, execCtx); // C
+  // 回显：落点 sessionId + 镜像去向 mirroredTo
+  assert.equal(r.sessionId, 'deploy-x');
+  assert.equal(r.mirroredTo, 'sess-real');
+  // 命名会话：C + pendingBatch + mirroredTo 指针
+  const gx = st.readGovernance('deploy-x');
+  assert.equal(gx.lastAssign.form, 'C');
+  assert.equal(gx.pendingBatch, true);
+  assert.equal(gx.mirroredTo, 'sess-real');
+  // 执行会话：镜像生效（lastAssign + pendingBatch + mirror 指针；history 不镜像）
+  const gy = st.readGovernance('sess-real');
+  assert.equal(gy.lastAssign.form, 'C');
+  assert.equal(gy.lastAssign.mirroredFrom, 'deploy-x');
+  assert.equal(gy.pendingBatch, true);
+  assert.equal(gy.mirror.from, 'deploy-x');
+  assert.equal(gy.history.length, 0);
+  // guard：C+pendingBatch → 门禁 2（先建批）而非门禁 1（未评估）——镜像前同调用会被门禁 1 误拦
+  const blocked = guardFn()({ name: 'write', agent: { session: { id: 'sess-real' } } });
+  assert.ok(blocked && blocked.includes('任务难度=C'));
+  // wave_plan 建批到命名会话 → 双向解锁（含镜像传播）
+  await by.wave_plan.execute({ batchId: 'b-x', tasks: [{ id: 't' }], session: 'deploy-x' }, execCtx);
+  assert.equal(st.readGovernance('deploy-x').pendingBatch, false);
+  assert.equal(st.readGovernance('deploy-x').mirroredTo, null);
+  assert.equal(st.readGovernance('sess-real').pendingBatch, false);
+  assert.equal(st.readGovernance('sess-real').mirror, null);
+  assert.equal(guardFn()({ name: 'write', agent: { session: { id: 'sess-real' } } }), undefined);
+});
+
+test('assign_check: A 类显式 session → 镜像后执行会话 guard 放行（镜像前误拦对比）', async () => {
+  const root = freshRoot('punky-gov-compat2-');
+  const st = createStore(root);
+  const { guardFn, tools: tls } = makeGuarded({ store: st, root });
+  const by = Object.fromEntries(tls.map((t) => [t.name, t]));
+  const execCtx = { agent: { session: { id: 'sess-real' } } };
+  // 镜像前：执行会话未评估 → 门禁 1 误拦（对比基准）
+  const before = guardFn()({ name: 'pwsh', agent: { session: { id: 'sess-real' } } });
+  assert.ok(before && before.includes('尚未进行任务难度评估'));
+  await by.assign_check.execute({ session: 'probe-x' }, execCtx); // A
+  assert.equal(st.readGovernance('sess-real').lastAssign.form, 'A');
+  assert.equal(st.readGovernance('sess-real').lastAssign.mirroredFrom, 'probe-x');
+  assert.equal(guardFn()({ name: 'pwsh', agent: { session: { id: 'sess-real' } } }), undefined);
+});
+
+test('assign_check: 缺省 session → 落当前执行会话不镜像；无会话上下文 → cli 兜底 + notice', async () => {
+  const root = freshRoot('punky-gov-compat3-');
+  const st = createStore(root);
+  const { tools: tls } = makeGuarded({ store: st, root });
+  const by = Object.fromEntries(tls.map((t) => [t.name, t]));
+  // 缺省：落 agent.session.id，无镜像
+  const r1 = await by.assign_check.execute({ needIsolation: true }, { agent: { session: { id: 'sess-real' } } }); // B
+  assert.equal(r1.sessionId, 'sess-real');
+  assert.equal(r1.mirroredTo, undefined);
+  assert.equal(st.readGovernance('sess-real').lastAssign.form, 'B');
+  // 无会话上下文：cli 兜底 + notice 警示
+  const r2 = await by.assign_check.execute({}, {});
+  assert.equal(r2.sessionId, 'cli');
+  assert.ok(r2.notice && r2.notice.includes('cli'));
+  const gcli = st.readGovernance('cli');
+  assert.equal(gcli.lastAssign.form, 'A');
+  // 显式传执行会话自身 ID：不触发镜像，mirroredTo 字段完全缺席（undefined/null 均会触发 harness lossless JSON 校验拒绝）
+  const r3 = await by.assign_check.execute({ session: 'sess-real' }, { agent: { session: { id: 'sess-real' } } });
+  assert.equal(r3.sessionId, 'sess-real');
+  assert.equal(r3.mirroredTo, undefined);
+  assert.equal(st.readGovernance('sess-real').mirroredTo, undefined); // 未镜像：命名会话无 mirroredTo 指针
+  // lossless round-trip 回归：输出对象必须可无损 JSON 序列化（harness 校验层硬性要求；undefined 值会触发 not lossless 拒绝）
+  assert.deepEqual(JSON.parse(JSON.stringify(r1)), r1);
+  assert.deepEqual(JSON.parse(JSON.stringify(r3)), r3);
 });
