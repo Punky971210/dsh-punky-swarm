@@ -114,7 +114,7 @@ export function evaluateAcEvidence({ acList = [], ledger = [], readBlob, mode = 
   return { acBindings, bindings: registry, result };
 }
 
-// 裁决报告落盘格式（决策包 §六 预留：audit/verify-verdict.md）——audit lane 写为 produce，Tier3 校验其存在
+// 裁决报告落盘格式（预留：audit/verify-verdict.md）——audit lane 写为 produce，Tier3 校验其存在
 export function renderVerdictReport({ batchId, sessionId, acList = [], result, evaluatedAt = new Date().toISOString() }) {
   const lines = [
     '# verify 裁决报告（audit/verify-verdict.md）',

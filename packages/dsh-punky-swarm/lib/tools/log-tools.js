@@ -17,13 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 蟛蜞模式日志导出工具（1 个）：log_export
 // -----------------------------------------------------------------------------
-// punky-finalize 决策包 §三（P2-11 半项）：模型可调用、只读、可审计的事件日志导出。
+// 模型可调用、只读、可审计的事件日志导出。
 // 现状事件流已完备（store.appendEvent 全量落 batch.events，含 member.settled / gate.* /
 // worktree.* / budget.* / system.* / asset.* 等），但缺模型可调用的导出工具——本工具为
-// store.readBatch 的纯读投影，零副作用（R3：不 appendEvent、不改状态文件、不碰 mailbox、
+// store.readBatch 的纯读投影，零副作用（不 appendEvent、不改状态文件、不碰 mailbox、
 // 不写工作区；唯一写路径是显式 writeTo 落盘到引擎产物根，属可审计产物）。
 // 装配开关：config.capabilities?.logs?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏，对齐 aip/worktree.enabled 先例）。
+// 回归零破坏）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
@@ -126,7 +126,7 @@ function buildReport(batch, sessionId, filtered, args) {
 
 export function createLogTools(ctx, deps) {
   const config = deps?.config ?? {};
-  // 默认关（对齐 aip/worktree.enabled 先例）：logs 未配置/disabled → 零注册，工具总数 14 不变
+  // 默认关：logs 未配置/disabled → 零注册，工具总数 14 不变
   if (config?.capabilities?.logs?.enabled !== true) return [];
   const { root, store } = deps;
 

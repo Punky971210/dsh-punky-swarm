@@ -39,7 +39,7 @@ export function toToolId(name) {
 
 // inputParam：defineTool 已把扁平属性表归一化为 JSON Schema 顶层结构
 //   {type:'object', properties, required}（required 提升为顶层数组，与国标 inputParam 同构）——
-//   已归一化则原样透传（决策包「原样透传」语义），扁平形态兜底展开（防御 defineTool 版本差异）。
+//   已归一化则原样透传（「原样透传」语义），扁平形态兜底展开（防御 defineTool 版本差异）。
 //   国标要求 required 恒存在（全可选参数时补空数组）。
 export function toInputParam(parameters = {}) {
   if (parameters && typeof parameters === 'object' && 'type' in parameters) {

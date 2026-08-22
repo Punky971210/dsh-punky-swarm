@@ -49,10 +49,10 @@ export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/jiufeng';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
   mkdirSync(root, { recursive: true });
-  // 启动日志：引擎产物根（Bug2 修复 ②，诊断可见性——worker/Leader 产物落盘契约的权威路径）
+  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
 
-  // D-A3 配置校验兜底（装配统一决策包 §3）：仅 warn 不炸宿主——validateCapabilities 仅对显式
+  // 配置校验兜底：仅 warn 不炸宿主——validateCapabilities 仅对显式
   // enabled 的非法组合报错；禁用能力零校验零 warn；空/缺省 config → errors=[] → 零 warn
   for (const err of validateCapabilities(config).errors) {
     ctx.logger?.warn?.('[dsh-punky-swarm] config: ' + err);
@@ -92,8 +92,8 @@ export const apply = (ctx, config = {}) => {
 
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
-  // 国标 AIP P0-1：enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
-  // C1 watch 心跳引擎（lane 过期检测）：enabled 默认关（红线 R3）——开启时才创建引擎并挂 watchdog 定时器
+  // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
+  // watch 心跳引擎（lane 过期检测）：enabled 默认关——开启时才创建引擎并挂 watchdog 定时器
   const watchCfg = resolveWatchConfig(config);
   let heartbeat = null;
   if (watchCfg.enabled) {
@@ -102,7 +102,7 @@ export const apply = (ctx, config = {}) => {
   const tools = createTools(ctx, { store, root, config, heartbeat });
   tools.register();
 
-  // watchdog 挂载（决策包 §1.2 挂载）：setInterval(scanIntervalMinutes) 调 heartbeat.tick() 扫描全部 running lane。
+  // watchdog 挂载：setInterval(scanIntervalMinutes) 调 heartbeat.tick() 扫描全部 running lane。
   // enabled 缺省/false 不挂——零运行时开销；ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
   let watchTimer = null;
   if (watchCfg.enabled && heartbeat) {
@@ -117,11 +117,11 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.info?.('[dsh-punky-swarm] watch capability enabled: lane heartbeat watchdog mounted (scan ' + scanMs + 'ms)');
   }
 
-  // 只读治理 API（工作台用）；agentCatalog：P4 ACS 描述目录（aip.enabled 门控，register 后非空）
-  // P6 接线（exec-format-wire）：aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
+  // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
+  // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
   let apiDispose = null;
   if (ctx.webServer) {
-    // 国标 P5 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
+    // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
     const discoveryCfg = resolveDiscoveryConfig(config);
     let discovery = null;
@@ -131,10 +131,10 @@ export const apply = (ctx, config = {}) => {
       ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
     }
 
-    // P3 DS1 外部 ADP 发现客户端（acps.discovery，默认关——U-D2 显式开启）：
+    // 外部 ADP 发现客户端（acps.discovery，默认关——显式开启）：
     // 装配在 webServer 域（与本地 discovery service 同域，scope=local/both 依赖其实例）；
     // enabled=false 不创建实例，零运行时路径（无网络/定时器）。消费方：经 api 上下文 acpsDiscovery 取用
-    // （demo-test V2 / 后续工具 lane）；DS3 mini-ADSP 仅预留签名（createMiniAdsp），P1 endpoint lane 就绪前不实现。
+    // mini-ADSP 仅预留签名（createMiniAdsp），endpoint 就绪前不实现。
     const acpsDiscoveryCfg = resolveAcpsDiscoveryConfig(config);
     let acpsDiscoveryClient = null;
     if (acpsDiscoveryCfg.enabled) {
@@ -152,8 +152,8 @@ export const apply = (ctx, config = {}) => {
     apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient }).dispose;
   }
 
-  // C5 诊断桥接（trajectory，决策包 §5）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
-  // enabled 默认关（对齐 aip.enabled 先例，红线 R3）：enabled=false 时桥接不创建不挂载——零运行时开销，行为与既有版本一致。
+  // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
+  // enabled 默认关：enabled=false 时桥接不创建不挂载——零运行时开销，行为与既有版本一致。
   // 生命周期：start() 挂订阅/轮询；stop() 退订/清定时器（经 apply 返回的 dispose 释放，进程重启后桥接随插件重建、映射从批次事件幂等恢复）
   const trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox }) : null;
   if (trajectory) {
@@ -163,19 +163,19 @@ export const apply = (ctx, config = {}) => {
     }
   }
 
-  // C6 内部 ACPs 桥接（config.acps.bridge，D6 默认关）：enabled=false 时 mountBridge 短路返回 null——
-  // 不实例化、零运行时路径（D7 config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关（D14）：
-  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递归 P1 endpoint lane（exec-acps-server）。
+  // 内部 ACPs 桥接（config.acps.bridge，默认关）：enabled=false 时 mountBridge 短路返回 null——
+  // 不实例化、零运行时路径（config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关：
+  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递由 endpoint 侧承担。
   const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
   if (bridge) {
     ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: G1 in-process bridge mounted (inbound='
       + (config?.acps?.bridge?.inbound === true) + ')');
   }
 
-  // C7 P3 R1 半自动注册客户端（config.acps.registry，exec-registry lane）：默认关——enabled=true 且
+  // 半自动注册客户端（config.acps.registry）：默认关——enabled=true 且
   // registry.url 配置时创建 RegistryClient 实例（能力装配，不自动发起注册——V3 人工审核不自动化
   // 跳过，注册动作由用户经脚本/工具显式触发：login→upsert→submit→人工审批→requestEab）。
-  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径（U-D2 语义）。
+  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径。
   const registryCfg = resolveRegistryConfig(config);
   const registryClient = registryCfg.enabled ? createRegistryClient(registryCfg) : null;
   if (registryCfg.enabled && !registryClient) {
@@ -185,10 +185,10 @@ export const apply = (ctx, config = {}) => {
       + registryCfg.apiBaseUrl + ')');
   }
 
-  // ACPs 对外 mTLS 服务端点（P1 lane exec-acps-server）：acps.enabled && acps.endpoint.enabled 双真才装配——
-  // 默认双关 = 零加载零监听零定时器（U-D2 config 短路，红线：关闭时无运行时路径）。
-  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程（施工契约红线）。
-  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀（D8 F-1），/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
+  // ACPs 对外 mTLS 服务端点：acps.enabled && acps.endpoint.enabled 双真才装配——
+  // 默认双关 = 零加载零监听零定时器（config 短路，关闭时无运行时路径）。
+  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
+  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀，/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
   const acpsCfg = resolveAcpsConfig(config);
   let acpsEndpoint = null;
   if (acpsCfg.enabled && acpsCfg.endpoint?.enabled) {
@@ -197,12 +197,12 @@ export const apply = (ctx, config = {}) => {
         ...acpsCfg,
         endpoint: {
           ...acpsCfg.endpoint,
-          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // D3 默认数据目录（引擎根内）
+          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // 默认数据目录（引擎根内）
         },
       };
-      // DEF-V6-1：/acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
+      // /acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
       // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
-      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回 P1 独立 accepted（向后兼容）。
+      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回独立 accepted（向后兼容）。
       const rpcHandler = bridge ? createEndpointRpcHandler(bridge, { logger: ctx.logger }) : undefined;
       acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
       if (acpsEndpoint.error) {
@@ -223,7 +223,7 @@ export const apply = (ctx, config = {}) => {
     }
   }
 
-  // C3 verify 引擎级捕获（verify-report 集成注意项 1 接线，决策包 §4）：capabilities.verify.enabled 门控挂
+  // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
   // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。enabled=false（默认）
   // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
   const verifyMount = mountVerify(ctx, { root, config });

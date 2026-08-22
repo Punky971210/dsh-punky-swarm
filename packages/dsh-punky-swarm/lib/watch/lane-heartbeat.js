@@ -16,18 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // lane-heartbeat：lane 过期检测引擎（能力补全 C1，watch 域，新建）
-// 成熟模式：dsh-plugin-heartbeat 退避/硬停引擎（study-heartbeat 借鉴点 1-5，机制映射见决策包 §1.1）
+// 成熟模式：dsh-plugin-heartbeat 退避/硬停引擎（退避/硬停机制）
 // 语义：running lane 无活动 → 退避档位追问（默认 10→20→30 分钟，冷场越久间隔越长）→
 //       连续 N 拍（默认 3）无活动 → appendEvent('lane.stalled', {lane, missed})，停止追问。
 //       只标记不自动处置（Manager/Leader 人审），不新增成员状态（stalled 用事件表达，不碰
 //       schema.js MEMBER_STATES/MEMBER_TRANSITIONS——写事件零侵入，加状态要动 schema/测试/面板/complete gate）。
-// 依赖注入（决策包 §1.2）：deps.store（readBatch/appendEvent/listSessions/listBatches/artifactsDirOf）
+// 依赖注入：deps.store（readBatch/appendEvent/listSessions/listBatches/artifactsDirOf）
 //                          deps.mailbox（comms/mailbox.js：send/readUnacked，追问投递与 pending 探测）
 //                          deps.config（capabilities.watch：enabled/intervalsMinutes/maxMissed/scanIntervalMinutes/probeTemplate）
 //                          deps.root（可选，mailbox 根；缺省由 store.sessionsDir 推导）
 //                          deps.now（可选，时钟注入，测试用；缺省 Date.now）
 // 共享触碰面归主：本文件仅导出引擎与工具定义；lane_heartbeat 工具的组装（lane-tools.js/register.js）
-// 归 lane-2（决策包 §1.2「组装进 lane-tools.js——避免 lane-1 触碰 lane-2 主文件」）；本 lane 只动
+// 组装进 lane-tools.js（避免与 lane-tools 主文件耦合）；本模块只动
 // watch/ 新域 + index.js 挂载 + schema.js watch 配置键 + cordis.patch.yml 注释。
 import { join, dirname } from 'node:path';
 import { statSync } from 'node:fs';
@@ -55,7 +55,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
   const clock = typeof now === 'function' ? now : () => Date.now();
   const engineRoot = root ?? (store?.sessionsDir ? dirname(store.sessionsDir) : null);
   // 状态表 Map<laneKey, { lastActivityAt, lastSeenTs, lastProbeAt, missedCount, stalled, pendingProbeId }>
-  // laneKey = `${sessionId}/${batchId}/${lane}`（决策包 §1.2）
+  // laneKey = `${sessionId}/${batchId}/${lane}`
   const state = new Map();
   let disposed = false;
 
@@ -96,7 +96,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     entry.pendingProbeId = null;
   }
 
-  // ---- 活动判定（三信号任一，防「长任务无产出误判」；决策包 §1.2 语义 1）----
+  // ---- 活动判定（三信号任一，防「长任务无产出误判」）----
   // ① batch.events：本 lane 可归因事件比上次扫描新（lane.stalled 为引擎自写事件，排除防自重置）
   function laneEventActivity(batch, lane, sinceTs) {
     const evs = batch.events ?? [];
@@ -178,7 +178,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
         .replaceAll('{batchId}', batchId)
         .replaceAll('{missed}', String(missed));
     }
-    // 轻量追问模板：≤5 句、含 lane 标识、不调工具、不复盘全部历史（决策包 §1.1 轻量唤醒指令约束）
+    // 轻量追问模板：≤5 句、含 lane 标识、不调工具、不复盘全部历史
     return [
       `Manager 心跳：lane「${lane}」（批次 ${batchId}）已连续 ${missed} 拍无活动信号。`,
       '请用 ≤3 句汇报当前进度或阻塞点（走 outbox）。',
@@ -196,7 +196,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     entry.lastProbeAt = null;
   }
 
-  // 扫描全部会话 running lane（决策包 §1.2 语义 2/5）：
+  // 扫描全部会话 running lane：
   // - 仅扫 batch.phase === 'running' 且 lane === 'running'；paused/planning/终态批次、idle/终态 lane 不挂心跳
   //   （恢复语义：running→idle 后不挂，重派 running 时以 fresh entry 重置计时）
   function tick() {
@@ -248,7 +248,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     for (const lane of Object.keys(batch.lanes ?? {})) state.delete(laneKeyOf(batch.sessionId, batch.batchId, lane));
   }
 
-  // 只读：lastActivityAt/当前档位/missed/stalled/pendingProbeId（决策包 §1.2 status）
+  // 只读：lastActivityAt/当前档位/missed/stalled/pendingProbeId
   function status(laneKey) {
     const entry = state.get(laneKey);
     // laneKey = `${sessionId}/${batchId}/${lane}`；lane 未约束可含 '/'，按前两个斜杠定位
@@ -277,7 +277,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     };
   }
 
-  // 活动信号外部入口：missedCount=0 回 tier0（决策包 §1.2 reset）
+  // 活动信号外部入口：missedCount=0 回 tier0
   function reset(laneKey) {
     const entry = state.get(laneKey);
     if (entry) resetEntry(entry, clock());
@@ -292,7 +292,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
 }
 
 // lane_heartbeat 工具定义（只读查询 + 可选手动触发一拍）。
-// 组装进 lane-tools.js（归 lane-2，决策包 §1.2）；enabled=false 时本工具不注册（W6）。
+// 组装进 lane-tools.js；enabled=false 时本工具不注册。
 // deps: { store, root, config, heartbeat? } —— heartbeat 缺省时自建（注册侧懒加载，与挂载引擎共享状态文件）
 export function createHeartbeatTools(ctx, deps = {}) {
   if (resolveWatchConfig(deps.config).enabled !== true) return [];

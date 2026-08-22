@@ -16,19 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 文件 server：ACPs 对外 mTLS 服务端点（lib/acps 域，P1 lane exec-acps-server）
-// 契约（施工契约 §2.1 + 决策 D1/D4/D8/D11/D12）：
+// 契约：
 //   - 独立 HTTPS 监听器（node:https + node:tls，零新依赖），默认端口 9443、绑定 127.0.0.1（config 可配）；
 //   - TLS：minVersion TLSv1.3 + requestCert + rejectUnauthorized（=CERT_REQUIRED + TLSv1_3 语义，
-//     对齐 registry-server/app/main_mtls.py:14-30）；devInsecure 仅显式开发开关（D4 E2，默认 false）；
+//     对齐 registry-server/app/main_mtls.py:14-30）；devInsecure 仅显式开发开关（默认 false）；
 //   - 客户端证书 CN 提取 → req.peerAic（对齐 registry-server/app/core/peer_cert.py:18-38）；
 //     受保护端点 AIC 格式校验（复用 lib/aip/identity.js validateAic，对齐 api_atr.py:82-88）；
 //   - 端点：POST /acps/rpc（AIP JSON-RPC，对齐 acps-sdk aip_rpc_model.py:15-57 +
 //     aip_base_model.py TaskCommand/TaskResult 形态）、GET /.well-known/acs.json（ACS 直取，
 //     复用 lib/aip/agent-descriptor.js，对齐 beijing_food/acs.json:15-40）、GET /health
 //     （对齐 demo-partner/partners/main.py:110-121）；
-//   - 路径前缀 /acps/*（D8 F-1）——与既有 /api/dsh-punky-swarm/*、/.well-known/aip 不冲突；
-//   - 默认关（U-D2）：装配层 enabled=false 时不实例化本模块（零运行时路径）。
-// 纯工厂 + 纯函数，模块顶层零副作用（与 createDiscoveryService 装配先例一致）。
+//   - 路径前缀 /acps/*——与既有 /api/dsh-punky-swarm/*、/.well-known/aip 不冲突；
+//   - 默认关：装配层 enabled=false 时不实例化本模块（零运行时路径）。
+// 纯工厂 + 纯函数，模块顶层零副作用。
 
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
@@ -99,7 +99,7 @@ export function rpcResponse(id, result, error) {
 /**
  * 默认 RPC handler：TaskCommand → TaskResult（state=accepted，TaskState 链首环）
  * 对齐 aip_base_model.py:167-181（TaskResult: type/taskId/status{state,stateChangedAt}）。
- * 本 lane（P1）只做端点载体与消息形态校验；P2 桥接 lane 注入自实现把 command 转 mailbox。
+ * 端点载体与消息形态校验；桥接注入自实现把 command 转 mailbox。
  * @param {object} command TaskCommand
  * @param {object} [ctx] { peerAic? }
  * @returns {object} TaskResult
@@ -183,13 +183,13 @@ function sendJson(res, status, data) {
  *   acsProvider 缺省 = buildAcs(config)；rpcHandler 缺省 = defaultRpcHandler；
  *   healthProvider 缺省 = { agent, status:'online', tasks:{active:0}, groups:{active:0} }（partners/main.py:110-121 形态）
  * @returns {{ server: import('node:https').Server, listen(port?), close(), address(), getPeerAic(req) }}
- *   证书缺失/不可用时返回 { error }（装配层告警并保持禁用，不阻塞主进程——施工契约红线）
+ *   证书缺失/不可用时返回 { error }（装配层告警并保持禁用，不阻塞主进程）
  */
 export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler, healthProvider, certDir } = {}) {
   const endpoint = config?.endpoint ?? {};
   const agentName = endpoint.agentName ?? 'dsh-punky-swarm';
 
-  // ── 证书加载（D3=C1：cert/key/ca 三路径；缺省从 certDir 自动生成——幂等）──
+  // ── 证书加载（cert/key/ca 三路径；缺省从 certDir 自动生成——幂等）──
   let tls;
   try {
     const dir = certDir ?? endpoint.certDir;
@@ -214,9 +214,9 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
     key: tls.key,
     cert: tls.cert,
     ca: tls.ca,
-    minVersion: endpoint.minVersion ?? 'TLSv1.3', // D12
+    minVersion: endpoint.minVersion ?? 'TLSv1.3', // TLS 最低版本
     requestCert: true,                            // CERT_REQUIRED 语义（main_mtls.py:28）
-    rejectUnauthorized: devInsecure ? false : true, // D4 E1：生产不允许降级；E2 仅显式开发开关
+    rejectUnauthorized: devInsecure ? false : true, // 生产不允许降级；开发模式仅显式开启
     handshakeTimeout: 10_000,
   }, (req, res) => {
     handleRequest(req, res).catch((e) => {
@@ -263,7 +263,7 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       }
       const parsed = parseRpcRequest(body);
       if (!parsed.ok) {
-        // JSON-RPC 消息结构非法 → 应用层 400 + JSON-RPC error body（参考实现 pydantic 校验 422 语义映射，V5 允许 4xx）
+        // JSON-RPC 消息结构非法 → 应用层 400 + JSON-RPC error body（参考实现 pydantic 校验 422 语义映射，允许 4xx）
         return sendJson(res, 400, rpcResponse(body?.id ?? null, null, parsed.error));
       }
       const handler = rpcHandler ?? defaultRpcHandler;

@@ -117,7 +117,7 @@ export function createGates(root) {
     const missing = t[field].filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     return missing.length ? { ok: false, code: 'GATE_EXIT_MISSING_' + t.layer.toUpperCase(), missing } : { ok: true };
   }
-  // needHuman Gate（P1-6，D14 复用 review 态挂起）：audit lane 产物声明 needHuman →
+  // needHuman Gate（复用 review 态挂起）：audit lane 产物声明 needHuman →
   // review→merged 前置人工裁决证据（note 契约 `human:<裁决人>:<时间>:<结论>`，如 human:user@2026-08-21:accept）
   // 缺证据 → GATE_NEEDHUMAN_PENDING；conflict 驳回不强制（评审驳回/人工否决语义）；
   // 未声明/非 audit lane → 零感知（{ ok: true, declared: false }）

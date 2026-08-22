@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // Tier3（dsh-punky-swarm 三层门禁）：任务可声明 layer/consume/produce/outputs/role/skills，
 // 建批时做三层契约静态校验（跨层引用 / 有 exec 必有 audit / 路径契约一致性 / skill 声明）；
 // cmd 由引擎注入 role/skill 前缀（装配可插拔，不绑定 jiufeng，见设计 §12.1/§14.2/§15.3）。
-// B2 resume 契约（punky-resume 批次 7 阶段 1）：task 可声明 checkpoint:{steps}（总步数）与 resume:boolean
+// resume 契约：task 可声明 checkpoint:{steps}（总步数）与 resume:boolean
 // （崩溃后新 worker 允许参考 checkpoint 跳过已完成步骤）——校验放行 + 字段透传（与 condition 同模式，
 // 默认关场景仅存元数据，消费方按 capabilities.worktree.enabled 开关生效）；resumeClauseFor(task) 供
 // 派发侧注入固定任务包条款（RESUME_CLAUSE）。
@@ -104,7 +104,7 @@ function checkConditionPaths(t, cond) {
   }
 }
 
-// B2 resume 契约字段规范化（punky-resume 批次 7 阶段 1，建批静态声明，与 condition 同模式）：
+// resume 契约字段规范化（建批静态声明，与 condition 同模式）：
 //   checkpoint: { steps: number }（声明本 lane 总步数，供 progress 校验与任务包注入；缺省 null）
 //   resume: boolean（声明"崩溃后新 worker 允许参考 checkpoint 跳过已完成步骤"；缺省 false = 现状，行为不变）
 // 非法（steps 非正整数 / resume 非 boolean）→ throw（fail-closed 拒建批）
@@ -127,13 +127,13 @@ export function normalizeResumeContract(t) {
   return { checkpoint, resume: resume === true };
 }
 
-// B3 任务包 resume 契约固定条款（决策包 §三 B2 原文）：resume: true 时注入 worker 派发提示词——
+// 任务包 resume 契约固定条款：resume: true 时注入 worker 派发提示词——
 //   新 worker 先查 checkpoint 历史（lane_checkpoint_status），从最后已 checkpoint 步骤之后继续，禁止重做；
 //   每完成一个子步骤立即 lane_checkpoint（携带 progress），禁止攒批。
 export const RESUME_CLAUSE =
   '若本 lane 存在 checkpoint（lane_checkpoint_status 可查），须先查询 checkpoint 历史，从最后已 checkpoint 的步骤之后继续，禁止重做已完成步骤；每完成一个子步骤立即 lane_checkpoint（携带 progress），禁止攒批。';
 
-// 任务包 resume 条款注入（B3）：task.resume === true → 返回固定条款文本（注入派发提示词）；否则 null（不注入，现状）
+// 任务包 resume 条款注入：task.resume === true → 返回固定条款文本（注入派发提示词）；否则 null（不注入，现状）
 export function resumeClauseFor(task) {
   return task?.resume === true ? RESUME_CLAUSE : null;
 }

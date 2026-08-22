@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 文件 certs：ACPs mTLS 证书材料（lib/acps 域，P1 lane exec-acps-server）
-// 契约：D2=B1 CAI 自签（node:crypto 自签 X.509，零新依赖）；D3=C1 文件（cert/key/ca 三路径
+// 契约：CAI 自签（node:crypto 自签 X.509，零新依赖）；文件三路径（cert/key/ca 三路径
 //       config 可配，默认 acps 数据目录）；TLS 语义对齐参考实现
 //       registry-server/app/main_mtls.py:14-30（cert/key/ca 三件套 + CERT_REQUIRED + TLSv1_3）。
 // 说明：lib/aip/identity.js 的 issueCredential 产出 JSON CAI（cn/san/签名载荷），非 X.509 DER/PEM，
@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   直接编码 X.509 证书（ASN.1 DER 手工编码，纯内建能力），签名算法 ECDSA P-256
 //   （对齐 identity.js DEFAULT_SIGN_ALGORITHM = 'ecdsa-p256'）。CAI 语义对齐（identity.js:24-27）：
 //   CN=AIC、SAN=URI:acps://{AIC}、extendedKeyUsage 分用途（serverAuth/clientAuth）。
-// 私钥文件权限注意（D3）：写文件 mode 0o600；数据目录默认 <root>/acps/certs（引擎根内，不落工作区根）。
+// 私钥文件权限注意：写文件 mode 0o600；数据目录默认 <root>/acps/certs（引擎根内，不落工作区根）。
 
 import crypto from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
@@ -261,7 +261,7 @@ export function issueCert({ caCertPem, caKeyPem, cn, aic, altNames = [], days = 
   });
 }
 
-// ── 文件管理（D3=C1：cert/key/ca 三路径 config 可配，默认 acps 数据目录）──
+// ── 文件管理（cert/key/ca 三路径 config 可配，默认 acps 数据目录）──
 // ensureAcpsCerts({ dir, aic })：幂等——目录已有 ca.pem/ca.key/server.pem/server.key 则复用；
 //   缺则生成落盘。返回 { certFile, keyFile, caFile, caCertPem, certPem }（TLS 上下文 + 联测用）。
 // 目录结构：<dir>/ca.pem + ca.key（自签 CA）、<dir>/server.pem + server.key（CA 签发服务端证书）。

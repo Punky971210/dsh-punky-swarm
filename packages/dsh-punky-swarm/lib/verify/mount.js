@@ -15,13 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// verify/mount.js —— verify 引擎级接线（装配统一决策包 §4 Part2，批次 4 集成注意项 1 收口）
+// verify/mount.js —— verify 引擎级接线（集成注意项 1 收口）
 // index.js 的可测缝：capabilities.verify.enabled 门控挂 installEvidenceCapture（tools/post-execute 证据捕获），
 //   返回 { installed, count, dispose }；enabled=false 零运行时开销；ctx.on 缺失静默降级（宿主能力缺失不炸）。
 // 边界：createCompletionGate 与 audit lane 显式 DI 消费路径一字不动（gate.js 零改动）——本文件只做引擎级捕获装配，
 //   裁决/拦截语义仍在 gate.js（advisory 只记录 / enforce 拦截），捕获侧只落 blob + ledger。
 import { installEvidenceCapture } from './evidence.js';
-// resolveVerifyConfig/VERIFY_DEFAULTS 统一归口 lib/schema.js（装配统一决策包 §3.1 注册表 default：
+// resolveVerifyConfig/VERIFY_DEFAULTS 统一归口 lib/schema.js（注册表 default：
 //   assembly-schema lane 落地同款实现，本文件不再自包含双实现——语义一致，消费路径单点，防未来字段漂移）
 import { VERIFY_DEFAULTS, resolveVerifyConfig } from '../schema.js';
 export { VERIFY_DEFAULTS, resolveVerifyConfig };

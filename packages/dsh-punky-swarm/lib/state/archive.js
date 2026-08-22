@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Archive：P1-5 done→archive（决策包 §二）——complete 后自动归档、单向（产物打包保留可查 + 不可回滚标记）
+// Archive：done→archive——complete 后自动归档、单向（产物打包保留可查 + 不可回滚标记）
 // 职责（单文件 = 归档，不含状态迁移判定，机器域归主 machine.js）：
 //   archiveBatch  —— 把 sessions/<sessionId>/artifacts/<batchId>/ 快照复制到 sessions/<sessionId>/archive/<batchId>/
 //                    （只复制不移动，保留原产物引用）+ 写 manifest.json（批次元数据 + 产物清单 + lanes 终态快照）
