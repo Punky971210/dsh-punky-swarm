@@ -15,33 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// registry-client：R1 半自动注册客户端（P3 registry-server 对接，exec-registry lane）
-// 施工契约：aip-acps-comm-build plan/spec.md §2.3（exec-registry）、D9（R1 半自动）、D13（EAB macKey
-//   AES-256-GCM 替代 SM4-CBC 标注）、审计 V3（注册需用户凭据：EAB 要求用户拥有 active AIC，人工审核
-//   不得自动化跳过）。
-// 事实源：参考实现 ACPs-community v2.1.0 源码（行号见文件内注释与 exec/registry.md 映射表）：
-//   - 用户侧 API 面：acps-cli/acps_cli/registry/client.py（login 185-195 / create_agent 302-306 /
-//     update_agent 308-312 / submit_agent 314-318 / list_my_agents 275-300 / get_eab_credential 438-447）
-//   - 用户侧编排：acps-cli/acps_cli/registry/commands.py（upsert_agent 361-414 / submit 417-438 /
-//     check 507-541 / fetch-eab 303-336）
-//   - 服务端端点：registry-server/app/agent/api.py（client_create_new_agent 337-357）、
-//     app/eab/api.py（create_eab_credential 43-59）、app/agent/api_atr.py（get_agent_acs_by_aic 118-188）
-//   - EAB 语义：app/eab/service.py（generate_eab_credential 42-76：仅本人 active AIC 51-55、一次性、
-//     expires_at 默认 24h、SM4 存储 63）
-//   - 路径推导：acps-cli/acps_cli/registry/config.py（_infer_default_atr_base_url 29-35：
-//     {origin}/acps-atr-v2；server_base_url 默认 http://localhost:9001/api/v1）
-// 红线：零新 node_modules 依赖——HTTP 用 node:http/https、加密用 node:crypto（D13）。
-// 默认关：acps.registry.enabled=false（U-D2 语义）；装配仅建客户端实例，不自动发起注册
-// （V3：注册需用户凭据、人工审核不自动化跳过——半自动注册，动作由用户显式触发）。
+// registry-client：半自动注册客户端（registry-server 对接）
+// EAB macKey 本地加密存证（AES-256-GCM）。审计：注册需用户凭据（EAB 要求用户拥有 active AIC），
+// 人工审核不得自动化跳过。
+// 约束：零新 node_modules 依赖——HTTP 用 node:http/https、加密用 node:crypto。
+// 默认关：acps.registry.enabled=false；装配仅建客户端实例，不自动发起注册
+// （注册需用户凭据、人工审核不自动化跳过——半自动注册，动作由用户显式触发）。
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
 
 // ── 配置键默认值（装配契约：acps.registry，默认关）──
-// url：registry public 面 API 基址（参考实现 server_base_url，默认 http://localhost:9001/api/v1；
+// url：registry public 面 API 基址（默认 http://localhost:9001/api/v1；
 //   传 {origin} 或 {origin}/api/v1 均可，本模块自动规整 apiBase/atrBase）
-// username/password：registry 用户凭据（config/env 注入，不硬编码、不落仓库——spec §2.3 红线）
+// username/password：registry 用户凭据（config/env 注入，不硬编码、不落仓库）
 // eabKey：EAB macKey 本地加密密钥（hex 32B / urlsafe-base64 43-44 字符 / 任意字符串经 sha256 派生 32B；
 //   缺省 null = 禁用加密存证能力，requestEab 仅返回明文凭据由调用方自存，不落盘）
 // token：可选预置 Bearer token（跳过 login；与 username/password 二选一）
@@ -171,10 +159,10 @@ export function resolveRegistryConfig(config) {
   };
 }
 
-// ── EAB macKey 本地加密存证（D13：Node 侧 AES-256-GCM 替代参考实现 SM4-CBC）──
+// ── EAB macKey 本地加密存证（Node 侧 AES-256-GCM）──
 // 参考实现服务端用 SM4-CBC 加密 mac_key 后入库（registry-server/app/core/crypto.py:46-53 sm4_encrypt、
 //   app/eab/service.py:63 sm4_encrypt(mac_key, settings.sm4_encryption_key)）；node:crypto 无 SM4 原语，
-//   D13 拍板用 AES-256-GCM（node:crypto 内建，零新依赖）。差异标注：
+//   AES-256-GCM（node:crypto 内建，零新依赖）。差异标注：
 //   - 算法不同：SM4-CBC（对称分组 128bit，PKCS#7）↔ AES-256-GCM（AEAD，密文+认证标签）；
 //   - 存储形态不同：参考实现 iv+密文 urlsafe-base64 拼接（crypto.py:53），本实现 iv+tag+密文 base64
 //     信封对象；
@@ -344,7 +332,7 @@ function httpRequest(method, url, { headers = {}, body = null, timeoutMs = 10000
   });
 }
 
-// ── RegistryClient：R1 半自动注册客户端 ──
+// ── RegistryClient：半自动注册客户端 ──
 // 方法与参考实现 acps-cli RegistryApiClient / commands 编排对齐（见文件头映射）。
 // 半自动语义（V3）：login/upsert/submit/requestEab 均为显式动作；本体注册需人工审核
 // （submit 后由 registry staff 审批，服务端在审批通过时分配权威 AIC——service_command.py:368-369），
@@ -508,7 +496,7 @@ export class RegistryClient {
     return result;
   }
 
-  // EAB 凭据 → AES-GCM 加密信封（D13；keyId/macKey 不落明文）
+  // EAB 凭据 → AES-GCM 加密信封（keyId/macKey 不落明文）
   encryptEab(credential) {
     if (!this.config.eabKey) {
       throw new RegistryClientError('acps.registry.eabKey is not configured; cannot encrypt EAB credential', {

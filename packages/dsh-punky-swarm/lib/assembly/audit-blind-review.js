@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 盲审编排装配数据（决策包 punky-assembly §5：Part 3 盲审编排——review-workflow 借鉴 M1-M6）
+// 盲审编排装配数据（review-workflow 借鉴）
 // 纯数据 + 辅助函数，零依赖（被 assembly-schema.js 断言扩展视图引用，独立可加载）：
 //   - BLIND_REVIEW_ROLES / BLIND_REVIEW_SKILLS：audit-panelist/audit-aggregate/audit-critic 三角色映射
 //   - BLIND_REVIEW_TEMPLATES：六任务契约模板（bundle/panelist/aggregate/critic/checklist/config，键名固定供断言）
@@ -33,7 +33,7 @@ export const BLIND_REVIEW_SKILLS = {
   'audit-critic': ['report-blind-audit'],                             // 独立复核 + 三态决议（endorse/challenge/block）
 };
 
-// ── 叠加顺序 D-A7（verify 自动证据 → 盲审可选 → needHuman 人工闸；verify blocked 直接升级人工不进入盲审）──
+// ── 叠加顺序（verify 自动证据 → 盲审可选 → needHuman 人工闸；verify blocked 直接升级人工不进入盲审）──
 // 文档化常量：Leader/Manager 建批参照；三原则 = ① verify 内容证据底座（先跑、自动）② 盲审质量评审编排（后跑、可选）
 // ③ needHuman 人工闸（最后、引擎强制 gates.js checkNeedHumanGate）。任一层的 produce 都进 Tier3 门禁（缺则拒 merged）。
 export const BLIND_REVIEW_ORDER = Object.freeze({
@@ -76,7 +76,7 @@ const T_CHECKLIST = `材料完整性分级（checklist，M4）：
 - 用户确认降级为可选条款（audit 层检查通过但标注降级）。`;
 
 const T_CONFIG = {
-  panelistCount: 2,     // 评委数默认 2（study ④：关键 lane 才启用、默认单审，防流程膨胀）
+  panelistCount: 2,     // 评委数默认 2（关键 lane 才启用、默认单审，防流程膨胀）
   threshold: 3.5,       // 评分阈值（如 rubric 均分 ≥3.5 为通过线，Leader/Manager 可按项目覆写）
   criticRequired: true, // critic 默认必跑（三态决议兜底；显式 false 可跳过，不建议）
   note: 'config 为建批默认值；Leader/Manager 经 buildAuditLaneSpec 覆写（panelistCount/threshold/criticRequired）',
@@ -91,7 +91,7 @@ export const BLIND_REVIEW_TEMPLATES = Object.freeze({
   config: T_CONFIG,
 });
 
-// ── 装配扩展合并（决策包 D-A5：extensions.blindReview 默认关）──
+// ── 装配扩展合并（extensions.blindReview 默认关）──
 // blindReview.enabled !== true → 原样返回（base DEFAULT_ASSEMBLY 一字不改 → buildAgentDescriptors 输出不变 → P1-3 兼容）；
 // enabled === true → 返回合并副本（三角色入 layers.audit.roles + skills，其他层/角色共享引用，base 不被 mutate）。
 export function applyAssemblyExtensions(assembly, extensions) {

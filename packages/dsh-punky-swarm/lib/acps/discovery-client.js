@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P3 DS1 外部 ADP 发现客户端（Agent Discovery Protocol）：插件 Leader 发现外部 partner。
+// 外部 ADP 发现客户端（Agent Discovery Protocol）：插件 Leader 发现外部 partner。
 // POST {adpBaseUrl}/discover 查询外部 discovery-server，返回 DiscoveryResponse
 // （result.acsMap / result.agents[].agentSkills / result.routes），供调用方选择调用目标。
 //
@@ -25,13 +25,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - DiscoveryResponse 模型：acps_sdk/acps_sdk/adp/models.py:664-757（result 与 error 互斥，CommonResponse 规范）
 //   - 服务端 /discover 端点：discovery-server/app/discovery/discovery_api.py:29-83；响应构造 service.py:262-283
 //
-// 与既有本地查询关系（DS0 保留，零改动）：
+// 与既有本地查询关系（保留，零改动）：
 //   lib/discovery/service.js = 本地进程内查询（插件自身工具/智能体目录，经 /api/dsh-punky-swarm/discover 暴露）；
-//   本模块 = 新增外部查询通道（DS1），共享同一协议常量与校验（lib/discovery/schema.js
+//   本模块 = 新增外部查询通道，共享同一协议常量与校验（lib/discovery/schema.js
 //   QUERY_TYPES/FILTER_OPERATORS/validateDiscoveryRequest/normalizeLimit——与参考实现 acps_sdk/adp 对齐）。
 //   查询范围选项 scope：local（仅本地）/ external（仅外部）/ both（本地+外部合并），装配可配（acps.discovery.scope）。
 //
-// DS3 mini-ADSP（可选）：对外提供 /discover 的服务端语义——P1 端点 lane（exec-acps-server）未就绪，
+// mini-ADSP（可选）：对外提供 /discover 的服务端语义——端点未就绪，
 // 仅预留函数签名 createMiniAdsp()（调用抛 NotImplemented，见文末），不实现。
 //
 // 零新依赖：HTTP 用全局 fetch（Node >= 22）+ AbortSignal.timeout，node:https 内建能力之上。
@@ -43,7 +43,7 @@ import {
   successResponse,
 } from '../discovery/schema.js';
 
-// ── 查询范围选项（装配可配；DS1 外部通道与 DS0 本地目录的组合方式）──
+// ── 查询范围选项（装配可配；外部通道与本地目录的组合方式）──
 export const DISCOVERY_SCOPES = ['local', 'external', 'both'];
 export const DISCOVERY_SCOPE_DEFAULT = 'local';
 
@@ -154,7 +154,7 @@ function mergeResponses(local, external) {
   return successResponse(result);
 }
 
-// DS1 ADP 客户端工厂（对齐 demo-leader DiscoveryClient discovery_client.py:32-118）。
+// ADP 客户端工厂。
 // 参数：
 //   baseUrl      外部 discovery-server 根地址（如 http://127.0.0.1:9020）；空 = 未配置（discover 抛错，mirror is_configured）
 //   timeout      单次请求超时 ms（默认 10000）
@@ -197,7 +197,7 @@ export function createAcpsDiscoveryClient({
       const verr = validateDiscoveryRequest(raw);
       if (verr) throw toClientError(verr, '请求参数校验失败');
 
-      // local 分支：既有本地查询服务（DS0 通道）
+      // local 分支：既有本地查询服务
       const runLocal = async () => {
         if (!localService || typeof localService.discover !== 'function') {
           throw new DiscoveryClientError('scope=' + effectiveScope + ' 需要本地发现服务（capabilities.discovery.enabled），但未装配');
@@ -271,11 +271,11 @@ export function createAcpsDiscoveryClient({
   };
 }
 
-// ── DS3 mini-ADSP（可选，预留）──
+// ── mini-ADSP（可选，预留）──
 // 对外提供 /discover 的服务端语义（本插件作为 ADP 服务端被外部查询）。
-// 决策 D10：DS3 非门禁；P1 端点 lane（exec-acps-server，对外 /acps/rpc + .well-known/acs.json）就绪前
+// mini-ADSP 非门禁；对外 /acps/rpc + .well-known/acs.json 端点就绪前
 // 仅预留本签名，不实现。实现路径（就绪后）：复用 lib/discovery/service.js 的 discover 语义，
-// 经 acps.endpoint（exec-acps-server 产物）挂载对外 /discover。
+// 经 acps.endpoint 挂载对外 /discover。
 export function createMiniAdsp() {
   throw new Error(
     'DS3 mini-ADSP 预留接口（未实现）：对外 /discover 服务端语义待 P1 endpoint lane（exec-acps-server）就绪后按需实现'

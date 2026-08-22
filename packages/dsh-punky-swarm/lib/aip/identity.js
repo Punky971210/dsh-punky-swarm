@@ -25,7 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     extendedKeyUsage 分用途（clientAuth/serverAuth）、有效期 requestedValidity（默认 49 天、
 //     建议 365~1825、上限 3650）；EAB（External Account Binding）凭证绑定 ACME 账户与 AIC；
 //     认证走 TLS1.3 mTLS（ACPs-spec-ATR-v02.01 §3.2/§3.3，ACPs-spec-AIA-v02.01）。
-//   SM2 校准：参考实现 v2.1.0 证书体系为 X.509/ACME（ECDSA/RSA），无 SM2 证据（spec §3.5）——
+//   SM2 校准：参考实现 v2.1.0 证书体系为 X.509/ACME（ECDSA/RSA），无 SM2 证据——
 //     本模块 sign 实现为可插拔接口：默认 ECDSA/RSA（node:crypto 原生，可跑可验签），
 //     算法可配置；SM2 留接口位（algorithm='sm2' 显式拒绝并提示），标注『SM2 待正式文本校准』。
 // 装配开关：identity 默认关（config.aip.identity.enabled === true 时调用方才激活本模块 API，
@@ -356,7 +356,7 @@ export async function sign(payload, keyRef, opts = {}) {
   }
   if (!privateKey) throw new Error('sign: keyRef.privateKey (or keyId with store) is required');
   if (algorithm === 'sm2') {
-    // SM2 待正式文本校准：参考实现 v2.1.0 无 SM2 证据（spec §3.5），不硬实现
+    // SM2 待正式文本校准：参考实现 v2.1.0 无 SM2 证据，不硬实现
     throw new Error('sign: SM2 待正式文本校准（ACPs v2.1.0 无 SM2 证据，暂不实现；请用 ecdsa-p256 / rsa-2048）');
   }
   if (!algorithm || !SIGN_ALGORITHMS[algorithm]) {

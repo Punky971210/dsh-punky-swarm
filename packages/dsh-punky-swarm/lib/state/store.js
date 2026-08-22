@@ -305,7 +305,7 @@ export function createStore(root, { rules } = {}) {
     return batch.phase === 'running' && lanes.every((s) => s === 'merged');
   }
 
-  // ---- B1 恢复审计辅助（punky-resume 决策包 §三 B1；只读探测，无副作用）----
+  // ---- 恢复审计辅助（只读探测，无副作用）----
   // task 契约查找（与 gates.findTask 同遍历语义：wavePlan[].tasks 按 id 匹配）
   function findTask(batch, lane) {
     for (const w of batch.wavePlan ?? []) {

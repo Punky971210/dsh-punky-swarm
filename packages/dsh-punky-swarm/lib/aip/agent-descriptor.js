@@ -15,15 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 agent-descriptor：国标 P4（GB/Z 185.4-2026《智能体描述》）描述生成器（exec-agent-desc lane）
+// 文件 agent-descriptor：国标 P4（GB/Z 185.4-2026《智能体描述》）描述生成器
 // 契约：纯函数——输入装配配置（team/layer/role/skills）+ 引擎信息，输出每 role 一份描述 JSON；
 //       零副作用、不消费运行时、可单测。
-// ⚠ 2026-08 校准（覆盖旧 14+8 口径，批次 aip-gb-fix spec §3.2/§5）：P4 字段集以参考实现
-//   ACPs-community v2.1.0 的 ACS（Agent Capability Specification）原文为准——
+// ⚠ 2026-08 校准（覆盖旧 14+8 口径）：字段集以 ACS（Agent Capability Specification）原文为准——
 //   registry-server/app/agent/acsSchema.json（JSON Schema 全文）为逐字字段来源；
-//   旧「14+8 属性」（agentId/accessAddress/accessMethod…）为二手解读，降级为兼容映射层
+//   旧「14+8 属性」（agentId/accessAddress/accessMethod…）仅作为兼容映射层
 //   （toLegacyDescriptor 纯函数，仅供审计对比，不参与对外契约）。
-// 派生值标记：固定值 = 本文件推导；预留 = P3-13 / 后续批次填充。
+// 派生值标记：固定值 = 本文件推导；预留 = 后续填充。
 // 仅用内建能力，零新增依赖（红线：不改 node_modules）。
 import { engineVersion } from './tool-descriptor.js';
 

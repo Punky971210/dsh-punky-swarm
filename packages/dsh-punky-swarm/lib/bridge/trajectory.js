@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // bridge/trajectory.js —— C5 诊断桥接（成熟模式：LangGraph 观测层 / dsh-trajectory-governance）
 // 订阅 trajectory 异常（anomaly）→ sessionId→lane 映射 → notify（默认 notify-only，auto-fail 默认关）
-// 原则（决策包 §5.1/§5.2）：只读消费告警载荷、不 mutate 载荷、不碰内核、不调插件任何控制面动作（红线 R5/R6）
+// 原则：只读消费告警载荷、不 mutate 载荷、不碰内核、不调插件任何控制面动作
 // 事件契约：'member.dispatch' 记录派发映射（既有事件通道，零新字段）；'lane.anomaly' 记录异常证据；broadcast 提示 Manager
 import { join } from 'node:path';
 import { TRAJECTORY_DEFAULTS } from '../schema.js';
@@ -27,7 +27,7 @@ const DISPATCH_EVENT = 'member.dispatch';   // 派发时记录 worker 会话 id�
 const ANOMALY_RECORD = 'lane.anomaly';      // 异常留痕事件（batch.events，面板可见）
 const MAILBOX_KIND = 'anomaly';             // broadcast 消息 kind
 
-// 装配开关（红线 R3：enabled 默认关，对齐 aip.enabled 先例；false 时桥接不挂载，零运行时开销）
+// 装配开关（enabled 默认关；false 时桥接不挂载，零运行时开销）
 export function isTrajectoryEnabled(config) {
   return config?.capabilities?.trajectory?.enabled === true;
 }
@@ -40,7 +40,7 @@ export function createTrajectoryBridge(ctx, deps) {
     : TRAJECTORY_DEFAULTS.failConfidence;
 
   // sessionId(worker 会话) → { sessionId, batchId, lane }；
-  // 派发时经 recordDispatch 记录；进程重启后从批次事件重建（幂等，R1）
+  // 派发时经 recordDispatch 记录；进程重启后从批次事件重建（幂等）
   const laneBySession = new Map();
   let pollTimer = null;
   let lastPollSince = 0;
@@ -87,7 +87,7 @@ export function createTrajectoryBridge(ctx, deps) {
 
   // notify（默认 notify-only）：lane.anomaly 事件 + broadcast 提示 Manager；不自动结算（Manager 按纪律裁决）
   // 注：store.newEvent 展开为 { ts, type, ...fields }——载荷若含顶层 type 会覆盖事件类型（store.js:56-58），
-  //     故 AnomalyAlert 载荷嵌套于 alert 字段（决策包 §5.1 载荷原样保留，事件 type 恒为 lane.anomaly）
+  //     故 AnomalyAlert 载荷嵌套于 alert 字段（载荷原样保留，事件 type 恒为 lane.anomaly）
   function notify(hit, alert) {
     const { sessionId, batchId, lane } = hit;
     const { anomalyId, type, confidence, severity, message } = alert;
@@ -101,7 +101,7 @@ export function createTrajectoryBridge(ctx, deps) {
   }
 
   // auto-fail 开关（默认关）：仅 loop_deadlock 且 confidence ≥ 阈值（可配）→ member_settle failed 终态结算
-  // 红线：不自动重试、不自动开新批次、不调插件 fork/auto-stop（决策包 §5.2 ③）；settle 判定权仍在 Manager/门禁
+  // 不自动重试、不自动开新批次、不调插件 fork/auto-stop；settle 判定权仍在 Manager/门禁
   function maybeAutoFail(hit, alert) {
     const { sessionId, batchId, lane } = hit;
     const { anomalyId, type, confidence, message } = alert;
@@ -167,7 +167,7 @@ export function createTrajectoryBridge(ctx, deps) {
   }
 
   function start() {
-    rebuildFromEvents(); // 幂等：重启后从批次事件重建映射（R1）
+    rebuildFromEvents(); // 幂等：重启后从批次事件重建映射
     if (typeof ctx?.on === 'function') {
       const handler = (a) => {
         try { handleAnomaly(a); } catch (e) { ctx.logger?.warn?.('[trajectory] handler error: ' + String(e?.message ?? e)); }

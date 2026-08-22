@@ -157,7 +157,7 @@ export function createApi(ctx, deps) {
     });
   }
 
-  // P4 ACS 智能体描述目录（exec-agent-desc lane）：enabled=true 时 agentCatalog 非空，注册 /agents；
+  // P4 ACS 智能体描述目录：enabled=true 时 agentCatalog 非空，注册 /agents；
   // 端点输出 ACS 字段集（AgentCapabilitySpec，逐字字段见 lib/aip/agent-descriptor.js）；只读、无参。
   // enabled=false（默认）时 agentCatalog 为 null，不注册该路由（既有路由契约不变）。
   if (agentCatalog) {

@@ -15,19 +15,16 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 acps-bridge：P2 内部 ACPs 桥接（形态④：file mailbox ↔ ACPs 消息，G1 进程内双向，默认关）
-// 施工契约：aip-acps-comm-build plan/spec.md §2.2/§三（D5=G1 进程内双向、D6=默认关、D7=config 短路零开销、
-//   D14=inbound 默认关）/§五（零破坏：mailbox ackId 原子写、三 box、outbox lane 隔离语义逐字保留）。
-// 参考实现：acps-sdk/acps_sdk/aip/aip_base_model.py（TaskCommand/TaskResult/TaskState，本批逐行核对）+
-//   aip_rpc_model.py:47-57（RpcRequest params.command=TaskCommand → result=TaskResult）。
+// 文件 acps-bridge：内部 ACPs 桥接（file mailbox ↔ ACPs 消息，进程内双向，默认关）
+// 零破坏：mailbox ackId 原子写、三 box、outbox lane 隔离语义逐字保留。
 //
 // 职责与红线：
 // - inbound：外部 ACPs TaskCommand → mailbox 消息。**经 lib/comms/mailbox.js 公共接口原子写（ackId 由 mailbox
 //   生成），绝不绕过、无旁路写**；写入目标仅 inbox（按 mentions/groupId 推导 lane 进 meta），outbox 不可由外部直接写。
 // - outbound：mailbox 消息 → ACPs Message/TaskResult。复用 lib/comms/aip-format.js 三映射
 //   （toAipMessage/toAipTask/toAipSession，本模块 re-export 供端点单一入口）；只投影/投递视图，不反写 mailbox 存储。
-// - 零路径（D7）：enabled=false 时 mountBridge 返回 null（不实例化），模块顶层无任何副作用（无监听/定时器/订阅）；
-//   G1 桥不自带监听——/rpc 监听归 P1 endpoint lane（衔接点见 handleInbound/toTaskResult 签名与 exec/bridge.md）。
+// - 零路径：enabled=false 时 mountBridge 返回 null（不实例化），模块顶层无任何副作用（无监听/定时器/订阅）；
+//   桥不自带监听——/rpc 监听归 endpoint 侧（衔接点见 handleInbound/toTaskResult 签名）。
 // - 生命周期：start/stop/dispose 幂等（开→关销毁、关→开重建，秒级无迁移）。
 
 import { join } from 'node:path';
@@ -41,7 +38,7 @@ import {
 } from './aip-format.js';
 import { resolveBridgeConfig } from '../schema.js';
 
-// TaskState 枚举（对齐参考实现 aip_base_model.py:23-33 逐字）
+// TaskState 枚举
 export const TASK_STATES = [
   'accepted', 'working', 'awaiting-input', 'awaiting-completion',
   'completed', 'canceled', 'failed', 'rejected',
@@ -87,7 +84,7 @@ export function taskCommandToInbound(taskCommand) {
 }
 
 // inbound 投递：经 mailbox.send 公共接口原子写 inbox（ackId 由 mailbox 生成）。
-// inboundEnabled 缺省 false（D14 默认关）：外部写 mailbox 需显式开启——调用方（endpoint /rpc）在
+// inboundEnabled 缺省 false（默认关）：外部写 mailbox 需显式开启——调用方（endpoint /rpc）在
 // bridge.inboundEnabled 门控通过后才传 { inboundEnabled: true }。
 export function deliverInbound(root, sessionId, batchId, taskCommand, { inboundEnabled = false } = {}) {
   if (!inboundEnabled) {
@@ -99,7 +96,7 @@ export function deliverInbound(root, sessionId, batchId, taskCommand, { inboundE
 }
 
 // ── outbound：mailbox 消息 → ACPs Message/TaskResult（纯投影，不反写 mailbox）──
-// toTaskResult：outbox/broadcast 消息 → ACPs TaskResult（aip_base_model.py:167-181）。
+// toTaskResult：outbox/broadcast 消息 → ACPs TaskResult。
 // taskId ← message.taskId ?? meta.taskId ?? ackId；status.state 由调用方按成员状态映射（缺省 completed，
 // 状态映射契约归 endpoint/Leader lane，见 exec/bridge.md 衔接点）；dataItems 复用 toAipDataItems（与 aip-format 同源）。
 export function toTaskResult(msg, { state = 'completed', stateChangedAt = null, products = null } = {}) {
@@ -125,14 +122,14 @@ export function toTaskResult(msg, { state = 'completed', stateChangedAt = null, 
   return out;
 }
 
-// ── 工厂（G1 进程内双向；enabled 门控，inbound 子门控）──
+// ── 工厂（进程内双向；enabled 门控，inbound 子门控）──
 export function createBridge({ root, config = {}, mailbox: mb = mailbox, logger = null } = {}) {
   const cfg = resolveBridgeConfig(config);
   const enabled = cfg.enabled;
   const inboundEnabled = cfg.enabled && cfg.inbound;
   let mounted = false;
 
-  // P1 endpoint /rpc 衔接点：收到 TaskCommand 后调用 handleInbound(taskCommand, { sessionId, batchId })。
+  // endpoint /rpc 衔接点：收到 TaskCommand 后调用 handleInbound(taskCommand, { sessionId, batchId })。
   // inbound 关（默认）→ 拒绝（视图只读）；缺 sessionId/batchId → 拒绝（mailbox 按会话/批次隔离，缺上下文不可投递）。
   function handleInbound(taskCommand, { sessionId, batchId } = {}) {
     if (!enabled) return { ok: false, code: 'BRIDGE_DISABLED', detail: 'acps.bridge.enabled is false (D6/D7)' };
@@ -152,7 +149,7 @@ export function createBridge({ root, config = {}, mailbox: mb = mailbox, logger 
     // outbound 衔接点（endpoint/视图调用；Message 投影复用 aip-format，单一入口）
     toOutbound: (msg) => toAipMessage(msg),
     toTaskResult,
-    // 生命周期：G1 桥不自带监听/定时器（/rpc 监听归 P1 endpoint lane）；start/stop 幂等标记
+    // 生命周期：桥不自带监听/定时器（/rpc 监听归 endpoint 侧）；start/stop 幂等标记
     start() { mounted = true; return { mounted }; },
     stop() { mounted = false; return { mounted }; },
     dispose() { mounted = false; },
@@ -160,16 +157,16 @@ export function createBridge({ root, config = {}, mailbox: mb = mailbox, logger 
   };
 }
 
-// ── 装配短路（D7）：enabled=false → null，不实例化（零路径）。index.js 装配处唯一调用点。──
+// ── 装配短路：enabled=false → null，不实例化（零路径）。index.js 装配处唯一调用点。──
 export function mountBridge(config, deps) {
   if (!resolveBridgeConfig(config).enabled) return null;
   return createBridge({ ...deps, config });
 }
 
-// ── P1 endpoint /rpc → bridge inbound 接线（DEF-V6-1）──
+// ── endpoint /rpc → bridge inbound 接线 ──
 // createEndpointRpcHandler(bridge) 生成适配 createAcpsServer 的 rpcHandler（server.js:269 注入点）：
 //   (command, ctx) → TaskResult。行为：
-//   - bridge 未装配（null）→ fallback（缺省 P1 独立回执 accepted，不落 mailbox）；
+//   - bridge 未装配（null）→ fallback（缺省独立回执 accepted，不落 mailbox）；
 //   - sessionId/batchId 上下文注入：sessionId ← command.sessionId（ACPs Message 基类字段,
 //     aip_base_model.py:151）?? command.commandParams.sessionId；batchId ← command.commandParams.batchId；
 //   - bridge.handleInbound 成功 → TaskResult accepted（任务已入 inbox 待派发）；
@@ -179,7 +176,7 @@ export function mountBridge(config, deps) {
 export function createEndpointRpcHandler(bridge, { logger = null } = {}) {
   return function endpointRpcHandler(command, ctx = {}) {
     if (!bridge) {
-      // bridge 未装配：P1 独立行为（回 accepted 但不落 mailbox——DEF-V6-1 前现状，向后兼容）
+      // bridge 未装配：独立行为（回 accepted 但不落 mailbox，向后兼容）
       return acceptedInboundResult(command, ctx);
     }
     const sessionId = command?.sessionId ?? command?.commandParams?.sessionId ?? null;
@@ -193,7 +190,7 @@ export function createEndpointRpcHandler(bridge, { logger = null } = {}) {
   };
 }
 
-// inbound 回执 TaskResult 构造（TaskResult 形态对齐 aip_base_model.py:167-181）：
+// inbound 回执 TaskResult 构造：
 //   accepted = 任务已入 inbox；rejected = bridge 拒绝（INBOUND_DISABLED 等，status.dataItems 附 code/detail）
 function inboundResult(taskCommand, state, ctx = {}) {
   const now = new Date().toISOString();
