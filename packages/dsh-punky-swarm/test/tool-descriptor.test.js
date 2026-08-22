@@ -116,10 +116,12 @@ test('生成：toolVersion 可覆盖缺省版本', () => {
   for (const d of made.catalog.list()) assert.equal(d.version, '9.9.9');
 });
 
-test('开关默认关：enabled=false 时 catalog 为 null、不生成目录', () => {
+test('开关口径：缺省配置默认开启（catalog 非空）；显式 aip.enabled=false 关闭（catalog null）', () => {
+  // 缺省配置（config 无 aip 键）→ readCapability 默认合并 {enabled:true} → 实际默认开启
   const { made } = makeCtx(false);
-  assert.equal(made.catalog, null);
-  // 显式 aip.enabled=false 同样关闭
+  assert.ok(made.catalog, '缺省配置必须实际默认开启（catalog 非空）');
+  assert.equal(made.catalog.list().length, 14);
+  // 显式 aip.enabled=false → 关闭，catalog 为 null
   const ctx2 = { tools: { register: () => {} }, logger: console };
   const made2 = createTools(ctx2, { store, root, config: { aip: { enabled: false } } });
   made2.register();

@@ -26,8 +26,12 @@ import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig } from './schema.js';
 import { validateCapabilities } from './assembly/schema.js';
+import { createDiscoveryService } from './discovery/service.js';
+import { buildAgentDescriptors } from './aip/agent-descriptor.js';
+import { engineVersion } from './aip/tool-descriptor.js';
+import { DEFAULT_ASSEMBLY } from './assembly.js';
 import { mountVerify } from './verify/mount.js';
 import * as mailbox from './comms/mailbox.js';
 
@@ -109,10 +113,20 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.info?.('[dsh-punky-swarm] watch capability enabled: lane heartbeat watchdog mounted (scan ' + scanMs + 'ms)');
   }
 
-  // 只读治理 API（工作台用）
+  // 只读治理 API（工作台用）；agentCatalog：P4 ACS 描述目录（aip.enabled 门控，register 后非空）
+  // P6 接线（exec-format-wire）：aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
   let apiDispose = null;
   if (ctx.webServer) {
-    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog }).dispose;
+    // 国标 P5 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
+    // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
+    const discoveryCfg = resolveDiscoveryConfig(config);
+    let discovery = null;
+    if (discoveryCfg.enabled) {
+      const agentDescriptors = buildAgentDescriptors(DEFAULT_ASSEMBLY, { version: engineVersion() });
+      discovery = createDiscoveryService({ catalog: tools.catalog, agentDescriptors, config: discoveryCfg });
+      ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
+    }
+    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery }).dispose;
   }
 
   // C5 诊断桥接（trajectory，决策包 §5）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。

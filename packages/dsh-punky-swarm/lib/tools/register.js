@@ -22,6 +22,11 @@ import { createMailboxTools } from './mailbox-tools.js';
 import { createLaneTools } from './lane-tools.js';
 import { createLogTools } from './log-tools.js';
 import { buildToolCatalog, engineVersion } from '../aip/tool-descriptor.js';
+import { buildAgentCatalog } from '../aip/agent-descriptor.js';
+import { resolveAssembly, DEFAULT_ASSEMBLY } from '../assembly.js';
+// P6 接线（exec-format-wire）：装配层导出 AIP 结构投影函数，供 api.js 只读端点使用（纯函数，不改 mailbox 存储）
+import * as aipFormat from '../comms/aip-format.js';
+import { readCapability } from '../assembly/schema.js';
 
 export function createTools(ctx, deps) {
   // guard 注册顺序保持现状：createTools 开头、工具数组构造之前（guard 回调闭包依赖 store/config）
@@ -34,20 +39,42 @@ export function createTools(ctx, deps) {
     ...createLogTools(ctx, deps), // E3 log_export：config.capabilities.logs.enabled===true 时注册（默认关 → 14 不变）
   ];
 
-  // 国标 AIP P0-1：装配 enabled 开关（默认关）——enabled === true 时注册工具目录快照并暴露 catalog。
+  // 国标 AIP P0-1：装配 enabled 开关（缺省默认开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开，
+  //   显式 aip.enabled:false 可关闭）。经 readCapability 默认合并读取（schema.js CAPABILITY_REGISTRY 同源口径）：
+  //   缺省配置（config 无 aip 键）→ 合并默认 {enabled:true} → 实际默认开启；enabled === true 时注册工具目录快照并暴露 catalog。
   // 生成器只读遍历 tools，不替换、不包装任何已注册工具对象（红线：既有工具契约不变）。
-  const aipEnabled = deps?.config?.aip?.enabled === true;
+  // P4 ACS（exec-agent-desc lane）：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
+  //   team 取 config.aip.team ?? 'jiufeng'）经 agent-descriptor 纯函数生成智能体描述目录 agentCatalog
+  //   （ACS 字段集，见 lib/aip/agent-descriptor.js）；enabled=false 时恒为 null、零开销。
+  const aipCfg = readCapability(deps?.config, 'aip');
+  const aipEnabled = aipCfg?.enabled === true;
   let catalog = null;
+  let agentCatalog = null;
 
   const register = () => {
     for (const t of tools) ctx.tools.register(t);
-    if (aipEnabled) catalog = buildToolCatalog(tools, { version: engineVersion(), config: deps?.config });
+    if (aipEnabled) {
+      catalog = buildToolCatalog(tools, { version: engineVersion(), config: deps?.config });
+      const aipCfg = deps?.config?.aip ?? {};
+      const assembly = resolveAssembly(aipCfg.team ?? 'jiufeng', deps?.config?.assembly) ?? DEFAULT_ASSEMBLY;
+      const { owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes } = aipCfg;
+      agentCatalog = buildAgentCatalog(assembly, {
+        version: engineVersion(),
+        generatedAt: new Date().toISOString(),
+        owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes,
+      });
+    }
   };
 
   return {
     tools,
     register,
-    // catalog 在 register() 之后非空（index.js 先 register 再 createApi 取用）；enabled=false 时恒为 null
+    // catalog / agentCatalog 在 register() 之后非空（index.js 先 register 再 createApi 取用）；
+    //   缺省默认开启 → 非空，仅显式 aip.enabled=false 时恒为 null（/tools 端点不注册）
     get catalog() { return catalog; },
+    get agentCatalog() { return agentCatalog; },
+    // P6 接线（exec-format-wire）：AIP 结构投影函数集（toAipMessage/toAipTask/toAipSession）——恒导出（纯函数零副作用），
+    // api.js 只读端点消费（缺省传入时端点不附投影，既有行为不变；红线：不改 mailbox 存储）
+    get aipFormat() { return aipFormat; },
   };
 }

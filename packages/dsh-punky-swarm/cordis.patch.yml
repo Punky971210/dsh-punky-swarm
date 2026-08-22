@@ -12,6 +12,10 @@
         # C5 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only，不自动结算）；
         #   autoFail=false（默认）异常不自动 member_settle failed；failConfidence 为 loop_deadlock 自动 failed 的置信阈值。
         capabilities:
+          # P5 发现服务（ADP，exec-discovery lane）：enabled=true 时挂载 POST /api/dsh-punky-swarm/discover +
+          #   GET /.well-known/aip（消费 tool catalog + agent-descriptor 目录）；nodes 可逐节点 active=false 隐藏（默认 active=true）。
+          discovery:
+            enabled: true
           trajectory:
             enabled: true
             autoFail: false

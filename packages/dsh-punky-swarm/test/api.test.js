@@ -23,6 +23,7 @@ import path from 'node:path';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
+import { buildToolCatalog } from '../lib/aip/tool-descriptor.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-'));
@@ -114,6 +115,35 @@ test('prefix fallback returns 404 json', () => {
   const r = invoke(routes[0], '/api/dsh-punky-swarm/unknown');
   assert.equal(r.status, 404);
   assert.equal(r.body.error, 'not-found');
+});
+
+// ── 国标 AIP P0-1 /tools 端点（与 aip.enabled 联动）：catalog 非空（缺省默认开启）时注册，null 时不注册 ──
+
+test('/tools 端点：catalog 非空时注册并返回 14 工具 6 属性', () => {
+  const routesT = [];
+  const ctxT = { webServer: { register: (r) => { routesT.push(r); return () => {}; } } };
+  const catalog = buildToolCatalog(
+    [{ name: 'wave_plan', description: 'd', parameters: { a: { type: 'string', required: true } }, output: { schema: { type: 'object' } } }],
+    {},
+  );
+  const apiT = createApi(ctxT, { store, root, catalog });
+  const toolsRoute = routesT.find((x) => x.path === '/api/dsh-punky-swarm/tools');
+  assert.ok(toolsRoute, '/tools 路由必须注册（catalog 非空）');
+  const r = invoke(toolsRoute, '/api/dsh-punky-swarm/tools');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.count, 1);
+  assert.equal(r.body.tools[0].toolId, 'dsh.punky-swarm.wave_plan');
+  assert.equal(r.body.tools[0].name, 'wave_plan');
+  assert.ok(r.body.generatedAt);
+  apiT.dispose();
+});
+
+test('/tools 端点：catalog 为 null（显式 aip.enabled=false）时不注册（保持 6 路由契约）', () => {
+  const routesT = [];
+  const ctxT = { webServer: { register: (r) => { routesT.push(r); return () => {}; } } };
+  const apiT = createApi(ctxT, { store, root, catalog: null });
+  assert.ok(!routesT.some((x) => x.path === '/api/dsh-punky-swarm/tools'), '/tools 不得注册（catalog null）');
+  apiT.dispose();
 });
 
 api.dispose();
