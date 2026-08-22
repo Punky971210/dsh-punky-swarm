@@ -130,7 +130,7 @@ dsh web restart
 兼容《人工智能 智能体互联》国标（GB/Z 185-2026）工具/智能体描述结构，仅增不改、可插拔：
 
 - **工具 6 属性**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
-- **智能体描述（P4，ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；旧「14+8 属性」（agentId/accessAddress/…）为二手解读，降级为 toLegacyDescriptor 兼容映射层（仅审计对比，不参与对外契约）；
+- **智能体描述（GB/Z 185.4-2026 第 4 部分：智能体描述；ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；旧「14+8 属性」（agentId/accessAddress/…）为二手解读，降级为 toLegacyDescriptor 兼容映射层（仅审计对比，不参与对外契约）；
 - **消息/任务/会话映射**：mailbox 消息、wavePlan 任务、批次状态 → 国标结构（纯映射只读不改存储，ackId 原子写保留）；
 - **身份体系**（默认关，`aip.identity.enabled=true` 激活）：AIC 身份码（OID 前缀 `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256 / RSA-2048）+ 信任链验证；SM2 暂不支持（签名接口可插拔，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝）；
 - **装配开关**：`aip.enabled`（默认开启）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）。
@@ -165,7 +165,7 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 `acps.bridge`（进程内双向，默认关；mode=`inprocess`）：
 - **inbound**（默认关，`acps.bridge.inbound=true` 显式开启）：外部 ACPs TaskCommand → mailbox 消息，**经 lib/comms/mailbox.js 公共接口原子写 inbox（ackId 由 mailbox 生成，绝不绕过、无旁路写）**；写入目标仅 inbox（按 mentions/groupId 推导 lane 进 meta），outbox 不可外部直接写，broadcast 外部投递不支持；
 - **outbound**：mailbox 消息 → ACPs Message/TaskResult（复用 aip-format 三映射），只投影/投递视图，不反写 mailbox 存储；
-- **/rpc→bridge 接线**：`POST /acps/rpc` 收到的 TaskCommand 经 `handleInbound` 落 mailbox；`bridge.inbound=false` 时协议级 `rejected`（INBOUND_DISABLED，HTTP 200 返回——传输成功、协议层拒绝）；bridge 未装配时回 P1 独立 accepted（向后兼容）；
+- **/rpc→bridge 接线**：`POST /acps/rpc` 收到的 TaskCommand 经 `handleInbound` 落 mailbox；`bridge.inbound=false` 时协议级 `rejected`（INBOUND_DISABLED，HTTP 200 返回——传输成功、协议层拒绝）；bridge 未装配时回端点缺省 accepted（向后兼容）；
 - **mailbox 红线保留**：ackId 原子写、三 box（inbox/outbox/broadcast）、lane 隔离语义逐字保留；
 - **零路径**：`enabled=false` 时不加载不实例化（mountBridge 返回 null）。
 
@@ -213,7 +213,7 @@ acps:
 
 ### 能力边界（未实现）
 
-- **P4 工具调用**：未实现（待国标正式文本定义），不宣称已实现；
+- **工具调用（GB/Z 185.7-2026 第 7 部分：智能体工具调用）**：未实现（待国标正式文本定义），不宣称已实现；
 - **SM2 签名**：暂不支持——sign 为可插拔接口，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝；
 - **mini-ADSP**：对外 `/discover` 服务端语义仅预留函数签名（createMiniAdsp），未实现；
 
