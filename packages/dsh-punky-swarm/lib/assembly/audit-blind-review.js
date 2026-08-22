@@ -92,7 +92,7 @@ export const BLIND_REVIEW_TEMPLATES = Object.freeze({
 });
 
 // ── 装配扩展合并（extensions.blindReview 默认关）──
-// blindReview.enabled !== true → 原样返回（base DEFAULT_ASSEMBLY 一字不改 → buildAgentDescriptors 输出不变 → P1-3 兼容）；
+// blindReview.enabled !== true → 原样返回（base DEFAULT_ASSEMBLY 一字不改 → buildAgentDescriptors 输出不变，兼容）；
 // enabled === true → 返回合并副本（三角色入 layers.audit.roles + skills，其他层/角色共享引用，base 不被 mutate）。
 export function applyAssemblyExtensions(assembly, extensions) {
   const br = (extensions && extensions.blindReview) || (assembly && assembly.extensions && assembly.extensions.blindReview);

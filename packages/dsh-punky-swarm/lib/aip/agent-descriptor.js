@@ -223,9 +223,9 @@ export function toLegacyDescriptor(descriptor, opts = {}) {
     interactionModes: ['point-to-point', 'group'],   // 旧固定值（mailbox 三件套语义）
     communicationProtocols: ['dsh-file-mailbox'],    // 旧固定值（mailbox 文件协议）
     securityLevel: 'session-isolated',               // 旧固定推导
-    trustLevel: null,                                // 旧预留：P3-13
+    trustLevel: null,                                // 旧预留：
     region: null,                                    // 旧预留
     language: 'zh-CN',                               // 旧预留
-    serviceLevel: null,                              // 旧预留：P3-13
+    serviceLevel: null,                              // 旧预留：
   };
 }

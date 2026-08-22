@@ -25,7 +25,7 @@ import { createGates, isAbsPath } from './gates.js';
 import { BATCH_SCHEMA_V3, migrateV2toV3, chainsDefaults, conditionDefaults } from './schema-v3.js';
 import * as machine from './machine.js';
 import { loadRules } from './machine-rules.js';
-import { createArchive } from './archive.js'; // P1-5：done→archive（complete 钩子）
+import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 
 const STORE_SCHEMA = BATCH_SCHEMA_V3;
 const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
@@ -42,9 +42,9 @@ export function createStore(root, { rules } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   const gates = createGates(root);
-  // P1-7：棘轮规则表（createStore(root, { rules }) 可选注入 loadRules 产物；未注入 = 默认规则 = schema 常量同引用，行为不变）
+  // 棘轮规则表（createStore(root, { rules }) 可选注入 loadRules 产物；未注入 = 默认规则 = schema 常量同引用，行为不变）
   const ratchet = rules ?? loadRules();
-  // P1-5：归档器装配（createStore 签名不变；归档目标 = <root>/sessions/<sid>/archive/<bid>/）
+  // 归档器装配（createStore 签名不变；归档目标 = <root>/sessions/<sid>/archive/<bid>/）
   const archive = createArchive(root);
 
   function sessionDir(sessionId) {
@@ -57,7 +57,7 @@ export function createStore(root, { rules } = {}) {
   function artifactsDirOf(sessionId, batchId) {
     return path.join(sessionDir(sessionId), 'artifacts', batchId);
   }
-  // P1-4：condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——相对路径解析到批次产物根，绝对路径直接用；存在性判定（existsSync）
+  // condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——相对路径解析到批次产物根，绝对路径直接用；存在性判定（existsSync）
   function conditionFileExists(sessionId, batchId) {
     const artifactsDir = artifactsDirOf(sessionId, batchId);
     return (p) => fs.existsSync(isAbsPath(p) ? p : path.join(artifactsDir, p));
@@ -105,7 +105,7 @@ export function createStore(root, { rules } = {}) {
       wavePlan: wavePlan.wavePlan,
       lanes,
       chains: chainsDefaults(), // C4：mailbox 环防护记账状态（v3 字段，唯一事实源）
-      archived: false, // P1-5：单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
+      archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
       events: [newEvent('batch.created', { batchId, sessionId })],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -142,12 +142,12 @@ export function createStore(root, { rules } = {}) {
     schema.assertMemberState(to);
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
     const from = batch.lanes[lane];
-    // P1-7：迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
+    // 迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
     const mv = machine.applyMemberTransition(from, to, { rules: ratchet });
     if (!mv.ok) throw new Error('invalid member transition: ' + from + ' -> ' + to);
-    // Tier3 门禁：派发（condition + entry）与结算（exit/Plan 契约）+ P1-6 needHuman（review 挂起检测 / merged 人工裁决闸）
+    // Tier3 门禁：派发（condition + entry）与结算（exit/Plan 契约）+ needHuman（review 挂起检测 / merged 人工裁决闸）
     if (to === 'running') {
-      // P1-4：派发前条件校验（lane.condition 静态声明，DI fileExists）——不满足 → 不派发、自动落 skipped（既有终态迁移）+ lane.skipped 事件；wavePlan 不动不重算
+      // 派发前条件校验（lane.condition 静态声明，DI fileExists）——不满足 → 不派发、自动落 skipped（既有终态迁移）+ lane.skipped 事件；wavePlan 不动不重算
       const cond = machine.checkDispatchCondition(sessionId, batchId, batch, lane, { fileExists: conditionFileExists(sessionId, batchId) });
       if (!cond.ok) {
         // 落 skipped 同样过棘轮表（fail-closed 优先：收紧配置删掉 from→skipped 时拒绝自动跳过，不绕过规则表）
@@ -171,7 +171,7 @@ export function createStore(root, { rules } = {}) {
       }
     }
     if (to === 'review') {
-      // P1-6：audit lane 产物含 needHuman 声明 → 事件 lane.needhuman 留痕（Manager 转达人工裁决）
+      // audit lane 产物含 needHuman 声明 → 事件 lane.needhuman 留痕（Manager 转达人工裁决）
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, null);
       if (nh.declared) batch.events.push(newEvent('lane.needhuman', { lane, path: nh.path }));
     }
@@ -184,7 +184,7 @@ export function createStore(root, { rules } = {}) {
         throw new Error(g.code + ': ' + (g.problems ?? g.missing).join(', '));
       }
       batch.events.push(newEvent('gate.passed', { lane, gate: 'exit' }));
-      // P1-6：needHuman 人工闸（merged 前置，与 checkExitGate 并列）——声明 lane 缺 human: 证据 → 拒 GATE_NEEDHUMAN_PENDING
+      // needHuman 人工闸（merged 前置，与 checkExitGate 并列）——声明 lane 缺 human: 证据 → 拒 GATE_NEEDHUMAN_PENDING
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, note);
       if (!nh.ok) {
         batch.events.push(newEvent('gate.needhuman_blocked', { lane, code: nh.code, path: nh.path }));
@@ -206,7 +206,7 @@ export function createStore(root, { rules } = {}) {
     if (!batch) throw new Error('batch not found: ' + batchId);
     schema.assertBatchPhase(to);
     const from = batch.phase;
-    // P1-7：批次阶段迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
+    // 批次阶段迁移判定走 machine（rules 可注入；默认规则与 schema 常量同引用，行为不变）
     const bv = machine.applyBatchTransition(from, to, { rules: ratchet });
     if (!bv.ok) throw new Error('invalid batch phase transition: ' + from + ' -> ' + to);
     if (to === 'complete') {
@@ -222,7 +222,7 @@ export function createStore(root, { rules } = {}) {
     batch.events.push(newEvent('batch.phase', { from, to }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
-    // P1-5：complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
+    // complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
     // 失败仅记录 archive.failed（archiveBatch 内部处理），不阻断 complete；try/catch 兜底意外异常（如批次文件不可读）
     if (to === 'complete') {
       try {
@@ -352,12 +352,12 @@ export function createStore(root, { rules } = {}) {
           if (state === 'running' || state === 'review') {
             batch.lanes[lane] = 'idle';
             recoveredLanes.push(lane);
-            // B1 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）
+            // 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）
             detail.push({ lane, from: state, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane) });
           }
         }
         if (recoveredLanes.length > 0) {
-          // B1 增强：保留 recoveredLanes（向后兼容，既有测试断言其存在），新增 detail 审计详情数组
+          // 保留 recoveredLanes（向后兼容，既有测试断言其存在），新增 detail 审计详情数组
           batch.events.push(newEvent('system.recovered', { batchId, sessionId, recoveredLanes, detail }));
           batch.updatedAt = new Date().toISOString();
           atomicWrite(batchFile(sessionId, batchId), batch);
@@ -431,7 +431,7 @@ export function createStore(root, { rules } = {}) {
     batchSettled, batchAutoReleaseable,
     recoverBatches, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
-    // P1-5：归档只读/幂等面（batch_status 面板与审计查询用）
+    // 归档只读/幂等面（batch_status 面板与审计查询用）
     archive: { archiveBatch: archive.archiveBatch, readManifest: archive.readManifest, listArchived: archive.listArchived },
   };
 }

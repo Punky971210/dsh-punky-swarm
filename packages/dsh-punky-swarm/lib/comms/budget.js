@@ -56,7 +56,7 @@ export function checkBudget(meta, chainsState, { maxChainHops = 4, maxChainRound
     return { ok: true, chain: { id: randomUUID(), hop: 0 } };
   }
   const hop = Number.isInteger(chain.hop) && chain.hop >= 0 ? chain.hop : 0;
-  // B1 环检测：链跳数超限
+  // 环检测：链跳数超限
   if (hop > maxChainHops) {
     return {
       ok: false,
@@ -71,7 +71,7 @@ export function checkBudget(meta, chainsState, { maxChainHops = 4, maxChainRound
   const to = meta?.to;
   if (rec && from != null && to != null) {
     const key = chainKey(from, to);
-    // B2 往返上限：同链同有序对往返 ≥ maxChainRoundTrips → PING_PONG
+    // 往返上限：同链同有序对往返 ≥ maxChainRoundTrips → PING_PONG
     const count = rec.edges?.[key] ?? 0;
     if (count >= maxChainRoundTrips) {
       return {
@@ -82,7 +82,7 @@ export function checkBudget(meta, chainsState, { maxChainHops = 4, maxChainRound
           + '; settle it yourself and report to the leader',
       };
     }
-    // B3 重发拒绝：同链同向同文本 → REPEATED_MESSAGE（跨链/新链同文本放行）
+    // 重发拒绝：同链同向同文本 → REPEATED_MESSAGE（跨链/新链同文本放行）
     if (typeof meta.text === 'string' && typeof rec.said?.[key] === 'string' && rec.said[key] === meta.text) {
       return {
         ok: false,
