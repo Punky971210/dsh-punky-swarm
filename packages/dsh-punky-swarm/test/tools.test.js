@@ -39,6 +39,29 @@ test('all 14 tools registered', () => {
   }
 });
 
+test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非空（14 描述，readCapability 默认合并）', () => {
+  const reg = [];
+  const ctxA = { tools: { register: (t) => reg.push(t) }, logger: console };
+  const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
+  const storeA = createStore(rootA);
+  const t = createTools(ctxA, { store: storeA, root: rootA }); // 缺省 config（无 aip 键）
+  assert.equal(t.catalog, null); // register() 前恒 null（懒生成）
+  t.register();
+  assert.ok(t.catalog, '缺省配置必须实际默认开启（catalog 非空）');
+  assert.equal(t.catalog.list().length, 14); // 14 工具 6 属性描述齐备
+  assert.equal(reg.length, 14); // 工具注册数不受 catalog 影响（既有 14 契约保持）
+});
+
+test('aip.enabled=false 显式关闭：register() 后 catalog 恒 null（/tools 不注册）', () => {
+  const reg = [];
+  const ctxB = { tools: { register: (t) => reg.push(t) }, logger: console };
+  const rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip2-'));
+  const storeB = createStore(rootB);
+  const t = createTools(ctxB, { store: storeB, root: rootB, config: { aip: { enabled: false } } });
+  t.register();
+  assert.equal(t.catalog, null);
+});
+
 test('full flow binds to exec session; args.session overrides', async () => {
   const w = await byName.wave_plan.execute({
     batchId: 'b-demo',

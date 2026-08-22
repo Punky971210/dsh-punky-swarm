@@ -25,7 +25,7 @@ English: [README.en.md](README.en.md)
 
 | 件 | 位置 | 内容 |
 |---|---|---|
-| 插件 | packages/dsh-punky-swarm | 引擎：**20 治理工具** + Tier3 门禁 + 会话隔离 v2 + 只读 API（含 AIP /tools 端点）+ 任务难度门禁 + 蟛蜞集群监控面板 |
+| 插件 | packages/dsh-punky-swarm | 引擎：**20 治理工具** + Tier3 门禁 + 会话隔离 v2 + 只读 API（含 AIP /tools·/agents·/discover 端点）+ 任务难度门禁 + 蟛蜞集群监控面板 |
 | 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
 | 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
 
@@ -123,17 +123,18 @@ dsh web restart
 |---|---|
 | `log_export` | 只读事件流导出（lane/type/since 过滤 + json/markdown + 引擎产物根落盘） |
 
-> 装配开关（cordis.patch.yml）：aip / verify / watch / worktree / budget / trajectory / logs 默认开启，可显式 `enabled: false` 逐键关闭；mergeAgent 默认关闭（需宿主注入 spawner）。
+> 装配开关（cordis.patch.yml）：aip / discovery / verify / watch / worktree / budget / trajectory / logs 默认开启，可显式 `enabled: false` 逐键关闭；identity 默认关闭（`aip.identity.enabled: true` 显式开启）；mergeAgent 默认关闭（需宿主注入 spawner）。
 
 ## 国标 AIP 兼容
 
-兼容《人工智能 智能体互联》国标（GB/Z 185-2026）工具/智能体描述结构，仅增不改、可插拔：
+兼容《人工智能 智能体互联》国标（GB/Z 185-2026）智能体互联结构，仅增不改、可插拔（字段名以参考实现 ACPs-community v2.1.0 原文为准）：
 
-- **工具 6 属性**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
-- **智能体 14+8 属性**：装配配置 → 每角色国标描述（agentId / capabilities / skills 8 项等），供 AIP 协议发现；
-- **消息/任务/会话映射**：mailbox 消息、wavePlan 任务、批次状态 → 国标结构（纯映射只读不改存储，ackId 原子写保留）；
-- **身份骨架**：OID 注册 / 凭证 / 签名 / 信任链接口预留（默认不激活）；
-- **装配开关**：`aip.enabled`（默认开启）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）。
+- **工具 6 属性（P7）**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；**保持现状、待正式文本校准**——参考实现无国标化映射定义，README 不宣称已国标化；
+- **智能体描述（P4，ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；旧「14+8 属性」（agentId/accessAddress/…）为二手解读，降级为 toLegacyDescriptor 兼容映射层（仅审计对比，不参与对外契约）；
+- **消息/任务/会话映射（P6）**：mailbox 消息、wavePlan 任务、批次状态 → ACPs AIP 结构（Message：id / sentAt / senderRole / senderId / dataItems / mentions；TaskCommand；Session——纯映射只读不改存储，ackId 原子写保留）；`/mailbox` items 与 `/batch` 附 ACPs 投影（缺省不注入时响应不变）；
+- **身份体系（P2/P3，默认关）**：AIC 身份码（前缀 1.2.156.3088 + 10 级编码 + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书（CN=AIC、SAN=acps://、EAB 凭证）+ 可插拔签名（默认 ECDSA-P256 / 可选 RSA-2048）+ 信任链验证；**SM2 暂缓标注**（参考实现无 SM2 证据，待正式文本校准，`algorithm='sm2'` 显式拒绝）；装配键 `aip.identity` 默认关（经模块 API 暴露，不注册新治理工具）；
+- **发现服务（P5/ADP，默认开）**：`POST /api/dsh-punky-swarm/discover`（type 四类 explicit/exploratory/trending/filtered、filter 34 运算符、错误码 40000~40005/50001）+ `GET /.well-known/aip`（协议 ACPs 02.01）；active 语义替代 discoverable（节点 active=false 不出现于查询结果）；
+- **装配开关**：`aip.enabled`（缺省默认开启，显式 `false` 关闭）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）+ ACS 智能体目录 + `GET /api/dsh-punky-swarm/agents`。
 
 ## 治理能力
 
