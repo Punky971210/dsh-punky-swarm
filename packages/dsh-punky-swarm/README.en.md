@@ -229,7 +229,7 @@ acps:
 | Diagnostics bridging | `capabilities.trajectory` | anomaly diagnosis (deadlock/invalid retry/goal drift) → sessionId→lane mapping → notify (autoFail default off) |
 | Log export | `capabilities.logs` | log_export tool: read-only event-stream projection, lane/type/since filters + json/markdown + engine artifact root landing (escape-proof) |
 | topic subscription | — (pure module) | subscribeTopic/emitTopic: in-process dispatch + mailbox broadcast landing (ackId atomic write) |
-| merge agent | `worktree.mergeAgent` (default off) | conflict-semantics resolution (requires host-injected spawner; without injection degrades to a notice + keeps conflict status) |
+| merge agent | `worktree.mergeAgent` (default off) | conflict-semantics resolution (requires a host-injected spawner; without injection the conflict stays unresolved) |
 
 ## Lifecycle
 

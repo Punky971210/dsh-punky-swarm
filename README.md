@@ -147,7 +147,7 @@ dsh web restart
 | 诊断桥接 | `capabilities.trajectory` | 异常诊断（死锁/无效重试/目标漂移）→ sessionId→lane 映射 → notify（autoFail 默认关） |
 | 日志导出 | `capabilities.logs` | log_export 工具：只读事件流投影，lane/type/since 过滤 + json/markdown + 引擎产物根落盘（防逃逸） |
 | topic 订阅 | —（纯模块） | subscribeTopic/emitTopic：进程内分发 + mailbox broadcast 落盘（ackId 原子写） |
-| merge agent | `worktree.mergeAgent`（默认关） | 冲突语义化解（需宿主注入 spawner；无注入降级提示 + 保持 conflict 现状） |
+| merge agent | `worktree.mergeAgent`（默认关） | 冲突语义化解（需宿主注入 spawner；未注入 spawner 时保持 conflict 状态） |
 
 ## 生命周期
 
