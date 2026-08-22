@@ -216,7 +216,6 @@ acps:
 - **P4 tool calling**: not implemented (pending the official national-standard text), not claimed as implemented;
 - **SM2 signing**: not supported — sign is a pluggable interface, defaults ECDSA-P256 / RSA-2048, `algorithm='sm2'` explicitly rejected;
 - **mini-ADSP**: external `/discover` server semantics only reserve the function signature (createMiniAdsp), not implemented;
-- **V2/V4 real interop**: not verified (interop with the reference implementation ACPs-community is based on source alignment + unit tests).
 
 ## Governance Capabilities
 
