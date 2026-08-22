@@ -132,12 +132,12 @@ Compatible with the Agent-Interconnection national standard (GB/Z 185-2026) tool
 - **Tool 6 attributes**: every tool provides toolId / name / description / version / inputParam / outputParam (toolId = `dsh.punky-swarm.<name>` reverse-domain unique; inputParam/outputParam are JSON Schemas, required always present);
 - **Agent 14+8 attributes**: assembly config → national-standard descriptor per role (agentId / capabilities / skills 8 items, etc.), for AIP protocol discovery;
 - **Message/task/session mapping**: mailbox messages, wavePlan tasks, batch status → national-standard structures (pure mapping, read-only, storage unchanged, ackId atomic write preserved);
-- **Identity system** (default off, activated by `aip.identity.enabled=true`): AIC identity code (OID prefix `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 check digit) + CAI identity certificate + pluggable signing (default ECDSA-P256 / RSA-2048) + trust-chain verification; SM2 deferred (no evidence in the reference implementation; pending official text calibration);
+- **Identity system** (default off, activated by `aip.identity.enabled=true`): AIC identity code (OID prefix `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 check digit) + CAI identity certificate + pluggable signing (default ECDSA-P256 / RSA-2048) + trust-chain verification; SM2 not supported (signing interface is pluggable, defaults ECDSA-P256 / RSA-2048, `algorithm='sm2'` explicitly rejected);
 - **Assembly switch**: `aip.enabled` (default on) → generates tool 6-attribute catalog + `GET /api/dsh-punky-swarm/tools` (filterable with `?name=`).
 
 ## ACPs Communication (off by default)
 
-ACPs (Agent Communication Protocol Standard) communication capability: external mTLS service endpoint (P1) + internal mailbox↔ACPs bridge (P2) + registry semi-automatic registration and external ADP discovery integration (P3). **All off by default** (U-D2 secure default) — both `acps.enabled` and `acps.endpoint.enabled` default to `false`; listeners/clients load only when explicitly enabled; when off there is zero runtime footprint (no listeners, no timers, no network).
+ACPs (Agent Communication Protocol Standard) communication capability: external mTLS service endpoint (P1) + internal mailbox↔ACPs bridge (P2) + registry semi-automatic registration and external ADP discovery integration (P3). **All off by default** (secure default) — both `acps.enabled` and `acps.endpoint.enabled` default to `false`; listeners/clients load only when explicitly enabled; when off there is zero runtime footprint (no listeners, no timers, no network).
 
 ### Capability overview
 
@@ -145,12 +145,12 @@ ACPs (Agent Communication Protocol Standard) communication capability: external 
 |---|---|---|---|
 | External mTLS endpoint | `acps.enabled` + `acps.endpoint.enabled` | Off | External AIP JSON-RPC / ACS / health check (TLSv1.3 + mutual certificates) |
 | Internal bridge | `acps.bridge` | Off (inbound additionally sub-gated off) | In-process bidirectional mailbox ↔ ACPs message projection/delivery |
-| registry registration | `acps.registry` | Off | R1 semi-automatic registration client (requires registry.url + user credentials) |
-| discovery discovery | `acps.discovery` | Off | DS1 external ADP discovery client (POST /discover) |
+| registry registration | `acps.registry` | Off | Semi-automatic registration client (requires registry.url + user credentials) |
+| discovery discovery | `acps.discovery` | Off | External ADP discovery client (POST /discover) |
 
 ### External mTLS service endpoint (P1)
 
-Standalone HTTPS listener (native node:https + node:tls, zero new dependencies), default port `9443` (`acps.endpoint.port`, avoiding the reference implementation's 9001-9021 range), host default `127.0.0.1`; TLSv1.3 (`minVersion` default, TLSv1.2 configurable) + mutual certificates (`requestCert` + `rejectUnauthorized` = CERT_REQUIRED); `devInsecure` is an explicit development-only switch (default `false`, production downgrade not allowed). Assembly condition: `acps.enabled` AND `acps.endpoint.enabled` **both true**; missing/unusable certificates → startup warning and stay disabled, does not block the main process.
+Standalone HTTPS listener (native node:https + node:tls, zero new dependencies), default port `9443` (`acps.endpoint.port` configurable), host default `127.0.0.1`; TLSv1.3 (`minVersion` default, TLSv1.2 configurable) + mutual certificates (`requestCert` + `rejectUnauthorized` = CERT_REQUIRED); `devInsecure` is an explicit development-only switch (default `false`, production downgrade not allowed). Assembly condition: `acps.enabled` AND `acps.endpoint.enabled` **both true**; missing/unusable certificates → startup warning and stay disabled, does not block the main process.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -162,22 +162,22 @@ Certificates: CA self-signed (native node:crypto X.509 + ECDSA P-256), entity ce
 
 ### Internal bridge (P2)
 
-`acps.bridge` (G1 in-process bidirectional, default off; mode=`inprocess`):
+`acps.bridge` (in-process bidirectional, default off; mode=`inprocess`):
 - **inbound** (default off, enable explicitly with `acps.bridge.inbound=true`): external ACPs TaskCommand → mailbox message, **written atomically to inbox via the lib/comms/mailbox.js public interface (ackId generated by mailbox, never bypassed, no side-channel writes)**; write target is inbox only (lane derived from mentions/groupId into meta), outbox is not externally writable, external broadcast delivery unsupported;
 - **outbound**: mailbox messages → ACPs Message/TaskResult (reuses the aip-format three mappings), projection/delivery view only, never writes back to mailbox storage;
-- **/rpc→bridge wiring (DEF-V6-1)**: TaskCommand received at `POST /acps/rpc` lands in mailbox via `handleInbound`; when `bridge.inbound=false`, protocol-level `rejected` (INBOUND_DISABLED, HTTP 200 returned — transport succeeded, protocol layer rejected); when bridge is not assembled, falls back to standalone P1 `accepted` (backward compatible);
+- **/rpc→bridge wiring**: TaskCommand received at `POST /acps/rpc` lands in mailbox via `handleInbound`; when `bridge.inbound=false`, protocol-level `rejected` (INBOUND_DISABLED, HTTP 200 returned — transport succeeded, protocol layer rejected); when bridge is not assembled, falls back to standalone P1 `accepted` (backward compatible);
 - **mailbox red lines preserved**: ackId atomic write, three boxes (inbox/outbox/broadcast), lane isolation semantics preserved verbatim;
-- **zero path (D7)**: when `enabled=false`, nothing loads or instantiates (mountBridge returns null).
+- **zero path**: when `enabled=false`, nothing loads or instantiates (mountBridge returns null).
 
 ### registry / discovery integration (P3, off by default)
 
-- **registry** (`acps.registry`, R1 semi-automatic registration client): requires `registry.url` + user credentials (username/password or token, injected via config/env, never hard-coded, never committed); flow login → upsertAgent → submitAgent (**human approval, never auto-skipped**) → requestEab → queryAcs; EAB macKey stored encrypted with **AES-256-GCM** (D13, documented as differing from the reference implementation's SM4-CBC storage; when `eabKey` is unconfigured, plaintext credentials are returned for the caller to store itself);
-- **discovery** (`acps.discovery`, DS1 ADP client): POST `{baseUrl}/discover` to query external agents (4 type categories / 34 operators, sharing protocol constants with local discovery); `scope` = local (existing local catalog only) / external (external only) / both (local+external merged, external takes precedence in acsMap); timeout default 10s, limit default 5.
+- **registry** (`acps.registry`, semi-automatic registration client): requires `registry.url` + user credentials (username/password or token, injected via config/env, never hard-coded, never committed); flow login → upsertAgent → submitAgent (**human approval, never auto-skipped**) → requestEab → queryAcs; EAB macKey stored encrypted with **AES-256-GCM** (when `eabKey` is unconfigured, plaintext credentials are returned for the caller to store itself);
+- **discovery** (`acps.discovery`, ADP client): POST `{baseUrl}/discover` to query external agents (4 type categories / 34 operators, sharing protocol constants with local discovery); `scope` = local (existing local catalog only) / external (external only) / both (local+external merged, external takes precedence in acsMap); timeout default 10s, limit default 5.
 
 ### Configuration example
 
 ```yaml
-# ACPs communication capability (all off by default, U-D2 secure default)
+# ACPs communication capability (all off by default, secure default)
 acps:
   enabled: true                # capability master switch
   endpoint:
@@ -188,16 +188,16 @@ acps:
     minVersion: TLSv1.3        # default TLSv1.3 (TLSv1.2 allowed)
     devInsecure: false         # explicit development only; no production downgrade
   bridge:
-    enabled: false             # internal bridge (G1 in-process bidirectional)
-    inbound: false             # external writes to mailbox require explicit true (D14)
+    enabled: false             # internal bridge (in-process bidirectional)
+    inbound: false             # external writes to mailbox require explicit true
   registry:
-    enabled: false             # R1 semi-automatic registration
+    enabled: false             # semi-automatic registration
     url: null                  # registry public API base URL (required)
     username: null             # injected via config/env, never hard-coded
     password: null
     eabKey: null               # EAB macKey encryption key (AES-256-GCM)
   discovery:
-    enabled: false             # DS1 external ADP discovery client
+    enabled: false             # external ADP discovery client
     baseUrl: ''                # external discovery-server root address
     scope: local               # local / external / both
     timeout: 10000             # default 10s
@@ -206,17 +206,17 @@ acps:
 
 ### Relationship with existing AIP capabilities
 
-- Existing endpoints (`GET /api/dsh-punky-swarm/tools`, `GET /api/dsh-punky-swarm/agents`, `POST /api/dsh-punky-swarm/discover`, `GET /.well-known/aip`) **remain byte-for-byte unchanged** — ACPs uses an independent 9443 listener + `/acps/*` prefix (D8 F-1), zero path conflicts;
-- Existing local discovery (`capabilities.discovery`, default on) is the in-process query channel; `acps.discovery` is the external query channel (DS1); `scope=both` merges both channels' results;
+- Existing endpoints (`GET /api/dsh-punky-swarm/tools`, `GET /api/dsh-punky-swarm/agents`, `POST /api/dsh-punky-swarm/discover`, `GET /.well-known/aip`) **remain byte-for-byte unchanged** — ACPs uses an independent 9443 listener + `/acps/*` prefix, zero path conflicts;
+- Existing local discovery (`capabilities.discovery`, default on) is the in-process query channel; `acps.discovery` is the external query channel; `scope=both` merges both channels' results;
 - Existing assets reused by ACPs communication: `aip-format` three mappings (Message/TaskCommand/Session), `lib/aip/identity.js` (AIC validation/certificates), `lib/discovery/schema.js` (protocol constants and validation);
 - Same as `aip.identity` (default off), this is a default-off capability; CAPABILITY_REGISTRY now has 9 keys (aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps).
 
-### Not implemented / deferred (truthfully documented)
+### Capability boundaries (not implemented)
 
-- **P4 tool calling**: pending official-text calibration (the reference implementation defines no national-standard mapping), not claimed as implemented;
-- **SM2 signing**: reference implementation v2.1.0 has no SM2 evidence — sign is a pluggable interface, defaults ECDSA-P256 / RSA-2048, `algorithm='sm2'` explicitly rejected with a pending-calibration notice;
-- **DS3 mini-ADSP**: external `/discover` server semantics only reserve the function signature (createMiniAdsp), not implemented;
-- **V2/V4 real interop**: real interop verification against the reference implementation ACPs-community pending demo environment (LLM credentials / Windows xattr), currently based on source alignment + unit tests.
+- **P4 tool calling**: not implemented (pending the official national-standard text), not claimed as implemented;
+- **SM2 signing**: not supported — sign is a pluggable interface, defaults ECDSA-P256 / RSA-2048, `algorithm='sm2'` explicitly rejected;
+- **mini-ADSP**: external `/discover` server semantics only reserve the function signature (createMiniAdsp), not implemented;
+- **V2/V4 real interop**: not verified (interop with the reference implementation ACPs-community is based on source alignment + unit tests).
 
 ## Governance Capabilities
 
