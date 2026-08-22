@@ -28,7 +28,7 @@ export function isAbsPath(p) {
   return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
 }
 
-// P1-6 needHuman：audit 产物人工裁决声明检测（纯函数，与 checkExitGate 同源文件解析）——
+// needHuman：audit 产物人工裁决声明检测（纯函数，与 checkExitGate 同源文件解析）——
 // 产物含独立行 `needHuman: true`（正则 /^needHuman:\s*true$/m）即声明人工裁决需求；
 // 缺失/空文件/目录跳过（零感知：缺产物由 exit gate 既有语义拒，本函数不补刀）
 export function detectNeedHuman(artifactsDir, producePaths) {

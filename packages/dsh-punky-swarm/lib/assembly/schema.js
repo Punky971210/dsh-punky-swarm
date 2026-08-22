@@ -48,7 +48,7 @@ export const CAPABILITY_REGISTRY = [
 // 项形如 { keys: ['x', 'y'], message: '...' }：两键同时 enabled=true → validateCapabilities 报 MUTEX error
 export const EXCLUSIONS = [];
 
-// ── 反向断言权威表（P1-8，对齐 jiufeng-team skill 装配表 8 角色）──
+// ── 反向断言权威表（对齐 jiufeng-team skill 装配表 8 角色）──
 // manager 显式豁免：Leader 直系拉起、不经 wavePlan lane 角色池，不登记于装配表 roles
 export const REQUIRED_ROLES = ['coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
 
@@ -179,7 +179,7 @@ export function validateAssembly(assembly) {
   return { errors };
 }
 
-// ── P1-8 完整性断言（三视图，入测试门禁）──
+// ── 完整性断言（三视图，入测试门禁）──
 // 视图 1 正向：装配表自洽（∀ (layer, role)：skills[role] 非空字符串数组且每个 skill 可解析）
 // 视图 2 反向：jiufeng-team 装配表 7 角色（manager 显式豁免）全部出现且映射非空
 // 视图 3 扩展：extensions.blindReview.enabled=true 时三角色映射非空 + 六模板键齐备

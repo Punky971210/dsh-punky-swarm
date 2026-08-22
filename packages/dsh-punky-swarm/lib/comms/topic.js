@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 topic：broadcast topic 订阅/分发（P2-10）
+// 文件 topic：broadcast topic 订阅/分发
 // 两路分发：① 进程内 handler 同步调用（异常隔离）；② 可选落 mailbox broadcast box（复用 mailbox.send，ackId 原子写语义）
 // 消费侧跨进程经 mailbox_read(box=broadcast) 读取，readTopic 提供按 topic/sinceTs 过滤的只读辅助
 import { join } from 'node:path';

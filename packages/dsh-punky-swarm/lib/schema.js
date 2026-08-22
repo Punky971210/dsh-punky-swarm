@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 蟛蜞模式状态机 schema（纯逻辑，零依赖）
-// 成员状态（对齐 A2 语义 + 设计 3.4）：
+// 成员状态：
 //   pending -> running -> review -> merged | failed | skipped | conflict
 //   idle：恢复语义（重启后 in-flight 成员落位 idle，可重新指派）
 export const MEMBER_STATES = [
