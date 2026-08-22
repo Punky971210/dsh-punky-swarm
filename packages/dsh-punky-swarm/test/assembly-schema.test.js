@@ -31,7 +31,7 @@ import {
   validateAssembly,
   assertAssemblyCompleteness,
 } from '../lib/assembly/schema.js';
-import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS } from '../lib/schema.js';
+import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS } from '../lib/schema.js';
 import { DEFAULT_ASSEMBLY } from '../lib/assembly.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,16 +48,18 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 
 // ── 注册表完整性（A1.1/A1.2）──
 
-test('CAPABILITY_REGISTRY registers all 6 capability keys', () => {
+test('CAPABILITY_REGISTRY registers all 7 capability keys', () => {
   assert.deepEqual(
     new Set(CAPABILITY_REGISTRY.map((e) => e.key)),
-    new Set(['aip', 'verify', 'watch', 'worktree', 'budget', 'trajectory']),
+    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'trajectory']),
   );
 });
 
 test('registry paths match existing consumer key paths', () => {
   const byKey = Object.fromEntries(CAPABILITY_REGISTRY.map((e) => [e.key, e.path]));
   assert.deepEqual(byKey.aip, ['aip']);
+  assert.deepEqual(byKey.identity, ['aip', 'identity']); // aip-gb-fix exec-identity：P2/P3 身份体系（默认关）
+  assert.deepEqual(byKey.discovery, ['capabilities', 'discovery']);
   assert.deepEqual(byKey.verify, ['capabilities', 'verify']);
   assert.deepEqual(byKey.watch, ['capabilities', 'watch']);
   assert.deepEqual(byKey.worktree, ['capabilities', 'worktree']);
@@ -65,10 +67,15 @@ test('registry paths match existing consumer key paths', () => {
   assert.deepEqual(byKey.trajectory, ['capabilities', 'trajectory']);
 });
 
-test('all registry defaults are ON by default (full-capability publish decision 2026-08-21)', () => {
-  // 全能力默认开（AIP 为主线 + 治理能力全开）；mergeAgent 嵌套默认关（需宿主注入 spawner，见 registry 注释）
+test('all registry defaults are ON by default except identity (off — aip-gb-fix exec-identity)', () => {
+  // 全能力默认开（AIP 为主线 + 治理能力全开）；mergeAgent 嵌套默认关（需宿主注入 spawner，见 registry 注释）；
+  // identity 例外：P2/P3 身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）
   for (const entry of CAPABILITY_REGISTRY) {
-    assert.equal(entry.default.enabled, true, entry.key + ' default must be enabled');
+    if (entry.key === 'identity') {
+      assert.equal(entry.default.enabled, false, 'identity default must be disabled (默认关)');
+    } else {
+      assert.equal(entry.default.enabled, true, entry.key + ' default must be enabled');
+    }
   }
 });
 
@@ -77,7 +84,9 @@ test('registry defaults align with lib/schema.js defaults', () => {
   assert.equal(byKey.watch, WATCH_DEFAULTS);
   assert.equal(byKey.trajectory, TRAJECTORY_DEFAULTS);
   assert.equal(byKey.verify, VERIFY_DEFAULTS);
+  assert.equal(byKey.discovery, DISCOVERY_DEFAULTS);
   assert.equal(VERIFY_DEFAULTS.mode, 'advisory');
+  assert.equal(DISCOVERY_DEFAULTS.enabled, true);
 });
 
 test('cordis.patch.yml aligns with registry defaults (all capabilities ON)', () => {
@@ -88,6 +97,10 @@ test('cordis.patch.yml aligns with registry defaults (all capabilities ON)', () 
   // verify 键由 verify-wiring lane 追加；补键后本断言仍须绿（前瞻对齐）
   if (patchYml.includes('verify:')) {
     assert.match(patchYml, /verify:\n\s+enabled: true/);
+  }
+  // discovery 键由 exec-discovery lane 追加
+  if (patchYml.includes('discovery:')) {
+    assert.match(patchYml, /discovery:\n\s+enabled: true/);
   }
   // mergeAgent 嵌套默认关（需宿主注入 spawner）
   assert.match(patchYml, /mergeAgent:\n\s+enabled: false/, 'mergeAgent must stay enabled: false in patch.yml');
@@ -104,6 +117,7 @@ test('readCapability reads by path with default merge', () => {
   const budgetOnly = { capabilities: { budget: { enabled: true } } };
   assert.deepEqual(readCapability(budgetOnly, 'budget'), { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 });
   assert.deepEqual(readCapability({ aip: { enabled: true } }, 'aip'), { enabled: true });
+  assert.deepEqual(readCapability({}, 'aip'), { enabled: true }); // 缺省默认开启（与 CAPABILITY_REGISTRY 默认一致）
   assert.equal(readCapability({}, 'nope'), undefined);
 });
 

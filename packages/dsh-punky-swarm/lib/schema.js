@@ -150,6 +150,23 @@ export function resolveVerifyConfig(config) {
   };
 }
 
+// ── capabilities.discovery：P5 发现服务（lib/discovery/service.js，本 lane 归主）──
+// ADP（Agent Discovery Protocol）统一 POST /discover + /.well-known/aip 预置；
+//   enabled=true（默认）：webServer 存在时挂载发现服务（消费 tool catalog + agent-descriptor 目录）；
+//   nodes：节点级 active 覆写——{ <aic|name>: { active: false } } 时该节点不出现在查询结果（默认 active=true）。
+export const DISCOVERY_DEFAULTS = Object.freeze({
+  enabled: true,
+  nodes: {},
+});
+
+export function resolveDiscoveryConfig(config) {
+  const c = config?.capabilities?.discovery ?? {};
+  return {
+    enabled: c.enabled === true,
+    nodes: (c.nodes && typeof c.nodes === 'object' && !Array.isArray(c.nodes)) ? c.nodes : {},
+  };
+}
+
 // ── config.ratchet：P1-7 棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
 // 对齐 aip.enabled / capabilities.watch 先例注释风格；消费方 lib/state/machine-rules.js（loadRules）：
 //   { ratchet: { memberRules?: { from: [to...] }, batchRules?: { from: [to...] }, allowRelax?: false } }

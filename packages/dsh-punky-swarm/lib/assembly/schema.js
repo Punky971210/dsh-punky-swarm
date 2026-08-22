@@ -21,13 +21,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 校验语义（D-A3）：validateCapabilities 仅对显式 enabled 的非法组合报错（fail-closed 在测试/装配验收层）；
 //   引擎启动侧只 warn 不炸宿主（配置错误不破坏可用性，与「默认关零破坏」一致）。
 
-import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS } from '../schema.js';
+import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS } from '../schema.js';
 
-// ── 能力注册表（6 键：aip/verify/watch/worktree/budget/trajectory）──
+// ── 能力注册表（8 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory）──
 // path = config 取值路径；default = 缺省值（全能力默认开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开，
 //   显式 enabled:false 可逐键关闭）；consumers = 既有消费点（键路径一致性依据）
+// identity 键（aip-gb-fix exec-identity）：P2/P3 身份体系默认关——config.aip.identity.enabled === true 时
+//   调用方才激活 lib/aip/identity.js 模块 API（AIC 身份码注册 + CAI 证书发行 + 签名 + 信任链验证）；
+//   默认关 → 零开销零破坏；不注册新治理工具（20 工具契约不变），身份能力经模块 API 暴露。
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
+  { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
+  { key: 'discovery', path: ['capabilities', 'discovery'], default: DISCOVERY_DEFAULTS, consumers: ['index.js discovery 服务装配 + api.js /discover + /.well-known/aip 端点'] },
   { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook', 'verify/gate.js createCompletionGate(DI)'] },
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
@@ -35,7 +40,7 @@ export const CAPABILITY_REGISTRY = [
   { key: 'trajectory', path: ['capabilities', 'trajectory'], default: TRAJECTORY_DEFAULTS, consumers: ['index.js 桥接订阅'] },
 ];
 
-// ── 互斥表（预留空表：当前 6 能力两两可叠加；未来互斥能力登记于此）──
+// ── 互斥表（预留空表：当前 7 能力两两可叠加；未来互斥能力登记于此）──
 // 项形如 { keys: ['x', 'y'], message: '...' }：两键同时 enabled=true → validateCapabilities 报 MUTEX error
 export const EXCLUSIONS = [];
 

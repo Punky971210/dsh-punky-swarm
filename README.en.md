@@ -25,7 +25,7 @@
 
 | Piece | Location | Content |
 |---|---|---|
-| Plugin | packages/dsh-punky-swarm | Engine: **20 governance tools** + Tier3 gates + session v2 + read-only API (incl. AIP /tools endpoint) + task difficulty gate + Punky swarm monitor |
+| Plugin | packages/dsh-punky-swarm | Engine: **20 governance tools** + Tier3 gates + session v2 + read-only API (incl. AIP /tools · /agents · /discover endpoints) + task difficulty gate + Punky swarm monitor |
 | Mode | packages/dsh-punky-swarm/presets/jiufeng | Punky Mode preset: Leader persona + governance discipline + tool-bootstrap |
 | Guide | packages/dsh-punky-swarm/skills/jiufeng-team | 3-layer 8-role × skill assembly table + constitution + templates |
 
@@ -123,17 +123,18 @@ Grouped by function:
 |---|---|
 | `log_export` | Read-only event-stream export (lane/type/since filters + json/markdown + engine-root writeTo) |
 
-> Capability switches (cordis.patch.yml): aip / verify / watch / worktree / budget / trajectory / logs default ON, disable per-key with `enabled: false`; mergeAgent default OFF (requires a host-injected spawner).
+> Capability switches (cordis.patch.yml): aip / discovery / verify / watch / worktree / budget / trajectory / logs default ON, disable per-key with `enabled: false`; identity default OFF (enable via `aip.identity.enabled: true`); mergeAgent default OFF (requires a host-injected spawner).
 
 ## GB AIP Compatibility
 
-GB/Z 185-2026 (AI Agent Interconnection) tool/agent descriptor compatibility — additive only, pluggable:
+GB/Z 185-2026 (AI Agent Interconnection) agent-interconnection compatibility — additive only, pluggable (field names follow the reference implementation ACPs-community v2.1.0 verbatim):
 
-- **Tool 6 attributes**: toolId / name / description / version / inputParam / outputParam (toolId = `dsh.punky-swarm.<name>`; JSON Schema with required always present);
-- **Agent 14+8 attributes**: assembly config → per-role GB descriptors (agentId / capabilities / 8 skill attributes);
-- **Message/Task/Session mapping**: mailbox, wavePlan tasks, batch state → GB structures (pure read-only mapping; ackId atomic writes preserved);
-- **Identity skeleton**: OID / credential / signature / trust-chain interfaces reserved (inactive by default);
-- **Switch**: `aip.enabled` (default ON) → 6-attribute catalog + `GET /api/dsh-punky-swarm/tools` (`?name=` filter).
+- **Tool 6 attributes (P7)**: toolId / name / description / version / inputParam / outputParam per tool (toolId = `dsh.punky-swarm.<name>`; inputParam/outputParam are JSON Schema with required always present); **kept as-is, pending official text calibration** — the reference implementation defines no GB-normalized mapping, so the README does not claim GB normalization;
+- **Agent descriptor (P4, ACS field set)**: assembly config → per-role ACS AgentCapabilitySpec (root 20 keys = 14 required: aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills; 6 optional: iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate; AgentSkill 8 keys = 5 required: id / name / description / version / tags, 3 optional: examples / inputModes / outputModes; protocol 02.01); the former "14+8 attributes" (agentId/accessAddress/…) was a second-hand reading, demoted to the toLegacyDescriptor compatibility mapping layer (audit-only, not part of the external contract);
+- **Message/Task/Session mapping (P6)**: mailbox messages, wavePlan tasks, batch state → ACPs AIP structures (Message: id / sentAt / senderRole / senderId / dataItems / mentions; TaskCommand; Session — pure read-only mapping, ackId atomic writes preserved); `/mailbox` items and `/batch` attach ACPs projections (response unchanged when not injected);
+- **Identity (P2/P3, default OFF)**: AIC identity codes (prefix 1.2.156.3088 + 10-level encoding + CRC-16/CCITT-FALSE + Base36 checksum) + CAI identity certificates (CN=AIC, SAN=acps://, EAB credential) + pluggable signing (default ECDSA-P256 / optional RSA-2048) + trust-chain verification; **SM2 deferred** (no SM2 evidence in the reference implementation, pending official text calibration; `algorithm='sm2'` explicitly rejected); switch `aip.identity` default OFF (exposed via module API, no new governance tools);
+- **Discovery (P5/ADP, default ON)**: `POST /api/dsh-punky-swarm/discover` (query types explicit/exploratory/trending/filtered, 34 filter operators, error codes 40000–40005/50001) + `GET /.well-known/aip` (protocol ACPs 02.01); active semantics replace discoverable (nodes with active=false are excluded from results);
+- **Switch**: `aip.enabled` (default ON when unset, explicit `false` disables) → tool 6-attribute catalog + `GET /api/dsh-punky-swarm/tools` (`?name=` filter) + ACS agent catalog + `GET /api/dsh-punky-swarm/agents`.
 
 ## Governance Capabilities
 
