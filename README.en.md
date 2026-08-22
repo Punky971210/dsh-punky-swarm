@@ -147,7 +147,7 @@ GB/Z 185-2026 (AI Agent Interconnection) agent-interconnection compatibility —
 | Trajectory bridge | `capabilities.trajectory` | anomaly diagnosis (deadlock/invalid retry/goal drift) → lane mapping → notify |
 | Log export | `capabilities.logs` | log_export tool: read-only event-stream projection, filters + json/markdown + engine-root writeTo (escape-proof) |
 | Topic subscribe | — (pure module) | subscribeTopic/emitTopic: in-process dispatch + mailbox broadcast (ackId atomic) |
-| Merge agent | `worktree.mergeAgent` (default OFF) | conflict resolution (needs host spawner; no-injection degrade + conflict kept) |
+| Merge agent | `worktree.mergeAgent` (default OFF) | conflict resolution (requires a host-injected spawner; without injection the conflict stays unresolved) |
 
 ## Lifecycle
 
