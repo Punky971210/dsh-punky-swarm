@@ -146,7 +146,7 @@ export const apply = (ctx, config = {}) => {
         localService: discovery,
       });
       ctx.logger?.info?.('[dsh-punky-swarm] acps discovery client enabled: scope=' + acpsDiscoveryCfg.scope
-        + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover, DS1)');
+        + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover)');
     }
 
     apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient }).dispose;
@@ -168,7 +168,7 @@ export const apply = (ctx, config = {}) => {
   // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递由 endpoint 侧承担。
   const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
   if (bridge) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: G1 in-process bridge mounted (inbound='
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: in-process bridge mounted (inbound='
       + (config?.acps?.bridge?.inbound === true) + ')');
   }
 
@@ -181,7 +181,7 @@ export const apply = (ctx, config = {}) => {
   if (registryCfg.enabled && !registryClient) {
     ctx.logger?.warn?.('[dsh-punky-swarm] acps.registry: ' + (registryCfg.reason ?? 'unable to create client'));
   } else if (registryClient) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: R1 semi-automatic registration client ready ('
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: semi-automatic registration client ready ('
       + registryCfg.apiBaseUrl + ')');
   }
 

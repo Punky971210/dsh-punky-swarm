@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 国标 AIP 工具 6 属性描述生成器（纯函数零副作用）
 // 国标 P7 工具调用要求每工具提供 6 项属性：toolId / Name / Description / Version / InputParam / OutputParam
-//   （GB/Z 185-2026《人工智能 智能体互联》P7，见 full-benchmark.md §6.1 / aip-decision.md §1.1）
+//   （GB/Z 185-2026《人工智能 智能体互联》P7）
 // 设计要点：4 项原样透传（name/description/inputParam/outputParam）、2 项派生（toolId/version），
 //   保证「零语义改写」——国标字段与引擎既有描述同构透传而非二次建模，任何一方变更都不产生漂移。
 // 本文件只依赖 Node 内建（structuredClone），不读文件系统，可独立单测。

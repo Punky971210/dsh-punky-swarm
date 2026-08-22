@@ -248,7 +248,7 @@ function worktreeToolCreate(ctx, deps) {
   const { store, root } = deps;
   return defineTool({
     name: 'lane_worktree_create',
-    description: 'git worktree 物理隔离（C2）：为 lane 建独立工作树——集成分支 punky/orch 常驻（主工作树从不 checkout 它）+ lane 分支 punky/<laneId>（从 orch HEAD 基线）。幂等：已注册 worktree 复用；残留目录先 worktree remove --force + prune；git 身份缺失时本地兜底 punky/punky@localhost。worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>（引擎状态根内，不落工作区）。与 lane_claim 互补：lane_claim 管逻辑写（批次状态/产物并发），本工具管物理写（git 文件树/分支）；仅当 C 类批次多 lane 作用于同一 git 仓库时由 Manager 在 exec 派发前调用，返回路径注入 worker 任务包作 cwd 契约。',
+    description: 'git worktree 物理隔离：为 lane 建独立工作树——集成分支 punky/orch 常驻（主工作树从不 checkout 它）+ lane 分支 punky/<laneId>（从 orch HEAD 基线）。幂等：已注册 worktree 复用；残留目录先 worktree remove --force + prune；git 身份缺失时本地兜底 punky/punky@localhost。worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>（引擎状态根内，不落工作区）。与 lane_claim 互补：lane_claim 管逻辑写（批次状态/产物并发），本工具管物理写（git 文件树/分支）；仅当 C 类批次多 lane 作用于同一 git 仓库时由 Manager 在 exec 派发前调用，返回路径注入 worker 任务包作 cwd 契约。',
     parameters: {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID（wave_plan task id）' },
@@ -286,7 +286,7 @@ function worktreeToolCheckpoint(ctx, deps) {
   const { store, root } = deps;
   return defineTool({
     name: 'lane_checkpoint',
-    description: 'lane checkpoint 提交（C2）：在 lane worktree 内 git add -A && git commit -m "<batchId>/<laneId>: <message>"；无变更（status --porcelain 空）no-op（不产生空提交）。这是续跑 B 增强恢复（批次 7 阶段 1）的物理保全地基：崩溃后 checkpoint 提交保住产物、人工可抢救（git log 可查），不触发任何自动恢复（守「不做续跑」红线）。worker 纪律：每完成一个子步骤即 checkpoint，禁止攒批。B2 增强：可选 progress={step,total}（步骤进度 STATUS，step 1-based）——提供时 commit message 内嵌 "step N/total" 且 worktree.checkpoint 事件携带 step/total（git log 可直接审计进度）；不传 progress 保持现状（向后兼容）。',
+    description: 'lane checkpoint 提交：在 lane worktree 内 git add -A && git commit -m "<batchId>/<laneId>: <message>"；无变更（status --porcelain 空）no-op（不产生空提交）。这是续跑增强恢复的物理保全地基：崩溃后 checkpoint 提交保住产物、人工可抢救（git log 可查），不触发任何自动恢复（守「不做续跑」红线）。worker 纪律：每完成一个子步骤即 checkpoint，禁止攒批。可选 progress={step,total}（步骤进度 STATUS，step 1-based）——提供时 commit message 内嵌 "step N/total" 且 worktree.checkpoint 事件携带 step/total（git log 可直接审计进度）；不传 progress 保持现状（向后兼容）。',
     parameters: {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
@@ -298,7 +298,7 @@ function worktreeToolCheckpoint(ctx, deps) {
           step: { type: 'integer', description: '当前步骤（1-based）' },
           total: { type: 'integer', description: '总步数' },
         },
-        description: '步骤进度 STATUS（可选，B2）：{ step, total }——step 1-based，total=总步数；提供时 commit message 内嵌 "step N/total" 且事件携带 step/total。校验：step/total 正整数且 step ≤ total。',
+        description: '步骤进度 STATUS（可选）：{ step, total }——step 1-based，total=总步数；提供时 commit message 内嵌 "step N/total" 且事件携带 step/total。校验：step/total 正整数且 step ≤ total。',
       },
       session: { type: 'string', description: '批次归属会话（缺省=当前执行会话，cli 兜底）' },
     },
@@ -345,7 +345,7 @@ function worktreeToolCheckpointStatus(ctx, deps) {
   const { store, root } = deps;
   return defineTool({
     name: 'lane_checkpoint_status',
-    description: 'lane checkpoint 状态查询（只读，B2 增强）：读取批次事件流中该 lane 的 worktree.checkpoint 事件序列（ts/step/total 已在事件内），返回 checkpoint 历史与 latest 进度——不依赖 git 调用（零副作用、只读），供新 worker 续跑前查询 checkpoint 以跳过已完成步骤（resume 契约唯一查询入口）。',
+    description: 'lane checkpoint 状态查询（只读）：读取批次事件流中该 lane 的 worktree.checkpoint 事件序列（ts/step/total 已在事件内），返回 checkpoint 历史与 latest 进度——不依赖 git 调用（零副作用、只读），供新 worker 续跑前查询 checkpoint 以跳过已完成步骤（resume 契约唯一查询入口）。',
     parameters: {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
@@ -402,7 +402,7 @@ function worktreeToolMerge(ctx, deps) {
   const { store, root } = deps;
   return defineTool({
     name: 'lane_worktree_merge',
-    description: 'merge lane 分支进 orch（C2）：串行执行（merge 队列锁，同批次 merge 串行化——git 锁即物理单写者，借鉴 taskswarm serializedMerge）。成功 → lane 产物并入 punky/orch，清理 lane worktree + 删除分支；失败（冲突）→ 保留现场（worktree/分支/在途 merge 状态全保留）并返回冲突文件清单，不自动处置（conflict 语义由 Manager/Leader 裁决，失败 lane 终态、重做=重开新批次）。与 lane_claim 互补并存：本工具管物理合并，lane_claim 仍管批次状态写。',
+    description: 'merge lane 分支进 orch：串行执行（merge 队列锁，同批次 merge 串行化——git 锁即物理单写者，借鉴 taskswarm serializedMerge）。成功 → lane 产物并入 punky/orch，清理 lane worktree + 删除分支；失败（冲突）→ 保留现场（worktree/分支/在途 merge 状态全保留）并返回冲突文件清单，不自动处置（conflict 语义由 Manager/Leader 裁决，失败 lane 终态、重做=重开新批次）。与 lane_claim 互补并存：本工具管物理合并，lane_claim 仍管批次状态写。',
     parameters: {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },

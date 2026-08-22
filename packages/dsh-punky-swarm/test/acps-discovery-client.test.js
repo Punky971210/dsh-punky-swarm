@@ -296,5 +296,5 @@ test('协议级错误（HTTP 200 + error 字段）→ 抛 DiscoveryClientError +
 
 // ── DS3 mini-ADSP（可选）预留签名 ──
 test('DS3 mini-ADSP: 预留签名调用抛 NotImplemented（P1 endpoint lane 就绪前不实现）', () => {
-  assert.throws(() => createMiniAdsp(), /DS3 mini-ADSP 预留接口（未实现）/);
+  assert.throws(() => createMiniAdsp(), /mini-ADSP 预留接口（未实现）/);
 });
