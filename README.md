@@ -127,7 +127,7 @@ dsh web restart
 
 ## 国标 AIP 兼容
 
-兼容《人工智能 智能体互联》国标（GB/Z 185-2026）智能体互联结构，仅增不改、可插拔（字段名以参考实现 ACPs-community v2.1.0 原文为准）：
+兼容《人工智能 智能体互联》国标（GB/Z 185-2026）智能体互联结构，仅增不改、可插拔（字段名以 ACPs-community v2.1.0 为准）：
 
 - **工具 6 属性（GB/Z 185.7-2026 第 7 部分：智能体工具调用）**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
 - **智能体描述（GB/Z 185.4-2026 第 4 部分：智能体描述；ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；
