@@ -19,7 +19,7 @@
 
 - Single agent, full loop (design → implement → test): heavy human intervention — the human becomes the bottleneck;
 - Graph-based orchestration (LangGraph direction): tried and dropped — the flow is frozen into a graph, expensive to change, squeezes agent freedom;
-- Middle path: the "Jiufeng" work mode (Leader decomposition → multi-role collaboration → gate verdicts) was built on JiuwenSwarm, then migrated to dsh as this plugin.
+- Middle path: the "Jiufeng" work mode (Leader decomposition → multi-role collaboration → gate verdicts) was built on an early Swarm cluster runtime, then migrated to dsh as this plugin.
 
 ## The Three Pieces
 
@@ -46,7 +46,17 @@ dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
 dsh web restart
 ```
 
-> This is the only install path — **git source + dsh plugin link**; no npm package is published.
+> npm is also available: `npm install -g dsh-punky-swarm` (version in [package.json](packages/dsh-punky-swarm/package.json)); git source + dsh plugin link remains the dev/debug path.
+
+### npm install
+
+```sh
+npm install -g dsh-punky-swarm
+dsh plugin --profile web add dsh-punky-swarm
+dsh web restart
+```
+
+> The `dsh plugin add` usage for the npm package is subject to verification after release (as of 0.3.1).
 
 ## Punky swarm monitor (read-only)
 
@@ -179,7 +189,7 @@ batch:  planning -> running -> paused -> aborted | complete (complete requires T
 
 ## License & Commercial Licensing
 
-This project is dual-licensed under **AGPL-3.0**:
+This project is licensed solely under **GNU AGPL v3 (AGPL-3.0)**:
 
-- **Open source**: Default license is [GNU AGPL v3](LICENSE). You may use, modify, and distribute it (including commercially) under AGPL-3.0; if you modify it and provide it over a network, you must publish your modifications under AGPL-3.0.
-- **Commercial**: For **closed-source** commercial use (private deployment, closed redistribution, paid hosting, etc.), contact the author for a commercial license. **Granting of a commercial license is at the licensor's sole discretion, without obligation to state reasons.**
+- You may freely use, modify and distribute it (including commercially) under [AGPL-3.0](LICENSE); if you modify it and provide it over a network, you must publish your modifications under AGPL-3.0.
+- For any other license (e.g. closed-source commercial use), contact the author for permission.

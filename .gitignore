@@ -4,6 +4,9 @@ node_modules/
 # logs
 *.log
 
+# npm tarballs (never committed)
+*.tgz
+
 # local rollback anchors (not for distribution)
 backups/
 

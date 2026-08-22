@@ -149,7 +149,7 @@ wave_plan 的 task.cmd 示例：
 
 ## 成员扩展技能推荐（2026-08-18 全量盘点定稿 · 2026-08-19 迁移/弃用更新）
 
-> 依据：原 JiuwenSwarm 技能仓库 93 包逐包读 SKILL.md 判定（分类全表见 docs/skills-evaluation.md）。
+> 依据：迁移自早期 Swarm 集群运行时的技能仓库 93 包逐包读 SKILL.md 判定（分类全表见 docs/skills-evaluation.md）。
 > 原则：worker 短生命周期，加载技能聚焦当前任务；展示/文件生成类技能按产出物需要按需加载，不默认装配。
 
 ### 推荐补充（成员可加载）
@@ -192,6 +192,6 @@ wave_plan 的 task.cmd 示例：
 | to-prd | disable-model-invocation 命令式，worker 不可加载 |
 | qa / handoff / llm-wiki | 交互式会话/旧运行时会话移交/知识库（mneme 已覆盖） |
 | prototype / scaffold-exercises / teach / ask-matt | 一次性脚手架/教学向，非成员聚焦 |
-| obsidian-vault / migrate-to-shoehorn / setup-* / delayed-restart-app / openJiuwen-DeepSearch | 环境特定或 JiuwenSwarm 运行时专属 |
+| obsidian-vault / migrate-to-shoehorn / setup-* / delayed-restart-app / openJiuwen-DeepSearch | 环境特定或 dsh 环境不可用的运行时专属 |
 | 展示/文件生成类（flowchart、ppt-animation、network-protocol-viz、scholar-notes、dynamic-archify、office-academic-skill、academic-writing-skill-set、writing-trio、revision-patterns、citation-evaluator、research-writing、gpt-sovits-tts-synthesis、ivt-poem-analyzer、baoyu-article-illustrator） | 产出物是演示/文档文件时按需加载，不默认装配 |
 | 全部 *-team / *_team 团队技能（33 个） | 团队型运行时，由 dsh-punky-swarm 集群模式承担，暂不迁移 |
