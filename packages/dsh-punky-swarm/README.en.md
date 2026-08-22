@@ -213,7 +213,7 @@ acps:
 
 ### Capability boundaries (not implemented)
 
-- **Tool calling (GB/Z 185.7-2026 Part 7: Agent Tool Calling)**: not implemented (pending the official national-standard text), not claimed as implemented;
+- **Tool calling (GB/Z 185.7-2026 Part 7: Agent Tool Calling)**: not implemented;
 - **SM2 signing**: not supported — sign is a pluggable interface, defaults ECDSA-P256 / RSA-2048, `algorithm='sm2'` explicitly rejected;
 - **mini-ADSP**: external `/discover` server semantics only reserve the function signature (createMiniAdsp), not implemented;
 
