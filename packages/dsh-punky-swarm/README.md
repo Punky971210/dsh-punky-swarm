@@ -137,7 +137,7 @@ dsh web restart
 
 ## ACPs 通讯方式（默认关）
 
-ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务端点（P1）+ 内部 mailbox↔ACPs 桥接（P2）+ registry 半自动注册与外部 ADP 发现对接（P3）。**全部默认关**（安全默认）——`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，显式开启才加载监听/客户端，关闭时零运行时路径（无监听、无定时器、无网络）。
+ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务端点 + 内部 mailbox↔ACPs 桥接 + registry 半自动注册与外部 ADP 发现对接。**全部默认关**（安全默认）——`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，显式开启才加载监听/客户端，关闭时零运行时路径（无监听、无定时器、无网络）。
 
 ### 能力总览
 
@@ -148,7 +148,7 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 | registry 注册 | `acps.registry` | 关 | 半自动注册客户端（需 registry.url + 用户凭据） |
 | discovery 发现 | `acps.discovery` | 关 | 外部 ADP 发现客户端（POST /discover） |
 
-### 对外 mTLS 服务端点（P1）
+### 对外 mTLS 服务端点
 
 独立 HTTPS 监听器（node:https + node:tls 原生，零新依赖），默认端口 `9443`（`acps.endpoint.port` 可配）、host 默认 `127.0.0.1`；TLSv1.3（`minVersion` 默认，可配 TLSv1.2）+ 双向证书（`requestCert` + `rejectUnauthorized` = CERT_REQUIRED）；`devInsecure` 仅显式开发开关（默认 `false`，生产不允许降级）。装配条件：`acps.enabled` 与 `acps.endpoint.enabled` **双真**；证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
 
@@ -160,7 +160,7 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 
 证书：CA 自签（node:crypto 原生 X.509 + ECDSA P-256），实体证书 CN=AIC、SAN=URI:acps://{AIC}，默认生成于 `<root>/acps/certs`（ca.pem/ca.key/server.pem/server.key）；`cert/key/ca` 三路径可配置覆盖。
 
-### 内部桥接（P2）
+### 内部桥接
 
 `acps.bridge`（进程内双向，默认关；mode=`inprocess`）：
 - **inbound**（默认关，`acps.bridge.inbound=true` 显式开启）：外部 ACPs TaskCommand → mailbox 消息，**经 lib/comms/mailbox.js 公共接口原子写 inbox（ackId 由 mailbox 生成，绝不绕过、无旁路写）**；写入目标仅 inbox（按 mentions/groupId 推导 lane 进 meta），outbox 不可外部直接写，broadcast 外部投递不支持；
@@ -169,7 +169,7 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 - **mailbox 红线保留**：ackId 原子写、三 box（inbox/outbox/broadcast）、lane 隔离语义逐字保留；
 - **零路径**：`enabled=false` 时不加载不实例化（mountBridge 返回 null）。
 
-### registry / discovery 对接（P3，默认关）
+### registry / discovery 对接（默认关）
 
 - **registry**（`acps.registry`，半自动注册客户端）：需 `registry.url` + 用户凭据（username/password 或 token，config/env 注入，不硬编码不落仓库）；流程 login → upsertAgent → submitAgent（**人工审批，不自动化跳过**）→ requestEab → queryAcs；EAB macKey **AES-256-GCM 加密存证**（`eabKey` 未配置时仅返回明文凭据由调用方自存）；
 - **discovery**（`acps.discovery`，ADP 客户端）：POST `{baseUrl}/discover` 查询外部 Agent（type 四类 / 34 运算符，与本地 discovery 共享协议常量）；`scope` = local（仅本地既有目录）/ external（仅外部）/ both（本地+外部合并，acsMap 外部优先）；timeout 默认 10s、limit 默认 5。
