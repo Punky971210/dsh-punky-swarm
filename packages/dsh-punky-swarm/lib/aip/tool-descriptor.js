@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 国标 AIP 工具 6 属性描述生成器（P0-1，纯函数零副作用）
+// 国标 AIP 工具 6 属性描述生成器（纯函数零副作用）
 // 国标 P7 工具调用要求每工具提供 6 项属性：toolId / Name / Description / Version / InputParam / OutputParam
 //   （GB/Z 185-2026《人工智能 智能体互联》P7，见 full-benchmark.md §6.1 / aip-decision.md §1.1）
 // 设计要点：4 项原样透传（name/description/inputParam/outputParam）、2 项派生（toolId/version），

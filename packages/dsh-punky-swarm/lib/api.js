@@ -140,7 +140,7 @@ export function createApi(ctx, deps) {
     },
   });
 
-  // 国标 AIP P0-1 工具列表同步（方案 A：只读 API 端点）：catalog 非空（缺省默认开启）时注册 /tools；
+  // 国标 AIP 工具列表同步（方案 A：只读 API 端点）：catalog 非空（缺省默认开启）时注册 /tools；
   // 仅显式 aip.enabled=false 时 catalog 为 null，不注册该路由（保持既有 6 路由契约）。
   // catalog 由 register.js 经 readCapability 默认合并口径提供——本条件与 enabled 联动，此处零逻辑改动。
   if (catalog) {

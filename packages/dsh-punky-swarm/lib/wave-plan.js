@@ -70,7 +70,7 @@ function isAbsPath(p) {
   return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
 }
 
-// P1-4 condition 规范化（建批静态声明，两种等价形态 → 统一对象数组）：
+// condition 规范化（建批静态声明，两种等价形态 → 统一对象数组）：
 //   condition: [{ path, exists: true }]（推荐主形态）/ condition: ['plan/spec.md']（字符串简写 = 存在即满足）
 // 非法（非数组 / 元素非法 / path 非空字符串 / exists 非 true）→ throw（fail-closed 拒建批）
 // 谓词唯一：exists（MVP 只做存在性判定）；exists: false 反向断言超出 MVP，拒建批。
@@ -215,10 +215,10 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
         const entry = assembly?.layers?.[layer]?.skills?.[role];
         if (entry) skills = entry;
       }
-      // P1-4：condition 结构 + 路径校验（对所有任务，含 generic），fail-closed 拒建批
+      // condition 结构 + 路径校验（对所有任务，含 generic），fail-closed 拒建批
       const condition = normalizeCondition(t.condition);
       checkConditionPaths(t, condition);
-      // B2：resume 契约字段校验 + 透传（checkpoint{steps}/resume 布尔；默认关场景仅存元数据，消费方按开关生效）
+      // resume 契约字段校验 + 透传（checkpoint{steps}/resume 布尔；默认关场景仅存元数据，消费方按开关生效）
       const resumeContract = normalizeResumeContract(t);
       return {
         id: t.id,
@@ -232,9 +232,9 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
         consume: Array.isArray(t.consume) ? [...t.consume] : null,
         produce: Array.isArray(t.produce) ? [...t.produce] : null,
         outputs: Array.isArray(t.outputs) ? [...t.outputs] : null,
-        condition, // P1-4：lane 条件（统一对象数组形态；缺省 null = 恒满足）
-        checkpoint: resumeContract.checkpoint, // B2：{ steps } | null（总步数声明，供 progress 校验与任务包注入）
-        resume: resumeContract.resume, // B2：boolean（缺省 false = 现状，行为不变）
+        condition, // lane 条件（统一对象数组形态；缺省 null = 恒满足）
+        checkpoint: resumeContract.checkpoint, // { steps } | null（总步数声明，供 progress 校验与任务包注入）
+        resume: resumeContract.resume, // boolean（缺省 false = 现状，行为不变）
       };
     }),
   }));
@@ -267,14 +267,14 @@ export function validateWavePlan(plan) {
       for (const f of ['consume', 'produce', 'outputs', 'skills']) {
         if (t[f] != null && (!Array.isArray(t[f]) || t[f].some((x) => typeof x !== 'string'))) throw new Error('task ' + f + ' must be string array');
       }
-      // P1-4：condition 规范化形态校验（建批后 wavePlan JSON 应为对象数组或 null）
+      // condition 规范化形态校验（建批后 wavePlan JSON 应为对象数组或 null）
       if (t.condition != null) {
         if (!Array.isArray(t.condition) || t.condition.some((c) => !c || typeof c !== 'object' || Array.isArray(c) || typeof c.path !== 'string' || c.exists !== true)) {
           throw new Error('task condition must be [{path, exists: true}, ...] array or null');
         }
         checkConditionPaths(t, t.condition);
       }
-      // B2：checkpoint/resume 形态校验（建批后 wavePlan JSON 应为 {steps} | null / boolean）
+      // checkpoint/resume 形态校验（建批后 wavePlan JSON 应为 {steps} | null / boolean）
       if (t.checkpoint != null && (typeof t.checkpoint !== 'object' || Array.isArray(t.checkpoint) || !Number.isInteger(t.checkpoint.steps) || t.checkpoint.steps < 1)) {
         throw new Error('task checkpoint must be { steps: positive int } or null');
       }

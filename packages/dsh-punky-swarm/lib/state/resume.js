@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - 默认关：config.resume.enabled !== true → recoverBatches() 原样委托 store.recoverBatches()（零行为变化）
 //   - 不新增成员态：恢复对象仅 running/review（crash 中断的 in-flight lane）；failed/conflict/skipped
 //     不参与任何恢复，失败是裁决结果不是中断，不复活
-//   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发，§A1 gate 交互设计）
+//   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发）
 //   - 不提供批次内自动续跑：重做仍开新批次
 //
 // 边界：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
@@ -41,7 +41,7 @@ export function resolveResumeConfig(config) {
   return { enabled: c.enabled === true };
 }
 
-// 填充点清单（增强恢复落地后逐项回填；workerResumeChapter() 亦引用）
+// 待回填清单（增强恢复落地后逐项回填；workerResumeChapter() 亦引用）
 export const RESUME_FILL_POINTS = [
   'A1 恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）',
   'A2 laneProgress 字段写/清/展（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；lane 结算终态经 laneProgressClear 清退；batch_status 面板 progress 视图）',
@@ -49,23 +49,23 @@ export const RESUME_FILL_POINTS = [
   '崩溃恢复用例测试（模拟 running 中 crash → 重启 restore → 新 worker 从 N+1 续跑 → 产物合并验证）',
 ];
 
-// ── A1 状态重建接口 ──
-// 单一入口扩展（§A1 推荐）：签名与 store.recoverBatches 同构，加可选 restoreRunning。
-//   restoreRunning 缺省 false → 原样委托 store.recoverBatches()（默认路径零改动；B1 的 detail 增强经 store 生效，不受本模块影响）
+// ── 状态重建接口 ──
+// 单一入口扩展：签名与 store.recoverBatches 同构，加可选 restoreRunning。
+//   restoreRunning 缺省 false → 原样委托 store.recoverBatches()（默认路径零改动；detail 增强经 store 生效，不受本模块影响）
 //   restoreRunning === true → restoreBatches()（running→running / review→review 原地保留）
 // 幂等与安全：同一恢复调用内每 lane 二选一（restore 与 recover 互斥，由本布尔分支保证）。
-// 接线点（填充点 1）：index.js 启动恢复处 `resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })`，
+// 接线点：index.js 启动恢复处 `resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })`，
 //   返回数组形态与 store.recoverBatches 一致（.length 兼容既有 `if (r.length)` 日志）。
 export function recoverBatches(store, { restoreRunning = false } = {}) {
   if (restoreRunning !== true) return store.recoverBatches();
   return restoreBatches(store);
 }
 
-// 独立恢复入口（§A1 备选，语义更清晰）：只处理非终态批次的 running/review lane——
+// 独立恢复入口（语义更清晰）：只处理非终态批次的 running/review lane——
 // 原地保留状态（不落 setMember，不重验 entry gate/condition）+ 事件留痕，返回 'sessionId/batchId' 数组。
 // 骨架已实现：状态保留 + system.recovered{detail[].restored=true} / system.restored 事件留痕。
-// 填充点（B 完成后回填，均只读探测，不改产物）：produced 证据（gateStatus outputsMissing/produceMissing 反推）、
-//   lastActiveAt（batch.events 该 lane 最近事件 ts，回退 updatedAt）、progress（laneProgress[lane] 合并，§A2）。
+// （增强恢复落地后回填，均只读探测，不改产物）：produced 证据（gateStatus outputsMissing/produceMissing 反推）、
+//   lastActiveAt（batch.events 该 lane 最近事件 ts，回退 updatedAt）、progress（laneProgress[lane] 合并）。
 export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
   const restored = [];
   for (const sessionId of store.listSessions()) {
@@ -78,11 +78,11 @@ export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
         detail.push({
           lane,
           from: state,
-          to: state, // 原地保留（A1：恢复 running/review 而非一律 idle）
-          restored: true, // 恢复标记（§A1 填充点：与 gate_status 面板展示的衔接）
-          // 填充点：produced（已产出产物清单，复用 gate 语义只读探测）、
+          to: state, // 原地保留（恢复 running/review 而非一律 idle）
+          restored: true, // 恢复标记（与 gate_status 面板展示的衔接）
+          // produced（已产出产物清单，复用 gate 语义只读探测）、
           // lastActiveAt（上次活动时间，batch.events 该 lane 最近事件 ts → 回退 batch.updatedAt）、
-          // progress（laneProgress[lane] 断点指针，§A2）
+          // progress（laneProgress[lane] 断点指针）
         });
       }
       if (detail.length) {
@@ -105,7 +105,7 @@ export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
   return restored; // 与 recoverBatches 同形态（数组，.length 兼容 index.js 日志）
 }
 
-// ── A2 断点指针语义（laneProgress，schema-v3.js 可选字段）──
+// ── 断点指针语义（laneProgress，schema-v3.js 可选字段）──
 // 纯函数：操作 batch 对象，不落盘（写入/清退由 B 的 lane_checkpoint / 结算路径调用本接口后交 store 原子写）
 
 // 读：无进度记录 → null（缺省 undefined 语义，读兼容）
@@ -122,7 +122,7 @@ export function isValidLaneProgress(p) {
   return true;
 }
 
-// 写（填充点 2 接口）：返回新 batch（不突变入参）。B 的 lane_checkpoint 携带 progress 时调用，
+// 写：返回新 batch（不突变入参）。lane_checkpoint 携带 progress 时调用，
 //   更新 laneProgress[lane]（断点指针：lane 执行到第 N 步，新 worker 从 N+1 继续），随后交 store 原子写。
 export function laneProgressWrite(batch, lane, progress) {
   if (!isValidLaneProgress(progress)) {
@@ -137,8 +137,8 @@ export function laneProgressWrite(batch, lane, progress) {
   };
 }
 
-// 清（填充点 2 接口）：lane 结算（merged/failed/skipped/conflict）时删除该 lane 指针，不残留脏指针（§A2 终态清退）；
-//   批次 complete 后整块随批次归档（P1-5 archive 已覆盖）。返回新 batch；无指针则原样返回。
+// 清：lane 结算（merged/failed/skipped/conflict）时删除该 lane 指针，不残留脏指针；
+//   批次 complete 后整块随批次归档（archive 已覆盖）。返回新 batch；无指针则原样返回。
 export function laneProgressClear(batch, lane) {
   if (!batch?.laneProgress?.[lane]) return batch;
   const lp = { ...batch.laneProgress };
@@ -146,14 +146,14 @@ export function laneProgressClear(batch, lane) {
   return { ...batch, laneProgress: Object.keys(lp).length ? lp : undefined };
 }
 
-// ── A3 worker 任务包契约断点续跑（骨架，B 完成后填充）──
+// ── worker 任务包契约断点续跑（骨架，增强恢复落地后填充）──
 // 返回任务包 resume 章节占位：B 完成后由装配层（worker 角色手册）按
 //   config.resume.enabled && capabilities.worktree.enabled 置 enabled=true 并注入派发提示词。
-// 四步契约语义（§A3）：N = laneProgress.step（最近一次 checkpoint 的 progress.step），resumeFrom = N+1。
+// 四步契约语义：N = laneProgress.step（最近一次 checkpoint 的 progress.step），resumeFrom = N+1。
 export function workerResumeChapter() {
   return {
     title: 'resume（断点续跑）',
-    enabled: false, // 填充点 3：B 完成后装配层按开关置 true 并实际注入
+    enabled: false, // 增强恢复落地后装配层按开关置 true 并实际注入
     steps: [
       '查询 laneProgress（laneProgressRead）/ lane_checkpoint_status → 得 { resumeFrom: N+1, total, produced }',
       '从第 N+1 步开始执行；已完成步骤（step ≤ N）的产物视为已交付，禁止重做',

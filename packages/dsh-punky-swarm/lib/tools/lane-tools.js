@@ -314,7 +314,7 @@ function worktreeToolCheckpoint(ctx, deps) {
       const probe = gitProbe();
       if (!probe.ok) return { ok: false, error: 'git 不可用：' + probe.error + '（lane_checkpoint 需要 git；请安装并加入 PATH，或设 DSH_GIT_BIN）' };
       if (typeof args.message !== 'string' || !args.message.trim()) throw new Error('message required');
-      // B2：progress 校验（fail-closed：step/total 正整数且 step ≤ total；不传 = null = 现状）
+      // progress 校验（fail-closed：step/total 正整数且 step ≤ total；不传 = null = 现状）
       let progress = null;
       if (args.progress != null) {
         const step = args.progress.step;
@@ -333,7 +333,7 @@ function worktreeToolCheckpoint(ctx, deps) {
       if (!r.ok) return r; // worktree 未建 → 提示先 create
       if (r.committed) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
-        if (progress) { evt.step = progress.step; evt.total = progress.total; } // B2：事件携带 step/total（不传则无，向后兼容）
+        if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
         store.appendEvent(sessionId, args.batchId, 'worktree.checkpoint', evt);
       }
       return r;

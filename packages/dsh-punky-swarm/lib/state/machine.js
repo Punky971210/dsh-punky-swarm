@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Machine：状态迁移判定 + 棘轮规则消费（P1-7）+ lane 派发条件校验（P1-4）
+// Machine：状态迁移判定 + 棘轮规则消费 + lane 派发条件校验
 // 机器域归主（exec-lifecycle-core 单写者）：本文件只含迁移判定 + 派发条件——
 // archive 逻辑归 archive.js、needHuman 逻辑归 gates.js/store.js，不得写入本文件。
 // 纯逻辑（无 IO）：fileExists 经 DI 注入（store.js 接线时绑定 artifactsDir），可独立单测。
@@ -47,7 +47,7 @@ export function applyBatchTransition(from, to, { rules } = {}) {
     : { ok: false, code: 'INVALID_BATCH_TRANSITION' };
 }
 
-// 派发条件校验（P1-4）：读任务 condition（对象数组 {path, exists}，建批时已规范化）→ 逐个 fileExists → AND 求值。
+// 派发条件校验：读任务 condition（对象数组 {path, exists}，建批时已规范化）→ 逐个 fileExists → AND 求值。
 // fileExists(path) 由 store.js 注入（相对路径解析在注入侧，本函数保持纯逻辑）。
 // 无 condition → 恒 { ok: true }。返回 { ok: true } | { ok: false, missing: [path...] }。
 export function checkDispatchCondition(sessionId, batchId, batch, lane, { fileExists }) {
