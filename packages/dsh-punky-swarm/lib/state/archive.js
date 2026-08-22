@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // Archive：done→archive——complete 后自动归档、单向（产物打包保留可查 + 不可回滚标记）
-// 职责（单文件 = 归档，不含状态迁移判定，机器域归主 machine.js）：
+// 职责（单文件 = 归档，不含状态迁移判定，迁移判定见 machine.js）：
 //   archiveBatch  —— 把 sessions/<sessionId>/artifacts/<batchId>/ 快照复制到 sessions/<sessionId>/archive/<batchId>/
 //                    （只复制不移动，保留原产物引用）+ 写 manifest.json（批次元数据 + 产物清单 + lanes 终态快照）
 //                    + 批次 JSON 置 archived:true + archive.done 事件

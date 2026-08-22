@@ -278,6 +278,6 @@ export function createAcpsDiscoveryClient({
 // 经 acps.endpoint 挂载对外 /discover。
 export function createMiniAdsp() {
   throw new Error(
-    'DS3 mini-ADSP 预留接口（未实现）：对外 /discover 服务端语义待 P1 endpoint lane（exec-acps-server）就绪后按需实现'
+    'mini-ADSP 预留接口（未实现）：对外 /discover 服务端语义待 endpoint 就绪后按需实现'
   );
 }

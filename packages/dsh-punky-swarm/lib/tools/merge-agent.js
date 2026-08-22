@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // LLM merge agent 冲突化解辅助模块（借鉴 taskswarm merger 三态判定）
 // -----------------------------------------------------------------------------
-// 契约（finalize-decision.md §2.1）：
+// 契约：
 //   - lane_worktree_merge 冲突时（doMerge 返回 {ok:false, conflict:true, files}）可选派 LLM merge agent
 //     语义化解；默认关（config.capabilities.worktree.mergeAgent.enabled !== true → 现状路径逐字一致，零感知零开销）。
 //   - spawner 由宿主注入（引擎不直接 spawn subagent）：deps.mergeAgentSpawner 或 deps.config.host?.spawnMergeAgent，

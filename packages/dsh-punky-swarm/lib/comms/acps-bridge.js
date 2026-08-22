@@ -88,7 +88,7 @@ export function taskCommandToInbound(taskCommand) {
 // bridge.inboundEnabled 门控通过后才传 { inboundEnabled: true }。
 export function deliverInbound(root, sessionId, batchId, taskCommand, { inboundEnabled = false } = {}) {
   if (!inboundEnabled) {
-    return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false (D14): external writes to mailbox disabled' };
+    return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false: external writes to mailbox disabled' };
   }
   const { message, meta } = taskCommandToInbound(taskCommand);
   const res = mailbox.send(boxRoot(root, sessionId, batchId), { type: 'inbox' }, message, meta);
@@ -132,8 +132,8 @@ export function createBridge({ root, config = {}, mailbox: mb = mailbox, logger 
   // endpoint /rpc 衔接点：收到 TaskCommand 后调用 handleInbound(taskCommand, { sessionId, batchId })。
   // inbound 关（默认）→ 拒绝（视图只读）；缺 sessionId/batchId → 拒绝（mailbox 按会话/批次隔离，缺上下文不可投递）。
   function handleInbound(taskCommand, { sessionId, batchId } = {}) {
-    if (!enabled) return { ok: false, code: 'BRIDGE_DISABLED', detail: 'acps.bridge.enabled is false (D6/D7)' };
-    if (!inboundEnabled) return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false (D14)' };
+    if (!enabled) return { ok: false, code: 'BRIDGE_DISABLED', detail: 'acps.bridge.enabled is false' };
+    if (!inboundEnabled) return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false' };
     if (!sessionId || !batchId) {
       return { ok: false, code: 'MISSING_CONTEXT', detail: 'sessionId/batchId required for mailbox write' };
     }

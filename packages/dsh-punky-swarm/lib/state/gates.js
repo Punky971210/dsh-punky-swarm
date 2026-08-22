@@ -89,7 +89,7 @@ export function createGates(root) {
     const missing = t.consume.filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     return missing.length ? { ok: false, code: 'GATE_ENTRY_MISSING', missing } : { ok: true };
   }
-  // Plan 契约产物结构校验（设计 §3.3/§15.3 N5）：仅 plan 产物——spec 必填章节 + task-tree JSON 可解析
+  // Plan 契约产物结构校验：仅 plan 产物——spec 必填章节 + task-tree JSON 可解析
   function checkPlanContract(sessionId, batchId, batch, lane) {
     const t = findTask(batch, lane);
     if (!t || t.layer !== 'plan' || !Array.isArray(t.produce)) return { ok: true };
