@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // Machine：状态迁移判定 + 棘轮规则消费 + lane 派发条件校验
-// 机器域归主（exec-lifecycle-core 单写者）：本文件只含迁移判定 + 派发条件——
+// 本文件只含迁移判定 + 派发条件——
 // archive 逻辑归 archive.js、needHuman 逻辑归 gates.js/store.js，不得写入本文件。
 // 纯逻辑（无 IO）：fileExists 经 DI 注入（store.js 接线时绑定 artifactsDir），可独立单测。
 import { DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES } from './machine-rules.js';

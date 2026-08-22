@@ -43,9 +43,9 @@ export function resolveResumeConfig(config) {
 
 // 待回填清单（增强恢复落地后逐项回填；workerResumeChapter() 亦引用）
 export const RESUME_FILL_POINTS = [
-  'A1 恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）',
-  'A2 laneProgress 字段写/清/展（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；lane 结算终态经 laneProgressClear 清退；batch_status 面板 progress 视图）',
-  'A3 任务包 resume 章节从"文档占位"升为"装配层实际注入"（worker 角色手册加 resume 条款，对应 B3 的 B 级条款升级版）',
+  '恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）',
+  'laneProgress 字段写/清/展（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；lane 结算终态经 laneProgressClear 清退；batch_status 面板 progress 视图）',
+  '任务包 resume 章节从"文档占位"升为"装配层实际注入"（worker 角色手册加 resume 条款）',
   '崩溃恢复用例测试（模拟 running 中 crash → 重启 restore → 新 worker 从 N+1 续跑 → 产物合并验证）',
 ];
 

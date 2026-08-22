@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //                          deps.config（capabilities.watch：enabled/intervalsMinutes/maxMissed/scanIntervalMinutes/probeTemplate）
 //                          deps.root（可选，mailbox 根；缺省由 store.sessionsDir 推导）
 //                          deps.now（可选，时钟注入，测试用；缺省 Date.now）
-// 共享触碰面归主：本文件仅导出引擎与工具定义；lane_heartbeat 工具的组装（lane-tools.js/register.js）
+// 本文件仅导出引擎与工具定义；lane_heartbeat 工具的组装（lane-tools.js/register.js）
 // 组装进 lane-tools.js（避免与 lane-tools 主文件耦合）；本模块只动
 // watch/ 新域 + index.js 挂载 + schema.js watch 配置键 + cordis.patch.yml 注释。
 import { join, dirname } from 'node:path';
