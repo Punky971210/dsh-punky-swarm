@@ -130,7 +130,7 @@ dsh web restart
 兼容《人工智能 智能体互联》国标（GB/Z 185-2026）工具/智能体描述结构，仅增不改、可插拔：
 
 - **工具 6 属性**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
-- **智能体 14+8 属性**：装配配置 → 每角色国标描述（agentId / capabilities / skills 8 项等），供 AIP 协议发现；
+- **智能体描述（P4，ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；旧「14+8 属性」（agentId/accessAddress/…）为二手解读，降级为 toLegacyDescriptor 兼容映射层（仅审计对比，不参与对外契约）；
 - **消息/任务/会话映射**：mailbox 消息、wavePlan 任务、批次状态 → 国标结构（纯映射只读不改存储，ackId 原子写保留）；
 - **身份体系**（默认关，`aip.identity.enabled=true` 激活）：AIC 身份码（OID 前缀 `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256 / RSA-2048）+ 信任链验证；SM2 暂不支持（签名接口可插拔，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝）；
 - **装配开关**：`aip.enabled`（默认开启）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）。
@@ -216,7 +216,6 @@ acps:
 - **P4 工具调用**：未实现（待国标正式文本定义），不宣称已实现；
 - **SM2 签名**：暂不支持——sign 为可插拔接口，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝；
 - **mini-ADSP**：对外 `/discover` 服务端语义仅预留函数签名（createMiniAdsp），未实现；
-- **V2/V4 真实互通**：未验证（与参考实现 ACPs-community 的互通以源码对齐 + 单测为准）。
 
 ## 治理能力
 
