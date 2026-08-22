@@ -21,9 +21,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 校验语义（D-A3）：validateCapabilities 仅对显式 enabled 的非法组合报错（fail-closed 在测试/装配验收层）；
 //   引擎启动侧只 warn 不炸宿主（配置错误不破坏可用性，与「默认关零破坏」一致）。
 
-import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS } from '../schema.js';
+import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 
-// ── 能力注册表（8 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory）──
+// ── 能力注册表（9 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps）──
 // path = config 取值路径；default = 缺省值（全能力默认开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开，
 //   显式 enabled:false 可逐键关闭）；consumers = 既有消费点（键路径一致性依据）
 // identity 键（aip-gb-fix exec-identity）：P2/P3 身份体系默认关——config.aip.identity.enabled === true 时
@@ -31,6 +31,10 @@ import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULT
 //   默认关 → 零开销零破坏；不注册新治理工具（20 工具契约不变），身份能力经模块 API 暴露。
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
+  // acps 键（aip-acps-comm-build exec-acps-server）：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥（P2 lane）。
+  // 默认关（U-D2）：acps.enabled 与 acps.endpoint.enabled 均 false 时零加载零监听（config 短路）；显式开启才
+  //   index.js 实例化 createAcpsServer（lib/acps/server.js + certs.js，node:https/tls/crypto 原生，零新依赖）。
+  { key: 'acps', path: ['acps'], default: ACPS_DEFAULTS, consumers: ['index.js acps endpoint 装配 + lib/acps/server.js'] },
   { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
   { key: 'discovery', path: ['capabilities', 'discovery'], default: DISCOVERY_DEFAULTS, consumers: ['index.js discovery 服务装配 + api.js /discover + /.well-known/aip 端点'] },
   { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook', 'verify/gate.js createCompletionGate(DI)'] },

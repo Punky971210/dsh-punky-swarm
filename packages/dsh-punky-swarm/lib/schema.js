@@ -167,6 +167,100 @@ export function resolveDiscoveryConfig(config) {
   };
 }
 
+// ── acps.discovery：P3 DS1 外部 ADP 发现客户端（lib/acps/discovery-client.js，本 lane 归主）──
+// 插件 Leader 经外部 discovery-server 发现 partner（POST {baseUrl}/discover）；
+// 默认关（U-D2 决策：对外能力显式开启）——enabled=false 不创建客户端实例，零运行时路径。
+//   baseUrl：外部 discovery-server 根地址（空 = 未配置，discover 调用抛错 mirror 参考实现 is_configured）
+//   timeout/limit：单次请求超时 ms（默认 10000）与默认返回上限（默认 5，对齐参考实现 discovery config）
+//   scope：查询范围 local（仅既有本地目录）/ external（仅外部）/ both（本地+外部合并）
+export const ACPS_DISCOVERY_DEFAULTS = Object.freeze({
+  enabled: false,
+  baseUrl: '',
+  timeout: 10_000,
+  limit: 5,
+  scope: 'local',
+});
+
+export function resolveAcpsDiscoveryConfig(config) {
+  const c = config?.acps?.discovery ?? {};
+  const scope = ['local', 'external', 'both'].includes(c.scope) ? c.scope : ACPS_DISCOVERY_DEFAULTS.scope;
+  return {
+    enabled: c.enabled === true,
+    baseUrl: typeof c.baseUrl === 'string' ? c.baseUrl : ACPS_DISCOVERY_DEFAULTS.baseUrl,
+    timeout: Number.isFinite(Number(c.timeout)) && Number(c.timeout) > 0
+      ? Number(c.timeout)
+      : ACPS_DISCOVERY_DEFAULTS.timeout,
+    limit: Number.isFinite(Number(c.limit)) && Number(c.limit) >= 1
+      ? Math.floor(Number(c.limit))
+      : ACPS_DISCOVERY_DEFAULTS.limit,
+    scope,
+  };
+}
+
+// ── config.acps.bridge：P2 内部 ACPs 桥接（lib/comms/acps-bridge.js，G1 进程内双向）──
+// 决策（施工契约 aip-acps-comm-build plan/spec.md §2.2/§三）：D5=G1 进程内双向、D6=默认关、D7=config 短路零开销、
+// D14=inbound 默认关。桥只经 mailbox.js 公共接口投递/投影，绝不绕过；enabled=false 时不加载不实例化（零路径）。
+export const BRIDGE_DEFAULTS = Object.freeze({
+  enabled: false,
+  mode: 'inprocess', // G1 进程内双向（D5 拍板；G2 本机 HTTP 桥不实现）
+  inbound: false,    // inbound 默认关（D14）：外部 ACPs 消息写 mailbox 需显式开启
+});
+
+export function resolveBridgeConfig(config) {
+  const c = config?.acps?.bridge ?? {};
+  return {
+    enabled: c.enabled === true,
+    mode: c.mode === 'http' ? 'http' : BRIDGE_DEFAULTS.mode,
+    inbound: c.inbound === true,
+  };
+}
+
+// ── config.acps：ACPs 通讯能力（P1 lane exec-acps-server，施工契约 aip-acps-comm-build §〇/§2.1）──
+// 默认关（U-D2：acps.enabled 与 acps.endpoint.enabled 均默认 false——显式开启才加载监听，关闭时零运行时路径）。
+//   endpoint：对外 mTLS 服务端点（lib/acps/server.js）——
+//     port 9443（D1，避开参考实现 9001-9021 段）；host 默认 127.0.0.1（config 可配）；
+//     cert/key/ca：D3=C1 三路径（null=自动生成到 certDir，默认 <root>/acps/certs）；aic：ACS 身份码
+//     （缺省=agent-descriptor 派生占位，V3 注册后经 config 覆盖）；minVersion TLSv1.3（D12）；
+//     devInsecure：D4 E2 显式开发开关（默认 false，生产 E1 不允许降级）。
+// 消费方：lib/index.js 装配（enabled 双真才实例化 createAcpsServer）；lib/assembly/schema.js CAPABILITY_REGISTRY。
+export const ACPS_DEFAULTS = Object.freeze({
+  enabled: false,               // 能力总开关（默认关——U-D2）
+  endpoint: {
+    enabled: false,             // 对外端点开关（默认关——U-D2）
+    port: 9443,                 // D1
+    host: '127.0.0.1',
+    cert: null,                 // D3=C1 三路径（null=自动生成 certDir）
+    key: null,
+    ca: null,
+    certDir: null,              // 缺省 <root>/acps/certs（index.js 注入 root）
+    aic: null,                  // ACS aic（缺省=agent-descriptor 派生占位）
+    agentName: 'dsh-punky-swarm',
+    minVersion: 'TLSv1.3',      // D12
+    devInsecure: false,         // D4 E2（默认关）
+  },
+});
+
+export function resolveAcpsConfig(config) {
+  const c = config?.acps ?? {};
+  const e = (c.endpoint && typeof c.endpoint === 'object' && !Array.isArray(c.endpoint)) ? c.endpoint : {};
+  return {
+    enabled: c.enabled === true,
+    endpoint: {
+      enabled: e.enabled === true,
+      port: Number.isInteger(Number(e.port)) && Number(e.port) > 0 ? Number(e.port) : ACPS_DEFAULTS.endpoint.port,
+      host: typeof e.host === 'string' && e.host.length > 0 ? e.host : ACPS_DEFAULTS.endpoint.host,
+      cert: typeof e.cert === 'string' && e.cert.length > 0 ? e.cert : null,
+      key: typeof e.key === 'string' && e.key.length > 0 ? e.key : null,
+      ca: typeof e.ca === 'string' && e.ca.length > 0 ? e.ca : null,
+      certDir: typeof e.certDir === 'string' && e.certDir.length > 0 ? e.certDir : null,
+      aic: typeof e.aic === 'string' && e.aic.length > 0 ? e.aic : null,
+      agentName: typeof e.agentName === 'string' && e.agentName.length > 0 ? e.agentName : ACPS_DEFAULTS.endpoint.agentName,
+      minVersion: e.minVersion === 'TLSv1.2' || e.minVersion === 'TLSv1.3' ? e.minVersion : ACPS_DEFAULTS.endpoint.minVersion,
+      devInsecure: e.devInsecure === true,
+    },
+  };
+}
+
 // ── config.ratchet：P1-7 棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
 // 对齐 aip.enabled / capabilities.watch 先例注释风格；消费方 lib/state/machine-rules.js（loadRules）：
 //   { ratchet: { memberRules?: { from: [to...] }, batchRules?: { from: [to...] }, allowRelax?: false } }
