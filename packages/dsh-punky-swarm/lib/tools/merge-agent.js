@@ -15,14 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// punky-finalize E2：LLM merge agent 冲突化解辅助模块（决策包 §二，借鉴 taskswarm merger 三态判定）
+// LLM merge agent 冲突化解辅助模块（借鉴 taskswarm merger 三态判定）
 // -----------------------------------------------------------------------------
 // 契约（finalize-decision.md §2.1）：
 //   - lane_worktree_merge 冲突时（doMerge 返回 {ok:false, conflict:true, files}）可选派 LLM merge agent
 //     语义化解；默认关（config.capabilities.worktree.mergeAgent.enabled !== true → 现状路径逐字一致，零感知零开销）。
 //   - spawner 由宿主注入（引擎不直接 spawn subagent）：deps.mergeAgentSpawner 或 deps.config.host?.spawnMergeAgent，
 //     签名 async (request) => ({ verdict, detail })；verdict ∈ CONFLICT_RESOLVED | SUCCESS | CONFLICT_UNRESOLVED。
-//   - 语义红线（R3/R5）：三态只映射既有 merged/conflict 路径；失败/超时/校验不过 → lane 保持 conflict 终态
+//   - 三态只映射既有 merged/conflict 路径；失败/超时/校验不过 → lane 保持 conflict 终态
 //     （merge agent 是冲突化解手段，非 lane 恢复；不新增成员态、不自动 settle）。
 //   - fail-closed：spawner 抛错/超时/返回未知 verdict/化解后 orch 仍有在途 merge（U 标记或 MERGE_HEAD 残留）
 //     → 一律视同 UNRESOLVED，保留现场走现状 conflict 路径（不挂起不 throw）。
@@ -53,7 +53,7 @@ export function runGit(repo, args) {
   }
 }
 
-// HARD 规则（写入 request.instructions，约束 agent 防误合并，决策包 §5.4 风险处置）
+// HARD 规则（写入 request.instructions，约束 agent 防误合并）
 export const HARD_INSTRUCTIONS = [
   'You are the merge agent for an in-flight git merge conflict in the orch worktree.',
   'HARD RULES:',
@@ -102,7 +102,7 @@ function statusQuo(opts, hint) {
 
 // 冲突化解主流程（lane-tools.js 接线点）：默认关 → 现状；启用 + spawner → 化解；
 // RESOLVED/SUCCESS 且 orch 在途 merge 校验通过 → 既有成功清理路径（worktree remove + branch -d）+ resolved 事件；
-// 其余（UNRESOLVED/抛错/超时/校验不过/无 spawner）→ 现状 conflict 路径（不挂起不 throw，R5 终态不违）
+// 其余（UNRESOLVED/抛错/超时/校验不过/无 spawner）→ 现状 conflict 路径（不挂起不 throw，保持终态）
 export async function resolveMergeConflict(deps, opts) {
   const config = deps?.config ?? {};
   const ma = config?.capabilities?.worktree?.mergeAgent;
@@ -119,7 +119,7 @@ export async function resolveMergeConflict(deps, opts) {
   try {
     resp = await withTimeout(Promise.resolve().then(() => spawner(request)), timeoutMs);
   } catch {
-    return statusQuo(opts, null); // 抛错/超时 → UNRESOLVED → 现状（保留现场，R5）
+    return statusQuo(opts, null); // 抛错/超时 → UNRESOLVED → 现状（保留现场）
   }
   const verdict = normalizeVerdict(resp?.verdict);
   if (verdict === VERDICT_UNRESOLVED) return statusQuo(opts, null);

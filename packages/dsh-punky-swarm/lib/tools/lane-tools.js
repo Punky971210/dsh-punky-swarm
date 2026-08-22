@@ -15,27 +15,26 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 蟛蜞模式 lane 工具（C2：worktree 物理隔离 + checkpoint 提交）
+// 蟛蜞模式 lane 工具（worktree 物理隔离 + checkpoint 提交）
 // -----------------------------------------------------------------------------
-// 填充自骨架（punky-capability 批次 exec-worktree lane；原骨架仅导出签名，本文件补齐
-// 3 个 worktree 治理工具，决策包 §2 为唯一权威）。实现契约要点：
+// 原骨架仅导出签名，本文件补齐 3 个 worktree 治理工具。实现契约要点：
 //   - lane_worktree_create  : git worktree 建 lane 隔离工作树（幂等；集成分支 punky/orch 常驻，
 //                             lane 分支 punky/<laneId> 从 orch HEAD 基线；残留先清理）
 //   - lane_worktree_merge   : 串行 merge lane 分支进 orch（merge 队列锁 = serializedMerge 纪律；
 //                             成功清理 worktree+分支；失败保留现场 + 冲突文件清单，不自动处置）
-//   - lane_checkpoint       : lane 内 git add -A + commit（无变更 no-op）；这是续跑 B 增强恢复
-//                             （批次 7 阶段 1）的物理保全地基——崩溃后 checkpoint 保住产物、
+//   - lane_checkpoint       : lane 内 git add -A + commit（无变更 no-op）；这是续跑增强恢复
+//                             的物理保全地基——崩溃后 checkpoint 保住产物、
 //                             人工可抢救（git log 可查），不触发任何自动恢复（守「不做续跑」红线）
-//   - lane_checkpoint_status: 只读查询该 lane checkpoint 历史与 latest 进度（B2 增强，读事件流不调 git；
+//   - lane_checkpoint_status: 只读查询该 lane checkpoint 历史与 latest 进度（读事件流不调 git；
 //                             resume 契约唯一查询入口——新 worker 查 checkpoint 跳过已完成步骤）
-// lane_heartbeat 工具由 lane-1（lib/watch/lane-heartbeat.js）注入组装（enabled 门控由该模块自持；
-// 守卫式加载：lane-1 未合入时静默降级，本模块照常注册 worktree 四工具，互不阻塞，决策包 §7.1-3）。
+// lane_heartbeat 工具由 lib/watch/lane-heartbeat.js 注入组装（enabled 门控由该模块自持；
+// 守卫式加载：既有 lane 未合入时静默降级，本模块照常注册 worktree 四工具，互不阻塞。
 //
 // 装配开关：config.capabilities?.worktree?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏，对齐 aip.enabled 先例）。B2 增强（punky-resume 批次 7 阶段 1）：lane_checkpoint 可选
+// 回归零破坏）。lane_checkpoint 可选
 // progress={step,total}（commit message 内嵌 step N/total + 事件 step/total）+ 只读 lane_checkpoint_status。
 //
-// 与 lane_claim 逻辑锁的互补关系（决策包 §2.2 实现契约内说明）：
+// 与 lane_claim 逻辑锁的互补关系：
 //   - lane_claim（既有）：同一 lane 的【逻辑写】锁——批次/成员状态文件、产物落盘路径并发防写；
 //     管「写谁的」（治理状态层），维持现状是正确性底线。
 //   - 本组工具（新增）：不同 lane 在【同一 git 仓库】的【物理写】——工作目录/分支/文件树；
@@ -49,15 +48,15 @@ import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './core.js';
 import * as lock from '../lock.js';
-import { resolveMergeConflict } from './merge-agent.js'; // punky-finalize E2：merge 冲突可选 LLM 化解（默认关）
+import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
 
-// ---- lane-1 依赖（守卫式加载）----
+// ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
 try {
   const m = await import('../watch/lane-heartbeat.js');
   createHeartbeatTools = (typeof m?.createHeartbeatTools === 'function') ? m.createHeartbeatTools : null;
 } catch {
-  createHeartbeatTools = null; // lane-1 未合入 / 模块异常 → lane_heartbeat 留待集成
+  createHeartbeatTools = null; // 模块异常 → lane_heartbeat 留待集成
 }
 
 // ---- 常量 ----
@@ -91,7 +90,7 @@ function gitProbe() {
   return r.ok ? { ok: true, version: r.stdout } : { ok: false, error: r.stderr };
 }
 
-// ---- 引擎状态根内布局（决策包 §2.2：worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>）----
+// ---- 引擎状态根内布局（worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>）----
 function batchWtRoot(root, sessionId, batchId) { return path.join(root, 'sessions', sessionId, 'worktrees', batchId); }
 function mainRepoDir(root, sessionId, batchId) { return path.join(batchWtRoot(root, sessionId, batchId), '_repo'); }
 function orchDirOf(root, sessionId, batchId) { return path.join(batchWtRoot(root, sessionId, batchId), 'orch'); }
@@ -113,7 +112,7 @@ function validateIds(sessionId, batchId, laneId) {
   if (RESERVED_LANE.has(laneId)) throw new Error('laneId conflicts with engine layout: ' + laneId);
 }
 
-// git 身份兜底：全局/本地均无身份时回退 punky/punky@localhost（决策包 §2.2 ensureGitIdentity）
+// git 身份兜底：全局/本地均无身份时回退 punky/punky@localhost
 function ensureGitIdentity(repo) {
   const name = runGit(repo, ['config', 'user.name']);
   const email = runGit(repo, ['config', 'user.email']);
@@ -189,7 +188,7 @@ function createLaneWorktree(root, sessionId, batchId, laneId) {
 }
 
 // checkpoint：git add -A && git commit -m "<batchId>/<laneId>: <message>"；无变更 no-op
-// B2 增强（checkpoint 保全引用，决策包 §三 B2）：可选 progress={step,total}——提供时 commit message 内嵌
+// （checkpoint 保全引用）：可选 progress={step,total}——提供时 commit message 内嵌
 //   "step <step>/<total> — <message>"（git log 可直接审计进度，对齐 taskswarm STATUS 语义）；
 //   不传 progress 保持现状格式（向后兼容，参数语义不变）。
 function doCheckpoint(root, sessionId, batchId, laneId, message, progress) {
@@ -259,7 +258,7 @@ function worktreeToolCreate(ctx, deps) {
       schema: { type: 'object', additionalProperties: false, properties: {
         ok: { type: 'boolean', required: true }, worktree: { type: 'string' }, branch: { type: 'string' },
         orchBranch: { type: 'string' }, reused: { type: 'boolean' }, base: { type: 'string' }, sessionId: { type: 'string' },
-        error: { type: 'string' }, // 执行路径 git 不可用返回 {ok:false,error}（punky-resume 登记项：schema 与实现对齐）
+        error: { type: 'string' }, // 执行路径 git 不可用返回 {ok:false,error}（schema 与实现对齐）
       } },
       render: (_args, v) => TEXT_OUTPUT('worktree: ' + v.worktree + ' @' + v.branch + (v.reused ? ' (reused)' : '')),
     },
@@ -431,7 +430,7 @@ function worktreeToolMerge(ctx, deps) {
       if (r.ok) {
         store.appendEvent(sessionId, args.batchId, 'worktree.merged', { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
       } else if (r.conflict) {
-        // punky-finalize E2：冲突可选 LLM merge agent 化解（默认关 → 现状逐字一致；全量逻辑在 merge-agent.js）
+        // 冲突可选 LLM merge agent 化解（默认关 → 现状逐字一致；全量逻辑在 merge-agent.js）
         return await resolveMergeConflict(deps, {
           root, store, sessionId, batchId: args.batchId, laneId: args.laneId,
           orchDir: orchDirOf(root, sessionId, args.batchId), branch: laneBranch(args.laneId),
@@ -443,13 +442,13 @@ function worktreeToolMerge(ctx, deps) {
   });
 }
 
-// ---- 组装（决策包 §2.2）：lane_heartbeat（lane-1 注入，enabled 门控由该模块自持）+ worktree 四工具 ----
+// ---- 组装：lane_heartbeat（enabled 门控由该模块自持）+ worktree 四工具 ----
 export function createLaneTools(ctx, deps) {
   const config = deps?.config ?? {};
   const tools = [];
-  // lane-1 注入的 lane_heartbeat；守卫式加载，lane-1 未合入时留待集成（功能独立，互不阻塞）
+  // 注入的 lane_heartbeat；守卫式加载，模块未合入时留待集成（功能独立，互不阻塞）
   if (createHeartbeatTools) tools.push(...createHeartbeatTools(ctx, deps));
-  // C2 worktree 四工具（create/merge/checkpoint/checkpoint_status）：默认关（对齐 aip.enabled 先例，回归零破坏）
+  // worktree 四工具（create/merge/checkpoint/checkpoint_status）：默认关（回归零破坏）
   if (config?.capabilities?.worktree?.enabled === true) {
     tools.push(
       worktreeToolCreate(ctx, deps),

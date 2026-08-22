@@ -15,24 +15,24 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 装配配置注册表统一（决策包 assembly-decision §3，Part 1 归主 lane：assembly-schema）
+// 装配配置注册表统一
 // 纯函数 + 数据，零运行时依赖（仅 import 本包 lib/schema.js 默认常量）。
-// 能力键路径保持既有现状（aip.* / capabilities.* 两套不变）= 消费点零改动 = 向后兼容（D-A2）。
-// 校验语义（D-A3）：validateCapabilities 仅对显式 enabled 的非法组合报错（fail-closed 在测试/装配验收层）；
+// 能力键路径保持既有现状（aip.* / capabilities.* 两套不变）= 消费点零改动 = 向后兼容。
+// 校验语义：validateCapabilities 仅对显式 enabled 的非法组合报错（fail-closed 在测试/装配验收层）；
 //   引擎启动侧只 warn 不炸宿主（配置错误不破坏可用性，与「默认关零破坏」一致）。
 
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 
 // ── 能力注册表（9 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps）──
-// path = config 取值路径；default = 缺省值（全能力默认开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开，
+// path = config 取值路径；default = 缺省值（全能力默认开——AIP 为主线 + 治理能力全开，
 //   显式 enabled:false 可逐键关闭）；consumers = 既有消费点（键路径一致性依据）
-// identity 键（aip-gb-fix exec-identity）：P2/P3 身份体系默认关——config.aip.identity.enabled === true 时
+// identity 键：身份体系默认关——config.aip.identity.enabled === true 时
 //   调用方才激活 lib/aip/identity.js 模块 API（AIC 身份码注册 + CAI 证书发行 + 签名 + 信任链验证）；
 //   默认关 → 零开销零破坏；不注册新治理工具（20 工具契约不变），身份能力经模块 API 暴露。
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
-  // acps 键（aip-acps-comm-build exec-acps-server）：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥（P2 lane）。
-  // 默认关（U-D2）：acps.enabled 与 acps.endpoint.enabled 均 false 时零加载零监听（config 短路）；显式开启才
+  // acps 键：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥。
+  // 默认关：acps.enabled 与 acps.endpoint.enabled 均 false 时零加载零监听（config 短路）；显式开启才
   //   index.js 实例化 createAcpsServer（lib/acps/server.js + certs.js，node:https/tls/crypto 原生，零新依赖）。
   { key: 'acps', path: ['acps'], default: ACPS_DEFAULTS, consumers: ['index.js acps endpoint 装配 + lib/acps/server.js'] },
   { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
@@ -49,11 +49,11 @@ export const CAPABILITY_REGISTRY = [
 export const EXCLUSIONS = [];
 
 // ── 反向断言权威表（P1-8，对齐 jiufeng-team skill 装配表 8 角色）──
-// manager 显式豁免：Leader 直系拉起、不经 wavePlan lane 角色池，不登记于装配表 roles（决策包 §3.3）
+// manager 显式豁免：Leader 直系拉起、不经 wavePlan lane 角色池，不登记于装配表 roles
 export const REQUIRED_ROLES = ['coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
 
-// ── 盲审扩展（Part 3 协同，决策包 §5.2/§5.5）──
-// 三角色 + 六模板键名清单；模板内容由 lib/assembly/audit-blind-review.js 提供（blind-review lane 归主）
+// ── 盲审扩展 ──
+// 三角色 + 六模板键名清单；模板内容由 lib/assembly/audit-blind-review.js 提供
 export const BLIND_REVIEW_ROLES = ['audit-panelist', 'audit-aggregate', 'audit-critic'];
 export const BLIND_REVIEW_TEMPLATE_KEYS = ['bundle', 'panelist', 'aggregate', 'critic', 'checklist', 'config'];
 
@@ -83,7 +83,7 @@ export function readCapability(config, key) {
   return deepMerge(entry.default, val);
 }
 
-// ── 校验（D-A3）：仅对显式 enabled 的非法组合报错；禁用能力零校验零开销 ──
+// ── 校验：仅对显式 enabled 的非法组合报错；禁用能力零校验零开销 ──
 export function validateCapabilities(config = {}) {
   const errors = [];
   const c = config.capabilities ?? {};

@@ -15,25 +15,25 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/state/resume.js — A 断点续跑骨架（决策包 punky-resume §四 A1/A2/A3；B 增强恢复落地后回填实现）
+// lib/state/resume.js — 断点续跑骨架（增强恢复落地后回填实现）
 //
-// 职责（A 阶段，执行模型改变——与 B 的"执行模型不变"互补）：
-//   A1 状态重建接口 —— 恢复 running/review（而非一律 idle）+ config.resume.enabled 开关（默认关）
-//   A2 断点指针语义 —— laneProgress 步骤进度（schema-v3.js 可选字段；本文件提供读写/清退接口骨架）
-//   A3 worker 任务包契约断点续跑 —— resume 章节占位（B 完成后装配层实际注入）
+// 职责（断点续跑：执行模型改变——与增强恢复的"执行模型不变"互补）：
+//   状态重建接口 —— 恢复 running/review（而非一律 idle）+ config.resume.enabled 开关（默认关）
+//   断点指针语义 —— laneProgress 步骤进度（schema-v3.js 可选字段；本文件提供读写/清退接口骨架）
+//   worker 任务包契约断点续跑 —— resume 章节占位（增强恢复落地后装配层实际注入）
 //
-// 纪律（红线 R1-R3 / 范围 S1-S4，决策包 §一/§六）：
+// 纪律：
 //   - 默认关：config.resume.enabled !== true → recoverBatches() 原样委托 store.recoverBatches()（零行为变化）
 //   - 不新增成员态：恢复对象仅 running/review（crash 中断的 in-flight lane）；failed/conflict/skipped
-//     不参与任何恢复（R1），失败是裁决结果不是中断，不复活（R3）
+//     不参与任何恢复，失败是裁决结果不是中断，不复活
 //   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发，§A1 gate 交互设计）
-//   - 不提供批次内自动续跑（R2）：重做仍开新批次
+//   - 不提供批次内自动续跑：重做仍开新批次
 //
 // 边界：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
 // 不触碰 store.js recoverBatches 主体（归 recover-audit lane）与 lane-tools.js（归 checkpoint-contract lane）。
 import * as schema from '../schema.js';
 
-// ── A1：config.resume 开关（对齐 aip.enabled / capabilities.watch 先例——默认关，零运行时开销，行为不变）──
+// ── config.resume 开关（默认关，零运行时开销，行为不变）──
 export const RESUME_DEFAULTS = Object.freeze({ enabled: false });
 
 export function resolveResumeConfig(config) {
@@ -41,7 +41,7 @@ export function resolveResumeConfig(config) {
   return { enabled: c.enabled === true };
 }
 
-// A 阶段填充点清单（决策包 §四 A3 填充点，B 完成后逐项回填；workerResumeChapter() 亦引用）
+// 填充点清单（增强恢复落地后逐项回填；workerResumeChapter() 亦引用）
 export const RESUME_FILL_POINTS = [
   'A1 恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）',
   'A2 laneProgress 字段写/清/展（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；lane 结算终态经 laneProgressClear 清退；batch_status 面板 progress 视图）',
@@ -71,10 +71,10 @@ export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
   for (const sessionId of store.listSessions()) {
     for (const batchId of store.listBatches(sessionId)) {
       const batch = store.readBatch(sessionId, batchId);
-      if (!batch || schema.isBatchTerminal(batch.phase)) continue; // R1：终态批次跳过
+      if (!batch || schema.isBatchTerminal(batch.phase)) continue; // 终态批次跳过
       const detail = [];
       for (const [lane, state] of Object.entries(batch.lanes ?? {})) {
-        if (state !== 'running' && state !== 'review') continue; // R1/R3：仅 crash 中断的 in-flight lane
+        if (state !== 'running' && state !== 'review') continue; // 仅 crash 中断的 in-flight lane
         detail.push({
           lane,
           from: state,

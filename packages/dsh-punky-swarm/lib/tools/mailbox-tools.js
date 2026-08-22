@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 蟛蜞模式通信工具（3 个）：mailbox_send / mailbox_read / mailbox_ack
-// 拆分自 lib/tools.js（punky-restructure exec-tools-split lane）：原样搬移，行为不变
-// C4（exec-budget lane）：mailbox_send 接线 budget 环防护——inbox 永不受限（Manager 权威出口下行派发）；
+// 拆分自 lib/tools.js（原样搬移，行为不变）
+// mailbox_send 接线 budget 环防护——inbox 永不受限（Manager 权威出口下行派发）；
 //   outbox/broadcast 在 config.capabilities.budget.enabled=true 时先 chainFor+checkBudget，拒绝返回 {ok:false, code, detail}（不 throw）+ budget.rejected 事件留痕
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import * as mailbox from '../comms/mailbox.js';

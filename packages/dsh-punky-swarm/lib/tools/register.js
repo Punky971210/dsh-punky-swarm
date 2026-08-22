@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 蟛蜞模式治理工具聚合注册入口（14 个 = core 11 + mailbox 3 + lane 骨架 0；可选能力组按装配键默认关）
-// 拆分自 lib/tools.js（punky-restructure exec-tools-split lane）：createTools 签名保持，index.js 调用不变
+// 拆分自 lib/tools.js（createTools 签名保持，index.js 调用不变）
 import { createCoreTools, installDifficultyGuard } from './core.js';
 import { createMailboxTools } from './mailbox-tools.js';
 import { createLaneTools } from './lane-tools.js';
@@ -39,11 +39,11 @@ export function createTools(ctx, deps) {
     ...createLogTools(ctx, deps), // E3 log_export：config.capabilities.logs.enabled===true 时注册（默认关 → 14 不变）
   ];
 
-  // 国标 AIP P0-1：装配 enabled 开关（缺省默认开——2026-08-21 发布决策：AIP 为主线 + 治理能力全开，
+  // 装配 enabled 开关（缺省默认开——AIP 为主线 + 治理能力全开，
   //   显式 aip.enabled:false 可关闭）。经 readCapability 默认合并读取（schema.js CAPABILITY_REGISTRY 同源口径）：
   //   缺省配置（config 无 aip 键）→ 合并默认 {enabled:true} → 实际默认开启；enabled === true 时注册工具目录快照并暴露 catalog。
   // 生成器只读遍历 tools，不替换、不包装任何已注册工具对象（红线：既有工具契约不变）。
-  // P4 ACS（exec-agent-desc lane）：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
+  // P4 ACS：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
   //   team 取 config.aip.team ?? 'jiufeng'）经 agent-descriptor 纯函数生成智能体描述目录 agentCatalog
   //   （ACS 字段集，见 lib/aip/agent-descriptor.js）；enabled=false 时恒为 null、零开销。
   const aipCfg = readCapability(deps?.config, 'aip');

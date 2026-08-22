@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 aip-format：ACPs AIP 消息/任务/会话结构投影（P6 交互，参考实现 ACPs v2.1.0）
-// 契约：artifacts/aip-gb-fix/plan/spec.md §3.6（字段级汇总来源 = 参考实现 07-ACPs-spec-AIP 原文）
+// 文件 aip-format：ACPs AIP 消息/任务/会话结构投影（ACPs 交互，参考实现 ACPs v2.1.0）
+// 契约：字段级汇总（AIP spec 原文）
 // 三函数均为纯函数：输入引擎自有结构 → 输出 ACPs AIP 兼容结构；不做任何文件/存储写操作，
 // mailbox 的 ackId 原子写、inbox/outbox/broadcast 三 box、outbox lane 隔离、ack 语义全部保留（红线：既有 mailbox 行为不变）。
 //

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 蟛蜞模式治理核心工具（11 个），defineTool 规范含 output.schema + output.render
-// 拆分自 lib/tools.js（punky-restructure exec-tools-split lane）：core 域原样搬移，行为不变
+// 拆分自 lib/tools.js（core 域原样搬移，行为不变）
 // 导出：createCoreTools(ctx, deps) => Array<defineTool>；installDifficultyGuard(ctx, deps)（难度门禁注册，原样搬移一字不改）
 // 共享辅助（mailbox-tools.js 复用）：TEXT_OUTPUT / sessionOf
 import { defineTool } from '@deepseek-ai/dsh-tools';
@@ -57,21 +57,21 @@ export function sessionOf(args, exec) {
 }
 export function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions', sessionId, '.locks', batchId + '.' + lane + '.lock'); }
 
-// 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改，含 Bug3 修复注释），注册顺序保持现状（createTools 开头）
+// 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改），注册顺序保持现状（createTools 开头）
 export function installDifficultyGuard(ctx, deps) {
   const { store, config = {} } = deps;
   // 任务难度值门禁（design task-difficulty-gate §3，引擎强制不依赖自觉）：执行型工具前置 guard
   // 同步签名 (execution) => string | undefined；execution 含 name / agent.session.id；返回 string 即拒绝
   if (typeof ctx.tools?.guard === 'function') {
     ctx.tools.guard((execution) => {
-      // ② subagent 降级豁免（Bug3 主修复，决策包 §4.3 ②，guard 开头）：subagent/subagent_fork 派发的 worker 会话
+      // ② subagent 降级豁免（guard 开头）：subagent/subagent_fork 派发的 worker 会话
       //   （delegationDepth>0 或带 parentSession）继承 Leader 侧已评估的任务形态，难度门禁不重复评估——
       //   会话隔离（worker 无 Leader 侧 lastAssign）+ 同块并行时序下重复评估必然误拦。豁免仅限难度门禁，
       //   其余 guard 语义（EXEC_TOOLS 名单、计数）不受影响；Leader 会话（无 header）仍走完整门禁。
       const header = execution?.agent?.session?.header;
       if (header && (header.delegationDepth > 0 || header.parentSession)) return undefined;
-      // ③′ session 解析对称（Bug3 补充）：与 sessionOf 同序——execution.arguments.session 优先，缺省回退 agent.session.id。
-      // 修复显式传 session 时评估（args.session 落点）与拦截（只认 agent.session）不同步导致的误拦（决策包 Bug3 §4.3 ③′）
+      // ③′ session 解析对称：与 sessionOf 同序——execution.arguments.session 优先，缺省回退 agent.session.id。
+      // 修复显式传 session 时评估（args.session 落点）与拦截（只认 agent.session）不同步导致的误拦
       const sessionId = execution?.arguments?.session ?? execution?.agent?.session?.id;
       if (!sessionId) return undefined;
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
@@ -191,7 +191,7 @@ export function createCoreTools(ctx, deps) {
         const hasActive = store.hasActiveBatch(sessionId);
         const patch = { lastAssign: { form, scope, at: now, reasons, execCallsSince: 0 }, history };
         if (form === 'C' && !hasActive) { patch.pendingBatch = true; patch.pendingSince = now; }
-        // Gap D 修复：新评估总是把 pendingBatch 收敛到正确状态——已有活跃批次，或残留 pendingBatch（C 判定后重评为 A/B），一律清锁
+        // 新评估总是把 pendingBatch 收敛到正确状态——已有活跃批次，或残留 pendingBatch（C 判定后重评为 A/B），一律清锁
         else if (hasActive || g0.pendingBatch) { patch.pendingBatch = false; patch.pendingSince = null; }
         // session-compat：显式 session 与执行会话不同 → 镜像到执行会话（guard 落点兼容）。
         // 镜像只写 lastAssign + pendingBatch + mirror 指针，不污染执行会话 history；解锁经 clearPendingBatch 传播

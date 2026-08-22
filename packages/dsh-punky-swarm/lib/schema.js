@@ -93,9 +93,9 @@ export function assertBatchPhase(p) {
   if (!isBatchPhase(p)) throw new Error('unknown batch phase: ' + String(p));
 }
 
-// ── 可选配置键默认值（装配默认开——全能力发布决策 2026-08-21：AIP 为主线 + 治理能力全开；
+// ── 可选配置键默认值（装配默认开——AIP 为主线 + 治理能力全开；
 //   显式 enabled:false 可逐键关闭。缺省 = 全能力启用，行为按各能力语义）──
-// capabilities.trajectory：C5 诊断桥接（lib/bridge/trajectory.js）——订阅 trajectory 异常 → sessionId→lane 映射 → notify；
+// capabilities.trajectory：诊断桥接（lib/bridge/trajectory.js）——订阅 trajectory 异常 → sessionId→lane 映射 → notify；
 //   enabled=true（默认）：桥接挂载；autoFail=false（默认）：异常只 notify，不自动 member_settle failed；
 //   failConfidence：loop_deadlock 自动 failed 的置信阈值（默认 0.85，可配）；
 //   poll：可选 HTTP 轮询 fallback（默认关，插件未装/无事件时静默降级）
@@ -106,11 +106,11 @@ export const TRAJECTORY_DEFAULTS = {
   poll: { enabled: false, baseUrl: null, intervalMs: 60_000 },
 };
 
-// ── capabilities.watch：C1 lane 过期检测（lib/watch/lane-heartbeat.js，本 lane 归主）──
-// 全能力发布决策：enabled=true（默认）时 watchdog 挂载、lane_heartbeat 注册
+// ── capabilities.watch：lane 过期检测（lib/watch/lane-heartbeat.js）──
+// enabled=true（默认）时 watchdog 挂载、lane_heartbeat 注册
 export const WATCH_DEFAULTS = Object.freeze({
   enabled: true,
-  intervalsMinutes: [10, 20, 30], // 退避档位（分钟）：冷场越久追问间隔越长（dsh-plugin-heartbeat buildSchedule 移植）
+  intervalsMinutes: [10, 20, 30], // 退避档位（分钟）：冷场越久追问间隔越长
   maxMissed: 3,                   // 硬停拍数：连续 N 拍无活动 → lane.stalled 事件，停止追问
   scanIntervalMinutes: 1,         // watchdog 扫描间隔（index.js 挂载 setInterval 用）
   probeTemplate: null,            // 追问模板（可选覆写；缺省用内置 ≤5 句模板，支持 {lane}/{batchId}/{missed} 占位）
@@ -134,8 +134,8 @@ export function resolveWatchConfig(config) {
   };
 }
 
-// ── capabilities.verify：C3 验收证据（lib/verify/evidence.js + lib/verify/gate.js，批次 4 接线对象）──
-// 全能力发布决策：enabled=true（默认）捕获 hook 挂载；
+// ── capabilities.verify：验收证据（lib/verify/evidence.js + lib/verify/gate.js）──
+// enabled=true（默认）捕获 hook 挂载；
 //   mode=advisory（默认）只记录不拦截；mode=enforce 显式启用则审计裁决拦截（createCompletionGate 读本键）
 export const VERIFY_DEFAULTS = Object.freeze({
   enabled: true,
@@ -150,7 +150,7 @@ export function resolveVerifyConfig(config) {
   };
 }
 
-// ── capabilities.discovery：P5 发现服务（lib/discovery/service.js，本 lane 归主）──
+// ── capabilities.discovery：发现服务（lib/discovery/service.js）──
 // ADP（Agent Discovery Protocol）统一 POST /discover + /.well-known/aip 预置；
 //   enabled=true（默认）：webServer 存在时挂载发现服务（消费 tool catalog + agent-descriptor 目录）；
 //   nodes：节点级 active 覆写——{ <aic|name>: { active: false } } 时该节点不出现在查询结果（默认 active=true）。
@@ -167,11 +167,11 @@ export function resolveDiscoveryConfig(config) {
   };
 }
 
-// ── acps.discovery：P3 DS1 外部 ADP 发现客户端（lib/acps/discovery-client.js，本 lane 归主）──
+// ── acps.discovery：外部 ADP 发现客户端（lib/acps/discovery-client.js）──
 // 插件 Leader 经外部 discovery-server 发现 partner（POST {baseUrl}/discover）；
-// 默认关（U-D2 决策：对外能力显式开启）——enabled=false 不创建客户端实例，零运行时路径。
-//   baseUrl：外部 discovery-server 根地址（空 = 未配置，discover 调用抛错 mirror 参考实现 is_configured）
-//   timeout/limit：单次请求超时 ms（默认 10000）与默认返回上限（默认 5，对齐参考实现 discovery config）
+// 默认关（对外能力显式开启）——enabled=false 不创建客户端实例，零运行时路径。
+//   baseUrl：外部 discovery-server 根地址（空 = 未配置，discover 调用抛错）
+//   timeout/limit：单次请求超时 ms（默认 10000）与默认返回上限（默认 5）
 //   scope：查询范围 local（仅既有本地目录）/ external（仅外部）/ both（本地+外部合并）
 export const ACPS_DISCOVERY_DEFAULTS = Object.freeze({
   enabled: false,
@@ -197,13 +197,13 @@ export function resolveAcpsDiscoveryConfig(config) {
   };
 }
 
-// ── config.acps.bridge：P2 内部 ACPs 桥接（lib/comms/acps-bridge.js，G1 进程内双向）──
-// 决策（施工契约 aip-acps-comm-build plan/spec.md §2.2/§三）：D5=G1 进程内双向、D6=默认关、D7=config 短路零开销、
-// D14=inbound 默认关。桥只经 mailbox.js 公共接口投递/投影，绝不绕过；enabled=false 时不加载不实例化（零路径）。
+// ── config.acps.bridge：内部 ACPs 桥接（lib/comms/acps-bridge.js，进程内双向）──
+// 桥只经 mailbox.js 公共接口投递/投影，绝不绕过；enabled=false 时不加载不实例化（零路径）。
+// inbound 默认关：外部 ACPs 消息写 mailbox 需显式开启。
 export const BRIDGE_DEFAULTS = Object.freeze({
   enabled: false,
-  mode: 'inprocess', // G1 进程内双向（D5 拍板；G2 本机 HTTP 桥不实现）
-  inbound: false,    // inbound 默认关（D14）：外部 ACPs 消息写 mailbox 需显式开启
+  mode: 'inprocess', // 进程内双向（本机 HTTP 桥不实现）
+  inbound: false,    // inbound 默认关：外部 ACPs 消息写 mailbox 需显式开启
 });
 
 export function resolveBridgeConfig(config) {
@@ -215,28 +215,28 @@ export function resolveBridgeConfig(config) {
   };
 }
 
-// ── config.acps：ACPs 通讯能力（P1 lane exec-acps-server，施工契约 aip-acps-comm-build §〇/§2.1）──
-// 默认关（U-D2：acps.enabled 与 acps.endpoint.enabled 均默认 false——显式开启才加载监听，关闭时零运行时路径）。
+// ── config.acps：ACPs 通讯能力 ──
+// 默认关（acps.enabled 与 acps.endpoint.enabled 均默认 false——显式开启才加载监听，关闭时零运行时路径）。
 //   endpoint：对外 mTLS 服务端点（lib/acps/server.js）——
-//     port 9443（D1，避开参考实现 9001-9021 段）；host 默认 127.0.0.1（config 可配）；
-//     cert/key/ca：D3=C1 三路径（null=自动生成到 certDir，默认 <root>/acps/certs）；aic：ACS 身份码
-//     （缺省=agent-descriptor 派生占位，V3 注册后经 config 覆盖）；minVersion TLSv1.3（D12）；
-//     devInsecure：D4 E2 显式开发开关（默认 false，生产 E1 不允许降级）。
+//     port 9443；host 默认 127.0.0.1（config 可配）；
+//     cert/key/ca：三路径（null=自动生成到 certDir，默认 <root>/acps/certs）；aic：ACS 身份码
+//     （缺省=agent-descriptor 派生占位，注册后经 config 覆盖）；minVersion TLSv1.3；
+//     devInsecure：显式开发开关（默认 false，生产不允许降级）。
 // 消费方：lib/index.js 装配（enabled 双真才实例化 createAcpsServer）；lib/assembly/schema.js CAPABILITY_REGISTRY。
 export const ACPS_DEFAULTS = Object.freeze({
-  enabled: false,               // 能力总开关（默认关——U-D2）
+  enabled: false,               // 能力总开关（默认关）
   endpoint: {
-    enabled: false,             // 对外端点开关（默认关——U-D2）
-    port: 9443,                 // D1
+    enabled: false,             // 对外端点开关（默认关）
+    port: 9443,                 // 对外监听端口
     host: '127.0.0.1',
-    cert: null,                 // D3=C1 三路径（null=自动生成 certDir）
+    cert: null,                 // 三路径（null=自动生成 certDir）
     key: null,
     ca: null,
     certDir: null,              // 缺省 <root>/acps/certs（index.js 注入 root）
     aic: null,                  // ACS aic（缺省=agent-descriptor 派生占位）
     agentName: 'dsh-punky-swarm',
-    minVersion: 'TLSv1.3',      // D12
-    devInsecure: false,         // D4 E2（默认关）
+    minVersion: 'TLSv1.3',      // TLS 最低版本
+    devInsecure: false,         // 开发模式开关（默认关）
   },
 });
 
@@ -261,8 +261,8 @@ export function resolveAcpsConfig(config) {
   };
 }
 
-// ── config.ratchet：P1-7 棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
-// 对齐 aip.enabled / capabilities.watch 先例注释风格；消费方 lib/state/machine-rules.js（loadRules）：
+// ── config.ratchet：棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
+// 消费方 lib/state/machine-rules.js（loadRules）：
 //   { ratchet: { memberRules?: { from: [to...] }, batchRules?: { from: [to...] }, allowRelax?: false } }
 // 棘轮语义：配置覆盖只许删（收紧）不许增（放宽）——覆盖表出现本文件默认表不存在的迁移 → loadRules throw（fail-closed）；
-//   allowRelax: true 为显式逃生门（默认 false，仅在部署侧明确授权时可用，决策包不推荐）。
+//   allowRelax: true 为显式逃生门（默认 false，仅在部署侧明确授权时可用，不推荐）。
