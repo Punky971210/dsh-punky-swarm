@@ -132,12 +132,12 @@ dsh web restart
 - **工具 6 属性**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
 - **智能体 14+8 属性**：装配配置 → 每角色国标描述（agentId / capabilities / skills 8 项等），供 AIP 协议发现；
 - **消息/任务/会话映射**：mailbox 消息、wavePlan 任务、批次状态 → 国标结构（纯映射只读不改存储，ackId 原子写保留）；
-- **身份体系**（默认关，`aip.identity.enabled=true` 激活）：AIC 身份码（OID 前缀 `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256 / RSA-2048）+ 信任链验证；SM2 暂缓标注（参考实现无证据，待正式文本校准）；
+- **身份体系**（默认关，`aip.identity.enabled=true` 激活）：AIC 身份码（OID 前缀 `1.2.156.3088` + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256 / RSA-2048）+ 信任链验证；SM2 暂不支持（签名接口可插拔，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝）；
 - **装配开关**：`aip.enabled`（默认开启）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）。
 
 ## ACPs 通讯方式（默认关）
 
-ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务端点（P1）+ 内部 mailbox↔ACPs 桥接（P2）+ registry 半自动注册与外部 ADP 发现对接（P3）。**全部默认关**（U-D2 安全默认）——`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，显式开启才加载监听/客户端，关闭时零运行时路径（无监听、无定时器、无网络）。
+ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务端点（P1）+ 内部 mailbox↔ACPs 桥接（P2）+ registry 半自动注册与外部 ADP 发现对接（P3）。**全部默认关**（安全默认）——`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，显式开启才加载监听/客户端，关闭时零运行时路径（无监听、无定时器、无网络）。
 
 ### 能力总览
 
@@ -145,12 +145,12 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 |---|---|---|---|
 | 对外 mTLS 端点 | `acps.enabled` + `acps.endpoint.enabled` | 关 | 对外提供 AIP JSON-RPC / ACS / 健康检查（TLSv1.3 + 双向证书） |
 | 内部桥接 | `acps.bridge` | 关（inbound 再子门控关） | mailbox ↔ ACPs 消息进程内双向投影/投递 |
-| registry 注册 | `acps.registry` | 关 | R1 半自动注册客户端（需 registry.url + 用户凭据） |
-| discovery 发现 | `acps.discovery` | 关 | DS1 外部 ADP 发现客户端（POST /discover） |
+| registry 注册 | `acps.registry` | 关 | 半自动注册客户端（需 registry.url + 用户凭据） |
+| discovery 发现 | `acps.discovery` | 关 | 外部 ADP 发现客户端（POST /discover） |
 
 ### 对外 mTLS 服务端点（P1）
 
-独立 HTTPS 监听器（node:https + node:tls 原生，零新依赖），默认端口 `9443`（`acps.endpoint.port`，避开参考实现 9001-9021 段）、host 默认 `127.0.0.1`；TLSv1.3（`minVersion` 默认，可配 TLSv1.2）+ 双向证书（`requestCert` + `rejectUnauthorized` = CERT_REQUIRED）；`devInsecure` 仅显式开发开关（默认 `false`，生产不允许降级）。装配条件：`acps.enabled` 与 `acps.endpoint.enabled` **双真**；证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
+独立 HTTPS 监听器（node:https + node:tls 原生，零新依赖），默认端口 `9443`（`acps.endpoint.port` 可配）、host 默认 `127.0.0.1`；TLSv1.3（`minVersion` 默认，可配 TLSv1.2）+ 双向证书（`requestCert` + `rejectUnauthorized` = CERT_REQUIRED）；`devInsecure` 仅显式开发开关（默认 `false`，生产不允许降级）。装配条件：`acps.enabled` 与 `acps.endpoint.enabled` **双真**；证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
@@ -162,22 +162,22 @@ ACPs（Agent Communication Protocol Standard）通讯能力：对外 mTLS 服务
 
 ### 内部桥接（P2）
 
-`acps.bridge`（G1 进程内双向，默认关；mode=`inprocess`）：
+`acps.bridge`（进程内双向，默认关；mode=`inprocess`）：
 - **inbound**（默认关，`acps.bridge.inbound=true` 显式开启）：外部 ACPs TaskCommand → mailbox 消息，**经 lib/comms/mailbox.js 公共接口原子写 inbox（ackId 由 mailbox 生成，绝不绕过、无旁路写）**；写入目标仅 inbox（按 mentions/groupId 推导 lane 进 meta），outbox 不可外部直接写，broadcast 外部投递不支持；
 - **outbound**：mailbox 消息 → ACPs Message/TaskResult（复用 aip-format 三映射），只投影/投递视图，不反写 mailbox 存储；
-- **/rpc→bridge 接线（DEF-V6-1）**：`POST /acps/rpc` 收到的 TaskCommand 经 `handleInbound` 落 mailbox；`bridge.inbound=false` 时协议级 `rejected`（INBOUND_DISABLED，HTTP 200 返回——传输成功、协议层拒绝）；bridge 未装配时回 P1 独立 accepted（向后兼容）；
+- **/rpc→bridge 接线**：`POST /acps/rpc` 收到的 TaskCommand 经 `handleInbound` 落 mailbox；`bridge.inbound=false` 时协议级 `rejected`（INBOUND_DISABLED，HTTP 200 返回——传输成功、协议层拒绝）；bridge 未装配时回 P1 独立 accepted（向后兼容）；
 - **mailbox 红线保留**：ackId 原子写、三 box（inbox/outbox/broadcast）、lane 隔离语义逐字保留；
-- **零路径（D7）**：`enabled=false` 时不加载不实例化（mountBridge 返回 null）。
+- **零路径**：`enabled=false` 时不加载不实例化（mountBridge 返回 null）。
 
 ### registry / discovery 对接（P3，默认关）
 
-- **registry**（`acps.registry`，R1 半自动注册客户端）：需 `registry.url` + 用户凭据（username/password 或 token，config/env 注入，不硬编码不落仓库）；流程 login → upsertAgent → submitAgent（**人工审批，不自动化跳过**）→ requestEab → queryAcs；EAB macKey **AES-256-GCM 加密存证**（D13，标注与参考实现 SM4-CBC 存储差异；`eabKey` 未配置时仅返回明文凭据由调用方自存）；
-- **discovery**（`acps.discovery`，DS1 ADP 客户端）：POST `{baseUrl}/discover` 查询外部 Agent（type 四类 / 34 运算符，与本地 discovery 共享协议常量）；`scope` = local（仅本地既有目录）/ external（仅外部）/ both（本地+外部合并，acsMap 外部优先）；timeout 默认 10s、limit 默认 5。
+- **registry**（`acps.registry`，半自动注册客户端）：需 `registry.url` + 用户凭据（username/password 或 token，config/env 注入，不硬编码不落仓库）；流程 login → upsertAgent → submitAgent（**人工审批，不自动化跳过**）→ requestEab → queryAcs；EAB macKey **AES-256-GCM 加密存证**（`eabKey` 未配置时仅返回明文凭据由调用方自存）；
+- **discovery**（`acps.discovery`，ADP 客户端）：POST `{baseUrl}/discover` 查询外部 Agent（type 四类 / 34 运算符，与本地 discovery 共享协议常量）；`scope` = local（仅本地既有目录）/ external（仅外部）/ both（本地+外部合并，acsMap 外部优先）；timeout 默认 10s、limit 默认 5。
 
 ### 配置示例
 
 ```yaml
-# ACPs 通讯能力（全部默认关，U-D2 安全默认）
+# ACPs 通讯能力（全部默认关，安全默认）
 acps:
   enabled: true                # 能力总开关
   endpoint:
@@ -188,16 +188,16 @@ acps:
     minVersion: TLSv1.3        # 默认 TLSv1.3（可 TLSv1.2）
     devInsecure: false         # 仅显式开发；生产不允许降级
   bridge:
-    enabled: false             # 内部桥（G1 进程内双向）
-    inbound: false             # 外部写 mailbox 需显式 true（D14）
+    enabled: false             # 内部桥（进程内双向）
+    inbound: false             # 外部写 mailbox 需显式 true
   registry:
-    enabled: false             # R1 半自动注册
+    enabled: false             # 半自动注册
     url: null                  # registry public API 基址（必需）
     username: null             # config/env 注入，不硬编码
     password: null
     eabKey: null               # EAB macKey 加密存证密钥（AES-256-GCM）
   discovery:
-    enabled: false             # DS1 外部 ADP 发现客户端
+    enabled: false             # 外部 ADP 发现客户端
     baseUrl: ''                # 外部 discovery-server 根地址
     scope: local               # local / external / both
     timeout: 10000             # 默认 10s
@@ -206,17 +206,17 @@ acps:
 
 ### 与既有 AIP 能力的关系
 
-- 既有端点（`GET /api/dsh-punky-swarm/tools`、`GET /api/dsh-punky-swarm/agents`、`POST /api/dsh-punky-swarm/discover`、`GET /.well-known/aip`）**一字不动**——ACPs 对外独立 9443 监听 + `/acps/*` 前缀（D8 F-1），路径零冲突；
-- 既有本地发现（`capabilities.discovery`，默认开）为进程内查询通道；`acps.discovery` 为外部查询通道（DS1），`scope=both` 时合并两通道结果；
+- 既有端点（`GET /api/dsh-punky-swarm/tools`、`GET /api/dsh-punky-swarm/agents`、`POST /api/dsh-punky-swarm/discover`、`GET /.well-known/aip`）**一字不动**——ACPs 对外独立 9443 监听 + `/acps/*` 前缀，路径零冲突；
+- 既有本地发现（`capabilities.discovery`，默认开）为进程内查询通道；`acps.discovery` 为外部查询通道，`scope=both` 时合并两通道结果；
 - ACPs 通讯复用的既有资产：`aip-format` 三映射（Message/TaskCommand/Session）、`lib/aip/identity.js`（AIC 校验/证书）、`lib/discovery/schema.js`（协议常量与校验）；
 - 与 `aip.identity`（默认关）同属默认关能力；CAPABILITY_REGISTRY 现 9 键（aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps）。
 
-### 未实现 / 暂缓（如实标注）
+### 能力边界（未实现）
 
-- **P4 工具调用**：待正式文本校准（参考实现无国标化映射定义），不宣称已实现；
-- **SM2 签名**：参考实现 v2.1.0 无 SM2 证据——sign 为可插拔接口，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝并提示待校准；
-- **DS3 mini-ADSP**：对外 `/discover` 服务端语义仅预留函数签名（createMiniAdsp），未实现；
-- **V2/V4 真实互通**：与参考实现 ACPs-community 的真实互通验证待 demo 环境（LLM 凭据 / Windows xattr），当前以源码对齐 + 单测为准。
+- **P4 工具调用**：未实现（待国标正式文本定义），不宣称已实现；
+- **SM2 签名**：暂不支持——sign 为可插拔接口，默认 ECDSA-P256 / RSA-2048，`algorithm='sm2'` 显式拒绝；
+- **mini-ADSP**：对外 `/discover` 服务端语义仅预留函数签名（createMiniAdsp），未实现；
+- **V2/V4 真实互通**：未验证（与参考实现 ACPs-community 的互通以源码对齐 + 单测为准）。
 
 ## 治理能力
 
