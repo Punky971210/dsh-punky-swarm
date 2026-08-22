@@ -127,7 +127,7 @@ Grouped by function:
 
 ## GB AIP Compatibility
 
-GB/Z 185-2026 (AI Agent Interconnection) agent-interconnection compatibility — additive only, pluggable (field names follow the reference implementation ACPs-community v2.1.0 verbatim):
+GB/Z 185-2026 (AI Agent Interconnection) agent-interconnection compatibility — additive only, pluggable (field names follow ACPs-community v2.1.0):
 
 - **Tool 6 attributes (GB/Z 185.7-2026 Part 7: Agent Tool Calling)**: toolId / name / description / version / inputParam / outputParam per tool (toolId = `dsh.punky-swarm.<name>`; inputParam/outputParam are JSON Schema with required always present);
 - **Agent descriptor (GB/Z 185.4-2026 Part 4: Agent Description; ACS field set)**: assembly config → per-role ACS AgentCapabilitySpec (root 20 keys = 14 required: aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills; 6 optional: iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate; AgentSkill 8 keys = 5 required: id / name / description / version / tags, 3 optional: examples / inputModes / outputModes; protocol 02.01);
