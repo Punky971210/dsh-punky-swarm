@@ -26,13 +26,17 @@ import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig } from './schema.js';
 import { validateCapabilities } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
+import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
 import { mountVerify } from './verify/mount.js';
+import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
+import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
+import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
 
 export const name = 'dsh-punky-swarm';
@@ -126,7 +130,26 @@ export const apply = (ctx, config = {}) => {
       discovery = createDiscoveryService({ catalog: tools.catalog, agentDescriptors, config: discoveryCfg });
       ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
     }
-    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery }).dispose;
+
+    // P3 DS1 外部 ADP 发现客户端（acps.discovery，默认关——U-D2 显式开启）：
+    // 装配在 webServer 域（与本地 discovery service 同域，scope=local/both 依赖其实例）；
+    // enabled=false 不创建实例，零运行时路径（无网络/定时器）。消费方：经 api 上下文 acpsDiscovery 取用
+    // （demo-test V2 / 后续工具 lane）；DS3 mini-ADSP 仅预留签名（createMiniAdsp），P1 endpoint lane 就绪前不实现。
+    const acpsDiscoveryCfg = resolveAcpsDiscoveryConfig(config);
+    let acpsDiscoveryClient = null;
+    if (acpsDiscoveryCfg.enabled) {
+      acpsDiscoveryClient = createAcpsDiscoveryClient({
+        baseUrl: acpsDiscoveryCfg.baseUrl,
+        timeout: acpsDiscoveryCfg.timeout,
+        limit: acpsDiscoveryCfg.limit,
+        scope: acpsDiscoveryCfg.scope,
+        localService: discovery,
+      });
+      ctx.logger?.info?.('[dsh-punky-swarm] acps discovery client enabled: scope=' + acpsDiscoveryCfg.scope
+        + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover, DS1)');
+    }
+
+    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient }).dispose;
   }
 
   // C5 诊断桥接（trajectory，决策包 §5）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
@@ -137,6 +160,66 @@ export const apply = (ctx, config = {}) => {
     const st = trajectory.start();
     if (st.subscribed) {
       ctx.logger?.info?.('[dsh-punky-swarm] trajectory bridge subscribed (autoFail=' + (config?.capabilities?.trajectory?.autoFail === true) + ')');
+    }
+  }
+
+  // C6 内部 ACPs 桥接（config.acps.bridge，D6 默认关）：enabled=false 时 mountBridge 短路返回 null——
+  // 不实例化、零运行时路径（D7 config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关（D14）：
+  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递归 P1 endpoint lane（exec-acps-server）。
+  const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
+  if (bridge) {
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: G1 in-process bridge mounted (inbound='
+      + (config?.acps?.bridge?.inbound === true) + ')');
+  }
+
+  // C7 P3 R1 半自动注册客户端（config.acps.registry，exec-registry lane）：默认关——enabled=true 且
+  // registry.url 配置时创建 RegistryClient 实例（能力装配，不自动发起注册——V3 人工审核不自动化
+  // 跳过，注册动作由用户经脚本/工具显式触发：login→upsert→submit→人工审批→requestEab）。
+  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径（U-D2 语义）。
+  const registryCfg = resolveRegistryConfig(config);
+  const registryClient = registryCfg.enabled ? createRegistryClient(registryCfg) : null;
+  if (registryCfg.enabled && !registryClient) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] acps.registry: ' + (registryCfg.reason ?? 'unable to create client'));
+  } else if (registryClient) {
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: R1 semi-automatic registration client ready ('
+      + registryCfg.apiBaseUrl + ')');
+  }
+
+  // ACPs 对外 mTLS 服务端点（P1 lane exec-acps-server）：acps.enabled && acps.endpoint.enabled 双真才装配——
+  // 默认双关 = 零加载零监听零定时器（U-D2 config 短路，红线：关闭时无运行时路径）。
+  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程（施工契约红线）。
+  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀（D8 F-1），/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
+  const acpsCfg = resolveAcpsConfig(config);
+  let acpsEndpoint = null;
+  if (acpsCfg.enabled && acpsCfg.endpoint?.enabled) {
+    try {
+      const endpointCfg = {
+        ...acpsCfg,
+        endpoint: {
+          ...acpsCfg.endpoint,
+          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // D3 默认数据目录（引擎根内）
+        },
+      };
+      // DEF-V6-1：/acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
+      // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
+      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回 P1 独立 accepted（向后兼容）。
+      const rpcHandler = bridge ? createEndpointRpcHandler(bridge, { logger: ctx.logger }) : undefined;
+      acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
+      if (acpsEndpoint.error) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] ' + acpsEndpoint.error + '（acps endpoint 保持禁用）');
+        acpsEndpoint = null;
+      } else {
+        acpsEndpoint.listen().then((addr) => {
+          ctx.logger?.info?.('[dsh-punky-swarm] acps endpoint enabled: mTLS listener https://' + addr.address + ':' + addr.port
+            + ' (TLSv1.3 + CERT_REQUIRED, devInsecure=' + endpointCfg.endpoint.devInsecure + ')');
+        }).catch((e) => {
+          ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint listen failed: ' + String(e) + '（保持禁用）');
+          acpsEndpoint = null;
+        });
+      }
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint disabled: ' + String(e.message));
+      acpsEndpoint = null;
     }
   }
 
@@ -154,5 +237,6 @@ export const apply = (ctx, config = {}) => {
     apiDispose?.();
     trajectory?.stop();
     verifyMount?.dispose();
+    if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };
