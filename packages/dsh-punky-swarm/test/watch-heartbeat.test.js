@@ -103,7 +103,7 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
 });
 
 // ---- W3：活动信号重置——产物 mtime / outbox / events 任一更新 → missed 归零、档位回 tier0 ----
-test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动拍不触发追问', () => {
+test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动拍不触发追问', async () => {
   const { root, store, S, batchId, lane } = setup();
   const engine = hb(store, root, FAST);
   engine.tick();
@@ -113,6 +113,9 @@ test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动
   const out = path.join(store.artifactsDirOf(S, batchId), 'exec', 'l1', 'out.txt');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, 'progress-v1');
+  // A1：同毫秒窗口规避——文件系统 mtime 记账可能 ≤ lastSeenTs（本地实证 6.4% 同毫秒/更早），
+  // 推进 2ms 使 mtime 确定性 > lastSeenTs（严格大于判定恒成立），消除 CI 偶发 missed 误增
+  await new Promise((r) => setTimeout(r, 2));
   engine.tick(); // 活动拍：只重置，不追问
   let st = engine.status(LANE_KEY);
   assert.equal(st.missed, 0, 'W3: missedCount 归零');
@@ -132,12 +135,15 @@ test('W3b：outbox 出现未 ack 消息 → 重置（活动信号 ②）', () =>
   assert.equal(engine.status(LANE_KEY).stalled, false);
 });
 
-test('W3c：batch.events 本 lane 事件更新 → 重置（活动信号 ①）', () => {
+test('W3c：batch.events 本 lane 事件更新 → 重置（活动信号 ①）', async () => {
   const { root, store, S, batchId, lane } = setup();
   const engine = hb(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
   store.appendEvent(S, batchId, 'gate.passed', { lane });
+  // A1：同毫秒窗口规避——事件 ts 为 ISO 毫秒精度，可能与 lastSeenTs 同毫秒致严格大于不成立，
+  // 推进 2ms 使事件 ts 确定性 > lastSeenTs，消除 CI 偶发 missed 误增
+  await new Promise((r) => setTimeout(r, 2));
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 0);
   // lane.stalled 为引擎自写事件，不视为活动（防自重置）
