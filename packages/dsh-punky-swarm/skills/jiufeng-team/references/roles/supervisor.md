@@ -14,6 +14,6 @@ CBM 全量验收+gap-list 对账→门禁。只读验收，输出 gap-list 供 L
 
 ## 协作方式（dsh 语义）
 - 派发：Leader 经 member_status 置 running → subagent 派发（任务包=wavePlan lane，含角色/目标/契约/验收）
-- 回执：完成经 subagent report 回传（简短结构化，产物落盘，不复制正文）
+- 回执：双通道——report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执，含产物落盘路径）；Manager 据此调度裁决
 - 门禁：review 阶段 Leader 按门禁裁决 merged/conflict；返工=review→running 保留；人审门禁：全额通过自动放行/3 次打回→Leader
 - 交互：不主动上报空闲（dsh 无空闲上报协议）；跨轮信息走产物+mailbox 元数据
