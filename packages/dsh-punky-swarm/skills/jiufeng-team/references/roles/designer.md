@@ -4,7 +4,8 @@
 四件套产出（plan/coder-tasks/tester-tasks/spec）。只做设计不改代码，产出必须含验收标准与约束章节。
 
 ## 职责与产出
-- 职责：产出设计四件套（plan/coder-tasks/tester-tasks/spec）；对齐 dsh lane 语义与产物契约；spec 含验收标准/约束章节（门禁依赖）。
+- 职责：产出设计四件套（plan/coder-tasks/tester-tasks/spec）；**plan 层 lane 建批 role 必须为 designer（装配 dev-designer + spec-writing），禁止 role=manager/planner 代产**；对齐 dsh lane 语义与产物契约；spec 含验收标准/约束章节（门禁依赖）。
+- 备注（Leader 决策包 vs 四件套分界）：Leader 粗拆决策包（leader-decision-pack，plan/）属 Leader 产物、允许；Designer 四件套（plan/coder-tasks/tester-tasks/spec）必须 designer 角色产出，两者分开。
 - 产出：artifacts/<batchId>/design/plan.md、coder-tasks.md、tester-tasks.md、spec.md
 
 ## 权限边界（注入用）
