@@ -113,9 +113,11 @@ test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动
   const out = path.join(store.artifactsDirOf(S, batchId), 'exec', 'l1', 'out.txt');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, 'progress-v1');
-  // A1：同毫秒窗口规避——文件系统 mtime 记账可能 ≤ lastSeenTs（本地实证 6.4% 同毫秒/更早），
-  // 推进 2ms 使 mtime 确定性 > lastSeenTs（严格大于判定恒成立），消除 CI 偶发 missed 误增
-  await new Promise((r) => setTimeout(r, 2));
+  // 确定性修复：文件系统 mtime 记账与进程 Date.now() 不同源，可能 ≤ lastSeenTs（本地实证
+  // 23% 轮次 mtime ≤ writeFileSync 时刻），引擎用严格大于判定导致活动漏判。显式 utimesSync
+  // 推进 mtime 至确定未来值，消除同毫秒竞态（300 轮实验 0 失败，mtime 恒 > lastSeenTs）。
+  const future = new Date(Date.now() + 5_000);
+  fs.utimesSync(out, future, future);
   engine.tick(); // 活动拍：只重置，不追问
   let st = engine.status(LANE_KEY);
   assert.equal(st.missed, 0, 'W3: missedCount 归零');
@@ -140,10 +142,10 @@ test('W3c：batch.events 本 lane 事件更新 → 重置（活动信号 ①）'
   const engine = hb(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
+  // 事件 ts 由 store 在 appendEvent 时生成（进程时钟），与 lastSeenTs 同源同精度；竞态点在
+  // 「事件 ts 与 lastSeenTs 同毫秒」，须在事件产生前推进时钟（等待在 appendEvent 之后无效）。
+  await new Promise((r) => setTimeout(r, 10));
   store.appendEvent(S, batchId, 'gate.passed', { lane });
-  // A1：同毫秒窗口规避——事件 ts 为 ISO 毫秒精度，可能与 lastSeenTs 同毫秒致严格大于不成立，
-  // 推进 2ms 使事件 ts 确定性 > lastSeenTs，消除 CI 偶发 missed 误增
-  await new Promise((r) => setTimeout(r, 2));
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 0);
   // lane.stalled 为引擎自写事件，不视为活动（防自重置）
