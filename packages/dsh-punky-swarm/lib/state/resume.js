@@ -146,6 +146,33 @@ export function laneProgressClear(batch, lane) {
   return { ...batch, laneProgress: Object.keys(lp).length ? lp : undefined };
 }
 
+// ── 步数预算（超限判定，纯函数；接线在 lane-tools.js lane_checkpoint，B 子项）──
+// 设计：任务建批时声明 checkpoint:{steps}（总步数预算，wave-plan.js normalizeResumeContract
+//   校验正整数或 null 后透传进 wavePlan）；lane_checkpoint 携带 progress 时判定
+//   progress.total > checkpoint.steps → 超限。判定只发信号不硬杀：接线层命中且事件流无该 lane
+//   的 lane.over-budget → appendEvent（幂等），转 review/stalled 由 Manager/Leader 裁决。
+// 返回 { over, budget }：budget = 任务声明的步数上限（未声明 = null）；over = total 是否超限。
+//   B-不变量：未声明 checkpoint.steps（budget=null）零感知——任意 progress 返回 { over:false, budget:null }。
+// 任务定位遍历语义与 store.findTask / machine.findTask 一致：wavePlan[].tasks 按 id 匹配。
+export function overBudgetOf(batch, lane, progress) {
+  let task = null;
+  for (const w of batch?.wavePlan ?? []) {
+    for (const t of w.tasks) if (t.id === lane) { task = t; break; }
+    if (task) break;
+  }
+  const budget = task?.checkpoint?.steps ?? null;
+  if (budget === null) return { over: false, budget: null }; // 未声明 → 零感知
+  const total = progress?.total;
+  if (Number.isInteger(total) && total > budget) return { over: true, budget };
+  return { over: false, budget };
+}
+
+// B-幂等判据：事件流已存在该 lane 的 lane.over-budget → true（接线层据此避免重复 appendEvent；
+//   同 lane 超限事件只发一次，重复 progress 调用不重复发）
+export function hasOverBudgetEvent(batch, lane) {
+  return (batch?.events ?? []).some((e) => e.type === 'lane.over-budget' && e.lane === lane);
+}
+
 // ── worker 任务包契约断点续跑（骨架，增强恢复落地后填充）──
 // 返回任务包 resume 章节占位：B 完成后由装配层（worker 角色手册）按
 //   config.resume.enabled && capabilities.worktree.enabled 置 enabled=true 并注入派发提示词。

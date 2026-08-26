@@ -237,12 +237,13 @@ test('T2.5 create schema 修正：output.schema 含 error 字段；git 不可用
   }
 });
 
-test('T2.6 回归护栏：lane-tools.js 逻辑行数净增 ≤10（基线 438 → ≤448，AGPL 头行豁免）', () => {
+test('T2.6 回归护栏：lane-tools.js 逻辑行数净增 ≤10（基线 447 → ≤457，AGPL 头行豁免）', () => {
   const src = fs.readFileSync(fileURLToPath(new URL('../lib/tools/lane-tools.js', import.meta.url)), 'utf8');
   // AGPL 头为发布合规强制（+17 行），护栏意图是防逻辑膨胀——统计剔除头部 /* */ 注释块后的逻辑行数
   // \r?\n 兼容 CRLF checkout（autocrlf=true 工作树中 AGPL 头以 \r\n 结尾，旧正则 /…\*\/\n/ 失配导致误报）；
-  // 基线复核：LF git blob 口径 447（strip 后 split 含尾部空串），CRLF 修复后同值 447 ≤ 448 通过
+  // 基线复核：B 步数预算接线授权净增（lane_checkpoint 超限检测 + lane.over-budget appendEvent，+8）后
+  //   基线 447 → 455；护栏按「基线 + ≤10」同步为 ≤457（净增语义不变，防后续逻辑膨胀）
   const stripped = src.replace(/^\/\*[\s\S]*?\*\/\r?\n/, '');
   const lines = stripped.split('\n').length; // 与基线同口径（split 含尾部空串）
-  assert.ok(lines <= 448, 'lane-tools.js 逻辑行数=' + lines + '（基线 439 split 口径 + ≤10）');
+  assert.ok(lines <= 457, 'lane-tools.js 逻辑行数=' + lines + '（基线 447 split 口径 + ≤10）');
 });

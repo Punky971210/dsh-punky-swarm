@@ -26,6 +26,7 @@ import { BATCH_SCHEMA_V3, migrateV2toV3, chainsDefaults, conditionDefaults } fro
 import * as machine from './machine.js';
 import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
+import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单（v2-node-robustness ②）
 
 const STORE_SCHEMA = BATCH_SCHEMA_V3;
 const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
@@ -38,10 +39,30 @@ function atomicWrite(file, data) {
   fs.renameSync(tmp, file); // Windows: MoveFileEx REPLACE_EXISTING
 }
 
-export function createStore(root, { rules } = {}) {
+// C 子项：连续失败升级（spec C）——计数纯函数（顶层导出，供单测）：
+// 从事件流末尾向前扫描，统计连续 member.settled 且 to === 'failed' 的事件数（含本次刚 push 的结算）；
+// 遇 member.settled 但 to !== 'failed'（merged/conflict/skipped/review/running 等）即停止（归零语义 C-计数）；
+// 非 member.settled 事件（worktree.checkpoint / batch.phase / gate.* 等）不打断计数。
+export function countConsecutiveFailedSettles(events) {
+  const evs = events ?? [];
+  let count = 0;
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const e = evs[i];
+    if (!e || e.type !== 'member.settled') continue;
+    if (e.to === 'failed') count++;
+    else break;
+  }
+  return count;
+}
+
+export function createStore(root, { rules, logger } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   const gates = createGates(root);
+  // 损坏批次旁路清单（②，D-001）：与 governance.json 同层；批次 JSON 结构零变更
+  const corruptRegistry = createCorruptRegistry(root);
+  // 留痕日志（可选注入；缺省 console——与 index.js ctx.logger 解耦，保持 createStore 既有调用点零改动）
+  const log = logger ?? console;
   // 棘轮规则表（createStore(root, { rules }) 可选注入 loadRules 产物；未注入 = 默认规则 = schema 常量同引用，行为不变）
   const ratchet = rules ?? loadRules();
   // 归档器装配（createStore 签名不变；归档目标 = <root>/sessions/<sid>/archive/<bid>/）
@@ -114,10 +135,37 @@ export function createStore(root, { rules } = {}) {
     return batch;
   }
 
-  function readBatch(sessionId, batchId) {
+  // 三态读取基础函数（readBatch 的语义来源，纯读取无副作用）：
+  //   { status:'ok', batch } | { status:'missing' } | { status:'corrupt', error }
+  function readBatchResult(sessionId, batchId) {
     const file = batchFile(sessionId, batchId);
-    if (!fs.existsSync(file)) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!fs.existsSync(file)) return { status: 'missing' };
+    try {
+      return { status: 'ok', batch: JSON.parse(fs.readFileSync(file, 'utf8')) };
+    } catch (err) {
+      return { status: 'corrupt', error: err };
+    }
+  }
+
+  function readBatch(sessionId, batchId) {
+    const res = readBatchResult(sessionId, batchId);
+    if (res.status === 'corrupt') {
+      // 损坏隔离（②，P0，D-001）：幂等登记旁路清单；仅首次登记时 warn 留痕（INV-2 不重复刷日志）；
+      // 损坏与不存在共用 null 返回值——需区分语义的调用方走 isCorrupt() 二次查询
+      const r = corruptRegistry.markBatchCorrupt(sessionId, batchId, res.error);
+      if (r.first) {
+        log.warn?.('[dsh-punky-swarm] corrupt batch isolated: ' + sessionId + '/' + batchId
+          + ' (' + ((res.error && res.error.message) || res.error) + ')；已登记 corrupt-batches.json，'
+          + '修复/删除文件后经 clearCorruptMark 清除标记');
+      }
+      return null;
+    }
+    return res.batch; // ok → batch；missing → undefined（调用点按 null 语义处理）
+  }
+
+  // 区分「损坏」与「不存在」（readBatch 两者均返回 null）
+  function isCorrupt(sessionId, batchId) {
+    return corruptRegistry.isCorrupt(sessionId, batchId);
   }
 
   function listBatches(sessionId) {
@@ -184,6 +232,43 @@ export function createStore(root, { rules } = {}) {
         throw new Error(g.code + ': ' + (g.problems ?? g.missing).join(', '));
       }
       batch.events.push(newEvent('gate.passed', { lane, gate: 'exit' }));
+      // targets 门禁（O2，设计 §1.3）：exec 层声明 targets（批次产物根外目标文件）→ merged 前置校验——
+      // exit gate 之后、command gate 之前（增量接线，不改既有门禁顺序与语义）。
+      // 失败（missing/unchanged）→ gate.target_blocked 事件 + 抛错拒 merged（lane 留 review，成员态不变，与 exit gate 同语义）；
+      // 通过且 declared → gate.target.passed 事件留痕；未声明/非 exec/逃生阀 → 零感知（无事件）。
+      const tg = gates.checkTargetsGate(sessionId, batchId, batch, lane);
+      if (!tg.ok) {
+        batch.events.push(newEvent('gate.target_blocked', { lane, code: tg.code, missing: tg.missing ?? [], unchanged: tg.unchanged ?? [] }));
+        batch.updatedAt = new Date().toISOString();
+        atomicWrite(batchFile(sessionId, batchId), batch);
+        throw new Error(tg.code + ': targets 未通过校验（missing=' + (tg.missing ?? []).join(', ') + '; unchanged=' + (tg.unchanged ?? []).join(', ') + '）');
+      }
+      if (tg.declared) {
+        batch.events.push(newEvent('gate.target.passed', { lane, mode: tg.mode ?? 'mtime', targets: tg.targets ?? [] }));
+      }
+      // 命令 gate（V1，设计 §组件 4）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行（checkExitGate 之后、needHuman 之前）
+      // 成功/未声明 → gate.exit 事件（declared 时）后继续；失败+needHuman 声明 → 转人工闸（escalation，merged 须 note 含 human: 证据）；
+      // 失败+未声明 → gate.exit_blocked 事件 + 抛 GATE_EXIT_*（拒 merged，lane 留 review）
+      const cg = gates.checkCommandGate(sessionId, batchId, batch, lane);
+      if (!cg.ok) {
+        batch.events.push(newEvent('gate.exit_blocked', { lane, code: cg.code, command: cg.command ?? null, exitCode: cg.exitCode ?? null, detail: cg.detail ?? null, escalation: cg.needHumanEscalation === true }));
+        if (cg.needHumanEscalation) {
+          // 转人工闸：复用 needHuman 证据契约（note 含 `human:<裁决人>:<时间>:<结论>`）；无证据 → GATE_NEEDHUMAN_PENDING 挂起
+          const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+          if (!evidence) {
+            batch.updatedAt = new Date().toISOString();
+            atomicWrite(batchFile(sessionId, batchId), batch);
+            throw new Error('GATE_NEEDHUMAN_PENDING: 命令 gate 失败（' + cg.code + '）且产物声明 needHuman，merged 须 note 含 human: 证据');
+          }
+          batch.events.push(newEvent('human.decision', { lane, note })); // 人工裁决留痕（note 可回溯）
+        } else {
+          batch.updatedAt = new Date().toISOString();
+          atomicWrite(batchFile(sessionId, batchId), batch);
+          throw new Error(cg.code + ': ' + (cg.detail ?? 'command gate failed'));
+        }
+      } else if (cg.declared) {
+        batch.events.push(newEvent('gate.exit', { lane, commands: cg.commands ?? [], results: cg.results ?? [], outputTruncated: cg.outputTruncated === true }));
+      }
       // needHuman 人工闸（merged 前置，与 checkExitGate 并列）——声明 lane 缺 human: 证据 → 拒 GATE_NEEDHUMAN_PENDING
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, note);
       if (!nh.ok) {
@@ -196,6 +281,22 @@ export function createStore(root, { rules } = {}) {
     }
     batch.lanes[lane] = to;
     batch.events.push(newEvent('member.settled', { lane, from, to, note: note ?? null }));
+    // C 子项：连续失败升级（spec C）——failed 结算后计数：同批次最近连续 failed ≥3 且批次 running → 触发 paused。
+    // 单次原子写：paused 迁移 + batch.phase 事件 + batch.failed-escalate 事件与本次结算同批落盘（不调 setPhase 二次写盘，避免竞态）。
+    // 棘轮校验 fail-closed：running→paused 迁移被部署收紧删除时 bv.ok=false，不触发、不绕过棘轮；
+    // phase 闸（T-2）：paused 后 phase 非 running 自然不重复；人工 resume 后计数从当前事件流重新评估；
+    // 不自动重试：failed 仍为终态（schema failed: [] 不变），重做=重开新批次。
+    if (to === 'failed' && batch.phase === 'running') {
+      const streak = countConsecutiveFailedSettles(batch.events);
+      if (streak >= 3) {
+        const bv = machine.applyBatchTransition('running', 'paused', { rules: ratchet });
+        if (bv.ok) {
+          batch.phase = 'paused';
+          batch.events.push(newEvent('batch.phase', { from: 'running', to: 'paused', reason: 'failed-escalate' }));
+          batch.events.push(newEvent('batch.failed-escalate', { lane, count: streak }));
+        }
+      }
+    }
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     return batch;
@@ -342,10 +443,16 @@ export function createStore(root, { rules } = {}) {
 
   function recoverBatches() {
     const recovered = [];
+    const corrupt = [];
     for (const sessionId of listSessions()) {
       for (const batchId of listBatches(sessionId)) {
         const batch = readBatch(sessionId, batchId);
-        if (!batch || schema.isBatchTerminal(batch.phase)) continue;
+        if (!batch) {
+          // 损坏批次隔离（②，P0）：登记已由 readBatch 幂等完成（first 才 warn）；汇总 corrupt 后跳过，不击穿循环（INV-1）
+          if (isCorrupt(sessionId, batchId)) corrupt.push(sessionId + '/' + batchId);
+          continue;
+        }
+        if (schema.isBatchTerminal(batch.phase)) continue;
         const recoveredLanes = [];
         const detail = [];
         for (const [lane, state] of Object.entries(batch.lanes)) {
@@ -365,7 +472,33 @@ export function createStore(root, { rules } = {}) {
         }
       }
     }
+    // 向后兼容：返回数组形态（.length/.join 兼容 index.js:86-87 既有消费与 resume.js:60 原样透传）；
+    // corrupt 汇总以非破坏性属性暴露（设计「{ recovered, corrupt }」语义经 recovered.corrupt 获得）
+    recovered.corrupt = corrupt;
+    if (corrupt.length) {
+      log.warn?.('[dsh-punky-swarm] recovery skipped ' + corrupt.length + ' corrupt batch(es): ' + corrupt.join(', '));
+    }
     return recovered;
+  }
+
+  // 孤儿 worker 显式回收（③，P1，设计 D-002/D-003）：lane.stalled 处置扩展——只标记 → 可显式回收。
+  // 语义：管理命令（显式触发，仿 recoverBatches 直写先例，不经棘轮表/不放宽 MEMBER_TRANSITIONS，C-5）；
+  //       默认不自动处置（人审保留，D-003）；lane.stalled 仍非成员状态（不新增成员态，W7 语义保持）。
+  // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收，INV-4：终态 lane 永不回收）。
+  // 事件：lane.recycled { lane, from:'running', reason:'stalled', note } 留痕；回收后走既有 member_status idle→running 重派（①）。
+  function recycleStalledLane(sessionId, batchId, lane) {
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+    if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
+    if (batch.lanes[lane] !== 'running') throw new Error('lane not running: ' + lane + ' (state=' + batch.lanes[lane] + ')');
+    // 校验该 lane 存在 lane.stalled 事件（batch.events 反查；stalled 只标记，回收须有停滞证据）
+    const hasStalled = (batch.events ?? []).some((e) => e.type === 'lane.stalled' && e.lane === lane);
+    if (!hasStalled) throw new Error('no lane.stalled event for lane: ' + lane + ' (recycle requires stalled evidence)');
+    batch.lanes[lane] = 'idle';
+    batch.events.push(newEvent('lane.recycled', { lane, from: 'running', reason: 'stalled', note: null }));
+    batch.updatedAt = new Date().toISOString();
+    atomicWrite(batchFile(sessionId, batchId), batch);
+    return { ok: true, lane, from: 'running', to: 'idle' };
   }
 
   function listAllBatches() {
@@ -425,12 +558,14 @@ export function createStore(root, { rules } = {}) {
   }
 
   return {
-    createBatch, readBatch, listBatches, listSessions, listAllBatches,
+    createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
     readChains, updateChains,
     batchSettled, batchAutoReleaseable,
-    recoverBatches, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
+    recoverBatches, recycleStalledLane, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
+    // 损坏旁路清单（②）：幂等登记 / 只读清单 / 人工修复后清除标记（透传 corrupt-registry）
+    corruptRegistry: { markBatchCorrupt: corruptRegistry.markBatchCorrupt, listCorruptBatches: corruptRegistry.listCorruptBatches, clearCorruptMark: corruptRegistry.clearCorruptMark, corruptFileOf: corruptRegistry.corruptFileOf },
     // 归档只读/幂等面（batch_status 面板与审计查询用）
     archive: { archiveBatch: archive.archiveBatch, readManifest: archive.readManifest, listArchived: archive.listArchived },
   };

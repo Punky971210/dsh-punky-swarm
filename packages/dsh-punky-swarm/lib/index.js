@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // v2：批次绑定 session（root/sessions/<sessionId>/...）；存量 root/batches 自动迁移到 legacy
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createStore } from './state/store.js';
 import { createTools } from './tools/register.js';
 import { createApi } from './api.js';
@@ -60,6 +60,9 @@ export const apply = (ctx, config = {}) => {
 
   const store = createStore(root);
 
+  // mailbox 周期 sweep 定时器（④，config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
+  let sweepTimer = null;
+
   // 存量迁移：root/batches/*.json -> sessions/legacy/batches/（仅一次，幂等）
   if (!recoveredThisProcess) {
     try {
@@ -85,8 +88,65 @@ export const apply = (ctx, config = {}) => {
     try {
       const r = store.recoverBatches();
       if (r.length) ctx.logger?.info?.('[dsh-punky-swarm] recovered batches: ' + r.join(', '));
+      // 恢复容错汇总（v2-node-robustness ②）：损坏批次被隔离（corrupt-batches.json + 跳过），不阻断其余恢复
+      if (Array.isArray(r.corrupt) && r.corrupt.length) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] isolated ' + r.corrupt.length + ' corrupt batch(es): ' + r.corrupt.join(', ') + '（人工修复/删除后 clearCorruptMark）');
+      }
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] recovery failed: ' + String(e));
+    }
+
+    // mailbox 启动清扫（④，D-006/sweepOnStart 默认 true）：recoverBatches 之后逐批次 mailbox 根 sweep 一次——
+    // 清 ack 超 TTL 消息+标记 / 损坏消息 quarantine / 孤儿 .acked（默认 TTL 7d、quarantine 30d）。
+    // 失败仅 warn 不阻塞启动；幂等可重入（sweep 无状态全量扫描）。
+    const mailCfg = config?.mailbox ?? {};
+    const sweepAllMailboxes = () => {
+      const agg = { scanned: 0, removed: 0, quarantined: 0, failed: 0 };
+      const mbBase = join(root, 'sessions');
+      if (existsSync(mbBase)) {
+        for (const sid of readdirSync(mbBase)) {
+          const mbRoot = join(mbBase, sid, 'mailbox');
+          if (!existsSync(mbRoot)) continue;
+          for (const bid of readdirSync(mbRoot)) {
+            try {
+              const r = mailbox.sweep(join(mbRoot, bid));
+              agg.scanned += r.scanned; agg.removed += r.removed; agg.quarantined += r.quarantined; agg.failed += r.failed;
+            } catch { agg.failed++; }
+          }
+        }
+      }
+      return agg;
+    };
+    if (mailCfg.sweepOnStart !== false) {
+      try {
+        const agg = sweepAllMailboxes();
+        if (agg.scanned || agg.removed || agg.quarantined || agg.failed) {
+          ctx.logger?.info?.('[dsh-punky-swarm] mailbox sweep on start: scanned=' + agg.scanned
+            + ' removed=' + agg.removed + ' quarantined=' + agg.quarantined + ' failed=' + agg.failed);
+        }
+      } catch (e) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] mailbox sweep on start failed: ' + String(e));
+      }
+    }
+    // 周期 sweep（默认 0=关，C-6 零隐式行为）：显式配置 sweepIntervalMs>0 才挂 setInterval（unref + dispose 清理）
+    const sweepIntervalMs = Number(mailCfg.sweepIntervalMs) || 0;
+    if (sweepIntervalMs > 0) {
+      sweepTimer = setInterval(() => {
+        try {
+          const agg = sweepAllMailboxes();
+          if (agg.removed || agg.quarantined || agg.failed) {
+            ctx.logger?.info?.('[dsh-punky-swarm] mailbox sweep (periodic): scanned=' + agg.scanned
+              + ' removed=' + agg.removed + ' quarantined=' + agg.quarantined + ' failed=' + agg.failed);
+          }
+        } catch (e) {
+          ctx.logger?.warn?.('[dsh-punky-swarm] mailbox sweep failed: ' + String(e));
+        }
+      }, sweepIntervalMs);
+      if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+      if (ctx.effect) {
+        ctx.effect(() => () => { clearInterval(sweepTimer); sweepTimer = null; }, 'dsh-punky-swarm: mailbox sweep');
+      }
+      ctx.logger?.info?.('[dsh-punky-swarm] mailbox periodic sweep mounted (interval ' + sweepIntervalMs + 'ms)');
     }
   }
 
@@ -233,6 +293,7 @@ export const apply = (ctx, config = {}) => {
 
   return () => {
     if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+    if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
     heartbeat?.dispose();
     apiDispose?.();
     trajectory?.stop();
