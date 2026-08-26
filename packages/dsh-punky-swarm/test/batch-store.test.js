@@ -247,3 +247,70 @@ test('recoverBatches 幂等：二次调用不重复记录 system.recovered', () 
   const after = store.readBatch(S, 'b-rec-detail').events.filter((e) => e.type === 'system.recovered').length;
   assert.equal(after, before); // 未新增事件（幂等）
 });
+
+// ---- O2 targets 门禁 store 接线（C3）：member_settle merged 前置（exit 后 command 前）----
+function makeTargetPlan(batchId, targets) {
+  const p = buildWavePlan({
+    batchId,
+    tasks: [
+      { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
+      { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'], targets },
+      { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    ],
+  });
+  store.createBatch(S, { batchId, wavePlan: p });
+  const art = (rel, content) => {
+    const abs = path.join(root, 'sessions', S, 'artifacts', batchId, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content ?? (rel.endsWith('spec.md') ? '# Spec\n## 验收标准\n- x\n## 约束\n- y\n' : 'code'));
+  };
+  art('plan/spec.md');
+  store.setMember(S, batchId, 'p1', 'running');
+  store.setMember(S, batchId, 'p1', 'review');
+  store.setMember(S, batchId, 'p1', 'merged');
+  art('exec/e1/main.py');
+}
+
+test('O2 C3 接线：声明 targets 缺失 → merged 前置拒 GATE_TARGET_MISSING（gate.target_blocked 事件 + lane 留 review）', () => {
+  const id = 'b-tg-wire-missing';
+  const gone = path.join(root, 'sessions', S, 'artifacts', id, 'target-gone.js'); // 不存在
+  makeTargetPlan(id, [gone]);
+  store.setMember(S, id, 'e1', 'running');
+  store.setMember(S, id, 'e1', 'review');
+  assert.throws(() => store.setMember(S, id, 'e1', 'merged'), /GATE_TARGET_MISSING/);
+  const b = store.readBatch(S, id);
+  assert.equal(b.lanes.e1, 'review'); // 成员态不变（拒 merged 不改状态）
+  const ev = b.events.find((e) => e.type === 'gate.target_blocked');
+  assert.ok(ev && ev.code === 'GATE_TARGET_MISSING' && ev.lane === 'e1', JSON.stringify(ev));
+  assert.ok(!b.events.some((e) => e.type === 'gate.target.passed'), '未通过不留 passed');
+});
+
+test('O2 C3 接线：声明 targets 通过 → merged 放行 + gate.target.passed（mode=mtime）', () => {
+  const id = 'b-tg-wire-ok';
+  const target = path.join(root, 'sessions', S, 'artifacts', id, 'target-ok.js');
+  makeTargetPlan(id, [target]);
+  fs.writeFileSync(target, 'code');
+  const future = new Date(Date.now() + 60000);
+  fs.utimesSync(target, future, future); // mtime 晚于 lane 启动
+  store.setMember(S, id, 'e1', 'running');
+  store.setMember(S, id, 'e1', 'review');
+  const r = store.setMember(S, id, 'e1', 'merged');
+  assert.equal(r.lanes.e1, 'merged');
+  const ev = r.events.find((e) => e.type === 'gate.target.passed');
+  assert.ok(ev && ev.mode === 'mtime' && ev.lane === 'e1', JSON.stringify(ev));
+  assert.deepEqual(ev.targets, [target]);
+});
+
+test('O2 C3 接线：未声明 targets 的 merged 行为与接线前一致（零感知回归，无 targets 事件）', () => {
+  const id = 'b-tg-wire-none';
+  makeTargetPlan(id, null); // 未声明 targets
+  store.setMember(S, id, 'e1', 'running');
+  store.setMember(S, id, 'e1', 'review');
+  const r = store.setMember(S, id, 'e1', 'merged');
+  assert.equal(r.lanes.e1, 'merged');
+  assert.ok(!r.events.some((e) => e.type === 'gate.target.passed' || e.type === 'gate.target_blocked'), '零感知无事件');
+  // 既有 gate.passed(exit) 事件顺序不破坏（exit 仍最先）
+  const evs = r.events.filter((e) => e.type === 'gate.passed' && e.lane === 'e1');
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].gate, 'exit');
+});

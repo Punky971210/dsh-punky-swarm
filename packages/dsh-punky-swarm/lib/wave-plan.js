@@ -24,9 +24,89 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 默认关场景仅存元数据，消费方按 capabilities.worktree.enabled 开关生效）；resumeClauseFor(task) 供
 // 派发侧注入固定任务包条款（RESUME_CLAUSE）。
 
+import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
+
 const SCHEMA_VERSION = 1;
 
 export const LAYERS = ['plan', 'exec', 'audit'];
+
+// 合法角色集合（jiufeng-team 8 角色，任务权威；大小写兼容，内部归一化小写）
+export const VALID_ROLES = ['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
+// 装配扩展角色（盲审三角色，与 assembly/schema.js BLIND_REVIEW_ROLES 同源；装配可插拔扩展点）
+export const ROLE_EXTENSIONS = BLIND_REVIEW_ROLES;
+// 校验白名单 = 8 角色 ∪ 装配扩展（既有合法装配角色不误报）
+export const ROLE_WHITELIST = new Set([...VALID_ROLES, ...ROLE_EXTENSIONS]);
+
+// role 归一化：合法角色（大小写不敏感）→ 小写规范名；非法/未声明 → null
+export function normalizeRole(role) {
+  if (role == null) return null;
+  if (typeof role !== 'string') return null;
+  const norm = role.trim().toLowerCase();
+  return ROLE_WHITELIST.has(norm) ? norm : null;
+}
+
+// layer → 缺省 role（task 未显式声明 role 时）：plan→designer / audit→supervisor / exec→coder；
+// 未声明 layer（generic 任务）→ null（保持现状：不注入 role 前缀，不改变既有 generic 语义）
+export function defaultRoleForLayer(layer) {
+  if (layer === 'plan') return 'designer';
+  if (layer === 'audit') return 'supervisor';
+  if (layer === 'exec') return 'coder';
+  return null;
+}
+
+// C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义：事件留痕、不阻断建批，与 GATE_ROLE_INVALID 一致；后续可配 enforce）——
+// 背景：实跑证实 C 类批次（多 wave/多 lane/跨层）常缺 plan 层 designer 与 audit 层 supervisor（被 planner/auditor 或 Leader 代劳）。
+// C 类形态判定（复用 wavePlan 拓扑信息）：wave 数 >1 或 lane 数 >1 或存在跨 layer 依赖；单 lane 批次（非 C 类形态）不触发本门禁。
+export const PLAN_LEAD_ROLES = new Set(['designer', 'coordinator', 'manager']); // plan 层牵头角色（manager 为 continuable subagent 常驻牵头）
+export const AUDIT_LEAD_ROLES = new Set(['supervisor', 'doc-manager']); // audit 层牵头角色
+
+// 跨 layer 依赖：任一任务的 deps 中存在 layer 与自身不同的依赖（DAG 跨层编排）
+function hasCrossLayerDep(tasks) {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  return tasks.some((t) => {
+    if (!t.layer) return false;
+    return (t.deps ?? []).some((d) => {
+      const dep = byId.get(d);
+      return dep && dep.layer && dep.layer !== t.layer;
+    });
+  });
+}
+
+export function isCClassBatch(tasks, waves) {
+  return waves.length > 1 || tasks.length > 1 || hasCrossLayerDep(tasks);
+}
+
+// 任务有效角色（归一化）：未声明 → 按 layer 缺省（plan→designer / audit→supervisor / exec→coder）；
+// 显式声明非法角色 → null（归一化失败，不满足齐备；由 GATE_ROLE_INVALID 另行告警）
+function effectiveRole(t) {
+  return normalizeRole(t.role ?? defaultRoleForLayer(t.layer));
+}
+
+// C 类批次角色齐备检查：plan 层 lane 需至少一个 designer/coordinator；audit 层 lane 需至少一个 supervisor/doc-manager；
+// 层不存在（无该层 lane）不检查（validateLayerContract 既有语义不变）；非 C 类形态（单 lane 批次）不触发
+export function collectRoleCompletenessWarnings(tasks, waves) {
+  if (!isCClassBatch(tasks, waves)) return [];
+  const warnings = [];
+  const planLanes = tasks.filter((t) => t.layer === 'plan');
+  if (planLanes.length > 0 && !planLanes.some((t) => PLAN_LEAD_ROLES.has(effectiveRole(t)))) {
+    warnings.push({
+      code: 'GATE_ROLE_MISSING',
+      layer: 'plan',
+      missing: 'designer|coordinator|manager',
+      message: 'C-class batch requires at least one plan lane with role designer, coordinator or manager (effective: ' + planLanes.map((t) => effectiveRole(t) ?? t.role ?? '(default)').join('/') + ')',
+    });
+  }
+  const auditLanes = tasks.filter((t) => t.layer === 'audit');
+  if (auditLanes.length > 0 && !auditLanes.some((t) => AUDIT_LEAD_ROLES.has(effectiveRole(t)))) {
+    warnings.push({
+      code: 'GATE_ROLE_MISSING',
+      layer: 'audit',
+      missing: 'supervisor|doc-manager',
+      message: 'C-class batch requires at least one audit lane with role supervisor or doc-manager (effective: ' + auditLanes.map((t) => effectiveRole(t) ?? t.role ?? '(default)').join('/') + ')',
+    });
+  }
+  return warnings;
+}
 
 export function topoWaves(tasks) {
   if (!Array.isArray(tasks) || tasks.length === 0) {
@@ -127,6 +207,38 @@ export function normalizeResumeContract(t) {
   return { checkpoint, resume: resume === true };
 }
 
+// targets/targetsMarker 契约规范化（O2 targets 声明契约，与 condition/resume 同模式）：
+//   targets: string[]——批次产物根外目标文件（exec worker 承诺「修改/生成」的既有文件）的绝对路径数组；
+//             相对路径建批拒绝（fail-closed，防把产物相对路径误当 targets）；
+//   targetsMarker: string|null——可选内容声明标记（缺省 null = 纯 mtime 校验；非空时目标文件含独立行
+//             `targets-claimed: true` 即视为已变更，见 gates.js checkTargetsGate marker 逃生路径）。
+// 非法（targets 非 string 数组 / 空 / 含非绝对路径 / targetsMarker 非 string|null）→ throw（fail-closed 拒建批）。
+export function normalizeTargetsContract(t) {
+  let targets = null;
+  if (t.targets != null) {
+    if (!Array.isArray(t.targets) || t.targets.length === 0) {
+      throw new Error('task ' + t.id + ' targets must be a non-empty string array');
+    }
+    for (const p of t.targets) {
+      if (typeof p !== 'string' || !p.trim()) {
+        throw new Error('task ' + t.id + ' targets must be non-empty strings');
+      }
+      if (!isAbsPath(p)) {
+        throw new Error('task ' + t.id + ' targets must be absolute paths (fail-closed, got: ' + p + ')');
+      }
+    }
+    targets = [...t.targets];
+  }
+  let targetsMarker = null;
+  if (t.targetsMarker != null) {
+    if (typeof t.targetsMarker !== 'string') {
+      throw new Error('task ' + t.id + ' targetsMarker must be a string or null');
+    }
+    targetsMarker = t.targetsMarker;
+  }
+  return { targets, targetsMarker };
+}
+
 // 任务包 resume 契约固定条款：resume: true 时注入 worker 派发提示词——
 //   新 worker 先查 checkpoint 历史（lane_checkpoint_status），从最后已 checkpoint 步骤之后继续，禁止重做；
 //   每完成一个子步骤立即 lane_checkpoint（携带 progress），禁止攒批。
@@ -203,12 +315,31 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
   if (!batchId || typeof batchId !== 'string') throw new Error('batchId required');
   const { waves } = topoWaves(tasks);
   validateLayerContract(tasks);
+  // role 集合校验（GATE_ROLE_INVALID，warning 语义：事件留痕、不阻断建批、保持兼容）——
+  // 仅「显式声明且非空、但不在合法集合」的 role 触发告警；未声明（走默认值）与归一化后合法的角色不告警
+  const warnings = [];
+  for (const t of tasks) {
+    if (typeof t.role === 'string' && t.role.trim() && normalizeRole(t.role) === null) {
+      warnings.push({
+        code: 'GATE_ROLE_INVALID',
+        task: t.id,
+        role: t.role,
+        message: 'task ' + t.id + ' role "' + t.role + '" is not a valid role (' + [...VALID_ROLES, ...ROLE_EXTENSIONS].join('/') + '); kept as-is for compatibility, layer default applies only when role is omitted',
+      });
+    }
+  }
+  // C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义）——并入同一收集循环/同一返回结构；
+  // 仅 C 类形态（多 wave/多 lane/跨层依赖）且对应层存在时检查；单 lane 批次不触发
+  warnings.push(...collectRoleCompletenessWarnings(tasks, waves));
   const wavePlan = waves.map((ids, idx) => ({
     wave: idx + 1,
     tasks: ids.map((id) => {
       const t = tasks.find((x) => x.id === id);
       const layer = t.layer ?? undefined;
-      const role = t.role ?? undefined;
+      // 默认值修正：task 未显式声明 role → 按 layer 取缺省（plan→designer / audit→supervisor / exec→coder；generic 无 layer → null 现状）
+      const rawRole = t.role ?? defaultRoleForLayer(layer);
+      // 大小写归一化：合法角色（Designer→designer）存小写规范名；非法角色保留原值（兼容，GATE_ROLE_INVALID 告警暴露）
+      const role = normalizeRole(rawRole) ?? rawRole;
       let skills = t.skills;
       // 装配补全（可插拔）：未显式声明 skills 时，按 team 装配表的 role → skills 补全（assembly 可选）
       if (assembly && role && skills === undefined) {
@@ -220,6 +351,9 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
       checkConditionPaths(t, condition);
       // resume 契约字段校验 + 透传（checkpoint{steps}/resume 布尔；默认关场景仅存元数据，消费方按开关生效）
       const resumeContract = normalizeResumeContract(t);
+      // targets/targetsMarker 契约校验 + 透传（O2：绝对路径 fail-closed 拒建批；未声明 = null = 零感知，
+      // 仿 condition 可选字段模式，不升 batch schema 版本）
+      const targetsContract = normalizeTargetsContract(t);
       return {
         id: t.id,
         cmd: assembleCmd(role, skills, t.cmd ?? ''),
@@ -227,7 +361,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
         model: t.model ?? null,
         tools: Array.isArray(t.tools) ? [...t.tools] : null,
         layer: t.layer ?? null,
-        role: t.role ?? null,
+        role: role ?? null,
         skills: skills ? [...skills] : null,
         consume: Array.isArray(t.consume) ? [...t.consume] : null,
         produce: Array.isArray(t.produce) ? [...t.produce] : null,
@@ -235,6 +369,8 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
         condition, // lane 条件（统一对象数组形态；缺省 null = 恒满足）
         checkpoint: resumeContract.checkpoint, // { steps } | null（总步数声明，供 progress 校验与任务包注入）
         resume: resumeContract.resume, // boolean（缺省 false = 现状，行为不变）
+        targets: targetsContract.targets, // string[] | null（绝对路径目标文件声明；未声明 null = 零感知）
+        targetsMarker: targetsContract.targetsMarker, // string | null（内容声明标记；缺省 null = 纯 mtime 校验）
       };
     }),
   }));
@@ -245,6 +381,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
     team: team || 'generic',
     wavePlan,
     concurrency: concurrencyN,
+    warnings, // role 校验告警（GATE_ROLE_INVALID，warning 语义：不阻断建批；事件留痕由调用方落批次）
   };
 }
 
@@ -280,6 +417,14 @@ export function validateWavePlan(plan) {
       }
       if (t.resume != null && typeof t.resume !== 'boolean') {
         throw new Error('task resume must be boolean');
+      }
+      // targets/targetsMarker 形态校验（O2，与建批规范化同语义，防伪造/篡改）：
+      // targets 为绝对路径 string 数组（相对路径 fail-closed 拒）；targetsMarker 为 string|null
+      if (t.targets != null && (!Array.isArray(t.targets) || t.targets.length === 0 || t.targets.some((x) => typeof x !== 'string' || !x.trim() || !isAbsPath(x)))) {
+        throw new Error('task targets must be a non-empty string array of absolute paths');
+      }
+      if (t.targetsMarker != null && typeof t.targetsMarker !== 'string') {
+        throw new Error('task targetsMarker must be string or null');
       }
     }
   }
