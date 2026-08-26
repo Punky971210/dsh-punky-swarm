@@ -13,8 +13,9 @@ graph TD
         DE -->|四件套: plan/spec/coder-tasks/tester-tasks| MA
     end
     subgraph 执行层⚡
-        MA -->|lane 任务| CR[coder池]
-        MA -->|测试任务| TE[tester池]
+        MA -.->|建议派发| L
+        L -->|lane 任务| CR[coder池]
+        L -->|测试任务| TE[tester池]
         CR -->|代码| RV[reviewer]
         TE -->|测试报告| RV
         RV -->|PASS/REWORK + gap-list.json| SV[supervisor]
@@ -32,7 +33,7 @@ graph TD
 | ① | 开启任务 + 人工粗拆 | Leader | leader-decision-pack.md + 模块清单（plan/） |
 | ② | 细拆 + 代码摸底 | Coordinator | task-tree.json + codebase-survey.md（plan/） |
 | ③ | 任务规范设计（四件套） | Designer | plan.md + spec.md + coder-tasks.md + tester-tasks.md（plan/） |
-| ④ | 调度分发 | Manager | lane 任务/测试任务（mailbox inbox） |
+| ④ | 建议派发 | Manager | 派发建议（mailbox inbox/broadcast）→ Leader 按建议 subagent 派发 worker（depth-1） |
 | ⑤ | 编码实现 | Coder 池 | 代码（exec/） |
 | ⑥a | 测试套件编写 + 验收检查清单准备（**准备段·与 code 同 wave 并行**） | Tester 池 / Reviewer | 测试套件 + 验收检查清单（exec/）——只依赖 plan 产物，不依赖 code 产物 |
 | ⑥b | 运行测试套件出报告 + 按清单逐项核对出 gap-list（**执行段·code 完成后立即**） | Tester 池 / Reviewer | 测试报告 + gap-list.json（exec/、audit/）——code 完成即跑，不等串行排期 |
@@ -69,8 +70,8 @@ wave4: [audit-验收]
 | 硬化判定点 | 三层门禁（引擎强制） |
 |---|---|
 | dp1 分配判定（ready→空闲实例） | Entry Gate（consume 齐备才派发）+ assign_check（A/B/C） |
-| dp2 完成确认（产出完整性） | Exit Gate（outputs/produce 落盘才 merged） |
-| dp3 审查路由（REWORK/PASS） | review 状态 + member_settle（返工 review→running 保留） |
+| dp2 完成确认（产出完整性） | Exit Gate（outputs/produce 落盘才 merged）；exec 层产物可含独立行 `gate: <命令>`（行首锚定，可多行顺序执行）→ merged 前置确定性执行、exit 0 通过（失败拒 merged 留 review；声明 needHuman 则转人工闸） |
+| dp3 审查路由（REWORK/PASS） | review 状态 + member_settle（返工 review→running 保留）；audit 层产物可含独立行 `needHuman: true` → merged 须带 `human:<裁决人>:<时间>:<结论>` 证据（缺则 GATE_NEEDHUMAN_PENDING） |
 | dp4 验收判定（gap-list 对账） | Complete Gate（audit 验收完成才 complete） |
 
 ## 五、职责分工要点
