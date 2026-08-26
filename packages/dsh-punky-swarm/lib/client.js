@@ -249,12 +249,14 @@ window.__ModuleLoader__.load({
                 const vals = Object.values(b.lanes || {});
                 const done = vals.filter((s) => TERMINAL.indexOf(s) >= 0).length;
                 const total = vals.length;
-                const sel = b.batchId === selected;
+                const sel = selected && (typeof selected === 'object'
+                  ? selected.session === b.session && selected.batchId === b.batchId
+                  : selected === b.batchId);
                 return React.createElement('button', {
-                  key: b.batchId,
+                  key: b.session ? b.session + ':' + b.batchId : b.batchId,
                   type: 'button',
                   className: 'psw-btn',
-                  onClick: () => onSelect(b.batchId),
+                  onClick: () => onSelect(b),
                   'aria-pressed': sel,
                   style: Object.assign({}, cardBase, {
                     textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
@@ -272,6 +274,9 @@ window.__ModuleLoader__.load({
                     React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
                   ),
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3 } },
+                    b.sessionShort && !b.isOwnSession
+                      ? React.createElement('span', { title: b.session, style: { fontFamily: T.mono, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 } }, b.sessionShort + ' ·')
+                      : null,
                     b.autoReleaseable
                       ? React.createElement(React.Fragment, null, React.createElement(Dot, { color: T.success }), React.createElement('span', null, tt('batch.release')))
                       : b.phase === 'complete' || b.phase === 'aborted'
@@ -442,10 +447,44 @@ window.__ModuleLoader__.load({
     const NS = 'dsh-punky-swarm';
     const inject = ['slots', 'locale'];
     async function api(path, session) {
-      const sep = path.includes('?') ? '&' : '?';
-      const res = await fetch('/api/dsh-punky-swarm' + path + sep + 'session=' + encodeURIComponent(session));
+      const base = '/api/dsh-punky-swarm' + path;
+      const url = session
+        ? base + (base.includes('?') ? '&' : '?') + 'session=' + encodeURIComponent(session)
+        : base;
+      const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
+    }
+
+    // 跨会话聚合：/sessions 取全部有批次的会话 → 逐会话 /batches 合并为统一列表；
+    // 当前对话会话（sid）批次优先，其后按会话展示；列表项携带 session 归属字段
+    async function aggregateBatches(sid) {
+      let sessions = [];
+      try {
+        const r = await api('/sessions');
+        sessions = (r && r.sessions) || [];
+      } catch {}
+      const ids = [];
+      if (sid) ids.push(sid);
+      for (const s of sessions) {
+        if (s && s.sessionId && s.sessionId !== sid) ids.push(s.sessionId);
+      }
+      const out = [];
+      for (const id of ids) {
+        let items = [];
+        try {
+          const r = await api('/batches', id);
+          items = (r && r.batches) || [];
+        } catch {}
+        for (const b of items) {
+          out.push(Object.assign({}, b, {
+            session: id,
+            sessionShort: String(id).slice(0, 8),
+            isOwnSession: id === sid
+          }));
+        }
+      }
+      return out;
     }
 
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
@@ -491,12 +530,11 @@ window.__ModuleLoader__.load({
       }, []);
 
       useEffect(() => {
-        if (!sid) return;
         let alive = true;
         const tick = async () => {
           try {
-            const r = await api('/batches', sid);
-            if (alive) { setBatches(r.batches); setUpdated(new Date()); }
+            const agg = await aggregateBatches(sid);
+            if (alive) { setBatches(agg); setUpdated(new Date()); }
           } catch {}
         };
         tick();
@@ -504,21 +542,21 @@ window.__ModuleLoader__.load({
         return () => { alive = false; clearInterval(iv); };
       }, [sid]);
       useEffect(() => {
-        if (!sel || !sid) { setDetail(null); return; }
+        if (!sel) { setDetail(null); return; }
         let alive = true;
         const tick = async () => {
           try {
-            const d = await api('/batch?batchId=' + encodeURIComponent(sel), sid);
+            const d = await api('/batch?batchId=' + encodeURIComponent(sel.batchId), sel.session);
             let mail = { inbox: [], broadcast: [] };
-            try { mail.inbox = (await api('/mailbox?batchId=' + encodeURIComponent(sel) + '&box=inbox', sid)).items; } catch {}
-            try { mail.broadcast = (await api('/mailbox?batchId=' + encodeURIComponent(sel) + '&box=broadcast', sid)).items; } catch {}
+            try { mail.inbox = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=inbox', sel.session)).items; } catch {}
+            try { mail.broadcast = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=broadcast', sel.session)).items; } catch {}
             if (alive) setDetail(Object.assign({}, d, { mail }));
           } catch {}
         };
         tick();
         const iv = setInterval(tick, 3000);
         return () => { alive = false; clearInterval(iv); };
-      }, [sel, sid]);
+      }, [sel]);
 
       const list = batches || [];
       const running = list.filter((b) => b.phase === 'running').length;
