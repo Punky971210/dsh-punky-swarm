@@ -34,12 +34,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const vals = Object.values(b.lanes || {});
                 const done = vals.filter((s) => TERMINAL.indexOf(s) >= 0).length;
                 const total = vals.length;
-                const sel = b.batchId === selected;
+                const sel = selected && (typeof selected === 'object'
+                  ? selected.session === b.session && selected.batchId === b.batchId
+                  : selected === b.batchId);
                 return React.createElement('button', {
-                  key: b.batchId,
+                  key: b.session ? b.session + ':' + b.batchId : b.batchId,
                   type: 'button',
                   className: 'psw-btn',
-                  onClick: () => onSelect(b.batchId),
+                  onClick: () => onSelect(b),
                   'aria-pressed': sel,
                   style: Object.assign({}, cardBase, {
                     textAlign: 'left', cursor: 'pointer', padding: '8px 10px',
@@ -57,6 +59,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
                   ),
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3 } },
+                    b.sessionShort && !b.isOwnSession
+                      ? React.createElement('span', { title: b.session, style: { fontFamily: T.mono, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 } }, b.sessionShort + ' ·')
+                      : null,
                     b.autoReleaseable
                       ? React.createElement(React.Fragment, null, React.createElement(Dot, { color: T.success }), React.createElement('span', null, tt('batch.release')))
                       : b.phase === 'complete' || b.phase === 'aborted'
