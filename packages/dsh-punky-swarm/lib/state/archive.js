@@ -59,7 +59,12 @@ export function createArchive(root) {
   function readBatch(sessionId, batchId) {
     const file = batchFileOf(sessionId, batchId);
     if (!fs.existsSync(file)) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      // 损坏批次隔离（v2-node-robustness ②，AC-1 读路径不 throw）：损坏 → null（登记在 store 旁路清单，本文件不重复）
+      return null;
+    }
   }
   function atomicWrite(file, data) {
     const dir = path.dirname(file);

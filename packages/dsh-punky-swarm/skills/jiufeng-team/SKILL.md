@@ -38,7 +38,7 @@ triggers:
 
 | 层 | 角色 | 操作手册（skill 工具加载） | 关键产出 |
 |---|---|---|---|
-| 任务层 | Coordinator/Manager | dev-planner | 排期 / 派发（wavePlan lane） |
+| 任务层 | Coordinator/Manager | dev-planner | 排期 / 建议派发（wavePlan lane） |
 | 执行层 | Designer | dev-designer + spec-writing | design.md / PRD / spec（to-prd 为 disable-model-invocation 命令式技能，不适用于 worker）；plan 层 lane role 强制 designer |
 | 执行层 | Coder（池） | dev-coder + efficient-edit + codebase-design | 代码 + dev_plan checklist |
 | 执行层 | Tester（池） | dev-tester | 测试集 + 结果 |
@@ -70,8 +70,8 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
     ② 若按工作区/会话路径落盘，结算前必须经 asset_claim 归位（Leader 侧执行，worker 在回执中注明产物路径），否则 exit gate 判 missing 拒 merged。',
   worker 双通道回执: '完成后 report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执，含产物落盘路径）',
   consume: [...], produce: [...],
-  纪律摘要: 'exec 层 code/test 职能分离（Coder 最小自检，全量验证归 Tester）；test/review 与 code 并行准备验收套件（两段式）；plan 产物归 Designer（role=designer）；audit worker 不复用（追加=新 lane 新派发）；session 从 batch_status 注入；audit lane 命名 audit-accept/audit-verify、报告措辞「待 Leader 处置的 gap 清单（不得由 audit 执行）」',
-  session 注入: 'sessionId/产物根一律从 batch_status 读取注入任务包，禁止手写',
+  纪律摘要: 'exec 层 code/test 职能分离（Coder 最小自检，全量验证归 Tester）；test/review 与 code 并行准备验收套件（两段式）；plan 产物归 Designer（role=designer）；audit worker 不复用 / session 注入 / audit lane 命名等纪律详见下方纪律要点',
+  session 注入: '见纪律要点——sessionId/产物根一律从 batch_status 读取注入任务包，禁手写',
   验收标准: [...] }
 ```
 
@@ -84,6 +84,7 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
 - 派发 sessionId/产物根从 batch_status 读取注入，禁手写；
 - audit lane 统一命名 audit-accept/audit-verify；报告措辞「待 Leader 处置的 gap 清单（不得由 audit 执行）」；
 - test 产可执行测试套件（PASS/FAIL 证据），review 产验收检查清单（MUST/SHOULD/FYI），二者互补不重复；
+- worker 每完成子步骤即 lane_checkpoint 提交，禁止攒批；
 - 不引入 audit 预算/节流字段（省 token、避免机械限制审计深度）。
 
 ### Manager 角色派发模板（代劳指挥 · continuable subagent）
@@ -105,15 +106,16 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 2. **装配**：Leader 派发时按上方装配表加载对应能力层手册；角色边界要点可内联进 task.cmd。
 3. **治理原则**：`references/constitution.md` 为项目级不可协商原则（编码/安全/合规/架构/门禁 5 章 MUST/SHOULD），角色细则引用格式「参考 Constitution §[章节]：[条目]」。
 4. **工作流蓝图**：`references/workflow.md`（角色 DAG + 11 步流转 + 产物契约表）；Designer 四件套等模板见 `references/templates/`。
+5. **Leader 派发 task.cmd 示例**：wave_plan 的 task.cmd 示例——
+   ```
+   { id: 'mod-a', cmd: '加载 jiufeng-team 后按 Designer 手册（dev-designer+spec-writing）产出 design.md', tools: ['skill','fs'] }
+   ```
 
 ## C 类触发后的执行机制（难度判定归蟛蜞模式）
 
 > 分层边界：任务难度判定（A/B/C 路由，default to C）由蟛蜞模式难度门禁负责（assign_check guard），本技能**不参与难度判定**——只描述 C 类任务确定后的执行方式。
 
-| 级别 | 判据 | 执行方式 |
-|---|---|---|
-| A（Leader 直做） | 单步可验证、低风险、无需多角色协作（小改动/单文件生成/快速查询） | Leader 直接完成：不建批次、不派发、不写 mailbox，零治理开销（是否判 A 由蟛蜞模式门禁裁决） |
-| C（复杂/大型） | 需并行、多角色、多轮协作或高门禁 | wave_plan 建批次 → member_status 派发 → 治理闭环（状态机/mailbox/锁/结算） |
+C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 派发 → 治理闭环（状态机/mailbox/锁/结算）。
 
 ## 三层门禁（Tier3）
 
@@ -125,7 +127,9 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 - **委派判定**：assign_check 输出 A/B/C——C 类（并行/多角色/门禁/可恢复）必须 wave_plan 建批；
 - **失败处理**：failed 为终态，重做=重开新批次；返工（review→running）保留；
-- **状态查询**：gate_status 查 lane 缺什么产物/契约问题。
+- **状态查询**：gate_status 查 lane 缺什么产物/契约问题；
+- **needHuman 契约（audit）**：产物可含独立行 `needHuman: true` 声明——merged 须带人工裁决证据 `human:<裁决人>:<时间>:<结论>`（如 `human:user@2026-08-21:accept`），缺则 GATE_NEEDHUMAN_PENDING 拒 merged；
+- **gate 契约（exec）**：产物可含独立行 `gate: <命令>`（行首锚定，可多行顺序执行）——merged 前置确定性执行，exit 0 通过；失败拒 merged（GATE_EXIT_*，lane 留 review）；失败且产物声明 needHuman: true → 转人工闸。
 
 **产物契约表**（详见 `references/workflow.md` §三）：plan→（leader-decision-pack/task-tree/codebase-survey/四件套）；exec→（代码/测试报告）；audit→（review/gap-list/acceptance/retrospective）。
 
@@ -136,13 +140,6 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 3. 完成后由 Leader 结算：通过线=merged，返工线=打回重做（同一 lane 3 次后升级人工/Leader 指挥方向）。
 4. 评审类角色按双线审查：通过线/返工线输出 MUST-FIX 清单（见 code-review-guideline / report-blind-audit）。
 5. 全员短生命周期：专注当前任务，不假设跨轮上下文（跨轮信息走 mailbox 元数据与状态文件）。
-
-## 使用方式（Leader）
-
-wave_plan 的 task.cmd 示例：
-```
-{ id: 'mod-a', cmd: '加载 jiufeng-team 后按 Designer 手册（dev-designer+spec-writing）产出 design.md', tools: ['skill','fs'] }
-```
 
 ## 边界
 

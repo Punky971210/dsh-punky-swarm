@@ -49,6 +49,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './core.js';
 import * as lock from '../lock.js';
 import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
+import { overBudgetOf, hasOverBudgetEvent } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
@@ -335,6 +336,14 @@ function worktreeToolCheckpoint(ctx, deps) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
         if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
         store.appendEvent(sessionId, args.batchId, 'worktree.checkpoint', evt);
+      }
+      // B 步数预算：progress 非空时判定超限（progress.total > 任务 checkpoint.steps）→ 幂等 appendEvent lane.over-budget；
+      //   不硬杀（仅发事件，照常返回，转 review/stalled 由 Manager/Leader 裁决）；未声明 checkpoint.steps 零感知。
+      if (progress) {
+        const b = overBudgetOf(batch, args.laneId, progress);
+        if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
+          store.appendEvent(sessionId, args.batchId, 'lane.over-budget', { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
+        }
       }
       return r;
     },

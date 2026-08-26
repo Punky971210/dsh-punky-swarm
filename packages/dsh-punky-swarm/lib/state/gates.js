@@ -20,6 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as schema from '../schema.js';
+import { runCommand } from './command-exec.js';
 
 // 会话名校验（与 store.js 同源；gates 独立持有以避免 store→gates→store 循环依赖）
 const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
@@ -27,6 +28,10 @@ const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
 export function isAbsPath(p) {
   return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
 }
+
+// targets 门禁（O2）marker 逃生声明标记：目标文件含独立行 `targets-claimed: true` 即视为已变更（跳过 mtime 比对）。
+// 行首锚定独立行正则（仿 needHuman 独立行模式）——内嵌/注释/非行首不误判（NFR3）。
+export const TARGETS_CLAIMED_RE = /^targets-claimed:\s*true$/m;
 
 // needHuman：audit 产物人工裁决声明检测（纯函数，与 checkExitGate 同源文件解析）——
 // 产物含独立行 `needHuman: true`（正则 /^needHuman:\s*true$/m）即声明人工裁决需求；
@@ -46,6 +51,37 @@ export function detectNeedHuman(artifactsDir, producePaths) {
   return { declared: false, path: null };
 }
 
+// 命令 gate（V1）：产物独立行声明 `gate: <命令>`（行首锚定正则，与 needHuman 独立行模式同源）
+// 内嵌/注释/非行首不误判；`gate: false` 视为显式禁用声明不计入（spec G1）；空命令（gate: 后无内容）不计入（spec G8）
+export const GATE_LINE_RE = /^gate:\s*(.+)$/gm;
+
+// 声明解析纯函数（同 detectNeedHuman 模式：缺失/空/目录跳过、零感知）：
+// 遍历 produce/outputs 并集 → 收集所有命中行命令（保序）→ { declared, commands, path }
+// 全部命中行为空/禁用 → declared=false（零感知，C2/G8）
+export function detectGate(artifactsDir, paths) {
+  if (!Array.isArray(paths) || paths.length === 0) return { declared: false, commands: [], path: null };
+  const commands = [];
+  let declaredPath = null;
+  for (const p of paths) {
+    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let content;
+    try {
+      const st = fs.statSync(abs);
+      if (st.isDirectory() || st.size === 0) continue;
+      content = fs.readFileSync(abs, 'utf8');
+    } catch { continue; }
+    GATE_LINE_RE.lastIndex = 0; // /g 正则复用防 lastIndex 泄漏
+    let m;
+    while ((m = GATE_LINE_RE.exec(content)) !== null) {
+      const cmd = m[1].trim();
+      if (cmd.length === 0 || cmd === 'false') continue; // 空命令 / gate: false（禁用声明）不计入
+      commands.push(cmd);
+      if (!declaredPath) declaredPath = p;
+    }
+  }
+  return { declared: commands.length > 0, commands, path: declaredPath };
+}
+
 export function createGates(root) {
   const sessionsDir = path.join(root, 'sessions');
 
@@ -63,7 +99,12 @@ export function createGates(root) {
   function readBatch(sessionId, batchId) {
     const file = batchFile(sessionId, batchId);
     if (!fs.existsSync(file)) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      // 损坏批次隔离（v2-node-robustness ②，AC-1 读路径不 throw）：损坏 → null（登记在 store 旁路清单，本文件不重复）
+      return null;
+    }
   }
 
   // ---- Tier3 门禁辅助 ----
@@ -72,6 +113,17 @@ export function createGates(root) {
       for (const t of w.tasks) if (t.id === lane) return t;
     }
     return null;
+  }
+  // lane 启动时间（O2 targets 门禁基准）：events 末尾向前反查最近一条 `member.settled` 且 lane 匹配且
+  // to==='running' 的事件 ts（ISO）——返工（review→running）会 push 新的 running 结算事件 → 基准重置（重新计时）；
+  // 无 → 回退 batch.createdAt（防御；正常 merged 必有 running 事件）。遍历模式仿 store.js lastActiveAtOf。
+  function laneStartedAt(batch, lane) {
+    const evs = batch.events ?? [];
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const e = evs[i];
+      if (e && e.type === 'member.settled' && e.lane === lane && e.to === 'running' && e.ts) return e.ts;
+    }
+    return batch.createdAt;
   }
   function resolveArtifact(sessionId, batchId, rel) {
     return isAbsPath(rel) ? rel : path.join(artifactsDirOf(sessionId, batchId), rel);
@@ -135,6 +187,96 @@ export function createGates(root) {
       message: 'audit lane 声明 needHuman，须 Manager 转达人工裁决（merged 需 note 含 human: 证据 / conflict 驳回）',
     };
   }
+  // 命令 gate（V1，设计 §组件 2 / spec G2-G10、C5-C7）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行 → 退出码判定
+  // 签名与既有门禁一致（batch 显式传入，不持有状态）；执行器经 deps.runCommand 注入（DI，默认真实执行器，测试可注入 mock）
+  // cwd 契约（C7）：lane worktree 根（若已建）→ GATE_REPO_ROOT（批次 repo 根配置，V1 env 注入）→ artifacts 根兜底
+  function commandCwd(sessionId, batchId, lane) {
+    const wt = path.join(sessionDir(sessionId), 'worktrees', batchId, lane);
+    try { if (fs.statSync(wt).isDirectory()) return wt; } catch { /* 未建 worktree，继续 */ }
+    const repoRoot = process.env.GATE_REPO_ROOT;
+    if (repoRoot) { try { if (fs.statSync(repoRoot).isDirectory()) return repoRoot; } catch { /* 无效则跳过 */ } }
+    return artifactsDirOf(sessionId, batchId);
+  }
+  function checkCommandGate(sessionId, batchId, batch, lane, deps = {}) {
+    // 总开关（GATE_ENABLED=false → 全部零感知，应急逃生阀）
+    if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') return { ok: true, declared: false };
+    const t = findTask(batch, lane);
+    if (!t || t.layer !== 'exec') return { ok: true, declared: false }; // 仅约束 exec 层验证声明（D-005）
+    // produce ∪ outputs 并集（去重保序）
+    const fields = [...new Set([...(t.produce ?? []), ...(t.outputs ?? [])])];
+    const det = detectGate(artifactsDirOf(sessionId, batchId), fields);
+    if (!det.declared) return { ok: true, declared: false }; // 未声明 gate → 零感知（C2/G10）
+    if (det.commands.length === 0) {
+      return { ok: false, code: 'GATE_EXIT_NO_COMMAND', command: null, exitCode: null, declared: true, needHumanEscalation: false, detail: 'gate 行命中但命令解析为空（防空命令假通过）' };
+    }
+    const run = deps.runCommand ?? runCommand;
+    const results = [];
+    let failed = null;
+    let outputTruncated = false;
+    for (const command of det.commands) {
+      const r = run({ command, cwd: commandCwd(sessionId, batchId, lane) });
+      if (r.truncated) outputTruncated = true;
+      const res = { command, exitCode: r.exitCode ?? null, durationMs: r.durationMs ?? 0 };
+      results.push(res);
+      if (r.forbidden) { failed = { code: 'GATE_EXIT_FORBIDDEN', command, exitCode: null, detail: '黑名单命中（只读守卫，不执行）' }; break; }
+      if (r.timedOut) { failed = { code: 'GATE_EXIT_TIMEOUT', command, exitCode: res.exitCode, detail: '命令超时（重试后仍超时）' }; break; }
+      if (r.error && r.error.startsWith('GATE_EXIT_SPAWN_FAIL')) { failed = { code: 'GATE_EXIT_SPAWN_FAIL', command, exitCode: null, detail: r.error }; break; }
+      if (r.error === 'GATE_EXIT_NO_COMMAND') { failed = { code: 'GATE_EXIT_NO_COMMAND', command, exitCode: null, detail: r.error }; break; }
+      if (!r.ok) { failed = { code: 'GATE_EXIT_NONZERO', command, exitCode: res.exitCode, detail: '退出码 ' + res.exitCode + '（非 0，重试后仍失败）' }; break; }
+    }
+    if (failed) {
+      // C5/G9：失败且产物同时声明 needHuman → 转人工闸（不抛错，store 接线转 checkNeedHumanGate 语义）
+      const nh = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
+      return { ok: false, ...failed, declared: true, needHumanEscalation: nh.declared, path: det.path };
+    }
+    return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path };
+  }
+  // targets 门禁（O2，设计 §1.2）：exec 层 lane 声明 targets（批次产物根外目标文件绝对路径）→ merged 前置校验
+  // 每个 target：①存在性（statSync 为文件；缺失/目录 → missing）；②变更性——mtime 晚于 lane 启动时间
+  // （默认 mtime 路径），或 marker 逃生（任务级 targetsMarker 非空 或 env GATE_TARGETS_MODE==='marker' →
+  // 目标文件内容含独立行 `targets-claimed: true` 即视为已变更，跳过 mtime 比对，两模式不叠加）；
+  // 未声明 targets / 非 exec 层 / GATE_ENABLED=false → 零感知（{ ok: true, declared: false }，与 checkCommandGate D-005 对称）。
+  // 判定：missing 非空 → { ok:false, code:'GATE_TARGET_MISSING', missing }；unchanged 非空 →
+  // { ok:false, code:'GATE_TARGET_UNCHANGED', unchanged }；全过 → { ok:true, declared:true, mode:'mtime'|'marker' }。
+  // 诚实披露：mtime/marker 均为低成本实证（非密码学证据），防「口头声称零成本通过」；恶意伪造归 O5 人审。
+  function checkTargetsGate(sessionId, batchId, batch, lane) {
+    // 总开关（GATE_ENABLED=false → 全批零感知，应急逃生阀，与 checkCommandGate 同源）
+    if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') return { ok: true, declared: false };
+    const t = findTask(batch, lane);
+    if (!t || t.layer !== 'exec' || !Array.isArray(t.targets) || t.targets.length === 0) {
+      return { ok: true, declared: false }; // 未声明 / 非 exec 层 → 零感知
+    }
+    const startAt = laneStartedAt(batch, lane);
+    const startMs = Date.parse(startAt);
+    const markerMode = (typeof t.targetsMarker === 'string' && t.targetsMarker.length > 0)
+      || String(process.env.GATE_TARGETS_MODE).toLowerCase() === 'marker';
+    const missing = [];
+    const unchanged = [];
+    for (const target of t.targets) {
+      let st;
+      try { st = fs.statSync(target); } catch { missing.push(target); continue; }
+      if (!st.isFile()) { missing.push(target); continue; } // 目录/非文件视同缺失（与 detectNeedHuman 文件判定同源）
+      if (markerMode) {
+        let claimed = false;
+        try {
+          claimed = TARGETS_CLAIMED_RE.test(fs.readFileSync(target, 'utf8'));
+        } catch { /* 读失败 → 视为未声明（fail-closed，落到 unchanged） */ }
+        if (claimed) continue; // 标记命中 → 视为已变更（跳过 mtime 比对）
+        unchanged.push(target);
+        continue;
+      }
+      // mtime 主路径（默认）：目标文件 mtime 必须晚于 lane 最近 running 启动时间
+      const mtimeMs = new Date(st.mtime).getTime();
+      if (!(Number.isFinite(mtimeMs) && Number.isFinite(startMs) && mtimeMs > startMs)) unchanged.push(target);
+    }
+    if (missing.length > 0) {
+      return { ok: false, declared: true, code: 'GATE_TARGET_MISSING', missing, unchanged: [], mode: markerMode ? 'marker' : 'mtime', targets: [...t.targets] };
+    }
+    if (unchanged.length > 0) {
+      return { ok: false, declared: true, code: 'GATE_TARGET_UNCHANGED', missing: [], unchanged, mode: markerMode ? 'marker' : 'mtime', targets: [...t.targets] };
+    }
+    return { ok: true, declared: true, missing: [], unchanged: [], mode: markerMode ? 'marker' : 'mtime', targets: [...t.targets] };
+  }
   // Complete Gate（设计 §5.2）：audit 层必须存在且全部 settled 且无 failed/conflict；exec 层全部 settled
   function checkCompleteGate(batch) {
     const layers = { plan: [], exec: [], audit: [] };
@@ -153,18 +295,39 @@ export function createGates(root) {
   // 门禁状态查询（gate_status 工具用，设计 §8 M1）：lane 的 layer/契约字段/缺失清单/plan 契约问题
   function gateStatus(sessionId, batchId, lane) {
     const batch = readBatch(sessionId, batchId);
-    if (!batch) throw new Error('batch not found: ' + batchId);
+    if (!batch) {
+      // 损坏批次（文件存在但解析失败）→ 返回 corrupt 视图不 throw（AC-1 读路径不 throw）；不存在 → throw
+      if (fs.existsSync(batchFile(sessionId, batchId))) {
+        return { lane, layer: null, state: null, team: null, corrupt: true, consume: [], produce: [], outputs: [], consumeMissing: [], outputsMissing: [], produceMissing: [], contractProblems: null, targets: [], targetsMissing: [], targetsUnchanged: [] };
+      }
+      throw new Error('batch not found: ' + batchId);
+    }
     const t = findTask(batch, lane);
     if (!t) return { lane, layer: null, state: batch.lanes[lane], gates: 'generic', team: batch.team };
     const missing = (field) => (Array.isArray(t[field]) ? t[field] : []).filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     const contract = t.layer === 'plan' ? checkPlanContract(sessionId, batchId, batch, lane) : null;
+    // targets 探测（O2，设计 §1.5）：声明清单 + 缺失清单 + 未变更清单——仅 stat（存在性 + mtime 路径），
+    // 不读文件正文（marker 命中判定留给门禁执行时，避免 gate_status 读文件成本，见 design Open Question 3）
+    const targets = Array.isArray(t.targets) ? [...t.targets] : [];
+    const startAt = laneStartedAt(batch, lane);
+    const startMs = Date.parse(startAt);
+    const statFile = (p) => { try { const st = fs.statSync(p); return st.isFile() ? st : null; } catch { return null; } };
+    const targetsMissing = targets.filter((p) => statFile(p) === null);
+    const targetsUnchanged = targets.filter((p) => {
+      if (targetsMissing.includes(p)) return false;
+      const st = statFile(p);
+      if (!st) return true; // 探测竞态：stat 失败视同未变更（保守）
+      const mtimeMs = new Date(st.mtime).getTime();
+      return !(Number.isFinite(mtimeMs) && Number.isFinite(startMs) && mtimeMs > startMs);
+    });
     return {
       lane, layer: t.layer ?? null, state: batch.lanes[lane], team: batch.team,
       consume: t.consume ?? [], produce: t.produce ?? [], outputs: t.outputs ?? [],
       consumeMissing: missing('consume'), outputsMissing: missing('outputs'), produceMissing: missing('produce'),
       contractProblems: contract && !contract.ok ? contract.problems : null,
+      targets, targetsMissing, targetsUnchanged,
     };
   }
 
-  return { checkEntryGate, checkPlanContract, checkExitGate, checkNeedHumanGate, checkCompleteGate, gateStatus };
+  return { checkEntryGate, checkPlanContract, checkExitGate, checkNeedHumanGate, checkCommandGate, checkTargetsGate, checkCompleteGate, gateStatus };
 }

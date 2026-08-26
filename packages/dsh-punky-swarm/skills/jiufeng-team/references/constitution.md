@@ -1,7 +1,7 @@
 # 项目 Constitution — 治理原则
 
 > 生成日期：[YYYY-MM-DD]
-> 生成者：Leader（基于 leader-decision-pack.md + Mnemopi 记忆种子）
+> 生成者：Leader（基于 leader-decision-pack.md + 经验记忆种子（dsh-mneme 优先））
 > 用途：项目级不可协商的治理原则，所有角色自动引用
 
 ---
@@ -53,11 +53,11 @@
 
 | 条目 | 类型 | 说明 |
 |------|------|------|
-| Coder 交付前必须自检（lint + 测试通过） | MUST | Mnemopi SP-05 |
-| Reviewer 打回必须附带 MUST-FIX 清单 | MUST | Mnemopi SP-08 |
-| 同子模块 3 次打回触发人审门禁 | MUST | 现有流水线规则 |
+| Coder 交付前必须自检（lint + 测试通过） | MUST | SP-05 |
+| Reviewer 打回必须附带 MUST-FIX 清单 | MUST | SP-08 |
+| 同子模块 3 次打回触发人审门禁 | MUST | 治理纪律 |
 | Spec Acceptance Criteria 必须可测试 | MUST | 可用 JSON 断言验证 |
-| 复盘必须阅读 6 类产出物 | MUST | Mnemopi SP-09 |
+| 复盘必须阅读 6 类产出物 | MUST | SP-09 |
 
 ---
 

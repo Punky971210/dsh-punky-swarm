@@ -14,7 +14,5 @@
 - 约束：按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 artifacts/<batchId>/；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）；设计前可查跨会话记忆/代码图谱复用既有方案
 
 ## 协作方式（dsh 语义）
-- 派发：Leader 经 member_status 置 running → subagent 派发（任务包=wavePlan lane，含角色/目标/契约/验收）
-- 回执：双通道——report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执，含产物落盘路径）；Manager 据此调度裁决
-- 门禁：review 阶段 Leader 按门禁裁决 merged/conflict；返工=review→running 保留；人审门禁：全额通过自动放行/3 次打回→Leader
-- 交互：不主动上报空闲（dsh 无空闲上报协议）；跨轮信息走产物+mailbox 元数据
+- 协作方式公共语义见 SKILL.md §纪律要点 + references/workflow.md §二；本角色差异如下
+- 门禁：review 阶段 Manager 按门禁语义结算 merged/conflict（member_settle）；批次 complete 由 Leader 终门禁（audit 验收齐备后）
