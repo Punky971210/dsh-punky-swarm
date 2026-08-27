@@ -116,8 +116,9 @@ test('runCommand：默认输出截断 8192B 生效（GATE_MAX_OUTPUT_BYTES 未�
 
 test('runCommand：cwd 生效 + `cd /d <dir> && <cmd>` 自控（命令在正确目录执行）', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-cwd-'));
-  // Windows：`cd` 跨盘须 `/d` 开关（cmd 标准行为，引擎透传 shell 语义）；同一盘内裸 cd 亦生效
-  const r = runCommand({ command: 'cd /d ' + JSON.stringify(dir) + ' && node -e "process.stdout.write(process.cwd())"', timeoutMs: 5000, retries: 0 });
+  // 平台分支：Windows cmd 跨盘须 `/d` 开关，POSIX sh 用裸 `cd`（引擎透传 shell 语义；本用例 os.tmpdir 同盘，裸 cd 语义等价）
+  const cdPrefix = process.platform === 'win32' ? 'cd /d ' : 'cd ';
+  const r = runCommand({ command: cdPrefix + JSON.stringify(dir) + ' && node -e "process.stdout.write(process.cwd())"', timeoutMs: 5000, retries: 0 });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.output.trim().replace(/\\/g, '/'), dir.replace(/\\/g, '/'), 'expect cwd = cd 目录');
 });
