@@ -15,10 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks（全部按 session 隔离）
+// dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks / stream（全部按 session 隔离）
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as mailbox from './comms/mailbox.js';
+import { createStreamHub } from './panel/stream.js';
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -34,6 +35,12 @@ export function createApi(ctx, deps) {
   const { store, root, catalog, agentCatalog, aipFormat, discovery } = deps;
   const disposers = [];
   const register = (route) => disposers.push(ctx.webServer.register(route));
+
+  // R3 SSE hub（设计 §3.3.3）：随 webServer 挂载（ADR-4：无独立配置键；降级回轮询即运行时自适配开关）。
+  // 装配点（index.js 层，exec-a 批②）预留时经 deps.panelStream 注入复用（含 topic 触发源 attachTopic 接线）；
+  // 缺省自建（fs.watch 单通道先行交付——契约移交点语义），自建者负责 dispose。
+  const panelStream = deps.panelStream || createStreamHub({ root, logger: ctx.logger });
+  if (!deps.panelStream) disposers.push(() => { try { panelStream.dispose(); } catch {} });
 
   register({
     kind: 'prefix',
@@ -207,6 +214,30 @@ export function createApi(ctx, deps) {
       },
     });
   }
+
+  // R3 SSE 端点（设计 §3.3.3，纯新增路由——既有 /api 路由一字不动）：
+  //   GET /api/dsh-punky-swarm/stream?session=<sid>[&batchId=<bid>]
+  //   SSE 帧协议：event: batch|mailbox|heartbeat + data:<JSON>；注释心跳帧每 10s（hub 内维护）。
+  //   推送只发轻量摘要 {sessionId,batchId,eventCount,updatedAt}，客户端回拉既有只读 API 取全量（ADR-5）。
+  register({
+    kind: 'exact',
+    path: '/api/dsh-punky-swarm/stream',
+    handler(req, res) {
+      try {
+        const { session, batchId } = q(req.url);
+        if (!session) return sendJson(res, 400, { error: 'session required' });
+        const st = panelStream.subscribe(session, batchId || null, res);
+        if (!st.ok) {
+          // 会话级连接数上限（≤8）→ 503；其余（缺 session/handshake 失败）→ 400
+          const status = st.reason === 'limit' ? 503 : 400;
+          try { sendJson(res, status, { error: st.reason === 'limit' ? 'too many stream connections for session' : st.reason }); } catch {}
+          return;
+        }
+      } catch (e) {
+        try { res.end(); } catch {}
+      }
+    },
+  });
 
   return { dispose() { for (const d of disposers) { try { d?.(); } catch {} } } };
 }
