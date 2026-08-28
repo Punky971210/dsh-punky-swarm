@@ -20,6 +20,8 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';
+// P1 批 R-07 排除项（承接归 panel 批）：事件读端字面量收敛——EVT 常量源 lib/state/event-types.js（P2-07 单点）
+import * as EVT from './state/event-types.js';
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -90,7 +92,7 @@ export function createApi(ctx, deps) {
         const laneAttempts = {};
         const upgrades = {};
         for (const e of b.events) {
-          if (e.type === 'member.settled' && e.from === 'review' && e.to === 'running') {
+          if (e.type === EVT.EVT_MEMBER_SETTLED && e.from === 'review' && e.to === 'running') {
             laneAttempts[e.lane] = (laneAttempts[e.lane] ?? 0) + 1;
           }
         }
