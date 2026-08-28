@@ -31,6 +31,8 @@ window.__ModuleLoader__.load({
       "view.cluster": "蟛蜞集群",
       "live": "实时",
       "refresh.auto": "3s 自动刷新",
+      "stream.live": "实时推送",
+      "stream.fallback": "已降级 3s 轮询",
       "updated": "更新于",
       "stat.total": "总批次",
       "stat.running": "运行中",
@@ -65,6 +67,8 @@ window.__ModuleLoader__.load({
       "view.cluster": "Punky swarm",
       "live": "Live",
       "refresh.auto": "3s auto refresh",
+      "stream.live": "Live push",
+      "stream.fallback": "3s polling fallback",
       "updated": "updated",
       "stat.total": "Batches",
       "stat.running": "Running",
@@ -503,6 +507,7 @@ window.__ModuleLoader__.load({
       const [sel, setSel] = useState(null);
       const [detail, setDetail] = useState(null);
       const [updated, setUpdated] = useState(null);
+      const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（R3 SSE 降级回轮询状态，D6 简化②）
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
@@ -532,33 +537,101 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
+      // R3 SSE 列表流（设计 §3.3.4）：EventSource 主通道 + 3s 轮询降级兜底（D2 保留既有轮询路径不删）。
+      // 收到 batch 信号 → eventCount 去重（旧于当前忽略）→ 重跑既有聚合；onerror / 15s 无心跳 → 回退轮询；
+      // 重连成功（EventSource 自动重连 / 心跳恢复）→ 停轮询回 SSE。
       useEffect(() => {
         let alive = true;
+        let es = null;
+        let pollIv = null;
+        let lastBeat = 0;
+        let degraded = false;
+        const seen = new Map(); // batchId -> 已见 eventCount（服务端摘要去重，旧于当前忽略）
         const tick = async () => {
           try {
             const agg = await aggregateBatches(sid);
-            if (alive) { setBatches(agg); setUpdated(new Date()); }
+            if (!alive) return;
+            setBatches(agg); setUpdated(new Date());
+            for (const b of agg) {
+              if (typeof b.eventCount === 'number') seen.set(b.batchId, Math.max(seen.get(b.batchId) || 0, b.eventCount));
+            }
           } catch {}
         };
+        const startPoll = () => { if (degraded || pollIv) return; degraded = true; setMode('poll'); pollIv = setInterval(tick, 3000); };
+        const stopPoll = () => { degraded = false; if (pollIv) { clearInterval(pollIv); pollIv = null; } setMode('sse'); };
+        const onBatch = (ev) => {
+          lastBeat = Date.now();
+          try {
+            const d = JSON.parse(ev.data);
+            const bid = d.batchId, n = d.eventCount;
+            if (bid && typeof n === 'number' && seen.get(bid) != null && n <= seen.get(bid)) return; // 旧于当前忽略
+            if (bid && typeof n === 'number') seen.set(bid, n);
+            tick();
+          } catch { tick(); }
+        };
+        const onHeartbeat = () => { lastBeat = Date.now(); if (degraded) stopPoll(); }; // 心跳恢复 → 回 SSE
+        const connect = () => {
+          try {
+            if (typeof EventSource === 'undefined' || !sid) { startPoll(); return; }
+            es = new EventSource('/api/dsh-punky-swarm/stream?session=' + encodeURIComponent(sid));
+            es.addEventListener('batch', onBatch);
+            es.addEventListener('heartbeat', onHeartbeat);
+            es.onopen = () => { lastBeat = Date.now(); stopPoll(); };
+            es.onerror = () => { lastBeat = Date.now(); if (!degraded) startPoll(); }; // 断流 → 轮询兜底（EventSource 自动重连）
+          } catch { startPoll(); }
+        };
         tick();
-        const iv = setInterval(tick, 3000);
-        return () => { alive = false; clearInterval(iv); };
+        connect();
+        const stall = setInterval(() => {
+          if (!degraded && es && lastBeat && Date.now() - lastBeat > 15000) startPoll(); // 15s 无心跳 → 降级轮询
+        }, 5000);
+        return () => { alive = false; if (es) { try { es.close(); } catch {} } if (pollIv) clearInterval(pollIv); clearInterval(stall); };
       }, [sid]);
+      // R3 SSE 详情流（设计 §3.3.4）：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
       useEffect(() => {
         if (!sel) { setDetail(null); return; }
         let alive = true;
+        let es = null;
+        let pollIv = null;
+        let lastBeat = 0;
+        let degraded = false;
+        let lastCount = null;
         const tick = async () => {
           try {
             const d = await api('/batch?batchId=' + encodeURIComponent(sel.batchId), sel.session);
             let mail = { inbox: [], broadcast: [] };
             try { mail.inbox = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=inbox', sel.session)).items; } catch {}
             try { mail.broadcast = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=broadcast', sel.session)).items; } catch {}
-            if (alive) setDetail(Object.assign({}, d, { mail }));
+            if (alive) { setDetail(Object.assign({}, d, { mail })); lastCount = d.eventCount; }
           } catch {}
         };
+        const startPoll = () => { if (degraded || pollIv) return; degraded = true; setMode('poll'); pollIv = setInterval(tick, 3000); };
+        const stopPoll = () => { degraded = false; if (pollIv) { clearInterval(pollIv); pollIv = null; } setMode('sse'); };
+        const onSignal = (ev) => {
+          lastBeat = Date.now();
+          try {
+            const d = JSON.parse(ev.data);
+            if (typeof d.eventCount === 'number' && lastCount != null && d.eventCount <= lastCount) return; // 旧于当前忽略
+            tick();
+          } catch { tick(); }
+        };
+        const onHeartbeat = () => { lastBeat = Date.now(); if (degraded) stopPoll(); };
+        const connect = () => {
+          try {
+            if (typeof EventSource === 'undefined' || !sel.session) { startPoll(); return; }
+            es = new EventSource('/api/dsh-punky-swarm/stream?session=' + encodeURIComponent(sel.session) + '&batchId=' + encodeURIComponent(sel.batchId));
+            es.addEventListener('batch', onSignal);
+            es.addEventListener('heartbeat', onHeartbeat);
+            es.onopen = () => { lastBeat = Date.now(); stopPoll(); };
+            es.onerror = () => { lastBeat = Date.now(); if (!degraded) startPoll(); };
+          } catch { startPoll(); }
+        };
         tick();
-        const iv = setInterval(tick, 3000);
-        return () => { alive = false; clearInterval(iv); };
+        connect();
+        const stall = setInterval(() => {
+          if (!degraded && es && lastBeat && Date.now() - lastBeat > 15000) startPoll();
+        }, 5000);
+        return () => { alive = false; if (es) { try { es.close(); } catch {} } if (pollIv) clearInterval(pollIv); clearInterval(stall); };
       }, [sel]);
 
       const list = batches || [];
@@ -589,7 +662,7 @@ window.__ModuleLoader__.load({
             React.createElement('span', { style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.8, color: liveColor } }, tt('live'))
           ),
           React.createElement('span', { style: { flex: 1 } }),
-          React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono } }, tt('refresh.auto')),
+          React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono } }, tt(mode === 'poll' ? 'stream.fallback' : 'stream.live')),
           React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, '· ' + tt('updated') + ' ' + updatedText)
         ),
         React.createElement('div', { role: 'status', 'aria-atomic': 'true', style: { display: 'flex', gap: 8 } },
