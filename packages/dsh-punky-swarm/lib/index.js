@@ -42,6 +42,9 @@ import * as mailbox from './comms/mailbox.js';
 import { createConfigWatcher, CONFIG_CHANGED_EVENT } from './hot/config-watch.js';
 // R2 topic 运行时（lib/comms/topic-runtime.js，新建）：装配面 start/stop（与 trajectory 桥同形）+ 状态事件发布接线
 import { createTopicRuntime } from './comms/topic-runtime.js';
+// M1 闭合（panel-verify §3 修复指引）：R3 SSE hub（lib/panel/stream.js）由装配层创建注入 api.js（deps.panelStream），
+//   topic.enabled 时经 hub.attachTopic('swarm.') 订阅低延迟触发源（subscribeTopicPrefix → parseTopicIds → notifyAll）
+import { createStreamHub } from './panel/stream.js';
 // P1-02 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
@@ -204,7 +207,11 @@ export const apply = (ctx, config = {}) => {
 
   // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
   // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
+  // M1：panelStream hub 由装配层创建并注入 deps.panelStream（api.js:44 注入面复用），dispose 归本层
+  //   （api.js:45 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
   let apiDispose = null;
+  let panelStream = null;
+  let topicAttachUn = null;
   if (ctx.webServer) {
     // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
@@ -234,12 +241,15 @@ export const apply = (ctx, config = {}) => {
         + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover)');
     }
 
-    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient }).dispose;
+    // M1 闭合（panel-verify §3 修复指引 2）：SSE hub 装配层创建注入——先建 hub 再传 deps.panelStream，
+    //   dispose 归属本层（api.js:45 自建者 dispose；注入时 api.js 不 push disposer）。
+    //   hub 随 webServer 挂载（ADR-4 无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源①
+    panelStream = createStreamHub({ root, logger: ctx.logger });
+    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient, panelStream }).dispose;
 
-    // [exec-b 挂载点预留] R3 SSE hub（lib/panel/stream.js，exec-b 新建）在此装配：随 webServer 挂载（ADR-4 无独立
-    //   配置键）、topic.enabled 时经 subscribeTopic('swarm.') 订阅低延迟触发源 + fs.watch 批次目录兜底；exec-a merged
-    //   后接线（契约移交点）。本批 exec-a 不实现 hub——exec-b 在 api.js 侧经 deps.panelStream 注入复用/自建兜底
-    //   （缺省 createStreamHub），本预留仅声明挂载面，不引入任何装配。
+    // M1 闭合（panel-verify §3 修复指引）：R3 SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
+    //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源①（下方 topic 运行时装配分支与 R1 热更新③对称接线）；
+    //   topic 关闭时 hub 仍装配（fs.watch ② + 心跳 ③ 双通道不变），attachTopic 零调用零路径。
   }
 
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
@@ -262,6 +272,9 @@ export const apply = (ctx, config = {}) => {
     topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
     topicRuntime.start();
     topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+    // M1 闭合：hub 触发源①接线（attachTopic('swarm.')，幂等——已接线不重复订阅）——
+    // 订阅后 store.setMember/setPhase 状态事件（swarm.member.settled / swarm.batch.phase）经 hub 路由推送 SSE
+    if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
     ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
   }
 
@@ -367,16 +380,18 @@ export const apply = (ctx, config = {}) => {
       trajectory.stop(); trajectory = null;
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge stopped');
     }
-    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动）
+    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动 + M1 hub attachTopic 对称退订）
     const topicCfg = readCapability(next, 'topic');
     if (topicCfg?.enabled && !topicRuntime) {
       topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
       topicRuntime.start();
       topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+      if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime started');
     } else if (!topicCfg?.enabled && topicRuntime) {
       topicRuntime.stop(); topicRuntime = null;
       topicSink.emit = null;
+      if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
     }
     // ④ verify 挂载（可选 L1）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
@@ -409,6 +424,9 @@ export const apply = (ctx, config = {}) => {
     apiDispose?.();
     trajectory?.stop();
     topicRuntime?.stop();
+    // M1：attachTopic 退订 + hub dispose（装配层创建者负责，api.js 注入时不重复 dispose）
+    if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
+    if (panelStream) { panelStream.dispose(); panelStream = null; }
     verifyMount?.dispose();
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
