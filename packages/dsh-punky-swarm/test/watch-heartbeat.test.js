@@ -210,10 +210,13 @@ test('W5：recoverBatches → running→idle 不被扫描；重派 running 计�
 });
 
 // ---- W6：工具面——enabled=false 不注册；enabled=true 注册 lane_heartbeat（只读查询 + 手动一拍） ----
-test('W6：lane_heartbeat 工具注册门控（enabled 默认关）', () => {
+test('W6：lane_heartbeat 工具注册门控（P1-01 缺省默认开；显式 enabled=false 不注册）', () => {
   const { root, store } = setup();
   const ctx = { tools: { register: () => {} } };
-  assert.deepEqual(createHeartbeatTools(ctx, { store, root, config: {} }), [], 'W6: enabled 缺省=false 不注册');
+  // P1-01 行为变更：缺省 watch 默认开 → 缺省注册（旧「缺省关」为旧行为断言）
+  const def = createHeartbeatTools(ctx, { store, root, config: {} });
+  assert.equal(def.length, 1, 'W6: enabled 缺省=true 注册（readCapability 合并 WATCH_DEFAULTS）');
+  assert.equal(def[0].name, 'lane_heartbeat');
   assert.deepEqual(createHeartbeatTools(ctx, { store, root, config: { capabilities: { watch: { enabled: false } } } }), [], 'W6: enabled=false 不注册');
   const tools = createHeartbeatTools(ctx, { store, root, config: { capabilities: { watch: { enabled: true } } } });
   assert.equal(tools.length, 1);
@@ -269,7 +272,7 @@ test('reset(laneKey) 外部活动入口；dispose 幂等', () => {
 // ---- resolveWatchConfig：配置键缺省默认 / 非法回退（schema.js 归主键） ----
 test('resolveWatchConfig：缺省默认、显式覆写、非法值回退', () => {
   const d = schema.resolveWatchConfig({});
-  assert.equal(d.enabled, false); // 无显式配置视为关（函数语义）；发布默认开由 patch.yml 注入实现
+  assert.equal(d.enabled, true); // P1-01 行为变更：缺省 = WATCH_DEFAULTS.enabled(true)（等价 readCapability 合并；旧「缺省关」为旧行为断言）
   assert.deepEqual(d.intervalsMinutes, [10, 20, 30]);
   assert.equal(d.maxMissed, 3);
   assert.equal(d.scanIntervalMinutes, 1);

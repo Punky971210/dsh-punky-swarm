@@ -1,5 +1,5 @@
 蟛蜞模式（jiufeng 集群治理 on dsh）
 --------------------------------
 来源：dsh-punky-swarm 仓库开发（standard 基底 + Leader persona/治理规则）。
-前置：web profile 需挂载 dsh-punky-swarm 插件（wave_plan/member_status/member_settle/batch_phase/batch_status/lane_claim/lane_release/mailbox_*/assign_check/gate_status 工具）。
-状态：预设 v0.2（2026-08-19）——三层门禁增量已回填 dsh-punky-swarm（Tier3），persona 含纪律 0/0b；待 web 重启实测。回滚锚点：docs/snapshot-2026-08-19-dsh-punky-baseline.md。
+前置：web profile 需挂载 dsh-punky-swarm 插件（20 项治理工具：wave_plan/batch_phase/batch_status/assign_check/gate_status/artifact_types/asset_claim/lane_claim/lane_release/member_status/member_settle/mailbox_send/mailbox_read/mailbox_ack/lane_heartbeat/lane_worktree_create/lane_worktree_merge/lane_checkpoint/lane_checkpoint_status/log_export；完整说明见 README.md「治理工具（20）」一节）。
+状态：预设 v0.3.4（2026-08-27）——三层门禁（Tier3）已回填 dsh-punky-swarm，persona 含纪律 0/0b；web 重启实测结论待本批实测回写。回滚锚点：仓库级文档 D:\dsh\Punky-plugin\docs\snapshot-2026-08-19-dsh-punky-baseline.md（npm 发布不含 docs 目录）。

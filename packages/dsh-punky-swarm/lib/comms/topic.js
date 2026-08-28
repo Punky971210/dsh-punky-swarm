@@ -18,6 +18,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 文件 topic：broadcast topic 订阅/分发
 // 两路分发：① 进程内 handler 同步调用（异常隔离）；② 可选落 mailbox broadcast box（复用 mailbox.send，ackId 原子写语义）
 // 消费侧跨进程经 mailbox_read(box=broadcast) 读取，readTopic 提供按 topic/sinceTs 过滤的只读辅助
+//
+// ⚠️ 预留未接线模块（P1-03 边界标注）——生产零调用（subscribeTopic/emitTopic/readTopic 无引用者）：
+//   - 装配开关 capabilities.topic.enabled（CAPABILITY_REGISTRY 注册表默认关，显式开启才接线）；
+//   - 接线（trajectory 桥广播改经本模块等）归操作面板批次，本批不实施。
+//   - 消费点不得绕过 mailbox 公共接口（与既有广播语义同源：mailbox.send/readUnacked）。
 import { join } from 'node:path';
 import { send as mailboxSend, readUnacked } from './mailbox.js';
 

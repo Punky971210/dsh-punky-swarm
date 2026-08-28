@@ -22,11 +22,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalizeArgs, stableHash } from './selector.js';
+import { SESSION_RE } from '../state/constants.js'; // P1-07 单点（原 :29 定义迁出）
 
 // 256KB 截断阈值（对齐 dsh-verification evidence-store 超限截断语义）
 export const MAX_BLOB_BYTES = 256 * 1024;
-
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
 
 // 控制面工具名单：治理/协调/宿主控制面工具不产证据（结果非领域产出，含本批后续挂载工具）
 export const CONTROL_PLANE_TOOLS = new Set([

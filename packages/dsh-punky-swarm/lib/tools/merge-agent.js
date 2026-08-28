@@ -26,9 +26,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     （merge agent 是冲突化解手段，非 lane 恢复；不新增成员态、不自动 settle）。
 //   - fail-closed：spawner 抛错/超时/返回未知 verdict/化解后 orch 仍有在途 merge（U 标记或 MERGE_HEAD 残留）
 //     → 一律视同 UNRESOLVED，保留现场走现状 conflict 路径（不挂起不 throw）。
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+// P1-05 单点：runGit 统一消费 lane-tools.js 导出版（超集带 cwd，契约 {ok,stdout,stderr,code}）；
+// 本文件原自持实现（:44）删除。循环依赖安全：本文件与 lane-tools.js 相互 import，但 runGit 调用点
+// 均在函数体内（运行时 live binding），顶层无调用。
+import { runGit } from './lane-tools.js';
 
 export const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
 export const VERDICT_SUCCESS = 'SUCCESS';
@@ -37,21 +40,6 @@ const RESOLVED = new Set([VERDICT_RESOLVED, VERDICT_SUCCESS]);
 export const NO_SPAWNER_HINT = 'mergeAgent configured but no spawner injected';
 const DEFAULT_TIMEOUT_MS = 600_000;
 const UNMERGED_RE = /^(UU|AA|DD|AU|UA|DU|UD)\s/; // git status --porcelain 的冲突 XY 标记全集
-
-const gitBin = () => process.env.DSH_GIT_BIN ?? 'git';
-
-// git 调用统一契约（与 lane-tools.runGit 同款；本模块独立持有，避免 lane-tools 行数膨胀）
-export function runGit(repo, args) {
-  try {
-    const out = execFileSync(gitBin(), args, {
-      cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-    });
-    return { ok: true, stdout: String(out ?? '').trim(), stderr: '' };
-  } catch (e) {
-    const stderr = e?.stderr ? String(e.stderr).trim() : (e?.message ? String(e.message) : String(e));
-    return { ok: false, stdout: '', stderr };
-  }
-}
 
 // HARD 规则（写入 request.instructions，约束 agent 防误合并）
 export const HARD_INSTRUCTIONS = [

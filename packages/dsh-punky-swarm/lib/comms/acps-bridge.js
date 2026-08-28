@@ -35,14 +35,9 @@ import {
   toAipSession,
   toAipDataItems,
   AIP_COMMAND_TYPES,
+  TASK_STATES,
 } from './aip-format.js';
 import { resolveBridgeConfig } from '../schema.js';
-
-// TaskState 枚举
-export const TASK_STATES = [
-  'accepted', 'working', 'awaiting-input', 'awaiting-completion',
-  'completed', 'canceled', 'failed', 'rejected',
-];
 
 // lane 合法性（与 mailbox.js sanitizeLane 同正则，fail-soft：外部输入不合法 → null 而非 throw）
 const LANE_RE = /^[a-zA-Z0-9._-]+$/;
@@ -220,5 +215,5 @@ function rejectedInboundResult(taskCommand, ctx, res) {
   return out;
 }
 
-// re-export aip-format 三映射（端点单一入口；与投影层同源，保证 ACPs 形态一致）
-export { toAipMessage, toAipTask, toAipSession, toAipDataItems, AIP_COMMAND_TYPES };
+// re-export aip-format 三映射 + 枚举（端点单一入口；与投影层同源，保证 ACPs 形态一致）
+export { toAipMessage, toAipTask, toAipSession, toAipDataItems, AIP_COMMAND_TYPES, TASK_STATES };

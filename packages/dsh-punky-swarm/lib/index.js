@@ -38,6 +38,9 @@ import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
 import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
 import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
+// P1-02 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
+//   内部原样委托 store.recoverBatches()，零行为变化）
+import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
 
 export const name = 'dsh-punky-swarm';
 export const inject = ['tools', 'webServer'];
@@ -59,6 +62,13 @@ export const apply = (ctx, config = {}) => {
   }
 
   const store = createStore(root);
+
+  // P2-04：GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
+  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
+  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
+  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
+  }
 
   // mailbox 周期 sweep 定时器（④，config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
   let sweepTimer = null;
@@ -83,10 +93,15 @@ export const apply = (ctx, config = {}) => {
   }
 
   // 启动恢复：in-flight 成员 -> idle + system.recovered（每个进程仅一次，跨全部 session）
+  // P1-02 接线：改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })——
+  //   config.resume.enabled 缺省关 → 内部委托 store.recoverBatches()（原路径零行为变化）；
+  //   开启 → restoreBatches()（running/review 原地保留 + system.restored 事件）。返回数组形态
+  //   .length/.corrupt 兼容既有日志消费。
   if (!recoveredThisProcess) {
     recoveredThisProcess = true;
     try {
-      const r = store.recoverBatches();
+      const resumeCfg = resolveResumeConfig(config);
+      const r = resumeRecoverBatches(store, { restoreRunning: resumeCfg.enabled });
       if (r.length) ctx.logger?.info?.('[dsh-punky-swarm] recovered batches: ' + r.join(', '));
       // 恢复容错汇总（v2-node-robustness ②）：损坏批次被隔离（corrupt-batches.json + 跳过），不阻断其余恢复
       if (Array.isArray(r.corrupt) && r.corrupt.length) {

@@ -61,12 +61,12 @@ async function makeBatch(store, bid, events = EVENTS) {
 
 function batchFileOf(root, bid) { return path.join(root, 'sessions', 'sess-log', 'batches', bid + '.json'); }
 
-test('T3.1 默认关：logs 未配置/disabled → log_export 不注册，工具总数 14', () => {
+test('T3.1 默认关：logs 未配置/disabled → log_export 不注册（工具总数 19 = P1-01 缺省默认开，不含 log_export）', () => {
   for (const cfg of [{}, { capabilities: {} }, { capabilities: { logs: {} } }, { capabilities: { logs: { enabled: false } } }]) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-log-off-'));
     const store = createStore(root);
     const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: cfg });
-    assert.equal(tools.length, 14, '缺省/disabled 配置下工具总数保持 14');
+    assert.equal(tools.length, 19, '缺省/disabled 配置下工具总数保持 19（14 + lane_heartbeat + worktree 四件，logs 默认关）');
     assert.equal(tools.some((t) => t.name === 'log_export'), false);
   }
 });
@@ -74,7 +74,7 @@ test('T3.1 默认关：logs 未配置/disabled → log_export 不注册，工具
 test('T3.1b 启用后 log_export 注册且仅 +1', async () => {
   const { byName } = setup(true);
   assert.equal(typeof byName.log_export?.execute, 'function');
-  assert.equal(Object.keys(byName).length, 15); // 14 + log_export
+  assert.equal(Object.keys(byName).length, 20); // 19 + log_export
 });
 
 test('T3.2 全量导出：eventCount=exported=events.length，items 与 readBatch 逐条保序一致', async () => {

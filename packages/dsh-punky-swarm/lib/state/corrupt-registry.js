@@ -24,9 +24,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 容错：清单文件自身损坏 → 读降级空清单（governance.json 同款 try/catch 模式），不 throw。
 import fs from 'node:fs';
 import path from 'node:path';
+import { SESSION_RE } from './constants.js'; // P1-07 单点（原 :29 定义迁出）
 
 const CORRUPT_SCHEMA = 1;
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
 
 // 清单文件路径（会话级；与 store.sessionDir 同源解析——root/sessions/<sessionId>/）
 export function corruptFileOf(root, sessionId) {

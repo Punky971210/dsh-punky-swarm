@@ -20,28 +20,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       零副作用、不消费运行时、可单测。
 // ⚠ 2026-08 校准（覆盖旧 14+8 口径）：字段集以 ACS（Agent Capability Specification）原文为准——
 //   registry-server/app/agent/acsSchema.json（JSON Schema 全文）为逐字字段来源；
-//   旧「14+8 属性」（agentId/accessAddress/accessMethod…）仅作为兼容映射层
-//   （toLegacyDescriptor 纯函数，仅供审计对比，不参与对外契约）。
+//   旧「14+8 兼容映射层」（toLegacyDescriptor / toLegacySkill + ALL_TOOLS / LAYER_CAPABILITIES）
+//   已移除（P2-06）：ACPs 兼容路径中无调用——ACPs 描述直接消费 buildAgentDescriptor 的 ACS 格式
+//   （server.js:37,136 装配），描述以 ACS 格式为准。
 // 派生值标记：固定值 = 本文件推导；预留 = 后续填充。
 // 仅用内建能力，零新增依赖（红线：不改 node_modules）。
 import { engineVersion } from './tool-descriptor.js';
 
 // ACPs 协议版本（acsSchema.json examples：["02.01"]）
 export const ACS_PROTOCOL_VERSION = '02.01';
-
-// ── 工具名全集（14，与 register.js 聚合一致；capabilities 由 layer 推导，仅 legacy 映射层用）──
-const ALL_TOOLS = [
-  'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check',
-  'asset_claim', 'gate_status', 'lane_claim', 'lane_release', 'member_settle',
-  'member_status', 'mailbox_send', 'mailbox_read', 'mailbox_ack',
-];
-
-// layer → capabilities 推导（legacy 映射层用；ACS 本身无此字段，ACS 能力经 capabilities 表达）
-const LAYER_CAPABILITIES = {
-  plan: ['wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'gate_status'],
-  exec: ALL_TOOLS,
-  audit: ['batch_status', 'artifact_types', 'gate_status', 'member_status', 'mailbox_read'],
-};
 
 // ACS AgentCapabilitySpec 必填 14 键（acsSchema.json required 数组原文）
 export const ACS_REQUIRED_FIELDS = Object.freeze([
@@ -181,51 +168,3 @@ export function buildAgentCatalog(assembly, engineInfo = {}) {
   };
 }
 
-// ── 旧 14+8 兼容映射层（校准后降级：仅供审计对比，不参与对外契约）──
-// 旧口径字段名（agentId/accessAddress/…/skillId/skillName/…）为二手解读（spec §3.2/§6.1），
-// ACS 无对应命名；本层把 ACS 描述映射回旧结构，字段级对照见 spec §6.1 与 exec 产物
-// agent-desc.md。映射原则：语义 1:1 处透传（aic→agentId、provider.organization→owner、
-// skills id→skillId、inputModes→inputParams、examples→triggerConditions 等），
-// ACS 无的旧字段（securityLevel/trustLevel/region/language/serviceLevel/interactionModes/
-// communicationProtocols）保持旧固定/预留值。
-
-function toLegacySkill(skill) {
-  return {
-    skillId: skill.id,               // ACS skills[].id → 旧 skillId（spec §6.1 语义同）
-    name: skill.name,                // 透传
-    description: skill.description,  // 透传
-    version: skill.version,          // 透传
-    inputParams: skill.inputModes ?? [],      // ACS inputModes → 旧 inputParams（语义同）
-    outputParams: skill.outputModes ?? [],    // ACS outputModes → 旧 outputParams（语义同）
-    triggerConditions: skill.examples ?? [],  // ACS examples → 旧 triggerConditions（近似语义，标注）
-    dependencies: [],                // 旧口径：技能包自包含
-  };
-}
-
-/**
- * ACS AgentCapabilitySpec → 旧 14+8 属性结构（纯函数，审计对比用；不参与对外契约）
- * @param {object} descriptor ACS AgentCapabilitySpec（buildAgentDescriptor 输出）
- * @param {object} [opts] { layer? } 层名——提供时经 LAYER_CAPABILITIES 推导旧 capabilities
- *   （ACS 无 layer 概念，旧 capabilities 为层推导治理工具清单）
- * @returns {object} 旧 14+8 属性 JSON
- */
-export function toLegacyDescriptor(descriptor, opts = {}) {
-  const layer = opts.layer;
-  return {
-    // ── 14 项属性（旧口径）──
-    agentId: descriptor.aic,                     // ACS aic → 旧 agentId（spec §6.1 语义同）
-    name: descriptor.name,                       // 透传
-    description: descriptor.description,         // 透传
-    version: descriptor.version,                 // 透传
-    owner: descriptor.provider?.organization ?? 'dsh', // ACS provider.organization → 旧 owner
-    capabilities: layer ? (LAYER_CAPABILITIES[layer] ?? []) : [], // 仅 opts.layer 时可推导
-    skills: (descriptor.skills ?? []).map(toLegacySkill),        // ACS AgentSkill[] → 旧 8 项
-    interactionModes: ['point-to-point', 'group'],   // 旧固定值（mailbox 三件套语义）
-    communicationProtocols: ['dsh-file-mailbox'],    // 旧固定值（mailbox 文件协议）
-    securityLevel: 'session-isolated',               // 旧固定推导
-    trustLevel: null,                                // 旧预留：
-    region: null,                                    // 旧预留
-    language: 'zh-CN',                               // 旧预留
-    serviceLevel: null,                              // 旧预留：
-  };
-}

@@ -17,6 +17,4 @@ spec 驱动编码+最小自检。按 spec 实现功能点，最小改动，最�
 - 约束：按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 artifacts/<batchId>/；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）
 
 ## 协作方式（dsh 语义）
-- 协作方式公共语义见 SKILL.md §纪律要点 + references/workflow.md §二；本角色差异如下
-- 门禁：review 阶段 Manager 按门禁语义结算 merged/conflict（member_settle）；批次 complete 由 Leader 终门禁（audit 验收齐备后）
-- 子步骤 checkpoint：每完成一个子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救）；续跑前 lane_checkpoint_status 查询跳过已完成步骤
+- 协作方式公共语义（checkpoint 纪律 / 三层门禁 / 约束引用格式单一来源）见 SKILL.md §纪律要点 + §三层门禁 + 使用方式 §3 + references/workflow.md §二/§四；本角色差异如下

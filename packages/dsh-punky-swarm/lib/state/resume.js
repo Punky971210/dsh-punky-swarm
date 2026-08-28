@@ -29,22 +29,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发）
 //   - 不提供批次内自动续跑：重做仍开新批次
 //
-// 边界：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
-// 不触碰 store.js recoverBatches 主体（归 recover-audit lane）与 lane-tools.js（归 checkpoint-contract lane）。
+// 边界（P1-02 接线后同步）：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
+// 不触碰 store.js recoverBatches 主体（归 recover-audit lane）与 lane-tools.js 契约边界。
+// P1-02 已接线：index.js 启动恢复改调本文件 recoverBatches（restoreRunning 按 config.resume.enabled）；
+//   laneProgress 写点经 lane-tools.js lane_checkpoint（progress 携带时调 store.updateLaneProgress，
+//   内部 laneProgressWrite 纯函数合并）+ 结算终态清退经 store.setMember（laneProgressClear）。
 import * as schema from '../schema.js';
+// P1-04 单点：findTask 收敛至 task-utils.js（overBudgetOf 原 :157-162 内联同构遍历删除）
+import { findTask } from './task-utils.js';
 
 // ── config.resume 开关（默认关，零运行时开销，行为不变）──
 export const RESUME_DEFAULTS = Object.freeze({ enabled: false });
 
 export function resolveResumeConfig(config) {
   const c = config?.resume ?? {};
+  // resume 键不在 CAPABILITY_REGISTRY（config.resume.* 顶层域，非 capabilities.*）——
+  // 缺省关语义即严格判等（RESUME_DEFAULTS.enabled=false），无需 readCapability（无 entry 返回 undefined）
   return { enabled: c.enabled === true };
 }
 
-// 待回填清单（增强恢复落地后逐项回填；workerResumeChapter() 亦引用）
+// 待回填清单（P1-02 接线后：1/2 已回填；剩余项为后续批次）：
 export const RESUME_FILL_POINTS = [
-  '恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）',
-  'laneProgress 字段写/清/展（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；lane 结算终态经 laneProgressClear 清退；batch_status 面板 progress 视图）',
+  // ✓ 已接线（P1-02，本批）：恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）
+  // ✓ 已接线（P1-02，本批）：laneProgress 字段写/清（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；
+  //    lane 结算终态经 laneProgressClear 清退）
+  // ✗ 待回填：batch_status 面板 progress 视图（操作面板批次）
   '任务包 resume 章节从"文档占位"升为"装配层实际注入"（worker 角色手册加 resume 条款）',
   '崩溃恢复用例测试（模拟 running 中 crash → 重启 restore → 新 worker 从 N+1 续跑 → 产物合并验证）',
 ];
@@ -153,13 +162,10 @@ export function laneProgressClear(batch, lane) {
 //   的 lane.over-budget → appendEvent（幂等），转 review/stalled 由 Manager/Leader 裁决。
 // 返回 { over, budget }：budget = 任务声明的步数上限（未声明 = null）；over = total 是否超限。
 //   B-不变量：未声明 checkpoint.steps（budget=null）零感知——任意 progress 返回 { over:false, budget:null }。
-// 任务定位遍历语义与 store.findTask / machine.findTask 一致：wavePlan[].tasks 按 id 匹配。
+// 任务定位语义与 store/machine/gates/lane-heartbeat 一致：wavePlan[].tasks 按 id 匹配
+// （P1-04 单点：改调 task-utils.findTask，删除原 :157-162 内联同构遍历）。
 export function overBudgetOf(batch, lane, progress) {
-  let task = null;
-  for (const w of batch?.wavePlan ?? []) {
-    for (const t of w.tasks) if (t.id === lane) { task = t; break; }
-    if (task) break;
-  }
+  const task = findTask(batch, lane);
   const budget = task?.checkpoint?.steps ?? null;
   if (budget === null) return { over: false, budget: null }; // 未声明 → 零感知
   const total = progress?.total;

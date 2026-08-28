@@ -22,7 +22,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import * as mailbox from '../comms/mailbox.js';
 import { chainFor, checkBudget, recordChain } from '../comms/budget.js';
-import { TEXT_OUTPUT, sessionOf } from './core.js';
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
+import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
 import { join } from 'node:path';
 
 function boxRoot(root, sessionId, batchId) { return join(root, 'sessions', sessionId, 'mailbox', batchId); }
@@ -53,8 +54,9 @@ export function createMailboxTools(ctx, deps) {
         const sessionId = sessionOf(args, exec);
         const batchId = args.batchId;
         const rootDir = boxRoot(root, sessionId, batchId);
-        // C4 环防护接线（enabled 默认关 → 零感知零开销；inbox 永不受限——Manager 追问/派发绝不因链预算被拒）
-        const budgetCfg = config?.capabilities?.budget;
+        // C4 环防护接线（P1-01：缺省默认开——readCapability 合并注册表 default {enabled:true}；
+        //   显式 capabilities.budget.enabled:false 可关 → 零感知零开销；inbox 永不受限——Manager 追问/派发绝不因链预算被拒）
+        const budgetCfg = readCapability(config, 'budget');
         if (b.type !== 'inbox' && budgetCfg?.enabled === true && store) {
           const batch = store.readBatch(sessionId, batchId);
           if (batch) {

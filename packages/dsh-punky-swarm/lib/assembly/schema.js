@@ -23,9 +23,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 
-// ── 能力注册表（9 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps）──
-// path = config 取值路径；default = 缺省值（全能力默认开——AIP 为主线 + 治理能力全开，
-//   显式 enabled:false 可逐键关闭）；consumers = 既有消费点（键路径一致性依据）
+// ── 能力注册表（11 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps/logs/topic）──
+// path = config 取值路径；default = 缺省值（7 键默认开——aip/discovery/verify/watch/worktree/budget/trajectory；
+//   显式 enabled:false 可逐键关闭；4 键默认关——identity/acps/logs/topic，需显式开启）；
+// consumers = 既有消费点（键路径一致性依据）
 // identity 键：身份体系默认关——config.aip.identity.enabled === true 时
 //   调用方才激活 lib/aip/identity.js 模块 API（AIC 身份码注册 + CAI 证书发行 + 签名 + 信任链验证）；
 //   默认关 → 零开销零破坏；不注册新治理工具（20 工具契约不变），身份能力经模块 API 暴露。
@@ -42,9 +43,14 @@ export const CAPABILITY_REGISTRY = [
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
   { key: 'budget', path: ['capabilities', 'budget'], default: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 }, consumers: ['comms/budget.js + mailbox-tools.js 发送检查'] },
   { key: 'trajectory', path: ['capabilities', 'trajectory'], default: TRAJECTORY_DEFAULTS, consumers: ['index.js 桥接订阅'] },
+  // logs 键（E3 增强，P1-01）：日志导出工具注册开关——默认关（与 cordis.patch.yml 显式 logs.enabled:true 相合）；
+  //   消费点经 readCapability(config,'logs') 缺省读取，显式 enabled:false 可关。
+  { key: 'logs', path: ['capabilities', 'logs'], default: { enabled: false }, consumers: ['tools/log-tools.js log_export 注册'] },
+  // topic 键（P1-03）：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）归操作面板批次，本批不实施。
+  { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留，接线归操作面板批次）'] },
 ];
 
-// ── 互斥表（预留空表：当前 7 能力两两可叠加；未来互斥能力登记于此）──
+// ── 互斥表（预留空表：当前能力两两可叠加；未来互斥能力登记于此）──
 // 项形如 { keys: ['x', 'y'], message: '...' }：两键同时 enabled=true → validateCapabilities 报 MUTEX error
 export const EXCLUSIONS = [];
 

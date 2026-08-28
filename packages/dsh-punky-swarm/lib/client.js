@@ -487,6 +487,9 @@ window.__ModuleLoader__.load({
       return out;
     }
 
+    // 浏览器端 TERMINAL 副本：Node 端单点 = lib/state/constants.js（P1-07 收敛）；
+    // 面板段经 window.__ModuleLoader__ 拼接执行（无 ESM import 能力），此处为手工同步副本，
+    // batch-list/batch-detail 段共享本作用域引用（渲染时求值）。
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
     const cardBase = {
       get background() { return T.card; },

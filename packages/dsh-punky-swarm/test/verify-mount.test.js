@@ -122,23 +122,21 @@ test('A2.1 端到端：引擎级捕获证据 → evaluateAcEvidence 消费裁决
   m.dispose();
 });
 
-test('A2.2 enabled=false（默认）：installed:false、不注册监听、零副作用（无 verify 目录）', () => {
+test('A2.2 P1-01 缺省默认开：缺省配置 installed:true；显式 enabled=false → installed:false、零副作用', () => {
+  // 缺省（config 无 capabilities 键）：verify 默认开（resolveVerifyConfig 等价 readCapability 合并）→ installed:true
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-vm-'));
   const ctx = makeCtx();
   const m = mountVerify(ctx, { root, config: {} });
-  assert.deepEqual(
-    { installed: m.installed, reason: m.reason, count: m.count() },
-    { installed: false, reason: 'disabled', count: 0 },
-    '缺省配置 → disabled 惰性',
-  );
-  assert.ok(!ctx.has('tools/post-execute'), '无监听注册');
-  assert.ok(!fs.existsSync(path.join(root, 'verify')), '无 verify 目录产生（零副作用）');
-
-  const m2 = mountVerify(ctx, { root, config: { capabilities: { verify: { enabled: false } } } });
+  assert.equal(m.installed, true, '缺省配置 → verify 默认开（P1-01 行为变更，旧「缺省关」为旧行为断言）');
+  assert.ok(ctx.has('tools/post-execute'), '缺省默认开 → post-execute 监听注册');
+  m.dispose();
+  // 显式关：installed:false、不注册监听、零副作用（无 verify 目录产生）
+  const ctx2 = makeCtx();
+  const m2 = mountVerify(ctx2, { root, config: { capabilities: { verify: { enabled: false } } } });
   assert.equal(m2.installed, false);
   assert.equal(m2.reason, 'disabled');
-  assert.ok(!ctx.has('tools/post-execute'));
-  assert.ok(!fs.existsSync(path.join(root, 'verify')));
+  assert.ok(!ctx2.has('tools/post-execute'), '无监听注册');
+  assert.ok(!fs.existsSync(path.join(root, 'verify')), '无 verify 目录产生（零副作用）');
 });
 
 test('A2.3 ctx.on 缺失：静默降级不 throw（宿主能力缺失）', () => {
@@ -192,9 +190,11 @@ test('A2.3 DI 路径保留：createCompletionGate 原语义（enabled 门控 eva
   assert.equal(capOff.installed, false, '显式 enabled=false → 不安装');
 });
 
-test('resolveVerifyConfig 边界：缺省关（函数语义）/ mode 非法回退 advisory', () => {
-  assert.deepEqual(resolveVerifyConfig({}), { enabled: false, mode: 'advisory' });
-  assert.deepEqual(resolveVerifyConfig({ capabilities: {} }), { enabled: false, mode: 'advisory' });
+test('resolveVerifyConfig 边界：P1-01 缺省默认开 / mode 非法回退 advisory', () => {
+  // P1-01 行为变更：缺省 = VERIFY_DEFAULTS {enabled:true}（等价 readCapability 合并；旧「缺省关」为旧行为断言）
+  assert.deepEqual(resolveVerifyConfig({}), { enabled: true, mode: 'advisory' });
+  assert.deepEqual(resolveVerifyConfig({ capabilities: {} }), { enabled: true, mode: 'advisory' });
+  assert.deepEqual(resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false, mode: 'advisory' });
   assert.deepEqual(resolveVerifyConfig({ capabilities: { verify: { enabled: true } } }), { enabled: true, mode: 'advisory' });
   assert.deepEqual(resolveVerifyConfig({ capabilities: { verify: { enabled: true, mode: 'enforce' } } }), { enabled: true, mode: 'enforce' });
   assert.deepEqual(resolveVerifyConfig({ capabilities: { verify: { enabled: true, mode: 'weird' } } }), { enabled: true, mode: 'advisory' }, '非法 mode 回退 advisory（gate 同语义）');

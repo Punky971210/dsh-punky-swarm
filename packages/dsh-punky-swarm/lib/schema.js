@@ -122,7 +122,10 @@ export function resolveWatchConfig(config) {
     ? c.intervalsMinutes.map((m) => (Number.isFinite(Number(m)) && Number(m) >= 0 ? Number(m) : null)).filter((x) => x !== null)
     : null;
   return {
-    enabled: c.enabled === true,
+    // P1-01 等价默认合并：缺省 = WATCH_DEFAULTS.enabled(true)（与 readCapability 对注册表 default 的
+    // deepMerge 语义等价——显式 enabled:false 才关）。不直接 import readCapability 以避免
+    // lib/schema.js ⟷ lib/assembly/schema.js 顶层循环依赖（assembly 顶层初始化需本文件常量，静态 import 会 TDZ）。
+    enabled: c.enabled !== false,
     intervalsMinutes: intervals && intervals.length > 0 ? intervals : WATCH_DEFAULTS.intervalsMinutes,
     maxMissed: Number.isFinite(Number(c.maxMissed)) && Number(c.maxMissed) >= 1 ? Math.floor(Number(c.maxMissed)) : WATCH_DEFAULTS.maxMissed,
     scanIntervalMinutes: Number.isFinite(Number(c.scanIntervalMinutes)) && Number(c.scanIntervalMinutes) >= 0.1
@@ -145,7 +148,8 @@ export const VERIFY_DEFAULTS = Object.freeze({
 export function resolveVerifyConfig(config) {
   const c = config?.capabilities?.verify ?? {};
   return {
-    enabled: c.enabled === true,
+    // P1-01 等价默认合并：缺省 = VERIFY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
+    enabled: c.enabled !== false,
     mode: c.mode === 'enforce' ? 'enforce' : VERIFY_DEFAULTS.mode,
   };
 }
@@ -162,7 +166,8 @@ export const DISCOVERY_DEFAULTS = Object.freeze({
 export function resolveDiscoveryConfig(config) {
   const c = config?.capabilities?.discovery ?? {};
   return {
-    enabled: c.enabled === true,
+    // P1-01 等价默认合并：缺省 = DISCOVERY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
+    enabled: c.enabled !== false,
     nodes: (c.nodes && typeof c.nodes === 'object' && !Array.isArray(c.nodes)) ? c.nodes : {},
   };
 }

@@ -1,18 +1,18 @@
 {
   "version": "1",
   "round_id": "round-YYYYMMDD-NNN",
-  "generated_by": "reviewer",
+  "generated_by": "supervisor",
   "generated_at": "YYYY-MM-DDTHH:MM:SS+08:00",
   "gaps": [
     {
       "id": "G001",
       "type": "missing",
       "severity": "high",
-      "source_pkg": "pkg-003",
+      "source_pkg": "M-01",
       "source_ref": "spec.md §3.1.2",
       "description": "用户注册 API 缺少邮箱格式校验逻辑",
-      "suggested_output": "code-output/user-module/validation/email.py",
-      "evidence": "在 code-output/user-module/ 目录中未找到任何 validation 相关文件"
+      "suggested_output": "artifacts/<batchId>/code/user-module/validation/email.py",
+      "evidence": "在 artifacts/<batchId>/code/user-module/ 目录中未找到任何 validation 相关文件"
     }
   ],
   "summary": {

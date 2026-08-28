@@ -22,15 +22,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // worktree.* / budget.* / system.* / asset.* 等），但缺模型可调用的导出工具——本工具为
 // store.readBatch 的纯读投影，零副作用（不 appendEvent、不改状态文件、不碰 mailbox、
 // 不写工作区；唯一写路径是显式 writeTo 落盘到引擎产物根，属可审计产物）。
-// 装配开关：config.capabilities?.logs?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏）。
+// 装配开关：经 readCapability(config,'logs') 合并注册表 default（P1-01——logs 键注册表默认关：
+//   缺省不注册 → 工具总数不含 log_export；显式 capabilities.logs.enabled:true（如 cordis.patch.yml）
+//   或 enabled:false 控制注册）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './core.js';
-
-const SAFE_ID = /^[a-zA-Z0-9._-]+$/; // 复用本包 SAFE_ID 语义（store.js SESSION_RE / batchId 同款）
-const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
+import { SAFE_ID, TERMINAL } from '../state/constants.js'; // P1-07 单点（原 :32-33 定义迁出）
+import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
 
 function artifactsDirOf(root, sessionId, batchId) {
   return path.join(root, 'sessions', sessionId, 'artifacts', batchId);
@@ -126,8 +126,9 @@ function buildReport(batch, sessionId, filtered, args) {
 
 export function createLogTools(ctx, deps) {
   const config = deps?.config ?? {};
-  // 默认关：logs 未配置/disabled → 零注册，工具总数 14 不变
-  if (config?.capabilities?.logs?.enabled !== true) return [];
+  // logs 注册表默认关（P1-01）：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
+  //   显式 logs.enabled=true（patch 全开）→ 注册 log_export。
+  if (readCapability(config, 'logs')?.enabled !== true) return [];
   const { root, store } = deps;
 
   return [

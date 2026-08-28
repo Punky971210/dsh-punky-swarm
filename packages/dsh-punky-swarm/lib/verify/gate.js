@@ -21,6 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // produce（audit/verify-verdict.md）→ Tier3 门禁照常校验该产物存在（既有 gates.js 零改动，verify 是内容层增强）。
 import { createSelectorRegistry } from './selector.js';
 import { createEvidenceRegistry } from './evidence.js';
+import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
 
 // 状态劣化序：done < failed < blocked（blocked 需人工，优先级最高）；null 视为最低（-1）
 function worse(a, b) {
@@ -142,12 +143,13 @@ export function renderVerdictReport({ batchId, sessionId, acList = [], result, e
   return lines.join('\n');
 }
 
-// 完成闸门工厂：config.capabilities.verify.{enabled, mode}——enabled 缺省关（V5）；
-// enabled=false 时 evaluate 返回 skipped（无裁决、零运行时开销）；enforce 仅显式装配启用。
+// 完成闸门工厂：config.capabilities.verify.{enabled, mode}——P1-01 缺省默认开（readCapability 合并
+//   注册表 default VERIFY_DEFAULTS {enabled:true, mode:'advisory'}）；显式 enabled:false 时 evaluate
+//   返回 skipped（无裁决、零运行时开销）；enforce 仅显式装配启用。
 export function createCompletionGate({ config = {}, mode } = {}) {
-  const cfg = (config && config.capabilities && config.capabilities.verify) || {};
-  const enabled = cfg.enabled === true;
-  const effMode = mode ?? cfg.mode ?? 'advisory';
+  const vcfg = readCapability(config, 'verify') ?? {};
+  const enabled = vcfg.enabled === true;
+  const effMode = mode ?? vcfg.mode ?? 'advisory';
   return {
     enabled,
     mode: effMode,

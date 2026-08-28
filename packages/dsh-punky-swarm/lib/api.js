@@ -115,6 +115,13 @@ export function createApi(ctx, deps) {
         const { batchId, box, lane, session } = q(req.url);
         if (!batchId || !box) return sendJson(res, 400, { error: 'batchId+box required' });
         if (!session) return sendJson(res, 400, { error: 'session required' });
+        // P2-08：box 枚举校验——非法 box 返回 400（含枚举提示）而非透传进 mailbox.readUnacked 抛错兜成 500
+        const BOXES = ['inbox', 'outbox', 'broadcast'];
+        if (!BOXES.includes(box)) {
+          return sendJson(res, 400, { error: 'invalid box: ' + box + ' (allowed: ' + BOXES.join(' | ') + ')' });
+        }
+        // 可选加固：outbox 分支 lane 必填（readUnacked 按 lane 读 outbox，缺 lane 属调用错误）
+        if (box === 'outbox' && !lane) return sendJson(res, 400, { error: 'lane required for outbox' });
         const b = box === 'outbox' ? { type: 'outbox', lane } : { type: box };
         const items = mailbox.readUnacked(join(root, 'sessions', session, 'mailbox', batchId), b);
         // P6 接线（exec-format-wire）：装配注入 aipFormat 时逐条附 ACPs Message 投影（纯函数投影，不改 mailbox 存储与 ack 语义）

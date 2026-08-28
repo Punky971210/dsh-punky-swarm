@@ -30,9 +30,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { migrateV2toV3 } from './schema-v3.js';
+import { SESSION_RE } from './constants.js'; // P1-07 单点（原 :34 定义迁出）
 
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
-const BATCH_RE = /^[a-zA-Z0-9._-]+$/;
+const BATCH_RE = SESSION_RE; // 同款正则（batchId 与 sessionId 共用 SAFE_ID 字符集）
 
 export function createArchive(root) {
   const sessionsDir = path.join(root, 'sessions');

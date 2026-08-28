@@ -13,8 +13,10 @@
 - 约束：按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 artifacts/<batchId>/；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）
 
 ## 协作方式（dsh 语义）
+
+- 协作方式公共语义（checkpoint 纪律 / 三层门禁 / 约束引用格式单一来源）见 SKILL.md §纪律要点 + §三层门禁 + 使用方式 §3 + references/workflow.md §二/§四；本角色差异如下
 - 派发：worker 由 Leader 经 member_status 置 running → subagent 派发（depth-1 直系，任务包含角色/目标/契约/验收）；Manager 不派发子代理，只经 mailbox 建议派发（lane+角色）
-- 指挥循环（每 turn）：batch_status 读黑板 → lane_heartbeat 心跳检查（过期检测，stalled 以事件表达，不改变成员状态） → mailbox_send inbox/broadcast 建议派发（**建议派发时从 batch_status 读取 sessionId/产物根注入任务包，禁止手写**） → mailbox_read outbox 收 worker 完成通知 → member_status running→review → member_settle 结算裁决（可用 gate_status 复核 GATE_EXIT_MISSING）；lane_worktree_merge 冲突 → 保留现场（worktree/分支/在途 merge 全保留）待裁决，conflict 语义由 Manager/Leader 裁决
+- 指挥循环（每 turn）：batch_status 读黑板 → lane_heartbeat 心跳检查（过期检测，stalled 以事件表达，不改变成员状态） → mailbox_send inbox/broadcast 建议派发（**建议派发时从 batch_status 读取 sessionId/产物根注入任务包，禁止手写；C 类多 lane 写同一 git 仓库时先 lane_worktree_create 建独立 worktree，将返回路径注入任务包作 cwd 契约**） → mailbox_read outbox 收 worker 完成通知 → member_status running→review → member_settle 结算裁决（可用 gate_status 复核 GATE_EXIT_MISSING）；lane_worktree_merge 冲突 → 保留现场（worktree/分支/在途 merge 全保留）待裁决，conflict 语义由 Manager/Leader 裁决
 - 回执：worker 双通道——report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细）；Manager 不读 report（不经 Leader 转发全文）
-- 门禁：review 阶段 Manager 按门禁语义结算 merged/conflict；返工=review→running 保留；人审门禁：全额通过自动放行/3 次打回→Leader
+- 门禁（差异）：人审门禁——全额通过自动放行 / 3 次打回 → Leader
 - 交互：被 Leader send_message 事件唤醒（worker 完成信号）；不主动上报空闲（dsh 无空闲上报协议）；跨轮信息走产物+mailbox

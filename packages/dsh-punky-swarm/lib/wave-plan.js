@@ -25,6 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派发侧注入固定任务包条款（RESUME_CLAUSE）。
 
 import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
+import { isAbsPath } from './state/constants.js'; // P1-07 单点（原 :149 自有实现删除，改 import）
 
 const SCHEMA_VERSION = 1;
 
@@ -144,10 +145,6 @@ export function topoWaves(tasks) {
     for (const id of ready) remaining.delete(id);
   }
   return { waves, order };
-}
-
-function isAbsPath(p) {
-  return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
 }
 
 // condition 规范化（建批静态声明，两种等价形态 → 统一对象数组）：

@@ -21,13 +21,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as schema from '../schema.js';
 import { runCommand } from './command-exec.js';
-
-// 会话名校验（与 store.js 同源；gates 独立持有以避免 store→gates→store 循环依赖）
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
-
-export function isAbsPath(p) {
-  return /^[A-Za-z]:[\\/]|^\\|^\//.test(p);
-}
+// P1-07 单点收敛：SESSION_RE/isAbsPath 定义迁至 constants.js；isAbsPath 保持导出
+// （store.js:24 等既有消费方 import { isAbsPath } from './gates.js' 不受影响）。
+import { SESSION_RE, isAbsPath } from './constants.js';
+// P1-04 单点：findTask 收敛至 task-utils.js（原 :108 本地定义删除，调用点不变）
+import { findTask } from './task-utils.js';
+export { isAbsPath };
 
 // targets 门禁（O2）marker 逃生声明标记：目标文件含独立行 `targets-claimed: true` 即视为已变更（跳过 mtime 比对）。
 // 行首锚定独立行正则（仿 needHuman 独立行模式）——内嵌/注释/非行首不误判（NFR3）。
@@ -93,7 +92,7 @@ export function createGates(root) {
     return path.join(sessionDir(sessionId), 'artifacts', batchId);
   }
   function batchFile(sessionId, batchId) {
-    if (!/^[a-zA-Z0-9._-]+$/.test(batchId)) throw new Error('invalid batchId');
+    if (!SESSION_RE.test(batchId)) throw new Error('invalid batchId');
     return path.join(sessionDir(sessionId), 'batches', batchId + '.json');
   }
   function readBatch(sessionId, batchId) {
@@ -108,12 +107,6 @@ export function createGates(root) {
   }
 
   // ---- Tier3 门禁辅助 ----
-  function findTask(batch, lane) {
-    for (const w of batch.wavePlan ?? []) {
-      for (const t of w.tasks) if (t.id === lane) return t;
-    }
-    return null;
-  }
   // lane 启动时间（O2 targets 门禁基准）：events 末尾向前反查最近一条 `member.settled` 且 lane 匹配且
   // to==='running' 的事件 ts（ISO）——返工（review→running）会 push 新的 running 结算事件 → 基准重置（重新计时）；
   // 无 → 回退 batch.createdAt（防御；正常 merged 必有 running 事件）。遍历模式仿 store.js lastActiveAtOf。
@@ -134,10 +127,11 @@ export function createGates(root) {
       return st.isDirectory() || st.size > 0;
     } catch { return false; }
   }
-  // Entry Gate（设计 §四）：exec lane 派发前 consume 必须全部存在且非空
+  // Entry Gate（设计 §四）：exec 与 audit lane 派发前 consume 必须全部存在且非空
+  // P2-03：条件覆盖 audit 层（原仅 exec——audit lane 声明 consume 时缺产物同样应拒派 GATE_ENTRY_MISSING）
   function checkEntryGate(sessionId, batchId, batch, lane) {
     const t = findTask(batch, lane);
-    if (!t || t.layer !== 'exec' || !Array.isArray(t.consume) || t.consume.length === 0) return { ok: true };
+    if (!t || (t.layer !== 'exec' && t.layer !== 'audit') || !Array.isArray(t.consume) || t.consume.length === 0) return { ok: true };
     const missing = t.consume.filter((p) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     return missing.length ? { ok: false, code: 'GATE_ENTRY_MISSING', missing } : { ok: true };
   }

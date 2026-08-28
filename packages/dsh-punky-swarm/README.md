@@ -69,6 +69,10 @@ dsh web restart
 
 ## 治理工具（20）
 
+> 口径前提（P1-01 统一）：**20 为 cordis.patch.yml 全开口径**（`logs.enabled: true` 时含 `log_export`）。
+> 缺省配置（config 无 capabilities 键）下 7 键默认开（aip/discovery/verify/watch/worktree/budget/trajectory），
+> 工具总数 19（不含 `log_export`）；`logs` 默认关，patch 显式开启后达 20。显式 `enabled: false` 可逐键关闭。
+
 按功能分类：
 
 ### 批次规划

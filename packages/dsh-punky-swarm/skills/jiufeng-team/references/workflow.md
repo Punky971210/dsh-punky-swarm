@@ -18,10 +18,10 @@ graph TD
         L -->|测试任务| TE[tester池]
         CR -->|代码| RV[reviewer]
         TE -->|测试报告| RV
-        RV -->|PASS/REWORK + gap-list.json| SV[supervisor]
+        RV -->|PASS/REWORK（review.md）| SV[supervisor]
     end
     subgraph 审计层🛡️
-        SV -->|acceptance-report + CBM 对账| DM[doc-manager]
+        SV -->|acceptance-report + gap-list.json + CBM 对账| DM[doc-manager]
         DM -->|retrospective-report → 记忆沉淀| CO
     end
 ```
@@ -36,9 +36,9 @@ graph TD
 | ④ | 建议派发 | Manager | 派发建议（mailbox inbox/broadcast）→ Leader 按建议 subagent 派发 worker（depth-1） |
 | ⑤ | 编码实现 | Coder 池 | 代码（exec/） |
 | ⑥a | 测试套件编写 + 验收检查清单准备（**准备段·与 code 同 wave 并行**） | Tester 池 / Reviewer | 测试套件 + 验收检查清单（exec/）——只依赖 plan 产物，不依赖 code 产物 |
-| ⑥b | 运行测试套件出报告 + 按清单逐项核对出 gap-list（**执行段·code 完成后立即**） | Tester 池 / Reviewer | 测试报告 + gap-list.json（exec/、audit/）——code 完成即跑，不等串行排期 |
-| ⑦ | 对抗审查 + gap-list 对账（执行段产物汇总） | Reviewer | review.md + gap-list.json（audit/） |
-| ⑧ | 验收审计 | Supervisor | acceptance-report.md（audit/） |
+| ⑥b | 运行测试套件出测试报告（**执行段·code 完成后立即**） | Tester 池 | 测试报告（exec/）——code 完成即跑，不等串行排期；gap-list 对账归 Supervisor（audit 段） |
+| ⑦ | 对抗审查（执行段产物汇总） | Reviewer | review.md（audit/） |
+| ⑧ | 验收审计 + gap-list 对账 | Supervisor | acceptance-report.md + gap-list.json（audit/） |
 | ⑨ | 复盘沉淀 | Doc-Manager | retrospective-report.md（audit/）→ 记忆库 |
 | ⑩ | 回馈循环 | Doc-Manager → Coordinator | 复盘知识 → 下一子模块 |
 
@@ -65,6 +65,20 @@ wave4: [audit-验收]
 
 > 引擎只校验存在性 + Plan 契约结构底线（spec 必含 \`## 验收标准\`/\`## 约束\`、task-tree.json 合法）；四件套内部结构见 references/templates/。
 
+### 模板 ↔ 产物映射表（P2-17 收敛：5 模板指名引用）
+
+> references/templates/ 5 模板逐一映射：模板 → 产出物 → 产物类型（artifact_types 注册表）→ layer/目录 → 产出角色 → consume 归属。call-chain-matrix / endpoint-behavior 为 **spec.md 内部章节模板**（非独立产物），由 Designer 四件套组装时填充。
+
+| 模板（references/templates/） | 产出物 | 产物类型 | layer / 目录 | 产出角色 | consume 归属 |
+|---|---|---|---|---|---|
+| leader-decision-pack.md | leader-decision-pack.md（粗拆决策包） | plan（任务层产物） | plan/ | Leader（人工对接 + grill 后） | Coordinator（细拆输入） |
+| plan-template.md | plan.md（四件套之一） | plan（排期） | plan/ | Designer（dev-designer + spec-writing） | Coder/Tester/Reviewer（spec 参照） |
+| call-chain-matrix-template.md | spec.md 的「调用链矩阵」章节（CH-*） | spec（执行规范） | plan/ | Designer（四件套组装时填充） | Coder/Tester（实现/测试依据） |
+| endpoint-behavior-template.md | spec.md 的「端点行为」章节（EP-*） | spec（执行规范） | plan/ | Designer（四件套组装时填充） | Coder/Tester（实现/测试依据） |
+| success-pattern-seeds.md | dsh-mneme 记忆（type=history/decision，SP-01~10 种子） | retrospective（复盘） | audit/ | Doc-Manager（复盘落库，非文件产物） | 记忆沉淀（后续批次检索复用） |
+
+> 产物类型名（plan/spec/taskTree/survey/code/testReport/review/gapList/acceptance/retrospective）与 lib/artifact-types.js 注册表一致；目录前缀（plan//exec//audit/）即 wave_plan layer 路径契约。
+
 ## 四、硬化判定点 ↔ 三层门禁
 
 | 硬化判定点 | 三层门禁（引擎强制） |
@@ -76,7 +90,7 @@ wave4: [audit-验收]
 
 ## 五、职责分工要点
 
-- **Manager**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现与指派（member_status）；DAG 全员只读、指派写权归 Manager/Leader；
+- **Manager**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 mailbox_send；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；
 - **Leader**：人工粗拆（决策包 + 模块清单），不充当 worker；
 - **Coordinator**：细拆（API 粒度）+ 代码摸底（codebase-survey.md）；
 - **Designer**：四件套（执行层全部规范，模板见 references/templates/）；

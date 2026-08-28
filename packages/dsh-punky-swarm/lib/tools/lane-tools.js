@@ -30,9 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // lane_heartbeat 工具由 lib/watch/lane-heartbeat.js 注入组装（enabled 门控由该模块自持；
 // 守卫式加载：既有 lane 未合入时静默降级，本模块照常注册 worktree 四工具，互不阻塞。
 //
-// 装配开关：config.capabilities?.worktree?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏）。lane_checkpoint 可选
-// progress={step,total}（commit message 内嵌 step N/total + 事件 step/total）+ 只读 lane_checkpoint_status。
+// 装配开关：经 readCapability(config,'worktree') 合并注册表 default（P1-01 缺省默认开，显式 enabled:false 可关）；
+// lane_checkpoint 可选 progress={step,total}（commit message + 事件 step/total + laneProgress 断点指针写）+ 只读 lane_checkpoint_status。
 //
 // 与 lane_claim 逻辑锁的互补关系：
 //   - lane_claim（既有）：同一 lane 的【逻辑写】锁——批次/成员状态文件、产物落盘路径并发防写；
@@ -46,10 +45,12 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './core.js';
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
 import * as lock from '../lock.js';
 import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
-import { overBudgetOf, hasOverBudgetEvent } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）
+import { overBudgetOf, hasOverBudgetEvent, laneProgressWrite } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）；laneProgressWrite：P1-02 断点指针写（checkpoint progress 接线）
+import { SAFE_ID } from '../state/constants.js'; // P1-07 单点（原 :64 定义迁出）
+import { readCapability } from '../assembly/schema.js'; // P1-01 装配开关缺省合并读取（注册表 default 同源口径）
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
@@ -61,7 +62,6 @@ try {
 }
 
 // ---- 常量 ----
-const SAFE_ID = /^[a-zA-Z0-9._-]+$/;
 const RESERVED_LANE = new Set(['_repo', 'orch']); // 与引擎目录布局冲突的 laneId 保留字
 const ORCH_BRANCH = 'punky/orch';
 const MERGE_WAIT_MS = 60_000; // 同批次 merge 串行化等待上限（serializedMerge 纪律）
@@ -337,9 +337,10 @@ function worktreeToolCheckpoint(ctx, deps) {
         if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
         store.appendEvent(sessionId, args.batchId, 'worktree.checkpoint', evt);
       }
-      // B 步数预算：progress 非空时判定超限（progress.total > 任务 checkpoint.steps）→ 幂等 appendEvent lane.over-budget；
-      //   不硬杀（仅发事件，照常返回，转 review/stalled 由 Manager/Leader 裁决）；未声明 checkpoint.steps 零感知。
+      // P1-02 断点指针：checkpoint 携带 progress 经 laneProgressWrite 写 laneProgress（每子步骤完成即写，失败不阻断）+ B 步数预算超限判定
       if (progress) {
+        try { store.updateLaneProgress(sessionId, args.batchId, args.laneId, { ...progress, status: 'running' }); }
+        catch (e) { ctx.logger?.warn?.('[lane-checkpoint] laneProgress write failed: ' + String(e?.message ?? e)); }
         const b = overBudgetOf(batch, args.laneId, progress);
         if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
           store.appendEvent(sessionId, args.batchId, 'lane.over-budget', { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
@@ -457,8 +458,8 @@ export function createLaneTools(ctx, deps) {
   const tools = [];
   // 注入的 lane_heartbeat；守卫式加载，模块未合入时留待集成（功能独立，互不阻塞）
   if (createHeartbeatTools) tools.push(...createHeartbeatTools(ctx, deps));
-  // worktree 四工具（create/merge/checkpoint/checkpoint_status）：默认关（回归零破坏）
-  if (config?.capabilities?.worktree?.enabled === true) {
+  // worktree 四工具（create/merge/checkpoint/checkpoint_status）：P1-01 缺省默认开（readCapability 合并注册表 default，显式 enabled:false 可关）
+  if (readCapability(config, 'worktree')?.enabled === true) {
     tools.push(
       worktreeToolCreate(ctx, deps),
       worktreeToolMerge(ctx, deps),

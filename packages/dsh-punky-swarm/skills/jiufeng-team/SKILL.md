@@ -38,12 +38,13 @@ triggers:
 
 | 层 | 角色 | 操作手册（skill 工具加载） | 关键产出 |
 |---|---|---|---|
-| 任务层 | Coordinator/Manager | dev-planner | 排期 / 建议派发（wavePlan lane） |
+| 任务层 | Coordinator | dev-planner | 细拆（API 粒度）+ 代码摸底（task-tree.json / codebase-survey.md） |
+| 任务层 | Manager | 治理工具（batch_status/gate_status/mailbox_*/member_*/lane_*） | 只指挥不执行：读黑板/mailbox → mailbox_send 建议派发 → 按 Leader 裁决执行 member_status/member_settle；不派子代理、不写代码、不读产物正文 |
 | 执行层 | Designer | dev-designer + spec-writing | design.md / PRD / spec（to-prd 为 disable-model-invocation 命令式技能，不适用于 worker）；plan 层 lane role 强制 designer |
 | 执行层 | Coder（池） | dev-coder + efficient-edit + codebase-design | 代码 + dev_plan checklist |
 | 执行层 | Tester（池） | dev-tester | 测试集 + 结果 |
-| 执行层 | Reviewer | code-review-guideline + report-blind-audit | review.md + gap-list.json |
-| 审计层 | Supervisor | report-blind-audit + archive（comet-archive 可选：OpenSpec 变更归档） | 验收报告（人审门禁） |
+| 执行层 | Reviewer | code-review-guideline + report-blind-audit | review.md + acceptance-checklist.md（验收检查清单） |
+| 审计层 | Supervisor | report-blind-audit + archive（comet-archive 可选：OpenSpec 变更归档） | acceptance-report.md + gap-list.json（audit 对账） |
 | 审计层 | Doc-Manager | doc-generator + doc-update | 文档/复盘 |
 
 ### 角色注入（Worker 上下文补全）
@@ -79,12 +80,14 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不�
 
 - exec 层 code/test 职能分离：Coder 最小自检（语法/lint/编译/已改文件单测冒烟），全量回归/端到端/验收归 Tester；
 - test/review 与 code 并行准备验收套件（准备段同 wave、执行段 code 完成即触发），consume 指向 plan 产物；
-- plan 四件套归 Designer（role=designer，禁止 manager/planner 代产）；
+- plan 四件套归 Designer（role=designer，禁止 manager 代产）；
 - audit worker 完成即终态，追加任务=新 lane 新派发，禁止 send_message 复用；
 - 派发 sessionId/产物根从 batch_status 读取注入，禁手写；
 - audit lane 统一命名 audit-accept/audit-verify；报告措辞「待 Leader 处置的 gap 清单（不得由 audit 执行）」；
 - test 产可执行测试套件（PASS/FAIL 证据），review 产验收检查清单（MUST/SHOULD/FYI），二者互补不重复；
-- worker 每完成子步骤即 lane_checkpoint 提交，禁止攒批；
+- worker 每完成子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救），禁止攒批；续跑前 lane_checkpoint_status 查询跳过已完成步骤（checkpoint 纪律单一来源，roles 不再重复详述）；
+- C 类多 lane 写同一 git 仓库时：exec 派发前 lane_worktree_create 建独立 worktree，将返回路径注入任务包作 cwd 契约（物理隔离，防 git 锁冲突）；
+- 治理工具豁免难度门禁：batch_*/member_*/mailbox_*/lane_*/gate_status/assign_check/artifact_types/log_export 等治理/查询工具属非执行型放行（防死锁——治理循环中 Leader 必须能查询/结算）；豁免仅限难度门禁，其余 guard 语义（EXEC_TOOLS 名单、计数）不受影响（口径与引擎 lib/tools/core.js installDifficultyGuard 注释一致）；
 - 不引入 audit 预算/节流字段（省 token、避免机械限制审计深度）。
 
 ### Manager 角色派发模板（代劳指挥 · continuable subagent）
@@ -111,6 +114,15 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
    { id: 'mod-a', cmd: '加载 jiufeng-team 后按 Designer 手册（dev-designer+spec-writing）产出 design.md', tools: ['skill','fs'] }
    ```
 
+### 治理工具补充（artifact_types / log_export）
+
+> 两工具已注册于治理工具面（README 治理工具 20 清单内），此处补用途/触发/装配键口径（与引擎实现一致）。
+
+| 工具 | 实现 | 用途 | 触发场景 | 装配键 |
+|---|---|---|---|---|
+| `artifact_types` | lib/artifact-types.js | 产物类型注册表只读查询：产物类型 → 层/目录前缀约定（plan/exec/audit），供 wave_plan 声明 consume/produce/outputs 与模板对齐；不绑定团队模板 | wave_plan 建批前声明产物归属、或核对产物路径契约时 | 恒注册（core 工具面） |
+| `log_export` | lib/tools/log-tools.js | 批次事件日志只读导出（store.readBatch 纯读投影，零副作用）：lane/type/since 过滤 + json/markdown 格式 + 可选 writeTo 落盘引擎产物根（批次内相对路径防逃逸） | 审计/复盘需完整事件时间线（batch_status 事件摘要之外的明细）时 | `capabilities.logs`（默认关；显式 `logs.enabled:true` 注册，如 cordis.patch.yml） |
+
 ## C 类触发后的执行机制（难度判定归蟛蜞模式）
 
 > 分层边界：任务难度判定（A/B/C 路由，default to C）由蟛蜞模式难度门禁负责（assign_check guard），本技能**不参与难度判定**——只描述 C 类任务确定后的执行方式。
@@ -123,7 +135,7 @@ C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 
 |---|---|
 | plan 🎯 | 产物契约：spec.md 必含 `## 验收标准`/`## 约束` 章节 + task-tree.json 合法 JSON——merged 前 Plan 契约校验（GATE_PLAN_CONTRACT） |
 | exec ⚡ | 派发前 consume 产物齐备（缺则拒派 GATE_ENTRY_MISSING）；结算前 outputs 落盘（缺则拒 merged） |
-| audit 🛡️ | 结算前 produce（review.md/gap-list.json）落盘；批次 complete 前置 audit 验收完成（缺则拒 complete） |
+| audit 🛡️ | 结算前 produce（review.md 归 Reviewer；gap-list.json/acceptance-report.md 由 Supervisor audit 对账产出）落盘；批次 complete 前置 audit 验收完成（缺则拒 complete） |
 
 - **委派判定**：assign_check 输出 A/B/C——C 类（并行/多角色/门禁/可恢复）必须 wave_plan 建批；
 - **失败处理**：failed 为终态，重做=重开新批次；返工（review→running）保留；
@@ -132,6 +144,8 @@ C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 
 - **gate 契约（exec）**：产物可含独立行 `gate: <命令>`（行首锚定，可多行顺序执行）——merged 前置确定性执行，exit 0 通过；失败拒 merged（GATE_EXIT_*，lane 留 review）；失败且产物声明 needHuman: true → 转人工闸。
 
 **产物契约表**（详见 `references/workflow.md` §三）：plan→（leader-decision-pack/task-tree/codebase-survey/四件套）；exec→（代码/测试报告）；audit→（review/gap-list/acceptance/retrospective）。
+
+**模板↔产物映射表**（详见 `references/workflow.md` §三末）：references/templates/ 5 模板（leader-decision-pack / plan / call-chain-matrix / endpoint-behavior / success-pattern-seeds）→ 产出物 → layer/consume 归属逐条可查。
 
 ## 蟛蜞治理集成（worker 视角）
 

@@ -33,7 +33,9 @@ import { join, dirname } from 'node:path';
 import { statSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { resolveWatchConfig, WATCH_DEFAULTS } from '../schema.js';
-import { sessionOf, TEXT_OUTPUT } from '../tools/core.js';
+import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // P2-01：watch 域不再 import tools/core（共享辅助下沉零依赖 shared.js）
+import { isAbsPath } from '../state/constants.js'; // P1-07 单点（原 :77 内联正则收敛）
+import { findTask } from '../state/task-utils.js'; // P1-04 单点（原 :69 本地定义删除）
 
 // 退避档位（分钟 → ms，单调化钳制）：档位单调不减，冷场越久追问间隔越长
 export function buildSchedule(intervalsMinutes) {
@@ -65,16 +67,10 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
   }
   const laneKeyOf = (sessionId, batchId, lane) => `${sessionId}/${batchId}/${lane}`;
 
-  function findTask(batch, lane) {
-    for (const w of batch.wavePlan ?? []) {
-      for (const t of w.tasks ?? []) if (t.id === lane) return t;
-    }
-    return null;
-  }
   // 产物解析（自持只读实现，与 gates.js resolveArtifact/fileExistsNonEmpty 同源模式，避免循环依赖）
   function resolveArtifact(sessionId, batchId, rel) {
     const base = store.artifactsDirOf(sessionId, batchId);
-    return /^[A-Za-z]:[\\/]|^\\|^\//.test(rel) ? rel : join(base, rel);
+    return isAbsPath(rel) ? rel : join(base, rel);
   }
 
   function freshEntry(nowTs) {
