@@ -26,7 +26,7 @@ triggers:
 | 层 | 角色 | 职责 | 能力层手册 | 可拓展性 |
 |----|------|------|-----------|:--------:|
 | 任务层 🎯 | Coordinator | 细拆（API 粒度）+ 代码摸底（粗拆已上移 Leader 人工对接） | dev-planner | 固定 |
-| 任务层 🎯 | Manager | 任务池调度 + 双线审查路由 + 人审返工门禁 | dev-planner | 固定 |
+| 任务层 🎯 | Manager | 任务池调度 + 双线审查路由 + 人审返工门禁 | 治理工具（见装配表） | 固定 |
 | 任务层 🎯 | Designer | 四件套产出（plan/coder-tasks/tester-tasks/spec） | dev-designer, spec-writing | 固定 |
 | 执行层 ⚡ | Coder 池 | spec 驱动编码 + **最小自检** | dev-coder, efficient-edit 等 | 动态（推荐 3） |
 | 执行层 ⚡ | Tester 池 | spec 驱动测试 + **功能验证/全量测试**（端到端、回归、验收执行） | dev-tester | 动态（推荐 2） |
