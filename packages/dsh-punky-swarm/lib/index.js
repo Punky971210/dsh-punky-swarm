@@ -27,7 +27,7 @@ import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig } from './schema.js';
-import { validateCapabilities } from './assembly/schema.js';
+import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
@@ -38,6 +38,10 @@ import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
 import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
 import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
+// R1 热更新运行时（lib/hot/config-watch.js，新建）：<root>/config/runtime.json watch → deepMerge 快照 → config.changed 广播
+import { createConfigWatcher, CONFIG_CHANGED_EVENT } from './hot/config-watch.js';
+// R2 topic 运行时（lib/comms/topic-runtime.js，新建）：装配面 start/stop（与 trajectory 桥同形）+ 状态事件发布接线
+import { createTopicRuntime } from './comms/topic-runtime.js';
 // P1-02 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
@@ -61,7 +65,13 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.warn?.('[dsh-punky-swarm] config: ' + err);
   }
 
-  const store = createStore(root);
+  // R2 topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
+  const topicSink = { emit: null };
+  const store = createStore(root, {
+    // R2 topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
+    // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
+    onStateChange: (ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } },
+  });
 
   // P2-04：GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
   // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
@@ -225,17 +235,34 @@ export const apply = (ctx, config = {}) => {
     }
 
     apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient }).dispose;
+
+    // [exec-b 挂载点预留] R3 SSE hub（lib/panel/stream.js，exec-b 新建）在此装配：随 webServer 挂载（ADR-4 无独立
+    //   配置键）、topic.enabled 时经 subscribeTopic('swarm.') 订阅低延迟触发源 + fs.watch 批次目录兜底；exec-a merged
+    //   后接线（契约移交点）。本批 exec-a 不实现 hub——exec-b 在 api.js 侧经 deps.panelStream 注入复用/自建兜底
+    //   （缺省 createStreamHub），本预留仅声明挂载面，不引入任何装配。
   }
 
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
   // enabled 默认关：enabled=false 时桥接不创建不挂载——零运行时开销，行为与既有版本一致。
   // 生命周期：start() 挂订阅/轮询；stop() 退订/清定时器（经 apply 返回的 dispose 释放，进程重启后桥接随插件重建、映射从批次事件幂等恢复）
-  const trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox }) : null;
+  let trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox }) : null;
   if (trajectory) {
     const st = trajectory.start();
     if (st.subscribed) {
       ctx.logger?.info?.('[dsh-punky-swarm] trajectory bridge subscribed (autoFail=' + (config?.capabilities?.trajectory?.autoFail === true) + ')');
     }
+  }
+
+  // R2 topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
+  // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
+  // 关闭时零挂载零路径（与 acps/bridge config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
+  // R1 热更新（config.changed）可实时启停本运行时（L1 消费点，见下方 applyConfigChange ③）。
+  let topicRuntime = null;
+  if (readCapability(config, 'topic')?.enabled) {
+    topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
+    topicRuntime.start();
+    topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+    ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
   }
 
   // 内部 ACPs 桥接（config.acps.bridge，默认关）：enabled=false 时 mountBridge 短路返回 null——
@@ -301,17 +328,87 @@ export const apply = (ctx, config = {}) => {
   // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
   // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。enabled=false（默认）
   // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
-  const verifyMount = mountVerify(ctx, { root, config });
+  let verifyMount = mountVerify(ctx, { root, config });
   if (verifyMount.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
   }
 
+  // ── R1 热更新装配（L1 消费点就地启停，叠加非替换）──
+  // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
+  // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果（D2）；
+  //   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播（设计 §3.1.5 裁决）
+  // 生效范围（L1，设计 §3.1.4）：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
+  //   对外能力（acps/bridge/acps.discovery/identity）不纳入热切（设计 §3.1.5 附带裁决）
+  let hotConfig = null;
+  const applyConfigChange = (change) => {
+    const next = change.config;
+    // ① watch watchdog：enabled 翻转 → 启/停（heartbeat.dispose + timer 句柄，幂等）
+    const wc = resolveWatchConfig(next);
+    if (wc.enabled && !heartbeat) {
+      heartbeat = createLaneHeartbeat({ store, mailbox, config: next, root });
+      const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
+      watchTimer = setInterval(() => {
+        try { heartbeat.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
+      }, scanMs);
+      if (typeof watchTimer.unref === 'function') watchTimer.unref();
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch watchdog started (scan ' + scanMs + 'ms)');
+    } else if (!wc.enabled && heartbeat) {
+      if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+      heartbeat.dispose(); heartbeat = null;
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch watchdog stopped');
+    }
+    // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
+    const trajOn = isTrajectoryEnabled(next);
+    if (trajOn && !trajectory) {
+      trajectory = createTrajectoryBridge(ctx, { store, config: next, mailbox });
+      const st = trajectory.start();
+      if (st.subscribed) ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge started');
+    } else if (!trajOn && trajectory) {
+      trajectory.stop(); trajectory = null;
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge stopped');
+    }
+    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动）
+    const topicCfg = readCapability(next, 'topic');
+    if (topicCfg?.enabled && !topicRuntime) {
+      topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
+      topicRuntime.start();
+      topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime started');
+    } else if (!topicCfg?.enabled && topicRuntime) {
+      topicRuntime.stop(); topicRuntime = null;
+      topicSink.emit = null;
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
+    }
+    // ④ verify 挂载（可选 L1）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
+    const vc = resolveVerifyConfig(next);
+    if (vc.enabled !== verifyMount.installed) {
+      verifyMount.dispose?.();
+      verifyMount = mountVerify(ctx, { root, config: next });
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: verify capture ' + (vc.enabled ? 'mounted' : 'unmounted'));
+    }
+  };
+  hotConfig = createConfigWatcher({
+    root, config,
+    onChange: (change) => {
+      // ① 进程内广播（cordis 总线事件，宿主可用时；exec-b hub/未来订阅方经 ctx.on 订阅）
+      try { ctx.emit?.(CONFIG_CHANGED_EVENT, change); } catch { /* 宿主事件缺失静默 */ }
+      // ② topic 镜像（R1→R2 可选，设计 §3.4）：topic.enabled 时同步 emitTopic('swarm.config.changed')，仅进程内分发
+      if (topicRuntime) { try { topicRuntime.publishConfigChanged(change); } catch { /* 隔离 */ } }
+      // ③ L1 消费点就地启停
+      applyConfigChange(change);
+    },
+    logger: ctx.logger,
+  });
+  hotConfig.start();
+
   return () => {
+    hotConfig?.dispose();
     if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
     if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
     heartbeat?.dispose();
     apiDispose?.();
     trajectory?.stop();
+    topicRuntime?.stop();
     verifyMount?.dispose();
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
