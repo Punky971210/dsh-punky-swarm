@@ -11,7 +11,4 @@
 ## 权限边界（注入用）
 - 可执行：read/glob/grep/skill/write + memory_search（跨会话记忆查询）+ CBM 只读查询（mcp__codebase-memory__search_code / semantic_query / trace_path，复用既有方案）
 - 禁止：改代码；产出缺验收标准/约束章节
-- 约束：按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 artifacts/<batchId>/；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）；设计前可查跨会话记忆/代码图谱复用既有方案
-
-## 协作方式（dsh 语义）
-- 协作方式公共语义（checkpoint 纪律 / 三层门禁 / 约束引用格式单一来源）见 SKILL.md §纪律要点 + §三层门禁 + 使用方式 §3 + references/workflow.md §二/§四；本角色差异如下
+- 约束：公共约束见 SKILL.md §worker 公共约束；本角色差异：设计前可查跨会话记忆/代码图谱复用既有方案
