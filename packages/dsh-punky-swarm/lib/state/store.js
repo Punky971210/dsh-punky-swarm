@@ -60,7 +60,7 @@ export function countConsecutiveFailedSettles(events) {
   return count;
 }
 
-export function createStore(root, { rules, logger } = {}) {
+export function createStore(root, { rules, logger, onStateChange } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   const gates = createGates(root);
@@ -111,6 +111,14 @@ export function createStore(root, { rules, logger } = {}) {
 
   function newEvent(type, fields = {}) {
     return { ts: new Date().toISOString(), type, ...fields };
+  }
+
+  // R2 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
+  // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（设计 §3.2.3 固化），
+  // 故必须在调用点埋（设计 §4.3/§5.3 风险点 2）。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
+  // 异常隔离（发布失败不阻断状态机）。载荷为纯数据摘要，topic 命名由装配侧（topic-runtime）负责。
+  function emitStateChange(ev) {
+    try { onStateChange?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ }
   }
 
   function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning' }) {
@@ -215,6 +223,8 @@ export function createStore(root, { rules, logger } = {}) {
         batch.events.push(newEvent(EVT.EVT_MEMBER_SETTLED, { lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
+        // R2 调用点埋点：condition 自动 skipped 亦为结算终态（member.settled 事件发布）
+        emitStateChange({ type: 'member.settled', sessionId, batchId, lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') });
         return batch;
       }
       const g = gates.checkEntryGate(sessionId, batchId, batch, lane);
@@ -296,6 +306,7 @@ export function createStore(root, { rules, logger } = {}) {
     // 棘轮校验 fail-closed：running→paused 迁移被部署收紧删除时 bv.ok=false，不触发、不绕过棘轮；
     // phase 闸（T-2）：paused 后 phase 非 running 自然不重复；人工 resume 后计数从当前事件流重新评估；
     // 不自动重试：failed 仍为终态（schema failed: [] 不变），重做=重开新批次。
+    let escalated = false;
     if (to === 'failed' && batch.phase === 'running') {
       const streak = countConsecutiveFailedSettles(batch.events);
       if (streak >= 3) {
@@ -304,11 +315,17 @@ export function createStore(root, { rules, logger } = {}) {
           batch.phase = 'paused';
           batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from: 'running', to: 'paused', reason: 'failed-escalate' }));
           batch.events.push(newEvent(EVT.EVT_BATCH_FAILED_ESCALATE, { lane, count: streak }));
+          escalated = true;
         }
       }
     }
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
+    // R2 调用点埋点：member.settled（结算终态/返工入 review 等全部迁移）+ 伴随的 batch.phase（failed-escalate）
+    emitStateChange({ type: 'member.settled', sessionId, batchId, lane, from, to, note: note ?? null });
+    if (escalated) {
+      emitStateChange({ type: 'batch.phase', sessionId, batchId, from: 'running', to: 'paused', reason: 'failed-escalate' });
+    }
     return batch;
   }
 
@@ -333,6 +350,8 @@ export function createStore(root, { rules, logger } = {}) {
     batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from, to }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
+    // R2 调用点埋点：batch.phase 迁移事件发布（规划→运行→暂停→终态等全部阶段迁移）
+    emitStateChange({ type: 'batch.phase', sessionId, batchId, from, to });
     // complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
     // 失败仅记录 archive.failed（archiveBatch 内部处理），不阻断 complete；try/catch 兜底意外异常（如批次文件不可读）
     if (to === 'complete') {
