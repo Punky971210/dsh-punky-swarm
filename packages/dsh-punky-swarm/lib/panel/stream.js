@@ -45,6 +45,7 @@ import { subscribeTopicPrefix } from '../comms/topic.js';
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
 const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐设计 §3.3.3 触发源③）
 const DEBOUNCE_MS = 300;         // fs.watch 防抖（Windows 目录事件丢失/重复兜底，设计 §5.3-4）
+// 以上为生产缺省值；createStreamHub 接受 heartbeatMs/debounceMs/maxConns 覆盖（单测提速用，缺省不变）
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
@@ -72,7 +73,7 @@ function parseTopicIds(topic, prefix) {
   return { sessionId: sid, batchId: bid };
 }
 
-export function createStreamHub({ root, logger } = {}) {
+export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debounceMs = DEBOUNCE_MS, maxConns = MAX_CONNS_PER_SESSION } = {}) {
   // sid -> { subs: Set<{res,batchId}>, watchers: Set<FSWatcher>, debounce: timer|null,
   //          pendingBid: string|null, lastSeen: Map<bid,eventCount> }
   const sessions = new Map();
@@ -211,7 +212,7 @@ export function createStreamHub({ root, logger } = {}) {
         }
       }
       if (total === 0) stopHeartbeatIfIdle();
-    }, HEARTBEAT_MS);
+    }, heartbeatMs);
     if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
   }
   function stopHeartbeatIfIdle() {
@@ -225,7 +226,7 @@ export function createStreamHub({ root, logger } = {}) {
     if (disposed) return { ok: false, reason: 'disposed' };
     if (typeof sessionId !== 'string' || !sessionId) return { ok: false, reason: 'session required' };
     const s = sessionOf(sessionId);
-    if (s.subs.size >= MAX_CONNS_PER_SESSION) return { ok: false, reason: 'limit' };
+    if (s.subs.size >= maxConns) return { ok: false, reason: 'limit' };
     try {
       if (typeof res.writeHead === 'function') res.writeHead(200, SSE_HEADERS);
       if (typeof res.flushHeaders === 'function') { try { res.flushHeaders(); } catch {} }
