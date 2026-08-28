@@ -64,8 +64,9 @@ export const BLIND_REVIEW_ROLES = ['audit-panelist', 'audit-aggregate', 'audit-c
 export const BLIND_REVIEW_TEMPLATE_KEYS = ['bundle', 'panelist', 'aggregate', 'critic', 'checklist', 'config'];
 
 // ── 内部工具 ──
-
-function deepMerge(base, override) {
+// R1 热更新（lib/hot/config-watch.js）导出复用本函数做 runtime 覆盖层 deepMerge——
+// 禁止复制散落实现（复制即漂移源，设计 §5.3 风险点 1）；readCapability 缺省合并与本函数同源。
+export function deepMerge(base, override) {
   if (override === undefined || override === null) return base;
   if (typeof base !== 'object' || base === null || typeof override !== 'object' || override === null) return override;
   const out = { ...base };
