@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { subscribeTopic, emitTopic, readTopic } from '../lib/comms/topic.js';
+import { subscribeTopic, emitTopic, readTopic, subscribeTopicPrefix } from '../lib/comms/topic.js';
 import { readUnacked, ack } from '../lib/comms/mailbox.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-topic-'));
@@ -114,4 +114,32 @@ test('T1.6 零破坏：缺省无 ctx 仅进程内分发、不落盘、不抛错�
   assert.throws(() => subscribeTopic('', () => {}));
   assert.throws(() => subscribeTopic(42, () => {}));
   assert.throws(() => emitTopic('', 'x'));
+});
+
+test('T1.7 前缀订阅（R3 SSE hub 机制）：emitTopic 按 startsWith 分发、(topic,payload) 签名、精确/前缀并存、退订幂等', () => {
+  const seen = [];
+  const un = subscribeTopicPrefix('swarm.', (topic, p) => seen.push([topic, p]));
+  emitTopic('swarm.member.settled.s1.b1', { n: 1 });
+  emitTopic('other.event.s1.b1', { n: 2 });
+  assert.equal(seen.length, 1, '非前缀 topic 不触发');
+  assert.equal(seen[0][0], 'swarm.member.settled.s1.b1');
+  assert.deepEqual(seen[0][1], { n: 1 });
+  un();
+  un(); // 重复退订 no-op
+  emitTopic('swarm.batch.phase.s1.b1', {});
+  assert.equal(seen.length, 1, '退订后不再收到');
+  // 精确订阅并存不受影响（前缀分发不改既有语义）
+  const exact = [];
+  const un2 = subscribeTopic('swarm.member.settled.s1.b1', (p) => exact.push(p));
+  emitTopic('swarm.member.settled.s1.b1', { n: 3 });
+  assert.deepEqual(exact, [{ n: 3 }]);
+  un2();
+  // delivered 计数含前缀分发
+  const un3 = subscribeTopicPrefix('swarm.', () => {});
+  const r = emitTopic('swarm.config.changed.s1.b1', {});
+  assert.equal(r.delivered, 1, '前缀 handler 计入 delivered');
+  un3();
+  // 空前缀 fail-closed
+  assert.throws(() => subscribeTopicPrefix('', () => {}));
+  assert.throws(() => subscribeTopicPrefix(42, () => {}));
 });
