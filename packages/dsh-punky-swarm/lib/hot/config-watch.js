@@ -26,7 +26,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - 快照 diff：无变化键不广播（防 fs.watch 重复事件抖动）
 //   - 坏 JSON / 读取失败：保持旧快照零行为变化（不广播），warn 留痕
 //   - 零新依赖：node:fs watch + JSON.parse（D1）
-// 生命周期：start()（幂等）/ stop()（幂等）/ dispose()；watcher unref（不阻塞进程退出）
+// 实施回注（本环境实测，2026-08-29）：设计 §3.1.3「对文件所在目录 watch」在本部署（Windows/Node v24）不可用——
+//   目录级 fs.watch 在目录内任意文件写入/重命名时触发 libuv 断言崩溃（src\win\fs-event.c:72，原生 abort 不可捕获，
+//   探针复现：direct write 与 tmp+rename 两种写入模式均崩）。改为「文件级 fs.watch（runtime.json 直 watch）+
+//   存在性轮询 bootstrap（文件缺失时低频探测，出现即建 watch + 触发一次重读）」。文件级 watch 在本环境实测稳定
+//   （direct write→change 事件、tmp+rename→rename 事件均正常，探针通过）。此回注写入 exec/panel-a-fix.md。
+// 生命周期：start()（幂等）/ stop()（幂等）/ dispose()；watcher/timer 均 unref（不阻塞进程退出）
 // 宿主事件广播由装配侧（index.js）承担：ctx.emit('dsh-punky-swarm/config.changed', payload)；
 //   本模块只负责文件 watch → 快照 → onChange 回调（可单测，无宿主依赖）
 import { watch, readFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -39,6 +44,7 @@ export const CONFIG_CHANGED_EVENT = 'dsh-punky-swarm/config.changed';
 const DEFAULT_DEBOUNCE_MS = 300;   // 防抖窗口（设计 §3.1.3）
 const PARSE_RETRY_MS = 50;         // 原子读重试间隔（写半文件/并发写窗口）
 const PARSE_RETRY_MAX = 4;         // 重试上限（仍失败 → 保持旧快照）
+const DEFAULT_POLL_MS = 1000;      // 存在性轮询间隔（文件缺失 bootstrap；文件级 watch 需文件存在）
 
 // 允许的 runtime.json 顶层键：注册表能力根（aip/acps/capabilities）+ 插件消费的非能力配置段
 // （mailbox/resume/ratchet/escalation）。热更新只做值传播、只覆盖既有 schema 路径——
@@ -99,13 +105,14 @@ async function readOverlayFile(file) {
   return {};
 }
 
-export function createConfigWatcher({ root, config, onChange, logger, debounceMs = DEFAULT_DEBOUNCE_MS, useWatcher = true } = {}) {
+export function createConfigWatcher({ root, config, onChange, logger, debounceMs = DEFAULT_DEBOUNCE_MS, useWatcher = true, pollMs = DEFAULT_POLL_MS } = {}) {
   const configDir = join(root, 'config');
   const runtimeFile = join(configDir, 'runtime.json');
   const log = logger ?? null;
   let snapshot = config;       // 缺省 = 静态 config 原样（零行为变化）
   let overlay = {};            // 当前生效覆盖层
-  let watcher = null;
+  let fileWatcher = null;      // 文件级 watch（本环境目录级 watch 触发 libuv 断言崩溃，实施回注）
+  let existenceTimer = null;   // 文件缺失 bootstrap 轮询
   let debounceTimer = null;
   let started = false;
   let disposed = false;
@@ -156,6 +163,44 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
     debounceTimer = setTimeout(() => { reload().catch(() => {}); }, debounceMs);
   }
 
+  // 文件级 watch 建立/重建（幂等）：每次事件后重建以跟随原子替换（tmp+rename 换 inode）；
+  // 文件缺失 → 存在性轮询 bootstrap（低频，unref），出现后建 watch + 触发一次重读
+  function ensureWatching() {
+    if (disposed || !started) return;
+    if (fileWatcher) {
+      try { fileWatcher.close(); } catch {}
+      fileWatcher = null;
+    }
+    if (!existsSync(runtimeFile)) {
+      if (!existenceTimer) {
+        existenceTimer = setInterval(() => {
+          if (disposed || !started) { clearInterval(existenceTimer); existenceTimer = null; return; }
+          if (existsSync(runtimeFile)) {
+            clearInterval(existenceTimer); existenceTimer = null;
+            ensureWatching();
+            handleFsChange().catch(() => {}); // 文件出现 → 重读一次（覆盖建 watch 前的首次写入）
+          }
+        }, pollMs);
+        if (typeof existenceTimer.unref === 'function') existenceTimer.unref();
+      }
+      return;
+    }
+    try {
+      fileWatcher = watch(runtimeFile, () => {
+        ensureWatching(); // 跟随原子替换重建（幂等）
+        handleFsChange().catch(() => {});
+      });
+      if (typeof fileWatcher.unref === 'function') fileWatcher.unref();
+      fileWatcher.on?.('error', (e) => {
+        log?.warn?.('[dsh-punky-swarm] runtime.json watch error (config hot reload degraded): ' + String(e?.message ?? e));
+        ensureWatching();
+      });
+    } catch (e) {
+      log?.warn?.('[dsh-punky-swarm] runtime.json watch failed (config hot reload disabled, restart to apply): ' + String(e?.message ?? e));
+      fileWatcher = null;
+    }
+  }
+
   function start() {
     if (started) return { started: true, snapshot };
     started = true;
@@ -179,22 +224,9 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
         log?.warn?.('[dsh-punky-swarm] runtime.json initial read failed (use static config): ' + String(e?.message ?? e));
       }
     }
-    // watch 目录而非文件（Windows 上文件级 watch 易失）；事件按文件名过滤 + 防抖 + 原子读重试
+    // 文件级 watch（实施回注：本环境目录级 watch 触发 libuv 断言崩溃，改直 watch 文件）+ 存在性轮询 bootstrap
     if (useWatcher && typeof watch === 'function') {
-      try {
-        watcher = watch(configDir, (_ev, filename) => {
-          // filename 可能为 Buffer/null；null 保守触发（平台差异），非 runtime.json 的明确事件忽略
-          if (filename && filename.toString() !== 'runtime.json') return;
-          handleFsChange().catch(() => {});
-        });
-        if (typeof watcher.unref === 'function') watcher.unref(); // 不阻塞进程退出
-        watcher.on?.('error', (e) => {
-          log?.warn?.('[dsh-punky-swarm] runtime.json watch error (config hot reload degraded): ' + String(e?.message ?? e));
-        });
-      } catch (e) {
-        log?.warn?.('[dsh-punky-swarm] runtime.json watch failed (config hot reload disabled, restart to apply): ' + String(e?.message ?? e));
-        watcher = null;
-      }
+      ensureWatching();
     }
     return { started: true, snapshot };
   }
@@ -202,7 +234,8 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
   function stop() {
     started = false;
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-    if (watcher) { try { watcher.close(); } catch {} watcher = null; }
+    if (fileWatcher) { try { fileWatcher.close(); } catch {} fileWatcher = null; }
+    if (existenceTimer) { clearInterval(existenceTimer); existenceTimer = null; }
     return { stopped: true };
   }
 
