@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createStreamHub } from '../lib/panel/stream.js';
+import { createStreamHub, hasShortNameSegment } from '../lib/panel/stream.js';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 import { emitTopic } from '../lib/comms/topic.js';
@@ -143,10 +143,11 @@ test('S5 close 清理：res close → 订阅移除（计数回落），会话空
 
 test('S6 fs.watch 触发源：批次 JSON 落盘 → 防抖后推送摘要（eventCount 读物理事实源）', async () => {
   const hub = createStreamHub({ root, debounceMs: 50 });
-  const res = new FakeRes();
-  hub.subscribe(S, 'b1', res);
+  // 先建目录再订阅（watcher 挂载需要目录存在；目录后创建的兜底在 10s 心跳对齐时补挂）
   const bdir = path.join(root, 'sessions', S, 'batches');
   fs.mkdirSync(bdir, { recursive: true });
+  const res = new FakeRes();
+  hub.subscribe(S, 'b1', res);
   await new Promise((r) => setTimeout(r, 300)); // 等 watcher 挂载
   fs.writeFileSync(path.join(bdir, 'b1.json'), JSON.stringify({ batchId: 'b1', events: [{}, {}] }));
   const evs = await until(() => {
@@ -253,4 +254,13 @@ test('S12 /stream 端点缺省自建 hub：未注入 panelStream 时路由仍可
   assert.equal(res.status, 200);
   assert.match(res.headers['Content-Type'], /text\/event-stream/);
   api.dispose(); // 自建 hub 随之 dispose（无泄漏）
+});
+
+test('S13 8.3 短路径预判（hasShortNameSegment）：短路径段命中 → 规避 fs.watch；正常长路径不命中', () => {
+  if (process.platform !== 'win32') return; // 短路径形态仅 Windows 判定
+  assert.equal(hasShortNameSegment('C:\\Users\\ADMINI~1\\AppData\\Local\\Temp'), true, '8.3 段命中');
+  assert.equal(hasShortNameSegment('C:\\Users\\Administrator\\.dsh\\jiufeng'), false, '长路径不命中');
+  assert.equal(hasShortNameSegment('C:\\tmp\\foo~2\\bar'), true, '任意目录的 8.3 段命中');
+  assert.equal(hasShortNameSegment('C:\\a\\b\\c'), false);
+  assert.equal(hasShortNameSegment(''), false);
 });

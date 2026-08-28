@@ -32,15 +32,16 @@ const PANEL_FILES = ['locales', 'theme', 'widgets', 'batch-list', 'batch-detail'
 function extractClientSegment(clientText, marker) {
   const start = clientText.indexOf(marker);
   assert.ok(start >= 0, 'client.js 缺失段标记: ' + marker);
+  // 段文本含标记行（与 panel 源文件 marker→EOF 对齐）
   const rel = clientText.slice(start + marker.length);
   const nextMarker = rel.indexOf('// ===== [panel-segment]');
-  if (nextMarker >= 0) return rel.slice(0, nextMarker);
+  if (nextMarker >= 0) return clientText.slice(start, start + marker.length + nextMarker);
   // 末段（main.js）：段尾 = `    return module.exports;` 行尾（含换行）
   const idx = rel.indexOf('    return module.exports;');
   assert.ok(idx >= 0, 'client.js 末段缺 module.exports 尾');
   const lineEnd = rel.indexOf('\n', idx);
   assert.ok(lineEnd >= 0, 'client.js 末段缺换行');
-  return rel.slice(0, lineEnd + 1);
+  return clientText.slice(start, start + marker.length + lineEnd + 1);
 }
 
 for (const name of PANEL_FILES) {

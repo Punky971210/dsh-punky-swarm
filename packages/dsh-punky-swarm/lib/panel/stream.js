@@ -38,14 +38,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // ============================================================
 
 import { watch } from 'node:fs';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { subscribeTopicPrefix } from '../comms/topic.js';
 
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
 const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐设计 §3.3.3 触发源③）
 const DEBOUNCE_MS = 300;         // fs.watch 防抖（Windows 目录事件丢失/重复兜底，设计 §5.3-4）
+const POLL_MS = 1000;            // stat 轮询兜底周期（8.3 短路径主机无法安全用 fs.watch 目录 watch）
 // 以上为生产缺省值；createStreamHub 接受 heartbeatMs/debounceMs/maxConns 覆盖（单测提速用，缺省不变）
+
+// 8.3 短路径段判定（XXXXXX~N）：libuv 在 Windows 上对含短路径段的目录做 fs.watch 时，
+// 事件回调带回长路径触发原生断言崩溃（Node v24 本机实测 fs-event.c line 72）——预判规避，改 stat 轮询。
+// 仅命中短路径形态才规避；正常长路径（生产 root=~/.dsh/jiufeng 经 homedir，长路径）走 fs.watch 事件通道。
+export function hasShortNameSegment(p) {
+  if (process.platform !== 'win32') return false;
+  const segs = String(p).split(/[\\/]/).filter(Boolean);
+  return segs.some((s) => /^[A-Za-z0-9]{1,8}~\d{1,3}$/.test(s));
+}
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
@@ -75,10 +85,11 @@ function parseTopicIds(topic, prefix) {
 
 export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debounceMs = DEBOUNCE_MS, maxConns = MAX_CONNS_PER_SESSION } = {}) {
   // sid -> { subs: Set<{res,batchId}>, watchers: Set<FSWatcher>, debounce: timer|null,
-  //          pendingBid: string|null, lastSeen: Map<bid,eventCount> }
+  //          pendingBid: string|null, polling: bool, sig: string|null }
   const sessions = new Map();
   const topicUnsubs = [];
   let heartbeatTimer = null;
+  let pollTimer = null;
   let disposed = false;
 
   const log = (msg) => { try { logger?.info?.('[dsh-punky-swarm/stream] ' + msg); } catch {} };
@@ -97,7 +108,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
   function sessionOf(sessionId) {
     let s = sessions.get(sessionId);
     if (!s) {
-      s = { subs: new Set(), watchers: new Set(), debounce: null, pendingBid: null };
+      s = { subs: new Set(), watchers: new Set(), debounce: null, pendingBid: null, polling: false, sig: null };
       sessions.set(sessionId, s);
     }
     return s;
@@ -119,19 +130,23 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
 
   function detach(res) {
     for (const [sid, s] of sessions) {
-      if (!s.subs.has(res)) continue;
-      s.subs.delete(res);
-      try { res.end(); } catch {}
-      if (s.subs.size === 0) teardownSession(sid);
-      return;
+      for (const sub of s.subs) {
+        if (sub.res !== res) continue;
+        s.subs.delete(sub);
+        try { res.end(); } catch {}
+        if (s.subs.size === 0) teardownSession(sid);
+        return;
+      }
     }
   }
 
-  // fs.watch：批量目录（含文件名→bid 解析）+ mailbox 目录（通用变化）+ 目录缺失时兜底 watch 会话根
+  // fs.watch：批量目录（含文件名→bid 解析）+ mailbox 目录（通用变化）+ 目录缺失时兜底 watch 会话根。
+  // 8.3 短路径预判（hasShortNameSegment）：命中 → 本会话转 stat 轮询兜底（fs.watch 在此路径形态原生崩溃风险）。
   function ensureWatchers(sessionId) {
     const s = sessions.get(sessionId);
-    if (!s || s.watchers.size || disposed) return;
+    if (!s || s.watchers.size || s.polling || disposed) return;
     const base = join(root, 'sessions', sessionId);
+    if (hasShortNameSegment(base)) { s.polling = true; startPoller(); scanChanged(sessionId); return; }
     const targets = [
       { dir: join(base, 'batches'), withBid: true },
       { dir: join(base, 'mailbox'), withBid: false },
@@ -155,15 +170,60 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     }
   }
 
+  // stat 轮询兜底：readdir mtime 签名比对（8.3 短路径主机；功能等价——正确性仍由客户端回拉兜底）
+  function scanChanged(sessionId) {
+    const s = sessions.get(sessionId);
+    if (!s) return false;
+    const dirs = [join(root, 'sessions', sessionId, 'batches'), join(root, 'sessions', sessionId, 'mailbox')];
+    const parts = [];
+    for (const d of dirs) {
+      try {
+        for (const f of readdirSync(d)) {
+          const st = statSync(join(d, f));
+          parts.push(f + ':' + st.mtimeMs + ':' + st.size);
+        }
+      } catch { /* 目录缺失跳过 */ }
+    }
+    const sig = parts.sort().join('|');
+    const changed = s.sig !== null && s.sig !== sig; // 首扫仅建基线（s.sig=null），不触发推送
+    s.sig = sig;
+    return changed;
+  }
+  function startPoller() {
+    if (pollTimer || disposed) return;
+    pollTimer = setInterval(() => {
+      for (const [sid, s] of sessions) {
+        if (!s.subs.size || !s.polling) continue;
+        if (scanChanged(sid)) scheduleNotify(sid, null);
+      }
+    }, POLL_MS);
+    if (typeof pollTimer.unref === 'function') pollTimer.unref();
+  }
+  function stopPollerIfIdle() {
+    let active = false;
+    for (const s of sessions.values()) { if (s.subs.size && s.polling) { active = true; break; } }
+    if (!active && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
   function teardownSession(sessionId) {
     const s = sessions.get(sessionId);
     if (!s) return;
-    for (const w of s.watchers) { try { w.close(); } catch {} }
+    for (const w of s.watchers) closeWatcher(w);
     s.watchers.clear();
     if (s.debounce) { clearTimeout(s.debounce); s.debounce = null; }
     s.pendingBid = null;
+    s.polling = false;
     sessions.delete(sessionId);
     stopHeartbeatIfIdle();
+    stopPollerIfIdle();
+  }
+
+  // Windows libuv 目录 watch 在事件在途时同步 close 会触发原生断言（fs-event.c）——
+  // 延迟一拍关闭，让在途事件排空（幂等：closed 标记防重复 close）
+  function closeWatcher(w) {
+    if (!w || w.__pswClosed) return;
+    w.__pswClosed = true;
+    setImmediate(() => { try { w.close(); } catch {} });
   }
 
   function scheduleNotify(sessionId, bid) {
@@ -273,6 +333,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
   function dispose() {
     disposed = true;
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     for (const un of topicUnsubs) { try { un(); } catch {} }
     topicUnsubs.length = 0;
     for (const sid of [...sessions.keys()]) teardownSession(sid);
