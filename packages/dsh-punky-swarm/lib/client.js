@@ -621,6 +621,7 @@ window.__ModuleLoader__.load({
             if (typeof EventSource === 'undefined' || !sel.session) { startPoll(); return; }
             es = new EventSource('/api/dsh-punky-swarm/stream?session=' + encodeURIComponent(sel.session) + '&batchId=' + encodeURIComponent(sel.batchId));
             es.addEventListener('batch', onSignal);
+            es.addEventListener('mailbox', onSignal); // 帧协议 event: mailbox（mailbox 目录变更信号，回拉双 /mailbox）
             es.addEventListener('heartbeat', onHeartbeat);
             es.onopen = () => { lastBeat = Date.now(); stopPoll(); };
             es.onerror = () => { lastBeat = Date.now(); if (!degraded) startPoll(); };

@@ -256,7 +256,20 @@ test('S12 /stream 端点缺省自建 hub：未注入 panelStream 时路由仍可
   api.dispose(); // 自建 hub 随之 dispose（无泄漏）
 });
 
-test('S13 8.3 短路径预判（hasShortNameSegment）：短路径段命中 → 规避 fs.watch；正常长路径不命中', () => {
+test('S14 帧协议 event: mailbox：mailbox 变更信号推送（详情流监听侧回拉双 /mailbox）', () => {
+  const hub = createStreamHub({ root });
+  const res = new FakeRes();
+  hub.subscribe(S, 'b1', res);
+  hub.notify(S, 'mailbox', 'b1', { eventCount: 3 });
+  const evs = parseFrames(res);
+  const mb = evs.find((f) => f.event === 'mailbox');
+  assert.ok(mb, 'mailbox 事件帧存在');
+  assert.equal(mb.data.batchId, 'b1');
+  assert.equal(mb.data.eventCount, 3);
+  hub.dispose();
+});
+
+test('S15 8.3 短路径预判（hasShortNameSegment）：短路径段命中 → 规避 fs.watch；正常长路径不命中', () => {
   if (process.platform !== 'win32') return; // 短路径形态仅 Windows 判定
   assert.equal(hasShortNameSegment('C:\\Users\\ADMINI~1\\AppData\\Local\\Temp'), true, '8.3 段命中');
   assert.equal(hasShortNameSegment('C:\\Users\\Administrator\\.dsh\\jiufeng'), false, '长路径不命中');

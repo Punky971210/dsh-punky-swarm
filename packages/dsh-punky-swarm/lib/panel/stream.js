@@ -85,7 +85,7 @@ function parseTopicIds(topic, prefix) {
 
 export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debounceMs = DEBOUNCE_MS, maxConns = MAX_CONNS_PER_SESSION } = {}) {
   // sid -> { subs: Set<{res,batchId}>, watchers: Set<FSWatcher>, debounce: timer|null,
-  //          pendingBid: string|null, polling: bool, sig: string|null }
+  //          pendingBid: string|null, pendingKind: 'batch'|'mailbox'|null, polling: bool, sig: string|null }
   const sessions = new Map();
   const topicUnsubs = [];
   let heartbeatTimer = null;
@@ -108,7 +108,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
   function sessionOf(sessionId) {
     let s = sessions.get(sessionId);
     if (!s) {
-      s = { subs: new Set(), watchers: new Set(), debounce: null, pendingBid: null, polling: false, sig: null };
+      s = { subs: new Set(), watchers: new Set(), debounce: null, pendingBid: null, pendingKind: null, polling: false, sig: null };
       sessions.set(sessionId, s);
     }
     return s;
@@ -140,7 +140,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     }
   }
 
-  // fs.watch：批量目录（含文件名→bid 解析）+ mailbox 目录（通用变化）+ 目录缺失时兜底 watch 会话根。
+  // fs.watch：批量目录（含文件名→bid 解析）+ mailbox 目录（帧协议 event: mailbox）+ 目录缺失时兜底 watch 会话根。
   // 8.3 短路径预判（hasShortNameSegment）：命中 → 本会话转 stat 轮询兜底（fs.watch 在此路径形态原生崩溃风险）。
   function ensureWatchers(sessionId) {
     const s = sessions.get(sessionId);
@@ -148,14 +148,14 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     const base = join(root, 'sessions', sessionId);
     if (hasShortNameSegment(base)) { s.polling = true; startPoller(); scanChanged(sessionId); return; }
     const targets = [
-      { dir: join(base, 'batches'), withBid: true },
-      { dir: join(base, 'mailbox'), withBid: false },
+      { dir: join(base, 'batches'), withBid: true, kind: 'batch' },
+      { dir: join(base, 'mailbox'), withBid: false, kind: 'mailbox' },
     ];
     for (const t of targets) {
       try {
         const w = watch(t.dir, { persistent: false }, (evt, fname) => {
           const bid = t.withBid && fname && /^[\w.-]+\.json$/i.test(fname) ? fname.replace(/\.json$/i, '') : null;
-          scheduleNotify(sessionId, bid);
+          scheduleNotify(sessionId, bid, t.kind);
         });
         w.on('error', () => {});
         s.watchers.add(w);
@@ -163,7 +163,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     }
     if (!s.watchers.size) {
       try {
-        const w = watch(base, { persistent: false }, () => scheduleNotify(sessionId, null));
+        const w = watch(base, { persistent: false }, () => scheduleNotify(sessionId, null, 'batch'));
         w.on('error', () => {});
         s.watchers.add(w);
       } catch { /* 会话根也不存在：静默（订阅仍在，心跳保活） */ }
@@ -212,6 +212,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     s.watchers.clear();
     if (s.debounce) { clearTimeout(s.debounce); s.debounce = null; }
     s.pendingBid = null;
+    s.pendingKind = null;
     s.polling = false;
     sessions.delete(sessionId);
     stopHeartbeatIfIdle();
@@ -226,18 +227,21 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     setImmediate(() => { try { w.close(); } catch {} });
   }
 
-  function scheduleNotify(sessionId, bid) {
+  function scheduleNotify(sessionId, bid, kind = 'batch') {
     const s = sessions.get(sessionId);
     if (!s || !s.subs.size) return;
     if (bid && !s.pendingBid) s.pendingBid = bid; // 防抖窗口内取首个明确 bid（其余变化归并）
+    if (!s.pendingKind) s.pendingKind = kind;
     if (s.debounce) clearTimeout(s.debounce);
     s.debounce = setTimeout(() => {
       s.debounce = null;
       const b = s.pendingBid;
+      const k = s.pendingKind || 'batch';
       s.pendingBid = null;
+      s.pendingKind = null;
       if (disposed) return;
-      notifyAll(sessionId, 'batch', b);
-    }, DEBOUNCE_MS);
+      notifyAll(sessionId, k, b);
+    }, debounceMs);
   }
 
   // 推送摘要（信号 + 计数，全量交给客户端回拉）；batchId 过滤详情流订阅者
