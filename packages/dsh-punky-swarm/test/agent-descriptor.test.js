@@ -200,10 +200,10 @@ test('端点：enabled=true 时 /agents 已注册并返回 {count:7, agents(ACS 
   }
 });
 
-test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 6 路由契约保持）', () => {
+test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 7 路由契约保持）', () => {
   const { routes } = apiWithAgentCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/agents'), 'agentCatalog null 时不得注册 /agents');
-  assert.equal(routes.length, 6, '既有 6 路由契约保持');
+  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 /stream）');
   const { routes: r2 } = apiWithAgentCatalog(undefined);
-  assert.equal(r2.length, 6);
+  assert.equal(r2.length, 7);
 });

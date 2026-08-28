@@ -191,10 +191,10 @@ test('端点：?name= 过滤返回单工具；未知 name 返回空', () => {
 test('端点：enabled=false（catalog null）时不注册 /tools（路由数不变）', () => {
   const { routes } = apiWithCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/tools'), 'catalog null 时不得注册 /tools');
-  assert.equal(routes.length, 6, '既有 6 路由契约保持');
+  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 = /stream SSE 路由）');
   // 无 catalog 参数（createApi 缺省调用形态）同样不注册
   const { routes: r2 } = apiWithCatalog(undefined);
-  assert.equal(r2.length, 6);
+  assert.equal(r2.length, 7);
 });
 
 test('目录快照：buildToolCatalog 只读（list 拷贝 / descriptors 冻结 / get 精确命中）', () => {
