@@ -1,0 +1,282 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
+// ============================================================
+// SSE hub（R3 面板推送，设计 exec/panel-design.md §3.3）
+//
+// 职责：会话级订阅集合 + 三路触发源（① topic 事件（enabled 时 attachTopic 接线）
+//   ② fs.watch <root>/sessions/<sid> 批次/mailbox 目录（防抖 300ms）
+//   ③ 10s 心跳帧（event: heartbeat + 注释帧 : ping 保活））
+// 推送粒度（ADR-5）：只推轻量摘要 { sessionId, batchId, eventCount, updatedAt }，
+//   客户端收到信号后回拉既有只读 API 取全量——正确性由回拉兜底，本模块零快照逻辑。
+//
+// D6 简化 5 项标注（设计 §3.3.5，逐项落地）：
+//   1. 多路复用通道协议 → 不做：单流 + event: batch|mailbox|heartbeat 类型区分
+//      （面板只读监控两种事件，单流足够）
+//   2. 断线指数退避重连 → 不做：依赖 EventSource 自动重连 + 客户端回退轮询
+//   3. 服务端背压/流控队列 → 不做：write 失败即断开该订阅者（客户端重连）
+//   4. 事件级增量快照 → 不做：推送信号 + 客户端回拉全量（服务端无快照逻辑）
+//   5. 鉴权/会话扩展 → 不做：沿用既有 /api 会话语义（session query 参数）
+//
+// 零新依赖（D1）：node:fs watch + 宿主注入的 node:http ServerResponse（writeHead/write）
+//   + 浏览器内置 EventSource（客户端侧）。无独立配置键（D3/D4）：随 webServer 挂载，
+//   降级回轮询即运行时自适配开关（ADR-4）。
+// ============================================================
+
+import { watch } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { subscribeTopicPrefix } from '../comms/topic.js';
+
+const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
+const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐设计 §3.3.3 触发源③）
+const DEBOUNCE_MS = 300;         // fs.watch 防抖（Windows 目录事件丢失/重复兜底，设计 §5.3-4）
+
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream; charset=utf-8',
+  'Cache-Control': 'no-cache, no-transform',
+  Connection: 'keep-alive',
+  'X-Accel-Buffering': 'no',
+};
+
+function frame(event, data) {
+  return 'event: ' + event + '\ndata: ' + JSON.stringify(data) + '\n\n';
+}
+function comment(text) {
+  return ': ' + text + '\n\n';
+}
+
+// topic 名 `swarm.<type>.<sid>.<bid>`：type 可含点（member.settled），从尾部取 sid/bid
+function parseTopicIds(topic, prefix) {
+  if (typeof topic !== 'string' || !topic.startsWith(prefix)) return null;
+  const rest = topic.slice(prefix.length);
+  const parts = rest.split('.');
+  if (parts.length < 2) return null;
+  const bid = parts[parts.length - 1];
+  const sid = parts[parts.length - 2];
+  if (!sid || !bid) return null;
+  return { sessionId: sid, batchId: bid };
+}
+
+export function createStreamHub({ root, logger } = {}) {
+  // sid -> { subs: Set<{res,batchId}>, watchers: Set<FSWatcher>, debounce: timer|null,
+  //          pendingBid: string|null, lastSeen: Map<bid,eventCount> }
+  const sessions = new Map();
+  const topicUnsubs = [];
+  let heartbeatTimer = null;
+  let disposed = false;
+
+  const log = (msg) => { try { logger?.info?.('[dsh-punky-swarm/stream] ' + msg); } catch {} };
+
+  // eventCount 只读最小读取（物理事实源 = 批次 JSON，store.js:109 语义）——非快照逻辑，仅计数
+  function readEventCount(sessionId, batchId) {
+    if (!root || !batchId) return null;
+    try {
+      const f = join(root, 'sessions', sessionId, 'batches', batchId + '.json');
+      if (!existsSync(f)) return null;
+      const b = JSON.parse(readFileSync(f, 'utf8'));
+      return Array.isArray(b.events) ? b.events.length : null;
+    } catch { return null; }
+  }
+
+  function sessionOf(sessionId) {
+    let s = sessions.get(sessionId);
+    if (!s) {
+      s = { subs: new Set(), watchers: new Set(), debounce: null, pendingBid: null };
+      sessions.set(sessionId, s);
+    }
+    return s;
+  }
+
+  function writeRes(res, chunk) {
+    if (!res || res.destroyed || res.writableEnded) return false;
+    try { res.write(chunk); return true; } catch { return false; }
+  }
+
+  // 推送单帧；write 失败（D6 简化③）→ 断开该订阅者（客户端自动重连/回退轮询）
+  function push(s, res, event, data) {
+    if (!writeRes(res, frame(event, data))) {
+      detach(res);
+      return false;
+    }
+    return true;
+  }
+
+  function detach(res) {
+    for (const [sid, s] of sessions) {
+      if (!s.subs.has(res)) continue;
+      s.subs.delete(res);
+      try { res.end(); } catch {}
+      if (s.subs.size === 0) teardownSession(sid);
+      return;
+    }
+  }
+
+  // fs.watch：批量目录（含文件名→bid 解析）+ mailbox 目录（通用变化）+ 目录缺失时兜底 watch 会话根
+  function ensureWatchers(sessionId) {
+    const s = sessions.get(sessionId);
+    if (!s || s.watchers.size || disposed) return;
+    const base = join(root, 'sessions', sessionId);
+    const targets = [
+      { dir: join(base, 'batches'), withBid: true },
+      { dir: join(base, 'mailbox'), withBid: false },
+    ];
+    for (const t of targets) {
+      try {
+        const w = watch(t.dir, { persistent: false }, (evt, fname) => {
+          const bid = t.withBid && fname && /^[\w.-]+\.json$/i.test(fname) ? fname.replace(/\.json$/i, '') : null;
+          scheduleNotify(sessionId, bid);
+        });
+        w.on('error', () => {});
+        s.watchers.add(w);
+      } catch { /* 目录尚未创建 → 兜底 watch 会话根 */ }
+    }
+    if (!s.watchers.size) {
+      try {
+        const w = watch(base, { persistent: false }, () => scheduleNotify(sessionId, null));
+        w.on('error', () => {});
+        s.watchers.add(w);
+      } catch { /* 会话根也不存在：静默（订阅仍在，心跳保活） */ }
+    }
+  }
+
+  function teardownSession(sessionId) {
+    const s = sessions.get(sessionId);
+    if (!s) return;
+    for (const w of s.watchers) { try { w.close(); } catch {} }
+    s.watchers.clear();
+    if (s.debounce) { clearTimeout(s.debounce); s.debounce = null; }
+    s.pendingBid = null;
+    sessions.delete(sessionId);
+    stopHeartbeatIfIdle();
+  }
+
+  function scheduleNotify(sessionId, bid) {
+    const s = sessions.get(sessionId);
+    if (!s || !s.subs.size) return;
+    if (bid && !s.pendingBid) s.pendingBid = bid; // 防抖窗口内取首个明确 bid（其余变化归并）
+    if (s.debounce) clearTimeout(s.debounce);
+    s.debounce = setTimeout(() => {
+      s.debounce = null;
+      const b = s.pendingBid;
+      s.pendingBid = null;
+      if (disposed) return;
+      notifyAll(sessionId, 'batch', b);
+    }, DEBOUNCE_MS);
+  }
+
+  // 推送摘要（信号 + 计数，全量交给客户端回拉）；batchId 过滤详情流订阅者
+  function notifyAll(sessionId, event, batchId, extra = {}) {
+    const s = sessions.get(sessionId);
+    if (!s || !s.subs.size) return;
+    for (const sub of [...s.subs]) {
+      if (sub.batchId && batchId && sub.batchId !== batchId) continue;
+      const targetBid = sub.batchId || batchId || null;
+      const summary = {
+        sessionId,
+        batchId: targetBid,
+        eventCount: extra.eventCount != null ? extra.eventCount : (targetBid ? readEventCount(sessionId, targetBid) : null),
+        updatedAt: extra.updatedAt || new Date().toISOString(),
+      };
+      push(s, sub.res, event, summary);
+    }
+  }
+
+  // 心跳：event: heartbeat（客户端 15s 无心跳降级判据）+ 注释帧 : ping（穿透代理保活）
+  function startHeartbeat() {
+    if (heartbeatTimer || disposed) return;
+    heartbeatTimer = setInterval(() => {
+      let total = 0;
+      for (const [sid, s] of sessions) {
+        // 订阅时目录尚不存在 → 心跳对齐时补挂 watcher（目录后创建兜底）
+        if (s.subs.size && !s.watchers.size) ensureWatchers(sid);
+        for (const sub of [...s.subs]) {
+          total++;
+          if (!writeRes(sub.res, comment('ping'))) { detach(sub.res); continue; }
+          push(s, sub.res, 'heartbeat', { ts: new Date().toISOString() });
+        }
+      }
+      if (total === 0) stopHeartbeatIfIdle();
+    }, HEARTBEAT_MS);
+    if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
+  }
+  function stopHeartbeatIfIdle() {
+    let total = 0;
+    for (const s of sessions.values()) total += s.subs.size;
+    if (total === 0 && heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  }
+
+  // 订阅：会话级上限 → SSE 握手 → 注册 + close 清理 → 挂 watcher/心跳
+  function subscribe(sessionId, batchId, res) {
+    if (disposed) return { ok: false, reason: 'disposed' };
+    if (typeof sessionId !== 'string' || !sessionId) return { ok: false, reason: 'session required' };
+    const s = sessionOf(sessionId);
+    if (s.subs.size >= MAX_CONNS_PER_SESSION) return { ok: false, reason: 'limit' };
+    try {
+      if (typeof res.writeHead === 'function') res.writeHead(200, SSE_HEADERS);
+      if (typeof res.flushHeaders === 'function') { try { res.flushHeaders(); } catch {} }
+    } catch { return { ok: false, reason: 'handshake' }; }
+    const sub = { res, batchId: batchId || null };
+    s.subs.add(sub);
+    writeRes(res, comment('connected'));
+    push(s, res, 'heartbeat', { ts: new Date().toISOString() });
+    const onClose = () => detach(res);
+    if (typeof res.on === 'function') { res.on('close', onClose); res.on('error', onClose); }
+    ensureWatchers(sessionId);
+    startHeartbeat();
+    log('subscribed session=' + sessionId + (batchId ? ' batch=' + batchId : '') + ' conns=' + s.subs.size);
+    return { ok: true };
+  }
+
+  // topic 触发源接线（设计 §3.3.3 ①）：exec-a merged 后由装配点（index.js 层）调用——
+  // 订阅 `swarm.` 前缀（swarm.<type>.<sid>.<bid>），按 payload/主题名提取会话与批次路由推送
+  function attachTopic(prefix = 'swarm.', handler) {
+    if (disposed) return () => {};
+    const un = subscribeTopicPrefix(prefix, (topic, payload) => {
+      try {
+        if (handler) { handler(topic, payload); return; }
+        const ids = parseTopicIds(topic, prefix);
+        const sessionId = payload?.sessionId || payload?.session || ids?.sessionId;
+        const batchId = payload?.batchId || ids?.batchId;
+        if (!sessionId) return;
+        notifyAll(sessionId, 'batch', batchId || null, {
+          eventCount: payload?.eventCount,
+          updatedAt: payload?.updatedAt,
+        });
+      } catch { /* 隔离 */ }
+    });
+    topicUnsubs.push(un);
+    return un;
+  }
+
+  function stats() {
+    let conns = 0;
+    for (const s of sessions.values()) conns += s.subs.size;
+    return { sessions: sessions.size, conns };
+  }
+
+  function dispose() {
+    disposed = true;
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    for (const un of topicUnsubs) { try { un(); } catch {} }
+    topicUnsubs.length = 0;
+    for (const sid of [...sessions.keys()]) teardownSession(sid);
+    sessions.clear();
+  }
+
+  return { subscribe, detach, notify: notifyAll, attachTopic, stats, dispose };
+}
