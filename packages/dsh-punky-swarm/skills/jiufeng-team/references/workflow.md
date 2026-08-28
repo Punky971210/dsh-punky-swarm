@@ -65,9 +65,9 @@ wave4: [audit-验收]
 
 > 引擎只校验存在性 + Plan 契约结构底线（spec 必含 \`## 验收标准\`/\`## 约束\`、task-tree.json 合法）；四件套内部结构见 references/templates/。
 
-### 模板 ↔ 产物映射表（P2-17 收敛：5 模板指名引用）
+### 模板 ↔ 产物映射表（P2-17 收敛：6 模板（5 md + 1 json 数据模板）指名引用）
 
-> references/templates/ 5 模板逐一映射：模板 → 产出物 → 产物类型（artifact_types 注册表）→ layer/目录 → 产出角色 → consume 归属。call-chain-matrix / endpoint-behavior 为 **spec.md 内部章节模板**（非独立产物），由 Designer 四件套组装时填充。
+> references/templates/ 6 模板逐一映射：模板 → 产出物 → 产物类型（artifact_types 注册表）→ layer/目录 → 产出角色 → consume 归属。call-chain-matrix / endpoint-behavior 为 **spec.md 内部章节模板**（非独立产物），由 Designer 四件套组装时填充；gap-list.json 为 **audit 对账数据模板**（非独立文件产物），由 Supervisor 对账时按 schema 落盘。
 
 | 模板（references/templates/） | 产出物 | 产物类型 | layer / 目录 | 产出角色 | consume 归属 |
 |---|---|---|---|---|---|
@@ -76,8 +76,9 @@ wave4: [audit-验收]
 | call-chain-matrix-template.md | spec.md 的「调用链矩阵」章节（CH-*） | spec（执行规范） | plan/ | Designer（四件套组装时填充） | Coder/Tester（实现/测试依据） |
 | endpoint-behavior-template.md | spec.md 的「端点行为」章节（EP-*） | spec（执行规范） | plan/ | Designer（四件套组装时填充） | Coder/Tester（实现/测试依据） |
 | success-pattern-seeds.md | dsh-mneme 记忆（type=history/decision，SP-01~10 种子） | retrospective（复盘） | audit/ | Doc-Manager（复盘落库，非文件产物） | 记忆沉淀（后续批次检索复用） |
+| gap-list.json | gap-list.json（audit 对账数据，schema 见模板） | gapList（audit 对账） | audit/ | Supervisor（audit 对账唯一产出者） | Leader（门禁裁决） |
 
-> 产物类型名（plan/spec/taskTree/survey/code/testReport/review/gapList/acceptance/retrospective）与 lib/artifact-types.js 注册表一致；目录前缀（plan//exec//audit/）即 wave_plan layer 路径契约。
+> 产物类型名（plan/spec/taskTree/survey/code/testReport/review/gapList/acceptance/retrospective）与 lib/artifact-types.js 注册表一致；目录前缀（plan/、exec/、audit/）即 wave_plan layer 路径契约。
 
 ## 四、硬化判定点 ↔ 三层门禁
 

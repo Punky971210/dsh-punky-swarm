@@ -150,7 +150,7 @@ C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 
 
 **产物契约表**（详见 `references/workflow.md` §三）：plan→（leader-decision-pack/task-tree/codebase-survey/四件套）；exec→（代码/测试报告）；audit→（review/gap-list/acceptance/retrospective）。
 
-**模板↔产物映射表**（详见 `references/workflow.md` §三末）：references/templates/ 5 模板（leader-decision-pack / plan / call-chain-matrix / endpoint-behavior / success-pattern-seeds）→ 产出物 → layer/consume 归属逐条可查。
+**模板↔产物映射表**（详见 `references/workflow.md` §三末）：references/templates/ 6 模板（5 md：leader-decision-pack / plan / call-chain-matrix / endpoint-behavior / success-pattern-seeds + 1 json 数据模板：gap-list）→ 产出物 → layer/consume 归属逐条可查。
 
 ## 蟛蜞治理集成（worker 视角）
 
