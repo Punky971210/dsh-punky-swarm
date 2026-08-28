@@ -58,21 +58,26 @@ triggers:
   **角色注入**：你是 <Role>——<Persona 一句话>；权限：<白名单>；禁止：<边界>。
   ```
 
+### worker 公共约束（单一来源）
+
+所有角色共用的「约束」行收敛于此单一来源，roles/*.md 权限边界只保留差异、不再内联（去多副本）：
+
+> 约束：按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 `artifacts/<batchId>/`；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）。
+
+roles 权限边界引用格式：`约束：公共约束见 SKILL.md §worker 公共约束；本角色差异：<仅差异>`——差异为空则整行省略。
+
 ### 任务包最小结构（Leader 派发模板）
 
-wave_plan 的 lane 任务包只含**角色/目标/契约/验收**，Leader 不预写实现（调用链设计、脚本实现由被指派 worker 全权负责）：
+wave_plan 的 lane 任务包只含**角色/目标/契约/验收** + 角色注入，Leader 不预写实现（调用链设计、脚本实现由被指派 worker 全权负责）。顶层字段 ≤10（id/role/layer/cmd/角色注入/产物落盘/契约/回执/纪律/验收标准），五字段必保（角色/目标/契约/验收/产物落盘），示例 ≤800 字符：
 
 ```json
-{ id, role: 'Coder'|'Tester'|'Supervisor', layer: 'plan'|'exec'|'audit',
+{ id, role, layer,
   cmd: '加载 <手册技能>，按任务包自行设计实现并落盘产物',
-  角色注入: '从 references/roles/<role>.md 取 Persona+权限边界两段内联（见上）',
-  产物落盘: '引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/（batchId 见本任务包），产物相对路径须落在该根下。两档写法：
-    ① 推荐——直接写引擎产物根（含 <layer>/ 子目录），免 asset_claim 归位，exit gate 直接判存在；
-    ② 若按工作区/会话路径落盘，结算前必须经 asset_claim 归位（Leader 侧执行，worker 在回执中注明产物路径），否则 exit gate 判 missing 拒 merged。',
-  worker 双通道回执: '完成后 report 回报 Leader（简短完成信号）+ mailbox_send outbox 通知 Manager（详细回执，含产物落盘路径）',
-  consume: [...], produce: [...],
-  纪律摘要: 'exec 层 code/test 职能分离（Coder 最小自检，全量验证归 Tester）；test/review 与 code 并行准备验收套件（两段式）；plan 产物归 Designer（role=designer）；audit worker 不复用 / session 注入 / audit lane 命名等纪律详见下方纪律要点',
-  session 注入: '见纪律要点——sessionId/产物根一律从 batch_status 读取注入任务包，禁手写',
+  角色注入: '<Persona 一段 ≤50 字>；<权限边界 可执行/禁止 各 ≤1 行，公共约束不重复>',
+  产物落盘: '引擎产物根见 SKILL.md 单一来源（两档写法/asset_claim），本 lane 落 <layer>/<lane>/',
+  契约: { consume: [...], produce: [...] },
+  worker 双通道回执: 'report 回报 Leader（一行）+ mailbox_send outbox 通知 Manager',
+  纪律: '见 SKILL.md §纪律要点；本 lane 适用=<≤2 条裁剪>',
   验收标准: [...] }
 ```
 
