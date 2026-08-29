@@ -51,6 +51,8 @@ import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 L
 import { overBudgetOf, hasOverBudgetEvent, laneProgressWrite } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）；laneProgressWrite：P1-02 断点指针写（checkpoint progress 接线）
 import { SAFE_ID } from '../state/constants.js'; // P1-07 单点（原 :64 定义迁出）
 import { readCapability } from '../assembly/schema.js'; // P1-01 装配开关缺省合并读取（注册表 default 同源口径）
+// R-01/R-07 收敛：worktree.*/lane.over-budget 事件字面量（发端 :278/:338/:346/:441 + 读端 :393）改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
@@ -275,7 +277,7 @@ function worktreeToolCreate(ctx, deps) {
       const { orch } = ensureOrch(root, sessionId, args.batchId);
       const { dir, branch, reused } = createLaneWorktree(root, sessionId, args.batchId, args.laneId);
       const base = runGit(orch, ['rev-parse', 'HEAD']);
-      store.appendEvent(sessionId, args.batchId, 'worktree.created', {
+      store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CREATED, {
         lane: args.laneId, worktree: dir, branch, orchBranch: ORCH_BRANCH, reused, base: base.ok ? base.stdout : null,
       });
       return { ok: true, worktree: dir, branch, orchBranch: ORCH_BRANCH, reused, base: base.ok ? base.stdout : null, sessionId };
@@ -335,7 +337,7 @@ function worktreeToolCheckpoint(ctx, deps) {
       if (r.committed) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
         if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
-        store.appendEvent(sessionId, args.batchId, 'worktree.checkpoint', evt);
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
       }
       // P1-02 断点指针：checkpoint 携带 progress 经 laneProgressWrite 写 laneProgress（每子步骤完成即写，失败不阻断）+ B 步数预算超限判定
       if (progress) {
@@ -343,7 +345,7 @@ function worktreeToolCheckpoint(ctx, deps) {
         catch (e) { ctx.logger?.warn?.('[lane-checkpoint] laneProgress write failed: ' + String(e?.message ?? e)); }
         const b = overBudgetOf(batch, args.laneId, progress);
         if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
-          store.appendEvent(sessionId, args.batchId, 'lane.over-budget', { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
+          store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }
       }
       return r;
@@ -390,7 +392,7 @@ function worktreeToolCheckpointStatus(ctx, deps) {
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       // 只读：事件流过滤（不调 git）；latest = 最近一次携带 progress 的 checkpoint（倒序取首个有 step/total 的）
-      const events = (batch.events ?? []).filter((e) => e.type === 'worktree.checkpoint' && e.lane === args.laneId);
+      const events = (batch.events ?? []).filter((e) => e.type === EVT.EVT_WORKTREE_CHECKPOINT && e.lane === args.laneId);
       const checkpoints = events.map((e) => {
         const c = { commit: typeof e.commit === 'string' ? e.commit : '', ts: e.ts, message: e.message ?? '' };
         if (Number.isInteger(e.step) && Number.isInteger(e.total)) { c.step = e.step; c.total = e.total; }
@@ -438,7 +440,7 @@ function worktreeToolMerge(ctx, deps) {
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       const r = await doMerge(root, sessionId, args.batchId, args.laneId);
       if (r.ok) {
-        store.appendEvent(sessionId, args.batchId, 'worktree.merged', { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_MERGED, { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
       } else if (r.conflict) {
         // 冲突可选 LLM merge agent 化解（默认关 → 现状逐字一致；全量逻辑在 merge-agent.js）
         return await resolveMergeConflict(deps, {

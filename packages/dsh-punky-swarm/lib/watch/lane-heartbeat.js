@@ -36,6 +36,8 @@ import { resolveWatchConfig, WATCH_DEFAULTS } from '../schema.js';
 import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // P2-01：watch 域不再 import tools/core（共享辅助下沉零依赖 shared.js）
 import { isAbsPath } from '../state/constants.js'; // P1-07 单点（原 :77 内联正则收敛）
 import { findTask } from '../state/task-utils.js'; // P1-04 单点（原 :69 本地定义删除）
+// R-01/R-07 收敛：lane.stalled 事件字面量（发端 :188 + 读端 :101/:139）改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 // 退避档位（分钟 → ms，单调化钳制）：档位单调不减，冷场越久追问间隔越长
 export function buildSchedule(intervalsMinutes) {
@@ -98,7 +100,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     const evs = batch.events ?? [];
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
-      if (e.type === 'lane.stalled') continue;
+      if (e.type === EVT.EVT_LANE_STALLED) continue;
       if (e.lane === lane) {
         const ts = Date.parse(e.ts ?? '');
         if (Number.isFinite(ts) && ts > sinceTs) return true;
@@ -136,7 +138,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     const evs = batch.events ?? [];
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
-      if (e.type === 'lane.stalled') continue;
+      if (e.type === EVT.EVT_LANE_STALLED) continue;
       if (e.lane === lane) {
         const ts = Date.parse(e.ts ?? '');
         if (Number.isFinite(ts) && ts > t) t = ts;
@@ -185,7 +187,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
 
   function markStalled(sessionId, batchId, lane, entry, nowTs) {
     try {
-      store.appendEvent(sessionId, batchId, 'lane.stalled', { lane, missed: entry.missedCount });
+      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_STALLED, { lane, missed: entry.missedCount });
     } catch { /* 批次已终态/不存在等 → 忽略（下轮不再扫） */ }
     entry.stalled = true;
     entry.lastSeenTs = nowTs; // 自写事件不触发自身重置

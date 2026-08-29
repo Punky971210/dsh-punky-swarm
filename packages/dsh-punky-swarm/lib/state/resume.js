@@ -37,6 +37,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import * as schema from '../schema.js';
 // P1-04 单点：findTask 收敛至 task-utils.js（overBudgetOf 原 :157-162 内联同构遍历删除）
 import { findTask } from './task-utils.js';
+// R-01 发端/读端收敛：事件字面量改引 EVT 常量单点（resume.js:99 双写法 + :179 读端）
+import * as EVT from './event-types.js';
 
 // ── config.resume 开关（默认关，零运行时开销，行为不变）──
 export const RESUME_DEFAULTS = Object.freeze({ enabled: false });
@@ -75,7 +77,7 @@ export function recoverBatches(store, { restoreRunning = false } = {}) {
 // 骨架已实现：状态保留 + system.recovered{detail[].restored=true} / system.restored 事件留痕。
 // （增强恢复落地后回填，均只读探测，不改产物）：produced 证据（gateStatus outputsMissing/produceMissing 反推）、
 //   lastActiveAt（batch.events 该 lane 最近事件 ts，回退 updatedAt）、progress（laneProgress[lane] 合并）。
-export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
+export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = {}) {
   const restored = [];
   for (const sessionId of store.listSessions()) {
     for (const batchId of store.listBatches(sessionId)) {
@@ -96,7 +98,8 @@ export function restoreBatches(store, { eventType = 'system.restored' } = {}) {
       }
       if (detail.length) {
         // 事件留痕：appendEvent 只追加事件 + updatedAt，不改 lanes——恢复路径不落 setMember（gate 交互设计）
-        store.appendEvent(sessionId, batchId, 'system.recovered', {
+        // R-01 双写法收敛：system.recovered（recover 语义）+ eventType 缺省 system.restored（restore 语义）均引 EVT 常量
+        store.appendEvent(sessionId, batchId, EVT.EVT_SYSTEM_RECOVERED, {
           batchId, sessionId,
           recoveredLanes: detail.map((d) => d.lane), // 保留既有字段（batch-store.test.js 断言其存在，向后兼容）
           detail,
@@ -176,7 +179,7 @@ export function overBudgetOf(batch, lane, progress) {
 // B-幂等判据：事件流已存在该 lane 的 lane.over-budget → true（接线层据此避免重复 appendEvent；
 //   同 lane 超限事件只发一次，重复 progress 调用不重复发）
 export function hasOverBudgetEvent(batch, lane) {
-  return (batch?.events ?? []).some((e) => e.type === 'lane.over-budget' && e.lane === lane);
+  return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_OVER_BUDGET && e.lane === lane);
 }
 
 // ── worker 任务包契约断点续跑（骨架，增强恢复落地后填充）──
