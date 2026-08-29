@@ -527,7 +527,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
     if (batch.lanes[lane] !== 'running') throw new Error('lane not running: ' + lane + ' (state=' + batch.lanes[lane] + ')');
     // 校验该 lane 存在 lane.stalled 事件（batch.events 反查；stalled 只标记，回收须有停滞证据）
-    const hasStalled = (batch.events ?? []).some((e) => e.type === 'lane.stalled' && e.lane === lane);
+    const hasStalled = (batch.events ?? []).some((e) => e.type === EVT.EVT_LANE_STALLED && e.lane === lane);
     if (!hasStalled) throw new Error('no lane.stalled event for lane: ' + lane + ' (recycle requires stalled evidence)');
     batch.lanes[lane] = 'idle';
     batch.events.push(newEvent(EVT.EVT_LANE_RECYCLED, { lane, from: 'running', reason: 'stalled', note: null }));

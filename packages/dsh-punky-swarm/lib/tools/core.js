@@ -28,6 +28,8 @@ import * as lock from '../lock.js';
 import { join } from 'node:path';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 export { TEXT_OUTPUT, sessionOf }; // P2-01 re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
+// R-01 发端收敛：gate.role_* 事件字面量（:123 发端）改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 // 执行型工具名单（有副作用/写盘/派发执行）：guard 计数与拦截用；可被 config.escalation.execTools 覆盖
 export const EXEC_TOOLS = [
@@ -120,7 +122,7 @@ export function createCoreTools(ctx, deps) {
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency });
         // role 校验告警留痕（GATE_ROLE_INVALID / GATE_ROLE_MISSING，warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
         for (const w of plan.warnings ?? []) {
-          store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? 'gate.role_missing' : 'gate.role_invalid', { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
+          store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? EVT.EVT_GATE_ROLE_MISSING : EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
         }
         clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false（design §4 写入点）
         return { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [] };

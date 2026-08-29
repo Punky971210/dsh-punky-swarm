@@ -26,6 +26,8 @@ import { runCommand } from './command-exec.js';
 import { SESSION_RE, isAbsPath } from './constants.js';
 // P1-04 单点：findTask 收敛至 task-utils.js（原 :108 本地定义删除，调用点不变）
 import { findTask } from './task-utils.js';
+// R-07 读端收敛：e.type 比较改引 EVT 常量单点（member.settled 读端 :117）
+import * as EVT from './event-types.js';
 export { isAbsPath };
 
 // targets 门禁（O2）marker 逃生声明标记：目标文件含独立行 `targets-claimed: true` 即视为已变更（跳过 mtime 比对）。
@@ -114,7 +116,7 @@ export function createGates(root) {
     const evs = batch.events ?? [];
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
-      if (e && e.type === 'member.settled' && e.lane === lane && e.to === 'running' && e.ts) return e.ts;
+      if (e && e.type === EVT.EVT_MEMBER_SETTLED && e.lane === lane && e.to === 'running' && e.ts) return e.ts;
     }
     return batch.createdAt;
   }

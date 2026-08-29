@@ -31,6 +31,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
 import { SAFE_ID, TERMINAL } from '../state/constants.js'; // P1-07 单点（原 :32-33 定义迁出）
 import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
+// R-07 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
+import * as EVT from '../state/event-types.js';
 
 function artifactsDirOf(root, sessionId, batchId) {
   return path.join(root, 'sessions', sessionId, 'artifacts', batchId);
@@ -47,10 +49,10 @@ function assertSafeRelative(p) {
 
 // 事件关键字段摘要（markdown 时间线表用；未知事件回退 JSON 截断）
 function summaryOf(e) {
-  if (e.type === 'member.settled') return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
-  if (e.type === 'lane.skipped' || e.type === 'lane.needhuman') return e.note ?? '';
-  if (e.type === 'batch.phase') return (e.from ?? '') + ' -> ' + (e.to ?? '');
-  if (e.type.startsWith('gate.') || e.type.startsWith('worktree.') || e.type === 'budget.rejected') {
+  if (e.type === EVT.EVT_MEMBER_SETTLED) return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
+  if (e.type === EVT.EVT_LANE_SKIPPED || e.type === EVT.EVT_LANE_NEEDHUMAN) return e.note ?? '';
+  if (e.type === EVT.EVT_BATCH_PHASE) return (e.from ?? '') + ' -> ' + (e.to ?? '');
+  if (e.type.startsWith('gate.') || e.type.startsWith('worktree.') || e.type === EVT.EVT_BUDGET_REJECTED) {
     const keys = ['lane', 'code', 'missing', 'detail', 'step', 'total', 'chainId', 'gate'];
     const parts = keys.filter((k) => e[k] !== undefined).map((k) => k + '=' + (Array.isArray(e[k]) ? e[k].join(',') : String(e[k])));
     return parts.join(' | ');
