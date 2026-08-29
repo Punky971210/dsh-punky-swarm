@@ -41,7 +41,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     派发前先 lane_worktree_create 并把路径注入 worker 任务包作 cwd 契约）。
 //   两者不能互相替代（worktree 不管状态文件并发；lane_claim 不管文件系统冲突），叠加才完整。
 // -----------------------------------------------------------------------------
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
@@ -53,6 +52,8 @@ import { SAFE_ID } from '../state/constants.js'; // P1-07 单点（原 :64 定�
 import { readCapability } from '../assembly/schema.js'; // P1-01 装配开关缺省合并读取（注册表 default 同源口径）
 // R-01/R-07 收敛：worktree.*/lane.over-budget 事件字面量（发端 :278/:338/:346/:441 + 读端 :393）改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
+// R-06 runGit 下沉：git 调用单点迁至 git-utils.js（本文件与 merge-agent.js 均改引，消除双向 import 环）
+import { runGit } from './git-utils.js';
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
@@ -67,25 +68,6 @@ try {
 const RESERVED_LANE = new Set(['_repo', 'orch']); // 与引擎目录布局冲突的 laneId 保留字
 const ORCH_BRANCH = 'punky/orch';
 const MERGE_WAIT_MS = 60_000; // 同批次 merge 串行化等待上限（serializedMerge 纪律）
-
-const gitBin = () => process.env.DSH_GIT_BIN ?? 'git';
-
-// git 调用统一契约（仿 study-taskswarm git.ts runGit）：同步、{ ok, stdout, stderr, code }；
-// git 缺失/不可执行 → ok:false + 清晰错误（不挂起、不静默失败，验收 T5）
-export function runGit(repo, args, { cwd } = {}) {
-  try {
-    const out = execFileSync(gitBin(), args, {
-      cwd: cwd ?? repo,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    return { ok: true, stdout: String(out ?? '').trim(), stderr: '', code: 0 };
-  } catch (e) {
-    const stderr = e?.stderr ? String(e.stderr).trim() : (e?.message ? String(e.message) : String(e));
-    return { ok: false, stdout: '', stderr, code: typeof e?.status === 'number' ? e.status : -1 };
-  }
-}
 
 // git 可用性探测（工具调用前置；git 不可用 → 返回清晰错误并提示安装，验收 T5）
 function gitProbe() {

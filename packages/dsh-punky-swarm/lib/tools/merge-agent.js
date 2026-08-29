@@ -28,10 +28,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     → 一律视同 UNRESOLVED，保留现场走现状 conflict 路径（不挂起不 throw）。
 import fs from 'node:fs';
 import path from 'node:path';
-// P1-05 单点：runGit 统一消费 lane-tools.js 导出版（超集带 cwd，契约 {ok,stdout,stderr,code}）；
-// 本文件原自持实现（:44）删除。循环依赖安全：本文件与 lane-tools.js 相互 import，但 runGit 调用点
-// 均在函数体内（运行时 live binding），顶层无调用。
-import { runGit } from './lane-tools.js';
+// R-06 runGit 下沉：git 调用单点迁至 git-utils.js——本文件改引 git-utils（原引 lane-tools.js
+// 导出版，与 lane-tools 相互 import 构成双向环）；runGit 调用点均在函数体内（运行时 live binding）。
+import { runGit } from './git-utils.js';
+// R-01 发端收敛：worktree.merge.* 事件字面量改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 export const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
 export const VERDICT_SUCCESS = 'SUCCESS';
@@ -84,7 +85,7 @@ function withTimeout(p, ms) {
 // hint 非空（无注入降级）时附加清晰提示 note，其余字段逐字保持 doMerge 冲突结果
 function statusQuo(opts, hint) {
   const { store, sessionId, batchId, laneId, conflict, conflictFiles } = opts;
-  store.appendEvent(sessionId, batchId, 'worktree.merge.conflict', { lane: laneId, files: conflictFiles });
+  store.appendEvent(sessionId, batchId, EVT.EVT_WORKTREE_MERGE_CONFLICT, { lane: laneId, files: conflictFiles });
   return hint ? { ...conflict, note: hint } : conflict;
 }
 
@@ -118,7 +119,7 @@ export async function resolveMergeConflict(deps, opts) {
   runGit(repo, ['worktree', 'prune']);
   const del = runGit(orchDir, ['branch', '-d', branch]);
   const detail = typeof resp?.detail === 'string' && resp.detail ? resp.detail : '';
-  store.appendEvent(sessionId, batchId, 'worktree.merge.resolved', { lane: laneId, files: conflictFiles, verdict, agent: detail || null });
+  store.appendEvent(sessionId, batchId, EVT.EVT_WORKTREE_MERGE_RESOLVED, { lane: laneId, files: conflictFiles, verdict, agent: detail || null });
   const note = del.ok
     ? 'resolved by merge agent' + (detail ? ': ' + detail : '')
     : 'branch -d: ' + del.stderr + '; resolved by merge agent';
