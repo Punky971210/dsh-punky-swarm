@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tsbuild",
+    "rootDir": "lib",
+    "declaration": true,
+    "sourceMap": false,
+    "declarationMap": false
+  }
+}
