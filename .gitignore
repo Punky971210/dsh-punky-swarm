@@ -21,5 +21,9 @@ Thumbs.db
 
 # development docs & meta (not published to the open-source repo)
 docs/
+!docs/
+docs/*
+# single-file exception: benchmark adoption index ships with the repo (T1 ruling, punky-repo-commit-0828)
+!docs/benchmark-adoption-index.md
 CONTRIBUTING.md
 CHANGELOG.md
