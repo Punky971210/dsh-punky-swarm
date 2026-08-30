@@ -118,8 +118,9 @@ test('T4.5 合并生效：mount.js 不再定义本地 resolveVerifyConfig/VERIFY
 
 test('T4.6 语义不变：mount.js 与 lib/schema.js 同一 resolveVerifyConfig（同源引用 + 边界行为一致）', () => {
   assert.equal(mountMod.resolveVerifyConfig, schemaResolve, 'mount.js re-export 即 lib/schema.js 原函数');
-  // 边界抽查（与 verify-mount.test.js 既有用例同断言值）：缺省关（函数语义，发布默认开由 patch.yml 注入）/ enforce / 非法 mode 回退 advisory
-  assert.deepEqual(mountMod.resolveVerifyConfig({}), { enabled: false, mode: 'advisory' });
+  // 边界抽查（与 verify-mount.test.js 既有用例同断言值）：P1-01 缺省默认开（等价 readCapability 合并）/ enforce / 非法 mode 回退 advisory
+  assert.deepEqual(mountMod.resolveVerifyConfig({}), { enabled: true, mode: 'advisory' });
+  assert.deepEqual(mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false, mode: 'advisory' });
   assert.deepEqual(
     mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: true, mode: 'enforce' } } }),
     { enabled: true, mode: 'enforce' },

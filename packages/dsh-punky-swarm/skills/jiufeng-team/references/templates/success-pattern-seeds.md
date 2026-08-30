@@ -37,7 +37,7 @@
 
 ### SP-04：API 粒度细拆
 
-- **描述**：Designer 产出四件套后，Coordinator 按 spec.md 中的 API 定义将 Coder 任务细拆到单个 API 级别（一个 API = 一个子任务）。
+- **描述**：Coordinator 先按 spec.md 中的 API 定义将 Coder 任务细拆到单个 API 级别（一个 API = 一个子任务，产出 task-tree.json），Designer 再消费 task-tree 产出任务包（四件套），Leader 复核后派发。
 - **复用建议**：API 级细拆让 Coder 和 Tester 的任务边界清晰，避免"一个任务做太多事"。
 - **dsh-mneme 语义**：`memory_save(type='history', title='SP-04 API 粒度细拆', importance=3)`（成功模式）
 
@@ -108,7 +108,7 @@
 # memory_save(type='history', title='SP-03 单子模块逐个迭代',
 #             content='每子模块独立过设计排期→细拆→执行→验收→复盘全链路，不并行处理多个子模块设计。', importance=3)
 # memory_save(type='history', title='SP-04 API 粒度细拆',
-#             content='Designer 四件套后，Coordinator 按 spec.md API 定义将 Coder 任务细拆到单个 API 级别。', importance=3)
+#             content='Coordinator 先按 spec.md API 定义将 Coder 任务细拆到单个 API 级别（task-tree.json），Designer 再消费产出任务包。', importance=3)
 # memory_save(type='history', title='SP-05 Coder 自检后交付+测试两段式',
 #             content='Coder 最小自检通过后交付；测试套件准备与 code 同 wave 并行，执行段在自检完成后立即触发。', importance=3)
 # memory_save(type='history', title='SP-06 Spec 驱动测试',

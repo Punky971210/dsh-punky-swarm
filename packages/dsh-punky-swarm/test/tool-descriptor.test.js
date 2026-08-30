@@ -29,7 +29,10 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack'];
+// P1-01 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + worktree 四件 = 19；
+// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 20）。断言按新契约更新（旧「14 工具」为旧行为）。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 19
 
 // 注册上下文（enabled 开关两态）
 function makeCtx(enabled) {
@@ -41,14 +44,14 @@ function makeCtx(enabled) {
   return { ctx, made, registered };
 }
 
-test('生成：14 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
+test('生成：缺省 19 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
   const { made } = makeCtx(true);
   const catalog = made.catalog;
   assert.ok(catalog, 'enabled=true 时 register() 后 catalog 非空');
-  assert.equal(catalog.list().length, 14);
-  assert.equal(catalog.descriptors.length, 14);
+  assert.equal(catalog.list().length, DEFAULT_TOOL_COUNT);
+  assert.equal(catalog.descriptors.length, DEFAULT_TOOL_COUNT);
   const toolIds = catalog.list().map((d) => d.toolId);
-  assert.equal(new Set(toolIds).size, 14, 'toolId 全局唯一');
+  assert.equal(new Set(toolIds).size, DEFAULT_TOOL_COUNT, 'toolId 全局唯一');
   for (const d of catalog.list()) {
     assert.ok(d && typeof d === 'object');
     for (const k of ['toolId', 'name', 'description', 'version', 'inputParam', 'outputParam']) {
@@ -120,7 +123,7 @@ test('开关口径：缺省配置默认开启（catalog 非空）；显式 aip.e
   // 缺省配置（config 无 aip 键）→ readCapability 默认合并 {enabled:true} → 实际默认开启
   const { made } = makeCtx(false);
   assert.ok(made.catalog, '缺省配置必须实际默认开启（catalog 非空）');
-  assert.equal(made.catalog.list().length, 14);
+  assert.equal(made.catalog.list().length, DEFAULT_TOOL_COUNT);
   // 显式 aip.enabled=false → 关闭，catalog 为 null
   const ctx2 = { tools: { register: () => {} }, logger: console };
   const made2 = createTools(ctx2, { store, root, config: { aip: { enabled: false } } });
@@ -132,11 +135,11 @@ test('行为不变抽查：register() 注册的正是 tools 数组原对象（�
   const off = makeCtx(false);
   const on = makeCtx(true);
   // 同一实例内：register 注册的每个工具就是 tools 数组里的对象（enabled 两态一致）
-  assert.equal(off.registered.length, 14);
-  assert.equal(on.registered.length, 14);
+  assert.equal(off.registered.length, DEFAULT_TOOL_COUNT);
+  assert.equal(on.registered.length, DEFAULT_TOOL_COUNT);
   assert.equal(off.registered.length, off.made.tools.length);
   assert.equal(on.registered.length, on.made.tools.length);
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < DEFAULT_TOOL_COUNT; i++) {
     assert.equal(off.registered[i], off.made.tools[i], '工具对象引用必须一致（未被替换/包装）@' + off.made.tools[i].name);
     assert.equal(on.registered[i], on.made.tools[i], '工具对象引用必须一致（未被替换/包装）@' + on.made.tools[i].name);
   }
@@ -159,15 +162,15 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('端点：enabled=true 时 /tools 已注册并返回 {count:14, tools} HTTP 200', () => {
+test('端点：enabled=true 时 /tools 已注册并返回 {count:19, tools} HTTP 200', () => {
   const { made } = makeCtx(true);
   const { routes } = apiWithCatalog(made.catalog);
   const route = routes.find((r) => r.path === '/api/dsh-punky-swarm/tools');
   assert.ok(route, 'enabled=true 时 /tools 路由已注册');
   const r = invoke(route, '/api/dsh-punky-swarm/tools');
   assert.equal(r.status, 200);
-  assert.equal(r.body.count, 14);
-  assert.equal(r.body.tools.length, 14);
+  assert.equal(r.body.count, DEFAULT_TOOL_COUNT);
+  assert.equal(r.body.tools.length, DEFAULT_TOOL_COUNT);
   assert.ok(typeof r.body.generatedAt === 'string');
   assert.ok(r.body.tools.every((d) => d.toolId && d.inputParam && d.outputParam));
 });
@@ -188,10 +191,10 @@ test('端点：?name= 过滤返回单工具；未知 name 返回空', () => {
 test('端点：enabled=false（catalog null）时不注册 /tools（路由数不变）', () => {
   const { routes } = apiWithCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/tools'), 'catalog null 时不得注册 /tools');
-  assert.equal(routes.length, 6, '既有 6 路由契约保持');
+  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 = /stream SSE 路由）');
   // 无 catalog 参数（createApi 缺省调用形态）同样不注册
   const { routes: r2 } = apiWithCatalog(undefined);
-  assert.equal(r2.length, 6);
+  assert.equal(r2.length, 7);
 });
 
 test('目录快照：buildToolCatalog 只读（list 拷贝 / descriptors 冻结 / get 精确命中）', () => {
@@ -199,7 +202,7 @@ test('目录快照：buildToolCatalog 只读（list 拷贝 / descriptors 冻结 
   const cat = made.catalog;
   const l1 = cat.list();
   l1.push('junk');
-  assert.equal(cat.list().length, 14, 'list() 返回拷贝，外部修改不影响快照');
+  assert.equal(cat.list().length, DEFAULT_TOOL_COUNT, 'list() 返回拷贝，外部修改不影响快照');
   assert.equal(cat.get('wave_plan').toolId, 'dsh.punky-swarm.wave_plan');
   assert.equal(cat.get('nope'), null);
   // 单工具生成器独立可用

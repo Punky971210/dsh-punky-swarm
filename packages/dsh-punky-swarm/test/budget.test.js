@@ -238,8 +238,9 @@ test('B2 集成: outbox 同链同有序对往返超限 → PING_PONG', async () 
   assert.equal(r3.code, 'PING_PONG');
 });
 
-test('B5: enabled=false（缺省）→ 现有 mailbox 调用零感知（重发不被拒、无预算事件、meta 原样透传）', async () => {
-  const { root, store, byName } = makeTools({}); // 无 capabilities.budget 配置
+test('B5: enabled=false（显式关）→ 现有 mailbox 调用零感知（重发不被拒、无预算事件、meta 原样透传）', async () => {
+  // P1-01 行为变更：budget 缺省默认开；零感知语义由显式 capabilities.budget.enabled=false 承担（旧「缺省关」为旧行为断言）
+  const { root, store, byName } = makeTools({ capabilities: { budget: { enabled: false } } });
   await makeBatch(store, byName, 'b-off');
   const base = { batchId: 'b-off', box: 'outbox', lane: 'a', message: { text: 'hello' }, meta: { chain: { id: 'c1', hop: 0 } } };
   for (let i = 0; i < 3; i++) {

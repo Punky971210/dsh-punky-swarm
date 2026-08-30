@@ -50,8 +50,9 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('registers 6 routes (prefix + 5 exact)', () => {
-  assert.equal(routes.length, 6);
+test('registers 7 routes (prefix + 6 exact)', () => {
+  // R3（exec-panel-b）：+1 = /stream SSE 路由（随 webServer 挂载，契约 §3.3）
+  assert.equal(routes.length, 7);
 });
 
 test('GET /batches requires session', () => {

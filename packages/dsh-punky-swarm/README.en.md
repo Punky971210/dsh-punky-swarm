@@ -69,6 +69,10 @@ The plugin ships with a **Punky swarm cluster** monitoring panel: third tab "对
 
 ## Governance Tools (20)
 
+> Scope premise (P1-01 unified): **20 is the full-open (cordis.patch.yml) count** — `log_export` is included only when `logs.enabled: true`.
+> Under the bare default config (no `capabilities` key), 7 keys are on by default (aip/discovery/verify/watch/worktree/budget/trajectory),
+> giving 19 tools (without `log_export`); `logs` defaults off and is turned on by the patch to reach 20. Explicit `enabled: false` disables per-key.
+
 Grouped by function:
 
 ### Batch planning

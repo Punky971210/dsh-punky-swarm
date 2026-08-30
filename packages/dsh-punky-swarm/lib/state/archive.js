@@ -30,9 +30,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { migrateV2toV3 } from './schema-v3.js';
+import { SESSION_RE } from './constants.js'; // P1-07 单点（原 :34 定义迁出）
+// R-01 发端收敛：archive.failed/archive.done 事件字面量改引 EVT 常量单点
+import * as EVT from './event-types.js';
 
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
-const BATCH_RE = /^[a-zA-Z0-9._-]+$/;
+const BATCH_RE = SESSION_RE; // 同款正则（batchId 与 sessionId 共用 SAFE_ID 字符集）
 
 export function createArchive(root) {
   const sessionsDir = path.join(root, 'sessions');
@@ -117,7 +119,7 @@ export function createArchive(root) {
       if (!b) return;
       const nb = migrateV2toV3(b); // v2 存量批次经迁移兜底（schema 升 3 + chains/archived 补齐）
       nb.events = nb.events ?? [];
-      nb.events.push({ ts: new Date().toISOString(), type: 'archive.failed', reason });
+      nb.events.push({ ts: new Date().toISOString(), type: EVT.EVT_ARCHIVE_FAILED, reason });
       nb.updatedAt = new Date().toISOString();
       atomicWrite(batchFileOf(sessionId, batchId), nb);
     } catch { /* 兜底也失败：静默（审计可经 archive/ 目录状态判断） */ }
@@ -158,7 +160,7 @@ export function createArchive(root) {
       // 单向标记：批次 JSON 置 archived:true + archive.done 事件（无 unarchive 入口 = 不可回滚）
       next.archived = true;
       next.events = next.events ?? [];
-      next.events.push({ ts: archivedAt, type: 'archive.done', archivedAt });
+      next.events.push({ ts: archivedAt, type: EVT.EVT_ARCHIVE_DONE, archivedAt });
       next.updatedAt = archivedAt;
       atomicWrite(batchFileOf(sessionId, batchId), next);
       return manifest;

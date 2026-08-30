@@ -21,7 +21,7 @@
 | M-02 | {名称} | BE / FE / Both | M-01 | {简要说明} |
 | ... | ... | ... | ... | ... |
 
-> 粗拆仅到顶层子模块级，不深入到 API 粒度。API 粒度由 Coordinator 在 Designer 产出后细拆。
+> 粗拆仅到顶层子模块级；API 粒度由 Coordinator 细拆产出 task-tree.json 后交 Designer 消费产出任务包。
 
 ### 子模块间依赖关系图（可选）
 

@@ -168,10 +168,11 @@ test('R5 生命周期：ctx.on 订阅 → handler 生效；stop() 退订无泄�
   bridge.stop(); // 幂等
 });
 
-test('R5 装配开关：isTrajectoryEnabled 默认关（enabled 缺省/false 不挂载）', () => {
-  assert.equal(isTrajectoryEnabled({}), false);
-  assert.equal(isTrajectoryEnabled({ capabilities: {} }), false);
-  assert.equal(isTrajectoryEnabled({ capabilities: { trajectory: {} } }), false);
+test('R5 装配开关：isTrajectoryEnabled 缺省默认开（P1-01；显式 enabled:false 不挂载）', () => {
+  // P1-01 行为变更：缺省 = readCapability 合并 TRAJECTORY_DEFAULTS {enabled:true}（旧「默认关」为旧行为断言）
+  assert.equal(isTrajectoryEnabled({}), true);
+  assert.equal(isTrajectoryEnabled({ capabilities: {} }), true);
+  assert.equal(isTrajectoryEnabled({ capabilities: { trajectory: {} } }), true);
   assert.equal(isTrajectoryEnabled({ capabilities: { trajectory: { enabled: false } } }), false);
   assert.equal(isTrajectoryEnabled({ capabilities: { trajectory: { enabled: true } } }), true);
 });

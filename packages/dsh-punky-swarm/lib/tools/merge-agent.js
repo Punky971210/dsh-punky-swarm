@@ -26,9 +26,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     （merge agent 是冲突化解手段，非 lane 恢复；不新增成员态、不自动 settle）。
 //   - fail-closed：spawner 抛错/超时/返回未知 verdict/化解后 orch 仍有在途 merge（U 标记或 MERGE_HEAD 残留）
 //     → 一律视同 UNRESOLVED，保留现场走现状 conflict 路径（不挂起不 throw）。
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+// R-06 runGit 下沉：git 调用单点迁至 git-utils.js——本文件改引 git-utils（原引 lane-tools.js
+// 导出版，与 lane-tools 相互 import 构成双向环）；runGit 调用点均在函数体内（运行时 live binding）。
+import { runGit } from './git-utils.js';
+// R-01 发端收敛：worktree.merge.* 事件字面量改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 export const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
 export const VERDICT_SUCCESS = 'SUCCESS';
@@ -37,21 +41,6 @@ const RESOLVED = new Set([VERDICT_RESOLVED, VERDICT_SUCCESS]);
 export const NO_SPAWNER_HINT = 'mergeAgent configured but no spawner injected';
 const DEFAULT_TIMEOUT_MS = 600_000;
 const UNMERGED_RE = /^(UU|AA|DD|AU|UA|DU|UD)\s/; // git status --porcelain 的冲突 XY 标记全集
-
-const gitBin = () => process.env.DSH_GIT_BIN ?? 'git';
-
-// git 调用统一契约（与 lane-tools.runGit 同款；本模块独立持有，避免 lane-tools 行数膨胀）
-export function runGit(repo, args) {
-  try {
-    const out = execFileSync(gitBin(), args, {
-      cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-    });
-    return { ok: true, stdout: String(out ?? '').trim(), stderr: '' };
-  } catch (e) {
-    const stderr = e?.stderr ? String(e.stderr).trim() : (e?.message ? String(e.message) : String(e));
-    return { ok: false, stdout: '', stderr };
-  }
-}
 
 // HARD 规则（写入 request.instructions，约束 agent 防误合并）
 export const HARD_INSTRUCTIONS = [
@@ -96,7 +85,7 @@ function withTimeout(p, ms) {
 // hint 非空（无注入降级）时附加清晰提示 note，其余字段逐字保持 doMerge 冲突结果
 function statusQuo(opts, hint) {
   const { store, sessionId, batchId, laneId, conflict, conflictFiles } = opts;
-  store.appendEvent(sessionId, batchId, 'worktree.merge.conflict', { lane: laneId, files: conflictFiles });
+  store.appendEvent(sessionId, batchId, EVT.EVT_WORKTREE_MERGE_CONFLICT, { lane: laneId, files: conflictFiles });
   return hint ? { ...conflict, note: hint } : conflict;
 }
 
@@ -130,7 +119,7 @@ export async function resolveMergeConflict(deps, opts) {
   runGit(repo, ['worktree', 'prune']);
   const del = runGit(orchDir, ['branch', '-d', branch]);
   const detail = typeof resp?.detail === 'string' && resp.detail ? resp.detail : '';
-  store.appendEvent(sessionId, batchId, 'worktree.merge.resolved', { lane: laneId, files: conflictFiles, verdict, agent: detail || null });
+  store.appendEvent(sessionId, batchId, EVT.EVT_WORKTREE_MERGE_RESOLVED, { lane: laneId, files: conflictFiles, verdict, agent: detail || null });
   const note = del.ok
     ? 'resolved by merge agent' + (detail ? ': ' + detail : '')
     : 'branch -d: ' + del.stderr + '; resolved by merge agent';

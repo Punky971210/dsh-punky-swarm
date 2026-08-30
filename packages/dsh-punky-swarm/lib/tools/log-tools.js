@@ -22,15 +22,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // worktree.* / budget.* / system.* / asset.* 等），但缺模型可调用的导出工具——本工具为
 // store.readBatch 的纯读投影，零副作用（不 appendEvent、不改状态文件、不碰 mailbox、
 // 不写工作区；唯一写路径是显式 writeTo 落盘到引擎产物根，属可审计产物）。
-// 装配开关：config.capabilities?.logs?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏）。
+// 装配开关：经 readCapability(config,'logs') 合并注册表 default（P1-01——logs 键注册表默认关：
+//   缺省不注册 → 工具总数不含 log_export；显式 capabilities.logs.enabled:true（如 cordis.patch.yml）
+//   或 enabled:false 控制注册）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './core.js';
-
-const SAFE_ID = /^[a-zA-Z0-9._-]+$/; // 复用本包 SAFE_ID 语义（store.js SESSION_RE / batchId 同款）
-const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
+import { SAFE_ID, TERMINAL } from '../state/constants.js'; // P1-07 单点（原 :32-33 定义迁出）
+import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
+// R-07 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
+import * as EVT from '../state/event-types.js';
 
 function artifactsDirOf(root, sessionId, batchId) {
   return path.join(root, 'sessions', sessionId, 'artifacts', batchId);
@@ -47,10 +49,10 @@ function assertSafeRelative(p) {
 
 // 事件关键字段摘要（markdown 时间线表用；未知事件回退 JSON 截断）
 function summaryOf(e) {
-  if (e.type === 'member.settled') return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
-  if (e.type === 'lane.skipped' || e.type === 'lane.needhuman') return e.note ?? '';
-  if (e.type === 'batch.phase') return (e.from ?? '') + ' -> ' + (e.to ?? '');
-  if (e.type.startsWith('gate.') || e.type.startsWith('worktree.') || e.type === 'budget.rejected') {
+  if (e.type === EVT.EVT_MEMBER_SETTLED) return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
+  if (e.type === EVT.EVT_LANE_SKIPPED || e.type === EVT.EVT_LANE_NEEDHUMAN) return e.note ?? '';
+  if (e.type === EVT.EVT_BATCH_PHASE) return (e.from ?? '') + ' -> ' + (e.to ?? '');
+  if (e.type.startsWith('gate.') || e.type.startsWith('worktree.') || e.type === EVT.EVT_BUDGET_REJECTED) {
     const keys = ['lane', 'code', 'missing', 'detail', 'step', 'total', 'chainId', 'gate'];
     const parts = keys.filter((k) => e[k] !== undefined).map((k) => k + '=' + (Array.isArray(e[k]) ? e[k].join(',') : String(e[k])));
     return parts.join(' | ');
@@ -126,8 +128,9 @@ function buildReport(batch, sessionId, filtered, args) {
 
 export function createLogTools(ctx, deps) {
   const config = deps?.config ?? {};
-  // 默认关：logs 未配置/disabled → 零注册，工具总数 14 不变
-  if (config?.capabilities?.logs?.enabled !== true) return [];
+  // logs 注册表默认关（P1-01）：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
+  //   显式 logs.enabled=true（patch 全开）→ 注册 log_export。
+  if (readCapability(config, 'logs')?.enabled !== true) return [];
   const { root, store } = deps;
 
   return [

@@ -18,10 +18,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 文件 topic：broadcast topic 订阅/分发
 // 两路分发：① 进程内 handler 同步调用（异常隔离）；② 可选落 mailbox broadcast box（复用 mailbox.send，ackId 原子写语义）
 // 消费侧跨进程经 mailbox_read(box=broadcast) 读取，readTopic 提供按 topic/sinceTs 过滤的只读辅助
+//
+// 接线状态（exec-panel-b 批②，R3 SSE hub）：
+//   - subscribeTopicPrefix（前缀订阅，R3 hub 订阅 `swarm.` 用，exec-b 新增，签名零改动）；
+//   - 装配开关 capabilities.topic.enabled（CAPABILITY_REGISTRY 注册表默认关，显式开启才接线）仍归 exec-a 装配；
+//   - 消费点不得绕过 mailbox 公共接口（与既有广播语义同源：mailbox.send/readUnacked）。
 import { join } from 'node:path';
 import { send as mailboxSend, readUnacked } from './mailbox.js';
 
 const registry = new Map(); // Map<topic, Set<handler>>
+const prefixRegistry = new Map(); // Map<prefix, Set<handler>>（前缀订阅，emitTopic 按 startsWith 分发）
 
 function assertTopic(topic) {
   if (typeof topic !== 'string' || topic.length === 0) {
@@ -51,6 +57,26 @@ export function subscribeTopic(topic, handler) {
   };
 }
 
+// 前缀订阅（R3 SSE hub 订阅 `swarm.` 用，exec-panel-b 新增；签名与 subscribeTopic 同形，handler 收 (topic, payload)）
+// 语义：emitTopic(topic) 时，topic.startsWith(prefix) 的前缀订阅者全部收到（精确注册与前缀注册并存、互不影响）
+export function subscribeTopicPrefix(prefix, handler) {
+  assertTopic(prefix); // 前缀不得为空（空前缀会匹配一切，禁止）
+  if (typeof handler !== 'function') throw new Error('invalid handler: ' + String(handler));
+  let set = prefixRegistry.get(prefix);
+  if (!set) { set = new Set(); prefixRegistry.set(prefix, set); }
+  set.add(handler); // 同 prefix 同 handler 幂等
+  let unsubscribed = false;
+  return function unsubscribe() {
+    if (unsubscribed) return; // 幂等，重复调用 no-op
+    unsubscribed = true;
+    const s = prefixRegistry.get(prefix);
+    if (s) {
+      s.delete(handler);
+      if (s.size === 0) prefixRegistry.delete(prefix);
+    }
+  };
+}
+
 export function emitTopic(topic, payload, ctx = {}) {
   assertTopic(topic);
   // ① 进程内分发：同步调用，异常隔离（单 handler 抛错不影响其余、不向上传播）
@@ -59,6 +85,13 @@ export function emitTopic(topic, payload, ctx = {}) {
   if (handlers) {
     for (const h of [...handlers]) {
       try { h(payload); delivered++; } catch { /* 隔离 */ }
+    }
+  }
+  // ①b 前缀分发（R3 SSE hub 订阅 `swarm.`）：handler 收 (topic, payload)，异常隔离
+  for (const [prefix, prefixHandlers] of prefixRegistry) {
+    if (!topic.startsWith(prefix)) continue;
+    for (const h of [...prefixHandlers]) {
+      try { h(topic, payload); delivered++; } catch { /* 隔离 */ }
     }
   }
   // ② 可选落 mailbox broadcast box（root/sessionId/batchId 齐备才落盘）

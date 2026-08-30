@@ -291,10 +291,10 @@ test('端点：discovery 注入时注册 /discover + /.well-known/aip（既有 6
   const { routes } = apiWithDiscovery(svc);
   assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/discover'), '/discover 已注册');
   assert.ok(routes.some((r) => r.path === '/.well-known/aip'), '/.well-known/aip 已注册');
-  assert.equal(routes.length, 8, '6 既有 + 2 新增');
+  assert.equal(routes.length, 9, '7 既有（R3 exec-panel-b：+1 /stream）+ 2 新增');
   // 未注入 discovery → 不注册（既有契约保持）
   const { routes: r2 } = apiWithDiscovery(null);
-  assert.equal(r2.length, 6);
+  assert.equal(r2.length, 7);
 });
 
 test('端点：POST /discover 成功返回 DiscoveryResponse（200）', async () => {

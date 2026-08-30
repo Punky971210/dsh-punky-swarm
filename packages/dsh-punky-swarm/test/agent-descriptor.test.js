@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // P4 ACS 描述生成器（exec-agent-desc lane）：字段集与参考实现 ACPs v2.1.0 acsSchema.json 逐字一致 +
-// 旧 14+8 兼容映射层 + register 接线 + /agents 端点（闭环用例，只增不碰既有测试）
+// register 接线 + /agents 端点（闭环用例，只增不碰既有测试）。旧 14+8 兼容映射层已移除（P2-06）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +28,7 @@ import { createApi } from '../lib/api.js';
 import { DEFAULT_ASSEMBLY } from '../lib/assembly.js';
 import {
   buildSkillDescriptor, buildAgentDescriptor, buildAgentDescriptors, buildAgentCatalog,
-  toLegacyDescriptor, ACS_REQUIRED_FIELDS, ACS_SKILL_REQUIRED_FIELDS,
+  ACS_REQUIRED_FIELDS, ACS_SKILL_REQUIRED_FIELDS,
   ACS_OPTIONAL_FIELDS, ACS_SKILL_OPTIONAL_FIELDS, ACS_PROTOCOL_VERSION,
 } from '../lib/aip/agent-descriptor.js';
 
@@ -128,42 +128,6 @@ test('ACS：engineInfo 覆盖可选/派生字段（endPoints/securitySchemes/cap
   for (const k of Object.keys(d)) assert.ok(extra.has(k), '越界键 ' + k);
 });
 
-test('兼容映射：toLegacyDescriptor 输出旧 14+8 结构（aic→agentId 等，审计对比用）', () => {
-  const d = buildAgentDescriptor(DEFAULT_ASSEMBLY, 'exec', 'coder', fixedEngine);
-  const legacy = toLegacyDescriptor(d, { layer: 'exec' });
-  const LEGACY_KEYS = ['agentId', 'name', 'description', 'version', 'owner', 'capabilities', 'skills', 'interactionModes', 'communicationProtocols', 'securityLevel', 'trustLevel', 'region', 'language', 'serviceLevel'];
-  for (const k of LEGACY_KEYS) assert.ok(k in legacy, '缺旧字段 ' + k);
-  assert.equal(legacy.agentId, d.aic, 'aic → agentId 1:1');
-  assert.equal(legacy.name, d.name);
-  assert.equal(legacy.version, d.version);
-  assert.equal(legacy.owner, d.provider.organization);
-  assert.deepEqual(legacy.capabilities, ['wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_status', 'mailbox_send', 'mailbox_read', 'mailbox_ack']);
-  // 技能 8 项映射
-  const s = legacy.skills[0];
-  for (const k of ['skillId', 'name', 'description', 'version', 'inputParams', 'outputParams', 'triggerConditions', 'dependencies']) assert.ok(k in s, '缺旧技能字段 ' + k);
-  assert.equal(s.skillId, d.skills[0].id);
-  assert.equal(s.name, d.skills[0].name);
-  // 无 layer 时不推导 capabilities
-  assert.deepEqual(toLegacyDescriptor(d).capabilities, []);
-});
-
-test('兼容映射：注入 skillMeta 后 round-trip 一致（description/tags 透传进 ACS → 映射回旧结构）', () => {
-  const engine = {
-    ...fixedEngine,
-    skillMeta: { 'dev-coder': { description: '编码执行角色', tags: ['编码'], examples: ['写代码'] } },
-  };
-  const d = buildAgentDescriptor(DEFAULT_ASSEMBLY, 'exec', 'coder', engine);
-  assert.equal(d.description, '编码执行角色');
-  const coderSkill = d.skills.find((s) => s.name === 'dev-coder');
-  assert.deepEqual(coderSkill.tags, ['编码']);
-  assert.deepEqual(coderSkill.examples, ['写代码']);
-  const legacy = toLegacyDescriptor(d, { layer: 'exec' });
-  const ls = legacy.skills.find((s) => s.name === 'dev-coder');
-  assert.equal(ls.description, '编码执行角色');
-  assert.deepEqual(ls.triggerConditions, ['写代码']);
-  assert.equal(legacy.agentId, d.aic);
-});
-
 test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结 / generatedAt 固定）', () => {
   const cat = buildAgentCatalog(DEFAULT_ASSEMBLY, fixedEngine);
   assert.equal(cat.generatedAt, '2026-08-22T00:00:00.000Z');
@@ -174,12 +138,12 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
 });
 
 // —— 接线层（register.js）——
-test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 仍为 14 工具', () => {
+test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 19 工具（P1-01 默认开）', () => {
   const { made } = makeCtx(true);
   assert.ok(made.agentCatalog, 'enabled=true 时 register() 后 agentCatalog 非空');
   assert.equal(made.agentCatalog.list().length, ROLE_COUNT);
   assert.ok(made.catalog, '既有 catalog 不受影响');
-  assert.equal(made.catalog.list().length, 14);
+  assert.equal(made.catalog.list().length, 19); // P1-01 缺省默认开：14 + lane_heartbeat + worktree 四件（logs 缺省关）
   for (const d of made.agentCatalog.list()) {
     for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '接线输出缺 ACS 键 ' + k);
   }
@@ -236,10 +200,10 @@ test('端点：enabled=true 时 /agents 已注册并返回 {count:7, agents(ACS 
   }
 });
 
-test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 6 路由契约保持）', () => {
+test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 7 路由契约保持）', () => {
   const { routes } = apiWithAgentCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/agents'), 'agentCatalog null 时不得注册 /agents');
-  assert.equal(routes.length, 6, '既有 6 路由契约保持');
+  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 /stream）');
   const { routes: r2 } = apiWithAgentCatalog(undefined);
-  assert.equal(r2.length, 6);
+  assert.equal(r2.length, 7);
 });

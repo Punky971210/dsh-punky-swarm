@@ -31,6 +31,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // TaskCommandType 枚举（参考实现原文，逐字）
 export const AIP_COMMAND_TYPES = ['get', 'start', 'continue', 'cancel', 'complete', 're-stream'];
 
+// TaskState 枚举（aip_base_model.py:23-33；任务状态枚举唯一源——acps-bridge/server 经 re-export 消费，禁止再自持定义）
+export const TASK_STATES = [
+  'accepted', 'working', 'awaiting-input', 'awaiting-completion',
+  'completed', 'canceled', 'failed', 'rejected',
+];
+
 // Message 基类投影：mailbox payload { ackId, ts, box, message, meta } → ACPs Message 结构
 // type 值 'message' 为投影标记（Message 基类 type 值域未限定，子类型如 task-command 由任务投影覆盖）；
 // senderRole/senderId 由 box 方向推导（inbox=Leader→worker=leader；outbox=worker→Leader=partner；

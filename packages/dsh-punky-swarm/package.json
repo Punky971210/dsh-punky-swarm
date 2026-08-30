@@ -1,6 +1,6 @@
 {
   "name": "dsh-punky-swarm",
-  "version": "0.3.4",
+  "version": "0.3.6",
   "type": "module",
   "description": "dsh-punky-swarm — dsh 插件（DeepSeek Harness）· punky 署名 · 集群治理（swarm governance）引擎：单机多子 agent 治理，wavePlan 三层 DAG + 引擎级门禁（Entry / Plan Contract / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 国标 AIP 兼容 + 全能力治理增强。附蟛蜞模式预设与 jiufeng-team 角色指引。",
   "license": "AGPL-3.0-only",
@@ -25,7 +25,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "check": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
+    "test": "npm run build && node --test"
   },
   "keywords": [
     "dsh",
@@ -62,6 +64,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.1.1-rc.2"
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.1.1-rc.2",
+    "typescript": "^5.9.3"
   }
 }

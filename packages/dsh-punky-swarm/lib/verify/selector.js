@@ -20,6 +20,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 服务端权威语义：裁决侧按 identity+tool+argsHash 全等绑定，模型提交值一律忽略（不参与匹配）。
 // AC 声明来源（零核心侵入）：批次 plan 产物 spec.md「## 验收标准」章节 —— audit lane 任务包携带
 // AC 清单 [{id, tool, args}]，不扩展 wave-plan task schema（wave-plan.js 零改动）。
+// TBD-4 核实（2026-08-28）：本文件与 lib/state/gates.js（批次内层间门禁）零耦合——不 import 亦不被
+//   其 import；verify 子系统（selector/mount/gate/evidence）独立成链，裁决纯函数经 DI 由 audit lane
+//   注入消费（evaluateAcEvidence），装配层仅挂载捕获 hook（mountVerify）与注册表门控，无共享调用路径。
 import { createHash } from 'node:crypto';
 
 // 递归规范化参数：对象键递归排序（{a:1,b:2} 与 {b:2,a:1} 同哈希）；数组保序；undefined 剔除；

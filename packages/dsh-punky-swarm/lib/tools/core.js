@@ -18,15 +18,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 蟛蜞模式治理核心工具（11 个），defineTool 规范含 output.schema + output.render
 // 拆分自 lib/tools.js（core 域原样搬移，行为不变）
 // 导出：createCoreTools(ctx, deps) => Array<defineTool>；installDifficultyGuard(ctx, deps)（难度门禁注册，原样搬移一字不改）
-// 共享辅助（mailbox-tools.js 复用）：TEXT_OUTPUT / sessionOf
+// 共享辅助（P2-01 下沉至零依赖 shared.js）：TEXT_OUTPUT / sessionOf——本文件 re-export 保持对外导出兼容
+//   （mailbox-tools/log-tools/lane-tools 已直引 shared.js；watch/lane-heartbeat 不再依赖 core.js）
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { buildWavePlan, validateWavePlan } from '../wave-plan.js';
 import { resolveAssembly } from '../assembly.js';
 import { ARTIFACT_TYPES } from '../artifact-types.js';
 import * as lock from '../lock.js';
 import { join } from 'node:path';
-
-export const TEXT_OUTPUT = (text) => [{ type: 'text', text }];
+import { TEXT_OUTPUT, sessionOf } from './shared.js';
+export { TEXT_OUTPUT, sessionOf }; // P2-01 re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
+// R-01 发端收敛：gate.role_* 事件字面量（:123 发端）改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
 
 // 执行型工具名单（有副作用/写盘/派发执行）：guard 计数与拦截用；可被 config.escalation.execTools 覆盖
 export const EXEC_TOOLS = [
@@ -51,10 +54,6 @@ export function clearPendingBatch(store, sessionId) {
   }
 }
 
-export function sessionOf(args, exec) {
-  if (args && typeof args.session === 'string' && args.session.length) return args.session;
-  return exec?.agent?.session?.id ?? 'cli';
-}
 export function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions', sessionId, '.locks', batchId + '.' + lane + '.lock'); }
 
 // 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改），注册顺序保持现状（createTools 开头）
@@ -75,7 +74,16 @@ export function installDifficultyGuard(ctx, deps) {
       const sessionId = execution?.arguments?.session ?? execution?.agent?.session?.id;
       if (!sessionId) return undefined;
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
-      if (!execTools.includes(execution.name)) return undefined; // ① 非执行型：放行（治理/查询，防死锁）
+      // ① 非执行型：放行（治理/查询，防死锁）
+      // ⚠ P2-05 豁免边界（明示）：
+      //   - 豁免类别：治理/查询类工具（batch_status/gate_status/member_status/artifact_types/lane_checkpoint_status/
+      //     lane_heartbeat 等不在 EXEC_TOOLS 名单者）+ 非执行型写（如 mailbox_read 读回执、assign_check 评估本身）。
+      //   - 豁免理由：防死锁——难度门禁是「先评估后执行」的护栏，评估/查询动作若也被拦截将形成
+      //     「评估→被拦→无法评估」死循环（worker 被派发后须先读状态再干活，读状态不能被门禁卡死）。
+      //   - 豁免范围：仅限难度门禁（本 guard）；其余 guard 语义（EXEC_TOOLS 计数 bumpExecCount、
+      //     执行型调用次数统计）不受影响——下方 store.bumpExecCount 仍对所有执行型调用计数。
+      //   - 名单可覆盖：config.escalation.execTools 可增减执行型名单（名单外即豁免）。
+      if (!execTools.includes(execution.name)) return undefined;
       const g = store.readGovernance(sessionId);
       let reason;
       // 门禁 1：从未评估 或 已过期（execCallsSince≥20 / 距 lastAssign.at≥30min）→ 要求先评估
@@ -114,7 +122,7 @@ export function createCoreTools(ctx, deps) {
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency });
         // role 校验告警留痕（GATE_ROLE_INVALID / GATE_ROLE_MISSING，warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
         for (const w of plan.warnings ?? []) {
-          store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? 'gate.role_missing' : 'gate.role_invalid', { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
+          store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? EVT.EVT_GATE_ROLE_MISSING : EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
         }
         clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false（design §4 写入点）
         return { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [] };

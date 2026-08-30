@@ -30,9 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // lane_heartbeat 工具由 lib/watch/lane-heartbeat.js 注入组装（enabled 门控由该模块自持；
 // 守卫式加载：既有 lane 未合入时静默降级，本模块照常注册 worktree 四工具，互不阻塞。
 //
-// 装配开关：config.capabilities?.worktree?.enabled === true 时注册（默认关 → 工具总数 14 不变，
-// 回归零破坏）。lane_checkpoint 可选
-// progress={step,total}（commit message 内嵌 step N/total + 事件 step/total）+ 只读 lane_checkpoint_status。
+// 装配开关：经 readCapability(config,'worktree') 合并注册表 default（P1-01 缺省默认开，显式 enabled:false 可关）；
+// lane_checkpoint 可选 progress={step,total}（commit message + 事件 step/total + laneProgress 断点指针写）+ 只读 lane_checkpoint_status。
 //
 // 与 lane_claim 逻辑锁的互补关系：
 //   - lane_claim（既有）：同一 lane 的【逻辑写】锁——批次/成员状态文件、产物落盘路径并发防写；
@@ -42,14 +41,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     派发前先 lane_worktree_create 并把路径注入 worker 任务包作 cwd 契约）。
 //   两者不能互相替代（worktree 不管状态文件并发；lane_claim 不管文件系统冲突），叠加才完整。
 // -----------------------------------------------------------------------------
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './core.js';
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
 import * as lock from '../lock.js';
 import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
-import { overBudgetOf, hasOverBudgetEvent } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）
+import { overBudgetOf, hasOverBudgetEvent, laneProgressWrite } from '../state/resume.js'; // B 步数预算：超限判定纯函数（判定层，接线在本文件）；laneProgressWrite：P1-02 断点指针写（checkpoint progress 接线）
+import { SAFE_ID } from '../state/constants.js'; // P1-07 单点（原 :64 定义迁出）
+import { readCapability } from '../assembly/schema.js'; // P1-01 装配开关缺省合并读取（注册表 default 同源口径）
+// R-01/R-07 收敛：worktree.*/lane.over-budget 事件字面量（发端 :278/:338/:346/:441 + 读端 :393）改引 EVT 常量单点
+import * as EVT from '../state/event-types.js';
+// R-06 runGit 下沉：git 调用单点迁至 git-utils.js（本文件与 merge-agent.js 均改引，消除双向 import 环）
+import { runGit } from './git-utils.js';
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
@@ -61,29 +65,9 @@ try {
 }
 
 // ---- 常量 ----
-const SAFE_ID = /^[a-zA-Z0-9._-]+$/;
 const RESERVED_LANE = new Set(['_repo', 'orch']); // 与引擎目录布局冲突的 laneId 保留字
 const ORCH_BRANCH = 'punky/orch';
 const MERGE_WAIT_MS = 60_000; // 同批次 merge 串行化等待上限（serializedMerge 纪律）
-
-const gitBin = () => process.env.DSH_GIT_BIN ?? 'git';
-
-// git 调用统一契约（仿 study-taskswarm git.ts runGit）：同步、{ ok, stdout, stderr, code }；
-// git 缺失/不可执行 → ok:false + 清晰错误（不挂起、不静默失败，验收 T5）
-export function runGit(repo, args, { cwd } = {}) {
-  try {
-    const out = execFileSync(gitBin(), args, {
-      cwd: cwd ?? repo,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    return { ok: true, stdout: String(out ?? '').trim(), stderr: '', code: 0 };
-  } catch (e) {
-    const stderr = e?.stderr ? String(e.stderr).trim() : (e?.message ? String(e.message) : String(e));
-    return { ok: false, stdout: '', stderr, code: typeof e?.status === 'number' ? e.status : -1 };
-  }
-}
 
 // git 可用性探测（工具调用前置；git 不可用 → 返回清晰错误并提示安装，验收 T5）
 function gitProbe() {
@@ -275,7 +259,7 @@ function worktreeToolCreate(ctx, deps) {
       const { orch } = ensureOrch(root, sessionId, args.batchId);
       const { dir, branch, reused } = createLaneWorktree(root, sessionId, args.batchId, args.laneId);
       const base = runGit(orch, ['rev-parse', 'HEAD']);
-      store.appendEvent(sessionId, args.batchId, 'worktree.created', {
+      store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CREATED, {
         lane: args.laneId, worktree: dir, branch, orchBranch: ORCH_BRANCH, reused, base: base.ok ? base.stdout : null,
       });
       return { ok: true, worktree: dir, branch, orchBranch: ORCH_BRANCH, reused, base: base.ok ? base.stdout : null, sessionId };
@@ -335,14 +319,15 @@ function worktreeToolCheckpoint(ctx, deps) {
       if (r.committed) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
         if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
-        store.appendEvent(sessionId, args.batchId, 'worktree.checkpoint', evt);
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
       }
-      // B 步数预算：progress 非空时判定超限（progress.total > 任务 checkpoint.steps）→ 幂等 appendEvent lane.over-budget；
-      //   不硬杀（仅发事件，照常返回，转 review/stalled 由 Manager/Leader 裁决）；未声明 checkpoint.steps 零感知。
+      // P1-02 断点指针：checkpoint 携带 progress 经 laneProgressWrite 写 laneProgress（每子步骤完成即写，失败不阻断）+ B 步数预算超限判定
       if (progress) {
+        try { store.updateLaneProgress(sessionId, args.batchId, args.laneId, { ...progress, status: 'running' }); }
+        catch (e) { ctx.logger?.warn?.('[lane-checkpoint] laneProgress write failed: ' + String(e?.message ?? e)); }
         const b = overBudgetOf(batch, args.laneId, progress);
         if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
-          store.appendEvent(sessionId, args.batchId, 'lane.over-budget', { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
+          store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }
       }
       return r;
@@ -389,7 +374,7 @@ function worktreeToolCheckpointStatus(ctx, deps) {
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       // 只读：事件流过滤（不调 git）；latest = 最近一次携带 progress 的 checkpoint（倒序取首个有 step/total 的）
-      const events = (batch.events ?? []).filter((e) => e.type === 'worktree.checkpoint' && e.lane === args.laneId);
+      const events = (batch.events ?? []).filter((e) => e.type === EVT.EVT_WORKTREE_CHECKPOINT && e.lane === args.laneId);
       const checkpoints = events.map((e) => {
         const c = { commit: typeof e.commit === 'string' ? e.commit : '', ts: e.ts, message: e.message ?? '' };
         if (Number.isInteger(e.step) && Number.isInteger(e.total)) { c.step = e.step; c.total = e.total; }
@@ -437,7 +422,7 @@ function worktreeToolMerge(ctx, deps) {
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       const r = await doMerge(root, sessionId, args.batchId, args.laneId);
       if (r.ok) {
-        store.appendEvent(sessionId, args.batchId, 'worktree.merged', { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_MERGED, { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
       } else if (r.conflict) {
         // 冲突可选 LLM merge agent 化解（默认关 → 现状逐字一致；全量逻辑在 merge-agent.js）
         return await resolveMergeConflict(deps, {
@@ -457,8 +442,8 @@ export function createLaneTools(ctx, deps) {
   const tools = [];
   // 注入的 lane_heartbeat；守卫式加载，模块未合入时留待集成（功能独立，互不阻塞）
   if (createHeartbeatTools) tools.push(...createHeartbeatTools(ctx, deps));
-  // worktree 四工具（create/merge/checkpoint/checkpoint_status）：默认关（回归零破坏）
-  if (config?.capabilities?.worktree?.enabled === true) {
+  // worktree 四工具（create/merge/checkpoint/checkpoint_status）：P1-01 缺省默认开（readCapability 合并注册表 default，显式 enabled:false 可关）
+  if (readCapability(config, 'worktree')?.enabled === true) {
     tools.push(
       worktreeToolCreate(ctx, deps),
       worktreeToolMerge(ctx, deps),

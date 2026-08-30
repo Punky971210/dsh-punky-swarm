@@ -27,9 +27,14 @@ import * as machine from './machine.js';
 import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单（v2-node-robustness ②）
+import { SESSION_RE } from './constants.js'; // P1-07 单点（原本文件 :32 定义迁出）
+import { laneProgressClear, laneProgressWrite } from './resume.js'; // P1-02 断点指针：结算终态清退 + 原子写合并（纯函数，本文件落盘）
+// P1-04 单点：findTask 收敛至 task-utils.js（原 :430 本地定义删除）
+import { findTask } from './task-utils.js';
+// P2-07 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
+import * as EVT from './event-types.js';
 
 const STORE_SCHEMA = BATCH_SCHEMA_V3;
-const SESSION_RE = /^[a-zA-Z0-9._-]+$/;
 
 function atomicWrite(file, data) {
   const dir = path.dirname(file);
@@ -48,14 +53,14 @@ export function countConsecutiveFailedSettles(events) {
   let count = 0;
   for (let i = evs.length - 1; i >= 0; i--) {
     const e = evs[i];
-    if (!e || e.type !== 'member.settled') continue;
+    if (!e || e.type !== EVT.EVT_MEMBER_SETTLED) continue;
     if (e.to === 'failed') count++;
     else break;
   }
   return count;
 }
 
-export function createStore(root, { rules, logger } = {}) {
+export function createStore(root, { rules, logger, onStateChange } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   const gates = createGates(root);
@@ -100,12 +105,20 @@ export function createStore(root, { rules, logger } = {}) {
   }
 
   function batchFile(sessionId, batchId) {
-    if (!/^[a-zA-Z0-9._-]+$/.test(batchId)) throw new Error('invalid batchId');
+    if (!SESSION_RE.test(batchId)) throw new Error('invalid batchId');
     return path.join(batchesDirOf(sessionId), batchId + '.json');
   }
 
   function newEvent(type, fields = {}) {
     return { ts: new Date().toISOString(), type, ...fields };
+  }
+
+  // R2 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
+  // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（设计 §3.2.3 固化），
+  // 故必须在调用点埋（设计 §4.3/§5.3 风险点 2）。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
+  // 异常隔离（发布失败不阻断状态机）。载荷为纯数据摘要，topic 命名由装配侧（topic-runtime）负责。
+  function emitStateChange(ev) {
+    try { onStateChange?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ }
   }
 
   function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning' }) {
@@ -127,7 +140,7 @@ export function createStore(root, { rules, logger } = {}) {
       lanes,
       chains: chainsDefaults(), // C4：mailbox 环防护记账状态（v3 字段，唯一事实源）
       archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
-      events: [newEvent('batch.created', { batchId, sessionId })],
+      events: [newEvent(EVT.EVT_BATCH_CREATED, { batchId, sessionId })],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -185,7 +198,7 @@ export function createStore(root, { rules, logger } = {}) {
   }
 
   function setMember(sessionId, batchId, lane, to, note = null) {
-    const batch = readBatch(sessionId, batchId);
+    let batch = readBatch(sessionId, batchId); // let：P1-02 终态清退经 laneProgressClear 返回新 batch（不突变入参）
     if (!batch) throw new Error('batch not found: ' + batchId);
     schema.assertMemberState(to);
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
@@ -203,16 +216,20 @@ export function createStore(root, { rules, logger } = {}) {
         if (!skip.ok) {
           throw new Error('invalid member transition: ' + from + ' -> skipped (condition unmet: ' + cond.missing.join(', ') + '; ratchet forbids auto-skip)');
         }
+        // P1-02：condition 自动 skipped 亦为结算终态——清退 laneProgress 断点指针（不残留脏指针）
+        batch = laneProgressClear(batch, lane);
         batch.lanes[lane] = 'skipped'; // pending→skipped 既有合法迁移
-        batch.events.push(newEvent('lane.skipped', { lane, from, note: 'condition unmet: ' + cond.missing.join(', ') }));
-        batch.events.push(newEvent('member.settled', { lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') }));
+        batch.events.push(newEvent(EVT.EVT_LANE_SKIPPED, { lane, from, note: 'condition unmet: ' + cond.missing.join(', ') }));
+        batch.events.push(newEvent(EVT.EVT_MEMBER_SETTLED, { lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
+        // R2 调用点埋点：condition 自动 skipped 亦为结算终态（member.settled 事件发布）
+        emitStateChange({ type: 'member.settled', sessionId, batchId, lane, from, to: 'skipped', note: 'condition unmet: ' + cond.missing.join(', ') });
         return batch;
       }
       const g = gates.checkEntryGate(sessionId, batchId, batch, lane);
       if (!g.ok) {
-        batch.events.push(newEvent('gate.entry.missing', { lane, missing: g.missing }));
+        batch.events.push(newEvent(EVT.EVT_GATE_ENTRY_MISSING, { lane, missing: g.missing }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(g.code + ': ' + g.missing.join(', '));
@@ -221,37 +238,37 @@ export function createStore(root, { rules, logger } = {}) {
     if (to === 'review') {
       // audit lane 产物含 needHuman 声明 → 事件 lane.needhuman 留痕（Manager 转达人工裁决）
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, null);
-      if (nh.declared) batch.events.push(newEvent('lane.needhuman', { lane, path: nh.path }));
+      if (nh.declared) batch.events.push(newEvent(EVT.EVT_LANE_NEEDHUMAN, { lane, path: nh.path }));
     }
     if (to === 'merged') {
       const g = gates.checkExitGate(sessionId, batchId, batch, lane);
       if (!g.ok) {
-        batch.events.push(newEvent('gate.exit.missing', { lane, code: g.code, detail: g.problems ?? g.missing }));
+        batch.events.push(newEvent(EVT.EVT_GATE_EXIT_MISSING, { lane, code: g.code, detail: g.problems ?? g.missing }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(g.code + ': ' + (g.problems ?? g.missing).join(', '));
       }
-      batch.events.push(newEvent('gate.passed', { lane, gate: 'exit' }));
+      batch.events.push(newEvent(EVT.EVT_GATE_PASSED, { lane, gate: 'exit' }));
       // targets 门禁（O2，设计 §1.3）：exec 层声明 targets（批次产物根外目标文件）→ merged 前置校验——
       // exit gate 之后、command gate 之前（增量接线，不改既有门禁顺序与语义）。
       // 失败（missing/unchanged）→ gate.target_blocked 事件 + 抛错拒 merged（lane 留 review，成员态不变，与 exit gate 同语义）；
       // 通过且 declared → gate.target.passed 事件留痕；未声明/非 exec/逃生阀 → 零感知（无事件）。
       const tg = gates.checkTargetsGate(sessionId, batchId, batch, lane);
       if (!tg.ok) {
-        batch.events.push(newEvent('gate.target_blocked', { lane, code: tg.code, missing: tg.missing ?? [], unchanged: tg.unchanged ?? [] }));
+        batch.events.push(newEvent(EVT.EVT_GATE_TARGET_BLOCKED, { lane, code: tg.code, missing: tg.missing ?? [], unchanged: tg.unchanged ?? [] }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(tg.code + ': targets 未通过校验（missing=' + (tg.missing ?? []).join(', ') + '; unchanged=' + (tg.unchanged ?? []).join(', ') + '）');
       }
       if (tg.declared) {
-        batch.events.push(newEvent('gate.target.passed', { lane, mode: tg.mode ?? 'mtime', targets: tg.targets ?? [] }));
+        batch.events.push(newEvent(EVT.EVT_GATE_TARGET_PASSED, { lane, mode: tg.mode ?? 'mtime', targets: tg.targets ?? [] }));
       }
       // 命令 gate（V1，设计 §组件 4）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行（checkExitGate 之后、needHuman 之前）
       // 成功/未声明 → gate.exit 事件（declared 时）后继续；失败+needHuman 声明 → 转人工闸（escalation，merged 须 note 含 human: 证据）；
       // 失败+未声明 → gate.exit_blocked 事件 + 抛 GATE_EXIT_*（拒 merged，lane 留 review）
       const cg = gates.checkCommandGate(sessionId, batchId, batch, lane);
       if (!cg.ok) {
-        batch.events.push(newEvent('gate.exit_blocked', { lane, code: cg.code, command: cg.command ?? null, exitCode: cg.exitCode ?? null, detail: cg.detail ?? null, escalation: cg.needHumanEscalation === true }));
+        batch.events.push(newEvent(EVT.EVT_GATE_EXIT_BLOCKED, { lane, code: cg.code, command: cg.command ?? null, exitCode: cg.exitCode ?? null, detail: cg.detail ?? null, escalation: cg.needHumanEscalation === true }));
         if (cg.needHumanEscalation) {
           // 转人工闸：复用 needHuman 证据契约（note 含 `human:<裁决人>:<时间>:<结论>`）；无证据 → GATE_NEEDHUMAN_PENDING 挂起
           const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
@@ -260,45 +277,55 @@ export function createStore(root, { rules, logger } = {}) {
             atomicWrite(batchFile(sessionId, batchId), batch);
             throw new Error('GATE_NEEDHUMAN_PENDING: 命令 gate 失败（' + cg.code + '）且产物声明 needHuman，merged 须 note 含 human: 证据');
           }
-          batch.events.push(newEvent('human.decision', { lane, note })); // 人工裁决留痕（note 可回溯）
+          batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note })); // 人工裁决留痕（note 可回溯）
         } else {
           batch.updatedAt = new Date().toISOString();
           atomicWrite(batchFile(sessionId, batchId), batch);
           throw new Error(cg.code + ': ' + (cg.detail ?? 'command gate failed'));
         }
       } else if (cg.declared) {
-        batch.events.push(newEvent('gate.exit', { lane, commands: cg.commands ?? [], results: cg.results ?? [], outputTruncated: cg.outputTruncated === true }));
+        batch.events.push(newEvent(EVT.EVT_GATE_EXIT, { lane, commands: cg.commands ?? [], results: cg.results ?? [], outputTruncated: cg.outputTruncated === true }));
       }
       // needHuman 人工闸（merged 前置，与 checkExitGate 并列）——声明 lane 缺 human: 证据 → 拒 GATE_NEEDHUMAN_PENDING
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, note);
       if (!nh.ok) {
-        batch.events.push(newEvent('gate.needhuman_blocked', { lane, code: nh.code, path: nh.path }));
+        batch.events.push(newEvent(EVT.EVT_GATE_NEEDHUMAN_BLOCKED, { lane, code: nh.code, path: nh.path }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(nh.code + ': ' + nh.message);
       }
-      if (nh.declared) batch.events.push(newEvent('human.decision', { lane, note })); // 人工裁决留痕（note 可回溯）
+      if (nh.declared) batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note })); // 人工裁决留痕（note 可回溯）
     }
+    // P1-02：lane 结算终态（merged/failed/skipped/conflict，member_settle 语义）清退 laneProgress
+    // 断点指针（不残留脏指针；批次 complete 后整块随批次归档由 archive 覆盖）
+    if (schema.isMemberTerminal(to)) batch = laneProgressClear(batch, lane);
     batch.lanes[lane] = to;
-    batch.events.push(newEvent('member.settled', { lane, from, to, note: note ?? null }));
+    batch.events.push(newEvent(EVT.EVT_MEMBER_SETTLED, { lane, from, to, note: note ?? null }));
     // C 子项：连续失败升级（spec C）——failed 结算后计数：同批次最近连续 failed ≥3 且批次 running → 触发 paused。
     // 单次原子写：paused 迁移 + batch.phase 事件 + batch.failed-escalate 事件与本次结算同批落盘（不调 setPhase 二次写盘，避免竞态）。
     // 棘轮校验 fail-closed：running→paused 迁移被部署收紧删除时 bv.ok=false，不触发、不绕过棘轮；
     // phase 闸（T-2）：paused 后 phase 非 running 自然不重复；人工 resume 后计数从当前事件流重新评估；
     // 不自动重试：failed 仍为终态（schema failed: [] 不变），重做=重开新批次。
+    let escalated = false;
     if (to === 'failed' && batch.phase === 'running') {
       const streak = countConsecutiveFailedSettles(batch.events);
       if (streak >= 3) {
         const bv = machine.applyBatchTransition('running', 'paused', { rules: ratchet });
         if (bv.ok) {
           batch.phase = 'paused';
-          batch.events.push(newEvent('batch.phase', { from: 'running', to: 'paused', reason: 'failed-escalate' }));
-          batch.events.push(newEvent('batch.failed-escalate', { lane, count: streak }));
+          batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from: 'running', to: 'paused', reason: 'failed-escalate' }));
+          batch.events.push(newEvent(EVT.EVT_BATCH_FAILED_ESCALATE, { lane, count: streak }));
+          escalated = true;
         }
       }
     }
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
+    // R2 调用点埋点：member.settled（结算终态/返工入 review 等全部迁移）+ 伴随的 batch.phase（failed-escalate）
+    emitStateChange({ type: 'member.settled', sessionId, batchId, lane, from, to, note: note ?? null });
+    if (escalated) {
+      emitStateChange({ type: 'batch.phase', sessionId, batchId, from: 'running', to: 'paused', reason: 'failed-escalate' });
+    }
     return batch;
   }
 
@@ -313,16 +340,18 @@ export function createStore(root, { rules, logger } = {}) {
     if (to === 'complete') {
       const g = gates.checkCompleteGate(batch);
       if (!g.ok) {
-        batch.events.push(newEvent('gate.complete_blocked', { code: g.code, pending: g.pending }));
+        batch.events.push(newEvent(EVT.EVT_GATE_COMPLETE_BLOCKED, { code: g.code, pending: g.pending }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(g.code + (g.pending ? ': ' + g.pending.join(', ') : ''));
       }
     }
     batch.phase = to;
-    batch.events.push(newEvent('batch.phase', { from, to }));
+    batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from, to }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
+    // R2 调用点埋点：batch.phase 迁移事件发布（规划→运行→暂停→终态等全部阶段迁移）
+    emitStateChange({ type: 'batch.phase', sessionId, batchId, from, to });
     // complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
     // 失败仅记录 archive.failed（archiveBatch 内部处理），不阻断 complete；try/catch 兜底意外异常（如批次文件不可读）
     if (to === 'complete') {
@@ -332,7 +361,7 @@ export function createStore(root, { rules, logger } = {}) {
         try {
           const b = readBatch(sessionId, batchId);
           if (b) {
-            b.events.push(newEvent('archive.failed', { reason: String((err && err.message) || err) }));
+            b.events.push(newEvent(EVT.EVT_ARCHIVE_FAILED, { reason: String((err && err.message) || err) }));
             b.updatedAt = new Date().toISOString();
             atomicWrite(batchFile(sessionId, batchId), b);
           }
@@ -369,6 +398,19 @@ export function createStore(root, { rules, logger } = {}) {
     return next.chains;
   }
 
+  // ---- P1-02 断点指针持久化（laneProgress）----
+  // updateLaneProgress：lane_checkpoint 携带 progress 时经 laneProgressWrite 纯函数合并后原子写
+  // （不突变入参；worktree.checkpoint 事件留痕由调用方 lane-tools 承担，本接口只写指针）。
+  // 清退走 setMember 终态分支（laneProgressClear），本接口只增不删。
+  function updateLaneProgress(sessionId, batchId, lane, progress) {
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+    const next = laneProgressWrite(batch, lane, progress);
+    next.updatedAt = new Date().toISOString();
+    atomicWrite(batchFile(sessionId, batchId), next);
+    return next;
+  }
+
   // asset_claim 归位（设计 6.3/§4）：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
   // 安全：target 必须是批次内相对路径——拒绝绝对路径、盘符前缀、.. / . / 空段；解析后仍须落在 artifacts 目录内（纵深防御）。
   function claimAsset(sessionId, batchId, { source, target }) {
@@ -389,7 +431,7 @@ export function createStore(root, { rules, logger } = {}) {
     if (!path.resolve(dest).startsWith(base)) throw new Error('target escapes artifacts dir: ' + target);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(source, dest); // 保留内容，不移动（避免破坏已引用）
-    batch.events.push(newEvent('asset.claimed', { lane: null, source, target }));
+    batch.events.push(newEvent(EVT.EVT_ASSET_CLAIMED, { lane: null, source, target }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     return { ok: true, claimedPath: target, batchId };
@@ -407,13 +449,6 @@ export function createStore(root, { rules, logger } = {}) {
   }
 
   // ---- 恢复审计辅助（只读探测，无副作用）----
-  // task 契约查找（与 gates.findTask 同遍历语义：wavePlan[].tasks 按 id 匹配）
-  function findTask(batch, lane) {
-    for (const w of batch.wavePlan ?? []) {
-      for (const t of w.tasks) if (t.id === lane) return t;
-    }
-    return null;
-  }
   // lastActiveAt（上次活动时间）：events 中该 lane 最近一条带 lane 字段事件（member.settled / worktree.checkpoint /
   // lane.skipped / lane.needhuman 等）的 ts；无 lane 事件 → 回退 batch.updatedAt
   function lastActiveAtOf(batch, lane) {
@@ -465,7 +500,7 @@ export function createStore(root, { rules, logger } = {}) {
         }
         if (recoveredLanes.length > 0) {
           // 保留 recoveredLanes（向后兼容，既有测试断言其存在），新增 detail 审计详情数组
-          batch.events.push(newEvent('system.recovered', { batchId, sessionId, recoveredLanes, detail }));
+          batch.events.push(newEvent(EVT.EVT_SYSTEM_RECOVERED, { batchId, sessionId, recoveredLanes, detail }));
           batch.updatedAt = new Date().toISOString();
           atomicWrite(batchFile(sessionId, batchId), batch);
           recovered.push(sessionId + '/' + batchId);
@@ -492,10 +527,10 @@ export function createStore(root, { rules, logger } = {}) {
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
     if (batch.lanes[lane] !== 'running') throw new Error('lane not running: ' + lane + ' (state=' + batch.lanes[lane] + ')');
     // 校验该 lane 存在 lane.stalled 事件（batch.events 反查；stalled 只标记，回收须有停滞证据）
-    const hasStalled = (batch.events ?? []).some((e) => e.type === 'lane.stalled' && e.lane === lane);
+    const hasStalled = (batch.events ?? []).some((e) => e.type === EVT.EVT_LANE_STALLED && e.lane === lane);
     if (!hasStalled) throw new Error('no lane.stalled event for lane: ' + lane + ' (recycle requires stalled evidence)');
     batch.lanes[lane] = 'idle';
-    batch.events.push(newEvent('lane.recycled', { lane, from: 'running', reason: 'stalled', note: null }));
+    batch.events.push(newEvent(EVT.EVT_LANE_RECYCLED, { lane, from: 'running', reason: 'stalled', note: null }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     return { ok: true, lane, from: 'running', to: 'idle' };
@@ -560,7 +595,7 @@ export function createStore(root, { rules, logger } = {}) {
   return {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
-    readChains, updateChains,
+    readChains, updateChains, updateLaneProgress, // P1-02：laneProgress 断点指针持久化
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,

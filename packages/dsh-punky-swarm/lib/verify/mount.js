@@ -20,6 +20,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   返回 { installed, count, dispose }；enabled=false 零运行时开销；ctx.on 缺失静默降级（宿主能力缺失不炸）。
 // 边界：createCompletionGate 与 audit lane 显式 DI 消费路径一字不动（gate.js 零改动）——本文件只做引擎级捕获装配，
 //   裁决/拦截语义仍在 gate.js（advisory 只记录 / enforce 拦截），捕获侧只落 blob + ledger。
+// TBD-4 核实（2026-08-28）：本文件与 lib/state/gates.js（批次内层间门禁）零耦合——不 import 亦不被其
+//   import；verify/gate.js 的 createCompletionGate / evaluateAcEvidence 消费点 = audit lane 显式 DI 注入
+//   （{acList, ledger, readBlob}）+ 装配层门控（index.js mountVerify 挂捕获 hook；assembly/schema.js verify
+//   键注册表 consumers 标注），无共享调用路径，无需改动任何调用代码。
 import { installEvidenceCapture } from './evidence.js';
 // resolveVerifyConfig/VERIFY_DEFAULTS 统一归口 lib/schema.js（注册表 default：
 //   assembly-schema lane 落地同款实现，本文件不再自包含双实现——语义一致，消费路径单点，防未来字段漂移）
