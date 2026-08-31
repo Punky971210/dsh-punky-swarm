@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tier3 引擎强制门禁 —— dsh-punky-swarm</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#f7fafc;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#1f2d3d}
+  #fig{width:1440px;margin:0 auto;padding:30px 40px 34px;background:#f7fafc}
+  .head{display:flex;align-items:baseline;gap:14px}
+  .head h1{font-size:26px;font-weight:700}
+  .head .sub{font-size:13px;color:#5b6b7f}
+  .tagline{display:inline-block;margin:12px 0 18px;padding:7px 14px;border-radius:8px;background:#e8f0fe;border:1px solid #9db9ef;color:#1d4ed8;font-size:13.5px;font-weight:600}
+  svg{display:block}
+  .g{opacity:0;transition:opacity .45s ease}
+  .g.show{opacity:1}
+  .box{fill:#ffffff;stroke:#8fb3ec;stroke-width:1.6}
+  .box.green{stroke:#8fd0ab}
+  .box.cyan{stroke:#7cc4d8}
+  .dim{fill:#ffffff;stroke:#dcb36b;stroke-width:1.6}
+  .badge{fill:#fdf0f0;stroke:#e5a0a0;stroke-width:1.4}
+  .badge-code{fill:#b91c1c;font-family:ui-monospace,Consolas,monospace;font-size:13px;font-weight:700}
+  .badge-why{fill:#7f1d1d;font-size:11px}
+  .node-name{fill:#1f2d3d;font-size:15.5px;font-weight:700}
+  .node-sub{fill:#5b6b7f;font-size:11.5px;font-family:ui-monospace,Consolas,monospace}
+  .gate-text{fill:#1d4ed8;font-size:13.5px;font-weight:700}
+  .gate-label{fill:#5b6b7f;font-size:12.5px;font-weight:700;letter-spacing:.5px}
+  .pass-lbl{fill:#16a34a;font-size:12px;font-weight:700}
+  .rej-lbl{fill:#dc2626;font-size:12px;font-weight:700}
+  .edge-pass{fill:none;stroke:#2563eb;stroke-width:2.4;stroke-linecap:round;marker-end:url(#arrBlue)}
+  .edge-rej{fill:none;stroke:#dc2626;stroke-width:2.2;stroke-linecap:round;marker-end:url(#arrRed)}
+  .glow{filter:url(#softGlow)}
+  .pulse{animation:gpulse 1.7s ease-in-out infinite}
+  @keyframes gpulse{0%,100%{opacity:.55}50%{opacity:1}}
+  .dash{stroke-dasharray:6 6;animation:dashmove .8s linear infinite}
+  @keyframes dashmove{to{stroke-dashoffset:-12}}
+  .legend{display:flex;gap:22px;margin-top:16px;font-size:12px;color:#5b6b7f;flex-wrap:wrap}
+  .legend b{font-family:ui-monospace,Consolas,monospace;color:#b91c1c}
+  body.static .g{opacity:1}
+  body.static .pulse{animation:none}
+  body.static .dash{animation:none}
+</style>
+</head>
+<body>
+<div id="fig">
+  <div class="head">
+    <h1>Tier3 引擎强制门禁</h1>
+    <span class="sub">派发 → 执行 → 结算 → 完成 · 三道门禁拦截半成品</span>
+  </div>
+  <span class="tagline">引擎强制，不是约定 —— 缺件即拒，带错误码可审计</span>
+
+  <svg width="1360" height="800" viewBox="0 0 1360 800" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+      <marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker>
+      <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- ============ main spine ============ -->
+    <!-- consume -->
+    <g class="g" id="g-consume">
+      <rect class="box" x="30" y="285" width="160" height="70" rx="12"/>
+      <text class="node-name" x="110" y="316" text-anchor="middle">上游产物</text>
+      <text class="node-sub" x="110" y="336" text-anchor="middle">consume 契约声明</text>
+    </g>
+    <!-- gate1 -->
+    <g class="g" id="g-gate1">
+      <text class="gate-label" x="340" y="262" text-anchor="middle">① 派发门禁</text>
+      <polygon class="dim" points="340,282 400,320 340,358 280,320"/>
+      <text class="gate-text" x="340" y="317" text-anchor="middle">consume</text>
+      <text class="gate-text" x="340" y="333" text-anchor="middle">齐备?</text>
+    </g>
+    <!-- exec -->
+    <g class="g" id="g-exec">
+      <rect class="box green" x="430" y="285" width="160" height="70" rx="12"/>
+      <text class="node-name" x="510" y="316" text-anchor="middle" fill="#16a34a">执行 lane</text>
+      <text class="node-sub" x="510" y="336" text-anchor="middle">member_status 派发</text>
+    </g>
+    <!-- gate2 -->
+    <g class="g" id="g-gate2">
+      <text class="gate-label" x="700" y="262" text-anchor="middle">② 结算门禁</text>
+      <polygon class="dim" points="700,282 760,320 700,358 640,320"/>
+      <text class="gate-text" x="700" y="317" text-anchor="middle">产物</text>
+      <text class="gate-text" x="700" y="333" text-anchor="middle">落盘?</text>
+    </g>
+    <!-- needHuman -->
+    <g class="g" id="g-need">
+      <text class="gate-label" x="850" y="278" text-anchor="middle">audit lane 附加</text>
+      <polygon class="dim" points="850,288 910,320 850,352 790,320"/>
+      <text class="gate-text" x="850" y="317" text-anchor="middle">needHuman</text>
+      <text class="gate-text" x="850" y="333" text-anchor="middle">声明?</text>
+    </g>
+    <!-- merged -->
+    <g class="g" id="g-merged">
+      <rect class="box green" x="960" y="285" width="150" height="70" rx="12"/>
+      <text class="node-name" x="1035" y="316" text-anchor="middle" fill="#16a34a">merged</text>
+      <text class="node-sub" x="1035" y="336" text-anchor="middle">member_settle 结算</text>
+    </g>
+    <!-- gate3 -->
+    <g class="g" id="g-gate3">
+      <text class="gate-label" x="1160" y="262" text-anchor="middle">③ 完成门禁</text>
+      <polygon class="dim" points="1160,282 1220,320 1160,358 1100,320"/>
+      <text class="gate-text" x="1160" y="317" text-anchor="middle">audit</text>
+      <text class="gate-text" x="1160" y="333" text-anchor="middle">验收?</text>
+    </g>
+    <!-- complete -->
+    <g class="g" id="g-complete">
+      <rect class="box cyan" x="1270" y="285" width="150" height="70" rx="12"/>
+      <text class="node-name" x="1345" y="316" text-anchor="middle" fill="#0e7490">批次 complete</text>
+      <text class="node-sub" x="1345" y="336" text-anchor="middle">batch_phase 终态</text>
+    </g>
+
+    <!-- ============ pass edges ============ -->
+    <g class="g" id="e1"><path class="edge-pass" d="M 190 320 L 278 320"/><text class="pass-lbl" x="236" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e2"><path class="edge-pass" d="M 400 320 L 428 320"/><text class="pass-lbl" x="414" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e3"><path class="edge-pass" d="M 590 320 L 638 320"/><text class="pass-lbl" x="614" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e4"><path class="edge-pass" d="M 760 320 L 788 320"/><text class="pass-lbl" x="774" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e5"><path class="edge-pass" d="M 910 320 L 958 320"/><text class="pass-lbl" x="934" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e6"><path class="edge-pass" d="M 1110 320 L 1098 320"/><text class="pass-lbl" x="1104" y="312" text-anchor="middle">通过</text></g>
+    <g class="g" id="e7"><path class="edge-pass" d="M 1220 320 L 1268 320"/><text class="pass-lbl" x="1244" y="312" text-anchor="middle">通过</text></g>
+
+    <!-- ============ reject paths ============ -->
+    <!-- gate1 reject -->
+    <g class="g" id="r1">
+      <path class="edge-rej" d="M 340 358 L 340 408"/>
+      <text class="rej-lbl" x="352" y="386" text-anchor="start">拒绝</text>
+      <rect class="badge" x="248" y="412" width="200" height="46" rx="10"/>
+      <text class="badge-code" x="348" y="434" text-anchor="middle">GATE_ENTRY_MISSING</text>
+      <text class="badge-why" x="348" y="451" text-anchor="middle">consume 缺件 → 拒派</text>
+    </g>
+    <!-- gate2 reject: split two failure modes -->
+    <g class="g" id="r2">
+      <path class="edge-rej" d="M 700 358 L 700 400"/>
+      <text class="rej-lbl" x="712" y="386" text-anchor="start">拒绝</text>
+      <path class="edge-rej" d="M 700 400 L 620 436"/>
+      <path class="edge-rej" d="M 700 400 L 800 436"/>
+      <rect class="badge" x="515" y="440" width="210" height="46" rx="10"/>
+      <text class="badge-code" x="620" y="462" text-anchor="middle">GATE_TARGET_MISSING</text>
+      <text class="badge-why" x="620" y="479" text-anchor="middle">产物缺失 → 拒 merged</text>
+      <rect class="badge" x="700" y="440" width="210" height="46" rx="10"/>
+      <text class="badge-code" x="805" y="462" text-anchor="middle">GATE_TARGET_UNCHANGED</text>
+      <text class="badge-why" x="805" y="479" text-anchor="middle">产物未变更 → 拒 merged</text>
+    </g>
+    <!-- needHuman branch -->
+    <g class="g" id="r3">
+      <path class="edge-rej" d="M 850 352 L 850 508"/>
+      <text class="rej-lbl" x="862" y="440" text-anchor="start">声明</text>
+      <rect class="badge" x="755" y="512" width="190" height="62" rx="10"/>
+      <text class="node-name" x="850" y="538" text-anchor="middle" fill="#b45309">人工闸</text>
+      <text class="node-sub" x="850" y="558" text-anchor="middle">裁决证据 human:裁决人:时间:结论</text>
+      <path class="edge-pass dash" d="M 850 512 C 850 430 1000 430 1035 356"/>
+      <text class="pass-lbl" x="950" y="438" text-anchor="middle">证据齐 → merged</text>
+      <path class="edge-rej" d="M 850 574 L 850 640"/>
+      <rect class="badge" x="735" y="644" width="230" height="46" rx="10"/>
+      <text class="badge-code" x="850" y="666" text-anchor="middle">GATE_NEEDHUMAN_PENDING</text>
+      <text class="badge-why" x="850" y="683" text-anchor="middle">缺人工证据 → 拒 merged</text>
+    </g>
+    <!-- gate3 reject -->
+    <g class="g" id="r4">
+      <path class="edge-rej" d="M 1160 358 L 1160 408"/>
+      <text class="rej-lbl" x="1172" y="386" text-anchor="start">拒绝</text>
+      <rect class="badge" x="1060" y="412" width="200" height="46" rx="10"/>
+      <text class="badge-code" x="1160" y="434" text-anchor="middle">audit 未验收</text>
+      <text class="badge-why" x="1160" y="451" text-anchor="middle">拒 complete（批次留 running）</text>
+    </g>
+  </svg>
+
+  <div class="legend">
+    <span>拒绝码：<b>GATE_ENTRY_MISSING</b>（派发缺件）· <b>GATE_TARGET_MISSING</b>（结算缺产物）· <b>GATE_TARGET_UNCHANGED</b>（结算未变更）· <b>GATE_NEEDHUMAN_PENDING</b>（缺人工裁决证据）</span>
+    <span>引擎级校验：缺件/未变更即拒，事件流留痕可审计</span>
+  </div>
+</div>
+
+<script>
+  const IS_STATIC = /[?&]static=1/.test(location.search);
+  if (IS_STATIC) document.body.classList.add('static');
+  const order = ['g-consume','e1','g-gate1','e2','g-exec','e3','g-gate2','e4','g-need','e5','g-merged','e6','g-gate3','e7','g-complete','r1','r2','r3','r4'];
+  const show = (id) => document.getElementById(id).classList.add('show');
+  const t = (ms) => new Promise(r => setTimeout(r, ms));
+  async function play(){
+    for (const id of order){ show(id); await t(230); }
+    // pulse the three gates to emphasize engine enforcement
+    for (const id of ['g-gate1','g-gate2','g-gate3']){
+      const el = document.getElementById(id);
+      el.classList.add('pulse'); await t(500); el.classList.remove('pulse'); await t(200);
+    }
+  }
+  if (IS_STATIC) order.forEach(show); else play();
+</script>
+</body>
+</html>

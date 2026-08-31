@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wavePlan 分波 DAG —— dsh-punky-swarm</title>
+<style>
+  :root{
+    --bg:#f7fafc; --panel:#ffffff; --line:#dbe4ee; --line-strong:#b9c8db;
+    --ink:#1f2d3d; --ink2:#5b6b7f; --mono:#3d7bd9;
+    --blue:#2563eb; --blue-soft:#e8f0fe; --blue-border:#9db9ef;
+    --green:#16a34a; --green-soft:#e9f7ef; --green-border:#8fd0ab;
+    --amber:#d97706; --amber-soft:#fdf3e3;
+    --red:#dc2626;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+  #fig{width:1440px;margin:0 auto;padding:34px 40px 40px;background:var(--bg)}
+  .title{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .title h1{font-size:26px;font-weight:700;letter-spacing:.3px}
+  .title .sub{font-size:13px;color:var(--ink2)}
+  .note{display:inline-flex;align-items:center;gap:8px;margin:10px 0 22px;padding:8px 14px;border-radius:8px;background:var(--amber-soft);border:1px solid #f0d9a8;font-size:13.5px;color:#7c4a03;font-weight:600}
+  .note .dot{width:8px;height:8px;border-radius:50%;background:var(--amber)}
+  .lane{position:relative;border-radius:14px;border:1.5px dashed var(--line-strong);margin-bottom:18px;padding:16px 20px 18px;background:var(--panel)}
+  .lane-tag{position:absolute;top:-12px;left:20px;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.5px}
+  .lane-tag.plan{background:var(--blue);color:#fff}
+  .lane-tag.exec{background:var(--green);color:#fff}
+  .lane-tag.audit{background:#0e7490;color:#fff}
+  .lane-row{display:flex;gap:22px;align-items:center;justify-content:space-between;min-height:120px}
+  .node{position:relative;border-radius:12px;border:1.5px solid;padding:12px 18px;text-align:center;background:#fff;opacity:0;transform:translateY(8px);transition:opacity .45s ease,transform .45s ease}
+  .node.show{opacity:1;transform:none}
+  .node .n-name{font-size:16px;font-weight:700}
+  .node .n-sub{font-size:12px;color:var(--ink2);margin-top:4px;font-family:ui-monospace,Consolas,monospace}
+  .node.blue{border-color:var(--blue-border);box-shadow:0 1px 0 #e2e9f5 inset}
+  .node.blue .n-name{color:var(--blue)}
+  .node.green{border-color:var(--green-border);box-shadow:0 1px 0 #e5f3ea inset}
+  .node.green .n-name{color:var(--green)}
+  .node.cyan{border-color:#7cc4d8;box-shadow:0 1px 0 #e6f5f9 inset}
+  .node.cyan .n-name{color:#0e7490}
+  .wave-col{flex:1;display:flex;flex-direction:column;gap:14px;align-items:center;position:relative;padding:10px 6px;border-radius:10px;background:transparent;transition:background .5s ease}
+  .wave-col.active{background:var(--green-soft)}
+  .wave-head{font-size:13px;font-weight:700;color:var(--ink2);letter-spacing:1px;display:flex;align-items:center;gap:8px}
+  .wave-head .n{display:inline-flex;width:22px;height:22px;border-radius:6px;background:var(--green);color:#fff;align-items:center;justify-content:center;font-size:12px}
+  .wave-head .par{font-size:11px;color:var(--ink2);font-weight:600;background:#eef3f8;padding:2px 8px;border-radius:999px}
+  .edge{opacity:0;transition:opacity .5s ease}
+  .edge.show{opacity:1}
+  .edge .path{fill:none;stroke:var(--blue);stroke-width:2.2;stroke-linecap:round;marker-end:url(#arrow)}
+  .edge .lbl{font-size:11.5px;font-family:ui-monospace,Consolas,monospace;fill:var(--mono)}
+  .seq{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:6px}
+  .seq .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid var(--line-strong);opacity:0;transition:opacity .4s ease,background .4s ease}
+  .seq .chip.show{opacity:1}
+  .seq .chip.done{background:var(--green-soft);border-color:var(--green-border);color:var(--green)}
+  .seq .sep{font-size:18px;color:var(--line-strong);opacity:0;transition:opacity .4s ease}
+  .seq .sep.show{opacity:1}
+  .pulse{animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(22,163,74,.35)}50%{box-shadow:0 0 0 10px rgba(22,163,74,0)}}
+  .dash-flow{stroke-dasharray:7 7;animation:dashmove .9s linear infinite}
+  @keyframes dashmove{to{stroke-dashoffset:-14}}
+  .footer{display:flex;justify-content:space-between;margin-top:14px;font-size:12px;color:var(--ink2)}
+  .footer .mono{font-family:ui-monospace,Consolas,monospace}
+  /* static mode: everything visible, no animation */
+  body.static .node,body.static .edge,body.static .seq .chip,body.static .seq .sep{opacity:1;transform:none}
+  body.static .wave-col.active{background:var(--green-soft)}
+  body.static .dash-flow{animation:none}
+  body.static .pulse{animation:none}
+</style>
+</head>
+<body>
+<div id="fig">
+  <div class="title">
+    <h1>wavePlan：按依赖 DAG 分波执行</h1>
+    <span class="sub">批次创建时固定分层分波 · plan → exec → audit</span>
+  </div>
+  <div class="note"><span class="dot"></span>wave 固定语义：批次启动后绝不中途重算</div>
+
+  <svg id="edges" width="1360" height="560" style="position:absolute;left:40px;top:170px;pointer-events:none;z-index:1;overflow:visible">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+      </marker>
+    </defs>
+    <!-- plan -> exec wave1 (A/B) -->
+    <g class="edge" id="e-plan-a"><path class="path" d="M 470 258 C 470 292, 300 292, 300 328"/><text class="lbl" x="300" y="286" text-anchor="middle">plan/spec</text></g>
+    <g class="edge" id="e-plan-b"><path class="path" d="M 470 258 C 470 292, 545 292, 545 328"/><text class="lbl" x="470" y="286" text-anchor="middle">plan/spec</text></g>
+    <!-- A/B -> C -->
+    <g class="edge" id="e-a-c"><path class="path" d="M 300 470 C 300 500, 700 500, 700 468"/><text class="lbl" x="500" y="496" text-anchor="middle">exec/A.out · exec/B.out</text></g>
+    <g class="edge" id="e-b-c"><path class="path" d="M 545 470 C 545 500, 700 500, 700 468"/></g>
+    <!-- C -> D/E -->
+    <g class="edge" id="e-c-d"><path class="path" d="M 700 610 C 700 640, 255 640, 255 668"/><text class="lbl" x="430" y="636" text-anchor="middle">exec/C.out</text></g>
+    <g class="edge" id="e-c-e"><path class="path" d="M 700 610 C 700 640, 835 640, 835 668"/><text class="lbl" x="768" y="636" text-anchor="middle">exec/C.out</text></g>
+    <!-- D/E -> audit -->
+    <g class="edge" id="e-d-aud"><path class="path" d="M 255 810 C 255 842, 680 842, 680 870"/><text class="lbl" x="300" y="838" text-anchor="middle">exec/D.out</text></g>
+    <g class="edge" id="e-e-aud"><path class="path" d="M 835 810 C 835 842, 700 842, 700 870"/><text class="lbl" x="820" y="838" text-anchor="middle">exec/E.out</text></g>
+  </svg>
+
+  <!-- plan lane -->
+  <div class="lane" style="height:120px;z-index:2">
+    <div class="lane-tag plan">plan 层</div>
+    <div class="lane-row" style="justify-content:center">
+      <div class="node blue" id="n-plan">
+        <div class="n-name">任务规划</div>
+        <div class="n-sub">产出 plan/spec 契约（产物声明 + 依赖 DAG）</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- exec lane -->
+  <div class="lane" style="z-index:2">
+    <div class="lane-tag exec">exec 层</div>
+    <div class="lane-row">
+      <div class="wave-col" id="w1">
+        <div class="wave-head"><span class="n">1</span>wave1 <span class="par">并行</span></div>
+        <div class="node green" id="n-a"><div class="n-name">任务 A</div><div class="n-sub">consume: plan/spec</div></div>
+        <div class="node green" id="n-b"><div class="n-name">任务 B</div><div class="n-sub">consume: plan/spec</div></div>
+      </div>
+      <div class="wave-col" id="w2">
+        <div class="wave-head"><span class="n">2</span>wave2 <span class="par">串行</span></div>
+        <div class="node green" id="n-c"><div class="n-name">任务 C</div><div class="n-sub">consume: exec/A.out · exec/B.out</div></div>
+      </div>
+      <div class="wave-col" id="w3">
+        <div class="wave-head"><span class="n">3</span>wave3 <span class="par">并行</span></div>
+        <div class="node green" id="n-d"><div class="n-name">任务 D</div><div class="n-sub">consume: exec/C.out</div></div>
+        <div class="node green" id="n-e"><div class="n-name">任务 E</div><div class="n-sub">consume: exec/C.out</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- audit lane -->
+  <div class="lane" style="height:120px;z-index:2">
+    <div class="lane-tag audit">audit 层</div>
+    <div class="lane-row" style="justify-content:center">
+      <div class="node cyan" id="n-aud">
+        <div class="n-name">验收任务</div>
+        <div class="n-sub">consume: exec/D.out · exec/E.out → 批次 complete</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="seq">
+    <span class="chip" id="s1">wave1 并行派发</span>
+    <span class="sep" id="s1s">→</span>
+    <span class="chip" id="s2">wave2 串行等待</span>
+    <span class="sep" id="s2s">→</span>
+    <span class="chip" id="s3">wave3 并行派发</span>
+    <span class="sep" id="s3s">→</span>
+    <span class="chip" id="s4">audit 验收</span>
+  </div>
+
+  <div class="footer">
+    <span>wave 内任务可并行 · wave 间按依赖串行（DAG 分层）</span>
+    <span class="mono">wave_plan → batch_status → member_status</span>
+  </div>
+</div>
+
+<script>
+  const IS_STATIC = /[?&]static=1/.test(location.search);
+  if (IS_STATIC) document.body.classList.add('static');
+  const ids = ['n-plan','e-plan-a','e-plan-b','n-a','n-b','n-c','e-a-c','e-b-c','n-d','n-e','e-c-d','e-c-e','n-aud','e-d-aud','e-e-aud','s1','s1s','s2','s2s','s3','s3s','s4'];
+  const show = (id) => document.getElementById(id) && document.getElementById(id).classList.add('show');
+  const markDone = (id) => document.getElementById(id).classList.add('done');
+  async function play(){
+    await t(400);
+    show('n-plan');
+    await t(450); show('e-plan-a'); show('e-plan-b');
+    await t(350); show('s1'); markDone('s1'); document.getElementById('w1').classList.add('active');
+    show('n-a'); await t(250); show('n-b');
+    await t(500); document.getElementById('w1').classList.remove('active');
+    await t(250); show('s1s'); await t(300);
+    show('s2'); document.getElementById('w2').classList.add('active');
+    await t(300); show('e-a-c'); show('e-b-c'); await t(250); show('n-c');
+    await t(500); markDone('s2'); document.getElementById('w2').classList.remove('active');
+    await t(250); show('s2s'); await t(300);
+    show('s3'); document.getElementById('w3').classList.add('active');
+    await t(300); show('e-c-d'); show('e-c-e'); await t(250); show('n-d'); await t(250); show('n-e');
+    await t(500); markDone('s3'); document.getElementById('w3').classList.remove('active');
+    await t(250); show('s3s'); await t(300);
+    show('s4'); document.getElementById('n-aud').classList.add('pulse');
+    await t(300); show('e-d-aud'); show('e-e-aud'); await t(250); show('n-aud');
+    await t(800); document.getElementById('n-aud').classList.remove('pulse');
+  }
+  const t = (ms) => new Promise(r => setTimeout(r, ms));
+  if (IS_STATIC) { ids.forEach(show); markDone('s1'); markDone('s2'); markDone('s3'); }
+  else play();
+</script>
+</body>
+</html>

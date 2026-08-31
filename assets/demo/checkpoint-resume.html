@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>checkpoint 断点续跑 —— dsh-punky-swarm</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#f7fafc;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#1f2d3d}
+  #fig{width:1440px;margin:0 auto;padding:30px 40px 34px;background:#f7fafc}
+  .head{display:flex;align-items:baseline;gap:14px}
+  .head h1{font-size:26px;font-weight:700}
+  .head .sub{font-size:13px;color:#5b6b7f}
+  .tagline{display:inline-block;margin:12px 0 16px;padding:7px 14px;border-radius:8px;background:#e9f7ef;border:1px solid #8fd0ab;color:#15803d;font-size:13.5px;font-weight:600}
+  .lanes{display:flex;gap:18px}
+  .lane-col{flex:1;border:1.5px dashed #b9c8db;border-radius:12px;background:#ffffff;padding:12px 12px 16px;min-width:0}
+  .lane-head{font-size:13px;font-weight:700;color:#1f2d3d;padding:4px 10px;border-radius:8px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .lane-head .tag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .lane-a .lane-head{background:#e8f0fe;color:#1d4ed8}
+  .lane-a .tag{background:#2563eb;color:#fff}
+  .lane-git .lane-head{background:#e9f7ef;color:#15803d}
+  .lane-git .tag{background:#16a34a;color:#fff}
+  .lane-ev .lane-head{background:#fdf3e3;color:#92400e}
+  .lane-ev .tag{background:#d97706;color:#fff}
+  .lane-b .lane-head{background:#f3e8fd;color:#6b21a8}
+  .lane-b .tag{background:#7c3aed;color:#fff}
+  .step{position:relative;border:1.5px solid #c9d6e6;border-radius:10px;padding:9px 12px;margin-bottom:10px;background:#fff;font-size:13px;opacity:0;transform:translateX(10px);transition:opacity .4s ease,transform .4s ease}
+  .step.show{opacity:1;transform:none}
+  .step .st-name{font-weight:700;color:#1f2d3d}
+  .step .st-sub{font-size:11.5px;color:#5b6b7f;margin-top:3px;font-family:ui-monospace,Consolas,monospace}
+  .step .st-no{position:absolute;top:-9px;left:-9px;width:20px;height:20px;border-radius:50%;background:#2563eb;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .step.done{border-color:#8fd0ab;background:#f6fdf8}
+  .step.done .st-no{background:#16a34a}
+  .commit{border:1.5px solid #8fd0ab;border-radius:8px;background:#f6fdf8;padding:6px 10px;margin:0 auto 8px;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:#166534;text-align:center;opacity:0;transition:opacity .4s ease}
+  .commit.show{opacity:1}
+  .commit .hash{color:#15803d;font-weight:700}
+  .crash{border:2px solid #dc2626;border-radius:10px;background:#fef2f2;padding:10px 12px;text-align:center;font-weight:700;color:#b91c1c;font-size:14px;margin:8px 0;opacity:0;transition:opacity .4s ease}
+  .crash.show{opacity:1}
+  .event{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:6px 10px;margin-bottom:8px;border-left:3px solid #d97706;background:#fffdf7;border-radius:0 8px 8px 0;opacity:0;transition:opacity .4s ease}
+  .event.show{opacity:1}
+  .event .ev-t{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:#92400e}
+  .event .ev-d{color:#5b6b7f}
+  .ev-arrow{text-align:center;color:#b9c8db;font-size:16px;margin:-2px 0 4px;opacity:0;transition:opacity .4s ease}
+  .ev-arrow.show{opacity:1}
+  .resume{border:2px solid #7c3aed;border-radius:10px;background:#faf5ff;padding:8px 12px;font-size:13px;font-weight:600;color:#6b21a8;margin-bottom:10px;opacity:0;transition:opacity .4s ease}
+  .resume.show{opacity:1}
+  .footer{display:flex;justify-content:space-between;margin-top:16px;font-size:12px;color:#5b6b7f}
+  .footer .mono{font-family:ui-monospace,Consolas,monospace}
+  .pulse{animation:gpulse 1.6s ease-in-out infinite}
+  @keyframes gpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.35)}50%{box-shadow:0 0 0 9px rgba(220,38,38,0)}}
+  body.static .step,body.static .commit,body.static .crash,body.static .event,body.static .resume,body.static .ev-arrow{opacity:1;transform:none}
+  body.static .pulse{animation:none}
+</style>
+</head>
+<body>
+<div id="fig">
+  <div class="head">
+    <h1>checkpoint 断点续跑：崩溃不丢进度</h1>
+    <span class="sub">每完成一个子步骤即 git 保全 · 崩溃后可查询 checkpoint 跳过已完成步骤</span>
+  </div>
+  <span class="tagline">lane_checkpoint（step N/total）→ 崩溃 → lane_checkpoint_status 查询 → 从断点续跑</span>
+
+  <div class="lanes">
+    <!-- worker A -->
+    <div class="lane-col lane-a">
+      <div class="lane-head"><span class="tag">A</span>worker A（执行中）</div>
+      <div class="step" id="a1"><span class="st-no">1</span><div class="st-name">步骤 1 完成</div><div class="st-sub">lane_checkpoint 提交 · step 1/3</div></div>
+      <div class="step" id="a2"><span class="st-no">2</span><div class="st-name">步骤 2 完成</div><div class="st-sub">lane_checkpoint 提交 · step 2/3</div></div>
+      <div class="crash" id="crash">✱ 崩溃（进程中断）</div>
+      <div class="step" id="a3" style="border-style:dashed;opacity:.35"><span class="st-no" style="background:#cbd5e1">3</span><div class="st-name" style="color:#94a3b8">步骤 3（未执行）</div><div class="st-sub" style="color:#b6c2d0">工作丢失，但 checkpoint 已保全</div></div>
+    </div>
+    <!-- lane worktree git -->
+    <div class="lane-col lane-git">
+      <div class="lane-head"><span class="tag">git</span>lane worktree（物理保全）</div>
+      <div class="commit" id="c1"><span class="hash">commit ✓</span><br>step 1/3 · 产物保全</div>
+      <div class="commit" id="c2"><span class="hash">commit ✓</span><br>step 2/3 · 产物保全</div>
+      <div class="event" id="glog" style="margin-top:6px"><span class="ev-t">git log</span><span class="ev-d">checkpoint 历史可查、可人工抢救</span></div>
+    </div>
+    <!-- event stream -->
+    <div class="lane-col lane-ev">
+      <div class="lane-head"><span class="tag">E</span>状态事件流（唯一事实源）</div>
+      <div class="event" id="e1"><span class="ev-t">worktree.checkpoint</span><span class="ev-d">step 1/3</span></div>
+      <div class="event" id="e2"><span class="ev-t">worktree.checkpoint</span><span class="ev-d">step 2/3</span></div>
+      <div class="ev-arrow" id="e3">↓ 崩溃</div>
+      <div class="event" id="e4"><span class="ev-t">lane_checkpoint_status</span><span class="ev-d">latest = step 2/3</span></div>
+      <div class="event" id="e5" style="border-left-color:#7c3aed;background:#faf5ff"><span class="ev-t">resume 契约</span><span class="ev-d">跳过已完成步骤</span></div>
+    </div>
+    <!-- worker B -->
+    <div class="lane-col lane-b">
+      <div class="lane-head"><span class="tag">B</span>worker B（续跑）</div>
+      <div class="resume" id="r1">lane_checkpoint_status 查询进度</div>
+      <div class="step" id="b3" style="border-color:#7c3aed"><span class="st-no" style="background:#7c3aed">3</span><div class="st-name">步骤 3 续跑</div><div class="st-sub">跳过步骤 1/2，从断点继续</div></div>
+      <div class="step" id="b4" style="border-color:#7c3aed"><span class="st-no" style="background:#7c3aed">4</span><div class="st-name">步骤 4 完成</div><div class="st-sub">lane_checkpoint · step 4/4 → 结算</div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>崩溃不触发自动续跑：checkpoint 只保全现场，续跑由新 worker 查询后显式接续</span>
+    <span class="mono">lane_checkpoint → lane_checkpoint_status → lane_worktree</span>
+  </div>
+</div>
+
+<script>
+  const IS_STATIC = /[?&]static=1/.test(location.search);
+  if (IS_STATIC) document.body.classList.add('static');
+  const order = ['a1','c1','e1','a2','c2','e2','crash','glog','e3','r1','e4','e5','b3','b4'];
+  const show = (id) => document.getElementById(id).classList.add('show');
+  const t = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function play(){
+    for (const id of order){ show(id); await t(300); }
+    const c = document.getElementById('crash');
+    c.classList.add('pulse'); await t(900); c.classList.remove('pulse');
+  }
+  if (IS_STATIC) order.forEach(show); else play();
+</script>
+</body>
+</html>
