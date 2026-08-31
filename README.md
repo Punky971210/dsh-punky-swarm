@@ -1,4 +1,4 @@
-# dsh-punky-swarm — 蟛蜞模式（Punky Swarm 集群治理）
+# dsh-punky-swarm —— DeepSeek Harness 多 Agent 集群治理插件
 
 <p align="center">
   <a href="https://github.com/Punky971210/dsh-punky-swarm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Punky971210/dsh-punky-swarm?label=license" alt="license"></a>
@@ -8,195 +8,108 @@
   <a href="https://github.com/Punky971210/dsh-punky-swarm/tree/main/packages/dsh-punky-swarm/test"><img src="https://img.shields.io/badge/tests-582%20passed-success" alt="tests"></a>
 </p>
 
-> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG（固定语义，建批后不重算）+ 引擎级门禁（Entry / Plan 契约 / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 任务难度路由门禁 + 国标 AIP 兼容 + 治理能力增强（心跳/watchdog、worktree 物理隔离、验收证据、mailbox 环防护、诊断桥接、日志导出）。附蟛蜞模式预设与 jiufeng-team 角色指引。
+> **单机 dsh 的多 Agent 集群编排器——门禁拒绝半成品，检查点断点续跑，让 AI 团队不「坏」而不只是能「跑」。**
+>
+> *Engine-enforced guardrails for DeepSeek Harness agent swarms: quality gates reject half-done work, crash-safe checkpoints resume in place — keeps AI teams from breaking, not just running.*
 
 English: [README.en.md](README.en.md)
 
-## 边界（Scope）
+## 快速了解（30 秒）
 
-- **目标**：dsh **单机多子 agent 治理**——在同一 dsh 进程内治理一批 worker（批次 / 门禁 / 通信 / 恢复重置派发）；
-- **范围外**：分布式集群同步、成本控制、模型分层路由；续跑仅提供 checkpoint 保全与恢复审计（失败 lane 仍终态、重做仍开新批次）。
+三个痛点：
 
-## 设计目的与由来
+- **无门禁的派发会带病开工**——上游产物没齐就派下游，失败要到返工才发现；
+- **无检查点的长任务一崩全丢**——几小时的批次因一次崩溃回到原点；
+- **多 lane 同写一个仓库互相踩**——并发提交互相覆盖，出冲突说不清谁改了什么。
 
-**目的**：门禁（Entry/Plan 契约/Exit/Complete）与批次、锁、mailbox 等机制的核心目的，是**保障流水线与集群的稳定运行**，而非限制 Agent 自由度——工具层对 Agent 全量开放，模式层只给指引，团队装配可插拔；任务按规模分级（Leader 指派 → 单 Agent 降级）。
+[DEMO:图1]（30 秒理解图：wavePlan 分波示意 / 三层门禁示意，静态截图）
 
-**由来**：本项目源于单 Agent 全流程与图式编排之间的取舍：
+## 快速开始（Quick Start）
 
-- 单 Agent 全流程（设计→执行→测试）：人工介入重，人成为流程瓶颈；
-- 图式编排（LangGraph 方向）：尝试后放弃——流程写死成图，改动成本高，Agent 自由度被压死；
-- 折中：按「九峰」工作模式（Leader 拆解 → 多角色协作 → 门禁裁决）在早期 Swarm 集群运行时上落地，随后迁移到 dsh 成为本插件。
-
-## 三件套
-
-| 件 | 位置 | 内容 |
-|---|---|---|
-| 插件 | packages/dsh-punky-swarm | 引擎：**20 治理工具** + Tier3 门禁 + 会话隔离 v2 + 只读 API（含 AIP /tools·/agents·/discover 端点）+ 任务难度门禁 + 蟛蜞集群监控面板 |
-| 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
-| 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
-
-## 安装
-
-> 以下指引面向 Agent / 自动化执行，命令可直接运行；`web` 为示例 profile，可替换。
-> 插件启动时**自动同步**模式预设（→ `~/.dsh/.agent-presets/jiufeng`）与技能指引（→ `~/.agents/skills/jiufeng-team`），**无需手动放置**；已存在且内容一致则跳过，不一致则覆盖为包内版本。
+环境要求：已安装 DeepSeek Harness（dsh）。
 
 ```sh
-git clone https://github.com/Punky971210/dsh-punky-swarm.git
-cd dsh-punky-swarm
-# 安装 peer 依赖（@deepseek-ai/dsh-tools、@deepseek-ai/cordis，版本由 package-lock.json 固定）
-npm ci --prefix packages/dsh-punky-swarm
-# POSIX
-dsh plugin --profile web add link:$(pwd)/packages/dsh-punky-swarm
-# Windows PowerShell
-dsh plugin --profile web add link:$PWD\packages\dsh-punky-swarm
-dsh web restart
-```
-
-> 也可通过 npm 安装：`npm install -g dsh-punky-swarm`（版本见 [package.json](packages/dsh-punky-swarm/package.json)）；git 源码 + dsh plugin link 为开发/调试方式。
-
-### npm 安装
-
-```sh
+# 一条命令安装 npm 包
 npm install -g dsh-punky-swarm
+# 装入 dsh（web 为示例 profile，可替换）
 dsh plugin --profile web add dsh-punky-swarm
 dsh web restart
 ```
 
-> npm 包的 `dsh plugin add` 用法以发布后实际验证为准（0.3.1 起）。
+最小示例（从安装到跑通第一个三层批次）：
 
-## 蟛蜞集群监控面板（只读）
+```text
+1. 按上一步安装插件并重启 dsh。
+2. 在会话中让 Agent 执行：wave_plan 建批（声明 plan/exec/audit 三层与产物契约）
+   → 批次进入 running → 各 lane 按 wave 依赖顺序派发执行。
+3. 用 batch_status / gate_status 观察批次状态与门禁缺件清单。
+```
 
-插件自带 **蟛蜞集群** 监控面板：会话区头部「对话 / 轨迹 / 蟛蜞集群」第三分页（conversation.view），**安装即得，无需额外配置**。
+## 能力清单（10 项）
 
-- **批次列表**：阶段（planning/running/complete…）+ 终态进度 `3/5` + 可自动放行/已完结标记；
-- **统计条**：总批次 / 运行中 / 已完结 / 异常（failed+conflict）；
-- **批次详情**：lane 状态卡（状态 + 任务简述 + 门禁缺件明细 + 层/依赖）、事件时间线、收件箱（派发/广播）计数；
-- **只读**：3s 自动刷新，跟随 Web UI 深浅主题；执行引擎（批次/门禁/状态机）**人工不可修改，只能查看**，治理操作由蟛蜞模式 Leader 执行。
+1. **任务难度 ABC 路由门禁**：A=Leader 直做 / B=单 subagent / C=wave_plan 建批；评估对象为完整目标任务（scope=full），default to C。
+2. **wavePlan 固定语义分波**：plan→exec→audit 三层，wave 按依赖 DAG 分层，批次创建后绝不中途重算。
+3. **Tier3 引擎强制门禁**：consume 产物齐备才派发（缺则 GATE_ENTRY_MISSING 拒派）；产物落盘才结算（缺则拒 merged）；audit 验收完成才 complete。
+4. **checkpoint 断点续跑**：每完成一个子步骤即 git 保全（step N/total），崩溃后新 worker 查询 checkpoint 跳过已完成步骤。
+5. **lane worktree 物理隔离 + 串行 merge**：多 lane 同写一个 git 仓库互不冲突，合并串行化，冲突保留现场。
+6. **mailbox 黑板通信**：inbox/outbox/broadcast 三向，原子写 + ackId，只写元数据不复制正文。
+7. **lane_claim 单写者锁**：O_EXCL 锁，冲突先拒绝，可 wait 等待、可 force 接管。
+8. **成员状态机**：pending→running→review→merged/failed/conflict/skipped，终态后拒绝再写。
+9. **批次会话隔离**：状态文件为唯一事实源，事件流留痕可审计。
+10. **工程状态**：19 个治理工具（默认装配，开启全部能力为 20 个）、582/582 测试全绿、v0.3.6 已发布（AGPL-3.0-only）、已收录 awesome-dsh-plugin。
 
-## 治理工具（20）
+## 演示（Demo）
 
-按功能分类：
+- 静态截图位：[DEMO:图2]（三层门禁示意）、[DEMO:图3]（checkpoint 续跑示意）、[DEMO:图4]（worktree 隔离示意）
+- 动画演示：待上线（见[路线图](#路线图roadmap)）
 
-### 批次规划
-| 工具 | 说明 |
-|---|---|
-| `wave_plan` | 按依赖 DAG 分层为 waves 建批（固定语义，建批后不重算） |
-| `batch_phase` | 批次阶段迁移（planning→running→paused→aborted/complete） |
-| `batch_status` | 查询批次状态（phase/lanes/wavePlan/事件摘要） |
+## 文档导航（Contents）
 
-### 任务分级与门禁
-| 工具 | 说明 |
-|---|---|
-| `assign_check` | 任务难度判定 A/B/C 与执行主体（guard 门禁依据） |
-| `gate_status` | 查询 lane 门禁状态（consume/produce/outputs 缺件清单） |
-| `artifact_types` | 查询产物类型注册表（层/目录前缀约定） |
+- [摘要](#摘要abstract) · [为什么需要它](#为什么需要它why) · [架构](#架构architecture) · [兼容矩阵](#兼容矩阵compatibility-matrix) · [路线图](#路线图roadmap) · [License](#license)
+- 英文摘要与能力清单：[README.en.md](README.en.md)
 
-### 资产与锁
-| 工具 | 说明 |
-|---|---|
-| `asset_claim` | 已直做产物归位为批次资产（复制入引擎产物根） |
-| `lane_claim` | 以 O_EXCL 单写者锁认领 lane（冲突先拒） |
-| `lane_release` | 释放 lane 锁 |
+---
 
-### 成员状态
-| 工具 | 说明 |
-|---|---|
-| `member_status` | 成员状态操作（pending/running/review/idle） |
-| `member_settle` | 成员结算（merged/failed/skipped/conflict，含门禁校验） |
+## 摘要（Abstract）
 
-### 通信（mailbox）
-| 工具 | 说明 |
-|---|---|
-| `mailbox_send` | 发送消息（inbox/outbox/broadcast，原子写 + ackId） |
-| `mailbox_read` | 读取未确认消息 |
-| `mailbox_ack` | 确认消费消息 |
+dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：任务按依赖分波执行，引擎级门禁拦截半成品，检查点让长任务崩溃可续跑。它面向单机场景，在同一 dsh 进程内治理一批 worker（批次 / 门禁 / 通信 / 恢复），提供单写者锁、mailbox 黑板通信与事件审计。当前状态：npm 包 `dsh-punky-swarm@0.3.6` 一条命令装入 dsh；默认装配 19 个治理工具；582 项测试全绿；以 AGPL-3.0-only 单一许可发布。
 
-### 心跳与过期检测
-| 工具 | 说明 |
-|---|---|
-| `lane_heartbeat` | lane 心跳查询/触发（watchdog 扫描，stalled 标记） |
+*dsh-punky-swarm is a single-machine multi-agent governance plugin for DeepSeek Harness. Tasks run in dependency-ordered waves, engine-enforced gates reject half-done work, and checkpoints let long-running batches resume after a crash. The plugin ships 19 governance tools (20 with all capabilities enabled), passes 582 tests, and is licensed under AGPL-3.0-only.*
 
-### worktree 物理隔离
-| 工具 | 说明 |
-|---|---|
-| `lane_worktree_create` | 为 lane 建独立 git worktree（从 orch HEAD 基线） |
-| `lane_worktree_merge` | 合并 lane 分支进 orch（冲突保留现场 + 清单） |
-| `lane_checkpoint` | lane 内 checkpoint 提交（git add+commit，保产物） |
-| `lane_checkpoint_status` | 查询 checkpoint 历史与进度（续跑契约入口） |
+## 为什么需要它（Why）
 
-### 日志
-| 工具 | 说明 |
-|---|---|
-| `log_export` | 只读事件流导出（lane/type/since 过滤 + json/markdown + 引擎产物根落盘） |
+单 Agent 好写，多 Agent 集群难管：并行任务的依赖怎么排、产物怎么对齐、失败怎么恢复、谁改了什么。多 Agent 并行不是把 prompt 一起发出去就完了——谁先跑、谁等谁、谁写哪个文件、崩了从哪续，这些才是集群治理的问题。
 
-> 装配开关（cordis.patch.yml）：aip / discovery / verify / watch / worktree / budget / trajectory / logs 默认开启，可显式 `enabled: false` 逐键关闭；identity 默认关闭（`aip.identity.enabled: true` 显式开启）；mergeAgent 默认关闭（需宿主注入 spawner）。
+- **无门禁的派发会带病开工**：下游在依赖产物缺失时就被派发，错误传播到返工阶段才暴露。Tier3 门禁在派发前核对 consume 产物，缺件即拒派（GATE_ENTRY_MISSING），把「带病开工」挡在源头。
+- **无检查点的长任务一崩全丢**：长批次没有中间保全，一次崩溃让数小时工作归零。checkpoint 在每完成一个子步骤时做 git 保全并记录进度（step N/total），崩溃后新 worker 可查询 checkpoint 跳过已完成步骤。
+- **多 lane 同写一个仓库互相踩**：并发写同一 git 仓库会互相覆盖、冲突难追责。lane worktree 为每个 lane 建立物理隔离的工作树，merge 串行执行，冲突保留现场由裁决方处置。
 
-## 国标 AIP 兼容
+## 架构（Architecture）
 
-兼容《人工智能 智能体互联》国标（GB/Z 185-2026）智能体互联结构，仅增不改、可插拔（字段名以 ACPs-community v2.1.0 为准）：
+- **角色分层**：Leader（决策与终门禁）→ Manager（调度）→ Worker（执行）；批次按 plan/exec/audit 三层组织，各层产物按契约衔接。
+- **状态与通信**：批次/成员状态以状态文件为唯一事实源；跨上下文通信走 mailbox 黑板（inbox/outbox/broadcast）；每一步操作写入事件流，可审计可回溯。
+- 治理不是写在文档里的约定，而是引擎强制执行的门禁——状态文件是唯一事实源，每一步都有事件可查。
 
-- **工具 6 属性（GB/Z 185.7-2026 第 7 部分：智能体工具调用）**：每工具提供 toolId / name / description / version / inputParam / outputParam（toolId = `dsh.punky-swarm.<name>` 反向域唯一；inputParam/outputParam 为 JSON Schema，required 恒在）；
-- **智能体描述（GB/Z 185.4-2026 第 4 部分：智能体描述；ACS 字段集）**：装配配置 → 每角色 ACS AgentCapabilitySpec 描述（根对象 20 键 = 必填 14：aic / active / lastModifiedTime / protocolVersion / name / description / version / provider / securitySchemes / endPoints / capabilities / defaultInputModes / defaultOutputModes / skills，可选 6：iconUrl / documentationUrl / webAppUrl / entityUserId / entityMeta / certificate；AgentSkill 8 键 = 必填 5：id / name / description / version / tags，可选 3：examples / inputModes / outputModes；协议 02.01）；
-- **消息/任务/会话映射（GB/Z 185.6-2026 第 6 部分）**：mailbox 消息、wavePlan 任务、批次状态 → ACPs AIP 结构（Message：id / sentAt / senderRole / senderId / dataItems / mentions；TaskCommand；Session——纯映射只读不改存储，ackId 原子写保留）；`/mailbox` items 与 `/batch` 附 ACPs 投影（缺省不注入时响应不变）；
-- **身份体系（GB/Z 185.2/185.3-2026 第 2/3 部分，默认关）**：AIC 身份码（前缀 1.2.156.3088 + 10 级编码 + CRC-16/CCITT-FALSE + Base36 校验码）+ CAI 身份证书（CN=AIC、SAN=acps://、EAB 凭证）+ 可插拔签名（默认 ECDSA-P256 / 可选 RSA-2048）+ 信任链验证；SM2 暂不支持（`algorithm='sm2'` 显式拒绝）；装配键 `aip.identity` 默认关（经模块 API 暴露，不注册新治理工具）；
-- **发现服务（GB/Z 185.5-2026 第 5 部分：智能体发现/ADP，默认开）**：`POST /api/dsh-punky-swarm/discover`（type 四类 explicit/exploratory/trending/filtered、filter 34 运算符、错误码 40000~40005/50001）+ `GET /.well-known/aip`（协议 ACPs 02.01）；active 语义替代 discoverable（节点 active=false 不出现于查询结果）；
-- **装配开关**：`aip.enabled`（缺省默认开启，显式 `false` 关闭）→ 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）+ ACS 智能体目录 + `GET /api/dsh-punky-swarm/agents`。
+## 兼容矩阵（Compatibility Matrix）
 
-## 治理能力
-
-| 能力 | 装配键 | 机制 |
+| 组件 | 版本 | 状态 |
 |---|---|---|
-| 心跳/过期检测 | `capabilities.watch` | watchdog 定时器 + lane_heartbeat 工具；退避档位追问 + 连续 N 拍无活动 → lane.stalled 标记 |
-| worktree 物理隔离 | `capabilities.worktree` | lane_worktree_create/merge/checkpoint（git worktree 隔离 + checkpoint 提交）；与 lane_claim 逻辑锁互补 |
-| 验收证据 | `capabilities.verify` | post-execute 证据捕获（内容寻址 blob + ledger）+ 三态裁决（done/failed/blocked）+ 完成门禁（advisory/enforce） |
-| mailbox 环防护 | `capabilities.budget` | 链跳数上限 / 同有序对往返上限 / 重复消息拒发；inbox 豁免 |
-| 诊断桥接 | `capabilities.trajectory` | 异常诊断（死锁/无效重试/目标漂移）→ sessionId→lane 映射 → notify（autoFail 默认关） |
-| 日志导出 | `capabilities.logs` | log_export 工具：只读事件流投影，lane/type/since 过滤 + json/markdown + 引擎产物根落盘（防逃逸） |
-| topic 订阅 | —（纯模块） | subscribeTopic/emitTopic：进程内分发 + mailbox broadcast 落盘（ackId 原子写） |
-| merge agent | `worktree.mergeAgent`（默认关） | 冲突语义化解（需宿主注入 spawner；未注入 spawner 时保持 conflict 状态） |
+| dsh-punky-swarm | 0.3.6（当前发布版） | 支持 |
+| Node.js | >=22（package.json engines） | 支持（实测于 Node 24） |
+| @deepseek-ai/dsh-tools（peer） | ^0.1.0-rc.6 \|\| ^0.1.1-rc.2 | 支持 |
+| @deepseek-ai/cordis（peer） | ^4.0.1 | 支持 |
+| 其他 dsh / Node 版本 | — | 未验证 |
 
-## 生命周期
+> 以仓库 CI 与测试矩阵为准；未验证项如实标注，不作未经实测的版本声明。
 
-- **lane 条件**：建批静态声明（依赖产物/文件存在），派发前校验，不满足落 skipped；
-- **archive 自动归档**：complete 后自动单向归档（产物打包保留可查，不可回滚）；
-- **needHuman 人工挂起**：audit 产物声明 needHuman → lane 挂 review，Manager 转达人工裁决（merged/conflict），不新增成员态；
-- **棘轮规则表**：状态迁移配置化（只许删不许增，allowRelax 逃生门默认关）；
-- **恢复机制**：checkpoint 保全 + 恢复审计 + 崩溃后 idle 归位重派（新 worker 可查 checkpoint 跳过已完成步骤）；断点续跑接口预留。
+## 路线图（Roadmap）
 
-## wavePlan（固定语义）
+- 动画演示页上线（补全 README 演示位）
+- README 英文全文翻译（可选）
 
-- 建批时按任务依赖 DAG 分层为 waves，**批次创建后绝不中途重算**（wavePlan 固定语义）；
-- 任务可声明 layer（plan/exec/audit）、consume/produce/outputs、role/skills；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）；
-- 同 wave 可并行派发；批次/成员状态以状态文件为唯一事实源（事件日志可审计）。
+## License
 
-## 任务难度门禁（Task Difficulty Gate）
-
-- **每轮（user turn）动手执行前**，Leader 须经 assign_check 给出任务难度 A/B/C 与执行主体：A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批；
-- **default to C**：评估对象是完整目标任务（scope=full），任一 C 特征（多环节≥3 / 多角色≥2 / 需门禁 / 外部依赖 / 可恢复性）即判 C；拿不准就填 C；
-- **guard 强制**：判 C 后未建批即调用执行型工具（pwsh/write/edit/run/subagent 等）会被引擎拒绝；未评估/评估过期（20 次执行调用或 30 分钟）同样拒绝，只读查询不受限；
-- **asset_claim**：判 C 前 Leader 已直做的探索/排障产物，可用 asset_claim 归位为批次资产，不返工。
-
-## 三层门禁（Tier3）
-
-- **建批静态校验**：layer ∈ plan/exec/audit；有 exec 必有 audit；产物路径契约；跨层引用；防篡改；
-- **Entry（入口门禁）**：exec 派发前 consume 产物齐备，缺则拒派（GATE_ENTRY_MISSING）；
-- **Plan 契约（产物结构门禁）**：plan 产物须含 spec 必填章节（验收标准/约束）+ task-tree 合法 JSON，缺失则拒 merged（GATE_PLAN_CONTRACT）；
-- **Exit（产出门禁）**：exec 结算前 outputs 落盘、audit 结算前 produce 落盘，缺则拒 merged（GATE_EXIT_MISSING_*）；
-- **Complete（收尾门禁）**：批次 complete 前 audit 层验收完成且无 failed/conflict、exec 层全终态（GATE_COMPLETE_*）；
-- **硬化（dp1-dp4）= 上述门禁引擎化**（映射见 skills/jiufeng-team/references/workflow.md §四）：dp1 分配判定 → Entry + assign_check；dp2 完成确认 → Exit；dp3 审查路由 → review + member_settle；dp4 验收判定 → Complete——属已实现能力，从「范围外」移除。
-
-generic 批次（无 layer）不触发门禁，向后兼容。
-
-## 状态机
-
-```
-成员：pending -> running -> review -> merged | failed | skipped | conflict（idle=恢复重派；review->running=返工）
-批次：planning -> running -> paused -> aborted | complete（complete 前置三层门禁）
-```
-
-## 许可与商业授权
-
-本项目以 **GNU AGPL v3（AGPL-3.0）为唯一许可**：
+本项目以 **GNU AGPL v3（AGPL-3.0-only）为唯一许可**：
 
 - 在遵守 [AGPL-3.0](LICENSE) 的前提下，可自由使用、修改、分发（含商用）；若修改后通过网络提供服务，须按 AGPL-3.0 公开修改内容。
-- 如需其他许可（如闭源商用），请联系作者获得许可。
+- 镜像同步透明说明：任何镜像仅复制发布文件（逐字节一致）并新增 commit 推送，不改写 .git 历史。
