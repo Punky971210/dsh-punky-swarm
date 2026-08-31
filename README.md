@@ -63,7 +63,7 @@ dsh web restart
 - 静态图：
   - ![图2 · Tier3 引擎强制门禁](./assets/demo/tier3-gates.png)
   - ![图3 · checkpoint 断点续跑](./assets/demo/checkpoint-resume.png)
-  - 图4 · 面板真实截图（dsh web「蟛蜞集群」监控面板）：
+  - 图4 · 面板真实截图（dsh web「Punky Swarm 集群」监控面板）：
     - ![图4a · 任务看板：批次列表与状态一览](./assets/demo/panel-overview.png)
     - ![图4b · 批次详情：lane 状态机（merged / running）](./assets/demo/panel-detail-pane.png)
     - ![图4c · 结算与事件留痕](./assets/demo/panel-events.png)
