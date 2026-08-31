@@ -1,8 +1,8 @@
-# dsh-punky-swarm — 蟛蜞模式（Punky Swarm 集群治理）
+# dsh-punky-swarm — Punky Swarm 集群治理
 
 ![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22-green) ![CI](https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml/badge.svg)
 
-> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG（固定语义，建批后不重算）+ 引擎级门禁（Entry / Plan 契约 / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 任务难度路由门禁 + 国标 AIP 兼容 + 治理能力增强（心跳/watchdog、worktree 物理隔离、验收证据、mailbox 环防护、诊断桥接、日志导出）。附蟛蜞模式预设与 jiufeng-team 角色指引。
+> dsh（DeepSeek Harness）**单机多子 agent 集群治理**插件：wavePlan 三层 DAG（固定语义，建批后不重算）+ 引擎级门禁（Entry / Plan 契约 / Exit / Complete）+ 状态机 + 锁/mailbox + 会话隔离 + 任务难度路由门禁 + 国标 AIP 兼容 + 治理能力增强（心跳/watchdog、worktree 物理隔离、验收证据、mailbox 环防护、诊断桥接、日志导出）。附 Punky Swarm 预设与 jiufeng-team 角色指引。
 
 English: [README.en.md](README.en.md)
 
@@ -19,14 +19,14 @@ English: [README.en.md](README.en.md)
 
 - 单 Agent 全流程（设计→执行→测试）：人工介入重，人成为流程瓶颈；
 - 图式编排（LangGraph 方向）：尝试后放弃——流程写死成图，改动成本高，Agent 自由度被压死；
-- 折中：按「九峰」工作模式（Leader 拆解 → 多角色协作 → 门禁裁决）在早期 Swarm 集群运行时上落地，随后迁移到 dsh 成为本插件。
+- 折中：按 Leader 拆解 → 多角色协作 → 门禁裁决的工作模式在早期 Swarm 集群运行时上落地，随后迁移到 dsh 成为本插件。
 
 ## 三件套
 
 | 件 | 位置 | 内容 |
 |---|---|---|
-| 插件 | packages/dsh-punky-swarm | 引擎：**20 治理工具** + Tier3 门禁 + 会话隔离 v2 + 只读 API（含 AIP /tools 端点）+ 任务难度门禁 + 蟛蜞集群监控面板 |
-| 模式 | packages/dsh-punky-swarm/presets/jiufeng | 蟛蜞模式预设：Leader persona + 治理纪律 + tool-bootstrap |
+| 插件 | packages/dsh-punky-swarm | 引擎：**20 治理工具** + Tier3 门禁 + 会话隔离 v2 + 只读 API（含 AIP /tools 端点）+ 任务难度门禁 + Punky Swarm 集群监控面板 |
+| 模式 | packages/dsh-punky-swarm/presets/jiufeng | Punky Swarm 预设：Leader persona + 治理纪律 + tool-bootstrap |
 | 指引 | packages/dsh-punky-swarm/skills/jiufeng-team | 3 层 8 角色 × 操作手册装配表 + constitution + 模板 |
 
 ## 安装
@@ -56,20 +56,18 @@ dsh plugin --profile web add dsh-punky-swarm
 dsh web restart
 ```
 
-> npm 包的 `dsh plugin add` 用法以发布后实际验证为准（0.3.1 起）。
+## Punky Swarm 集群监控面板（只读）
 
-## 蟛蜞集群监控面板（只读）
-
-插件自带 **蟛蜞集群** 监控面板：会话区头部「对话 / 轨迹 / 蟛蜞集群」第三分页（conversation.view），**安装即得，无需额外配置**。
+插件自带 **Punky Swarm 集群** 监控面板：会话区头部「对话 / 轨迹 / Punky Swarm 集群」第三分页（conversation.view），**安装即得，无需额外配置**。
 
 - **批次列表**：阶段（planning/running/complete…）+ 终态进度 `3/5` + 可自动放行/已完结标记；
 - **统计条**：总批次 / 运行中 / 已完结 / 异常（failed+conflict）；
 - **批次详情**：lane 状态卡（状态 + 任务简述 + 门禁缺件明细 + 层/依赖）、事件时间线、收件箱（派发/广播）计数；
-- **只读**：3s 自动刷新，跟随 Web UI 深浅主题；执行引擎（批次/门禁/状态机）**人工不可修改，只能查看**，治理操作由蟛蜞模式 Leader 执行。
+- **只读**：3s 自动刷新，跟随 Web UI 深浅主题；执行引擎（批次/门禁/状态机）**人工不可修改，只能查看**，治理操作由 Punky Swarm Leader 执行。
 
 ## 治理工具（20）
 
-> 口径前提（P1-01 统一）：**20 为 cordis.patch.yml 全开口径**（`logs.enabled: true` 时含 `log_export`）。
+> 口径说明：**20 为 cordis.patch.yml 全开口径**（`logs.enabled: true` 时含 `log_export`）。
 > 缺省配置（config 无 capabilities 键）下 7 键默认开（aip/discovery/verify/watch/worktree/budget/trajectory），
 > 工具总数 19（不含 `log_export`）；`logs` 默认关，patch 显式开启后达 20。显式 `enabled: false` 可逐键关闭。
 
@@ -245,7 +243,7 @@ acps:
 ## wavePlan（固定语义）
 
 - 建批时按任务依赖 DAG 分层为 waves，**批次创建后绝不中途重算**（wavePlan 固定语义）；
-- 任务可声明 layer（plan/exec/audit）、consume/produce/outputs、role/skills；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）；
+- 任务可声明 layer（plan/exec/audit）、consume/produce/outputs、role/skills；team 装配按 role 注入 skill 前缀（可插拔，不绑定特定团队）；
 - 同 wave 可并行派发；批次/成员状态以状态文件为唯一事实源（事件日志可审计）。
 
 ## 任务难度门禁（Task Difficulty Gate）

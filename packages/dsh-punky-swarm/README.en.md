@@ -19,13 +19,13 @@
 
 - Single-agent full pipeline (design → execution → testing): heavy human involvement, the human becomes the pipeline bottleneck;
 - Graph-style orchestration (LangGraph direction): tried and abandoned — flow hard-coded into graphs, costly to change, agent freedom crushed;
-- Compromise: implemented on an early Swarm cluster runtime following the "jiufeng" working pattern (Leader decomposition → multi-role collaboration → gate adjudication), then migrated into dsh to become this plugin.
+- Compromise: implemented on an early Swarm cluster runtime following a Leader-decomposition → multi-role collaboration → gate-adjudication working pattern, then migrated into dsh to become this plugin.
 
 ## The Three Components
 
 | Component | Location | Contents |
 |---|---|---|
-| Plugin | packages/dsh-punky-swarm | Engine: **20 governance tools** + Tier3 gates + session isolation v2 + read-only API (incl. AIP /tools endpoint) + task difficulty gate + Punky swarm cluster monitoring panel |
+| Plugin | packages/dsh-punky-swarm | Engine: **20 governance tools** + Tier3 gates + session isolation v2 + read-only API (incl. AIP /tools endpoint) + task difficulty gate + Punky Swarm cluster monitoring panel |
 | Pattern | packages/dsh-punky-swarm/presets/jiufeng | Punky Swarm preset: Leader persona + governance discipline + tool-bootstrap |
 | Guide | packages/dsh-punky-swarm/skills/jiufeng-team | 3-layer 8-role × operation-manual assembly table + constitution + templates |
 
@@ -56,11 +56,9 @@ dsh plugin --profile web add dsh-punky-swarm
 dsh web restart
 ```
 
-> The `dsh plugin add` usage for the npm package is subject to post-release verification (from 0.3.1).
-
 ## Punky Swarm Cluster Monitoring Panel (read-only)
 
-The plugin ships with a **Punky swarm cluster** monitoring panel: third tab "对话 / 轨迹 / 蟛蜞集群" in the session header (conversation.view), **available on install, no extra configuration**.
+The plugin ships with a **Punky Swarm cluster** monitoring panel: third tab "对话 / 轨迹 / Punky Swarm 集群" in the session header (conversation.view), **available on install, no extra configuration**.
 
 - **Batch list**: phase (planning/running/complete…) + terminal progress `3/5` + auto-release/completed marks;
 - **Stats bar**: total batches / running / completed / abnormal (failed+conflict);
@@ -69,7 +67,7 @@ The plugin ships with a **Punky swarm cluster** monitoring panel: third tab "对
 
 ## Governance Tools (20)
 
-> Scope premise (P1-01 unified): **20 is the full-open (cordis.patch.yml) count** — `log_export` is included only when `logs.enabled: true`.
+> Scope note: **20 is the full-open (cordis.patch.yml) count** — `log_export` is included only when `logs.enabled: true`.
 > Under the bare default config (no `capabilities` key), 7 keys are on by default (aip/discovery/verify/watch/worktree/budget/trajectory),
 > giving 19 tools (without `log_export`); `logs` defaults off and is turned on by the patch to reach 20. Explicit `enabled: false` disables per-key.
 
@@ -245,7 +243,7 @@ acps:
 ## wavePlan (fixed semantics)
 
 - On batch creation, tasks are layered into waves by dependency DAG; **never recomputed mid-flight after creation** (fixed wavePlan semantics);
-- Tasks may declare layer (plan/exec/audit), consume/produce/outputs, role/skills; team assembly injects skill prefixes by role (pluggable, not bound to jiufeng);
+- Tasks may declare layer (plan/exec/audit), consume/produce/outputs, role/skills; team assembly injects skill prefixes by role (pluggable, not bound to a specific team);
 - Same-wave tasks dispatch in parallel; batch/member status uses the state file as the single source of truth (event log auditable).
 
 ## Task Difficulty Gate
