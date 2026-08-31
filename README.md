@@ -22,7 +22,7 @@ English: [README.en.md](README.en.md)
 - **无检查点的长任务一崩全丢**——几小时的批次因一次崩溃回到原点；
 - **多 lane 同写一个仓库互相踩**——并发提交互相覆盖，出冲突说不清谁改了什么。
 
-[DEMO:图1]（30 秒理解图：wavePlan 分波示意 / 三层门禁示意，静态截图）
+![wavePlan 分波 DAG（30 秒理解图）](./assets/demo/waveplan-dag.png)
 
 ## 快速开始（Quick Start）
 
@@ -60,8 +60,17 @@ dsh web restart
 
 ## 演示（Demo）
 
-- 静态截图位：[DEMO:图2]（三层门禁示意）、[DEMO:图3]（checkpoint 续跑示意）、[DEMO:图4]（worktree 隔离示意）
-- 动画演示：待上线（见[路线图](#路线图roadmap)）
+- 静态图：
+  - ![图2 · Tier3 引擎强制门禁](./assets/demo/tier3-gates.png)
+  - ![图3 · checkpoint 断点续跑](./assets/demo/checkpoint-resume.png)
+  - 图4 · 面板真实截图（dsh web「蟛蜞集群」监控面板）：
+    - ![图4a · 任务看板：批次列表与状态一览](./assets/demo/panel-overview.png)
+    - ![图4b · 批次详情：lane 状态机（merged / running）](./assets/demo/panel-detail-pane.png)
+    - ![图4c · 结算与事件留痕](./assets/demo/panel-events.png)
+- 动画演示（HTML 单文件，浏览器打开即播放；gh-pages 托管待上线，见[路线图](#路线图roadmap)）：
+  - [wavePlan 分波 DAG 动画](./assets/demo/waveplan-dag.html)
+  - [Tier3 引擎门禁动画](./assets/demo/tier3-gates.html)
+  - [checkpoint 断点续跑动画](./assets/demo/checkpoint-resume.html)
 
 ## 文档导航（Contents）
 
@@ -104,7 +113,7 @@ dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：�
 
 ## 路线图（Roadmap）
 
-- 动画演示页上线（补全 README 演示位）
+- 演示动画 gh-pages 托管上线（动画 HTML 已在 assets/demo/，可直接浏览器打开）
 - README 英文全文翻译（可选）
 
 ## License
