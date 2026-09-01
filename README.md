@@ -31,9 +31,9 @@ dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：�
 
 单 Agent 好写，多 Agent 集群难管：并行任务的依赖怎么排、产物怎么对齐、失败怎么恢复、谁改了什么。多 Agent 并行不是把 prompt 一起发出去就完了——谁先跑、谁等谁、谁写哪个文件、崩了从哪续，这些才是集群治理的问题。
 
-- **无门禁的派发会带病开工**：下游在依赖产物缺失时就被派发，错误传播到返工阶段才暴露。Tier3 门禁在派发前核对 consume 产物，缺件即拒派（GATE_ENTRY_MISSING），把「带病开工」挡在源头。
-- **无检查点的长任务一崩全丢**：长批次没有中间保全，一次崩溃让数小时工作归零。checkpoint 在每完成一个子步骤时做 git 保全并记录进度（step N/total），崩溃后新 worker 可查询 checkpoint 跳过已完成步骤。
-- **多 lane 同写一个仓库互相踩**：并发写同一 git 仓库会互相覆盖、冲突难追责。lane worktree 为每个 lane 建立物理隔离的工作树，merge 串行执行，冲突保留现场由裁决方处置。
+- **无门禁的派发会带病开工**：下游在依赖产物缺失时就被派发，错误传播到返工阶段才暴露。门禁在派发前核对产物是否齐备，缺件即拒绝，把「带病开工」挡在源头。
+- **无检查点的长任务一崩全丢**：长批次没有中间保全，一次崩溃让数小时工作归零。完成每个子步骤即保存进度，崩溃后可从断点继续，不再从头再来。
+- **多 lane 同写一个仓库互相踩**：并发写同一仓库会互相覆盖、冲突难追责。每个 lane 有独立工作区互不干扰，冲突保留现场交裁决。
 
 ## 快速了解（30 秒）
 
@@ -47,23 +47,23 @@ dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：�
 
 ```mermaid
 flowchart LR
-  subgraph PLAN["plan 层"]
-    P["plan · 产出 spec.md"]
+  subgraph PLAN[plan 层]
+    P["plan 产出 spec.md"]
   end
-  subgraph EXEC["exec 层"]
-    subgraph W1["wave 1 · 并行"]
-      A1["exec-A · 产出 impl.md"]
-      A2["exec-B · 产出 test.md"]
+  subgraph EXEC[exec 层]
+    subgraph W1[wave 1 并行]
+      A1["exec-A 产出 impl.md"]
+      A2["exec-B 产出 test.md"]
     end
-    subgraph W2["wave 2"]
-      A3["exec-C · 产出 verify.md"]
+    subgraph W2[wave 2]
+      A3["exec-C 产出 verify.md"]
     end
-    subgraph W3["wave 3"]
-      A4["exec-D · 产出 release.md"]
+    subgraph W3[wave 3]
+      A4["exec-D 产出 release.md"]
     end
   end
-  subgraph AUDIT["audit 层"]
-    AU["audit · 验收"]
+  subgraph AUDIT[audit 层]
+    AU["audit 验收"]
   end
   P -->|"spec.md"| A1
   P -->|"spec.md"| A2
@@ -71,7 +71,7 @@ flowchart LR
   A2 -->|"test.md"| A3
   A3 -->|"verify.md"| A4
   A4 -->|"release.md"| AU
-  NOTE["wave 固定语义：批次创建后绝不中途重算"]
+  NOTE["wave 固定语义 批次创建后绝不中途重算"]
   EXEC -.-> NOTE
 ```
 
@@ -121,14 +121,14 @@ dsh web restart
 
 ```mermaid
 flowchart TD
-  S["派发 lane"] --> D1{"consume 产物齐备？"}
-  D1 -- "否" --> R1["拒派 · GATE_ENTRY_MISSING"]
-  D1 -- "是" --> X["执行（worker 落盘产物）"]
-  X --> D2{"产物已落盘？"}
-  D2 -- "否" --> R2["拒结算 · GATE_TARGET_MISSING"]
-  D2 -- "是" --> C["member_settle → merged"]
-  C --> D3{"audit 验收完成？"}
-  D3 -- "人工闸" --> R3["GATE_NEEDHUMAN · 人工裁决"]
+  S["派发 lane"] --> D1{"consume 产物齐备?"}
+  D1 -- "否" --> R1["拒派 GATE_ENTRY_MISSING"]
+  D1 -- "是" --> X["执行 worker 落盘产物"]
+  X --> D2{"产物已落盘?"}
+  D2 -- "否" --> R2["拒结算 GATE_TARGET_MISSING"]
+  D2 -- "是" --> C["member_settle merged"]
+  C --> D3{"audit 验收完成?"}
+  D3 -- "人工闸" --> R3["GATE_NEEDHUMAN 人工裁决"]
   D3 -- "通过" --> DONE["批次 complete"]
 ```
 
@@ -136,19 +136,18 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-  autonumber
   participant A as worker A
   participant G as lane git 保全
   participant B as worker B
   A->>A: 执行 step 1/3
-  A->>G: lane_checkpoint（git 保全）
+  A->>G: lane_checkpoint git 保全
   A->>A: 执行 step 2/3
-  A->>G: lane_checkpoint（git 保全）
-  Note over A: 崩溃，进程终止
+  A->>G: lane_checkpoint git 保全
+  Note over A: 崩溃 进程终止
   Note over G: checkpoint 历史 git log 可查
   B->>G: lane_checkpoint_status 查询进度
   G-->>B: 已完成 step 2/3
-  B->>B: 跳过已完成步骤，从 step 3 续跑
+  B->>B: 跳过已完成步骤 从 step 3 续跑
 ```
 
 ## 兼容矩阵（Compatibility Matrix）
