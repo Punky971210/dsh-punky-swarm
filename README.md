@@ -14,6 +14,27 @@
 
 English: [README.en.md](README.en.md)
 
+## 文档导航（Contents）
+
+- [摘要](#摘要abstract) · [为什么需要它](#为什么需要它why) · [快速了解（30 秒）](#快速了解30-秒) · [快速开始](#快速开始quick-start) · [能力清单](#能力清单10-项) · [架构](#架构architecture) · [演示](#演示demo) · [兼容矩阵](#兼容矩阵compatibility-matrix) · [路线图](#路线图roadmap) · [License](#license)
+- 英文版：[README.en.md](README.en.md)
+
+---
+
+## 摘要（Abstract）
+
+dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：任务按依赖分波执行，引擎级门禁拦截半成品，检查点让长任务崩溃可续跑。它面向单机场景，在同一 dsh 进程内治理一批 worker（批次 / 门禁 / 通信 / 恢复），提供单写者锁、mailbox 黑板通信与事件审计。当前状态：npm 包 `dsh-punky-swarm@0.3.6` 一条命令装入 dsh；默认装配 19 个治理工具；582 项测试全绿；以 AGPL-3.0-only 单一许可发布。
+
+*dsh-punky-swarm is a single-machine multi-agent governance plugin for DeepSeek Harness. Tasks run in dependency-ordered waves, engine-enforced gates reject half-done work, and checkpoints let long-running batches resume after a crash. The plugin ships 19 governance tools (20 with all capabilities enabled), passes 582 tests, and is licensed under AGPL-3.0-only.*
+
+## 为什么需要它（Why）
+
+单 Agent 好写，多 Agent 集群难管：并行任务的依赖怎么排、产物怎么对齐、失败怎么恢复、谁改了什么。多 Agent 并行不是把 prompt 一起发出去就完了——谁先跑、谁等谁、谁写哪个文件、崩了从哪续，这些才是集群治理的问题。
+
+- **无门禁的派发会带病开工**：下游在依赖产物缺失时就被派发，错误传播到返工阶段才暴露。Tier3 门禁在派发前核对 consume 产物，缺件即拒派（GATE_ENTRY_MISSING），把「带病开工」挡在源头。
+- **无检查点的长任务一崩全丢**：长批次没有中间保全，一次崩溃让数小时工作归零。checkpoint 在每完成一个子步骤时做 git 保全并记录进度（step N/total），崩溃后新 worker 可查询 checkpoint 跳过已完成步骤。
+- **多 lane 同写一个仓库互相踩**：并发写同一 git 仓库会互相覆盖、冲突难追责。lane worktree 为每个 lane 建立物理隔离的工作树，merge 串行执行，冲突保留现场由裁决方处置。
+
 ## 快速了解（30 秒）
 
 三个痛点：
@@ -22,7 +43,37 @@ English: [README.en.md](README.en.md)
 - **无检查点的长任务一崩全丢**——几小时的批次因一次崩溃回到原点；
 - **多 lane 同写一个仓库互相踩**——并发提交互相覆盖，出冲突说不清谁改了什么。
 
-![wavePlan 分波 DAG（30 秒理解图）](./assets/demo/waveplan-dag.png)
+**图1 · wavePlan 分波 DAG** —— plan/exec/audit 三层泳道，exec 内 wave1-3 分列：wave 内并行、wave 间串行，依赖箭头标注产物名。
+
+```mermaid
+flowchart LR
+  subgraph PLAN["plan 层"]
+    P["plan · 产出 spec.md"]
+  end
+  subgraph EXEC["exec 层"]
+    subgraph W1["wave 1 · 并行"]
+      A1["exec-A · 产出 impl.md"]
+      A2["exec-B · 产出 test.md"]
+    end
+    subgraph W2["wave 2"]
+      A3["exec-C · 产出 verify.md"]
+    end
+    subgraph W3["wave 3"]
+      A4["exec-D · 产出 release.md"]
+    end
+  end
+  subgraph AUDIT["audit 层"]
+    AU["audit · 验收"]
+  end
+  P -->|"spec.md"| A1
+  P -->|"spec.md"| A2
+  A1 -->|"impl.md"| A3
+  A2 -->|"test.md"| A3
+  A3 -->|"verify.md"| A4
+  A4 -->|"release.md"| AU
+  NOTE["wave 固定语义：批次创建后绝不中途重算"]
+  EXEC -.-> NOTE
+```
 
 ## 快速开始（Quick Start）
 
@@ -58,46 +109,47 @@ dsh web restart
 9. **批次会话隔离**：状态文件为唯一事实源，事件流留痕可审计。
 10. **工程状态**：19 个治理工具（默认装配，开启全部能力为 20 个）、582/582 测试全绿、v0.3.6 已发布（AGPL-3.0-only）、已收录 awesome-dsh-plugin。
 
-## 演示（Demo）
-
-- 静态图：
-  - ![图2 · Tier3 引擎强制门禁](./assets/demo/tier3-gates.png)
-  - ![图3 · checkpoint 断点续跑](./assets/demo/checkpoint-resume.png)
-  - 图4 · 面板真实截图（dsh web「Punky Swarm 集群」监控面板）：
-    - ![图4a · 任务看板：批次列表与状态一览](./assets/demo/panel-overview.png)
-    - ![图4b · 批次详情：lane 状态机（merged / running）](./assets/demo/panel-detail-pane.png)
-    - ![图4c · 结算与事件留痕](./assets/demo/panel-events.png)
-- 动画演示（HTML 单文件，浏览器打开即播放；gh-pages 托管待上线，见[路线图](#路线图roadmap)）：
-  - [wavePlan 分波 DAG 动画](./assets/demo/waveplan-dag.html)
-  - [Tier3 引擎门禁动画](./assets/demo/tier3-gates.html)
-  - [checkpoint 断点续跑动画](./assets/demo/checkpoint-resume.html)
-
-## 文档导航（Contents）
-
-- [摘要](#摘要abstract) · [为什么需要它](#为什么需要它why) · [架构](#架构architecture) · [兼容矩阵](#兼容矩阵compatibility-matrix) · [路线图](#路线图roadmap) · [License](#license)
-- 英文摘要与能力清单：[README.en.md](README.en.md)
-
----
-
-## 摘要（Abstract）
-
-dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：任务按依赖分波执行，引擎级门禁拦截半成品，检查点让长任务崩溃可续跑。它面向单机场景，在同一 dsh 进程内治理一批 worker（批次 / 门禁 / 通信 / 恢复），提供单写者锁、mailbox 黑板通信与事件审计。当前状态：npm 包 `dsh-punky-swarm@0.3.6` 一条命令装入 dsh；默认装配 19 个治理工具；582 项测试全绿；以 AGPL-3.0-only 单一许可发布。
-
-*dsh-punky-swarm is a single-machine multi-agent governance plugin for DeepSeek Harness. Tasks run in dependency-ordered waves, engine-enforced gates reject half-done work, and checkpoints let long-running batches resume after a crash. The plugin ships 19 governance tools (20 with all capabilities enabled), passes 582 tests, and is licensed under AGPL-3.0-only.*
-
-## 为什么需要它（Why）
-
-单 Agent 好写，多 Agent 集群难管：并行任务的依赖怎么排、产物怎么对齐、失败怎么恢复、谁改了什么。多 Agent 并行不是把 prompt 一起发出去就完了——谁先跑、谁等谁、谁写哪个文件、崩了从哪续，这些才是集群治理的问题。
-
-- **无门禁的派发会带病开工**：下游在依赖产物缺失时就被派发，错误传播到返工阶段才暴露。Tier3 门禁在派发前核对 consume 产物，缺件即拒派（GATE_ENTRY_MISSING），把「带病开工」挡在源头。
-- **无检查点的长任务一崩全丢**：长批次没有中间保全，一次崩溃让数小时工作归零。checkpoint 在每完成一个子步骤时做 git 保全并记录进度（step N/total），崩溃后新 worker 可查询 checkpoint 跳过已完成步骤。
-- **多 lane 同写一个仓库互相踩**：并发写同一 git 仓库会互相覆盖、冲突难追责。lane worktree 为每个 lane 建立物理隔离的工作树，merge 串行执行，冲突保留现场由裁决方处置。
-
 ## 架构（Architecture）
 
 - **角色分层**：Leader（决策与终门禁）→ Manager（调度）→ Worker（执行）；批次按 plan/exec/audit 三层组织，各层产物按契约衔接。
 - **状态与通信**：批次/成员状态以状态文件为唯一事实源；跨上下文通信走 mailbox 黑板（inbox/outbox/broadcast）；每一步操作写入事件流，可审计可回溯。
 - 治理不是写在文档里的约定，而是引擎强制执行的门禁——状态文件是唯一事实源，每一步都有事件可查。
+
+## 演示（Demo）
+
+**图2 · Tier3 引擎强制门禁** —— 派发前核对 consume 产物（缺件 GATE_ENTRY_MISSING 拒派）、结算前核对产物落盘（缺失 GATE_TARGET_MISSING 拒结算）、需人工裁决时转人工闸（GATE_NEEDHUMAN）。
+
+```mermaid
+flowchart TD
+  S["派发 lane"] --> D1{"consume 产物齐备？"}
+  D1 -- "否" --> R1["拒派 · GATE_ENTRY_MISSING"]
+  D1 -- "是" --> X["执行（worker 落盘产物）"]
+  X --> D2{"产物已落盘？"}
+  D2 -- "否" --> R2["拒结算 · GATE_TARGET_MISSING"]
+  D2 -- "是" --> C["member_settle → merged"]
+  C --> D3{"audit 验收完成？"}
+  D3 -- "人工闸" --> R3["GATE_NEEDHUMAN · 人工裁决"]
+  D3 -- "通过" --> DONE["批次 complete"]
+```
+
+**图3 · checkpoint 断点续跑** —— 每完成一个子步骤即 lane_checkpoint 提交 git 保全（step N/total）；崩溃后新 worker 用 lane_checkpoint_status 查询进度，跳过已完成步骤续跑。
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as worker A
+  participant G as lane git 保全
+  participant B as worker B
+  A->>A: 执行 step 1/3
+  A->>G: lane_checkpoint（git 保全）
+  A->>A: 执行 step 2/3
+  A->>G: lane_checkpoint（git 保全）
+  Note over A: 崩溃，进程终止
+  Note over G: checkpoint 历史 git log 可查
+  B->>G: lane_checkpoint_status 查询进度
+  G-->>B: 已完成 step 2/3
+  B->>B: 跳过已完成步骤，从 step 3 续跑
+```
 
 ## 兼容矩阵（Compatibility Matrix）
 
@@ -114,7 +166,6 @@ dsh-punky-swarm 是 DeepSeek Harness（dsh）的多 Agent 集群治理插件：�
 ## 路线图（Roadmap）
 
 - 演示动画 gh-pages 托管上线（动画 HTML 已在 assets/demo/，可直接浏览器打开）
-- README 英文全文翻译（可选）
 
 ## License
 
