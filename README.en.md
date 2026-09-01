@@ -26,9 +26,9 @@ dsh-punky-swarm is a single-machine multi-agent governance plugin for DeepSeek H
 
 Single agents are easy; swarms are hard. Parallel multi-agent execution is not just firing prompts together — who runs first, who waits for whom, who writes which file, where to resume after a crash. Those are the real questions of swarm governance.
 
-- **Ungated dispatch starts work half-baked** — downstream lanes get dispatched before their dependency artifacts exist, and failures surface only at rework time. Tier3 gates check consume artifacts before dispatch and reject with GATE_ENTRY_MISSING, stopping half-baked work at the source.
-- **Long tasks without checkpoints lose everything on a crash** — one crash resets hours of batch work. Checkpoints git-preserve progress per sub-step (step N/total); a new worker queries checkpoints and skips completed steps.
-- **Parallel lanes writing one repo trample each other** — concurrent commits overwrite each other and conflicts are untraceable. Lane worktrees isolate each lane physically, merges serialize, and conflicts keep the scene for adjudication.
+- **Ungated dispatch starts work half-baked** — downstream lanes get dispatched before their dependency artifacts exist, so failures surface only at rework time. Gates verify artifacts before dispatch and reject when anything is missing, stopping half-baked work at the source.
+- **Long tasks without checkpoints lose everything on a crash** — long batches have no mid-way backup, and one crash wipes out hours of work. Progress is saved after every completed sub-step, so after a crash you resume from the breakpoint instead of starting over.
+- **Parallel lanes writing one repo trample each other** — concurrent writes to the same repo overwrite each other and conflicts are hard to trace. Each lane gets an isolated workspace, and conflicts are kept for adjudication.
 
 ## 30-Second Overview
 
@@ -42,23 +42,23 @@ Three pain points:
 
 ```mermaid
 flowchart LR
-  subgraph PLAN["plan layer"]
-    P["plan · produces spec.md"]
+  subgraph PLAN[plan layer]
+    P["plan produces spec.md"]
   end
-  subgraph EXEC["exec layer"]
-    subgraph W1["wave 1 · parallel"]
-      A1["exec-A · produces impl.md"]
-      A2["exec-B · produces test.md"]
+  subgraph EXEC[exec layer]
+    subgraph W1[wave 1 parallel]
+      A1["exec-A produces impl.md"]
+      A2["exec-B produces test.md"]
     end
-    subgraph W2["wave 2"]
-      A3["exec-C · produces verify.md"]
+    subgraph W2[wave 2]
+      A3["exec-C produces verify.md"]
     end
-    subgraph W3["wave 3"]
-      A4["exec-D · produces release.md"]
+    subgraph W3[wave 3]
+      A4["exec-D produces release.md"]
     end
   end
-  subgraph AUDIT["audit layer"]
-    AU["audit · acceptance"]
+  subgraph AUDIT[audit layer]
+    AU["audit acceptance"]
   end
   P -->|"spec.md"| A1
   P -->|"spec.md"| A2
@@ -66,7 +66,7 @@ flowchart LR
   A2 -->|"test.md"| A3
   A3 -->|"verify.md"| A4
   A4 -->|"release.md"| AU
-  NOTE["wave fixed semantics: never recomputed after batch creation"]
+  NOTE["wave fixed semantics never recomputed after batch creation"]
   EXEC -.-> NOTE
 ```
 
@@ -116,13 +116,13 @@ Minimal example (from install to the first three-layer batch):
 ```mermaid
 flowchart TD
   S["dispatch lane"] --> D1{"consume artifacts ready?"}
-  D1 -- "no" --> R1["reject dispatch · GATE_ENTRY_MISSING"]
-  D1 -- "yes" --> X["execute (worker writes artifacts)"]
+  D1 -- "no" --> R1["reject dispatch GATE_ENTRY_MISSING"]
+  D1 -- "yes" --> X["execute worker writes artifacts"]
   X --> D2{"artifacts on disk?"}
-  D2 -- "no" --> R2["reject settle · GATE_TARGET_MISSING"]
-  D2 -- "yes" --> C["member_settle → merged"]
+  D2 -- "no" --> R2["reject settle GATE_TARGET_MISSING"]
+  D2 -- "yes" --> C["member_settle merged"]
   C --> D3{"audit accepted?"}
-  D3 -- "human gate" --> R3["GATE_NEEDHUMAN · manual review"]
+  D3 -- "human gate" --> R3["GATE_NEEDHUMAN manual review"]
   D3 -- "passed" --> DONE["batch complete"]
 ```
 
@@ -130,19 +130,18 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-  autonumber
   participant A as worker A
   participant G as lane git backup
   participant B as worker B
   A->>A: run step 1/3
-  A->>G: lane_checkpoint (git backup)
+  A->>G: lane_checkpoint git backup
   A->>A: run step 2/3
-  A->>G: lane_checkpoint (git backup)
-  Note over A: crash, process dies
+  A->>G: lane_checkpoint git backup
+  Note over A: crash process dies
   Note over G: checkpoint history in git log
   B->>G: lane_checkpoint_status query
   G-->>B: step 2/3 done
-  B->>B: skip done steps, resume from step 3
+  B->>B: skip done steps resume from step 3
 ```
 
 ## Compatibility Matrix
