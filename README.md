@@ -50,17 +50,15 @@ flowchart LR
   subgraph PLAN[plan 层]
     P["plan 产出 spec.md"]
   end
-  subgraph EXEC[exec 层]
-    subgraph W1[wave 1 并行]
-      A1["exec-A 产出 impl.md"]
-      A2["exec-B 产出 test.md"]
-    end
-    subgraph W2[wave 2]
-      A3["exec-C 产出 verify.md"]
-    end
-    subgraph W3[wave 3]
-      A4["exec-D 产出 release.md"]
-    end
+  subgraph W1[wave 1 并行]
+    A1["exec-A 产出 impl.md"]
+    A2["exec-B 产出 test.md"]
+  end
+  subgraph W2[wave 2]
+    A3["exec-C 产出 verify.md"]
+  end
+  subgraph W3[wave 3]
+    A4["exec-D 产出 release.md"]
   end
   subgraph AUDIT[audit 层]
     AU["audit 验收"]
@@ -71,8 +69,6 @@ flowchart LR
   A2 -->|"test.md"| A3
   A3 -->|"verify.md"| A4
   A4 -->|"release.md"| AU
-  NOTE["wave 固定语义 批次创建后绝不中途重算"]
-  EXEC -.-> NOTE
 ```
 
 ## 快速开始（Quick Start）

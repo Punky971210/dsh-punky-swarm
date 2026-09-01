@@ -45,17 +45,15 @@ flowchart LR
   subgraph PLAN[plan layer]
     P["plan produces spec.md"]
   end
-  subgraph EXEC[exec layer]
-    subgraph W1[wave 1 parallel]
-      A1["exec-A produces impl.md"]
-      A2["exec-B produces test.md"]
-    end
-    subgraph W2[wave 2]
-      A3["exec-C produces verify.md"]
-    end
-    subgraph W3[wave 3]
-      A4["exec-D produces release.md"]
-    end
+  subgraph W1[wave 1 parallel]
+    A1["exec-A produces impl.md"]
+    A2["exec-B produces test.md"]
+  end
+  subgraph W2[wave 2]
+    A3["exec-C produces verify.md"]
+  end
+  subgraph W3[wave 3]
+    A4["exec-D produces release.md"]
   end
   subgraph AUDIT[audit layer]
     AU["audit acceptance"]
@@ -66,8 +64,6 @@ flowchart LR
   A2 -->|"test.md"| A3
   A3 -->|"verify.md"| A4
   A4 -->|"release.md"| AU
-  NOTE["wave fixed semantics never recomputed after batch creation"]
-  EXEC -.-> NOTE
 ```
 
 ## Quick Start
