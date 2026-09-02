@@ -57,3 +57,23 @@
           #   落盘到引擎产物根（可审计）；显式 enabled:false 可关闭（关闭时工具不注册）。
           logs:
             enabled: true
+        # 工具调用级护栏（governance hook，M2 阶段 2.2）：订阅宿主 tools/pre-execute + tools/post-execute，
+        # 6 原语纯函数内核（ALLOW/DENY/REQUIRE_APPROVAL/DEFER/NARROW/PAUSE）；拒绝收据落盘
+        # <root>/governance/refusals/<sessionId>/。rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
+        # 分层：任务级=ctx.tools.guard 难度门禁（core.js:65，派发前治理）；调用级=本 hook（执行时治理）。
+        # 【已敲定 2026-08-31】默认开启（hook.enabled: true），可显式关闭（governance.hook.enabled=false）。
+        # 热更新（P3 已热切，harden-plan §5.4 A）：governance 键已纳入 runtime.json 白名单
+        # （lib/hot/config-watch.js ALLOWED_TOP_KEYS）——governance.hook 任一子键生效变化（enabled 翻转 /
+        # rules / flags / defaults）经 applyConfigChange ⑤ dispose+重挂即时生效，免重启；
+        # <root>/config/runtime.json 覆盖示例见 README（如 {"governance":{"hook":{"enabled":false}}}）。
+        governance:
+          hook:
+            enabled: true      # 默认开启；空规则表 → decide 恒 ALLOW → 零行为变化
+            rules: []          # 规则表（空=零拦截）；Rule 结构见 lib/governance/types.ts
+            defaults:
+              deny: DENY       # fail-closed 兜底（未分类违规 → 兜底原语，hf.md:87）；可配置为其他拒绝类原语
+                               # （如 REQUIRE_APPROVAL）；不可为 ALLOW——resolve 校验回退 DENY（P0 死配置修复，配置真实生效）
+            flags:
+              pause: false     # 原语开关（CAGE feature-flag 借鉴 hf.md:83-85；默认关 → P3 回退 DENY）
+              narrow: false
+              defer: false

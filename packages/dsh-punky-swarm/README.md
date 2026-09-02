@@ -253,6 +253,113 @@ acps:
 - **guard 强制**：判 C 后未建批即调用执行型工具（pwsh/write/edit/run/subagent 等）会被引擎拒绝；未评估/评估过期（20 次执行调用或 30 分钟）同样拒绝，只读查询不受限；
 - **asset_claim**：判 C 前 Leader 已直做的探索/排障产物，可用 asset_claim 归位为批次资产，不返工。
 
+## 工具调用级护栏（Governance Hook，M2）
+
+订阅宿主 `tools/pre-execute` + `tools/post-execute` 双阶段（零宿主改造，插件侧增量），CAGE 6 原语纯函数内核裁决（`lib/governance/`，TS 编译回拷）：
+
+- **分层语义**（与任务级门禁互补，不冲突）：
+
+| 层 | 机制 | 位点 | 语义 |
+|---|---|---|---|
+| 任务级（派发前）| `ctx.tools.guard`（任务难度门禁）| 评估/建批状态机 | 「该执行型调用是否允许发生」|
+| 调用级（执行时）| 本 hook pre-execute kernel | `tools/pre-execute` waterfall | 「该次调用的参数/工具是否越界」（规则表）|
+
+  执行序：pre-execute waterfall（kernel）→ ask 解析 → 难度门禁（guardReason）→ dispatch；kernel 判 ALLOW → 难度门禁照常生效（两门禁串行叠加）；kernel 判 deny/ask → 难度门禁不再参与（不变量：难度门禁只可能「收紧」不可能被绕过）。
+
+### ① 原语运行期语义（6/6）
+
+| 原语 | 落地形态 | 触发档位 |
+|---|---|---|
+| `ALLOW` | 透传不拦截（`next()`）| 规则未命中 / 命中零违规 |
+| `DENY` | `{kind:'deny'}` 拒绝执行 | hard（P2）；pausable/narrowable/soft 在对应 flag 关闭时回退 DENY（P3-P5）|
+| `REQUIRE_APPROVAL` | `{kind:'ask'}` → 宿主 approval 通道（serviceAsk）| manual_review（P1）/ ftra（P0）/ soft 置信达标（P6）|
+| `NARROW` | `{kind:'deny'}` + 参数收窄指引 + 收据 `narrowedParams` | flag.narrow=true 且 narrowable（P4）|
+| `DEFER` | `{kind:'deny'}` + 会话延后挂起（状态文件 + 收据 `deferMeta`）| flag.defer=true 且 soft（P5）|
+| `PAUSE` | `{kind:'deny'}` + 会话暂停（状态文件 + 收据 `pauseMeta`）| flag.pause=true 且 pausable（P3）|
+
+- **统一拒绝消息格式**：`[governance:<primitive>] <reason>`（primitive ∈ ALLOW/DENY/REQUIRE_APPROVAL/DEFER/NARROW/PAUSE；对齐难度门禁 `[task-difficulty-gate]` 前缀风格）——模型侧可区分「任务级未评估」vs「调用级越界」。DENY/DEFER/NARROW/PAUSE 统一以 `{kind:'deny'}` 落地（2.2 简版 + 收据元信息）；REQUIRE_APPROVAL → `{kind:'ask'}`。
+- **REQUIRE_APPROVAL ask 行为（显式化）**：pre 同步落盘 `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}`，post 尽力补记 `outcome`（denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once）。**依赖宿主 approval 通道（serviceAsk），无审批服务 / 无 agent = 降级 deny**（行为不变，记录显式化）；allowed-once → allow。
+- **DEFER/PAUSE 文件态简版状态机（flag 开启后真实生效）**：`flags.defer: true`（soft 违规）→ 会话挂起延后（状态文件 `<root>/governance/state/<sessionId>.json`，窗口 30s，收据含 `deferMeta`）；`flags.pause: true`（pausable 违规）→ 会话暂停（窗口 60s，收据含 `pauseMeta`）。挂起/暂停期间同会话调用统一 `[governance:DEFER|PAUSE]` deny（reason 含 retry-after / pauseToken / until），**惰性过期自动恢复**（读时清理，无定时器 / 无 resume 端点）；flag-off 折叠 DENY 无状态副作用（与「会话延后/暂停中」可区分）。
+
+### ② 配置指南与示例规则（可复制）
+
+- **配置**：`cordis.patch.yml` 顶层键 `governance.hook`——`enabled: true`（**默认开**，已敲定 2026-08-31；显式 `enabled: false` 可关）/ `rules: []` / `defaults.deny: DENY`（fail-closed 兜底，可配其他拒绝类原语，不可为 ALLOW）/ `flags: {pause:false, narrow:false, defer:false}`（原语开关默认关 → 对应档回退 DENY）。规则表按 `Rule` 结构（`id` / `tools?` / `match{path?,op?,pattern?,value?}` / `violations[{code,category,severity?,message,path?}]` / `narrow?`）。
+- ⚠️ **出厂默认 `rules: []` = 零拦截**（decide 恒 ALLOW，行为不变）——勿误以为护栏在生效；以下示例复制到 `governance.hook`（替换 `rules` 与 `flags` 段）即真实生效，亦可写入 `<root>/config/runtime.json` 热更新覆盖（见 ⑤）。
+
+```yaml
+# 复制到 cordis.patch.yml 的 governance.hook 段（替换既有 rules: [] 与 flags 即可生效）
+# 预期行为：示例 1 命中 → DENY；示例 2 命中 → NARROW（收窄指引 + narrowedParams 落收据）；
+#            示例 3 命中 → REQUIRE_APPROVAL ask（依赖宿主 approval 通道，无通道则降级 deny）
+governance:
+  hook:
+    enabled: true
+    flags:
+      pause: false
+      narrow: true      # 示例 2 需开启 narrow 原语（默认 false——不开则示例 2 回退 DENY + 收窄指引）
+      defer: false
+    rules:
+      # 示例 1：禁止强制删除（hard → DENY）——tools 按宿主实际工具名（bash/pwsh/…）
+      - id: example-forbid-force-delete
+        tools: [bash, pwsh]
+        match: { path: /cmd, op: regex, pattern: 'rm -rf|Remove-Item -Recurse|del /f /s /q' }
+        violations:
+          - code: EX1
+            category: hard
+            message: 强制删除命令被护栏禁止（rm -rf / Remove-Item -Recurse / del /f /s /q）
+      # 示例 2：超时参数收窄（narrowable + narrow bounds → flag.narrow=true 时 NARROW）
+      - id: example-timeout-narrow
+        tools: [bash]
+        match: { path: /timeout, op: gt, value: 3600 }
+        violations:
+          - code: EX2
+            category: narrowable
+            message: 超时参数超过 3600s，需收窄
+        narrow:
+          - path: /timeout
+            max: 3600
+      # 示例 3（可选）：审批门（manual_review → REQUIRE_APPROVAL）
+      - id: example-admin-approval
+        match: { path: /scope, op: eq, value: admin }
+        violations:
+          - code: EX3
+            category: manual_review
+            message: 高危管理操作需人工复核
+```
+
+预期行为（喂 kernel 裁决）：示例 1（`bash` + `cmd: "rm -rf /data"`）→ `DENY`（priority 2，ruleRefs `['example-forbid-force-delete']`）；示例 2（`bash` + `timeout: 7200`）在 `flags.narrow: true` → `NARROW` + `narrowedParams`（`/timeout` 7200 → 3600 钳制明细），flag-off 则回退 `DENY`；示例 3（任意工具 + `scope: "admin"`）→ `REQUIRE_APPROVAL`。
+
+### ③ 收据证据信封（哈希锚定 + 验签）
+
+- **拒绝收据**：`<root>/governance/refusals/<sessionId>/<receiptId>.json`（原子写 tmp+rename）+ `ledger-<sessionId>.jsonl`（追加）。**基础八键**：receiptId / ts / tool / callId / sessionId / decision（primitive+priority+reason）/ attemptedParams / ruleRefs；**可选扩展**（P0-P2，向后兼容，旧收据无字段不炸）：`narrowedParams`（NARROW / DENY-含窄域的钳制指引）、`deferMeta` / `pauseMeta`（DEFER/PAUSE 元信息）、`ask`（REQUIRE_APPROVAL 记录）、`anchor`（哈希锚定）。
+- **哈希锚定（P2，M5-d 简版）**：同 session 收据按 ts 序串 sha256 哈希链——`anchor: {version: 1, alg: 'sha256', prevHash, hash}`；hash 覆盖收据除 anchor 自身外全部字段（含 prevHash），篡改任一收据即破坏其后整条链。
+- **验签**：`lib/governance/receipt-store.js` `verifyRefusals(root, sessionId)` → `{ok, brokenAt, count, receipts}`——逐条 `{receiptId, ts, anchored, ok, issue?}`，issue = `hash-mismatch`（自身内容被篡改）/ `link-break`（prevHash 与链上前一不符 = 缺链/伪造重锚）；旧收据（无 anchor）不参与链校验、不判失败（兼容）。审计可复跑：改 1 字节 → verify 失败且 brokenAt 定位。
+- **能力边界**：canonical 为 RFC8785 简版（键排序 + 无空白 + undefined/NaN 对齐 JSON.stringify）；完整 RFC8785 数字规范化/逐字符转义与真签名（WORM）归 M5（见 ⑥）。
+
+### ④ 双层桥接（批级事件流）
+
+收据落盘 → 装配层 `onRefusal` 回调 → 批级事件流 `<root>/governance/events/refusal-<sessionId>.jsonl`（每行 `{type:'governance.refusal.recorded', ts, sessionId, receiptId, primitive, tool, callId}`），与 refusals 收据/ledger 并行可观测——**分层治理「收据层 → 批级事件流」协同**（hook-eval A.3 批判 6 关闭）。仅事件可见性，**不触发批级状态迁移**（DEFER/PAUSE → batch_phase paused/aborted 联动归 M5-a）；回调抛错隔离 warn 不阻断裁决；dispose 后断开；热更新重挂后桥接随动重新注入（见 ⑤）。
+
+### ⑤ 热更新（免重启）
+
+- governance 键已纳入 runtime.json 顶层白名单（`lib/hot/config-watch.js` `ALLOWED_TOP_KEYS`）——`governance.hook` 任一**生效子键变化**（enabled 翻转 / rules / flags / defaults）经装配侧 `applyConfigChange` ⑤ dispose + 重挂**即时生效，免重启**（对齐 verify ④ 模式；kernel 闭包持有旧配置 → 统一重挂，不引入 updateConfig API）。重挂后运行时状态重置（refusals count 归零、跨重挂在途 ask 的 outcome 补记丢失——收据 `ask.initiated` 已在 pre 落盘不丢审计）；DEFER/PAUSE 会话状态为文件态（state-store），不随重挂丢失。
+- **覆盖示例**（写入 `<root>/config/runtime.json`，原子写 tmp+rename；深度合并叠加，静态配置零改动）：
+
+```json
+{ "governance": { "hook": { "enabled": false } } }
+```
+
+  写 `enabled: false` → 热切卸载（pre 不再触发，调用不再被拦）；写回 `true` 或删除该键（恢复默认 true）→ 重挂生效。rules 覆盖示例（数组整体替换，其余子键保留静态值）：
+
+```json
+{ "governance": { "hook": { "rules": [ { "id": "runtime-deny-shutdown", "tools": ["bash"], "match": { "path": "/cmd", "op": "regex", "pattern": "shutdown" }, "violations": [ { "code": "RT1", "category": "hard", "message": "禁止 shutdown 命令" } ] } ] } } }
+```
+
+  预期：写入后重挂 → 新规则立即拦截 `shutdown` 调用（DENY + 收据落盘），无需重启进程。
+
+### ⑥ 不做清单（修订）
+
+防范围蔓延（M2 施工边界，修订后仍完整）：MCP 网关/进程外路径（N-1）、8-tier 金融层（N-2）、NeMo/Presidio/spaCy 重依赖（N-3）、K8s/云集成（N-4）、模型侧 LLM 拦截（N-5）、路由封条 seal（N-6）、DEFER/PAUSE **完整**状态机（N-7，指 Redis 状态机/队列语义——文件态简版已落地 P1，见 ①；禁 setInterval/禁端点核查保持）、NARROW 透明参数改写（N-8，宿主禁止输入改写，以 deny+指引落地）、流事件 tools/result+SSE（N-9）、哈希锚定/签名证据信封（N-10，指完整 RFC8785/真签名——M5-d **sha256 链简版已落地 P2**，见 ③）、WORM（N-11，维持不做）。完整核查方法见批次 `exec/tester-report.md`。
+
 ## 三层门禁（Tier3）
 
 - **建批静态校验**：layer ∈ plan/exec/audit；有 exec 必有 audit；产物路径契约；跨层引用；防篡改；

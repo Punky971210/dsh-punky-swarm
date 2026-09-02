@@ -26,7 +26,7 @@ import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
@@ -34,6 +34,16 @@ import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
 import { mountVerify } from './verify/mount.js';
+// M2 工具调用级护栏（governance hook，阶段 2.2）：lib/governance/wiring.js（G8）订阅宿主
+// tools/pre-execute + tools/post-execute（双阶段零宿主改造，rc.md:194）——6 原语纯函数内核裁决 +
+// 拒绝收据落盘（receipt-store.js G9）；装配对齐 mountVerify 模式（PK lib/index.js:341-347）。
+import { installGovernanceHook } from './governance/wiring.js';
+// P3 热切（harden-plan §5.4 A）：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
+//   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount ④ 模式，不引入 updateConfig API）
+import { resolveGovernanceConfig } from './governance/config.js';
+// P2 双层桥接事件流（harden-plan §5.3 B）：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
+//   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移——归 M5-a）
+import { appendRefusalEvent } from './governance/receipt-store.js';
 import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
 import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
 import { createAcpsServer } from './acps/server.js';
@@ -346,6 +356,56 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
   }
 
+  // M2 工具调用级护栏（governance hook，阶段 2.2）：governance.hook.enabled 缺省 true（已敲定 2026-08-31）——
+  // 订阅宿主 tools/pre-execute + tools/post-execute；rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
+  // P2 双层桥接（harden-plan §5.3 B）：注入 onRefusal → 收据落盘时写批级事件流
+  //   <root>/governance/events/refusal-<sessionId>.jsonl（governance.refusal.recorded；仅事件可见性，
+  //   不触发批级状态迁移——batch_phase 联动归 M5-a）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
+  // P3 硬化（harden-plan §5.4 A）：governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
+  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults）经 applyConfigChange ⑤
+  //   dispose + 重挂即时生效（对齐 verifyMount ④ 模式；重挂后 refusals count 归零、pendingAsks 清空——
+  //   运行时状态重置契约，交互处置详见 remountGovernanceHook 注释）。
+  // 装配层桥接回调（remount 复用：旧实例 dispose 断开回调后，新实例重新注入——桥接随动不断链）
+  const refusalEventBridge = (receipt) => {
+    try {
+      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt);
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] governance refusal event bridge failed (isolated): ' + String(e?.message ?? e));
+    }
+  };
+  // 当前已挂载 hook 的解析配置快照（P3 热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
+  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {});
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge });
+  if (governanceHook.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl)');
+  }
+  // P3 热切重挂（⑤ 分支 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
+  //   = enabled 翻转或 rules/flags/defaults 实际变更；JSON 序敏感——规则序参与裁决，变化即重挂）→
+  //   dispose + 以新快照重挂。kernel 闭包持有旧 cfg（createGovernanceKernel(cfg) 捕获引用）→ 最小改动
+  //   统一走 dispose+重挂，不引入 updateConfig API（harden-plan §5.4 A.2）。幂等：无生效变化零操作。
+  //   交互处置（manifest 留痕）：
+  //   - p2 桥接（onRefusal）：dispose 置空旧实例 refusalCb（B4 断开）→ 新实例重新注入 refusalEventBridge
+  //     → remount 后批级事件流随动（bridge 事件不因重挂丢失接线）；
+  //   - p1 状态机：pendingAsks 为 hook 实例内存态（跨 pre/post 存活）→ 重挂清空——跨重挂在途 ask 的
+  //     outcome 补记丢失（收据 ask.initiated 已在 pre 落盘不丢审计，outcome 保持 initiated 态；重挂仅
+  //     发生在 governance 配置变化时，窗口极小）；DEFER/PAUSE 会话状态为文件态（state-store）→ 不随重挂丢失；
+  //   - refusals count 随新实例归零（运行时状态重置契约，harden-plan §5.4 A.2「重挂后 refusals count 等
+  //     运行时状态重置」）。
+  const remountGovernanceHook = (nextConfig, logTag) => {
+    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {});
+    if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
+    const wasInstalled = governanceHook?.installed === true;
+    governanceHook?.dispose?.();
+    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge });
+    governanceInstalledCfg = govCfg;
+    const nowInstalled = governanceHook?.installed === true;
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled
+      ? 're-mounted (governance.hook 生效变化已热切，新 rules/flags/defaults/enabled 生效)'
+      : 'unmounted (governance.hook.enabled=false 或装配前置缺失)')
+      + (logTag ? ' [' + logTag + ']' : '') + ' [was=' + wasInstalled + ' now=' + nowInstalled + ']');
+    return true;
+  };
+
   // ── R1 热更新装配（L1 消费点就地启停，叠加非替换）──
   // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
   // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果（D2）；
@@ -401,6 +461,9 @@ export const apply = (ctx, config = {}) => {
       verifyMount = mountVerify(ctx, { root, config: next });
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: verify capture ' + (vc.enabled ? 'mounted' : 'unmounted'));
     }
+    // ⑤ governance hook（P3 热切，harden-plan §5.4 A.2）：governance.hook 生效变化 → dispose + 重挂
+    //   （逻辑见 remountGovernanceHook；幂等——无生效变化零操作；启动对账见 apply 尾部 hotConfig.start() 之后）
+    remountGovernanceHook(next);
   };
   hotConfig = createConfigWatcher({
     root, config,
@@ -415,6 +478,10 @@ export const apply = (ctx, config = {}) => {
     logger: ctx.logger,
   });
   hotConfig.start();
+  // P3 启动对账：watcher.start() 应用初始 runtime.json overlay 但不广播（H7 重启语义）——若启动时 overlay
+  //   已含 governance 变化（如 enabled:false / rules 覆盖），装配侧（上方）仍按静态 config 挂载 →
+  //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，①-④ 维持既有启动语义）。
+  remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay');
 
   return () => {
     hotConfig?.dispose();
@@ -428,6 +495,7 @@ export const apply = (ctx, config = {}) => {
     if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
     if (panelStream) { panelStream.dispose(); panelStream = null; }
     verifyMount?.dispose();
+    governanceHook?.dispose();
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };
