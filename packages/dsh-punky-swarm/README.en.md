@@ -253,6 +253,115 @@ acps:
 - **guard enforced**: after a C judgment, calling execution tools (pwsh/write/edit/run/subagent, etc.) without creating a batch is rejected by the engine; unassessed/expired assessments (20 execution calls or 30 minutes) are likewise rejected; read-only queries unrestricted;
 - **asset_claim**: exploration/troubleshooting artifacts the Leader produced directly before a C judgment can be claimed as batch assets via asset_claim, no rework.
 
+## Tool-Call-Level Guardrails (Governance Hook, M2)
+
+Subscribes to the host's `tools/pre-execute` + `tools/post-execute` two phases (zero host modification, additive on the plugin side); the CAGE 6-primitive pure-function kernel adjudicates (`lib/governance/`, TS compiled back):
+
+- **Layered semantics** (complementary to the task-level gate, no conflict):
+
+| Layer | Mechanism | Location | Semantics |
+|---|---|---|---|
+| Task level (before dispatch) | `ctx.tools.guard` (task difficulty gate) | assessment/batch-creation state machine | "whether this execution-type call is allowed to happen" |
+| Call level (at execution time) | this hook's pre-execute kernel | `tools/pre-execute` waterfall | "whether this call's parameters/tools are out of bounds" (rule table) |
+
+  Execution order: pre-execute waterfall (kernel) → ask resolution → difficulty gate (guardReason) → dispatch; when the kernel judges ALLOW → the difficulty gate applies as usual (the two gates stack serially); when the kernel judges deny/ask → the difficulty gate no longer participates (invariant: the difficulty gate can only tighten, never be bypassed).
+
+### ① Primitive Runtime Semantics (6/6)
+
+| Primitive | Landing form | Trigger tier |
+|---|---|---|
+| `ALLOW` | Pass-through, no interception (`next()`) | rule not matched / matched with zero violations |
+| `DENY` | `{kind:'deny'}` rejects execution | hard (P2); pausable/narrowable/soft fall back to DENY when the corresponding flag is off (P3-P5) |
+| `REQUIRE_APPROVAL` | `{kind:'ask'}` → host approval channel (serviceAsk) | manual_review (P1) / ftra (P0) / soft confidence met (P6) |
+| `NARROW` | `{kind:'deny'}` + parameter narrowing guidance + receipt `narrowedParams` | flag.narrow=true and narrowable (P4) |
+| `DEFER` | `{kind:'deny'}` + session deferred suspension (state file + receipt `deferMeta`) | flag.defer=true and soft (P5) |
+| `PAUSE` | `{kind:'deny'}` + session pause (state file + receipt `pauseMeta`) | flag.pause=true and pausable (P3) |
+
+- **Unified refusal message format**: `[governance:<primitive>] <reason>` (primitive ∈ ALLOW/DENY/REQUIRE_APPROVAL/DEFER/NARROW/PAUSE; aligned with the difficulty gate's `[task-difficulty-gate]` prefix style) — the model side can distinguish "task level unassessed" from "call level out of bounds". DENY/DEFER/NARROW/PAUSE all land as `{kind:'deny'}` (2.2 simplified + receipt metadata); REQUIRE_APPROVAL → `{kind:'ask'}`.
+- **REQUIRE_APPROVAL ask behavior (explicit)**: pre synchronously writes `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}`; post best-effort backfills `outcome` (denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once). **Depends on the host approval channel (serviceAsk); no approval service / no agent → degraded deny** (behavior unchanged, record made explicit); allowed-once → allow.
+- **DEFER/PAUSE file-state simplified state machine (truly effective once flags are on)**: `flags.defer: true` (soft violation) → session suspended and deferred (state file `<root>/governance/state/<sessionId>.json`, window 30s, receipt carries `deferMeta`); `flags.pause: true` (pausable violation) → session paused (window 60s, receipt carries `pauseMeta`). While suspended/paused, same-session calls are uniformly denied with `[governance:DEFER|PAUSE]` (reason includes retry-after / pauseToken / until); **lazy expiry auto-recovers** (cleaned on read; no timer / no resume endpoint); flag-off collapses to DENY with no state side effect (distinguishable from "session deferred/paused").
+
+### ② Configuration Guide and Example Rules (copyable)
+
+- **Configuration**: top-level key `governance.hook` in `cordis.patch.yml` — `enabled: true` (**default on**, finalized 2026-08-31; explicit `enabled: false` turns it off) / `rules: []` / `defaults.deny: DENY` (fail-closed fallback, other denial-class primitives configurable, ALLOW not allowed) / `flags: {pause:false, narrow:false, defer:false}` (primitive switches default off → the corresponding tier falls back to DENY). The rule table follows the `Rule` structure (`id` / `tools?` / `match{path?,op?,pattern?,value?}` / `violations[{code,category,severity?,message,path?}]` / `narrow?`).
+- ⚠️ **Factory default `rules: []` = zero interception** (decide is always ALLOW, behavior unchanged) — do not mistake it for active guardrails; the examples below take real effect when copied into `governance.hook` (replacing the `rules` and `flags` sections), and can also be written to `<root>/config/runtime.json` for a hot-update override (see ⑤).
+
+```yaml
+# Copy into the governance.hook section of cordis.patch.yml (replacing the existing rules: [] and flags sections takes effect)
+# Expected behavior: example 1 matched → DENY; example 2 matched → NARROW (narrowing guidance + narrowedParams land in the receipt);
+#                     example 3 matched → REQUIRE_APPROVAL ask (depends on the host approval channel; no channel → degraded deny)
+governance:
+  hook:
+    enabled: true
+    flags:
+      pause: false
+      narrow: true      # example 2 needs the narrow primitive enabled (default false — if off, example 2 falls back to DENY + narrowing guidance)
+      defer: false
+    rules:
+      # Example 1: forbid force delete (hard → DENY) — tools follow the host's actual tool names (bash/pwsh/…)
+      - id: example-forbid-force-delete
+        tools: [bash, pwsh]
+        match: { path: /cmd, op: regex, pattern: 'rm -rf|Remove-Item -Recurse|del /f /s /q' }
+        violations:
+          - code: EX1
+            category: hard
+            message: Force-delete commands are forbidden by the guardrail (rm -rf / Remove-Item -Recurse / del /f /s /q)
+      # Example 2: timeout parameter narrowing (narrowable + narrow bounds → NARROW when flag.narrow=true)
+      - id: example-timeout-narrow
+        tools: [bash]
+        match: { path: /timeout, op: gt, value: 3600 }
+        violations:
+          - code: EX2
+            category: narrowable
+            message: Timeout parameter exceeds 3600s and must be narrowed
+        narrow:
+          - path: /timeout
+            max: 3600
+      # Example 3 (optional): approval gate (manual_review → REQUIRE_APPROVAL)
+      - id: example-admin-approval
+        match: { path: /scope, op: eq, value: admin }
+        violations:
+          - code: EX3
+            category: manual_review
+            message: High-risk admin operations require manual review
+```
+
+Expected behavior (fed to the kernel): example 1 (`bash` + `cmd: "rm -rf /data"`) → `DENY` (priority 2, ruleRefs `['example-forbid-force-delete']`); example 2 (`bash` + `timeout: 7200`) with `flags.narrow: true` → `NARROW` + `narrowedParams` (`/timeout` 7200 → 3600 clamp details); flag off → falls back to `DENY`; example 3 (any tool + `scope: "admin"`) → `REQUIRE_APPROVAL`.
+
+### ③ Receipt Evidence Envelope (hash anchoring + verification)
+
+- **Refusal receipt**: `<root>/governance/refusals/<sessionId>/<receiptId>.json` (atomic write tmp+rename) + `ledger-<sessionId>.jsonl` (append). **Base eight keys**: receiptId / ts / tool / callId / sessionId / decision (primitive+priority+reason) / attemptedParams / ruleRefs; **optional extensions** (P0-P2, backward compatible; old receipts without these fields do not break): `narrowedParams` (NARROW / DENY-with-narrow clamp guidance), `deferMeta` / `pauseMeta` (DEFER/PAUSE metadata), `ask` (REQUIRE_APPROVAL record), `anchor` (hash anchoring).
+- **Hash anchoring (P2, M5-d simplified)**: same-session receipts are chained in ts order into a sha256 hash chain — `anchor: {version: 1, alg: 'sha256', prevHash, hash}`; the hash covers all receipt fields except anchor itself (including prevHash); tampering with any receipt breaks the whole chain after it.
+- **Verification**: `lib/governance/receipt-store.js` `verifyRefusals(root, sessionId)` → `{ok, brokenAt, count, receipts}` — per receipt `{receiptId, ts, anchored, ok, issue?}`, issue = `hash-mismatch` (own content tampered) / `link-break` (prevHash not matching the previous receipt in the chain = missing link / forged re-anchor); old receipts (no anchor) do not join chain validation and are not judged failed (compatible). Audit can re-run: change 1 byte → verify fails and brokenAt locates it.
+- **Capability boundary**: canonical is the RFC8785 simplified version (key sorting + no whitespace + undefined/NaN aligned with JSON.stringify); full RFC8785 numeric normalization / per-character escaping and true signatures (WORM) belong to M5 (see ⑥).
+
+### ④ Two-Layer Bridge (batch-level event stream)
+
+Receipt landing → assembly-layer `onRefusal` callback → batch-level event stream `<root>/governance/events/refusal-<sessionId>.jsonl` (each line `{type:'governance.refusal.recorded', ts, sessionId, receiptId, primitive, tool, callId}`), observable in parallel with refusals receipts/ledger — **layered governance "receipt layer → batch-level event stream" coordination** (hook-eval A.3 critique 6 closed). Event visibility only, **does not trigger batch-level state transitions** (DEFER/PAUSE → batch_phase paused/aborted linkage belongs to M5-a); callback errors are isolated as warn and do not block adjudication; disconnected after dispose; after a hot re-mount the bridge follows and is re-injected (see ⑤).
+
+### ⑤ Hot Update (no restart)
+
+- The governance key is in the runtime.json top-level whitelist (`lib/hot/config-watch.js` `ALLOWED_TOP_KEYS`) — any **effective sub-key change** of `governance.hook` (enabled flip / rules / flags / defaults) takes effect immediately via assembly-side `applyConfigChange` ⑤ dispose + re-mount, **no restart** (aligned with the verify ④ pattern; the kernel closure holds the old config → unified re-mount, no updateConfig API introduced). Runtime state resets after a re-mount (refusals count back to zero; the outcome backfill of in-flight asks across a re-mount is lost — `ask.initiated` was already landed in the receipt at pre, audit not lost); DEFER/PAUSE session state is file-based (state-store), not lost across a re-mount.
+- **Override examples** (write to `<root>/config/runtime.json`, atomic write tmp+rename; deep-merge overlay, static config zero change):
+
+```json
+{ "governance": { "hook": { "enabled": false } } }
+```
+
+  Writing `enabled: false` → hot unmount (pre no longer triggers, calls no longer intercepted); writing back `true` or deleting the key (restores the default true) → re-mount takes effect. Rules override example (whole-array replacement, remaining sub-keys keep static values):
+
+```json
+{ "governance": { "hook": { "rules": [ { "id": "runtime-deny-shutdown", "tools": ["bash"], "match": { "path": "/cmd", "op": "regex", "pattern": "shutdown" }, "violations": [ { "code": "RT1", "category": "hard", "message": "Shutdown commands are forbidden" } ] } ] } } }
+```
+
+  Expected: after writing, re-mount → the new rule immediately intercepts `shutdown` calls (DENY + receipt landing), no process restart needed.
+
+### ⑥ Not-Implemented List (revised)
+
+Anti-scope-creep (M2 construction boundary, still complete after revision): MCP gateway / out-of-process paths (N-1), 8-tier financial layer (N-2), NeMo/Presidio/spaCy heavy dependencies (N-3), K8s/cloud integration (N-4), model-side LLM interception (N-5), route seal (N-6), DEFER/PAUSE **complete** state machine (N-7 — refers to Redis state-machine/queue semantics; the file-state simplified version has landed as P1, see ①; the no-setInterval / no-endpoint audit checks remain), NARROW transparent parameter rewriting (N-8 — the host forbids input rewriting, landed as deny + guidance), streaming events tools/result + SSE (N-9), hash-anchoring/signature evidence envelope (N-10 — refers to full RFC8785 / true signatures; the M5-d **sha256-chain simplified version has landed as P2**, see ③), WORM (N-11, kept not-implemented). Full verification method: see batch `exec/tester-report.md`.
+
+- Adjudicated boundaries & recheck conclusions for residuals #3/#5/#6/#9: [governance-boundaries.en.md](docs/governance-boundaries.en.md)
+
 ## Tier3 Gates
 
 - **Batch-creation static validation**: layer ∈ plan/exec/audit; exec implies audit; artifact path contracts; cross-layer references; tamper resistance;

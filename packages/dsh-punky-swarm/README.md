@@ -360,6 +360,8 @@ governance:
 
 防范围蔓延（M2 施工边界，修订后仍完整）：MCP 网关/进程外路径（N-1）、8-tier 金融层（N-2）、NeMo/Presidio/spaCy 重依赖（N-3）、K8s/云集成（N-4）、模型侧 LLM 拦截（N-5）、路由封条 seal（N-6）、DEFER/PAUSE **完整**状态机（N-7，指 Redis 状态机/队列语义——文件态简版已落地 P1，见 ①；禁 setInterval/禁端点核查保持）、NARROW 透明参数改写（N-8，宿主禁止输入改写，以 deny+指引落地）、流事件 tools/result+SSE（N-9）、哈希锚定/签名证据信封（N-10，指完整 RFC8785/真签名——M5-d **sha256 链简版已落地 P2**，见 ③）、WORM（N-11，维持不做）。完整核查方法见批次 `exec/tester-report.md`。
 
+- 残留 #3/#5/#6/#9 已裁定边界与复核结论：[governance-boundaries.md](docs/governance-boundaries.md)
+
 ## 三层门禁（Tier3）
 
 - **建批静态校验**：layer ∈ plan/exec/audit；有 exec 必有 audit；产物路径契约；跨层引用；防篡改；

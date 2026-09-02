@@ -19,7 +19,9 @@
     "cordis.patch.yml",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/governance-boundaries.md",
+    "docs/governance-boundaries.en.md"
   ],
   "engines": {
     "node": ">=22"
