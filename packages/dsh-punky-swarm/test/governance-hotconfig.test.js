@@ -19,11 +19,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   T1 ALLOWED_TOP_KEYS 含 governance（config-watch 白名单，harden-plan §5.4 A.1）
 //   T2 validateOverlay 接受 governance / 拒绝未知顶层键与未知 capabilities 键
 //   T3 applyConfigChange ⑤ enabled 翻转 → dispose+重挂（装配级：apply + runtime.json 热写，pre listener 卸载/重注册）
-//   T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；README 示例规则 1 装配链路命中 → DENY + 收据 + 桥接事件流随动）
+//   T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs/guardrails-hook.md §3 示例规则 1 装配链路命中 → DENY + 收据 + 桥接事件流随动）
 //   T5 既有 ①-④ 分支回归：非 governance 键热变更不触发重挂、不抛错（④ resolveVerifyConfig 缺陷修复回归——
 //      基线 index.js 未导入 resolveVerifyConfig，任何 hot 变更在 ④ 抛 ReferenceError 阻断后续分支）
-//   T6 示例规则 1 命中（README ②：hard → DENY；含示例 3 manual_review → REQUIRE_APPROVAL 佐证）
-//   T7 示例规则 2 命中（README ②：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）
+//   T6 示例规则 1 命中（docs/guardrails-hook.md §3：hard → DENY；含示例 3 manual_review → REQUIRE_APPROVAL 佐证）
+//   T7 示例规则 2 命中（docs/guardrails-hook.md §3：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）
 // 装配级形态（apply + runtime.json 热写）对齐 legacy-fix.test.js（fake ctx 先例）与 hot-config.test.js H8
 // （真实 fs.watch + 防抖等待先例）；governance hook 单点语义回归由 governance-wiring/state/proto 组覆盖。
 import test from 'node:test';
@@ -84,7 +84,7 @@ function execOf(name, args) {
   return { name, arguments: args, callId: 'call-' + name + '-' + Math.random().toString(36).slice(2, 8) };
 }
 
-// ── README ② 示例规则（governance-hotconfig 与 README 同源：T6/T7/T4 断言即 README 预期行为）──
+// ── docs/guardrails-hook.md §3 示例规则（governance-hotconfig 与 docs/guardrails-hook.md 同源：T6/T7/T4 断言即文档预期行为）──
 const EX_RULE_FORBID_DELETE = {
   id: 'example-forbid-force-delete',
   tools: ['bash', 'pwsh'],
@@ -148,20 +148,20 @@ test('T3 applyConfigChange ⑤ enabled 翻转 → dispose+重挂（pre listener 
   }
 });
 
-test('T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；README 示例规则 1 装配链路命中）', async () => {
+test('T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs/guardrails-hook.md §3 示例规则 1 装配链路命中）', async () => {
   const root = freshRoot();
   writeRuntime(root, {}); // 预建 runtime.json
   const ctx = assemblyCtx();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   try {
     await sleep(HOT_SETTLE);
-    // 热写 README 示例规则 1（rules 数组整体替换）
+    // 热写 docs/guardrails-hook.md §3 示例规则 1（rules 数组整体替换）
     writeRuntime(root, { governance: { hook: { rules: [EX_RULE_FORBID_DELETE] } } });
     await sleep(HOT_SLEEP);
     assert.equal(ctx.preCount(), 1, 'rules 热更后 hook 仍挂载（重挂后 pre listener 1 个）');
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
     assert.equal(typeof pre, 'function');
-    // bash + rm -rf → DENY（示例规则 1 命中，README 预期行为）
+    // bash + rm -rf → DENY（示例规则 1 命中，docs/guardrails-hook.md §3 预期行为）
     let nextCalled = 0;
     const out = await pre(execOf('bash', { cmd: 'rm -rf /data' }), () => { nextCalled++; });
     assert.equal(out.kind, 'deny');
@@ -214,7 +214,7 @@ test('T5 既有 ①-④ 分支回归：非 governance 键热变更零重挂、�
   }
 });
 
-test('T6 示例规则 1 命中（README ②：hard → DENY；示例 3 → REQUIRE_APPROVAL）', () => {
+test('T6 示例规则 1 命中（docs/guardrails-hook.md §3：hard → DENY；示例 3 → REQUIRE_APPROVAL）', () => {
   const cfg = resolveGovernanceConfig({ rules: [EX_RULE_FORBID_DELETE, EX_RULE_ADMIN_APPROVAL] });
   const kernel = createGovernanceKernel(cfg);
   // 示例 1：bash + rm -rf → DENY（priority 2，ruleRefs 溯源）
@@ -228,13 +228,13 @@ test('T6 示例规则 1 命中（README ②：hard → DENY；示例 3 → REQUI
   // 不命中 → ALLOW
   const d3 = kernel.decide({ name: 'bash', arguments: { cmd: 'ls -la' } });
   assert.equal(d3.primitive, 'ALLOW');
-  // 示例 3：scope=admin → REQUIRE_APPROVAL（manual_review；README 说明 ask 依赖宿主通道，无则降级 deny）
+  // 示例 3：scope=admin → REQUIRE_APPROVAL（manual_review；docs/guardrails-hook.md §3 说明 ask 依赖宿主通道，无则降级 deny）
   const d4 = kernel.decide({ name: 'bash', arguments: { scope: 'admin', cmd: 'userdel alice' } });
   assert.equal(d4.primitive, 'REQUIRE_APPROVAL');
   assert.equal(d4.priority, 1);
 });
 
-test('T7 示例规则 2 命中（README ②：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）', () => {
+test('T7 示例规则 2 命中（docs/guardrails-hook.md §3：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）', () => {
   // flag.narrow=true → NARROW + narrowedParams（/timeout 7200 → 3600）
   const cfgOn = resolveGovernanceConfig({
     rules: [EX_RULE_TIMEOUT_NARROW],
@@ -257,5 +257,5 @@ test('T7 示例规则 2 命中（README ②：narrowable + flag.narrow → NARRO
   const dOff = kOff.decide({ name: 'bash', arguments: { timeout: 7200 } });
   assert.equal(dOff.primitive, 'DENY');
   assert.equal(dOff.priority, 4);
-  assert.ok(dOff.narrowedParams, 'flag-off 回退 DENY 仍携带收窄指引（README ② 预期行为注）');
+  assert.ok(dOff.narrowedParams, 'flag-off 回退 DENY 仍携带收窄指引（docs/guardrails-hook.md §3 预期行为注）');
 });

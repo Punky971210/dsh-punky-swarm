@@ -21,7 +21,17 @@
     "README.md",
     "CHANGELOG.md",
     "docs/governance-boundaries.md",
-    "docs/governance-boundaries.en.md"
+    "docs/governance-boundaries.en.md",
+    "docs/governance-technical.md",
+    "docs/governance-technical.en.md",
+    "docs/guardrails-hook.md",
+    "docs/guardrails-hook.en.md",
+    "docs/single-machine-capabilities.md",
+    "docs/single-machine-capabilities.en.md",
+    "docs/aip-compliance.md",
+    "docs/aip-compliance.en.md",
+    "docs/acps-communication.md",
+    "docs/acps-communication.en.md"
   ],
   "engines": {
     "node": ">=22"
