@@ -33,6 +33,10 @@ import { laneProgressClear, laneProgressWrite } from './resume.js'; // P1-02 断
 import { findTask } from './task-utils.js';
 // P2-07 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
+// M5-a（C5）：违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
+//   无循环依赖：store.js → escalation.js → event-types.js 单向链）。默认计入原语集（DENY/NARROW）亦复用
+//   escalation.js 导出常量（单一事实源——config resolve 默认与纯函数签名缺省同源）。
+import { countGovernanceRefusals, DEFAULT_ESCALATION_PRIMITIVES } from '../governance/escalation.js';
 
 const STORE_SCHEMA = BATCH_SCHEMA_V3;
 
@@ -197,6 +201,77 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       .sort();
   }
 
+  // M5-a（C6）：升级写公共内联函数——failed-escalate 与 governance-escalate 双源复用（写路径同构，
+  // 杜绝第二套暂停语义）。只做「paused 迁移 + 两事件同批追加」（不写盘），落盘由调用点统一 atomicWrite
+  // （保持单次原子写：paused + batch.phase + 源事件同批落盘，不调 setPhase 二次写防竞态）；
+  // R2 emitStateChange 亦由调用点统一触发（事件载荷 reason 区分双源）。
+  // 棘轮校验（machine.applyBatchTransition running→paused bv.ok）在调用点完成——本函数不重复校验。
+  function escalatePausedWrite(batch, { reason, eventType, fields }) {
+    batch.phase = 'paused';
+    batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from: 'running', to: 'paused', reason }));
+    batch.events.push(newEvent(eventType, fields));
+  }
+
+  // M5-a（C4/C5/C6）：违规计数记录 + 窗口评估 + 达阈值升级（批事件流单一事实源，原子写）。
+  //   入参 escalation = 装配侧 resolve 产物（{enabled, threshold, windowMs, primitives}）；调用方（桥接/
+  //   测试）负责归属（C2）后传入本方法。防御纵深（与 C3 计入过滤同标准，方法内重复守卫——桥接过滤
+  //   遗漏不误计不误升级）：enabled!==true → 零记录零升级（T20 关态零路径）；ruleRefs 空（状态门收据）
+  //   → 零记录零升级（T12 全排除）；primitive ∉ primitives → 零记录零升级（DEFER/PAUSE/类别外默认不计）。
+  //   升级执行（C6）：escalation.enabled ∧ phase==='running' → countGovernanceRefusals 窗口计数（C5）≥
+  //   threshold ∧ 棘轮 bv.ok → 公共函数 escalatePausedWrite（reason='governance-escalate' + 载荷事件）；
+  //   单次原子写（记录与升级同批落盘，不调 setPhase 二次写）；paused 后 phase 闸自然挡重复（C7）；
+  //   R2 埋点：升级伴随 emitStateChange batch.phase（reason='governance-escalate'，与 failed-escalate 对称）。
+  //   C8 观察者纪律：失败（批次缺失等）上抛由调用方 catch warn 隔离；本方法为同步段无 await。
+  //   返回 batch（含可能升级后的最新形态）；未升级 = 仅追加 governance.refusal 记录（T13 语义）。
+  function recordGovernanceRefusal(sessionId, batchId, { lane, receiptId, primitive, ruleRefs, tool, escalation = {} } = {}) {
+    // 防御守卫（C3 同标准）：enabled 关态 / 状态门收据（ruleRefs=[]）/ primitive 不在计入集 → 零事件零升级
+    if (escalation.enabled !== true) return null; // 不误调不误记（T20：enabled=false 批事件流零 governance.refusal）
+    if (!Array.isArray(ruleRefs) || ruleRefs.length === 0) return null; // 状态门收据永不计数（T12）
+    const primSet = new Set(escalation.primitives ?? DEFAULT_ESCALATION_PRIMITIVES);
+    if (!primSet.has(primitive)) return null; // DEFER/PAUSE/REQUIRE_APPROVAL 等默认不计（T12）
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId);
+    // C4：可计入收据 → 批事件流追加 governance.refusal（ts 由 newEvent 基座携带；C10 常量）
+    batch.events.push(newEvent(EVT.EVT_GOVERNANCE_REFUSAL, { lane, receiptId, primitive, ruleRefs, tool }));
+    // C5/C6：仅 phase==='running' 时评估；paused/planning 等 phase 只记录不升级（C7/T13）
+    let escalated = false;
+    if (batch.phase === 'running') {
+      const now = Date.now();
+      const count = countGovernanceRefusals(batch.events, {
+        windowMs: escalation.windowMs,
+        primitives: escalation.primitives,
+        now,
+      });
+      if (count >= (escalation.threshold ?? 3)) {
+        const bv = machine.applyBatchTransition('running', 'paused', { rules: ratchet });
+        if (bv.ok) {
+          // 尾窗收据摘要（C6 载荷 receiptIds 供审计回查）：窗口内可计入 refusal 的 receiptId 清单
+          const receiptIds = [];
+          for (const e of batch.events) {
+            if (!e || e.type !== EVT.EVT_GOVERNANCE_REFUSAL) continue;
+            if (e.receiptId === undefined || e.receiptId === null) continue; // 兼容缺 receiptId 记录（不摘要）
+            const tsMs = typeof e.ts === 'number' ? e.ts : Date.parse(String(e.ts ?? ''));
+            if (Number.isNaN(tsMs)) continue;
+            if (now - tsMs > escalation.windowMs) continue; // 窗口外不计入摘要（与计数窗口同界）
+            receiptIds.push(e.receiptId);
+          }
+          escalatePausedWrite(batch, {
+            reason: 'governance-escalate',
+            eventType: EVT.EVT_BATCH_GOVERNANCE_ESCALATE,
+            fields: { count, windowMs: escalation.windowMs, lane, receiptIds },
+          });
+          escalated = true;
+        }
+      }
+    }
+    batch.updatedAt = new Date().toISOString();
+    atomicWrite(batchFile(sessionId, batchId), batch);
+    if (escalated) {
+      emitStateChange({ type: 'batch.phase', sessionId, batchId, from: 'running', to: 'paused', reason: 'governance-escalate' });
+    }
+    return batch;
+  }
+
   function setMember(sessionId, batchId, lane, to, note = null) {
     let batch = readBatch(sessionId, batchId); // let：P1-02 终态清退经 laneProgressClear 返回新 batch（不突变入参）
     if (!batch) throw new Error('batch not found: ' + batchId);
@@ -306,15 +381,19 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     // 棘轮校验 fail-closed：running→paused 迁移被部署收紧删除时 bv.ok=false，不触发、不绕过棘轮；
     // phase 闸（T-2）：paused 后 phase 非 running 自然不重复；人工 resume 后计数从当前事件流重新评估；
     // 不自动重试：failed 仍为终态（schema failed: [] 不变），重做=重开新批次。
+    // M5-a（C6）：升级写走公共内联函数 escalatePausedWrite（failed-escalate 与 governance-escalate 双源复用，
+    //   写路径同构杜绝第二套暂停语义）；本段行为零变化（reason='failed-escalate' + batch.failed-escalate 事件原样）。
     let escalated = false;
     if (to === 'failed' && batch.phase === 'running') {
       const streak = countConsecutiveFailedSettles(batch.events);
       if (streak >= 3) {
         const bv = machine.applyBatchTransition('running', 'paused', { rules: ratchet });
         if (bv.ok) {
-          batch.phase = 'paused';
-          batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from: 'running', to: 'paused', reason: 'failed-escalate' }));
-          batch.events.push(newEvent(EVT.EVT_BATCH_FAILED_ESCALATE, { lane, count: streak }));
+          escalatePausedWrite(batch, {
+            reason: 'failed-escalate',
+            eventType: EVT.EVT_BATCH_FAILED_ESCALATE,
+            fields: { lane, count: streak },
+          });
           escalated = true;
         }
       }
@@ -595,6 +674,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
   return {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
+    recordGovernanceRefusal, // M5-a（C4/C5/C6）：违规计数记录 + 窗口评估 + 升级（批事件流单一事实源）
     readChains, updateChains, updateLaneProgress, // P1-02：laneProgress 断点指针持久化
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,

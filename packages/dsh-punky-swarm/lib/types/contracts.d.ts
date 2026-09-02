@@ -147,6 +147,19 @@ export type BatchEvent = BatchEventBase & ({
     lane: string;
     count: number;
 } | {
+    type: 'batch.governance-escalate';
+    count: number;
+    windowMs: number;
+    lane: string;
+    receiptIds: string[];
+} | {
+    type: 'governance.refusal';
+    lane: string;
+    receiptId: string;
+    primitive: string;
+    ruleRefs: string[];
+    tool: string;
+} | {
     type: 'member.settled';
     lane: string;
     from: MemberState;

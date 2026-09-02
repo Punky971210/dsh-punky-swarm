@@ -108,7 +108,7 @@ governance:
 
 ## 5. 事件桥接（收据 → 事件流）
 
-收据落盘 → 装配层 `onRefusal` 回调 → 批级事件流 `<root>/governance/events/refusal-<sessionId>.jsonl`（每行 `{type:'governance.refusal.recorded', ts, sessionId, receiptId, primitive, tool, callId}`），与 refusals 收据/ledger 并行可观测——分层治理「收据层 → 事件流」协同。仅事件可见性，**本桥接不触发批级状态迁移**（批级 paused 另有自动触发源：连续失败升级 `failed-escalate`，见 governance-technical §2）；回调抛错隔离 warn 不阻断裁决；`dispose` 后断开（幂等）；热更新重挂后桥接随动重新注入（见 §6）。
+收据落盘 → 装配层 `onRefusal` 回调 → 批级事件流 `<root>/governance/events/refusal-<sessionId>.jsonl`（每行 `{type:'governance.refusal.recorded', ts, sessionId, receiptId, primitive, tool, callId}`），与 refusals 收据/ledger 并行可观测——分层治理「收据层 → 事件流」协同。桥接默认仅事件可见性，**不触发批级状态迁移**；当 `governance.hook.escalation.enabled: true` 且收据归属到批次（经 member.dispatch 会话映射）时，规则拒绝（DENY/NARROW）按批滚动窗口计数，达阈值经棘轮校验可触发批级 paused（事件 reason='governance-escalate'，见 governance-technical §2）。**DEFER/PAUSE 会话短窗态不直映批级 paused**（短窗惰性自动恢复 vs 批级持久挂起，语义错配禁区）；状态门收据（ruleRefs 为空）不计入。批级 paused 自动触发源共二：连续成员失败 `failed-escalate`（既有）与护栏违规计数 `governance-escalate`。回调抛错隔离 warn 不阻断裁决；`dispose` 后断开（幂等）；热更新重挂后桥接随动重新注入（见 §6）。
 
 ## 6. 热更新（免重启）
 

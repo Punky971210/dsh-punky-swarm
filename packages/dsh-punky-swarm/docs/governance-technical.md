@@ -45,7 +45,7 @@
 ```
 
 - 批次阶段迁移：`batch_phase`（planning→running→paused→aborted|complete），终态后拒绝再写；
-- **paused 双触发源**：手动 `batch_phase(paused)`；或自动失败升级——同批连续失败 ≥3（事件 `reason='failed-escalate'`）经棘轮校验后自动转入 paused；
+- **paused 三触发源**：手动 `batch_phase(paused)`；或自动失败升级——同批连续失败 ≥3（`reason='failed-escalate'`）；或护栏违规计数升级——`governance.hook.escalation` 开启且归属批次的规则拒绝（DENY/NARROW）10 分钟窗口内 ≥3（`reason='governance-escalate'`，可配 threshold/windowMs/primitives）；均经棘轮校验后自动转入 paused，恢复=人工 `batch_phase(running)`。
 - 成员状态操作：pending→running（派发）/ running→review（提交评审）/ idle→running（恢复重派）；终态结算 merged/failed/skipped/conflict 走 `member_settle`，含对应门禁校验（plan merged 前 Plan 契约校验、exec merged 前 outputs 校验、audit merged 前 produce 校验）；
 - lane 声明 targets 时，merged 前逐一核对落盘（缺则拒 merged `GATE_TARGET_MISSING`，未变更拒 merged `GATE_TARGET_UNCHANGED`）；
 - audit 层产物含 `needHuman: true` 独立行时，merged 须携带人工裁决证据（契约 `human:<裁决人>:<时间>:<结论>`），缺失拒 merged `GATE_NEEDHUMAN_PENDING`。

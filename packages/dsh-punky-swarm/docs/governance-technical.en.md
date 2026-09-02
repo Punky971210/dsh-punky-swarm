@@ -45,7 +45,7 @@ Batch: planning -> running -> paused -> aborted | complete
 ```
 
 - Batch phase transitions: `batch_phase` (planning→running→paused→aborted|complete); writes are rejected after a terminal state;
-- **paused dual sources**: manual `batch_phase(paused)`; or automatic failure escalation — ≥3 consecutive failures in a batch (event `reason='failed-escalate'`) transitions to paused after the ratchet check;
+- **paused three sources**: manual `batch_phase(paused)`; or automatic failure escalation — ≥3 consecutive failures in the batch (`reason='failed-escalate'`); or guardrail-violation count escalation — with `governance.hook.escalation` enabled, rule refusals (DENY/NARROW) attributed to the batch reaching ≥3 within the 10-minute window (`reason='governance-escalate'`, threshold/windowMs/primitives configurable); all transition to paused after the ratchet check; recovery = manual `batch_phase(running)`.
 - Member state operations: pending→running (dispatch) / running→review (submit for review) / idle→running (recovery re-dispatch); terminal settlements merged/failed/skipped/conflict go through `member_settle`, which runs the corresponding gate validation (Plan-contract validation before plan merged, outputs validation before exec merged, produce validation before audit merged);
 - When a lane declares targets, each is verified to be on disk before merged (missing → merged rejected `GATE_TARGET_MISSING`, unchanged → `GATE_TARGET_UNCHANGED`);
 - When an audit-layer artifact contains a standalone `needHuman: true` line, merged requires human adjudication evidence (contract `human:<adjudicator>:<time>:<conclusion>`); missing → merged rejected `GATE_NEEDHUMAN_PENDING`.

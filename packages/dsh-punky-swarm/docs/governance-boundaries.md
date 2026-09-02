@@ -38,3 +38,9 @@
   - `test/governance-hotconfig.test.js:87` —— 注释明示示例规则同源（T6/T7/T4 断言即文档预期行为）；常量 :88-105 `EX_RULE_FORBID_DELETE` / `EX_RULE_TIMEOUT_NARROW` / `EX_RULE_ADMIN_APPROVAL` —— id / tools / match / violations / narrow 与文档 yaml 互映。
 - **变更流程（doc-update 口径）**：① 修改 [guardrails-hook.md](guardrails-hook.md) §3 示例 yaml → ② 同步 [guardrails-hook.en.md](guardrails-hook.en.md) §3（双语 1:1）→ ③ 同步 `test/governance-hotconfig.test.js` `EX_RULE_*` 常量（:88-105）→ ④ 跑 governance 组测试（`node --test test/governance-hotconfig.test.js`）确认预期行为断言仍绿。
 - **未来路径**：维持现状（口径记录），无未来路径项。
+
+## §4 护栏违规计数升级边界（护栏 → 批级 paused）
+
+- **能力结论**：护栏违规计数升级**默认关**——`governance.hook.escalation.enabled` 出厂为 `false`；显式开启且归属批次的规则拒绝（DENY/NARROW）在窗口内达阈值后，才可能自动暂停批次（批级 paused 自动触发源相应为三，见 governance-technical.md §2）。默认关 = 出厂零行为变化，非缺失项。
+- **证据位点**：触发链与配置键见 [guardrails-hook.md](guardrails-hook.md) §5「事件桥接」（escalation 触发条件）与 §3 配置；批级状态机与触发源见 [governance-technical.md](governance-technical.md) §2。
+- **维持现状 / 未来路径**：维持现状（默认关为出厂语义）。

@@ -15,6 +15,13 @@ export interface ReceiptAskMeta {
     outcome?: 'denied-no-approval' | 'denied-no-agent' | 'denied-rejected' | 'denied-cancelled' | 'unavailable' | 'allowed-once';
 }
 export type GovernancePrimitive = 'ALLOW' | 'DENY' | 'REQUIRE_APPROVAL' | 'DEFER' | 'NARROW' | 'PAUSE';
+export type EscalationPrimitive = 'DENY' | 'NARROW' | 'DEFER' | 'PAUSE';
+export interface GovernanceEscalationConfig {
+    enabled: boolean;
+    threshold: number;
+    windowMs: number;
+    primitives: readonly EscalationPrimitive[];
+}
 export type ViolationCategory = 'hard' | 'pausable' | 'narrowable' | 'soft' | 'manual_review' | 'ftra' | 'unknown';
 export interface Violation {
     code: string;
@@ -46,6 +53,7 @@ export interface GovernanceConfig {
         narrow: boolean;
         defer: boolean;
     };
+    escalation: GovernanceEscalationConfig;
 }
 export interface ReceiptAnchor {
     version: 1;

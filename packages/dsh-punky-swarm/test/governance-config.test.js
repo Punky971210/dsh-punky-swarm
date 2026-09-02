@@ -29,11 +29,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8').replace(/\r\n/g, '\n');
 
 // 全默认期望（蓝图 §7 yaml，已敲定 2026-08-31：enabled:true 默认开启可显式关闭）
+// M5-a（2026-09-02）：resolve 扩 escalation 段（D-5）——默认关形态（enabled:false / threshold:3 /
+//   windowMs:600000 / primitives:['DENY','NARROW']）；本期望随 config.js resolve 输出结构同步。
 const EXPECT_DEFAULTS = {
   enabled: true,
   rules: [],
   defaults: { deny: 'DENY' },
   flags: { pause: false, narrow: false, defer: false },
+  escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },
 };
 
 test('I2-1 默认合并：resolveGovernanceConfig(undefined) 与 resolveGovernanceConfig({}) → 全默认', () => {

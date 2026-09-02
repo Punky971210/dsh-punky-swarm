@@ -35,6 +35,9 @@ export const EVT_SYSTEM_RESTORED = 'system.restored'; // R-01 扩面（resume.js
 
 // 成员迁移
 export const EVT_MEMBER_SETTLED = 'member.settled';
+// D-1 方案 B（m5a-d1-20260902 批次）：派发登记事件（装配层 post-execute 观察 Manager 派发工具 → 写侧登记；
+// trajectory.js 读侧本地字面量 DISPATCH_EVENT 同步收敛为本常量——audit m5a-acceptance §7 附带建议）
+export const EVT_MEMBER_DISPATCH = 'member.dispatch';
 export const EVT_LANE_SKIPPED = 'lane.skipped';
 export const EVT_LANE_NEEDHUMAN = 'lane.needhuman';
 export const EVT_LANE_RECYCLED = 'lane.recycled';
@@ -63,3 +66,10 @@ export const EVT_GATE_NEEDHUMAN_BLOCKED = 'gate.needhuman_blocked';
 export const EVT_GATE_COMPLETE_BLOCKED = 'gate.complete_blocked';
 export const EVT_GATE_ROLE_MISSING = 'gate.role_missing'; // R-01 扩面（core.js:123 发端）
 export const EVT_GATE_ROLE_INVALID = 'gate.role_invalid'; // R-01 扩面（core.js:123 发端）
+
+// 治理违规计数（M5-a，C10）：EVT_GOVERNANCE_REFUSAL 为可计入事件（recordGovernanceRefusal 追加、
+// countGovernanceRefusals 纯函数读端）——exec-count lane 登记；EVT_BATCH_GOVERNANCE_ESCALATE 为升级事件
+// （C6 发端：计数达阈值经棘轮后批 paused 事件）——exec-wiring lane 登记（两常量在 build-20260902 批内齐备）。
+// 登记纪律：先登记常量后于调用点引用（见本文件头注释）。
+export const EVT_GOVERNANCE_REFUSAL = 'governance.refusal';
+export const EVT_BATCH_GOVERNANCE_ESCALATE = 'batch.governance-escalate';

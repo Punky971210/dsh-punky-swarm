@@ -63,6 +63,20 @@ export interface ReceiptAskMeta {
 export type GovernancePrimitive =
   | 'ALLOW' | 'DENY' | 'REQUIRE_APPROVAL' | 'DEFER' | 'NARROW' | 'PAUSE';
 
+// M5-a 违规计数升级（§4 escalation 键）可计入原语子集：DENY/NARROW 默认计入；DEFER/PAUSE 自带
+//   30s/60s 短窗自愈（state-store.js）默认不计、可显式扩入；REQUIRE_APPROVAL（ask 流程）与
+//   状态门收据（ruleRefs=[]）设计红线不可配入（§1.5）——resolve 校验层拒绝/回退（见 config.ts）。
+export type EscalationPrimitive = 'DENY' | 'NARROW' | 'DEFER' | 'PAUSE';
+
+// M5-a 违规计数升级配置（§4 装配键 governance.hook.escalation）——出厂默认关（enabled:false =
+//   零计数零记录零升级，桥接维持现状仅 jsonl；与 hook enabled:true 内核就位零拦截正交）。
+export interface GovernanceEscalationConfig {
+  enabled: boolean;         // 总开关（默认 false）
+  threshold: number;        // 窗口内可计入 refusal 数阈值（整数 ≥1；默认 3，与 failed-escalate 同值不同键）
+  windowMs: number;         // 滚动计数窗口毫秒（≥1000；默认 600000 = 10 分钟）
+  primitives: readonly EscalationPrimitive[]; // 计入的拒绝类原语子集（默认 ['DENY','NARROW']；freeze 后只读）
+}
+
 // 违规类别（classify 六分路 P0-P6 + 兜底 的判档依据，蓝图 §4）。
 export type ViolationCategory =
   | 'hard' | 'pausable' | 'narrowable' | 'soft' | 'manual_review' | 'ftra' | 'unknown';
@@ -94,6 +108,7 @@ export interface GovernanceConfig {
   rules: Rule[];            // 规则表（空表=零拦截，decide 恒 ALLOW）
   defaults: { deny: GovernancePrimitive }; // fail-closed 兜底（默认 DENY）
   flags: { pause: boolean; narrow: boolean; defer: boolean }; // 原语开关（CAGE feature-flag 借鉴，hf.md:83-85）
+  escalation: GovernanceEscalationConfig; // M5-a：违规计数升级（§4；resolve 恒返回——默认关形态）
 }
 
 // P2 哈希锚定信封（M5-d 简版）：version=1 表示 sha256 内容哈希链布局。

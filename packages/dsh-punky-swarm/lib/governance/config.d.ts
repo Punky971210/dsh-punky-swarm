@@ -1,4 +1,4 @@
-import type { GovernanceConfig, GovernancePrimitive, Rule } from './types.js';
+import type { GovernanceConfig, GovernanceEscalationConfig, GovernancePrimitive, Rule } from './types.js';
 export declare const GOVERNANCE_DEFAULTS: Readonly<{
     enabled: boolean;
     rules: readonly Rule[];
@@ -10,6 +10,7 @@ export declare const GOVERNANCE_DEFAULTS: Readonly<{
         narrow: boolean;
         defer: boolean;
     }>;
+    escalation: Readonly<GovernanceEscalationConfig>;
 }>;
 interface ConfigGovernanceInput {
     enabled?: unknown;
@@ -22,6 +23,14 @@ interface ConfigGovernanceInput {
         narrow?: unknown;
         defer?: unknown;
     };
+    escalation?: {
+        enabled?: unknown;
+        threshold?: unknown;
+        windowMs?: unknown;
+        primitives?: unknown;
+    };
 }
-export declare function resolveGovernanceConfig(config: ConfigGovernanceInput | null | undefined): GovernanceConfig;
+export declare function resolveGovernanceConfig(config: ConfigGovernanceInput | null | undefined, opts?: {
+    warn?: (msg: string) => void;
+}): GovernanceConfig;
 export {};

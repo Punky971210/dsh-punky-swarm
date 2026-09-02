@@ -38,3 +38,9 @@ Every section carries four elements: **capability conclusion / evidence location
   - `test/governance-hotconfig.test.js:87` — comment states the example rules share the same source (the T6/T7/T4 assertions are the documented expected behavior); constants :88-105 `EX_RULE_FORBID_DELETE` / `EX_RULE_TIMEOUT_NARROW` / `EX_RULE_ADMIN_APPROVAL` — id / tools / match / violations / narrow mirror the document yaml.
 - **Change workflow (doc-update policy)**: ① modify the example yaml in [guardrails-hook.en.md](guardrails-hook.en.md) §3 → ② sync [guardrails-hook.md](guardrails-hook.md) §3 (bilingual 1:1) → ③ sync the `EX_RULE_*` constants in `test/governance-hotconfig.test.js` (:88-105) → ④ run the governance group tests (`node --test test/governance-hotconfig.test.js`) to confirm the expected-behavior assertions still pass.
 - **Future path**: keep as-is (policy record), no future-path item.
+
+## §4 Guardrail-Violation Count Escalation Boundary (guardrails → batch paused)
+
+- **Capability conclusion**: guardrail-violation count escalation is **off by default** — `governance.hook.escalation.enabled` ships as `false`; only after it is explicitly enabled and rule refusals (DENY/NARROW) attributed to the batch reach the threshold within the window can a batch be automatically paused (the batch-level paused automatic sources correspondingly number three; see governance-technical.en.md §2). Default off = zero factory behavior change, not a gap.
+- **Evidence locations**: trigger chain and configuration key in [guardrails-hook.en.md](guardrails-hook.en.md) §5 "Event Bridging" (escalation trigger condition) and §3 configuration; batch-level state machine and trigger sources in [governance-technical.en.md](governance-technical.en.md) §2.
+- **Keep as-is / future path**: keep as-is (default off is the factory semantics).

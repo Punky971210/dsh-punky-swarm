@@ -25,6 +25,7 @@ import { createTools } from './tools/register.js';
 import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
+import { installDispatchRegistration } from './bridge/dispatch-register.js'; // D-1 方案 B 写侧登记点（m5a-d1 批次）
 import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
@@ -362,22 +363,98 @@ export const apply = (ctx, config = {}) => {
   //   <root>/governance/events/refusal-<sessionId>.jsonl（governance.refusal.recorded；仅事件可见性，
   //   不触发批级状态迁移——batch_phase 联动归 M5-a）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
   // P3 硬化（harden-plan §5.4 A）：governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
-  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults）经 applyConfigChange ⑤
+  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults / escalation）经 applyConfigChange ⑤
   //   dispose + 重挂即时生效（对齐 verifyMount ④ 模式；重挂后 refusals count 归零、pendingAsks 清空——
   //   运行时状态重置契约，交互处置详见 remountGovernanceHook 注释）。
+  // M5-a（C2/C3 桥接扩展，D-1 处置见下）：escalation.enabled=true 时，收据经「会话→批次归属」映射
+  //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（C4-C6
+  //   升级链在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → T16 静默降级
+  //   （仅 jsonl 可见、批事件流零新增、零升级——不误暂停）。
+  //   ⚠️ D-1 冲突处置（2026-09-02 exec-wiring lane 早报）：宿主派发流（member_status → subagent spawn）
+  //   当前无法取得被派发 worker 的真实会话 id（trajectory.recordDispatch 无生产调用方、subagent 工具参数
+  //   无 batchId/lane 结构化字段）→ 归属登记点（写侧）待 Leader/用户裁决后注入；读侧索引恒空 → 出厂
+  //   enabled=false 零路径 + 即使开启也 T16 静默降级（安全侧：漏计不误暂停）。本段接线骨架先行，登记点
+  //   落地（写 member.dispatch）后无需改动即可生效（rebuildDispatchIndex 幂等从批次事件重建）。
   // 装配层桥接回调（remount 复用：旧实例 dispose 断开回调后，新实例重新注入——桥接随动不断链）
   const refusalEventBridge = (receipt) => {
     try {
-      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt);
+      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt); // C1：jsonl 事件可见性（现状不动）
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] governance refusal event bridge failed (isolated): ' + String(e?.message ?? e));
     }
+    // M5-a 升级链（C2-C6；观察者纪律：任一失败仅 warn，不阻断 deny 裁决）
+    try {
+      const esc = governanceInstalledCfg?.escalation; // 热更感知：remount 后 governanceInstalledCfg 已更新
+      if (esc?.enabled !== true) return;              // T20：enabled=false 零路径（出厂默认）
+      const sessionId = receipt?.sessionId ?? 'cli';
+      if (sessionId === 'cli') return;                // cli 未归属不计数（T16）
+      let hit = dispatchIndex.get(sessionId);         // 归属映射（member.dispatch 重建；登记点待 D-1）
+      if (!hit) {
+        // miss 惰性重建：运行中登记点（写 member.dispatch）落地后，下一 refusal 即可命中（无需重启/热更）；
+        // 重建幂等（镜像 trajectory rebuildFromEvents）；refusal 为低频事件，全扫成本可接受
+        rebuildDispatchIndex();
+        hit = dispatchIndex.get(sessionId);
+      }
+      if (!hit) return;                               // T16：映射缺失 → 仅 jsonl、零批事件、零升级
+      store.recordGovernanceRefusal(hit.sessionId, hit.batchId, {
+        lane: hit.lane,
+        receiptId: receipt?.receiptId,
+        primitive: receipt?.decision?.primitive,
+        ruleRefs: receipt?.ruleRefs,
+        tool: receipt?.tool,
+        escalation: { enabled: true, threshold: esc.threshold, windowMs: esc.windowMs, primitives: esc.primitives },
+      });
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] governance escalation bridge failed (isolated): ' + String(e?.message ?? e));
+    }
   };
+  // M5-a 归属读侧索引（C2；D-1 冲突处置：登记点待裁决，读侧骨架先行）：
+  //   workerSessionId → { sessionId, batchId, lane }——从全部批次事件 member.dispatch 幂等重建
+  //   （镜像 trajectory.js rebuildFromEvents:58-71 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
+  //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（T16 安全侧）。
+  const dispatchIndex = new Map();
+  const rebuildDispatchIndex = () => {
+    dispatchIndex.clear();
+    let n = 0;
+    for (const { sessionId, batchId } of store.listAllBatches()) {
+      const batch = store.readBatch(sessionId, batchId);
+      if (!batch?.events) continue;
+      for (const ev of batch.events) {
+        if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
+          dispatchIndex.set(ev.workerSessionId, { sessionId, batchId, lane: ev.lane });
+          n++;
+        }
+      }
+    }
+    return n;
+  };
+  rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
+  // D-1 方案 B 写侧登记点（m5a-d1-20260902 批次；audit m5a-acceptance §7.4 裁决落地）：
+  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork/send_message）
+  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
+  //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
+  //   :414-430 同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（T16 静默，
+  //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
+  //   读侧骨架零改动（不触碰 :414-430 逻辑；写侧只追加事件 + 维护同一 Map）。
+  let dispatchReg = installDispatchRegistration(ctx, {
+    store,
+    dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
+    config,
+    // 装配注入面（方案 B）：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
+    //   缺省 undefined → 模块内 member_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
+    //   yml 静态块不适用时走兜底意图——两路共存，T16 语义保持。
+    resolveBatchContext: config?.dispatch?.resolveBatchContext,
+    logger: ctx.logger,
+  });
+  if (dispatchReg.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] D-1 dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（方案 B，零宿主改造）');
+  }
   // 当前已挂载 hook 的解析配置快照（P3 热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
   let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {});
   let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge });
   if (governanceHook.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl)');
+    ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
+      + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
   }
   // P3 热切重挂（⑤ 分支 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
   //   = enabled 翻转或 rules/flags/defaults 实际变更；JSON 序敏感——规则序参与裁决，变化即重挂）→
@@ -496,6 +573,7 @@ export const apply = (ctx, config = {}) => {
     if (panelStream) { panelStream.dispose(); panelStream = null; }
     verifyMount?.dispose();
     governanceHook?.dispose();
+    dispatchReg?.dispose?.(); // D-1 方案 B 登记点退订（幂等）
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };
