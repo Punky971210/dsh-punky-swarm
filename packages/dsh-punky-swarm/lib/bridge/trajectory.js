@@ -22,11 +22,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { join } from 'node:path';
 import { TRAJECTORY_DEFAULTS } from '../schema.js';
 import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
+import { EVT_MEMBER_DISPATCH } from '../state/event-types.js'; // D-1 方案 B 收敛（audit m5a-acceptance §7 附带建议 #3）
 
 const ANOMALY_EVENT = 'trajectory/anomaly'; // 首选通道：同运行时实时订阅（Cordis 总线事件）
-const DISPATCH_EVENT = 'member.dispatch';   // 派发时记录 worker 会话 id（桥接器 recordDispatch 写入）
 const ANOMALY_RECORD = 'lane.anomaly';      // 异常留痕事件（batch.events，面板可见）
 const MAILBOX_KIND = 'anomaly';             // broadcast 消息 kind
+// 派发事件 type 收敛：原本地字面量 DISPATCH_EVENT='member.dispatch' 收敛为 event-types.js 常量
+// EVT_MEMBER_DISPATCH（同值，行为零变化）；读侧骨架 index.js:414-430 保持自身字面量零改动（D-1 契约）。
+const DISPATCH_EVENT = EVT_MEMBER_DISPATCH;
 
 // 装配开关（P1-01：缺省默认开——readCapability 合并注册表 default {enabled:true}；
 //   显式 capabilities.trajectory.enabled:false 可关，false 时桥接不挂载，零运行时开销）

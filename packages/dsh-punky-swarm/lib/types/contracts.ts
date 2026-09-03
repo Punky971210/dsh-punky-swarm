@@ -197,6 +197,8 @@ export type BatchEvent = BatchEventBase & (
   | { type: 'batch.created'; batchId: string; sessionId: string }                     // EVT_BATCH_CREATED
   | { type: 'batch.phase'; from: BatchPhase; to: BatchPhase; reason?: string }        // EVT_BATCH_PHASE
   | { type: 'batch.failed-escalate'; lane: string; count: number }                    // EVT_BATCH_FAILED_ESCALATE
+  | { type: 'batch.governance-escalate'; count: number; windowMs: number; lane: string; receiptIds: string[] } // EVT_BATCH_GOVERNANCE_ESCALATE（M5-a C6）
+  | { type: 'governance.refusal'; lane: string; receiptId: string; primitive: string; ruleRefs: string[]; tool: string } // EVT_GOVERNANCE_REFUSAL（M5-a C4）
   | { type: 'member.settled'; lane: string; from: MemberState; to: MemberState; note: string | null } // EVT_MEMBER_SETTLED
   | { type: 'lane.skipped'; lane: string; from: MemberState; note: string }           // EVT_LANE_SKIPPED
   | { type: 'lane.needhuman'; lane: string; path: string | null }                     // EVT_LANE_NEEDHUMAN

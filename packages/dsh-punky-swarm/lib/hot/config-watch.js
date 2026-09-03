@@ -47,11 +47,13 @@ const PARSE_RETRY_MAX = 4;         // 重试上限（仍失败 → 保持旧快�
 const DEFAULT_POLL_MS = 1000;      // 存在性轮询间隔（文件缺失 bootstrap；文件级 watch 需文件存在）
 
 // 允许的 runtime.json 顶层键：注册表能力根（aip/acps/capabilities）+ 插件消费的非能力配置段
-// （mailbox/resume/ratchet/escalation）。热更新只做值传播、只覆盖既有 schema 路径——
-// 拒绝未知顶层键防拼写漂移产生幽灵配置（设计 §3.1.3「拒绝未知顶层键」；契约验收④）
+// （mailbox/resume/ratchet/escalation/governance——P3 硬化后 governance 纳入热切，harden-plan §5.4 A：
+//   子键覆盖由 deepMerge 传播，仅顶层校验，与 mailbox 等非能力段同口径；装配侧 applyConfigChange ⑤
+//   消费 governance 变化做 dispose+重挂）。
+// 热更新只做值传播、只覆盖既有 schema 路径——拒绝未知顶层键防拼写漂移产生幽灵配置（设计 §3.1.3「拒绝未知顶层键」；契约验收④）
 export const ALLOWED_TOP_KEYS = new Set([
   'aip', 'acps', 'capabilities',
-  'mailbox', 'resume', 'ratchet', 'escalation',
+  'mailbox', 'resume', 'ratchet', 'escalation', 'governance',
 ]);
 
 // capabilities 子键白名单（注册表 path[0]==='capabilities' 的既有键）——
