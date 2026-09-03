@@ -1,6 +1,6 @@
 # Call-Level Guardrails (Governance Hook) Technical Manual
 
-> This document describes the tool-call-level guardrails: 6-primitive runtime semantics, rule configuration and examples, refusal receipts and verification, event bridging, hot update, and non-provisions. The batch-level governance engine lives in [governance-technical.en.md](governance-technical.en.md); capability-boundary declarations live in [governance-boundaries.en.md](governance-boundaries.en.md).
+> This document describes the tool-call-level guardrails: 6-primitive runtime semantics, rule configuration and examples, refusal receipts and verification, event bridging, hot update, non-provisions, and capability boundaries & trade-offs. The batch-level governance engine lives in [governance-technical.en.md](governance-technical.en.md); capability-boundary declarations live in [governance-boundaries.en.md](governance-boundaries.en.md).
 > 中文: [guardrails-hook.md](guardrails-hook.md)
 
 The guardrails subscribe to the host tool lifecycle events `tools/pre-execute` + `tools/post-execute` (additive on the plugin side, zero host modification); a 6-primitive pure-function kernel adjudicates (`lib/governance/`, synchronous, deterministic, zero IO). Complementary to the batch-level task difficulty gate, no conflict:
@@ -141,3 +141,48 @@ The current guardrails provide in-process, single-machine, rule-table-driven cal
 - streaming event push (tools/result + SSE class);
 - full RFC8785 (numeric normalization / per-character escaping) and true-signature evidence envelope (the sha256-chain simplified version is provided, see §4);
 - immutable storage (write-once class).
+
+## 8. Capability Boundaries & Trade-offs
+
+The call-level guardrails extend governance beyond the task level with a call-level line of defense while keeping determinism, auditability, zero added dependencies, and zero host modification. The summary below is grouped into **enhancement surface / capability boundaries / technical trade-offs** (implementation details in §1–§7).
+
+### 8.1 Enhancement Surface (10 items)
+
+Relative to task-level governance, the guardrails add ten governance capabilities:
+
+1. **Finer granularity: task level (inside batch orchestration, before dispatch) → call level (at each call's execution)** — bounds checks no longer stop at dispatch time; they happen on every tool call (§1);
+2. **Two independent lines of defense** — the task-level difficulty gate (how tasks are dispatched) and the call-level guardrails (whether each call is out of bounds) are wired independently and apply in series; neither can be bypassed (comparison table above);
+3. **6 primitives per call** — ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE land on every call; non-ALLOW synchronously produces a refusal receipt (§2);
+4. **Deterministic pure function** — the kernel is synchronous, deterministic, zero IO, free of external state: same input → same output, unit-testable and reproducible (§2);
+5. **Verifiable audit hash chain** — same-session receipts are chained by ts order into a sha256 chain; tampering breaks the chain and verify locates it (§4);
+6. **Runtime states DEFER/PAUSE** — session-level defer/pause genuinely take effect as file states (window + lazy expiry recovery), not just hints (§2);
+7. **Hot update** — rules / switches / defaults take effect at runtime without restart (§6);
+8. **Two-layer violation escalation** — call-level violation counts reaching the threshold can trigger batch-level paused through ratchet validation (§5);
+9. **Secure factory defaults** — enabled by default with a fail-closed fallback (unclassified violations → DENY, never ALLOW): the line of defense exists on install, complementary to factory zero interception that needs configured rules to actually fire (see 8.2-2);
+10. **Unified refusal format** — the `[governance:<primitive>]` prefix aligns with the difficulty-gate style, letting the caller distinguish "task level unassessed" from "call level out of bounds" (§2).
+
+### 8.2 Capability Boundaries (8 items)
+
+Usage boundaries of the guardrails (scope statements, not defects; the feature-level non-provision list lives in §7):
+
+1. **Tool side, not model side** — adjudication acts on the host tool-call layer (pre/post-execute); the model's own generation and reasoning are outside the guardrails' scope (see §7);
+2. **Factory zero interception; rules must be configured to take effect** — with `rules: []`, decide is always ALLOW; "install and use, existing behavior unchanged" holds only once rules are configured (§3);
+3. **Single-machine, plugin-scoped; not a gateway** — in-process, single-machine, plugin form; out-of-process / MCP gateway paths are not provided (see §7);
+4. **NARROW is guidance-level; the host forbids rewriting** — NARROW lands as deny + narrowing guidance, never transparent parameter rewriting (the host forbids input rewriting, §2/§7);
+5. **Tamper-evidence ≠ deletion protection** — the chain guarantees that landed receipts cannot be silently altered (tampering breaks the chain and is locatable), but the receipt files themselves can be deleted: no WORM / write-once storage is provided (§4/§7);
+6. **Attribution depends on registration** — receipt → batch-level linkage relies on registration via the member.dispatch session mapping; unattributed receipts stay event-visible only and never trigger batch-level transitions (§5);
+7. **No authoritative signature** — hash anchoring is self-proving within the chain, with no third-party authoritative signature backing it (full RFC8785 and true signatures are not provided, §4/§7);
+8. **Rule version is not snapshotted** — receipts record the matched rule IDs (ruleRefs) and the reason, not the rule-set version in force at adjudication time; after a hot-update wholesale rule replacement, old receipts cannot exactly reproduce the rule set that judged them (§4/§6).
+
+### 8.3 Technical Trade-offs
+
+**Strengths**
+- **Deterministic and testable** — pure synchronous kernel, same input → same output; rule behavior can be locked down by unit tests and reproduced for verification;
+- **Zero added dependencies** — Node standard library + host peer only, no third-party runtime dependency (§2);
+- **Zero host modification** — additive wiring on the plugin side; the host only exposes its existing lifecycle events, no intrusion (§1).
+
+**Costs**
+- **No model-side line of defense** — the model's own behavior is outside the line (see 8.2-1);
+- **NARROW does not actually rewrite** — it only guides narrowing and cannot modify parameters itself; the actual effect depends on the caller's cooperation (see 8.2-4);
+- **No WORM** — tamper-evidence does not prevent deletion; the strength ceiling of the audit trail is self-proving chaining (see 8.2-5);
+- **Hot reload resets in-flight approvals** — after a hot re-mount, the outcome backfill of in-flight asks across the re-mount is lost (`ask.initiated` already landed at pre, so the audit survives; §6).
