@@ -15,7 +15,7 @@ English: [README.en.md](README.en.md)
 - **进程内消息与环防护**——mailbox 三箱（inbox / outbox / broadcast）原子写与确认，环防护抑制消息风暴，通信路径可追踪。
 - **崩溃可恢复**——心跳过期检测 + 进度 checkpoint 保全：崩溃后现场与产物可查、新 worker 可接续；不自动续跑，失败任务重做即开新批次。
 - **只读监控面板**——Web UI 直接查看批次、lane 状态与事件时间线，只读不干预，人工不可误改。
-- **工具调用级护栏（6 原语）**——ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE 六种裁决原语；出厂零拦截，按需配置规则，命中越界即产出**可验篡改的拒绝收据**（sha256 哈希链锚定，复核可定位篡改位置）。裁决确定、可预期、便于测试。
+- **工具调用级护栏（6 原语）**——双层治理中的调用级防线（本地优先、证据可审计）：除派发前难度门禁外，每次工具调用再按 ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE 六原语逐调用裁决是否越界，命中即产出**可验篡改的拒绝收据**（sha256 哈希链锚定，复核可定位篡改位置）。裁决确定、可预期、便于测试，适合需要**可审计防越界、确定性可测试治理**的本地多 Agent 编排。护栏事件以收据与事件流文件留痕、可复核（事件级可观测），暂无独立 UI 面板；出厂 `rules` 为空即零拦截，按需配置规则后生效。
 - **热更新配置，免重启**——护栏规则与开关写入 `runtime.json` 即时生效，进程无需重启。
 - **国标 AIP 兼容**——遵循《人工智能 智能体互联》GB/Z 185-2026 描述结构（工具 6 属性 / 智能体 ACS / 消息任务会话映射），仅增不改、可插拔。
 - **可选的 ACPs 通讯**——对外 mTLS 服务端点、registry 注册与外部发现，默认全部关闭（安全默认）。
@@ -118,7 +118,7 @@ flowchart LR
 | 文档 | 内容 |
 |---|---|
 | [docs/governance-technical.md](docs/governance-technical.md) | 批级治理技术手册：三层门禁、状态机、wavePlan 契约、20 治理工具参考、装配键表、生命周期 |
-| [docs/guardrails-hook.md](docs/guardrails-hook.md) | 调用级护栏技术手册：6 原语运行期语义、规则配置与示例、拒绝收据与验签、热更新、边界与不提供项 |
+| [docs/guardrails-hook.md](docs/guardrails-hook.md) | 调用级护栏技术手册：6 原语运行期语义、规则配置与示例、拒绝收据与验签、热更新、边界与不提供项、能力边界与取舍 |
 | [docs/aip-compliance.md](docs/aip-compliance.md) | 国标 AIP 兼容明细：工具 6 属性、ACS 字段集、消息/任务/会话映射、身份体系 |
 | [docs/acps-communication.md](docs/acps-communication.md) | ACPs 通讯明细：mTLS 端点、内部桥接、registry / discovery、配置示例、能力边界 |
 | [docs/governance-boundaries.md](docs/governance-boundaries.md) | 能力边界声明：哈希链与 canonical 边界、规则示例与测试同步维护口径 |
