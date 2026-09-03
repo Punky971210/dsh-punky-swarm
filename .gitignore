@@ -27,3 +27,6 @@ docs/*
 !docs/benchmark-adoption-index.md
 CONTRIBUTING.md
 CHANGELOG.md
+
+# user-local decisions (not uploaded)
+**/docs/decisions/
