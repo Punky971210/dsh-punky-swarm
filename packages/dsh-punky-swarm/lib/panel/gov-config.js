@@ -19,21 +19,41 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     // 治理配置页（settings.section，id='governance-config' order=16；main.js apply() 注册）。
     // 段内仅 function 声明：本段物理序在 main.js 之后（工厂体以 module.exports/return 收尾），
     // 依赖函数声明提升在 apply 注册引用时可用——禁止在本段顶层出现 const/let/var（死区永不初始化）。
-    // 引用的 T/cardBase/tt/chip/STATE/Dot/Chip/SectionTitle/Skeleton 等为前序段绑定（渲染时已初始化）。
+    // 引用的 T/cardBase/tt/chip/STATE/Dot/Chip/Skeleton 等为前序段绑定（渲染时已初始化）；
+    // 本页专属标题/复选行/字号基准 = 段内 G()/GovHeader/PresetCheckRow（不动共享 SectionTitle——避免波及其它视图）。
     //
     // 数据契约 = GET /api/dsh-punky-swarm/config → { overlay, applied, presets }
     //   overlay = <root>/config/runtime.json governance 段原样（磁盘原文；无 = null）
     //   applied = 引擎 resolve 后的生效快照——preset 已被展开为 rules（不保留 preset 键），
     //             故 preset 当前值只读 overlay.hook.preset；applied 仅用于「生效规则数/生效状态」展示。
-    //   presets = [{ id, count }] 注册目录元数据（下拉规则数摘要）。
+    //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
     // 写契约 = POST 同路径，body { governance: { hook: { enabled, preset?, escalation, flags } } }，
     //         400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射）。
+    // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
+    //   同批引用 compose+l1 会被引擎唯一性校验拒（resolve 回退空表）→ UI 不复选 compose：
+    //   勾选集仅 l1/l2 两 checkbox，全勾 = ["l1-sensitive","l2-resource"]（18 条，compose 等效）；
+    //   全不勾 = 省略 preset 键（后端删键回出厂零规则；空数组/空串会被后端 400 拒）。
 
+    // —— 字号基准（配置页局部；宿主 settings 卡片 15/13/12 尺度对齐，整体较旧版上调一级）——
+    // 本段顶层禁 const（物理序在 main.js 的 return 之后，死区永不初始化）→ 一律函数声明取数。
+    function G() {
+      return {
+        title: 13,   // 卡片标题
+        row: 13,     // 行标题（开关/复选行）
+        sub: 12,     // 行说明/提示
+        label: 12.5, // 字段名 label
+        input: 13,   // 输入/数值控件文本
+        cap: 12,     // 小标注/警示/合计行
+        chip: 11.5,  // mono 编码小件（原语 chip / 单位后缀）
+        btn: 13      // 动作按钮
+      };
+    }
     function fmtN(k, n) { return tt(k).replace('{n}', String(n)); }
     function pickBool(a, b, d) { return typeof a === 'boolean' ? a : typeof b === 'boolean' ? b : d; }
     function pickNum(a, b, d) { return typeof a === 'number' && isFinite(a) ? a : typeof b === 'number' && isFinite(b) ? b : d; }
     function clockOf(d) { try { return d.toTimeString().slice(0, 8); } catch { return ''; } }
-    function presetIds() { return ['l1-sensitive', 'l2-resource', 'compose']; }
+    // 可选装载复选集 = l1 + l2（不再提供 compose 作独立项；compose 仅作旧值回显展开，见 formPresetOf）
+    function presetOptionIds() { return ['l1-sensitive', 'l2-resource']; }
     function escPrimitives() { return ['DENY', 'NARROW', 'DEFER', 'PAUSE']; } // REQUIRE_APPROVAL 红线不可经表单（引擎契约），不出现
     function presetMeaningKey(id) {
       switch (id) {
@@ -42,6 +62,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         case 'compose': return 'gov.preset.compose';
         default: return null;
       }
+    }
+    // GET overlay.hook.preset 回显 → 表单勾选集。兼容：单字符串（compose/l1-sensitive/l2-resource）|
+    // string[] | 空/省略 → null（全不勾）。'compose' = l1+l2 展开全勾（旧值迁移，保存归一为数组）。
+    // 含未注册 id / 非法形态 → { custom: <原文> }（无勾选位可表，保存原样保留 + 警示）。
+    function formPresetOf(pv) {
+      if (pv === undefined || pv === null || pv === '') return null;
+      const raw = typeof pv === 'string' ? [pv] : Array.isArray(pv) ? pv : null;
+      if (!raw) return { custom: pv };
+      const opts = presetOptionIds();
+      const sel = [];
+      for (const id of raw) {
+        if (id === 'compose') { if (sel.indexOf('l1-sensitive') < 0) sel.push('l1-sensitive'); if (sel.indexOf('l2-resource') < 0) sel.push('l2-resource'); }
+        else if (opts.indexOf(id) >= 0) { if (sel.indexOf(id) < 0) sel.push(id); }
+        else return { custom: pv }; // 含未知 id（如并发手工混入 compose+l1 的旧文件）→ 整值原样保留
+      }
+      return opts.filter((id) => sel.indexOf(id) >= 0).length ? opts.filter((id) => sel.indexOf(id) >= 0) : null;
+    }
+    // 表单勾选集 → POST 装载键：null = 省略 preset 键（回出厂零规则，后端删键）；数组 = string[] 装载键；
+    // { custom } = 原文透传（后端 unknown-preset 校验自行裁决）。
+    function presetWireOf(fp) {
+      if (fp === null || fp === undefined) return undefined;
+      if (fp && typeof fp === 'object' && !Array.isArray(fp) && 'custom' in fp) return fp.custom;
+      return fp; // string[]（deriveForm 归一非空）
     }
     function errorLabelKey(code) {
       switch (code) {
@@ -75,7 +118,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return data;
     }
     // 表单初值：overlay（磁盘原文）优先、applied（生效默认补齐）兜底——字段粒度合并。
-    // preset 只读 overlay.hook.preset（applied 不保留 preset）；null=出厂空表（保存省略键）。
+    // preset 只读 overlay.hook.preset（applied 不保留 preset）；null=出厂空表（保存省略键）；
+    // 回显兼容映射见 formPresetOf：'compose' → 全勾数组、string[] → 按项勾、空/省略 → null。
     function deriveForm(data) {
       const ov = data && data.overlay && data.overlay.hook ? data.overlay.hook : null;
       const ap = data && data.applied && data.applied.hook ? data.applied.hook : null;
@@ -83,13 +127,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const escA = (ap && ap.escalation) || {};
       const flO = (ov && ov.flags) || {};
       const flA = (ap && ap.flags) || {};
-      let preset = null;
-      const pv = ov && ov.preset;
-      if (typeof pv === 'string' && pv !== '') preset = pv;
-      else if (Array.isArray(pv) && pv.length) preset = pv.slice();
       return {
         enabled: pickBool(ov && ov.enabled, ap && ap.enabled, true),
-        preset: preset,
+        preset: formPresetOf(ov && ov.preset), // null | string[]（勾选集） | { custom: 原文 }
         escalation: {
           enabled: pickBool(escO.enabled, escA.enabled, false),
           threshold: String(pickNum(escO.threshold, escA.threshold, 3)),
@@ -147,18 +187,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         style: Object.assign({}, cardBase, { padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9 })
       },
         title
-          ? React.createElement('div', { style: { fontSize: 11.5, fontWeight: 700, color: T.text2, letterSpacing: 0.3 } }, title)
+          ? React.createElement('div', { style: { fontSize: G().title, fontWeight: 700, color: T.text2, letterSpacing: 0.3 } }, title)
           : null,
         children
+      );
+    }
+    // 配置页主标题（SectionTitle 同形态、字号上调到宿主设置页标题尺度；不改共享 widgets.SectionTitle——避免波及其它视图）
+    function GovHeader({ children }) {
+      return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 } },
+        React.createElement('span', { style: { width: 3, height: 14, borderRadius: 999, background: T.accent } }),
+        React.createElement('span', { style: { fontSize: 14, fontWeight: 700, color: T.text, letterSpacing: 0.3 } }, children)
       );
     }
     function SwitchRow({ checked, onChange, title, desc, disabled }) {
       const on = !!checked;
       return React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10 } },
         React.createElement('div', { style: { flex: 1, minWidth: 0 } },
-          React.createElement('div', { style: { fontSize: 12.5, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
+          React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
           desc
-            ? React.createElement('div', { style: { fontSize: 11, color: T.text3, lineHeight: 1.45, marginTop: 3 } }, desc)
+            ? React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.45, marginTop: 3 } }, desc)
             : null
         ),
         React.createElement('button', {
@@ -188,21 +235,58 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         )
       );
     }
+    // preset 复选行（规则预设多选）：行 = 语义标题 + id · 规则数（mono）+ 右侧方形勾选框（与 SwitchRow 同几何）
+    function PresetCheckRow({ checked, onChange, title, sub, disabled }) {
+      const on = !!checked;
+      return React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10 } },
+        React.createElement('div', { style: { flex: 1, minWidth: 0 } },
+          React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, fontFamily: T.mono, lineHeight: 1.45, marginTop: 3 } }, sub)
+        ),
+        React.createElement('button', {
+          type: 'button',
+          role: 'checkbox',
+          'aria-checked': on,
+          disabled: !!disabled,
+          onClick: () => onChange(!on),
+          style: {
+            position: 'relative', boxSizing: 'border-box', flex: 'none', marginTop: 1,
+            width: 18, height: 18, borderRadius: 5, padding: 0,
+            background: on ? T.accent : T.card,
+            border: '1px solid ' + (on ? T.accent : T.border),
+            cursor: disabled ? 'default' : 'pointer',
+            opacity: disabled ? 0.55 : 1,
+            transition: 'background .15s ease, border-color .15s ease'
+          }
+        },
+          on
+            ? React.createElement('span', {
+                style: {
+                  position: 'absolute', top: 3, left: 5,
+                  width: 5, height: 9,
+                  border: 'solid #fff', borderWidth: '0 2px 2px 0',
+                  transform: 'rotate(45deg)'
+                }
+              })
+            : null
+        )
+      );
+    }
     function NumberField({ label, value, onChange, min, step, suffix, disabled }) {
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-        React.createElement('span', { style: { flex: 1, fontSize: 11.5, color: T.text2, lineHeight: 1.3 } }, label),
+        React.createElement('span', { style: { flex: 1, fontSize: G().label, color: T.text2, lineHeight: 1.3 } }, label),
         React.createElement('input', {
           type: 'number', min: min, step: step, value: value, disabled: !!disabled,
           onChange: (e) => onChange(e.target.value),
           style: {
             width: 96, background: T.card, color: T.text,
             border: '1px solid ' + T.border, borderRadius: 8, padding: '5px 8px',
-            fontSize: 12, fontFamily: T.mono, outline: 'none', textAlign: 'right',
+            fontSize: G().input, fontFamily: T.mono, outline: 'none', textAlign: 'right',
             opacity: disabled ? 0.55 : 1
           }
         }),
         suffix
-          ? React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, width: 20, flex: 'none' } }, suffix)
+          ? React.createElement('span', { style: { fontSize: G().chip, color: T.text3, fontFamily: T.mono, width: 20, flex: 'none' } }, suffix)
           : null
       );
     }
@@ -214,7 +298,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             key: p, type: 'button', disabled: !!disabled,
             onClick: () => onChange(on ? value.filter((x) => x !== p) : value.concat([p])),
             style: {
-              fontFamily: T.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
+              fontFamily: T.mono, fontSize: G().chip, fontWeight: 700, letterSpacing: 0.3,
               padding: '3px 10px', borderRadius: 999, cursor: disabled ? 'default' : 'pointer',
               color: on ? '#fff' : T.text2,
               background: on ? T.accent : 'transparent',
@@ -320,6 +404,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       }
       function patch(p) { setForm(Object.assign({}, form, p)); }
       function patchEsc(p) { patch({ escalation: Object.assign({}, form.escalation, p) }); }
+      // preset 复选切换：勾选集 = string[] 子集（保序）；全取消 → null（保存省略键回出厂）；自定义引用被替换为显式勾选
+      function togglePreset(id, on) {
+        const opts = presetOptionIds();
+        let cur = Array.isArray(form.preset) ? form.preset.slice() : [];
+        if (on) { if (cur.indexOf(id) < 0) cur.push(id); }
+        else cur = cur.filter((x) => x !== id);
+        const next = opts.filter((x) => cur.indexOf(x) >= 0);
+        patch({ preset: next.length ? next : null });
+      }
       async function handleSave() {
         const esc = form.escalation;
         const threshold = Number(esc.threshold);
@@ -329,12 +422,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         if (!Number.isFinite(windowMs) || windowMs < 1000) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
+        // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
+        // { custom } = 原文透传。全不勾必须省略键（后端拒空数组/空串，runtime-config.js §③）
+        const presetWire = presetWireOf(form.preset);
         const hook = {
           enabled: !!form.enabled,
           escalation: { enabled: !!esc.enabled, threshold: threshold, windowMs: windowMs, primitives: prims },
           flags: { narrow: !!form.narrow }
         };
-        if (form.preset) hook.preset = form.preset; // string | array 原文；null=出厂空表（省略键）
+        if (presetWire !== undefined) hook.preset = presetWire;
         const payload = { governance: { hook: hook } };
         const beforeSig = meta && meta.applied ? hookSig(meta.applied.hook) : null;
         setErr(null); setState('saving');
@@ -355,13 +451,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       // —— loading / error 态（无表单可编辑时的骨架与失败面板）——
       if (!form || !meta) {
         return React.createElement('div', { 'aria-busy': 'true', style: { display: 'flex', flexDirection: 'column', gap: 10, color: T.text, fontFamily: T.font } },
-          React.createElement(SectionTitle, null, state === 'error' ? tt('gov.error.net') : tt('gov.loading')),
+          React.createElement(GovHeader, null, state === 'error' ? tt('gov.error.net') : tt('gov.loading')),
           state === 'error'
-            ? React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', color: T.error, fontSize: 12 } },
+            ? React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', color: T.error, fontSize: G().label } },
                 React.createElement('span', null, tt('gov.error.net')),
                 React.createElement('button', {
                   type: 'button', className: 'psw-btn', onClick: reload,
-                  style: { background: T.card, color: T.text2, border: '1px solid ' + T.border, borderRadius: 8, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }
+                  style: { background: T.card, color: T.text2, border: '1px solid ' + T.border, borderRadius: 8, padding: '5px 12px', fontSize: G().label, cursor: 'pointer' }
                 }, tt('gov.reset'))
               )
             : React.createElement('div', null,
@@ -378,14 +474,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const busy = state === 'saving' || state === 'confirming';
       const liveOk = state === 'ready' || state === 'live';
       const pending = state === 'saving' || state === 'confirming';
-      const selectable = presetIds();
-      const selValue = typeof form.preset === 'string' && selectable.indexOf(form.preset) >= 0 ? form.preset : '';
-      const customPreset = form.preset !== null && selValue === '';
+      const selOptions = presetOptionIds();
+      const presetSel = Array.isArray(form.preset) ? form.preset : [];            // 勾选集（保序；仅注册选项）
+      const customRef = form.preset !== null && !Array.isArray(form.preset);      // { custom: 原文 }（无勾选位可表，保存原样）
       const countOf = (id) => { const m = meta.presets; return typeof m[id] === 'number' ? m[id] : 0; };
+      const presetTotal = presetSel.reduce((s, id) => s + countOf(id), 0);        // 规则数摘要：l1=12 / l2=6 / 全选=18（compose 等效）
       const liveSt = pending ? STATE.running : STATE.merged;
       const chipLabel = state === 'saving' ? tt('gov.saving') : state === 'confirming' ? tt('gov.saved') : tt('gov.live');
       const btnBase = {
-        borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
+        borderRadius: 8, padding: '6px 14px', fontSize: G().btn, fontWeight: 600,
         cursor: 'pointer', lineHeight: 1.3, transition: 'opacity .15s ease'
       };
       const saveDisabled = busy || state === 'loading' || !dirty;
@@ -393,7 +490,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, color: T.text, fontFamily: T.font, width: '100%', boxSizing: 'border-box' } },
         // 头部：标题 + 生效规则数 + 生效状态 Chip + 最近生效时间
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-          React.createElement(SectionTitle, null, fmtN('gov.title.live', meta.rules)),
+          React.createElement(GovHeader, null, fmtN('gov.title.live', meta.rules)),
           React.createElement('span', { style: { flex: 1 } }),
           React.createElement(Chip, { st: liveSt },
             React.createElement(Dot, { color: liveSt.fg }),
@@ -412,32 +509,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           })
         ),
 
-        // 卡片 B 规则预设
+        // 卡片 B 规则预设（多选：l1 + l2 两勾选项；不复选 compose——后端唯一性校验拒同批重复 id）
         React.createElement(GovCard, { title: tt('gov.preset.title') },
-          React.createElement('select', {
-            value: selValue,
-            onChange: (e) => patch({ preset: e.target.value === '' ? null : e.target.value }),
-            style: {
-              width: '100%', background: T.card, color: T.text,
-              border: '1px solid ' + T.border, borderRadius: 8, padding: '6px 8px',
-              fontSize: 12, fontFamily: T.mono, outline: 'none'
-            }
-          },
-            [{ value: '', label: tt('gov.preset.none') }]
-              .concat(selectable.map((id) => ({ value: id, label: id + ' · ' + fmtN('gov.preset.rules', countOf(id)) })))
-              .map((o) => React.createElement('option', { key: o.value, value: o.value }, o.label))
-          ),
-          !customPreset && presetMeaningKey(selValue)
-            ? React.createElement('div', { style: { fontSize: 11, color: T.text2 } }, tt(presetMeaningKey(selValue)))
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.5 } }, tt('gov.preset.hint')),
+          selOptions.map((id) => React.createElement(PresetCheckRow, {
+            key: id,
+            checked: presetSel.indexOf(id) >= 0,
+            onChange: (v) => togglePreset(id, v),
+            title: tt(presetMeaningKey(id)),
+            sub: id + ' · ' + fmtN('gov.preset.rules', countOf(id))
+          })),
+          // 规则数摘要联动：单勾 12/6；全勾 = 18（compose 全量组合等效行）
+          presetSel.length === 2 && presetTotal > 0
+            ? React.createElement('div', { style: { fontSize: G().cap, color: T.text2, fontWeight: 600 } },
+                tt(presetMeaningKey('compose')) + ' · ' + fmtN('gov.preset.rules', presetTotal))
             : null,
-          customPreset
-            ? React.createElement('div', { style: { fontSize: 10.5, color: T.warn, lineHeight: 1.45 } },
+          presetSel.length === 0 && !customRef
+            ? React.createElement('div', { style: { fontSize: G().cap, color: T.text3 } }, tt('gov.preset.none'))
+            : null,
+          customRef
+            ? React.createElement('div', { style: { fontSize: G().cap, color: T.warn, lineHeight: 1.5 } },
                 tt('gov.preset.custom'),
-                React.createElement('span', { style: { fontFamily: T.mono, opacity: 0.85 } }, ' ' + JSON.stringify(form.preset))
+                React.createElement('span', { style: { fontFamily: T.mono, opacity: 0.85 } }, ' ' + JSON.stringify(form.preset.custom))
               )
             : null,
           meta.manualRules > 0
-            ? React.createElement('div', { style: { fontSize: 10.5, color: T.warn, lineHeight: 1.45 } }, fmtN('gov.preset.manual', meta.manualRules))
+            ? React.createElement('div', { style: { fontSize: G().cap, color: T.warn, lineHeight: 1.5 } }, fmtN('gov.preset.manual', meta.manualRules))
             : null
         ),
 
@@ -462,7 +559,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                   onChange: (v) => patchEsc({ windowMs: v })
                 }),
                 React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-                  React.createElement('span', { style: { flex: 1, fontSize: 11.5, color: T.text2 } }, tt('gov.esc.primitives')),
+                  React.createElement('span', { style: { flex: 1, fontSize: G().label, color: T.text2 } }, tt('gov.esc.primitives')),
                   React.createElement(PrimitiveChips, {
                     value: form.escalation.primitives,
                     onChange: (next) => patchEsc({ primitives: next })
@@ -488,7 +585,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
               role: 'alert',
               style: {
                 border: '1px solid ' + T.error, borderRadius: 8, padding: '8px 12px',
-                display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5, color: T.error
+                display: 'flex', flexDirection: 'column', gap: 3, fontSize: G().sub, color: T.error
               }
             },
               err.net
@@ -526,7 +623,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           }, tt('gov.reset')),
           React.createElement('span', { style: { flex: 1 } }),
           dirty && !busy
-            ? React.createElement('span', { style: { fontSize: 11, color: T.warn } },
+            ? React.createElement('span', { style: { fontSize: G().cap, color: T.warn } },
                 React.createElement(Dot, { color: T.warn }),
                 React.createElement('span', { style: { marginLeft: 5 } }, tt('gov.dirty')))
             : null
