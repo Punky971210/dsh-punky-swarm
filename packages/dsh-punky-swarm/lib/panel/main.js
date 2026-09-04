@@ -264,6 +264,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         label: () => t('view.cluster'),
         inject: (sessionId) => ({ sessionId })
       }, ClusterWorkbench));
+      // 治理配置页（settings.section；与 conversation.view 并存，两 seat 互不排他）。
+      // order=16：出厂占用 0/10/15/20（host-impl-facts §②），16..19 空闲位取 16；
+      // label thunk 随 locale 惰性重读；页面自带 GET/POST 取数，inject 省略（owner 仅收 { close }）。
+      ctx.slots.inject('settings.section', () => ctx.slots.register({
+        name: 'settings.section',
+        id: 'governance-config',
+        order: 16,
+        locale: NS,
+        label: () => t('nav.governance')
+      }, GovernanceConfigSection));
     }
 
     module.exports = { apply, inject };

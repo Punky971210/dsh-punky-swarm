@@ -22,6 +22,9 @@ import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';
 // P1 批 R-07 排除项（承接归 panel 批）：事件读端字面量收敛——EVT 常量源 lib/state/event-types.js（P2-07 单点）
 import * as EVT from './state/event-types.js';
+// WebUI 治理配置写通道（webui-config-build-20260903）：/config 端点 trusted 判定（自复刻宿主 /api
+//   护栏语义，conn:184-198 未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
+import { isTrustedConfigRequest } from './webui/config-trust.js';
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -213,6 +216,68 @@ export function createApi(ctx, deps) {
         try {
           sendJson(res, 200, discovery.wellKnown());
         } catch (e) { sendJson(res, 500, { error: { code: 50001, message: 'InternalError', data: String(e.message) } }); }
+      },
+    });
+  }
+
+  // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.1/§1.2，落点 = discover 段与 stream 段之间）：
+  //   GET + POST /api/dsh-punky-swarm/config —— 配置页页载取数 / 受控字段集保存（写 <root>/config/runtime.json）。
+  //   条件注册仿 discovery/agentCatalog（上方 :162-190 注入形态）：deps.configEndpoints.runtimeConfig
+  //   注入时注册；未注入不注册 → 既有 7 路由/9 路由计数测试零回归（不改既有注册面，disposer 统一回收）。
+  //   trusted 判定（GET/POST 共用，§1.3）：Host loopback/trustedHosts + sec-fetch-site≠cross-site + Origin 同源
+  //   （isTrustedConfigRequest，lib/webui/config-trust.js；trustedHosts 出厂 [] → loopback-only）。
+  //   写逻辑全在 service（lib/webui/runtime-config.js）：白名单预检 400 → 读-改-写 → validateOverlay
+  //   兜底 500 → tmp+rename 原子写；GET 取数 overlay（磁盘原样）/applied（装配侧解析快照）/presets（注册目录）。
+  if (deps.configEndpoints?.runtimeConfig) {
+    const cfgEp = deps.configEndpoints;
+    const trustedHosts = Array.isArray(cfgEp.trustedHosts) ? cfgEp.trustedHosts : [];
+    register({
+      kind: 'exact',
+      path: '/api/dsh-punky-swarm/config',
+      handler(req, res) {
+        // trusted 护栏前置（GET/POST 共用；护栏语义非鉴权层、防 DNS-rebinding/跨站——§1.2）
+        if (!isTrustedConfigRequest(req, trustedHosts)) {
+          const body = req.method === 'POST' ? { ok: false, error: 'forbidden' } : { error: 'forbidden' };
+          return sendJson(res, 403, body);
+        }
+        if (req.method === 'GET') {
+          try {
+            const overlay = cfgEp.runtimeConfig.readOverlay();
+            const gov = overlay && typeof overlay === 'object' && !Array.isArray(overlay)
+              && overlay.governance && typeof overlay.governance === 'object' && !Array.isArray(overlay.governance)
+              ? overlay.governance : null;
+            const applied = typeof cfgEp.applied === 'function' ? cfgEp.applied() : null;
+            const presets = typeof cfgEp.presets === 'function' ? (cfgEp.presets() ?? []) : [];
+            // overlay = 磁盘 runtime.json governance 段原样（表单未保存改动基准；无 = null）；
+            // applied = 装配侧已解析快照（默认补齐 + preset 展开 rules）；presets = 注册目录元数据 [{id,count}]
+            sendJson(res, 200, { overlay: gov, applied: { hook: applied }, presets });
+          } catch (e) { sendJson(res, 500, { error: String(e?.message ?? e) }); }
+          return;
+        }
+        if (req.method === 'POST') {
+          let bodyPromise;
+          try {
+            bodyPromise = readJsonBody(req); // req.body 为 string 时 JSON.parse 同步抛 → 先包住归 400
+          } catch (e) {
+            return sendJson(res, 400, { ok: false, error: 'invalid-json: ' + String(e?.message ?? e) });
+          }
+          return bodyPromise.then((payload) => {
+            try {
+              const out = cfgEp.runtimeConfig.writeGovernance(payload);
+              if (!out.ok) {
+                if (out.status === 500 || !Array.isArray(out.errors)) {
+                  return sendJson(res, out.status || 500, { ok: false, error: out.error ?? 'write-rejected' });
+                }
+                return sendJson(res, 400, { ok: false, errors: out.errors });
+              }
+              return sendJson(res, 200, { ok: true, written: out.written, ts: new Date().toISOString() });
+            } catch (e) {
+              // 读-改-写 IO 异常（坏 base JSON / rename 失败等）→ 500 不回写（设计 §1.5「不应发生」面）
+              return sendJson(res, 500, { ok: false, error: String(e?.message ?? e) });
+            }
+          }).catch((e) => sendJson(res, 400, { ok: false, error: 'invalid-json: ' + String(e?.message ?? e) }));
+        }
+        return sendJson(res, 405, { ok: false, error: 'method-not-allowed' });
       },
     });
   }

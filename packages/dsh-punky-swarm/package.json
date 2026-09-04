@@ -31,7 +31,9 @@
     "docs/aip-compliance.md",
     "docs/aip-compliance.en.md",
     "docs/acps-communication.md",
-    "docs/acps-communication.en.md"
+    "docs/acps-communication.en.md",
+    "docs/webui-governance-config.md",
+    "docs/webui-governance-config.en.md"
   ],
   "engines": {
     "node": ">=22"

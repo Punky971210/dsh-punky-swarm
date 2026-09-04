@@ -18,8 +18,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // assemble-panel.mjs — exec-panel-split lane 产物：lib/panel/ 段文件 → lib/client.js 浏览器 bundle
 // 零依赖（仅 node:fs/node:path 内置模块），运行于包根目录：
 //   node scripts/assemble-panel.mjs
-// 拼接顺序：外壳头 + locales + theme + widgets + batch-list + batch-detail + main 组装 + 外壳尾
-// （与 restructure-decision.md §6.2 一致）。段文件为单一事实源；本脚本只做逐字拼接。
+// 拼接顺序：外壳头 + locales + theme + widgets + batch-list + batch-detail + main 组装 + gov-config + 外壳尾
+// （与 restructure-decision.md §6.2 一致；gov-config.js 追加在 main.js 之后，见 webui-config-design §2.4——
+//  段内仅 function 声明，靠提升供 main.js apply 注册引用）。段文件为单一事实源；本脚本只做逐字拼接。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -64,7 +65,8 @@ const SHELL_TAIL = `  }
 });
 `;
 
-// 段拼接顺序（与决策包 §6.2 一致；函数声明提升 + const 初始化序由段内顺序保证）
+// 段拼接顺序（与决策包 §6.2 一致；函数声明提升 + const 初始化序由段内顺序保证；
+// gov-config.js 置于 main.js 之后——其顶层仅 function 声明，运行时依赖声明提升）
 const SEGMENT_ORDER = [
   'locales.js',
   'theme.js',
@@ -72,6 +74,7 @@ const SEGMENT_ORDER = [
   'batch-list.js',
   'batch-detail.js',
   'main.js',
+  'gov-config.js',
 ];
 
 function readSegment(name) {
