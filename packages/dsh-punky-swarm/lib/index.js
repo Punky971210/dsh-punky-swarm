@@ -42,6 +42,9 @@ import { installGovernanceHook } from './governance/wiring.js';
 // P3 热切（harden-plan §5.4 A）：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
 //   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount ④ 模式，不引入 updateConfig API）
 import { resolveGovernanceConfig } from './governance/config.js';
+// M5-b（preset-build）：preset 装载（governance.hook.preset 引用键 → boot 装载一次 table 注入 resolve
+//   presetTable——preset 文件 = 发布资产语义，热更只管引用启停、不重读文件）
+import { loadPresetTable } from './governance/preset-loader.js';
 // P2 双层桥接事件流（harden-plan §5.3 B）：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
 //   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移——归 M5-a）
 import { appendRefusalEvent } from './governance/receipt-store.js';
@@ -449,9 +452,17 @@ export const apply = (ctx, config = {}) => {
   if (dispatchReg.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] D-1 dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（方案 B，零宿主改造）');
   }
+  // M5-b preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 三 JSON → 表注入 resolve
+  //   presetTable（governance.hook.preset 引用展开源）。errors（文件缺失/损坏/形状坏）→ 逐条 warn 留痕，
+  //   不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
+  // C2（acceptance）：resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
+  //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
+  const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
+  const { table: presetTable, errors: presetErrors } = loadPresetTable();
+  for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
   // 当前已挂载 hook 的解析配置快照（P3 热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
-  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {});
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge });
+  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
@@ -469,11 +480,11 @@ export const apply = (ctx, config = {}) => {
   //   - refusals count 随新实例归零（运行时状态重置契约，harden-plan §5.4 A.2「重挂后 refusals count 等
   //     运行时状态重置」）。
   const remountGovernanceHook = (nextConfig, logTag) => {
-    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {});
+    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
     if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
     const wasInstalled = governanceHook?.installed === true;
     governanceHook?.dispose?.();
-    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge });
+    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable });
     governanceInstalledCfg = govCfg;
     const nowInstalled = governanceHook?.installed === true;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled

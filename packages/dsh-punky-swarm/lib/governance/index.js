@@ -14,11 +14,13 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
-// 治理内核公共面收敛（G7）：re-export 6 个内核组件（ESM .js 后缀，对齐 PK 编译回拷模式）。
+// 治理内核公共面收敛（G7）：re-export 7 个内核组件（ESM .js 后缀，对齐 PK 编译回拷模式）。
 // 蓝图：m2-detailed.md §2 表 G7。消费方 = wiring.js（G8）与测试。
+// M5-b（preset-build）：barrel 追加 preset-loader（preset 注册表/装载表/形状校验，经 index.ts 导出对齐 A6）。
 export * from './types.js';
 export * from './decisions.js';
 export * from './classify.js';
 export * from './narrow.js';
 export * from './kernel.js';
 export * from './config.js';
+export * from './preset-loader.js';

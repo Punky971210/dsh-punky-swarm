@@ -24,6 +24,7 @@ const files = [
   'governance/narrow.js', 'governance/narrow.d.ts',
   'governance/config.js', 'governance/config.d.ts',
   'governance/kernel.js', 'governance/kernel.d.ts',
+  'governance/preset-loader.js', 'governance/preset-loader.d.ts',
   'governance/index.js', 'governance/index.d.ts',
 ];
 

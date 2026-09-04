@@ -15,6 +15,7 @@ export declare const GOVERNANCE_DEFAULTS: Readonly<{
 interface ConfigGovernanceInput {
     enabled?: unknown;
     rules?: unknown;
+    preset?: unknown;
     defaults?: {
         deny?: unknown;
     };
@@ -30,7 +31,16 @@ interface ConfigGovernanceInput {
         primitives?: unknown;
     };
 }
+export declare function validateRuleTable(rules: readonly unknown[]): {
+    ok: boolean;
+    errors: string[];
+};
+export declare function validatePresetRules(rules: unknown): {
+    ok: boolean;
+    errors: string[];
+};
 export declare function resolveGovernanceConfig(config: ConfigGovernanceInput | null | undefined, opts?: {
     warn?: (msg: string) => void;
+    presetTable?: Readonly<Record<string, readonly Rule[]>>;
 }): GovernanceConfig;
 export {};

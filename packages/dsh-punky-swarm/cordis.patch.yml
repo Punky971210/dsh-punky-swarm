@@ -70,6 +70,14 @@
           hook:
             enabled: true      # 默认开启；空规则表 → decide 恒 ALLOW → 零行为变化
             rules: []          # 规则表（空=零拦截）；Rule 结构见 lib/governance/types.ts
+            # M5-b preset 装载键（preset-build）：引用随包预设（presets/hook-rules/ 三 JSON，注册 id 枚举：
+            #   l1-sensitive / l2-resource / compose——不接受任意路径），保序展开拼接至 rules（inline rules 在后）。
+            #   preset: 'l1-sensitive' 或 preset: ['l1-sensitive', 'l2-resource']（= compose 逐条等价，二选一互斥引用——
+            #   同批引用 compose + l1-sensitive 会产生重复 id → 装载失败回退空表 + warn，宁空勿半）。
+            #   runtime.json 热更示例：{"governance":{"hook":{"preset":["l1-sensitive","l2-resource"]}}}（⑤ 通道即时生效）。
+            #   出厂不默认启用任何 preset（本键缺省 = 空表零拦截不变，与 rules:[] 出厂安全默认严格一致）——
+            #   需启用时经 runtime.json 下发或装配 config 注入；preset 文件内容随包版本发布生效（boot 装载一次）。
+            # preset: []        # ← 示例注释（默认不启用，勿取消注释即默认值）
             # M5-a：护栏违规计数升级（默认关——出厂零行为变化；开启后：归属批次的规则拒绝
             # （DENY/NARROW）在 windowMs 内达 threshold → 经棘轮校验批 paused（reason=governance-escalate）；
             # 与 hook enabled:true 内核就位零拦截正交——出厂 rules:[] 本就零收据，关保持「改规则不意外武装暂停」保守面）

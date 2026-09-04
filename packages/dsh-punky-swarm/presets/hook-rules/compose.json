@@ -1,0 +1,209 @@
+{
+  "_meta": {
+    "presetId": "compose",
+    "schemaVersion": 1,
+    "layer": "compose",
+    "title": "全量预设（L1 敏感防护 + L2 资源边界）",
+    "description": "l1-sensitive 与 l2-resource 的全量合并（18 条，L1 12 条在前、L2 6 条在后）。内容等价于分别引用两个预设的组合；启用时与单独引用 l1/l2 互斥，避免重复 id。",
+    "ruleCount": 18,
+    "tools": ["subagent", "subagent_fork", "send_message", "workflow", "ralph", "web_search", "pwsh", "ssh_exec", "ssh_cluster", "create_goal"],
+    "notes": {
+      "L1-D01": "私钥块进入 subagent/subagent_fork prompt：hard DENY。",
+      "L1-D02": "私钥块进入 send_message 消息体：hard DENY。",
+      "L1-D03": "私钥块进入 workflow 脚本正文：hard DENY。",
+      "L1-D04": "私钥块进入 ralph 轮次目标：hard DENY。",
+      "L1-A05": "凭据签名进入 prompt：manual_review。",
+      "L1-A06": "凭据签名进入 send_message 消息体：manual_review。",
+      "L1-A07": "凭据签名进入 workflow 脚本：manual_review。",
+      "L1-A08": "凭据签名进入 ralph 目标：manual_review。",
+      "L1-D09": "带凭据 URL 进入 web_search 查询串：hard DENY。",
+      "L1-A10": "pwsh 命令内联凭据：manual_review。",
+      "L1-A11": "ssh_exec 命令内联凭据：manual_review。",
+      "L1-A12": "ssh_cluster 命令内联凭据：manual_review。",
+      "L2-R01": "pwsh timeoutMs ≤ 600000ms。",
+      "L2-R02": "ssh_exec timeoutMs ≤ 120000ms。",
+      "L2-R03": "ssh_cluster timeoutMs ≤ 300000ms。",
+      "L2-R04": "ssh_cluster maxWorkers ≤ 16。",
+      "L2-R05": "create_goal max_goal_rounds ≤ 50。",
+      "L2-R06": "ralph maxRounds ≤ 20。"
+    },
+    "boundary": "多档同现裁决（以引擎分类序为准，hard 优先于 manual_review 优先于 narrowable）：同一次调用命中多条不同类别规则时——含 hard → DENY；否则含 manual_review → REQUIRE_APPROVAL（人工复核）；仅 narrowable → flags.narrow 开为 NARROW、关则回退 DENY（均带收窄指引）。narrowedParams 仅在 NARROW 或 DENY 含 narrowable 时填充；REQUIRE_APPROVAL 命中时即使同调用另有 narrowable 违规也不下发钳制指引。例：pwsh 命令内联凭据（L1-A10 manual_review）与 timeoutMs 超限（L2-R01 narrowable）同现 → 裁决 REQUIRE_APPROVAL，人工放行时 L2 上限不被钳制（人工放行 = 知情接受超限，人工闸兜底）；自动化无审批通道态 = fail-closed 拒绝，不构成放行。"
+  },
+  "rules": [
+    {
+      "id": "L1-D01",
+      "tools": ["subagent", "subagent_fork"],
+      "match": { "path": "/prompt", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D01", "category": "hard", "path": "/prompt",
+          "message": "[preset L1] 子代理 prompt 中出现私钥块（-----BEGIN ... PRIVATE KEY-----）：私钥材料禁止传入子代理/委托上下文" }
+      ]
+    },
+    {
+      "id": "L1-D02",
+      "tools": ["send_message"],
+      "match": { "path": "/message", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D02", "category": "hard", "path": "/message",
+          "message": "[preset L1] send_message 消息体中出现私钥块：私钥材料禁止经消息信道发送给子代理" }
+      ]
+    },
+    {
+      "id": "L1-D03",
+      "tools": ["workflow"],
+      "match": { "path": "/script", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D03", "category": "hard", "path": "/script",
+          "message": "[preset L1] workflow script 中出现私钥块：脚本正文禁止携带私钥材料分发到子代理" }
+      ]
+    },
+    {
+      "id": "L1-D04",
+      "tools": ["ralph"],
+      "match": { "path": "/objective", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D04", "category": "hard", "path": "/objective",
+          "message": "[preset L1] ralph objective 中出现私钥块：私钥材料禁止写入新鲜 agent 的轮次目标" }
+      ]
+    },
+    {
+      "id": "L1-A05",
+      "tools": ["subagent", "subagent_fork"],
+      "match": { "path": "/prompt", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A05", "category": "manual_review", "path": "/prompt",
+          "message": "[preset L1] 子代理 prompt 疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：透传敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A06",
+      "tools": ["send_message"],
+      "match": { "path": "/message", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A06", "category": "manual_review", "path": "/message",
+          "message": "[preset L1] 消息体疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：跨子代理发送敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A07",
+      "tools": ["workflow"],
+      "match": { "path": "/script", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A07", "category": "manual_review", "path": "/script",
+          "message": "[preset L1] workflow 脚本疑似携带凭据：分发到子代理执行前需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A08",
+      "tools": ["ralph"],
+      "match": { "path": "/objective", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A08", "category": "manual_review", "path": "/objective",
+          "message": "[preset L1] ralph 目标疑似携带凭据：写入轮次目标前需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-D09",
+      "tools": ["web_search"],
+      "match": { "path": "/queries", "op": "regex", "pattern": "https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@" },
+      "violations": [
+        { "code": "L1-D09", "category": "hard", "path": "/queries",
+          "message": "[preset L1] web_search 查询串含内嵌凭据 URL（user:pass@host）：禁止向搜索端点外发凭据" }
+      ]
+    },
+    {
+      "id": "L1-A10",
+      "tools": ["pwsh"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A10", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] pwsh 命令疑似内联凭据（令牌/secret/带凭据 URL）：建议改经凭证存储引用，执行需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A11",
+      "tools": ["ssh_exec"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A11", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] ssh_exec 命令疑似内联凭据：远程 shell 正文携带敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A12",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A12", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] ssh_cluster 批量命令疑似内联凭据：多主机远程正文携带敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L2-R01",
+      "tools": ["pwsh"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 600000 },
+      "violations": [
+        { "code": "L2-R01", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] pwsh timeoutMs 超过上限 600000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 600000 } ]
+    },
+    {
+      "id": "L2-R02",
+      "tools": ["ssh_exec"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 120000 },
+      "violations": [
+        { "code": "L2-R02", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] ssh_exec timeoutMs 超过上限 120000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 120000 } ]
+    },
+    {
+      "id": "L2-R03",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 300000 },
+      "violations": [
+        { "code": "L2-R03", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] ssh_cluster timeoutMs 超过上限 300000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 300000 } ]
+    },
+    {
+      "id": "L2-R04",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/maxWorkers", "op": "gt", "value": 16 },
+      "violations": [
+        { "code": "L2-R04", "category": "narrowable", "path": "/maxWorkers",
+          "message": "[preset L2] ssh_cluster maxWorkers 超过上限 16：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/maxWorkers", "max": 16 } ]
+    },
+    {
+      "id": "L2-R05",
+      "tools": ["create_goal"],
+      "match": { "path": "/max_goal_rounds", "op": "gt", "value": 50 },
+      "violations": [
+        { "code": "L2-R05", "category": "narrowable", "path": "/max_goal_rounds",
+          "message": "[preset L2] create_goal max_goal_rounds 超过上限 50：自动延续轮数需受资源边界约束" }
+      ],
+      "narrow": [ { "path": "/max_goal_rounds", "max": 50 } ]
+    },
+    {
+      "id": "L2-R06",
+      "tools": ["ralph"],
+      "match": { "path": "/maxRounds", "op": "gt", "value": 20 },
+      "violations": [
+        { "code": "L2-R06", "category": "narrowable", "path": "/maxRounds",
+          "message": "[preset L2] ralph maxRounds 超过上限 20：轮次上限需受资源边界约束" }
+      ],
+      "narrow": [ { "path": "/maxRounds", "max": 20 } ]
+    }
+  ]
+}
