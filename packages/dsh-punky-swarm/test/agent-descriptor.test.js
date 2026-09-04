@@ -138,12 +138,12 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
 });
 
 // —— 接线层（register.js）——
-test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 19 工具（P1-01 默认开）', () => {
+test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 20 工具（P1-01 默认开）', () => {
   const { made } = makeCtx(true);
   assert.ok(made.agentCatalog, 'enabled=true 时 register() 后 agentCatalog 非空');
   assert.equal(made.agentCatalog.list().length, ROLE_COUNT);
   assert.ok(made.catalog, '既有 catalog 不受影响');
-  assert.equal(made.catalog.list().length, 19); // P1-01 缺省默认开：14 + lane_heartbeat + worktree 四件（logs 缺省关）
+  assert.equal(made.catalog.list().length, 20); // P1-01 缺省默认开：14 + lane_heartbeat + lane_longrun + worktree 四件（logs 缺省关）
   for (const d of made.agentCatalog.list()) {
     for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '接线输出缺 ACS 键 ' + k);
   }

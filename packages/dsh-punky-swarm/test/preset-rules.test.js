@@ -150,13 +150,13 @@ test('P-3 文件内规则 id 全局唯一（3 文件各自）', () => {
 
 // ── T-1 P-4 防误拦静态 ──
 
-// 治理族参考名单（audit 核实的注册工具：core 11 + lane 4 + log 1 + mailbox 3 + heartbeat 1 = 20；
+// 治理族参考名单（audit 核实的注册工具：core 11 + lane 5 + log 1 + mailbox 3 + heartbeat 1 + longrun 1 = 21；
 // 另有只读治理查询工具 compat_status 等——口径为「白名单结构性排除 + 参考名单」，非固定封闭总数）
 const GOVERNANCE_TOOLS = [
   'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim',
   'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_status',
   'lane_worktree_create', 'lane_checkpoint', 'lane_checkpoint_status', 'lane_worktree_merge',
-  'log_export', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat',
+  'log_export', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun',
   'compat_status',
 ];
 // 覆盖工具并集（用户侧内容/资源面工具，10 个，与源设计 §8 一致）

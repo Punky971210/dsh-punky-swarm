@@ -52,8 +52,110 @@ export function buildSchedule(intervalsMinutes) {
   return list;
 }
 
+// ---- longrun 档（超时重派探针，与 stalled 档并列，design longrun-probe-design §1-§5）----
+// 语义：running lane 持续超 maxDurationMs（默认 20min）且近 noProgressWindowMs（默认 5min）无新 checkpoint
+//       且无活动（严格 AND）→ 探针产候选：appendEvent('lane.longrun.candidate') + mailbox broadcast 通知
+//       Manager 裁决。动作即止：不改 lane 状态（同 stalled 纪律——写事件零侵入，不碰 schema.js）。
+//       去重以批次事件流为唯一事实源：同 stint（lane + runningSince 相同）只产一次，跨重启幂等。
+//       runningSince = 事件流最近 member.dispatch / member.settled{to:'running'}（取较新）；重派（新 running
+//       stint）即更新 → 计时重置。checkpoint 最新 ts 从事件流 worktree.checkpoint 事件读（resume 契约同源）。
+// 配置（用户定案修订：出厂默认开，非设计默认关）：capabilities.watch.longrun{enabled,maxDurationMs,noProgressWindowMs}
+// resolve 独立实现于本模块（schema.js 红线不改；键根/非法回退风格对齐 resolveWatchConfig）。
+export const LONGRUN_DEFAULTS = Object.freeze({
+  enabled: true, // 出厂默认开（定案修订：半自动件默认开防漏检；显式 false 才关）
+  maxDurationMs: 1_200_000, // 默认 20min（长跑超时阈值；正整数 ms，非法回退默认）
+  noProgressWindowMs: 300_000, // 默认 5min（无进展窗；正整数 ms，非法回退默认）
+});
+export const LONGRUN_REASON = 'duration-exceeded-no-progress';
+export function resolveLongrunConfig(config) {
+  const c = config?.capabilities?.watch?.longrun ?? {};
+  const posMs = (v) => (Number.isFinite(Number(v)) && Number(v) >= 1 ? Math.floor(Number(v)) : null);
+  return {
+    enabled: c.enabled !== false, // 缺省 = LONGRUN_DEFAULTS.enabled(true)，显式 false 才关（对齐 resolveWatchConfig P1-01 语义）
+    maxDurationMs: posMs(c.maxDurationMs) ?? LONGRUN_DEFAULTS.maxDurationMs,
+    noProgressWindowMs: posMs(c.noProgressWindowMs) ?? LONGRUN_DEFAULTS.noProgressWindowMs,
+  };
+}
+
+// 纯事件流读取（零依赖批次对象）：runningSince（stint 起点）＝最近 member.dispatch 或 member.settled{to:'running'}
+function parseEvTs(e) {
+  const n = Date.parse(e?.ts ?? '');
+  return Number.isFinite(n) ? n : null;
+}
+export function stintRunningSinceOf(batch, lane) {
+  const evs = batch?.events ?? [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const e = evs[i];
+    if (e?.lane !== lane) continue;
+    if (e.type === EVT.EVT_MEMBER_DISPATCH) return parseEvTs(e);
+    if (e.type === EVT.EVT_MEMBER_SETTLED && e.to === 'running') return parseEvTs(e);
+  }
+  return null;
+}
+export function lastCheckpointTsOf(batch, lane) {
+  const evs = batch?.events ?? [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const e = evs[i];
+    if (e?.type === EVT.EVT_WORKTREE_CHECKPOINT && e?.lane === lane) return parseEvTs(e);
+  }
+  return null;
+}
+export function hasLongrunCandidate(batch, lane, runningSinceMs) {
+  if (runningSinceMs == null) return false;
+  return (batch?.events ?? []).some((e) => {
+    if (e?.type !== EVT.EVT_LANE_LONGRUN_CANDIDATE || e?.lane !== lane) return false;
+    const ms = Date.parse(e?.runningSince ?? '');
+    return Number.isFinite(ms) && ms === runningSinceMs;
+  });
+}
+// judgeLongrun 纯函数（判定要素全部取自批次事件流 + 心跳内存 lastActivityAt，不调 git、不改状态）：
+// candidate = laneState==='running' ∧ batch.phase==='running' ∧ durationMs>maxDurationMs（严格 >）
+//             ∧ !checkpointFresh ∧ !activityFresh（checkpoint/activity 窗均严格 <）
+// 载荷携带原始 fresh 值供 Manager 复核（若后续需改 OR 语义，纯函数单点即可）。
+export function judgeLongrun({
+  batch, lane, nowTs,
+  maxDurationMs = LONGRUN_DEFAULTS.maxDurationMs,
+  noProgressWindowMs = LONGRUN_DEFAULTS.noProgressWindowMs,
+  lastActivityAtMs = null, // 心跳内存最近活动（ms）；引擎重启后为空 → 引擎侧以 baselineTs 兜底传入
+}) {
+  const laneState = batch?.lanes?.[lane];
+  const batchPhase = batch?.phase;
+  const base = {
+    lane, laneState, phase: batchPhase,
+    maxDurationMs, noProgressWindowMs,
+    runningSince: null, runningSinceTs: null, durationMs: null,
+    lastCheckpointTs: null, checkpointFresh: false,
+    lastActivityAt: null, activityFresh: false,
+    candidate: false, reason: null,
+  };
+  if (laneState !== 'running') return { ...base, reason: 'lane-not-running' };
+  if (batchPhase !== 'running') return { ...base, reason: 'batch-not-running' };
+  const runningSinceTs = stintRunningSinceOf(batch, lane);
+  if (runningSinceTs === null) return { ...base, reason: 'no-running-since' };
+  const durationMs = nowTs - runningSinceTs;
+  const lastCheckpointTs = lastCheckpointTsOf(batch, lane);
+  const checkpointFresh = lastCheckpointTs !== null && (nowTs - lastCheckpointTs) < noProgressWindowMs;
+  const activityFresh = lastActivityAtMs !== null && (nowTs - lastActivityAtMs) < noProgressWindowMs;
+  const out = {
+    ...base,
+    runningSince: new Date(runningSinceTs).toISOString(),
+    runningSinceTs,
+    durationMs,
+    lastCheckpointTs: lastCheckpointTs === null ? null : new Date(lastCheckpointTs).toISOString(),
+    checkpointFresh,
+    lastActivityAt: lastActivityAtMs === null ? null : new Date(lastActivityAtMs).toISOString(),
+    activityFresh,
+    candidate: durationMs > maxDurationMs && !checkpointFresh && !activityFresh,
+  };
+  out.reason = out.candidate ? LONGRUN_REASON : (durationMs > maxDurationMs
+    ? (checkpointFresh ? 'checkpoint-fresh' : (activityFresh ? 'activity-fresh' : 'no-longrun-candidate'))
+    : 'duration-not-exceeded');
+  return out;
+}
+
 export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
   const cfg = resolveWatchConfig(config);
+  const lrCfg = resolveLongrunConfig(config); // longrun 档配置（出厂默认开；关态 tick 不跑判定）
   const schedule = buildSchedule(cfg.intervalsMinutes);
   const hardStop = cfg.maxMissed; // 硬停拍数：连续 N 拍无活动 → stalled
   const clock = typeof now === 'function' ? now : () => Date.now();
@@ -95,12 +197,13 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
   }
 
   // ---- 活动判定（三信号任一，防「长任务无产出误判」）----
-  // ① batch.events：本 lane 可归因事件比上次扫描新（lane.stalled 为引擎自写事件，排除防自重置）
+  // ① batch.events：本 lane 可归因事件比上次扫描新（lane.stalled / lane.longrun.candidate 为引擎自写事件，
+  //    排除防自重置——写事件零侵入的既有 stalled 纪律扩面到 longrun 档）
   function laneEventActivity(batch, lane, sinceTs) {
     const evs = batch.events ?? [];
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
-      if (e.type === EVT.EVT_LANE_STALLED) continue;
+      if (e.type === EVT.EVT_LANE_STALLED || e.type === EVT.EVT_LANE_LONGRUN_CANDIDATE) continue;
       if (e.lane === lane) {
         const ts = Date.parse(e.ts ?? '');
         if (Number.isFinite(ts) && ts > sinceTs) return true;
@@ -138,7 +241,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     const evs = batch.events ?? [];
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
-      if (e.type === EVT.EVT_LANE_STALLED) continue;
+      if (e.type === EVT.EVT_LANE_STALLED || e.type === EVT.EVT_LANE_LONGRUN_CANDIDATE) continue;
       if (e.lane === lane) {
         const ts = Date.parse(e.ts ?? '');
         if (Number.isFinite(ts) && ts > t) t = ts;
@@ -194,12 +297,103 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     entry.lastProbeAt = null;
   }
 
+  // ---- longrun 档（超时重派探针，design longrun-probe-design §1/§3/§5）：----
+  // 与 stalled 档互不干扰：同一 tick 扫描、同一内存表；只读判定 + 候选产出（动作即止），不改 lane 状态、
+  // 不 interrupt、不重派（成员控制归 Leader）。判定前置于心跳扫描执行：内存 entry 尚为本 tick 前状态
+  // （无 fresh 宽限污染——设计 §1.2：引擎重启后内存空 → 以事件/产物基线兜底）。
+  // lastActivityAt 来源：state 内存 entry.lastActivityAt（含 outbox 未 ack 活动信号）；entry 缺失 → baselineTs 兜底。
+  function longrunLastActivityAt(sessionId, batchId, batch, lane) {
+    const entry = state.get(laneKeyOf(sessionId, batchId, lane));
+    if (entry?.lastActivityAt != null) return entry.lastActivityAt;
+    return baselineTs(sessionId, batchId, batch, lane, 0); // 无内存条目 → 事件/产物最新信号（无信号=0→非新鲜）
+  }
+  // 候选产出（动作即止 2 项）：① 事件流留痕 ② mailbox broadcast 直写（底层 send，治理系统件不过 budget）。
+  // 事件流去重（同 stint 已产 → skip）覆盖同 tick/多次 tick/引擎重启恢复三种情形；先事件后消息
+  // （事件失败 → 不写消息；消息失败仅 warn 语义静默——事件为唯一事实源，面板/Leader 可查）。
+  function emitLongrunCandidate(sessionId, batchId, batch, lane, nowTs) {
+    const verdict = judgeLongrun({
+      batch, lane, nowTs,
+      maxDurationMs: lrCfg.maxDurationMs,
+      noProgressWindowMs: lrCfg.noProgressWindowMs,
+      lastActivityAtMs: longrunLastActivityAt(sessionId, batchId, batch, lane),
+    });
+    if (!verdict.candidate) return;
+    if (hasLongrunCandidate(batch, lane, verdict.runningSinceTs)) return; // 事件流去重
+    const payload = {
+      lane,
+      runningSince: verdict.runningSince,
+      durationMs: verdict.durationMs,
+      maxDurationMs: verdict.maxDurationMs,
+      noProgressWindowMs: verdict.noProgressWindowMs,
+      lastCheckpointTs: verdict.lastCheckpointTs,
+      lastActivityAt: verdict.lastActivityAt,
+      checkpointFresh: verdict.checkpointFresh,
+      activityFresh: verdict.activityFresh,
+      reason: verdict.reason,
+    };
+    try {
+      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_LONGRUN_CANDIDATE, payload);
+    } catch { return; /* 批次终态/不存在 → 不产消息（事件失败即止） */ }
+    try {
+      mailbox.send(mailboxRootOf(sessionId, batchId), { type: 'broadcast' }, {
+        kind: 'longrun.candidate', sessionId, batchId, ...payload,
+      });
+    } catch { /* 消息写失败：事件已留痕，静默（下轮同 stint 去重不再重发） */ }
+  }
+  // longrun 扫描档：仅扫 batch.phase==='running' 且 lane==='running'（与心跳 tick 扫描条件一致）
+  function longrunTick(nowTs) {
+    for (const sessionId of store.listSessions()) {
+      for (const batchId of store.listBatches(sessionId)) {
+        const batch = store.readBatch(sessionId, batchId);
+        if (!batch) continue;
+        if (batch.phase !== 'running') continue;
+        for (const [lane, st] of Object.entries(batch.lanes ?? {})) {
+          if (st !== 'running') continue;
+          try { emitLongrunCandidate(sessionId, batchId, batch, lane, nowTs); }
+          catch { /* 单 lane 探针失败隔离（不阻断整轮扫描） */ }
+        }
+      }
+    }
+  }
+  // 只读：单 lane longrun 探针状态（lane_longrun 工具查询用；不依赖本 tick 是否已跑——实时判定）
+  function longrunStatus(sessionId, batchId, lane, nowTs) {
+    const batch = store.readBatch(sessionId, batchId);
+    if (!batch) return { laneKey: laneKeyOf(sessionId, batchId, lane), tracked: false, candidate: false, reason: 'batch-not-found' };
+    const verdict = judgeLongrun({
+      batch, lane, nowTs: nowTs ?? clock(),
+      maxDurationMs: lrCfg.maxDurationMs,
+      noProgressWindowMs: lrCfg.noProgressWindowMs,
+      lastActivityAtMs: longrunLastActivityAt(sessionId, batchId, batch, lane),
+    });
+    return {
+      laneKey: laneKeyOf(sessionId, batchId, lane),
+      sessionId, batchId, lane,
+      tracked: state.has(laneKeyOf(sessionId, batchId, lane)),
+      enabled: lrCfg.enabled,
+      maxDurationMs: lrCfg.maxDurationMs,
+      noProgressWindowMs: lrCfg.noProgressWindowMs,
+      runningSince: verdict.runningSince,
+      runningSinceTs: verdict.runningSinceTs,
+      durationMs: verdict.durationMs,
+      lastCheckpointTs: verdict.lastCheckpointTs,
+      lastActivityAt: verdict.lastActivityAt,
+      checkpointFresh: verdict.checkpointFresh,
+      activityFresh: verdict.activityFresh,
+      candidate: verdict.candidate,
+      emitted: hasLongrunCandidate(batch, lane, verdict.runningSinceTs),
+      reason: verdict.reason,
+    };
+  }
+
   // 扫描全部会话 running lane：
   // - 仅扫 batch.phase === 'running' 且 lane === 'running'；paused/planning/终态批次、idle/终态 lane 不挂心跳
   //   （恢复语义：running→idle 后不挂，重派 running 时以 fresh entry 重置计时）
   function tick() {
     if (disposed) return;
     const nowTs = clock();
+    // longrun 档（并列，同 tick 同引擎）：置于心跳扫描之前执行——此时内存 entry 为本 tick 前状态
+    // （freshEntry 宽限不污染 lastActivityAt 判定；重启后 entry 缺失 → baselineTs 兜底，design §1.2）。
+    if (lrCfg.enabled) longrunTick(nowTs);
     for (const sessionId of store.listSessions()) {
       for (const batchId of store.listBatches(sessionId)) {
         const batch = store.readBatch(sessionId, batchId);
@@ -286,7 +480,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     state.clear();
   }
 
-  return { tick, status, reset, dispose };
+  return { tick, status, reset, dispose, longrunStatus };
 }
 
 // lane_heartbeat 工具定义（只读查询 + 可选手动触发一拍）。
@@ -326,6 +520,51 @@ export function createHeartbeatTools(ctx, deps = {}) {
           batchId: args.batchId,
           sessionId,
           lanes: laneIds.map((l) => heartbeat.status(`${sessionId}/${args.batchId}/${l}`)),
+        };
+      },
+    }),
+  ];
+}
+
+// lane_longrun 工具定义（只读查询 + 可选手动触发一拍；longrun 档并列注册，lane_heartbeat 输出零变化）。
+// 组装进 lane-tools.js；门控 = watch.enabled && watch.longrun.enabled（出厂默认开——用户定案修订；显式
+// capabilities.watch.longrun.enabled:false 时不注册，tick 亦不跑 longrun 判定，零事件零消息零行为变化）。
+// deps: { store, root, config, heartbeat? } —— heartbeat 缺省时自建（与挂载引擎共享状态文件/内存表）
+export function createLongrunTools(ctx, deps = {}) {
+  if (resolveWatchConfig(deps.config).enabled !== true) return [];
+  if (resolveLongrunConfig(deps.config).enabled !== true) return [];
+  const heartbeat = deps.heartbeat
+    ?? createLaneHeartbeat({ store: deps.store, mailbox: deps.mailbox, config: deps.config, root: deps.root });
+  return [
+    defineTool({
+      name: 'lane_longrun',
+      description: '查询/手动触发 lane 超时重派探针（watch 能力，longrun 档，只读+可选手动一拍）：返回指定批次 running lane 的长跑档状态（runningSince/durationMs/maxDurationMs/noProgressWindowMs/lastCheckpointTs/lastActivityAt/checkpointFresh/activityFresh/candidate/emitted/reason）；beat=true 时先跑一拍扫描（心跳 stalled 档与 longrun 档并列）再返回。探针只产候选（事件 + mailbox broadcast），不改任何成员状态；重派裁决归 Manager/Leader。watch.longrun.enabled=false 时不注册。',
+      parameters: {
+        batchId: { type: 'string', required: true, description: '批次 ID' },
+        lane: { type: 'string', description: 'lane ID；缺省返回该批全部 running lane' },
+        session: { type: 'string', description: '批次归属会话' },
+        beat: { type: 'boolean', description: '手动触发一拍扫描（tick）后再返回状态' },
+      },
+      output: {
+        schema: { type: 'object', additionalProperties: false, properties: {
+          batchId: { type: 'string', required: true },
+          sessionId: { type: 'string', required: true },
+          lanes: { type: 'array', required: true, items: { type: 'object', additionalProperties: true } },
+        } },
+        render: (_args, value) => TEXT_OUTPUT('lane longrun probe: ' + value.lanes.length + ' lane(s)'),
+      },
+      async execute(args, exec) {
+        const sessionId = sessionOf(args, exec);
+        if (args.beat === true) heartbeat.tick();
+        const batch = deps.store.readBatch(sessionId, args.batchId);
+        if (!batch) throw new Error('batch not found: ' + args.batchId);
+        const laneIds = args.lane
+          ? [args.lane]
+          : Object.keys(batch.lanes ?? {}).filter((l) => batch.lanes[l] === 'running');
+        return {
+          batchId: args.batchId,
+          sessionId,
+          lanes: laneIds.map((l) => heartbeat.longrunStatus(sessionId, args.batchId, l, null)),
         };
       },
     }),

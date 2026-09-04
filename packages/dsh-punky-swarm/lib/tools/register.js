@@ -41,7 +41,7 @@ export function createTools(ctx, deps) {
     ...createCoreTools(ctx, deps),
     ...createMailboxTools(ctx, deps),
     ...createLaneTools(ctx, deps),
-    ...createLogTools(ctx, deps), // E3 log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。TBD-2 实测工具总数：裸配置 19 / patch 全开 20 / 显式关（worktree+watch 关）14
+    ...createLogTools(ctx, deps), // E3 log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。TBD-2 实测工具总数：裸配置 20 / patch 全开 21 / 显式关（worktree+watch 关）14
   ];
 
   // 装配 enabled 开关（缺省默认开——AIP 为主线 + 治理能力全开，

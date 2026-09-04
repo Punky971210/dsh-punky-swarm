@@ -69,19 +69,19 @@ function orchPath(root, batchId) { return path.join(wtRoot(root, batchId), 'orch
 const repoPath = (root, batchId) => path.join(wtRoot(root, batchId), '_repo');
 const refExists = (root, batchId, ref) => git(['-C', repoPath(root, batchId), 'show-ref', '--verify', '--quiet', ref]).ok;
 
-test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（19 工具）；显式 enabled=false 不注册', () => {
-  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 19（14 + lane_heartbeat + worktree 四件）
+test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（20 工具）；显式 enabled=false 不注册', () => {
+  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 20（14 + lane_heartbeat + lane_longrun + worktree 四件）
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wt-off-'));
   const store = createStore(root);
   const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root });
-  assert.equal(tools.length, 19);
+  assert.equal(tools.length, 20);
   const names = tools.map((t) => t.name);
   for (const n of ['lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(names.includes(n), '缺省默认开：' + n + ' 应注册');
   }
-  // 显式关（P1-01 验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（14 + lane_heartbeat = 15）
+  // 显式关（P1-01 验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（14 + lane_heartbeat + lane_longrun = 16）
   const { tools: t2 } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: { capabilities: { worktree: { enabled: false } } } });
-  assert.equal(t2.length, 15);
+  assert.equal(t2.length, 16);
   assert.equal(t2.some((t) => t.name === 'lane_worktree_create' || t.name === 'lane_worktree_merge' || t.name === 'lane_checkpoint' || t.name === 'lane_checkpoint_status'), false);
 });
 
