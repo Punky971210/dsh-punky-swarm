@@ -27,6 +27,8 @@ docs/*
 !docs/benchmark-adoption-index.md
 CONTRIBUTING.md
 CHANGELOG.md
+# single-file exception: package CHANGELOG ships with the repo (0.4.1 follow-up ruling; no more add -f)
+!packages/dsh-punky-swarm/CHANGELOG.md
 
 # user-local decisions (not uploaded)
 **/docs/decisions/
