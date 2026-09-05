@@ -1,3 +1,29 @@
+## 0.4.1（2026-09-05）
+
+### 治理预设规则包
+
+- 出厂护栏规则预设随包发布（presets/hook-rules）：l1-sensitive（L1 敏感数据防护 12 条）、l2-resource（L2 资源上限 6 条）、compose（L1+L2 全量 18 条），wrapper 结构（`_meta` 元数据 + `rules` 数组），规则字段与引擎 Rule 类型逐字段对齐、零扩展字段。
+- preset 装载与引用：装载器剥离 `_meta` 取 rules 并做受控资产早失败校验；`governance.hook.preset` 支持注册 id / id 数组引用（如 `"preset": "compose"` 或 `["l1-sensitive","l2-resource"]`），跨 preset 规则 id 全局唯一性校验拒绝重复。
+
+### Web UI 治理配置页 + runtime.json 写通道
+
+- 治理配置设置页（Web UI 设置区）：护栏开关、规则预设、违规自动升级（触发次数 / 窗口）可视化配置；页面保存即时生效、无需重启。
+- runtime.json 热写通道：保存请求经 config-trust 校验（顶层白名单 / 值域 / preset 与内联规则冲突守卫）后落盘 runtime.json，400 校验拒绝不回写；窗口秒输入后端毫秒归一化（windowSeconds → windowMs，线协议键不落盘）。
+- 随包双语主题文档：docs/webui-governance-config(.en).md。
+
+### lane_longrun 超时无进展探针
+
+- watch 长跑档（默认开启）：running lane 运行超时且长期无 checkpoint / 活动进展 → 产候选并广播给 Manager（探针只产候选，不改成员状态），重派裁决归 Manager / Leader。
+- 与心跳 stalled 档并列扫描；事件留痕可审计。
+
+### Web UI 修复
+
+- 治理配置页 UI 修复：重命名、preset 多选、放大字号、移除全组合提示。
+
+### 发布整理
+
+- 版本 0.4.0 → 0.4.1；根 README（GitHub 面）精简：170 → ≈100 行，中文 / 英文 1:1 同构重写，去除过期版本与测试数（实测刷新 816）；删除 README.market.md（人话版内容并入精简后根 README 机制表与能力段）。
+
 ## 0.4.0（2026-09-03）
 
 ### 工具调用级治理护栏
