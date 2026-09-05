@@ -149,6 +149,28 @@ test('校验-8 规则表冲突守卫：现有 overlay rules 非空 + preset 引�
   assert.equal(noRules.ok, true);
 });
 
+test('校验-9 windowSeconds 秒语义值域（webui-config-fix2-20260904）：≥1 过 / <1、非数、字符串、Infinity 拒；与旧 windowMs 互斥', () => {
+  const escOnly = (esc) => validateGovernancePayload({ governance: { hook: { escalation: esc } } });
+  assert.equal(escOnly({ windowSeconds: 600 }).ok, true);
+  assert.equal(escOnly({ windowSeconds: 1 }).ok, true);
+  assert.equal(escOnly({ windowSeconds: 1.5 }).ok, true, '非整数秒 ×1000 = 1500ms 仍在 ms 合法域（引擎域）');
+  assert.equal(escOnly({ windowSeconds: 0.5 }).ok, false, '<1s → 换算 500ms 越 ms 域');
+  assert.equal(escOnly({ windowSeconds: 0 }).ok, false);
+  assert.equal(escOnly({ windowSeconds: -1 }).ok, false);
+  assert.equal(escOnly({ windowSeconds: '600' }).ok, false);
+  assert.equal(escOnly({ windowSeconds: Infinity }).ok, false);
+  assert.equal(escOnly({ windowSeconds: null }).ok, false);
+  assert.equal(firstError(escOnly({ windowSeconds: 0 })).field, 'governance.hook.escalation.windowSeconds');
+  // 新旧字段同送 → 互斥拒绝（歧义线协议）
+  const both = escOnly({ windowSeconds: 60, windowMs: 60000 });
+  assert.equal(both.ok, false);
+  assert.equal(firstError(both).field, 'governance.hook.escalation.windowSeconds');
+  assert.equal(firstError(both).code, 'invalid-value');
+  // 旧 windowMs（ms）语义原样保持（向后兼容）
+  assert.equal(escOnly({ windowMs: 1000 }).ok, true);
+  assert.equal(escOnly({ windowMs: 999 }).ok, false);
+});
+
 test('写-1 首次写（文件缺失 bootstrap）：写全量 → runtime.json 落盘、governance 段精确、tmp 不残留', () => {
   const root = freshRoot();
   const svc = createRuntimeConfigService({ root });
@@ -244,4 +266,42 @@ test('写-6 多轮写叠加：enabled 翻转 + preset 切换（无 rules 场景�
     escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },
     flags: { narrow: true },
   });
+});
+
+test('写-7 windowSeconds → windowMs 换算归一落盘（×1000；windowSeconds 为线协议键不落盘）', () => {
+  const root = freshRoot();
+  const svc = createRuntimeConfigService({ root });
+  const out = svc.writeGovernance({
+    governance: { hook: {
+      enabled: true, preset: 'l1-sensitive',
+      escalation: { enabled: true, threshold: 3, windowSeconds: 300, primitives: ['DENY'] },
+      flags: { narrow: false },
+    } },
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.written.hook.escalation.windowMs, 300000, 'written 回显 ms（×1000）');
+  assert.equal('windowSeconds' in out.written.hook.escalation, false, 'windowSeconds 不落盘');
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
+  assert.equal(parsed.governance.hook.escalation.windowMs, 300000);
+  assert.equal('windowSeconds' in parsed.governance.hook.escalation, false);
+});
+
+test('写-8 窗口换算覆盖语义：windowSeconds 覆盖既有 windowMs；旧 windowMs 提交不二次换算', () => {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(
+    { governance: { hook: { escalation: { enabled: true, threshold: 7, windowMs: 600000, primitives: ['DENY'] } } } }, null, 2));
+  const svc = createRuntimeConfigService({ root });
+  // 新语义 windowSeconds 90 → 覆盖为 90000ms
+  const s = svc.writeGovernance({ governance: { hook: { escalation: { enabled: true, windowSeconds: 90 } } } });
+  assert.equal(s.ok, true);
+  let parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal(parsed.governance.hook.escalation.windowMs, 90000);
+  // 旧语义 windowMs 45000 → 原样透传（不 ×1000 二次换算，向后兼容）
+  const m = svc.writeGovernance({ governance: { hook: { escalation: { enabled: true, windowMs: 45000 } } } });
+  assert.equal(m.ok, true);
+  parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal(parsed.governance.hook.escalation.windowMs, 45000);
+  assert.equal(parsed.governance.hook.escalation.threshold, 7, '未提交子键保留');
 });

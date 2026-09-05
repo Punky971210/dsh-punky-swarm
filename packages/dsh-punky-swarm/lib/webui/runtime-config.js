@@ -48,7 +48,10 @@ const ESCALATION_PRIMITIVE_SET = new Set(['DENY', 'NARROW', 'DEFER', 'PAUSE']);
 const TOP_KEYS = new Set(['governance']);
 const GOV_KEYS = new Set(['hook']);
 const HOOK_FORM_KEYS = new Set(['enabled', 'preset', 'escalation', 'flags']);
-const ESC_FORM_KEYS = new Set(['enabled', 'threshold', 'windowMs', 'primitives']);
+// windowSeconds（秒，webui-config-fix2-20260904 新语义提交字段）= UI 输入单位；后端 ×1000 归一
+//   windowMs（毫秒）落盘——runtime.json 存储契约（windowMs ms）不变。windowMs（ms）字段保留旧语义
+//   向后兼容（既有 api-config/webui-runtime-config 测试与调用方不破）。
+const ESC_FORM_KEYS = new Set(['enabled', 'threshold', 'windowMs', 'windowSeconds', 'primitives']);
 const FLAG_FORM_KEYS = new Set(['narrow']);
 
 // 规则表冲突守卫的错误文案（§1.4-4）——表单不改写/清空手工 rules 的静默覆盖防护
@@ -142,10 +145,23 @@ export function validateGovernancePayload(payload, curHook) {
           push('governance.hook.escalation.threshold', 'invalid-value', 'threshold must be an integer >= 1');
         }
       }
-      if ('windowMs' in esc) {
-        const w = esc.windowMs;
-        if (typeof w !== 'number' || !Number.isFinite(w) || w < 1000) {
-          push('governance.hook.escalation.windowMs', 'invalid-value', 'windowMs must be a finite number >= 1000 (ms)');
+      // 窗口单位（webui-config-fix2-20260904）：windowSeconds（秒，新语义，≥1s）+ windowMs（毫秒，旧语义
+      //   ≥1000ms，向后兼容）互斥——同送拒绝（歧义）；换算在写路径 ×1000 归一（毫秒存储契约不变）。
+      if ('windowMs' in esc && 'windowSeconds' in esc) {
+        push('governance.hook.escalation.windowSeconds', 'invalid-value',
+          'windowSeconds (s) and windowMs (ms) are mutually exclusive — send either the new windowSeconds (UI seconds) or the legacy windowMs (ms)');
+      } else {
+        if ('windowMs' in esc) {
+          const w = esc.windowMs;
+          if (typeof w !== 'number' || !Number.isFinite(w) || w < 1000) {
+            push('governance.hook.escalation.windowMs', 'invalid-value', 'windowMs must be a finite number >= 1000 (ms)');
+          }
+        }
+        if ('windowSeconds' in esc) {
+          const s = esc.windowSeconds;
+          if (typeof s !== 'number' || !Number.isFinite(s) || s < 1) {
+            push('governance.hook.escalation.windowSeconds', 'invalid-value', 'windowSeconds must be a finite number >= 1 (s)');
+          }
         }
       }
       if ('primitives' in esc) {
@@ -267,11 +283,16 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   return { runtimeFile, readOverlay, writeGovernance };
 }
 
-// 从已验证的 escalation 段摘出「显式提交」的子键（仅本表单键，逐字段值域已在 validate 保证）
+// 从已验证的 escalation 段摘出「显式提交」的子键（仅本表单键，逐字段值域已在 validate 保证）。
+// 窗口单位归一（webui-config-fix2-20260904）：windowSeconds（秒）→ ×1000 换算为 windowMs 落盘
+//   （runtime.json 毫秒存储契约不变，windowSeconds 为线协议键不落盘）；旧 windowMs（毫秒）原样
+//   透传（向后兼容——不二次换算）。两者同送已在 validate 阶段互斥拒绝。
 function pickEscalationSubset(esc) {
   const sub = {};
-  for (const k of ['enabled', 'threshold', 'windowMs', 'primitives']) {
+  for (const k of ['enabled', 'threshold', 'primitives']) {
     if (k in esc) sub[k] = esc[k];
   }
+  if ('windowSeconds' in esc) sub.windowMs = esc.windowSeconds * 1000;
+  else if ('windowMs' in esc) sub.windowMs = esc.windowMs;
   return sub;
 }

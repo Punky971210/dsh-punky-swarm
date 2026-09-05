@@ -195,3 +195,32 @@ test('端点：POST 坏 JSON 体（req.body 非法 string）→ 400 invalid-json
   assert.equal(resBody.ok, false);
   assert.match(resBody.error, /invalid-json/);
 });
+
+test('端点：POST /config windowSeconds（秒）→ 200 落盘换算 windowMs（×1000，毫秒契约不变）', async () => {
+  const root = freshRoot();
+  const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
+  const payload = {
+    governance: { hook: { enabled: true, preset: 'l2-resource', escalation: { enabled: true, threshold: 2, windowSeconds: 300, primitives: ['DENY', 'NARROW'] }, flags: { narrow: true } } },
+  };
+  const r = await invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH, { method: 'POST', body: payload });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.written.hook.escalation.windowMs, 300000, 'written 回显 ms（×1000）');
+  assert.equal('windowSeconds' in r.body.written.hook.escalation, false, 'windowSeconds 为线协议键，不回显');
+  const file = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
+  assert.equal(file.governance.hook.escalation.windowMs, 300000);
+  assert.equal('windowSeconds' in file.governance.hook.escalation, false);
+});
+
+test('端点：POST /config windowSeconds 越界（<1s）→ 400 invalid-value；新旧字段同送 → 400 互斥（均不落盘）', async () => {
+  const root = freshRoot();
+  const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
+  const route = routes.find((x) => x.path === CONFIG_PATH);
+  const badSec = await invoke(route, CONFIG_PATH, { method: 'POST', body: { governance: { hook: { escalation: { windowSeconds: 0.5 } } } } });
+  assert.equal(badSec.status, 400);
+  assert.equal(badSec.body.errors[0].field, 'governance.hook.escalation.windowSeconds');
+  const both = await invoke(route, CONFIG_PATH, { method: 'POST', body: { governance: { hook: { escalation: { windowSeconds: 60, windowMs: 60000 } } } } });
+  assert.equal(both.status, 400);
+  assert.equal(both.body.errors[0].code, 'invalid-value');
+  assert.equal(fs.existsSync(path.join(root, 'config', 'runtime.json')), false, '400 不落盘');
+});

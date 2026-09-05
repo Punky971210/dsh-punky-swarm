@@ -29,6 +29,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
     // 写契约 = POST 同路径，body { governance: { hook: { enabled, preset?, escalation, flags } } }，
     //         400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射）。
+    // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
+    //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
+    //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
     // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
     //   同批引用 compose+l1 会被引擎唯一性校验拒（resolve 回退空表）→ UI 不复选 compose：
     //   勾选集仅 l1/l2 两 checkbox，全勾 = ["l1-sensitive","l2-resource"]（18 条，compose 等效）；
@@ -133,7 +136,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         escalation: {
           enabled: pickBool(escO.enabled, escA.enabled, false),
           threshold: String(pickNum(escO.threshold, escA.threshold, 3)),
-          windowMs: String(pickNum(escO.windowMs, escA.windowMs, 600000)),
+          // 窗口单位：overlay/applied 存 windowMs（ms，毫秒契约）→ 表单以秒显示/输入（/1000）；
+          // 缺省 600000ms = 600s。提交走 windowSeconds（秒）由后端 ×1000 归一落盘。
+          windowSecs: String(pickNum(escO.windowMs, escA.windowMs, 600000) / 1000),
           primitives: Array.isArray(escO.primitives)
             ? escO.primitives.slice()
             : Array.isArray(escA.primitives) ? escA.primitives.slice() : ['DENY', 'NARROW']
@@ -416,10 +421,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       async function handleSave() {
         const esc = form.escalation;
         const threshold = Number(esc.threshold);
-        const windowMs = Number(esc.windowMs);
+        const windowSecs = Number(esc.windowSecs); // 秒语义；后端 ×1000 归一 windowMs（毫秒契约不变）
         const bad = [];
         if (!Number.isInteger(threshold) || threshold < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.threshold') });
-        if (!Number.isFinite(windowMs) || windowMs < 1000) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
+        if (!Number.isFinite(windowSecs) || windowSecs < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
         // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
@@ -427,7 +432,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         const presetWire = presetWireOf(form.preset);
         const hook = {
           enabled: !!form.enabled,
-          escalation: { enabled: !!esc.enabled, threshold: threshold, windowMs: windowMs, primitives: prims },
+          escalation: { enabled: !!esc.enabled, threshold: threshold, windowSeconds: windowSecs, primitives: prims },
           flags: { narrow: !!form.narrow }
         };
         if (presetWire !== undefined) hook.preset = presetWire;
@@ -554,9 +559,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                   onChange: (v) => patchEsc({ threshold: v })
                 }),
                 React.createElement(NumberField, {
-                  label: tt('gov.esc.window'), value: form.escalation.windowMs,
-                  min: 1000, step: 1000, suffix: 'ms',
-                  onChange: (v) => patchEsc({ windowMs: v })
+                  label: tt('gov.esc.window'), value: form.escalation.windowSecs,
+                  min: 1, step: 1,
+                  onChange: (v) => patchEsc({ windowSecs: v })
                 }),
                 React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                   React.createElement('span', { style: { flex: 1, fontSize: G().label, color: T.text2 } }, tt('gov.esc.primitives')),

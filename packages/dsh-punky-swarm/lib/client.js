@@ -69,7 +69,7 @@ window.__ModuleLoader__.load({
       "gov.hook.title": "护栏开关",
       "gov.hook.desc": "开启后拦截越界调用；出厂空规则表零拦截",
       "gov.preset.title": "规则预设",
-      "gov.preset.hint": "可多选叠加装载；同时勾选两项 = 原「全量组合」，全不选 = 出厂空表（零拦截）",
+      "gov.preset.hint": "可多选叠加装载；全不选 = 出厂空表（零拦截）",
       "gov.preset.none": "出厂空表（零拦截）",
       "gov.preset.rules": "{n} 条规则",
       "gov.preset.l1": "敏感数据防护（凭据/私钥）",
@@ -79,7 +79,7 @@ window.__ModuleLoader__.load({
       "gov.preset.manual": "检测到 {n} 条手工规则，预设切换需先手工移除",
       "gov.esc.title": "违规自动升级",
       "gov.esc.threshold": "窗口内触发次数",
-      "gov.esc.window": "窗口（毫秒）",
+      "gov.esc.window": "窗口（秒）",
       "gov.esc.primitives": "计入原语",
       "gov.narrow.title": "窄化放行",
       "gov.narrow.desc": "开启后超限调用按收窄指引重试放行，替代直接拒绝",
@@ -139,7 +139,7 @@ window.__ModuleLoader__.load({
       "gov.hook.title": "Guardrail switch",
       "gov.hook.desc": "Blocks out-of-scope calls when on; the factory empty rule table intercepts nothing",
       "gov.preset.title": "Rule preset",
-      "gov.preset.hint": "Multi-select stacks presets; both selected = the old \"full combination\", none = factory-empty (no interception)",
+      "gov.preset.hint": "Multi-select stacks presets; none selected = factory-empty (no interception)",
       "gov.preset.none": "Factory default (no rules)",
       "gov.preset.rules": "{n} rules",
       "gov.preset.l1": "Sensitive-data guard (credentials/keys)",
@@ -149,7 +149,7 @@ window.__ModuleLoader__.load({
       "gov.preset.manual": "{n} custom rules present; switch the preset only after removing them manually",
       "gov.esc.title": "Auto-escalation",
       "gov.esc.threshold": "Refusals within window",
-      "gov.esc.window": "Window (ms)",
+      "gov.esc.window": "Window (s)",
       "gov.esc.primitives": "Counted verdicts",
       "gov.narrow.title": "Narrowed allowance",
       "gov.narrow.desc": "Lets over-limit calls retry within clamped bounds instead of a direct refusal",
@@ -792,6 +792,9 @@ window.__ModuleLoader__.load({
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
     // 写契约 = POST 同路径，body { governance: { hook: { enabled, preset?, escalation, flags } } }，
     //         400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射）。
+    // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
+    //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
+    //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
     // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
     //   同批引用 compose+l1 会被引擎唯一性校验拒（resolve 回退空表）→ UI 不复选 compose：
     //   勾选集仅 l1/l2 两 checkbox，全勾 = ["l1-sensitive","l2-resource"]（18 条，compose 等效）；
@@ -896,7 +899,9 @@ window.__ModuleLoader__.load({
         escalation: {
           enabled: pickBool(escO.enabled, escA.enabled, false),
           threshold: String(pickNum(escO.threshold, escA.threshold, 3)),
-          windowMs: String(pickNum(escO.windowMs, escA.windowMs, 600000)),
+          // 窗口单位：overlay/applied 存 windowMs（ms，毫秒契约）→ 表单以秒显示/输入（/1000）；
+          // 缺省 600000ms = 600s。提交走 windowSeconds（秒）由后端 ×1000 归一落盘。
+          windowSecs: String(pickNum(escO.windowMs, escA.windowMs, 600000) / 1000),
           primitives: Array.isArray(escO.primitives)
             ? escO.primitives.slice()
             : Array.isArray(escA.primitives) ? escA.primitives.slice() : ['DENY', 'NARROW']
@@ -1179,10 +1184,10 @@ window.__ModuleLoader__.load({
       async function handleSave() {
         const esc = form.escalation;
         const threshold = Number(esc.threshold);
-        const windowMs = Number(esc.windowMs);
+        const windowSecs = Number(esc.windowSecs); // 秒语义；后端 ×1000 归一 windowMs（毫秒契约不变）
         const bad = [];
         if (!Number.isInteger(threshold) || threshold < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.threshold') });
-        if (!Number.isFinite(windowMs) || windowMs < 1000) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
+        if (!Number.isFinite(windowSecs) || windowSecs < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
         // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
@@ -1190,7 +1195,7 @@ window.__ModuleLoader__.load({
         const presetWire = presetWireOf(form.preset);
         const hook = {
           enabled: !!form.enabled,
-          escalation: { enabled: !!esc.enabled, threshold: threshold, windowMs: windowMs, primitives: prims },
+          escalation: { enabled: !!esc.enabled, threshold: threshold, windowSeconds: windowSecs, primitives: prims },
           flags: { narrow: !!form.narrow }
         };
         if (presetWire !== undefined) hook.preset = presetWire;
@@ -1317,9 +1322,9 @@ window.__ModuleLoader__.load({
                   onChange: (v) => patchEsc({ threshold: v })
                 }),
                 React.createElement(NumberField, {
-                  label: tt('gov.esc.window'), value: form.escalation.windowMs,
-                  min: 1000, step: 1000, suffix: 'ms',
-                  onChange: (v) => patchEsc({ windowMs: v })
+                  label: tt('gov.esc.window'), value: form.escalation.windowSecs,
+                  min: 1, step: 1,
+                  onChange: (v) => patchEsc({ windowSecs: v })
                 }),
                 React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                   React.createElement('span', { style: { flex: 1, fontSize: G().label, color: T.text2 } }, tt('gov.esc.primitives')),
