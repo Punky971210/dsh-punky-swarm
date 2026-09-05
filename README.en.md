@@ -85,6 +85,33 @@ Minimal run: ask the agent to create a three-layer batch with wave_plan (declare
 - Governance config page guide: [webui-governance-config.md](packages/dsh-punky-swarm/docs/webui-governance-config.md);
 - Interactive demos (open in a browser): [waveplan-dag](assets/demo/waveplan-dag.html) · [tier3-gates](assets/demo/tier3-gates.html) · [checkpoint-resume](assets/demo/checkpoint-resume.html).
 
+## Governance Tools
+
+20 tools ship by default (optional ones such as `log_export` register when their capability key is enabled). The table walks through batching, state, gates, assets & locks, members, mailbox messaging, heartbeat watch, isolation and checkpoints:
+
+| Tool | Governance capability / purpose | Stage |
+|---|---|---|
+| `wave_plan` | Create a batch layered into waves by dependency DAG; static contract checks; never recomputed | plan |
+| `batch_phase` | Move a batch through planning→running→paused→aborted/complete | All |
+| `batch_status` | Query batch state (phase/lanes/wavePlan/event digest) | All |
+| `assign_check` | Grade task difficulty A/B/C and pick the executor (full scope, default C) | plan |
+| `gate_status` | Query gate state (consume/produce/outputs missing lists) | plan/exec/audit |
+| `artifact_types` | Query the artifact-type registry (layer/directory prefix conventions) | plan |
+| `asset_claim` | Copy already-produced artifacts into batch assets | plan |
+| `lane_claim` | O_EXCL single-writer lane lock (reject first; wait/force takeover) | exec |
+| `lane_release` | Release a lane lock | exec |
+| `member_status` | Operate member state (pending/running/review/idle) | exec |
+| `member_settle` | Settle members (merged/failed/skipped/conflict, gate-checked) | exec/audit |
+| `mailbox_send` | Send messages (inbox/outbox/broadcast; atomic write + ackId) | All |
+| `mailbox_read` | Read unacknowledged messages | All |
+| `mailbox_ack` | Acknowledge consumed messages | All |
+| `lane_heartbeat` | Lane heartbeat query/trigger (flags stalled; flag only, no auto action) | exec |
+| `lane_longrun` | No-progress probe for long runs (flags candidate, notifies the Manager) | exec |
+| `lane_worktree_create` | Create an isolated git worktree per lane (baseline = integration HEAD) | exec |
+| `lane_worktree_merge` | Merge a lane branch into the integration branch (conflicts keep the scene) | exec |
+| `lane_checkpoint` | Git checkpoint after each sub-step (step N/total) | exec |
+| `lane_checkpoint_status` | Query checkpoint history & progress (resume contract entry) | exec |
+
 ## Compatibility & Boundaries
 
 Current version **0.4.1**; 816 tests passing (measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.

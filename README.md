@@ -87,6 +87,33 @@ dsh web restart
 - 治理配置页说明：[webui-governance-config.md](packages/dsh-punky-swarm/docs/webui-governance-config.md)；
 - 交互演示（浏览器直接打开）：[waveplan-dag](assets/demo/waveplan-dag.html) · [tier3-gates](assets/demo/tier3-gates.html) · [checkpoint-resume](assets/demo/checkpoint-resume.html)。
 
+## 治理工具一览
+
+治理动作由 20 个默认装配的工具承载（`log_export` 等可选工具在对应能力键开启后另计），下表按建批、状态、门禁、资产与锁、成员、mailbox 通信、心跳看护、隔离与断点分组：
+
+| 工具 | 治理能力 / 用途 | 阶段 |
+|---|---|---|
+| `wave_plan` | 按依赖 DAG 分波建批，三层产物契约静态校验，分层固定不重算 | plan |
+| `batch_phase` | 批次阶段迁移（planning→running→paused→aborted/complete） | 全程 |
+| `batch_status` | 批次状态查询（phase/lanes/wavePlan/事件摘要） | 全程 |
+| `assign_check` | 任务难度 A/B/C 判定与执行主体（评估完整目标，拿不准按 C） | plan |
+| `gate_status` | 门禁状态查询（consume/produce/outputs 缺件清单） | plan/exec/audit |
+| `artifact_types` | 产物类型注册表查询（层/目录前缀约定） | plan |
+| `asset_claim` | 已直做产物复制归位为批次资产 | plan |
+| `lane_claim` | O_EXCL 单写者锁认领（冲突先拒，可 wait/force 接管） | exec |
+| `lane_release` | 释放 lane 锁 | exec |
+| `member_status` | 成员状态操作（pending/running/review/idle） | exec |
+| `member_settle` | 成员结算（merged/failed/skipped/conflict，带门禁校验） | exec/audit |
+| `mailbox_send` | 发送消息（inbox/outbox/broadcast，原子写 + ackId） | 全程 |
+| `mailbox_read` | 读取未确认消息 | 全程 |
+| `mailbox_ack` | 确认消费消息 | 全程 |
+| `lane_heartbeat` | lane 心跳查询/触发（失活标 stalled，只标记不自动处置） | exec |
+| `lane_longrun` | 长跑无进展探针（标候选并通知 Manager） | exec |
+| `lane_worktree_create` | 为 lane 建隔离 git worktree（从集成分支 HEAD 基线） | exec |
+| `lane_worktree_merge` | lane 分支并入集成分支（冲突保留现场交裁决） | exec |
+| `lane_checkpoint` | 每完成子步骤即 git 保全（step N/total） | exec |
+| `lane_checkpoint_status` | 查询 checkpoint 历史与进度（续跑契约入口） | exec |
+
 ## 兼容性与边界
 
 当前版本 **0.4.1**；816 项测试全绿（实测于 Node 24，CI 覆盖 Node 22/24）；peer 依赖 @deepseek-ai/dsh-tools（^0.1.0-rc.6 \|\| ^0.1.1-rc.2）与 @deepseek-ai/cordis（^4.0.1）；已收录 awesome-dsh-plugin。
