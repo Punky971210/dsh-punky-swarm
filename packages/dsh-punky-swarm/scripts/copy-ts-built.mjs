@@ -1,20 +1,3 @@
-/*
-Copyright (C) 2025-2026 Punky
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-*/
-
 // copy-ts-built.mjs —— 编译产物回拷（设计 §5.2 双配置方案）
 // tsc -p tsconfig.build.json 把 lib 下 .ts 模块 emit 到 .tsbuild/；
 // 本脚本把转换模块 + contracts 的 .js/.d.ts 回拷到 lib/ 原位（main/exports/相对 import 路径契约零变化），
@@ -41,6 +24,7 @@ const files = [
   'governance/narrow.js', 'governance/narrow.d.ts',
   'governance/config.js', 'governance/config.d.ts',
   'governance/kernel.js', 'governance/kernel.d.ts',
+  'governance/preset-loader.js', 'governance/preset-loader.d.ts',
   'governance/index.js', 'governance/index.d.ts',
 ];
 

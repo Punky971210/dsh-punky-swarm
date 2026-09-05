@@ -57,11 +57,14 @@ import { runGit } from './git-utils.js';
 
 // ---- 依赖注入（守卫式加载）----
 let createHeartbeatTools = null;
+let createLongrunTools = null;
 try {
   const m = await import('../watch/lane-heartbeat.js');
   createHeartbeatTools = (typeof m?.createHeartbeatTools === 'function') ? m.createHeartbeatTools : null;
+  createLongrunTools = (typeof m?.createLongrunTools === 'function') ? m.createLongrunTools : null;
 } catch {
   createHeartbeatTools = null; // 模块异常 → lane_heartbeat 留待集成
+  createLongrunTools = null; // 模块异常 → lane_longrun 留待集成
 }
 
 // ---- 常量 ----
@@ -436,12 +439,14 @@ function worktreeToolMerge(ctx, deps) {
   });
 }
 
-// ---- 组装：lane_heartbeat（enabled 门控由该模块自持）+ worktree 四工具 ----
+// ---- 组装：lane_heartbeat / lane_longrun（enabled 门控由该模块自持）+ worktree 四工具 ----
 export function createLaneTools(ctx, deps) {
   const config = deps?.config ?? {};
   const tools = [];
   // 注入的 lane_heartbeat；守卫式加载，模块未合入时留待集成（功能独立，互不阻塞）
   if (createHeartbeatTools) tools.push(...createHeartbeatTools(ctx, deps));
+  // 注入的 lane_longrun（longrun 档并列注册；出厂默认开——watch.longrun.enabled 默认 true，显式 false 不注册）
+  if (createLongrunTools) tools.push(...createLongrunTools(ctx, deps));
   // worktree 四工具（create/merge/checkpoint/checkpoint_status）：P1-01 缺省默认开（readCapability 合并注册表 default，显式 enabled:false 可关）
   if (readCapability(config, 'worktree')?.enabled === true) {
     tools.push(

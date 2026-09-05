@@ -1,0 +1,143 @@
+{
+  "_meta": {
+    "presetId": "l1-sensitive",
+    "schemaVersion": 1,
+    "layer": "L1",
+    "title": "L1 敏感数据防护预设",
+    "description": "调用参数值级敏感数据防护：私钥块/凭据签名进入子代理透传面、外网搜索出口与命令执行面时的内容检测与分级动作（hard 拒绝 / manual_review 人工复核）。",
+    "ruleCount": 12,
+    "tools": ["subagent", "subagent_fork", "send_message", "workflow", "ralph", "web_search", "pwsh", "ssh_exec", "ssh_cluster"],
+    "notes": {
+      "L1-D01": "私钥块字面量进入 subagent/subagent_fork 的 prompt：私钥复制进子代理上下文几乎无正当场景，hard 直接 DENY。",
+      "L1-D02": "私钥块进入 send_message 消息体：禁止经消息信道发送给子代理，hard DENY。",
+      "L1-D03": "私钥块进入 workflow 脚本正文：脚本分发到一批新鲜子代理，hard DENY。",
+      "L1-D04": "私钥块进入 ralph 轮次目标：写入每轮新鲜 agent 的不可变目标，hard DENY。",
+      "L1-A05": "凭据签名（令牌前缀/内联 secret/带凭据 URL）进入 prompt：可能是正当透传也可能是泄密，manual_review 转人工闸。",
+      "L1-A06": "凭据签名进入 send_message 消息体：跨子代理发送敏感需人工确认。",
+      "L1-A07": "凭据签名进入 workflow 脚本：分发执行前需人工确认。",
+      "L1-A08": "凭据签名进入 ralph 目标：写入轮次目标前需人工确认。",
+      "L1-D09": "带凭据 URL（user:pass@host）进入 web_search 查询串：查询会外发至搜索端点，无正当场景，hard DENY；/queries 为数组，regex 按 String(数组) 判定。",
+      "L1-A10": "pwsh 命令内联凭据：可能正当（本地 CLI 环境变量注入），manual_review。",
+      "L1-A11": "ssh_exec 远程命令内联凭据：远程 shell 正文携带敏感需人工确认。",
+      "L1-A12": "ssh_cluster 批量命令内联凭据：多主机远程正文携带敏感需人工确认。"
+    },
+    "boundary": "仅覆盖跨信任边界透传面（subagent 族/workflow/ralph）、外网出口面（web_search）与命令执行面（pwsh/ssh 族）的参数值内容；本地文件写读（write/edit/read）与路径面由宿主沙箱管理，本预设不设规则；全部规则显式 tools 白名单，治理/编排类工具不在名单内（结构性豁免）。"
+  },
+  "rules": [
+    {
+      "id": "L1-D01",
+      "tools": ["subagent", "subagent_fork"],
+      "match": { "path": "/prompt", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D01", "category": "hard", "path": "/prompt",
+          "message": "[preset L1] 子代理 prompt 中出现私钥块（-----BEGIN ... PRIVATE KEY-----）：私钥材料禁止传入子代理/委托上下文" }
+      ]
+    },
+    {
+      "id": "L1-D02",
+      "tools": ["send_message"],
+      "match": { "path": "/message", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D02", "category": "hard", "path": "/message",
+          "message": "[preset L1] send_message 消息体中出现私钥块：私钥材料禁止经消息信道发送给子代理" }
+      ]
+    },
+    {
+      "id": "L1-D03",
+      "tools": ["workflow"],
+      "match": { "path": "/script", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D03", "category": "hard", "path": "/script",
+          "message": "[preset L1] workflow script 中出现私钥块：脚本正文禁止携带私钥材料分发到子代理" }
+      ]
+    },
+    {
+      "id": "L1-D04",
+      "tools": ["ralph"],
+      "match": { "path": "/objective", "op": "regex", "pattern": "-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY-----" },
+      "violations": [
+        { "code": "L1-D04", "category": "hard", "path": "/objective",
+          "message": "[preset L1] ralph objective 中出现私钥块：私钥材料禁止写入新鲜 agent 的轮次目标" }
+      ]
+    },
+    {
+      "id": "L1-A05",
+      "tools": ["subagent", "subagent_fork"],
+      "match": { "path": "/prompt", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A05", "category": "manual_review", "path": "/prompt",
+          "message": "[preset L1] 子代理 prompt 疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：透传敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A06",
+      "tools": ["send_message"],
+      "match": { "path": "/message", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A06", "category": "manual_review", "path": "/message",
+          "message": "[preset L1] 消息体疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：跨子代理发送敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A07",
+      "tools": ["workflow"],
+      "match": { "path": "/script", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A07", "category": "manual_review", "path": "/script",
+          "message": "[preset L1] workflow 脚本疑似携带凭据：分发到子代理执行前需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A08",
+      "tools": ["ralph"],
+      "match": { "path": "/objective", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A08", "category": "manual_review", "path": "/objective",
+          "message": "[preset L1] ralph 目标疑似携带凭据：写入轮次目标前需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-D09",
+      "tools": ["web_search"],
+      "match": { "path": "/queries", "op": "regex", "pattern": "https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@" },
+      "violations": [
+        { "code": "L1-D09", "category": "hard", "path": "/queries",
+          "message": "[preset L1] web_search 查询串含内嵌凭据 URL（user:pass@host）：禁止向搜索端点外发凭据" }
+      ]
+    },
+    {
+      "id": "L1-A10",
+      "tools": ["pwsh"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A10", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] pwsh 命令疑似内联凭据（令牌/secret/带凭据 URL）：建议改经凭证存储引用，执行需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A11",
+      "tools": ["ssh_exec"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A11", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] ssh_exec 命令疑似内联凭据：远程 shell 正文携带敏感需人工确认" }
+      ]
+    },
+    {
+      "id": "L1-A12",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/command", "op": "regex",
+        "pattern": "(?:https?:\\/\\/[^\\s\\/@:]+:[^\\s\\/@]+@)|(?:sk-[A-Za-z0-9_-]{20,})|(?:ghp_[A-Za-z0-9]{30,})|(?:gho_[A-Za-z0-9]{30,})|(?:AKIA[0-9A-Z]{16})|(?:AIza[0-9A-Za-z_-]{35})|(?:ya29\\.[0-9A-Za-z_-]{10,})|(?:xox[baprs]-[A-Za-z0-9-]{10,})|(?:(?:[Pp]assword|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey|[Aa]uthorization|[Cc]redential|[Aa]ccess[_-]?[Kk]ey)[\\s]*[:=][\\s]*[\"']?[A-Za-z0-9_\\-.\\/+]{10,})" },
+      "violations": [
+        { "code": "L1-A12", "category": "manual_review", "path": "/command",
+          "message": "[preset L1] ssh_cluster 批量命令疑似内联凭据：多主机远程正文携带敏感需人工确认" }
+      ]
+    }
+  ]
+}

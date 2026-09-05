@@ -31,8 +31,17 @@
           #   intervalsMinutes 退避档位（分钟，默认 [10,20,30]，冷场越久追问间隔越长）；maxMissed 硬停拍数
           #   （默认 3，连续 N 拍无活动 → appendEvent('lane.stalled') 停止追问，只标记不自动处置）；
           #   scanIntervalMinutes watchdog 扫描间隔（默认 1）；probeTemplate 可选覆写追问模板（{lane}/{batchId}/{missed} 占位）。
+          #   longrun 子键（长跑档探针，出厂默认开——用户定案修订，非设计默认关）：running lane 持续超
+          #   maxDurationMs（默认 1200000=20min）且近 noProgressWindowMs（默认 300000=5min）无新 checkpoint
+          #   且无活动（严格 AND）→ 同 tick 产 lane.longrun.candidate 事件 + mailbox broadcast 候选通知
+          #   Manager 裁决（探针只标记不改 lane 状态；lane_longrun 工具并列注册，enabled=false 不注册、
+          #   tick 不判、零事件零消息零行为变化）。
           watch:
             enabled: true
+            longrun:
+              enabled: true           # 出厂默认开（定案修订：显式 false 才关）
+              maxDurationMs: 1200000  # 长跑超时阈值（默认 20min；正整数 ms，非法回退默认）
+              noProgressWindowMs: 300000  # 无进展窗（默认 5min；正整数 ms，非法回退默认）
           # worktree 物理隔离（lane-tools）：enabled=true 时注册 lane_worktree_create / lane_worktree_merge / lane_checkpoint
           # （git worktree 隔离 + checkpoint 提交；与 lane_claim 逻辑锁互补——lane_claim 管状态层「写谁的」，
           #  本组工具管工作区层「写到哪」；全能力默认开 → 工具总数 18（14+heartbeat+worktree 三件+log_export），回归已覆盖）。
@@ -70,6 +79,14 @@
           hook:
             enabled: true      # 默认开启；空规则表 → decide 恒 ALLOW → 零行为变化
             rules: []          # 规则表（空=零拦截）；Rule 结构见 lib/governance/types.ts
+            # M5-b preset 装载键（preset-build）：引用随包预设（presets/hook-rules/ 三 JSON，注册 id 枚举：
+            #   l1-sensitive / l2-resource / compose——不接受任意路径），保序展开拼接至 rules（inline rules 在后）。
+            #   preset: 'l1-sensitive' 或 preset: ['l1-sensitive', 'l2-resource']（= compose 逐条等价，二选一互斥引用——
+            #   同批引用 compose + l1-sensitive 会产生重复 id → 装载失败回退空表 + warn，宁空勿半）。
+            #   runtime.json 热更示例：{"governance":{"hook":{"preset":["l1-sensitive","l2-resource"]}}}（⑤ 通道即时生效）。
+            #   出厂不默认启用任何 preset（本键缺省 = 空表零拦截不变，与 rules:[] 出厂安全默认严格一致）——
+            #   需启用时经 runtime.json 下发或装配 config 注入；preset 文件内容随包版本发布生效（boot 装载一次）。
+            # preset: []        # ← 示例注释（默认不启用，勿取消注释即默认值）
             # M5-a：护栏违规计数升级（默认关——出厂零行为变化；开启后：归属批次的规则拒绝
             # （DENY/NARROW）在 windowMs 内达 threshold → 经棘轮校验批 paused（reason=governance-escalate）；
             # 与 hook enabled:true 内核就位零拦截正交——出厂 rules:[] 本就零收据，关保持「改规则不意外武装暂停」保守面）

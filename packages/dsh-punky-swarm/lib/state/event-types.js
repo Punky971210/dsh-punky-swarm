@@ -46,6 +46,11 @@ export const EVT_ASSET_CLAIMED = 'asset.claimed';
 
 // 监控/预算/进度事件（R-01 扩面）
 export const EVT_LANE_STALLED = 'lane.stalled'; // R-01 扩面（lane-heartbeat.js:188 发端 + store.js:530 读端）
+// longrun 档（longrun-probe-build 批次）：lane 超时重派探针候选事件——running 持续超 maxDurationMs 且
+// 近 noProgressWindowMs 无新 checkpoint 且无活动（严格 AND）→ 探针产候选（事件 + mailbox broadcast 通知 Manager 裁决）。
+// 与 lane.stalled 语义区分：stalled=连续 N 拍无活动（失联/假死档）；longrun=时长超阈值+无进展（任务过重/停滞档）。
+// 纪律同 stalled：只写事件流不改 lane 状态（schema.js MEMBER_STATES/TRANSITIONS 零改动）。
+export const EVT_LANE_LONGRUN_CANDIDATE = 'lane.longrun.candidate';
 export const EVT_LANE_OVER_BUDGET = 'lane.over-budget'; // R-01 扩面（lane-tools.js:346 发端 + resume.js:179 读端）
 export const EVT_BUDGET_REJECTED = 'budget.rejected'; // R-01 扩面（mailbox-tools.js:79 发端 + log-tools.js:53 读端）
 export const EVT_WORKTREE_CREATED = 'worktree.created'; // R-01 扩面（lane-tools.js:278 发端）

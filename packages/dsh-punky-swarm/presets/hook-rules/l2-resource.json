@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "presetId": "l2-resource",
+    "schemaVersion": 1,
+    "layer": "L2",
+    "title": "L2 资源边界预设",
+    "description": "资源型参数数值上限 + 收窄指引（deny-with-guidance）：调用超限时拒绝并回钳制后的参数建议（narrowedParams），模型按指引重试即为合规调用。",
+    "ruleCount": 6,
+    "tools": ["pwsh", "ssh_exec", "ssh_cluster", "create_goal", "ralph"],
+    "notes": {
+      "L2-R01": "pwsh timeoutMs 上限 600000ms；gt 严格大于，等值不命中；clamp max 含等号收敛到上限值。",
+      "L2-R02": "ssh_exec timeoutMs 上限 120000ms（默认 60000，防任意调大）。",
+      "L2-R03": "ssh_cluster timeoutMs 上限 300000ms。",
+      "L2-R04": "ssh_cluster maxWorkers 上限 16（默认并发 8）。",
+      "L2-R05": "create_goal max_goal_rounds 上限 50（自动延续轮数资源约束）。",
+      "L2-R06": "ralph maxRounds 上限 20（部署上限兜底的预设硬化）。"
+    },
+    "boundary": "仅覆盖实有资源型参数（timeoutMs/maxWorkers/max_goal_rounds/maxRounds）；read.limit 与 web_search.queries 条数由宿主硬上限管理，本预设不重复；gt 判定为严格大于、等值放行。多档同现：本层规则命中（narrowable）与 manual_review 规则同现时裁决为人工复核（REQUIRE_APPROVAL），此时不产出收窄指引——资源边界由人工闸裁决替代（人工放行 = 知情接受超限）；自动化无审批通道态 = fail-closed 拒绝，不构成放行。"
+  },
+  "rules": [
+    {
+      "id": "L2-R01",
+      "tools": ["pwsh"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 600000 },
+      "violations": [
+        { "code": "L2-R01", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] pwsh timeoutMs 超过上限 600000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 600000 } ]
+    },
+    {
+      "id": "L2-R02",
+      "tools": ["ssh_exec"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 120000 },
+      "violations": [
+        { "code": "L2-R02", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] ssh_exec timeoutMs 超过上限 120000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 120000 } ]
+    },
+    {
+      "id": "L2-R03",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/timeoutMs", "op": "gt", "value": 300000 },
+      "violations": [
+        { "code": "L2-R03", "category": "narrowable", "path": "/timeoutMs",
+          "message": "[preset L2] ssh_cluster timeoutMs 超过上限 300000ms：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/timeoutMs", "max": 300000 } ]
+    },
+    {
+      "id": "L2-R04",
+      "tools": ["ssh_cluster"],
+      "match": { "path": "/maxWorkers", "op": "gt", "value": 16 },
+      "violations": [
+        { "code": "L2-R04", "category": "narrowable", "path": "/maxWorkers",
+          "message": "[preset L2] ssh_cluster maxWorkers 超过上限 16：请按收窄指引重试" }
+      ],
+      "narrow": [ { "path": "/maxWorkers", "max": 16 } ]
+    },
+    {
+      "id": "L2-R05",
+      "tools": ["create_goal"],
+      "match": { "path": "/max_goal_rounds", "op": "gt", "value": 50 },
+      "violations": [
+        { "code": "L2-R05", "category": "narrowable", "path": "/max_goal_rounds",
+          "message": "[preset L2] create_goal max_goal_rounds 超过上限 50：自动延续轮数需受资源边界约束" }
+      ],
+      "narrow": [ { "path": "/max_goal_rounds", "max": 50 } ]
+    },
+    {
+      "id": "L2-R06",
+      "tools": ["ralph"],
+      "match": { "path": "/maxRounds", "op": "gt", "value": 20 },
+      "violations": [
+        { "code": "L2-R06", "category": "narrowable", "path": "/maxRounds",
+          "message": "[preset L2] ralph maxRounds 超过上限 20：轮次上限需受资源边界约束" }
+      ],
+      "narrow": [ { "path": "/maxRounds", "max": 20 } ]
+    }
+  ]
+}

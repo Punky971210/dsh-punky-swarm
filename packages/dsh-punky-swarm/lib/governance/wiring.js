@@ -77,11 +77,17 @@ export function formatDecision(d) {
 //   evidence.js:242-244 同款）。装配层（lib/index.js）注入实现 → 写批级事件流文件
 //   <root>/governance/events/refusal-<sessionId>.jsonl（零依赖 node:fs 追加；事件序不变量 §4.4：
 //   桥接在 pre 同步路径内调用，不 ctx.emit、不异步脱离事件流）。dispose 时回调断开（幂等）。
-export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal } = {}) {
+export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable } = {}) {
   // 配置读取：cordis.patch.yml 顶层 governance.hook 键（蓝图 §7；I2-4 对齐断言）。
   // 缺省/空对象 → GOVERNANCE_DEFAULTS（enabled:true, rules:[], defaults.deny:DENY, flags 全 false）。
-  const cfg = resolveGovernanceConfig(config?.governance?.hook ?? {});
+  // M5-b（preset-build，C2）：resolve opts 注入 presetTable（boot 装载一次的 preset 表——wiring 内部
+  //   resolve 与装配侧快照基准一致）+ warn 封装（logger.warn，非静默——preset 装载失败回退空表时
+  //   显式留痕，防「以为武装实则裸奔」假安全）。
   const log = logger ?? ctx?.logger ?? null;
+  const cfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, {
+    presetTable,
+    warn: (m) => log?.warn?.('[governance] ' + m),
+  });
   const inert = (reason) => ({ installed: false, reason, refusals: { count: () => 0 }, dispose() {} });
   if (cfg.enabled !== true) return inert('disabled');
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');

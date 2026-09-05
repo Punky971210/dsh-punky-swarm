@@ -32,17 +32,17 @@ const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
 
 const EXEC_SESS = { agent: { session: { id: 'sess-leader' } } };
 
-// P1-01 缺省默认开：core 11 + mailbox 3 + lane_heartbeat + worktree 四件 = 19（logs 缺省关，log_export 不在内）
-const DEFAULT_TOOL_COUNT = 19;
+// P1-01 缺省默认开：core 11 + mailbox 3 + lane_heartbeat + lane_longrun + worktree 四件 = 20（logs 缺省关，log_export 不在内）
+const DEFAULT_TOOL_COUNT = 20;
 
-test('all 19 tools registered（P1-01 缺省默认开）', () => {
+test('all 20 tools registered（P1-01 缺省默认开）', () => {
   assert.equal(tools.length, DEFAULT_TOOL_COUNT);
-  for (const n of ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
+  for (const n of ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(byName[n], 'missing tool ' + n);
   }
 });
 
-test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非空（19 描述，readCapability 默认合并）', () => {
+test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非空（20 描述，readCapability 默认合并）', () => {
   const reg = [];
   const ctxA = { tools: { register: (t) => reg.push(t) }, logger: console };
   const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
@@ -51,7 +51,7 @@ test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非
   assert.equal(t.catalog, null); // register() 前恒 null（懒生成）
   t.register();
   assert.ok(t.catalog, '缺省配置必须实际默认开启（catalog 非空）');
-  assert.equal(t.catalog.list().length, DEFAULT_TOOL_COUNT); // 19 工具 6 属性描述齐备
+  assert.equal(t.catalog.list().length, DEFAULT_TOOL_COUNT); // 20 工具 6 属性描述齐备
   assert.equal(reg.length, DEFAULT_TOOL_COUNT); // 工具注册数与 catalog 一致（P1-01 缺省默认开）
 });
 

@@ -42,6 +42,13 @@ import { installGovernanceHook } from './governance/wiring.js';
 // P3 热切（harden-plan §5.4 A）：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
 //   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount ④ 模式，不引入 updateConfig API）
 import { resolveGovernanceConfig } from './governance/config.js';
+// M5-b（preset-build）：preset 装载（governance.hook.preset 引用键 → boot 装载一次 table 注入 resolve
+//   presetTable——preset 文件 = 发布资产语义，热更只管引用启停、不重读文件）
+import { loadPresetTable, PRESET_IDS } from './governance/preset-loader.js';
+// WebUI 治理配置写通道（webui-config-build-20260903）：createApi configEndpoints 注入面——
+//   runtimeConfig 服务实例（<root>/config/runtime.json 写通道）+ trustedHosts（出厂 []）+ applied/presets
+//   getters（延迟引用装配后初始化绑定，HTTP 请求时求值无 TDZ——见 createApi 调用点注释）
+import { createRuntimeConfigService } from './webui/runtime-config.js';
 // P2 双层桥接事件流（harden-plan §5.3 B）：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
 //   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移——归 M5-a）
 import { appendRefusalEvent } from './governance/receipt-store.js';
@@ -256,7 +263,21 @@ export const apply = (ctx, config = {}) => {
     //   dispose 归属本层（api.js:45 自建者 dispose；注入时 api.js 不 push disposer）。
     //   hub 随 webServer 挂载（ADR-4 无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源①
     panelStream = createStreamHub({ root, logger: ctx.logger });
-    apiDispose = createApi(ctx, { store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat, discovery, acpsDiscovery: acpsDiscoveryClient, panelStream }).dispose;
+    // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.6）：configEndpoints 注入面——
+    //   runtimeConfig = <root>/config/runtime.json 写通道服务实例；trustedHosts 出厂 []（loopback-only，
+    //   非 loopback 部署需把宿主 trustedHosts 镜像进插件 config.trustedHosts——文档化运维要求）；
+    //   applied/presets = 延迟 getter：governanceInstalledCfg/presetCatalog 在本函数体后段（preset 装载
+    //   之后）才初始化——getter 只在 HTTP 请求时求值，彼时已绑定，无 TDZ。
+    apiDispose = createApi(ctx, {
+      store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat,
+      discovery, acpsDiscovery: acpsDiscoveryClient, panelStream,
+      configEndpoints: {
+        runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
+        trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
+        applied: () => governanceInstalledCfg,
+        presets: () => presetCatalog,
+      },
+    }).dispose;
 
     // M1 闭合（panel-verify §3 修复指引）：R3 SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
     //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源①（下方 topic 运行时装配分支与 R1 热更新③对称接线）；
@@ -449,9 +470,22 @@ export const apply = (ctx, config = {}) => {
   if (dispatchReg.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] D-1 dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（方案 B，零宿主改造）');
   }
+  // M5-b preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 三 JSON → 表注入 resolve
+  //   presetTable（governance.hook.preset 引用展开源）。errors（文件缺失/损坏/形状坏）→ 逐条 warn 留痕，
+  //   不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
+  // C2（acceptance）：resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
+  //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
+  const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
+  const { table: presetTable, errors: presetErrors } = loadPresetTable();
+  for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
+  // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.6）：preset 注册目录元数据
+  //   （GET /config presets 源：id = 已成功装载的注册 id、count = 规则数——装载失败不入目录，
+  //   装配侧已对 errors 逐条 warn；derived from presetTable，:461 装载后一次性派生）
+  const presetCatalog = PRESET_IDS.filter((id) => Array.isArray(presetTable[id]))
+    .map((id) => ({ id, count: presetTable[id].length }));
   // 当前已挂载 hook 的解析配置快照（P3 热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
-  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {});
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge });
+  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
@@ -469,11 +503,11 @@ export const apply = (ctx, config = {}) => {
   //   - refusals count 随新实例归零（运行时状态重置契约，harden-plan §5.4 A.2「重挂后 refusals count 等
   //     运行时状态重置」）。
   const remountGovernanceHook = (nextConfig, logTag) => {
-    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {});
+    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
     if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
     const wasInstalled = governanceHook?.installed === true;
     governanceHook?.dispose?.();
-    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge });
+    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable });
     governanceInstalledCfg = govCfg;
     const nowInstalled = governanceHook?.installed === true;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled

@@ -1,164 +1,96 @@
-# dsh-punky-swarm — Multi-Agent Governance for DeepSeek Harness
+# dsh-punky-swarm — Multi-Agent Pipeline Governance for DeepSeek Harness
 
 <p align="center">
   <a href="https://github.com/Punky971210/dsh-punky-swarm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Punky971210/dsh-punky-swarm?label=license" alt="license"></a>
-  <a href="https://github.com/awesome-dsh-plugin/awesome-dsh-plugin"><img src="https://awesome-dsh-plugin.com/badge.svg" alt="awesome"></a>
+  <a href="https://awesome-dsh-plugin.com"><img src="https://awesome-dsh-plugin.com/badge.svg" alt="awesome"></a>
   <a href="https://github.com/Punky971210/dsh-punky-swarm/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Punky971210/dsh-punky-swarm/ci.yml?branch=main&label=CI" alt="CI"></a>
   <a href="https://github.com/Punky971210/dsh-punky-swarm/blob/main/packages/dsh-punky-swarm/package.json"><img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="node"></a>
-  <a href="https://github.com/Punky971210/dsh-punky-swarm/tree/main/packages/dsh-punky-swarm/test"><img src="https://img.shields.io/badge/tests-582%20passed-success" alt="tests"></a>
+  <a href="https://github.com/Punky971210/dsh-punky-swarm/tree/main/packages/dsh-punky-swarm/test"><img src="https://img.shields.io/badge/tests-816%20passed-success" alt="tests"></a>
 </p>
 
-> *Engine-enforced guardrails for DeepSeek Harness agent swarms: quality gates reject half-done work, crash-safe checkpoints resume in place — keeps AI teams from breaking, not just running.*
+> *Engine-enforced guardrails for local agent pipelines: quality gates reject half-done work, checkpoints resume in place — keeps AI teams from breaking, not just running.*
 
 中文: [README.md](README.md)
 
-## Contents
-
-- [Abstract](#abstract) · [Why](#why) · [30-Second Overview](#30-second-overview) · [Quick Start](#quick-start) · [Capabilities](#capabilities-10) · [Architecture](#architecture) · [Demo](#demo) · [Compatibility Matrix](#compatibility-matrix) · [Roadmap](#roadmap) · [License](#license)
-
 ---
-
-## Abstract
-
-dsh-punky-swarm is a single-machine multi-agent governance plugin for DeepSeek Harness. Tasks run in dependency-ordered waves, engine-enforced gates reject half-done work, and checkpoints let long-running batches resume after a crash. The plugin ships 19 governance tools (20 with all capabilities enabled), passes 582 tests, and is licensed under AGPL-3.0-only.
 
 ## Why
 
-Single agents are easy; swarms are hard. Parallel multi-agent execution is not just firing prompts together — who runs first, who waits for whom, who writes which file, where to resume after a crash. Those are the real questions of swarm governance.
+A single agent is easy to manage: when it drifts, you watch and pull it back. A batch of agents working together is another story — who runs first, who waits for whom, who writes which file, where to resume after a crash. With no one in charge, that is an incident site waiting to happen.
 
-- **Ungated dispatch starts work half-baked** — downstream lanes get dispatched before their dependency artifacts exist, so failures surface only at rework time. Gates verify artifacts before dispatch and reject when anything is missing, stopping half-baked work at the source.
-- **Long tasks without checkpoints lose everything on a crash** — long batches have no mid-way backup, and one crash wipes out hours of work. Progress is saved after every completed sub-step, so after a crash you resume from the breakpoint instead of starting over.
-- **Parallel lanes writing one repo trample each other** — concurrent writes to the same repo overwrite each other and conflicts are hard to trace. Each lane gets an isolated workspace, and conflicts are kept for adjudication.
+Three pain points everyone who has run long batches has hit:
 
-## 30-Second Overview
+- **Half-done work shipped as done** — downstream lanes get dispatched before upstream artifacts exist, and failures only surface at rework time;
+- **One crash wipes out everything** — hours of batch work with no mid-way backup, reset to zero by a single crash;
+- **Parallel lanes trample each other** — several agents writing the same repo overwrite each other, and nobody can tell who changed what.
 
-Three pain points:
+The tools are not broken — what is missing are gates in the pipeline. This plugin installs three gates into the engine: artifacts incomplete, no dispatch; step done, save a checkpoint; one job, one writer at a time.
 
-- **Ungated dispatch starts work half-baked** — downstream dispatched before upstream artifacts are ready; failure only surfaces at rework;
-- **No checkpoints, long tasks lose everything on a crash** — hours of batch work reset by a single crash;
-- **Parallel lanes writing one repo trample each other** — concurrent commits overwrite, and nobody can tell who changed what.
+Every task is graded before it starts: a quick job you can finish directly (A), a self-contained chunk for one agent (B), and a job with many steps, roles and acceptance criteria goes through the full batch pipeline (C) — when in doubt, treat it as a big job, so small tasks never get a heavyweight process.
 
-**Fig 1 · wavePlan dependency DAG** — plan/exec/audit swim lanes; wave 1-3 inside exec: parallel within a wave, serial between waves; edges carry artifact names.
+## Three Mechanisms, Three Cures
+
+| Pain point | Mechanism | What you get |
+|---|---|---|
+| Half-done work shipped as done | **Engine-enforced gates**: upstream artifacts checked before dispatch, files checked on disk before settle, acceptance checked before complete — reject when anything is missing | Half-done work never reaches you |
+| One crash wipes out everything | **Checkpointing**: every completed sub-step is preserved in git; resume from the breakpoint after a crash | Interruption is a pause at a save point, not a restart |
+| Parallel lanes trample each other | **Single-writer lock + isolated workspaces**: one writer per lane at a time, each working in its own tree | Conflicts keep the scene for adjudication — never silently overwritten |
+
+People work in three layers: Leader breaks down tasks and owns the final gate, Manager schedules, workers execute. Tasks run in dependency-ordered waves (wavePlan, below), and each batch goes through plan → exec → audit, artifacts connected by contract. Waves are fixed at batch creation and never recomputed — change the goal, create a new batch; a running batch does not drift. Lane state and events are fully traced and auditable.
 
 ```mermaid
 flowchart LR
   subgraph PLAN[plan layer]
-    P["plan produces spec.md"]
+    P["plan produces spec"]
   end
   subgraph W1[wave 1 parallel]
-    A1["exec-A produces impl.md"]
-    A2["exec-B produces test.md"]
+    A1["exec-A"]
+    A2["exec-B"]
   end
   subgraph W2[wave 2]
-    A3["exec-C produces verify.md"]
-  end
-  subgraph W3[wave 3]
-    A4["exec-D produces release.md"]
+    A3["exec-C"]
   end
   subgraph AUDIT[audit layer]
     AU["audit acceptance"]
   end
-  P -->|"spec.md"| A1
-  P -->|"spec.md"| A2
-  A1 -->|"impl.md"| A3
-  A2 -->|"test.md"| A3
-  A3 -->|"verify.md"| A4
-  A4 -->|"release.md"| AU
+  P --> A1
+  P --> A2
+  A1 --> A3
+  A2 --> A3
+  A3 --> AU
 ```
+
+**Since 0.4.1, governance ships with a ready config page and rule packs:**
+
+- **Config page — no file editing**: the Web UI «Settings → Governance Config» page adjusts guardrail switches, rules and escalation windows; saving applies immediately (written to runtime.json and hot-reloaded), no restart needed;
+- **Preset rule packs — one click, one guardrail suite**: sensitive-data protection (l1-sensitive), resource limits (l2-resource), and a combined pack (compose) work out of the box — no need to write rules from scratch;
+- **No-progress probe for long runs**: a lane that keeps running but produces no checkpoint for too long is flagged as a candidate and reported to the Manager, so you see where it is stuck even without watching.
 
 ## Quick Start
 
-Requirements: DeepSeek Harness (dsh) installed.
+Prerequisites: DeepSeek Harness (dsh) installed, Node.js ≥ 22.
 
 ```sh
+# Install the npm package and load it into dsh (web is an example profile)
 npm install -g dsh-punky-swarm
 dsh plugin --profile web add dsh-punky-swarm
 dsh web restart
 ```
 
-Minimal example (from install to the first three-layer batch):
+Minimal run: ask the agent to create a three-layer batch with wave_plan (declare plan/exec/audit and artifact contracts) → the batch enters running → lanes dispatch in wave dependency order; watch state and gate gaps anytime with batch_status / gate_status.
 
-```text
-1. Install the plugin and restart dsh as above.
-2. In a session, ask the agent to create a batch via wave_plan (declaring
-   plan/exec/audit layers and artifact contracts) → batch enters running →
-   lanes dispatch in wave dependency order.
-3. Inspect batch state and gate gaps with batch_status / gate_status.
-```
+## Docs & Demos
 
-## Capabilities (10)
+- Technical details (gate semantics, state machines, assembly & tool reference): [governance-technical.md](packages/dsh-punky-swarm/docs/governance-technical.md);
+- Governance config page guide: [webui-governance-config.md](packages/dsh-punky-swarm/docs/webui-governance-config.md);
+- Interactive demos (open in a browser): [waveplan-dag](assets/demo/waveplan-dag.html) · [tier3-gates](assets/demo/tier3-gates.html) · [checkpoint-resume](assets/demo/checkpoint-resume.html).
 
-1. **ABC task-difficulty routing gate** — A=Leader direct / B=single subagent / C=wave_plan batch; scope=full, default to C.
-2. **wavePlan with fixed semantics** — 3 layers (plan→exec→audit), waves layered by dependency DAG, never recomputed after batch creation.
-3. **Tier3 engine-enforced gates** — dispatch requires consume artifacts (GATE_ENTRY_MISSING otherwise); settle requires artifacts on disk; complete requires audit acceptance.
-4. **Checkpoint resume** — git-preserved progress per sub-step (step N/total); a new worker queries checkpoints and skips completed steps after a crash.
-5. **Lane worktree isolation + serialized merge** — parallel lanes writing one git repo stay conflict-free; merges serialize; conflicts keep the scene.
-6. **Mailbox blackboard** — inbox/outbox/broadcast, atomic writes with ackId, metadata only.
-7. **lane_claim single-writer lock** — O_EXCL, conflict rejects first, wait or force takeover.
-8. **Member state machine** — pending→running→review→merged/failed/conflict/skipped; terminal states reject further writes.
-9. **Batch session isolation** — state files are the single source of truth; event stream is auditable.
-10. **Project state** — 19 governance tools by default (20 with all capabilities), 582/582 tests passing, v0.3.6 released, AGPL-3.0-only, listed on awesome-dsh-plugin.
+## Compatibility & Boundaries
 
-## Architecture
+Current version **0.4.1**; 816 tests passing (measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.
 
-- **Role layering** — Leader (decisions & final gate) → Manager (scheduling) → Worker (execution); batches are organized into plan/exec/audit layers whose artifacts connect by contract.
-- **State & communication** — batch/member state lives in state files as the single source of truth; cross-context communication goes through the mailbox blackboard (inbox/outbox/broadcast); every operation writes to the event stream — auditable and traceable.
-- Governance is not a documented convention but engine-enforced gates — state files are the single source of truth and every step leaves an event trail.
-
-## Demo
-
-**Fig 2 · Tier3 engine-enforced gates** — consume artifacts checked before dispatch (missing → GATE_ENTRY_MISSING, dispatch rejected), artifacts checked on disk before settle (missing → GATE_TARGET_MISSING, settle rejected), human adjudication when needed (GATE_NEEDHUMAN).
-
-```mermaid
-flowchart TD
-  S["dispatch lane"] --> D1{"consume artifacts ready?"}
-  D1 -- "no" --> R1["reject dispatch GATE_ENTRY_MISSING"]
-  D1 -- "yes" --> X["execute worker writes artifacts"]
-  X --> D2{"artifacts on disk?"}
-  D2 -- "no" --> R2["reject settle GATE_TARGET_MISSING"]
-  D2 -- "yes" --> C["member_settle merged"]
-  C --> D3{"audit accepted?"}
-  D3 -- "human gate" --> R3["GATE_NEEDHUMAN manual review"]
-  D3 -- "passed" --> DONE["batch complete"]
-```
-
-**Fig 3 · checkpoint crash recovery** — every completed sub-step is git-preserved via lane_checkpoint (step N/total); after a crash a new worker queries progress with lane_checkpoint_status and resumes from the first unfinished step.
-
-```mermaid
-sequenceDiagram
-  participant A as worker A
-  participant G as lane git backup
-  participant B as worker B
-  A->>A: run step 1/3
-  A->>G: lane_checkpoint git backup
-  A->>A: run step 2/3
-  A->>G: lane_checkpoint git backup
-  Note over A: crash process dies
-  Note over G: checkpoint history in git log
-  B->>G: lane_checkpoint_status query
-  G-->>B: step 2/3 done
-  B->>B: skip done steps resume from step 3
-```
-
-## Compatibility Matrix
-
-| Component | Version | Status |
-|---|---|---|
-| dsh-punky-swarm | 0.3.6 (current release) | Supported |
-| Node.js | >=22 (package.json engines) | Supported (tested on Node 24) |
-| @deepseek-ai/dsh-tools (peer) | ^0.1.0-rc.6 \|\| ^0.1.1-rc.2 | Supported |
-| @deepseek-ai/cordis (peer) | ^4.0.1 | Supported |
-| Other dsh / Node versions | — | Not verified |
-
-> The repo CI and test matrix are authoritative; unverified entries are marked as-is, with no version claims beyond what has actually been tested.
-
-## Roadmap
-
-- gh-pages hosting for demo animations (animation HTML already in assets/demo/, open directly in a browser)
+Honest boundaries: in-process governance for a single machine — no distributed cluster sync, no cost control, no model-tier routing; zero cloud dependencies and no network exposure by default; failed lanes are terminal and rework means a new batch, never auto-resume.
 
 ## License
 
-Licensed under **GNU AGPL v3 (AGPL-3.0-only)** as the sole license:
-
-- You may freely use, modify, and redistribute (including commercially) under [AGPL-3.0](LICENSE); if you provide the software as a network service after modification, you must make the modified source available under AGPL-3.0.
-- Mirror sync transparency: any mirror only copies release files (byte-for-byte) and adds commits — never rewriting .git history.
+Licensed under **GNU AGPL v3 (AGPL-3.0-only)** as the sole license: you may freely use, modify and redistribute (including commercially) under [AGPL-3.0](LICENSE); if you provide the software as a network service after modification you must make the modified source available. Mirrors only copy release files and add commits — never rewriting .git history.

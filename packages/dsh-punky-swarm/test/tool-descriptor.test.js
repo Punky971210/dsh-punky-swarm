@@ -29,10 +29,10 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-// P1-01 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + worktree 四件 = 19；
-// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 20）。断言按新契约更新（旧「14 工具」为旧行为）。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
-const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 19
+// P1-01 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 = 20；
+// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 21）。断言按新契约更新（旧「14 工具」为旧行为）。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 20
 
 // 注册上下文（enabled 开关两态）
 function makeCtx(enabled) {
@@ -44,7 +44,7 @@ function makeCtx(enabled) {
   return { ctx, made, registered };
 }
 
-test('生成：缺省 19 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
+test('生成：缺省 20 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
   const { made } = makeCtx(true);
   const catalog = made.catalog;
   assert.ok(catalog, 'enabled=true 时 register() 后 catalog 非空');
