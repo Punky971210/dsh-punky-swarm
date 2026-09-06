@@ -199,7 +199,7 @@ export const apply = (ctx, config = {}) => {
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
   // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
-  // watch 心跳引擎（lane 过期检测）：enabled 默认关——开启时才创建引擎并挂 watchdog 定时器
+  // watch 心跳引擎（lane 过期检测）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）
   const watchCfg = resolveWatchConfig(config);
   let heartbeat = null;
   if (watchCfg.enabled) {
@@ -209,7 +209,7 @@ export const apply = (ctx, config = {}) => {
   tools.register();
 
   // watchdog 挂载：setInterval(scanIntervalMinutes) 调 heartbeat.tick() 扫描全部 running lane。
-  // enabled 缺省/false 不挂——零运行时开销；ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
+  // 显式 enabled=false 时不挂——零运行时开销；缺省默认开即挂（watchCfg.enabled && heartbeat）。ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
   let watchTimer = null;
   if (watchCfg.enabled && heartbeat) {
     const scanMs = Math.max(1000, Math.round(watchCfg.scanIntervalMinutes * 60_000));

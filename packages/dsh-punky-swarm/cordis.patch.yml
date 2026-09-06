@@ -44,7 +44,7 @@
               noProgressWindowMs: 300000  # 无进展窗（默认 5min；正整数 ms，非法回退默认）
           # worktree 物理隔离（lane-tools）：enabled=true 时注册 lane_worktree_create / lane_worktree_merge / lane_checkpoint
           # （git worktree 隔离 + checkpoint 提交；与 lane_claim 逻辑锁互补——lane_claim 管状态层「写谁的」，
-          #  本组工具管工作区层「写到哪」；全能力默认开 → 工具总数 18（14+heartbeat+worktree 三件+log_export），回归已覆盖）。
+          #  本组工具管工作区层「写到哪」；工具总数按 register.js TBD-2 实测口径：裸配置 20 / patch 全开 21（含 lane_longrun 与 lane_checkpoint_status）/ 显式关（worktree+watch 关）14）。
           worktree:
             enabled: true
             # merge agent 装配键：enabled=true 且宿主注入 mergeAgentSpawner 时，

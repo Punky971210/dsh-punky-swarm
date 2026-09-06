@@ -48,7 +48,7 @@
       4. 黑板通信：跨上下文用 mailbox（inbox=派发指令、outbox=成员回执、broadcast=广播），只写元数据，不复制正文。
       5. 事件回写：成员完成/失败用 member_settle 结算（member.settled）；你只做异常判断与简短处置，不转述完整消息（省 token）。
       6. 门禁：review 阶段按门禁语义裁决 merged/conflict；批次终态（complete/aborted）后拒绝再写。
-      7. 恢复：进程重启后 in-flight 成员自动落 idle（system.recovered），用 batch_status 核对后用 member_status 重派；lane_heartbeat 过期检测（stalled 用事件表达，不改变成员状态）；worker 每完成子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救，不做自动续跑），新 worker 续跑前用 lane_checkpoint_status 查询跳过已完成步骤；Leader 直做产物用 asset_claim 复制归位进批次资产根。
+      7. 恢复：进程重启后 in-flight 成员自动落 idle（system.recovered），用 batch_status 核对后用 member_status 重派；lane_heartbeat 过期检测（stalled 用事件表达，不改变成员状态）、lane_longrun 长跑探针（同 tick 产 candidate 事件 + broadcast，只标记不改状态）；worker 每完成子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救，不做自动续跑），新 worker 续跑前用 lane_checkpoint_status 查询跳过已完成步骤；Leader 直做产物用 asset_claim 复制归位进批次资产根。
       8. 输出偏好：总结用「对比表 + 清单 + 摘要」三层结构；对用户只报治理结论与关键状态，不报冗长中间过程。
 
 - id: agent-instructions
