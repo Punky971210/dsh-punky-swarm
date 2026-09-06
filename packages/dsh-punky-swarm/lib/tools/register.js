@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 蟛蜞模式治理工具聚合注册入口（core 11 + mailbox 3 + lane 工具族 + 可选能力组；可选组按装配键
 // 缺省默认开——readCapability 合并注册表 default；显式 enabled:false 可逐键关闭）
 // 拆分自 lib/tools.js（createTools 签名保持，index.js 调用不变）
-// ⚠ P2-05 治理工具豁免边界（与 core.js installDifficultyGuard ① 口径一致）：
+// ⚠ 治理工具豁免边界（与 core.js installDifficultyGuard 口径一致）：
 //   治理/查询类工具（batch_status/gate_status/member_status/artifact_types/lane_heartbeat/
 //   lane_checkpoint_status 等非执行型）豁免任务难度门禁——理由：防死锁（评估/查询若被拦
 //   则「先评估后执行」护栏自锁）；豁免仅限难度门禁，其余 guard 语义（执行计数等）不受影响。
@@ -29,7 +29,7 @@ import { createLogTools } from './log-tools.js';
 import { buildToolCatalog, engineVersion } from '../aip/tool-descriptor.js';
 import { buildAgentCatalog } from '../aip/agent-descriptor.js';
 import { resolveAssembly, DEFAULT_ASSEMBLY } from '../assembly.js';
-// P6 接线（exec-format-wire）：装配层导出 AIP 结构投影函数，供 api.js 只读端点使用（纯函数，不改 mailbox 存储）
+// 接线：装配层导出 AIP 结构投影函数，供 api.js 只读端点使用（纯函数，不改 mailbox 存储）
 import * as aipFormat from '../comms/aip-format.js';
 import { readCapability } from '../assembly/schema.js';
 
@@ -41,14 +41,14 @@ export function createTools(ctx, deps) {
     ...createCoreTools(ctx, deps),
     ...createMailboxTools(ctx, deps),
     ...createLaneTools(ctx, deps),
-    ...createLogTools(ctx, deps), // E3 log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。TBD-2 实测工具总数：裸配置 20 / patch 全开 21 / 显式关（worktree+watch 关）14
+    ...createLogTools(ctx, deps), // log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。实测工具总数：裸配置 20 / patch 全开 21 / 显式关（worktree+watch 关）14
   ];
 
   // 装配 enabled 开关（缺省默认开——AIP 为主线 + 治理能力全开，
   //   显式 aip.enabled:false 可关闭）。经 readCapability 默认合并读取（schema.js CAPABILITY_REGISTRY 同源口径）：
   //   缺省配置（config 无 aip 键）→ 合并默认 {enabled:true} → 实际默认开启；enabled === true 时注册工具目录快照并暴露 catalog。
   // 生成器只读遍历 tools，不替换、不包装任何已注册工具对象（红线：既有工具契约不变）。
-  // P4 ACS：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
+  // ACS 智能体描述：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
   //   team 取 config.aip.team ?? 'jiufeng'）经 agent-descriptor 纯函数生成智能体描述目录 agentCatalog
   //   （ACS 字段集，见 lib/aip/agent-descriptor.js）；enabled=false 时恒为 null、零开销。
   const aipCfg = readCapability(deps?.config, 'aip');
@@ -78,7 +78,7 @@ export function createTools(ctx, deps) {
     //   缺省默认开启 → 非空，仅显式 aip.enabled=false 时恒为 null（/tools 端点不注册）
     get catalog() { return catalog; },
     get agentCatalog() { return agentCatalog; },
-    // P6 接线（exec-format-wire）：AIP 结构投影函数集（toAipMessage/toAipTask/toAipSession）——恒导出（纯函数零副作用），
+    // 接线：AIP 结构投影函数集（toAipMessage/toAipTask/toAipSession）——恒导出（纯函数零副作用），
     // api.js 只读端点消费（缺省传入时端点不附投影，既有行为不变；红线：不改 mailbox 存储）
     get aipFormat() { return aipFormat; },
   };

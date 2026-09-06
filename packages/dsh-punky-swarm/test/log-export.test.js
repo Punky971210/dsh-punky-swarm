@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// E3 log_export 单测（punky-finalize 决策包 §3.2 验收 T3.1-T3.6）：
+// log_export 单测：
 // T3.1 默认关：logs 未配置/disabled → log_export 不注册，工具总数 14（T0 断言保持）
 // T3.2 全量导出：eventCount=exported=events.length，items 与 store.readBatch 逐条一致（ts/type 保序）
 // T3.3 过滤：lane / type（前缀匹配）/ since 各自生效且可叠加；空结果 → items=[]、exported=0

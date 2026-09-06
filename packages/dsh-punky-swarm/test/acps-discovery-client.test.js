@@ -15,11 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P3 DS1 外部 ADP 发现客户端单测（lib/acps/discovery-client.js）：
+// 外部 ADP 发现客户端单测（lib/acps/discovery-client.js）：
 // 请求结构（对齐参考实现 DiscoveryRequest）/ 响应解析 / 查询范围选项（local/external/both）/
 // 开关双态（acps.discovery 默认关）/ 错误路径（未配置/连接失败/超时/HTTP 错误/协议错误/无效响应）。
 // 基准：ACPs-community v2.1.0（demo-leader discovery_client.py + acps_sdk/adp/models.py + discovery-server）。
-// 真实互通（插件 Leader ↔ 参考实现 discovery-server / demo-partner）归 exec-demo-test lane（V2），本文件不依赖外部服务。
+// 真实互通（插件 Leader ↔ 参考实现 discovery-server / demo-partner）不在本文件覆盖，本文件不依赖外部服务。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -206,7 +206,7 @@ test('客户端工厂: 非法 scope → TypeError；DISCOVERY_SCOPES 导出', ()
   assert.throws(() => createAcpsDiscoveryClient({ scope: 'all' }), TypeError);
 });
 
-// ── 开关双态（acps.discovery 默认关，U-D2 显式开启）──
+// ── 开关双态（acps.discovery 默认关，显式开启）──
 test('resolveAcpsDiscoveryConfig: 缺省/空配置 → enabled:false + 默认值（零路径）', () => {
   const cfg = resolveAcpsDiscoveryConfig({});
   assert.equal(cfg.enabled, false);
@@ -294,7 +294,7 @@ test('协议级错误（HTTP 200 + error 字段）→ 抛 DiscoveryClientError +
   );
 });
 
-// ── DS3 mini-ADSP（可选）预留签名 ──
+// ── mini-ADSP（可选）预留签名 ──
 test('DS3 mini-ADSP: 预留签名调用抛 NotImplemented（P1 endpoint lane 就绪前不实现）', () => {
   assert.throws(() => createMiniAdsp(), /mini-ADSP 预留接口（未实现）/);
 });

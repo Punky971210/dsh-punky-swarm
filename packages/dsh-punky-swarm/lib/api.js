@@ -20,10 +20,10 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';
-// P1 批 R-07 排除项（承接归 panel 批）：事件读端字面量收敛——EVT 常量源 lib/state/event-types.js（P2-07 单点）
+// 事件读端字面量收敛：EVT 常量单源 lib/state/event-types.js
 import * as EVT from './state/event-types.js';
-// WebUI 治理配置写通道（webui-config-build-20260903）：/config 端点 trusted 判定（自复刻宿主 /api
-//   护栏语义，conn:184-198 未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
+// WebUI 治理配置写通道：/config 端点 trusted 判定（自复刻宿主 /api
+//   护栏语义，宿主未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
 import { isTrustedConfigRequest } from './webui/config-trust.js';
 
 function sendJson(res, status, data) {
@@ -41,9 +41,9 @@ export function createApi(ctx, deps) {
   const disposers = [];
   const register = (route) => disposers.push(ctx.webServer.register(route));
 
-  // R3 SSE hub（设计 §3.3.3）：随 webServer 挂载（ADR-4：无独立配置键；降级回轮询即运行时自适配开关）。
-  // 装配点（index.js 层，exec-a 批②）预留时经 deps.panelStream 注入复用（含 topic 触发源 attachTopic 接线）；
-  // 缺省自建（fs.watch 单通道先行交付——契约移交点语义），自建者负责 dispose。
+  // SSE hub：随 webServer 挂载（无独立配置键；降级回轮询即运行时自适配开关）。
+  // 装配点（index.js 层）预留时经 deps.panelStream 注入复用（含 topic 触发源 attachTopic 接线）；
+  // 缺省自建（fs.watch 单通道先行交付），自建者负责 dispose。
   const panelStream = deps.panelStream || createStreamHub({ root, logger: ctx.logger });
   if (!deps.panelStream) disposers.push(() => { try { panelStream.dispose(); } catch {} });
 
@@ -112,7 +112,7 @@ export function createApi(ctx, deps) {
           laneAttempts,
           upgrades,
           lanesGate: Object.fromEntries(Object.keys(b.lanes).map((l) => [l, store.gateStatus(session, batchId, l)])),
-          // P6 接线（exec-format-wire）：装配注入 aipFormat 时附 ACPs Session 投影（纯函数，不改存储；缺省不附 → 既有响应不变）
+          // 装配注入 aipFormat 时附 ACPs Session 投影（纯函数，不改存储；缺省不附 → 既有响应不变）
           ...(aipFormat ? { aipSession: aipFormat.toAipSession(b) } : {}),
         });
       } catch (e) { sendJson(res, 500, { error: String(e.message) }); }
@@ -127,7 +127,7 @@ export function createApi(ctx, deps) {
         const { batchId, box, lane, session } = q(req.url);
         if (!batchId || !box) return sendJson(res, 400, { error: 'batchId+box required' });
         if (!session) return sendJson(res, 400, { error: 'session required' });
-        // P2-08：box 枚举校验——非法 box 返回 400（含枚举提示）而非透传进 mailbox.readUnacked 抛错兜成 500
+        // box 枚举校验——非法 box 返回 400（含枚举提示）而非透传进 mailbox.readUnacked 抛错兜成 500
         const BOXES = ['inbox', 'outbox', 'broadcast'];
         if (!BOXES.includes(box)) {
           return sendJson(res, 400, { error: 'invalid box: ' + box + ' (allowed: ' + BOXES.join(' | ') + ')' });
@@ -136,7 +136,7 @@ export function createApi(ctx, deps) {
         if (box === 'outbox' && !lane) return sendJson(res, 400, { error: 'lane required for outbox' });
         const b = box === 'outbox' ? { type: 'outbox', lane } : { type: box };
         const items = mailbox.readUnacked(join(root, 'sessions', session, 'mailbox', batchId), b);
-        // P6 接线（exec-format-wire）：装配注入 aipFormat 时逐条附 ACPs Message 投影（纯函数投影，不改 mailbox 存储与 ack 语义）
+        // 装配注入 aipFormat 时逐条附 ACPs Message 投影（纯函数投影，不改 mailbox 存储与 ack 语义）
         sendJson(res, 200, aipFormat ? { items: items.map((it) => ({ ...it, aip: aipFormat.toAipMessage(it) })) } : { items });
       } catch (e) { sendJson(res, 500, { error: String(e.message) }); }
     },
@@ -176,7 +176,7 @@ export function createApi(ctx, deps) {
     });
   }
 
-  // P4 ACS 智能体描述目录：enabled=true 时 agentCatalog 非空，注册 /agents；
+  // 智能体描述目录：enabled=true 时 agentCatalog 非空，注册 /agents；
   // 端点输出 ACS 字段集（AgentCapabilitySpec，逐字字段见 lib/aip/agent-descriptor.js）；只读、无参。
   // aip.enabled=false（显式关闭——aip 出厂默认开，readCapability 缺省合并 {enabled:true}）时 agentCatalog 为 null，不注册该路由（既有路由契约不变）。
   if (agentCatalog) {
@@ -191,7 +191,7 @@ export function createApi(ctx, deps) {
       },
     });
   }
-  // 国标 P5 发现服务（ADP 语义）：discovery 服务实例注入时注册
+  // 发现服务（ADP 语义）：discovery 服务实例注入时注册
   //   POST /api/dsh-punky-swarm/discover — 统一发现查询（DiscoveryRequest → DiscoveryResponse）
   //   GET  /.well-known/aip          — 发现服务预置信息（地址/协议版本/能力概要）
   if (discovery) {
@@ -220,11 +220,11 @@ export function createApi(ctx, deps) {
     });
   }
 
-  // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.1/§1.2，落点 = discover 段与 stream 段之间）：
+  // WebUI 治理配置写通道（路由落点 = discover 段与 stream 段之间）：
   //   GET + POST /api/dsh-punky-swarm/config —— 配置页页载取数 / 受控字段集保存（写 <root>/config/runtime.json）。
-  //   条件注册仿 discovery/agentCatalog（上方 :162-190 注入形态）：deps.configEndpoints.runtimeConfig
+  //   条件注册仿 discovery/agentCatalog（上方注入形态）：deps.configEndpoints.runtimeConfig
   //   注入时注册；未注入不注册 → 既有 7 路由/9 路由计数测试零回归（不改既有注册面，disposer 统一回收）。
-  //   trusted 判定（GET/POST 共用，§1.3）：Host loopback/trustedHosts + sec-fetch-site≠cross-site + Origin 同源
+  //   trusted 判定（GET/POST 共用）：Host loopback/trustedHosts + sec-fetch-site≠cross-site + Origin 同源
   //   （isTrustedConfigRequest，lib/webui/config-trust.js；trustedHosts 出厂 [] → loopback-only）。
   //   写逻辑全在 service（lib/webui/runtime-config.js）：白名单预检 400 → 读-改-写 → validateOverlay
   //   兜底 500 → tmp+rename 原子写；GET 取数 overlay（磁盘原样）/applied（装配侧解析快照）/presets（注册目录）。
@@ -235,7 +235,7 @@ export function createApi(ctx, deps) {
       kind: 'exact',
       path: '/api/dsh-punky-swarm/config',
       handler(req, res) {
-        // trusted 护栏前置（GET/POST 共用；护栏语义非鉴权层、防 DNS-rebinding/跨站——§1.2）
+        // trusted 护栏前置（GET/POST 共用；护栏语义非鉴权层、防 DNS-rebinding/跨站）
         if (!isTrustedConfigRequest(req, trustedHosts)) {
           const body = req.method === 'POST' ? { ok: false, error: 'forbidden' } : { error: 'forbidden' };
           return sendJson(res, 403, body);
@@ -246,7 +246,7 @@ export function createApi(ctx, deps) {
             const gov = overlay && typeof overlay === 'object' && !Array.isArray(overlay)
               && overlay.governance && typeof overlay.governance === 'object' && !Array.isArray(overlay.governance)
               ? overlay.governance : null;
-            // watch 段取数（longrun-panel-config-20260905）：overlayWatch = 磁盘 capabilities.watch 段原样
+            // watch 段取数：overlayWatch = 磁盘 capabilities.watch 段原样
             //   （无 = null）；applied.watch = 装配侧解析生效快照（watchInstalledCfg，经 appliedWatch getter——
             //   未注入时省略该键，旧 harness/旧客户端零感知）。既有 overlay=governance 语义不动。
             const caps = overlay && typeof overlay === 'object' && !Array.isArray(overlay)
@@ -276,8 +276,8 @@ export function createApi(ctx, deps) {
           }
           return bodyPromise.then((payload) => {
             try {
-              // POST 按 body 键存在性分派（longrun-panel-config-20260905）：含 capabilities 段 → writeWatch
-              //   （单保存合并 governance + capabilities.watch 双段同 body，Leader 裁决 1——writeWatch 内部
+              // POST 按 body 键存在性分派：含 capabilities 段 → writeWatch
+              //   （单保存合并 governance + capabilities.watch 双段同 body——writeWatch 内部
               //   同时处理可选 governance 段，分节校验 + 单次原子写）；仅 governance（旧客户端/既有测试契约）
               //   → writeGovernance 原路径（错误形态与路由零变化）。
               const hasCaps = payload && typeof payload === 'object' && !Array.isArray(payload) && 'capabilities' in payload;
@@ -292,7 +292,7 @@ export function createApi(ctx, deps) {
               }
               return sendJson(res, 200, { ok: true, written: out.written, ts: new Date().toISOString() });
             } catch (e) {
-              // 读-改-写 IO 异常（坏 base JSON / rename 失败等）→ 500 不回写（设计 §1.5「不应发生」面）
+              // 读-改-写 IO 异常（坏 base JSON / rename 失败等）→ 500 不落盘（「不应发生」面）
               return sendJson(res, 500, { ok: false, error: String(e?.message ?? e) });
             }
           }).catch((e) => sendJson(res, 400, { ok: false, error: 'invalid-json: ' + String(e?.message ?? e) }));
@@ -302,10 +302,10 @@ export function createApi(ctx, deps) {
     });
   }
 
-  // R3 SSE 端点（设计 §3.3.3，纯新增路由——既有 /api 路由一字不动）：
+  // SSE 端点（纯新增路由——既有 /api 路由一字不动）：
   //   GET /api/dsh-punky-swarm/stream?session=<sid>[&batchId=<bid>]
   //   SSE 帧协议：event: batch|mailbox|heartbeat + data:<JSON>；注释心跳帧每 10s（hub 内维护）。
-  //   推送只发轻量摘要 {sessionId,batchId,eventCount,updatedAt}，客户端回拉既有只读 API 取全量（ADR-5）。
+  //   推送只发轻量摘要 {sessionId,batchId,eventCount,updatedAt}，客户端回拉既有只读 API 取全量。
   register({
     kind: 'exact',
     path: '/api/dsh-punky-swarm/stream',

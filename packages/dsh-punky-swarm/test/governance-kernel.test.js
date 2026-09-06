@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // U4 内核单测：组合序全链路——空规则恒 ALLOW / 规则命中全链路 / tools 白名单 / 多规则 ruleRefs / op 全语义 / path 缺省 / 收据构造。
-// 蓝图：m2-detailed.md §9.1 U4；build-plan §1.2 U4（8 条）。
-// P0 扩展（harden-plan §6 P0 组 K-N×4）：NARROW 运行期接线——narrowable+flag.on→NARROW+narrowedParams；
+// NARROW 运行期接线——narrowable+flag.on→NARROW+narrowedParams；
 //   flag.off→DENY 回退（narrowedParams 按契约填充）；未知 path bounds 跳过不抛错；hard+narrowable→DENY（P2 优先）。
 
 import test from 'node:test';
@@ -179,9 +178,9 @@ test('U4-8 createRefusalReceipt builds receipt with deep-copied params', () => {
   assert.equal(attemptedParams.cmd, 'rm -rf /', 'input untouched by receipt mutation');
 });
 
-// ── P0 组 K-N（harden-plan §6）：NARROW 运行期接线 ──
+// ── NARROW 运行期接线 ──
 
-// narrowable 规则（A2 显式 narrow bounds：/timeout max=100）
+// narrowable 规则（显式 narrow bounds：/timeout max=100）
 const narrowRule = (over = {}) => ({
   id: 'RN01',
   tools: ['bash'],

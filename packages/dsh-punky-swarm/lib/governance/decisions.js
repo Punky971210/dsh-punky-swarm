@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 // 6 原语常量数组（单一事实源；satisfies 绑定 types.ts 联合防漂移，纯类型层校验）。
-// 对照 hf.md:76-77（CAGE GovernanceDecision 六原语全在）。
+// 对照 CAGE GovernanceDecision 六原语。
 export const GOVERNANCE_PRIMITIVES = [
     'ALLOW', 'DENY', 'REQUIRE_APPROVAL', 'DEFER', 'NARROW', 'PAUSE',
 ];

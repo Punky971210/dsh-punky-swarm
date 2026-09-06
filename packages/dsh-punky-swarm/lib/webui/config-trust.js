@@ -15,12 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/webui/config-trust.js —— 自复刻宿主 /api 信任护栏语义（conn:184-198，未导出故复刻）
-// 背景（eval/host-impl-facts.md ①）：插件以 kind:'exact' 自注册的 webServer 路由先于宿主 /api prefix
+// lib/webui/config-trust.js —— 自复刻宿主 /api 信任护栏语义（宿主未导出故复刻）
+// 背景：插件以 kind:'exact' 自注册的 webServer 路由先于宿主 /api prefix
 //   命中（host-web exact 优先），不经宿主 isTrustedApiRequest 护栏——新增写端点后跨站 POST 面成立
 //   （同源策略不拦简单请求副作用），故写端点须自复刻宿主护栏判定（GET 同走——与宿主护栏对读请求
 //   一致：护栏语义非鉴权层、防的是 DNS-rebinding/跨站）。
-// 语义契约全文 = api-request-trust.d.ts 43 行 + conn:100-104（loopback 分类）——复刻不放宽不收紧：
+// 语义契约全文 = 宿主 api-request-trust 声明（43 行）+ loopback 分类——复刻不放宽不收紧：
 //   Host 头必须存在且可解析 → hostname 是 loopback 或在 trustedHosts → sec-fetch-site !== 'cross-site'
 //   → Origin 存在时 origin.host === Host 的 host（缺省通过）。纯函数、零宿主依赖、可单测。
 
@@ -30,7 +30,7 @@ function header(h, name) {
   return typeof v === 'string' ? v : undefined;
 }
 
-// loopback 分类（conn:100-104）：localhost / [::1] / 127/8 IPv4（WHATWG hostname，IPv6 保留括号）
+// loopback 分类：localhost / [::1] / 127/8 IPv4（WHATWG hostname，IPv6 保留括号）
 export function isLoopbackHostname(hostname) {
   if (hostname === 'localhost' || hostname === '[::1]') return true;
   const parts = hostname.split('.');
@@ -38,7 +38,7 @@ export function isLoopbackHostname(hostname) {
     && parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
 }
 
-// trustedHosts 条目匹配（conn:148-176 语义）：无端口条目 = 该 hostname 任意端口；带端口 = host:port 精确。
+// trustedHosts 条目匹配：无端口条目 = 该 hostname 任意端口；带端口 = host:port 精确。
 // 条目在装配时已断言为裸 authority（host | host:port，canonical 形态），此处只做比对。
 export function isTrustedAuthority(hostUrl, trustedHosts) {
   return (trustedHosts || []).some((entry) => {
@@ -48,7 +48,7 @@ export function isTrustedAuthority(hostUrl, trustedHosts) {
   });
 }
 
-// 判定（conn:184-198 同构）：Host 存在且可解析 → hostname loopback 或在 trustedHosts →
+// 判定（与宿主同构）：Host 存在且可解析 → hostname loopback 或在 trustedHosts →
 // sec-fetch-site !== 'cross-site' → Origin 存在时 origin.host === Host 的 host（缺省通过）
 export function isTrustedConfigRequest(req, trustedHosts = []) {
   const host = header(req.headers, 'host');

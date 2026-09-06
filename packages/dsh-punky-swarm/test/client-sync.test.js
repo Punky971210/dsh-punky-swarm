@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// client.js 拼装同步校验（既有 TBD-3 机制，契约 §6）：lib/panel/*.js 的 [panel-segment] 段
-// 必须与 lib/client.js 内对应段逐字节一致。R3 触及 main.js/locales.js 两段；本测试覆盖全部七段。
-// （webui-config-build-20260903：exec-ui 新增 gov-config.js 段 → SEGMENT_ORDER 追加后同步断言期望随之更新，
-//   tester lane 补齐，见设计 §2.4/§3 重生成自检「若存在段同步断言则更新其期望」。）
+// client.js 拼装同步校验：lib/panel/*.js 的 [panel-segment] 段
+// 必须与 lib/client.js 内对应段逐字节一致。段拼接触及 main.js/locales.js 等；本测试覆盖全部七段。
+// （新增 gov-config.js 段 → SEGMENT_ORDER 追加后同步断言期望随之更新，
+//   重生成自检「若存在段同步断言则更新其期望」。）
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

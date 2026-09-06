@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 成员状态：
 //   pending -> running -> review -> merged | failed | skipped | conflict
 //   idle：恢复语义（重启后 in-flight 成员落位 idle，可重新指派）
-// Phase 2 类型化：常量 as const 派生字面量联合（单一事实源=常量）；迁移表 satisfies 绑定 contracts 通用形态防漂移；
+// 类型化说明：常量 as const 派生字面量联合（单一事实源=常量）；迁移表 satisfies 绑定 contracts 通用形态防漂移；
 //   守卫函数 unknown 参数 + 类型谓词（运行期行为与 JS 源逐字节等价，as const/satisfies 纯类型层）。
 import type { TransitionTable, BatchTransitionTable } from './types/contracts.js';
 
@@ -239,7 +239,7 @@ export function resolveWatchConfig(config: ConfigInput | null | undefined): Reso
     ? c.intervalsMinutes.map((m: unknown) => (Number.isFinite(Number(m)) && Number(m) >= 0 ? Number(m) : null)).filter((x): x is number => x !== null)
     : null;
   return {
-    // P1-01 等价默认合并：缺省 = WATCH_DEFAULTS.enabled(true)（与 readCapability 对注册表 default 的
+    // 等价默认合并：缺省 = WATCH_DEFAULTS.enabled(true)（与 readCapability 对注册表 default 的
     // deepMerge 语义等价——显式 enabled:false 才关）。不直接 import readCapability 以避免
     // lib/schema.ts ⟷ lib/assembly/schema.ts 顶层循环依赖（assembly 顶层初始化需本文件常量，静态 import 会 TDZ）。
     enabled: c.enabled !== false,
@@ -266,7 +266,7 @@ export const VERIFY_DEFAULTS = Object.freeze({
 export function resolveVerifyConfig(config: ConfigInput | null | undefined): ResolvedVerifyConfig {
   const c = config?.capabilities?.verify ?? {};
   return {
-    // P1-01 等价默认合并：缺省 = VERIFY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
+    // 等价默认合并：缺省 = VERIFY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
     enabled: c.enabled !== false,
     mode: c.mode === 'enforce' ? 'enforce' : VERIFY_DEFAULTS.mode,
   };
@@ -284,7 +284,7 @@ export const DISCOVERY_DEFAULTS = Object.freeze({
 export function resolveDiscoveryConfig(config: ConfigInput | null | undefined): ResolvedDiscoveryConfig {
   const c = config?.capabilities?.discovery ?? {};
   return {
-    // P1-01 等价默认合并：缺省 = DISCOVERY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
+    // 等价默认合并：缺省 = DISCOVERY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
     enabled: c.enabled !== false,
     nodes: (c.nodes && typeof c.nodes === 'object' && !Array.isArray(c.nodes)) ? c.nodes : {},
   };

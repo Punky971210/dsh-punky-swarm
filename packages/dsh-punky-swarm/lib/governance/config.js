@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { isGovernancePrimitive } from './decisions.js';
-// 默认值（蓝图 §7 yaml，【已敲定 2026-08-31】）：
+// 默认值：
 //   enabled: true（可显式关闭）；rules: []（空表=零拦截）；defaults.deny: 'DENY'（fail-closed 兜底）；
 //   flags: { pause: false, narrow: false, defer: false }（原语开关默认关 → P3/P4/P5 回退 DENY）
-// M5-a escalation 默认（§4）：enabled:false（出厂零行为）/ threshold:3（与 failed-escalate 同值不同键）/
+// escalation 默认：enabled:false（出厂零行为）/ threshold:3（与 failed-escalate 同值不同键）/
 //   windowMs:600000（10 分钟滚动窗）/ primitives:['DENY','NARROW']（DEFER/PAUSE 默认不计可显式扩入）
 // as const：'DENY'/true/false 字面量派生（deny: 'DENY' 绑定 GovernancePrimitive 防漂移，纯类型层校验）
 const GOVERNANCE_DEFAULTS_RAW = {
@@ -33,7 +33,7 @@ const GOVERNANCE_DEFAULTS_RAW = {
         primitives: ['DENY', 'NARROW'],
     },
 };
-// escalation.primitives 合法值域（计入可配置子集；REQUIRE_APPROVAL 与状态门收据不可配入——§1.5 红线）
+// escalation.primitives 合法值域（计入可配置子集；REQUIRE_APPROVAL 与状态门收据不可配入——红线）
 const ESCALATION_PRIMITIVES = ['DENY', 'NARROW', 'DEFER', 'PAUSE'];
 export const GOVERNANCE_DEFAULTS = Object.freeze({
     ...GOVERNANCE_DEFAULTS_RAW,
@@ -42,13 +42,13 @@ export const GOVERNANCE_DEFAULTS = Object.freeze({
         primitives: Object.freeze([...GOVERNANCE_DEFAULTS_RAW.escalation.primitives]),
     }),
 });
-// ── M5-b 规则表校验纯函数（零 IO；resolve 与 preset-loader 共用，供单测直引）──
+// ── 规则表校验纯函数（零 IO；resolve 与 preset-loader 共用，供单测直引）──
 // 规则 match.op 合法值域 + violations.category 合法值域（对齐 types.ts Rule/Violation 契约，
 // 与 classify.ts 消费面一致——非法 op/category 预设文件装载期早失败，见 validatePresetRules）
 const RULE_MATCH_OPS = ['eq', 'gt', 'gte', 'lt', 'lte', 'in', 'regex'];
 const VIOLATION_CATEGORIES = ['hard', 'pausable', 'narrowable', 'soft', 'manual_review', 'ftra', 'unknown'];
-// 全表规则 id 唯一性校验（§2.2 F1 处置）：preset×preset / preset×inline / inline 内自重复 + 空/非 string id
-//   → ok:false + 错误文案含重复 id 与次数。引擎 violations 不去重（kernel.ts:153 逐条 push）——
+// 全表规则 id 唯一性校验（preset×preset / preset×inline / inline 内自重复 + 空/非 string id
+//   → ok:false + 错误文案含重复 id 与次数。引擎 violations 不去重（kernel.ts 逐条 push）——
 //   重复 id 同命中会双倍收据文案，故装载层拒绝（宁空勿半，绝不部分武装）。
 export function validateRuleTable(rules) {
     const errors = [];
@@ -72,7 +72,7 @@ export function validateRuleTable(rules) {
     }
     return { ok: errors.length === 0, errors };
 }
-// 预设文件形状校验（§1.4，preset-loader 装载 preset 文件时执行——受控资产早失败）：
+// 预设文件形状校验（preset-loader 装载 preset 文件时执行——受控资产早失败）：
 //   顶层 rules 数组；每条 id 非空 string / tools 可选（元素 string；内容规则显式白名单属语义约束
 //   由 preset-rules 静态回归保证，不在此拒绝）/ match 对象（path 可选 string 以 / 开头或空、op 合法或缺省、
 //   value/pattern 可选）/ violations 非空（code 非空 string、category 合法、message string、path 可选 string）/
@@ -172,7 +172,7 @@ export function validatePresetRules(rules) {
     }
     return { ok: errors.length === 0, errors };
 }
-// escalation 校验回退（§4 + §1.5）：
+// escalation 校验回退：
 //   threshold 非法（非整数 / <1）→ 回退默认 3；windowMs 非法（非数 / <1000）→ 回退默认 600000；
 //   primitives 仅接受 DENY/NARROW/DEFER/PAUSE（REQUIRE_APPROVAL 与状态门收据不可配入——非法值剔除，
 //   剔空 → 回退默认 ['DENY','NARROW'] + warn 留痕（有 logger 时）。enabled 仅显式 true 才开（默认关）。
@@ -209,7 +209,7 @@ function resolveEscalationConfig(raw, warn) {
         primitives,
     };
 }
-// preset 引用归一（§2.1/§2.3，纯函数）：undefined → null（未配置）；string → [string]；string[] 保序；
+// preset 引用归一（纯函数）：undefined → null（未配置）；string → [string]；string[] 保序；
 //   其余形态（数字/对象/数组内非 string/空串/空数组）→ errors（装载失败由 resolve 回退空表 + warn）。
 function normalizePresetRefs(preset) {
     const errors = [];
@@ -243,11 +243,11 @@ export function resolveGovernanceConfig(config, opts) {
     const presetTable = opts?.presetTable;
     const d = (c.defaults && typeof c.defaults === 'object' && !Array.isArray(c.defaults)) ? c.defaults : {};
     const f = (c.flags && typeof c.flags === 'object' && !Array.isArray(c.flags)) ? c.flags : {};
-    // M5-b preset 装载分支（§2.2 定稿：preset 展开序 → inline rules 在后；全表唯一性校验；失败回退空表+warn）：
+    // preset 装载分支（preset 展开序 → inline rules 在后；全表唯一性校验；失败回退空表+warn）：
     //   - 无 preset 键 → 完全沿现状（c.rules 直传/默认[]——零行为差强保证）；
     //   - preset 引用存在 → 归一/查表展开/拼接 inline → validateRuleTable；
     //     任一错误（类型非法/未知 id/重复 id/空 id）→ 回退 rules:[] + warn 逐条（宁空勿半、不 throw）。
-    //   resolved 快照只存展开后 rules（不存引用原值）→ remount JSON 比较器零改动感知生效差异（§2.2.6）。
+    //   resolved 快照只存展开后 rules（不存引用原值）→ remount JSON 比较器零改动感知生效差异。
     let rules;
     if (c.preset !== undefined) {
         const { refs, errors: normErrors } = normalizePresetRefs(c.preset);
@@ -291,8 +291,8 @@ export function resolveGovernanceConfig(config, opts) {
         // 缺省 = GOVERNANCE_DEFAULTS.enabled(true)，显式 enabled:false 才关（对齐 resolveWatchConfig 注释）
         enabled: c.enabled !== false,
         rules,
-        // fail-closed 兜底（P0 硬化，harden-plan §5.1 B.3）：仅接受合法原语，否则 DENY；
-        // 「兜底不可 ALLOW」——fail-closed 纪律（hook-eval A.4「unknown → DENY 绝不 ALLOW」）不允许把兜底配置成放行，
+        // fail-closed 兜底：仅接受合法原语，否则 DENY；
+        // 「兜底不可 ALLOW」——fail-closed 纪律（unknown → DENY 绝不 ALLOW）：不允许把兜底配置成放行，
         //   defaults.deny==='ALLOW' → resolve 回退 DENY（推荐处置：回退+注释；classify 侧另有双保险防御）
         defaults: {
             deny: (isGovernancePrimitive(d.deny) && d.deny !== 'ALLOW') ? d.deny : GOVERNANCE_DEFAULTS.defaults.deny,
@@ -302,7 +302,7 @@ export function resolveGovernanceConfig(config, opts) {
             narrow: f.narrow === true,
             defer: f.defer === true,
         },
-        // M5-a escalation 段（D-5）：并入 resolved 快照 → remount JSON 比较感知任一子键变化（默认关形态）
+        // escalation 段：并入 resolved 快照 → remount JSON 比较感知任一子键变化（默认关形态）
         escalation: resolveEscalationConfig(c.escalation, warn),
     };
 }

@@ -25,7 +25,7 @@ import { createTools } from './tools/register.js';
 import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
-import { installDispatchRegistration } from './bridge/dispatch-register.js'; // D-1 方案 B 写侧登记点（m5a-d1 批次）
+import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 派发写侧登记点（见 bridge/dispatch-register.js）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
@@ -35,35 +35,35 @@ import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
 import { mountVerify } from './verify/mount.js';
-// M2 工具调用级护栏（governance hook，阶段 2.2）：lib/governance/wiring.js（G8）订阅宿主
-// tools/pre-execute + tools/post-execute（双阶段零宿主改造，rc.md:194）——6 原语纯函数内核裁决 +
-// 拒绝收据落盘（receipt-store.js G9）；装配对齐 mountVerify 模式（PK lib/index.js:341-347）。
+// 工具调用级护栏（governance hook）：lib/governance/wiring.js 订阅宿主
+// tools/pre-execute + tools/post-execute（双阶段零宿主改造）——6 原语纯函数内核裁决 +
+// 拒绝收据落盘（receipt-store.js）；装配对齐 mountVerify 模式。
 import { installGovernanceHook } from './governance/wiring.js';
-// P3 热切（harden-plan §5.4 A）：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
-//   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount ④ 模式，不引入 updateConfig API）
+// governance 键热更：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
+//   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount 模式，不引入 updateConfig API）
 import { resolveGovernanceConfig } from './governance/config.js';
-// M5-b（preset-build）：preset 装载（governance.hook.preset 引用键 → boot 装载一次 table 注入 resolve
+// preset 装载：governance.hook.preset 引用键 → boot 装载一次 table 注入 resolve
 //   presetTable——preset 文件 = 发布资产语义，热更只管引用启停、不重读文件）
 import { loadPresetTable, PRESET_IDS } from './governance/preset-loader.js';
-// WebUI 治理配置写通道（webui-config-build-20260903）：createApi configEndpoints 注入面——
+// WebUI 治理配置写通道：createApi configEndpoints 注入面——
 //   runtimeConfig 服务实例（<root>/config/runtime.json 写通道）+ trustedHosts（出厂 []）+ applied/presets
 //   getters（延迟引用装配后初始化绑定，HTTP 请求时求值无 TDZ——见 createApi 调用点注释）
 import { createRuntimeConfigService } from './webui/runtime-config.js';
-// P2 双层桥接事件流（harden-plan §5.3 B）：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
-//   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移——归 M5-a）
+// 双层桥接事件流：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
+//   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移）
 import { appendRefusalEvent } from './governance/receipt-store.js';
 import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
 import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
 import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
-// R1 热更新运行时（lib/hot/config-watch.js，新建）：<root>/config/runtime.json watch → deepMerge 快照 → config.changed 广播
+// 热更新运行时（lib/hot/config-watch.js）：<root>/config/runtime.json watch → deepMerge 快照 → config.changed 广播
 import { createConfigWatcher, CONFIG_CHANGED_EVENT } from './hot/config-watch.js';
-// R2 topic 运行时（lib/comms/topic-runtime.js，新建）：装配面 start/stop（与 trajectory 桥同形）+ 状态事件发布接线
+// topic 运行时（lib/comms/topic-runtime.js）：装配面 start/stop（与 trajectory 桥同形）+ 状态事件发布接线
 import { createTopicRuntime } from './comms/topic-runtime.js';
-// M1 闭合（panel-verify §3 修复指引）：R3 SSE hub（lib/panel/stream.js）由装配层创建注入 api.js（deps.panelStream），
+// SSE hub（lib/panel/stream.js）由装配层创建注入 api.js（deps.panelStream），
 //   topic.enabled 时经 hub.attachTopic('swarm.') 订阅低延迟触发源（subscribeTopicPrefix → parseTopicIds → notifyAll）
 import { createStreamHub } from './panel/stream.js';
-// P1-02 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
+// 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
 
@@ -86,22 +86,22 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.warn?.('[dsh-punky-swarm] config: ' + err);
   }
 
-  // R2 topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
+  // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
   const topicSink = { emit: null };
   const store = createStore(root, {
-    // R2 topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
+    // topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
     // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
     onStateChange: (ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } },
   });
 
-  // P2-04：GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
+  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
   // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
   // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
   if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
     ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
   }
 
-  // mailbox 周期 sweep 定时器（④，config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
+  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
   let sweepTimer = null;
 
   // 存量迁移：root/batches/*.json -> sessions/legacy/batches/（仅一次，幂等）
@@ -124,7 +124,7 @@ export const apply = (ctx, config = {}) => {
   }
 
   // 启动恢复：in-flight 成员 -> idle + system.recovered（每个进程仅一次，跨全部 session）
-  // P1-02 接线：改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })——
+  // 接线：改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })——
   //   config.resume.enabled 缺省关 → 内部委托 store.recoverBatches()（原路径零行为变化）；
   //   开启 → restoreBatches()（running/review 原地保留 + system.restored 事件）。返回数组形态
   //   .length/.corrupt 兼容既有日志消费。
@@ -134,7 +134,7 @@ export const apply = (ctx, config = {}) => {
       const resumeCfg = resolveResumeConfig(config);
       const r = resumeRecoverBatches(store, { restoreRunning: resumeCfg.enabled });
       if (r.length) ctx.logger?.info?.('[dsh-punky-swarm] recovered batches: ' + r.join(', '));
-      // 恢复容错汇总（v2-node-robustness ②）：损坏批次被隔离（corrupt-batches.json + 跳过），不阻断其余恢复
+      // 恢复容错汇总：损坏批次被隔离（corrupt-batches.json + 跳过），不阻断其余恢复
       if (Array.isArray(r.corrupt) && r.corrupt.length) {
         ctx.logger?.warn?.('[dsh-punky-swarm] isolated ' + r.corrupt.length + ' corrupt batch(es): ' + r.corrupt.join(', ') + '（人工修复/删除后 clearCorruptMark）');
       }
@@ -142,7 +142,7 @@ export const apply = (ctx, config = {}) => {
       ctx.logger?.warn?.('[dsh-punky-swarm] recovery failed: ' + String(e));
     }
 
-    // mailbox 启动清扫（④，D-006/sweepOnStart 默认 true）：recoverBatches 之后逐批次 mailbox 根 sweep 一次——
+    // mailbox 启动清扫（sweepOnStart 默认 true）：recoverBatches 之后逐批次 mailbox 根 sweep 一次——
     // 清 ack 超 TTL 消息+标记 / 损坏消息 quarantine / 孤儿 .acked（默认 TTL 7d、quarantine 30d）。
     // 失败仅 warn 不阻塞启动；幂等可重入（sweep 无状态全量扫描）。
     const mailCfg = config?.mailbox ?? {};
@@ -174,7 +174,7 @@ export const apply = (ctx, config = {}) => {
         ctx.logger?.warn?.('[dsh-punky-swarm] mailbox sweep on start failed: ' + String(e));
       }
     }
-    // 周期 sweep（默认 0=关，C-6 零隐式行为）：显式配置 sweepIntervalMs>0 才挂 setInterval（unref + dispose 清理）
+    // 周期 sweep（默认 0=关，零隐式行为）：显式配置 sweepIntervalMs>0 才挂 setInterval（unref + dispose 清理）
     const sweepIntervalMs = Number(mailCfg.sweepIntervalMs) || 0;
     if (sweepIntervalMs > 0) {
       sweepTimer = setInterval(() => {
@@ -201,11 +201,11 @@ export const apply = (ctx, config = {}) => {
   // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
   // watch 心跳引擎（lane 过期检测 + longrun 档）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——
   // 仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）。
-  // 引擎引用 holder（heartbeatRef，longrun-panel-config-20260905）：热重建（applyConfigChange ① 生效变化
+  // 引擎引用 holder（heartbeatRef）：热重建（applyConfigChange 生效变化
   // 通道 / boot 对账）后，watchdog timer 回调与 lane_heartbeat/lane_longrun 工具经 heartbeatRef.current
-  // 执行时解引用、自动跟随新实例（修复「工具闭包绑创建时旧引擎 → 热重建后静默失效」缺陷，design §1.4）。
+  // 执行时解引用、自动跟随新实例（修复「工具闭包绑创建时旧引擎 → 热重建后静默失效」缺陷）。
   const watchCfg = resolveWatchConfig(config);
-  const longrunCfg = resolveLongrunConfig(config); // longrun 档独立解析于 lane-heartbeat.js（schema.js 红线不改）
+  const longrunCfg = resolveLongrunConfig(config); // longrun 档独立解析于 lane-heartbeat.js
   const heartbeatRef = { current: null };
   let heartbeat = null;
   if (watchCfg.enabled) {
@@ -214,10 +214,10 @@ export const apply = (ctx, config = {}) => {
   }
   // watch 生效面安装快照（热更比对基准 + GET /config applied.watch 源；镜像 governanceInstalledCfg 模式）。
   // 生效变化 = 5 键 { enabled, longrun.enabled, scanIntervalMinutes, longrun.maxDurationMs,
-  //   longrun.noProgressWindowMs } 任一（watch-panel-wiring-20260905 e2：两长跑阈值纳入比较集与安装快照——
+  //   longrun.noProgressWindowMs } 任一（两长跑阈值纳入比较集与安装快照——
   //   applied.watch 自动携带阈值供面板回显与确认轮询；手工 runtime.json 阈值热更/boot 对账随之生效，
   //   修复「阈值不在生效面 → 只等下次其它生效键 remount 才值传播」现状洞）。
-  //   Leader 裁决：longrun.enabled 翻转热更即时；引擎重建语义见 remountWatchEngine——内存状态表清空、
+  //   longrun.enabled 翻转热更即时；引擎重建语义见 remountWatchEngine——内存状态表清空、
   //   从事件流/产物 mtime 基线重算（幂等：无变化零操作）。
   let watchInstalledCfg = {
     enabled: watchCfg.enabled,
@@ -250,8 +250,8 @@ export const apply = (ctx, config = {}) => {
 
   // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
   // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
-  // M1：panelStream hub 由装配层创建并注入 deps.panelStream（api.js:44 注入面复用），dispose 归本层
-  //   （api.js:45 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
+  // panelStream hub 由装配层创建并注入 deps.panelStream（api.js 注入面复用），dispose 归本层
+  //   （api.js 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
   let apiDispose = null;
   let panelStream = null;
   let topicAttachUn = null;
@@ -284,11 +284,11 @@ export const apply = (ctx, config = {}) => {
         + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover)');
     }
 
-    // M1 闭合（panel-verify §3 修复指引 2）：SSE hub 装配层创建注入——先建 hub 再传 deps.panelStream，
-    //   dispose 归属本层（api.js:45 自建者 dispose；注入时 api.js 不 push disposer）。
-    //   hub 随 webServer 挂载（ADR-4 无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源①
+    // SSE hub 装配层创建注入——先建 hub 再传 deps.panelStream，
+    //   dispose 归属本层（api.js 自建者 dispose；注入时 api.js 不 push disposer）。
+    //   hub 随 webServer 挂载（无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源
     panelStream = createStreamHub({ root, logger: ctx.logger });
-    // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.6）：configEndpoints 注入面——
+    // WebUI 治理配置写通道：configEndpoints 注入面——
     //   runtimeConfig = <root>/config/runtime.json 写通道服务实例；trustedHosts 出厂 []（loopback-only，
     //   非 loopback 部署需把宿主 trustedHosts 镜像进插件 config.trustedHosts——文档化运维要求）；
     //   applied/presets = 延迟 getter：governanceInstalledCfg/presetCatalog 在本函数体后段（preset 装载
@@ -300,18 +300,18 @@ export const apply = (ctx, config = {}) => {
         runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
         trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
         applied: () => governanceInstalledCfg,
-        // watch 生效快照 getter（longrun-panel-config-20260905）：watchInstalledCfg 初始化于上方 watch 引擎装配
+        // watch 生效快照 getter：watchInstalledCfg 初始化于上方 watch 引擎装配
         //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ。
-        //   watch-panel-wiring e2：生效快照随比较集扩展自动携带 longrun 阈值（maxDurationMs/noProgressWindowMs）
+        //   生效快照随比较集扩展自动携带 longrun 阈值（maxDurationMs/noProgressWindowMs）
         //   → GET /config applied.watch 即面板回显与 watchSig 确认轮询的完整数据源（无需装配侧再加工）
         appliedWatch: () => watchInstalledCfg,
         presets: () => presetCatalog,
       },
     }).dispose;
 
-    // M1 闭合（panel-verify §3 修复指引）：R3 SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
-    //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源①（下方 topic 运行时装配分支与 R1 热更新③对称接线）；
-    //   topic 关闭时 hub 仍装配（fs.watch ② + 心跳 ③ 双通道不变），attachTopic 零调用零路径。
+    // SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
+    //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源（下方 topic 运行时装配分支与热更新通道对称接线）；
+    //   topic 关闭时 hub 仍装配（fs.watch 与心跳通道不变），attachTopic 零调用零路径。
   }
 
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
@@ -325,16 +325,16 @@ export const apply = (ctx, config = {}) => {
     }
   }
 
-  // R2 topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
+  // topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
   // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
   // 关闭时零挂载零路径（与 acps/bridge config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
-  // R1 热更新（config.changed）可实时启停本运行时（L1 消费点，见下方 applyConfigChange ③）。
+  // 热更新（config.changed）可实时启停本运行时（见下方 applyConfigChange）。
   let topicRuntime = null;
   if (readCapability(config, 'topic')?.enabled) {
     topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
     topicRuntime.start();
     topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
-    // M1 闭合：hub 触发源①接线（attachTopic('swarm.')，幂等——已接线不重复订阅）——
+    // hub 触发源接线（attachTopic('swarm.')，幂等——已接线不重复订阅）——
     // 订阅后 store.setMember/setPhase 状态事件（swarm.member.settled / swarm.batch.phase）经 hub 路由推送 SSE
     if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
     ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
@@ -408,45 +408,44 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
   }
 
-  // M2 工具调用级护栏（governance hook，阶段 2.2）：governance.hook.enabled 缺省 true（已敲定 2026-08-31）——
+  // 工具调用级护栏（governance hook）：governance.hook.enabled 缺省 true——
   // 订阅宿主 tools/pre-execute + tools/post-execute；rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
-  // P2 双层桥接（harden-plan §5.3 B）：注入 onRefusal → 收据落盘时写批级事件流
+  // 双层桥接：注入 onRefusal → 收据落盘时写批级事件流
   //   <root>/governance/events/refusal-<sessionId>.jsonl（governance.refusal.recorded；仅事件可见性，
-  //   不触发批级状态迁移——batch_phase 联动归 M5-a）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
-  // P3 硬化（harden-plan §5.4 A）：governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
-  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults / escalation）经 applyConfigChange ⑤
-  //   dispose + 重挂即时生效（对齐 verifyMount ④ 模式；重挂后 refusals count 归零、pendingAsks 清空——
+  //   不触发批级状态迁移）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
+  // governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
+  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults / escalation）经 applyConfigChange
+  //   dispose + 重挂即时生效（对齐 verifyMount 模式；重挂后 refusals count 归零、pendingAsks 清空——
   //   运行时状态重置契约，交互处置详见 remountGovernanceHook 注释）。
-  // M5-a（C2/C3 桥接扩展，D-1 处置见下）：escalation.enabled=true 时，收据经「会话→批次归属」映射
-  //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（C4-C6
-  //   升级链在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → T16 静默降级
+  // 违规升级桥接扩展（escalation.enabled=true 时）：收据经「会话→批次归属」映射
+  //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（升级链
+  //   在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → 静默降级
   //   （仅 jsonl 可见、批事件流零新增、零升级——不误暂停）。
-  //   ⚠️ D-1 冲突处置（2026-09-02 exec-wiring lane 早报）：宿主派发流（member_status → subagent spawn）
-  //   当前无法取得被派发 worker 的真实会话 id（trajectory.recordDispatch 无生产调用方、subagent 工具参数
-  //   无 batchId/lane 结构化字段）→ 归属登记点（写侧）待 Leader/用户裁决后注入；读侧索引恒空 → 出厂
-  //   enabled=false 零路径 + 即使开启也 T16 静默降级（安全侧：漏计不误暂停）。本段接线骨架先行，登记点
-  //   落地（写 member.dispatch）后无需改动即可生效（rebuildDispatchIndex 幂等从批次事件重建）。
+  //   宿主派发流（member_status → subagent spawn）无 batchId/lane 结构化字段，归属登记点（写侧）
+  //   由装配观察登记（见 bridge/dispatch-register.js）；读侧索引缺登记时恒空 → 出厂 enabled=false
+  //   零路径 + 即使开启也静默降级（安全侧：漏计不误暂停）。读侧索引经 rebuildDispatchIndex 幂等重建，
+  //   登记点落地（写 member.dispatch）后无需改动即可生效。
   // 装配层桥接回调（remount 复用：旧实例 dispose 断开回调后，新实例重新注入——桥接随动不断链）
   const refusalEventBridge = (receipt) => {
     try {
-      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt); // C1：jsonl 事件可见性（现状不动）
+      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt); // jsonl 事件可见性
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] governance refusal event bridge failed (isolated): ' + String(e?.message ?? e));
     }
-    // M5-a 升级链（C2-C6；观察者纪律：任一失败仅 warn，不阻断 deny 裁决）
+    // 违规升级链（观察者纪律：任一失败仅 warn，不阻断 deny 裁决）
     try {
       const esc = governanceInstalledCfg?.escalation; // 热更感知：remount 后 governanceInstalledCfg 已更新
       if (esc?.enabled !== true) return;              // T20：enabled=false 零路径（出厂默认）
       const sessionId = receipt?.sessionId ?? 'cli';
-      if (sessionId === 'cli') return;                // cli 未归属不计数（T16）
-      let hit = dispatchIndex.get(sessionId);         // 归属映射（member.dispatch 重建；登记点待 D-1）
+      if (sessionId === 'cli') return;                // cli 未归属不计数
+      let hit = dispatchIndex.get(sessionId);         // 归属映射（member.dispatch 重建）
       if (!hit) {
         // miss 惰性重建：运行中登记点（写 member.dispatch）落地后，下一 refusal 即可命中（无需重启/热更）；
         // 重建幂等（镜像 trajectory rebuildFromEvents）；refusal 为低频事件，全扫成本可接受
         rebuildDispatchIndex();
         hit = dispatchIndex.get(sessionId);
       }
-      if (!hit) return;                               // T16：映射缺失 → 仅 jsonl、零批事件、零升级
+      if (!hit) return;                               // 映射缺失 → 仅 jsonl、零批事件、零升级
       store.recordGovernanceRefusal(hit.sessionId, hit.batchId, {
         lane: hit.lane,
         receiptId: receipt?.receiptId,
@@ -459,10 +458,10 @@ export const apply = (ctx, config = {}) => {
       ctx.logger?.warn?.('[dsh-punky-swarm] governance escalation bridge failed (isolated): ' + String(e?.message ?? e));
     }
   };
-  // M5-a 归属读侧索引（C2；D-1 冲突处置：登记点待裁决，读侧骨架先行）：
+  // 归属读侧索引（读侧骨架先行）：
   //   workerSessionId → { sessionId, batchId, lane }——从全部批次事件 member.dispatch 幂等重建
-  //   （镜像 trajectory.js rebuildFromEvents:58-71 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
-  //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（T16 安全侧）。
+  //   （镜像 trajectory.js rebuildFromEvents 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
+  //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（安全侧）。
   const dispatchIndex = new Map();
   const rebuildDispatchIndex = () => {
     dispatchIndex.clear();
@@ -480,58 +479,57 @@ export const apply = (ctx, config = {}) => {
     return n;
   };
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
-  // D-1 方案 B 写侧登记点（m5a-d1-20260902 批次；audit m5a-acceptance §7.4 裁决落地）：
+  // 派发写侧登记点（dispatch-register.js）：
   //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork/send_message）
   //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
   //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
-  //   :414-430 同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（T16 静默，
+  //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，
   //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
-  //   读侧骨架零改动（不触碰 :414-430 逻辑；写侧只追加事件 + 维护同一 Map）。
+  //   读侧骨架零改动（写侧只追加事件 + 维护同一 Map）。
   let dispatchReg = installDispatchRegistration(ctx, {
     store,
     dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
     config,
-    // 装配注入面（方案 B）：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
+    // 装配注入面：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
     //   缺省 undefined → 模块内 member_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
-    //   yml 静态块不适用时走兜底意图——两路共存，T16 语义保持。
+    //   yml 静态块不适用时走兜底意图——两路共存，静默降级语义保持。
     resolveBatchContext: config?.dispatch?.resolveBatchContext,
     logger: ctx.logger,
   });
   if (dispatchReg.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] D-1 dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（方案 B，零宿主改造）');
+    ctx.logger?.info?.('[dsh-punky-swarm] dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（零宿主改造）');
   }
-  // M5-b preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 三 JSON → 表注入 resolve
+  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 三 JSON → 表注入 resolve
   //   presetTable（governance.hook.preset 引用展开源）。errors（文件缺失/损坏/形状坏）→ 逐条 warn 留痕，
   //   不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
-  // C2（acceptance）：resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
+  // resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
   //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
   const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
   const { table: presetTable, errors: presetErrors } = loadPresetTable();
   for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
-  // WebUI 治理配置写通道（webui-config-build-20260903，设计 §1.6）：preset 注册目录元数据
+  // WebUI 治理配置写通道：preset 注册目录元数据
   //   （GET /config presets 源：id = 已成功装载的注册 id、count = 规则数——装载失败不入目录，
-  //   装配侧已对 errors 逐条 warn；derived from presetTable，:461 装载后一次性派生）
+  //   装配侧已对 errors 逐条 warn；derived from presetTable，装载后一次性派生）
   const presetCatalog = PRESET_IDS.filter((id) => Array.isArray(presetTable[id]))
     .map((id) => ({ id, count: presetTable[id].length }));
-  // 当前已挂载 hook 的解析配置快照（P3 热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
+  // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
   let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
   let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
   }
-  // P3 热切重挂（⑤ 分支 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
+  // 热切重挂（生效变化通道 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
   //   = enabled 翻转或 rules/flags/defaults 实际变更；JSON 序敏感——规则序参与裁决，变化即重挂）→
   //   dispose + 以新快照重挂。kernel 闭包持有旧 cfg（createGovernanceKernel(cfg) 捕获引用）→ 最小改动
-  //   统一走 dispose+重挂，不引入 updateConfig API（harden-plan §5.4 A.2）。幂等：无生效变化零操作。
-  //   交互处置（manifest 留痕）：
-  //   - p2 桥接（onRefusal）：dispose 置空旧实例 refusalCb（B4 断开）→ 新实例重新注入 refusalEventBridge
+  //   统一走 dispose+重挂，不引入 updateConfig API。幂等：无生效变化零操作。
+  //   交互处置：
+  //   - 桥接（onRefusal）：dispose 置空旧实例 refusalCb（断开）→ 新实例重新注入 refusalEventBridge
   //     → remount 后批级事件流随动（bridge 事件不因重挂丢失接线）；
-  //   - p1 状态机：pendingAsks 为 hook 实例内存态（跨 pre/post 存活）→ 重挂清空——跨重挂在途 ask 的
+  //   - 状态机：pendingAsks 为 hook 实例内存态（跨 pre/post 存活）→ 重挂清空——跨重挂在途 ask 的
   //     outcome 补记丢失（收据 ask.initiated 已在 pre 落盘不丢审计，outcome 保持 initiated 态；重挂仅
   //     发生在 governance 配置变化时，窗口极小）；DEFER/PAUSE 会话状态为文件态（state-store）→ 不随重挂丢失；
-  //   - refusals count 随新实例归零（运行时状态重置契约，harden-plan §5.4 A.2「重挂后 refusals count 等
-  //     运行时状态重置」）。
+  //   - refusals count 随新实例归零（运行时状态重置契约：重挂后 refusals count 等运行时状态重置）。
   const remountGovernanceHook = (nextConfig, logTag) => {
     const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
     if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
@@ -547,9 +545,9 @@ export const apply = (ctx, config = {}) => {
     return true;
   };
 
-  // watch 引擎重挂（longrun-panel-config-20260905：热更 ① 生效变化通道 + 启动对账共用；镜像
+  // watch 引擎重挂（热更生效变化通道 + 启动对账共用；镜像
   //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（5 键 {enabled, longrun.enabled,
-  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs}——watch-panel-wiring e2 扩展）
+  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs}）
   //   → 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
   //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
   //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
@@ -585,12 +583,12 @@ export const apply = (ctx, config = {}) => {
     return true;
   };
 
-  // ── R1 热更新装配（L1 消费点就地启停，叠加非替换）──
+  // ── 热更新装配（就地启停，叠加非替换）──
   // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
-  // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果（D2）；
-  //   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播（设计 §3.1.5 裁决）
-  // 生效范围（L1，设计 §3.1.4）：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
-  //   对外能力（acps/bridge/acps.discovery/identity）不纳入热切（设计 §3.1.5 附带裁决）
+  // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果；
+  //   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播
+  // 生效范围：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
+  //   对外能力（acps/bridge/acps.discovery/identity）不纳入热切
   let hotConfig = null;
   const applyConfigChange = (change) => {
     const next = change.config;
@@ -598,7 +596,7 @@ export const apply = (ctx, config = {}) => {
     //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs} 任一变化 →
     //   dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
     //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转与阈值变更经同一通道即时生效
-    //   （design §2.2/§2.3——watch.enabled 翻转既有语义保留并统一进 remount；阈值键纳入后手工 runtime.json
+    //   （watch.enabled 翻转既有语义保留并统一进 remount；阈值键纳入后手工 runtime.json
     //   阈值热写即时 remount、重启 boot 对账对齐，不再滞后）
     remountWatchEngine(next);
     // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
@@ -611,7 +609,7 @@ export const apply = (ctx, config = {}) => {
       trajectory.stop(); trajectory = null;
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge stopped');
     }
-    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动 + M1 hub attachTopic 对称退订）
+    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动 + hub attachTopic 对称退订）
     const topicCfg = readCapability(next, 'topic');
     if (topicCfg?.enabled && !topicRuntime) {
       topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
@@ -632,30 +630,30 @@ export const apply = (ctx, config = {}) => {
       verifyMount = mountVerify(ctx, { root, config: next });
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: verify capture ' + (vc.enabled ? 'mounted' : 'unmounted'));
     }
-    // ⑤ governance hook（P3 热切，harden-plan §5.4 A.2）：governance.hook 生效变化 → dispose + 重挂
+    // ⑤ governance hook（热切）：governance.hook 生效变化 → dispose + 重挂
     //   （逻辑见 remountGovernanceHook；幂等——无生效变化零操作；启动对账见 apply 尾部 hotConfig.start() 之后）
     remountGovernanceHook(next);
   };
   hotConfig = createConfigWatcher({
     root, config,
     onChange: (change) => {
-      // ① 进程内广播（cordis 总线事件，宿主可用时；exec-b hub/未来订阅方经 ctx.on 订阅）
+      // ① 进程内广播（cordis 总线事件，宿主可用时；SSE hub/未来订阅方经 ctx.on 订阅）
       try { ctx.emit?.(CONFIG_CHANGED_EVENT, change); } catch { /* 宿主事件缺失静默 */ }
-      // ② topic 镜像（R1→R2 可选，设计 §3.4）：topic.enabled 时同步 emitTopic('swarm.config.changed')，仅进程内分发
+      // ② topic 镜像（可选）：topic.enabled 时同步 emitTopic('swarm.config.changed')，仅进程内分发
       if (topicRuntime) { try { topicRuntime.publishConfigChanged(change); } catch { /* 隔离 */ } }
-      // ③ L1 消费点就地启停
+      // ③ 就地启停
       applyConfigChange(change);
     },
     logger: ctx.logger,
   });
   hotConfig.start();
-  // P3 启动对账：watcher.start() 应用初始 runtime.json overlay 但不广播（H7 重启语义）——若启动时 overlay
+  // 启动对账：watcher.start() 应用初始 runtime.json overlay 但不广播（重启语义）——若启动时 overlay
   //   已含 governance 变化（如 enabled:false / rules 覆盖），装配侧（上方）仍按静态 config 挂载 →
-  //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，①-④ 维持既有启动语义）。
+  //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，维持既有启动语义）。
   remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay');
-  // watch boot 对账（longrun-panel-config-20260905 缺口 2，镜像 governance :595 对账）：持久化到 runtime.json
+  // watch boot 对账（缺口补）：持久化到 runtime.json
   //   的 capabilities.watch.* 覆盖（watch.enabled / longrun.enabled / 长跑阈值等）在重启后经快照解析与静态
-  //   装配不一致 → 同样 dispose+重建+重挂——保证持久化 watch 覆盖（阈值键随 e2 比较集扩展一并纳入）
+  //   装配不一致 → 同样 dispose+重建+重挂——保证持久化 watch 覆盖（阈值键随比较集扩展一并纳入）
   //   「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
   remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay');
 
@@ -667,12 +665,12 @@ export const apply = (ctx, config = {}) => {
     apiDispose?.();
     trajectory?.stop();
     topicRuntime?.stop();
-    // M1：attachTopic 退订 + hub dispose（装配层创建者负责，api.js 注入时不重复 dispose）
+    // attachTopic 退订 + hub dispose（装配层创建者负责，api.js 注入时不重复 dispose）
     if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
     if (panelStream) { panelStream.dispose(); panelStream = null; }
     verifyMount?.dispose();
     governanceHook?.dispose();
-    dispatchReg?.dispose?.(); // D-1 方案 B 登记点退订（幂等）
+    dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };

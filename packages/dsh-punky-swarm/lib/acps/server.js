@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 server：ACPs 对外 mTLS 服务端点（lib/acps 域，P1 lane exec-acps-server）
+// 文件 server：ACPs 对外 mTLS 服务端点（lib/acps 域）
 // 契约：
 //   - 独立 HTTPS 监听器（node:https + node:tls，零新依赖），默认端口 9443、绑定 127.0.0.1（config 可配）；
 //   - TLS：minVersion TLSv1.3 + requestCert + rejectUnauthorized（=CERT_REQUIRED + TLSv1_3 语义，

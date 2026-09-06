@@ -15,28 +15,27 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/webui/runtime-config.js —— WebUI 治理配置写通道服务（webui-config-build-20260903）
+// lib/webui/runtime-config.js —— WebUI 治理配置写通道服务
 // 端点 POST /api/dsh-punky-swarm/config 的写侧：受控白名单预检（拒绝而非回退）→ 读-改-写保留语义
 //   → validateOverlay 兜底 → tmp+rename 原子写 <root>/config/runtime.json。
-// 依据：webui-config-design.md §1.4（校验）/§1.5（原子写）；宿主事实 eval/host-impl-facts.md §③/§④。
 // 语义要点：
 //   - 读-改-写保留：读现有 runtime.json（缺失 = {}）→ 仅替换顶层 governance 段 → 写回全量。
 //     其它顶层键（aip/acps/capabilities/mailbox/resume/ratchet/escalation）与 governance.hook 内
 //     非表单键（rules/defaults/pause/defer）原样保留——写通道是「受控改键」，不做全量替换。
-//   - preset 省略（payload.hook 无 preset 键）= 删键回静态出厂空表（叠加语义，T4-4 模式）；
+//   - preset 省略（payload.hook 无 preset 键）= 删键回静态出厂空表（叠加语义）；
 //     escalation/flags/enabled 省略 = 该键不动（escalation 显式整段合并：{...cur, ...form}）。
-//   - 服务端自做值域预检（validateOverlay 不做 governance 深度校验的缺口，§1.4）——
+//   - 服务端自做值域预检（validateOverlay 不做 governance 深度校验的缺口）——
 //     拒绝（400 errors 逐字段 code）而非引擎式回退，给表单可操作回显。
 //   - 预检通过仍跑 validateOverlay(全量 overlay) 兜底：保证写入内容必被 watcher 接受、
-//     热更确定性生效；兜底失败 → 500 不回写（不应发生）。
+//     热更确定性生效；兜底失败 → 500 不落盘（不应发生）。
 //   - 原子写：同目录写临时文件（.runtime.json.tmp）→ renameSync——写入必须走 rename 而非
-//     直接 writeFile，watch 只看到完整文件（config-watch 文件级 watch 实施回注，cw:29-33）。
-//   - watch 写通道（longrun-panel-config-20260905）：writeWatch 处理 capabilities.watch 段——读-改-写保留
+//     直接 writeFile，watch 只看到完整文件（config-watch 文件级 watch）。
+//   - watch 写通道：writeWatch 处理 capabilities.watch 段——读-改-写保留
 //     （capabilities 只合并 watch 子对象：{...curWatch, enabled?, longrun:{...curLongrun, enabled?/阈值}}，
 //     其余顶层键与 capabilities 其余子键原样）。端点按 body 键分派：单保存合并 governance + capabilities.watch
-//     双段同 body（Leader 裁决 1）→ 含 capabilities 段走 writeWatch（内部同时处理可选 governance 段，
+//     双段同 body → 含 capabilities 段走 writeWatch（内部同时处理可选 governance 段，
 //     复用 writeGovernance 校验/合并语义）；仅 governance（旧客户端/既有测试）→ writeGovernance 原路径。
-//     阈值写通道已就绪（Leader 裁决 2；watch-panel-wiring e1/e2 注释对齐）：longrun.maxDurationMs/
+//     阈值写通道已就绪：longrun.maxDurationMs/
 //       noProgressWindowMs 值域允许正整数 ms≥1，可经面板表单（UI 分钟换算 ms）与手工 runtime.json 写入。
 // 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay（导出面）+ preset-loader 的
 //   PRESET_IDS（注册 id 枚举唯一权威，不接受任意路径引用）。
@@ -46,31 +45,31 @@ import { validateOverlay } from '../hot/config-watch.js';
 import { PRESET_IDS } from '../governance/preset-loader.js';
 
 // 受控表单 escalation.primitives 合法值域 = 引擎 resolve 合法域（governance/config.js resolveEscalationConfig
-//   ——DENY/NARROW/DEFER/PAUSE；REQUIRE_APPROVAL 与状态门收据不可配入，config.js:177 红线）。
+//   ——DENY/NARROW/DEFER/PAUSE；REQUIRE_APPROVAL 与状态门收据不可配入，config.js resolve 红线）。
 //   config.ts 未导出该枚举（governance/*.js 为 .ts 编译产物，不动源防环）——此处本地持字面量 +
-//   交叉引用注释；改引擎枚举须同步此处（两端同源，注释锚 config.js:37）。
+//   交叉引用注释；改引擎枚举须同步此处（两端同源）。
 const ESCALATION_PRIMITIVE_SET = new Set(['DENY', 'NARROW', 'DEFER', 'PAUSE']);
 
-// 受控字段集白名单（§1.4-1/2）：body 顶层仅 governance；governance 仅 hook；hook 仅表单四键。
+// 受控字段集白名单：body 顶层仅 governance；governance 仅 hook；hook 仅表单四键。
 const TOP_KEYS = new Set(['governance']);
 const GOV_KEYS = new Set(['hook']);
 const HOOK_FORM_KEYS = new Set(['enabled', 'preset', 'escalation', 'flags']);
-// watch 写通道受控键（longrun-panel-config-20260905；watch-panel-wiring e1/e2 注释对齐）：capabilities 段
+// watch 写通道受控键：capabilities 段
 //   白名单仅 watch；watch 仅 enabled/longrun；longrun 仅 enabled + 两阈值（maxDurationMs/noProgressWindowMs
-//   ——Leader 裁决 2：值域允许正整数 ms≥1，可经面板表单分钟输入换算 ms 提交）。watch 其它键
+//   ——值域允许正整数 ms≥1，可经面板表单分钟输入换算 ms 提交）。watch 其它键
 //   （scanIntervalMinutes/intervalsMinutes/maxMissed/probeTemplate）不经写通道（扫描/探针模板等走手工
 //   runtime.json 或静态 config——热更生效面 5 键 {enabled, longrun.enabled, scanIntervalMinutes,
 //   longrun.maxDurationMs, longrun.noProgressWindowMs}，装配侧 remountWatchEngine 比对）。
 const WATCH_CAPS_KEYS = new Set(['watch']);
 const WATCH_KEYS = new Set(['enabled', 'longrun']);
 const WATCH_LONGRUN_KEYS = new Set(['enabled', 'maxDurationMs', 'noProgressWindowMs']);
-// windowSeconds（秒，webui-config-fix2-20260904 新语义提交字段）= UI 输入单位；后端 ×1000 归一
+// windowSeconds（秒，新语义提交字段）= UI 输入单位；后端 ×1000 归一
 //   windowMs（毫秒）落盘——runtime.json 存储契约（windowMs ms）不变。windowMs（ms）字段保留旧语义
 //   向后兼容（既有 api-config/webui-runtime-config 测试与调用方不破）。
 const ESC_FORM_KEYS = new Set(['enabled', 'threshold', 'windowMs', 'windowSeconds', 'primitives']);
 const FLAG_FORM_KEYS = new Set(['narrow']);
 
-// 规则表冲突守卫的错误文案（§1.4-4）——表单不改写/清空手工 rules 的静默覆盖防护
+// 规则表冲突守卫的错误文案——表单不改写/清空手工 rules 的静默覆盖防护
 const INLINE_RULES_CONFLICT_MSG = '检测到手工 rules（governance.hook.rules 非空）；preset 切换会与手工规则并存/冲突——'
   + '请先手工移除 rules 或保持 preset 不变（受控表单不提供清空 rules 动作）';
 
@@ -78,9 +77,9 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
-// ── 服务端受控白名单预检（纯函数、零 IO，§1.4）──
+// ── 服务端受控白名单预检（纯函数、零 IO）──
 // payload = POST 请求体 { governance: { hook: {...} } }；curHook = 当前文件 governance.hook（可选，
-//   提供时追加 §1.4-4 规则表冲突守卫——preset 相对现有引用有变化 + 现有 overlay rules 非空 → 拒绝）。
+//   提供时追加规则表冲突守卫——preset 相对现有引用有变化 + 现有 overlay rules 非空 → 拒绝）。
 // 返回 { ok, errors: [{ field, code, message }] }——400 拒绝而非回退（值域判据 = 引擎 resolve 合法域，
 //   不发明引擎外上封顶）。code 枚举（UI 双语映射键）：unknown-top-level / field-not-allowed /
 //   unknown-preset / preset-conflicts-inline-rules / invalid-value。
@@ -161,7 +160,7 @@ export function validateGovernancePayload(payload, curHook) {
           push('governance.hook.escalation.threshold', 'invalid-value', 'threshold must be an integer >= 1');
         }
       }
-      // 窗口单位（webui-config-fix2-20260904）：windowSeconds（秒，新语义，≥1s）+ windowMs（毫秒，旧语义
+      // 窗口单位：windowSeconds（秒，新语义，≥1s）+ windowMs（毫秒，旧语义
       //   ≥1000ms，向后兼容）互斥——同送拒绝（歧义）；换算在写路径 ×1000 归一（毫秒存储契约不变）。
       if ('windowMs' in esc && 'windowSeconds' in esc) {
         push('governance.hook.escalation.windowSeconds', 'invalid-value',
@@ -219,7 +218,7 @@ export function validateGovernancePayload(payload, curHook) {
     const curRules = Array.isArray(curHook?.rules) ? curHook.rules : [];
     if (curRules.length > 0) {
       const curRefKey = presetRefKey(curHook?.preset);
-      const nextRef = 'preset' in hook ? hook.preset : undefined; // 省略 = 删键（§1.5）
+      const nextRef = 'preset' in hook ? hook.preset : undefined; // 省略 = 删键
       if (presetRefKey(nextRef) !== curRefKey) {
         push('governance.hook.preset', 'preset-conflicts-inline-rules', INLINE_RULES_CONFLICT_MSG);
       }
@@ -236,7 +235,7 @@ function presetRefKey(ref) {
   return 'x:' + JSON.stringify(ref);
 }
 
-// ── watch 受控白名单预检（纯函数、零 IO；longrun-panel-config-20260905）──
+// ── watch 受控白名单预检（纯函数、零 IO）──
 // payload = POST body 的 capabilities 段（{ watch?: { enabled?, longrun?: {...} } }）；curWatch = 当前
 //   文件 capabilities.watch（可选——签名与 validateGovernancePayload(payload, curHook) 对称；watch 无规则表类
 //   守卫，当前不使用，仅占位预留）。错误码沿用 governance 同枚举（UI 双语映射零新增）：
@@ -280,7 +279,7 @@ export function validateWatchPayload(payload, curWatch) {
           if ('enabled' in lr && typeof lr.enabled !== 'boolean') {
             push('capabilities.watch.longrun.enabled', 'invalid-value', 'longrun.enabled must be boolean');
           }
-          // 阈值写通道（Leader 裁决 2；watch-panel-wiring e1/e2 注释对齐）：正整数 ms ≥1（写通道值域允许、
+          // 阈值写通道：正整数 ms ≥1（写通道值域允许、
           //   可经表单——UI 分钟输入换算 ms 提交；面板回显与热更经 remount 生效面 5 键）
           for (const k of ['maxDurationMs', 'noProgressWindowMs']) {
             if (k in lr) {
@@ -299,7 +298,7 @@ export function validateWatchPayload(payload, curWatch) {
 
 // governance 段受控合并（writeGovernance 与 writeWatch 共用；payload.governance 须已通过
 //   validateGovernancePayload 校验）：仅替换 hook 表单键，hook 内非表单键（rules/defaults/pause/defer）
-//   经 curHook 展开原样保留——preset 省略 = 删键（回静态出厂空表，T4-4）；escalation/flags 整段合并仅覆盖提交子键
+//   经 curHook 展开原样保留——preset 省略 = 删键（回静态出厂空表）；escalation/flags 整段合并仅覆盖提交子键
 function mergeGovernance(curGov, gov) {
   const curHook = isPlainObject(curGov?.hook) ? curGov.hook : {};
   const hook = gov.hook;
@@ -325,7 +324,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   const runtimeFile = join(configDir, 'runtime.json');
 
   // 读现有 runtime.json（缺失 = {}）；坏 JSON/非对象 → throw（错误信息含路径）——
-  // 写路径拒写不吞：其它顶层键无法保全时宁 500 不回写（坏 base 属运维错误，见 §1.5「不应发生」）
+  // 写路径拒写不吞：其它顶层键无法保全时宁 500 不落盘（坏 base 属运维错误，「不应发生」）
   function readOverlay() {
     if (!existsSync(runtimeFile)) return {};
     const raw = readFileSync(runtimeFile, 'utf8');
@@ -334,7 +333,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
     return parsed;
   }
 
-  // 写通道公共落盘段：validateOverlay(全量) 兜底（§1.4-5——写入必被 watcher 接受，失败 500 不回写）→
+  // 写通道公共落盘段：validateOverlay(全量) 兜底（写入必被 watcher 接受，失败 500 不落盘）→
   //   同目录 tmp + rename 原子写（rename 需同卷原子；watch 只看到完整文件）
   function commitOverlay(overlay) {
     const gate = validateOverlay(overlay);
@@ -352,7 +351,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   function writeGovernance(payload) {
     let overlay;
     try {
-      overlay = readOverlay(); // 坏 base JSON → 归一到 500 不回写（其它顶层键无法保全）
+      overlay = readOverlay(); // 坏 base JSON → 归一到 500 不落盘（其它顶层键无法保全）
     } catch (e) {
       return { ok: false, status: 500, error: 'runtime.json unreadable: ' + String(e?.message ?? e) };
     }
@@ -368,8 +367,8 @@ export function createRuntimeConfigService({ root, logger } = {}) {
     return { ok: true, written: mergedGov };
   }
 
-  // watch 写通道（longrun-panel-config-20260905）：端点按 body 键分派——含 capabilities 段走本函数。
-  //   单保存合并 governance + capabilities.watch 双段同 body（Leader 裁决 1），故同时处理可选 governance 段
+  // watch 写通道：端点按 body 键分派——含 capabilities 段走本函数。
+  //   单保存合并 governance + capabilities.watch 双段同 body，故同时处理可选 governance 段
   //   （governance-only 旧客户端 → writeGovernance 原路径，本函数不经手）。读-改-写保留：capabilities 段只
   //   合并 watch 子对象（{...curWatch, enabled?, longrun:{...curLongrun, 显式子键}}），其余顶层键与
   //   capabilities 其余子键原样；validateOverlay 全量兜底；tmp+rename 原子写。返回
@@ -377,7 +376,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   function writeWatch(payload) {
     let overlay;
     try {
-      overlay = readOverlay(); // 坏 base JSON → 归一到 500 不回写（其它顶层键无法保全）
+      overlay = readOverlay(); // 坏 base JSON → 归一到 500 不落盘（其它顶层键无法保全）
     } catch (e) {
       return { ok: false, status: 500, error: 'runtime.json unreadable: ' + String(e?.message ?? e) };
     }
@@ -453,7 +452,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
 }
 
 // 从已验证的 escalation 段摘出「显式提交」的子键（仅本表单键，逐字段值域已在 validate 保证）。
-// 窗口单位归一（webui-config-fix2-20260904）：windowSeconds（秒）→ ×1000 换算为 windowMs 落盘
+// 窗口单位归一：windowSeconds（秒）→ ×1000 换算为 windowMs 落盘
 //   （runtime.json 毫秒存储契约不变，windowSeconds 为线协议键不落盘）；旧 windowMs（毫秒）原样
 //   透传（向后兼容——不二次换算）。两者同送已在 validate 阶段互斥拒绝。
 function pickEscalationSubset(esc) {

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// E4 legacy-fix 单测（punky-finalize 决策包 §4 审计遗留修正）：
+// legacy-fix 单测（审计遗留修正）：
 //   T4.1 warn 触发（非法组合 → apply 后 logger.warn 含错误文本）
 //   T4.2 不炸宿主（非法配置 apply 正常返回、disposer 正常产出、不 throw）
 //   T4.3 缺省零 warn（空/缺省 config 零 warn；禁用能力零校验零 warn）
@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   T4.5 合并生效（mount.js 不再定义本地 resolveVerifyConfig/VERIFY_DEFAULTS，消费路径指向 lib/schema.js）
 //   T4.6 语义不变（mount.js re-export 与 lib/schema.js 同一函数引用；边界行为抽查与 verify-mount.test.js 同断言值）
 //   T4.7 无越界（index.js 的 mountVerify 挂载调用点原样保留）
-// 副作用说明（决策包 §5.4）：apply 首调触发 syncAssets（幂等：目标字节一致则跳过——测试机资产目录
+// 副作用说明：apply 首调触发 syncAssets（幂等：目标字节一致则跳过——测试机资产目录
 //   已存在 → current 零写入）与 store 恢复（temp root 无 in-flight 批次 → 零操作）；recoveredThisProcess
 //   首调后置 true，后续 apply 不再触发资产同步。
 import test from 'node:test';
@@ -35,7 +35,7 @@ import { apply } from '../lib/index.js';
 import { resolveVerifyConfig as schemaResolve } from '../lib/schema.js';
 import * as mountMod from '../lib/verify/mount.js';
 
-// mock ctx（§5.4 处置：tools.register 空实现、webServer 缺席、logger 收集）——createTools 经
+// mock ctx（tools.register 空实现、webServer 缺席、logger 收集）——createTools 经
 // ctx.tools.register 注册；installDifficultyGuard 对 ctx.tools.guard 可选链，缺省安全跳过。
 function makeCtx() {
   const calls = { info: [], warn: [], error: [] };
@@ -118,7 +118,7 @@ test('T4.5 合并生效：mount.js 不再定义本地 resolveVerifyConfig/VERIFY
 
 test('T4.6 语义不变：mount.js 与 lib/schema.js 同一 resolveVerifyConfig（同源引用 + 边界行为一致）', () => {
   assert.equal(mountMod.resolveVerifyConfig, schemaResolve, 'mount.js re-export 即 lib/schema.js 原函数');
-  // 边界抽查（与 verify-mount.test.js 既有用例同断言值）：P1-01 缺省默认开（等价 readCapability 合并）/ enforce / 非法 mode 回退 advisory
+  // 边界抽查（与 verify-mount.test.js 既有用例同断言值）：缺省默认开（等价 readCapability 合并）/ enforce / 非法 mode 回退 advisory
   assert.deepEqual(mountMod.resolveVerifyConfig({}), { enabled: true, mode: 'advisory' });
   assert.deepEqual(mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false, mode: 'advisory' });
   assert.deepEqual(

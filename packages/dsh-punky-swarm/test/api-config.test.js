@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// webui-config-build-20260903 / 设计 §3 测试表：api-config——/config 端点契约（trusted 403 / 400 校验 /
+// /config 端点契约测试（trusted 403 / 400 校验 /
 //   405 / GET 取数 / POST 落盘 / 条件注册路由计数零回归）。直调 handler 形态（req={url,method,headers,body}
-//   + res mock），harness 对齐 discovery.test.js:273-287（apiWithDiscovery/invoke）。
-//   临时根一律落 D 盘（D:\dsh\_tmp\webui-config-build\，用户落盘纪律）。
+//   + res mock），harness 对齐 discovery.test.js（apiWithDiscovery/invoke）。
+//   临时根一律落 D 盘（D:\dsh\_tmp\，用户落盘纪律）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -43,8 +43,8 @@ function apiWithConfigEndpoints(configEndpoints, extra = {}) {
 }
 
 // 注入面装配（index.js configEndpoints 同形）：真实 runtimeConfig 服务 + applied/presets 假 getter
-// watch 生效快照（longrun-panel-config-20260905）：appliedWatch = watchInstalledCfg 形状
-//   { enabled, longrun:{enabled}, scanIntervalMinutes }（build-report §6 契约 3——applied.watch 生效面快照）
+// watch 生效快照：appliedWatch = watchInstalledCfg 形状
+//   { enabled, longrun:{enabled}, scanIntervalMinutes }（applied.watch 生效面快照）
 const APPLIED_WATCH = { enabled: true, longrun: { enabled: true }, scanIntervalMinutes: 1 };
 function makeConfigEndpoints(root) {
   return {
@@ -229,9 +229,9 @@ test('端点：POST /config windowSeconds 越界（<1s）→ 400 invalid-value�
   assert.equal(fs.existsSync(path.join(root, 'config', 'runtime.json')), false, '400 不落盘');
 });
 
-// ── capabilities.watch 段端点契约（longrun-panel-config-20260905，e2 新增）──
+// ── capabilities.watch 段端点契约（新增）──
 // GET 新增平级键 overlayWatch/applied.watch（既有 overlay=governance 段语义不动）；POST 含 capabilities 段
-//   → writeWatch（单保存合并双段）。契约基准：build-report §6 交接契约 2/3/5。
+//   → writeWatch（单保存合并双段）。
 
 test('端点：GET /config 新增字段形状——overlayWatch（磁盘 capabilities.watch 原文）+ applied.watch（生效快照）', () => {
   const root = freshRoot();

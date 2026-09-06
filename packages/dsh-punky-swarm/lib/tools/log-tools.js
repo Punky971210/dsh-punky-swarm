@@ -22,16 +22,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // worktree.* / budget.* / system.* / asset.* 等），但缺模型可调用的导出工具——本工具为
 // store.readBatch 的纯读投影，零副作用（不 appendEvent、不改状态文件、不碰 mailbox、
 // 不写工作区；唯一写路径是显式 writeTo 落盘到引擎产物根，属可审计产物）。
-// 装配开关：经 readCapability(config,'logs') 合并注册表 default（P1-01——logs 键注册表默认关：
+// 装配开关：经 readCapability(config,'logs') 合并注册表 default（logs 键注册表默认关：
 //   缺省不注册 → 工具总数不含 log_export；显式 capabilities.logs.enabled:true（如 cordis.patch.yml）
 //   或 enabled:false 控制注册）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './shared.js'; // P2-01：共享辅助直引零依赖 shared.js（不再经 core.js）
-import { SAFE_ID, TERMINAL } from '../state/constants.js'; // P1-07 单点（原 :32-33 定义迁出）
-import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
-// R-07 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
+import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
+import { SAFE_ID, TERMINAL } from '../state/constants.js'; // 单点（原定义迁出）
+import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
+// 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
 import * as EVT from '../state/event-types.js';
 
 function artifactsDirOf(root, sessionId, batchId) {
@@ -128,7 +128,7 @@ function buildReport(batch, sessionId, filtered, args) {
 
 export function createLogTools(ctx, deps) {
   const config = deps?.config ?? {};
-  // logs 注册表默认关（P1-01）：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
+  // logs 注册表默认关：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
   //   显式 logs.enabled=true（patch 全开）→ 注册 log_export。
   if (readCapability(config, 'logs')?.enabled !== true) return [];
   const { root, store } = deps;

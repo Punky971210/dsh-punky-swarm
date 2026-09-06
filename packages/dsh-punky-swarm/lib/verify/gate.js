@@ -15,13 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// verify/gate.js —— 完成闸门三态裁决（C3 成熟模式：dsh-verification CompletionGate）
+// verify/gate.js —— 完成闸门三态裁决（借鉴 dsh-verification CompletionGate）
 // 三态：done / failed / blocked；模式 advisory（默认只记录不拦截）/ enforce（显式装配启用则拦截）。
 // 审计消费桥接：audit lane 消费 exec 产物 + evidence → evaluateGate 产出裁决 → 裁决报告落盘为 audit
 // produce（audit/verify-verdict.md）→ Tier3 门禁照常校验该产物存在（既有 gates.js 零改动，verify 是内容层增强）。
 import { createSelectorRegistry } from './selector.js';
 import { createEvidenceRegistry } from './evidence.js';
-import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
+import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
 
 // 状态劣化序：done < failed < blocked（blocked 需人工，优先级最高）；null 视为最低（-1）
 function worse(a, b) {
@@ -143,7 +143,7 @@ export function renderVerdictReport({ batchId, sessionId, acList = [], result, e
   return lines.join('\n');
 }
 
-// 完成闸门工厂：config.capabilities.verify.{enabled, mode}——P1-01 缺省默认开（readCapability 合并
+// 完成闸门工厂：config.capabilities.verify.{enabled, mode}——缺省默认开（readCapability 合并
 //   注册表 default VERIFY_DEFAULTS {enabled:true, mode:'advisory'}）；显式 enabled:false 时 evaluate
 //   返回 skipped（无裁决、零运行时开销）；enforce 仅显式装配启用。
 export function createCompletionGate({ config = {}, mode } = {}) {

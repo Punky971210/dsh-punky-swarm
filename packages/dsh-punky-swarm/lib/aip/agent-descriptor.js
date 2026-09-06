@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // ⚠ 2026-08 校准（覆盖旧 14+8 口径）：字段集以 ACS（Agent Capability Specification）原文为准——
 //   registry-server/app/agent/acsSchema.json（JSON Schema 全文）为逐字字段来源；
 //   旧「14+8 兼容映射层」（toLegacyDescriptor / toLegacySkill + ALL_TOOLS / LAYER_CAPABILITIES）
-//   已移除（P2-06）：ACPs 兼容路径中无调用——ACPs 描述直接消费 buildAgentDescriptor 的 ACS 格式
+//   已移除：ACPs 兼容路径中无调用——ACPs 描述直接消费 buildAgentDescriptor 的 ACS 格式
 //   （server.js:37,136 装配），描述以 ACS 格式为准。
 // 派生值标记：固定值 = 本文件推导；预留 = 后续填充。
 // 仅用内建能力，零新增依赖（红线：不改 node_modules）。

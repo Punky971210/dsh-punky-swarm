@@ -15,23 +15,23 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// bridge/trajectory.js —— C5 诊断桥接（成熟模式：LangGraph 观测层 / dsh-trajectory-governance）
+// bridge/trajectory.js —— 诊断桥接（借鉴 LangGraph 观测层 / dsh-trajectory-governance 模式）
 // 订阅 trajectory 异常（anomaly）→ sessionId→lane 映射 → notify（默认 notify-only，auto-fail 默认关）
 // 原则：只读消费告警载荷、不 mutate 载荷、不碰内核、不调插件任何控制面动作
 // 事件契约：'member.dispatch' 记录派发映射（既有事件通道，零新字段）；'lane.anomaly' 记录异常证据；broadcast 提示 Manager
 import { join } from 'node:path';
 import { TRAJECTORY_DEFAULTS } from '../schema.js';
-import { readCapability } from '../assembly/schema.js'; // P1-01：装配开关经注册表 default 缺省合并
-import { EVT_MEMBER_DISPATCH } from '../state/event-types.js'; // D-1 方案 B 收敛（audit m5a-acceptance §7 附带建议 #3）
+import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
+import { EVT_MEMBER_DISPATCH } from '../state/event-types.js'; // 派发事件常量收敛（与 event-types.js 同值）
 
 const ANOMALY_EVENT = 'trajectory/anomaly'; // 首选通道：同运行时实时订阅（Cordis 总线事件）
 const ANOMALY_RECORD = 'lane.anomaly';      // 异常留痕事件（batch.events，面板可见）
 const MAILBOX_KIND = 'anomaly';             // broadcast 消息 kind
 // 派发事件 type 收敛：原本地字面量 DISPATCH_EVENT='member.dispatch' 收敛为 event-types.js 常量
-// EVT_MEMBER_DISPATCH（同值，行为零变化）；读侧骨架 index.js:414-430 保持自身字面量零改动（D-1 契约）。
+// EVT_MEMBER_DISPATCH（同值，行为零变化）；读侧骨架保持自身字面量零改动。
 const DISPATCH_EVENT = EVT_MEMBER_DISPATCH;
 
-// 装配开关（P1-01：缺省默认开——readCapability 合并注册表 default {enabled:true}；
+// 装配开关（缺省默认开——readCapability 合并注册表 default {enabled:true}；
 //   显式 capabilities.trajectory.enabled:false 可关，false 时桥接不挂载，零运行时开销）
 export function isTrajectoryEnabled(config) {
   return readCapability(config, 'trajectory')?.enabled === true;
@@ -91,7 +91,7 @@ export function createTrajectoryBridge(ctx, deps) {
   }
 
   // notify（默认 notify-only）：lane.anomaly 事件 + broadcast 提示 Manager；不自动结算（Manager 按纪律裁决）
-  // 注：store.newEvent 展开为 { ts, type, ...fields }——载荷若含顶层 type 会覆盖事件类型（store.js:56-58），
+  // 注：store.newEvent 展开为 { ts, type, ...fields }——载荷若含顶层 type 会覆盖事件类型，
   //     故 AnomalyAlert 载荷嵌套于 alert 字段（载荷原样保留，事件 type 恒为 lane.anomaly）
   function notify(hit, alert) {
     const { sessionId, batchId, lane } = hit;

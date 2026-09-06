@@ -16,9 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // U2 内核单测：分类器六分路 P0-P6 逐档 + 多违规取最高 + fail-closed。
-// 蓝图：m2-detailed.md §9.1 U2；build-plan §1.2 U2（12 条）。
-// P0 扩展（harden-plan §6 P0 组 K-D×3）：defaults.deny 死配置修复——兜底读配置真实生效（REQUIRE_APPROVAL）、
-//   默认 DENY 回归、ALLOW 双保险回退 DENY（classify 防御；resolve 校验见 governance-config.test.js I2 扩展）。
+// defaults.deny 死配置修复——兜底读配置真实生效（REQUIRE_APPROVAL）、
+//   默认 DENY 回归、ALLOW 双保险回退 DENY（classify 防御；resolve 校验见 governance-config.test.js 扩展）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -127,9 +126,9 @@ test('U2-12 unknown category and missing confidence fail closed to DENY', () => 
   assert.equal(emptyFlags.primitive, 'DENY', 'missing flag fields behave as false');
 });
 
-// ── P0 组 K-D（harden-plan §6）：defaults.deny 死配置修复（兜底读配置真实生效）──
+// ── defaults.deny 死配置修复（兜底读配置真实生效）──
 
-// K-D1 defaults.deny=REQUIRE_APPROVAL + unknown 违规 → 兜底 REQUIRE_APPROVAL（配置真实生效，不再硬编码 DENY）
+// defaults.deny=REQUIRE_APPROVAL + unknown 违规 → 兜底 REQUIRE_APPROVAL（配置真实生效，不再硬编码 DENY）
 test('K-D1 defaults.deny=REQUIRE_APPROVAL → unknown falls back to REQUIRE_APPROVAL', () => {
   const d = classifyViolation({
     tool: 'bash', params: {}, violations: [v('unknown')], flags: FLAGS_OFF,
@@ -140,7 +139,7 @@ test('K-D1 defaults.deny=REQUIRE_APPROVAL → unknown falls back to REQUIRE_APPR
   assert.ok(d.reason.startsWith('[fail-closed]'), '[fail-closed] prefix kept');
 });
 
-// K-D2 默认 DENY 回归：defaults 缺省 / defaults.deny=DENY → 兜底仍 DENY（fail-closed 回归不变）
+// 默认 DENY 回归：defaults 缺省 / defaults.deny=DENY → 兜底仍 DENY（fail-closed 回归不变）
 test('K-D2 default (missing / DENY) fallback stays DENY', () => {
   const missing = classifyViolation({ tool: 'bash', params: {}, violations: [v('unknown')], flags: FLAGS_OFF });
   assert.equal(missing.primitive, 'DENY', 'defaults missing → DENY (回归)');
@@ -150,7 +149,7 @@ test('K-D2 default (missing / DENY) fallback stays DENY', () => {
   assert.equal(explicit.primitive, 'DENY');
 });
 
-// K-D3 defaults.deny=ALLOW → classify 双保险回退 DENY（fail-closed 纪律：兜底绝不 ALLOW；resolve 校验见 config I2）
+// defaults.deny=ALLOW → classify 双保险回退 DENY（fail-closed 纪律：兜底绝不 ALLOW）
 test('K-D3 defaults.deny=ALLOW → classify guard falls back to DENY (never ALLOW)', () => {
   const d = classifyViolation({
     tool: 'bash', params: {}, violations: [v('unknown')], flags: FLAGS_OFF, defaults: { deny: 'ALLOW' },

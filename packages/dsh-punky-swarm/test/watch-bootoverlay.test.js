@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// watch 启动对账（longrun-panel-config-20260905，e2 新增）：镜像 governance-bootoverlay.test.js BO1 结构，
+// watch 启动对账（新增）：镜像 governance-bootoverlay.test.js BO1 结构，
 //   断言对象 = lib/index.js 尾部 remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay')——
 //   启动时（apply 尾部 hotConfig.start() 后）runtime.json overlay 已含 capabilities.watch 生效变化 →
 //   按当前快照补一次对账 remount（logTag='boot-overlay'，热更路径无此 tag 可区分）。

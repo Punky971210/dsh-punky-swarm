@@ -15,21 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Gates：Tier3 层间门禁（设计 §3.3/§四/§五/§15）——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
+// Gates：Tier3 层间门禁——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
 // 纯函数闭包工厂：createGates(root) 注入 root；门禁函数签名 (sessionId, batchId, batch, lane)——batch 对象显式传入，不持有状态
-// Phase 2 类型化：wavePlan 任务属性访问经 taskOf 单点断言（findTask 保持 JS，返回 object|null → WavePlanTask，
+// 类型化说明：wavePlan 任务属性访问经 taskOf 单点断言（findTask 保持 JS，返回 object|null → WavePlanTask，
 //   断言依据：findTask 语义即"按 id 定位 buildWavePlan 持久形态任务"）；Batch/批事件判别联合收窄（零断言消解 TS2339）；
 //   gate 函数返回类型沿用结构推断（消费方 store.js 等为 JS，无类型约束）——运行期语义零变更（断言纯类型层）。
 import fs from 'node:fs';
 import path from 'node:path';
 import * as schema from '../schema.js';
 import { runCommand } from './command-exec.js';
-// P1-07 单点收敛：SESSION_RE/isAbsPath 定义迁至 constants.js；isAbsPath 保持导出
-// （store.js:24 等既有消费方 import { isAbsPath } from './gates.js' 不受影响）。
+// 单点收敛：SESSION_RE/isAbsPath 定义迁至 constants.js；isAbsPath 保持导出
+// （既有消费方 import { isAbsPath } from './gates.js' 不受影响）。
 import { SESSION_RE, isAbsPath } from './constants.js';
-// P1-04 单点：findTask 收敛至 task-utils.js（原 :108 本地定义删除，调用点不变）
+// findTask 单点：收敛至 task-utils.js（原本地定义删除，调用点不变）
 import { findTask } from './task-utils.js';
-// R-07 读端收敛：e.type 比较改引 EVT 常量单点（member.settled 读端 :117）
+// 读端收敛：e.type 比较改引 EVT 常量单点（member.settled 读端）
 import * as EVT from './event-types.js';
 import type { Batch, Layer, WavePlanTask } from '../types/contracts.js';
 export { isAbsPath };
@@ -72,7 +72,7 @@ export const GATE_LINE_RE = /^gate:\s*(.+)$/gm;
 
 // 声明解析纯函数（同 detectNeedHuman 模式：缺失/空/目录跳过、零感知）：
 // 遍历 produce/outputs 并集 → 收集所有命中行命令（保序）→ { declared, commands, path }
-// 全部命中行为空/禁用 → declared=false（零感知，C2/G8）
+// 全部命中行为空/禁用 → declared=false（零感知）
 export function detectGate(artifactsDir: string, paths: string[]) {
   if (!Array.isArray(paths) || paths.length === 0) return { declared: false, commands: [], path: null };
   const commands = [];
@@ -118,13 +118,13 @@ export function createGates(root: string) {
       // 单点断言：批次 JSON 由 store.createBatch 写入（Batch 契约同源形态），JSON.parse 产物断言为 Batch
       return JSON.parse(fs.readFileSync(file, 'utf8')) as Batch;
     } catch {
-      // 损坏批次隔离（v2-node-robustness ②，AC-1 读路径不 throw）：损坏 → null（登记在 store 旁路清单，本文件不重复）
+      // 损坏批次隔离：读路径不 throw——损坏 → null（登记在 store 旁路清单，本文件不重复）
       return null;
     }
   }
 
   // ---- Tier3 门禁辅助 ----
-  // lane 启动时间（O2 targets 门禁基准）：events 末尾向前反查最近一条 `member.settled` 且 lane 匹配且
+  // lane 启动时间（targets 门禁基准）：events 末尾向前反查最近一条 `member.settled` 且 lane 匹配且
   // to==='running' 的事件 ts（ISO）——返工（review→running）会 push 新的 running 结算事件 → 基准重置（重新计时）；
   // 无 → 回退 batch.createdAt（防御；正常 merged 必有 running 事件）。遍历模式仿 store.js lastActiveAtOf。
   // e.type === EVT 常量值（'member.settled'）在 BatchEvent 判别联合下收窄；兜底分支字段 unknown 与 === 比较不受影响
@@ -145,8 +145,8 @@ export function createGates(root: string) {
       return st.isDirectory() || st.size > 0;
     } catch { return false; }
   }
-  // Entry Gate（设计 §四）：exec 与 audit lane 派发前 consume 必须全部存在且非空
-  // P2-03：条件覆盖 audit 层（原仅 exec——audit lane 声明 consume 时缺产物同样应拒派 GATE_ENTRY_MISSING）
+  // Entry Gate：exec 与 audit lane 派发前 consume 必须全部存在且非空
+  // 条件覆盖 audit 层（原仅 exec——audit lane 声明 consume 时缺产物同样应拒派 GATE_ENTRY_MISSING）
   function checkEntryGate(sessionId: string, batchId: string, batch: Batch, lane: string) {
     const t = taskOf(batch, lane);
     if (!t || (t.layer !== 'exec' && t.layer !== 'audit') || !Array.isArray(t.consume) || t.consume.length === 0) return { ok: true };
@@ -171,7 +171,7 @@ export function createGates(root: string) {
     }
     return problems.length ? { ok: false, code: 'GATE_PLAN_CONTRACT', problems } : { ok: true };
   }
-  // Exit Gate（设计 §五）：exec→outputs 存在；audit→produce 存在；plan→Plan 契约
+  // Exit Gate：exec→outputs 存在；audit→produce 存在；plan→Plan 契约
   function checkExitGate(sessionId: string, batchId: string, batch: Batch, lane: string) {
     const t = taskOf(batch, lane);
     if (!t || !t.layer) return { ok: true };
@@ -199,7 +199,7 @@ export function createGates(root: string) {
       message: 'audit lane 声明 needHuman，须 Manager 转达人工裁决（merged 需 note 含 human: 证据 / conflict 驳回）',
     };
   }
-  // 命令 gate（V1，设计 §组件 2 / spec G2-G10、C5-C7）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行 → 退出码判定
+  // 命令 gate（V1）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行 → 退出码判定
   // 签名与既有门禁一致（batch 显式传入，不持有状态）；执行器经 deps.runCommand 注入（DI，默认真实执行器，测试可注入 mock）
   // cwd 契约（C7）：lane worktree 根（若已建）→ GATE_REPO_ROOT（批次 repo 根配置，V1 env 注入）→ artifacts 根兜底
   function commandCwd(sessionId: string, batchId: string, lane: string) {
@@ -216,11 +216,11 @@ export function createGates(root: string) {
     // 总开关（GATE_ENABLED=false → 全部零感知，应急逃生阀）
     if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') return { ok: true, declared: false };
     const t = taskOf(batch, lane);
-    if (!t || t.layer !== 'exec') return { ok: true, declared: false }; // 仅约束 exec 层验证声明（D-005）
+    if (!t || t.layer !== 'exec') return { ok: true, declared: false }; // 仅约束 exec 层验证声明
     // produce ∪ outputs 并集（去重保序）
     const fields = [...new Set([...(t.produce ?? []), ...(t.outputs ?? [])])];
     const det = detectGate(artifactsDirOf(sessionId, batchId), fields);
-    if (!det.declared) return { ok: true, declared: false }; // 未声明 gate → 零感知（C2/G10）
+    if (!det.declared) return { ok: true, declared: false }; // 未声明 gate → 零感知
     if (det.commands.length === 0) {
       return { ok: false, code: 'GATE_EXIT_NO_COMMAND', command: null, exitCode: null, declared: true, needHumanEscalation: false, detail: 'gate 行命中但命令解析为空（防空命令假通过）' };
     }
@@ -240,20 +240,20 @@ export function createGates(root: string) {
       if (!r.ok) { failed = { code: 'GATE_EXIT_NONZERO', command, exitCode: res.exitCode, detail: '退出码 ' + res.exitCode + '（非 0，重试后仍失败）' }; break; }
     }
     if (failed) {
-      // C5/G9：失败且产物同时声明 needHuman → 转人工闸（不抛错，store 接线转 checkNeedHumanGate 语义）
+      // 失败且产物同时声明 needHuman → 转人工闸（不抛错，store 接线转 checkNeedHumanGate 语义）
       const nh = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
       return { ok: false, ...failed, declared: true, needHumanEscalation: nh.declared, path: det.path };
     }
     return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path };
   }
-  // targets 门禁（O2，设计 §1.2）：exec 层 lane 声明 targets（批次产物根外目标文件绝对路径）→ merged 前置校验
+  // targets 门禁：exec 层 lane 声明 targets（批次产物根外目标文件绝对路径）→ merged 前置校验
   // 每个 target：①存在性（statSync 为文件；缺失/目录 → missing）；②变更性——mtime 晚于 lane 启动时间
   // （默认 mtime 路径），或 marker 逃生（任务级 targetsMarker 非空 或 env GATE_TARGETS_MODE==='marker' →
   // 目标文件内容含独立行 `targets-claimed: true` 即视为已变更，跳过 mtime 比对，两模式不叠加）；
-  // 未声明 targets / 非 exec 层 / GATE_ENABLED=false → 零感知（{ ok: true, declared: false }，与 checkCommandGate D-005 对称）。
+  // 未声明 targets / 非 exec 层 / GATE_ENABLED=false → 零感知（{ ok: true, declared: false }，与 checkCommandGate 对称）。
   // 判定：missing 非空 → { ok:false, code:'GATE_TARGET_MISSING', missing }；unchanged 非空 →
   // { ok:false, code:'GATE_TARGET_UNCHANGED', unchanged }；全过 → { ok:true, declared:true, mode:'mtime'|'marker' }。
-  // 诚实披露：mtime/marker 均为低成本实证（非密码学证据），防「口头声称零成本通过」；恶意伪造归 O5 人审。
+  // 诚实披露：mtime/marker 均为低成本实证（非密码学证据），防「口头声称零成本通过」；恶意伪造归人工审计。
   function checkTargetsGate(sessionId: string, batchId: string, batch: Batch, lane: string) {
     // 总开关（GATE_ENABLED=false → 全批零感知，应急逃生阀，与 checkCommandGate 同源）
     if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') return { ok: true, declared: false };
@@ -292,7 +292,7 @@ export function createGates(root: string) {
     }
     return { ok: true, declared: true, missing: [], unchanged: [], mode: markerMode ? 'marker' : 'mtime', targets: [...t.targets] };
   }
-  // Complete Gate（设计 §5.2）：audit 层必须存在且全部 settled 且无 failed/conflict；exec 层全部 settled
+  // Complete Gate：audit 层必须存在且全部 settled 且无 failed/conflict；exec 层全部 settled
   function checkCompleteGate(batch: Batch) {
     const layers: Record<Layer, string[]> = { plan: [], exec: [], audit: [] };
     for (const w of batch.wavePlan ?? []) {
@@ -307,7 +307,7 @@ export function createGates(root: string) {
     if (layers.exec.length && !allTerminal(layers.exec)) return { ok: false, code: 'GATE_COMPLETE_EXEC_PENDING', pending: layers.exec.filter((id: string) => !schema.isMemberTerminal(laneState(id))) };
     return { ok: true };
   }
-  // 门禁状态查询（gate_status 工具用，设计 §8 M1）：lane 的 layer/契约字段/缺失清单/plan 契约问题
+  // 门禁状态查询（gate_status 工具用）：lane 的 layer/契约字段/缺失清单/plan 契约问题
   function gateStatus(sessionId: string, batchId: string, lane: string) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) {
@@ -321,7 +321,7 @@ export function createGates(root: string) {
     if (!t) return { lane, layer: null, state: batch.lanes[lane], gates: 'generic', team: batch.team };
     const missing = (field: TaskArrayField) => (Array.isArray(t[field]) ? t[field] : []).filter((p: string) => !fileExistsNonEmpty(resolveArtifact(sessionId, batchId, p)));
     const contract = t.layer === 'plan' ? checkPlanContract(sessionId, batchId, batch, lane) : null;
-    // targets 探测（O2，设计 §1.5）：声明清单 + 缺失清单 + 未变更清单——仅 stat（存在性 + mtime 路径），
+    // targets 探测：声明清单 + 缺失清单 + 未变更清单——仅 stat（存在性 + mtime 路径），
     // 不读文件正文（marker 命中判定留给门禁执行时，避免 gate_status 读文件成本，见 design Open Question 3）
     const targets: string[] = Array.isArray(t.targets) ? [...t.targets] : [];
     const startAt = laneStartedAt(batch, lane);

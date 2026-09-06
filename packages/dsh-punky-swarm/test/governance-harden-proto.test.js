@@ -15,21 +15,20 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// M2 硬化原型演示扩展（harden-plan §5.5 B，tester lane 产物）：P0-P3 关键能力端到端演示
-//   A. NARROW 实际钳制（P0）：narrowable 规则 + flag.narrow → wiring pre deny + 收据 narrowedParams
+// 硬化原型演示扩展：P0-P3 关键能力端到端演示
+//   A. NARROW 实际钳制：narrowable 规则 + flag.narrow → wiring pre deny + 收据 narrowedParams
 //      （钳制后参数 + clamped 明细）落盘；模型按指引修正重发合规参数 → ALLOW（双调用对比——
-//      证明「钳制指引可落地」；exec.arguments 未被改写，宿主禁输入改写 N-8 保持）。
-//   B. ask 双路径（P1）：REQUIRE_APPROVAL → pre {kind:'ask'} + 收据 ask.initiated；两路径——
+//      证明「钳制指引可落地」；exec.arguments 未被改写，宿主禁输入改写保持）。
+//   B. ask 双路径：REQUIRE_APPROVAL → pre {kind:'ask'} + 收据 ask.initiated；两路径——
 //      ① fake approval 服务 allowed-once → 放行执行 + post 补记 ask.outcome=allowed-once；
 //      ② 无审批服务 → 宿主降级 deny + post 补记 ask.outcome=denied-no-approval。
-//      （实现事实：两路径收据均落盘——ask.initiated pre 同步落盘；outcome 演化不同。
-//       harden-plan §5.5 B「allow（无收据）」文案与实现有出入，tester-report §B 记录偏差。）
-//   C. 签名篡改检测（P2）：writeRefusal ×3（sha256 链锚定）→ verifyRefusals ok → 篡改中链收据
+//      （实现事实：两路径收据均落盘——ask.initiated pre 同步落盘；outcome 演化不同。）
+//   C. 签名篡改检测：writeRefusal ×3（sha256 链锚定）→ verifyRefusals ok → 篡改中链收据
 //      1 字节 → verifyRefusals ok=false + brokenAt 定位（hash-mismatch）+ 链上后继联动失败（link-break）
 //      → 恢复原字节 → ok=true（自愈回归）。
-//   D. 热更新实测（P3，真装配级）：apply + 真 fs.watch + 真 runtime.json——enabled 翻转（卸载/重挂）
+//   D. 热更新实测（真装配级）：apply + 真 fs.watch + 真 runtime.json——enabled 翻转（卸载/重挂）
 //      + 规则热更即时生效（示例 1 DENY → 示例 2 NARROW 钳制收据 → rules:[] 零拦截恢复）+ 桥接事件流随动。
-//   E. 回归（harden-plan §5.5 E）：原 P1 六步原型链（拦截→裁决→收据→读回→ask 降级→count/limit）
+//   E. 回归：原六步原型链（拦截→裁决→收据→读回→ask 降级→count/limit）
 //      保持绿（全量断言在 governance-proto.test.js P1-1..P1-6，此处最小复演快照互指）。
 // 载体：node --test 随全量回归（与 governance-proto.test.js 同形态：fake ctx + 最小宿主链驱动）。
 import test from 'node:test';
@@ -242,7 +241,7 @@ test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；�
   assert.equal(rB.ask.outcome, 'denied-no-approval', '路径② post 补记 outcome=denied-no-approval（无审批服务降级）');
   assert.equal(rB.ask.channel, 'host-serviceAsk');
 
-  // 双路径收据 ask 字段不同（outcome 演化分支）——harden-plan §5.5 B 断言口径
+  // 双路径收据 ask 字段不同（outcome 演化分支）——断言口径
   const rA = backA.find((r) => r.callId === execA.callId);
   assert.notEqual(rA.ask.outcome, rB.ask.outcome, '两路径 ask.outcome 不同');
   // verifyRefusals 仍 ok（post 补记走级联重锚，链不破——p2 移交① 处置验证）
@@ -299,7 +298,7 @@ test('C 签名篡改检测：写 3 份锚定收据 verify ok；篡改中链 1 �
   assert.equal(e1.ok, true, '前驱 C-r1 不受影响');
   // 链语义（简版证据信封）：朴素篡改只破坏被篡改收据自身（后继链接的是 hash 非 body——r3.prevHash 仍指
   //   r2 盘上旧 anchor.hash，链上前一推进值同为旧 hash → r3 自洽不联动失败）。后继联动失败需「伪造重锚」
-  //   （见 ③）。tester-report §C 记录此链语义与 harden-plan §5.5 步骤 C 文案的精确化。
+  //   （见 ③）。此链语义与步骤 C 文案的精确化。
 
   // ③ 伪造重锚（改 body + 重算自身 anchor.hash 伪装自洽）→ 链上后继 C-r3 link-break 联动失败
   //    （攻击者若改 body+重算自己 hash，后继 prevHash 指向旧 hash → link-break，篡改不可藏匿）

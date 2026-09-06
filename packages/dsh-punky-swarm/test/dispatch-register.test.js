@@ -15,12 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// D-1 方案 B 写侧登记点测试（m5a-d1-20260902 批次，独立文件——不触碰 governance-escalate.test.js 17 用例）。
+// 派发登记点测试（写侧登记：member_status running 意图 → subagent post-execute → member.dispatch 落批）。
 // 覆盖：R1 提取纯函数（结构化 result 各形态）；R2 真实登记路径（member_status running 意图 → subagent
-// post-execute → member.dispatch 事件落批 + dispatchIndex 可查）；R3 非 Manager 派发不登记（T16 语义保持）；
+// post-execute → member.dispatch 事件落批 + dispatchIndex 可查）；非 Manager 派发不登记（无登记静默降级语义）；
 // R4 send_message 重复唤醒幂等（不重复登记）；R5 装配层端到端（apply 真实装配：登记 → 归属命中 → escalation
 // 计数 → paused——读侧骨架零改动生效）；R6 装配注入 resolveBatchContext 显式路径（不经 member_status）。
-// 标注（如实）：T20a/T21（governance-escalate.test.js）原用 member.dispatch 直写模拟「映射命中」前置——
+// 标注（如实）：governance-escalate.test.js 原用 member.dispatch 直写模拟「映射命中」前置——
 // 语义 = escalation 关态零路径 / 记录抛错隔离，与登记点机制解耦；保持原样不改（直写 = 读侧 fixture 合法形态），
 // 真实登记路径由本文件 R2/R5 覆盖。段边界：本文件零触碰 governance-escalate.test.js。
 import test from 'node:test';

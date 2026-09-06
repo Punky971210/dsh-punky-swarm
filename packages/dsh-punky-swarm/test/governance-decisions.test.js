@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // U1 内核单测：6 原语枚举完备 / isGovernancePrimitive 边界 / primitiveToPreDecision 映射 / primitiveLabel 中文标签。
-// 蓝图：m2-detailed.md §9.1 U1；build-plan §1.2 U1（4 条）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +26,7 @@ import {
   primitiveLabel,
 } from '../lib/governance/decisions.js';
 
-// U1-1 枚举完备：长度 6 且集合 == 六原语（对照 hf.md:76-77）
+// U1-1 枚举完备：长度 6 且集合 == 六原语（对照 CAGE GovernanceDecision 六原语）
 test('U1-1 GOVERNANCE_PRIMITIVES enumerates exactly the six primitives', () => {
   assert.equal(GOVERNANCE_PRIMITIVES.length, 6);
   const set = new Set(GOVERNANCE_PRIMITIVES);

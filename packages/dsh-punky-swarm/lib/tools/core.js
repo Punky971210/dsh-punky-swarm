@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 蟛蜞模式治理核心工具（11 个），defineTool 规范含 output.schema + output.render
 // 拆分自 lib/tools.js（core 域原样搬移，行为不变）
 // 导出：createCoreTools(ctx, deps) => Array<defineTool>；installDifficultyGuard(ctx, deps)（难度门禁注册，原样搬移一字不改）
-// 共享辅助（P2-01 下沉至零依赖 shared.js）：TEXT_OUTPUT / sessionOf——本文件 re-export 保持对外导出兼容
+// 共享辅助（下沉至零依赖 shared.js）：TEXT_OUTPUT / sessionOf——本文件 re-export 保持对外导出兼容
 //   （mailbox-tools/log-tools/lane-tools 已直引 shared.js；watch/lane-heartbeat 不再依赖 core.js）
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { buildWavePlan, validateWavePlan } from '../wave-plan.js';
@@ -27,8 +27,8 @@ import { ARTIFACT_TYPES } from '../artifact-types.js';
 import * as lock from '../lock.js';
 import { join } from 'node:path';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
-export { TEXT_OUTPUT, sessionOf }; // P2-01 re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
-// R-01 发端收敛：gate.role_* 事件字面量（:123 发端）改引 EVT 常量单点
+export { TEXT_OUTPUT, sessionOf }; // re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
+// 事件字面量改引 EVT 常量单点（gate.role_* 发端）
 import * as EVT from '../state/event-types.js';
 
 // 执行型工具名单（有副作用/写盘/派发执行）：guard 计数与拦截用；可被 config.escalation.execTools 覆盖
@@ -59,7 +59,7 @@ export function lockPath(root, sessionId, batchId, lane) { return join(root, 'se
 // 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改），注册顺序保持现状（createTools 开头）
 export function installDifficultyGuard(ctx, deps) {
   const { store, config = {} } = deps;
-  // 任务难度值门禁（design task-difficulty-gate §3，引擎强制不依赖自觉）：执行型工具前置 guard
+  // 任务难度值门禁（引擎强制不依赖自觉）：执行型工具前置 guard
   // 同步签名 (execution) => string | undefined；execution 含 name / agent.session.id；返回 string 即拒绝
   if (typeof ctx.tools?.guard === 'function') {
     ctx.tools.guard((execution) => {
@@ -75,7 +75,7 @@ export function installDifficultyGuard(ctx, deps) {
       if (!sessionId) return undefined;
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
       // ① 非执行型：放行（治理/查询，防死锁）
-      // ⚠ P2-05 豁免边界（明示）：
+      // ⚠ 治理工具豁免边界（明示）：
       //   - 豁免类别：治理/查询类工具（batch_status/gate_status/member_status/artifact_types/lane_checkpoint_status/
       //     lane_heartbeat 等不在 EXEC_TOOLS 名单者）+ 非执行型写（如 mailbox_read 读回执、assign_check 评估本身）。
       //   - 豁免理由：防死锁——难度门禁是「先评估后执行」的护栏，评估/查询动作若也被拦截将形成
@@ -124,7 +124,7 @@ export function createCoreTools(ctx, deps) {
         for (const w of plan.warnings ?? []) {
           store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? EVT.EVT_GATE_ROLE_MISSING : EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
         }
-        clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false（design §4 写入点）
+        clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false
         return { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [] };
       },
     }),
@@ -222,7 +222,7 @@ export function createCoreTools(ctx, deps) {
           });
         }
         const execToolCount = g.execToolCount ?? 0;
-        // 升级信号（design escalation-hardgate §2.2 S4）：execToolCount≥5 且无活跃批次 → 软提示
+        // 升级信号：execToolCount≥5 且无活跃批次 → 软提示
         const escalationHint = (execToolCount >= 5 && !hasActive)
           ? 'execToolCount=' + execToolCount + ' ≥5 且无批次：任务已升级为复杂形态，必须 wave_plan 建批'
           : '';

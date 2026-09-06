@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 损坏批次旁路清单（v2-node-robustness ②，设计 D-001）
+// 损坏批次旁路清单
 // 批次 JSON 唯一事实源结构零变更；损坏隔离信息走会话级旁路清单 corrupt-batches.json
 // （<sessionDir>/corrupt-batches.json，与 governance.json 同层同级）。
 // 语义：损坏批次无法写入 batch 文件本身（文件已坏），故隔离以「清单状态 + logger 留痕」呈现；
@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 容错：清单文件自身损坏 → 读降级空清单（governance.json 同款 try/catch 模式），不 throw。
 import fs from 'node:fs';
 import path from 'node:path';
-import { SESSION_RE } from './constants.js'; // P1-07 单点（原 :29 定义迁出）
+import { SESSION_RE } from './constants.js'; // 单点（原定义迁出）
 
 const CORRUPT_SCHEMA = 1;
 

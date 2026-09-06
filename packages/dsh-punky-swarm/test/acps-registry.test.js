@@ -15,13 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// exec-registry lane 测试（P3 R1 半自动注册客户端）：
-//   1) 注册请求结构对齐参考实现 AgentCreate schema（registry-server/app/agent/schema.py:14-30）
-//   2) EAB 凭据 AES-256-GCM 加解密（D13：替代参考实现 SM4-CBC，crypto.py:46-53；keyId/macKey 不落明文）
+// 半自动注册客户端测试：
+//   1) 注册请求结构对齐参考实现 AgentCreate schema（registry-server/app/agent/schema.py）
+//   2) EAB 凭据 AES-256-GCM 加解密（替代参考实现 SM4-CBC；keyId/macKey 不落明文）
 //   3) 装配开关双态（acps.registry 默认关；enabled=true 且 url 配置时可用；缺 url 短路）
 //   4) 错误路径（无 token / 非本人 AIC 403 / 缺 eabKey / 解密失败）
 //   5) mock registry 服务验证客户端行为（login→upsert→submit→check→requestEab→queryAcs 全链路，
-//      对齐 acps-cli RegistryApiClient 调用语义）——真实 registry 互通归 exec-demo-test lane。
+//      对齐 acps-cli RegistryApiClient 调用语义）——真实 registry 互通不在本文件覆盖。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';

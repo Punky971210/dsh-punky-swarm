@@ -18,18 +18,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // wavePlan 固定语义：DAG 拓扑分层，启动时确定并持久化，绝不在中途重算
 // Tier3（dsh-punky-swarm 三层门禁）：任务可声明 layer/consume/produce/outputs/role/skills，
 // 建批时做三层契约静态校验（跨层引用 / 有 exec 必有 audit / 路径契约一致性 / skill 声明）；
-// cmd 由引擎注入 role/skill 前缀（装配可插拔，不绑定 jiufeng，见设计 §12.1/§14.2/§15.3）。
+// cmd 由引擎注入 role/skill 前缀（装配可插拔，不绑定 jiufeng）。
 // resume 契约：task 可声明 checkpoint:{steps}（总步数）与 resume:boolean
 // （崩溃后新 worker 允许参考 checkpoint 跳过已完成步骤）——校验放行 + 字段透传（与 condition 同模式，
 // 默认关场景仅存元数据，消费方按 capabilities.worktree.enabled 开关生效）；resumeClauseFor(task) 供
 // 派发侧注入固定任务包条款（RESUME_CLAUSE）。
-// Phase 2 类型化：输入面 WavePlanTaskInput（id 必填其余可选）/ 持久面 WavePlanTask（缺省落 null/[]/false），
+// 类型化说明：输入面 WavePlanTaskInput（id 必填其余可选）/ 持久面 WavePlanTask（缺省落 null/[]/false），
 //   buildWavePlan 是两形态间的唯一规范化桥；topoWaves 产物 id 必命中 tasks（find 单点断言）；
-//   G4：PLAN_LEAD_ROLES.has(effectiveRole(t)) 经显式空值守卫（Set.has(null) 运行期即 false，非行为缺陷）——
+//   PLAN_LEAD_ROLES.has(effectiveRole(t)) 经显式空值守卫（Set.has(null) 运行期即 false，非行为缺陷）——
 //   全部消解路径均为类型适配，运行期语义零变更。
 
 import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
-import { isAbsPath } from './state/constants.js'; // P1-07 单点（原 :149 自有实现删除，改 import）
+import { isAbsPath } from './state/constants.js'; // 单点（自有实现收敛改 import）
 import type { ConditionClause, ConditionInput, Layer, Wave, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 
 // 两形态并集：拓扑/契约校验函数同时服务建批输入（WavePlanTaskInput）与持久化校验（WavePlanTask）——
@@ -100,7 +100,7 @@ export function collectRoleCompletenessWarnings(tasks: WaveTask[], waves: string
   const warnings = [];
   const planLanes = tasks.filter((t) => t.layer === 'plan');
   if (planLanes.length > 0 && !planLanes.some((t) => {
-    // G4 空值守卫：effectiveRole 返回 string|null；Set.has(null) 运行期恒 false，显式守卫类型适配、判定结果不变
+    // 空值守卫：effectiveRole 返回 string|null；Set.has(null) 运行期恒 false，显式守卫类型适配、判定结果不变
     const r = effectiveRole(t);
     return r !== null && PLAN_LEAD_ROLES.has(r);
   })) {
@@ -192,7 +192,7 @@ export function normalizeCondition(cond: ConditionInput): ConditionClause[] | nu
   return out.length ? out : null; // 空数组 = 无条件（恒满足）
 }
 
-// condition 路径契约（与 consume 同源）：相对路径必须在本批次产物根内（plan/|exec/|audit/ 前缀）；artifacts/ 跨批次先禁；绝对路径放行
+// condition 路径契约（与 consume 同源）：相对路径必须在当前批次产物根内（plan/|exec/|audit/ 前缀）；artifacts/ 跨批次先禁；绝对路径放行
 // 对所有声明 condition 的任务生效（含 generic 批次），建批入口统一校验（fail-closed 拒建批）
 function checkConditionPaths(t: WaveTask, cond: ConditionClause[] | null) {
   for (const c of cond ?? []) {
@@ -226,7 +226,7 @@ export function normalizeResumeContract(t: WavePlanTaskInput): { checkpoint: { s
   return { checkpoint, resume: resume === true };
 }
 
-// targets/targetsMarker 契约规范化（O2 targets 声明契约，与 condition/resume 同模式）：
+// targets/targetsMarker 契约规范化（targets 声明契约，与 condition/resume 同模式）：
 //   targets: string[]——批次产物根外目标文件（exec worker 承诺「修改/生成」的既有文件）的绝对路径数组；
 //             相对路径建批拒绝（fail-closed，防把产物相对路径误当 targets）；
 //   targetsMarker: string|null——可选内容声明标记（缺省 null = 纯 mtime 校验；非空时目标文件含独立行
@@ -282,11 +282,11 @@ function validateLayerContract(tasks: WaveTask[]) {
   if (exec.length === 0 && audit.length === 0 && plan.length === 0) {
     throw new Error('three-tier: layer must be one of plan/exec/audit');
   }
-  // 有 exec 必有 audit（设计 §3.3/§5.2）
+  // 有 exec 必有 audit
   if (exec.length > 0 && audit.length === 0) {
     throw new Error('three-tier: exec layers require at least one audit lane');
   }
-  // 路径契约一致性（N6/§15.3）：相对路径必须在本批次产物根内（plan/exec/audit 前缀）；跨批次 artifacts/ 先禁；绝对路径放行（N2 自由开放，由运行时 gate 校验存在性）
+  // 路径契约一致性：相对路径必须在当前批次产物根内（plan/exec/audit 前缀）；跨批次 artifacts/ 先禁；绝对路径放行（由运行时 gate 校验存在性）
   const checkPaths = (t: WaveTask, field: TaskArrayField) => {
     for (const p of t[field] ?? []) {
       if (typeof p !== 'string' || !p.trim()) throw new Error('task ' + t.id + ' ' + field + ' must be non-empty strings');
@@ -303,7 +303,7 @@ function validateLayerContract(tasks: WaveTask[]) {
       // condition 结构/路径校验在建批入口对所有任务统一做（见 buildWavePlan），此处不重复
     }
   }
-  // 跨层引用：exec.consume 的相对 plan/ 路径必须由 plan 层 produce 提供（设计 §3.3 建批静态校验）
+  // 跨层引用：exec.consume 的相对 plan/ 路径必须由 plan 层 produce 提供（建批静态校验）
   const planProduces = new Set(plan.flatMap((t) => t.produce ?? []));
   for (const t of exec) {
     for (const p of t.consume ?? []) {
@@ -312,7 +312,7 @@ function validateLayerContract(tasks: WaveTask[]) {
       }
     }
   }
-  // skill 声明校验（N4/§15.3）：非空字符串；真实存在性由装配/技能库在注册侧保证
+  // skill 声明校验：非空字符串；真实存在性由装配/技能库在注册侧保证
   for (const t of tasks) {
     if (t.skills != null) {
       if (!Array.isArray(t.skills) || t.skills.length === 0 || t.skills.some((s: string) => typeof s !== 'string' || !s.trim())) {
@@ -325,7 +325,7 @@ function validateLayerContract(tasks: WaveTask[]) {
   }
 }
 
-// 引擎注入 cmd 前缀：按 role 契约 + 装配的 skill 能力（设计 §12.1/§14.2），Leader 只写任务内容
+// 引擎注入 cmd 前缀：按 role 契约 + 装配的 skill 能力，Leader 只写任务内容
 export function assembleCmd(role: string | null, skills: string[] | null | undefined, cmd: string): string {
   const parts: string[] = [];
   if (role) parts.push('[role=' + role + ']');
@@ -381,7 +381,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team = 'generic
       checkConditionPaths(t, condition);
       // resume 契约字段校验 + 透传（checkpoint{steps}/resume 布尔；默认关场景仅存元数据，消费方按开关生效）
       const resumeContract = normalizeResumeContract(t);
-      // targets/targetsMarker 契约校验 + 透传（O2：绝对路径 fail-closed 拒建批；未声明 = null = 零感知，
+      // targets/targetsMarker 契约校验 + 透传（绝对路径 fail-closed 拒建批；未声明 = null = 零感知，
       // 仿 condition 可选字段模式，不升 batch schema 版本）
       const targetsContract = normalizeTargetsContract(t);
       return {
@@ -448,7 +448,7 @@ export function validateWavePlan(plan: WavePlanDoc): boolean {
       if (t.resume != null && typeof t.resume !== 'boolean') {
         throw new Error('task resume must be boolean');
       }
-      // targets/targetsMarker 形态校验（O2，与建批规范化同语义，防伪造/篡改）：
+      // targets/targetsMarker 形态校验（与建批规范化同语义，防伪造/篡改）：
       // targets 为绝对路径 string 数组（相对路径 fail-closed 拒）；targetsMarker 为 string|null
       if (t.targets != null && (!Array.isArray(t.targets) || t.targets.length === 0 || t.targets.some((x: string) => typeof x !== 'string' || !x.trim() || !isAbsPath(x)))) {
         throw new Error('task targets must be a non-empty string array of absolute paths');

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P2/P3 身份体系（aip-gb-fix exec-identity）：AIC 编码/校验 + CAI 证书 + 签名 + 信任链验证
+// 身份体系：AIC 编码/校验 + CAI 证书 + 签名 + 信任链验证
 // 向量基准：ACPs-spec-AIC-v02.01 §4（0x1234 盐 → 0JU4）+ 参考实现 registry-server test_aic.py
 //（无盐 → 0H9T）。装配开关：identity 默认关、aip.identity.enabled=true 可读、不注册新工具。
 import test from 'node:test';

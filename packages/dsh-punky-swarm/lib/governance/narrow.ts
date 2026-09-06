@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// NARROW 参数钳制（G4）：JSON Pointer 只读钳制，返回深拷贝 + 变更明细。
-// 蓝图：m2-detailed.md §5（移植 _compute_narrowed_params，hf.md:96）。
+// NARROW 参数钳制：JSON Pointer 只读钳制，返回深拷贝 + 变更明细。
+// 移植 _compute_narrowed_params 语义。
 // 纯函数、零依赖、确定性；安全默认：未知 path 跳过不抛错、形状/类型不变、深拷贝不改输入。
 
 export interface NarrowBounds {
@@ -95,7 +95,7 @@ export function computeNarrowedParams(params: unknown, bounds: NarrowBounds[]): 
       if (typeof b.max === 'number' && (raw as number) > b.max) to = b.max;
       else if (typeof b.min === 'number' && (raw as number) < b.min) to = b.min;
     }
-    // enum 收敛：enum 不含当前值 → 取 enum 首值（『待核实』取首 vs 拒绝，蓝图建议取首并记 clamped）
+    // enum 收敛：enum 不含当前值 → 取 enum 首值（取首并记 clamped）
     if (Array.isArray(b.enum) && b.enum.length > 0 && !b.enum.includes(raw)) {
       to = b.enum[0];
     }

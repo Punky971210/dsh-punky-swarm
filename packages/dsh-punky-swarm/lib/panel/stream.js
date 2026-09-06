@@ -16,15 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // ============================================================
-// SSE hub（R3 面板推送，设计 exec/panel-design.md §3.3）
+// SSE hub（面板推送）
 //
 // 职责：会话级订阅集合 + 三路触发源（① topic 事件（enabled 时 attachTopic 接线）
 //   ② fs.watch <root>/sessions/<sid> 批次/mailbox 目录（防抖 300ms）
 //   ③ 10s 心跳帧（event: heartbeat + 注释帧 : ping 保活））
-// 推送粒度（ADR-5）：只推轻量摘要 { sessionId, batchId, eventCount, updatedAt }，
+// 推送粒度：只推轻量摘要 { sessionId, batchId, eventCount, updatedAt }，
 //   客户端收到信号后回拉既有只读 API 取全量——正确性由回拉兜底，本模块零快照逻辑。
 //
-// D6 简化 5 项标注（设计 §3.3.5，逐项落地）：
+// 简化标注（逐项落地）：
 //   1. 多路复用通道协议 → 不做：单流 + event: batch|mailbox|heartbeat 类型区分
 //      （面板只读监控两种事件，单流足够）
 //   2. 断线指数退避重连 → 不做：依赖 EventSource 自动重连 + 客户端回退轮询
@@ -32,9 +32,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   4. 事件级增量快照 → 不做：推送信号 + 客户端回拉全量（服务端无快照逻辑）
 //   5. 鉴权/会话扩展 → 不做：沿用既有 /api 会话语义（session query 参数）
 //
-// 零新依赖（D1）：node:fs watch + 宿主注入的 node:http ServerResponse（writeHead/write）
-//   + 浏览器内置 EventSource（客户端侧）。无独立配置键（D3/D4）：随 webServer 挂载，
-//   降级回轮询即运行时自适配开关（ADR-4）。
+// 零新依赖：node:fs watch + 宿主注入的 node:http ServerResponse（writeHead/write）
+//   + 浏览器内置 EventSource（客户端侧）。无独立配置键：随 webServer 挂载，
+//   降级回轮询即运行时自适配开关。
 // ============================================================
 
 import { watch } from 'node:fs';
@@ -43,8 +43,8 @@ import { join } from 'node:path';
 import { subscribeTopicPrefix } from '../comms/topic.js';
 
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
-const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐设计 §3.3.3 触发源③）
-const DEBOUNCE_MS = 300;         // fs.watch 防抖（Windows 目录事件丢失/重复兜底，设计 §5.3-4）
+const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐触发源③）
+const DEBOUNCE_MS = 300;         // fs.watch 防抖（Windows 目录事件丢失/重复兜底）
 const POLL_MS = 1000;            // stat 轮询兜底周期（8.3 短路径主机无法安全用 fs.watch 目录 watch）
 // 以上为生产缺省值；createStreamHub 接受 heartbeatMs/debounceMs/maxConns 覆盖（单测提速用，缺省不变）
 
@@ -94,7 +94,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
 
   const log = (msg) => { try { logger?.info?.('[dsh-punky-swarm/stream] ' + msg); } catch {} };
 
-  // eventCount 只读最小读取（物理事实源 = 批次 JSON，store.js:109 语义）——非快照逻辑，仅计数
+  // eventCount 只读最小读取（物理事实源 = 批次 JSON 的 events 字段）——非快照逻辑，仅计数
   function readEventCount(sessionId, batchId) {
     if (!root || !batchId) return null;
     try {
@@ -119,7 +119,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     try { res.write(chunk); return true; } catch { return false; }
   }
 
-  // 推送单帧；write 失败（D6 简化③）→ 断开该订阅者（客户端自动重连/回退轮询）
+  // 推送单帧；write 失败 → 断开该订阅者（客户端自动重连/回退轮询）
   function push(s, res, event, data) {
     if (!writeRes(res, frame(event, data))) {
       detach(res);
@@ -307,7 +307,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     return { ok: true };
   }
 
-  // topic 触发源接线（设计 §3.3.3 ①）：exec-a merged 后由装配点（index.js 层）调用——
+  // topic 触发源接线：由装配点（index.js 层）调用——
   // 订阅 `swarm.` 前缀（swarm.<type>.<sid>.<bid>），按 payload/主题名提取会话与批次路由推送
   function attachTopic(prefix = 'swarm.', handler) {
     if (disposed) return () => {};

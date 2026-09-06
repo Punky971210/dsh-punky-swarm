@@ -15,15 +15,15 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// command-exec：命令 gate（V1）确定性执行器（设计 §组件 3 / spec G4-G8、C6-C7）
+// command-exec：命令 gate（V1）确定性执行器
 // 接口：runCommand({ command, cwd, timeoutMs, retries, env, forbiddenRe, maxOutputBytes }) → { ok, exitCode, output(截断), durationMs, timedOut, forbidden, error }
 // 语义：仅退出码判定（exit 0 = 通过；非 0 = 失败，不解析 stdout）；超时 kill；重试容忍瞬态失败；黑名单只读守卫（命中不执行）；
 //       凭据只走 env 注入（不入文件/日志/输出）；输出截断入审计。
 // 实现决策（同步执行器）：store.setMember 为同步 API（既有工具/测试全同步调用），merged 前置门禁须同步判定；
 //       runCommand 采用 spawnSync（child_process.spawn 家族同步形态），接口契约与 design 一致（参数/返回不变），
-//       不异步化 setMember，保持既有调用点零破坏（C2 签名零改动、既有测试基线只增不减）。
+//       不异步化 setMember，保持既有调用点零破坏、既有测试基线只增不减。
 //       超时：spawnSync timeout + killSignal（Windows 上 SIGTERM/SIGKILL 均映射 TerminateProcess，两段式在同步执行器中等价；
-//       POSIX 两段式 kill 若需细化留 V2 评估——见 code-change-summary 披露）。
+//       POSIX 两段式 kill 若需细化留后续评估——见 code-change-summary 披露）。
 import { spawnSync } from 'node:child_process';
 
 // ---- 默认值（env 可调，全部有默认）----

@@ -15,13 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// R1 热更新运行时单测（设计 §3.1 + 契约 §3.2 exec-panel-a 验收①②④⑤⑥）
+// 热更新运行时单测
 //   H1 缺省 {} 零行为变化（快照 = 静态 config 原样；start 不广播）
 //   H2 覆盖既有路径生效（runtime.json 覆盖 capabilities.trajectory.enabled → onChange 携带 key/value/config）
-//   H3 未知顶层键被拒（保持旧快照，不广播）——契约验收④
+//   H3 未知顶层键被拒（保持旧快照，不广播）
 //   H4 坏 JSON 保持旧快照（不广播、不抛错）
 //   H5 无变化键不广播（防 fs.watch 抖动）
-//   H6 启停幂等（重复 start/stop/dispose 无异常）——契约验收⑤
+//   H6 启停幂等（重复 start/stop/dispose 无异常）
 //   H7 初始 overlay 启动即生效但不广播（重启语义）
 //   H8 fs.watch 真实触发路径（防抖后 onChange 生效）
 //   H9 deepMerge 导出复用（assembly/schema.js export 语义不变，readCapability 回归）

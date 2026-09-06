@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// R2 topic 接线单测（设计 §3.2 + 契约 §3.2 exec-panel-a 验收②⑤ + P2-1 处置回注）
+// topic 接线单测
 //   T1 topic 默认关：readCapability 缺省 {enabled:false}；未装配 onStateChange 的 store 零行为变化（无发布无落盘）
 //   T2 发布接线：topic 运行时 start → publishStateChange → 订阅方收到 swarm.<type>.<sid>.<bid> + mailbox broadcast 落盘
 //   T3 readTopic 精确过滤（命名规范点分倒置可过滤）
@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   T5 配置变更镜像：swarm.config.changed 仅进程内分发（无 session 归属不落 mailbox）
 //   T6 store 集成：onStateChange 接线 publishStateChange → setMember/setPhase 发布（member.settled/batch.phase）
 //   T7 failed-escalate：连续 3 次 failed → batch.phase 事件一并发布
-//   T8 启停幂等（重复 start/stop 无异常）——契约验收⑤
+//   T8 启停幂等（重复 start/stop 无异常）
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

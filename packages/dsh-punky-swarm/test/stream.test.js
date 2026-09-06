@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// R3 SSE hub + /stream 端点单测（设计 exec/panel-design.md §3.3）：
+// SSE hub + /stream 端点单测：
 //   握手/帧格式、摘要推送与批次过滤、会话级连接上限、close 清理、fs.watch 触发源、
 //   topic 触发源（attachTopic，payload 与主题名双解析）、dispose、api 路由装配。
 //   心跳周期/防抖/上限用构造参数覆盖提速（生产缺省 heartbeatMs=10000/debounceMs=300/maxConns=8 不变）。
@@ -164,7 +164,7 @@ test('S7 topic 触发源（attachTopic）：payload 携带会话/批次 → 路�
   hub.attachTopic('swarm.');
   const res = new FakeRes();
   hub.subscribe(S, 'b1', res);
-  // ① payload 携带 ids（exec-a emitTopic 载荷形态）
+  // ① payload 携带 ids（emitTopic 载荷形态）
   emitTopic('swarm.member.settled.' + S + '.b1', { sessionId: S, batchId: 'b1', eventCount: 5 });
   // ② payload 无 ids → 从主题名 swarm.<type>.<sid>.<bid> 尾部解析
   emitTopic('swarm.batch.phase.' + S + '.b1', {});

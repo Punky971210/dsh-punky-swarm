@@ -33,7 +33,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
     // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs } } } }
     //         （单保存合并双段：governance + watch 能力开关；400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射））。
-    // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
+    // 窗口单位：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
     //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
     //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
     // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
@@ -486,7 +486,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
         // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
-        // { custom } = 原文透传。全不勾必须省略键（后端拒空数组/空串，runtime-config.js §③）
+        // { custom } = 原文透传。全不勾必须省略键（后端拒空数组/空串）
         const presetWire = presetWireOf(form.preset);
         const hook = {
           enabled: !!form.enabled,
@@ -496,8 +496,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         if (presetWire !== undefined) hook.preset = presetWire;
         const watch = form.watch || { enabled: true, longrun: { enabled: true } };
         const wl = (watch && watch.longrun) || {};
-        // 单保存合并双段（Leader 裁决 1）：governance 组装保持原样 + capabilities.watch 段追加——
-        //   显式布尔（裁决 4：与 governance.hook.enabled 先例一致，不做「等于默认值删键」）；
+        // 单保存合并双段：governance 组装保持原样 + capabilities.watch 段追加——
+        //   显式布尔（与 governance.hook.enabled 先例一致，不做「等于默认值删键」）；
         //   longrun 三键齐发（enabled + 两阈值 ms）——后端 merge 只覆盖显式提交子键，无损其它手工键
         const payload = {
           governance: { hook: hook },

@@ -29,15 +29,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发）
 //   - 不提供批次内自动续跑：重做仍开新批次
 //
-// 边界（P1-02 接线后同步）：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
-// 不触碰 store.js recoverBatches 主体（归 recover-audit lane）与 lane-tools.js 契约边界。
-// P1-02 已接线：index.js 启动恢复改调本文件 recoverBatches（restoreRunning 按 config.resume.enabled）；
+// 边界：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
+// 不触碰 store.js recoverBatches 主体与 lane-tools.js 契约边界。
+// 已接线：index.js 启动恢复改调本文件 recoverBatches（restoreRunning 按 config.resume.enabled）；
 //   laneProgress 写点经 lane-tools.js lane_checkpoint（progress 携带时调 store.updateLaneProgress，
 //   内部 laneProgressWrite 纯函数合并）+ 结算终态清退经 store.setMember（laneProgressClear）。
 import * as schema from '../schema.js';
-// P1-04 单点：findTask 收敛至 task-utils.js（overBudgetOf 原 :157-162 内联同构遍历删除）
+// findTask 单点：收敛至 task-utils.js（overBudgetOf 原内联同构遍历删除）
 import { findTask } from './task-utils.js';
-// R-01 发端/读端收敛：事件字面量改引 EVT 常量单点（resume.js:99 双写法 + :179 读端）
+// 事件字面量改引 EVT 常量单点（system.recovered/system.restored 双写法 + over-budget 读端）
 import * as EVT from './event-types.js';
 
 // ── config.resume 开关（默认关，零运行时开销，行为不变）──
@@ -50,10 +50,10 @@ export function resolveResumeConfig(config) {
   return { enabled: c.enabled === true };
 }
 
-// 待回填清单（P1-02 接线后：1/2 已回填；剩余项为后续批次）：
+// 待回填清单：
 export const RESUME_FILL_POINTS = [
-  // ✓ 已接线（P1-02，本批）：恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）
-  // ✓ 已接线（P1-02，本批）：laneProgress 字段写/清（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；
+  // ✓ 已接线：恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）
+  // ✓ 已接线：laneProgress 字段写/清（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；
   //    lane 结算终态经 laneProgressClear 清退）
   // ✗ 待回填：batch_status 面板 progress 视图（操作面板批次）
   '任务包 resume 章节从"文档占位"升为"装配层实际注入"（worker 角色手册加 resume 条款）',
@@ -98,7 +98,7 @@ export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = 
       }
       if (detail.length) {
         // 事件留痕：appendEvent 只追加事件 + updatedAt，不改 lanes——恢复路径不落 setMember（gate 交互设计）
-        // R-01 双写法收敛：system.recovered（recover 语义）+ eventType 缺省 system.restored（restore 语义）均引 EVT 常量
+        // system.recovered（recover 语义）+ eventType 缺省 system.restored（restore 语义）均引 EVT 常量
         store.appendEvent(sessionId, batchId, EVT.EVT_SYSTEM_RECOVERED, {
           batchId, sessionId,
           recoveredLanes: detail.map((d) => d.lane), // 保留既有字段（batch-store.test.js 断言其存在，向后兼容）
@@ -158,7 +158,7 @@ export function laneProgressClear(batch, lane) {
   return { ...batch, laneProgress: Object.keys(lp).length ? lp : undefined };
 }
 
-// ── 步数预算（超限判定，纯函数；接线在 lane-tools.js lane_checkpoint，B 子项）──
+// ── 步数预算（超限判定，纯函数；接线在 lane-tools.js lane_checkpoint）──
 // 设计：任务建批时声明 checkpoint:{steps}（总步数预算，wave-plan.js normalizeResumeContract
 //   校验正整数或 null 后透传进 wavePlan）；lane_checkpoint 携带 progress 时判定
 //   progress.total > checkpoint.steps → 超限。判定只发信号不硬杀：接线层命中且事件流无该 lane
@@ -166,7 +166,7 @@ export function laneProgressClear(batch, lane) {
 // 返回 { over, budget }：budget = 任务声明的步数上限（未声明 = null）；over = total 是否超限。
 //   B-不变量：未声明 checkpoint.steps（budget=null）零感知——任意 progress 返回 { over:false, budget:null }。
 // 任务定位语义与 store/machine/gates/lane-heartbeat 一致：wavePlan[].tasks 按 id 匹配
-// （P1-04 单点：改调 task-utils.findTask，删除原 :157-162 内联同构遍历）。
+// （改调 task-utils.findTask，删除原内联同构遍历）。
 export function overBudgetOf(batch, lane, progress) {
   const task = findTask(batch, lane);
   const budget = task?.checkpoint?.steps ?? null;

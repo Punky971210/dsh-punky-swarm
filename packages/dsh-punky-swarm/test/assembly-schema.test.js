@@ -68,11 +68,11 @@ test('registry paths match existing consumer key paths', () => {
 });
 
 test('all registry defaults are ON by default except identity/acps/logs/topic (off — 默认关能力)', () => {
-  // P1-01 口径：7 键默认开（aip/discovery/verify/watch/worktree/budget/trajectory）+ 4 键默认关；
-  // identity 例外：P2/P3 身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）；
-  // acps 例外：ACPs 通讯能力默认关（U-D2 显式开启——对外 mTLS 端点/内部桥均默认不激活，安全默认）；
-  // logs 例外（P1-01 E3）：日志导出默认关，patch 显式 logs.enabled:true 开启；
-  // topic 例外（P1-03）：comms/topic.js 预留模块默认关，接线归操作面板批次。
+  // 口径：7 键默认开（aip/discovery/verify/watch/worktree/budget/trajectory）+ 4 键默认关；
+  // identity 例外：身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）；
+  // acps 例外：ACPs 通讯能力默认关（显式开启——对外 mTLS 端点/内部桥均默认不激活，安全默认）；
+  // logs 例外：日志导出默认关，patch 显式 logs.enabled:true 开启；
+  // topic 例外：comms/topic.js 预留模块默认关，接线预留。
   const OFF_KEYS = new Set(['identity', 'acps', 'logs', 'topic']);
   for (const entry of CAPABILITY_REGISTRY) {
     if (OFF_KEYS.has(entry.key)) {
@@ -102,7 +102,7 @@ test('cordis.patch.yml aligns with registry defaults (all capabilities ON)', () 
   if (patchYml.includes('verify:')) {
     assert.match(patchYml, /verify:\n\s+enabled: true/);
   }
-  // discovery 键由 exec-discovery lane 追加
+  // discovery 键后续追加；补键后本断言仍须绿（前瞻对齐）
   if (patchYml.includes('discovery:')) {
     assert.match(patchYml, /discovery:\n\s+enabled: true/);
   }

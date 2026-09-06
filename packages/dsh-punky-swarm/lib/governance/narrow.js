@@ -78,7 +78,7 @@ export function computeNarrowedParams(params, bounds) {
             else if (typeof b.min === 'number' && raw < b.min)
                 to = b.min;
         }
-        // enum 收敛：enum 不含当前值 → 取 enum 首值（『待核实』取首 vs 拒绝，蓝图建议取首并记 clamped）
+        // enum 收敛：enum 不含当前值 → 取 enum 首值（取首并记 clamped）
         if (Array.isArray(b.enum) && b.enum.length > 0 && !b.enum.includes(raw)) {
             to = b.enum[0];
         }

@@ -16,11 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // Step2 preset 装载集成测试：装配级 preset 生效（静态 config preset 键 → hook 用展开 rules 拦截）+
-//   T-4 热更四态（runtime.json overlay：启/换/错/撤，⑤ 通道 dispose+重挂即时生效）+
-//   C3（acceptance 条件）：preset 规则命中 DENY → escalation 计数联动断言（开启可计入 / 出厂关零记录）。
-// 依据：preset-impl-design.md §2.5/§2.6/§4 T-4；acceptance.md C2/C3。
+//   T-4 热更四态（runtime.json overlay：启/换/错/撤，dispose+重挂即时生效）+
+//   preset 规则命中 DENY → escalation 计数联动断言（开启可计入 / 出厂关零记录）。
 // harness 形态对齐 governance-hotconfig.test.js（assemblyCtx/freshRoot/writeRuntime/execOf）与
-//   governance-escalate.test.js §2（seedBatch + member.dispatch 登记模拟映射命中，T20a 同法）。
+//   governance-escalate.test.js §2（seedBatch + member.dispatch 登记模拟映射命中，同法）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -225,7 +224,7 @@ test('T4-4 撤：overlay 移除 preset 键 → 回出厂空表零拦截（deepMe
   }
 });
 
-// ── C3 preset×escalation 联动（acceptance 条件）：preset 规则命中 DENY → escalation 计数——
+// ── preset×escalation 联动（preset 规则命中 DENY → escalation 计数）──
 //   开启（enabled=true + 映射命中 + 3 次 DENY）→ 批 paused（governance-escalate）；
 //   出厂关（escalation 缺省）→ 零批事件、phase 不误暂停。
 

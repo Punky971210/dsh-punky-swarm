@@ -15,11 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// M5-a 护栏违规计数升级（governance-escalate）测试。
-// 段边界契约（plan §1，防双写）：本文件以「段」划分——
-//   §1 纯函数段（T1-T5）：countGovernanceRefusals 窗口评估——exec-count lane 落地（本段）；
-//   §2 集成段（T10-T21）：store 方法 + 桥接归属升级链——exec-tester lane 拥有文件整合权并落地；
-//   任何 lane 不得越段改写。T6-T9 编号空缺（设计编号从 T5 跳 T10），勿重排编号。
+// 护栏违规计数升级（governance-escalate）测试。
+// 段边界契约（防双写）：本文件以「段」划分——
+//   §1 纯函数段（T1-T5）：countGovernanceRefusals 窗口评估（本段）；
+//   §2 集成段（T10-T21）：store 方法 + 桥接归属升级链；
+//   任何段不得越段改写。T6-T9 编号空缺（编号从 T5 跳 T10），勿重排编号。
 // 纯函数段纪律：零 IO / 零副作用——直接以构造事件序列测 countGovernanceRefusals（不建 store）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,7 +38,7 @@ const refusal = (offsetSec, primitive = 'DENY') => ({
 });
 const mkEvent = (type, fields = {}) => ({ ts: new Date(NOW - 5000).toISOString(), type, ...fields });
 
-// ---- §1 纯函数段：countGovernanceRefusals（C5 窗口评估 + primitive 过滤）----
+// ---- §1 纯函数段：countGovernanceRefusals（窗口评估 + primitive 过滤）----
 
 test('T1: 空/undefined events → count=0', () => {
   assert.equal(countGovernanceRefusals([], { now: NOW }), 0);
@@ -105,19 +105,18 @@ test('T5: 窗口语义 vs 连续语义——DENY→merged→DENY→DENY（非连
 });
 
 // ---- §2 集成段（T10-T21）：store 方法 + 桥接归属升级链 ----
-// 语义依据：design §6.2 表（T10-T21，设计编号从 T5 跳 T10，T6-T9 空缺勿重排）/ plan §5 / §3.5 摘要。
 // 分层测法：
-//   - store 层（T10-T15/T17/T18）：直引 createStore + store.recordGovernanceRefusal（C4-C6 升级链在
-//     store 方法内闭环——记录/窗口评估/棘轮升级单次原子写 store.js:226-273）；
-//   - R2 层（T19）：topic 全链（createStore onStateChange → topic runtime → subscribeTopic，镜像
-//     topic-wiring.test.js T7:169-182 形态——governance-escalate 的 batch.phase 一并 emitStateChange）；
+//   - store 层（T10-T15/T17/T18）：直引 createStore + store.recordGovernanceRefusal（升级链在
+//     store 方法内闭环——记录/窗口评估/棘轮升级单次原子写）；
+//   - topic 层（T19）：全链（createStore onStateChange → topic runtime → subscribeTopic，镜像
+//     topic-wiring.test.js 形态——governance-escalate 的 batch.phase 一并 emitStateChange）；
 //   - 装配层（T16/T20a/T21）：apply + fake ctx 全链路（lib/index.js refusalEventBridge：归属映射 /
 //     关态零路径 / 抛错隔离，镜像 governance-hotconfig.test.js assemblyCtx 先例）；
-//   - config 层（T12 配置侧 / T20b）：resolveGovernanceConfig escalation 校验回退 + 快照感知（D-5）。
-// D-1 依赖标注（如实、不伪造通过）：真实登记点（写 member.dispatch）写侧 D-1 未决（用户裁决中，
-//   exec-wiring manifest §2 早报）——读侧骨架 dispatchIndex 就绪、登记点落地形态端到端已验证；
+//   - config 层（T12 配置侧 / T20b）：resolveGovernanceConfig escalation 校验回退 + 快照感知。
+// 依赖标注（如实、不伪造通过）：真实登记点（写 member.dispatch）未决（裁决中）——
+//   读侧骨架 dispatchIndex 就绪、登记点落地形态端到端已验证；
 //   本段 T16（映射 miss 静默降级）即当前无登记点下的真实出厂语义；T20a/T21 的「映射命中」形态
-//   经 member.dispatch 事件直写模拟（dispatchIndex 读侧重建入口，与 wiring-manifest §2 端到端同法）。
+//   经 member.dispatch 事件直写模拟（dispatchIndex 读侧重建入口）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -142,7 +141,7 @@ function makeRunningBatch(batchId, lanes) {
   gStore.createBatch(S2, { batchId, wavePlan: plan, phase: 'running' });
   return batchId;
 }
-// 可计入 refusal 记录（C4 入口直调；第 i 条 receiptId=ri、lane l1、DENY、ruleRefs=['R1']）
+// 可计入 refusal 记录（入口直调；第 i 条 receiptId=ri、lane l1、DENY、ruleRefs=['R1']）
 function record(batchId, i, over = {}) {
   return gStore.recordGovernanceRefusal(S2, batchId, {
     lane: 'l1', receiptId: 'r' + i, primitive: 'DENY', ruleRefs: ['R1'], tool: 'bash', escalation: ESC_ON, ...over,
@@ -263,7 +262,7 @@ test('T11: 未达阈值不触发（2 条 < 默认阈值 3 → 仍 running、无�
 test('T12: 全排除——状态门收据（ruleRefs=[]）/ REQUIRE_APPROVAL / DEFER / PAUSE 默认不计入（零记录零升级）；不可配原语配置侧剔除回退', () => {
   makeRunningBatch('b-t12', ['l1']);
   const arg = (over) => ({ lane: 'l1', receiptId: 'rx', primitive: 'DENY', ruleRefs: ['R1'], tool: 'bash', escalation: ESC_ON, ...over });
-  // 逐类排除（store 方法守卫与 C3 计入过滤同标准：返回 null、零事件、零升级）
+  // 逐类排除（store 方法守卫与计入过滤同标准：返回 null、零事件、零升级）
   assert.equal(gStore.recordGovernanceRefusal(S2, 'b-t12', arg({ ruleRefs: [] })), null, '状态门收据（ruleRefs=[]）永不计数（T12）');
   assert.equal(gStore.recordGovernanceRefusal(S2, 'b-t12', arg({ primitive: 'REQUIRE_APPROVAL' })), null, 'REQUIRE_APPROVAL ask（initiated）不计（§1.5）');
   assert.equal(gStore.recordGovernanceRefusal(S2, 'b-t12', arg({ primitive: 'DEFER' })), null, 'DEFER 默认不计（primitives 不含）');

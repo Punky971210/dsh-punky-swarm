@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 certs：ACPs mTLS 证书材料（lib/acps 域，P1 lane exec-acps-server）
+// 文件 certs：ACPs mTLS 证书材料（lib/acps 域）
 // 契约：CAI 自签（node:crypto 自签 X.509，零新依赖）；文件三路径（cert/key/ca 三路径
 //       config 可配，默认 acps 数据目录）；TLS 语义对齐参考实现
 //       registry-server/app/main_mtls.py:14-30（cert/key/ca 三件套 + CERT_REQUIRED + TLSv1_3）。

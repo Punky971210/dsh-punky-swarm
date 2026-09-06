@@ -15,23 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/types/contracts.ts —— 契约类型层（jiufeng-ts-phase12 · Phase 1 · coder）
+// lib/types/contracts.ts —— 契约类型层
 //
 // type-only：本文件只含 type/interface 声明，零值导出、零运行期产物（编译产物为空模块）。
 //   消费方式：
-//     - Phase 2 的 5 个模块（schema/schema-v3/machine-rules/gates/wave-plan）转 .ts 后
+//     - schema/schema-v3/machine-rules/gates/wave-plan 等 .ts 模块
 //       `import type { ... } from '../types/contracts.js'`（import type 编译期擦除）；
 //     - JS 侧 JSDoc 纯类型引用：`/** @type {import('../types/contracts.js').Batch} */`
 //       （JSDoc 类型注解编译期擦除，零运行时 require——JS 文件本身不得 import 本文件）。
 //
 // 单一事实源：字面量联合（MemberState/BatchPhase/SettleState）与 lib/schema.js 常量
-//   MEMBER_STATES/BATCH_PHASES/SETTLE_STATES 逐值一致。Phase 1 自包含定义（schema.js
-//   尚为 JS、无类型导出，`import type { ... } from '../schema.js'` 不可行）；Phase 2
-//   schema.js→schema.ts 转换后按设计 §1.1/§2 改为从 '../schema.js' re-export 派生类型
-//   （两处字面量结构等价，切换零风险）。派生方向单向：schema(常量+派生) → contracts(通用形状)
+//   MEMBER_STATES/BATCH_PHASES/SETTLE_STATES 逐值一致；schema.ts 派生类型从 '../schema.js'
+//   re-export（两处字面量结构等价）。派生方向单向：schema(常量+派生) → contracts(通用形状)
 //   → 消费 .ts；类型层 import 全部擦除，无运行期循环依赖风险。
 
-// ── §1 甲：枚举字面量联合（与 lib/schema.js 常量逐值一致）──
+// ── 枚举字面量联合（与 lib/schema.js 常量逐值一致）──
 
 /** 成员状态：pending/running/review 迁移中态 + merged/failed/skipped/conflict 终态 + idle 恢复态（8 值） */
 export type MemberState =
@@ -50,7 +48,7 @@ export type BatchPhase = 'planning' | 'running' | 'paused' | 'aborted' | 'comple
 /** 结算终态三值（isMemberTerminal 判定 = SETTLE_STATES.includes(s) || s === 'conflict'） */
 export type SettleState = 'merged' | 'failed' | 'skipped';
 
-// ── §1 乙：迁移表（通用 Record 形态；schema.ts 常量以 satisfies 绑定防漂移）──
+// ── 迁移表（通用 Record 形态；schema.ts 常量以 satisfies 绑定防漂移）──
 
 /** 成员迁移表：from 态 → 合法 to 态列表（只读；运行期只复制后写，不原地改常量） */
 export type TransitionTable = Record<MemberState, readonly MemberState[]>;
@@ -58,7 +56,7 @@ export type TransitionTable = Record<MemberState, readonly MemberState[]>;
 /** 批次阶段迁移表（同 TransitionTable 语义） */
 export type BatchTransitionTable = Record<BatchPhase, readonly BatchPhase[]>;
 
-// ── §1 丙：WavePlanTask（输入/持久双形态）──
+// ── WavePlanTask（输入/持久双形态）──
 
 /** 任务分层：plan（规划）/ exec（执行）/ audit（验收）——Tier3 三层门禁 */
 export type Layer = 'plan' | 'exec' | 'audit';
@@ -88,7 +86,7 @@ export interface WavePlanTaskInput {
   condition?: ConditionInput;
   checkpoint?: { steps: number };
   resume?: boolean;
-  targets?: string[];           // O2：批次产物根外绝对路径目标文件
+  targets?: string[];           // 批次产物根外绝对路径目标文件
   targetsMarker?: string | null;
 }
 
@@ -135,9 +133,9 @@ export interface WavePlanDoc {
   }>;
 }
 
-// ── §1 丁：Batch / Lane / BatchEvent ──
+// ── Batch / Lane / BatchEvent ──
 
-/** 环防护记账状态（C4 mailbox；batch JSON 唯一事实源，v3 字段） */
+/** 环防护记账状态（mailbox 环防护；batch JSON 唯一事实源，v3 字段） */
 export interface ChainsState {
   chains: Record<string, { edges: Record<string, number>; said: Record<string, string> }>;
   order: string[];
@@ -189,7 +187,7 @@ export interface BatchEventBase {
  * 批次事件判别联合：按 lib/state/event-types.js EVT_* 常量值登记 + 兜底分支。
  * 判别字段 type 与 EVT 常量值绑定（常量仍为运行期事实源；gates.ts 内
  * `e.type === EVT.EVT_MEMBER_SETTLED` 与字面量比较两写法并存均可收窄）。
- * 尾部兜底分支保证未知/未来事件不报错（R-01 扩面事件：lane.stalled /
+ * 尾部兜底分支保证未知/未来事件不报错（lane.stalled /
  * lane.over-budget / budget.rejected / worktree.* / gate.role_* /
  * archive.done / system.restored 等——ts+type 必备，其余字段 unknown 可读）。
  */
@@ -197,8 +195,8 @@ export type BatchEvent = BatchEventBase & (
   | { type: 'batch.created'; batchId: string; sessionId: string }                     // EVT_BATCH_CREATED
   | { type: 'batch.phase'; from: BatchPhase; to: BatchPhase; reason?: string }        // EVT_BATCH_PHASE
   | { type: 'batch.failed-escalate'; lane: string; count: number }                    // EVT_BATCH_FAILED_ESCALATE
-  | { type: 'batch.governance-escalate'; count: number; windowMs: number; lane: string; receiptIds: string[] } // EVT_BATCH_GOVERNANCE_ESCALATE（M5-a C6）
-  | { type: 'governance.refusal'; lane: string; receiptId: string; primitive: string; ruleRefs: string[]; tool: string } // EVT_GOVERNANCE_REFUSAL（M5-a C4）
+  | { type: 'batch.governance-escalate'; count: number; windowMs: number; lane: string; receiptIds: string[] } // EVT_BATCH_GOVERNANCE_ESCALATE
+  | { type: 'governance.refusal'; lane: string; receiptId: string; primitive: string; ruleRefs: string[]; tool: string } // EVT_GOVERNANCE_REFUSAL
   | { type: 'member.settled'; lane: string; from: MemberState; to: MemberState; note: string | null } // EVT_MEMBER_SETTLED
   | { type: 'lane.skipped'; lane: string; from: MemberState; note: string }           // EVT_LANE_SKIPPED
   | { type: 'lane.needhuman'; lane: string; path: string | null }                     // EVT_LANE_NEEDHUMAN
@@ -216,14 +214,14 @@ export type BatchEvent = BatchEventBase & (
   | { type: 'gate.complete_blocked'; code: string; pending?: string[] }               // EVT_GATE_COMPLETE_BLOCKED
   | { type: 'archive.failed'; reason: string }                                        // EVT_ARCHIVE_FAILED
   | { type: 'system.recovered'; batchId: string; sessionId: string; recoveredLanes: string[]; detail: unknown[] } // EVT_SYSTEM_RECOVERED
-  // 兜底：R-01 扩面事件（lane.stalled / lane.over-budget / budget.rejected /
+  // 兜底：扩展事件（lane.stalled / lane.over-budget / budget.rejected /
   //   worktree.created|checkpoint|merged|merge.conflict|merge.resolved /
   //   gate.role_missing / gate.role_invalid / archive.done / system.restored 等）
   //   与未来新增事件——ts+type 必备，其余字段保持 unknown 可读
   | { type: string; [k: string]: unknown }
 );
 
-// ── §1 戊：GateResult 判别联合（gates.js 全部返回点；核心形态 + 载荷可选字段）──
+// ── GateResult 判别联合（gates.js 全部返回点；核心形态 + 载荷可选字段）──
 
 /** 门禁失败错误码全量枚举（按层后缀/门禁族；不设通配符，保持穷尽性收益） */
 export type GateErrorCode =
@@ -238,7 +236,7 @@ export type GateErrorCode =
   // 命令 gate（V1）——GATE_EXIT_* 全族
   | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT'
   | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO'
-  // targets 门禁（O2）
+  // targets 门禁
   | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED'
   // complete 门禁
   | 'GATE_COMPLETE_NO_AUDIT' | 'GATE_EXIT_PENDING_AUDIT'

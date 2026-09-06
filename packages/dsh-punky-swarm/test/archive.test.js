@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Archive（P1-5 done→archive）验收测试：决策包 §2.3 A1-A6
+// Archive（done→archive）验收测试
 // A1 自动归档 / A2 单向 / A3 幂等 / A4 失败不阻断 / A5 行为不变 / A6 v2 存量迁移
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 盲审编排装配数据测试（决策包 punky-assembly §5.4 验收标准 A3.1-A3.7）
+// 盲审编排装配数据测试
 // 覆盖：三角色映射 / 六模板契约 / applyAssemblyExtensions 开关语义 / buildAuditLaneSpec DAG 契约 / 叠加顺序条款 / 默认关零破坏
 import test from 'node:test';
 import assert from 'node:assert/strict';

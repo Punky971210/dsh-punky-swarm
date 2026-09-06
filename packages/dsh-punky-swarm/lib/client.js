@@ -575,7 +575,7 @@ window.__ModuleLoader__.load({
       return out;
     }
 
-    // 浏览器端 TERMINAL 副本：Node 端单点 = lib/state/constants.js（P1-07 收敛）；
+    // 浏览器端 TERMINAL 副本：Node 端单点 = lib/state/constants.js；
     // 面板段经 window.__ModuleLoader__ 拼接执行（无 ESM import 能力），此处为手工同步副本，
     // batch-list/batch-detail 段共享本作用域引用（渲染时求值）。
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
@@ -591,7 +591,7 @@ window.__ModuleLoader__.load({
       const [sel, setSel] = useState(null);
       const [detail, setDetail] = useState(null);
       const [updated, setUpdated] = useState(null);
-      const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（R3 SSE 降级回轮询状态，D6 简化②）
+      const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（SSE 降级回轮询状态）
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
@@ -621,7 +621,7 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      // R3 SSE 列表流（设计 §3.3.4）：EventSource 主通道 + 3s 轮询降级兜底（D2 保留既有轮询路径不删）。
+      // SSE 列表流：EventSource 主通道 + 3s 轮询降级兜底（保留既有轮询路径不删）。
       // 收到 batch 信号 → eventCount 去重（旧于当前忽略）→ 重跑既有聚合；onerror / 15s 无心跳 → 回退轮询；
       // 重连成功（EventSource 自动重连 / 心跳恢复）→ 停轮询回 SSE。
       useEffect(() => {
@@ -671,7 +671,7 @@ window.__ModuleLoader__.load({
         }, 5000);
         return () => { alive = false; if (es) { try { es.close(); } catch {} } if (pollIv) clearInterval(pollIv); clearInterval(stall); };
       }, [sid]);
-      // R3 SSE 详情流（设计 §3.3.4）：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
+      // SSE 详情流：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
       useEffect(() => {
         if (!sel) { setDetail(null); return; }
         let alive = true;
@@ -781,7 +781,7 @@ window.__ModuleLoader__.load({
         inject: (sessionId) => ({ sessionId })
       }, ClusterWorkbench));
       // 治理配置页（settings.section；与 conversation.view 并存，两 seat 互不排他）。
-      // order=16：出厂占用 0/10/15/20（host-impl-facts §②），16..19 空闲位取 16；
+      // order=16：出厂占用 0/10/15/20，16..19 空闲位取 16；
       // label thunk 随 locale 惰性重读；页面自带 GET/POST 取数，inject 省略（owner 仅收 { close }）。
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section',
@@ -812,7 +812,7 @@ window.__ModuleLoader__.load({
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
     // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs } } } }
     //         （单保存合并双段：governance + watch 能力开关；400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射））。
-    // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
+    // 窗口单位：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
     //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
     //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
     // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
@@ -1265,7 +1265,7 @@ window.__ModuleLoader__.load({
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
         // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
-        // { custom } = 原文透传。全不勾必须省略键（后端拒空数组/空串，runtime-config.js §③）
+        // { custom } = 原文透传。全不勾必须省略键（后端拒空数组/空串）
         const presetWire = presetWireOf(form.preset);
         const hook = {
           enabled: !!form.enabled,
@@ -1275,8 +1275,8 @@ window.__ModuleLoader__.load({
         if (presetWire !== undefined) hook.preset = presetWire;
         const watch = form.watch || { enabled: true, longrun: { enabled: true } };
         const wl = (watch && watch.longrun) || {};
-        // 单保存合并双段（Leader 裁决 1）：governance 组装保持原样 + capabilities.watch 段追加——
-        //   显式布尔（裁决 4：与 governance.hook.enabled 先例一致，不做「等于默认值删键」）；
+        // 单保存合并双段：governance 组装保持原样 + capabilities.watch 段追加——
+        //   显式布尔（与 governance.hook.enabled 先例一致，不做「等于默认值删键」）；
         //   longrun 三键齐发（enabled + 两阈值 ms）——后端 merge 只覆盖显式提交子键，无损其它手工键
         const payload = {
           governance: { hook: hook },

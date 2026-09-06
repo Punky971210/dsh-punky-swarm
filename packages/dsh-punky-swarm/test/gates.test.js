@@ -189,7 +189,7 @@ test('generic（无 layer）：不触发门禁（向后兼容）', () => {
   assert.equal(store.setPhase(SID, 'b-gen', 'complete').phase, 'complete');
 });
 
-// ---- P1-6 needHuman（D14 复用 review 态挂起；不新增成员态）----
+// ---- needHuman 人工闸（复用 review 态挂起；不新增成员态）----
 const NEEDHUMAN_TASKS = [
   { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
   { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
@@ -401,7 +401,7 @@ test('命令 gate G10：未声明 gate → merged 零感知（无 gate.* 事件�
   assert.ok(!r.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'expect zero gate events');
 });
 
-// ---- Tester 全量补充：V3 多行集成 / V5 集成超时 / V9 非 exec 零感知 / V10 事件零泄漏 / V11 cwd 契约 / C5 逃生阀 ----
+// ---- 补充用例：多行集成 / 集成超时 / 非 exec 零感知 / 事件零泄漏 / cwd 契约 / 逃生阀 ----
 
 test('命令 gate V3：多行 gate 全部 exit 0 → merged + gate.exit 事件含全部 commands/results（保序）', () => {
   makePlan('b-cg-v3-ok', CMD_TASKS);
@@ -555,7 +555,7 @@ test('命令 gate C5：GATE_ENABLED=false → 全部零感知（应急逃生阀�
   }
 });
 
-// ---- O2 targets 门禁（C2/C3/C4，冒烟口径 T1-T11，全量回归归 Tester）----
+// ---- targets 门禁（冒烟口径）----
 // 三层批次 + e1 声明 targets（绝对路径）；target 文件写于引擎产物根之外（批次外临时文件，模拟既有源码/配置）
 function makeTargetBatch(batchId, targets, opts = {}) {
   makePlan(batchId, [

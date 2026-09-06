@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// I2 集成测试（build-plan §2.6 I2，4 条）：resolveGovernanceConfig 默认合并 + cordis.patch.yml governance 键对齐断言
-// （对齐 assembly-schema.test.js:96-111 patch 断言模式：readFileSync + regex）。
+// I2 集成测试：resolveGovernanceConfig 默认合并 + cordis.patch.yml governance 键对齐断言
+// （对齐 assembly-schema.test.js patch 断言模式：readFileSync + regex）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -28,8 +28,8 @@ import { createGovernanceKernel } from '../lib/governance/kernel.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8').replace(/\r\n/g, '\n');
 
-// 全默认期望（蓝图 §7 yaml，已敲定 2026-08-31：enabled:true 默认开启可显式关闭）
-// M5-a（2026-09-02）：resolve 扩 escalation 段（D-5）——默认关形态（enabled:false / threshold:3 /
+// 全默认期望：enabled:true 默认开启可显式关闭
+// resolve 扩 escalation 段——默认关形态（enabled:false / threshold:3 /
 //   windowMs:600000 / primitives:['DENY','NARROW']）；本期望随 config.js resolve 输出结构同步。
 const EXPECT_DEFAULTS = {
   enabled: true,

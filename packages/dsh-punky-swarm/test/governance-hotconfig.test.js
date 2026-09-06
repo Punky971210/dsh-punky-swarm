@@ -15,15 +15,15 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P3 组（harden-plan §6 P3 组，7 条）：governance 键热更新 + 示例规则可执行
-//   T1 ALLOWED_TOP_KEYS 含 governance（config-watch 白名单，harden-plan §5.4 A.1）
+// governance 键热更新 + 示例规则可执行
+//   T1 ALLOWED_TOP_KEYS 含 governance（config-watch 白名单）
 //   T2 validateOverlay 接受 governance / 拒绝未知顶层键与未知 capabilities 键
 //   T3 applyConfigChange ⑤ enabled 翻转 → dispose+重挂（装配级：apply + runtime.json 热写，pre listener 卸载/重注册）
-//   T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs/guardrails-hook.md §3 示例规则 1 装配链路命中 → DENY + 收据 + 桥接事件流随动）
+//   T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；guardrails-hook 示例规则 1 装配链路命中 → DENY + 收据 + 桥接事件流随动）
 //   T5 既有 ①-④ 分支回归：非 governance 键热变更不触发重挂、不抛错（④ resolveVerifyConfig 缺陷修复回归——
 //      基线 index.js 未导入 resolveVerifyConfig，任何 hot 变更在 ④ 抛 ReferenceError 阻断后续分支）
-//   T6 示例规则 1 命中（docs/guardrails-hook.md §3：hard → DENY；含示例 3 manual_review → REQUIRE_APPROVAL 佐证）
-//   T7 示例规则 2 命中（docs/guardrails-hook.md §3：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）
+//   T6 示例规则 1 命中（guardrails-hook：hard → DENY；含示例 3 manual_review → REQUIRE_APPROVAL 佐证）
+//   T7 示例规则 2 命中（guardrails-hook：narrowable + flag.narrow → NARROW + narrowedParams 钳制；flag-off 回退 DENY）
 // 装配级形态（apply + runtime.json 热写）对齐 legacy-fix.test.js（fake ctx 先例）与 hot-config.test.js H8
 // （真实 fs.watch + 防抖等待先例）；governance hook 单点语义回归由 governance-wiring/state/proto 组覆盖。
 import test from 'node:test';

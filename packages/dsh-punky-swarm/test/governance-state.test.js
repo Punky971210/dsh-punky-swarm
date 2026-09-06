@@ -15,12 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P1 组 S（harden-plan §6，8 条新增）：DEFER/PAUSE 文件态简版状态机 + REQUIRE_APPROVAL ask 接线。
-// 载体：test/governance-state.test.js（新增文件）。
+// DEFER/PAUSE 文件态简版状态机 + REQUIRE_APPROVAL ask 接线。
+// 载体：test/governance-state.test.js。
 // 覆盖：S1 ask+收据 ask.initiated / S2 无 approval→降级 deny 复现+outcome 补记 / S3 post 补记 ask 终态 /
 //       S4 DEFER 窗口内重试 deny+过期重裁 / S5 PAUSE 同 session 后续 deny+过期恢复（含跨 session 隔离）/
 //       S6 flag-off 折叠无状态副作用 / S7 状态文件落盘/读回幂等+惰性过期 / S8 双版本 ask 契约。
-// 宿主模拟口径（P1 ask 接线）：
+// 宿主模拟口径（ask 接线）：
 //   pre 返回 {kind:'ask'} 后由宿主 serviceAsk（HOST:3303-3354）解析——无审批服务 → 降级 deny（reason 保留
 //   ask.reason）；降级路径 result 经 HOST:3117-3128 materialize 为 isError:true 的 post-result，
 //   仍触发 tools/post-execute waterfall（HOST:3008 → finalizeScheduledExecution → postExecute，宿主源码复核）。
@@ -213,7 +213,7 @@ test('S2 no approval service → host degrade deny reproduced + post patches ask
   };
   let nextCalled = 0;
   const postDecision = await post(exec, result, async () => { nextCalled++; return { kind: 'accept' }; });
-  // post pass-through 不变（§4.4）
+  // post pass-through 不变
   assert.equal(postDecision.kind, 'accept');
   assert.equal(nextCalled, 1);
   // outcome 尽力补记：默认（无审批服务，宿主保留 ask.reason 无特征文本）→ denied-no-approval
@@ -419,7 +419,7 @@ test('S7 state file: write/read-back idempotent, lazy expiry cleans on read, cor
   assert.throws(() => stateFileOf(root, '../evil'), /invalid sessionId/);
 });
 
-// ── S8：双版本 ask 契约（0.1.0-rc.6 / 0.1.1-rc.2 各跑一遍：ask.initiated + 降级补记；wiring 零宿主 import §4.6）──
+// ── S8：双版本 ask 契约（0.1.0-rc.6 / 0.1.1-rc.2 各跑一遍：ask.initiated + 降级补记；wiring 零宿主 import）──
 test('S8 dual-version ask contract: both host versions get ask.initiated receipt + degrade outcome patch', async () => {
   for (const ver of ['0.1.0-rc.6', '0.1.1-rc.2']) {
     const ctx = fakeCtx();

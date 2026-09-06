@@ -15,21 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// governance/state-store.js —— DEFER/PAUSE 文件态简版状态机（P1，harden-plan §5.2 A，JS 文件 IO）
+// governance/state-store.js —— DEFER/PAUSE 文件态简版状态机（JS 文件 IO）
 // 载体对齐 receipt-store.js 模式：node:fs 原子写（tmp+rename）+ SESSION_RE 校验 + 零新依赖。
 // 位置：<root>/governance/state/<sessionId>.json（per-session 单文件，幂等读写）；root = 引擎根。
 // 状态机：idle | deferred({deferId, retryAfterMs, until}) | paused({pauseToken, until})。
 // 惰性过期：读时比较 until vs now，过期即视为 idle 并清理状态文件——【禁止 setInterval/后台定时器】
-//   （维持 N-7 核查：无 redis/bullmq/setInterval；恢复语义 = 惰性过期自动恢复，零命令面/零 HTTP/零 resume 端点）。
+//   （无 redis/bullmq/setInterval；恢复语义 = 惰性过期自动恢复，零命令面/零 HTTP/零 resume 端点）。
 // 与 flag-off 折叠 deny 的区分（关键语义，classify P3/P5 flag=false → DENY 无状态副作用）：
 //   本模块只被 wiring 在 flag-on 且命中（decision DEFER/PAUSE）或状态门拒绝路径调用；
-//   flag-off 折叠 DENY 不触碰状态文件（S6 断言）。
+//   flag-off 折叠 DENY 不触碰状态文件。
 // 内核纯度：纯函数内核（kernel/classify）零 IO；本 JS 触点供 wiring 层调用。
 import fs from 'node:fs';
 import path from 'node:path';
 import { SESSION_RE } from '../state/constants.js';
 
-// 窗口常量（harden-plan §5.2 A.5/A.6「建议默认常量，worker 定并文档化」）：
+// 窗口常量：
 //   DEFER 延后窗口 30s（数据水合前挂起、稍后自动恢复为可重试状态）；
 //   PAUSE 暂停窗口 60s（同 session 任意工具调用被拒，过期自动恢复）。
 export const DEFER_RETRY_MS = 30_000;
@@ -111,7 +111,7 @@ export function readSessionState(root, sessionId) {
 // retryAfterMs 缺省 = DEFER_RETRY_MS（wiring 触发路径用常量；测试可传短窗口验证过期）。
 export function setDeferred(root, sessionId, { deferId, retryAfterMs } = {}) {
   const sid = String(sessionId ?? 'cli');
-  const dId = deferId ?? globalThis.crypto.randomUUID(); // node≥19 WebCrypto（标准库内建，kernel.ts 先例）
+  const dId = deferId ?? globalThis.crypto.randomUUID(); // node≥19 WebCrypto（标准库内建）
   const ms = typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs > 0
     ? retryAfterMs
     : DEFER_RETRY_MS;

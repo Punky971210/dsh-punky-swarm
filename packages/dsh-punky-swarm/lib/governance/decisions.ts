@@ -15,14 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 6 治理原语枚举定义（G2）：常量数组 + 类型守卫 + 语义标签 + 原语→宿主决策映射。
-// 蓝图：m2-detailed.md §3。纯函数、零依赖（结构映射，不 import 宿主）。
-// 组合优先级（REQUIRE_APPROVAL > DENY > DEFER > NARROW > PAUSE）由 classify 归一（§4），本模块不做组合。
+// 6 治理原语枚举定义：常量数组 + 类型守卫 + 语义标签 + 原语→宿主决策映射。
+// 纯函数、零依赖（结构映射，不 import 宿主）。
+// 组合优先级（REQUIRE_APPROVAL > DENY > DEFER > NARROW > PAUSE）由 classify 归一，本模块不做组合。
 
 import type { GovernancePrimitive } from './types.js';
 
 // 6 原语常量数组（单一事实源；satisfies 绑定 types.ts 联合防漂移，纯类型层校验）。
-// 对照 hf.md:76-77（CAGE GovernanceDecision 六原语全在）。
+// 对照 CAGE GovernanceDecision 六原语。
 export const GOVERNANCE_PRIMITIVES = [
   'ALLOW', 'DENY', 'REQUIRE_APPROVAL', 'DEFER', 'NARROW', 'PAUSE',
 ] as const satisfies readonly GovernancePrimitive[];
@@ -42,9 +42,9 @@ export function isGovernancePrimitive(v: unknown): v is GovernancePrimitive {
   return GOVERNANCE_PRIMITIVES.includes(v as GovernancePrimitive);
 }
 
-// 原语 → 宿主 pre-execute 决策（蓝图 §3 映射列）：
-//   DENY/DEFER/NARROW/PAUSE → {kind:'deny', reason}（2.2 简版统一 deny + 收据元信息）；
-//   REQUIRE_APPROVAL → {kind:'ask', reason}（→ serviceAsk，HOST:3106,3303-3347）；
+// 原语 → 宿主 pre-execute 决策：
+//   DENY/DEFER/NARROW/PAUSE → {kind:'deny', reason}（简版统一 deny + 收据元信息）；
+//   REQUIRE_APPROVAL → {kind:'ask', reason}（→ serviceAsk）；
 //   ALLOW → 'pass'（透传）。
 export type PreDecision =
   | { kind: 'deny'; reason: string }

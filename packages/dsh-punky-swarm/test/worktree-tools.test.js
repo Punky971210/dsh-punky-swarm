@@ -15,15 +15,15 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// C2 worktree 四工具单测（决策包 §2.3 验收 T1-T5 + B2 checkpoint 保全引用 T6/T7）：
+// worktree 四工具单测：
 // T1 创建：worktree 目录存在 / punky/<laneId> 分支存在 / 基线=orch HEAD / 重复创建幂等 / 身份兜底
 // T2 checkpoint：提交出现（git log 可查）/ 无变更 no-op（不产生空提交）
 // T3 合并：成功 → 产物入 orch + worktree/分支清理；冲突 → 保留现场 + 冲突文件清单（不自动解决）
 // T4 串行化：merge 队列锁等待（同批次 merge 串行）+ 与 lane_claim 并存（worktree 场景 lane_claim 仍锁批次状态写）
 // T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起；enabled=false → 不注册（工具总数 14 不变）
-// T6 B2 progress checkpoint：事件含 step/total + commit message 内嵌 "step N/total"（git log 可查）；向后兼容
-// T7 B2 lane_checkpoint_status：只读查询 checkpoint 历史 + latest；不依赖 git（git 不可用也可查）
-// 备注：本文件在 git 可用环境运行（git 是本能力硬依赖，决策包 T5 要求环境 git 可用）；
+// T6 progress checkpoint：事件含 step/total + commit message 内嵌 "step N/total"（git log 可查）；向后兼容
+// T7 lane_checkpoint_status：只读查询 checkpoint 历史 + latest；不依赖 git（git 不可用也可查）
+// 备注：本文件在 git 可用环境运行（git 是本能力硬依赖）；
 //       引擎状态根内布局 <root>/sessions/<sessionId>/worktrees/<batchId>/{_repo,orch,<laneId>}
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,7 +79,7 @@ test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（20 工�
   for (const n of ['lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(names.includes(n), '缺省默认开：' + n + ' 应注册');
   }
-  // 显式关（P1-01 验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（14 + lane_heartbeat + lane_longrun = 16）
+  // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（14 + lane_heartbeat + lane_longrun = 16）
   const { tools: t2 } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: { capabilities: { worktree: { enabled: false } } } });
   assert.equal(t2.length, 16);
   assert.equal(t2.some((t) => t.name === 'lane_worktree_create' || t.name === 'lane_worktree_merge' || t.name === 'lane_checkpoint' || t.name === 'lane_checkpoint_status'), false);
