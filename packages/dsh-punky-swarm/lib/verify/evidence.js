@@ -220,7 +220,7 @@ export function createEvidenceRegistry() {
   };
 }
 
-// ---- post-execute 捕获安装（enabled 缺省关，V5：enabled=false 零运行时开销） ----
+// ---- post-execute 捕获安装（函数默认参 enabled=false = 裸调保守默认零开销；verify 能力出厂默认开——mountVerify 经 resolveVerifyConfig 缺省 enabled=true 装配时显式传 enabled:true） ----
 // 订阅宿主 tools/post-execute waterfall：观察派生证据 → 落 blob + 台账；pass-through 不断链（return next()）。
 // 捕获失败只记录不抛（观察者不得破坏工具执行链）。
 export function installEvidenceCapture(ctx, opts = {}) {

@@ -285,7 +285,7 @@ export const apply = (ctx, config = {}) => {
   }
 
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
-  // enabled 默认关：enabled=false 时桥接不创建不挂载——零运行时开销，行为与既有版本一致。
+  // trajectory 出厂默认开（isTrajectoryEnabled 经 readCapability 合并注册表 default enabled:true）——仅显式 capabilities.trajectory.enabled:false 时桥接不创建不挂载（零运行时开销，行为与既有版本一致）
   // 生命周期：start() 挂订阅/轮询；stop() 退订/清定时器（经 apply 返回的 dispose 释放，进程重启后桥接随插件重建、映射从批次事件幂等恢复）
   let trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox }) : null;
   if (trajectory) {
@@ -371,7 +371,7 @@ export const apply = (ctx, config = {}) => {
   }
 
   // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
-  // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。enabled=false（默认）
+  // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。verify 出厂默认开（resolveVerifyConfig 缺省 enabled=true）；仅显式 enabled=false 才
   // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
   let verifyMount = mountVerify(ctx, { root, config });
   if (verifyMount.installed) {

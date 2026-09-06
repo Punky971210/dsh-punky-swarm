@@ -32,7 +32,7 @@ export { VERIFY_DEFAULTS, resolveVerifyConfig };
 
 // 引擎级捕获挂载（index.js apply 内调用）：
 //   enabled=true + ctx.on 可用 → installEvidenceCapture 订阅 tools/post-execute（pass-through 不断链）→ installed:true；
-//   enabled=false（默认）→ installed:false / reason:'disabled'，不注册任何监听，零副作用；
+//   enabled=false（显式关闭——verify 出厂默认开，resolveVerifyConfig 缺省 enabled=true）→ installed:false / reason:'disabled'，不注册任何监听，零副作用；
 //   ctx.on 缺失 → installed:false / reason:'ctx.on unavailable'，静默降级不 throw。
 export function mountVerify(ctx, { root, config, logger } = {}) {
   const cfg = resolveVerifyConfig(config);
