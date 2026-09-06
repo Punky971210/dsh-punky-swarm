@@ -488,8 +488,13 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
 // deps: { store, root, config, heartbeat? } —— heartbeat 缺省时自建（注册侧懒加载，与挂载引擎共享状态文件）
 export function createHeartbeatTools(ctx, deps = {}) {
   if (resolveWatchConfig(deps.config).enabled !== true) return [];
+  // 注册期实例（回退路径：deps.getHeartbeat 未注入的调用方——既有测试/直接装配经 deps.heartbeat 注入）；
+  // 执行路径经 engineAt() 解引用（longrun-panel-config-20260905）：index.js 装配注入
+  // getHeartbeat（→ heartbeatRef.current）→ 热重建后工具自动跟随新引擎（修复旧实例闭包缺陷）；
+  // getHeartbeat 返回 null（watch 关/热关，引擎缺失）→ disabled 状态对象不 throw
   const heartbeat = deps.heartbeat
     ?? createLaneHeartbeat({ store: deps.store, mailbox: deps.mailbox, config: deps.config, root: deps.root });
+  const engineAt = () => (typeof deps.getHeartbeat === 'function' ? deps.getHeartbeat() : heartbeat);
   return [
     defineTool({
       name: 'lane_heartbeat',
@@ -510,16 +515,34 @@ export function createHeartbeatTools(ctx, deps = {}) {
       },
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec);
-        if (args.beat === true) heartbeat.tick();
+        const engine = engineAt(); // 执行时解引用：引擎缺失（watch 关/热关）→ null → disabled 状态
+        // beat 手动一拍：引擎缺失时 no-op（disabled 查询仍可安全返回，不 throw）
+        if (args.beat === true && engine) engine.tick();
         const batch = deps.store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);
         const laneIds = args.lane
           ? [args.lane]
           : Object.keys(batch.lanes ?? {}).filter((l) => batch.lanes[l] === 'running');
+        if (!engine) {
+          // watch 关闭/热关（引擎缺失）：返回 disabled 状态对象（enabled:false, reason:'watch-disabled',
+          //   tracked:false）——查询工具只读安全，不抛错；beat=true 已按 no-op 跳过
+          return {
+            batchId: args.batchId,
+            sessionId,
+            lanes: laneIds.map((l) => ({
+              laneKey: `${sessionId}/${args.batchId}/${l}`,
+              sessionId, batchId: args.batchId, lane: l,
+              tracked: false,
+              enabled: false,
+              reason: 'watch-disabled',
+              missed: 0, stalled: false, pendingProbeId: null, lastProbeAt: null, lastActivityAt: null,
+            })),
+          };
+        }
         return {
           batchId: args.batchId,
           sessionId,
-          lanes: laneIds.map((l) => heartbeat.status(`${sessionId}/${args.batchId}/${l}`)),
+          lanes: laneIds.map((l) => engine.status(`${sessionId}/${args.batchId}/${l}`)),
         };
       },
     }),
@@ -533,8 +556,11 @@ export function createHeartbeatTools(ctx, deps = {}) {
 export function createLongrunTools(ctx, deps = {}) {
   if (resolveWatchConfig(deps.config).enabled !== true) return [];
   if (resolveLongrunConfig(deps.config).enabled !== true) return [];
+  // 注册期实例（回退路径：deps.getHeartbeat 未注入的调用方）；执行路径经 engineAt() 解引用——
+  // index.js 装配注入 getHeartbeat（heartbeatRef.current）→ 热重建后跟随新引擎；null → disabled 状态
   const heartbeat = deps.heartbeat
     ?? createLaneHeartbeat({ store: deps.store, mailbox: deps.mailbox, config: deps.config, root: deps.root });
+  const engineAt = () => (typeof deps.getHeartbeat === 'function' ? deps.getHeartbeat() : heartbeat);
   return [
     defineTool({
       name: 'lane_longrun',
@@ -555,16 +581,39 @@ export function createLongrunTools(ctx, deps = {}) {
       },
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec);
-        if (args.beat === true) heartbeat.tick();
+        const engine = engineAt(); // 执行时解引用：引擎缺失（watch 关/热关）→ null → disabled 状态
+        // beat 手动一拍：引擎缺失时 no-op（disabled 查询仍可安全返回，不 throw）
+        if (args.beat === true && engine) engine.tick();
         const batch = deps.store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);
         const laneIds = args.lane
           ? [args.lane]
           : Object.keys(batch.lanes ?? {}).filter((l) => batch.lanes[l] === 'running');
+        if (!engine) {
+          // watch 关闭/热关（引擎缺失）：返回 disabled 状态对象（enabled:false, reason:'watch-disabled',
+          //   tracked:false）——查询工具只读安全，不抛错；beat=true 已按 no-op 跳过
+          return {
+            batchId: args.batchId,
+            sessionId,
+            lanes: laneIds.map((l) => ({
+              laneKey: `${sessionId}/${args.batchId}/${l}`,
+              sessionId, batchId: args.batchId, lane: l,
+              enabled: false,
+              reason: 'watch-disabled',
+              tracked: false,
+              candidate: false,
+              emitted: false,
+              runningSince: null, runningSinceTs: null, durationMs: null,
+              lastCheckpointTs: null, lastActivityAt: null,
+              checkpointFresh: false, activityFresh: false,
+              maxDurationMs: null, noProgressWindowMs: null,
+            })),
+          };
+        }
         return {
           batchId: args.batchId,
           sessionId,
-          lanes: laneIds.map((l) => heartbeat.longrunStatus(sessionId, args.batchId, l, null)),
+          lanes: laneIds.map((l) => engine.longrunStatus(sessionId, args.batchId, l, null)),
         };
       },
     }),

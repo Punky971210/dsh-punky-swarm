@@ -178,7 +178,7 @@ export function createApi(ctx, deps) {
 
   // P4 ACS 智能体描述目录：enabled=true 时 agentCatalog 非空，注册 /agents；
   // 端点输出 ACS 字段集（AgentCapabilitySpec，逐字字段见 lib/aip/agent-descriptor.js）；只读、无参。
-  // enabled=false（默认）时 agentCatalog 为 null，不注册该路由（既有路由契约不变）。
+  // aip.enabled=false（显式关闭——aip 出厂默认开，readCapability 缺省合并 {enabled:true}）时 agentCatalog 为 null，不注册该路由（既有路由契约不变）。
   if (agentCatalog) {
     register({
       kind: 'exact',
@@ -246,11 +246,24 @@ export function createApi(ctx, deps) {
             const gov = overlay && typeof overlay === 'object' && !Array.isArray(overlay)
               && overlay.governance && typeof overlay.governance === 'object' && !Array.isArray(overlay.governance)
               ? overlay.governance : null;
+            // watch 段取数（longrun-panel-config-20260905）：overlayWatch = 磁盘 capabilities.watch 段原样
+            //   （无 = null）；applied.watch = 装配侧解析生效快照（watchInstalledCfg，经 appliedWatch getter——
+            //   未注入时省略该键，旧 harness/旧客户端零感知）。既有 overlay=governance 语义不动。
+            const caps = overlay && typeof overlay === 'object' && !Array.isArray(overlay)
+              && overlay.capabilities && typeof overlay.capabilities === 'object' && !Array.isArray(overlay.capabilities)
+              ? overlay.capabilities : null;
+            const overlayWatch = caps && typeof caps.watch === 'object' && !Array.isArray(caps.watch) ? caps.watch : null;
             const applied = typeof cfgEp.applied === 'function' ? cfgEp.applied() : null;
+            const appliedWatch = typeof cfgEp.appliedWatch === 'function' ? cfgEp.appliedWatch() : null;
             const presets = typeof cfgEp.presets === 'function' ? (cfgEp.presets() ?? []) : [];
             // overlay = 磁盘 runtime.json governance 段原样（表单未保存改动基准；无 = null）；
-            // applied = 装配侧已解析快照（默认补齐 + preset 展开 rules）；presets = 注册目录元数据 [{id,count}]
-            sendJson(res, 200, { overlay: gov, applied: { hook: applied }, presets });
+            // overlayWatch = 磁盘 capabilities.watch 段原样（watch 开关表单基准；无 = null）；
+            // applied = 装配侧已解析快照（默认补齐 + preset 展开 rules）；applied.watch = watch 生效快照
+            //   （{ enabled, longrun:{enabled}, scanIntervalMinutes }——enabled/longrun.enabled 缺省 true）；
+            // presets = 注册目录元数据 [{id,count}]
+            const appliedOut = { hook: applied };
+            if (appliedWatch !== null && appliedWatch !== undefined) appliedOut.watch = appliedWatch;
+            sendJson(res, 200, { overlay: gov, overlayWatch, applied: appliedOut, presets });
           } catch (e) { sendJson(res, 500, { error: String(e?.message ?? e) }); }
           return;
         }
@@ -263,7 +276,14 @@ export function createApi(ctx, deps) {
           }
           return bodyPromise.then((payload) => {
             try {
-              const out = cfgEp.runtimeConfig.writeGovernance(payload);
+              // POST 按 body 键存在性分派（longrun-panel-config-20260905）：含 capabilities 段 → writeWatch
+              //   （单保存合并 governance + capabilities.watch 双段同 body，Leader 裁决 1——writeWatch 内部
+              //   同时处理可选 governance 段，分节校验 + 单次原子写）；仅 governance（旧客户端/既有测试契约）
+              //   → writeGovernance 原路径（错误形态与路由零变化）。
+              const hasCaps = payload && typeof payload === 'object' && !Array.isArray(payload) && 'capabilities' in payload;
+              const out = hasCaps
+                ? cfgEp.runtimeConfig.writeWatch(payload)
+                : cfgEp.runtimeConfig.writeGovernance(payload);
               if (!out.ok) {
                 if (out.status === 500 || !Array.isArray(out.errors)) {
                   return sendJson(res, out.status || 500, { ok: false, error: out.error ?? 'write-rejected' });

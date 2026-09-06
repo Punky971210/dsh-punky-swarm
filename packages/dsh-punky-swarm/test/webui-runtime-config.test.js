@@ -22,7 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { validateGovernancePayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
+import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
 
 const TMP_BASE = 'D:\\dsh\\_tmp\\webui-config-build';
 fs.mkdirSync(TMP_BASE, { recursive: true });
@@ -304,4 +304,262 @@ test('写-8 窗口换算覆盖语义：windowSeconds 覆盖既有 windowMs；旧
   parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
   assert.equal(parsed.governance.hook.escalation.windowMs, 45000);
   assert.equal(parsed.governance.hook.escalation.threshold, 7, '未提交子键保留');
+});
+
+// ── watch 写通道（longrun-panel-config-20260905，e2 新增）──
+// validateWatchPayload 纯函数（payload = POST body 的 capabilities 段，字段名锚 capabilities.*）+ writeWatch
+//   集成（读-改-写保留 / longrun 整段合并仅覆盖显式子键 / 双段任一 400 整写拒绝 / validateOverlay 兜底 500 /
+//   原子写 / governance 键不受影响）。契约基准：build-report §6 交接契约 1/2/4/5。
+
+// ---- validateWatchPayload：capabilities 段白名单仅 watch ----
+test('watch校验-1 capabilities 段白名单仅 watch：discovery 等其它能力键 → field-not-allowed（400 code）', () => {
+  for (const extra of ['discovery', 'verify', 'trajectory', 'topic']) {
+    const r = validateWatchPayload({ [extra]: { enabled: true } });
+    assert.equal(r.ok, false, `capabilities.${extra} 必须拒绝`);
+    assert.equal(firstError(r).code, 'field-not-allowed');
+    assert.equal(firstError(r).field, 'capabilities.' + extra, '字段名锚 capabilities.*');
+  }
+});
+
+test('watch校验-2 watch 子键白名单仅 enabled/longrun：scanIntervalMinutes/maxMissed/probeTemplate → field-not-allowed', () => {
+  for (const key of ['scanIntervalMinutes', 'intervalsMinutes', 'maxMissed', 'probeTemplate']) {
+    const r = validateWatchPayload({ watch: { [key]: key === 'probeTemplate' ? 'hi' : 5 } });
+    assert.equal(r.ok, false, `watch.${key} 必须拒绝（表单外键走手工 runtime.json 路径）`);
+    assert.equal(firstError(r).code, 'field-not-allowed');
+    assert.equal(firstError(r).field, 'capabilities.watch.' + key);
+  }
+});
+
+test('watch校验-3 longrun 键白名单：仅 enabled + 阈值留门 maxDurationMs/noProgressWindowMs；其它 → field-not-allowed', () => {
+  for (const key of ['scanIntervalMinutes', 'maxMissed', 'foo']) {
+    const r = validateWatchPayload({ watch: { longrun: { [key]: 1 } } });
+    assert.equal(r.ok, false, `watch.longrun.${key} 必须拒绝`);
+    assert.equal(firstError(r).code, 'field-not-allowed');
+    assert.equal(firstError(r).field, 'capabilities.watch.longrun.' + key);
+  }
+  // 合法：enabled + 双阈值同段过
+  assert.equal(validateWatchPayload({ watch: { enabled: true, longrun: { enabled: false, maxDurationMs: 999000, noProgressWindowMs: 123000 } } }).ok, true);
+});
+
+test('watch校验-4 enabled 值域布尔：watch.enabled / longrun.enabled 非布尔 → invalid-value', () => {
+  for (const v of ['true', 1, null, {}, []]) {
+    const r1 = validateWatchPayload({ watch: { enabled: v } });
+    assert.equal(r1.ok, false, `enabled=${JSON.stringify(v)} 必须拒绝`);
+    assert.equal(firstError(r1).field, 'capabilities.watch.enabled');
+    assert.equal(firstError(r1).code, 'invalid-value');
+    const r2 = validateWatchPayload({ watch: { longrun: { enabled: v } } });
+    assert.equal(r2.ok, false);
+    assert.equal(firstError(r2).field, 'capabilities.watch.longrun.enabled');
+    assert.equal(firstError(r2).code, 'invalid-value');
+  }
+});
+
+test('watch校验-5 阈值留门值域（Leader 裁决 2）：正整数 ms ≥1 过 / 0、负数、小数、字符串、Infinity、NaN 拒', () => {
+  const lr = (over) => validateWatchPayload({ watch: { longrun: { ...over } } });
+  // 留门放行：正整数 ms ≥1（含 1 与超大整数，无引擎外上封顶）
+  assert.equal(lr({ maxDurationMs: 1 }).ok, true);
+  assert.equal(lr({ maxDurationMs: 1_200_000 }).ok, true);
+  assert.equal(lr({ noProgressWindowMs: 1 }).ok, true);
+  assert.equal(lr({ noProgressWindowMs: 300_000 }).ok, true);
+  assert.equal(lr({ maxDurationMs: 1, noProgressWindowMs: 1 }).ok, true);
+  // 拒绝：0 / 负数 / 小数 / 字符串 / Infinity / NaN
+  for (const bad of [0, -5, 1.5, '100', Infinity, NaN]) {
+    for (const k of ['maxDurationMs', 'noProgressWindowMs']) {
+      const r = lr({ [k]: bad });
+      assert.equal(r.ok, false, `${k}=${String(bad)} 必须拒绝`);
+      assert.equal(firstError(r).field, 'capabilities.watch.longrun.' + k);
+      assert.equal(firstError(r).code, 'invalid-value');
+    }
+  }
+});
+
+test('watch校验-6 结构形态：payload 非对象 → invalid-value；watch/longrun 非对象 → invalid-value；null/undefined = 无事可写 ok', () => {
+  assert.equal(validateWatchPayload([1]).ok, false);
+  assert.equal(firstError(validateWatchPayload([1])).field, 'capabilities');
+  assert.equal(validateWatchPayload(42).ok, false);
+  assert.equal(validateWatchPayload('x').ok, false);
+  const wBad = validateWatchPayload({ watch: 'x' });
+  assert.equal(wBad.ok, false);
+  assert.equal(firstError(wBad).field, 'capabilities.watch');
+  const lrBad = validateWatchPayload({ watch: { longrun: 5 } });
+  assert.equal(lrBad.ok, false);
+  assert.equal(firstError(lrBad).field, 'capabilities.watch.longrun');
+  // 无 capabilities 段（null/undefined）= 无事可写（签名对称占位）
+  assert.equal(validateWatchPayload(null).ok, true);
+  assert.equal(validateWatchPayload(undefined).ok, true);
+  assert.equal(validateWatchPayload({}).ok, true, '空 capabilities 段 = 无事可写');
+});
+
+test('watch校验-7 合法 payload 全过 + 错误码枚举沿用（UI 映射零新增）', () => {
+  assert.equal(validateWatchPayload({ watch: { enabled: false } }).ok, true);
+  assert.equal(validateWatchPayload({ watch: { longrun: { enabled: false } } }).ok, true);
+  assert.equal(validateWatchPayload({ watch: { enabled: true, longrun: { enabled: true, maxDurationMs: 600000, noProgressWindowMs: 60000 } } }).ok, true);
+  // 错误码集合未越枚举（沿用 governance 同枚举，UI 双语映射零新增）
+  const codes = new Set();
+  const collect = (r) => { for (const e of r.errors) codes.add(e.code); };
+  collect(validateWatchPayload({ discovery: { enabled: true } }));
+  collect(validateWatchPayload({ watch: { scanIntervalMinutes: 5 } }));
+  collect(validateWatchPayload({ watch: { enabled: 'yes' } }));
+  collect(validateWatchPayload({ watch: { longrun: { maxDurationMs: 0 } } }));
+  assert.deepEqual([...codes].sort(), ['field-not-allowed', 'invalid-value']);
+});
+
+// ---- writeWatch 集成 ----
+
+test('watch写-1 capabilities-only 首写：落盘 capabilities.watch 精确、written 仅含 capabilities、tmp 不残留', () => {
+  const root = freshRoot();
+  const svc = createRuntimeConfigService({ root });
+  const out = svc.writeWatch({ capabilities: { watch: { enabled: false, longrun: { enabled: false } } } });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.written, { capabilities: { watch: { enabled: false, longrun: { enabled: false } } } });
+  const file = path.join(root, 'config', 'runtime.json');
+  assert.equal(fs.existsSync(file), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { capabilities: { watch: { enabled: false, longrun: { enabled: false } } } });
+  assert.equal('governance' in out.written, false, 'written 仅含本次实际提交段');
+  assert.equal(fs.existsSync(path.join(root, 'config', '.runtime.json.tmp')), false, 'tmp 不残留（原子写）');
+});
+
+test('watch写-2 读-改-写保留：capabilities 其余子键 + watch 深层键 + 其它顶层键 + governance 键全保留', () => {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  const base = {
+    aip: { enabled: true },
+    mailbox: { sweepOnStart: false },
+    capabilities: {
+      discovery: { enabled: true, port: 3333 },
+      watch: {
+        enabled: true, scanIntervalMinutes: 5, maxMissed: 3, probeTemplate: 'hi {lane}',
+        longrun: { enabled: true, maxDurationMs: 999000, noProgressWindowMs: 123000 },
+      },
+    },
+    governance: { hook: { preset: 'l1-sensitive', enabled: true } },
+  };
+  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(base, null, 2));
+  const svc = createRuntimeConfigService({ root });
+  // 只提交 watch.enabled + longrun.enabled（表单两开关）——深层键与其它段全部原样
+  const out = svc.writeWatch({ capabilities: { watch: { enabled: false, longrun: { enabled: false } } } });
+  assert.equal(out.ok, true);
+  const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal(parsed.aip.enabled, true, '其它顶层键保留');
+  assert.deepEqual(parsed.mailbox, { sweepOnStart: false }, '其它顶层键保留');
+  assert.deepEqual(parsed.capabilities.discovery, { enabled: true, port: 3333 }, 'capabilities 其余子键原样保留');
+  assert.deepEqual(parsed.capabilities.watch, {
+    enabled: false, scanIntervalMinutes: 5, maxMissed: 3, probeTemplate: 'hi {lane}',
+    longrun: { enabled: false, maxDurationMs: 999000, noProgressWindowMs: 123000 },
+  }, 'watch 深层键保留；longrun 整段合并仅覆盖显式提交子键（enabled），阈值原样');
+  assert.deepEqual(parsed.governance, base.governance, 'governance 键不受影响');
+  // written.capabilities = 合并后 capabilities 全量（含 discovery）
+  assert.equal(out.written.capabilities.discovery.enabled, true);
+  assert.equal(out.written.capabilities.watch.enabled, false);
+  assert.equal('governance' in out.written, false);
+});
+
+test('watch写-3 merge-only 省略语义：省略子键 = 不动（不删键）——阈值与 enabled 均保留/翻转各自独立', () => {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(
+    { capabilities: { watch: { enabled: false, longrun: { enabled: true, maxDurationMs: 999000 } } } }, null, 2));
+  const svc = createRuntimeConfigService({ root });
+  // ① 只提交 watch.enabled:true → longrun 段（含 enabled 与阈值）不动
+  const out1 = svc.writeWatch({ capabilities: { watch: { enabled: true } } });
+  assert.equal(out1.ok, true);
+  let parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal(parsed.capabilities.watch.enabled, true, 'watch.enabled 更新');
+  assert.deepEqual(parsed.capabilities.watch.longrun, { enabled: true, maxDurationMs: 999000 }, '省略 longrun 键 → 该段原样不动');
+  // ② 只提交 longrun.enabled:false → watch.enabled 保持
+  const out2 = svc.writeWatch({ capabilities: { watch: { longrun: { enabled: false } } } });
+  assert.equal(out2.ok, true);
+  parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal(parsed.capabilities.watch.enabled, true, '省略 enabled → 不动');
+  assert.deepEqual(parsed.capabilities.watch.longrun, { enabled: false, maxDurationMs: 999000 }, 'longrun 整段合并仅覆盖 enabled，阈值保留');
+});
+
+test('watch写-4 双段合并：governance + capabilities.watch 同 body 单保存 → 两段各自合并落盘（Leader 裁决 1）', () => {
+  const root = freshRoot();
+  const svc = createRuntimeConfigService({ root });
+  const out = svc.writeWatch({
+    governance: { hook: { enabled: true, preset: 'l1-sensitive', flags: { narrow: true } } },
+    capabilities: { watch: { enabled: false, longrun: { enabled: false } } },
+  });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.written.governance.hook.preset, 'l1-sensitive');
+  assert.deepEqual(out.written.capabilities.watch, { enabled: false, longrun: { enabled: false } });
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
+  assert.equal(parsed.governance.hook.enabled, true);
+  assert.equal(parsed.governance.hook.flags.narrow, true);
+  assert.deepEqual(parsed.capabilities.watch, { enabled: false, longrun: { enabled: false } });
+});
+
+test('watch写-5 双段任一 400 → 整写拒绝（无部分写，文件不落盘/保持原样）', () => {
+  // (a) governance 非法 + capabilities 合法 → 400，文件不创建
+  const rootA = freshRoot();
+  const svcA = createRuntimeConfigService({ root: rootA });
+  const a = svcA.writeWatch({
+    governance: { hook: { preset: 'no-such' } },
+    capabilities: { watch: { enabled: true } },
+  });
+  assert.equal(a.ok, false);
+  assert.equal(a.status, 400);
+  assert.equal(firstError(a).code, 'unknown-preset');
+  assert.equal(fs.existsSync(path.join(rootA, 'config', 'runtime.json')), false, '整写拒绝不落盘');
+  // (b) governance 合法 + capabilities 非法 → 400；既有文件不被部分写
+  const rootB = freshRoot();
+  const dirB = path.join(rootB, 'config');
+  fs.mkdirSync(dirB, { recursive: true });
+  fs.writeFileSync(path.join(dirB, 'runtime.json'), JSON.stringify({ aip: { enabled: true } }, null, 2));
+  const svcB = createRuntimeConfigService({ root: rootB });
+  const b = svcB.writeWatch({
+    governance: { hook: { enabled: true, preset: 'l1-sensitive' } },
+    capabilities: { watch: { enabled: 'yes' } },
+  });
+  assert.equal(b.ok, false);
+  assert.equal(b.status, 400);
+  assert.equal(firstError(b).field, 'capabilities.watch.enabled');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dirB, 'runtime.json'), 'utf8')), { aip: { enabled: true } }, '无部分写（文件保持原样）');
+});
+
+test('watch写-6 顶层白名单：governance/capabilities 之外顶层键 → unknown-top-level；payload 非对象 → invalid-value', () => {
+  const root = freshRoot();
+  const svc = createRuntimeConfigService({ root });
+  const r = svc.writeWatch({ capabilities: { watch: { enabled: true } }, ghost: 1 });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.equal(firstError(r).code, 'unknown-top-level');
+  assert.equal(firstError(r).field, 'ghost');
+  assert.equal(fs.existsSync(path.join(root, 'config', 'runtime.json')), false, '拒绝不落盘');
+  const notObj = svc.writeWatch('x');
+  assert.equal(notObj.ok, false);
+  assert.equal(notObj.status, 400);
+  assert.equal(firstError(notObj).code, 'invalid-value');
+});
+
+test('watch写-7 validateOverlay 兜底：base 含 watcher 非法顶层键（手工坏文件）→ 500 overlay-rejected，不回写不覆盖', () => {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  // 手工 base 含 validateOverlay 拒绝的未知顶层键（watcher 合法面之外，仅 commitOverlay 全量兜底能拦）
+  const baseRaw = JSON.stringify({ capabilities: { discovery: { enabled: true } }, ghostTop: { x: 1 } }, null, 2);
+  fs.writeFileSync(path.join(dir, 'runtime.json'), baseRaw, 'utf8');
+  const svc = createRuntimeConfigService({ root });
+  const out = svc.writeWatch({ capabilities: { watch: { enabled: false } } });
+  assert.equal(out.ok, false);
+  assert.equal(out.status, 500);
+  assert.match(out.error, /overlay-rejected/);
+  assert.equal(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'), baseRaw, '兜底失败不回写不覆盖');
+  assert.equal(fs.existsSync(path.join(dir, '.runtime.json.tmp')), false, 'tmp 不残留');
+});
+
+test('watch写-8 坏 base JSON → 500 unreadable 不回写（与 governance 写通道同口径）', () => {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runtime.json'), '{ not-json', 'utf8');
+  const svc = createRuntimeConfigService({ root });
+  const out = svc.writeWatch({ capabilities: { watch: { enabled: false } } });
+  assert.equal(out.ok, false);
+  assert.equal(out.status, 500);
+  assert.match(out.error, /unreadable/);
+  assert.equal(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'), '{ not-json', '坏 base 不被覆盖');
 });

@@ -207,6 +207,21 @@ function engineAt({ root, store, config, base, offsetMs }) {
   return hb(store, root, config, { now: () => base + offsetMs });
 }
 
+// 直写批次文件 seeding（T16 自定义阈值分钟级判定用）：running batch + running lane + dispatch 事件
+//   ts = base - agoMs（注入时钟精确驱动 duration；镜像 watch-hotconfig seedOverdueStint——setMember 的
+//   真实 settled ts 会覆盖伪造时间轴，故 lanes/事件直写文件）
+function seedDispatch(root, S, batchId, lane, agoMs, base) {
+  const aux = createStore(root);
+  const plan = buildWavePlan({ batchId, tasks: [{ id: lane, outputs: ['exec/' + lane + '/out.txt'], cmd: 'work' }] });
+  aux.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
+  const bf = aux.batchFile(S, batchId);
+  const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
+  b.lanes[lane] = 'running';
+  b.events.push({ ts: new Date(base - agoMs).toISOString(), type: EVT_MEMBER_DISPATCH, lane, workerSessionId: 'w1' });
+  fs.writeFileSync(bf, JSON.stringify(b, null, 2));
+  return aux;
+}
+
 test('T9 tick 命中 → 恰 1 事件 + 1 broadcast（载荷齐全）；不改 lane 状态', () => {
   const { root, store, S, batchId, lane } = setup();
   const base = Date.now();
@@ -337,6 +352,48 @@ test('lane_longrun 查询：返回探针状态；beat=true 手动触发一拍（
   assert.equal(qb.lanes.length, 1);
 });
 
+// ---- L1 复核缺口（watch-panel-wiring-20260905 补用例）：引擎在、多 running lane、缺省 lane
+//   → 全批 running lane（非 running 排除）；显式 lane 单行过滤；逐行字段齐全 ----
+test('lane_longrun 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除；逐行字段齐全）；显式 lane 单行', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-wld-'));
+  const store = createStore(root);
+  const S = 'sess-lr-wld';
+  const batchId = 'b-lr-wld';
+  const plan = buildWavePlan({
+    batchId,
+    tasks: ['l1', 'l2', 'l3', 'l4', 'l5'].map((id) => ({ id, outputs: ['exec/' + id + '/out.txt'], cmd: 'work' })),
+  });
+  store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
+  // 混合 lane 态：l1/l2 running；l3 idle；l4 failed；l5 merged（终态）——直写镜像 seedOverdueStint 先例
+  const bf = store.batchFile(S, batchId);
+  const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
+  b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged' };
+  fs.writeFileSync(bf, JSON.stringify(b, null, 2));
+  const engine = hb(store, root); // 缺省 config：watch + longrun 默认开
+  engine.tick(); // 首拍建心跳 entry（running lane 无 dispatch 事件 → no-running-since，零候选零噪音）
+  const ctx = { tools: { register: () => {} } };
+  const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
+  const exec = { agent: { session: { id: S } } };
+
+  // 缺省 lane → 全批 running lane（恰 2 行），非 running（idle/failed/merged）排除
+  const q = await tool.execute({ batchId }, exec);
+  assert.equal(q.sessionId, S);
+  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2'], '缺省返回全批 running lane；idle/failed/merged 排除');
+  for (const row of q.lanes) {
+    assert.ok(row.laneKey.startsWith(S + '/' + batchId + '/'), '逐行 laneKey 齐全（' + row.laneKey + '）');
+    assert.equal(row.enabled, true, '引擎在 → longrun enabled');
+    assert.equal(row.maxDurationMs, 1_200_000, '默认阈值 20min（引擎 lrCfg 携带）');
+    assert.equal(row.noProgressWindowMs, 300_000, '默认无进展窗 5min');
+    assert.equal(typeof row.candidate, 'boolean');
+    assert.equal(typeof row.emitted, 'boolean');
+    assert.equal(row.tracked, true, 'running lane 被引擎追踪');
+  }
+  // 显式 lane 单行过滤回归
+  const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
+  assert.equal(q2.lanes.length, 1, '显式 lane → 单行');
+  assert.equal(q2.lanes[0].lane, 'l2');
+});
+
 // ---- 回归锚点：默认开不影响既有 heartbeat/watch 行为（T15 局部锚；全套回归见 watch-heartbeat.test.js）----
 test('T15 回归锚：longrun 默认开 + 活跃 lane（近窗活动）→ 不产候选、无 broadcast 噪音', () => {
   const { root, store, S, batchId, lane } = setup();
@@ -353,4 +410,71 @@ test('T15 回归锚：longrun 默认开 + 活跃 lane（近窗活动）→ 不�
   e2.tick();
   assert.equal(candEvents(store, S, batchId, lane).length, 0, '近窗有活动 → 不误报');
   assert.equal(bcastItems(root, S, batchId).filter((m) => m.message?.kind === 'longrun.candidate').length, 0);
+});
+
+// ---- T16（watch-panel-wiring e2 窗口生效正例）：阈值经 remount 纳入生效面后，重建引擎以合并快照
+//   nextConfig 构造（lib/index.js remountWatchEngine → createLaneHeartbeat({config: nextConfig}) →
+//   resolveLongrunConfig 捕获新阈值 lrCfg，lane-heartbeat.js:158）。本用例以同形自定义阈值配置 + 注入
+//   时钟验证：新阈值下 judgeLongrun 判定时机正确（分钟级 stint 即可判 / 恰达阈值严格 > 不判），
+//   并对默认阈值引擎同 stint 零候选——判定差异即「阈值随 remount 值传播生效」的行为证据。----
+// 分钟级阈值（H4 热写同值 60000/30000，与 remount 后 nextConfig 同形）
+const LR_1MIN = { capabilities: { watch: { enabled: true, longrun: { enabled: true, maxDurationMs: 60_000, noProgressWindowMs: 30_000 } } } };
+
+test('T16a 窗口生效正例：自定义阈值 60s/30s（注入时钟）——90s stint 超 1min → tick 即产候选（载荷阈值正确）；默认阈值引擎同 stint 零候选', () => {
+  const base = Date.now();
+  // ① 自定义阈值引擎：90s 前 dispatch → duration 90s > 60s 阈值 → 首拍即候选
+  const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16a-'));
+  const storeA = seedDispatch(rootA, 'sess-lr-t16a', 'b-lr-t16a', 'l1', 90_000, base);
+  const eA = hb(storeA, rootA, LR_1MIN, { now: () => base });
+  eA.tick();
+  const evsA = candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1');
+  assert.equal(evsA.length, 1, '90s stint 超 1min 自定义阈值 → 首拍产候选');
+  const evA = evsA[0];
+  assert.equal(evA.maxDurationMs, 60_000, '载荷阈值 = 新阈值（remount 值传播后引擎 lrCfg）');
+  assert.equal(evA.noProgressWindowMs, 30_000);
+  assert.equal(evA.durationMs, 90_000);
+  assert.equal(evA.reason, 'duration-exceeded-no-progress');
+  // broadcast 双通道载荷同阈值
+  const bcA = bcastItems(rootA, 'sess-lr-t16a', 'b-lr-t16a');
+  const candA = bcA.filter((m) => m.message?.kind === 'longrun.candidate' && m.message.lane === 'l1');
+  assert.equal(candA.length, 1, 'broadcast 恰 1 条候选');
+  assert.equal(candA[0].message.maxDurationMs, 60_000);
+  // 同 stint 再扫不重复（去重语义在自定义阈值下保持）
+  eA.tick();
+  assert.equal(candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1').length, 1, '同 stint 去重（新阈值下不重复产）');
+  eA.dispose();
+  // ② 对照：默认阈值（20min）引擎对同 90s stint → 零候选——90s 远未超 20min，判定差异 = 自定义阈值生效证据
+  const rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16b-'));
+  const storeB = seedDispatch(rootB, 'sess-lr-t16b', 'b-lr-t16b', 'l1', 90_000, base);
+  const eB = hb(storeB, rootB, { capabilities: { watch: { enabled: true } } }, { now: () => base });
+  eB.tick();
+  assert.equal(candEvents(storeB, 'sess-lr-t16b', 'b-lr-t16b', 'l1').length, 0, '默认阈值（20min）下同 stint 零候选（阈值即时生效的判定差异）');
+  eB.dispose();
+});
+
+test('T16b 自定义阈值边界判定时机（严格 >）：duration 恰达 60s 阈值不判；超 1s（61s）才产候选', () => {
+  const base = Date.now();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16c-'));
+  const store = seedDispatch(root, 'sess-lr-t16c', 'b-lr-t16c', 'l1', 30_000, base); // 30s stint
+  const S = 'sess-lr-t16c', batchId = 'b-lr-t16c', lane = 'l1';
+  // ① t = base+30s：duration = 60s == 60s 阈值 → 严格 > 不触发（零候选）
+  const e1 = hb(store, root, LR_1MIN, { now: () => base + 30_000 });
+  e1.tick();
+  assert.equal(candEvents(store, S, batchId, lane).length, 0, 'duration 恰达阈值不候选（严格 >）');
+  const st1 = e1.longrunStatus(S, batchId, lane, base + 30_000);
+  assert.equal(st1.durationMs, 60_000, '判定窗口 duration = 恰达 60s');
+  assert.equal(st1.candidate, false);
+  assert.equal(st1.reason, 'duration-not-exceeded');
+  e1.dispose();
+  // ② t = base+31s：duration = 61s > 60s 阈值 → 产候选（判定时机 = 越过阈值后一拍）
+  const e2 = hb(store, root, LR_1MIN, { now: () => base + 31_000 });
+  e2.tick();
+  const evs = candEvents(store, S, batchId, lane);
+  assert.equal(evs.length, 1, 'duration 超阈值 1s → 产候选');
+  assert.equal(evs[0].durationMs, 61_000);
+  assert.equal(evs[0].maxDurationMs, 60_000);
+  assert.equal(bcastItems(root, S, batchId).filter((m) => m.message?.kind === 'longrun.candidate').length, 1);
+  // ③ 探针不改 lane 状态（验收 5 在自定义阈值路径保持）
+  assert.equal(store.readBatch(S, batchId).lanes[lane], 'running');
+  e2.dispose();
 });

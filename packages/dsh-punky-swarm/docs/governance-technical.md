@@ -137,7 +137,10 @@
 
 | 工具 | 说明 |
 |---|---|
-| `lane_heartbeat` | lane 心跳查询/触发（watchdog 扫描，stalled 标记） |
+| `lane_heartbeat` | lane 心跳查询/触发（watchdog 扫描，stalled 标记；lane 缺省 → 返回该批全部 running lane） |
+| `lane_longrun` | lane 长跑超时重派探针查询/触发（longrun 档：runningSince/时长/无进展窗/候选状态；lane 缺省 → 返回该批全部 running lane；watch 与 longrun 子开关均开启时注册） |
+
+无 Manager（或 Manager 缺席）批次的 watch 消费由 Leader 兜底承担：每次 worker 结算或确认空闲时，Leader 以 `mailbox_read(broadcast)` 查 longrun.candidate 广播，再以 `lane_longrun` 缺省全批查询核对探针态（candidate/emitted/reason）；命中候选按半自动重派处置——近窗有 checkpoint/活动则等待继续观察，确无进展则停轮重派或重开批次，处置存疑则上报用户裁决；批次拉起 Manager 后调度交还 Manager。
 
 ### worktree 物理隔离
 
@@ -163,7 +166,7 @@
 | 发现服务（ADP） | `capabilities.discovery` | 开 | 挂载 `POST /api/dsh-punky-swarm/discover` + `GET /.well-known/aip`；nodes 可逐节点 active=false 隐藏 |
 | 诊断桥接 | `capabilities.trajectory` | 开（autoFail=false） | 异常诊断 → sessionId→lane 映射 → notify；autoFail=true 时才自动 failed（failConfidence 阈值） |
 | mailbox 环防护 | `capabilities.budget` | 开（hops=4 / roundTrips=2） | outbox/broadcast 发送前 checkBudget；inbox（Leader 下行派发）永不受限 |
-| 心跳/过期检测 | `capabilities.watch` | 开 | watchdog 定时器 + lane_heartbeat；退避档位追问 + 连续 N 拍无活动 → lane.stalled 标记（只标记不自动处置） |
+| 心跳/过期检测 | `capabilities.watch` | 开 | watchdog 定时器 + lane_heartbeat；退避档位追问 + 连续 N 拍无活动 → lane.stalled 标记（只标记不自动处置）；热更/重启对账生效面 5 键 = {`enabled`, `longrun.enabled`, `scanIntervalMinutes`, `longrun.maxDurationMs`, `longrun.noProgressWindowMs`}——长跑阈值可经治理配置页表单（分钟换算 ms）或 runtime.json 写入并生效 |
 | worktree 物理隔离 | `capabilities.worktree` | 开 | lane_worktree_create/merge/checkpoint；与 lane_claim 逻辑锁互补 |
 | 验收证据 | `capabilities.verify` | 开（mode=advisory） | post-execute 证据捕获（内容寻址 blob + ledger）；三态裁决（done/failed/blocked）；mode=enforce 时拦截 |
 | 日志导出 | `capabilities.logs` | 关 | log_export 工具注册（patch 显式开启） |

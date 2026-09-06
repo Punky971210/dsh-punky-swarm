@@ -36,6 +36,7 @@
       0c. 职责分工：Manager 为任务第一对接点——收发消息（mailbox）、读任务状态（batch_status/gate_status）、空闲节点发现与指派（member_status 拉起 idle/pending lane）；DAG 状态全员只读，指派写权归 Manager/Leader。粗拆由 Leader 人工对接用户后产出模块清单（决策包），Coordinator 不再粗拆，只做 API 粒度细拆。
       0d. 记忆语义：复盘/归档产物（retrospective-report.md 等）落盘即可；记忆沉淀优先用 dsh 开放记忆工具（dsh-mneme），Mnemopi 仅作旧环境降级路径，不强制依赖。
       0e. Leader 不写实现：执行层 lane 任务包只含（角色/目标/关键契约/验收标准/产物契约）；调用链设计、脚本实现由被指派 worker 全权负责，Leader 预写执行脚本即越权。
+      0f. L0 watch 消费协议（无 Manager 批，Leader 自担）：批次未拉起 Manager（或 Manager 缺席）期间，Leader 承担 watch 消费——每次 worker 结算（member_settle）或确认空闲时，mailbox_read(broadcast) 查 longrun.candidate 广播，再以 lane_longrun 缺省全批查询核对探针态（candidate/emitted/reason）；命中候选按半自动重派处置：lane 近窗有 checkpoint/活动 → 等待继续观察；确无进展且重派价值明确 → interrupt_agent 停当前轮后 member_status(idle→running) 重派或重开新批次；处置存疑 → 上报用户裁决。有 Manager 时调度交还 Manager（纪律 0g），本节仅兜底无 Manager 批。
       0g. Leader 唤醒协议（Manager 代劳指挥）：worker 由 Leader 派发（depth-1 直系，可 send_message 唤醒）；批次拉起 Manager 后——
         - Manager 经 mailbox 建议派发（读 batch_status 黑板 → 建议 lane/角色），Leader 按建议 subagent 派发 worker；
         - worker report 完成 → Leader 只 send_message Manager「X 完成」（一行事件信号，不做调度决策）；
@@ -48,7 +49,7 @@
       4. 黑板通信：跨上下文用 mailbox（inbox=派发指令、outbox=成员回执、broadcast=广播），只写元数据，不复制正文。
       5. 事件回写：成员完成/失败用 member_settle 结算（member.settled）；你只做异常判断与简短处置，不转述完整消息（省 token）。
       6. 门禁：review 阶段按门禁语义裁决 merged/conflict；批次终态（complete/aborted）后拒绝再写。
-      7. 恢复：进程重启后 in-flight 成员自动落 idle（system.recovered），用 batch_status 核对后用 member_status 重派；lane_heartbeat 过期检测（stalled 用事件表达，不改变成员状态）；worker 每完成子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救，不做自动续跑），新 worker 续跑前用 lane_checkpoint_status 查询跳过已完成步骤；Leader 直做产物用 asset_claim 复制归位进批次资产根。
+      7. 恢复：进程重启后 in-flight 成员自动落 idle（system.recovered），用 batch_status 核对后用 member_status 重派；lane_heartbeat 过期检测（stalled 用事件表达，不改变成员状态）、lane_longrun 长跑探针（同 tick 产 candidate 事件 + broadcast，只标记不改状态）；worker 每完成子步骤即 lane_checkpoint 提交保全（崩溃后 git log 可查、人工可抢救，不做自动续跑），新 worker 续跑前用 lane_checkpoint_status 查询跳过已完成步骤；Leader 直做产物用 asset_claim 复制归位进批次资产根。
       8. 输出偏好：总结用「对比表 + 清单 + 摘要」三层结构；对用户只报治理结论与关键状态，不报冗长中间过程。
 
 - id: agent-instructions

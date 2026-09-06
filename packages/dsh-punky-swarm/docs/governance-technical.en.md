@@ -137,7 +137,10 @@ Tools are grouped by function; registration is controlled by assembly keys (see 
 
 | Tool | Description |
 |---|---|
-| `lane_heartbeat` | Lane heartbeat query/trigger (watchdog scan, stalled marking) |
+| `lane_heartbeat` | Lane heartbeat query/trigger (watchdog scan, stalled marking; lane omitted → returns all running lanes of the batch) |
+| `lane_longrun` | Lane longrun probe query/trigger (longrun tier: runningSince/duration/no-progress window/candidate state; lane omitted → returns all running lanes of the batch; registered when both the watch and longrun sub-switches are on) |
+
+Watch consumption for batches without a Manager (or while the Manager is absent) falls to the Leader: on each worker settlement or confirmed idle, the Leader checks `mailbox_read(broadcast)` for longrun.candidate broadcasts and cross-checks probe state (candidate/emitted/reason) with `lane_longrun` (whole-batch default); a hit candidate is handled as a semi-automatic redispatch — keep observing while the lane has recent checkpoints/activity, stop-and-redispatch or reopen the batch when there is genuinely no progress, and escalate doubtful cases to the user; once a Manager is raised, scheduling returns to the Manager.
 
 ### worktree physical isolation
 
@@ -163,7 +166,7 @@ Assembly is centralized in `cordis.patch.yml`; runtime overrides are covered in 
 | Discovery service (ADP) | `capabilities.discovery` | on | Mounts `POST /api/dsh-punky-swarm/discover` + `GET /.well-known/aip`; nodes can hide per-node with active=false |
 | Diagnostics bridging | `capabilities.trajectory` | on (autoFail=false) | anomaly diagnosis → sessionId→lane mapping → notify; auto-failed only when autoFail=true (failConfidence threshold) |
 | Mailbox loop protection | `capabilities.budget` | on (hops=4 / roundTrips=2) | checkBudget before outbox/broadcast sends; inbox (Leader downlink dispatch) never limited |
-| Heartbeat/expiry detection | `capabilities.watch` | on | watchdog timer + lane_heartbeat; backoff-tier follow-ups + N consecutive no-activity beats → lane.stalled mark (mark only, no automatic disposition) |
+| Heartbeat/expiry detection | `capabilities.watch` | on | watchdog timer + lane_heartbeat; backoff-tier follow-ups + N consecutive no-activity beats → lane.stalled mark (mark only, no automatic disposition); hot-apply/restart-reconcile surface = 5 keys {`enabled`, `longrun.enabled`, `scanIntervalMinutes`, `longrun.maxDurationMs`, `longrun.noProgressWindowMs`} — longrun thresholds can be set via the governance-config page form (minutes→ms) or runtime.json and take effect on hot-apply/restart |
 | worktree physical isolation | `capabilities.worktree` | on | lane_worktree_create/merge/checkpoint; complements the lane_claim logical lock |
 | Acceptance evidence | `capabilities.verify` | on (mode=advisory) | post-execute evidence capture (content-addressed blob + ledger); three-state adjudication (done/failed/blocked); intercepts when mode=enforce |
 | Log export | `capabilities.logs` | off | log_export tool registration (explicitly enabled by the patch) |

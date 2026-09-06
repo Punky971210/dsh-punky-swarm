@@ -67,6 +67,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.preset.custom": "检测到非受控 preset 引用，保存将沿用原文",
       "gov.preset.manual": "检测到 {n} 条手工规则，预设切换需先手工移除",
       "gov.esc.title": "违规自动升级",
+      "gov.esc.desc": "开启后：同一批任务在设定时间窗口内被护栏拒绝（计入「计入原语」的处置）达到阈值次数时，自动将该批次暂停并留痕，等待你检查后手动恢复运行。",
       "gov.esc.threshold": "窗口内触发次数",
       "gov.esc.window": "窗口（秒）",
       "gov.esc.primitives": "计入原语",
@@ -84,7 +85,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.err.fieldNotAllowed": "字段不在受控范围",
       "gov.err.invalidValue": "字段取值非法",
       "gov.err.topLevel": "未知顶层键",
-      "gov.err.conflict": "与手工规则冲突"
+      "gov.err.conflict": "与手工规则冲突",
+      // watch 能力开关（卡片 E：父开关 Lane 过期检测 + longrun 子开关 + 长跑两阈值分钟字段；出厂默认开，显式 false 才关）
+      "gov.watch.title": "Lane 过期检测",
+      "gov.watch.desc": "开启后扫描运行中的子任务，连续无活动按档位追问并标记 stalled；关闭后停止扫描",
+      "gov.watch.longrun.title": "长跑超时重派探针",
+      "gov.watch.longrun.desc": "运行超时长阈值且窗口内无 checkpoint/活动的 lane 将产出重派候选，由 Manager/Leader 半自动裁决重派",
+      "gov.watch.longrun.maxDuration": "超时窗口（分钟）",
+      "gov.watch.longrun.noProgress": "无进展窗口（分钟）"
     };
     const en = {
       "view.cluster": "Punky swarm",
@@ -137,6 +145,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.preset.custom": "Non-listed preset reference detected; saving keeps it verbatim",
       "gov.preset.manual": "{n} custom rules present; switch the preset only after removing them manually",
       "gov.esc.title": "Auto-escalation",
+      "gov.esc.desc": "When on, once guardrail refusals for the same batch reach the threshold within the counting window, the batch is automatically paused with a record, waiting for you to review and resume it manually.",
       "gov.esc.threshold": "Refusals within window",
       "gov.esc.window": "Window (s)",
       "gov.esc.primitives": "Counted verdicts",
@@ -154,7 +163,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.err.fieldNotAllowed": "Field not in controlled scope",
       "gov.err.invalidValue": "Invalid field value",
       "gov.err.topLevel": "Unknown top-level key",
-      "gov.err.conflict": "Conflicts with custom rules"
+      "gov.err.conflict": "Conflicts with custom rules",
+      // watch capability switches (card E: parent switch + longrun child switch + two long-run threshold minute fields; on by default, explicit false disables)
+      "gov.watch.title": "Lane expiry watch",
+      "gov.watch.desc": "Scans running lanes and probes lanes idle past backoff tiers until stalled; off stops scanning",
+      "gov.watch.longrun.title": "Long-run timeout probe",
+      "gov.watch.longrun.desc": "Emits a redispatch candidate for lanes past the duration threshold with no recent checkpoint/activity; Manager/Leader decide",
+      "gov.watch.longrun.maxDuration": "Timeout window (min)",
+      "gov.watch.longrun.noProgress": "No-progress window (min)"
     };
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)

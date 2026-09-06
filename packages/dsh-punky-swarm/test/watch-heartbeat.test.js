@@ -244,6 +244,49 @@ test('W6b：lane_heartbeat 查询返回心跳状态；beat=true 手动触发一�
   assert.equal(qb.lanes[0].missed, 2);
 });
 
+// ---- W6c（L1 复核缺口，watch-panel-wiring-20260905 补用例）：引擎在、多 running lane、缺省 lane
+//   → 全批 running lane（idle/失败/终态 lane 排除）；显式 lane 单行过滤回归 ----
+test('W6c：lane_heartbeat 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除）；显式 lane 单行过滤', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hb-w6c-'));
+  const store = createStore(root);
+  const S = 'sess-hb-w6c';
+  const batchId = 'b-hb-w6c';
+  const plan = buildWavePlan({
+    batchId,
+    tasks: ['l1', 'l2', 'l3', 'l4', 'l5'].map((id) => ({ id, outputs: ['exec/' + id + '/out.txt'], cmd: 'work' })),
+  });
+  store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
+  // 混合 lane 态：l1/l2 running；l3 idle（恢复后待重派）；l4 failed；l5 merged（终态 lane）。
+  // 直写镜像 seedOverdueStint 先例（工具缺省过滤只认 batch.lanes[l]==='running'，非 running 一律排除）
+  const bf = store.batchFile(S, batchId);
+  const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
+  b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged' };
+  fs.writeFileSync(bf, JSON.stringify(b, null, 2));
+  const engine = hb(store, root); // 缺省 config：watch 默认开
+  engine.tick(); // 首拍建心跳 entry（默认退避首档 10min 宽限 → 不追问）
+  const ctx = { tools: { register: () => {} } };
+  const [tool] = createHeartbeatTools(ctx, { store, root, heartbeat: engine });
+  const exec = { agent: { session: { id: S } } };
+
+  // 缺省 lane → 全批 running lane（2 行），非 running（idle/failed/merged）排除
+  const q = await tool.execute({ batchId }, exec);
+  assert.equal(q.sessionId, S);
+  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2'], '缺省返回全批 running lane；idle/failed/merged 排除');
+  for (const row of q.lanes) {
+    assert.ok(row.laneKey.startsWith(S + '/' + batchId + '/'), '逐行 laneKey 齐全（' + row.laneKey + '）');
+    assert.equal(row.tracked, true, 'running lane 被引擎追踪');
+    assert.equal(row.stalled, false);
+  }
+  // 显式 lane 单行过滤回归
+  const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
+  assert.equal(q2.lanes.length, 1, '显式 lane → 单行');
+  assert.equal(q2.lanes[0].lane, 'l2');
+  // 非 running lane 显式查询仍安全返回（只读不 throw；未追踪行 tracked:false）
+  const q3 = await tool.execute({ batchId, lane: 'l3' }, exec);
+  assert.equal(q3.lanes.length, 1);
+  assert.equal(q3.lanes[0].tracked, false);
+});
+
 // ---- W7：零侵入——无新增成员状态、状态机常量不变 ----
 test('W7：无新增成员状态（stalled 用事件表达，不碰 MEMBER_STATES/MEMBER_TRANSITIONS）', () => {
   assert.equal(schema.MEMBER_STATES.includes('stalled'), false);
