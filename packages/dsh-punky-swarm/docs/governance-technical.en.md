@@ -138,6 +138,7 @@ Tools are grouped by function; registration is controlled by assembly keys (see 
 | Tool | Description |
 |---|---|
 | `lane_heartbeat` | Lane heartbeat query/trigger (watchdog scan, stalled marking) |
+| `lane_longrun` | Lane longrun probe query/trigger (longrun tier: runningSince/duration/no-progress window/candidate state; registered when both the watch and longrun sub-switches are on) |
 
 ### worktree physical isolation
 

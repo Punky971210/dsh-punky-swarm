@@ -22,13 +22,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     // 引用的 T/cardBase/tt/chip/STATE/Dot/Chip/Skeleton 等为前序段绑定（渲染时已初始化）；
     // 本页专属标题/复选行/字号基准 = 段内 G()/GovHeader/PresetCheckRow（不动共享 SectionTitle——避免波及其它视图）。
     //
-    // 数据契约 = GET /api/dsh-punky-swarm/config → { overlay, applied, presets }
+    // 数据契约 = GET /api/dsh-punky-swarm/config → { overlay, overlayWatch, applied, presets }
     //   overlay = <root>/config/runtime.json governance 段原样（磁盘原文；无 = null）
+    //   overlayWatch = 磁盘 capabilities.watch 段原样（磁盘原文；无 = null）——watch 开关表单基准（overlay 优先）
     //   applied = 引擎 resolve 后的生效快照——preset 已被展开为 rules（不保留 preset 键），
     //             故 preset 当前值只读 overlay.hook.preset；applied 仅用于「生效规则数/生效状态」展示。
+    //   applied.watch = 引擎 resolve 后的 watch 生效快照（{ enabled, longrun: { enabled }, scanIntervalMinutes }；
+    //             缺省 enabled/longrun.enabled = true——出厂默认开语义，显式 false 才关；表单兜底源）
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
-    // 写契约 = POST 同路径，body { governance: { hook: { enabled, preset?, escalation, flags } } }，
-    //         400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射）。
+    // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled } } } }
+    //         （单保存合并双段：governance + watch 能力开关；400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射））。
     // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
     //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
     //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
@@ -126,6 +129,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     function deriveForm(data) {
       const ov = data && data.overlay && data.overlay.hook ? data.overlay.hook : null;
       const ap = data && data.applied && data.applied.hook ? data.applied.hook : null;
+      // watch 段（卡片 E）：overlayWatch = 磁盘 capabilities.watch 原文；applied.watch = 引擎 resolve 生效快照
+      const ovW = data && data.overlayWatch && typeof data.overlayWatch === 'object' ? data.overlayWatch : null;
+      const apW = data && data.applied && data.applied.watch && typeof data.applied.watch === 'object' ? data.applied.watch : null;
       const escO = (ov && ov.escalation) || {};
       const escA = (ap && ap.escalation) || {};
       const flO = (ov && ov.flags) || {};
@@ -143,7 +149,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             ? escO.primitives.slice()
             : Array.isArray(escA.primitives) ? escA.primitives.slice() : ['DENY', 'NARROW']
         },
-        narrow: pickBool(flO.narrow, flA.narrow, false)
+        narrow: pickBool(flO.narrow, flA.narrow, false),
+        // watch 能力开关（卡片 E）：overlay 优先、applied 兜底；缺省 true（出厂默认开语义，显式 false 才关——
+        //   与引擎 resolveWatchConfig/resolveLongrunConfig 的 enabled !== false 判定同口径，回显「开」）
+        watch: {
+          enabled: pickBool(ovW && ovW.enabled, apW && apW.enabled, true),
+          longrun: {
+            enabled: pickBool(ovW && ovW.longrun && ovW.longrun.enabled, apW && apW.longrun && apW.longrun.enabled, true)
+          }
+        }
       };
     }
     function deriveMeta(data) {
@@ -179,12 +193,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         rules: h && Array.isArray(h.rules) ? h.rules.length : 0
       });
     }
-    // remount 确认：生效快照已变化且 enabled 与提交一致 → 判定生效（快照未变=热更未落，继续轮询）
-    function appliedMatches(payload, beforeSig, applied) {
-      if (!applied || !applied.hook) return false;
-      if (applied.hook.enabled !== payload.governance.hook.enabled) return false;
-      const sig = hookSig(applied.hook);
-      if (beforeSig !== null && sig === beforeSig) return false;
+    // applied.watch 生效快照签名（watch 段：父开关 + longrun 子开关布尔——热重建生效比对用）
+    function watchSig(w) {
+      const lr = (w && w.longrun) || {};
+      return JSON.stringify({ enabled: !!(w && w.enabled), longrun: { enabled: !!lr.enabled } });
+    }
+    // dirty 基准分节（单保存合并 governance + capabilities.watch 双段）：剥掉 watch 键后 = governance 表单节
+    function govFormOf(f) { const o = Object.assign({}, f); delete o.watch; return o; }
+    // remount 确认：按「实际改动节」比对生效快照（governance 节沿用 hookSig 既有语义；watch 节用 watchSig）。
+    //   未改动节不要求快照翻转（watch 与 governance 各自独立生效通道——watch-only 保存时 governance 快照
+    //   不变属预期，不阻塞确认）；改动节要求生效快照已翻转（快照未变=热更未落，继续轮询）。
+    function appliedMatches(payload, beforeSig, applied, beforeWatchSig, govChanged, watchChanged) {
+      if (!applied) return false;
+      if (govChanged) {
+        if (!applied.hook) return false;
+        if (applied.hook.enabled !== payload.governance.hook.enabled) return false;
+        const sig = hookSig(applied.hook);
+        if (beforeSig !== null && sig === beforeSig) return false;
+      }
+      if (watchChanged) {
+        const w = applied.watch;
+        if (!w) return false;
+        const want = payload.capabilities.watch;
+        if (!!w.enabled !== !!want.enabled) return false;
+        const wantLr = (want.longrun && want.longrun.enabled) === true;
+        if (((w.longrun && w.longrun.enabled) === true) !== wantLr) return false;
+        const ws = watchSig(w);
+        if (beforeWatchSig !== null && ws === beforeWatchSig) return false;
+      }
       return true;
     }
     function GovCard({ title, children }) {
@@ -383,7 +419,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const data = await getConfig();
             if (!alive) return;
             setMeta(deriveMeta(data));
-            if (appliedMatches(confirm.payload, confirm.beforeSig, data && data.applied)) {
+            if (appliedMatches(confirm.payload, confirm.beforeSig, data && data.applied, confirm.beforeWatchSig, confirm.govChanged, confirm.watchChanged)) {
               setLiveAt(new Date()); setState('live');
               return;
             }
@@ -409,6 +445,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       }
       function patch(p) { setForm(Object.assign({}, form, p)); }
       function patchEsc(p) { patch({ escalation: Object.assign({}, form.escalation, p) }); }
+      // watch 段（卡片 E）patch：父开关整层替换、子开关只动 longrun 子对象
+      function patchWatch(p) { patch({ watch: Object.assign({}, form.watch, p) }); }
+      function patchWatchLongrun(p) { patchWatch({ longrun: Object.assign({}, form.watch.longrun, p) }); }
       // preset 复选切换：勾选集 = string[] 子集（保序）；全取消 → null（保存省略键回出厂）；自定义引用被替换为显式勾选
       function togglePreset(id, on) {
         const opts = presetOptionIds();
@@ -436,13 +475,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           flags: { narrow: !!form.narrow }
         };
         if (presetWire !== undefined) hook.preset = presetWire;
-        const payload = { governance: { hook: hook } };
+        const watch = form.watch || { enabled: true, longrun: { enabled: true } };
+        // 单保存合并双段（Leader 裁决 1）：governance 组装保持原样 + capabilities.watch 段追加——
+        //   显式布尔（裁决 4：与 governance.hook.enabled 先例一致，不做「等于默认值删键」）
+        const payload = {
+          governance: { hook: hook },
+          capabilities: {
+            watch: {
+              enabled: !!watch.enabled,
+              longrun: { enabled: !!(watch.longrun && watch.longrun.enabled) }
+            }
+          }
+        };
         const beforeSig = meta && meta.applied ? hookSig(meta.applied.hook) : null;
+        const beforeWatchSig = meta && meta.applied && meta.applied.watch ? watchSig(meta.applied.watch) : null;
+        // dirty 基准分节：确认轮询按实际改动节比对（watch 与 governance 独立生效通道——未动节不要求快照翻转）
+        const preForm = base ? JSON.parse(base) : null;
+        const govChanged = preForm === null || JSON.stringify(govFormOf(form)) !== JSON.stringify(govFormOf(preForm));
+        const watchChanged = preForm === null || JSON.stringify(form.watch) !== JSON.stringify(preForm.watch);
         setErr(null); setState('saving');
         try {
           await postConfig(payload);
           setBase(JSON.stringify(form));
-          setConfirm({ payload: payload, beforeSig: beforeSig });
+          setConfirm({ payload: payload, beforeSig: beforeSig, beforeWatchSig: beforeWatchSig, govChanged: govChanged, watchChanged: watchChanged });
           setState('confirming');
         } catch (e) {
           const data = (e && e.data) || null;
@@ -582,6 +637,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             title: tt('gov.narrow.title'),
             desc: tt('gov.narrow.desc')
           })
+        ),
+
+        // 卡片 E watch 能力开关（置于卡片 D 之后；父开关 Lane 过期检测 + 子开关 longrun 探针——
+        //   父关 → 子项 disabled + 灰提示「关闭父能力后子项不生效」；出厂默认开、显式 false 才关，回显以 applied 为准）
+        React.createElement(GovCard, null,
+          React.createElement(SwitchRow, {
+            checked: form.watch.enabled,
+            onChange: (v) => patchWatch({ enabled: v }),
+            title: tt('gov.watch.title'),
+            desc: tt('gov.watch.desc')
+          }),
+          React.createElement(SwitchRow, {
+            checked: form.watch.enabled && form.watch.longrun.enabled,
+            onChange: (v) => patchWatchLongrun({ enabled: v }),
+            disabled: !form.watch.enabled,
+            title: tt('gov.watch.longrun.title'),
+            desc: form.watch.enabled ? tt('gov.watch.longrun.desc') : tt('gov.watch.longrun.disabledHint')
+          }),
+          React.createElement('div', { style: { fontSize: G().cap, color: T.text3, lineHeight: 1.5, paddingTop: 2 } },
+            React.createElement('div', null, tt('gov.watch.note.hot')),
+            React.createElement('div', null, tt('gov.watch.note.off'))
+          )
         ),
 
         // 错误条（网络失败 / 400 逐条 code→双语映射）

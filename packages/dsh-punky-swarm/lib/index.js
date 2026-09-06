@@ -26,7 +26,7 @@ import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { installDispatchRegistration } from './bridge/dispatch-register.js'; // D-1 方案 B 写侧登记点（m5a-d1 批次）
-import { createLaneHeartbeat } from './watch/lane-heartbeat.js';
+import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
@@ -199,22 +199,35 @@ export const apply = (ctx, config = {}) => {
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
   // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
-  // watch 心跳引擎（lane 过期检测）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）
+  // watch 心跳引擎（lane 过期检测 + longrun 档）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——
+  // 仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）。
+  // 引擎引用 holder（heartbeatRef，longrun-panel-config-20260905）：热重建（applyConfigChange ① 生效变化
+  // 通道 / boot 对账）后，watchdog timer 回调与 lane_heartbeat/lane_longrun 工具经 heartbeatRef.current
+  // 执行时解引用、自动跟随新实例（修复「工具闭包绑创建时旧引擎 → 热重建后静默失效」缺陷，design §1.4）。
   const watchCfg = resolveWatchConfig(config);
+  const longrunCfg = resolveLongrunConfig(config); // longrun 档独立解析于 lane-heartbeat.js（schema.js 红线不改）
+  const heartbeatRef = { current: null };
   let heartbeat = null;
   if (watchCfg.enabled) {
     heartbeat = createLaneHeartbeat({ store, mailbox, config, root });
+    heartbeatRef.current = heartbeat;
   }
-  const tools = createTools(ctx, { store, root, config, heartbeat });
+  // watch 生效面安装快照（热更比对基准 + GET /config applied.watch 源；镜像 governanceInstalledCfg 模式）。
+  // 生效变化 = { enabled, longrun.enabled, scanIntervalMinutes } 任一（Leader 裁决：longrun.enabled 翻转热更即时；
+  //   引擎重建语义见 remountWatchEngine——内存状态表清空、从事件流/产物 mtime 基线重算）。
+  let watchInstalledCfg = { enabled: watchCfg.enabled, longrun: { enabled: longrunCfg.enabled }, scanIntervalMinutes: watchCfg.scanIntervalMinutes };
+  // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
+  //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
+  const tools = createTools(ctx, { store, root, config, heartbeat, getHeartbeat: () => heartbeatRef.current });
   tools.register();
 
-  // watchdog 挂载：setInterval(scanIntervalMinutes) 调 heartbeat.tick() 扫描全部 running lane。
+  // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
   // 显式 enabled=false 时不挂——零运行时开销；缺省默认开即挂（watchCfg.enabled && heartbeat）。ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
   let watchTimer = null;
   if (watchCfg.enabled && heartbeat) {
     const scanMs = Math.max(1000, Math.round(watchCfg.scanIntervalMinutes * 60_000));
     watchTimer = setInterval(() => {
-      try { heartbeat.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
+      try { heartbeatRef.current?.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
     }, scanMs);
     if (typeof watchTimer.unref === 'function') watchTimer.unref();
     if (ctx.effect) {
@@ -275,6 +288,9 @@ export const apply = (ctx, config = {}) => {
         runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
         trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
         applied: () => governanceInstalledCfg,
+        // watch 生效快照 getter（longrun-panel-config-20260905）：watchInstalledCfg 初始化于上方 watch 引擎装配
+        //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ
+        appliedWatch: () => watchInstalledCfg,
         presets: () => presetCatalog,
       },
     }).dispose;
@@ -517,6 +533,39 @@ export const apply = (ctx, config = {}) => {
     return true;
   };
 
+  // watch 引擎重挂（longrun-panel-config-20260905：热更 ① 生效变化通道 + 启动对账共用；镜像
+  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（{enabled, longrun.enabled,
+  //   scanIntervalMinutes}）→ 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
+  //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
+  //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
+  //   运行时状态重置契约：引擎内存状态表随 dispose 清空、重建后从事件流/产物 mtime 基线重算
+  //   （lane-heartbeat baselineTs 兜底）——不会误 stalled；longrun 候选去重以事件流 runningSince 为准，
+  //   跨重建不重复产 candidate。工具注册面仍启动静态：运行期关闭只停扫描，lane_heartbeat/lane_longrun
+  //   查询返回 disabled 状态（lane-heartbeat.js 工具侧 getHeartbeat 执行时解引用）。
+  const remountWatchEngine = (nextConfig, logTag) => {
+    const wc = resolveWatchConfig(nextConfig);
+    const lr = resolveLongrunConfig(nextConfig);
+    const nextInstalled = { enabled: wc.enabled, longrun: { enabled: lr.enabled }, scanIntervalMinutes: wc.scanIntervalMinutes };
+    if (JSON.stringify(nextInstalled) === JSON.stringify(watchInstalledCfg)) return false;
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+    if (heartbeat) { heartbeat.dispose(); heartbeat = null; heartbeatRef.current = null; }
+    if (wc.enabled) {
+      heartbeat = createLaneHeartbeat({ store, mailbox, config: nextConfig, root });
+      heartbeatRef.current = heartbeat;
+      const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
+      watchTimer = setInterval(() => {
+        try { heartbeatRef.current?.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
+      }, scanMs);
+      if (typeof watchTimer.unref === 'function') watchTimer.unref();
+    }
+    watchInstalledCfg = nextInstalled;
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch engine ' + (wc.enabled
+      ? 're-mounted (scan ' + Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000)) + 'ms, longrun=' + lr.enabled + ')'
+      : 'unmounted (watch disabled)')
+      + (logTag ? ' [' + logTag + ']' : ''));
+    return true;
+  };
+
   // ── R1 热更新装配（L1 消费点就地启停，叠加非替换）──
   // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
   // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果（D2）；
@@ -526,21 +575,11 @@ export const apply = (ctx, config = {}) => {
   let hotConfig = null;
   const applyConfigChange = (change) => {
     const next = change.config;
-    // ① watch watchdog：enabled 翻转 → 启/停（heartbeat.dispose + timer 句柄，幂等）
-    const wc = resolveWatchConfig(next);
-    if (wc.enabled && !heartbeat) {
-      heartbeat = createLaneHeartbeat({ store, mailbox, config: next, root });
-      const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
-      watchTimer = setInterval(() => {
-        try { heartbeat.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
-      }, scanMs);
-      if (typeof watchTimer.unref === 'function') watchTimer.unref();
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch watchdog started (scan ' + scanMs + 'ms)');
-    } else if (!wc.enabled && heartbeat) {
-      if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
-      heartbeat.dispose(); heartbeat = null;
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch watchdog stopped');
-    }
+    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——{enabled, longrun.enabled,
+    //   scanIntervalMinutes} 任一变化 → dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
+    //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转经同一通道热更即时生效
+    //   （design §2.2——watch.enabled 翻转既有语义保留并统一进 remount）
+    remountWatchEngine(next);
     // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
     const trajOn = isTrajectoryEnabled(next);
     if (trajOn && !trajectory) {
@@ -593,6 +632,10 @@ export const apply = (ctx, config = {}) => {
   //   已含 governance 变化（如 enabled:false / rules 覆盖），装配侧（上方）仍按静态 config 挂载 →
   //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，①-④ 维持既有启动语义）。
   remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay');
+  // watch boot 对账（longrun-panel-config-20260905 缺口 2，镜像 governance :595 对账）：持久化到 runtime.json
+  //   的 capabilities.watch.* 覆盖（watch.enabled / longrun.enabled 等）在重启后经快照解析与静态装配不一致 →
+  //   同样 dispose+重建+重挂——保证持久化 watch 覆盖「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
+  remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay');
 
   return () => {
     hotConfig?.dispose();

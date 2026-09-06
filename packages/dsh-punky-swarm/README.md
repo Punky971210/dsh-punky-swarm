@@ -15,8 +15,8 @@ English: [README.en.md](README.en.md)
 - **进程内消息与环防护**——mailbox 三箱（inbox / outbox / broadcast）原子写与确认，环防护抑制消息风暴，通信路径可追踪。
 - **崩溃可恢复**——心跳过期检测 + 进度 checkpoint 保全：崩溃后现场与产物可查、新 worker 可接续；不自动续跑，失败任务重做即开新批次。
 - **只读监控面板**——Web UI 直接查看批次、lane 状态与事件时间线，只读不干预，人工不可误改。
-- **工具调用级护栏（6 原语）**——双层治理中的调用级防线（本地优先、证据可审计）：除派发前难度门禁外，每次工具调用再按 ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE 六原语逐调用裁决是否越界，命中即产出**可验篡改的拒绝收据**（sha256 哈希链锚定，复核可定位篡改位置）。裁决确定、可预期、便于测试，适合需要**可审计防越界、确定性可测试治理**的本地多 Agent 编排。护栏事件以收据与事件流文件留痕、可复核（事件级可观测），暂无独立 UI 面板；出厂 `rules` 为空即零拦截，按需配置规则后生效。
-- **热更新配置，免重启**——护栏规则与开关写入 `runtime.json` 即时生效，进程无需重启。
+- **工具调用级护栏（6 原语）**——双层治理中的调用级防线（本地优先、证据可审计）：除派发前难度门禁外，每次工具调用再按 ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE 六原语逐调用裁决是否越界，命中即产出**可验篡改的拒绝收据**（sha256 哈希链锚定，复核可定位篡改位置）。裁决确定、可预期、便于测试，适合需要**可审计防越界、确定性可测试治理**的本地多 Agent 编排。护栏事件以收据与事件流文件留痕、可复核（事件级可观测）；开关与规则在设置侧边栏「蟛蜞治理配置」页配置（出厂 `rules` 为空即零拦截，按需配置规则后生效）。
+- **热更新配置，免重启**——护栏规则与开关、watch 能力开关（lane 心跳/长跑探针）写入 `runtime.json` 即时生效，进程无需重启；重启时亦按 `runtime.json` 对账生效。
 - **国标 AIP 兼容**——遵循《人工智能 智能体互联》GB/Z 185-2026 描述结构（工具 6 属性 / 智能体 ACS / 消息任务会话映射），仅增不改、可插拔。
 - **可选的 ACPs 通讯**——对外 mTLS 服务端点、registry 注册与外部发现，默认全部关闭（安全默认）。
 - **本地运行，开箱即用**——零云依赖、默认零网络暴露；单一 npm 包内含插件引擎、Punky Swarm 预设与 jiufeng-team 角色指引，附中英双语文档。
@@ -68,6 +68,8 @@ dsh web restart
 - **批次详情**：lane 状态卡（状态、任务简述、门禁缺件、层与依赖）、事件时间线、收件箱计数；
 - **只读设计**：3 秒自动刷新，跟随深浅主题；批次与门禁状态只能查看，治理操作由 Leader 通过治理工具完成。
 
+设置侧边栏另提供「**蟛蜞治理配置**」页（非只读，可保存）：在此配置护栏（`governance.hook` 开关/预设/升级/窄化）与 lane 能力开关（`watch.enabled` / `watch.longrun.enabled`），保存即写入 `runtime.json` 并即时生效、无需重启 dsh；详见 [docs/webui-governance-config.md](docs/webui-governance-config.md)。
+
 ## 配置速览
 
 插件配置集中在 `cordis.patch.yml`，关键装配键与默认值：
@@ -80,6 +82,8 @@ dsh web restart
 | 国标 AIP 目录与查询端点 | `aip.enabled` | 开 |
 | 身份体系（AIC / CAI / 签名） | `aip.identity.enabled` | 关 |
 | ACPs 通讯（mTLS 端点 / 桥接 / registry / discovery） | `acps.*` | 关（关闭时无监听、无定时器、无网络） |
+
+> 注：`capabilities.watch` 含 `longrun` 子开关（长跑超时重派探针，出厂默认开，显式 `false` 才关）；`watch.enabled` 与 `watch.longrun.enabled` 均可在「蟛蜞治理配置」页热更开关，写入 `runtime.json` 即时生效（见「热更新配置，免重启」与 [docs/webui-governance-config.md](docs/webui-governance-config.md)）。
 
 各键语义、配置示例与规则写法见 [docs/governance-technical.md](docs/governance-technical.md) 与 [docs/guardrails-hook.md](docs/guardrails-hook.md)。
 
@@ -117,7 +121,8 @@ flowchart LR
 
 | 文档 | 内容 |
 |---|---|
-| [docs/governance-technical.md](docs/governance-technical.md) | 批级治理技术手册：三层门禁、状态机、wavePlan 契约、20 治理工具参考、装配键表、生命周期 |
+| [docs/governance-technical.md](docs/governance-technical.md) | 批级治理技术手册：三层门禁、状态机、wavePlan 契约、21 治理工具参考、装配键表、生命周期 |
+| [docs/webui-governance-config.md](docs/webui-governance-config.md) | Web UI「治理配置」页说明：护栏开关/预设与 lane 能力开关（watch）的保存生效口径与行为边界 |
 | [docs/guardrails-hook.md](docs/guardrails-hook.md) | 调用级护栏技术手册：6 原语运行期语义、规则配置与示例、拒绝收据与验签、热更新、边界与不提供项、能力边界与取舍 |
 | [docs/aip-compliance.md](docs/aip-compliance.md) | 国标 AIP 兼容明细：工具 6 属性、ACS 字段集、消息/任务/会话映射、身份体系 |
 | [docs/acps-communication.md](docs/acps-communication.md) | ACPs 通讯明细：mTLS 端点、内部桥接、registry / discovery、配置示例、能力边界 |

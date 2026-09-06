@@ -15,8 +15,8 @@
 - **In-process messaging with loop protection** — the mailbox's three boxes (inbox / outbox / broadcast) use atomic writes and acknowledgements; loop protection suppresses message storms, and communication paths stay traceable.
 - **Crash-recoverable** — heartbeat expiry detection plus progress checkpoint preservation: after a crash the scene and artifacts remain inspectable and a new worker can take over; no automatic resume — a failed task is redone by opening a new batch.
 - **Read-only monitoring panel** — the Web UI shows batches, lane states, and the event timeline directly; read-only, non-intrusive, so nothing can be altered by accident.
-- **Call-level guardrails (6 primitives)** — the call-level line of defense in two-layer governance (local-first, evidence-auditable): besides the pre-dispatch difficulty gate, every tool call is adjudicated per call against the six primitives ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE to decide whether it is out of bounds; a hit produces a **tamper-evident refusal receipt** (sha256 hash-chain anchored; re-checking can locate where tampering happened). Adjudication is deterministic, predictable, and easy to test — suited to local multi-agent orchestration needing **auditable out-of-bounds prevention with deterministic, testable governance**. Guardrail events are observable at the event level through receipts and event-stream files (verifiable), with no dedicated UI panel; out of the box `rules` is empty (zero interception) and takes effect once rules are configured on demand.
-- **Hot-updatable configuration, no restart** — guardrail rules and switches written to `runtime.json` take effect immediately, with no process restart.
+- **Call-level guardrails (6 primitives)** — the call-level line of defense in two-layer governance (local-first, evidence-auditable): besides the pre-dispatch difficulty gate, every tool call is adjudicated per call against the six primitives ALLOW / DENY / REQUIRE_APPROVAL / NARROW / DEFER / PAUSE to decide whether it is out of bounds; a hit produces a **tamper-evident refusal receipt** (sha256 hash-chain anchored; re-checking can locate where tampering happened). Adjudication is deterministic, predictable, and easy to test — suited to local multi-agent orchestration needing **auditable out-of-bounds prevention with deterministic, testable governance**. Guardrail events are observable at the event level through receipts and event-stream files (verifiable); the switches and rules are configured on the "Punky Swarm Governance" page in the Settings sidebar (out of the box `rules` is empty (zero interception) and takes effect once rules are configured on demand).
+- **Hot-updatable configuration, no restart** — guardrail rules and switches, plus the watch capability switches (lane heartbeat / longrun probe), written to `runtime.json` take effect immediately, with no process restart; on restart they are also reconciled against `runtime.json`.
 - **National-standard AIP compatible** — follows the descriptor structures of GB/Z 185-2026 (Artificial Intelligence — Agent Interconnection): tool 6 attributes / agent ACS / message-task-session mapping; additive only, pluggable.
 - **Optional ACPs communication** — external mTLS service endpoint, registry registration, and external discovery, all off by default (secure default).
 - **Runs locally, works out of the box** — zero cloud dependency, zero network exposure by default; a single npm package contains the plugin engine, the Punky Swarm preset, and the jiufeng-team role guide, with bilingual (Chinese / English) documentation.
@@ -68,6 +68,8 @@ The plugin ships a **read-only** monitoring panel — the third tab, "Conversati
 - **Batch detail**: lane status cards (state, task summary, gate missing items, layer and dependencies), event timeline, inbox counts;
 - **Read-only by design**: 3-second auto-refresh, follows the light/dark theme; batch and gate states are view-only, and governance operations are carried out by the Leader through governance tools.
 
+The Settings sidebar also provides a "**Punky Swarm Governance**" page (writable, saveable): configure the guardrails (`governance.hook` switch/preset/escalation/narrowing) and the lane capability switches (`watch.enabled` / `watch.longrun.enabled`) here; saving writes `runtime.json` and takes effect immediately with no dsh restart. See [docs/webui-governance-config.en.md](docs/webui-governance-config.en.md).
+
 ## Configuration at a Glance
 
 Plugin configuration is centralized in `cordis.patch.yml`; the key assembly keys and their defaults:
@@ -80,6 +82,8 @@ Plugin configuration is centralized in `cordis.patch.yml`; the key assembly keys
 | National-standard AIP catalog and query endpoint | `aip.enabled` | On |
 | Identity system (AIC / CAI / signing) | `aip.identity.enabled` | Off |
 | ACPs communication (mTLS endpoint / bridge / registry / discovery) | `acps.*` | Off (when off: no listeners, no timers, no network) |
+
+> Note: `capabilities.watch` includes a `longrun` sub-switch (longrun timeout re-dispatch probe, on by factory default, off only when explicitly set to `false`); both `watch.enabled` and `watch.longrun.enabled` can be hot-toggled on the "Punky Swarm Governance" page, written to `runtime.json` and taking effect immediately (see "Hot-updatable configuration, no restart" above and [docs/webui-governance-config.en.md](docs/webui-governance-config.en.md)).
 
 Key semantics, configuration examples, and rule authoring: see [docs/governance-technical.en.md](docs/governance-technical.en.md) and [docs/guardrails-hook.en.md](docs/guardrails-hook.en.md).
 
@@ -117,7 +121,8 @@ Technical details live under `docs/` (each document ships with an English versio
 
 | Document | Contents |
 |---|---|
-| [docs/governance-technical.en.md](docs/governance-technical.en.md) | Batch-level governance technical manual: three-layer gates, state machine, wavePlan contract, 20 governance tools reference, assembly key table, lifecycle |
+| [docs/governance-technical.en.md](docs/governance-technical.en.md) | Batch-level governance technical manual: three-layer gates, state machine, wavePlan contract, 21 governance tools reference, assembly key table, lifecycle |
+| [docs/webui-governance-config.en.md](docs/webui-governance-config.en.md) | Web UI "Governance Configuration" page guide: save/activation semantics and behavior boundaries for guardrail switch/presets and the lane capability switch (watch) |
 | [docs/guardrails-hook.en.md](docs/guardrails-hook.en.md) | Call-level guardrail technical manual: runtime semantics of the 6 primitives, rule configuration and examples, refusal receipts and verification, hot update, boundaries and non-provisions, capability boundaries & trade-offs |
 | [docs/aip-compliance.en.md](docs/aip-compliance.en.md) | National-standard AIP compliance details: tool 6 attributes, ACS field set, message / task / session mapping, identity system |
 | [docs/acps-communication.en.md](docs/acps-communication.en.md) | ACPs communication details: mTLS endpoints, internal bridge, registry / discovery, configuration examples, capability boundaries |

@@ -84,7 +84,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.err.fieldNotAllowed": "字段不在受控范围",
       "gov.err.invalidValue": "字段取值非法",
       "gov.err.topLevel": "未知顶层键",
-      "gov.err.conflict": "与手工规则冲突"
+      "gov.err.conflict": "与手工规则冲突",
+      // watch 能力开关（卡片 E：watch 父开关 Lane 过期检测 + longrun 子开关；出厂默认开，显式 false 才关）
+      "gov.watch.title": "Lane 过期检测（watch）",
+      "gov.watch.desc": "开启后扫描运行中的子任务，连续无活动按档位追问并标记 stalled；关闭后停止扫描",
+      "gov.watch.longrun.title": "长跑超时重派探针（longrun）",
+      "gov.watch.longrun.desc": "运行超时长阈值且窗口内无 checkpoint/活动的 lane 将产出重派候选，由 Manager 裁决",
+      "gov.watch.longrun.disabledHint": "关闭父能力后子项不生效",
+      "gov.watch.note.hot": "保存后热更即时生效（引擎重建）；重启后按 runtime.json 对账",
+      "gov.watch.note.off": "关闭期间 running lane 不再产生 stalled / 超时重派事件"
     };
     const en = {
       "view.cluster": "Punky swarm",
@@ -154,7 +162,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "gov.err.fieldNotAllowed": "Field not in controlled scope",
       "gov.err.invalidValue": "Invalid field value",
       "gov.err.topLevel": "Unknown top-level key",
-      "gov.err.conflict": "Conflicts with custom rules"
+      "gov.err.conflict": "Conflicts with custom rules",
+      // watch capability switches (card E: watch parent switch + longrun child; on by default, explicit false disables)
+      "gov.watch.title": "Lane expiry watch",
+      "gov.watch.desc": "Scans running lanes and probes lanes idle past backoff tiers until stalled; off stops scanning",
+      "gov.watch.longrun.title": "Long-run timeout probe (longrun)",
+      "gov.watch.longrun.desc": "Emits a redispatch candidate for lanes past the duration threshold with no recent checkpoint/activity; Manager decides",
+      "gov.watch.longrun.disabledHint": "Disabled while the parent switch is off",
+      "gov.watch.note.hot": "Saving hot-reloads the engine immediately; restarts reconcile from runtime.json",
+      "gov.watch.note.off": "While off, running lanes emit no stalled / long-run events"
     };
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)

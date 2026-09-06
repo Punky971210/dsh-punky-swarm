@@ -138,6 +138,7 @@
 | 工具 | 说明 |
 |---|---|
 | `lane_heartbeat` | lane 心跳查询/触发（watchdog 扫描，stalled 标记） |
+| `lane_longrun` | lane 长跑超时重派探针查询/触发（longrun 档：runningSince/时长/无进展窗/候选状态；watch 与 longrun 子开关均开启时注册） |
 
 ### worktree 物理隔离
 
