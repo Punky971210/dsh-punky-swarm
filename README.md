@@ -8,9 +8,11 @@
   <a href="https://github.com/Punky971210/dsh-punky-swarm/tree/main/packages/dsh-punky-swarm/test"><img src="https://img.shields.io/badge/tests-816%20passed-success" alt="tests"></a>
 </p>
 
-> **本地多 Agent 流水线治理——门禁拦下半成品，检查点原地续跑，让 AI 团队不「坏」而不只是能「跑」。**
+> **一个 Agent 是帮手；一批会治理的 Agent，是顶一个部门的产能。**
 >
-> *Engine-enforced guardrails for local agent pipelines: quality gates reject half-done work, checkpoints resume in place — keeps AI teams from breaking, not just running.*
+> **本地多 Agent 流水线治理**——任务分级、拆解、排期、质检、验收、容灾全部装进引擎，人只做裁决：说清要什么，验收做出什么。门禁拦下半成品，检查点原地续跑，让 Agent 团队不「坏」而不只是能「跑」。
+>
+> *One agent is a helper; a governed swarm of agents is department-scale output in one person — breakdown, scheduling, gates, acceptance and recovery live in the engine, and you only judge: say what you want, accept what it made.*
 
 English: [README.en.md](README.en.md)
 
@@ -37,6 +39,10 @@ English: [README.en.md](README.en.md)
 | 半成品当完成品交 | **门禁引擎强制**：派发前查上游产物、结算前查落盘、完结前查验收，缺件直接拒 | 半成品到不了你手里 |
 | 一崩全丢 | **checkpoint 存档**：每完成一个子步骤 git 保全一次，崩了从断点续 | 中断只是停在存档点，不是从头再来 |
 | 并发互相踩 | **单写者锁 + 隔离工作区**：同一 lane 同时只许一个写者，各改各的树 | 冲突保留现场，交人裁决，不静默覆盖 |
+
+## 为什么是引擎级，而不是协议级
+
+MCP、ACP 这类互联协议能把 Agent 连起来互相调用，但连出来的是聊天室和会议室——能对话，组织不成流水线。门禁要拦在工具调用链上：产出不齐不许开工、一步没验收不进下一步，这类检查只能长在宿主执行循环内部，协议层没有落点。dsh 把 agent loop 开放给开发者，流水线才可能装进引擎——这也是本插件治理机制全部落在宿主进程内的原因。
 
 干活的人分三层：Leader 拆解与终审、Manager 调度、worker 执行；任务按依赖排成波次执行（wavePlan，见下），批内再分 plan / exec / audit 三阶段，每阶段产物按契约衔接。批次建好后分层不再中途重算——想改目标就新建批次，正在跑的不会偷跑偏；每个 lane 的状态与事件全程留痕，可审计可回溯。
 

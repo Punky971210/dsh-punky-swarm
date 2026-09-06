@@ -8,6 +8,8 @@
   <a href="https://github.com/Punky971210/dsh-punky-swarm/tree/main/packages/dsh-punky-swarm/test"><img src="https://img.shields.io/badge/tests-816%20passed-success" alt="tests"></a>
 </p>
 
+> *One agent is a helper; a governed swarm of agents is department-scale output in one person — breakdown, scheduling, gates, acceptance and recovery live in the engine, and you only judge: say what you want, accept what it made.*
+>
 > *Engine-enforced guardrails for local agent pipelines: quality gates reject half-done work, checkpoints resume in place — keeps AI teams from breaking, not just running.*
 
 中文: [README.md](README.md)
@@ -35,6 +37,10 @@ Every task is graded before it starts: a quick job you can finish directly (A), 
 | Half-done work shipped as done | **Engine-enforced gates**: upstream artifacts checked before dispatch, files checked on disk before settle, acceptance checked before complete — reject when anything is missing | Half-done work never reaches you |
 | One crash wipes out everything | **Checkpointing**: every completed sub-step is preserved in git; resume from the breakpoint after a crash | Interruption is a pause at a save point, not a restart |
 | Parallel lanes trample each other | **Single-writer lock + isolated workspaces**: one writer per lane at a time, each working in its own tree | Conflicts keep the scene for adjudication — never silently overwritten |
+
+## Why engine-level, not protocol-level
+
+Interconnect protocols such as MCP and ACP can wire agents together to call each other, but what they wire up is a chat room and a meeting room — they can talk, they cannot form a pipeline. Gates have to sit on the tool-call chain: no upstream artifacts, no dispatch; one step not accepted, no progress to the next. Such checks can only live inside the host's execution loop — protocol layers have no place for them. dsh opens the agent loop to developers, which is what makes an engine-level pipeline possible — and why every governance mechanism in this plugin lives inside the host process.
 
 People work in three layers: Leader breaks down tasks and owns the final gate, Manager schedules, workers execute. Tasks run in dependency-ordered waves (wavePlan, below), and each batch goes through plan → exec → audit, artifacts connected by contract. Waves are fixed at batch creation and never recomputed — change the goal, create a new batch; a running batch does not drift. Lane state and events are fully traced and auditable.
 
