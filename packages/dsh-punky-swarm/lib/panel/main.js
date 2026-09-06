@@ -59,7 +59,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return out;
     }
 
-    // 浏览器端 TERMINAL 副本：Node 端单点 = lib/state/constants.js（P1-07 收敛）；
+    // 浏览器端 TERMINAL 副本：Node 端单点 = lib/state/constants.js；
     // 面板段经 window.__ModuleLoader__ 拼接执行（无 ESM import 能力），此处为手工同步副本，
     // batch-list/batch-detail 段共享本作用域引用（渲染时求值）。
     const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
@@ -75,7 +75,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const [sel, setSel] = useState(null);
       const [detail, setDetail] = useState(null);
       const [updated, setUpdated] = useState(null);
-      const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（R3 SSE 降级回轮询状态，D6 简化②）
+      const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（SSE 降级回轮询状态）
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
@@ -105,7 +105,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         };
       }, []);
 
-      // R3 SSE 列表流（设计 §3.3.4）：EventSource 主通道 + 3s 轮询降级兜底（D2 保留既有轮询路径不删）。
+      // SSE 列表流：EventSource 主通道 + 3s 轮询降级兜底（保留既有轮询路径不删）。
       // 收到 batch 信号 → eventCount 去重（旧于当前忽略）→ 重跑既有聚合；onerror / 15s 无心跳 → 回退轮询；
       // 重连成功（EventSource 自动重连 / 心跳恢复）→ 停轮询回 SSE。
       useEffect(() => {
@@ -155,7 +155,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }, 5000);
         return () => { alive = false; if (es) { try { es.close(); } catch {} } if (pollIv) clearInterval(pollIv); clearInterval(stall); };
       }, [sid]);
-      // R3 SSE 详情流（设计 §3.3.4）：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
+      // SSE 详情流：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
       useEffect(() => {
         if (!sel) { setDetail(null); return; }
         let alive = true;
@@ -265,7 +265,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         inject: (sessionId) => ({ sessionId })
       }, ClusterWorkbench));
       // 治理配置页（settings.section；与 conversation.view 并存，两 seat 互不排他）。
-      // order=16：出厂占用 0/10/15/20（host-impl-facts §②），16..19 空闲位取 16；
+      // order=16：出厂占用 0/10/15/20，16..19 空闲位取 16；
       // label thunk 随 locale 惰性重读；页面自带 GET/POST 取数，inject 省略（owner 仅收 { close }）。
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section',

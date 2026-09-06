@@ -163,7 +163,7 @@ test('invalid sessionId rejected', () => {
   assert.throws(() => store.createBatch('../evil', { batchId: 'x', wavePlan: buildWavePlan({ batchId: 'x', tasks: [{ id: 'a' }] }) }));
 });
 
-// ---- B1 恢复审计（punky-resume 决策包 §三 B1）：system.recovered.detail 详情 + 幂等（AC2）----
+// ---- B1 恢复审计：system.recovered.detail 详情 + 幂等 ----
 
 test('recoverBatches detail: lastActiveAt/produced 审计详情（running→idle + review→idle）', () => {
   const p = buildWavePlan({
@@ -248,7 +248,7 @@ test('recoverBatches 幂等：二次调用不重复记录 system.recovered', () 
   assert.equal(after, before); // 未新增事件（幂等）
 });
 
-// ---- O2 targets 门禁 store 接线（C3）：member_settle merged 前置（exit 后 command 前）----
+// ---- targets 门禁 store 接线：member_settle merged 前置（exit 后 command 前）----
 function makeTargetPlan(batchId, targets) {
   const p = buildWavePlan({
     batchId,

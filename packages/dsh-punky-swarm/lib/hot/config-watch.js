@@ -15,22 +15,22 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/hot/config-watch.js —— R1 热更新运行时（能力开关实时生效，叠加非替换）
-// 设计依据：exec/panel-design.md §3.1（触发源/传播/生效语义）+ §3.1.5（判定语义双套保留、值传播）
+// lib/hot/config-watch.js —— 热更新运行时（能力开关实时生效，叠加非替换）
+// 设计要点：触发源/传播/生效语义 + 判定语义双套保留、值传播
 // 链路：<root>/config/runtime.json（JSON）──fs.watch + 防抖 300ms──▶ 原子读重试 ──▶ 覆盖键校验 ──▶
 //       deepMerge（导出复用 assembly/schema.js，禁止复制）──▶ 新快照 ──▶ onChange({key,value,config}) 广播
 // 语义：
-//   - 叠加非替换：只影响被覆盖键的后续读取；不写任何静态文件、不改变 cordis.patch.yml 读取结果（D2）
+//   - 叠加非替换：只影响被覆盖键的后续读取；不写任何静态文件、不改变 cordis.patch.yml 读取结果
 //   - 缺省 {} → 快照 = 静态 config 原样（零行为变化，启动不广播）
 //   - 覆盖键校验：仅既有 schema 路径（注册表能力根 + 插件消费配置段），拒绝未知顶层键/未知 capabilities 子键
 //   - 快照 diff：无变化键不广播（防 fs.watch 重复事件抖动）
 //   - 坏 JSON / 读取失败：保持旧快照零行为变化（不广播），warn 留痕
-//   - 零新依赖：node:fs watch + JSON.parse（D1）
-// 实施回注（本环境实测，2026-08-29）：设计 §3.1.3「对文件所在目录 watch」在本部署（Windows/Node v24）不可用——
-//   目录级 fs.watch 在目录内任意文件写入/重命名时触发 libuv 断言崩溃（src\win\fs-event.c:72，原生 abort 不可捕获，
-//   探针复现：direct write 与 tmp+rename 两种写入模式均崩）。改为「文件级 fs.watch（runtime.json 直 watch）+
-//   存在性轮询 bootstrap（文件缺失时低频探测，出现即建 watch + 触发一次重读）」。文件级 watch 在本环境实测稳定
-//   （direct write→change 事件、tmp+rename→rename 事件均正常，探针通过）。此回注写入 exec/panel-a-fix.md。
+//   - 零新依赖：node:fs watch + JSON.parse
+// 实施回注（本环境实测）：目录级 fs.watch 在目录内任意文件写入/重命名时触发 libuv 断言崩溃
+//   （src\win\fs-event.c:72，原生 abort 不可捕获，探针复现：direct write 与 tmp+rename 两种写入模式均崩）。
+//   改为「文件级 fs.watch（runtime.json 直 watch）+ 存在性轮询 bootstrap（文件缺失时低频探测，
+//   出现即建 watch + 触发一次重读）」。文件级 watch 在本环境实测稳定
+//   （direct write→change 事件、tmp+rename→rename 事件均正常，探针通过）。
 // 生命周期：start()（幂等）/ stop()（幂等）/ dispose()；watcher/timer 均 unref（不阻塞进程退出）
 // 宿主事件广播由装配侧（index.js）承担：ctx.emit('dsh-punky-swarm/config.changed', payload)；
 //   本模块只负责文件 watch → 快照 → onChange 回调（可单测，无宿主依赖）
@@ -41,16 +41,16 @@ import { deepMerge, CAPABILITY_REGISTRY } from '../assembly/schema.js';
 // cordis 总线事件名（config.changed 广播契约；装配侧 ctx.emit 用）
 export const CONFIG_CHANGED_EVENT = 'dsh-punky-swarm/config.changed';
 
-const DEFAULT_DEBOUNCE_MS = 300;   // 防抖窗口（设计 §3.1.3）
+const DEFAULT_DEBOUNCE_MS = 300;   // 防抖窗口
 const PARSE_RETRY_MS = 50;         // 原子读重试间隔（写半文件/并发写窗口）
 const PARSE_RETRY_MAX = 4;         // 重试上限（仍失败 → 保持旧快照）
 const DEFAULT_POLL_MS = 1000;      // 存在性轮询间隔（文件缺失 bootstrap；文件级 watch 需文件存在）
 
 // 允许的 runtime.json 顶层键：注册表能力根（aip/acps/capabilities）+ 插件消费的非能力配置段
-// （mailbox/resume/ratchet/escalation/governance——P3 硬化后 governance 纳入热切，harden-plan §5.4 A：
-//   子键覆盖由 deepMerge 传播，仅顶层校验，与 mailbox 等非能力段同口径；装配侧 applyConfigChange ⑤
+// （mailbox/resume/ratchet/escalation/governance——governance 纳入热更：
+//   子键覆盖由 deepMerge 传播，仅顶层校验，与 mailbox 等非能力段同口径；装配侧 applyConfigChange
 //   消费 governance 变化做 dispose+重挂）。
-// 热更新只做值传播、只覆盖既有 schema 路径——拒绝未知顶层键防拼写漂移产生幽灵配置（设计 §3.1.3「拒绝未知顶层键」；契约验收④）
+// 热更新只做值传播、只覆盖既有 schema 路径——拒绝未知顶层键防拼写漂移产生幽灵配置
 export const ALLOWED_TOP_KEYS = new Set([
   'aip', 'acps', 'capabilities',
   'mailbox', 'resume', 'ratchet', 'escalation', 'governance',

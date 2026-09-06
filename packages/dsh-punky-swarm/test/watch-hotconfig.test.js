@@ -15,17 +15,17 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// watch 热更通道（longrun-panel-config-20260905，e2 新增；watch-panel-wiring-20260905 e2 扩展生效面）：
-//   装配级（apply + runtime.json 热写，镜像 governance-hotconfig/governance-preset-config T4 写法）断言
+// watch 热更通道（新增；扩展生效面）：
+//   装配级（apply + runtime.json 热写，镜像 governance-hotconfig/governance-preset-config 写法）断言
 //   remountWatchEngine 生效——生效面 = 5 键 { enabled, longrun.enabled, scanIntervalMinutes,
 //   longrun.maxDurationMs, longrun.noProgressWindowMs } 任一变化 → dispose+重建+重挂 timer+
 //   更新 heartbeatRef/watchInstalledCfg（lib/index.js remountWatchEngine）。行为断言双通道：
 //   (a) applied.watch（configEndpoints.appliedWatch = watchInstalledCfg 生效快照）经 GET /config 同步可查——
-//       快照形状为 5 键全形（阈值随安装快照携带，供面板回显与 watchSig 确认轮询）；
+//       快照形状为 5 键全形（阈值随安装快照携带，供面板回显与确认轮询）；
 //   (b) 引擎级 dispose+重建语义（longrun.enabled=false 重建 → tick 不产候选但 stalled 档存活）。
-//   幂等（e2 语义翻转，取代旧「阈值不在生效面」契约）：阈值 maxDurationMs/noProgressWindowMs 已纳入生效面——
-//   阈值-only 热写触发 remount（新阈值即时生效，H4）；同值重写 JSON 比较相等 → 幂等 no-op（零操作）。
-//   disabled 状态对象（build-report §6 契约 6）：引擎缺失（watch 关/热关）时 lane_heartbeat/lane_longrun
+//   幂等（语义翻转，取代旧「阈值不在生效面」契约）：阈值 maxDurationMs/noProgressWindowMs 已纳入生效面——
+//   阈值-only 热写触发 remount（新阈值即时生效）；同值重写 JSON 比较相等 → 幂等 no-op（零操作）。
+//   disabled 状态对象：引擎缺失（watch 关/热关）时 lane_heartbeat/lane_longrun
 //   查询返回 {enabled:false, reason:'watch-disabled', ...} 不 throw；beat=true 关闭态 no-op。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -250,7 +250,7 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
   }
 });
 
-// ── H5 disabled 状态对象（build-report §6 契约 6）：引擎缺失（watch 关/热关）工具查询不 throw ──
+// ── H5 disabled 状态对象：引擎缺失（watch 关/热关）工具查询不 throw ──
 function runningStore(root, S, batchId, lane) {
   const store = createStore(root);
   const plan = buildWavePlan({ batchId, tasks: [{ id: lane, cmd: 'work' }] });

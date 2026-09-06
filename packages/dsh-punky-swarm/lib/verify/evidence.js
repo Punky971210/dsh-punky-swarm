@@ -15,25 +15,25 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// verify/evidence.js —— post-execute 捕获 + 内容寻址 blob（C3 成熟模式：dsh-verification CapturedEvidence）
+// verify/evidence.js —— post-execute 捕获 + 内容寻址 blob（借鉴 dsh-verification CapturedEvidence）
 // 订阅宿主 tools/post-execute（cordis waterfall，pass-through 不断链），从真实 ToolExecutionResult 派生证据；
 // 内容寻址存储（key=contentHash，tmp+rename 原子写，读校验损坏 fail closed，>256KB 截断标记），同内容去重；
 // 控制面工具不产证据。纯逻辑 + 文件 blob（root/verify/blobs + root/verify/ledger-<session>.jsonl，引擎状态根）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalizeArgs, stableHash } from './selector.js';
-import { SESSION_RE } from '../state/constants.js'; // P1-07 单点（原 :29 定义迁出）
+import { SESSION_RE } from '../state/constants.js'; // 单点（原定义迁出）
 
 // 256KB 截断阈值（对齐 dsh-verification evidence-store 超限截断语义）
 export const MAX_BLOB_BYTES = 256 * 1024;
 
-// 控制面工具名单：治理/协调/宿主控制面工具不产证据（结果非领域产出，含本批后续挂载工具）
+// 控制面工具名单：治理/协调/宿主控制面工具不产证据（结果非领域产出，含后续挂载的控制面工具）
 export const CONTROL_PLANE_TOOLS = new Set([
   // 蟛蜞治理 core 11 + mailbox 3
   'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim',
   'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_status',
   'mailbox_send', 'mailbox_read', 'mailbox_ack',
-  // 本批后续能力（watch/worktree/budget/trajectory 装配后同样控制面）
+  // 后续挂载能力（watch/worktree/budget/trajectory 装配后同样控制面）
   'lane_heartbeat', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint',
   // 宿主控制/会话面
   'ask_user_question', 'describe_image', 'read_image', 'todo_write', 'list_agents',

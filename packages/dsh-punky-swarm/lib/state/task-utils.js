@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/state/task-utils.js —— 任务定位纯函数单点（P1-04 收敛，替代 5 处同构遍历）
+// lib/state/task-utils.js —— 任务定位纯函数单点（替代多处同构遍历）
 // 零依赖设计：不 import 任何模块，杜绝循环依赖（原各文件自持实现的根因：
 //   gates.js「避免 machine→gates 依赖」/ machine.js「自持只读实现」等注释）。
 // 防御取最全形态：batch?.wavePlan ?? [] + w.tasks ?? []（容缺省与空数组），

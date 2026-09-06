@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// SchemaV3：batch schema v3 —— 新增可选字段 chains（C4 mailbox 环防护记账状态，batch JSON 唯一事实源）
+// SchemaV3：batch schema v3 —— 新增可选字段 chains（mailbox 环防护记账状态，batch JSON 唯一事实源）
 //   + archived（done→archive：单向归档标记，布尔，缺省 false）
 // chains shape（与 dsh-team TeamState.chains 同构）：
 //   { chains: { [chainId]: { edges: { [from→to]: count }, said: { [from→to]: lastText } } }, order: [chainId] }
@@ -29,7 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   缺省 undefined（无进度记录 = 未断点）；status 与成员态对齐，不新增成员态；
 //   沿用"可选字段 + migrate 幂等兜底"模式（不升大版本）：非法形态（非 plain object）归一为缺省，
 //   存量 v3 批次缺字段 = 缺省，读取天然兼容；写入点/清退点由 lib/state/resume.js（断点指针接口）与 lane_checkpoint 承担。
-// Phase 2 类型化：migrateV2toV3 输入 unknown（任意 JSON 解析产物最诚实），内部既有 typeof/Array.isArray 守卫保留，
+// 类型化说明：migrateV2toV3 输入 unknown（任意 JSON 解析产物最诚实），内部既有 typeof/Array.isArray 守卫保留，
 //   字段操作在 Record<string, unknown> 上进行，边界断言返回 Batch——运行期语义零变更（断言纯类型层）。
 import type { Batch, LaneProgressMap } from '../types/contracts.js';
 

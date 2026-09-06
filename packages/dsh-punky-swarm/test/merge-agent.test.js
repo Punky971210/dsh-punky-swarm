@@ -15,12 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// punky-finalize E2 merge agent 单测（决策包 §2.2 验收 T2.1-T2.6）：
+// merge agent 单测：
 // T2.1 默认关零破坏：mergeAgent 未配置/disabled → merge 冲突路径与现状逐字一致（现场保留 + files 清单 + conflict 事件）
 // T2.2 注入化解成功：spawner 返回 CONFLICT_RESOLVED/SUCCESS + orch 无冲突标记 → merge 成功（ok/worktreeCleaned/branchDeleted）
 //      + worktree.merge.resolved 事件留痕（含 conflictFiles 与 agent 摘要）；注入点二选一（deps.mergeAgentSpawner / config.host.spawnMergeAgent）
 // T2.3 注入化解失败：UNRESOLVED / 抛错 / 超时 / 声称化解但 orch 仍有在途 merge → 保持 conflict 现状 + conflict 事件；
-//      不新增 lane 态、不自动 settle（R3/R5）
+//      不新增 lane 态、不自动 settle
 // T2.4 无注入降级：enabled=true 但 deps 无 spawner → 清晰提示 + 保持 conflict 现状（不挂起不 throw）
 // T2.5 create schema 修正：lane_worktree_create output.schema 含 error 字段；git 不可用路径返回 {ok:false,error} 与 schema 一致
 // T2.6 回归护栏：lane-tools.js 行数净增 ≤10（基线 438 内容行 → ≤448）；既有 worktree-tools.test.js 全绿由全量 node --test 承担
@@ -110,7 +110,7 @@ function assertConflictStatusQuo(mb, root, store, batchId, laneId) {
   const batch = store.readBatch('sess-wt', batchId);
   assert.equal(batch.events.some((e) => e.type === 'worktree.merge.conflict' && e.lane === laneId), true, 'conflict 事件');
   assert.equal(batch.events.some((e) => e.type === 'worktree.merge.resolved' && e.lane === laneId), false, '无 resolved 事件');
-  // R3/R5：不新增 lane 态、不自动 settle
+  // 不新增 lane 态、不自动 settle
   assert.equal(batch.events.some((e) => e.type === 'member.settled' && e.lane === laneId), false, '不自动 settle');
   assert.equal(batch.lanes[laneId], 'pending', 'lane 态不变（wave_plan 初始 pending）');
 }

@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// C5 诊断桥接单测（决策包 §5.3 验收 R1-R5）：
+// 诊断桥接单测：
 // R1 映射正确（member.dispatch 事件 + mapping 反查 + 重启重建）
 // R2 notify 事件（lane.anomaly + broadcast）
-// R3 auto-fail 默认关（缺省配置只 notify，不自动结算）
+// auto-fail 默认关（缺省配置只 notify，不自动结算）
 // R4 auto-fail 开启（loop_deadlock + confidence≥阈值 → failed；其他类型/低置信不触发）
 // R5 生命周期与豁免（start/stop 无泄漏；无 ctx.on 静默降级；enabled 默认关）
 import test from 'node:test';
@@ -169,7 +169,7 @@ test('R5 生命周期：ctx.on 订阅 → handler 生效；stop() 退订无泄�
 });
 
 test('R5 装配开关：isTrajectoryEnabled 缺省默认开（P1-01；显式 enabled:false 不挂载）', () => {
-  // P1-01 行为变更：缺省 = readCapability 合并 TRAJECTORY_DEFAULTS {enabled:true}（旧「默认关」为旧行为断言）
+  // 行为变更：缺省 = readCapability 合并 TRAJECTORY_DEFAULTS {enabled:true}（旧「默认关」为旧行为断言）
   assert.equal(isTrajectoryEnabled({}), true);
   assert.equal(isTrajectoryEnabled({ capabilities: {} }), true);
   assert.equal(isTrajectoryEnabled({ capabilities: { trajectory: {} } }), true);

@@ -12,11 +12,11 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 */
 
-// P2 组 B（harden-plan §6，4 条新增）：双层桥接（收据事件 → 批级事件流，仅事件可见性）。
-// 载体：test/governance-bridge.test.js（新增文件）。
+// 双层桥接（收据事件 → 批级事件流，仅事件可见性）。
+// 载体：test/governance-bridge.test.js。
 // 覆盖：B1 onRefusal 同步回调收到收据 / B2 回调抛错隔离不阻断 / B3 批级事件流文件与收据一致 /
 //       B4 dispose 后回调断开。
-// 装配形态（harden-plan §5.3 B）：installGovernanceHook({onRefusal}) —— 收据落盘成功 → 同步回调；
+// 装配形态：installGovernanceHook({onRefusal}) —— 收据落盘成功 → 同步回调；
 //   lib/index.js 注入 appendRefusalEvent 写 <root>/governance/events/refusal-<sessionId>.jsonl（B3 载体同款）。
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -43,11 +43,11 @@ export const CAPABILITY_REGISTRY = [
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
   { key: 'budget', path: ['capabilities', 'budget'], default: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 }, consumers: ['comms/budget.js + mailbox-tools.js 发送检查'] },
   { key: 'trajectory', path: ['capabilities', 'trajectory'], default: TRAJECTORY_DEFAULTS, consumers: ['index.js 桥接订阅'] },
-  // logs 键（E3 增强，P1-01）：日志导出工具注册开关——默认关（与 cordis.patch.yml 显式 logs.enabled:true 相合）；
+  // logs 键：日志导出工具注册开关——默认关（与 cordis.patch.yml 显式 logs.enabled:true 相合）；
   //   消费点经 readCapability(config,'logs') 缺省读取，显式 enabled:false 可关。
   { key: 'logs', path: ['capabilities', 'logs'], default: { enabled: false }, consumers: ['tools/log-tools.js log_export 注册'] },
-  // topic 键（P1-03）：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）归操作面板批次，本批不实施。
-  { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留，接线归操作面板批次）'] },
+  // topic 键：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）预留。
+  { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留）'] },
 ];
 
 // ── 互斥表（预留空表：当前能力两两可叠加；未来互斥能力登记于此）──
@@ -64,8 +64,8 @@ export const BLIND_REVIEW_ROLES = ['audit-panelist', 'audit-aggregate', 'audit-c
 export const BLIND_REVIEW_TEMPLATE_KEYS = ['bundle', 'panelist', 'aggregate', 'critic', 'checklist', 'config'];
 
 // ── 内部工具 ──
-// R1 热更新（lib/hot/config-watch.js）导出复用本函数做 runtime 覆盖层 deepMerge——
-// 禁止复制散落实现（复制即漂移源，设计 §5.3 风险点 1）；readCapability 缺省合并与本函数同源。
+// 热更新（lib/hot/config-watch.js）导出复用本函数做 runtime 覆盖层 deepMerge——
+// 禁止复制散落实现（复制即漂移源）；readCapability 缺省合并与本函数同源。
 export function deepMerge(base, override) {
   if (override === undefined || override === null) return base;
   if (typeof base !== 'object' || base === null || typeof override !== 'object' || override === null) return override;

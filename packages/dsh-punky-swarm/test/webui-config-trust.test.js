@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// webui-config-build-20260903 / 设计 §3 测试表：webui-config-trust——trusted 判定纯函数单测
-// 语义契约：自复刻宿主 /api 信任护栏（conn:184-198 未导出故复刻，lib/webui/config-trust.js）——
+// webui-config-trust——trusted 判定纯函数单测
+// 语义契约：自复刻宿主 /api 信任护栏（宿主未导出故复刻，lib/webui/config-trust.js）——
 //   Host 存在且可解析 → hostname loopback 或在 trustedHosts → sec-fetch-site !== 'cross-site'
 //   → Origin 存在时 origin.host === Host 的 host（缺省通过）。复刻不放宽不收紧。
 import test from 'node:test';

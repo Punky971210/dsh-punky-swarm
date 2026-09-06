@@ -15,9 +15,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P2 内部 ACPs 桥接测试（V6 开关矩阵，施工契约 spec.md §2.2/§三 D5-D7/D14/§五 零破坏边界）：
-// ① bridge.enabled=false：mountBridge 短路 → null（零实例化零路径，D7）+ mailbox 既有行为不变；
-// ② enabled=true + inbound=false：外部写 mailbox 被拒（INBOUND_DISABLED，D14），视图只读；
+// 内部 ACPs 桥接测试（开关矩阵 + 零破坏边界）：
+// ① bridge.enabled=false：mountBridge 短路 → null（零实例化零路径），mailbox 既有行为不变；
+// ② enabled=true + inbound=false：外部写 mailbox 被拒（INBOUND_DISABLED），视图只读；
 // ③ inbound=true：ACPs TaskCommand → mailbox.inbox 原子写（ackId 有效/幂等）+ 桥出 ACPs Message/TaskResult 回包；
 // ④ 双向转换与 aip-format 三映射一致（toOutbound === toAipMessage 同源；command 透传语义对齐 toAipTask）；
 // ⑤ 红线：ackId 原子写、三 box（inbox/outbox/broadcast）、outbox lane 隔离、ack 语义逐字保留——桥只经 mailbox 公共接口。
@@ -236,7 +236,7 @@ test('红线：生命周期幂等——start/stop/dispose 重复调用不抛错'
   assert.equal(b.mounted, false);
 });
 
-// ---------- ⑥ DEF-V6-1：P1 endpoint /rpc → bridge inbound 接线（demo 互通实测缺口） ----------
+// ---------- ⑥ endpoint /rpc → bridge inbound 接线（demo 互通实测缺口） ----------
 // 断言「/rpc START → mailbox.inbox unacked=1（bridge enabled+inbound=true 时）」与
 // 「inbound=false 时 /rpc 不落 mailbox（INBOUND_DISABLED）」——mTLS 端点 + bridge 集成。
 
@@ -296,7 +296,7 @@ test('DEF-V6-1: /rpc START（bridge enabled+inbound=true）→ 200 accepted + ma
     assert.equal(r.status, 200);
     assert.equal(r.body.result.status.state, 'accepted'); // 协议级 accepted（任务已入 inbox）
     assert.equal(r.body.result.senderId, CLIENT_AIC);
-    // 核心断言：/rpc START → mailbox.inbox unacked=1（DEF-V6-1 实测缺口修复）
+    // 核心断言：/rpc START → mailbox.inbox unacked=1（inbound 实测缺口修复）
     const items = readUnacked(v6Root('sess-v6', 'b-v6'), { type: 'inbox' });
     assert.equal(items.length, 1);
     assert.equal(items[0].message.command, 'start');

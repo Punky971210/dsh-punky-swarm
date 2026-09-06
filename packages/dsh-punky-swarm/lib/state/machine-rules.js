@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   覆盖表出现默认表中不存在的迁移 → loadRules throw（启动即失败，fail-closed，棘轮不可绕过）；
 //   allowRelax: true 为显式逃生门（默认 false，仅在部署侧明确授权时可用）。
 // 纯逻辑零依赖（无 IO），可独立单测。
-// Phase 2 类型化：validateOverride 泛型化（T = MemberState|BatchPhase，覆盖表 Record<T, readonly T[]>）；
+// 类型化说明：validateOverride 泛型化（T = MemberState|BatchPhase，覆盖表 Record<T, readonly T[]>）；
 //   override 为配置输入 unknown（运行期校验兜底，fail-closed 语义零变更）；棘轮 throw 逻辑一字不动。
 import { MEMBER_TRANSITIONS, BATCH_TRANSITIONS } from '../schema.js';
 // 默认 = 现行强约束（与 schema 常量同引用，非拷贝）

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Step2 preset 装载单测（T-3）：preset-loader（registry/装载/形状/坏目录容错）+
 //   resolveGovernanceConfig preset 装载语义（展开/拼接/拒绝/回退/warn 被调断言/EXPECT_DEFAULTS 回归）。
-// 依据：preset-impl-design.md §2.2/§2.3/§2.4 + §4 T-3；acceptance.md C1/C2/C3。
 // 纪律：直引 ../lib/governance/*.js 编译产物（npm run build 回拷 .js）；fixture 按实现行为断言。
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 可插拔装配数据（设计 §12.1/§14.2/§15.3 N7）：team → layer → role → skills
+// 可插拔装配数据：team → layer → role → skills
 // 引擎只认 "role 契约 + skill 前缀" 通用格式，不感知 team；非 jiufeng 团队 = 换装配（外部路径 config.assembly 或自定义 resolveAssembly）
 export const DEFAULT_ASSEMBLY = {
   team: 'jiufeng',

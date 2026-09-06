@@ -15,8 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// M1 闭合装配级单测（panel-verify §3 修复指引 5）：topic 触发源接线——
-//   hub.attachTopic('swarm.') 装配调用点语义验证（index.js 装配序列等价复刻）：
+// topic 触发源装配级单测——hub.attachTopic('swarm.') 装配调用点语义验证（index.js 装配序列等价复刻）：
 //   A1 装配级链路：topic.enabled=true 装配模式（hub 创建 + attachTopic + topicRuntime + store onStateChange）
 //      → store.setMember 状态事件 → hub 收到 SSE 推送帧（触发源①低延迟通道激活）
 //   A2 enabled=false 零接线：hub 装配但未 attachTopic → 状态事件零推送（fs.watch 单通道形态不变）

@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // U3 内核单测：NARROW 参数钳制——数值 max/min、enum 收敛、pattern、未知路径跳过、形状/类型不变、空 bounds 零钳制、深拷贝。
-// 蓝图：m2-detailed.md §9.1 U3；build-plan §1.2 U3（8 条）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Step1 预设片段测试（T-1/T-2）：presets/hook-rules/ 三文件结构/形状/唯一性/防误拦静态 +
 //   kernel.decide 裁决 fixture（F-01~F-15）+ 防误拦运行期回归（R-1~R-4）。
-// 依据：preset-impl-design.md §1/§3/§4（Step1 零引擎改动）；acceptance.md C1（F-14 reason 仅 hard 档 message 修正）。
 // 纪律：fixture 期望按实际 kernel 行为写（先读 kernel.js/classify.js 再断言，不盲从早期设计文本）。
 // 直引 ../lib/governance/*.js 编译产物（npm run build 回拷 .js，与既有 governance-*.test.js 同一模式）。
 
@@ -159,7 +158,7 @@ const GOVERNANCE_TOOLS = [
   'log_export', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun',
   'compat_status',
 ];
-// 覆盖工具并集（用户侧内容/资源面工具，10 个，与源设计 §8 一致）
+// 覆盖工具并集（用户侧内容/资源面工具，10 个）
 const EXPECTED_COVERAGE = [
   'subagent', 'subagent_fork', 'send_message', 'workflow', 'ralph', 'web_search',
   'pwsh', 'ssh_exec', 'ssh_cluster', 'create_goal',
@@ -204,7 +203,7 @@ const GH_40 = 'ghp_' + 'A'.repeat(36) + 'B'.repeat(4); // ghp_ + 40 位 [A-Za-z0
 const SK_24 = 'sk-' + 'a1B2c3D4e5F6g7H8i9J0kLmN'; // sk- + 24 位 [A-Za-z0-9_-]
 
 const FIXTURES = [
-  // F-01~F-07/F-12：单规则命中（源设计 T1-1~T1-12 转录，prefix 改为 F-）
+  // 单规则命中（各编号用例转录为 F- 前缀）
   { label: 'F-01 subagent prompt 私钥块', tool: 'subagent', args: { prompt: `deploy? ${PEM_RSA}` },
     expect: { primitive: 'DENY', priority: 2, ruleRefs: ['L1-D01'] } },
   { label: 'F-02 subagent_fork prompt 含 ghp_ 令牌', tool: 'subagent_fork', args: { prompt: `use token ${GH_40}` },

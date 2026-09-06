@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/state/constants.js —— 标识符/路径校验常量单点（P1-07 收敛）
+// lib/state/constants.js —— 标识符/路径校验常量单点
 // 零依赖纯常量/纯函数模块：不 import 任何本包模块（避免循环依赖）。
 // 消费方：store/gates/archive/corrupt-registry/evidence/log-tools/lane-tools/
-//         wave-plan/lane-heartbeat/client/panel 等（见契约 P1-07 消费点清单）。
+//         wave-plan/lane-heartbeat/client/panel 等。
 // 浏览器端面板段（lib/panel/*.js 与 lib/client.js 合成 bundle）无 ESM import 能力，
 // 其 TERMINAL 为手工同步副本（见该处注释），Node 端单点以本文件为准。
 

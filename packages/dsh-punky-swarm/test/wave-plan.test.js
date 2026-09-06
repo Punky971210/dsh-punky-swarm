@@ -113,7 +113,7 @@ test('B3 resume 任务包契约条款：resumeClauseFor 注入/不注入 + RESUM
   assert.equal(resumeClauseFor({ id: 'a', resume: true }), RESUME_CLAUSE);
   assert.equal(resumeClauseFor({ id: 'b', resume: false }), null, 'resume=false → 不注入（现状）');
   assert.equal(resumeClauseFor({ id: 'c' }), null, '缺省 → 不注入');
-  // 契约文本断言（决策包 §三 B2 原文：resume:true 时注入固定条款）
+  // 契约文本断言（resume:true 时注入固定条款）
   assert.ok(RESUME_CLAUSE.includes('lane_checkpoint_status'), '条款引用 lane_checkpoint_status');
   assert.ok(RESUME_CLAUSE.includes('禁止重做已完成步骤'), '禁止重做');
   assert.ok(RESUME_CLAUSE.includes('禁止攒批'), '禁止攒批');
@@ -293,7 +293,7 @@ test('C 类批次无 plan 层 lane：仅按存在的层检查（audit 缺 superv
   assert.equal(miss[0].layer, 'audit');
 });
 
-// ---- O2 targets 声明契约（C1）----
+// ---- targets 声明契约 ----
 test('O2 targets 契约：合法绝对路径 targets/targetsMarker 建批透传成功 + validateWavePlan 通过', () => {
   const plan = buildWavePlan({ batchId: 'b-tg-ok', tasks: [
     { id: 'e1', layer: 'exec', role: 'coder', outputs: ['exec/e1/o'], targets: ['D:\\repo\\x\\src\\a.js', 'D:/repo/x/docs/api.md'], targetsMarker: 'targets-claimed: true', cmd: 'x' },

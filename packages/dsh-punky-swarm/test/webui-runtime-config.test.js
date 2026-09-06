@@ -15,9 +15,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// webui-config-build-20260903 / 设计 §3 测试表：webui-runtime-config——服务端受控白名单预检
-//   （validateGovernancePayload 纯函数，§1.4）与写通道集成（读-改-写保留 + validateOverlay 兜底 +
-//   tmp+rename 原子写，§1.5）。临时根一律落 D 盘（D:\dsh\_tmp\webui-config-build\，用户落盘纪律）。
+// webui-runtime-config——服务端受控白名单预检
+//   （validateGovernancePayload 纯函数）与写通道集成（读-改-写保留 + validateOverlay 兜底 +
+//   tmp+rename 原子写）。临时根一律落 D 盘（D:\dsh\_tmp\，用户落盘纪律）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +28,7 @@ const TMP_BASE = 'D:\\dsh\\_tmp\\webui-config-build';
 fs.mkdirSync(TMP_BASE, { recursive: true });
 const freshRoot = () => fs.mkdtempSync(path.join(TMP_BASE, 'rtcfg-'));
 
-// 合法受控 payload（§1.2 表单字段全集形态）
+// 合法受控 payload（表单字段全集形态）
 const VALID = {
   governance: {
     hook: {
@@ -306,10 +306,10 @@ test('写-8 窗口换算覆盖语义：windowSeconds 覆盖既有 windowMs；旧
   assert.equal(parsed.governance.hook.escalation.threshold, 7, '未提交子键保留');
 });
 
-// ── watch 写通道（longrun-panel-config-20260905，e2 新增）──
+// ── watch 写通道（新增）──
 // validateWatchPayload 纯函数（payload = POST body 的 capabilities 段，字段名锚 capabilities.*）+ writeWatch
 //   集成（读-改-写保留 / longrun 整段合并仅覆盖显式子键 / 双段任一 400 整写拒绝 / validateOverlay 兜底 500 /
-//   原子写 / governance 键不受影响）。契约基准：build-report §6 交接契约 1/2/4/5。
+//   原子写 / governance 键不受影响）。
 
 // ---- validateWatchPayload：capabilities 段白名单仅 watch ----
 test('watch校验-1 capabilities 段白名单仅 watch：discovery 等其它能力键 → field-not-allowed（400 code）', () => {

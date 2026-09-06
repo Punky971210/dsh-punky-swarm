@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/tools/shared.js —— 工具域零依赖共享辅助（P2-01 下沉）
+// lib/tools/shared.js —— 工具域零依赖共享辅助
 // 承载 TEXT_OUTPUT / sessionOf（原 lib/tools/core.js 导出，watch 域 lane-heartbeat 亦消费，
 // 为避免 watch → tools/core 整模块依赖，下沉至本零依赖模块——零 import 防循环依赖）。
 // 消费方：core.js（re-export 保持对外导出兼容）、mailbox-tools.js / log-tools.js /

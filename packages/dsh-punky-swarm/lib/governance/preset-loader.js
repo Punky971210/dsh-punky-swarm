@@ -14,11 +14,11 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
-// governance/preset-loader.ts —— M5-b preset 装载（preset-build-20260903，preset-impl 设计 §2.4）
+// governance/preset-loader.ts —— preset 装载器：注册表/装载表/形状校验（引用键 → boot 装载）
 // IO 边界：本模块是 governance 侧唯一读 preset 文件处（boot 装载一次 table → 注入 resolve 的
 // presetTable；runtime 热更只管引用启用/停用，不管文件内容热切——preset 文件 = 发布资产语义，
 // remount 不重读文件，fs.watch presets 目录归未来需求）。
-// 依赖方向（防环，设计 §2.4）：校验纯函数（validatePresetRules 形状 / validateRuleTable 唯一性）
+// 依赖方向（防环）：校验纯函数（validatePresetRules 形状 / validateRuleTable 唯一性）
 //   持有在 config.ts（resolve 同文件、单测既有直引 config.js 习惯）；本模块 import config.ts 的
 //   校验函数；config.ts 零 IO 零文件依赖不 import 本模块。
 // 装载语义：
@@ -33,7 +33,7 @@ import { validatePresetRules } from './config.js';
 // 注册 id 枚举（唯一权威；runtime.json governance.hook.preset 仅接受这些 id，不接受任意路径）
 export const PRESET_IDS = ['l1-sensitive', 'l2-resource', 'compose'];
 // 随包预设目录：<pkg>/presets/hook-rules/（由本模块位置上溯三级定位——lib/governance/preset-loader.js
-//   → lib → 包根；开发/发布同构，files 已含 presets 整目录随包发布，package.json A8）
+//   → lib → 包根；开发/发布同构，files 已含 presets 整目录随包发布）
 export const PRESETS_DIR = join(dirname(dirname(dirname(fileURLToPath(import.meta.url)))), 'presets', 'hook-rules');
 // 装载单个 preset 文件（wrapper{_meta,rules}）：读 JSON → _meta 剥离 → 形状校验（validatePresetRules
 //   内含文件内 id 唯一 + regex 试编译）→ Rule[]。id 未注册 / 文件缺失 / parse 失败 / 形状坏 → ok:false。

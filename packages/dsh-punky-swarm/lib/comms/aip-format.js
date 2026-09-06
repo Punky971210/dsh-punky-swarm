@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 三函数均为纯函数：输入引擎自有结构 → 输出 ACPs AIP 兼容结构；不做任何文件/存储写操作，
 // mailbox 的 ackId 原子写、inbox/outbox/broadcast 三 box、outbox lane 隔离、ack 语义全部保留（红线：既有 mailbox 行为不变）。
 //
-// 字段对齐原则（spec.md §3.6 与 AIP 规范原文核对）：
+// 字段对齐原则（与 AIP 规范原文核对）：
 // - Message 基类字段：type(id) / id / sentAt / senderRole("leader"|"partner") / senderId / mentions? / dataItems? / groupId? / sessionId?
 // - TaskCommand extends Message：type="task-command" / command(TaskCommandType) / commandParams? / taskId?
 // - Session：id / taskResults[] / taskCommands[] / createdAt / updatedAt
@@ -95,7 +95,7 @@ export function toAipDataItems(message) {
 }
 
 // 任务命令投影：wavePlan task → ACPs TaskCommand 结构
-// ACPs 无独立『任务定义』对象——任务由 TaskCommand（命令）+ TaskResult（状态/结果）承载（spec.md §3.6）。
+// ACPs 无独立『任务定义』对象——任务由 TaskCommand（命令）+ TaskResult（状态/结果）承载（AIP 规范）。
 // wavePlan task 派发语义 = start 命令；task.cmd 若本身命中 TaskCommandType 枚举则透传，否则默认 'start'（注明推导）。
 // 引擎自有键（layer/role/skills/deps/consume/produce/outputs/cmd/model/tools）移入 commandParams（值域开放，非 ACPs 顶层字段）。
 export function toAipTask(task) {
@@ -125,7 +125,7 @@ export function toAipTask(task) {
 }
 
 // 会话投影：批次状态 { sessionId, phase, concurrency, wavePlan, lanes, createdAt, updatedAt, ... } → ACPs Session
-// ACPs Session 只存在于 Leader，仅 sessionId 进消息（spec.md §3.6）；taskResults 引擎无数据 → 空数组（如实）；
+// ACPs Session 只存在于 Leader，仅 sessionId 进消息（AIP 规范）；taskResults 引擎无数据 → 空数组（如实）；
 // taskCommands ← wavePlan 任务投影；agentIds/state/taskIds/concurrency 非 ACPs 字段 → 剔除（agentIds 由消息 senderId 表达、
 // 状态由 TaskResult.status 表达、taskIds 由 taskCommands[].taskId 表达、并发为引擎调度参数，均非 Session 契约）。
 export function toAipSession(session) {

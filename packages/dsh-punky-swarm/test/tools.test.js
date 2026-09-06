@@ -32,7 +32,7 @@ const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
 
 const EXEC_SESS = { agent: { session: { id: 'sess-leader' } } };
 
-// P1-01 缺省默认开：core 11 + mailbox 3 + lane_heartbeat + lane_longrun + worktree 四件 = 20（logs 缺省关，log_export 不在内）
+// 缺省默认开：core 11 + mailbox 3 + lane_heartbeat + lane_longrun + worktree 四件 = 20（logs 缺省关，log_export 不在内）
 const DEFAULT_TOOL_COUNT = 20;
 
 test('all 20 tools registered（P1-01 缺省默认开）', () => {

@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// I1 集成测试（build-plan §2.6 I1，8 条）：wiring 接线契约（fake ctx 先例 tools.test.js:199-201 fake guard 模式）
+// I1 集成测试：wiring 接线契约（fake ctx 先例 tools.test.js fake guard 模式）
 // 覆盖：挂载与 disposer / ALLOW 透传 / DENY 短路 / REQUIRE_APPROVAL→ask / post pass-through /
-//       收据落盘（四要素 + ledger + 读回）/ 与难度门禁组合（HOST:3116 语义）/ 双版本宿主兼容。
-// P0 扩展（harden-plan §6 P0 组 W-N×2）：NARROW 运行期接线 e2e——pre 链 NARROW → reason 修正指引 +
+//       收据落盘（四要素 + ledger + 读回）/ 与难度门禁组合 / 双版本宿主兼容。
+// NARROW 运行期接线 e2e——pre 链 NARROW → reason 修正指引 +
 //   收据 narrowedParams 落盘读回一致；收据扩展字段（9 键）兼容断言（旧 8 键读回不炸）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -187,7 +187,7 @@ test('I1-6 收据落盘：temp root → refusals/<sessionId>/<receiptId>.json �
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
   assert.equal(files.length, 1);
   const receipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
-  // 内容四要素（design.md:115）：attemptedParams / 裁决（primitive+priority+reason）/ 理由 / ts
+  // 内容四要素：attemptedParams / 裁决（primitive+priority+reason）/ 理由 / ts
   assert.ok(receipt.receiptId, 'receiptId present');
   assert.ok(receipt.ts, 'ts present');
   assert.equal(receipt.decision.primitive, 'DENY');
@@ -264,7 +264,7 @@ test('I1-8 双版本宿主兼容：0.1.0-rc.6 与 0.1.1-rc.2 各跑一遍全绿�
   }
 });
 
-// ── P0 组 W-N（harden-plan §6）：NARROW 运行期接线 e2e ──
+// ── NARROW 运行期接线 e2e ──
 
 // W-N1 pre 链 NARROW → {kind:'deny'} + reason 含修正指引（宿主禁输入改写，不实际改写 exec.arguments）+ 收据 narrowedParams 落盘读回一致
 test('W-N1 NARROW pre chain: deny + reason guidance + receipt narrowedParams round-trips', async () => {
@@ -312,7 +312,7 @@ test('W-N2 extended receipt: 9 keys with narrowedParams; legacy 8-key receipt re
   assert.ok(Object.prototype.hasOwnProperty.call(extended, 'narrowedParams'), 'narrowedParams key present');
   assert.ok(Object.prototype.hasOwnProperty.call(extended, 'anchor'), 'P2: anchor key present (writeRefusal 锚定)');
   assert.equal(Object.keys(extended).length, 10, '8 base keys + narrowedParams + anchor');
-  // 模拟旧收据（无 narrowedParams，8 键）手动落盘 → readRefusals 不炸（旧收据兼容 §4.2）
+  // 模拟旧收据（无 narrowedParams，8 键）手动落盘 → readRefusals 不炸（旧收据兼容）
   const legacy = {
     receiptId: 'legacy-0001',
     ts: '2026-01-01T00:00:00.000Z',

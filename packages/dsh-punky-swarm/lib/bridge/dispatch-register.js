@@ -15,17 +15,17 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// bridge/dispatch-register.js —— D-1 方案 B 写侧登记点（m5a-d1-20260902 批次，装配注入 resolveBatchContext 兜底登记）
-// 背景：M5-a C2 归属读侧骨架（lib/index.js:414-430 dispatchIndex，从批次事件 member.dispatch 幂等重建）已就位，
-//   但写侧无真实调用方（audit m5a-acceptance §7 D-1 FAIL：trajectory.recordDispatch 全 lib 无生产调用方）。
-//   本模块 = 用户裁决的方案 B（audit §7.4 + m5a-plan §8-① 标注 b）：装配层 post-execute 观察 Manager 派发
-//   worker 的工具调用（subagent/subagent_fork/send_message 等）→ 提取返回的 childId/agentId + resolveBatchContext(exec)
-//   得当前批/lane → 写 member.dispatch 事件（store.appendEvent，与读侧骨架对接零改动生效——启动重建 + miss 惰性重建
-//   均自动感知）；未取到批上下文（非 Manager 派发场景）→ 不登记（保持 T16 无登记静默降级语义）。
-// 零宿主改造：仅订阅宿主既有 tools/post-execute waterfall（pass-through 恒 next()，先例 evidence.js:232-247）；
-//   swarm 自身工具（member_status 等）同样流经该 waterfall（evidence CONTROL_PLANE_TOOLS 佐证）→
-//   兜底解析 = 观察同会话 member_status(status=running) 的派发意图（0g 时序：先置 running 再派发 worker）。
-// 语义红线：漏计不误暂停（T16 安全侧）——解析不出批上下文宁可跳过；不引入任何批级状态迁移。
+// bridge/dispatch-register.js —— 派发登记点（dispatch registration）：装配层观察派发工具，把
+//   「worker 会话 → { sessionId, batchId, lane }」写为 member.dispatch 批次事件。
+// 背景：归属读侧骨架（dispatchIndex，从批次事件 member.dispatch 幂等重建）依赖写侧登记；
+//   本模块经装配层 post-execute 观察 Manager 派发（member_status(status=running) 意图）
+//   → resolveBatchContext 得当前批/lane → store.appendEvent 写 member.dispatch
+//   （与读侧骨架对接零改动生效：启动重建 + miss 惰性重建，幂等）；
+//   未取到批上下文（非 Manager 派发场景）→ 不登记（无登记静默降级语义）。
+// 零宿主改造：仅订阅宿主既有 tools/post-execute waterfall（pass-through 恒 next()）；
+//   swarm 自身工具（member_status 等）同样流经该 waterfall → 兜底解析 = 观察同会话
+//   member_status(status=running) 的派发意图（时序：先置 running 再派发 worker）。
+// 语义红线：漏计不误暂停（安全侧）——解析不出批上下文宁可跳过；不引入任何批级状态迁移。
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
 
@@ -63,12 +63,12 @@ export function extractWorkerSessionId(exec, result) {
   return m ? m[1] : null;
 }
 
-// D-1 方案 B 装配层登记点（对齐 mountVerify/installGovernanceHook 模式）：
+// 装配层登记点（对齐 mountVerify/installGovernanceHook 模式）：
 //   订阅 ctx.on('tools/post-execute')——识别派发类工具 → 提取 workerSessionId → resolveBatchContext(exec)
 //   （deps 显式注入优先；缺省 = 同会话 member_status(running) 派发意图兜底）→ 命中批上下文则 appendEvent
-//   member.dispatch {lane, workerSessionId}（读侧骨架零改动生效）；未命中 → 不登记（T16）。
+//   member.dispatch {lane, workerSessionId}（读侧骨架零改动生效）；未命中 → 不登记。
 //   幂等守卫：dispatchIndex.has(workerSessionId) 已映射 → 跳过（防 send_message 重复唤醒重复登记）。
-//   观察者纪律：任一失败仅 warn，恒 return next()（不阻断、不抛错——evidence.js:242-244 同款）。
+//   观察者纪律：任一失败仅 warn，恒 return next()（不阻断、不抛错）。
 // 返回 { installed, dispose, count, mapping }；ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸）。
 export function installDispatchRegistration(ctx, deps = {}) {
   const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS } = deps;
@@ -107,12 +107,12 @@ export function installDispatchRegistration(ctx, deps = {}) {
       // ② 非派发类工具 → 不登记（透传）
       if (!toolSet.has(exec.name)) return next();
       const workerSessionId = extractWorkerSessionId(exec, result);
-      if (!workerSessionId) return next(); // 无持久 worker 会话（background/foreground/失败）→ T16 不登记
+      if (!workerSessionId) return next(); // 无持久 worker 会话（background/foreground/失败）→ 不登记
       // ③ resolveBatchContext(exec)：显式注入优先，缺省 = 同会话派发意图兜底（装配注入 resolveBatchContext 兜底）
       const hit = typeof resolveBatchContext === 'function'
         ? resolveBatchContext(exec, { workerSessionId, result })
         : (intentBySession.get(caller) ?? null);
-      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return next(); // 未取到批上下文 → T16 不登记
+      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return next(); // 未取到批上下文 → 不登记
       if (register(hit.sessionId, hit.batchId, hit.lane, workerSessionId)) {
         intentBySession.delete(caller); // 消费意图（一次 running → 一次派发登记）
       }

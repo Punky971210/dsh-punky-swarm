@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // archive 逻辑归 archive.js、needHuman 逻辑归 gates.js/store.js，不得写入本文件。
 // 纯逻辑（无 IO）：fileExists 经 DI 注入（store.js 接线时绑定 artifactsDir），可独立单测。
 import { DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES } from './machine-rules.js';
-// P1-04 单点：findTask 收敛至 task-utils.js（原 :69 本地定义删除——原「避免 machine→gates 依赖」由零依赖单点承担）
+// findTask 单点：收敛至 task-utils.js（原本地定义删除——原「避免 machine→gates 依赖」由零依赖单点承担）
 import { findTask } from './task-utils.js';
 
 // 缺省规则 = 默认表（与 schema 常量同引用，行为不变）

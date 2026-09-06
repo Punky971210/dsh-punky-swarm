@@ -15,11 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/tools/git-utils.js —— git 调用单点（R-06 runGit 下沉）
+// lib/tools/git-utils.js —— git 调用单点（runGit 下沉）
 // -----------------------------------------------------------------------------
-// 原 runGit 定义于 lane-tools.js（P1-05 起 merge-agent 消费 lane-tools 导出版），
+// 原 runGit 定义于 lane-tools.js（merge-agent 消费 lane-tools 导出版），
 // lane-tools.js ↔ merge-agent.js 相互 import 构成双向环（运行时 live binding 无碍，
-// 但静态引用环可读性差、易踩初始化顺序坑）。R-06 把 runGit/gitBin 下沉到本零依赖
+// 但静态引用环可读性差、易踩初始化顺序坑）。runGit/gitBin 下沉到本零依赖
 // 模块：lane-tools.js 与 merge-agent.js 均改引本文件，双向环消除。
 // 零依赖：仅 node:child_process（不 import 任何本包模块，避免环）。
 import { execFileSync } from 'node:child_process';

@@ -15,9 +15,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P1-04 findTask 单点测试（task-utils.js）：7 用例——
+// findTask 单点测试（task-utils.js）：7 用例——
 // 正常命中 / 未命中 null / wavePlan 缺省 / tasks 缺省 / batch null / tasks 含 null 跳过 / 提前返回语义。
-// 消费方（gates/machine/store/lane-heartbeat/resume）行为等价性由全量回归（44 文件）兜底。
+// 消费方（gates/machine/store/lane-heartbeat/resume）行为等价性由全量回归兜底。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { findTask } from '../lib/state/task-utils.js';

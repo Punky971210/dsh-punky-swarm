@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// C4 mailbox 环防护单测（exec-budget lane）：B1-B6 验收标准
+// mailbox 环防护单测：B1-B6 验收标准
 // 纯函数（budget.js / schema-v3.js）+ 状态入批次（store.js）+ 接线（mailbox-tools.js 集成）
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -239,7 +239,7 @@ test('B2 集成: outbox 同链同有序对往返超限 → PING_PONG', async () 
 });
 
 test('B5: enabled=false（显式关）→ 现有 mailbox 调用零感知（重发不被拒、无预算事件、meta 原样透传）', async () => {
-  // P1-01 行为变更：budget 缺省默认开；零感知语义由显式 capabilities.budget.enabled=false 承担（旧「缺省关」为旧行为断言）
+  // 行为变更：budget 缺省默认开；零感知语义由显式 capabilities.budget.enabled=false 承担（旧「缺省关」为旧行为断言）
   const { root, store, byName } = makeTools({ capabilities: { budget: { enabled: false } } });
   await makeBatch(store, byName, 'b-off');
   const base = { batchId: 'b-off', box: 'outbox', lane: 'a', message: { text: 'hello' }, meta: { chain: { id: 'c1', hop: 0 } } };

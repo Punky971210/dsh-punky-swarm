@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P4 ACS 描述生成器（exec-agent-desc lane）：字段集与参考实现 ACPs v2.1.0 acsSchema.json 逐字一致 +
-// register 接线 + /agents 端点（闭环用例，只增不碰既有测试）。旧 14+8 兼容映射层已移除（P2-06）。
+// ACS 描述生成器：字段集与参考实现 ACPs v2.1.0 acsSchema.json 逐字一致 +
+// register 接线 + /agents 端点（闭环用例，只增不碰既有测试）。旧 14+8 兼容映射层已移除。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

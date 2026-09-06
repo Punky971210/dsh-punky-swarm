@@ -15,8 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P2 组 H（harden-plan §6，6 条新增）：收据签名/哈希锚定（M5-d 证据信封简版）。
-// 载体：test/governance-receipt-anchor.test.js（新增文件）。
+// 收据签名/哈希锚定（证据信封简版）。
+// 载体：test/governance-receipt-anchor.test.js。
 // 覆盖：H1 单收据 anchor / H2 多收据哈希链（prevHash 衔接）/ H3 canonical 确定性 /
 //       H4 篡改检测（brokenAt 定位）/ H5 旧收据无 anchor 兼容 / H6 删中间收据缺链检测。
 // 直接驱动 receipt-store.writeRefusal/verifyRefusals + hash-utils（收据构造直写，不绕 wiring）。

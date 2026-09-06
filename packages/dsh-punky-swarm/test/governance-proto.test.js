@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P1 原型演示（build-plan §3.2，6 条）：M2「工具调用被拦截 → 原语裁决 → 拒绝收据落盘」链路
+// 原型演示（6 条）：「工具调用被拦截 → 原语裁决 → 拒绝收据落盘」链路
 // 载体：最小宿主管线替身（fake ctx + 按 HOST:3105/3116/3305 语义的最小 waterfall/ask 链驱动）。
 // 覆盖：P1-1 模拟 ctx 挂载 / P1-2 规则命中 / P1-3 裁决断言（DENY + 统一拒绝正文格式）/
 //       P1-4 收据落盘（8 键 + 内容四要素）/ P1-5 readRefusals 读回一致性 / P1-6 ask 降级 deny（HOST:3305-3311）。
@@ -145,14 +145,14 @@ test('P1-4 收据落盘：<root>/governance/refusals/<sessionId>/<receiptId>.jso
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
   assert.equal(files.length, 1, '恰 1 份收据');
   const receipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
-  // P2 硬化（harden-plan §5.3）：writeRefusal 锚定 → 9 键（8 基础 + anchor）；anchor 字段断言（sha256 链首 prevHash=null）
+  // 锚定：writeRefusal 锚定 → 9 键（8 基础 + anchor）；anchor 字段断言（sha256 链首 prevHash=null）
   const keys = Object.keys(receipt).sort();
   assert.deepEqual(keys, ['anchor', 'attemptedParams', 'callId', 'decision', 'receiptId', 'ruleRefs', 'sessionId', 'tool', 'ts']);
   assert.equal(receipt.anchor.version, 1, 'anchor.version=1');
   assert.equal(receipt.anchor.alg, 'sha256', 'anchor.alg=sha256');
   assert.equal(receipt.anchor.prevHash, null, '链首收据 prevHash=null');
   assert.match(receipt.anchor.hash, /^[0-9a-f]{64}$/, 'anchor.hash 为 sha256 hex（64 字符）');
-  // 内容四要素（design.md:115）
+  // 内容四要素：attemptedParams / 裁决（decision.primitive+priority+reason）/ 理由 / ts
   assert.deepEqual(receipt.attemptedParams, { cmd: 'rm -rf /' }, 'attempted_params');
   assert.equal(receipt.decision.primitive, 'DENY', '裁决 primitive');
   assert.equal(receipt.decision.priority, 2, '裁决 priority（P2）');

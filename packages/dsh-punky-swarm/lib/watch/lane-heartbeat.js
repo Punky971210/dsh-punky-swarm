@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lane-heartbeat：lane 过期检测引擎（能力补全 C1，watch 域，新建）
+// lane-heartbeat：lane 过期检测引擎（watch 域）
 // 成熟模式：dsh-plugin-heartbeat 退避/硬停引擎（退避/硬停机制）
 // 语义：running lane 无活动 → 退避档位追问（默认 10→20→30 分钟，冷场越久间隔越长）→
 //       连续 N 拍（默认 3）无活动 → appendEvent('lane.stalled', {lane, missed})，停止追问。
@@ -33,10 +33,10 @@ import { join, dirname } from 'node:path';
 import { statSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { resolveWatchConfig, WATCH_DEFAULTS } from '../schema.js';
-import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // P2-01：watch 域不再 import tools/core（共享辅助下沉零依赖 shared.js）
-import { isAbsPath } from '../state/constants.js'; // P1-07 单点（原 :77 内联正则收敛）
-import { findTask } from '../state/task-utils.js'; // P1-04 单点（原 :69 本地定义删除）
-// R-01/R-07 收敛：lane.stalled 事件字面量（发端 :188 + 读端 :101/:139）改引 EVT 常量单点
+import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // watch 域不再 import tools/core（共享辅助下沉零依赖 shared.js）
+import { isAbsPath } from '../state/constants.js'; // 单点（原内联正则收敛）
+import { findTask } from '../state/task-utils.js'; // 单点（原本地定义删除）
+// lane.stalled 事件字面量（发端 + 读端）改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
 
 // 退避档位（分钟 → ms，单调化钳制）：档位单调不减，冷场越久追问间隔越长
@@ -52,17 +52,17 @@ export function buildSchedule(intervalsMinutes) {
   return list;
 }
 
-// ---- longrun 档（超时重派探针，与 stalled 档并列，design longrun-probe-design §1-§5）----
+// ---- longrun 档（超时重派探针，与 stalled 档并列）----
 // 语义：running lane 持续超 maxDurationMs（默认 20min）且近 noProgressWindowMs（默认 5min）无新 checkpoint
 //       且无活动（严格 AND）→ 探针产候选：appendEvent('lane.longrun.candidate') + mailbox broadcast 通知
 //       Manager 裁决。动作即止：不改 lane 状态（同 stalled 纪律——写事件零侵入，不碰 schema.js）。
 //       去重以批次事件流为唯一事实源：同 stint（lane + runningSince 相同）只产一次，跨重启幂等。
 //       runningSince = 事件流最近 member.dispatch / member.settled{to:'running'}（取较新）；重派（新 running
 //       stint）即更新 → 计时重置。checkpoint 最新 ts 从事件流 worktree.checkpoint 事件读（resume 契约同源）。
-// 配置（用户定案修订：出厂默认开，非设计默认关）：capabilities.watch.longrun{enabled,maxDurationMs,noProgressWindowMs}
-// resolve 独立实现于本模块（schema.js 红线不改；键根/非法回退风格对齐 resolveWatchConfig）。
+// 配置：capabilities.watch.longrun{enabled,maxDurationMs,noProgressWindowMs}
+// resolve 独立实现于本模块（schema.js 不改；键根/非法回退风格对齐 resolveWatchConfig）。
 export const LONGRUN_DEFAULTS = Object.freeze({
-  enabled: true, // 出厂默认开（定案修订：半自动件默认开防漏检；显式 false 才关）
+  enabled: true, // 出厂默认开（半自动件默认开防漏检；显式 false 才关）
   maxDurationMs: 1_200_000, // 默认 20min（长跑超时阈值；正整数 ms，非法回退默认）
   noProgressWindowMs: 300_000, // 默认 5min（无进展窗；正整数 ms，非法回退默认）
 });
@@ -71,7 +71,7 @@ export function resolveLongrunConfig(config) {
   const c = config?.capabilities?.watch?.longrun ?? {};
   const posMs = (v) => (Number.isFinite(Number(v)) && Number(v) >= 1 ? Math.floor(Number(v)) : null);
   return {
-    enabled: c.enabled !== false, // 缺省 = LONGRUN_DEFAULTS.enabled(true)，显式 false 才关（对齐 resolveWatchConfig P1-01 语义）
+    enabled: c.enabled !== false, // 缺省 = LONGRUN_DEFAULTS.enabled(true)，显式 false 才关
     maxDurationMs: posMs(c.maxDurationMs) ?? LONGRUN_DEFAULTS.maxDurationMs,
     noProgressWindowMs: posMs(c.noProgressWindowMs) ?? LONGRUN_DEFAULTS.noProgressWindowMs,
   };
@@ -297,10 +297,10 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     entry.lastProbeAt = null;
   }
 
-  // ---- longrun 档（超时重派探针，design longrun-probe-design §1/§3/§5）：----
+  // ---- longrun 档（超时重派探针）：----
   // 与 stalled 档互不干扰：同一 tick 扫描、同一内存表；只读判定 + 候选产出（动作即止），不改 lane 状态、
   // 不 interrupt、不重派（成员控制归 Leader）。判定前置于心跳扫描执行：内存 entry 尚为本 tick 前状态
-  // （无 fresh 宽限污染——设计 §1.2：引擎重启后内存空 → 以事件/产物基线兜底）。
+  // （无 fresh 宽限污染——引擎重启后内存空 → 以事件/产物基线兜底）。
   // lastActivityAt 来源：state 内存 entry.lastActivityAt（含 outbox 未 ack 活动信号）；entry 缺失 → baselineTs 兜底。
   function longrunLastActivityAt(sessionId, batchId, batch, lane) {
     const entry = state.get(laneKeyOf(sessionId, batchId, lane));
@@ -392,7 +392,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
     if (disposed) return;
     const nowTs = clock();
     // longrun 档（并列，同 tick 同引擎）：置于心跳扫描之前执行——此时内存 entry 为本 tick 前状态
-    // （freshEntry 宽限不污染 lastActivityAt 判定；重启后 entry 缺失 → baselineTs 兜底，design §1.2）。
+    // （freshEntry 宽限不污染 lastActivityAt 判定；重启后 entry 缺失 → baselineTs 兜底）。
     if (lrCfg.enabled) longrunTick(nowTs);
     for (const sessionId of store.listSessions()) {
       for (const batchId of store.listBatches(sessionId)) {
@@ -489,7 +489,7 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now }) {
 export function createHeartbeatTools(ctx, deps = {}) {
   if (resolveWatchConfig(deps.config).enabled !== true) return [];
   // 注册期实例（回退路径：deps.getHeartbeat 未注入的调用方——既有测试/直接装配经 deps.heartbeat 注入）；
-  // 执行路径经 engineAt() 解引用（longrun-panel-config-20260905）：index.js 装配注入
+  // 执行路径经 engineAt() 解引用：index.js 装配注入
   // getHeartbeat（→ heartbeatRef.current）→ 热重建后工具自动跟随新引擎（修复旧实例闭包缺陷）；
   // getHeartbeat 返回 null（watch 关/热关，引擎缺失）→ disabled 状态对象不 throw
   const heartbeat = deps.heartbeat

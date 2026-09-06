@@ -29,7 +29,7 @@
 ### Web UI 治理配置页 + runtime.json 写通道
 
 - 治理配置设置页（Web UI 设置区）：护栏开关、规则预设、违规自动升级（触发次数 / 窗口）可视化配置；页面保存即时生效、无需重启。
-- runtime.json 热写通道：保存请求经 config-trust 校验（顶层白名单 / 值域 / preset 与内联规则冲突守卫）后落盘 runtime.json，400 校验拒绝不回写；窗口秒输入后端毫秒归一化（windowSeconds → windowMs，线协议键不落盘）。
+- runtime.json 热写通道：保存请求经 config-trust 校验（顶层白名单 / 值域 / preset 与内联规则冲突守卫）后落盘 runtime.json，400 校验拒绝不落盘；窗口秒输入后端毫秒归一化（windowSeconds → windowMs，线协议键不落盘）。
 - 随包双语主题文档：docs/webui-governance-config(.en).md。
 
 ### lane_longrun 超时无进展探针
@@ -99,17 +99,17 @@
 
 ## 0.3.3（2026-08-22）
 
-### 国标 AIP 兼容契约对齐（aip-gb-fix → aip-align-publish 合入主仓库）
+### 国标 AIP 兼容契约对齐
 
-- **aip.enabled 默认开启**（readCapability 合并 `{enabled:true}`）；智能体描述改为 ACS 字段集（P4，根对象 20 键 必填 14/可选 6、AgentSkill 8 键，协议 02.01，旧 14+8 属性降级为 toLegacyDescriptor 兼容映射层）；消息映射对齐 ACPs AIP（P6，aip-format.js Message/TaskCommand/Session 三函数，mailbox/batch 附 ACPs 投影）；身份体系（P2/P3，默认关）：AIC 身份码（前缀 1.2.156.3088 + CRC-16/CCITT-FALSE + Base36）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256/RSA-2048）；发现服务（P5/ADP，默认开）：`lib/discovery/` 新域 + `POST /api/dsh-punky-swarm/discover`（type 四类/filter 34 运算符/错误码 40000~40005/50001）+ `GET /.well-known/aip`；P7 工具 6 属性保持现状（待正式文本校准）。
+- **aip.enabled 默认开启**（readCapability 合并 `{enabled:true}`）；智能体描述改为 ACS 字段集（根对象 20 键 必填 14/可选 6、AgentSkill 8 键，协议 02.01，旧 14+8 属性降级为 toLegacyDescriptor 兼容映射层）；消息映射对齐 ACPs AIP（aip-format.js Message/TaskCommand/Session 三函数，mailbox/batch 附 ACPs 投影）；身份体系（默认关）：AIC 身份码（前缀 1.2.156.3088 + CRC-16/CCITT-FALSE + Base36）+ CAI 身份证书 + 可插拔签名（默认 ECDSA-P256/RSA-2048）；发现服务（ADP，默认开）：`lib/discovery/` 新域 + `POST /api/dsh-punky-swarm/discover`（type 四类/filter 34 运算符/错误码 40000~40005/50001）+ `GET /.well-known/aip`；工具描述 6 属性保持现状（待正式协议文本校准）。
 
-### ACPs 通讯方式（P1-P3，默认关）
+### ACPs 通讯方式（默认关）
 
-- **能力总开关默认关（U-D2）**：`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，关闭时零运行时路径；对外 mTLS 服务端点（P1）：独立 HTTPS 监听器（node:https/tls 原生、零新依赖），默认端口 9443/host 127.0.0.1、TLSv1.3 + 双向证书（CERT_REQUIRED）、端点 `POST /acps/rpc`（AIP JSON-RPC）+ `GET /.well-known/acs.json`（ACS 14 必填键 + mutualTLS + JSONRPC）+ `GET /health`，证书 CA 自签（CN=AIC/SAN=acps://AIC，默认 `<root>/acps/certs`）；内部桥接（P2，默认关）：`acps.bridge`（同进程双向，inbound 默认关 D14 需显式 `acps.bridge.inbound=true`；outbound = mailbox→ACPs 投影/投递；`/rpc→bridge 接线` DEF-V6-1，inbound=false 时协议级 rejected INBOUND_DISABLED）；registry 对接（P3/R1 半自动注册，默认关）：login→upsertAgent→submitAgent（人工工批不自动跳过）→requestEab→queryAcs，EAB macKey **AES-256-GCM 加密存证**（D13，与参考实现 SM4-CBC 标注差异）；discovery 对接（P3/DS1 ADP 客户端，默认关）：`POST {baseUrl}/discover` 查询外部 Agent（type 四类/34 运算符与本地共享协议常量），scope=local/external/both（默认 local）；能力注册表扩至 9 键（aip/identity/discovery/verify/watch/worktree/budget/trajectory/**acps**，acps 与 identity 为默认关能力）；未实现项如实标注（P4 工具调用待正式文本；SM2 签名无参考证据可插拔；DS3 mini-ADSP 仅预留签名；V2/V4 与参考实现真实互通待 demo 验证）。
+- **能力总开关默认关**：`acps.enabled` 与 `acps.endpoint.enabled` 均默认 `false`，关闭时零运行时路径；对外 mTLS 服务端点：独立 HTTPS 监听器（node:https/tls 原生、零新依赖），默认端口 9443/host 127.0.0.1、TLSv1.3 + 双向证书（CERT_REQUIRED）、端点 `POST /acps/rpc`（AIP JSON-RPC）+ `GET /.well-known/acs.json`（ACS 14 必填键 + mutualTLS + JSONRPC）+ `GET /health`，证书 CA 自签（CN=AIC/SAN=acps://AIC，默认 `<root>/acps/certs`）；内部桥接（默认关）：`acps.bridge`（同进程双向，inbound 默认关需显式 `acps.bridge.inbound=true`；outbound = mailbox→ACPs 投影/投递；`/rpc→bridge 接线` 已通，inbound=false 时协议级 rejected INBOUND_DISABLED）；registry 对接（半自动注册，默认关）：login→upsertAgent→submitAgent（人工工批不自动跳过）→requestEab→queryAcs，EAB macKey **AES-256-GCM 加密存证**（与参考实现 SM4-CBC 标注差异）；discovery 对接（ADP 客户端，默认关）：`POST {baseUrl}/discover` 查询外部 Agent（type 四类/34 运算符与本地共享协议常量），scope=local/external/both（默认 local）；能力注册表扩至 9 键（aip/identity/discovery/verify/watch/worktree/budget/trajectory/**acps**，acps 与 identity 为默认关能力）；未实现项如实标注（工具调用待正式协议文本校准；SM2 签名无参考证据可插拔；mini-ADSP 仅预留签名；与参考实现真实互通待 demo 验证）。
 
-### 护栏根治 + 文档补建（aip-acps-cleanup）
+### 护栏根治 + 文档补建
 
-- T2.6 护栏 `\r?\n` 修复（merge-agent 护栏）；`README.en.md` 英文文档补建（22 KB，含中文互链）。
+- 护栏 `\r?\n` 处理修复（merge-agent 护栏）；`README.en.md` 英文文档补建（22 KB，含中文互链）。
 
 ## 0.3.2（2026-08-22）
 
@@ -121,15 +121,15 @@
 
 ### 许可合规修正 + npm 发布
 - 许可唯一化：全仓表述统一为 AGPL-3.0 唯一许可（AGPL-3.0-only），移除商业授权字段；其他授权一律「联系作者获得许可」（README.md / README.en.md / CHANGELOG 0.3.0 记载 / docs/OPENSOURCE.md）
-- 品牌残留清零：Swarm 集群品牌词全包改写为 dsh 语义历史沿革（README 中英 L22、SKILL.md L152/L195、CHANGELOG 历史记载）
+- 品牌残留清零：Swarm 集群品牌词全包改写为 dsh 语义历史沿革（README / SKILL.md / CHANGELOG 历史记载）
 - npm 发布：dsh-punky-swarm@0.3.1 发布至 npm registry（`npm install -g dsh-punky-swarm`），README / docs/OPENSOURCE 安装章节同步更新
-- 本地库同步：D:\dsh\Punky-plugin 与发布包文本/版本号对齐（排除 backup/node_modules/backups）
+- 发布包与主仓库文本/版本号对齐（排除备份与依赖目录）
 - 审计清理：docs/OPENSOURCE.md checklist LICENSE 项修正为 AGPL-3.0；本地库 package-lock.json root license 修正为 AGPL-3.0-only
 
 ## 0.3.0（2026-08-21）
 
-### 0.3.0 发布：8 批次升级 + AGPL-3.0 唯一许可 + 治理能力默认全开
-- 8 批次能力升级：引擎修复（目录 consume 判定 / 产物根指引 / 难度门禁豁免）+ lib 四域解耦（43 文件，删 3 单体）+ 国标 AIP 兼容 + 7 能力域（资产/装配/桥接/通信/面板/状态/验证/监控）+ 生命周期 + 恢复机制
+### 0.3.0 发布：AGPL-3.0 唯一许可 + 治理能力默认全开
+- 能力升级：引擎修复（目录 consume 判定 / 产物根指引 / 难度门禁豁免）+ lib 四域解耦（43 文件，删 3 单体）+ 国标 AIP 兼容 + 7 能力域（资产/装配/桥接/通信/面板/状态/验证/监控）+ 生命周期 + 恢复机制
 - 测试 93 → 276 全绿（27 测试文件）
 - 许可切换：Apache-2.0 → AGPL-3.0 唯一许可（AGPL-3.0-only；其他授权一律联系作者获得许可，自 0.3.0 起）
 - 治理能力默认全开：wavePlan 三层 DAG + 引擎级门禁 + 状态机 + 锁/mailbox + 会话隔离
@@ -148,7 +148,7 @@
 - 新增 SKILL.md「Manager 角色派发模板」：Manager=代劳指挥（只指挥不执行、不派发子代理），指挥循环 5 步（batch_status 读黑板 → mailbox_send 建议派发 → mailbox_read 收通知 → member_status/settle 结算 → report 批次完成）；任务包模板补 worker 双通道回执约定（report→Leader 简短 + mailbox_send outbox→Manager 详细）
 - 新增 persona 纪律 0g Leader 唤醒协议：worker 由 Leader 派发（depth-1 直系）、Manager mailbox 建议、report→send_message 一行唤醒、Leader 不做调度决策（调度循环在 Manager 上下文）
 - manager.md 协作方式 5 要素更新：不派发子代理 / mailbox 建议派发 / 收 worker 通知 / member_settle 结算裁决 / worker 双通道回执
-- references/ 残留清零：constitution/workflow/call-chain-matrix-template/leader-decision-pack 4 文件 Swarm 集群运行时术语（HITL/HATL/Converge/任务包）改写为 dsh 语义（人审门禁/gap-list 对账/lane 任务）；role 8 文件重写（4 段骨架 dsh 工具面对齐）
+- references/ 残留术语改写：Swarm 集群运行时术语（HITL/HATL/Converge/任务包）统一为 dsh 治理语义（人审门禁/gap-list 对账/lane 任务）。
 - 测试 93/93 全绿；安装链路验证（模块加载 + syncAssets 幂等）通过
 
 ## 0.2.0（2026-08-19）

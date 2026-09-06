@@ -15,14 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 budget：mailbox 循环防护（C4，dsh-team 循环防护三件套语义适配）
-// 借鉴 dsh-team config.ts:41-42（maxChainHops/maxChainRoundTrips）、service.ts:514-571（chainFor/REPEATED_MESSAGE/记账+CHAIN_MEMORY 裁剪）、errors.ts（错误码闭环）。
+// 文件 budget：mailbox 循环防护（借鉴 dsh-team 循环防护语义）
+// 借鉴 dsh-team（maxChainHops/maxChainRoundTrips、chainFor/REPEATED_MESSAGE/记账+CHAIN_MEMORY 裁剪、错误码闭环）。
 // 纯函数模块：不 import store/mailbox（状态由调用方传入），接线在 tools/mailbox-tools.js。
 // 链语义：蟛蜞 worker 读多封消息无「正在处理哪条」机械绑定 → 链由发送方在 meta.chain 显式声明 {id, hop}；
 //   不声明 = 新链 hop=0（向后兼容，现有调用零感知）。
 import { randomUUID } from 'node:crypto';
 
-// 记账上限：chains 保留最近 64 条链（dsh-team CHAIN_MEMORY=64），batch JSON 不膨胀
+// 记账上限：chains 保留最近 64 条链（借鉴 dsh-team CHAIN_MEMORY=64），batch JSON 不膨胀
 export const CHAIN_MEMORY = 64;
 
 // 有序对 key：from→to

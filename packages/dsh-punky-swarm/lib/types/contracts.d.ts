@@ -80,7 +80,7 @@ export interface WavePlanDoc {
         message: string;
     }>;
 }
-/** 环防护记账状态（C4 mailbox；batch JSON 唯一事实源，v3 字段） */
+/** 环防护记账状态（mailbox 环防护；batch JSON 唯一事实源，v3 字段） */
 export interface ChainsState {
     chains: Record<string, {
         edges: Record<string, number>;
@@ -129,7 +129,7 @@ export interface BatchEventBase {
  * 批次事件判别联合：按 lib/state/event-types.js EVT_* 常量值登记 + 兜底分支。
  * 判别字段 type 与 EVT 常量值绑定（常量仍为运行期事实源；gates.ts 内
  * `e.type === EVT.EVT_MEMBER_SETTLED` 与字面量比较两写法并存均可收窄）。
- * 尾部兜底分支保证未知/未来事件不报错（R-01 扩面事件：lane.stalled /
+ * 尾部兜底分支保证未知/未来事件不报错（lane.stalled /
  * lane.over-budget / budget.rejected / worktree.* / gate.role_* /
  * archive.done / system.restored 等——ts+type 必备，其余字段 unknown 可读）。
  */

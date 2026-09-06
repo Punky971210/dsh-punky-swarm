@@ -352,7 +352,7 @@ test('lane_longrun 查询：返回探针状态；beat=true 手动触发一拍（
   assert.equal(qb.lanes.length, 1);
 });
 
-// ---- L1 复核缺口（watch-panel-wiring-20260905 补用例）：引擎在、多 running lane、缺省 lane
+// ---- L1 复核缺口（补用例）：引擎在、多 running lane、缺省 lane
 //   → 全批 running lane（非 running 排除）；显式 lane 单行过滤；逐行字段齐全 ----
 test('lane_longrun 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除；逐行字段齐全）；显式 lane 单行', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-wld-'));

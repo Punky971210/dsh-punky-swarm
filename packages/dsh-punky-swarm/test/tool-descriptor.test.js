@@ -29,7 +29,7 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-// P1-01 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 = 20；
+// 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 = 20；
 // logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 21）。断言按新契约更新（旧「14 工具」为旧行为）。
 const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 20
@@ -104,7 +104,7 @@ test('生成：4 项透传 2 项派生（inputParam 与 defineTool 归一化结�
       assert.deepEqual(d.inputParam.properties.box.enum, ['inbox', 'outbox', 'broadcast']);
     }
   }
-  // 抽样：wave_plan required=['batchId','tasks']；mailbox_read required=['batchId','box']（源码实标 req，决策包映射表一致）
+  // 抽样：wave_plan required=['batchId','tasks']；mailbox_read required=['batchId','box']（源码实标 req）
   assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks']);
   assert.deepEqual(byName.mailbox_read.inputParam.required, ['batchId', 'box']);
   assert.equal(byName.wave_plan.inputParam.type, 'object');

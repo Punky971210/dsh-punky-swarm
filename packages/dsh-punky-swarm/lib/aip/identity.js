@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 文件 identity：国标 P2/P3 身份体系（AIC 身份码 + CAI 身份证书）
 // -----------------------------------------------------------------------------
-// 校准基准（plan/spec.md §3.4/§3.5，[参考] = ACPs-community v2.1.0 原文）：
+// 校准基准（§3.4/§3.5；[参考] = ACPs-community v2.1.0 原文）：
 //   P2 身份码 AIC：10 级编码（前缀 1.2.156.3088 + 版本/ARSP/供应商/本体/实体 + 校验码），
 //     CRC-16/CCITT-FALSE（poly=0x1021, init=0xFFFF, refin/refout=false, xorout=0x0000）+
 //     ARSP 盐值（>=2 字节）+ Base36 固定 4 位校验码（ACPs-spec-AIC-v02.01 §4）。

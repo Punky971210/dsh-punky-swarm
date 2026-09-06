@@ -15,11 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// P1 mTLS 服务端点测试（aip-acps-comm-build exec-acps-server）
-// 分层（施工契约 §六 V5）：TLS 层（握手失败类——断言连接失败/握手异常，不断言 HTTP 状态码）
-//   + 应用层（TLS 通过后——可断言 4xx/2xx）。参考实现出处见 exec/acps-server.md 映射表。
+// mTLS 服务端点测试
+// 分层：TLS 层（握手失败类——断言连接失败/握手异常，不断言 HTTP 状态码）
+//   + 应用层（TLS 通过后——可断言 4xx/2xx）。
 // 信任锚一致性：服务端经 certDir 自动生成 CA+服务端证书（ensureAcpsCerts），测试客户端
-//   用同一 certDir 的 CA 签发客户端证书（CN=客户端 AIC）——双向同一信任锚（main_mtls.py:27-29 语义）。
+//   用同一 certDir 的 CA 签发客户端证书（CN=客户端 AIC）——双向同一信任锚。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import https from 'node:https';
@@ -271,7 +271,7 @@ test('app: 未知路径 → 404', async () => {
   } finally { await close(); }
 });
 
-// ── 装配开关双态（U-D2：默认关零路径 / 显式开可监听）──
+// ── 装配开关双态（默认关零路径 / 显式开可监听）──
 
 test('装配：resolveAcpsConfig 默认双关（enabled:false + endpoint.enabled:false——零运行时路径）', () => {
   const d = resolveAcpsConfig({});

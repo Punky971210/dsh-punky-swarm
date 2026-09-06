@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// api.js:86 读端字面量收敛回归（契约 §3.2 exec-panel-a 验收③：grep 复核——无裸字面量）
+// api.js 事件读端字面量收敛回归（grep 复核——无裸字面量）
 // 源码面断言：api.js 事件读端不得出现裸 'member.settled' 字面量，必须引用 lib/state/event-types.js 的 EVT 常量
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// aip-format 测试：三映射字段按 ACPs AIP v2.1.0 结构对齐（spec.md §3.6，参考实现 07-ACPs-spec-AIP 原文）
+// aip-format 测试：三映射字段按 ACPs AIP v2.1.0 结构对齐（参考实现 07-ACPs-spec-AIP 原文）
 // 断言点：
 // 1) toAipMessage → ACPs Message 字段集（type/id/sentAt/senderRole/senderId/mentions?/dataItems?/sessionId?），
 //    自推导字段（messageId/timestamp/sender/receiver/channel/contentType/content/meta）必须剔除；

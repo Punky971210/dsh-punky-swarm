@@ -27,13 +27,13 @@ import * as machine from './machine.js';
 import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单（v2-node-robustness ②）
-import { SESSION_RE } from './constants.js'; // P1-07 单点（原本文件 :32 定义迁出）
-import { laneProgressClear, laneProgressWrite } from './resume.js'; // P1-02 断点指针：结算终态清退 + 原子写合并（纯函数，本文件落盘）
-// P1-04 单点：findTask 收敛至 task-utils.js（原 :430 本地定义删除）
+import { SESSION_RE } from './constants.js'; // 单点（原本文件定义迁出）
+import { laneProgressClear, laneProgressWrite } from './resume.js'; // 断点指针：结算终态清退 + 原子写合并（纯函数，本文件落盘）
+// findTask 单点：收敛至 task-utils.js（原本地定义删除）
 import { findTask } from './task-utils.js';
-// P2-07 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
+// 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
-// M5-a（C5）：违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
+// 违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
 //   无循环依赖：store.js → escalation.js → event-types.js 单向链）。默认计入原语集（DENY/NARROW）亦复用
 //   escalation.js 导出常量（单一事实源——config resolve 默认与纯函数签名缺省同源）。
 import { countGovernanceRefusals, DEFAULT_ESCALATION_PRIMITIVES } from '../governance/escalation.js';
@@ -68,7 +68,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   const gates = createGates(root);
-  // 损坏批次旁路清单（②，D-001）：与 governance.json 同层；批次 JSON 结构零变更
+  // 损坏批次旁路清单：与 governance.json 同层；批次 JSON 结构零变更
   const corruptRegistry = createCorruptRegistry(root);
   // 留痕日志（可选注入；缺省 console——与 index.js ctx.logger 解耦，保持 createStore 既有调用点零改动）
   const log = logger ?? console;
@@ -117,9 +117,9 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return { ts: new Date().toISOString(), type, ...fields };
   }
 
-  // R2 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
-  // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（设计 §3.2.3 固化），
-  // 故必须在调用点埋（设计 §4.3/§5.3 风险点 2）。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
+  // 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
+  // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（调用点埋点固化），
+  // 故必须在调用点埋。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
   // 异常隔离（发布失败不阻断状态机）。载荷为纯数据摘要，topic 命名由装配侧（topic-runtime）负责。
   function emitStateChange(ev) {
     try { onStateChange?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ }
@@ -142,7 +142,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       team: wavePlan.team ?? 'generic',
       wavePlan: wavePlan.wavePlan,
       lanes,
-      chains: chainsDefaults(), // C4：mailbox 环防护记账状态（v3 字段，唯一事实源）
+      chains: chainsDefaults(), // 环防护记账状态（v3 字段，唯一事实源）
       archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
       events: [newEvent(EVT.EVT_BATCH_CREATED, { batchId, sessionId })],
       createdAt: new Date().toISOString(),
@@ -201,10 +201,10 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       .sort();
   }
 
-  // M5-a（C6）：升级写公共内联函数——failed-escalate 与 governance-escalate 双源复用（写路径同构，
+  // 升级写公共内联函数——failed-escalate 与 governance-escalate 双源复用（写路径同构，
   // 杜绝第二套暂停语义）。只做「paused 迁移 + 两事件同批追加」（不写盘），落盘由调用点统一 atomicWrite
   // （保持单次原子写：paused + batch.phase + 源事件同批落盘，不调 setPhase 二次写防竞态）；
-  // R2 emitStateChange 亦由调用点统一触发（事件载荷 reason 区分双源）。
+  // 状态事件发布亦由调用点统一触发（事件载荷 reason 区分双源）。
   // 棘轮校验（machine.applyBatchTransition running→paused bv.ok）在调用点完成——本函数不重复校验。
   function escalatePausedWrite(batch, { reason, eventType, fields }) {
     batch.phase = 'paused';
@@ -212,28 +212,28 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     batch.events.push(newEvent(eventType, fields));
   }
 
-  // M5-a（C4/C5/C6）：违规计数记录 + 窗口评估 + 达阈值升级（批事件流单一事实源，原子写）。
+  // 违规计数记录 + 窗口评估 + 达阈值升级（批事件流单一事实源，原子写）。
   //   入参 escalation = 装配侧 resolve 产物（{enabled, threshold, windowMs, primitives}）；调用方（桥接/
-  //   测试）负责归属（C2）后传入本方法。防御纵深（与 C3 计入过滤同标准，方法内重复守卫——桥接过滤
-  //   遗漏不误计不误升级）：enabled!==true → 零记录零升级（T20 关态零路径）；ruleRefs 空（状态门收据）
-  //   → 零记录零升级（T12 全排除）；primitive ∉ primitives → 零记录零升级（DEFER/PAUSE/类别外默认不计）。
-  //   升级执行（C6）：escalation.enabled ∧ phase==='running' → countGovernanceRefusals 窗口计数（C5）≥
+  //   测试）负责归属后传入本方法。防御纵深（与计入过滤同标准，方法内重复守卫——桥接过滤
+  //   遗漏不误计不误升级）：enabled!==true → 零记录零升级（关态零路径）；ruleRefs 空（状态门收据）
+  //   → 零记录零升级（全排除）；primitive ∉ primitives → 零记录零升级（DEFER/PAUSE/类别外默认不计）。
+  //   升级执行：escalation.enabled ∧ phase==='running' → countGovernanceRefusals 窗口计数 ≥
   //   threshold ∧ 棘轮 bv.ok → 公共函数 escalatePausedWrite（reason='governance-escalate' + 载荷事件）；
-  //   单次原子写（记录与升级同批落盘，不调 setPhase 二次写）；paused 后 phase 闸自然挡重复（C7）；
-  //   R2 埋点：升级伴随 emitStateChange batch.phase（reason='governance-escalate'，与 failed-escalate 对称）。
-  //   C8 观察者纪律：失败（批次缺失等）上抛由调用方 catch warn 隔离；本方法为同步段无 await。
-  //   返回 batch（含可能升级后的最新形态）；未升级 = 仅追加 governance.refusal 记录（T13 语义）。
+  //   单次原子写（记录与升级同批落盘，不调 setPhase 二次写）；paused 后 phase 闸自然挡重复；
+  //   埋点：升级伴随 emitStateChange batch.phase（reason='governance-escalate'，与 failed-escalate 对称）。
+  //   观察者纪律：失败（批次缺失等）上抛由调用方 catch warn 隔离；本方法为同步段无 await。
+  //   返回 batch（含可能升级后的最新形态）；未升级 = 仅追加 governance.refusal 记录。
   function recordGovernanceRefusal(sessionId, batchId, { lane, receiptId, primitive, ruleRefs, tool, escalation = {} } = {}) {
-    // 防御守卫（C3 同标准）：enabled 关态 / 状态门收据（ruleRefs=[]）/ primitive 不在计入集 → 零事件零升级
+    // 防御守卫：enabled 关态 / 状态门收据（ruleRefs=[]）/ primitive 不在计入集 → 零事件零升级
     if (escalation.enabled !== true) return null; // 不误调不误记（T20：enabled=false 批事件流零 governance.refusal）
     if (!Array.isArray(ruleRefs) || ruleRefs.length === 0) return null; // 状态门收据永不计数（T12）
     const primSet = new Set(escalation.primitives ?? DEFAULT_ESCALATION_PRIMITIVES);
     if (!primSet.has(primitive)) return null; // DEFER/PAUSE/REQUIRE_APPROVAL 等默认不计（T12）
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
-    // C4：可计入收据 → 批事件流追加 governance.refusal（ts 由 newEvent 基座携带；C10 常量）
+    // 可计入收据 → 批事件流追加 governance.refusal（ts 由 newEvent 基座携带）
     batch.events.push(newEvent(EVT.EVT_GOVERNANCE_REFUSAL, { lane, receiptId, primitive, ruleRefs, tool }));
-    // C5/C6：仅 phase==='running' 时评估；paused/planning 等 phase 只记录不升级（C7/T13）
+    // 仅 phase==='running' 时评估；paused/planning 等 phase 只记录不升级
     let escalated = false;
     if (batch.phase === 'running') {
       const now = Date.now();
@@ -245,7 +245,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       if (count >= (escalation.threshold ?? 3)) {
         const bv = machine.applyBatchTransition('running', 'paused', { rules: ratchet });
         if (bv.ok) {
-          // 尾窗收据摘要（C6 载荷 receiptIds 供审计回查）：窗口内可计入 refusal 的 receiptId 清单
+          // 尾窗收据摘要（升级载荷 receiptIds 供审计回查）：窗口内可计入 refusal 的 receiptId 清单
           const receiptIds = [];
           for (const e of batch.events) {
             if (!e || e.type !== EVT.EVT_GOVERNANCE_REFUSAL) continue;
@@ -273,7 +273,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
   }
 
   function setMember(sessionId, batchId, lane, to, note = null) {
-    let batch = readBatch(sessionId, batchId); // let：P1-02 终态清退经 laneProgressClear 返回新 batch（不突变入参）
+    let batch = readBatch(sessionId, batchId); // 终态清退经 laneProgressClear 返回新 batch（不突变入参）
     if (!batch) throw new Error('batch not found: ' + batchId);
     schema.assertMemberState(to);
     if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
@@ -291,7 +291,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
         if (!skip.ok) {
           throw new Error('invalid member transition: ' + from + ' -> skipped (condition unmet: ' + cond.missing.join(', ') + '; ratchet forbids auto-skip)');
         }
-        // P1-02：condition 自动 skipped 亦为结算终态——清退 laneProgress 断点指针（不残留脏指针）
+        // condition 自动 skipped 亦为结算终态——清退 laneProgress 断点指针（不残留脏指针）
         batch = laneProgressClear(batch, lane);
         batch.lanes[lane] = 'skipped'; // pending→skipped 既有合法迁移
         batch.events.push(newEvent(EVT.EVT_LANE_SKIPPED, { lane, from, note: 'condition unmet: ' + cond.missing.join(', ') }));
@@ -324,7 +324,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
         throw new Error(g.code + ': ' + (g.problems ?? g.missing).join(', '));
       }
       batch.events.push(newEvent(EVT.EVT_GATE_PASSED, { lane, gate: 'exit' }));
-      // targets 门禁（O2，设计 §1.3）：exec 层声明 targets（批次产物根外目标文件）→ merged 前置校验——
+      // targets 门禁：exec 层声明 targets（批次产物根外目标文件）→ merged 前置校验——
       // exit gate 之后、command gate 之前（增量接线，不改既有门禁顺序与语义）。
       // 失败（missing/unchanged）→ gate.target_blocked 事件 + 抛错拒 merged（lane 留 review，成员态不变，与 exit gate 同语义）；
       // 通过且 declared → gate.target.passed 事件留痕；未声明/非 exec/逃生阀 → 零感知（无事件）。
@@ -338,7 +338,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       if (tg.declared) {
         batch.events.push(newEvent(EVT.EVT_GATE_TARGET_PASSED, { lane, mode: tg.mode ?? 'mtime', targets: tg.targets ?? [] }));
       }
-      // 命令 gate（V1，设计 §组件 4）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行（checkExitGate 之后、needHuman 之前）
+      // 命令 gate（V1）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行（checkExitGate 之后、needHuman 之前）
       // 成功/未声明 → gate.exit 事件（declared 时）后继续；失败+needHuman 声明 → 转人工闸（escalation，merged 须 note 含 human: 证据）；
       // 失败+未声明 → gate.exit_blocked 事件 + 抛 GATE_EXIT_*（拒 merged，lane 留 review）
       const cg = gates.checkCommandGate(sessionId, batchId, batch, lane);
@@ -371,7 +371,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       }
       if (nh.declared) batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note })); // 人工裁决留痕（note 可回溯）
     }
-    // P1-02：lane 结算终态（merged/failed/skipped/conflict，member_settle 语义）清退 laneProgress
+    // lane 结算终态（merged/failed/skipped/conflict，member_settle 语义）清退 laneProgress
     // 断点指针（不残留脏指针；批次 complete 后整块随批次归档由 archive 覆盖）
     if (schema.isMemberTerminal(to)) batch = laneProgressClear(batch, lane);
     batch.lanes[lane] = to;
@@ -381,7 +381,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     // 棘轮校验 fail-closed：running→paused 迁移被部署收紧删除时 bv.ok=false，不触发、不绕过棘轮；
     // phase 闸（T-2）：paused 后 phase 非 running 自然不重复；人工 resume 后计数从当前事件流重新评估；
     // 不自动重试：failed 仍为终态（schema failed: [] 不变），重做=重开新批次。
-    // M5-a（C6）：升级写走公共内联函数 escalatePausedWrite（failed-escalate 与 governance-escalate 双源复用，
+    // 升级写走公共内联函数 escalatePausedWrite（failed-escalate 与 governance-escalate 双源复用，
     //   写路径同构杜绝第二套暂停语义）；本段行为零变化（reason='failed-escalate' + batch.failed-escalate 事件原样）。
     let escalated = false;
     if (to === 'failed' && batch.phase === 'running') {
@@ -400,7 +400,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     }
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
-    // R2 调用点埋点：member.settled（结算终态/返工入 review 等全部迁移）+ 伴随的 batch.phase（failed-escalate）
+    // 调用点埋点：member.settled（结算终态/返工入 review 等全部迁移）+ 伴随的 batch.phase（failed-escalate）
     emitStateChange({ type: 'member.settled', sessionId, batchId, lane, from, to, note: note ?? null });
     if (escalated) {
       emitStateChange({ type: 'batch.phase', sessionId, batchId, from: 'running', to: 'paused', reason: 'failed-escalate' });
@@ -429,7 +429,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     batch.events.push(newEvent(EVT.EVT_BATCH_PHASE, { from, to }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
-    // R2 调用点埋点：batch.phase 迁移事件发布（规划→运行→暂停→终态等全部阶段迁移）
+    // 调用点埋点：batch.phase 迁移事件发布（规划→运行→暂停→终态等全部阶段迁移）
     emitStateChange({ type: 'batch.phase', sessionId, batchId, from, to });
     // complete 钩子——门禁通过 + phase 写入后自动归档（单向、幂等）；
     // 失败仅记录 archive.failed（archiveBatch 内部处理），不阻断 complete；try/catch 兜底意外异常（如批次文件不可读）
@@ -459,7 +459,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return batch;
   }
 
-  // ---- C4 budget：chains 状态读写（批次 v3 字段，原子写复用 atomicWrite）----
+  // ---- 环防护 budget：chains 状态读写（批次 v3 字段，原子写复用 atomicWrite）----
   // readChains：读 batch.chains；v2 存量批次经 migrateV2toV3 幂等补默认（只读不落盘）
   function readChains(sessionId, batchId) {
     const batch = readBatch(sessionId, batchId);
@@ -477,7 +477,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return next.chains;
   }
 
-  // ---- P1-02 断点指针持久化（laneProgress）----
+  // ---- 断点指针持久化（laneProgress）----
   // updateLaneProgress：lane_checkpoint 携带 progress 时经 laneProgressWrite 纯函数合并后原子写
   // （不突变入参；worktree.checkpoint 事件留痕由调用方 lane-tools 承担，本接口只写指针）。
   // 清退走 setMember 终态分支（laneProgressClear），本接口只增不删。
@@ -490,7 +490,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return next;
   }
 
-  // asset_claim 归位（设计 6.3/§4）：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
+  // asset_claim 归位：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
   // 安全：target 必须是批次内相对路径——拒绝绝对路径、盘符前缀、.. / . / 空段；解析后仍须落在 artifacts 目录内（纵深防御）。
   function claimAsset(sessionId, batchId, { source, target }) {
     const batch = readBatch(sessionId, batchId);
@@ -562,7 +562,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       for (const batchId of listBatches(sessionId)) {
         const batch = readBatch(sessionId, batchId);
         if (!batch) {
-          // 损坏批次隔离（②，P0）：登记已由 readBatch 幂等完成（first 才 warn）；汇总 corrupt 后跳过，不击穿循环（INV-1）
+          // 损坏批次隔离：登记已由 readBatch 幂等完成（首次才 warn）；汇总 corrupt 后跳过，不击穿循环
           if (isCorrupt(sessionId, batchId)) corrupt.push(sessionId + '/' + batchId);
           continue;
         }
@@ -595,11 +595,11 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return recovered;
   }
 
-  // 孤儿 worker 显式回收（③，P1，设计 D-002/D-003）：lane.stalled 处置扩展——只标记 → 可显式回收。
-  // 语义：管理命令（显式触发，仿 recoverBatches 直写先例，不经棘轮表/不放宽 MEMBER_TRANSITIONS，C-5）；
-  //       默认不自动处置（人审保留，D-003）；lane.stalled 仍非成员状态（不新增成员态，W7 语义保持）。
-  // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收，INV-4：终态 lane 永不回收）。
-  // 事件：lane.recycled { lane, from:'running', reason:'stalled', note } 留痕；回收后走既有 member_status idle→running 重派（①）。
+  // 孤儿 worker 显式回收：lane.stalled 处置扩展——只标记 → 可显式回收。
+  // 语义：管理命令（显式触发，仿 recoverBatches 直写先例，不经棘轮表/不放宽 MEMBER_TRANSITIONS）；
+  //       默认不自动处置（人审保留）；lane.stalled 仍非成员状态（不新增成员态，语义保持）。
+  // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收：终态 lane 永不回收）。
+  // 事件：lane.recycled { lane, from:'running', reason:'stalled', note } 留痕；回收后走既有 member_status idle→running 重派。
   function recycleStalledLane(sessionId, batchId, lane) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
@@ -623,7 +623,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     return all;
   }
 
-  // ---- 会话级治理状态（governance.json v2，design task-difficulty-gate §4）----
+  // ---- 会话级治理状态（governance.json v2）----
   // 每回合任务难度评估（A/B/C）的事实源：lastAssign + history 审计 + 执行型工具计数 + pendingBatch
   const GOV_SCHEMA = 2;
   function govDefaults() {
@@ -674,12 +674,12 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
   return {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
-    recordGovernanceRefusal, // M5-a（C4/C5/C6）：违规计数记录 + 窗口评估 + 升级（批事件流单一事实源）
-    readChains, updateChains, updateLaneProgress, // P1-02：laneProgress 断点指针持久化
+    recordGovernanceRefusal, // 违规计数记录 + 窗口评估 + 升级（批事件流单一事实源）
+    readChains, updateChains, updateLaneProgress, // laneProgress 断点指针持久化
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, sessionsDir, artifactsDirOf, gateStatus: gates.gateStatus,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
-    // 损坏旁路清单（②）：幂等登记 / 只读清单 / 人工修复后清除标记（透传 corrupt-registry）
+    // 损坏旁路清单：幂等登记 / 只读清单 / 人工修复后清除标记（透传 corrupt-registry）
     corruptRegistry: { markBatchCorrupt: corruptRegistry.markBatchCorrupt, listCorruptBatches: corruptRegistry.listCorruptBatches, clearCorruptMark: corruptRegistry.clearCorruptMark, corruptFileOf: corruptRegistry.corruptFileOf },
     // 归档只读/幂等面（batch_status 面板与审计查询用）
     archive: { archiveBatch: archive.archiveBatch, readManifest: archive.readManifest, listArchived: archive.listArchived },

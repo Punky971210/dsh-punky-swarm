@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lane-heartbeat 单测（能力补全 C1，watch 域）——覆盖决策包 §1.3 验收标准 W1-W7
+// lane-heartbeat 单测（watch 域）——覆盖验收标准 W1-W7
 // 零侵入（W7）：不新增成员状态、不碰核心语义；本文件只增不减既有测试基线
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -213,7 +213,7 @@ test('W5：recoverBatches → running→idle 不被扫描；重派 running 计�
 test('W6：lane_heartbeat 工具注册门控（P1-01 缺省默认开；显式 enabled=false 不注册）', () => {
   const { root, store } = setup();
   const ctx = { tools: { register: () => {} } };
-  // P1-01 行为变更：缺省 watch 默认开 → 缺省注册（旧「缺省关」为旧行为断言）
+  // 行为变更：缺省 watch 默认开 → 缺省注册（旧「缺省关」为旧行为断言）
   const def = createHeartbeatTools(ctx, { store, root, config: {} });
   assert.equal(def.length, 1, 'W6: enabled 缺省=true 注册（readCapability 合并 WATCH_DEFAULTS）');
   assert.equal(def[0].name, 'lane_heartbeat');
@@ -244,7 +244,7 @@ test('W6b：lane_heartbeat 查询返回心跳状态；beat=true 手动触发一�
   assert.equal(qb.lanes[0].missed, 2);
 });
 
-// ---- W6c（L1 复核缺口，watch-panel-wiring-20260905 补用例）：引擎在、多 running lane、缺省 lane
+// ---- W6c（L1 复核缺口，补用例）：引擎在、多 running lane、缺省 lane
 //   → 全批 running lane（idle/失败/终态 lane 排除）；显式 lane 单行过滤回归 ----
 test('W6c：lane_heartbeat 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除）；显式 lane 单行过滤', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hb-w6c-'));

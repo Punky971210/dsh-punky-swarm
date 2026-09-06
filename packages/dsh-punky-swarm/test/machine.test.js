@@ -89,7 +89,7 @@ test('ratchet: batchRules tightening works the same', () => {
   assert.equal(applyBatchTransition('planning', 'running', { rules }).ok, true); // 未声明键默认
 });
 
-// ---- R3 放宽拒绝（棘轮 fail-closed；allowRelax 默认 false）----
+// ---- 放宽拒绝（棘轮 fail-closed；allowRelax 默认 false）----
 test('ratchet: adding a transition not in defaults throws (relaxation blocked)', () => {
   assert.throws(() => loadRules({ ratchet: { memberRules: { conflict: ['merged'] } } }), /relaxing transition "conflict -> merged"/);
   assert.throws(() => loadRules({ ratchet: { batchRules: { complete: ['running'] } } }), /relaxing/);

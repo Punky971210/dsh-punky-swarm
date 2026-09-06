@@ -30,8 +30,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { migrateV2toV3 } from './schema-v3.js';
-import { SESSION_RE } from './constants.js'; // P1-07 单点（原 :34 定义迁出）
-// R-01 发端收敛：archive.failed/archive.done 事件字面量改引 EVT 常量单点
+import { SESSION_RE } from './constants.js'; // 单点（原定义迁出）
+// 事件字面量改引 EVT 常量单点（archive.failed/archive.done）
 import * as EVT from './event-types.js';
 
 const BATCH_RE = SESSION_RE; // 同款正则（batchId 与 sessionId 共用 SAFE_ID 字符集）

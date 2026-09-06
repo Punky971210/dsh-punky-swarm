@@ -15,12 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// C3 verify 引擎级接线单测（装配统一决策包 §4.2 验收 A2.1-A2.3）：
+// verify 引擎级接线单测：
 // A2.1 enabled=true：mountVerify 挂 tools/post-execute 监听 → 真实派发 → blob + ledger 落盘、count()>0、
 //     pass-through 不断链、dispose 退订无残留；捕获证据可经 evaluateAcEvidence 消费出裁决（audit lane DI 可消费）
 // A2.2 enabled=false：installed:false、不注册监听、零副作用（无 verify 目录产生）
 // A2.3 ctx.on 缺失：静默降级不 throw
-// A2.3 DI 路径保留：createCompletionGate 原语义（enabled=false → skipped；enforce → 拦截）+ 显式 installEvidenceCapture 语义
+// DI 路径保留：createCompletionGate 原语义（enabled=false → skipped；enforce → 拦截）+ 显式 installEvidenceCapture 语义
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -191,7 +191,7 @@ test('A2.3 DI 路径保留：createCompletionGate 原语义（enabled 门控 eva
 });
 
 test('resolveVerifyConfig 边界：P1-01 缺省默认开 / mode 非法回退 advisory', () => {
-  // P1-01 行为变更：缺省 = VERIFY_DEFAULTS {enabled:true}（等价 readCapability 合并；旧「缺省关」为旧行为断言）
+  // 行为变更：缺省 = VERIFY_DEFAULTS {enabled:true}（等价 readCapability 合并；旧「缺省关」为旧行为断言）
   assert.deepEqual(resolveVerifyConfig({}), { enabled: true, mode: 'advisory' });
   assert.deepEqual(resolveVerifyConfig({ capabilities: {} }), { enabled: true, mode: 'advisory' });
   assert.deepEqual(resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false, mode: 'advisory' });
