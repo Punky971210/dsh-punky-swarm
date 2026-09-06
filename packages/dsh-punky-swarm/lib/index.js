@@ -213,9 +213,21 @@ export const apply = (ctx, config = {}) => {
     heartbeatRef.current = heartbeat;
   }
   // watch 生效面安装快照（热更比对基准 + GET /config applied.watch 源；镜像 governanceInstalledCfg 模式）。
-  // 生效变化 = { enabled, longrun.enabled, scanIntervalMinutes } 任一（Leader 裁决：longrun.enabled 翻转热更即时；
-  //   引擎重建语义见 remountWatchEngine——内存状态表清空、从事件流/产物 mtime 基线重算）。
-  let watchInstalledCfg = { enabled: watchCfg.enabled, longrun: { enabled: longrunCfg.enabled }, scanIntervalMinutes: watchCfg.scanIntervalMinutes };
+  // 生效变化 = 5 键 { enabled, longrun.enabled, scanIntervalMinutes, longrun.maxDurationMs,
+  //   longrun.noProgressWindowMs } 任一（watch-panel-wiring-20260905 e2：两长跑阈值纳入比较集与安装快照——
+  //   applied.watch 自动携带阈值供面板回显与确认轮询；手工 runtime.json 阈值热更/boot 对账随之生效，
+  //   修复「阈值不在生效面 → 只等下次其它生效键 remount 才值传播」现状洞）。
+  //   Leader 裁决：longrun.enabled 翻转热更即时；引擎重建语义见 remountWatchEngine——内存状态表清空、
+  //   从事件流/产物 mtime 基线重算（幂等：无变化零操作）。
+  let watchInstalledCfg = {
+    enabled: watchCfg.enabled,
+    longrun: {
+      enabled: longrunCfg.enabled,
+      maxDurationMs: longrunCfg.maxDurationMs,
+      noProgressWindowMs: longrunCfg.noProgressWindowMs,
+    },
+    scanIntervalMinutes: watchCfg.scanIntervalMinutes,
+  };
   // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
   //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
   const tools = createTools(ctx, { store, root, config, heartbeat, getHeartbeat: () => heartbeatRef.current });
@@ -289,7 +301,9 @@ export const apply = (ctx, config = {}) => {
         trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
         applied: () => governanceInstalledCfg,
         // watch 生效快照 getter（longrun-panel-config-20260905）：watchInstalledCfg 初始化于上方 watch 引擎装配
-        //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ
+        //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ。
+        //   watch-panel-wiring e2：生效快照随比较集扩展自动携带 longrun 阈值（maxDurationMs/noProgressWindowMs）
+        //   → GET /config applied.watch 即面板回显与 watchSig 确认轮询的完整数据源（无需装配侧再加工）
         appliedWatch: () => watchInstalledCfg,
         presets: () => presetCatalog,
       },
@@ -534,8 +548,9 @@ export const apply = (ctx, config = {}) => {
   };
 
   // watch 引擎重挂（longrun-panel-config-20260905：热更 ① 生效变化通道 + 启动对账共用；镜像
-  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（{enabled, longrun.enabled,
-  //   scanIntervalMinutes}）→ 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
+  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（5 键 {enabled, longrun.enabled,
+  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs}——watch-panel-wiring e2 扩展）
+  //   → 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
   //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
   //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
   //   运行时状态重置契约：引擎内存状态表随 dispose 清空、重建后从事件流/产物 mtime 基线重算
@@ -545,7 +560,11 @@ export const apply = (ctx, config = {}) => {
   const remountWatchEngine = (nextConfig, logTag) => {
     const wc = resolveWatchConfig(nextConfig);
     const lr = resolveLongrunConfig(nextConfig);
-    const nextInstalled = { enabled: wc.enabled, longrun: { enabled: lr.enabled }, scanIntervalMinutes: wc.scanIntervalMinutes };
+    const nextInstalled = {
+      enabled: wc.enabled,
+      longrun: { enabled: lr.enabled, maxDurationMs: lr.maxDurationMs, noProgressWindowMs: lr.noProgressWindowMs },
+      scanIntervalMinutes: wc.scanIntervalMinutes,
+    };
     if (JSON.stringify(nextInstalled) === JSON.stringify(watchInstalledCfg)) return false;
     if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
     if (heartbeat) { heartbeat.dispose(); heartbeat = null; heartbeatRef.current = null; }
@@ -575,10 +594,12 @@ export const apply = (ctx, config = {}) => {
   let hotConfig = null;
   const applyConfigChange = (change) => {
     const next = change.config;
-    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——{enabled, longrun.enabled,
-    //   scanIntervalMinutes} 任一变化 → dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
-    //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转经同一通道热更即时生效
-    //   （design §2.2——watch.enabled 翻转既有语义保留并统一进 remount）
+    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——5 键 {enabled, longrun.enabled,
+    //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs} 任一变化 →
+    //   dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
+    //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转与阈值变更经同一通道即时生效
+    //   （design §2.2/§2.3——watch.enabled 翻转既有语义保留并统一进 remount；阈值键纳入后手工 runtime.json
+    //   阈值热写即时 remount、重启 boot 对账对齐，不再滞后）
     remountWatchEngine(next);
     // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
     const trajOn = isTrajectoryEnabled(next);
@@ -633,8 +654,9 @@ export const apply = (ctx, config = {}) => {
   //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，①-④ 维持既有启动语义）。
   remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay');
   // watch boot 对账（longrun-panel-config-20260905 缺口 2，镜像 governance :595 对账）：持久化到 runtime.json
-  //   的 capabilities.watch.* 覆盖（watch.enabled / longrun.enabled 等）在重启后经快照解析与静态装配不一致 →
-  //   同样 dispose+重建+重挂——保证持久化 watch 覆盖「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
+  //   的 capabilities.watch.* 覆盖（watch.enabled / longrun.enabled / 长跑阈值等）在重启后经快照解析与静态
+  //   装配不一致 → 同样 dispose+重建+重挂——保证持久化 watch 覆盖（阈值键随 e2 比较集扩展一并纳入）
+  //   「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
   remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay');
 
   return () => {

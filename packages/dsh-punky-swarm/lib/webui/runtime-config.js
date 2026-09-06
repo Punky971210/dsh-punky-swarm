@@ -36,7 +36,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     其余顶层键与 capabilities 其余子键原样）。端点按 body 键分派：单保存合并 governance + capabilities.watch
 //     双段同 body（Leader 裁决 1）→ 含 capabilities 段走 writeWatch（内部同时处理可选 governance 段，
 //     复用 writeGovernance 校验/合并语义）；仅 governance（旧客户端/既有测试）→ writeGovernance 原路径。
-//     阈值留门（Leader 裁决 2）：longrun.maxDurationMs/noProgressWindowMs 值域允许正整数 ms≥1，表单不列。
+//     阈值写通道已就绪（Leader 裁决 2；watch-panel-wiring e1/e2 注释对齐）：longrun.maxDurationMs/
+//       noProgressWindowMs 值域允许正整数 ms≥1，可经面板表单（UI 分钟换算 ms）与手工 runtime.json 写入。
 // 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay（导出面）+ preset-loader 的
 //   PRESET_IDS（注册 id 枚举唯一权威，不接受任意路径引用）。
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
@@ -54,11 +55,12 @@ const ESCALATION_PRIMITIVE_SET = new Set(['DENY', 'NARROW', 'DEFER', 'PAUSE']);
 const TOP_KEYS = new Set(['governance']);
 const GOV_KEYS = new Set(['hook']);
 const HOOK_FORM_KEYS = new Set(['enabled', 'preset', 'escalation', 'flags']);
-// watch 写通道受控键（longrun-panel-config-20260905）：capabilities 段白名单仅 watch；
-//   watch 仅 enabled/longrun；longrun 仅 enabled + 阈值留门（maxDurationMs/noProgressWindowMs——
-//   Leader 裁决 2：值域允许正整数 ms≥1，表单不列）。watch 其它键（scanIntervalMinutes/intervalsMinutes/
-//   maxMissed/probeTemplate）不经写通道（改阈值/扫描走手工 runtime.json 或静态 config——热更生效面仅
-//   {enabled, longrun.enabled, scanIntervalMinutes}，装配侧 remountWatchEngine 比对）。
+// watch 写通道受控键（longrun-panel-config-20260905；watch-panel-wiring e1/e2 注释对齐）：capabilities 段
+//   白名单仅 watch；watch 仅 enabled/longrun；longrun 仅 enabled + 两阈值（maxDurationMs/noProgressWindowMs
+//   ——Leader 裁决 2：值域允许正整数 ms≥1，可经面板表单分钟输入换算 ms 提交）。watch 其它键
+//   （scanIntervalMinutes/intervalsMinutes/maxMissed/probeTemplate）不经写通道（扫描/探针模板等走手工
+//   runtime.json 或静态 config——热更生效面 5 键 {enabled, longrun.enabled, scanIntervalMinutes,
+//   longrun.maxDurationMs, longrun.noProgressWindowMs}，装配侧 remountWatchEngine 比对）。
 const WATCH_CAPS_KEYS = new Set(['watch']);
 const WATCH_KEYS = new Set(['enabled', 'longrun']);
 const WATCH_LONGRUN_KEYS = new Set(['enabled', 'maxDurationMs', 'noProgressWindowMs']);
@@ -278,7 +280,8 @@ export function validateWatchPayload(payload, curWatch) {
           if ('enabled' in lr && typeof lr.enabled !== 'boolean') {
             push('capabilities.watch.longrun.enabled', 'invalid-value', 'longrun.enabled must be boolean');
           }
-          // 阈值留门（Leader 裁决 2）：正整数 ms ≥1（写通道值域允许、表单不列——最小 UI）
+          // 阈值写通道（Leader 裁决 2；watch-panel-wiring e1/e2 注释对齐）：正整数 ms ≥1（写通道值域允许、
+          //   可经表单——UI 分钟输入换算 ms 提交；面板回显与热更经 remount 生效面 5 键）
           for (const k of ['maxDurationMs', 'noProgressWindowMs']) {
             if (k in lr) {
               const v = lr[k];

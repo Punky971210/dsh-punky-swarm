@@ -27,10 +27,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     //   overlayWatch = 磁盘 capabilities.watch 段原样（磁盘原文；无 = null）——watch 开关表单基准（overlay 优先）
     //   applied = 引擎 resolve 后的生效快照——preset 已被展开为 rules（不保留 preset 键），
     //             故 preset 当前值只读 overlay.hook.preset；applied 仅用于「生效规则数/生效状态」展示。
-    //   applied.watch = 引擎 resolve 后的 watch 生效快照（{ enabled, longrun: { enabled }, scanIntervalMinutes }；
-    //             缺省 enabled/longrun.enabled = true——出厂默认开语义，显式 false 才关；表单兜底源）
+    //   applied.watch = 引擎 resolve 后的 watch 生效快照（{ enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs }, scanIntervalMinutes }；
+    //             缺省 enabled/longrun.enabled = true——出厂默认开语义，显式 false 才关；长跑阈值缺省 1200000/300000 ms（LONGRUN_DEFAULTS）。
+    //             e2 remount 生效面含阈值后，applied 快照携带阈值 → 表单回显 + 确认轮询数据源；表单兜底源）
     //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
-    // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled } } } }
+    // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs } } } }
     //         （单保存合并双段：governance + watch 能力开关；400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射））。
     // 窗口单位（webui-config-fix2-20260904）：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
     //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
@@ -155,7 +156,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         watch: {
           enabled: pickBool(ovW && ovW.enabled, apW && apW.enabled, true),
           longrun: {
-            enabled: pickBool(ovW && ovW.longrun && ovW.longrun.enabled, apW && apW.longrun && apW.longrun.enabled, true)
+            enabled: pickBool(ovW && ovW.longrun && ovW.longrun.enabled, apW && apW.longrun && apW.longrun.enabled, true),
+            // 长跑两阈值（分钟表单态）：overlay → applied → 默认 20/5（引擎 LONGRUN_DEFAULTS 1200000/300000 ms），
+            //   /60000 显示分钟；非整分钟存量值（手工 runtime.json）允许小数分钟显示，提交 Math.round 保真
+            maxDurationMin: String(pickNum(ovW && ovW.longrun && ovW.longrun.maxDurationMs, apW && apW.longrun && apW.longrun.maxDurationMs, 1200000) / 60000),
+            noProgressMin: String(pickNum(ovW && ovW.longrun && ovW.longrun.noProgressWindowMs, apW && apW.longrun && apW.longrun.noProgressWindowMs, 300000) / 60000)
           }
         }
       };
@@ -193,10 +198,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         rules: h && Array.isArray(h.rules) ? h.rules.length : 0
       });
     }
-    // applied.watch 生效快照签名（watch 段：父开关 + longrun 子开关布尔——热重建生效比对用）
+    // applied.watch 生效快照签名（watch 段：父开关 + longrun 子开关 + 长跑两阈值 ms——热重建生效比对用；
+    //   阈值纳入签名使「阈值-only 保存」在确认轮询中能被识别为生效快照翻转；快照缺阈值键（e2 生效面落地前）按 null 处理）
     function watchSig(w) {
       const lr = (w && w.longrun) || {};
-      return JSON.stringify({ enabled: !!(w && w.enabled), longrun: { enabled: !!lr.enabled } });
+      return JSON.stringify({
+        enabled: !!(w && w.enabled),
+        longrun: {
+          enabled: !!lr.enabled,
+          maxDurationMs: typeof lr.maxDurationMs === 'number' ? lr.maxDurationMs : null,
+          noProgressWindowMs: typeof lr.noProgressWindowMs === 'number' ? lr.noProgressWindowMs : null
+        }
+      });
     }
     // dirty 基准分节（单保存合并 governance + capabilities.watch 双段）：剥掉 watch 键后 = governance 表单节
     function govFormOf(f) { const o = Object.assign({}, f); delete o.watch; return o; }
@@ -461,9 +474,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         const esc = form.escalation;
         const threshold = Number(esc.threshold);
         const windowSecs = Number(esc.windowSecs); // 秒语义；后端 ×1000 归一 windowMs（毫秒契约不变）
+        // watch 长跑两阈值（分钟语义；UI 本地换算 ms 原生键 maxDurationMs/noProgressWindowMs——后端白名单/值域已就绪，零后端代码）
+        const wlr = (form.watch && form.watch.longrun) || {};
+        const maxDurMin = Number(wlr.maxDurationMin);
+        const noProgMin = Number(wlr.noProgressMin);
         const bad = [];
         if (!Number.isInteger(threshold) || threshold < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.threshold') });
         if (!Number.isFinite(windowSecs) || windowSecs < 1) bad.push({ code: 'invalid-value', message: tt('gov.esc.window') });
+        if (!Number.isFinite(maxDurMin) || maxDurMin < 1) bad.push({ code: 'invalid-value', message: tt('gov.watch.longrun.maxDuration') });
+        if (!Number.isFinite(noProgMin) || noProgMin < 1) bad.push({ code: 'invalid-value', message: tt('gov.watch.longrun.noProgress') });
         if (bad.length) { setErr({ items: bad }); return; }
         const prims = esc.primitives.filter((p) => escPrimitives().indexOf(p) >= 0);
         // POST 装载键：null/undefined = 省略 preset 键（后端删键回出厂零规则）；数组 = string[]；
@@ -476,14 +495,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         };
         if (presetWire !== undefined) hook.preset = presetWire;
         const watch = form.watch || { enabled: true, longrun: { enabled: true } };
+        const wl = (watch && watch.longrun) || {};
         // 单保存合并双段（Leader 裁决 1）：governance 组装保持原样 + capabilities.watch 段追加——
-        //   显式布尔（裁决 4：与 governance.hook.enabled 先例一致，不做「等于默认值删键」）
+        //   显式布尔（裁决 4：与 governance.hook.enabled 先例一致，不做「等于默认值删键」）；
+        //   longrun 三键齐发（enabled + 两阈值 ms）——后端 merge 只覆盖显式提交子键，无损其它手工键
         const payload = {
           governance: { hook: hook },
           capabilities: {
             watch: {
               enabled: !!watch.enabled,
-              longrun: { enabled: !!(watch.longrun && watch.longrun.enabled) }
+              longrun: {
+                enabled: !!(wl && wl.enabled),
+                maxDurationMs: Math.round(maxDurMin * 60000),
+                noProgressWindowMs: Math.round(noProgMin * 60000)
+              }
             }
           }
         };
@@ -598,13 +623,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             : null
         ),
 
-        // 卡片 C 违规升级（SwitchRow 无标题卡片；子项开启后联动显示）
+        // 卡片 C 违规升级（SwitchRow 无标题卡片；desc 常显——开关 off 亦显示语义说明；子项开启后联动显示）
         React.createElement(GovCard, null,
           React.createElement(SwitchRow, {
             checked: form.escalation.enabled,
             onChange: (v) => patchEsc({ enabled: v }),
             title: tt('gov.esc.title'),
-            desc: null
+            desc: tt('gov.esc.desc')
           }),
           form.escalation.enabled
             ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 0 0 2px' } },
@@ -639,8 +664,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           })
         ),
 
-        // 卡片 E watch 能力开关（置于卡片 D 之后；父开关 Lane 过期检测 + 子开关 longrun 探针——
-        //   父关 → 子项 disabled + 灰提示「关闭父能力后子项不生效」；出厂默认开、显式 false 才关，回显以 applied 为准）
+        // 卡片 E watch 能力开关（父开关 Lane 过期检测 + 子开关 longrun 探针 + 长跑两阈值分钟字段；
+        //   父关 → 子开关 disabled 不可点（交互保留、无解释文字）；阈值字段在父子均开时渲染，关闭时隐藏但值保留于 form）
         React.createElement(GovCard, null,
           React.createElement(SwitchRow, {
             checked: form.watch.enabled,
@@ -653,12 +678,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             onChange: (v) => patchWatchLongrun({ enabled: v }),
             disabled: !form.watch.enabled,
             title: tt('gov.watch.longrun.title'),
-            desc: form.watch.enabled ? tt('gov.watch.longrun.desc') : tt('gov.watch.longrun.disabledHint')
+            desc: tt('gov.watch.longrun.desc')
           }),
-          React.createElement('div', { style: { fontSize: G().cap, color: T.text3, lineHeight: 1.5, paddingTop: 2 } },
-            React.createElement('div', null, tt('gov.watch.note.hot')),
-            React.createElement('div', null, tt('gov.watch.note.off'))
-          )
+          form.watch.enabled && form.watch.longrun.enabled
+            ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 0 0 2px' } },
+                React.createElement(NumberField, {
+                  label: tt('gov.watch.longrun.maxDuration'), value: form.watch.longrun.maxDurationMin,
+                  min: 1, step: 1,
+                  onChange: (v) => patchWatchLongrun({ maxDurationMin: v })
+                }),
+                React.createElement(NumberField, {
+                  label: tt('gov.watch.longrun.noProgress'), value: form.watch.longrun.noProgressMin,
+                  min: 1, step: 1,
+                  onChange: (v) => patchWatchLongrun({ noProgressMin: v })
+                })
+              )
+            : null
         ),
 
         // 错误条（网络失败 / 400 逐条 code→双语映射）

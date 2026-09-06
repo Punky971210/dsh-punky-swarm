@@ -15,13 +15,16 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// watch 热更通道（longrun-panel-config-20260905，e2 新增）：装配级（apply + runtime.json 热写，
-//   镜像 governance-hotconfig/governance-preset-config T4 写法）断言 remountWatchEngine 生效——
-//   生效面 = { enabled, longrun.enabled, scanIntervalMinutes } 任一变化 → dispose+重建+重挂 timer+
+// watch 热更通道（longrun-panel-config-20260905，e2 新增；watch-panel-wiring-20260905 e2 扩展生效面）：
+//   装配级（apply + runtime.json 热写，镜像 governance-hotconfig/governance-preset-config T4 写法）断言
+//   remountWatchEngine 生效——生效面 = 5 键 { enabled, longrun.enabled, scanIntervalMinutes,
+//   longrun.maxDurationMs, longrun.noProgressWindowMs } 任一变化 → dispose+重建+重挂 timer+
 //   更新 heartbeatRef/watchInstalledCfg（lib/index.js remountWatchEngine）。行为断言双通道：
-//   (a) applied.watch（configEndpoints.appliedWatch = watchInstalledCfg 生效快照）经 GET /config 同步可查；
+//   (a) applied.watch（configEndpoints.appliedWatch = watchInstalledCfg 生效快照）经 GET /config 同步可查——
+//       快照形状为 5 键全形（阈值随安装快照携带，供面板回显与 watchSig 确认轮询）；
 //   (b) 引擎级 dispose+重建语义（longrun.enabled=false 重建 → tick 不产候选但 stalled 档存活）。
-//   幂等对照（T4 写法）：阈值 maxDurationMs/noProgressWindowMs 变更不触发 remount（build-report §6 契约 7）。
+//   幂等（e2 语义翻转，取代旧「阈值不在生效面」契约）：阈值 maxDurationMs/noProgressWindowMs 已纳入生效面——
+//   阈值-only 热写触发 remount（新阈值即时生效，H4）；同值重写 JSON 比较相等 → 幂等 no-op（零操作）。
 //   disabled 状态对象（build-report §6 契约 6）：引擎缺失（watch 关/热关）时 lane_heartbeat/lane_longrun
 //   查询返回 {enabled:false, reason:'watch-disabled', ...} 不 throw；beat=true 关闭态 no-op。
 import test from 'node:test';
@@ -135,8 +138,11 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
-    // 基线：出厂快照 {enabled:true, longrun:{enabled:true}, scanIntervalMinutes:1}；boot 对账幂等零 remount
-    assert.deepEqual(getConfig(routes).applied.watch, { enabled: true, longrun: { enabled: true }, scanIntervalMinutes: 1 });
+    // 基线：出厂快照 5 键全形 {enabled:true, longrun:{enabled:true, maxDurationMs:1200000, noProgressWindowMs:300000},
+    //   scanIntervalMinutes:1}；boot 对账幂等零 remount
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
+      'applied.watch 出厂快照含 5 键（阈值随 e2 生效面携带默认 1200000/300000）');
     assert.equal(remountLines(ctx.calls).length, 0, '快照与静态一致 → boot 对账 no-op（无 remount 日志）');
     // 热写 longrun.enabled:false → 生效面变化 → dispose+重建（re-mounted，logTag 缺省=热更路径）
     writeRuntime(root, { capabilities: { watch: { longrun: { enabled: false } } } });
@@ -145,8 +151,9 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     assert.equal(lines.length, 1, 'remount 恰 1 行（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=false\)/, '重建日志含生效面（longrun=false）');
     assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag（区分启动对账）');
-    assert.deepEqual(getConfig(routes).applied.watch, { enabled: true, longrun: { enabled: false }, scanIntervalMinutes: 1 },
-      'applied.watch 生效快照已随 remount 更新（watchInstalledCfg）');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
+      'applied.watch 生效快照已随 remount 更新（watchInstalledCfg；enabled 翻转阈值保留默认）');
     assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
   } finally {
@@ -169,8 +176,9 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
     let lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1);
     assert.match(lines[0], /unmounted \(watch disabled\)/, 'enabled=false → unmounted 方向（实际: ' + lines[0] + '）');
-    assert.deepEqual(getConfig(routes).applied.watch, { enabled: false, longrun: { enabled: true }, scanIntervalMinutes: 1 },
-      '关闭态 applied.watch.enabled=false（watchInstalledCfg 仍记快照形状，供面板回显）');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: false, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
+      '关闭态 applied.watch.enabled=false（watchInstalledCfg 仍记快照全形含阈值，供面板回显）');
     // ② enabled:true → 以合并快照重建（re-mounted）
     writeRuntime(root, { capabilities: { watch: { enabled: true } } });
     await sleep(HOT_SLEEP);
@@ -203,20 +211,38 @@ test('H3 scanIntervalMinutes 变更 → remount（scan 档期重挂）；applied
   }
 });
 
-// ── H4 幂等 no-op 对照（T4 写法）：阈值 maxDurationMs/noProgressWindowMs 留门但不在生效面 → 零 remount ──
-test('H4 阈值留门不触发 remount（build-report §6 契约 7）：仅改 longrun.maxDurationMs/noProgressWindowMs → 零操作', async () => {
+// ── H4 语义翻转（watch-panel-wiring e2）：阈值已纳入生效面（第 4/5 键）——阈值-only 热更 →
+//   remountWatchEngine 重建（remount 恰 1 次 + applied.watch 快照携带新阈值）；同值重写 → JSON 比较相等
+//   → 幂等 no-op（对照 BO1-B 写法，动态热更路径）。分钟级测试值（60000=1min / 30000=30s）即 task 2
+//   窗口生效正例的 remount 端证据；判定时机（引擎侧）见 watch-longrun.test.js T16（同阈值注入时钟）。
+test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留门零 remount」契约）：新阈值生效快照随动 + 同值重写幂等 no-op', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
   const { ctx, routes } = assemblyCtx();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
-    // 热写阈值（watcher 广播 onChange，applyConfigChange 经 remountWatchEngine 比对生效面 → 相等 → no-op）
-    writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 999999, noProgressWindowMs: 111111 } } } });
+    // ① 热写阈值（分钟级：maxDurationMs 60000=1min / noProgressWindowMs 30000=30s）→ 生效面 5 键第 4/5 键变化
+    //    → remount 恰 1 次（dispose 旧引擎 + 以合并快照 nextConfig 重建——新阈值经 createLaneHeartbeat
+    //    resolveLongrunConfig 捕获，判定时机验证见 T16）
+    writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
     await sleep(HOT_SLEEP);
-    assert.equal(remountLines(ctx.calls).length, 0, '阈值变化不在生效面 → 零 remount 日志（幂等 no-op）');
-    assert.deepEqual(getConfig(routes).applied.watch, { enabled: true, longrun: { enabled: true }, scanIntervalMinutes: 1 },
-      '生效快照不变（阈值经值传播仅进引擎 config，不重建）');
+    const lines = remountLines(ctx.calls);
+    assert.equal(lines.length, 1, '阈值-only 变化现触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
+    assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=true\)/, '重建日志 re-mounted（阈值变化不翻 enabled/longrun/scan）');
+    assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000 }, scanIntervalMinutes: 1 },
+      'applied.watch 生效快照随 remount 携带新阈值（watchInstalledCfg 5 键全形）');
+    assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
+    assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
+    // ② 同值重写 → nextInstalled 与 watchInstalledCfg JSON 相等 → 幂等 no-op（零新增 remount，快照不变）
+    writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
+    await sleep(HOT_SLEEP);
+    assert.equal(remountLines(ctx.calls).length, 1, '同值重写幂等 no-op：remount 仍恰 1 次（实际: ' + ctx.calls.info.join(' || ') + '）');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000 }, scanIntervalMinutes: 1 },
+      '同值重写后生效快照不变');
     assert.equal(ctx.calls.warn.length, 0, '幂等路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '幂等路径零 error');
   } finally {
