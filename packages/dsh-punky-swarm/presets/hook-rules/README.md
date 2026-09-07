@@ -16,6 +16,38 @@
 - **L1 凭据签名**（L1-A05~A08、A10~A12）：`manual_review` → **REQUIRE_APPROVAL** 人工复核。可能是正当透传（如向执行子代理交付部署凭证），也可能泄密；交互态走宿主人工闸，自动化无审批通道态 = fail-closed 拒绝。
 - **L2 资源上限**（L2-R01~R06）：`narrowable` + `narrow[{path, max}]`。`flags.narrow: true` 时原语为 **NARROW**，否则回退 **DENY**——两种情况均拒绝执行并下发 `narrowedParams` 收窄指引（clamped 明细），模型按指引重试即为合规调用（deny-with-guidance）。
 
+## 逐条规则审阅清单（供用户与 Agent 审阅检查）
+
+下表把 l1-sensitive（12 条）与 l2-resource（6 条）逐条展开为可审阅清单——字段（rule id / preset 归属 / 类别 / 原语（生效档）/ 触发 tools / match 摘要 / violation message）与引擎 `Rule`/`Violation` 契约一一对应，内容派生自各 JSON 的 `rules` 机器值与 `_meta.notes` 人话说明；**`compose` 为 L1 12 条在前 + L2 6 条在后的逐条等价合并**（P-1 保序断言守护），引用本双表即完整清单，不重复 compose 正文。
+
+### L1 敏感数据防护（l1-sensitive，12 条）
+
+| rule id | preset 归属 | 类别（category） | 原语（生效档） | 触发 tools | match 摘要（path + op） | violation message |
+|---|---|---|---|---|---|---|
+| L1-D01 | l1-sensitive | hard | DENY（P2 硬性违规） | subagent、subagent_fork | `/prompt` · regex（私钥块头 BEGIN…PRIVATE KEY） | [preset L1] 子代理 prompt 中出现私钥块（-----BEGIN … PRIVATE KEY-----）：私钥材料禁止传入子代理/委托上下文 |
+| L1-D02 | l1-sensitive | hard | DENY（P2 硬性违规） | send_message | `/message` · regex（私钥块头） | [preset L1] send_message 消息体中出现私钥块：私钥材料禁止经消息信道发送给子代理 |
+| L1-D03 | l1-sensitive | hard | DENY（P2 硬性违规） | workflow | `/script` · regex（私钥块头） | [preset L1] workflow script 中出现私钥块：脚本正文禁止携带私钥材料分发到子代理 |
+| L1-D04 | l1-sensitive | hard | DENY（P2 硬性违规） | ralph | `/objective` · regex（私钥块头） | [preset L1] ralph objective 中出现私钥块：私钥材料禁止写入新鲜 agent 的轮次目标 |
+| L1-A05 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | subagent、subagent_fork | `/prompt` · regex（凭据签名：令牌前缀/内联 secret/带凭据 URL） | [preset L1] 子代理 prompt 疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：透传敏感需人工确认 |
+| L1-A06 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | send_message | `/message` · regex（凭据签名） | [preset L1] 消息体疑似携带凭据（令牌前缀/内联 secret/带凭据 URL）：跨子代理发送敏感需人工确认 |
+| L1-A07 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | workflow | `/script` · regex（凭据签名） | [preset L1] workflow 脚本疑似携带凭据：分发到子代理执行前需人工确认 |
+| L1-A08 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | ralph | `/objective` · regex（凭据签名） | [preset L1] ralph 目标疑似携带凭据：写入轮次目标前需人工确认 |
+| L1-D09 | l1-sensitive | hard | DENY（P2 硬性违规） | web_search | `/queries` · regex（带凭据 URL user:pass@host；/queries 为数组，按 String(数组) 判定） | [preset L1] web_search 查询串含内嵌凭据 URL（user:pass@host）：禁止向搜索端点外发凭据 |
+| L1-A10 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | pwsh | `/command` · regex（凭据签名） | [preset L1] pwsh 命令疑似内联凭据（令牌/secret/带凭据 URL）：建议改经凭证存储引用，执行需人工确认 |
+| L1-A11 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | ssh_exec | `/command` · regex（凭据签名） | [preset L1] ssh_exec 命令疑似内联凭据：远程 shell 正文携带敏感需人工确认 |
+| L1-A12 | l1-sensitive | manual_review | REQUIRE_APPROVAL（P1 人工复核） | ssh_cluster | `/command` · regex（凭据签名） | [preset L1] ssh_cluster 批量命令疑似内联凭据：多主机远程正文携带敏感需人工确认 |
+
+### L2 资源边界（l2-resource，6 条）
+
+| rule id | preset 归属 | 类别（category） | 原语（生效档） | 触发 tools | match 摘要（path + op） | violation message |
+|---|---|---|---|---|---|---|
+| L2-R01 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | pwsh | `/timeoutMs` · gt 600000（narrow max=600000） | [preset L2] pwsh timeoutMs 超过上限 600000ms：请按收窄指引重试 |
+| L2-R02 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | ssh_exec | `/timeoutMs` · gt 120000（narrow max=120000） | [preset L2] ssh_exec timeoutMs 超过上限 120000ms：请按收窄指引重试 |
+| L2-R03 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | ssh_cluster | `/timeoutMs` · gt 300000（narrow max=300000） | [preset L2] ssh_cluster timeoutMs 超过上限 300000ms：请按收窄指引重试 |
+| L2-R04 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | ssh_cluster | `/maxWorkers` · gt 16（narrow max=16） | [preset L2] ssh_cluster maxWorkers 超过上限 16：请按收窄指引重试 |
+| L2-R05 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | create_goal | `/max_goal_rounds` · gt 50（narrow max=50） | [preset L2] create_goal max_goal_rounds 超过上限 50：自动延续轮数需受资源边界约束 |
+| L2-R06 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | ralph | `/maxRounds` · gt 20（narrow max=20） | [preset L2] ralph maxRounds 超过上限 20：轮次上限需受资源边界约束 |
+
 ## 启用方式
 
 预设为**可选启用**片段，出厂规则表保持空（零拦截）。两种启用写法：

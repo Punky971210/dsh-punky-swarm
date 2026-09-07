@@ -53,7 +53,7 @@ test('resolveBridgeConfig: 默认关 (enabled=false, mode=inprocess, inbound=fal
   assert.deepEqual(BRIDGE_DEFAULTS, { enabled: false, mode: 'inprocess', inbound: false });
 });
 
-test('resolveBridgeConfig: 显式开启 enabled=true 时 inbound 仍默认关（D14）', () => {
+test('resolveBridgeConfig: 显式开启 enabled=true 时 inbound 仍默认关', () => {
   assert.equal(resolveBridgeConfig({ acps: { bridge: { enabled: true } } }).enabled, true);
   assert.equal(resolveBridgeConfig({ acps: { bridge: { enabled: true } } }).inbound, false);
   const on = resolveBridgeConfig({ acps: { bridge: { enabled: true, inbound: true } } });
@@ -85,14 +85,14 @@ test('createBridge: enabled=false 实例 handleInbound 拒绝且不写 mailbox�
   b.dispose();
 });
 
-// ---------- ② inbound 默认关（D14）：外部不可写 mailbox ----------
+// ---------- ② inbound 默认关：外部不可写 mailbox ----------
 test('inbound=false（enabled=true）：外部写被拒 INBOUND_DISABLED，视图只读', () => {
   const b = createBridge({ root: engineRoot, config: { acps: { bridge: { enabled: true } } } });
   assert.equal(b.inboundEnabled, false);
   const r = b.handleInbound({ command: 'start', taskId: 't1' }, { sessionId: 's1', batchId: 'b1' });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'INBOUND_DISABLED');
-  assert.ok(!fs.existsSync(mbRoot('s1', 'b1')), 'inbound 关时不得落盘（D14）');
+  assert.ok(!fs.existsSync(mbRoot('s1', 'b1')), 'inbound 关时不得落盘');
   // 视图（outbound 投影）仍可用——只读不写
   const view = b.toOutbound({ ackId: 'x', ts: '2026-08-22T00:00:00.000Z', box: { type: 'inbox' }, message: 'hi' });
   assert.equal(view.type, 'message');
@@ -100,7 +100,7 @@ test('inbound=false（enabled=true）：外部写被拒 INBOUND_DISABLED，视�
   b.dispose();
 });
 
-test('deliverInbound: inboundEnabled=false 直接拒绝（缺省 D14）', () => {
+test('deliverInbound: inboundEnabled=false 直接拒绝（缺省）', () => {
   const r = deliverInbound(engineRoot, 's1', 'b1', { command: 'start' });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'INBOUND_DISABLED');
@@ -319,7 +319,7 @@ test('DEF-V6-1: /rpc（bridge enabled + inbound=false）→ 200 rejected + 不�
       } },
     });
     assert.equal(r.status, 200);
-    assert.equal(r.body.result.status.state, 'rejected'); // 协议级拒绝（D14 inbound 门控）
+    assert.equal(r.body.result.status.state, 'rejected'); // 协议级拒绝（inbound 门控）
     assert.equal(r.body.result.status.dataItems[0].data.code, 'INBOUND_DISABLED');
     assert.ok(!fs.existsSync(v6Root('sess-v6b', 'b-v6b')), 'inbound=false 时 /rpc 不得落 mailbox');
   } finally { await s.close(); }

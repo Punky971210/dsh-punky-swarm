@@ -215,7 +215,7 @@ test('EAB 凭据 AES-256-GCM：加解密往返，keyId/macKey 不落明文', () 
   };
   const envelope = encryptEabCredential(credential, '0'.repeat(64));
   const serialized = JSON.stringify(envelope);
-  // keyId/macKey 明文不出现（D13：不落明文）
+  // keyId/macKey 明文不出现（密钥材料不落明文）
   assert.equal(serialized.includes(credential.keyId), false);
   assert.equal(serialized.includes(credential.macKey), false);
   // aic/expiresAt 元数据可明文旁路（非密钥材料）

@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // I1 集成测试：wiring 接线契约（fake ctx 先例 tools.test.js fake guard 模式）
-// 覆盖：挂载与 disposer / ALLOW 透传 / DENY 短路 / REQUIRE_APPROVAL→ask / post pass-through /
+// 覆盖：挂载与 disposer / ALLOW 透传 / DENY 短路 / REQUIRE_APPROVAL→ask / post 双口径（V8：普通结果恒
+//       next；ask 泛化分支受控短路补正）/ DENY 短路径与 ask reason 规则引用（B 辅，V7）/
 //       收据落盘（四要素 + ledger + 读回）/ 与难度门禁组合 / 双版本宿主兼容。
 // NARROW 运行期接线 e2e——pre 链 NARROW → reason 修正指引 +
 //   收据 narrowedParams 落盘读回一致；收据扩展字段（9 键）兼容断言（旧 8 键读回不炸）。
@@ -138,7 +139,7 @@ test('I1-2 ALLOW 透传：pre listener 收到 ALLOW 决策 → 调用了 next()�
   hook.dispose();
 });
 
-test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀}，未调 next()', async () => {
+test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀 + 命中规则引用（B 辅）}，未调 next()', async () => {
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
   const hook = installGovernanceHook(ctx, { store: null, root, config: DENY_CFG });
@@ -147,12 +148,14 @@ test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀}
   const decision = await pre(execOf('bash', { cmd: 'rm -rf /' }), async () => { nextCalled++; return { kind: 'allow' }; });
   assert.equal(decision.kind, 'deny');
   assert.match(decision.reason, /^\[governance:DENY\] /);
+  // V7：DENY 短路径 reason 携带命中规则引用（B 辅；前缀断言不破、规则 id 可见）
+  assert.match(decision.reason, /规则引用：R001/, 'DENY reason 含命中规则引用（规则 id 可见，用户/Agent 可审阅）');
   assert.equal(nextCalled, 0);
   assert.equal(hook.refusals.count(), 1);
   hook.dispose();
 });
 
-test('I1-4 REQUIRE_APPROVAL → ask：返回 {kind:ask, reason}', async () => {
+test('I1-4 REQUIRE_APPROVAL → ask：返回 {kind:ask, reason（前缀 + 命中规则引用）}', async () => {
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
   const hook = installGovernanceHook(ctx, { store: null, root, config: ASK_CFG });
@@ -160,11 +163,14 @@ test('I1-4 REQUIRE_APPROVAL → ask：返回 {kind:ask, reason}', async () => {
   const decision = await pre(execOf('edit', { scope: 'admin' }), async () => ({ kind: 'allow' }));
   assert.equal(decision.kind, 'ask');
   assert.match(decision.reason, /^\[governance:REQUIRE_APPROVAL\] /);
+  // V7（ask 侧）：ask.reason 亦携带命中规则引用（B 辅——审批 UI reason / 无审批服务降级文本可见）
+  assert.match(decision.reason, /规则引用：R002/, 'ask reason 含命中规则引用（规则 id 可见）');
   assert.equal(hook.refusals.count(), 1);
   hook.dispose();
 });
 
-test('I1-5 post pass-through：post listener 恒 return next()，不断链（next 被调用）', async () => {
+test('I1-5 post 双口径（V8）：普通结果恒 next（不断链）；ask 泛化分支受控短路（next 不被调用，返回 accept+content 补正文本）', async () => {
+  // 口径①（普通结果，非本插件 ask）：post listener 恒 return next()，不断链
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
   const hook = installGovernanceHook(ctx, { store: null, root, config: DENY_CFG });
@@ -172,8 +178,31 @@ test('I1-5 post pass-through：post listener 恒 return next()，不断链（nex
   let nextCalled = 0;
   const decision = await post(execOf('bash', { cmd: 'ls' }), { content: [{ type: 'text', text: 'ok' }], isError: false }, async () => { nextCalled++; return { kind: 'accept' }; });
   assert.equal(decision.kind, 'accept');
-  assert.equal(nextCalled, 1);
+  assert.equal(nextCalled, 1, '普通结果恒 next（pass-through 语义保持）');
   hook.dispose();
+
+  // 口径②（本插件 ask + 宿主 rejected 泛化拒绝文本）：受控短路——next 不被调用，
+  //   返回 {kind:accept, content:[补正文本]}（护栏标注 + 命中规则；宿主 accept+content 替换保 isError）
+  const ctx2 = fakeCtx();
+  const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
+  const hook2 = installGovernanceHook(ctx2, { store: null, root: root2, config: ASK_CFG });
+  const pre2 = ctx2.listeners.get('tools/pre-execute');
+  const post2 = ctx2.listeners.get('tools/post-execute');
+  const exec = execOf('edit', { scope: 'admin' });
+  const gate = await pre2(exec, async () => ({ kind: 'allow' }));
+  assert.equal(gate.kind, 'ask', 'pre 登记 ask（pendingAsks）');
+  let next2 = 0;
+  const d2 = await post2(
+    exec,
+    { content: [{ type: 'text', text: 'Error: the user rejected tool "edit"' }], isError: true, error: { message: 'the user rejected tool "edit"' } },
+    async () => { next2++; return { kind: 'accept' }; },
+  );
+  assert.equal(d2.kind, 'accept');
+  assert.ok(Array.isArray(d2.content) && d2.content.length === 1 && typeof d2.content[0]?.text === 'string', 'content 替换为补正文本');
+  assert.match(d2.content[0].text, /\[governance:REQUIRE_APPROVAL/, '补正文本含护栏标注');
+  assert.match(d2.content[0].text, /R002/, '补正文本含命中规则 id');
+  assert.equal(next2, 0, 'ask 泛化分支受控短路（next 不被调用——V8 口径②）');
+  hook2.dispose();
 });
 
 test('I1-6 收据落盘：temp root → refusals/<sessionId>/<receiptId>.json 存在 + ledger-<sessionId>.jsonl 追加一行（四要素验证）', async () => {

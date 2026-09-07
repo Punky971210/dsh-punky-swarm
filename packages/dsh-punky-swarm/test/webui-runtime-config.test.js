@@ -17,14 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // webui-runtime-config——服务端受控白名单预检
 //   （validateGovernancePayload 纯函数）与写通道集成（读-改-写保留 + validateOverlay 兜底 +
-//   tmp+rename 原子写）。临时根一律落 D 盘（D:\dsh\_tmp\，用户落盘纪律）。
+//   tmp+rename 原子写）。临时根一律落 D 盘测试临时目录（D:\dsh\_tmp\ 下）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
 
-const TMP_BASE = 'D:\\dsh\\_tmp\\webui-config-build';
+const TMP_BASE = 'D:\\dsh\\_tmp\\dsh-tmp';
 fs.mkdirSync(TMP_BASE, { recursive: true });
 const freshRoot = () => fs.mkdtempSync(path.join(TMP_BASE, 'rtcfg-'));
 

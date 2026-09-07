@@ -170,7 +170,7 @@ test('接线：aip.enabled=false 时 agentCatalog 为 null、零生成', () => {
   assert.equal(made2.agentCatalog, null);
 });
 
-// —— 端点层（方案 A：GET /api/dsh-punky-swarm/agents）——
+// —— 端点层（只读 GET /api/dsh-punky-swarm/agents）——
 function apiWithAgentCatalog(agentCatalog) {
   const routes = [];
   const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };

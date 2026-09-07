@@ -15,7 +15,7 @@
 ## 1. 双阶段接线
 
 - **pre-execute**：状态前置检查（会话延后/暂停中 → 直接拒绝，见 §2 DEFER/PAUSE）→ 内核裁决 → ALLOW 则透传（`next()`）；非 ALLOW 同步落盘拒绝收据（失败仅 warn，观察者纪律，不阻断裁决）→ 返回 `{kind:'deny'|'ask'}`；
-- **post-execute**：pass-through 观察者——恒 `next()`，不篡改结果；仅尽力补记 ask outcome（查表推断，写失败仅 warn）；
+- **post-execute**：pass-through 观察者——恒 `next()`，不篡改结果；仅尽力补记 ask outcome（查表推断，写失败仅 warn）。**受控例外（拒绝可见性，受控补正）**：宿主 serviceAsk 泛化分支（rejected/cancelled/unavailable/no-agent）覆盖 ask.reason 后，post 对本插件 ask 命中分支**短路补正** Agent 可见文本——返回 `{kind:'accept', content:[补正文本]}`（宿主 accept+content 替换仅改展示 content、保 isError:true 与 error.message）；短路条件严格收窄（仅该 4 分支 + 本插件 pendingAsk 命中），补记/补正失败降级恒 `next()`（零行为回归）；其余一切场景恒 `next()`（详见 §2）；
 - **事件序**：pre → execute → post → result；本 hook 不调用 `ctx.emit` 篡改事件流；pre 拒绝短路径下 execute 不执行，post 观察者仍被调用（ask 降级 deny 路径同样补记）；
 - **卸载**：`dispose()` 依次卸载 pre + post listener（幂等）。
 
@@ -41,8 +41,8 @@
 7. `soft` 置信 ≥ 0.70 → REQUIRE_APPROVAL；
 8. 未分类违规 → 兜底原语（defaults.deny，缺省 DENY；绝不 ALLOW——fail-closed）。
 
-- **统一拒绝消息格式**：`[governance:<primitive>] <reason>`（primitive ∈ ALLOW/DENY/REQUIRE_APPROVAL/DEFER/NARROW/PAUSE；对齐难度门禁 `[task-difficulty-gate]` 前缀风格）——模型侧可区分「任务级未评估」vs「调用级越界」。DENY/DEFER/NARROW/PAUSE 统一以 `{kind:'deny'}` 落地；REQUIRE_APPROVAL → `{kind:'ask'}`。
-- **REQUIRE_APPROVAL ask 行为（显式化）**：pre 同步落盘 `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}`；post 尽力补记 `outcome`（denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once）。**依赖宿主 approval 通道（serviceAsk），无审批服务 / 无 agent = 降级 deny**（行为不变，记录显式化）；allowed-once → allow。
+- **统一拒绝消息格式**：`[governance:<primitive>] <reason>`（primitive ∈ ALLOW/DENY/REQUIRE_APPROVAL/DEFER/NARROW/PAUSE；对齐难度门禁 `[task-difficulty-gate]` 前缀风格）——模型侧可区分「任务级未评估」vs「调用级越界」。DENY/DEFER/NARROW/PAUSE 统一以 `{kind:'deny'}` 落地；REQUIRE_APPROVAL → `{kind:'ask'}`。**命中规则引用**：ruleRefs 非空时 reason 尾部追加「；规则引用：`<ruleId>`（preset `<presetId>`）」——DENY 短路径与 ask.reason 均携带（审批 UI 若渲染 reason，用户拒绝前即可见命中规则；无 preset 归属的自定义规则仅列 rule id）。
+- **REQUIRE_APPROVAL ask 行为（显式化）**：pre 同步落盘 `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}`（登记时顺带缓存 decision 快照：primitive/reason/ruleRefs——post 补正零盘读）；post 尽力补记 `outcome`（denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once）。**依赖宿主 approval 通道（serviceAsk），无审批服务 / 无 agent = 降级 deny**（行为不变，记录显式化）；allowed-once → allow。**拒绝可见性（受控例外）**：宿主 serviceAsk 在 4 个泛化分支——rejected（`user rejected`）/ cancelled（`was cancelled`）/ unavailable（`no approval channel is available`）/ no-agent（`no agent to route it through`）——会把 ask.reason 覆盖为「工具名级」泛化文本（如 `the user rejected tool "pwsh"`，无护栏标识、无命中规则）；wiring post 观察者对本插件 ask 命中分支做**受控补正**：短路返回 `{kind:'accept', content:[补正文本]}`——补正文本含 `[governance:REQUIRE_APPROVAL 人工闸拒绝（护栏拦截…）]` 护栏标注 + 命中规则（rule id + preset 归属）+ 违规 message + 收据/清单查阅路径（<root>/governance/refusals/… 与 presets/hook-rules/README.md），保 isError、失败降级恒 `next()`（零行为回归）；**denied-no-approval（无审批服务降级，宿主保留 ask.reason 即护栏前缀正文）不补正**（不重复标注）。短路条件严格收窄，触碰「post 恒 next」纪律的边界见 §1/§7。
 - **DEFER/PAUSE 文件态状态机（flag 开启后真实生效）**：`flags.defer: true`（soft 违规）→ 会话挂起延后（状态文件 `<root>/governance/state/<sessionId>.json`，窗口 30s，收据含 `deferMeta`）；`flags.pause: true`（pausable 违规）→ 会话暂停（窗口 60s，收据含 `pauseMeta`）。挂起/暂停期间同会话调用统一 `[governance:DEFER|PAUSE]` deny（reason 含 retry-after / pauseToken / until），**惰性过期自动恢复**（读时清理，无定时器 / 无 resume 端点）；flag-off 折叠 DENY 无状态副作用（与「会话延后/暂停中」可区分）。
 
 ## 3. 配置指南与示例规则
@@ -141,6 +141,21 @@ governance:
 - 流式事件推送（tools/result + SSE 类）；
 - 完整 RFC8785（数字规范化 / 逐字符转义）与真签名证据信封（sha256 链简版已提供，见 §4）；
 - 不可变存储（write-once 类）。
+
+### 引擎边界与拒绝可见性查阅路径
+
+**引擎边界（宿主依赖层，插件不可改）**：
+
+- 宿主 `serviceAsk` 对拒绝 reason 的保留/拼接——rejected/cancelled/unavailable/no-agent 四分支把 `ask.reason` 覆盖为「工具名级」泛化文本；真根修需宿主上游保留/拼接 reason（npm 覆盖即丢，不提供），插件侧以 post 受控补正兜底（见 §2）；
+- 宿主审批 UI 对 reason 的渲染形态（审批卡片是否展示多行护栏明细）——宿主 Web 实现；插件只保证 reason 文本（含规则引用）随 `approval.request` 送达；
+- WebUI「治理配置」页逐条规则查看/编辑——页面本体在宿主 dsh-web；插件只提供 presetCatalog 元数据，当前审阅面 = 本仓库规则清单（见下 ④）。
+
+**拒绝可见性查阅路径**（「可见文本 → 审计明细 → 全量清单」可追溯链）：
+
+- ① 被拒后 Agent 汇报文本（受控补正文本）：会话内即时可见 `[governance:REQUIRE_APPROVAL 人工闸拒绝…]` + 命中规则（rule id + preset 归属）+ 违规 message + 收据路径，Agent 可按违规 message 修正参数后重发合规调用；
+- ② 审批请求 reason（规则引用送达）：reason 尾部「；规则引用：…」，随 approval.request 送达宿主 UI；
+- ③ 收据明细（人工/审计）：`<root>/governance/refusals/<sessionId>/<receiptId>.json`（decision.reason + ruleRefs + attemptedParams + ask.outcome，哈希锚定）+ `ledger-<sessionId>.jsonl` + 批级事件流（见 §4/§5）；
+- ④ 全量规则清单（主动审阅）：`presets/hook-rules/README.md`「逐条规则审阅清单」（l1-sensitive 12 + l2-resource 6，rule id/preset/category/原语/tools/match/message）+ 各 preset JSON。
 
 ## 8. 能力边界与取舍
 

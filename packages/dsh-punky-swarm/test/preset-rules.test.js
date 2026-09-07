@@ -347,3 +347,26 @@ test('R-4 大小写：Password=/password= 与 sk-/SK- 变体命中一致', () =>
     assert.deepEqual(d.ruleRefs, ['L1-A05']);
   }
 });
+
+// ── T-3 V9 审阅清单一致性：README 逐条表 rule id 集 == l1-sensitive 12 ∪ l2-resource 6（JSON 解析对照）──
+// 载体（决策包第五节）：presets/hook-rules/README.md「逐条规则审阅清单」双表（L1 12 行 + L2 6 行），
+// 每行首列 = rule id（L1-[A-Z]\d{2} / L2-R\d{2}）；compose 为逐条等价引用（P-1 保序断言对应），不重复正文。
+test('V9 README 逐条审阅清单：表 rule id 集 == l1-sensitive 12 ∪ l2-resource 6；compose 等价声明在档', () => {
+  const readme = readFileSync(join(presetsDir, 'README.md'), 'utf8');
+  assert.ok(!readme.startsWith('\uFEFF'), 'README 不应含 UTF-8 BOM');
+  // 表数据行 = 行首 '| ' + 规范 rule id（仅清单表以 rule id 为首列；文件/内容表首列为反引号文件名不命中）
+  const tableIds = [];
+  for (const line of readme.split('\n')) {
+    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2})\s*\|/.exec(line);
+    if (m) tableIds.push(m[1]);
+  }
+  const expected = [...L1.rules, ...L2.rules].map((r) => r.id).sort();
+  assert.equal(tableIds.length, 18, '逐条表恰 18 行（L1 12 + L2 6）');
+  assert.deepEqual([...new Set(tableIds)].sort(), expected,
+    'README 逐条表 rule id 集须与 l1/l2 JSON 完全一致（漏行/超集/改 id 均拒绝）');
+  // 表头字段契约（rule id / preset 归属 / … / violation message）在档（用户可逐条审阅的载体存在）
+  assert.match(readme, /^\|\s*rule id\s*\|\s*preset 归属\s*\|/m, '清单表头含 rule id + preset 归属 列');
+  assert.ok(readme.includes('violation message'), '清单表头含 violation message 列');
+  // compose 等价声明（决策包：compose = 逐条等价，README 以 L1/L2 双表呈现 18 行、不重复 compose 正文）
+  assert.ok(readme.includes('compose') && readme.includes('等价'), 'README 含 compose 等价声明（与 P-1 保序断言一致）');
+});
