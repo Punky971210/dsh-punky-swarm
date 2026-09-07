@@ -85,7 +85,7 @@ test('createBridge: enabled=false 实例 handleInbound 拒绝且不写 mailbox�
   b.dispose();
 });
 
-// ---------- ② inbound 默认关（D14）：外部不可写 mailbox ----------
+// ---------- ② inbound 默认关：外部不可写 mailbox ----------
 test('inbound=false（enabled=true）：外部写被拒 INBOUND_DISABLED，视图只读', () => {
   const b = createBridge({ root: engineRoot, config: { acps: { bridge: { enabled: true } } } });
   assert.equal(b.inboundEnabled, false);
@@ -319,7 +319,7 @@ test('DEF-V6-1: /rpc（bridge enabled + inbound=false）→ 200 rejected + 不�
       } },
     });
     assert.equal(r.status, 200);
-    assert.equal(r.body.result.status.state, 'rejected'); // 协议级拒绝（D14 inbound 门控）
+    assert.equal(r.body.result.status.state, 'rejected'); // 协议级拒绝（inbound 门控）
     assert.equal(r.body.result.status.dataItems[0].data.code, 'INBOUND_DISABLED');
     assert.ok(!fs.existsSync(v6Root('sess-v6b', 'b-v6b')), 'inbound=false 时 /rpc 不得落 mailbox');
   } finally { await s.close(); }

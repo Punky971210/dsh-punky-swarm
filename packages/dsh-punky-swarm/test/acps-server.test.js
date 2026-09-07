@@ -278,7 +278,7 @@ test('装配：resolveAcpsConfig 默认双关（enabled:false + endpoint.enabled
   assert.equal(d.enabled, false);
   assert.equal(d.endpoint.enabled, false);
   assert.equal(d.endpoint.port, 9443); // D1 默认值
-  assert.equal(d.endpoint.minVersion, 'TLSv1.3'); // D12
+  assert.equal(d.endpoint.minVersion, 'TLSv1.3');
   assert.equal(d.endpoint.devInsecure, false);    // D4 E2 默认关
   // 部分配置不破坏默认（短路钳制）
   const partial = resolveAcpsConfig({ acps: { endpoint: { port: 'abc' } } });
