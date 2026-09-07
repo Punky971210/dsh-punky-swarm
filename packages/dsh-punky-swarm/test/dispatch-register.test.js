@@ -240,7 +240,7 @@ test('R6: 装配注入 resolveBatchContext(exec) 显式返回批上下文 → �
   const aux = seedRunning(root, 'sess-b', 'b-r6');
   const ctx = assemblyCtx();
   const index = new Map();
-  // 注入解析器：任何 subagent 派发显式归属 sess-b/b-r6/l1（模拟宿主/编排层提供归属——方案 B 装配注入面）
+  // 注入解析器：任何 subagent 派发显式归属 sess-b/b-r6/l1（模拟宿主/编排层提供归属——装配注入面）
   const injected = (exec, { workerSessionId }) => (exec.name === 'subagent' ? { sessionId: 'sess-b', batchId: 'b-r6', lane: 'l1', workerSessionId } : null);
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger, resolveBatchContext: injected });
   try {

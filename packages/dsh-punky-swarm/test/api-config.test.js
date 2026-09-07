@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // /config 端点契约测试（trusted 403 / 400 校验 /
 //   405 / GET 取数 / POST 落盘 / 条件注册路由计数零回归）。直调 handler 形态（req={url,method,headers,body}
 //   + res mock），harness 对齐 discovery.test.js（apiWithDiscovery/invoke）。
-//   临时根一律落 D 盘（D:\dsh\_tmp\，用户落盘纪律）。
+//   临时根一律落 D 盘测试临时目录（D:\dsh\_tmp\ 下）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,7 +27,7 @@ import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 import { createRuntimeConfigService } from '../lib/webui/runtime-config.js';
 
-const TMP_BASE = 'D:\\dsh\\_tmp\\webui-config-build';
+const TMP_BASE = 'D:\\dsh\\_tmp\\dsh-tmp';
 fs.mkdirSync(TMP_BASE, { recursive: true });
 const freshRoot = () => fs.mkdtempSync(path.join(TMP_BASE, 'api-cfg-'));
 

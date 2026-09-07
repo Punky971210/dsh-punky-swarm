@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // governance/wiring.js —— 宿主触点接线（JS，对齐 evidence.js 模式）
 // 订阅宿主 tools/pre-execute（deny→Error、ask→serviceAsk）
-//   + tools/post-execute（pass-through 观察者恒 next()，先例 evidence.js）。
+//   + tools/post-execute（pass-through 观察者，先例 evidence.js；ask 泛化分支受控补正 = 文档化例外，见下）。
 // 组合：createGovernanceKernel 裁决 → createRefusalReceipt 收据 → writeRefusal 落盘
 //   （失败仅 warn 不阻断——观察者纪律）→ primitiveToPreDecision 决策映射。
 // 事件序不变量：pre→execute→post→result；本 wiring 不调用 ctx.emit 篡改事件流；
@@ -35,12 +35,76 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   REQUIRE_APPROVAL ask 接线——pre 返回 {kind:'ask'} 交宿主 serviceAsk，收据同步落盘
 //   ask.initiated（channel/initiated/requestId=callId）；post 观察者尽力补记 ask.outcome（infer 自 result，
 //   isError→降级 deny 各分支 / 非错误→allowed-once），写失败仅 warn、不改返回语义。
+//   拒绝可见性（受控补正，本文件核心增强）：宿主 serviceAsk 在 4 个泛化分支（rejected/cancelled/
+//   unavailable/no-agent）会把 ask.reason 覆盖为「工具名级」泛化文本——Agent 只见 the user rejected tool "X"，
+//   无护栏标识、无命中规则。wiring post 观察者对命中分支做**受控补正**：短路返回
+//   {kind:'accept', content:[补正文本]}（宿主 accept+content 替换仅改展示 content、保 isError:true 与
+//   error.message），补正文本含 [governance:…] 护栏标注 + 命中规则（rule id + preset 归属）+ 违规 message
+//   + 收据/清单查阅路径；补记或补正失败 → 降级恒 next()（零行为回归）。短路条件严格收窄：
+//   仅本插件 ask（pendingAsks 命中）+ 4 泛化分支，其余一切场景恒 next()——触碰「post 恒 next」纪律的
+//   受控例外（文档化边界见 docs/guardrails-hook.md §1/§2/§7）。denied-no-approval（无审批服务降级，
+//   宿主保留 ask.reason 即本 wiring 前缀正文）不补正（不重复标注）。
 // 双层桥接——构造参数 onRefusal?(receipt)（收据落盘成功同步回调，
 //   抛错隔离 warn）；装配层注入实现写批级事件流 <root>/governance/events/refusal-<sessionId>.jsonl
 //   （仅事件可见性，不触发批级状态迁移）；dispose 断开回调（幂等）。
 import { createGovernanceKernel, createRefusalReceipt, primitiveToPreDecision, resolveGovernanceConfig } from './index.js';
 import { writeRefusal, patchRefusalAsk } from './receipt-store.js';
 import { readSessionState, setDeferred, setPaused } from './state-store.js';
+
+// ── 规则引用工具（拒绝正文与受控补正共用）──
+// preset 归属映射（rule id 前缀 → preset 注册 id）：L1-* → l1-sensitive、L2-* → l2-resource
+// （compose 复用 L1/L2 规则原 id，不产生独立前缀）；自定义规则（无前缀）→ null（省略 preset 归属，仅列 id）。
+const PRESET_OF_RULE_PREFIX = [
+  ['L1-', 'l1-sensitive'],
+  ['L2-', 'l2-resource'],
+];
+
+export function presetOfRuleId(id) {
+  if (typeof id !== 'string' || id.length === 0) return null;
+  for (const [prefix, presetId] of PRESET_OF_RULE_PREFIX) {
+    if (id.startsWith(prefix)) return presetId;
+  }
+  return null;
+}
+
+// 命中规则引用文本：ruleRefs 逐条格式化为「id（preset <presetId>）」（无 preset 归属 → 仅 id）；空/非数组 → ''。
+export function ruleRefsText(ruleRefs) {
+  if (!Array.isArray(ruleRefs) || ruleRefs.length === 0) return '';
+  return ruleRefs
+    .map((id) => {
+      const presetId = presetOfRuleId(id);
+      return presetId === null ? String(id) : `${id}（preset ${presetId}）`;
+    })
+    .join('、');
+}
+
+// 宿主 serviceAsk 泛化分支集合（受控补正短路条件）：这些分支把 ask.reason 覆盖为工具名级泛化文本——
+//   denied-rejected（user rejected）/ denied-cancelled（was cancelled）/ unavailable（no approval channel
+//   is available）/ denied-no-agent（no agent to route it through）。
+// denied-no-approval（无审批服务降级——宿主保留 ask.reason 即本 wiring 前缀正文）不在集合内（不重复标注）。
+const GENERIC_DENIAL_OUTCOMES = new Set(['denied-rejected', 'denied-cancelled', 'unavailable', 'denied-no-agent']);
+
+// 补正可见文本（纯函数，零盘读）：输入 = pre 登记缓存的 decision 快照 + receiptId/sessionId。
+// 产出 = 护栏行为标注 + 命中规则引用（含 preset 归属）+ 违规 message（decision.reason）+ 收据/清单查阅路径。
+// decision 快照缺失/形状异常 → 上抛（调用方 catch → 降级恒 next()）。
+function buildDenialCorrectionText(pending) {
+  const cached = pending?.decision;
+  if (!cached || cached.primitive !== 'REQUIRE_APPROVAL') {
+    throw new Error('cached decision unavailable (primitive=' + (cached?.primitive ?? 'none') + ')');
+  }
+  const sessionId = pending.sessionId ?? 'cli';
+  const receiptId = pending.receiptId ?? '(unknown)';
+  const refs = ruleRefsText(cached.ruleRefs);
+  const reason = typeof cached.reason === 'string' && cached.reason.length > 0
+    ? cached.reason
+    : '护栏拦截（违规明细缺失）';
+  return (
+    `Error: [governance:${cached.primitive} 人工闸拒绝（护栏拦截，宿主泛化拒绝文本补正）] ` +
+    (refs.length > 0 ? `命中规则：${refs}；` : '') +
+    `${reason}；护栏明细见收据 <root>/governance/refusals/${sessionId}/${receiptId}.json，` +
+    '全量规则审阅清单见 presets/hook-rules/README.md（Agent 可按违规 message 修正参数后重发合规调用）'
+  );
+}
 
 // 拒绝正文统一格式：[governance:<primitive>] <reason>（对齐难度门禁 [task-difficulty-gate] 前缀风格）
 // reason 取 kernel 裁决 reason（含违规明细/路径——模型可据此修正参数）。
@@ -49,6 +113,9 @@ import { readSessionState, setDeferred, setPaused } from './state-store.js';
 // NARROW 原语恒含基础修正指引（保持原语义，兼容无 narrow 字段的场景）；
 //   决策携带 narrowedParams（NARROW 必填 / DENY 窄域指引）时追加钳制明细（clamped path: from → to，
 //   模型可据此重发合规参数）；不实际改写 exec.arguments。
+// 规则引用（决策正文尾部追加）：ruleRefs 非空时尾部追加命中规则（含 preset 归属）——DENY 短路径与 ask.reason 均携带，
+//   审批 UI（若渲染 reason）与降级拒绝文本可见命中规则，用户/Agent 可当场审阅；无规则引用场景
+//   （状态门 gate 决策 ruleRefs=[] 等）不追加（文本零变化）。
 export function formatDecision(d) {
   let reason = `[governance:${d.primitive}] ${d.reason}`;
   if (d.primitive === 'NARROW' || (d.primitive === 'DENY' && d.narrowedParams !== undefined)) {
@@ -63,6 +130,8 @@ export function formatDecision(d) {
       reason += `；钳制明细：${detail}`;
     }
   }
+  const refs = ruleRefsText(d.ruleRefs);
+  if (refs.length > 0) reason += `；规则引用：${refs}`;
   return reason;
 }
 
@@ -94,9 +163,10 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
   let refusalCount = 0;
   // 双层桥接回调（可选；dispose 置空断开——回调随之失效，幂等）
   let refusalCb = typeof onRefusal === 'function' ? onRefusal : null;
-  // ask 关联表（hook 实例内存态）：callId → { receiptId, sessionId }——pre 记 initiated 时登记，
-  //   post 观察者按 callId 查表尽力补记 outcome；实例级内存态跨 pre/post 调用存活（宿主同 call 连续触发），
-  //   进程重启丢失仅影响「补记」（outcome 保持 initiated 态，收据本身已在 pre 落盘——不丢审计）。
+  // ask 关联表（hook 实例内存态）：callId → { receiptId, sessionId, decision 快照 }——pre 记 initiated 时登记，
+  //   post 观察者按 callId 查表尽力补记 outcome +（泛化分支）受控补正文本；实例级内存态跨 pre/post 调用存活
+  //   （宿主同 call 连续触发），进程重启丢失仅影响「补记/补正」（outcome 保持 initiated 态，收据本身已在 pre
+  //   落盘——不丢审计）。
   const pendingAsks = new Map();
 
   // 会话 id 归一（对齐宿主 exec.agent.session；无 agent → 'cli'，与 receipt-store 缺省口径一致）
@@ -202,7 +272,18 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
         log?.warn?.('[governance] refusal bridge callback failed (isolated): ' + String(e?.message ?? e));
       }
       if (receipt.ask !== undefined) {
-        pendingAsks.set(exec.callId, { receiptId: receipt.receiptId, sessionId });
+        // 拒绝可见性（受控补正）：登记时顺带缓存 decision 快照（primitive/reason/ruleRefs）——post 补正零盘读
+        //   （宿主 serviceAsk 泛化分支覆盖 reason 后，仍可凭快照重建护栏语义文本；收据本体不读不依赖）。
+        pendingAsks.set(exec.callId, {
+          receiptId: receipt.receiptId,
+          sessionId,
+          decision: {
+            primitive: d.primitive,
+            priority: d.priority,
+            reason: d.reason,
+            ruleRefs: Array.isArray(d.ruleRefs) ? [...d.ruleRefs] : [],
+          },
+        });
       }
     } catch (e) {
       log?.warn?.('[governance] refusal receipt write failed (observer, does not block decision): ' + String(e?.message ?? e));
@@ -240,10 +321,16 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
     return 'denied-no-approval'; // 默认：无审批服务降级（宿主保留 ask.reason，无特征文本）
   };
 
-  // post-execute：pass-through 观察者——恒 next()（先例 evidence.js）；职责=不篡改结果。
-  // 预留不实现：block/替换 content|value 仅显式规则开启时考虑（此路径未实现，注释留待）。
-  // 增强（仍在 pass-through 语义内）：next() 前尽力补记 ask.outcome（查 pendingAsks → infer → patchRefusalAsk；
+  // post-execute：pass-through 观察者（先例 evidence.js；职责=不篡改结果，恒 next()）
+  //   + 受控例外（拒绝可见性，受控补正）：宿主 serviceAsk 4 泛化分支把 ask.reason 覆盖为工具名级泛化文本，
+  //   短路返回 {kind:'accept', content:[补正文本]}——宿主 accept+content 替换仅改展示 content、保 isError:true
+  //   与 error.message（dsh-tools postExecute 语义）；其余一切场景恒 next()。
+  // 常规增强（仍在 pass-through 语义内）：next() 前尽力补记 ask.outcome（查 pendingAsks → infer → patchRefusalAsk；
   //   任何失败仅 warn，绝不阻断/改变返回语义）。
+  // 短路条件严格收窄（受控例外，非放开）：仅本插件 ask（pendingAsks 命中且会话一致）+ GENERIC_DENIAL_OUTCOMES
+  //   四分支；denied-no-approval（无审批服务降级，宿主保留护栏 reason）恒 next() 不重复标注；
+  //   非本插件 ask / 无 pending 登记（V4）/ 普通结果（V8-①）恒 next()。补记或补正失败 → warn 降级恒 next()
+  //   （V5：零行为回归、不抛、不破坏结果）。
   const post = async (exec, result, next) => {
     try {
       const sessionId = sessionIdOf(exec);
@@ -251,10 +338,26 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
       if (pending !== undefined && pending.sessionId === sessionId) {
         pendingAsks.delete(exec.callId);
         const outcome = inferAskOutcome(result);
-        patchRefusalAsk(root, sessionId, pending.receiptId, outcome);
+        if (GENERIC_DENIAL_OUTCOMES.has(outcome)) {
+          // 补记 + 补正同一保护区：任一步失败 → 降级恒 next()（审计收据或补正数据不可靠时不改写结果）
+          try {
+            patchRefusalAsk(root, sessionId, pending.receiptId, outcome);
+            const text = buildDenialCorrectionText(pending);
+            return { kind: 'accept', content: [{ type: 'text', text }] };
+          } catch (e) {
+            log?.warn?.('[governance] ask outcome backfill/correction failed (degraded to pass-through): ' + String(e?.message ?? e));
+          }
+        } else {
+          // 其余 outcome（allowed-once / denied-no-approval 等）：恒 next() 语义，仅尽力补记
+          try {
+            patchRefusalAsk(root, sessionId, pending.receiptId, outcome);
+          } catch (e) {
+            log?.warn?.('[governance] ask outcome patch failed (observer, does not block result): ' + String(e?.message ?? e));
+          }
+        }
       }
     } catch (e) {
-      log?.warn?.('[governance] ask outcome patch failed (observer, does not block result): ' + String(e?.message ?? e));
+      log?.warn?.('[governance] ask outcome observer failed (does not block result): ' + String(e?.message ?? e));
     }
     return next();
   };

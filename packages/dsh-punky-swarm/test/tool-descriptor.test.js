@@ -147,7 +147,7 @@ test('行为不变抽查：register() 注册的正是 tools 数组原对象（�
   assert.deepEqual(on.registered.map((t) => t.name).sort(), off.registered.map((t) => t.name).sort());
 });
 
-// —— 端点层（方案 A：GET /api/dsh-punky-swarm/tools）——
+// —— 端点层（只读 GET /api/dsh-punky-swarm/tools）——
 function apiWithCatalog(catalog) {
   const routes = [];
   const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
