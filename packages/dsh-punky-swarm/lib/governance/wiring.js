@@ -329,8 +329,8 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
   //   任何失败仅 warn，绝不阻断/改变返回语义）。
   // 短路条件严格收窄（受控例外，非放开）：仅本插件 ask（pendingAsks 命中且会话一致）+ GENERIC_DENIAL_OUTCOMES
   //   四分支；denied-no-approval（无审批服务降级，宿主保留护栏 reason）恒 next() 不重复标注；
-  //   非本插件 ask / 无 pending 登记（V4）/ 普通结果（V8-①）恒 next()。补记或补正失败 → warn 降级恒 next()
-  //   （V5：零行为回归、不抛、不破坏结果）。
+  //   非本插件 ask / 无 pending 登记 / 普通结果恒 next()。补记或补正失败 → warn 降级恒 next()
+  //   （零行为回归、不抛、不破坏结果）。
   const post = async (exec, result, next) => {
     try {
       const sessionId = sessionIdOf(exec);

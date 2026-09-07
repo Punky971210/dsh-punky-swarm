@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // I1 集成测试：wiring 接线契约（fake ctx 先例 tools.test.js fake guard 模式）
-// 覆盖：挂载与 disposer / ALLOW 透传 / DENY 短路 / REQUIRE_APPROVAL→ask / post 双口径（V8：普通结果恒
-//       next；ask 泛化分支受控短路补正）/ DENY 短路径与 ask reason 规则引用（B 辅，V7）/
+// 覆盖：挂载与 disposer / ALLOW 透传 / DENY 短路 / REQUIRE_APPROVAL→ask / post 双口径（普通结果恒
+//       next；ask 泛化分支受控短路补正）/ DENY 短路径与 ask reason 规则引用/
 //       收据落盘（四要素 + ledger + 读回）/ 与难度门禁组合 / 双版本宿主兼容。
 // NARROW 运行期接线 e2e——pre 链 NARROW → reason 修正指引 +
 //   收据 narrowedParams 落盘读回一致；收据扩展字段（9 键）兼容断言（旧 8 键读回不炸）。
@@ -139,7 +139,7 @@ test('I1-2 ALLOW 透传：pre listener 收到 ALLOW 决策 → 调用了 next()�
   hook.dispose();
 });
 
-test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀 + 命中规则引用（B 辅）}，未调 next()', async () => {
+test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀 + 命中规则引用}，未调 next()', async () => {
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
   const hook = installGovernanceHook(ctx, { store: null, root, config: DENY_CFG });
@@ -148,7 +148,7 @@ test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀 
   const decision = await pre(execOf('bash', { cmd: 'rm -rf /' }), async () => { nextCalled++; return { kind: 'allow' }; });
   assert.equal(decision.kind, 'deny');
   assert.match(decision.reason, /^\[governance:DENY\] /);
-  // V7：DENY 短路径 reason 携带命中规则引用（B 辅；前缀断言不破、规则 id 可见）
+  // DENY 短路径 reason 携带命中规则引用（前缀断言不破、规则 id 可见）
   assert.match(decision.reason, /规则引用：R001/, 'DENY reason 含命中规则引用（规则 id 可见，用户/Agent 可审阅）');
   assert.equal(nextCalled, 0);
   assert.equal(hook.refusals.count(), 1);
@@ -163,13 +163,13 @@ test('I1-4 REQUIRE_APPROVAL → ask：返回 {kind:ask, reason（前缀 + 命中
   const decision = await pre(execOf('edit', { scope: 'admin' }), async () => ({ kind: 'allow' }));
   assert.equal(decision.kind, 'ask');
   assert.match(decision.reason, /^\[governance:REQUIRE_APPROVAL\] /);
-  // V7（ask 侧）：ask.reason 亦携带命中规则引用（B 辅——审批 UI reason / 无审批服务降级文本可见）
+  // ask 侧：ask.reason 亦携带命中规则引用（审批 UI reason / 无审批服务降级文本可见）
   assert.match(decision.reason, /规则引用：R002/, 'ask reason 含命中规则引用（规则 id 可见）');
   assert.equal(hook.refusals.count(), 1);
   hook.dispose();
 });
 
-test('I1-5 post 双口径（V8）：普通结果恒 next（不断链）；ask 泛化分支受控短路（next 不被调用，返回 accept+content 补正文本）', async () => {
+test('I1-5 post 双口径：普通结果恒 next（不断链）；ask 泛化分支受控短路（next 不被调用，返回 accept+content 补正文本）', async () => {
   // 口径①（普通结果，非本插件 ask）：post listener 恒 return next()，不断链
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-wire-'));
@@ -201,7 +201,7 @@ test('I1-5 post 双口径（V8）：普通结果恒 next（不断链）；ask �
   assert.ok(Array.isArray(d2.content) && d2.content.length === 1 && typeof d2.content[0]?.text === 'string', 'content 替换为补正文本');
   assert.match(d2.content[0].text, /\[governance:REQUIRE_APPROVAL/, '补正文本含护栏标注');
   assert.match(d2.content[0].text, /R002/, '补正文本含命中规则 id');
-  assert.equal(next2, 0, 'ask 泛化分支受控短路（next 不被调用——V8 口径②）');
+  assert.equal(next2, 0, 'ask 泛化分支受控短路（next 不被调用）');
   hook2.dispose();
 });
 
