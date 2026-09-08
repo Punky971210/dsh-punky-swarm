@@ -1,4 +1,4 @@
-import type { ConditionClause, ConditionInput, Layer, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
+import type { ConditionClause, ConditionInput, Layer, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 type WaveTask = WavePlanTaskInput | WavePlanTask;
 export declare const LAYERS: readonly ["plan", "exec", "audit"];
 export declare const VALID_ROLES: readonly ["coordinator", "manager", "designer", "coder", "tester", "reviewer", "supervisor", "doc-manager"];
@@ -15,6 +15,18 @@ export declare function collectRoleCompletenessWarnings(tasks: WaveTask[], waves
     missing: string;
     message: string;
 }[];
+export declare const MANAGER_PLANS: readonly ["raise", "leader-direct"];
+export declare function countExecLanes(tasks: WaveTask[]): number;
+export declare function isCPlusBatch(tasks: WaveTask[]): boolean;
+export declare function normalizeAssemblyDecl(input: unknown): {
+    decl: WavePlanAssemblyDecl | null;
+    warnings: WavePlanDoc['warnings'];
+};
+export type AssemblyGateResult = 'ok' | {
+    code: 'GATE_ROLE_ASSEMBLY_MISSING';
+    message: string;
+};
+export declare function assemblyGate(tasks: WaveTask[], decl: WavePlanAssemblyDecl | null): AssemblyGateResult;
 export declare function topoWaves(tasks: WaveTask[]): {
     waves: string[][];
     order: string[];

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 残留 #11（m2-residual-20260831）：boot-overlay 启动对账装配级测试补 1 条。
+// boot-overlay 启动对账装配级测试补 1 条。
 //   断言对象 = lib/index.js:484 `remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay')`：
 //   启动时（apply 尾部 hotConfig.start() 后）runtime.json overlay 已含 governance 生效变化 →
 //   按当前快照补一次对账 remount（logTag='boot-overlay'——热更路径无此 tag，可区分启动对账与热更）。

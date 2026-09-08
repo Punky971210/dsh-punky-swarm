@@ -95,6 +95,15 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收** + 角色注入
 - 治理工具豁免难度门禁：batch_*/member_*/mailbox_*/lane_*/gate_status/assign_check/artifact_types/log_export 等治理/查询工具属非执行型放行（防死锁——治理循环中 Leader 必须能查询/结算）；豁免仅限难度门禁，其余 guard 语义（EXEC_TOOLS 名单、计数）不受影响（口径与引擎 lib/tools/core.js installDifficultyGuard 注释一致）；
 - 不引入 audit 预算/节流字段（省 token、避免机械限制审计深度）。
 
+### 装配模式与角色装配决策（何时配谁 · C+ 强制装配）
+
+装配按难度判档（A/B/C/C+，档位定义归 persona 纪律 0）决定角色组成。本技能不参与判档，只写「谁必须配、谁可代行、谁承接审核」的可执行判据：
+
+- **何时配 Manager（C+ 批强制拉起）**：判档 C+ 的批（批内 exec 层 lane 数≥3）running 后 Leader 必须拉起 Manager——continuable subagent 一次注入（批次上下文 + 调度循环，模板见下节），**不允许**以 0f 兜底或 Leader 代行替代（persona 纪律 0f/0g）。exec 层 lane 数<3 的普通 C 批：Leader 可代行（豁免留痕「本批由 Leader 直驱」），拉起 Manager 为可选增强；A/B 级不配。
+- **何时配 Coordinator**：批内 exec 层 lane 数≥3（C+ 强制）**或**粗拆决策需 task-tree/细拆产物（API 粒度任务清单 / codebase-survey）时，plan 层建 role=coordinator lane（produce=plan/task-tree.json + codebase-survey.md，consume=leader-decision-pack）；无细拆需求不必配。未建 coordinator lane 而由 Designer/Leader 代产 task-tree 的，须在 plan lane 产物备注未启用理由（入装配声明或 spec 备注）。
+- **audit 承接 supervisor+reviewer 审核职能为默认语义**：audit 层 lane 承接验收 + 对抗审查（取代式装配可接受——实证取代率≈55.3%，用户已认可）；**双角色分离**（reviewer 独立 exec 对抗 lane + supervisor audit 验收）为**显式选项**，供需对抗审查的高危/合规批选用（规范样本见 references/templates/success-pattern-seeds.md，P2-1 存档）。
+- **C+ 装配声明**：C+ 批 plan lane 产物须含角色装配声明（Manager 拉起计划 / Coordinator lane 分配 / audit 角色分配），机制见 persona 纪律 0b；本技能 plan lane 任务包与模板示例同步含该章节占位（Leader 派发 C+ 批 plan lane 时注入）。
+
 ### Manager 角色派发模板（代劳指挥 · continuable subagent）
 
 Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）时按下方模板注入。**Manager 定位：代劳指挥——只指挥不执行、不派发子代理（worker 由 Leader 派发，depth-1 直系）；Manager 只读黑板/mailbox、做结算裁决，不经 subagent 创建 worker**。
@@ -130,7 +139,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 ## C 类触发后的执行机制（难度判定归蟛蜞模式）
 
-> 分层边界：任务难度判定（A/B/C 路由，default to C）由蟛蜞模式难度门禁负责（assign_check guard），本技能**不参与难度判定**——只描述 C 类任务确定后的执行方式。
+> 分层边界：任务难度判定（A/B/C/C+ 路由，default to C；C+=C 且批内 exec 层 lane 数≥3，装配强制见上节「装配模式与角色装配决策」）由蟛蜞模式难度门禁负责（assign_check guard），本技能**不参与难度判定**——只描述 C/C+ 类任务确定后的执行方式。
 
 C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 派发 → 治理闭环（状态机/mailbox/锁/结算）。
 
@@ -142,7 +151,7 @@ C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 
 | exec ⚡ | 派发前 consume 产物齐备（缺则拒派 GATE_ENTRY_MISSING）；结算前 outputs 落盘（缺则拒 merged） |
 | audit 🛡️ | 结算前 produce（review.md 归 Reviewer；gap-list.json/acceptance-report.md 由 Supervisor audit 对账产出）落盘；批次 complete 前置 audit 验收完成（缺则拒 complete） |
 
-- **委派判定**：assign_check 输出 A/B/C——C 类（并行/多角色/门禁/可恢复）必须 wave_plan 建批；
+- **委派判定**：assign_check 输出 A/B/C/C+——C/C+ 类（并行/多角色/门禁/可恢复）必须 wave_plan 建批（C+ 另含 Manager+Coordinator 强制装配，见「装配模式与角色装配决策」节）；
 - **失败处理**：failed 为终态，重做=重开新批次；返工（review→running）保留；
 - **状态查询**：gate_status 查 lane 缺什么产物/契约问题；
 - **needHuman 契约（audit）**：产物可含独立行 `needHuman: true` 声明——merged 须带人工裁决证据 `human:<裁决人>:<时间>:<结论>`（如 `human:user@2026-08-21:accept`），缺则 GATE_NEEDHUMAN_PENDING 拒 merged；

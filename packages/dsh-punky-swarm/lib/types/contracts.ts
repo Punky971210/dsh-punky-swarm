@@ -133,6 +133,24 @@ export interface WavePlanDoc {
   }>;
 }
 
+// ── 批次级装配声明（C+ 档门禁；wave_plan 可选顶层参数 assembly 的归一化产物）──
+
+/** 编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批，O0f 兜底协议） */
+export type ManagerPlan = 'raise' | 'leader-direct';
+
+/**
+ * 批次级装配声明（建批方随 wave_plan 传入；normalizeAssemblyDecl 归一化后经 createBatch
+ * 持久化为 batch JSON 顶层可选字段，schema 不升、旧批零迁移）。
+ * 必填：managerPlan（编排牵头形态）、auditLane（验收归属 lane id，须存在于 tasks 且为 audit 层 lane）；
+ * 可选：coordinatorLane（协调细拆 lane id，须存在于 tasks 且为 plan 层 lane）、roles（参与角色集，词法校验软告警）。
+ */
+export interface WavePlanAssemblyDecl {
+  managerPlan: ManagerPlan;
+  auditLane: string;            // 验收归属 lane id（须为 audit 层 lane；悬空/层错配 → GATE_ASSEMBLY_INVALID 拒建批，§3.3）
+  coordinatorLane?: string;     // 可选：协调/细拆 lane id（须为 plan 层 lane；声明后承担 CBM 代码摸底→细拆履职，§3.5）
+  roles?: string[];             // 可选：声明参与角色集（词法白名单校验；非法词条 → GATE_ROLE_INVALID 告警，批次照建）
+}
+
 // ── Batch / Lane / BatchEvent ──
 
 /** 环防护记账状态（mailbox 环防护；batch JSON 唯一事实源，v3 字段） */
@@ -164,6 +182,7 @@ export interface Batch {
   lanes: Record<string, MemberState>; // laneId → 成员态（建批全 'pending'）
   chains: ChainsState;          // v3 字段（chainsDefaults 兜底）
   archived: boolean;            // v3 字段（false 缺省；complete 归档后置 true）
+  assembly?: WavePlanAssemblyDecl | null; // v3 纯增量可选字段（缺省 undefined = 未声明/旧批，读取兼容零迁移；C+ 批建批时归一化落盘，auditLane/coordinatorLane 层归属已静态校验）
   laneProgress?: LaneProgressMap; // v3 可选字段；非法形态经 migrateV2toV3 归一为 undefined（不写字段）
   events: BatchEvent[];
   createdAt: string;            // ISO

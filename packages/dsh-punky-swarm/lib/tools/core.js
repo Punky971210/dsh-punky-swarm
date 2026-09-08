@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 共享辅助（下沉至零依赖 shared.js）：TEXT_OUTPUT / sessionOf——本文件 re-export 保持对外导出兼容
 //   （mailbox-tools/log-tools/lane-tools 已直引 shared.js；watch/lane-heartbeat 不再依赖 core.js）
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { buildWavePlan, validateWavePlan } from '../wave-plan.js';
+import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate } from '../wave-plan.js';
 import { resolveAssembly } from '../assembly.js';
 import { ARTIFACT_TYPES } from '../artifact-types.js';
 import * as lock from '../lock.js';
@@ -108,10 +108,10 @@ export function createCoreTools(ctx, deps) {
   return [
     defineTool({
       name: "wave_plan",
-      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。",
-      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发上限（默认 5）"},"team":{"type":"string","description":"装配团队（默认 generic；三层批推荐 jiufeng）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"}},
+      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 jiufeng）。C+ 档（exec 层 lane≥3 三层批）建批必须携带批次级装配声明 assembly：{ managerPlan: 'raise'|'leader-direct', auditLane: '<audit lane id>', coordinatorLane?, roles? }——缺失/结构非法/悬空 lane id 拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/jiufeng>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发上限（默认 5）"},"team":{"type":"string","description":"装配团队（默认 generic；三层批推荐 jiufeng）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"},"assembly":{"type":"object","additionalProperties":false,"description":"C+ 档批次级装配声明（可选顶层参数，与 batchId/tasks 平级）：exec 层 lane≥3 的三层批必填——managerPlan 编排牵头形态 + auditLane 验收归属 lane id；coordinatorLane/roles 可选；缺失/结构/引用非法拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）","properties":{"managerPlan":{"type":"string","required":true,"enum":["raise","leader-direct"],"description":"编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批）"},"auditLane":{"type":"string","required":true,"description":"验收归属 lane id：本批承担最终验收的 lane（须为 audit 层 lane 且存在于 tasks；层错配/悬空 → 拒建批 GATE_ASSEMBLY_INVALID）"},"coordinatorLane":{"type":"string","description":"可选：协调/细拆 lane id（须为 plan 层 lane 且存在于 tasks；声明后承担 CBM 代码摸底→细拆履职）；缺省无"},"roles":{"type":"array","items":{"type":"string"},"description":"可选：本批声明参与的角色集（词法白名单校验；非法词条 → GATE_ROLE_INVALID 告警，批次照建）"}}}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true},"warnings":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true},"warnings":{"type":"array","items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true}}},
         render: (_args, value) => TEXT_OUTPUT('wavePlan created: ' + value.batchId + ' @' + value.sessionId + ' (' + value.wavePlan.length + ' waves)' + (value.warnings?.length ? '; role warnings: ' + value.warnings.length : '')),
       },
       async execute(args, exec) {
@@ -119,13 +119,23 @@ export function createCoreTools(ctx, deps) {
         const assembly = resolveAssembly(args.team, config.assembly);
         const plan = buildWavePlan({ batchId: args.batchId, tasks: args.tasks, concurrency: args.concurrency ?? 5, team: args.team, assembly });
         validateWavePlan(plan);
-        const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency });
-        // role 校验告警留痕（GATE_ROLE_INVALID / GATE_ROLE_MISSING，warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
+        // C+ 档装配门禁（T1 建批时刻，validateWavePlan 后、createBatch 前）：exec 层 lane≥3 的三层批必须携带
+        // 批次级装配声明 assembly（managerPlan/auditLane 必填）。拒建批（throw：GATE_ROLE_ASSEMBLY_MISSING 缺声明 /
+        // GATE_ASSEMBLY_INVALID 结构/引用非法）→ 无批次 JSON 落盘、pendingBatch 锁保留（Leader 补声明后重试）；
+        // 通过 → 归一化 decl 随 createBatch 持久化（batch JSON 顶层可选字段，schema 不升）；roles 词法告警并入返回 warnings
+        const asm = normalizeAssemblyDecl(args.assembly); // { decl, warnings }；结构非法 → GATE_ASSEMBLY_INVALID throw
+        const asmGate = assemblyGate(plan.wavePlan.flatMap((w) => w.tasks), asm.decl); // C+ 缺声明 → 拒；悬空 lane id → throw
+        if (asmGate !== 'ok') throw new Error(asmGate.code + ': ' + asmGate.message);
+        if (asm.warnings.length > 0) plan.warnings.push(...asm.warnings); // roles 词法告警并入（事件随既有循环留痕、返回值暴露）
+        const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined });
+        // role 校验告警留痕（GATE_ROLE_INVALID / GATE_ROLE_MISSING / assembly.roles 词法告警，warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
         for (const w of plan.warnings ?? []) {
           store.appendEvent(sessionId, plan.batchId, w.code === 'GATE_ROLE_MISSING' ? EVT.EVT_GATE_ROLE_MISSING : EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
         }
         clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false
-        return { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [] };
+        const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [] };
+        if (asm.decl) out.assembly = asm.decl; // 归一化装配声明视图（closed output.schema 已扩 properties；未声明不写键）
+        return out;
       },
     }),
     defineTool({

@@ -1,6 +1,6 @@
 # jiufeng 工作流蓝图（蟛蜞模式）
 
-> 说明：Manager 为任务第一对接点；粗拆由 Leader 人工对接；Coordinator 负责细拆与代码摸底。
+> 说明：Manager 为任务第一对接点——C+ 批（批内 exec 层 lane 数≥3）running 后强制拉起，普通 C 批 Leader 可代行（留痕「本批由 Leader 直驱」）；粗拆由 Leader 人工对接；Coordinator 按触发装配——exec 层 lane 数≥3 或需 task-tree/细拆产物时 plan 层建 role=coordinator lane，未建而由 Designer/Leader 代产 task-tree 的须在 plan lane 备注理由；audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项。
 
 ## 一、角色 DAG（谁产出 → 谁消费 → 谁验证）
 
@@ -31,7 +31,7 @@ graph TD
 | 步骤 | 动作 | 角色 | 产出物（产物类型） |
 |:----|------|------|------|
 | ① | 开启任务 + 人工粗拆 | Leader | leader-decision-pack.md + 模块清单（plan/） |
-| ② | 细拆 + 代码摸底 | Coordinator | task-tree.json + codebase-survey.md（plan/） |
+| ② | 细拆 + 代码摸底（按触发装配：仅 C+ 批或需细拆产物批建 coordinator lane；其余由 Designer 代产 task-tree 并在 plan lane 备注理由） | Coordinator / Designer | task-tree.json + codebase-survey.md（plan/） |
 | ③ | 任务规范设计（四件套） | Designer | plan.md + spec.md + coder-tasks.md + tester-tasks.md（plan/） |
 | ④ | 建议派发 | Manager | 派发建议（mailbox inbox/broadcast）→ Leader 按建议 subagent 派发 worker（depth-1） |
 | ⑤ | 编码实现 | Coder 池 | 代码（exec/） |
@@ -43,6 +43,8 @@ graph TD
 | ⑩ | 回馈循环 | Doc-Manager → Coordinator | 复盘知识 → 下一子模块 |
 
 > 注：⑤ 编码与 ⑥a 准备段同 wave 并行；⑥b 在 code 完成后立即触发（非全串行直链）。
+
+**装配裁剪（普通 C 批）**：上表为**全装配蓝图**，适用于 C+ / 复杂批（完整启用 ② Coordinator、④ Manager 指挥）。普通 C 批（批内 exec 层 lane 数<3）可裁剪为 plan（Designer 代产细拆，plan lane 备注未启用理由）→ exec → audit（audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项），Manager 职责由 Leader 代行并留痕「本批由 Leader 直驱」。角色 DAG 图为全装配形态示意，普通 C 批按本注记执行。
 
 ### 两段式 wave 示例
 

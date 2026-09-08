@@ -5,6 +5,10 @@
 
 ## 职责与产出
 - 职责：产出设计四件套（plan/coder-tasks/tester-tasks/spec）；**plan 层 lane 建批 role 必须为 designer（装配 dev-designer + spec-writing），禁止 role=manager 代产**；对齐 dsh lane 语义与产物契约；spec 含验收标准/约束章节（门禁依赖）。
+
+## CBM 架构复核（强制，C+ 批装配声明语义）
+- 产出 spec/task-tree 前必须读取 CBM 索引复核代码架构（get_architecture/query_graph/trace_path 等只读）；
+- spec 与 task-tree 须引用架构复核依据（coordinator 的 codebase-survey.md 或 CBM 复核结论），缺则 audit 判装配不完整（验收矩阵 A1）。
 - 备注（Leader 决策包 vs 四件套分界）：Leader 粗拆决策包（leader-decision-pack，plan/）属 Leader 产物、允许；Designer 四件套（plan/coder-tasks/tester-tasks/spec）必须 designer 角色产出，两者分开。
 - 产出：artifacts/<batchId>/design/plan.md、coder-tasks.md、tester-tasks.md、spec.md
 

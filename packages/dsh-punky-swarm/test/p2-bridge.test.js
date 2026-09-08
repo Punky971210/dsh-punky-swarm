@@ -280,7 +280,7 @@ function rpcPost(port, caPem, client, body) {
   });
 }
 
-test('DEF-V6-1: /rpc START（bridge enabled+inbound=true）→ 200 accepted + mailbox.inbox unacked=1', async () => {
+test('/rpc START（bridge enabled+inbound=true）→ 200 accepted + mailbox.inbox unacked=1', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-v6root-'));
   const v6Root = (sid, bid) => path.join(root, 'sessions', sid, 'mailbox', bid);
   const s = await startEndpointBridge({ bridgeCfg: { enabled: true, inbound: true }, root });
@@ -306,7 +306,7 @@ test('DEF-V6-1: /rpc START（bridge enabled+inbound=true）→ 200 accepted + ma
   } finally { await s.close(); }
 });
 
-test('DEF-V6-1: /rpc（bridge enabled + inbound=false）→ 200 rejected + 不落 mailbox（INBOUND_DISABLED）', async () => {
+test('/rpc（bridge enabled + inbound=false）→ 200 rejected + 不落 mailbox（INBOUND_DISABLED）', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-v6root-'));
   const v6Root = (sid, bid) => path.join(root, 'sessions', sid, 'mailbox', bid);
   const s = await startEndpointBridge({ bridgeCfg: { enabled: true, inbound: false }, root });
@@ -325,7 +325,7 @@ test('DEF-V6-1: /rpc（bridge enabled + inbound=false）→ 200 rejected + 不�
   } finally { await s.close(); }
 });
 
-test('DEF-V6-1: /rpc（bridge enabled+inbound=true 但缺 sessionId/batchId）→ 200 rejected + 不落 mailbox（MISSING_CONTEXT）', async () => {
+test('/rpc（bridge enabled+inbound=true 但缺 sessionId/batchId）→ 200 rejected + 不落 mailbox（MISSING_CONTEXT）', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-v6root-'));
   const s = await startEndpointBridge({ bridgeCfg: { enabled: true, inbound: true }, root });
   try {
@@ -339,7 +339,7 @@ test('DEF-V6-1: /rpc（bridge enabled+inbound=true 但缺 sessionId/batchId）�
   } finally { await s.close(); }
 });
 
-test('DEF-V6-1: /rpc（bridge 未装配=null）→ 200 accepted 但不落 mailbox（P1 独立行为向后兼容）', async () => {
+test('/rpc（bridge 未装配=null）→ 200 accepted 但不落 mailbox（P1 独立行为向后兼容）', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-v6root-'));
   const v6Root = (sid, bid) => path.join(root, 'sessions', sid, 'mailbox', bid);
   const s = await startEndpointBridge({ bridgeCfg: {}, root, withBridge: false });

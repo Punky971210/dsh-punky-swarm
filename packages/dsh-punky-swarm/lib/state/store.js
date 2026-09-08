@@ -125,7 +125,9 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     try { onStateChange?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ }
   }
 
-  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning' }) {
+  // C+ 档装配声明（assembly，batch JSON 顶层可选字段）：缺省 undefined → 不写键（仿 laneProgress 零噪音模式，
+  // schema 不升、旧批无键读取兼容零迁移——C+ 门禁归一化产物随建批持久化，供运行期/审计按需消费）
+  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly }) {
     schema.assertBatchPhase(phase);
     const file = batchFile(sessionId, batchId);
     if (fs.existsSync(file)) throw new Error('batch already exists: ' + batchId);
@@ -144,6 +146,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
       lanes,
       chains: chainsDefaults(), // 环防护记账状态（v3 字段，唯一事实源）
       archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
+      ...(assembly !== undefined ? { assembly } : {}), // 装配声明（C+ 归一化 decl）；未声明不写键（旧批/非 C+ 批零噪音）
       events: [newEvent(EVT.EVT_BATCH_CREATED, { batchId, sessionId })],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -573,8 +576,10 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
           if (state === 'running' || state === 'review') {
             batch.lanes[lane] = 'idle';
             recoveredLanes.push(lane);
-            // 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）
-            detail.push({ lane, from: state, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane) });
+            // 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）；
+            // outcome='crashed'：C5 结局分型——进程崩溃重启后 in-flight lane 被强制落 idle 的结局记账值
+            // （只记不改：非成员态、不拦截、不新增迁移；随既有 system.recovered.detail 供重派前经事件流查询）
+            detail.push({ lane, from: state, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane), outcome: 'crashed' });
           }
         }
         if (recoveredLanes.length > 0) {
@@ -599,7 +604,10 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
   // 语义：管理命令（显式触发，仿 recoverBatches 直写先例，不经棘轮表/不放宽 MEMBER_TRANSITIONS）；
   //       默认不自动处置（人审保留）；lane.stalled 仍非成员状态（不新增成员态，语义保持）。
   // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收：终态 lane 永不回收）。
-  // 事件：lane.recycled { lane, from:'running', reason:'stalled', note } 留痕；回收后走既有 member_status idle→running 重派。
+  // 事件：lane.recycled { lane, from:'running', reason:'stalled', outcome:'interrupted', note } 留痕；
+  //   outcome='interrupted'：C5 结局分型——运行中被显式回收（停滞证据 → 脱离在飞态）的结局记账值
+  //   （只记不改：非成员态、不拦截、不新增迁移；watch stalled/longrun 信号零变，仅处置落 idle 时记账）；
+  //   回收后走既有 member_status idle→running 重派。
   function recycleStalledLane(sessionId, batchId, lane) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
@@ -609,7 +617,7 @@ export function createStore(root, { rules, logger, onStateChange } = {}) {
     const hasStalled = (batch.events ?? []).some((e) => e.type === EVT.EVT_LANE_STALLED && e.lane === lane);
     if (!hasStalled) throw new Error('no lane.stalled event for lane: ' + lane + ' (recycle requires stalled evidence)');
     batch.lanes[lane] = 'idle';
-    batch.events.push(newEvent(EVT.EVT_LANE_RECYCLED, { lane, from: 'running', reason: 'stalled', note: null }));
+    batch.events.push(newEvent(EVT.EVT_LANE_RECYCLED, { lane, from: 'running', reason: 'stalled', outcome: 'interrupted', note: null }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     return { ok: true, lane, from: 'running', to: 'idle' };
