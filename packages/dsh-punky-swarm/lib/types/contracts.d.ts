@@ -80,6 +80,20 @@ export interface WavePlanDoc {
         message: string;
     }>;
 }
+/** 编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批，O0f 兜底协议） */
+export type ManagerPlan = 'raise' | 'leader-direct';
+/**
+ * 批次级装配声明（建批方随 wave_plan 传入；normalizeAssemblyDecl 归一化后经 createBatch
+ * 持久化为 batch JSON 顶层可选字段，schema 不升、旧批零迁移）。
+ * 必填：managerPlan（编排牵头形态）、auditLane（验收归属 lane id，须存在于 tasks 且为 audit 层 lane）；
+ * 可选：coordinatorLane（协调细拆 lane id，须存在于 tasks 且为 plan 层 lane）、roles（参与角色集，词法校验软告警）。
+ */
+export interface WavePlanAssemblyDecl {
+    managerPlan: ManagerPlan;
+    auditLane: string;
+    coordinatorLane?: string;
+    roles?: string[];
+}
 /** 环防护记账状态（mailbox 环防护；batch JSON 唯一事实源，v3 字段） */
 export interface ChainsState {
     chains: Record<string, {
@@ -109,6 +123,7 @@ export interface Batch {
     lanes: Record<string, MemberState>;
     chains: ChainsState;
     archived: boolean;
+    assembly?: WavePlanAssemblyDecl | null;
     laneProgress?: LaneProgressMap;
     events: BatchEvent[];
     createdAt: string;

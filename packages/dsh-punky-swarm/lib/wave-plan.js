@@ -115,6 +115,121 @@ export function collectRoleCompletenessWarnings(tasks, waves) {
     }
     return warnings;
 }
+// ── C+ 档装配门禁（spec A/B/C，T1 建批时刻静态校验）──
+// 背景：C 类三层批次（≥3 个 exec lane）实跑频繁缺「批次级编排装配声明」（谁牵头调度 Manager、验收归哪条 audit lane），
+// 全靠 Leader 事后人工补救。本门禁把裁决前移到建批：凡 exec 层 lane ≥ 3（C+）的批次必须携带装配声明 assembly。
+// 档位语义（spec §3.3，与既有 GATE_ROLE_MISSING 同族命名、语义分离、并存不合并）：
+//   - 缺 assembly（C+）→ 拒建批：GATE_ROLE_ASSEMBLY_MISSING（新码，编排装配声明缺失 = C+ 硬前置，不复用告警通道）；
+//   - 结构/引用非法 → 拒建批：GATE_ASSEMBLY_INVALID（fail-closed，对齐 deps 未知 id / targets 相对路径既有 throw 家族）；
+//   - roles 词法非法 → 告警：GATE_ROLE_INVALID（复用既有软告警通道，批次照建）。
+// 码经 throw 消息前缀暴露（建批拦截是 throw 非 gates.ts 返回码族，不进 GateErrorCode，见 spec §5.3）。
+export const MANAGER_PLANS = ['raise', 'leader-direct']; // assembly.managerPlan 合法枚举（运行时事实源，与 contracts.ManagerPlan 字面量等价）
+// 统计口径：仅按 task 的 layer 字段计（layer==='exec' 的 lane 数，spec §3.1）
+export function countExecLanes(tasks) {
+    return tasks.filter((t) => t.layer === 'exec').length;
+}
+// C+ 判定（T1 触发阈值，spec §3.1）：任一 task 声明 layer ∈ {plan, exec, audit}（三层批形态）
+// 且 layer==='exec' 的 lane 数 ≥ 3 → C+（建批必须携带装配声明）；exec<3 或 generic 批 → 不强制（零感知）
+export function isCPlusBatch(tasks) {
+    const threeTier = tasks.some((t) => t.layer != null && LAYERS.includes(t.layer));
+    return threeTier && countExecLanes(tasks) >= 3;
+}
+// assembly 归一化/校验（纯函数，导出供工具与测试共用）：input 缺省/undefined → { decl: null, warnings: [] }
+// （非 C+ 批零感知）；结构非法 → throw 'GATE_ASSEMBLY_INVALID: assembly.<field> ...'（fail-closed 拒建批）——
+//   非对象 / managerPlan 非枚举 / auditLane、coordinatorLane 非非空字符串；
+// roles 词法非法（词条非字符串、或不在合法角色集合 VALID_ROLES∪扩展）→ warnings（GATE_ROLE_INVALID，
+//   软告警不阻断建批；事件经既有 gate.role_invalid 通道留痕）。归一化 decl 供 createBatch 持久化（batch JSON 顶层可选字段）。
+export function normalizeAssemblyDecl(input) {
+    if (input == null)
+        return { decl: null, warnings: [] };
+    if (typeof input !== 'object' || Array.isArray(input)) {
+        throw new Error('GATE_ASSEMBLY_INVALID: assembly must be an object { managerPlan, auditLane, coordinatorLane?, roles? } (got: ' + (Array.isArray(input) ? 'array' : typeof input) + ')');
+    }
+    const raw = input;
+    const warnings = [];
+    const mpRaw = raw.managerPlan;
+    if (mpRaw !== 'raise' && mpRaw !== 'leader-direct') {
+        throw new Error('GATE_ASSEMBLY_INVALID: assembly.managerPlan must be one of raise|leader-direct (got: ' + String(mpRaw) + ')');
+    }
+    const managerPlan = mpRaw; // 单点断言：上方双字面量守卫后仅剩合法枚举（断言纯类型层）
+    const auditLane = raw.auditLane;
+    if (typeof auditLane !== 'string' || !auditLane.trim()) {
+        throw new Error('GATE_ASSEMBLY_INVALID: assembly.auditLane must be a non-empty string (audit lane id, got: ' + String(auditLane) + ')');
+    }
+    const decl = { managerPlan, auditLane: auditLane.trim() };
+    const coordinatorLane = raw.coordinatorLane;
+    if (coordinatorLane != null) {
+        if (typeof coordinatorLane !== 'string' || !coordinatorLane.trim()) {
+            throw new Error('GATE_ASSEMBLY_INVALID: assembly.coordinatorLane must be a non-empty string when present');
+        }
+        decl.coordinatorLane = coordinatorLane.trim();
+    }
+    const roles = raw.roles;
+    if (roles != null) {
+        if (!Array.isArray(roles)) {
+            warnings.push({ code: 'GATE_ROLE_INVALID', message: 'assembly.roles must be an array of role strings (got: ' + typeof roles + ')' });
+        }
+        else {
+            const kept = [];
+            for (const r of roles) {
+                const s = typeof r === 'string' ? r : null;
+                if (s === null || !s.trim() || !ROLE_WHITELIST.has(s.trim().toLowerCase())) {
+                    warnings.push({
+                        code: 'GATE_ROLE_INVALID',
+                        role: s ?? String(r),
+                        message: 'assembly.roles entry "' + (s ?? String(r)) + '" is not a valid role (' + [...VALID_ROLES, ...ROLE_EXTENSIONS].join('/') + ')',
+                    });
+                }
+                else {
+                    kept.push(s);
+                }
+            }
+            if (kept.length)
+                decl.roles = kept; // 合法词条保留（信息性声明；大小写原样透传，词法判定大小写不敏感）
+        }
+    }
+    return { decl, warnings };
+}
+// C+ 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
+//   - decl 悬空 lane id（auditLane/coordinatorLane 不在 tasks）→ throw GATE_ASSEMBLY_INVALID（引用悬空 = 声明无意义，fail-closed）；
+//   - 层归属（spec §3.2/§3.3 新行 + §3.5 结构前置）：三层批形态（任一 task 声明 layer）时 auditLane 须指向 audit 层 lane、
+//     coordinatorLane 须指向 plan 层 lane；层错配 → throw GATE_ASSEMBLY_INVALID（含层错配明细）。generic 批（无 layer 声明）
+//     跳过层归属（无层可归属；带 assembly 仅信息性持久化，spec T5）；
+//   - 非 C+ 批（exec<3 或 generic 无 layer）→ 'ok'（零感知，行为与现状一致）；
+//   - C+ 且缺 decl → { code: 'GATE_ROLE_ASSEMBLY_MISSING', message }（拒建批，消息自解释补法）；
+//   - C+ 且 decl 齐备 → 'ok'。
+export function assemblyGate(tasks, decl) {
+    if (decl != null) {
+        const byId = new Map(tasks.map((t) => [t.id, t]));
+        // 层归属仅在批内存在声明 layer 的任务（三层批形态）时强制：generic 批无 audit/plan 层概念，跳过（T5 声明无害仅持久化）
+        const threeTier = tasks.some((t) => t.layer != null && LAYERS.includes(t.layer));
+        const audit = byId.get(decl.auditLane);
+        if (!audit) {
+            throw new Error('GATE_ASSEMBLY_INVALID: assembly.auditLane "' + decl.auditLane + '" does not match any task id in this batch');
+        }
+        if (threeTier && audit.layer !== 'audit') {
+            throw new Error('GATE_ASSEMBLY_INVALID: assembly.auditLane "' + decl.auditLane + '" must reference an audit-layer lane (found layer: ' + (audit.layer ?? 'none') + ')');
+        }
+        if (decl.coordinatorLane != null) {
+            const coord = byId.get(decl.coordinatorLane);
+            if (!coord) {
+                throw new Error('GATE_ASSEMBLY_INVALID: assembly.coordinatorLane "' + decl.coordinatorLane + '" does not match any task id in this batch');
+            }
+            if (threeTier && coord.layer !== 'plan') {
+                throw new Error('GATE_ASSEMBLY_INVALID: assembly.coordinatorLane "' + decl.coordinatorLane + '" must reference a plan-layer lane (found layer: ' + (coord.layer ?? 'none') + ')');
+            }
+        }
+    }
+    if (!isCPlusBatch(tasks))
+        return 'ok';
+    if (decl == null) {
+        return {
+            code: 'GATE_ROLE_ASSEMBLY_MISSING',
+            message: "C+ batch requires assembly declaration (exec lanes >= 3) — pass assembly: { managerPlan: 'raise'|'leader-direct', auditLane: '<audit lane id>' }",
+        };
+    }
+    return 'ok';
+}
 export function topoWaves(tasks) {
     if (!Array.isArray(tasks) || tasks.length === 0) {
         throw new Error('tasks must be a non-empty array');

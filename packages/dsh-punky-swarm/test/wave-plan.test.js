@@ -142,7 +142,7 @@ test('role 合法性：8 角色集合 + 大小写归一化（Designer→designer
   assert.equal(flat.y.role, 'coder');
   assert.equal(flat.z.role, 'reviewer');
   assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], '合法角色不触发非法告警');
-  // C 类批次（3 lane 跨层）audit 层 reviewer 非 supervisor/doc-manager → 齐备告警（方案 C warning 语义）
+  // C 类批次（3 lane 跨层）audit 层 reviewer 非 supervisor/doc-manager → 齐备告警（warning 语义）
   const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
   assert.equal(miss.length, 1);
   assert.equal(miss[0].layer, 'audit');
@@ -157,7 +157,7 @@ test('role 非法（planner/auditor）→ GATE_ROLE_INVALID 告警不阻断，ro
   assert.equal(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').length, 2, '两个非法角色各一条非法告警');
   assert.ok(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').every((w) => w.code === 'GATE_ROLE_INVALID'));
   assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').map((w) => w.role).sort(), ['auditor', 'planner']);
-  // C 类批次（跨层依赖）plan/audit 层均缺牵头角色 → 各一条齐备告警（方案 C，与非法告警并存）
+  // C 类批次（跨层依赖）plan/audit 层均缺牵头角色 → 各一条齐备告警（与非法告警并存）
   const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
   assert.equal(miss.length, 2);
   assert.deepEqual(miss.map((w) => w.layer).sort(), ['audit', 'plan']);
@@ -195,13 +195,13 @@ test('role 盲审扩展角色（audit-panelist 等）为合法角色：不触发
   ] });
   assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], '盲审扩展角色为合法角色，不触发非法告警');
   const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, 'C 类多 lane 批次 audit 层缺 supervisor/doc-manager → 齐备告警（warning 语义，方案 C）');
+  assert.equal(miss.length, 1, 'C 类多 lane 批次 audit 层缺 supervisor/doc-manager → 齐备告警（warning 语义）');
   assert.equal(miss[0].layer, 'audit');
   assert.equal(plan.wavePlan[0].tasks[0].role, 'audit-panelist');
   assert.equal(validateWavePlan(plan), true, 'warning 不阻断建批');
 });
 
-// ---- 方案 C：C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义） ----
+// ---- C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义） ----
 
 test('C 类形态判定：多 wave / 多 lane / 跨 layer 依赖任一命中即 C 类；单 lane 单 wave 无跨层依赖非 C 类', () => {
   assert.equal(isCClassBatch([{ id: 'a' }], [['a']]), false, '单 lane 单 wave 无跨层依赖 → 非 C 类');
