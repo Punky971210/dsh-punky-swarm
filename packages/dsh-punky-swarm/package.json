@@ -33,7 +33,9 @@
     "docs/acps-communication.md",
     "docs/acps-communication.en.md",
     "docs/webui-governance-config.md",
-    "docs/webui-governance-config.en.md"
+    "docs/webui-governance-config.en.md",
+    "docs/integrations/comfyui-glue.md",
+    "docs/integrations/comfyui-glue.en.md"
   ],
   "engines": {
     "node": ">=22"
