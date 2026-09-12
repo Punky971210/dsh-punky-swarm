@@ -48,11 +48,19 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 
 // ── 注册表完整性（A1.1/A1.2）──
 
-test('CAPABILITY_REGISTRY registers all 11 capability keys（P1-01/03 新增 logs/topic）', () => {
+test('CAPABILITY_REGISTRY registers all 12 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog）', () => {
   assert.deepEqual(
     new Set(CAPABILITY_REGISTRY.map((e) => e.key)),
-    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'trajectory', 'acps', 'logs', 'topic']),
+    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
   );
+});
+
+test('auditlog registry entry points at capabilities.auditlog and defaults to enabled', () => {
+  // punky-auditlog-impl-m1：审计日志 sink 默认开（用户裁决 Q-DEF=A）；env PUNKY_AUDITLOG 逐键覆盖本键
+  const entry = CAPABILITY_REGISTRY.find((e) => e.key === 'auditlog');
+  assert.ok(entry, 'auditlog 键存在于注册表');
+  assert.deepEqual(entry.path, ['capabilities', 'auditlog']);
+  assert.equal(entry.default.enabled, true, '默认开（不在 OFF_KEYS 内）');
 });
 
 test('registry paths match existing consumer key paths', () => {

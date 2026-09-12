@@ -22,6 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   引擎启动侧只 warn 不炸宿主（配置错误不破坏可用性，与「默认关零破坏」一致）。
 
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
+import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 
 // ── 能力注册表（11 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps/logs/topic）──
 // path = config 取值路径；default = 缺省值（7 键默认开——aip/discovery/verify/watch/worktree/budget/trajectory；
@@ -48,6 +49,8 @@ export const CAPABILITY_REGISTRY = [
   { key: 'logs', path: ['capabilities', 'logs'], default: { enabled: false }, consumers: ['tools/log-tools.js log_export 注册'] },
   // topic 键：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）预留。
   { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留）'] },
+  // auditlog 键：审计日志 sink（默认开，用户裁决 Q-DEF=A）；env PUNKY_AUDITLOG 逐键覆盖；消费 lib/index.js mountAuditLog + lib/auditlog/**
+  { key: 'auditlog', path: ['capabilities', 'auditlog'], default: AUDITLOG_DEFAULTS, consumers: ['lib/index.js apply() mountAuditLog', 'lib/auditlog/sink.js', 'docs 根 README（落点/开关）'] },
 ];
 
 // ── 互斥表（预留空表：当前能力两两可叠加；未来互斥能力登记于此）──

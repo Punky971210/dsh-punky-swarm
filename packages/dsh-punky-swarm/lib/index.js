@@ -66,6 +66,10 @@ import { createStreamHub } from './panel/stream.js';
 // 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
+// 审计日志 sink（lib/auditlog/）：进程级 cordis logger exporter——默认开、可显式关闭、按日分卷 + 体积上限、
+//   零远程上报。挂载点见下方 apply() 内注释（必须在 validateCapabilities warn / GATE_ENABLED warn / syncAssets
+//   三条 warn 之前，否则这些启动期审计信号永久缺席）。
+import { mountAuditLog } from './auditlog/sink.js';
 
 export const name = 'dsh-punky-swarm';
 export const inject = ['tools', 'webServer'];
@@ -79,6 +83,19 @@ export const apply = (ctx, config = {}) => {
   mkdirSync(root, { recursive: true });
   // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
+
+  // 审计日志挂载（唯一挂载点，代码内挂载：cordis loader 行 schema 无 logger 装配位——摸底契约卡 §0-8）——
+  // 必须在下方 validateCapabilities warn / GATE_ENABLED warn / syncAssets 三条 warn 之前，
+  // 否则「配置非法 / 门禁逃生阀 / 资产清单不可用」这些启动期审计信号永久缺席；挂载失败不炸宿主。
+  // 关闭态（PUNKY_AUDITLOG=off 或 capabilities.auditlog.enabled:false）→ 零目录零 exporter。
+  try {
+    const auditMount = mountAuditLog(ctx, { root, config });
+    if (auditMount.mounted) {
+      ctx.logger?.info?.('[dsh-punky-swarm] audit log sink mounted: ' + auditMount.sinkDir + '\\' + auditMount.filename);
+    }
+  } catch (e) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] auditlog mount failed: ' + String(e)); // 挂载失败不炸宿主
+  }
 
   // 配置校验兜底：仅 warn 不炸宿主——validateCapabilities 仅对显式
   // enabled 的非法组合报错；禁用能力零校验零 warn；空/缺省 config → errors=[] → 零 warn

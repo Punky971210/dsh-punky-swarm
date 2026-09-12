@@ -77,6 +77,46 @@ English: [README.en.md](README.en.md)
 
 配置入口：Web UI 设置区的治理配置页可调护栏开关、规则与窗口，保存即时生效、免重启。
 
+## 审计日志（audit log）
+
+插件内置一个**进程级审计日志 sink**：把引擎与本插件产生的日志逐行落到本地磁盘，供事后核对。**默认开启**——审计入口的意义在常态可用：默认关等于只在「事先想到要开」时才留证据，恰是排障最需要证据时缺失。日志形态、字段、落点、开关如下，逐条可核验。
+
+**落点**：`<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl`（文件名日期取**本地日期**，进程启动时定名、进程内不变）；单卷写满 64 MiB 后转分卷 `audit-YYYY-MM-DD.1.jsonl`、`.2.jsonl`… 该落点**不在会话工作区内、也不在插件产物根内**；运行期诊断面另落同根下 `diagnostics\sink-diagnostics.json`。`<DSH_HOME>` 依次取 `PUNKY_AUDITLOG_SINK_DIR` → `DSH_HOME` → `~/.dsh`（前两者为空则用下一个），再拼 `logs/punky-swarm`。
+
+**关闭它**（两种渠道，均需**重启宿主**才生效）：
+
+1. 环境变量 `PUNKY_AUDITLOG`：`0` / `false` / `off` / `no` 任一即关（大小写不敏感、去空白）；`1` / `true` / `on` / `yes` 即开；未设或空值 = 不干预。
+2. 插件配置键 `capabilities.auditlog.enabled: false`，写进 `cordis.patch.yml` 或 `runtime.json`。
+
+**优先级**：env 覆盖 config，**逐键**按此规则（`PUNKY_AUDITLOG_SINK_DIR` / `PUNKY_AUDITLOG_KEEP_DAYS` / `PUNKY_AUDITLOG_MAX_FILE_BYTES` / `PUNKY_AUDITLOG_MAX_TOTAL_BYTES` / `PUNKY_AUDITLOG_LEVELS_DEFAULT` / `PUNKY_LOGGER_STDOUT` 同理）。**关闭态零代价**：不创建 sink 目录、不注册 exporter、不写一个字节；**热改不生效**——只有重启宿主后新配置才生效，运行中的进程不会中途挂上或卸下 sink（挂载是启动期一次性的副作用，本插件不提供运行期开关）。
+
+**输出到 stdout**：另有一道 `PUNKY_LOGGER_STDOUT` 开关控制是否把**同一行**同时写到 stdout，**默认关**；只有 `1` / `true` / `on` / `yes` 才开启，其余一律视为关。关闭时本模块不向 stdout 写任何字节。
+
+**一行一个 JSON（JSONL）**，10 个字段：
+
+| 字段 | 含义 |
+|---|---|
+| `v` | 行格式版本，当前恒为 `1` |
+| `ts` | 事件时间，ISO 8601（UTC） |
+| `level` | 级别：`error` / `warn` / `info` / `debug` |
+| `name` | 日志来源名，缺省为 `root` |
+| `msg` | 渲染后的消息文本（与宿主日志同一渲染路径） |
+| `args` | 原始参数（不可序列化值降级为 `<unserializable>`） |
+| `sn` | 内核侧序列号 |
+| `truncated` | 该行是否发生过截断 |
+| `pid` | 进程号 |
+| `kind` | 记录种类：`log`（普通日志行）/ `sink-error`（sink 自产诊断行） |
+
+单行硬上限 32 KiB：超限时先截 `args` 段、再截 `msg` 段，截断处留 `...[truncated]` 标记并把 `truncated` 置真，**不丢记录、不中断日志**。
+
+**轮转与保留上限**：单卷 **64 MiB** 硬分割（新卷 `-1` / `-2` … 单调递增，不重排、不回退）；**保留 14 天**（按分卷名内日期判定，早于「今天 − 14 天」的已收盘卷删除）；**总量 512 MiB**（超出时按最旧优先清理）。
+
+**不做任何远程上报**：审计日志只写本地磁盘，无网络出口、无远端 sink、无 OTel 导出——这是硬约束，不是默认值。
+
+**捕获面（诚实声明）**：日志内容是**诊断文本 + 绝对路径 + 会话/批次标识符 + Error 堆栈**，属**元数据级**，不记录业务数据本身。**注意捕获面无法按 ctx / 插件收窄**：logger 的 exporter 注册表是进程级全局的，本插件拿不到「按上下文隔离」的能力，也就无法承诺「只记自己的日志」——装上本插件意味着进程内日志会被一并记入。按来源名收窄同样不可靠：本插件自身的关键 warn 与例行 info 共用同一来源名 `dsh-punky-swarm`。
+
+**已知边界**：不支持多进程写同一 sink 根——同机多个 dsh 实例共用一个 `DSH_HOME` 时，同一卷会被并发追加（单次写入 ≤ 32 KiB，行不会交错），分卷计数可能各自从 `.1` 起并互相覆盖同名分卷；需要多个隔离实例共存的，请用 `PUNKY_AUDITLOG_SINK_DIR` 给每个实例指定各自目录。审计 sink 只做排查取证用的本地留痕，不构成安全审计或合规审计能力。
+
 ## 安装
 
 前置：已安装 DeepSeek Harness（dsh），Node.js ≥ 22。

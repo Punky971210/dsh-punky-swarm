@@ -1,5 +1,19 @@
 ## 未发布（Unreleased）
 
+### 审计日志（默认开、可显式关闭、有轮转与体积上限、零远程上报）
+
+- 新增进程级审计日志 sink（`lib/auditlog/sink.js` + `lib/auditlog/config.js`），挂载点在 `lib/index.js` 的 `apply()` 内——**先于配置校验 warn、门禁逃生阀 warn 与资产同步**，使启动期审计信号不漏记；挂载失败不炸宿主。
+- 落点 `<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl`（本地日期；`<DSH_HOME>` 依次取 `PUNKY_AUDITLOG_SINK_DIR` → `DSH_HOME` → `~/.dsh`），不在会话工作区、不在插件产物根内；运行期诊断面在同根 `diagnostics/sink-diagnostics.json`。
+- 默认开启；关闭渠道两条：环境变量 `PUNKY_AUDITLOG`（`0`/`false`/`off`/`no`）或配置键 `capabilities.auditlog.enabled: false`；env 逐键覆盖 config；关闭态不建目录、不注册 exporter、零字节写入；**热改需重启宿主生效**（不提供运行期挂载/卸载）。
+- 行格式 JSONL，10 字段（`v`/`ts`/`level`/`name`/`msg`/`args`/`sn`/`truncated`/`pid`/`kind`）；单行硬上限 32 KiB，两段截断（先 `args` 后 `msg`）并留 `...[truncated]` 标记，不丢记录。
+- 轮转与体积上限：单卷 64 MiB 硬分割（`-1`/`-2`… 单调递增）、保留 14 天、总量 512 MiB（超出按最旧优先清理）；只 append、永不改写既有卷。
+- stdout 默认关（`PUNKY_LOGGER_STDOUT` 显式开启才输出），与文件 sink 同一 record 结构；写失败不 fallback stdout。
+- 降级有界：export 全链路 try/catch 绝不向调用点抛错；连续失败 3 次开断路器（此后每 1000 次尝试放行一次探活），`sink-error` 记录上限 3 条；不调用 exporter 的 disposer。
+- **不做任何远程上报**（零网络出口、零远端 sink、零 OTel 导出）；捕获面为元数据级（诊断文本 + 绝对路径 + 会话/批次标识符 + Error 堆栈），**无法按 ctx/插件收窄**（exporter 注册表进程级全局）。
+- 能力注册表新增 `capabilities.auditlog` 项（默认值取自 `lib/auditlog/config.js` 的冻结常量，单一来源）；不注册新工具、不新增校验规则、不新增运行时依赖。
+- 已知边界：不支持多进程写同一 sink 根（隔离实例请用 `PUNKY_AUDITLOG_SINK_DIR` 指定独立目录）。
+- 版本号不变（本次仅登记变更，不 bump）。
+
 ### 团队更名登记：jiufeng-team → software-team
 
 - 登记条目（可追溯硬项）：原名 `jiufeng-team` → 新名 `software-team`；日期 **2026-09-12**；原因：引擎/团队分层改造，团队技能名与团队定位对齐（「蟛蜞模式」为引擎侧治理模式名，软件工程角色指引归团队层，原「蟛蜞模式指引层」名不副实）。

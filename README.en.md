@@ -75,6 +75,46 @@ Optional **rule presets** ship with the package — one line enables one guardra
 
 Configuration entry point: the governance config page in the Web UI settings area adjusts guardrail switches, rules and windows; saving applies immediately, no restart needed.
 
+## Audit log
+
+The plugin ships a **process-level audit log sink**: it writes the engine's and this plugin's log lines to local disk, line by line, for after-the-fact inspection. It is **enabled by default** — an audit entry point is only worth having if it is always on: being off by default means evidence exists only when you happened to think of switching it on beforehand, which is exactly the case where evidence is most needed. Format, fields, location and switches are below, each verifiable.
+
+**Location**: `<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl` (the date in the file name is the **local date**; the name is fixed at process start and does not change within the process). When one volume reaches 64 MiB it rolls over to `audit-YYYY-MM-DD.1.jsonl`, `.2.jsonl`, … This location is **neither inside the session workspace nor inside the plugin artifact root**; runtime diagnostics go to a separate file, `diagnostics\sink-diagnostics.json`, under the same root. `<DSH_HOME>` is resolved as `PUNKY_AUDITLOG_SINK_DIR` → `DSH_HOME` → `~/.dsh` (the first non-blank wins), then `logs/punky-swarm` is appended.
+
+**Turning it off** (two channels; either one takes effect only after a **host restart**):
+
+1. Environment variable `PUNKY_AUDITLOG`: `0` / `false` / `off` / `no` disables it (case-insensitive, surrounding whitespace trimmed); `1` / `true` / `on` / `yes` enables it; unset or blank means "no override".
+2. Plugin config key `capabilities.auditlog.enabled: false`, written into `cordis.patch.yml` or `runtime.json`.
+
+**Priority**: env overrides config, **per key** (the same rule applies to `PUNKY_AUDITLOG_SINK_DIR` / `PUNKY_AUDITLOG_KEEP_DAYS` / `PUNKY_AUDITLOG_MAX_FILE_BYTES` / `PUNKY_AUDITLOG_MAX_TOTAL_BYTES` / `PUNKY_AUDITLOG_LEVELS_DEFAULT` / `PUNKY_LOGGER_STDOUT`). **The disabled state costs nothing**: no sink directory is created, no exporter is registered, not a single byte is written. **Hot changes do not apply** — the new configuration only takes effect after a host restart; a running process never mounts or unmounts the sink midway (mounting is a one-shot side effect at startup, and no runtime switch is provided).
+
+**Writing to stdout**: a separate `PUNKY_LOGGER_STDOUT` switch controls whether the **same line** is also written to stdout. It is **off by default**; only `1` / `true` / `on` / `yes` enable it, anything else counts as off. When it is off, this module writes no bytes to stdout at all.
+
+**One JSON per line (JSONL)**, 10 fields:
+
+| Field | Meaning |
+|---|---|
+| `v` | Line format version, currently always `1` |
+| `ts` | Event time, ISO 8601 (UTC) |
+| `level` | Level: `error` / `warn` / `info` / `debug` |
+| `name` | Log source name; defaults to `root` |
+| `msg` | Rendered message text (the same rendering path the host log uses) |
+| `args` | Raw arguments (values that cannot be serialized degrade to `<unserializable>`) |
+| `sn` | Kernel-side sequence number |
+| `truncated` | Whether this line was truncated |
+| `pid` | Process id |
+| `kind` | Record kind: `log` (a regular log line) / `sink-error` (a diagnostic line produced by the sink itself) |
+
+A single line is hard-capped at 32 KiB: over the cap the `args` segment is truncated first, then the `msg` segment, with a `...[truncated]` marker left at the cut and `truncated` set to true — **no record is dropped and logging is not interrupted**.
+
+**Rotation and retention limits**: a hard split at **64 MiB** per volume (new volumes `-1` / `-2` … increase monotonically; no reordering, no going back); **14 days** of retention (judged by the date inside the volume's name; closed volumes older than "today − 14 days" are deleted); **512 MiB** total (when exceeded, the oldest are cleaned up first).
+
+**No remote reporting whatsoever**: the audit log is written to local disk only — no network egress, no remote sink, no OTel export. This is a hard constraint, not a default value.
+
+**Capture surface (honest statement)**: what gets logged is **diagnostic text + absolute paths + session/batch identifiers + Error stacks**, i.e. **metadata-level**; the business data itself is not recorded. **Note that the capture surface cannot be narrowed per ctx / plugin**: the logger's exporter registry is process-global, so this plugin has no "isolate by context" capability and cannot promise "only my own logs are recorded" — loading this plugin means in-process logs are recorded along with it. Narrowing by source name is equally unreliable: this plugin's own critical warns share the same source name `dsh-punky-swarm` as its routine info.
+
+**Known boundaries**: multiple processes writing the same sink root are not supported — when several dsh instances on one machine share a single `DSH_HOME`, the same volume is appended to concurrently (a single write is ≤ 32 KiB, so lines never interleave) and the volume counters may each start at `.1` and overwrite same-named volumes. To run several isolated instances side by side, point each one at its own directory with `PUNKY_AUDITLOG_SINK_DIR`. The audit sink only provides local traces for troubleshooting and inspection; it is not a security-audit or compliance-audit capability.
+
 ## Installation
 
 Prerequisites: DeepSeek Harness (dsh) installed, Node.js ≥ 22.
