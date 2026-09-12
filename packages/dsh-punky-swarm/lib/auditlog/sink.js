@@ -65,7 +65,22 @@ const MAX_PRUNE_SCAN = 5000;
 /** 分卷接管时最多尝试的分卷序号（防御超大单行的死循环） */
 const MAX_ROTATE_ATTEMPTS = 10000;
 
-/** 级别数值映射（自建表，与内核枚举同值但**不 import 内核枚举**——§七 7.1） */
+/**
+ * 审计档位映射（本模块私有表）：以消息**类型名** `error/warn/info/debug` 为键 → 档位 0/1/2/3。
+ *
+ * 与内核 `LoggerLevel` 的真实关系（回源核对所得，勿凭印象改）：内核那份枚举是**方法序数域**
+ * —— cordis `src/logger.ts` 声明 `ERROR=0 / INFO=1 / WARN=2 / DEBUG=3`，`Logger` 构造器把该序数
+ * 逐方法内联（`this.error = this._method('error', LoggerLevel.ERROR)` 一段），`_method` 再把该序数
+ * 写进消息的 `level` 字段；而同一消息的 `type` 字段存的是**方法名字符串**。两个字段是两条互不相干的
+ * 数值/字符串域。本表与内核序数域**数值集合相同**（同为 0..3），但**同名键并不同值**：
+ * 本表 `warn=1 / info=2`，内核序数域 `warn=2 / info=1`，两键互换。
+ *
+ * 因此本表不是内核枚举的副本或镜像，而是本模块自持的「类型名 → 档位」映射：审计阈值判定只按
+ * `message.type` 查本表（见 levelNumberOf），全程不读 `message.level`，两域不一致因而对本模块
+ * 行为零影响；反之若改读 `message.level`，默认阈值 1 会连 warn 一起吞掉。
+ *
+ * 本模块 import 了 cordis 的 `Logger`（供 Logger.format 渲染），但未也无需 import `LoggerLevel`。
+ */
 const LEVEL_BY_TYPE = { error: 0, warn: 1, info: 2, debug: 3 };
 
 const DAY_MS = 86400000;
@@ -564,8 +579,10 @@ function writeLine(line) {
 // ── L6 export()：整体 try/catch，绝不 rethrow ──
 
 /**
- * 审计级别数值：按**消息类型名**映射（口径与 spec §七 7.1 的 `error=0,warn=1,info=2,debug=3` 逐字一致，
- * 与内核方法序数同值）。**故意不使用 `message.level`**——见下方规范注释。
+ * 审计级别档位：按**消息类型名**查本模块自持表（error=0 / warn=1 / info=2 / debug=3）。
+ *
+ * **故意不使用 `message.level`**：该字段属内核方法序数域（同名键 warn=2、info=1，与本表互换），
+ * 两域不同值；本模块阈值语义只认类型域，理由见上方 LEVEL_BY_TYPE 定义与下方 passesAuditLevel 说明。
  */
 function levelNumberOf(message) {
   const type = message?.type;

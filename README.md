@@ -81,7 +81,7 @@ English: [README.en.md](README.en.md)
 
 插件内置一个**进程级审计日志 sink**：把引擎与本插件产生的日志逐行落到本地磁盘，供事后核对。**默认开启**——审计入口的意义在常态可用：默认关等于只在「事先想到要开」时才留证据，恰是排障最需要证据时缺失。日志形态、字段、落点、开关如下，逐条可核验。
 
-**落点**：`<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl`（文件名日期取**本地日期**，进程启动时定名、进程内不变）；单卷写满 64 MiB 后转分卷 `audit-YYYY-MM-DD.1.jsonl`、`.2.jsonl`… 该落点**不在会话工作区内、也不在插件产物根内**；运行期诊断面另落同根下 `diagnostics\sink-diagnostics.json`。`<DSH_HOME>` 依次取 `PUNKY_AUDITLOG_SINK_DIR` → `DSH_HOME` → `~/.dsh`（前两者为空则用下一个），再拼 `logs/punky-swarm`。
+**落点**：`<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl`（文件名日期取**本地日期**，进程启动时定名、进程内不变）；单卷写满 64 MiB 后转分卷 `audit-YYYY-MM-DD.1.jsonl`、`.2.jsonl`… 该落点**不在会话工作区内、也不在插件产物根内**；运行期诊断面另落同根下 `diagnostics\sink-diagnostics.json`。`<DSH_HOME>` 依次取 `PUNKY_AUDITLOG_SINK_DIR` → 插件配置子键 `capabilities.auditlog.sinkDir` → `DSH_HOME` → `~/.dsh`（前项为空则用下一项），再拼 `logs/punky-swarm`。
 
 **关闭它**（两种渠道，均需**重启宿主**才生效）：
 
@@ -98,7 +98,7 @@ English: [README.en.md](README.en.md)
 |---|---|
 | `v` | 行格式版本，当前恒为 `1` |
 | `ts` | 事件时间，ISO 8601（UTC） |
-| `level` | 级别：`error` / `warn` / `info` / `debug` |
+| `level` | 级别：`error` / `warn` / `info` / `debug`；sink 自产诊断行为 `sink-error` |
 | `name` | 日志来源名，缺省为 `root` |
 | `msg` | 渲染后的消息文本（与宿主日志同一渲染路径） |
 | `args` | 原始参数（不可序列化值降级为 `<unserializable>`） |
@@ -209,7 +209,7 @@ dsh web restart
 
 ## 兼容性与边界
 
-当前版本 **0.4.3**；863 项测试全绿（实测于 Node 24，CI 覆盖 Node 22/24）；peer 依赖 @deepseek-ai/dsh-tools（^0.1.0-rc.6 \|\| ^0.1.1-rc.2）与 @deepseek-ai/cordis（^4.0.1）；已收录 awesome-dsh-plugin。
+当前版本以 `packages/dsh-punky-swarm/package.json` 为单一真源（见 `CHANGELOG.md` 变更记录）；900+ 项测试全绿（实测于 Node 24，CI 覆盖 Node 22/24）；peer 依赖 @deepseek-ai/dsh-tools（^0.1.0-rc.6 \|\| ^0.1.1-rc.2）与 @deepseek-ai/cordis（^4.0.1）；已收录 awesome-dsh-plugin。
 
 诚实边界：面向单机进程内治理——不做分布式集群同步、无成本控制、无模型分层路由，零云依赖、默认零网络暴露；失败即终态，重做即新建批次，不自动续跑。
 

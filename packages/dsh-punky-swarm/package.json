@@ -34,6 +34,7 @@
     "docs/acps-communication.en.md",
     "docs/webui-governance-config.md",
     "docs/webui-governance-config.en.md",
+    "docs/upstream-defects.md",
     "docs/integrations/comfyui-glue.md",
     "docs/integrations/comfyui-glue.en.md"
   ],
@@ -43,7 +44,7 @@
   "scripts": {
     "check": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
-    "test": "npm run build && node --test"
+    "test": "npm run build && node --import ./test/helpers/isolated-home.preload.mjs --test"
   },
   "keywords": [
     "dsh",

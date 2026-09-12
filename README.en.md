@@ -79,7 +79,7 @@ Configuration entry point: the governance config page in the Web UI settings are
 
 The plugin ships a **process-level audit log sink**: it writes the engine's and this plugin's log lines to local disk, line by line, for after-the-fact inspection. It is **enabled by default** — an audit entry point is only worth having if it is always on: being off by default means evidence exists only when you happened to think of switching it on beforehand, which is exactly the case where evidence is most needed. Format, fields, location and switches are below, each verifiable.
 
-**Location**: `<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl` (the date in the file name is the **local date**; the name is fixed at process start and does not change within the process). When one volume reaches 64 MiB it rolls over to `audit-YYYY-MM-DD.1.jsonl`, `.2.jsonl`, … This location is **neither inside the session workspace nor inside the plugin artifact root**; runtime diagnostics go to a separate file, `diagnostics\sink-diagnostics.json`, under the same root. `<DSH_HOME>` is resolved as `PUNKY_AUDITLOG_SINK_DIR` → `DSH_HOME` → `~/.dsh` (the first non-blank wins), then `logs/punky-swarm` is appended.
+**Location**: `<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl` (the date in the file name is the **local date**; the name is fixed at process start and does not change within the process). When one volume reaches 64 MiB it rolls over to `audit-YYYY-MM-DD.1.jsonl`, `.2.jsonl`, … This location is **neither inside the session workspace nor inside the plugin artifact root**; runtime diagnostics go to a separate file, `diagnostics\sink-diagnostics.json`, under the same root. `<DSH_HOME>` is resolved as `PUNKY_AUDITLOG_SINK_DIR` → plugin config subkey `capabilities.auditlog.sinkDir` → `DSH_HOME` → `~/.dsh` (the first non-blank wins), then joined with `logs/punky-swarm`.
 
 **Turning it off** (two channels; either one takes effect only after a **host restart**):
 
@@ -96,7 +96,7 @@ The plugin ships a **process-level audit log sink**: it writes the engine's and 
 |---|---|
 | `v` | Line format version, currently always `1` |
 | `ts` | Event time, ISO 8601 (UTC) |
-| `level` | Level: `error` / `warn` / `info` / `debug` |
+| `level` | Level: `error` / `warn` / `info` / `debug`; `sink-error` for sink-generated diagnostic rows |
 | `name` | Log source name; defaults to `root` |
 | `msg` | Rendered message text (the same rendering path the host log uses) |
 | `args` | Raw arguments (values that cannot be serialized degrade to `<unserializable>`) |
@@ -207,7 +207,7 @@ Bilingual topic documentation ships with the package (7 groups, each with a Chin
 
 ## Compatibility & boundaries
 
-Current version **0.4.3**; 863 tests passing (measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.
+The current version is sourced from `packages/dsh-punky-swarm/package.json` (see `CHANGELOG.md`); 900+ tests passing (measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.
 
 Honest boundaries: in-process governance for a single machine — no distributed cluster sync, no cost control, no model-tier routing; zero cloud dependencies and no network exposure by default; failure is terminal and rework means a new batch, never auto-resume.
 
