@@ -1,3 +1,5 @@
+> 更名登记（2026-09-12）：原名 jiufeng-team，自本批起更名为 software-team；登记出处：CHANGELOG.md（根 / packages/dsh-punky-swarm）。
+
 # Single-Machine Capabilities
 
 > This document states the single-machine capability boundaries of dsh-punky-swarm in product language: local operation, zero cloud dependency, zero network exposure by default, plugin-scoped governance, deterministic zero-dependency.
@@ -7,7 +9,7 @@
 
 - The plugin runs inside the dsh (DeepSeek Harness) process; orchestration, adjudication and record-keeping all complete inside the local process;
 - The governed objects are a cohort of Agent subprocesses orchestrated in the same process (batches / gates / communication / recovery re-dispatch);
-- A single npm package contains: the plugin engine, the Punky Swarm preset (presets/jiufeng), and the jiufeng-team role guide (skills/jiufeng-team); on startup the plugin auto-syncs the preset and skills to the user directory — no manual placement needed;
+- A single npm package contains: the plugin engine, the Punky Swarm preset (presets/jiufeng), and the software-team role guide (skills/software-team); on startup the plugin auto-syncs the preset and skills to the user directory — no manual placement needed;
 - The read-only monitoring panel loads with the plugin (the "Punky Swarm cluster" tab in the session view), available on install.
 
 ## 2. Zero Cloud Dependency / Zero External Services

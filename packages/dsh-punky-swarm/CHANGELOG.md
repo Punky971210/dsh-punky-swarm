@@ -1,3 +1,12 @@
+## 未发布（Unreleased）
+
+### 团队更名登记：jiufeng-team → software-team
+
+- 登记条目（可追溯硬项）：原名 `jiufeng-team` → 新名 `software-team`；日期 **2026-09-12**；原因：引擎/团队分层改造，团队技能名与团队定位对齐（「蟛蜞模式」为引擎侧治理模式名，软件工程角色指引归团队层，原「蟛蜞模式指引层」名不副实）。
+- 影响面：技能目录 `skills/jiufeng-team/` → `skills/software-team/`（18 文件，文件集合与 8 角色文件名不变）；同步任务 `lib/assets.js:85` 目标改为 `~/.agents/skills/software-team`，关联测试 `test/assets.test.js` 同步；`SKILL.md` frontmatter `name:`、自检脚本 `scripts/check-v3-density.mjs` 注释与 `cmd` 示例改名；本包 `package.json` description 与 `docs/single-machine-capabilities.md`/`.en.md` 同步改名。
+- 不改动面：`presets/jiufeng/`（preset id/目录名/`preset.yml` 的 `name`）、装配命名空间键 `jiufeng`（`DEFAULT_ASSEMBLY.team`、`aip.team`）、引擎数据根 `~/.dsh/jiufeng`、`VALID_ROLES`/`REQUIRED_ROLES` 值。
+- 历史行不改：本文件既有 `jiufeng-team` 记载（历史事实行）原样保留，本次仅**追加**本登记块。
+
 ## 0.4.4（2026-09-08）
 
 ### 批次事件结局分型（恢复与回收记账）

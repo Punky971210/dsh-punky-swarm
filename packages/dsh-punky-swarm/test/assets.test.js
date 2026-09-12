@@ -64,19 +64,21 @@ test('syncDir: 目标不一致 -> synced 并覆盖（含多余文件清除）', 
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('syncAssets: 双资产同步到模拟 home + 二次幂等', () => {
+test('syncAssets: 三资产同步到模拟 home + 二次幂等', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'punky-assets-'));
   try {
     const root = join(tmp, 'pkg');
     makeTree(join(root, 'presets/jiufeng'), { 'preset.yml': 'p', 'agent.cordis.yml': 'a' });
-    makeTree(join(root, 'skills/jiufeng-team'), { 'SKILL.md': 's' });
+    makeTree(join(root, 'skills/software-team'), { 'SKILL.md': 's' });
+    makeTree(join(root, 'skills/design-team'), { 'SKILL.md': 'd' });
     const home = join(tmp, 'home');
     const r1 = syncAssets({ home, packageRoot: root });
-    assert.deepEqual(r1.map((x) => x.status), ['synced', 'synced']);
+    assert.deepEqual(r1.map((x) => x.status), ['synced', 'synced', 'synced']);
     assert.equal(existsSync(join(home, '.dsh', '.agent-presets', 'jiufeng', 'preset.yml')), true);
-    assert.equal(existsSync(join(home, '.agents', 'skills', 'jiufeng-team', 'SKILL.md')), true);
+    assert.equal(existsSync(join(home, '.agents', 'skills', 'software-team', 'SKILL.md')), true);
+    assert.equal(existsSync(join(home, '.agents', 'skills', 'design-team', 'SKILL.md')), true);
     const r2 = syncAssets({ home, packageRoot: root });
-    assert.deepEqual(r2.map((x) => x.status), ['current', 'current']);
+    assert.deepEqual(r2.map((x) => x.status), ['current', 'current', 'current']);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
@@ -86,6 +88,6 @@ test('syncAssets: 源缺失 -> missing-source 不报错', () => {
     const root = join(tmp, 'empty');
     mkdirSync(root, { recursive: true });
     const r = syncAssets({ home: join(tmp, 'home'), packageRoot: root });
-    assert.deepEqual(r.map((x) => x.status), ['missing-source', 'missing-source']);
+    assert.deepEqual(r.map((x) => x.status), ['missing-source', 'missing-source', 'missing-source']);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });

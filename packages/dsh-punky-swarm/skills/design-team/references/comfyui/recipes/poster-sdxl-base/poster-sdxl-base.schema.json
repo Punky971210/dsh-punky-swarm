@@ -1,0 +1,68 @@
+{
+  "ckpt_name": {
+    "type": "string",
+    "default": "sd_xl_base_1.0.safetensors",
+    "recommendedRange": "固定（须 ∈ object_info ckpt 列表；A5 实测本机仅此 1 项在册）",
+    "description": "采样底模文件名（ComfyUI models/checkpoints 相对名）。未就位 → 拒绝执行并上报，绝不触发下载。"
+  },
+  "seed": {
+    "type": "integer",
+    "default": -1,
+    "recommendedRange": "任意整数（写定值记 runs.json）",
+    "description": "-1 = 实现内生成随机整数并写定注入，禁 ComfyUI 服务端随机；实际写定 seed 为审计复跑三件套之一。"
+  },
+  "positive": {
+    "type": "string",
+    "default": "a white ceramic coffee cup with saucer on a light oak wooden table, soft diffused window light from the left, warm off-white minimalist background wall, centered composition with clean negative space above for a title area, subtle shadow under the cup, professional advertising still-life photography, crisp details",
+    "recommendedRange": "主体明确 + 构图描述优先（非裸基底抽象词）",
+    "description": "正向提示词。默认按板2 策略起草（A5 教训驱动）：① 可命名主体/前景（陶瓷咖啡杯+碟）→ ② 构图与层次（居中、上方留白供标题区）→ ③ 环境光效（左侧漫射窗光）→ ④ 风格词克制；禁止裸 base+抽象背景词（A5 实测 → 粉红抽象堆叠）。"
+  },
+  "negative": {
+    "type": "string",
+    "default": "text, watermark, low quality, blurry, deformed, extra limbs, jpeg artifacts, oversaturated",
+    "recommendedRange": "基线 + 按需扩展（不堆叠互相冲突的限制词）",
+    "description": "负向提示词强化清单：text/watermark（Q4 文字留白：图内文字一律交由 CSS 版式层）/low quality/blurry/deformed/extra limbs（A5 §⑦ 实测基线）+ jpeg artifacts/oversaturated（按需扩展）。"
+  },
+  "width": {
+    "type": "integer",
+    "default": 1024,
+    "recommendedRange": "1024–1344",
+    "description": "图宽。1024 起步（A5 实测 1024² 可行，≈32.5 s 含模型首载）；>1344 有 8 GB 显存风险。方版档 = width 1024 × height 1024。"
+  },
+  "height": {
+    "type": "integer",
+    "default": 1536,
+    "recommendedRange": "1024–1536",
+    "description": "图高。海报底图向竖版默认 1536（8 GB 档上限，以落地实测校正）；方形档覆盖为 1024。"
+  },
+  "steps": {
+    "type": "integer",
+    "default": 24,
+    "recommendedRange": "20–40",
+    "description": "采样步数。默认 24（A5/BOD1 实测档）。"
+  },
+  "cfg": {
+    "type": "number",
+    "default": 6.5,
+    "recommendedRange": "5.0–8.0",
+    "description": "CFG 引导强度。默认 6.5（A5/BOD1 实测档）。"
+  },
+  "sampler_name": {
+    "type": "string",
+    "default": "euler",
+    "recommendedRange": "euler 等 ∈ object_info sampler 选项",
+    "description": "采样器。默认 euler（A5 实测通过）；提交前以全量 object_info 核对选项（防 422，A5 §⑧ 教训）。"
+  },
+  "scheduler": {
+    "type": "string",
+    "default": "normal",
+    "recommendedRange": "normal / karras ∈ object_info scheduler 选项",
+    "description": "调度器。默认 normal（A5 实测通过）；提交前以全量 object_info 核对选项。"
+  },
+  "filename_prefix": {
+    "type": "string",
+    "default": "派生：<COMFYUI_RUN_PREFIX>_seed<N>",
+    "recommendedRange": "显式覆盖合法（建议保留派生默认防覆盖）",
+    "description": "输出文件名前缀。默认由 runner 依 COMFYUI_RUN_PREFIX（=<批次>-<lane>）与写定 seed 派生，如 ai-paint-board2-exec-verify_seed2026090801；每次 job 唯一，防同名覆盖。"
+  }
+}

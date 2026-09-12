@@ -30,7 +30,7 @@ import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
 import { isAbsPath } from './state/constants.js'; // 单点（自有实现收敛改 import）
 const SCHEMA_VERSION = 1;
 export const LAYERS = ['plan', 'exec', 'audit'];
-// 合法角色集合（jiufeng-team 8 角色，任务权威；大小写兼容，内部归一化小写）
+// 合法角色集合（software-team 8 角色，任务权威；大小写兼容，内部归一化小写）
 export const VALID_ROLES = ['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
 // 装配扩展角色（盲审三角色，与 assembly/schema.js BLIND_REVIEW_ROLES 同源；装配可插拔扩展点）
 export const ROLE_EXTENSIONS = BLIND_REVIEW_ROLES;

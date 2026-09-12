@@ -1,3 +1,5 @@
+> 更名登记（2026-09-12）：原名 jiufeng-team，自本批起更名为 software-team；登记出处：CHANGELOG.md（根 / packages/dsh-punky-swarm）。
+
 # 单机能力边界（Single-Machine Capabilities）
 
 > 本文档以产品化语言陈述 dsh-punky-swarm 的单机能力边界：本地运行、零云依赖、默认零网络暴露、插件级治理范围、确定性零依赖。
@@ -7,7 +9,7 @@
 
 - 插件运行于 dsh（DeepSeek Harness）进程内，编排、裁决与留痕全部在本机进程内完成；
 - 治理对象是同一进程内编排的一批 Agent 子进程（批次 / 门禁 / 通信 / 恢复重派）；
-- 单 npm 包内含：插件引擎、Punky Swarm 预设（presets/jiufeng）、jiufeng-team 角色指引（skills/jiufeng-team）；插件启动时自动同步预设与技能到用户目录，无需手动放置；
+- 单 npm 包内含：插件引擎、Punky Swarm 预设（presets/jiufeng）、software-team 角色指引（skills/software-team）；插件启动时自动同步预设与技能到用户目录，无需手动放置；
 - 只读监控面板随插件加载（会话页「Punky Swarm 集群」分页），安装即得。
 
 ## 2. 零云依赖 / 零外部服务

@@ -1,4 +1,13 @@
 
+## 未发布（Unreleased）
+
+### 团队更名登记：jiufeng-team → software-team
+
+- 登记条目（可追溯硬项）：原名 `jiufeng-team` → 新名 `software-team`；日期 **2026-09-12**；原因：引擎/团队分层改造，团队技能名与团队定位对齐（「蟛蜞模式」为引擎侧治理模式名，软件工程角色指引归团队层，原「蟛蜞模式指引层」名不副实）。
+- 影响面：技能目录 `packages/dsh-punky-swarm/skills/jiufeng-team/` → `skills/software-team/`（18 文件，文件集合与 8 角色文件名不变）；技能同步任务 `lib/assets.js:85` 与关联测试 `test/assets.test.js` 同步改名；`SKILL.md` frontmatter `name:`、自引用与 `cmd` 示例改名，description 定位由「蟛蜞模式指引层」改为「软件工程团队」；`package.json` description、包内 `docs/single-machine-capabilities.md`/`.en.md` 同步改名；部署副本目标路径随之变为 `~/.agents/skills/software-team`（管理式同步单向复制，旧副本目录清理归冒烟批次 R-1 断言）。
+- 不改动面：`presets/jiufeng/`（preset id/目录名）、装配命名空间键 `jiufeng`（`DEFAULT_ASSEMBLY.team`、`aip.team`）、引擎数据根 `~/.dsh/jiufeng`、`VALID_ROLES`/`REQUIRED_ROLES` 值。
+- 历史行不改：本文件既有 `jiufeng-team` 记载（历史事实行）原样保留，本次仅**追加**本登记块（可追溯性:更名注记行 → CHANGELOG → 批次产物三向对应）。
+
 ## 0.4.4（2026-09-08）
 
 ### 批次事件结局分型（恢复与回收记账）

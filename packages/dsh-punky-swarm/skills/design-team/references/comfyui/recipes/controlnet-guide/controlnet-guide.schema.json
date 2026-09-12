@@ -1,0 +1,116 @@
+{
+  "ckpt_name": {
+    "type": "string",
+    "default": "sd_xl_base_1.0.safetensors",
+    "recommendedRange": "固定（须 ∈ object_info ckpt 列表；实测本机仅此 1 项在册）",
+    "description": "采样底模文件名（ComfyUI models/checkpoints 相对名）。未就位 → 拒绝执行并上报，绝不触发下载。"
+  },
+  "seed": {
+    "type": "integer",
+    "default": -1,
+    "recommendedRange": "任意整数（写定值记 runs.json）",
+    "description": "-1 = 实现内生成随机整数并写定注入，禁 ComfyUI 服务端随机；实际写定 seed 为审计复跑三件套之一。"
+  },
+  "positive": {
+    "type": "string",
+    "default": "a white ceramic coffee cup with saucer on a light oak wooden table, soft diffused window light from the left, warm off-white minimalist background wall, centered composition with clean negative space above for a title area, subtle shadow under the cup, professional advertising still-life photography, crisp details",
+    "recommendedRange": "主体明确 + 构图描述优先（非裸基底抽象词）",
+    "description": "正向提示词。沿用 poster-sdxl-base 起草策略：可命名主体/构图层次/环境光效/风格克制；cn_enabled=true 时主体/构图描述宜与参考图内容呼应（CN 提供结构、文案提供语义/风格）。"
+  },
+  "negative": {
+    "type": "string",
+    "default": "text, watermark, low quality, blurry, deformed, extra limbs, jpeg artifacts, oversaturated",
+    "recommendedRange": "基线 + 按需扩展（不堆叠互相冲突的限制词）",
+    "description": "负向提示词强化清单：text/watermark（图内文字走 CSS 版式层）/low quality/blurry/deformed/extra limbs 基线 + jpeg artifacts/oversaturated 扩展；CN 档可加（如 edge artifacts, duplicated edges）按需。"
+  },
+  "width": {
+    "type": "integer",
+    "default": 1024,
+    "recommendedRange": "1024–1344",
+    "description": "图宽。1024 起步；CN 档 8GB 建议 ≤1024（cntest 实测 896×1152 首跑即成功，见配方卡调参）。"
+  },
+  "height": {
+    "type": "integer",
+    "default": 1536,
+    "recommendedRange": "1024–1536",
+    "description": "图高。海报底图向竖版默认 1536；CN 档 8GB 建议 ≤1152（cntest 实测 896×1152）。"
+  },
+  "steps": {
+    "type": "integer",
+    "default": 24,
+    "recommendedRange": "20–40",
+    "description": "采样步数。默认 24（poster-sdxl-base 实测档；CN 不改变步数默认）。"
+  },
+  "cfg": {
+    "type": "number",
+    "default": 6.5,
+    "recommendedRange": "5.0–8.0",
+    "description": "CFG 引导强度。默认 6.5（poster-sdxl-base 实测档）。"
+  },
+  "sampler_name": {
+    "type": "string",
+    "default": "euler",
+    "recommendedRange": "euler 等 ∈ object_info sampler 选项",
+    "description": "采样器。默认 euler；提交前以全量 object_info 核对选项（防 422）。"
+  },
+  "scheduler": {
+    "type": "string",
+    "default": "normal",
+    "recommendedRange": "normal / karras ∈ object_info scheduler 选项",
+    "description": "调度器。默认 normal；提交前以全量 object_info 核对选项。"
+  },
+  "filename_prefix": {
+    "type": "string",
+    "default": "派生：<COMFYUI_RUN_PREFIX>_seed<N>",
+    "recommendedRange": "显式覆盖合法（建议保留派生默认防覆盖）",
+    "description": "输出文件名前缀。默认由 runner 依 COMFYUI_RUN_PREFIX（=<批次>-<lane>）与写定 seed 派生；每次 job 唯一，防同名覆盖。"
+  },
+  "cn_enabled": {
+    "type": "boolean",
+    "default": false,
+    "recommendedRange": "true/false",
+    "description": "ControlNet 门。false = 纯 poster-sdxl-base 7 节点 txt2img 链（零 CN 回归，与 poster-sdxl-base 等价）；true = 本配方 CN 构图引导链（poster 7 节点 + CN 5 节点 = 12 节点 API graph）。"
+  },
+  "cn_ref_image": {
+    "type": "string",
+    "default": "",
+    "recommendedRange": "必填（cn_enabled=true 时）：input 目录内参考图文件名",
+    "description": "参考图文件名 = LoadImage node 8 的 image 值（ComfyUI input 目录相对名；经 /upload/image 上传后落 input，或以现成 input 文件名直接引用，如 m1_s1.png）。cn_enabled=true 而未指定 → 拒绝提交并上报。"
+  },
+  "cn_type": {
+    "type": "string",
+    "default": "canny/lineart/anime_lineart/mlsd",
+    "recommendedRange": "∈ union 实测 combo：auto | openpose | depth | hed/pidi/scribble/ted | canny/lineart/anime_lineart/mlsd | normal | segment | tile | repaint",
+    "description": "ControlNet 类型（union 档：SetUnionControlNetType.type 字符串 combo 实测值，canny 语义档默认 = canny/lineart/anime_lineart/mlsd——0.34 无裸 canny 值，勿直传 canny）。官方单类型模型（canny/depth fp16）时忽略本槽（模型自带类型，链需去 SetUnion 节点，见配方卡 §4 变体）。"
+  },
+  "cn_model": {
+    "type": "string",
+    "default": "diffusion_pytorch_model_promax.safetensors",
+    "recommendedRange": "∈ object_info ControlNetLoader.control_net_name 实测清单（本机：promax / canny fp16 / depth fp16）",
+    "description": "ControlNet 模型文件名（models/controlnet/ 相对名，实测 input 名 control_net_name）。默认 = 在册 union promax（实测名）。未就位 → 拒绝执行并上报，绝不触发下载。"
+  },
+  "cn_preprocessor": {
+    "type": "string",
+    "default": "Canny",
+    "recommendedRange": "Canny（内置）| aux 已装类名（如 CannyEdgePreprocessor / DepthAnythingV2Preprocessor / OpenposePreprocessor，须 object_info 实测在册）",
+    "description": "提示图预处理器 class_type。默认 Canny（内置 Detect Edges (Canny)，class_type=Canny，免 aux；kornia 已装）。换 aux 类名须先在 object_info 实测确认在册（aux 依赖已装 opencv 后生效），并按该类输入契约改链（本模板按 Canny 阈值输入接线，进阶改链见配方卡 §4）。"
+  },
+  "cn_strength": {
+    "type": "number",
+    "default": 0.7,
+    "recommendedRange": "0.5–0.9（社区参考区间，非权威；留实机 A/B 校正）",
+    "description": "ControlNet 强度（ControlNetApplyAdvanced.strength）。过高（≈1）+ 全程施加易过约束/边缘伪影；构图类常用中高、风格类低。数值无单一权威源（cg-reference），默认 0.7 为 cntest 实测可用值。"
+  },
+  "cn_start_percent": {
+    "type": "number",
+    "default": 0.0,
+    "recommendedRange": "0.0（构图/结构全程约束）；构图阶段后放开可试 0.0–0.3",
+    "description": "ControlNet 生效起始步段（ControlNetApplyAdvanced.start_percent）。默认 0.0。"
+  },
+  "cn_end_percent": {
+    "type": "number",
+    "default": 1.0,
+    "recommendedRange": "1.0 默认；构图保型可试 0.7–0.85（社区参考，非权威）",
+    "description": "ControlNet 生效结束步段（ControlNetApplyAdvanced.end_percent）。提前收尾（<1）→ 后段采样放开细节/风格自由；构图过约束或想 CN 打结构 + 自由细化时用。"
+  }
+}

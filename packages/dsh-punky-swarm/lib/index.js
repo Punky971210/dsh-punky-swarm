@@ -112,7 +112,7 @@ export const apply = (ctx, config = {}) => {
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] legacy migration failed: ' + String(e));
     }
-    // 资产同步：预设（~/.dsh/.agent-presets/jiufeng）与技能（~/.agents/skills/jiufeng-team），幂等，参照 dsh-liangshen
+    // 资产同步：预设（~/.dsh/.agent-presets/jiufeng）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
     try {
       for (const r of syncAssets()) {
         if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);

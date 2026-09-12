@@ -82,7 +82,8 @@ export function syncAssets(opts = {}) {
   const root = opts.packageRoot ?? packageRoot()
   const jobs = [
     { rel: 'presets/jiufeng', target: join(home, '.dsh', '.agent-presets', 'jiufeng') },
-    { rel: 'skills/jiufeng-team', target: join(home, '.agents', 'skills', 'jiufeng-team') },
+    { rel: 'skills/software-team', target: join(home, '.agents', 'skills', 'software-team') },
+    { rel: 'skills/design-team', target: join(home, '.agents', 'skills', 'design-team') },
   ]
   const results = []
   for (const job of jobs) {

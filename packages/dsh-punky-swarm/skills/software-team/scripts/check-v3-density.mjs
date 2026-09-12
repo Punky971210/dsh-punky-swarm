@@ -10,7 +10,7 @@
  *   S3 roles/*.md 中「约束」行与公共约束模板串匹配数 >0 → FAIL（收敛后应为 0，提示去重）
  *   S4 公共语义指针句在 roles 内出现：完整指针句 >0 → FAIL；压缩差异说明 >2 处 → FAIL
  *      （收敛后仅 manager/reviewer 差异说明可保留，≤2 处）
- * 用法：node skills/jiufeng-team/scripts/check-v3-density.mjs
+ * 用法：node skills/software-team/scripts/check-v3-density.mjs
  * 退出码：全 PASS = 0；任一 FAIL = 1
  */
 
@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..'); // skills/jiufeng-team/
+const ROOT = path.resolve(__dirname, '..'); // skills/software-team/
 const SKILL = path.join(ROOT, 'SKILL.md');
 const ROLES_DIR = path.join(ROOT, 'references', 'roles');
 

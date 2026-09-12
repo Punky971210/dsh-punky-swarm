@@ -1,30 +1,41 @@
-# jiufeng 工作流蓝图（蟛蜞模式）
+# software-team 工作流蓝图（蟛蜞模式）
 
-> 说明：Manager 为任务第一对接点——C+ 批（批内 exec 层 lane 数≥3）running 后强制拉起，普通 C 批 Leader 可代行（留痕「本批由 Leader 直驱」）；粗拆由 Leader 人工对接；Coordinator 按触发装配——exec 层 lane 数≥3 或需 task-tree/细拆产物时 plan 层建 role=coordinator lane，未建而由 Designer/Leader 代产 task-tree 的须在 plan lane 备注理由；audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项。
+> 说明：**Manager 为引擎层角色（Leader 直属、团队无关，定义见 `presets/jiufeng/references/manager.md`），不属本团队角色集**；其为任务第一对接点——C+ 批（批内 exec 层 lane 数≥3）running 后强制拉起，普通 C 批 Leader 可代行（留痕「本批由 Leader 直驱」）；粗拆由 Leader 人工对接；Coordinator 按触发装配——exec 层 lane 数≥3 或需 task-tree/细拆产物时 plan 层建 role=coordinator lane，未建而由 Designer/Leader 代产 task-tree 的须在 plan lane 备注理由；audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项。
 
 ## 一、角色 DAG（谁产出 → 谁消费 → 谁验证）
 
 ```mermaid
 graph TD
-    subgraph 任务层🎯
-        L[Leader] -->|人工对接+粗拆决策包| MA[Manager]
-        L -->|模块清单| CO[coordinator]
-        CO -->|task-tree.json + codebase-survey.md| DE[designer]
-        DE -->|四件套: plan/spec/coder-tasks/tester-tasks| MA
+    L[Leader 组织层]
+    MA[Manager 引擎层角色 · 团队无关]
+    subgraph 任务层🎯（本团队 2 角色）
+        CO[coordinator]
+        DE[designer]
     end
-    subgraph 执行层⚡
-        MA -.->|建议派发| L
-        L -->|lane 任务| CR[coder池]
-        L -->|测试任务| TE[tester池]
-        CR -->|代码| RV[reviewer]
-        TE -->|测试报告| RV
-        RV -->|PASS/REWORK（review.md）| SV[supervisor]
+    subgraph 执行层⚡（本团队 3 角色）
+        CR[coder池]
+        TE[tester池]
+        RV[reviewer]
     end
-    subgraph 审计层🛡️
-        SV -->|acceptance-report + gap-list.json + CBM 对账| DM[doc-manager]
-        DM -->|retrospective-report → 记忆沉淀| CO
+    subgraph 审计层🛡️（本团队 2 角色）
+        SV[supervisor]
+        DM[doc-manager]
     end
+    L -->|人工对接+粗拆决策包| MA
+    L -->|模块清单| CO
+    CO -->|task-tree.json + codebase-survey.md| DE
+    DE -->|四件套: plan/spec/coder-tasks/tester-tasks| MA
+    MA -.->|建议派发| L
+    L -->|lane 任务| CR
+    L -->|测试任务| TE
+    CR -->|代码| RV
+    TE -->|测试报告| RV
+    RV -->|PASS/REWORK（review.md）| SV
+    SV -->|acceptance-report + gap-list.json + CBM 对账| DM
+    DM -->|retrospective-report → 记忆沉淀| CO
 ```
+
+> **节点归属（D-1 口径）**：DAG 中 `L`（Leader）与 `MA`（Manager）为**引擎/组织层节点**，不属本团队角色集——`MA` 由引擎包 `presets/jiufeng/references/manager.md` 定义（Leader 直属、团队无关、由 Leader 以 continuable subagent 拉起）；任务层/执行层/审计层三个 subgraph 内的 7 个节点才是本团队角色（2 + 3 + 2 = 7）。
 
 ## 二、核心流转（11 步）
 
@@ -33,7 +44,7 @@ graph TD
 | ① | 开启任务 + 人工粗拆 | Leader | leader-decision-pack.md + 模块清单（plan/） |
 | ② | 细拆 + 代码摸底（按触发装配：仅 C+ 批或需细拆产物批建 coordinator lane；其余由 Designer 代产 task-tree 并在 plan lane 备注理由） | Coordinator / Designer | task-tree.json + codebase-survey.md（plan/） |
 | ③ | 任务规范设计（四件套） | Designer | plan.md + spec.md + coder-tasks.md + tester-tasks.md（plan/） |
-| ④ | 建议派发 | Manager | 派发建议（mailbox inbox/broadcast）→ Leader 按建议 subagent 派发 worker（depth-1） |
+| ④ | 建议派发 | Manager（**引擎层角色**，Leader 直属，非本团队角色集成员） | 派发建议（mailbox inbox/broadcast）→ Leader 按建议 subagent 派发 worker（depth-1） |
 | ⑤ | 编码实现 | Coder 池 | 代码（exec/） |
 | ⑥a | 测试套件编写 + 验收检查清单准备（**准备段·与 code 同 wave 并行**） | Tester 池 / Reviewer | 测试套件 + 验收检查清单（exec/）——只依赖 plan 产物，不依赖 code 产物 |
 | ⑥b | 运行测试套件出测试报告（**执行段·code 完成后立即**） | Tester 池 | 测试报告（exec/）——code 完成即跑，不等串行排期；gap-list 对账归 Supervisor（audit 段） |
@@ -44,7 +55,7 @@ graph TD
 
 > 注：⑤ 编码与 ⑥a 准备段同 wave 并行；⑥b 在 code 完成后立即触发（非全串行直链）。
 
-**装配裁剪（普通 C 批）**：上表为**全装配蓝图**，适用于 C+ / 复杂批（完整启用 ② Coordinator、④ Manager 指挥）。普通 C 批（批内 exec 层 lane 数<3）可裁剪为 plan（Designer 代产细拆，plan lane 备注未启用理由）→ exec → audit（audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项），Manager 职责由 Leader 代行并留痕「本批由 Leader 直驱」。角色 DAG 图为全装配形态示意，普通 C 批按本注记执行。
+**装配裁剪（普通 C 批）**：上表为**全装配蓝图**，适用于 C+ / 复杂批（完整启用 ② Coordinator、④ Manager 指挥——Manager 为**引擎层角色**，非本团队角色集成员）。普通 C 批（批内 exec 层 lane 数<3）可裁剪为 plan（Designer 代产细拆，plan lane 备注未启用理由）→ exec → audit（audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项），Manager 职责由 Leader 代行并留痕「本批由 Leader 直驱」。角色 DAG 图为全装配形态示意（引擎/组织层节点 L/MA 与团队 7 角色分层标注），普通 C 批按本注记执行。
 
 ### 两段式 wave 示例
 
@@ -93,7 +104,7 @@ wave4: [audit-验收]
 
 ## 五、职责分工要点
 
-- **Manager**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 mailbox_send；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；
+- **Manager（引擎层角色，非本团队角色集）**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 mailbox_send；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；定义见引擎包 `presets/jiufeng/references/manager.md`；
 - **Leader**：人工粗拆（决策包 + 模块清单），不充当 worker；
 - **Coordinator**：细拆（API 粒度）+ 代码摸底（codebase-survey.md）；
 - **Designer**：四件套（执行层全部规范，模板见 references/templates/）；

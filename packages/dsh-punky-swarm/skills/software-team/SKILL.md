@@ -1,7 +1,7 @@
 ---
-name: jiufeng-team
+name: software-team
 description: |
-  蟛蜞模式指引层 + 装配层技能：角色定义（3 层 8 角色，
+  软件工程团队：角色定义（3 层 7 角色 + 引擎层角色 Manager，
   见 references/roles/）+ 角色×操作手册装配表（dev*/prd*/review*/doc* 手册映射）。
   行为层（hardening/rail）由 dsh-punky-swarm 承担。
   当需要确定某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，或 Leader 派发 worker
@@ -17,16 +17,15 @@ triggers:
   - "派发任务"
 ---
 
-# jiufeng-team — 蟛蜞模式角色 × 装配
+# software-team — 软件工程团队角色 × 装配
 
 > roles 为子目录 `references/roles/`；装配映射与角色定义单一来源均为本技能。行为层 hardening/rail 由 dsh-punky-swarm 承担。
 
-## 角色概览（3 层 8 角色）
+## 角色概览（3 层 7 角色 + 引擎层角色 Manager）
 
 | 层 | 角色 | 职责 | 能力层手册 | 可拓展性 |
 |----|------|------|-----------|:--------:|
 | 任务层 🎯 | Coordinator | 细拆（API 粒度）+ 代码摸底（粗拆已上移 Leader 人工对接） | dev-planner | 固定 |
-| 任务层 🎯 | Manager | 任务池调度 + 双线审查路由 + 人审返工门禁 | 治理工具（见装配表） | 固定 |
 | 任务层 🎯 | Designer | 四件套产出（plan/coder-tasks/tester-tasks/spec） | dev-designer, spec-writing | 固定 |
 | 执行层 ⚡ | Coder 池 | spec 驱动编码 + **最小自检** | dev-coder, efficient-edit 等 | 动态（推荐 3） |
 | 执行层 ⚡ | Tester 池 | spec 驱动测试 + **功能验证/全量测试**（端到端、回归、验收执行） | dev-tester | 动态（推荐 2） |
@@ -34,12 +33,15 @@ triggers:
 | 审计层 🛡️ | Supervisor | CBM 全量验收 + gap-list 对账 → 人审门禁 | report-blind-audit, archive | 固定 |
 | 审计层 🛡️ | Doc-Manager | 复盘 + 记忆沉淀（dsh-mneme 优先；Mnemopi 降级） | doc-generator, doc-update | 固定 |
 
+> **引擎层角色：Manager——不属本团队角色集**。Manager 为**团队无关的通用治理角色**（Leader 直属下属，由 Leader 以 continuable subagent 拉起），其定义、调度循环与派发模板单一来源为引擎包 `presets/jiufeng/references/manager.md`；不占 `references/roles/` 名额、不参与本团队 7 角色计数（与 `lib/assembly/schema.js:59` `REQUIRED_ROLES` 7 角色 + 显式豁免 manager 的引擎契约一致）。
+
 ## 装配表（角色 → 操作手册）
+
+> 本表列**本团队 7 角色**（Coordinator / Designer / Coder / Tester / Reviewer / Supervisor / Doc-Manager）；**引擎层角色 Manager 不在本表**——其履职定义与操作面（治理工具 batch_status/gate_status/mailbox_*/member_*/lane_*）见 `presets/jiufeng/references/manager.md`。
 
 | 层 | 角色 | 操作手册（skill 工具加载） | 关键产出 |
 |---|---|---|---|
 | 任务层 | Coordinator | dev-planner | 细拆（API 粒度）+ 代码摸底（task-tree.json / codebase-survey.md） |
-| 任务层 | Manager | 治理工具（batch_status/gate_status/mailbox_*/member_*/lane_*） | 只指挥不执行：读黑板/mailbox → mailbox_send 建议派发 → 按 Leader 裁决执行 member_status/member_settle；不派子代理、不写代码、不读产物正文 |
 | 执行层 | Designer | dev-designer + spec-writing | design.md / PRD / spec（to-prd 为 disable-model-invocation 命令式技能，不适用于 worker）；plan 层 lane role 强制 designer |
 | 执行层 | Coder（池） | dev-coder + efficient-edit + codebase-design | 代码 + dev_plan checklist |
 | 执行层 | Tester（池） | dev-tester | 测试集 + 结果 |
@@ -99,23 +101,15 @@ wave_plan 的 lane 任务包只含**角色/目标/契约/验收** + 角色注入
 
 装配按难度判档（A/B/C/C+，档位定义归 persona 纪律 0）决定角色组成。本技能不参与判档，只写「谁必须配、谁可代行、谁承接审核」的可执行判据：
 
-- **何时配 Manager（C+ 批强制拉起）**：判档 C+ 的批（批内 exec 层 lane 数≥3）running 后 Leader 必须拉起 Manager——continuable subagent 一次注入（批次上下文 + 调度循环，模板见下节），**不允许**以 0f 兜底或 Leader 代行替代（persona 纪律 0f/0g）。exec 层 lane 数<3 的普通 C 批：Leader 可代行（豁免留痕「本批由 Leader 直驱」），拉起 Manager 为可选增强；A/B 级不配。
+- **何时配 Manager（C+ 批强制拉起）**：判档 C+ 的批（批内 exec 层 lane 数≥3）running 后 Leader 必须拉起 Manager——continuable subagent 一次注入（批次上下文 + 调度循环，注入模板见 `presets/jiufeng/references/manager.md`），**不允许**以 0f 兜底或 Leader 代行替代（persona 纪律 0f/0g）。exec 层 lane 数<3 的普通 C 批：Leader 可代行（豁免留痕「本批由 Leader 直驱」），拉起 Manager 为可选增强；A/B 级不配。
 - **何时配 Coordinator**：批内 exec 层 lane 数≥3（C+ 强制）**或**粗拆决策需 task-tree/细拆产物（API 粒度任务清单 / codebase-survey）时，plan 层建 role=coordinator lane（produce=plan/task-tree.json + codebase-survey.md，consume=leader-decision-pack）；无细拆需求不必配。未建 coordinator lane 而由 Designer/Leader 代产 task-tree 的，须在 plan lane 产物备注未启用理由（入装配声明或 spec 备注）。
 - **audit 承接 supervisor+reviewer 审核职能为默认语义**：audit 层 lane 承接验收 + 对抗审查（取代式装配可接受——实证取代率≈55.3%，用户已认可）；**双角色分离**（reviewer 独立 exec 对抗 lane + supervisor audit 验收）为**显式选项**，供需对抗审查的高危/合规批选用（规范样本见 references/templates/success-pattern-seeds.md，P2-1 存档）。
 - **C+ 装配声明**：C+ 批 plan lane 产物须含角色装配声明（Manager 拉起计划 / Coordinator lane 分配 / audit 角色分配），机制见 persona 纪律 0b；本技能 plan lane 任务包与模板示例同步含该章节占位（Leader 派发 C+ 批 plan lane 时注入）。
 
-### Manager 角色派发模板（代劳指挥 · continuable subagent）
+### Manager 角色派发模板 → 已上移引擎层
 
-Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）时按下方模板注入。**Manager 定位：代劳指挥——只指挥不执行、不派发子代理（worker 由 Leader 派发，depth-1 直系）；Manager 只读黑板/mailbox、做结算裁决，不经 subagent 创建 worker**。
-
-**指挥循环**（每 turn）：
-1. `batch_status` 读黑板 → 发现可派 lane（deps 已满足且 pending）；
-2. `mailbox_send` inbox/broadcast 建议 Leader 派发（lane id + 角色建议）；
-3. `mailbox_read` outbox 收 worker 完成通知；
-4. `member_status` running→review → `member_settle` 结算裁决；
-5. 循环至批次全终态 → report「批次完成」给 Leader。
-
-**Leader 职责对应**：按 Manager 建议 subagent 派发 worker（depth-1 直系，任务包注明双通道回执）；worker report 完成 → `send_message` Manager 事件唤醒（一行，不做调度决策）。
+> Manager 通用定义、指挥循环与派发模板**不再由本团队技能承载**，已上移引擎包：`presets/jiufeng/references/manager.md`（persona 纪律 0g 的引用目标亦改指该文件）。
+> 本团队层只保留软件工程专属条款；Manager 为团队无关的治理角色，其定义随引擎层演进——**变更时只改引擎包一处，本文件不复制副本**，避免双份正文漂移。
 
 ## 使用方式
 
@@ -125,7 +119,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 4. **工作流蓝图**：`references/workflow.md`（角色 DAG + 11 步流转 + 产物契约表）；Designer 四件套等模板见 `references/templates/`。
 5. **Leader 派发 task.cmd 示例**：wave_plan 的 task.cmd 示例——
    ```
-   { id: 'mod-a', cmd: '加载 jiufeng-team 后按 Designer 手册（dev-designer+spec-writing）产出 design.md', tools: ['skill','fs'] }
+   { id: 'mod-a', cmd: '加载 software-team 后按 Designer 手册（dev-designer+spec-writing）产出 design.md', tools: ['skill','fs'] }
    ```
 
 ### 治理工具补充（artifact_types / log_export）
@@ -220,4 +214,4 @@ C 类任务确定后的执行方式：`wave_plan` 建批次 → `member_status` 
 | prototype / scaffold-exercises / teach / ask-matt | 一次性脚手架/教学向，非成员聚焦 |
 | obsidian-vault / migrate-to-shoehorn / setup-* / delayed-restart-app / openJiuwen-DeepSearch | 环境特定或 dsh 环境不可用的运行时专属 |
 | 展示/文件生成类（flowchart、ppt-animation、network-protocol-viz、scholar-notes、dynamic-archify、office-academic-skill、academic-writing-skill-set、writing-trio、revision-patterns、citation-evaluator、research-writing、gpt-sovits-tts-synthesis、ivt-poem-analyzer、baoyu-article-illustrator） | 产出物是演示/文档文件时按需加载，不默认装配 |
-| 全部 *-team / *_team 团队技能（33 个） | 团队型运行时，由 dsh-punky-swarm 集群模式承担，不装配 |
+| 全部 *-team / *_team 团队技能（33 个） | 团队型运行时，由 dsh-punky-swarm 集群模式承担，不装配（**不含本仓自带团队技能**：本技能 `software-team` 与同仓 `design-team` 为集群模式下的团队技能本体，属装配表定义对象，不在本行排除范围内） |
