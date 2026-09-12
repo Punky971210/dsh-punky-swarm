@@ -17,12 +17,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 资产同步：把包内 presets/ 与 skills/ 同步到用户目录（参照 dsh-liangshen 语义）
 // 幂等：目标目录字节一致则跳过（current），否则整体覆盖（synced）；只动插件自有目录，不碰用户其他预设/技能。
+// 清单驱动：job 表来源 = 包内 presets/jiufeng/asset-manifest.json（M 层）+ 内置自举条（B 层，文件粒度）。
+// 清单不可用（缺失/读取失败/JSON 破损/schema 不合规/落点越界）一律整体回退内置默认表，绝不静默不同步。
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MTIME_TOLERANCE_MS = 1000
+
+/** 资产清单的包内相对路径（B 层自举条 rel；禁止作为清单 assets[] 条目出现——自举回环）。 */
+export const MANIFEST_REL = 'presets/jiufeng/asset-manifest.json'
+
+/** 落点根枚举 -> 用户机解析根（清单只写枚举，不写绝对路径；两值即 Q-2 冻结落点）。 */
+const TARGET_ROOTS = {
+  preset: ['.dsh', '.agent-presets'],
+  skill: ['.agents', 'skills'],
+}
+
+/** 内置默认资产表（清单不可用时的降级表；落点与冻结值逐字等价）。 */
+const DEFAULT_ASSETS = [
+  { rel: 'presets/jiufeng', target: { root: 'preset', subpath: 'jiufeng' } },
+  { rel: 'skills/software-team', target: { root: 'skill', subpath: 'software-team' } },
+  { rel: 'skills/design-team', target: { root: 'skill', subpath: 'design-team' } },
+]
 
 /** 包根目录（lib/assets.js -> 包根）。 */
 export function packageRoot() {
@@ -71,21 +89,129 @@ export function syncDir(sourceDir, targetDir) {
   return 'current'
 }
 
+function errText(error) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** 清单路径规则（rel / target.subpath 共用）：非空、`/` 分隔、无前导 `/`、段不得命中 ''/'.'/'..'、无 `\` 与 `:`。 */
+function isValidRelPath(value) {
+  if (typeof value !== 'string' || value.length === 0) return false
+  if (value.includes('\\') || value.includes(':') || value.startsWith('/')) return false
+  return value.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..')
+}
+
+/** 单行人类可读文本：trim 后长度 ∈ [1, 200]。 */
+function isText(value) {
+  return typeof value === 'string' && value.trim().length >= 1 && value.trim().length <= 200
+}
+
 /**
- * 同步预设与技能到用户目录。
+ * 清单 schema 校验（逐字段可判定谓词）。
+ * @returns {string|null} 首个违规字段名（合法为 null）。
+ */
+function firstSchemaViolation(raw) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return 'manifestVersion'
+  if (raw.manifestVersion !== 1) return 'manifestVersion'
+  if (!isText(raw.description)) return 'description'
+  if (!Array.isArray(raw.assets) || raw.assets.length < 1) return 'assets'
+  for (const asset of raw.assets) {
+    if (asset === null || typeof asset !== 'object' || Array.isArray(asset)) return 'rel'
+    if (!isValidRelPath(asset.rel)) return 'rel'
+    if (asset.rel === MANIFEST_REL) return 'bootstrap-cycle'
+    if (asset.note !== undefined && !isText(asset.note)) return 'note'
+    const target = asset.target
+    if (target === null || typeof target !== 'object' || Array.isArray(target)) return 'target.root'
+    if (target.root !== 'preset' && target.root !== 'skill') return 'target.root'
+    if (!isValidRelPath(target.subpath)) return 'target.subpath'
+  }
+  return null
+}
+
+/**
+ * 落点渲染：join(ROOT[root], subpath)。
+ * 防御性兜底：解析结果必须以 ROOT[root] 为前缀，越界返回 { ok:false, reason:'target.escape' }
+ * （schema 路径规则已使其不可达，此处为纵深防御，单测直调覆盖）。
+ * @returns {{ok: true, path: string}|{ok: false, reason: string}}
+ */
+export function resolveTarget(home, target) {
+  const segs = TARGET_ROOTS[target.root]
+  if (!segs) return { ok: false, reason: 'target.root' }
+  const base = join(home, ...segs)
+  const path = join(base, target.subpath)
+  const back = relative(base, path)
+  if (back.startsWith('..') || isAbsolute(back)) return { ok: false, reason: 'target.escape' }
+  return { ok: true, path }
+}
+
+/** B 层自举条落点：预设根下 `jiufeng/asset-manifest.json`（文件粒度，与 M 层目录条互不依赖）。 */
+function bootstrapTarget(home) {
+  return join(home, ...TARGET_ROOTS.preset, 'jiufeng', 'asset-manifest.json')
+}
+
+/**
+ * 读清单 -> 校验 -> 产出 job 表（M 层）；任何不可用态均回退内置默认表。
+ * @returns {{manifest: string, jobs: [{rel: string, target: string}]}}
+ */
+function loadJobs(root, home) {
+  const defaultJobs = DEFAULT_ASSETS.map((asset) => ({ rel: asset.rel, target: resolveTarget(home, asset.target).path }))
+  const manifestPath = join(root, MANIFEST_REL)
+  if (!existsSync(manifestPath)) return { manifest: 'missing', jobs: defaultJobs }
+
+  let text
+  try {
+    text = readFileSync(manifestPath, 'utf8')
+  } catch {
+    return { manifest: 'read-error', jobs: defaultJobs }
+  }
+  if (text.startsWith('\uFEFF')) text = text.slice(1)
+
+  let raw
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return { manifest: 'parse-error', jobs: defaultJobs }
+  }
+
+  const violation = firstSchemaViolation(raw)
+  if (violation) return { manifest: 'schema-invalid:' + violation, jobs: defaultJobs }
+
+  const jobs = []
+  for (const asset of raw.assets) {
+    const resolved = resolveTarget(home, asset.target)
+    if (!resolved.ok) return { manifest: 'schema-invalid:' + resolved.reason, jobs: defaultJobs }
+    jobs.push({ rel: asset.rel, target: resolved.path })
+  }
+  return { manifest: 'ok', jobs }
+}
+
+/**
+ * 同步预设与技能到用户目录（清单驱动）。
+ * B 层自举条恒先行、文件粒度、不进 results；M 层 = 清单 assets[]（不可用时 = 内置默认表）。
  * @param opts.home - 用户主目录（测试可注入）；缺省 homedir()。
  * @param opts.packageRoot - 包根（测试可注入）；缺省按 import.meta.url 解析。
- * @returns [{asset, status: 'synced'|'current'|'missing-source'|'failed', error?}]
+ * @returns {{results: [{asset, status: 'synced'|'current'|'missing-source'|'failed', error?}], manifest: string}}
+ *   manifest ∈ 'ok' | 'missing' | 'read-error' | 'parse-error' | 'schema-invalid:<首个违规字段名>'
  */
 export function syncAssets(opts = {}) {
   const home = opts.home ?? homedir()
   const root = opts.packageRoot ?? packageRoot()
-  const jobs = [
-    { rel: 'presets/jiufeng', target: join(home, '.dsh', '.agent-presets', 'jiufeng') },
-    { rel: 'skills/software-team', target: join(home, '.agents', 'skills', 'software-team') },
-    { rel: 'skills/design-team', target: join(home, '.agents', 'skills', 'design-team') },
-  ]
+  const { manifest, jobs } = loadJobs(root, home)
   const results = []
+
+  // B 层（自举条）：只复制清单文件本体，破「要同步清单必须先读清单」的环；成功态不进 results。
+  // 失败必须可观测（禁静默）：沿用逐条 failed 语义入 results（仅失败时进，成功态 results 长度不受影响）。
+  const bootstrapSrc = join(root, MANIFEST_REL)
+  if (existsSync(bootstrapSrc)) {
+    try {
+      const dest = bootstrapTarget(home)
+      mkdirSync(dirname(dest), { recursive: true })
+      syncDir(bootstrapSrc, dest)
+    } catch (error) {
+      results.push({ asset: MANIFEST_REL, status: 'failed', error: errText(error) })
+    }
+  }
+
+  // M 层：清单驱动条目（降级态 = 内置默认表），逐条语义与既有实现一致。
   for (const job of jobs) {
     const src = join(root, job.rel)
     if (!existsSync(src)) {
@@ -97,8 +223,8 @@ export function syncAssets(opts = {}) {
       const status = syncDir(src, job.target)
       results.push({ asset: job.rel, status })
     } catch (error) {
-      results.push({ asset: job.rel, status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      results.push({ asset: job.rel, status: 'failed', error: errText(error) })
     }
   }
-  return results
+  return { results, manifest }
 }

@@ -114,9 +114,14 @@ export const apply = (ctx, config = {}) => {
     }
     // 资产同步：预设（~/.dsh/.agent-presets/jiufeng）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
     try {
-      for (const r of syncAssets()) {
+      const { results, manifest } = syncAssets()
+      for (const r of results) {
         if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);
         else if (r.status === 'failed') ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + r.asset + ': ' + r.error);
+      }
+      // 清单不可用（缺失/读取失败/JSON 破损/schema 不合规）-> 已回退内置默认表；降级态必须可观测（禁静默）
+      if (manifest !== 'ok') {
+        ctx.logger?.warn?.('[dsh-punky-swarm] asset manifest 不可用（' + manifest + '），已回退内置默认资产表；用户机实装面可能与包内清单声明不一致')
       }
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + String(e));

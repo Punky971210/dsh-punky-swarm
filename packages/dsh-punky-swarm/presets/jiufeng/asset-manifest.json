@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 1,
+  "description": "蟛蜞模式（jiufeng）资产清单：声明包内预设与团队技能到用户机实装面的单向同步（真源=包内 skills/，不反向同步）",
+  "assets": [
+    {
+      "rel": "presets/jiufeng",
+      "note": "蟛蜞模式预设本体（persona 纪律、preset.yml、agent.cordis.yml、references/manager.md、NOTICE、本清单）",
+      "target": { "root": "preset", "subpath": "jiufeng" }
+    },
+    {
+      "rel": "skills/software-team",
+      "note": "软件工程团队技能（运行期唯一可加载面，真源）",
+      "target": { "root": "skill", "subpath": "software-team" }
+    },
+    {
+      "rel": "skills/design-team",
+      "note": "设计团队技能（运行期唯一可加载面，真源）",
+      "target": { "root": "skill", "subpath": "design-team" }
+    }
+  ]
+}
