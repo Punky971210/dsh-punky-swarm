@@ -1,0 +1,56 @@
+{
+  "team": "research-team",
+  "manifest": {
+    "version": 3,
+    "requires_engine": ">=0.4.4",
+    "hash": "unhashed",
+    "source": "三层自定义角色（research-planner / researcher / research-auditor）+ 本机既有调研技能池（spec-writing / decision-mapping / tech-benchmark-planning / ara-compiler / ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer）+ 本包自建手册（acceptance-gate）；技能声明值 = 宿主 SKILL.md frontmatter 的 name（加载名），非宿主目录名"
+  },
+  "roles": {
+    "extra": ["research-planner", "researcher", "research-auditor"],
+    "plan_leads": ["research-planner"],
+    "audit_leads": ["research-auditor"]
+  },
+  "layers": {
+    "plan": {
+      "roles": ["research-planner"],
+      "skills": {
+        "research-planner": ["spec-writing", "decision-mapping", "tech-benchmark-planning", "ara-compiler"]
+      }
+    },
+    "exec": {
+      "roles": ["researcher"],
+      "skills": {
+        "researcher": ["ara-compiler", "ara-research-manager", "citation-evaluator", "arxiv-translator"]
+      }
+    },
+    "audit": {
+      "roles": ["research-auditor"],
+      "skills": {
+        "research-auditor": ["acceptance-gate", "ara-rigor-reviewer", "citation-evaluator"]
+      }
+    }
+  },
+  "flows": {
+    "plan": {
+      "produce_field": "produce",
+      "entry_requires": [],
+      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+    },
+    "exec": {
+      "produce_field": "outputs",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "targets": true,
+      "gate_command": true
+    },
+    "audit": {
+      "produce_field": "produce",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "needhuman": true
+    },
+    "complete": { "require_audit_outcomes": ["pass", "skip"] }
+  },
+  "state_machine": { "kind": "tighten-only", "overrides": {} }
+}

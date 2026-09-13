@@ -1,0 +1,57 @@
+{
+  "team": "design-team",
+  "manifest": {
+    "version": 1,
+    "requires_engine": ">=0.4.4",
+    "hash": "unhashed",
+    "source": "角色与层职责见 skills/design-team/SKILL.md；执行侧能力指向 comfyui-use（Layer A 配方驱动：配方 -> 参数槽 -> 板1 comfy_* 工具序列 -> 质检 -> 审计回执），其迁入副本落 skills/design-team/references/comfyui/"
+  },
+  "roles": {
+    "extra": ["design-planner", "workflow-builder", "workflow-auditor", "producer"],
+    "plan_leads": ["design-planner"],
+    "audit_leads": ["workflow-auditor"]
+  },
+  "layers": {
+    "plan": {
+      "roles": ["design-planner"],
+      "skills": {
+        "design-planner": ["spec-writing", "interaction-design-principles", "comfyui-use"]
+      }
+    },
+    "exec": {
+      "roles": ["workflow-builder", "producer"],
+      "skills": {
+        "workflow-builder": ["comfyui-use"],
+        "producer": ["comfyui-use"]
+      }
+    },
+    "audit": {
+      "roles": ["workflow-auditor"],
+      "skills": {
+        "workflow-auditor": ["acceptance-gate", "review-execution", "comfyui-use"]
+      }
+    }
+  },
+  "flows": {
+    "plan": {
+      "produce_field": "produce",
+      "entry_requires": [],
+      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+    },
+    "exec": {
+      "produce_field": "outputs",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "targets": true,
+      "gate_command": true
+    },
+    "audit": {
+      "produce_field": "produce",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "needhuman": true
+    },
+    "complete": { "require_audit_outcomes": ["pass", "skip"] }
+  },
+  "state_machine": { "kind": "tighten-only", "overrides": {} }
+}
