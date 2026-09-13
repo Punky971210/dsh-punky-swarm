@@ -24,9 +24,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 三条断言：
 //   G1 隔离前置（precondition）——本进程 `os.homedir()` 必须等于 preload 声明的隔离根。
 //      真实 home 真源取 `os.userInfo().homedir`（系统账户 API，不受 USERPROFILE/HOME 改写影响）。
-//   G2 真实面零变化——真实面上取文件级指纹（相对路径 + 字节数 + mtimeMs 的 sha256）前后对比必须全等。
+//   G2 真实面零变化——**被测算面**上取文件级指纹（相对路径 + 字节数 + mtimeMs 的 sha256）前后对比必须全等。
 //      用文件级而非目录 mtime：目录 mtime 对内层文件写入不敏感。
 //   G3 写点归属（主判别项）——被测路径产生的写入落点与日志自报落点都必须 `startsWith(隔离根)`。
+//
+// 断言面（2026-09-13 修正，本文件本轮改动）——「被测算面」与「活宿主面」必须分开：
+//   · 被测算面（REAL_FACES，参与 G2 指纹全等断言）= 仅被测代码可写的两个资产同步目标根：
+//       `<home>/.agents/skills`、`<home>/.dsh/.agent-presets`
+//       （`lib/assets.js:73-90` 的 syncDir 内容幂等：逐文件 size+mtime 容差 + 字节比对，一致即 'current'
+//        不落写 ⇒ 「运行前后逐字全等」是本测试可满足的真实不变量）。
+//   · 活宿主面（LIVE_FACES，**结构性排除**）= `<home>/.dsh/logs`（审计 sink 根）：
+//       真实机上的常驻宿主逐 tick 追加 `punky-swarm/audit-<date>.jsonl`（实测 2026-09-13 单卷 967 KB →
+//       1.09 MB 且持续增长），该面的存在性与内容都是**宿主活动的函数**，与被测路径无关。
+//       把它放进 G2 的「前后指纹全等」断言 ⇒ 断言把宿主的合法写入读成隔离泄漏（**结构性错误**：
+//       断言面里混进了「活宿主本来就会写」的面，与被测代码是否泄漏无关）。
+//   · 活宿主面退出状态断言 ≠ 放弃对该面的判别：其泄漏判别下沉到**归属谓词**
+//       （G3 的 self-report 归属 + D4 的真实面落点对照），判据与宿主噪声正交——
+//       宿主写多少次都不改变「被测进程的落点归谁」这一判定；另加 `liveFaceExcluded` 自检，
+//       防止该面被重新放回指纹面（结构性错误靠代码判红，不靠注释约束）。
 //
 // 写安全的构造性保证：G1 是 G2/G3 的前置闸。G1 不成立时 `before` 钩子立即失败，
 // **不执行**任何被测写路径——隔离没确认，就不动手，因此守卫本身在任何情况下都不会写真实 home。
@@ -35,11 +50,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 改为把 G1/G2/G3 搬到**一个以正确 preload 隔离的子进程**里跑：判定逻辑不变，只是执行位置换到被隔离的
 // 进程，并由本进程对子进程回报的真实证据（隔离根内文件清单 + 真实面前后指纹）做断言；机制失效即判红。
 //
-// 判别力自证（三条，全部在受控临时目录内，绝不触碰真实面）：
+// 判别力自证（四条，全部在受控临时目录内，绝不触碰真实面）：
 //   D1 谓词级：把「实际重定向到 A、却声明隔离根为 B（B≠A）」的取值喂给 G1/G3 谓词 → 必须判红。
 //   D2 进程级：用**故意写错的 preload**（声明 B、实际重定向 A）跑本文件自身 → 守卫必须红（子进程非零退出）。
 //   D3 写入级：在同一故意写错的 preload 下真跑一次 `apply()` → 真实产出的文件落点不在声明隔离根内，
 //      把这些**真实文件路径**喂给 G3 谓词 → 必须判红。
+//   D4 活宿主面：真实 sink 落点喂 G3 谓词必须判红（活宿主面仍受归属判别）；把活宿主面放回「零变化」
+//      指纹面必须被 `liveFaceExcluded` 自检判红（断言面收窄本身有牙，不是删断言了事）。
 //
 // 已知限制（如实披露，勿读作更强的结论）：
 //   ① D1–D3 用「重定向到另一个受控临时目录」代表「隔离失效」，证明的是**守卫谓词与守卫进程在偏移场景下
@@ -49,6 +66,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //      （资产同步幂等、正常不会改字节），G2 可能被外部活动扰动——这是 G2 作为「结果断言」的固有边界，
 //      机制侧的判据是 G3。
 //   ③ 未加载 preload 的常规跑法下，本文件只能替子进程证实机制生效，无法回溯本进程已发生的写入。
+//   ④ 活宿主面（`<home>/.dsh/logs`）**不再有任何状态级断言**（存在性/内容/指纹都不判）：该面由常驻宿主
+//      持续写，状态级断言结构性不可靠（这正是 2026-09-13 修正的原因）。该面的能力边界如实收窄为
+//      「归属判别仍生效（D4/G3），状态变化不再作为证据」——本文件不假装它仍被状态断言覆盖。
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -69,13 +89,27 @@ const DEMO_CHILD = process.env.PUNKY_ISOLATION_DEMO_CHILD === '1';
 // 真实 home 真源：os.userInfo() 走系统账户 API，preload 改写的 USERPROFILE/HOME 影响不到它。
 const REAL_HOME = os.userInfo().homedir;
 
-// 真实面上的三个被测写点：资产同步的两个目标根 + 审计 sink 根。后者在真实机上当前不存在
-// （审计 sink 是否落盘取决于挂载是否走到建目录），一旦隔离失效它就是「只要挂载必然出现」的那类落点。
+// 真实面上的**被测算面**（REAL_FACES）：只保留「仅被测代码会写」的两个资产同步目标根。
+// 判据：该面在真实机上只由 punky-swarm 的 syncAssets() 写，且同步内容幂等（§头部断言面说明），
+// 故「本测试运行前后逐字全等」是可满足的真实不变量。活宿主面见 LIVE_FACES（结构性排除，不在此列）。
 const REAL_FACES = [
   path.join(REAL_HOME, '.agents', 'skills'),
   path.join(REAL_HOME, '.dsh', '.agent-presets'),
-  path.join(REAL_HOME, '.dsh', 'logs'),
 ];
+
+// 真实面上的**活宿主面**（LIVE_FACES）：常驻宿主本就会持续写这些路径 ⇒ 不得进入「零变化」断言面。
+// `~/.dsh/logs` = 审计 sink 根：活宿主逐 tick 追加 `punky-swarm/audit-<date>.jsonl`
+// （实测 2026-09-13 单卷 967 KB → 1.09 MB 且持续增长）。该面的存在性/内容/指纹都是宿主活动的函数，
+// 与被测路径无关；把它放进 G2 会被读成「隔离泄漏」的假警报（结构性错误）。
+// 该面的泄漏判别由归属谓词承担（G3 自报落点归属 + D4 真实面落点对照 + liveFaceExcluded 自检）。
+const LIVE_FACES = [
+  {
+    path: path.join(REAL_HOME, '.dsh', 'logs'),
+    reason: '审计 sink 根：常驻宿主逐 tick 追写 audit-<date>.jsonl（合法写入，非本测试可观测面）',
+  },
+];
+// 真实面 sink 落点样本：喂给归属谓词做「真实面必须判越界」的确定性对照（不触碰该文件）。
+const REAL_SINK_PROBE = path.join(LIVE_FACES[0].path, 'punky-swarm', 'audit-probe.jsonl');
 
 // ── 谓词（纯函数，供判别力自证直接调用）──
 
@@ -123,6 +157,20 @@ export function attributionVerdict(writtenPaths, isolatedRoot) {
     if (n !== root && !n.startsWith(prefix)) outside.push(p);
   }
   return { ok: outside.length === 0, outside };
+}
+
+/**
+ * 断言面自检：活宿主面不得出现在「零变化」指纹面内。
+ * 结构性错误（把活宿主合法写入面放进结果断言）必须由代码判红，而不是只写在注释里。
+ * @param {string[]} faces 「零变化」指纹断言面
+ * @param {string[]} livePaths 活宿主面路径（缺省 LIVE_FACES）
+ */
+export function liveFaceExcluded(faces, livePaths = LIVE_FACES.map((f) => f.path)) {
+  const offenders = [];
+  for (const face of faces) {
+    for (const live of livePaths) if (normPath(face) === normPath(live)) offenders.push(face);
+  }
+  return { ok: offenders.length === 0, offenders };
 }
 
 // ── 指纹与文件工具 ──
@@ -252,7 +300,10 @@ test('G1 隔离前置：os.homedir() 落在声明隔离根内且非真实 home',
     assert.equal(m.report.homedirIsolated, true, '子进程 os.homedir() 必须落在其隔离根内');
     assert.equal(m.report.sinkCreated, true, '子进程内 apply() 的审计 sink 根必须在隔离根内被创建');
     assert.equal(m.report.assetsSynced, true, '子进程内资产同步必须落到隔离根内');
-    assert.equal(m.report.realLogsExists, false, '子进程运行后真实 <home>/.dsh/logs 仍不得存在');
+    // 活宿主面（真实 <home>/.dsh/logs）**不再**用「存在性」判：该面由常驻宿主持续写，存在性无判别力
+    // （2026-09-13 修正，见头部断言面说明）。改用确定性归属对照：真实面 sink 落点必须被判越界。
+    assert.equal(attributionVerdict([REAL_SINK_PROBE], m.report.sentinel).ok, false,
+      '对照组：真实 <home>/.dsh/logs 落点必须被判越界（活宿主面退出状态断言 ≠ 放弃归属判别）');
     process.stderr.write('[home-isolation] 本进程未加载隔离 preload：G1/G2/G3 已改在隔离子进程内实证；'
       + '要获得进程内隔离请用 `npm test`（preload 已接线）。\n');
     return;
@@ -276,8 +327,12 @@ test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐
       assert.equal(a.sumBytes, b.sumBytes, `子进程跑 apply() 前后真实面字节和不变：${REAL_FACES[i]}`);
       assert.equal(a.digest, b.digest, `子进程跑 apply() 前后真实面文件级指纹不变：${REAL_FACES[i]}`);
     }
-    assert.equal(fs.existsSync(path.join(REAL_HOME, '.dsh', 'logs')), false,
-      '真实 <home>/.dsh/logs 不得因本测试运行而出现（隔离失效时它必然出现）');
+    // 活宿主面不参与上面的「零变化」断言（宿主持续追写该面）；改用归属对照 + 断言面自检
+    // （D4 已就同一谓词/同一自检给出判别力演示）。
+    assert.equal(attributionVerdict([REAL_SINK_PROBE], m.report.sentinel).ok, false,
+      '对照组：真实 <home>/.dsh/logs 落点必须被判越界（活宿主面退出状态断言）');
+    assert.equal(liveFaceExcluded(REAL_FACES).ok, true,
+      '「零变化」断言面不得包含活宿主面：' + JSON.stringify(liveFaceExcluded(REAL_FACES).offenders));
     return;
   }
   assert.ok(state.applied, '被测路径已执行（G1 不成立时本用例由前置闸阻断）');
@@ -289,8 +344,12 @@ test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐
     assert.equal(a.sumBytes, b.sumBytes, `真实面字节和不变：${REAL_FACES[i]}`);
     assert.equal(a.digest, b.digest, `真实面文件级指纹不变：${REAL_FACES[i]}`);
   }
-  assert.equal(fs.existsSync(path.join(REAL_HOME, '.dsh', 'logs')), false,
-    '真实 <home>/.dsh/logs 不得因本测试运行而出现（隔离失效时它必然出现）');
+  // 活宿主面（REAL_HOME/.dsh/logs）**不在**上面的指纹面内：常驻宿主逐 tick 追写该面，
+  // 把它的存在性/内容读成泄漏是结构性错误（2026-09-13 修正）。该面的判据改为两条确定性对照：
+  assert.equal(liveFaceExcluded(REAL_FACES).ok, true,
+    '「零变化」断言面不得包含活宿主面：' + JSON.stringify(liveFaceExcluded(REAL_FACES).offenders));
+  assert.equal(attributionVerdict([REAL_SINK_PROBE], ISOLATED).ok, false,
+    '对照组：真实 <home>/.dsh/logs 落点必须被判越界（本进程实际 sink 根归属由 G3 判）');
 });
 
 // ── G3 ──
@@ -412,7 +471,9 @@ test('D3 判别力（写入级）：写错隔离时真实写点不在声明隔�
     assert.ok(report, '写入探针应产出 JSON 报告：' + r.out.slice(0, 800));
     assert.ok(report.writtenUnderActual.length > 0, '写错隔离时 apply() 确实写进了注入目录（真实写入证据）');
     assert.equal(report.writtenUnderClaimed.length, 0, '声明的隔离根下不应有任何写入');
-    assert.equal(report.realLogsExists, false, '真实 <home>/.dsh/logs 不得出现');
+    // 活宿主面改用确定性归属对照（原先的「真实 <home>/.dsh/logs 不得出现」无判别力：常驻宿主本就写它）
+    assert.equal(attributionVerdict([REAL_SINK_PROBE], report.claimedRoot).ok, false,
+      '对照组：真实 <home>/.dsh/logs 落点必须被判越界（活宿主面归属判据仍生效）');
     for (const p of report.writtenUnderActual) {
       // 逐条证据：这些**真实文件**若交给 G3 谓词核对归属，必须判越界
       assert.equal(attributionVerdict([p], report.claimedRoot).ok, false, '越界落点必须判红：' + p);
@@ -422,6 +483,23 @@ test('D3 判别力（写入级）：写错隔离时真实写点不在声明隔�
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ── 判别力自证 D4：活宿主面（断言面收窄后的牙齿）──
+
+test('D4 判别力（活宿主面）：真实 sink 落点仍被判越界；把活宿主面放回断言面必被自检判红', () => {
+  const root = ISOLATED || path.join(os.tmpdir(), 'punky-guard-d4-root');
+  // ① 活宿主面退出「零变化」指纹断言 ≠ 放弃对该面的判别：真实面落点喂同一归属谓词必须判红。
+  //    该判据与宿主噪声正交——宿主写多少次都不改变「被测进程的落点归谁」这一判定。
+  assert.equal(attributionVerdict([REAL_SINK_PROBE], root).ok, false,
+    '真实 <home>/.dsh/logs 落点必须被归属谓词判红');
+  assert.equal(attributionVerdict([path.join(root, '.dsh', 'logs', 'punky-swarm', 'a.jsonl')], root).ok, true,
+    '对照组：隔离根内落点仍判绿');
+  // ② 断言面自检有牙：把活宿主面放回指纹面 → 判红；现行断言面 → 判绿（收窄靠代码约束，不靠注释）。
+  assert.equal(liveFaceExcluded(REAL_FACES).ok, true, '现行「零变化」断言面不得包含活宿主面');
+  const reAdded = liveFaceExcluded([...REAL_FACES, LIVE_FACES[0].path]);
+  assert.equal(reAdded.ok, false, '把活宿主面放回「零变化」断言面必须判红（结构性错误不可回归）');
+  assert.deepEqual(reAdded.offenders, [LIVE_FACES[0].path], '自检须精确指出被误纳的活宿主面');
 });
 
 // ── 注入用脚本源（运行时写入临时目录，不进仓库）──
@@ -466,7 +544,6 @@ const report = {
   sinkCreated: fs.existsSync(sink),
   assetsSynced: fs.existsSync(skill) && fs.existsSync(preset),
   writtenFiles: walk(sentinel),
-  realLogsExists: fs.existsSync(path.join(real, '.dsh', 'logs')),
   logs: calls.info,
 };
 console.log('@@REPORT@@' + JSON.stringify(report) + '@@END@@');
@@ -489,7 +566,6 @@ const report = {
   claimedRoot: claimed, actualRoot: actual, homedir: os.homedir(),
   writtenUnderActual: walk(actual),
   writtenUnderClaimed: fs.existsSync(claimed) ? walk(claimed) : [],
-  realLogsExists: fs.existsSync(path.join(os.userInfo().homedir, '.dsh', 'logs')),
 };
 console.log('@@REPORT@@' + JSON.stringify(report) + '@@END@@');
 `;

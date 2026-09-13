@@ -17,12 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 审计日志配置解析（纯函数，零副作用、零文件系统访问、零 deps）
 //
-// 契约来源：plan/spec.md（批次 punky-auditlog-impl-m1）
-//   §三 3.1  sink 根解析优先级：PUNKY_AUDITLOG_SINK_DIR > DSH_HOME > homedir()/.dsh，再拼 logs/punky-swarm/
-//   §四     轮转/保留/体积上限数值（keepDays 14 / maxFileBytes 64MiB / maxTotalBytes 512MiB）
-//   §五 5.1 开关契约：默认开 + env 逐键覆盖 config（capabilities.auditlog.*）
-//   §五 5.2 stdout 开关（PUNKY_LOGGER_STDOUT，默认关）
-//   §七 7.1 sink 侧审计阈值 levelsDefault（默认 3；内核侧 exporter.levels 固定 {default:3} 不随之变化）
+// 本模块解析的配置契约（逐条为技术规则，数值与 sink 侧实现同源）：
+//   · sink 根解析优先级：PUNKY_AUDITLOG_SINK_DIR > config.sinkDir > DSH_HOME > homedir()/.dsh，再拼 logs/punky-swarm/
+//   · 轮转/保留/体积上限数值（keepDays 14 / maxFileBytes 64MiB / maxTotalBytes 512MiB）
+//   · 开关契约：默认开 + env 逐键覆盖 config（capabilities.auditlog.*）
+//   · stdout 开关（PUNKY_LOGGER_STDOUT，默认关）
+//   · sink 侧审计阈值 levelsDefault（默认 3；内核侧 exporter.levels 固定 {default:3} 不随之变化）
+//   · 同键重复行聚合计数开关 aggregate（默认开；关闭即逐行落盘，等价旧行为）
 //
 // 硬约束（X13）：**不 import `@deepseek-ai/dsh-home-paths`**（该包不在真实 profile 的 node_modules 树内），
 //   此处以同义本地解析与内核 resolveDshHome 的优先级逐条对齐（configured ?? $DSH_HOME ?? ~/.dsh）。
@@ -30,17 +31,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** sink 目录相对默认 <DSH_HOME> 的二级路径（§三 3.1 字面口径） */
+/** sink 目录相对默认 <DSH_HOME> 的二级路径（字面口径） */
 export const SINK_SUBPATH = join('logs', 'punky-swarm');
 
 /** 配置缺省值（冻结常量；`lib/assembly/schema.js` 注册表 import 本对象作 default —— 单一来源） */
 export const AUDITLOG_DEFAULTS = Object.freeze({
-  enabled: true,                 // §五 5.1 默认开
-  keepDays: 14,                  // §四 保留天数
-  maxFileBytes: 67108864,        // §四 单卷上限 64 MiB
-  maxTotalBytes: 536870912,      // §四 总量上限 512 MiB
-  stdout: false,                 // §五 5.2 默认关
-  levelsDefault: 3,              // §七 7.1 sink 侧审计阈值（0=error 1=warn 2=info 3=debug）
+  enabled: true,                 // 默认开
+  keepDays: 14,                  // 保留天数
+  maxFileBytes: 67108864,        // 单卷上限 64 MiB
+  maxTotalBytes: 536870912,      // 总量上限 512 MiB
+  stdout: false,                 // stdout 默认关
+  levelsDefault: 3,              // sink 侧审计阈值（0=error 1=warn 2=info 3=debug）
+  aggregate: true,               // 同键重复行聚合计数默认开（关闭即等价旧行为）
 });
 
 // ── env 解析原语 ──
@@ -71,7 +73,7 @@ function parsePositive(raw) {
 }
 
 /**
- * 数值键解析：env 覆盖 config → 非法值钳制回落默认 + **恰好 1 条 warn**（§五 5.4 第 2 条）。
+ * 数值键解析：env 覆盖 config → 非法值钳制回落默认 + **恰好 1 条 warn**。
  * @param {unknown} envRaw env 原始值（未设/空白 = 不干预）
  * @param {unknown} cfgRaw config 显式值（undefined = 缺省）
  * @param {number} fallback 默认值
@@ -93,7 +95,7 @@ function resolveNumber(envRaw, cfgRaw, fallback, key, warn) {
 }
 
 /**
- * sink 根解析（§三 3.1，逐条对齐内核 resolveDshHome 优先级；**不**使用引擎治理 root）。
+ * sink 根解析（逐条对齐内核 resolveDshHome 优先级；**不**使用引擎治理 root）。
  * @param {object} opts
  * @param {unknown} [opts.envValue]  PUNKY_AUDITLOG_SINK_DIR 原始值
  * @param {unknown} [opts.dshHome]   DSH_HOME 原始值
@@ -119,7 +121,8 @@ export function resolveSinkDir(opts = {}) {
  * @param {string} [opts.home] 兜底用户主目录（缺省 os.homedir()）
  * @param {((msg: string) => void)} [opts.warn] 非法值告警通道（缺省 no-op —— 保证缺省态零输出）
  * @returns {{enabled: boolean, sinkDir: string, keepDays: number, maxFileBytes: number,
- *            maxTotalBytes: number, stdout: boolean, levelsDefault: number, diagnosticsDir: string}}
+ *            maxTotalBytes: number, stdout: boolean, levelsDefault: number, aggregate: boolean,
+ *            diagnosticsDir: string}}
  */
 export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
   const warn = typeof opts.warn === 'function' ? opts.warn : () => {};
@@ -129,7 +132,7 @@ export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
     : {};
   const child = (cap && typeof cap === 'object') ? cap : {};
 
-  // enabled：与既有「readCapability 缺省合并 + env 覆盖」惯例同形（§五 5.1）
+  // enabled：与既有「readCapability 缺省合并 + env 覆盖」惯例同形
   const envEnabled = parseFlag(e.PUNKY_AUDITLOG);
   let enabled;
   if (envEnabled !== null) enabled = envEnabled;
@@ -140,7 +143,7 @@ export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
     enabled = AUDITLOG_DEFAULTS.enabled;
   }
 
-  // stdout：仅 `1`/`true`/`on`（+`yes`）为开，其余一律关（§五 5.2 字面口径）
+  // stdout：仅 `1`/`true`/`on`（+`yes`）为开，其余一律关（字面口径）
   const envStdout = parseFlag(e.PUNKY_LOGGER_STDOUT);
   let stdout = false;
   if (envStdout !== null) stdout = envStdout === true;
@@ -154,8 +157,20 @@ export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
     home: opts.home,
   });
 
+  // aggregate：同键重复行聚合计数的开关，默认开；env 三态覆盖 config（与 enabled 同形）
+  const envAggregate = parseFlag(e.PUNKY_AUDITLOG_AGGREGATE);
+  let aggregate;
+  if (envAggregate !== null) aggregate = envAggregate;
+  else if (child.aggregate === undefined || child.aggregate === null) aggregate = AUDITLOG_DEFAULTS.aggregate;
+  else if (typeof child.aggregate === 'boolean') aggregate = child.aggregate;
+  else {
+    warn('capabilities.auditlog.aggregate: 值非法（' + JSON.stringify(child.aggregate) + '），回落默认 ' + AUDITLOG_DEFAULTS.aggregate);
+    aggregate = AUDITLOG_DEFAULTS.aggregate;
+  }
+
   return {
     enabled,
+    aggregate,
     sinkDir,
     keepDays: resolveNumber(e.PUNKY_AUDITLOG_KEEP_DAYS, child.keepDays, AUDITLOG_DEFAULTS.keepDays,
       'PUNKY_AUDITLOG_KEEP_DAYS/capabilities.auditlog.keepDays', warn),
@@ -166,7 +181,7 @@ export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
     stdout,
     levelsDefault: resolveNumber(e.PUNKY_AUDITLOG_LEVELS_DEFAULT, child.levelsDefault, AUDITLOG_DEFAULTS.levelsDefault,
       'PUNKY_AUDITLOG_LEVELS_DEFAULT/capabilities.auditlog.levelsDefault', warn),
-    // 诊断面固定落在 sink 根之下（§三 3.3）——同样不在会话工作区、不在交付白名单根内
+    // 诊断面固定落在 sink 根之下——同样不在会话工作区、不在交付白名单根内
     diagnosticsDir: join(sinkDir, 'diagnostics'),
   };
 }

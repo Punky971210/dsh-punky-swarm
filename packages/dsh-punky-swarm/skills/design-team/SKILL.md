@@ -4,7 +4,7 @@ description: |
   设计团队指引（团队层 skill，与 software-team 平级）：plan 层角色
   coordinator / designer 定义（见 references/roles/）+ 三层产物契约
   （plan/ exec/ audit/）+ 设计侧能力层装配表 —— 执行侧能力指向
-  Comfyui-use 的 Layer A（自研配方驱动：配方 → 参数槽 → 板1 comfy_*
+  `comfyui-use`（技能加载名 = frontmatter `name`；部署目录名保持 `Comfyui-use`）的 Layer A（自研配方驱动：配方 → 参数槽 → 板1 comfy_*
   工具序列 → 质检 → 审计回执），Layer A 正文与 recipes/ 全树已迁入
   references/comfyui/。
   本轮只建 plan 层两角色，执行层留空（由 Leader 代劳填充设计任务）。
@@ -53,18 +53,18 @@ triggers:
 |---|---|---|---|
 | 任务层 | Coordinator | dev-planner | 设计侧细拆（配方/契约粒度任务清单）+ 被消费方契约摸底（`survey/<target>-contract.md`） |
 | 任务层 | Designer | spec-writing + design-an-interface | 设计产物：配方契约 / 参数槽规格 / 交付口径（含验收标准与约束章节），落 `plan/` |
-| 执行层 | （**本轮留空**，由 Leader 代劳） | 指向 `Comfyui-use` Layer A（配方驱动链路） | 配方实机产物 / 图像底图 / 质检回执，落 `exec/<lane>/` |
+| 执行层 | （**本轮留空**，由 Leader 代劳） | 指向 `comfyui-use` Layer A（配方驱动链路） | 配方实机产物 / 图像底图 / 质检回执，落 `exec/<lane>/` |
 | 审计层 | （**本轮未建**，见前瞻段） | report-blind-audit + archive（届时按 C+ 装配规则声明） | 验收报告 / gap-list |
 
 ### 执行层现状与代劳声明
 
 - 本阶段（本轮）**执行层角色槽为空**：无 Coder / Tester / Reviewer 角色定义，`references/roles/` 下只有 `coordinator.md` 与 `designer.md` 两个文件。
 - 需要执行侧动作（配方实机产出、图像底图生成、质检与审计回执落盘）时，**本阶段由 Leader 代劳填充设计任务**：Leader 直接承担执行层职责并按 `references/comfyui/` 的配方链路执行，不另行派生执行角色定义。
-- 执行侧能力层来自 **`Comfyui-use` 的 Layer A**（见下节「能力层：ComfyUI Layer A」），本团队不自建第二套配方驱动实现。
+- 执行侧能力层来自 **`comfyui-use` 的 Layer A**（见下节「能力层：ComfyUI Layer A」），本团队不自建第二套配方驱动实现。
 
 ## 能力层：ComfyUI Layer A（迁入副本）
 
-设计团队的执行侧能力指向朋友技能 `Comfyui-use` 的 **Layer A（自研配方驱动层）**。按 Q-5B「整段迁入」字面要求，Layer A 正文与 `recipes/` 全树已**复制**（非引用）进本技能：
+设计团队的执行侧能力指向朋友技能 `comfyui-use` 的 **Layer A（自研配方驱动层）**。按 Q-5B「整段迁入」字面要求，Layer A 正文与 `recipes/` 全树已**复制**（非引用）进本技能：
 
 | 项 | 落点 |
 |---|---|

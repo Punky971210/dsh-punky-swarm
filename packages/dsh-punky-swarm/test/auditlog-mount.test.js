@@ -69,7 +69,7 @@ const asUrl = (p) => 'file:///' + p.replace(/\\\\/g, '/');
 const { LoggerService } = await import(asUrl(process.env.PUNKY_PROBE_CORDIS));
 const { Context } = await import(asUrl(process.env.PUNKY_PROBE_CORDIS));
 const { apply } = await import(asUrl(process.env.PUNKY_PROBE_INDEX));
-const { mountAuditLog, exportMessage, auditlogStats } = await import(asUrl(process.env.PUNKY_PROBE_SINK));
+const { mountAuditLog, exportMessage, auditlogStats, buildRow, flushDiagnostics } = await import(asUrl(process.env.PUNKY_PROBE_SINK));
 
 const MODE = process.env.PUNKY_PROBE_MODE || 'apply';
 const LOG_DIR = process.env.PUNKY_PROBE_LOGDIR || '';
@@ -108,6 +108,94 @@ try {
     out.segUnchanged = fs.readFileSync(segPath).equals(segBefore);
     out.segRows = readJsonl(segPath).map((r) => r.msg);
     out.seg2Rows = readJsonl(path.join(SINK_DIR, 'audit-' + DAY + '.2.jsonl')).map((r) => r.msg);
+  } else if (MODE === 'aggregate') {
+    // 聚合计数面（Q-NOISE=C）：以**注入 ts** 精确控制窗口推进——窗口右界取到达时间，故 ts 即可当时间轴用。
+    const SC = process.env.PUNKY_PROBE_AGG_SCENARIO || 'repeat';
+    const BASE = Date.parse('2026-09-12T12:00:00.000Z');
+    const SAME = 'agg-probe: repeated noise';
+    // 同 msg 不同 args：%s 形参渲染后与本句逐字相同 → 用来证明聚合键不含 args（args 差异行会被折叠）
+    const ALT = ['agg-probe: %s', 'repeated noise'];
+    const res = mountAuditLog({ logger: { exporter: () => () => {} } }, { config: {}, env: process.env });
+    const inj = (sn, ts, args, type) => {
+      const t = type || 'warn';
+      exportMessage({ sn: sn, ts: ts, type: t, level: t === 'error' ? 0 : t === 'warn' ? 1 : t === 'info' ? 2 : 3, name: 'aggprobe', args: args });
+    };
+    if (SC === 'repeat') {
+      inj(1, BASE, [SAME]);
+      inj(2, BASE + 1000, ALT);
+      inj(3, BASE + 2000, ALT);
+      inj(4, BASE + 3000, ALT);
+      inj(5, BASE + 70000, [SAME]);
+      inj(6, BASE + 71000, ALT);
+      inj(7, BASE + 72000, ALT);
+      inj(8, BASE + 200000, [SAME]);
+    } else if (SC === 'off') {
+      inj(1, BASE, [SAME]);
+      inj(2, BASE + 1000, [SAME]);
+      inj(3, BASE + 2000, [SAME]);
+      inj(4, BASE + 3000, [SAME]);
+      inj(5, BASE + 70000, [SAME]);
+    } else if (SC === 'level') {
+      // 阈值过滤发生在聚合之前 → 被过滤的消息不进窗口（L0 的判别力）
+      inj(1, BASE, [SAME], 'info');
+      inj(2, BASE + 1000, [SAME], 'info');
+      inj(3, BASE + 2000, [SAME], 'info');
+      inj(4, BASE, [SAME], 'warn');
+      inj(5, BASE + 1000, [SAME], 'warn');
+      inj(6, BASE + 2000, [SAME], 'warn');
+      inj(7, BASE + 70000, [SAME], 'warn');
+    } else if (SC === 'flush') {
+      inj(1, BASE, [SAME]);
+      inj(2, BASE + 1000, [SAME]);
+      inj(3, BASE + 2000, [SAME]);
+      out.rowsBeforeFlush = readJsonl(path.join(SINK_DIR, 'audit-' + DAY + '.jsonl')).length;
+      out.statBeforeFlush = auditlogStats();
+      flushDiagnostics('agg-probe-flush');
+    } else if (SC === 'exit') {
+      inj(1, BASE, [SAME]);
+      inj(2, BASE + 1000, [SAME]);
+      inj(3, BASE + 2000, [SAME]);
+      out.rowsBeforeExit = readJsonl(path.join(SINK_DIR, 'audit-' + DAY + '.jsonl')).length;
+    } else if (SC === 'cap') {
+      // 每 59999 ms 一条同键消息（逐条刷新右界），第 11 条把这个窗口顶到硬上限 600000 ms
+      const CAP = Date.parse('2026-09-12T20:00:00.000Z');
+      inj(1, CAP, [SAME]);
+      for (let i = 1; i <= 10; i++) inj(i + 1, CAP + i * 59999, [SAME]);
+      inj(12, CAP + 610000, [SAME]);
+    } else if (SC === 'diag') {
+      inj(1, BASE, [SAME]);
+      inj(2, BASE + 1000, [SAME]);
+      inj(3, BASE + 2000, [SAME]);
+      flushDiagnostics('agg-probe-diag');
+    } else if (SC === 'sealed') {
+      // 近行长上限（① 未截断 ② 余量 < 闭环行附加字段所需）的行不聚合：
+      // 行长随 msg 单调，用 buildRow 实测收敛到「≤32768 且 +64 即越界」的区间
+      // （内核 Logger.format 的 maxLength 会先裁 msg 段，故不能直接按 msg 长度反解）。
+      const lineLen = (n) => Buffer.byteLength(JSON.stringify(buildRow({ sn: 1, ts: BASE, type: 'warn', name: 'aggprobe', args: ['S'.repeat(n)] })), 'utf8');
+      let N = 22000;
+      for (let i = 0; i < 24; i++) {
+        const len = lineLen(N);
+        if (len <= 32768 && len + 64 > 32768) break;
+        const next = N + (32736 - len);
+        if (next === N) break;
+        N = next < 1 ? 1 : next;
+      }
+      const longMsg = 'S'.repeat(N);
+      out.sealedLineBytes = lineLen(N);
+      out.sealedArgsChars = longMsg.length;
+      out.sealedMsgChars = buildRow({ sn: 1, ts: BASE, type: 'warn', name: 'aggprobe', args: [longMsg] }).msg.length;
+      inj(1, BASE, [longMsg]);
+      inj(2, BASE + 1000, [longMsg]);
+      inj(3, BASE + 2000, [longMsg]);
+      inj(4, BASE + 70000, [longMsg]);
+    }
+    out.ok = true;
+    out.mounted = res.mounted;
+    out.rows = readJsonl(path.join(SINK_DIR, 'audit-' + DAY + '.jsonl'));
+    out.stat = auditlogStats();
+    out.diagPath = path.join(SINK_DIR, 'diagnostics', 'sink-diagnostics.json');
+    out.diagExists = fs.existsSync(out.diagPath);
+    out.diag = out.diagExists ? JSON.parse(fs.readFileSync(out.diagPath, 'utf8')) : null;
   } else {
     // 真实 cordis 面：Context + 内置 LoggerService + 真实 fiber（exporter() 经 ctx.effect 需活跃 fiber）
     const rootCtx = new Context();
@@ -475,4 +563,217 @@ test('T-A14 接管既有分卷：已满的 .1 之后切到 .2，主卷与旧分�
   assert.equal(r.segRows.length, 1, '.1 分卷仍只有 1 行种子（实际: ' + r.segRows.length + '）');
   assert.deepEqual(r.seg2Rows.slice(-3), ['takeover-1', 'takeover-2', 'takeover-3'],
     '3 行全部落在 .2（实际: ' + JSON.stringify(r.seg2Rows) + '）');
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// 聚合计数面（同一 (level,name,msg) 的窗口折叠）——两态对照四级适配 + 守恒式 + 开关 + 诊断面
+//
+// 口径（与 README 一致）：闭环行也是一次成功写盘 → 计入 state.writes（writes = 成功写盘行数）；
+// 但闭环行不由任何消息产生，故在**消息面**守恒式里必须整体扣除 aggregateRows：
+//   messagesSeen === (writes - aggregateRows) + filteredByLevel + collapsedMessages + failures
+// （修正式恒成立；aggregateRows === 0 时退化为原字面式，见 T-C1/T-C2。）
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+const SAME_MSG = 'agg-probe: repeated noise';
+const TEN_FIELDS = ['v', 'ts', 'level', 'name', 'msg', 'args', 'sn', 'truncated', 'pid', 'kind'];
+const AGG_FIELDS = [...TEN_FIELDS, 'count', 'aggKey'];
+const ISO = (ms) => new Date(ms).toISOString();
+const BASE = Date.parse('2026-09-12T12:00:00.000Z');
+const HEX16 = /^[0-9a-f]{16}$/;
+
+/** 守恒式（修正式 + aggregateRows===0 时的字面式）逐次校验 */
+function assertConservation(stat, label) {
+  const literal = stat.writes + stat.filteredByLevel + stat.collapsedMessages + stat.failures;
+  const r = { writes: stat.writes, filteredByLevel: stat.filteredByLevel, collapsedMessages: stat.collapsedMessages, aggregateRows: stat.aggregateRows, failures: stat.failures, messagesSeen: stat.messagesSeen };
+  assert.equal(
+    stat.messagesSeen,
+    (stat.writes - stat.aggregateRows) + stat.filteredByLevel + stat.collapsedMessages + stat.failures,
+    label + '：消息面守恒式（writes 扣除 aggregateRows）必须恒成立（实际: ' + JSON.stringify(r) + '）');
+  assert.equal(literal - stat.messagesSeen, stat.aggregateRows,
+    label + '：字面式与修正式之差恒为 aggregateRows（闭环行是行面产出、不是消息，实际: ' + JSON.stringify(r) + '）');
+  if (stat.aggregateRows === 0) {
+    assert.equal(stat.messagesSeen, literal,
+      label + '：aggregateRows===0 时字面式亦成立（与旧行为连续，实际: ' + JSON.stringify(r) + '）');
+  }
+}
+
+// ── T-C1 L2 重复态：折叠 + 闭环行字段级正确 + aggKey 跨窗口稳定 ──
+
+test('T-C1 聚合重复态：首行 10 字段不变；闭环行 count=1+折叠数、ts=末条被抑制、sn/args=首行；aggKey 跨窗口稳定', () => {
+  const r = runProbe('tc1', { PUNKY_PROBE_AGG_SCENARIO: 'repeat' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.rows.length, 5, '2 个窗口 × （首行 + 闭环行）+ 最后一条首行 = 5 行（实际: ' + r.rows.length + ' 行）');
+
+  // ① 首行：10 字段逐字不变、kind:"log"、无 count
+  assert.deepEqual(Object.keys(r.rows[0]), TEN_FIELDS, '首行恰 10 字段且顺序不变（实际: ' + JSON.stringify(Object.keys(r.rows[0])) + '）');
+  assert.equal(r.rows[0].kind, 'log', '首行 kind="log"');
+  assert.equal('count' in r.rows[0], false, '首行不写 count（既有行字节形态零变化）');
+  assert.equal(r.rows[0].ts, ISO(BASE), '首行 ts = 该消息真实时间');
+  assert.equal(r.rows[0].sn, 1, '首行 sn = 该消息序列号');
+
+  // ② 闭环行：12 字段（10 + count + aggKey），count = 1 + 折叠数
+  assert.deepEqual(Object.keys(r.rows[1]), AGG_FIELDS, '闭环行 = 10 字段 + 附加 count/aggKey（实际: ' + JSON.stringify(Object.keys(r.rows[1])) + '）');
+  assert.equal(r.rows[1].kind, 'log-aggregate', '闭环行 kind="log-aggregate"');
+  assert.equal(r.rows[1].count, 4, '窗口 1 含首行共 4 条 ⇒ count=4（实际: ' + r.rows[1].count + '）');
+  assert.equal(r.rows[1].ts, ISO(BASE + 3000), '闭环行 ts = 窗口内**末条被抑制**消息时间，不取当前时间（实际: ' + r.rows[1].ts + '）');
+  assert.equal(r.rows[1].sn, 1, '闭环行 sn = 首行 sn（实际: ' + r.rows[1].sn + '）');
+  assert.deepEqual(r.rows[1].args, [SAME_MSG], '闭环行 args = 首行值（实际: ' + JSON.stringify(r.rows[1].args) + '）');
+  assert.equal(r.rows[1].msg, r.rows[0].msg, '闭环行 msg 与首行逐字相同');
+  assert.equal(r.rows[1].pid, r.rows[0].pid, '闭环行 pid = 首行 pid（同进程）');
+  assert.equal(r.rows[1].truncated, false, '闭环行 truncated 继承首行（false）');
+  assert.ok(HEX16.test(r.rows[1].aggKey), 'aggKey 为 16 位 hex（实际: ' + r.rows[1].aggKey + '）');
+
+  // ③ B3 证据：被折叠行的 args 形状（%s 形参）在落盘中完全不可见
+  assert.equal(r.rows.filter((x) => JSON.stringify(x.args).includes('%s')).length, 0,
+    '被折叠消息的 args 形状不出现在任何落盘行（保真边界 B3；实际: ' + JSON.stringify(r.rows.map((x) => x.args)) + '）');
+
+  // ④ 闭环行先于触发它的新首行落盘；新窗口独立开窗
+  assert.equal(r.rows[2].kind, 'log', '第 3 行是触发闭环的那条新首行（kind="log"）');
+  assert.equal(r.rows[2].sn, 5, '新首行 sn=5（实际: ' + r.rows[2].sn + '）');
+  assert.equal(r.rows[2].ts, ISO(BASE + 70000), '新首行 ts = 该消息真实时间');
+
+  // ⑤ 第二个窗口同样闭环；aggKey 与窗口 1 相同（同 (level,name,msg) ⇒ 同键），ts/sn 不同不影响键
+  assert.equal(r.rows[3].kind, 'log-aggregate', '第 4 行是窗口 2 的闭环行');
+  assert.equal(r.rows[3].count, 3, '窗口 2 ⇒ count=3（实际: ' + r.rows[3].count + '）');
+  assert.equal(r.rows[3].aggKey, r.rows[1].aggKey, 'aggKey 只由 (level,name,msg) 决定：跨窗口相同（前:' + r.rows[1].aggKey + ' 后:' + r.rows[3].aggKey + '）');
+  assert.equal(r.rows[3].sn, 5, '窗口 2 闭环行 sn = 窗口 2 首行 sn');
+  assert.equal(r.rows[3].ts, ISO(BASE + 72000), '窗口 2 闭环行 ts = 其末条被抑制消息时间');
+
+  // ⑥ 计数器与守恒式
+  assert.equal(r.stat.messagesSeen, 8, 'messagesSeen=8（实际: ' + r.stat.messagesSeen + '）');
+  assert.equal(r.stat.collapsedMessages, 5, 'collapsedMessages = 3 + 2 = 5（实际: ' + r.stat.collapsedMessages + '）');
+  assert.equal(r.stat.aggregateRows, 2, 'aggregateRows=2（实际: ' + r.stat.aggregateRows + '）');
+  assert.equal(r.stat.writes, 5, 'writes = 物理行数 5（闭环行也计入——成功写盘行数语义未变）');
+  assert.equal(r.stat.writes, r.rows.length, 'writes 与物理行数逐行对应');
+  assertConservation(r.stat, 'T-C1');
+});
+
+// ── T-C2 L3 开关 off 态：逐行落盘、零闭环行、字面式成立（回归对照面）──
+
+test('T-C2 聚合 off 态（PUNKY_AUDITLOG_AGGREGATE=off）：5 条同键消息逐行落盘、零 log-aggregate、collapsedMessages 恒 0', () => {
+  const r = runProbe('tc2', { PUNKY_PROBE_AGG_SCENARIO: 'off', PUNKY_AUDITLOG_AGGREGATE: 'off' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.rows.length, 5, '5 条消息逐行落盘（实际: ' + r.rows.length + '）');
+  assert.equal(r.rows.filter((x) => x.kind === 'log-aggregate').length, 0, '关闭态零 log-aggregate 行');
+  assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '全部为 kind="log"（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
+  assert.ok(r.rows.every((x) => !('count' in x)), '关闭态每行仍恰 10 字段（无 count）');
+  assert.equal(r.stat.collapsedMessages, 0, 'collapsedMessages 恒 0（实际: ' + r.stat.collapsedMessages + '）');
+  assert.equal(r.stat.aggregateRows, 0, 'aggregateRows 恒 0（实际: ' + r.stat.aggregateRows + '）');
+  assert.equal(r.stat.writes, 5, 'writes=5');
+  assert.equal(r.stat.messagesSeen, 5, 'messagesSeen=5');
+  assert.equal(r.stat.messagesSeen, r.stat.writes + r.stat.filteredByLevel + r.stat.collapsedMessages + r.stat.failures,
+    'off 态：字面式（= 旧行为）逐字成立');
+});
+
+// ── T-C3 L0 阈值层 + L2④：过滤先于聚合；被聚合时 warn 仍可见 ──
+
+test('T-C3 阈值先于聚合（levelsDefault=1）：info 3 条全被过滤且不进窗口；warn 折叠后仍可见（首行 + 闭环行）', () => {
+  const r = runProbe('tc3', { PUNKY_PROBE_AGG_SCENARIO: 'level', PUNKY_AUDITLOG_LEVELS_DEFAULT: '1' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.stat.filteredByLevel, 3, '阈值 1：3 条 info 被 sink 侧过滤（实际: ' + r.stat.filteredByLevel + '）');
+  assert.equal(r.rows.filter((x) => x.level === 'info').length, 0, 'info 0 命中（L1 语义不受聚合影响）');
+  assert.equal(r.rows.filter((x) => x.level === 'warn').length, 3,
+    '阈值 1 仍收到真实 warn：首行 + 闭环行 + 新首行 = 3 行（实际: ' + r.rows.filter((x) => x.level === 'warn').length + '）');
+  assert.equal(r.rows[0].kind, 'log', '第 1 行 = warn 首行');
+  assert.equal(r.rows[1].kind, 'log-aggregate', '第 2 行 = warn 闭环行');
+  assert.equal(r.rows[1].count, 3, '闭环行 count=3（实际: ' + r.rows[1].count + '）');
+  assert.equal(r.stat.collapsedMessages, 2, '被过滤的 info 绝不进窗口：collapsedMessages 只算 warn 的 2 条（实际: ' + r.stat.collapsedMessages + '）');
+  assert.equal(r.stat.messagesSeen, 7, 'messagesSeen = 3 info + 4 warn（实际: ' + r.stat.messagesSeen + '）');
+  assertConservation(r.stat, 'T-C3');
+});
+
+// ── T-C4 闭环落点③：flushDiagnostics() 全键 flush ──
+
+test('T-C4 闭环落点③ flushDiagnostics()：未越窗的同键消息在手动 flush 时闭环成 1 行 count=3', () => {
+  const r = runProbe('tc4', { PUNKY_PROBE_AGG_SCENARIO: 'flush' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.rowsBeforeFlush, 1, 'flush 前只有首行（窗口内不为被抑制消息写任何行；实际: ' + r.rowsBeforeFlush + '）');
+  assert.equal(r.statBeforeFlush.collapsedMessages, 2, 'flush 前已折叠 2 条');
+  assert.equal(r.statBeforeFlush.aggregateRows, 0, 'flush 前零闭环行');
+  assert.equal(r.rows.length, 2, 'flush 后补写 1 行闭环行（实际: ' + r.rows.length + '）');
+  assert.equal(r.rows[1].kind, 'log-aggregate', 'flush 补写的是 log-aggregate 行');
+  assert.equal(r.rows[1].count, 3, 'count=3（实际: ' + r.rows[1].count + '）');
+  assert.equal(r.rows[1].ts, ISO(BASE + 2000), '闭环行 ts = 末条被抑制消息时间（实际: ' + r.rows[1].ts + '）');
+  assert.equal(r.stat.aggregateRows, 1, 'aggregateRows=1');
+  assertConservation(r.stat, 'T-C4');
+});
+
+// ── T-C5 闭环落点②：进程 exit 钩子（父进程在子进程退出后读盘取证）──
+
+test('T-C5 闭环落点② exit 钩子：子进程退出即全键 flush，父进程读回闭环行 count=3', () => {
+  const r = runProbe('tc5', { PUNKY_PROBE_AGG_SCENARIO: 'exit' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.rowsBeforeExit, 1, '进程内读到的仍是 1 行（窗口未闭环；实际: ' + r.rowsBeforeExit + '）');
+  const after = fs.readFileSync(path.join(r.__sinkDir, 'audit-' + DAY + '.jsonl'), 'utf8')
+    .split('\n').filter((l) => l).map((l) => JSON.parse(l));
+  assert.equal(after.length, 2, '子进程退出后（父进程重新读盘）共 2 行（实际: ' + after.length + '）');
+  assert.equal(after[1].kind, 'log-aggregate', '第 2 行由 exit 钩子写出');
+  assert.equal(after[1].count, 3, 'count=3（实际: ' + after[1].count + '）');
+  assert.equal(after[1].ts, ISO(BASE + 2000), '闭环行 ts = 末条被抑制消息时间');
+});
+
+// ── T-C6 窗口硬上限 600000 ms ──
+
+test('T-C6 硬上限 600000 ms：逐条刷新右界的窗口被顶到 startAt+600000 后闭环（否则该条会被继续折叠）', () => {
+  const r = runProbe('tc6', { PUNKY_PROBE_AGG_SCENARIO: 'cap' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.rows.length, 3, '首行 + 闭环行 + 新首行（实际: ' + r.rows.length + '）');
+  assert.equal(r.rows[1].kind, 'log-aggregate', '第 2 行 = 闭环行');
+  assert.equal(r.rows[1].count, 11,
+    '12 条中前 11 条同窗（滑动刷新把右界顶到硬上限 startAt+600000）⇒ count=11；'
+    + '若窗口无硬上限（右界会被刷到 659990），第 12 条会被继续折叠 ⇒ 不会出现闭环行（实际: ' + r.rows[1].count + '）');
+  assert.equal(r.rows[1].ts, ISO(Date.parse('2026-09-12T20:00:00.000Z') + 599990), '闭环行 ts = 末条被抑制消息时间');
+  assert.equal(r.stat.aggregateRows, 1, '恰 1 行闭环行');
+  assert.equal(r.stat.collapsedMessages, 10, 'collapsedMessages=10（实际: ' + r.stat.collapsedMessages + '）');
+  assertConservation(r.stat, 'T-C6');
+});
+
+// ── T-C7 诊断面 aggregate 段（AC-12）＋ 闭环落点③ 的快照顺序 ──
+
+test('T-C7 诊断面 aggregate 段：windowOpen/collapsedTotal/keys[≤50] 落盘，既有字段不变', () => {
+  const root = freshRoot('tc7');
+  const sinkDir = seedUnappendableSink(root);                    // 写失败可注入、sink 根可建
+  const r = runProbeRaw('tc7', { PUNKY_PROBE_AGG_SCENARIO: 'diag' }, 'aggregate', { root });
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.equal(r.diagExists, true, '诊断面已落盘（' + r.diagPath + '）');
+  const d = r.diag;
+  assert.equal(d.note, 'agg-probe-diag', 'note 取调用方给定值（实际: ' + d.note + '）');
+  assert.ok(d.aggregate, '诊断面含 aggregate 段（实际: ' + JSON.stringify(Object.keys(d)) + '）');
+  assert.equal(d.aggregate.windowOpen, 1, '快照时刻 1 个窗口未闭环（快照先于 flush——B5 的唯一补救面；实际: ' + d.aggregate.windowOpen + '）');
+  assert.equal(d.aggregate.collapsedTotal, 2, 'collapsedTotal=2（实际: ' + d.aggregate.collapsedTotal + '）');
+  assert.equal(d.aggregate.keys.length, 1, 'keys 含 1 条（实际: ' + d.aggregate.keys.length + '）');
+  assert.equal(d.aggregate.keys[0].count, 3, 'keys[0].count=3（实际: ' + JSON.stringify(d.aggregate.keys[0]) + '）');
+  assert.ok(HEX16.test(d.aggregate.keys[0].aggKey), 'keys[0].aggKey 为 16 位 hex');
+  assert.equal(d.aggregate.keys[0].windowEnd, ISO(BASE + 62000), 'keys[0].windowEnd = 刷新后的窗口右界（实际: ' + d.aggregate.keys[0].windowEnd + '）');
+  assert.ok(!Number.isNaN(Date.parse(d.aggregate.keys[0].windowEnd)), 'windowEnd 可 Date.parse');
+  assert.ok(d.aggregate.keys.length <= 50, 'keys 有界（≤50）');
+  for (const k of ['v', 'ts', 'pid', 'engine', 'sinkDir', 'sinkPath', 'attempts', 'writes', 'failures', 'consecutiveFailures',
+    'skippedByBreaker', 'sinkErrorRecords', 'sinkErrorRecordsFailed', 'filteredByLevel', 'lastError']) {
+    assert.ok(k in d, '既有诊断面字段不丢：' + k);
+  }
+  assert.equal(d.sinkDir, sinkDir, '诊断面记录实际 sink 根');
+  assert.ok(r.stat.failures > 0, '该场景确有写失败（failures>0；实际: ' + r.stat.failures + '）');
+  assert.equal(r.stat.aggregateRows, 1, 'flush 仍写出闭环行（写失败也计入产出面）');
+  assert.equal(r.stat.collapsedMessages, 2, 'collapsedMessages=2');
+  assertConservation(r.stat, 'T-C7');
+});
+
+// ── T-C8 近行长上限的行不聚合（闭环行 msg/args 必须与首行逐字相同）──
+
+test('T-C8 近行长上限（余量 < 闭环行附加字段）的行不聚合：逐行落盘、msg 未被截断、零折叠', () => {
+  const r = runProbe('tc8', { PUNKY_PROBE_AGG_SCENARIO: 'sealed' }, 'aggregate');
+  assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
+  assert.ok(r.sealedLineBytes <= 32768 && r.sealedLineBytes + 64 > 32768,
+    '构造出的行长处于「未截断但余量 < 64 字节」区间（实际: ' + r.sealedLineBytes + '）');
+  assert.equal(r.rows.length, 4, '4 条同键消息逐行落盘（不聚合；实际: ' + r.rows.length + '）');
+  assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '零 log-aggregate 行');
+  assert.ok(r.rows.every((x) => x.truncated === false), '首行未被截断（msg 逐字保留）');
+  assert.equal(r.rows[0].msg.length, r.sealedMsgChars, 'msg 未被截断改写（实际: ' + r.rows[0].msg.length + ' vs ' + r.sealedMsgChars + '）');
+  assert.equal(r.rows[0].msg.endsWith('...[truncated]'), false, 'msg 尾部无截断标记（该行确未走截断路径）');
+  assert.equal(r.rows[0].args[0].length, r.sealedArgsChars, 'args 逐字保留');
+  assert.ok(r.rows.every((x) => Buffer.byteLength(JSON.stringify(x), 'utf8') <= 32768), '每行仍 ≤ 32768 字节');
+  assert.equal(r.stat.collapsedMessages, 0, '近上限行不进折叠面（实际: ' + r.stat.collapsedMessages + '）');
+  assert.equal(r.stat.aggregateRows, 0, '零闭环行');
+  assert.equal(r.stat.messagesSeen, r.stat.writes, '4 条消息 = 4 行（字面式亦成立）');
+  assertConservation(r.stat, 'T-C8');
 });

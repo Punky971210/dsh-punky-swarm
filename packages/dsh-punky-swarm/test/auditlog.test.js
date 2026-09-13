@@ -30,9 +30,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import { AUDITLOG_DEFAULTS, resolveAuditLogConfig, resolveSinkDir, parseFlag } from '../lib/auditlog/config.js';
-import { MAX_LINE_BYTES, MAX_LONG_ARG_CHARS, buildRow, pruneByAge, pruneByTotal, sinkFilePath } from '../lib/auditlog/sink.js';
+import {
+  MAX_LINE_BYTES, MAX_LONG_ARG_CHARS, buildRow, pruneByAge, pruneByTotal, sinkFilePath,
+  aggregateKey, AGGREGATE_WINDOW_MS, AGGREGATE_MAX_WINDOW_MS,
+} from '../lib/auditlog/sink.js';
 
 // ── 隔离根（每个用例独立，全部落在 os.tmpdir() 下）──
 
@@ -241,4 +245,82 @@ test('T-A7 总量上限：超限 → 按 mtime 从旧到新删到 ≤ 上限、�
 
 test('T-A15 定值常量：MAX_LINE_BYTES=32768 与 spec §四/§L8 逐字一致', () => {
   assert.equal(MAX_LINE_BYTES, 32768, '单行硬上限 32 KiB');
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// 聚合计数：配置面（开关）与聚合键（纯函数面）
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+// ── T-C9 聚合开关（默认开 + env 三态 + config 键 + env 覆盖 config + 非法值回落）──
+
+test('T-C9 聚合开关：缺省开 / env 三态（真值词开、假值词关、未识别不干预）/ config 键 / env 覆盖 config / 非法值回落 + 恰 1 条 warn', () => {
+  const sink = 'D:\\iso\\nope';
+  // ① 缺省 → 开（Q-NOISE=C 的默认态就是开）
+  assert.equal(AUDITLOG_DEFAULTS.aggregate, true, '缺省 aggregate=true');
+  assert.equal(resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_SINK_DIR: sink })).aggregate, true, '未设 → true');
+  assert.equal(resolveAuditLogConfig({ capabilities: { auditlog: {} } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink })).aggregate, true, '空子键 → true');
+  assert.equal(resolveAuditLogConfig(undefined, env({ PUNKY_AUDITLOG_SINK_DIR: sink })).aggregate, true, 'undefined config → true');
+  // ② env 关词 / 开词
+  for (const word of ['off', '0', 'false', 'no', 'OFF', ' False ']) {
+    assert.equal(resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_AGGREGATE: word })).aggregate, false,
+      'PUNKY_AUDITLOG_AGGREGATE=' + JSON.stringify(word) + ' → false');
+  }
+  for (const word of ['1', 'true', 'on', 'yes', ' On ']) {
+    assert.equal(resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_AGGREGATE: word })).aggregate, true,
+      'PUNKY_AUDITLOG_AGGREGATE=' + JSON.stringify(word) + ' → true');
+  }
+  assert.equal(resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_AGGREGATE: 'maybe' })).aggregate, true,
+    '未识别值 → 不干预（缺省开）');
+  assert.equal(resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_AGGREGATE: '' })).aggregate, true, '空值 → 不干预');
+  // ③ config 键双向
+  assert.equal(resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: false } } }, env({ PUNKY_AUDITLOG_AGGREGATE: '' })).aggregate, false,
+    'capabilities.auditlog.aggregate:false 生效');
+  assert.equal(resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: true } } }, env({ PUNKY_AUDITLOG_AGGREGATE: '' })).aggregate, true,
+    'capabilities.auditlog.aggregate:true 生效');
+  // ④ env 逐键覆盖 config（双向）
+  assert.equal(resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: false } } }, env({ PUNKY_AUDITLOG_AGGREGATE: '1' })).aggregate, true,
+    'env 真值覆盖 config false');
+  assert.equal(resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: true } } }, env({ PUNKY_AUDITLOG_AGGREGATE: 'off' })).aggregate, false,
+    'env 假值覆盖 config true');
+  // ⑤ 非法 config 值 → 回落默认 + 恰 1 条 warn（与 enabled 同形）
+  const warns = [];
+  const c = resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: 'abc' } } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink }),
+    { warn: (m) => warns.push(m) });
+  assert.equal(c.aggregate, true, "非法 aggregate('abc') → 回落 true");
+  assert.equal(warns.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns) + '）');
+  assert.ok(warns[0].includes('capabilities.auditlog.aggregate'), 'warn 文案含键名');
+  // ⑥ 缺省态零 warn（聚合键的加入不得引入启动噪声）
+  const warns2 = [];
+  resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns2.push(m) });
+  resolveAuditLogConfig({ capabilities: { auditlog: {} } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns2.push(m) });
+  assert.equal(warns2.length, 0, '缺省/空子键 → 零 warn（实际: ' + JSON.stringify(warns2) + '）');
+  // ⑦ 冻结常量未被破坏，且既有 6 键数值不变
+  assert.equal(Object.isFrozen(AUDITLOG_DEFAULTS), true, '缺省值常量仍冻结');
+  assert.deepEqual(
+    [AUDITLOG_DEFAULTS.enabled, AUDITLOG_DEFAULTS.keepDays, AUDITLOG_DEFAULTS.maxFileBytes, AUDITLOG_DEFAULTS.maxTotalBytes,
+      AUDITLOG_DEFAULTS.stdout, AUDITLOG_DEFAULTS.levelsDefault],
+    [true, 14, 67108864, 536870912, false, 3], '既有 6 键数值逐字不变');
+});
+
+// ── T-C10 聚合键：sha256(level ⊕ name ⊕ msg).slice(0,16)，不含 ts/sn/pid/args ──
+
+test('T-C10 聚合键：sha256(level ⊕ name ⊕ msg) 前 16 位 hex（与独立复算逐字相同）；三字段任一变化即换键', () => {
+  // 独立复算（不调用被测函数）：以 node:crypto 同口径算出期望值
+  const expect = (level, name, msg) => createHash('sha256')
+    .update(level + '\u0000' + name + '\u0000' + msg, 'utf8').digest('hex').slice(0, 16);
+  const got = aggregateKey('warn', 'dsh-punky-swarm', 'boom');
+  assert.equal(got, expect('warn', 'dsh-punky-swarm', 'boom'), '与独立复算逐字相同（实际: ' + got + ' vs ' + expect('warn', 'dsh-punky-swarm', 'boom') + '）');
+  assert.equal(got.length, 16, '取 16 位 hex（实际: ' + got.length + '）');
+  assert.match(got, /^[0-9a-f]{16}$/, '全小写 hex');
+  // 稳定性：同三元组 → 同键（与 ts/sn/pid 无关——函数签名即只吃这三项）
+  assert.equal(aggregateKey('warn', 'n', 'm'), aggregateKey('warn', 'n', 'm'), '确定函数：同输入同输出');
+  // 敏感性：三字段各自变化都换键
+  assert.notEqual(aggregateKey('warn', 'n', 'm'), aggregateKey('error', 'n', 'm'), 'level 变化 → 换键');
+  assert.notEqual(aggregateKey('warn', 'n', 'm'), aggregateKey('warn', 'n2', 'm'), 'name 变化 → 换键');
+  assert.notEqual(aggregateKey('warn', 'n', 'm'), aggregateKey('warn', 'n', 'm2'), 'msg 变化 → 换键');
+  // 域分隔符：避免「拼接歧义」被当成同一键
+  assert.notEqual(aggregateKey('warn', 'n', 'm'), aggregateKey('warn', 'nm', ''), '分隔符保证拼接不歧义');
+  // 窗口常量（模块内常量，非配置键）
+  assert.equal(AGGREGATE_WINDOW_MS, 60000, '默认窗口 60000 ms');
+  assert.equal(AGGREGATE_MAX_WINDOW_MS, 600000, '窗口硬上限 600000 ms');
 });
