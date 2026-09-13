@@ -1,5 +1,62 @@
 ## 未发布（Unreleased）
 
+### 追踪项收口：口径定案与文档订正（2026-09-13）
+
+- **F7（文档订正）**：`discipline.md` 附录 A 的 `TEAM_ASSET_LEAD_NOT_IN_LAYERS` 行订正为精确口径——该码只判「声明的 lead 角色**是否出现在任何层**的 `layers[*].roles` 中（声明悬空）」，**不判层次归属**；某层是否构成该层牵头由 `lane.layer` + 牵头集判定；并明示**牵头角色 ≠ Manager**（Manager 属引擎层、不占 lane）。
+- **F2（勘误）**：团队资产内技能名**一律取加载名**（宿主 `SKILL.md` frontmatter `name`）；早期 spec 文本中的目录名写法（如 `research-compiler`）作废，实际值为 `ara-compiler` / `ara-research-manager` / `ara-rigor-reviewer`。
+- **F1（跨批交接口径，零引擎改动）**：生产/交付批（`producer` / `publisher`）需要搭建批的 audit 产物时，**由 Leader 在生产批建批前用 `asset_claim` 把该产物归位到生产批产物根**，生产 lane 的 `consume` 指向**本批内路径**（入口门禁因此照常生效：审核未过则产物不存在 → `GATE_ENTRY_MISSING` 拒派）。跨批原生引用（引擎直接解析他批产物根）留作后续增强，**不得**假定其已生效。
+- **O-2（路径口径）**：批次产物路径以 **批次 `wavePlan` 为唯一权威**（冻结语义，不中途重算）；plan 文档（`task-tree.json` / `assembly-statement.md`）中的路径引用仅作可读说明，与 wavePlan 不一致时以 wavePlan 为准。
+- **F3 留痕**：`skills/design-team/SKILL.md` 直读字节数与某 lane 自述存在 +182 B 差异（疑报告后用词微调），不影响判据（Layer A 区块 59/59 已独立复算），记留痕、无动作。
+
+### 团队装配扩充：design-team / research-team / writing-team（2026-09-13）
+
+- **新增三套团队装配资产 + 团队技能**（装配数据唯一权威 = 各自 `presets/<team>/team-asset.yml`；团队技能只声明指针与用途，不复制装配数据）：
+  - `design-team`：plan `design-planner`（评估需求 → 研判风格 → 设计 ComfyUI 使用资产）/ exec `workflow-builder`（搭建工作流 + 初步冒烟）、`producer`（**新批次实跑生产**，consume audit 产物）/ audit `workflow-auditor`（审工具合理性与是否符合设计目的）。技能：`spec-writing`、`interaction-design-principles`、`comfyui-use`、`acceptance-gate`、`review-execution`。
+  - `research-team`：plan `research-planner` / exec `researcher` / audit `research-auditor`。技能：`spec-writing`、`decision-mapping`、`tech-benchmark-planning`、`ara-compiler`、`ara-research-manager`、`ara-rigor-reviewer`、`citation-evaluator`、`arxiv-translator`（**加载名口径**）。
+  - `writing-team`：plan `writing-planner`（读者/平台/体裁/风格评估 → 写作规格）/ exec `drafter`（按规格成稿）、`polisher`（修订/去 AI 痕/密度压缩）、`publisher`（**新批次排版交付**，consume audit 两产物）/ audit `writing-auditor`（判据对照审稿，只读不改稿）。技能：`spec-writing`、`writing-trio`、`wechat-writing-style`、`humanizer`、`lieflat-less-ai-tone`、`revision-patterns`、`baoyu-markdown-to-html`、`acceptance-gate`、`review-execution`。
+- **三团队共用口径**：自定义角色经资产 `roles.extra` + `plan_leads`/`audit_leads` 声明（与引擎基础牵头集**并集**）；`flows`/`state_machine` 沿用软件工程团队同口径（plan 契约裸标题 `## 验收标准`/`## 约束`、exec `entry_requires:["consume"]`、audit `needhuman`、`complete.require_audit_outcomes:["pass","skip"]`、`tighten-only`）；**生产/交付一律另开批次**，其 lane `consume` audit 验收产物（缺则 `GATE_ENTRY_MISSING` 拒派 ⇒ 审核通过才开产/交付）。
+- **装配读端**：`lib/assembly/team-asset.js`、`lib/assembly/flows.js` 已随本次提交落入 HEAD（此前为未跟踪文件，他域改动回退会使新团队资产不可加载）。
+- **技能名解析**：装配内技能名一律取**加载名**（宿主 `SKILL.md` frontmatter `name`）；引擎的技能存在性校验（`GATE_SKILL_MISSING`）按「宿主**目录名 ∪ frontmatter 名**」判定，避免目录名与加载名不一致时的误报。
+- **登记与测试**：`presets/jiufeng/asset-manifest.json`（→9 条）、`lib/assets.js` `DEFAULT_ASSETS`、`test/assets.test.js` 计数与清单断言同步（断言强度未放宽）；新增 `test/team-assets-fill.test.js`（9 用例）与 `test/writing-team-asset.test.js`（5 用例）覆盖：资产加载期校验、建批技能前缀逐字、自定义牵头生效、生产/交付的 `GATE_ENTRY_MISSING` 正负例。
+
+### 缺口推进（追踪项处置，2026-09-13）
+
+- **`batch.manager.raised` 登记幂等（O-1）**：`store.markManagerRaised` 增**同 `agentId` 幂等守卫**——重复登记同一 Manager 直接返回既有记录、**不重复写事件**（此前「先登记、后迁移」的调用序被重试时会留下重复事件，属审计噪音）。配套把 `test/governance.test.js` 的期望事件数由 2 改为 1（断言强度不降：改为「同 agentId 幂等」这一更强语义）。验证：`npm test` **1062/1062 fail 0**。
+- **F6（装配读端落 HEAD）**：`lib/assembly/team-asset.js`、`lib/assembly/flows.js` 此前是**未跟踪文件**（他域在途改动一旦被回退，design-team / research-team 两套新资产将不可加载）——已连同本批交付（`presets/{design,research}-team/team-asset.yml`、`skills/research-team/SKILL.md`、`test/team-assets-fill.test.js`）以**路径限定提交**落入 HEAD，未挟带他域在途改动。
+- **F7（仅文档面，未改代码）**：`TEAM_ASSET_LEAD_NOT_IN_LAYERS` 的校验语义是「牵头角色须出现在**任一层**的 roles 中（声明悬空即报码）」（见 `lib/assembly/team-asset.js`），与部分文档写成「本层」不一致；**不收紧校验**——某层是否构成牵头由 `lane.layer` + 牵头集判定。已登入工作区追踪台账 `engine-open-items.md`。
+- **澄清（与 Manager 层归属相关）**：**「牵头角色」不指代 Manager**。牵头角色是团队层内承担计划/验收职责的角色（声明面 `roles.plan_leads` / `roles.audit_leads`）；Manager 是引擎层功能角色（不属任何层、不占 lane，只代理指挥团队按任务 DAG 执行），从不进入牵头候选集；误用作 lane 角色会得专属告警 `GATE_ROLE_MANAGER_AS_LANE`。
+
+### 复核收尾：`manager` 作 lane 角色的专属告警 + 孤儿回收入口留档（2026-09-13）
+
+- **D1（修）**：`manager` 保留在合法角色集合中（供 `assembly.roles` **声明面**使用），新增**专属告警码 `GATE_ROLE_MANAGER_AS_LANE`**——某 lane 的生效角色为 `manager` 时提示「Manager 属引擎层（不属任何层、不占 lane），请改用该域自己的计划/验收角色（plan: designer/coordinator；audit: supervisor/doc-manager）」。此前该情形只会混入 `GATE_ROLE_MISSING`，读起来像「缺牵头角色」，语义错位。仅告警、不阻断；`manager` 仍可作 `assembly.roles` 声明项。
+- **B7（留档，不接线）**：孤儿 worker 的显式回收维持 **lib 级人审能力** —— `store.recycleStalledLane(sessionId, batchId, lane)`：
+  - **语义**：lane 必须为 `running` 且已有 `lane.stalled` 证据（终态 lane 永不可回收）；执行后 lane 落 `idle`，并留事件 `lane.recycled{lane, from:'running', reason:'stalled', outcome:'interrupted', note}`；随后走既有 `member_status(idle→running)` 重派。
+  - **不接线的理由**：① 注册为治理工具会打破「20 工具契约」（多个测试文件硬断言）；② 加 API 路由 / 面板入口属前端面新增，超出本轮范围；③ 该动作要求人审判断，而工具层无 caller identity，暴露为工具反而不安全。
+  - **触发方式（当前）**：宿主侧以 Node 直接调用 `createStore(<引擎状态根>).recycleStalledLane(sessionId, batchId, lane)`；是否接线为工具/API 由后续需要决定。
+
+### 团队装配收敛：jiufeng 团队装配退役 + 临时团队 `flows` 面补全（2026-09-13）
+
+- **jiufeng 团队装配退役**：装配数据唯一权威来源 = 团队资产 `presets/<team>/team-asset.{json,yml}`；删除 `presets/jiufeng/team-asset.yml`，`lib/assembly.js` 不再内置任何团队常量兜底（原 `team === 'jiufeng' ? DEFAULT_ASSEMBLY : null` 分支移除）。`DEFAULT_ASSEMBLY` 保留为兼容导出，内容改为 = `software-team` 装配（不再含退役技能名）。此后各团队以自身资产为准（`software-team` 等）。
+- **无资产团队不再静默**：`team` 无对应资产时，建批照常成功但**不注入任何 `[skills=…]` 前缀**，并落告警事件 `gate.role_invalid{code: GATE_TEAM_ASSET_MISSING}`（不阻断）。
+- **技能名存在性告警**：建批时校验装配引用的技能能否在**宿主技能根**（`~/.agents/skills/<name>/SKILL.md`）解析，缺失落 `GATE_SKILL_MISSING`（不阻断；技能根不存在时跳过校验，避免隔离环境噪声）。
+- **临时团队 `flows` 面补全（D3）**：建批时 `teamsRoot` 随批次持久化（新可选字段 `teamsRoot`，缺省不写键 = 旧批零迁移）；门禁读端解析根优先级改为 ① 批次级 `teamsRoot` → ② 注入的 `flowsRoot`（测试缝）→ ③ 包根。临时团队的 `entry_requires` / `contract` / `produce_field` / `needhuman` / `complete` 判据**按临时资产生效**，与内置团队同一解析器、同一门禁语义。
+- 契约测试同步：11 条承载旧语义的用例改写为新语义（等价锚改指 `software-team`；显式断言 `resolveAssembly('jiufeng') === null`、`loadTeamAsset(...,'jiufeng').ok === false`）；新增 T8（临时团队 flows 生效 + 缺省对照）。用例总数 1053。
+
+### 治理面缺口修复（复核批次落地，2026-09-13）
+
+- **终态冻结（A1）**：批次进入 `complete` / `aborted` 后，任何成员迁移一律拒 `GATE_BATCH_TERMINAL`（防「已收口批次仍被改写成 running」）。
+- **C+ 收口告警（A2）**：exec 层 lane ≥3 的批次 `complete` 时未登记 Manager 拉起 → 落 `gate.manager_missing`（**非阻断**，避免追溯性拦旧批）。
+- **Manager 拉起登记（新增可核事实）**：`batch_phase({ batchId, manager: { agentId, note? } })` 登记 → 写批次字段 `manager={agentId,raisedAt}` + 事件 `batch.manager.raised`；`batch_status` / `gate_status` 均可读。门禁：非 `running` 拒 `GATE_MANAGER_PHASE_INVALID`、终态拒 `GATE_MANAGER_TERMINAL`、`agentId` 必填 `GATE_MANAGER_AGENT_ID_REQUIRED`。
+- **longrun 豁免随派发（A3）**：豁免是「本次派发」的属性——结算终态自动清退；**重派未带 `exempt` 时旧豁免自动失效**（不再继承放大阈值与 stalled 豁免）。
+- **崩溃恢复清 stale lane 锁（A4）**：进程重启恢复把 in-flight lane 落 idle 时，同步清退该 lane 的锁文件（持有者进程已不存在 ⇒ 死锁），使重派不再被 `lane_claim` 冲突挡住。
+- **`gate_status` 批次级视图（B3）**：返回补 `manager` 与 `assembly` 两字段，使 C+ 装配声明与 Manager 事实可经单次只读查询核对。
+- **告警文本去重（B8）**：`GATE_ROLE_MISSING.missing` 拼接去重。
+- **预留事件标注（B5）**：`worktree.created/merged/merge.conflict/merge.resolved`、`gate.passed`、`gate.exit.missing`、`gate.target_blocked`、`gate.target.passed` 标注为「预留未接线」（lib 内无写端无读端），不得当作既有留痕能力引用。
+- **未接线声明披露补全（D4）**：`flows.*.consume_field` 补进「暂无消费点」清单（引擎恒按任务自身 `consume` 判定）。
+- **发布面脱敏（C3）**：`skills/design-team/SKILL.md` 去除本机绝对路径与内部产物路径引用。
+- **指引订正（C1/C2/C4/C6）**：装配声明的**唯一生效形态**写明为 `wave_plan({ assembly: { … } })` 顶层入参（plan 文档只是人可读载体）；persona 0h 豁免倍率改为「按类型取档（ai-render 8× / large-download 6× / dep-install·none 4×）」；纪律 0 条重复表述合并；难度路由口径明确为「多线并行或多依赖才升 C，单线程不建批」（B 档收窄为两类：独立上下文调研 / 已明确上下文可简单派发的单步任务）。
+- **痕迹清理**：非文档文件中移除内部决策溯源与版本叙事（批次 id、日期戳、「用户裁决」、「本批/本轮」、内部文档路径、`spec §x`/`GAP-0x` 编号）；`test/**` 中承载旧语义的注释与常量同步订正。
+
 ### 审计日志（默认开、可显式关闭、有轮转与体积上限、零远程上报）
 
 - 新增进程级审计日志 sink（`lib/auditlog/sink.js` + `lib/auditlog/config.js`），挂载点在 `lib/index.js` 的 `apply()` 内——**先于配置校验 warn、门禁逃生阀 warn 与资产同步**，使启动期审计信号不漏记；挂载失败不炸宿主。
