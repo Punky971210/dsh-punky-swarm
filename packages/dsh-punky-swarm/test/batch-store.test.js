@@ -22,15 +22,32 @@ import os from 'node:os';
 import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
+import { SPEC_OK, threeTierTasks, seedArtifacts, runLane } from './helpers/gate-fixture.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-bs-'));
 const store = createStore(root);
 const S = 'sess-a';
 
+// 【r2 同步 · B2/B3/A1/B1】旧 fixture 为「lane 无 layer 的双 lane 批」：新语义下无 `layer` 的 lane 不得
+//   整 lane 免检（结算被 exit 门拒 `GATE_LANE_LAYER_MISSING`）、批次须含 exec/audit 层方得 complete（B3）、
+//   plan 产物必须被下游 consume（A1）、exec/audit 派发前 consume 须已声明且在场（B1 + presence）。
+//   修法：**保留 2 lane 形态与 id**（避免无谓改动既有断言），改按「t1 = plan / t2 = audit」的合规三层形态，
+//   其中 t2 消费 t1 的产物（同时满足 A1 与 B5 的 audit 判据锚定）。
 const plan = buildWavePlan({
   batchId: 'b-test',
-  tasks: [{ id: 't1' }, { id: 't2', deps: ['t1'] }],
+  tasks: [
+    { id: 't1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
+    { id: 't2', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/t2.md'], cmd: 'review', deps: ['t1'] },
+  ],
 });
+// 声明产物须**在派发前**在场（entry/exit 门 presence 硬约束）——plan/spec.md 供 t1 契约门 + t2 判据来源
+const bTestArt = (rel, content) => {
+  const abs = path.join(root, 'sessions', S, 'artifacts', 'b-test', rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content);
+};
+bTestArt('plan/spec.md', SPEC_OK);
+bTestArt('audit/t2.md', 'ok');
 
 test('createBatch persists with all lanes pending (session-scoped)', () => {
   const b = store.createBatch(S, { batchId: 'b-test', wavePlan: plan });
@@ -64,11 +81,12 @@ test('batchSettled only when all lanes terminal', () => {
 });
 
 test('terminal batch rejects further writes', () => {
-  const p = buildWavePlan({ batchId: 'b-term', tasks: [{ id: 'a' }] });
+  // 【r2 同步 · B2/B3/A1/B1】无 layer 的单 lane 批既不能结算（exit 门拒 `GATE_LANE_LAYER_MISSING`）
+  //   也不能收口（`GATE_COMPLETE_NO_TIER`）⇒ 改合规三层批 + 声明产物在场 + 全 lane 结算。
+  const p = buildWavePlan({ batchId: 'b-term', tasks: threeTierTasks(['a']) });
   store.createBatch(S, { batchId: 'b-term', wavePlan: p, phase: 'running' });
-  store.setMember(S, 'b-term', 'a', 'running');
-  store.setMember(S, 'b-term', 'a', 'review');
-  store.setMember(S, 'b-term', 'a', 'merged');
+  seedArtifacts(root, S, 'b-term', ['a']);
+  for (const lane of ['p1', 'a', 'a1']) runLane(store, S, 'b-term', lane);
   store.setPhase(S, 'b-term', 'complete');
   assert.throws(() => store.setMember(S, 'b-term', 'a', 'running'));
   assert.throws(() => store.setPhase(S, 'b-term', 'paused'));
@@ -86,6 +104,19 @@ test('recoverBatches resets in-flight lanes to idle with system.recovered', () =
   assert.equal(b.lanes.a, 'idle');
   assert.equal(b.lanes.b, 'idle');
   assert.ok(b.events.some((e) => e.type === 'system.recovered'));
+});
+
+test('recoverBatches 清退 stale lane 锁（崩溃后重派不再被死锁挡住）', () => {
+  const p3 = buildWavePlan({ batchId: 'b-lock', tasks: [{ id: 'a' }] });
+  store.createBatch(S, { batchId: 'b-lock', wavePlan: p3, phase: 'running' });
+  store.setMember(S, 'b-lock', 'a', 'running');
+  const lock = path.join(store.sessionsDir, S, '.locks', 'b-lock.a.lock');
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  fs.writeFileSync(lock, JSON.stringify({ token: 'crashed-holder', ts: Date.now(), pid: 999999 }), 'utf8');
+  assert.ok(fs.existsSync(lock), '前置：锁文件已存在');
+  store.recoverBatches(); // 模拟进程重启：in-flight → idle
+  assert.equal(fs.existsSync(lock), false, '恢复后不得残留持有者进程已不存在的锁');
+  assert.equal(store.readBatch(S, 'b-lock').lanes.a, 'idle');
 });
 
 test('state file is valid JSON on disk (atomic write)', () => {
@@ -132,15 +163,15 @@ test('claimAsset rejects path escape and bad inputs', () => {
 });
 
 test('sessions are isolated: same batchId in different sessions coexist', () => {
-  const pA = buildWavePlan({ batchId: 'b-iso', tasks: [{ id: 'x' }] });
-  const pB = buildWavePlan({ batchId: 'b-iso', tasks: [{ id: 'x' }] });
+  // 【r2 同步 · B2/B3/A1/B1】无 layer 的单 lane 批已不可结算 ⇒ 改合规三层批（仅 sess-a 侧需落盘产物）
+  const pA = buildWavePlan({ batchId: 'b-iso', tasks: threeTierTasks(['x']) });
+  const pB = buildWavePlan({ batchId: 'b-iso', tasks: threeTierTasks(['x']) });
   const a = store.createBatch('sess-a', { batchId: 'b-iso', wavePlan: pA, phase: 'running' });
   const b = store.createBatch('sess-b', { batchId: 'b-iso', wavePlan: pB, phase: 'running' });
   assert.equal(a.sessionId, 'sess-a');
   assert.equal(b.sessionId, 'sess-b');
-  store.setMember('sess-a', 'b-iso', 'x', 'running');
-  store.setMember('sess-a', 'b-iso', 'x', 'review');
-  store.setMember('sess-a', 'b-iso', 'x', 'merged');
+  seedArtifacts(root, 'sess-a', 'b-iso', ['x']);
+  for (const lane of ['p1', 'x', 'a1']) runLane(store, 'sess-a', 'b-iso', lane);
   // sess-b 不受影响
   assert.equal(store.readBatch('sess-b', 'b-iso').lanes.x, 'pending');
   assert.deepEqual(store.listSessions().filter((s) => s === 'sess-a' || s === 'sess-b').sort(), ['sess-a', 'sess-b']);
@@ -166,26 +197,30 @@ test('invalid sessionId rejected', () => {
 // ---- B1 恢复审计：system.recovered.detail 详情 + 幂等 ----
 
 test('recoverBatches detail: lastActiveAt/produced 审计详情（running→idle + review→idle）', () => {
+  // 【r2 同步 · B1/B2/A1】旧 fixture 的 exec/audit lane 无 `consume`（零依赖拒派）且 plan 产物无人消费
+  //   ⇒ 补 plan 层消费者与各 lane 的 consume；plan 层只声明**在场**产物（「缺失产物不列入 produced」
+  //   这条判据由 exec 侧的 `exec/missing.md` 承载，`:218` 原有断言不变）。
   const p = buildWavePlan({
     batchId: 'b-rec-detail',
     tasks: [
-      { id: 'x', layer: 'exec', outputs: ['exec/x.md', 'exec/missing.md'] },
-      { id: 'y', layer: 'audit', produce: ['audit/y.md'] },
-      { id: 'z', layer: 'plan', produce: ['plan/z.md', 'plan/absent.md'] },
+      { id: 'z', layer: 'plan', produce: ['plan/z.md'] },
+      { id: 'x', layer: 'exec', consume: ['plan/z.md'], outputs: ['exec/x.md', 'exec/missing.md'] },
+      { id: 'y', layer: 'audit', consume: ['plan/z.md'], produce: ['audit/y.md'] },
     ],
   });
   store.createBatch(S, { batchId: 'b-rec-detail', wavePlan: p, phase: 'running' });
+  // 已产出产物：只写契约中一部分 → produced 只列已存在且非空者
+  //   （须在**派发前**落盘：entry 门 presence 硬约束要求 consume 声明项全部在场）
+  const aDir = path.join(root, 'sessions', S, 'artifacts', 'b-rec-detail');
+  for (const sub of ['exec', 'audit', 'plan']) fs.mkdirSync(path.join(aDir, sub), { recursive: true });
+  fs.writeFileSync(path.join(aDir, 'exec', 'x.md'), 'x-out');
+  fs.writeFileSync(path.join(aDir, 'audit', 'y.md'), 'y-out');
+  fs.writeFileSync(path.join(aDir, 'plan', 'z.md'), SPEC_OK); // audit 判据来源须含裸标题
   store.setMember(S, 'b-rec-detail', 'x', 'running');
   store.setMember(S, 'b-rec-detail', 'y', 'running');
   store.setMember(S, 'b-rec-detail', 'y', 'review');
   store.setMember(S, 'b-rec-detail', 'z', 'running');
   store.setMember(S, 'b-rec-detail', 'z', 'review');
-  // 已产出产物：只写契约中一部分 → produced 只列已存在且非空者
-  const aDir = path.join(root, 'sessions', S, 'artifacts', 'b-rec-detail');
-  for (const sub of ['exec', 'audit', 'plan']) fs.mkdirSync(path.join(aDir, sub), { recursive: true });
-  fs.writeFileSync(path.join(aDir, 'exec', 'x.md'), 'x-out');
-  fs.writeFileSync(path.join(aDir, 'audit', 'y.md'), 'y-out');
-  fs.writeFileSync(path.join(aDir, 'plan', 'z.md'), 'z-out');
 
   const recovered = store.recoverBatches();
   assert.ok(recovered.includes(S + '/b-rec-detail'));

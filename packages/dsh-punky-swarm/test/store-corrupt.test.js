@@ -29,6 +29,7 @@ import { createLaneHeartbeat } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { corruptFileOf } from '../lib/state/corrupt-registry.js';
 import * as schema from '../lib/schema.js';
+import { SPEC_OK, threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
 
 // 静默 logger（不刷测试输出；只关心行为不关心日志正文）
 const SILENT = { warn() {}, info() {}, error() {} };
@@ -175,11 +176,20 @@ test('INV-3a：二次 recoverBatches → system.recovered 不重复（幂等，�
 
 test('INV-3b：恢复后 running/review→idle；detail 含 lane/from/lastActiveAt/produced', () => {
   const { root, store, S } = setup();
+  // 【r2 同步 · B1/B2/A1】旧 fixture 无 plan 层且 l1/l2 无 `consume` ⇒ 派发被 `GATE_ENTRY_MISSING` 拒
+  //   （零依赖拒派不再依赖团队声明）⇒ 补 plan 层（产物被 exec/audit 消费）+ 两条 lane 的 consume。
   const plan = buildWavePlan({
     batchId: 'b-det',
-    tasks: [{ id: 'l1', layer: 'exec', outputs: ['exec/out.txt'] }, { id: 'l2', layer: 'audit', produce: ['audit/accept.md'] }],
+    tasks: [
+      { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
+      { id: 'l1', layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/out.txt'], cmd: 'run', deps: ['p1'] },
+      { id: 'l2', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/accept.md'], cmd: 'review', deps: ['l1'] },
+    ],
   });
   store.createBatch(S, { batchId: 'b-det', wavePlan: plan, phase: 'running' });
+  const specAbs = path.join(root, 'sessions', S, 'artifacts', 'b-det', 'plan', 'spec.md');
+  fs.mkdirSync(path.dirname(specAbs), { recursive: true });
+  fs.writeFileSync(specAbs, SPEC_OK); // 上游在场（entry 门 presence 硬约束 + audit 判据来源）
   store.setMember(S, 'b-det', 'l1', 'running');
   store.setMember(S, 'b-det', 'l2', 'running');
   store.setMember(S, 'b-det', 'l2', 'review');
@@ -209,7 +219,7 @@ test('INV-4a：idle→running 重派合法（machine 迁移）；重复重派 ru
 });
 
 test('INV-4b：终态 lane（failed/merged/skipped/conflict）→ running 非法迁移被拒（不自动重试纪律）', () => {
-  const { store, S } = setup();
+  const { root, store, S } = setup();
   // failed：running → failed（合法链）
   const bidF = 'b-f';
   const planF = buildWavePlan({ batchId: bidF, tasks: [{ id: 'a' }] });
@@ -218,9 +228,12 @@ test('INV-4b：终态 lane（failed/merged/skipped/conflict）→ running 非法
   store.setMember(S, bidF, 'a', 'failed');
   assert.throws(() => store.setMember(S, bidF, 'a', 'running'), /invalid member transition/, 'failed 终态不可重派');
   // merged：running → review → merged（合法链）
+  // 【r2 同步 · B2】旧 fixture 的 lane 无 layer ⇒ 无法结算到 merged（exit 门拒 `GATE_LANE_LAYER_MISSING`）
+  //   ⇒ 改用合规三层批 + 声明产物在场。
   const bidM = 'b-m';
-  const planM = buildWavePlan({ batchId: bidM, tasks: [{ id: 'a' }] });
+  const planM = buildWavePlan({ batchId: bidM, tasks: threeTierTasks(['a']) });
   store.createBatch(S, { batchId: bidM, wavePlan: planM, phase: 'running' });
+  seedArtifacts(root, S, bidM, ['a']);
   store.setMember(S, bidM, 'a', 'running');
   store.setMember(S, bidM, 'a', 'review');
   store.setMember(S, bidM, 'a', 'merged');
@@ -231,7 +244,7 @@ test('INV-4b：终态 lane（failed/merged/skipped/conflict）→ running 非法
   store.createBatch(S, { batchId: bidC, wavePlan: planC, phase: 'running' });
   store.setMember(S, bidC, 'a', 'running');
   store.setMember(S, bidC, 'a', 'review');
-  store.setMember(S, bidC, 'a', 'conflict');
+  store.setMember(S, bidC, 'a', 'conflict', '评审驳回：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   assert.throws(() => store.setMember(S, bidC, 'a', 'running'), /invalid member transition/, 'conflict 终态不可重派');
   // skipped：直接构造终态批次文件（pending→skipped 自动落路径既有）
   const bidS = 'b-s';

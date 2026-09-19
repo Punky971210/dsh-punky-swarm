@@ -39,10 +39,40 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-topicw-'));
 const S = 'sess-t';
 const B = 'b1';
 
+// 【r2 同步 · B2/B3/A1】旧 fixture 直接构造 raw wavePlan（lane **无 layer**、批次无 exec/audit）——
+//   与 r2「拒绝免检」冲突：① 无 `layer` 的 lane 不得整 lane 免检（B2 ⇒ `GATE_LANE_LAYER_MISSING`）；
+//   ② 零执行零验收不得 complete（B3 ⇒ `GATE_COMPLETE_NO_TIER`）；③ plan 产物必须被下游 consume（A1）。
+//   ⇒ 统一构造**合规三层形态**：laneIds 归 exec 层，附 plan 层（产物被消费）+ audit 层。
+const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
 function makeBatch(store, batchId, laneIds) {
-  const wavePlan = { team: 'generic', wavePlan: [{ wave: 1, tasks: laneIds.map((id) => ({ id, cmd: 'x' })) }] };
+  const wavePlan = {
+    team: 'generic',
+    wavePlan: [{
+      wave: 1,
+      tasks: [
+        { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
+        ...laneIds.map((id) => ({ id, layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/' + id + '.md'], cmd: 'x', deps: ['p1'] })),
+        { id: 'a1', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/r.md'], cmd: 'review', deps: laneIds },
+      ],
+    }],
+  };
   store.createBatch(S, { batchId, wavePlan, phase: 'running' });
   return batchId;
+}
+function writeArt(batchId, rel, content) {
+  const abs = path.join(root, 'sessions', S, 'artifacts', batchId, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content);
+}
+function seedArtifacts(batchId, laneIds) {
+  writeArt(batchId, 'plan/spec.md', SPEC_OK);                              // entry 门 presence 硬约束
+  for (const id of laneIds) writeArt(batchId, 'exec/' + id + '.md', 'out'); // exit 门：声明产物须在场
+  writeArt(batchId, 'audit/r.md', 'review');
+}
+function runLane(store, sessionId, batchId, lane) {
+  store.setMember(sessionId, batchId, lane, 'running');
+  store.setMember(sessionId, batchId, lane, 'review');
+  store.setMember(sessionId, batchId, lane, 'merged');
 }
 
 function mailboxRootOf(sessionId, batchId) {
@@ -56,10 +86,11 @@ test('T1 topic 默认关：readCapability 缺省 {enabled:false}；无 onStateCh
   // 未装配钩子的 store：迁移照常、无发布异常
   const store = createStore(root);
   const bid = makeBatch(store, 't1', ['x']);
+  seedArtifacts(bid, ['x']); // r2 同步：合规三层批的声明产物必须在场
   assert.doesNotThrow(() => {
-    store.setMember(S, bid, 'x', 'running');
-    store.setMember(S, bid, 'x', 'review');
-    store.setMember(S, bid, 'x', 'merged');
+    runLane(store, S, bid, 'p1');
+    runLane(store, S, bid, 'x');
+    runLane(store, S, bid, 'a1');
     store.setPhase(S, bid, 'complete');
   });
   const b = store.readBatch(S, bid);
@@ -143,8 +174,20 @@ test('T6 store 集成：onStateChange 接线 publishStateChange → setMember/se
   rt.start();
   const store = createStore(root, { onStateChange: (ev) => rt.publishStateChange(ev) });
   const bid = 't6';
-  const wavePlan = { team: 'generic', wavePlan: [{ wave: 1, tasks: [{ id: 'x', cmd: 'x' }] }] };
+  // r2 同步：合规三层形态（无 layer 的 lane 不再免检；exit 门要求声明产物在场）
+  const wavePlan = {
+    team: 'generic',
+    wavePlan: [{
+      wave: 1,
+      tasks: [
+        { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
+        { id: 'x', layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/x.md'], cmd: 'x', deps: ['p1'] },
+        { id: 'a1', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/r.md'], cmd: 'review', deps: ['x'] },
+      ],
+    }],
+  };
   store.createBatch(S, { batchId: bid, wavePlan }); // phase 缺省 planning
+  seedArtifacts(bid, ['x']);
   const settled = [];
   const phases = [];
   const us = subscribeTopic('swarm.member.settled.' + S + '.' + bid, (p) => settled.push(p));

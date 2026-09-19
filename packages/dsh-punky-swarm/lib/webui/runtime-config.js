@@ -37,11 +37,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     复用 writeGovernance 校验/合并语义）；仅 governance（旧客户端/既有测试）→ writeGovernance 原路径。
 //     阈值写通道已就绪：longrun.maxDurationMs/
 //       noProgressWindowMs 值域允许正整数 ms≥1，可经面板表单（UI 分钟换算 ms）与手工 runtime.json 写入。
-// 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay（导出面）+ preset-loader 的
+// 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay + stripBom（均为既有导出面，
+//   BOM 剥除复用同一实现不新增副本）+ preset-loader 的
 //   PRESET_IDS（注册 id 枚举唯一权威，不接受任意路径引用）。
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { validateOverlay } from '../hot/config-watch.js';
+import { validateOverlay, stripBom } from '../hot/config-watch.js';
 import { PRESET_IDS } from '../governance/preset-loader.js';
 
 // 受控表单 escalation.primitives 合法值域 = 引擎 resolve 合法域（governance/config.js resolveEscalationConfig
@@ -55,14 +56,19 @@ const TOP_KEYS = new Set(['governance']);
 const GOV_KEYS = new Set(['hook']);
 const HOOK_FORM_KEYS = new Set(['enabled', 'preset', 'escalation', 'flags']);
 // watch 写通道受控键：capabilities 段
-//   白名单仅 watch；watch 仅 enabled/longrun；longrun 仅 enabled + 两阈值（maxDurationMs/noProgressWindowMs
-//   ——值域允许正整数 ms≥1，可经面板表单分钟输入换算 ms 提交）。watch 其它键
+//   白名单仅 watch；watch 仅 enabled/longrun；longrun 仅 enabled + 四阈值（maxDurationMs/noProgressWindowMs
+//   ——值域允许正整数 ms≥1）+ 两档新开关（staleBatchMs/unconsumedTimeoutMs ——值域允许**非负整数**，
+//   显式 0 = 关闭该档，逃生阀语义；故不可与上面两键共用「≥1」判据）。watch 其它键
 //   （scanIntervalMinutes/intervalsMinutes/maxMissed/probeTemplate）不经写通道（扫描/探针模板等走手工
-//   runtime.json 或静态 config——热更生效面 5 键 {enabled, longrun.enabled, scanIntervalMinutes,
-//   longrun.maxDurationMs, longrun.noProgressWindowMs}，装配侧 remountWatchEngine 比对）。
+//   runtime.json 或静态 config——热更生效面 7 键 {enabled, longrun.enabled, scanIntervalMinutes,
+//   longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs, longrun.unconsumedTimeoutMs}，
+//   装配侧 remountWatchEngine 比对）。
 const WATCH_CAPS_KEYS = new Set(['watch']);
 const WATCH_KEYS = new Set(['enabled', 'longrun']);
-const WATCH_LONGRUN_KEYS = new Set(['enabled', 'maxDurationMs', 'noProgressWindowMs']);
+const WATCH_LONGRUN_KEYS = new Set(['enabled', 'maxDurationMs', 'noProgressWindowMs', 'staleBatchMs', 'unconsumedTimeoutMs']);
+// longrun 值域两档：① 正整数 ms≥1（0 = 非法回退默认）；② 非负整数 ms≥0（0 = 显式关闭该档，合法）
+const WATCH_LONGRUN_POS_KEYS = ['maxDurationMs', 'noProgressWindowMs'];
+const WATCH_LONGRUN_ZERO_OFF_KEYS = ['staleBatchMs', 'unconsumedTimeoutMs'];
 // windowSeconds（秒，新语义提交字段）= UI 输入单位；后端 ×1000 归一
 //   windowMs（毫秒）落盘——runtime.json 存储契约（windowMs ms）不变。windowMs（ms）字段保留旧语义
 //   向后兼容（既有 api-config/webui-runtime-config 测试与调用方不破）。
@@ -123,9 +129,9 @@ export function validateGovernancePayload(payload, curHook) {
     const badPreset = (field, message) => push(field, 'invalid-value', message);
     const p = hook.preset;
     if (typeof p === 'string') {
-      if (p.length === 0) badPreset('governance.hook.preset', 'preset must not be an empty string（省略该键 = 出厂空表）');
-      else if (!PRESET_IDS.includes(p)) push('governance.hook.preset', 'unknown-preset',
-        `unknown preset id '${p}'（注册 id 枚举：${PRESET_IDS.join(' / ')}）`);
+      // 单选遗产清除（2026-09-14）：单值字符串形态不再接受——护栏配置一律多选 / 数组
+      badPreset('governance.hook.preset',
+        `preset must be an array of registered ids（单值字符串形态已废除，请改 preset: ["${p}"]；多选可叠加多项）`);
     } else if (Array.isArray(p)) {
       if (p.length === 0) badPreset('governance.hook.preset', 'preset array must not be empty（空引用无意义；省略该键 = 出厂空表）');
       p.forEach((el, i) => {
@@ -274,18 +280,28 @@ export function validateWatchPayload(payload, curWatch) {
         } else {
           for (const k of Object.keys(lr)) {
             if (!WATCH_LONGRUN_KEYS.has(k)) push('capabilities.watch.longrun.' + k, 'field-not-allowed',
-              `longrun key '${k}' not allowed（仅 enabled / maxDurationMs / noProgressWindowMs）`);
+              `longrun key '${k}' not allowed（仅 enabled / maxDurationMs / noProgressWindowMs / staleBatchMs / unconsumedTimeoutMs）`);
           }
           if ('enabled' in lr && typeof lr.enabled !== 'boolean') {
             push('capabilities.watch.longrun.enabled', 'invalid-value', 'longrun.enabled must be boolean');
           }
           // 阈值写通道：正整数 ms ≥1（写通道值域允许、
-          //   可经表单——UI 分钟输入换算 ms 提交；面板回显与热更经 remount 生效面 5 键）
-          for (const k of ['maxDurationMs', 'noProgressWindowMs']) {
+          //   可经表单——UI 分钟输入换算 ms 提交；面板回显与热更经 remount 生效面 7 键）
+          for (const k of WATCH_LONGRUN_POS_KEYS) {
             if (k in lr) {
               const v = lr[k];
               if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) {
                 push('capabilities.watch.longrun.' + k, 'invalid-value', k + ' must be a positive integer >= 1 (ms)');
+              }
+            }
+          }
+          // 两档开关：非负整数 ms ≥0——**显式 0 合法且语义为关闭该档**（关闭该档的逃生阀）；
+          //   判据必须放行 0（若与上面两键共用「≥1」会把 0 判非法 → 逃生阀写不进）
+          for (const k of WATCH_LONGRUN_ZERO_OFF_KEYS) {
+            if (k in lr) {
+              const v = lr[k];
+              if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
+                push('capabilities.watch.longrun.' + k, 'invalid-value', k + ' must be an integer >= 0 (ms; 0 disables this gate)');
               }
             }
           }
@@ -328,7 +344,11 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   function readOverlay() {
     if (!existsSync(runtimeFile)) return {};
     const raw = readFileSync(runtimeFile, 'utf8');
-    const parsed = JSON.parse(raw); // 坏 JSON → SyntaxError 上抛
+    // BOM 容忍（2026-09-17 panel-hotfix）：外部工具（PowerShell `Set-Content -Encoding UTF8`）写盘会带
+    //   U+FEFF，而 readFileSync 不剥 BOM → JSON.parse 直接抛 SyntaxError；本读端被读/写两通道共用 ⇒ 面板读存
+    //   双死（活体 500）。复用 hot/config-watch.js 既有 stripBom（同读端单一实现，禁第三份副本）；
+    //   仅放宽读端对 BOM 的容忍，不放宽任何校验。
+    const parsed = JSON.parse(stripBom(raw)); // 坏 JSON → SyntaxError 上抛
     if (!isPlainObject(parsed)) throw new Error('runtime.json must be a JSON object: ' + runtimeFile);
     return parsed;
   }
@@ -433,10 +453,15 @@ export function createRuntimeConfigService({ root, logger } = {}) {
       if ('longrun' in watch) {
         const curLr = isPlainObject(curWatch.longrun) ? curWatch.longrun : {};
         const sub = {};
-        for (const k of ['enabled', 'maxDurationMs', 'noProgressWindowMs']) {
-          if (k in watch.longrun) sub[k] = watch.longrun[k]; // longrun 整段合并仅覆盖显式提交子键（省略不动）
+        for (const k of WATCH_LONGRUN_KEYS) {
+          if (k === 'enabled') continue; // enabled 单独处理（boolean，上面已有赋值分支）
+          // 仅覆盖**显式提交**的子键（省略/undefined = 不动，保留现值）——不可写成 `sub[k] = watch.longrun[k]`，
+          //   否则未提交的键会以 undefined 形式落盘（JSON.stringify 掉键 → 未提交键被删，违反 merge-only 语义）
+          if (watch.longrun[k] !== undefined) sub[k] = watch.longrun[k];
         }
         nextWatch.longrun = { ...curLr, ...sub };
+        // enabled 单独处理：显式提交才覆盖（boolean；省略 = 保留现值）
+        if ('enabled' in watch.longrun) nextWatch.longrun.enabled = watch.longrun.enabled;
       }
       const nextCap = { ...curCap, watch: nextWatch };
       nextOverlay.capabilities = nextCap;

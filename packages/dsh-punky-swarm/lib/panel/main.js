@@ -70,12 +70,69 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       get borderColor() { return T.border; },
       borderRadius: 10
     };
+    // 引力条（选中批次作用域）：块由 focusBlocksOf 产出（0 值已收起）；点选 → 设置左栏筛选
+    function focusFilterOf(key) {
+      if (key === 'gate' || key === 'decision') return 'issue';
+      if (key === 'running') return 'running';
+      return 'all';
+    }
+
+    function FocusStrip({ blocks, onPick }) {
+      if (!blocks || !blocks.length) return null;
+      const tone = (k) => (k === 'decision' ? pal().escFg : k === 'stuck' || k === 'gate' ? T.warn : k === 'running' ? T.info : T.text2);
+      return React.createElement('div', {
+        role: 'status',
+        'aria-live': 'polite',
+        style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }
+      },
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontWeight: 600 } }, tt('focus.title')),
+        blocks.map((b) => React.createElement(FocusBlock, {
+          key: b.key, label: tt('focus.' + b.key), n: b.n, tone: tone(b.key),
+          onClick: () => onPick(b.key)
+        })),
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, tt('focus.pick'))
+      );
+    }
+
+    // 主行动卡（整行，尖端诱导：关键数字 20px/700）；对象 = 列表范围最高优先批次（选中则以选中项为准）
+    function ActionCard({ card, pending, onGo }) {
+      if (!card) return null;
+      const tone = card.order === 0 ? T.error : card.order === 1 ? T.info : card.order === 2 ? T.warn : T.success;
+      const args = card.reasonArgs || {};
+      const why = fmtCount(tt(card.reasonKey), args.n == null ? 0 : args.n)
+        + (args.dangling ? ' · ' + fmtCount(tt('dangling.badge'), args.dangling) : '');
+      return React.createElement('div', {
+        className: 'psw-card',
+        style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderLeft: '3px solid ' + tone })
+      },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' } },
+          React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontWeight: 600 } }, tt('action.title')),
+          React.createElement('span', { style: { fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, card.batchId),
+          React.createElement('span', { style: { flex: 1 } }),
+          React.createElement('span', { style: { fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: tone, fontVariantNumeric: 'tabular-nums' } }, pending),
+          React.createElement('button', {
+            type: 'button', className: 'psw-btn', onClick: () => onGo(card),
+            style: { fontSize: 10.5, padding: '2px 10px', borderRadius: 999, cursor: 'pointer', border: '1px solid ' + T.accent, background: 'transparent', color: T.accent, fontFamily: 'inherit', fontWeight: 600 }
+          }, tt('action.goto'))
+        ),
+        React.createElement('div', { style: { fontSize: 11, color: T.text2, lineHeight: 1.45 } },
+          React.createElement('span', { style: { color: T.text3 } }, tt('action.why') + '：'), why),
+        React.createElement('div', { style: { fontSize: 11, color: T.text3, lineHeight: 1.45 } },
+          tt('action.next') + '：' + tt('focus.pick'))
+      );
+    }
+
     function ClusterWorkbench({ sessionId }) {
       const [batches, setBatches] = useState(null);
       const [sel, setSel] = useState(null);
       const [detail, setDetail] = useState(null);
       const [updated, setUpdated] = useState(null);
       const [mode, setMode] = useState('sse'); // 'sse' | 'poll'（SSE 降级回轮询状态）
+      const [scope, setScope] = useState('own'); // 'own' 本会话 | 'all' 全部会话（跨会话聚合显式化）
+      const [listFilter, setListFilter] = useState('all');
+      const [loadErr, setLoadErr] = useState(null);
+      const [staleAt, setStaleAt] = useState(null);
+      const [copied, setCopied] = useState(false);
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
@@ -117,13 +174,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         const seen = new Map(); // batchId -> 已见 eventCount（服务端摘要去重，旧于当前忽略）
         const tick = async () => {
           try {
-            const agg = await aggregateBatches(sid);
+            const agg = await aggregateBatches(scope === 'all' ? '' : sid);
             if (!alive) return;
-            setBatches(agg); setUpdated(new Date());
+            setBatches(agg); setUpdated(new Date()); setLoadErr(null);
             for (const b of agg) {
               if (typeof b.eventCount === 'number') seen.set(b.batchId, Math.max(seen.get(b.batchId) || 0, b.eventCount));
             }
-          } catch {}
+          } catch (e) {
+            // 拉取失败**不清屏**：保留上次成功数据 + 标注「数据可能过期」（禁静默降级）
+            if (alive) { setLoadErr(String((e && e.message) || e)); setStaleAt(new Date()); }
+          }
         };
         const startPoll = () => { if (degraded || pollIv) return; degraded = true; setMode('poll'); pollIv = setInterval(tick, 3000); };
         const stopPoll = () => { degraded = false; if (pollIv) { clearInterval(pollIv); pollIv = null; } setMode('sse'); };
@@ -154,7 +214,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           if (!degraded && es && lastBeat && Date.now() - lastBeat > 15000) startPoll(); // 15s 无心跳 → 降级轮询
         }, 5000);
         return () => { alive = false; if (es) { try { es.close(); } catch {} } if (pollIv) clearInterval(pollIv); clearInterval(stall); };
-      }, [sid]);
+      }, [sid, scope]);
+
+      // 深链读端：#cluster=<session>:<batchId>&view=... ⇒ 选中该批次（刷新后保持；仅读，不写引擎）
+      useEffect(() => {
+        try {
+          const m = /(?:^|[#&])cluster=([^&]+)/.exec(String((typeof location !== 'undefined' && location.hash) || ''));
+          if (!m || !m[1]) return;
+          const raw = decodeURIComponent(m[1]);
+          const i = raw.lastIndexOf(':');
+          if (i > 0) setSel({ session: raw.slice(0, i), batchId: raw.slice(i + 1) });
+        } catch {}
+      }, []);
+
       // SSE 详情流：信号 → 回拉 /batch + 双 /mailbox（复用既有逻辑）；降级回轮询语义同列表流
       useEffect(() => {
         if (!sel) { setDetail(null); return; }
@@ -170,8 +242,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             let mail = { inbox: [], broadcast: [] };
             try { mail.inbox = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=inbox', sel.session)).items; } catch {}
             try { mail.broadcast = (await api('/mailbox?batchId=' + encodeURIComponent(sel.batchId) + '&box=broadcast', sel.session)).items; } catch {}
-            if (alive) { setDetail(Object.assign({}, d, { mail })); lastCount = d.eventCount; }
-          } catch {}
+            if (alive) { setDetail(Object.assign({}, d, { mail })); lastCount = d.eventCount; setLoadErr(null); }
+          } catch (e) {
+            if (alive) { setLoadErr(String((e && e.message) || e)); setStaleAt(new Date()); }
+          }
         };
         const startPoll = () => { if (degraded || pollIv) return; degraded = true; setMode('poll'); pollIv = setInterval(tick, 3000); };
         const stopPoll = () => { degraded = false; if (pollIv) { clearInterval(pollIv); pollIv = null; } setMode('sse'); };
@@ -216,6 +290,42 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const updatedText = updated
         ? updated.toTimeString().slice(0, 8)
         : '--:--:--';
+      // 选中批次作用域：引力条 / 主行动卡 / 详情共用同一份数据（无选中 ⇒ 引力条不渲染，首屏焦点交主行动卡）
+      const selDetail = detail && sel && detail.batchId === sel.batchId ? detail : null;
+      const selMail = selDetail && selDetail.mail ? selDetail.mail : { inbox: [], broadcast: [] };
+      const selEvs = selDetail ? (selDetail.recentEvents || []) : [];
+      const focus = selDetail ? focusBlocksOf(selDetail, selMail, selEvs) : [];
+      const card = actionCardOf(list, sel, selDetail, selMail, selEvs);
+      const cardScope = card && selDetail && selDetail.batchId === card.batchId ? selDetail : (card ? list.filter((b) => b.batchId === card.batchId)[0] : null);
+      const cardPending = cardScope ? Object.values(cardScope.lanes || {}).filter((s) => TERMINAL.indexOf(s) < 0).length : 0;
+      const selectBatch = (b) => {
+        const next = b && b.batchId ? { session: b.session || sid, batchId: b.batchId } : null;
+        setSel(next);
+        try {
+          if (next && typeof location !== 'undefined') {
+            location.hash = 'cluster=' + encodeURIComponent(next.session + ':' + next.batchId) + '&view=lanes';
+          }
+        } catch {}
+      };
+      const copyLink = () => {
+        try {
+          if (typeof location !== 'undefined' && navigator && navigator.clipboard) navigator.clipboard.writeText(location.href);
+          setCopied(true);
+        } catch {}
+      };
+      const rangeBtn = (key) => React.createElement('button', {
+        key: key,
+        type: 'button',
+        className: 'psw-btn',
+        'aria-pressed': scope === key,
+        onClick: () => setScope(key),
+        style: {
+          fontSize: 10.5, padding: '1px 8px', borderRadius: 999, cursor: 'pointer',
+          border: '1px solid ' + (scope === key ? T.accent : T.border),
+          background: scope === key ? T.selBg : 'transparent',
+          color: scope === key ? T.text : T.text3, fontFamily: 'inherit'
+        }
+      }, tt(key === 'own' ? 'view.range.own' : 'view.range.all'));
 
       return React.createElement('div', {
         'aria-busy': !batches,
@@ -224,13 +334,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           padding: '14px 16px', color: T.text, fontFamily: T.font
         }
       },
-        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 28 } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 28, flexWrap: 'wrap' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             React.createElement('span', { style: { fontSize: 15, fontWeight: 700, letterSpacing: 0.2 } }, tt('view.cluster')),
             React.createElement('span', { className: 'psw-pulse', style: { width: 7, height: 7, borderRadius: 999, background: liveColor, boxShadow: '0 0 0 3px ' + halo } }),
-            React.createElement('span', { style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.8, color: liveColor } }, tt('live'))
+            React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, letterSpacing: 0.8, color: liveColor } }, tt('live'))
           ),
+          React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } }, rangeBtn('own'), rangeBtn('all')),
           React.createElement('span', { style: { flex: 1 } }),
+          React.createElement('button', {
+            type: 'button', className: 'psw-btn', onClick: copyLink,
+            style: { fontSize: 10.5, padding: '1px 8px', borderRadius: 999, cursor: 'pointer', border: '1px solid ' + T.border, background: 'transparent', color: T.text3, fontFamily: 'inherit' }
+          }, copied ? tt('view.copied') : tt('view.copy')),
           React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono } }, tt(mode === 'poll' ? 'stream.fallback' : 'stream.live')),
           React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, '· ' + tt('updated') + ' ' + updatedText)
         ),
@@ -240,8 +355,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           React.createElement(Stat, { label: tt('stat.done'), value: doneCnt, color: T.success }),
           React.createElement(Stat, { label: tt('stat.issues'), value: issues, color: issues ? T.error : T.text3 })
         ),
+        loadErr
+          ? React.createElement('div', {
+              role: 'status', 'aria-live': 'polite',
+              style: Object.assign({}, cardBase, { padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, borderColor: T.error, flexWrap: 'wrap' })
+            },
+              React.createElement('span', { style: { fontSize: 11, color: T.error, fontWeight: 600 } }, tt('load.error') + ' · ' + loadErr),
+              React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } },
+                (staleAt ? updatedText : '--:--:--') + ' · ' + tt('stale.data')),
+              React.createElement('button', {
+                type: 'button', className: 'psw-btn',
+                onClick: () => { setLoadErr(null); setUpdated(null); },
+                style: { fontSize: 10.5, padding: '1px 8px', borderRadius: 999, cursor: 'pointer', border: '1px solid ' + T.border, background: 'transparent', color: T.text2, fontFamily: 'inherit' }
+              }, tt('load.retry'))
+            )
+          : null,
+        React.createElement(FocusStrip, { blocks: focus, onPick: (key) => setListFilter(focusFilterOf(key)) }),
+        React.createElement(ActionCard, { card: card, pending: cardPending, onGo: (c) => selectBatch({ batchId: c.batchId, session: c.session || sid }) }),
         React.createElement('div', { className: 'psw-panes' },
-          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: setSel, loading: true }),
+          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: selectBatch, loading: true, filter: listFilter, onFilter: setListFilter }),
           React.createElement(BatchDetail, { d: detail })
         )
       );

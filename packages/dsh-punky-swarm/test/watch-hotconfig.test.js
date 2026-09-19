@@ -141,8 +141,8 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     // 基线：出厂快照 5 键全形 {enabled:true, longrun:{enabled:true, maxDurationMs:1200000, noProgressWindowMs:300000},
     //   scanIntervalMinutes:1}；boot 对账幂等零 remount
     assert.deepEqual(getConfig(routes).applied.watch,
-      { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
-      'applied.watch 出厂快照含 5 键（阈值随 e2 生效面携带默认 1200000/300000）');
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+      'applied.watch 出厂快照含 7 键（阈值随 e2 生效面携带默认 1200000/300000 + D-4/D-2 两档 86400000/1800000）');
     assert.equal(remountLines(ctx.calls).length, 0, '快照与静态一致 → boot 对账 no-op（无 remount 日志）');
     // 热写 longrun.enabled:false → 生效面变化 → dispose+重建（re-mounted，logTag 缺省=热更路径）
     writeRuntime(root, { capabilities: { watch: { longrun: { enabled: false } } } });
@@ -152,7 +152,7 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=false\)/, '重建日志含生效面（longrun=false）');
     assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag（区分启动对账）');
     assert.deepEqual(getConfig(routes).applied.watch,
-      { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
+      { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       'applied.watch 生效快照已随 remount 更新（watchInstalledCfg；enabled 翻转阈值保留默认）');
     assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
@@ -177,7 +177,7 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
     assert.equal(lines.length, 1);
     assert.match(lines[0], /unmounted \(watch disabled\)/, 'enabled=false → unmounted 方向（实际: ' + lines[0] + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
-      { enabled: false, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
+      { enabled: false, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       '关闭态 applied.watch.enabled=false（watchInstalledCfg 仍记快照全形含阈值，供面板回显）');
     // ② enabled:true → 以合并快照重建（re-mounted）
     writeRuntime(root, { capabilities: { watch: { enabled: true } } });
@@ -232,8 +232,8 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=true\)/, '重建日志 re-mounted（阈值变化不翻 enabled/longrun/scan）');
     assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag');
     assert.deepEqual(getConfig(routes).applied.watch,
-      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000 }, scanIntervalMinutes: 1 },
-      'applied.watch 生效快照随 remount 携带新阈值（watchInstalledCfg 5 键全形）');
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+      'applied.watch 生效快照随 remount 携带新阈值（watchInstalledCfg 7 键全形）');
     assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ② 同值重写 → nextInstalled 与 watchInstalledCfg JSON 相等 → 幂等 no-op（零新增 remount，快照不变）
@@ -241,10 +241,48 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     await sleep(HOT_SLEEP);
     assert.equal(remountLines(ctx.calls).length, 1, '同值重写幂等 no-op：remount 仍恰 1 次（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
-      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000 }, scanIntervalMinutes: 1 },
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       '同值重写后生效快照不变');
     assert.equal(ctx.calls.warn.length, 0, '幂等路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '幂等路径零 error');
+  } finally {
+    disposer();
+  }
+});
+
+// ── H7（本批新增）D-4/D-2 两档开关纳入生效面（第 6/7 键）：热写 staleBatchMs/unconsumedTimeoutMs 变化 →
+//   remountWatchEngine 重建（remount 恰 1 次 + applied.watch 快照携带新值）；**显式 0 = 关闭**同样是一次
+//   有效生效变化（不是「非法回退默认」——否则逃生阀热更后静默无效）。──
+test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变化 → remount（快照 7 键随动）；显式 0 同样生效（逃生阀）', async () => {
+  const root = freshRoot();
+  writeRuntime(root, {});
+  const { ctx, routes } = assemblyCtx();
+  const disposer = apply(ctx, bareConfig(root));
+  try {
+    await sleep(HOT_SETTLE);
+    assert.equal(remountLines(ctx.calls).length, 0, '基线 boot 对账 no-op');
+    // ① 热写 staleBatchMs=0（显式关闭僵尸批过滤）→ 生效面第 6 键变化 → remount 恰 1 次
+    writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0 } } } });
+    await sleep(HOT_SLEEP);
+    let lines = remountLines(ctx.calls);
+    assert.equal(lines.length, 1, 'staleBatchMs 变化触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 0, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+      '快照携带 staleBatchMs=0（显式 0 被当合法值透传，而非回退默认 24h）');
+    // ② 热写 unconsumedTimeoutMs=60000（D-2 阈值收紧）→ 第 7 键变化 → 再 remount 1 次
+    writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
+    await sleep(HOT_SLEEP);
+    lines = remountLines(ctx.calls);
+    assert.equal(lines.length, 2, 'unconsumedTimeoutMs 变化再次 remount');
+    assert.deepEqual(getConfig(routes).applied.watch,
+      { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 0, unconsumedTimeoutMs: 60000 }, scanIntervalMinutes: 1 },
+      '两档新键均已纳入生效面（7 键全形随动）');
+    assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
+    assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
+    // ③ 同值重写幂等：零新增 remount
+    writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
+    await sleep(HOT_SLEEP);
+    assert.equal(remountLines(ctx.calls).length, 2, '同值重写幂等 no-op');
   } finally {
     disposer();
   }

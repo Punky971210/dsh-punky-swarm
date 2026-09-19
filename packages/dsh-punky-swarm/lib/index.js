@@ -21,11 +21,18 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createStore } from './state/store.js';
+import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
+import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
 import { createTools } from './tools/register.js';
 import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 派发写侧登记点（见 bridge/dispatch-register.js）
+// P3a 自动结算主路（规格 §2/§3/§4）：宿主 `subagent/end` 生命周期事件 → 引擎自动判定 ⇒ 全绿自动 merged /
+//   任一判据不满足 ⇒ 停轮（缺省 onFail=pause）。**必须**以 `{ global: true }` 注册（契约卡
+//   `plan/host-completion-probe-spec.md` #8/#9：被 scope 化的插件 ctx 下默认监听漏收）。
+import { installAutoSettle } from './engine/auto-settle.js';
+import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
@@ -72,19 +79,23 @@ import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './s
 import { mountAuditLog } from './auditlog/sink.js';
 
 export const name = 'dsh-punky-swarm';
-export const inject = ['tools', 'webServer'];
+// `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.startContinuable`）**必须**
+//   声明该依赖——cordis 对未声明的服务在取属性时直接抛 `cannot get property "subagents" without inject`，
+//   而不是返回 undefined（该缺陷由本批次首派抓出）。宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，
+//   故声明安全；取用侧仍留 try/catch 兜底（见 lib/engine/dispatch.js `subagentRuntimeOf`）。
+export const inject = ['tools', 'webServer', 'subagents'];
 
 // 恢复语义：每个进程只执行一次（无论插件按进程级还是会话级挂载）
 let recoveredThisProcess = false;
 
 export const apply = (ctx, config = {}) => {
-  const rawRoot = config.root ?? '~/.dsh/jiufeng';
+  const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
   mkdirSync(root, { recursive: true });
   // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
 
-  // 审计日志挂载（唯一挂载点，代码内挂载：cordis loader 行 schema 无 logger 装配位——摸底契约卡 §0-8）——
+  // 审计日志挂载（唯一挂载点，代码内挂载：cordis loader 行 schema 无 logger 装配位）——
   // 必须在下方 validateCapabilities warn / GATE_ENABLED warn / syncAssets 三条 warn 之前，
   // 否则「配置非法 / 门禁逃生阀 / 资产清单不可用」这些启动期审计信号永久缺席；挂载失败不炸宿主。
   // 关闭态（PUNKY_AUDITLOG=off 或 capabilities.auditlog.enabled:false）→ 零目录零 exporter。
@@ -106,6 +117,12 @@ export const apply = (ctx, config = {}) => {
   // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
   const topicSink = { emit: null };
   const store = createStore(root, {
+    // 棘轮规则表注入（A-① 接线）：`config.ratchet` 经装配点透传到状态机读点（`state/store.js` 的
+    //   `rules ?? loadRules()`）——**必须传整份 config**（`loadRules` 内部自取 `config.ratchet`，
+    //   machine-rules.js:78；传子对象会静默退化为默认表 = 写了不生效）。
+    //   fail-closed：非法棘轮配置（越界键/放宽迁移且未开 allowRelax）在此 **throw** ⇒ 启动即失败，
+    //   不静默回落默认规则（棘轮不可绕过，machine-rules.ts:20-22）；回滚 = 删本行。
+    rules: loadRules(config),
     // topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
     // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
     onStateChange: (ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } },
@@ -129,7 +146,7 @@ export const apply = (ctx, config = {}) => {
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] legacy migration failed: ' + String(e));
     }
-    // 资产同步：预设（~/.dsh/.agent-presets/jiufeng）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
+    // 资产同步：预设（~/.dsh/.agent-presets/punky-preset）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
     try {
       const { results, manifest } = syncAssets()
       for (const r of results) {
@@ -231,14 +248,17 @@ export const apply = (ctx, config = {}) => {
   const heartbeatRef = { current: null };
   let heartbeat = null;
   if (watchCfg.enabled) {
-    heartbeat = createLaneHeartbeat({ store, mailbox, config, root });
+    heartbeat = createLaneHeartbeat({ store, mailbox, config, root, liveConfig: config, logger: ctx.logger });
     heartbeatRef.current = heartbeat;
   }
   // watch 生效面安装快照（热更比对基准 + GET /config applied.watch 源；镜像 governanceInstalledCfg 模式）。
-  // 生效变化 = 5 键 { enabled, longrun.enabled, scanIntervalMinutes, longrun.maxDurationMs,
-  //   longrun.noProgressWindowMs } 任一（两长跑阈值纳入比较集与安装快照——
-  //   applied.watch 自动携带阈值供面板回显与确认轮询；手工 runtime.json 阈值热更/boot 对账随之生效，
-  //   修复「阈值不在生效面 → 只等下次其它生效键 remount 才值传播」现状洞）。
+  // 生效变化 = 7 键 { enabled, longrun.enabled, scanIntervalMinutes, longrun.maxDurationMs,
+  //   longrun.noProgressWindowMs, longrun.staleBatchMs, longrun.unconsumedTimeoutMs } 任一（长跑阈值与
+  //   两档新开关纳入比较集与安装快照——applied.watch 自动携带供面板回显与确认轮询；
+  //   手工 runtime.json 热更/boot 对账随之生效）。
+  //   staleBatchMs（默认 24h，显式 0 = 关闭僵尸批过滤）与 unconsumedTimeoutMs
+  //   （默认 30min，显式 0 = 关闭消费超时档）均为「可配可关」的逃生阀，故 resolveLongrunConfig
+  //   对二者走显式 `=== 0` 分支放行 0（不可沿用 posMs 的 ≥1 判据，否则 0 被当非法回退默认）。
   //   longrun.enabled 翻转热更即时；引擎重建语义见 remountWatchEngine——内存状态表清空、
   //   从事件流/产物 mtime 基线重算（幂等：无变化零操作）。
   let watchInstalledCfg = {
@@ -247,12 +267,24 @@ export const apply = (ctx, config = {}) => {
       enabled: longrunCfg.enabled,
       maxDurationMs: longrunCfg.maxDurationMs,
       noProgressWindowMs: longrunCfg.noProgressWindowMs,
+      staleBatchMs: longrunCfg.staleBatchMs,
+      unconsumedTimeoutMs: longrunCfg.unconsumedTimeoutMs,
     },
     scanIntervalMinutes: watchCfg.scanIntervalMinutes,
   };
   // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
   //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
-  const tools = createTools(ctx, { store, root, config, heartbeat, getHeartbeat: () => heartbeatRef.current });
+  // readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
+  //   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
+  //   hotConfig 在本函数体下方（let 声明晚于此处）⇒ 读取器内部用 try/catch 兜住 TDZ/异常，回落静态 config。
+  const readConfig = () => {
+    try {
+      return hotConfig ? hotConfig.readSnapshot() : config;
+    } catch {
+      return config;
+    }
+  };
+  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current });
   tools.register();
 
   // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
@@ -521,22 +553,87 @@ export const apply = (ctx, config = {}) => {
   if (dispatchReg.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（零宿主改造）');
   }
-  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 三 JSON → 表注入 resolve
-  //   presetTable（governance.hook.preset 引用展开源）。errors（文件缺失/损坏/形状坏）→ 逐条 warn 留痕，
-  //   不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
+  // 自动结算**主路**（P3a 规格 §2）：装配期一次注册宿主 `subagent/end`。
+  //   `{ global: true }` **硬性要求**（契约卡 #6/#8/#9）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
+  //   resolver 为 `null`（受 scope 过滤）⇒ 探针实测**被 scope 化的插件 ctx（preset standing mount）默认漏收**，
+  //   `global` 短路一切 scope 过滤（`cordis/lib/index.js:263`）。不得以「根 ctx 收得到」为由省略（#7 仅因未 tag）。
+  //   映射与幂等：`info.id`（durable 子会话 id，**非** runId）→ 本 closure 的 `dispatchIndex`
+  //   → `autoSettleLane` 单点判定（与兼底路 `swarm_report(settle-request)` **同一函数**）；
+  //   未命中（进程级广播夹带非本套件子会话）⇒ 静默丢弃（零事件零状态变化）。
+  //   回调内**不**解析子句柄（契约卡 #12：handle disposal 先于 emit），结算信息只来自 payload。
+  //   失败隔离：`installAutoSettle` 内部全程 try/catch 且不抛（观察者纪律）。
+  let autoSettle = installAutoSettle(ctx, {
+    store,
+    dispatchIndex, // 与读侧骨架 / 登记点共享同一 Map（登记后无需重启即命中）
+    root,
+    liveConfig: config, // 与 `member_settle` 链推进同源（`apply` 的 config；热更经 readLiveConfig 在工具面）
+    logger: ctx.logger,
+  });
+  if (autoSettle.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] auto-settle mounted: 宿主 subagent/end（global:true）→ 引擎自动结算判定（复用 Tier3 校验链；缺省 onFail=pause 停轮）');
+  }
+  // ── W1-① 重放/恢复（装配期**有界**扫描；蓝图 §W1-①）────────────────────────────────
+  //   缺口（实测）：链推进由 `member.settled` 驱动；若进程死在「**已结算**」与「**已推进**」之间
+  //   （或推进因门禁/挂载点失败而无人补），批次会永久停在「lane 已 merged、下一环从未被决策」。
+  //   本扫描启动后补一次决策。**纪律**（四条，缺一即为「写了不生效」或「静默危害」）：
+  //     ① 只处理 `running` 批 —— `paused` 是人工停轮（`resume` 是唯一恢复入口）、终态不追；
+  //     ② 一律**只决策不派发**（`replayBatch` 内固定 `noDispatch`）：装配期无工具流水线 ⇒ 无挂载点，
+  //        真派仍由 Leader/Manager 在工具面执行（与 S12 裁决一致）；
+  //     ③ 全程 try/catch 不抛，且**异步化**（不阻塞 `apply` 返回）；
+  //     ④ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3），有补决策才 info 一行摘要。
+  //   有界：会话数与批次数均设上限，防大批量启动时扫盘过久。
+  try {
+    const MAX_SESSIONS = 5;
+    const MAX_BATCHES = 20;
+    const sessions = (typeof store.listSessions === 'function' ? store.listSessions() : []).slice(0, MAX_SESSIONS);
+    const targets = [];
+    for (const sid of sessions) {
+      const ids = typeof store.listBatches === 'function' ? store.listBatches(sid) : [];
+      for (const bid of ids) {
+        if (targets.length >= MAX_BATCHES) break;
+        try { if (store.readBatch(sid, bid)?.phase === 'running') targets.push({ sessionId: sid, batchId: bid }); } catch { /* 坏批跳过 */ }
+      }
+      if (targets.length >= MAX_BATCHES) break;
+    }
+    if (targets.length > 0) {
+      void (async () => {
+        let replayed = 0; const hits = [];
+        for (const t of targets) {
+          try {
+            const r = await replayBatch({ store, root, liveConfig: config }, ctx, t);
+            if (r && r.replayed > 0) { replayed += r.replayed; hits.push(t.batchId); }
+          } catch { /* 单批隔离 */ }
+        }
+        if (replayed > 0) {
+          ctx.logger?.info?.('[dsh-punky-swarm] replay(装配期)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
+            + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
+        }
+      })();
+    }
+  } catch { /* 启动期扫描失败不影响插件装载 */ }
+  // 未挂载（`ctx.on` 缺失 = 受限/最小 ctx）⇒ **不 warn**：正式宿主恒提供 `ctx.on`（同 dispatch-register.js 的
+  //   `inert` 静默降级口径），warn 只会让「缺省配置零 warn」契约（legacy-fix T4.3）误报；
+  //   此时自动结算走兼底路 `swarm_report(settle-request)`，能力缺失不炸宿主。
+  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 四 JSON → 双表注入 resolve
+  //   presetTable（参数级规则面：governance.hook.preset 引用展开源）与 presetBanTable
+  //   （第三类工具黑名单面：同一引用键，条目进 toolBan）。errors（文件缺失/损坏/形状坏）→ 逐条 warn
+  //   留痕，不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
   // resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
   //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
   const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
-  const { table: presetTable, errors: presetErrors } = loadPresetTable();
+  const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
   for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
   // WebUI 治理配置写通道：preset 注册目录元数据
-  //   （GET /config presets 源：id = 已成功装载的注册 id、count = 规则数——装载失败不入目录，
-  //   装配侧已对 errors 逐条 warn；derived from presetTable，装载后一次性派生）
-  const presetCatalog = PRESET_IDS.filter((id) => Array.isArray(presetTable[id]))
-    .map((id) => ({ id, count: presetTable[id].length }));
+  //   （GET /config presets 源：id = 已成功装载的注册 id、count = 条目数——装载失败不入目录，
+  //   装配侧已对 errors 逐条 warn；derived from 双表，装载后一次性派生）
+  //   两表并计：rules 面（l1-sensitive / l2-resource）+ 第三类 toolBan 面（l3-tool-ban），
+  //   count = 两类条目数之和（l3 仅有 toolBan 条目，l1/l2 仅有 rules；compose 组合项已废除）
+  const presetCatalog = PRESET_IDS
+    .filter((id) => Array.isArray(presetTable[id]) || Array.isArray(presetBanTable[id]))
+    .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));
   // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
-  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable });
+  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
@@ -553,11 +650,11 @@ export const apply = (ctx, config = {}) => {
   //     发生在 governance 配置变化时，窗口极小）；DEFER/PAUSE 会话状态为文件态（state-store）→ 不随重挂丢失；
   //   - refusals count 随新实例归零（运行时状态重置契约：重挂后 refusals count 等运行时状态重置）。
   const remountGovernanceHook = (nextConfig, logTag) => {
-    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, warn: governanceWarn });
+    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
     if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
     const wasInstalled = governanceHook?.installed === true;
     governanceHook?.dispose?.();
-    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable });
+    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable });
     governanceInstalledCfg = govCfg;
     const nowInstalled = governanceHook?.installed === true;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled
@@ -568,8 +665,9 @@ export const apply = (ctx, config = {}) => {
   };
 
   // watch 引擎重挂（热更生效变化通道 + 启动对账共用；镜像
-  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（5 键 {enabled, longrun.enabled,
-  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs}）
+  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（7 键 {enabled, longrun.enabled,
+  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
+  //   longrun.unconsumedTimeoutMs}）
   //   → 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
   //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
   //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
@@ -582,14 +680,20 @@ export const apply = (ctx, config = {}) => {
     const lr = resolveLongrunConfig(nextConfig);
     const nextInstalled = {
       enabled: wc.enabled,
-      longrun: { enabled: lr.enabled, maxDurationMs: lr.maxDurationMs, noProgressWindowMs: lr.noProgressWindowMs },
+      longrun: {
+        enabled: lr.enabled,
+        maxDurationMs: lr.maxDurationMs,
+        noProgressWindowMs: lr.noProgressWindowMs,
+        staleBatchMs: lr.staleBatchMs,
+        unconsumedTimeoutMs: lr.unconsumedTimeoutMs,
+      },
       scanIntervalMinutes: wc.scanIntervalMinutes,
     };
     if (JSON.stringify(nextInstalled) === JSON.stringify(watchInstalledCfg)) return false;
     if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
     if (heartbeat) { heartbeat.dispose(); heartbeat = null; heartbeatRef.current = null; }
     if (wc.enabled) {
-      heartbeat = createLaneHeartbeat({ store, mailbox, config: nextConfig, root });
+      heartbeat = createLaneHeartbeat({ store, mailbox, config: nextConfig, root, liveConfig: nextConfig, logger: ctx.logger });
       heartbeatRef.current = heartbeat;
       const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
       watchTimer = setInterval(() => {
@@ -612,10 +716,21 @@ export const apply = (ctx, config = {}) => {
   // 生效范围：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
   //   对外能力（acps/bridge/acps.discovery/identity）不纳入热切
   let hotConfig = null;
+  // ratchet 热更守卫的基线：与 createStore 注入所用的同一份 config 对齐（装配期生效的棘轮表）
+  let lastRatchetJson = JSON.stringify(config?.ratchet ?? null);
   const applyConfigChange = (change) => {
     const next = change.config;
-    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——5 键 {enabled, longrun.enabled,
-    //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs} 任一变化 →
+    // ⓪ ratchet（棘轮表）：**重启生效面**（G-3 收口，2026-09-15 用户裁决 Q-9=A）——棘轮表在装配期
+    //   随 `createStore({ rules })` 注入（上方），热更**不应用**；但变化必须显式告警、非法必须当场校验
+    //   （禁「写了不生效却不吭声」；`loadRules` fail-closed 语义不变——重启时非法配置仍会装配失败）。
+    const rg = ratchetHotGuard({ next, lastJson: lastRatchetJson });
+    if (rg.changed) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] hot config: ' + rg.message);
+      lastRatchetJson = rg.json;
+    }
+    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——7 键 {enabled, longrun.enabled,
+    //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
+    //   longrun.unconsumedTimeoutMs} 任一变化 →
     //   dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
     //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转与阈值变更经同一通道即时生效
     //   （watch.enabled 翻转既有语义保留并统一进 remount；阈值键纳入后手工 runtime.json
@@ -645,7 +760,7 @@ export const apply = (ctx, config = {}) => {
       if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
     }
-    // ④ verify 挂载（可选 L1）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
+    // ④ verify 挂载（可选）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
     const vc = resolveVerifyConfig(next);
     if (vc.enabled !== verifyMount.installed) {
       verifyMount.dispose?.();
@@ -693,6 +808,7 @@ export const apply = (ctx, config = {}) => {
     verifyMount?.dispose();
     governanceHook?.dispose();
     dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
+    autoSettle?.dispose?.(); // 自动结算主路（subagent/end）退订（幂等；兼底路随工具面存续）
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };

@@ -27,6 +27,12 @@ import { BATCH_SCHEMA_V3, migrateV2toV3 } from '../lib/state/schema-v3.js';
 import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
 import { readUnacked } from '../lib/comms/mailbox.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 mailbox 预算）统一补 software-team；
+//   该团队 skills 必须可解析（不可解析/技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）⇒ 先注入隔离技能根。
+seedTeamAssetSkills('software-team');
 
 // ---------- B1/B2/B3：纯函数三拒绝码 ----------
 
@@ -177,7 +183,9 @@ function makeTools(config = {}) {
   const store = createStore(root);
   const ctx = { tools: { register: () => {} }, logger: console };
   const { tools } = createTools(ctx, { store, root, config });
-  return { root, store, byName: Object.fromEntries(tools.map((t) => [t.name, t])) };
+  // G1 前置（新门禁）：`wave_plan` 属 C 档动作 ⇒ 建批前先把本会话评估为 C（同 assign_check 落盘函数）
+  assessC(store, EXEC_SESS.agent.session.id, { rationale: 'fixture：mailbox 预算套件建批前置评估（多 lane 治理 ⇒ C 档）' });
+  return { root, store, byName: withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t]))) };
 }
 
 async function makeBatch(store, byName, batchId) {

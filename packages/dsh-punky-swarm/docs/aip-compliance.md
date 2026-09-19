@@ -53,7 +53,7 @@ mailbox 消息、wavePlan 任务、批次状态 → 国标结构（纯映射、�
 |---|---|---|
 | `aip.enabled` | 开 | 生成工具 6 属性目录 + `GET /api/dsh-punky-swarm/tools`（可 `?name=` 过滤）；关闭则零运行时开销 |
 | `aip.identity.enabled` | 关 | 身份体系（AIC/CAI/签名/信任链）激活 |
-| `aip.team` | jiufeng | 装配团队（决定 ACS 角色集来源） |
+| `aip.team` | punky-preset | 装配团队（决定 ACS 角色集来源） |
 
 相关端点：`GET /api/dsh-punky-swarm/tools`、`GET /api/dsh-punky-swarm/agents`、`GET /.well-known/aip`（均为只读）。
 

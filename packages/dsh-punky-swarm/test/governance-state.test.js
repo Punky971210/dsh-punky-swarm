@@ -403,10 +403,16 @@ test('S7 state file: write/read-back idempotent, lazy expiry cleans on read, cor
   assert.equal(stateExists(root, 'sess-s7'), false);
   assert.equal(readSessionState(root, 'sess-s7').status, 'idle');
   clearSessionState(root, 'sess-s7'); // 不存在不抛
-  // 惰性过期：短窗口 → 等窗口过 → 读即 idle + 文件清理（无定时器，读时惰性）
+  // 惰性过期（2026-09-17 修 flaky）：**窗口内断言改用长窗口**，消除 20ms 竞态。
+  //   原实现用单一 `retryAfterMs: 20`，「设态 → 立刻读回断言窗口内未过期」之间只要被
+  //   调度/GC 拖过 20ms 即误判 ⇒ 全量并发跑概率性红、隔离单跑 3/3 绿（实测）。
+  //   语义不变：① 窗口内读回仍 `deferred`；② 窗口过后读即 `idle` + 清理文件。
+  const mWide = setDeferred(root, 'sess-s7', { retryAfterMs: 60000 });
+  assert.equal(mWide.retryAfterMs, 60000);
+  assert.equal(readSessionState(root, 'sess-s7').status, 'deferred', '窗口内未过期');
+  clearSessionState(root, 'sess-s7');
   const m3 = setDeferred(root, 'sess-s7', { retryAfterMs: 20 });
   assert.equal(m3.retryAfterMs, 20);
-  assert.equal(readSessionState(root, 'sess-s7').status, 'deferred', '窗口内未过期');
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(readSessionState(root, 'sess-s7').status, 'idle', '过期 → idle');
   assert.equal(stateExists(root, 'sess-s7'), false, '过期文件读时清理');

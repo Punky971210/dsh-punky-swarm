@@ -21,6 +21,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   escalation 任一子键变化经既有 dispose+重挂通道生效）。出厂默认关（enabled:false = 零计数零记录零升级）。
 // resolve 扩 preset 装载键（引用键非路径，装载表经 preset-loader boot 注入）——
 //   governance.hook.preset: string|string[] = 注册 preset id 枚举（loader 随包 PRESETS_DIR 装载展开）；
+//   inline 通道（无 preset 键的热加载主干）的 toolBan **同受形状校验**（2026-09-15 B1）：
+//   validateToolBanEntries（条目形状）+ validateToolBanTable（id 唯一）双过才武装，坏条目 warn 指名索引+原因后回退空表。
 //   语义 = 保序拼接（preset 引用序展开 → inline rules 在后）→ 全表唯一性校验（validateRuleTable）→
 //   重复/未知 id 装载失败回退 rules:[] + warn 逐条（宁空勿半，不 throw——resolve 在 boot/热更路径，
 //   throw 爆炸面过大）；resolved 快照存展开后 rules（不存引用原值 → remount JSON 比较器零改动感知一切生效差异）；
@@ -29,7 +31,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 等价默认合并——缺省 = GOVERNANCE_DEFAULTS.enabled(true)，显式 enabled:false 才关。
 // 空 rules → decide 恒 ALLOW（零行为变化，与 verify/watch/budget 默认开口径一致）。
 
-import type { EscalationPrimitive, GovernanceConfig, GovernanceEscalationConfig, GovernancePrimitive, Rule } from './types.js';
+import type { EscalationPrimitive, GovernanceConfig, GovernanceEscalationConfig, GovernancePrimitive, Rule, ToolBanEntry } from './types.js';
 import { isGovernancePrimitive } from './decisions.js';
 
 // 默认值：
@@ -41,6 +43,7 @@ import { isGovernancePrimitive } from './decisions.js';
 const GOVERNANCE_DEFAULTS_RAW = {
   enabled: true,
   rules: [],
+  toolBan: [],
   defaults: { deny: 'DENY' },
   flags: { pause: false, narrow: false, defer: false },
   escalation: {
@@ -57,6 +60,7 @@ const ESCALATION_PRIMITIVES: readonly string[] = ['DENY', 'NARROW', 'DEFER', 'PA
 export const GOVERNANCE_DEFAULTS: Readonly<{
   enabled: boolean;
   rules: readonly Rule[];
+  toolBan: readonly ToolBanEntry[];
   defaults: Readonly<{ deny: GovernancePrimitive }>;
   flags: Readonly<{ pause: boolean; narrow: boolean; defer: boolean }>;
   escalation: Readonly<GovernanceEscalationConfig>;
@@ -72,6 +76,10 @@ export const GOVERNANCE_DEFAULTS: Readonly<{
 interface ConfigGovernanceInput {
   enabled?: unknown;
   rules?: unknown;
+  // 第三类判定面：工具黑名单条目（inline 形态 = **热加载通道**：写入 <root>/config/runtime.json 的
+  //   governance.hook.toolBan 即经 resolve 快照变化触发 dispose+重挂生效，免重启；
+  //   preset 形态（l3-tool-ban）见 preset 键——随包资产、需 boot 装载一次）
+  toolBan?: unknown;
   // preset 装载引用键（string|string[] = 注册 preset id；宽松接口 unknown，resolve 内归一——
   // 仅接受注册 id 枚举，不接受任意路径：随包受控资产、确定性可校验、无路径逃逸/环境漂移面）
   preset?: unknown;
@@ -113,6 +121,55 @@ export function validateRuleTable(rules: readonly unknown[]): { ok: boolean; err
   }
   for (const [id, n] of seen) {
     if (n > 1) errors.push(`duplicate rule id '${id}' (${n}x)：id 须全局唯一（引擎 violations 不去重，重复会双倍收据文案）`);
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+// ── 第三类判定面（工具黑名单）校验纯函数（零 IO；preset-loader 与 resolve 共用，供单测直引）──
+
+// 行为面合法值域（首批仅 file-write；未知值装载期早失败——判定内核侧对未知行为不命中，
+//   双保险：装载层拒绝坏资产、运行期不误判）
+export const TOOL_BAN_BEHAVIORS: readonly string[] = ['file-write'];
+
+// 工具黑名单条目形状校验（preset 文件与 inline 共用）：条目须为对象；id / code / message / tool
+//   须为非空 string（编号红线：无来源编号禁止）；behavior ∈ TOOL_BAN_BEHAVIORS；
+//   category 可选且须 ∈ VIOLATION_CATEGORIES（缺省由判定内核取 'hard'）。
+export function validateToolBanEntries(entries: unknown): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!Array.isArray(entries)) return { ok: false, errors: ['toolBan 须为数组'] };
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i] as Record<string, unknown> | null | undefined;
+    const at = `toolBan[${i}]`;
+    if (!e || typeof e !== 'object') { errors.push(`${at} 非对象`); continue; }
+    const tag = typeof e.id === 'string' && e.id.length > 0 ? `${at}(${String(e.id)})` : at;
+    for (const k of ['id', 'code', 'message', 'tool']) {
+      if (typeof e[k] !== 'string' || (e[k] as string).length === 0) errors.push(`${tag}.${k} 缺失/须为非空 string`);
+    }
+    if (!TOOL_BAN_BEHAVIORS.includes(String(e.behavior))) {
+      errors.push(`${tag}.behavior 非法: ${String(e.behavior)}（合法: ${TOOL_BAN_BEHAVIORS.join('/')}）`);
+    }
+    if (e.category !== undefined && !VIOLATION_CATEGORIES.includes(String(e.category))) {
+      errors.push(`${tag}.category 非法: ${String(e.category)}`);
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+// 工具黑名单全表 id 唯一性校验（preset×preset / preset×inline / inline 内自重复 + 空/非 string id
+//   → ok:false + 错误文案含重复 id 与次数）：与 validateRuleTable 同纪律（引擎 violations 不去重，
+//   重复 id 同命中会双倍收据文案，故装载层拒绝——宁空勿半，绝不部分武装）。
+export function validateToolBanTable(entries: readonly unknown[]): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const seen = new Map<string, number>();
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i] as Record<string, unknown> | null | undefined;
+    if (!e || typeof e !== 'object') { errors.push(`toolBan[${i}] 非对象（条目须为对象）`); continue; }
+    const id = e.id;
+    if (typeof id !== 'string' || id.length === 0) { errors.push(`toolBan[${i}] id 缺失/非 string（收据 ruleRefs 溯源需要 id）`); continue; }
+    seen.set(id, (seen.get(id) ?? 0) + 1);
+  }
+  for (const [id, n] of seen) {
+    if (n > 1) errors.push(`duplicate toolBan id '${id}' (${n}x)：id 须全局唯一（引擎 violations 不去重，重复会双倍收据文案）`);
   }
   return { ok: errors.length === 0, errors };
 }
@@ -232,14 +289,16 @@ function resolveEscalationConfig(raw: ConfigGovernanceInput['escalation'], warn?
   };
 }
 
-// preset 引用归一（纯函数）：undefined → null（未配置）；string → [string]；string[] 保序；
-//   其余形态（数字/对象/数组内非 string/空串/空数组）→ errors（装载失败由 resolve 回退空表 + warn）。
+// preset 引用归一（纯函数）：undefined → null（未配置）；**string[] 数组 = 唯一合法形态（多选）**；
+//   其余形态（单值字符串 / 数字 / 对象 / 数组内非 string / 空串 / 空数组）→ errors（装载失败由 resolve 回退空表 + warn）。
+// 2026-09-14 用户裁决：`preset` 的**单值字符串形态（单选遗产）已废除**——护栏配置一律多选 / 数组；
+//   旧写法 `preset: "l1-sensitive"` 判形态非法（回退空表 + warn），请改 `preset: ["l1-sensitive"]`。
 function normalizePresetRefs(preset: unknown): { refs: string[] | null; errors: string[] } {
   const errors: string[] = [];
   if (preset === undefined) return { refs: null, errors };
   if (typeof preset === 'string') {
-    if (preset.length === 0) errors.push('governance.hook.preset 为空串（须为注册 preset id）');
-    return { refs: preset.length > 0 ? [preset] : null, errors };
+    errors.push(`governance.hook.preset 单值字符串形态已废除（单选遗产）：'${preset}' → 请改数组 preset: ["${preset}"]（多选，可多项叠加）`);
+    return { refs: null, errors };
   }
   if (Array.isArray(preset)) {
     if (preset.length === 0) {
@@ -253,17 +312,22 @@ function normalizePresetRefs(preset: unknown): { refs: string[] | null; errors: 
     }
     return { refs, errors };
   }
-  errors.push(`governance.hook.preset 类型非法: ${JSON.stringify(preset)}（须为 string | string[] 注册 id）`);
+  errors.push(`governance.hook.preset 类型非法: ${JSON.stringify(preset)}（须为注册 preset id 数组，如 ["l1-sensitive","l3-tool-ban"]——多选语义，单值形态已废除）`);
   return { refs: null, errors };
 }
 
 export function resolveGovernanceConfig(
   config: ConfigGovernanceInput | null | undefined,
-  opts?: { warn?: (msg: string) => void; presetTable?: Readonly<Record<string, readonly Rule[]>> },
+  opts?: {
+    warn?: (msg: string) => void;
+    presetTable?: Readonly<Record<string, readonly Rule[]>>;
+    presetBanTable?: Readonly<Record<string, readonly ToolBanEntry[]>>;
+  },
 ): GovernanceConfig {
   const c = config ?? {};
   const warn = opts?.warn;
   const presetTable = opts?.presetTable;
+  const presetBanTable = opts?.presetBanTable;
   const d = (c.defaults && typeof c.defaults === 'object' && !Array.isArray(c.defaults)) ? c.defaults : {};
   const f = (c.flags && typeof c.flags === 'object' && !Array.isArray(c.flags)) ? c.flags : {};
   // preset 装载分支（preset 展开序 → inline rules 在后；全表唯一性校验；失败回退空表+warn）：
@@ -272,42 +336,76 @@ export function resolveGovernanceConfig(
   //     任一错误（类型非法/未知 id/重复 id/空 id）→ 回退 rules:[] + warn 逐条（宁空勿半、不 throw）。
   //   resolved 快照只存展开后 rules（不存引用原值）→ remount JSON 比较器零改动感知生效差异。
   let rules: Rule[];
+  let toolBan: ToolBanEntry[];
   if (c.preset !== undefined) {
     const { refs, errors: normErrors } = normalizePresetRefs(c.preset);
     const errs = [...normErrors];
     const merged: Rule[] = [];
+    const mergedBan: ToolBanEntry[] = [];
     if (refs !== null) {
       for (const ref of refs) {
         const found = presetTable?.[ref];
-        // 缺 table（接线漏注入）或查无 → 未知 id 装载失败（出厂/缺省表不识别任何引用）
-        if (!found || !Array.isArray(found)) {
-          errs.push(`governance.hook.preset: 未知 preset id '${ref}'（注册 id 枚举：l1-sensitive / l2-resource / compose；自定义组合请用数组引用或直接写 inline rules）`);
+        const foundBan = presetBanTable?.[ref];
+        const hasRules = Array.isArray(found);
+        const hasBan = Array.isArray(foundBan);
+        // 缺 table（接线漏注入）或查无（两类判定面皆无）→ 未知 id 装载失败（出厂/缺省表不识别任何引用）
+        if (!hasRules && !hasBan) {
+          errs.push(`governance.hook.preset: 未知 preset id '${ref}'（注册 id 枚举：l1-sensitive / l2-resource / l3-tool-ban；组合请用数组引用或直接写 inline rules / inline toolBan）`);
         } else {
-          merged.push(...found);
+          // preset 引用同时展开**两类判定面**：l1-sensitive / l2-resource = 参数规则；
+          //   l3-tool-ban = 工具黑名单（第三类，条目进 mergedBan）
+          if (hasRules) merged.push(...(found as readonly Rule[]));
+          if (hasBan) mergedBan.push(...(foundBan as readonly ToolBanEntry[]));
         }
       }
     }
-    if (errs.length > 0) {
+    const inline = Array.isArray(c.rules) ? c.rules as Rule[] : [];
+    const inlineBan = Array.isArray(c.toolBan) ? c.toolBan as ToolBanEntry[] : [];
+    const finalBan = [...mergedBan, ...inlineBan];
+    const vBan = validateToolBanTable(finalBan);
+    if (errs.length > 0 || !vBan.ok) {
       for (const e of errs) warn?.(`[governance] ${e}；装载失败回退空表（宁空勿半——出厂空表=零拦截，请修正后热更重挂生效）`);
+      for (const e of vBan.errors) warn?.(`[governance] preset 装载失败（toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
       rules = [];
+      toolBan = [];
     } else {
-      const inline = Array.isArray(c.rules) ? c.rules as Rule[] : [];
       const final = [...merged, ...inline];
       const v = validateRuleTable(final);
       if (v.ok) {
         rules = final;
+        toolBan = finalBan;
       } else {
         for (const e of v.errors) warn?.(`[governance] preset 装载失败：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
         rules = [];
+        toolBan = [];
       }
     }
   } else {
     rules = Array.isArray(c.rules) ? c.rules as Rule[] : [...GOVERNANCE_DEFAULTS.rules];
+    // 第三类判定面 inline 通道（**热加载主干**）：runtime.json 写 governance.hook.toolBan →
+    //   本快照变化即触发 dispose+重挂（remount JSON 比较），免重启生效、无需 preset 装载。
+    //   ⚠ 形状校验（2026-09-15 B1 修复，fail-open → fail-closed）：本通道此前**直赋** c.toolBan
+    //   （零校验），与 preset 通道（preset-loader 装载期走 validateToolBanEntries）不对称——
+    //   坏条目（缺 code/message/tool、未知 behavior）被静默武装进内核：拒绝文案 code=undefined、
+    //   未知 behavior 永不命中（fail-open）。现接**同一校验器**（形状 + 全表 id 唯一），
+    //   坏条目 ⇒ warn 逐条**指名条目索引与原因** + 回退空表（宁空勿半，与 preset 分支同纪律：
+    //   绝不让半截表武装进内核）；空表/合法表零行为差（出厂 [] 与在册条目照旧生效）。
+    const inlineBan: ToolBanEntry[] = Array.isArray(c.toolBan) ? c.toolBan as ToolBanEntry[] : [...GOVERNANCE_DEFAULTS.toolBan];
+    const vBan = validateToolBanEntries(inlineBan);
+    const uBan = validateToolBanTable(inlineBan);
+    if (vBan.ok && uBan.ok) {
+      toolBan = inlineBan;
+    } else {
+      for (const e of vBan.errors) warn?.(`[governance] inline toolBan 形状校验失败（热加载通道 governance.hook.toolBan）：${e}；回退空表（宁空勿半——修正坏条目后热更重挂生效）`);
+      for (const e of uBan.errors) warn?.(`[governance] inline toolBan 装载失败（热加载通道 governance.hook.toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
+      toolBan = [];
+    }
   }
   return {
     // 缺省 = GOVERNANCE_DEFAULTS.enabled(true)，显式 enabled:false 才关（对齐 resolveWatchConfig 注释）
     enabled: c.enabled !== false,
     rules,
+    toolBan,
     // fail-closed 兜底：仅接受合法原语，否则 DENY；
     // 「兜底不可 ALLOW」——fail-closed 纪律（unknown → DENY 绝不 ALLOW）：不允许把兜底配置成放行，
     //   defaults.deny==='ALLOW' → resolve 回退 DENY（推荐处置：回退+注释；classify 侧另有双保险防御）

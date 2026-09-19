@@ -102,9 +102,29 @@ export interface Rule {
                                            //   旧规则无该字段 → 不钳制（向后兼容）
 }
 
+// ── 第三类判定面：工具黑名单（工具 × 行为）──
+// 与参数级 rules 并列的**第二类判定来源**（用户裁决 2026-09-14 Q1：新维度，非「又是一条参数规则」）。
+// 语义 = 「写通道路由」纪律：Agent 写文件走 edit / write / str-replace-editor 等在册工具，
+//   不经 shell（pwsh）自建写路径落盘（编码头/BOM 易被写盘破坏，且不可逆）。
+// 判定内核见 tool-ban.ts（纯函数、零依赖；**与执行引擎侧 lib/tools/readonly.js 无关**——用户裁决 Q4）。
+export type ToolBanBehavior = 'file-write';   // 首批仅 'file-write'；扩面需同步 TOOL_BAN_BEHAVIORS 与判定实现
+
+export interface ToolBanEntry {
+  id: string;                    // 条目 id（收据 ruleRefs 溯源；编号红线同 Rule：无来源编号禁止）
+  tool: string;                  // 命中工具名（如 'pwsh'；段首写命令名等由 behavior 判定面处理）
+  // 行为面（首批仅 'file-write'）。**未知 / 缺失值 ⇒ fail-closed**（2026-09-15 B1 修订：
+  //   judgeBehavior 命中而非放行，与 readonly 面 fail-closed 对齐；装载层
+  //   validateToolBanEntries 另在载入期拒载，双层防线）——原文「未知值不判定不命中」已与实现相反。
+  behavior: ToolBanBehavior;
+  code: string;                  // 违规编号（收据可溯源；判定内核缺 code 时退路 = 条目 id → 'unknown'）
+  category?: ViolationCategory;  // 缺省 'hard'（→ P2 DENY）；可显式改档（如 manual_review）
+  message: string;               // 违规说明（入收据 reason 与拒绝正文）
+}
+
 export interface GovernanceConfig {
   enabled: boolean;         // hook 总开关
-  rules: Rule[];            // 规则表（空表=零拦截，decide 恒 ALLOW）
+  rules: Rule[];            // 参数级规则表（空表=零拦截，decide 恒 ALLOW）
+  toolBan: ToolBanEntry[];  // 第三类：工具黑名单（空表=零拦截；与 rules 任一非空即进入裁决）
   defaults: { deny: GovernancePrimitive }; // fail-closed 兜底（默认 DENY）
   flags: { pause: boolean; narrow: boolean; defer: boolean }; // 原语开关（CAGE feature-flag 借鉴）
   escalation: GovernanceEscalationConfig; // 违规计数升级（resolve 恒返回——默认关形态）

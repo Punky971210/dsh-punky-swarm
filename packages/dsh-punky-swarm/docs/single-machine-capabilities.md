@@ -9,7 +9,7 @@
 
 - 插件运行于 dsh（DeepSeek Harness）进程内，编排、裁决与留痕全部在本机进程内完成；
 - 治理对象是同一进程内编排的一批 Agent 子进程（批次 / 门禁 / 通信 / 恢复重派）；
-- 单 npm 包内含：插件引擎、Punky Swarm 预设（presets/jiufeng）、software-team 角色指引（skills/software-team）；插件启动时自动同步预设与技能到用户目录，无需手动放置；
+- 单 npm 包内含：插件引擎、Punky Swarm 预设（presets/punky-preset）、software-team 角色指引（skills/software-team）；插件启动时自动同步预设与技能到用户目录，无需手动放置；
 - 只读监控面板随插件加载（会话页「Punky Swarm 集群」分页），安装即得。
 
 ## 2. 零云依赖 / 零外部服务
@@ -29,7 +29,7 @@
 
 - 治理范围为**单个 dsh 插件进程**内的集群编排（批级三层门禁 + 调用级护栏双层，见 governance-technical.md / guardrails-hook.md）；
 - 批次/成员状态以状态文件为唯一事实源，事件全程留痕可审计；
-- 崩溃恢复为 checkpoint 保全 + 恢复审计 + idle 归位重派（新 worker 可查 checkpoint 跳过已完成步骤）；**不自动续跑**——失败 lane 终态、重做开新批次；
+- 崩溃恢复为 checkpoint 保全 + 恢复审计 + **在途 lane 落 `idle`（空闲态，非崩溃态）后可重派（返工/续跑）**（新 worker 可查 checkpoint 跳过已完成步骤）；**不自动续跑**——失败 lane 终态、重做开新批次；
 - 跨机分布式集群同步、多机编排、成本控制、模型分层路由不在提供范围（见 governance-technical.md §8 架构边界）。
 
 ## 5. 确定性与零依赖

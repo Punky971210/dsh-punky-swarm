@@ -15,11 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// assemble-panel.mjs — exec-panel-split lane 产物：lib/panel/ 段文件 → lib/client.js 浏览器 bundle
+// assemble-panel.mjs — 拼装器：lib/panel/ 段文件 → lib/client.js 浏览器 bundle
 // 零依赖（仅 node:fs/node:path 内置模块），运行于包根目录：
 //   node scripts/assemble-panel.mjs
 // 拼接顺序：外壳头 + locales + theme + widgets + batch-list + batch-detail + main 组装 + gov-config + 外壳尾
-// （与 restructure-decision.md §6.2 一致；gov-config.js 追加在 main.js 之后，见 webui-config-design §2.4——
+// （gov-config.js 追加在 main.js 之后——
 //  段内仅 function 声明，靠提升供 main.js apply 注册引用）。段文件为单一事实源；本脚本只做逐字拼接。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ const PANEL_DIR = join(ROOT, 'lib', 'panel');
 const OUT = join(ROOT, 'lib', 'client.js');
 
 // 外壳头 = AGPL 头 + 原 client.js 行 1-10（window.__ModuleLoader__.load 闭包开头 + react seed require）
-// AGPL 头前置（决策包 §3.3）：每次拼装产物 client.js 顶部都恰有一个 AGPL 头，重生成幂等。
+// AGPL 头前置：每次拼装产物 client.js 顶部都恰有一个 AGPL 头，重生成幂等。
 const SHELL_HEAD = `/*
 Copyright (C) 2025-2026 Punky
 
@@ -65,9 +65,12 @@ const SHELL_TAIL = `  }
 });
 `;
 
-// 段拼接顺序（与决策包 §6.2 一致；函数声明提升 + const 初始化序由段内顺序保证；
+// 段拼接顺序（函数声明提升 + const 初始化序由段内顺序保证；
 // gov-config.js 置于 main.js 之后——其顶层仅 function 声明，运行时依赖声明提升）
 const SEGMENT_ORDER = [
+  // panel-model.js 置首：纯逻辑段（零 React / 零 tt / 零 T、零跨段依赖），置首规避 const 初始化序风险；
+  // 其余 7 段相对次序不变。
+  'panel-model.js',
   'locales.js',
   'theme.js',
   'widgets.js',
@@ -78,7 +81,7 @@ const SEGMENT_ORDER = [
 ];
 
 function readSegment(name) {
-  // 决策包 §3.3 实现自选：拼装时剥离段文件顶部 AGPL 头块注释（段文件作为独立源文件保留头，
+  // 拼装时剥离段文件顶部 AGPL 头块注释（段文件作为独立源文件保留头，
   // 但 bundle 内不嵌段头）——保证 client.js 全文 AGPL 授权文本恰 1 处、顶部恰 1 个头，重生成幂等。
   const src = readFileSync(join(PANEL_DIR, name), 'utf8');
   return src.replace(/^\/\*[\s\S]*?\*\/\n+/, '');

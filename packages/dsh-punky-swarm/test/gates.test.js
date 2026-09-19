@@ -29,8 +29,14 @@ const store = createStore(root);
 const SID = 's-gate';
 const specOk = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
 
+// 套件对齐归档（批次 gate-techdebt · lane e2-gov-repair · 用户裁决 Q1=C）：
+//   失效红条的**原用例体逐字**保存在本对象中（活字符串数据，零执行）；
+//   对应的 test.todo 仅登记待办，正确断言留待独立小批复活（复用时取出文本重组即可）。
+const ARCHIVED_CASES = {};
+
+
 function makePlan(batchId, tasks, opts = {}) {
-  const plan = buildWavePlan({ batchId, tasks, team: 'jiufeng', ...opts });
+  const plan = buildWavePlan({ batchId, tasks, team: 'punky-preset', ...opts });
   store.createBatch(SID, { batchId, wavePlan: plan, concurrency: plan.concurrency });
   return plan;
 }
@@ -40,11 +46,16 @@ function art(batchId, rel, content) {
   fs.writeFileSync(abs, content ?? (rel.endsWith('spec.md') ? specOk : (rel.endsWith('.json') ? '{"tasks":[]}' : 'code')));
   return abs;
 }
+// 【r2 同步 · B4】audit lane 的 `standalone: true` 逃生阀在本批收紧为「显式授权 + 事实核验 + 留痕」：
+//   自声明不再足以放行——须布尔 true **且** `standaloneReason` 非空 **且** 批次内确实无可用上游。
+//   旧口径「audit lane 无上游 ⇒ standalone 自声明即放行」⇒ 新语义直接拒 `GATE_STANDALONE_UNJUSTIFIED`。
+//   本 fixture 按 **B5 设计本意**（audit 必须锚到 plan 判据来源）改为真 `consume`：audit 消费
+//   `plan/spec.md`，由 entry 门的「判据来源门」校验该产物正文含裸标题 `## 验收标准`。
 function tasks3() {
   return [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md', 'plan/task-tree.json'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md', 'plan/task-tree.json'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md', 'audit/gap-list.json'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/review.md', 'audit/gap-list.json'], cmd: 'review', deps: ['e1'] },
   ];
 }
 // 状态机流转：running → review → merged；捕获 Error 返回
@@ -70,6 +81,46 @@ test('Entry Gate：exec 派发前 consume 缺失 → 拒绝并记录事件', () 
   assert.equal(b.lanes.e1, 'pending');
 });
 
+// ── P1（2026-09-14 用户裁决，**全局严格**）：audit 判据来源锚定 ──
+// P1-a 建批期：三层批中只要有 audit lane 声明 consume，则至少一条必须消费到 plan 层产物
+// P1-b entry 期：audit lane 派发前，其消费的 plan 产物正文须含裸标题行 `## 验收标准`
+function tasksAuditCriteria() {
+  return [
+    { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
+    { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
+    { id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/spec.md'], produce: ['audit/accept.md'], cmd: 'accept', deps: ['e1'] },
+  ];
+}
+
+test('P1-a：audit lane 只消费 exec 产物 → 拒建批 GATE_AUDIT_INPUT_MISSING（含两条边界放行）', () => {
+  const t = tasksAuditCriteria();
+  const bad = [t[0], t[1], { ...t[2], consume: ['exec/e1/main.py'] }];
+  assert.throws(
+    () => buildWavePlan({ batchId: 'b-p1a', tasks: bad, team: 'punky-preset' }),
+    /GATE_AUDIT_INPUT_MISSING: no audit lane consumes a plan-layer product/,
+  );
+  // 边界①：audit lane 不声明 consume → 不入本检查（空 consume 由 entry_requires 在派发面拦）
+  assert.ok(buildWavePlan({ batchId: 'b-p1a-ok', tasks: [t[0], t[1], { ...t[2], consume: undefined }], team: 'punky-preset' }));
+  // 边界②：锚定 plan 产物后放行（exec 产物可同时保留）
+  assert.ok(buildWavePlan({ batchId: 'b-p1a-ok2', tasks: [t[0], t[1], { ...t[2], consume: ['plan/spec.md', 'exec/e1/main.py'] }], team: 'punky-preset' }));
+});
+
+test('P1-b：audit 派发前 plan 产物缺 `## 验收标准` → 拒派 GATE_AUDIT_CRITERIA_MISSING；补齐正文后放行', () => {
+  makePlan('b-audit-crit', tasksAuditCriteria());
+  art('b-audit-crit', 'plan/spec.md', '# Spec\n（本文件故意不含验收标准标题）\n');
+  const r = set(SID, 'b-audit-crit', 'a1', 'running');
+  assert.ok(r instanceof Error && /GATE_AUDIT_CRITERIA_MISSING/.test(r.message), String(r && r.message));
+  const b = store.readBatch(SID, 'b-audit-crit');
+  const ev = b.events.find((e) => e.type === 'gate.entry.missing' && e.lane === 'a1');
+  assert.ok(ev, '拒派须留 gate.entry.missing 事件');
+  assert.ok(Array.isArray(ev.problems) && ev.problems.some((p) => /lacks "## 验收标准"/.test(p)), JSON.stringify(ev.problems));
+  assert.equal(b.lanes.a1, 'pending', '拒派后 lane 仍为 pending');
+  // 补齐裸标题行 → 同一 lane 可派发（非终态否决）
+  art('b-audit-crit', 'plan/spec.md', specOk);
+  const r2 = set(SID, 'b-audit-crit', 'a1', 'running');
+  assert.ok(!(r2 instanceof Error), '补齐正文后应放行：' + String(r2 && r2.message));
+});
+
 test('Entry Gate：consume 齐备 → 派发通过', () => {
   makePlan('b-entry2', tasks3());
   art('b-entry2', 'plan/spec.md');
@@ -79,24 +130,42 @@ test('Entry Gate：consume 齐备 → 派发通过', () => {
   assert.equal(r.lanes.e1, 'running');
 });
 
-test('Entry Gate：目录型 consume 通过（Bug1：Windows 目录 size 恒 0 不再误判缺失）', () => {
+// 【r2 同步 · 裁定 ②】R-34：本用例与 `:148-160` 原断言「**目录型产物一律通过**」，
+//   因与本批新语义（拒绝免检：**声明形态二分**）冲突而**同步改写**：
+//     · 声明路径以 `/` 结尾 ⇒ **目录语义**：目录必须**存在且非空** ⇒ 放行；
+//     · 声明路径不以 `/` 结尾 ⇒ **文件语义**：必须是**非空文件**；给目录 ⇒ 拒。
+//   **Bug1 意图（保留）**：Windows 下目录 `size` 恒 0，早期实现据此把「已存在的目录」误判为「缺失」；
+//     用例名显式声明该成因 ⇒ **目录存在性这一意图有依据、必须保留**。
+//     本批只**收窄**「隐式把目录当文件放行」：目录语义须由声明**显式表达**（`/` 结尾），且目录须**非空**。
+test('Entry Gate：目录型 consume 通过（Bug1：Windows 目录 size 恒 0 不再误判缺失）· r2 同步：声明形态二分（`/` 结尾=目录语义）', () => {
   makePlan('b-dir-entry', [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md', 'exec/repos/'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art('b-dir-entry', 'plan/spec.md');
   fs.mkdirSync(path.join(root, 'sessions', SID, 'artifacts', 'b-dir-entry', 'exec', 'repos'), { recursive: true });
+  // r2 新增：目录语义要求**非空**（空目录不得冒充产物）⇒ 目录内放一个真实文件
+  art('b-dir-entry', 'exec/repos/README.md');
   const r = set(SID, 'b-dir-entry', 'e1', 'running');
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.e1, 'running');
 });
 
+// 【r2 同步 · 裁定 ②】文件语义负例对照（**不在本文件**：属本批 RED 网，见
+//   `test/gate-hardening-red.test.js` T15 的 (c)/(e)/(g) 子例）：
+//   声明**不带** `/` 结尾 ⇒ 文件语义 ⇒ 给目录必须**拒**。
+//   **r2 前为 RED**（当时 `gates.js:154-161` 的 `st.isDirectory() → true` 使目录隐式冒充文件）；
+//   r2 实现「声明形态二分」（`gates.ts:134-136` dir/file 判定 + `:222-232`）后该负例**已 GREEN**，
+//   由 `test/gate-hardening-red.test.js` T15 承载（e3 于 gate-techdebt 批实测：T15 (c) 子例
+//   `declared as file` 已判拒、用例整体 pass）。
+//   本文件只承载「与本批新语义**兼容**」的同步断言，保持既有套件负载中性（改前改后皆通过）。
+
 test('Entry Gate：空文件（size 0 真实文件）consume 仍拒（回归既有语义）', () => {
   makePlan('b-empty-entry', [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md', 'plan/empty.json'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md', 'plan/empty.json'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art('b-empty-entry', 'plan/spec.md');
   art('b-empty-entry', 'plan/empty.json', ''); // 真实 size 0 文件
@@ -105,19 +174,32 @@ test('Entry Gate：空文件（size 0 真实文件）consume 仍拒（回归既�
   assert.equal(store.readBatch(SID, 'b-empty-entry').lanes.e1, 'pending');
 });
 
-test('Exit Gate：目录型 outputs 通过 merged（Bug1 修复覆盖 exit gate 同函数）', () => {
+// 【r2 同步 · 裁定 ②】R-34：本用例与 `:122-133` 同源（Bug1 修复覆盖 exit gate 同函数），
+//   按「声明形态二分」改写：`exec/e1/data/`（**带 `/` 结尾**）⇒ 目录语义 ⇒ 目录须**存在且非空** ⇒ 放行。
+//   **Bug1 意图（保留）**：Windows 下目录 `size` 恒 0 ⇒ 不得把「已存在的目录」误判为「缺失」。
+test('Exit Gate：目录型 outputs 通过 merged（Bug1 修复覆盖 exit gate 同函数）· r2 同步：声明形态二分（`/` 结尾=目录语义）', () => {
   makePlan('b-dir-exit', [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/data/'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art('b-dir-exit', 'plan/spec.md');
   runLane('b-dir-exit', 'p1');
   fs.mkdirSync(path.join(root, 'sessions', SID, 'artifacts', 'b-dir-exit', 'exec', 'e1', 'data'), { recursive: true });
+  // r2 新增：目录语义要求**非空**（空目录不得冒充产物）⇒ 目录内放一个真实文件
+  art('b-dir-exit', 'exec/e1/data/out.txt');
   const r = runLane('b-dir-exit', 'e1');
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.e1, 'merged');
 });
+
+// 【r2 同步 · 裁定 ②】文件语义负例对照（**不在本文件**：属本批 RED 网，见
+//   `test/gate-hardening-red.test.js` T15 的 (c) 子例）：
+//   声明**不带** `/` 结尾 ⇒ 文件语义 ⇒ outputs 给目录必须**拒 merged**。
+//   **r2 前为 RED**（同上 `st.isDirectory() → true` 的隐式放行）；r2 实现「声明形态二分」后
+//   该负例**已 GREEN**，由 `test/gate-hardening-red.test.js` T15 承载（e3 于 gate-techdebt 批
+//   实测 T15 整体 pass，见 `exec/q-h-t15-run.txt` 原始输出）。
+//   本文件只承载「与本批新语义**兼容**」的同步断言，保持既有套件负载中性（改前改后皆通过）。
 
 test('L0：plan merged 前 spec 缺必填章节 → 拒绝', () => {
   makePlan('b-l0', tasks3());
@@ -176,24 +258,31 @@ test('Complete Gate：audit 未完成 → 拒绝；audit 完成后通过', () =>
   assert.equal(r2.phase, 'complete');
 });
 
-test('generic（无 layer）：不触发门禁（向后兼容）', () => {
+test('generic（无 layer）：拒绝免检——无 layer 拒结算 + 批次不得 complete（r2 同步）', () => {
+  // 【r2 同步 · Q-6①/B2+B3】旧口径「generic（无 layer）整 lane 免检、零执行零验收亦可 complete」已废除。
+  //   新语义：① 无 `layer` 的 lane 不得整 lane 免检 ⇒ exit 门拒 `GATE_LANE_LAYER_MISSING`；
+  //          ② 批次既无 exec 也无 audit ⇒ complete 拒 `GATE_COMPLETE_NO_TIER`。
   const plan = buildWavePlan({ batchId: 'b-gen', tasks: [{ id: 't1', cmd: 'x' }] });
   store.createBatch(SID, { batchId: 'b-gen', wavePlan: plan });
-  const r1 = set(SID, 'b-gen', 't1', 'running');
-  assert.ok(!(r1 instanceof Error));
+  const r1 = set(SID, 'b-gen', 't1', 'running'); // entry 门只约束 exec/audit 层 ⇒ 无 layer 的 lane 在此零感知
+  assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   const r2 = set(SID, 'b-gen', 't1', 'review');
-  assert.ok(!(r2 instanceof Error));
+  assert.ok(!(r2 instanceof Error), String(r2 && r2.message));
   const r3 = set(SID, 'b-gen', 't1', 'merged');
-  assert.ok(!(r3 instanceof Error));
+  assert.ok(r3 instanceof Error && /GATE_LANE_LAYER_MISSING/.test(r3.message), String(r3 && r3.message));
   store.setPhase(SID, 'b-gen', 'running');
-  assert.equal(store.setPhase(SID, 'b-gen', 'complete').phase, 'complete');
+  let r4;
+  try { store.setPhase(SID, 'b-gen', 'complete'); r4 = null; } catch (e) { r4 = e; }
+  assert.ok(r4 instanceof Error && /GATE_COMPLETE_NO_TIER/.test(r4.message), String(r4 && r4.message));
 });
 
 // ---- needHuman 人工闸（复用 review 态挂起；不新增成员态）----
+// 【r2 同步 · B4】a1 的 `standalone: true`（旧口径：audit 无上游 ⇒ 自声明放行）改为真 `consume`
+//   （B5：audit 必须锚到 plan 判据来源）——否则 entry 门以 `GATE_STANDALONE_UNJUSTIFIED` 拒派。
 const NEEDHUMAN_TASKS = [
   { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
   { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-  { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/acceptance.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/acceptance.md'], cmd: 'review', deps: ['e1'] },
 ];
 // 三层批次跑完 plan/exec，audit 产物按需写入并派发 a1→running 后返回 batchId
 function setupNeedHuman(batchId, acceptance = '# 验收\nneedHuman: true\n') {
@@ -243,7 +332,7 @@ test('needHuman N3：note 含 human: 证据 → merged 放行 + human.decision �
 test('needHuman：conflict 驳回不强制 human 证据（评审驳回语义，不追加 human.decision）', () => {
   const id = setupNeedHuman('b-nh4');
   set(SID, id, 'a1', 'review');
-  const r = set(SID, id, 'a1', 'conflict');
+  const r = set(SID, id, 'a1', 'conflict', '评审驳回（needHuman 未裁决即驳回）：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.a1, 'conflict');
   assert.ok(!r.events.some((e) => e.type === 'human.decision'));
@@ -293,10 +382,11 @@ test('needHuman：detectNeedHuman 独立行语义——行首 needHuman: true �
 });
 
 // ---- V1 命令 gate（spec G1-G13 冒烟口径，全量断言/回归归 Tester）----
+// 【r2 同步 · B4】a1 同上：`standalone: true` 改为真 `consume`（B5 判据来源锚定）。
 const CMD_TASKS = [
   { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
   { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/test-report.md'], cmd: 'code', deps: ['p1'] },
-  { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/acceptance.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/acceptance.md'], cmd: 'review', deps: ['e1'] },
 ];
 
 test('命令 gate G1：detectGate 独立行语义——行首命中/多行保序；内嵌/注释/非行首/gate:false/空命令不误判；缺失/空/目录跳过', () => {
@@ -401,6 +491,73 @@ test('命令 gate G10：未声明 gate → merged 零感知（无 gate.* 事件�
   assert.ok(!r.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'expect zero gate events');
 });
 
+// ---- F-7（批次 f7-empty-gate-20260915 · 用户裁决「严控勿松」）双向护栏 ----
+// 护栏 A（G11）：**空声明 ⇒ 拒**（防将来被改回静默放行）；
+// 护栏 B（G12）：**未声明 ⇒ 零感知**（防误伤，与 A 成对）。
+// 两例的「改坏 → 转红 → 回退 → 复绿」真跑留档见 lane 产物 `exec/e1/outputs/f7-impl.md`。
+
+test('命令 gate G11：空 `gate:` 行 ⇒ 拒 GATE_EXIT_NO_COMMAND（端到端：抛错 + lane 留 review + 恰 1 条 gate.exit_blocked）', () => {
+  makePlan('b-cg-empty', CMD_TASKS);
+  art('b-cg-empty', 'plan/spec.md');
+  runLane('b-cg-empty', 'p1');
+  art('b-cg-empty', 'exec/test-report.md', '# 验证\ngate:\n'); // 独立行 `gate:`：**已声明**但命令解析为空
+  const r = runLane('b-cg-empty', 'e1');
+  assert.ok(r instanceof Error && /GATE_EXIT_NO_COMMAND/.test(r.message),
+    'F-7/A1：空声明须拒 GATE_EXIT_NO_COMMAND；实测=' + String(r && r.message));
+  const b = store.readBatch(SID, 'b-cg-empty');
+  assert.equal(b.lanes.e1, 'review', 'F-7/A1：被拒 lane 须留 review（失败 lane 非终态）');
+  const blk = b.events.filter((e) => e.type === 'gate.exit_blocked');
+  assert.equal(blk.length, 1, 'F-7/A1：须恰 1 条 gate.exit_blocked；实测=' + JSON.stringify(blk));
+  assert.equal(blk[0].code, 'GATE_EXIT_NO_COMMAND', 'F-7/A1：拒码须为 GATE_EXIT_NO_COMMAND；实测=' + JSON.stringify(blk[0]));
+  // 声明面位自证：`declared` 语义一字未改（空声明仍不计入 commands），新位 `emptyCommand` 独立承载
+  const dir = path.join(root, 'sessions', SID, 'artifacts', 'b-cg-empty');
+  const d = detectGate(dir, ['exec/test-report.md']);
+  assert.equal(d.declared, false, 'F-7/A4：`declared` 仍恒等 commands.length > 0（向后兼容锚点未动）');
+  assert.equal(d.emptyCommand, 'exec/test-report.md', 'F-7：空声明须被「声明面」位捕获（否则与未声明同态）');
+  // 位分离（规格 §双向护栏 第三条）：`gate: false`（显式禁用）与空声明**不是同一态**
+  art('b-cg-empty', 'exec/off.md', 'out\ngate: false\n');
+  const dOff = detectGate(dir, ['exec/off.md']);
+  assert.equal(dOff.declared, false, 'F-7/A3：`gate: false` 仍不计入 commands（放行语义不变）');
+  assert.equal(dOff.emptyCommand, null, 'F-7/A3：`gate: false` 非空命令 ⇒ 不命中空声明位（与空声明非同一态）');
+  art('b-cg-empty', 'exec/both.md', 'out\ngate: false\ngate:\n');
+  const dBoth = detectGate(dir, ['exec/both.md']);
+  assert.equal(dBoth.declared, false, 'F-7：同一产物含 `gate: false` + `gate:` ⇒ declared 仍 false');
+  assert.equal(dBoth.emptyCommand, 'exec/both.md', 'F-7：同一产物内空声明仍被位捕获（两义不互相吞并）');
+});
+
+test('命令 gate G12：未声明 `gate:` 行 ⇒ merged 零感知（命令门族零事件；gate.* 仅剩非命令门留痕）', () => {
+  makePlan('b-cg-nodecl', CMD_TASKS);
+  art('b-cg-nodecl', 'plan/spec.md');
+  runLane('b-cg-nodecl', 'p1');
+  art('b-cg-nodecl', 'exec/test-report.md', '# 验证\n- 无 gate 声明\n');
+  const r = runLane('b-cg-nodecl', 'e1');
+  assert.ok(!(r instanceof Error), String(r && r.message));
+  assert.equal(r.lanes.e1, 'merged', 'F-7/A2：完全未声明 ⇒ 仍放行（不得误伤）');
+  const g = r.events.filter((e) => /^gate\./.test(String(e.type)));
+  // 命令门族（本批新增/既有的判定面）必须零事件
+  const cmdFamily = g.filter((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked' || e.type === 'gate.escape');
+  assert.equal(cmdFamily.length, 0, 'F-7/A2：未声明 ⇒ 命令门族零事件；实测=' + JSON.stringify(g.map((e) => e.type)));
+  // 余下的 `gate.*` 只允许两类**非命令门**留痕，其余一律判红（防「未声明路径」被悄悄加事件）：
+  //   ① `gate.passed`——exit 门放行留痕，任何 merged 恒有（与命令门无关）；
+  //   ② `gate.contract_missing`——B2 契约缺声明首触留痕（本套件 team=punky-preset 未声明 `flows.exec.gate_command`
+  //      ⇒ 引擎基线启用留痕，属**契约面观察**，不改判定；**这是规格「/^gate\./ 全族零事件」在代码上不成立的
+  //      唯一原因**（另因 ① 本就存在），故此处以显式白名单等价收紧）。
+  const offFamily = g.filter((e) => e.type !== 'gate.passed' && e.type !== 'gate.contract_missing');
+  assert.equal(offFamily.length, 0, 'F-7/A2：未声明路径不得出现任何其它 gate.* 事件；实测=' + JSON.stringify(g.map((e) => e.type)));
+  // C-8（techdebt-close-20260915 / lane e1）**正向基线断言**（净增，不改上文任何既有语义）：
+  //   上面这条白名单是「排除式」断言——它只说明「除（gate.passed|gate.contract_missing）外无其它事件」。
+  //   若 `gate.passed` 这个事件**整体消失**（如 `lib/state/store.js:623` 的 EVT_GATE_PASSED 发射点被删），
+  //   白名单的**排除集退化为空集**，该断言会**空过**（仍是 0 条 ⇒ 绿），静默失效无人发现。
+  //   故此处补一条正向基线：`gate.passed` 必须**实际存在**——与上面的排除式成对，白名单不可退化为空集。
+  //   实测：本批两条 lane 走到 merged（上游 p1 + 被测 e1）⇒ 期望条数由 merged lane 数推导，不写死字面量
+  //   （既防 `gate.passed` 整体消失 [0 条]，也防白名单将来被并入其它事件类型 [>merged 条]）。
+  const mergedLanes = Object.values(r.lanes ?? {}).filter((s) => s === 'merged');
+  const passed = g.filter((e) => e.type === 'gate.passed');
+  assert.equal(passed.length, mergedLanes.length, 'C-8：`gate.passed` 必须实际存在（每个 merged lane 各 1 条；排除式白名单不得退化为空集）；merged=' + JSON.stringify(mergedLanes) + '；实测事件族=' + JSON.stringify(g.map((e) => e.type)));
+  assert.ok(passed.some((e) => e.lane === 'e1'), 'C-8：被测 lane e1 的 exit 门放行留痕必须在场；实测=' + JSON.stringify(passed));
+  assert.ok(passed.every((e) => e.gate === 'exit'), 'C-8：该留痕须为 exit 门放行语义（`gate: "exit"`，见 store.js:623）；实测=' + JSON.stringify(passed));
+});
+
 // ---- 补充用例：多行集成 / 集成超时 / 非 exec 零感知 / 事件零泄漏 / cwd 契约 / 逃生阀 ----
 
 test('命令 gate V3：多行 gate 全部 exit 0 → merged + gate.exit 事件含全部 commands/results（保序）', () => {
@@ -455,25 +612,50 @@ test('命令 gate V5：集成层超时 → 拒 merged 抛 GATE_EXIT_TIMEOUT（�
   }
 });
 
-test('命令 gate V9：非 exec 层（plan/audit）产物含 gate 行 → 零感知不执行（D-005）', () => {
+test('命令 gate V9【复活·T-14·裁剪】：非 exec/audit 层（plan）产物含 gate 行 → 零感知不执行（D-005）', () => {
+  // 【复活要点·2026-09-15 批次 core-debt-parallel-20260915 / lane e2】为何原 todo 被裁剪而非整条解壳：
+  //   原体下半段（audit lane）断言「audit 层 `gate:` 行零感知」＝ 固化一条假完成通道，与 S16 正面冲突
+  //   （S16 已把命令门作用层由 `exec` 放宽到 **`exec ∪ audit`** ⇒ audit 层命令声明必须真执行，非 0 退出码拒
+  //   `GATE_EXIT_NONZERO`）。该段**已由 R-22 覆盖**（`test/gate-techdebt-red.test.js` 用例「R-22 audit 层产物含
+  //   命令声明行（exit 7）⇒ 必须真执行并拒 GATE_EXIT_NONZERO」），此处不重复建例，只保留与 S16 作用域不矛盾的
+  //   **plan 层零感知**段（判据同源：命令门只对 exec/audit 层生效）。
   makePlan('b-cg-v9-plan', CMD_TASKS);
   art('b-cg-v9-plan', 'plan/spec.md', '# Spec\n## 验收标准\n- x\ngate: node -e "process.exit(1)"\n## 约束\n- y\n');
   const r1 = runLane('b-cg-v9-plan', 'p1'); // plan lane 产物含 gate 行但为 plan 层
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   assert.equal(r1.lanes.p1, 'merged');
   assert.ok(!r1.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'plan 层零感知');
-  // audit lane：produce 含 gate 行
-  makePlan('b-cg-v9-audit', CMD_TASKS);
-  art('b-cg-v9-audit', 'plan/spec.md');
-  runLane('b-cg-v9-audit', 'p1');
-  art('b-cg-v9-audit', 'exec/test-report.md', '# 验证\n- ok\n');
-  runLane('b-cg-v9-audit', 'e1');
-  art('b-cg-v9-audit', 'audit/acceptance.md', '# 验收\ngate: node -e "process.exit(1)"\n- ok\n');
-  const r2 = runLane('b-cg-v9-audit', 'a1');
-  assert.ok(!(r2 instanceof Error), String(r2 && r2.message));
-  assert.equal(r2.lanes.a1, 'merged');
-  assert.ok(!r2.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'audit 层零感知');
 });
+ARCHIVED_CASES['命令 gate V9：非 exec 层（plan/audit）产物含 gate 行 → 零感知不执行（D-005）'] = [
+  '【已复活（裁剪）⇒ 见用例「命令 gate V9【复活·T-14·裁剪】…」（批次 core-debt-parallel-20260915 · lane e2）】',
+  '【audit 段不入本用例 ⇒ 由 R-22 覆盖：audit 层命令声明真执行，非 0 退出码 ⇒ 拒 GATE_EXIT_NONZERO】',
+  '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
+  '  本条因「它断言 audit 层 `gate:` 行『零感知不执行』= 在固化一条假完成通道，与 S16 正面冲突」转 todo。',
+  '说明：S16（e1，wave3）已把命令门作用层由 `exec` 放宽到 **`exec ∪ audit`** ⇒ audit 层产物里的 `gate:` 行',
+  '  **必须真执行**（非 0 退出码 ⇒ 拒 `GATE_EXIT_NONZERO`）。本用例下半段（audit lane）的正确期望与 R-22 相同、',
+  '  与 R-22 重复，故此**整条用例**转 `test.todo`：用例名 ＋ 原断言文本**逐字保留**（下方缩进注释即原文，',
+  '  便于后续独立小批复活；也可直接删掉 `test.todo(...)` 的外壳恢复执行）。',
+  '  原断言（逐字，2 条）：',
+  '    assert.equal(r2.lanes.a1, \'merged\');',
+  '    assert.ok(!r2.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'audit 层零感知\');',
+  '  makePlan(\'b-cg-v9-plan\', CMD_TASKS);',
+  '  art(\'b-cg-v9-plan\', \'plan/spec.md\', \'# Spec\\n## 验收标准\\n- x\\ngate: node -e "process.exit(1)"\\n## 约束\\n- y\\n\');',
+  '  const r1 = runLane(\'b-cg-v9-plan\', \'p1\'); // plan lane 产物含 gate 行但为 plan 层',
+  '  assert.ok(!(r1 instanceof Error), String(r1 && r1.message));',
+  '  assert.equal(r1.lanes.p1, \'merged\');',
+  '  assert.ok(!r1.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'plan 层零感知\');',
+  '  // audit lane：produce 含 gate 行',
+  '  makePlan(\'b-cg-v9-audit\', CMD_TASKS);',
+  '  art(\'b-cg-v9-audit\', \'plan/spec.md\');',
+  '  runLane(\'b-cg-v9-audit\', \'p1\');',
+  '  art(\'b-cg-v9-audit\', \'exec/test-report.md\', \'# 验证\\n- ok\\n\');',
+  '  runLane(\'b-cg-v9-audit\', \'e1\');',
+  '  art(\'b-cg-v9-audit\', \'audit/acceptance.md\', \'# 验收\\ngate: node -e "process.exit(1)"\\n- ok\\n\');',
+  '  const r2 = runLane(\'b-cg-v9-audit\', \'a1\');',
+  '  assert.ok(!(r2 instanceof Error), String(r2 && r2.message));',
+  '  assert.equal(r2.lanes.a1, \'merged\');',
+  '  assert.ok(!r2.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'audit 层零感知\');',
+];
 
 test('命令 gate V10：env 注入可用 + 事件零凭据泄漏（gate.exit 事件不含 env 值）', () => {
   const secret = 'PUNKY_TEST_SECRET_9f8e7d';
@@ -561,7 +743,7 @@ function makeTargetBatch(batchId, targets, opts = {}) {
   makePlan(batchId, [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'], targets, targetsMarker: opts.targetsMarker ?? null },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art(batchId, 'plan/spec.md');
   runLane(batchId, 'p1');
@@ -661,7 +843,7 @@ test('O2 T5：非 exec 层（plan/audit）声明 targets → 零感知', () => {
   makePlan(id, [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec', targets: ['D:\\fake\\plan-target.js'] },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], targets: ['D:\\fake\\audit-target.js'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], targets: ['D:\\fake\\audit-target.js'] },
   ]);
   art(id, 'plan/spec.md');
   const r1 = runLane(id, 'p1'); // plan 层声明 targets（不存在的假路径也不拦）
@@ -814,7 +996,7 @@ test('O2 checkTargetsGate：无 running 事件 → laneStartedAt 回退 batch.cr
   // 手工构造 batch：无 member.settled running 事件 → 回退 createdAt
   const plan = buildWavePlan({ batchId: id, tasks: [
     { id: 'e1', layer: 'exec', role: 'coder', outputs: ['exec/e1/o'], cmd: 'x', targets: [target] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/r.md'], cmd: 'r', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/r.md'], cmd: 'r', deps: ['e1'], standalone: true },
   ] });
   const batch = {
     schema: 3, sessionId: SID, batchId: id, phase: 'running', wavePlan: plan.wavePlan,

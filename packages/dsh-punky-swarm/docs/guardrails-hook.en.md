@@ -45,10 +45,23 @@ Adjudication order (category priority, first match wins):
 - **REQUIRE_APPROVAL ask behavior (explicit)**: pre synchronously writes `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}` (and caches a decision snapshot — primitive/reason/ruleRefs — for zero-disk-read post correction); post best-effort backfills `outcome` (denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once). **Depends on the host approval channel (serviceAsk); no approval service / no agent → degraded deny** (behavior unchanged, record made explicit); allowed-once → allow. **Denial visibility (controlled exception)**: the host's serviceAsk overwrites ask.reason with tool-name-level generic text on 4 generic branches — rejected (`user rejected`) / cancelled (`was cancelled`) / unavailable (`no approval channel is available`) / no-agent (`no agent to route it through`) — e.g. `the user rejected tool "pwsh"` (no guardrail marker, no matched rules); the wiring post observer **short-circuits a controlled correction** for matched asks of this plugin: returns `{kind:'accept', content:[corrected text]}` whose text carries the `[governance:REQUIRE_APPROVAL approval-gate rejection (guardrail interception…)]` marker + matched rules (rule id + preset attribution) + violation message + receipt/checklist lookup paths (<root>/governance/refusals/… and presets/hook-rules/README.md), preserving isError and degrading to `next()` on failure (zero behavior regression); **denied-no-approval (no-approval-service degrade — the host keeps ask.reason, i.e. the guardrail-prefixed text) is not corrected** (no duplicate annotation). The short-circuit condition is strictly narrowed; the boundary of touching the "post always next()" discipline lives in §1/§7.
 - **DEFER/PAUSE file-state state machine (truly effective once flags are on)**: `flags.defer: true` (soft violation) → session suspended and deferred (state file `<root>/governance/state/<sessionId>.json`, window 30s, receipt carries `deferMeta`); `flags.pause: true` (pausable violation) → session paused (window 60s, receipt carries `pauseMeta`). While suspended/paused, same-session calls are uniformly denied with `[governance:DEFER|PAUSE]` (reason includes retry-after / pauseToken / until); **lazy expiry auto-recovers** (cleaned on read; no timer / no resume endpoint); flag-off collapses to DENY with no state side effect (distinguishable from "session deferred/paused").
 
+### Third adjudication face: tool blacklist (tool × behavior)
+
+Beyond parameter-level rules (`rules`), the guardrails expose a **tool-level adjudication face** `toolBan` (added 2026-09-14) — the **write-channel routing** discipline: an Agent writing files should go through the registered tools (`edit` / `write` / `str-replace-editor`) instead of landing bytes through a shell (`pwsh`) write path of its own construction (on Windows, `>` redirection and `Set-Content` / `Out-File` may write GBK or a BOM, corrupting the file encoding header irreversibly).
+
+- **Entry shape** (`ToolBanEntry`): `id` / `tool` / `behavior` (first batch: `file-write` only) / `code` / `category?` (default `hard`) / `message`;
+- **Adjudication**: `matchToolBan` (`lib/governance/tool-ban.ts`) — tool name + behavior match; `file-write` is decided by `judgeFileWriteCommand` (quote masking → stream-merge stripping → whole-string write indicators → per-segment leading write command → otherwise allowed; an unclosed quote is fail-closed);
+- **Wiring**: a hit produces `Violation` + `ruleRefs` and joins the **same** `classifyViolation` path as parameter-rule hits → default `hard` → **DENY (P2)**; the six-way classifier is untouched, so receipts / event bridging / denial visibility are reused as-is;
+- **Refusal text** carries the correction "write files with the registered tools (edit / write / str-replace-editor)";
+- **Narrowed scope**: only the "modify or write files" class is intercepted — redirection (`>` / `>>`), writer cmdlets (Set-Content / Add-Content / Out-File / New-Item / Remove-Item / Move-Item / Copy-Item / Export-Csv…), landing parameters (`-OutFile` / `find -exec`), segment-leading write commands (rm / mv / cp / del / mkdir / touch / tee / chmod…); **execution / build / test / package-manager / read-only commands all pass** (`npm run build`, `npm test`, `node x.mjs`, `git status`, `Get-ChildItem` do not match — build and test write files themselves, so intercepting them would break the normal development loop);
+- **Independent of the execution engine**: the adjudication lives inside the guardrails and does **not import / modify** `lib/tools/readonly.js` (the shared read-only-scouting decision used on the execution side by the task difficulty gate — a different problem);
+- **Boundary (stated honestly)**: heuristic, **not a sandbox** — aliases (`sc` / `ni` / `ri` / `mi`), script files (`pwsh -File x.ps1`), escaped arguments and encoding tricks can bypass it; "inline interpreter writes" (`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`) are not covered in the first batch (followup). It does **not** promise OS-level isolation or encoding safety — the actual encoding guarantee comes from the edit/write toolchain itself.
+
 ## 3. Configuration Guide and Example Rules
 
-- **Configuration**: top-level key `governance.hook` in `cordis.patch.yml` — `enabled: true` (**default on**; explicit `enabled: false` turns it off) / `rules: []` / `defaults.deny: DENY` (fail-closed fallback, other denial-class primitives configurable, ALLOW not allowed) / `flags: {pause:false, narrow:false, defer:false}` (primitive switches default off → the corresponding class falls back to DENY).
+- **Configuration**: top-level key `governance.hook` in `cordis.patch.yml` — `enabled: true` (**default on**; explicit `enabled: false` turns it off) / `rules: []` (parameter-level rules) / `toolBan: []` (third face: tool blacklist; empty table = zero interception) / `defaults.deny: DENY` (fail-closed fallback, other denial-class primitives configurable, ALLOW not allowed) / `flags: {pause:false, narrow:false, defer:false}` (primitive switches default off → the corresponding class falls back to DENY).
 - **Rule structure**: `id` / `tools?` / `match{path?,op?,pattern?,value?}` / `violations[{code,category,severity?,message,path?}]` / `narrow?`.
+- **ToolBanEntry structure (third face)**: `id` / `tool` (e.g. `pwsh`) / `behavior` (`file-write`) / `code` / `category?` (default `hard`) / `message`; adjudication kernel and boundary in §2 "Third adjudication face".
 
 `match.op` supports: `eq` (recursive deep equality) / `gt` / `gte` / `lt` / `lte` / `in` / `regex`; `match.path` is a JSON Pointer (default = match the whole arguments; path absent → not matched). `category` values: hard / manual_review / ftra / narrowable / pausable / soft / unknown.
 
@@ -127,6 +140,14 @@ Receipt landing → assembly-layer `onRefusal` callback → event stream `<root>
 
   Expected: after writing, re-mount → the new rule immediately intercepts `shutdown` calls (DENY + receipt landing), no process restart needed.
 
+  **Third-face (tool blacklist) hot-update example** (`toolBan` also lands in the resolved snapshot → effective without restart; the `l3-tool-ban` preset file is a shipped asset, so its reference key needs one boot load):
+
+```json
+{ "governance": { "hook": { "toolBan": [ { "id": "L3-W01", "tool": "pwsh", "behavior": "file-write", "code": "L3-W01", "category": "hard", "message": "[preset L3] pwsh command contains a file-write action: write files with the registered tools (edit / write)" } ] } } }
+```
+
+  Expected: after writing, re-mount → `pwsh` file-write commands (e.g. `Set-Content -Path a.txt -Value x`) are immediately DENIED (reason carries the correction text + rule reference `L3-W01 (preset l3-tool-ban)` + receipt landing); read-only commands (`Get-ChildItem`) and build commands (`npm run build`) still pass.
+
 ## 7. Boundaries and Non-Provisions
 
 The current guardrails provide in-process, single-machine, rule-table-driven call-level governance; the following are **not currently provided** (explicit scope-boundary statements, not gaps):
@@ -155,7 +176,7 @@ The current guardrails provide in-process, single-machine, rule-table-driven cal
 - ① Agent-reported text after a refusal (controlled-correction text): session-immediately-visible `[governance:REQUIRE_APPROVAL approval-gate rejection…]` + matched rules (rule id + preset attribution) + violation message + receipt path; the Agent can retry a compliant call following the violation message;
 - ② Approval-request reason (rule-reference delivery): reason tail「; rule reference: …」, delivered to the host UI with `approval.request`;
 - ③ Receipt details (manual/audit): `<root>/governance/refusals/<sessionId>/<receiptId>.json` (decision.reason + ruleRefs + attemptedParams + ask.outcome, hash-anchored) + `ledger-<sessionId>.jsonl` + the batch-level event stream (see §4/§5);
-- ④ Full rule list (proactive review): the「Per-rule review checklist」in `presets/hook-rules/README.md` (l1-sensitive 12 + l2-resource 6; rule id/preset/category/primitive/tools/match/message) + the preset JSON files.
+- ④ Full rule list (proactive review): the「Per-rule review checklist」in `presets/hook-rules/README.md` (parameter-level: l1-sensitive 12 + l2-resource 6; third face tool blacklist: l3-tool-ban 1 — rule id/preset/category/primitive/tools/match/message, with the L3 table additionally carrying behavior/criterion summary) + the preset JSON files.
 
 ## 8. Capability Boundaries & Trade-offs
 

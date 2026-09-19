@@ -23,12 +23,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveGovernanceConfig, validateRuleTable, validatePresetRules } from '../lib/governance/config.js';
+import { resolveGovernanceConfig, validateRuleTable, validatePresetRules, validateToolBanEntries, validateToolBanTable } from '../lib/governance/config.js';
 import { loadPresetFile, loadPresetTable, PRESET_IDS, PRESETS_DIR } from '../lib/governance/preset-loader.js';
 
-// ── 真实 preset 表（包内 presets/hook-rules/ 三文件，随 npm test 构建后目录恒定）──
+// ── 真实 preset 表（包内 presets/hook-rules/ 四文件，随 npm test 构建后目录恒定）──
+// 双表：TABLE = 参数级规则面（l1/l2）；BAN_TABLE = 第三类工具黑名单面（l3-tool-ban）；compose 组合项已废除
 const REAL = loadPresetTable();
 const TABLE = REAL.table;
+const BAN_TABLE = REAL.banTable;
 
 // 最小合法规则（过 validatePresetRules 的形状基线；violations.code 与规则 id 不强绑定——引擎按 category 消费）
 function rule(id, over = {}) {
@@ -37,13 +39,21 @@ function rule(id, over = {}) {
 function wrapper(rules, metaOver = {}) {
   return JSON.stringify({ _meta: { presetId: 'x', schemaVersion: 1, ...metaOver }, rules });
 }
+// 第三类判定面 wrapper（toolBan 面；l3-tool-ban.json 的文件形态）
+function banWrapper(toolBan, metaOver = {}) {
+  return JSON.stringify({ _meta: { presetId: 'x', schemaVersion: 1, ...metaOver }, toolBan });
+}
+// 最小合法黑名单条目（过 validateToolBanEntries 形状基线）
+function banEntry(id, over = {}) {
+  return { id, tool: 'pwsh', behavior: 'file-write', code: id, category: 'hard', message: 'm', ...over };
+}
 
 function freshTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-preset-loader-'));
 }
 
-test('L-1 注册枚举：PRESET_IDS = 3 注册 id；PRESETS_DIR 指向随包 presets/hook-rules', () => {
-  assert.deepEqual([...PRESET_IDS], ['l1-sensitive', 'l2-resource', 'compose']);
+test('L-1 注册枚举：PRESET_IDS = 3 注册 id（l1/l2 + 第三类 l3-tool-ban；compose 组合项已废除）；PRESETS_DIR 指向随包 presets/hook-rules', () => {
+  assert.deepEqual([...PRESET_IDS], ['l1-sensitive', 'l2-resource', 'l3-tool-ban']);
   assert.equal(path.basename(PRESETS_DIR), 'hook-rules');
   assert.equal(path.basename(path.dirname(PRESETS_DIR)), 'presets');
   for (const id of PRESET_IDS) {
@@ -51,17 +61,24 @@ test('L-1 注册枚举：PRESET_IDS = 3 注册 id；PRESETS_DIR 指向随包 pre
   }
 });
 
-test('L-2 loadPresetTable()：3 注册 id 全装载、_meta 剥离（规则对象零 _meta/零扩展字段）、errors 空', () => {
-  assert.deepEqual(Object.keys(REAL.table), [...PRESET_IDS]);
+test('L-2 loadPresetTable()：双表分派（rules 面 3 id + toolBan 面 l3-tool-ban）、_meta 剥离、errors 空', () => {
+  // rules 面：l1/l2 —— l3-tool-ban 无 rules ⇒ 不入 table（catalog 计数由两表并计）
+  assert.deepEqual(Object.keys(REAL.table), ['l1-sensitive', 'l2-resource']);
+  // toolBan 面（第三类判定面）：仅 l3-tool-ban 有黑名单条目
+  assert.deepEqual(Object.keys(REAL.banTable), ['l3-tool-ban']);
   assert.deepEqual(REAL.errors, []);
   assert.equal(REAL.table['l1-sensitive'].length, 12);
   assert.equal(REAL.table['l2-resource'].length, 6);
-  assert.equal(REAL.table['compose'].length, 18);
-  for (const id of PRESET_IDS) {
+  assert.equal(REAL.banTable['l3-tool-ban'].length, 1);
+  for (const id of Object.keys(REAL.table)) {
     for (const r of REAL.table[id]) {
       assert.equal('_meta' in r, false, `${id} 规则 ${r.id} 不应含 _meta（剥离语义：loader 只剥 _meta 不洗规则）`);
       assert.ok(r && typeof r.id === 'string');
     }
+  }
+  for (const e of REAL.banTable['l3-tool-ban']) {
+    assert.equal('_meta' in e, false, `黑名单条目 ${e.id} 不应含 _meta（剥离语义）`);
+    assert.ok(e && typeof e.id === 'string' && e.tool === 'pwsh' && e.behavior === 'file-write');
   }
 });
 
@@ -76,24 +93,26 @@ test('L-3 loadPresetFile：注册 id 单文件装载成功；未知 id 拒绝（
 });
 
 test('L-4 坏目录容错：单文件失败 → 该 id 不入表 + errors 收集，其余照常（不 throw）', () => {
-  // (a) 全坏：坏 JSON / 顶层非 wrapper / 文件内重复 id → 3 id 全失败、errors 逐文件收集、table 空
+  // (a) 全坏：坏 JSON / 顶层非 wrapper / 黑名单形状坏 → 3 id 全失败、errors 逐文件收集、双表皆空
   const dirAll = freshTmp();
   fs.writeFileSync(path.join(dirAll, 'l1-sensitive.json'), '{ not json');
   fs.writeFileSync(path.join(dirAll, 'l2-resource.json'), JSON.stringify({ rules: 'nope' }));
-  fs.writeFileSync(path.join(dirAll, 'compose.json'), wrapper([rule('R1'), rule('R1')]));
+  fs.writeFileSync(path.join(dirAll, 'l3-tool-ban.json'), banWrapper([banEntry('L3-W01', { behavior: 'bogus' })]));
   const rAll = loadPresetTable(dirAll);
-  assert.deepEqual(Object.keys(rAll.table), [], '全坏目录 → 零 id 入表');
+  assert.deepEqual(Object.keys(rAll.table), [], '全坏目录 → 零 id 入 rules 表');
+  assert.deepEqual(Object.keys(rAll.banTable), [], '全坏目录 → 零 id 入 toolBan 表');
   assert.equal(rAll.errors.length, 3, '每文件一条错误（实际: ' + rAll.errors.join(' | ') + '）');
   assert.ok(rAll.errors.some((e) => e.includes('JSON.parse 失败')));
   assert.ok(rAll.errors.some((e) => e.includes('顶层结构非法')));
-  assert.ok(rAll.errors.some((e) => e.includes('duplicate rule id')));
-  // (b) 单坏：l2 坏、l1/compose 好 → table 含 2 id、errors 仅 1 条
+  assert.ok(rAll.errors.some((e) => e.includes('behavior 非法')), '黑名单形状错误定位到 behavior（实际: ' + rAll.errors.join(' | ') + '）');
+  // (b) 单坏：l2 坏、l1/l3 好 → rules 表 1 id、toolBan 表 1 id、errors 仅指向坏 id
   const dirOne = freshTmp();
   fs.writeFileSync(path.join(dirOne, 'l1-sensitive.json'), wrapper([rule('R1')]));
   fs.writeFileSync(path.join(dirOne, 'l2-resource.json'), wrapper([{ id: 'R2' }])); // violations 缺失 → 形状坏
-  fs.writeFileSync(path.join(dirOne, 'compose.json'), wrapper([rule('R3')]));
+  fs.writeFileSync(path.join(dirOne, 'l3-tool-ban.json'), banWrapper([banEntry('L3-W01')]));
   const rOne = loadPresetTable(dirOne);
-  assert.deepEqual(Object.keys(rOne.table).sort(), ['compose', 'l1-sensitive'], '坏文件单 id 不入表、其余照常');
+  assert.deepEqual(Object.keys(rOne.table), ['l1-sensitive'], '坏文件单 id 不入表、其余照常');
+  assert.deepEqual(Object.keys(rOne.banTable), ['l3-tool-ban'], 'toolBan 面照常装载（与 rules 面互不影响）');
   assert.ok(rOne.errors.length >= 1, '坏文件错误按条收集（该文件形状错误逐条入 errors）');
   assert.ok(rOne.errors.every((e) => e.includes('l2-resource')), '错误全部定位到坏 preset id（实际: ' + rOne.errors.join(' | ') + '）');
 });
@@ -135,6 +154,7 @@ test('L-6 validateRuleTable：全表 id 唯一性——重复 id 报次数、空
 const EXPECT_DEFAULTS = {
   enabled: true,
   rules: [],
+  toolBan: [],
   defaults: { deny: 'DENY' },
   flags: { pause: false, narrow: false, defer: false },
   escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },
@@ -149,22 +169,26 @@ test('T3-1 无 preset 键零行为差：resolve({}) / resolve({rules}) 与 EXPEC
   assert.equal(c.rules.length, 1);
   assert.equal(c.enabled, true);
   // enabled:false + preset 展开不抛错（rules 仍解析；hook 不挂由 wiring 语义负责）
-  const off = resolveGovernanceConfig({ enabled: false, preset: 'l1-sensitive' }, { presetTable: TABLE });
+  const off = resolveGovernanceConfig({ enabled: false, preset: ['l1-sensitive'] }, { presetTable: TABLE });
   assert.equal(off.enabled, false);
   assert.equal(off.rules.length, 12);
 });
 
-test('T3-2 preset string 展开：preset:l1-sensitive → 12 条 = 文件内容（_meta 剥离后逐条等价）', () => {
-  const c = resolveGovernanceConfig({ preset: 'l1-sensitive' }, { presetTable: TABLE });
+test('T3-2 单值字符串形态已废除（单选遗产）：preset:"l1-sensitive" → 形态非法回退空表 + warn；数组形态照常展开', () => {
+  const warns = [];
+  const single = resolveGovernanceConfig({ preset: 'l1-sensitive' }, { presetTable: TABLE, warn: (m) => warns.push(m) });
+  assert.deepEqual(single.rules, [], '单值形态 → 回退空表（宁空勿半，不静默兼容）');
+  assert.ok(warns.some((m) => /单值字符串形态已废除/.test(m)), 'warn 说明形态废除与数组写法（实际: ' + warns.join(' | ') + '）');
+  // 数组形态（多选）= 唯一合法形态：逐条等价展开
+  const c = resolveGovernanceConfig({ preset: ['l1-sensitive'] }, { presetTable: TABLE });
   assert.equal(c.rules.length, 12);
   assert.deepEqual(c.rules, [...TABLE['l1-sensitive']]);
   assert.deepEqual(c.rules.map((r) => r.id), TABLE['l1-sensitive'].map((r) => r.id));
 });
 
-test('T3-3 preset string[] 展开保序 + compose 等价：["l1-sensitive","l2-resource"] = compose 逐条等价（L1 前 L2 后）', () => {
+test('T3-3 preset string[] 展开保序：["l1-sensitive","l2-resource"] → 18 条（L1 前 12 / L2 后 6，文件序）', () => {
   const c = resolveGovernanceConfig({ preset: ['l1-sensitive', 'l2-resource'] }, { presetTable: TABLE });
-  assert.equal(c.rules.length, 18);
-  assert.deepEqual(c.rules, [...TABLE['compose']], '数组引用 = compose 展开逐条等价（两种写法同一份 18 条）');
+  assert.equal(c.rules.length, 18, '12 + 6 保序拼接（compose 组合项已废除，组合由数组引用表达）');
   // 保序断言：前 12 为 l1 文件序、后 6 为 l2 文件序
   assert.deepEqual(c.rules.slice(0, 12).map((r) => r.id), TABLE['l1-sensitive'].map((r) => r.id));
   assert.deepEqual(c.rules.slice(12, 18).map((r) => r.id), TABLE['l2-resource'].map((r) => r.id));
@@ -172,7 +196,7 @@ test('T3-3 preset string[] 展开保序 + compose 等价：["l1-sensitive","l2-r
 
 test('T3-4 preset + inline 共存：preset:l2-resource + inline 1 条 → 6+1 保序拼接（preset 展开前、inline 后）', () => {
   const inline = rule('MY-INLINE');
-  const c = resolveGovernanceConfig({ preset: 'l2-resource', rules: [inline] }, { presetTable: TABLE });
+  const c = resolveGovernanceConfig({ preset: ['l2-resource'], rules: [inline] }, { presetTable: TABLE });
   assert.equal(c.rules.length, 7);
   assert.equal(c.rules[0].id, 'L2-R01');
   assert.equal(c.rules[5].id, 'L2-R06');
@@ -181,22 +205,25 @@ test('T3-4 preset + inline 共存：preset:l2-resource + inline 1 条 → 6+1 �
 
 test('T3-5 未知 id：preset:no-such → 装载失败回退 rules:[] + warn 含未知 preset id（opts.warn 捕获断言）', () => {
   const warns = [];
-  const c = resolveGovernanceConfig({ preset: 'no-such' }, { presetTable: TABLE, warn: (m) => warns.push(m) });
+  const c = resolveGovernanceConfig({ preset: ['no-such'] }, { presetTable: TABLE, warn: (m) => warns.push(m) });
   assert.deepEqual(c.rules, [], '未知 id → 回退空表（宁空勿半）');
   assert.ok(warns.some((m) => m.includes("未知 preset id 'no-such'")), 'warn 应被调用并含未知 id（实际: ' + warns.join(' | ') + '）');
 });
 
-test('T3-6 跨引用重复 id：preset:["l1-sensitive","compose"] → validateRuleTable 拒绝回退空表 + warn 列重复 id', () => {
+test('T3-6 跨引用重复 id：同一 preset 引用两次 → 展开后 rule id 撞车 → validateRuleTable 拒绝回退空表 + warn', () => {
   const warns = [];
-  const c = resolveGovernanceConfig({ preset: ['l1-sensitive', 'compose'] }, { presetTable: TABLE, warn: (m) => warns.push(m) });
-  assert.deepEqual(c.rules, [], 'compose × l1 重复 id（互斥引用误用）→ 回退空表');
+  const c = resolveGovernanceConfig(
+    { preset: ['l1-sensitive', 'l1-sensitive'] },
+    { presetTable: TABLE, warn: (m) => warns.push(m) },
+  );
+  assert.deepEqual(c.rules, [], '重复 id（引用误用）→ 回退空表');
   assert.ok(warns.some((m) => /duplicate rule id 'L1-D01'/.test(m)), 'warn 列重复 id（实际: ' + warns.join(' | ') + '）');
 });
 
 test('T3-7 preset×inline 重复：preset:l1-sensitive + inline rules 含同 id L1-D01 → 拒绝回退空表 + warn', () => {
   const warns = [];
   const c = resolveGovernanceConfig(
-    { preset: 'l1-sensitive', rules: [rule('L1-D01')] },
+    { preset: ['l1-sensitive'], rules: [rule('L1-D01')] },
     { presetTable: TABLE, warn: (m) => warns.push(m) },
   );
   assert.deepEqual(c.rules, [], 'preset×inline 重复 id → 回退空表');
@@ -220,19 +247,19 @@ test('T3-8 引用形态非法：preset 数字 / 数组含非 string / 空串 / �
   const c4 = resolveGovernanceConfig({ preset: [] }, { presetTable: table2, warn: (m) => warns.push(m) });
   assert.deepEqual(c4.rules, [], '空数组无意义引用 → 回退空表');
   assert.ok(warns.length >= 4, '每形态各 warn 一次（实际 ' + warns.length + ' 次）');
-  // 表缺注册 id（未知 id 语义）：表无 compose → preset:compose 拒绝
-  const c5 = resolveGovernanceConfig({ preset: 'compose' }, { presetTable: table2, warn: (m) => warns.push(m) });
+  // 表缺注册 id（未知 id 语义）：自定义表只含 l1 的 rules，引用 l3-tool-ban（table/banTable 皆无）→ 拒绝
+  const c5 = resolveGovernanceConfig({ preset: 'l3-tool-ban' }, { presetTable: table2, warn: (m) => warns.push(m) });
   assert.deepEqual(c5.rules, [], 'presetTable 缺该 id → 判未知 id 拒绝（缺省/部分表不识别）');
   // presetTable 完全不注入（缺省 opts）→ 任何引用都拒绝（设计：缺省表 = 所有 id 未注册）
   const warns2 = [];
-  const c6 = resolveGovernanceConfig({ preset: 'l1-sensitive' }, { warn: (m) => warns2.push(m) });
+  const c6 = resolveGovernanceConfig({ preset: ['l1-sensitive'] }, { warn: (m) => warns2.push(m) });
   assert.deepEqual(c6.rules, [], 'presetTable 缺省 → 引用判未注册回退空表');
   assert.ok(warns2.some((m) => m.includes('未知 preset id')));
 });
 
 test('T3-9 装载成功无 warn：合法展开零 warn（防误报回归——成功路径不污染日志）', () => {
   const warns = [];
-  resolveGovernanceConfig({ preset: 'compose' }, { presetTable: TABLE, warn: (m) => warns.push(m) });
+  resolveGovernanceConfig({ preset: ['l1-sensitive'] }, { presetTable: TABLE, warn: (m) => warns.push(m) });
   resolveGovernanceConfig({ preset: ['l1-sensitive', 'l2-resource'], rules: [rule('MY-INLINE')] }, { presetTable: TABLE, warn: (m) => warns.push(m) });
   assert.deepEqual(warns, [], '合法装载/展开零 warn');
 });

@@ -110,7 +110,7 @@ export function isAcked(root, box, ackId) {
   return fs.existsSync(path.join(ackDir(boxDir(root, box)), ackId + '.acked'));
 }
 
-// ---- 滞留清理（④，T-CODE-4）：ack 标记 TTL sweep + 损坏消息 quarantine + 孤儿 .acked 清理 ----
+// ---- 滞留清理（④）：ack 标记 TTL sweep + 损坏消息 quarantine + 孤儿 .acked 清理 ----
 // sweep(root, { ttlMs=7d, quarantineTtlMs=30d, now })：遍历 root 下全部 box 目录（supervisor/inbox、
 // broadcast、<lane>/outbox）：
 //   - acked 且标记超 TTL → 删消息文件 + 删 .acked 标记（消息删除失败则标记保留，下轮 sweep 重试）

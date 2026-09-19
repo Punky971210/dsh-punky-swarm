@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // client.js 拼装同步校验：lib/panel/*.js 的 [panel-segment] 段
-// 必须与 lib/client.js 内对应段逐字节一致。段拼接触及 main.js/locales.js 等；本测试覆盖全部七段。
+// 必须与 lib/client.js 内对应段逐字节一致。段拼接触及 main.js/locales.js 等；本测试覆盖全部八段。
 // （新增 gov-config.js 段 → SEGMENT_ORDER 追加后同步断言期望随之更新，
 //   重生成自检「若存在段同步断言则更新其期望」。）
 import test from 'node:test';
@@ -29,7 +29,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
 const client = fs.readFileSync(path.join(repo, 'lib', 'client.js'), 'utf8');
 
-const PANEL_FILES = ['locales', 'theme', 'widgets', 'batch-list', 'batch-detail', 'main', 'gov-config'];
+// 段序与 scripts/assemble-panel.mjs 的 SEGMENT_ORDER 一一对应（panel-model 段置首，见该文件注释）
+const PANEL_FILES = ['panel-model', 'locales', 'theme', 'widgets', 'batch-list', 'batch-detail', 'main', 'gov-config'];
 
 function extractClientSegment(clientText, marker) {
   const start = clientText.indexOf(marker);

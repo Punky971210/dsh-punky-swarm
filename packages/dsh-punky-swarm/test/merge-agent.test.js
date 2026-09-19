@@ -34,6 +34,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 merge 治理）统一补 software-team；
+//   该团队的 skills 必须可解析 ⇒ 隔离 HOME 下先注入宿主技能根。
+seedTeamAssetSkills('software-team');
 
 const EXEC_SESS = { agent: { session: { id: 'sess-wt' } } };
 
@@ -62,7 +68,9 @@ function setup({ mergeAgent = null, spawner = null, hostSpawner = null } = {}) {
   const config = { capabilities: { worktree: wt } };
   if (hostSpawner) config.host = { spawnMergeAgent: hostSpawner };
   const { tools } = createTools(ctx, { store, root, config, mergeAgentSpawner: spawner ?? undefined });
-  return { root, store, byName: Object.fromEntries(tools.map((t) => [t.name, t])), registered };
+  // G1 前置（新门禁）：建批属 C 档动作 ⇒ 本套件建批前先把会话评估为 C（同 assign_check 落盘函数）
+  assessC(store, 'sess-wt', { rationale: 'fixture：merge-agent 套件建批前置评估（双 lane 冲突治理 ⇒ C 档）' });
+  return { root, store, byName: withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t]))), registered };
 }
 
 function wtRoot(root, batchId) { return path.join(root, 'sessions', 'sess-wt', 'worktrees', batchId); }

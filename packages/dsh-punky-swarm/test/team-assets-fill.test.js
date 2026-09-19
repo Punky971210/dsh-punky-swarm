@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   A3 自定义牵头生效（静态 + 运行 + 悬空牵头反例 TEAM_ASSET_LEAD_NOT_IN_LAYERS）；
 //   A4 生产口径可强制：producer lane 声明 consume=audit 两产物 → 缺产物 GATE_ENTRY_MISSING 且成员态不进入 running；
 //      补齐后同 lane 可派（正例）；并断言「entry_requires:['consume'] 已翻牌」以防 legacy 口径下的假绿；
-//   兼容：team='jiufeng'（团队装配已退役）→ 无 [skills=…] 前缀 + GATE_TEAM_ASSET_MISSING（防回归）。
+//   兼容：team='punky-preset'（团队装配已退役）→ 无 [skills=…] 前缀 + GATE_TEAM_ASSET_MISSING（防回归）。
 //
 // 口径归属（硬约束，见批次产物根 plan/team-assets-spec.md）：
 //   期望值只取自「资产文件原文解析」；SKILL.md 文本不参与 A2 期望值（防真源被文档劫持）。
@@ -39,7 +39,15 @@ import { fileURLToPath } from 'node:url';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { clearRoleCache, clearFlowCache, packageRoot } from '../lib/assembly/flows.js';
+import { assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { loadTeamAsset, parseTeamAsset, validateTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
+import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
+
+// 【P1 同步 · 宿主技能根】P1 起团队资产的 `skills` 必须**可解析**（不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批；
+//   技能根不存在/不可读 ⇒ **同码拒**，不静默跳过）⇒ 隔离 HOME（preload 重定向）下先造出「这些技能已安装」的
+//   宿主技能根。注入面 = **显式 env**（`USERPROFILE || HOME` + `.agents/skills`，与引擎读端同源，零新变量）；
+//   载荷逐字取各团队资产原文的声明（design-team / research-team 为被检团队，其余为交叉对照用）。
+for (const team of ['design-team', 'research-team', 'writing-team', 'engine-team', 'software-team']) seedTeamAssetSkills(team);
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESS = { agent: { session: { id: 'sess-taf' } } };
@@ -60,6 +68,8 @@ function makeHarness() {
   const store = createStore(root);
   const ctx = { tools: { register: () => {} }, logger: console };
   const { tools } = createTools(ctx, { store, root });
+  // G1 前置（新门禁）：`wave_plan` / `member_status` 属 C 档动作 ⇒ 先把本会话评估为 C（同 assign_check 落盘函数）
+  assessC(store, SESSION_ID, { rationale: 'fixture：团队资产套件建批前置评估（plan/exec/audit 多线 ⇒ C 档）' });
   return { root, store, byName: Object.fromEntries(tools.map((t) => [t.name, t])) };
 }
 
@@ -83,7 +93,7 @@ function designTasks() {
   return [
     { id: 'p1', layer: 'plan', role: 'design-planner', produce: ['plan/design-spec.md'], cmd: 'plan-design' },
     { id: 'e1', layer: 'exec', role: 'workflow-builder', consume: ['plan/design-spec.md'], outputs: ['exec/workflow.json'], deps: ['p1'], cmd: 'build-workflow' },
-    { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit-workflow' },
+    { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['plan/design-spec.md', 'exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit-workflow' },
   ];
 }
 
@@ -91,7 +101,7 @@ function researchTasks() {
   return [
     { id: 'p1', layer: 'plan', role: 'research-planner', produce: ['plan/research-spec.md'], cmd: 'plan-research' },
     { id: 'e1', layer: 'exec', role: 'researcher', consume: ['plan/research-spec.md'], outputs: ['exec/research-report.md'], deps: ['p1'], cmd: 'do-research' },
-    { id: 'a1', layer: 'audit', role: 'research-auditor', consume: ['exec/research-report.md'], produce: ['audit/source-verification.md'], deps: ['e1'], cmd: 'verify-sources' },
+    { id: 'a1', layer: 'audit', role: 'research-auditor', consume: ['plan/research-spec.md', 'exec/research-report.md'], produce: ['audit/source-verification.md'], deps: ['e1'], cmd: 'verify-sources' },
   ];
 }
 
@@ -124,7 +134,7 @@ test('A2 design-team 建批：零 GATE_ROLE_INVALID / 零 GATE_ROLE_MISSING，cm
     clearRoleCache();
     clearFlowCache();
     const asset = rawAsset('design-team'); // 期望值 = 资产原文独立解析（非 lane 自述）
-    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-design', tasks: designTasks(), team: 'design-team' }, SESS);
+    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-design', tasks: designTasks(), team: 'design-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(out.batchId, 'taf-a2-design');
     // ① 零角色告警（含 assembly.roles 词法告警通道）
     assert.equal(codesOf(out).includes('GATE_ROLE_INVALID'), false, '不得出现 GATE_ROLE_INVALID：' + JSON.stringify(out.warnings));
@@ -158,7 +168,7 @@ test('A2 research-team 建批：零 GATE_ROLE_INVALID / 零 GATE_ROLE_MISSING，
     clearRoleCache();
     clearFlowCache();
     const asset = rawAsset('research-team');
-    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-research', tasks: researchTasks(), team: 'research-team' }, SESS);
+    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-research', tasks: researchTasks(), team: 'research-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(out.batchId, 'taf-a2-research');
     assert.equal(codesOf(out).includes('GATE_ROLE_INVALID'), false, '不得出现 GATE_ROLE_INVALID：' + JSON.stringify(out.warnings));
     assert.equal(codesOf(out).includes('GATE_ROLE_MISSING'), false, '不得出现 GATE_ROLE_MISSING：' + JSON.stringify(out.warnings));
@@ -190,7 +200,7 @@ test('A2 交叉验证：注入前缀 ≠ 内联 skills 时以装配为准（同�
     clearRoleCache();
     const tasks = designTasks();
     tasks[1] = { ...tasks[1], skills: ['SENTINEL-SKILL'] }; // 显式声明 ≠ 资产声明
-    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-cross', tasks, team: 'design-team' }, SESS);
+    const out = await byName.wave_plan.execute({ batchId: 'taf-a2-cross', tasks, team: 'design-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(out.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'e1').cmd, '[role=workflow-builder] [skills=SENTINEL-SKILL] build-workflow',
       '显式 skills 优先（既有语义）⇒ 未显式声明的 p1/a1 前缀确来自资产读端');
     assert.match(out.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'p1').cmd, /\[skills=spec-writing,interaction-design-principles,comfyui-use\]/);
@@ -225,7 +235,7 @@ test('A3 牵头运行面：plan 牵头 lane + audit 牵头 lane 建批（含 C+ 
       { id: 'e1', layer: 'exec', role: 'workflow-builder', consume: ['plan/design-spec.md'], outputs: ['exec/workflow.json'], deps: ['p1'], cmd: 'b1' },
       { id: 'e2', layer: 'exec', role: 'workflow-builder', consume: ['plan/design-spec.md'], outputs: ['exec/workflow2.json'], deps: ['p1'], cmd: 'b2' },
       { id: 'e3', layer: 'exec', role: 'producer', consume: ['plan/design-spec.md'], outputs: ['exec/production/p.json'], deps: ['p1'], cmd: 'p' },
-      { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit' },
+      { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['plan/design-spec.md', 'exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit' },
     ];
     const out = await byName.wave_plan.execute({
       batchId: 'taf-a3', tasks, team: 'design-team',
@@ -253,9 +263,17 @@ test('A3 反例：牵头角色悬空（不在该层/任一层）→ TEAM_ASSET_L
     fs.mkdirSync(path.join(tmpRoot, 'presets', 'design-team'), { recursive: true });
     fs.writeFileSync(path.join(tmpRoot, 'presets', 'design-team', 'team-asset.yml'), JSON.stringify(broken), 'utf8');
     const r = loadTeamAsset(tmpRoot, 'design-team');
-    assert.equal(r.ok, false, '悬空牵头必须被拒载');
+    // 【R2-3 一致性（2026-09-17）改语义】原断言 `assert.equal(r.ok, false, '悬空牵头必须被拒载')` 随新语义
+    //   反转：`ok = 无 blocking`，而 `TEAM_ASSET_LEAD_NOT_IN_LAYERS` ∈ warning 侧（`BLOCKING_CODES` 未收录）
+    //   ⇒ 悬空牵头现在报 `ok:true` + problems 非空（**警告不消失、不降级为日志**），与 `chain.js` 同口径。
+    //   本用例意图（证明该校验真在跑）**未削弱**：① 断言翻转 + ② 显式补 problems 非空
+    //   （旧断言由 `ok` 隐含）+ ③ 码面断言逐字保留 + ④ 严重级断言（新增，钉死 warning 级）。
+    assert.equal(r.ok, true, '新语义：仅 warning（LEAD_NOT_IN_LAYERS）⇒ ok:true（旧语义此处 false）');
+    assert.ok(r.problems.length > 0, 'warning 必须**完整保留**在 problems（不得丢弃）');
     assert.ok(r.problems.some((p) => p.code === TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS),
       '须报 TEAM_ASSET_LEAD_NOT_IN_LAYERS：' + JSON.stringify(r.problems));
+    assert.equal(r.problems.some((p) => p.code === TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS && p.severity === 'blocking'), false,
+      '该码须为 warning 级（若被升级为 blocking ⇒ ok 应翻 false，本断言会随之失败）');
     assert.equal(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS, 'TEAM_ASSET_LEAD_NOT_IN_LAYERS');
     // 对照：真实资产无该码（证明上面的红不是环境噪音）
     const good = loadTeamAsset(packageRoot(), 'design-team');
@@ -268,7 +286,7 @@ test('A3 反例：牵头角色悬空（不在该层/任一层）→ TEAM_ASSET_L
 // ── A4：生产口径可强制（同批产物根正/负例成对）──
 
 test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_ENTRY_MISSING 且不进入 running；补齐后可派', async () => {
-  const { root, byName } = makeHarness();
+  const { root, store, byName } = makeHarness();
   try {
     clearRoleCache();
     clearFlowCache();
@@ -277,12 +295,19 @@ test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_E
     const tasks = [
       { id: 'p1', layer: 'plan', role: 'design-planner', produce: ['plan/design-spec.md'], cmd: 'plan' },
       { id: 'e1', layer: 'exec', role: 'workflow-builder', consume: ['plan/design-spec.md'], outputs: ['exec/workflow.json'], deps: ['p1'], cmd: 'build' },
-      { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit' },
+      { id: 'a1', layer: 'audit', role: 'workflow-auditor', consume: ['plan/design-spec.md', 'exec/workflow.json'], produce: ['audit/workflow-review.md'], deps: ['e1'], cmd: 'audit' },
       // producer：**新批次**语义下的同一 lane（本批内验证 consume 强制面；跨批语义只记 followup）
-      { id: 'prod1', layer: 'exec', role: 'producer', consume: ['audit/workflow-review.md', 'audit/gap-list.json'], outputs: ['exec/production/out.png'], deps: ['a1'], cmd: 'produce' },
+      //   【2026-09-18 同步 · exec 双消费】执行侧 lane 一律 `plan/` ＋ 上游产物 双消费（与 audit 同构；
+      //   资产 `flows.exec.consumes_required_per_lane: ["plan/"]` 建批期强制）⇒ 补 plan 规格件。
+      { id: 'prod1', layer: 'exec', role: 'producer', consume: ['plan/design-spec.md', 'audit/workflow-review.md', 'audit/gap-list.json'], outputs: ['exec/production/out.png'], deps: ['a1'], cmd: 'produce' },
     ];
-    const out = await byName.wave_plan.execute({ batchId: 'taf-a4', tasks, team: 'design-team' }, SESS);
+    const out = await byName.wave_plan.execute({ batchId: 'taf-a4', tasks, team: 'design-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(codesOf(out).includes('GATE_ROLE_INVALID'), false, 'producer 角色须合法（∈ roles.extra）：' + JSON.stringify(out.warnings));
+    // G2 前置（2026-09-14 新门禁）：本批声明（缺省归一化）`managerPlan: 'raise'` ⇒ prod1（exec 层）派发前须先登记
+    //   Manager，否则 entry 门先返 GATE_MANAGER_NOT_RAISED、吞掉本用例的被检面（GATE_ENTRY_MISSING）。
+    registerManager(store, SESSION_ID, 'taf-a4', 'mgr-taf-a4');
+    // plan 规格先落盘（exec lane 的 `plan/` 消费是必含项；使被检面收敛到「缺 audit 两产物」）
+    writeArtifact(root, 'taf-a4', 'plan/design-spec.md', '# spec\n');
     // ① 负例：audit 两产物不在产物根 → 拒派
     await assert.rejects(
       () => byName.member_status.execute({ batchId: 'taf-a4', lane: 'prod1', status: 'running' }, SESS),
@@ -298,8 +323,10 @@ test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_E
     await byName.member_status.execute({ batchId: 'taf-a4', lane: 'prod1', status: 'running' }, SESS);
     assert.equal(readBatch(root, 'taf-a4').lanes.prod1, 'running', '补齐 consume 产物后同 lane 可派（拒绝来自缺产物，非角色/技能非法）');
     // ④ 对照负例：只补一个产物仍拒（证明判据是「逐条存在性」而非「任一存在」）
-    const out2 = await byName.wave_plan.execute({ batchId: 'taf-a4b', tasks, team: 'design-team' }, SESS);
+    const out2 = await byName.wave_plan.execute({ batchId: 'taf-a4b', tasks, team: 'design-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(codesOf(out2).includes('GATE_ROLE_INVALID'), false);
+    registerManager(store, SESSION_ID, 'taf-a4b', 'mgr-taf-a4b'); // G2 前置：exec 层派发前须已登记 Manager（同上）
+    writeArtifact(root, 'taf-a4b', 'plan/design-spec.md', '# spec\n');        // exec lane 的 `plan/` 消费（必含项）
     writeArtifact(root, 'taf-a4b', 'audit/workflow-review.md', '# review\n'); // 仅缺 gap-list.json
     await assert.rejects(
       () => byName.member_status.execute({ batchId: 'taf-a4b', lane: 'prod1', status: 'running' }, SESS),
@@ -312,18 +339,34 @@ test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_E
   }
 });
 
-// ── 兼容锚：jiufeng 团队装配已退役（防回归）──
+// ── 兼容锚：punky-preset 团队装配已退役（防回归）──
 
-test('兼容：team=jiufeng（装配已退役）→ 无 [skills=…] 前缀 + GATE_TEAM_ASSET_MISSING 告警（不阻断建批）', async () => {
+test('【P1 反转 + 同步】team=punky-preset（预设/模式名，非团队资产）⇒ 构造期拒 TEAM_ASSET_NOT_FOUND + 零批次落盘', async () => {
   const { root, byName } = makeHarness();
   try {
     clearRoleCache();
-    // 单 task ⇒ 非 C 类形态，避免 GATE_ROLE_MISSING 噪音混淆判据
-    const out = await byName.wave_plan.execute({ batchId: 'taf-jf', team: 'jiufeng', tasks: [{ id: 'p1', layer: 'plan', role: 'designer', cmd: 'plan-it' }] }, SESS);
-    assert.deepEqual(cmdsOf(out), ['p1 | [role=designer] plan-it'], '退役后不得注入任何技能前缀');
-    assert.equal(codesOf(out).includes('GATE_TEAM_ASSET_MISSING'), true, '须留痕 GATE_TEAM_ASSET_MISSING：' + JSON.stringify(out.warnings));
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, 'presets', 'jiufeng', 'team-asset.yml')), false, 'jiufeng 资产文件须为删除态（退役语义）');
-    assert.equal(fs.existsSync(batchFileOf(root, 'taf-jf')), true, '告警不阻断建批');
+    // 单 task ⇒ 非 C 类形态，避免 GATE_ROLE_MISSING 噪音混淆判据。
+    // 【r2 同步 · A1/B3】旧 fixture 的「单 lane **plan** 批」已不可建（plan 产物无人 consume ⇒
+    //   `GATE_ORPHAN_PRODUCT`；A1/B3 硬约束：不得建 plan-only 批）⇒ 同一「单 lane 批」形态改以
+    //   audit 层表达；含 audit 层的三层批经**工具面**建批须带批次级 assembly 声明。
+    // 【P1 反转】旧口径「无资产 ⇒ 无前缀 + GATE_TEAM_ASSET_MISSING 告警 + **不阻断建批**」已废除（P1 §1/§2）：
+    //   `team` 必填且必须解析到资产 ⇒ punky-preset（模式名）无团队资产 ⇒ **构造期拒、零批次 JSON 落盘**。
+    //   断言强度：只把「放行 + 告警」反转成「拒 + 零落盘」，判据未删（仍逐字核对资产文件不存在这一前提）。
+    let msg = null;
+    try {
+      await byName.wave_plan.execute({
+        batchId: 'taf-jf', team: 'punky-preset',
+        tasks: [{ id: 'p1', layer: 'audit', role: 'designer', cmd: 'plan-it' }],
+        assembly: { auditLane: 'p1' },
+      }, SESS);
+    } catch (e) {
+      msg = String(e?.message ?? e);
+    }
+    assert.notEqual(msg, null, '无资产的 team 名（模式名 punky-preset）⇒ 构造期拒（P1）');
+    assert.match(msg, /TEAM_ASSET_NOT_FOUND/, '拒态须原样透出资产码：' + String(msg));
+    assert.equal(fs.existsSync(path.join(REPO_ROOT, 'presets', 'punky-preset', 'team-asset.yml')), false, 'punky-preset 资产文件须为不存在态（非团队资产语义）');
+    assert.equal(fs.existsSync(path.join(REPO_ROOT, 'presets', 'punky-preset', 'team-asset.json')), false, 'punky-preset 资产文件须为不存在态（非团队资产语义）');
+    assert.equal(fs.existsSync(batchFileOf(root, 'taf-jf')), false, '拒后零批次 JSON 落盘（P1 反转原「告警不阻断建批」）');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     clearRoleCache();

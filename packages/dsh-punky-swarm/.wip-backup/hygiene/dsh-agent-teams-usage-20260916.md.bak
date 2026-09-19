@@ -1,0 +1,128 @@
+# dsh 官方 agent-teams / subagent 能力使用方法（2026-09-16）
+
+调研员：独立调研员（只读）；宿主：本机 `D:\dsh\npm\0.1.5-rc.1`（`@deepseek-ai/dsh/package.json:version = 0.1.5-rc.1`，包目录时间 2026-09-11）。
+用途：供主 Agent（Leader）**按官方能力分配任务**时照做。证据一律给 `file:line`（相对 `node_modules/@deepseek-ai/<pkg>/`，简写 `<pkg>/...`）。
+**前置事实（先读）**：本机 **未安装**官方 agent-teams 三包——`Get-ChildItem @deepseek-ai | ? Name -match 'team'` 返回空；`tools_search("agent teams teammate spawn_teammate team task board")` 与 `skill_search("official agent teams teammate orchestration")` 均无官方 team 工具/技能（检索词已写全）。故本文的「可调用官方能力」= **subagent seam**；agent-teams 仅在 §1/§3/§8 作为**版本条件项**说明。
+
+---
+
+## 1. 能力是什么（一句话）
+
+- **官方 subagent**：一个「服务 + 多 provider + 委派工具」的能力 seam（`ctx.subagents`），把工作交给**另一个 Agent**并回收结果，支持两种子级形态——**一次性**（一次运行一个结果，收回后 dispose）与**可继续**（持久子会话，可续发消息/中断/列举）。证据：`dsh-subagent/README.zh.md:12,47`；`dsh-subagent/lib/types/types.d.ts:292-318`、`:327-376`。
+- **官方 agent-teams（0.1.6 实验层）**：team 层（roster/mailbox/task board，`ctx.agentTeams`、`spawn_teammate` 等九个工具）——**本机不可调用**，仅在 0.1.6-alpha 三包 + profile 挂载后存在（参见本目录底稿 `dsh-agent-teams-research-20260916.md` §0/§2）。
+- **与蟛蜞引擎的定位差异（一句话）**：官方 seam 管**「怎么把活发给另一个 Agent 并收回」**（传输 + 生命周期 + 取消 + 相邻消息）；蟛蜞引擎管**「这活该不该发、发成什么形态、产物算不算数」**（难度门禁、三层契约、lane 单写者锁、结算与留痕）。官方文档自述其生命周期事件**「只供观察」**（`dsh-subagent/README.zh.md:178`）——**没有门禁、没有审计、没有产物契约、没有批次**。
+
+## 2. 入口与调用形态
+
+### 2.1 主 Agent 侧（模型面，本机实际挂载见 `dsh-base/cordis.patch.yml:328-416`）
+
+| 入口 | 挂载配置（证据） | 参数面 | 返回 / 同步语义 |
+|---|---|---|---|
+| `subagent` | provider=`spawn`、`backgroundMode: continuable`（`cordis.patch.yml:349-354`） | `description`(必)、`prompt`(必)、`run_in_background`(选，本机默认 **true**)；仅当开启模型选择时另加 `provider`/`model`/`reasoning_effort`（`dsh-tool-subagent/README.zh.md:47-53,67`） | continuable：**不等结果**，返回 `started subagent <childId>`，结算经运行时通知到达父级（`README.zh.md:61,194`）；显式 `run_in_background:false` 才前台等待（`:61`） |
+| `subagent_fork` | provider=`fork`、`backgroundMode: one-shot`（`cordis.patch.yml:362-367`） | 同 `subagent` | **同步**：前台等待，返回子级最终文本；非 `completed` 返回 `Error: <终止原因>`（`README.zh.md:59,180`） |
+| `workflow` | `dsh-tool-workflow` + `workflow-worker-thread`(provider=spawn)（`:369-375`） | `meta`(必：`name`/`description`，可选 `phases`)、`script`(必，纯 JS 脚本、无 `export const meta`)、`args`(选，JSON 对象)（`dsh-tool-workflow/README.zh.md:32`） | **阻塞父轮次**，返回 `{ runId, agentsStarted, result }`；取消/失败返回错误，**绝不部分成功**（`:34,38,159`） |
+| `ralph` | `subagentProvider: spawn`、`maxRounds: 64`（`cordis.patch.yml:412-416`） | `objective`(必)、`maxRounds`(选)（`dsh-tool-ralph/README.zh.md:32,131`） | **前台阻塞**至结算，终态 `complete`/`blocked`/`budget-limited`（`:32`） |
+| `send_message` / `interrupt_agent` / `list_agents` | `dsh-tool-subagent-control` + `.../list-agents`（`:343-347`） | 分别：`agent_id`+`message` / `agent_id` / 可选 `scope`（control `README.zh.md:111`） | 均**非同步答复**：只返回「已接受」（`message delivered to agent <id>` / `interrupt requested for agent <id>`）（`:125,139`） |
+
+### 2.2 插件侧 API（`ctx.subagents`，注册即可用：`cordis.patch.yml:328-329`）
+
+- 类：`SubagentRuntime`（`dsh-subagent/lib/types/index.d.ts:98`）。方法清单与签名（同文件）：
+  `start(name, request): Promise<SubagentRun>`（`:296`）、`startContinuable(spec): Promise<ContinuableStart>`（`:117`）、`sendMessage(sender: Agent, targetId, content, options)`（`:132`）、`interrupt(targetSessionId, authority)`（`:161`）、`listChildren(parentSessionId, signal?)`（`:201`）、`listDescendants(rootSessionId, signal?)`（`:217`）、`list()/getProvider(name)/registerProvider(p)`（`:272-283`）、`drainContinuableDescendants/drainContinuableChildren`（`:172-183`）。
+- 返回值形态：
+  `SubagentRun = { id, localAgent, result: Promise<SubagentResult>, dispose() }`（`types.d.ts:292-318`，`dispose` 幂等、必须调用）；
+  `ContinuableStart = { childId, messageId }`（`types.d.ts:46-51`）。
+- **实现面 vs 类型面差异（实测）**：本机 `startContinuable` 实际返回 `id`（worker 会话 id），类型面写 `childId`——蟛蜞按「`id` 优先、`childId` 次之」解析（`dsh-punky-swarm/lib/engine/dispatch.js:134-151`）。
+- 事件：`subagent/start`（`:85`）、`subagent/end`（`:94`），**均为 scope-filtered dispatch**；另有 `subagent/provider-added|removed`（`:68-74`）。载荷见 §3「完成事件」。
+
+## 3. 支持 / 不支持矩阵
+
+| 维度 | 结论 | 证据 |
+|---|---|---|
+| provider 取值 | 本机挂载 `spawn`（`dsh-subagent-spawn-in-process`，`providerName` 默认 `spawn`）、`fork`（`dsh-subagent-fork-in-process`）；进程外另有 ACP/SDK/Codex/Claude Code（未装） | `cordis.patch.yml:331-339`；`dsh-subagent/README.zh.md:12` |
+| 深度限制 | `maxDepth`（工具侧默认 `3`；`0` 禁止委派；`'provider-managed'` 交给进程外后端）；需 provider 声明 `depthLimit` 能力；子级 depth = 父 depth+1，**会话 header 权威且单调**（运行时只能加深不能降） | `dsh-tool-subagent/README.zh.md:53,63`；`types.d.ts:169-175`；`dsh-subagent/lib/types/depth.d.ts:11-25` |
+| 并发 | 服务「可对同一 provider 并发启动**不同**子级」，且要求 provider 的各次启动互不耦合 | `types.d.ts:322-326` |
+| 并发上限 | `ctx.subagents` **未见**并发上限字段；**`workflow` 引擎侧**有子 agent 总数后备上限 `maxTotalAgents`（超部署上限即在发布运行前拒） | `dsh-tool-ralph/README.zh.md:65`；§8 `[推断]` |
+| 工具面收窄 | **按次**：`request.toolFilter: ToolRestriction`（需 `toolFilter` 能力），实现为子级创建窗口内的 scoped `tools.restrict()`——**提示词里消失且拒绝执行**（一种可见性语义） | `types.d.ts:176-183`；`dsh-subagent-spawn-in-process/README.zh.md:83,109` |
+| 工具面收窄（静态） | 工具实例 config 固定 `toolFilter`/`persona`/`maxDepth`；**换一个策略需要另一个不同名的工具实例** | `dsh-tool-subagent/README.zh.md:52,214` |
+| 模型/推理覆盖 | `request.agentOptions`（provider/model/reasoningEffort/maxTokens）需 `agentOptions` 能力；spawn/fork/DSH SDK 支持，**ACP/Codex/Claude Code 一律拒绝而非忽略**；工具侧还要 `modelSelectionSettings` 才暴露参数 | `types.d.ts:155-162`；`dsh-tool-subagent/README.zh.md:67,93` |
+| 温度 | **未见 temperature/采样参数**（能力清单只有 `agentOptions` 的 provider/model/reasoningEffort/maxTokens） | `types.d.ts:122-128`；§8 `[推断]` |
+| continuable vs 一次性 | continuable：持久 Session、稳定子 id、可续发/中断、**默认后台**；一次性：发布即转移所有权、单结果、用后 dispose | `dsh-subagent/README.zh.md:47,53,71`；`types.d.ts:283-318` |
+| fork vs spawn | fork 以**父级已完成轮次前缀**为初始内容（**不含进行中轮次**，启动后父级新内容不再到达）；spawn 空对话，父级对话一条不带；两者子级均**不继承父级工具/权限**（全新作用域） | `dsh-subagent-fork-in-process/README.zh.md:12,32-36`；`dsh-subagent-spawn-in-process/README.zh.md:109,140` |
+| 完成事件 | `subagent/start(info: SubagentRunInfo{runId,provider,id,local})`；`subagent/end(info: SubagentRunEndInfo{runId,provider,id,local,stopReason,lastAssistantMessage?})`；`stopReason ∈ completed/aborted/error/max-tokens/refusal` | `types.d.ts:74-110`、`:239-252` |
+| 事件 scope 过滤 | `subagent/start|end` 按**委派 parent 作 carrier 的 scoped dispatch**：parent 作用域监听者只收到自己派出的；**`{global:true}` 短路一切过滤** | `index.d.ts:78-94`；`cordis/lib/index.js:263`（`hook.global \|\| !filter \|\| filter.call(...)`） |
+| 事件不变量 | 事件对**构造期配对校验**：end 无配对 start / runId 重复 / provider·id·local 不一致 → fail | `dsh-subagent/lib/invariant.js:10,36-56` |
+| 中途通信 | `sendMessage` **仅相邻**：任何确切在线 Agent 可指定**直接**可继续 child；只有驻留的可继续 child 可指定**自己的直接 parent**（parent 必须在线）；running→Steer 最近 step / idle→起一轮 / 缺席直接 child→冷恢复 | `index.d.ts:118-132`；`dsh-subagent/README.zh.md:171-177` |
+| 一次性子级通信 | **不能** `send_message`（`list_agents` 有意排除一次性子级） | control `README.zh.md:57,171` |
+| 取消/中断 | ① 启动期 `signal`（`request.signal` / `spec.signal`）只管到 inbox 接受；② `interrupt` 只停**当前轮**，保留 inbox/后代/后续可续；③ `interrupt` 已结算目标 = 接受型 no-op | `types.d.ts:148-154`；`index.d.ts:147-161`；control `README.zh.md:53` |
+| 子级回父级 | 有**接受标识**，但官方明确**不承诺恰好一次投递**，且无持久 parent mailbox（parent 不在线即拒） | `dsh-subagent/README.zh.md:172,177` |
+
+## 4. 任务分配建议（Leader 操作口径）
+
+**5 条规则**
+1. **单步、自足、只要一个结果 → 官方一次性委派**（本机 `subagent` 默认 continuable，故「一次性」= 显式 `run_in_background:false` 或直接 `subagent_fork`）。子级空会话 ⇒ **提示词必须自足**（`spawn-in-process/README.zh.md:140`）。
+2. **需要多轮往返/中途改向/事后追问 → continuable**（`subagent` 默认形态，拿 `childId` 后 `send_message` 续发；`list_agents` 找回）。一次性形态结构上做不到续发。
+3. **任务建立在当前对话之上（延续分析/审查/二次加工）→ `subagent_fork`**：seed 父级已完成轮次、KV 前缀可复用（`fork-in-process/README.zh.md:122`）；**不要**用 spawn 再手抄上下文。
+4. **≥3 条独立子任务且要汇总/结构化结果 → `workflow`**；1–2 条委派用普通 `subagent`（`tool-workflow/README.zh.md:28`）。注意 workflow **阻塞父轮次**、取消即丢局部输出（`:159`）。
+5. **留在主 Agent 的**：需求澄清与方向裁决、需要当前 in-flight 上下文的即时推理、写同一文件的串行修改（子级**无共享写锁**——官方 `writeScopes` 只告警不阻止）、跨轮长程目标（用 goal，不用 `ralph`；`tool-ralph/README.zh.md:12,28`）。
+
+**反例（4 条）**
+- 把单步任务拆成两个子代理串联「省上下文」——两次往返 + 两份 schema 成本 > 收益，官方口径也是「一两项委派用普通 subagent」。
+- 把需要当前对话的延续任务派给 `spawn`——子级看不到本对话，必然返工。
+- 纯一次性的批量渲染/抓取也用 continuable——多一个持久会话与结算通知 token（`dsh-subagent/README.zh.md:133-141`）。
+- 想在 `subagent/end` 回调里「自动追派」子级——**事件路没有可用的 parent Agent**（§6-①）。
+
+## 5. 与蟛蜞引擎的分工（用户当前口径：**暂时按官方能力分配任务**）
+
+| 场景 | 用哪边 | 理由（证据） |
+|---|---|---|
+| 单步/双步调研、读码、探针、写单文件 | **官方直跑**（`subagent` / `subagent_fork`） | seam 已覆盖派发+结果+取消；无治理开销（`types.d.ts:292-318`） |
+| 多轮探索、边跑边改向 | **官方 continuable** + `send_message` | 官方唯一天然支持续发消息的形态（`index.d.ts:132`） |
+| fan-out 汇总型一次性编排 | **官方 `workflow`** | 脚本 fan-out + phases + 结构化返回（`tool-workflow/README.zh.md:28-38`） |
+| 需门禁裁决 / 三层契约产物校验 / lane 单写者锁 / 批次留痕与事件审计 / 停轮与恢复 | **蟛蜞**（`wave_plan`/`member_*`/`batch_*`/`gate_status`/`lane_claim`） | 官方**完全没有**这些面：事件「只供观察」（`dsh-subagent/README.zh.md:178`），无产物契约、无锁、无审计 |
+| 蟛蜞自己的 worker 派发 | **官方 seam 是底座**：`ctx.subagents.startContinuable(spec)` 由蟛蜞调用，`spec.request.parent = exec.agent`、`toolFilter.deny` 收窄工具面、`label` 作可回溯键 | `dsh-punky-swarm/lib/engine/dispatch.js:100-115,226-236`；`lib/index.js:86`（`inject` 含 `subagents`） |
+| 官方事件 → 蟛蜞结算 | `subagent/end`（`{global:true}`）→ 自动结算单点判定 | `dsh-punky-swarm/lib/index.js:556-573` |
+
+**交界纪律**：官方能力**不替代**蟛蜞门禁；蟛蜞的 `lane_dispatch` 与「Leader 直用官方 `subagent`」是**两条不同轨道**——后者产物不经批次结算/审计（`lib/tools/core.js` 的 G1 正是为堵「借成员面绕开档位」而设，见蟛蜞 CHANGELOG:187-188）。
+
+## 6. 已知坑（实测 / 代码可证）
+
+1. **事件回调无「调用方 Agent」挂载点** ⇒ 事件路无法自派子会话。`subagent/end` 载荷只有 `{runId, provider, id, local, stopReason, lastAssistantMessage?}`（`types.d.ts:93-110`，**无 Agent 对象**），而 `start`/`startContinuable` 的 `request.parent` **必须是确切在线 `Agent`**（`types.d.ts:146`；`index.d.ts:124`）。蟛蜞只能取工具流水线里的 `exec?.agent`（`dispatch.js:227`），没有它就直接报错（`dispatch.js:235`：「缺少调用方 Agent —— 派发必须在工具流水线内调用」）。**推论**：自动派发必须由**工具面**发起，不能由事件回调发起。
+2. **`subagent/end` 的 scope 过滤导致被 scope 化的 ctx 默认漏收** ⇒ 必须 `{global:true}` 注册。事件按委派 parent 作 carrier 过滤（`index.d.ts:78-94`）；蟛蜞契约卡实测：preset standing mount 的 ctx 默认**收不到**，`global` 短路一切过滤（`dsh-punky-swarm/lib/index.js:556-559` ← `cordis/lib/index.js:263`）。
+3. **子句柄在 `subagent/end` 回调内已失效（先 dispose 后 emit）**。可继续 child 的 teardown 顺序：`capture()`（`continuation-activation.js:604`）→ **`await activation.handle.dispose()`（`:611`）** → … → `activation.observer.settle()`（`:627`）→ emit `subagent/end`（`lifecycle.js:117-124`）。一次性路径同理：`run-settlement.js:48-62` 是「await result → dispose」。⇒ **回调里不要再去解析子句柄/活 Agent**，结算信息只取 payload（蟛蜞契约卡 #12 已按此写：`lib/index.js:563`）。
+4. **新增/改变插件工具面须重启宿主**。工具/注册 id 的装配发生在**宿主 boot / 插件 apply**阶段：`l3-tool-ban` 的注册 id 枚举「需 boot 装载一次，即重启宿主一次」（`dsh-punky-swarm/docs/governance-boundaries.md:53`），客户端 bundle 改动同样「需重启宿主一次方可加载」（同仓 `CHANGELOG.md:227`）。今日实测旁证：旧进程内调用 `batch_control` 得 `unknown tool`（**观察项**，非代码可证；与上述机制一致）。
+5. **附坑 A：未 `inject` 的服务取属性直接抛**，不是返回 undefined——`cannot get property "subagents" without inject`；取用须 try/catch 或补 `inject`（蟛蜞已补：`lib/index.js:86`；兜底：`dispatch.js:154-166`）。
+6. **附坑 B：`startContinuable` 的 `signal` 是运行时必需字段**，类型面把它放进 `Omit` 但实现直接 `spec.signal.throwIfAborted()` ⇒ 缺它即抛（`dispatch.js:92-99`）。
+
+## 7. 能力探测方法（不启动服务、不重启）
+
+1. **静态①「本机到底挂了什么」**：读 `dsh-base/cordis.patch.yml:328-416`——provider 名称（`spawn`/`fork`）、工具名（`subagent`/`subagent_fork`）、`backgroundMode`、`maxRounds`、`subagentProvider`。**这是版本相关事实的唯一权威源**（`grep -n subagent|workflow|ralph .../cordis.patch.yml`）。
+2. **静态②「契约面」**：各包 `README.zh.md`（行为）+ `lib/types/*.d.ts`（发布出去的 API 契约，含能力位与终态语义）。
+3. **静态③「机器可读 API 目录」**：`dsh-subagent/lib/typert.host.js` 内含每方法/事件的 `name` / `declaration` / `jsDoc` 条目（如 `:889 subagent/end`、`:957 subagent/start`、`:729 SubagentRun`）——**grep 即可枚举全量 API 与事件签名，零启动**。
+4. **会话内探针**：`tools_search`（工具/MCP 面）+ `skill_search`/`skill`（技能面）各检索一次再断言「没有」（本文检索词见开头）；折叠工具的 schema 用 `tools_schema({name})` 展开，**折叠 ≠ 禁用**。
+5. **最小运行探针（建议写法，本次未执行）**：只 import **纯函数模块**验证行为，例如 `node --input-type=module -e "import('file:///D:/dsh/npm/0.1.5-rc.1/node_modules/@deepseek-ai/dsh-subagent/lib/types/depth.js').then(m=>console.log(m.delegationDepthOf))"`；写成脚本时落 `%TEMP%\<name>.mjs`，跑完 `Remove-Item` 即净。**不要**在探针里 `new Context()` 挂服务/占会话（会与在跑宿主争资源）。
+
+## 8. 未验证项（严格区分）
+
+**已核实（发布包源码 + 配置证据）**：宿主版本与包面；本机挂载的 provider/工具/模式；工具参数面；`ctx.subagents` 全方法签名与返回值；能力位五元组与「缺能力即拒」；深度语义；工具面收窄语义（按次 + 静态）；continuable/一次性与 fork/spawn 差异；事件载荷、scope 过滤、配对不变量；中断/取消语义与限制。
+
+**推断（须补证据才可升级）**
+- `[推断]` **无全局并发上限**：只证明「服务允许并发启动不同子级」（`types.d.ts:322-326`），未见上限字段；缺证据 = 真实宿主内并发 N 次 `startContinuable` 的实测。
+- `[推断]` **无法覆盖 temperature 等采样参数**：能力清单只列 provider/model/reasoningEffort/maxTokens（`types.d.ts:122-128`）；缺证据 = `dsh-agent` 的 `AgentOptions` 全字段核读。
+- `[推断]` **`subagent/end` 回调内 `ctx.agents.get(childId)` 必为 undefined**：dispose 先于 settle 是硬证据（§6-③），但「get 一定 miss」未运行时验证。
+- `[推断]` **工具面增改须重启**：机制证据（boot 装载 + 客户端 bundle）+ 今日 `unknown tool` 观察，未做受控复现（禁重启宿主）。
+- `[未验证]` **agent-teams 三包挂载后的真实行为**：本机未安装、纪律禁装；底稿 §2 的 `ctx.agentTeams`/九工具面**只能作为「若升级 0.1.6-alpha.1 + profile 挂载后」的未来项**，不可当作现状使用。
+
+## 9. 一页速查
+
+| 场景 | 入口 | 关键参数 | 注意 |
+|---|---|---|---|
+| 单步、自足、要一个结果就完 | `subagent`（显式 `run_in_background:false`）或 `subagent_fork` | `description`, `prompt` | 子级空会话 ⇒ 提示词自足；不可续发消息 |
+| 要建立在本对话之上的延续任务 | `subagent_fork` | `description`, `prompt` | seed = 已完成轮次**快照**，不含进行中轮次 |
+| 多轮往返 / 边跑边改向 | `subagent`（默认 continuable）+ `send_message` | `subagent`: `description`+`prompt`；`send_message`: `agent_id`+`message` | 只返回「已接受」，答复另起一条消息；一次性子级不可通信 |
+| 找回/清点子级 | `list_agents`（`scope: children\|descendants`） | — | 只列**可继续**子级，一次性被排除 |
+| 停某一轮但保留子级 | `interrupt_agent` | `agent_id` | 只停当前轮；后代照跑；已结算 = no-op |
+| ≥3 条独立子任务 + 汇总 | `workflow` | `meta`(name/description/phases) + `script`(JS) + `args` | 阻塞父轮次；取消丢局部输出；失败不部分成功 |
+| 显式要求 Ralph 迭代 | `ralph` | `objective`, `maxRounds?` | 前台阻塞；完成由 worker 自述，**非独立验证** |
+| 要门禁/审计/锁/批次留痕 | **蟛蜞**（`wave_plan`/`member_*`/`gate_status`） | 见蟛蜞纪律 | 官方 seam 无任何治理面；两者是不同轨道 |
+| 插件内自派 worker | `ctx.subagents.startContinuable(spec)` | `provider`, `label`, `signal`(必需), `request.parent`(在线 Agent) | 事件回调内**拿不到** parent ⇒ 只能在工具面调用 |
+| 事件订阅 | `ctx.on('subagent/end', h, { global: true })` | — | 不加 `global` 在被 scope 化的 ctx 上**默认漏收**；回调内句柄已 dispose |

@@ -26,6 +26,7 @@ import { createStore } from '../lib/state/store.js';
 import { createArchive } from '../lib/state/archive.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { migrateV2toV3, chainsDefaults } from '../lib/state/schema-v3.js';
+import { threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-arc-'));
 const store = createStore(root);
@@ -33,7 +34,7 @@ const SID = 's-arc';
 const specOk = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
 
 function makePlan(batchId, tasks, opts = {}) {
-  const plan = buildWavePlan({ batchId, tasks, team: 'jiufeng', ...opts });
+  const plan = buildWavePlan({ batchId, tasks, team: 'punky-preset', ...opts });
   store.createBatch(SID, { batchId, wavePlan: plan });
   return plan;
 }
@@ -54,11 +55,13 @@ function runLane(batchId, lane) {
   if (r2 instanceof Error) return r2;
   return set(SID, batchId, lane, 'merged');
 }
+// 【r2 同步 · B4】a1 的 `standalone: true`（旧口径：audit 无上游 ⇒ 自声明即放行）改为真 `consume`
+//   （B5：audit 必须锚到 plan 判据来源）——否则 entry 门以 `GATE_STANDALONE_UNJUSTIFIED` 拒派。
 function tasks3() {
   return [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: 'code', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/review.md'], cmd: 'review', deps: ['e1'] },
   ];
 }
 // 三层批次完整流转 → complete（plan/exec/audit 各 lane merged，产物齐备）
@@ -132,11 +135,19 @@ test('A3：幂等——重复归档 no-op（不重复复制、不覆盖 manifest
 });
 
 test('A4：归档失败不阻断 complete——archive.failed + complete 已置位；补齐产物后重试成功', () => {
-  // 无产物目录的 generic 批次 complete → 归档失败但 complete 正常返回（phase=complete 已置位）
-  const p = buildWavePlan({ batchId: 'b-fail', tasks: [{ id: 't1', cmd: 'x' }] });
+  // 【r2 同步 · B2/B3/A1/B1】旧 fixture 为「无 layer 的 generic 单 lane 批」：新语义下零执行零验收
+  //   不得 complete（`GATE_COMPLETE_NO_TIER`）⇒ 改**合规三层批**；「无产物目录」这一构造改由
+  //   「成员结算后移除整个批次产物根」达成（complete 门只读 wavePlan/成员态、不读产物目录
+  //   ⇒ 「归档失败不阻断 complete」的原意完整保留）。
+  const p = buildWavePlan({ batchId: 'b-fail', tasks: threeTierTasks(['t1']) });
   store.createBatch(SID, { batchId: 'b-fail', wavePlan: p });
   store.setPhase(SID, 'b-fail', 'running');
-  runLane('b-fail', 't1');
+  seedArtifacts(root, SID, 'b-fail', ['t1']);
+  for (const lane of ['p1', 't1', 'a1']) {
+    const e = runLane('b-fail', lane);
+    if (e instanceof Error) throw e;
+  }
+  fs.rmSync(path.join(root, 'sessions', SID, 'artifacts', 'b-fail'), { recursive: true, force: true });
   const r = store.setPhase(SID, 'b-fail', 'complete');
   assert.equal(r.phase, 'complete'); // 不被阻断
   const bf = store.readBatch(SID, 'b-fail');
@@ -179,7 +190,7 @@ test('A6：v2 存量批次 complete → 迁移兜底（schema 升 3 + chains + a
     phase: 'running',
     concurrency: 5,
     team: 'generic',
-    wavePlan: [{ wave: 1, tasks: [{ id: 'a1', layer: 'audit', produce: ['audit/review.md'], cmd: 'r' }] }],
+    wavePlan: [{ wave: 1, tasks: [{ id: 'a1', layer: 'audit', produce: ['audit/review.md'], cmd: 'r', standalone: true }] }],
     lanes: { a1: 'merged' },
     events: [{ ts: '2026-01-01T00:00:00.000Z', type: 'batch.created', batchId: 'b-v2', sessionId: SID }],
     createdAt: '2026-01-01T00:00:00.000Z',

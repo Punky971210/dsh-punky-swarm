@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 治理内核组合根：规则匹配 → 违规收集 → classifyViolation → KernelDecision（同步、确定性、零 IO）。
-// 空 rules → { primitive:'ALLOW', priority:-1, reason:'', ruleRefs:[] }。
+// 空 rules + 空 toolBan → { primitive:'ALLOW', priority:-1, reason:'', ruleRefs:[] }。
+// 第三类判定面（工具黑名单，用户裁决 2026-09-14）：toolBan 条目经 matchToolBan 判定（工具名 + 行为面），
+//   命中的违规与参数规则命中**同列汇入** violations/ruleRefs → 同一 classify 统一裁决（零分类器改动，
+//   收据 / 事件桥接 / 拒绝可见性链路天然复用）。
 // 零依赖纪律：本文件不 import 任何外部包/宿主模块——仅本目录相对导入；
 //   randomUUID 用全局 crypto（node≥19 WebCrypto，标准库内建，非外部包）；
 //   deepEqual 自实现递归（避免 node:util import 触发零依赖 grep 审计）。
@@ -26,6 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import type { GovernanceConfig, KernelDecision, RefusalReceipt, Rule, Violation } from './types.js';
 import { classifyViolation } from './classify.js';
 import { computeNarrowedParams, type NarrowBounds } from './narrow.js';
+import { matchToolBan } from './tool-ban.js';
 
 // ── Rule.match 匹配语义 ──
 
@@ -141,13 +145,18 @@ export function createGovernanceKernel(config: GovernanceConfig): GovernanceKern
     //   primitive==='DENY' 且 violations 含 narrowable（flag-off 回退，或多违规 hard 优先）亦填充
     //   （决策留痕：deny 同时携带钳制结果作模型修正依据——收据携带 narrowedParams，语义增强）。
     decide(exec) {
-      if (!Array.isArray(config.rules) || config.rules.length === 0) {
+      const banEntries = Array.isArray(config.toolBan) ? config.toolBan : [];
+      if ((!Array.isArray(config.rules) || config.rules.length === 0) && banEntries.length === 0) {
         return { primitive: 'ALLOW', priority: -1, reason: '', ruleRefs: [] };
       }
       const violations: Violation[] = [];
       const hitIds: string[] = [];
       const narrowBounds: NarrowBounds[] = [];
-      for (const rule of config.rules) {
+      // 第三类判定面（工具黑名单）：工具级命中先行收集（与下面参数规则同列汇入 → 同一 classify 裁决）
+      const ban = matchToolBan(banEntries, exec);
+      for (const v of ban.violations) violations.push(v);
+      for (const id of ban.ruleRefs) hitIds.push(id);
+      for (const rule of config.rules ?? []) {
         if (ruleMatches(rule, exec)) {
           hitIds.push(rule.id);
           for (const v of rule.violations) violations.push(v);

@@ -31,9 +31,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   存量 v3 批次缺字段 = 缺省，读取天然兼容；写入点/清退点由 lib/state/resume.js（断点指针接口）与 lane_checkpoint 承担。
 // 类型化说明：migrateV2toV3 输入 unknown（任意 JSON 解析产物最诚实），内部既有 typeof/Array.isArray 守卫保留，
 //   字段操作在 Record<string, unknown> 上进行，边界断言返回 Batch——运行期语义零变更（断言纯类型层）。
-import type { Batch, LaneProgressMap } from '../types/contracts.js';
+// P1 交接门（handoff gate，2026-09-17）：`batch.handoffs` 为批次级**可选字段**（沿用「可选字段 + migrate
+//   幂等兜底 + 不升大版本」惯用法，与 chains/archived/laneProgress/lane.condition 同族）。
+//   形态：`{ [toLaneId]: LaneHandoff[] }`（见 lib/types/contracts.ts `LaneHandoffMap`）。
+//   **缺省语义与其余字段不同（裁决 ①=B）**：`undefined` **不是**「空表」，而是**存量批标记**——
+//   未交接门按 `batch.handoffs === undefined` 判定「本批不受新门约束」⇒ 放行 + 落 `lane.handoff.gap` 告警
+//   （不静默、不砸存量）。故本文件**不**为缺字段的批次补默认值（补了会把存量批误标为「新建批」并全拒）。
+//   新建批的写入点是 `lib/state/store.js#createBatch`（`handoffsDefaults()` ⇒ 恒写，空对象 = 无 deps 的批）。
+import type { Batch, LaneHandoffMap, LaneProgressMap } from '../types/contracts.js';
 
 export const BATCH_SCHEMA_V3 = 3;
+
+/** P1 交接表缺省（**新建批**用；空对象 = 该批无 deps ⇒ 未交接门恒放行） */
+export function handoffsDefaults(): LaneHandoffMap {
+  return {};
+}
+
+/** P1 交接表形态校验（批次级 plain object；值级校验见 gates.ts `handoffVerdictOf`） */
+export function isHandoffs(v: unknown): v is LaneHandoffMap {
+  return v != null && typeof v === 'object' && !Array.isArray(v);
+}
 
 export function chainsDefaults() {
   return { chains: {}, order: [] };

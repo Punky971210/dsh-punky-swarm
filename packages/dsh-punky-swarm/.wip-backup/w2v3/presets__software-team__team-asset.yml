@@ -1,0 +1,61 @@
+{
+  "team": "software-team",
+  "manifest": {
+    "version": 3,
+    "requires_engine": ">=0.4.4",
+    "hash": "unhashed",
+    "source": "角色作用（skills/software-team/references/roles/*.md）+ superpowers 技能池 + 本包自建手册（software-team-assembly / review-execution / acceptance-gate / retro-and-memory）"
+  },
+  "roles": { "extra": [] },
+  "layers": {
+    "plan": {
+      "roles": ["coordinator", "designer"],
+      "skills": {
+        "coordinator": ["brainstorming", "writing-plans"],
+        "designer": ["brainstorming", "writing-plans", "spec-writing"]
+      }
+    },
+    "exec": {
+      "roles": ["coder", "tester", "reviewer"],
+      "skills": {
+        "coder": ["test-driven-development", "codebase-design", "receiving-code-review", "requesting-code-review"],
+        "tester": ["verification-before-completion", "systematic-debugging"],
+        "reviewer": ["review-execution"]
+      }
+    },
+    "audit": {
+      "roles": ["supervisor", "doc-manager"],
+      "skills": {
+        "supervisor": ["acceptance-gate", "verification-before-completion"],
+        "doc-manager": ["doc-generator", "retro-and-memory"],
+        "reviewer": ["review-execution"]
+      }
+    }
+  },
+  "flows": {
+    "plan": {
+      "produce_field": "produce",
+      "entry_requires": [],
+      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+    },
+    "exec": {
+      "produce_field": "outputs",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "targets": true,
+      "gate_command": true
+    },
+    "audit": {
+      "produce_field": "produce",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "needhuman": true,
+      "audit_contract": {
+        "criteria_from": "plan/**",
+        "consumes_required": ["plan/", "exec/"],
+        "verdict": ["pass", "fail", "skip"]
+      }
+    }
+  },
+  "state_machine": { "kind": "tighten-only", "overrides": {} }
+}

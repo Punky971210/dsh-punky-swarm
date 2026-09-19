@@ -30,7 +30,7 @@ import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 // consumers = 既有消费点（键路径一致性依据）
 // identity 键：身份体系默认关——config.aip.identity.enabled === true 时
 //   调用方才激活 lib/aip/identity.js 模块 API（AIC 身份码注册 + CAI 证书发行 + 签名 + 信任链验证）；
-//   默认关 → 零开销零破坏；不注册新治理工具（20 工具契约不变），身份能力经模块 API 暴露。
+//   默认关 → 零开销零破坏；不注册新治理工具（**21 工具契约**：2026-09-15 增 `lane_dispatch`），身份能力经模块 API 暴露。
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
   // acps 键：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥。
@@ -49,7 +49,7 @@ export const CAPABILITY_REGISTRY = [
   { key: 'logs', path: ['capabilities', 'logs'], default: { enabled: false }, consumers: ['tools/log-tools.js log_export 注册'] },
   // topic 键：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）预留。
   { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留）'] },
-  // auditlog 键：审计日志 sink（默认开，用户裁决 Q-DEF=A）；env PUNKY_AUDITLOG 逐键覆盖；消费 lib/index.js mountAuditLog + lib/auditlog/**
+  // auditlog 键：审计日志 sink（默认开）；env PUNKY_AUDITLOG 逐键覆盖；消费 lib/index.js mountAuditLog + lib/auditlog/**
   { key: 'auditlog', path: ['capabilities', 'auditlog'], default: AUDITLOG_DEFAULTS, consumers: ['lib/index.js apply() mountAuditLog', 'lib/auditlog/sink.js', 'docs 根 README（落点/开关）'] },
 ];
 

@@ -18,11 +18,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 治理内核公共面收敛：re-export 内核组件（ESM .js 后缀，对齐编译回拷模式）。
 // 消费方 = wiring.js 与测试。
 // barrel 追加 preset-loader（preset 注册表/装载表/形状校验导出）。
+// barrel 追加 tool-ban（第三类判定面：工具黑名单判定内核 + 纠正文本常量）。
 
 export * from './types.js';
 export * from './decisions.js';
 export * from './classify.js';
 export * from './narrow.js';
+export * from './tool-ban.js';
 export * from './kernel.js';
 export * from './config.js';
 export * from './preset-loader.js';

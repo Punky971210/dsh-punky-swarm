@@ -52,7 +52,7 @@ function makeConfigEndpoints(root) {
     trustedHosts: [],
     applied: () => ({ enabled: true, rules: [], defaults: { deny: 'DENY' }, flags: { pause: false, narrow: false, defer: false }, escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] } }),
     appliedWatch: () => APPLIED_WATCH,
-    presets: () => [{ id: 'l1-sensitive', count: 12 }, { id: 'l2-resource', count: 6 }, { id: 'compose', count: 18 }],
+    presets: () => [{ id: 'l1-sensitive', count: 12 }, { id: 'l2-resource', count: 6 }, { id: 'l3-tool-ban', count: 1 }],
   };
 }
 
@@ -84,13 +84,13 @@ test('端点：GET /config 页载取数 → 200 overlay（磁盘 governance 原�
   const root = freshRoot();
   const dir = path.join(root, 'config');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify({ governance: { hook: { preset: 'l1-sensitive' } } }, null, 2));
+  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify({ governance: { hook: { preset: ['l1-sensitive'] } } }, null, 2));
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const r = invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH);
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.overlay, { hook: { preset: 'l1-sensitive' } });
+  assert.deepEqual(r.body.overlay, { hook: { preset: ['l1-sensitive'] } });
   assert.equal(r.body.applied.hook.enabled, true, 'applied = 装配侧解析快照');
-  assert.deepEqual(r.body.presets.map((p) => p.count), [12, 6, 18]);
+  assert.deepEqual(r.body.presets.map((p) => p.count), [12, 6, 1]); // l1 12 / l2 6 / l3-tool-ban 1（compose 废除后 catalog 三项）
 });
 
 test('端点：GET /config overlay 无 governance → overlay null；文件缺失 → 200 空 overlay', () => {
@@ -113,7 +113,7 @@ test('端点：POST /config 成功落盘 <tmpRoot>/config/runtime.json（governa
   const root = freshRoot();
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const payload = {
-    governance: { hook: { enabled: true, preset: 'l2-resource', escalation: { enabled: true, threshold: 2, windowMs: 300000, primitives: ['DENY', 'NARROW'] }, flags: { narrow: true } } },
+    governance: { hook: { enabled: true, preset: ['l2-resource'], escalation: { enabled: true, threshold: 2, windowMs: 300000, primitives: ['DENY', 'NARROW'] }, flags: { narrow: true } } },
   };
   const r = await invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH, { method: 'POST', body: payload });
   assert.equal(r.status, 200);
@@ -142,7 +142,7 @@ test('端点：POST /config 400 含错误码枚举（unknown-preset）；GET 同
   const root = freshRoot();
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const route = routes.find((x) => x.path === CONFIG_PATH);
-  const bad = await invoke(route, CONFIG_PATH, { method: 'POST', body: { governance: { hook: { preset: 'nope' } } } });
+  const bad = await invoke(route, CONFIG_PATH, { method: 'POST', body: { governance: { hook: { preset: ['nope'] } } } });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.errors[0].code, 'unknown-preset');
   // GET 同走 trusted：非 loopback Host → 403
@@ -204,7 +204,7 @@ test('端点：POST /config windowSeconds（秒）→ 200 落盘换算 windowMs�
   const root = freshRoot();
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const payload = {
-    governance: { hook: { enabled: true, preset: 'l2-resource', escalation: { enabled: true, threshold: 2, windowSeconds: 300, primitives: ['DENY', 'NARROW'] }, flags: { narrow: true } } },
+    governance: { hook: { enabled: true, preset: ['l2-resource'], escalation: { enabled: true, threshold: 2, windowSeconds: 300, primitives: ['DENY', 'NARROW'] }, flags: { narrow: true } } },
   };
   const r = await invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH, { method: 'POST', body: payload });
   assert.equal(r.status, 200);
@@ -240,11 +240,11 @@ test('端点：GET /config 新增字段形状——overlayWatch（磁盘 capabil
   // 磁盘 watch 段带深层阈值键：overlayWatch 必须原样回显（含阈值等非表单键）；overlay 仍 = governance 段
   const watchRaw = { enabled: false, longrun: { enabled: false, maxDurationMs: 999000, noProgressWindowMs: 123000 } };
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(
-    { governance: { hook: { preset: 'l1-sensitive' } }, capabilities: { watch: watchRaw } }, null, 2));
+    { governance: { hook: { preset: ['l1-sensitive'] } }, capabilities: { watch: watchRaw } }, null, 2));
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const r = invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH);
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.overlay, { hook: { preset: 'l1-sensitive' } }, 'overlay 仍 = governance 段（既有语义不动）');
+  assert.deepEqual(r.body.overlay, { hook: { preset: ['l1-sensitive'] } }, 'overlay 仍 = governance 段（既有语义不动）');
   assert.deepEqual(r.body.overlayWatch, watchRaw, 'overlayWatch = 磁盘 capabilities.watch 原样（含阈值）');
   assert.deepEqual(r.body.applied.watch, APPLIED_WATCH, 'applied.watch = 装配侧生效快照（watchInstalledCfg 形状）');
   assert.equal(r.body.applied.hook.enabled, true, 'applied.hook 既有键不破');
@@ -297,13 +297,13 @@ test('端点：POST /config 双段合并单保存（governance + capabilities.wa
   const root = freshRoot();
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const payload = {
-    governance: { hook: { enabled: true, preset: 'l1-sensitive', flags: { narrow: true } } },
+    governance: { hook: { enabled: true, preset: ['l1-sensitive'], flags: { narrow: true } } },
     capabilities: { watch: { enabled: true, longrun: { enabled: false } } },
   };
   const r = await invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH, { method: 'POST', body: payload });
   assert.equal(r.status, 200);
   assert.equal(r.body.ok, true);
-  assert.equal(r.body.written.governance.hook.preset, 'l1-sensitive');
+  assert.deepEqual(r.body.written.governance.hook.preset, ['l1-sensitive']);
   assert.deepEqual(r.body.written.capabilities.watch, payload.capabilities.watch);
   const file = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
   assert.equal(file.governance.hook.enabled, true);
@@ -329,7 +329,7 @@ test('端点：POST /config 双段任一 400 整写拒绝（governance 合法 + 
   const r = await invoke(routes.find((x) => x.path === CONFIG_PATH), CONFIG_PATH, {
     method: 'POST',
     body: {
-      governance: { hook: { enabled: true, preset: 'l1-sensitive' } },
+      governance: { hook: { enabled: true, preset: ['l1-sensitive'] } },
       capabilities: { watch: { scanIntervalMinutes: 5 } }, // 表单外 watch 级键 → field-not-allowed
     },
   });
@@ -344,7 +344,7 @@ test('端点：POST /config capabilities + 未知顶层键 → 400 unknown-top-l
   const dir = path.join(root, 'config');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(
-    { aip: { enabled: true }, governance: { hook: { preset: 'l1-sensitive' } } }, null, 2));
+    { aip: { enabled: true }, governance: { hook: { preset: ['l1-sensitive'] } } }, null, 2));
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   const route = routes.find((x) => x.path === CONFIG_PATH);
   // ① capabilities + 未知顶层键 → 400 unknown-top-level
@@ -358,6 +358,6 @@ test('端点：POST /config capabilities + 未知顶层键 → 400 unknown-top-l
   assert.equal(ok.status, 200);
   const file = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
   assert.equal(file.aip.enabled, true, '其它顶层键保留');
-  assert.deepEqual(file.governance, { hook: { preset: 'l1-sensitive' } }, 'governance 键不受影响');
+  assert.deepEqual(file.governance, { hook: { preset: ['l1-sensitive'] } }, 'governance 键不受影响');
   assert.deepEqual(file.capabilities.watch, { enabled: false }, 'capabilities.watch 已写');
 });

@@ -175,7 +175,9 @@ test('role 默认值修正：plan→designer / audit→supervisor / exec→coder
   const plan = buildWavePlan({ batchId: 'b-role', tasks: [
     { id: 'p1', layer: 'plan', produce: ['plan/s.md'] },
     { id: 'e1', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
+    // a1 显式消费被认领 exec lane 的交付产物 `exec/e1/o`：U-7/G-08 替代判据的「认领即须消费」口径
+    //   （旧判据恒不命中 ⇒ 该夹具此前无需声明；新判据可达后，缺该声明会产 GATE_PAIRING_CARDINALITY_DRIFT）。
+    { id: 'a1', layer: 'audit', consume: ['plan/s.md', 'exec/e1/o'], produce: ['audit/r.md'], deps: ['e1'] },
     { id: 'g1', cmd: 'generic' },
   ] });
   const flat = Object.fromEntries(plan.wavePlan.flatMap((w) => w.tasks).map((t) => [t.id, t]));
@@ -220,7 +222,7 @@ test('C 类三层批次缺 plan 层 designer/coordinator → GATE_ROLE_MISSING�
   const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
   assert.equal(miss.length, 1, '仅 plan 层缺牵头角色');
   assert.equal(miss[0].layer, 'plan');
-  assert.equal(miss[0].missing, 'designer|coordinator|manager');
+  assert.equal(miss[0].missing, 'designer|coordinator');
   assert.equal(validateWavePlan(plan), true, 'warning 语义：不阻断建批');
 });
 
@@ -254,21 +256,35 @@ test('C 类三层批次未声明 role：默认值补全（plan→designer / audi
   assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], '默认值补全后齐备，不告警');
 });
 
-test('C 类三层批次 manager 作 plan 牵头（continuable subagent）→ 无 GATE_ROLE_MISSING', () => {
+test('C 类三层批次 manager 作 plan 牵头 → 不再满足 plan 牵头（Manager 属引擎层、不占 lane，2026-09-13 裁决）→ GATE_ROLE_MISSING(plan)', () => {
   const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
     { id: 'p1', role: 'manager', layer: 'plan', produce: ['plan/s.md'] },
     { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
     { id: 'a1', role: 'supervisor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
   ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], 'manager 属 plan 牵头集合，不告警');
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], 'manager 合法角色，不误报非法');
+  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
+  assert.equal(miss.length, 1, 'manager 不属 PLAN_LEAD_ROLES → plan 层牵头缺失告警');
+  assert.equal(miss[0].layer, 'plan');
+  assert.equal(miss[0].missing, 'designer|coordinator', '缺 role 文案不含 manager');
+  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], 'manager 仍是合法角色（VALID_ROLES 含 manager），不误报非法');
+  // D1 收尾：manager 作 lane 角色另有**专属**告警（不混入 GATE_ROLE_MISSING，避免被读成「缺牵头角色」）
+  const mgr = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MANAGER_AS_LANE');
+  assert.equal(mgr.length, 1, 'manager 出现在 lane.role ⇒ 专属告警一条');
+  assert.equal(mgr[0].task, 'p1');
+  assert.equal(mgr[0].layer, 'plan');
+  assert.match(mgr[0].message, /engine-layer role/);
+  assert.equal(validateWavePlan(plan), true, 'warning 语义：不阻断建批');
 });
 
 test('单 lane 批次（非 C 类形态）不触发 GATE_ROLE_MISSING', () => {
+  // 【r2 同步 · A1/B3】旧 fixture 为「单 lane **plan** 批」——新语义下 plan 产物必须被至少一条 lane consume
+  //   （A1 主防线）⇒ 单 plan lane 批一律拒建批 `GATE_ORPHAN_PRODUCT`（V-3 硬约束：不得建 plan-only 批）。
+  //   本用例的被测点只在于「**非 C 类单 lane 形态**不触发角色齐备门禁」⇒ 改以单 audit lane 表达同一形态
+  //   （仍是有 layer 的单 lane 批、非 C 类）。plan 层的角色告警面由下方三条用例（三层批）覆盖。
   const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'coder', layer: 'plan', produce: ['plan/s.md'] },
+    { id: 'p1', role: 'coder', layer: 'audit', produce: ['audit/r.md'] },
   ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], '单 lane plan 批次非 C 类形态，不告警');
+  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], '单 lane 批次非 C 类形态，不告警');
 });
 
 test('plan 层非法角色（planner）：GATE_ROLE_INVALID 与 GATE_ROLE_MISSING 并存（互不遮蔽）', () => {
@@ -336,6 +352,8 @@ test('O2 targets 契约：validateWavePlan 伪造/篡改 targets 形态拒绝', 
 });
 
 test('O2 normalizeTargetsContract：独立规范化入口', () => {
-  assert.deepEqual(normalizeTargetsContract({ id: 'x', targets: ['D:\\a.js'], targetsMarker: 'm' }), { targets: ['D:\\a.js'], targetsMarker: 'm' });
-  assert.deepEqual(normalizeTargetsContract({ id: 'x' }), { targets: null, targetsMarker: null });
+  assert.deepEqual(normalizeTargetsContract({ id: 'x', targets: ['D:\\a.js'], targetsMarker: 'm' }), { targets: ['D:\\a.js'], targetsMarker: 'm', targetsNoChange: false });
+  assert.deepEqual(normalizeTargetsContract({ id: 'x' }), { targets: null, targetsMarker: null, targetsNoChange: false });
+  // R1-g：零改动声明位透传（缺口修复：不再逼出假改动）
+  assert.deepEqual(normalizeTargetsContract({ id: 'x', targets: ['D:\\a.js'], targetsNoChange: true }), { targets: ['D:\\a.js'], targetsMarker: null, targetsNoChange: true });
 });

@@ -26,6 +26,7 @@ import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import { createLaneHeartbeat } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
+import { threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
 
 const SILENT = { warn() {}, info() {}, error() {} };
 
@@ -62,15 +63,18 @@ test('INV-5a：有 lane.stalled 事件的 running lane → recycleStalledLane �
 });
 
 test('INV-5b：非 running lane（idle/终态）→ recycleStalledLane 拒绝 throw', () => {
-  const { store, S } = setup();
+  const { root, store, S } = setup();
   // idle：恢复后
   const bid1 = makeStalledBatch(store, S, 'b-idle');
   store.recoverBatches();
   assert.throws(() => store.recycleStalledLane(S, bid1, 'l1'), /lane not running/);
   // merged 终态
+  // 【r2 同步 · B2】旧 fixture 的 lane 无 layer ⇒ 无法结算到 merged（exit 门拒 `GATE_LANE_LAYER_MISSING`）
+  //   ⇒ 改用合规三层批 + 声明产物在场。
   const bid2 = 'b-merged';
-  const plan = buildWavePlan({ batchId: bid2, tasks: [{ id: 'a' }] });
+  const plan = buildWavePlan({ batchId: bid2, tasks: threeTierTasks(['a']) });
   store.createBatch(S, { batchId: bid2, wavePlan: plan, phase: 'running' });
+  seedArtifacts(root, S, bid2, ['a']);
   store.setMember(S, bid2, 'a', 'running');
   store.setMember(S, bid2, 'a', 'review');
   store.setMember(S, bid2, 'a', 'merged');

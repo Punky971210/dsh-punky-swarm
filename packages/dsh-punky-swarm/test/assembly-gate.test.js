@@ -26,33 +26,49 @@ import os from 'node:os';
 import path from 'node:path';
 import { valueSchemaSpecToJsonSchema, parameterSchemaSpecToJsonSchema } from '@deepseek-ai/dsh-tools';
 import {
-  countExecLanes, isCPlusBatch, normalizeAssemblyDecl, assemblyGate, MANAGER_PLANS,
+  countExecLanes, isCPlusBatch, requiresAssemblyDecl, normalizeAssemblyDecl, assemblyGate, MANAGER_PLANS,
   buildWavePlan, validateWavePlan, ROLE_WHITELIST,
 } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（被检面是装配门）建批统一补 software-team
+//   （其角色集恰含 designer / coordinator / coder / supervisor，与 cplusTasks 的角色逐字一致）；
+//   该团队 skills 必须可解析 ⇒ 隔离 HOME 下先注入宿主技能根。
+seedTeamAssetSkills('software-team');
 
 // ── fixtures ──
 
 // 三层批任务样张：p1(plan/designer) + execN 个 exec/coder + a1(audit/supervisor)。
 // exec≥3 即 C+（spec §2/§3.1）；角色齐备（plan designer / audit supervisor）→ 无 GATE_ROLE_MISSING 噪音
+// 【r2 同步 · A1】`coordinator: true` 时 c1 声明 `plan/tree.json`——新语义下 plan 产物必须被至少一条 lane
+//   consume（A1 主防线，否则建批期拒 `GATE_ORPHAN_PRODUCT`）⇒ 该产物由 audit lane 消费（验收核对任务树）。
+// 【P1 同步 · 形态收紧】a1 追加 consume 各 exec 产物：P1 起建批必带团队资产，而内置团队与 engine-team 的
+//   `flows.audit.audit_contract.consumes_required` 均为 `['plan/','exec/']`（引擎既有 `GATE_AUDIT_INPUT_MISSING`
+//   纪律，本批不放宽）⇒ 合规三层批的 audit 必须消费两个前缀。断言强度未变（未删任何判据）。
 function cplusTasks(execN, { coordinator = false } = {}) {
   const tasks = [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/s.md'], cmd: 'spec' },
   ];
   if (coordinator) tasks.push({ id: 'c1', layer: 'plan', role: 'coordinator', deps: ['p1'], consume: ['plan/s.md'], produce: ['plan/tree.json'], cmd: 'split' });
+  const execRels = [];
   for (let i = 1; i <= execN; i++) {
-    tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: ['exec/e' + i + '/o.md'], deps: ['p1'], cmd: 'impl' });
+    const rel = 'exec/e' + i + '/o.md';
+    execRels.push(rel);
+    tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: [rel], deps: ['p1'], cmd: 'impl' });
   }
-  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
+  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: [...(coordinator ? ['plan/tree.json'] : []), 'plan/s.md', ...execRels], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
   return tasks;
 }
 
-// §3.2 合规 assembly 值对象（DSL 编译断言与 core.js wave_plan 参数同形态；required 编译收集为布尔）
+// §3.2 合规 assembly 值对象（DSL 编译断言与 core.js wave_plan 参数同形态；required 编译收集为布尔）。
+// 2026-09-14：`managerPlan` 由必填改为**可选**（引擎缺省 = raise，leader-direct 须显式写出）⇒ required 仅 auditLane。
 const ASSEMBLY_VALUE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    managerPlan: { type: 'string', required: true, enum: ['raise', 'leader-direct'], description: '编排牵头形态' },
+    managerPlan: { type: 'string', enum: ['raise', 'leader-direct'], description: '编排牵头形态（缺省 = raise）' },
     auditLane: { type: 'string', required: true, description: '验收归属 lane id' },
     coordinatorLane: { type: 'string', description: '可选' },
     roles: { type: 'array', items: { type: 'string' }, description: '可选' },
@@ -66,7 +82,10 @@ function makeHarness() {
   const reg = [];
   const ctx = { tools: { register: (t) => reg.push(t) }, logger: console };
   const { tools } = createTools(ctx, { store, root });
-  const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+  const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
+  // G1 前置（新门禁）：`wave_plan` 属 C 档动作 ⇒ 工具面用例先把本会话评估为 C。
+  //   旧记录只写 `form:'C'` 而缺 `difficulty` ⇒ 引擎按「未评估」处理（宁严勿松），故必须补真实档位字段。
+  assessC(store, 'sess-cpa', { rationale: 'fixture：装配门套件工具面建批前置评估（C+ 多 lane 并行 ⇒ C 档）' });
   return { root, store, byName };
 }
 const SESS = { agent: { session: { id: 'sess-cpa' } } };
@@ -76,15 +95,16 @@ function batchFileOf(root, sessionId, batchId) {
 
 // ── T1-T8 纯函数面 ──
 
-test('T1 纯函数：C+（exec≥3 三层批）缺 assembly → GATE_ROLE_ASSEMBLY_MISSING', () => {
+test('T1 纯函数：三层批（含 audit 层）缺 assembly → GATE_ROLE_ASSEMBLY_MISSING', () => {
   const tasks = cplusTasks(3);
   assert.equal(countExecLanes(tasks), 3);
   assert.equal(isCPlusBatch(tasks), true);
+  assert.equal(requiresAssemblyDecl(tasks), true, '含 audit 层的三层批 ⇒ 装配声明必备（2026-09-14 扩面）');
   const r = assemblyGate(tasks, null);
   assert.notEqual(r, 'ok');
   assert.equal(r.code, 'GATE_ROLE_ASSEMBLY_MISSING');
-  assert.match(r.message, /C\+ batch requires assembly declaration \(exec lanes >= 3\)/);
-  assert.match(r.message, /pass assembly: \{ managerPlan: 'raise'\|'leader-direct', auditLane: '<audit lane id>' \}/);
+  assert.match(r.message, /three-tier batch with an audit lane requires an assembly declaration/);
+  assert.match(r.message, /pass assembly: \{ managerPlan\?: 'raise'\|'leader-direct' \(default raise\), auditLane: '<audit lane id>' \}/);
 });
 
 test('T2/T3 纯函数：C+ 带合规 assembly（raise/leader-direct + auditLane + coordinatorLane/roles）→ ok + 归一化', () => {
@@ -103,11 +123,25 @@ test('normalizeAssemblyDecl：缺省/undefined → { decl: null, warnings: [] }�
   assert.deepEqual(decl, { managerPlan: 'raise', auditLane: 'a1', roles: ['Designer', 'Coder'] }); // 词条大小写原样透传（词法判定不敏感）
 });
 
-test('T4 纯函数：三层批 exec=2（<3）缺 assembly → 不强制（ok）', () => {
-  const tasks = cplusTasks(2);
-  assert.equal(countExecLanes(tasks), 2);
-  assert.equal(isCPlusBatch(tasks), false);
-  assert.equal(assemblyGate(tasks, null), 'ok');
+test('managerPlan 缺省 = raise（2026-09-14 用户裁决「Manager 见批即默认」）；非法值仍拒', () => {
+  const { decl, warnings } = normalizeAssemblyDecl({ auditLane: 'a1' });
+  assert.equal(decl.managerPlan, 'raise', '省略 managerPlan ⇒ 引擎归一化为 raise（可核事实）');
+  assert.equal(warnings.length, 0);
+  assert.equal(normalizeAssemblyDecl({ managerPlan: 'leader-direct', auditLane: 'a1' }).decl.managerPlan, 'leader-direct', '显式 leader-direct 保留');
+  assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'bogus', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct \(got: bogus\)/);
+  assert.throws(() => normalizeAssemblyDecl({ managerPlan: '', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct/);
+});
+
+test('T4 纯函数：必备判定按「含 audit 层」而非 exec 条数（扩面后口径）', () => {
+  const exec2 = cplusTasks(2);
+  assert.equal(countExecLanes(exec2), 2);
+  assert.equal(isCPlusBatch(exec2), false, 'exec<3 不再是「集群规模」口径');
+  assert.equal(requiresAssemblyDecl(exec2), true, '含 audit 层的三层批 ⇒ 必备（exec 条数不决定）');
+  assert.notEqual(assemblyGate(exec2, null), 'ok');
+  // 无 audit 层的三层批 → 不强制（零噪音，与既有行为兼容）
+  const noAudit = [{ id: 'p1', layer: 'plan' }, { id: 'e1', layer: 'exec' }, { id: 'e2', layer: 'exec' }];
+  assert.equal(requiresAssemblyDecl(noAudit), false);
+  assert.equal(assemblyGate(noAudit, null), 'ok');
 });
 
 test('T5 纯函数：generic 批（无 layer）缺 assembly / 带 assembly → ok', () => {
@@ -121,7 +155,7 @@ test('T5 纯函数：generic 批（无 layer）缺 assembly / 带 assembly → o
 test('T6 纯函数：assembly 结构非法 → GATE_ASSEMBLY_INVALID throw（fail-closed）', () => {
   assert.throws(() => normalizeAssemblyDecl('raise'), /GATE_ASSEMBLY_INVALID: assembly must be an object/);
   assert.throws(() => normalizeAssemblyDecl([]), /GATE_ASSEMBLY_INVALID: assembly must be an object/);
-  assert.throws(() => normalizeAssemblyDecl({}), /GATE_ASSEMBLY_INVALID: assembly\.managerPlan must be one of raise\|leader-direct/);
+  assert.throws(() => normalizeAssemblyDecl({}), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/); // managerPlan 现缺省 raise ⇒ 缺 auditLane 仍拒
   assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'bogus', auditLane: 'a1' }), /GATE_ASSEMBLY_INVALID: assembly\.managerPlan must be one of raise\|leader-direct \(got: bogus\)/);
   assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
   assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane must be a non-empty string/);
@@ -181,12 +215,14 @@ test('countExecLanes/isCPlusBatch：边界口径（仅按 task.layer 计）', ()
 
 // ── T1-T8 工具 execute 集成面 ──
 
-test('T1 execute：C+ 缺 assembly → reject（GATE_ROLE_ASSEMBLY_MISSING）+ 无批次 JSON + pendingBatch 锁保留', async () => {
+test('T1 execute：三层批（含 audit 层）缺 assembly → reject（GATE_ROLE_ASSEMBLY_MISSING）+ 无批次 JSON + pendingBatch 锁保留', async () => {
   const { root, store, byName } = makeHarness();
-  store.writeGovernance('sess-cpa', { lastAssign: { form: 'C', at: new Date().toISOString() }, pendingBatch: true, pendingSince: new Date().toISOString() });
+  // G1 前置：判 C 后未建批的锁态（`pendingBatch`）——旧写法只写 `form`，新档位口径下等价「未评估」⇒ 用
+  //   `assessC` 落真实 difficulty 字段，再补 pendingBatch 锁，保持本用例的被检面（锁保留）不变。
+  store.writeGovernance('sess-cpa', { pendingBatch: true, pendingSince: new Date().toISOString() });
   await assert.rejects(
     () => byName.wave_plan.execute({ batchId: 'cpa-t1', tasks: cplusTasks(3) }, SESS),
-    /GATE_ROLE_ASSEMBLY_MISSING: C\+ batch requires assembly declaration \(exec lanes >= 3\)/,
+    /GATE_ROLE_ASSEMBLY_MISSING: three-tier batch with an audit lane requires an assembly declaration/,
   );
   assert.equal(fs.existsSync(batchFileOf(root, 'sess-cpa', 'cpa-t1')), false, '拒建批：无批次 JSON 落盘');
   assert.equal(store.readGovernance('sess-cpa').pendingBatch, true, '拒建批：pendingBatch 锁保留（Leader 补声明后重试解锁）');
@@ -211,12 +247,19 @@ test('T3 execute：C+ 带 leader-direct → 通过（枚举两值皆合法）', 
   assert.deepEqual(out.assembly, { managerPlan: 'leader-direct', auditLane: 'a1' });
 });
 
-test('T4 execute：三层批 exec=2（<3）缺 assembly → 通过（行为与现状一致，不强制）', async () => {
-  const { root, byName } = makeHarness();
-  const out = await byName.wave_plan.execute({ batchId: 'cpa-t4', tasks: cplusTasks(2) }, SESS);
-  assert.ok(out.lanes.p1 === 'pending');
-  const raw = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-t4'), 'utf8'));
-  assert.equal('assembly' in raw, false, 'exec<3 缺声明：batch JSON 不写 assembly 键（零噪音）');
+test('T4 execute：三层批（含 audit 层）缺 assembly → 拒建批（扩面口径）；无 audit 层的三层批=唯一不强制形态', async () => {
+  const { byName } = makeHarness();
+  await assert.rejects(
+    () => byName.wave_plan.execute({ batchId: 'cpa-t4', tasks: cplusTasks(2) }, SESS),
+    /GATE_ROLE_ASSEMBLY_MISSING: three-tier batch with an audit lane/,
+  );
+  // 引擎不变量：含 exec 层的三层批缺 audit lane → 更早的一道闸（validateLayerContract）就拒 ⇒ 该形态不可达
+  await assert.rejects(
+    () => byName.wave_plan.execute({ batchId: 'cpa-t4c', tasks: [{ id: 'p1', layer: 'plan', cmd: 'p' }, { id: 'e1', layer: 'exec', cmd: 'e', deps: ['p1'] }] }, SESS),
+    /three-tier: exec layers require at least one audit lane/,
+  );
+  // 唯一「不强制」形态 = 无 audit 层的三层批（纯函数面判定）
+  assert.equal(requiresAssemblyDecl([{ id: 'p1', layer: 'plan' }]), false);
 });
 
 test('T5 execute：generic 批无 assembly 通过；带 assembly 亦通过（仅持久化，声明无害）', async () => {
@@ -274,9 +317,9 @@ test('T8 execute：roles 词条非法 → 告警（GATE_ROLE_INVALID warning + g
 
 // ── T9 schema DSL 合规（宿主注册等价：defineTool/DSL 编译同一条路径）──
 
-test('T9 DSL：§3.2 合规形态编译通过，required 正确收集为 ["managerPlan","auditLane"]', () => {
+test('T9 DSL：§3.2 合规形态编译通过，required 正确收集为 ["auditLane"]（managerPlan 已改为可选·缺省 raise）', () => {
   const js = valueSchemaSpecToJsonSchema(ASSEMBLY_VALUE_SCHEMA);
-  assert.deepEqual(js.required, ['managerPlan', 'auditLane']);
+  assert.deepEqual(js.required, ['auditLane']);
   // 根参数对象为隐式开放 ParameterSchemaSpec：新增顶层 assembly 键编译通过
   const pjs = parameterSchemaSpecToJsonSchema({ batchId: { type: 'string', required: true }, assembly: ASSEMBLY_VALUE_SCHEMA });
   assert.ok(pjs.properties.assembly, 'parameters 顶层含 assembly 键');

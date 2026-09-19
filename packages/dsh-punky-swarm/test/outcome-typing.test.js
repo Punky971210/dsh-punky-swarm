@@ -126,7 +126,7 @@ test('C5-4 attempt 派生零变：crashed/interrupted 不入 member.settled，�
   store.setMember(S, bid, 'l1', 'review');
   store.setMember(S, bid, 'l1', 'running');
   store.setMember(S, bid, 'l1', 'review');
-  store.setMember(S, bid, 'l1', 'conflict');
+  store.setMember(S, bid, 'l1', 'conflict', '评审驳回：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   // l2：running 中 crash（recoverBatches 记 crashed）
   store.setMember(S, bid, 'l2', 'running');
   store.recoverBatches();
@@ -198,7 +198,7 @@ test('C5-7 既有四档结算零变：merged/failed/skipped/conflict 事件载�
   store.createBatch(S, { batchId: bid, wavePlan: plan, phase: 'running' });
   store.setMember(S, bid, 'a', 'running');
   store.setMember(S, bid, 'a', 'review');
-  store.setMember(S, bid, 'a', 'failed');
+  store.setMember(S, bid, 'a', 'failed', '构造失败终态：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   const b = store.readBatch(S, bid);
   assert.equal(b.lanes.a, 'failed');
   const s = b.events.find((e) => e.type === 'member.settled' && e.to === 'failed');

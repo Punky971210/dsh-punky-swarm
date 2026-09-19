@@ -35,7 +35,7 @@ const out = { scenarios: [] };
 // 场景 A：gate 全通过 → gate.exit 事件在 member.settled(merged) 之前
 {
   const bid = 'b-smoke-a';
-  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'jiufeng' }) });
+  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
   runLane(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(0)"\n');
@@ -55,7 +55,7 @@ const out = { scenarios: [] };
 // 场景 B：gate 失败（非 0）→ gate.exit_blocked → 拒 merged 抛 GATE_EXIT_NONZERO，lane 留 review
 {
   const bid = 'b-smoke-b';
-  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'jiufeng' }) });
+  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
   runLane(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(2)"\n');
@@ -74,7 +74,7 @@ const out = { scenarios: [] };
 // 场景 C：gate 失败 + needHuman → gate.exit_blocked(escalation) → 无证据 GATE_NEEDHUMAN_PENDING → human: 证据 merged + human.decision
 {
   const bid = 'b-smoke-c';
-  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'jiufeng' }) });
+  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
   runLane(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(1)"\nneedHuman: true\n');
@@ -100,7 +100,7 @@ const out = { scenarios: [] };
 // 场景 D：未声明 gate → 零感知（无 gate.* 事件）
 {
   const bid = 'b-smoke-d';
-  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'jiufeng' }) });
+  store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
   runLane(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\n- 无 gate 声明\n');

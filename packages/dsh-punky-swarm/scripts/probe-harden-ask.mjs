@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// M2 硬化真宿主 ask 双路径探针（exec-tester lane；harden-plan §5.5 原型 B + p1-manifest 移交⑥）
+// 真宿主 ask 双路径探针（governance hook 端到端）
 // 真宿主 = cordis 真 Context + dsh-tools ToolRuntime（本 worktree node_modules @deepseek-ai/dsh-tools
 //   0.1.0-rc.6）+ 真实 installGovernanceHook（wiring 端到端）——非 fake ctx。
 // 观察点（serviceAsk HOST:3296-3347 逐分支真宿主实测）：

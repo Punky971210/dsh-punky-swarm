@@ -28,22 +28,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 语义红线：漏计不误暂停（安全侧）——解析不出批上下文宁可跳过；不引入任何批级状态迁移。
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
+import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from './lane-handle.js'; // 派发句柄（C 档唯一凭证）
 
 // 派发类工具名单（装配注入可经 deps.tools 覆盖/扩列）；send_message 为既有 worker 唤醒（0g），
-// 其 childId 取 args.subagent_id（注册目标 = 被唤醒 worker 会话——若 spawn 时漏登可兜底补登）。
+// 其目标 worker 会话 id 取 **`args.agent_id`**（**宿主实签名**：`{agent_id, message}`，`required=['agent_id','message']`，
+// 2026-09-18 本会话 `tools_schema` 实读；旧键名 `subagent_id` 仅作**回落防御**保留）。
+// 【T-14/G-10#3 · 2026-09-18 裁定】名单**不改**（`subagent*` 不可用是官方 profile 的**配置事实**，
+//   不是引擎契约；改名单会在别的 profile 下丢登记）。
 export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork', 'send_message'];
 
 // 从 post-execute (exec, result) 提取被派发 worker 会话 id（childId/agentId）。
 // 宿主结构化 result：subagent → ToolExecutionResult.value = {kind:'continuable', subagentId}（continuable 后台模式，
 // subagentId = startContinuable childId = 会话 id）；background jobId / foreground runId 非会话 id（不登记——
-// 无持久 worker 会话可归属，T16 静默）；send_message → 目标在 args.subagent_id。提取不到 → null（不登记）。
+// 无持久 worker 会话可归属，静默）；send_message → 目标在 `args.agent_id`（宿主实签名；`args.subagent_id` 作回落）。提取不到 → null（不登记）。
 export function extractWorkerSessionId(exec, result) {
   if (!exec || typeof exec.name !== 'string') return null;
   const name = exec.name;
   if (name !== 'subagent' && name !== 'subagent_fork' && name !== 'send_message') return null; // 非派发类不提取
   if (result?.isError === true) return null; // 派发失败无 worker 会话（观察者仍透传，不登记）
   if (name === 'send_message') {
-    const id = exec?.arguments?.subagent_id;
+    // 【T-14/G-10#3 键名校正】宿主 `send_message` 参数面为 `{agent_id, message}` ⇒ 主取 `agent_id`；
+    //   `subagent_id` 作**回落防御**（旧夹具 / 宿主键名再漂移时仍能提取，避免静默漏登记）。
+    const id = exec?.arguments?.agent_id ?? exec?.arguments?.subagent_id;
     return typeof id === 'string' && id.length ? id : null;
   }
   // subagent / subagent_fork：结构化 value（host ToolExecutionResult）或平铺 result 兼容
@@ -107,7 +113,39 @@ export function installDispatchRegistration(ctx, deps = {}) {
       // ② 非派发类工具 → 不登记（透传）
       if (!toolSet.has(exec.name)) return next();
       const workerSessionId = extractWorkerSessionId(exec, result);
-      if (!workerSessionId) return next(); // 无持久 worker 会话（background/foreground/失败）→ 不登记
+      if (!workerSessionId) {
+        // 【T-14/G-10#3 · 显式降级告警（不静默漏登记）】原此处**静默 `return next()`**：官方 profile 下
+        //   `subagent*` 不在宿主工具面 ⇒ 其告警分支恒不进（见下方 ③′），而 `send_message` 提取失败
+        //   （原读错键名 `subagent_id`）会**零告警地漏登记** ⇒ `member.dispatch` 恒零产生、下游
+        //   `laneBindingOf`/自动结算整链静默失效。
+        //   现口径：提取不到持久 worker 会话即**显式留痕降级**（含宿主结构化形态 `background`/`foreground`
+        //   = jobId/runId 非会话 id、`isError` 失败、键缺失三类成因），再 `next()`。
+        //   **不引入拒绝**（观察者纪律：恒 `next()`；`GATE_SUBAGENT_OUTSIDE_LANES` 已随 gate-lite 第二批删除）。
+        logger?.warn?.('[dsh-punky-swarm] dispatch register degraded（提取不到持久 worker 会话 ⇒ 本次不登记 · tool='
+          + exec.name + ' · caller=' + caller + '）：键缺失/键名漂移，或结果为失败/非会话 id'
+          + '（background jobId / foreground runId）——非静默降级，仅留痕不阻断');
+        return next();
+      }
+      // ③′-a **句柄优先**（2026-09-15 用户裁决「不写 token 即禁止派发」）：任务包内含有效 lane 句柄 ⇒
+      //   以句柄的 (batchId, lane) **精确登记**（一次性消费）。这修掉了原「单槽意图」缺陷——并行 N 条 lane
+      //   同波派发时**全部可登记**，而非只登记最后一条。句柄是 C 档派发的**唯一凭证**（由 `lane_dispatch` 发放）；
+      //   解析不到句柄时**退回既有意图路径**（本步只补登记、不引入拒绝——拒绝在 guard 档位门，另行落地）。
+      const handleText = textOfDispatchArgs(exec.arguments);
+      const parsed = parseLaneHandleFromText(handleText);
+      if (parsed) {
+        const c = consumeLaneHandle(parsed.token, { batchId: parsed.batchId, lane: parsed.lane });
+        if (c.ok) {
+          if (register(c.entry.sessionId, c.entry.batchId, c.entry.lane, workerSessionId)) intentBySession.delete(caller);
+          return next();
+        }
+        logger?.warn?.('[dsh-punky-swarm] lane handle rejected: ' + c.reason + '（lane=' + parsed.lane + '，退回意图路径）');
+      } else if (exec.name === 'subagent' || exec.name === 'subagent_fork') {
+        // B6（修 W5「静默降级」）：派发工具**未携带句柄**时**显式留痕**，再走既有意图兜底。
+        //   该码与对应拒绝分支**均已删除**（`GATE_SUBAGENT_OUTSIDE_LANES` 随 gate-lite 第二批 · B 删除；官方 profile 已 `disabled` 宿主委派工具）；此处的职责只有一个——**不静默**。
+        logger?.warn?.('[dsh-punky-swarm] dispatch without lane handle（' + exec.name + ' · caller=' + caller
+          + '）⇒ 走意图兜底登记（**不再有拒绝码**：宿主委派工具已由官方 profile `disabled`、'
+          + '`GATE_SUBAGENT_OUTSIDE_LANES` 已随 gate-lite 第二批 · B 删除；本行只保证不静默）');
+      }
       // ③ resolveBatchContext(exec)：显式注入优先，缺省 = 同会话派发意图兜底（装配注入 resolveBatchContext 兜底）
       const hit = typeof resolveBatchContext === 'function'
         ? resolveBatchContext(exec, { workerSessionId, result })

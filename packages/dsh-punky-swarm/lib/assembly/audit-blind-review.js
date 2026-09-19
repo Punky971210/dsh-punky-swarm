@@ -45,7 +45,7 @@ export const BLIND_REVIEW_ORDER = Object.freeze({
 });
 
 // ── 六任务契约模板（键名固定，供 assertAssemblyCompleteness 扩展视图与 Leader/Manager 建批取用）──
-const T_BUNDLE = `材料包准备（bundle，防评价污染 M6）：
+const T_BUNDLE = `材料包准备（bundle，防评价污染）：
 - 事实摘录段：仅摘录 exec 产物事实，每条标注出处（file:line）；锚定对照声明前置（对照同 X 分锚定）；
 - 禁评价词（好/差/优雅/低劣等主观词一律禁止——事实层与评价层分离是盲审有效性关键）；
 - 材料完整性按 checklist 模板分级：阻塞缺失→中止；非阻塞→备注 + 对应维度扣分；用户确认降级为可选条款；
@@ -58,19 +58,19 @@ const T_PANELIST = `独立盲审打分（panelist）：
 - 失败重试 ≤3 次，仍失败标 DEGRADED（映射 skipped/低权重，不单评顶替）；
 - 产物落盘 audit/panelist-<i>.md（Tier3 门禁：缺 produce 拒 merged，替代文本 checkpoint）。`;
 
-const T_AGGREGATE = `聚合裁决（aggregate，锚定 + Δ 两阶段，M2）：
+const T_AGGREGATE = `聚合裁决（aggregate，锚定 + Δ 两阶段）：
 - 阶段 1 锚定一致性：各 panelist 锚定对照匹配同 X 分 → 进阶段 2；锚定分歧 → Chair 裁决（引用事实依据）；
 - 阶段 2 Δ 分级：Δ=0 直接取；Δ=1 默认取低（可依理据采纳高）；Δ=2 Chair 裁决；Δ≥3 补理据重评，仍 ≥3 升级人工；
 - 加权总分手算验证（Checkpoint 4）；聚合报告落盘 audit/aggregate.md；
 - needHuman 声明落本产物（独立行 needHuman: true）——人工闸裁决对象=聚合结论，非单 panelist。`;
 
-const T_CRITIC = `独立复核（critic，三态决议 M3）：
+const T_CRITIC = `独立复核（critic，三态决议）：
 - 独立 session（不复用聚合上下文，避免偏见）；输入 bundle + 全部 panelist 评分 + 聚合报告 + rubric；
 - 流程合规检查 + 逐维度理据挑战 + 跨维度一致性检查；
 - 三态决议：endorse（通过→merged）/ challenge（Chair 逐条响应→conflict/重审）/ block（退回聚合，不允许跳过）；
 - 产物落盘 audit/critic.md（audit produce，Tier3 缺则拒 merged）；顺序约束：critic 必须等 aggregate 完成后启动。`;
 
-const T_CHECKLIST = `材料完整性分级（checklist，M4）：
+const T_CHECKLIST = `材料完整性分级（checklist）：
 - 阻塞项缺失 → 中止（Tier3 硬门禁为默认，引擎强制不后退到自觉）；
 - 非阻塞项缺失 → 备注 + 对应维度扣分；
 - 用户确认降级为可选条款（audit 层检查通过但标注降级）。`;

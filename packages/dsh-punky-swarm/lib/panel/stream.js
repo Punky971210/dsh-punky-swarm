@@ -41,6 +41,10 @@ import { watch } from 'node:fs';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { subscribeTopicPrefix } from '../comms/topic.js';
+// 读端容忍 BOM：批 JSON 可能被外部工具（PowerShell `Set-Content -Encoding UTF8`）写带 U+FEFF，
+//   readFileSync 不剥 BOM → JSON.parse 抛 SyntaxError 被 catch 吞成 null（静默计数失效）。
+//   复用 hot/config-watch.js 既有 stripBom（与 webui/runtime-config.js#readOverlay 同一单一实现，禁第三份副本）。
+import { stripBom } from '../hot/config-watch.js';
 
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
 const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐触发源③）
@@ -50,7 +54,7 @@ const POLL_MS = 1000;            // stat 轮询兜底周期（8.3 短路径主�
 
 // 8.3 短路径段判定（XXXXXX~N）：libuv 在 Windows 上对含短路径段的目录做 fs.watch 时，
 // 事件回调带回长路径触发原生断言崩溃（Node v24 本机实测 fs-event.c line 72）——预判规避，改 stat 轮询。
-// 仅命中短路径形态才规避；正常长路径（生产 root=~/.dsh/jiufeng 经 homedir，长路径）走 fs.watch 事件通道。
+// 仅命中短路径形态才规避；正常长路径（生产 root=~/.dsh/punky-preset 经 homedir，长路径）走 fs.watch 事件通道。
 export function hasShortNameSegment(p) {
   if (process.platform !== 'win32') return false;
   const segs = String(p).split(/[\\/]/).filter(Boolean);
@@ -100,7 +104,7 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     try {
       const f = join(root, 'sessions', sessionId, 'batches', batchId + '.json');
       if (!existsSync(f)) return null;
-      const b = JSON.parse(readFileSync(f, 'utf8'));
+      const b = JSON.parse(stripBom(readFileSync(f, 'utf8')));
       return Array.isArray(b.events) ? b.events.length : null;
     } catch { return null; }
   }

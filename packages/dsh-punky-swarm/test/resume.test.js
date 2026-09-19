@@ -32,6 +32,12 @@ import path from 'node:path';
 import { overBudgetOf, hasOverBudgetEvent, laneProgressWrite } from '../lib/state/resume.js';
 import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（被检面是 checkpoint 预算）建批统一补 software-team；
+//   其 skills 须可解析 ⇒ 隔离 HOME 下先注入宿主技能根。
+seedTeamAssetSkills('software-team');
 
 const EXEC_SESS = { agent: { session: { id: 'sess-budget' } } };
 
@@ -97,7 +103,9 @@ function setup() {
     store, root,
     config: { capabilities: { worktree: { enabled: true } } },
   });
-  return { root, store, byName: Object.fromEntries(tools.map((t) => [t.name, t])) };
+  // G1 前置（新门禁）：`wave_plan` 属 C 档动作 ⇒ 建批前先把本会话评估为 C（同 assign_check 落盘函数）
+  assessC(store, 'sess-budget', { rationale: 'fixture：checkpoint 预算集成套件建批前置评估（多环节治理 ⇒ C 档）' });
+  return { root, store, byName: withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t]))) };
 }
 
 test('B6 集成：lane_checkpoint 超限 progress → 事件流恰好 1 条 lane.over-budget（幂等）+ 不硬杀', async () => {

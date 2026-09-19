@@ -34,6 +34,12 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import * as lock from '../lib/lock.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 worktree 工具）统一补 software-team；
+//   该团队 skills 必须可解析 ⇒ 隔离 HOME 下先注入宿主技能根。
+seedTeamAssetSkills('software-team');
 
 const EXEC_SESS = { agent: { session: { id: 'sess-wt' } } };
 
@@ -60,7 +66,10 @@ function setup(extraConfig = {}) {
     store, root,
     config: { capabilities: { worktree: { enabled: true } }, ...extraConfig },
   });
-  return { root, store, byName: Object.fromEntries(tools.map((t) => [t.name, t])), registered };
+  // G1 前置（新门禁）：`wave_plan` / `member_*` 属 C 档动作 ⇒ 本套件建批前先把会话评估为 C
+  //   （否则在真正的被判面之前就被 GATE_BATCH_REQUIRES_C 拦下）；走 assign_check 的同一落盘函数。
+  assessC(store, 'sess-wt', { rationale: 'fixture：worktree 套件建批前置评估（多 lane 治理 ⇒ C 档）' });
+  return { root, store, byName: withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t]))), registered };
 }
 
 function wtRoot(root, batchId) { return path.join(root, 'sessions', 'sess-wt', 'worktrees', batchId); }
@@ -69,19 +78,19 @@ function orchPath(root, batchId) { return path.join(wtRoot(root, batchId), 'orch
 const repoPath = (root, batchId) => path.join(wtRoot(root, batchId), '_repo');
 const refExists = (root, batchId, ref) => git(['-C', repoPath(root, batchId), 'show-ref', '--verify', '--quiet', ref]).ok;
 
-test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（20 工具）；显式 enabled=false 不注册', () => {
-  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 20（14 + lane_heartbeat + lane_longrun + worktree 四件）
+test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（26 工具，含 lane_dispatch/swarm_report/swarm_cc + P3a batch_control + P1 handoff 两件）；显式 enabled=false 不注册', () => {
+  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 26（core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view）
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wt-off-'));
   const store = createStore(root);
   const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root });
-  assert.equal(tools.length, 20);
+  assert.equal(tools.length, 26);
   const names = tools.map((t) => t.name);
   for (const n of ['lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(names.includes(n), '缺省默认开：' + n + ' 应注册');
   }
-  // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（14 + lane_heartbeat + lane_longrun = 16）
+  // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（core 12 + lane_heartbeat + lane_longrun + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 22）
   const { tools: t2 } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: { capabilities: { worktree: { enabled: false } } } });
-  assert.equal(t2.length, 16);
+  assert.equal(t2.length, 22);
   assert.equal(t2.some((t) => t.name === 'lane_worktree_create' || t.name === 'lane_worktree_merge' || t.name === 'lane_checkpoint' || t.name === 'lane_checkpoint_status'), false);
 });
 

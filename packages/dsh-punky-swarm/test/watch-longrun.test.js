@@ -123,14 +123,18 @@ test('T6 无 checkpoint 历史 + 无活动 + 超时 → 候选（lastCheckpointT
   assert.equal(v.candidate, true);
 });
 
-test('T7 非 running 不判：lane 非 running / batch.phase≠running → 不候选', () => {
+test('T7 非 running 不产候选：lane 状态窗口内（idle/paused）→ candidate=false + 状态窗口 reason', () => {
   const now = 1_800_000_000_000;
+  // 【r2 同步 · watch 状态面】旧口径的「双 running 门」短路（`lane-not-running` / `batch-not-running`）
+  //   已删除（`lane-heartbeat.js:109`）：扫描准入改为「批次非终态 lane 集合」，非 running lane 按
+  //   **状态驻留窗口**给出 reason（idle → `idle-in-window`，超窗 → `idle-awaiting-resume`；
+  //   batch.paused → `paused-in-window`，超窗 → paused-dwell）。断言改为该判据下的实测值。
   const idle = judgeLongrun({ batch: { phase: 'running', lanes: { l1: 'idle' }, events: [mkEv(now - MAX_D, EVT_MEMBER_DISPATCH, { lane: 'l1' })] }, lane: 'l1', nowTs: now, maxDurationMs: MAX_D, noProgressWindowMs: WINDOW, lastActivityAtMs: null });
   assert.equal(idle.candidate, false);
-  assert.equal(idle.reason, 'lane-not-running');
+  assert.equal(idle.reason, 'idle-in-window');
   const paused = judgeLongrun({ batch: { phase: 'paused', lanes: { l1: 'running' }, events: [mkEv(now - MAX_D, EVT_MEMBER_DISPATCH, { lane: 'l1' })] }, lane: 'l1', nowTs: now, maxDurationMs: MAX_D, noProgressWindowMs: WINDOW, lastActivityAtMs: null });
   assert.equal(paused.candidate, false);
-  assert.equal(paused.reason, 'batch-not-running');
+  assert.equal(paused.reason, 'paused-in-window');
 });
 
 // ---- runningSince 推导 / 重派重置（T8）----
@@ -352,9 +356,9 @@ test('lane_longrun 查询：返回探针状态；beat=true 手动触发一拍（
   assert.equal(qb.lanes.length, 1);
 });
 
-// ---- L1 复核缺口（补用例）：引擎在、多 running lane、缺省 lane
-//   → 全批 running lane（非 running 排除）；显式 lane 单行过滤；逐行字段齐全 ----
-test('lane_longrun 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除；逐行字段齐全）；显式 lane 单行', async () => {
+// ---- L1 复核缺口（补用例）：引擎在、多 lane 混合态、缺省 lane
+//   → 全批**非终态** lane（终态排除）；显式 lane 单行过滤；逐行字段齐全 ----
+test('lane_longrun 缺省 lane → 全批非终态 lane（多 running；idle 纳入、failed/merged 排除；逐行字段齐全）；显式 lane 单行', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-wld-'));
   const store = createStore(root);
   const S = 'sess-lr-wld';
@@ -375,10 +379,12 @@ test('lane_longrun 缺省 lane → 全批 running lane（多 running；idle/fail
   const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
   const exec = { agent: { session: { id: S } } };
 
-  // 缺省 lane → 全批 running lane（恰 2 行），非 running（idle/failed/merged）排除
+  // 缺省 lane → 全批**非终态** lane（l1/l2 running + l3 idle；终态 l4 failed / l5 merged 排除）
+  // 【r2 同步 · watch 状态面】缺省过滤由「仅 running」改为「按状态过滤：{pending, running, review, idle}」
+  //   （`lane-heartbeat.js:1428` 非终态 lane 过滤）⇒ 期望集合为 ['l1','l2','l3']。
   const q = await tool.execute({ batchId }, exec);
   assert.equal(q.sessionId, S);
-  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2'], '缺省返回全批 running lane；idle/failed/merged 排除');
+  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2', 'l3'], '缺省返回全批非终态 lane；终态（failed/merged）排除');
   for (const row of q.lanes) {
     assert.ok(row.laneKey.startsWith(S + '/' + batchId + '/'), '逐行 laneKey 齐全（' + row.laneKey + '）');
     assert.equal(row.enabled, true, '引擎在 → longrun enabled');

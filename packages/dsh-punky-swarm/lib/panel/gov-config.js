@@ -30,16 +30,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     //   applied.watch = 引擎 resolve 后的 watch 生效快照（{ enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs }, scanIntervalMinutes }；
     //             缺省 enabled/longrun.enabled = true——出厂默认开语义，显式 false 才关；长跑阈值缺省 1200000/300000 ms（LONGRUN_DEFAULTS）。
     //             e2 remount 生效面含阈值后，applied 快照携带阈值 → 表单回显 + 确认轮询数据源；表单兜底源）
-    //   presets = [{ id, count }] 注册目录元数据（复选行/合计规则数摘要：l1=12 / l2=6 / compose=18）。
+    //   presets = [{ id, count }] 注册目录元数据（复选行/合计条目数摘要：l1=12 / l2=6 / l3=1）。
     // 写契约 = POST 同路径，body { governance: { hook: {...} }, capabilities: { watch: { enabled, longrun: { enabled, maxDurationMs, noProgressWindowMs } } } }
     //         （单保存合并双段：governance + watch 能力开关；400 → { ok:false, errors:[{ field, code, message }] }（页面按 code 双语映射））。
     // 窗口单位：GET overlay.escalation.windowMs 存 ms（毫秒契约不变）；
     //   表单以秒显示/输入（初值 = windowMs/1000），提交走 escalation.windowSeconds（秒语义字段），
     //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
-    // preset 语义（本次多选改造）：装载键 = string | string[]；compose 与 l1+l2 展开等价且 id 重叠，
-    //   同批引用 compose+l1 会被引擎唯一性校验拒（resolve 回退空表）→ UI 不复选 compose：
-    //   勾选集仅 l1/l2 两 checkbox，全勾 = ["l1-sensitive","l2-resource"]（18 条，compose 等效）；
+    // preset 语义（2026-09-14 改：全部规则集平级多选）：装载键 = string | string[]；
+    //   勾选集 = ["l1-sensitive","l2-resource","l3-tool-ban"] 的任意子集——**组合由勾选叠加表达**，
+    //   面板不存在也不接受 compose 这一「组合项」（`compose` 注册 id 已废除：引擎注册表只剩三项，
+    //   旧配置若含它须经下方一次性回显迁移转成 l1+l2 才能保存）。
+    //   三个规则集 id 互不重叠（L1/L2 走 rules 面、L3 走 toolBan 面），多选叠加不会被引擎唯一性校验拒；
     //   全不勾 = 省略 preset 键（后端删键回出厂零规则；空数组/空串会被后端 400 拒）。
+    //   旧值一次性迁移（救生索，非注册项）：overlay.hook.preset === 'compose' → 回显为 l1+l2 两项勾选，
+    //   用户保存即归一为合法数组；不做该迁移则旧值会落到 { custom } 分支、被后端 unknown-preset 拒。
 
     // —— 字号基准（配置页局部；宿主 settings 卡片 15/13/12 尺度对齐，整体较旧版上调一级）——
     // 本段顶层禁 const（物理序在 main.js 的 return 之后，死区永不初始化）→ 一律函数声明取数。
@@ -56,33 +60,36 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       };
     }
     function fmtN(k, n) { return tt(k).replace('{n}', String(n)); }
+    // 双占位符文案格式化（{n} = 已选规则集项数、{m} = 合计条目数）——「已选 N 项 · 合计 M 条」合计行用
+    function fmtN2(k, n, m) { return tt(k).replace('{n}', String(n)).replace('{m}', String(m)); }
     function pickBool(a, b, d) { return typeof a === 'boolean' ? a : typeof b === 'boolean' ? b : d; }
     function pickNum(a, b, d) { return typeof a === 'number' && isFinite(a) ? a : typeof b === 'number' && isFinite(b) ? b : d; }
     function clockOf(d) { try { return d.toTimeString().slice(0, 8); } catch { return ''; } }
-    // 可选装载复选集 = l1 + l2（不再提供 compose 作独立项；compose 仅作旧值回显展开，见 formPresetOf）
-    function presetOptionIds() { return ['l1-sensitive', 'l2-resource']; }
+    // 可选装载复选集 = 全部注册规则集（三个平级多选项：L1 敏感 / L2 资源 / L3 工具黑名单）——
+    //   组合 = 勾选叠加本身（如「规则预设」全勾 = ['l1-sensitive','l2-resource','l3-tool-ban']），
+    //   不再有 compose 这一「组合项」（该注册 id 已废除）；'compose' 仅在 formPresetOf 里作一次性旧值迁移。
+    function presetOptionIds() { return ['l1-sensitive', 'l2-resource', 'l3-tool-ban']; }
     function escPrimitives() { return ['DENY', 'NARROW', 'DEFER', 'PAUSE']; } // REQUIRE_APPROVAL 红线不可经表单（引擎契约），不出现
     function presetMeaningKey(id) {
       switch (id) {
         case 'l1-sensitive': return 'gov.preset.l1';
         case 'l2-resource': return 'gov.preset.l2';
-        case 'compose': return 'gov.preset.compose';
+        case 'l3-tool-ban': return 'gov.preset.l3';
         default: return null;
       }
     }
-    // GET overlay.hook.preset 回显 → 表单勾选集。兼容：单字符串（compose/l1-sensitive/l2-resource）|
-    // string[] | 空/省略 → null（全不勾）。'compose' = l1+l2 展开全勾（旧值迁移，保存归一为数组）。
-    // 含未注册 id / 非法形态 → { custom: <原文> }（无勾选位可表，保存原样保留 + 警示）。
+    // GET overlay.hook.preset 回显 → 表单勾选集（**仅数组形态**；单选遗产清除 2026-09-14）：
+    //   空/省略 → null（全不勾）；数组且 id 全在可选集内 → 勾选集；
+    //   单值字符串（旧单选遗留）/ 含未注册 id / 其它非法形态 → { custom: <原文> }——无勾选位可表，
+    //   保存时原文透传，由后端形态校验拒绝并回显（面板给警示，用户按多选重新勾选即可）。
     function formPresetOf(pv) {
       if (pv === undefined || pv === null || pv === '') return null;
-      const raw = typeof pv === 'string' ? [pv] : Array.isArray(pv) ? pv : null;
-      if (!raw) return { custom: pv };
+      if (!Array.isArray(pv)) return { custom: pv }; // 单值字符串等旧形态：不再自动迁移，交用户改勾选
       const opts = presetOptionIds();
       const sel = [];
-      for (const id of raw) {
-        if (id === 'compose') { if (sel.indexOf('l1-sensitive') < 0) sel.push('l1-sensitive'); if (sel.indexOf('l2-resource') < 0) sel.push('l2-resource'); }
-        else if (opts.indexOf(id) >= 0) { if (sel.indexOf(id) < 0) sel.push(id); }
-        else return { custom: pv }; // 含未知 id（如并发手工混入 compose+l1 的旧文件）→ 整值原样保留
+      for (const id of pv) {
+        if (opts.indexOf(id) >= 0) { if (sel.indexOf(id) < 0) sel.push(id); }
+        else return { custom: pv }; // 含未注册 id → 整值原样保留（后端拒绝并回显）
       }
       return opts.filter((id) => sel.indexOf(id) >= 0).length ? opts.filter((id) => sel.indexOf(id) >= 0) : null;
     }
@@ -126,7 +133,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     }
     // 表单初值：overlay（磁盘原文）优先、applied（生效默认补齐）兜底——字段粒度合并。
     // preset 只读 overlay.hook.preset（applied 不保留 preset）；null=出厂空表（保存省略键）；
-    // 回显兼容映射见 formPresetOf：'compose' → 全勾数组、string[] → 按项勾、空/省略 → null。
+    // 回显兼容映射见 formPresetOf：'compose'（已废除的旧组合项）→ l1+l2 两项勾选、string[] → 按项勾、空/省略 → null。
     function deriveForm(data) {
       const ov = data && data.overlay && data.overlay.hook ? data.overlay.hook : null;
       const ap = data && data.applied && data.applied.hook ? data.applied.hook : null;
@@ -563,7 +570,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const presetSel = Array.isArray(form.preset) ? form.preset : [];            // 勾选集（保序；仅注册选项）
       const customRef = form.preset !== null && !Array.isArray(form.preset);      // { custom: 原文 }（无勾选位可表，保存原样）
       const countOf = (id) => { const m = meta.presets; return typeof m[id] === 'number' ? m[id] : 0; };
-      const presetTotal = presetSel.reduce((s, id) => s + countOf(id), 0);        // 规则数摘要：l1=12 / l2=6 / 全选=18（compose 等效）
+      const presetTotal = presetSel.reduce((s, id) => s + countOf(id), 0);        // 条目数合计：三项全勾 = 12 + 6 + 1 = 19（多选叠加）
       const liveSt = pending ? STATE.running : STATE.merged;
       const chipLabel = state === 'saving' ? tt('gov.saving') : state === 'confirming' ? tt('gov.saved') : tt('gov.live');
       const btnBase = {
@@ -594,7 +601,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           })
         ),
 
-        // 卡片 B 规则预设（多选：l1 + l2 两勾选项；不复选 compose——后端唯一性校验拒同批重复 id）
+        // 卡片 B 规则预设（多选：L1/L2/L3 三个平级勾选项；组合 = 勾选叠加本身，无 compose 组合项语义）
         React.createElement(GovCard, { title: tt('gov.preset.title') },
           React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.5 } }, tt('gov.preset.hint')),
           selOptions.map((id) => React.createElement(PresetCheckRow, {
@@ -604,10 +611,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             title: tt(presetMeaningKey(id)),
             sub: id + ' · ' + fmtN('gov.preset.rules', countOf(id))
           })),
-          // 规则数摘要联动：单勾 12/6；全勾 = 18（compose 全量组合等效行）
-          presetSel.length === 2 && presetTotal > 0
+          // 合计行（通用；不含任何「组合项」概念）：已选 N 项 · 合计 M 条
+          presetSel.length > 0 && presetTotal > 0
             ? React.createElement('div', { style: { fontSize: G().cap, color: T.text2, fontWeight: 600 } },
-                tt(presetMeaningKey('compose')) + ' · ' + fmtN('gov.preset.rules', presetTotal))
+                fmtN2('gov.preset.total', presetSel.length, presetTotal))
             : null,
           presetSel.length === 0 && !customRef
             ? React.createElement('div', { style: { fontSize: G().cap, color: T.text3 } }, tt('gov.preset.none'))

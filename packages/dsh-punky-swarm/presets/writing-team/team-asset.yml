@@ -1,0 +1,103 @@
+{
+  "team": "writing-team",
+  "manifest": { "version": 3, "requires_engine": ">=0.4.4", "hash": "unhashed", "source": "写作团队（writing-team）装配资产：三层角色 writing-planner（plan）/ drafter·polisher·publisher（exec）/ writing-auditor（audit）；角色职责与写作纪律见 skills/writing-team/SKILL.md，能力层指向本机既有写作技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）。2026-09-18 通用化轮：版本号统一为 3、plan 产物改用 ${branch} 插值、**发布（publisher）退出团队链步**——由 Leader 在交接后于后台执行（同 design-team 的生产口径）；另补 manifest.source" },
+  "roles": {
+    "extra": ["writing-planner", "drafter", "polisher", "publisher", "writing-auditor"],
+    "plan_leads": ["writing-planner"],
+    "audit_leads": ["writing-auditor"]
+  },
+  "layers": {
+    "plan": {
+      "roles": ["writing-planner"],
+      "skills": {
+        "writing-planner": ["spec-writing", "writing-trio", "wechat-writing-style"]
+      }
+    },
+    "exec": {
+      "roles": ["drafter", "polisher", "publisher"],
+      "skills": {
+        "drafter": ["writing-trio", "wechat-writing-style"],
+        "polisher": ["humanizer", "lieflat-less-ai-tone", "revision-patterns", "writing-trio"],
+        "publisher": ["baoyu-markdown-to-html"]
+      }
+    },
+    "audit": {
+      "roles": ["writing-auditor"],
+      "skills": {
+        "writing-auditor": ["acceptance-gate", "review-execution", "humanizer"]
+      }
+    }
+  },
+  "flows": {
+    "plan": {
+      "produce_field": "produce",
+      "entry_requires": [],
+      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+    },
+    "exec": {
+      "produce_field": "outputs",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "consumes_required": ["plan/"],
+      "consumes_required_per_lane": ["plan/"],
+      "targets": true,
+      "gate_command": true
+    },
+    "audit": {
+      "produce_field": "produce",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "needhuman": true,
+      "audit_contract": {
+        "criteria_from": "plan/**",
+        "consumes_required": ["plan/", "exec/"],
+        "verdict": ["pass", "fail", "skip"]
+      }
+    }
+  },
+  "chain": {
+    "version": 3,
+    "steps": [
+      {
+        "id": "plan",
+        "layer": "plan",
+        "role": "writing-planner",
+        "template": { "produce": ["plan/${branch}-spec.md"] },
+        "branches": [
+          { "id": "plan-writer", "role": "writing-planner", "template": { "cmd": "产出写作规格与验收标准（${branch}）" } }
+        ],
+        "next": "exec"
+      },
+      {
+        "id": "exec",
+        "layer": "exec",
+        "role": "drafter",
+        "template": { "produce": ["exec/${branch}/"] },
+        "branches": [
+          { "id": "exec-drafter", "role": "drafter", "template": { "cmd": "按规格成稿（${branch}）" } },
+          { "id": "exec-polisher", "role": "polisher", "template": { "cmd": "修订去 AI 痕（${branch}）" } }
+        ],
+        "next": "audit-pair"
+      },
+      {
+        "id": "audit-pair",
+        "layer": "audit",
+        "role": "writing-auditor",
+        "pair_with": "exec",
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "next": "accept"
+      },
+      {
+        "id": "accept",
+        "layer": "audit",
+        "role": "writing-auditor",
+        "join": "all",
+        "terminal": true,
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+      }
+    ],
+    "join": { "anyFailure": "pause" },
+    "onFail": "pause",
+    "rework": { "allowed": true, "max_attempts": 2, "escalate": "human" }
+  }
+}

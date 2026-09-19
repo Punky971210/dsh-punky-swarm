@@ -33,9 +33,39 @@ test('schema allows review -> running (rework)', () => {
   assert.equal(schema.canTransitionMember('running', 'review'), true);
 });
 
+// 【r2 同步 · B2/B3/A1】旧 fixture 用「lane 无 layer 的小批」驱动返工/结算语义，与 r2「拒绝免检」冲突：
+//   · B2：无 `layer` 的 lane 不得整 lane 免检 ⇒ 结算时拒 `GATE_LANE_LAYER_MISSING`；
+//   · B3/A1：批次须有 exec 或 audit 层、且 plan 产物必须被下游 consume（不得建 plan-only 批）。
+//   ⇒ 统一改**合规三层批**：laneIds 归 exec 层，附 plan 层（产物被消费）与 audit 层。
+const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+function threeTierTasks(laneIds) {
+  return [
+    { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
+    ...laneIds.map((id) => ({ id, layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/' + id + '.md'], cmd: 'run', deps: ['p1'] })),
+    { id: 'a1', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/r.md'], cmd: 'review', deps: laneIds },
+  ];
+}
+function writeArt(batchId, rel, content) {
+  const abs = path.join(root, 'sessions', S, 'artifacts', batchId, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content);
+}
+function seedArtifacts(batchId, laneIds) {
+  writeArt(batchId, 'plan/spec.md', SPEC_OK);       // entry 门 presence 硬约束
+  for (const id of laneIds) writeArt(batchId, 'exec/' + id + '.md', 'out'); // exit 门：声明产物须在场
+  writeArt(batchId, 'audit/r.md', 'review');
+}
+function runLane(batchId, lane) {
+  store.setMember(S, batchId, lane, 'running');
+  store.setMember(S, batchId, lane, 'review');
+  store.setMember(S, batchId, lane, 'merged');
+}
+
 test('rework cycle: pending->running->review->running(x2)->review->merged', () => {
-  const plan = buildWavePlan({ batchId: 'b-rework', tasks: [{ id: 't1' }] });
+  const plan = buildWavePlan({ batchId: 'b-rework', tasks: threeTierTasks(['t1']) });
   store.createBatch(S, { batchId: 'b-rework', wavePlan: plan, phase: 'running' });
+  seedArtifacts('b-rework', ['t1']);
+  runLane('b-rework', 'p1');
   store.setMember(S, 'b-rework', 't1', 'running');   // 派发
   store.setMember(S, 'b-rework', 't1', 'review');    // 提交评审
   store.setMember(S, 'b-rework', 't1', 'running');   // REWORK 打回返工（attempt 1）
@@ -43,6 +73,7 @@ test('rework cycle: pending->running->review->running(x2)->review->merged', () =
   store.setMember(S, 'b-rework', 't1', 'running');   // REWORK 打回返工（attempt 2）
   store.setMember(S, 'b-rework', 't1', 'review');    // 三审
   store.setMember(S, 'b-rework', 't1', 'merged');    // 通过
+  runLane('b-rework', 'a1'); // r2 同步：autoReleaseable 要求**全部** lane merged ⇒ audit 层亦须结算
   const b = store.readBatch(S, 'b-rework');
   assert.equal(b.lanes.t1, 'merged');
   const reworks = b.events.filter((e) => e.type === 'member.settled' && e.lane === 't1' && e.from === 'review' && e.to === 'running').length;
@@ -51,14 +82,13 @@ test('rework cycle: pending->running->review->running(x2)->review->merged', () =
 });
 
 test('autoReleaseable false when conflict/failed present', () => {
-  const plan = buildWavePlan({ batchId: 'b-cf', tasks: [{ id: 'a' }, { id: 'b' }] });
+  const plan = buildWavePlan({ batchId: 'b-cf', tasks: threeTierTasks(['a', 'b']) });
   store.createBatch(S, { batchId: 'b-cf', wavePlan: plan, phase: 'running' });
-  store.setMember(S, 'b-cf', 'a', 'running');
-  store.setMember(S, 'b-cf', 'a', 'review');
-  store.setMember(S, 'b-cf', 'a', 'merged');
+  seedArtifacts('b-cf', ['a', 'b']);
+  runLane('b-cf', 'a');
   store.setMember(S, 'b-cf', 'b', 'running');
   store.setMember(S, 'b-cf', 'b', 'review');
-  store.setMember(S, 'b-cf', 'b', 'failed');
+  store.setMember(S, 'b-cf', 'b', 'failed', '构造失败终态：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   assert.equal(store.batchAutoReleaseable(store.readBatch(S, 'b-cf')), false);
 });
 

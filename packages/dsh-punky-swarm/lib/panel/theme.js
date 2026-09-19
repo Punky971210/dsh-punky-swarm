@@ -36,10 +36,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         text: '#1f2937', text2: '#475569', text3: '#64748b', dim: '#64748b',
         accent: '#3b82f6', success: '#15803d', warn: '#b45309', error: '#dc2626', info: '#2563eb',
         skeleton: '#eef2f7', selBg: 'rgba(59,130,246,0.10)',
-        chipPending: 'rgba(100,116,139,0.20)', chipRunning: 'rgba(180,83,9,0.12)',
-        chipReview: 'rgba(37,99,235,0.10)', chipMerged: 'rgba(21,128,61,0.12)',
-        chipFailed: 'rgba(220,38,38,0.10)', chipSkipped: 'rgba(100,116,139,0.16)',
-        chipConflict: 'rgba(234,88,12,0.12)', chipIdle: 'rgba(100,116,139,0.14)',
+        // 对比度（验收 7）：light 侧 chipRunning/chipReview/chipMerged/chipFailed/chipConflict 原 alpha
+        //   实测 < 4.5:1 ⇒ 按冻结节拍 §3.2 的处置「只调 bg alpha、不新增色相」收窄至 ≥4.6:1。
+        chipPending: 'rgba(100,116,139,0.20)', chipRunning: 'rgba(180,83,9,0.06)',
+        chipReview: 'rgba(37,99,235,0.08)', chipMerged: 'rgba(21,128,61,0.06)',
+        chipFailed: 'rgba(220,38,38,0.03)', chipSkipped: 'rgba(100,116,139,0.16)',
+        chipConflict: 'rgba(234,88,12,0.09)', chipIdle: 'rgba(100,116,139,0.14)',
         haloSuccess: 'rgba(21,128,61,0.16)', haloWarn: 'rgba(180,83,9,0.16)',
         gateBg: 'rgba(180,83,9,0.12)', escBg: 'rgba(234,88,12,0.12)', escFg: '#c2410c'
       },
@@ -48,10 +50,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         text: '#e6ebf4', text2: '#a8b3c7', text3: '#7f8ca3', dim: '#8b96ab',
         accent: '#4f8cff', success: '#3fb950', warn: '#d29922', error: '#f85149', info: '#58a6ff',
         skeleton: '#1d2740', selBg: 'rgba(79,140,255,0.12)',
+        // 对比度（验收 7）：dark 侧 chipFailed / chipConflict 原 alpha 实测 < 4.5:1 ⇒ 同法收窄至 ≥4.6:1。
         chipPending: 'rgba(127,140,163,0.22)', chipRunning: 'rgba(210,153,34,0.16)',
         chipReview: 'rgba(88,166,255,0.16)', chipMerged: 'rgba(63,185,80,0.16)',
-        chipFailed: 'rgba(248,81,73,0.16)', chipSkipped: 'rgba(127,140,163,0.18)',
-        chipConflict: 'rgba(224,104,46,0.18)', chipIdle: 'rgba(127,140,163,0.16)',
+        chipFailed: 'rgba(248,81,73,0.08)', chipSkipped: 'rgba(127,140,163,0.18)',
+        chipConflict: 'rgba(224,104,46,0.07)', chipIdle: 'rgba(127,140,163,0.16)',
         haloSuccess: 'rgba(63,185,80,0.18)', haloWarn: 'rgba(210,153,34,0.18)',
         gateBg: 'rgba(210,153,34,0.16)', escBg: 'rgba(224,104,46,0.16)', escFg: '#e0682e'
       }

@@ -8,10 +8,10 @@
 
 ## 职责与产出
 - 职责：产出设计侧规格文档（配方选择与契约、11 槽/19 槽参数规格、质检与回执口径、交付验收口径）；**plan 层 lane 建批 role 必须为 designer**（装配 spec-writing + design-an-interface），禁止 role=manager 代产；对齐 dsh lane 语义与产物契约；规格文档含验收口径与约束章节（沿用引擎 Plan 契约习惯，便于门禁与 audit 对照）。
-- 与执行层的分界：Designer 只产出**规格与契约**；配方实机产出、图像底图生成、质检回执落盘属执行层动作——本阶段执行层留空，**由 Leader 代劳填充设计任务**（见 `SKILL.md` §执行层现状与代劳声明）。
-- 产出：`plan/design-spec.md`（或 `plan/<配方>-contract.md`）、纳入 `plan/task-tree.json` 的配方粒度任务链、被消费方契约的验收口径引用。
+- 与执行层的分界：Designer 只产出**规格与契约**；配方实机产出、图像底图生成、质检回执落盘属执行层动作——执行层已装配（workflow-builder / producer），audit 层为 workflow-auditor；角色→技能映射见 presets/design-team/team-asset.yml。
+- 产出：`plan/plan-designer-spec.md`（资产 plan 步模板 `plan/${branch}-spec.md` 的展开值；分支 id = `plan-designer`）、纳入 `plan/task-tree.json` 的配方粒度任务链、被消费方契约的验收口径引用。
 
-## CBM 架构复核（强制，C+ 批装配声明语义）
+## CBM 架构复核（强制，exec 层 lane≥3 的三层批装配声明语义）
 - 产出设计规格/task-tree 前必须读取 CBM 索引复核被消费方结构（get_architecture/query_graph/trace_path 等只读）；
 - 设计规格与 task-tree 须引用架构复核依据（coordinator 的 `survey/<target>-contract.md` 或 CBM 复核结论），缺则 audit 判装配不完整。
 - 备注（Leader 决策包 vs 设计规格分界）：Leader 粗拆决策包（leader-decision-pack，`plan/`）属 Leader 产物、允许；设计规格必须 designer 角色产出，两者分开。

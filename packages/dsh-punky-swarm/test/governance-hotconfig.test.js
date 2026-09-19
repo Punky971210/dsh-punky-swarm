@@ -31,7 +31,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ALLOWED_TOP_KEYS, validateOverlay } from '../lib/hot/config-watch.js';
+import { ALLOWED_TOP_KEYS, validateOverlay, ratchetHotGuard } from '../lib/hot/config-watch.js';
 import { apply } from '../lib/index.js';
 import { createGovernanceKernel } from '../lib/governance/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
@@ -110,6 +110,38 @@ test('T1 ALLOWED_TOP_KEYS 含 governance（热更白名单，harden-plan §5.4 A
   for (const k of ['aip', 'acps', 'capabilities', 'mailbox', 'resume', 'ratchet', 'escalation']) {
     assert.equal(ALLOWED_TOP_KEYS.has(k), true, '既有顶层键保留: ' + k);
   }
+});
+
+// ── ratchet 热更守卫（G-3 收口，2026-09-15 用户裁决 Q-9=A）：重启生效面——热更不应用但必须说出口 ──
+test('T8 ratchetHotGuard：无变化 ⇒ changed=false 零噪音', () => {
+  const last = JSON.stringify({ memberRules: { pending: ['failed'] } });
+  const r = ratchetHotGuard({ next: { ratchet: { memberRules: { pending: ['failed'] } } }, lastJson: last });
+  assert.equal(r.changed, false);
+  assert.equal(r.message, null);
+});
+
+test('T9 ratchetHotGuard：合法变更 ⇒ changed=true / valid=true / 文案含「需重启生效」', () => {
+  const r = ratchetHotGuard({ next: { ratchet: { memberRules: { pending: ['failed'] } } }, lastJson: 'null' });
+  assert.equal(r.changed, true);
+  assert.equal(r.valid, true);
+  assert.match(r.message, /需重启生效/);
+  assert.match(r.message, /热更不应用/);
+});
+
+test('T10 ratchetHotGuard：非法变更 ⇒ valid=false / 文案含「非法」与失败原因（fail-closed 预警）', () => {
+  const r = ratchetHotGuard({ next: { ratchet: { memberRules: { pending: 'running' } } }, lastJson: 'null' });
+  assert.equal(r.changed, true);
+  assert.equal(r.valid, false);
+  assert.match(r.message, /非法/);
+  assert.match(r.message, /array of non-empty strings/);
+});
+
+test('T11 ratchetHotGuard：删除 ratchet 键也算变更（回到默认表，仍需重启生效）', () => {
+  const last = JSON.stringify({ memberRules: { pending: ['failed'] } });
+  const r = ratchetHotGuard({ next: {}, lastJson: last });
+  assert.equal(r.changed, true);
+  assert.equal(r.valid, true, '删除 = 回落默认表（schema 常量同引用），loadRules 不抛');
+  assert.match(r.message, /需重启生效/);
 });
 
 test('T2 validateOverlay 接受 governance、拒绝未知键', () => {

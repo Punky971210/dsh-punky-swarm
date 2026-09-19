@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createStore, countConsecutiveFailedSettles } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
+import { threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-esc-'));
 const store = createStore(root);
@@ -105,7 +106,20 @@ test('C: 连续 3 failed 触发 → phase paused + batch.failed-escalate {count:
 });
 
 test('C: 中间 merged 归零（failed→merged→failed×2 → streak=2 不触发）', () => {
-  makeRunningBatch('b-reset', ['f1', 'm1', 'f2', 'f3']);
+  // 【r2 同步 · B2/B3/A1】旧 fixture 的 lane 全无 layer，`m1` 无法结算到 merged
+  //   （exit 门拒 `GATE_LANE_LAYER_MISSING`）⇒ 该 lane 补 exec 层并纳入合规三层批 + 声明产物在场。
+  //   f1/f2/f3 只落 failed（不经 exit 门），形态不受影响。
+  const plan = buildWavePlan({
+    batchId: 'b-reset',
+    tasks: [
+      ...threeTierTasks(['m1']),
+      { id: 'f1', layer: 'exec', cmd: 'x' },
+      { id: 'f2', layer: 'exec', cmd: 'x' },
+      { id: 'f3', layer: 'exec', cmd: 'x' },
+    ],
+  });
+  store.createBatch(S, { batchId: 'b-reset', wavePlan: plan, phase: 'running' });
+  seedArtifacts(root, S, 'b-reset', ['m1']);
   failed('b-reset', 'f1');
   merged('b-reset', 'm1');
   failed('b-reset', 'f2');

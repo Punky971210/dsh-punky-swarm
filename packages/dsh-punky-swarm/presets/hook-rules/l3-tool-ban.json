@@ -1,0 +1,36 @@
+{
+  "_meta": {
+    "presetId": "l3-tool-ban",
+    "schemaVersion": 1,
+    "layer": "L3",
+    "ruleCount": 1,
+    "title": "工具黑名单（写通道路由）",
+    "kind": "tool-ban",
+    "source": "用户裁决 2026-09-14：在 cage 护栏新建第三类「工具黑名单」，首批禁用 pwsh 进行文件写",
+    "intent": "让 Agent 写文件默认走 edit / write / str-replace-editor 等在册工具，不经 shell 自建写路径落盘——Windows 下 `>` 重定向与 Set-Content / Out-File 可能写入 GBK 或带 BOM，破坏文件编码头且不可逆",
+    "scope": "只拦「修改或写文件」这一类动作：重定向（> / >>）、写文件 cmdlet（Set-Content / Add-Content / Out-File / New-Item / Remove-Item / Move-Item / Copy-Item / Export-Csv…）、落盘参数（-OutFile / find -exec）、段首写命令名（rm / mv / cp / del / mkdir / touch / tee / chmod…）",
+    "not_in_scope": "执行 / 构建 / 测试 / 包管理 / 网络一律放行——npm run build（tsc 落盘）、npm test、node x.mjs、git status、Get-ChildItem 均不命中（构建与测试本身要写盘，拦它们会断裂常规开发闭环）",
+    "boundary": "启发式、非沙箱：别名（sc / ni / ri / mi）、脚本文件（pwsh -File x.ps1）、转义参数、编码方式可绕过；「内联解释器写」（node -e fs.writeFileSync / python -c open(w)）首批不覆盖（followup）",
+    "behavior": "file-write",
+    "tools": [
+      "pwsh"
+    ],
+    "notes": [
+      "原语档：category hard → 引擎 P2 硬违 → DENY（拒绝执行 + 收据 ruleRefs=[L3-W01]）。",
+      "拒绝正文携带纠正文本「文件写请改用 edit / write / str-replace-editor 等在册工具」（判定内核 tool-ban.ts 常量 WRITE_CHANNEL_HINT）。",
+      "本 preset 走第三类判定面（toolBan 表），与参数级 rules 面并列（compose 组合项 2026-09-14 已废除——注册表不再含该 id），引用方式 preset: ['l1-sensitive','l2-resource','l3-tool-ban'] 或单独 'l3-tool-ban'。",
+      "热加载：等价的 inline 形态可写 <root>/config/runtime.json 的 governance.hook.toolBan（免重启生效）；本 preset 文件为随包资产，需 boot 装载一次（重启宿主一次）方可被 preset 引用键识别。",
+      "扩面（未启用）：bash 同款条目 = 复制本条目并把 tool 改为 bash、id/code 改为 L3-W02；「内联解释器写」需新增 behavior 值（如 interpreter-write）与判定实现，属 followup 而非本批范围。"
+    ]
+  },
+  "toolBan": [
+    {
+      "id": "L3-W01",
+      "tool": "pwsh",
+      "behavior": "file-write",
+      "code": "L3-W01",
+      "category": "hard",
+      "message": "[preset L3] pwsh 命令含文件写动作（重定向 / 写动词 cmdlet / 写命令名）：文件写请走 edit / write 等在册工具（shell 写盘可能写入 GBK 或带 BOM，破坏文件编码头）"
+    }
+  ]
+}

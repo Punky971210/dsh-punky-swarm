@@ -41,6 +41,8 @@
       "produce_field": "outputs",
       "consume_field": "consume",
       "entry_requires": ["consume"],
+      "consumes_required": ["plan/"],
+      "consumes_required_per_lane": ["plan/"],
       "targets": true,
       "gate_command": true
     },
@@ -48,9 +50,56 @@
       "produce_field": "produce",
       "consume_field": "consume",
       "entry_requires": ["consume"],
-      "needhuman": true
-    },
-    "complete": { "require_audit_outcomes": ["pass", "skip"] }
+      "needhuman": true,
+      "audit_contract": {
+        "criteria_from": "plan/**",
+        "consumes_required": ["plan/", "exec/"],
+        "verdict": ["pass", "fail", "skip"]
+      }
+    }
   },
-  "state_machine": { "kind": "tighten-only", "overrides": {} }
+  "chain": {
+    "version": 3,
+    "steps": [
+      {
+        "id": "plan",
+        "layer": "plan",
+        "role": "research-planner",
+        "template": { "produce": ["plan/${branch}-spec.md"] },
+        "branches": [
+          { "id": "plan-researcher", "role": "research-planner", "template": { "cmd": "产出调研规格与验收标准（${branch}）" } }
+        ],
+        "next": "exec"
+      },
+      {
+        "id": "exec",
+        "layer": "exec",
+        "role": "researcher",
+        "template": { "produce": ["exec/research-report.md"] },
+        "branches": [
+          { "id": "exec-researcher", "role": "researcher", "template": { "cmd": "按规格执行调研并逐条溯源（${branch}）" } }
+        ],
+        "next": "audit-pair"
+      },
+      {
+        "id": "audit-pair",
+        "layer": "audit",
+        "role": "research-auditor",
+        "pair_with": "exec",
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "next": "accept"
+      },
+      {
+        "id": "accept",
+        "layer": "audit",
+        "role": "research-auditor",
+        "join": "all",
+        "terminal": true,
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+      }
+    ],
+    "join": { "anyFailure": "pause" },
+    "onFail": "pause",
+    "rework": { "allowed": true, "max_attempts": 2, "escalate": "human" }
+  }
 }

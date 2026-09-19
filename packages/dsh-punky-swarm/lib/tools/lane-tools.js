@@ -72,7 +72,7 @@ const RESERVED_LANE = new Set(['_repo', 'orch']); // 与引擎目录布局冲突
 const ORCH_BRANCH = 'punky/orch';
 const MERGE_WAIT_MS = 60_000; // 同批次 merge 串行化等待上限（serializedMerge 纪律）
 
-// git 可用性探测（工具调用前置；git 不可用 → 返回清晰错误并提示安装，验收 T5）
+// git 可用性探测（工具调用前置；git 不可用 → 返回清晰错误并提示安装）
 function gitProbe() {
   const r = runGit('.', ['--version']);
   return r.ok ? { ok: true, version: r.stdout } : { ok: false, error: r.stderr };
@@ -158,8 +158,8 @@ function ensureOrch(root, sessionId, batchId) {
 }
 
 // lane worktree 创建（幂等）：已注册 → 复用；残留 → 清理重建
-// 分支已存在（上次崩溃/未合并残留）→ 挂载既有分支（checkpoint 保全优先，验收 T6）；
-// 全新 → 从 orch HEAD 基线建分支（验收 T1：基线 = orch HEAD）
+// 分支已存在（上次崩溃/未合并残留）→ 挂载既有分支（checkpoint 保全优先）；
+// 全新 → 从 orch HEAD 基线建分支（基线 = orch HEAD）
 function createLaneWorktree(root, sessionId, batchId, laneId) {
   const repo = mainRepoDir(root, sessionId, batchId);
   const dir = laneDirOf(root, sessionId, batchId, laneId);

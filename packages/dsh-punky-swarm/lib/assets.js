@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 资产同步：把包内 presets/ 与 skills/ 同步到用户目录（参照 dsh-liangshen 语义）
 // 幂等：目标目录字节一致则跳过（current），否则整体覆盖（synced）；只动插件自有目录，不碰用户其他预设/技能。
-// 清单驱动：job 表来源 = 包内 presets/jiufeng/asset-manifest.json（M 层）+ 内置自举条（B 层，文件粒度）。
+// 清单驱动：job 表来源 = 包内 presets/punky-preset/asset-manifest.json（M 层）+ 内置自举条（B 层，文件粒度）。
 // 清单不可用（缺失/读取失败/JSON 破损/schema 不合规/落点越界）一律整体回退内置默认表，绝不静默不同步。
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 const MTIME_TOLERANCE_MS = 1000
 
 /** 资产清单的包内相对路径（B 层自举条 rel；禁止作为清单 assets[] 条目出现——自举回环）。 */
-export const MANIFEST_REL = 'presets/jiufeng/asset-manifest.json'
+export const MANIFEST_REL = 'presets/punky-preset/asset-manifest.json'
 
 /** 落点根枚举 -> 用户机解析根（清单只写枚举，不写绝对路径；两值即 Q-2 冻结落点）。 */
 const TARGET_ROOTS = {
@@ -37,9 +37,23 @@ const TARGET_ROOTS = {
 
 /** 内置默认资产表（清单不可用时的降级表；落点与冻结值逐字等价）。 */
 const DEFAULT_ASSETS = [
-  { rel: 'presets/jiufeng', target: { root: 'preset', subpath: 'jiufeng' } },
+  { rel: 'presets/punky-preset', target: { root: 'preset', subpath: 'punky-preset' } },
+  // P1（2026-09-16）：引擎自建团队资产随包发布 + 同步登记（与 asset-manifest.json 同批同形，两处必须一致）。
+  //   注意（如实标注）：**运行期真源始终是包内** `presets/engine-team/team-asset.yml`（读端 `packageRoot()`）；
+  //   本条的落点 `<home>/.dsh/.agent-presets/engine-team/` 是**交付/审计副本**，不是 teamsRoot 形态
+  //   （teamsRoot 解析 `<root>/presets/<team>/team-asset.*`），故它不被引擎当资产根读——登记目的是「资产随包可审计」。
+  { rel: 'presets/engine-team', target: { root: 'preset', subpath: 'engine-team' } },
   { rel: 'skills/software-team', target: { root: 'skill', subpath: 'software-team' } },
+  // P1（2026-09-17）：engine-team 技能文档随包发布 + 同步登记（与 asset-manifest.json 同批同形，两处必须一致）。
+  { rel: 'skills/engine-team', target: { root: 'skill', subpath: 'engine-team' } },
   { rel: 'skills/design-team', target: { root: 'skill', subpath: 'design-team' } },
+  // 退役（2026-09-17）：原「团队装配资产说明」技能条目随该技能目录**整体退役**删除（清单条目 11 → 10）——
+  //   其内容已并入 `skills/software-team/SKILL.md` 的「装配资产（team-asset）说明与用途」章节。
+  { rel: 'skills/review-execution', target: { root: 'skill', subpath: 'review-execution' } },
+  { rel: 'skills/acceptance-gate', target: { root: 'skill', subpath: 'acceptance-gate' } },
+  { rel: 'skills/retro-and-memory', target: { root: 'skill', subpath: 'retro-and-memory' } },
+  { rel: 'skills/research-team', target: { root: 'skill', subpath: 'research-team' } },
+  { rel: 'skills/writing-team', target: { root: 'skill', subpath: 'writing-team' } },
 ]
 
 /** 包根目录（lib/assets.js -> 包根）。 */
@@ -143,9 +157,9 @@ export function resolveTarget(home, target) {
   return { ok: true, path }
 }
 
-/** B 层自举条落点：预设根下 `jiufeng/asset-manifest.json`（文件粒度，与 M 层目录条互不依赖）。 */
+/** B 层自举条落点：预设根下 `punky-preset/asset-manifest.json`（文件粒度，与 M 层目录条互不依赖）。 */
 function bootstrapTarget(home) {
-  return join(home, ...TARGET_ROOTS.preset, 'jiufeng', 'asset-manifest.json')
+  return join(home, ...TARGET_ROOTS.preset, 'punky-preset', 'asset-manifest.json')
 }
 
 /**

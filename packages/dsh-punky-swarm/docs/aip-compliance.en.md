@@ -53,7 +53,7 @@ Implementation in `lib/aip/identity.js` (AIC validation / certificates / sign / 
 |---|---|---|
 | `aip.enabled` | on | Generates the tool 6-attribute catalog + `GET /api/dsh-punky-swarm/tools` (filterable with `?name=`); when off, zero runtime overhead |
 | `aip.identity.enabled` | off | Activates the identity system (AIC/CAI/signing/trust chain) |
-| `aip.team` | jiufeng | assembly team (determines the source of the ACS role set) |
+| `aip.team` | punky-preset | assembly team (determines the source of the ACS role set) |
 
 Related endpoints: `GET /api/dsh-punky-swarm/tools`, `GET /api/dsh-punky-swarm/agents`, `GET /.well-known/aip` (all read-only).
 

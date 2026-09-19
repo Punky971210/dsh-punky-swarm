@@ -186,8 +186,8 @@ test('W4：退避档位（fake clock）——追问节奏 10min → 30min → 60
   assert.equal(st.tier, 2, '档位随 missed 单调（min(missed, len-1)）');
 });
 
-// ---- W5：生命周期——idle lane 不扫；重派 running 计时重置 ----
-test('W5：recoverBatches → running→idle 不被扫描；重派 running 计时重置', () => {
+// ---- W5：生命周期——running→idle 后不得静默丢态；重派 running 计时重置 ----
+test('W5：recoverBatches → running→idle 后不得静默丢态；重派 running 计时重置', async () => {
   const { root, store, S, batchId, lane } = setup();
   const engine = hb(store, root, FAST);
   engine.tick();
@@ -198,9 +198,19 @@ test('W5：recoverBatches → running→idle 不被扫描；重派 running 计�
   store.recoverBatches();
   assert.equal(store.readBatch(S, batchId).lanes[lane], 'idle');
   engine.tick();
-  assert.equal(engine.status(LANE_KEY).tracked, false, 'W5: idle lane 不被扫描（条目清除）');
+  // **本断言由本批新语义替代（旧口径：`engine.status(LANE_KEY).tracked === false`，即
+  //   「idle lane 不被扫描 / 心跳条目被 state.delete 清除」）**。C-2 明文要求删除
+  //   lib/watch/lane-heartbeat.js:675 的 `state.delete(laneKey)` 静默丢态路径（§1.2「必须删除的既有短路」
+  //   + §W 第 6 行「C-2 删静默丢态（悬挂第二重成因）」）⇒「非 running lane 不可见」不再成立。
+  //   改为核**设计已定的观测面**：缺省过滤按状态过滤（§6.1 A 栏②）⇒ 该 idle lane 必须仍能被读出（不得自我抹掉）。
+  const [hbTool] = createHeartbeatTools({ tools: { register: () => {} } }, { store, root, heartbeat: engine });
+  const q = await hbTool.execute({ batchId }, { agent: { session: { id: S } } });
+  assert.ok(
+    q.lanes.some((r) => r.lane === lane),
+    'C-2/§6.1：running→idle 后该 lane 不得在只读查询面消失（不得静默丢态）；实际 lanes=' + JSON.stringify(q.lanes.map((r) => r.lane)),
+  );
 
-  // 重派 running：计时重置（fresh entry，missed 从 0 起算）
+  // 重派 running：计时重置（fresh entry，missed 从 0 起算）—— 既有生命周期意图，本批不变
   store.setMember(S, batchId, lane, 'running');
   engine.tick();
   const st = engine.status(LANE_KEY);
@@ -245,22 +255,26 @@ test('W6b：lane_heartbeat 查询返回心跳状态；beat=true 手动触发一�
 });
 
 // ---- W6c（L1 复核缺口，补用例）：引擎在、多 running lane、缺省 lane
-//   → 全批 running lane（idle/失败/终态 lane 排除）；显式 lane 单行过滤回归 ----
-test('W6c：lane_heartbeat 缺省 lane → 全批 running lane（多 running；idle/failed/merged 排除）；显式 lane 单行过滤', async () => {
+//   → **本断言由本批新语义替代（旧口径：缺省 lane 只返回 running lane，idle/failed/merged 一律排除）**。
+//   C-2 决议：缺省 `lane` 过滤从「仅 running」改为「按状态过滤」= 返回全部**非终态** lane
+//   （{pending, running, review, idle}）；终态（merged/failed/skipped/conflict）仍排除。
+//   落点 lib/watch/lane-heartbeat.js:804 / :870（writer = e1）；本条覆盖 :804 面。 ----
+test('W6c：lane_heartbeat 缺省 lane → 全批非终态 lane（idle/review/pending 在内；终态 merged/failed 排除）；显式 lane 单行过滤', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hb-w6c-'));
   const store = createStore(root);
   const S = 'sess-hb-w6c';
   const batchId = 'b-hb-w6c';
   const plan = buildWavePlan({
     batchId,
-    tasks: ['l1', 'l2', 'l3', 'l4', 'l5'].map((id) => ({ id, outputs: ['exec/' + id + '/out.txt'], cmd: 'work' })),
+    tasks: ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7'].map((id) => ({ id, outputs: ['exec/' + id + '/out.txt'], cmd: 'work' })),
   });
   store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
-  // 混合 lane 态：l1/l2 running；l3 idle（恢复后待重派）；l4 failed；l5 merged（终态 lane）。
-  // 直写镜像 seedOverdueStint 先例（工具缺省过滤只认 batch.lanes[l]==='running'，非 running 一律排除）
+  // 混合 lane 态：l1/l2 running；l3 idle（恢复后待重派）；l6 review（待结算）；l7 pending（未派发）。
+  // 终态：l4 failed；l5 merged。
+  // 直写镜像 seedOverdueStint 先例（该先例建立时缺省过滤只认 batch.lanes[l]==='running'）
   const bf = store.batchFile(S, batchId);
   const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
-  b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged' };
+  b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged', l6: 'review', l7: 'pending' };
   fs.writeFileSync(bf, JSON.stringify(b, null, 2));
   const engine = hb(store, root); // 缺省 config：watch 默认开
   engine.tick(); // 首拍建心跳 entry（默认退避首档 10min 宽限 → 不追问）
@@ -268,23 +282,32 @@ test('W6c：lane_heartbeat 缺省 lane → 全批 running lane（多 running；i
   const [tool] = createHeartbeatTools(ctx, { store, root, heartbeat: engine });
   const exec = { agent: { session: { id: S } } };
 
-  // 缺省 lane → 全批 running lane（2 行），非 running（idle/failed/merged）排除
+  // 缺省 lane → 全批**非终态** lane（5 行）；终态（failed/merged）排除
   const q = await tool.execute({ batchId }, exec);
   assert.equal(q.sessionId, S);
-  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2'], '缺省返回全批 running lane；idle/failed/merged 排除');
+  assert.deepEqual(
+    q.lanes.map((r) => r.lane).sort(),
+    ['l1', 'l2', 'l3', 'l6', 'l7'],
+    'C-2：缺省返回非终态 lane（running/idle/review/pending）；终态 failed/merged 排除。'
+      + '旧口径（本批替代）= 仅 running ⇒ [l1, l2]。实际=' + JSON.stringify(q.lanes.map((r) => r.lane)),
+  );
   for (const row of q.lanes) {
     assert.ok(row.laneKey.startsWith(S + '/' + batchId + '/'), '逐行 laneKey 齐全（' + row.laneKey + '）');
-    assert.equal(row.tracked, true, 'running lane 被引擎追踪');
-    assert.equal(row.stalled, false);
+    if (row.lane === 'l1' || row.lane === 'l2') {
+      assert.equal(row.tracked, true, 'running lane 被引擎追踪');
+      assert.equal(row.stalled, false);
+    }
+    assert.equal(typeof row.state, 'string', 'D2/§6.1 A 栏③：输出须含 state 字段（lane=' + row.lane + '）');
   }
   // 显式 lane 单行过滤回归
   const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
   assert.equal(q2.lanes.length, 1, '显式 lane → 单行');
   assert.equal(q2.lanes[0].lane, 'l2');
-  // 非 running lane 显式查询仍安全返回（只读不 throw；未追踪行 tracked:false）
+  // 非 running lane 显式查询仍安全返回（只读不 throw）。tracked 值由 e1 的扫描面策略决定
+  // （C-2 已删 :675 `state.delete` 静默丢态路径）⇒ 此处**不**再断言 tracked，只核只读安全与单行过滤。
   const q3 = await tool.execute({ batchId, lane: 'l3' }, exec);
   assert.equal(q3.lanes.length, 1);
-  assert.equal(q3.lanes[0].tracked, false);
+  assert.equal(q3.lanes[0].lane, 'l3');
 });
 
 // ---- W7：零侵入——无新增成员状态、状态机常量不变 ----

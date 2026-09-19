@@ -1,0 +1,1138 @@
+{
+  "files": {
+    "test/abort-dangling-and-warn-event.test.js": {
+      "asserts": 39,
+      "blankLines": 35,
+      "lines": 275,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/acps-discovery-client.test.js": {
+      "asserts": 74,
+      "blankLines": 31,
+      "lines": 301,
+      "tautologies": 0,
+      "tests": 24,
+      "todos": 0
+    },
+    "test/acps-registry.test.js": {
+      "asserts": 89,
+      "blankLines": 31,
+      "lines": 393,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/acps-server.test.js": {
+      "asserts": 70,
+      "blankLines": 35,
+      "lines": 319,
+      "tautologies": 0,
+      "tests": 20,
+      "todos": 0
+    },
+    "test/agent-descriptor.test.js": {
+      "asserts": 70,
+      "blankLines": 19,
+      "lines": 217,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/aip-format.test.js": {
+      "asserts": 56,
+      "blankLines": 17,
+      "lines": 218,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/api-batch-keys.test.js": {
+      "asserts": 26,
+      "blankLines": 19,
+      "lines": 184,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/api-config.test.js": {
+      "asserts": 85,
+      "blankLines": 30,
+      "lines": 364,
+      "tautologies": 0,
+      "tests": 19,
+      "todos": 0
+    },
+    "test/api-evt.test.js": {
+      "asserts": 4,
+      "blankLines": 7,
+      "lines": 37,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
+    "test/api.test.js": {
+      "asserts": 40,
+      "blankLines": 23,
+      "lines": 192,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/archive.test.js": {
+      "asserts": 53,
+      "blankLines": 14,
+      "lines": 219,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/assembly-gate-extra.test.js": {
+      "asserts": 8,
+      "blankLines": 12,
+      "lines": 100,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/assembly-gate.test.js": {
+      "asserts": 95,
+      "blankLines": 39,
+      "lines": 364,
+      "tautologies": 0,
+      "tests": 24,
+      "todos": 0
+    },
+    "test/assembly-schema.test.js": {
+      "asserts": 71,
+      "blankLines": 38,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 26,
+      "todos": 0
+    },
+    "test/assets.test.js": {
+      "asserts": 43,
+      "blankLines": 27,
+      "lines": 298,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/audit-blind-review.test.js": {
+      "asserts": 64,
+      "blankLines": 14,
+      "lines": 173,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/audit-contract-gate.test.js": {
+      "asserts": 42,
+      "blankLines": 27,
+      "lines": 283,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/auditlog-mount.test.js": {
+      "asserts": 197,
+      "blankLines": 69,
+      "lines": 780,
+      "tautologies": 0,
+      "tests": 20,
+      "todos": 0
+    },
+    "test/auditlog.test.js": {
+      "asserts": 97,
+      "blankLines": 36,
+      "lines": 327,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/auto-settle.test.js": {
+      "asserts": 127,
+      "blankLines": 35,
+      "lines": 647,
+      "tautologies": 0,
+      "tests": 26,
+      "todos": 0
+    },
+    "test/baseline-snapshot-cli.test.js": {
+      "asserts": 39,
+      "blankLines": 21,
+      "lines": 213,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/batch-control.test.js": {
+      "asserts": 69,
+      "blankLines": 37,
+      "lines": 389,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/batch-store.test.js": {
+      "asserts": 86,
+      "blankLines": 28,
+      "lines": 351,
+      "tautologies": 0,
+      "tests": 18,
+      "todos": 0
+    },
+    "test/budget.test.js": {
+      "asserts": 64,
+      "blankLines": 27,
+      "lines": 265,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
+    "test/chain-v2-declaration.test.js": {
+      "asserts": 36,
+      "blankLines": 28,
+      "lines": 210,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/chain-v2-pairing.test.js": {
+      "asserts": 20,
+      "blankLines": 19,
+      "lines": 222,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/chain-v3-assembly.test.js": {
+      "asserts": 69,
+      "blankLines": 34,
+      "lines": 320,
+      "tautologies": 0,
+      "tests": 17,
+      "todos": 0
+    },
+    "test/client-sync.test.js": {
+      "asserts": 8,
+      "blankLines": 10,
+      "lines": 71,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/command-exec.test.js": {
+      "asserts": 71,
+      "blankLines": 37,
+      "lines": 342,
+      "tautologies": 0,
+      "tests": 26,
+      "todos": 0
+    },
+    "test/complete-outcomes-empty.test.js": {
+      "asserts": 43,
+      "blankLines": 27,
+      "lines": 299,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/concurrency-gate.test.js": {
+      "asserts": 89,
+      "blankLines": 46,
+      "lines": 624,
+      "tautologies": 0,
+      "tests": 19,
+      "todos": 0
+    },
+    "test/config-watch-robust.test.js": {
+      "asserts": 9,
+      "blankLines": 10,
+      "lines": 97,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/contract-missing-first-touch.test.js": {
+      "asserts": 51,
+      "blankLines": 34,
+      "lines": 487,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/contract.test.js": {
+      "asserts": 20,
+      "blankLines": 17,
+      "lines": 114,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/discovery.test.js": {
+      "asserts": 109,
+      "blankLines": 35,
+      "lines": 333,
+      "tautologies": 0,
+      "tests": 26,
+      "todos": 0
+    },
+    "test/dispatch-failure-rollback.test.js": {
+      "asserts": 18,
+      "blankLines": 12,
+      "lines": 106,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/dispatch-inject-guard.test.js": {
+      "asserts": 15,
+      "blankLines": 11,
+      "lines": 77,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/dispatch-prompt-compose.test.js": {
+      "asserts": 8,
+      "blankLines": 10,
+      "lines": 80,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/dispatch-register.test.js": {
+      "asserts": 72,
+      "blankLines": 20,
+      "lines": 387,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/engine-dispatch.test.js": {
+      "asserts": 85,
+      "blankLines": 23,
+      "lines": 335,
+      "tautologies": 0,
+      "tests": 17,
+      "todos": 0
+    },
+    "test/failed-escalate.test.js": {
+      "asserts": 30,
+      "blankLines": 19,
+      "lines": 183,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/flex-assembly-roles.test.js": {
+      "asserts": 24,
+      "blankLines": 19,
+      "lines": 207,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/gap-s12-chain-downgrade.test.js": {
+      "asserts": 88,
+      "blankLines": 33,
+      "lines": 463,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/gate-flows.test.js": {
+      "asserts": 96,
+      "blankLines": 29,
+      "lines": 561,
+      "tautologies": 0,
+      "tests": 17,
+      "todos": 0
+    },
+    "test/gate-hardening-red.test.js": {
+      "asserts": 69,
+      "blankLines": 131,
+      "lines": 1217,
+      "tautologies": 0,
+      "tests": 37,
+      "todos": 0
+    },
+    "test/gate-lite-batch2.test.js": {
+      "asserts": 34,
+      "blankLines": 22,
+      "lines": 187,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/gate-lite-smoke.test.js": {
+      "asserts": 19,
+      "blankLines": 20,
+      "lines": 168,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/gate-spawn-fail.test.js": {
+      "asserts": 31,
+      "blankLines": 15,
+      "lines": 150,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/gate-techdebt-red.test.js": {
+      "asserts": 113,
+      "blankLines": 73,
+      "lines": 1150,
+      "tautologies": 0,
+      "tests": 39,
+      "todos": 4
+    },
+    "test/gates.test.js": {
+      "asserts": 198,
+      "blankLines": 66,
+      "lines": 1010,
+      "tautologies": 0,
+      "tests": 49,
+      "todos": 0
+    },
+    "test/governance-bootoverlay.test.js": {
+      "asserts": 8,
+      "blankLines": 11,
+      "lines": 112,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
+    "test/governance-bridge.test.js": {
+      "asserts": 23,
+      "blankLines": 12,
+      "lines": 163,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/governance-classify.test.js": {
+      "asserts": 29,
+      "blankLines": 29,
+      "lines": 160,
+      "tautologies": 0,
+      "tests": 15,
+      "todos": 0
+    },
+    "test/governance-config.test.js": {
+      "asserts": 16,
+      "blankLines": 12,
+      "lines": 85,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/governance-decisions.test.js": {
+      "asserts": 17,
+      "blankLines": 10,
+      "lines": 83,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/governance-denial-visibility.test.js": {
+      "asserts": 44,
+      "blankLines": 17,
+      "lines": 265,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/governance-escalate.test.js": {
+      "asserts": 95,
+      "blankLines": 33,
+      "lines": 523,
+      "tautologies": 0,
+      "tests": 17,
+      "todos": 0
+    },
+    "test/governance-harden-proto.test.js": {
+      "asserts": 91,
+      "blankLines": 40,
+      "lines": 459,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/governance-hotconfig.test.js": {
+      "asserts": 58,
+      "blankLines": 23,
+      "lines": 294,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/governance-kernel.test.js": {
+      "asserts": 58,
+      "blankLines": 32,
+      "lines": 249,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/governance-narrow.test.js": {
+      "asserts": 26,
+      "blankLines": 15,
+      "lines": 93,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/governance-preset-config.test.js": {
+      "asserts": 36,
+      "blankLines": 18,
+      "lines": 293,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/governance-preset-loader.test.js": {
+      "asserts": 76,
+      "blankLines": 25,
+      "lines": 266,
+      "tautologies": 0,
+      "tests": 15,
+      "todos": 0
+    },
+    "test/governance-proto.test.js": {
+      "asserts": 43,
+      "blankLines": 16,
+      "lines": 217,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/governance-receipt-anchor.test.js": {
+      "asserts": 47,
+      "blankLines": 14,
+      "lines": 192,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/governance-state.test.js": {
+      "asserts": 103,
+      "blankLines": 27,
+      "lines": 454,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/governance-toolban.test.js": {
+      "asserts": 91,
+      "blankLines": 37,
+      "lines": 423,
+      "tautologies": 0,
+      "tests": 22,
+      "todos": 0
+    },
+    "test/governance-wiring.test.js": {
+      "asserts": 77,
+      "blankLines": 22,
+      "lines": 362,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/governance.test.js": {
+      "asserts": 204,
+      "blankLines": 41,
+      "lines": 667,
+      "tautologies": 0,
+      "tests": 31,
+      "todos": 0
+    },
+    "test/handoff-gate-hotconfig.test.js": {
+      "asserts": 29,
+      "blankLines": 17,
+      "lines": 262,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/handoff-gate.test.js": {
+      "asserts": 88,
+      "blankLines": 38,
+      "lines": 463,
+      "tautologies": 0,
+      "tests": 15,
+      "todos": 0
+    },
+    "test/home-isolation.test.js": {
+      "asserts": 61,
+      "blankLines": 47,
+      "lines": 573,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/hot-config.test.js": {
+      "asserts": 42,
+      "blankLines": 19,
+      "lines": 212,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/identity.test.js": {
+      "asserts": 100,
+      "blankLines": 39,
+      "lines": 293,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/integration-comfyui-glue.test.js": {
+      "asserts": 6,
+      "blankLines": 14,
+      "lines": 112,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/legacy-fix.test.js": {
+      "asserts": 20,
+      "blankLines": 16,
+      "lines": 141,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/lifecycle.test.js": {
+      "asserts": 33,
+      "blankLines": 20,
+      "lines": 213,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/lock.test.js": {
+      "asserts": 11,
+      "blankLines": 11,
+      "lines": 69,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/log-export.test.js": {
+      "asserts": 58,
+      "blankLines": 21,
+      "lines": 221,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/longrun-exempt.test.js": {
+      "asserts": 107,
+      "blankLines": 44,
+      "lines": 423,
+      "tautologies": 0,
+      "tests": 21,
+      "todos": 0
+    },
+    "test/m1-on-removed.test.js": {
+      "asserts": 39,
+      "blankLines": 33,
+      "lines": 324,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/machine.test.js": {
+      "asserts": 43,
+      "blankLines": 20,
+      "lines": 154,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/mailbox-sweep.test.js": {
+      "asserts": 32,
+      "blankLines": 18,
+      "lines": 182,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/mailbox.test.js": {
+      "asserts": 11,
+      "blankLines": 12,
+      "lines": 60,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/member-deny-boundary.test.js": {
+      "asserts": 5,
+      "blankLines": 9,
+      "lines": 49,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/member-transition-hint.test.js": {
+      "asserts": 8,
+      "blankLines": 9,
+      "lines": 68,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/merge-agent.test.js": {
+      "asserts": 46,
+      "blankLines": 24,
+      "lines": 258,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/mode-gate.test.js": {
+      "asserts": 48,
+      "blankLines": 22,
+      "lines": 199,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/orphan-recycle.test.js": {
+      "asserts": 18,
+      "blankLines": 15,
+      "lines": 141,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/outcome-typing.test.js": {
+      "asserts": 46,
+      "blankLines": 18,
+      "lines": 209,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/p2-bridge.test.js": {
+      "asserts": 90,
+      "blankLines": 33,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 20,
+      "todos": 0
+    },
+    "test/p2-chain-autodrive.test.js": {
+      "asserts": 84,
+      "blankLines": 45,
+      "lines": 540,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/p2-settle-handoff.test.js": {
+      "asserts": 36,
+      "blankLines": 23,
+      "lines": 291,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/panel-render.test.js": {
+      "asserts": 104,
+      "blankLines": 50,
+      "lines": 443,
+      "tautologies": 0,
+      "tests": 23,
+      "todos": 0
+    },
+    "test/phase-reason.test.js": {
+      "asserts": 33,
+      "blankLines": 26,
+      "lines": 293,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/preset-rules.test.js": {
+      "asserts": 66,
+      "blankLines": 38,
+      "lines": 393,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/ratchet-wiring.test.js": {
+      "asserts": 35,
+      "blankLines": 28,
+      "lines": 314,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/readonly-shape.test.js": {
+      "asserts": 18,
+      "blankLines": 8,
+      "lines": 51,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/readonly-shell.test.js": {
+      "asserts": 25,
+      "blankLines": 15,
+      "lines": 223,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/replay-integration.test.js": {
+      "asserts": 48,
+      "blankLines": 26,
+      "lines": 299,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/replay-recovery.test.js": {
+      "asserts": 16,
+      "blankLines": 14,
+      "lines": 79,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/resume.test.js": {
+      "asserts": 31,
+      "blankLines": 19,
+      "lines": 159,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/rework.test.js": {
+      "asserts": 8,
+      "blankLines": 11,
+      "lines": 107,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/role-pluggable.test.js": {
+      "asserts": 27,
+      "blankLines": 14,
+      "lines": 139,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/schema.test.js": {
+      "asserts": 33,
+      "blankLines": 10,
+      "lines": 69,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/software-team-asset.test.js": {
+      "asserts": 47,
+      "blankLines": 15,
+      "lines": 222,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/store-corrupt.test.js": {
+      "asserts": 53,
+      "blankLines": 27,
+      "lines": 281,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/stream.test.js": {
+      "asserts": 71,
+      "blankLines": 29,
+      "lines": 367,
+      "tautologies": 0,
+      "tests": 18,
+      "todos": 0
+    },
+    "test/suite-consistency-and-hot.test.js": {
+      "asserts": 40,
+      "blankLines": 17,
+      "lines": 297,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/task-utils.test.js": {
+      "asserts": 16,
+      "blankLines": 12,
+      "lines": 82,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/team-asset-mandatory.test.js": {
+      "asserts": 35,
+      "blankLines": 35,
+      "lines": 328,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/team-asset-snapshot.test.js": {
+      "asserts": 102,
+      "blankLines": 48,
+      "lines": 423,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/team-asset.test.js": {
+      "asserts": 131,
+      "blankLines": 38,
+      "lines": 473,
+      "tautologies": 0,
+      "tests": 21,
+      "todos": 0
+    },
+    "test/team-assets-fill.test.js": {
+      "asserts": 60,
+      "blankLines": 29,
+      "lines": 375,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/teams-root.test.js": {
+      "asserts": 45,
+      "blankLines": 33,
+      "lines": 439,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/test-baseline.test.js": {
+      "asserts": 78,
+      "blankLines": 33,
+      "lines": 415,
+      "tautologies": 0,
+      "tests": 18,
+      "todos": 0
+    },
+    "test/tool-descriptor.test.js": {
+      "asserts": 60,
+      "blankLines": 19,
+      "lines": 218,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/tool-schema-conformance.test.js": {
+      "asserts": 18,
+      "blankLines": 24,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/tools.test.js": {
+      "asserts": 125,
+      "blankLines": 48,
+      "lines": 604,
+      "tautologies": 0,
+      "tests": 27,
+      "todos": 0
+    },
+    "test/topic-attach.test.js": {
+      "asserts": 14,
+      "blankLines": 14,
+      "lines": 141,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/topic-wiring.test.js": {
+      "asserts": 45,
+      "blankLines": 17,
+      "lines": 252,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/topic.test.js": {
+      "asserts": 36,
+      "blankLines": 14,
+      "lines": 146,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/trajectory.test.js": {
+      "asserts": 44,
+      "blankLines": 27,
+      "lines": 179,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/verify-mount.test.js": {
+      "asserts": 55,
+      "blankLines": 25,
+      "lines": 214,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/w1-conditional-edges.test.js": {
+      "asserts": 50,
+      "blankLines": 32,
+      "lines": 352,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
+    "test/watch-bootoverlay.test.js": {
+      "asserts": 23,
+      "blankLines": 18,
+      "lines": 215,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
+    "test/watch-heartbeat.test.js": {
+      "asserts": 95,
+      "blankLines": 39,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/watch-hotconfig.test.js": {
+      "asserts": 76,
+      "blankLines": 26,
+      "lines": 431,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/watch-longrun-exempt.test.js": {
+      "asserts": 122,
+      "blankLines": 31,
+      "lines": 629,
+      "tautologies": 0,
+      "tests": 21,
+      "todos": 0
+    },
+    "test/watch-longrun-integration.test.js": {
+      "asserts": 66,
+      "blankLines": 14,
+      "lines": 274,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/watch-longrun.test.js": {
+      "asserts": 111,
+      "blankLines": 34,
+      "lines": 487,
+      "tautologies": 0,
+      "tests": 22,
+      "todos": 0
+    },
+    "test/watch-state-surface-red.test.js": {
+      "asserts": 71,
+      "blankLines": 45,
+      "lines": 617,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/wave-plan-pairing.test.js": {
+      "asserts": 37,
+      "blankLines": 21,
+      "lines": 204,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/wave-plan.test.js": {
+      "asserts": 123,
+      "blankLines": 35,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 30,
+      "todos": 0
+    },
+    "test/webui-config-trust.test.js": {
+      "asserts": 37,
+      "blankLines": 16,
+      "lines": 97,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/webui-preset-options.test.js": {
+      "asserts": 12,
+      "blankLines": 12,
+      "lines": 72,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/webui-runtime-config.test.js": {
+      "asserts": 225,
+      "blankLines": 47,
+      "lines": 676,
+      "tautologies": 0,
+      "tests": 36,
+      "todos": 0
+    },
+    "test/worktree-tools.test.js": {
+      "asserts": 80,
+      "blankLines": 19,
+      "lines": 301,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/writing-team-asset.test.js": {
+      "asserts": 60,
+      "blankLines": 22,
+      "lines": 277,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    }
+  },
+  "generatedAt": "2026-09-18T15:55:18Z",
+  "generatedBy": "scripts/baseline-snapshot.mjs",
+  "kind": "test-baseline",
+  "metricSemantics": {
+    "asserts": "`assert.<method>(` call sites in code region (comments/strings excluded)",
+    "blankLines": "blank lines (whitespace-only), informational only",
+    "lines": "physical lines split by LF",
+    "tautologies": "always-true assertion call sites in code region (assert.ok(<const truthy>) / assert.(strict|deep)?Equal(X, X)); heuristic, not AST",
+    "tests": "top-level `test(` call sites in code region (test.todo excluded)",
+    "todos": "`test.todo(` call sites in code region"
+  },
+  "reason": "engine-debt-cleanup-3-20260918 收口：A 工位新增 I1-I6（+6 tests/+38 asserts）+ B 工位 D6 注释与冒烟配方",
+  "schema": 1,
+  "totals": {
+    "asserts": 7943,
+    "blankLines": 3646,
+    "files": 139,
+    "lines": 41578,
+    "tautologies": 0,
+    "tests": 1594,
+    "todos": 4
+  }
+}

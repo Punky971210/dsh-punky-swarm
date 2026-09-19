@@ -37,10 +37,19 @@ import { DEFAULT_ASSEMBLY } from '../lib/assembly.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── fixture：可解析技能名目录（生产 = ~/.agents/skills/<name>/SKILL.md 存在性解析器）──
+//   punky-preset 团队装配退役后刷新（DEFAULT_ASSEMBLY = software-team 装配）：
+//   集合 = DEFAULT_ASSEMBLY（= presets/software-team/team-asset.yml `layers.skills`）技能全集
+//          ∪ blindReview 扩展 fixture 引用（report-blind-audit：盲审角色手册，非装配默认项）
+//   旧装配技能名（dev-* 族 / efficient-edit / design-an-interface / archive / doc-update /
+//   code-review-guideline）已退役 ⇒ 从 fixture 移除，不得再作为"可解析技能"出现。
 const SKILL_NAMES = new Set([
-  'dev-planner', 'dev-designer', 'spec-writing', 'design-an-interface',
-  'dev-coder', 'efficient-edit', 'codebase-design', 'dev-tester',
-  'code-review-guideline', 'report-blind-audit', 'archive', 'doc-generator', 'doc-update',
+  'brainstorming', 'writing-plans', 'spec-writing',
+  'test-driven-development', 'codebase-design', 'receiving-code-review', 'requesting-code-review',
+  'verification-before-completion', 'systematic-debugging',
+  'review-execution',
+  'acceptance-gate',
+  'doc-generator', 'retro-and-memory',
+  'report-blind-audit',
 ]);
 const catalog = { has: (name) => SKILL_NAMES.has(name) };
 
@@ -224,13 +233,13 @@ test('validateAssembly rejects malformed shapes', () => {
   assert.match(validateAssembly(null).errors[0], /object/);
   assert.match(validateAssembly(42).errors[0], /object/);
   // role 缺 skills
-  const noSkills = { team: 'jiufeng', layers: { exec: { roles: ['coder'], skills: {} } } };
+  const noSkills = { team: 'punky-preset', layers: { exec: { roles: ['coder'], skills: {} } } };
   assert.match(validateAssembly(noSkills).errors[0], /coder missing or empty/);
   // skills 空数组
-  const emptySkills = { team: 'jiufeng', layers: { exec: { roles: ['coder'], skills: { coder: [] } } } };
+  const emptySkills = { team: 'punky-preset', layers: { exec: { roles: ['coder'], skills: { coder: [] } } } };
   assert.match(validateAssembly(emptySkills).errors[0], /coder missing or empty/);
   // roles 非数组
-  const badRoles = { team: 'jiufeng', layers: { exec: { roles: 'coder', skills: { coder: ['dev-coder'] } } } };
+  const badRoles = { team: 'punky-preset', layers: { exec: { roles: 'coder', skills: { coder: ['dev-coder'] } } } };
   assert.match(validateAssembly(badRoles).errors[0], /roles must be a non-empty array/);
 });
 
@@ -247,7 +256,7 @@ test('completeness view 1 (forward): unresolvable skill reported', () => {
     ...DEFAULT_ASSEMBLY,
     layers: {
       ...DEFAULT_ASSEMBLY.layers,
-      exec: { ...DEFAULT_ASSEMBLY.layers.exec, skills: { ...DEFAULT_ASSEMBLY.layers.exec.skills, coder: ['dev-coder', 'not-a-real-skill'] } },
+      exec: { ...DEFAULT_ASSEMBLY.layers.exec, skills: { ...DEFAULT_ASSEMBLY.layers.exec.skills, coder: ['test-driven-development', 'not-a-real-skill'] } },
     },
   };
   const r = assertAssemblyCompleteness(bad, catalog);
@@ -298,7 +307,7 @@ test('completeness view 3 (extension): blindReview on → roles + 6 templates OK
         roles: [...DEFAULT_ASSEMBLY.layers.audit.roles, ...BLIND_REVIEW_ROLES],
         skills: {
           ...DEFAULT_ASSEMBLY.layers.audit.skills,
-          'audit-panelist': ['report-blind-audit', 'code-review-guideline'],
+          'audit-panelist': ['report-blind-audit', 'review-execution'],
           'audit-aggregate': ['report-blind-audit'],
           'audit-critic': ['report-blind-audit'],
         },

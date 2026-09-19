@@ -371,7 +371,7 @@ test('G3 写点归属：apply() 的全部写入落点位于隔离根之下', () 
   const presetDir = path.join(ISOLATED, '.dsh', '.agent-presets');
   assert.equal(fs.existsSync(sinkDir), true, '审计 sink 根已在隔离根内创建（写入确实发生且被转移）');
   assert.equal(fs.existsSync(path.join(skillDir, 'software-team', 'SKILL.md')), true, '技能资产落在隔离根内');
-  assert.equal(fs.existsSync(path.join(presetDir, 'jiufeng')), true, '预设资产落在隔离根内');
+  assert.equal(fs.existsSync(path.join(presetDir, 'punky-preset')), true, '预设资产落在隔离根内');
   assert.ok(state.isolatedAfter.count > state.isolatedBefore.count,
     `隔离根内文件数应因被测路径而增长：${state.isolatedBefore.count} → ${state.isolatedAfter.count}`);
 
@@ -535,7 +535,7 @@ const norm = (p) => { let o = String(p); try { o = fs.realpathSync.native(o); } 
 const isUnder = (p, r) => { const a = norm(p); const b = norm(r); return a === b || a.startsWith(b.endsWith(path.sep) ? b : b + path.sep); };
 const sink = path.join(sentinel, '.dsh', 'logs', 'punky-swarm');
 const skill = path.join(sentinel, '.agents', 'skills', 'software-team', 'SKILL.md');
-const preset = path.join(sentinel, '.dsh', '.agent-presets', 'jiufeng');
+const preset = path.join(sentinel, '.dsh', '.agent-presets', 'punky-preset');
 function walk(root) { const out = []; const st = [root]; while (st.length) { const d = st.pop(); let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) st.push(p); else if (e.isFile()) out.push(p); } } return out; }
 const report = {
   g1Ok: norm(os.homedir()) === norm(sentinel) && norm(os.homedir()) !== norm(real),

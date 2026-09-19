@@ -15,10 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 真宿主调度器实测探针（build-plan §3.2 可选补充 + 蓝图 §8『待核实』项）：
+// 真宿主调度器实测探针：
 // pre 拒绝后，宿主对 tools/result 的行为实测（源码读证 HOST:3105-3137 / 3226-3261 已在报告中交叉印证）。
 // 载体：cordis 真 Context + dsh-tools ToolRuntime（本 worktree node_modules 内 0.1.0-rc.6）+
-//       真实 installGovernanceHook（M2 hook 端到端）——非 fake ctx。
+//       真实 installGovernanceHook（governance hook 端到端）——非 fake ctx。
 // 观察点：
 //   A) pre 拒绝（DENY 短路）→ 工具体是否执行？post-execute 是否被调用？tools/result 是否发射（冻结 Error 结果）？
 //   B) ask 决策 → 无 approval 服务 → 宿主降级 deny（HOST:3305-3311）→ 同上观察。
@@ -60,7 +60,7 @@ app.tools.register(defineTool({
   },
 }));
 
-// ── 挂载真实 M2 governance hook（temp root，不碰真实 ~/.dsh/jiufeng）──
+// ── 挂载真实 governance hook（temp root，不碰真实 ~/.dsh/punky-preset）──
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-probe-'));
 const CONFIG = {
   governance: {
@@ -89,7 +89,7 @@ console.log(`[probe] host=dsh-tools@${hostVersion} | hook.installed=${hook.insta
 const observed = { post: [], result: [] };
 app.on('tools/post-execute', async (exec, result, next) => {
   observed.post.push({ name: exec.name, callId: exec.callId, isError: result.isError, kind: 'pass-through' });
-  return next(); // M2 post 恒 pass-through（2.2 语义）
+  return next(); // post 恒 pass-through
 });
 app.on('tools/result', (exec, result) => {
   observed.result.push({

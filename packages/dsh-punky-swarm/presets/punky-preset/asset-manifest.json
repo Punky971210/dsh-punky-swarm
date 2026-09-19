@@ -1,0 +1,56 @@
+{
+  "manifestVersion": 1,
+  "description": "蟛蜞模式（punky-preset）资产清单：声明包内预设与团队技能到用户机实装面的单向同步（真源=包内 skills/，不反向同步）",
+  "assets": [
+    {
+      "rel": "presets/punky-preset",
+      "note": "蟛蜞模式预设本体（persona 纪律、preset.yml、agent.cordis.yml、references/manager.md、NOTICE、本清单）",
+      "target": { "root": "preset", "subpath": "punky-preset" }
+    },
+    {
+      "rel": "presets/engine-team",
+      "note": "引擎自建团队资产（team-asset.yml：层/角色/技能/flows/chain 声明；P1 2026-09-16 新增）；运行期真源仍是包内 presets/engine-team/，本落点为交付/审计副本（非 teamsRoot 形态）",
+      "target": { "root": "preset", "subpath": "engine-team" }
+    },
+    {
+      "rel": "skills/software-team",
+      "note": "软件工程团队技能（运行期唯一可加载面，真源）",
+      "target": { "root": "skill", "subpath": "software-team" }
+    },
+    {
+      "rel": "skills/engine-team",
+      "note": "引擎团队技能（三层角色与产物契约；装配数据真源仍在 presets/engine-team/team-asset.yml）",
+      "target": { "root": "skill", "subpath": "engine-team" }
+    },
+    {
+      "rel": "skills/design-team",
+      "note": "设计团队技能（运行期唯一可加载面，真源）",
+      "target": { "root": "skill", "subpath": "design-team" }
+    },
+    {
+      "rel": "skills/review-execution",
+      "note": "执行层评审角色手册（reviewer：对抗式审查 + 结构化 verdict）",
+      "target": { "root": "skill", "subpath": "review-execution" }
+    },
+    {
+      "rel": "skills/acceptance-gate",
+      "note": "审计层验收角色手册（supervisor：对账式验收 + gap-list 唯一产出者）",
+      "target": { "root": "skill", "subpath": "acceptance-gate" }
+    },
+    {
+      "rel": "skills/retro-and-memory",
+      "note": "审计层复盘角色手册（doc-manager：证据驱动复盘 + 跨会话记忆沉淀）",
+      "target": { "root": "skill", "subpath": "retro-and-memory" }
+    },
+    {
+      "rel": "skills/research-team",
+      "note": "调研团队技能（三层角色 research-planner / researcher / research-auditor 的职责与产物契约；装配数据真源仍在 presets/research-team/team-asset.yml）",
+      "target": { "root": "skill", "subpath": "research-team" }
+    },
+    {
+      "rel": "skills/writing-team",
+      "note": "写作团队技能（三层角色 writing-planner / drafter·polisher·publisher / writing-auditor 的职责与产物契约；装配数据真源仍在 presets/writing-team/team-asset.yml）",
+      "target": { "root": "skill", "subpath": "writing-team" }
+    }
+  ]
+}

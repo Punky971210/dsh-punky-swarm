@@ -1,24 +1,27 @@
 # hook-rules 规则预设集
 
-本目录为 dsh-punky-swarm 随包发布的调用参数级护栏规则预设（preset）。预设以「wrapper（`_meta` 元数据 + `rules` 规则数组）」JSON 文件组织，规则正文与引擎 `Rule` 类型逐字段对齐、零扩展字段；装载器只剥离 `_meta` 取 `rules`，不做规则字段改写。
+本目录为 dsh-punky-swarm 随包发布的调用级护栏预设（preset）。预设以「wrapper（`_meta` 元数据 + `rules` 规则数组 / `toolBan` 黑名单数组）」JSON 文件组织，规则正文与引擎 `Rule` 类型逐字段对齐、零扩展字段；装载器只剥离 `_meta` 取正文（`rules` 与/或 `toolBan`），不做字段改写。
 
 ## 文件与内容
 
-| 文件 | 注册 id | 层 | 规则数 | 内容 |
+| 文件 | 注册 id | 层 | 条目数 | 内容 |
 |---|---|---|---|---|
 | `l1-sensitive.json` | `l1-sensitive` | L1 | 12 | 敏感数据防护：私钥块/凭据签名进入子代理透传面（subagent/subagent_fork/send_message/workflow/ralph）、外网搜索出口（web_search）与命令执行面（pwsh/ssh_exec/ssh_cluster）时的值级内容检测 |
 | `l2-resource.json` | `l2-resource` | L2 | 6 | 资源边界：timeoutMs/maxWorkers/max_goal_rounds/maxRounds 数值上限，超限拒绝并回收窄指引 |
-| `compose.json` | `compose` | compose | 18 | 全量合并（L1 12 条在前、L2 6 条在后），内容等价于分别引用 l1-sensitive 与 l2-resource |
+| `l3-tool-ban.json` | `l3-tool-ban` | L3 | 1 | **第三类判定面（工具黑名单，工具 × 行为）**：首批禁用 `pwsh` 的 `file-write`（写通道路由——文件写走 `edit` / `write` 等在册工具，不经 shell 自建写路径落盘，避免编码头/BOM 被破坏）。条目走独立 `toolBan` 表 |
+
+> **`compose` 组合项已废除、`preset` 单值写法亦已废除**（2026-09-14 用户裁决）：原 `compose.json`（L1+L2 全量合并 18 条）已从仓库与注册表删除；`preset` 的**单值字符串形态（单选遗产）一并清除**——`preset: "compose"` 与 `preset: "l1-sensitive"` 都**不再是合法引用**（写通道拒；引擎判形态 / 未知 id → 装载失败回退空表 + warn）。**唯一合法形态 = 数组（多选）**：`preset: ["l1-sensitive","l2-resource"]`（18 条参数规则），或再加 `"l3-tool-ban"`（含工具黑名单条目）。
 
 动作档语义：
 
 - **L1 私钥块**（L1-D01~D04、D09）：`hard` → **DENY** 拒绝执行。私钥字面量进入透传面/出网面无正当场景。
 - **L1 凭据签名**（L1-A05~A08、A10~A12）：`manual_review` → **REQUIRE_APPROVAL** 人工复核。可能是正当透传（如向执行子代理交付部署凭证），也可能泄密；交互态走宿主人工闸，自动化无审批通道态 = fail-closed 拒绝。
 - **L2 资源上限**（L2-R01~R06）：`narrowable` + `narrow[{path, max}]`。`flags.narrow: true` 时原语为 **NARROW**，否则回退 **DENY**——两种情况均拒绝执行并下发 `narrowedParams` 收窄指引（clamped 明细），模型按指引重试即为合规调用（deny-with-guidance）。
+- **L3 工具黑名单**（L3-W01）：`hard` → **DENY** 拒绝执行。判定面 = 工具 × 行为（`toolBan` 表），命中理由与纠正文本入拒绝正文——**写通道路由**：Agent 写文件应走 `edit` / `write` / `str-replace-editor` 等在册工具（shell 写盘在 Windows 下可能写 GBK 或带 BOM，破坏文件编码头且不可逆）。**收窄口径**：只拦「修改或写文件」这一类动作，执行/构建/测试/包管理/只读命令一律放行（`npm run build`、`npm test`、`node x.mjs`、`git status`、`Get-ChildItem` 均不命中）。
 
 ## 逐条规则审阅清单（供用户与 Agent 审阅检查）
 
-下表把 l1-sensitive（12 条）与 l2-resource（6 条）逐条展开为可审阅清单——字段（rule id / preset 归属 / 类别 / 原语（生效档）/ 触发 tools / match 摘要 / violation message）与引擎 `Rule`/`Violation` 契约一一对应，内容派生自各 JSON 的 `rules` 机器值与 `_meta.notes` 人话说明；**`compose` 为 L1 12 条在前 + L2 6 条在后的逐条等价合并**（P-1 保序断言守护），引用本双表即完整清单，不重复 compose 正文。
+下表把 l1-sensitive（12 条）与 l2-resource（6 条）逐条展开为可审阅清单——字段（rule id / preset 归属 / 类别 / 原语（生效档）/ 触发 tools / match 摘要 / violation message）与引擎 `Rule`/`Violation` 契约一一对应，内容派生自各 JSON 的 `rules` 机器值与 `_meta.notes` 人话说明；引用本双表即完整清单（原 `compose` 组合项已废除，不再有独立合并文件）。
 
 ### L1 敏感数据防护（l1-sensitive，12 条）
 
@@ -48,14 +51,30 @@
 | L2-R05 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | create_goal | `/max_goal_rounds` · gt 50（narrow max=50） | [preset L2] create_goal max_goal_rounds 超过上限 50：自动延续轮数需受资源边界约束 |
 | L2-R06 | l2-resource | narrowable | NARROW（P4，flags.narrow:true）否则 DENY 回退 | ralph | `/maxRounds` · gt 20（narrow max=20） | [preset L2] ralph maxRounds 超过上限 20：轮次上限需受资源边界约束 |
 
+### L3 工具黑名单（l3-tool-ban，1 条 · 第三类判定面）
+
+下表把 l3-tool-ban 逐条展开为可审阅清单——字段（条目 id / preset 归属 / behavior / category / 原语（生效档）/ 触发 tool / 判据摘要 / violation message）与引擎 `ToolBanEntry`/`Violation` 契约一一对应；**该面走独立 `toolBan` 表**（第三类判定面），与参数级规则面可任意叠加，引用方式见「启用方式」。
+
+| 条目 id | preset 归属 | 行为面（behavior） | 类别（category） | 原语（生效档） | 触发 tool | 判据摘要 | violation message |
+|---|---|---|---|---|---|---|---|
+| L3-W01 | l3-tool-ban | `file-write` | hard | DENY（P2 硬性违规） | pwsh | 命令含写文件动作：重定向（`>` / `>>`）、写动词 cmdlet（Set-Content / Add-Content / Out-File / New-Item / Remove-Item / Move-Item / Copy-Item / Export-Csv…）、落盘参数（`-OutFile` / `find -exec`）、段首写命令名（rm / mv / cp / del / mkdir / touch / tee / chmod…）。执行 / 构建 / 测试 / 包管理 / 只读命令**放行** | [preset L3] pwsh 命令含文件写动作（重定向 / 写动词 cmdlet / 写命令名）：文件写请走 edit / write 等在册工具（shell 写盘可能写入 GBK 或带 BOM，破坏文件编码头） |
+
+**判定链与边界（如实标注）**：引号掩码（引号内的 `>` 与 cmdlet 名不参与判定，`Select-String -Pattern "Set-Content"` 不误拦）→ 剥离流合并（`2>&1` / `2>$null` 不算落盘）→ 全串写指示符 → 分段取段首写命令名 → 其余放行；未闭合引号 fail-closed（按写文件处理）。**这是启发式、非沙箱**：别名（`sc` / `ni` / `ri` / `mi`）、脚本文件（`pwsh -File x.ps1`）、转义参数、编码方式可绕过，「内联解释器写」（`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`）首批不覆盖——本面只收敛「无意识地用 shell 写盘代替 edit/write」这一主路径，**不承诺**等价于 OS 级隔离或编码安全（真正的编码保证来自 edit/write 工具链本身）。
+
 ## 启用方式
 
 预设为**可选启用**片段，出厂规则表保持空（零拦截）。两种启用写法：
 
-1. **引用键（推荐，后续装载能力版本提供）**：`governance.hook.preset` 配置注册 id 或注册 id 数组——
-   `"preset": "compose"`（18 条全量）或 `"preset": ["l1-sensitive", "l2-resource"]`（组合，展开结果与 compose 逐条等价）。
-   `compose` 与分别引用 l1/l2 为互斥用法：同批引用会因规则 id 重复被装载层唯一性校验拒绝（规则 id 须全局唯一）。
-2. **整表粘贴（装载能力落地前过渡）**：将目标文件的 `rules` 数组整体写入 `governance.hook.rules`。
+1. **引用键（推荐）**：`governance.hook.preset` 配置注册 id 或注册 id 数组（注册 id 共三项：`l1-sensitive` / `l2-resource` / `l3-tool-ban`）——
+   `"preset": ["l1-sensitive", "l2-resource"]`（18 条参数规则叠加）或 `"preset": ["l1-sensitive", "l2-resource", "l3-tool-ban"]`（再叠加工具黑名单）。
+   **组合由多选 / 数组引用表达**（原 `compose` 组合项已废除——该 id 不再是合法引用）；三类规则集 id 互不重叠（L1/L2 走 rules 面、L3 走 toolBan 面），任意叠加不会被装载层唯一性校验拒。
+   **注意**：preset 文件是随包资产，注册 id 在进程 boot 时装载一次——**新增/修改 preset 文件后需重启宿主一次**方可被引用键识别。
+2. **整表粘贴（无 preset 装载能力时的过渡）**：将目标文件的 `rules` 数组整体写入 `governance.hook.rules`（`toolBan` 条目写入 `governance.hook.toolBan`）。
+3. **热加载（推荐用于第三类判定面）**：把 `toolBan` 条目直接写入 `<root>/config/runtime.json` 的 `governance.hook.toolBan`——`governance.hook` 任一生效子键变化即 dispose + 重挂，**免重启即时生效**：
+
+```json
+{ "governance": { "hook": { "toolBan": [ { "id": "L3-W01", "tool": "pwsh", "behavior": "file-write", "code": "L3-W01", "category": "hard", "message": "[preset L3] pwsh 命令含文件写动作：文件写请走 edit / write 等在册工具" } ] } } }
+```
 
 启用 L2 时建议同时设 `flags: { narrow: true }` 使原语语义清晰；不开也成立（回退 DENY + 指引照给）。
 
@@ -90,6 +109,7 @@ L2 数值上限为声明式规则值：调整即改对应规则的 `match.value`
 
 ## 边界
 
-- 覆盖范围 = 调用参数值级内容与资源数值上限；本地文件写读（write/edit/read）与路径面归宿主沙箱管理，本预设不设规则。
+- 覆盖范围 = 参数级**内容值**（L1 敏感数据）与**资源数值上限**（L2）+ 第三类**写动作**判定（L3 工具黑名单：shell 命令是否在改/写文件）。本地文件写读工具（`write` / `edit` / `read`）与路径面归宿主沙箱管理，本预设不设规则——**L3 恰恰是把写操作引导回这些在册工具**。
+- **L3 与执行引擎无关**：其判定实现在护栏内（`lib/governance/tool-ban.ts`），**不 import / 不修改** `lib/tools/readonly.js`（后者是任务难度门禁「只读侦察面」在执行侧使用的共享判定，服务于「评估前能否跑侦察命令」这一另一个问题）；两处判定各自独立、互不影响。
 - 只拒绝不改写：宿主参数输入只读，命中即拒绝 + 收据 reason 给模型纠正文本，不做内容消毒替换。
 - escalation（违规计数升级）出厂关闭；开启后 DENY/NARROW 在默认计入子集内，阈值/窗口由部署方自定。

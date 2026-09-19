@@ -21,16 +21,20 @@ At the top of the page you can see the current state: whether the guardrails are
 
 ### Rule preset
 
-Pick a ready-made rule set to quickly enable a group of out-of-bounds protections:
+**All rule sets are peer options and multi-selectable** — there is no "combination item"; the combination is the selection itself:
 
-| Option | Number of rules | Purpose |
+| Option (multi-select) | Entries | Purpose |
 |---|---|---|
-| Factory default (no interception) | 0 | No rules enabled; guardrails on but nothing is held back |
-| Sensitive-data guard | 12 | For out-of-bounds calls involving sensitive data such as credentials and private keys |
-| Resource limits | 6 | For calls that exceed resource ceilings such as timeout and concurrency |
-| Combination (L1 + L2) | 18 | The full combination of the two rule sets above |
+| Factory default (nothing selected) | 0 | No rules enabled; guardrails on but nothing is held back |
+| Sensitive-data guard (`l1-sensitive`) | 12 | For out-of-bounds calls involving sensitive data such as credentials and private keys |
+| Resource limits (`l2-resource`) | 6 | For calls that exceed resource ceilings such as timeout and concurrency |
+| Tool blacklist (`l3-tool-ban`) | 1 | Third adjudication face: blocks pwsh **file writes** and routes them to the registered tools (edit / write); build / test / read-only commands still pass |
 
-Once you select a preset, the page shows the **count and a purpose summary** for that rule set. Switching presets does not change the running state by itself — it takes effect when you click Save.
+Any selection stacks (all three = 19 entries: 12 + 6 rules plus 1 blacklist entry). Each row shows its own entry count, and an "N selected · M entries total" summary is displayed; switching selections does not change the running state by itself — it takes effect when you click Save.
+
+**About the former "Combination (L1 + L2)" option and the former single-value form**: the preset id `compose` has been **removed from the engine registry** (2026-09-14), and the **single-string form of `preset` (a single-select leftover) has been abolished too** — neither `preset: "compose"` nor `preset: "l1-sensitive"` is a valid reference any more (the write channel rejects them with `unknown-preset` / `invalid-value`; the engine falls back to an empty table with a warning). The page performs **no automatic migration**: a non-array legacy value is kept verbatim with a warning and rejected by the writer on save — re-check the boxes and save (express combinations with multi-select).
+
+**Third-face note**: `l3-tool-ban` uses the tool-blacklist face (`toolBan`) and never collides with the parameter-rule face of `l1`/`l2`, so any combination can be checked together; its boundary (heuristic, non-sandbox, only "modify or write files") is documented in [guardrails-hook.en.md](guardrails-hook.en.md) §2.
 
 ### Auto-escalation
 

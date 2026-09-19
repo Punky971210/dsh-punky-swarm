@@ -127,23 +127,32 @@ test('IT-A Manager 读面：候选经 mailbox_read broadcast 可达且载荷齐�
   assert.equal(candEvents(store, S, batchId, lane).length, 1, '事件留痕不受 ack 影响（Leader/审计面仍在）');
 });
 
-// ---- IT-B broadcast 方向：候选只入 broadcast；inbox/outbox 无候选 ----
-test('IT-B 方向正确：候选只入 broadcast；inbox 仅既有 probe、outbox 无候选', () => {
+// ---- IT-B 方向（D-3 双通道后修订）：候选入 broadcast + supervisor/inbox 双通道；outbox 无候选 ----
+// 契约变更注记（本批 D-3）：原断言为「候选只入 broadcast，inbox 绝无候选」（单通道设计）。
+//   用户裁决 D-3 = 候选除 broadcast 外**同时投 supervisor/inbox**（spec §3.7.2），本条断言随契约更新：
+//   inbox 现应有**恰 1 条** longrun.candidate（channel:'inbox'，ackId 与 broadcast 那条独立），
+//   broadcast 仍**恰 1 条**（既有单通道计数不因双投递变成 2 —— spec 验收 G28/G30）。
+test('IT-B 方向（D-3 修订）：候选双通道 = broadcast + supervisor/inbox 各恰 1 条；outbox 无候选', () => {
   const { root, store, S, batchId, lane } = setup();
   const { base, engine, at } = timedEngine(store, root, { capabilities: { watch: { enabled: true } } });
   at(0).tick();
   at(26 * MIN).tick(); // 产候选 + 心跳首拍无活动 → probe 下行追问（tier0 ≥10min）
   assert.equal(candEvents(store, S, batchId, lane).length, 1);
-  // inbox：可能有心跳 probe（下行流），但绝无 longrun.candidate
+  // inbox：既有 probe（下行追问）+ D-3 新增的候选副本（channel:'inbox'）
   const inb = inboxItems(root, S, batchId);
-  assert.equal(candOf(inb).length, 0, 'inbox 无候选（下行流不混入）');
-  assert.ok(inb.some((m) => m.message?.kind === 'probe' && m.message.lane === lane), 'inbox 含既有 probe 追问（方向对照）');
+  const inbCand = candOf(inb);
+  assert.equal(inbCand.length, 1, 'inbox 恰 1 条候选（D-3 双通道）');
+  assert.equal(inbCand[0].message.channel, 'inbox', 'inbox 那条带 channel 标记（可辨通道）');
+  assert.ok(inbCand[0].ackId, 'inbox 候选带自身 ackId（记录级；与 broadcast 独立）');
+  assert.ok(inb.some((m) => m.message?.kind === 'probe' && m.message.lane === lane), 'inbox 仍含既有 probe 追问（方向对照）');
   // outbox：worker 未回执 → 空 → 无候选
   const outb = outboxItems(root, S, batchId, lane);
   assert.equal(outb.length, 0, 'outbox 空（无 worker 回执）');
   assert.equal(candOf(outb).length, 0, 'outbox 无候选');
-  // broadcast：恰 1 条候选（唯一去向）
-  assert.equal(candOf(bcastItems(root, S, batchId)).length, 1, 'broadcast 恰 1 条候选');
+  // broadcast：恰 1 条候选（D-3 不改变既有单通道计数）
+  const bc = candOf(bcastItems(root, S, batchId));
+  assert.equal(bc.length, 1, 'broadcast 恰 1 条候选');
+  assert.notEqual(bc[0].ackId, inbCand[0].message.ackId, '两通道 ackId 独立');
   assert.equal(base > 0, true);
 });
 

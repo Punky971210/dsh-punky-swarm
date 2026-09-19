@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 本模块实现契约（锁定口径落地对照）：
 //   L1 exporter.levels **固定** {default:3}（不得由配置下调）→ 审计阈值由 sink 侧自过滤
-//   L2 文件 sink 为主；stdout 仅开关（PUNKY_LOGGER_STDOUT，默认关）、不 fallback（D-3）
+//   L2 文件 sink 为主；stdout 仅开关（PUNKY_LOGGER_STDOUT，默认关）、不 fallback
 //   L3 落点 <DSH_HOME>/logs/punky-swarm/audit-<本地日期>.jsonl，不在会话工作区、不在交付白名单根内
 //   L4 挂载只能代码内 → 唯一入口 mountAuditLog(ctx, { root, config })，由 lib/index.js apply 调用
 //   L5 自持开关，**绝不调用 exporter 的 disposer**（内核缺陷：销毁 e1 会连带杀掉 e2）
@@ -50,13 +50,13 @@ const ENGINE_NAME = 'dsh-punky-swarm';
 export const MAX_LINE_BYTES = 32768;
 /** L8 ① args 段单值裁剪阈值（字符） */
 export const MAX_LONG_ARG_CHARS = 512;
-/** D-5 连续失败 N 次 → 断路 */
+/** 连续失败 N 次 → 断路 */
 export const BREAKER_THRESHOLD = 3;
-/** D-5 断路后每 N 次尝试放行 1 次探活 */
+/** 断路后每 N 次尝试放行 1 次探活 */
 export const BREAKER_PROBE_INTERVAL = 1000;
-/** D-5 `kind:"sink-error"` 记录上限 */
+/** `kind:"sink-error"` 记录上限 */
 export const MAX_SINK_ERROR_RECORDS = 3;
-/** D-4/D-5 诊断面 lastError 截断长度 */
+/** 诊断面 lastError 截断长度 */
 export const MAX_ERROR_CHARS = 500;
 
 /** 聚合窗口默认长度（滑动；模块内常量，非配置键——README 只声明语义与开关，不暴露可配性） */
@@ -236,7 +236,7 @@ function capRecord(rec) {
 
   // ② msg 段：尾部截断 + 可见标记（标记必须留在正文里）。
   //    本阶段的可达条件（实测口径）：单行的**转义膨胀**（\n → \\n 等）使行长超 32 KiB——
-  //    因为内核 Logger.format 的 `maxLength` 只裁单个行（L8 此前实测已证），不含转义的纯长行
+  //    因为内核 Logger.format 的 `maxLength` 只裁单个行（实测已证），不含转义的纯长行
   //    会在 ① 阶段就被整体替换为 <truncated>。此处按 overshoot 二分收敛，保证标记留在尾部且行 ≤ 上限。
   const marker = '...[truncated]';
   let probe = line;                                   // 复用 ① 之后的序列化结果
@@ -541,7 +541,7 @@ export function pruneByTotal(sinkDir, maxTotalBytes) {
   return removed;
 }
 
-// ── D-4 诊断面 ──
+// ── 诊断面 ──
 
 function writeDiagnostics(note) {
   if (!state.diagnosticsPath) return;
@@ -577,7 +577,7 @@ function writeDiagnostics(note) {
     };
     fs.mkdirSync(state.diagnosticsDir, { recursive: true });
     fs.writeFileSync(state.diagnosticsPath, JSON.stringify(snapshot, null, 2), { encoding: 'utf8' });
-  } catch { /* 诊断面自身失败静默——D-5③ 降级路径不放大 */ }
+  } catch { /* 诊断面自身失败静默——降级路径不放大 */ }
 }
 
 function noteFirstFailure() {
@@ -587,7 +587,7 @@ function noteFirstFailure() {
   }
 }
 
-// ── 写入路径（D-2 / D-3 / D-5）──
+// ── 写入路径──
 
 function stdoutWrite(rec) {
   if (!state.cfg?.stdout) return;                 // 默认关 → 零调用
@@ -600,7 +600,7 @@ function stdoutWrite(rec) {
 }
 
 function writeSinkError(textValue) {
-  // D-5：降级记账有界——前 MAX_SINK_ERROR_RECORDS 条 + 此后每 BREAKER_PROBE_INTERVAL 次尝试最多 1 条
+  // 降级记账有界——前 MAX_SINK_ERROR_RECORDS 条 + 此后每 BREAKER_PROBE_INTERVAL 次尝试最多 1 条
   if (state.sinkErrorRecords >= MAX_SINK_ERROR_RECORDS
       && state.attempts % BREAKER_PROBE_INTERVAL !== 0) return;
   const rec = buildSinkErrorRow(textValue);
@@ -610,7 +610,7 @@ function writeSinkError(textValue) {
     fs.appendFileSync(currentSegmentPath(), line + '\n', { encoding: 'utf8' });
     state.sinkErrorRecords += 1;
   } catch {
-    state.sinkErrorRecordsFailed += 1;            // 失败面不自噬：只计数（D-5③）
+    state.sinkErrorRecordsFailed += 1;            // 失败面不自噬：只计数
   }
 }
 
@@ -622,7 +622,7 @@ function annotateFailure(error, phase) {
   noteFirstFailure();
 }
 
-/** D-5 断路判定：连续失败 ≥ 3 后，只累计 skippedByBreaker；每 1000 次尝试放行一次探活 */
+/** 断路判定：连续失败 ≥ 3 后，只累计 skippedByBreaker；每 1000 次尝试放行一次探活 */
 function shouldSkipByBreaker() {
   if (state.consecutiveFailures < BREAKER_THRESHOLD) return false;
   if (state.attempts % BREAKER_PROBE_INTERVAL === 0) return false;   // 探活放行
@@ -657,13 +657,13 @@ function takeoverExistingSegment(day) {
 /**
  * 写一行进 sink（同步写 L7）。
  * - 单卷上限：写满前一刻切到下一分卷，不删不截不断行；
- * - 行本身大于单卷上限时不切分卷（写了也没用）→ 交由失败面/断路有界处理（D-2/D-5）；
+ * - 行本身大于单卷上限时不切分卷（写了也没用）→ 交由失败面/断路有界处理；
  * - 每 PRUNE_EVERY_WRITES 行成功写触发一次清理（清理时机③）。
  */
 function writeLine(line) {
   state.attempts += 1;
 
-  if (shouldSkipByBreaker()) return;              // D-5 断路：不再触碰文件系统
+  if (shouldSkipByBreaker()) return;              // 断路：不再触碰文件系统
 
   if (Buffer.byteLength(line, 'utf8') > state.cfg.maxFileBytes) {
     annotateFailure(new Error('line exceeds maxFileBytes (' + state.cfg.maxFileBytes + ')'), 'oversize line');
@@ -702,7 +702,7 @@ function writeLine(line) {
     fs.appendFileSync(target, line + '\n', { encoding: 'utf8' });   // L7 同步写
     state.segmentBytes += lineBytes + 1;                            // +1 = LF
     state.writes += 1;
-    state.consecutiveFailures = 0;                                  // 成功即解除断路器（D-5①）
+    state.consecutiveFailures = 0;                                  // 成功即解除断路器
   } catch (error) {
     annotateFailure(error, 'append failed');
     return;
@@ -769,13 +769,13 @@ export function exportMessage(message) {
         rec.truncated = true;
         state.truncatedLines += 1;
       }
-    } catch (error) {                       // D-2：序列化失败 → 记 sink-error 后返回，不尝试写盘
+    } catch (error) {                       // 序列化失败 → 记 sink-error 后返回，不尝试写盘
       recordError(error);
       writeSinkError('serialize failed: ' + state.lastError);
       return;
     }
 
-    stdoutWrite(rec);                       // stdout 只是开关，不是降级面（D-3）
+    stdoutWrite(rec);                       // stdout 只是开关，不是降级面
     ingestAggregate(message, rec, line);    // 聚合开：窗口内同键折叠；聚合关：等价直接写盘
   } catch (error) {                         // L6：绝不 rethrow
     recordError(error);
@@ -803,7 +803,7 @@ export function mountAuditLog(ctx, opts = {}) {
   if (state.mounted) return { mounted: false, reason: 'duplicate' };
 
   const logger = ctx?.root?.logger ?? ctx?.logger;
-  // 防御式身份判定：不用 instanceof（探针 P1 实测 ctx.logger instanceof LoggerService === false）
+  // 防御式身份判定：不用 instanceof（实测 ctx.logger instanceof LoggerService === false）
   if (!logger || typeof logger.exporter !== 'function') return { mounted: false, reason: 'no-logger' };
 
   state.cfg = c;
@@ -848,7 +848,7 @@ export function mountAuditLog(ctx, opts = {}) {
     state.segmentBytes = mainBytes === null ? 0 : mainBytes;
   } catch (error) { recordError(error); }
 
-  // D-4：优雅退出路径落一次诊断快照（Stop-Process -Force 不触发 exit，由首失败与每 1000 行兜底）。
+  // 优雅退出路径落一次诊断快照（Stop-Process -Force 不触发 exit，由首失败与每 1000 行兜底）。
   // 聚合闭环落点②：全键 flush——与 flushDiagnostics 同序（先落快照：快照里看得出此刻哪些窗口未闭环，
   // 再逐窗闭环落盘；强杀不走本钩子，故末窗口的 count 仍会丢，见 README 保真边界 B5）。
   try {

@@ -25,15 +25,26 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { buildToolCatalog } from '../lib/aip/tool-descriptor.js';
 import * as mailbox from '../lib/comms/mailbox.js';
+import { seedArtifacts, runLane } from './helpers/gate-fixture.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-'));
 const store = createStore(root);
 const S = 'sess-api';
-const plan = buildWavePlan({ batchId: 'b-api', tasks: [{ id: 't1', cmd: '编写计划文档' }] });
+// 【r2 同步 · B2/B3/A1/B1】旧 fixture 为「lane 无 layer 的单 lane 批」：新语义下无 `layer` 的 lane 不得
+//   整 lane 免检（结算被 exit 门拒 `GATE_LANE_LAYER_MISSING`）、批次须含 exec/audit 层（B3）、plan 产物
+//   必须被下游 consume（A1）、派发前 consume 必须已声明且在场（B1+presence）
+//   ⇒ 改**合规三层批**，落盘声明产物后驱动全 lane 结算到 merged（`autoReleaseable` 要求全部 merged）。
+const plan = buildWavePlan({
+  batchId: 'b-api',
+  tasks: [
+    { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: '拆分任务' },
+    { id: 't1', layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/t1.md'], cmd: '编写计划文档', deps: ['p1'] },
+    { id: 'a1', layer: 'audit', consume: ['plan/spec.md'], produce: ['audit/a1.md'], cmd: '验收', deps: ['t1'] },
+  ],
+});
 store.createBatch(S, { batchId: 'b-api', wavePlan: plan, phase: 'running' });
-store.setMember(S, 'b-api', 't1', 'running');
-store.setMember(S, 'b-api', 't1', 'review');
-store.setMember(S, 'b-api', 't1', 'merged');
+seedArtifacts(root, S, 'b-api', ['t1']);
+for (const lane of ['p1', 't1', 'a1']) runLane(store, S, 'b-api', lane);
 mailbox.send(path.join(root, 'sessions', S, 'mailbox', 'b-api'), { type: 'inbox' }, { task: 't1' });
 // 另一 session 的同名批次（隔离验证）
 const p2 = buildWavePlan({ batchId: 'b-api', tasks: [{ id: 't1' }] });
@@ -85,8 +96,11 @@ test('GET /batch?batchId= returns detail (session-scoped)', () => {
   assert.equal(r.body.lanes.t1, 'merged');
   assert.equal(r.body.autoReleaseable, true);
   // 任务简述（cmd）随 wavePlan 暴露——面板据此展示任务内容
-  assert.equal(r.body.wavePlan[0].tasks[0].id, 't1');
-  assert.equal(r.body.wavePlan[0].tasks[0].cmd, '编写计划文档');
+  // 【r2 同步】合规批含 plan/audit 层 ⇒ ① 不能再用 `wavePlan[0].tasks[0]` 定位被测 lane（分属不同 wave），
+  //   改按 id 跨 wave 定位；② 三层 lane 的 cmd 由引擎注入 `[role=<层缺省角色>]` 前缀（既有装配语义，
+  //   非本批新增）⇒ 断言取「前缀 + 任务内容」的完整实测值（不弱化为模糊匹配）。
+  const flat = r.body.wavePlan.flatMap((w) => w.tasks);
+  assert.equal(flat.find((t) => t.id === 't1').cmd, '[role=coder] 编写计划文档');
   assert.deepEqual(r.body.laneAttempts, {});
   const nf = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batch'), '/api/dsh-punky-swarm/batch?batchId=nope&session=' + S);
   assert.equal(nf.status, 404);
@@ -150,15 +164,16 @@ test('/tools 端点：catalog 为 null（显式 aip.enabled=false）时不注册
 api.dispose();
 
 
-test('GET /batch returns lanesGate（generic 无 layer；三层列出缺失）', () => {
-  // generic 批次
+test('GET /batch returns lanesGate（r2 同步：三层批的 layer 读数 + 缺失清单）', () => {
+  // 【r2 同步 · B2】旧口径「generic（无 layer）lane 的 layer 读数为 null」已废除（无 layer 不再免检）
+  //   ⇒ b-api 为合规三层批，被测 exec lane 的 layer 读数为 'exec'。
   const r1 = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batch'), '/api/dsh-punky-swarm/batch?batchId=b-api&session=' + S);
   assert.equal(r1.status, 200);
   assert.ok(r1.body.lanesGate && r1.body.lanesGate.t1);
-  assert.equal(r1.body.lanesGate.t1.layer, null);
+  assert.equal(r1.body.lanesGate.t1.layer, 'exec');
   // 三层批次：consume 缺失可见
   const p3 = buildWavePlan({
-    batchId: 'b-g3', team: 'jiufeng',
+    batchId: 'b-g3', team: 'punky-preset',
     tasks: [
       { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 's' },
       { id: 'e1', layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/e1/a.py'], cmd: 'c', deps: ['p1'] },

@@ -39,12 +39,14 @@ function loadPreset(file) {
 
 const L1 = loadPreset('l1-sensitive.json');
 const L2 = loadPreset('l2-resource.json');
-const COMPOSE = loadPreset('compose.json');
+// 第三类判定面（工具黑名单，2026-09-14）：独立 toolBan 面
+// （compose 组合项 2026-09-14 已废除——注册表只剩三项，组合由多选 / 数组引用表达）
+const L3 = loadPreset('l3-tool-ban.json');
 
 // ── T-1 P-1 结构 ──
 
-test('P-1 结构：wrapper{_meta,rules} + 条数 12/6/18 + compose 保序等价 l1∪l2', () => {
-  for (const p of [L1, L2, COMPOSE]) {
+test('P-1 结构：wrapper{_meta,rules} + 条数 12/6（l1/l2 各自契约）', () => {
+  for (const p of [L1, L2]) {
     assert.ok(p && typeof p === 'object');
     assert.ok(p._meta && typeof p._meta === 'object', '_meta 存在');
     assert.ok(Array.isArray(p.rules), 'rules 数组存在');
@@ -57,13 +59,28 @@ test('P-1 结构：wrapper{_meta,rules} + 条数 12/6/18 + compose 保序等价 
   }
   assert.equal(L1.rules.length, 12);
   assert.equal(L2.rules.length, 6);
-  assert.equal(COMPOSE.rules.length, 18);
   assert.equal(L1._meta.presetId, 'l1-sensitive');
   assert.equal(L2._meta.presetId, 'l2-resource');
-  assert.equal(COMPOSE._meta.presetId, 'compose');
-  // compose = l1 展开在前 + l2 展开在后（保序逐条深度相等）
-  assert.deepEqual(COMPOSE.rules.slice(0, 12), L1.rules);
-  assert.deepEqual(COMPOSE.rules.slice(12, 18), L2.rules);
+});
+
+// ── T-1b P-1b 第三类判定面结构：wrapper{_meta,toolBan} + 1 条目 ──
+
+test('P-1b 结构：l3-tool-ban wrapper{_meta,toolBan} 1 条目（条目零扩展字段）', () => {
+  assert.equal(L3._meta.presetId, 'l3-tool-ban');
+  assert.equal(L3._meta.layer, 'L3');
+  assert.equal(L3._meta.kind, 'tool-ban');
+  assert.equal(typeof L3._meta.source, 'string', '来源编号红线：preset 登记来源');
+  assert.ok(Array.isArray(L3.toolBan), 'toolBan 数组存在');
+  assert.equal(L3.toolBan.length, 1);
+  assert.equal(L3.rules, undefined, 'L3 文件不产生参数规则（rules 面缺省）');
+  const e = L3.toolBan[0];
+  assert.equal(e.id, 'L3-W01');
+  assert.equal(e.code, 'L3-W01');
+  assert.equal(e.tool, 'pwsh');
+  assert.equal(e.behavior, 'file-write');
+  assert.equal(e.category, 'hard');
+  assert.equal(typeof e.message, 'string');
+  assert.equal('_meta' in e, false, '条目零扩展字段（loader 只剥 _meta、不洗条目）');
 });
 
 // ── T-1 P-2 形状（对齐引擎 Rule/Violation/match/narrow 契约，零依赖守卫）──
@@ -113,7 +130,7 @@ function ruleShapeErrors(rule, fileTag) {
 
 test('P-2 形状：18 条逐条对齐 Rule/Violation/match/narrow 契约', () => {
   const all = [...L1.rules, ...L2.rules];
-  for (const [fileTag, rules] of [['l1-sensitive', L1.rules], ['l2-resource', L2.rules], ['compose', COMPOSE.rules]]) {
+  for (const [fileTag, rules] of [['l1-sensitive', L1.rules], ['l2-resource', L2.rules]]) {
     for (const rule of rules) {
       const errs = ruleShapeErrors(rule, fileTag);
       assert.deepEqual(errs, [], `形状校验失败: ${errs.join(' | ')}`);
@@ -141,7 +158,7 @@ test('P-2b 正则可编译 + hard/manual/narrowable 档分布符合设计', () =
 // ── T-1 P-3 唯一性 ──
 
 test('P-3 文件内规则 id 全局唯一（3 文件各自）', () => {
-  for (const [tag, rules] of [['l1-sensitive', L1.rules], ['l2-resource', L2.rules], ['compose', COMPOSE.rules]]) {
+  for (const [tag, rules] of [['l1-sensitive', L1.rules], ['l2-resource', L2.rules]]) {
     const ids = rules.map((r) => r.id);
     assert.equal(new Set(ids).size, ids.length, `${tag} 含重复 id`);
   }
@@ -165,21 +182,21 @@ const EXPECTED_COVERAGE = [
 ];
 
 test('P-4 防误拦静态：规则 tools ∩ 治理族 = ∅；覆盖并集 = 用户侧 10 工具', () => {
-  const all = [...L1.rules, ...L2.rules, ...COMPOSE.rules];
+  const all = [...L1.rules, ...L2.rules];
   for (const r of all) {
     for (const t of r.tools) {
       assert.ok(!GOVERNANCE_TOOLS.includes(t), `${r.id} 白名单含治理工具 ${t}`);
     }
   }
   // 反方向：3 文件 _meta.tools 并集 == 覆盖工具并集（无治理工具漏入、无缺失）
-  const coverageUnion = new Set([...L1._meta.tools, ...L2._meta.tools, ...COMPOSE._meta.tools]);
+  const coverageUnion = new Set([...L1._meta.tools, ...L2._meta.tools]);
   assert.deepEqual([...coverageUnion].sort(), [...EXPECTED_COVERAGE].sort());
 });
 
-// ── T-1 P-5 kernel 裁决 fixture F-01~F-15（compose 全量）──
+// ── T-1 P-5 kernel 裁决 fixture F-01~F-15（l1/l2 全量展开）──
 
 function makeKernel(flags = {}) {
-  return createGovernanceKernel(resolveGovernanceConfig({ rules: COMPOSE.rules, flags }));
+  return createGovernanceKernel(resolveGovernanceConfig({ rules: [...L1.rules, ...L2.rules], flags }));
 }
 
 // 工具函数：核验 decision 主字段 + 可选 reason/narrowedParams 断言
@@ -348,25 +365,28 @@ test('R-4 大小写：Password=/password= 与 sk-/SK- 变体命中一致', () =>
   }
 });
 
-// ── T-3 V9 审阅清单一致性：README 逐条表 rule id 集 == l1-sensitive 12 ∪ l2-resource 6（JSON 解析对照）──
-// 载体（决策包第五节）：presets/hook-rules/README.md「逐条规则审阅清单」双表（L1 12 行 + L2 6 行），
-// 每行首列 = rule id（L1-[A-Z]\d{2} / L2-R\d{2}）；compose 为逐条等价引用（P-1 保序断言对应），不重复正文。
-test('V9 README 逐条审阅清单：表 rule id 集 == l1-sensitive 12 ∪ l2-resource 6；compose 等价声明在档', () => {
+// ── T-3 V9 审阅清单一致性：README 逐条表条目标识集 == L1 12 ∪ L2 6 ∪ L3 1（JSON 解析对照）──
+// 载体（决策包第五节）：presets/hook-rules/README.md「逐条审阅清单」三表（L1 12 行 + L2 6 行 + L3 1 行），
+// 每行首列 = 条目 id（L1-[A-Z]\d{2} / L2-R\d{2} / L3-W\d{2}）；compose 组合项已废除（README 仅留废除声明，不列正文）。
+test('V9 README 逐条审阅清单：表条目标识集 == l1-sensitive 12 ∪ l2-resource 6 ∪ l3-tool-ban 1；compose 废除声明在档', () => {
   const readme = readFileSync(join(presetsDir, 'README.md'), 'utf8');
   assert.ok(!readme.startsWith('\uFEFF'), 'README 不应含 UTF-8 BOM');
-  // 表数据行 = 行首 '| ' + 规范 rule id（仅清单表以 rule id 为首列；文件/内容表首列为反引号文件名不命中）
+  // 表数据行 = 行首 '| ' + 规范条目 id（仅清单表以 id 为首列；文件/内容表首列为反引号文件名不命中）
   const tableIds = [];
   for (const line of readme.split('\n')) {
-    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2})\s*\|/.exec(line);
+    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2}|L3-W\d{2})\s*\|/.exec(line);
     if (m) tableIds.push(m[1]);
   }
-  const expected = [...L1.rules, ...L2.rules].map((r) => r.id).sort();
-  assert.equal(tableIds.length, 18, '逐条表恰 18 行（L1 12 + L2 6）');
+  const expected = [...L1.rules, ...L2.rules, ...L3.toolBan].map((r) => r.id).sort();
+  assert.equal(tableIds.length, 19, '逐条表恰 19 行（L1 12 + L2 6 + L3 1，三类判定面全覆盖）');
   assert.deepEqual([...new Set(tableIds)].sort(), expected,
-    'README 逐条表 rule id 集须与 l1/l2 JSON 完全一致（漏行/超集/改 id 均拒绝）');
+    'README 逐条表条目标识集须与 l1/l2/l3 JSON 完全一致（漏行/超集/改 id 均拒绝）');
   // 表头字段契约（rule id / preset 归属 / … / violation message）在档（用户可逐条审阅的载体存在）
   assert.match(readme, /^\|\s*rule id\s*\|\s*preset 归属\s*\|/m, '清单表头含 rule id + preset 归属 列');
   assert.ok(readme.includes('violation message'), '清单表头含 violation message 列');
-  // compose 等价声明（决策包：compose = 逐条等价，README 以 L1/L2 双表呈现 18 行、不重复 compose 正文）
-  assert.ok(readme.includes('compose') && readme.includes('等价'), 'README 含 compose 等价声明（与 P-1 保序断言一致）');
+  // L3 表头（第三类判定面的字段契约：条目 id / behavior / 触发 tool / 判据摘要）
+  assert.match(readme, /^\|\s*条目 id\s*\|\s*preset 归属\s*\|\s*行为面（behavior）\s*\|/m, 'L3 表头含条目 id + 行为面 列');
+  assert.ok(readme.includes('判据摘要'), 'L3 表头含判据摘要 列');
+  // compose 废除声明（2026-09-14：compose 组合项已从注册表删除，README 须显式声明废除，不留误导性等价说明）
+  assert.ok(readme.includes('compose') && readme.includes('废除'), 'README 含 compose 废除声明');
 });

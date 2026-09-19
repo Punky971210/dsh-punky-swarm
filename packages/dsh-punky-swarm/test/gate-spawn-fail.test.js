@@ -87,8 +87,9 @@ test('GAP-05b：runCommand 对 nonexistent 命令的平台分支（Windows: NONZ
   const r = runCommand({ command: 'definitely_not_a_real_command_xyz_987', timeoutMs: 5000 });
   assert.equal(r.ok, false, '不存在命令必失败');
   if (r.error && r.error.startsWith('GATE_EXIT_SPAWN_FAIL')) {
-    // 某些环境（无 shell）spawn 级失败
-    assert.ok(true);
+    // 某些环境（无 shell）spawn 级失败：失败须归类为 spawn 级，不得被误判为超时
+    // （依据 lib/state/command-exec.js 的 spawn 级分支返回 timedOut:false，与 GATE_EXIT_TIMEOUT 分支互斥）
+    assert.equal(r.timedOut, false, 'spawn 级失败不得被归类为超时：' + r.error);
   } else {
     assert.equal(r.error, null);
     assert.ok(r.exitCode !== 0, 'shell 返回非 0 退出码：' + r.exitCode);

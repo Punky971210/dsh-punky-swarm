@@ -136,8 +136,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     assert.equal(mountedLines(ctxA.calls).length, 1, '静态装配先挂载（watch capability enabled）→ 被对账卸载');
     // 行为断言：applied.watch（watchInstalledCfg）已随启动对账对齐 overlay——enabled=false（阈值未覆盖 → 默认）
     assert.deepEqual(getAppliedWatch(routesA),
-      { enabled: false, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
-      '启动对账后生效快照 enabled=false（引擎按持久化覆盖关；5 键全形含默认阈值）');
+      { enabled: false, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+      '启动对账后生效快照 enabled=false（引擎按持久化覆盖关；7 键全形含默认阈值 + D-2/D-4 两档）');
   } finally {
     disposerA();
   }
@@ -153,8 +153,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
       assert.ok(bootA2[0].includes('re-mounted') && bootA2[0].includes('longrun=false'),
         'overlay longrun.enabled:false → re-mounted（longrun=false）（实际: ' + bootA2[0] + '）');
       assert.deepEqual(getAppliedWatch(routesA2),
-        { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 1 },
-        '启动对账后长跑探针开关重启即对齐（applied.watch.longrun.enabled=false；阈值默认保留）');
+        { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+        '启动对账后长跑探针开关重启即对齐（applied.watch.longrun.enabled=false；阈值与 D-2/D-4 两档默认保留）');
       assert.equal(ctxA2.calls.warn.length, 0, '对账路径零 warn');
       assert.equal(ctxA2.calls.error.length, 0, '对账路径零 error');
     } finally {
@@ -175,8 +175,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
       assert.equal(bootRemountLines(ctxB.calls).length, 0, '快照一致 → 零 [boot-overlay] remount 日志（幂等 no-op；实际: ' + ctxB.calls.info.join(' || ') + '）');
       assert.equal(mountedLines(ctxB.calls).length, 1, '静态引擎挂载保持（对账未误卸载）');
       assert.deepEqual(getAppliedWatch(routesB),
-        { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000 }, scanIntervalMinutes: 0.1 },
-        '生效快照 = 静态出厂 5 键全形（enabled/longrun 默认开 + 阈值默认）');
+        { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 0.1 },
+        '生效快照 = 静态出厂 7 键全形（enabled/longrun 默认开 + 阈值默认 + D-2/D-4 两档默认）');
       assert.equal(ctxB.calls.warn.length, 0, '启动对账路径零 warn（实际: ' + ctxB.calls.warn.join(' || ') + '）');
       assert.equal(ctxB.calls.error.length, 0, '启动对账路径零 error');
       // 行为正场景：对账 no-op 后引擎照常扫描——超时 stint（25min 前派发）经静默 tick 产候选（≤ 1 个档期 + 余量）
@@ -203,8 +203,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
         'overlay 阈值变化 → re-mounted（enabled/longrun 保持默认开）（实际: ' + bootC[0] + '）');
       assert.equal(mountedLines(ctxC.calls).length, 1, '静态引擎先挂载 → 被对账以新阈值重建');
       assert.deepEqual(getAppliedWatch(routesC),
-        { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000 }, scanIntervalMinutes: 1 },
-        '启动对账后生效快照阈值对齐 overlay（重启即生效，供面板回显/确认轮询）');
+        { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
+        '启动对账后生效快照阈值对齐 overlay（重启即生效，供面板回显/确认轮询）；D-2/D-4 两档未覆盖 → 默认');
       assert.equal(ctxC.calls.warn.length, 0, '对账路径零 warn');
       assert.equal(ctxC.calls.error.length, 0, '对账路径零 error');
     } finally {

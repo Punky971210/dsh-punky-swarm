@@ -8,6 +8,20 @@
         # toolVersion 可选覆盖引擎版本。关闭（false）则零运行时开销，行为与既有版本完全一致。
         aip:
           enabled: true
+        # 模式跟随（2026-09-16 用户裁决：**全局装载、不全局生效**）：蟛蜞治理（难度门禁 / G1 档位门禁 /
+        #   套件工具）只在这些 agent preset 的会话里生效；**名单外模式门禁全放行且不计数**（其他模式零影响）。
+        #   `jiufeng` 为**旧 preset id 的过渡别名**（改名前的会话 header 已记该值）——保留以保证既有会话
+        #   续跑且治理不中断；待存量会话结束后于下个大版本移除。
+        #   热更：<root>/config/runtime.json 写 {"modes":{"gate":[...]}} 即生效、无需重启；
+        #   `null` = 回到旧行为（全模式生效），`[]` = 显式停用。缺省（未配置）亦为全模式生效。
+        modes:
+          gate: ['punky-preset', 'jiufeng']
+        # 派发套件（C/E 阶段）：引擎自派（lane_dispatch → ctx.subagents.startContinuable）所用宿主
+        #   subagent provider 名。宿主默认 provider = `spawn`（dsh-base 挂载 dsh-subagent-spawn-in-process,
+        #   providerName: spawn）；`gate` 缺省 `'warn'`（只留痕不拦）——切 `enforce` 的前提是模式跟随已活体验证通过，
+        #   否则非白名单模式的 `subagent` 派发会被 `GATE_SUBAGENT_OUTSIDE_LANES` 卡死。
+        dispatch:
+          provider: spawn
         # 能力补全装配（默认全开——AIP 为主线 + 治理能力全开；显式 enabled:false 可逐键关闭）
         # 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only，不自动结算）；
         #   autoFail=false（默认）异常不自动 member_settle failed；failConfidence 为 loop_deadlock 自动 failed 的置信阈值。
@@ -80,9 +94,9 @@
             enabled: true      # 默认开启；空规则表 → decide 恒 ALLOW → 零行为变化
             rules: []          # 规则表（空=零拦截）；Rule 结构见 lib/governance/types.ts
             # preset 装载键：引用随包预设（presets/hook-rules/ 三 JSON，注册 id 枚举：
-            #   l1-sensitive / l2-resource / compose——不接受任意路径），保序展开拼接至 rules（inline rules 在后）。
-            #   preset: 'l1-sensitive' 或 preset: ['l1-sensitive', 'l2-resource']（= compose 逐条等价，二选一互斥引用——
-            #   同批引用 compose + l1-sensitive 会产生重复 id → 装载失败回退空表 + warn，宁空勿半）。
+            #   l1-sensitive / l2-resource / l3-tool-ban——不接受任意路径），保序展开拼接至 rules（inline rules 在后）。
+            #   preset: ['l1-sensitive', 'l2-resource']（数组 = 多选叠加；compose 组合项 2026-09-14 已废除——
+            #   引用未注册 id 会装载失败回退空表 + warn，宁空勿半）。
             #   runtime.json 热更示例：{"governance":{"hook":{"preset":["l1-sensitive","l2-resource"]}}}（热更即时生效）。
             #   出厂不默认启用任何 preset（本键缺省 = 空表零拦截不变，与 rules:[] 出厂安全默认严格一致）——
             #   需启用时经 runtime.json 下发或装配 config 注入；preset 文件内容随包版本发布生效（boot 装载一次）。

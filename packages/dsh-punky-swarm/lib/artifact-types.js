@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 通用产物类型注册表
 // 定位：通用任务治理模式——登记产物类型 → 层/目录前缀的约定，供校验与查询；
-// 不绑定任何团队模板（jiufeng 四件套只是使用者，产物内部格式归模板层）。
+// 不绑定任何团队模板（punky-preset 四件套只是使用者，产物内部格式归模板层）。
 // 三层目录约定：plan/（任务层）、exec/（执行层）、audit/（审计层），与 wave-plan 路径契约一致。
 
 export const ARTIFACT_TYPES = [

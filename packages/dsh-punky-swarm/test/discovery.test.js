@@ -40,11 +40,11 @@ const TOOLS = [
 ];
 const AGENT_DESCRIPTORS = [
   {
-    agentId: 'jiufeng.exec.coder', name: 'coder', description: 'spec 驱动编码+自检',
+    agentId: 'punky-preset.exec.coder', name: 'coder', description: 'spec 驱动编码+自检',
     version: '1.0.0', skills: [{ skillId: 'dsh.skill.dev-coder', name: 'dev-coder', description: '编码', version: '1.0.0', triggerConditions: [] }],
   },
   {
-    agentId: 'jiufeng.audit.reviewer', name: 'reviewer', description: '评审验收',
+    agentId: 'punky-preset.audit.reviewer', name: 'reviewer', description: '评审验收',
     version: '1.0.0', skills: [{ skillId: 'dsh.skill.code-review', name: 'code-review-guideline', description: '代码审查', version: '1.0.0', triggerConditions: [] }],
   },
 ];
@@ -180,9 +180,9 @@ test('discover explicit：按名称/能力查询命中 + ranking + acsMap', () =
 test('discover explicit：按智能体查询（agent-descriptor 目录）', () => {
   const svc = makeService();
   const r = svc.discover({ query: 'coder' });
-  assert.ok(r.result.acsMap['jiufeng.exec.coder'], 'agent 描述应入 acsMap');
+  assert.ok(r.result.acsMap['punky-preset.exec.coder'], 'agent 描述应入 acsMap');
   const hits = r.result.agents[0].agentSkills;
-  assert.ok(hits.some((h) => h.aic === 'jiufeng.exec.coder'));
+  assert.ok(hits.some((h) => h.aic === 'punky-preset.exec.coder'));
 });
 
 test('discover explicit：无命中 → 空 agents + 空 acsMap（不臆造）', () => {
@@ -198,7 +198,7 @@ test('discover filtered：只按 filter 过滤，query 被忽略', () => {
   const r = svc.discover({ type: 'filtered', query: 'ignored', filter: { conditions: [{ field: 'name', op: 'eq', value: 'coder' }] } });
   const hits = r.result.agents[0].agentSkills;
   assert.ok(hits.length >= 1);
-  assert.ok(hits.every((h) => h.aic === 'jiufeng.exec.coder'));
+  assert.ok(hits.every((h) => h.aic === 'punky-preset.exec.coder'));
 });
 
 test('discover trending：随机打散返回 ≤ limit', () => {

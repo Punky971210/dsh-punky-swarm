@@ -29,10 +29,13 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-// 缺省默认开：14（core 11 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 = 20；
-// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 21）。断言按新契约更新（旧「14 工具」为旧行为）。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
-const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 20
+// 缺省默认开：14（core 12 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 26；
+// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 27）。断言按新契约更新（旧「14 工具」为旧行为）。
+// 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口，发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
+// 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
+// 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**；工具是机制、门是策略）⇒ 25 → 26。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'handoff_submit', 'handoff_view', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 26
 
 // 注册上下文（enabled 开关两态）
 function makeCtx(enabled) {
@@ -44,7 +47,7 @@ function makeCtx(enabled) {
   return { ctx, made, registered };
 }
 
-test('生成：缺省 20 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
+test('生成：缺省 26 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
   const { made } = makeCtx(true);
   const catalog = made.catalog;
   assert.ok(catalog, 'enabled=true 时 register() 后 catalog 非空');
@@ -104,8 +107,9 @@ test('生成：4 项透传 2 项派生（inputParam 与 defineTool 归一化结�
       assert.deepEqual(d.inputParam.properties.box.enum, ['inbox', 'outbox', 'broadcast']);
     }
   }
-  // 抽样：wave_plan required=['batchId','tasks']；mailbox_read required=['batchId','box']（源码实标 req）
-  assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks']);
+  // 抽样：wave_plan required=['batchId','tasks','team']（【P1 同步】`team` 已改必填无缺省）；
+  //       mailbox_read required=['batchId','box']（源码实标 req）
+  assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks', 'team']);
   assert.deepEqual(byName.mailbox_read.inputParam.required, ['batchId', 'box']);
   assert.equal(byName.wave_plan.inputParam.type, 'object');
   // outputParam 与 output.schema 同构（深比较，键序无关）
@@ -162,7 +166,7 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('端点：enabled=true 时 /tools 已注册并返回 {count:19, tools} HTTP 200', () => {
+test('端点：enabled=true 时 /tools 已注册并返回 {count:26, tools} HTTP 200', () => {
   const { made } = makeCtx(true);
   const { routes } = apiWithCatalog(made.catalog);
   const route = routes.find((r) => r.path === '/api/dsh-punky-swarm/tools');

@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 存在理由：被测代码存在**真实的用户主目录派生写点**，且它们在测试里不可回避——
 //   `lib/index.js` 的 `apply()` 以裸调 `syncAssets()`（无 home 实参）触发资产同步，落 `~/.agents/skills`
-//   与 `~/.dsh/.agent-presets`；同处 `~/.dsh/jiufeng` 由 `homedir()` 拼出引擎根；审计 sink 落
+//   与 `~/.dsh/.agent-presets`；同处 `~/.dsh/punky-preset` 由 `homedir()` 拼出引擎根；审计 sink 落
 //   `<DSH_HOME>/logs/punky-swarm`（DSH_HOME 缺省兜底 `homedir()/.dsh`）。任何直接 import `apply()` 的
 //   测试文件（本包现有 9 个）在进程内首调即触达这些写点。
 //

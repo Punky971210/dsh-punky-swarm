@@ -42,7 +42,7 @@ function tmpRoot() {
 // 静态 config（模拟 cordis.patch.yml 宿主合并结果）：含既有 schema 路径
 function staticConfig() {
   return {
-    root: '~/.dsh/jiufeng',
+    root: '~/.dsh/punky-preset',
     capabilities: {
       trajectory: { enabled: true, autoFail: false },
       watch: { enabled: true, scanIntervalMinutes: 1 },

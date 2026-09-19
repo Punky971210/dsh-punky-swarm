@@ -10,7 +10,7 @@
 **构图/结构参考引导生图**：用一张参考图（构图/边缘/线稿/姿态/深度）经 ControlNet 约束 SDXL 1.0 base 的采样过程，产出「保留参考图构图结构、内容按提示词语义重绘」的海报底图。典型场景（cg-reference §0）：
 
 - 参考图构图保持 → 文案重绘（Img2Img+CN 约束构图，保留原图结构、风格更自由）；
-- 主体位置/边缘走向/画面分区约束 → 海报底图向排版留白仍由 CSS 层承载；
+- 主体位置/边缘走向/画面分区约束 → 海报底图向排版留白仍由**文字图层**承载（旧称「CSS 层」已作废）；
 - 8GB 档：单 CN、fp16、≤1024 基准（cntest 实测 896×1152 首跑即成功，39.9s/张）。
 
 **双分支/条件用法**：`cn_enabled=false` → 纯 poster-sdxl-base txt2img 链（节点 1–7，等价既有 poster 配方，零回归）；`cn_enabled=true` → 12 节点 CN 构图引导链。schema 兼容性关键：默认 false，老调用不变。
@@ -95,7 +95,7 @@ workflow JSON 以 `<槽名>` / `<槽名: 默认>` 标记注入点（同 poster �
 |---|---|---|
 | Q-CN1 | 构图遵循 | 产出主体位置/分区/边缘走向与参考图构图骨架一致（对照 cn_ref_image 与提示图）；非构图漂移/参考失效 |
 | Q-CN2 | 主体-语义一致 | 产出主体与 positive 描述一致、非纯参考图复制（CN 引导结构、文案决定内容）；无边缘线僵硬复制伪影 |
-| Q-CN3 | 画质基线 | 沿用 poster Q3/Q4：negative 覆盖 text/watermark/low quality/blurry/deformed/extra limbs；图内不画字（CSS 层）；无 CN 引入的带状/断层伪影 |
+| Q-CN3 | 画质基线 | 沿用 poster Q3/Q4：negative 覆盖 text/watermark/low quality/blurry/deformed/extra limbs；图内不画字（**文字图层**）；无 CN 引入的带状/断层伪影 |
 | Q-CN4 | seed 挑样 + 回执 | 同参数 ≥2 seed 挑样 1 交付（证据入 evidence，写定种子供复跑）；审计回执含 19 槽快照（11 poster + 8 cn_*） |
 
 ## 9. 审计回执模板（填好后随产物归档）

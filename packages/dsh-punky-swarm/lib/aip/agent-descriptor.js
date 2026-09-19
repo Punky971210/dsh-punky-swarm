@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 文件 agent-descriptor：国标 P4（GB/Z 185.4-2026《智能体描述》）描述生成器
 // 契约：纯函数——输入装配配置（team/layer/role/skills）+ 引擎信息，输出每 role 一份描述 JSON；
 //       零副作用、不消费运行时、可单测。
-// ⚠ 2026-08 校准（覆盖旧 14+8 口径）：字段集以 ACS（Agent Capability Specification）原文为准——
+// ⚠ 字段集校准（覆盖旧 14+8 口径）：字段集以 ACS（Agent Capability Specification）原文为准——
 //   registry-server/app/agent/acsSchema.json（JSON Schema 全文）为逐字字段来源；
 //   旧「14+8 兼容映射层」（toLegacyDescriptor / toLegacySkill + ALL_TOOLS / LAYER_CAPABILITIES）
 //   已移除：ACPs 兼容路径中无调用——ACPs 描述直接消费 buildAgentDescriptor 的 ACS 格式
@@ -76,9 +76,9 @@ export function buildSkillDescriptor(skillName, meta = {}, engineInfo = {}) {
 /**
  * 装配角色 → ACS AgentCapabilitySpec（Agent 描述，逐字字段名见 acsSchema.json 根对象）
  * 必填 14 键恒输出（值取诚实推导默认，可经 engineInfo 覆盖）；可选 6 键仅在提供时输出。
- * 派生值说明（诚实标注，spec §3.2）：
+ * 派生值说明（诚实标注）：
  * - aic：注册服务分配的 OID 身份码——本引擎无 ARSP 注册，输出派生占位 `${team}.${layer}.${role}`，
- *   真实 AIC 需按 spec §3.4（10 级编码 + CRC-16 校验）由注册服务分配后经 engineInfo.aic 覆盖；
+ *   真实 AIC 需按 AIC 规范（10 级编码 + CRC-16 校验）由注册服务分配后经 engineInfo.aic 覆盖；
  * - active：默认 true（引擎装配角色即可用），engineInfo.active 可覆盖；
  * - lastModifiedTime：ISO 8601；engineInfo.lastModifiedTime ?? engineInfo.generatedAt ?? 当前时刻；
  * - provider：{ countryCode: 'CN', organization: owner ?? 'dsh' }（AgentProvider 全可选字段）；
@@ -100,7 +100,9 @@ export function buildSkillDescriptor(skillName, meta = {}, engineInfo = {}) {
  * @returns {object} ACS AgentCapabilitySpec
  */
 export function buildAgentDescriptor(assembly, layer, role, engineInfo = {}) {
-  const team = assembly.team ?? 'generic';
+  // P1（2026-09-16，D-3）：`?? 'generic'` 兜底已清退（`generic` 已废除，留着会成第二默认值真源）——
+  //   装配未声明 team ⇒ 空串（如实「未声明」，不再把已废团队名写进 AIC 派生占位）。
+  const team = assembly.team ?? '';
   const layerCfg = assembly.layers?.[layer];
   const skillNames = Array.isArray(layerCfg?.skills?.[role]) ? layerCfg.skills[role] : [];
   const skillMetaMap = engineInfo.skillMeta ?? {};

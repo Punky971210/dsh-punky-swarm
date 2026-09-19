@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   键注册表 consumers 标注），无共享调用路径，无需改动任何调用代码。
 import { installEvidenceCapture } from './evidence.js';
 // resolveVerifyConfig/VERIFY_DEFAULTS 统一归口 lib/schema.js（注册表 default：
-//   assembly-schema lane 落地同款实现，本文件不再自包含双实现——语义一致，消费路径单点，防未来字段漂移）
+//   同款实现已在装配 schema 侧落地，本文件不再自包含双实现——语义一致，消费路径单点，防未来字段漂移）
 import { VERIFY_DEFAULTS, resolveVerifyConfig } from '../schema.js';
 export { VERIFY_DEFAULTS, resolveVerifyConfig };
 

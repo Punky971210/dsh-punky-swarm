@@ -44,3 +44,12 @@
 - **能力结论**：护栏违规计数升级**默认关**——`governance.hook.escalation.enabled` 出厂为 `false`；显式开启且归属批次的规则拒绝（DENY/NARROW）在窗口内达阈值后，才可能自动暂停批次（批级 paused 自动触发源相应为三，见 governance-technical.md §2）。默认关 = 出厂零行为变化，非缺失项。
 - **证据位点**：触发链与配置键见 [guardrails-hook.md](guardrails-hook.md) §5「事件桥接」（escalation 触发条件）与 §3 配置；批级状态机与触发源见 [governance-technical.md](governance-technical.md) §2。
 - **维持现状 / 未来路径**：维持现状（默认关为出厂语义）。
+
+## §5 第三类判定面（工具黑名单）边界
+
+- **能力结论**：`toolBan` 是**启发式、非沙箱**的写通道路由判定——只收敛「无意识地用 shell（pwsh）写盘代替 edit/write」这一主路径；别名（`sc` / `ni` / `ri` / `mi`）、脚本文件（`pwsh -File x.ps1`）、转义参数、编码方式均可绕过；「内联解释器写」（`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`）**首批不覆盖**（followup）。**不承诺**等价于 OS 级隔离，也**不承诺**编码安全——真正的编码保证来自 edit/write 工具链本身（UTF-8 无 BOM）。
+- **拦截面收窄**（用户裁决 Q3/Q6）：只判「修改或写文件」这一类动作；执行 / 构建 / 测试 / 包管理 / 只读命令一律放行（`npm run build`、`npm test`、`node x.mjs`、`git status`、`Get-ChildItem` 均不命中）——构建与测试本身要写盘，拦它们会断裂常规开发闭环。
+- **与执行引擎无关**（用户裁决 Q4）：判定实现在护栏内（`lib/governance/tool-ban.ts`），**不 import / 不修改** `lib/tools/readonly.js`（任务难度门禁「只读侦察面」在执行侧使用的共享判定，服务的是另一个问题：评估前能否跑侦察命令）；两处判定各自独立、互不影响。
+- **生效通道**：① 热加载（`<root>/config/runtime.json` 的 `governance.hook.toolBan`——进 resolved 快照 ⇒ 既有 remount 比较器零改动感知变化 → dispose + 重挂，**免重启**）；② 随包 preset `l3-tool-ban`（引用键，注册 id 枚举需 boot 装载一次，即**重启宿主一次**）。
+- **出厂默认**：`toolBan: []` = 零拦截（与 `rules: []` 同口径，装上即用、不改变既有行为）。
+- **证据位点**：判定链与条目结构见 [guardrails-hook.md](guardrails-hook.md) §2「第三类判定面」与 §3 配置；逐条清单见 `presets/hook-rules/README.md`「L3 工具黑名单」表。

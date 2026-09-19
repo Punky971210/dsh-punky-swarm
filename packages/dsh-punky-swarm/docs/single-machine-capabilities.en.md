@@ -9,7 +9,7 @@
 
 - The plugin runs inside the dsh (DeepSeek Harness) process; orchestration, adjudication and record-keeping all complete inside the local process;
 - The governed objects are a cohort of Agent subprocesses orchestrated in the same process (batches / gates / communication / recovery re-dispatch);
-- A single npm package contains: the plugin engine, the Punky Swarm preset (presets/jiufeng), and the software-team role guide (skills/software-team); on startup the plugin auto-syncs the preset and skills to the user directory — no manual placement needed;
+- A single npm package contains: the plugin engine, the Punky Swarm preset (presets/punky-preset), and the software-team role guide (skills/software-team); on startup the plugin auto-syncs the preset and skills to the user directory — no manual placement needed;
 - The read-only monitoring panel loads with the plugin (the "Punky Swarm cluster" tab in the session view), available on install.
 
 ## 2. Zero Cloud Dependency / Zero External Services
@@ -29,7 +29,7 @@
 
 - The governance range is the cluster orchestration **inside a single dsh plugin process** (batch-level three-layer gates + call-level guardrails, two layers; see governance-technical.en.md / guardrails-hook.en.md);
 - Batch/member state uses the state file as the single source of truth; events are fully recorded and auditable;
-- Crash recovery is checkpoint preservation + recovery audit + idle re-dispatch (new workers can query checkpoints to skip completed steps); **no automatic resume** — failed lanes stay terminal, redo opens a new batch;
+- Crash recovery is checkpoint preservation + recovery audit + **in-flight lanes drop to `idle` (the idle state, not a crash state) and may be re-dispatched (rework/resume)** (new workers can query checkpoints to skip completed steps); **no automatic resume** — failed lanes stay terminal, redo opens a new batch;
 - Cross-machine distributed cluster sync, multi-machine orchestration, cost control and model tiering are outside the provided range (see §8 architectural boundaries in governance-technical.en.md).
 
 ## 5. Determinism and Zero Dependency

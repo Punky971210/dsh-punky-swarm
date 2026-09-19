@@ -98,9 +98,16 @@ test('ACS：buildAgentDescriptors 每 role 一份（7），aic 派生唯一', ()
   assert.equal(ds.length, ROLE_COUNT);
   const aics = ds.map((d) => d.aic);
   assert.equal(new Set(aics).size, ROLE_COUNT, 'aic 全局唯一');
+  // aic 派生占位 = `<team>.<layer>.<role>`；punky-preset 团队装配退役后 DEFAULT_ASSEMBLY.team = software-team
+  assert.deepEqual(aics, [
+    'software-team.plan.coordinator', 'software-team.plan.designer',
+    'software-team.exec.coder', 'software-team.exec.tester', 'software-team.exec.reviewer',
+    'software-team.audit.supervisor', 'software-team.audit.doc-manager',
+  ], 'aic 前缀取装配 team（software-team），逐 role 一份且层归属正确');
+  assert.equal(aics.some((a) => a.startsWith('punky-preset.')), false, 'punky-preset 团队装配已退役：不得再产出 punky-preset 前缀 aic');
   const coder = ds.find((d) => d.name === 'coder');
-  assert.equal(coder.aic, 'jiufeng.exec.coder');
-  assert.deepEqual(coder.skills.map((s) => s.name), ['dev-coder', 'efficient-edit', 'codebase-design']);
+  assert.equal(coder.aic, 'software-team.exec.coder');
+  assert.deepEqual(coder.skills.map((s) => s.name), ['test-driven-development', 'codebase-design', 'receiving-code-review', 'requesting-code-review'], 'coder 技能集 = software-team 装配声明（逐字）');
 });
 
 test('ACS：engineInfo 覆盖可选/派生字段（endPoints/securitySchemes/capabilities/iconUrl/active/aic）', () => {
@@ -138,12 +145,12 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
 });
 
 // —— 接线层（register.js）——
-test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 20 工具（P1-01 默认开）', () => {
+test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 26 工具（P1-01 默认开 + lane_dispatch + P3a batch_control + P1 handoff 两件）', () => {
   const { made } = makeCtx(true);
   assert.ok(made.agentCatalog, 'enabled=true 时 register() 后 agentCatalog 非空');
   assert.equal(made.agentCatalog.list().length, ROLE_COUNT);
   assert.ok(made.catalog, '既有 catalog 不受影响');
-  assert.equal(made.catalog.list().length, 20); // P1-01 缺省默认开：14 + lane_heartbeat + lane_longrun + worktree 四件（logs 缺省关）
+  assert.equal(made.catalog.list().length, 26); // P1-01 缺省默认开：core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc（logs 缺省关；2026-09-16 P3a control lane +batch_control ⇒ 23→24；2026-09-17 P1 +handoff_submit/handoff_view 常驻注册 ⇒ 25→26）
   for (const d of made.agentCatalog.list()) {
     for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '接线输出缺 ACS 键 ' + k);
   }

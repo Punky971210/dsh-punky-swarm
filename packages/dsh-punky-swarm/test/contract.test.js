@@ -19,8 +19,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { topoWaves, buildWavePlan, validateWavePlan, assembleCmd, LAYERS } from '../lib/wave-plan.js';
 
-const jiufengAssembly = {
-  team: 'jiufeng',
+const punkyPresetAssembly = {
+  team: 'punky-preset',
   layers: {
     plan: { roles: ['coordinator', 'designer'], skills: { coordinator: ['dev-planner'], designer: ['dev-designer', 'spec-writing'] } },
     exec: { roles: ['coder', 'tester'], skills: { coder: ['dev-coder', 'efficient-edit'], tester: ['dev-tester'] } },
@@ -29,22 +29,28 @@ const jiufengAssembly = {
 };
 
 function threeTierTasks() {
+  // 【r2 同步 · A1】旧 fixture 的 plan 声明了 `plan/task-tree.json` 但**无任何 lane consume**：
+  //   新语义下该悬空产物在建批期即拒建批（`GATE_ORPHAN_PRODUCT`，A1 主防线）。
+  //   修法是**补下游 consume**（不是删声明、也不是放宽门禁）⇒ 由 audit lane 消费 task-tree（验收需核对任务树）。
   return [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md', 'plan/task-tree.json'], cmd: '产出 spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/main.py'], cmd: '实现', deps: ['p1'] },
-    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md', 'exec/e1/main.py'], produce: ['audit/review.md', 'audit/gap-list.json'], cmd: '审查', deps: ['e1'] },
+    { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md', 'plan/task-tree.json', 'exec/e1/main.py'], produce: ['audit/review.md', 'audit/gap-list.json'], cmd: '审查', deps: ['e1'] },
   ];
 }
 
-test('generic（无 layer）保持向后兼容，无前缀注入', () => {
+test('无 team 直调（无 layer）不再回落 generic：plan.team = undefined，无前缀注入（P1 同步）', () => {
+  // 【P1 同步 · 读端口径】`lib/wave-plan.js` 的 `team = 'generic'` 缺省已删除（读端不再有第二个默认值真源）⇒
+  //   直调不传 `team` 时 `plan.team` 为 `undefined`；工具面则**必填**（缺 ⇒ 参数面即拒，见 wave_plan schema）。
+  //   本用例判据（无前缀注入 + plan 合法）逐字不变，只把"缺省值"的期望从 `'generic'` 改为 `undefined`。
   const plan = buildWavePlan({ batchId: 'b-g', tasks: [{ id: 't1', cmd: 'hi' }, { id: 't2', cmd: 'x', deps: ['t1'] }] });
-  assert.equal(plan.team, 'generic');
+  assert.equal(plan.team, undefined, '直调缺省不再回落 generic（P1：读端兜底已清）');
   assert.equal(plan.wavePlan[0].tasks[0].cmd, 'hi');
   assert.equal(validateWavePlan(plan), true);
 });
 
 test('三层正常：跨层引用/路径/有 exec 必有 audit 通过，cmd 注入 role+skill 前缀', () => {
-  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'jiufeng', assembly: jiufengAssembly });
+  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'punky-preset', assembly: punkyPresetAssembly });
   const flat = plan.wavePlan.flatMap((w) => w.tasks);
   const e1 = flat.find((t) => t.id === 'e1');
   const a1 = flat.find((t) => t.id === 'a1');
@@ -93,7 +99,7 @@ test('assembleCmd：前缀组合与空输入', () => {
 });
 
 test('validateWavePlan：篡改 layer / 跨层不一致拒绝', () => {
-  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'jiufeng', assembly: jiufengAssembly });
+  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'punky-preset', assembly: punkyPresetAssembly });
   const forged1 = JSON.parse(JSON.stringify(plan));
   forged1.wavePlan[0].tasks[0].layer = 'bogus';
   assert.throws(() => validateWavePlan(forged1), /layer invalid/);

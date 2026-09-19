@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // governance/receipt-store.js —— 拒绝收据落盘（JS 文件 IO，对齐 evidence.js 模式）
 // 位置：<root>/governance/refusals/<sessionId>/<receiptId>.json（原子写 tmp+rename，对齐 evidence.js writeBlobAtomic）
 //      + <root>/governance/refusals/ledger-<sessionId>.jsonl 追加（对齐 evidence.js appendLedger）
-// root = 引擎根（~/.dsh/jiufeng）。
+// root = 引擎根（~/.dsh/punky-preset）。
 // 内容四要素：attempted_params（attemptedParams）/ 裁决（decision.primitive+priority+reason）/
 //   理由（decision.reason）/ ts；另含 receiptId、tool、callId、sessionId、ruleRefs。
 // 哈希锚定（证据信封简版）：writeRefusal 写 anchor

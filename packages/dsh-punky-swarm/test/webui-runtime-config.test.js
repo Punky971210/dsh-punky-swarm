@@ -23,6 +23,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
+import { createApi } from '../lib/api.js';
+import { createStore } from '../lib/state/store.js';
 
 const TMP_BASE = 'D:\\dsh\\_tmp\\dsh-tmp';
 fs.mkdirSync(TMP_BASE, { recursive: true });
@@ -33,7 +35,7 @@ const VALID = {
   governance: {
     hook: {
       enabled: true,
-      preset: 'l1-sensitive',
+      preset: ['l1-sensitive'],
       escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },
       flags: { narrow: false },
     },
@@ -78,11 +80,16 @@ test('校验-4 enabled 非布尔 → 400 invalid-value', () => {
   }
 });
 
-test('校验-5 preset 值域：合法 id 过 / 未知 id → unknown-preset / 非法形态与空数组 → invalid-value', () => {
+test('校验-5 preset 值域：仅接受注册 id 数组（多选）/ 单值字符串形态已废除 / 未知 id → unknown-preset / 非法形态与空数组 → invalid-value', () => {
   assert.equal(validateGovernancePayload(VALID).ok, true);
-  assert.equal(validateGovernancePayload({ governance: { hook: { preset: 'l2-resource' } } }).ok, true);
-  assert.equal(validateGovernancePayload({ governance: { hook: { preset: ['l1-sensitive', 'compose'] } } }).ok, true);
-  const unknown = validateGovernancePayload({ governance: { hook: { preset: 'no-such' } } });
+  assert.equal(validateGovernancePayload({ governance: { hook: { preset: ['l2-resource'] } } }).ok, true);
+  assert.equal(validateGovernancePayload({ governance: { hook: { preset: ['l1-sensitive', 'l3-tool-ban'] } } }).ok, true);
+  // 单选遗产清除（2026-09-14）：单值字符串形态判非法（**即便 id 合法**也不接受）
+  const single = validateGovernancePayload({ governance: { hook: { preset: 'l2-resource' } } });
+  assert.equal(single.ok, false, '单值字符串形态已废除（形态优先于 id 合法性）');
+  assert.equal(firstError(single).code, 'invalid-value');
+  assert.match(firstError(single).message, /must be an array/, '错误信息给出数组写法指引');
+  const unknown = validateGovernancePayload({ governance: { hook: { preset: ['no-such'] } } });
   assert.equal(unknown.ok, false);
   assert.equal(firstError(unknown).code, 'unknown-preset');
   const unknownArr = validateGovernancePayload({ governance: { hook: { preset: ['l1-sensitive', 'bogus'] } } });
@@ -133,8 +140,8 @@ test('校验-7 flags：仅 narrow；narrow 非布尔 / pause、defer 在 flags �
 test('校验-8 规则表冲突守卫：现有 overlay rules 非空 + preset 引用变化 → preset-conflicts-inline-rules；引用不变/无 rules → 过', () => {
   const manual = { governance: { hook: { rules: [{ id: 'R1', match: {}, violations: [] }] } } };
   // 现有文件 hook 含 preset 'l1-sensitive' + 手工 rules；提交换 preset → 拒
-  const curHook = { preset: 'l1-sensitive', rules: manual.governance.hook.rules };
-  const switchR = validateGovernancePayload({ governance: { hook: { preset: 'l2-resource' } } }, curHook);
+  const curHook = { preset: ['l1-sensitive'], rules: manual.governance.hook.rules };
+  const switchR = validateGovernancePayload({ governance: { hook: { preset: ['l2-resource'] } } }, curHook);
   assert.equal(switchR.ok, false);
   assert.equal(firstError(switchR).code, 'preset-conflicts-inline-rules');
   // 省略 preset（=删键回静态）同样视为引用变化 → 拒
@@ -142,10 +149,10 @@ test('校验-8 规则表冲突守卫：现有 overlay rules 非空 + preset 引�
   assert.equal(omitR.ok, false);
   assert.equal(firstError(omitR).code, 'preset-conflicts-inline-rules');
   // preset 引用不变 → 过（可保存其它字段）
-  const same = validateGovernancePayload({ governance: { hook: { enabled: false, preset: 'l1-sensitive' } } }, curHook);
+  const same = validateGovernancePayload({ governance: { hook: { enabled: false, preset: ['l1-sensitive'] } } }, curHook);
   assert.equal(same.ok, true);
   // 无手工 rules → 任意切换过
-  const noRules = validateGovernancePayload({ governance: { hook: { preset: 'l2-resource' } } }, { preset: 'l1-sensitive' });
+  const noRules = validateGovernancePayload({ governance: { hook: { preset: ['l2-resource'] } } }, { preset: ['l1-sensitive'] });
   assert.equal(noRules.ok, true);
 });
 
@@ -192,12 +199,12 @@ test('写-2 读-改-写保留：其它顶层键 + 手工 rules 原样保留；es
   const base = {
     aip: { enabled: true },
     capabilities: { discovery: { enabled: true } },
-    governance: { hook: { enabled: false, preset: 'l1-sensitive', rules: manualRules, escalation: { enabled: true, threshold: 5 } } },
+    governance: { hook: { enabled: false, preset: ['l1-sensitive'], rules: manualRules, escalation: { enabled: true, threshold: 5 } } },
   };
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(base, null, 2));
   const svc = createRuntimeConfigService({ root });
   // 同 preset 提交（表单保持 preset 选择）→ 守卫过；rules 保留
-  const out = svc.writeGovernance({ governance: { hook: { enabled: true, preset: 'l1-sensitive', flags: { narrow: true } } } });
+  const out = svc.writeGovernance({ governance: { hook: { enabled: true, preset: ['l1-sensitive'], flags: { narrow: true } } } });
   assert.equal(out.ok, true);
   const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
   assert.equal(parsed.aip.enabled, true, '其它顶层键保留');
@@ -214,7 +221,7 @@ test('写-3 preset 删键回出厂（省略 preset 键）；escalation 整段合
   const dir = path.join(root, 'config');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(
-    { governance: { hook: { enabled: true, preset: 'l1-sensitive', escalation: { enabled: true, threshold: 7, windowMs: 300000 } } } }, null, 2));
+    { governance: { hook: { enabled: true, preset: ['l1-sensitive'], escalation: { enabled: true, threshold: 7, windowMs: 300000 } } } }, null, 2));
   const svc = createRuntimeConfigService({ root });
   // 省略 preset → 删键回静态出厂（叠加语义 T4-4 模式）
   const out = svc.writeGovernance({ governance: { hook: { enabled: true, escalation: { enabled: false } } } });
@@ -246,7 +253,7 @@ test('写-4 validateOverlay 兜底与坏 base 处置：坏 base JSON → 500 不
 test('写-5 400 校验拒绝不落盘（文件保持原样）', () => {
   const root = freshRoot();
   const svc = createRuntimeConfigService({ root });
-  const out = svc.writeGovernance({ governance: { hook: { preset: 'no-such-preset' } } });
+  const out = svc.writeGovernance({ governance: { hook: { preset: ['no-such-preset'] } } });
   assert.equal(out.ok, false);
   assert.equal(out.status, 400);
   assert.equal(firstError(out).code, 'unknown-preset');
@@ -257,12 +264,12 @@ test('写-6 多轮写叠加：enabled 翻转 + preset 切换（无 rules 场景�
   const root = freshRoot();
   const svc = createRuntimeConfigService({ root });
   assert.equal(svc.writeGovernance(VALID).ok, true);
-  const out2 = svc.writeGovernance({ governance: { hook: { enabled: false, preset: 'l2-resource', flags: { narrow: true } } } });
+  const out2 = svc.writeGovernance({ governance: { hook: { enabled: false, preset: ['l2-resource'], flags: { narrow: true } } } });
   assert.equal(out2.ok, true);
   const parsed = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
   assert.deepEqual(parsed.governance.hook, {
     enabled: false,
-    preset: 'l2-resource',
+    preset: ['l2-resource'],
     escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },
     flags: { narrow: true },
   });
@@ -273,7 +280,7 @@ test('写-7 windowSeconds → windowMs 换算归一落盘（×1000；windowSecon
   const svc = createRuntimeConfigService({ root });
   const out = svc.writeGovernance({
     governance: { hook: {
-      enabled: true, preset: 'l1-sensitive',
+      enabled: true, preset: ['l1-sensitive'],
       escalation: { enabled: true, threshold: 3, windowSeconds: 300, primitives: ['DENY'] },
       flags: { narrow: false },
     } },
@@ -330,15 +337,34 @@ test('watch校验-2 watch 子键白名单仅 enabled/longrun：scanIntervalMinut
   }
 });
 
-test('watch校验-3 longrun 键白名单：仅 enabled + 阈值留门 maxDurationMs/noProgressWindowMs；其它 → field-not-allowed', () => {
+test('watch校验-3 longrun 键白名单：enabled + 阈值 maxDurationMs/noProgressWindowMs + 两档开关 staleBatchMs/unconsumedTimeoutMs；其它 → field-not-allowed', () => {
   for (const key of ['scanIntervalMinutes', 'maxMissed', 'foo']) {
     const r = validateWatchPayload({ watch: { longrun: { [key]: 1 } } });
     assert.equal(r.ok, false, `watch.longrun.${key} 必须拒绝`);
     assert.equal(firstError(r).code, 'field-not-allowed');
     assert.equal(firstError(r).field, 'capabilities.watch.longrun.' + key);
   }
-  // 合法：enabled + 双阈值同段过
+  // 合法：enabled + 双阈值 + D-4/D-2 两档开关同段过（白名单已扩两键）
   assert.equal(validateWatchPayload({ watch: { enabled: true, longrun: { enabled: false, maxDurationMs: 999000, noProgressWindowMs: 123000 } } }).ok, true);
+  assert.equal(validateWatchPayload({ watch: { longrun: { staleBatchMs: 86_400_000, unconsumedTimeoutMs: 1_800_000 } } }).ok, true);
+  assert.equal(validateWatchPayload({ watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 0 } } }).ok, true, '显式 0 = 关闭该档，白名单/值域均放行（逃生阀可从 UI 写入）');
+});
+
+test('watch校验-3b D-4/D-2 两档开关值域：非负整数 ms ≥0 过（含 0 = 关闭）；负数/小数/字符串/Infinity/NaN → invalid-value', () => {
+  const lr = (over) => validateWatchPayload({ watch: { longrun: { ...over } } });
+  for (const k of ['staleBatchMs', 'unconsumedTimeoutMs']) {
+    // 放行：0（关闭该档）+ 任意非负整数（无引擎外上封顶）
+    assert.equal(lr({ [k]: 0 }).ok, true, `${k}=0 必须放行（显式关闭语义）`);
+    assert.equal(lr({ [k]: 86_400_000 }).ok, true);
+    assert.equal(lr({ [k]: 1 }).ok, true);
+    // 拒绝：负数 / 小数 / 字符串 / Infinity / NaN
+    for (const bad of [-1, -86_400_000, 1.5, '60000', Infinity, NaN]) {
+      const r = lr({ [k]: bad });
+      assert.equal(r.ok, false, `${k}=${String(bad)} 必须拒绝`);
+      assert.equal(firstError(r).field, 'capabilities.watch.longrun.' + k);
+      assert.equal(firstError(r).code, 'invalid-value');
+    }
+  }
 });
 
 test('watch校验-4 enabled 值域布尔：watch.enabled / longrun.enabled 非布尔 → invalid-value', () => {
@@ -433,7 +459,7 @@ test('watch写-2 读-改-写保留：capabilities 其余子键 + watch 深层键
         longrun: { enabled: true, maxDurationMs: 999000, noProgressWindowMs: 123000 },
       },
     },
-    governance: { hook: { preset: 'l1-sensitive', enabled: true } },
+    governance: { hook: { preset: ['l1-sensitive'], enabled: true } },
   };
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(base, null, 2));
   const svc = createRuntimeConfigService({ root });
@@ -480,11 +506,11 @@ test('watch写-4 双段合并：governance + capabilities.watch 同 body 单保�
   const root = freshRoot();
   const svc = createRuntimeConfigService({ root });
   const out = svc.writeWatch({
-    governance: { hook: { enabled: true, preset: 'l1-sensitive', flags: { narrow: true } } },
+    governance: { hook: { enabled: true, preset: ['l1-sensitive'], flags: { narrow: true } } },
     capabilities: { watch: { enabled: false, longrun: { enabled: false } } },
   });
   assert.equal(out.ok, true);
-  assert.deepEqual(out.written.governance.hook.preset, 'l1-sensitive');
+  assert.deepEqual(out.written.governance.hook.preset, ['l1-sensitive']);
   assert.deepEqual(out.written.capabilities.watch, { enabled: false, longrun: { enabled: false } });
   const parsed = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
   assert.equal(parsed.governance.hook.enabled, true);
@@ -497,7 +523,7 @@ test('watch写-5 双段任一 400 → 整写拒绝（无部分写，文件不落
   const rootA = freshRoot();
   const svcA = createRuntimeConfigService({ root: rootA });
   const a = svcA.writeWatch({
-    governance: { hook: { preset: 'no-such' } },
+    governance: { hook: { preset: ['no-such'] } },
     capabilities: { watch: { enabled: true } },
   });
   assert.equal(a.ok, false);
@@ -511,7 +537,7 @@ test('watch写-5 双段任一 400 → 整写拒绝（无部分写，文件不落
   fs.writeFileSync(path.join(dirB, 'runtime.json'), JSON.stringify({ aip: { enabled: true } }, null, 2));
   const svcB = createRuntimeConfigService({ root: rootB });
   const b = svcB.writeWatch({
-    governance: { hook: { enabled: true, preset: 'l1-sensitive' } },
+    governance: { hook: { enabled: true, preset: ['l1-sensitive'] } },
     capabilities: { watch: { enabled: 'yes' } },
   });
   assert.equal(b.ok, false);
@@ -562,4 +588,88 @@ test('watch写-8 坏 base JSON → 500 unreadable 不回写（与 governance 写
   assert.equal(out.status, 500);
   assert.match(out.error, /unreadable/);
   assert.equal(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'), '{ not-json', '坏 base 不被覆盖');
+});
+
+// ── BOM 读端容忍（2026-09-17 panel-hotfix，缺陷回归锚 BOM-R*）──
+// 活体缺陷：外部工具（PowerShell `Set-Content -Encoding UTF8`）写 <root>/config/runtime.json 会带 UTF-8 BOM，
+//   webui 读端裸 `JSON.parse(readFileSync(..., 'utf8'))` 直接抛 SyntaxError（Node 不剥 U+FEFF）；同一 readOverlay
+//   被读/写两通道共用 ⇒ GET 500 + POST 500，面板彻底不可用（只出「网络错误」且重置无效）。
+// 修复：读端复用 lib/hot/config-watch.js 既有 stripBom（加 export），**禁第三份副本**——仓库内 stripBom 定义
+//   处数量保持 2（hot/config-watch.js + assembly/team-asset.js）。语义只放宽 BOM 容忍，不放宽任何校验。
+const BOM = '\uFEFF';
+const GATES_BASE = { gates: { handoff: { entry: true, settle: true } } };
+const headBytes = (file) => [...fs.readFileSync(file).subarray(0, 3)]
+  .map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+function withBomRoot() {
+  const root = freshRoot();
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runtime.json'), BOM + JSON.stringify(GATES_BASE), 'utf8');
+  return root;
+}
+
+// 端点级取证 harness（直调 handler 形态，对齐 test/api-config.test.js）
+const CONFIG_PATH = '/api/dsh-punky-swarm/config';
+const TRUSTED_HEADERS = { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:3080' };
+function configRoute(root) {
+  const routes = [];
+  const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
+  createApi(ctx, {
+    store: createStore(freshRoot()), root,
+    configEndpoints: {
+      runtimeConfig: createRuntimeConfigService({ root }),
+      trustedHosts: [],
+      applied: () => ({ enabled: true, rules: [], defaults: { deny: 'DENY' }, flags: { pause: false, narrow: false, defer: false }, escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] } }),
+      appliedWatch: () => ({ enabled: true, longrun: { enabled: true }, scanIntervalMinutes: 1 }),
+      presets: () => [{ id: 'l1-sensitive', count: 12 }],
+    },
+  });
+  return routes.find((r) => r.path === CONFIG_PATH);
+}
+function invokeRoute(route, { method = 'GET', headers = TRUSTED_HEADERS, body } = {}) {
+  let status = 0, resBody = null;
+  const res = { writeHead(s) { status = s; }, end(b) { resBody = JSON.parse(b); } };
+  const req = { url: CONFIG_PATH, method, headers };
+  if (body !== undefined) req.body = body;
+  const ret = route.handler(req, res);
+  if (ret && typeof ret.then === 'function') return ret.then(() => ({ status, body: resBody }));
+  return { status, body: resBody };
+}
+
+test('BOM-R1 读端容忍 BOM：带 BOM 的 runtime.json → readOverlay 返回对象而非抛（活体缺陷回归锚）', () => {
+  const root = withBomRoot();
+  const svc = createRuntimeConfigService({ root });
+  assert.deepEqual(svc.readOverlay(), GATES_BASE, 'BOM 不应导致读端抛错（修复前 = SyntaxError: Unexpected token）');
+  // 无 BOM 输入路径行为不变：同内容无 BOM 文件读出的对象逐键相同
+  const plain = freshRoot();
+  fs.mkdirSync(path.join(plain, 'config'), { recursive: true });
+  fs.writeFileSync(path.join(plain, 'config', 'runtime.json'), JSON.stringify(GATES_BASE), 'utf8');
+  assert.deepEqual(createRuntimeConfigService({ root: plain }).readOverlay(), svc.readOverlay());
+});
+
+test('BOM-R2 读-改-写：BOM 基线下两写通道 ok:true；落盘首 3 字节 ≠ EF BB BF 且 gates 段原样保留', () => {
+  const root = withBomRoot();
+  const svc = createRuntimeConfigService({ root });
+  assert.equal(svc.writeGovernance(VALID).ok, true, 'BOM 基线不再归一为 500');
+  assert.equal(svc.writeWatch({ capabilities: { watch: { enabled: false } } }).ok, true);
+  const file = path.join(root, 'config', 'runtime.json');
+  assert.notEqual(headBytes(file), 'EF BB BF', '落盘不带 BOM（写侧归零由本断言固化，防未来回归）');
+  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual(parsed.gates, GATES_BASE.gates, '读-改-写保留：gates 段原样');
+  assert.equal(parsed.governance.hook.preset[0], 'l1-sensitive', 'governance 段已写入');
+  assert.equal(fs.existsSync(path.join(root, 'config', '.runtime.json.tmp')), false, 'tmp 不残留（原子写）');
+});
+
+test('BOM-R3 端点级：BOM 基线 GET /config → 200 四键齐、POST → 200 ok:true（不再 500）', async () => {
+  const root = withBomRoot();
+  const route = configRoute(root);
+  const g = await invokeRoute(route, { method: 'GET' });
+  assert.equal(g.status, 200, '修复前该请求经 api.js catch 归一为 500（活体面板不可用来源）');
+  assert.deepEqual(Object.keys(g.body).sort(), ['applied', 'overlay', 'overlayWatch', 'presets'], 'GET 四键契约不变');
+  assert.equal(g.body.overlay, null, '本基线无 governance 段 → overlay null（键在场）');
+  const p = await invokeRoute(route, { method: 'POST', body: VALID });
+  assert.equal(p.status, 200);
+  assert.equal(p.body.ok, true);
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, 'config', 'runtime.json'), 'utf8'));
+  assert.deepEqual(parsed.gates, GATES_BASE.gates, 'POST 读-改-写后 gates 段仍在');
 });

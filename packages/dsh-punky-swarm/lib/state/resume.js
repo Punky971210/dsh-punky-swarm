@@ -125,7 +125,7 @@ export function laneProgressRead(batch, lane) {
   return batch?.laneProgress?.[lane] ?? null;
 }
 
-// 值级校验：status ∈ running|review（与成员态对齐，不新增成员态 S2）；step/total 正整数且 step ≤ total
+// 值级校验：status ∈ running|review（与成员态对齐）；step/total 正整数且 step ≤ total
 export function isValidLaneProgress(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
   if (p.status !== 'running' && p.status !== 'review') return false;

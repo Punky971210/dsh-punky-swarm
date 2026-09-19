@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /**
- * check-v3-density.mjs — V3 信息密度检查脚本（S1–S4）
+ * check-v3-density.mjs — 信息密度检查脚本（S1–S4）
  *
- * 批次：punky-impl-takeover-0829 / lane e4（exec-roles-script 域）
- * 契约：v3-impl-pack.md（落点 A/B）+ v3-density-design.md §4.3（脚本可测规则）
+ * 契约：SKILL.md / references/roles/*.md 的信息密度规则
  * 规则：
  *   S1 统计任务包顶层键数 >10 → FAIL（SKILL.md §任务包最小结构 json 示例）
  *   S2 Persona 行字符数 >50（CJK 计 1 字符）→ FAIL（roles/*.md ## Persona 段）
- *   S3 roles/*.md 中「约束」行与公共约束模板串匹配数 >0 → FAIL（收敛后应为 0，提示去重）
+ *   S3 roles/*.md 中「约束」行与公共约束模板串匹配数 >0 → FAIL（应为 0，提示去重）
  *   S4 公共语义指针句在 roles 内出现：完整指针句 >0 → FAIL；压缩差异说明 >2 处 → FAIL
- *      （收敛后仅 manager/reviewer 差异说明可保留，≤2 处）
+ *      （仅 manager/reviewer 的差异说明可保留，≤2 处）
  * 用法：node skills/software-team/scripts/check-v3-density.mjs
  * 退出码：全 PASS = 0；任一 FAIL = 1
  */
@@ -25,9 +24,9 @@ const ROLES_DIR = path.join(ROOT, 'references', 'roles');
 
 /** 公共约束模板串（SKILL.md §worker 公共约束 单一来源）——去空白比较，防换行干扰 */
 const PUBLIC_CONSTRAINT = '按真实用户行为操作（点击调用链，禁机器式调接口）；产物落盘 `artifacts/<batchId>/`；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）';
-/** 完整指针句（收敛前 8 角色同句的旧长句） */
+/** 完整指针句（8 角色同句的长句形态） */
 const FULL_POINTER = '协作方式公共语义（checkpoint 纪律 / 三层门禁 / 约束引用格式单一来源）见 SKILL.md §纪律要点 + §三层门禁 + 使用方式 §3 + references/workflow.md §二/§四';
-/** 压缩差异说明（收敛后仅 manager/reviewer 保留） */
+/** 压缩差异说明（仅 manager/reviewer 保留） */
 const COMPACT_POINTER = '协作方式：公共语义单一来源见 SKILL.md；本角色差异如下';
 
 const strip = (s) => s.replace(/\s+/g, '');

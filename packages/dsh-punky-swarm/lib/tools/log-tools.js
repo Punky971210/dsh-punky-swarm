@@ -51,7 +51,7 @@ function assertSafeRelative(p) {
 function summaryOf(e) {
   if (e.type === EVT.EVT_MEMBER_SETTLED) return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
   if (e.type === EVT.EVT_LANE_SKIPPED || e.type === EVT.EVT_LANE_NEEDHUMAN) return e.note ?? '';
-  if (e.type === EVT.EVT_BATCH_PHASE) return (e.from ?? '') + ' -> ' + (e.to ?? '');
+  if (e.type === EVT.EVT_BATCH_PHASE) return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.reason ? ' | ' + e.reason : '');
   if (e.type.startsWith('gate.') || e.type.startsWith('worktree.') || e.type === EVT.EVT_BUDGET_REJECTED) {
     const keys = ['lane', 'code', 'missing', 'detail', 'step', 'total', 'chainId', 'gate'];
     const parts = keys.filter((k) => e[k] !== undefined).map((k) => k + '=' + (Array.isArray(e[k]) ? e[k].join(',') : String(e[k])));

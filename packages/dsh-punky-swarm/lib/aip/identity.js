@@ -29,7 +29,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     本模块 sign 实现为可插拔接口：默认 ECDSA/RSA（node:crypto 原生，可跑可验签），
 //     算法可配置；SM2 留接口位（algorithm='sm2' 显式拒绝并提示），标注『SM2 待正式文本校准』。
 // 装配开关：identity 默认关（config.aip.identity.enabled === true 时调用方才激活本模块 API，
-//   由 lib/assembly/schema.js CAPABILITY_REGISTRY 声明）；不注册新治理工具（20 工具契约不变），
+//   由 lib/assembly/schema.js CAPABILITY_REGISTRY 声明）；不注册新治理工具（**21 工具契约**：2026-09-15 增
+//   `lane_dispatch` 派发套件入口），
 //   身份能力经本模块 API 暴露。零运行时副作用（纯函数 + 可选 store 注入）。
 // -----------------------------------------------------------------------------
 import crypto from 'node:crypto';

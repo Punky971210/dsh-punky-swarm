@@ -27,7 +27,7 @@ import { execFileSync } from 'node:child_process';
 const gitBin = () => process.env.DSH_GIT_BIN ?? 'git';
 
 // git 调用统一契约（仿 study-taskswarm git.ts runGit）：同步、{ ok, stdout, stderr, code }；
-// git 缺失/不可执行 → ok:false + 清晰错误（不挂起、不静默失败，验收 T5）
+// git 缺失/不可执行 → ok:false + 清晰错误（不挂起、不静默失败）
 export function runGit(repo, args, { cwd } = {}) {
   try {
     const out = execFileSync(gitBin(), args, {

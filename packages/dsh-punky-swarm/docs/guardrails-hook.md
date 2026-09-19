@@ -45,10 +45,23 @@
 - **REQUIRE_APPROVAL ask 行为（显式化）**：pre 同步落盘 `ask: {channel:'host-serviceAsk', initiated, requestId(=callId)}`（登记时顺带缓存 decision 快照：primitive/reason/ruleRefs——post 补正零盘读）；post 尽力补记 `outcome`（denied-no-approval / denied-no-agent / denied-rejected / denied-cancelled / unavailable / allowed-once）。**依赖宿主 approval 通道（serviceAsk），无审批服务 / 无 agent = 降级 deny**（行为不变，记录显式化）；allowed-once → allow。**拒绝可见性（受控例外）**：宿主 serviceAsk 在 4 个泛化分支——rejected（`user rejected`）/ cancelled（`was cancelled`）/ unavailable（`no approval channel is available`）/ no-agent（`no agent to route it through`）——会把 ask.reason 覆盖为「工具名级」泛化文本（如 `the user rejected tool "pwsh"`，无护栏标识、无命中规则）；wiring post 观察者对本插件 ask 命中分支做**受控补正**：短路返回 `{kind:'accept', content:[补正文本]}`——补正文本含 `[governance:REQUIRE_APPROVAL 人工闸拒绝（护栏拦截…）]` 护栏标注 + 命中规则（rule id + preset 归属）+ 违规 message + 收据/清单查阅路径（<root>/governance/refusals/… 与 presets/hook-rules/README.md），保 isError、失败降级恒 `next()`（零行为回归）；**denied-no-approval（无审批服务降级，宿主保留 ask.reason 即护栏前缀正文）不补正**（不重复标注）。短路条件严格收窄，触碰「post 恒 next」纪律的边界见 §1/§7。
 - **DEFER/PAUSE 文件态状态机（flag 开启后真实生效）**：`flags.defer: true`（soft 违规）→ 会话挂起延后（状态文件 `<root>/governance/state/<sessionId>.json`，窗口 30s，收据含 `deferMeta`）；`flags.pause: true`（pausable 违规）→ 会话暂停（窗口 60s，收据含 `pauseMeta`）。挂起/暂停期间同会话调用统一 `[governance:DEFER|PAUSE]` deny（reason 含 retry-after / pauseToken / until），**惰性过期自动恢复**（读时清理，无定时器 / 无 resume 端点）；flag-off 折叠 DENY 无状态副作用（与「会话延后/暂停中」可区分）。
 
+### 第三类判定面：工具黑名单（工具 × 行为）
+
+除参数级规则（`rules`）外，护栏另有**一类工具级判定面** `toolBan`（2026-09-14 新增）——**写通道路由**纪律：Agent 写文件应走 `edit` / `write` / `str-replace-editor` 等在册工具，不经 shell（`pwsh`）自建写路径落盘（Windows 下 `>` 重定向与 `Set-Content` / `Out-File` 可能写 GBK 或带 BOM，破坏文件编码头且不可逆）。
+
+- **条目结构**（`ToolBanEntry`）：`id` / `tool` / `behavior`（首批仅 `file-write`）/ `code` / `category?`（缺省 `hard`）/ `message`；
+- **判定**：`matchToolBan`（`lib/governance/tool-ban.ts`）——工具名 + 行为面匹配，`file-write` 由 `judgeFileWriteCommand` 判定（引号掩码 → 剥流合并 → 全串写指示符 → 分段取段首写命令名 → 其余放行；未闭合引号 fail-closed）；
+- **裁决接线**：命中产出 `Violation` 与 `ruleRefs`，与参数规则命中**同列汇入**同一 `classifyViolation` → 缺省 `hard` → **DENY（P2）**；**未改分类器六分路**，收据 / 事件桥接 / 拒绝可见性链路天然复用；
+- **拒绝正文**：携带纠正文本「文件写请改用 edit / write / str-replace-editor 等在册工具」；
+- **收窄口径（拦截面）**：只拦「修改或写文件」这一类动作——重定向（`>` / `>>`）、写动词 cmdlet（Set-Content / Add-Content / Out-File / New-Item / Remove-Item / Move-Item / Copy-Item / Export-Csv…）、落盘参数（`-OutFile` / `find -exec`）、段首写命令名（`rm` / `mv` / `cp` / `del` / `mkdir` / `touch` / `tee` / `chmod`…）；**执行 / 构建 / 测试 / 包管理 / 只读命令一律放行**（`npm run build`、`npm test`、`node x.mjs`、`git status`、`Get-ChildItem` 均不命中——构建与测试本身要写盘，拦它们会断裂常规开发闭环）；
+- **与执行引擎无关**：判定实现在护栏内，**不 import / 不修改** `lib/tools/readonly.js`（后者是任务难度门禁「只读侦察面」在执行侧使用的共享判定，服务的是另一个问题）；
+- **边界（如实标注）**：启发式、**非沙箱**——别名（`sc` / `ni` / `ri` / `mi`）、脚本文件（`pwsh -File x.ps1`）、转义参数、编码方式可绕过；「内联解释器写」（`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`）首批不覆盖（followup）。**不承诺**等价于 OS 级隔离或编码安全——真正的编码保证来自 edit/write 工具链本身。
+
 ## 3. 配置指南与示例规则
 
-- **配置**：`cordis.patch.yml` 顶层键 `governance.hook`——`enabled: true`（**默认开**；显式 `enabled: false` 可关）/ `rules: []` / `defaults.deny: DENY`（fail-closed 兜底，可配其他拒绝类原语，不可为 ALLOW）/ `flags: {pause:false, narrow:false, defer:false}`（原语开关默认关 → 对应类回退 DENY）。
+- **配置**：`cordis.patch.yml` 顶层键 `governance.hook`——`enabled: true`（**默认开**；显式 `enabled: false` 可关）/ `rules: []`（参数级规则）/ `toolBan: []`（第三类工具黑名单，空表=零拦截）/ `defaults.deny: DENY`（fail-closed 兜底，可配其他拒绝类原语，不可为 ALLOW）/ `flags: {pause:false, narrow:false, defer:false}`（原语开关默认关 → 对应类回退 DENY）。
 - **Rule 结构**：`id` / `tools?` / `match{path?,op?,pattern?,value?}` / `violations[{code,category,severity?,message,path?}]` / `narrow?`。
+- **ToolBanEntry 结构（第三类）**：`id` / `tool`（如 `pwsh`）/ `behavior`（`file-write`）/ `code` / `category?`（缺省 `hard`）/ `message`；判定内核与边界见 §2「第三类判定面」。
 
 `match.op` 支持：`eq`（递归深度相等）/ `gt` / `gte` / `lt` / `lte` / `in` / `regex`；`match.path` 为 JSON Pointer（缺省 = 匹配整个 arguments；path 不存在 → 不命中）。`category` 取值：hard / manual_review / ftra / narrowable / pausable / soft / unknown。
 
@@ -127,6 +140,14 @@ governance:
 
   预期：写入后重挂 → 新规则立即拦截 `shutdown` 调用（DENY + 收据落盘），无需重启进程。
 
+  **第三类（工具黑名单）热加载示例**（`toolBan` 面同样进 resolved 快照 → 免重启生效；preset 文件 `l3-tool-ban` 为随包资产，引用键需 boot 装载一次）：
+
+```json
+{ "governance": { "hook": { "toolBan": [ { "id": "L3-W01", "tool": "pwsh", "behavior": "file-write", "code": "L3-W01", "category": "hard", "message": "[preset L3] pwsh 命令含文件写动作：文件写请走 edit / write 等在册工具" } ] } } }
+```
+
+  预期：写入后重挂 → `pwsh` 的文件写命令（如 `Set-Content -Path a.txt -Value x`）立即被 DENY（正文含纠正文本 + 规则引用 `L3-W01（preset l3-tool-ban）` + 收据落盘）；只读命令（`Get-ChildItem`）、构建命令（`npm run build`）照常透传。
+
 ## 7. 边界与不提供项
 
 当前护栏提供进程内、单机、规则表驱动的调用级治理；以下**当前不提供**（均为明确的范围边界陈述，非缺失项）：
@@ -155,7 +176,7 @@ governance:
 - ① 被拒后 Agent 汇报文本（受控补正文本）：会话内即时可见 `[governance:REQUIRE_APPROVAL 人工闸拒绝…]` + 命中规则（rule id + preset 归属）+ 违规 message + 收据路径，Agent 可按违规 message 修正参数后重发合规调用；
 - ② 审批请求 reason（规则引用送达）：reason 尾部「；规则引用：…」，随 approval.request 送达宿主 UI；
 - ③ 收据明细（人工/审计）：`<root>/governance/refusals/<sessionId>/<receiptId>.json`（decision.reason + ruleRefs + attemptedParams + ask.outcome，哈希锚定）+ `ledger-<sessionId>.jsonl` + 批级事件流（见 §4/§5）；
-- ④ 全量规则清单（主动审阅）：`presets/hook-rules/README.md`「逐条规则审阅清单」（l1-sensitive 12 + l2-resource 6，rule id/preset/category/原语/tools/match/message）+ 各 preset JSON。
+- ④ 全量规则清单（主动审阅）：`presets/hook-rules/README.md`「逐条审阅清单」（参数级：l1-sensitive 12 + l2-resource 6；第三类工具黑名单：l3-tool-ban 1——rule id/preset/category/原语/tools/match/message，L3 表另含 behavior/判据摘要）+ 各 preset JSON。
 
 ## 8. 能力边界与取舍
 

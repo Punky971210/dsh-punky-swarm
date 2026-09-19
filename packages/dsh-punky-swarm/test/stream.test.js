@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createStreamHub, hasShortNameSegment } from '../lib/panel/stream.js';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
@@ -272,8 +273,94 @@ test('S14 帧协议 event: mailbox：mailbox 变更信号推送（详情流监�
 test('S15 8.3 短路径预判（hasShortNameSegment）：短路径段命中 → 规避 fs.watch；正常长路径不命中', () => {
   if (process.platform !== 'win32') return; // 短路径形态仅 Windows 判定
   assert.equal(hasShortNameSegment('C:\\Users\\ADMINI~1\\AppData\\Local\\Temp'), true, '8.3 段命中');
-  assert.equal(hasShortNameSegment('C:\\Users\\Administrator\\.dsh\\jiufeng'), false, '长路径不命中');
+  assert.equal(hasShortNameSegment('C:\\Users\\Administrator\\.dsh\\punky-preset'), false, '长路径不命中');
   assert.equal(hasShortNameSegment('C:\\tmp\\foo~2\\bar'), true, '任意目录的 8.3 段命中');
   assert.equal(hasShortNameSegment('C:\\a\\b\\c'), false);
   assert.equal(hasShortNameSegment(''), false);
+});
+
+// ── BOM 读端容忍（2026-09-17 techdebt-bom-reader，缺陷回归锚 BOM-R*）──
+// 缺陷（上游端到端实测复现）：批 JSON 若被外部工具（PowerShell `Set-Content -Encoding UTF8`）写带 UTF-8 BOM，
+//   readEventCount 的裸 `JSON.parse(readFileSync(f,'utf8'))` 直接抛 SyntaxError（Node 不剥 U+FEFF），
+//   被 `catch { return null }` 吞成 null ⇒ SSE batch 帧 eventCount 静默失效（无日志、无降级信号）。
+// 修复：读端复用 lib/hot/config-watch.js 既有 stripBom（与 webui/runtime-config.js#readOverlay 同一单一实现，
+//   禁第三份副本）。只放宽读端对 BOM 的容忍，不放宽任何校验（数组判定 / 存在性短路原样）。
+const BOM = '\uFEFF';
+const BS = 's-stream-bom';
+
+function bomBatchFile(bid) {
+  const dir = path.join(root, 'sessions', BS, 'batches');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, bid + '.json');
+}
+function writeBatchRaw(bid, text) {
+  const f = bomBatchFile(bid);
+  fs.writeFileSync(f, text, 'utf8');
+  return f;
+}
+// 直调 notify 形态（非 S6 的 fs.watch + 挂载等待）：readEventCount 的取值发生在 notifyAll 内，
+//   fs.watch 只决定触发时机；直调消除防抖/挂载时序导致的 flaky（同规格探针 D 段形态）。
+function notifyEventCount(bid) {
+  const hub = createStreamHub({ root });
+  const res = new FakeRes();
+  hub.subscribe(BS, bid, res);
+  hub.notify(BS, 'batch', bid, {});
+  hub.dispose();
+  const f = parseFrames(res).filter((x) => x.event === 'batch' && x.data.batchId === bid);
+  return f.length ? f[f.length - 1].data.eventCount : undefined;
+}
+const head3 = (f) => [...fs.readFileSync(f).subarray(0, 3)]
+  .map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+
+test('S16 BOM 读端（AC-1）：带 BOM 批 JSON ⇒ eventCount 为真实计数（非 null）', () => {
+  const f = writeBatchRaw('bom-2', BOM + JSON.stringify({ batchId: 'bom-2', events: [{}, {}] }));
+  assert.equal(head3(f), 'EF BB BF', '用例输入确带 UTF-8 BOM（防「没写进去却断言通过」）');
+  assert.equal(notifyEventCount('bom-2'), 2, 'BOM 批 ⇒ eventCount === 2（严格数值，非 != null 弱断言）');
+  // 同形无 BOM 对照：stripBom 对非 BOM 输入恒等返回 ⇒ 读数应与带 BOM 一致（恒等替换，非近似）
+  writeBatchRaw('plain-2', JSON.stringify({ batchId: 'plain-2', events: [{}, {}] }));
+  assert.equal(notifyEventCount('plain-2'), 2, '无 BOM 同形批 ⇒ 同样 2');
+});
+
+test('S17 BOM 读端反例（AC-1）：events:[] + BOM ⇒ 0（非 null）；BOM 但 events 非数组 ⇒ 仍 null', () => {
+  writeBatchRaw('bom-empty', BOM + JSON.stringify({ batchId: 'bom-empty', events: [] }));
+  assert.equal(notifyEventCount('bom-empty'), 0, '空数组是「空」不是「读失败」⇒ 严格 0，不得为 null');
+  writeBatchRaw('bom-noev', BOM + JSON.stringify({ batchId: 'bom-noev' }));
+  assert.equal(notifyEventCount('bom-noev'), null, 'events 缺失 ⇒ 仍 null（不放宽为 0）');
+  writeBatchRaw('bom-evstr', BOM + JSON.stringify({ batchId: 'bom-evstr', events: 'nope' }));
+  assert.equal(notifyEventCount('bom-evstr'), null, 'events 非数组 ⇒ 仍 null');
+});
+
+test('S18 读端反例（AC-2）：坏 JSON ⇒ 仍 null 且不向调用方抛错；批文件不存在 ⇒ 仍 null', () => {
+  writeBatchRaw('bad-plain', '{ not-json');
+  writeBatchRaw('bad-bom', BOM + '{ not-json');
+  let v1;
+  let v2;
+  assert.doesNotThrow(() => { v1 = notifyEventCount('bad-plain'); }, '坏 JSON 不得向调用方抛错逃逸（catch 语义保留）');
+  assert.doesNotThrow(() => { v2 = notifyEventCount('bad-bom'); }, '带 BOM 的坏 JSON 同样不抛错');
+  assert.equal(v1, null, '坏 JSON ⇒ 仍 null');
+  assert.equal(v2, null, '带 BOM 的坏 JSON ⇒ 仍 null');
+  assert.equal(fs.existsSync(bomBatchFile('missing')), false, '前置：缺文件确不存在');
+  assert.equal(notifyEventCount('missing'), null, '存在性短路路径不变 ⇒ null');
+});
+
+test('S19 静态（AC-4）：命名 stripBom 定义仍恰 2 处；stream.js 无内联 BOM 剥除副本', () => {
+  const libDir = fileURLToPath(new URL('../lib/', import.meta.url));
+  const hits = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!/\.(js|ts)$/.test(e.name)) continue;
+      if (/^export function stripBom\b/m.test(fs.readFileSync(p, 'utf8'))) {
+        hits.push(path.relative(libDir, p).replace(/\\/g, '/'));
+      }
+    }
+  };
+  walk(libDir);
+  assert.deepEqual(hits.sort(), ['assembly/team-asset.js', 'hot/config-watch.js'], '禁第三份副本：命名定义仍恰 2 处');
+  const src = fs.readFileSync(new URL('../lib/panel/stream.js', import.meta.url), 'utf8');
+  assert.equal(src.includes('\\uFEFF'), false, 'stream.js 无 uFEFF 字面量内联');
+  assert.equal(/charCodeAt\s*\(\s*0\s*\)/.test(src), false, 'stream.js 无 charCodeAt(0) 内联判断');
+  assert.ok(src.includes("import { stripBom } from '../hot/config-watch.js'"), '唯一新增是复用 import');
+  assert.ok(src.includes("JSON.parse(stripBom(readFileSync(f, 'utf8')))"), '读路径经 stripBom');
 });

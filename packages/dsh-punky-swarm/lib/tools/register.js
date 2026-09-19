@@ -49,7 +49,7 @@ export function createTools(ctx, deps) {
   //   缺省配置（config 无 aip 键）→ 合并默认 {enabled:true} → 实际默认开启；enabled === true 时注册工具目录快照并暴露 catalog。
   // 生成器只读遍历 tools，不替换、不包装任何已注册工具对象（红线：既有工具契约不变）。
   // ACS 智能体描述：enabled === true 时按装配配置（config.assembly ?? DEFAULT_ASSEMBLY，
-  //   team 取 config.aip.team ?? 'jiufeng'）经 agent-descriptor 纯函数生成智能体描述目录 agentCatalog
+  //   team 取 config.aip.team ?? 'punky-preset'）经 agent-descriptor 纯函数生成智能体描述目录 agentCatalog
   //   （ACS 字段集，见 lib/aip/agent-descriptor.js）；enabled=false 时恒为 null、零开销。
   const aipCfg = readCapability(deps?.config, 'aip');
   const aipEnabled = aipCfg?.enabled === true;
@@ -61,7 +61,7 @@ export function createTools(ctx, deps) {
     if (aipEnabled) {
       catalog = buildToolCatalog(tools, { version: engineVersion(), config: deps?.config });
       const aipCfg = deps?.config?.aip ?? {};
-      const assembly = resolveAssembly(aipCfg.team ?? 'jiufeng', deps?.config?.assembly) ?? DEFAULT_ASSEMBLY;
+      const assembly = resolveAssembly(aipCfg.team ?? 'punky-preset', deps?.config?.assembly) ?? DEFAULT_ASSEMBLY;
       const { owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes } = aipCfg;
       agentCatalog = buildAgentCatalog(assembly, {
         version: engineVersion(),

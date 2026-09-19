@@ -84,7 +84,7 @@ test('装配-1 preset 键生效：apply 静态 preset:l1-sensitive → pre 命�
   const root = freshRoot();
   writeRuntime(root, {});
   const ctx = assemblyCtx();
-  const disposer = apply(ctx, { root, governance: { hook: { preset: 'l1-sensitive' } } });
+  const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } });
   try {
     await sleep(HOT_SETTLE);
     assert.equal(ctx.preCount(), 1, 'hook 已挂（preset 展开规则就位）');
@@ -157,7 +157,7 @@ test('T4-2 换：overlay 换 preset:l2-resource → remount rules=6（l1 规则�
   try {
     await sleep(HOT_SETTLE);
     // 换引用为单 l2
-    writeRuntime(root, { governance: { hook: { preset: 'l2-resource' } } });
+    writeRuntime(root, { governance: { hook: { preset: ['l2-resource'] } } });
     await sleep(HOT_SLEEP);
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
     // l1 规则不再命中：web_search 带凭据 URL（L1-D09 属 l1）→ ALLOW
@@ -176,11 +176,11 @@ test('T4-3 错：overlay 含未知 id → 装载失败回退空表 + warn 留痕
   const root = freshRoot();
   writeRuntime(root, {});
   const ctx = assemblyCtx();
-  const disposer = apply(ctx, { root, governance: { hook: { preset: 'l1-sensitive' } } });
+  const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } });
   try {
     await sleep(HOT_SETTLE);
     // 热写未知 id（runtime overlay 不校验 governance 子键 → 传播到 resolve）
-    writeRuntime(root, { governance: { hook: { preset: 'no-such-preset' } } });
+    writeRuntime(root, { governance: { hook: { preset: ['no-such-preset'] } } });
     await sleep(HOT_SLEEP);
     // C2：装载失败 warn 显式留痕（非静默——防以为武装实则裸奔）
     assert.ok(
@@ -206,7 +206,7 @@ test('T4-4 撤：overlay 移除 preset 键 → 回出厂空表零拦截（deepMe
   try {
     await sleep(HOT_SETTLE);
     // ① overlay 热启 preset
-    writeRuntime(root, { governance: { hook: { preset: 'l1-sensitive' } } });
+    writeRuntime(root, { governance: { hook: { preset: ['l1-sensitive'] } } });
     await sleep(HOT_SLEEP);
     const preOn = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
     const outOn = await preOn(execOf('web_search', { queries: ['https://u:p@example.com/q'] }), () => {});
@@ -240,7 +240,7 @@ test('C3-1 escalation 开启：preset 规则命中 DENY（L1-D01）3 次达阈�
   const ctx = assemblyCtx();
   const disposer = apply(ctx, {
     root,
-    governance: { hook: { preset: 'l1-sensitive', escalation: { enabled: true, threshold: 3 } } },
+    governance: { hook: { preset: ['l1-sensitive'], escalation: { enabled: true, threshold: 3 } } },
   });
   try {
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
@@ -271,7 +271,7 @@ test('C3-2 出厂关（escalation 缺省）：preset DENY 命中 → 仅 jsonl�
   const aux = seedBatch(root, S, 'b-c3off');
   aux.appendEvent(S, 'b-c3off', 'member.dispatch', { lane: 'l1', workerSessionId: 'sess-ws-c3off' });
   const ctx = assemblyCtx();
-  const disposer = apply(ctx, { root, governance: { hook: { preset: 'l1-sensitive' } } }); // escalation 缺省关
+  const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } }); // escalation 缺省关
   try {
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
     for (let i = 0; i < 3; i++) {

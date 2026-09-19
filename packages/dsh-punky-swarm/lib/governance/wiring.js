@@ -52,11 +52,14 @@ import { writeRefusal, patchRefusalAsk } from './receipt-store.js';
 import { readSessionState, setDeferred, setPaused } from './state-store.js';
 
 // ── 规则引用工具（拒绝正文与受控补正共用）──
-// preset 归属映射（rule id 前缀 → preset 注册 id）：L1-* → l1-sensitive、L2-* → l2-resource
-// （compose 复用 L1/L2 规则原 id，不产生独立前缀）；自定义规则（无前缀）→ null（省略 preset 归属，仅列 id）。
+// preset 归属映射（rule id 前缀 → preset 注册 id）：L1-* → l1-sensitive、L2-* → l2-resource、
+// L3-* → l3-tool-ban（第三类判定面：工具黑名单条目 id 前缀）
+// （三类规则集各自独立前缀；compose 组合项已废除，不再有复用 L1/L2 原 id 的引用形态）；
+// 自定义规则（无前缀）→ null（省略 preset 归属，仅列 id）。
 const PRESET_OF_RULE_PREFIX = [
   ['L1-', 'l1-sensitive'],
   ['L2-', 'l2-resource'],
+  ['L3-', 'l3-tool-ban'],
 ];
 
 export function presetOfRuleId(id) {
@@ -145,15 +148,16 @@ export function formatDecision(d) {
 //   装配层（lib/index.js）注入实现 → 写批级事件流文件
 //   <root>/governance/events/refusal-<sessionId>.jsonl（零依赖 node:fs 追加；事件序不变量：
 //   桥接在 pre 同步路径内调用，不 ctx.emit、不异步脱离事件流）。dispose 时回调断开（幂等）。
-export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable } = {}) {
+export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable, presetBanTable } = {}) {
   // 配置读取：cordis.patch.yml 顶层 governance.hook 键。
   // 缺省/空对象 → GOVERNANCE_DEFAULTS（enabled:true, rules:[], defaults.deny:DENY, flags 全 false）。
-  // resolve opts 注入 presetTable（boot 装载一次的 preset 表——wiring 内部
-  //   resolve 与装配侧快照基准一致）+ warn 封装（logger.warn，非静默——preset 装载失败回退空表时
-  //   显式留痕，防「以为武装实则裸奔」假安全）。
+  // resolve opts 注入 presetTable / presetBanTable（boot 装载一次的双表——参数级规则面与
+  //   第三类工具黑名单面；wiring 内部 resolve 与装配侧快照基准一致）+ warn 封装（logger.warn，
+  //   非静默——preset 装载失败回退空表时显式留痕，防「以为武装实则裸奔」假安全）。
   const log = logger ?? ctx?.logger ?? null;
   const cfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, {
     presetTable,
+    presetBanTable,
     warn: (m) => log?.warn?.('[governance] ' + m),
   });
   const inert = (reason) => ({ installed: false, reason, refusals: { count: () => 0 }, dispose() {} });
@@ -368,7 +372,7 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
   return {
     installed: true,
     refusals: { count: () => refusalCount },
-    // 依次卸载 pre + post listener（ctx.on 返回的 disposer 先例 evidence.js:247）；卸载后 listener 不再触发（I1-1 断言）。
+    // 依次卸载 pre + post listener（ctx.on 返回的 disposer 先例 evidence.js:247）；卸载后 listener 不再触发。
     dispose() {
       if (disposed) return;
       disposed = true;

@@ -21,7 +21,7 @@
 | M-02 | {名称} | BE / FE / Both | M-01 | {简要说明} |
 | ... | ... | ... | ... | ... |
 
-> 粗拆仅到顶层子模块级；API 粒度由 Coordinator 细拆产出 task-tree.json 后交 Designer 消费产出任务包。
+> 粗拆仅到顶层子模块级；API 粒度细拆**按需声明**：需要任务树的批次由**建批 `tasks` 面**（`produce:['plan/task-tree.json']`）声明，Coordinator 产出 task-tree.json 后交 Designer 消费产出任务包；未声明即不产出该件。
 
 ### 子模块间依赖关系图（可选）
 

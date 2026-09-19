@@ -31,9 +31,11 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 // 全默认期望：enabled:true 默认开启可显式关闭
 // resolve 扩 escalation 段——默认关形态（enabled:false / threshold:3 /
 //   windowMs:600000 / primitives:['DENY','NARROW']）；本期望随 config.js resolve 输出结构同步。
+// resolve 扩第三类判定面 toolBan（2026-09-14）——默认空表（空表=零拦截；与 rules 任一非空即进入裁决）。
 const EXPECT_DEFAULTS = {
   enabled: true,
   rules: [],
+  toolBan: [],
   defaults: { deny: 'DENY' },
   flags: { pause: false, narrow: false, defer: false },
   escalation: { enabled: false, threshold: 3, windowMs: 600000, primitives: ['DENY', 'NARROW'] },

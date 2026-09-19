@@ -31,7 +31,7 @@ const hasSkill = (name) => SKILL_CATALOG.has(name);
 
 // fixture 装配：形状对齐 lib/assembly.js DEFAULT_ASSEMBLY（audit 层 3 角色）
 const BASE_ASSEMBLY = {
-  team: 'jiufeng',
+  team: 'punky-preset',
   layers: {
     plan: { roles: ['coordinator'], skills: { coordinator: ['dev-planner'] } },
     exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
@@ -87,7 +87,7 @@ test('A3.3 applyAssemblyExtensions：关 → 原样返回（零变化）；开 �
   const merged = applyAssemblyExtensions(BASE_ASSEMBLY, { blindReview: { enabled: true } });
   assert.notEqual(merged, BASE_ASSEMBLY, '开 → 新对象');
   assert.deepEqual(BASE_ASSEMBLY, {
-    team: 'jiufeng',
+    team: 'punky-preset',
     layers: {
       plan: { roles: ['coordinator'], skills: { coordinator: ['dev-planner'] } },
       exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
@@ -122,7 +122,7 @@ test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、cr
   const plan = buildWavePlan({
     batchId: 'blind-review-dag',
     tasks: spec.tasks,
-    team: 'jiufeng',
+    team: 'punky-preset',
     assembly: applyAssemblyExtensions(BASE_ASSEMBLY, { blindReview: { enabled: true } }),
   });
   assert.equal(plan.wavePlan.length, 3, 'panelists wave1 → aggregate wave2 → critic wave3');

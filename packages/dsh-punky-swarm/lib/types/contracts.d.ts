@@ -1,4 +1,4 @@
-/** 成员状态：pending/running/review 迁移中态 + merged/failed/skipped/conflict 终态 + idle 恢复态（8 值） */
+/** 成员状态：pending/running/review 迁移中态 + merged/failed/skipped/conflict 终态 + idle **空闲态**（8 值；idle = 字面意义的空闲，非崩溃态，返工/续跑可调用） */
 export type MemberState = 'pending' | 'running' | 'review' | 'merged' | 'failed' | 'skipped' | 'conflict' | 'idle';
 /** 批次阶段：planning/running/paused 非终态 + aborted/complete 终态（5 值） */
 export type BatchPhase = 'planning' | 'running' | 'paused' | 'aborted' | 'complete';
@@ -37,6 +37,9 @@ export interface WavePlanTaskInput {
     resume?: boolean;
     targets?: string[];
     targetsMarker?: string | null;
+    standalone?: boolean;
+    standaloneReason?: string;
+    targetsNoChange?: boolean;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
 export interface WavePlanTask {
@@ -58,6 +61,44 @@ export interface WavePlanTask {
     resume: boolean;
     targets: string[] | null;
     targetsMarker: string | null;
+    standalone?: boolean;
+    /** standalone 逃生理由（B7-b 补入类型面）：buildWavePlan 归一化**恒写**——字符串原样保留、非字符串（含缺省）落 null
+     *  （与 targetsMarker 同风格：缺省落 null 不落 undefined）。写端 `lib/wave-plan.ts`（归一化保留）、
+     *  读端 `lib/state/gates.ts` 的 `standaloneVerdict`（为空 ⇒ 拒 GATE_STANDALONE_UNJUSTIFIED）。 */
+    standaloneReason?: string | null;
+    targetsNoChange?: boolean;
+    /** P1 交接门（M-6 双写，**只读回显**）：官方任务板 `team_task_create` 产出的 task id 镜像。
+     *  **不参与任何判定**（判定只看黑板 `batch.handoffs`）；缺省 null = 未建官方 task（零感知）。 */
+    officialTaskId?: string | null;
+}
+/** 交接契约（下游据此取件；`consumedFrom` = 消费证据，替代消息 ack 语义） */
+export interface LaneHandoffContract {
+    consumedFrom: string;
+    assertions: string[];
+}
+/** 单条交接记录（`batch.handoffs[toLaneId][]` 值形态） */
+export interface LaneHandoff {
+    from: string;
+    to: string;
+    batch: string;
+    step?: string | null;
+    artifacts: string[];
+    contract: LaneHandoffContract;
+    status: 'pending' | 'submitted';
+    ts: string;
+    /** 官方任务板镜像（M-6 双写，**只读回显**）：由 Leader 侧 `team_task_create` 后回填；
+     *  **不参与任何判定**（判定只看黑板 = 本字段所在对象），写失败只落 `mirror.gap`、不进拒绝路径。 */
+    officialTaskId?: string | null;
+}
+/** 交接表：**toLaneId** → 该 lane 的入边交接列表（批次级可选字段；缺省 undefined = 存量批 ⇒ 门整体放行 + 留痕） */
+export type LaneHandoffMap = Record<string, LaneHandoff[]>;
+/** 交接门判定结果（`gates.ts` 内部使用；`missing` 须能让下游看出**缺哪条边 / 缺哪件产物**） */
+export interface HandoffVerdict {
+    ok: boolean;
+    legacy?: boolean;
+    missing: string[];
+    problems: string[];
+    pending?: string[];
 }
 /** 单 wave 层：wave 序号 + 该层任务列表（topoWaves 分层产物） */
 export interface Wave {
@@ -85,8 +126,11 @@ export type ManagerPlan = 'raise' | 'leader-direct';
 /**
  * 批次级装配声明（建批方随 wave_plan 传入；normalizeAssemblyDecl 归一化后经 createBatch
  * 持久化为 batch JSON 顶层可选字段，schema 不升、旧批零迁移）。
- * 必填：managerPlan（编排牵头形态）、auditLane（验收归属 lane id，须存在于 tasks 且为 audit 层 lane）；
- * 可选：coordinatorLane（协调细拆 lane id，须存在于 tasks 且为 plan 层 lane）、roles（参与角色集，词法校验软告警）。
+ * 入参必填：auditLane（验收归属 lane id，须存在于 tasks 且为 audit 层 lane）；
+ * 入参可选：managerPlan（编排牵头形态，**缺省 raise** —— 2026-09-14 用户裁决「Manager 见批即默认」；
+ *  升格为**引擎可核事实**：归一化后恒有值，收口告警按该声明触发，见 state/store.js）、
+ *  coordinatorLane（协调细拆 lane id，须存在于 tasks 且为 plan 层 lane）、roles（参与角色集，词法校验软告警）。
+ * 注：本接口描述的是**归一化后的 decl**（managerPlan 恒有值）；建批入参的必填/缺省口径见 core.js wave_plan 参数面。
  */
 export interface WavePlanAssemblyDecl {
     managerPlan: ManagerPlan;
@@ -111,6 +155,57 @@ export interface LaneProgress {
 }
 /** 断点进度表：laneId → 进度（批次级可选字段；缺省 undefined = 无断点记录） */
 export type LaneProgressMap = Record<string, LaneProgress>;
+/** 豁免类型白名单（四值；未知值拒 GATE_EXEMPT_TYPE_UNKNOWN，不静默取默认档） */
+export type LaneExemptType = 'ai-render' | 'large-download' | 'dep-install' | 'none';
+/** 派发面来源（结构性证据：豁免只能由 pending→running / idle→running 写入） */
+export type LaneExemptGrantedFrom = 'pending' | 'idle';
+/**
+ * 单 lane 豁免授予记录（batch.laneExempt[laneId] 值形态）。
+ * tierMultiplier = 档位表原始默认（审计用：可辨「用户显式覆盖倍率」与「档位默认」）；
+ * multiplier = 生效倍率（显式 > 档位表）；stalled = 是否同时豁免 heartbeat stalled 追问。
+ */
+export interface LaneExemptGrant {
+    grantedAt: string;
+    grantedFrom: LaneExemptGrantedFrom;
+    type: LaneExemptType;
+    multiplier: number;
+    tierMultiplier: number;
+    stalled: boolean;
+}
+/** 豁免表：laneId → 授予记录（批次级可选字段；缺省 undefined = 无豁免，读取兼容零迁移） */
+export type LaneExemptMap = Record<string, LaneExemptGrant>;
+/** 团队资产解析快照的**批次级指纹引用**（§8③，批次 `a3-snapshot-b1-20260915`）。
+ *  · 纯增量可选字段（缺省 undefined = 旧批/未落盘，读取兼容零迁移）；`schema` 不升（仍为 3）。
+ *  · **只引用不复制**：完整解析结果在会话级正档 `<sessionDir>/team-assets/<team>.<hash>.json`，
+ *    本字段只带指纹 + 键级摘要（不含资产正文、不含完整 summary）。
+ *  · **不参与任何门禁判定**：派生观察面；缺档 ⇒ `gate_status` 回 `declarationMissing:true`（不回落现算）。
+ *  · 无资产批（`generic` / 拼错 / 退役团队）：本字段照落（`ok:false`、指纹为 null），**不写档、不落事件**。
+ *  · 写档失败 ⇒ `snapshotWriteFailed:true`（告警 + 留痕，**不拒建批**：观察面故障不升级为治理面拒态）。 */
+export interface TeamAssetRef {
+    team: string;
+    root: string;
+    rootKind: 'package' | 'teams-root';
+    assetPath: string | null;
+    assetHash: string | null;
+    assetSig: string | null;
+    snapshotPath: string | null;
+    resolvedAt: string;
+    ok: boolean;
+    severity: 'none' | 'strong' | 'blocking';
+    snapshotWriteFailed?: boolean;
+    summaryKeys: {
+        produceFields: string[];
+        consumeFields: Record<string, string>;
+        entryRequiresSource: Record<string, 'team-asset:entry_requires' | 'tighten-only-default' | null>;
+        flagsResolved: Record<string, {
+            declared: boolean;
+            value: boolean | null;
+            effective: boolean;
+        }>;
+        contractSections: string[] | null;
+        unwiredKeys: string[];
+    };
+}
 /** 批次对象（v3：store.js createBatch 运行时形态 + schema-v3.js migrateV2toV3 兜底字段） */
 export interface Batch {
     schema: 3;
@@ -124,7 +219,11 @@ export interface Batch {
     chains: ChainsState;
     archived: boolean;
     assembly?: WavePlanAssemblyDecl | null;
+    teamsRoot?: string;
     laneProgress?: LaneProgressMap;
+    handoffs?: LaneHandoffMap;
+    laneExempt?: LaneExemptMap;
+    teamAsset?: TeamAssetRef;
     events: BatchEvent[];
     createdAt: string;
     updatedAt: string;
@@ -205,6 +304,20 @@ export type BatchEvent = BatchEventBase & ({
     source: string;
     target: string;
 } | {
+    type: 'lane.handoff';
+    lane: string;
+    from: string;
+    to: string;
+    artifacts: string[];
+    assertions: string[];
+    handoffBatch: string;
+} | {
+    type: 'lane.handoff.gap';
+    lane: string;
+    code: string;
+    missing: string[];
+    legacy?: boolean;
+} | {
     type: 'gate.entry.missing';
     lane: string;
     missing: string[];
@@ -252,6 +365,32 @@ export type BatchEvent = BatchEventBase & ({
     code: string;
     pending?: string[];
 } | {
+    type: 'gate.contract_missing';
+    cause: 'undeclared' | 'declared-off' | 'unresolvable';
+    gateKind: string;
+    layer: string | null;
+    lane: string | null;
+    declared: boolean;
+    source: string;
+    degrade: {
+        kind: string;
+        note: string;
+    };
+    problems: string[];
+} | {
+    type: 'batch.team-asset.resolved';
+    team: string;
+    root: string;
+    rootKind: 'package' | 'teams-root';
+    assetPath: string | null;
+    assetHash: string | null;
+    ok: boolean;
+    severity: 'none' | 'strong' | 'blocking';
+    snapshotPath: string | null;
+    snapshotWriteFailed?: boolean;
+    problems: string[];
+    unwiredKeys: string[];
+} | {
     type: 'archive.failed';
     reason: string;
 } | {
@@ -265,7 +404,7 @@ export type BatchEvent = BatchEventBase & ({
     [k: string]: unknown;
 });
 /** 门禁失败错误码全量枚举（按层后缀/门禁族；不设通配符，保持穷尽性收益） */
-export type GateErrorCode = 'GATE_ENTRY_MISSING' | 'GATE_PLAN_CONTRACT' | 'GATE_EXIT_MISSING_EXEC' | 'GATE_EXIT_MISSING_AUDIT' | 'GATE_NEEDHUMAN_PENDING' | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT' | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO' | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED' | 'GATE_COMPLETE_NO_AUDIT' | 'GATE_EXIT_PENDING_AUDIT' | 'GATE_COMPLETE_AUDIT_FAILED' | 'GATE_COMPLETE_EXEC_PENDING';
+export type GateErrorCode = 'GATE_ENTRY_MISSING' | 'GATE_HANDOFF_MISSING' | 'GATE_AUDIT_INPUT_MISSING' | 'GATE_AUDIT_CRITERIA_MISSING' | 'GATE_BATCH_REQUIRES_C' | 'GATE_MEMBER_REQUIRES_C' | 'GATE_PLAN_CONTRACT' | 'GATE_EXIT_MISSING_EXEC' | 'GATE_EXIT_MISSING_AUDIT' | 'GATE_NEEDHUMAN_PENDING' | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT' | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO' | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED' | 'GATE_COMPLETE_NO_AUDIT' | 'GATE_EXIT_PENDING_AUDIT' | 'GATE_COMPLETE_AUDIT_FAILED' | 'GATE_COMPLETE_EXEC_PENDING' | 'GATE_COMPLETE_OUTCOMES_EMPTY' | 'GATE_SETTLE_NOTE_MISSING' | 'GATE_EXEMPT_NOT_DISPATCH' | 'GATE_EXEMPT_INVALID' | 'GATE_EXEMPT_TYPE_UNKNOWN' | 'GATE_EXEMPT_REVOKE_REQUIRED';
 /** 门禁通过：ok: true + 各门禁可选载荷 */
 export interface GateOk {
     ok: true;

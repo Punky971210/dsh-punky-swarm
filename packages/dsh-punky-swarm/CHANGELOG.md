@@ -1,5 +1,353 @@
 ## 未发布（Unreleased）
 
+### 清理波：构建面收口（TD-09 + TD-21/N-13 + G-2）与长尾清理并行（2026-09-18，批 `cleanup-wave-20260918`）
+
+- **形态**：engine-team · 5 lane（`plan-designer` → **`exec-build` ∥ `exec-panel-docs` ∥ `exec-longtail`** → `audit-wave`）· `leader-direct`；用户裁决「能力面扩张挂起，构建面与长尾清理**不踩踏则并行**」；`audit verdict = approve`（pass 9 / skip 1 / fail 0 / **blocking 0** / followup 4）。
+- **TD-09 结项（构建面）**：`npm run check` exit 0；**`npm run build`** exit 0（tsc → `.tsbuild` → `copy-ts-built.mjs` 回拷 **15 组 / 30 文件**）；**`npm test` exit 0**（tests 1616 / pass 1612 / fail 0 / todo 4）。**构建幂等实测**：build 后再跑 `pkg-hashes --check` 仍 GREEN（回拷产物与在盘字节一致）。
+- **TD-21 / N-13 结项（读放大收敛）**：`lib/state/gates.ts` 抽 `gateStatusOfLane`（唯一计算实现、零读盘）+ `gateStatusOfBatch(sessionId,batchId)` / `gateStatusMapOfBatch(...)`（一次 `readBatch` → `{lane: gateView}`）；`gateStatus` **保留为兼容外壳**（签名 / 形状 / 抛错面逐字不变，`lib/tools/core.js` 零改动）；`lib/state/store.js:1247,1251-1252` 暴露；`lib/api.js:141` 由逐 lane 循环改**批级一次调用**。**读数（audit 独立自写探针）**：投影段**恒读 1**、整请求**恒 2**、**不随 lane 数增长**（N∈{1,3,6,12}）；逐 lane 与旧实现 `deepStrictEqual` 全等。**两阶段落地**：改前 dry-diff **0/30 全等** → 改后 **2/28**（仅 `state/gates.js`+`.d.ts`）→ 备份 30 文件在 `.wip-backup/build-pre-td21-20260918/`。
+- **G-2 结项**：新增 `test/api-batch-keys.test.js`（**3 用例 / 26 断言**）：P-1 七键在场（含条件键 `manager`/`smoke` **不写空占位**的负向断言）/ P-2 批级与逐 lane 深比较全等 / P-3 读计数（双口径）。
+- **G-6 勘误结项（零改动）**：「跨段顶层 `chip` 重名」**不成立**——唯一声明 = `lib/panel/theme.js:83`，`widgets.js:22` 是组件 `Chip`（大写）。**复跑陷阱已登记**：PowerShell `Select-String` 默认大小写不敏感会误判，须加 `-CaseSensitive`。
+- **G-7 结项**：`lib/panel/main.js:341` `fontSize: 10` → **10.5**（对齐 Q-2 下限）；bundle 内 `fontSize: 10,` 命中归零。
+- **TD-15 部分结项**：F-5（`lib/assembly/chain.js` 7 处悬空包内 `docs/` 引用 → `[docs-ref]` 锚记 + 展开表，**仅注释零语义**）+ 新件入册（`skills/engine-team/SKILL.md` 新增工程文档指针章节，repo ↔ live 镜像 sha 全等）；F2/F7/G3/N-9/N-11 属层域外，独立排期（N-9 建议直接结项）。
+- **长尾交底（TD-16～19）**：`exec/exec-longtail.md`（258 行）逐条「取证 / 方案 / 可自动 / 需授权」；**零系统级写**。三条口径订正：① `GATE_MANAGER_NOT_RAISED` 硬门**已删**（判定代码 0 处）⇒ 解封 = `batch_phase({phase:'running'})`；② 看护任务 `dsh-web-watchdog` **已注册但 Disabled + Interactive only**（启用前须核 `-or 401`）；③ **（被 audit 推翻的 exec 结论）**「包内 docs 未纳版本控制」**错误**——`packages/dsh-punky-swarm/docs` 实为**在版 17 件**（`.gitignore` 的 `docs/` 锚定仓根，被 `!docs/` 反取回），真正排除面 = `**/docs/decisions/` + 工作区 docs 树。
+- **F-3 双配置核对**：`~/.dsh/AGENTS.md` ↔ `~/.claude/CLAUDE.md` **零漂移**（sha256 同值 `365EB100…`，各 12,660 B / 106 行，锚点双在场，无 BOM + LF）⇒ 未写一个字节。
+- **Leader 收口读数**：基线重算（+3 tests / +26 asserts / +184 lines）`--check` **0 漂移**；`pkg-hashes.txt` **359 件** GREEN；五队资产 `ok:true`；指引 **GREEN**；定向套件 panel 31/31、api 族 94/94。
+- **部署面**：`lib/api.js` / `lib/state/gates.js` **待宿主重载**才在 3080 生效（读放大收敛 N+1 → 2 于下次重载后可用）；面板 UI 无变化。
+
+### 面板重构：集群监控面板按引擎现状重新设计（2026-09-18，批 `panel-redesign-20260918`）
+
+- **依据**：用户对设计稿 `docs/panel-redesign-spec-20260918.md` 的 5 条裁决——Q-1 面板**不引入操作**（只读）；Q-2 **接受密度偏离**（正文/辅助字 ≥10.5px、关键数字 ≥18px、对比度 ≥4.5:1，先看效果再评估）；Q-3 **治理配置页不动**（`gov-config.js` 一字不改，挂起为待办）；Q-4 事件流**默认人话摘要** + 保留「原始 type」开关；Q-5 **新增渲染测试**。
+- **服务端读端（纯加法，零新真源）**：`lib/api.js` 351→375 行，`/batch` 补 **7 键 + 1 条件键**（`danglingLanes` / `handoffs` / `manager`* / `assembly`* / `teamAsset`* / `chain`* / `+smoke`*），三处投影只 `import` 既有单点纯函数（`danglingLanesOf` / `chainEchoOf`+`chainOfBatch` / `smokeOf`）——**禁第二份判定**；SSE 帧协议与既有键语义零改动。
+- **客户端 7 段 → 8 段**：新增 `lib/panel/panel-model.js`（309 行**纯函数段**，`SEGMENT_ORDER` 置首、段内禁 `React.`/`tt(`/`T.`，可 `new Function` 独立求值 = 可测性前提）；六段改造——`locales` 179→413（**19 键**换词/新增）、`theme` 103→106（仅 chip alpha）、`widgets` 63→89（≥18px 关键数字 + `aria-label`/`aria-hidden`）、`batch-list` 84→144（关注度角标 + 筛选）、`batch-detail` 163→324（**三层泳道** + 契约行「吃→吐」 + 交接/装配条 + 人话事件流 + 原始开关）、`main` 280→412（**引力条** + **主行动卡** + 错误态条 + 深链 + 降级原因句）；`lib/client.js` 重拼（8 段 / 2444 行）；`scripts/assemble-panel.mjs` 与 `test/client-sync.test.js` 同步（段清单 +1）。
+- **测试面**：新增 `test/panel-render.test.js`（**22 例 / 97 断言 / 430 行**：引力条 0 值收起、主行动卡优先级、三层分区不混层与 exec 并行计数、契约行逐字一致、徽章零噪音、19 键文案（zh/en 各恰 1 次）、对比度 16 组、降级原因句、段纯度、≥18px 字号）；`test/client-sync.test.js` 段清单同步（+1 行）。
+- **验收（audit lane 独立复证，非引用自证）**：十项 **pass 8 / fail 1 / skip 3**，**exec 侧 blocking = 0**，gap-list 7 条全 `followup`。唯一 fail = **部署面**（3080 宿主进程启动早于本批落盘 ⇒ 内存中仍是改前 `api.js`/bundle；HTTP 探针 15 键、新键全缺），实现面以旁路独立复证为真（直 import 真源函数 + 直读批次 JSON + 自实现 WCAG 公式复算 16 组最低 4.60 + 内存复算拼装 139524 bytes 逐字节一致）。**⇒ 收口前置：一次宿主重启**。
+- **Leader 收口读数**：全量套件 **tests 1613 / pass 1609 / fail 0 / todo 4**；`baselines/test-baseline.json` 重算（+22 tests / +97 asserts / +431 lines，`--check` 0 漂移）；`pkg-hashes.txt` 重算 **358 件**（+2：`panel-model.js`、`panel-render.test.js`）`--check` **GREEN**；`check-team-assets` 五队 `ok:true`；`check-guidance-sync` **GREEN**。
+- **显式延后（登记，不静默砍）**：① **N-13** `lanesGate` 批次级一次扫描（需改 `lib/state/gates.ts` + `npx tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs` = 等价 `npm run build`，触 TD-09「构建面须用户放行」红线；现状实测 **4 次批次读/请求**）② `handoffGate` 键（需 `lib/index.js` 注入 liveConfig + `core.js` `readLiveConfig` 单点化）③ 引力条「卡住 N」引擎级 `stalled`（真源为 `lane_heartbeat`/`lane_longrun` 探针，逐请求调用 = 整批扫描）⇒ 本轮以「**待恢复 N**」（idle 计数）代替，**不冒充 stalled** ④ watch 服务端增量 ⑤ `test/api-batch-keys.test.js`（P-2/P-3 用例依赖 N-13）。
+- **教训（R-3，写入门禁口径）**：**命令 gate 的 cwd 不是包根**——解析序 = lane worktree → env `GATE_REPO_ROOT` → **批次产物根**（`lib/state/gates.js:967-983`）⇒ `gate:` 行若用裸相对路径会**假红**（exit 1，`GATE_EXIT_NONZERO`）；正确形态 = 行内自带 `cd /d <包根>`。本批首轮即因此被判 paused，修正后从产物根 `cmd /d /s /c` 复现 exit 0。
+- **生效与收口（2026-09-18 宿主重载后实测）**：引擎代码（`lib/api.js`、`lib/panel/**`、`lib/client.js`）随宿主重启生效。**部署面已闭**（原 G-1）：新进程 `pid 15576` 起于 `14:33:34`（后于本批落盘 `14:14`）；`/api/dsh-punky-swarm/batch` 探针由 **15 键 → 20 键**，七新键全在场（`danglingLanes` / `handoffs`（逐 lane 边计数）/ `assembly` / `teamAsset`（`team=engine-team, ok=true`）/ `chain` / `lanesGate` / `aipSession`），条件键 `manager` / `smoke` 正确缺场；在盘 bundle `lib/client.js` = **8 段 / 2447 行 / 139,524 B**（含 `panel-model` 段标记恰 1 处）；`pkg-hashes --check` **GREEN**、`check-guidance-sync` **GREEN**；批次 `panel-redesign-20260918` ⇒ **`complete`**。**残留（用户面）— 已确认闭环（2026-09-18）**：用户实测**面板可见**且**深链生效**（`http://127.0.0.1:3080/#cluster=session-ea465acf-…%3Apanel-redesign-20260918&view=lanes` 直达该批 `lanes` 视图）⇒ **面板项完全收口**。
+- **顺带归档（TD-24 / R-3 口径写入指引）**：`presets/punky-preset/references/discipline.md` **§0e 新增 D-9**（任务包强制项：`gate:` 行必须 cwd 无关）+ **附录 A.4** 的命令 gate cwd 契约补「两种合规范式 + 实测假红反例 + 真源 `commandCwd()`」；`skills/engine-team/SKILL.md` §交接与门禁要点 同口径加一条。**live 副本同批同步**（`~/.dsh/.agent-presets/punky-preset/references/discipline.md`、`~/.agents/skills/engine-team/SKILL.md`）⇒ `check-guidance-sync` 复跑 **GREEN**。
+
+### TD-02 结项：`pkg-hashes.txt` 重算 + 交付副本核对 + 宿主 reload 验证（2026-09-18，重启后）
+
+- **宿主 reload 冒烟（本轮实测，非推断）**：dsh web 进程 `pid 36928` 起于 `2026-09-18 13:33:34`（旧进程已被替换 ⇒ F-1 的重启事实成立）；插件 apply 于 `2026-09-18T05:33:42Z`（= 13:33:42）写入 **7 条** `[dsh-punky-swarm] asset synced`（`presets/punky-preset`、`presets/engine-team`、`skills/software-team`、`skills/engine-team`、`skills/design-team`、`skills/research-team`、`skills/writing-team`）——证据源 `~/.dsh/logs/punky-swarm/audit-2026-09-18.jsonl`（`pid:36928`、`kind:log`）。**未 sync 的 3 条**（`skills/review-execution` / `acceptance-gate` / `retro-and-memory`）为 `current`（无变更 ⇒ 不记日志，与 `syncDir` 幂等语义一致）。
+- **交付副本核对（十面逐文件 sha256：0 mismatch / 0 missing）**：`presets/punky-preset`(6)【含 `references/discipline.md` = 本轮退役口径改写】、`presets/engine-team`(1)【team-asset v3 单步三分支】、`skills/{software,engine,design,research,writing}-team`(17/1/9/1/1)、`skills/{review-execution,acceptance-gate,retro-and-memory}`(1/1/1) —— **repo 树 vs live 树逐文件比对全等**。⇒ F-2 / f-03 / UV-1 / G5 / G6 五条「live 落后」项**一次翻掉**；且**成因已定位**：交付副本由插件 apply 内的 `syncAssets()`（`lib/index.js:151`）**自动幂等同步**，**无需手工镜像**（原「是否本轮手工镜像」的悬置取消）。
+- **TD-02 主体：新增生成器 `scripts/pkg-hashes.mjs` + 清单重算**。根因 = **该清单此前无生成器**（一次性命令产出）⇒ 重算不可复现、漂移只能人肉比对。新脚本单点固化三件事：范围（`baselines/ docs/ lib/ presets/ scripts/ skills/ test` 递归 + 包根文件；**点目录与 `node_modules` 一律排除**、清单自身不入表）、排序（相对路径字节序）、形态（`<相对路径>\t<sha256>\n`、UTF-8 无 BOM + LF）。参数面 **fail-closed**（未知参数/非法组合 ⇒ 用法打 stderr + **exit 2**，绝不进写盘分支）；`--check` 为只读对照。
+- **重算读数**：重算前 `--check` = **RED 48 项漂移**（changed **45** / added **2**〔`scripts/pkg-hashes.mjs` 本体、`test/concurrency-gate.test.js`〕／removed **1**〔`skills/software-team-assembly/SKILL.md` 已退役〕；清单 355 → 实测 **356 件**）；重算后 `--check` = **changed 0 / added 0 / removed 0（GREEN）**。**回滚路径**：旧清单原样留存 `.wip-backup/pkg-hashes-pre-td02-20260918.txt`（sha256 `5c1ff601385295acd0b5875ceb11bd08b6fcff90773c303db7dfce1771b500c1`，33,678 B / 355 行）。**注（避免自指过期）**：新版清单**自身**的 sha 与字节数**不写进包内**——清单包含 `CHANGELOG.md` ⇒ 一旦写入就自指过期；清单真值以「最后一次 `--check` GREEN」为准，其 sha 记于台账 `§6.2`（包外，稳定）。
+- **仍未做（维持挂起）**：longrun 工具改造（T-2/F-10/F-11）与面板 / HTTP 读端（T-1）——用户裁决挂起；五队新链真批（TD-07）待真实任务自然发生。
+
+### 清债轮：冗余声明退役 + 死码清理 + K-2 单码例外（2026-09-18，用户裁决「保留引擎运行的核心内容，清理冗余设计与死代码」）
+
+- **裁决口径**：用户裁「保留引擎运行的**核心**内容，清理所有**冗余设计**及其技术债与死代码；**longrun 与面板维持挂起**；`TEAM_ASSET_LAYER_UNKNOWN` 目前用不到（无外部自建 team）⇒ 先清理，之后有需求再用其他方式补充」。
+- **① K-2 结项 = 单码例外（不推翻 Q1 严格面）**：`TEAM_ASSET_LAYER_UNKNOWN` **移出** `BLOCKING_CODES`（`lib/assembly/team-asset.js`）——未知层不再否决建批（`ok:true` + severity `warning` 留痕 + **不级联**），**其余 `TEAM_ASSET_*` 码逐条保持 blocking**。这是「Q1 都不降」的**唯一单码例外**，已在码表旁原位登记「为何只此一码」。
+- **② 未接线三键退役（声明即拒）**：顶层 `state_machine` / 顶层 `rework` / `flows.<layer>.progress_contract` ⇒ 新增 `RETIRED_TOP_KEYS` / `RETIRED_FLOW_KEYS` 退役闸，**声明即拒** `TEAM_ASSET_FIELD_NOT_ALLOWED`（blocking、**零新造码**）。台账 `UNWIRED_DECLARATIONS` **清零**（三条整条删除、历史注释原位留档）⇒ `unwiredDeclarationsOf()` 恒空、`gate_status.gateStrength.unwired` 不再回显任何键。依据：三键**零运行期消费者**（原登记即「无读端」），留作「声明位」= 写了不生效 ⇒ **比拒更糟**（同 M1 步级 `on` 裁决）。
+- **③ 链级 `chain.needHuman` 退役**：新增 `RETIRED_CHAIN_KEYS`（**派生自单点事由表** `RETIRED_CHAIN_REASONS`，新增退役键必同时补事由）⇒ `validateChain` 第 ⑧b 条**声明即拒** `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.needHuman`。原「只声明不消费」摘除；链级人工闸**唯一真源** = `flows.audit.needhuman` + Tier3 `checkNeedHumanGate`（**不设双真源**）。
+- **④ 死码清理（只清「已无判据对象」的部分）**：`lib/assembly/team-asset.js` 不可达分支 `if (layer === 'complete') continue;`（F-4 后恒假）；同文件 `STATE_*` 三码 + `ESCALATIONS` 常量 + 未被消费的 `MEMBER_STATES`/`MEMBER_TRANSITIONS` 导入；`scripts/check-guidance-sync.mjs` 零读点载荷 `line`（连同 `forEach` 死下标参数）。`lib/tools/core.js` 的 `member-session-trace.log` 死绑定**上批已删**，本轮只留一行沿革注释（**不**当死码再删——保住审计线索）。
+- **⑤ 测试面（翻转 + 补留痕 + 保码面，删断言数 = 0）**：`test/audit-contract-gate.test.js`（F-4+K-2）、`test/team-asset.test.js`（`state_machine`/`rework` 声明 → 退役闸一例；R2-3-c 表行改 `FIELD_NOT_ALLOWED`；混合告警夹具改用 `roles.extra`）、`test/chain-v3-assembly.test.js`（未知层不再否决 + 码/严重级锚点）、`test/gate-flows.test.js`（F-4+K-2 四锚点）、`test/teams-root.test.js`（`ENTRY_REQUIRE_UNKNOWN` + 新增「未知层不否决建批」例）、`test/contract-missing-first-touch.test.js`（夹具去 `state_machine`）、`test/gate-techdebt-red.test.js`（R-14/R-29 → 空台账 + 反向锚点）、`test/team-asset-snapshot.test.js`（`unwired` 恒空）、`test/writing-team-asset.test.js`（`state_machine` 缺席）；**新增** `test/p2-chain-autodrive.test.js` **P2-1b**（退役键声明即拒：路径 + 码 + severity + 反向零误伤 + 台账可读）。
+- **⑥ 文档同步**：`presets/punky-preset/references/discipline.md` 消费点裁决表两行（`state_machine` / `progress_contract`+`rework`）**合并改写**为「**已退役（声明即拒）**」行（含台账位置与依据）；**live 副本同批同步**（`~/.dsh/.agent-presets/punky-preset/references/discipline.md`，`check-guidance-sync` 报 `repo == live`）⇒ 检查器 **GREEN**；三队 SKILL.md（engine / software / research）的「未接线键」口径更新为「`flows.exec.contract` = 未接线声明｜`chain.needHuman`、`flows.*.progress_contract` = **已退役、声明即拒**」。
+- **⑥b 顺手修一处团队文档与资产不一致**（同一清债口径）：`skills/engine-team/SKILL.md` §链步形态原写「exec **三步串行**（`exec-impl`/`exec-verify`/`exec-review`），`pair_with:"exec-review"` ⇒ 6 lane」——与权威资产（**单步三分支**、`pair_with:"exec"`）**相反**；已按实测改写为「一步三分支并行 ⇒ `audit-pair` 派生 3 条 audit lane」，并把**实测读数**写进文档（`expandChainBranches(chain)`：plan 1 / exec 3 / audit-pair 3 / accept 1 = **8 lane**；`loadTeamAsset` / `chainProblemsOf` 均 `problems: []`、`expand.ok = true`）。**证据 = 命令读数**，非推断。
+- **⑦ 派生工件与验证**：`baselines/test-baseline.json` 经官方脚本重生成（`--reason` 留痕）⇒ `files 136 / tests 1552 / asserts 7719 / tautologies 0 / todos 4 / lines 40439`（相对上一版：tests +1 / asserts +6 / lines +19，**全部来自 P2-1b**）。**全量验证**：`node --import ./test/helpers/isolated-home.preload.mjs --test` ⇒ **tests 1590 / pass 1586 / fail 0 / todo 4**；`node scripts/baseline-snapshot.mjs --check` ⇒ **exit 0**；`node scripts/check-team-assets.mjs --json` ⇒ **五队 `ok:true` / `problems: []`**（`resolvableNames 101`）；`node scripts/check-guidance-sync.mjs` ⇒ **GREEN**。
+- **⑧ 未做（显式登记，不声称已做）**：**宿主 reload 冒烟**（F-1/F-2/f-03/UV-1/G5/G6）待一次授权窗口；`pkg-hashes.txt`（2026-09-17 22:57 版，已 stale）与交付副本 `~/.dsh/.agent-presets/engine-team/team-asset.yml`（实测 sha 与 repo 不一致）**同批待重载窗口同步**；**longrun 工具改造（T-2/F-10/F-11）与面板/HTTP 读端（T-1）维持挂起**（用户裁决）。
+- **生效**：引擎代码（`lib/**`）+ 数据面（`presets/punky-preset/references/discipline.md`）+ 三条 SKILL.md ⇒ **需宿主重启一次**才在 live 生效（本轮**未**重启，**未**声称已做）。
+
+### 交接语义归并：M0′（三小项）+ M1（删步级条件边 `on`）（2026-09-17，批 `handoff-consolidation-m0m1-20260917`）
+
+- **M0′-① · `leader-direct` 批链推进全程 no-op**：`assembly.managerPlan === 'leader-direct'` 的批，`advanceChainAfterSettle`（`lib/engine/chain-runner.js`）在**读批之后、相位闸之前**直接返回，返回 `reason:'manager-plan-leader-direct'` + `note:'leader-direct-noop'`（**常态，不 warn**）。判据 = 批次 JSON 字段（建批期归一化写入；同字段既有读端 = 收口告警段），**不看 roster、不做运行时推断**。动机：Leader 直驱形态下引擎无自派能力（`dispatchLaneCore` 需 `exec.agent` 挂载点）⇒ 推进必然落 `no-lane-for-step` / `no-paired-lane` / `dispatch-failed` 等停轮分支，把 `running` 批写成 `paused`，逼 Leader 手工 `resume`（真机实证：同会话前一批 4ms 内 `chain.step{dispatch:{ok:false,reason:'no-lane-for-step'}}` + `batch.phase running→paused`）。边界：不改相位、不写 `chain.step`、不派发、不写锁；`raise` 批与无 `assembly` 的历史批**逐字不变**；调用方（`member_settle` 工具面 / 自动结算路 / 重放路）**零改动**（均不消费 `reason` 分支）。
+- **M0′-② · `batch.phase` 事件补 `reason`（事由随相位迁移落盘）**：`store.setPhase` 增第 4 参 `{ reason = null }` 并归一化（**仅非空字符串计事由**）⇒ **非空才写键**，既有 `{from,to}` 形态零污染（历史读端与既有深比较不受影响）；埋点同步带 `reason`。**四个生产写点**逐个补事由：① 链停轮 `pauseBatch`（8 个调用点，取值与所在分支 `out.reason` **同源**）→ `chain:<分支>`；② 自动结算停轮 `pauseForFail` → `auto-settle:<判据码>`；③ `batch_phase` 工具面 → 缺省回填 `manual:batch_phase:<phase>`（**新增可选参 `reason`**，调用方可覆盖）；④ `batch_control` 干预面 → `manual:batch_control.<action>`。读端 `log_export` markdown 渲染 `<from> -> <to> | <reason>`（审计面「为何不推进」的唯一解释入口）。**不新增运行期门禁**（`setPhase` 是通用内部写入口，加抛错会连带改造测试夹具与动态相位调用面）⇒ 改以**源码级回归锁**承担（`test/phase-reason.test.js` 的 PR-8：三生产文件内不得存在裸 `setPhase(` 调用）。
+- **M0′-③ · `chain` 运行期口径收敛（6 处纯文本）**：统一口径句 = 「`chain` = **建批期展开 + 静态校验**；**运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**（`chain.step` 仅是推进留痕，随 M5′ 退出）」。落点：`presets/punky-preset/references/discipline.md §0o`（新增「运行期口径」条 + 八条校验清单去掉 `on`）、`lib/assembly/chain.js` 头注释、`lib/engine/chain-runner.js` 头注释、`wave_plan` 与 `batch_status` 的 `description` 尾注、本 CHANGELOG。**只写口径、不新开文档**；包内 `docs/**` 与 EN 面实测无同步面。
+- **M1 · 步级条件边 `on` 声明面下线（能力面**不可逆**）**：`on` 从「白名单键」变「未知键」⇒ `validateChain` **声明即拒** `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.steps.<id>.on`（v1/v2/v3 同拒，**零批次 JSON 落盘**）。**刻意不静默失能**：只删校验会让声明被忽略（「写了不生效」比拒更糟）。删除面：键域常量 `CHAIN_ON_TOKENS` 整条删除；`edgesOfStep` 只产 `next`；悬空目标校验（③）只判 `next`；判定单点 `chainNextOf` 收敛为「`merged`→`next`（缺省即链尾）/ `skipped` 恒不推进 / 失败面只余 `anyFailure`→`onFail` 两级」（`conflict` 与 `failed` **逐字同路**）；`CHAIN_STEP_VIA` 收窄为 `['next','onFail','anyFailure']`（写侧白名单 ⇒ 新写不可能产出历史 `on` 族取值）。**保留面（读侧历史兼容，禁删）**：`chainEchoOf`（不校验 `via` ⇒ 历史事件照常回显）、`countReworkAttempts`（仍按历史 `via` 计数，服务历史批的跨重启幂等）、`chainNextOf` 的回边预算段 —— 三者**同注登记**：M1 后无新触发路径，口径迁移归 **M4/CH-2**（本批不含；删则静默丢 `rework` 语义）。
+- **能力面影响（不可逆项）**：显式条件路由（`on` 的四个终态键）**无法再声明**。等价性依据（`plan/spec.md §3`）：① 5 个内置团队资产 `chain` 块**零 `on` 使用**（逐行举证）；② 删掉的都是「**未声明 `on` 时从不命中**」的兜底分支 ⇒ 对不声明 `on` 的资产判定结果**逐字不变**；③ 反例面由拒绝面 fail-closed 挡住。未来若需恢复须**走规格**（登记于 `plan/spec.md §4 R1`）。
+- **测试面**：`test/w1-conditional-edges.test.js` **同题反转**（W1-② 条件边 → 下线拒绝面：声明即拒三版本 + 零落盘 + 旧语义逐字不变 + 新 via 取值，头部登记反转）；`test/p2-chain-autodrive.test.js`（五段链改 `next`-only、环夹具改用 **v2 `deps` 拓扑回边**、`via` 期望改 `next`、**追加 M0′-① 三例**：leader-direct no-op / raise 对照 / 无 assembly 历史批不命中）；`test/gap-s12-chain-downgrade.test.js`（`on.merged` → `next`）；三套件装配声明由 `leader-direct` 改 **`raise`**（M0′-① 后 leader-direct 批链推进全程 no-op ⇒ 断言「引擎自动递进 / 无挂载点降级」的套件必须取非 leader-direct 形态）；`test/chain-v2-pairing.test.js` **同因联动**（分支配对 e2e 的装配声明改 `raise`，否则去屏障断言恒 wait）；**新增** `test/m1-on-removed.test.js`（13 例）与 `test/phase-reason.test.js`（8 例）。
+- **断言账（如实）**：全库 asserts **7489 → 7563（+74）**、tests **1509 → 1532（+23）**、tautologies **0 → 0**；其中 `w1-conditional-edges` 单文件 tests −1 / asserts **−7**（**对象消失的等价改写**：显式条件路由已下线，7 条「条件路由生效」断言失去判据对象，改写为「声明即拒 / 恒不推进 / 新 via 取值」断言；**非静默删断言**，`baseline --check` 的总量判据不降反升）。
+- **验证**：新增两套件 RED→GREEN（RED：21 例中 15 红，逐条证明「失败 = 未实现」）；受影响清单（spec §8②，14 文件）**204/204 pass**；**全量** `node --import ./test/helpers/isolated-home.preload.mjs --test` ⇒ **tests 1570 / pass 1564 / fail 2 / todo 4**，两例红 = `test/test-baseline.test.js` 的 e2-1/e2-2（**基线快照滞后**所致：本批新增/改写用例 ⇒ 逐文件漂移；`baselines/**` 按批约束**只允许 `--check`**、禁写盘 ⇒ 登记为已知项，重生成归 Leader 排期）；`node scripts/baseline-snapshot.mjs --check` **exit 0**（断言总数 +74 不降、恒真形态 0 不升）。
+- **宿主冒烟（未做，显式登记）**：本批**禁重启宿主**（批约束 C-6）⇒ 真实加载冒烟**无法在本批完成**；完成判据取「模块级 import 冒烟 + 受影响测试全绿 + 基线 `--check`」，**宿主 reload 冒烟待 Leader 排期（重启窗口）**——`exec/out.md` 已同口径登记，**未声称已做**。
+- **生效**：引擎代码（`lib/**`）与数据面（`presets/punky-preset/references/discipline.md`）⇒ **需宿主重启一次**；本批**禁重启宿主**，故**宿主级 reload 冒烟待 Leader 排期**（已在 `exec/out.md` 显式登记，未声称已做）。
+
+### P2：推进链 `chain` 接线 —— 事件驱动自动推进 + P0 句柄修复（2026-09-16，批 `p2-chain-autodrive-20260916`）
+
+- **语义（构造期校验 + 事件驱动自动推进）**：团队资产**顶层 `chain`**（唯一规范位；显式声明 `flows.chain` ⇒ 拒 `TEAM_ASSET_FIELD_NOT_ALLOWED`，禁双真源、不设兼容分支）在**构造期**（`wave_plan`，`createBatch` **之前**）做**八条静态校验**——层白名单 / 角色悬空 / 悬空 `next`·`on` / 到不了的环节（无孤儿步）/ 环须由 `rework` 承认 / 链尾（`terminal`）唯一 / `join:any` 必带 `anyFailure` / 只收枚举 token（禁表达式）；逐条**复用既有 `TEAM_ASSET_*` 码、零新造**，拒后**零批次 JSON 落盘**。链内 lane 的 `member.settled` ⇒ 引擎算下一环并**自派**（`merged` 走 `next`/`on.merged`；`failed`/`conflict` 走 `on.fail` → `join:any` 的 `anyFailure` → 链级 `onFail`；`skipped` 不推进）；每次推进落一条 `chain.step`（`{from,to,via,lane,step}`），`batch_status` 增 `chain` 回显（`{version,steps[],lastStep,edges[]}`）。**无 `chain` 的批全程 no-op**（层序/门禁/事件/成员语义逐字不变 = R5 向后兼容锁，读端也不出现 `chain` 键）。
+- **停轮口径（只停推进、不判死）**：`onFail` 缺省 `pause` ⇒ 写 `chain.step` + `running→paused`（幂等；已 `paused` 不重复写），**不写 `failed`、不 `abort`**；`review`/`failed` 两 token 只留痕停轮（处置交还 Leader/Manager）。链步在本批无对应 lane（`no-lane-for-step`）、目标 lane 已终态/持锁不可重派（`no-redispatchable-lane`）、映射歧义（`ambiguous-mapping`）一律**停轮 + 事件留痕**，**绝不新造 lane、绝不改 `wavePlan` 分层**（RK2）；回边只重派同一 lane，`rework.max_attempts` 硬限（计数取事件流 `via:'on.fail'` 条数，跨重启幂等）。
+- **落点（新增 2 + 修改 3 + 常量 1）**：新增 `lib/assembly/chain.js`（纯函数：解析 / 八条校验 / lane→step 映射 / 推进判定 / 读端投影，零 IO、零副作用）与 `lib/engine/chain-runner.js`（`member.settled` ⇒ 推进主入口；异常隔离不抛，结算事实不被推进失败反噬）；`lib/engine/dispatch.js` 抽出 `dispatchLaneCore`（工具面 `lane_dispatch` 与链引擎**共用同一条派发路径**——同 Tier3 entry 门 / 同句柄 / 同任务包骨架 / 同 `member.dispatch` 登记，禁第二套实现）；`lib/tools/core.js` 接 `assertChainReady`（构造期首码原样透出）+ `member_settle` 挂推进 + `batch_status` 回显；`lib/assembly/team-asset.js` 删除 P1 的 `chain` 未接线台账条目；`lib/state/event-types.js` 增 `EVT_CHAIN_STEP='chain.step'`（本批唯一 `lib/state/**` 改动，一行）。
+- **P0 句柄修复**：**成功自派 ⇒ 立即消费句柄**（`member.dispatch` 登记之后调 `consumeLaneHandle`；口径「自派即发放即作废、仅直派形态需长期有效」写入代码注释）；两处降级「仅发句柄」分支（无 `ctx.subagents` / 未配置 `config.dispatch.provider`）**不得消费**——句柄是人工直派形态的唯一凭证；失败路径维持既有消费（等价「已回收」）。绑定缺口判据改「**无绑定才报**」：本 stint 内 `member.dispatch` 且 `workerSessionId` 非空 ⇒ 已绑定直接 `hit:false`（**句柄残留 ≠ 无绑定**，修掉引擎自派后旧句柄造成的 `token-ttl-expired` 幽灵缺口）；`no-dispatch` / 无绑定 + 超 TTL 未消费句柄 ⇒ `token-ttl-expired` 两类既有语义逐字保留。
+- **测试面（本批 e-tests）**：新增 `test/p2-chain-autodrive.test.js`（**9 例**：① 链声明正向（五段链八条全过 + 真资产 `engine-team` + `flows.chain` 位置拒 + `skipped` 不推进）② 三反例构造期拒（环未被 `rework` 承认 / `join:any` 缺 `anyFailure` / 链尾不唯一）各含**零批次 JSON 落盘**校验 ③ **五段链自动递进**：`plan` merged ⇒ `plan→exec→tester→review→audit` 逐环自动自派（4 条 `chain.step` 逐条核对 `via`、`member.dispatch` 与 label、句柄零残留、`batch_status.chain` 回显可复原全链，链尾不伪造边）④ P0 句柄两分支（成功= `handle-consumed` + `pendingHandles` 清空；降级= 句柄仍 `verifyLaneHandle` 通过且留在 pending）⑤ `>30min` 活跃 lane 零假 gap（真实批次的已绑定 lane 在 TTL 之后仍 `hit:false` + 未绑定反证仍报 `token-ttl-expired` + 无 dispatch 仍 `no-dispatch`）⑥ 无 `chain` 向后兼容锁（零 `chain.step` / 相位不变 / 不自动派发 / 读端无 `chain` 键）⑦ G-3 有资产但无 `flows.audit` + 含 audit lane ⇒ 零感知跳过）。**删断言数 = 0**。
+- **回归锁（两处既有红，均为方向对齐而非放宽）**：`test/team-asset-mandatory.test.js` P1-4a 的 `chain` 台账断言 **反转为「不得登记」**（P1 登记（`status:'unwired'`、consumer 标 P2）→ P2 接线 ⇒ 条目整条删除；反转形态防回退，判据强度未减）；`test/engine-dispatch.test.js` B2 夹具**去掉 `workerSessionId`**（原夹具带 `ws-1` 命中「无绑定才报」判据 ⇒ `token-ttl-expired` 分支**永不可达**；反证实测：旧夹具 `{"hit":false,"reason":null}`、新夹具 `{"hit":true,"reason":"token-ttl-expired"}`）并**补**「已绑定 + 超 TTL 残句柄 ⇒ `hit:false`」断言。
+- **指引**：`presets/punky-preset/references/discipline.md` §0o 增「**`chain` 已接线**」（唯一规范位 / 八条校验 / 自动推进 / 无链 no-op / P1 台账条目已删）与「**两段式拒态（G-2）**」——建批失败须先分段：**段一 = 框架参数面**（宿主参数 schema，文案不含引擎码）⇒ **段二 = 业务构造期面**（`wave_plan.execute` 内判定序，文案首行原样透出 `TEAM_ASSET_*`/`GATE_*` 码）；共同判据 = **零批次 JSON 落盘** + `pendingBatch` 保留可重试。
+- **派生工件**：`baselines/test-baseline.json` 经官方脚本重生成（`node scripts/baseline-snapshot.mjs --reason "P2 推进链接线（批 p2-chain-autodrive-20260916 · lane e-tests）…"`）⇒ files **114→115**、tests **1321→1330**（+9）、asserts **6540→6586**（+46）、tautologies 0、todos 4 不变。
+  - *（2026-09-17 漂移复核注记：**以上数字是 P2 时点快照，非当前值**——基线此后已被后续批次重生成。现 `baselines/test-baseline.json` 实读：`reason` = 「W1-① 重放/恢复尾巴：新增 test/replay-integration.test.js…」、`generatedAt` = `2026-09-16T16:24:15Z`、files **125** / tests **1431** / asserts **7063** / tautologies 0 / todos 4；`package.json` version 仍为 `0.4.4`（本批未发版）。P2 当时的历史数字按「不重写历史」纪律原样保留。）*
+- **验证**：定向 `node --import ./test/helpers/isolated-home.preload.mjs --test test/p2-chain-autodrive.test.js` **9/9 pass**；四文件定向（`test-baseline` + 本批三处）**53/53 pass**；全量同命令 **tests 1366 / pass 1362 / fail 0 / todo 4**（其中 2 例 `test-baseline` 红由基线滞后引起，重生成后归零）。
+- **生效**：引擎代码（`lib/**`）与数据面（`presets/punky-preset/references/discipline.md`、`baselines/`）⇒ **需宿主重启一次**：代码面随插件重载生效，指引面经资产同步（包内 `presets/` → `~/.dsh/.agent-presets/punky-preset/`）随同一次重启落到 live preset。
+
+### P1：团队资产必填化 —— `team` 必填 + 构造期拒 + 废 `generic`（2026-09-16，批 `p1-team-asset-mandatory-20260916`）
+
+- **语义（构造期拒）**：`wave_plan` 的 `team` 改为**必填且必须解析到团队资产**——缺失/空串 ⇒ 参数面即拒（`team` 出 `required`，文案原样含 `TEAM_ASSET_MISSING_FIELD` 语义）；解析不到资产（含**已废除的 `generic`**、**已退役的 `jiufeng`**、以及**模式名误用**如 `punky-preset`）⇒ 构造期拒 `TEAM_ASSET_NOT_FOUND`；资产某 role 的 `skills` **非空但不可解析** ⇒ 拒 `TEAM_ASSET_SKILLS_MISMATCH`（语义由「非空」扩为「非空且可解析」）。**拒后零批次 JSON 落盘**、`pendingBatch` 保留（补声明可重试）——不再有「告警 + 照常建批」的假绿灯。
+- **判定序（fail-closed，`lib/tools/core.js` 构造期前置段，先于 `store.createBatch`）**：① `team` 词法/必填 → ② 资产加载 + 加载期不变量（首个 blocking 码**原样透出**）→ ③ `skills` 可解析 → ④ 才进 `buildWavePlan`/`createBatch`。**门作用域仍限工具面**（直调 `buildWavePlan` 不走本门 = 已登记差异 W-2，本批不消）。
+- **技能可解析面**：宿主技能根 `USERPROFILE||HOME` + `.agents/skills`（与既有技能名告警面**同源**）；可解析名 = 技能**目录名** ∪ `SKILL.md` frontmatter `name`；**技能根不存在/不可读 ⇒ 同码拒**（不放行、不静默跳过）。零新 env、零新码（复用既有 `TEAM_ASSET_*`）。
+- **拒态文案可读可自救**：点名「该团队无资产 ⇒ 改用有资产的团队」并给出**运行时枚举**的可解析团队；同时消歧「`presets/<team>/team-asset.yml` = 团队资产」vs「`presets/punky-preset/` = 预设（模式）资产，不是团队资产」。
+- **新增资产 `presets/engine-team/team-asset.yml`**：engine 级团队（plan `designer` / exec `coder`·`reviewer` / audit `reviewer`，`audit_leads:[reviewer]`）；`chain` 段 P1 **只登记不接线**——已登进 `lib/assembly/team-asset.js` 的 `UNWIRED_DECLARATIONS`（`status:'unwired'`，consumer 标「P2 flows 推进链」），P2 接线时删该条。资产清单同步 **9 → 10 条**（`presets/punky-preset/asset-manifest.json` 与 `lib/assets.js` 的 `DEFAULT_ASSETS`，新增 `presets/engine-team → preset/engine-team`）。
+- **读端兜底清理**：`lib/state/store.js` / `lib/assembly/snapshot.js` / `lib/aip/agent-descriptor.js` 的 `?? 'generic'` 与 `lib/wave-plan.js` 的 `team = 'generic'` 缺省**同批清退**（避免第二个默认值真源）；缺省链口径不变（无 `chain` ⇒ 现行 3 层直线链 `plan→exec→audit`）。
+- **指引**：`presets/punky-preset/references/discipline.md` 新增 **§0o 团队资产必填与缺省链口径**（team 必填 / 无资产团队名一律拒 / 命名空间消歧 / 团队资产要求含自建团队 skills 必可解析 / 缺省链口径；§0m 已被「派发套件」占用，故不共号）。
+- **测试面（本批 e2）**：新增 `test/team-asset-mandatory.test.js`（9 例：无资产拒 + 零落盘、模式名误用拒、`team` 缺失/空串拒、`generic` 拒、teamsRoot skills 不可解析拒（含正向对照）、技能根不存在同码拒、engine-team `ok:true`/`problems:[]` + 牵头角色不悬空 + `chain` 登记**且可读**、engine-team 建批零 `GATE_TEAM_ASSET_*`/`GATE_ROLE_MISSING`、读端不再兜底 `generic`）；新增夹具 `test/helpers/host-skills.mjs`（隔离宿主技能根**显式注入** + 建批面默认团队 `withDefaultTeam`）。同步既有用例：**60 处 / 14 文件**建批调用补 `team`（不覆盖显式传值）、**4 处断言反转**（无资产：告警+建批 → 拒+零批次落盘）、**9 文件补技能根**、`threeTierTasks`/`cplusTasks`/`G2_TASKS` audit 补 `exec/` consume（团队 `audit_contract.consumes_required` 既有纪律，形态收紧）、assets 计数 **9→10**、`contract.test.js` 与 tool-descriptor 读端口径同步、`suite-consistency-and-hot` 的 `stripComments` 改正则→状态机（注释里 `presets/*` 会破坏正则配对，实测把 core.js 14 个 `defineTool` 块吞到 4 个）。**删断言数 = 0**。
+- **派生工件**：`baselines/test-baseline.json` 经官方脚本重生成（`node scripts/baseline-snapshot.mjs --reason "P1 团队资产必填化（批 p1-team-asset-mandatory-20260916）：新增 test/team-asset-mandatory.test.js（9 例）+ 同步既有用例（补 team / 断言反转 / 夹具技能根 / assets 计数 9→10 / 扫描器修正）"`）⇒ files 113→114、tests 1312→1321（+9）、asserts 6498→6540（+42）、todos 4 不变。
+- **验证**：定向 `node --import ./test/helpers/isolated-home.preload.mjs --test test/team-asset-mandatory.test.js` **9/9 pass**；全量同命令 **tests 1357 / pass 1353 / fail 0 / todo 4**（e1 未落盘期 RED 基线 = 100 fail，收敛后 0）。
+- **生效**：引擎代码（`lib/**`、`presets/engine-team/`、`asset-manifest.json`）与**数据面**（`presets/punky-preset/references/discipline.md §0o`、`baselines/`）⇒ **需宿主重启一次**：代码面随插件重载生效，指引面经资产同步（包内 `presets/` → `~/.dsh/.agent-presets/punky-preset/`）随同一次重启落到 live preset。
+
+### 套件工具单点注册表 `SUITE_TOOLS`：deny 集与模式门覆盖集同源派生（2026-09-16，批 `suite-registry-20260916`）
+
+- **动机**：成员 deny 集（`lib/engine/dispatch.js` 的 13 项字面量）与模式门覆盖集（`lib/tools/core.js` 的 `assertModeActive` 调用点）此前各自散落、两侧口径靠人肉同步——本批把「哪件工具属于哪一面」收敛成**一张表 + 两个派生函数**：新建 `lib/engine/suite.js`（`SUITE_TOOLS`，26 件 × 五字段 `name`/`kind`/`modeGate`/`memberDeny`/`write`）。
+- **派生与兼容**：`SUITE_DENY_TOOLS ≡ SUITE_TOOLS.filter(memberDeny)`（**13 项，导出名/内容/顺序逐字不变**、`Object.freeze`）；`MODE_GATED_TOOLS ≡ SUITE_TOOLS.filter(modeGate)`（9 项）。`lib/engine/dispatch.js` 改为 `import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from './suite.js'` 再 `export { … }`——**必须保留本地绑定**：`buildStartSpec({ denyTools = SUITE_DENY_TOOLS })` 的缺省值直接引用该符号，纯再导出（`export { … } from`）会 `ReferenceError`。
+  - *（2026-09-17 漂移复核注记：注册表此后**扩了一件**，故上句的 26 / 13 / 9 是**本批时点值**。现 `lib/engine/suite.js` 运行期实读：`SUITE_TOOLS` **27** / `SUITE_DENY_TOOLS` **14** / `MODE_GATED_TOOLS` **10**，增量恰为 `batch_control`（`suite.js:59`，成员 deny 与模式门两面各 +1，注释自述「P3a 最小干预面」）。⇒「13 项逐字不变」的现存语义是**既有 13 项名字与顺序不变 + 尾部追加**，不是总数冻结（`test/suite-consistency-and-hot.test.js` SC-1 现按 14/10 对账）。本批历史数字原样保留。）*
+- **口径边界（承前）**：本表只收治理/派发套件，`mcp__*` **不入表、不进 deny、不受模式门**（MCP 等普通工具对成员全量开放）。
+- **模式门补齐 5 件**：`batch_phase` / `lane_claim` / `lane_release` / `asset_claim` / `assign_check`——各件 `execute` **首行**落 `assertModeActive(deps, exec, '<动作名>')`，**先于**参数/状态校验，使非生效模式下零治理写入（`batch_phase` 不迁阶段、`lane_claim` 不落锁、`asset_claim` 不复制产物、`assign_check` 不写 `lastAssign`）。
+- **回归锁**：`test/suite-consistency-and-hot.test.js` SC-1 升级为**全量一致性**（注册表派生 ↔ 导出 ↔ 冻结现值：deny 13 项顺序逐字不变、modeGate 9 项含新补 5 件、两面均不含 `mcp__*`）+ 新增 SC-4（**静态声明面 = 行为面 = 注册表 `modeGate` 集**，双向相等）；`test/mode-gate.test.js` 新增 T3（新补 5 件各一条反向用例 ⇒ `GATE_MODE_INACTIVE` + 零治理写入）。反证已做：三处预期故意改错时三条用例各自 RED。
+- **文档**：`presets/punky-preset/references/discipline.md` §0n 增「零介入面 = 注册表 modeGate 集」条（含 9 件清单与锁定用例指针）。
+- **生效**：代码改动 ⇒ **需宿主重启**。
+
+### 禁止成员嵌套派发：`subagent` / `subagent_fork` 入成员 deny 列表（2026-09-16 用户裁决）
+
+- **裁决口径**：「【成员侧只禁主 Agent 的派发工具】≡【禁止成员嵌套派发】——蟛蜞模式下成员无法派生子成员即可」；边界同时确立为「**MCP 等普通工具对成员全量开放**」。
+- **为何必须显式 deny（代码证据）**：宿主 `maxDepth` 判据是 `childDepth > maxDepth`（`@deepseek-ai/dsh-subagent/lib/index.js:432-436`），我们传的 `maxDepth: 1` **只约束「创建该子会话」**，不约束子会话再派——子会话再派时用的是**它自己那层**的 `tool-subagent` 配置，而 `presets/punky-preset/agent.cordis.yml` 的 `tool-subagent`/`tool-subagent-fork` **未设 maxDepth** ⇒ 走宿主默认 **3** ⇒ 成员（depth 1）再派 depth 2 **被允许**。故成员 deny 列表是「禁止嵌套派发」的**唯一落实点**（`toolFilter.deny` = 可见性期收窄，工具 vanish 且拒绝执行；活体已证「目录可见、调用面被移除」）。
+- **落点**：`lib/engine/dispatch.js` `SUITE_DENY_TOOLS` 11 → **13** 项（`+ subagent` / `+ subagent_fork`），并注明口径边界（不得扩到 `mcp__*` 等普通工具）。
+- **回归锁**：新增 `test/member-deny-boundary.test.js`（3 用例）：① 两件派发工具必须在列；② 必须真正落到 `buildStartSpec(...).request.toolFilter.deny`（不是只写在常量里）；③ **边界锁**——列表不得含 `mcp__*`/`read`/`write`/`pwsh` 等普通工具。测试基线按登记理由再生（`tests=+3 asserts=+5`）。
+- **未采的第二道防线（留档，非本轮范围）**：可另在 preset 给 `tool-subagent`/`tool-subagent-fork` 设 `maxDepth: 1` 做结构性兜底（Leader 的 `childDepth=1≤1` 不受影响；成员再派 `2>1` 被拒）。经裁决只做 deny 面，此项记为可选加固。
+- **生效**：代码改动 ⇒ **需宿主重启**。
+
+### 派发套件活体验证结论 + 第三处缺陷（任务包不携带 `cmd`）（2026-09-16，批次 `suite-live-20260916`）
+
+**活体通过面**（同一批次三轮修复后实测）：
+
+| 验证项 | 活体读数 |
+|---|---|
+| 引擎自派（`lane_dispatch` → `ctx.subagents.startContinuable`） | p-spec → worker `7cefa483…`；e-a → `25940350…`；e-b → `6c4dfa53…`；a-verify → `fa70aa90…` 全部 `spawned:true` |
+| B5 引擎直写 `member.dispatch` | 批事件 3 条（p-spec / e-a @05:51:47.873 / e-b @05:51:48.119）；**并行派发两条 lane 各自登记、未互相覆盖**（修掉「只登记最后一条」） |
+| 成员工具面收窄 | e-a：`wave_plan`/`member_settle`/`assign_check` 目录可见但**本会话不可用**；e-b：`tools_schema` 精确名查询 `missing=[lane_dispatch, wave_plan, member_status]` ⇒ **可见性期收窄生效**（目录层 ≠ 会话面，两口径不可混同） |
+| 成员通信套件 | `swarm.report → Leader（suite-live-20260916/e-a，progress）` 与 `swarm.cc → Manager（suite-live-20260916/e-b，anomaly）` 均成功，**未报 `GATE_SWARM_UNBOUND_REPORT`** ⇒ 身份按 `member.dispatch.workerSessionId` 反查绑定成功；批事件 `swarm.report` / `swarm.cc` 双留痕 |
+| 产物与门禁 | `plan/spec.md`(1,449B) / `exec/a.md`(1,578B) / `exec/b.md`(1,776B) 落批次产物根；plan/exec lane 结算 merged（Plan 契约 / outputs 门均通过） |
+
+**第三处缺陷（本轮抓出，已修待重启生效）**：worker 回执报任务包「目标」位为 `（未声明 cmd）`。
+
+- **根因**：派发处读 `store.readBatch(...)?.wavePlan?.tasks`，而 **`batch.wavePlan` 存的是 wave 数组**（`[{wave, tasks:[…]}]`；见 `wave_plan` 渲染 `value.wavePlan.length + ' waves'`）⇒ `.tasks` 恒 `undefined` ⇒ `laneTask` 恒 `null` ⇒ 任务包「角色/契约/产物」位同样取不到，worker 只能靠 Leader 的 `prompt` 补充自述任务（**本轮全靠 prompt 自包含才没跑偏**——若 Leader 只给一句话要点，引擎自派的 worker 将拿到空任务包）。
+- **修复**：改为拍平所有 wave 的 tasks 后再按 lane id 定位（`wavePlan.flatMap(w => w?.tasks ?? [])`，并兼容旧的非数组形态）。
+- **同源特征（三处一致）**：这条派发链上「**类型面/结构面与运行时不符**」——①未 `inject` 的服务取属性即抛（不是 `undefined`）；②类型 `Omit` 掉却在运行时必需的 `signal`；③`wavePlan` 是 wave 数组而非 `{tasks}`。⇒ 该链路后续改动须以**活体**为准，类型/文档面不足以定契约。
+- **待补验证（本轮未做）**：被 `toolFilter.deny` 的工具是「隐藏」已在活体证实，但**「越权调用被拒」尚未实测**（两条 lane 都按纪律没去调），下一轮由一条 lane 显式尝试调用 `wave_plan` 取拒态码。
+
+### 派发套件活体缺陷修复：`inject` 漏声明 `subagents` + `startContinuable` 的 `signal` 契约（2026-09-16，批次 `suite-live-20260916` 首派连抓两层）
+
+- **第一层（inject）**：
+  - **现象（活体原始报错）**：`lane_dispatch({batchId, lane:'p-spec'})` 报 `cannot get property "subagents" without inject`——**原始 cordis 错**，不是我们的 `GATE_DISPATCH_*` 码面；lane 已被置 `running` 但零绑定 worker。
+  - **根因**：cordis 对**未在 `inject` 声明的服务**在取属性时**直接抛**（不是返回 `undefined`）⇒ `subagentRuntimeOf(ctx)` 里那句 `ctx?.subagents` 直接炸，既定的「无 `ctx.subagents` ⇒ 降级为仅发句柄」分支（B1 语义）**从未有机会执行**。
+  - **修复**：① `lib/index.js` `inject` 补 `subagents`（宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，声明安全）；② `subagentRuntimeOf` 包 `try/catch` ⇒ 走「仅发句柄」降级，不再以原始错崩掉。
+- **第二层（signal，重启后重派才暴露）**：
+  - **现象**：`GATE_DISPATCH_FAILED: 引擎自派失败：Cannot read properties of undefined (reading 'throwIfAborted')`。
+  - **根因**：宿主 `SubagentRuntime.startContinuable(spec)` **直接调 `spec.signal.throwIfAborted()`**（`@deepseek-ai/dsh-subagent/lib/types/continuation.js:139`，并透传 `prepareContinuable(..., {signal: spec.signal})`）⇒ **`signal` 是运行时必需字段**；而宿主类型把它写在 `Omit<..., 'signal'>` 里 ⇒ **类型面看不出来**，只有活体能抓。
+  - **修复**：`lib/engine/dispatch.js` `buildStartSpec` 补 `signal`——缺省 `new AbortController().signal`（**永不中止**：worker 不随 Leader 回合取消而中断），并支持调用方注入自有 signal（原样透传，显式取消能力）。
+- **锁死回归**：`test/dispatch-inject-guard.test.js` 扩到 6 用例：inject 含 `subagents`；**抛错式**取属性（Proxy 模拟注入守卫）⇒ `null` 不抛；常规三形态；**`spec.signal` 存在且 `throwIfAborted()` 可调**；自有 signal 原样透传 + 中止后抛；缺省 signal 每次独立（不复用单例，防跨 lane 误取消）。测试基线按登记理由再生（累计 `tests=+6 asserts=+15`）。
+- **顺带实证（正面结论）**：第一层失败**被引擎自己的观测面抓到**——心跳写 `lane.binding_gap{lane:p-spec, reason:no-dispatch}`（D2 接线活体有效，**只标记不自动处置**），Manager 首轮只读回执据此定位（含产物根目录不存在这一物理佐证）。
+- **生效**：两处均为代码改动 ⇒ **各需一次宿主重启**；本批置 `paused`，重启后 `batch_phase(running)` + 重派 `p-spec` 续跑。
+
+### `execToolCount` 降为纯观察面：不再是升档/评估过期依据（2026-09-16 用户裁决）
+
+- **裁决原话**：「execToolCount 改为仅提示，不作为升难度档依据，难度档位依据已经彻底改写。」
+- **落点**：`lib/state/store.js` `stale()` **移除 `execCallsSince ≥ maxCalls(20)` 判据**（入参 `maxCalls` 保留但忽略，向后兼容调用方签名）——过期只认「从未评估 / 距 `lastAssign.at` ≥ 30min / 时间戳非法」；`bumpExecCount` 保留累计语义并注明**纯观察**。
+- **理由（如实）**：① 档位依据已改写为「每回合主动写入的 difficulty + 判据」，调用数本就不该驱动档位或过期；② 活体实测只读侦察计数会被灌水（见 `lib/tools/readonly.js` 头部活体注记）⇒ 旧判据会误触发重评、压缩评估窗口。
+- **连带更新**：`lib/tools/readonly.js` 头注补充活体实测结论（guard 阶段只读判定未命中，属待修项）与「计数仅观察」口径。
+- **测试同步（4 条断言改写 + 1 条新锚）**：`test/governance.test.js` stale 用例改为「`execCallsSince` 20 / 10000 均不过期」；`guard` 用例由「20 次调用后重评」改为「补足 20+ 次仍放行 + 时间窗过期才重评」；`test/tools.test.js` 两处旧判据断言改用时间窗。测试基线按登记理由再生（`asserts=+5`）。
+
+### 改名登记与「模式跟随」：`jiufeng` → `punky-preset` + 全局装载不全局生效（2026-09-16）
+
+- **改名（三处全改，用户裁决 A3）**：① **agent preset id / 目录**：`presets/jiufeng/` → `presets/punky-preset/`（含 `asset-manifest.json`、`preset.yml`、`agent.cordis.yml`、`references/`）；② **引擎数据根缺省**：`config.root ?? '~/.dsh/punky-preset'`（旧根 `~/.dsh/jiufeng` **原样保留**为历史归档，用户裁决 R-c：不迁移、不桥接 ⇒ 活体查询不呈现旧批次）；③ **装配命名空间**：`aip.team` 缺省与 `resolveAssembly(...)` 的退役团队名一并改 `punky-preset`。**未改**（历史事实）：`CHANGELOG.md` 既有条目、`docs/decisions/**` 留档、旧团队名 `jiufeng-team` 字面。
+- **改动面**：51 个文件 165 处（`lib/**` 含 `wave-plan.ts/.js` 对、`test/**` 断言与夹具、`presets/**`、`skills/**`、`docs/**`、`scripts/**`）；`test/contract.test.js` 内标识符 `jiufengAssembly` 手工修正为 `punkyPresetAssembly`（机械替换会咬伤长标识符，已登记为改名操作的坑）。
+- **模式跟随（B1，用户裁决「全局装载、不全局生效」）**：新增 `config.modes.gate` 白名单——名单内 preset 才启用难度门禁 / G1 / 套件工具；名单外**门禁全放行且不计数**（其他模式零影响）；子会话（Manager/worker）继承父会话模式，**结算面不被误锁**；套件写面工具在名单外拒 `GATE_MODE_INACTIVE`（先于 G1）。`modes` / `dispatch` 纳入热更白名单 ⇒ 改 `runtime.json` 即生效、无需重启。
+- **缺省方向（如实登记）**：包缺省 = `modes.gate` 未配置 ⇒ **全模式生效（旧行为）**，避免升级悄然改变任何已装环境的行为；「跟随模式」由部署配置显式开启（本机 `cordis.patch.yml` 已写 `gate: ['punky-preset','jiufeng']`，`jiufeng` 为旧会话过渡别名）。
+- **`dispatch.gate` 保持缺省 `warn`**（用户裁决：enforce 不开）；`config.dispatch.provider: spawn` 随本次一并配置（宿主 `dsh-base` 挂载 `dsh-subagent-spawn-in-process`, providerName `spawn`）。
+- **验证**：新增 `test/mode-gate.test.js`（10 用例：纯函数 / guard 放行与计数 / 套件拒态码与 G1 次序 / 热更白名单与快照切换）⇒ 10/10；全量回归绿；测试基线按登记理由再生（+10 用例 / +42 断言，差值恰为新文件）。
+- **生效**：引擎代码 + 部署配置 ⇒ **需宿主重启**；活体验证（白名单外模式零介入、白名单内门禁照旧、`lane_dispatch` 自派）留待重启后按清单执行。
+
+### B2：蓝图 §8⑤「运行期首触校验」落地 —— `gate.contract_missing`（2026-09-15）
+
+- **语义（读法 A，Leader 已裁）**：团队资产**未声明**某检查项 ⇒ 引擎缺省接管时**首次触达该检查点**，落事件 `gate.contract_missing` + 一次 `warn` 留痕；**非拒态**——**不新增 `GateErrorCode`**、不改任何判定、不改 exit code、不阻断迁移。
+- **去重与幂等**：去重键 `(batchId, gateKind, layer)`，判据 = `batch.events`（同键已存在 ⇒ 不再发）⇒ **只报一次/批 + 跨重启幂等**；实测 **7 条/批**（6 个判定位 + `layer` 维度）。
+- **只读零发射（R-5 硬边界）**：事件**只由写路径**（`setMember` / `setPhase`）发射；`gate_status` 等**只读视图绝不发射**（负控用例锁定）。
+- **落点**：`lib/state/event-types.js`（常量单点）｜`lib/types/contracts.ts`（事件判别分支；`GateErrorCode` **零改**）｜`lib/state/gates.ts`（**纯构造**载荷 `contractMissingPayload()` + 6 个判定位：`entry_requires`/`contract`/`needhuman`/`gate_command`/`targets`/`complete`）｜`lib/state/store.js`（纯函数去重 + **即时发射器**，与 `member.settled` **同一次 `atomicWrite`**）。
+- **验证**：9 用例 RED(6红)→GREEN(9/9)；R-5 只读零发射（`gateStatus` 9 次 + 真工具面 3 次调用均零事件）；幂等（跨 `createStore` 实例重建后同键仍 1 条）；定向 344 tests / 0 fail；**audit 独立复现 18/18**（含 `GateErrorCode` 21 条零新增、拒侧仍拒）。
+- **规格勘误（D-5，2026-09-15 回写）**：实施形态由规格「延迟收集 + 统一落盘」改为**即时 push 独立发射器**（去重须即时判定）；去重上限由规格「≤6 条/批」订正为**实测 7 条**（键含 `layer`，按 R-3 键逐字实现、不并层）；勘误落在 `artifacts/core-debt-parallel-20260915/plan/debt-spec.md` 顶部「勘误与回写」。
+- **生效**：引擎代码 ⇒ 需宿主重启（已随 2026-09-15 重启载入）；**活体事件验证纳入内核收口后的统一验证 V3**。
+
+### F-7：空 `gate:` 行（**声明了却没给命令**）改为**真拒**（2026-09-15，用户裁「严控勿松」）
+
+- **问题（长期潜伏，非新缺陷）**：exec 层产物写 `gate:` 行但**命令解析为空**时，`lib/state/gates.js` 的 `GATE_EXIT_NO_COMMAND` 分支**长期不可达**——三重遮蔽：① 正则 `^gate:\s*(.+)$` 的 `(.+)` 要求 ≥1 字符 ⇒ 空声明零命中；② 收集层 `cmd.length===0 ⇒ continue` 再剔除；③ 判定层 `if(!det.declared)` 早退**先于**空判 ⇒ 该码永不执行；注释却声称「命令解析为空仍走 GATE_EXIT_NO_COMMAND」（**注释漂移 = 第二重「写了不生效」**）。实测为**静默放行**。
+- **改动**（`lib/state/gates.ts` 单文件；`store.js`/`command-exec.js` 判定未碰）：新增 `GATE_EMPTY_LINE_RE=/^gate:[ \t]*$/m`（**`[ \t]` 非 `\s`**，防跨行误吞）+ `detectGate.emptyCommand` 位 + `!det.declared` 早退**之前**首判短路 ⇒ 空声明直接拒；删原死码三行（保留 `:786` 历史痕迹注释「曾长期不可达，F-7 起真正生效」）；**`declared` 语义一字未改**（兼容锚点）；顺带把 `GATE_OFF_LINE_RE` 的 `\s*` 收紧为 `[ \t]*`（零行为变化）。
+- **语义边界（必须区分）**：**空声明 ⇒ 拒**（`gate.exit_blocked` + lane 留 review）｜**完全未声明 ⇒ 仍零感知**｜`gate: false` ⇒ 走显式关闭留痕（`command-declared-off`），**不拒**。
+- **连带 fixture**：**删断言数 = 0**（3 处反转 + 用例名 + X-1 关账）；`gates.test.js`：**F-7 净增 +14（纯新增，唯一改动块 `@@ -403,0 +494,55 @@`），文件当前 203**——注：与「改前 189」的差额含**前置批次**（r2/V9）删除的 7 行，非本批删除（audit 独立判定）；新增 G11 空声明端到端拒 / G12 未声明零命令门族事件、`gate-techdebt-red.test.js` 3 条断言反转、`command-exec.test.js` 补「仅单元层可达」注释。
+- **双向护栏（真跑留档）**：A 向「改坏短路 ⇒ G11 + R-27 转红 → 回退复绿」；B 向「误置位 ⇒ G10 + G12 + R-27(a) 转红 → 回退复绿」；正则探针 13/13（R7 跨行风险 MISMATCH=0）。
+- **验证**：**拒载反例真调用**（空声明/尾随空格 ⇒ `ERROR GATE_EXIT_NO_COMMAND` + lane `review` + `gate.exit_blocked` 恰 1 条）；定向 5 文件 **132 tests / 128 pass / fail 0 / todo 4 / exit 0**；`gate:` 行在**产物根**与**仓库根**双 cwd exit 0（92/88）；`npm run build` 后产物同步（未手改 `.js`/`.d.ts`）；**全量判定归 audit lane**。
+- **不追溯（U5）**：**旧批**中未 merged 的空声明 lane **不追溯**——此前后续将以「静默通过」变「拒 + 留 review」，属**有意的正向收紧**（符合「严控勿松」）；已终态批不受影响。
+- **规格偏差（如实）**：规格建议护栏 G12 用 `/^gate\./` **全族**零事件，实测不成立（`gate.passed` 在 merged 恒有；jiufeng 下另有 B2 的 `gate.contract_missing` 契约首触留痕，二者均**非命令门**）⇒ e1 已等价收紧为「**命令门族零事件** + 其余 `gate.*` 仅白名单该两项，出现第三种即红」，**护栏强度不降**。
+- **生效**：引擎代码 ⇒ **需宿主重启一次**。
+
+### F-4：`flows.complete` 升为 `LAYER_UNKNOWN`（**blocking 拒载**）（2026-09-15，用户裁决 Q-D=A「严控勿松」）
+
+- **改动**：`lib/assembly/team-asset.js:48` 的 `FLOW_SECTIONS` **移除 `'complete'`**（同处注释同步为「已清退」口径）。允许层集自此**恰为三段：`plan` / `exec` / `audit`**。
+- **行为变化（须读，按用户「严控勿松」裁决执行）**：团队资产若声明 `flows.complete` ⇒ **整份资产拒载**（码 `TEAM_ASSET_LAYER_UNKNOWN`、`severity='blocking'`）——**不降为告警、不加兼容分支、不豁免、不追溯旧批**；处置 = **删除该段**（四个内置团队在 legacy 清退时已删 ⇒ 零回归）。
+- **连带 fixture**：**删断言 0 / 断言反转 1 / 新增 19**；`test/audit-contract-gate.test.js` 采「**活证据保活 + 废键证据面迁为拒载反例**」双轨（`:176` 的 `GATE_COMPLETE_AUDIT_FAILED` 断言逐字保留——其语义正是「`verdict` 是唯一真源」；原 legacy 键面迁为新用例断言整份拒载），避免以「删键了事」造成**静默证据丢失**。
+- **双向护栏（实测）**：临时把 `'complete'` 加回 ⇒ **恰好 3 条用例转红**（46/43/3，exit 1）；回退后 **46/46 exit 0**。
+- **验证**：定向 6 文件 **65/65 exit 0**；A5-L2 47/47；A7 `node scripts/check-team-assets.mjs` 四团队 **PASS**；**全量（权威跑，audit lane 独立复跑）1251 / pass 1247 / fail 0 / todo 4 / exit 0**（e1 自报的 1248/1244/0/4 为 `--test "test/*.test.js"` **子集口径**，属文件集差异、非回归）；`gate:` 行在**产物根**与**仓库根**双 cwd exit 0，并以引擎真件 `detectGate`+`runCommand`（cwd=产物根）实跑 `COMMANDS=1 / EXIT=0`。
+- **生效**：引擎代码 ⇒ **需宿主重启一次**。
+- **登记未清**：`team-asset.js` 死码（原 :274，现 :282）**本批不清**（精准修改）；`docs/**` 经扫描**无需改动**（对 `complete` 的 24 处命中全属「批次阶段 / complete 门禁」语义）。
+
+### `idle` 语义纠正：**字面意义的「空闲态」**（2026-09-15 用户澄清；代码行为不变）
+
+- **澄清（用户口径）**：`idle` **不是崩溃态**，是**字面意义的空闲态**——成员当前无在跑动作；`idle → running` 是**返工 / 续跑 / 重派**的**常规入口，可随时调用**，不必先有「故障」。进程重启把在途 lane 落回 `idle` 只是它的**一个来源**，不是它的定义。
+- **纠正面（只纠正措辞与定位，判定与行为零改动）**：
+  - 引擎：`lib/state/gates.ts`（G-1 注释 + **运行期可见的 `gate.escape.reason` 文案** → 「G-1 空闲态不堵：lane 处于 idle（空闲态——返工/续跑可调用；进程重启亦会把在途 lane 落回 idle）…」；mtime 变更性基线注释 2 处 → 「排除 idle 空闲态重派」）；`lib/types/contracts.ts`（`MemberState` 注释 → 「idle **空闲态**（8 值；非崩溃态，返工/续跑可调用）」）。
+  - 指引：`presets/jiufeng/references/discipline.md`（§0b G2 边界改「G-1 空闲态不堵」；**新增独立 idle 语义条**：字面空闲、非崩溃态、`idle→running` 为续跑/重派入口）；`presets/jiufeng/agent.cordis.yml`（纪律 `0g` 与 `7`）；`presets/jiufeng/references/manager.md`（3 处）。
+  - 文档：`docs/governance-technical.md` 与 `.en.md`（状态图、成员状态操作、G-1 边界、恢复机制、重启冷窗 5 处）；`docs/single-machine-capabilities.md` 与 `.en.md`；`docs/engine-intro.md`（并**顺带修正其中已过时的 G1 表述**——「worker/Manager 子会话继承父档」已按 Q2=B 取消，判据落调用方）。
+- **验证**：`npm run build` exit 0；全量 **1242 / pass 1228 / fail 0 / todo 14 / exit 0**（无测试断言旧文案）。
+- **生效**：`gates.ts`/`contracts.ts`（含 build 产物，运行期 `escape.reason` 文案在内）与 persona/指引属文本面 ⇒ **需宿主重启一次**在运行会话生效。
+
+### legacy（缺声明回落）**完全清退**（2026-09-15，用户裁决「完全清退，不兼容旧有批次」）
+
+- **批次** `legacy-retire-20260915`（5 lane / 3 waves：`p1` 清退规格 → `e1` 引擎侧 ‖ `e2` 资产侧 → `a1` 验收；team `software-team`，建批即拉起 Manager）。**audit verdict=pass（blocking 0 / followup 5）**；**批已 complete**。
+- **引擎侧清退（E-1..E-5）**：`LEGACY_PLAN_CONTRACT` 死常量删除 → `ENGINE_BASELINE_PLAN_SECTIONS`（`flows.js`）唯一真源；plan 契约缺声明分支正名（行为零变化）；`produceFieldOf` **null 化**（消除 `degrades{kind:'produce-field-widened'}` 的虚构字段名误报，非判定面）；**complete 双键收敛**——`verdict` 为唯一真源（`gates.ts` 两态 `source`），`flows.complete.require_audit_outcomes` 校验移除（校验器保留 `complete` 合法 + `continue` 短路，方案 B）；`enforcesConsumeEntry` 死函数删除 + 全部「回落 legacy」措辞正名。
+- **资产侧清退（E-2）**：四个内置团队资产（software/design/research/writing-team）的 `flows.complete.require_audit_outcomes` 段**整段删除**（每文件恰 −64B 纯删除）；`audit_contract.verdict` 真源全保留。
+- **总语义（第一硬约束，已实测守住）**：**引擎基线 = 唯一默认**，**新建批次行为零变化**——a1 以自写 18 条探针做「当前引擎 vs 基线回滚副本」双引擎对照：**15 条判定面双引擎同判（零翻转）**，3 处差异全为清退动作本身（produceFieldOf 回落、degrades 误报、资产 complete 段）。**旧批次不兼容、不追溯**（按用户裁决）。
+- **验证**：全量 **1236 / pass 1222 / fail 0 / todo 14 / exit 0**（Leader 独立复跑一致；+1 = 规格点名的**正向清退用例**，非放水）；两条 lane `gate:` 命令在产物根与仓库根**四跑全 exit 0**；改动物对账**越界 0**（14 文件基线 MANIFEST 逐条对上，`store.js`/`gates.test.js`/`contract.test.js`/`gate-techdebt-red` 逐字节零改，四 yml 恰 −64B）；`lib/**` 内 `LEGACY_|require_audit_outcomes|enforcesConsumeEntry` **代码零命中**（仅存历史注释）。
+- **文档同步**：`discipline.md`（码表 `verdict` 行、audit 边界行、teamsRoot 两处、附录 A.2「消费点实况」——`consume_field` 标注为 S19① **已接线**、`audit_contract` 三键消费点写明）、`lib/assembly.js` / `lib/tools/core.js` 注释正名。
+- **followup（a1 登记，不阻断）**：F-3 `scripts/probes/flex-assembly-audit.mjs:52` 废键声明（探针脚本，无害）；F-4 方案 A（`FLOW_SECTIONS` 移除 `complete`）独立清理项；F-5 a1 未直接复跑 build（以产物同刻 mtime + 套件背书判定）。
+- **生效**：`flows.js`/`gates.ts`(→build)/`assembly.js`/`core.js` 属引擎代码 ⇒ **需宿主重启一次**在运行会话生效。
+
+### `config.ratchet` 热更守卫：重启生效面显式化（2026-09-15，用户裁决 Q-9=A，G-3 收口）
+
+- **问题（audit G-3）**：`config.ratchet` 位列热更顶层键白名单（`lib/hot/config-watch.js` `ALLOWED_TOP_KEYS`），但 `applyConfigChange` **无 ratchet 分支** ⇒ 热写「被接受却不生效、非法也不校验」——典型「写了不生效」的假动作面（A-① 接线后该键已真实生效于装配期，此面更显眼）。
+- **裁决与落地（按推荐 A，机制按意图修正）**：原表述「移出热键」在机制上不成立——`ALLOWED_TOP_KEYS` 是 runtime.json 顶层键**合法性白名单**（boot overlay 同用），移除会让 `ratchet` 整键被拒（破坏启动期配置）。故按**意图**落地：`lib/hot/config-watch.js` 新增**纯函数守卫 `ratchetHotGuard`**（变化检测 + `loadRules` 当场校验 + 文案），`lib/index.js` 的 `applyConfigChange` 增 **⑥ 分支**：ratchet 变化 ⇒ **warn「需重启生效（热更不应用）」**；非法 ⇒ **warn「非法 + 重启时装配将失败」**（`loadRules` fail-closed 语义不变，重启仍会失败——守卫只负责让用户提前知晓）。`ALLOWED_TOP_KEYS` 保持含 `ratchet`（合法启动期键）。
+- **测试**：`test/governance-hotconfig.test.js` 新增 T8–T11（无变化零噪音 / 合法变更文案 / 非法变更文案与原因 / 删键回落默认表仍告警）。全量 **1235 / pass 1221 / fail 0 / todo 14 / exit 0**。
+- **生效**：`lib/index.js` / `lib/hot/config-watch.js` 为手写 JS ⇒ **需宿主重启一次**在运行会话生效。
+
+### 引擎核心待办 A 类落地：`config.ratchet` 生产接线 + 台账漂移修正（2026-09-15，用户指令「按 wave_plan 拆分成小项并行」）
+
+- **批次** `core-pending-a-20260915`（5 lane / 3 waves：`p1`‖`p2` → `e1`‖`e2` → `a1`；team `software-team`；`assembly={managerPlan:'raise', auditLane:'a1'}`，**建批即拉起 Manager** 并登记）。audit lane **verdict=pass**（`blocking` 0 / `followup` 8）。
+- **A-① `config.ratchet` 生产不可达（已修）**：装配点 `lib/index.js` 的 `createStore(root, { rules: loadRules(config), onStateChange })` —— **必须传整份 config**（`lib/state/machine-rules.js` 内部自取 `config.ratchet`；传子对象会静默退化为默认表 = 没修）；读点 `lib/state/store.js` 的 `rules ?? loadRules()` 形态**一字未改**；**缺省零差异**（无 `ratchet` / 空对象 / `{}` 三者与 `schema` 常量**同引用**）。台账条目（`gates.ts`）由「🔴 域外未接线」改述为 `status:'wired'` 并保留可读性。
+  - **⚠ 行为变化（必读）**：**非法棘轮配置**（越界键 / 放宽迁移且未 `allowRelax`）由「**静默忽略**」变为「**装配期 throw**」（`loadRules` 语义 fail-closed：棘轮不可绕过）⇒ 配置写错会让插件**加载失败**（错误信息明确，如 `ratchet memberRules: relaxing transition "pending -> bogus" is not allowed`）。回滚 = 删 `rules:` 一行。
+- **A-② 台账漂移（已修）**：`lib/assembly/team-asset.js` 的 `UNWIRED_DECLARATIONS` **删除 `consume_field` 整条**（并清 `declared` 映射死键、原位留历史注释）——**只把 `status` 改 `'wired'` 无法消除误报**（读端 `unwiredDeclarationsOf` 只按「该键是否被声明」过滤，不看 `status`）；`lib/assembly/flows.js` 两处失实注释（「已备但未接线」）同步为「已接线（S19①）」。事实基础：`consume_field` 自 **S19①** 起已由 `gates.ts` entry 门 `consumeFieldNameOf` 消费。四内置团队 `unwired` 由 `[consume_field, state_machine]` → `[state_machine]`（`gate_status.gateStrength.unwired` 不再误报）。
+- **R-15 复活（P-1 口径）**：`test/gate-techdebt-red.test.js` 的 `test.todo` R-15 改为真实用例；白名单 `CONSUME_FIELDS=['consume']` **未扩**（`inputs` 构造在合规资产下不可达一事已在测试体内注明，避免假契约）。同文件顺带**cwd 无关化**（`PKG_ROOT` 基准；`process.cwd()` 依赖清零）。
+- **新增** `test/ratchet-wiring.test.js`（7 用例）：判别性设计（无 `ratchet` ⇒ `GATE_ENTRY_MISSING`；收紧后 ⇒ `invalid member transition: pending -> running`，**码字可区分**，避免「只断言抛错」的恒绿假过）+ 缺省零差异（引用相等）+ 非法配置 fail-closed + 接线形态守卫；子进程隔离 `USERPROFILE`/`HOME`/`DSH_HOME`。
+- **命令 gate 的 cwd 契约（第二批实测坑，已入纪律 §0b 六）**：`gate:` 行在**批次产物根**执行 ⇒ 写成绝对路径**还不够**，**被调脚本自身也不得依赖 cwd**（`process.cwd()` 相对夹具必 `ENOENT` → 结算被 `GATE_EXIT_NONZERO` 拒、lane 留 review）；交付判据 = 在**产物根**与**仓库根**各跑一次**均 exit 0**。本批 e2 因此被门禁拦下一次并返工（`review → running → 重跑 gate`）。
+- **验证（Leader 独立复跑 + audit 独立取证）**：全量 **1231 / pass 1217 / fail 0 / todo 14 / exit 0**（基线 1224/1209/0；差量闭合 = +7 新用例、R-15 todo→pass）；两条 lane `gate:` 命令在产物根与仓库根**四处 exit 0**；改动物对账**无越界**（30 项 tsc 回拷产物与新鲜构建逐字 `SAME=30 / DIFF=0`）。
+- **生效条件**：`lib/index.js` / `lib/state/store.js` / `lib/assembly/*` 为手写 JS（免构建）；`lib/state/gates.ts` 属源、已 `npm run build` ⇒ 本批**需宿主重启一次**方在运行会话生效（用户口径：不自行重启）。**宿主级加载冒烟未做**（受禁令，列为 followup）。
+- **audit gap-list（8 条 followup / 0 blocking，如实登记）**：G-1 规格未回写 `core-spec`（`pending:['running']` 不构成收紧，e1 已按代码订正为 `pending:['failed']`）；G-2 注释行号 off-by-one；**G-3 `config.ratchet` 仍列 `lib/hot/config-watch.js` 的 hot 顶层键，但 `applyConfigChange` 无 ratchet 分支 ⇒ 热更不生效、非法热写不校验**（待裁决）；G-4 本条目即 CHANGELOG 补记；G-5 宿主级冒烟未做；G-6 e2 自述「`process.cwd()` 计数 0」实为 1（`:87` 注释内）；G-7 A-③ 清单缺「默认值/不裁决后果」行；G-8 三个 `.ts`/产物文件无备份级 diff（无基线）。
+
+### G1 收窄（Q2=B）+ 镜像只升不降（Q4=B）（2026-09-15，用户裁决）
+
+- **G1 收窄：成员仅作为会话存在，不可写成员状态**。`lib/tools/core.js#assertMemberActionTierC` **取消父档继承**（原实现允许 worker / Manager 子会话经 `header.parentSession` 继承 Leader 的 C 档）：
+  - **建批（`wave_plan`）**：只认**本会话自己的 C 档** —— worker / Manager 子会话一律建不了批（B 档仅承载单个「单步独立任务」，不进 `wave_plan`）；
+  - **成员状态（`member_status` / `member_settle`）**：仅 **调用方会话自己 C 档（Leader）** 或 **该批已登记的 Manager 会话**（`batch.manager.agentId`；宿主口径 = continuable 的 `subagentId = childId = 会话 id`）可写；
+  - **判据落调用方**而非批归属会话 ⇒ 「worker 借用 C 档批会话的 `session` 参数借道」同样被拒（原实现会误放行：命中批归属会话的 C 档）。
+- **镜像只升不降（Q4=B）**：`assign_check` 在「显式 `session` ≠ 执行会话」时把评估镜像到执行会话（guard 兼容）；现**只升不降**——执行会话自身档位更强（rank `C > B > A`）时**跳过镜像**（`notice` 回显「镜像跳过」、不写 `mirroredTo`），保留其 `lastAssign` / `pendingBatch` 不动。动机（实测）：为写「他会话」B 档夹具而调 `assign_check`，镜像把 Leader 自身 C 档覆盖为 B。
+- **测试**：`test/tools.test.js` 原「继承正例」改写为新契约（worker 不继承 ⇒ 建批拒；非 Manager 子会话借 C 档批会话 `session` 仍拒；该批已登记 Manager 会话放行），新增 Q4 镜像用例（只升不降 + 等档照常镜像的反向对照）。聚焦 **27/27**、全量 **1224 / pass 1209 / fail 0**。
+- **文档**：`presets/jiufeng/references/discipline.md`（§0 G1 收窄段 + §0a 镜像只升不降 + 附录 A.3.1）、`presets/jiufeng/agent.cordis.yml`（纪律 `0` / `0a`）、`presets/jiufeng/references/manager.md`（§4 成员面写权边界）、`skills/software-team/SKILL.md`（纪律要点）、`docs/governance-technical.md` 与 `.en.md`。
+- **生效条件**：`lib/tools/core.js` 属引擎代码（纯 JS）⇒ **需宿主重启一次**方在运行会话生效（同「引擎改动重启前不生效」实测口径；用户口径：不自行重启）。
+- **Q3（同批裁决）**：**旧引擎拉起的批次无关**（不追溯、不迁移）；**legacy 由后续任务统一清退**（登记见 `docs/legacy-fallback-inventory-*` 的退场口径）。
+
+### G1「档位 × 工具面」+ G2「建批即拉起」硬门禁（2026-09-14，用户裁决：G1=B 严格 / G2=A）
+
+- **现象与根因（用户提出）**：难度门禁只管住 Leader 自己的执行型工具面，**管不住「借成员面工具绕开档位」**——A/B 档会话照样能 `wave_plan` 建批、`member_status` / `member_settle` 写成员状态。次生根因更重：Leader 以 A/B 档手工 `subagent` 逐个派单 + 手工改成员状态 ⇒ **批次落在 worker 会话名下**（装配声明 / Manager 拉起 / audit lane 责任全部错位），与「成员大规模并行」的执行模式相悖。另一条时序缺口：`managerPlan` 缺省已归一到 `raise`，但「拉起」当时只有收口告警（且仅 exec lane≥3 的批）⇒ **实为自觉**。
+- **G1 = 工具面前置断言（严格档）**：新增 `assertMemberActionTierC(store, sessionId, exec, action)`（`lib/tools/core.js`），`wave_plan` / `member_settle` / `member_status` 三处调用前要求当前会话已写入 `difficulty: 'C'`——**未评估与 A/B 同罚**，分别拒 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`；worker / Manager 子会话经 `header.parentSession` **继承父档**（否则「建批即拉起」的 Manager 连自家批都结算不了）。**设计取舍**：未做成 guard 规则（那一层只拦 Agent 调用路径、代价更小）——选工具面强制，任何调用者都绕不过去，代价是引擎级测试须显式模拟「C 档会话建批」这一前置事实。
+- **G2 = entry 门禁前置（事前拦）**：`lib/state/gates.ts#checkEntryGate` 增判——`assembly.managerPlan === 'raise'`（含缺省归一）的批，**第一个 exec 层 lane 派发前**必须已登记 `batch.manager`（`batch_phase({ batchId, manager: { agentId } })`），否则拒派 `GATE_MANAGER_NOT_RAISED`。边界：只拦 **exec** 层（plan 层可先出设计与计划）；判定走 `reject()` ⇒ **继承 G-1「idle 恢复永不可堵」**（`idle` lane 的崩溃重派降级为告警放行 + 留痕）；显式 `leader-direct` 的批不受此门。收口告警 `gate.manager_missing` **保留**为事后核对面（两者同源 `managerPlan`）。
+- **码表**：`GateErrorCode` 增 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C` / `GATE_MANAGER_NOT_RAISED`。
+- **纪律与文档**：`presets/jiufeng/references/discipline.md`（§0 增「档位 × 工具面一致性（G1）」；§0b 一 增「建批即拉起（G2 硬门禁）」；§0g 标「已由 entry 门禁硬拦」；附录 A.3.1 新增 + A.4 增一行）；`presets/jiufeng/agent.cordis.yml`（纪律 0 增 G1 一句；0b / 0g 增 G2）；`presets/jiufeng/references/manager.md`（§1 拉起时机增「该时序已由 entry 门禁硬拦」）；`skills/software-team/SKILL.md`（纪律要点增「成员面动作只认 C 档」+ 任务包不含建批/管成员职责）；`docs/governance-technical.md` 与 `.en.md`（§4 增 G1 / G2 两段）；`docs/engine-intro.md`（难度路由行补 G1/G2）。口径原话：**成员协作只有一条轨道** = 评 C → 建批 → 建批即拉起 Manager → 由 Manager/Leader 派发与结算。
+- **存量影响面（实测）**：扫描 `~/.dsh/jiufeng/sessions/**/batches/*.json`——批总数 765、`running`/`paused` 71、声明 `raise` 63、其中未登记 Manager 51；**唯一可能被拦的形态（在途 + 未登记 + 有 pending lane）= 4 个批，且其 pending lane 全在 audit 层** ⇒ **G2 实际阻塞存量批 = 0**（那 4 个批若将来重开 exec lane，需一行 `batch_phase(manager=…)` 解封，属既定语义）。
+- **验证（Leader 独立复跑）**：`npm run build` exit 0；全量测试 **1223 / pass 1208 / fail 0 / todo 15**（改动前基线 1214 / 1129 / 70 ⇒ 净增 **9** 条 G1/G2 用例；新增 `test.skip`/`test.only` = 0，用例总数不减）。红证据由 worker 以「临时停用门禁 → 单跑取红 → 逐字还原」取得（`lib/tools/core.js` 还原后 sha256 `03e890a2…6ad0` 与备份一致，`lib/**` 内无探针残留）。测试面改动：17 个 `test/**` 文件——`test/helpers/gate-fixture.mjs` 新增共享种子 `assessC`（走 `writeGovernance`，与 `assign_check` 同一落盘函数）与 `registerManager`（委托 `store.markManagerRaised`，即 `batch_phase({manager})` 唯一入口），16 个套件在 harness/`setup` 补种子、3 处补 Manager 登记；`lib/**` 语义**零改动**（未通过改断言/改实现绕过任何红）。
+- **实机生效性（重启后实测，4/4 PASS）**：重启**之前**两道门禁在运行进程里均**未生效**（探针①未评估会话建批成功；探针②`raise` 批未登记 Manager 派 exec lane 返回改前码 `GATE_ENTRY_MISSING`，而构建产物 `lib/state/gates.js` 内已含 `GATE_MANAGER_NOT_RAISED` ⇒ **非构建缺失、是进程未重载模块**）。**用户重启后复验**：① 未评估会话建批 → 拒 `GATE_BATCH_REQUIRES_C`；② `raise` 批未登记 Manager 派 exec lane → 拒 `GATE_MANAGER_NOT_RAISED`；③ 登记 Manager 后同 lane 拒因回落到 `GATE_ENTRY_MISSING`（G2 已放行）；④ lane `idle` 重派 → 降级放行 + 事件 `gate.escape{kind:'idle-recovery-passthrough'}`，**移除 Manager 后同样降级**（`reason` 内可见被跳过的 `GATE_MANAGER_NOT_RAISED`）——G-1「恢复路径永不可堵」在 G2 上实测成立；⑤ **B 档分支（用户原始症状）**：B 档会话调 `wave_plan` → 拒 `GATE_BATCH_REQUIRES_C`（`本会话档位 = B`）、调 `member_status` → 拒 `GATE_MEMBER_REQUIRES_C` ⇒「B 难度还去建批」已被物理堵死。
+- **顺带修复（O-18，本轮实机复验发现）**：`lib/state/store.js` 的 entry 门禁**抛错文案**旧写法 `g.missing ?? g.problems ?? []` 会被恒为数组（G2 下为空 `[]`）的 `missing` 吞掉 `problems` ⇒ 抛错只剩 `Error: GATE_MANAGER_NOT_RAISED`（**留痕事件里 `problems` 是全的**，仅抛错侧丢提示）。改为**取非空者**，一并修好 P1 `GATE_AUDIT_CRITERIA_MISSING` 的同类形态；`test/tools.test.js` 的 G2 负向断言同步**收紧为必须带提示**（`/GATE_MANAGER_NOT_RAISED: .*batch_phase.*登记再派 exec/`）。验证：聚焦 **26/26**、全量 **1223 / pass 1208 / fail 0**；**待下次宿主重启生效**。
+- **口径修正（如实）**：本轮之前记录的「G1 已在 live 会话确认生效」**与本次探针矛盾**，复核判为早先那条结论**不可靠**（很可能是把难度 guard 的「未评估即拒执行型工具」误读为 G1）——以实机探针为准。
+
+### 单选遗产全面清除：`preset` 一律多选 / 数组（2026-09-14，用户澄清）
+
+- **澄清（用户口径）**：`compose` 是「护栏配置原本单选」时的不合理设计产物——单选无法表达叠加，才需要一个"全量合并项"。故本轮把**单选遗产整体清除**，护栏配置统一为**多选 / 数组**语义。
+- **引擎**（`lib/governance/config.ts`）：`preset` 的**单值字符串形态废除**——`preset: "l1-sensitive"` 判形态非法（`normalizePresetRefs` 报错 → resolve 回退空表 + warn，warn 文本给出数组写法指引）；**唯一合法形态 = 注册 id 数组**。
+- **写通道**（`lib/webui/runtime-config.js`）：单值字符串 → `invalid-value`（错误信息含 `must be an array` 与数组写法），不再按 id 合法性放行。
+- **面板**（`lib/panel/gov-config.js`）：`formPresetOf` 只接受数组；单值字符串 / 含未注册 id / 其它形态一律走 `{ custom }`（原文保留 + 警示），保存时由后端形态校验拒绝并回显——**不再有任何单值或 compose 自动迁移**（上一轮的 compose 一次性迁移映射一并删除）。
+- **测试同步**：48 处单值点位改数组 + 3 处语义用例改写（`governance-preset-loader` T3-2 → 「单值形态废除回退空表 + warn」；`webui-runtime-config` 校验-5 → 「单值即便 id 合法也判 invalid-value」；`webui-preset-options` W2 → 「compose 迁移分支须删除」并新增 W5「formPresetOf 只接受数组、非数组不自动包装」）+ 2 处断言期望改数组（`api-config` / `webui-runtime-config` 的 `written…preset`）。
+- **文档**：`docs/webui-governance-config{,.en}.md`（旧组合项段改写为「不做自动迁移 + 单值废除」）、`presets/hook-rules/README.md`、`cordis.patch.yml`（示例统一数组）。
+- **验证**：`npm test` **1118/1118 fail 0**；最小探针实测 `validateGovernancePayload({preset:'l2-resource'})` → `ok:false / invalid-value`、`{preset:['l2-resource']}` → `ok:true`；面板产物重新合成（`assemble-panel.mjs`，1540 行 / 7 段）。
+- **代价与影响（如实）**：本机既有配置为数组（`~/.dsh/jiufeng/config/runtime.json` = `["l2-resource","l3-tool-ban"]`），无现网影响；**他处若有单值 `preset: "xxx"` 旧配置，升级后会失效**（引擎回退空表 + warn；面板保存被拒并提示改数组）——这是「全面清除单选遗产」的已知代价。
+- **顺带实证（L3 已生效）**：本轮一次带 `*>` 重定向的 pwsh 命令被 **L3-W01 当场 DENY**（正文含「改用 edit / write」+ 规则引用 `L3-W01（preset l3-tool-ban）`），随后改用管道形态完成验证——写通道路由按设计工作。
+
+### compose 组合项彻底删除：注册项 4 → 3（2026-09-14，用户裁决「compose 注册项也删」）
+
+- **删除面**：`presets/hook-rules/compose.json` 文件删除；`PRESET_IDS` **4 → 3**（`l1-sensitive` / `l2-resource` / `l3-tool-ban`）——`preset: "compose"` **不再是合法引用**（写通道以 `unknown-preset` 拒绝；引擎装载判未知 id → **回退空表 + warn**，宁空勿半）。组合一律由**多选 / 数组引用**表达。
+- **同步面**：`lib/governance/preset-loader.ts`（枚举 + 三处注释）、`lib/governance/config.ts`（未知 id 提示文案）、`lib/index.js` 与 `lib/governance/wiring.js`（注释）、`cordis.patch.yml`（preset 注释）、`presets/hook-rules/{README.md,l3-tool-ban.json}`、`docs/webui-governance-config{,.en}.md`、测试 5 文件（`preset-rules`：去 COMPOSE 加载 / P-1 / P-1b / 两处循环 / V9 改「废除声明」断言；`governance-preset-loader`：L-1 / L-2 / L-4（坏目录计数 4→3）/ T3-3 / T3-6（改用同 id 引用两次构造重复）/ T3-8 / T3-9；`api-config` catalog mock；`webui-runtime-config` preset 值域用例；`webui-preset-options` W2 措辞）。
+- **保留面（救生索，非注册项）**：面板 `formPresetOf` 的 `'compose' → l1+l2` **一次性回显迁移**保留——旧 runtime.json 里的 `preset: "compose"` 在面板回显为两项勾选，保存即归一为合法数组；若不做该迁移，旧值会落到 `{ custom }` 分支并被后端 `unknown-preset` 拒。
+- **影响面与不可逆性（如实登记）**：本机既有配置不含 compose（`~/.dsh/jiufeng/config/runtime.json` 现值 `preset: ["l2-resource"]`），故本次删除无现网影响；**若他处仍有 `preset: "compose"` 的旧配置，删除后该引用会静默回退空表（仅 warn 留痕）**——这是本裁决的已知代价。
+- **验证**：`npm run check`（tsc）+ `npm test` 全量 + 面板重新合成（`node scripts/assemble-panel.mjs`）；`grep` 全仓复核 compose 仅剩「已废除」声明与一次性迁移映射两类命中（`docker-compose` / 英文 composed 为无关词）。
+
+### 治理配置面板：规则集全部多选 + compose 组合项语义退场（2026-09-14，用户裁决）
+
+- **L3 未出现在面板的根因**：面板多选行由源分段 `lib/panel/gov-config.js`（合成进 `lib/client.js`）的 `presetOptionIds()` 硬编码为两项 `['l1-sensitive','l2-resource']`——引擎侧 catalog 已含 `l3-tool-ban`，但面板不认。已改源分段为三项（L1 敏感 / L2 资源 / L3 工具黑名单平级多选）。
+- **compose 语义退场（面板层）**：面板不再有「组合项」概念（组合 = 勾选叠加本身）；`gov.preset.compose` 文案键删除，原「全勾 = L1+L2 全量组合」摘要行改为通用合计行「已选 N 项 · 合计 M 条」（新增 `fmtN2` 双占位符格式化 + `gov.preset.total` 中英文案）。面板对旧值 `preset: "compose"` 保留**一次性回显迁移**（→ l1+l2 两项勾选），避免旧配置因选项消失而无法保存。（本轮当时 compose 尚在注册表内；**随后按用户裁决「compose 注册项也删」彻底删除**，见下一条。）
+- **改源不改产物（纪律修复）**：`lib/client.js` 是 `lib/panel/*.js` 7 段经 `scripts/assemble-panel.mjs` 合成的产物（`test/client-sync.test.js` 逐字节一致性守护）。本轮先误改产物被该测试当场拦下（2 例失败）→ 改为「改源分段 → 重新合成」的正当路径（合成 1541 行 / 7 段）。
+- **新增回归锚点**：`test/webui-preset-options.test.js`（W1–W4 源码级契约断言）——① 选项集合 = 三个平级规则集且**必须含 `l3-tool-ban`**（防面板再漏规则集）；② 选项集合不得含 `compose`，且一次性旧值迁移映射须保留；③ zh/en 文案键齐备（l1/l2/l3/total）且 compose 文案键已删；④ 合计行为通用实现（不得以「恰好两项」判定）。
+- **文档**：`docs/webui-governance-config.md` / `.en.md`「规则预设」段重写为多选语义（含旧 compose 项说明 + 第三类判定面提示）。
+- **验证**：`node --check lib/client.js` exit 0；`npm test` **1117/1117 fail 0**（原 1112 + 5）。
+- **如实记录（flaky 观察，未处置）**：一次全量跑出现 `test/audit-contract-gate.test.js`「glob 回归：`plan/**` 不再命中 exec 路径」1 例失败，而该文件单跑 8/8 全绿、且本轮改动不涉 `lib/assembly/flows.js`；复跑全量即 1117/1117。判为全量并发下的偶发（用例为纯函数断言；实现含两条防放宽规则，见 `lib/assembly/flows.js:237-259`），留痕待观察，未做改动。
+- **生效条件**：面板 UI 是客户端 bundle，改动**需重启宿主一次**方可加载；引擎侧 `l3-tool-ban` 的 presetTable 在宿主 boot 时装载（用户已重启过一次）⇒ 现可**直接**在 `runtime.json` 引用 `l3-tool-ban` 而无需再重启。
+
+### cage 护栏第三类「工具黑名单」：写通道路由（2026-09-14，用户裁决 Q1=A / Q2=A / Q3「仅护栏禁止修改或写文件」/ Q4「仅护栏可热加载、与执行引擎无关」/ Q5=B）
+
+- **新增第三类判定面 `toolBan`（工具 × 行为）**：与参数级 `rules` 并列的判定来源。首批条目 `L3-W01`（preset `l3-tool-ban`）：禁用 `pwsh` 的 `file-write`——**写通道路由**：文件写走 `edit` / `write` / `str-replace-editor` 等在册工具，不经 shell 自建写路径落盘（Windows 下 `>` 重定向与 `Set-Content` / `Out-File` 可能写入 GBK 或带 BOM，破坏文件编码头且不可逆）。
+- **判定内核**（新增 `lib/governance/tool-ban.ts`，纯函数零依赖）：引号掩码（引号内的 `>` / cmdlet 名不参与判定）→ 剥流合并（`2>&1` / `2>$null` 不算落盘）→ 全串写指示符（重定向 / 写动词 cmdlet / `-OutFile` / `find -exec`）→ 分段取段首写命令名 → 其余放行；未闭合引号 fail-closed。**收窄口径**（Q3/Q6）：只拦「修改或写文件」这一类动作，执行 / 构建 / 测试 / 包管理 / 只读命令一律放行（`npm run build`、`npm test`、`node x.mjs`、`git status`、`Get-ChildItem` 不命中——拦构建会断裂常规开发闭环）。
+- **裁决接线（零分类器改动）**：`matchToolBan` 命中产出 `Violation` + `ruleRefs`，与参数规则命中**同列汇入**同一 `classifyViolation` → 缺省 `hard` → **DENY（P2）**；拒绝正文携带纠正文本「文件写请改用 edit / write / str-replace-editor 等在册工具」。收据 / 事件桥接 / 拒绝可见性链路天然复用（`ruleRefs` 前缀 `L3-` → preset 归属 `l3-tool-ban`，`wiring.presetOfRuleId`）。
+- **与执行引擎无关**（Q4）：判定在护栏内**自带一份收窄的写动作判定**，**不 import / 不修改** `lib/tools/readonly.js`（任务难度门禁「只读侦察面」在执行侧使用的共享判定）——两处判定独立、互不影响。
+- **双生效通道**：① **热加载主力**（`<root>/config/runtime.json` 的 `governance.hook.toolBan`；`toolBan` 进 resolved 快照 ⇒ 既有 remount JSON 比较器**零改动**感知变化 → dispose + 重挂，**免重启**）；② 随包 preset `l3-tool-ban`（注册 id 枚举 3 → 4，**其后按用户裁决复归 3 项——compose 组合项废除**；`preset` 引用键需 boot 装载一次）。L3 为独立判定维度，与参数级规则面（L1/L2）任意叠加（`preset: ['l1-sensitive','l2-resource','l3-tool-ban']`）。
+- **装载面**：`loadPresetTable()` 返回**双表**（`table` 参数级规则 / `banTable` 第三类）；`presetCatalog`（WebUI `GET /config presets`）两表并计；新增校验 `validateToolBanEntries`（形状）与 `validateToolBanTable`（全表 id 唯一，与 `validateRuleTable` 同纪律——宁空勿半，任一错误两类面一并回退空表）；`toolBan` 行为面合法值域 `TOOL_BAN_BEHAVIORS = ['file-write']`。
+- **文件面**：新增 `lib/governance/tool-ban.ts` + `presets/hook-rules/l3-tool-ban.json` + `test/governance-toolban.test.js`（27 例：F 判定正反成对 / K 裁决接线 / R 装载语义 / A 装配级静态引用与**热加载端到端**）；同步 `lib/governance/{types,config,kernel,preset-loader,index}.ts|js`、`lib/governance/wiring.js`、`lib/index.js`（双表注入 + catalog）、`scripts/copy-ts-built.mjs`（回拷清单加 `governance/tool-ban`）、`presets/hook-rules/README.md`（L3 审阅清单表 + 启用方式 + 边界）、`test/{preset-rules,governance-preset-loader,governance-config}.test.js`、`docs/{guardrails-hook,governance-boundaries,webui-governance-config}.md` 与 `.en.md` 对偶、`CHANGELOG.md`。
+- **验证**：`npm run check`（tsc）exit 0；`npm test` **1112/1112 fail 0**（原 1072 + 40）；**宿主同源加载冒烟**（宿主以 `link:` 指向本包源码，加载 `lib/index.js` + `loadPresetTable()` 双表：`l1-sensitive` 12 / `l2-resource` 6 / `l3-tool-ban` 1（compose 其后废除，注册 id 现为三项），errors 空）。
+- **边界（如实）**：启发式、**非沙箱**——别名（`sc` / `ni` / `ri` / `mi`）、脚本文件（`pwsh -File x.ps1`）、转义参数、编码方式可绕过；「内联解释器写」（`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`）**首批不覆盖**（followup：需新增 behavior 值与判定实现）。本面不保证编码安全，真正的编码保证来自 edit/write 工具链本身。
+- **未决（待用户）**：**真进程重启冒烟**——Q5=B 本轮不重启宿主，重启后由用户用真实调用验证（如 `pwsh` + `Set-Content` 被拒、`Get-ChildItem` 放行）。
+
+### 难度门禁 v3：无默认档 + 只读侦察面（2026-09-14）
+
+- **难度无默认档（主动写入）**：`assign_check` 新增**必填**参数 `difficulty`（枚举 `A|B|C`）与 `rationale`（判据，≥12 字），难度由 Leader 主动写入并落 `governance.json` 的 `lastAssign{ difficulty, rationale, form, reasons }` + `history` 供审计；缺 `difficulty` 拒 `GATE_DIFFICULTY_INVALID`，缺/过短 `rationale` 拒 `GATE_DIFFICULTY_RATIONALE_MISSING`。旧口径「default to C」「拿不准就填 C」**废止**。
+- **布尔特征降为交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation` 不再唯一决定档位，只作校验输入；引擎据此算出 `derived`。`difficulty` **等于 `derived` 即放行**（`override:false`）；**不等时「有解释才放行」**（`override:true`）——「解释」= `rationale` 含三要素：① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限，缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）；`derived`/`override` 随 `lastAssign` + `history` 落盘（`derived` 由引擎计算 ⇒ 可核事实，读端可辨「哪些档位偏离了机械推导」）。
+- **只读侦察面（对标梁神模式两阶段锚定）**：`read` / `glob` / `grep` 与只读 shell 命令（pwsh/bash 的**命令级**判定，`lib/tools/readonly.js`：只读白名单 + 写指示符拒绝 + 默认拒绝）在任何评估状态下放行且**不计数**（不占 `execCallsSince` 评估窗口）；执行型工具（write/edit/非只读 shell/subagent 等）调用前仍须先评估。**边界如实标注**：判定为**启发式、非沙箱**（可经别名/脚本/转义参数/编码绕过），不承诺等价于 OS 级隔离。
+- **C+ 档撤销 + 装配面扩面（2026-09-14 用户裁决）**：难度枚举只剩 `A|B|C`；装配**与难度档解耦**——**三层批**（任一 task 声明 layer）建批必须传 `assembly`（由「exec 层 lane≥3」**扩面**；缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`，必备判定 = `requiresAssemblyDecl`），`auditLane` 必填且指向 audit 层 lane，**`managerPlan` 缺省 `raise`**（省略即建批即拉起 Manager；确需 Leader 直驱才**显式**写 `leader-direct`）；**收口告警改按声明触发**——`gate.manager_missing` 携带 `{execLanes, managerPlan}`，声明 `leader-direct` 的批不再被误报（旧口径按 lane 数触发属语义矛盾）。
+- **guard 门禁 1 收紧**：旧记录（有 `form` 无 `difficulty`）按**未评估**处理，须重评一次。
+- **只读判定误拒修复（F1–F4，2026-09-14 复核）**：引号字面量先**掩码**（引号内 `>` / `|` / `;` 不再参与判定）、`2>&1` / `2>$null` 按**流合并**放行、赋值前缀（`$x = ` / `x=`）与 `git` 前缀选项（`-C <dir>` / `--no-pager` / `-P` / `--paginate`）**剥离后**判定、未闭合引号 fail-closed（判定链见 `lib/tools/readonly.js` 头部）。
+- **拒收码可观测口径修正**：`difficulty` 枚举/缺参由**工具参数 schema 层**先行拒（`invalid arguments: …`）；`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 是同一拒收在**内核显式分支**的命名（勿当外部错误码 grep）——`docs/governance-technical.md`(+`.en.md`) 与 `discipline.md` 三处同步。
+- **`leader-direct` 批的 mailbox 口径（缺口补齐）**：无 Manager 消费者 ⇒ worker 回执走**单通道** `report`→Leader、**不写 `outbox`**（persona 0g + `discipline.md#§4` + `manager.md#5.4` + `software-team/SKILL.md` 任务包模板四处同口径）。
+- **audit 职责与收敛口径（2026-09-14 用户裁决 A）**：audit 层 = **验收**（按 plan 的验收标准逐条核对），**不做二次评审**；工程团队 `tester→reviewer→supervisor` 是同一语义的三段实现，非工程团队单 audit 角色是单段实现、不因此扩大职责。**收敛判据**：① 验收标准条目 100% 逐条有结论；② 未决怀疑全部落 `gap-list.json`（标 `blocking`/`followup`，过程形式不算载体）；③ `blocking` 收紧为「不满足即无法判定某条标准」；**不得以「继续调查」为默认终点**（audit 不收口 ⇒ `GATE_EXIT_PENDING_AUDIT` 阻塞整批 complete）。落点：`discipline.md#§0k`（新增）+ persona 0k + `acceptance-gate/SKILL.md §2.5` + `software-team/references/roles/supervisor.md`。
+- **P1：audit 判据来源锚定（2026-09-14 用户裁决，全局严格、无需声明翻牌）**：① **建批期** —— 三层批中只要有 audit lane 声明了 `consume`，则**至少一条** audit lane 必须消费到 **plan 层产物**（判定：`plan/` 前缀，或由某条 plan lane 在 `produce`/`outputs` 声明；落**批级**，多 audit lane 设计不必每条都消费 spec），否则**拒建批** `GATE_AUDIT_INPUT_MISSING`；② **entry 期** —— audit lane 派发前，其消费的 plan 产物至少一份**正文含裸标题行 `## 验收标准`**（与 `GATE_PLAN_CONTRACT` 同判据），否则**拒派** `GATE_AUDIT_CRITERIA_MISSING`（载荷 `problems`）。**语义依据**：audit 对的是**总体任务验收**，判据只能来自 plan 的验收标准；exec 层的 `reviewer`（消费 tester 结果）是**初步 audit，不外延到总体验收**，不构成替代。落点：`lib/wave-plan.ts`（建批）+ `lib/state/gates.ts`（entry）+ `lib/state/store.js`（拒派载荷兼容）+ `lib/types/contracts.ts`（码表）+ `discipline.md#§0k` 与附录 A + `acceptance-gate/SKILL.md` + `software-team/references/roles/reviewer.md`；既有 fixture 中「audit 只消费 exec 产物」的**漂移按不变量收敛**。
+- **P2：audit 职责声明化（2026-09-14 用户裁决 B，fail-closed）**：团队资产新增 **`flows.audit.audit_contract`**（与同层 `contract` **不同键**——后者是产出内容契约 `artifact_globs`/`required_sections`，避免语义混淆）：`{ criteria_from?, consumes_required?, verdict?, checklist_anchor?, exempt?, reason? }`。**建批期门禁**：批次含 audit lane 且解析到团队资产时，**缺键 → 拒建批** `GATE_AUDIT_CONTRACT_MISSING`；**显式空 `{}` 或 `{exempt:true}` → 放行但落留痕告警** `GATE_AUDIT_CONTRACT_EXEMPT`（带 `reason` 则一并记）；**无团队资产**（`generic` / 已退役团队）→ 跳过（零感知）。四个内置团队资产已补实内容声明。**为什么 fail-closed**：缺声明仅告警 = 无人读时「幽灵通过」；本口径让「忘了声明」被拦、「明确决定不约束」必须**写出来**，读端可区分两者。落点：`lib/assembly/team-asset.js`（结构校验）+ `lib/tools/core.js`（建批期门禁 + 豁免告警）+ 四团队 `team-asset.yml` + `discipline.md#§0k` 与附录 A + 新增测试 `test/audit-contract-gate.test.js`（4 例：正例 / 缺键拒建批 / 显式空放行带告警 / 无资产跳过）。
+- **P2.1：audit_contract 字段接消费 + 白声明清理（2026-09-14「A 方案」，逐字段核实后）**：审出 P2 声明的四个字段 `criteria_from` / `consumes_required` / `checklist_anchor` / `verdict` **均无消费点**（典型「声明白契约」），且 `verdict` 与既有 `flows.complete.require_audit_outcomes` **重复**。处置：① `criteria_from` **接消费** —— entry 期按其 glob **指名**锚点产物（未被指名的 plan 产物带 `## 验收标准` 不顶用）；② `consumes_required` **接消费** —— 建批期要求每个声明前缀至少被一条 audit lane 的 `consume` 命中；③ `verdict` 升为 complete 门禁**唯一真源**（`require_audit_outcomes` 降为未声明时的 legacy 回落），取值统一为 `{pass,skip,fail,conflict}`（software-team 原 `approve/reject` 已校正）；④ **移除 `checklist_anchor`**（自由文本不可机器判定 ⇒ 归技能手册/文档面）。落点：`lib/state/gates.ts`（两处读端）+ `lib/tools/core.js`（加强门禁）+ `lib/assembly/team-asset.js`（去字段校验）+ 四资产字段收敛 + 新增 3 例测试（`consumes_required` 缺口 / `criteria_from` 指名 / `verdict` 真源）。
+- **缺陷修复：`globMatchesPath` 末段回退静默放宽（2026-09-14，P2.1 活体验证中发现）**：`lib/assembly/flows.js` 的末段回退有两处缺陷——① **`**` 作末段**时退化为「匹配任意路径」（实测 `plan/**` 命中 `exec/e1/o.md`）；② **只比文件名、不校目录段**（`plan/*spec.md` 命中 `D:/…/exec/design-spec.md`）。后果：audit 的 `criteria_from` 锚点与 plan 内容契约的 `artifact_globs` **静默放宽**（判据形同虚设）。修法：末段回退**仅对绝对路径**生效（保留「绝对路径产物带目录前缀不该失配」的原始动机）+ **末段非纯通配 `**`** + **目录段按序对齐**。落点：`lib/assembly/flows.js`（唯一实现；`sectionProblemsOf` 与 `gates.ts` 两个消费方同时受益）+ `test/audit-contract-gate.test.js` 新增 6 条断言回归（两条缺陷回归点 + 原动机保护 + 反例）。**发现路径留档**：该缺陷是 P2.1 活体冒烟的**报错文案**里多出一条不该出现的 `exec/e1/o.md` 才暴露的（细节输出本身携带信息）；且我的第一版修复不彻底，被自己写的回归测试当场抓出。
+
+### 灵活装配 × 角色白名单同源修复（2026-09-14）
+
+- **缺口事实（按事实核查，非按测试结论）**：用户报告「灵活装配指引与角色白名单对不上，leader 的灵活装配都作废」。探针 `scripts/probes/flex-assembly-audit.mjs`（leader 直做，零依赖可直接跑）复现两条：
+  - **D-1（词法面不同源）**：资产把自有角色写进 `layers[*].roles`（= 技能映射的键，最自然的写法）却没抄一份到 `roles.extra` ⇒ 建批时**每个自定义 lane 角色**判 `GATE_ROLE_INVALID`（探针 C1：5 条）+ 计划/验收位 `GATE_ROLE_MISSING`（2 条）。指引（`discipline.md §0j 二`「放开的是层 / 角色 / 技能 / flows 的组装」）与白名单（8 基础角色 ∪ 盲审三角色 ∪ `roles.extra`）**不一致**。包内 4 团队之所以干净，是靠**人工把各层角色并集抄进 `roles.extra`**（`test/team-assets-fill.test.js:214` 的断言即该同步义务的证据）。
+  - **D-2（缓存陈旧 = 真·作废）**：`lib/assembly/flows.js` 的 `CACHE` / `ROLE_CACHE` 键仅 `root::team`、无失效判据 ⇒ **同进程内改资产不重载**。Leader 的灵活装配循环（写资产 → 建批 → 见告警 → 补声明 → 重建批）第二步仍读旧值（探针 C4：run2 资产已含 `roles.extra`，仍报 5×`GATE_ROLE_INVALID` + 2×`GATE_ROLE_MISSING`），修正**隔空失效直到重启**（宿主为长驻进程）。
+- **修复（引擎侧，最小且兼容）**：
+  - ① **角色词法集与资产声明面同源**：新增 `unionRoleVocabulary()`（`lib/assembly/flows.js`）= **各层声明角色 ∪ `roles.extra`**（小写归一 + 去重）；`lib/wave-plan.ts#buildWavePlan` 与 `lib/tools/core.js`（`assembly.roles` 判定）改从该读端取词法集。`resolveTeamRoles` 新增 `layerRoles` / `layerRolesByLayer` 字段；**`extra` 字段语义不变**（仍= 显式声明的扩展角色，`software-team` 仍为 `[]`）。
+  - ② **缓存加资产签名**：新增 `teamAssetSignature(root, team)`（路径 + mtime + size，读端 `lib/assembly/team-asset.js`），`CACHE` / `ROLE_CACHE` 命中前比对签名，变了即重读 ⇒ 资产改动**即时生效、免重启**。
+  - ③ **告警文案**：`GATE_ROLE_INVALID` 消息补「, or any role declared by the team asset）」，指向唯一读端。
+- **未改（显式保留）**：`GATE_ROLE_MISSING` 语义——**牵头角色仍须显式声明**（`plan_leads` / `audit_leads`）；「角色可用」与「角色可牵头」是两件事（是否让各层声明角色自动取得牵头资格 = 待用户裁决项，见工作区台账）。
+- **指引同步（3 处）**：`presets/jiufeng/references/discipline.md#§0j 五` 重写为新口径（含旧口径作废声明 + 探针/回归证据）；`presets/jiufeng/references/manager.md §5.6` 修**陈旧 flows 口径**（原文「临时团队只覆盖装配面、`flows` 待补全、批次不存 `teamsRoot`」与 D3 补全后的实现**相反**，与 persona 0j / discipline §0j 四冲突）+ 增「资产改动即时生效」；`docs/engine-intro.md` 三节同步。
+- **验证**：新增 `test/flex-assembly-roles.test.js`（F1 layer 声明即合法 / F2 装配声明面同源 + 未声明角色负向对照 / F3 `extra` 兼容与 union 语义 / F4 缓存陈旧修复 / F5 灵活装配循环端到端）；`npm test` **1072/1072 fail 0**（原 1067 + 5）；`npm run check`（tsc）exit 0；构建链 `npm run build` 已回拷 `lib/wave-plan.js|d.ts`。
+- **残留（如实）**：D-2 的签名判据在同一 mtime 毫秒内**同尺寸**改写时可能漏判（人工/代理编辑流中不现实，未为此牺牲缓存命中）；资产层角色名若带大写而 `layers[*].skills` 键为原样大写，归一化小写会让前缀查找 miss（既有行为，未在本轮改动）。
+
+### 指引一致性订正与记录补齐（2026-09-14）
+
+- **`discipline.md §0c` 口径订正**：原写「Manager = **任务第一对接点** … 空闲节点发现与建议指派（`member_status` 拉起 idle/pending lane）」，与 persona 新口径（Manager 只代劳指挥、不产 plan 产物）及既有写入口径（**派发与结算写入默认由 Leader 执行**）冲突。已改为：① Manager = 引擎层功能角色（不属任何层、不占 lane），只代劳指挥、**不产 plan 产物、不得充当 plan 层牵头**；② **派发/结算写入默认执行方 = Leader**，Manager 负判读+建议，仅在 Leader 明确授权时代为写入。
+- **团队技能退役名订正（5 文件）**：`skills/software-team/SKILL.md`（角色概览表 + 装配表技能列 → v3 名；装配表上方加「唯一来源 = `presets/software-team/team-asset.yml`」；示例与指引引用同改；弃用/不装配两节保留但加「本节为历史记录」声明）、`skills/software-team-assembly/SKILL.md`（角色作用表技能列 → v3 名）、`skills/design-team/references/roles/designer.md`（删「执行层留空、由 Leader 代劳」——与设计团队现状相反，改为「执行层已装配 `workflow-builder`/`producer`、audit 层 `workflow-auditor`」）、`skills/software-team/references/workflow.md` 与 `.../roles/designer.md`（`dev-designer`/`dev-planner` 引用 → `spec-writing`/`writing-plans`）。**`software-team/SKILL.md` frontmatter description** 同步（原「`dev*/prd*/review*/doc*` 手册映射」→「角色 × 能力层技能速查 + 唯一来源声明」）。
+- **复核口径**：`skills/**` 精确词边界扫描，装配/角色手册语境下退役名命中 **0**；剩余 6 处全在**已声明的历史节**或**自建技能的「替代旧 X」说明句**中（有意保留）。
+- **验证**：`npm test` **1067/1067 fail 0**（文档改动后复跑）；改动文件 UTF-8 无 BOM。
+
+### persona 纪律块精简（两轮，2026-09-13）
+
+- **规模**：治理纪律块 **4482 → 3071 字符（−31.5%）**；规则行数仍为 **21**（`0` / `0a`–`0i` / `0j` / `1`–`10`，编号一个不缺，`#§x` 引用全部有效）。
+- **手段**：① 去重——0c 与 0g 的 Manager 口径合一、8 从 5 拆回独立行、1–4 短句化；② 操作性条款下沉——`0b`/`0f`/`0g`/`0h`/`0i`/`9`/`10`/`0j` 只留「判据 + 指针」（`references/discipline.md#§0b|§0f|§0g|§0h|§0i|§9|§10|§0j`），码表与操作序列留在细则。
+- **订正陈旧事实（重点）**：`0j` 原写「临时团队…`flows` 面待补全（后续项）」，与 D3 补全后的实现**相反** → 已改为「**装配面与 `flows` 面均已生效**（`teamsRoot` 随批次持久化，与内置团队同一校验器、同一门禁语义；缺省走包根）」；旧口径残留 **0** 处。
+- **判据守恒核验**（逐条 grep 实测在场）：`明确多线并行`、`单线程任务一律不建批`、`assign_check`、`gate_status`、`revokeExempt`、`禁裸 subagent`、`progress/NN`、`宿主级加载`、`survey/<target>-contract`、`flows 面均已生效`、`同一门禁语义`（`batch.manager.raised` 事件名与豁免倍率码表位于 `#§0g`/`#§0h` 细则内）。
+- **验证**：YAML 结构自检 **PASS**（21 行编号齐、无未编号续行、无控制字符）；全量 `npm test` **1067/1067 fail 0**。
+
 ### 追踪项收口：口径定案与文档订正（2026-09-13）
 
 - **F7（文档订正）**：`discipline.md` 附录 A 的 `TEAM_ASSET_LEAD_NOT_IN_LAYERS` 行订正为精确口径——该码只判「声明的 lead 角色**是否出现在任何层**的 `layers[*].roles` 中（声明悬空）」，**不判层次归属**；某层是否构成该层牵头由 `lane.layer` + 牵头集判定；并明示**牵头角色 ≠ Manager**（Manager 属引擎层、不占 lane）。
@@ -52,6 +400,7 @@
 - **`gate_status` 批次级视图（B3）**：返回补 `manager` 与 `assembly` 两字段，使 C+ 装配声明与 Manager 事实可经单次只读查询核对。
 - **告警文本去重（B8）**：`GATE_ROLE_MISSING.missing` 拼接去重。
 - **预留事件标注（B5）**：`worktree.created/merged/merge.conflict/merge.resolved`、`gate.passed`、`gate.exit.missing`、`gate.target_blocked`、`gate.target.passed` 标注为「预留未接线」（lib 内无写端无读端），不得当作既有留痕能力引用。
+  - **订正（2026-09-15 · 复核实测）**：本行 2026-08 建账时点后，其中三项**已被接线**，原「无写端无读端」表述**已过期**——`gate.passed`（exit 门放行留痕，任何 merged 恒有）、`gate.target_blocked` / `gate.target.passed`（targets 门：写端 `lib/state/store.js:632/:638`，读端 `test/gates.test.js` O2 组 + `test/batch-store.test.js:309/:323`）。**结论：不得按「预留」删除**（删除会同时移除 targets 门的留痕能力与 6 条断言），B5 台账条目据此改为「事实订正」；仅 `worktree.*` 与 `gate.exit.missing` 维持预留标注。
 - **未接线声明披露补全（D4）**：`flows.*.consume_field` 补进「暂无消费点」清单（引擎恒按任务自身 `consume` 判定）。
 - **发布面脱敏（C3）**：`skills/design-team/SKILL.md` 去除本机绝对路径与内部产物路径引用。
 - **指引订正（C1/C2/C4/C6）**：装配声明的**唯一生效形态**写明为 `wave_plan({ assembly: { … } })` 顶层入参（plan 文档只是人可读载体）；persona 0h 豁免倍率改为「按类型取档（ai-render 8× / large-download 6× / dep-install·none 4×）」；纪律 0 条重复表述合并；难度路由口径明确为「多线并行或多依赖才升 C，单线程不建批」（B 档收窄为两类：独立上下文调研 / 已明确上下文可简单派发的单步任务）。

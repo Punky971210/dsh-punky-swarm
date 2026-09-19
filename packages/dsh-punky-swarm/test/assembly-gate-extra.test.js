@@ -31,16 +31,26 @@ import {
 } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
+import { assessC } from './helpers/gate-fixture.mjs';
+import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// 【P1 同步】`team` 必填且必须解析到资产 ⇒ 建批统一补 software-team；其 skills 须可解析 ⇒ 先注入隔离技能根。
+seedTeamAssetSkills('software-team');
 
 // ── fixtures（与 assembly-gate.test.js 同构：p1(plan/designer) + 3 exec/coder + a1(audit/supervisor) → C+）──
+// 【P1 同步 · 形态收紧】a1 追加 consume 各 exec 产物（团队 `audit_contract.consumes_required=['plan/','exec/']`）；
+//   断言强度未变（未删任何判据）。
 function cplusTasks(execN) {
   const tasks = [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/s.md'], cmd: 'spec' },
   ];
+  const execRels = [];
   for (let i = 1; i <= execN; i++) {
-    tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: ['exec/e' + i + '/o.md'], deps: ['p1'], cmd: 'impl' });
+    const rel = 'exec/e' + i + '/o.md';
+    execRels.push(rel);
+    tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: [rel], deps: ['p1'], cmd: 'impl' });
   }
-  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
+  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/s.md', ...execRels], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
   return tasks;
 }
 
@@ -51,7 +61,9 @@ function makeHarness() {
   const reg = [];
   const ctx = { tools: { register: (t) => reg.push(t) }, logger: console };
   const { tools } = createTools(ctx, { store, root });
-  const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+  const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
+  // G1 前置（新门禁）：`wave_plan` 属 C 档动作 ⇒ 工具面用例先评估为 C（同 assign_check 落盘函数）
+  assessC(store, 'sess-cpa', { rationale: 'fixture：装配门 roles 套件建批前置评估（C+ 多 lane 并行 ⇒ C 档）' });
   return { root, store, byName };
 }
 const SESS = { agent: { session: { id: 'sess-cpa' } } };

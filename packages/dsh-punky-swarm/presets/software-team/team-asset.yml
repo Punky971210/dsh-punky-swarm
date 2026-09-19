@@ -1,0 +1,117 @@
+{
+  "team": "software-team",
+  "manifest": {
+    "version": 3,
+    "requires_engine": ">=0.4.4",
+    "hash": "unhashed",
+    "source": "角色作用（skills/software-team/references/roles/*.md）+ superpowers 技能池 + 本包自建手册（review-execution / acceptance-gate / retro-and-memory）；装配资产说明与用途见 skills/software-team/SKILL.md（原退役技能已并入）；「池」（Coder 池 / Tester 池）声明：仅 Agent-team 方案使用；subagent 方案不用——「池」是声明面（可多实例并行），引擎无校验，不承载分配语义"
+  },
+  "roles": { "extra": [] },
+  "layers": {
+    "plan": {
+      "roles": ["coordinator", "designer"],
+      "skills": {
+        "coordinator": ["brainstorming", "writing-plans"],
+        "designer": ["brainstorming", "writing-plans", "spec-writing"]
+      }
+    },
+    "exec": {
+      "roles": ["coder", "tester", "reviewer"],
+      "skills": {
+        "coder": ["test-driven-development", "codebase-design", "receiving-code-review", "requesting-code-review"],
+        "tester": ["verification-before-completion", "systematic-debugging"],
+        "reviewer": ["review-execution"]
+      }
+    },
+    "audit": {
+      "roles": ["supervisor", "doc-manager"],
+      "skills": {
+        "supervisor": ["acceptance-gate", "verification-before-completion"],
+        "doc-manager": ["doc-generator", "retro-and-memory"]
+      }
+    }
+  },
+  "flows": {
+    "plan": {
+      "produce_field": "produce",
+      "entry_requires": [],
+      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+    },
+    "exec": {
+      "produce_field": "outputs",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "consumes_required": ["plan/"],
+      "consumes_required_per_lane": ["plan/"],
+      "targets": true,
+      "gate_command": true
+    },
+    "audit": {
+      "produce_field": "produce",
+      "consume_field": "consume",
+      "entry_requires": ["consume"],
+      "needhuman": true,
+      "audit_contract": {
+        "criteria_from": "plan/**",
+        "consumes_required": ["plan/", "exec/"],
+        "verdict": ["pass", "fail", "skip"]
+      }
+    }
+  },
+  "chain": {
+    "version": 3,
+    "steps": [
+      {
+        "id": "plan",
+        "layer": "plan",
+        "role": "coordinator",
+        "template": { "produce": ["plan/${branch}-spec.md"] },
+        "branches": [
+          { "id": "plan-coordinator", "role": "coordinator", "template": { "cmd": "编排出任务树与调度口径（${branch}）" } },
+          { "id": "plan-designer", "role": "designer", "deps": ["plan-coordinator"], "template": { "cmd": "产出规格与验收标准（${branch}）" } }
+        ],
+        "next": "exec-work"
+      },
+      {
+        "id": "exec-work",
+        "layer": "exec",
+        "role": "coder",
+        "template": { "produce": ["exec/${branch}.md"] },
+        "branches": [
+          { "id": "exec-coder", "role": "coder", "template": { "cmd": "实现变更（${branch}）" } },
+          { "id": "exec-tester", "role": "tester", "template": { "cmd": "验证行为（${branch}）" } }
+        ],
+        "next": "exec-review"
+      },
+      {
+        "id": "exec-review",
+        "layer": "exec",
+        "role": "reviewer",
+        "template": { "produce": ["exec/${branch}.md"] },
+        "branches": [
+          { "id": "exec-reviewer", "role": "reviewer", "template": { "cmd": "独立复跑测试并给出评审结论（${branch}）" } }
+        ],
+        "next": "audit-pair"
+      },
+      {
+        "id": "audit-pair",
+        "layer": "audit",
+        "role": "supervisor",
+        "pair_with": "exec-review",
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "next": "accept"
+      },
+      {
+        "id": "accept",
+        "layer": "audit",
+        "role": "supervisor",
+        "join": "all",
+        "terminal": true,
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+      }
+    ],
+    "join": { "anyFailure": "pause" },
+    "onFail": "pause",
+    "rework": { "allowed": true, "max_attempts": 2, "escalate": "human" }
+  }
+}
