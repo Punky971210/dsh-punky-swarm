@@ -183,6 +183,21 @@
 - **本波验收口径据此修正**：R3 的判据是 **「新增 0 例失败」**（18 例全部归因环境），而非「全量 fail = 0」；
   两枚目标门禁的 E2E 断言在**不含 git 的套件**内已全绿（5 tests / 25 asserts）。
 
+### 7.1 第二类环境缺陷：满负载下的 flaky 超时（**R3-4 后复跑时新观察到**）
+
+`test/command-exec.test.js` 的 **D1-A8**（"无重定向的同一条命令仍正常执行"**对照组**）在**全量并发**下偶发失败：
+
+```
+{ok:false, exitCode:null, output:"", durationMs:5023, timedOut:true, error:"GATE_EXIT_TIMEOUT"}
+```
+
+- **判定（实测）**：`node --test test/command-exec.test.js` **单跑 26/26 pass / 0 fail** ⇒ **与代码无关**，
+  是 5s 执行上限在满负载（100+ 测试文件并发 + 内部 spawn）下被打爆。
+- **为什么记在这里**：它使**全量 fail 数本身是个抖动值**（本机观测既有 18 也有 19）。⇒ **Δfail 的判据必须写成
+  「新增失败均为 §7 两类之一」**：① 含 `invalid reference: punky/`；② `GATE_EXIT_TIMEOUT` 型超时且**单跑复现为绿**。
+  仅凭「fail 计数变多 1」判回归，会把这类抖动误读为回归。
+- **不要做的事**：为过测试而抬高该套件的超时上限（生产行为面；且抖动源是机器负载，不是阈值本身）。
+
 ---
 
 ## 8. R3-3：`GATE_AUDIT_CRITERIA_MISSING` 「判据两处」勘误与 fail-open 缺口登记
@@ -240,16 +255,23 @@ entry 门**放行**、plan 契约门**拒**（`lacks "## 约束"`）⇒ 差异�
 
 纪律：**`lib/**` 零 diff、零解冻、零门禁行为变更**（同 R3 全域）。
 
-### 8.4 解冻建议（**待裁**，本波零执行）
+### 8.4 解冻建议与裁定（**2026-09-21 用户裁定：维持冻结**）
 
-把两处的 `content.includes('<section>')` 换成既有的 `sectionLineHit(content, '<section>')`（与 `required_sections` 判据同源）：
+原建议：把两处的 `content.includes('<section>')` 换成既有的 `sectionLineHit(content, '<section>')`（与 `required_sections` 判据同源）：
 
 - **收益**：消除 fail-open 假绿；注释 / 纪律文档的宣称与实现一致；判据同源（O-4.3）。
 - **障碍**：属**行为变更（更严）** ⇒ 撞 `rebuild-blueprint §3.4` 的「门禁行为冻结」（W6 字面冻结对象是"抽取"，
-  但其**精神面**是"不改门禁行为"）⇒ **须用户裁决**。
+  但其**精神面**是"不改门禁行为"）⇒ 须用户裁决。
 - **附带待决**：代码围栏内的标题行 `sectionLineHit` **同样拦不住**（它只锚行首 / 整行）⇒ 解冻时须**一并裁**
   「围栏内是否算命中」，否则只修一半。
 - **回滚**：单点两行改动；§8.3 的绊线断言即回滚探针。
+
+> **裁定（2026-09-21）：维持冻结，本波零执行。**
+> 理由：门禁行为冻结（W6 精神面）优先于 fail-open 收紧；且可行性本身不完整（`sectionLineHit` 拦不住围栏内标题行，
+> 单改函数只修一半）。**该缺口已由 §8.3 的绊线 ×3 显式登记**（断言现行宽松行为、标注"已登记缺口，非期望行为"）
+> ⇒ 缺口不是"被忘掉"，而是"被有意延后并留下触发器"。
+> **解冻条件**（缺一不可）：① 新引擎形态定型，W6 冻结自然解除；② 同时给出围栏内命中的判定口径。
+> 届时改判信号 = 本波绊线转红（转红即提示重裁，非回归）。
 
 ### 8.5 验收判据（本波）
 
@@ -310,11 +332,17 @@ R3-2 该枚只落了「围栏 + 前置面」并**如实标注 `围栏 ≠ E2E`**
 
 ### 9.4 实现坑（如实记录，均为"自证机制抓到"）
 
-- **`nextLoad()` 的 `source` 是 `Uint8Array`，不是 string**（Node 22.22.2 本包实测：`typeof === 'object'` ∧ `ArrayBuffer.isView === true`）。
-  首版 loader 按 `typeof source === 'string'` 判定、"非 string 即放行" ⇒ **钩子静默失效**（破坏没改到源、测试照旧通过）。
+- **`nextLoad()` 的 `source` 是 `Buffer`（`TypedArray`），不是 string** —— 复核确证，非推测。
+  观测法：独立 preload 里 `register(hook, url)`，`load()` 内把 `result.source` 的**运行时事实**落盘（只观测、不改写）。
+  Node **22.22.2** 对本包 `lib/state/event-types.js` 实测载荷：
+  `{ format: "module", typeofSource: "object", ctor: "Buffer", isUint8Array: true, isArrayBuffer: false,
+  isString: false, byteLength: 25929, bytesFirst10: [47,42,10,67,111,112,121,114,105,103] }`
+  （前 10 字节译出即 `/*\nCopyrig`，与该文件首行注释吻合 ⇒ 观测对象正确）。
+  Node 文档对 `load()` 返回 `source` 的口径是 `string | ArrayBufferView | ArrayBuffer` ⇒ 运行时给 `Buffer` 属**正常实现**，非本包特有。
+  **首版 loader 按 `typeof source === 'string'` 判定、"非 string 即放行" ⇒ 钩子静默失效**（破坏没改到源、测试照旧通过）。
   **抓到它的是子进程自证**：`control.sabotageApplied === false`（点名常量 import 后仍为 `'gate.escape'`）。
-  ⇒ 修法 = 双形态接收（string / `ArrayBuffer.isView` → `Buffer.from(buf, byteOffset, byteLength).toString('utf8')`），
-  且**未知形态一律抛**、目标模块无 `source` 也抛——**不许再有第二条静默放行路径**。
+  ⇒ 修法（经复核后**收敛为一行**，不再分层判定形态）：`typeof raw === 'string' ? raw : new TextDecoder('utf8').decode(raw)`
+  ——一次性覆盖三种合法形态，**未知形态由 `TextDecoder` 直接抛**（天然 fail-loud），另加「目标模块无 `source` 即抛」一道显式守卫。
   **这是 R3-1/R3-2「乐观污染」的第三种形态**：前两种是"把没覆盖看成覆盖""把注释当判据"，
   这次是「**把'破坏没生效'看成'守卫是死码'**」——同属"让证据看起来比实际更强"。
   ⇒ 通则：**任何"人为制造条件"的测试，必须自带"条件确实成立了"的自证**，否则它证明的可能是**什么都没发生**。

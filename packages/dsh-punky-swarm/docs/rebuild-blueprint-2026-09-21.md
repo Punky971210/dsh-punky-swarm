@@ -95,7 +95,7 @@
 | 项 | 状态 | 决策树 |
 |---|---|---|
 | `lib/schema.ts` ⟷ `lib/assembly/schema.js` 顶层循环依赖 | **冻结**（W4） | 新引擎若保留 `assembly` 层 ⇒ 常量下沉独立叶子模块（`lib/state/constants.js` 先例）；新引擎若并层 ⇒ 随并层自然消失。**两路都不在本波** |
-| `GATE_AUDIT_CRITERIA_MISSING` 判据两处（`gates.ts:903` 与 `:994`，同为 `includes('## 验收标准')`） | **冻结**（W6） | 门禁行为冻结 ⇒ 不做判据抽取。**勘误（r3-3 现场核查）**：两处**共用字面量但不是同一判据**——`:903` 判「锚点产物**任一**含验收标准」（拒 `GATE_AUDIT_CRITERIA_MISSING`），`:994` 判「**每份** `*spec.md` **两章都要**」（拒 `GATE_PLAN_CONTRACT`）⇒ **无重复实现、无抽取对象**，本冻结项标的消失。真问题在判据**形态**（`content.includes` 子串 vs 宣称的裸标题行 `sectionLineHit`，方向 fail-open）⇒ 见 `docs/gate-assertion-blueprint-2026-09-21.md` §8 |
+| `GATE_AUDIT_CRITERIA_MISSING` 判据两处（`gates.ts:903` 与 `:994`，同为 `includes('## 验收标准')`） | **冻结**（W6） | 门禁行为冻结 ⇒ 不做判据抽取。**勘误（r3-3 现场核查）**：两处**共用字面量但不是同一判据**——`:903` 判「锚点产物**任一**含验收标准」（拒 `GATE_AUDIT_CRITERIA_MISSING`），`:994` 判「**每份** `*spec.md` **两章都要**」（拒 `GATE_PLAN_CONTRACT`）⇒ **无重复实现、无抽取对象**，本冻结项标的消失。真问题在判据**形态**（`content.includes` 子串 vs 宣称的裸标题行 `sectionLineHit`，方向 fail-open）⇒ 见 `docs/gate-assertion-blueprint-2026-09-21.md` §8。**裁定（2026-09-21）：维持冻结** —— 该 fail-open 缺口由 §8.3 绊线 ×3 显式登记，解冻条件见 §8.4 裁定块 |
 | `assembly/chain.js` 946 行拆薄 | **冻结**（未裁） | 等新引擎形态定后随层语义重划 |
 
 ### 3.5 修改（本波零执行）

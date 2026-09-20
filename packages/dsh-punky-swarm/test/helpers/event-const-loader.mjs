@@ -54,17 +54,23 @@ export function initialize(data) {
   WEAKEN_GUARD = data?.weakenGuard === true;
 }
 
+/** 统一解码 source（Node 文档口径：`string | ArrayBufferView | ArrayBuffer`）。
+ *  实测（Node 22.22.2，本机对该文件的 loader 观测）：默认 ESM 加载器返回的是 **`Buffer`**
+ *  （`ctor:"Buffer"` · `instanceof Uint8Array` 真 · `typeof === "object"` · `byteLength 25929`），
+ *  **不是 string**。证据与观测方法见 `docs/gate-assertion-blueprint-2026-09-21.md` §9.4。
+ *  ⚠️ 若按 `typeof === 'string'` 判定后放行 ⇒ 钩子**静默失效**（破坏没改到源、测试照旧通过）。
+ *  故此处一行覆盖三种合法形态；未知形态由 `TextDecoder` 直接抛（天然 fail-loud，不写形态分支）。 */
+function decodeSource(raw) {
+  return typeof raw === 'string' ? raw : new TextDecoder('utf8').decode(raw);
+}
+
 export async function load(url, context, nextLoad) {
   const result = await nextLoad(url, context);
   const bare = url.split('?')[0];
   // ── 负向对照档：削弱守卫（**只在显式开关下生效**；命中失败即抛，不许静默）──────────────
   if (WEAKEN_GUARD && bare.endsWith(GUARD_SUFFIX)) {
-    const src = typeof result?.source === 'string'
-      ? result.source
-      : (ArrayBuffer.isView(result?.source)
-        ? Buffer.from(result.source.buffer, result.source.byteOffset, result.source.byteLength).toString('utf8')
-        : null);
-    if (src === null || !src.includes(GUARD_SNIPPET)) {
+    const src = decodeSource(result?.source);
+    if (!src.includes(GUARD_SNIPPET)) {
       throw new Error('[event-const-loader] 削弱守卫失败：判据行未命中（store.js 源码形态已变）');
     }
     return { ...result, source: src.replace(GUARD_SNIPPET, 'if (false) {') };
@@ -73,21 +79,13 @@ export async function load(url, context, nextLoad) {
   if (NAMES.length === 0) return result;
   if (!bare.endsWith(TARGET_SUFFIX)) return result;
 
-  // source 形态（Node 22.22.2 实测）：本包该文件经默认 ESM 加载器返回值是 **`Uint8Array`**
-  //   （`typeof === 'object'` 且 `ArrayBuffer.isView === true`），**不是 string**。
-  //   ⇒ 首版按 `typeof === 'string'` 判定「非 string 即放行」导致**静默不生效**
-  //   （由子进程 `sabotageApplied` 自证抓到）。此处显式双形态接收；**未知形态一律抛**（fail-loud），
-  //   否则又会出现「钩子静默失效被读成守卫失效」的假证据。
   const raw = result?.source;
   if (raw === undefined || raw === null) {
     // 目标模块无 source（如被 CJS loader 接管）⇒ 破坏**不可能**生效 ⇒ 抛（不许静默放行）
     throw new Error('[event-const-loader] 目标模块无 source（format=' + String(result?.format)
       + '）⇒ 破坏无法生效，拒绝静默放行');
   }
-  let source;
-  if (typeof raw === 'string') source = raw;
-  else if (ArrayBuffer.isView(raw)) source = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString('utf8');
-  else throw new Error('[event-const-loader] 未知 source 形态：' + Object.prototype.toString.call(raw));
+  let source = decodeSource(raw);
 
   const applied = [];
   for (const name of NAMES) {
