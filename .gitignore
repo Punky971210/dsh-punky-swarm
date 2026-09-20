@@ -17,7 +17,7 @@ Thumbs.db
 .vscode/
 
 # audit script output (regenerable ledgers; keep the scripts, drop the data)
-scripts/audit/out/
+**/scripts/audit/out/
 
 # per-round working scratch (must never be committed)
 .wip-backup/
