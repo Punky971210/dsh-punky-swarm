@@ -47,18 +47,8 @@ export function handoffsDefaults(): LaneHandoffMap {
   return {};
 }
 
-/** P1 交接表形态校验（批次级 plain object；值级校验见 gates.ts `handoffVerdictOf`） */
-export function isHandoffs(v: unknown): v is LaneHandoffMap {
-  return v != null && typeof v === 'object' && !Array.isArray(v);
-}
-
 export function chainsDefaults() {
   return { chains: {}, order: [] };
-}
-
-// laneProgress 缺省（undefined = 无断点进度）；对外显式化缺省语义，供消费方/测试引用
-export function laneProgressDefaults() {
-  return undefined;
 }
 
 // laneProgress 形态校验（批次级 plain object，值级校验由 resume.js isValidLaneProgress 承担）

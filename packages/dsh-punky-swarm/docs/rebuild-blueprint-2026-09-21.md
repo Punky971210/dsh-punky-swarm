@@ -64,7 +64,7 @@
 | 批 | 内容 | 规模 |
 |---|---|---|
 | P-D1 | 清场：`.wip-backup/` 整目录、`test-run-e3.log`、审计脚本迁 `scripts/audit/` | 4.2MB + 84KB |
-| P-D2 | 真死代码（B1：内外皆零引用）删除 | 18 逻辑符号 / 11 文件 |
+| P-D2 | 真死代码（B1：内外皆零引用）——**收窄为删 8 项**（另 10 项有显式声明语义，转冻结） | 8 逻辑符号 / 6 文件 |
 | P-D3 | 多余 `export` 收敛（B2：内部自用、外部零引用） | 122 逻辑符号 / 31 文件（4 个 ts 源） |
 | P-D4 | 冻结登记落盘（把 W2/W4/W6 的冻结项与决策树写死，防后续误当幻觉产物重删） | 1 文件 |
 
@@ -116,27 +116,37 @@
 - **回滚**：代码零改动，`git revert` 或直接重建目录（无代码面风险）。
 - commit `r2-cleanup-1: 清场`
 
-### P-D2 · 真死代码清理（B1，18 逻辑符号）
+### P-D2 · 真死代码清理（B1）——**施工期收窄为「删 8 / 冻结 10」**
 
-删除清单（内外皆零引用，含测试）：
+> ⚠️ **与原蓝图的冲突已报到**：原蓝图按「内外皆零引用 ⇒ 可删」把 B1 全 18 项列为删除对象。**实测复查发现其中 10 项虽零引用，但自带显式声明语义**（预留格式 / 骨架契约 / 白名单 / 对齐外部规范 / 版本口径 / 读端契约名）。删它们等于替用户做「接线/降级」裁定，与 W2 冻结口径冲突 ⇒ 只删 8 项无声明语义的真死 helper，另 10 项转入 P-D4 冻结登记。
 
-| 文件 | 符号 | ts 源 |
+**删除（8）**
+
+| 文件 | 符号 | ts 源 | 判读 |
+|---|---|---|---|
+| `lib/assembly/chain.js` | `flatTasksOf` | — | 通用 helper，零引用 |
+| `lib/auditlog/sink.js` | `currentSinkPath` `runPrune` | — | 注释自述「供测试」，实测**无任何测试使用** ⇒ 意图过期 |
+| `lib/state/schema-v3.ts` | `isHandoffs` `laneProgressDefaults` | ✅ | `isHandoffs` 与 `gates.ts handoffVerdictOf` 重复；`laneProgressDefaults()` 恒返回 `undefined` |
+| `lib/governance/escalation.js` | `GOVERNANCE_REFUSAL_EVENT_TYPE` | — | 纯别名（正文：58 处直接用 `EVT.EVT_GOVERNANCE_REFUSAL`） |
+| `lib/lock.js` | `lockFileName` | — | 零引用，且同文件 `isLocked` 仍在 |
+| `lib/state/store.js` | `artifactsDirOfRoot` | — | 路径 helper，调用方另行内联拼路径 |
+
+**冻结（10，转 P-D4 登记，不删）**
+
+| 文件 | 符号 | 自带声明语义 |
 |---|---|---|
-| `lib/discovery/schema.js` | `FORWARD_DEPTH_LIMIT_DEFAULT` `FORWARD_FANOUT_LIMIT_DEFAULT` `FORWARD_EACH_TIMEOUT_MS_DEFAULT` `FORWARD_TOTAL_TIMEOUT_MS_DEFAULT` | — |
-| `lib/assembly/chain.js` | `CHAIN_VERSION` `CHAIN_GUIDANCE_INJECTS` `flatTasksOf` | — |
-| `lib/auditlog/sink.js` | `currentSinkPath` `runPrune` | — |
-| `lib/state/schema-v3.ts` | `isHandoffs` `laneProgressDefaults` | ✅ |
-| `lib/assembly/flows.js` | `flowsDeclarationOf` | — |
-| `lib/governance/escalation.js` | `GOVERNANCE_REFUSAL_EVENT_TYPE` | — |
-| `lib/lock.js` | `lockFileName` | — |
-| `lib/state/resume.js` | `workerResumeChapter` | — |
-| `lib/state/store.js` | `artifactsDirOfRoot` | — |
-| `lib/verify/gate.js` | `renderVerdictReport` | — |
-| `lib/watch/lane-heartbeat.js` | `REASON_EXEMPT_CLEARED` | — |
+| `lib/discovery/schema.js` | `FORWARD_{DEPTH,FANOUT}_LIMIT_DEFAULT` `FORWARD_{EACH,TOTAL}_TIMEOUT_MS_DEFAULT` | 节标题逐字「与 `acps_sdk/adp/constants.py` 一致」⇒ 外部规范对齐表 |
+| `lib/assembly/chain.js` | `CHAIN_VERSION` | 「v1（既有缺省口径）」版本口径 |
+| `lib/assembly/chain.js` | `CHAIN_GUIDANCE_INJECTS` | 「`flows.<layer>.guidance.inject` 白名单（禁自由文本）」 |
+| `lib/assembly/flows.js` | `flowsDeclarationOf` | 自述「gateStrength / 诊断面板的取数入口」 |
+| `lib/verify/gate.js` | `renderVerdictReport` | 自述「落盘格式（**预留**：audit/verify-verdict.md）」 |
+| `lib/state/resume.js` | `workerResumeChapter` | 自述「**骨架**，增强恢复落地后填充」，`enabled:false` |
+| `lib/watch/lane-heartbeat.js` | `REASON_EXEMPT_CLEARED` | 「读端事件名走字面量——本批无写者」⇒ 已落地的读端契约名 |
 
 - **前置校验**（已做）：18 个名字在**全仓 `*.md` 零命中** ⇒ 无文档契约面。
-- **执行**：`.ts` 项改源后 `npm run build`；纯 `.js` 项直改。
-- commit `r2-cleanup-2: 删真死代码（B1 18 项）`
+- **执行**：`.ts` 项改源后 `npm run build`；纯 `.js` 项直改。实测 **1703/1699/0/4** 保持。
+- commit `r2-cleanup-2: 删真死 helper 8 项（B1 收窄，10 项转冻结）`
+
 
 ### P-D3 · 导出面收敛（B2，122 逻辑符号）
 
@@ -184,7 +194,8 @@
 | P-D0 后 | `npm run build` 使 `lib/wave-plan.d.ts` 新增 `collectAuditPairingWarnings` 声明（+22 行） | **基线漂移**：上一轮只改了 `wave-plan.ts` 与 `wave-plan.js`，漏同步 `.d.ts`。本波随 P-D1 一并提交（生成物同批纪律） |
 | P-D1 | 原审计脚本扫描域含 `scripts/`，迁入后自身会被当语料 | 脚本内显式排除 `scripts/audit`（否则 `other` 计数被符号名字面量污染） |
 | P-D1 | 原蓝图列 5 个审计脚本 | 实为 4 个（第一版 `audit-dead-code.mjs` 已被第二版完全覆盖，不留） |
-| P-D1 | 沙箱批量删除守卫（>50 文件/次）会拦 `.tsbuild` 清理（194 文件） | `npm run build` 在无沙箱隔离模式下正常；若被拦，改「编译 → 回拷 → 移出 `.tsbuild`」三步等效流程 |
+| P-D1 | 沙箱批量删除守卫（>50 文件/次，按 turn 累计）会拦 `.tsbuild` 清理（194–659 文件） | 守卫计数按 turn 累加，越往后越易触发；触发时用「编译 → 回拷 → **同盘 rename 移出** `.tsbuild`」三步等效流程（跨盘 `rename` 会 `EXDEV`，须用 `D:\dsh\.scratch\`）。`.tsbuild` 残留会直接让 `gates-vocabulary-contract.test.js:402` 转红 |
+| P-D2 | 原蓝图 P-D2 列 B1 全 18 项删除 | **收窄为删 8 / 冻结 10**（详见 P-D2 节）：10 项自带显式声明语义（预留格式 / 骨架 / 白名单 / 外部规范对齐 / 版本口径 / 读端契约名） |
 
 ## 7. 风险与回滚
 

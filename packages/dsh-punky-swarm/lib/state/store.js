@@ -154,10 +154,6 @@ export function resolveGateEventTypes(evt = EVT) {
     contractMissing: requireEventType(evt, 'EVT_GATE_CONTRACT_MISSING'),
   };
 }
-// 引擎产物根：<root>/sessions/<sessionId>/artifacts/<batchId>/（asset_claim 与 wave_plan 契约同源）
-export function artifactsDirOfRoot(root, sessionId, batchId) {
-  return path.join(root, 'sessions', sessionId, 'artifacts', batchId);
-}
 function atomicWrite(file, data) {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });

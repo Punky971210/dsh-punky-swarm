@@ -31,9 +31,6 @@ import * as EVT from '../state/event-types.js';
 export const DEFAULT_ESCALATION_WINDOW_MS = 600000;
 export const DEFAULT_ESCALATION_PRIMITIVES = ['DENY', 'NARROW'];
 
-// 目标事件类型（governance.refusal）——recordGovernanceRefusal 追加 → 本函数读端。
-export const GOVERNANCE_REFUSAL_EVENT_TYPE = EVT.EVT_GOVERNANCE_REFUSAL;
-
 /**
  * 违规计数纯函数：
  * 从批事件流统计滚动时间窗内可计入的 governance.refusal 事件数。

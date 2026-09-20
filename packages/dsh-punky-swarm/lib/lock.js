@@ -63,7 +63,3 @@ export function release(lockPath, token) {
 export function isLocked(lockPath) {
   return fs.existsSync(lockPath);
 }
-
-export function lockFileName(batchId) {
-  return path.join('.locks', batchId + '.lock');
-}

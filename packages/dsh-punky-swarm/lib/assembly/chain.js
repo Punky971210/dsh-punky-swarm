@@ -739,15 +739,6 @@ export function pairedLaneOf(targetLanes, sourceLane, tasks) {
   return null;
 }
 
-/** 本批全部任务（`wavePlan[].tasks` 拍平；`wavePlan` 存的是 **wave 数组**，见 `lane_dispatch` 注释）。 */
-export function flatTasksOf(batch) {
-  const wp = isPlainObject(batch) ? batch.wavePlan : null;
-  if (!Array.isArray(wp)) return [];
-  const out = [];
-  for (const w of wp) for (const t of (isPlainObject(w) && Array.isArray(w.tasks)) ? w.tasks : []) if (isPlainObject(t)) out.push(t);
-  return out;
-}
-
 // ── 推进判定（纯函数：给定「已结算的 lane + 结果」，算下一环） ────────────────────
 /**
  * @param chain   顶层 chain 声明

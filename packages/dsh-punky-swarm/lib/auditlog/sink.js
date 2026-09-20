@@ -861,18 +861,6 @@ export function mountAuditLog(ctx, opts = {}) {
   return { mounted: true, sinkDir: state.sinkDir, filename: state.filename };
 }
 
-/** 供测试读取当前卷路径（不触发任何写入） */
-export function currentSinkPath() {
-  return currentSegmentPath();
-}
-
-/** 供测试触发一次清理（等价于「每 1000 行」与「分卷切换」两个落盘点） */
-export function runPrune() {
-  const removedAge = pruneByAge(state.sinkDir, state.cfg?.keepDays ?? 14);
-  const removedTotal = pruneByTotal(state.sinkDir, state.cfg?.maxTotalBytes ?? 536870912);
-  return { removedAge, removedTotal };
-}
-
 /** 供测试触发一次诊断面落盘 + 全键 flush 聚合窗口（聚合闭环落点③） */
 export function flushDiagnostics(note) {
   writeDiagnostics(note ?? 'manual');
