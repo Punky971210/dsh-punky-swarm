@@ -21,6 +21,7 @@
 //   「无断言门禁」判定面 = `kind ∈ {typed, thrown}` 且有生产引用但测试零命中。
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { classifyHits, strengthSelfTest } from './strength.mjs';
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, 'scripts', 'audit', 'out');
@@ -28,6 +29,14 @@ const SKIP = new Set(['node_modules', '.git', '.tsbuild', '.wip-backup', 'backup
 const SELF_AUDIT = join(ROOT, 'scripts', 'audit');
 const BASELINE = join(ROOT, 'docs', 'audit-2026-09-21-gate-ledger.json');
 const CHECK = process.argv.includes('--check');
+const SELFTEST = process.argv.includes('--selftest');
+
+if (SELFTEST) {
+  const n = strengthSelfTest();
+  console.log(`[strength] 判别力自证通过：${n} 个用例（标题/整码/多行/弱/夹具/跨界边界）`);
+  console.log('（探测器必须自证有分辨率；否则它本身可能空转 —— R3-4 教训。）');
+  process.exit(0);
+}
 
 function walk(dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -137,10 +146,19 @@ for (const id of [...ids].sort()) {
     regexConstHits += (text.match(REGEX_CONST_RE(id)) || []).length;
     codeConstHits += (text.match(CODE_CONST_RE(id)) || []).length;
   }
+  // 命中分类：标题点名 / 载荷断言 / 窗口内弱断言 / 其余位置（详见 strength.mjs）
   const tst = [];
+  let nameHits = 0;
+  let exactHits = 0;
+  let weakHits = 0;
+  let otherHits = 0;
   for (const f of testFiles) {
-    const n = (shieldComments(readFileSync(f, 'utf8')).match(re) || []).length;
-    if (n) tst.push(`${rel(f)}×${n}`);
+    const cls = classifyHits(shieldComments(readFileSync(f, 'utf8')), id);
+    if (cls.total) tst.push(`${rel(f)}×${cls.total}`);
+    nameHits += cls.title;
+    exactHits += cls.exact;
+    weakHits += cls.weak;
+    otherHits += cls.other;
   }
   const idSet = [...ids];
   const aliasOf = idSet.sort().find((o) => o !== id && o.startsWith(id)) ?? null;
@@ -157,6 +175,7 @@ for (const id of [...ids].sort()) {
     id, kind, inUnion: UNION.has(id), aliasOf: kind === 'ghost' ? aliasOf : null,
     selfGates, prod, prodFiles: prod.length,
     testFiles: tst.length, testHits: tst.reduce((a, s) => a + Number(s.split('×')[1]), 0),
+    nameHits, exactHits, weakHits, otherHits,
     envHits, codeUseHits, codeConstHits, regexConstHits,
   });
 }
@@ -206,6 +225,16 @@ for (const k of ['regexConst', 'envVar', 'ghost', 'mention']) {
   console.log(`  — ${k} (${g.length})`);
   for (const r of g) console.log(`      ${r.id.padEnd(34)} ${r.aliasOf ? '前缀 → ' + r.aliasOf : 'env=' + r.envHits + ' re=' + r.regexConstHits + ' prodFiles=' + r.prodFiles + ' testHits=' + r.testHits}`);
 }
+
+// ── 断言强度：`testHits > 0` 但**一行载荷断言都没有**的拒码 ────────────────────────
+//   ⚠ 与「无断言」是不同缺陷：后者台账已列出（`libOnly`）；前者**看起来被覆盖了**，
+//     但命中的全部落在测试标题 / 夹具常量 / 非整码断言上 ⇒ 绳子没拴住任何行为。
+const NAME_ONLY = codes.filter((r) => r.testHits > 0 && r.exactHits === 0 && r.nameHits > 0);
+const WEAK_ONLY = codes.filter((r) => r.testHits > 0 && r.exactHits === 0 && r.nameHits === 0);
+console.log(`\n### ⚑ 点名但无载荷断言（${NAME_ONLY.length}）：测试标题里写了码，正文无整码断言`);
+NAME_ONLY.forEach((r) => console.log(`  ${r.id.padEnd(34)} hits=${r.testHits} title=${r.nameHits} weak=${r.weakHits} other=${r.otherHits}  files=${r.testFiles}`));
+console.log(`\n### ⚑ 有命中但无载荷断言（${WEAK_ONLY.length}）：码出现在非断言位置（夹具/常量/宽正则）`);
+WEAK_ONLY.forEach((r) => console.log(`  ${r.id.padEnd(34)} hits=${r.testHits} title=${r.nameHits} weak=${r.weakHits} other=${r.otherHits}  files=${r.testFiles}`));
 
 console.log(`\n### 无断言拒码：有生产引用但测试零命中 (${libOnly.length})`);
 libOnly.forEach((r) => console.log(`  ${r.id.padEnd(34)} [${r.kind}]  prod=[${r.prod.join(' ')}]`));
