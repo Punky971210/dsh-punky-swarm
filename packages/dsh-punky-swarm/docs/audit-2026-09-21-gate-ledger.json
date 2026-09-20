@@ -1,0 +1,944 @@
+[
+  {
+    "id": "GATE_ARTIFACT_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×7",
+      "lib\\state\\gates.ts×7"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_COMPLETE_EXEC_PENDING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_COMPLETE_NO_AUDIT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_DIFFICULTY_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×2"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_DIFFICULTY_RATIONALE_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×2"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_EVENT_CONST_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×5"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_EXEC_INPUT_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×3"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_EXIT_MISSING_",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_FORBIDDEN_RE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×2"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_HANDOFF_LEGACY_PASSTHROUGH",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_NO_DECLARATION",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_OFF_LINE_RE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_SKILL_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\tools\\core.js×5"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_TEAMS_ROOT_",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×3"
+    ],
+    "testFiles": 0,
+    "testHits": 0
+  },
+  {
+    "id": "GATE_DISPATCH_PROVIDER_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\dispatch.js×1"
+    ],
+    "testFiles": 1,
+    "testHits": 1
+  },
+  {
+    "id": "GATE_EXIT_",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 1
+  },
+  {
+    "id": "GATE_RETRY",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1"
+    ],
+    "testFiles": 1,
+    "testHits": 1
+  },
+  {
+    "id": "GATE_ARTIFACT_OUTSIDE_ROOT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×3",
+      "lib\\state\\gates.ts×3"
+    ],
+    "testFiles": 2,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_EMPTY_LINE_RE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×4",
+      "lib\\state\\gates.ts×4"
+    ],
+    "testFiles": 1,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_LINE_RE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×7",
+      "lib\\state\\gates.ts×7"
+    ],
+    "testFiles": 1,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_MANAGER_AGENT_ID_REQUIRED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_MANAGER_PHASE_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_MANAGER_TERMINAL",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×2",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 1,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_SUBAGENT_OUTSIDE_LANES",
+    "selfDef": 0,
+    "prod": [
+      "lib\\bridge\\dispatch-register.js×3",
+      "lib\\engine\\dispatch.js×2",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 2,
+    "testHits": 2
+  },
+  {
+    "id": "GATE_AUDIT_CRITERIA_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\state\\store.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 2,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_BATCH_CONTROL_ACTION_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×1"
+    ],
+    "testFiles": 1,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_EXIT_MISSING_AUDIT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 2,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_PAIRING_CARDINALITY_DRIFT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\wave-plan.js×1",
+      "lib\\wave-plan.ts×1"
+    ],
+    "testFiles": 2,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_PLAN_NO_DECLARATION",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 1,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_SWARM_UNBOUND_REPORT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 3
+  },
+  {
+    "id": "GATE_COMPLETE_OUTCOMES_EMPTY",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\tools\\core.js×5",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 2,
+    "testHits": 4
+  },
+  {
+    "id": "GATE_EXEMPT_TYPE_UNKNOWN",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\lane-exempt.js×3",
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 2,
+    "testHits": 4
+  },
+  {
+    "id": "GATE_MAX_OUTPUT_BYTES",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1"
+    ],
+    "testFiles": 1,
+    "testHits": 4
+  },
+  {
+    "id": "GATE_TIMEOUT_MS",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1"
+    ],
+    "testFiles": 1,
+    "testHits": 4
+  },
+  {
+    "id": "GATE_ARTIFACT_NOT_A_FILE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×5",
+      "lib\\state\\gates.ts×5"
+    ],
+    "testFiles": 1,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_AUDIT_CONTRACT_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×2"
+    ],
+    "testFiles": 3,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_DIFFICULTY_MISMATCH",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×4"
+    ],
+    "testFiles": 1,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_DISPATCH_CAPABILITY_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\dispatch.js×1"
+    ],
+    "testFiles": 2,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_DISPATCH_FAILED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\dispatch.js×3"
+    ],
+    "testFiles": 5,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_EXEMPT_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\lane-exempt.js×2",
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_EXIT_TIMEOUT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1",
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_TEAMS_ROOT_ASSET_NOT_FOUND",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×3"
+    ],
+    "testFiles": 1,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_VOCAB_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×4",
+      "lib\\state\\gates.ts×4",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 1,
+    "testHits": 5
+  },
+  {
+    "id": "GATE_ARTIFACT_EMPTY_NO_REASON",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×3",
+      "lib\\state\\gates.ts×3"
+    ],
+    "testFiles": 1,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_EXEMPT_REVOKE_REQUIRED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\lane-exempt.js×1",
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_EXIT_NO_DECLARATION",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\wave-plan.js×1",
+      "lib\\wave-plan.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_EXIT_PENDING_AUDIT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_LANE_NOT_IN_PLAN",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×4",
+      "lib\\state\\gates.ts×4"
+    ],
+    "testFiles": 3,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_MEMBER_REQUIRES_C",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_ROLE_MANAGER_AS_LANE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\wave-plan.js×2",
+      "lib\\wave-plan.ts×2"
+    ],
+    "testFiles": 3,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_SETTLE_NOTE_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\auto-settle.js×1",
+      "lib\\state\\store.js×2",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 6
+  },
+  {
+    "id": "GATE_BATCH_TERMINAL",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\dangling.js×1",
+      "lib\\state\\event-types.js×2",
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\state\\store.js×1",
+      "lib\\tools\\core.js×2",
+      "lib\\wave-plan.js×1",
+      "lib\\wave-plan.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 7
+  },
+  {
+    "id": "GATE_CONCURRENCY_EXCEEDED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\dispatch.js×1",
+      "lib\\state\\event-types.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 7
+  },
+  {
+    "id": "GATE_PLAN_PRESENCE_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\tools\\core.js×2",
+      "lib\\wave-plan.js×5",
+      "lib\\wave-plan.ts×5"
+    ],
+    "testFiles": 3,
+    "testHits": 7
+  },
+  {
+    "id": "GATE_EXIT_FORBIDDEN",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1",
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 8
+  },
+  {
+    "id": "GATE_EXIT_SPAWN_FAIL",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×2",
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 8
+  },
+  {
+    "id": "GATE_TEAM_ASSET_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\assembly\\flows.js×1",
+      "lib\\assembly\\snapshot.js×1",
+      "lib\\assembly\\team-asset.js×1",
+      "lib\\assembly.js×2",
+      "lib\\tools\\core.js×1"
+    ],
+    "testFiles": 4,
+    "testHits": 8
+  },
+  {
+    "id": "GATE_AUDIT_CONTRACT_EXEMPT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\tools\\core.js×4"
+    ],
+    "testFiles": 4,
+    "testHits": 9
+  },
+  {
+    "id": "GATE_MANAGER_NOT_RAISED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\state\\store.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 5,
+    "testHits": 9
+  },
+  {
+    "id": "GATE_TARGETS_MODE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 1,
+    "testHits": 9
+  },
+  {
+    "id": "GATE_TARGET_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 9
+  },
+  {
+    "id": "GATE_BATCH_REQUIRES_C",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 4,
+    "testHits": 10
+  },
+  {
+    "id": "GATE_TEAMS_ROOT_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×7"
+    ],
+    "testFiles": 1,
+    "testHits": 10
+  },
+  {
+    "id": "GATE_REPO_ROOT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 2,
+    "testHits": 11
+  },
+  {
+    "id": "GATE_STANDALONE_UNJUSTIFIED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×5",
+      "lib\\state\\gates.ts×5",
+      "lib\\types\\contracts.ts×1",
+      "lib\\wave-plan.js×1",
+      "lib\\wave-plan.ts×1"
+    ],
+    "testFiles": 5,
+    "testHits": 11
+  },
+  {
+    "id": "GATE_TARGET_UNCHANGED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\tools\\core.js×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 2,
+    "testHits": 11
+  },
+  {
+    "id": "GATE_EXIT_MISSING_EXEC",
+    "selfDef": 0,
+    "prod": [
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 12
+  },
+  {
+    "id": "GATE_AUDIT_INPUT_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\tools\\core.js×3",
+      "lib\\types\\contracts.ts×1",
+      "lib\\wave-plan.js×3",
+      "lib\\wave-plan.ts×3"
+    ],
+    "testFiles": 6,
+    "testHits": 13
+  },
+  {
+    "id": "GATE_ROLE_ASSEMBLY_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×4",
+      "lib\\wave-plan.js×3",
+      "lib\\wave-plan.ts×4"
+    ],
+    "testFiles": 5,
+    "testHits": 13
+  },
+  {
+    "id": "GATE_COMPLETE_NO_TIER",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2"
+    ],
+    "testFiles": 7,
+    "testHits": 14
+  },
+  {
+    "id": "GATE_EXEMPT_NOT_DISPATCH",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\lane-exempt.js×1",
+      "lib\\state\\store.js×2",
+      "lib\\tools\\core.js×4",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 1,
+    "testHits": 14
+  },
+  {
+    "id": "GATE_NEEDHUMAN_PENDING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×6",
+      "lib\\state\\gates.ts×6",
+      "lib\\state\\store.js×3",
+      "lib\\tools\\core.js×2",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 6,
+    "testHits": 14
+  },
+  {
+    "id": "GATE_COMPLETE_AUDIT_FAILED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\auto-settle.js×1",
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 5,
+    "testHits": 15
+  },
+  {
+    "id": "GATE_MODE_INACTIVE",
+    "selfDef": 0,
+    "prod": [
+      "lib\\engine\\dispatch.js×1",
+      "lib\\engine\\suite.js×1",
+      "lib\\tools\\core.js×1"
+    ],
+    "testFiles": 3,
+    "testHits": 15
+  },
+  {
+    "id": "GATE_LANE_LAYER_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1"
+    ],
+    "testFiles": 13,
+    "testHits": 17
+  },
+  {
+    "id": "GATE_TOKEN_UNKNOWN",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×4",
+      "lib\\state\\gates.ts×4",
+      "lib\\state\\vocabulary.js×1",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 2,
+    "testHits": 17
+  },
+  {
+    "id": "GATE_EXIT_NONZERO",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×1",
+      "lib\\state\\gates.ts×1",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 5,
+    "testHits": 19
+  },
+  {
+    "id": "GATE_EXIT_NO_COMMAND",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\command-exec.js×1",
+      "lib\\state\\gates.js×8",
+      "lib\\state\\gates.ts×8",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 3,
+    "testHits": 19
+  },
+  {
+    "id": "GATE_ORPHAN_PRODUCT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\state\\gates.js×3",
+      "lib\\state\\gates.ts×3",
+      "lib\\tools\\core.js×1",
+      "lib\\wave-plan.js×4",
+      "lib\\wave-plan.ts×4"
+    ],
+    "testFiles": 9,
+    "testHits": 19
+  },
+  {
+    "id": "GATE_ASSEMBLY_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\tools\\core.js×5",
+      "lib\\types\\contracts.ts×1",
+      "lib\\wave-plan.js×12",
+      "lib\\wave-plan.ts×12"
+    ],
+    "testFiles": 1,
+    "testHits": 22
+  },
+  {
+    "id": "GATE_HANDOFF_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\event-types.js×1",
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\state\\store.js×5",
+      "lib\\tools\\core.js×6",
+      "lib\\types\\contracts.ts×1",
+      "lib\\wave-plan.js×3",
+      "lib\\wave-plan.ts×3"
+    ],
+    "testFiles": 3,
+    "testHits": 24
+  },
+  {
+    "id": "GATE_PLAN_CONTRACT",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×3",
+      "lib\\state\\gates.ts×3",
+      "lib\\types\\contracts.ts×1"
+    ],
+    "testFiles": 5,
+    "testHits": 25
+  },
+  {
+    "id": "GATE_ENABLED",
+    "selfDef": 0,
+    "prod": [
+      "lib\\index.js×5",
+      "lib\\state\\gates.js×8",
+      "lib\\state\\gates.ts×8",
+      "lib\\watch\\lane-heartbeat.js×1"
+    ],
+    "testFiles": 3,
+    "testHits": 30
+  },
+  {
+    "id": "GATE_ROLE_INVALID",
+    "selfDef": 0,
+    "prod": [
+      "lib\\assembly\\flows.js×1",
+      "lib\\assembly\\team-asset.js×1",
+      "lib\\tools\\core.js×4",
+      "lib\\types\\contracts.ts×2",
+      "lib\\wave-plan.js×12",
+      "lib\\wave-plan.ts×12"
+    ],
+    "testFiles": 8,
+    "testHits": 45
+  },
+  {
+    "id": "GATE_ENTRY_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\state\\gates.js×2",
+      "lib\\state\\gates.ts×2",
+      "lib\\state\\store.js×4",
+      "lib\\types\\contracts.ts×2"
+    ],
+    "testFiles": 14,
+    "testHits": 53
+  },
+  {
+    "id": "GATE_ROLE_MISSING",
+    "selfDef": 0,
+    "prod": [
+      "lib\\assembly\\flows.js×1",
+      "lib\\assembly\\team-asset.js×1",
+      "lib\\tools\\core.js×3",
+      "lib\\wave-plan.js×6",
+      "lib\\wave-plan.ts×6"
+    ],
+    "testFiles": 9,
+    "testHits": 56
+  }
+]

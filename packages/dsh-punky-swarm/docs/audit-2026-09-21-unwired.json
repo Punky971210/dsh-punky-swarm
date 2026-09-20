@@ -1,0 +1,3599 @@
+{
+  "counts": {
+    "C1": 29,
+    "C2": 200,
+    "B1": 20,
+    "B2": 138
+  },
+  "C1": [
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "flattenAgentSkills",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "API_BASE_PATH",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "ATR_BASE_PATH",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "decryptEabCredential",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "ACS_REQUIRED_FIELDS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "ACS_SKILL_REQUIRED_FIELDS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "isEntityAic",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\artifact-types.js",
+      "name": "artifactTypeOf",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\artifact-types.js",
+      "name": "typesOfLayer",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\audit-blind-review.js",
+      "name": "BLIND_REVIEW_ORDER",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "clearFlowCache",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 67,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "clearRoleCache",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 85,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\schema.js",
+      "name": "validateAssembly",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 11,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "auditlogStats",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "sinkFilePath",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\lane-handle.js",
+      "name": "sweepExpiredHandles",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\lane-handle.js",
+      "name": "__resetLaneHandles",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 66,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "parseLabel",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\escalation.js",
+      "name": "DEFAULT_ESCALATION_WINDOW_MS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\state-store.js",
+      "name": "clearSessionState",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "assertMemberTransition",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "assertBatchTransition",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "assertMemberTransition",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "assertBatchTransition",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\event-types.js",
+      "name": "EVT_CHAIN_STEP",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "DEFAULT_THRESHOLD_MULTIPLIER",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\machine.js",
+      "name": "RATCHET_RULES",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "MANAGER_PLANS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "MANAGER_PLANS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    }
+  ],
+  "C2": [
+    {
+      "file": "lib\\acps\\certs.js",
+      "name": "generateCaCert",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\certs.js",
+      "name": "issueCert",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "DISCOVERY_SCOPES",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "DISCOVERY_SCOPE_DEFAULT",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "DiscoveryClientError",
+      "selfUse": 21,
+      "prod": 0,
+      "testUse": 14,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "buildDiscoveryRequest",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\discovery-client.js",
+      "name": "parseDiscoveryResponse",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 12,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "REGISTRY_DEFAULTS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "buildRegistrationPayload",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "RegistryClientError",
+      "selfUse": 27,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "deriveAtrBaseUrl",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\registry-client.js",
+      "name": "encryptEabCredential",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "JSONRPC_VERSION",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "parseRpcRequest",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "rpcResponse",
+      "selfUse": 5,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "defaultRpcHandler",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "buildAcs",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "ACS_PROTOCOL_VERSION",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "ACS_OPTIONAL_FIELDS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "ACS_SKILL_OPTIONAL_FIELDS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\agent-descriptor.js",
+      "name": "buildSkillDescriptor",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "AIC_PREFIX",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "BASE36_ALPHABET",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "SIGN_ALGORITHMS",
+      "selfUse": 5,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "CAI_DEFAULT_VALIDITY_DAYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "CAI_MAX_VALIDITY_DAYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "base36Encode",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "base36Decode",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "crc16CcittFalse",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "parseSalt",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "calculateAicChecksum",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "normalizeAic",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "splitAic",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "isOntologyAic",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "generateAic",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 20,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "createMemoryStore",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "registerIdentity",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "verifySignature",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\tool-descriptor.js",
+      "name": "toToolId",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\tool-descriptor.js",
+      "name": "buildToolDescriptor",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\artifact-types.js",
+      "name": "ARTIFACT_TYPES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\audit-blind-review.js",
+      "name": "BLIND_REVIEW_SKILLS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\audit-blind-review.js",
+      "name": "BLIND_REVIEW_TEMPLATES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\audit-blind-review.js",
+      "name": "applyAssemblyExtensions",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\audit-blind-review.js",
+      "name": "buildAuditLaneSpec",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_VERSIONS",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_V3_STEP_KEYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "edgesOfStep",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "resolveChainOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "validateChain",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 59,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "loadChainOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\schema.js",
+      "name": "EXCLUSIONS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\schema.js",
+      "name": "REQUIRED_ROLES",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\schema.js",
+      "name": "BLIND_REVIEW_TEMPLATE_KEYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "PRODUCE_LAYERS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "FLOW_SECTIONS",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 11,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "PRODUCE_FIELDS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "ENTRY_REQUIREMENTS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "parseTeamAsset",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "readTeamAsset",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly.js",
+      "name": "assemblyFromTeamAsset",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\assets.js",
+      "name": "syncDir",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\assets.js",
+      "name": "resolveTarget",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\config.js",
+      "name": "parseFlag",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\config.js",
+      "name": "resolveSinkDir",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "MAX_LINE_BYTES",
+      "selfUse": 5,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "MAX_LONG_ARG_CHARS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "AGGREGATE_WINDOW_MS",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "AGGREGATE_MAX_WINDOW_MS",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "buildRow",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 11,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "aggregateKey",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 12,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "pruneByAge",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "pruneByTotal",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "exportMessage",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "flushDiagnostics",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\dispatch-register.js",
+      "name": "DEFAULT_DISPATCH_TOOLS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\dispatch-register.js",
+      "name": "extractWorkerSessionId",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 14,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\lane-handle.js",
+      "name": "LANE_HANDLE_TTL_MS",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\acps-bridge.js",
+      "name": "deriveLane",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\acps-bridge.js",
+      "name": "taskCommandToInbound",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\acps-bridge.js",
+      "name": "deliverInbound",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\acps-bridge.js",
+      "name": "toTaskResult",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\acps-bridge.js",
+      "name": "createBridge",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\budget.js",
+      "name": "CHAIN_MEMORY",
+      "selfUse": 5,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\mailbox.js",
+      "name": "boxDir",
+      "selfUse": 5,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\comms\\mailbox.js",
+      "name": "quarantineDir",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\filter.js",
+      "name": "resolveField",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\filter.js",
+      "name": "matchOp",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 22,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\filter.js",
+      "name": "matchCondition",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "DISCOVERY_LIMIT_MAX",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "validateFilterShape",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "AUTO_SETTLE_SUBAGENT_END",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "DEFAULT_ON_FAIL",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "AUDIT_SETTLE_DEFERRAL_REASON",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "isAuditLayerLane",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "settleIdOf",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "hasAutoSettleRecord",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "requestAutoSettle",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\chain-runner.js",
+      "name": "redispatchableFrom",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "composeWorkerPrompt",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "buildStartSpec",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "mapSpawnError",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "workerSessionIdOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "readGateMode",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "isChildSession",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "normalizeModeGate",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\decisions.js",
+      "name": "GOVERNANCE_PRIMITIVES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\decisions.js",
+      "name": "primitiveLabel",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\decisions.ts",
+      "name": "GOVERNANCE_PRIMITIVES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\decisions.ts",
+      "name": "primitiveLabel",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\hash-utils.js",
+      "name": "canonicalize",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\preset-loader.js",
+      "name": "loadPresetFile",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\preset-loader.ts",
+      "name": "loadPresetFile",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\receipt-store.js",
+      "name": "refusalDirOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\receipt-store.js",
+      "name": "eventStreamFileOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 6,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\state-store.js",
+      "name": "DEFER_RETRY_MS",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\state-store.js",
+      "name": "PAUSE_WINDOW_MS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\state-store.js",
+      "name": "stateFileOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.js",
+      "name": "UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.js",
+      "name": "UNKNOWN_VIOLATION_CODE",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.js",
+      "name": "judgeFileWriteCommand",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.ts",
+      "name": "UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.ts",
+      "name": "UNKNOWN_VIOLATION_CODE",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\tool-ban.ts",
+      "name": "judgeFileWriteCommand",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\panel\\stream.js",
+      "name": "hasShortNameSegment",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "canTransitionBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "ACPS_DISCOVERY_DEFAULTS",
+      "selfUse": 8,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "BRIDGE_DEFAULTS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "canTransitionBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 9,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "ACPS_DISCOVERY_DEFAULTS",
+      "selfUse": 8,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "BRIDGE_DEFAULTS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "DEFAULT_FORBIDDEN_PATTERNS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 23,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "matchesForbidden",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 28,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "truncateOutput",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "TARGETS_CLAIMED_RE",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "detectNeedHuman",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "detectPendingMarker",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 14,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "GATE_LINE_RE",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "GATE_EMPTY_LINE_RE",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "detectGate",
+      "selfUse": 10,
+      "prod": 0,
+      "testUse": 18,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "TARGETS_CLAIMED_RE",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "detectNeedHuman",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "detectPendingMarker",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 14,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "GATE_LINE_RE",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "GATE_EMPTY_LINE_RE",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "detectGate",
+      "selfUse": 10,
+      "prod": 0,
+      "testUse": 18,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "LANE_EXEMPT_TYPES",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "LANE_EXEMPT_TIERS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "tierMultiplierOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "validateExemptPayload",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\vocabulary.js",
+      "name": "VOCABULARY_KINDS",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\vocabulary.js",
+      "name": "tokensOfKind",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\vocabulary.js",
+      "name": "gateCodeKnown",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\vocabulary.js",
+      "name": "validateVocabulary",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 25,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "assertTeamsRootLexical",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "resolveTeamsRootOption",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "hostSkillsRoot",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\readonly.js",
+      "name": "judgeShellCommand",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 12,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\readonly.js",
+      "name": "commandOf",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "CONTROL_PLANE_TOOLS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "storeBlob",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 1,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "buildSchedule",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "LONGRUN_REASON",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "LONGRUN_REASON_EXEMPT_ACTIVE",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "stintRunningSinceOf",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "lastCheckpointTsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "longrunCandidateOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "hasLongrunUnconsumed",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 2,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "lastEventTsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "isStaleBatch",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "lastProgressTsOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 13,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "judgeLongrun",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 23,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "LAYERS",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 70,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "ROLE_WHITELIST",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "normalizeRole",
+      "selfUse": 8,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "defaultRoleForLayer",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "AUDIT_LEAD_ROLES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "isCClassBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "collectRoleCompletenessWarnings",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "countExecLanes",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "isCPlusBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "normalizeTargetsContract",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "RESUME_CLAUSE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "resumeClauseFor",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "HANDOFF_GATE_ENV",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "LAYERS",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 70,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "ROLE_WHITELIST",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 3,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "normalizeRole",
+      "selfUse": 8,
+      "prod": 0,
+      "testUse": 10,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "defaultRoleForLayer",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "AUDIT_LEAD_ROLES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 4,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "isCClassBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "collectRoleCompletenessWarnings",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "countExecLanes",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "isCPlusBatch",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 8,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "normalizeTargetsContract",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "RESUME_CLAUSE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 7,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "resumeClauseFor",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "HANDOFF_GATE_ENV",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 5,
+      "other": 0
+    },
+    {
+      "file": "lib\\webui\\runtime-config.js",
+      "name": "validateGovernancePayload",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 30,
+      "other": 0
+    },
+    {
+      "file": "lib\\webui\\runtime-config.js",
+      "name": "validateWatchPayload",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 29,
+      "other": 0
+    }
+  ],
+  "B1": [
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_VERSION",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_GUIDANCE_INJECTS",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "flatTasksOf",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "flowsDeclarationOf",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "currentSinkPath",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "runPrune",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_DEPTH_LIMIT_DEFAULT",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_FANOUT_LIMIT_DEFAULT",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_EACH_TIMEOUT_MS_DEFAULT",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_TOTAL_TIMEOUT_MS_DEFAULT",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\escalation.js",
+      "name": "GOVERNANCE_REFUSAL_EVENT_TYPE",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\lock.js",
+      "name": "lockFileName",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\resume.js",
+      "name": "workerResumeChapter",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.js",
+      "name": "isHandoffs",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.js",
+      "name": "laneProgressDefaults",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.ts",
+      "name": "isHandoffs",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.ts",
+      "name": "laneProgressDefaults",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\store.js",
+      "name": "artifactsDirOfRoot",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\gate.js",
+      "name": "renderVerdictReport",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_EXEMPT_CLEARED",
+      "selfUse": 0,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    }
+  ],
+  "B2": [
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "RPC_METHOD",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\acps\\server.js",
+      "name": "RPC_ERRORS",
+      "selfUse": 8,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "DEFAULT_VERSION",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "DEFAULT_ARSP",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "DEFAULT_VENDOR",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "DEFAULT_ONTOLOGY_SERIAL_LEN",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "DEFAULT_INSTANCE_SERIAL_LEN",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "CHECKSUM_LEN",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\identity.js",
+      "name": "CAI_EAB_EXPIRE_HOURS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\tool-descriptor.js",
+      "name": "toInputParam",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\aip\\tool-descriptor.js",
+      "name": "toOutputParam",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_JOINS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_ON_FAIL_TOKENS",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "RETIRED_CHAIN_DECLARATIONS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "CHAIN_TEMPLATE_VARS",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "branchIdsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\chain.js",
+      "name": "pairTemplateMatches",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "consumeFieldProblemOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "presenceGlobsOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\flows.js",
+      "name": "presenceGlobMatches",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "SNAPSHOT_SCHEMA",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "SNAPSHOT_KIND",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "SNAPSHOT_DIR",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "SNAPSHOT_SUMMARY_KEYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "snapshotDirOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "assetHashOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "snapshotFileNameOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "flagsResolvedOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "snapshotSummaryOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\snapshot.js",
+      "name": "summaryKeysOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\assembly\\team-asset.js",
+      "name": "TEAM_ASSET_FILENAMES",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\config.js",
+      "name": "SINK_SUBPATH",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "BREAKER_THRESHOLD",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "BREAKER_PROBE_INTERVAL",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "MAX_SINK_ERROR_RECORDS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\auditlog\\sink.js",
+      "name": "MAX_ERROR_CHARS",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\bridge\\lane-handle.js",
+      "name": "LANE_HANDLE_RE",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_DEPTH_LIMIT_MIN",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_DEPTH_LIMIT_MAX",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_FANOUT_LIMIT_MIN",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "FORWARD_FANOUT_LIMIT_MAX",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\discovery\\schema.js",
+      "name": "DISCOVERY_LIMIT_DEFAULT",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "SETTLEABLE_STOP_REASONS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "isAuditSettleDeferral",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\auto-settle.js",
+      "name": "isPhaseGateSkip",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\dispatch.js",
+      "name": "LABEL_PREFIX",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\suite.js",
+      "name": "memberDenyTools",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\engine\\suite.js",
+      "name": "modeGateTools",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\wiring.js",
+      "name": "presetOfRuleId",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\wiring.js",
+      "name": "ruleRefsText",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\governance\\wiring.js",
+      "name": "formatDecision",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\hot\\config-watch.js",
+      "name": "ALLOWED_CAPS_KEYS",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.js",
+      "name": "isBatchPhase",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\schema.ts",
+      "name": "isBatchPhase",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "envNumber",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "forbiddenReFromEnv",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\command-exec.js",
+      "name": "matchWritePath",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "contractMissingPayload",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "GATE_OFF_LINE_RE",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "detectGateOff",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "REASON_DECL_RE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "vocabularyViewOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "detectReasonTokens",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "reasonVocabularyNote",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "EMPTY_REASON_RE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "emptyReasonOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "sectionLineHit",
+      "selfUse": 10,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "elementLineHit",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.js",
+      "name": "isInsideRoot",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "contractMissingPayload",
+      "selfUse": 12,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "GATE_OFF_LINE_RE",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "detectGateOff",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "REASON_DECL_RE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "vocabularyViewOf",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "detectReasonTokens",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "reasonVocabularyNote",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "EMPTY_REASON_RE",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "emptyReasonOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "sectionLineHit",
+      "selfUse": 10,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "elementLineHit",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\gates.ts",
+      "name": "isInsideRoot",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "EXEMPT_MULTIPLIER_MIN",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\lane-exempt.js",
+      "name": "EXEMPT_MULTIPLIER_MAX",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\resume.js",
+      "name": "RESUME_DEFAULTS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\resume.js",
+      "name": "RESUME_FILL_POINTS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\resume.js",
+      "name": "laneProgressRead",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.js",
+      "name": "isLaneProgress",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\schema-v3.ts",
+      "name": "isLaneProgress",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\store.js",
+      "name": "requireEventType",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\store.js",
+      "name": "gateDegradeEvents",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\store.js",
+      "name": "CONTRACT_MISSING_PAYLOAD_KEYS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\store.js",
+      "name": "resolveGateEventTypes",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\state\\vocabulary.js",
+      "name": "vocabularyAbsPath",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "clearPendingBatch",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "assertTeamsRootAsset",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "RETIRED_TEAM_NAME",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "resolvableSkillNames",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "declaredSkillNamesOf",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\core.js",
+      "name": "packagedTeamsWithAsset",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "VERDICT_RESOLVED",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "VERDICT_SUCCESS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "VERDICT_UNRESOLVED",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "NO_SPAWNER_HINT",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "HARD_INSTRUCTIONS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "buildMergeAgentRequest",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "normalizeVerdict",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\tools\\merge-agent.js",
+      "name": "checkInFlightMerge",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "MAX_BLOB_BYTES",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "classifyEvidence",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "extractResultText",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "deriveEvidence",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\evidence.js",
+      "name": "evidenceKey",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\verify\\gate.js",
+      "name": "evaluateGate",
+      "selfUse": 6,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "LONGRUN_REASON_STALE_BATCH",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_DANGLING_MEMBER",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_NOT_SCANNED_PLANNING",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_PAUSED_DWELL",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_PENDING_UNDISPATCHED",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_REVIEW_AWAITING_SETTLE",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_IDLE_AWAITING_RESUME",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_BLIND_RUN_NO_DEPS",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_BLIND_RUN_UPSTREAM_MISSING",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "REASON_BLIND_RUN_UPSTREAM_NEVER_READY",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "isScannedLaneState",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "stateAnchorOf",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "batchPausedAnchorOf",
+      "selfUse": 3,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "laneConsumePathsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "laneHasEmptyDeps",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "batchLaneCount",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "batchHasDependencyEdges",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "upstreamMissingEvidenceOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\watch\\lane-heartbeat.js",
+      "name": "blindRunVerdict",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "orphanPlanProductsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.js",
+      "name": "checkHandoffDeclarations",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "orphanPlanProductsOf",
+      "selfUse": 2,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\wave-plan.ts",
+      "name": "checkHandoffDeclarations",
+      "selfUse": 4,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\webui\\config-trust.js",
+      "name": "isLoopbackHostname",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    },
+    {
+      "file": "lib\\webui\\config-trust.js",
+      "name": "isTrustedAuthority",
+      "selfUse": 1,
+      "prod": 0,
+      "testUse": 0,
+      "other": 0
+    }
+  ],
+  "dens": {
+    "lib\\acps\\certs.js": {
+      "total": 3,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\acps\\discovery-client.js": {
+      "total": 8,
+      "unwired": 6,
+      "selfOnly": 5
+    },
+    "lib\\acps\\registry-client.js": {
+      "total": 11,
+      "unwired": 8,
+      "selfOnly": 5
+    },
+    "lib\\acps\\server.js": {
+      "total": 8,
+      "unwired": 7,
+      "selfOnly": 7
+    },
+    "lib\\aip\\agent-descriptor.js": {
+      "total": 9,
+      "unwired": 6,
+      "selfOnly": 4
+    },
+    "lib\\aip\\identity.js": {
+      "total": 30,
+      "unwired": 25,
+      "selfOnly": 24
+    },
+    "lib\\aip\\tool-descriptor.js": {
+      "total": 6,
+      "unwired": 4,
+      "selfOnly": 4
+    },
+    "lib\\api.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\artifact-types.js": {
+      "total": 4,
+      "unwired": 3,
+      "selfOnly": 1
+    },
+    "lib\\assembly\\audit-blind-review.js": {
+      "total": 6,
+      "unwired": 5,
+      "selfOnly": 4
+    },
+    "lib\\assembly\\chain.js": {
+      "total": 26,
+      "unwired": 15,
+      "selfOnly": 12
+    },
+    "lib\\assembly\\flows.js": {
+      "total": 24,
+      "unwired": 6,
+      "selfOnly": 3
+    },
+    "lib\\assembly\\schema.js": {
+      "total": 10,
+      "unwired": 4,
+      "selfOnly": 3
+    },
+    "lib\\assembly\\snapshot.js": {
+      "total": 11,
+      "unwired": 10,
+      "selfOnly": 10
+    },
+    "lib\\assembly\\team-asset.js": {
+      "total": 24,
+      "unwired": 7,
+      "selfOnly": 7
+    },
+    "lib\\assembly.js": {
+      "total": 3,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\assets.js": {
+      "total": 5,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\auditlog\\config.js": {
+      "total": 5,
+      "unwired": 3,
+      "selfOnly": 3
+    },
+    "lib\\auditlog\\sink.js": {
+      "total": 19,
+      "unwired": 18,
+      "selfOnly": 14
+    },
+    "lib\\bridge\\dispatch-register.js": {
+      "total": 3,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\bridge\\lane-handle.js": {
+      "total": 11,
+      "unwired": 4,
+      "selfOnly": 2
+    },
+    "lib\\bridge\\trajectory.js": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\comms\\acps-bridge.js": {
+      "total": 7,
+      "unwired": 5,
+      "selfOnly": 5
+    },
+    "lib\\comms\\aip-format.js": {
+      "total": 6,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\comms\\budget.js": {
+      "total": 5,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\comms\\mailbox.js": {
+      "total": 8,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\comms\\topic-runtime.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\comms\\topic.js": {
+      "total": 4,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\discovery\\filter.js": {
+      "total": 4,
+      "unwired": 3,
+      "selfOnly": 3
+    },
+    "lib\\discovery\\schema.js": {
+      "total": 19,
+      "unwired": 11,
+      "selfOnly": 7
+    },
+    "lib\\discovery\\service.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\engine\\auto-settle.js": {
+      "total": 13,
+      "unwired": 10,
+      "selfOnly": 10
+    },
+    "lib\\engine\\chain-runner.js": {
+      "total": 2,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\engine\\dispatch.js": {
+      "total": 19,
+      "unwired": 9,
+      "selfOnly": 8
+    },
+    "lib\\engine\\replay.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\engine\\suite.js": {
+      "total": 5,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\governance\\classify.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\classify.ts": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\config.js": {
+      "total": 7,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\config.ts": {
+      "total": 7,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\decisions.js": {
+      "total": 4,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\governance\\decisions.ts": {
+      "total": 4,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\governance\\escalation.js": {
+      "total": 4,
+      "unwired": 2,
+      "selfOnly": 0
+    },
+    "lib\\governance\\hash-utils.js": {
+      "total": 4,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\governance\\kernel.js": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\kernel.ts": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\narrow.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\narrow.ts": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\governance\\preset-loader.js": {
+      "total": 4,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\governance\\preset-loader.ts": {
+      "total": 4,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\governance\\receipt-store.js": {
+      "total": 7,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\governance\\state-store.js": {
+      "total": 7,
+      "unwired": 4,
+      "selfOnly": 3
+    },
+    "lib\\governance\\tool-ban.js": {
+      "total": 5,
+      "unwired": 3,
+      "selfOnly": 3
+    },
+    "lib\\governance\\tool-ban.ts": {
+      "total": 5,
+      "unwired": 3,
+      "selfOnly": 3
+    },
+    "lib\\governance\\wiring.js": {
+      "total": 4,
+      "unwired": 3,
+      "selfOnly": 3
+    },
+    "lib\\hot\\config-watch.js": {
+      "total": 8,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\index.js": {
+      "total": 3,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\lock.js": {
+      "total": 4,
+      "unwired": 1,
+      "selfOnly": 0
+    },
+    "lib\\panel\\stream.js": {
+      "total": 2,
+      "unwired": 1,
+      "selfOnly": 1
+    },
+    "lib\\schema.js": {
+      "total": 28,
+      "unwired": 6,
+      "selfOnly": 4
+    },
+    "lib\\schema.ts": {
+      "total": 28,
+      "unwired": 6,
+      "selfOnly": 4
+    },
+    "lib\\state\\archive.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\command-exec.js": {
+      "total": 7,
+      "unwired": 6,
+      "selfOnly": 6
+    },
+    "lib\\state\\constants.js": {
+      "total": 4,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\corrupt-registry.js": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\dangling.js": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\event-types.js": {
+      "total": 61,
+      "unwired": 1,
+      "selfOnly": 0
+    },
+    "lib\\state\\gates.js": {
+      "total": 23,
+      "unwired": 18,
+      "selfOnly": 18
+    },
+    "lib\\state\\gates.ts": {
+      "total": 23,
+      "unwired": 18,
+      "selfOnly": 18
+    },
+    "lib\\state\\lane-exempt.js": {
+      "total": 9,
+      "unwired": 7,
+      "selfOnly": 6
+    },
+    "lib\\state\\machine-rules.js": {
+      "total": 3,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\machine-rules.ts": {
+      "total": 3,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\machine.js": {
+      "total": 4,
+      "unwired": 1,
+      "selfOnly": 0
+    },
+    "lib\\state\\resume.js": {
+      "total": 12,
+      "unwired": 4,
+      "selfOnly": 3
+    },
+    "lib\\state\\schema-v3.js": {
+      "total": 8,
+      "unwired": 3,
+      "selfOnly": 1
+    },
+    "lib\\state\\schema-v3.ts": {
+      "total": 8,
+      "unwired": 3,
+      "selfOnly": 1
+    },
+    "lib\\state\\store.js": {
+      "total": 11,
+      "unwired": 5,
+      "selfOnly": 4
+    },
+    "lib\\state\\task-utils.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\state\\vocabulary.js": {
+      "total": 8,
+      "unwired": 5,
+      "selfOnly": 5
+    },
+    "lib\\tools\\core.js": {
+      "total": 18,
+      "unwired": 9,
+      "selfOnly": 9
+    },
+    "lib\\tools\\git-utils.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\tools\\lane-tools.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\tools\\log-tools.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\tools\\mailbox-tools.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\tools\\merge-agent.js": {
+      "total": 9,
+      "unwired": 8,
+      "selfOnly": 8
+    },
+    "lib\\tools\\readonly.js": {
+      "total": 4,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\tools\\register.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\tools\\shared.js": {
+      "total": 2,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\verify\\evidence.js": {
+      "total": 12,
+      "unwired": 7,
+      "selfOnly": 7
+    },
+    "lib\\verify\\gate.js": {
+      "total": 4,
+      "unwired": 2,
+      "selfOnly": 1
+    },
+    "lib\\verify\\mount.js": {
+      "total": 1,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\verify\\selector.js": {
+      "total": 4,
+      "unwired": 0,
+      "selfOnly": 0
+    },
+    "lib\\watch\\lane-heartbeat.js": {
+      "total": 41,
+      "unwired": 31,
+      "selfOnly": 30
+    },
+    "lib\\wave-plan.js": {
+      "total": 32,
+      "unwired": 16,
+      "selfOnly": 15
+    },
+    "lib\\wave-plan.ts": {
+      "total": 32,
+      "unwired": 16,
+      "selfOnly": 15
+    },
+    "lib\\webui\\config-trust.js": {
+      "total": 3,
+      "unwired": 2,
+      "selfOnly": 2
+    },
+    "lib\\webui\\runtime-config.js": {
+      "total": 3,
+      "unwired": 2,
+      "selfOnly": 2
+    }
+  }
+}

@@ -84,6 +84,28 @@ export declare function checkHandoffDeclarations(tasks: WaveTask[], opts?: {
     smoke?: boolean;
     handoffGate?: boolean;
 }): void;
+/**
+ * 判据（规格 `plan/debt-spec.md` §2.1 方案 R，**只读、零副作用**）：对每条 `layer === 'audit'` 的 task，
+ * 取其 `deps` 中每条 `layer === 'exec'` 的入边 `E`（= 本 audit lane **认领**了一条 exec lane），
+ * 若本 lane 的 `consume` **未覆盖 `E` 的任何交付产物**（`E.produce ∪ E.outputs`；两者皆空 ⇒ 视为覆盖缺失）
+ * ⇒ 产一条**告警**（「疑似配对基数漂移：认领即须声明消费该 exec 的产物」+ 建议）。
+ *
+ * 【2026-09-18 · 替换判据（G-08）】**旧判据已退役**：它比较的是「上游 exec lane 的 `deps` 是否覆盖本 audit
+ * lane 的 `deps` 且严格更大」——该判据在**任何合法拓扑下不可满足**（本 audit lane 的 `deps` 含该 exec lane
+ * 自身，而任何 lane 的 `deps` 都不含自身；要满足覆盖即须自指环，而该构造在建批期先被 `topoWaves` 以
+ * `cycle detected in task deps` 拒绝）⇒ 旧判据恒 `false`，是**零可达性的空转校验**（退役表达式原文与原始读数见
+ * `exec/pairing-panel.md` §U-7 与探针 `exec-pairing-panel/probe/u7-reachability.json`，本 docstring 不复制该表达式）。
+ * 替换判据与旧判据**注释自述的语义**同旨（「一条 exec lane 被 ≥2 条 audit lane 认领且认领集不同」）：
+ * 认领集 = `deps ∩ exec`，覆盖面 = 本 lane 的 `consume`。可达性实证见 `test/wave-plan-pairing.test.js`
+ * （六格构造：不可达 3 + 可达 3，逐格断言 + 原始读数）。
+ *
+ * **不得升级为拒建批**（与容忍口径同纪律）：现网 `leader-direct` 批的 audit lane 常为**单条聚合**
+ * （`docs/engine-design-adjudication-20260918.md:46` 实证：声明 3 exec 分支 + `pair_with:"exec"`，实批 1 条聚合
+ * audit lane）⇒ 硬拒会**立刻**打断既有建批。`pair_with` 退役后 1:1 配对改由 audit lane 显式 `deps` 表达
+ * （`deps` **恰为** `[<对应 exec lane>]`）**并显式消费其交付产物**；跨层聚合由该 audit lane 显式声明全部目标 lane
+ * 且逐条消费其产物（认领即须消费）。
+ */
+export declare function collectAuditPairingWarnings(tasks: WaveTask[]): WavePlanDoc['warnings'];
 export declare function buildWavePlan({ batchId, tasks, concurrency, team, assembly, teamsRoot, smoke, handoffGate }: {
     batchId: string;
     tasks: WavePlanTaskInput[];
