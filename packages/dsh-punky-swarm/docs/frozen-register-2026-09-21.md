@@ -77,41 +77,47 @@
 
 ---
 
-## 3. 无断言门禁（11 个，冻结）
+## 3. 无断言门禁（9 个，冻结）
 
 判据：**有生产引用但测试零断言**。硬拒收口门漏断言 = 白盒测试绿 ≠ 生产路径走过。
 
-**前置净化（2026-09-21 勘误）**：台账原始命中 15 项，其中
-- **3 个前缀伪影**被剔除：`GATE_EXIT_MISSING_` / `GATE_TEAMS_ROOT_` / `GATE_EXIT_` 是源码模板拼接（`'GATE_EXIT_MISSING_' + layer`）与注释（`GATE_TEAMS_ROOT_*`）被正则截成的前缀，**不是门禁码**
-- **2 个 `_RE` 正则常量**被排除：`GATE_FORBIDDEN_RE` / `GATE_OFF_LINE_RE`（本就不是门禁码）
+**口径（2026-09-21 v3 定稿）**：台账**拒码真源 = `lib/types/contracts.ts` 的 `GateErrorCode` union**；
+正则 `\bGATE_[A-Z0-9_]+\b` 只作**候选收集器**，候选再按「出现上下文」分类，非码一律移出本口径。
+本表 = `kind ∈ {typed, thrown}` + 有生产引用 + 测试零命中。逐项判读见下。
 
-⇒ 真实可外显门禁码 = **10 个**（`GATE_ARTIFACT_MISSING` 为出口门内部哨兵，不直接外显）。
+**两次勘误（均由「乐观污染」触发：让『没覆盖』看起来像『已覆盖』）**：
+- v1（原始）在**源码原文**上计数 ⇒ **注释里提到某码**也算「有断言 / 有生产引用」。实测：在新增测试的注释里写一句 `GATE_ARTIFACT_MISSING`，其 `testHits` 由 0 变非 0，`--check` 误报「已消除无断言项」。
+- v2 **去注释**（`scripts/audit/gates.mjs` 的 `shieldComments`；刻意**不**去字符串——断言普遍写成 `'GATE_X'` 字面量，必须计入）。
+- v3 **改用拒码真源**：正则把 `GATE_*` 的**非码标识符**也当码收，实测混入 14 个（正则常量 3 · 环境变量名 7 · 前缀伪影 2 · 已退役码留痕 2）。
+  · 环境变量名（**不是码**）：`GATE_ENABLED`（逃生阀）· `GATE_REPO_ROOT` · `GATE_TARGETS_MODE` · `GATE_TIMEOUT_MS` · `GATE_RETRY` · `GATE_MAX_OUTPUT_BYTES` · `GATE_FORBIDDEN_RE`
+  · 正则常量（**不是码**）：`GATE_OFF_LINE_RE` / `GATE_EMPTY_LINE_RE` / `GATE_LINE_RE`
+  · 前缀伪影：`GATE_EXIT_MISSING_` / `GATE_EXIT_` 是源码模板拼接（`'GATE_EXIT_MISSING_' + layer`）被正则截成的残片
+  · 已退役码留痕：`GATE_SUBAGENT_OUTSIDE_LANES` / `GATE_MANAGER_TERMINAL`（`lib/types/contracts.ts:415-428` / `lib/state/store.js:930` 逐字记「已删除」）
+
+**P0 两枚**（收口主门，此前零断言 ⇒ 已由 R3-1 补**生产路径 E2E 断言**离榜）：`GATE_COMPLETE_EXEC_PENDING` / `GATE_COMPLETE_NO_AUDIT`（`test/complete-tier-gate-e2e.test.js`）。
+> 原记「P0 三枚」，第三枚 `GATE_ARTIFACT_MISSING` 经复核为**假缺口**：它是出口门内部哨兵，按设计被重写为 `GATE_EXIT_MISSING_<LAYER>` 才外显，而该外显形态已有 12 处断言 / 3 套件（`GATE_EXIT_MISSING_AUDIT` 3 · `GATE_EXIT_MISSING_EXEC` 9）。
 
 | 门禁码 | 类别 | 拦什么 | 生产引用点 |
 |---|---|---|---|
 | `GATE_ARTIFACT_MISSING` | 哨兵 | 产物在场判定的**内部哨兵**：出口门将其改写为 `GATE_EXIT_MISSING_<LAYER>`（缺在场按层族回落），不直接外显 | lib/state/gates.js×7 · lib/state/gates.ts×7 |
-| `GATE_COMPLETE_EXEC_PENDING` | 收口主门 | exec 层未全部终态即拒 complete（`pending` 回显待收 lane） | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
-| `GATE_COMPLETE_NO_AUDIT` | 收口主门 | 批内 audit 层为空即拒 complete | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
 | `GATE_DIFFICULTY_INVALID` | 工具门 | `assign_check` 的 difficulty 非 A\|B\|C（无默认档） | lib/tools/core.js×2 |
 | `GATE_DIFFICULTY_RATIONALE_MISSING` | 工具门 | `assign_check` 的 rationale 缺失或 < 12 字 | lib/tools/core.js×2 |
-| `GATE_EVENT_CONST_MISSING` | fail-closed 守卫 | 事件常量缺位时**拒绝写入**（防落 `type:undefined` 污染审计面） | lib/state/store.js×5 |
-| `GATE_EXEC_INPUT_MISSING` | 建批门 | exec lane 未消费 `plan/` 产物（批级 `consumes_required` / 逐 lane `_per_lane` 两档） | lib/tools/core.js×3 |
+| `GATE_EVENT_CONST_MISSING` | fail-closed 守卫 | 事件常量缺位时**拒绝写入**（防落 `type:undefined` 污染审计面） | lib/state/store.js×3 |
+| `GATE_EXEC_INPUT_MISSING` | 建批门 | exec lane 未消费 `plan/` 产物（批级 `consumes_required` / 逐 lane `_per_lane` 两档） | lib/tools/core.js×2 |
 | `GATE_HANDOFF_LEGACY_PASSTHROUGH` | 留痕码 | 入口侧：存量批无 `batch.handoffs` ⇒ 放行**但留痕**（不静默、不砸存量） | lib/state/store.js×1 |
 | `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` | 留痕码 | 出口侧：同上（结算侧镜像） | lib/state/store.js×1 |
 | `GATE_NO_DECLARATION` | 判据门 | presence 契约：声明清单为空 | lib/state/gates.js×1 · lib/state/gates.ts×1 |
-| `GATE_SKILL_MISSING` | 告警码 | 技能在宿主技能根不可解析 ⇒ 建批留痕告警（`plan.warnings`，不阻断建批） | lib/state/event-types.js×1 · lib/tools/core.js×5 |
+| `GATE_SKILL_MISSING` | 告警码 | 技能在宿主技能根不可解析 ⇒ 建批留痕告警（`plan.warnings`，不阻断建批） | lib/tools/core.js×1 |
 
 **裁定（2026-09-21，替代原 W6「都删」）**：**不删，冻结至新引擎落地**。
 
-- 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 3 个前缀伪影**，照字面执行会去删两个不存在的码。
-- 去伪影后逐项实地看过：11 项**全部是活代码**，抛出点在生产路径上 —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。
+- 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 2 个前缀伪影**（`GATE_EXIT_` / `GATE_EXIT_MISSING_`，模板拼接 `'GATE_EXIT_MISSING_' + layer` 被正则截出的残片），照字面执行会去删两个不存在的码。
+- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为当前冻结面。
 - 它们 `testHits = 0` ⇒ **删除效果无法由测试判定**（可能静默放行，也可能被别的门先拦而"看起来没变化"）⇒ 属**静默回归风险**，不是等价重构；且删门禁是**行为变更**，与蓝图 §2「修改/重构 = 本波不做」冲突。
 
-**解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。解冻顺序 P0 → P1 → P2；任一码若在新形态下确实不再需要，须在本表逐行改判并留痕。
+**勘误链**：上游甄别报告记「15 个」→ v1 台账（含注释污染 + 前缀伪影 + 非码标识符）**15** → v2 去注释 **11** → v3 拒码真源口径 **9**（其中两枚收口门已由 R3-1 补测离榜）。
 
-**勘误链**：上游甄别报告记「15 个」→ 台账实测 15（含伪影）→ 去 3 伪影后 13 → 再除 2 个 `_RE` 常量后 **11**。
-
-**P0 三枚**（收口主门，优先补测）：`GATE_COMPLETE_EXEC_PENDING` / `GATE_COMPLETE_NO_AUDIT` / `GATE_ARTIFACT_MISSING`。
+**解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。
 
 参考：jiuwen `schema/status.py:274-302` 的**两个镜像闸**（`PLANNING` 前 / `IN_REVIEW` 后，逐字 structurally identical mirrors）⇒ 蟛蜞 entry/exit 对偶门应有对称断言组。
 
@@ -136,7 +142,7 @@
 判据：**仅测试引用，但本文件内部已消费** ⇒ `export` 多余却**不可去**（去 export 会断 200 处测试引用）。
 
 > 判读：这 200 项把「未接线」这件事**测没了**——测试直捅内部实现，测试绿只证明内部函数对，不证明生产路径走了它。
-> 这是 11 个无断言门禁（§3）的同一枚硬币另一面，处置同归 §3 裁定（冻结至新引擎落地）。
+> 这是 9 个无断言门禁（§3）的同一枚硬币另一面，处置同归 §3 裁定（冻结至新引擎落地）。
 
 ---
 

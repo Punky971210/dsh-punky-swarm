@@ -29,9 +29,11 @@ const dedupe = (arr) => {
 const c1 = dedupe(unwired.C1).sort((a, b) => b.tests - a.tests || a.base.localeCompare(b.base));
 const b1kept = dedupe(unwired.B1).sort((a, b) => a.base.localeCompare(b.base));
 
-// 无断言门禁：真实码（剔除前缀伪影）+ 无 `_RE` 正则常量 + 有生产引用 + 测试零断言
-const ghosts = ledger.filter((r) => r.aliasOf);
-const libOnly = ledger.filter((r) => !r.aliasOf && r.prod.length > 0 && r.testHits === 0 && !/_RE$/.test(r.id));
+// 非码 GATE_* 标识符（前缀伪影 / 正则常量 / 环境变量名 / 已退役码留痕）——**不得**计入门禁口径
+const ghosts = ledger.filter((r) => r.kind === 'ghost');
+const nonCodes = ledger.filter((r) => !['typed', 'thrown'].includes(r.kind));
+const libOnly = ledger.filter((r) => ['typed', 'thrown'].includes(r.kind) && r.prod.length > 0 && r.testHits === 0);
+const kindCount = (k) => nonCodes.filter((r) => r.kind === k).length;
 
 // 门禁码 → [类别, 拦什么]（人工判读，随新引擎形态重议）
 const GATE_CLASS = {
@@ -110,11 +112,21 @@ lines.push('## 3. 无断言门禁（' + libOnly.length + ' 个，冻结）');
 lines.push('');
 lines.push('判据：**有生产引用但测试零断言**。硬拒收口门漏断言 = 白盒测试绿 ≠ 生产路径走过。');
 lines.push('');
-lines.push('**前置净化（2026-09-21 勘误）**：台账原始命中 15 项，其中');
-lines.push('- **3 个前缀伪影**被剔除：`' + ghosts.map((g) => g.id).join('` / `') + '` 是源码模板拼接（`\'GATE_EXIT_MISSING_\' + layer`）与注释（`GATE_TEAMS_ROOT_*`）被正则截成的前缀，**不是门禁码**');
-lines.push('- **2 个 `_RE` 正则常量**被排除：`GATE_FORBIDDEN_RE` / `GATE_OFF_LINE_RE`（本就不是门禁码）');
+lines.push('**口径（2026-09-21 v3 定稿）**：台账**拒码真源 = `lib/types/contracts.ts` 的 `GateErrorCode` union**；');
+lines.push('正则 `\\bGATE_[A-Z0-9_]+\\b` 只作**候选收集器**，候选再按「出现上下文」分类，非码一律移出本口径。');
+lines.push('本表 = `kind ∈ {typed, thrown}` + 有生产引用 + 测试零命中。逐项判读见下。');
 lines.push('');
-lines.push('⇒ 真实可外显门禁码 = **10 个**（`GATE_ARTIFACT_MISSING` 为出口门内部哨兵，不直接外显）。');
+lines.push('**两次勘误（均由「乐观污染」触发：让『没覆盖』看起来像『已覆盖』）**：');
+lines.push('- v1（原始）在**源码原文**上计数 ⇒ **注释里提到某码**也算「有断言 / 有生产引用」。实测：在新增测试的注释里写一句 `GATE_ARTIFACT_MISSING`，其 `testHits` 由 0 变非 0，`--check` 误报「已消除无断言项」。');
+lines.push('- v2 **去注释**（`scripts/audit/gates.mjs` 的 `shieldComments`；刻意**不**去字符串——断言普遍写成 `\'GATE_X\'` 字面量，必须计入）。');
+lines.push('- v3 **改用拒码真源**：正则把 `GATE_*` 的**非码标识符**也当码收，实测混入 ' + nonCodes.length + ' 个（正则常量 ' + kindCount('regexConst') + ' · 环境变量名 ' + kindCount('envVar') + ' · 前缀伪影 ' + kindCount('ghost') + ' · 已退役码留痕 ' + kindCount('mention') + '）。');
+lines.push('  · 环境变量名（**不是码**）：`GATE_ENABLED`（逃生阀）· `GATE_REPO_ROOT` · `GATE_TARGETS_MODE` · `GATE_TIMEOUT_MS` · `GATE_RETRY` · `GATE_MAX_OUTPUT_BYTES` · `GATE_FORBIDDEN_RE`');
+lines.push('  · 正则常量（**不是码**）：`' + nonCodes.filter((r) => r.kind === 'regexConst').map((r) => r.id).join('` / `') + '`');
+lines.push('  · 前缀伪影：`' + ghosts.map((g) => g.id).join('` / `') + '` 是源码模板拼接（`\'GATE_EXIT_MISSING_\' + layer`）被正则截成的残片');
+lines.push('  · 已退役码留痕：`' + nonCodes.filter((r) => r.kind === 'mention').map((r) => r.id).join('` / `') + '`（`lib/types/contracts.ts:415-428` / `lib/state/store.js:930` 逐字记「已删除」）');
+lines.push('');
+lines.push('**P0 两枚**（收口主门，此前零断言 ⇒ 已由 R3-1 补**生产路径 E2E 断言**离榜）：`GATE_COMPLETE_EXEC_PENDING` / `GATE_COMPLETE_NO_AUDIT`（`test/complete-tier-gate-e2e.test.js`）。');
+lines.push('> 原记「P0 三枚」，第三枚 `GATE_ARTIFACT_MISSING` 经复核为**假缺口**：它是出口门内部哨兵，按设计被重写为 `GATE_EXIT_MISSING_<LAYER>` 才外显，而该外显形态已有 12 处断言 / 3 套件（`GATE_EXIT_MISSING_AUDIT` 3 · `GATE_EXIT_MISSING_EXEC` 9）。');
 lines.push('');
 lines.push('| 门禁码 | 类别 | 拦什么 | 生产引用点 |');
 lines.push('|---|---|---|---|');
@@ -125,15 +137,13 @@ for (const r of libOnly) {
 lines.push('');
 lines.push('**裁定（2026-09-21，替代原 W6「都删」）**：**不删，冻结至新引擎落地**。');
 lines.push('');
-lines.push('- 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 3 个前缀伪影**，照字面执行会去删两个不存在的码。');
-lines.push('- 去伪影后逐项实地看过：11 项**全部是活代码**，抛出点在生产路径上 —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。');
+lines.push('- 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 2 个前缀伪影**（`GATE_EXIT_` / `GATE_EXIT_MISSING_`，模板拼接 `\'GATE_EXIT_MISSING_\' + layer` 被正则截出的残片），照字面执行会去删两个不存在的码。');
+lines.push('- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为当前冻结面。');
 lines.push('- 它们 `testHits = 0` ⇒ **删除效果无法由测试判定**（可能静默放行，也可能被别的门先拦而"看起来没变化"）⇒ 属**静默回归风险**，不是等价重构；且删门禁是**行为变更**，与蓝图 §2「修改/重构 = 本波不做」冲突。');
 lines.push('');
-lines.push('**解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。解冻顺序 P0 → P1 → P2；任一码若在新形态下确实不再需要，须在本表逐行改判并留痕。');
+lines.push('**勘误链**：上游甄别报告记「15 个」→ v1 台账（含注释污染 + 前缀伪影 + 非码标识符）**15** → v2 去注释 **11** → v3 拒码真源口径 **9**（其中两枚收口门已由 R3-1 补测离榜）。');
 lines.push('');
-lines.push('**勘误链**：上游甄别报告记「15 个」→ 台账实测 15（含伪影）→ 去 3 伪影后 13 → 再除 2 个 `_RE` 常量后 **' + libOnly.length + '**。');
-lines.push('');
-lines.push('**P0 三枚**（收口主门，优先补测）：`GATE_COMPLETE_EXEC_PENDING` / `GATE_COMPLETE_NO_AUDIT` / `GATE_ARTIFACT_MISSING`。');
+lines.push('**解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。');
 lines.push('');
 lines.push('参考：jiuwen `schema/status.py:274-302` 的**两个镜像闸**（`PLANNING` 前 / `IN_REVIEW` 后，逐字 structurally identical mirrors）⇒ 蟛蜞 entry/exit 对偶门应有对称断言组。');
 lines.push('');

@@ -248,6 +248,14 @@
       "tests": 8,
       "todos": 0
     },
+    "test/complete-tier-gate-e2e.test.js": {
+      "asserts": 25,
+      "blankLines": 25,
+      "lines": 230,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/concurrency-gate.test.js": {
       "asserts": 89,
       "blankLines": 46,
@@ -1137,7 +1145,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-20T05:54:09Z",
+  "generatedAt": "2026-09-20T17:39:17Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1148,15 +1156,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "D5 补丁：plan 契约 elements / pending_marker 两条类型校验的红测（test/team-asset.test.js +3 例 / team-asset.js 加性收紧）",
+  "reason": "R3-1 门禁断言补测：新增 test/complete-tier-gate-e2e.test.js（GATE_COMPLETE_NO_AUDIT / GATE_COMPLETE_EXEC_PENDING 生产路径 E2E，5 用例）",
   "schema": 1,
   "totals": {
-    "asserts": 8139,
-    "blankLines": 3771,
-    "files": 142,
-    "lines": 42620,
+    "asserts": 8164,
+    "blankLines": 3796,
+    "files": 143,
+    "lines": 42850,
     "tautologies": 0,
-    "tests": 1664,
+    "tests": 1669,
     "todos": 4
   }
 }
