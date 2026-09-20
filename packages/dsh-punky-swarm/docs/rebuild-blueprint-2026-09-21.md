@@ -196,6 +196,8 @@
 | P-D1 | 原蓝图列 5 个审计脚本 | 实为 4 个（第一版 `audit-dead-code.mjs` 已被第二版完全覆盖，不留） |
 | P-D1 | 沙箱批量删除守卫（>50 文件/次，按 turn 累计）会拦 `.tsbuild` 清理（194–659 文件） | 守卫计数按 turn 累加，越往后越易触发；触发时用「编译 → 回拷 → **同盘 rename 移出** `.tsbuild`」三步等效流程（跨盘 `rename` 会 `EXDEV`，须用 `D:\dsh\.scratch\`）。`.tsbuild` 残留会直接让 `gates-vocabulary-contract.test.js:402` 转红 |
 | P-D2 | 原蓝图 P-D2 列 B1 全 18 项删除 | **收窄为删 8 / 冻结 10**（详见 P-D2 节）：10 项自带显式声明语义（预留格式 / 骨架 / 白名单 / 外部规范对齐 / 版本口径 / 读端契约名） |
+| 波后复核（2026-09-21） | `scripts/audit/gates.mjs` 的正则 `\bGATE_[A-Z0-9_]+\b` 把源码**模板拼接**（`'GATE_EXIT_MISSING_' + layer`）与**注释**（`GATE_TEAMS_ROOT_*`）截成前缀，当独立门禁码收录 ⇒ 台账虚增 3 项（`GATE_EXIT_` / `GATE_EXIT_MISSING_` / `GATE_TEAMS_ROOT_`） | `gates.mjs` 增**严格前缀剔除**（凡前缀于同集合内另一码者判伪影，`aliasOf` 落台账）；台账「无断言」命中 15 → 13，登记 §3 13 → **11**；被剔除前缀的真实码（`GATE_EXIT_MISSING_EXEC/AUDIT`、`GATE_TEAMS_ROOT_INVALID/ASSET_NOT_FOUND`）**本就有测试断言**（`test/gate-flows.test.js:270`、`test/teams-root.test.js:234/312`） |
+| 波后复核（2026-09-21） | 冻结登记**生成器**原置于 `scripts/audit/out/`（已 gitignore）⇒ 登记**不可复现** | `gen-register.mjs` 迁入 `scripts/audit/`（版本控制内），与其余 4 个生成器同置；复现命令写进登记抬头 |
 
 ## 7. 风险与回滚
 
@@ -232,10 +234,10 @@ npm run build && node --import ./test/helpers/isolated-home.preload.mjs --test
 
 > ⚠️ `__resetLaneHandles`（测试隔离钩）、`clearFlowCache`/`clearRoleCache`（被 67/85 处测试调用）是**测试基础设施**，冻结而非删除。
 
-## 附录 D · 无断言门禁（**实为 13 个**，冻结）
+## 附录 D · 无断言门禁（**实为 11 个**，冻结）
 
-> 勘误：本附录初稿沿用甄别报告的「15 个」，本轮实测台账为 **13 个**（报告把 `_RE` 正则常量 `GATE_FORBIDDEN_RE` 计入，并把 `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` 误截为 `GATE_SETTLE_LEGACY_PASSTHROUGH`）。**权威清单见 `docs/frozen-register-2026-09-21.md` §3**。
+> 勘误链：甄别报告「15 个」→ 台账实测 **15**（含 3 个前缀伪影）→ 去伪影后 **13** → 再除 2 个 `_RE` 正则常量（`GATE_FORBIDDEN_RE` / `GATE_OFF_LINE_RE`，本就不是门禁码）后 **11**；其中 `GATE_ARTIFACT_MISSING` 为出口门内部哨兵（被改写成 `GATE_EXIT_MISSING_<LAYER>`），**真实可外显门禁码 = 10 个**。**权威清单 + 逐项「拦什么」见 `docs/frozen-register-2026-09-21.md` §3。**
 
 P0：`GATE_COMPLETE_EXEC_PENDING` `GATE_COMPLETE_NO_AUDIT` `GATE_ARTIFACT_MISSING`
-P1：`GATE_NO_DECLARATION` `GATE_EXIT_MISSING_` `GATE_SKILL_MISSING` `GATE_EXEC_INPUT_MISSING`
-P2：`GATE_TEAMS_ROOT_` `GATE_DIFFICULTY_INVALID` `GATE_DIFFICULTY_RATIONALE_MISSING` `GATE_EVENT_CONST_MISSING` `GATE_HANDOFF_LEGACY_PASSTHROUGH` `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH`
+P1：`GATE_NO_DECLARATION` `GATE_SKILL_MISSING` `GATE_EXEC_INPUT_MISSING`
+P2：`GATE_DIFFICULTY_INVALID` `GATE_DIFFICULTY_RATIONALE_MISSING` `GATE_EVENT_CONST_MISSING` `GATE_HANDOFF_LEGACY_PASSTHROUGH` `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH`

@@ -5,7 +5,8 @@
 
 - 基线：`e3e8cd0` → 清理波后 `5a6ce2a`
 - 裁定依据：W2（未接线不接）/ W4（schema 随新引擎形态取舍）/ W6（无断言门禁冻结）
-- 复现：`node scripts/audit/dead-code2.mjs && node scripts/audit/classify.mjs && node scripts/audit/gates.mjs`
+- 生成器：`scripts/audit/gen-register.mjs`（2026-09-21 由 gitignore 的 `out/` 迁入版本控制 ⇒ 登记可复现）
+- 复现：`node scripts/audit/dead-code2.mjs && node scripts/audit/classify.mjs && node scripts/audit/gates.mjs && node scripts/audit/gen-register.mjs`
 
 ---
 
@@ -74,29 +75,33 @@
 
 ---
 
-## 3. 无断言门禁（13 个，W6 冻结）
+## 3. 无断言门禁（11 个，W6 冻结）
 
 判据：**有生产引用但测试零断言**。硬拒收口门漏断言 = 白盒测试绿 ≠ 生产路径走过。
 
-| 门禁码 | 生产引用点 |
-|---|---|
-| `GATE_ARTIFACT_MISSING` | lib/state/gates.js×7 · lib/state/gates.ts×7 |
-| `GATE_COMPLETE_EXEC_PENDING` | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
-| `GATE_COMPLETE_NO_AUDIT` | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
-| `GATE_DIFFICULTY_INVALID` | lib/tools/core.js×2 |
-| `GATE_DIFFICULTY_RATIONALE_MISSING` | lib/tools/core.js×2 |
-| `GATE_EVENT_CONST_MISSING` | lib/state/store.js×5 |
-| `GATE_EXEC_INPUT_MISSING` | lib/tools/core.js×3 |
-| `GATE_EXIT_MISSING_` | lib/state/gates.js×2 · lib/state/gates.ts×2 |
-| `GATE_HANDOFF_LEGACY_PASSTHROUGH` | lib/state/store.js×1 |
-| `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` | lib/state/store.js×1 |
-| `GATE_NO_DECLARATION` | lib/state/gates.js×1 · lib/state/gates.ts×1 |
-| `GATE_SKILL_MISSING` | lib/state/event-types.js×1 · lib/tools/core.js×5 |
-| `GATE_TEAMS_ROOT_` | lib/tools/core.js×3 |
+**前置净化（2026-09-21 勘误）**：台账原始命中 15 项，其中
+- **3 个前缀伪影**被剔除：`GATE_EXIT_MISSING_` / `GATE_TEAMS_ROOT_` / `GATE_EXIT_` 是源码模板拼接（`'GATE_EXIT_MISSING_' + layer`）与注释（`GATE_TEAMS_ROOT_*`）被正则截成的前缀，**不是门禁码**
+- **2 个 `_RE` 正则常量**被排除：`GATE_FORBIDDEN_RE` / `GATE_OFF_LINE_RE`（本就不是门禁码）
+
+⇒ 真实可外显门禁码 = **10 个**（`GATE_ARTIFACT_MISSING` 为出口门内部哨兵，不直接外显）。
+
+| 门禁码 | 类别 | 拦什么 | 生产引用点 |
+|---|---|---|---|
+| `GATE_ARTIFACT_MISSING` | 哨兵 | 产物在场判定的**内部哨兵**：出口门将其改写为 `GATE_EXIT_MISSING_<LAYER>`（缺在场按层族回落），不直接外显 | lib/state/gates.js×7 · lib/state/gates.ts×7 |
+| `GATE_COMPLETE_EXEC_PENDING` | 收口主门 | exec 层未全部终态即拒 complete（`pending` 回显待收 lane） | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
+| `GATE_COMPLETE_NO_AUDIT` | 收口主门 | 批内 audit 层为空即拒 complete | lib/state/gates.js×1 · lib/state/gates.ts×1 · lib/types/contracts.ts×1 |
+| `GATE_DIFFICULTY_INVALID` | 工具门 | `assign_check` 的 difficulty 非 A\|B\|C（无默认档） | lib/tools/core.js×2 |
+| `GATE_DIFFICULTY_RATIONALE_MISSING` | 工具门 | `assign_check` 的 rationale 缺失或 < 12 字 | lib/tools/core.js×2 |
+| `GATE_EVENT_CONST_MISSING` | fail-closed 守卫 | 事件常量缺位时**拒绝写入**（防落 `type:undefined` 污染审计面） | lib/state/store.js×5 |
+| `GATE_EXEC_INPUT_MISSING` | 建批门 | exec lane 未消费 `plan/` 产物（批级 `consumes_required` / 逐 lane `_per_lane` 两档） | lib/tools/core.js×3 |
+| `GATE_HANDOFF_LEGACY_PASSTHROUGH` | 留痕码 | 入口侧：存量批无 `batch.handoffs` ⇒ 放行**但留痕**（不静默、不砸存量） | lib/state/store.js×1 |
+| `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` | 留痕码 | 出口侧：同上（结算侧镜像） | lib/state/store.js×1 |
+| `GATE_NO_DECLARATION` | 判据门 | presence 契约：声明清单为空 | lib/state/gates.js×1 · lib/state/gates.ts×1 |
+| `GATE_SKILL_MISSING` | 告警码 | 技能在宿主技能根不可解析 ⇒ 建批留痕告警（`plan.warnings`，不阻断建批） | lib/state/event-types.js×1 · lib/tools/core.js×5 |
 
 **W6 冻结口径**：本波不改门禁行为、不补测。新引擎定型后按功能重议（补测优先，且必须补**生产路径 E2E 断言**，不是白盒直调 `createGates`）。
 
-**勘误**：上游甄别报告记「15 个」，本轮实测台账为 **13 个**。差异根因：报告把 `GATE_FORBIDDEN_RE`（`_RE` 正则常量，非门禁码）计入，且把 `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` 误截为 `GATE_SETTLE_LEGACY_PASSTHROUGH`（前缀码截断所致）。
+**勘误链**：上游甄别报告记「15 个」→ 台账实测 15（含伪影）→ 去 3 伪影后 13 → 再除 2 个 `_RE` 常量后 **11**。
 
 **P0 三枚**（收口主门，优先补测）：`GATE_COMPLETE_EXEC_PENDING` / `GATE_COMPLETE_NO_AUDIT` / `GATE_ARTIFACT_MISSING`。
 
@@ -123,7 +128,7 @@
 判据：**仅测试引用，但本文件内部已消费** ⇒ `export` 多余却**不可去**（去 export 会断 200 处测试引用）。
 
 > 判读：这 200 项把「未接线」这件事**测没了**——测试直捅内部实现，测试绿只证明内部函数对，不证明生产路径走了它。
-> 这是 13 个无断言门禁（§3）的同一枚硬币另一面，处置归 W6。
+> 这是 11 个无断言门禁（§3）的同一枚硬币另一面，处置归 W6。
 
 ---
 
