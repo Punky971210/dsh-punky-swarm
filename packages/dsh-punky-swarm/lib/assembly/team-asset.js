@@ -176,6 +176,13 @@ export function unwiredDeclarationsOf(source) {
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 const isStringArray = (v) => Array.isArray(v) && v.length > 0 && v.every(isNonEmptyString);
+// D5：**可选**声明位的数组形——`Array.isArray` 且元素均为非空字符串，**允许空数组**。
+//   为什么允许空：读端对空数组是「零迭代 ⇒ 零感知」（`lib/state/gates.js:1023` 注释逐字同义）⇒ 与缺省等价，
+//   不是「写了不生效」的缺陷面；若按 `isStringArray`（要求非空）校验会**无据拒载**（口径外扩张）。
+const isOptionalStringArray = (v) => Array.isArray(v) && v.every(isNonEmptyString);
+// D5：`{ literal: <非空字符串> }` 形态——与读端同判据（`lib/state/gates.js:1066-1072`：须为对象且
+//   `literal` 为非空字符串，否则静默视同未声明）。
+const isPendingMarkerShape = (v) => isPlainObject(v) && isNonEmptyString(v.literal);
 
 export function stripBom(text) {
   return typeof text === 'string' && text.startsWith(BOM) ? text.slice(BOM.length) : text;
@@ -327,6 +334,19 @@ export function validateTeamAsset(asset) {
         else {
           if (!isStringArray(flow.contract.artifact_globs)) push(TEAM_ASSET_CODES.CONTRACT_EMPTY, `${at}.contract.artifact_globs`, 'artifact_globs 必填（非空字符串数组）');
           if (!isStringArray(flow.contract.required_sections)) push(TEAM_ASSET_CODES.CONTRACT_EMPTY, `${at}.contract.required_sections`, 'required_sections 必填（非空字符串数组）');
+          // D5（2026-09-19）：R1 §2.4 #3/#4 定下的两个**可选**声明位补**类型校验**。
+          //   缺口：读端（`lib/state/gates.js`）对「声明了但形状不对」**静默回落**——`elements` 非数组 ⇒
+          //     `declaredElements = []` 零迭代（:976-978）；`pending_marker` 非对象 / `literal` 非字符串
+          //     ⇒ 视为未声明（:1066-1072）。声明方看不出自己的声明**从未生效** = 「写了不生效」的静默面，
+          //     与本文件既有纪律（要么接线，要么显式拒收）相悖 ⇒ 在载入期显式登记。
+          //   口径：**缺省不声明 ⇒ 零行为变化**（`!= null` 短路沿既有可选键风格，如 `flow.consume_field` :296）；
+          //     复用既有 `BAD_TYPE`（∈ BLOCKING_CODES，见 :125），**不新造错误码**。
+          if (flow.contract.elements != null && !isOptionalStringArray(flow.contract.elements)) {
+            push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.contract.elements`, 'elements 必须是字符串数组（元素为非空字符串；空数组与缺省等价）');
+          }
+          if (flow.contract.pending_marker != null && !isPendingMarkerShape(flow.contract.pending_marker)) {
+            push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.contract.pending_marker`, 'pending_marker 必须是 { literal: <非空字符串> } 形态');
+          }
         }
       }
 

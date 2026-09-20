@@ -88,6 +88,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/artifact-types.test.js": {
+      "asserts": 37,
+      "blankLines": 22,
+      "lines": 167,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
     "test/assembly-gate-extra.test.js": {
       "asserts": 8,
       "blankLines": 12,
@@ -391,6 +399,14 @@
       "tautologies": 0,
       "tests": 39,
       "todos": 4
+    },
+    "test/gates-vocabulary-contract.test.js": {
+      "asserts": 60,
+      "blankLines": 51,
+      "lines": 417,
+      "tautologies": 0,
+      "tests": 24,
+      "todos": 0
     },
     "test/gates.test.js": {
       "asserts": 198,
@@ -897,11 +913,11 @@
       "todos": 0
     },
     "test/team-asset.test.js": {
-      "asserts": 131,
-      "blankLines": 38,
-      "lines": 473,
+      "asserts": 139,
+      "blankLines": 41,
+      "lines": 537,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 24,
       "todos": 0
     },
     "test/team-assets-fill.test.js": {
@@ -990,6 +1006,14 @@
       "lines": 214,
       "tautologies": 0,
       "tests": 7,
+      "todos": 0
+    },
+    "test/vocabulary.test.js": {
+      "asserts": 91,
+      "blankLines": 49,
+      "lines": 394,
+      "tautologies": 0,
+      "tests": 32,
       "todos": 0
     },
     "test/w1-conditional-edges.test.js": {
@@ -1113,7 +1137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-18T15:55:18Z",
+  "generatedAt": "2026-09-20T05:54:09Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1124,15 +1148,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "engine-debt-cleanup-3-20260918 收口：A 工位新增 I1-I6（+6 tests/+38 asserts）+ B 工位 D6 注释与冒烟配方",
+  "reason": "D5 补丁：plan 契约 elements / pending_marker 两条类型校验的红测（test/team-asset.test.js +3 例 / team-asset.js 加性收紧）",
   "schema": 1,
   "totals": {
-    "asserts": 7943,
-    "blankLines": 3646,
-    "files": 139,
-    "lines": 41578,
+    "asserts": 8139,
+    "blankLines": 3771,
+    "files": 142,
+    "lines": 42620,
     "tautologies": 0,
-    "tests": 1594,
+    "tests": 1664,
     "todos": 4
   }
 }

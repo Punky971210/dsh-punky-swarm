@@ -15,6 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 // Gates：Tier3 层间门禁——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
+// ⚠ 本文件（`gates.ts`）是**唯一手写源**；同目录 `gates.js` / `gates.d.ts` 由 `tsc -p tsconfig.build.json`
+//   + `scripts/copy-ts-built.mjs` 生成 ⇒ **只改 gates.ts**（手改 `.js` / `.d.ts` 会被下一次构建静默回退）。
 // 纯函数闭包工厂：createGates(root) 注入 root；门禁函数签名 (sessionId, batchId, batch, lane)——batch 对象显式传入，不持有状态
 // 类型化说明：wavePlan 任务属性访问经 taskOf 单点断言（findTask 保持 JS，返回 object|null → WavePlanTask，
 //   断言依据：findTask 语义即"按 id 定位 buildWavePlan 持久形态任务"）；Batch/批事件判别联合收窄（零断言消解 TS2339）；
@@ -37,6 +39,11 @@ import { flowsForBatch, flowOf, produceFieldOf, produceFieldsOf, packageRoot, en
 // 未接线声明台账**单一来源**（team-asset.js `UNWIRED_DECLARATIONS`）＋ 团队资产读端（供台账的**顶层键**读法）。
 // 同样**只读复用**：`lib/assembly/team-asset.js` 不在本 lane 写域，逐字不改。
 import { loadTeamAsset, UNWIRED_DECLARATIONS } from '../assembly/team-asset.js';
+// R1「契约三小件」·词表读端（exec-1 lane 交付 `lib/state/vocabulary.json` / `vocabulary.js`）。
+//   本文件**只读**词表，不写、不改词表真源；判定**单点**复用 `reasonTokenKnown`（其内部 `knownOf` 是
+//   gate/reason 两 kind 的唯一实现）⇒ entry 门（E1）与命令门（C3）共用同一 tokenOf，禁两套口径。
+//   依赖方向：gates.ts → vocabulary.js（单向；vocabulary.js **不** import gates.ts —— 防环，其文件头明示）。
+import { VOCABULARY_REL, loadVocabulary, reasonTokenKnown } from './vocabulary.js';
 // 读端收敛：e.type 比较改引 EVT 常量单点（member.settled 读端）
 import * as EVT from './event-types.js';
 // P1/P2 交接门开关：**唯一解析点**在 `lib/wave-plan.ts#handoffGateEnabledOf`（读 runtime.json `gates.handoff.*`，
@@ -100,6 +107,23 @@ export function detectNeedHuman(artifactsDir, producePaths) {
             return { declared: true, path: p };
     }
     return { declared: false, path: null };
+}
+// ── R1 §2.4 #4 · 人工待确认字面量检测（**纯函数**，与 `detectNeedHuman` 同区：声明解析函数族）──────
+// 语义：团队成员可经 `flows.plan.contract.pending_marker:{literal:"<非空字符串>"}` 声明「本团队的 plan
+//   产物用什么字面量表达『口径待人工裁决』」；产物正文**逐字**含该字面量 ⇒ 命中（拒 `GATE_NEEDHUMAN_PENDING`）。
+// 判据三条（冻结）：
+//   · **逐字 `includes`，非正则**（字面量可能含 `[` `]` 等正则元字符，正则化会把 `a.b` 误判成通配）；
+//   · `literal` 非空才参与（空串恒命中 ⇒ 直接判未声明，防「空声明 = 全命中」的假挂起）；
+//   · **零 IO、零副作用**：内容由调用方读好传入（本函数不碰 fs）。
+// 边界（与 U-1 一致）：本函数**不判层**；「仅 plan 层生效」由调用点 `checkPlanContract`（本就只服务 plan 层）
+//   的显式 `t.layer === 'plan'` 守卫承担 ⇒ 判定面单点、不在此处再嵌层语义（防两处判层漂移）。
+export function detectPendingMarker(content, literal) {
+    if (typeof content !== 'string' || content.length === 0
+        || typeof literal !== 'string' || literal.length === 0) {
+        return { declared: false, index: -1 };
+    }
+    const index = content.indexOf(literal);
+    return index < 0 ? { declared: false, index: -1 } : { declared: true, index };
 }
 // 命令 gate（V1）：产物独立行声明 `gate: <命令>`（行首锚定正则，与 needHuman 独立行模式同源）
 // 内嵌/注释/非行首不误判；`gate: false` 视为显式禁用声明不计入；空命令（gate: 后无内容）**不计入 `commands`**，
@@ -175,6 +199,125 @@ export function detectGateOff(artifactsDir, paths) {
     return { declared: false, path: null };
 }
 // ─────────────────────────────────────────────────────────────────────────────
+// R1 §2.4 #2/#5 ·「reason 词表」判据族 —— **单点实现**（entry 门 E1 与命令门 C3 共用，禁两套口径）
+//   声明面（冻结，规格 §3 M-2）：产物内**行首锚定的独立行** `reason: <token>`。
+//     与既有行族同构：`reason:` 类比 `gate:`（GATE_LINE_RE）/ `empty-reason:`（EMPTY_REASON_RE）/
+//     `targets-claimed:`；`^reason:` **不匹配** `empty-reason:` ⇒ 既有载原因行族零误伤（逐字可机检）。
+//   为什么是「独立行」而非 `t.reason`：`WavePlanTask`（`lib/types/contracts.ts`）**无 `reason` 字段**、
+//     冻结面未授权新增任务字段 ⇒ 判定面落在**产物正文**（本规格 §3 M-2 冻结补全，唯一实现处 = 本处）。
+//   读取纪律：与 `detectGate` / `detectNeedHuman` 同源——`produce ∪ outputs` 声明产物、缺失/空/目录跳过、
+//     空 token 行不计入；**零写盘、零事件**（纯读）。
+export const REASON_DECL_RE = /^reason:[ \t]*(\S[^\n]*)$/gm;
+/** 词表只读视图（`gateStatusOfLane` 展示位 + 判据面自证；**零拒码、零判定**）。 */
+export function vocabularyViewOf(opts = {}) {
+    const doc = loadVocabulary({ root: opts.root ?? null });
+    if (doc.ok !== true)
+        return { loaded: false, version: null, source: null };
+    const meta = doc.meta;
+    return {
+        loaded: true,
+        version: meta && typeof meta.version === 'number' ? meta.version : null,
+        source: VOCABULARY_REL,
+    };
+}
+/** 解析产物内的 `reason: <token>` 声明行（保序；`token` 取 trim 后原文，空则不计入）。 */
+export function detectReasonTokens(artifactsDir, paths) {
+    const out = [];
+    if (!Array.isArray(paths) || paths.length === 0)
+        return out;
+    for (const p of paths) {
+        const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+        let content;
+        try {
+            const st = fs.statSync(abs);
+            if (st.isDirectory() || st.size === 0)
+                continue;
+            content = fs.readFileSync(abs, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        REASON_DECL_RE.lastIndex = 0; // /g 正则复用防 lastIndex 泄漏（同 detectGate 纪律）
+        let m;
+        while ((m = REASON_DECL_RE.exec(content)) !== null) {
+            const token = String(m[1]).trim();
+            if (token.length === 0)
+                continue;
+            out.push({ token, path: p, index: m.index });
+        }
+    }
+    return out;
+}
+/**
+ * 词表判定（**单点**：`checkEntryGate` E1 与 `checkCommandGate` C3 同调本函数）：
+ *   · 未登记 token ⇒ `ok:false` + `unknown[]` ⇒ 调用方拒 `GATE_TOKEN_UNKNOWN`（Q-3=B 的收紧面）；
+ *   · 词条存在但 `enabled:false` ⇒ `restated[]`（**放行 + 告警**，禁用≠删除：既有产物仍解析通过）；
+ *   · 词表不可用（缺文件 / 坏 JSON / schema 不过）⇒ **fail-open**：`ok:true` + `degrade`
+ *     （`GATE_VOCAB_INVALID` 是**告警级**码，不是拒码 —— 词表损坏不得砸生产，§2.1(f)）。
+ * 严格生效（U-2）：本函数**无**任何按批龄分流 / env 关阀 / 缺声明放宽分支；「存量不追溯」由词表内容
+ *   承载（R1 交付形态 `entries: []` ⇒ 零 token 命中 ⇒ 零校验面），**不**由批次年龄承载。
+ */
+export function reasonVocabularyVerdict(artifactsDir, paths, opts = {}) {
+    const root = opts.root ?? null;
+    const declarations = detectReasonTokens(artifactsDir, paths);
+    const doc = loadVocabulary({ root });
+    if (doc.ok !== true) {
+        return {
+            ok: true, declarations, unknown: [], restated: [],
+            degrade: {
+                kind: 'vocabulary-unavailable', code: 'GATE_VOCAB_INVALID',
+                problems: Array.isArray(doc.problems) ? doc.problems : [],
+            },
+        };
+    }
+    const unknown = [];
+    const restated = [];
+    for (const d of declarations) {
+        const r = reasonTokenKnown(d.token, { root });
+        if (r.known !== true) {
+            unknown.push(d);
+            continue;
+        }
+        if (r.restated === true) {
+            const entry = r.entry;
+            restated.push({ ...d, entryId: entry && typeof entry.id === 'string' ? entry.id : null });
+        }
+    }
+    return { ok: unknown.length === 0, declarations, unknown, restated, degrade: null };
+}
+/**
+ * 词表判定的**放行侧载荷**（单点构造；entry 门 E1 与命令门 C3 同形）：
+ *   `{}` = 零感知（无声明 / 全部在册）；`escapes[]` = 留痕面（`vocabulary-restated` 告警 /
+ *   `vocabulary-unavailable` 降级）。
+ * 形态选择（**刻意的**）：只走 `escapes[]` **多值通道**，**不**占用 `escape` 单值键 —— 调用点可能已自带
+ *   专属 `escape`（如 `command-declared-off` / `standalone`），两态可同时成立（例：显式禁用 `gate:` +
+ *   产物声明停用词条）⇒ 多值通道使两条留痕**各自可归因**、互不覆盖（写端 `store.js#gateEscapeEvents`
+ *   同时消费 `escape` 与 `escapes[]`）。
+ * 纪律：本函数**只产载荷**，不落盘、不改判定（落盘唯一在 store 写路径 ⇒ R-5「只读视图零事件」）。
+ */
+export function reasonVocabularyNote(v) {
+    if (v.degrade !== null) {
+        return {
+            vocabCode: v.degrade.code,
+            escapes: [{
+                    kind: v.degrade.kind,
+                    reason: '词表不可用（' + v.degrade.code + '）⇒ fail-open 降级放行 + 留痕（**不拒批**：词表损坏不得砸生产）'
+                        + (v.degrade.problems.length ? '：' + v.degrade.problems.join('; ') : ''),
+                }],
+        };
+    }
+    if (v.restated.length > 0) {
+        return {
+            escapes: [{
+                    kind: 'vocabulary-restated',
+                    reason: '产物声明的 reason token 命中**停用**词条（enabled:false）⇒ 放行 + 告警'
+                        + '（禁用≠删除：既有产物仍解析通过）：' + v.restated.map((r) => r.token + '@' + r.path).join(', '),
+                }],
+        };
+    }
+    return {};
+}
+// ─────────────────────────────────────────────────────────────────────────────
 // 拒绝免检（presence 硬约束）判据族 —— **唯一实现 presenceJudge**（判据同源，O-4.3）
 //   mode:'declare' = 建批期静态面（P1–P5；调用点 lib/wave-plan.ts，e2 导入）
 //   mode:'runtime' = 运行期含文件面（P1–P9；调用点本文件的 entry / plan / exit 三门）
@@ -211,6 +354,18 @@ export function sectionLineHit(content, section) {
         return false;
     const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp('^' + escaped + '[ \\t]*$', 'm').test(content);
+}
+/**
+ * 元素声明行判定（R1 §2.4 #3）：行首锚定 + 独立整行 `element: <id>`。
+ *  与既有行族同构（`reason:` / `gate:` / `targets-claimed:` / `empty-reason:`）；不用 `content.includes(id)`
+ *  是因为元素 id（如 `goal`）通常极短，`includes` 会把任意词命中 ⇒ 判据不可靠（假绿风险）。
+ *  `id` 按**字面量**转义后匹配（与 `sectionLineHit` 同法，防正则元字符）。
+ */
+export function elementLineHit(content, id) {
+    if (typeof content !== 'string' || typeof id !== 'string' || id.length === 0)
+        return false;
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('^element:[ \\t]*' + escaped + '[ \\t]*$', 'm').test(content);
 }
 /** 路径归属判定（P8）：绝对路径产物必须在批次产物根内。 */
 export function isInsideRoot(absPath, rootDir) {
@@ -336,6 +491,11 @@ export function createGates(root, opts = {}) {
     const sessionsDir = path.join(root, 'sessions');
     // 声明解析根（DI 缝，测试可指向临时包根；生产缺省 = 包根 packageRoot()）
     const flowsRoot = opts && typeof opts.flowsRoot === 'string' ? opts.flowsRoot : null;
+    // R1 词表读取根（DI 缝，与 `flowsRoot` **同形**：测试可指向临时包根；生产缺省 = 包根 ⇒ 零行为变化）。
+    //   存在理由：S-④ 要求「停用词条 ⇒ 既有产物解析通过 / 新写点被拒」的**两态可分**用例必须注入
+    //   私有词表夹具；而交付物 `lib/state/vocabulary.json` 不得被测试污染（exec-1 同口径）。
+    const vocabularyRoot = opts && typeof opts.vocabularyRoot === 'string' ? opts.vocabularyRoot : null;
+    const vocabOpts = { root: vocabularyRoot };
     // 热配置读取器（`task-27`）：门开关策略**只在门禁侧解析一次**（单一解析点 `handoffGateEnabledOf`）。
     //   优先用装配点注入的 `readConfig`（工具面同源热更快照）；未注入（单测直建 store / 早期装配）⇒ 读
     //   `lib/hot/config-watch.js` 的**模块级生效快照**（与 watcher 同一次写入，非第二套读路径）；
@@ -661,6 +821,22 @@ export function createGates(root, opts = {}) {
             }
             return { ok: false, lane, ...payload, ...teamNote, handoffLegacy: hvLegacy, missing: payload.missing ?? [] };
         };
+        // ── E1 词表早期拒（R1 §2.4 #5）────────────────────────────────────────────────────────────
+        // 位置（冻结）：**晚于** lane 存在性（上方 `!t` 早退）与 plan 豁免（上方 `t.layer` 早退）、
+        //   **早于** smoke 豁免（下方 `smokeOf(batch)`）⇒ 冒烟/探针批同样受「未登记 reason token」约束
+        //   （词表面属**行为安全**面，不属产物契约豁免面）。判定与命令门 C3 **同调** `reasonVocabularyVerdict`
+        //   （**同一 tokenOf 单点**，禁两套口径）。
+        // 严格生效（U-2）：无按批龄分流 / 无 env 关阀；「存量不追溯」由词表内容承载（`entries: []` ⇒ 零命中）。
+        const vocabE1 = reasonVocabularyVerdict(artifactsDirOf(sessionId, batchId), declaredArtifactsOf(t), vocabOpts);
+        const vocabNote = reasonVocabularyNote(vocabE1);
+        if (!vocabE1.ok) {
+            const first = vocabE1.unknown[0];
+            return reject({
+                code: 'GATE_TOKEN_UNKNOWN', source: 'reason', token: first.token, path: first.path, missing: [],
+                problems: vocabE1.unknown.map((u) => u.path + ' declares unregistered reason token "' + u.token
+                    + '"（词表未登记 ⇒ 拒：Q-3=B 只对**新增写点**强制注册）'),
+            });
+        }
         // G2（2026-09-14 用户裁决 A）：**建批即拉起**——声明 `managerPlan: 'raise'` 的批，**首个 exec 派发前**必须已
         //   登记 Manager（`batch_phase({ manager: { agentId } })` 写批字段 `batch.manager`）。动机（用户口径）：执行模式
         //   应为「建批 → **建批即拉起 Manager** → Manager 调度、成员大规模并行（coder 施工与 tester 备测同 wave）」，
@@ -678,7 +854,7 @@ export function createGates(root, opts = {}) {
         // gate-lite Q-G1：冒烟/探针批 ⇒ 跳过**产物契约类** entry 门（consume 在场 / audit 判据来源）。
         //   位置：Manager 拉起门**之后**（派发准入属行为安全门，一字不减）；lane 存在性门更在其前。
         if (smokeOf(batch)) {
-            return { ok: true, lane, smoke: true, smokeSkipped: 'entry-consume', ...(cmEntry ?? {}) };
+            return { ok: true, lane, smoke: true, smokeSkipped: 'entry-consume', ...(cmEntry ?? {}), ...vocabNote };
         }
         // ── P1 交接门拒态判定（判据在函数头部求值，见 `hv`）─────────────────────────────────────────
         if (!hv.ok) {
@@ -693,7 +869,7 @@ export function createGates(root, opts = {}) {
         if (consume.length === 0) {
             const s = standaloneVerdict(batch, t);
             if (s.ok)
-                return { ok: true, lane, standalone: true, escape: { kind: 'standalone', lane, reason: s.reason }, ...teamNote, ...(cmEntry ?? {}) };
+                return { ok: true, lane, standalone: true, escape: { kind: 'standalone', lane, reason: s.reason }, ...teamNote, ...(cmEntry ?? {}), ...vocabNote };
             if (s.declared) {
                 return reject({ code: 'GATE_STANDALONE_UNJUSTIFIED', missing: [], problems: [lane + ': standalone 声明不成立（须布尔 true + 非空 standaloneReason + 批次内确实无可用上游）'] });
             }
@@ -755,7 +931,11 @@ export function createGates(root, opts = {}) {
         }
         // 放行侧回传（P1 交接门）：`handoffLegacy` = 存量批标记（裁决 ①=B）——写端（`store.setMember`）据此落
         //   `lane.handoff.gap{legacy:true}` 告警（不静默、不砸存量）。**仅新增本键**：其余放行载荷逐字不变。
-        return { ok: true, lane, handoffLegacy: hvLegacy, ...(cmEntry ?? {}) };
+        // R1 词表 E1 放行侧载荷（`vocabNote`）：`{}` = 零感知；有停用词条命中 ⇒ `escapes[{kind:'vocabulary-restated'}]`；
+        //   词表不可用 ⇒ `escapes[{kind:'vocabulary-unavailable'}]` + `vocabCode:'GATE_VOCAB_INVALID'`（告警级，不拒批）。
+        //   形态为 `escapes[]` **多值通道** ⇒ 与其它分支自带的单值 `escape`（`standalone` / `idle-recovery-passthrough`）
+        //   互不覆盖：两态可同时成立且各自可归因（写端消费两者）。
+        return { ok: true, lane, handoffLegacy: hvLegacy, ...(cmEntry ?? {}), ...vocabNote };
     }
     // Plan 契约门（(c) 收敛，拒绝免检）：声明必须存在 → 形态/在场 → 内容判据
     //   · 无产物声明 ⇒ 拒 `GATE_PLAN_NO_DECLARATION`（免检分支消失）；
@@ -785,6 +965,25 @@ export function createGates(root, opts = {}) {
         //   lane 级最低判据 = ≥1 份在场产物携带其中任一章节（readonly：下游仅 some/join 只读消费）
         const requiredSections = contract && Array.isArray(contract.required_sections) && contract.required_sections.length > 0
             ? contract.required_sections : ENGINE_BASELINE_PLAN_SECTIONS;
+        // ── P3 元素/小节 判据面（R1 §2.4 #3）——**声明了才启用**（缺省 ⇒ 零感知，引擎基线行为逐字不变）──────
+        // 元素：`contract.elements`（词表 `kind:'element'` 的 id 清单）⇒ 被检产物须含**行首锚定独立行**
+        //   `element: <id>`（与 `reason:` / `gate:` / `targets-claimed:` 行族同构，判据 = `elementLineHit`）。
+        //   不用 `content.includes(id)`：元素 id 通常极短（`goal` / `constraints`），子串匹配会把任意词命中 ⇒ 假绿。
+        // 小节：`contract.subsections` 对象形 `{ "<标题>": <level> }` 归一取键、数组形等价 level 2 ⇒ 逐条走
+        //   **既有** `sectionLineHit`（裸标题行，与 `required_sections` 同判据、同函数 ⇒ 判据同源，不造第二套）。
+        // 被检面 = 本 lane 的 `produce ∪ outputs`（与 required_sections 同一 `declared` 循环），逐件核；缺 ⇒ 追加
+        //   `problems`（沿用既有汇总通道，**复用** `GATE_PLAN_CONTRACT`，**不新增拒码**）。
+        const declaredElements = contract && Array.isArray(contract.elements)
+            ? contract.elements.filter((x) => typeof x === 'string' && x.trim().length > 0)
+            : [];
+        const declaredSubsections = (() => {
+            const s = contract ? contract.subsections : null;
+            if (Array.isArray(s))
+                return s.filter((x) => typeof x === 'string' && x.trim().length > 0);
+            if (s !== null && typeof s === 'object')
+                return Object.keys(s).filter((k) => k.trim().length > 0);
+            return [];
+        })();
         const problems = [];
         const notes = [];
         let present = 0;
@@ -821,6 +1020,15 @@ export function createGates(root, opts = {}) {
                 // 单点断言：sectionProblemsOf（flows.js，保持 JS）返回 any → 断言为 string[]（运行期零变化，断言纯类型层）
                 for (const prob of sectionProblemsOf(p, content, contract))
                     problems.push(prob);
+                // P3（R1 §2.4 #3）：元素/小节逐条核（声明为空数组 ⇒ 本循环零迭代 ⇒ 零感知）
+                for (const el of declaredElements) {
+                    if (!elementLineHit(content, el))
+                        problems.push(p + ' lacks element "' + el + '"');
+                }
+                for (const ss of declaredSubsections) {
+                    if (!sectionLineHit(content, ss))
+                        problems.push(p + ' lacks subsection "' + ss + '"');
+                }
             }
             else if (p.endsWith('spec.md')) {
                 // 引擎基线 spec.md 判据（E-2 正名，legacy-retire-20260915）：无 contract 声明时，对以 spec.md 结尾的
@@ -846,6 +1054,48 @@ export function createGates(root, opts = {}) {
             problems.push(lane + ': no plan artifact carries a criteria section (' + requiredSections.join(' / ') + ')');
         if (problems.length)
             return { ok: false, code: 'GATE_PLAN_CONTRACT', lane, problems, missing: [] };
+        // ── P4 待确认（R1 §2.4 #4；U-1 锁定面 = **仅 plan 层**）──────────────────────────────────────────
+        // 声明位：`flows.plan.contract.pending_marker:{literal:"<非空字符串>"}`（R1 冻结唯一合法字面量 = `[待确认]`）。
+        //   **未声明 ⇒ 立即零感知返回**（`markerLiteral === null` 短路在 `t.layer` 判定**之前** ⇒ 不读产物、不加 IO）。
+        // 判定：产物正文**逐字**含该字面量（`detectPendingMarker` 纯函数）且 `t.layer === 'plan'` ⇒ 拒。
+        //   **复用既有码** `GATE_NEEDHUMAN_PENDING`（**不造新码**）：语义与 audit 侧人工闸同属「挂起等人工裁决」，
+        //   载荷补 `pendingMarker:{path, index}` 供定位（两套字面量各有归属，审计可辨）。
+        // U-1（用户裁决 C）：判定面**仅 plan**——audit 层**不**走本判定，其人工闸仍是既有 `checkNeedHumanGate`
+        //   的独立行 `needHuman: true`（本批一字不动）；故本处显式 `t.layer === 'plan'` 守卫（非依赖调用链隐含）。
+        // 拒因优先级：**契约缺陷先行**（上方 `problems` 拒态已 return）⇒ 契约修好后再做人工裁决，拒因不互相掩盖。
+        const markerLiteral = (() => {
+            const pm = contract ? contract.pending_marker : null;
+            if (pm === null || typeof pm !== 'object')
+                return null;
+            const lit = pm.literal;
+            return typeof lit === 'string' && lit.length > 0 ? lit : null;
+        })();
+        if (markerLiteral !== null && t.layer === 'plan') {
+            for (const p of declared) {
+                const abs = resolveArtifact(sessionId, batchId, p);
+                let content = '';
+                try {
+                    const st = fs.statSync(abs);
+                    if (st.isDirectory() || st.size === 0)
+                        continue;
+                    content = fs.readFileSync(abs, 'utf8');
+                }
+                catch {
+                    continue;
+                }
+                const pm = detectPendingMarker(content, markerLiteral);
+                if (pm.declared) {
+                    return {
+                        ok: false, code: 'GATE_NEEDHUMAN_PENDING', lane, missing: [],
+                        problems: [p + ' contains pending marker ' + JSON.stringify(markerLiteral)],
+                        pendingMarker: { path: p, index: pm.index },
+                        message: 'plan lane 产物含人工待确认字面量 ' + JSON.stringify(markerLiteral)
+                            + '（团队资产 `flows.plan.contract.pending_marker` 声明位生效）⇒ 须人工裁决后再 merged'
+                            + '（复用既有 GATE_NEEDHUMAN_PENDING，不造新码）',
+                    };
+                }
+            }
+        }
         const pass = { ok: true, lane, ...(cmContract ?? {}) };
         if (notes.length) {
             pass.escapes = notes.map((n) => ({ kind: 'empty-artifact-noted', artifact: n.artifact, reason: n.reason }));
@@ -1015,6 +1265,26 @@ export function createGates(root, opts = {}) {
         // produce ∪ outputs 并集（去重保序）
         const fields = [...new Set([...(t.produce ?? []), ...(t.outputs ?? [])])];
         const det = detectGate(artifactsDirOf(sessionId, batchId), fields);
+        // ── C3 词表（R1 §2.4 #2）────────────────────────────────────────────────────────────────────
+        // 位置（冻结）：`detectGate` 之后、`emptyCommand` 首判**之前** ⇒ 「`gate:` 未声明」与「`reason:` 未登记」
+        //   两件事**各判各的**（后者不因前者早退而被遮蔽）。
+        // 判据面 = 本 lane 的 `produce ∪ outputs`（`fields`，与 `gate:` 行族同扫描面）；判定调 E1 的**同一函数**
+        //   `reasonVocabularyVerdict`（单点，禁两套口径）。未登记 ⇒ 拒 `GATE_TOKEN_UNKNOWN`；
+        //   停用条目 ⇒ 放行 + `restated` 告警；词表不可用 ⇒ fail-open 降级留痕（`GATE_VOCAB_INVALID`，**不拒批**）。
+        const vocabC3 = reasonVocabularyVerdict(artifactsDirOf(sessionId, batchId), fields, vocabOpts);
+        const vocabNote = reasonVocabularyNote(vocabC3);
+        if (!vocabC3.ok) {
+            const first = vocabC3.unknown[0];
+            // 载荷形状对齐既有失败分支（写端 `store.js` 读 `code` / `command` / `exitCode` / `detail` /
+            //   `needHumanEscalation`）⇒ `detail` 必填，否则抛错文案退化为 'command gate failed'（不可读）。
+            return {
+                ok: false, code: 'GATE_TOKEN_UNKNOWN', lane, declared: false,
+                command: null, exitCode: null, needHumanEscalation: false, path: first.path,
+                token: first.token, source: 'reason',
+                detail: first.path + ' 声明未登记的 reason token "' + first.token + '"（词表未登记 ⇒ 拒：Q-3=B 只对**新增写点**强制注册）',
+                problems: vocabC3.unknown.map((u) => u.path + ' declares unregistered reason token "' + u.token + '"'),
+            };
+        }
         // S-F7（**首位判定**）：空 `gate:` 行 ⇒ 「已声明 + 命令解析为空」⇒ 拒 GATE_EXIT_NO_COMMAND。
         //   必须在 `!det.declared` 早退**之前**判定——否则空声明会与「完全未声明」同路零感知。
         //   `declared: true` 是刻意的：空声明**确实声明了**（`path` 带上便于返工定位；载荷与下文原分支逐字一致）。
@@ -1041,10 +1311,13 @@ export function createGates(root, opts = {}) {
                         kind: 'command-declared-off', lane, path: off.path,
                         reason: '产物含独立行 `gate: false`（显式禁用声明）⇒ 命令门零感知放行（判定不变）＋留痕',
                     },
+                    // R1 C3 放行侧载荷（`escapes[]` 多值通道，与上方单值 `escape` 互不覆盖）：两态可同时成立
+                    //   （既显式禁用 `gate:`、产物又声明停用词条 / 词表不可用）⇒ 两条留痕各自可归因。
+                    ...vocabNote,
                     ...(cmCommand ?? {}),
                 };
             }
-            return { ok: true, declared: false, ...(cmCommand ?? {}) }; // 未声明 gate → 零感知（判定不变）+ 首触留痕
+            return { ok: true, declared: false, ...(cmCommand ?? {}), ...vocabNote }; // 未声明 gate → 零感知（判定不变）+ 首触留痕
         }
         // S-F7：本位置原为 `if (det.commands.length === 0) return { code:'GATE_EXIT_NO_COMMAND' }` 三行——
         //   该分支**恒不可达**（`declared === commands.length > 0` ⇒ 到达此处 `commands.length` 必 > 0，
@@ -1086,7 +1359,7 @@ export function createGates(root, opts = {}) {
             const nh = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
             return { ok: false, ...failed, declared: true, needHumanEscalation: nh.declared, path: det.path };
         }
-        return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path, ...(cmCommand ?? {}) };
+        return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path, ...(cmCommand ?? {}), ...vocabNote };
     }
     // targets 门禁：exec 层 lane 声明 targets（批次产物根外目标文件绝对路径）→ merged 前置校验
     // 每个 target：①存在性（statSync 为文件；缺失/目录 → missing）；②变更性——mtime 晚于 lane 变更性基线（laneStartedAt：排除 idle 空闲态重派）
@@ -1435,6 +1708,7 @@ export function createGates(root, opts = {}) {
                 consume: [], produce: [], outputs: [], consumeMissing: [], outputsMissing: [], produceMissing: [],
                 contractProblems: null, targets: [], targetsMissing: [], targetsUnchanged: [],
                 gateStrength: gateStrengthOf(batch),
+                vocabulary: vocabularyViewOf(vocabOpts),
             };
         }
         // 面板与门禁同源（原则②）：缺失判定改走 presenceJudge（形态二分 + 0 字节 + 空内容通道），
@@ -1474,6 +1748,10 @@ export function createGates(root, opts = {}) {
             contractProblems: contract && !contract.ok ? contract.problems : null,
             targets, targetsMissing, targetsUnchanged,
             gateStrength: gateStrengthOf(batch),
+            // R1 §2.4 #6：词表**只读展示位**（恰好 `{loaded,version,source}` 三键）——**不参与任何判定**：
+            //   面板据此显示「本批判定所依的词表是否加载成功 / 版本 / 来源」，不得据此放行或拒绝任何 lane。
+            //   词表不可用（fail-open 侧）⇒ `loaded:false` + 两 null（与词表门 E1/C3 的降级口径同源）。
+            vocabulary: vocabularyViewOf(vocabOpts),
         };
     }
     // 批级门禁视图（TD-21 / N-13）：**一次读批** → `{lane: gateView}`（键序 = `batch.lanes` 键序）。

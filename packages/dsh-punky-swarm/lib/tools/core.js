@@ -27,7 +27,7 @@ import { resolveTeamRoles, unionRoleVocabulary, resolveTeamFlows, flowOf, packag
 // 会话级临时团队资产根（teamsRoot）：加载期校验唯一入口（只读复用，不改 team-asset.js）
 // P1（2026-09-16）追加读端：`teamAssetCandidates`（拒态文案点名候选路径）/ `TEAM_ASSET_SEVERITY`（挑首个 blocking 码原样透出）
 import { loadTeamAsset, TEAM_ASSET_CODES, TEAM_ASSET_DIR, TEAM_ASSET_SEVERITY, teamAssetCandidates } from '../assembly/team-asset.js';
-import { ARTIFACT_TYPES } from '../artifact-types.js';
+import { artifactTypesView } from '../artifact-types.js';
 import * as lock from '../lock.js';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -993,7 +993,7 @@ export function createCoreTools(ctx, deps) {
         render: (_args, value) => TEXT_OUTPUT('artifact types: ' + value.types.length),
       },
       async execute() {
-        return { types: ARTIFACT_TYPES.map((t) => ({ type: t.type, dir: t.dir, layer: t.layer, desc: t.desc })) };
+        return { types: artifactTypesView() };
       },
     }),
     defineTool({

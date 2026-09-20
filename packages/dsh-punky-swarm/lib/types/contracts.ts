@@ -381,6 +381,15 @@ export type GateErrorCode =
   | 'GATE_MEMBER_REQUIRES_C'
   // plan 契约
   | 'GATE_PLAN_CONTRACT'
+  // R1「契约三小件」·词表面（`docs/r1-blueprint-spec.md` §2.1(f) 冻结 2 条）——
+  //   写端 = `lib/state/gates.ts` 的 entry 门 E1（`:checkEntryGate`）与命令门 C3（`:checkCommandGate`），
+  //   两者**同一 tokenOf 单点**（`reasonVocabularyVerdict` ⇒ `vocabulary.js#reasonTokenKnown`），禁两套口径。
+  //   · `GATE_TOKEN_UNKNOWN`：**新增写点**在产物内声明了未登记的 `kind=gate|reason` token ⇒ **拒**
+  //     （Q-3=B 只对新增码强制注册；存量不追溯由词表内容承载：`entries: []` ⇒ 零 token 命中）。
+  //   · `GATE_VOCAB_INVALID`：`vocabulary.json` 自身 schema 校验不过 ⇒ **告警级（fail-open，不拒批）**——
+  //     只作 `escapes[{kind:'vocabulary-unavailable'}]` 的**可读码**经 `vocabCode` 回显（词表损坏不得砸生产）。
+  | 'GATE_TOKEN_UNKNOWN'
+  | 'GATE_VOCAB_INVALID'
   // exit（按层后缀）
   | 'GATE_EXIT_MISSING_EXEC' | 'GATE_EXIT_MISSING_AUDIT'
   // needHuman 人工闸

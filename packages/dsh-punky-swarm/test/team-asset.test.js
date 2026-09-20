@@ -143,6 +143,70 @@ test('contract 空章节/空 glob → CONTRACT_EMPTY', () => {
   assert.ok(CODES(validateTeamAsset(b)).includes(TEAM_ASSET_CODES.CONTRACT_EMPTY));
 });
 
+// ---- D5（2026-09-19）：plan 契约两个**可选**声明位的类型校验（`elements` / `pending_marker`）----
+// 缺口：R1 §2.4 #3/#4 定下这两个声明位（元素级小节校验 / `[待确认]` 字面量），但**类型校验未落地**
+//   （`lib/assembly/team-asset.js` 不在 R1 实施 lane 写域）；读端对坏形状**静默回落**
+//   （`lib/state/gates.js:976-978` 非数组 ⇒ 零迭代；`:1066-1072` 非对象 / literal 非字符串 ⇒ 视同未声明）
+//   ⇒ 声明方看不出「声明从未生效」=「写了不生效」的静默面。
+// 口径：**缺省不声明 ⇒ 零行为变化**；坏形状 ⇒ 复用既有 `BAD_TYPE`（∈ BLOCKING_CODES）显式拒载，不新造码。
+test('D5 红测①：`contract.elements` 非字符串数组 ⇒ BAD_TYPE（blocking，不静默回落）', () => {
+  const cases = [
+    'goal',          // 裸字符串（最常见误写：单元素未包成数组）
+    ['goal', 3],     // 元素含非字符串
+    ['goal', ''],    // 元素含空串（读端会静默丢弃该元素 ⇒ 该条声明不生效）
+    ['goal', '  '],  // 空白串同上
+    { goal: true },  // 对象形（误把 elements 当映射）
+  ];
+  for (const bad of cases) {
+    const a = baseAsset();
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'], elements: bad };
+    const v = validateTeamAsset(a);
+    assert.ok(CODES(v).includes(TEAM_ASSET_CODES.BAD_TYPE),
+      `elements=${JSON.stringify(bad)} 必须产 BAD_TYPE；实测=` + JSON.stringify(v.problems));
+    assert.equal(v.ok, false, 'BAD_TYPE ∈ BLOCKING_CODES ⇒ 拒载（不能静默当未声明）');
+  }
+});
+
+test('D5 红测②：`contract.pending_marker` 非 `{ literal: string }` ⇒ BAD_TYPE（blocking）', () => {
+  const cases = [
+    '[待确认]',        // 裸字符串（最常见误写）
+    ['[待确认]'],      // 数组
+    {},                // 对象但缺 literal
+    { literal: 1 },    // literal 非字符串
+    { literal: '' },   // literal 空串（读端 `lit.length > 0` ⇒ 视同未声明）
+    { literal: '  ' }, // literal 纯空白
+  ];
+  for (const bad of cases) {
+    const a = baseAsset();
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'], pending_marker: bad };
+    const v = validateTeamAsset(a);
+    assert.ok(CODES(v).includes(TEAM_ASSET_CODES.BAD_TYPE),
+      `pending_marker=${JSON.stringify(bad)} 必须产 BAD_TYPE；实测=` + JSON.stringify(v.problems));
+    assert.equal(v.ok, false, 'BAD_TYPE ∈ BLOCKING_CODES ⇒ 拒载');
+  }
+});
+
+test('D5 正例（缺省不启用）：合法形态 / 空数组 / 未声明 / 显式 null 四态均零行为变化（ok=true）', () => {
+  const shape = (mut) => {
+    const a = baseAsset();
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'] };
+    mut(a.flows.plan.contract);
+    return a;
+  };
+  const base = shape(() => {});
+  const legal = shape((c) => { c.elements = ['goal', 'constraints']; c.pending_marker = { literal: '[待确认]' }; });
+  const emptyArr = shape((c) => { c.elements = []; });                    // 空数组 = 读端零迭代 = 与缺省等价
+  const nullish = shape((c) => { c.elements = null; c.pending_marker = null; }); // 沿既有 `!= null` 可选键风格
+  for (const [name, a] of [['未声明', base], ['合法形态', legal], ['空数组', emptyArr], ['显式 null', nullish]]) {
+    const v = validateTeamAsset(a);
+    assert.equal(v.ok, true, `${name}：必须保持 ok=true；实测=` + JSON.stringify(v.problems));
+    assert.deepEqual(CODES(v), [], `${name}：不得产任何 problem（缺省不启用）`);
+  }
+  // 合法形态必须**逐字保留**（校验只读不写、不改写声明）
+  assert.deepEqual(legal.flows.plan.contract.elements, ['goal', 'constraints']);
+  assert.deepEqual(legal.flows.plan.contract.pending_marker, { literal: '[待确认]' });
+});
+
 // ---- B-3（批次 core-techdebt-close-20260915 · lane e1）：`flows.audit.contract` 旧泛键标废 ----
 // 缺口：`flows.audit.contract` 是**旧泛键**（现役真源 = 同层 `audit_contract`，读端 `flows.js` `auditContract`）。
 //   旧泛键在 `validateTeamAsset` 原只走通用 `contract` 段（结构合法即静默通过），而**无任何运行期读点**

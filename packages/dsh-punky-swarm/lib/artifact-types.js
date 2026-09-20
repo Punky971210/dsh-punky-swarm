@@ -46,3 +46,21 @@ export function artifactTypeOf(relPath) {
 export function typesOfLayer(layer) {
   return ARTIFACT_TYPES.filter((t) => t.layer === layer).map((t) => t.type);
 }
+
+// 产物类型注册表 → 回显视图（**唯一读端**，供 `lib/tools/core.js` 的 `artifact_types` 消费）。
+// 冻结契约（blueprint §2.2）：四字段逐字回显；新字段**纯增量**、**缺省不声明即不产键**
+//   ⇒ 既有条目的回显键集恒为 `{type,dir,layer,desc}`（零漂移）。
+// `elements`（string[]）：该产物类型必须逐条覆盖的元素 id（∈ 词表 kind:'element' 且 enabled:true）；
+// `subsections`（object|string[]）：产物内部小节骨架（对象形 = { "<标题>": level }；数组形等价 level 2）。
+// 入参缺省 = 本模块的注册表（测试可注入夹具，无需改注册表即可验两态）。
+export function artifactTypesView(types = ARTIFACT_TYPES) {
+  const rows = Array.isArray(types) ? types : [];
+  return rows.map((t) => ({
+    type: t.type,
+    dir: t.dir,
+    layer: t.layer,
+    desc: t.desc,
+    ...(Array.isArray(t.elements) ? { elements: [...t.elements] } : {}),
+    ...(t.subsections != null ? { subsections: t.subsections } : {}),
+  }));
+}

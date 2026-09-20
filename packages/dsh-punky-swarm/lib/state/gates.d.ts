@@ -27,6 +27,10 @@ export declare function detectNeedHuman(artifactsDir: string, producePaths: stri
     declared: boolean;
     path: string;
 };
+export declare function detectPendingMarker(content: string, literal: string): {
+    declared: boolean;
+    index: number;
+};
 export declare const GATE_LINE_RE: RegExp;
 export declare const GATE_EMPTY_LINE_RE: RegExp;
 export declare function detectGate(artifactsDir: string, paths: string[]): {
@@ -42,6 +46,75 @@ export declare function detectGateOff(artifactsDir: string, paths: string[]): {
 } | {
     declared: boolean;
     path: string;
+};
+export declare const REASON_DECL_RE: RegExp;
+export interface ReasonTokenDecl {
+    token: string;
+    path: string;
+    index: number;
+}
+export interface ReasonVocabularyVerdict {
+    ok: boolean;
+    declarations: ReasonTokenDecl[];
+    unknown: ReasonTokenDecl[];
+    restated: Array<ReasonTokenDecl & {
+        entryId: string | null;
+    }>;
+    degrade: {
+        kind: string;
+        code: string;
+        problems: string[];
+    } | null;
+}
+/** 词表只读视图（§2.4 #6 的**纯展示位**形态：恰好三键，不参与任何判定）。 */
+export interface VocabularyView {
+    loaded: boolean;
+    version: number | null;
+    source: string | null;
+}
+/** 词表只读视图（`gateStatusOfLane` 展示位 + 判据面自证；**零拒码、零判定**）。 */
+export declare function vocabularyViewOf(opts?: {
+    root?: string | null;
+}): VocabularyView;
+/** 解析产物内的 `reason: <token>` 声明行（保序；`token` 取 trim 后原文，空则不计入）。 */
+export declare function detectReasonTokens(artifactsDir: string, paths: string[]): ReasonTokenDecl[];
+/**
+ * 词表判定（**单点**：`checkEntryGate` E1 与 `checkCommandGate` C3 同调本函数）：
+ *   · 未登记 token ⇒ `ok:false` + `unknown[]` ⇒ 调用方拒 `GATE_TOKEN_UNKNOWN`（Q-3=B 的收紧面）；
+ *   · 词条存在但 `enabled:false` ⇒ `restated[]`（**放行 + 告警**，禁用≠删除：既有产物仍解析通过）；
+ *   · 词表不可用（缺文件 / 坏 JSON / schema 不过）⇒ **fail-open**：`ok:true` + `degrade`
+ *     （`GATE_VOCAB_INVALID` 是**告警级**码，不是拒码 —— 词表损坏不得砸生产，§2.1(f)）。
+ * 严格生效（U-2）：本函数**无**任何按批龄分流 / env 关阀 / 缺声明放宽分支；「存量不追溯」由词表内容
+ *   承载（R1 交付形态 `entries: []` ⇒ 零 token 命中 ⇒ 零校验面），**不**由批次年龄承载。
+ */
+export declare function reasonVocabularyVerdict(artifactsDir: string, paths: string[], opts?: {
+    root?: string | null;
+}): ReasonVocabularyVerdict;
+/**
+ * 词表判定的**放行侧载荷**（单点构造；entry 门 E1 与命令门 C3 同形）：
+ *   `{}` = 零感知（无声明 / 全部在册）；`escapes[]` = 留痕面（`vocabulary-restated` 告警 /
+ *   `vocabulary-unavailable` 降级）。
+ * 形态选择（**刻意的**）：只走 `escapes[]` **多值通道**，**不**占用 `escape` 单值键 —— 调用点可能已自带
+ *   专属 `escape`（如 `command-declared-off` / `standalone`），两态可同时成立（例：显式禁用 `gate:` +
+ *   产物声明停用词条）⇒ 多值通道使两条留痕**各自可归因**、互不覆盖（写端 `store.js#gateEscapeEvents`
+ *   同时消费 `escape` 与 `escapes[]`）。
+ * 纪律：本函数**只产载荷**，不落盘、不改判定（落盘唯一在 store 写路径 ⇒ R-5「只读视图零事件」）。
+ */
+export declare function reasonVocabularyNote(v: ReasonVocabularyVerdict): {
+    vocabCode: string;
+    escapes: {
+        kind: string;
+        reason: string;
+    }[];
+} | {
+    escapes: {
+        kind: string;
+        reason: string;
+    }[];
+    vocabCode?: undefined;
+} | {
+    vocabCode?: undefined;
+    escapes?: undefined;
 };
 export declare const EMPTY_REASON_RE: RegExp;
 export type PresenceMode = 'declare' | 'runtime';
@@ -67,6 +140,13 @@ export declare function declaredKindOf(declared: string): 'file' | 'dir';
 export declare function emptyReasonOf(content: string): string | null;
 /** 判据章节**裸标题行**判定（S10 最低内容判据）：行首锚定 + 整行仅标题（编号变体/正文提及均不命中）。 */
 export declare function sectionLineHit(content: string, section: string): boolean;
+/**
+ * 元素声明行判定（R1 §2.4 #3）：行首锚定 + 独立整行 `element: <id>`。
+ *  与既有行族同构（`reason:` / `gate:` / `targets-claimed:` / `empty-reason:`）；不用 `content.includes(id)`
+ *  是因为元素 id（如 `goal`）通常极短，`includes` 会把任意词命中 ⇒ 判据不可靠（假绿风险）。
+ *  `id` 按**字面量**转义后匹配（与 `sectionLineHit` 同法，防正则元字符）。
+ */
+export declare function elementLineHit(content: string, id: string): boolean;
 /** 路径归属判定（P8）：绝对路径产物必须在批次产物根内。 */
 export declare function isInsideRoot(absPath: string, rootDir: string): boolean;
 /**
@@ -85,6 +165,7 @@ export declare function presenceJudge(input?: {
 export declare function createGates(root: string, opts?: {
     flowsRoot?: string;
     readConfig?: () => unknown;
+    vocabularyRoot?: string;
 }): {
     checkEntryGate: (sessionId: string, batchId: string, batch: Batch, lane: string) => {
         contractMissing?: {
@@ -130,6 +211,11 @@ export declare function createGates(root: string, opts?: {
         missing?: undefined;
         problems?: undefined;
     } | {
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -150,6 +236,58 @@ export declare function createGates(root: string, opts?: {
         missing?: undefined;
         problems?: undefined;
     } | {
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        smoke: boolean;
+        smokeSkipped: string;
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode?: undefined;
+        escapes?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        smoke: boolean;
+        smokeSkipped: string;
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -174,6 +312,111 @@ export declare function createGates(root: string, opts?: {
         missing?: undefined;
         problems?: undefined;
     } | {
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        standalone: boolean;
+        escape: {
+            kind: string;
+            lane: string;
+            reason: string;
+        };
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode?: undefined;
+        escapes?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        standalone: boolean;
+        escape: {
+            kind: string;
+            lane: string;
+            reason: string;
+        };
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        handoffLegacy: boolean;
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        lane: string;
+        handoffLegacy: boolean;
+        code?: undefined;
+        missing?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode?: undefined;
+        escapes?: undefined;
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -271,22 +514,45 @@ export declare function createGates(root: string, opts?: {
         };
         disabledBy?: undefined;
         code?: undefined;
+        lane?: undefined;
         command?: undefined;
         exitCode?: undefined;
         needHumanEscalation?: undefined;
         path?: undefined;
+        token?: undefined;
+        source?: undefined;
         detail?: undefined;
+        problems?: undefined;
     } | {
         ok: boolean;
         declared: boolean;
         disabledBy: string;
         escape?: undefined;
         code?: undefined;
+        lane?: undefined;
         command?: undefined;
         exitCode?: undefined;
         needHumanEscalation?: undefined;
         path?: undefined;
+        token?: undefined;
+        source?: undefined;
         detail?: undefined;
+        problems?: undefined;
+    } | {
+        ok: boolean;
+        code: string;
+        lane: string;
+        declared: boolean;
+        command: null;
+        exitCode: null;
+        needHumanEscalation: boolean;
+        path: string;
+        token: string;
+        source: string;
+        detail: string;
+        problems: string[];
+        escape?: undefined;
+        disabledBy?: undefined;
     } | {
         ok: boolean;
         code: string;
@@ -298,6 +564,10 @@ export declare function createGates(root: string, opts?: {
         detail: string;
         escape?: undefined;
         disabledBy?: undefined;
+        lane?: undefined;
+        token?: undefined;
+        source?: undefined;
+        problems?: undefined;
     } | {
         contractMissing?: {
             cause: "undeclared";
@@ -311,6 +581,11 @@ export declare function createGates(root: string, opts?: {
             };
             problems: string[];
         } | undefined;
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
         ok: boolean;
         declared: boolean;
         escape: {
@@ -322,12 +597,94 @@ export declare function createGates(root: string, opts?: {
         };
         disabledBy?: undefined;
         code?: undefined;
+        lane?: undefined;
         command?: undefined;
         exitCode?: undefined;
         needHumanEscalation?: undefined;
         path?: undefined;
+        token?: undefined;
+        source?: undefined;
         detail?: undefined;
+        problems?: undefined;
     } | {
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        ok: boolean;
+        declared: boolean;
+        escape: {
+            kind: string;
+            lane: string;
+            path: string | null;
+            reason: string;
+            gate?: undefined;
+        };
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        path?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        vocabCode?: undefined;
+        escapes?: undefined;
+        ok: boolean;
+        declared: boolean;
+        escape: {
+            kind: string;
+            lane: string;
+            path: string | null;
+            reason: string;
+            gate?: undefined;
+        };
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        path?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -345,11 +702,76 @@ export declare function createGates(root: string, opts?: {
         escape?: undefined;
         disabledBy?: undefined;
         code?: undefined;
+        lane?: undefined;
         command?: undefined;
         exitCode?: undefined;
         needHumanEscalation?: undefined;
         path?: undefined;
+        token?: undefined;
+        source?: undefined;
         detail?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        escape?: undefined;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        path?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode?: undefined;
+        escapes?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        escape?: undefined;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        path?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
     } | {
         declared: boolean;
         needHumanEscalation: boolean;
@@ -361,7 +783,16 @@ export declare function createGates(root: string, opts?: {
         ok: boolean;
         escape?: undefined;
         disabledBy?: undefined;
+        lane?: undefined;
+        token?: undefined;
+        source?: undefined;
+        problems?: undefined;
     } | {
+        vocabCode: string;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -387,10 +818,89 @@ export declare function createGates(root: string, opts?: {
         escape?: undefined;
         disabledBy?: undefined;
         code?: undefined;
+        lane?: undefined;
         command?: undefined;
         exitCode?: undefined;
         needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
         detail?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        escape?: undefined;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        vocabCode?: undefined;
+        escapes?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        escape?: undefined;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
     };
     checkTargetsGate: (sessionId: string, batchId: string, batch: Batch, lane: string) => {
         ok: boolean;
@@ -566,6 +1076,7 @@ export declare function createGates(root: string, opts?: {
             };
             completeSemantics: string;
         };
+        vocabulary: VocabularyView;
     } | {
         lane: string;
         layer: null;
@@ -651,6 +1162,7 @@ export declare function createGates(root: string, opts?: {
             };
             completeSemantics: string;
         };
+        vocabulary: VocabularyView;
     }>;
     gateStatusMapOfBatch: (sessionId: string, batchId: string) => Record<string, {
         lane: string;
@@ -720,6 +1232,7 @@ export declare function createGates(root: string, opts?: {
             };
             completeSemantics: string;
         };
+        vocabulary: VocabularyView;
     }>;
     teamAssetViewOf: (batch: Batch | null | undefined) => {
         teamAsset: unknown;

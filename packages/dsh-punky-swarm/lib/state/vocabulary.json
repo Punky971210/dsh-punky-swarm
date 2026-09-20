@@ -1,0 +1,26 @@
+{
+  "$schema": "dsh-punky-swarm/vocabulary@1",
+  "meta": {
+    "version": 1,
+    "updated": "2026-09-19",
+    "counts": {
+      "gateCodes": 86,
+      "reasonTokens": 45
+    }
+  },
+  "sources": [
+    {
+      "id": "gate-entry",
+      "path": "lib/state/gates.ts",
+      "line": 598,
+      "note": "GATE_* 拒码面（Entry 门入口 checkEntryGate）"
+    },
+    {
+      "id": "reason-empty-line",
+      "path": "lib/state/gates.ts",
+      "line": 206,
+      "note": "reason 载体行族（EMPTY_REASON_RE / empty-reason: 独立行）"
+    }
+  ],
+  "entries": []
+}
