@@ -2,9 +2,12 @@
 //   用法：cd packages/dsh-punky-swarm && node scripts/audit/dead-code2.mjs && node scripts/audit/classify.mjs && node scripts/audit/gates.mjs && node scripts/audit/gen-register.mjs
 //   本文件 2026-09-21 由 scripts/audit/out/ 迁入 scripts/audit/（原位置在 gitignore 的 out/ 内 ⇒ 登记不可复现）。
 import fs from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const OUT = join(process.cwd(), 'scripts', 'audit', 'out');
+// 输出路径可覆盖（`REGISTER_OUT=scripts/audit/out/frozen-register.preview.md`）⇒ 使「生成物 vs 版本控制内文件」
+//   的**漂移可校验**（生成到 `out/` 后 diff），而不必覆盖正档。缺省 = 正档（行为不变）。
+const OUT_MD = process.env.REGISTER_OUT || join('docs', 'frozen-register-2026-09-21.md');
 const unwired = JSON.parse(fs.readFileSync(join(OUT, 'unwired-summary.json'), 'utf8'));
 const ledger = JSON.parse(fs.readFileSync(join(OUT, 'gate-ledger.json'), 'utf8'));
 
@@ -138,10 +141,26 @@ lines.push('');
 lines.push('**裁定（2026-09-21，替代原 W6「都删」）**：**不删，冻结至新引擎落地**。');
 lines.push('');
 lines.push('- 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 2 个前缀伪影**（`GATE_EXIT_` / `GATE_EXIT_MISSING_`，模板拼接 `\'GATE_EXIT_MISSING_\' + layer` 被正则截出的残片），照字面执行会去删两个不存在的码。');
-lines.push('- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为当前冻结面。');
+lines.push('- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为**裁定当刻**的冻结面（该 9 项已由 R3 波逐枚处置，结果见下「进展」；本表标题与表格是**台账实测**，故数字随补测推进而减）。');
 lines.push('- 它们 `testHits = 0` ⇒ **删除效果无法由测试判定**（可能静默放行，也可能被别的门先拦而"看起来没变化"）⇒ 属**静默回归风险**，不是等价重构；且删门禁是**行为变更**，与蓝图 §2「修改/重构 = 本波不做」冲突。');
 lines.push('');
 lines.push('**勘误链**：上游甄别报告记「15 个」→ v1 台账（含注释污染 + 前缀伪影 + 非码标识符）**15** → v2 去注释 **11** → v3 拒码真源口径 **9**（其中两枚收口门已由 R3-1 补测离榜）。');
+lines.push('');
+// ── R3 波进展（固定文案，非台账计算量；随新引擎形态重议）──────────────────────────────
+lines.push('**进展（R3 波，2026-09-21）**：本表 9 项已逐枚判读处置 ⇒ **余 2 项刻意不补**（`GATE_ARTIFACT_MISSING` 假缺口 · `GATE_NO_DECLARATION` 不可达内部分支）。');
+lines.push('判读口径「真缺口 ⇒ 补测 / 断言松动 ⇒ 收紧 / 不可达 ⇒ 只登记 + 绊线」与逐枚证据见 `docs/gate-assertion-blueprint-2026-09-21.md`：');
+lines.push('§6（R3-2 判读表）· §6.1（`GATE_DIFFICULTY_*` 声明面遮蔽）· §8（R3-3 判据「两处」勘误 + fail-open 缺口）· §9（R3-4 真 E2E）。');
+lines.push('');
+lines.push('| 波 | 覆盖 | 处置 |');
+lines.push('|---|---|---|');
+lines.push('| R3-1 | `GATE_COMPLETE_EXEC_PENDING` · `GATE_COMPLETE_NO_AUDIT` | 生产路径 E2E ⇒ **离榜** |');
+lines.push('| R3-2 | `GATE_EXEC_INPUT_MISSING` · `GATE_SKILL_MISSING` · `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` · `GATE_EVENT_CONST_MISSING` | 补测（末项为**降级覆盖**：围栏 + 前置面） |');
+lines.push('| R3-2 | `GATE_HANDOFF_LEGACY_PASSTHROUGH` · `GATE_DIFFICULTY_RATIONALE_MISSING` | 收紧既有断言（补载荷码 / 锁全码） |');
+lines.push('| R3-2 | `GATE_DIFFICULTY_INVALID` | **不可达**（`parameters` 声明面遮蔽）⇒ 登记 + 绊线（fail-closed，非安全洞） |');
+lines.push('| R3-2 | `GATE_ARTIFACT_MISSING` · `GATE_NO_DECLARATION` | **刻意不补**（假缺口·哨兵 / 不可达内部分支）⇒ 只登记 |');
+lines.push('| R3-4 | `GATE_EVENT_CONST_MISSING` | 降级覆盖 ⇒ **真 E2E**（加载期改源 ×3 档 + 负向对照） |');
+lines.push('');
+lines.push('**本表冻结裁定一字未变**（不删、冻结至新引擎落地）：上述全部为**纯增量补测**，`lib/**` 零 diff、零门禁行为变更。');
 lines.push('');
 lines.push('**解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。');
 lines.push('');
@@ -180,6 +199,6 @@ lines.push('3. **改判留痕**：撤销冻结时，在本文件对应行加「�
 lines.push('4. **单一强制点**：接线时不得新写一套，必须接既有实现（`tools/core.js:349` 逐字「禁各写一套」）。');
 lines.push('5. **不得以「无断言」为删除理由**：`testHits = 0` 只证明**测试没覆盖**，不证明**代码是死的**。缺断言 ⇒ 先补测（生产路径 E2E），补完再判要不要删。');
 
-fs.writeFileSync(join(process.cwd(), 'docs', 'frozen-register-2026-09-21.md'), lines.join('\n') + '\n');
-console.log('-> docs/frozen-register-2026-09-21.md  (' + lines.length + ' 行)');
+fs.writeFileSync(resolve(process.cwd(), OUT_MD), lines.join('\n') + '\n');
+console.log('-> ' + OUT_MD + '  (' + lines.length + ' 行)');
 console.log('C1=' + c1.length + ' B1残留=' + b1kept.length + ' 无断言门禁=' + libOnly.length + ' 前缀伪影(剔除)=' + ghosts.length);

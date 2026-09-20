@@ -77,7 +77,7 @@
 
 ---
 
-## 3. 无断言门禁（9 个，冻结）
+## 3. 无断言门禁（2 个，冻结）
 
 判据：**有生产引用但测试零断言**。硬拒收口门漏断言 = 白盒测试绿 ≠ 生产路径走过。
 
@@ -100,22 +100,30 @@
 | 门禁码 | 类别 | 拦什么 | 生产引用点 |
 |---|---|---|---|
 | `GATE_ARTIFACT_MISSING` | 哨兵 | 产物在场判定的**内部哨兵**：出口门将其改写为 `GATE_EXIT_MISSING_<LAYER>`（缺在场按层族回落），不直接外显 | lib/state/gates.js×7 · lib/state/gates.ts×7 |
-| `GATE_DIFFICULTY_INVALID` | 工具门 | `assign_check` 的 difficulty 非 A\|B\|C（无默认档） | lib/tools/core.js×2 |
-| `GATE_DIFFICULTY_RATIONALE_MISSING` | 工具门 | `assign_check` 的 rationale 缺失或 < 12 字 | lib/tools/core.js×2 |
-| `GATE_EVENT_CONST_MISSING` | fail-closed 守卫 | 事件常量缺位时**拒绝写入**（防落 `type:undefined` 污染审计面） | lib/state/store.js×3 |
-| `GATE_EXEC_INPUT_MISSING` | 建批门 | exec lane 未消费 `plan/` 产物（批级 `consumes_required` / 逐 lane `_per_lane` 两档） | lib/tools/core.js×2 |
-| `GATE_HANDOFF_LEGACY_PASSTHROUGH` | 留痕码 | 入口侧：存量批无 `batch.handoffs` ⇒ 放行**但留痕**（不静默、不砸存量） | lib/state/store.js×1 |
-| `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` | 留痕码 | 出口侧：同上（结算侧镜像） | lib/state/store.js×1 |
 | `GATE_NO_DECLARATION` | 判据门 | presence 契约：声明清单为空 | lib/state/gates.js×1 · lib/state/gates.ts×1 |
-| `GATE_SKILL_MISSING` | 告警码 | 技能在宿主技能根不可解析 ⇒ 建批留痕告警（`plan.warnings`，不阻断建批） | lib/tools/core.js×1 |
 
 **裁定（2026-09-21，替代原 W6「都删」）**：**不删，冻结至新引擎落地**。
 
 - 原裁定「无断言门禁都删」所依据的清单（上游报告记 15）**含 2 个前缀伪影**（`GATE_EXIT_` / `GATE_EXIT_MISSING_`，模板拼接 `'GATE_EXIT_MISSING_' + layer` 被正则截出的残片），照字面执行会去删两个不存在的码。
-- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为当前冻结面。
+- 去伪影后逐枚实地看过（v2 口径 11 项），抛出点**全在生产路径上** —— 收口主门 ×2（exec 未终态 / 无 audit ⇒ 拒 complete）、判据门、建批门（exec 未消费 `plan/`）、工具门 ×2（`assign_check` 难度档位与判据）、fail-closed 守卫（事件常量缺位 ⇒ 拒写入）、留痕/告警码 ×3、哨兵 ×1。其中两枚收口主门已由 R3-1 补测离榜，余 9 项为**裁定当刻**的冻结面（该 9 项已由 R3 波逐枚处置，结果见下「进展」；本表标题与表格是**台账实测**，故数字随补测推进而减）。
 - 它们 `testHits = 0` ⇒ **删除效果无法由测试判定**（可能静默放行，也可能被别的门先拦而"看起来没变化"）⇒ 属**静默回归风险**，不是等价重构；且删门禁是**行为变更**，与蓝图 §2「修改/重构 = 本波不做」冲突。
 
 **勘误链**：上游甄别报告记「15 个」→ v1 台账（含注释污染 + 前缀伪影 + 非码标识符）**15** → v2 去注释 **11** → v3 拒码真源口径 **9**（其中两枚收口门已由 R3-1 补测离榜）。
+
+**进展（R3 波，2026-09-21）**：本表 9 项已逐枚判读处置 ⇒ **余 2 项刻意不补**（`GATE_ARTIFACT_MISSING` 假缺口 · `GATE_NO_DECLARATION` 不可达内部分支）。
+判读口径「真缺口 ⇒ 补测 / 断言松动 ⇒ 收紧 / 不可达 ⇒ 只登记 + 绊线」与逐枚证据见 `docs/gate-assertion-blueprint-2026-09-21.md`：
+§6（R3-2 判读表）· §6.1（`GATE_DIFFICULTY_*` 声明面遮蔽）· §8（R3-3 判据「两处」勘误 + fail-open 缺口）· §9（R3-4 真 E2E）。
+
+| 波 | 覆盖 | 处置 |
+|---|---|---|
+| R3-1 | `GATE_COMPLETE_EXEC_PENDING` · `GATE_COMPLETE_NO_AUDIT` | 生产路径 E2E ⇒ **离榜** |
+| R3-2 | `GATE_EXEC_INPUT_MISSING` · `GATE_SKILL_MISSING` · `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` · `GATE_EVENT_CONST_MISSING` | 补测（末项为**降级覆盖**：围栏 + 前置面） |
+| R3-2 | `GATE_HANDOFF_LEGACY_PASSTHROUGH` · `GATE_DIFFICULTY_RATIONALE_MISSING` | 收紧既有断言（补载荷码 / 锁全码） |
+| R3-2 | `GATE_DIFFICULTY_INVALID` | **不可达**（`parameters` 声明面遮蔽）⇒ 登记 + 绊线（fail-closed，非安全洞） |
+| R3-2 | `GATE_ARTIFACT_MISSING` · `GATE_NO_DECLARATION` | **刻意不补**（假缺口·哨兵 / 不可达内部分支）⇒ 只登记 |
+| R3-4 | `GATE_EVENT_CONST_MISSING` | 降级覆盖 ⇒ **真 E2E**（加载期改源 ×3 档 + 负向对照） |
+
+**本表冻结裁定一字未变**（不删、冻结至新引擎落地）：上述全部为**纯增量补测**，`lib/**` 零 diff、零门禁行为变更。
 
 **解冻口径**：新引擎定型后按功能重议，**补测优先于删码**，且必须补**生产路径 E2E 断言**（不是白盒直调 `createGates`）。
 
@@ -142,7 +150,7 @@
 判据：**仅测试引用，但本文件内部已消费** ⇒ `export` 多余却**不可去**（去 export 会断 200 处测试引用）。
 
 > 判读：这 200 项把「未接线」这件事**测没了**——测试直捅内部实现，测试绿只证明内部函数对，不证明生产路径走了它。
-> 这是 9 个无断言门禁（§3）的同一枚硬币另一面，处置同归 §3 裁定（冻结至新引擎落地）。
+> 这是 2 个无断言门禁（§3）的同一枚硬币另一面，处置同归 §3 裁定（冻结至新引擎落地）。
 
 ---
 

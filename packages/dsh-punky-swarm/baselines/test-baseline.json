@@ -363,7 +363,7 @@
     "test/gate-assertion-r32.test.js": {
       "asserts": 25,
       "blankLines": 38,
-      "lines": 388,
+      "lines": 396,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -374,6 +374,14 @@
       "lines": 171,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/gate-event-const-e2e-r34.test.js": {
+      "asserts": 38,
+      "blankLines": 19,
+      "lines": 178,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/gate-flows.test.js": {
@@ -1161,7 +1169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-20T19:01:05Z",
+  "generatedAt": "2026-09-20T19:16:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1172,15 +1180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "r3-3: GATE_AUDIT_CRITERIA_MISSING 判据「两处」勘误 + 判据形态钉死（纯增量：新增 test/gate-criteria-parity-r33.test.js；lib 零 diff）",
+  "reason": "r3-4: GATE_EVENT_CONST_MISSING 真 E2E + helper 加「无标记即静默退出」防线；顺带消除 frozen-register 正档与生成物漂移。纯增量：lib 零 diff",
   "schema": 1,
   "totals": {
-    "asserts": 8207,
-    "blankLines": 3853,
-    "files": 145,
-    "lines": 43436,
+    "asserts": 8245,
+    "blankLines": 3872,
+    "files": 146,
+    "lines": 43622,
     "tautologies": 0,
-    "tests": 1682,
+    "tests": 1686,
     "todos": 4
   }
 }

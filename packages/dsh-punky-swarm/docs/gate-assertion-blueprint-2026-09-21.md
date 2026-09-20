@@ -160,6 +160,8 @@
 - **R3-3**：`GATE_AUDIT_CRITERIA_MISSING` **两处实现**判据单点化（`gates.ts` 收一处）—— 属重构，须独立波。
   → **已执行（`r3-3` 波）：上游前提被现场核查推翻** ⇒ 无抽取对象；改判为「勘误 + 钉死 + 缺口登记」。**结论与实证见 §8**。
 - **R3-4（可选加强）**：`GATE_EVENT_CONST_MISSING` 的**真 E2E** —— 子进程 + `module.register()` loader 钩子：在 `load()` 里把 `lib/state/event-types.js` 的 `export const <CONST> = …` 改写为 `= undefined`，再驱动一条产 `gate.escape` 的路径（如 `gate-techdebt-red.test.js` R-01 的 standalone 逃生），断言「抛且**零落盘**」。成本 ≈ 1 loader + 1 子进程脚本；收益 = 把"源被改"从围栏升级为行为证明。**前置**：确认与 C1 未接线清单不冲突。
+  → **已执行（`r3-4` 波）**：R3-2 该枚的「**降级覆盖**」（围栏 + 前置面）已替换为**真 E2E**——5 tests（对照 ×1 · 破坏 ×3 · 负向对照 ×1）。
+  **C1 前置已核**：不改任何生产源码、不解冻任何登记项（破坏全在**加载期**完成）。**结论与实证见 §9**。
 - **仍未解冻**：C1 26 项接线 / B1 10 项存废 / schema 消环 / 13 个 `_RE`… 均等新引擎形态。本波不解冻任何一项。
 
 ---
@@ -256,4 +258,120 @@ entry 门**放行**、plan 契约门**拒**（`lacks "## 约束"`）⇒ 差异�
 3. `node scripts/baseline-snapshot.mjs --check` 零漂移（基线已随本批重生成）。
 4. `git diff --stat -- lib` **空**（纯增量）。
 5. `node scripts/audit/gates.mjs --check`：无断言项集合**不变**（本波不增删拒码，只钉判据形态）。
+
+---
+
+## 9. R3-4：`GATE_EVENT_CONST_MISSING` 真 E2E（把"降级覆盖"换成"行为证明"）
+
+R3-2 该枚只落了「围栏 + 前置面」并**如实标注 `围栏 ≠ E2E`**（§6 行 8 / `test/gate-assertion-r32.test.js:325-341`）。
+本波补齐这半块证据：**在"源被改"的条件下走生产路径**，断言守卫的真实行为（抛 + 零落盘）。
+
+### 9.1 为什么必须"改源"：进程内三条路全堵死（R3-2 实证，本波沿用）
+
+| 路 | 是否可行 | 依据 |
+|---|---|---|
+| 进程内 `delete EVT.EVT_GATE_ESCAPE` | ✗ | ESM 命名空间 `Object.isExtensible === false` ⇒ `TypeError: Cannot delete property … of [object Module]`（Node 22.22.2 实测） |
+| 导出注入缝 `resolveGateEventTypes(evt)` | ✗ | 它是**模块私有**；导出 = 解冻 **C1** 未接线登记项（`docs/audit-2026-09-21-unwired.json`） |
+| **加载期改写 `event-types.js` 源码** | ✔ | 不触碰任何生产源码文件、不解冻任何登记项、不动模块导出面 |
+
+**威胁模型对齐**：该守卫的真实触发场景本就不是运行期事件，而是「有人改 `event-types.js` 把常量删掉 / 改名」——
+**源码面事件**。故加载期改写不是"人造场景"，而是对该事件的忠实模拟（只把 `export const X = <字面量>;` 的右值换成 `undefined;`）。
+
+### 9.2 交付物（4 个新文件，全在 `test/` 内；`lib/**` 零 diff）
+
+| 文件 | 职责 |
+|---|---|
+| `test/helpers/event-const-loader.mjs` | module loader hook：目标模块源码改写（点名常量置 `undefined`）+ 负向对照档（守卫判据置 `false`） |
+| `test/helpers/event-const-sabotage.preload.mjs` | `register(hook, url, { data })` 注册（**用 `data` 而非 env 跨线程传参**，不依赖未承诺行为） |
+| `test/helpers/event-const-missing-child.mjs` | 子进程驱动：建批 → `setMember(e1,'running')` → 采集事实（**只采集不判定**，判定全在父测试） |
+| `test/gate-event-const-e2e-r34.test.js` | 5 例；含**父测试独立复算 sha**（防"子进程自述即通过"） |
+
+驱动路径 = 本包既有 RED 用例 **R-01** 同一条生产路径（`test/gate-techdebt-red.test.js:277` 的 standalone 逃生）：
+建「exec lane 确无 plan 上游 + `standaloneReason` 齐备」批 ⇒ `setMember(…, 'running')` ⇒ entry 门放行并产 **escape 载荷** ⇒ 统一写盘点 `resolveGateEventTypes()` 解析 3 常量。
+
+### 9.3 四档实测（本机 Node 22.22.2；每档 = 一个**全新子进程**，因模块图进程内只求值一次）
+
+| 档 | 破坏 | `threw` | 批文件 | lane | `events`（磁盘复读） | `undefinedTypeCount` |
+|---|---|---|---|---|---|---|
+| **对照** | 无 | `false` | **被改写** | `e1: running` | `batch.created` · `batch.team-asset.resolved` · **`gate.escape{kind:"standalone"}`** · `member.settled` | 0 |
+| **破坏 ①** | 缺 `EVT_GATE_ESCAPE` | **`true`** | **逐字节不变** | `e1: pending` | 仅建批期 2 条 | 0 |
+| **破坏 ②** | 缺 `EVT_GATE_DEGRADE`（本路径未用到） | **`true`** | **逐字节不变** | `e1: pending` | 仅建批期 2 条 | 0 |
+| **破坏 ③** | 缺 `EVT_GATE_CONTRACT_MISSING`（本路径未用到） | **`true`** | **逐字节不变** | `e1: pending` | 仅建批期 2 条 | 0 |
+| **负向对照** | 缺 `EVT_GATE_ESCAPE` **且** 削弱守卫 | `false` | 被改写 | `e1: running` | `…` · **`[type: undefined]{kind:"standalone"}`** · `member.settled` | **1** |
+
+破坏档错误消息（逐字，可归因）：
+> `GATE_EVENT_CONST_MISSING: event type constant "EVT_GATE_ESCAPE" is absent/empty in lib/state/event-types.js ⇒ 拒绝写入（fail-closed：不得写 type:undefined；请先落常量再由写端发射）`
+
+**「零落盘」的三重判据**（互不依赖）：① 父测试读盘复算 sha256 === 子进程自述；② 复算值 === 建批后基线 sha（逐字节不变）；③ 磁盘 `events` 仍只有建批期 2 条、成员仍 `pending`。
+
+**负向对照的意义**（本波**最重要的一条**）：上四档断言的"零落盘 / 零失名"若是**无条件成立**（例如 `atomicWrite` 恰好因别的原因不执行），它们就**不构成对守卫的证据**。
+故设第 5 档：同一路径 + 守卫判据置 `false` ⇒ **放行并真写下 `type: undefined` 的事件**（实测 `[null,"standalone"]`）。
+⇒ 反证那三个"零"确是**守卫的功劳**，且本套件**能看见**污染。**绊线**：将来删/弱化该守卫 ⇒ 本档转红。
+
+### 9.4 实现坑（如实记录，均为"自证机制抓到"）
+
+- **`nextLoad()` 的 `source` 是 `Uint8Array`，不是 string**（Node 22.22.2 本包实测：`typeof === 'object'` ∧ `ArrayBuffer.isView === true`）。
+  首版 loader 按 `typeof source === 'string'` 判定、"非 string 即放行" ⇒ **钩子静默失效**（破坏没改到源、测试照旧通过）。
+  **抓到它的是子进程自证**：`control.sabotageApplied === false`（点名常量 import 后仍为 `'gate.escape'`）。
+  ⇒ 修法 = 双形态接收（string / `ArrayBuffer.isView` → `Buffer.from(buf, byteOffset, byteLength).toString('utf8')`），
+  且**未知形态一律抛**、目标模块无 `source` 也抛——**不许再有第二条静默放行路径**。
+  **这是 R3-1/R3-2「乐观污染」的第三种形态**：前两种是"把没覆盖看成覆盖""把注释当判据"，
+  这次是「**把'破坏没生效'看成'守卫是死码'**」——同属"让证据看起来比实际更强"。
+  ⇒ 通则：**任何"人为制造条件"的测试，必须自带"条件确实成立了"的自证**，否则它证明的可能是**什么都没发生**。
+- **`register()` 的 specifier 必须是 URL**：`register('D:/…')` ⇒ `ERR_UNSUPPORTED_ESM_URL_SCHEME: Received protocol 'd:'`（Windows 盘符被当 scheme）。
+  正式实现用 `register('./event-const-loader.mjs', import.meta.url)`（相对 specifier + parentURL）。
+- **`--import` 可重复**：两个 preload（隔离 home + 破坏钩子）串接即可，顺序无关（二者互不依赖）。
+- **`node --test` 会把 `test/**` 下「所有模块」当测试文件收集执行**（本仓既有惯例：`test/helpers/gate-fixture.mjs` /
+  `host-skills.mjs` / `isolated-home.preload.mjs` 等各在运行日志里占一条**文件级 Subtest**）。
+  ⇒ 本波新增 3 个 helper，运行期 `# tests` 因此 **+3**（文件级空测试）。
+  但本波的两个 helper 与既有"纯导出型"不同：一个是**可执行脚本**（被收集时会真跑一遍建批、往 stdout 打一行 `##R34##`），
+  一个是 **preload**（被收集时会把 loader hook 注册进**主测试进程**）。
+  ⇒ 各加一道**自带防线**：`event-const-missing-child.mjs` 无 `PSWARM_R34_CHILD=1` 即 `process.exit(0)`；
+  `event-const-sabotage.preload.mjs` 无 `PSWARM_EVENT_CONST_HOOK=1` 即**不注册**。
+  **通则：放进 `test/` 的模块必须假定"会被当测试执行"** —— 无标记即静默无副作用，而不是指望收集器放过它。
+
+### 9.5 一条**语义锁**（须明确：锁的是现状，不是规范主张）
+
+`resolveGateEventTypes()`（`lib/state/store.js:149-156`）**无条件解析三常量** ⇒ **任一缺位即拒**，
+即便本次载荷只用其中一枚（破坏档 ②③ 所证）。方向 **fail-closed**，且使"常量缺位"在**任何**门禁留痕路径上立即暴露，
+而非等到该类型首次被用到 —— 从"最紧"角度看是优点。
+本波把它钉成断言，含义是：**若将来改为按需（lazy）解析，这两档必然转红**，届时须**重新裁决该语义**（转红 = 提示重裁，非回归）。
+
+### 9.6 验收判据（本波）
+
+1. 新套件单跑 **5/5 pass**（对照 ×1 · 破坏 ×3 · 负向对照 ×1）。
+2. 静态基线：`files 145 → 146`（`baseline-snapshot` 只数**测试文件**，`test/helpers/*` 不计）·
+   `tests 1682 → 1686`（+4）· `asserts 8207 → 8245`（+38）· `todos` 保持 4。
+3. 运行期全量：`1721 → 1729`（**+8** = 新套件 **+5** 例 + 新 helper **+3** 条文件级空测试，见 §9.4）· **Δfail = 0**（18 例环境缺陷不计，见 §7）。
+   ⚠️ **静态 +4 与运行期 +5 的差额是 `baseline-snapshot` 的固有口径**：破坏档 ②③ 由 `for` 循环产出
+   （源码内只出现**一次** `test(` 调用）⇒ 静态按 1 计、运行期计 2。
+   **故静态基线是"源码面的下界"，运行期计数才是用例数**——两者不一致时须解释口径，不得据静态数倒推用例数。
+4. `git diff --stat -- lib` **空**（纯增量；破坏全在加载期，生产源码零改动）。
+5. 台账口径：拒码集合 **66 → 66**（零增删）；无断言项 **2 → 2**（本波只把 `GATE_EVENT_CONST_MISSING` 的断言从"降级覆盖"升为"E2E 行为证明"，不改变集合）。
+6. 负向对照档**必须绿**（否则本套件的"零"无判别力）。
+7. 冻结登记正档与生成物 **零漂移**（§9.7：`REGISTER_OUT=<preview>` 重生成后 diff 为空）。
+
+### 9.7 顺带修正：冻结登记正档与生成物的漂移（本波发现）
+
+R3-2 已把无断言项从 9 降到 2，但 **`docs/frozen-register-2026-09-21.md` 未随台账推进** ——
+正档仍写「## 3. 无断言门禁（**9 个**，冻结）」且表列 9 行，与台账实测的 2 项**直接矛盾**
+（生成物重跑后标题/表格会变成 2，`--check` 亦报「已消除无断言项 (7)」）。
+根因不是谁写错，而是**「登记是生成物」这条纪律只被执行了一半**：`gates.mjs --check` 更新的是 `out/`（gitignore），
+而正档 `docs/…` 需**显式重跑 `gen-register.mjs`** —— 中间没有任何检查会发现二者已不同步。
+
+处置（本波）：
+
+- 重跑 `gates.mjs --check`（刷新 `out/` 台账）+ `gen-register.mjs`（**刷新正档**）⇒ 正档反映实测：标题 **2 个**、表 2 行。
+- **新增「进展（R3 波）」段**（写进 `gen-register.mjs` 的固定文案 ⇒ 重生成不丢）：解释 9 → 2 的来龙去脉，
+  逐波列出被覆盖的 9 项与处置，使"数字变小"不会读成"凭空消失"。
+- **生成器新增输出路径覆盖** `REGISTER_OUT=<path>`（缺省 = 正档，行为不变）⇒ 使「生成物 vs 版本控制内文件」的
+  漂移**可校验**：`REGISTER_OUT=scripts/audit/out/frozen-register.preview.md node scripts/audit/gen-register.mjs`
+  再 diff 预览与正档即可，**不必覆盖正档**。本波实测：**零漂移**（逐字节一致）。
+- 附注：`gates.mjs --check` 的基线留档 `docs/audit-2026-09-21-gate-ledger.json` **刻意停在 R3-1 时点**
+  （它是"当时快照"，推进它会让 `--check` 失去"发现新漂移"的能力）；故本波 `--check` 会持续报
+  「已消除无断言项 (7)」—— 这是 **R3-2 的成果**，属**预期漂移**，不是错误。
+
+> **教训（并入 R3 通则）**：生成物纪律要覆盖**全链**——只重跑"数据段"而忘记"正档"，
+> 会让台账与叙述长期背离，而任何 `--check` 都发现不了（因为 `--check` 比的是数据段）。
+> 与 §6.1「宣称为真 ≠ 实现为真」同族：**「生成了」≠「正档已更新」**。
 

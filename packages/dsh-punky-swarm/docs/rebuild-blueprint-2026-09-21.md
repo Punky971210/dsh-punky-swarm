@@ -252,3 +252,7 @@ npm run build && node --import ./test/helpers/isolated-home.preload.mjs --test
 P0：`GATE_COMPLETE_EXEC_PENDING` `GATE_COMPLETE_NO_AUDIT` `GATE_ARTIFACT_MISSING`
 P1：`GATE_NO_DECLARATION` `GATE_SKILL_MISSING` `GATE_EXEC_INPUT_MISSING`
 P2：`GATE_DIFFICULTY_INVALID` `GATE_DIFFICULTY_RATIONALE_MISSING` `GATE_EVENT_CONST_MISSING` `GATE_HANDOFF_LEGACY_PASSTHROUGH` `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH`
+
+> **进展（R3 波，2026-09-21）**：上列 P0+P1+P2（去重后 = §3 台账 v3 口径的 9 项冻结面）已**逐枚判读处置**并经台账实测确认（`gates.mjs --check` 报「已消除无断言项 (7)」，拒码集合 66→66 零增删）。
+> **当前实测余 2 项**：`GATE_ARTIFACT_MISSING`（**假缺口**：出口门内部哨兵，外显形态 `GATE_EXIT_MISSING_<LAYER>` 已有断言）· `GATE_NO_DECLARATION`（**不可达内部**分支，外显形态另有断言）——**均刻意不补**。
+> **冻结裁定与解冻口径一字未变**：R3-1…R3-4 全部为纯增量补测（`lib/**` 零 diff）。逐枚证据见 `docs/gate-assertion-blueprint-2026-09-21.md` §6（判读表）· §6.1 · §8 · §9。

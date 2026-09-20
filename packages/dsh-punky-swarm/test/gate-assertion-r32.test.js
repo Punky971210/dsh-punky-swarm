@@ -27,6 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       GATE_SKILL_MISSING      ×2（覆盖层声明不可解析技能 ⇒ 留痕 / 全可解析 ⇒ 零告警）
 //       GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH ×1（出口门开启 + 存量批 ⇒ 放行 + 落码）
 //       GATE_EVENT_CONST_MISSING ×2（围栏 + 前置面；**降级覆盖**，理由见该例注释）
+//         → R3-4 已把该枚的 E2E 补上（`test/gate-event-const-e2e-r34.test.js`）；本两例保留为**源码面围栏**
 //   · 假缺口·断言松动 → 收紧**既有**断言，不在本文件（governance.test.js ×4 行 / handoff-gate.test.js ×1 处）
 //   · 假缺口·不可达内部分支 → `GATE_NO_DECLARATION`：`presenceJudge` 的内部 code，两处调用点
 //       恒传 `declared:[p]`（长度 1），建批期空声明更早被 `GATE_PLAN_PRESENCE_MISSING` 拦下
@@ -338,7 +339,14 @@ test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 
 // **真实威胁模型**：本守卫只会在「有人改动 `lib/state/event-types.js` 把常量删掉/改名」时触发 ——
 //   那是**源码面事件**，不是运行期事件。故本波按本仓既有围栏惯例（`gate-lite-batch2.test.js` 的
 //   「源码面不得再出现该字面量」· `gate-hardening-red.test.js` T35 的 L3 源码唯一性）落**围栏断言**。
-//   **如实标注：围栏 ≠ §6.5 要求的「生产路径 E2E」**；本枚的 E2E 覆盖留待新引擎的 DI 形态（见蓝图 §6）。
+//   **如实标注：围栏 ≠ §6.5 要求的「生产路径 E2E」**。
+//
+// 【R3-4 更新（2026-09-21）】该 E2E **已落地**：`test/gate-event-const-e2e-r34.test.js`（加载期改写
+//   `event-types.js` 源码 = 忠实模拟"有人删/改常量"这一**源码面事件**，子进程驱动生产路径，
+//   断言「抛 + 零落盘 + 零失名事件」，另有负向对照档证明判别力）。结论与实证见蓝图 §9。
+//   ⇒ 本文件下方两例**保留**，但角色已从"降级替代品"变为**与之互补的源码面围栏**：
+//     E2E 证**行为**（缺位时的运行期后果）；本两例证**形态**（抛点唯一 / 判据是非空字符串 /
+//     三常量全经同一守卫解析 / 解析早于原子写）——后者能在 E2E 之外独立发现"结构被绕开"。
 
 test('R3-2【围栏·非 E2E】GATE_EVENT_CONST_MISSING：fail-closed 抛点唯一且在 atomicWrite 之前', () => {
   const src = fs.readFileSync(path.join(PKG, 'lib', 'state', 'store.js'), 'utf8');
