@@ -100,7 +100,7 @@ export const AUTO_SETTLE_TRIGGERS = Object.freeze({ subagentEnd: 'subagent/end',
 
 /** 可结算的 `stopReason` 白名单（契约卡 #5 取值域：completed / aborted / error / max-tokens / refusal）。
  *  只放行 `completed`；未知值一律**保守不结算**（fail-safe：宁可漏结算也不谎报成功）。 */
-export const SETTLEABLE_STOP_REASONS = Object.freeze(['completed']);
+const SETTLEABLE_STOP_REASONS = Object.freeze(['completed']);
 
 /** 失败处置缺省值（规格 §3 末行：`onFail: pause｜review｜failed`，**缺省 `pause`** = 停轮上报）。
  *  本轮只实现缺省值；`review` / `failed` 为后续项（未落未实现分支）。 */
@@ -124,7 +124,7 @@ export function isAuditLayerLane(batch, lane) {
  *  **不进幂等链**（与 `isPhaseGateSkip` 同族）：该留痕是「本 lane 的结算职责不在引擎」的**持久策略事实**，
  *  不是「已结算/已判重」的事实——若计入幂等，Leader 显式结算前的每次触发都会被判成 `already-settled`
  *  而**再也不留痕**（职责转移的可见性被幂等键吞掉）。故每次触发各留一次痕。 */
-export function isAuditSettleDeferral(e) {
+function isAuditSettleDeferral(e) {
   return e?.type === EVT_AUTO_SETTLE_SKIPPED && e?.reason === AUDIT_SETTLE_DEFERRAL_REASON;
 }
 
@@ -163,7 +163,7 @@ export function hasAutoSettleRecord(batch, lane, settleId) {
 }
 
 /** 相位闸留痕判定（单点）：`auto.settle.skipped` 且 `reason` 为 `phase-*`。 */
-export function isPhaseGateSkip(e) {
+function isPhaseGateSkip(e) {
   return e?.type === EVT_AUTO_SETTLE_SKIPPED && typeof e.reason === 'string' && e.reason.startsWith('phase-');
 }
 

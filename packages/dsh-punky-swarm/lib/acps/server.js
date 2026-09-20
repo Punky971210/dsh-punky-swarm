@@ -42,12 +42,12 @@ import { AIP_COMMAND_TYPES as TASK_COMMAND_TYPES, TASK_STATES } from '../comms/a
 
 // ── AIP RPC 常量（对齐参考实现 aip_base_model.py:23-49 / aip_rpc_model.py:15-57）──
 export const JSONRPC_VERSION = '2.0';
-export const RPC_METHOD = 'rpc';
+const RPC_METHOD = 'rpc';
 // TaskCommandType 枚举 / TaskState 枚举：单一源 = lib/comms/aip-format.js（re-export 别名，禁止再自持定义）
 export { TASK_COMMAND_TYPES, TASK_STATES };
 
 // JSON-RPC 2.0 标准错误码（JSON-RPC 2.0 规范；参考实现 JSONRPCError 形态 aip_rpc_model.py:24-29）
-export const RPC_ERRORS = Object.freeze({
+const RPC_ERRORS = Object.freeze({
   PARSE: { code: -32700, message: 'Parse error' },
   INVALID_REQUEST: { code: -32600, message: 'Invalid Request' },
   METHOD_NOT_FOUND: { code: -32601, message: 'Method not found' },

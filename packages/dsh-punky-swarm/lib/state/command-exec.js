@@ -29,7 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { spawnSync } from 'node:child_process';
 
 // ---- 默认值（env 可调，全部有默认）----
-export function envNumber(name, def) {
+function envNumber(name, def) {
   const v = Number(process.env[name]);
   return Number.isFinite(v) && v > 0 ? v : def;
 }
@@ -66,7 +66,7 @@ export const DEFAULT_FORBIDDEN_PATTERNS = [
 ];
 
 // GATE_FORBIDDEN_RE env 覆盖（JSON 字符串数组，如 '["\\\\brm\\\\s+-rf\\\\b"]'）；解析失败回退默认清单
-export function forbiddenReFromEnv() {
+function forbiddenReFromEnv() {
   const raw = process.env.GATE_FORBIDDEN_RE;
   if (!raw) return DEFAULT_FORBIDDEN_PATTERNS;
   try {
@@ -137,7 +137,7 @@ function headToken(seg) {
 }
 
 // 写盘路径判定（scope ①②③④ 逐项）。返回命中依据字符串；未命中返回 null。
-export function matchWritePath(command) {
+function matchWritePath(command) {
   const text = maskQuoted(stripStreamMerges(command));
   if (WRITE_REDIRECT_RE.test(text)) return '含重定向（> / >>）';
   if (WRITE_CMDLET_RE.test(text)) return '含写文件 cmdlet';

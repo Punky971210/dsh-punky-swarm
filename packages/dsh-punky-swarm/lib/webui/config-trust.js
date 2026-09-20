@@ -31,7 +31,7 @@ function header(h, name) {
 }
 
 // loopback 分类：localhost / [::1] / 127/8 IPv4（WHATWG hostname，IPv6 保留括号）
-export function isLoopbackHostname(hostname) {
+function isLoopbackHostname(hostname) {
   if (hostname === 'localhost' || hostname === '[::1]') return true;
   const parts = hostname.split('.');
   return parts.length === 4 && parts[0] === '127'
@@ -40,7 +40,7 @@ export function isLoopbackHostname(hostname) {
 
 // trustedHosts 条目匹配：无端口条目 = 该 hostname 任意端口；带端口 = host:port 精确。
 // 条目在装配时已断言为裸 authority（host | host:port，canonical 形态），此处只做比对。
-export function isTrustedAuthority(hostUrl, trustedHosts) {
+function isTrustedAuthority(hostUrl, trustedHosts) {
   return (trustedHosts || []).some((entry) => {
     let u; try { u = new URL('http://' + entry); } catch { return false; }
     const entryPort = u.port !== '' ? u.port : new URL('https://' + entry).port; // canonicalAuthority 语义

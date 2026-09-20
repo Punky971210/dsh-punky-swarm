@@ -45,19 +45,19 @@ import {
 import { loadTeamAsset, teamAssetSignature } from './team-asset.js';
 
 /** 正档格式版本（`schema` 键；键集变化时才升，本批为 1）。 */
-export const SNAPSHOT_SCHEMA = 1;
+const SNAPSHOT_SCHEMA = 1;
 /** 正档类型标记（防「同目录下别的 JSON 被当档读」）。 */
-export const SNAPSHOT_KIND = 'team-asset-snapshot';
+const SNAPSHOT_KIND = 'team-asset-snapshot';
 /** 会话级档目录名（相对 `<sessionDir>`）。 */
-export const SNAPSHOT_DIR = 'team-assets';
+const SNAPSHOT_DIR = 'team-assets';
 /** 快照内 `summary` 的稳定子集（`declarationSummaryOf` 的读端投影；`unwired` 单独平铺、不当子对象）。 */
-export const SNAPSHOT_SUMMARY_KEYS = Object.freeze([
+const SNAPSHOT_SUMMARY_KEYS = Object.freeze([
   'produceFields', 'produceFieldDeclared', 'consumeFields', 'consumeProblems',
   'entryRequires', 'flags', 'flagsResolved', 'contract', 'presenceGlobs', 'auditContract',
 ]);
 
 /** 会话级档目录绝对路径。 */
-export function snapshotDirOf(sessionDirAbs) {
+function snapshotDirOf(sessionDirAbs) {
   return path.join(sessionDirAbs, SNAPSHOT_DIR);
 }
 
@@ -69,7 +69,7 @@ export function snapshotDirOf(sessionDirAbs) {
  *   对文件字节不等价）、**不导出** `lib/state/archive.js` 的局部读字节函数（改动面更大）⇒ 零新依赖、零域外写。
  * @returns 16 位 hex；路径不可读/不存在 ⇒ `null`（调用方按「写档失败」处置）。
  */
-export function assetHashOf(assetPath) {
+function assetHashOf(assetPath) {
   if (typeof assetPath !== 'string' || assetPath.length === 0) return null;
   try {
     return createHash('sha256').update(fs.readFileSync(assetPath)).digest('hex').slice(0, 16);
@@ -79,7 +79,7 @@ export function assetHashOf(assetPath) {
 }
 
 /** 档名 = `<team>.<assetHash>.json`（同 hash ⇒ 同名 ⇒ 同档）。 */
-export function snapshotFileNameOf(team, assetHash) {
+function snapshotFileNameOf(team, assetHash) {
   return String(team) + '.' + String(assetHash) + '.json';
 }
 
@@ -88,7 +88,7 @@ export function snapshotFileNameOf(team, assetHash) {
  * 由 `flagOf` + `enabledByFlag` 现算 ⇒ 让「未声明 ⇒ 门禁生效侧（tighten-only）」在快照内可见。
  * 只进快照，**不改** `declarationSummaryOf` 的返回形状（保形，避免既有断言破）。
  */
-export function flagsResolvedOf(flows) {
+function flagsResolvedOf(flows) {
   const out = {};
   for (const layer of ['plan', 'exec', 'audit']) {
     const f = flowOf(flows, layer);
@@ -101,7 +101,7 @@ export function flagsResolvedOf(flows) {
 }
 
 /** 声明面**可读汇总**的稳定子集（复用单一读端 `declarationSummaryOf`，不新增第二套声明语义）。 */
-export function snapshotSummaryOf(flows, asset = null) {
+function snapshotSummaryOf(flows, asset = null) {
   const raw = declarationSummaryOf(flows, asset) ?? {};
   const out = {};
   for (const k of SNAPSHOT_SUMMARY_KEYS) out[k] = k === 'flagsResolved' ? flagsResolvedOf(flows) : (raw[k] ?? null);
@@ -109,7 +109,7 @@ export function snapshotSummaryOf(flows, asset = null) {
 }
 
 /** 键级摘要（批次字段 `summaryKeys` 取数；只含键名/短值，**不含正文、不含完整 summary**）。 */
-export function summaryKeysOf(summary, unwired) {
+function summaryKeysOf(summary, unwired) {
   const s = summary ?? {};
   const entryRequires = s.entryRequires ?? {};
   return {

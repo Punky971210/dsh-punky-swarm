@@ -32,7 +32,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /** sink 目录相对默认 <DSH_HOME> 的二级路径（字面口径） */
-export const SINK_SUBPATH = join('logs', 'punky-swarm');
+const SINK_SUBPATH = join('logs', 'punky-swarm');
 
 /** 配置缺省值（冻结常量；`lib/assembly/schema.js` 注册表 import 本对象作 default —— 单一来源） */
 export const AUDITLOG_DEFAULTS = Object.freeze({

@@ -42,7 +42,7 @@ export const BATCH_TRANSITIONS = {
 export function isMemberState(s) {
     return MEMBER_STATES.includes(s);
 }
-export function isBatchPhase(p) {
+function isBatchPhase(p) {
     return BATCH_PHASES.includes(p);
 }
 export function isMemberTerminal(s) {

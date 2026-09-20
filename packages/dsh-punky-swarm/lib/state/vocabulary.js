@@ -68,7 +68,7 @@ function rootOf(opts) {
  * @param {{root?: string|null}} [opts]
  * @returns {string}
  */
-export function vocabularyAbsPath(opts = {}) {
+function vocabularyAbsPath(opts = {}) {
   return path.join(rootOf(opts), ...VOCABULARY_REL.split('/'));
 }
 

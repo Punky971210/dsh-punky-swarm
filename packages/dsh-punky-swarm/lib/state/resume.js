@@ -41,7 +41,7 @@ import { findTask } from './task-utils.js';
 import * as EVT from './event-types.js';
 
 // ── config.resume 开关（默认关，零运行时开销，行为不变）──
-export const RESUME_DEFAULTS = Object.freeze({ enabled: false });
+const RESUME_DEFAULTS = Object.freeze({ enabled: false });
 
 export function resolveResumeConfig(config) {
   const c = config?.resume ?? {};
@@ -51,7 +51,7 @@ export function resolveResumeConfig(config) {
 }
 
 // 待回填清单：
-export const RESUME_FILL_POINTS = [
+const RESUME_FILL_POINTS = [
   // ✓ 已接线：恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）
   // ✓ 已接线：laneProgress 字段写/清（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；
   //    lane 结算终态经 laneProgressClear 清退）
@@ -121,7 +121,7 @@ export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = 
 // 纯函数：操作 batch 对象，不落盘（写入/清退由 B 的 lane_checkpoint / 结算路径调用本接口后交 store 原子写）
 
 // 读：无进度记录 → null（缺省 undefined 语义，读兼容）
-export function laneProgressRead(batch, lane) {
+function laneProgressRead(batch, lane) {
   return batch?.laneProgress?.[lane] ?? null;
 }
 

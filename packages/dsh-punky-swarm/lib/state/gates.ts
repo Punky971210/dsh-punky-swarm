@@ -101,7 +101,7 @@ export type ContractMissingPayload = {
   };
 };
 /** 六判定位共用的载荷构造（gateKind 见 6 个调用点；source/degrade 逐点给出**引擎缺省来源**，可审计）。 */
-export function contractMissingPayload(
+function contractMissingPayload(
   gateKind: string, layer: string, source: string, degradeKind: string, degradeNote: string,
 ): ContractMissingPayload {
   return {
@@ -199,9 +199,9 @@ export function detectGate(artifactsDir: string, paths: string[]) {
 //   （**判定不变**：显式禁用仍放行）。
 // F-7：**空声明已由 `GATE_EMPTY_LINE_RE` 位承接并在 `checkCommandGate` 首判短路为拒**
 //   （原注释「命令解析为空仍拒」描述了当时**不可达**的死码分支，属「说已防护、实未防护」的注释漂移，已订正）。
-export const GATE_OFF_LINE_RE = /^gate:[ \t]*false[ \t]*$/m;
+const GATE_OFF_LINE_RE = /^gate:[ \t]*false[ \t]*$/m;
 
-export function detectGateOff(artifactsDir: string, paths: string[]) {
+function detectGateOff(artifactsDir: string, paths: string[]) {
   if (!Array.isArray(paths) || paths.length === 0) return { declared: false, path: null };
   for (const p of paths) {
     const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
@@ -225,7 +225,7 @@ export function detectGateOff(artifactsDir: string, paths: string[]) {
 //     冻结面未授权新增任务字段 ⇒ 判定面落在**产物正文**（本规格 §3 M-2 冻结补全，唯一实现处 = 本处）。
 //   读取纪律：与 `detectGate` / `detectNeedHuman` 同源——`produce ∪ outputs` 声明产物、缺失/空/目录跳过、
 //     空 token 行不计入；**零写盘、零事件**（纯读）。
-export const REASON_DECL_RE = /^reason:[ \t]*(\S[^\n]*)$/gm;
+const REASON_DECL_RE = /^reason:[ \t]*(\S[^\n]*)$/gm;
 
 export interface ReasonTokenDecl { token: string; path: string; index: number }
 
@@ -241,7 +241,7 @@ export interface ReasonVocabularyVerdict {
 export interface VocabularyView { loaded: boolean; version: number | null; source: string | null }
 
 /** 词表只读视图（`gateStatusOfLane` 展示位 + 判据面自证；**零拒码、零判定**）。 */
-export function vocabularyViewOf(opts: { root?: string | null } = {}): VocabularyView {
+function vocabularyViewOf(opts: { root?: string | null } = {}): VocabularyView {
   const doc = loadVocabulary({ root: opts.root ?? null });
   if (doc.ok !== true) return { loaded: false, version: null, source: null };
   const meta = doc.meta as { version?: unknown } | undefined;
@@ -253,7 +253,7 @@ export function vocabularyViewOf(opts: { root?: string | null } = {}): Vocabular
 }
 
 /** 解析产物内的 `reason: <token>` 声明行（保序；`token` 取 trim 后原文，空则不计入）。 */
-export function detectReasonTokens(artifactsDir: string, paths: string[]): ReasonTokenDecl[] {
+function detectReasonTokens(artifactsDir: string, paths: string[]): ReasonTokenDecl[] {
   const out: ReasonTokenDecl[] = [];
   if (!Array.isArray(paths) || paths.length === 0) return out;
   for (const p of paths) {
@@ -322,7 +322,7 @@ export function reasonVocabularyVerdict(
  *   同时消费 `escape` 与 `escapes[]`）。
  * 纪律：本函数**只产载荷**，不落盘、不改判定（落盘唯一在 store 写路径 ⇒ R-5「只读视图零事件」）。
  */
-export function reasonVocabularyNote(v: ReasonVocabularyVerdict) {
+function reasonVocabularyNote(v: ReasonVocabularyVerdict) {
   if (v.degrade !== null) {
     return {
       vocabCode: v.degrade.code,
@@ -357,7 +357,7 @@ export function reasonVocabularyNote(v: ReasonVocabularyVerdict) {
 //   · R-2（行首锚定，不容前导空白，与 TARGETS_CLAIMED_RE 同族 `^...$`）。
 //   · O-4.2：真实 0 字节文件一律判 missing（0 字节不可能自带原因行）。
 // ─────────────────────────────────────────────────────────────────────────────
-export const EMPTY_REASON_RE = /^empty-reason:[ \t]*(\S[^\n]*)$/m;
+const EMPTY_REASON_RE = /^empty-reason:[ \t]*(\S[^\n]*)$/m;
 
 export type PresenceMode = 'declare' | 'runtime';
 
@@ -382,7 +382,7 @@ export function declaredKindOf(declared: string): 'file' | 'dir' {
 }
 
 /** 原因行判定：**行首锚定 + 非空文本**（R-2；行中出现 / 前导空白 / 空文本 ⇒ 不命中）。 */
-export function emptyReasonOf(content: string): string | null {
+function emptyReasonOf(content: string): string | null {
   if (typeof content !== 'string') return null;
   const m = content.match(EMPTY_REASON_RE);
   if (!m) return null;
@@ -396,7 +396,7 @@ function substantiveContentOf(content: string): string {
 }
 
 /** 判据章节**裸标题行**判定（S10 最低内容判据）：行首锚定 + 整行仅标题（编号变体/正文提及均不命中）。 */
-export function sectionLineHit(content: string, section: string): boolean {
+function sectionLineHit(content: string, section: string): boolean {
   if (typeof content !== 'string' || typeof section !== 'string' || section.length === 0) return false;
   const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('^' + escaped + '[ \\t]*$', 'm').test(content);
@@ -408,14 +408,14 @@ export function sectionLineHit(content: string, section: string): boolean {
  *  是因为元素 id（如 `goal`）通常极短，`includes` 会把任意词命中 ⇒ 判据不可靠（假绿风险）。
  *  `id` 按**字面量**转义后匹配（与 `sectionLineHit` 同法，防正则元字符）。
  */
-export function elementLineHit(content: string, id: string): boolean {
+function elementLineHit(content: string, id: string): boolean {
   if (typeof content !== 'string' || typeof id !== 'string' || id.length === 0) return false;
   const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('^element:[ \\t]*' + escaped + '[ \\t]*$', 'm').test(content);
 }
 
 /** 路径归属判定（P8）：绝对路径产物必须在批次产物根内。 */
-export function isInsideRoot(absPath: string, rootDir: string): boolean {
+function isInsideRoot(absPath: string, rootDir: string): boolean {
   const rel = path.relative(path.resolve(rootDir), path.resolve(absPath));
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }

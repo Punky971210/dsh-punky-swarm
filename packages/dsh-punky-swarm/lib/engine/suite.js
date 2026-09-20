@@ -95,12 +95,12 @@ export const SUITE_TOOLS = Object.freeze([
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */
-export function memberDenyTools() {
+function memberDenyTools() {
   return SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
 }
 
 /** 模式门覆盖集（派生）：`execute` 首行须落 `assertModeActive` 的工具名。 */
-export function modeGateTools() {
+function modeGateTools() {
   return SUITE_TOOLS.filter((t) => t.modeGate).map((t) => t.name);
 }
 

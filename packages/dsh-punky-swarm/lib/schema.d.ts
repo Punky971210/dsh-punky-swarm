@@ -22,7 +22,6 @@ export declare const BATCH_TRANSITIONS: {
     readonly complete: readonly [];
 };
 export declare function isMemberState(s: unknown): s is MemberState;
-export declare function isBatchPhase(p: unknown): p is BatchPhase;
 export declare function isMemberTerminal(s: unknown): s is MemberState;
 export declare function isBatchTerminal(p: unknown): p is BatchPhase;
 export declare function canTransitionMember(from: MemberState, to: MemberState): boolean;

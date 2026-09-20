@@ -110,9 +110,9 @@ export const CHAIN_VERSIONS = Object.freeze([1, 2, 3]);
 /** v1（既有缺省口径；`CHAIN_VERSIONS[0]` = 缺省语义版本）。 */
 export const CHAIN_VERSION = 1;
 /** `join` 合法枚举（步级汇合语义：all = 全 merged 才推进；any = 首个 merged 即推进）。 */
-export const CHAIN_JOINS = Object.freeze(['all', 'any']);
+const CHAIN_JOINS = Object.freeze(['all', 'any']);
 /** `onFail` / `join.anyFailure` 合法 token（**只收枚举、禁表达式**）。 */
-export const CHAIN_ON_FAIL_TOKENS = Object.freeze(['pause', 'review', 'failed']);
+const CHAIN_ON_FAIL_TOKENS = Object.freeze(['pause', 'review', 'failed']);
 /** `chain.step` 事件的 `via` 取值全集（推进命中的分支）。**这是读端白名单**：
  *  写侧只可能产生下列三值（M1 后步级条件边下线 ⇒ 不再有 `on` 族取值）。
  *  ⚠ 历史值：`on` + 四 token（`merged` / `fail` / `skipped` / `conflict`）曾是合法取值，**磁盘上仍有**真实记录
@@ -149,13 +149,13 @@ const RETIRED_CHAIN_DECLARATION_REASONS = Object.freeze({
   rework: '回边返工策略（`allowed`/`max_attempts`）：已停消费 —— `rework` 改用 gap-list 表达（`blocking`/`followup`）',
 });
 /** 退役链声明键清单（**只读台账**：`Object.keys` 派生自事由表 ⇒ 新增退役键必同时补事由，不留空话）。 */
-export const RETIRED_CHAIN_DECLARATIONS = Object.freeze(Object.keys(RETIRED_CHAIN_DECLARATION_REASONS));
+const RETIRED_CHAIN_DECLARATIONS = Object.freeze(Object.keys(RETIRED_CHAIN_DECLARATION_REASONS));
 
 // ── 【v3 · W2 装配图】声明面常量（`[docs-ref] w2 §2.1/§3.1`）──────────────
 /** 仅 `chain.version=3` 允许的步级键（v1/v2 声明即拒 `TEAM_ASSET_FIELD_NOT_ALLOWED`，V1）。 */
 export const CHAIN_V3_STEP_KEYS = Object.freeze(['branches', 'pair_with', 'template']);
 /** `template` 允许的插值变量（**只许出现在 v3 `template` 内、且禁表达式**，V4）。 */
-export const CHAIN_TEMPLATE_VARS = Object.freeze(['lane', 'branch']);
+const CHAIN_TEMPLATE_VARS = Object.freeze(['lane', 'branch']);
 /** `flows.<layer>.guidance.inject` 白名单（**结构化小节标题枚举**，禁自由文本）。 */
 export const CHAIN_GUIDANCE_INJECTS = Object.freeze(['结论', '判据', '约束', '禁止事项']);
 
@@ -170,7 +170,7 @@ const templateTokensOf = (s) => {
 const withoutTemplateTokens = (s) => (typeof s === 'string' ? s.replace(/\$\{([^}]*)\}/g, '') : '');
 
 /** 【v3】步的分支 id 清单（未声明 `branches` ⇒ 空数组）。 */
-export function branchIdsOf(step) {
+function branchIdsOf(step) {
   return Array.isArray(step?.branches)
     ? step.branches.filter((b) => isPlainObject(b) && isNonEmptyString(b.id)).map((b) => b.id)
     : [];
@@ -178,7 +178,7 @@ export function branchIdsOf(step) {
 
 /** 【v3】配对实例 lane id 是否命中该步 `template.id` 的 `${lane}` 模式
  *  （`audit-${lane}` ⇒ `audit-exec-coder` 命中）。非配对步 / 无 `template.id` ⇒ false。 */
-export function pairTemplateMatches(step, laneId) {
+function pairTemplateMatches(step, laneId) {
   if (!isNonEmptyString(laneId)) return false;
   if (!isNonEmptyString(step?.pair_with) && !isNonEmptyString(step?.perLane)) return false;
   const tpl = isPlainObject(step.template) && isNonEmptyString(step.template.id) ? step.template.id : null;

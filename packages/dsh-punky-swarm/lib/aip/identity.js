@@ -41,14 +41,14 @@ export const BASE36_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const BASE36_INDEX = Object.fromEntries([...BASE36_ALPHABET].map((ch, i) => [ch, i]));
 
 // 默认分段（对齐参考实现 registry-server/app/utils/aic.py 常量）
-export const DEFAULT_VERSION = '1';          // 第 5 级：身份码版本号（1~Z）
-export const DEFAULT_ARSP = '0001';          // 第 6 级：智能体注册服务商序号（1~ZZZZZZ）
-export const DEFAULT_VENDOR = '00001';       // 第 7 级：智能体供应商序号（1~ZZZZZZ）
-export const DEFAULT_ONTOLOGY_SERIAL_LEN = 6; // 第 8 级：本体序列号长度（1~9）
-export const DEFAULT_INSTANCE_SERIAL_LEN = 6; // 第 9 级：实体序列号长度（1~9）
+const DEFAULT_VERSION = '1';          // 第 5 级：身份码版本号（1~Z）
+const DEFAULT_ARSP = '0001';          // 第 6 级：智能体注册服务商序号（1~ZZZZZZ）
+const DEFAULT_VENDOR = '00001';       // 第 7 级：智能体供应商序号（1~ZZZZZZ）
+const DEFAULT_ONTOLOGY_SERIAL_LEN = 6; // 第 8 级：本体序列号长度（1~9）
+const DEFAULT_INSTANCE_SERIAL_LEN = 6; // 第 9 级：实体序列号长度（1~9）
 
 // 校验码（第 10 级）固定 4 位 Base36
-export const CHECKSUM_LEN = 4;
+const CHECKSUM_LEN = 4;
 
 // 签名算法注册表（可插拔接口；sm2 仅占位，待正式文本校准）
 export const SIGN_ALGORITHMS = {
@@ -61,7 +61,7 @@ export const DEFAULT_SIGN_ALGORITHM = 'ecdsa-p256';
 // CAI 证书默认参数（ACPs-spec-ATR-v02.01 §3.2(12)）
 export const CAI_DEFAULT_VALIDITY_DAYS = 49;   // 默认 49 天
 export const CAI_MAX_VALIDITY_DAYS = 3650;     // 上限 3650 天
-export const CAI_EAB_EXPIRE_HOURS = 24;        // EAB 凭证有效期（对齐参考实现 settings 语义）
+const CAI_EAB_EXPIRE_HOURS = 24;        // EAB 凭证有效期（对齐参考实现 settings 语义）
 
 // ---- Base36 编解码 ----
 export function base36Encode(num, length = 0) {

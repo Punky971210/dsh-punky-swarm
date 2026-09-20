@@ -60,7 +60,7 @@ export function isMemberState(s: unknown): s is MemberState {
   return MEMBER_STATES.includes(s as MemberState);
 }
 
-export function isBatchPhase(p: unknown): p is BatchPhase {
+function isBatchPhase(p: unknown): p is BatchPhase {
   return BATCH_PHASES.includes(p as BatchPhase);
 }
 

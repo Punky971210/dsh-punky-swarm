@@ -259,7 +259,7 @@ export function consumeFieldOf(flow, layer) {
 }
 
 /** `consume_field` 越界/非法声明的问题串（无问题 ⇒ null）。 */
-export function consumeFieldProblemOf(flow, layer) {
+function consumeFieldProblemOf(flow, layer) {
   const f = flow && typeof flow.consume_field === 'string' ? flow.consume_field : null;
   if (f === null || CONSUME_FIELDS.includes(f)) return null;
   return 'flows.' + String(layer ?? '(layer)') + '.consume_field=' + JSON.stringify(f)
@@ -407,7 +407,7 @@ export function globMatchesPath(pattern, relPath) {
  *                    不得依赖回退兜底（回归点：`test/audit-contract-gate.test.js:141-148`）。
  * @returns {{globs: string[], explicit: string[], anchored: {dir: string|null, tail: string}[], unexpandable: string[]}}
  */
-export function presenceGlobsOf(contract) {
+function presenceGlobsOf(contract) {
   const globs = contract && Array.isArray(contract.artifact_globs) ? contract.artifact_globs : [];
   const explicit = [];
   const anchored = [];
@@ -435,7 +435,7 @@ export function presenceGlobsOf(contract) {
  * 结构匹配复用 `globMatchesPath`（其内建两条防静默放宽守卫：末段 `**` 不参与回退、目录段须对齐）⇒
  * 与 `test/audit-contract-gate.test.js:141-148` 的回归口径**同源**，本函数不引入第二套匹配逻辑。
  */
-export function presenceGlobMatches(expanded, relPath) {
+function presenceGlobMatches(expanded, relPath) {
   const ex = expanded && typeof expanded === 'object' ? expanded : { globs: [], explicit: [] };
   const raw = String(relPath ?? '').replace(/\\/g, '/');
   if (Array.isArray(ex.explicit) && ex.explicit.includes(raw)) return true;

@@ -133,7 +133,7 @@ export const LONGRUN_DEFAULTS = Object.freeze({
 export const LONGRUN_REASON = 'duration-exceeded-no-progress';
 // 非候选 reason 取值（既有值一字不改，回归锚）：豁免生效中 / 磁盘进度快照新鲜 / 僵尸批次
 export const LONGRUN_REASON_EXEMPT_ACTIVE = 'exempt-active';
-export const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
+const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
 
 // =====================================================================================
 // 状态面扩面（一态一判据）—— 本段是探针的语义契约，实现与断言同源的唯一落点。
@@ -186,15 +186,15 @@ export const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
 //    从 `batch.lanes` 映射得出。两处**不重复**：e1 只出 lane 级行 + 逐行 `dangling:true`，
 //    e2 出批次级聚合；二者取值同源（同一 `batch.lanes`），不做交叉校验、不互为前置。
 // =====================================================================================
-export const REASON_DANGLING_MEMBER = 'dangling-member';
-export const REASON_NOT_SCANNED_PLANNING = 'not-scanned-planning';
-export const REASON_PAUSED_DWELL = 'paused-awaiting-decision';
-export const REASON_PENDING_UNDISPATCHED = 'pending-undispatched';
-export const REASON_REVIEW_AWAITING_SETTLE = 'review-awaiting-settle';
-export const REASON_IDLE_AWAITING_RESUME = 'idle-awaiting-resume';
-export const REASON_BLIND_RUN_NO_DEPS = 'blind-run-no-deps';
-export const REASON_BLIND_RUN_UPSTREAM_MISSING = 'blind-run-upstream-missing';
-export const REASON_BLIND_RUN_UPSTREAM_NEVER_READY = 'blind-run-upstream-never-ready';
+const REASON_DANGLING_MEMBER = 'dangling-member';
+const REASON_NOT_SCANNED_PLANNING = 'not-scanned-planning';
+const REASON_PAUSED_DWELL = 'paused-awaiting-decision';
+const REASON_PENDING_UNDISPATCHED = 'pending-undispatched';
+const REASON_REVIEW_AWAITING_SETTLE = 'review-awaiting-settle';
+const REASON_IDLE_AWAITING_RESUME = 'idle-awaiting-resume';
+const REASON_BLIND_RUN_NO_DEPS = 'blind-run-no-deps';
+const REASON_BLIND_RUN_UPSTREAM_MISSING = 'blind-run-upstream-missing';
+const REASON_BLIND_RUN_UPSTREAM_NEVER_READY = 'blind-run-upstream-never-ready';
 // 豁免清退显式提示（D7 次选方案的探针侧可见面）：
 //   读端事件名走**字面量**——`lib/state/event-types.js` 本批无写者，不得越域新增常量（design §9）。
 export const REASON_EXEMPT_CLEARED = 'exempt-cleared';
@@ -300,7 +300,7 @@ export function isStaleBatch(batch, nowTs, staleBatchMs) {
 export function laneStateOf(batch, lane) {
   return batch?.lanes?.[lane] ?? null;
 }
-export function isScannedLaneState(batch, lane) {
+function isScannedLaneState(batch, lane) {
   const s = laneStateOf(batch, lane);
   return s !== null && !schema.isMemberTerminal(s);
 }
@@ -311,7 +311,7 @@ export function isDanglingLane(batch, lane) {
 
 // ---- 状态锚点（§2 实现要点 1）：纯事件流反向扫描，返回**与 state 匹配**的最近迁移 ts ----
 // 锚点与状态同源（state 现读 batch.lanes[lane]，不缓存）；缺锚点 → null（state 照常透出）。
-export function stateAnchorOf(batch, lane) {
+function stateAnchorOf(batch, lane) {
   const st = laneStateOf(batch, lane);
   if (st === null) return null;
   const evs = batch?.events ?? [];
@@ -341,7 +341,7 @@ export function stateAnchorOf(batch, lane) {
   return null; // 其余态（终态/未知）无时间判据 ⇒ 无锚点
 }
 // 批次档锚点：最近 batch.phase→paused（paused 档的先判锚点）
-export function batchPausedAnchorOf(batch) {
+function batchPausedAnchorOf(batch) {
   const evs = batch?.events ?? [];
   for (let i = evs.length - 1; i >= 0; i--) {
     const e = evs[i];
@@ -416,7 +416,7 @@ export function lastProgressTsOf(progressDir, { maxDepth = PROGRESS_DIR_MAX_DEPT
 // 路径解析口径与 gates.resolveArtifact 同源：`<artifactsDirOf(sessionId,batchId)>/<rel>`；
 //   **可解析 = 存在且非空**（空文件不算就绪）。
 // =====================================================================================
-export function laneConsumePathsOf(batch, lane) {
+function laneConsumePathsOf(batch, lane) {
   const t = findTask(batch, lane);
   if (!t) return []; // wavePlan 缺该项 ⇒ 零观测面（BR-1/BR-3 反例；不存在即「不可判」而非「可判为真」）
   return Array.isArray(t.consume) ? t.consume.filter((p) => typeof p === 'string' && p) : [];
@@ -435,7 +435,7 @@ export function laneConsumePathsOf(batch, lane) {
 //      运行期兜底档不替静态门禁发言。
 //   保留语义：**显式 `consume: []`** = 建批方明示「本 lane 无上游」⇒ 结构上确实无依赖却已在跑 ⇒ BR-1 成立
 //      （RS-6 的 l-blind 即此形态；`consume` 缺省/`null` 一律不判）。`deps` 缺省与 `[]` 视为等价（无上游）。
-export function laneHasEmptyDeps(batch, lane) {
+function laneHasEmptyDeps(batch, lane) {
   const t = findTask(batch, lane);
   if (!t) return false; // 未登记 wavePlan ⇒ 不判（零静默：以 unverified 记账，不猜——BR-1 的关键反例）
   const consumeExplicitlyEmpty = Array.isArray(t.consume) && t.consume.length === 0;
@@ -446,7 +446,7 @@ export function laneHasEmptyDeps(batch, lane) {
   return batchLaneCount(batch) === 1;
 }
 // 批内 lane 数（wavePlan[].tasks 全量计数）；无 wavePlan ⇒ 0（无法判定）
-export function batchLaneCount(batch) {
+function batchLaneCount(batch) {
   const waves = batch?.wavePlan;
   if (!Array.isArray(waves)) return 0;
   let n = 0;
@@ -454,7 +454,7 @@ export function batchLaneCount(batch) {
   return n;
 }
 // 批内是否存在任何依赖边（wavePlan[].tasks[].deps 非空即为真）；无 wavePlan ⇒ 保守判 true（不判盲跑）
-export function batchHasDependencyEdges(batch) {
+function batchHasDependencyEdges(batch) {
   const waves = batch?.wavePlan;
   if (!Array.isArray(waves)) return true;
   let sawTask = false;
@@ -469,7 +469,7 @@ export function batchHasDependencyEdges(batch) {
 // BR-2 的「派发时刻可解析」证据 = 派发之后**首个观测**的既定事实（U-4）：
 //   观测时刻须**晚于**该 lane 当前 stint 起点（member.dispatch / settled→running），否则不构成「派发后」证据；
 //   观测结果与当前结果不一致（曾可解析 ∧ 现不可解析）⇒ BR-2 成立。
-export function upstreamMissingEvidenceOf(consumeObs, runningSinceTs, nowResolvable) {
+function upstreamMissingEvidenceOf(consumeObs, runningSinceTs, nowResolvable) {
   if (!consumeObs || runningSinceTs === null) return null;
   const { resolvedAtTs = null, neverResolvable = false, observedTs = null } = consumeObs;
   const afterDispatchTs = observedTs !== null && observedTs > runningSinceTs ? observedTs : null;
@@ -480,7 +480,7 @@ export function upstreamMissingEvidenceOf(consumeObs, runningSinceTs, nowResolva
   return { evidenceSource: resolvedAtTs > 0 ? 'dispatch-window-tick-observation' : 'dispatch-window-tick-first-observation', evidenceTs };
 }
 // 产出裁定（U-3 阶梯 ⑤ 的**档内**定序）：BR-2 > BR-1 > BR-3；未命中 → reason=null。
-export function blindRunVerdict({
+function blindRunVerdict({
   batch, lane, nowTs, durationMs, blindRunGraceMs = LONGRUN_DEFAULTS.blindRunGraceMs,
   exempt = null, progressTsMs = null, consumeObs = null, resolveConsume = null, exemptClearedAtMs = null,
 }) {

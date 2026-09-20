@@ -17,8 +17,6 @@ export type ContractMissingPayload = {
         problems: string[];
     };
 };
-/** 六判定位共用的载荷构造（gateKind 见 6 个调用点；source/degrade 逐点给出**引擎缺省来源**，可审计）。 */
-export declare function contractMissingPayload(gateKind: string, layer: string, source: string, degradeKind: string, degradeNote: string): ContractMissingPayload;
 export declare const TARGETS_CLAIMED_RE: RegExp;
 export declare function detectNeedHuman(artifactsDir: string, producePaths: string[]): {
     declared: boolean;
@@ -39,15 +37,6 @@ export declare function detectGate(artifactsDir: string, paths: string[]): {
     path: string | null;
     emptyCommand: string | null;
 };
-export declare const GATE_OFF_LINE_RE: RegExp;
-export declare function detectGateOff(artifactsDir: string, paths: string[]): {
-    declared: boolean;
-    path: null;
-} | {
-    declared: boolean;
-    path: string;
-};
-export declare const REASON_DECL_RE: RegExp;
 export interface ReasonTokenDecl {
     token: string;
     path: string;
@@ -72,12 +61,6 @@ export interface VocabularyView {
     version: number | null;
     source: string | null;
 }
-/** 词表只读视图（`gateStatusOfLane` 展示位 + 判据面自证；**零拒码、零判定**）。 */
-export declare function vocabularyViewOf(opts?: {
-    root?: string | null;
-}): VocabularyView;
-/** 解析产物内的 `reason: <token>` 声明行（保序；`token` 取 trim 后原文，空则不计入）。 */
-export declare function detectReasonTokens(artifactsDir: string, paths: string[]): ReasonTokenDecl[];
 /**
  * 词表判定（**单点**：`checkEntryGate` E1 与 `checkCommandGate` C3 同调本函数）：
  *   · 未登记 token ⇒ `ok:false` + `unknown[]` ⇒ 调用方拒 `GATE_TOKEN_UNKNOWN`（Q-3=B 的收紧面）；
@@ -90,33 +73,6 @@ export declare function detectReasonTokens(artifactsDir: string, paths: string[]
 export declare function reasonVocabularyVerdict(artifactsDir: string, paths: string[], opts?: {
     root?: string | null;
 }): ReasonVocabularyVerdict;
-/**
- * 词表判定的**放行侧载荷**（单点构造；entry 门 E1 与命令门 C3 同形）：
- *   `{}` = 零感知（无声明 / 全部在册）；`escapes[]` = 留痕面（`vocabulary-restated` 告警 /
- *   `vocabulary-unavailable` 降级）。
- * 形态选择（**刻意的**）：只走 `escapes[]` **多值通道**，**不**占用 `escape` 单值键 —— 调用点可能已自带
- *   专属 `escape`（如 `command-declared-off` / `standalone`），两态可同时成立（例：显式禁用 `gate:` +
- *   产物声明停用词条）⇒ 多值通道使两条留痕**各自可归因**、互不覆盖（写端 `store.js#gateEscapeEvents`
- *   同时消费 `escape` 与 `escapes[]`）。
- * 纪律：本函数**只产载荷**，不落盘、不改判定（落盘唯一在 store 写路径 ⇒ R-5「只读视图零事件」）。
- */
-export declare function reasonVocabularyNote(v: ReasonVocabularyVerdict): {
-    vocabCode: string;
-    escapes: {
-        kind: string;
-        reason: string;
-    }[];
-} | {
-    escapes: {
-        kind: string;
-        reason: string;
-    }[];
-    vocabCode?: undefined;
-} | {
-    vocabCode?: undefined;
-    escapes?: undefined;
-};
-export declare const EMPTY_REASON_RE: RegExp;
 export type PresenceMode = 'declare' | 'runtime';
 /** 空内容原因行留痕（`gate.escape{kind:'empty-artifact-noted'}` 的载荷）。 */
 export interface PresenceNote {
@@ -136,19 +92,6 @@ export interface PresenceVerdict {
 }
 /** 声明形态（R-1）：按**声明原文**判定（`/` 结尾 = 目录语义），不做尾斜杠规范化。 */
 export declare function declaredKindOf(declared: string): 'file' | 'dir';
-/** 原因行判定：**行首锚定 + 非空文本**（R-2；行中出现 / 前导空白 / 空文本 ⇒ 不命中）。 */
-export declare function emptyReasonOf(content: string): string | null;
-/** 判据章节**裸标题行**判定（S10 最低内容判据）：行首锚定 + 整行仅标题（编号变体/正文提及均不命中）。 */
-export declare function sectionLineHit(content: string, section: string): boolean;
-/**
- * 元素声明行判定（R1 §2.4 #3）：行首锚定 + 独立整行 `element: <id>`。
- *  与既有行族同构（`reason:` / `gate:` / `targets-claimed:` / `empty-reason:`）；不用 `content.includes(id)`
- *  是因为元素 id（如 `goal`）通常极短，`includes` 会把任意词命中 ⇒ 判据不可靠（假绿风险）。
- *  `id` 按**字面量**转义后匹配（与 `sectionLineHit` 同法，防正则元字符）。
- */
-export declare function elementLineHit(content: string, id: string): boolean;
-/** 路径归属判定（P8）：绝对路径产物必须在批次产物根内。 */
-export declare function isInsideRoot(absPath: string, rootDir: string): boolean;
 /**
  * presence 判据唯一实现（判据同源：建批期 `mode:'declare'` / 运行期 `mode:'runtime'`）。
  * `abs` / `content` 只对**单件声明**有效（多件声明由调用方逐件调用，或建批期只走静态面）。

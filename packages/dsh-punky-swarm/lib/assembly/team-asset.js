@@ -42,7 +42,7 @@ import { join } from 'node:path';
 
 // ── 常量：可拔插面的白名单（引擎基础语义，声明不得越界）──
 export const TEAM_ASSET_DIR = 'presets';
-export const TEAM_ASSET_FILENAMES = Object.freeze(['team-asset.json', 'team-asset.yml']);
+const TEAM_ASSET_FILENAMES = Object.freeze(['team-asset.json', 'team-asset.yml']);
 export const PRODUCE_LAYERS = Object.freeze(['plan', 'exec', 'audit']); // 有「产出存在性」语义的层
 export const FLOW_SECTIONS = Object.freeze([...PRODUCE_LAYERS]);
 // ↑ F-4（2026-09-15 用户裁决 Q-D=A，严控勿松）落点：原为 `Object.freeze([...PRODUCE_LAYERS, 'complete'])`，

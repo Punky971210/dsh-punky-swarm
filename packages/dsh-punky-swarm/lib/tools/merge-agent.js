@@ -34,16 +34,16 @@ import { runGit } from './git-utils.js';
 // R-01 发端收敛：worktree.merge.* 事件字面量改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
 
-export const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
-export const VERDICT_SUCCESS = 'SUCCESS';
-export const VERDICT_UNRESOLVED = 'CONFLICT_UNRESOLVED';
+const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
+const VERDICT_SUCCESS = 'SUCCESS';
+const VERDICT_UNRESOLVED = 'CONFLICT_UNRESOLVED';
 const RESOLVED = new Set([VERDICT_RESOLVED, VERDICT_SUCCESS]);
-export const NO_SPAWNER_HINT = 'mergeAgent configured but no spawner injected';
+const NO_SPAWNER_HINT = 'mergeAgent configured but no spawner injected';
 const DEFAULT_TIMEOUT_MS = 600_000;
 const UNMERGED_RE = /^(UU|AA|DD|AU|UA|DU|UD)\s/; // git status --porcelain 的冲突 XY 标记全集
 
 // HARD 规则（写入 request.instructions，约束 agent 防误合并）
-export const HARD_INSTRUCTIONS = [
+const HARD_INSTRUCTIONS = [
   'You are the merge agent for an in-flight git merge conflict in the orch worktree.',
   'HARD RULES:',
   '1. Do NOT re-run merge; the merge is already in progress in the orch worktree.',
@@ -53,19 +53,19 @@ export const HARD_INSTRUCTIONS = [
   '5. If you cannot resolve confidently, return CONFLICT_UNRESOLVED — never fabricate.',
 ].join('\n');
 
-export function buildMergeAgentRequest({ batchId, laneId, orchDir, conflictFiles, branch }) {
+function buildMergeAgentRequest({ batchId, laneId, orchDir, conflictFiles, branch }) {
   return { batchId, laneId, orchDir, conflictFiles, branch, instructions: HARD_INSTRUCTIONS };
 }
 
 // 三态判定（超时/异常/未知 verdict → UNRESOLVED，fail-closed）
-export function normalizeVerdict(v) {
+function normalizeVerdict(v) {
   if (RESOLVED.has(v) || v === VERDICT_UNRESOLVED) return v;
   return VERDICT_UNRESOLVED;
 }
 
 // 在途 merge 校验辅助：orch git status 无 U 冲突标记 且 无 MERGE_HEAD 残留（化解已 git commit 完成）；
 // git 不可查 → { ok:false, conflicted:true } fail-closed（无法证明化解 → 视同未化解）
-export function checkInFlightMerge(orchDir) {
+function checkInFlightMerge(orchDir) {
   const st = runGit(orchDir, ['status', '--porcelain']);
   if (!st.ok) return { ok: false, conflicted: true, error: st.stderr };
   const unmerged = st.stdout.split('\n').filter((l) => UNMERGED_RE.test(l));

@@ -25,7 +25,7 @@ import { canonicalizeArgs, stableHash } from './selector.js';
 import { SESSION_RE } from '../state/constants.js'; // 单点（原定义迁出）
 
 // 256KB 截断阈值（对齐 dsh-verification evidence-store 超限截断语义）
-export const MAX_BLOB_BYTES = 256 * 1024;
+const MAX_BLOB_BYTES = 256 * 1024;
 
 // 控制面工具名单：治理/协调/宿主控制面工具不产证据（结果非领域产出，含后续挂载的控制面工具）
 export const CONTROL_PLANE_TOOLS = new Set([
@@ -54,14 +54,14 @@ const KIND_BY_TOOL = {
   write: 'file_diff', edit: 'file_diff',
 };
 
-export function classifyEvidence(exec) {
+function classifyEvidence(exec) {
   if (!exec || typeof exec.name !== 'string' || !exec.name.length) return null;
   if (CONTROL_PLANE_TOOLS.has(exec.name)) return null;
   return KIND_BY_TOOL[exec.name] ?? null;
 }
 
 // 从 ToolExecutionResult 提取展示文本（content 块兼容 string/array/object；失败/空 → ''）
-export function extractResultText(result) {
+function extractResultText(result) {
   if (!result) return '';
   const c = result.content;
   if (typeof c === 'string') return c;
@@ -78,7 +78,7 @@ export function extractResultText(result) {
 }
 
 // 派生证据（纯函数）：控制面/未知工具 → null；其余 → 结构化证据（含 selectorKey 供审计侧全等匹配）
-export function deriveEvidence(exec, result) {
+function deriveEvidence(exec, result) {
   const kind = classifyEvidence(exec);
   if (!kind) return null;
   const args = exec && exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {};
@@ -101,7 +101,7 @@ function blobDirOf(root) { return path.join(root, 'verify', 'blobs'); }
 function blobPathOf(root, key) { return path.join(blobDirOf(root), key + '.json'); }
 
 // 内容哈希：只对证据的规范字段求值（不含 blobKey 元数据），读校验与写校验共用同一函数
-export function evidenceKey(evidence) {
+function evidenceKey(evidence) {
   return stableHash({
     kind: evidence.kind,
     tool: evidence.tool,

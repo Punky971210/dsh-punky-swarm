@@ -59,12 +59,6 @@ export declare const RESUME_CLAUSE = "\u82E5\u672C lane \u5B58\u5728 checkpoint\
 export declare function resumeClauseFor(task: WavePlanTask | null): string | null;
 /** 任务声明面并集（`produce ∪ outputs`，**保留声明原文**，去重保序）。 */
 export declare function declaredArtifactsOf(t: WaveTask): string[];
-/**
- * A1 悬空产物（plan 层）：被声明的 plan 产物**无任何 lane 的 `consume` 引用**（纯读声明面，不读文件正文）。
- * 有意不对称（`design §11.A`）：exec / audit 层产物悬空**不在此列**（exec 产物可能本就是终端交付物）；
- * 它们由运行期 `gateStrength.orphanProducts` 强告警可见（不拒）。
- */
-export declare function orphanPlanProductsOf(tasks: WaveTask[]): string[];
 export declare function assembleCmd(role: string | null, skills: string[] | null | undefined, cmd: string): string;
 export declare const HANDOFF_GATE_ENV = "PSWARM_HANDOFF_GATE";
 export type HandoffGateStage = 'entry' | 'settle';
@@ -80,10 +74,6 @@ export interface HandoffGateState {
 export declare function handoffGateStateOf(liveConfig: unknown, env?: Record<string, string | undefined>): HandoffGateState;
 /** 单段判定（薄封装；三处消费点用这个）。 */
 export declare function handoffGateEnabledOf(liveConfig: unknown, stage?: HandoffGateStage, env?: Record<string, string | undefined>): boolean;
-export declare function checkHandoffDeclarations(tasks: WaveTask[], opts?: {
-    smoke?: boolean;
-    handoffGate?: boolean;
-}): void;
 /**
  * 判据（规格 `plan/debt-spec.md` §2.1 方案 R，**只读、零副作用**）：对每条 `layer === 'audit'` 的 task，
  * 取其 `deps` 中每条 `layer === 'exec'` 的入边 `E`（= 本 audit lane **认领**了一条 exec lane），

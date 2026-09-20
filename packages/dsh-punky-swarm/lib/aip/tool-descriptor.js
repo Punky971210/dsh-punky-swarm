@@ -41,7 +41,7 @@ export function toToolId(name) {
 //   {type:'object', properties, required}（required 提升为顶层数组，与国标 inputParam 同构）——
 //   已归一化则原样透传（「原样透传」语义），扁平形态兜底展开（防御 defineTool 版本差异）。
 //   国标要求 required 恒存在（全可选参数时补空数组）。
-export function toInputParam(parameters = {}) {
+function toInputParam(parameters = {}) {
   if (parameters && typeof parameters === 'object' && 'type' in parameters) {
     const clone = structuredClone(parameters);
     if (!('required' in clone)) clone.required = [];
@@ -58,7 +58,7 @@ export function toInputParam(parameters = {}) {
 }
 
 // outputParam：既有 output.schema 已是 JSON Schema 顶层结构，原样透传（深拷贝防共享引用漂移）
-export function toOutputParam(output) {
+function toOutputParam(output) {
   return output?.schema ? structuredClone(output.schema) : { type: 'object', properties: {} };
 }
 

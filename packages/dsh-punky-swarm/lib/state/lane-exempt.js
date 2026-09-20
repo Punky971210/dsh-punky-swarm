@@ -44,8 +44,8 @@ export const LANE_EXEMPT_TIERS = {
 export const DEFAULT_THRESHOLD_MULTIPLIER = 1;
 
 // 显式倍率合法区间（闭区间；< 1 会收紧阈值，与「豁免」语义相反 → 拒）
-export const EXEMPT_MULTIPLIER_MIN = 1;
-export const EXEMPT_MULTIPLIER_MAX = 100;
+const EXEMPT_MULTIPLIER_MIN = 1;
+const EXEMPT_MULTIPLIER_MAX = 100;
 
 // 4 个豁免门禁错误码（裸字面量 throw，形态同既有 `invalid member transition`——
 //   不进 lib/state/gates.ts（那是门禁工厂）、不新增事件类型：它们是「参数面非法」，

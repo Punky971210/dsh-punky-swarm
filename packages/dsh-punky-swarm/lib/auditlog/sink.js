@@ -51,13 +51,13 @@ export const MAX_LINE_BYTES = 32768;
 /** L8 ① args 段单值裁剪阈值（字符） */
 export const MAX_LONG_ARG_CHARS = 512;
 /** 连续失败 N 次 → 断路 */
-export const BREAKER_THRESHOLD = 3;
+const BREAKER_THRESHOLD = 3;
 /** 断路后每 N 次尝试放行 1 次探活 */
-export const BREAKER_PROBE_INTERVAL = 1000;
+const BREAKER_PROBE_INTERVAL = 1000;
 /** `kind:"sink-error"` 记录上限 */
-export const MAX_SINK_ERROR_RECORDS = 3;
+const MAX_SINK_ERROR_RECORDS = 3;
 /** 诊断面 lastError 截断长度 */
-export const MAX_ERROR_CHARS = 500;
+const MAX_ERROR_CHARS = 500;
 
 /** 聚合窗口默认长度（滑动；模块内常量，非配置键——README 只声明语义与开关，不暴露可配性） */
 export const AGGREGATE_WINDOW_MS = 60000;

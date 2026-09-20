@@ -491,7 +491,7 @@ export function declaredArtifactsOf(t: WaveTask): string[] {
  * 有意不对称（`design §11.A`）：exec / audit 层产物悬空**不在此列**（exec 产物可能本就是终端交付物）；
  * 它们由运行期 `gateStrength.orphanProducts` 强告警可见（不拒）。
  */
-export function orphanPlanProductsOf(tasks: WaveTask[]): string[] {
+function orphanPlanProductsOf(tasks: WaveTask[]): string[] {
   const consumed = new Set<string>();
   for (const t of tasks) {
     for (const c of (t.consume ?? []) as string[]) if (typeof c === 'string') consumed.add(c);
@@ -697,7 +697,7 @@ export function handoffGateEnabledOf(
 //   159 例回归）。「未交接」的拒态属**运行期** entry 门（`GATE_HANDOFF_MISSING`），不属建批期。
 // 注：`deps` 指向**不存在的 id** 由 `topoWaves` 报（`depends on unknown id`），本函数不抢答其语义。
 // `smoke:true`（冒烟/探针批，gate-lite Q-G1）⇒ 与产物契约类门同键豁免。
-export function checkHandoffDeclarations(tasks: WaveTask[], opts: { smoke?: boolean; handoffGate?: boolean } = {}): void {
+function checkHandoffDeclarations(tasks: WaveTask[], opts: { smoke?: boolean; handoffGate?: boolean } = {}): void {
   if (opts.smoke === true) return;
   // 策略值由**调用方**解析后传入（工具面持 liveConfig ⇒ 传 `handoffGateEnabledOf(readLiveConfig(deps),'entry')`）；
   //   缺省（直调 `buildWavePlan` / 单测）走**缺省配置**的兜底解析（env → 缺省关）—— 单一解析点不变。

@@ -37,7 +37,7 @@ function worse(a, b) {
 //   mode:       'advisory'（默认，只记录不拦截）| 'enforce'（拦截，status!==done 时 intercepted=true）
 // 裁决规则：缺绑定 → failed「Missing evidence for AC x」；绑定但证据不满足 → failed+detail；
 //   损坏/截断 blob（读校验 fail closed）→ blocked（需人工）；证据为工具错误 → failed；至少一条成功证据 → done。
-export function evaluateGate({ acBindings = [], evidence = null, mode = 'advisory' }) {
+function evaluateGate({ acBindings = [], evidence = null, mode = 'advisory' }) {
   if (!Array.isArray(acBindings)) throw new Error('evaluateGate: acBindings must be an array');
   if (mode !== 'advisory' && mode !== 'enforce') throw new Error('evaluateGate: mode must be advisory|enforce');
   if (typeof evidence?.bindingsFor !== 'function' || typeof evidence?.readBlob !== 'function') {

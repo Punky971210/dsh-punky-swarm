@@ -62,7 +62,7 @@ const PRESET_OF_RULE_PREFIX = [
   ['L3-', 'l3-tool-ban'],
 ];
 
-export function presetOfRuleId(id) {
+function presetOfRuleId(id) {
   if (typeof id !== 'string' || id.length === 0) return null;
   for (const [prefix, presetId] of PRESET_OF_RULE_PREFIX) {
     if (id.startsWith(prefix)) return presetId;
@@ -71,7 +71,7 @@ export function presetOfRuleId(id) {
 }
 
 // 命中规则引用文本：ruleRefs 逐条格式化为「id（preset <presetId>）」（无 preset 归属 → 仅 id）；空/非数组 → ''。
-export function ruleRefsText(ruleRefs) {
+function ruleRefsText(ruleRefs) {
   if (!Array.isArray(ruleRefs) || ruleRefs.length === 0) return '';
   return ruleRefs
     .map((id) => {
@@ -119,7 +119,7 @@ function buildDenialCorrectionText(pending) {
 // 规则引用（决策正文尾部追加）：ruleRefs 非空时尾部追加命中规则（含 preset 归属）——DENY 短路径与 ask.reason 均携带，
 //   审批 UI（若渲染 reason）与降级拒绝文本可见命中规则，用户/Agent 可当场审阅；无规则引用场景
 //   （状态门 gate 决策 ruleRefs=[] 等）不追加（文本零变化）。
-export function formatDecision(d) {
+function formatDecision(d) {
   let reason = `[governance:${d.primitive}] ${d.reason}`;
   if (d.primitive === 'NARROW' || (d.primitive === 'DENY' && d.narrowedParams !== undefined)) {
     reason += '；参数修正指引：宿主禁止输入改写，请按收窄指引修正参数后重新发起调用';

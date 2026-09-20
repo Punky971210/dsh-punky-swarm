@@ -33,7 +33,7 @@ import { randomBytes } from 'node:crypto';
 export const LANE_HANDLE_TTL_MS = 30 * 60 * 1000;
 
 /** 任务包内携带形态（行内标记，可出现在任意文本字段；推荐**首行**）。 */
-export const LANE_HANDLE_RE = /\[swarm-lane:([^/\][]+)\/([^#\]]+)#([0-9a-f]{16})\]/;
+const LANE_HANDLE_RE = /\[swarm-lane:([^/\][]+)\/([^#\]]+)#([0-9a-f]{16})\]/;
 
 /** token -> { batchId, lane, sessionId, at, used }（进程内单例）。 */
 const handles = new Map();

@@ -69,7 +69,7 @@ const DEGRADE_PAYLOAD_KEYS = ['kind', 'declaredField', 'effective', 'layers', 'l
 
 // fail-closed 事件类型解析：常量必须是**非空字符串**才允许写盘（单一守卫，供 gate.escape / gate.degrade 共用）。
 // 抛出即停手（调用点不落盘）——「缺常量 ⇒ 明确错误」优先于「写一条无名事件」。
-export function requireEventType(evt, name) {
+function requireEventType(evt, name) {
   const t = evt ? evt[name] : undefined;
   if (typeof t !== 'string' || t.length === 0) {
     throw new Error(GATE_EVENT_CONST_MISSING + ': event type constant "' + name
@@ -99,7 +99,7 @@ export function gateEscapeEvents(res, lane) {
     .filter((e) => e && typeof e === 'object' && typeof e.kind === 'string' && e.kind.length > 0)
     .map((e) => ({ payload: { ...pickPayload(ESCAPE_PAYLOAD_KEYS, e), lane: e.lane ?? lane } }));
 }
-export function gateDegradeEvents(res, lane) {
+function gateDegradeEvents(res, lane) {
   if (!res || !Array.isArray(res.degrades)) return [];
   return res.degrades
     .filter((d) => d && typeof d === 'object' && typeof d.kind === 'string' && d.kind.length > 0)
@@ -117,7 +117,7 @@ export function gateDegradeEvents(res, lane) {
 //   ④ **只由写路径调用**：本函数只**计算**、不落盘 ⇒ 落盘唯一在 store 写端（`setMember` / `setPhase`），
 //      **只读视图（`gate_status` 等）不经本路径**（R-5 硬边界；本函数被只读调用也不产生任何写效果）；
 //   ⑤ 载荷键**白名单搬运**：`type` 是 `newEvent` 的事件名槽位，载荷**不得**占用（同 escape/degrade 纪律）。
-export const CONTRACT_MISSING_PAYLOAD_KEYS = ['cause', 'gateKind', 'layer', 'lane', 'declared', 'source', 'degrade', 'problems'];
+const CONTRACT_MISSING_PAYLOAD_KEYS = ['cause', 'gateKind', 'layer', 'lane', 'declared', 'source', 'degrade', 'problems'];
 export function contractMissingEvents(batch, res, lane) {
   const cm = res && typeof res === 'object' ? res.contractMissing : null;
   if (!cm || typeof cm !== 'object') return [];
@@ -146,7 +146,7 @@ export function contractMissingEvents(batch, res, lane) {
 // 事件类型解析（**注入式**，默认取单点常量表 `lib/state/event-types.js`）：
 //   写端在**每次落盘前**解析常量 ⇒ 缺位即抛（fail-closed）。`evt` 参数为生产零改动前提下的
 //   可注入缝（缺省 = EVT namespace import，逐字同源）、供探针以「人为缺常量」实测守卫行为。
-export function resolveGateEventTypes(evt = EVT) {
+function resolveGateEventTypes(evt = EVT) {
   return {
     escape: requireEventType(evt, 'EVT_GATE_ESCAPE'),
     degrade: requireEventType(evt, 'EVT_GATE_DEGRADE'),

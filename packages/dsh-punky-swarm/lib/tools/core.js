@@ -153,7 +153,7 @@ export function assertModeActive(deps, exec, where) {
 // 清 pendingBatch（wave_plan 建批 / 批次 complete|aborted 后调用；无治理状态时不创建文件）
 // session-compat：本会话曾把评估镜像到执行会话（mirroredTo）时，解锁同步传播到镜像会话，
 // 避免 C@命名会话建批后，执行会话 guard 残留「先建批」幻觉锁
-export function clearPendingBatch(store, sessionId) {
+function clearPendingBatch(store, sessionId) {
   const g = store.readGovernance(sessionId);
   const mirroredTo = g.mirroredTo ?? null;
   if (g.pendingBatch || g.pendingSince || g.lastAssign || mirroredTo) {
@@ -295,7 +295,7 @@ export function assertTeamsRootLexical(team, teamsRoot) {
 }
 
 // ② 资产加载期校验（显式 teamsRoot 时）：缺失 → 新码；存在但非法 → 原样透出 TEAM_ASSET_* 码；不回落
-export function assertTeamsRootAsset(root, team) {
+function assertTeamsRootAsset(root, team) {
   const dir = join(root, TEAM_ASSET_DIR, team);
   const r = loadTeamAsset(root, team);
   if (!r.ok) {
@@ -334,7 +334,7 @@ export function resolveTeamsRootOption(team, teamsRoot) {
 //   `presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/` …），**不是团队资产**——
 //   故 `team:'punky-preset'` 属「无资产 ⇒ 拒」（本机实测该目录无 `team-asset.yml`），拒态文案必须点明此区别。
 // 作用域：只保证**工具面**（本工具）。直调 `buildWavePlan` 不走同一门 = **已登记差异 W-2**，P1 **不消**（超范围）。
-export const RETIRED_TEAM_NAME = 'generic'; // 已废除的旧缺省团队名（P1 前读端兜底值；现建批面显式拒）
+const RETIRED_TEAM_NAME = 'generic'; // 已废除的旧缺省团队名（P1 前读端兜底值；现建批面显式拒）
 
 /** 宿主技能根：`USERPROFILE || HOME` + `.agents/skills`（与建批期 `GATE_SKILL_MISSING` 判定**同源**，不新增 env）。 */
 export function hostSkillsRoot() {
@@ -349,7 +349,7 @@ export function hostSkillsRoot() {
  * 本函数是「技能可解析面」的**单一实现**：构造期 skills 门与 `GATE_SKILL_MISSING` 告警共用，禁各写一套。
  * @returns {{ ok: boolean, reason: string|null, root: string|null, known: Set<string> }}
  */
-export function resolvableSkillNames() {
+function resolvableSkillNames() {
   const skillsRoot = hostSkillsRoot();
   if (!skillsRoot || !existsSync(skillsRoot)) {
     return { ok: false, reason: 'skills-root-missing', root: skillsRoot, known: new Set() };
@@ -374,7 +374,7 @@ export function resolvableSkillNames() {
 }
 
 /** 资产声明的全部技能名（各层 × 各 role，去重）；**按资产面**判可解析（`config.assembly` 覆盖层不属资产）。 */
-export function declaredSkillNamesOf(asset) {
+function declaredSkillNamesOf(asset) {
   const out = new Set();
   const layers = asset && typeof asset === 'object' && asset.layers && typeof asset.layers === 'object' ? asset.layers : {};
   for (const def of Object.values(layers)) {
@@ -392,7 +392,7 @@ export function declaredSkillNamesOf(asset) {
  * 判据自真源：`presets/<team>/team-asset.{json,yml}`（`teamAssetCandidates` 同源，通配写作 `presets/<any-team>/`），不硬编码清单（防漂移）。
  * 可测性（Leader 口径）：枚举结果**必然 ⊆** 实际存在 `team-asset.*` 的 `presets/*` 目录。
  */
-export function packagedTeamsWithAsset(root = packageRoot()) {
+function packagedTeamsWithAsset(root = packageRoot()) {
   try {
     const dir = join(root, TEAM_ASSET_DIR);
     if (!existsSync(dir)) return [];

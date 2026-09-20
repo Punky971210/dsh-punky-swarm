@@ -47,7 +47,7 @@ export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
  * 第二绑定键（B3，学 agent-teams 的 label 做法）：可从**子会话事件/描述**反解析 (batchId, lane)，
  * 不依赖引擎内存，重启后仍可核。
  */
-export const LABEL_PREFIX = 'punky-swarm:';
+const LABEL_PREFIX = 'punky-swarm:';
 export function labelOf(batchId, lane) {
   return LABEL_PREFIX + String(batchId) + ':' + String(lane);
 }

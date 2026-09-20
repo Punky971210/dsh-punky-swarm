@@ -23,7 +23,7 @@ export function chainsDefaults() {
     return { chains: {}, order: [] };
 }
 // laneProgress 形态校验（批次级 plain object，值级校验由 resume.js isValidLaneProgress 承担）
-export function isLaneProgress(v) {
+function isLaneProgress(v) {
     return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 // lane.condition 缺省（null = 恒满足）；建批无 condition 声明时落此缺省

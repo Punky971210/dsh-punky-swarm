@@ -126,7 +126,7 @@ export function ratchetHotGuard({ next, lastJson, loadRulesFn = loadRules }) {
 
 // capabilities 子键白名单（注册表 path[0]==='capabilities' 的既有键）——
 // 拒绝 capabilities.<未知> 幽灵配置（discovery/verify/watch/worktree/budget/trajectory/logs/topic）
-export const ALLOWED_CAPS_KEYS = new Set(
+const ALLOWED_CAPS_KEYS = new Set(
   CAPABILITY_REGISTRY.filter((e) => e.path[0] === 'capabilities').map((e) => e.path[1]),
 );
 

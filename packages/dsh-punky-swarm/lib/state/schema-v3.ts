@@ -52,7 +52,7 @@ export function chainsDefaults() {
 }
 
 // laneProgress 形态校验（批次级 plain object，值级校验由 resume.js isValidLaneProgress 承担）
-export function isLaneProgress(v: unknown): v is LaneProgressMap {
+function isLaneProgress(v: unknown): v is LaneProgressMap {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 

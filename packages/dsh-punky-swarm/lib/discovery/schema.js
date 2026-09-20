@@ -25,16 +25,16 @@ export const QUERY_TYPE_EXPLICIT = 'explicit';
 
 // ── 转发限制（FORWARD_*，与 acps_sdk/adp/constants.py 一致）──
 export const FORWARD_DEPTH_LIMIT_DEFAULT = 3;   // 服务器默认
-export const FORWARD_DEPTH_LIMIT_MIN = 1;
-export const FORWARD_DEPTH_LIMIT_MAX = 5;       // 绝对上限
+const FORWARD_DEPTH_LIMIT_MIN = 1;
+const FORWARD_DEPTH_LIMIT_MAX = 5;       // 绝对上限
 export const FORWARD_FANOUT_LIMIT_DEFAULT = 1;  // 未提供时默认不允许并发转发
-export const FORWARD_FANOUT_LIMIT_MIN = 1;
-export const FORWARD_FANOUT_LIMIT_MAX = 5;
+const FORWARD_FANOUT_LIMIT_MIN = 1;
+const FORWARD_FANOUT_LIMIT_MAX = 5;
 export const FORWARD_EACH_TIMEOUT_MS_DEFAULT = 10_000;
 export const FORWARD_TOTAL_TIMEOUT_MS_DEFAULT = 60_000;
 
 // ── 查询结果限制（服务器默认 5，上限 50，同 discovery-server/schema.py）──
-export const DISCOVERY_LIMIT_DEFAULT = 5;
+const DISCOVERY_LIMIT_DEFAULT = 5;
 export const DISCOVERY_LIMIT_MAX = 50;
 
 // ── 过滤运算符全集（FilterOperator，06-ACPs-spec-ADP §4.2.1 逐字 34 个）──
