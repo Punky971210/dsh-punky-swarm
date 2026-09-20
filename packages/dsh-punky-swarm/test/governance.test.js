@@ -574,10 +574,31 @@ test('assign_check: 无默认档——缺 difficulty / 缺判据 / 判据过短�
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
-  await assert.rejects(() => by.assign_check.execute({ rationale: '测试：仅给判据不给难度值' }, {}), /difficulty/);
-  await assert.rejects(() => by.assign_check.execute({ difficulty: 'A' }, {}), /rationale/);
-  await assert.rejects(() => by.assign_check.execute({ difficulty: 'A', rationale: '太短' }, {}), /rationale/);
-  await assert.rejects(() => by.assign_check.execute({ difficulty: 'C+', rationale: '测试：C+ 档已撤销，不应被接受' }, {}), /difficulty/);
+  // 【R3-2 实测 · 判据分层】本用例原断言为 `/difficulty/` · `/rationale/`（只锁**分支词**，不锁**码**）。
+  //   收紧时实测发现更强的结论——**拒态来自哪一层**：
+  //     · 缺 `difficulty` / `difficulty:'C+'` / 缺 `rationale`  ⇒ 由**声明面**（DSH 工具参数校验）拦下，
+  //       `ToolArgsError: missing required property "difficulty"` / `must be one of ["A","B","C"]`
+  //       —— 因为 `assign_check` 的 `parameters` 已声明 `difficulty:{required:true,enum:['A','B','C']}`
+  //       与 `rationale:{required:true}`（`lib/tools/core.js:1002`）；
+  //     · `rationale:'太短'` ⇒ schema 只声明 `type:string`（无 `minLength`）⇒ 放行到**引擎门**，
+  //       抛 `GATE_DIFFICULTY_RATIONALE_MISSING`（`lib/tools/core.js:1027`）。
+  //   ⇒ 结论：**`GATE_DIFFICULTY_INVALID`（`core.js:1021`）在工具面不可达**（两条分支均被声明面遮蔽，
+  //     覆盖其全部调用形态）；`GATE_DIFFICULTY_RATIONALE_MISSING` **部分可达**（仅"值过短"分支）。
+  //     判读与建议已登记 `docs/gate-assertion-blueprint-2026-09-21.md` §6（本波零 lib 改动：只登记不修）。
+  //   下面按**实际拒态层**如实断言；对遮蔽分支加**绊线**——遮蔽一旦解除（schema 放松），断言即转红，
+  //   提示把判据改回引擎码并同步 §6 判读。
+  const shadowed = (code) => (e) => {
+    const msg = String(e?.message ?? e);
+    assert.equal(new RegExp(code).test(msg), false,
+      '绊线：' + code + ' 本应在声明面被遮蔽（若转红 ⇒ 遮蔽已解除，须改判并同步蓝图 §6）：' + msg);
+    assert.match(msg, /invalid arguments/, '声明面拒态须仍是参数校验错误：' + msg);
+    return true;
+  };
+  await assert.rejects(() => by.assign_check.execute({ rationale: '测试：仅给判据不给难度值' }, {}), shadowed('GATE_DIFFICULTY_INVALID'));
+  await assert.rejects(() => by.assign_check.execute({ difficulty: 'A' }, {}), shadowed('GATE_DIFFICULTY_RATIONALE_MISSING'));
+  await assert.rejects(() => by.assign_check.execute({ difficulty: 'C+', rationale: '测试：C+ 档已撤销，不应被接受' }, {}), shadowed('GATE_DIFFICULTY_INVALID'));
+  // 唯一可达分支：值过短（schema 无 minLength）⇒ 必达引擎门，锁**全码**（机器可读契约）
+  await assert.rejects(() => by.assign_check.execute({ difficulty: 'A', rationale: '太短' }, {}), /GATE_DIFFICULTY_RATIONALE_MISSING/);
   assert.equal(st.readGovernance('cli').lastAssign, null); // 拒收路径零写入
 });
 

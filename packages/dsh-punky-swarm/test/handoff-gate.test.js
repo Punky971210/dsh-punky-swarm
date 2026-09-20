@@ -337,6 +337,12 @@ test('P1-H6 存量批：无 batch.handoffs 字段 ⇒ 未交接门放行 + lane.
     assert.equal(d.lanes?.e1 ?? h.store.readBatch(SESSION, 'h6').lanes.e1, 'running', '存量批不因新门被全拒（不砸存量）');
     const legacyGap = eventsOf(h.store, 'h6').filter((e) => e.type === EVT.EVT_LANE_HANDOFF_GAP && e.legacy === true);
     assert.ok(legacyGap.length >= 1, '须留痕告警（不静默）');
+    // 【R3-2 收紧】原断言只用 `legacy === true` 作判别符 —— 它是**入口/出口两侧共有**的标记，
+    //   锁不住「本条是入口侧」。补断言载荷 `code`（`GateErrorCode` 成员，机器可读契约）
+    //   ⇒ 出口侧同族码 `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` 另由
+    //   `test/gate-assertion-r32.test.js` 的专用用例覆盖。
+    assert.equal(legacyGap[0].code, 'GATE_HANDOFF_LEGACY_PASSTHROUGH',
+      '须点名**入口侧**存量批放行码（可审计归因）：' + JSON.stringify(legacyGap[0]));
     // 交接载体不存在 ⇒ 登记明确拒（不静默、不凭空给存量批开新门）。
     //   注：产物**先落盘**——否则会先命中「产物不在场」判据（那是对新建批的正当拒态，但盖住本用例的被检面）。
     seedArtifact(h, 'h6', 'exec/e1.md');

@@ -43,7 +43,7 @@
 | `GATE_ARTIFACT_MISSING` | 哨兵 | `GATE_EXIT_MISSING_<LAYER>`（出口门重写） | **12 处 / 3 套件**（v3 台账实测：`GATE_EXIT_MISSING_AUDIT` 3 · `GATE_EXIT_MISSING_EXEC` 9） | **假缺口**（映射一旦失效，这 12 处会看到裸哨兵而转红） |
 | `GATE_COMPLETE_NO_AUDIT` | 收口主门 | 同名 | **零命中** | **真缺口** ⇒ R3-1 |
 | `GATE_COMPLETE_EXEC_PENDING` | 收口主门 | 同名 | **零命中** | **真缺口** ⇒ R3-1 |
-| 其余 8 枚（`GATE_NO_DECLARATION` / `GATE_EXEC_INPUT_MISSING` / `GATE_DIFFICULTY_*` / `GATE_EVENT_CONST_MISSING` / `GATE_HANDOFF_*_LEGACY_PASSTHROUGH` / `GATE_SKILL_MISSING`） | 判据/建批/工具/fail-closed/留痕 | 待逐枚核 | 待核 | R3-2（下波逐枚判读） |
+| 其余 8 枚 | 判据/建批/工具/fail-closed/留痕 | **逐枚核完 ⇒ 见 §6 判读表**（4 真缺口已补测 · 2 假缺口已收紧 · 2 不可达已登记） | 见 §6 | **R3-2 已落地** |
 
 **顺带勘误**：冻结登记 §3 的「P0 三枚」应更正为 **P0 两枚**。第三枚 `GATE_ARTIFACT_MISSING` 的行为面已被 12 处断言覆盖（v3 台账口径），不属缺口。
 
@@ -82,6 +82,25 @@
 - **`GATE_COMPLETE_NO_TIER`** —— 已有 8+ 处断言（`gates.test.js:264,276` 等）。
 - **白盒直调 `checkCompleteGate`** —— 本波要治的正是「白盒绿 ≠ 生产路径走过」。
 
+### 3.5 R3-2 施工单（同波第二段）
+
+| 动作 | 文件 | 内容 |
+|---|---|---|
+| **新增** | `test/gate-assertion-r32.test.js` | 8 tests：E-A ×2（拒 + 对照）· E-B ×1 · `GATE_SKILL_MISSING` ×2（留痕 + 防误报）· 出口侧 legacy ×1 · `GATE_EVENT_CONST_MISSING` 围栏 ×2 |
+| **收紧** | `test/governance.test.js:572` 用例 | 4 条 `assert.rejects` 按**实际拒态层**如实断言 + 绊线（原为 `/difficulty/` · `/rationale/` 分支词） |
+| **收紧** | `test/handoff-gate.test.js:338` | 补断言载荷 `code === 'GATE_HANDOFF_LEGACY_PASSTHROUGH'` |
+| **文档** | 本文件 §2 / §6 | 8 枚判读表 + 归属失实发现 + 后续施工单 |
+| **同步** | `baselines/test-baseline.json` | 生成物同批重生成（`--reason`） |
+
+**R3-2 判据**：`node scripts/audit/gates.mjs` 的「无断言拒码：有生产引用但测试零命中」由 **9 → 2**（实测）。
+留下的 2 枚 = §6 判读表的 #7 `GATE_NO_DECLARATION` 与 §2 的 `GATE_ARTIFACT_MISSING`，**均为「不可达内部分支 / 哨兵」** ——
+它们**按设计留在榜上**（外显形态已由别的层断言覆盖），本案**刻意不补重复用例**（§1.5）。
+
+> ⚠ **口径自知**：`testHits` 是「该码在 `test/` 内（去注释后）出现的次数」，是**覆盖代理量**、**不是**断言强度的证明 ——
+> 一条测试**名字**里写码也算命中。故本波对 4 枚真缺口**不依赖该代理量**：每枚都另有针对**真实抛/落载荷**的正则或 `code` 相等断言
+> （`gate-assertion-r32.test.js` 内逐枚可核）；对 2 枚不可达项则**明确不补**。此自知延续 R3-1「乐观方向污染」的教训 ——
+> **代理量涨了 ≠ 覆盖面涨了**。
+
 ---
 
 ## 4. 验收判据
@@ -103,14 +122,43 @@
 | A1 的"改 `wavePlan`"被误读为"测试在造非法状态" | 低 | 用例注释写明：这是门禁**自述**的威胁模型（`wave-plan.ts:465` 逐字「A1 双点：主防线 = 建批期，二级防线 = 运行期 `checkCompleteGate`」） |
 | 误把补测当成"解冻" | 低 | 蓝图 §0 + commit message 双写「纯增量、零解冻」 |
 
-**回滚**：`git revert <R3-1 commit>` 即可（单文件 + 一个生成物，无生产代码依赖）。
+**回滚**：R3-1 = `git revert fda041a`；R3-2 = 按其 commit 单独 revert（两段各自独立：R3-1 只碰新建测试 + 生成物，R3-2 只碰 3 个既有/新增测试 + 文档 + 生成物；**均无生产代码依赖**）。
 
 ---
 
-## 6. 后续（R3-2 及以后）
+## 6. R3-2 判读表（其余 8 枚逐枚）与处置
 
-- **R3-2**：其余 8 枚逐枚判读「真缺口 / 假缺口（外显形态已覆盖）」，真缺口补测，假缺口登记判据与**覆盖它的既有断言行号**。
+判据（本波定稿，逐条可判；④ 是 ③ 的一个子类，单列因为处置不同）：
+
+1. **真缺口** = 无任何测试驱动**产出该码的生产路径**并断言**可判别观测量** ⇒ **补测**（走工具/门禁面真实调用）。
+2. **假缺口·断言松动** = 路径已驱动，但断言只锁「分支词 / 共有标记」、锁不住**码** ⇒ **收紧既有断言**（纯增量）。
+3. **真缺口·不可达** = 生产路径上的**防御性分支**，其承载的不变量由**另一层的外显形态**承担（该形态已有断言） ⇒ **只登记 + 写绊线**，不写重复用例（§1.5「不留凑数用例」）。
+4. **真缺口·不可达（声明面遮蔽）** = 实现面判据被**声明面判据**完全前置遮蔽（同层更严）⇒ **登记 + 证据 + 建议**；本波**零 lib 改动**，只动测试与文档。
+
+| # | 码 | 落点 | 判读 | 证据（生产行 · 测试行） | 处置 |
+|---|---|---|---|---|---|
+| 1 | `GATE_EXEC_INPUT_MISSING` | `lib/tools/core.js:739`（E-A 批级）· `:749`（E-B 逐 lane） | **真缺口** | 既有套件里 `consumes_required` **全指 audit 面**（→ `GATE_AUDIT_INPUT_MISSING`，`audit-contract-gate.test.js:127-137`）；exec 面只以「资产已声明且满足」的**通过态**被顺带走到，**拒态零断言** | **补测 ×3**：E-A 拒（+ 零批次落盘）· E-A 对照放行 · E-B 拒 |
+| 2 | `GATE_SKILL_MISSING` | `lib/tools/core.js:776`（`plan.warnings.push`） | **真缺口** | `test/` 零命中；且 `config.assembly` 在 `test/` **零注入** ⇒ 唯一可达路径（覆盖层声明）从未被驱动。可达性推理：无覆盖时 `resolveAssembly` 逐字返回资产 layers（`lib/assembly.js:57-59`），而资产面已由构造期硬门 `TEAM_ASSET_SKILLS_MISMATCH` 把关（`core.js:460-477`）⇒ 告警恒不触发 | **补测 ×2**：覆盖层不可解析 ⇒ 留痕且**不阻断建批** / 全可解析 ⇒ **零告警**（防误报） |
+| 3 | `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` | `lib/state/store.js:742` | **真缺口** | 入口侧同族码有 P1-H6 覆盖（`handoff-gate.test.js:326-356`）；**出口侧从未被驱动**（全仓 `LEGACY_PASSTHROUGH` 在 `test/` 零命中）。三条件须同时成立（`gates.ts:1676-1695`）：出口门开启 · lane 有下游 · `batch.handoffs` 缺位 | **补测 ×1**：存量批 + 出口门开启 ⇒ 放行 + 落码 + `legacy:true` |
+| 4 | `GATE_HANDOFF_LEGACY_PASSTHROUGH` | `lib/state/store.js:647` | **假缺口·断言松动** | 路径已驱动（P1-H6）；但只断言 `legacy === true` —— 该标记**入口/出口两侧共有**，锁不住「本条是入口侧」 | **收紧**：`handoff-gate.test.js:338` 补断言载荷 `code` |
+| 5 | `GATE_DIFFICULTY_INVALID` | `lib/tools/core.js:1021` | **真缺口·不可达（声明面遮蔽）** | 实测（Node 22.22.2）：`parameters` 已声明 `difficulty:{required:true,enum:['A','B','C']}`（`core.js:1002`）⇒ **缺字段**与**非法值**两条分支均被 DSH 工具参数校验前置拦下（`ToolArgsError: missing required property "difficulty"` / `must be one of ["A","B","C"]`）⇒ 引擎门拿不到球，**其全部调用形态均不可达** | **登记 + 绊线**：`governance.test.js:572` 用例改为断言「拒态来自声明面**且引擎码不出现**」，遮蔽一旦解除即转红并提示改判 |
+| 6 | `GATE_DIFFICULTY_RATIONALE_MISSING` | `lib/tools/core.js:1027` | **真缺口·部分可达** | 「值过短」分支**可达**（schema 只声明 `type:string`，无 `minLength`）⇒ 实测抛引擎码；「缺字段」分支被声明面遮蔽（`ToolArgsError: missing required property "rationale"`） | **收紧 + 登记**：可达分支锁**全码**；遮蔽分支走同一绊线 |
+| 7 | `GATE_NO_DECLARATION` | `lib/state/gates.js:390`（`presenceJudge` 内部 code） | **真缺口·不可达（内部分支）** | 三处调用点恒传 `declared:[p]`（长度 1：`wave-plan.ts:525` · `gates.js:680` · `gates.js:993`）；建批期空声明更早被 `GATE_PLAN_PRESENCE_MISSING` 拦下（`wave-plan.ts:519-522`）；运行期「零声明」由 `GATE_EXIT_NO_DECLARATION` 承担（`gates.ts:1079`）。**两个外显形态均已有断言**：`gate-lite-smoke.test.js:92`（建批期）· `gate-hardening-red.test.js:351,365,366,766,945`（运行期） | **只登记**（等价不变量的"零声明拒"已由外显形态覆盖 ⇒ 不写重复用例） |
+| 8 | `GATE_EVENT_CONST_MISSING` | `lib/state/store.js:75`（`requireEventType`，唯一守卫） | **真缺口·本波降级覆盖** | 设计**自述预留注入缝**（`store.js:146-148`：「供探针以『人为缺常量』实测守卫行为」），但 `resolveGateEventTypes` **未导出**，且已登记在 C1「未接线」清单（`docs/audit-2026-09-21-unwired.json`）⇒ 导出 = **解冻 C1 项**（本波禁止）。默认实参是 ESM 命名空间，**实测不可改**：`Object.isExtensible(ns) === false`，`delete ns.EVT_GATE_ESCAPE` ⇒ `TypeError: Cannot delete property 'EVT_GATE_ESCAPE' of [object Module]` | **围栏 ×2**（源码面 5 条 + 前置面），**如实标注「围栏 ≠ §6.5 的 E2E」**；真 E2E 做法见 §6.2 |
+
+### 6.1 本波最重要的发现：归属被**声明面**改写
+
+`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 的**归属已失实**：同一不变量被**两层**判据覆盖，而 `parameters`（声明面）比引擎门（实现面）**更严** ⇒ 实现面成死码。
+
+- **方向是 fail-closed**（拒得更早，不是更少）⇒ **不是安全洞**，优先级低。
+- 但 `assign_check` 的 `description` **逐字宣称**「不填即拒（`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING`）」⇒ **契约归属失实**：按码分类的消费者（审计按 `code` 归类、外部 catch 该码）**永远等不到**这两个码。
+- **建议（三选一，本波零 lib 改动只登记）**：① 删引擎死分支（当哨兵不算数，直接删）；② 改 `description` 的归属说法为「参数面拒 / 引擎面拒」分述；③ 放松 schema（去 `required`/`enum`）让引擎门接管，保住「码即契约」。
+- **可复用通则**：**判据分层时，更严的一层会把更宽的一层变成死码** —— 与 R3-1 的「乐观方向污染」互补：那条讲"把没覆盖看成覆盖"，这条讲"把不可达看成可达"（台账口径上二者**都算"有生产引用 + 有测试覆盖"**，实则引擎门从未被走到）。**故「有引用」不等于「可达」，须核声明面是否前置拦截。**
+
+### 6.2 后续（R3-3 及以后）
+
 - **R3-3**：`GATE_AUDIT_CRITERIA_MISSING` **两处实现**判据单点化（`gates.ts` 收一处）—— 属重构，须独立波。
+- **R3-4（可选加强）**：`GATE_EVENT_CONST_MISSING` 的**真 E2E** —— 子进程 + `module.register()` loader 钩子：在 `load()` 里把 `lib/state/event-types.js` 的 `export const <CONST> = …` 改写为 `= undefined`，再驱动一条产 `gate.escape` 的路径（如 `gate-techdebt-red.test.js` R-01 的 standalone 逃生），断言「抛且**零落盘**」。成本 ≈ 1 loader + 1 子进程脚本；收益 = 把"源被改"从围栏升级为行为证明。**前置**：确认与 C1 未接线清单不冲突。
 - **仍未解冻**：C1 26 项接线 / B1 10 项存废 / schema 消环 / 13 个 `_RE`… 均等新引擎形态。本波不解冻任何一项。
 
 ---

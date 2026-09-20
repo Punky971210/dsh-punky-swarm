@@ -360,6 +360,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/gate-assertion-r32.test.js": {
+      "asserts": 25,
+      "blankLines": 38,
+      "lines": 388,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
     "test/gate-flows.test.js": {
       "asserts": 96,
       "blankLines": 29,
@@ -569,9 +577,9 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 204,
+      "asserts": 206,
       "blankLines": 41,
-      "lines": 667,
+      "lines": 688,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -585,9 +593,9 @@
       "todos": 0
     },
     "test/handoff-gate.test.js": {
-      "asserts": 88,
+      "asserts": 89,
       "blankLines": 38,
-      "lines": 463,
+      "lines": 469,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1145,7 +1153,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-20T17:39:17Z",
+  "generatedAt": "2026-09-20T18:30:08Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1156,15 +1164,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "R3-1 门禁断言补测：新增 test/complete-tier-gate-e2e.test.js（GATE_COMPLETE_NO_AUDIT / GATE_COMPLETE_EXEC_PENDING 生产路径 E2E，5 用例）",
+  "reason": "R3-2：门禁断言补测（4 枚真缺口补测 + 2 枚假缺口收紧断言 + 2 枚不可达登记）",
   "schema": 1,
   "totals": {
-    "asserts": 8164,
-    "blankLines": 3796,
-    "files": 143,
-    "lines": 42850,
+    "asserts": 8192,
+    "blankLines": 3834,
+    "files": 144,
+    "lines": 43265,
     "tautologies": 0,
-    "tests": 1669,
+    "tests": 1677,
     "todos": 4
   }
 }
