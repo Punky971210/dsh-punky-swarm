@@ -199,7 +199,7 @@ test('P1-3 自建团队（teamsRoot）skills 不可解析 ⇒ 构造期拒 TEAM_
   const { root, byName } = makeHarness();
   clearRoleCache();
   // 显式 env 注入技能根：技能根**存在**且含一条可解析名 ⇒ 反例的成因只能是「名字不可解析」，而非「根不存在」
-  seedSkills([SEEDED]);
+  seedSkills([SEEDED], undefined, { stub: true });
   const teamsRoot = mkTeamsRoot(tmpAssetWithSkills({ plan: SEEDED, exec: UNSOLVABLE, audit: SEEDED }));
   const batchId = 'ta-mand-badskills';
   await assert.rejects(

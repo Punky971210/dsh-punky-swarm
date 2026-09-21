@@ -132,7 +132,7 @@ function makeHarness({ chain = chain5(), auditFlow = true, subagents = null } = 
   //   注：不可用 `chain: undefined` 表达「无链」——解构缺省值会把 `undefined` 还原成缺省链（本文件实测踩过）。
   if (chain !== null) asset.chain = chain;
   fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(asset, null, 2), 'utf8');
-  seedHostSkills(declaredSkillsOf(asset));
+  seedHostSkills(declaredSkillsOf(asset), undefined, { stub: true });
   clearRoleCache();
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

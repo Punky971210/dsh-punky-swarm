@@ -73,6 +73,20 @@
 
 ⚠ 方案 B 的**影响面**（须先评估再施工）：39 个测试文件调用 `seedTeamAssetSkills`；名单初次落地时若遗漏 ⇒ **立即大片红**（这正是它的价值，但必须一次把名单取全：从 5 份资产的 33 个名字生成，再由人工逐条确认「确属宿主侧」）。
 
+**✅ 执行结果（2026-09-21 21:1x，F1 已落地）**
+
+| 项 | 落地 |
+|---|---|
+| 名单 | `host-skills.mjs` 新增 **`HOST_ONLY_SKILLS`（27 个，冻结数组）**——「真实资产声明 ∩ 包内无副本」的显式快照 |
+| 行为变更 | `seedHostSkills(names, home, { stub = false })`：包内无副本 ∧ 未登记 ∧ 未显式声明 ⇒ **抛错**（提示两种正解：补名单 / 收副本）；`seedTeamAssetSkills` 走缺省 **⇒ 读真实资产这条路径受保护** |
+| 显式声明 | **10 处调用点**（9 文件）改传 `{ stub: true }`：`contract-missing-first-touch` · `flex-assembly-roles` · `gate-assertion-r32`×2 · `teams-root` · `handoff-gate-hotconfig` · `handoff-gate` · `p2-settle-handoff` · `team-asset-mandatory` · `p2-chain-autodrive` |
+| 双向断言 | 新 `test/fixture-skill-ledger.test.js` **4 条**：① 名单 ⊆ 资产声明 ② 名单 ∩ 包内副本 = ∅ ③ **资产声明 = 包内副本 ∪ 名单（无遗漏）** ④ 负向：未登记名字走缺省 ⇒ 真抛错 |
+| **保护已生效的实证** | 施工中立刻抓到 **2 个从未被质疑过的未登记自造名**：`dev-tester`（`p2-chain-autodrive` 自造资产）+ `ta-mand-seeded-skill`（`team-asset-mandatory`）⇒ 它们此前靠「静默造桩」蒙过，现在必须显式声明或改判 |
+| 验收 | 全量 **1757 tests / 1735 pass / 18 fail（全为环境类）⇒ 非环境类 0**；基线 files 147→**148** / tests 1710→**1714** / asserts 8341→**8351** |
+| 影响面 | **仅 `test/**`**（helper + 10 处调用点 + 1 新测试）；`lib/**` 零 diff |
+
+⇒ 此后**改真实资产的技能名而不同步名单 ⇒ 立刻红**（F1-3），并且「包内副本被误删」也会红（F1-2）。**门禁正向不再是恒真命题。**
+
 ### 3.2 ②-B 团队装配夹具：**自建资产与真实资产并存，语义可能漂移**（用户点名项 2）
 
 **事实**：31 个测试文件自建 team-asset（`writeTempTeam` 6 · 本地 `teamAsset()` 3 · 其余写文件）；另 `withDefaultTeam`（14 文件）默认注入 `team`。

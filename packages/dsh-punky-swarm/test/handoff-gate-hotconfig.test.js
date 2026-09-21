@@ -80,7 +80,7 @@ function makeHarness() {
   const dir = path.join(teamsRoot, 'presets', TEAM);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(teamAsset(), null, 2), 'utf8');
-  seedHostSkills(declaredSkillsOf(teamAsset()));
+  seedHostSkills(declaredSkillsOf(teamAsset()), undefined, { stub: true });
   clearRoleCache();
   // 环境隔离：本套件验的是 **runtime.json 热配置**路径 ⇒ 必须先中和**环境变量兜底**，
   //   否则 ambient env（实测本机就有 `PSWARM_HANDOFF_GATE=1`）会把「缺省关/只开一段」的用例污染成「两段全开」。

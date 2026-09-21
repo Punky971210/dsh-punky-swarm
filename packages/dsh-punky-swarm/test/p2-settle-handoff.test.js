@@ -90,7 +90,7 @@ function makeHarness() {
   const dir = path.join(teamsRoot, 'presets', TEAM);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(teamAsset(), null, 2), 'utf8');
-  seedHostSkills(declaredSkillsOf(teamAsset()));
+  seedHostSkills(declaredSkillsOf(teamAsset()), undefined, { stub: true });
   // 【task-27 纪律】测试**不得依赖 ambient env**：本套件用 env 择入开启态，而宿主/父进程可能已带
   //   `PSWARM_HANDOFF_GATE=1`（实测本机即如此）⇒ 不中和会让「以为门关」的派发步骤被 entry 门拦下。
   //   故此处保存并清除，`cleanup` 还原（进程级 env 归零，语义完全由本套件控制）。

@@ -49,7 +49,7 @@ const TMP_TEAM = 'tmp-team';
 //   技能根不存在/不可读 ⇒ **同码拒**，不静默跳过）⇒ 隔离 HOME 下必须先造出「这些技能已安装」的宿主技能根。
 //   注入面 = **显式 env**（`USERPROFILE || HOME` + `.agents/skills`，与引擎读端同源，零新变量）。
 const TMP_SKILLS = ['TMP-PLAN-SKILL', 'TMP-EXEC-SKILL', 'TMP-AUDIT-SKILL'];
-seedHostSkills([...TMP_SKILLS, ...declaredSkillsOf(readTeamAssetSource('software-team').asset)]);
+seedHostSkills([...TMP_SKILLS, ...declaredSkillsOf(readTeamAssetSource('software-team').asset)], undefined, { stub: true });
 
 // 临时团队资产（技能前缀刻意与包内不同 ⇒ lane cmd 前缀可反证来源）
 function tmpAsset() {

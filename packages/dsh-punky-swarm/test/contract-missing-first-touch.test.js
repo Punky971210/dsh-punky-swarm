@@ -66,7 +66,7 @@ const NO_ASSET_TEAM = 'no-asset-team-b2';
 //   故被检面（首触留痕 `entry_requires@exec`）不变。
 const MIN_TEAM = 'b2-min-team';
 const MIN_SKILL = 'B2-MIN-SKILL';
-seedHostSkills([MIN_SKILL]); // 技能根须可解析（P1 §3），显式注入隔离 HOME
+seedHostSkills([MIN_SKILL], undefined, { stub: true }); // 技能根须可解析（P1 §3），显式注入隔离 HOME
 function mkMinTeamRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-minteams-'));
   const asset = {

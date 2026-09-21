@@ -88,7 +88,7 @@ function makeHarness({ config = {} } = {}) {
   const store = createStore(root);
   // 宿主技能根（P1 起团队资产的 skills 必须**可解析**，否则 TEAM_ASSET_SKILLS_MISMATCH 拒建批）：
   //   注入面 = 显式 env（隔离 HOME 的 .agents/skills），与引擎读端同源。
-  seedHostSkills(declaredSkillsOf(teamAsset()));
+  seedHostSkills(declaredSkillsOf(teamAsset()), undefined, { stub: true });
   const ctx = { tools: { register: () => {} }, logger: { info() {}, warn() {}, error() {} } };
   const { tools } = createTools(ctx, { store, root, config });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

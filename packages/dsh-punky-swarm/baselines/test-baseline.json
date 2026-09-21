@@ -344,6 +344,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/fixture-skill-ledger.test.js": {
+      "asserts": 10,
+      "blankLines": 11,
+      "lines": 102,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/flex-assembly-roles.test.js": {
       "asserts": 24,
       "blankLines": 19,
@@ -1177,7 +1185,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T12:27:58Z",
+  "generatedAt": "2026-09-21T13:01:35Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1191,12 +1199,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8341,
-    "blankLines": 3906,
-    "files": 147,
-    "lines": 44106,
+    "asserts": 8351,
+    "blankLines": 3917,
+    "files": 148,
+    "lines": 44208,
     "tautologies": 0,
-    "tests": 1710,
+    "tests": 1714,
     "todos": 4
   }
 }

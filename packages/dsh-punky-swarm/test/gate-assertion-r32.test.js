@@ -257,7 +257,7 @@ test('R3-2 GATE_SKILL_MISSING 对照：覆盖层技能全可解析 ⇒ 零该码
   });
   try {
     // 与上例的**唯一差异** = 三个技能名已注入宿主技能根（见本文件 setup 的种子面）
-    seedHostSkills(['r32-designer', 'r32-coder', 'r32-reviewer']);
+    seedHostSkills(['r32-designer', 'r32-coder', 'r32-reviewer'], undefined, { stub: true });
     const teamsRoot = writeTempTeam('punky-r32-skok-', PROBE);
     const out = await h.byName.wave_plan.execute({
       batchId: 'r32-skok', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
@@ -283,7 +283,7 @@ test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 
     const dir = path.join(teamsRoot, 'presets', SETTLE_TEAM);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(settleTeamAsset(), null, 2), 'utf8');
-    seedHostSkills(declaredSkillsOf(settleTeamAsset()));
+    seedHostSkills(declaredSkillsOf(settleTeamAsset()), undefined, { stub: true });
 
     await h.byName.wave_plan.execute({
       batchId: 'r32-sl', team: SETTLE_TEAM, teamsRoot, tasks: settleTasks(), assembly: { auditLane: 'a1' },
