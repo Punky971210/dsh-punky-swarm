@@ -41,7 +41,7 @@ import { apply } from '../lib/index.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
-import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxWeb } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MIN = 60_000;
@@ -49,29 +49,7 @@ const MIN = 60_000;
 const CONFIG_PATH = '/api/dsh-punky-swarm/config';
 const TRUSTED_HEADERS = { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:3080' };
 
-// ── 装配级 fake ctx（governance-bootoverlay 同款）+ webServer 路由捕获（GET /config 查 applied.watch）──
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const routes = [];
-  const ctx = {
-    listeners, calls, logger,
-    tools: { register() {} },
-    emit() {},
-    webServer: { register: (r) => { routes.push(r); return () => {}; } },
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  return { ctx, routes };
-}
+// ── 装配级 fake ctx：`assemblyCtxWeb()` 基线 + `webServer`（返回 `{ ctx, routes }`）（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wbo-'));
@@ -120,7 +98,7 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
   // ── A：启动前 runtime.json 已含 watch.enabled:false（≠ 静态默认开）→ 引擎被对账卸载 ──
   const rootA = freshRoot();
   writeRuntime(rootA, { capabilities: { watch: { enabled: false } } });
-  const { ctx: ctxA, routes: routesA } = assemblyCtx();
+  const { ctx: ctxA, routes: routesA } = assemblyCtxWeb();
   const disposerA = apply(ctxA, STATIC_WATCH(rootA));
   try {
     // 启动对账 remount 恰一次（logTag='boot-overlay'；热更路径无此 tag）
@@ -141,7 +119,7 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
   await t.test('BO1-A2 overlay longrun.enabled:false → 启动对账一次 re-mounted（longrun=false + applied.watch 对齐）', () => {
     const rootA2 = freshRoot();
     writeRuntime(rootA2, { capabilities: { watch: { longrun: { enabled: false } } } });
-    const { ctx: ctxA2, routes: routesA2 } = assemblyCtx();
+    const { ctx: ctxA2, routes: routesA2 } = assemblyCtxWeb();
     const disposerA2 = apply(ctxA2, STATIC_WATCH(rootA2));
     try {
       const bootA2 = bootRemountLines(ctxA2.calls);
@@ -164,7 +142,7 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     writeRuntime(rootB, {});
     // scanIntervalMinutes:0.1（min 0.1 → watchdog 档期 6000ms）——幂等对照的行为正场景：对账 no-op 不误杀引擎，
     //   静默 tick 对超时 stint 照常产候选（出厂默认开语义）
-    const { ctx: ctxB, routes: routesB } = assemblyCtx();
+    const { ctx: ctxB, routes: routesB } = assemblyCtxWeb();
     const disposerB = apply(ctxB, { root: rootB, capabilities: { watch: { enabled: true, scanIntervalMinutes: 0.1 } } });
     try {
       // remountWatchEngine 快照相等 → 返回 false no-op（不 dispose 不重挂不写 remount 日志）
@@ -190,7 +168,7 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     //    → 阈值键纳入 boot 对账比较集（watch-panel-wiring e2）→ 重启即对齐（修复「阈值 boot 不生效」洞）──
     const rootC = freshRoot();
     writeRuntime(rootC, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
-    const { ctx: ctxC, routes: routesC } = assemblyCtx();
+    const { ctx: ctxC, routes: routesC } = assemblyCtxWeb();
     const disposerC = apply(ctxC, STATIC_WATCH(rootC));
     try {
       const bootC = bootRemountLines(ctxC.calls);

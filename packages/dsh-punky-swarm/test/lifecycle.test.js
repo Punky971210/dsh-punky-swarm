@@ -87,7 +87,7 @@ function writeArtifact(batchId, rel, content) {
   fs.writeFileSync(abs, content);
   return abs;
 }
-function threeTierTasks(probe) {
+function threeTierWithProbe(probe) {
   return [
     { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
     { ...probe, consume: ['plan/spec.md'] },
@@ -96,7 +96,7 @@ function threeTierTasks(probe) {
 }
 function makeStoreWithBatch(batchId, task, opts = {}) {
   const store = opts.store ?? createStore(root);
-  const plan = buildWavePlan({ batchId, tasks: threeTierTasks(task) });
+  const plan = buildWavePlan({ batchId, tasks: threeTierWithProbe(task) });
   store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
   // 上游在场（entry 门 presence 硬约束）；`seed:false` 保留「上游全缺」的原始构造（条件未满足用例）
   if (opts.seed !== false) writeArtifact(batchId, 'plan/spec.md', SPEC_OK);
@@ -168,7 +168,7 @@ test('R1b: store assert switch keeps behavior identical (invalid transitions sti
   const batchId = 'b-r1';
   // r2 同步：被测 lane 补 exec 层（B2 拒绝免检）+ 纳入合规三层批（B3/A1）；exit 门要求声明产物在场 ⇒ 落盘
   const store = createStore(root);
-  const plan = buildWavePlan({ batchId, tasks: threeTierTasks({ id: 'x', layer: 'exec', outputs: ['exec/x.md'], cmd: 'run' }) });
+  const plan = buildWavePlan({ batchId, tasks: threeTierWithProbe({ id: 'x', layer: 'exec', outputs: ['exec/x.md'], cmd: 'run' }) });
   store.createBatch(S, { batchId, wavePlan: plan }); // phase 缺省 planning
   writeArtifact(batchId, 'plan/spec.md', SPEC_OK);
   writeArtifact(batchId, 'exec/x.md', 'out');
@@ -199,7 +199,7 @@ test('R3b: batch transition tightening via injected rules', () => {
   // r2 同步：同 R1b（补 exec 层 + 合规三层批 + 声明产物在场）
   const plan = buildWavePlan({
     batchId,
-    tasks: threeTierTasks({ id: 'x', layer: 'exec', outputs: ['exec/x.md'], cmd: 'run' }),
+    tasks: threeTierWithProbe({ id: 'x', layer: 'exec', outputs: ['exec/x.md'], cmd: 'run' }),
   });
   store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
   writeArtifact(batchId, 'plan/spec.md', SPEC_OK);

@@ -76,7 +76,7 @@ const batchLanded = (root, batchId) => fs.existsSync(batchFileOf(root, batchId))
 // 要求 tasks 元素是 lossless JSON，`undefined` 会在进 execute 之前就被参数校验拦下，污染被检面）。
 const roleOfSw = (layer) => ({ plan: 'designer', exec: 'coder', audit: 'supervisor' })[layer];
 
-function threeTierTasks(roleOf) {
+function threeTierWithRoleFn(roleOf) {
   return [
     { id: 'p1', layer: 'plan', role: roleOf('plan'), produce: ['plan/spec.md'], cmd: 'plan-it' },
     { id: 'e1', layer: 'exec', role: roleOf('exec'), consume: ['plan/spec.md'], outputs: ['exec/e1.md'], deps: ['p1'], cmd: 'run-it' },
@@ -93,7 +93,7 @@ test('P1-1a 无资产（team 名拼错 / 未建资产）⇒ 构造期拒 TEAM_AS
   let msg = null;
   try {
     await byName.wave_plan.execute({
-      batchId, team: 'no-such-team-xyz', tasks: threeTierTasks(roleOfSw),
+      batchId, team: 'no-such-team-xyz', tasks: threeTierWithRoleFn(roleOfSw),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS);
   } catch (e) {
@@ -115,7 +115,7 @@ test('P1-1b 预设（模式）名误用：`team:punky-preset`（无 team-asset�
   const batchId = 'ta-mand-presetname';
   await assert.rejects(
     () => byName.wave_plan.execute({
-      batchId, team: 'punky-preset', tasks: threeTierTasks(roleOfSw),
+      batchId, team: 'punky-preset', tasks: threeTierWithRoleFn(roleOfSw),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS),
     /TEAM_ASSET_NOT_FOUND/,
@@ -127,7 +127,7 @@ test('P1-1b 预设（模式）名误用：`team:punky-preset`（无 team-asset�
 test('P1-1c `team` 缺失 / 空串 ⇒ 构造期拒 TEAM_ASSET_MISSING_FIELD，且零批次 JSON 落盘', async () => {
   const { root, byName } = makeHarness();
   clearRoleCache();
-  const tasks = threeTierTasks(() => undefined);
+  const tasks = threeTierWithRoleFn(() => undefined);
   const assembly = { managerPlan: 'leader-direct', auditLane: 'a1' };
   // 缺失：落在参数 schema 的 required 面（"missing required property \"team\"" / `"team" is required`）
   //   或构造期码面 —— 两处都不许放行（P1 §5：`team` 声明为 required）。
@@ -153,7 +153,7 @@ test("P1-2 `team:'generic'`（已废除）⇒ 构造期拒 TEAM_ASSET_NOT_FOUND�
   const batchId = 'ta-mand-generic';
   await assert.rejects(
     () => byName.wave_plan.execute({
-      batchId, team: 'generic', tasks: threeTierTasks(roleOfSw),
+      batchId, team: 'generic', tasks: threeTierWithRoleFn(roleOfSw),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS),
     /TEAM_ASSET_NOT_FOUND/,
@@ -205,7 +205,7 @@ test('P1-3 自建团队（teamsRoot）skills 不可解析 ⇒ 构造期拒 TEAM_
   const batchId = 'ta-mand-badskills';
   await assert.rejects(
     () => byName.wave_plan.execute({
-      batchId, team: 'ta-mand-team', teamsRoot, tasks: threeTierTasks(roleOfTmp),
+      batchId, team: 'ta-mand-team', teamsRoot, tasks: threeTierWithRoleFn(roleOfTmp),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS),
     /TEAM_ASSET_SKILLS_MISMATCH/,
@@ -217,7 +217,7 @@ test('P1-3 自建团队（teamsRoot）skills 不可解析 ⇒ 构造期拒 TEAM_
   const okRoot = mkTeamsRoot(tmpAssetWithSkills({ plan: SEEDED, exec: SEEDED, audit: SEEDED }));
   clearRoleCache();
   const ok = await byName.wave_plan.execute({
-    batchId: 'ta-mand-goodskills', team: 'ta-mand-team', teamsRoot: okRoot, tasks: threeTierTasks(roleOfTmp),
+    batchId: 'ta-mand-goodskills', team: 'ta-mand-team', teamsRoot: okRoot, tasks: threeTierWithRoleFn(roleOfTmp),
     assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
   }, SESS);
   assert.equal(ok.batchId, 'ta-mand-goodskills');
@@ -237,7 +237,7 @@ test('P1-3b 技能根**不存在**（显式 env 切到无技能的 HOME）⇒ �
     clearRoleCache();
     await assert.rejects(
       () => byName.wave_plan.execute({
-        batchId: 'ta-mand-noroot', team: 'ta-mand-team', teamsRoot, tasks: threeTierTasks(roleOfTmp),
+        batchId: 'ta-mand-noroot', team: 'ta-mand-team', teamsRoot, tasks: threeTierWithRoleFn(roleOfTmp),
         assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
       }, SESS),
       /TEAM_ASSET_SKILLS_MISMATCH/,
@@ -292,7 +292,7 @@ test("P1-4b 以 team:'engine-team' 建批：零 GATE_TEAM_ASSET_* / GATE_ROLE_MI
   clearRoleCache();
   const roleOf = (layer) => (src.asset.layers?.[layer]?.roles ?? [])[0];
   const out = await byName.wave_plan.execute({
-    batchId: 'ta-mand-engine', team: 'engine-team', tasks: threeTierTasks(roleOf),
+    batchId: 'ta-mand-engine', team: 'engine-team', tasks: threeTierWithRoleFn(roleOf),
     assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
   }, SESS);
   assert.equal(out.batchId, 'ta-mand-engine');

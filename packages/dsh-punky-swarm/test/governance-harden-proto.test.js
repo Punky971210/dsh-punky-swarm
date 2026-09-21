@@ -40,7 +40,7 @@ import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { writeRefusal, readRefusals, verifyRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { makeAnchor } from '../lib/governance/hash-utils.js';
 import { apply } from '../lib/index.js';
-import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxPre, tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
 // F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。
 const fakeCtx = () => makeFakeCtx({ error: true });
@@ -49,34 +49,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── fake ctx（捕获 ctx.on 注册的 listener；disposer 移除注册——cordis ctx.on 返回 dispose 语义）──
 
-// ── 装配级 fake ctx（hotconfig 同款：事件→Set，可多 listener；preCount 观察）──
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const ctx = {
-    listeners,
-    calls,
-    logger,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  ctx.preCount = () => listeners.get('tools/pre-execute')?.size ?? 0;
-  return ctx;
-}
+// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
-function freshRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 
 // 最小 ToolExecution 形态（HTYPES:196-220）；callId 每次唯一（B 步骤同调用 pre/post 复用同一 exec）
@@ -128,7 +102,7 @@ const EX_RULE_ADMIN_APPROVAL = {
 
 // ═══ A. NARROW 实际钳制（P0，wiring 全链）═══
 test('A NARROW 实际钳制：narrowable+flag.narrow → pre deny + 收据 narrowedParams（钳制明细落盘）；修正重发合规参数 → ALLOW（双调用对比）', async () => {
-  const root = freshRoot('gov-harden-A-');
+  const root = tempRoot('gov-harden-A-');
   const ctx = fakeCtx();
   const cfg = {
     governance: {
@@ -185,7 +159,7 @@ test('A NARROW 实际钳制：narrowable+flag.narrow → pre deny + 收据 narro
 
 // ═══ B. ask 双路径（P1：REQUIRE_APPROVAL 有/无审批服务）═══
 test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；① fake approval allowed-once → post 补记 outcome=allowed-once；② 无审批服务 → 降级 deny + outcome=denied-no-approval', async () => {
-  const root = freshRoot('gov-harden-B-');
+  const root = tempRoot('gov-harden-B-');
   const ctx = fakeCtx();
   const cfg = {
     governance: {
@@ -246,7 +220,7 @@ test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；�
 
 // ═══ C. 签名篡改检测（P2：收据写→验→篡改 1 字节→verifyRefusals 定位→恢复）═══
 test('C 签名篡改检测：写 3 份锚定收据 verify ok；篡改中链 1 字节 → verifyRefusals ok=false brokenAt 定位（hash-mismatch）+ 链上后继 link-break 联动失败；恢复原字节 → ok=true', async () => {
-  const root = freshRoot('gov-harden-C-');
+  const root = tempRoot('gov-harden-C-');
   const sessionId = 'sess-harden-C';
   // 3 份手工收据（ts 递增 10ms 保证链序确定；writeRefusal 自动锚定 sha256 链）
   const base = Date.parse('2026-08-31T00:00:00.000Z');
@@ -322,9 +296,9 @@ test('C 签名篡改检测：写 3 份锚定收据 verify ok；篡改中链 1 �
 
 // ═══ D. 热更新实测（P3：真装配级 apply + 真 fs.watch + 真 runtime.json）═══
 test('D 热更新实测：runtime.json 写 governance.hook.enabled=false → pre 卸载（不再拦截）；写回 true + 规则热更 → 重挂新规则即时生效（示例 1 DENY → 示例 2 NARROW 收据钳制）；rules:[] → 零拦截恢复', async () => {
-  const root = freshRoot('gov-harden-D-');
+  const root = tempRoot('gov-harden-D-');
   writeRuntime(root, {}); // 预建 runtime.json（watcher 需文件存在；初始 overlay {} 零变化）
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   const HOT_SLEEP = 1000;
   const HOT_SETTLE = 200;
@@ -394,7 +368,7 @@ test('D 热更新实测：runtime.json 写 governance.hook.enabled=false → pre
 
 // ═══ E. 回归（原 P1 六步原型链快照；全量断言在 governance-proto.test.js P1-1..P1-6）═══
 test('E 回归：原 P1 六步原型链保持绿（挂载/拦截/裁决/收据落盘/读回/ask 降级/count+limit）', async () => {
-  const root = freshRoot('gov-harden-E-');
+  const root = tempRoot('gov-harden-E-');
   const ctx = fakeCtx();
   const cfg = {
     governance: {

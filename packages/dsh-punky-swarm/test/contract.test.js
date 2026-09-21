@@ -28,7 +28,7 @@ const punkyPresetAssembly = {
   },
 };
 
-function threeTierTasks() {
+function threeTierWithTaskTree() {
   // 【r2 同步 · A1】旧 fixture 的 plan 声明了 `plan/task-tree.json` 但**无任何 lane consume**：
   //   新语义下该悬空产物在建批期即拒建批（`GATE_ORPHAN_PRODUCT`，A1 主防线）。
   //   修法是**补下游 consume**（不是删声明、也不是放宽门禁）⇒ 由 audit lane 消费 task-tree（验收需核对任务树）。
@@ -50,7 +50,7 @@ test('无 team 直调（无 layer）不再回落 generic：plan.team = undefined
 });
 
 test('三层正常：跨层引用/路径/有 exec 必有 audit 通过，cmd 注入 role+skill 前缀', () => {
-  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'punky-preset', assembly: punkyPresetAssembly });
+  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierWithTaskTree(), team: 'punky-preset', assembly: punkyPresetAssembly });
   const flat = plan.wavePlan.flatMap((w) => w.tasks);
   const e1 = flat.find((t) => t.id === 'e1');
   const a1 = flat.find((t) => t.id === 'a1');
@@ -62,33 +62,33 @@ test('三层正常：跨层引用/路径/有 exec 必有 audit 通过，cmd 注�
 });
 
 test('拒建批：exec.consume 引用 plan 层未 produce 的路径', () => {
-  const tasks = threeTierTasks();
+  const tasks = threeTierWithTaskTree();
   tasks[0].produce = ['plan/spec.md']; // 去掉 task-tree.json
   tasks[1].consume = ['plan/spec.md', 'plan/task-tree.json'];
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks }), /not produced by any plan lane/);
 });
 
 test('拒建批：有 exec 无 audit', () => {
-  const tasks = threeTierTasks().filter((t) => t.id !== 'a1');
+  const tasks = threeTierWithTaskTree().filter((t) => t.id !== 'a1');
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks }), /require at least one audit lane/);
 });
 
 test('拒建批：路径必须在本批次产物根内（plan/|exec/|audit/ 或绝对路径）', () => {
-  const tasks = threeTierTasks();
+  const tasks = threeTierWithTaskTree();
   tasks[1].outputs = ['foo/out.txt'];
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks }), /must be under plan\/\|exec\/\|audit\//);
 });
 
 test('拒建批：跨批次引用 MVP 先禁（N6）', () => {
-  const tasks = threeTierTasks();
+  const tasks = threeTierWithTaskTree();
   tasks[1].consume = ['artifacts/other-batch/plan/spec.md'];
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks }), /cross-batch reference is disabled/);
 });
 
 test('拒建批：skills 声明非法（空数组 / 非字符串）', () => {
-  const t1 = threeTierTasks(); t1[1].skills = [];
+  const t1 = threeTierWithTaskTree(); t1[1].skills = [];
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks: t1 }), /skills must be a non-empty string array/);
-  const t2 = threeTierTasks(); t2[1].skills = ['dev-coder', 42];
+  const t2 = threeTierWithTaskTree(); t2[1].skills = ['dev-coder', 42];
   assert.throws(() => buildWavePlan({ batchId: 'b-x', tasks: t2 }), /skills must be a non-empty string array/);
 });
 
@@ -99,7 +99,7 @@ test('assembleCmd：前缀组合与空输入', () => {
 });
 
 test('validateWavePlan：篡改 layer / 跨层不一致拒绝', () => {
-  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierTasks(), team: 'punky-preset', assembly: punkyPresetAssembly });
+  const plan = buildWavePlan({ batchId: 'b-3', tasks: threeTierWithTaskTree(), team: 'punky-preset', assembly: punkyPresetAssembly });
   const forged1 = JSON.parse(JSON.stringify(plan));
   forged1.wavePlan[0].tasks[0].layer = 'bogus';
   assert.throws(() => validateWavePlan(forged1), /layer invalid/);

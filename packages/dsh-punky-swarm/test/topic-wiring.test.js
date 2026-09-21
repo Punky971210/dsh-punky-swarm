@@ -34,6 +34,7 @@ import { readCapability } from '../lib/assembly/schema.js';
 import { createTopicRuntime } from '../lib/comms/topic-runtime.js';
 import { subscribeTopic, emitTopic } from '../lib/comms/topic.js';
 import { readUnacked } from '../lib/comms/mailbox.js';
+import { runLane } from './helpers/gate-fixture.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-topicw-'));
 const S = 'sess-t';
@@ -64,15 +65,10 @@ function writeArt(batchId, rel, content) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content);
 }
-function seedArtifacts(batchId, laneIds) {
+function seedTierArtifacts(batchId, laneIds) {
   writeArt(batchId, 'plan/spec.md', SPEC_OK);                              // entry 门 presence 硬约束
   for (const id of laneIds) writeArt(batchId, 'exec/' + id + '.md', 'out'); // exit 门：声明产物须在场
   writeArt(batchId, 'audit/r.md', 'review');
-}
-function runLane(store, sessionId, batchId, lane) {
-  store.setMember(sessionId, batchId, lane, 'running');
-  store.setMember(sessionId, batchId, lane, 'review');
-  store.setMember(sessionId, batchId, lane, 'merged');
 }
 
 function mailboxRootOf(sessionId, batchId) {
@@ -86,7 +82,7 @@ test('T1 topic 默认关：readCapability 缺省 {enabled:false}；无 onStateCh
   // 未装配钩子的 store：迁移照常、无发布异常
   const store = createStore(root);
   const bid = makeBatch(store, 't1', ['x']);
-  seedArtifacts(bid, ['x']); // r2 同步：合规三层批的声明产物必须在场
+  seedTierArtifacts(bid, ['x']); // r2 同步：合规三层批的声明产物必须在场
   assert.doesNotThrow(() => {
     runLane(store, S, bid, 'p1');
     runLane(store, S, bid, 'x');
@@ -187,7 +183,7 @@ test('T6 store 集成：onStateChange 接线 publishStateChange → setMember/se
     }],
   };
   store.createBatch(S, { batchId: bid, wavePlan }); // phase 缺省 planning
-  seedArtifacts(bid, ['x']);
+  seedTierArtifacts(bid, ['x']);
   const settled = [];
   const phases = [];
   const us = subscribeTopic('swarm.member.settled.' + S + '.' + bid, (p) => settled.push(p));

@@ -36,7 +36,7 @@ import { apply } from '../lib/index.js';
 import { createGovernanceKernel } from '../lib/governance/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
-import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,30 +45,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SLEEP = 1000;
 const HOT_SETTLE = 200;
 
-// ── 装配级 fake ctx：ctx.on 追加式注册（可多个 listener，返回按身份 disposer；热重挂需旧 listener 移除）──
-function assemblyCtx() {
-  const listeners = new Map(); // event -> Set<fn>
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const ctx = {
-    listeners,
-    calls,
-    logger,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  ctx.preCount = () => listeners.get('tools/pre-execute')?.size ?? 0;
-  return ctx;
-}
+// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hotgov-'));
@@ -154,7 +131,7 @@ test('T2 validateOverlay 接受 governance、拒绝未知键', () => {
 test('T3 applyConfigChange ⑤ enabled 翻转 → dispose+重挂（pre listener 卸载/重注册）', async () => {
   const root = freshRoot();
   writeRuntime(root, {}); // 预建 runtime.json（watcher 直 watch 文件需存在；初始 overlay {} 零变化）
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   try {
     await sleep(HOT_SETTLE); // watcher 建立余量
@@ -179,7 +156,7 @@ test('T3 applyConfigChange ⑤ enabled 翻转 → dispose+重挂（pre listener 
 test('T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs/guardrails-hook.md §3 示例规则 1 装配链路命中）', async () => {
   const root = freshRoot();
   writeRuntime(root, {}); // 预建 runtime.json
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -218,7 +195,7 @@ test('T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs
 test('T5 既有 ①-④ 分支回归：非 governance 键热变更零重挂、零抛错（④ resolveVerifyConfig 缺陷修复）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   try {
     await sleep(HOT_SETTLE);

@@ -26,6 +26,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   node scripts/audit/dup-similarity.mjs              # 表（默认 top 25）
 //   node scripts/audit/dup-similarity.mjs --min 3 --top 40
 //   node scripts/audit/dup-similarity.mjs --fn writeRuntime   # 单函数全定义对照（含文件与行号）
+//   node scripts/audit/dup-similarity.mjs --group assemblyCtx # 单函数按**归一化函数体**分组（= 实际有几个形状）
+//   node scripts/audit/dup-similarity.mjs --group freshRoot --body   # 附带各形状的函数体（人眼 diff）
+//   node scripts/audit/dup-similarity.mjs --group freshRoot --struct # 抹平字面量后分组（暴露「仅常量不同」的族）
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,6 +98,14 @@ const strip = (s) => s.split('\n')
   .filter((l) => l && !l.startsWith('//') && !l.startsWith('*') && !l.startsWith('/*'))
   .join('\n');
 
+/** 结构归一：把字符串/模板串字面量与数字抹平 ⇒ 暴露「同一结构、仅常量不同」的族。
+ *  ⚠ 用途：判定能否**参数化后合并**（如 `freshRoot` 各文件只差硬编码的 tmp 前缀）。 */
+const structOf = (s) => s
+  .replace(/'(?:[^'\\]|\\.)*'/g, "'·'")
+  .replace(/"(?:[^"\\]|\\.)*"/g, '"·"')
+  .replace(/`(?:[^`\\]|\\.)*`/g, '`·`')
+  .replace(/\b\d+(?:\.\d+)?\b/g, '0');
+
 /** 行集合 Jaccard（去空行/注释）。 */
 function jaccard(a, b) {
   const A = new Set(strip(a).split('\n'));
@@ -139,6 +150,43 @@ if (only) {
       if (s >= 0.7) console.log('  ' + Math.round(s * 100) + '%  ' + hits[i].rel + ':' + hits[i].line + ' ⇄ ' + hits[k].rel + ':' + hits[k].line);
     }
   }
+  process.exit(0);
+}
+
+// ── 分组模式：把单函数的全部定义按「归一化函数体」聚类 ⇒ 直接看出**实际有几个形状** ──
+//   用途：判定「能不能合」。形状数 = 1 ⇒ 纯复制可直接抽单点；形状数 > 1 ⇒ 先看差异轴是**加性**还是**多维**
+//   （加性 ⇒ 拆名/工厂；多维 ⇒ 按变体拆名，见台账 §3.3 纪律）。
+const groupOf = argOf('--group', null);
+if (groupOf) {
+  const showBody = process.argv.includes('--body');
+  const structMode = process.argv.includes('--struct');
+  const hits = [];
+  for (const rel of files) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    for (const b of extractBodies(src, groupOf)) hits.push({ rel, ...b });
+  }
+  if (hits.length === 0) {
+    console.log('(无定义) ' + groupOf);
+    process.exit(0);
+  }
+  const groups = new Map();
+  for (const h of hits) {
+    const key = structMode ? structOf(strip(h.body)) : strip(h.body);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(h);
+  }
+  const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  console.log('## ' + groupOf + '：' + hits.length + ' 处定义 → **' + sorted.length + ' 个形状**\n');
+  sorted.forEach(([key, list], i) => {
+    console.log('### [' + i + '] ×' + list.length + '（归一化 ' + key.split('\n').length + ' 行）');
+    console.log('  ' + list.map((h) => h.rel + ':' + h.line).join('\n  '));
+    if (showBody) {
+      console.log('  ```js');
+      console.log(key.split('\n').slice(0, 60).map((l) => '  ' + l).join('\n'));
+      console.log('  ```');
+    }
+    console.log('');
+  });
   process.exit(0);
 }
 

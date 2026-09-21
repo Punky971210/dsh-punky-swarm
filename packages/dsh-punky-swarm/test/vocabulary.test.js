@@ -49,7 +49,7 @@ const VOCAB_ABS = path.join(PKG_ROOT, 'lib', 'state', 'vocabulary.json');
 
 // ── 夹具：临时根下造一份**隔离词表**（绝不写包内交付物文件）────────────────────
 const TMP_ROOTS = [];
-function tempRoot() {
+function tempRootTracked() {
   const r = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-vocab-'));
   TMP_ROOTS.push(r);
   return r;
@@ -60,7 +60,7 @@ test.after(() => {
 
 /** 写一份词表到临时根；`entries` 为本用例私有夹具（含 `enabled:false` 停用条目）。 */
 function seedVocab(entries, metaOverride = {}) {
-  const root = tempRoot();
+  const root = tempRootTracked();
   const doc = {
     $schema: 'dsh-punky-swarm/vocabulary@1',
     meta: {
@@ -159,7 +159,7 @@ test('A6 导出面 = 冻结 6 符号 + 2 常量（`node --check` 之外的形状
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('B1 缺文件 ⇒ ok:false（不抛）；fail-closed 不等于「无词表则任意码合法」', () => {
-  const root = tempRoot();
+  const root = tempRootTracked();
   const d = loadVocabulary({ root });
   assert.equal(d.ok, false);
   assert.ok(d.problems.length > 0, '须给出可读 problems');
@@ -168,7 +168,7 @@ test('B1 缺文件 ⇒ ok:false（不抛）；fail-closed 不等于「无词表�
 });
 
 test('B2 JSON 解析失败 ⇒ ok:false（不抛）', () => {
-  const root = tempRoot();
+  const root = tempRootTracked();
   const abs = path.join(root, VOCABULARY_REL);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, '{ "entries": [ , not json', 'utf8');

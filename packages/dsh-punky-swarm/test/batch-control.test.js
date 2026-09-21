@@ -44,7 +44,7 @@ import {
   EVT_BATCH_PHASE, EVT_BATCH_ABORT_DANGLING, EVT_MEMBER_SETTLED,
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
 } from '../lib/state/event-types.js';
-import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assessC, assemblyCtxOpts } from './helpers/gate-fixture.mjs';
 import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); // cwd 无关
@@ -93,20 +93,8 @@ function settleLane(store, batchId, lane) {
   store.setMember(SESS_ID, batchId, lane, 'merged');
 }
 
+// ── 装配级 fake ctx：`assemblyCtxOpts()` `on` 项存 `{ fn, opts }`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 // 主路回调调用面（探针契约卡 §30-33：`ctx.on('subagent/end', h, { global: true })`，回调签名 `(info) => void`）
-function assemblyCtx() {
-  const listeners = new Map();
-  return {
-    listeners,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn, opts) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add({ fn, opts });
-      return () => { for (const e of listeners.get(event) ?? []) if (e.fn === fn) listeners.get(event).delete(e); };
-    },
-  };
-}
 async function emitSubagentEnd(ctx, info) {
   for (const { fn } of [...(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? [])]) await fn(info);
 }
@@ -284,7 +272,7 @@ test('F1：paused 批 + subagent/end ⇒ 无 member.settled、lane 不变、留�
   const lanesBefore = { ...lanesOf(store, 'b-g1') };
   const settledBefore = memberSettledCount(store, 'b-g1', 'e1');
 
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-g1', { sessionId: SESS_ID, batchId: 'b-g1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: console });
   try {
@@ -308,7 +296,7 @@ test('F1：paused 批 + subagent/end ⇒ 无 member.settled、lane 不变、留�
 
   // resume 后同一 lane 再触发 ⇒ 正常结算（resume 是唯一恢复入口；相位闸不得毒化幂等键）
   await controlOf(byName).execute({ batchId: 'b-g1', action: 'resume' }, SESS);
-  const ctx2 = assemblyCtx();
+  const ctx2 = assemblyCtxOpts();
   const reg2 = installAutoSettle(ctx2, { store, dispatchIndex: index, root, logger: console });
   try {
     await emitSubagentEnd(ctx2, endInfo('ws-g1'));
@@ -349,7 +337,7 @@ test('G1：running 相位既有行为零回归——同批同触发正常结算�
   await makeBatch(byName, root, 'b-ok');
   await toRunning(byName, 'b-ok');
   store.setMember(SESS_ID, 'b-ok', 'e1', 'running');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-ok', { sessionId: SESS_ID, batchId: 'b-ok', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: console });
   try {

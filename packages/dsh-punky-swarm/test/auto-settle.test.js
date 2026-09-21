@@ -33,7 +33,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { createGates } from '../lib/state/gates.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
-import { threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assemblyCtxOpts, tempRoot } from './helpers/gate-fixture.mjs';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
   EVT_MEMBER_SETTLED, EVT_BATCH_PHASE, EVT_MEMBER_DISPATCH,
@@ -45,29 +45,7 @@ import {
 import { createTools } from '../lib/tools/register.js';
 import { createCoreTools } from '../lib/tools/core.js';
 
-// ── helpers（对齐 dispatch-register.test.js 的 assemblyCtx / freshRoot 形态）──
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  return {
-    listeners, calls, logger,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn, opts) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add({ fn, opts });
-      return () => { for (const e of listeners.get(event) ?? []) if (e.fn === fn) listeners.get(event).delete(e); };
-    },
-  };
-}
-function freshRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+// ── 装配级 fake ctx：`assemblyCtxOpts()` `on` 项存 `{ fn, opts }`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 // 合规三层批（plan/exec/audit）——判据链复用 gate-fixture（与既有套件同一份契约形态）
 function seedBatch(root, sessionId, batchId, { lane = 'e1', phase = 'running', memberState = 'running' } = {}) {
   const store = createStore(root);
@@ -90,8 +68,8 @@ const endInfo = (id, stopReason = 'completed') => ({ runId: 'run-' + id, provide
 
 // ── A：装配面契约（事件名 + {global:true} 必填 + payload 常量）──
 test('A1: installAutoSettle 以 ctx.on("subagent/end", h, { global: true }) 注册（scope 化插件 ctx 默认漏收，global 为硬性要求）', () => {
-  const root = freshRoot('punky-as-a1-');
-  const ctx = assemblyCtx();
+  const root = tempRoot('punky-as-a1-');
+  const ctx = assemblyCtxOpts();
   const reg = installAutoSettle(ctx, { store: createStore(root), dispatchIndex: new Map(), logger: ctx.logger });
   try {
     assert.equal(reg.installed, true);
@@ -106,7 +84,7 @@ test('A1: installAutoSettle 以 ctx.on("subagent/end", h, { global: true }) 注�
 });
 
 test('A2: ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸，零副作用）', () => {
-  const root = freshRoot('punky-as-a2-');
+  const root = tempRoot('punky-as-a2-');
   const reg = installAutoSettle({ logger: console }, { store: createStore(root), dispatchIndex: new Map() });
   assert.equal(reg.installed, false);
   assert.equal(typeof reg.reason, 'string');
@@ -115,10 +93,10 @@ test('A2: ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸，零�
 
 // ── B：主路真触发（`subagent/end` → 引擎自动结算到 merged，全程无人工 member_settle）──
 test('B1: 主路——running lane + completed 事件 ⇒ 自动 running→review→merged（经 review 中转，不跳门禁）+ 事件留痕', async () => {
-  const root = freshRoot('punky-as-b1-');
+  const root = tempRoot('punky-as-b1-');
   const S = 'sess-b1';
   const store = seedBatch(root, S, 'b1');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-b1', { sessionId: S, batchId: 'b1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -143,10 +121,10 @@ test('B1: 主路——running lane + completed 事件 ⇒ 自动 running→revie
 });
 
 test('B2: 未命中 dispatchIndex（进程级广播夹带非本套件子会话）⇒ 静默丢弃：零事件、零状态变化、零 warn', async () => {
-  const root = freshRoot('punky-as-b2-');
+  const root = tempRoot('punky-as-b2-');
   const S = 'sess-b2';
   const store = seedBatch(root, S, 'b2');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const reg = installAutoSettle(ctx, { store, dispatchIndex: new Map(), root, logger: ctx.logger });
   try {
     const beforeLen = store.readBatch(S, 'b2').events.length;
@@ -167,10 +145,10 @@ test('B2: 未命中 dispatchIndex（进程级广播夹带非本套件子会话�
 
 // ── C：反例不谎报（stopReason 非 completed ⇒ 不结算）──
 test('C1: stopReason=aborted/error/max-tokens/refusal ⇒ 不走成功结算（lane 停在 running，落触发留痕带原因）', async () => {
-  const root = freshRoot('punky-as-c1-');
+  const root = tempRoot('punky-as-c1-');
   const S = 'sess-c1';
   const store = seedBatch(root, S, 'c1');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-c1', { sessionId: S, batchId: 'c1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -188,10 +166,10 @@ test('C1: stopReason=aborted/error/max-tokens/refusal ⇒ 不走成功结算（l
 });
 
 test('C2: 未知 stopReason（宿主新增枚举）⇒ 保守不结算（fail-safe：宁不结算不谎报）', async () => {
-  const root = freshRoot('punky-as-c2-');
+  const root = tempRoot('punky-as-c2-');
   const S = 'sess-c2';
   const store = seedBatch(root, S, 'c2');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-c2', { sessionId: S, batchId: 'c2', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -204,10 +182,10 @@ test('C2: 未知 stopReason（宿主新增枚举）⇒ 保守不结算（fail-sa
 });
 
 test('C3: payload 缺 id / 非对象 / lastAssistantMessage 缺失 ⇒ 不抛错、不误结算（可选字段不得触发崩溃）', async () => {
-  const root = freshRoot('punky-as-c3-');
+  const root = tempRoot('punky-as-c3-');
   const S = 'sess-c3';
   const store = seedBatch(root, S, 'c3');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-c3', { sessionId: S, batchId: 'c3', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -227,10 +205,10 @@ test('C3: payload 缺 id / 非对象 / lastAssistantMessage 缺失 ⇒ 不抛错
 
 // ── D：幂等去重（同一 (batchId, lane, 子会话 id) 只结算一次）──
 test('D1: 同 id 重复 subagent/end（多 epoch / 重启重放）⇒ 第二次经幂等键跳过：不重复结算、不重复写事件', async () => {
-  const root = freshRoot('punky-as-d1-');
+  const root = tempRoot('punky-as-d1-');
   const S = 'sess-d1';
   const store = seedBatch(root, S, 'd1');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-d1', { sessionId: S, batchId: 'd1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -257,18 +235,18 @@ test('D1: 同 id 重复 subagent/end（多 epoch / 重启重放）⇒ 第二次�
 });
 
 test('D2: 跨重启幂等（同批 JSON 重放）——新监听器实例 + 同一已结算 lane ⇒ 不重复结算', async () => {
-  const root = freshRoot('punky-as-d2-');
+  const root = tempRoot('punky-as-d2-');
   const S = 'sess-d2';
   const store = seedBatch(root, S, 'd2');
   const index = new Map([['ws-d2', { sessionId: S, batchId: 'd2', lane: 'e1' }]]);
-  const ctx1 = assemblyCtx();
+  const ctx1 = assemblyCtxOpts();
   const reg1 = installAutoSettle(ctx1, { store, dispatchIndex: index, root, logger: ctx1.logger });
   await emitSubagentEnd(ctx1, endInfo('ws-d2'));
   reg1.dispose();
   const before = store.readBatch(S, 'd2');
   // 进程重启 = 新 store 实例 + 新监听器（判据只来自批次 JSON）
   const store2 = createStore(root);
-  const ctx2 = assemblyCtx();
+  const ctx2 = assemblyCtxOpts();
   const reg2 = installAutoSettle(ctx2, { store: store2, dispatchIndex: new Map(index), root, logger: ctx2.logger });
   try {
     await emitSubagentEnd(ctx2, endInfo('ws-d2'));
@@ -284,7 +262,7 @@ test('D2: 跨重启幂等（同批 JSON 重放）——新监听器实例 + 同�
 });
 
 test('D3: 幂等键 = (batchId, lane, 子会话 id) 判据函数（settleIdOf / hasAutoSettleRecord 单点）', () => {
-  const root = freshRoot('punky-as-d3-');
+  const root = tempRoot('punky-as-d3-');
   const S = 'sess-d3';
   const store = seedBatch(root, S, 'd3');
   const b = store.readBatch(S, 'd3');
@@ -301,10 +279,10 @@ test('D3: 幂等键 = (batchId, lane, 子会话 id) 判据函数（settleIdOf / 
 
 // ── E：停轮（缺省 onFail=pause；不写 failed、不改成员状态）──
 test('E1: 判据不满足（exec 产物缺失）⇒ 停轮：auto.settle.paused 带 reason + 批 running→paused；成员保持 review、不写 failed', async () => {
-  const root = freshRoot('punky-as-e1-');
+  const root = tempRoot('punky-as-e1-');
   const S = 'sess-e1';
   const store = seedBatch(root, S, 'e1', { lane: 'e1' });
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-e1', { sessionId: S, batchId: 'e1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -326,11 +304,11 @@ test('E1: 判据不满足（exec 产物缺失）⇒ 停轮：auto.settle.paused 
 });
 
 test('E2: 停轮幂等——第二次失败触发不重复写 paused 事件、不重复推进相位', async () => {
-  const root = freshRoot('punky-as-e2-');
+  const root = tempRoot('punky-as-e2-');
   const S = 'sess-e2';
   const store = seedBatch(root, S, 'e2', { lane: 'e1' });
   fs.rmSync(path.join(root, 'sessions', S, 'artifacts', 'e2', 'exec', 'e1.md'));
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-e2', { sessionId: S, batchId: 'e2', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -347,11 +325,11 @@ test('E2: 停轮幂等——第二次失败触发不重复写 paused 事件、�
 
 // ── F：兼底路（settle-request）与双路合并 ──
 test('F1: 兼底路——requestAutoSettle 身份反查 laneBindingOf（member.dispatch 事件）⇒ 与主路同一判定函数', async () => {
-  const root = freshRoot('punky-as-f1-');
+  const root = tempRoot('punky-as-f1-');
   const S = 'sess-f1';
   const store = seedBatch(root, S, 'f1');
   store.appendEvent(S, 'f1', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-f1' });
-  const r = await requestAutoSettle({ ctx: assemblyCtx(), store, root }, { workerSessionId: 'ws-f1', reason: 'worker settle-request' });
+  const r = await requestAutoSettle({ ctx: assemblyCtxOpts(), store, root }, { workerSessionId: 'ws-f1', reason: 'worker settle-request' });
   try {
     assert.equal(r.ok, true);
     assert.equal(r.action, 'merged');
@@ -364,10 +342,10 @@ test('F1: 兼底路——requestAutoSettle 身份反查 laneBindingOf（member.d
 });
 
 test('F2: 兼底路未绑定（身份反查 miss）⇒ 明确拒（不猜、不静默）', async () => {
-  const root = freshRoot('punky-as-f2-');
+  const root = tempRoot('punky-as-f2-');
   const S = 'sess-f2';
   const store = seedBatch(root, S, 'f2');
-  const r = await requestAutoSettle({ ctx: assemblyCtx(), store, root }, { workerSessionId: 'ws-unbound' });
+  const r = await requestAutoSettle({ ctx: assemblyCtxOpts(), store, root }, { workerSessionId: 'ws-unbound' });
   assert.equal(r.ok, false);
   assert.equal(r.action, 'unbound');
   assert.equal(store.readBatch(S, 'f2').lanes.e1, 'running', '未绑定零状态变化');
@@ -375,11 +353,11 @@ test('F2: 兼底路未绑定（身份反查 miss）⇒ 明确拒（不猜、不�
 });
 
 test('F3: 双路同时到达同一 lane ⇒ 单次结算（第二条经幂等键 no-op，无冲突事件、无非法迁移）', async () => {
-  const root = freshRoot('punky-as-f3-');
+  const root = tempRoot('punky-as-f3-');
   const S = 'sess-f3';
   const store = seedBatch(root, S, 'f3');
   store.appendEvent(S, 'f3', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-f3' });
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-f3', { sessionId: S, batchId: 'f3', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -401,11 +379,11 @@ test('F3: 双路同时到达同一 lane ⇒ 单次结算（第二条经幂等键
 });
 
 test('F4: swarm_report(settle-request) 工具面接线自证——core 工具存在且触发兼底判定（防「模块在、工具没接」）', async () => {
-  const root = freshRoot('punky-as-f4-');
+  const root = tempRoot('punky-as-f4-');
   const S = 'sess-f4';
   const store = seedBatch(root, S, 'f4');
   store.appendEvent(S, 'f4', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-f4' });
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const tools = createCoreTools(ctx, { store, root, config: {}, readConfig: () => ({}) });
   const rep = tools.find((t) => t.name === 'swarm_report');
   assert.ok(rep, 'swarm_report 仍注册（既有轨道零回归）');
@@ -417,10 +395,10 @@ test('F4: swarm_report(settle-request) 工具面接线自证——core 工具存
 
 // ── G：登记面/装配面自证 ──
 test('G1: 主路监听实际被调（非死代码）——回调计数 = 监听调用次数（未命中仍零写入）', async () => {
-  const root = freshRoot('punky-as-g1-');
+  const root = tempRoot('punky-as-g1-');
   const S = 'sess-g1';
   const store = seedBatch(root, S, 'g1');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-g1', { sessionId: S, batchId: 'g1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -438,12 +416,12 @@ test('G1: 主路监听实际被调（非死代码）——回调计数 = 监听�
 });
 
 test('G2: autoSettleLane 直调面 = 单点判定（两路共用）；onFail 缺省常量 = pause', async () => {
-  const root = freshRoot('punky-as-g2-');
+  const root = tempRoot('punky-as-g2-');
   const S = 'sess-g2';
   const store = seedBatch(root, S, 'g2');
   assert.equal(DEFAULT_ON_FAIL, 'pause');
   const r = await autoSettleLane(
-    { ctx: assemblyCtx(), store, root },
+    { ctx: assemblyCtxOpts(), store, root },
     { sessionId: S, batchId: 'g2', lane: 'e1', workerSessionId: 'ws-g2', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd },
   );
   assert.equal(r.ok, true);
@@ -452,18 +430,18 @@ test('G2: autoSettleLane 直调面 = 单点判定（两路共用）；onFail 缺
 });
 
 test('G3: 终态 lane 再触发 ⇒ skipped（触发资格：命中 lane 须非终态），幂等键按 (lane, id) 判定', async () => {
-  const root = freshRoot('punky-as-g3-');
+  const root = tempRoot('punky-as-g3-');
   const S = 'sess-g3';
   const store = seedBatch(root, S, 'g3');
   const batchId = 'g3';
   const r1 = await autoSettleLane(
-    { ctx: assemblyCtx(), store, root },
+    { ctx: assemblyCtxOpts(), store, root },
     { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3a', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
   );
   assert.equal(r1.action, 'merged');
   // 同 lane **不同** id（另一 stint/另一 worker）→ 触发资格不满足（lane 已终态）
   const r2 = await autoSettleLane(
-    { ctx: assemblyCtx(), store, root },
+    { ctx: assemblyCtxOpts(), store, root },
     { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3b', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
   );
   assert.equal(r2.action, 'skipped');
@@ -477,8 +455,8 @@ test('G3: 终态 lane 再触发 ⇒ skipped（触发资格：命中 lane 须非�
 
 // ── H：工具面真加载（插件入口不炸 + 工具数不回归）──
 test('H1: 插件入口真加载冒烟——createTools 工具数 26（本模块不新增对外工具；+1 来自 P3a control lane 的 batch_control；【2026-09-17 P1】+handoff_submit/handoff_view 常驻注册 ⇒ 24 → 26）且新增模块可被入口装配路径解析', async () => {
-  const root = freshRoot('punky-as-h1-');
-  const ctx = assemblyCtx();
+  const root = tempRoot('punky-as-h1-');
+  const ctx = assemblyCtxOpts();
   const bundle = createTools(ctx, { store: createStore(root), root, config: {}, readConfig: () => ({}) });
   assert.equal(bundle.tools.length, 29, '工具面数量 = 26（自动结算不新增/不删除对外工具；P3a control lane 另加 batch_control 一件；【2026-09-17 P1】+handoff_submit/handoff_view ⇒ 24 → 26）');
   const names = bundle.tools.map((t) => t.name);
@@ -521,10 +499,10 @@ function seedVerdictFork(root, S, B, verdictLine) {
 const completeGateOf = (root, store, S, B) => createGates(root).checkCompleteGate(store.readBatch(S, B));
 
 test('I1: audit 层 lane 的结算职责移出本路——action=skipped/reason=audit-explicit-settle-required，lane 与相位均不变，未进判定段', async () => {
-  const root = freshRoot('punky-as-i1-');
+  const root = tempRoot('punky-as-i1-');
   const S = 'sess-i1';
   const store = seedVerdictFork(root, S, 'i1', 'verdict: fail');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxOpts();
   const index = new Map([['ws-i1', { sessionId: S, batchId: 'i1', lane: 'a1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
@@ -549,10 +527,10 @@ test('I1: audit 层 lane 的结算职责移出本路——action=skipped/reason=
 });
 
 test('I2: 非 audit 层零行为变化——同夹具的 exec 层 lane ⇒ action=merged（与 A/B/G 组逐字同路）', async () => {
-  const root = freshRoot('punky-as-i2-');
+  const root = tempRoot('punky-as-i2-');
   const S = 'sess-i2';
   const store = seedBatch(root, S, 'i2');
-  const r = await autoSettleLane({ ctx: assemblyCtx(), store, root }, {
+  const r = await autoSettleLane({ ctx: assemblyCtxOpts(), store, root }, {
     sessionId: S, batchId: 'i2', lane: 'e1', workerSessionId: 'ws-i2',
     stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd,
   });
@@ -566,12 +544,12 @@ test('I2: 非 audit 层零行为变化——同夹具的 exec 层 lane ⇒ actio
 });
 
 test('I3: 职责转移留痕**不进幂等链**——连触 3 次 ⇒ skipped 累计 3、永不判 already-settled', async () => {
-  const root = freshRoot('punky-as-i3-');
+  const root = tempRoot('punky-as-i3-');
   const S = 'sess-i3';
   const store = seedVerdictFork(root, S, 'i3', 'verdict: fail');
   const outer = [];
   for (const id of ['ws-i3-1', 'ws-i3-2', 'ws-i3-3']) {
-    outer.push(await autoSettleLane({ ctx: assemblyCtx(), store, root }, {
+    outer.push(await autoSettleLane({ ctx: assemblyCtxOpts(), store, root }, {
       sessionId: S, batchId: 'i3', lane: 'a1', workerSessionId: id,
       stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.settleRequest,
     }));
@@ -602,10 +580,10 @@ test('I4: 层判定单点 isAuditLayerLane——仅 `layer === "audit"` 命中�
 });
 
 test('I5: 【专门用例·分叉关闭】audit 产物含行首 `verdict: fail` ⇒ 批**不得**被判为可完成（改前此处 ok:true）', async () => {
-  const root = freshRoot('punky-as-i5-');
+  const root = tempRoot('punky-as-i5-');
   const S = 'sess-i5';
   const store = seedVerdictFork(root, S, 'i5', 'verdict: fail');
-  const r = await autoSettleLane({ ctx: assemblyCtx(), store, root }, {
+  const r = await autoSettleLane({ ctx: assemblyCtxOpts(), store, root }, {
     sessionId: S, batchId: 'i5', lane: 'a1', workerSessionId: 'ws-i5',
     stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd,
   });
@@ -629,10 +607,10 @@ test('I5: 【专门用例·分叉关闭】audit 产物含行首 `verdict: fail` 
 });
 
 test('I6: 【专门用例·同判据回归】`verdict: pass` ⇒ 完成门判定与改前逐字一致（显式 merged 放行、exec 自动路照旧）', async () => {
-  const root = freshRoot('punky-as-i6-');
+  const root = tempRoot('punky-as-i6-');
   const S = 'sess-i6';
   const store = seedVerdictFork(root, S, 'i6', 'verdict: pass');
-  const r = await autoSettleLane({ ctx: assemblyCtx(), store, root }, {
+  const r = await autoSettleLane({ ctx: assemblyCtxOpts(), store, root }, {
     sessionId: S, batchId: 'i6', lane: 'a1', workerSessionId: 'ws-i6',
     stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd,
   });

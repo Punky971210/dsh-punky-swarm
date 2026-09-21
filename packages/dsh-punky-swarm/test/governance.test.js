@@ -24,19 +24,16 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
-import { threeTierTasks, seedArtifacts, runLane, registerManager } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, runLane, registerManager, tempRoot } from './helpers/gate-fixture.mjs';
 import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
 
 // 【P1 同步 · 前置】团队资产的 skills 必须可解析（不可解析/技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）
 //   ⇒ 隔离 HOME 下先注入宿主技能根；本套件建批统一补 `software-team`（见各 harness 的 withDefaultTeam）。
 seedTeamAssetSkills('software-team');
 
-function freshRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 // ---------- 1. governance store 层（batch-store.js） ----------
-const store = createStore(freshRoot('punky-gov-store-'));
+const store = createStore(tempRoot('punky-gov-store-'));
 const S = 'sess-gov';
 
 test('readGovernance returns defaults when no file / corrupted file', () => {
@@ -99,7 +96,7 @@ test('hasActiveBatch: 活跃（非终态）批次判定', () => {
 });
 
 // ---------- 2. assign_check 增强（tools.js） ----------
-const toolsRoot = freshRoot('punky-gov-tools-');
+const toolsRoot = tempRoot('punky-gov-tools-');
 const toolsStore = createStore(toolsRoot);
 const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store: toolsStore, root: toolsRoot });
 // 【P1 同步】`team` 现为必填且必须解析到资产（无资产 ⇒ 构造期拒）⇒ 本套件（建批只是手段、被检面是治理门）统一补
@@ -318,7 +315,7 @@ function makeGuarded(deps) {
 }
 
 test('guard: 未评估 → 执行型被拒（门禁 1），非执行型放行，计数与拦截分离', () => {
-  const root = freshRoot('punky-gov-guard1-');
+  const root = tempRoot('punky-gov-guard1-');
   const st = createStore(root);
   const { guardFn } = makeGuarded({ store: st, root });
   assert.equal(typeof guardFn(), 'function');
@@ -335,7 +332,7 @@ test('guard: 未评估 → 执行型被拒（门禁 1），非执行型放行，
 });
 
 test('guard: C 类未建批 → 执行型被拒（门禁 2）；wave_plan 建批 → pendingBatch=false 放行', async () => {
-  const root = freshRoot('punky-gov-guard2-');
+  const root = tempRoot('punky-gov-guard2-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -354,7 +351,7 @@ test('guard: C 类未建批 → 执行型被拒（门禁 2）；wave_plan 建批
 });
 
 test('guard: A 类派 subagent/subagent_fork → 拒（门禁 3 一致性），A 类 pwsh 放行', async () => {
-  const root = freshRoot('punky-gov-guard3-');
+  const root = tempRoot('punky-gov-guard3-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -368,7 +365,7 @@ test('guard: A 类派 subagent/subagent_fork → 拒（门禁 3 一致性），A
 });
 
 test('guard: execToolCount 仅观察——补足 20+ 次执行调用**不再**触发重评（2026-09-16 裁决）', async () => {
-  const root = freshRoot('punky-gov-guard4-');
+  const root = tempRoot('punky-gov-guard4-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -387,7 +384,7 @@ test('guard: execToolCount 仅观察——补足 20+ 次执行调用**不再**�
 });
 
 test('guard: 不同 session 隔离——B 会话不受 A 会话 pendingBatch 影响', async () => {
-  const root = freshRoot('punky-gov-guard5-');
+  const root = tempRoot('punky-gov-guard5-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -405,7 +402,7 @@ test('guard: 不同 session 隔离——B 会话不受 A 会话 pendingBatch 影
 });
 
 test('guard: config.escalation.execTools 覆盖执行型名单', async () => {
-  const root = freshRoot('punky-gov-guard6-');
+  const root = tempRoot('punky-gov-guard6-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root, config: { escalation: { execTools: ['pwsh'] } } });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -418,7 +415,7 @@ test('guard: config.escalation.execTools 覆盖执行型名单', async () => {
 
 // ---------- 4. 写入点：wave_plan 建批 / batch complete|aborted 清 pendingBatch ----------
 test('wave_plan 建批清 pendingBatch；batch_phase complete/aborted 兜底清理', async () => {
-  const root = freshRoot('punky-gov-wp-');
+  const root = tempRoot('punky-gov-wp-');
   const st = createStore(root);
   const { tools: tls } = createTools({ tools: { register: () => {} }, logger: console }, { store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -444,7 +441,7 @@ test('wave_plan 建批清 pendingBatch；batch_phase complete/aborted 兜底清�
 });
 
 test('assign_check: C 判定后重评为 A/B → pendingBatch 残留清除（Gap D 修复）', async () => {
-  const root = freshRoot('punky-gov-pbc-');
+  const root = tempRoot('punky-gov-pbc-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -464,7 +461,7 @@ test('assign_check: C 判定后重评为 A/B → pendingBatch 残留清除（Gap
 
 // ---------- 5. session 显式化兼容（session-compat：显式 sessionID + 兼容不填） ----------
 test('assign_check: 显式 session 回显 + 镜像到执行会话，guard 不误拦，建批后双向解锁', async () => {
-  const root = freshRoot('punky-gov-compat1-');
+  const root = tempRoot('punky-gov-compat1-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -498,7 +495,7 @@ test('assign_check: 显式 session 回显 + 镜像到执行会话，guard 不误
 });
 
 test('assign_check: A 类显式 session → 镜像后执行会话 guard 放行（镜像前误拦对比）', async () => {
-  const root = freshRoot('punky-gov-compat2-');
+  const root = tempRoot('punky-gov-compat2-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -513,7 +510,7 @@ test('assign_check: A 类显式 session → 镜像后执行会话 guard 放行�
 });
 
 test('assign_check: 缺省 session → 落当前执行会话不镜像；无会话上下文 → cli 兜底 + notice', async () => {
-  const root = freshRoot('punky-gov-compat3-');
+  const root = tempRoot('punky-gov-compat3-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -540,7 +537,7 @@ test('assign_check: 缺省 session → 落当前执行会话不镜像；无会�
 
 // ---------- 5. 难度门禁 v3：只读侦察面 + 主动写入难度/判据（无默认档） ----------
 test('guard: 未评估态只读 shell 放行且不计数；写命令仍拦（只读侦察面）', () => {
-  const root = freshRoot('punky-gov-ro-');
+  const root = tempRoot('punky-gov-ro-');
   const st = createStore(root);
   const { guardFn } = makeGuarded({ store: st, root });
   const call = (name, args, sess) => guardFn()({ name, arguments: args, agent: { session: { id: sess ?? 'sess-ro' } } });
@@ -560,7 +557,7 @@ test('guard: 未评估态只读 shell 放行且不计数；写命令仍拦（只
 });
 
 test('guard: 旧记录（有 form 无 difficulty）按未评估处理（升级后一次性重评）', () => {
-  const root = freshRoot('punky-gov-legacy-');
+  const root = tempRoot('punky-gov-legacy-');
   const st = createStore(root);
   const { guardFn } = makeGuarded({ store: st, root });
   const call = (name) => guardFn()({ name, agent: { session: { id: 'sess-legacy' } } });
@@ -573,7 +570,7 @@ test('guard: 旧记录（有 form 无 difficulty）按未评估处理（升级�
 });
 
 test('assign_check: 无默认档——缺 difficulty / 缺判据 / 判据过短一律拒且零写入', async () => {
-  const root = freshRoot('punky-gov-req-');
+  const root = tempRoot('punky-gov-req-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -606,7 +603,7 @@ test('assign_check: 无默认档——缺 difficulty / 缺判据 / 判据过短�
 });
 
 test('assign_check: 声明与特征矛盾 → 拒 GATE_DIFFICULTY_MISMATCH（零写入）', async () => {
-  const root = freshRoot('punky-gov-mm-');
+  const root = tempRoot('punky-gov-mm-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -622,7 +619,7 @@ test('assign_check: 声明与特征矛盾 → 拒 GATE_DIFFICULTY_MISMATCH（零
 });
 
 test('assign_check: 难度与判据落 governance.json（审计面：lastAssign + history 双留痕）', async () => {
-  const root = freshRoot('punky-gov-audit-');
+  const root = tempRoot('punky-gov-audit-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -642,7 +639,7 @@ test('assign_check: 难度与判据落 governance.json（审计面：lastAssign 
 });
 
 test('assign_check: 有解释的偏离 → 放行 + derived/override 落盘（Q-B1=B，2026-09-14）', async () => {
-  const root = freshRoot('punky-gov-ovr-');
+  const root = tempRoot('punky-gov-ovr-');
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
@@ -672,7 +669,7 @@ test('assign_check: 有解释的偏离 → 放行 + derived/override 落盘（Q-
 });
 
 test('两阶段锚定：只读侦察 → 写入判据 → 全工具面开放（C 类判定后只读命令仍放行）', async () => {
-  const root = freshRoot('punky-gov-2phase-');
+  const root = tempRoot('punky-gov-2phase-');
   const st = createStore(root);
   const { guardFn, tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));

@@ -48,7 +48,7 @@ function set(session, batchId, lane, to, note) {
   try { return store.setMember(session, batchId, lane, to, note); }
   catch (e) { return e; }
 }
-function runLane(batchId, lane) {
+function runLaneOrError(batchId, lane) {
   const r1 = set(SID, batchId, lane, 'running');
   if (r1 instanceof Error) return r1;
   const r2 = set(SID, batchId, lane, 'review');
@@ -69,11 +69,11 @@ function completeThreeLayer(batchId) {
   makePlan(batchId, tasks3());
   store.setPhase(SID, batchId, 'running');
   art(batchId, 'plan/spec.md', specOk);
-  runLane(batchId, 'p1');
+  runLaneOrError(batchId, 'p1');
   art(batchId, 'exec/e1/main.py', 'print(1)');
-  runLane(batchId, 'e1');
+  runLaneOrError(batchId, 'e1');
   art(batchId, 'audit/review.md', 'ok');
-  runLane(batchId, 'a1');
+  runLaneOrError(batchId, 'a1');
   return store.setPhase(SID, batchId, 'complete');
 }
 
@@ -144,7 +144,7 @@ test('A4：归档失败不阻断 complete——archive.failed + complete 已置�
   store.setPhase(SID, 'b-fail', 'running');
   seedArtifacts(root, SID, 'b-fail', ['t1']);
   for (const lane of ['p1', 't1', 'a1']) {
-    const e = runLane('b-fail', lane);
+    const e = runLaneOrError('b-fail', lane);
     if (e instanceof Error) throw e;
   }
   fs.rmSync(path.join(root, 'sessions', SID, 'artifacts', 'b-fail'), { recursive: true, force: true });
@@ -170,7 +170,7 @@ test('A5：行为不变——非 complete 不归档；新建批次 archived 缺�
   store.createBatch(SID, { batchId: 'b-nc', wavePlan: p });
   assert.equal(store.readBatch(SID, 'b-nc').archived, false); // v3 新建批次缺省 false
   store.setPhase(SID, 'b-nc', 'running');
-  runLane('b-nc', 'x');
+  runLaneOrError('b-nc', 'x');
   // phase 仍 running → 不触发归档
   assert.equal(fs.existsSync(path.join(root, 'sessions', SID, 'archive', 'b-nc')), false);
   const bn = store.readBatch(SID, 'b-nc');

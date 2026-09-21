@@ -163,7 +163,7 @@
     "test/auto-settle.test.js": {
       "asserts": 127,
       "blankLines": 35,
-      "lines": 647,
+      "lines": 625,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -179,7 +179,7 @@
     "test/batch-control.test.js": {
       "asserts": 69,
       "blankLines": 37,
-      "lines": 389,
+      "lines": 377,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -323,7 +323,7 @@
     "test/dispatch-register.test.js": {
       "asserts": 72,
       "blankLines": 20,
-      "lines": 387,
+      "lines": 365,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -342,6 +342,14 @@
       "lines": 183,
       "tautologies": 0,
       "tests": 10,
+      "todos": 0
+    },
+    "test/fixture-helper-ledger.test.js": {
+      "asserts": 15,
+      "blankLines": 13,
+      "lines": 122,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/fixture-skill-ledger.test.js": {
@@ -467,7 +475,7 @@
     "test/governance-bootoverlay.test.js": {
       "asserts": 8,
       "blankLines": 11,
-      "lines": 108,
+      "lines": 85,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -515,7 +523,7 @@
     "test/governance-escalate.test.js": {
       "asserts": 95,
       "blankLines": 33,
-      "lines": 519,
+      "lines": 498,
       "tautologies": 0,
       "tests": 17,
       "todos": 0
@@ -523,7 +531,7 @@
     "test/governance-harden-proto.test.js": {
       "asserts": 91,
       "blankLines": 40,
-      "lines": 447,
+      "lines": 421,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -531,7 +539,7 @@
     "test/governance-hotconfig.test.js": {
       "asserts": 58,
       "blankLines": 23,
-      "lines": 290,
+      "lines": 267,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -555,7 +563,7 @@
     "test/governance-preset-config.test.js": {
       "asserts": 36,
       "blankLines": 18,
-      "lines": 289,
+      "lines": 268,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -595,7 +603,7 @@
     "test/governance-toolban.test.js": {
       "asserts": 91,
       "blankLines": 37,
-      "lines": 419,
+      "lines": 399,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -611,7 +619,7 @@
     "test/governance.test.js": {
       "asserts": 208,
       "blankLines": 41,
-      "lines": 691,
+      "lines": 688,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -883,7 +891,7 @@
     "test/rework.test.js": {
       "asserts": 10,
       "blankLines": 11,
-      "lines": 110,
+      "lines": 108,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1035,7 +1043,7 @@
     "test/topic-wiring.test.js": {
       "asserts": 45,
       "blankLines": 17,
-      "lines": 252,
+      "lines": 248,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1083,7 +1091,7 @@
     "test/watch-bootoverlay.test.js": {
       "asserts": 23,
       "blankLines": 18,
-      "lines": 211,
+      "lines": 189,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1099,7 +1107,7 @@
     "test/watch-hotconfig.test.js": {
       "asserts": 76,
       "blankLines": 26,
-      "lines": 427,
+      "lines": 406,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1193,7 +1201,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T13:32:33Z",
+  "generatedAt": "2026-09-21T13:52:15Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1207,12 +1215,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8367,
-    "blankLines": 3942,
-    "files": 149,
-    "lines": 44191,
+    "asserts": 8382,
+    "blankLines": 3955,
+    "files": 150,
+    "lines": 44071,
     "tautologies": 0,
-    "tests": 1722,
+    "tests": 1727,
     "todos": 4
   }
 }

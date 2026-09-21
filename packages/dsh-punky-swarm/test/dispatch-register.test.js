@@ -38,31 +38,9 @@ import {
   issueLaneHandle, parseLaneHandleFromText, verifyLaneHandle, consumeLaneHandle,
   pendingHandles, sweepExpiredHandles, textOfDispatchArgs, LANE_HANDLE_TTL_MS, __resetLaneHandles,
 } from '../lib/bridge/lane-handle.js';
+import { assemblyCtx, tempRoot } from './helpers/gate-fixture.mjs';
 
-// ── helpers（对齐 governance-escalate.test.js assemblyCtx / seedBatch 形态）──
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const ctx = {
-    listeners, calls, logger,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  return ctx;
-}
-function freshRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+// ── 装配级 fake ctx：`assemblyCtx()` 装配 ctx **基线**（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 function execOf(name, args, sessionId, extra = {}) {
   return {
     name,
@@ -113,7 +91,7 @@ test('R1: extractWorkerSessionId——subagent continuable 取 subagentId；back
 
 // ── R2：真实登记路径（member_status running 意图 → subagent post-execute → member.dispatch 事件落批 + dispatchIndex 可查）──
 test('R2: installDispatchRegistration——member_status(running) 意图 → subagent post-execute → member.dispatch 事件落批、dispatchIndex 映射可查', async () => {
-  const root = freshRoot('punky-dr2-');
+  const root = tempRoot('punky-dr2-');
   // 拓扑对齐：Manager 会话 = 批会话（member_status 未显式 session 时 sessionOf 回退 exec.agent.session.id，
   // 与 member_status 工具自身 setMember 定位同源——批文件须在 Manager 会话下）
   const aux = seedRunning(root, 'mgr-s', 'b-r2');
@@ -144,7 +122,7 @@ test('R2: installDispatchRegistration——member_status(running) 意图 → sub
 
 // R2-b：意图 sessionId 显式指向批所在会话（Manager 会话 ≠ 批会话时，member_status 带 args.session）
 test('R2b: member_status 显式 session 指向批会话 → 事件落对批、映射正确', async () => {
-  const root = freshRoot('punky-dr2b-');
+  const root = tempRoot('punky-dr2b-');
   const aux = seedRunning(root, 'sess-b', 'b-r2b');
   const ctx = assemblyCtx();
   const index = new Map();
@@ -162,7 +140,7 @@ test('R2b: member_status 显式 session 指向批会话 → 事件落对批、�
 
 // ── R3：非 Manager 派发不登记（T16 语义：无 member_status 意图 → 零 member.dispatch、零副作用）──
 test('R3: 未取到批上下文（无 member_status 意图，非 Manager 派发）→ 不登记（T16 静默降级）', async () => {
-  const root = freshRoot('punky-dr3-');
+  const root = tempRoot('punky-dr3-');
   const aux = seedRunning(root, 'sess-b', 'b-r3');
   const ctx = assemblyCtx();
   const index = new Map();
@@ -184,7 +162,7 @@ test('R3: 未取到批上下文（无 member_status 意图，非 Manager 派发�
 
 // ── R4：send_message 重复唤醒幂等（同一 worker 已登记 → 不重复 member.dispatch）──
 test('R4: 已登记 worker 再次 send_message 唤醒 → 幂等跳过（不重复事件）', async () => {
-  const root = freshRoot('punky-dr4-');
+  const root = tempRoot('punky-dr4-');
   const aux = seedRunning(root, 'sess-b', 'b-r4');
   const ctx = assemblyCtx();
   const index = new Map();
@@ -210,7 +188,7 @@ test('R4: 已登记 worker 再次 send_message 唤醒 → 幂等跳过（不重�
 // 回归缺陷：官方 profile 下 `subagent*` 不在宿主工具面（其告警分支恒不进），而 `send_message` 原读错键名
 // （`args.subagent_id`）⇒ 提取恒 null ⇒ `return next()` **零告警漏登记**，下游 laneBindingOf/自动结算静默失效。
 test('R4b: send_message 键名漂移（既非 agent_id 亦非 subagent_id）⇒ 显式降级告警 + 零登记（不静默）', async () => {
-  const root = freshRoot('punky-dr4b-');
+  const root = tempRoot('punky-dr4b-');
   const aux = seedRunning(root, 'sess-b', 'b-r4b');
   const ctx = assemblyCtx();
   const index = new Map();
@@ -233,7 +211,7 @@ test('R4b: send_message 键名漂移（既非 agent_id 亦非 subagent_id）⇒ 
 
 // ── R5：装配层端到端（apply 真实装配：登记 → 归属命中 → escalation 计数 → paused——读侧骨架零改动生效）──
 test('R5: apply 装配端到端——真实登记路径（member_status running + subagent post-execute）→ worker refusal 归属批计数 → escalation paused', async () => {
-  const root = freshRoot('punky-dr5-');
+  const root = tempRoot('punky-dr5-');
   const aux = seedRunning(root, 'sess-b', 'b-r5'); // running 批
   const ctx = assemblyCtx();
   const RULE_RM_RF = {
@@ -274,7 +252,7 @@ test('R5: apply 装配端到端——真实登记路径（member_status running 
 
 // ── R6：装配注入 resolveBatchContext 显式路径（不经 member_status 意图）──
 test('R6: 装配注入 resolveBatchContext(exec) 显式返回批上下文 → 无 member_status 也登记', async () => {
-  const root = freshRoot('punky-dr6-');
+  const root = tempRoot('punky-dr6-');
   const aux = seedRunning(root, 'sess-b', 'b-r6');
   const ctx = assemblyCtx();
   const index = new Map();
@@ -293,7 +271,7 @@ test('R6: 装配注入 resolveBatchContext(exec) 显式返回批上下文 → �
 
 // R7：ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸）
 test('R7: ctx.on 缺失 → installDispatchRegistration inert（installed:false、零副作用）', () => {
-  const root = freshRoot('punky-dr7-');
+  const root = tempRoot('punky-dr7-');
   const reg = installDispatchRegistration({ logger: console }, { store: createStore(root), dispatchIndex: new Map(), config: {} });
   assert.equal(reg.installed, false);
   assert.equal(reg.count(), 0);
@@ -343,7 +321,7 @@ test('R9: lane-handle——issue→parse→consume 一次性；未知/过期/批
 // ── R11：工具面接线自证 —— `createCoreTools` 必须暴露套件派发入口 `lane_dispatch` ──
 // 依据：2026-09-15 用户裁决「token 走新工具 lane_dispatch 取句柄」；本用例防「模块在、工具没接」的假绿。
 test('R11: createCoreTools 暴露 lane_dispatch（参数含 batchId/lane；与 member_status 同批门禁语义）', async () => {
-  const root = freshRoot('punky-dr11-');
+  const root = tempRoot('punky-dr11-');
   const ctx = assemblyCtx();
   const tools = createCoreTools(ctx, { store: createStore(root), root, config: {} });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
@@ -359,7 +337,7 @@ test('R11: createCoreTools 暴露 lane_dispatch（参数含 batchId/lane；与 m
 // 回归缺陷：旧「单槽意图」（每会话只留最后一次 member_status(running)）在并行派发时只登记最后一条。
 test('R10: 任务包含句柄 ⇒ 依句柄 (batchId, lane) 精确登记；并行两条 lane 全登记；句柄重放不登记', async () => {
   __resetLaneHandles();
-  const root = freshRoot('punky-dr10-');
+  const root = tempRoot('punky-dr10-');
   const aux = seedRunning(root, 'mgr-s', 'b-r10', ['l1', 'l2']);
   const ctx = assemblyCtx();
   const index = new Map();

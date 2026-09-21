@@ -63,7 +63,7 @@ function set(session, batchId, lane, to, note) {
   try { return store.setMember(session, batchId, lane, to, note); }
   catch (e) { return e; }
 }
-function runLane(batchId, lane) {
+function runLaneOrError(batchId, lane) {
   const r1 = set(SID, batchId, lane, 'running');
   if (r1 instanceof Error) return r1;
   const r2 = set(SID, batchId, lane, 'review');
@@ -184,11 +184,11 @@ test('Exit Gate：目录型 outputs 通过 merged（Bug1 修复覆盖 exit gate 
     { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art('b-dir-exit', 'plan/spec.md');
-  runLane('b-dir-exit', 'p1');
+  runLaneOrError('b-dir-exit', 'p1');
   fs.mkdirSync(path.join(root, 'sessions', SID, 'artifacts', 'b-dir-exit', 'exec', 'e1', 'data'), { recursive: true });
   // r2 新增：目录语义要求**非空**（空目录不得冒充产物）⇒ 目录内放一个真实文件
   art('b-dir-exit', 'exec/e1/data/out.txt');
-  const r = runLane('b-dir-exit', 'e1');
+  const r = runLaneOrError('b-dir-exit', 'e1');
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.e1, 'merged');
 });
@@ -205,7 +205,7 @@ test('L0：plan merged 前 spec 缺必填章节 → 拒绝', () => {
   makePlan('b-l0', tasks3());
   art('b-l0', 'plan/spec.md', '# spec without sections');
   art('b-l0', 'plan/task-tree.json');
-  const r = runLane('b-l0', 'p1');
+  const r = runLaneOrError('b-l0', 'p1');
   assert.ok(r instanceof Error && /GATE_PLAN_CONTRACT/.test(r.message), String(r.message));
 });
 
@@ -213,7 +213,7 @@ test('L0：spec 齐备 + task-tree 合法 JSON → plan merged 通过', () => {
   makePlan('b-l0b', tasks3());
   art('b-l0b', 'plan/spec.md');
   art('b-l0b', 'plan/task-tree.json');
-  const r = runLane('b-l0b', 'p1');
+  const r = runLaneOrError('b-l0b', 'p1');
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.p1, 'merged');
 });
@@ -221,8 +221,8 @@ test('L0：spec 齐备 + task-tree 合法 JSON → plan merged 通过', () => {
 test('Exit Gate exec：merged 前 outputs 缺失 → 拒绝', () => {
   makePlan('b-ex', tasks3());
   art('b-ex', 'plan/spec.md'); art('b-ex', 'plan/task-tree.json');
-  runLane('b-ex', 'p1');
-  runLane('b-ex', 'e1'); // e1 未写 outputs → merged 被拒
+  runLaneOrError('b-ex', 'p1');
+  runLaneOrError('b-ex', 'e1'); // e1 未写 outputs → merged 被拒
   assert.equal(store.readBatch(SID, 'b-ex').lanes.e1, 'review');
 });
 
@@ -231,10 +231,10 @@ test('Exit Gate exec：merged 前 outputs 缺失 → 拒绝', () => {
 test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；拒后不可原地重来（恢复 = gap-list + 新批次）', () => {
   makePlan('b-au', tasks3());
   art('b-au', 'plan/spec.md'); art('b-au', 'plan/task-tree.json');
-  runLane('b-au', 'p1');
+  runLaneOrError('b-au', 'p1');
   art('b-au', 'exec/e1/main.py');
-  runLane('b-au', 'e1');
-  const r = runLane('b-au', 'a1'); // audit produce 未写
+  runLaneOrError('b-au', 'e1');
+  const r = runLaneOrError('b-au', 'a1'); // audit produce 未写
   assert.ok(r instanceof Error && /GATE_EXIT_MISSING_AUDIT/.test(r.message), String(r.message));
   // 拒 = 零写入 ⇒ 状态不变（仍 review，非终态）
   assert.equal(store.readBatch(SID, 'b-au').lanes.a1, 'review');
@@ -244,12 +244,12 @@ test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；拒后不可原�
   // 恢复路径 = 新任务批次：同规格另开一批，产物齐备 ⇒ 正常结算并留 gate.passed
   makePlan('b-au2', tasks3());
   art('b-au2', 'plan/spec.md'); art('b-au2', 'plan/task-tree.json');
-  runLane('b-au2', 'p1');
+  runLaneOrError('b-au2', 'p1');
   art('b-au2', 'exec/e1/main.py');
-  runLane('b-au2', 'e1');
+  runLaneOrError('b-au2', 'e1');
   art('b-au2', 'audit/review.md');
   art('b-au2', 'audit/gap-list.json');
-  const ok = runLane('b-au2', 'a1');
+  const ok = runLaneOrError('b-au2', 'a1');
   assert.ok(!(ok instanceof Error), String(ok && ok.message));
   assert.ok(ok.events.some((e) => e.type === 'gate.passed' && e.lane === 'a1'));
 });
@@ -257,15 +257,15 @@ test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；拒后不可原�
 test('Complete Gate：audit 未完成 → 拒绝；audit 完成后通过', () => {
   makePlan('b-c', tasks3());
   art('b-c', 'plan/spec.md'); art('b-c', 'plan/task-tree.json');
-  runLane('b-c', 'p1');
+  runLaneOrError('b-c', 'p1');
   art('b-c', 'exec/e1/main.py');
-  runLane('b-c', 'e1');
+  runLaneOrError('b-c', 'e1');
   store.setPhase(SID, 'b-c', 'running');
   let r1;
   try { store.setPhase(SID, 'b-c', 'complete'); r1 = null; } catch (e) { r1 = e; }
   assert.ok(r1 instanceof Error && /GATE_EXIT_PENDING_AUDIT/.test(r1.message), String(r1.message));
   art('b-c', 'audit/review.md'); art('b-c', 'audit/gap-list.json');
-  runLane('b-c', 'a1');
+  runLaneOrError('b-c', 'a1');
   const r2 = store.setPhase(SID, 'b-c', 'complete');
   assert.ok(!(r2 instanceof Error), String(r2.message));
   assert.equal(r2.phase, 'complete');
@@ -301,9 +301,9 @@ const NEEDHUMAN_TASKS = [
 function setupNeedHuman(batchId, acceptance = '# 验收\nneedHuman: true\n') {
   makePlan(batchId, NEEDHUMAN_TASKS);
   art(batchId, 'plan/spec.md');
-  runLane(batchId, 'p1');
+  runLaneOrError(batchId, 'p1');
   art(batchId, 'exec/e1/main.py');
-  runLane(batchId, 'e1');
+  runLaneOrError(batchId, 'e1');
   art(batchId, 'audit/acceptance.md', acceptance);
   const r = set(SID, batchId, 'a1', 'running'); // 派发 audit lane（产物已备）
   if (r instanceof Error) throw r;
@@ -367,11 +367,11 @@ test('needHuman N4：挂 review 未裁决 → complete 拒（GATE_EXIT_PENDING_A
 test('needHuman N5：无 needHuman 声明的 audit lane merged 不要求证据（零侵入）', () => {
   makePlan('b-nh6', tasks3()); // tasks3 的 a1 produce 无 needHuman 声明
   art('b-nh6', 'plan/spec.md'); art('b-nh6', 'plan/task-tree.json');
-  runLane('b-nh6', 'p1');
+  runLaneOrError('b-nh6', 'p1');
   art('b-nh6', 'exec/e1/main.py');
-  runLane('b-nh6', 'e1');
+  runLaneOrError('b-nh6', 'e1');
   art('b-nh6', 'audit/review.md'); art('b-nh6', 'audit/gap-list.json');
-  const r = runLane('b-nh6', 'a1'); // merged 无 note
+  const r = runLaneOrError('b-nh6', 'a1'); // merged 无 note
   assert.ok(!(r instanceof Error), String(r.message));
   assert.equal(r.lanes.a1, 'merged');
   assert.ok(!r.events.some((e) => e.type === 'lane.needhuman'));
@@ -436,9 +436,9 @@ test('命令 gate G1：detectGate 独立行语义——行首命中/多行保序
 test('命令 gate G4：exit 0 → merged 放行 + gate.exit 事件（命令/exitCode/耗时）', () => {
   makePlan('b-cg-ok', CMD_TASKS);
   art('b-cg-ok', 'plan/spec.md');
-  runLane('b-cg-ok', 'p1');
+  runLaneOrError('b-cg-ok', 'p1');
   art('b-cg-ok', 'exec/test-report.md', '# 验证\n- ok\ngate: node -e "process.exit(0)"\n');
-  const r = runLane('b-cg-ok', 'e1');
+  const r = runLaneOrError('b-cg-ok', 'e1');
   assert.ok(!(r instanceof Error), String(r && r.message));
   assert.equal(r.lanes.e1, 'merged');
   const ev = r.events.find((e) => e.type === 'gate.exit');
@@ -451,9 +451,9 @@ test('命令 gate G4：exit 0 → merged 放行 + gate.exit 事件（命令/exit
 test('命令 gate G4：exit 非 0 → 拒 merged 抛 GATE_EXIT_NONZERO + gate.exit_blocked 留痕，lane 留 review', () => {
   makePlan('b-cg-nz', CMD_TASKS);
   art('b-cg-nz', 'plan/spec.md');
-  runLane('b-cg-nz', 'p1');
+  runLaneOrError('b-cg-nz', 'p1');
   art('b-cg-nz', 'exec/test-report.md', '# 验证\ngate: node -e "process.exit(3)"\n');
-  const r = runLane('b-cg-nz', 'e1');
+  const r = runLaneOrError('b-cg-nz', 'e1');
   assert.ok(r instanceof Error && /GATE_EXIT_NONZERO/.test(r.message), String(r && r.message));
   const b = store.readBatch(SID, 'b-cg-nz');
   assert.equal(b.lanes.e1, 'review'); // 失败 lane 留 review（非终态，C4）
@@ -464,9 +464,9 @@ test('命令 gate G4：exit 非 0 → 拒 merged 抛 GATE_EXIT_NONZERO + gate.ex
 test('命令 gate G7：黑名单命令 → GATE_EXIT_FORBIDDEN（拒绝执行，gate.exit_blocked 留痕）', () => {
   makePlan('b-cg-fb', CMD_TASKS);
   art('b-cg-fb', 'plan/spec.md');
-  runLane('b-cg-fb', 'p1');
+  runLaneOrError('b-cg-fb', 'p1');
   art('b-cg-fb', 'exec/test-report.md', '# 验证\ngate: rm -rf /tmp/xxx\n');
-  const r = runLane('b-cg-fb', 'e1');
+  const r = runLaneOrError('b-cg-fb', 'e1');
   assert.ok(r instanceof Error && /GATE_EXIT_FORBIDDEN/.test(r.message), String(r && r.message));
   const ev = store.readBatch(SID, 'b-cg-fb').events.find((e) => e.type === 'gate.exit_blocked');
   assert.ok(ev && ev.code === 'GATE_EXIT_FORBIDDEN', JSON.stringify(ev));
@@ -475,7 +475,7 @@ test('命令 gate G7：黑名单命令 → GATE_EXIT_FORBIDDEN（拒绝执行，
 test('命令 gate G9：失败 + needHuman 声明 → 转人工闸：无 human 证据拒 GATE_NEEDHUMAN_PENDING；有证据 merged', () => {
   makePlan('b-cg-nh', CMD_TASKS);
   art('b-cg-nh', 'plan/spec.md');
-  runLane('b-cg-nh', 'p1');
+  runLaneOrError('b-cg-nh', 'p1');
   art('b-cg-nh', 'exec/test-report.md', '# 验证\ngate: node -e "process.exit(1)"\nneedHuman: true\n');
   const r1 = set(SID, 'b-cg-nh', 'e1', 'running');
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
@@ -496,9 +496,9 @@ test('命令 gate G9：失败 + needHuman 声明 → 转人工闸：无 human �
 test('命令 gate G10：未声明 gate → merged 零感知（无 gate.* 事件）', () => {
   makePlan('b-cg-z', CMD_TASKS);
   art('b-cg-z', 'plan/spec.md');
-  runLane('b-cg-z', 'p1');
+  runLaneOrError('b-cg-z', 'p1');
   art('b-cg-z', 'exec/test-report.md', '# 验证\n- 无 gate 声明\n');
-  const r = runLane('b-cg-z', 'e1');
+  const r = runLaneOrError('b-cg-z', 'e1');
   assert.ok(!(r instanceof Error), String(r && r.message));
   assert.equal(r.lanes.e1, 'merged');
   assert.ok(!r.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'expect zero gate events');
@@ -512,9 +512,9 @@ test('命令 gate G10：未声明 gate → merged 零感知（无 gate.* 事件�
 test('命令 gate G11：空 `gate:` 行 ⇒ 拒 GATE_EXIT_NO_COMMAND（端到端：抛错 + lane 留 review + 恰 1 条 gate.exit_blocked）', () => {
   makePlan('b-cg-empty', CMD_TASKS);
   art('b-cg-empty', 'plan/spec.md');
-  runLane('b-cg-empty', 'p1');
+  runLaneOrError('b-cg-empty', 'p1');
   art('b-cg-empty', 'exec/test-report.md', '# 验证\ngate:\n'); // 独立行 `gate:`：**已声明**但命令解析为空
-  const r = runLane('b-cg-empty', 'e1');
+  const r = runLaneOrError('b-cg-empty', 'e1');
   assert.ok(r instanceof Error && /GATE_EXIT_NO_COMMAND/.test(r.message),
     'F-7/A1：空声明须拒 GATE_EXIT_NO_COMMAND；实测=' + String(r && r.message));
   const b = store.readBatch(SID, 'b-cg-empty');
@@ -541,9 +541,9 @@ test('命令 gate G11：空 `gate:` 行 ⇒ 拒 GATE_EXIT_NO_COMMAND（端到端
 test('命令 gate G12：未声明 `gate:` 行 ⇒ merged 零感知（命令门族零事件；gate.* 仅剩非命令门留痕）', () => {
   makePlan('b-cg-nodecl', CMD_TASKS);
   art('b-cg-nodecl', 'plan/spec.md');
-  runLane('b-cg-nodecl', 'p1');
+  runLaneOrError('b-cg-nodecl', 'p1');
   art('b-cg-nodecl', 'exec/test-report.md', '# 验证\n- 无 gate 声明\n');
-  const r = runLane('b-cg-nodecl', 'e1');
+  const r = runLaneOrError('b-cg-nodecl', 'e1');
   assert.ok(!(r instanceof Error), String(r && r.message));
   assert.equal(r.lanes.e1, 'merged', 'F-7/A2：完全未声明 ⇒ 仍放行（不得误伤）');
   const g = r.events.filter((e) => /^gate\./.test(String(e.type)));
@@ -576,9 +576,9 @@ test('命令 gate G12：未声明 `gate:` 行 ⇒ merged 零感知（命令门�
 test('命令 gate V3：多行 gate 全部 exit 0 → merged + gate.exit 事件含全部 commands/results（保序）', () => {
   makePlan('b-cg-v3-ok', CMD_TASKS);
   art('b-cg-v3-ok', 'plan/spec.md');
-  runLane('b-cg-v3-ok', 'p1');
+  runLaneOrError('b-cg-v3-ok', 'p1');
   art('b-cg-v3-ok', 'exec/test-report.md', '# 验证\n- ok\ngate: node -e "process.exit(0)"\ngate: node -e "process.exit(0)"\n');
-  const r = runLane('b-cg-v3-ok', 'e1');
+  const r = runLaneOrError('b-cg-v3-ok', 'e1');
   assert.ok(!(r instanceof Error), String(r && r.message));
   assert.equal(r.lanes.e1, 'merged');
   const ev = r.events.find((e) => e.type === 'gate.exit');
@@ -590,12 +590,12 @@ test('命令 gate V3：多行 gate 全部 exit 0 → merged + gate.exit 事件�
 test('命令 gate V3：多行 gate 任一失败 → 短路拒绝（后续命令不执行）+ gate.exit_blocked', () => {
   makePlan('b-cg-v3-short', CMD_TASKS);
   art('b-cg-v3-short', 'plan/spec.md');
-  runLane('b-cg-v3-short', 'p1');
+  runLaneOrError('b-cg-v3-short', 'p1');
   // 第 2 条命令写标记文件：若被短路执行会留痕
   const marker = path.join(root, 'sessions', SID, 'artifacts', 'b-cg-v3-short', 'marker.txt');
   const cmd2 = 'node -e "require(\'fs\').writeFileSync(\'' + marker.replace(/\\/g, '/') + '\',\'x\')"';
   art('b-cg-v3-short', 'exec/test-report.md', '# 验证\ngate: node -e "process.exit(1)"\ngate: ' + cmd2 + '\n');
-  const r = runLane('b-cg-v3-short', 'e1');
+  const r = runLaneOrError('b-cg-v3-short', 'e1');
   assert.ok(r instanceof Error && /GATE_EXIT_NONZERO/.test(r.message), String(r && r.message));
   assert.ok(!fs.existsSync(marker), 'expect second command NOT executed (short-circuit)');
   const ev = store.readBatch(SID, 'b-cg-v3-short').events.find((e) => e.type === 'gate.exit_blocked');
@@ -608,11 +608,11 @@ test('命令 gate V5：集成层超时 → 拒 merged 抛 GATE_EXIT_TIMEOUT（�
   try {
     makePlan('b-cg-v5-t', CMD_TASKS);
     art('b-cg-v5-t', 'plan/spec.md');
-    runLane('b-cg-v5-t', 'p1');
+    runLaneOrError('b-cg-v5-t', 'p1');
     // node 长 sleep（默认 GATE_RETRY=1 → 最多 2 次执行，每次 400ms 超时）
     art('b-cg-v5-t', 'exec/test-report.md', '# 验证\ngate: node -e "setTimeout(()=>{}, 10000)"\n');
     const t0 = Date.now();
-    const r = runLane('b-cg-v5-t', 'e1');
+    const r = runLaneOrError('b-cg-v5-t', 'e1');
     const dur = Date.now() - t0;
     assert.ok(r instanceof Error && /GATE_EXIT_TIMEOUT/.test(r.message), String(r && r.message));
     assert.ok(dur < 5000, 'expect bounded duration (no hang), got ' + dur + 'ms');
@@ -634,7 +634,7 @@ test('命令 gate V9【复活·T-14·裁剪】：非 exec/audit 层（plan）产
   //   **plan 层零感知**段（判据同源：命令门只对 exec/audit 层生效）。
   makePlan('b-cg-v9-plan', CMD_TASKS);
   art('b-cg-v9-plan', 'plan/spec.md', '# Spec\n## 验收标准\n- x\ngate: node -e "process.exit(1)"\n## 约束\n- y\n');
-  const r1 = runLane('b-cg-v9-plan', 'p1'); // plan lane 产物含 gate 行但为 plan 层
+  const r1 = runLaneOrError('b-cg-v9-plan', 'p1'); // plan lane 产物含 gate 行但为 plan 层
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   assert.equal(r1.lanes.p1, 'merged');
   assert.ok(!r1.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), 'plan 层零感知');
@@ -653,18 +653,18 @@ ARCHIVED_CASES['命令 gate V9：非 exec 层（plan/audit）产物含 gate 行 
   '    assert.ok(!r2.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'audit 层零感知\');',
   '  makePlan(\'b-cg-v9-plan\', CMD_TASKS);',
   '  art(\'b-cg-v9-plan\', \'plan/spec.md\', \'# Spec\\n## 验收标准\\n- x\\ngate: node -e "process.exit(1)"\\n## 约束\\n- y\\n\');',
-  '  const r1 = runLane(\'b-cg-v9-plan\', \'p1\'); // plan lane 产物含 gate 行但为 plan 层',
+  '  const r1 = runLaneOrError(\'b-cg-v9-plan\', \'p1\'); // plan lane 产物含 gate 行但为 plan 层',
   '  assert.ok(!(r1 instanceof Error), String(r1 && r1.message));',
   '  assert.equal(r1.lanes.p1, \'merged\');',
   '  assert.ok(!r1.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'plan 层零感知\');',
   '  // audit lane：produce 含 gate 行',
   '  makePlan(\'b-cg-v9-audit\', CMD_TASKS);',
   '  art(\'b-cg-v9-audit\', \'plan/spec.md\');',
-  '  runLane(\'b-cg-v9-audit\', \'p1\');',
+  '  runLaneOrError(\'b-cg-v9-audit\', \'p1\');',
   '  art(\'b-cg-v9-audit\', \'exec/test-report.md\', \'# 验证\\n- ok\\n\');',
-  '  runLane(\'b-cg-v9-audit\', \'e1\');',
+  '  runLaneOrError(\'b-cg-v9-audit\', \'e1\');',
   '  art(\'b-cg-v9-audit\', \'audit/acceptance.md\', \'# 验收\\ngate: node -e "process.exit(1)"\\n- ok\\n\');',
-  '  const r2 = runLane(\'b-cg-v9-audit\', \'a1\');',
+  '  const r2 = runLaneOrError(\'b-cg-v9-audit\', \'a1\');',
   '  assert.ok(!(r2 instanceof Error), String(r2 && r2.message));',
   '  assert.equal(r2.lanes.a1, \'merged\');',
   '  assert.ok(!r2.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'audit 层零感知\');',
@@ -674,13 +674,13 @@ test('命令 gate V10：env 注入可用 + 事件零凭据泄漏（gate.exit 事
   const secret = 'PUNKY_TEST_SECRET_9f8e7d';
   makePlan('b-cg-v10-env', CMD_TASKS);
   art('b-cg-v10-env', 'plan/spec.md');
-  runLane('b-cg-v10-env', 'p1');
+  runLaneOrError('b-cg-v10-env', 'p1');
   // 命令从 env 读凭据并输出（命令成功执行 = env 注入可用；事件载荷不含 output/凭据值）
   art('b-cg-v10-env', 'exec/test-report.md', '# 验证\ngate: node -e "console.log(process.env.A || \'none\')"\n');
   const prev = process.env.A;
   process.env.A = secret;
   try {
-    const r = runLane('b-cg-v10-env', 'e1');
+    const r = runLaneOrError('b-cg-v10-env', 'e1');
     assert.ok(!(r instanceof Error), String(r && r.message));
     assert.equal(r.lanes.e1, 'merged');
     const ev = r.events.find((e) => e.type === 'gate.exit');
@@ -696,24 +696,24 @@ test('命令 gate V11：cwd 契约——默认 artifacts 兜底；GATE_REPO_ROOT
   // 子用例 1：默认（无 worktree、无 GATE_REPO_ROOT）→ artifacts 根兜底
   makePlan('b-cg-v11-cwd', CMD_TASKS);
   art('b-cg-v11-cwd', 'plan/spec.md');
-  runLane('b-cg-v11-cwd', 'p1');
+  runLaneOrError('b-cg-v11-cwd', 'p1');
   const marker1 = path.join(root, 'sessions', SID, 'artifacts', 'b-cg-v11-cwd', 'cwd1.txt');
   art('b-cg-v11-cwd', 'exec/test-report.md', '# 验证\ngate: node -e "require(\'fs\').writeFileSync(\'' + marker1.replace(/\\/g, '/') + '\', process.cwd())"\n');
-  const r1 = runLane('b-cg-v11-cwd', 'e1');
+  const r1 = runLaneOrError('b-cg-v11-cwd', 'e1');
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   const want1 = path.join(root, 'sessions', SID, 'artifacts', 'b-cg-v11-cwd');
   assert.equal(fs.readFileSync(marker1, 'utf8').trim().replace(/\\/g, '/'), want1.replace(/\\/g, '/'), '默认 cwd = artifacts 兜底');
   // 子用例 2：GATE_REPO_ROOT env 生效（无 worktree 时优先 repo 根配置）
   makePlan('b-cg-v11-repo', CMD_TASKS);
   art('b-cg-v11-repo', 'plan/spec.md');
-  runLane('b-cg-v11-repo', 'p1');
+  runLaneOrError('b-cg-v11-repo', 'p1');
   const marker2 = path.join(root, 'sessions', SID, 'artifacts', 'b-cg-v11-repo', 'cwd2.txt');
   const prevRoot = process.env.GATE_REPO_ROOT;
   process.env.GATE_REPO_ROOT = root + '-repo-root';
   fs.mkdirSync(process.env.GATE_REPO_ROOT, { recursive: true }); // 目录须真实存在（commandCwd 校验后生效）
   try {
     art('b-cg-v11-repo', 'exec/test-report.md', '# 验证\ngate: node -e "require(\'fs\').writeFileSync(\'' + marker2.replace(/\\/g, '/') + '\', process.cwd())"\n');
-    const r2 = runLane('b-cg-v11-repo', 'e1');
+    const r2 = runLaneOrError('b-cg-v11-repo', 'e1');
     assert.ok(!(r2 instanceof Error), String(r2 && r2.message));
     assert.equal(fs.readFileSync(marker2, 'utf8').trim().replace(/\\/g, '/'), process.env.GATE_REPO_ROOT.replace(/\\/g, '/'), 'GATE_REPO_ROOT 生效');
   } finally {
@@ -739,9 +739,9 @@ test('命令 gate C5：GATE_ENABLED=false → 全部零感知（应急逃生阀�
   try {
     makePlan('b-cg-v9-off', CMD_TASKS);
     art('b-cg-v9-off', 'plan/spec.md');
-    runLane('b-cg-v9-off', 'p1');
+    runLaneOrError('b-cg-v9-off', 'p1');
     art('b-cg-v9-off', 'exec/test-report.md', '# 验证\ngate: node -e "process.exit(1)"\n');
-    const r = runLane('b-cg-v9-off', 'e1');
+    const r = runLaneOrError('b-cg-v9-off', 'e1');
     assert.ok(!(r instanceof Error), String(r && r.message));
     assert.equal(r.lanes.e1, 'merged', '逃生阀关闭时 gate 失败命令也不拦截');
     assert.ok(!r.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked'), '无 gate 事件');
@@ -759,7 +759,7 @@ function makeTargetBatch(batchId, targets, opts = {}) {
     { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], standalone: true },
   ]);
   art(batchId, 'plan/spec.md');
-  runLane(batchId, 'p1');
+  runLaneOrError(batchId, 'p1');
   art(batchId, 'exec/e1/main.py');
   return batchId;
 }
@@ -843,9 +843,9 @@ test('O2 T4：未声明 targets → merged 零感知（无 gate.target.* 事件�
   const id = 'b-tg-t4';
   makePlan(id, tasks3());
   art(id, 'plan/spec.md'); art(id, 'plan/task-tree.json');
-  runLane(id, 'p1');
+  runLaneOrError(id, 'p1');
   art(id, 'exec/e1/main.py');
-  const r = runLane(id, 'e1');
+  const r = runLaneOrError(id, 'e1');
   assert.ok(!(r instanceof Error), String(r && r.message));
   assert.equal(r.lanes.e1, 'merged');
   assert.ok(!r.events.some((e) => e.type === 'gate.target.passed' || e.type === 'gate.target_blocked'), '无 targets 事件（零感知）');
@@ -859,14 +859,14 @@ test('O2 T5：非 exec 层（plan/audit）声明 targets → 零感知', () => {
     { id: 'a1', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md'], produce: ['audit/review.md'], cmd: 'review', deps: ['e1'], targets: ['D:\\fake\\audit-target.js'] },
   ]);
   art(id, 'plan/spec.md');
-  const r1 = runLane(id, 'p1'); // plan 层声明 targets（不存在的假路径也不拦）
+  const r1 = runLaneOrError(id, 'p1'); // plan 层声明 targets（不存在的假路径也不拦）
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   assert.equal(r1.lanes.p1, 'merged');
   assert.ok(!r1.events.some((e) => e.type === 'gate.target.passed' || e.type === 'gate.target_blocked'), 'plan 层零感知');
   art(id, 'exec/e1/main.py');
-  runLane(id, 'e1');
+  runLaneOrError(id, 'e1');
   art(id, 'audit/review.md');
-  const r3 = runLane(id, 'a1'); // audit 层声明 targets → 零感知
+  const r3 = runLaneOrError(id, 'a1'); // audit 层声明 targets → 零感知
   assert.ok(!(r3 instanceof Error), String(r3 && r3.message));
   assert.equal(r3.lanes.a1, 'merged');
   assert.ok(!r3.events.some((e) => e.type === 'gate.target.passed' || e.type === 'gate.target_blocked'), 'audit 层零感知');

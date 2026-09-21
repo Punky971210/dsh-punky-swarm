@@ -18,7 +18,7 @@ function art(batchId, rel, content) {
 function set(b, lane, to, note) {
   try { return store.setMember(SID, b, lane, to, note); } catch (e) { return e; }
 }
-function runLane(b, lane) {
+function runLaneOrError(b, lane) {
   const r1 = set(b, lane, 'running'); if (r1 instanceof Error) return r1;
   const r2 = set(b, lane, 'review'); if (r2 instanceof Error) return r2;
   return set(b, lane, 'merged');
@@ -37,9 +37,9 @@ const out = { scenarios: [] };
   const bid = 'b-smoke-a';
   store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
-  runLane(bid, 'p1');
+  runLaneOrError(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(0)"\n');
-  const r = runLane(bid, 'e1');
+  const r = runLaneOrError(bid, 'e1');
   const b = store.readBatch(SID, bid);
   const idxExit = b.events.findIndex((e) => e.type === 'gate.exit');
   const idxSettled = b.events.findIndex((e) => e.type === 'member.settled' && e.lane === 'e1' && e.to === 'merged');
@@ -57,9 +57,9 @@ const out = { scenarios: [] };
   const bid = 'b-smoke-b';
   store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
-  runLane(bid, 'p1');
+  runLaneOrError(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(2)"\n');
-  const r = runLane(bid, 'e1');
+  const r = runLaneOrError(bid, 'e1');
   const b = store.readBatch(SID, bid);
   const ev = b.events.find((e) => e.type === 'gate.exit_blocked');
   out.scenarios.push({
@@ -76,7 +76,7 @@ const out = { scenarios: [] };
   const bid = 'b-smoke-c';
   store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
-  runLane(bid, 'p1');
+  runLaneOrError(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\ngate: node -e "process.exit(1)"\nneedHuman: true\n');
   const s1 = set(bid, 'e1', 'running'); const s2 = set(bid, 'e1', 'review');
   const s3 = set(bid, 'e1', 'merged', 'no evidence');
@@ -102,9 +102,9 @@ const out = { scenarios: [] };
   const bid = 'b-smoke-d';
   store.createBatch(SID, { batchId: bid, wavePlan: buildWavePlan({ batchId: bid, tasks: TASKS, team: 'punky-preset' }) });
   art(bid, 'plan/spec.md', specOk);
-  runLane(bid, 'p1');
+  runLaneOrError(bid, 'p1');
   art(bid, 'exec/report.md', '# 验证\n- 无 gate 声明\n');
-  const r = runLane(bid, 'e1');
+  const r = runLaneOrError(bid, 'e1');
   const b = store.readBatch(SID, bid);
   const hasGateEvents = b.events.some((e) => e.type === 'gate.exit' || e.type === 'gate.exit_blocked');
   out.scenarios.push({

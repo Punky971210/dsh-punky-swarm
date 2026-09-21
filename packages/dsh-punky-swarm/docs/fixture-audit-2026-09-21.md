@@ -30,7 +30,7 @@
 | 夹具 API（`test/helpers/**` 导出） | **30** 个（F1 后 24 / 首版 23）；**④ 死夹具 = 0**（全部有直接消费者 / 显式间接加载 / 模块内自用） |
 | 桩分支线索（②） | **shape 1 + note 7**；`shape` 主证据在 `test/helpers/host-skills.mjs`（`fs.existsSync(real) ? 真实 : 造桩`），F1 起该分支**须显式 `{stub:true}`** 才可走 |
 | **技能空壳率** | 5 个团队资产共声明 **43** 个技能名，其中 **33 个（77%）在包内无真实 `SKILL.md`** ⇒ 夹具为空壳（F1 已把「造桩」从缺省改为显式，数量不变而**契约变硬**） |
-| 重复夹具候选（③） | **33** 个同名函数跨文件重复定义（F2 前 35 ⇒ 收敛 `writeTempTeam`×6 + `mkTeam*`×2） |
+| 重复夹具候选（③） | **24** 个同名函数跨文件重复定义（≥3 处；F3+F4 后由 35 降至此） |
 | 团队资产写入面（②/③ 混合） | **30** 个测试文件（F2 前 31「自建」口径虚高）⇒ **真实骨架 9 / 合成 19 / 直接写 5（白名单）** |
 
 ### 2.1 ③ 的强度证据（函数体相似度，去空行/注释后按行集合 Jaccard）
@@ -143,13 +143,28 @@
 
 **收敛效果**：重复函数候选 **33 → 28**；含高相似对的函数 **21 → 14**；高相似对合计 **156 → 70**。
 
-**剩档（F4）**
+**F4 执行结果（2026-09-21 22:0x，`lib/**` 零 diff）**
 
-| 档 | 对象 | 依据 | 建议 |
+判据工具升级：`dup-similarity.mjs` 新增 **`--group <fn>`**（按归一化函数体聚类 ⇒ 直接数出「**实际有几个形状**」）
+与 **`--struct`**（抹平字符串/数字字面量 ⇒ 暴露「同一结构、仅常量不同」的族）。⚠ 这一步是必需的：
+不加 `--struct` 时 `freshRoot` 显示 12 个形状，加了才是 **4 个**（各文件仅 tmp 前缀常量不同）。
+
+| 处置 | 对象 | 依据 | 结果 |
 |---|---|---|---|
-| **选合 / 改名消歧** | `assemblyCtx`(11) | 30/55（**5 个真实变体**：① 极简 `on(event,fn,opts)`+`{fn,opts}` 项 ② 同① + `calls/logger` ③ `on(event,fn)` 平面 fn 项 + `calls/logger` ④ 同③ + `ctx.preCount` ⑤ 同④ + `webServer` + `return {ctx,routes}`） | **不做一刀切合并**（选项化会变成 4 开关工厂）：按变体**拆名**（如 `assemblyCtxPre` / `webCtxRoutes`）或按「同变体组」小批合并；先做**改名消歧**（禁同名不同物） |
-| 选合 | `execOf`(11, 9/55) · `freshRoot`(16, 7/120) · `tasks3`(7, 4/21) · `invoke`(7, 4/21) · `settleLane`(6, 4/15) · `writeArt`(6, 4/15) · `batchFileOf`(6, 2/15) | 部分相似（同族内确有差异） | 按「差异点」分组，能合的组合，不能合的**改名区分** |
-| **禁按名合** | `makeHarness`(26, 0/325) · `makePlan`(3) · `seedArtifacts`(3) · `mkCtx`(3) · `makeCtx`(4) | 同名**不同物**（0 对 ≥70%） | 保持独立，或改名消歧 |
+| **拆名（4 形状）** | `assemblyCtx`(11) | 4 个形状且**全部不可合并**（后三个只在「加性 trait」上不同，但 ③ 连**返回形状**都变、④ 的 `on` 项存 `{fn,opts}` 且被 `auto-settle:101` **逐字断言**） | 4 个具名 builder：`assemblyCtx` / `assemblyCtxPre` / `assemblyCtxWeb` / `assemblyCtxOpts`（落 `gate-fixture.mjs`，三变体共用私有基线实现）；11 文件 51 处调用点改名 |
+| **同名消歧** | 14 处与**共享导出**同名的本地定义 | `runLane`×**5** / `threeTierTasks`×5 / `seedArtifacts`×3 / `tempRoot`×1 —— grep 会得到互相冲突的契约（这是**真隐患**，非风格问题） | `gates`+`archive`+**`smoke-gate-v14.mjs`** → **`runLaneOrError`**（差别：返回 Error 而非抛出）；`threeTierTasks` → `threeTierWithTaskTree` / `threeTierWithProbe` / `threeTierLean` / `threeTierWithRoleFn` / `threeTierNamedRoles`；`seedArtifacts` → `seedTierFiles` / `seedTierArtifacts`；`tempRoot` → `tempRootTracked` ⇒ **同名冲突清零** |
+| **复用共享** | `topic-wiring.runLane`（签名与共享版逐字相同）· `rework.runLane`（语义相同、仅绑定模块级 `store/S`） | 逐字等同 / 一行适配 | 前者直接 import；后者 `import { runLane as sharedRunLane }` + 一行适配（调用点零改动） |
+| **合入共享** | `freshRoot(prefix)` 6 处（`auto-settle`/`dispatch-register`/`governance-harden-proto`/`governance`/`concurrency-gate`/`engine-dispatch`） | 与既有 `tempRoot` **逐字同形**（`mkdtempSync(path.join(os.tmpdir(), prefix))`） | 删本地 6 份副本，85 处调用点改用 `tempRoot` |
+| **判为保留** | `execOf`(11→**7 形状**) · `mkBatch`(12→**11**) · `invoke`(7→**6**) · `makeHarness`(26→**21**) · `settleLane`/`writeArt`/`batchFileOf`(各 6→**4**) · `tasks3`(7→**3**) · `set`/`runLane`/`writeArtifact`(各 4→**3**) · `freshRoot`(10→**2**) | 形状数 ≥3 ⇒ **同名不同物**（差异在字段/签名/副作用，非常量）；各「2 处相同」组均为**文件本地 + 依赖本地符号** ⇒ 抽出去要加适配层，收益低于耦合代价 | **保持独立**（台账口径「能合的组合，不能合的**改名区分**」——此处两者都不做：既非同一物，强行抽公共件会耦合无关套件）；`freshRoot` 余 10 处为「逐文件 tmp 前缀」的 1 行变体，另 2 处已消歧为 `freshRootTracked` |
+| **判为不可达** | `threeTierTasks` 剩余的**共享版 vs 本地版语义差异** | 共享版 audit 消费 exec 产物且产物名 `audit/<auditId>.md`；`rework` 本地版产物名 `audit/r.md` 且不消费 exec 产物 ⇒ 换成共享版会与它自己的 `seedTierArtifacts` 写的路径**对不上** | 不改判（保持本地），已在消歧表列明 |
+
+**收敛效果（F3+F4 累计）**：重复候选 35 → **24**；含高相似对的函数 21 → **11**；高相似对 **156 → 32**；与共享导出同名的本地定义 13 → **0**；`assemblyCtx` 同名副本 11 → **4 具名**。
+
+⚠ **一处方法论教训（本波由断言抓出）**：我第一轮的「同名冲突」扫描只滤了 `**/*.js` ⇒ **漏掉 `test/smoke-gate-v14.mjs`**（第 14 处 `runLane`）。
+是台账断言 **F4-1**（本地 `function` 名 ∩ 共享导出名 = ∅）把它抓出来的 —— 这正是「**把纪律做成可执行断言**」的价值：
+人写的检查脚本会漏，断言不会。⇒ 纪律：**`test/**` 的遍历一律用 `/\.(js|mjs)$/`**（`.mjs` 与 `.js` 同权，`node --test` 二者都收集）。
+
+⚠ **判读更正**：台账首版本估「选合档按差异点分组即可合」**偏乐观**——实测多数候选在**结构层面**就是不同物（`mkBatch` 12 处 11 形状、`execOf` 11 处 7 形状）。**同名不同物的正解是「认出它不是同一物」，而不是「想办法合掉」**；本波只对 3 类真同源者动手（`assemblyCtx` 一份契约抄 11 次 / `freshRoot` 一份实现抄 6 次 / 13 处名撞共享导出）。
 
 ### 3.4 ④ 死夹具：**本次 0 个**
 
@@ -173,7 +188,7 @@
 | **F1** | ②-A 空壳显式化：`HOST_ONLY_SKILLS` 名单 + 抛错分支 + 双向断言 | 无（可先行） | 全量**非环境类 fail = 0**；新名单与资产声明**双向相等**断言绿 |
 | **F2** | ②-B 团队资产写入面单点化 + 显式白名单（`team-fixture.mjs`：`writeTempTeam`/`writeRealTeam`/`writeSyntheticTeam`/`threeTierSyntheticTeam`）+ `fixture-team-ledger.test.js` 强制面 | F1 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；`fixtures.mjs` 重复候选 35→**33**、写入面 31→**30 文件（骨架 9 / 合成 19 / 直接写 5）**；`--accept` 基线已更新 |
 | **F3** | ③ 必合档收敛（`writeRuntime` 9 · `laneHeartbeat` 4 · `tempRoot` 3 · `seedArtifactFile` 5 · `fakeCtx` 6 = 21 处定义 → 5 个单点原语） | 无 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；重复候选 33→**28**、高相似对 156→**70**；新增取证工具 `scripts/audit/dup-similarity.mjs`；`--accept` 基线已更新 |
-| **F4** | ③ 选合档 + **改名消歧**（`assemblyCtx` 5 变体优先；`makeHarness`/`makePlan`/`mkCtx`/`makeCtx`/`seedArtifacts` 为同名不同物） | F3 | 同上；相似度表重跑后「同名不同物」全部有区分名 |
+| **F4** | ③ 选合档 + **改名消歧**（`assemblyCtx` 11 处 / 13 处本地定义名撞共享导出 / `freshRoot(prefix)` 6 处） | 无 | ✅ **已落地**（2026-09-21 22:0x）：全量非环境类 fail = 0；`assemblyCtx` → **4 具名 builder**；同名冲突 13 → **0**；`freshRoot(prefix)` 6 处并入 `tempRoot`；其余判**保留**（结构形状 ≥3 ⇒ 非同物）。重复候选 28 → **24**、高相似对 70 → **32**；详见 §3.3 |
 | **F5** | 门禁正向补测：以真实资产名驱动技能解析（替代空壳恒真） | F1 | 新增「资产技能名 ↔ 宿主技能根」正向用例（可用 `HOST_ONLY_SKILLS` 作声明面） |
 
 **通用纪律**：一批一 commit；每片「**先重生成基线、再跑全量**」；`node scripts/audit/fixtures.mjs --check` 零漂移（收敛导致 API 变化时 `--accept` 并登记）；`lib/**` 原则上零 diff（**F1/F2 只动 `test/**`**；若确需动读端 ⇒ 独立批）。

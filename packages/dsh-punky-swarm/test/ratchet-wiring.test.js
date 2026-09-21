@@ -64,7 +64,7 @@ const pendingRoots = [];
 process.on('exit', () => {
   for (const d of pendingRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* 已清理 */ } }
 });
-function freshRoot(tag) {
+function freshRootTracked(tag) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-ratchet-wiring-' + tag + '-'));
   pendingRoots.push(d);
   return d;
@@ -166,7 +166,7 @@ process.exit(0);
 let probePath = null;
 function probeFile() {
   if (!probePath) {
-    probePath = path.join(freshRoot('probe'), 'probe.mjs');
+    probePath = path.join(freshRootTracked('probe'), 'probe.mjs');
     fs.writeFileSync(probePath, PROBE_SOURCE, 'utf8');
   }
   return probePath;
@@ -175,7 +175,7 @@ function probeFile() {
 /** 装配级探针执行：隔离 HOME/DSH_HOME 子进程（真实用户目录零写入）。
  *  ratchet === undefined ⇒ 不传 `config.ratchet`（基线）；其余按 JSON 注入。 */
 function runProbe(tag, ratchet) {
-  const root = freshRoot(tag);
+  const root = freshRootTracked(tag);
   const home = path.join(root, 'user');
   const dshHome = path.join(root, 'dsh-home');
   fs.mkdirSync(home, { recursive: true });

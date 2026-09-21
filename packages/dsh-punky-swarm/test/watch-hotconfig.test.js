@@ -38,7 +38,7 @@ import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
 import { createLaneHeartbeat, createHeartbeatTools, createLongrunTools } from '../lib/watch/lane-heartbeat.js';
 import * as mailbox from '../lib/comms/mailbox.js';
-import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxWeb } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // fs.watch 事件 → 防抖 300ms（createConfigWatcher 默认）→ reload → onChange；等待窗口对齐
@@ -50,30 +50,9 @@ const MIN = 60_000;
 const CONFIG_PATH = '/api/dsh-punky-swarm/config';
 const TRUSTED_HEADERS = { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:3080' };
 
-// ── 装配级 fake ctx：governance-hotconfig 同款（ctx.on 追加式注册 + logger 计数）+ webServer 路由捕获
-//   （供 GET /config 经 configEndpoints.appliedWatch 查 applied.watch 生效快照）──
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const routes = [];
-  const ctx = {
-    listeners, calls, logger,
-    tools: { register() {} },
-    emit() {},
-    webServer: { register: (r) => { routes.push(r); return () => {}; } },
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  return { ctx, routes };
-}
+// ── 装配级 fake ctx：`assemblyCtxWeb()` 基线 + `webServer`（返回 `{ ctx, routes }`）⇒ `routes` 供
+//   GET /config 经 configEndpoints.appliedWatch 查 applied.watch 生效快照
+//   （取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-'));
@@ -130,7 +109,7 @@ function inboxItems(root, S, batchId) {
 test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false）+ GET applied.watch 生效快照更新', async () => {
   const root = freshRoot();
   writeRuntime(root, {}); // 预建 runtime.json（文件级 watch 需文件存在；初始 overlay {} 零变化）
-  const { ctx, routes } = assemblyCtx();
+  const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
@@ -161,7 +140,7 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
 test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ re-mounted（以合并快照重建）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const { ctx, routes } = assemblyCtx();
+  const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
@@ -191,7 +170,7 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
 test('H3 scanIntervalMinutes 变更 → remount（scan 档期重挂）；applied.watch.scanIntervalMinutes 随动', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const { ctx, routes } = assemblyCtx();
+  const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
@@ -214,7 +193,7 @@ test('H3 scanIntervalMinutes 变更 → remount（scan 档期重挂）；applied
 test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留门零 remount」契约）：新阈值生效快照随动 + 同值重写幂等 no-op', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const { ctx, routes } = assemblyCtx();
+  const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);
@@ -252,7 +231,7 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
 test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变化 → remount（快照 7 键随动）；显式 0 同样生效（逃生阀）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const { ctx, routes } = assemblyCtx();
+  const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
     await sleep(HOT_SETTLE);

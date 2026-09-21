@@ -197,3 +197,76 @@ export function writeRuntime(root, overlay) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
 }
+
+// ── 【F4】装配 ctx 夹具（伪 ctx，供插件 `install*` 面断言注册/热更行为）────────────────────
+// 判据 = 「**同名不同物 × 变体可分辨**」（`node scripts/audit/dup-similarity.mjs --fn assemblyCtx`）。
+// 原 11 个文件各写一份同名 `assemblyCtx`，实为 **4 个形状**，且四个都**不可合并**：
+//   ① 基线与 ② 只差一个**探针方法**（`preCount`）——而 ③ 把 `webServer` 挂上后**返回值也变**
+//      （`{ctx, routes}`，两个 watch 套件按此解构）⇒ 一刀切出「开关工厂」会同时改返回形状；
+//   ④ 的 `on` 项存 **`{fn, opts}`**（非平坦 `fn`）——`auto-settle:101` 逐字断言
+//      `hooks[0].opts === {global:true}` ⇒ **不可压平**（压平即丢断言能力）。
+// ⇒ 按台账 §3.3 纪律：**不选项化**，按变体**拆名**（本模块只依赖 node 内置）。
+// 消费约定（调用方须一致）：④ 的订阅项是 `{fn, opts}` ⇒ 取回调写 `for (const {fn} of …)`；
+//   ①②③ 的订阅项是**平坦 `fn`** ⇒ 写 `const h = [...listeners.get(ev)][0]`。
+
+/** 装配 ctx **基线**：`on` 项存平坦 `fn`；`calls`/`logger` 收集告警与日志。**无** `preCount`/`webServer`。 */
+export function assemblyCtx() {
+  return baseAssemblyCtx();
+}
+
+/** 基线 + `preCount()`：`tools/pre-execute` 已挂监听数（热挂/热卸断言用探针）。 */
+export function assemblyCtxPre() {
+  const ctx = baseAssemblyCtx();
+  ctx.preCount = () => ctx.listeners.get('tools/pre-execute')?.size ?? 0;
+  return ctx;
+}
+
+/** 基线 + `webServer.register`（路由收集）。⚠ **返回 `{ ctx, routes }`**（非 ctx 本身）。 */
+export function assemblyCtxWeb() {
+  const ctx = baseAssemblyCtx();
+  const routes = [];
+  ctx.webServer = { register: (r) => { routes.push(r); return () => {}; } };
+  return { ctx, routes };
+}
+
+/** `on` 项存 **`{ fn, opts }`**（对齐三参 `ctx.on(ev, fn, opts)`）⇒ 供断言 `opts` 内容（如 `{global:true}`）。 */
+export function assemblyCtxOpts() {
+  const listeners = new Map();
+  const calls = { info: [], warn: [], error: [] };
+  const logger = {
+    info: (...a) => calls.info.push(a.join(' ')),
+    warn: (...a) => calls.warn.push(a.join(' ')),
+    error: (...a) => calls.error.push(a.join(' ')),
+  };
+  return {
+    listeners, calls, logger,
+    tools: { register() {} },
+    emit() {},
+    on(event, fn, opts) {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event).add({ fn, opts });
+      return () => { for (const e of listeners.get(event) ?? []) if (e.fn === fn) listeners.get(event).delete(e); };
+    },
+  };
+}
+
+/** 基线实现（不导出）：三个变体共用，避免再抄一份。 */
+function baseAssemblyCtx() {
+  const listeners = new Map();
+  const calls = { info: [], warn: [], error: [] };
+  const logger = {
+    info: (...a) => calls.info.push(a.join(' ')),
+    warn: (...a) => calls.warn.push(a.join(' ')),
+    error: (...a) => calls.error.push(a.join(' ')),
+  };
+  return {
+    listeners, calls, logger,
+    tools: { register() {} },
+    emit() {},
+    on(event, fn) {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event).add(fn);
+      return () => { listeners.get(event)?.delete(fn); };
+    },
+  };
+}

@@ -36,8 +36,8 @@ import {
 } from '../lib/engine/dispatch.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
 import { bindingGapOf } from '../lib/watch/lane-heartbeat.js';
+import { tempRoot } from './helpers/gate-fixture.mjs';
 
-function freshRoot(p) { return fs.mkdtempSync(path.join(os.tmpdir(), p)); }
 function mkCtx(runtime) {
   const calls = { info: [], warn: [], error: [] };
   const ctx = {
@@ -172,7 +172,7 @@ test('G3 有效句柄 ⇒ 放行（两档皆然）；B 档/非派发工具 ⇒ �
 
 // ── R：D 阶段 · 成员侧套件通信（swarm_report / swarm_cc） ──
 test('R1 laneBindingOf：无登记 ⇒ null；有 member.dispatch ⇒ 反查 (sessionId, batchId, lane)', () => {
-  const root = freshRoot('punky-edr1-');
+  const root = tempRoot('punky-edr1-');
   const store = seedBatch(root, 'sess-c', 'b-r1');
   assert.equal(laneBindingOf(store, 'ws-none'), null);
   store.appendEvent('sess-c', 'b-r1', EVT_MEMBER_DISPATCH, { lane: 'l1', workerSessionId: 'ws-b1' });
@@ -180,7 +180,7 @@ test('R1 laneBindingOf：无登记 ⇒ null；有 member.dispatch ⇒ 反查 (se
 });
 
 test('R2 swarm_report：绑定成员 ⇒ 事件 swarm.report + Leader 通道（broadcast）双留痕', async () => {
-  const root = freshRoot('punky-edr2-');
+  const root = tempRoot('punky-edr2-');
   const store = seedBatch(root, 'sess-c', 'b-r2');
   store.appendEvent('sess-c', 'b-r2', EVT_MEMBER_DISPATCH, { lane: 'l1', workerSessionId: 'ws-w1' });
   const ctx = mkCtx(null);
@@ -199,7 +199,7 @@ test('R2 swarm_report：绑定成员 ⇒ 事件 swarm.report + Leader 通道（b
 });
 
 test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + Manager 通道（supervisor/inbox）双留痕', async () => {
-  const root = freshRoot('punky-edr3-');
+  const root = tempRoot('punky-edr3-');
   const store = seedBatch(root, 'sess-c', 'b-r3');
   store.appendEvent('sess-c', 'b-r3', EVT_MEMBER_DISPATCH, { lane: 'l1', workerSessionId: 'ws-w2' });
   const ctx = mkCtx(null);
@@ -218,7 +218,7 @@ test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + Manager 通道（supervis
 //  `unbound:true`，且**无 batchId 时不落事件**（`eventWritten:false`——无批次文件即无事件面，
 //  如实回显、不静默、不谎报成功）。
 test('R4 未绑定会话调套件通信 ⇒ 放行 + 如实回显（Q-G2：官方成员无 lane 绑定为常态，不再拒）', async () => {
-  const root = freshRoot('punky-edr4-');
+  const root = tempRoot('punky-edr4-');
   const store = seedBatch(root, 'sess-c', 'b-r4');
   const ctx = mkCtx(null);
   const tools = createCoreTools(ctx, { store, root, config: {} });
@@ -261,7 +261,7 @@ test('B2 bindingGapOf：无 dispatch ⇒ no-dispatch；有 dispatch 且无悬挂
 
 test('T1 引擎自派成功：写 member.dispatch（B5 唯一写路径）+ 返回 workerSessionId + 按次收窄（B2）', async () => {
   __resetLaneHandles();
-  const root = freshRoot('punky-ed1-');
+  const root = tempRoot('punky-ed1-');
   const store = seedBatch(root, 'sess-c', 'b-ed1');
   let captured = null;
   const ctx = mkCtx({ startContinuable: async (spec) => { captured = spec; return { id: 'ws-eng-1', messageId: 'm1' }; } });
@@ -289,7 +289,7 @@ test('T1 引擎自派成功：写 member.dispatch（B5 唯一写路径）+ 返�
 
 test('T2 宿主无 ctx.subagents ⇒ 优雅降级「仅发句柄」（spawned:false + 原因，不静默）', async () => {
   __resetLaneHandles();
-  const root = freshRoot('punky-ed2-');
+  const root = tempRoot('punky-ed2-');
   const store = seedBatch(root, 'sess-c', 'b-ed2');
   const ctx = mkCtx(null);
   const tools = createCoreTools(ctx, { store, root, config: {} });
@@ -303,7 +303,7 @@ test('T2 宿主无 ctx.subagents ⇒ 优雅降级「仅发句柄」（spawned:fa
 
 test('T3 未配置 provider ⇒ **降级为仅发句柄**（N1 清债：不再抛错丢句柄；B4：仍不猜 provider）', async () => {
   __resetLaneHandles();
-  const root = freshRoot('punky-ed3-');
+  const root = tempRoot('punky-ed3-');
   const store = seedBatch(root, 'sess-c', 'b-ed3');
   const ctx = mkCtx({ startContinuable: async () => ({ id: 'ws-x' }) });
   const tools = createCoreTools(ctx, { store, root, config: {} });
@@ -322,7 +322,7 @@ test('T3 未配置 provider ⇒ **降级为仅发句柄**（N1 清债：不再�
 
 test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISPATCH_CAPABILITY_MISSING（B6 失败显式）', async () => {
   __resetLaneHandles();
-  const root = freshRoot('punky-ed4-');
+  const root = tempRoot('punky-ed4-');
   const store = seedBatch(root, 'sess-c', 'b-ed4');
   const ctx = mkCtx({ startContinuable: async () => { throw new Error('tool-subagent: provider "p" cannot enforce toolFilter (no toolFilter capability)'); } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'p' } } });

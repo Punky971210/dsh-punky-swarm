@@ -86,7 +86,7 @@ function makeHarness(tag) {
 const batchFileOf = (root, batchId) => path.join(root, 'sessions', SESS_ID, 'batches', batchId + '.json');
 
 /** 播种三层批的声明产物（plan 判据正文含裸标题 `## 验收标准`）。 */
-function seedArtifacts(root, batchId) {
+function seedTierFiles(root, batchId) {
   const entries = [
     ['plan/spec.md', '# spec\n## 验收标准\n- x\n## 约束\n- y\n'],
     ['exec/e1.md', 'out'],
@@ -106,7 +106,7 @@ async function buildRunningBatch(byName, root, batchId, tasks) {
   }, SESS);
   assert.equal(out.batchId, batchId, '建批成功（夹具前提；失败则本用例的拒因不可归因）');
   await byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
-  seedArtifacts(root, batchId);
+  seedTierFiles(root, batchId);
 }
 
 const runLane = (store, batchId, lane, stopAt) => {

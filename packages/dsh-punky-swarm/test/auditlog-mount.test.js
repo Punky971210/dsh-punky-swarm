@@ -52,7 +52,7 @@ const pendingRoots = [];
 process.on('exit', () => {
   for (const d of pendingRoots) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* 已清理 */ } }
 });
-function freshRoot(tag) {
+function freshRootTracked(tag) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-auditlog-mount-' + tag + '-'));
   pendingRoots.push(d);
   return d;
@@ -309,7 +309,7 @@ process.stdout.write('\\n__PROBE_JSON__' + JSON.stringify(out) + '\\n');
 let probePath = null;
 function probeFile() {
   if (!probePath) {
-    const dir = freshRoot('probe');
+    const dir = freshRootTracked('probe');
     probePath = path.join(dir, 'probe.mjs');
     fs.writeFileSync(probePath, PROBE_SOURCE, 'utf8');
   }
@@ -318,7 +318,7 @@ function probeFile() {
 
 /** 子进程返回体解析 */
 function runProbeRaw(tag, env, mode = 'apply', overrides = {}) {
-  const root = overrides.root ?? freshRoot(tag);
+  const root = overrides.root ?? freshRootTracked(tag);
   const home = path.join(root, 'user');
   const dshHome = path.join(root, 'dsh-home');
   fs.mkdirSync(home, { recursive: true });
@@ -500,7 +500,7 @@ test('T-A5/A8 挂载面分卷：小 maxFileBytes → 主卷/.1/.2 单调、每�
 // ── T-A9/A10/A11 挂载面：真 OS 失败 → 不外抛、有界、零 stdout fallback、诊断面落盘 ──
 
 test('T-A9/A10/A11 挂载面降级：sinkDir 落在普通文件下 → 不外抛/有界/零 stdout/诊断面已落', () => {
-  const root = freshRoot('ta9');
+  const root = freshRootTracked('ta9');
   fs.writeFileSync(path.join(root, 'not-a-dir'), 'regular file, not a directory', 'utf8');
   const badSink = path.join(root, 'not-a-dir', 'logs');
   const r = runProbeRaw('ta9', {
@@ -526,7 +526,7 @@ test('T-A9/A10/A11 挂载面降级：sinkDir 落在普通文件下 → 不外抛
 // ── T-A16 挂载面：D-4 诊断面真能落盘（sink 根可写、写失败可注入）──
 
 test('T-A16 D-4 诊断面：写失败（主卷路径是目录）→ 诊断面独立落盘、含失败计数、不外抛', () => {
-  const root = freshRoot('ta16');
+  const root = freshRootTracked('ta16');
   const sinkDir = seedUnappendableSink(root);
   const r = runProbeRaw('ta16', {
     PUNKY_AUDITLOG_SINK_DIR: sinkDir,
@@ -731,7 +731,7 @@ test('T-C6 硬上限 600000 ms：逐条刷新右界的窗口被顶到 startAt+60
 // ── T-C7 诊断面 aggregate 段（AC-12）＋ 闭环落点③ 的快照顺序 ──
 
 test('T-C7 诊断面 aggregate 段：windowOpen/collapsedTotal/keys[≤50] 落盘，既有字段不变', () => {
-  const root = freshRoot('tc7');
+  const root = freshRootTracked('tc7');
   const sinkDir = seedUnappendableSink(root);                    // 写失败可注入、sink 根可建
   const r = runProbeRaw('tc7', { PUNKY_PROBE_AGG_SCENARIO: 'diag' }, 'aggregate', { root });
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');

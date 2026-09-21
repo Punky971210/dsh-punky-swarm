@@ -50,6 +50,7 @@ import * as EVENT_TYPES from '../lib/state/event-types.js';
 import * as dispatchMod from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import { advanceChainAfterSettle } from '../lib/engine/chain-runner.js';
+import { tempRoot } from './helpers/gate-fixture.mjs';
 
 /** 并发闸拒态事件名：常量**冻结保留**（历史批磁盘事件面读端不变），但**写点已随闸删除**。 */
 const EVT_CONCURRENCY_BLOCKED = EVENT_TYPES.EVT_GATE_CONCURRENCY_BLOCKED;
@@ -58,7 +59,6 @@ const CONCURRENCY_CODE = dispatchMod.CONCURRENCY_EXCEEDED_CODE;
 
 const SPEC_OK = '# 规格夹具\n## 验收标准\n- x\n## 约束\n- y\n';
 
-function freshRoot(p) { return fs.mkdtempSync(path.join(os.tmpdir(), p)); }
 
 function mkCtx(runtime) {
   const calls = { info: [], warn: [], error: [] };
@@ -150,7 +150,7 @@ function assertNoBlockedEvent(store, sid, batchId, note) {
 test('T1【退役锁 · Q-B】occupied >= limit ⇒ **不再拒**：零抛错 + 零 gate.concurrency_blocked + lane 照常 running', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t1';
-  const root = freshRoot('punky-cg-t1-');
+  const root = tempRoot('punky-cg-t1-');
   const store = seedBatch(root, SID, 'b-t1', ['l1', 'l2'], { concurrency: 1 });
   const spawned = [];
   const ctx = mkCtx(fakeRuntime(spawned));
@@ -176,7 +176,7 @@ test('T1【退役锁 · Q-B】occupied >= limit ⇒ **不再拒**：零抛错 + 
 test('T2 放行路径：occupied < limit ⇒ spawned:true + 恰 N 条 member.dispatch + 零拒态事件', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t2';
-  const root = freshRoot('punky-cg-t2-');
+  const root = tempRoot('punky-cg-t2-');
   const store = seedBatch(root, SID, 'b-t2', ['l1', 'l2', 'l3', 'l4', 'l5'], { concurrency: 4 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
@@ -196,7 +196,7 @@ test('T2 放行路径：occupied < limit ⇒ spawned:true + 恰 N 条 member.dis
 test('T3【退役锁 · Q-B】occupied === limit ⇒ **照常放行**（容量判定已删除：既不是 `>=` 也不是 `>`）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t3';
-  const root = freshRoot('punky-cg-t3-');
+  const root = tempRoot('punky-cg-t3-');
   const store = seedBatch(root, SID, 'b-t3', ['l1', 'l2', 'l3', 'l4'], { concurrency: 3 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
@@ -214,7 +214,7 @@ test('T3【退役锁 · Q-B】occupied === limit ⇒ **照常放行**（容量�
 test('T4【退役锁 · Q-B】跨批：两批并发派发全部放行（无批级容量判定 ⇒ 无「批级计数」面）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t4';
-  const root = freshRoot('punky-cg-t4-');
+  const root = tempRoot('punky-cg-t4-');
   const store = seedBatch(root, SID, 'b-p1', ['l1', 'l2'], { concurrency: 1 });
   seedBatch(root, SID, 'b-p2', ['l1', 'l2'], { concurrency: 1, store });
   const spawned = [];
@@ -233,7 +233,7 @@ test('T4【退役锁 · Q-B】跨批：两批并发派发全部放行（无批�
 test('T5【退役锁 · Q-B】leader-direct 批零限流（与 assembly.managerPlan 取值无关：闸位已删）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t5';
-  const root = freshRoot('punky-cg-t5-');
+  const root = tempRoot('punky-cg-t5-');
   const store = seedBatch(root, SID, 'b-t5', ['l1', 'l2'], {
     concurrency: 1,
     assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
@@ -329,7 +329,7 @@ function settleP1(store, sid, batchId) {
 test('T6【退役锁 · Q-A=C】chain-runner 入口 = no-op：零 chain.step / 零派发 / 零拒态 / 零容量判定', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t6';
-  const root = freshRoot('punky-cg-t6-');
+  const root = tempRoot('punky-cg-t6-');
   const store = seedChainBatch(root, SID, 'b-t6', { concurrency: 1 });
   const spawned = [];
   const ctx = mkCtx(fakeRuntime(spawned));
@@ -354,7 +354,7 @@ test('T6【退役锁 · Q-A=C】chain-runner 入口 = no-op：零 chain.step / �
 test('T6b【退役锁 · Q-A=C】混合场景无意义：入口 no-op ⇒ 既无 spawned 也无 deferred，零 chain.step', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t6b';
-  const root = freshRoot('punky-cg-t6b-');
+  const root = tempRoot('punky-cg-t6b-');
   const store = seedChainBatch(root, SID, 'b-t6b', { concurrency: 1 });
   const spawned = [];
   const ctx = mkCtx(fakeRuntime(spawned));
@@ -373,7 +373,7 @@ test('T6b【退役锁 · Q-A=C】混合场景无意义：入口 no-op ⇒ 既无
 test('T6c【退役锁 · Q-A=C】容量充足亦不派：链推进退役与容量无关（零 chain.step 与 concurrency 取值无关）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t6c';
-  const root = freshRoot('punky-cg-t6c-');
+  const root = tempRoot('punky-cg-t6c-');
   const store = seedChainBatch(root, SID, 'b-t6c', { concurrency: 4 });
   const spawned = [];
   const ctx = mkCtx(fakeRuntime(spawned));
@@ -390,7 +390,7 @@ test('T6c【退役锁 · Q-A=C】容量充足亦不派：链推进退役与容�
 test('T7 终态不计入：4 条 running 全部走 running→review→merged ⇒ occupied=0，可继续派', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t7';
-  const root = freshRoot('punky-cg-t7-');
+  const root = tempRoot('punky-cg-t7-');
   const store = seedBatch(root, SID, 'b-t7', ['l1', 'l2', 'l3', 'l4', 'l5'], { concurrency: 4 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
@@ -413,7 +413,7 @@ test('T7 终态不计入：4 条 running 全部走 running→review→merged ⇒
 test('T8【退役锁 · Q-B】review / idle 面不再有「槽位」语义：连续派发全部放行、零拒态', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t8';
-  const root = freshRoot('punky-cg-t8-');
+  const root = tempRoot('punky-cg-t8-');
   const store = seedBatch(root, SID, 'b-t8', ['l1', 'l2', 'l3'], { concurrency: 1 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
@@ -444,7 +444,7 @@ test('T8【退役锁 · Q-B】review / idle 面不再有「槽位」语义：连
 test('T9【退役锁 · Q-B】7 条 pending、concurrency=4 ⇒ 全部可派（零判定 ⇒ 不存在「首批全拒」面）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t9';
-  const root = freshRoot('punky-cg-t9-');
+  const root = tempRoot('punky-cg-t9-');
   const store = seedBatch(root, SID, 'b-t9', ['l1', 'l2', 'l3', 'l4', 'l5'], { concurrency: 4 });
   assert.equal(Object.values(store.readBatch(SID, 'b-t9').lanes).filter((s) => s === 'pending').length, 7, '前置：7 条 pending（5 exec + plan p1 + audit a1）');
   const spawned = [];
@@ -462,7 +462,7 @@ test('T9【退役锁 · Q-B】7 条 pending、concurrency=4 ⇒ 全部可派（�
 test('T10a【退役锁 · Q-B】批 JSON 缺 concurrency（存量/手改批）⇒ 与判定无关：6 条全部放行、零拒态', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t10a';
-  const root = freshRoot('punky-cg-t10a-');
+  const root = tempRoot('punky-cg-t10a-');
   const store = seedBatch(root, SID, 'b-t10a', ['l1', 'l2', 'l3', 'l4', 'l5', 'l6']); // 真实建批（建批面恒写正整数）
   // 「本闸落地前建的老批」形态：唯一一个字段被删，不绕过任何既有校验。
   const file = path.join(root, 'sessions', SID, 'batches', 'b-t10a.json');
@@ -485,7 +485,7 @@ test('T10a【退役锁 · Q-B】批 JSON 缺 concurrency（存量/手改批）�
 test('T10b【退役锁 · Q-B】非法 concurrency=0 ⇒ 与判定无关（既非「无上限」fail-open 也非「恒拒」）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t10b';
-  const root = freshRoot('punky-cg-t10b-');
+  const root = tempRoot('punky-cg-t10b-');
   const store = seedBatch(root, SID, 'b-t10b', ['l1', 'l2'], { concurrency: 0 });
   assert.equal(store.readBatch(SID, 'b-t10b').concurrency, 0, '前置：批 JSON 确为 0（非法值原样落盘 = 纯声明）');
   const spawned = [];
@@ -513,7 +513,7 @@ test('T10c【退役锁 · Q-B】判据纯函数与拒码常量**不再导出**�
 test('T11【退役锁 · Q-B】smoke:true 批零限流（豁免清单已无对象）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t11';
-  const root = freshRoot('punky-cg-t11-');
+  const root = tempRoot('punky-cg-t11-');
   const store = seedBatch(root, SID, 'b-t11', ['l1', 'l2'], { concurrency: 1 });
   store.appendEvent(SID, 'b-t11', EVT_BATCH_SMOKE, { batchId: 'b-t11' });
   const spawned = [];
@@ -529,7 +529,7 @@ test('T11【退役锁 · Q-B】smoke:true 批零限流（豁免清单已无对�
 test('T12【退役锁 · Q-B】连派不再「零写入」：lanes 正常推进 + 零 gate.concurrency_blocked', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t12';
-  const root = freshRoot('punky-cg-t12-');
+  const root = tempRoot('punky-cg-t12-');
   const store = seedBatch(root, SID, 'b-t12', ['l1', 'l2'], { concurrency: 1 });
   const file = path.join(root, 'sessions', SID, 'batches', 'b-t12.json');
   const spawned = [];
@@ -559,7 +559,7 @@ test('T12【退役锁 · Q-B】连派不再「零写入」：lanes 正常推进 
 test('T13【语义反转 · Q-B】直派面：member_status(status=running) 超限**照常迁移成功**（零 GATE_CONCURRENCY_EXCEEDED）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t13';
-  const root = freshRoot('punky-cg-t13-');
+  const root = tempRoot('punky-cg-t13-');
   const store = seedBatch(root, SID, 'b-t13', ['l1', 'l2'], { concurrency: 1 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
@@ -581,7 +581,7 @@ test('T13【语义反转 · Q-B】直派面：member_status(status=running) 超�
 test('T14 让位面：批终态 / 未知 lane ⇒ 仍抛既有拒码（不是闸码），且零拒态事件', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t14';
-  const root = freshRoot('punky-cg-t14-');
+  const root = tempRoot('punky-cg-t14-');
   const store = seedBatch(root, SID, 'b-t14', ['l1', 'l2'], { concurrency: 1 });
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));

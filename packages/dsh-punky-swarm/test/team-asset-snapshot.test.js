@@ -65,7 +65,7 @@ function planOf(team, laneIds = ['e1']) {
 
 /** 走真实工具面（`wave_plan`）建批所需的合规三层 tasks：plan 产物被 exec/audit 双重消费，
  *  audit 覆盖 software-team 声明 `consumes_required: ['plan/','exec/']` 的两个前缀。 */
-function threeTierTasks() {
+function threeTierNamedRoles() {
   return [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1.md'], cmd: 'run', deps: ['p1'] },
@@ -275,7 +275,7 @@ test('D3 回显面：gate_status / batch_status 值经宿主 createSuccessResult
   const byName = makeToolHarness(store, root);
   const exec = SESS_OF(SESSION);
 
-  await byName.wave_plan.execute({ batchId: 'b3-tools', tasks: threeTierTasks(), team: TEAM, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, exec);
+  await byName.wave_plan.execute({ batchId: 'b3-tools', tasks: threeTierNamedRoles(), team: TEAM, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, exec);
 
   // schema 键齐备（漏补即失败的直接判据）
   assert.ok(byName.gate_status.output.schema.properties.teamAsset, 'gate_status.output.schema.teamAsset');
@@ -363,7 +363,7 @@ test('D8 只读面零副作用：连续两次 gate_status 前后，批次文件 
   assessC(store, SESSION);
   const byName = makeToolHarness(store, root);
   const exec = SESS_OF(SESSION);
-  await byName.wave_plan.execute({ batchId: 'b8-ro', tasks: threeTierTasks(), team: TEAM, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, exec);
+  await byName.wave_plan.execute({ batchId: 'b8-ro', tasks: threeTierNamedRoles(), team: TEAM, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, exec);
 
   const sessionDir = path.join(root, 'sessions', SESSION);
   const treeBefore = treeOf(sessionDir);

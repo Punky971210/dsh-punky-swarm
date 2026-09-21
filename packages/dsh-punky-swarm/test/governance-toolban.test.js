@@ -35,7 +35,7 @@ import { createGovernanceKernel } from '../lib/governance/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { loadPresetTable } from '../lib/governance/preset-loader.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
-import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SETTLE = 200;
@@ -300,27 +300,7 @@ test('R-7 inline 重复 id：接 validateToolBanTable → 回退空表 + warn �
 
 // ── A 段：装配级端到端（静态 preset 引用 + runtime.json 热更）──
 
-function assemblyCtx() {
-  const listeners = new Map();
-  const calls = { info: [], warn: [], error: [] };
-  const logger = {
-    info: (...a) => calls.info.push(a.join(' ')),
-    warn: (...a) => calls.warn.push(a.join(' ')),
-    error: (...a) => calls.error.push(a.join(' ')),
-  };
-  const ctx = {
-    listeners, calls, logger,
-    tools: { register() {} },
-    emit() {},
-    on(event, fn) {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event).add(fn);
-      return () => { listeners.get(event)?.delete(fn); };
-    },
-  };
-  ctx.preCount = () => listeners.get('tools/pre-execute')?.size ?? 0;
-  return ctx;
-}
+// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-toolban-'));
 }
@@ -335,7 +315,7 @@ function execOf(name, args, sessionId) {
 test('A-1 装配级静态引用：apply preset:l3-tool-ban → pwsh 写文件 DENY + 收据溯源；只读命令透传', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l3-tool-ban'] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -366,7 +346,7 @@ test('A-1 装配级静态引用：apply preset:l3-tool-ban → pwsh 写文件 DE
 test('A-2 热加载通道：runtime.json 写 inline toolBan → 免重启重挂生效（Q4「仅护栏可热加载」）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});                    // 起始：无 toolBan
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true } } });
   try {
     await sleep(HOT_SETTLE);
@@ -399,7 +379,7 @@ test('A-3 提示文本常量与文档口径一致：WRITE_CHANNEL_HINT 指向在
 test('A-4 装配级：runtime.json 坏条目 ⇒ 载入期 warn 指名条目 + 回退空表（hook 照常挂载）', async () => {
   const root = freshRoot();
   writeRuntime(root, { governance: { hook: { enabled: true, toolBan: [{ id: 'BAD-1', behavior: 'interpreter-write' }] } } });
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxPre();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true } } });
   try {
     const bootWarns = ctx.calls.warn.filter((m) => /inline toolBan/.test(m));
