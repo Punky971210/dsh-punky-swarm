@@ -7,14 +7,14 @@
 
 ---
 
-## §0 引擎改装现状摘要（2026-09-21 19:4x，HEAD `bbac27e`）
+## §0 引擎改装现状摘要（2026-09-21 20:3x，生成时 HEAD `4d4e45f`）
 
 | 轴 | 现状 |
 |---|---|
-| **波次** | R1 契约加固 → R2 清理波 → R3g 门禁断言波 → A1–A4 裁定 → K1–K4 裁定 → N0.5 去返工边（+恢复路径族收尾）→ **N1-R4-1a/1b/1c 公共池与图变更**（当前） |
-| **形态** | 池 = `owner == null` 的**视图**（不是容器）；派发 = 唯一出池动作（Leader 单点，不引入 claim）；图变更 = 唯一写入口 `store.addPoolTasks`；不成环靠**结构性保证**（deps 只许指向既有任务），不做禁止性断言 |
-| **门禁** | 拒码集合 **66 零增删**；无断言项 2（刻意不补）；套件工具 **31**；deny **15**；modeGate **11** |
-| **测试** | 1743 tests / 1721 pass / **18 fail 全为环境类 git 回归**（`invalid reference: punky/orch`，根因未定性）⇒ 非环境类 **0**；基线 147/1700/8303 |
+| **波次** | R1 契约加固 → R2 清理波 → R3g 门禁断言波 → A1–A4 裁定 → K1–K4 裁定 → N0.5 去返工边（+恢复路径族收尾）→ **N1-R4-1a/1b/1c/2 公共池与图变更**（当前） |
+| **形态** | 池 = `owner == null` 的**视图**（不是容器）；派发 = 唯一出池动作（Leader 单点，不引入 claim）；图变更 = **两个显式写入口**（`store.addPoolTasks` 追加任务 / `store.addTaskEdges` 加边），均单次 `atomicWrite`；不成环靠**结构性保证**（`deps` 只许指向已声明在先 + 同层或上游），不做禁止性断言 |
+| **门禁** | 拒码集合 **66 零增删**；无断言项 2（刻意不补）；套件工具 **32**；deny **16**；modeGate **12** |
+| **测试** | 1753 tests / 1731 pass / **18 fail 全为环境类 git 回归**（`invalid reference: punky/orch`，根因未定性）⇒ 非环境类 **0**；基线 147/1710/8341 |
 | **可达性审计** | 已落成工序（扫描器 + 口径 + 判读台账），判读覆盖 **119/119**；真守卫 85 条中**无④**；④ 实际只有成环检查一项（已删） |
 
 ### task_* 工具计划（当前与后续）
@@ -22,15 +22,16 @@
 | 工具 | 状态 | 计划 |
 |---|---|---|
 | `task_pool` | ✅ 已落地（R4-1a） | 无后续改动；随池语义扩展回显 |
-| `batch_tasks_add` | ✅ 已落地（R4-1c） | 等 B1 裁定：若 `deps` 约束提升为全局，同步加「同层或上游」校验 |
+| `batch_tasks_add` | ✅ 已落地（R4-1c） | 追加期已启用 `deps` 结构约束；**建批期是否同口径启用仍待裁**（撞 `writing-team-asset` 真实反例：exec 依赖下游 audit，见 §5） |
+| `task_update` | ✅ **已落地**（R4-2） | 池内任务**加边**（只增不删）；触 handoffs 补条 + 出口门自动感知（数据源本就是落盘 `wavePlan`）⇒ **无遗留** |
 | `task_split` | ❌ **已舍弃** | 无「拆父任务」语义（plan 层摸底/拆分本身即独立任务） |
-| `task_update` | ⏸ **未做** | 切片 **R4-2**：给未派发任务**加边**；触 handoffs 播种 + 出口门改读 `revision` ⇒ 施工单内风险最高，**独立批** |
 | （后续候选）`batch_tasks_*` | 未排 | 若需要「池内作废/替换」，按 K1 走「作废 + 池内新增替代 + gap-list 留痕」，不改 `owner` |
 
-### 当前待裁（3 项）
-1. **B1**：是否把「`deps` 只许指向**已声明**的**同层或上游层**任务」提升为**全局**结构约束（实测既有测试零违反 ⇒ 影响面 ≈ 0）⇒ 可一并去掉 `buildWavePlan`/`validateWavePlan` 的成环检查。
-2. **退役码**：已加标记；是否要字面删除注释（当前保留）。
-3. **`assets.js:147` 纵深防御**：判读更正为**非冗余**，建议保留（如需删，请先给「不可达」的实证）。
+### 当前待裁（2 项）
+1. **B1 收尾**：`deps` 结构约束**追加期已启用**、**建批期停用**（撞 `writing-team-asset.test.js` 的 exec→audit 真实反例）⇒ 三选一未裁：① 改判该用例 ② 只用于追加期 ③ 层序降为告警。
+2. **`assets.js` 纵深防御**：判读更正为**非冗余**，保留（如需删，请先给「不可达」的实证）。
+
+> 已闭合：退役码注释**已字面删除**（12 文件 29 行，保留 5 处防回生断言）。
 
 ## §1 代码面（commit 级）
 
@@ -42,7 +43,8 @@
 | 4 | **R2 清理波**：`.wip-backup/` 删；B1 删 8 / 冻 10；B2 收敛 122；`scripts/audit/` 生成器链；冻结台账 | `17b6b97 … c761cd1`（09-21 01:07–01:34） | 【实测】`.wip-backup` 已不存在；`scripts/audit/` = `dead-code2 / classify / gates / gen-register / plan-lists / strength` |
 | 5 | **R3g 门禁断言波**（纯增量，`lib/**` 零 diff）：无断言拒码 9 → **2**；拒码集合 66 → 66 零增删；真 E2E（loader 钩子 + 负向对照）；断言强度台账 | `fda041a … a944759`（09-21 02:16–04:05） | 【实测】1729 tests / 1725 pass / **0 fail** / 4 todo（连续两轮稳定） |
 | 6 | **N0.5 去返工边**（K3）：`schema.MEMBER_TRANSITIONS.review` 删 `running`（`schema.ts:41` + 产物 `.js:26`/`.d.ts:10`，走 `npm run build`）；返工能力族断言**反向改判**（`machine.test.js:46` / `rework.test.js` 3 例 / `gate-techdebt-red` R-21）；基线 8245 → **8248** | `5642d3b`（09-21 11:3x） | 【实测】`git diff --stat -- lib` 仅 schema 三件套 |
-| 10 | **N1-R4-1c 池内追加任务**（图变更唯一写入口）：`store.addPoolTasks`（单次 atomicWrite：wavePlan 重归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕 + `planRevision+1`）+ 新工具 **`batch_tasks_add`**（入 deny + 模式门）；判据与建批期**同源**（`buildWavePlan` + `topoWaves`）；只增不改；**不新建拒码**（非法输入抛普通 Error，批终态复用 `GATE_BATCH_TERMINAL`） | `01707aa`（09-21 13:5x） | 【实测】`task-pool-r41.test.js` **14/14**（含反例：追加 exec 无 audit ⇒ 被 `three-tier` 校验拒）；套件 30→31、工具数 27→28、deny 14→**15**、modeGate 10→**11**；全量 1743 / 1720 pass / **19 fail（18 环境 + 1 偶发，单跑 26/26 为绿）** ⇒ 非环境类 0；基线 147/1700/**8303** |
+| 11 | **N1-R4-2 池内加边**（`task_update`）：`store.addTaskEdges`（只增不删；单次 `atomicWrite`：wavePlan 重归一化 + handoffs 补 `pending` 条 + `plan.mutated.edges` + `planRevision+1`）+ 新工具 **`task_update`**（入 deny + 模式门）+ 结构性保证（已声明在先 + 同层或上游）+ 新增两条语义边界（上游已结算 ⇒ 拒 / 存量批 ⇒ 拒）；连带 套件 31→32、工具数 28→29、deny 15→16、modeGate 11→12 | 本批（09-21 20:3x） | 【实测】`task-pool-r41` **24/24**；全量 **1753 / 1731 / 18 fail 全为环境类** ⇒ 非环境类 0；基线 147/1710/**8341** |
+| 10 | **N1-R4-1c 池内追加任务**（图变更写入口）：`store.addPoolTasks`（单次 atomicWrite：wavePlan 重归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕 + `planRevision+1`）+ 新工具 **`batch_tasks_add`**（入 deny + 模式门）；⚠ 不成环改为**结构性保证**（承 R4-1d：不建成环断言）；判据与建批期**同源**（`buildWavePlan` + `topoWaves`）；只增不改；**不新建拒码**（非法输入抛普通 Error，批终态复用 `GATE_BATCH_TERMINAL`） | `01707aa`（09-21 13:5x） | 【实测】`task-pool-r41.test.js` **14/14**（含反例：追加 exec 无 audit ⇒ 被 `three-tier` 校验拒）；套件 30→31、工具数 27→28、deny 14→**15**、modeGate 10→**11**；全量 1743 / 1720 pass / **19 fail（18 环境 + 1 偶发，单跑 26/26 为绿）** ⇒ 非环境类 0；基线 147/1700/**8303** |
 | 9 | **N1-R4-1b 派发 = 唯一出池动作**（`owner` 写入方闭环）：`store.setMember` 第 7 参 `owner`（可选项）+ `EVT_TASK_OWNER_ASSIGNED` 出池留痕 + 派发面调用点（`core.js member_status` / `dispatch.js:221`）；**非改派**（已出池不覆盖）；fail-open 边界（取不到 Agent 标识 ⇒ 零写入） | `2c5e87e`（09-21 13:3x） | 【实测】`task-pool-r41.test.js` **9/9**；全量 1738 / 1716 pass / **18 fail 全为环境类** ⇒ **非环境类 0**；基线 147/1695/**8291** |
 | 8 | **N1-R4-1a 公共池只读地基**：`WavePlanTask.owner`（可选声明面，缺省 `null` = 在池内）+ `wave-plan.ts` 归一化 + 新增 **`task_pool`** 只读工具（池 = `owner==null` 的**视图**，不引入 claim）+ 注册表 29→30；判据 = 上游 `deps` 全终态 ∧ lane 仍 `pending`，否则 `blockers[]` 指名 | 本批（09-21 12:5x） | 【实测】新测试 `task-pool-r41.test.js` **6/6**；`suite-consistency`+`wave-plan`+`batch-store` **52/52**；基线 147/1692/**8281**；`pkg-hashes` 370→398。⚠ **`owner` 尚无写入方**（见下） |
 | 7 | **N0.5 收尾 · 恢复路径族闭合**：`dispatch.js:287` 派发失败回滚目标 `review` → **`failed`**（`running→failed`，**零新增边**）+ 提示改「不可原地重派 ⇒ 恢复 = gap-list + 新批次」；**否决**「门禁拒置 failed」（撞既有纪律「门禁拒 = 零写入」，`batch-store.test.js:317` 明断言）；改判 5 例（`gates` Exit Gate audit / O2 T8 · `governance` A3 · `outcome-typing` C5-4 · `dispatch-failure-rollback` DR-2 · `suite-consistency` SC-3）；`attempt` 登记为**能力已移除**；基线 8248 → **8256** | `3c1f549`（09-21 11:5x） | 【实测】全量 1729 / 1707 pass / 4 todo；**fail 18 全为环境类**（git `invalid reference` 回归），**非环境类 0** |
@@ -58,7 +60,7 @@
 | **`task_pool`** | 只读 | **K1 公共池**（蓝图 §3.2 **P-A**：池 = `owner == null` 的**视图**，不是容器；不引入 claim 自领） | 触点 10（读端回显）+ 13（工具面）；R4-1a |
 | **`batch_tasks_add`** | 写（入池） | **K1「派发是唯一出池动作」的入口侧** + **A4 目标一：更细拆分**（§4）；判据与建批期同源（`buildWavePlan` + `topoWaves`） | 触点 4/5/8（lanes/handoffs 播种 + 单写者 `atomicWrite`）+ 9（`plan.mutated`）+ 11（`revision` 可选字段）；切片 **R4-1（只追加 lane，不加边）** |
 | ~~`task_split`~~ | — | **已舍弃**（2026-09-21 13:3x）：plan 层摸底/拆分本身即独立任务 ⇒ **无「拆父任务」语义** | 见 §4 第 8 条 |
-| `task_update`（未做） | 写（加边） | K1「未派发任务在池内可自由调整依赖」 | 切片 **R4-2**（触 handoffs 播种 + 出口门改读 `revision`，风险最高） |
+| **`task_update`** | 写（加边） | K1「**未派发**任务在池内可自由调整依赖」+ 触点 #3（重跑 `checkHandoffDeclarations`）/ #5（同事务补 `pending` 条）/ #6（出口门读当前声明） | 触点 3/5/6；**R4-2 ✅ 已落地**（只增不删；已派发即冻结；不成环靠结构性保证） |
 | `member_status` / `lane_dispatch`（**非 `task_*`**） | 写（**出池**） | K1「派发 = 唯一出池动作 + 门禁点」⇒ 派发面写 `owner`（R4-1b） | 触点 8（复用既有单写者路径） |
 | `lane_claim` | 写（锁） | 派发串行化（既有，非本轮新增） | — |
 

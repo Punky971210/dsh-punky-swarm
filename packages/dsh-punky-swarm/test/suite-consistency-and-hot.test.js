@@ -66,23 +66,27 @@ const FROZEN_DENY = [
   ...LEGACY_DENY.slice(BATCH_CONTROL_INSERT_AT),
   // N1-R4-1c：图变更写入口 ⇒ 成员不得改图（与 batch_control 同为人工/治理面）
   'batch_tasks_add',
+  // N1-R4-2：池内任务**加边**（图变更写入口 #2）⇒ 同上（成员不得改图）
+  'task_update',
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
-const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add'];
+const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release', 'asset_claim',
   // 【P3a control lane 追加】人工干预面同样受模式门（非生效模式零治理写入）
   'batch_control',
   // 【task-22 变更登记】P1 `handoff_submit` **不入模式门**（归 `comms` 族：交接是生产者的动作，
-  //   须成员可调用 ⇒ 不落 `assertModeActive`）；【N1-R4-1c】+`batch_tasks_add`（图变更写入口）⇒ **11 项**。
+  //   须成员可调用 ⇒ 不落 `assertModeActive`）；【N1-R4-1c】+`batch_tasks_add`、【N1-R4-2】+`task_update`
+  //   （两件均为图变更写入口）⇒ **12 项**。
   'batch_tasks_add',
+  'task_update',
 ];
 // 本批（`suite-registry-20260916`）新补的模式门 5 件：原实现面无覆盖（`assign_check` 文档表误标 ✅）
 const NEW_MODE_GATED = ['batch_phase', 'lane_claim', 'lane_release', 'asset_claim', 'assign_check'];
 const sortedUnique = (xs) => [...new Set(xs)].sort();
 
-test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（15 项，既有 13 项顺序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（11 项，含新补 5 件 + P3a batch_control）；均不含 mcp__*', () => {
+test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（16 项，既有 13 项顺序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
   // ① 只读清单与执行型清单同源（原断言保留）
   const leakedShell = SHELL_TOOLS.filter((t) => !EXEC_TOOLS.includes(t));
   assert.deepEqual(leakedShell, [], '只读判定只作用于 shell 类工具，二者必须同源');
@@ -97,7 +101,7 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（15 项，既
   }
   // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 13 项**顺序逐字不变 + P3a 追加项）
   const derivedDeny = SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
-  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（14 项：旧 13 项相对顺序不变 + P3a batch_control；task-22 后 handoff_submit 不入 deny）');
+  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（16 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update；task-22 后 handoff_submit 不入 deny）');
   assert.deepEqual([...SUITE_DENY_TOOLS].filter((n) => !POST_LEGACY_DENY_ADDED.includes(n)), LEGACY_DENY,
     '去掉 P3a 之后追加的项后必须**逐字等于**旧 13 项序列（新项只允许追加，不得重排/删项）');
   assert.equal([...SUITE_DENY_TOOLS].indexOf('batch_control'), BATCH_CONTROL_INSERT_AT,

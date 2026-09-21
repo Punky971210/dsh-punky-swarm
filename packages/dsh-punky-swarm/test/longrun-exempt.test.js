@@ -345,7 +345,7 @@ test('EX-C15: 撤销不改成员状态（lanes 不变、无新增 member.settled
 test('EX-J38: 工具总数仍 26（含 lane_dispatch/swarm_report/swarm_cc + P3a batch_control + P1 handoff 两件）；member_status 参数表按冻结清单扩两键，既有 4 键与顺序不变', () => {
   const { store, root } = setup();
   const { tools, byName } = toolsFixture(root, store);
-  assert.equal(tools.length, 28); // 【2026-09-16 P3a control lane】23 → 24（+batch_control）；【2026-09-17 P1】+handoff_submit/handoff_view 常驻注册 ⇒ 25 → 26
+  assert.equal(tools.length, 29); // 【2026-09-16 P3a control lane】23 → 24（+batch_control）；【2026-09-17 P1】+handoff_submit/handoff_view 常驻注册 ⇒ 25 → 26
   const ms = byName.member_status;
   // defineTool 归一化后：parameters = { type:'object', properties:{...}, required:[...] }（声明顺序即 Object.keys 顺序）
   assert.deepEqual(Object.keys(ms.parameters.properties), ['batchId', 'lane', 'status', 'session', 'exempt', 'revokeExempt']);

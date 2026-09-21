@@ -238,11 +238,178 @@ test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）',
 test('R4-1a-5 注册表：`task_pool` 入表、不占 deny、不占模式门（冻结序列零变化）', () => {
   const names = SUITE_TOOLS.map((t) => t.name);
   assert.ok(names.includes('task_pool'), '应已注册');
-  assert.equal(SUITE_TOOLS.length, 31, '套件工具全集 29 → 30 → 31');
+  assert.equal(SUITE_TOOLS.length, 32, '套件工具全集 29 → 30 → 31 → 32');
   assert.equal(SUITE_DENY_TOOLS.includes('task_pool'), false, '只读视图：不入成员 deny');
   assert.equal(MODE_GATED_TOOLS.includes('task_pool'), false, '零写入：不占模式门');
   // 前 14 条 deny 冻结序列的相对顺序零变化（新项只允许追加，不得重排）
-  assert.equal(SUITE_DENY_TOOLS.length, 15, 'deny 集 14 → 15（+batch_tasks_add）');
+  assert.equal(SUITE_DENY_TOOLS.length, 16, 'deny 集 14 → 15 → 16（+batch_tasks_add +task_update）');
   assert.equal(SUITE_DENY_TOOLS[0], 'assign_check', 'deny 序列首项不变');
-  assert.equal(MODE_GATED_TOOLS.length, 11, '模式门集 10 → 11（+batch_tasks_add）');
+  assert.equal(MODE_GATED_TOOLS.length, 12, '模式门集 10 → 11 → 12（+batch_tasks_add +task_update）');
+  // R4-2：`task_update` = 池内加边（图变更写入口 #2）⇒ 入 deny + 入模式门（成员不得改图）
+  assert.ok(names.includes('task_update'), 'task_update 应已注册');
+  assert.equal(SUITE_DENY_TOOLS.includes('task_update'), true, '图变更写入口 ⇒ 入成员 deny');
+  assert.equal(MODE_GATED_TOOLS.includes('task_update'), true, '写治理面 ⇒ 入模式门');
+});
+
+// ── R4-2：池内任务**加边**（`task_update`；只增不删 · 已派发即冻结）──────────────────────────
+// 用户裁定（2026-09-21「按原计划推进（task_update 加边）」）⇒ 兑现蓝图 §7.4 触点 #3 / #5 / #6。
+//   不成环靠**结构性保证**（不做成环断言）：新边只许指向「已声明在先 + 同层或上游层」的任务。
+test('R4-2-1 加边：`deps` 只增（旧边保持在前）+ handoffs 补 `pending` 条 + `plan.mutated.edges` + revision+1', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e1', [{ id: 'p1' }, { id: 'x1', deps: ['p1'] }, { id: 'y1', deps: ['x1'] }]);
+  const b = store.addTaskEdges(S, 'b-e1', [{ id: 'y1', add: ['p1'] }], { reason: '补一条跨层依赖', author: 'leader' });
+  const y1 = b.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'y1');
+  assert.deepEqual(y1.deps, ['x1', 'p1'], '只增不删：既有边保持在前，新边追加在后');
+  const list = b.handoffs.y1 ?? [];
+  assert.equal(list.length, 2, '两条入边各一条交接条（同事务补 `pending`，不留「有边无条」空洞）');
+  assert.equal(list.find((r) => r.from === 'p1')?.status, 'pending', '新入边补 `pending`（与建批期种子同形态）');
+  assert.equal(list.find((r) => r.from === 'x1')?.status, 'pending', '既有条**保留**（不重建丢档）');
+  assert.equal(list.find((r) => r.from === 'p1')?.contract?.consumedFrom, 'p1', '契约 `consumedFrom` 指回入边');
+  assert.equal(b.planRevision, 1, 'revision 递增');
+  const mut = b.events.filter((e) => e.type === 'plan.mutated');
+  assert.equal(mut.length, 1, '留痕恰好一条');
+  assert.deepEqual(mut[0].edges, [{ id: 'y1', add: ['p1'] }], '留痕带 `edges`');
+  assert.equal(mut[0].reason, '补一条跨层依赖');
+  assert.equal(mut[0].author, 'leader');
+});
+
+test('R4-2-2 已派发即冻结（K1）：`owner` 非空 或 lane 非 `pending` ⇒ 拒加边（零写入）', () => {
+  const { store, S } = setup();
+  // ① 声明面已出池（owner 非空）
+  mkBatch(store, S, 'b-e2a', [{ id: 'p1' }, { id: 'x1' }, { id: 'y1', owner: 'agent-1' }]);
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-e2a', [{ id: 'y1', add: ['p1'] }]),
+    (e) => /已出池/.test(e.message) && /已派发即冻结/.test(e.message) && !/GATE_/.test(e.message),
+    '已派发 ⇒ 冻结（普通错误，不带 GATE_ 码）',
+  );
+  // ② 执行面已离开 pending（lane 兜底判据）
+  mkBatch(store, S, 'b-e2b', [{ id: 'p1' }, { id: 'x1' }]);
+  store.setMember(S, 'b-e2b', 'x1', 'running');
+  assert.throws(() => store.addTaskEdges(S, 'b-e2b', [{ id: 'x1', add: ['p1'] }]), /已出池|已派发即冻结/);
+  assert.equal(store.readBatch(S, 'b-e2b').wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'x1')?.deps?.length ?? 0, 0,
+    '拒态零写入：deps 未被改动');
+});
+
+test('R4-2-3 不成环 = 结构性保证：新边只许指向**已声明在先**的任务（拒绝反向边 / 自指）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e3', [{ id: 'x1' }, { id: 'p1' }]); // p1 声明序在后
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-e3', [{ id: 'x1', add: ['p1'] }]),
+    (e) => /已声明在先/.test(e.message) && /结构性保证/.test(e.message) && !/GATE_/.test(e.message),
+    '反向边（dep 声明在后）⇒ 拒；这是结构约束而非成环断言',
+  );
+  mkBatch(store, S, 'b-e3b', [{ id: 'p1' }, { id: 'x1' }]);
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-e3b', [{ id: 'x1', add: ['x1'] }]),
+    /不得自指/,
+    '自指 ⇒ 拒',
+  );
+});
+
+test('R4-2-4 层序结构约束：只许指向**同层或上游层**（exec 不得依赖下游 audit）', () => {
+  const { store, S } = setup();
+  // 夹具须「audit 声明在 exec 之前」，否则会先撞「已声明在先」⇒ 两条结构约束无法解耦验证。
+  mkBatch(store, S, 'b-e4', [
+    { id: 'p1', layer: 'plan', produce: ['plan/s.md'] },
+    { id: 'a1', layer: 'audit', consume: ['plan/s.md'] },
+    { id: 'e1', layer: 'exec', consume: ['plan/s.md'] },
+  ]);
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-e4', [{ id: 'e1', add: ['a1'] }]),
+    (e) => /同层或上游层/.test(e.message) && !/GATE_/.test(e.message),
+    'exec 依赖下游 audit ⇒ 拒（与追加期同一套结构约束）',
+  );
+});
+
+test('R4-2-5 上游已结算 ⇒ 拒：终态 lane 无交接可等（该边结构性无法满足）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e5', [
+    { id: 'p1', layer: 'plan', produce: ['plan/s.md'] },
+    { id: 'a1', layer: 'audit', consume: ['plan/s.md'] },
+    { id: 'e1', layer: 'exec', consume: ['plan/s.md'] },
+  ]);
+  store.setMember(S, 'b-e5', 'p1', 'running');
+  store.setMember(S, 'b-e5', 'p1', 'failed'); // 终态（`running→failed` 合法；不经 exit 门 ⇒ 无需产物在场）
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-e5', [{ id: 'e1', add: ['p1'] }]),
+    (e) => /已结算/.test(e.message) && /无交接可等/.test(e.message) && !/GATE_/.test(e.message),
+    '上游终态 ⇒ 新边恒 pending ⇒ 下游永远开不了工 ⇒ 加边期即拒',
+  );
+});
+
+test('R4-2-6 幂等与零变更：已存在的边跳过；全部已存在 ⇒ 不落盘', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e6', [{ id: 'p1' }, { id: 'x1', deps: ['p1'] }, { id: 'y1' }]);
+  // 部分幂等：给 x1 再加既有边 + 给 y1 加新边 ⇒ 只落 y1 的新边
+  const b = store.addTaskEdges(S, 'b-e6', [{ id: 'x1', add: ['p1'] }, { id: 'y1', add: ['p1'] }]);
+  assert.deepEqual(b.events.filter((e) => e.type === 'plan.mutated')[0].edges, [{ id: 'y1', add: ['p1'] }],
+    '既有边跳过、不计入留痕');
+  // 全部已存在 ⇒ 零变更，不落盘
+  const before = store.readBatch(S, 'b-e6').planRevision;
+  assert.throws(() => store.addTaskEdges(S, 'b-e6', [{ id: 'x1', add: ['p1'] }]), /零新增边/);
+  assert.equal(store.readBatch(S, 'b-e6').planRevision, before, '零变更不递增 revision');
+});
+
+test('R4-2-7 存量批（无 `handoffs` 字段）⇒ 拒加边（不静默把 legacy 形态转成受门形态）', () => {
+  const { store, root, S } = setup();
+  mkBatch(store, S, 'b-legacy', [{ id: 'p1' }, { id: 'x1' }]);
+  const f = path.join(root, 'sessions', S, 'batches', 'b-legacy.json');
+  const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+  delete j.handoffs; // 造存量形态（`createBatch` 恒写该字段 ⇒ 须显式删）
+  fs.writeFileSync(f, JSON.stringify(j), 'utf8');
+  assert.throws(
+    () => store.addTaskEdges(S, 'b-legacy', [{ id: 'x1', add: ['p1'] }]),
+    /存量形态/,
+    '存量批加边会改变交接门语义（legacy 放行 → 受门约束）⇒ 拒',
+  );
+});
+
+test('R4-2-8 工具面：`task_update` 加边后 `task_pool` 立即反映新 `deps`（读端同源）', async () => {
+  const { store, root, S } = setup();
+  mkBatch(store, S, 'b-e8', [{ id: 'p1' }, { id: 'x1' }]);
+  const by = toolByName(store, root);
+  const exec = { agent: { session: { id: S } } };
+  const before = await by.task_pool.execute({ batchId: 'b-e8', session: S }, exec);
+  assert.equal(before.pool.find((t) => t.id === 'x1').dispatchable, true, '前置：x1 无上游 ⇒ 可派发');
+  const out = await by.task_update.execute({ batchId: 'b-e8', edges: [{ id: 'x1', add: ['p1'] }], reason: '补上游' }, exec);
+  assert.deepEqual(out.edges, [{ id: 'x1', add: ['p1'] }]);
+  assert.equal(out.planRevision, 1);
+  assert.equal(out.handoffsCount, 1, '新增一条交接条');
+  const after = await by.task_pool.execute({ batchId: 'b-e8', session: S }, exec);
+  const x1 = after.pool.find((t) => t.id === 'x1');
+  assert.deepEqual(x1.deps, ['p1'], '读端立即反映新边（同一落盘真源）');
+  assert.equal(x1.dispatchable, false, '上游未结算 ⇒ 不再可派发');
+  assert.ok(x1.blockers.some((s) => /GATE_HANDOFF_MISSING/.test(s)), 'blockers 指名');
+});
+
+test('R4-2-9 批终态 ⇒ 复用既有 `GATE_BATCH_TERMINAL`（唯一例外）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e9', [{ id: 'p1' }, { id: 'x1' }]);
+  store.setPhase(S, 'b-e9', 'aborted');
+  assert.throws(() => store.addTaskEdges(S, 'b-e9', [{ id: 'x1', add: ['p1'] }]), /GATE_BATCH_TERMINAL/);
+});
+
+// 触点 #6（出口门）**证据级别声明**：本用例断言的是「**数据源一致性**」——即出口门判据所消费的
+//   「下游集合」形态与落盘 `batch.wavePlan` 同形（复刻 `gates.js#checkSettleHandoffGate` 的下游枚举）。
+//   ⇒ 结论：加边**无需改码**即被感知（数据源本来就是「当前落盘的声明」，不存在需要换的第二个源）。
+//   ⚠ **不是**端到端的门行为验证（那需要开启交接门 + 完整结算夹具，由既有 `test/handoff-gate.test.js` 覆盖）。
+test('R4-2-10 触点 #6：出口门的「下游集合」数据源 = 落盘 `batch.wavePlan`（加边即被感知）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-e10', [{ id: 'p1' }, { id: 'x1' }]);
+  // 与 `gates.js#checkSettleHandoffGate` 的 ① 同形：遍历 wavePlan、按 `deps` 反查下游
+  const downstreamOf = (b, lane) => {
+    const out = [];
+    for (const w of b.wavePlan ?? []) {
+      for (const t of w.tasks ?? []) {
+        if (!t || typeof t.id !== 'string' || t.id === lane) continue;
+        if ((Array.isArray(t.deps) ? t.deps : []).some((d) => d === lane)) out.push(t.id);
+      }
+    }
+    return out;
+  };
+  assert.deepEqual(downstreamOf(store.readBatch(S, 'b-e10'), 'p1'), [], '前置：加边前 p1 无下游 ⇒ 出口门零感知');
+  const b = store.addTaskEdges(S, 'b-e10', [{ id: 'x1', add: ['p1'] }]);
+  assert.deepEqual(downstreamOf(b, 'p1'), ['x1'], '加边后上游的**下游集合立即**包含新下游（同一落盘真源）');
+  assert.equal(b.handoffs.x1.find((r) => r.from === 'p1')?.status, 'pending',
+    '新 out 边已在**同一事务**补 `pending` 交接条（出口门据此判「至少一条已成立交接」）');
 });

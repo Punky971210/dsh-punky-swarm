@@ -1556,6 +1556,46 @@ export function createCoreTools(ctx, deps) {
         };
       },
     }),
+    // ── N1-R4-2（K1 公共池）：`task_update` = 给**池内**任务**加边**的写入口 ────────────────────
+    // 兑现蓝图 §7.4 触点 #3（重跑 `checkHandoffDeclarations`）/ #5（同事务补 `pending` 交条件）/ #6（出口门读当前声明）。
+    //   · K1：「**未派发**任务在池内可自由调整依赖」⇒ 加边是**池内**动作，不在红线保护对象内；
+    //   · ⚠ 已派发/已启动（`owner` 非空 或 lane 已离开 `pending`）⇒ **冻结**、不得加边（层内不重算 · 非改派）；
+    //   · **只增不删**：不提供删边——删边会毁掉既有交接声明与下游已消费的事实 ⇒ 属「重算」，撞 K1 红线；
+    //   · **不成环靠结构性保证**（用户裁定：不做成环断言）：新边只许指向**已声明在先** + **同层或上游层**的任务；
+    //   · 单次 `atomicWrite`：wavePlan 重归一化（**重跑**建批期校验）+ handoffs 补 `pending` 交条件 + `plan.mutated` 留痕。
+    //   ⇒ 触点 #6 **无需改码**：出口门 `checkSettleHandoffGate` 的「下游集合」本就**直接读落盘 `batch.wavePlan`**
+    //     （= 当前 revision 的声明）⇒ 加边后自动感知；「换数据源」的真相 = 数据源本来就是它（本批补断言锁住）。
+    defineTool({
+      name: "task_update",
+      description: "给**池内任务加边**（新增依赖，只增不删）：仅限**未派发**任务（`owner == null` 且 lane 仍 `pending`）；已派发/已启动任务**冻结**（K1：层内不重算 · 非改派；换人走「作废 + 池内新增替代任务 + gap-list」）。新依赖须**已声明在先**且**同层或上游层**（不成环的**结构性保证**，非成环断言），且上游**未结算**（终态 lane 无交接可等 ⇒ 该边结构性无法满足）。单次原子写：wavePlan 重归一化（重跑建批期校验）+ handoffs 补 `pending` 交条件 + `plan.mutated` 留痕 + `planRevision+1`。⚠ **删边不提供**（属重算）。非法输入抛**普通错误**（不带 `GATE_` 前缀）；批次已终态抛 `GATE_BATCH_TERMINAL`。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"edges":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"加边数组；每项形如 `{ id, add: [上游任务 id, ...] }`——`id` = 池内目标任务（须未派发），`add` = 新增依赖（只增不删；须已存在、已声明在先、同层或上游、未结算）"},"reason":{"type":"string","description":"加边理由（落 `plan.mutated` 留痕，供审计复盘）"},"session":{"type":"string","description":"批次归属会话"}},
+      output: {
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"edges":{"type":"array","items":{"type":"object","additionalProperties":true}},"planRevision":{"type":"integer"},"handoffsCount":{"type":"integer"},"note":{"type":"string"}}},
+        render: (_args, value) => TEXT_OUTPUT('edges added to ' + value.batchId + ': '
+          + (value.edges ?? []).map((e) => e.id + '<-' + (e.add ?? []).join('+')).join('; ')
+          + ' (revision=' + value.planRevision + ')'),
+      },
+      async execute(args, exec) {
+        assertModeActive(deps, exec, '池内任务加边（task_update）'); // 模式门：非生效模式零治理写入，先于参数/状态校验
+        const sessionId = sessionOf(args, exec);
+        const list = Array.isArray(args.edges) ? args.edges : [];
+        const b = store.addTaskEdges(sessionId, args.batchId, list, {
+          reason: args.reason ?? null,
+          author: ownerOfExec(exec),
+        });
+        return {
+          batchId: args.batchId,
+          edges: list.map((e) => ({
+            id: String(e?.id ?? ''),
+            add: Array.isArray(e?.add) ? e.add.map((x) => String(x)) : [],
+          })),
+          planRevision: b.planRevision ?? 1,
+          handoffsCount: Object.values(b.handoffs ?? {}).reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0),
+          note: '加边已落盘（单次原子写）：新入边已补 `pending` 交条件，`plan.mutated` 已留痕。'
+            + '⚠ 只增不删——删边会毁掉既有交接声明与下游已消费事实（属「重算」，撞 K1 红线），故不提供。',
+        };
+      },
+    }),
   ];
 }
 

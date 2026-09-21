@@ -46,7 +46,7 @@ assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置�
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口：发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
 // 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
 // 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**）⇒ 25 → 26。
-const DEFAULT_TOOL_COUNT = 28;
+const DEFAULT_TOOL_COUNT = 29;
 
 test('all 26 tools registered（P1-01 缺省默认开 + lane_dispatch + batch_control + P1 handoff 两件）', () => {
   assert.equal(tools.length, DEFAULT_TOOL_COUNT);

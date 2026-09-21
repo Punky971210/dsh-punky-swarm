@@ -275,6 +275,16 @@ const CASES = {
     success: async (h) => h.byName.batch_tasks_add.execute({ batchId: C2, tasks: [{ id: 'pool-add-1', layer: 'exec', role: 'coder' }], reason: '普查 fixture：池内追加' }, EXEC),
     reject: async (h) => h.byName.batch_tasks_add.execute({ batchId: C2, tasks: [{ id: 'p1' }] }, EXEC),
   },
+  // N1-R4-2：池内任务**加边**（图变更写入口 #2）。夹具 = **独立批**（`freshBatch` ⇒ 三层链 p1→l1→la1），
+  //   给 audit lane 追加**同批 plan lane** 的入边（已声明在先 + 上游层 ⇒ 通过结构约束；上游未结算 ⇒ 可加）。
+  //   拒态 = 目标任务不存在 ⇒ 抛普通错误（不新建 `GATE_` 码）。
+  task_update: {
+    success: async (h) => h.byName.task_update.execute({
+      batchId: await freshBatch(h, 'census-edge'),
+      edges: [{ id: 'la1', add: ['p1'] }], reason: '普查 fixture：池内加边',
+    }, EXEC),
+    reject: async (h) => h.byName.task_update.execute({ batchId: C2, edges: [{ id: 'no-such-task', add: ['p1'] }] }, EXEC),
+  },
 };
 
 /** 单次探测：返回值 ⇒ 逐条 schema 校验（双口径）；抛错 ⇒ 断言非 schema 形态。 */
@@ -292,7 +302,7 @@ async function probe(fn, h, tool) {
   }
 }
 
-test('TSC-1 全工具 output.schema 一致性普查：28 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
+test('TSC-1 全工具 output.schema 一致性普查：29 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
   const h = await makeHarness();
   const names = h.byName && Object.keys(h.byName);
   const registered = Object.keys(CASES).filter((n) => h.byName[n]);

@@ -83,14 +83,14 @@ test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（27 工�
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wt-off-'));
   const store = createStore(root);
   const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root });
-  assert.equal(tools.length, 28);
+  assert.equal(tools.length, 29);
   const names = tools.map((t) => t.name);
   for (const n of ['lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(names.includes(n), '缺省默认开：' + n + ' 应注册');
   }
   // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（core 12 + lane_heartbeat + lane_longrun + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 22；【2026-09-21 N1-R4-1a】+task_pool ⇒ 23）
   const { tools: t2 } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: { capabilities: { worktree: { enabled: false } } } });
-  assert.equal(t2.length, 24); // 22 + task_pool（N1-R4-1a）
+  assert.equal(t2.length, 25); // 22 + task_pool（N1-R4-1a）
   assert.equal(t2.some((t) => t.name === 'lane_worktree_create' || t.name === 'lane_worktree_merge' || t.name === 'lane_checkpoint' || t.name === 'lane_checkpoint_status'), false);
 });
 
