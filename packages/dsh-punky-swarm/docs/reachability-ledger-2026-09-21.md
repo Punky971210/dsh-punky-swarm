@@ -42,6 +42,47 @@
 ### ⚠ 与门禁台账的口径差异（须交叉核对）
 台账称「无断言拒码 **2** 枚」，本表 `test=0` 有 **6** 条 ⇒ 差异来自命中口径（断言上下文 vs 全文件字符串）。**两者都可能是真缺口**，但也都可能是"命中了文案而非断言"。⇒ 下一步：用 `scripts/audit/strength.mjs` 的 `classifyHits` 口径重扫这 6 条，确认是真零断言还是统计假象。
 
+## §2.5 全量判读（第二轮：净化 + 分层，已覆盖全部 119 条）
+
+> 用户要求「一次性把这类存量清干净」⇒ 本轮把**全集**走完（不再只判高信号子集）。
+> **第一步必须净化**：命中集合里混着大量**非守卫**（见 §0 缺陷 3）。
+
+### 净化分类（`--classify`，启发式 + 人工复核）
+
+| 类 | 数量 | 是否需判读 |
+|---|---|---|
+| **guard:真守卫** | **85** | ✔ 判读对象 |
+| noise:事件常量（命中 `EVT_GATE_*`） | 16 | ✘ 剔除 |
+| noise:环境变量/配置（`GATE_ENABLED`/`GATE_ENV`/`GATE_MAX_OUTPUT_BYTES`/`GATE_MAX_WINDOW_MS`/`GATE_RETRY`…） | 6 | ✘ 剔除 |
+| noise:模板前缀碎片（`GATE_EXIT_` / `GATE_EXIT_MISSING_` / …） | 3 | ✘ 剔除 |
+| **retired:码已退役（仅注释残留）** | **5** | ⚠ **新发现第 5 类**，见下 |
+| const:常量表条目 | 2 | ✘ 剔除 |
+| candidate:lib 内零命中（`GATE_EXIT_MISSING_AUDIT/EXEC`，模板拼接码） | 2 | ⚠ 属①（拼接产生，非不可达） |
+
+### 真守卫 85 条的分层判读
+
+| 层 | 判据 | 归类 | 处置 |
+|---|---|---|---|
+| **人工逐条确证 6 条**（§1） | 看实现路径 | ① 可达 | 补断言 |
+| **证据层 79 条** | `prod ≥ 1`（有生产引用）+ 状态由**调用方输入/成员态**驱动（artifact 缺失、产物未声明、命令非零、豁免载荷非法…） | **③ 输入可构造**（可构造 ⇒ 必须拦） | 保留；其中零断言的按 R3g 纪律补测 |
+| **已确证 ②** | `GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` | ② 被参数面遮蔽 | 登记 + 绊线（R3-2 已完成） |
+
+**⇒ 全量结论：真守卫中再无④（结构性不可能）。** ④ 全集仍只有三项：成环检查（**已删**）、`assets.js:147`（**待裁**）、以及 ——
+
+### ⚠ 新发现第 5 类：**退役码的注释残留**（不属于四分类，单列）
+
+`GATE_MANAGER_TERMINAL` / `GATE_MANAGER_PHASE_INVALID` / `GATE_MANAGER_AGENT_ID_REQUIRED` / `GATE_MANAGER_NOT_RAISED` / `GATE_TEAM_ASSET_MISSING`
+
+- 码**已删除**（注释逐字「三码已删」「硬门已删」），但**注释与文档仍在引用** ⇒ grep 会误以为门还在。
+- 与 R3 的「说已防护、实未防护」**同族**（注释漂移），方向相反：这里是「**说已删除、却被 grep 当活码**」。
+- **处置建议**：登记进 `redundant-guard-audit` 台账；不删注释（注释解释了退役理由，有价值），但应**加统一前缀标记**（如 `【已退役码·勿引用】`）使扫描器与人工都能一眼分辨。⇒ **待裁**
+
+### 边类 17 条（判读完成）
+
+- **成员边 10 条全部①可达**：`pending→running`（派发）/ `pending→failed` / `pending→skipped`（condition 未满足自动 skip，走 `applyMemberTransition`）/ `running→review` / `running→failed`（dispatch 回滚 + trajectory）/ `running→skipped`（**经核实可达**——`member_settle` 的 status enum 含 `skipped`，可显式结算）/ `review→merged/conflict/failed` / `idle→running`（recycle 后重派）。
+- **相位边 7 条全部①可达**（`planning→running/aborted`、`running→paused/complete/aborted`、`paused→running/aborted`）。
+- ⇒ **更正前一轮的"疑似"**：`running→skipped` 经核实为可达（此前误判为疑似④），特此更正。
+
 ## §3 后续判读顺序（113 条待判）
 
 1. **先核「疑似常量」**：`GATE_ROW_HEADROOM` 一类（名称/常量 vs 真拒码）⇒ 从判读集剔除噪声。

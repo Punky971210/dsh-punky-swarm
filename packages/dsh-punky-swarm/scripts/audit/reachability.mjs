@@ -110,6 +110,75 @@ for (const e of batchEdges) {
   });
 }
 
+// ── --context 证据输出（供人工判读：每个守卫的首个生产命中上下文）────────────────
+function contextOf(needle, files) {
+  for (const f of files) {
+    const t = readFileSync(f, 'utf8').split('\n');
+    for (let i = 0; i < t.length; i++) {
+      if (t[i].includes(needle)) {
+        const from = Math.max(0, i - 1);
+        const to = Math.min(t.length, i + 2);
+        return {
+          file: relative(ROOT, f), line: i + 1,
+          text: t.slice(from, to).map((l) => l.trim().slice(0, 120)).join(' ⏎ '),
+        };
+      }
+    }
+  }
+  return null;
+}
+// ── --classify 净化分类（把「疑似守卫」分成真守卫 / 各类噪声）──────────────────────
+//   判读前必须净化：命中集合里混有环境变量、事件常量、模板前缀碎片、已删码的注释残留——
+//   它们**不是守卫**，把它们当守卫判读会得出错误结论（本轮实测教训）。
+function classify(id, ctx) {
+  const txt = ctx ? ctx.text : '';
+  if (/_$/.test(id)) return 'noise:模板前缀碎片';
+  if (/EVT_GATE/.test(txt)) return 'noise:事件常量(命中 EVT_GATE_*)';
+  if (/envNumber\(|process\.env|GATE_ENABLED|GATE_ENV\b/.test(txt)) return 'noise:环境变量/配置';
+  if (/已删|已移除|不再存在|已删除/.test(txt)) return 'retired:码已退役(仅注释残留)';
+  if (/export const [A-Z_]+ =/.test(txt) && txt.includes(id + "'")) return 'const:常量表条目';
+  if (txt === '') return 'candidate:lib 内零命中(需人工)';
+  return 'guard:真守卫(需判读)';
+}
+if (process.argv.includes('--classify')) {
+  const buckets = new Map();
+  const out = ['# 可达性审计 · 净化分类（机器启发式，人工复核）', ''];
+  for (const r of rows) {
+    const c = contextOf(r.needle, libNonDef);
+    const k = classify(r.id, c);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push({ r, c });
+  }
+  for (const [k, list] of [...buckets.entries()].sort()) {
+    out.push('## ' + k + '（' + list.length + '）');
+    out.push('');
+    for (const { r, c } of list) {
+      out.push('- `' + r.id + '`（prod=' + r.prod + ', test=' + r.test + '）'
+        + (c ? ' — ' + c.file + ':' + c.line : ' — lib 内零命中'));
+    }
+    out.push('');
+  }
+  writeFileSync(join(OUT, 'reachability-classify.md'), out.join('\n'), 'utf8');
+  for (const [k, list] of [...buckets.entries()].sort()) {
+    console.log('[classify] ' + k + ' = ' + list.length);
+  }
+  console.log('[classify] -> ' + relative(ROOT, join(OUT, 'reachability-classify.md')));
+  process.exit(0);
+}
+
+if (process.argv.includes('--context')) {
+  const out = ['# 可达性审计 · 生产命中上下文（机器生成，供人工判读）', ''];
+  for (const r of rows) {
+    const c = contextOf(r.needle, libNonDef);
+    out.push('## ' + r.kind + ' · `' + r.id + '`（prod=' + r.prod + ', test=' + r.test + '）');
+    out.push(c ? ('- ' + c.file + ':' + c.line + ' — ' + c.text) : '- （lib 内零命中）');
+    out.push('');
+  }
+  writeFileSync(join(OUT, 'reachability-context.md'), out.join('\n'), 'utf8');
+  console.log('[reachability] 上下文 -> ' + relative(ROOT, join(OUT, 'reachability-context.md')));
+  process.exit(0);
+}
+
 // ── --check 漂移比对 ─────────────────────────────────────────────────────────
 const ids = rows.map((r) => r.kind + ':' + r.id).sort();
 if (process.argv.includes('--check')) {
