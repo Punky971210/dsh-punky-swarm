@@ -63,8 +63,22 @@ for (const f of libFiles) {
   // 只取**拒码**字面量（以 `GATE_` 开头）；`EVT_GATE_*` 等事件常量不属于守卫，排除
   for (const x of t.matchAll(/'?(GATE_[A-Z0-9_]+)'?/g)) thrown.add(x[1]);
 }
-// 噪声过滤：`_RE` 结尾 = **正则常量**（非守卫，如 `GATE_FORBIDDEN_RE`），不进判读集
-const codes = [...new Set([...typed, ...thrown])].filter((c) => !/_RE$/.test(c)).sort();
+// 噪声过滤（两轮）：
+//   ① `_RE` 结尾 = **正则常量**（非守卫，如 `GATE_FORBIDDEN_RE`），不进判读集；
+//   ② 【N 类白名单（2026-09-22 02:3x 用户裁决，docs/gate-code-classification-2026-09-22.md）】
+//      非守卫字面量（配置键/解析器常量/兼容标记/常量片段）⇒ 从门禁码统计口径剔除（常量本体生产在用，只剔口径）。
+const NON_GUARD = new Set([
+  'GATE_ENABLED', 'GATE_ENV', 'GATE_TIMEOUT_MS', 'GATE_RETRY', 'GATE_MAX_OUTPUT_BYTES',
+  'GATE_MAX_WINDOW_MS', 'GATE_WINDOW_MS',
+  'GATE_LINE_RE', 'GATE_EMPTY_LINE_RE', 'GATE_OFF_LINE_RE', 'GATE_FORBIDDEN_RE',
+  'GATE_TARGETS_MODE', 'GATE_CODES', 'GATE_REPO_ROOT', 'GATE_MARKER', 'GATE_KINDS',
+  'GATE_COUNT_FILE', 'GATE_RUNTIME_JS', 'GATE_PASSED', 'GATE_EXIT',
+  'GATE_HANDOFF_LEGACY_PASSTHROUGH', 'GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH',
+]);
+const codes = [...new Set([...typed, ...thrown])]
+  .filter((c) => !/_RE$/.test(c))
+  .filter((c) => !NON_GUARD.has(c))
+  .sort();
 const DEF_FILES = new Set(['lib/types/contracts.ts', 'lib/types/contracts.js']);
 const libNonDef = libFiles.filter((f) => !DEF_FILES.has(relative(ROOT, f).replace(/\\/g, '/')));
 

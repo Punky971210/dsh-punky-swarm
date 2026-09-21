@@ -1,0 +1,1195 @@
+[
+ {
+  "code": "GATE_AUDIT_CRITERIA_MISSING",
+  "prod": 9,
+  "test": 10,
+  "sites": [
+   "assembly\\flows.js",
+   "assembly\\team-asset.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_PLAN_CONTRACT",
+  "prod": 9,
+  "test": 33,
+  "sites": [
+   "assembly\\flows.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_ROLE_INVALID",
+  "prod": 35,
+  "test": 46,
+  "sites": [
+   "assembly\\flows.js",
+   "assembly\\team-asset.js"
+  ],
+  "cls": "A2 事件留痕",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ROLE_MISSING",
+  "prod": 19,
+  "test": 56,
+  "sites": [
+   "assembly\\flows.js",
+   "assembly\\team-asset.js"
+  ],
+  "cls": "A2 事件留痕",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_WINDOW_MS",
+  "prod": 4,
+  "test": 2,
+  "sites": [
+   "auditlog\\sink.js",
+   "auditlog\\sink.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_MAX_WINDOW_MS",
+  "prod": 4,
+  "test": 2,
+  "sites": [
+   "auditlog\\sink.js",
+   "auditlog\\sink.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ROW_HEADROOM",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "auditlog\\sink.js",
+   "auditlog\\sink.js"
+  ],
+  "cls": "D 非守卫常量",
+  "note": "reachability 台账已剔除"
+ },
+ {
+  "code": "GATE_SUBAGENT_OUTSIDE_LANES",
+  "prod": 8,
+  "test": 2,
+  "sites": [
+   "bridge\\dispatch-register.js",
+   "bridge\\dispatch-register.js"
+  ],
+  "cls": "C 退役(注释)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_SETTLE_NOTE_MISSING",
+  "prod": 5,
+  "test": 7,
+  "sites": [
+   "engine\\auto-settle.js",
+   "state\\store.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_COMPLETE_AUDIT_FAILED",
+  "prod": 7,
+  "test": 15,
+  "sites": [
+   "engine\\auto-settle.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_CONCURRENCY_BLOCKED",
+  "prod": 3,
+  "test": 1,
+  "sites": [
+   "engine\\dispatch.js",
+   "engine\\dispatch.js"
+  ],
+  "cls": "C 事件常量冻结(历史读端)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_DISPATCH_FAILED",
+  "prod": 3,
+  "test": 5,
+  "sites": [
+   "engine\\dispatch.js",
+   "engine\\dispatch.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_DISPATCH_CAPABILITY_MISSING",
+  "prod": 1,
+  "test": 5,
+  "sites": [
+   "engine\\dispatch.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_DISPATCH_PROVIDER_INVALID",
+  "prod": 1,
+  "test": 1,
+  "sites": [
+   "engine\\dispatch.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_CONCURRENCY_EXCEEDED",
+  "prod": 3,
+  "test": 7,
+  "sites": [
+   "engine\\dispatch.js",
+   "state\\event-types.js"
+  ],
+  "cls": "C 退役(注释)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_MODE_INACTIVE",
+  "prod": 3,
+  "test": 15,
+  "sites": [
+   "engine\\dispatch.js",
+   "engine\\suite.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ENABLED",
+  "prod": 22,
+  "test": 30,
+  "sites": [
+   "index.js",
+   "index.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_FORBIDDEN_RE",
+  "prod": 2,
+  "test": 0,
+  "sites": [
+   "state\\command-exec.js",
+   "state\\command-exec.js"
+  ],
+  "cls": "N 解析器常量",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_EXIT_SPAWN_FAIL",
+  "prod": 8,
+  "test": 8,
+  "sites": [
+   "state\\command-exec.js",
+   "state\\command-exec.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_TIMEOUT",
+  "prod": 5,
+  "test": 5,
+  "sites": [
+   "state\\command-exec.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_TIMEOUT_MS",
+  "prod": 1,
+  "test": 4,
+  "sites": [
+   "state\\command-exec.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_RETRY",
+  "prod": 1,
+  "test": 1,
+  "sites": [
+   "state\\command-exec.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_MAX_OUTPUT_BYTES",
+  "prod": 1,
+  "test": 4,
+  "sites": [
+   "state\\command-exec.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_NO_COMMAND",
+  "prod": 19,
+  "test": 19,
+  "sites": [
+   "state\\command-exec.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_FORBIDDEN",
+  "prod": 7,
+  "test": 8,
+  "sites": [
+   "state\\command-exec.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_BATCH_TERMINAL",
+  "prod": 15,
+  "test": 11,
+  "sites": [
+   "state\\dangling.js",
+   "state\\event-types.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_PLAN_PRESENCE_MISSING",
+  "prod": 15,
+  "test": 9,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ORPHAN_PRODUCT",
+  "prod": 16,
+  "test": 19,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_MANAGER_MISSING",
+  "prod": 2,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "B 零断言(事件)",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_MANAGER_ROSTER_GAP",
+  "prod": 2,
+  "test": 5,
+  "sites": [
+   "state\\event-types.js",
+   "tools\\core.js"
+  ],
+  "cls": "A2 事件留痕",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ENTRY_MISSING",
+  "prod": 14,
+  "test": 54,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_MISSING",
+  "prod": 3,
+  "test": 2,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "A2 留痕事件码·在役+断言",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_PASSED",
+  "prod": 3,
+  "test": 1,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "N 解析器片段",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_TARGET_BLOCKED",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "B 零断言(事件)",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_TARGET_PASSED",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "B 零断言(事件)",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_HANDOFF_MISSING",
+  "prod": 25,
+  "test": 26,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_BLOCKED",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "B 零断言(事件)",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_EXIT",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "D 模板前缀",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_NEEDHUMAN_BLOCKED",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "B 零断言(事件)",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_COMPLETE_BLOCKED",
+  "prod": 3,
+  "test": 2,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "A2 留痕事件码·在役+断言",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_COMPLETE_OUTCOMES_EMPTY",
+  "prod": 12,
+  "test": 5,
+  "sites": [
+   "state\\event-types.js",
+   "state\\event-types.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_AUDIT_CONTRACT_EXEMPT",
+  "prod": 5,
+  "test": 9,
+  "sites": [
+   "state\\event-types.js",
+   "tools\\core.js"
+  ],
+  "cls": "A2 事件留痕",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_SKILL_MISSING",
+  "prod": 6,
+  "test": 7,
+  "sites": [
+   "state\\event-types.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_CONTRACT_MISSING",
+  "prod": 5,
+  "test": 9,
+  "sites": [
+   "state\\event-types.js",
+   "state\\store.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ESCAPE",
+  "prod": 4,
+  "test": 19,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_DEGRADE",
+  "prod": 4,
+  "test": 10,
+  "sites": [
+   "state\\event-types.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_LINE_RE",
+  "prod": 15,
+  "test": 2,
+  "sites": [
+   "state\\gates.d.ts",
+   "state\\gates.js"
+  ],
+  "cls": "N 解析器常量",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EMPTY_LINE_RE",
+  "prod": 9,
+  "test": 2,
+  "sites": [
+   "state\\gates.d.ts",
+   "state\\gates.js"
+  ],
+  "cls": "N 解析器常量",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_TOKEN_UNKNOWN",
+  "prod": 13,
+  "test": 17,
+  "sites": [
+   "state\\gates.d.ts",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_VOCAB_INVALID",
+  "prod": 12,
+  "test": 5,
+  "sites": [
+   "state\\gates.d.ts",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_LANE_NOT_IN_PLAN",
+  "prod": 8,
+  "test": 6,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_NEEDHUMAN_PENDING",
+  "prod": 19,
+  "test": 14,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_OFF_LINE_RE",
+  "prod": 4,
+  "test": 0,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "N 解析器常量",
+  "note": "① 可达 ⇒ 补测缺口（R3g）"
+ },
+ {
+  "code": "GATE_NO_DECLARATION",
+  "prod": 2,
+  "test": 1,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "B 被遮蔽(内部分支)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ARTIFACT_OUTSIDE_ROOT",
+  "prod": 6,
+  "test": 2,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ARTIFACT_NOT_A_FILE",
+  "prod": 10,
+  "test": 5,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ARTIFACT_MISSING",
+  "prod": 14,
+  "test": 1,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "D 哨兵",
+  "note": "外显形态 GATE_EXIT_MISSING_<LAYER> 的哨兵，外显断言 12 处"
+ },
+ {
+  "code": "GATE_ARTIFACT_EMPTY_NO_REASON",
+  "prod": 6,
+  "test": 6,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_STANDALONE_UNJUSTIFIED",
+  "prod": 14,
+  "test": 11,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "D 模板/哨兵",
+  "note": ""
+ },
+ {
+  "code": "GATE_AUDIT_INPUT_MISSING",
+  "prod": 13,
+  "test": 15,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_PLAN_NO_DECLARATION",
+  "prod": 4,
+  "test": 3,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_LANE_LAYER_MISSING",
+  "prod": 2,
+  "test": 17,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_NO_DECLARATION",
+  "prod": 4,
+  "test": 7,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_MISSING_",
+  "prod": 4,
+  "test": 1,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ },
+ {
+  "code": "GATE_REPO_ROOT",
+  "prod": 4,
+  "test": 11,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "N 常量",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_NONZERO",
+  "prod": 4,
+  "test": 19,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_TARGETS_MODE",
+  "prod": 4,
+  "test": 9,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "N 常量",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_TARGET_MISSING",
+  "prod": 7,
+  "test": 9,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_TARGET_UNCHANGED",
+  "prod": 7,
+  "test": 11,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_COMPLETE_NO_TIER",
+  "prod": 4,
+  "test": 14,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_COMPLETE_NO_AUDIT",
+  "prod": 4,
+  "test": 3,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_PENDING_AUDIT",
+  "prod": 4,
+  "test": 6,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_COMPLETE_EXEC_PENDING",
+  "prod": 4,
+  "test": 3,
+  "sites": [
+   "state\\gates.js",
+   "state\\gates.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_CODES",
+  "prod": 6,
+  "test": 4,
+  "sites": [
+   "state\\lane-exempt.js",
+   "state\\lane-exempt.js"
+  ],
+  "cls": "N 常量",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXEMPT_NOT_DISPATCH",
+  "prod": 9,
+  "test": 14,
+  "sites": [
+   "state\\lane-exempt.js",
+   "state\\store.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXEMPT_INVALID",
+  "prod": 6,
+  "test": 5,
+  "sites": [
+   "state\\lane-exempt.js",
+   "state\\lane-exempt.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXEMPT_TYPE_UNKNOWN",
+  "prod": 9,
+  "test": 4,
+  "sites": [
+   "state\\lane-exempt.js",
+   "state\\lane-exempt.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXEMPT_REVOKE_REQUIRED",
+  "prod": 5,
+  "test": 6,
+  "sites": [
+   "state\\lane-exempt.js",
+   "state\\store.js"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EVENT_CONST_MISSING",
+  "prod": 5,
+  "test": 12,
+  "sites": [
+   "state\\store.js",
+   "state\\store.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_HANDOFF_LEGACY_PASSTHROUGH",
+  "prod": 1,
+  "test": 2,
+  "sites": [
+   "state\\store.js"
+  ],
+  "cls": "N 兼容标记",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_",
+  "prod": 3,
+  "test": 1,
+  "sites": [
+   "state\\store.js",
+   "tools\\core.js"
+  ],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ },
+ {
+  "code": "GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH",
+  "prod": 1,
+  "test": 5,
+  "sites": [
+   "state\\store.js"
+  ],
+  "cls": "N 兼容标记",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_BATCH_REQUIRES_C",
+  "prod": 3,
+  "test": 10,
+  "sites": [
+   "tools\\core.js",
+   "types\\contracts.d.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_MEMBER_REQUIRES_C",
+  "prod": 3,
+  "test": 6,
+  "sites": [
+   "tools\\core.js",
+   "types\\contracts.d.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_TEAMS_ROOT_ASSET_NOT_FOUND",
+  "prod": 3,
+  "test": 5,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_TEAMS_ROOT_INVALID",
+  "prod": 7,
+  "test": 10,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_TEAMS_ROOT_",
+  "prod": 3,
+  "test": 0,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ },
+ {
+  "code": "GATE_SWARM_UNBOUND_REPORT",
+  "prod": 2,
+  "test": 3,
+  "sites": [
+   "tools\\core.js",
+   "types\\contracts.ts"
+  ],
+  "cls": "C 退役(注释)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ROLE_ASSEMBLY_MISSING",
+  "prod": 12,
+  "test": 13,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ASSEMBLY_INVALID",
+  "prod": 30,
+  "test": 22,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_AUDIT_CONTRACT_MISSING",
+  "prod": 2,
+  "test": 5,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXEC_INPUT_MISSING",
+  "prod": 3,
+  "test": 6,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_MANAGER_TERMINAL",
+  "prod": 1,
+  "test": 1,
+  "sites": [
+   "tools\\core.js"
+  ],
+  "cls": "C 退役(注释)",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_BATCH_CONTROL_ACTION_INVALID",
+  "prod": 1,
+  "test": 3,
+  "sites": [
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_DIFFICULTY_INVALID",
+  "prod": 2,
+  "test": 3,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "B 被遮蔽",
+  "note": "② 参数面先拒（R3-2 登记+绊线）"
+ },
+ {
+  "code": "GATE_DIFFICULTY_RATIONALE_MISSING",
+  "prod": 2,
+  "test": 4,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "B 被遮蔽",
+  "note": "② 参数面先拒（R3-2 登记+绊线）"
+ },
+ {
+  "code": "GATE_DIFFICULTY_MISMATCH",
+  "prod": 4,
+  "test": 5,
+  "sites": [
+   "tools\\core.js",
+   "tools\\core.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_EXIT_MISSING_EXEC",
+  "prod": 2,
+  "test": 12,
+  "sites": [
+   "types\\contracts.d.ts",
+   "types\\contracts.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_EXIT_MISSING_AUDIT",
+  "prod": 2,
+  "test": 3,
+  "sites": [
+   "types\\contracts.d.ts",
+   "types\\contracts.ts"
+  ],
+  "cls": "A1 拒码·在役+断言",
+  "note": "union 成员，保留"
+ },
+ {
+  "code": "GATE_ENV",
+  "prod": 5,
+  "test": 5,
+  "sites": [
+   "wave-plan.d.ts",
+   "wave-plan.js"
+  ],
+  "cls": "N 配置键",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_ROLE_MANAGER_AS_LANE",
+  "prod": 4,
+  "test": 6,
+  "sites": [
+   "wave-plan.js",
+   "wave-plan.js"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_PAIRING_CARDINALITY_DRIFT",
+  "prod": 2,
+  "test": 3,
+  "sites": [
+   "wave-plan.js",
+   "wave-plan.ts"
+  ],
+  "cls": "A1 直抛拒码",
+  "note": "gate.* 事件留痕（非拒码），观察面"
+ },
+ {
+  "code": "GATE_COUNT_FILE",
+  "prod": 0,
+  "test": 4,
+  "sites": [],
+  "cls": "N 常量",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_MARKER",
+  "prod": 0,
+  "test": 4,
+  "sites": [],
+  "cls": "N 常量",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_KINDS",
+  "prod": 0,
+  "test": 2,
+  "sites": [],
+  "cls": "N 常量",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_RUNTIME_JS",
+  "prod": 0,
+  "test": 4,
+  "sites": [],
+  "cls": "N 常量",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_TEAM_ASSET_MISSING",
+  "prod": 0,
+  "test": 3,
+  "sites": [],
+  "cls": "C 退役(注释)",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_MANAGER_PHASE_INVALID",
+  "prod": 0,
+  "test": 1,
+  "sites": [],
+  "cls": "C 退役(注释)",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_MANAGER_AGENT_ID_REQUIRED",
+  "prod": 0,
+  "test": 1,
+  "sites": [],
+  "cls": "C 退役(注释)",
+  "note": "仅注释/测试命中，无生产写点"
+ },
+ {
+  "code": "GATE_AUDIT_CONTRACT_",
+  "prod": 0,
+  "test": 3,
+  "sites": [],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ },
+ {
+  "code": "GATE_TEAM_ASSET_",
+  "prod": 0,
+  "test": 5,
+  "sites": [],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ },
+ {
+  "code": "GATE_ROLE_",
+  "prod": 0,
+  "test": 7,
+  "sites": [],
+  "cls": "D 模板前缀",
+  "note": "拼接产生 GATE_EXIT_MISSING_<LAYER>（候选两码）"
+ }
+]
