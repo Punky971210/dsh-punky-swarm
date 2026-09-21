@@ -270,6 +270,8 @@ engine_team_settle { batchId, lane, note? }     // 成员唯一结算通道
 
 **边界**：deny 只作用于 **dispatch 通道**（buildStartRequest 唯一注入点）；teammate（官方 spawn_teammate）不经此路径，其工具收口机制 = B5 立稿待定口径。
 
+**语义确认（2026-09-22 05:0x 用户裁定，设计认可无需改动）**：memberDeny 的语义 = **成员被禁用这些工具**（成员调用面收窄），**不是** Leader 治理工具缺失 —— Leader 的治理工具面不受影响。deny 即终态设计，无后续动作。
+
 ### E4 撤销
 
 **官方 `maxMembers` 超限由官方工具拦截**（用户裁定）⇒ 「槽位真拦实证」失去对象，E4 正式撤销（蓝图 §387 行随之闭合）；N3 剩余 = sig 幂等（另见 `docs/sig-fingerprint-design-2026-09-22.md`，待裁 D-sig-1..4）。
