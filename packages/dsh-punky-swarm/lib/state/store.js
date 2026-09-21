@@ -1024,6 +1024,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   }
 
   // Manager 拉起登记（唯一写入口）：写批次级 `manager` 字段 + `batch.manager.raised` 事件。
+  // 【已退役码·勿引用】（2026-09-21 可达性审计标记；以下码名仅为历史说明，**门已不存在**）
   // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】**三码已删**：
   //   `GATE_MANAGER_TERMINAL` / `GATE_MANAGER_PHASE_INVALID` / `GATE_MANAGER_AGENT_ID_REQUIRED` 不再存在
   //   ⇒ 登记**不再按 phase 或 agentId 拒绝**：

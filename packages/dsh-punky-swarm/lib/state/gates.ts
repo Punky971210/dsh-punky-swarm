@@ -835,6 +835,7 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
     //   而原实现只有**批次收口时的告警**（`gate.manager_missing`，且仅 exec≥3 的批）⇒ 「拉起」实为自觉。
     //   此处把时序前置到**派发面**。边界：只拦 **exec** lane（plan 层的设计/计划允许先于拉起）；走 `reject()`
     //   ⇒ 自动继承 G-1「空闲态不堵」（lane 为 idle 时降级为告警放行 + 留痕）。
+    // 【已退役码·勿引用】（2026-09-21 可达性审计标记；以下码名仅为历史说明，**门已不存在**）
     // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】
     //   **原 `GATE_MANAGER_NOT_RAISED` 硬门已删**：Manager 在册判定改由**官方 roster** 承抽
     //   （读端 `lib/tools/core.js#managerRosterOf` / `managerViewOf`：`ctx.get('agentTeams')` →

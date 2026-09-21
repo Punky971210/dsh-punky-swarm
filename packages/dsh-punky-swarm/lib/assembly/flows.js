@@ -121,6 +121,7 @@ function severityOfProblems(problems) {
 
 /**
  * 团队资产解析失败的**强警示载荷**（要求 5；`severity` / `blocking` / `problems` 供读端分流）。
+ * 【已退役码·勿引用】（2026-09-21 可达性审计标记；以下码名仅为历史说明，**门已不存在**）
  * 【gate-lite 第二批 · 放行 4（2026-09-17 用户裁决）】**原 `code:'GATE_TEAM_ASSET_MISSING'` 已删**：
  *   该码是同一语义的**第二生产点**（第一处 `lib/tools/core.js` 的死推点已随 C 项删除），
  *   保留它会让「已判死码」在两处回生 ⇒ 本载荷**不带码**，只带 severity/blocking/problems/note
