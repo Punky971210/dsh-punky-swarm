@@ -425,9 +425,9 @@
       "todos": 0
     },
     "test/gate-techdebt-red.test.js": {
-      "asserts": 113,
+      "asserts": 114,
       "blankLines": 73,
-      "lines": 1150,
+      "lines": 1154,
       "tautologies": 0,
       "tests": 39,
       "todos": 4
@@ -699,7 +699,7 @@
     "test/machine.test.js": {
       "asserts": 43,
       "blankLines": 20,
-      "lines": 154,
+      "lines": 155,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -865,9 +865,9 @@
       "todos": 0
     },
     "test/rework.test.js": {
-      "asserts": 8,
+      "asserts": 10,
       "blankLines": 11,
-      "lines": 107,
+      "lines": 110,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1169,7 +1169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-20T19:16:49Z",
+  "generatedAt": "2026-09-21T03:31:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1180,13 +1180,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "r3-4: GATE_EVENT_CONST_MISSING 真 E2E + helper 加「无标记即静默退出」防线；顺带消除 frozen-register 正档与生成物漂移。纯增量：lib 零 diff",
+  "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8245,
+    "asserts": 8248,
     "blankLines": 3872,
     "files": 146,
-    "lines": 43622,
+    "lines": 43630,
     "tautologies": 0,
     "tests": 1686,
     "todos": 4

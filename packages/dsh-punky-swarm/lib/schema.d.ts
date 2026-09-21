@@ -7,7 +7,7 @@ export type SettleState = typeof SETTLE_STATES[number];
 export declare const MEMBER_TRANSITIONS: {
     readonly pending: readonly ["running", "failed", "skipped"];
     readonly running: readonly ["review", "failed", "skipped"];
-    readonly review: readonly ["merged", "conflict", "failed", "running"];
+    readonly review: readonly ["merged", "conflict", "failed"];
     readonly idle: readonly ["running"];
     readonly merged: readonly [];
     readonly failed: readonly [];

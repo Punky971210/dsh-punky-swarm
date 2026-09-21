@@ -28,9 +28,12 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-rework-'));
 const store = createStore(root);
 const S = 'sess-rw';
 
-test('schema allows review -> running (rework)', () => {
-  assert.equal(schema.canTransitionMember('review', 'running'), true);
-  assert.equal(schema.canTransitionMember('running', 'review'), true);
+// 【2026-09-21 K3 去返工边】改判：本用例原为「允许 review→running」的正向锁；返工边去除后**反转**为反向锁，
+//   目的从「保护返工能力」变为「**锁死返工边不得复活**」（失败即终态，返工 = gap-list + 新任务批次）。
+test('schema rejects review -> running (返工边已去，K3)', () => {
+  assert.equal(schema.canTransitionMember('review', 'running'), false);
+  assert.equal(schema.canTransitionMember('running', 'review'), true); // 提交评审路径不受影响
+  assert.deepEqual([...schema.MEMBER_TRANSITIONS.review], ['merged', 'conflict', 'failed']);
 });
 
 // 【r2 同步 · B2/B3/A1】旧 fixture 用「lane 无 layer 的小批」驱动返工/结算语义，与 r2「拒绝免检」冲突：
@@ -61,23 +64,22 @@ function runLane(batchId, lane) {
   store.setMember(S, batchId, lane, 'merged');
 }
 
-test('rework cycle: pending->running->review->running(x2)->review->merged', () => {
+// 【2026-09-21 K3 去返工边】改判：原「review→running 打回可反复」的循环已不可达 ⇒ 用例改为**反向锁**：
+//   派发→提交评审→**重派被拒**（状态机拒）→ 直接 merged；并断言事件流中**零** review→running 记录。
+test('rework cycle 已废止：review 后重派被拒，只可 merged/conflict/failed（K3）', () => {
   const plan = buildWavePlan({ batchId: 'b-rework', tasks: threeTierTasks(['t1']) });
   store.createBatch(S, { batchId: 'b-rework', wavePlan: plan, phase: 'running' });
   seedArtifacts('b-rework', ['t1']);
   runLane('b-rework', 'p1');
   store.setMember(S, 'b-rework', 't1', 'running');   // 派发
   store.setMember(S, 'b-rework', 't1', 'review');    // 提交评审
-  store.setMember(S, 'b-rework', 't1', 'running');   // REWORK 打回返工（attempt 1）
-  store.setMember(S, 'b-rework', 't1', 'review');    // 再提交
-  store.setMember(S, 'b-rework', 't1', 'running');   // REWORK 打回返工（attempt 2）
-  store.setMember(S, 'b-rework', 't1', 'review');    // 三审
-  store.setMember(S, 'b-rework', 't1', 'merged');    // 通过
+  assert.throws(() => store.setMember(S, 'b-rework', 't1', 'running'), /invalid member transition/); // 打回返工 ⇒ 拒
+  store.setMember(S, 'b-rework', 't1', 'merged');    // 通过（review→merged 仍合法）
   runLane('b-rework', 'a1'); // r2 同步：autoReleaseable 要求**全部** lane merged ⇒ audit 层亦须结算
   const b = store.readBatch(S, 'b-rework');
   assert.equal(b.lanes.t1, 'merged');
   const reworks = b.events.filter((e) => e.type === 'member.settled' && e.lane === 't1' && e.from === 'review' && e.to === 'running').length;
-  assert.equal(reworks, 2);
+  assert.equal(reworks, 0, '返工边已去 ⇒ 事件流不得再有 review→running 记录');
   assert.equal(store.batchAutoReleaseable(b), true);
 });
 
@@ -92,15 +94,16 @@ test('autoReleaseable false when conflict/failed present', () => {
   assert.equal(store.batchAutoReleaseable(store.readBatch(S, 'b-cf')), false);
 });
 
-test('3-retreat escalation marker derivable from events (attempt >= 3)', () => {
+// 【2026-09-21 K3 去返工边】改判：attempt「≥3 次打回升级」标记原本**派生自** review→running 事件计数。
+//   返工边去除后该派生源消失 ⇒ 用例改为**反向锁**：第二轮派发即被拒，事件流中 attempt 计数恒为 0。
+//   ⚠ 连带结论：**attempt 升级标记在现行语义下已无派生源** ⇒ 如需保留该能力，须另立派生口径（登记为待裁，见蓝图 §8）。
+test('3-retreat escalation 不再可由 review→running 派生（K3：该派生源已消失）', () => {
   const plan = buildWavePlan({ batchId: 'b-esc', tasks: [{ id: 'x' }] });
   store.createBatch(S, { batchId: 'b-esc', wavePlan: plan, phase: 'running' });
-  for (let i = 0; i < 4; i++) {
-    store.setMember(S, 'b-esc', 'x', 'running');
-    store.setMember(S, 'b-esc', 'x', 'review');
-  }
+  store.setMember(S, 'b-esc', 'x', 'running');
+  store.setMember(S, 'b-esc', 'x', 'review');
+  assert.throws(() => store.setMember(S, 'b-esc', 'x', 'running'), /invalid member transition/);
   const b = store.readBatch(S, 'b-esc');
   const reworks = b.events.filter((e) => e.type === 'member.settled' && e.lane === 'x' && e.from === 'review' && e.to === 'running').length;
-  assert.equal(reworks, 3);
-  assert.equal(reworks >= 3, true);
+  assert.equal(reworks, 0, '返工边已去 ⇒ attempt 不得再由 review→running 累加');
 });

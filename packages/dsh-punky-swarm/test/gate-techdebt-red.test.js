@@ -688,7 +688,10 @@ test('R-20 lane 已 running 再次派发 ⇒ 抛 invalid member transition 且 b
   assert.equal(n2, n1, 'R-CAS-1：拒派不得追加事件');
 });
 
-test('R-21 正向对照：pending→running / idle→running / review→running 均成功【回归保护】', () => {
+// 【2026-09-21 K3 去返工边】R-CAS-4 改判：原断言「review→running 返工既有语义不得被本批收紧」
+//   已随返工边（`schema.MEMBER_TRANSITIONS.review` 去掉 `running`）**反转**——失败即终态，
+//   返工 = gap-list + 新任务批次。⇒ 本用例从「三路径全通」改为「两通一拒」，**保留 (a)(b) 的回归保护**。
+test('R-21 正向对照：pending→running / idle→running 成功；review→running 已去边须拒【回归保护】', () => {
   const bid = mkSettled('r21');
   const a = trySet(bid, 'e1', 'running');
   setLaneState(bid, 'e1', 'idle');
@@ -700,7 +703,8 @@ test('R-21 正向对照：pending→running / idle→running / review→running 
   obs(null, '(c) review→running（返工）', d instanceof Error ? d.message : d.lanes.e1);
   assert.ok(!(a instanceof Error), 'R-CAS-2：pending→running 必须成功（不得无差别拒）：' + String(a && a.message));
   assert.ok(!(c instanceof Error), 'R-CAS-3：idle→running 恢复路径不得被堵（G-1）：' + String(c && c.message));
-  assert.ok(!(d instanceof Error), 'R-CAS-4：review→running 返工既有语义不得被本批收紧：' + String(d && d.message));
+  assert.ok(d instanceof Error, 'R-CAS-4（改判 K3）：review→running 返工边已去除 ⇒ 必须被拒；实测=' + String(d && d.message));
+  assert.ok(/invalid member transition/.test(d.message), 'R-CAS-4（改判 K3）：拒须为状态机拒（"invalid member transition"）；实测=' + String(d && d.message));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -38,7 +38,7 @@ export type SettleState = typeof SETTLE_STATES[number];
 export const MEMBER_TRANSITIONS = {
   pending: ['running', 'failed', 'skipped'],
   running: ['review', 'failed', 'skipped'],
-  review: ['merged', 'conflict', 'failed', 'running'], // running = REWORK 返工（attempt+1，由事件计数）
+  review: ['merged', 'conflict', 'failed'], // 返工边（`review → running`）已于 2026-09-21 去除（K3）：失败即终态，返工 = gap-list + 新任务批次
   idle: ['running'],
   merged: [],
   failed: [],

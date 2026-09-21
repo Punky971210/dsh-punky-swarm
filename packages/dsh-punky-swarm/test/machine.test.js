@@ -43,7 +43,8 @@ test('applyMemberTransition default matches schema.canTransitionMember', () => {
   const cases = [
     ['pending', 'running', true], ['pending', 'failed', true], ['pending', 'skipped', true], ['pending', 'merged', false],
     ['running', 'review', true], ['running', 'skipped', true], ['running', 'merged', false],
-    ['review', 'merged', true], ['review', 'conflict', true], ['review', 'running', true],
+    // 返工边 `review → running` 已于 2026-09-21 去除（K3）：失败即终态，返工 = gap-list + 新任务批次
+    ['review', 'merged', true], ['review', 'conflict', true], ['review', 'running', false],
     ['idle', 'running', true], ['merged', 'running', false], ['conflict', 'merged', false],
     ['bogus', 'running', false], ['pending', 'bogus', false],
   ];

@@ -195,6 +195,13 @@ jiuwen 有 6 类探测器 + 4 档 severity + 分级处置 + 强度预算；蟛�
 | **验证** | ① `npm run build` 零错；② 全量 `fail = 0`（改判后基线断言数不变）；③ `git diff --stat -- lib` 只有 schema 三件套；④ 冻结台账与 `docs/gate-assertion-blueprint §7` 无新增待办 |
 | **纪律** | 一批一 commit；与 N1 **不同批**（N0.5 是既有裁定的施工兑现，N1 是新形态） |
 
+#### 7.3.1 施工结果（2026-09-21 11:2x）
+
+- ✅ 已完成：`lib/schema.ts:41` 删 `running` → `npm run build` → `lib/schema.js:26` / `lib/schema.d.ts:10` 同步（**三件套，零其它产物漂移**）。
+- ✅ 已改判（返工能力族，反向锁死）：`test/machine.test.js:46` · `test/rework.test.js`（3 例）· `test/gate-techdebt-red.test.js` R-21（R-CAS-4 反转）。基线 `asserts 8245 → 8248 (+3)`。
+- ⏸ **未闭合（4 例，属「恢复路径断裂族」，须先裁 §8-8）**：`test/gates.test.js` Exit Gate audit + O2 T8 · `test/governance.test.js` A3 重派 · `test/outcome-typing.test.js` C5-4 attempt。
+- ⚠ **施工单影响面评估不足（如实登记）**：原估「1 条测试改判」，实测 **10 条断言**受影响（返工能力族 6 + 恢复路径族 4），且暴露一条**系统性语义断裂**（§8-8）。
+
 ---
 
 ## 8. 待裁 / 未取证（本文件不闭合）
@@ -207,7 +214,27 @@ jiuwen 有 6 类探测器 + 4 档 severity + 分级处置 + 强度预算；蟛�
 | 4 | 任务指纹 `sig` 的入参集合 | 建议 `SHA-256(deps + owner + 验收标准 + 规格引用)`；**未取证** |
 | 5 | **`adjudication E4`**：官方 `maxMembers` 槽位是否真拦 | 未实证 ⇒ N3 必做；**不得**据「声明有」推断「真拦」 |
 | 6 | 路线稿 U-1..U-6 未取证项 | 进 N1 前置取证，不得当证据用 |
-| 7 | **N0.5 是否现在开工**（去返工边，动 `lib/**`） | 建议开工——它是既有裁定（R-01）的施工兑现，与 N1 正交，先做可让 N1 建立在一致的终态语义上 |
+| 7 | ~~N0.5 是否现在开工~~ | ✅ 已开工（2026-09-21 11:1x），结果见 §7.3.1 |
+| **8** | ★ **恢复路径断裂族**（去边后暴露，N0.5 收尾前必须裁） | 见下方专项 |
+
+### 8.8 ★ 恢复路径断裂族（去返工边的系统性代价）
+
+**现象**：`review` 现在只能 → `merged`/`conflict`/`failed`，但既有实现把 `review` 当作「**待重试中间态**」用了至少两处：
+
+1. `lib/engine/dispatch.js:287` —— 派发失败回滚 `setMember(..., 'review')`，错误提示「`review→running` 为既定返工入口，直接重派」⇒ 去边后**提示失实 + 重派被拒**，lane 卡死。
+2. 门禁拒后（`exit` 门 produce 缺失等）lane 停在 `review`，补产物后需再 `running` ⇒ 被拒（即 4 条未闭合测试的成因）。
+
+**三选一（须裁）**：
+
+| 方案 | 形态 | 判读 |
+|---|---|---|
+| **① 拒后即终态**（K3 严格） | 派发失败 / 门禁拒 ⇒ lane 置 **`failed`**（`running→failed` 合法）；恢复走**新任务批次**（或同批追加 lane）；`dispatch.js` 回滚目标改 `failed` + 改提示 | ✅ **建议**。最贴合 K3（失败即终态），**零新增边**，语义单一 |
+| ② 拒后留在 `running` | 改门禁写路径：被拒时**不写** `review` ⇒ 修因后直接 `merged` | 零新增边，但改门禁语义（产物缺失时 lane 仍 `running`）；与「review = 已提交待判」语义冲突 |
+| ③ 换中间态 `idle` | 新增 `review→idle`（`idle→running` 已有） | ❌ 不取：`idle` 已存在故不撞「禁加状态」，但这是**返工边换皮**，与 K3 精神直接冲突 |
+
+**连带结论（须一并裁）**：`attempt` 升级标记（「≥3 次打回」）原本派生自 `review→running` 事件计数 ⇒ 去边后**该派生源消失**。若该能力需保留，须另立派生口径（如按新批次计数）；否则登记为「能力已移除」。
+
+**环境类失败（与去边无关，单独登记）**：本轮全量出现 `fatal: invalid reference: punky/orch` 类失败 **16 例**（`worktree-tools` 7 + `merge-agent` 9 + `resume` 2）。受控实验：把 PortableGit 2.55.0.windows.3 置 PATH 首位后**仍 7/7 失败** ⇒ **git 版本归因二次证伪**（与 §7 环境缺陷登记一致），根因仍未定性。
 
 ---
 
