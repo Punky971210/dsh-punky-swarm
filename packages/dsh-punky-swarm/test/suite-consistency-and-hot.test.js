@@ -170,7 +170,7 @@ test('SC-3 派发失败 ⇒ lane 置 failed 且**无残留句柄**（无幽灵 t
   const ctx = {
     tools: { register: () => {}, guard: () => () => {} },
     logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { startContinuable: async () => { throw new Error('spawn boom'); } },
+    subagents: { start: async () => { throw new Error('spawn boom'); } },
   };
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
   const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));

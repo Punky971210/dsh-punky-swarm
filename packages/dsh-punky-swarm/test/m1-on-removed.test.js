@@ -248,7 +248,7 @@ function makeHarness({ chain }) {
   const ctx = {
     tools: { register: () => {} },
     logger: { info() {}, warn() {}, error() {} },
-    subagents: { startContinuable: async () => ({ id: 'w-m1' }) },
+    subagents: { start: async () => ({ id: 'w-m1', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) },
   };
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-m1-teams-'));
   const asset = { team: TEAM, layers: LAYERS, roles: ROLES, flows: FLOWS, chain };

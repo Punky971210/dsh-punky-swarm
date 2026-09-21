@@ -79,7 +79,7 @@ import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './s
 import { mountAuditLog } from './auditlog/sink.js';
 
 export const name = 'dsh-punky-swarm';
-// `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.startContinuable`）**必须**
+// `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.start`，one-shot；2026-09-22 起）**必须**
 //   声明该依赖——cordis 对未声明的服务在取属性时直接抛 `cannot get property "subagents" without inject`，
 //   而不是返回 undefined（该缺陷由本批次首派抓出）。宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，
 //   故声明安全；取用侧仍留 try/catch 兜底（见 lib/engine/dispatch.js `subagentRuntimeOf`）。

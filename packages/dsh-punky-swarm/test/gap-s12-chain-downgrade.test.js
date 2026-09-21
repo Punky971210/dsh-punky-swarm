@@ -267,7 +267,7 @@ test('S12-a2【退役锁 · Q-A=C】主路（subagent/end）：同一 no-op 单�
 
 test('S12-b1【退役锁 · Q-A=C】工具路（Leader 手工 member_settle，exec.agent 在场）⇒ 不再自动派发 spawned（入口恒 no-op）', async () => {
   const spawned = [];
-  const h = makeHarness({ subagents: { startContinuable: async (spec) => { spawned.push(spec.label); return { id: 'w-b1-' + spawned.length }; } } });
+  const h = makeHarness({ subagents: { start: async (provider, request) => { spawned.push(request.label); return { id: 'w-b1-' + spawned.length, result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } } });
   const B = 's12-b1';
   // 【退役锁 · Q-A=C 2026-09-18】工具路的链自动派发已退役 ⇒ 自证入口 no-op 后返回（旧断言留档，不执行）。
   await assertAdvanceRetired(h, B);

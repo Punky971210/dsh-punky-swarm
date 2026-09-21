@@ -109,7 +109,7 @@ function makeHarness({ chain }) {
   const ctx = {
     tools: { register: () => {} },
     logger: { info() {}, warn() {}, error() {} },
-    subagents: { startContinuable: async (spec) => { spawned.push(spec.label); return { id: 'w-w1c-' + spawned.length }; } },
+    subagents: { start: async (provider, request) => { spawned.push(request.label); return { id: 'w-w1c-' + spawned.length, result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } },
   };
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-w1c-teams-'));
   const asset = { team: TEAM, layers: LAYERS, roles: ROLES, flows: FLOWS, chain };

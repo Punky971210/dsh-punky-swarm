@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   不约束子会话再派（它再派时用自己那层的 `tool-subagent` 配置，preset 未设 ⇒ 宿主默认 3）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SUITE_DENY_TOOLS, buildStartSpec } from '../lib/engine/dispatch.js';
+import { SUITE_DENY_TOOLS, buildStartRequest } from '../lib/engine/dispatch.js';
 
 const DISPATCH_TOOLS = ['subagent', 'subagent_fork'];
 
@@ -33,9 +33,9 @@ test('DB-1 成员 deny 列表必须含 subagent / subagent_fork（禁止成员�
   }
 });
 
-test('DB-2 上述 deny 必须真正落到 start spec 的 toolFilter.deny（不是只写在常量里）', () => {
-  const spec = buildStartSpec({ provider: 'spawn', batchId: 'b-db', lane: 'l1', parent: { id: 'a' }, prompt: 't' });
-  const deny = spec.request.toolFilter.deny;
+test('DB-2 上述 deny 必须真正落到 start request 的 toolFilter.deny（不是只写在常量里）', () => {
+  const request = buildStartRequest({ batchId: 'b-db', lane: 'l1', parent: { id: 'a' }, prompt: 't' });
+  const deny = request.toolFilter.deny;
   for (const t of DISPATCH_TOOLS) assert.ok(deny.includes(t), 'toolFilter.deny 缺失：' + t);
   assert.ok(deny.includes('wave_plan') && deny.includes('assign_check'), '原治理套件项不得丢失');
 });

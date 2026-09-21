@@ -301,7 +301,7 @@ test('P2-2c 反例③链尾不唯一（terminal 两处）⇒ 构造期拒 TEAM_A
 test('P2-3【退役锁 · Q-A=C】自动递进正向已无对象：plan merged ⇒ 零 chain.step、零 member.dispatch、零成员态变化（不再逐环自派）', async () => {
   __resetLaneHandles();
   const spawned = [];
-  const h = makeHarness({ subagents: { startContinuable: async (spec) => { spawned.push(spec.label); return { id: 'w-' + spawned.length }; } } });
+  const h = makeHarness({ subagents: { start: async (provider, request) => { spawned.push(request.label); return { id: 'w-' + spawned.length, result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } } });
   const B = 'p2-auto';
   await mkBatch(h, B);
   // 【退役锁 · Q-A=C 2026-09-18】逐环自动递进已退役 ⇒ 自证入口 no-op 后返回（旧断言留档，不执行）。
@@ -360,7 +360,7 @@ test('P2-3【退役锁 · Q-A=C】自动递进正向已无对象：plan merged �
 
 test('P2-4 句柄零残留：成功自派 ⇒ pendingHandles 无该 (batch,lane)；降级「仅发句柄」⇒ 句柄仍有效', async () => {
   __resetLaneHandles();
-  const h = makeHarness({ subagents: { startContinuable: async () => ({ id: 'w-ok' }) } });
+  const h = makeHarness({ subagents: { start: async () => ({ id: 'w-ok', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) } });
   await mkBatch(h, 'p2-p0-ok');
   seed(h, 'p2-p0-ok', 'plan/spec.md', SPEC);
   const d1 = await h.byName.lane_dispatch.execute({ batchId: 'p2-p0-ok', lane: 'exec' }, SESS);
@@ -390,7 +390,7 @@ test('P2-4 句柄零残留：成功自派 ⇒ pendingHandles 无该 (batch,lane)
 test('P2-5 >30min 活跃 lane 零假 gap：有绑定 dispatch ⇒ 不报 token-ttl-expired；无绑定仍照报', async () => {
   __resetLaneHandles();
   // 真实批次：引擎自派的 lane 已绑定（member.dispatch + workerSessionId 非空）
-  const h = makeHarness({ subagents: { startContinuable: async () => ({ id: 'w-live' }) } });
+  const h = makeHarness({ subagents: { start: async () => ({ id: 'w-live', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) } });
   await mkBatch(h, 'p2-gap-live');
   seed(h, 'p2-gap-live', 'plan/spec.md', SPEC);
   await h.byName.lane_dispatch.execute({ batchId: 'p2-gap-live', lane: 'exec' }, SESS);
@@ -414,7 +414,7 @@ test('P2-5 >30min 活跃 lane 零假 gap：有绑定 dispatch ⇒ 不报 token-t
 
 test('P2-6 向后兼容锁：无 `chain` 声明 ⇒ 不写 chain.step / 不改相位 / 不自动派发 / 读端无 chain 键', async () => {
   __resetLaneHandles();
-  const h = makeHarness({ chain: null, subagents: { startContinuable: async () => ({ id: 'w-never' }) } });
+  const h = makeHarness({ chain: null, subagents: { start: async () => ({ id: 'w-never', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) } });
   const B = 'p2-nochain';
   await mkBatch(h, B);
   seed(h, B, 'plan/spec.md', SPEC);
@@ -441,7 +441,7 @@ const phaseEventsOf = (h, batchId) => (h.store.readBatch(SESSION, batchId)?.even
 test('P2-8【退役锁 · Q-A=C】M0′-①：`managerPlan:"leader-direct"` 批 ⇒ 链推进 no-op（该专属分支已升级为全批统一 no-op：零 chain.step / 零相位事件 / 零派发）', async () => {
   __resetLaneHandles();
   const spawned = [];
-  const h = makeHarness({ subagents: { startContinuable: async (spec) => { spawned.push(spec.label); return { id: 'w-ld' }; } } });
+  const h = makeHarness({ subagents: { start: async (provider, request) => { spawned.push(request.label); return { id: 'w-ld', result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } } });
   const B = 'p2-leader-direct';
   await mkBatchWithAssembly(h, B, { managerPlan: 'leader-direct', auditLane: 'audit' });
   seed(h, B, 'plan/spec.md', SPEC);
@@ -474,7 +474,7 @@ test('P2-8【退役锁 · Q-A=C】M0′-①：`managerPlan:"leader-direct"` 批 
 test('P2-9【退役锁 · Q-A=C】对照（AC-2）：同夹具把 `managerPlan` 换 `raise` ⇒ 旧行为**不再**保留（全批统一 no-op：零 chain.step / 零派发）', async () => {
   __resetLaneHandles();
   const spawned = [];
-  const h = makeHarness({ subagents: { startContinuable: async (spec) => { spawned.push(spec.label); return { id: 'w-ra' }; } } });
+  const h = makeHarness({ subagents: { start: async (provider, request) => { spawned.push(request.label); return { id: 'w-ra', result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } } });
   const B = 'p2-raise-advance';
   await mkBatchWithAssembly(h, B, { managerPlan: 'raise', auditLane: 'audit' });
   // 【退役锁 · Q-A=C 2026-09-18】raise 批的「旧行为保留」对照已不成立（全批 no-op）⇒ 自证后返回（旧断言留档）。

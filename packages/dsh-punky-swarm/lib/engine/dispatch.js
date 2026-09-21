@@ -19,14 +19,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 定位（2026-09-16 用户裁决 + 调研批结论）：
 //   · **可见性期收窄是唯一按次可用的收窄通道**：宿主 `subagent` 工具的模型面参数**不含** `toolFilter`
 //     （`dsh-tool-subagent/lib/index.js:402-428`；`toolFilter` 只在插件配置 zod schema `:255-269` = 部署期静态），
-//     而 `ctx.subagents.startContinuable` 的 `request.toolFilter` 是**按次**的（`dsh-subagent/lib/types/types.d.ts:180`：
-//     从子会话 prompt 中移除该工具**且拒绝执行**）⇒ 只有程序化调用者（= 本模块）能按次收窄。
+//     而 `ctx.subagents.start(name, request)` 的 `request.toolFilter` 是**按次**的（one-shot 与 continuable 走
+//     **同一** `applyChildComposition`，`dsh-subagent-in-process-driver/lib/index.js:173-176`）
+//     ⇒ 只有程序化调用者（= 本模块）能按次收窄。
 //   · **能力位前置**（调研收敛点 K4，5 源共识）：provider 不支持 `toolFilter` 时**拒派**，不「以弱换强」。
 //   · **唯一写路径**（改善 W6）：自派成功后由引擎**直接写** `member.dispatch{lane, workerSessionId}`，
 //     不再依赖 post-execute 事后观察（观察保留为兜底，覆盖 Leader 直派旧形态）。
 //   · **失败显式**（修 W5）：任何失败路径都给出可读原因，不静默降级。
 // 本模块是**纯函数 + 策略常量**（便于单测）；真正的 spawn 调用在 `lib/tools/core.js` 的 `lane_dispatch` 内
 //   （必须在**工具流水线内**执行：`exec.agent` 在场，子会话才能正确挂到本会话）。
+//
+// ── 【2026-09-22 · one-shot 化（用户裁定「dispatch 彻底改为一次性执行器语义」）】 ──────────
+//   · **spawn 通道**：`startContinuable` → **`rt.start(provider, request)`**（one-shot，fire-and-forget）：
+//     run 生命周期属主 = 本模块 `activeRuns` 持有的 run 对象（`dsh-subagent-in-process-driver` 文件头：
+//     "the one quiescent lifecycle owner held by the provider's caller"），**与 Leader 工具回合无关**；
+//     引擎持引用、不调 `dispose` ⇒ worker 跑到完成（V-1 三层互证，见活体核报告）。
+//   · **signal 纪律（禁透传 `exec.signal`）**：官方工具 foreground 用 `exec.signal`、background **故意新建
+//     controller**（`dsh-tool-subagent/lib/index.js:559 / :543`）——`exec.signal` 随工具调用结束而中止 ⇒
+//     本模块缺省**自持永不中止 signal**（`new AbortController().signal`），保 worker 跨回合跑完。
+//   · **能力退役**：引擎侧**零** steer/queuePrompt/coldResume 依赖（2026-09-22 全库取证，19 条命中逐条判读）；
+//     send_message worker 唤醒（continuous 专属）随 S2 退役。durable 会话/唤醒/续跑等 continuous 能力
+//     **全部归 teammate runner**（agent-team 方案，`docs/agent-team-bridge-design-draft-v0-2026-09-21.md` §4/B5）
+//     —— 两方案共用黑板与门禁，**不共用会话语义**。
+//   · 依据：`docs/dispatch-one-shot-redesign-plan-2026-09-21.md` + 活体核
+//     `docs/dispatch-one-shot-verification-2026-09-21.md`（V-1/V-2/V-3 全过）。
 import { issueLaneHandle, consumeLaneHandle, firstLineOf } from '../bridge/lane-handle.js';
 // 派发登记事件常量（原在 `lib/tools/core.js` 侧引用；派发核心抽出后由本模块写，故此处直引）
 // 【2026-09-18 · Q-B 取消并发闸】原同址直引的 `EVT_GATE_CONCURRENCY_BLOCKED` 已从本模块写端移除（唯一写点
@@ -38,7 +54,7 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 /** 成员 deny 集（B2 的 deny 清单）+ 模式门覆盖集：**单点注册表在 `engine/suite.js`**（`SUITE_TOOLS`），
  *  本模块 `import` 后**再导出**（导出名与内容逐字不变：13 项、`Object.freeze`；不得退回字面量）。
  *  ⚠ 必须 `import` + `export {}` 两句分开写：`export … from` 只做透传、**不建本地绑定**，
- *  而本模块的 `buildStartSpec({ denyTools = SUITE_DENY_TOOLS })` 缺省值依赖本地符号（活体实测报 ReferenceError）。
+ *  而本模块的 `buildStartRequest({ denyTools = SUITE_DENY_TOOLS })` 缺省值依赖本地符号（活体实测报 ReferenceError）。
  *  口径边界、`subagent`/`subagent_fork` 必 deny 的理由、以及 `mcp__*` 不入表的口径，均随实现迁至 `suite.js` 表头注释。 */
 import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from './suite.js';
 export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
@@ -96,29 +112,28 @@ export function composeWorkerPrompt({
   return L.join('\n');
 }
 
-/** 组装 `startContinuable` 的调用载荷（纯函数，便于单测）。
- *  ⚠ 活体实测（2026-09-16，批次 `suite-live-20260916` 首派第二层报错抓出）：宿主
- *  `SubagentRuntime.startContinuable(spec)` **直接调 `spec.signal.throwIfAborted()`**
- *  （`@deepseek-ai/dsh-subagent/lib/types/continuation.js:139`，并透传给
- *  `host.prepareContinuable(..., { signal: spec.signal })`）⇒ **`signal` 是运行时必需字段**：
- *  缺它即抛 `Cannot read properties of undefined (reading 'throwIfAborted')`（由本模块
- *  `mapSpawnError` 归一为 `GATE_DISPATCH_FAILED`）。宿主类型虽把 `signal` 放在 `Omit` 里，
- *  但**以实现为准**。缺省给**永不中止**的 signal（worker 不随 Leader 回合取消而中断）；
- *  调用方可注入自有 signal 以显式支持取消。 */
-export function buildStartSpec({
-  provider, batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, maxDepth = 1, signal,
+/** 组装 `rt.start(provider, request)` 的 **one-shot 请求载荷**（纯函数，便于单测）。
+ *  【2026-09-22 · one-shot 化】原 `buildStartSpec`（continuable 嵌套形态 `{provider,label,signal,request:{…}}`）
+ *  改为**平铺 one-shot 请求**（`SubagentStartRequest`：`{label,prompt,parent,signal,toolFilter,persona?,maxDepth}`）；
+ *  `provider` 改由调用方直传 `rt.start(provider, request)`（原 `spec.provider` 字段随形态删除）。
+ *  ⚠ 活体实测（2026-09-16，批次 `suite-live-20260916` 首派第二层报错抓出）：宿主 `signal` 是**运行时必需字段**
+ *  （缺它即抛 `Cannot read properties of undefined (reading 'throwIfAborted')`，由本模块 `mapSpawnError`
+ *  归一为 `GATE_DISPATCH_FAILED`）——本字段纪律延续。
+ *  ⚠ **signal 纪律（one-shot 化新增，禁透传 `exec.signal`）**：缺省给**自持永不中止**的 signal（worker 不随
+ *  Leader 回合取消而中断；官方 background 分支实证 `exec.signal` 会随工具调用结束 abort，见头部「signal 纪律」）；
+ *  调用方可注入自有 signal 以显式支持取消。
+ *  `label`（B3）由宿主快照进子会话 descriptor（`dsh-subagent/lib/index.js:3155-3159`）⇒ 重启后仍可核。 */
+export function buildStartRequest({
+  batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, maxDepth = 1, signal,
 }) {
   return {
-    provider,
     label: labelOf(batchId, lane),
     signal: signal ?? new AbortController().signal,
-    request: {
-      parent,
-      prompt: [{ type: 'text', text: prompt }],
-      toolFilter: { deny: [...new Set([...denyTools, ...extraDeny])] },
-      ...(persona !== undefined ? { persona } : {}),
-      maxDepth,
-    },
+    parent,
+    prompt: [{ type: 'text', text: prompt }],
+    toolFilter: { deny: [...new Set([...denyTools, ...extraDeny])] },
+    ...(persona !== undefined ? { persona } : {}),
+    maxDepth,
   };
 }
 
@@ -139,19 +154,19 @@ export function mapSpawnError(err) {
   return { code: 'GATE_DISPATCH_FAILED', message: '引擎自派失败：' + raw };
 }
 
-/** `startContinuable` 返回载荷 → worker 会话 id（D-2 清债，2026-09-16）。
- *  **两个契约面并存**（N4 修正，2026-09-16 评审）：
- *   · **实现面** = `id`（活体实测返回 `{id:'<uuid>'}`，两批多 lane 均如此）；
- *   · **类型面** = `childId`（宿主类型声明 `SubagentStartResult { childId, messageId }`）。
- *  故两者都认（`id` 优先、`childId` 次之），再兜 `subagentId`。旧写法
- *  `start.id ?? start.subagentId ?? start.childId` 是**猜字段且不告警**：宿主形态一变即静默 null。
- *  取不到时**不静默**：返回 null，由调用方带**原始载荷**报错；回落命中时**显式告警**（方向不再错指宿主）。 */
+/** `rt.start` 返回的 `SubagentRun` → worker 会话 id（D-2 清债，2026-09-16；one-shot 化语义更新 2026-09-22）。
+ *  **主字段 = `id`**（`SubagentRun.id` = 子会话 id，`dsh-subagent-in-process-driver` :166/:219 实证；
+ *  与宿主 `subagent/end` 事件的 `info.id` 同源 —— V-3 已核，S3 观察桥据此对齐）。
+ *  兼容回落 `childId`/`subagentId`（continuable 时代契约字段，防御宿主形态漂移）：回落命中**显式告警**。
+ *  旧写法 `start.id ?? start.subagentId ?? start.childId` 是**猜字段且不告警**：宿主形态一变即静默 null。
+ *  取不到时**不静默**：返回 null，由调用方带**原始载荷**报错。
+ *  ⚠ 勿与 `runId`（宿主观察 id，`observeRun` 的 `SubagentRunId(randomUUID())`）混淆 —— 登记面只用**会话 id**。 */
 export function workerSessionIdOf(start, warn) {
   if (!start || typeof start !== 'object') return null;
   if (typeof start.id === 'string' && start.id) return start.id;
   for (const k of ['childId', 'subagentId']) {
     if (typeof start[k] === 'string' && start[k]) {
-      warn?.('startContinuable 未返回实现面字段 `id` → 回落 `' + k + '`（类型面/实现面并存，非异常；若两者皆缺请查宿主返回形态）');
+      warn?.('start 未返回实现面字段 `id` → 回落 `' + k + '`（continuable 时代契约字段，防御性保留；若两者皆缺请查宿主返回形态）');
       return start[k];
     }
   }
@@ -162,7 +177,8 @@ export function workerSessionIdOf(start, warn) {
  *  ⚠ 活体实测（2026-09-16，本批 suite-live-20260916 首派抓出）：cordis 对**未在 inject 声明的服务**
  *  在取属性时**直接抛** `cannot get property "subagents" without inject`（不是返回 undefined）
  *  ⇒ 取用必须包 try/catch，否则引擎自派以原始 cordis 错崩掉，而不是走既定的「仅发句柄」降级分支（B1 语义）。
- *  正解是 `lib/index.js` 的 `inject` 补 `subagents`（声明依赖）；本 try/catch 是兜底不崩。 */
+ *  正解是 `lib/index.js` 的 `inject` 补 `subagents`（声明依赖）；本 try/catch 是兜底不崩。
+ *  【2026-09-22 · one-shot 化】探测面 `startContinuable` → **`start`**（one-shot 唯一通道）。 */
 export function subagentRuntimeOf(ctx) {
   let rt = null;
   try {
@@ -170,7 +186,34 @@ export function subagentRuntimeOf(ctx) {
   } catch {
     return null; // 未注入/注入守卫抛错 ⇒ 视为不可用（降级为「仅发句柄」，不崩）
   }
-  return rt && typeof rt.startContinuable === 'function' ? rt : null;
+  return rt && typeof rt.start === 'function' ? rt : null;
+}
+
+// ── 【2026-09-22 · one-shot 化】run 生命周期属主登记 ──────────────────────────────
+// `activeRuns` = 本进程在飞的 one-shot worker run 表（key = workerSessionId）。**唯一的 quiescent
+//   lifecycle owner 是调用方持有的 run 对象**（driver 文件头明言）⇒ 引擎必须持引用直到 result settle，
+//   既防 GC 语义歧义，也为将来「批次中止 ⇒ 取消 worker」留取消入口（`run.dispose()`，本批不接线）。
+//   result settle ⇒ 自动摘除；rejection ⇒ **显式告警留痕**（一次性 run 失败不许静默），**不进黑板判定**
+//   （结算仍走门禁——"事件由引擎写、结算走门禁"纪律不变）。
+const activeRuns = new Map();
+/** one-shot run 终态跟踪（非抛出：跟踪失败只告警，绝不影响派发成功路径）。 */
+function trackOneShotRun(workerSessionId, run, warn) {
+  if (!run || typeof run !== 'object' || !(run.result instanceof Promise)) {
+    warn?.('start 返回载荷缺 `result`（Promise）⇒ run 终态不可跟踪（留痕不阻断；若宿主形态变更请按本载荷适配）');
+    return;
+  }
+  activeRuns.set(workerSessionId, run);
+  run.result.then(
+    () => { activeRuns.delete(workerSessionId); },
+    (e) => {
+      activeRuns.delete(workerSessionId);
+      warn?.('one-shot worker run 失败（留痕不进判定，结算走门禁）：' + String(e?.message ?? e) + ' · worker=' + workerSessionId);
+    },
+  );
+}
+/** 在飞 one-shot worker 数（观测面；测试与心跳探针用，**零判定**）。 */
+export function activeRunCount() {
+  return activeRuns.size;
 }
 
 // ── 【2026-09-18 · Q-B **取消并发闸**（退役登记，勿回退）】 ───────────────────────────────
@@ -255,7 +298,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     ctx?.logger?.warn?.('[dsh-punky-swarm] lane_dispatch: 未配置 config.dispatch.provider ⇒ 仅发句柄（不猜 provider）· lane=' + lane);
     return { ...base, spawned: false, spawnNote: '未配置 config.dispatch.provider ⇒ 仅发句柄（补配置后重派，或用 firstLine 直派）' };
   }
-  // ④ 任务包骨架：lane 契约 + 纪律 + 句柄首行（B2/B3 由 buildStartSpec 注入 toolFilter/label）
+  // ④ 任务包骨架：lane 契约 + 纪律 + 句柄首行（B2/B3 由 buildStartRequest 注入 toolFilter/label）
   // ⚠ 活体实测（2026-09-16，批次 suite-live-20260916 首派成功后发现）：`batch.wavePlan` 存的是
   //   **wave 数组**（`[{ wave, tasks:[…] }]`），旧写法读 `wavePlan.tasks` **恒取不到** ⇒ 任务包「目标」位
   //   退化成 `（未声明 cmd）`。此处拍平所有 wave 的 tasks。
@@ -273,17 +316,20 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     consume: laneTask?.consume ?? [], produce: laneTask?.produce ?? [], outputs: laneTask?.outputs ?? [],
     firstLine: h.firstLine, leaderPrompt, artifactsRoot,
   });
-  const spec = buildStartSpec({
-    provider, batchId, lane, parent: exec?.agent, prompt,
-    // N2 清债（2026-09-16 评审）：denyTools/persona 同样读**热更快照**
-    denyTools: SUITE_DENY_TOOLS,
-    extraDeny: liveConfig?.dispatch?.denyTools ?? [],
-    persona: liveConfig?.dispatch?.persona,
-  });
+  // 【2026-09-22 · one-shot 化】`startContinuable(spec)` → **`rt.start(provider, request)`**：
+  //   one-shot 请求**平铺**（label/prompt/parent/signal/toolFilter/persona/maxDepth 同层）；
+  //   **只 await 启动、不 await `run.result`**（fire-and-forget，保住「不阻塞 Leader 回合」）；
+  //   run 交 `trackOneShotRun` 持引用（终态自动摘除，失败显式告警不进判定）。
   let start = null;
   try {
     if (!exec?.agent) throw new Error('缺少调用方 Agent —— 派发必须在工具流水线内调用（exec.agent 决定子会话挂载点）');
-    start = await rt.startContinuable(spec);
+    start = await rt.start(provider, buildStartRequest({
+      batchId, lane, parent: exec.agent, prompt,
+      // N2 清债（2026-09-16 评审）：denyTools/persona 同样读**热更快照**
+      denyTools: SUITE_DENY_TOOLS,
+      extraDeny: liveConfig?.dispatch?.denyTools ?? [],
+      persona: liveConfig?.dispatch?.persona,
+    }));
   } catch (e) {
     const m = mapSpawnError(e); // B6 失败显式：归一为可读码面，绝不静默
     // D-3（2026-09-16 清债）：派发失败**必须回滚 lane**——否则 lane 停在 `running` 却无 worker。
@@ -300,13 +346,16 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
       + '**不可原地重派**（K3：返工边 review→running 已去除，重派会被 `invalid member transition` 拒）；'
       + '如需人工核查：`gate_status({ batchId: "' + batchId + '", lane: "' + lane + '" })`。');
   }
-  // D-2（2026-09-16 清债）：worker 会话 id **定点取值**（契约字段 `id`），不再静默猜字段；
+  // D-2（2026-09-16 清债）：worker 会话 id **定点取值**（`SubagentRun.id` = 子会话 id），不再静默猜字段；
   //   兼容回落会**显式告警**，取不到则带原始载荷显式报错（不静默 null ⇒ 不留「绑定失败但无根因」）。
   const workerSessionId = workerSessionIdOf(start, (msg) => ctx?.logger?.warn?.('[dsh-punky-swarm] ' + msg));
   if (!workerSessionId) {
-    throw new Error('GATE_DISPATCH_FAILED: startContinuable 未返回 worker 会话 id（载荷=' + JSON.stringify(start) + '）'
-      + ' —— 契约字段为 `id`（兼容 `subagentId`/`childId`）；宿主返回形态若变更请按本载荷适配。');
+    throw new Error('GATE_DISPATCH_FAILED: rt.start 未返回 worker 会话 id（载荷=' + JSON.stringify(start)
+      + '） —— 契约字段为 `id`（`SubagentRun.id` = 子会话 id；与 `subagent/end` 事件 `info.id` 同源）；'
+      + '宿主返回形态若变更请按本载荷适配。');
   }
+  // 【2026-09-22 · one-shot 化】run 生命周期属主登记（持引用防 GC 语义歧义；终态自动摘除；失败显式告警）。
+  trackOneShotRun(workerSessionId, start, (msg) => ctx?.logger?.warn?.('[dsh-punky-swarm] ' + msg));
   // ⑤ B5 唯一写路径：自派成功即由引擎直接登记（不依赖 post-execute 事后观察）
   store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, { lane, workerSessionId });
   // ⑥ **P0**：成功自派 ⇒ 立即作废句柄（口径见本函数头「自派即发放即作废、仅直派形态需长期有效」）。

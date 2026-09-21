@@ -31,7 +31,7 @@ import {
 } from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import {
-  SUITE_DENY_TOOLS, labelOf, parseLabel, composeWorkerPrompt, buildStartSpec, mapSpawnError, subagentRuntimeOf,
+  SUITE_DENY_TOOLS, labelOf, parseLabel, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf,
   evaluateTierCDispatch, readGateMode,
 } from '../lib/engine/dispatch.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
@@ -94,17 +94,17 @@ test('P2 任务包骨架：含句柄首行 + lane/层/角色 + 消费产出 + �
   }
 });
 
-test('P3 startSpec：label + toolFilter.deny（套件自带 + 追加、去重）+ maxDepth=1 + parent', () => {
+test('P3 startRequest（one-shot 平铺）：label + toolFilter.deny（套件自带 + 追加、去重）+ maxDepth=1 + parent', () => {
   const parent = { id: 'agent-1' };
-  const spec = buildStartSpec({ provider: 'p', batchId: 'b-1', lane: 'e1', parent, prompt: 'task' });
-  assert.equal(spec.provider, 'p');
-  assert.equal(spec.label, 'punky-swarm:b-1:e1');
-  assert.equal(spec.request.parent, parent);
-  assert.equal(spec.request.maxDepth, 1);
-  assert.equal(spec.request.prompt[0].text, 'task');
-  assert.ok(spec.request.toolFilter.deny.includes('assign_check') && spec.request.toolFilter.deny.includes('wave_plan'));
-  const spec2 = buildStartSpec({ provider: 'p', batchId: 'b', lane: 'l', parent, prompt: 'x', extraDeny: ['assign_check', 'my_tool'] });
-  const d = spec2.request.toolFilter.deny;
+  const request = buildStartRequest({ batchId: 'b-1', lane: 'e1', parent, prompt: 'task' });
+  assert.equal(request.label, 'punky-swarm:b-1:e1');
+  assert.equal(request.parent, parent);
+  assert.equal(request.maxDepth, 1);
+  assert.equal(request.prompt[0].text, 'task');
+  assert.ok(request.toolFilter.deny.includes('assign_check') && request.toolFilter.deny.includes('wave_plan'));
+  assert.ok(request.signal, 'one-shot 请求必须带自持 signal（禁透传 exec.signal，见头部纪律）');
+  const request2 = buildStartRequest({ batchId: 'b', lane: 'l', parent, prompt: 'x', extraDeny: ['assign_check', 'my_tool'] });
+  const d = request2.toolFilter.deny;
   assert.equal(d.filter((x) => x === 'assign_check').length, 1, '去重');
   assert.ok(d.includes('my_tool'), '追加生效');
   assert.ok(SUITE_DENY_TOOLS.includes('member_settle') && SUITE_DENY_TOOLS.includes('lane_dispatch'), '成员不得再派/写状态');
@@ -116,10 +116,12 @@ test('P4 mapSpawnError：能力位/ provider / 其它 三类归一（B4 能力�
   assert.equal(mapSpawnError(new Error('boom')).code, 'GATE_DISPATCH_FAILED');
 });
 
-test('P5 subagentRuntimeOf：仅当 startContinuable 可调用才算可用（否则降级）', () => {
+test('P5 subagentRuntimeOf：仅当 start（one-shot 通道）可调用才算可用（否则降级）', () => {
   assert.equal(subagentRuntimeOf(mkCtx(null)), null);
   assert.equal(subagentRuntimeOf(mkCtx({})), null);
-  assert.equal(subagentRuntimeOf(mkCtx({ startContinuable: () => {} })) !== null, true);
+  assert.equal(subagentRuntimeOf(mkCtx({ start: () => {} })) !== null, true);
+  assert.equal(subagentRuntimeOf(mkCtx({ startContinuable: () => {} })), null,
+    '仅存 continuable 通道 ⇒ 不可用（2026-09-22 one-shot 化）');
 });
 
 // ── G：C 阶段派发面门禁（软启用；纯函数判定） ──
@@ -264,7 +266,7 @@ test('T1 引擎自派成功：写 member.dispatch（B5 唯一写路径）+ 返�
   const root = tempRoot('punky-ed1-');
   const store = seedBatch(root, 'sess-c', 'b-ed1');
   let captured = null;
-  const ctx = mkCtx({ startContinuable: async (spec) => { captured = spec; return { id: 'ws-eng-1', messageId: 'm1' }; } });
+  const ctx = mkCtx({ start: async (provider, request) => { captured = { provider, ...request }; return { id: 'ws-eng-1', result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
   const exec = { agent: { session: { id: 'sess-c' } } };
@@ -272,12 +274,13 @@ test('T1 引擎自派成功：写 member.dispatch（B5 唯一写路径）+ 返�
   assert.equal(r.spawned, true);
   assert.equal(r.workerSessionId, 'ws-eng-1');
   assert.equal(r.status, 'running');
-  // B2 按次收窄 + B3 label + B1 任务包
+  // B2 按次收窄 + B3 label + B1 任务包（one-shot 平铺形态；provider 由 rt.start 首参直传）
+  assert.equal(captured.provider, 'spawn-in-process');
   assert.equal(captured.label, 'punky-swarm:b-ed1:l1');
-  assert.ok(captured.request.toolFilter.deny.includes('wave_plan'));
-  assert.equal(captured.request.parent, exec.agent);
-  assert.ok(captured.request.prompt[0].text.includes(r.firstLine), '任务包含句柄首行');
-  assert.ok(captured.request.prompt[0].text.includes('要点：先读规格'), 'Leader 要点已拼接');
+  assert.ok(captured.toolFilter.deny.includes('wave_plan'));
+  assert.equal(captured.parent, exec.agent);
+  assert.ok(captured.prompt[0].text.includes(r.firstLine), '任务包含句柄首行');
+  assert.ok(captured.prompt[0].text.includes('要点：先读规格'), 'Leader 要点已拼接');
   // B5：引擎直接登记（不依赖 post-execute 观察）
   const b = store.readBatch('sess-c', 'b-ed1');
   const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
@@ -305,7 +308,7 @@ test('T3 未配置 provider ⇒ **降级为仅发句柄**（N1 清债：不再�
   __resetLaneHandles();
   const root = tempRoot('punky-ed3-');
   const store = seedBatch(root, 'sess-c', 'b-ed3');
-  const ctx = mkCtx({ startContinuable: async () => ({ id: 'ws-x' }) });
+  const ctx = mkCtx({ start: async () => ({ id: 'ws-x', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) });
   const tools = createCoreTools(ctx, { store, root, config: {} });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
   // 【2026-09-16 评审 N1】旧契约：抛 `GATE_DISPATCH_CAPABILITY_MISSING`——但那会**丢掉刚发的句柄**，
@@ -324,7 +327,7 @@ test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISP
   __resetLaneHandles();
   const root = tempRoot('punky-ed4-');
   const store = seedBatch(root, 'sess-c', 'b-ed4');
-  const ctx = mkCtx({ startContinuable: async () => { throw new Error('tool-subagent: provider "p" cannot enforce toolFilter (no toolFilter capability)'); } });
+  const ctx = mkCtx({ start: async () => { throw new Error('tool-subagent: provider "p" cannot enforce toolFilter (no toolFilter capability)'); } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'p' } } });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
   await assert.rejects(() => ld.execute({ batchId: 'b-ed4', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }), /GATE_DISPATCH_CAPABILITY_MISSING/);

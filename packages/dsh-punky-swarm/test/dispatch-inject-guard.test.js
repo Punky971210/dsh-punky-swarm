@@ -22,33 +22,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   走既定的「仅发句柄」降级分支）。本套件锁死②，防将来有人把 try/catch 删回去。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { subagentRuntimeOf, buildStartSpec } from '../lib/engine/dispatch.js';
+import { subagentRuntimeOf, buildStartRequest } from '../lib/engine/dispatch.js';
 import * as plugin from '../lib/index.js';
 
-// ── 宿主 `startContinuable` 的 signal 契约（2026-09-16 同批首派**第二层**报错抓出） ─────────
-//   宿主实现在 `@deepseek-ai/dsh-subagent/lib/types/continuation.js:139` 直接调
-//   `spec.signal.throwIfAborted()`；缺 signal 即抛 `Cannot read properties of undefined
+// ── 宿主 one-shot `start` 的 signal 契约（2026-09-16 首派抓出；2026-09-22 one-shot 化续用） ─────
+//   宿主 `SubagentRuntime.start` → provider driver 对 `request.signal` 直接调 `throwIfAborted()`
+//   （`dsh-subagent-in-process-driver` :163）；缺 signal 即抛 `Cannot read properties of undefined
 //   (reading 'throwIfAborted')`（被 mapSpawnError 归一为 GATE_DISPATCH_FAILED）。
-//   宿主类型把 `signal` 放在 `Omit` 里 ⇒ **类型面看不出来，只能靠活体 + 本回归锁死**。
-test('SP-4 buildStartSpec：必须带可调用的 signal（宿主 throwIfAborted 契约）', () => {
-  const spec = buildStartSpec({ provider: 'spawn', batchId: 'b-x', lane: 'l1', parent: { id: 'a' }, prompt: 't' });
-  assert.ok(spec.signal, 'spec.signal 必须存在');
-  assert.equal(typeof spec.signal.throwIfAborted, 'function', 'signal 必须支持 throwIfAborted（宿主直接调用）');
-  assert.doesNotThrow(() => spec.signal.throwIfAborted(), '未中止的 signal 调用不得抛');
-  assert.equal(spec.signal.aborted, false);
+//   ⚠ one-shot 化纪律：**禁透传 `exec.signal`**（官方 background 分支实证其随工具调用结束 abort）
+//   ⇒ 缺省必须自持永不中止 signal；本套件锁死该契约。
+test('SP-4 buildStartRequest：必须带可调用的 signal（宿主 throwIfAborted 契约）+ label/toolFilter 在位', () => {
+  const request = buildStartRequest({ batchId: 'b-x', lane: 'l1', parent: { id: 'a' }, prompt: 't' });
+  assert.ok(request.signal, 'request.signal 必须存在');
+  assert.equal(typeof request.signal.throwIfAborted, 'function', 'signal 必须支持 throwIfAborted（宿主直接调用）');
+  assert.doesNotThrow(() => request.signal.throwIfAborted(), '未中止的 signal 调用不得抛');
+  assert.equal(request.signal.aborted, false);
+  assert.equal(request.label, 'punky-swarm:b-x:l1', 'B3 label 必须在顶层（宿主快照进 descriptor）');
+  assert.ok(Array.isArray(request.toolFilter.deny) && request.toolFilter.deny.length > 0, 'toolFilter.deny 必须在位（按次收窄唯一通道）');
+  assert.equal(request.prompt[0].type, 'text', 'prompt 须为 ContentBlock 形态');
+  assert.equal(request.maxDepth, 1, '缺省 maxDepth=1');
 });
 
-test('SP-5 buildStartSpec：自有 signal 可注入并原样透传（取消能力面）', () => {
+test('SP-5 buildStartRequest：自有 signal 可注入并原样透传（取消能力面）', () => {
   const ctl = new AbortController();
-  const spec = buildStartSpec({ provider: 'spawn', batchId: 'b-x', lane: 'l1', parent: { id: 'a' }, prompt: 't', signal: ctl.signal });
-  assert.equal(spec.signal, ctl.signal, '注入的 signal 必须原样透传（不自造第二个）');
+  const request = buildStartRequest({ batchId: 'b-x', lane: 'l1', parent: { id: 'a' }, prompt: 't', signal: ctl.signal });
+  assert.equal(request.signal, ctl.signal, '注入的 signal 必须原样透传（不自造第二个）');
   ctl.abort();
-  assert.throws(() => spec.signal.throwIfAborted(), /abort/i, '已中止 signal 调 throwIfAborted 应抛（宿主据此短路）');
+  assert.throws(() => request.signal.throwIfAborted(), /abort/i, '已中止 signal 调 throwIfAborted 应抛（宿主据此短路）');
 });
 
-test('SP-6 buildStartSpec：缺省 signal 每次独立（不复用全局单例，避免跨 lane 误取消）', () => {
-  const a = buildStartSpec({ provider: 'p', batchId: 'b', lane: 'l1', parent: {}, prompt: 'x' });
-  const b = buildStartSpec({ provider: 'p', batchId: 'b', lane: 'l2', parent: {}, prompt: 'x' });
+test('SP-6 buildStartRequest：缺省 signal 每次独立（不复用全局单例，避免跨 lane 误取消）', () => {
+  const a = buildStartRequest({ batchId: 'b', lane: 'l1', parent: {}, prompt: 'x' });
+  const b = buildStartRequest({ batchId: 'b', lane: 'l2', parent: {}, prompt: 'x' });
   assert.notEqual(a.signal, b.signal);
 });
 
@@ -67,10 +72,12 @@ test('SP-2 未注入服务的**抛错式**取属性 ⇒ 返回 null（降级「�
   assert.equal(subagentRuntimeOf(throwingCtx), null, '抛错式上下文必须被兜住');
 });
 
-test('SP-3 常规形态：无服务 / 服务无 startContinuable / 服务可用', () => {
+test('SP-3 常规形态：无服务 / 服务无 start / 服务可用（one-shot 化探测面）', () => {
   assert.equal(subagentRuntimeOf({}), null);
   assert.equal(subagentRuntimeOf(undefined), null);
-  assert.equal(subagentRuntimeOf({ subagents: {} }), null, '无 startContinuable ⇒ 视为不可用');
-  const rt = { startContinuable: async () => ({}) };
+  assert.equal(subagentRuntimeOf({ subagents: {} }), null, '无 start ⇒ 视为不可用');
+  assert.equal(subagentRuntimeOf({ subagents: { startContinuable: async () => ({}) } }), null,
+    '仅存 continuable 通道 ⇒ 不可用（2026-09-22 one-shot 化：start 是唯一通道）');
+  const rt = { start: async () => ({}) };
   assert.equal(subagentRuntimeOf({ subagents: rt }), rt, '可用服务原样返回');
 });

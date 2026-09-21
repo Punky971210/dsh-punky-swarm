@@ -79,7 +79,7 @@ function mkCtx(runtime) {
 /** 假宿主：登记每次 spawn 的 spec（供放行路径断言「发了 worker」）。 */
 function fakeRuntime(sink) {
   return {
-    startContinuable: async (spec) => {
+    start: async (spec) => {
       const id = 'ws-' + (sink.length + 1);
       sink.push({ id, spec });
       return { id, messageId: 'm-' + id };

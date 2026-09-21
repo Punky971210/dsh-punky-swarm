@@ -299,15 +299,15 @@
     "test/dispatch-failure-rollback.test.js": {
       "asserts": 20,
       "blankLines": 12,
-      "lines": 113,
+      "lines": 118,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
     },
     "test/dispatch-inject-guard.test.js": {
-      "asserts": 15,
+      "asserts": 20,
       "blankLines": 11,
-      "lines": 77,
+      "lines": 84,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -329,9 +329,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 85,
+      "asserts": 87,
       "blankLines": 23,
-      "lines": 335,
+      "lines": 338,
       "tautologies": 0,
       "tests": 17,
       "todos": 0
@@ -1217,7 +1217,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T14:41:39Z",
+  "generatedAt": "2026-09-21T16:13:18Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1231,10 +1231,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8419,
+    "asserts": 8426,
     "blankLines": 3986,
     "files": 152,
-    "lines": 44414,
+    "lines": 44429,
     "tautologies": 0,
     "tests": 1738,
     "todos": 4

@@ -42,7 +42,7 @@ async function harness() {
   const ctx = {
     tools: { register: () => {}, guard: () => () => {} },
     logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { startContinuable: async (spec) => { captured.push(spec); return { id: 'worker-stub-1' }; } },
+    subagents: { start: async (provider, request) => { captured.push({ provider, ...request }); return { id: 'worker-stub-1', result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } },
   };
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
   const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
@@ -62,8 +62,8 @@ test('DP-1 任务包携带 lane 的 cmd（wavePlan 为 wave 数组时不得退�
   const { by, exec, captured } = await harness();
   const r = await by.lane_dispatch.execute({ batchId: 'b-dp', lane: 'e1' }, exec);
   assert.equal(r.spawned, true, '引擎自派应成功（桩 subagents）');
-  assert.equal(captured.length, 1, 'startContinuable 应被调用一次');
-  const text = captured[0].request.prompt[0].text;
+  assert.equal(captured.length, 1, 'start（one-shot）应被调用一次');
+  const text = captured[0].prompt[0].text;
   assert.ok(text.includes('CMD-MARK-e1'), '任务包「目标」位必须含该 lane 的 cmd：\n' + text);
   assert.ok(!text.includes('（未声明 cmd）'), '不得退化占位符：\n' + text);
 });
@@ -71,7 +71,7 @@ test('DP-1 任务包携带 lane 的 cmd（wavePlan 为 wave 数组时不得退�
 test('DP-2 任务包同时携带 layer / role / 契约（consume·outputs）与句柄首行', async () => {
   const { by, exec, captured } = await harness();
   await by.lane_dispatch.execute({ batchId: 'b-dp', lane: 'e1' }, exec);
-  const text = captured[0].request.prompt[0].text;
+  const text = captured[0].prompt[0].text;
   assert.ok(/层|layer/.test(text), '应含层信息');
   assert.ok(text.includes('coder') || text.includes('role'), '应含角色信息');
   assert.ok(text.includes('plan/spec.md'), '应含 consume 契约（plan/spec.md）');

@@ -52,13 +52,15 @@ test('DR-1 workerSessionIdOf：实现面 id 优先、类型面 childId 同认，
 });
 
 // ── D-3 工具面（真派发失败 ⇒ 回滚 + 恢复指引） ───────────────────────────────
-async function harness(startContinuable) {
+// 【2026-09-22 · one-shot 化】stub 通道 `startContinuable` → `start(provider, request)`；
+//   成功形态 = `SubagentRun { id, result: Promise }`（result settle 后 activeRuns 自动摘除）。
+async function harness(start) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-dr-'));
   const store = createStore(root);
   const ctx = {
     tools: { register: () => {}, guard: () => () => {} },
     logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { startContinuable },
+    subagents: { start },
   };
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
   const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
@@ -103,7 +105,10 @@ test('DR-3 宿主返回载荷缺 id 且无兼容字段 ⇒ 显式报错（带原
 });
 
 test('DR-4 兼容回落（只有 subagentId）⇒ 派发成功且不因此失败', async () => {
-  const { by, exec, store } = await harness(async () => ({ subagentId: 'w-legacy' }));
+  const { by, exec, store } = await harness(async () => ({
+    subagentId: 'w-legacy',
+    result: Promise.resolve({ output: [], stopReason: 'completed' }),
+  }));
   const r = await by.lane_dispatch.execute({ batchId: 'b-dr', lane: 'e1' }, exec);
   assert.equal(r.spawned, true);
   assert.equal(r.workerSessionId, 'w-legacy');
