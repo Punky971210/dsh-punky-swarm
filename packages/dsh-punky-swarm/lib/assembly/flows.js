@@ -80,7 +80,9 @@ export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([ENGINE_BASELINE_CRIT
 
 const CACHE = new Map(); // key: `${pkgRoot}::${team}` → { sig, out }（sig = 资产路径+mtime+size；变了即重读）
 
-/** 清缓存（测试/诊断用；生产不调用——声明是冷加载资产）。 */
+/** 清缓存（测试/诊断用；生产不调用——声明是冷加载资产）。
+ *  【C1 判读（N2 第一批，docs/c1-wiring-audit-2026-09-22.md）】降级为测试隔离钩，**不接热更**：
+ *  缓存是 sig 自愈型（资产 mtime/size 变即重读），热更/资产变更无需清。 */
 export function clearFlowCache() {
   CACHE.clear();
 }
@@ -292,6 +294,7 @@ function consumeFieldProblemOf(flow, layer) {
 //   与白名单（8 基础角色 ∪ 盲审三角色）对不上。现以 `unionRoleVocabulary` 把 ①∪② 作为**该团队的角色词法集**，
 //   白名单与资产声明面**同源**：声明了 = 可用（②变成可选补充，不再是隐藏必填项）。
 const ROLE_CACHE = new Map(); // key → { sig, out }（sig 同 CACHE：改资产即时生效，不需重启）
+/** 清角色缓存（测试隔离钩；C1 判读 = 降级不接热更，理由同 clearFlowCache——sig 自愈）。 */
 export function clearRoleCache() {
   ROLE_CACHE.clear();
 }

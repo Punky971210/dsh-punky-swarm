@@ -257,6 +257,8 @@ export const EVT_BATCH_GOVERNANCE_ESCALATE = 'batch.governance-escalate';
 //   ⇒ 该事件在本批**无消费者**，按「不添加未被要求的灵活性」不预留常量（若将来实施，先登记常量再接调用点）。
 export const EVT_GATE_ESCAPE = 'gate.escape';
 export const EVT_GATE_DEGRADE = 'gate.degrade';
+// 【退役登记（N2 第一批 C1 判读，docs/c1-wiring-audit-2026-09-22.md）】chain 自动推进已退役（Q-A=C，单通道）
+//   ⇒ `chain.step` 事件无生产写端；常量**冻结保留**（历史批磁盘事件读端不变），勿引用其可达性。
 export const EVT_CHAIN_STEP = 'chain.step';
 
 // P3a 自动结算（规格 §2/§3/§4）：**引擎自动**判定 lane 交付 ⇒ 全绿自动 `merged`，任一不满足 ⇒ 停轮。

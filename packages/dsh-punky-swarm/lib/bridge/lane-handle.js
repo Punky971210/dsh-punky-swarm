@@ -106,7 +106,10 @@ export function consumeLaneHandle(token, opts = {}) {
   return { ok: true, entry: v.entry };
 }
 
-/** 清理过期句柄（供心跳/测试调用）；返回清理条数。 */
+/** 清理过期句柄（**显式维护钩子，生产不自动调用**；返回清理条数）。
+ *  【C1 判读（N2 第一批，docs/c1-wiring-audit-2026-09-22.md）】降级：**不接心跳自动清扫**——
+ *  过期句柄正是绑定缺口探针的信号面（bindingGapOf 消费 token-ttl-expired 判「幽灵悬挂意图」），
+ *  自动清扫会抹掉缺口信号；句柄量级 = 派发频次，内存可忽略。 */
 export function sweepExpiredHandles(now = Date.now()) {
   let n = 0;
   for (const [k, v] of handles.entries()) {
@@ -122,7 +125,7 @@ export function pendingHandles(now = Date.now()) {
     .map(([token, v]) => ({ token, batchId: v.batchId, lane: v.lane, sessionId: v.sessionId, at: v.at, expired: now - v.at > LANE_HANDLE_TTL_MS }));
 }
 
-/** 测试专用：清空单例（生产路径不得调用）。 */
+/** 测试专用：清空单例（生产路径不得调用）。（C1 判读 = 降级测试隔离钩。） */
 export function __resetLaneHandles() {
   handles.clear();
 }

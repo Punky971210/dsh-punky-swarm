@@ -66,6 +66,9 @@ export function canTransitionBatch(from, to) {
     const tos = BATCH_TRANSITIONS[from];
     return tos.includes(to);
 }
+/* 【C1 判读（N2 第一批，docs/c1-wiring-audit-2026-09-22.md）】assert* 两个函数**降级登记、不在生产接线**：
+ *  在役迁移校验 = `machine.applyMemberTransition`（machine-rules，store.js:805/821，带 ratchet 注入、更强）；
+ *  此处接线会构成**双判定源**（违反「禁第二套」纪律）。保留 = 声明面兼容导出（测试锁表语义）。 */
 export function assertMemberTransition(from, to) {
     if (!canTransitionMember(from, to)) {
         throw new Error('invalid member transition: ' + from + ' -> ' + to);
