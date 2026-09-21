@@ -56,3 +56,19 @@
 - `new-engine-blueprint-2026-09-21.md §6`「6 守卫接线」行 ⇒ **以本台账为准修正**（证据优先于蓝图意向）；
 - `frozen-register-2026-09-21.md §1` ⇒ C1 26 项自本批起**状态 = 已判读**（三选一已落，见 §2；不再等「新引擎形态」）；
 - `reachability-ledger`（守卫可达性 119 条）与本题**正交**（那是「守卫可达吗」，这是「未接线的导出符号怎么处置」），勿混。
+
+## §5 第二批落地（2026-09-22 02:1x，commit 745d27b）
+
+- `validateAssembly` 已删（lib/assembly/schema.js；撤函数保常量表：BLIND_REVIEW_ROLES/BLIND_REVIEW_TEMPLATE_KEYS/CAPABILITY_REGISTRY/EXCLUSIONS/REQUIRED_ROLES 全保留）。
+
+- 判定真源 = 在役 `assertAssemblyCompleteness`（视图 1 严格覆盖原形状校验且更强；在役消费方 `audit-blind-review.js`）。
+
+- 测试迁移：assembly-schema.test.js 两个自产自销用例 → 迁移到在役判定源（DEFAULT_ASSEMBLY ok + 5 类畸形 not ok），行为覆盖不丢。
+
+- 验收：受影响套件绿；全量 1783/1757/22 fail/4 todo（4 预期红 + 18 环境类 ⇒ 非环境类 0）；基线 152/1738/8425（asserts -2）；pkg-hashes 424。
+
+- **C1 26 项至此全部闭合**（22 降级 + 2 设计题挂起 + 1 删 + 1 历史退役登记）。剩余开放项：第三批类型一致性（须裁定）。
+
+## §6 A3③ 判据配置化延伸 · 收口普查（2026-09-22 02:1x）
+
+普查 `lib/state/gates.ts` 判据面：**硬编码章节字面量零残留** —— `criteria_section`（audit 声明键）/ `required_sections`（plan 声明键）双通道齐备，缺声明回落单一真源 `ENGINE_BASELINE_*` 并落首触事件。⇒ **A3③「判据配置化」完备，N2 全部闭合**；延伸无剩余项。
