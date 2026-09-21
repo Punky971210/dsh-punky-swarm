@@ -16,6 +16,7 @@
 | 3 | **并发闸取消**（Q-B）：`assertConcurrencyAdmit` / `concurrencyVerdictOf` / `CONCURRENCY_EXCEEDED_CODE` 删除；`GATE_CONCURRENCY_EXCEEDED` 出 union | adjudication §7 | 【实测】`lib/engine/dispatch.js:179-185 / :217` 删除留痕注释在案；`concurrency` 仅存声明与回显 |
 | 4 | **R2 清理波**：`.wip-backup/` 删；B1 删 8 / 冻 10；B2 收敛 122；`scripts/audit/` 生成器链；冻结台账 | `17b6b97 … c761cd1`（09-21 01:07–01:34） | 【实测】`.wip-backup` 已不存在；`scripts/audit/` = `dead-code2 / classify / gates / gen-register / plan-lists / strength` |
 | 5 | **R3g 门禁断言波**（纯增量，`lib/**` 零 diff）：无断言拒码 9 → **2**；拒码集合 66 → 66 零增删；真 E2E（loader 钩子 + 负向对照）；断言强度台账 | `fda041a … a944759`（09-21 02:16–04:05） | 【实测】1729 tests / 1725 pass / **0 fail** / 4 todo（连续两轮稳定） |
+| 6 | **N0.5 去返工边**（K3）：`schema.MEMBER_TRANSITIONS.review` 删 `running`（`schema.ts:41` + 产物 `.js:26`/`.d.ts:10`，走 `npm run build`）；返工能力族断言**反向改判**（`machine.test.js:46` / `rework.test.js` 3 例 / `gate-techdebt-red` R-21）；基线 8245 → **8248** | `5642d3b`（09-21 11:3x） | 【实测】`git diff --stat -- lib` 仅 schema 三件套；⚠ **未闭合 4 例**见 §5 |
 
 > R3g 子波：`fda041a`（R3-1 补测）· `035426d`（R3-2 判读）· `0d280ea`（R3-3 前提推翻 + fail-open）· `43c4b29`（R3-4 真 E2E）· `a3dcf22`（R3-3 冻结 + 源类型实证）· `a944759`（R3-5 强度台账）。
 
@@ -50,6 +51,14 @@
 4. **不重做 Jiuwen 对位** —— 路线稿 §4.2（可借 6 / 不可借 3）+ 集群稿 §6（不搬 4）已覆盖；新蓝图 §2.5 只做「受限采纳」增量
 5. **不重排 C1 26 / B1 残留 10 / schema 消环 / C2 200** —— 蓝图 §6 已给批量解冻映射，只等形态定
 6. **不重排路线稿波 2（R4 图修订）** —— 已并入 **N1**，13 触点与 R4-1/2/3 切片直接继承
+
+## §5 未闭合（随 N0.5 暴露，需裁定后才可收尾）
+
+| 项 | 内容 | 状态 |
+|---|---|---|
+| **恢复路径断裂族**（4 例断言） | 去边后 `review` 只能 → merged/conflict/failed；既有实现把 `review` 当「待重试中间态」：`dispatch.js:287` 派发失败回滚到 `review`（提示「review→running 为既定返工入口」现已**失实且重派被拒**）；exit 门拒后 lane 卡 `review`。受影响测试：`gates.test.js`（Exit Gate audit / O2 T8）、`governance.test.js`（A3 重派）、`outcome-typing.test.js`（C5-4 attempt） | ⏸ 待裁（三选一见 `new-engine-blueprint §8.8`，建议①拒后即终态置 `failed`） |
+| **`attempt` 升级标记** | 原派生自 `review→running` 事件计数 ⇒ 去边后**派生源消失**；需保留则须另立口径 | ⏸ 同上 |
+| **环境类 18 例**（`invalid reference: punky/orch`） | `worktree-tools` 7 + `merge-agent` 9 + `resume` 2；与去边**无关**。受控实验：PortableGit 置 PATH 首位后仍 7/7 失败 ⇒ **git 版本归因二次证伪** | ⏸ 根因未定性，独立登记 |
 
 ---
 
