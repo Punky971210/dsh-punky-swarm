@@ -7,16 +7,16 @@
 
 ---
 
-## §0 引擎改装现状摘要（2026-09-21 21:4x，生成时 HEAD `23a6d08`）
+## §0 引擎改装现状摘要（2026-09-21 22:0x，生成时 HEAD `696f5cf`）
 
 | 轴 | 现状 |
 |---|---|
-| **波次** | R1 → R2 清理波 → R3g → A1–A4 → K1–K4 → N0.5 → N1-R4-1a/1b/1c/2 → **夹具审计 F1/F2/F3**（当前） |
+| **波次** | R1 → R2 清理波 → R3g → A1–A4 → K1–K4 → N0.5 → N1-R4-1a/1b/1c/2 → **夹具审计 F1/F2/F3/F4**（当前） |
 | **形态** | 池 = `owner == null` 的**视图**（不是容器）；派发 = 唯一出池动作（Leader 单点，不引入 claim）；图变更 = **两个显式写入口**（`store.addPoolTasks` 追加任务 / `store.addTaskEdges` 加边），均单次 `atomicWrite`；不成环靠**结构性保证**（`deps` 只许指向已声明在先 + 同层或上游），不做禁止性断言 |
 | **门禁** | 拒码集合 **66 零增删**；无断言项 2（刻意不补）；套件工具 **32**；deny **16**；modeGate **12** |
-| **测试** | **1767 tests / 1745 pass / 18 fail / 4 todo**；18 fail **全为环境类 git 回归**（merge-agent 9 · resume 2 · worktree-tools 7）⇒ 非环境类 **0**；基线 **149/1722/8367**（静态行数 44307→44191） |
+| **测试** | **1772 tests / 1750 pass / 18 fail / 4 todo**；18 fail **全为环境类 git 回归**（merge-agent 9 · resume 2 · worktree-tools 7）⇒ 非环境类 **0**；基线 **150/1727/8382**（静态行数 44191→44071） |
 | **可达性审计** | 已落成工序（扫描器 + 口径 + 判读台账），判读覆盖 **119/119**；真守卫 85 条中**无④**；④ 实际只有成环检查一项（已删） |
-| **夹具审计** | 已落成工序（`scripts/audit/fixtures.mjs` + `docs/fixture-audit-2026-09-21.md`，与可达性审计同族第二条）：**④死夹具 = 0** · ②空壳 = 技能桩 **33/43** · ③重复 = **33 个同名函数 / 156 对高相似** · 团队资产写入面 **30 文件（真实骨架 9 / 合成 19 / 直接写 5）**。⇒ **F1 ✅**（技能空壳显式化）+ **F2 ✅**（团队资产写入面单点化 + 显式白名单）；**F3–F5 待开工** |
+| **夹具审计** | 已落成工序（`scripts/audit/fixtures.mjs` + `docs/fixture-audit-2026-09-21.md`）：**④死夹具 = 0** · ②空壳 = 技能桩 **33/43** · ③重复 = **24 个同名函数 / 32 对高相似**（F3+F4 后；原 35/156）· 团队资产写入面 **30 文件**。⇒ **F1 ✅**（技能空壳显式化）· **F2 ✅**（团队写入面单点 + 白名单）· **F3 ✅**（必合档 21→5 单点原语）· **F4 ✅**（`assemblyCtx` 4 具名 builder + 同名冲突 14→0 + `freshRoot` 并入 `tempRoot`）；**F5 待开工** |
 
 ### task_* 工具计划（当前与后续）
 
@@ -52,6 +52,7 @@
 | 12 | **夹具审计 F1 · 技能空壳显式化**（台账 §3.1）：`HOST_ONLY_SKILLS` **27 名**名单 + `seedHostSkills` 缺省**拒绝造桩**（读真实资产路径受保护）+ 10 处自造调用点显式 `{ stub: true }` + 新 `test/fixture-skill-ledger.test.js` **4 条**双向断言（含负向真抛错）⇒ 施工中即抓到 **2 个未登记自造名**（`dev-tester` / `ta-mand-seeded-skill`）；**仅 `test/**`**、`lib/**` 零 diff | 本批（09-21 21:1x） | 【实测】全量 **1757 / 1735 pass / 18 fail 全为环境类** ⇒ 非环境类 0；基线 147/1710/8341 → **148/1714/8351** |
 | 13 | **夹具审计 F2 · 团队资产写入面单点化 + 显式白名单**（台账 §3.2）：新 `test/helpers/team-fixture.mjs`（`writeTempTeam` 真实骨架 / `writeRealTeam` / `writeSyntheticTeam` 合成 / `threeTierSyntheticTeam` 模板）+ 29 个写入者**全部收敛**（直接写只剩 5 个 loader/边界自测文件，带 `【F2 白名单】` 标记）+ 新 `test/fixture-team-ledger.test.js` **8 条**（直接写集合 ≡ 白名单 / 白名单须显式标记 / 理由自证 / **骨架保真 deepEqual** / `withDefaultTeam` 14 文件双向 + 断言 team 必填的套件不得经过它）；实测 重复候选 35→**33**、写入面 31→**30**、本地 `teamAsset()` 3→**0**；**仅 `test/**`**、`lib/**` 零 diff | 本批（09-21 21:2x） | 【实测】全量 **1766 / 1744 / 18 fail 全为环境类 ⇒ 非环境类 0**；基线 149/1722/8367 |
 | 14 | **夹具审计 F3 · 必合档收敛**（台账 §3.3）：21 处定义 → **5 个单点原语** —— `writeRuntime`(9) · `laneHeartbeat`(4) · `tempRoot`(3) · `seedArtifactFile`(5) · `fakeCtx({warn,error})`(6)；落点 `gate-fixture.mjs`（无 lib 依赖）+ 新增 **`watch-fixture.mjs`**（唯一带 lib 依赖者 ⇒ 独立域内 helper）；`fakeCtx` 的 3 个非缺省变体用「别名导入 + 一行适配」⇒ **调用点零改动**；`hb` 正名 `laneHeartbeat`（4 文件 41 调用点同步改名）；新增取证工具 **`scripts/audit/dup-similarity.mjs`**（`--fn` 下钻）；**仅 `test/**` 与 `scripts/audit/**`**、`lib/**` 零 diff | 本批（09-21 21:4x） | 【实测】重复候选 33→**28**、高相似对 156→**70**、含高相似函数 21→14；全量 **1767 / 1745 / 18 fail 全为环境类 ⇒ 非环境类 0**；静态行数 44307→44191 |
+| 15 | **夹具审计 F4 · 选合档同名消歧 + `assemblyCtx` 拆名**（台账 §3.3）：`assemblyCtx`(11 同名副本) → **4 具名 builder**（`assemblyCtx`/`Pre`/`Web`/`Opts`，落 `gate-fixture.mjs`）；**14 处本地定义名撞共享导出** → 消歧清零（`runLane`×5→`runLaneOrError`/复用共享 · `threeTierTasks`×5→`With*` · `seedArtifacts`×3→`seedTier*` · `tempRoot`→`tempRootTracked`）；`freshRoot(prefix)` **6 处并入 `tempRoot`**（85 调用点）；新 `test/fixture-helper-ledger.test.js` **5 条**台账断言（★ F4-1 当场抓出漏项 `smoke-gate-v14.mjs`——我只滤了 `*.js`）；余下 6 个候选判**保留**（结构形状 ≥3 ⇒ 同名不同物）。工具升级 `dup-similarity.mjs` 加 `--group`（数形状）+ `--struct`（抹平字面量） | 本批（09-21 22:0x，`696f5cf`） | 【实测】重复候选 33→**24** · 高相似对 70→**32** · 同名冲突 13→**0**；全量 **1772 / 1750 / 18 fail 全为环境类 ⇒ 非环境类 0**；基线 150/1727/8382 |
 
 > R3g 子波：`fda041a`（R3-1 补测）· `035426d`（R3-2 判读）· `0d280ea`（R3-3 前提推翻 + fail-open）· `43c4b29`（R3-4 真 E2E）· `a3dcf22`（R3-3 冻结 + 源类型实证）· `a944759`（R3-5 强度台账）。
 
