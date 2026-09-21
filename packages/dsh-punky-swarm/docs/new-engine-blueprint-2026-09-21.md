@@ -234,6 +234,17 @@ jiuwen 有 6 类探测器 + 4 档 severity + 分级处置 + 强度预算；蟛�
 | **验证** | ① 新增 `test/task-pool-*.test.js`；② 基线**先重生成再跑全量**；③ 非环境类 `fail = 0`；④ `gates --check` 66→66；⑤ `gen-register` 预览零漂移；⑥ 旧批（无 `owner`/`revision`）**零迁移可读** |
 | **纪律** | 一批一 commit；与 N2（C1 接线 + 判据配置化）**不同批**；R4-1 与 R4-2 **分两片独立验收** |
 
+#### 7.4.0 R4-1a 施工结果（2026-09-21 12:5x，✅ 已落地）
+
+| 项 | 内容 |
+|---|---|
+| **本片范围** | **只读地基**：`owner` 声明面 + `task_pool` 只读视图。**不做**加边（R4-2）、**不做** `task_split`（R4-1b）、**不改**派发写路径 |
+| **落点** | ① `contracts.ts` `WavePlanTaskInput.owner?`（可选）/ `WavePlanTask.owner: string｜null`（恒写，缺省 `null`）② `wave-plan.ts` 归一化（非字符串含缺省 ⇒ `null`，与 `targetsMarker` 同风格）③ `core.js` 新增 `task_pool` 工具（只读）④ `suite.js` 注册表 +1（第 15 条后非 deny 区块 ⇒ deny 冻结序列零变化） |
+| **判据** | 池内 = `owner == null`；可派发 = 上游 `deps` 全部 `isMemberTerminal` ∧ lane 仍 `pending`；否则 `blockers[]` **指名**（`GATE_HANDOFF_MISSING` / `ALREADY_DISPATCHED`），**不静默** |
+| **影响面（四类扫）** | 能力族 = 1 工具 + 1 可选字段；**恢复族/回滚族 = 无**；连带族 = 注册表（29→**30**）、`pkg-hashes`（370→**398** 件）、测试基线（147/1692/**8281**） |
+| **验证** | `test/task-pool-r41.test.js` **6/6**（含断言 `SUITE_DENY_TOOLS` 仍 14、`MODE_GATED_TOOLS` 仍 10、deny 序列首项不变）；`suite-consistency` + `wave-plan` + `batch-store` **52/52** |
+| **⚠ 未闭合（下片 R4-1b）** | **`owner` 目前无写入方**——派发（`dispatch.js:221` `setMember(...,'running')`）**不写** `owner`。⇒ 池视图当前恒等于「全部未派发 lane」，语义未闭环。写入方须与 `setMember` 同一次 `atomicWrite`（改 `setMember` 载荷面或新增派发面写点），属**写路径变更 ⇒ 独立批** |
+
 ### 7.4.1 ★ N1 开工前置冲突（须先裁，否则不动 `lib/**`）
 
 | # | 冲突 | 我的建议 |

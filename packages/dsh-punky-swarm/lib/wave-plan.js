@@ -901,6 +901,11 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 targets: targetsContract.targets, // string[] | null（绝对路径目标文件声明；未声明 null = 零感知）
                 targetsMarker: targetsContract.targetsMarker, // string | null（内容声明标记；缺省 null = 纯 mtime 校验）
                 targetsNoChange: targetsContract.targetsNoChange, // true = 零改动声明（跳过变更性判定，仅核存在性）
+                // N1-R4-1（K1 公共池）：归属声明——非字符串（含缺省）⇒ `null`（= **在池内**，未派发）。
+                //   ⚠ 只作声明面：池 = `owner == null` 的**视图**，不是容器；不引入认领语义，派发仍 Leader 单点。
+                owner: typeof t.owner === 'string'
+                    ? t.owner
+                    : null,
             }; // 单点断言：`standaloneReason`（B4/R-01b）不在 `WavePlanTask` 类型面
             //   （lib/types/contracts.ts 非本 lane 写域）⇒ 仅类型层断言，运行期对象形态即上述字面量本身。
         }),

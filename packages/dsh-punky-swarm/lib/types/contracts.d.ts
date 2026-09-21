@@ -40,6 +40,7 @@ export interface WavePlanTaskInput {
     standalone?: boolean;
     standaloneReason?: string;
     targetsNoChange?: boolean;
+    owner?: string | null;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
 export interface WavePlanTask {
@@ -70,6 +71,11 @@ export interface WavePlanTask {
     /** P1 交接门（M-6 双写，**只读回显**）：官方任务板 `team_task_create` 产出的 task id 镜像。
      *  **不参与任何判定**（判定只看黑板 `batch.handoffs`）；缺省 null = 未建官方 task（零感知）。 */
     officialTaskId?: string | null;
+    /** N1-R4-1（K1 公共池）：任务**归属声明**——`null` = **在池内**（未派发）、非空 = 已出池。
+     *  buildWavePlan 归一化**恒写**（非字符串含缺省 ⇒ `null`，与 `targetsMarker` 同风格：不落 undefined）。
+     *  ⚠ **本字段只作声明面**：池 = `owner == null` 的**视图**（不是容器），不引入认领/claim 语义；
+     *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
+    owner: string | null;
 }
 /** 交接契约（下游据此取件；`consumedFrom` = 消费证据，替代消息 ack 语义） */
 export interface LaneHandoffContract {

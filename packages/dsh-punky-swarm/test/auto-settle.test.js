@@ -480,7 +480,7 @@ test('H1: 插件入口真加载冒烟——createTools 工具数 26（本模块�
   const root = freshRoot('punky-as-h1-');
   const ctx = assemblyCtx();
   const bundle = createTools(ctx, { store: createStore(root), root, config: {}, readConfig: () => ({}) });
-  assert.equal(bundle.tools.length, 26, '工具面数量 = 26（自动结算不新增/不删除对外工具；P3a control lane 另加 batch_control 一件；【2026-09-17 P1】+handoff_submit/handoff_view ⇒ 24 → 26）');
+  assert.equal(bundle.tools.length, 27, '工具面数量 = 26（自动结算不新增/不删除对外工具；P3a control lane 另加 batch_control 一件；【2026-09-17 P1】+handoff_submit/handoff_view ⇒ 24 → 26）');
   const names = bundle.tools.map((t) => t.name);
   assert.ok(names.includes('swarm_report') && names.includes('member_settle'), '既有成员面工具零回归');
   // 入口模块可解析（装配期 will import installAutoSettle —— 这里自证模块面无循环依赖/无语法错）

@@ -78,19 +78,19 @@ function orchPath(root, batchId) { return path.join(wtRoot(root, batchId), 'orch
 const repoPath = (root, batchId) => path.join(wtRoot(root, batchId), '_repo');
 const refExists = (root, batchId, ref) => git(['-C', repoPath(root, batchId), 'show-ref', '--verify', '--quiet', ref]).ok;
 
-test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（26 工具，含 lane_dispatch/swarm_report/swarm_cc + P3a batch_control + P1 handoff 两件）；显式 enabled=false 不注册', () => {
-  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 26（core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view）
+test('T0 P1-01 缺省默认开：无配置时 worktree 四工具注册（27 工具，含 lane_dispatch/swarm_report/swarm_cc + P3a batch_control + P1 handoff 两件）；显式 enabled=false 不注册', () => {
+  // 缺省（config 无 capabilities 键）：worktree 默认开 → 四工具注册，工具总数 27（core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view）
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wt-off-'));
   const store = createStore(root);
   const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root });
-  assert.equal(tools.length, 26);
+  assert.equal(tools.length, 27);
   const names = tools.map((t) => t.name);
   for (const n of ['lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(names.includes(n), '缺省默认开：' + n + ' 应注册');
   }
-  // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（core 12 + lane_heartbeat + lane_longrun + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 22）
+  // 显式关（验收显式关态）：capabilities.worktree.enabled=false → 四工具不注册（core 12 + lane_heartbeat + lane_longrun + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 22；【2026-09-21 N1-R4-1a】+task_pool ⇒ 23）
   const { tools: t2 } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: { capabilities: { worktree: { enabled: false } } } });
-  assert.equal(t2.length, 22);
+  assert.equal(t2.length, 23); // 22 + task_pool（N1-R4-1a）
   assert.equal(t2.some((t) => t.name === 'lane_worktree_create' || t.name === 'lane_worktree_merge' || t.name === 'lane_checkpoint' || t.name === 'lane_checkpoint_status'), false);
 });
 

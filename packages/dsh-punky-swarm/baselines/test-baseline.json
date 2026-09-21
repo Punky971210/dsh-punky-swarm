@@ -920,6 +920,14 @@
       "tests": 4,
       "todos": 0
     },
+    "test/task-pool-r41.test.js": {
+      "asserts": 25,
+      "blankLines": 15,
+      "lines": 133,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/task-utils.test.js": {
       "asserts": 16,
       "blankLines": 12,
@@ -987,7 +995,7 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 24,
-      "lines": 359,
+      "lines": 364,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1169,7 +1177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T03:54:04Z",
+  "generatedAt": "2026-09-21T05:12:26Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1183,12 +1191,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8256,
-    "blankLines": 3872,
-    "files": 146,
-    "lines": 43661,
+    "asserts": 8281,
+    "blankLines": 3887,
+    "files": 147,
+    "lines": 43799,
     "tautologies": 0,
-    "tests": 1686,
+    "tests": 1692,
     "todos": 4
   }
 }

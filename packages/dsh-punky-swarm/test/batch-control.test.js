@@ -364,7 +364,7 @@ test('G1：running 相位既有行为零回归——同批同触发正常结算�
 
 test('G2：插件入口真加载——createTools 工具数 25 → 26，batch_control 已注册且参数面闭集', async () => {
   const { root, byName } = makeHarness('g2');
-  assert.equal(Object.keys(byName).length, 26, '本 lane 新增 batch_control ⇒ 23 → 24；【2026-09-17 P1】handoff 两件常驻注册 ⇒ 25 → 26');
+  assert.equal(Object.keys(byName).length, 27, '本 lane 新增 batch_control ⇒ 23 → 24；【2026-09-17 P1】handoff 两件常驻注册 ⇒ 25 → 26');
   const t = byName.batch_control;
   assert.ok(t, 'batch_control 须真实注册');
   assert.deepEqual(Object.keys(t.parameters.properties), ['batchId', 'action', 'session'], '参数面 = 最小干预面三键');

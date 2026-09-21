@@ -265,6 +265,11 @@ const CASES = {
     success: async (h) => h.byName.lane_checkpoint_status.execute({ batchId: C1, laneId: 'e1' }, EXEC),
     reject: async (h) => h.byName.lane_checkpoint_status.execute({ batchId: C1 }, EXEC),
   },
+  // N1-R4-1a：公共池只读视图。拒态 = 批次不存在（工具面抛业务错，非 schema 错）⇒ 亦被普查接受。
+  task_pool: {
+    success: async (h) => h.byName.task_pool.execute({ batchId: C1 }, EXEC),
+    reject: async (h) => h.byName.task_pool.execute({ batchId: 'census-nope' }, EXEC),
+  },
 };
 
 /** 单次探测：返回值 ⇒ 逐条 schema 校验（双口径）；抛错 ⇒ 断言非 schema 形态。 */
@@ -282,7 +287,7 @@ async function probe(fn, h, tool) {
   }
 }
 
-test('TSC-1 全工具 output.schema 一致性普查：26 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
+test('TSC-1 全工具 output.schema 一致性普查：27 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
   const h = await makeHarness();
   const names = h.byName && Object.keys(h.byName);
   const registered = Object.keys(CASES).filter((n) => h.byName[n]);
