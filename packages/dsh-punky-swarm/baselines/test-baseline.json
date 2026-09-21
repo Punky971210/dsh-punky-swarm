@@ -113,9 +113,9 @@
       "todos": 0
     },
     "test/assembly-schema.test.js": {
-      "asserts": 71,
+      "asserts": 69,
       "blankLines": 38,
-      "lines": 359,
+      "lines": 362,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -1217,7 +1217,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T16:45:53Z",
+  "generatedAt": "2026-09-21T18:14:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1231,10 +1231,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8427,
+    "asserts": 8425,
     "blankLines": 3986,
     "files": 152,
-    "lines": 44436,
+    "lines": 44439,
     "tautologies": 0,
     "tests": 1738,
     "todos": 4

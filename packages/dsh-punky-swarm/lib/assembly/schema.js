@@ -144,52 +144,10 @@ export function validateCapabilities(config = {}) {
   return { errors };
 }
 
-// ── 结构校验：team/layers/roles/skills 形状；role ∈ roles ⇒ skills[role] 非空字符串数组 ──
-export function validateAssembly(assembly) {
-  const errors = [];
-  if (assembly === null || typeof assembly !== 'object') {
-    return { errors: ['assembly must be an object'] };
-  }
-  if (typeof assembly.team !== 'string' || assembly.team.length === 0) {
-    errors.push('assembly.team must be a non-empty string');
-  }
-  const layers = assembly.layers;
-  if (layers === null || typeof layers !== 'object' || Array.isArray(layers)) {
-    errors.push('assembly.layers must be an object');
-    return { errors };
-  }
-  for (const [layerName, layer] of Object.entries(layers)) {
-    if (layer === null || typeof layer !== 'object') {
-      errors.push('layers.' + layerName + ' must be an object');
-      continue;
-    }
-    const roles = layer.roles;
-    if (!Array.isArray(roles) || roles.length === 0) {
-      errors.push('layers.' + layerName + '.roles must be a non-empty array');
-      continue;
-    }
-    const skills = layer.skills;
-    if (skills === null || typeof skills !== 'object' || Array.isArray(skills)) {
-      errors.push('layers.' + layerName + '.skills must be an object');
-      continue;
-    }
-    for (const role of roles) {
-      const list = skills[role];
-      if (!Array.isArray(list) || list.length === 0) {
-        errors.push('layers.' + layerName + '.skills.' + role + ' missing or empty');
-      } else {
-        for (const s of list) {
-          if (typeof s !== 'string' || s.length === 0) {
-            errors.push('layers.' + layerName + '.skills.' + role + ' contains non-string skill');
-          }
-        }
-      }
-    }
-  }
-  return { errors };
-}
-
 // ── 完整性断言（三视图，入测试门禁）──
+// 【C1 判读（N2 第二批，docs/c1-wiring-audit-2026-09-22.md）】原 `validateAssembly`（纯形状校验）已删：
+//   生产零调用 + 测试自产自销；形状判定真源 = 本函数视图 1（严格覆盖且更强：+技能可解析性 +REQUIRED_ROLES
+//   反向对齐，在役消费方 `audit-blind-review.js`）。
 // 视图 1 正向：装配表自洽（∀ (layer, role)：skills[role] 非空字符串数组且每个 skill 可解析）
 // 视图 2 反向：software-team 装配表 7 角色（manager 显式豁免）全部出现且映射非空
 // 视图 3 扩展：extensions.blindReview.enabled=true 时三角色映射非空 + 六模板键齐备

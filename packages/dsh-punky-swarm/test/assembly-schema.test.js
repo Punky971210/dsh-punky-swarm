@@ -28,7 +28,6 @@ import {
   BLIND_REVIEW_TEMPLATE_KEYS,
   readCapability,
   validateCapabilities,
-  validateAssembly,
   assertAssemblyCompleteness,
 } from '../lib/assembly/schema.js';
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS } from '../lib/schema.js';
@@ -216,31 +215,35 @@ test('validateCapabilities: disabled capability illegal values are ignored (zero
   assert.deepEqual(validateCapabilities({}).errors, []);
 });
 
-// ── validateAssembly（A1.4）──
+// ── 装配形状校验（A1.4）──
+// 【C1 判读（N2 第二批，docs/c1-wiring-audit-2026-09-22.md）】原 `validateAssembly` 已删（生产零调用、
+//   测试自产自销；判定真源 = 在役 `assertAssemblyCompleteness`，其视图 1 严格覆盖形状检查且更强——
+//   含技能可解析性 + REQUIRED_ROLES 反向对齐）。本组用例迁移到在役判定源，行为覆盖不丢。
+const shapeCatalog = { has: () => true }; // 形状判读用目录（技能可解析性不构成本组变量）
 
-test('validateAssembly passes DEFAULT_ASSEMBLY and external config.assembly shapes', () => {
-  assert.deepEqual(validateAssembly(DEFAULT_ASSEMBLY).errors, []);
-  const external = {
-    team: 'my-team',
-    layers: {
-      exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
-    },
-  };
-  assert.deepEqual(validateAssembly(external).errors, []);
+test('assembly shape (ex-validateAssembly): DEFAULT_ASSEMBLY 通过完整性与形状校验', () => {
+  assert.equal(assertAssemblyCompleteness(DEFAULT_ASSEMBLY, shapeCatalog).ok, true);
 });
 
-test('validateAssembly rejects malformed shapes', () => {
-  assert.match(validateAssembly(null).errors[0], /object/);
-  assert.match(validateAssembly(42).errors[0], /object/);
-  // role 缺 skills
+test('assembly shape (ex-validateAssembly): 畸形形状全部判 not ok', () => {
+  for (const bad of [null, 42]) {
+    assert.equal(assertAssemblyCompleteness(bad, shapeCatalog).ok, false, '非对象 ⇒ not ok');
+  }
+  // role 缺 skills（视图 1 报错文案与原实现逐字同源：'missing or empty'）
   const noSkills = { team: 'punky-preset', layers: { exec: { roles: ['coder'], skills: {} } } };
-  assert.match(validateAssembly(noSkills).errors[0], /coder missing or empty/);
+  assert.ok(
+    assertAssemblyCompleteness(noSkills, shapeCatalog).missing.some((m) => /coder missing or empty/.test(m)),
+    'role 缺 skills',
+  );
   // skills 空数组
   const emptySkills = { team: 'punky-preset', layers: { exec: { roles: ['coder'], skills: { coder: [] } } } };
-  assert.match(validateAssembly(emptySkills).errors[0], /coder missing or empty/);
-  // roles 非数组
+  assert.ok(
+    assertAssemblyCompleteness(emptySkills, shapeCatalog).missing.some((m) => /coder missing or empty/.test(m)),
+    'skills 空数组',
+  );
+  // roles 非数组（字符串可迭代 ⇒ 逐字符查 skills ⇒ 必产 missing）
   const badRoles = { team: 'punky-preset', layers: { exec: { roles: 'coder', skills: { coder: ['dev-coder'] } } } };
-  assert.match(validateAssembly(badRoles).errors[0], /roles must be a non-empty array/);
+  assert.ok(assertAssemblyCompleteness(badRoles, shapeCatalog).missing.length > 0, 'roles 非数组 ⇒ not ok');
 });
 
 // ── assertAssemblyCompleteness 三视图（A1.5 / P1-8）──
