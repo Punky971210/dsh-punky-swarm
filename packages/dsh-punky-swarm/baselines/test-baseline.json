@@ -912,6 +912,14 @@
       "tests": 5,
       "todos": 0
     },
+    "test/skill-resolution-real-asset.test.js": {
+      "asserts": 21,
+      "blankLines": 14,
+      "lines": 155,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/software-team-asset.test.js": {
       "asserts": 47,
       "blankLines": 15,
@@ -1201,7 +1209,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T13:52:15Z",
+  "generatedAt": "2026-09-21T14:18:43Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1215,12 +1223,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8382,
-    "blankLines": 3955,
-    "files": 150,
-    "lines": 44071,
+    "asserts": 8403,
+    "blankLines": 3969,
+    "files": 151,
+    "lines": 44226,
     "tautologies": 0,
-    "tests": 1727,
+    "tests": 1732,
     "todos": 4
   }
 }
