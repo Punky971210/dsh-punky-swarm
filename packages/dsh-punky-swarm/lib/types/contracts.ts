@@ -380,9 +380,6 @@ export type GateErrorCode =
   // entry（audit 判据来源锚定，P1，2026-09-14）
   | 'GATE_AUDIT_INPUT_MISSING'
   | 'GATE_AUDIT_CRITERIA_MISSING'
-  // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】原枚举成员
-  //   `'「未拉起 Manager」码(已删)'` 已删除：Manager 在册判定改由**官方 roster** 承抽
-  //   （读端 `lib/tools/core.js#managerRosterOf`；建批期落 `gate.manager_roster_gap`）⇒ 派发面无拒态。
   // 成员面档位一致性（G1，2026-09-14，严格档）
   | 'GATE_BATCH_REQUIRES_C'
   | 'GATE_MEMBER_REQUIRES_C'
@@ -419,34 +416,12 @@ export type GateErrorCode =
   //   检索口径：全仓 `GATE_[A-Z_]+` 字面量与 `code:` 抛点逐枚对照，见 exec/e4/outputs/fix-e4.md 对照表）。
   //   成员面/批次面参数非法（store.js 直抛，无 GateResult 载荷）
   | 'GATE_SETTLE_NOTE_MISSING'   // review→failed/skipped/conflict 缺非空 note（lib/state/store.js:541）
-  // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】原枚举成员 `'「Manager 终态」码(已删)'` /
-  //   `'「Manager 相位非法」码(已删)'` 已删除：Manager 登记面**不再按 phase 拒绝**（任意 phase 均可登记事实；
-  //   在册判定改由官方 roster 承抽，见 `lib/tools/core.js#managerRosterOf`）⇒ 两码无拒态、不占码表。
-  //   注：`'「Manager agentId 必填」码(已删)'` 从来只在 store 直抛、未入本枚举；同批一并删除（空 agentId ⇒ 返回
-  //   null 不写垃圾记录，由调用方走「既无 phase 又无 manager」的显式报错分支，**不静默**）。
   //   派发面豁免参数非法（常量单点 lib/state/lane-exempt.js:53-58）
   | 'GATE_EXEMPT_NOT_DISPATCH'   // exempt 出现在 to!=='running'；或 revoke 与 status 并用（lane-exempt.js:54 常量 → store.js:527 抛；工具面 lib/tools/core.js:612/619 直抛）
   | 'GATE_EXEMPT_INVALID'        // 载荷结构非法（lane-exempt.js:55 常量 → normalizeExemptPayload lane-exempt.js:94 抛）
   | 'GATE_EXEMPT_TYPE_UNKNOWN'   // type 不在四值白名单（lane-exempt.js:56 常量 → normalizeExemptPayload lane-exempt.js:98 抛）
   | 'GATE_EXEMPT_REVOKE_REQUIRED'; // revokeExempt 但该 lane 无既有豁免（lane-exempt.js:57 常量 → store.js:463 抛）
-  // 【2026-09-18 · Q-B **取消并发闸**】原枚举成员 `'GATE_CONCURRENCY_EXCEEDED'` 已删除：闸（判据纯函数 /
-  //   拒码常量 / 拒态事件写点 / 三条派发面的准入调用）随 Q-B 整体退役
-  //   （`docs/engine-design-adjudication-20260918.md:182`）⇒ 该码**无任何拒态来源**，不占码表（与
-  //   `'「Manager 终态」码(已删)'` / `'GATE_SUBAGENT_OUTSIDE_LANES'` 等「无拒态即不占码表」同口径）。
-  //   ⚠ 兼容面：磁盘历史批事件载荷里的 `code` 是 **string 数据**，不受本联合型收窄影响 ⇒ 历史读端
-  //   （`log_export` 的 `gate.*` 过滤 / `batch_status` 事件清单）逐字不变；类型面无遗留消费者。
-  //   ⚠ 生成物同步：本文件（源）与 `lib/types/contracts.d.ts`（生成物）**手工同改**（本批禁 `npm run build`，
-  //   否则下一次 build 会以 `.ts` 产物回写覆盖 `.d.ts`）；`lib/types/contracts.js` 仅 `export {}`（680 B，
-  //   无码表内容）⇒ **无需改**。
 
-  // 派发套件（2026-09-15 用户裁决：C 档派发须携 lane 句柄；成员侧通信走套件工具）
-  // 【gate-lite 第二批 · B（2026-09-17 用户裁决）】原枚举成员 `'GATE_SUBAGENT_OUTSIDE_LANES'` 已删除：
-  //   官方 agent-team profile 已 `disabled` 掉宿主 `subagent` / `subagent_fork`
-  //   （`dsh-experimental-agent-team-profile/cordis.patch.yml:10-14`）⇒ 闸门拦的工具在官方场景**不存在**；
-  //   `config.dispatch.gate` 收敛为**只留痕不拦**（`evaluateTierCDispatch` 恒 `ok:true` + `warnNote`）。
-  // 【gate-lite 第一批 · E② 清理（2026-09-17）】原枚举成员 `'GATE_SWARM_UNBOUND_REPORT'` 已删除：
-  //   该身份门随 Q-G2 用户裁决「删除这一项」整条移除（官方 Team 成员无 lane 绑定是常态，不是异常）；
-  //   成员回报改为 best-effort（消息照发 + 回显 `unbound`/`eventWritten`/`notice`），**无拒态** ⇒ 不占码表。
 
 /** 门禁通过：ok: true + 各门禁可选载荷 */
 export interface GateOk {

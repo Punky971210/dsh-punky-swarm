@@ -216,30 +216,6 @@ export function activeRunCount() {
   return activeRuns.size;
 }
 
-// ── 【2026-09-18 · Q-B **取消并发闸**（退役登记，勿回退）】 ───────────────────────────────
-// 上游裁决：`docs/engine-design-adjudication-20260918.md:182`（Q-B）——`concurrency` 不再作运行期准入判定，
-//   高并发不得被限流；`batch.concurrency` 保留为**纯声明 + 回显、零判定**（字段名/类型/缺省 5/落盘位/
-//   `batch_status` 回显/面板数字全部不变，见 `lib/wave-plan.js:838`、`lib/state/store.js:296`）。
-// 本段原为批级**容量**准入（批次 `concurrency-gate-20260917`，判据来源 `plan/gate-spec.md`）：
-//   判据式 `occupied(仅计 running) >= limit`、闸位单点（与 `setMember('running')` 同同步段）、超限零写入 +
-//   落 1 条 `gate.concurrency_blocked`、三条派发面（`lane_dispatch` / chain 自动派 / `member_status` 直派）共用。
-//   **该实现已整体删除**：`CONCURRENCY_EXCEEDED_CODE` / `CONCURRENCY_DEFAULT_LIMIT` /
-//   `CONCURRENCY_CANDIDATE_CAP` / `concurrencyLimitOf` / `concurrencyVerdictOf` / `concurrencyRejectMessage` /
-//   `assertConcurrencyAdmit` 的判定体与写入体、本模块内的调用点、以及只为让位面而引的 `isBatchTerminal`
-//   import：全部移除（引擎内**零运行期限流路径**）。
-// 兼容面（**只读，禁删**）：
-//   · `EVT_GATE_CONCURRENCY_BLOCKED` 常量冻结在 `lib/state/event-types.js`（历史批磁盘事件面读端不变）；
-//   · `lib/types/contracts.ts` / `.d.ts` 的 `GateErrorCode` 联合型已移除 `'GATE_CONCURRENCY_EXCEEDED'` 字面量
-//     （磁盘历史事件载荷里的 `code` 是 string 数据，不受 TS 联合型收窄影响 ⇒ 无兼容风险）。
-// 跨 lane 闭环（**已解除，2026-09-18**）：`lib/tools/core.js`（**B lane 写域**）对该执行点的 import 面（`:55`）
-//   与直派面调用点（`:1464`）已由 B lane 同批**删净** ⇒ 本模块**不保留任何退役占位/别名**（导出面零残渣）。
-//   时序留痕：占位曾在「并行 lane 未删净」窗口内短暂存在（理由 = ESM 缺导出是**加载期**错误，会让整包测试
-//   全红、掩盖真读数）；窗口关闭后即移除。该事实登记于本 lane 产物 `exec/engine-retire.md` §未决 U-1（已解除）。
-
-/** 【2026-09-18 · Q-B】并发闸执行点（判据 → 留痕 → 拒）**已整体删除**；导出面**零残渣**（无占位、无别名）。
- *  跨 lane 闭环事实：`lib/tools/core.js`（**B lane 写域**）已于同批删净其 import 面（`:55`）与直派面调用点
- *  （`:1464`）⇒ 本模块无需任何加载期兼容占位（占位窗口已关闭，见文件内「退役登记」段）。 */
-
 
 // ── 派发核心（**唯一实现**：工具面与链引擎共用，禁第二套） ──────────────────────
 // P2（批次 `p2-chain-autodrive-20260916`，lane e-chain）抽出：原实现内联在
@@ -372,7 +348,6 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
 //   · **C 档**：须携带**有效 lane 句柄**（`lane_dispatch` 发放；一次性 + TTL）。
 // 落地形态 = `config.dispatch.gate`：`'warn'`（缺省，**只留痕告警不拦**）。
 // 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**`'enforce'` 拒态已删** —— 原码
-//   `GATE_SUBAGENT_OUTSIDE_LANES` 不再存在：官方 agent-team profile 已 `disabled` 掉宿主
 //   `subagent`/`subagent_fork`（`dsh-experimental-agent-team-profile/cordis.patch.yml:10-14`）
 //   ⇒ 闸门拦的工具在官方场景不存在。现语义 = **只留痕不拦**（`evaluateTierCDispatch` 恒 `ok:true`
 //   + `warnNote`）；`readGateMode` 保留（配置面仍在，供审计/热更观测，不再决定拦截）。
@@ -417,7 +392,7 @@ export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inb
 /**
  * 纯函数：给定档位/工具名/参数文本/配置，判定 C 档派发面的**留痕**处置。
  * 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**恒 `ok:true`（不再拒）**：原 `mode==='enforce'`
- *   分支（拒 `GATE_SUBAGENT_OUTSIDE_LANES`）已随码删除（官方 profile 已 disable 宿主 `subagent`/`subagent_fork`）。
+*   分支已随码删除（官方 profile 已 disable 宿主 `subagent`/`subagent_fork`）。
  *   `mode` 仍回显（`warn`/`enforce` = 配置面事实，供审计观测），但**不再影响判定**；无有效句柄一律产 `warnNote`。
  * @returns {{applies: boolean, ok: boolean, mode: 'warn'|'enforce', handleReason: string|null, denyReason: null, warnNote: string|null}}
  */

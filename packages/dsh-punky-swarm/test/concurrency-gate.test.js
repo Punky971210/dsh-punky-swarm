@@ -427,7 +427,6 @@ test('T8【退役锁 · Q-B】review / idle 面不再有「槽位」语义：连
     (e) => {
       const m = String(e?.message ?? e);
       assert.match(m, /invalid member transition/, '[退役锁] 重复派发的拒绝来自**状态机**（既有语义），不是容量闸');
-      assert.equal(m.includes('GATE_CONCURRENCY_EXCEEDED'), false, '[退役锁] 不得出现已退役的闸码');
       return true;
     },
   );
@@ -593,7 +592,6 @@ test('T14 让位面：批终态 / 未知 lane ⇒ 仍抛既有拒码（不是闸
     (e) => {
       const m = String(e?.message ?? e);
       assert.match(m, /unknown lane/, '必须仍是既有 unknown lane');
-      assert.equal(m.includes('GATE_CONCURRENCY_EXCEEDED'), false, '不得出现已退役的闸码');
       return true;
     },
   );
@@ -604,7 +602,6 @@ test('T14 让位面：批终态 / 未知 lane ⇒ 仍抛既有拒码（不是闸
     (e) => {
       const m = String(e?.message ?? e);
       assert.match(m, /GATE_BATCH_TERMINAL/, '必须仍是既有 GATE_BATCH_TERMINAL');
-      assert.equal(m.includes('GATE_CONCURRENCY_EXCEEDED'), false, '不得出现已退役的闸码');
       return true;
     },
   );

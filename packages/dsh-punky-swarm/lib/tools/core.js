@@ -248,7 +248,7 @@ export function installDifficultyGuard(ctx, deps) {
       }
       // 门禁 4（派发面 · C 阶段，2026-09-16）：C 档下 `subagent`/`subagent_fork` 建议携带**有效 lane 句柄**；
       //   **B 档不受影响**（单步调研/单步派发）；A 档由门禁 3 拒（本判不重复）。
-      //   【gate-lite 第二批 · B（2026-09-17 用户裁决）】**已改为只留痕不拦**：原 `GATE_SUBAGENT_OUTSIDE_LANES`
+      //   【gate-lite 第二批 · B（2026-09-17 用户裁决）】**已改为只留痕不拦**，
       //   拒态随码删除（官方 agent-team profile 已 disable 宿主 `subagent`/`subagent_fork` ⇒ 官方场景下无拦截对象）。
       //   `dec.denyReason` 恒为 null（保留分支读法 = 结构不变，防读端漂移）；无句柄一律走 `warnNote` 留痕。
       //   句柄面：`lane_dispatch` 发放（一次性 + TTL）；引擎只读 `exec.arguments`，故句柄由任务包文本携带。
@@ -508,7 +508,6 @@ export function assertChainReady(team, { root = packageRoot() } = {}) {
 // ── gate-lite Q-G2（2026-09-17 用户裁决：「**删除这一项**」）：成员回报**目标解析**（身份门已删） ──────
 // 背景（普查 `docs/gate-census-20260917.md` + 本轮实测）：官方 Team 成员由宿主 `spawn_teammate` 拉起，
 //   **天然无 `member.dispatch` 绑定** ⇒ 「未绑定」是该场景的**常态**而非异常；原
-//   `GATE_SWARM_UNBOUND_REPORT` 把常态当拒绝（实测命中：`replay-lock` / `asset-chain` 两个官方成员的回报）。
 // 现口径 = **不再拒**，改 best-effort 解析（不猜批次、不静默）：
 //   ① 有 dispatch 绑定 ⇒ 既有路径逐字不变（owner 会话 + 绑定批次 + 绑定 lane）；
 //   ② 无绑定 ⇒ 目标批次由调用方**显式** `batchId` 给出（可选参数，缺省即无批次面），归属会话取宿主父会话
@@ -817,7 +816,7 @@ export function createCoreTools(ctx, deps) {
     }),
     defineTool({
       name: "batch_phase",
-      description: "批次阶段迁移：planning->running->paused->aborted|complete（终态后拒绝再写）。complete 前置：audit 层验收齐备（Tier3 门禁）。可选 manager={agentId,note?}：**legacy 登记面**（写批次字段 manager + batch.manager.raised 事件，只登记不改阶段，可单独调用）——【gate-lite 第二批 · A】Manager 在册判定的**新真源 = 官方 roster**（`ctx.get('agentTeams')` → `listMembers`；经 wave_plan/batch_status 的 `managerRoster` 回显，声明 raise 而无 Manager 落 `gate.manager_roster_gap`）；本登记**不再按 phase/agentId 拒绝**（原 GATE_MANAGER_TERMINAL / _PHASE_INVALID / _AGENT_ID_REQUIRED 三码已按用户裁决删除；空 agentId ⇒ 不写记录、不抛错）。批次按会话隔离，缺省取当前执行会话。迁移事由随事件落盘（`reason`），暂停类迁移缺省自动回填 `manual:batch_phase:<phase>`，不静默。",
+      description: "批次阶段迁移：planning->running->paused->aborted|complete（终态后拒绝再写）。complete 前置：audit 层验收齐备（Tier3 门禁）。可选 manager={agentId,note?}：**legacy 登记面**（写批次字段 manager + batch.manager.raised 事件，只登记不改阶段，可单独调用）——【gate-lite 第二批 · A】Manager 在册判定的**新真源 = 官方 roster**（`ctx.get('agentTeams')` → `listMembers`；经 wave_plan/batch_status 的 `managerRoster` 回显，声明 raise 而无 Manager 落 `gate.manager_roster_gap`）；本登记**不再按 phase/agentId 拒绝**（空 agentId ⇒ 不写记录、不抛错）。批次按会话隔离，缺省取当前执行会话。迁移事由随事件落盘（`reason`），暂停类迁移缺省自动回填 `manual:batch_phase:<phase>`，不静默。",
       parameters: {"batchId":{"type":"string","required":true},"phase":{"type":"string","enum":["running","paused","aborted","complete"]},"reason":{"type":"string","description":"相位迁移事由（写入 batch.phase 事件；缺省 manual:batch_phase:<phase>）"},"manager":{"type":"object","description":"Manager **legacy 登记**载荷：{agentId: 非空字符串, note?: 说明}；任意 phase 均可登记（含终态；幂等）；空/缺 agentId ⇒ 不写记录（返回 null，调用方按「既无 phase 又无 manager」如实报错）。**不构成在册判据**——在册以官方 roster 为准（managerRoster 回显）","additionalProperties":false,"properties":{"agentId":{"type":"string"},"note":{"type":"string"}}},"session":{"type":"string","description":"批次归属会话"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"manager":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}}}},

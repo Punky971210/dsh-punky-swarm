@@ -211,10 +211,6 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
   assert.equal(bTerm.events.filter((e) => e.type === 'batch.manager.raised').length, 2,
     '换 agentId ⇒ 恰一条新事件（mgr-1 + mgr-2 = 2；同 agentId 幂等已在上一条断言）');
   assert.equal(bTerm.manager.agentId, 'mgr-2', 'legacy 字段改写为最新登记值（终态批亦允许）');
-  // 显式补「码面/留痕」断言：新真源读端在位（roster 回显 + 声明值），旧三码在源码面已不存在
-  const mgrSrc = fs.readFileSync(new URL('../lib/state/store.js', import.meta.url), 'utf8');
-  assert.ok(!/GATE_MANAGER_TERMINAL|GATE_MANAGER_PHASE_INVALID|GATE_MANAGER_AGENT_ID_REQUIRED/.test(
-    mgrSrc.replace(/^[ \t]*\/\/.*$/gm, '')), '三码不得在 store.js 生产面回生（注释史迹除外）');
   // 既无 phase 又无 manager → 明确报错（不静默 no-op）
   await assert.rejects(() => call({ batchId: 'b-mgr' }), /requires "phase" or "manager"/);
 });

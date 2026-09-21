@@ -208,7 +208,7 @@ export const EVT_GATE_COMPLETE_BLOCKED = 'gate.complete_blocked';
 //   · **保留理由**：历史批磁盘事件流**真实存在**本事件（27 批中 5 批计数非 0，见
 //     `docs/engine-design-adjudication-20260918.md:93`）⇒ 删常量会让历史事件面**无法按名取**
 //     （`log_export` 的 `gate.*` 过滤 / `batch_status` 事件清单 / 事后审计取证）。
-//   · 原载荷契约（**历史数据留档**，逐字）：`{ lane, code:'GATE_CONCURRENCY_EXCEEDED', occupied, limit,
+//   · 原载荷契约字段（历史数据留档）：`{ lane, occupied, limit,
 //     limitSource, occupiedLanes[], candidateLanes[] }`。
 // 读端（不变）：`log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效）。
 export const EVT_GATE_CONCURRENCY_BLOCKED = 'gate.concurrency_blocked';

@@ -126,7 +126,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
         //   `laneBindingOf`/自动结算整链静默失效。
         //   现口径：提取不到持久 worker 会话即**显式留痕降级**（含宿主结构化形态 `background`/`foreground`
         //   = jobId/runId 非会话 id、`isError` 失败、键缺失三类成因），再 `next()`。
-        //   **不引入拒绝**（观察者纪律：恒 `next()`；`GATE_SUBAGENT_OUTSIDE_LANES` 已随 gate-lite 第二批删除）。
+        //   **不引入拒绝**（观察者纪律：恒 `next()`）。
         logger?.warn?.('[dsh-punky-swarm] dispatch register degraded（提取不到持久 worker 会话 ⇒ 本次不登记 · tool='
           + exec.name + ' · caller=' + caller + '）：键缺失/键名漂移，或结果为失败/非会话 id'
           + '（background jobId / foreground runId）——非静默降级，仅留痕不阻断');
@@ -147,10 +147,10 @@ export function installDispatchRegistration(ctx, deps = {}) {
         logger?.warn?.('[dsh-punky-swarm] lane handle rejected: ' + c.reason + '（lane=' + parsed.lane + '，退回意图路径）');
       } else if (exec.name === 'subagent' || exec.name === 'subagent_fork') {
         // B6（修 W5「静默降级」）：派发工具**未携带句柄**时**显式留痕**，再走既有意图兜底。
-        //   该码与对应拒绝分支**均已删除**（`GATE_SUBAGENT_OUTSIDE_LANES` 随 gate-lite 第二批 · B 删除；官方 profile 已 `disabled` 宿主委派工具）；此处的职责只有一个——**不静默**。
+        //   对应拒绝分支已删（官方 profile 已 `disabled` 宿主委派工具）；此处的职责只有一个——**不静默**。
         logger?.warn?.('[dsh-punky-swarm] dispatch without lane handle（' + exec.name + ' · caller=' + caller
           + '）⇒ 走意图兜底登记（**不再有拒绝码**：宿主委派工具已由官方 profile `disabled`、'
-          + '`GATE_SUBAGENT_OUTSIDE_LANES` 已随 gate-lite 第二批 · B 删除；本行只保证不静默）');
+          + '本行只保证不静默）');
       }
       // ③ resolveBatchContext(exec)：显式注入优先，缺省 = 同会话派发意图兜底（装配注入 resolveBatchContext 兜底）
       const hit = typeof resolveBatchContext === 'function'

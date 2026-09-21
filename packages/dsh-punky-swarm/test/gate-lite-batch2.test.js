@@ -157,20 +157,13 @@ function scan(dir, re, exts = ['.js', '.ts']) {
   return out;
 }
 
-// 【2026-09-21 改判】该码已按可达性审计裁定**字面删除**（连注释引用一并清除）⇒ 终态应为**lib 内零命中**；
-//   原断言「仅允许存在于 flows.js」在字面删除后不再成立（那处正是被清除的注释引用）。
-test('T4 C 防回生（字面删除后）：code: GATE_TEAM_ASSET_MISSING 生产形态在 lib/** 内**零命中**', () => {
-  const hits = scan(path.join(PKG, 'lib'), /code:\s*'GATE_TEAM_ASSET_MISSING'/);
-  assert.deepEqual(hits, [],
-    '该码已字面删除（含注释引用）⇒ 生产形态须零命中；若在 lib 内重现 ⇒ 红。实际：' + JSON.stringify(hits));
-});
+// 【N2 收口 · G3 合并（2026-09-22）】原 T4「GATE_TEAM_ASSET_MISSING 防回生」与 T5 的枚举零命中断言
+//   已合并至 test/retired-codes-lock.test.js（退役码单表锁）；T5 仅保留 d.ts 同步检查（生成物独有维度）。
 
-test('T5 E①/E②：dispatch.js 不再导出 UNBOUND_REPORT_CODE；枚举与生成物不再含该码', () => {
+test('T5 E①/E②：dispatch.js 不再导出 UNBOUND_REPORT_CODE；生成物 .d.ts 不再含该码', () => {
   const dispatchSrc = fs.readFileSync(path.join(PKG, 'lib/engine/dispatch.js'), 'utf8');
   assert.ok(!/export const UNBOUND_REPORT_CODE/.test(dispatchSrc), '死导出已删');
-  const tsSrc = fs.readFileSync(path.join(PKG, 'lib/types/contracts.ts'), 'utf8');
   const dtsSrc = fs.readFileSync(path.join(PKG, 'lib/types/contracts.d.ts'), 'utf8');
-  assert.ok(!/\| 'GATE_SWARM_UNBOUND_REPORT'/.test(tsSrc), '枚举成员已删（源）');
   assert.ok(!/'GATE_SWARM_UNBOUND_REPORT'/.test(dtsSrc), '枚举成员已删（生成物，重建后同步）');
 });
 
