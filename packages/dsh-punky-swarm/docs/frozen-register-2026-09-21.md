@@ -112,14 +112,14 @@
 
 **进展（R3 波，2026-09-21）**：本表 9 项已逐枚判读处置 ⇒ **余 2 项刻意不补**（`GATE_ARTIFACT_MISSING` 假缺口 · `GATE_NO_DECLARATION` 不可达内部分支）。
 判读口径「真缺口 ⇒ 补测 / 断言松动 ⇒ 收紧 / 不可达 ⇒ 只登记 + 绊线」与逐枚证据见 `docs/gate-assertion-blueprint-2026-09-21.md`：
-§6（R3-2 判读表）· §6.1（`GATE_DIFFICULTY_*` 声明面遮蔽）· §8（R3-3 判据「两处」勘误 + fail-open 缺口）· §9（R3-4 真 E2E）。
+§6（R3-2 判读表）· §6.1（`GATE_DIFFICULTY_*` 分层口径，**2026-09-21 §11.2 勘误：非失实**）· §8（R3-3 判据「两处」勘误 + fail-open 缺口）· §9（R3-4 真 E2E）· §11（A1/A2/A3 用户裁定）。
 
 | 波 | 覆盖 | 处置 |
 |---|---|---|
 | R3-1 | `GATE_COMPLETE_EXEC_PENDING` · `GATE_COMPLETE_NO_AUDIT` | 生产路径 E2E ⇒ **离榜** |
 | R3-2 | `GATE_EXEC_INPUT_MISSING` · `GATE_SKILL_MISSING` · `GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH` · `GATE_EVENT_CONST_MISSING` | 补测（末项为**降级覆盖**：围栏 + 前置面） |
 | R3-2 | `GATE_HANDOFF_LEGACY_PASSTHROUGH` · `GATE_DIFFICULTY_RATIONALE_MISSING` | 收紧既有断言（补载荷码 / 锁全码） |
-| R3-2 | `GATE_DIFFICULTY_INVALID` | **不可达**（`parameters` 声明面遮蔽）⇒ 登记 + 绊线（fail-closed，非安全洞） |
+| R3-2 | `GATE_DIFFICULTY_INVALID` | **已登记分层口径**（内核分支命名，非外显契约）⇒ **保留 + 绊线**，不判失实（2026-09-21 用户裁定勘误，见 §11.2） |
 | R3-2 | `GATE_ARTIFACT_MISSING` · `GATE_NO_DECLARATION` | **刻意不补**（假缺口·哨兵 / 不可达内部分支）⇒ 只登记 |
 | R3-4 | `GATE_EVENT_CONST_MISSING` | 降级覆盖 ⇒ **真 E2E**（加载期改源 ×3 档 + 负向对照） |
 

@@ -148,7 +148,10 @@
 
 ### 6.1 本波最重要的发现：归属被**声明面**改写
 
-`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 的**归属已失实**：同一不变量被**两层**判据覆盖，而 `parameters`（声明面）比引擎门（实现面）**更严** ⇒ 实现面成死码。
+> **⚠ 2026-09-21 勘误（用户裁定 A2，见 §11.2）**：本节标题与「归属失实」的**定性**是错的——该分层是**既有已登记的设计口径**（`CHANGELOG.md:314` / `docs/governance-technical.md:81` / `discipline.md:328` 三处），引擎码被登记为「**内核显式分支**的命名，仅在绕过 schema 的调用路径可见，勿当作可 grep 到的外部错误码」。
+> **观测事实不变**（外部可观测量 = `invalid arguments`，引擎码当前不可达），**结论改判**：不是「契约失实」，是「**内核兜底 + 外显形态分离**」。`lib/**` 与 `description` **一字不改**；绊线保留。以下原文按「勘误后」阅读。
+
+`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 的**外显归属**被声明面接管：同一不变量被**两层**判据覆盖，而 `parameters`（声明面）比引擎门（实现面）**更严** ⇒ 实现面在**常规调用形态**下不可达（保留为绕过 schema 路径上的兜底）。
 
 - **方向是 fail-closed**（拒得更早，不是更少）⇒ **不是安全洞**，优先级低。
 - 但 `assign_check` 的 `description` **逐字宣称**「不填即拒（`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING`）」⇒ **契约归属失实**：按码分类的消费者（审计按 `code` 归类、外部 catch 该码）**永远等不到**这两个码。
@@ -495,3 +498,42 @@ R3-2 已把无断言项从 9 降到 2，但 **`docs/frozen-register-2026-09-21.m
 4. 全量测试 **Δfail = 0**（新增文件在 `scripts/audit/`，不进测试计数；静态基线零漂移）。
 5. `git diff --stat -- lib` **空**。
 
+---
+
+## 11. 2026-09-21 用户裁定（A1 / A2 / A3）与两处勘误
+
+### 11.1 A1 · `GATE_BATCH_CONTROL_ACTION_INVALID`：**冻结**（不删、不改、不拆 OR）
+
+- **用户裁定**：「删掉或冻结」。
+- **实测否决了「拆 OR + 直调补断言」这条路**：`defineTool`（`node_modules/@deepseek-ai/dsh-tools/lib/index.js:836`）把参数校验**包在返回对象的 `execute` 内部**——`:862` 是包装体、`:864` `throw new ToolArgsError(violations)`，位置在 `userExecute` **之前**。⇒ 直调 `tool.execute(args, ctx)` **同样走校验**，**不存在「绕过 `parameters` 的调用形态**」（`userExecute` 闭包外部拿不到）。
+- ⇒ 方案①（补一条引擎面直调断言）**不可行**；方案③（删分支 / 改 `description`）动 `lib/**` 且会丢 fail-closed 兜底、撞「不得以『无断言』为删除理由」。
+- **裁定：冻结**。保留现有 OR 断言与引擎兜底分支，登记为「声明面遮蔽 + 内核兜底」，与 `GATE_DIFFICULTY_INVALID` 同族。**绊线**：`action` 的 `enum` 声明一旦被移除/放宽，OR 的第二支即升为真断言 ⇒ 届时改判。
+
+### 11.2 A2 · `assign_check` 保留；「不可达」的**定性勘误**（非失实，是既有分层口径）
+
+- **用户裁定**：保留 `assign_check`；Agent 需填的参数是对的；门禁也生效过 ⇒ 核查「哪里不符合预期」。
+- **核查结论：我的事实观测对，定性错。** 三处既有登记早已写明该分层，且是**设计意图**：
+  - `CHANGELOG.md:314`：「`difficulty` 枚举/缺参由**工具参数 schema 层**先行拒（`invalid arguments: …`）；`GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 是同一拒收在**内核显式分支**的命名（勿当外部错误码 grep）」
+  - `docs/governance-technical.md:81`：「码字 `GATE_DIFFICULTY_INVALID` 是同一拒收在**内核显式分支**的命名（**仅在绕过 schema 的调用路径可见**，**勿当作可 grep 到的外部错误码**）」
+  - `presets/punky-preset/references/discipline.md:328`：「段一 · 框架参数面：宿主在进入 `execute` **之前**按工具参数 schema 拒…文案由**宿主**生成，**不带** `GATE_*` 引擎码」
+- ⇒ 「门禁也生效过」成立：该分支在 schema 加 `required`/`enum` 之前是**唯一防线**，且按登记它至今仍是「绕过 schema 的调用路径」上的兜底。我在 R3-2 把它当作新发现并定性为「归属失实」，是**未先检索既有登记**的流程缺陷，**不是代码缺陷**。
+- **处置**：`lib/**` 零改动、`description` 一字不改；§6.1 结论改判；绊线保留（schema 一旦放宽 ⇒ 引擎码重新外显 ⇒ 转红提示改判）。
+- **附带一处措辞偏差（如实登记，本波不动）**：`discipline.md:328` 的「宿主在进入 `execute` **之前**」，实测是「`defineTool` 包装体内、用户 `execute` 体之前」（同 §11.1）。语义无误但易读成「宿主层、插件无控制权」。属 `presets/**`，归资产会话。
+
+### 11.3 A3 · `sectionLineHit` **不是幻觉**（实证）；plan 产出规格与判据**正面冲突**（新增，须裁定）
+
+- **实证（非幻觉）**：`lib/state/gates.ts:399` `function sectionLineHit(content: string, section: string): boolean`；构建产物 `lib/state/gates.js:352` 同；且被**真实消费**——`gates.ts:978` `requiredSections.some((s) => sectionLineHit(content, s))`、`:987` 子章节判据。⇒ §8.2「同文件内既有行首锚定 + 整行匹配的判据函数」这一论据成立。
+- **你拟定的 plan 产出规格** `C://Users//Administrator//.jiuwenswarm//agent//workspace//skills//spec-writing//SKILL.md` 与现行判据**正面冲突**：该规格 13 章全为英文——`## Overview` / `## Problem` / `## Solution` / `## Requirements`（`### Functional` `### Non-Functional`）/ `## API Design` / `## Key Dependencies` / `## API Contracts 引用` / **`## Acceptance Criteria`** / `## Testing Strategy` / `## Success Metrics` / `## Timeline` / `## Open Questions`；**无 `## 验收标准`、无 `## 约束`** ⇒ 照此规格产出的每份 spec **都会被 `GATE_PLAN_CONTRACT` 拒**（`gates.ts:994` 要求两章齐备）。
+- ⇒ A3 的实质**上移一层**：不再是「`includes` vs `sectionLineHit` 的形态之争」，而是「**章节名字面量是否与产出规格一致**」；且引擎**已有配置化通道** `required_sections` + `sectionLineHit`（`gates.ts:978`）⇒ 硬编码的 `:903`/`:994` 是与该通道并存的**第二套判据**（这是 §8.1「无抽取对象」之外、更值得抽的一处）。
+- **三选一（须你裁定）**：
+  ① **规格本地化**：模板保留 spec-writing 骨架，但把 `## Acceptance Criteria` **映射**为中文 `## 验收标准`、`## Requirements`/`### Non-Functional` 映射为 `## 约束`。⇒ 引擎判据**零改动**，可立即开工。
+  ② **判据改英文名**（或中英任一命中）。⇒ **行为变更**，须先解冻 W6。
+  ③ **判据配置化**：把 `:903`/`:994` 的硬编码章节名收敛进 `required_sections`（或新增 `plan_spec.sections` 声明面），规格可换而代码不改；**顺带消掉 §8.2 的 fail-open**（配置化时一并定命中形态）。⇒ 代价最大，且与 A4 新引擎形态同向。
+- **我的建议**：③ 与你的新引擎形态（更细拆分 / 黑板可变）同向，但属门禁行为与结构变更 ⇒ 应随新引擎独立波落地；**过渡期若要先用 spec-writing 规格，取 ①**（零改动即可开工）。
+
+### 11.4 本波（§11）验收判据
+
+1. `git diff --stat -- lib` **空**；`git diff --stat -- test` **空**（纯文档 + 生成器文案）。
+2. `REGISTER_OUT=<preview> node scripts/audit/gen-register.mjs` 与正档 diff **零漂移**。
+3. `node scripts/audit/gates.mjs --check`：拒码集合 **66 → 66**；无断言项 **2 → 2**。
+4. 全量测试 **Δfail = 0**（文档与生成器改动不进测试计数；若跑则须仍为 1729 / 0 fail / 4 todo）。
