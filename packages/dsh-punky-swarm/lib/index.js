@@ -534,7 +534,7 @@ export const apply = (ctx, config = {}) => {
   };
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
   // 派发写侧登记点（dispatch-register.js）：
-  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork/send_message）
+  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
   //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
   //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
   //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，

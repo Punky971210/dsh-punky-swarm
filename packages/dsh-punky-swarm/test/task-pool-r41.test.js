@@ -238,13 +238,13 @@ test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）',
 test('R4-1a-5 注册表：`task_pool` 入表、不占 deny、不占模式门（冻结序列零变化）', () => {
   const names = SUITE_TOOLS.map((t) => t.name);
   assert.ok(names.includes('task_pool'), '应已注册');
-  assert.equal(SUITE_TOOLS.length, 32, '套件工具全集 29 → 30 → 31 → 32');
+  assert.equal(SUITE_TOOLS.length, 36, '套件工具全集 29 → 30 → 31 → 32 → 36（S2 宿主连续控制族 4 件）');
   assert.equal(SUITE_DENY_TOOLS.includes('task_pool'), false, '只读视图：不入成员 deny');
   assert.equal(MODE_GATED_TOOLS.includes('task_pool'), false, '零写入：不占模式门');
   // 前 14 条 deny 冻结序列的相对顺序零变化（新项只允许追加，不得重排）
-  assert.equal(SUITE_DENY_TOOLS.length, 16, 'deny 集 14 → 15 → 16（+batch_tasks_add +task_update）');
+  assert.equal(SUITE_DENY_TOOLS.length, 20, 'deny 集 14 → 15 → 16 → 20（+batch_tasks_add +task_update +S2 连续控制族 4 件）');
   assert.equal(SUITE_DENY_TOOLS[0], 'assign_check', 'deny 序列首项不变');
-  assert.equal(MODE_GATED_TOOLS.length, 12, '模式门集 10 → 11 → 12（+batch_tasks_add +task_update）');
+  assert.equal(MODE_GATED_TOOLS.length, 12, '模式门集 10 → 11 → 12（+batch_tasks_add +task_update；S2 四件为宿主工具不占模式门）');
   // R4-2：`task_update` = 池内加边（图变更写入口 #2）⇒ 入 deny + 入模式门（成员不得改图）
   assert.ok(names.includes('task_update'), 'task_update 应已注册');
   assert.equal(SUITE_DENY_TOOLS.includes('task_update'), true, '图变更写入口 ⇒ 入成员 deny');

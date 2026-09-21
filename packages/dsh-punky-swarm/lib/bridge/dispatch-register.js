@@ -30,17 +30,23 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
 import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from './lane-handle.js'; // 派发句柄（C 档唯一凭证）
 
-// 派发类工具名单（装配注入可经 deps.tools 覆盖/扩列）；send_message 为既有 worker 唤醒（0g），
-// 其目标 worker 会话 id 取 **`args.agent_id`**（**宿主实签名**：`{agent_id, message}`，`required=['agent_id','message']`，
-// 2026-09-18 本会话 `tools_schema` 实读；旧键名 `subagent_id` 仅作**回落防御**保留）。
-// 【T-14/G-10#3 · 2026-09-18 裁定】名单**不改**（`subagent*` 不可用是官方 profile 的**配置事实**，
-//   不是引擎契约；改名单会在别的 profile 下丢登记）。
-export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork', 'send_message'];
+// 派发类工具名单（装配注入可经 deps.tools 覆盖/扩列）。
+// 【2026-09-22 · S2 one-shot 化 · send_message 唤醒退役（用户裁定「彻底功能分离」，勿回退）】
+//   原名单含 `send_message`（0g worker 唤醒：对 continuable 常驻子会话投递消息触发其下一轮）。
+//   dispatch 已改**一次性执行器语义**（`lib/engine/dispatch.js` 头部「one-shot 化」）：worker 跑完即弃，
+//   **无可唤醒对象** ⇒ 本名单移除 `send_message`；唤醒/续聊/coldResume 等 continuous 能力整体归
+//   teammate runner（agent-team 方案，设计稿 §4/B5）。配套：worker deny 追加连续控制族
+//   （`suite.js` 表尾 4 件）——成员对 `send_message` 的调用面在 deny 面收口，登记面不再观察。
+//   兼容面（**只读，禁删**）：`extractWorkerSessionId` 的 `send_message` 分支**保留**（纯函数防御面，
+//   deps.tools 显式注入仍可观察；R1 纯函数回归继续锁死其键名解析正确性）。
+export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork'];
 
 // 从 post-execute (exec, result) 提取被派发 worker 会话 id（childId/agentId）。
 // 宿主结构化 result：subagent → ToolExecutionResult.value = {kind:'continuable', subagentId}（continuable 后台模式，
 // subagentId = startContinuable childId = 会话 id）；background jobId / foreground runId 非会话 id（不登记——
-// 无持久 worker 会话可归属，静默）；send_message → 目标在 `args.agent_id`（宿主实签名；`args.subagent_id` 作回落）。提取不到 → null（不登记）。
+// 无持久 worker 会话可归属，静默）；send_message → 目标在 `args.agent_id`（宿主实签名；`args.subagent_id` 作回落）。
+// 【S2 退役登记（2026-09-22）】`send_message` 已退出观察名单（one-shot 化）；本函数分支为**纯函数防御面**保留
+//   （deps.tools 显式注入仍可观察；R1 回归锁死其键名解析）。提取不到 → null（不登记）。
 export function extractWorkerSessionId(exec, result) {
   if (!exec || typeof exec.name !== 'string') return null;
   const name = exec.name;

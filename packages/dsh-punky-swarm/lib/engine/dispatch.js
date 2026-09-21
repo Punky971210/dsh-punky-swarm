@@ -51,8 +51,8 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 // 【2026-09-18 · Q-B】原 `isBatchTerminal` 只为并发闸判据的「让位面」而引（`concurrencyVerdictOf`
 //   的 `batch-terminal` 分支）；闸取消后本模块**零读点** ⇒ import 一并删除（不保留第二套批终态判据）。
 
-/** 成员 deny 集（B2 的 deny 清单）+ 模式门覆盖集：**单点注册表在 `engine/suite.js`**（`SUITE_TOOLS`），
- *  本模块 `import` 后**再导出**（导出名与内容逐字不变：13 项、`Object.freeze`；不得退回字面量）。
+/** 成员 deny 集（B2 的 deny 清单，S2 起含宿主连续控制族 4 件 ⇒ 20 项）+ 模式门覆盖集：**单点注册表在 `engine/suite.js`**（`SUITE_TOOLS`），
+ *  本模块 `import` 后**再导出**（导出名不变、内容随注册表演进；不得退回字面量）。
  *  ⚠ 必须 `import` + `export {}` 两句分开写：`export … from` 只做透传、**不建本地绑定**，
  *  而本模块的 `buildStartRequest({ denyTools = SUITE_DENY_TOOLS })` 缺省值依赖本地符号（活体实测报 ReferenceError）。
  *  口径边界、`subagent`/`subagent_fork` 必 deny 的理由、以及 `mcp__*` 不入表的口径，均随实现迁至 `suite.js` 表头注释。 */

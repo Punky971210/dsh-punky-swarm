@@ -68,9 +68,14 @@ const FROZEN_DENY = [
   'batch_tasks_add',
   // N1-R4-2：池内任务**加边**（图变更写入口 #2）⇒ 同上（成员不得改图）
   'task_update',
+  // S2（2026-09-22 · one-shot 化）：宿主连续控制族 ⇒ 成员整体 deny（一次性执行器无可唤/续聊/等待/打断对象）
+  'send_message',
+  'interrupt_agent',
+  'list_agents',
+  'wait_agent',
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
-const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update'];
+const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release', 'asset_claim',
@@ -101,7 +106,7 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（16 项，既
   }
   // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 13 项**顺序逐字不变 + P3a 追加项）
   const derivedDeny = SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
-  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（16 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update；task-22 后 handoff_submit 不入 deny）');
+  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（20 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 4 件；task-22 后 handoff_submit 不入 deny）');
   assert.deepEqual([...SUITE_DENY_TOOLS].filter((n) => !POST_LEGACY_DENY_ADDED.includes(n)), LEGACY_DENY,
     '去掉 P3a 之后追加的项后必须**逐字等于**旧 13 项序列（新项只允许追加，不得重排/删项）');
   assert.equal([...SUITE_DENY_TOOLS].indexOf('batch_control'), BATCH_CONTROL_INSERT_AT,
@@ -271,7 +276,7 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   //   其「成员可调、不落模式门」的行为面证据落在 ④ 反向抽样。
   const { tools } = createTools(ctx, { store, root, config, readConfig: () => config });
   const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
-  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export']; // 宿主派发工具 + 可选能力组（logs）
+  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent']; // 宿主派发工具 + 宿主连续控制族（S2）+ 可选能力组（logs）
   assert.deepEqual(SUITE_TOOLS.map((t) => t.name).filter((n) => !byName[n]), NOT_REGISTERED_BY_DEFAULT,
     '表内未注册的只允许非默认注册三件（其余必须真实注册）');
   assert.deepEqual(tools.map((t) => t.name).filter((n) => !SUITE_TOOLS.some((t) => t.name === n)), [],

@@ -101,3 +101,13 @@ durable 会话 / 信箱唤醒 / coldResume / wait_agent / interrupt_agent / fork
 - **批内 E2E 说明**：`dsh-agent-loop-testkit` 未随运行时安装（devDependency）⇒ 真实宿主 one-shot E2E 留待下一次活体批次（与 `suite-live` 同路径）；批内验收 = 单测全绿 + V-1/V-2/V-3 源码级核。
 
 - S2（唤醒退役 + deny 收口）· S3（`subagent/end` 观察桥）待续。
+
+## §9 S2 台账 + S3 作废登记（2026-09-22 00:3x）
+
+- **S2 ✅ 已落地**：① `suite.js` 表尾追加**宿主连续控制族 4 件**（`send_message`/`interrupt_agent`/`list_agents`/`wait_agent`，memberDeny:true / modeGate:false / 宿主工具不占模式门）⇒ `SUITE_TOOLS` 32→**36**、`SUITE_DENY_TOOLS` 16→**20**（worker `toolFilter.deny` 经 `buildStartRequest` 缺省自动收口）；② `dispatch-register.js` `DEFAULT_DISPATCH_TOOLS` 移除 `send_message`（退役登记照 Q-B 格式；`extractWorkerSessionId` send_message 分支保留为纯函数防御面）；③ `lib/index.js`:537 注释同步。
+
+- **冻结面普查**：`suite-consistency`（FROZEN_DENY 精确集 +4 / POST_LEGACY_DENY_ADDED +4 / NOT_REGISTERED_BY_DEFAULT +4）、`task-pool-r41`（36/20/12 三断言）、`dispatch-register`（R8 契约改两件；R4 改「退役透传零登记零告警」；R4b 载体迁移到 subagent 载荷无 id——T-14/G-10#3 不静默锁保留在在役路径）；受影响 8 套件 **117/117 绿**。
+
+- **S3 ⏹ 作废登记（防重复建设）**：装配面**已存在** `installAutoSettle`（P3a 规格装配，`lib/index.js:565`）——订阅宿主 `subagent/end`（`global:true` 硬性要求）+ `info.id → dispatchIndex` 映射（V-3 的对齐在生产面早被消费）→ `autoSettleLane` 单点判定（复用 Tier3 校验链，缺省 onFail=pause）。本方案 §2-S3 的「观察桥」是其子集，**不另建第二座桥**；「`lane.worker_ended` 留痕事件」随自动结算的既有事件面（member.settled / auto.settle.*）覆盖，零缺口。
+
+- 验收口径同 S1（4 预期红 + 环境类偶发 ⇒ 非环境类 0）。

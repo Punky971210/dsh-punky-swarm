@@ -321,9 +321,9 @@
       "todos": 0
     },
     "test/dispatch-register.test.js": {
-      "asserts": 72,
+      "asserts": 73,
       "blankLines": 20,
-      "lines": 365,
+      "lines": 367,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -955,7 +955,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 40,
       "blankLines": 17,
-      "lines": 305,
+      "lines": 310,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1217,7 +1217,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T16:13:18Z",
+  "generatedAt": "2026-09-21T16:45:53Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1231,10 +1231,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8426,
+    "asserts": 8427,
     "blankLines": 3986,
     "files": 152,
-    "lines": 44429,
+    "lines": 44436,
     "tautologies": 0,
     "tests": 1738,
     "todos": 4

@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派发登记点测试（写侧登记：member_status running 意图 → subagent post-execute → member.dispatch 落批）。
 // 覆盖：R1 提取纯函数（结构化 result 各形态）；R2 真实登记路径（member_status running 意图 → subagent
 // post-execute → member.dispatch 事件落批 + dispatchIndex 可查）；非 Manager 派发不登记（无登记静默降级语义）；
-// R4 send_message 重复唤醒幂等（不重复登记）；R4b 提取失败 ⇒ 显式降级告警（T-14/G-10#3）；R5 装配层端到端（apply 真实装配：登记 → 归属命中 → escalation
+// R4 send_message 唤醒已退役（S2 one-shot 化）：退役透传零登记；R4b 提取失败 ⇒ 显式降级告警（T-14/G-10#3，载体迁移到 subagent）；R5 装配层端到端（apply 真实装配：登记 → 归属命中 → escalation
 // 计数 → paused——读侧骨架零改动生效）；R6 装配注入 resolveBatchContext 显式路径（不经 member_status）。
 // 标注（如实）：governance-escalate.test.js 原用 member.dispatch 直写模拟「映射命中」前置——
 // 语义 = escalation 关态零路径 / 记录抛错隔离，与登记点机制解耦；保持原样不改（直写 = 读侧 fixture 合法形态），
@@ -160,34 +160,36 @@ test('R3: 未取到批上下文（无 member_status 意图，非 Manager 派发�
   }
 });
 
-// ── R4：send_message 重复唤醒幂等（同一 worker 已登记 → 不重复 member.dispatch）──
-test('R4: 已登记 worker 再次 send_message 唤醒 → 幂等跳过（不重复事件）', async () => {
+// ── R4：send_message 唤醒退役（S2 one-shot 化，2026-09-22，勿回退）──
+// 原「重复唤醒幂等」语义随 one-shot 化退役：一次性 worker 跑完即弃，**无可唤醒对象** ⇒ send_message
+// 退出观察名单 ⇒ 其 post-execute 走 ② 透传（**零登记、零告警**，与任意非派发工具同族）。
+// 唤醒/续聊/coldResume 等 continuous 能力归 teammate runner（agent-team 方案，设计稿 §4/B5）。
+test('R4: send_message 已退役出观察名单 → 零登记零告警（透传，与任意非派发工具同族）', async () => {
   const root = tempRoot('punky-dr4-');
   const aux = seedRunning(root, 'sess-b', 'b-r4');
   const ctx = assemblyCtx();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
-    // spawn 登记 ws-r4
+    // spawn 登记 ws-r4（在役路径不变）
     await dispatchPostAll(ctx, execOf('member_status', { session: 'sess-b', batchId: 'b-r4', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
     await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r4'));
-    // 再次唤醒（send_message 同 worker，宿主键名 agent_id）——意图已消费、且 dispatchIndex.has → 幂等跳过
-    await dispatchPostAll(ctx, execOf('member_status', { session: 'sess-b', batchId: 'b-r4', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
+    // 退役后的 send_message（两种键名形态）→ 不在观察名单 ⇒ 透传，零新增登记
     await dispatchPostAll(ctx, execOf('send_message', { agent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm2' } });
-    // 回落键名同 worker（subagent_id）→ 亦幂等跳过（提取成功 ⇒ 不产降级告警）
     await dispatchPostAll(ctx, execOf('send_message', { subagent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm3' } });
     const b = aux.readBatch('sess-b', 'b-r4');
-    assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length, 1, '同一 worker 仅 1 条登记事件');
+    assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length, 1, '仅 spawn 那 1 条登记');
     assert.equal(reg.count(), 1);
+    assert.equal(ctx.calls.warn.filter((w) => w.includes('dispatch register degraded')).length, 0, '退役工具透传 ⇒ 零降级告警（非提取失败）');
   } finally {
     reg.dispose();
   }
 });
 
 // ── R4b：**提取失败 ⇒ 显式降级告警（不静默漏登记）**——T-14/G-10#3 的核心修复锁 ──
-// 回归缺陷：官方 profile 下 `subagent*` 不在宿主工具面（其告警分支恒不进），而 `send_message` 原读错键名
-// （`args.subagent_id`）⇒ 提取恒 null ⇒ `return next()` **零告警漏登记**，下游 laneBindingOf/自动结算静默失效。
-test('R4b: send_message 键名漂移（既非 agent_id 亦非 subagent_id）⇒ 显式降级告警 + 零登记（不静默）', async () => {
+// 【S2 迁移登记（2026-09-22）】原用 send_message 键名漂移作载体；send_message 退役出观察名单后，
+//   本锁迁移到**在役路径**（subagent 载荷无会话 id）——告警保护面不变，载体随名单演进。
+test('R4b: 派发工具提取失败（subagent 载荷无会话 id）⇒ 显式降级告警 + 零登记（不静默）', async () => {
   const root = tempRoot('punky-dr4b-');
   const aux = seedRunning(root, 'sess-b', 'b-r4b');
   const ctx = assemblyCtx();
@@ -196,11 +198,11 @@ test('R4b: send_message 键名漂移（既非 agent_id 亦非 subagent_id）⇒ 
   try {
     // 前置意图在场（否则「不登记」会被 T16 意图缺失掩盖，测不到提取失败这一因）
     await dispatchPostAll(ctx, execOf('member_status', { session: 'sess-b', batchId: 'b-r4b', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
-    // 宿主键名再漂移：worker 会话 id 落在未知键上 ⇒ 提取不到
-    await dispatchPostAll(ctx, execOf('send_message', { worker_id: 'ws-r4b', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm9' } });
+    // 载荷无任何会话 id 键 ⇒ 提取不到
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), { isError: false, value: {} });
     const b = aux.readBatch('sess-b', 'b-r4b');
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, '提取不到 ⇒ 零伪登记');
-    assert.equal(index.has('ws-r4b'), false, 'dispatchIndex 无映射');
+    assert.equal(index.size, 0, 'dispatchIndex 无映射');
     assert.ok(ctx.calls.warn.some((w) => w.includes('dispatch register degraded')), '提取失败留痕 warn（不静默漏登记）');
     // 观察者纪律不变：告警不阻断（listener 恒 next()，异常面仍零 isolate warn）
     assert.equal(ctx.calls.warn.filter((w) => w.includes('dispatch registration failed')).length, 0);
@@ -278,9 +280,9 @@ test('R7: ctx.on 缺失 → installDispatchRegistration inert（installed:false�
   assert.doesNotThrow(() => reg.dispose());
 });
 
-// R8：DEFAULT_DISPATCH_TOOLS 契约（登记点观察名单 = 派发类工具）
-test('R8: DEFAULT_DISPATCH_TOOLS 含 subagent/subagent_fork/send_message', () => {
-  assert.deepEqual([...DEFAULT_DISPATCH_TOOLS].sort(), ['send_message', 'subagent', 'subagent_fork'].sort());
+// R8：DEFAULT_DISPATCH_TOOLS 契约（登记点观察名单 = 派发类工具；send_message 已随 S2 退役，2026-09-22）
+test('R8: DEFAULT_DISPATCH_TOOLS = subagent/subagent_fork（send_message 已退役出名单）', () => {
+  assert.deepEqual([...DEFAULT_DISPATCH_TOOLS].sort(), ['subagent', 'subagent_fork'].sort());
 });
 
 // ── R9：派发句柄纯函数（发放 / 解析 / 校验 / 一次性消费 / TTL / 悬挂视图）──
