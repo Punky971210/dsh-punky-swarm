@@ -37,7 +37,7 @@ import { laneProgressClear, laneProgressWrite } from './resume.js'; // 断点指
 import { EXEMPT_GATE_CODES, normalizeExemptPayload } from './lane-exempt.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除）
 import { findTask } from './task-utils.js';
-import { buildWavePlan } from '../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化（判据与建批期同源）
+import { buildWavePlan, LAYERS } from '../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化（判据与建批期同源）
 // 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
 // 违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
@@ -384,13 +384,16 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       if (ids.includes(id)) throw new Error('task append rejected: 本次追加内 id 重复 ⇒ ' + id);
       ids.push(id);
     }
-    // ★ 结构性保证（2026-09-21 18:5x 用户裁定）：**引擎不提供成环回路** ⇒ 不做「成环断言」（那属冗余检查）。
-    //   做法：追加任务的 `deps` **只许指向批次内既有任务**——不得指向本次新增的任务、不得自指。
-    //   ⇒ 新增任务之间无边、新增任务只依赖既有 ⇒ **成环在结构上不可能**（无需运行期检测）。
-    //   对比：原实现调 `topoWaves` 判环，属「为不可能发生的状态加禁止性断言」，已按裁定去除。
+    // ★ 结构性保证（2026-09-21 18:5x 用户裁定 + 19:5x 全局化）：**引擎不提供成环回路** ⇒ 不做「成环断言」。
+    //   做法（与建批期**同一套**约束，见 `wave-plan.ts#validateDepsStructure`）：
+    //     ① `deps` 只许指向批次内**既有**任务（不得指向本次新增、不得自指）⇒ 已声明在先
+    //     ② 只许指向**同层或上游层**（generic 不参与层序判定）
+    //   ⇒ 新增任务之间无边、只依赖既有且层序不降 ⇒ **成环在结构上不可能**。
+    const layerIdx = (v) => (v == null ? null : LAYERS.indexOf(String(v)));
     for (const t of list) {
       const id = String(t.id).trim();
       const deps = t && Array.isArray(t.deps) ? t.deps : [];
+      const cur = layerIdx(t.layer ?? null);
       for (const d of deps) {
         if (typeof d !== 'string' || d.trim().length === 0) {
           throw new Error('task append rejected: deps 元素须为非空字符串（任务 ' + id + '）');
@@ -398,6 +401,13 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         if (!existing.has(d)) {
           throw new Error('task append rejected: deps 只能指向批次内**既有**任务 ⇒ ' + d
             + '（不得指向本次新增的任务，亦不得自指；这是「不成环」的**结构性保证**，非断言检查）');
+        }
+        const up = (batch.wavePlan ?? []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []))
+          .find((x) => x && x.id === d);
+        const upl = layerIdx(up?.layer ?? null);
+        if (cur != null && upl != null && upl > cur) {
+          throw new Error('task append rejected: deps 只许指向**同层或上游层** ⇒ 任务 ' + id
+            + '（层 ' + String(t.layer) + '）不得依赖下游层 ' + d + '（层 ' + String(up?.layer) + '）');
         }
       }
     }
@@ -700,7 +710,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         // 载荷兼容：GATE_ENTRY_MISSING 用 `missing`；GATE_AUDIT_CRITERIA_MISSING（P1）等用 `problems`。
         //   **取非空者**：旧写法 `g.missing ?? g.problems` 在「missing 存在但为空数组 + problems 有内容」时会吞掉 problems
         //   ⇒ 抛错文案只剩码字、丢掉可执行提示（历史实机复验：留痕事件里 problems 是全的，但工具抛错无细节）。
-        //   改后取非空者，两类门禁的抛错都带回提示。注：本条注释原引用的 GATE_MANAGER_NOT_RAISED 已随
+        //   改后取非空者，两类门禁的抛错都带回提示。注：本条注释原引用的 「未拉起 Manager」码(已删) 已随
         //   gate-lite 第二批 A 项删除（该门整体移除），提示取非空者这一**机制**保留不变。
         const detail = (g.missing && g.missing.length) ? g.missing : (g.problems ?? []);
         // P1 交接门拒态（2026-09-17）：码 = `GATE_HANDOFF_MISSING`（裁决 ④=A 新造独立码）⇒ 落**专用**缺口事件
@@ -1024,9 +1034,8 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   }
 
   // Manager 拉起登记（唯一写入口）：写批次级 `manager` 字段 + `batch.manager.raised` 事件。
-  // 【已退役码·勿引用】（2026-09-21 可达性审计标记；以下码名仅为历史说明，**门已不存在**）
-  // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】**三码已删**：
-  //   `GATE_MANAGER_TERMINAL` / `GATE_MANAGER_PHASE_INVALID` / `GATE_MANAGER_AGENT_ID_REQUIRED` 不再存在
+  // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】**原 Manager 三码已删**
+  //   （2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码；语义见本段，勿再引用码名）
   //   ⇒ 登记**不再按 phase 或 agentId 拒绝**：
   //     · 任意 phase（含终态）均可登记事实（幂等；不改批次阶段、不改成员状态）；
   //     · `agentId` 缺失/空白 ⇒ **不写垃圾记录**（返回 null，调用方按「既无 phase 又无 manager」如实报错），

@@ -97,7 +97,7 @@ test('full flow binds to exec session; args.session overrides', async () => {
   assert.deepEqual((await byName.batch_phase.execute({ batchId: 'b-demo', phase: 'running' }, EXEC_SESS)).phase, 'running');
   // G2 前置（2026-09-14 新门禁）：`assembly: { auditLane: 't2' }` 缺省归一化 managerPlan='raise' ⇒ exec 层
   //   派发前须先登记 Manager（`batch_phase({manager})` 唯一入口）。【gate-lite 第二批 · A】该登记**不再是派发前提**
-//   （原 `GATE_MANAGER_NOT_RAISED` 拒态已删；在册判定改由官方 roster 承抽，回显 `managerRoster`）。
+//   （原 `「未拉起 Manager」码(已删)` 拒态已删；在册判定改由官方 roster 承抽，回显 `managerRoster`）。
   await byName.batch_phase.execute({ batchId: 'b-demo', manager: { agentId: 'mgr-demo' } }, EXEC_SESS);
 
   const claim = await byName.lane_claim.execute({ batchId: 'b-demo', lane: 't1' }, EXEC_SESS);
@@ -453,7 +453,7 @@ test('Q4=B 镜像**只升不降**：执行会话自身 C 档不被「他会话 B
 // G2（2026-09-14 用户裁决 A）：**建批即拉起** —— 声明 `managerPlan: 'raise'`（`normalizeAssemblyDecl`
 //   使其成为**缺省值**）的批，**首个 exec 层派发前**须已登记 Manager。
 //   【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】**本门的拒态已删**：
-//   原码 `GATE_MANAGER_NOT_RAISED` 不再存在 —— Manager 在册判定改由**官方 roster** 承抽
+//   原码 `「未拉起 Manager」码(已删)` 不再存在 —— Manager 在册判定改由**官方 roster** 承抽
 //   （`ctx.get('agentTeams')` → `listMembers(agent)`；读端 `lib/tools/core.js#managerRosterOf`，
 //   回显 `wave_plan.managerRoster` / `batch_status.managerRoster`，声明 raise 而无 Manager 落
 //   `gate.manager_roster_gap` 事件）。⇒ 下列用例按「**翻转拒态期望 + 保留原结构断言 + 显式补
@@ -511,7 +511,7 @@ test('G2 语义变迁（A 项）：声明（缺省）managerPlan=raise 且未登
   const h = g2Harness('punky-g2-a-');
   const sess = await h.build('sess-g2-miss', 'g2-miss', G2_TASKS);
   h.seedPlan('sess-g2-miss', 'g2-miss');
-  // 【翻转】原断言：`assert.rejects(..., /^Error: GATE_MANAGER_NOT_RAISED: .*batch_phase.*登记再派 exec/)`。
+  // 【翻转】原断言：`assert.rejects(..., /^Error: 「未拉起 Manager」码(已删): .*batch_phase.*登记再派 exec/)`。
   //   现语义：该门整体删除 ⇒ 未登记不再构成派发拒因（本用例保留为**新语义回归锁**）。
   const r = await h.by.member_status.execute({ batchId: 'g2-miss', lane: 'e1', status: 'running' }, sess);
   assert.equal(r.status, 'running', '未登记 Manager 不再是派发拒因（A 项：Manager 承抽官方 roster）');
@@ -532,7 +532,7 @@ test('G2 语义变迁（显式 raise 同一口径）：显式 assembly.managerPl
   const h = g2Harness('punky-g2-b-', { assembly: { managerPlan: 'raise', auditLane: 'a1' } });
   const sess = await h.build('sess-g2-explicit', 'g2-explicit', G2_TASKS);
   h.seedPlan('sess-g2-explicit', 'g2-explicit');
-  // 【翻转】原断言：`assert.rejects(..., /^Error: GATE_MANAGER_NOT_RAISED/)` ⇒ 现为放行 + 结构断言保留
+  // 【翻转】原断言：`assert.rejects(..., /^Error: 「未拉起 Manager」码(已删)/)` ⇒ 现为放行 + 结构断言保留
   const r = await h.by.member_status.execute({ batchId: 'g2-explicit', lane: 'e1', status: 'running' }, sess);
   assert.equal(r.status, 'running');
   const b = h.st.readBatch('sess-g2-explicit', 'g2-explicit');

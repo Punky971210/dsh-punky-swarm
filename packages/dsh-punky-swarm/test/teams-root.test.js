@@ -179,7 +179,7 @@ test('T8 D3：批次持久化 teamsRoot ⇒ 临时资产的 flows 在门禁读�
     // ④ 【r2 同步 · B1】门禁**不依赖团队声明**：无 consume 的 exec lane 在缺省（无资产）下同样拒派
     //    —— 旧口径「缺省 ⇒ 空 consume 免检、同形 lane 可派」已废除（引擎基线收紧侧）。
     //    G2 前置（2026-09-14 新门禁）：`assembly` 缺省归一化为 `managerPlan: 'raise'` ⇒ exec 层派发前须先登记
-    //    Manager，否则 entry 门先以 GATE_MANAGER_NOT_RAISED 拦下、吞掉本用例的被检面（GATE_ENTRY_MISSING）。
+    //    Manager，否则 entry 门先以 「未拉起 Manager」码(已删) 拦下、吞掉本用例的被检面（GATE_ENTRY_MISSING）。
     registerManager(store, SESS.agent.session.id, 'troot-t8-ctl', 'mgr-t8ctl');
     await assert.rejects(
       () => byName.member_status.execute({ batchId: 'troot-t8-ctl', lane: 'e1', status: 'running' }, SESS),
@@ -361,7 +361,7 @@ test('T5 向后兼容：缺省 teamsRoot → 包内 software-team 技能前缀�
     assert.equal(pkgAsset.ok, true);
     assert.deepEqual(pkgAsset.asset.layers.plan.skills.designer, ['brainstorming', 'writing-plans', 'spec-writing']);
     // ② punky-preset（**预设/模式资产**，非团队资产；团队装配已退役、资产文件不存在）：
-    //    【P1 反转 + 同步】旧口径「无前缀 + GATE_TEAM_ASSET_MISSING 告警 + **不阻断建批**」已废除 ⇒
+    //    【P1 反转 + 同步】旧口径「无前缀 + 「团队资产缺失」码(已删) 告警 + **不阻断建批**」已废除 ⇒
     //    P1 起「`team` 必填且必须解析到资产；无资产 ⇒ **构造期拒**、**零批次 JSON 落盘**」。
     //    （断言强度：只把「放行」改为「拒」，判据面由「前缀为空」升级为「拒态码 + 零落盘」，未删任何判据）
     let jfMsg = null;
@@ -395,7 +395,7 @@ test('T6 门禁不可绕过（临时团队语境）：exec 缺 consume 拒派 GA
     // 临时团队建批（e1.consume=['plan/outline.md'] 未落盘）
     await byName.wave_plan.execute({ batchId: 'troot-t6', tasks: tmpTasks(), team: TMP_TEAM, teamsRoot, assembly: { auditLane: 'a1' } }, SESS);
     // G2 前置（2026-09-14 新门禁）：本批声明（缺省归一化）`managerPlan: 'raise'` ⇒ exec 层派发前须先登记 Manager；
-    //   否则 entry 门先返 GATE_MANAGER_NOT_RAISED，本用例的被检面（GATE_ENTRY_MISSING）不可达。
+    //   否则 entry 门先返 「未拉起 Manager」码(已删)，本用例的被检面（GATE_ENTRY_MISSING）不可达。
     registerManager(store, SESS.agent.session.id, 'troot-t6', 'mgr-t6');
     await assert.rejects(
       () => byName.member_status.execute({ batchId: 'troot-t6', lane: 'e1', status: 'running' }, SESS),

@@ -728,6 +728,50 @@ function checkHandoffDeclarations(tasks: WaveTask[], opts: { smoke?: boolean; ha
   }
 }
 
+// ── N1-R4-1d：`deps` 结构约束（**全局**，2026-09-21 用户裁定）─────────────────────────
+/**
+ * 结构约束（两条，缺一不可）：
+ *   ① **已声明在先**：`deps` 只许指向 tasks 数组中**位于自身之前**的任务（声明顺序 = 拓扑序依据）。
+ *   ② **同层或上游层**：只许指向层级 ≤ 自身层级的任务（`plan(0) < exec(1) < audit(2)`）；
+ *      `layer == null`（generic）**不参与**层序判定（既有批大量使用 generic，收紧会破坏存量）。
+ *   ⇒ 两者成立 ⇒ 依赖图是**严格偏序** ⇒ **成环在结构上不可能** ⇒ 无需运行期成环断言
+ *      （用户裁定：不给定「拒绝环」断言，引擎内不设成环回路即可）。
+ *   违反 ⇒ 抛**普通 Error**（**不带 `GATE_` 前缀**：2026-09-21 裁定「暂不新建拒码，迁移门禁再议」）。
+ */
+export function validateDepsStructure(tasks: WaveTask[]): void {
+  const LIDX: Record<string, number> = { plan: 0, exec: 1, audit: 2 };
+  const byId = new Map<string, WaveTask>();
+  for (const t of tasks) if (t && typeof t.id === 'string' && t.id) byId.set(t.id, t);
+  const seen = new Set<string>();
+  for (const t of tasks) {
+    if (!t || typeof t.id !== 'string' || !t.id) continue;
+    const cur = t.layer == null ? null : LIDX[String(t.layer)];
+    for (const d of Array.isArray(t.deps) ? (t.deps as string[]) : []) {
+      if (typeof d !== 'string' || !d) continue;
+      // 分工（**不抢答**既有判据，与 `checkHandoffDeclarations` 同纪律）：
+      //   · 自指 ⇒ 由 `topoWaves` 报（cycle detected）
+      //   · 悬空 id（deps 指向不存在的任务）⇒ 由 `topoWaves` 报（depends on unknown id）
+      //   ⇒ 本函数**只**约束「已存在且声明在先」的依赖顺序与层序。
+      if (d === t.id) continue;
+      if (!byId.has(d)) continue;
+      if (!seen.has(d)) {
+        throw new Error('deps 结构约束违反：任务 ' + t.id + ' 的 deps `' + d
+          + '` 未在此前声明（只许指向**已声明在先**的任务；这是「不成环」的结构性保证，非断言检查）');
+      }
+      const up = byId.get(d);
+      const upl = up && (up as unknown as { layer?: unknown }).layer != null
+        ? LIDX[String((up as unknown as { layer?: unknown }).layer)]
+        : null;
+      if (cur != null && upl != null && upl > cur) {
+        throw new Error('deps 结构约束违反：任务 ' + t.id + '（层 ' + String(t.layer)
+          + '）不得依赖下游层任务 ' + d + '（层 ' + String((up as unknown as { layer?: unknown }).layer)
+          + '）；deps 只许指向**同层或上游层**');
+      }
+    }
+    seen.add(t.id);
+  }
+}
+
 // ── §5.1 配对基数软校验（`pair_with` 退役后的替代面；**只告警不拒**） ─────────────────────────
 /**
  * 判据（规格 `plan/debt-spec.md` §2.1 方案 R，**只读、零副作用**）：对每条 `layer === 'audit'` 的 task，
@@ -811,6 +855,11 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   //   （给出「缺哪条边 / 缺哪件来源」），若后置会被 `topoWaves` 的 `depends on unknown id` 抢答 ⇒
   //   调用方拿不到新码语义（码面契约见 §7 判据 1/2）。非 deps 的其它拓扑违规仍由 `topoWaves` 原样报。
   checkHandoffDeclarations(tasks, { smoke: smoke === true, ...(handoffGate === undefined ? {} : { handoffGate }) });
+  // N1-R4-1d：**deps 结构约束**（已声明在先 + 同层或上游）。
+  //   ⚠ **建批期暂不启用**（2026-09-21）：启用后撞**真实反例**——`test/writing-team-asset.test.js` 的
+  //     `prod1`（exec）依赖 `a1`（audit），属「exec 依赖下游层」的既有合法构造 ⇒ 收紧会破坏既有建批。
+  //     ⇒ 冲突已上报，待裁（选项：改判用例 / 只用于追加期 / 层序降为告警）。函数已导出且**追加期在用**。
+  // validateDepsStructure(tasks);
   const { waves } = topoWaves(tasks);
   validateLayerContract(tasks, { smoke: smoke === true });
   // 团队角色集（可拔插）——角色词法集 = 资产**各层声明角色** ∪ `roles.extra`（`unionRoleVocabulary`）；

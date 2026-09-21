@@ -403,7 +403,7 @@
     "test/gate-lite-batch2.test.js": {
       "asserts": 34,
       "blankLines": 22,
-      "lines": 187,
+      "lines": 189,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1177,7 +1177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T10:54:58Z",
+  "generatedAt": "2026-09-21T12:18:24Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1194,7 +1194,7 @@
     "asserts": 8306,
     "blankLines": 3896,
     "files": 147,
-    "lines": 43923,
+    "lines": 43925,
     "tautologies": 0,
     "tests": 1700,
     "todos": 4

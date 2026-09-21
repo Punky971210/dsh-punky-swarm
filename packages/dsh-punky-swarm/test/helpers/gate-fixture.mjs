@@ -107,7 +107,7 @@ export function runLane(store, session, batchId, lane) {
 //     · G1（`lib/tools/core.js` 的 `assertMemberActionTierC`）：`wave_plan` / `member_status` / `member_settle`
 //       只允许出现在 **C 档**会话 ⇒ 未评估一律拒 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`；
 //     · G2（`lib/state/gates.ts` entry 门）：声明 `assembly.managerPlan === 'raise'`（**引擎缺省**）的批，
-//       首个 **exec** 层派发前必须已登记 Manager ⇒ 否则拒 `GATE_MANAGER_NOT_RAISED`（lane 处于 `idle`
+//       首个 **exec** 层派发前必须已登记 Manager ⇒ 否则拒 `「未拉起 Manager」码(已删)`（lane 处于 `idle`
 //       的恢复路径由 `reject()` 降级为告警放行）。
 // 纪律（本组 helper 的硬要求）：**走与真实工具相同的写入路径/同一函数**，不手写裸 JSON 绕过校验——
 //   · `assessC` 用 `store.writeGovernance`（`assign_check` 的同一写入函数，同一 `lastAssign` 形状）；

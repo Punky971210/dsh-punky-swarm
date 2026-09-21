@@ -164,7 +164,7 @@ test('assign_check: escalationHint 当 execToolCount>=5 且无活跃批次', asy
 test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）', async () => {
   await byName.wave_plan.execute({ batchId: 'b-mgr', tasks: [{ id: 'a' }] }, AC_SESS);
   const call = (args) => byName.batch_phase.execute(args, AC_SESS);
-  // 门禁①：**本断言由本批新语义替代（旧口径：planning 期登记被拒 GATE_MANAGER_PHASE_INVALID）**。
+  // 门禁①：**本断言由本批新语义替代（旧口径：planning 期登记被拒 「Manager 相位非法」码(已删)）**。
   //   C-1 决议：准入从 `phase === 'running'` 改为「批次非终态」（planning/running/paused 可登记），
   //   对齐用户口径「建批即拉起，不绑定 running」。落点 lib/state/store.js:573-575（writer = e2）。
   //   断言面：登记成功、**不改批次阶段**、写批字段 + 恰一条 batch.manager.raised 事件。
@@ -177,7 +177,7 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
   assert.equal(b0.events.filter((e) => e.type === 'batch.manager.raised').length, 1);
   await call({ batchId: 'b-mgr', phase: 'running' });
   // 门禁②：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转** —— 原断言
-  //   `assert.rejects(/GATE_MANAGER_AGENT_ID_REQUIRED/)` 对应码已删 ⇒ 空/空白 agentId **不再报门禁错**：
+  //   `assert.rejects(/「Manager agentId 必填」码(已删)/)` 对应码已删 ⇒ 空/空白 agentId **不再报门禁错**：
   //   语义 = 「不写垃圾记录 + 单独调用时走既有显式报错分支（`requires "phase" or "manager"`）」，即**不静默 no-op**。
   await assert.rejects(() => call({ batchId: 'b-mgr', manager: {} }), /requires "phase" or "manager"/,
     '空 agentId ⇒ 不写记录；无 phase 的单独调用如实报错（不静默）');
@@ -202,7 +202,7 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
   assert.equal(b2.phase, 'paused');
   assert.equal(b2.events.filter((e) => e.type === 'batch.manager.raised').length, 1, '同 agentId 重复登记幂等：不产重复事件');
   // 门禁③：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转为放行** —— 原断言
-  //   `assert.rejects(… /GATE_MANAGER_TERMINAL/ 且非 PHASE_INVALID…)` 两码已删 ⇒ 终态批**亦可登记事实**
+  //   `assert.rejects(… /「Manager 终态」码(已删)/ 且非 PHASE_INVALID…)` 两码已删 ⇒ 终态批**亦可登记事实**
   //   （在册判定的新真源 = 官方 roster；legacy 字段仅作观察面）。
   //   保留原结构断言：登记**不改批次阶段**、幂等（不重复写事件）。
   await call({ batchId: 'b-mgr', phase: 'aborted' });
@@ -430,7 +430,7 @@ test('wave_plan 建批清 pendingBatch；batch_phase complete/aborted 兜底清�
   await by.wave_plan.execute({ batchId: 'b-wp', tasks: threeTierTasks(['t1']), assembly: { auditLane: 'a1' } }, EXEC);
   assert.equal(st.readGovernance('sess-wp').pendingBatch, false); // 建批解锁
   // G2 前置（2026-09-14 新门禁）：含 exec 层且声明（缺省归一化）`managerPlan: 'raise'` 的批，**收口/派发前**
-  //   须先登记 Manager（否则 entry 门先返 GATE_MANAGER_NOT_RAISED）。本用例被检面是 complete 兜底清锁，
+  //   须先登记 Manager（否则 entry 门先返 「未拉起 Manager」码(已删)）。本用例被检面是 complete 兜底清锁，
   //   故先按引擎规定路径登记 Manager，保持被检面不变。
   registerManager(st, 'sess-wp', 'b-wp', 'mgr-wp');
   seedArtifacts(root, 'sess-wp', 'b-wp', ['t1']);

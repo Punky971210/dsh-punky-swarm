@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   A3 自定义牵头生效（静态 + 运行 + 悬空牵头反例 TEAM_ASSET_LEAD_NOT_IN_LAYERS）；
 //   A4 生产口径可强制：producer lane 声明 consume=audit 两产物 → 缺产物 GATE_ENTRY_MISSING 且成员态不进入 running；
 //      补齐后同 lane 可派（正例）；并断言「entry_requires:['consume'] 已翻牌」以防 legacy 口径下的假绿；
-//   兼容：team='punky-preset'（团队装配已退役）→ 无 [skills=…] 前缀 + GATE_TEAM_ASSET_MISSING（防回归）。
+//   兼容：team='punky-preset'（团队装配已退役）→ 无 [skills=…] 前缀 + 「团队资产缺失」码(已删)（防回归）。
 //
 // 口径归属（硬约束，见批次产物根 plan/team-assets-spec.md）：
 //   期望值只取自「资产文件原文解析」；SKILL.md 文本不参与 A2 期望值（防真源被文档劫持）。
@@ -304,7 +304,7 @@ test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_E
     const out = await byName.wave_plan.execute({ batchId: 'taf-a4', tasks, team: 'design-team', assembly: { auditLane: 'a1' } }, SESS);
     assert.equal(codesOf(out).includes('GATE_ROLE_INVALID'), false, 'producer 角色须合法（∈ roles.extra）：' + JSON.stringify(out.warnings));
     // G2 前置（2026-09-14 新门禁）：本批声明（缺省归一化）`managerPlan: 'raise'` ⇒ prod1（exec 层）派发前须先登记
-    //   Manager，否则 entry 门先返 GATE_MANAGER_NOT_RAISED、吞掉本用例的被检面（GATE_ENTRY_MISSING）。
+    //   Manager，否则 entry 门先返 「未拉起 Manager」码(已删)、吞掉本用例的被检面（GATE_ENTRY_MISSING）。
     registerManager(store, SESSION_ID, 'taf-a4', 'mgr-taf-a4');
     // plan 规格先落盘（exec lane 的 `plan/` 消费是必含项；使被检面收敛到「缺 audit 两产物」）
     writeArtifact(root, 'taf-a4', 'plan/design-spec.md', '# spec\n');
@@ -349,7 +349,7 @@ test('【P1 反转 + 同步】team=punky-preset（预设/模式名，非团队�
     // 【r2 同步 · A1/B3】旧 fixture 的「单 lane **plan** 批」已不可建（plan 产物无人 consume ⇒
     //   `GATE_ORPHAN_PRODUCT`；A1/B3 硬约束：不得建 plan-only 批）⇒ 同一「单 lane 批」形态改以
     //   audit 层表达；含 audit 层的三层批经**工具面**建批须带批次级 assembly 声明。
-    // 【P1 反转】旧口径「无资产 ⇒ 无前缀 + GATE_TEAM_ASSET_MISSING 告警 + **不阻断建批**」已废除（P1 §1/§2）：
+    // 【P1 反转】旧口径「无资产 ⇒ 无前缀 + 「团队资产缺失」码(已删) 告警 + **不阻断建批**」已废除（P1 §1/§2）：
     //   `team` 必填且必须解析到资产 ⇒ punky-preset（模式名）无团队资产 ⇒ **构造期拒、零批次 JSON 落盘**。
     //   断言强度：只把「放行 + 告警」反转成「拒 + 零落盘」，判据未删（仍逐字核对资产文件不存在这一前提）。
     let msg = null;

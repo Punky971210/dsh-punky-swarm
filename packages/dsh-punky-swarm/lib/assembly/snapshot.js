@@ -31,7 +31,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   —— 批次侧只落指纹 + 键级摘要，**不复制资产正文、不复制完整 summary**。
 //
 // 边界（规格 §6）：无资产（`generic` / 拼错 / 退役团队）⇒ 只写 `ok:false` 字段，**不写档、不落事件**
-//   （无内容可冻结 ⇒ 无 hash 可命名；失败事实由 `batch.teamAsset.ok:false` **字段**承担——原 `GATE_TEAM_ASSET_MISSING` 告警与码已删，见 `lib/tools/core.js:691-694`）。
+//   （无内容可冻结 ⇒ 无 hash 可命名；失败事实由 `batch.teamAsset.ok:false` **字段**承担——原 `「团队资产缺失」码(已删)` 告警与码已删，见 `lib/tools/core.js:691-694`）。
 //   有资产但解析失败 ⇒ 与成功路径同构（照写档 + 记 `resolved.ok:false`），跳过写盘 = 又一处空过点。
 //   写档失败（目录不可写 / 满盘 / 竞态）⇒ 返回 `{ error }`（**不 throw**）：调用方告警 + 字段/事件双留痕，
 //   **不拒建批**——观察面故障不升级为治理面拒态（解析本身没失败，失败的只是派生观察档）。

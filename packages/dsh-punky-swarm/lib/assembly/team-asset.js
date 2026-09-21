@@ -90,7 +90,7 @@ export const TEAM_ASSET_CODES = Object.freeze({
 });
 
 // ── 问题严重级（r2 强警示面，要求 5 / design §6 `flows-unresolved`） ──
-// 定位：团队资产缺失 / 团队名不可解析在 r1 只以**文本告警**出现（原码 `GATE_TEAM_ASSET_MISSING` 与该处告警
+// 定位：团队资产缺失 / 团队名不可解析在 r1 只以**文本告警**出现（原码 `「团队资产缺失」码(已删)` 与该处告警
 //   **均已删除**——gate-lite 第二批 · C，见 `lib/tools/core.js:691-694`；该形态现已由构造期拒载承担），
 //   调用方无法机器化区分「资产完全不可用」与「可用但退化」。
 //   r2 给每条问题附 `severity`，并导出 `blockingProblemsOf`：读端据此决定是否升级为强警示。

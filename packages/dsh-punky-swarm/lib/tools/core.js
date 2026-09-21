@@ -758,7 +758,7 @@ export function createCoreTools(ctx, deps) {
           }
         }
         if (asm.warnings.length > 0) plan.warnings.push(...asm.warnings); // roles 词法告警并入（事件随既有循环留痕、返回值暴露）
-        // 团队资产缺失告警（B4）：**已删码**（gate-lite 第二批 · C，2026-09-17）——原码 `GATE_TEAM_ASSET_MISSING`
+        // 团队资产缺失告警（B4）：**已删码**（gate-lite 第二批 · C，2026-09-17）——原码 `「团队资产缺失」码(已删)`
         //   自述「P1 后不可达」（无资产已在构造期前置为拒 `TEAM_ASSET_NOT_FOUND`/`TEAM_ASSET_SKILLS_MISMATCH`，
         //   `createBatch` 之前 throw）⇒ 死码占用告警通道且与「无资产即拒」的口径自相矛盾，按普查结论整条删除；
         //   防回生断言见 `test/gate-lite-batch2.test.js`（源码面不得再出现该字面量）。
@@ -830,7 +830,7 @@ export function createCoreTools(ctx, deps) {
         // Manager legacy 登记（留痕入口）：可与阶段迁移同一次调用。
         // 顺序：**先登记、后迁移**——这样「同一次调用里从 running 迁走」也能正常登记。
         // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】原「准入 = 批次非终态 + agentId 必填」
-        //   两处硬判**已删**（`GATE_MANAGER_TERMINAL` / `_PHASE_INVALID` / `_AGENT_ID_REQUIRED` 三码不存在）：
+        //   两处硬判**已删**（`「Manager 终态」码(已删)` / `_PHASE_INVALID` / `_AGENT_ID_REQUIRED` 三码不存在）：
         //   · 任意 phase 均可登记事实（幂等；不改阶段、不改成员状态）；
         //   · 空/缺 `agentId` ⇒ `markManagerRaised` 返回 null ⇒ 走下方「既无 phase 又无 manager」显式报错
         //     （不写垃圾记录、不静默）。

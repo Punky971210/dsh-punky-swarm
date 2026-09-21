@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// gate-lite 第二批：A2（Manager 承抽官方 roster 的**读端**）+ C（删 `GATE_TEAM_ASSET_MISSING` 死码）
+// gate-lite 第二批：A2（Manager 承抽官方 roster 的**读端**）+ C（删 `「团队资产缺失」码(已删)` 死码）
 //   + E（三处写域外残留清理）。
 //
 // 覆盖：
@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //        service 不可用 ⇒ `reason:'service-unavailable'`（基线态，回显承担可读性、不落事件）；
 //        调用抛错 ⇒ `reason:'not-a-team-member: …'`（异常态，回显、不落事件）。
 //   T3（A2 读端 · batch_status）：`managerRoster` 与 legacy `batch.manager` 并列回显（新批以 roster 为准，旧批字段可读）。
-//   T4（C 防回生）：`code: 'GATE_TEAM_ASSET_MISSING'` 的**生产形态**只允许出现在 `lib/assembly/flows.js`
+//   T4（C 防回生）：`code: '「团队资产缺失」码(已删)'` 的**生产形态**只允许出现在 `lib/assembly/flows.js`
 //        （写域外仅存的一处 legacy escalation 载荷）——若在建批告警发射面（`lib/tools/**`）重现 ⇒ 本断言红。
 //   T5（E①/E②）：`lib/engine/dispatch.js` 不再导出 `UNBOUND_REPORT_CODE`；枚举/生成物不再含
 //        `'GATE_SWARM_UNBOUND_REPORT'`（生产形态 `| '…'`）。
@@ -164,10 +164,12 @@ function scan(dir, re, exts = ['.js', '.ts']) {
   return out;
 }
 
-test('T4 C 防回生：code: GATE_TEAM_ASSET_MISSING 生产形态仅允许存在于 lib/assembly/flows.js（写域外 legacy 载荷）', () => {
+// 【2026-09-21 改判】该码已按可达性审计裁定**字面删除**（连注释引用一并清除）⇒ 终态应为**lib 内零命中**；
+//   原断言「仅允许存在于 flows.js」在字面删除后不再成立（那处正是被清除的注释引用）。
+test('T4 C 防回生（字面删除后）：code: GATE_TEAM_ASSET_MISSING 生产形态在 lib/** 内**零命中**', () => {
   const hits = scan(path.join(PKG, 'lib'), /code:\s*'GATE_TEAM_ASSET_MISSING'/);
-  assert.deepEqual(hits, ['lib/assembly/flows.js'],
-    '该码已被判死码整条删除（core.js 建批告警发射面）；若在建批/结算面重现 ⇒ 红。实际：' + JSON.stringify(hits));
+  assert.deepEqual(hits, [],
+    '该码已字面删除（含注释引用）⇒ 生产形态须零命中；若在 lib 内重现 ⇒ 红。实际：' + JSON.stringify(hits));
 });
 
 test('T5 E①/E②：dispatch.js 不再导出 UNBOUND_REPORT_CODE；枚举与生成物不再含该码', () => {

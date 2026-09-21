@@ -75,6 +75,16 @@ export declare function handoffGateStateOf(liveConfig: unknown, env?: Record<str
 /** 单段判定（薄封装；三处消费点用这个）。 */
 export declare function handoffGateEnabledOf(liveConfig: unknown, stage?: HandoffGateStage, env?: Record<string, string | undefined>): boolean;
 /**
+ * 结构约束（两条，缺一不可）：
+ *   ① **已声明在先**：`deps` 只许指向 tasks 数组中**位于自身之前**的任务（声明顺序 = 拓扑序依据）。
+ *   ② **同层或上游层**：只许指向层级 ≤ 自身层级的任务（`plan(0) < exec(1) < audit(2)`）；
+ *      `layer == null`（generic）**不参与**层序判定（既有批大量使用 generic，收紧会破坏存量）。
+ *   ⇒ 两者成立 ⇒ 依赖图是**严格偏序** ⇒ **成环在结构上不可能** ⇒ 无需运行期成环断言
+ *      （用户裁定：不给定「拒绝环」断言，引擎内不设成环回路即可）。
+ *   违反 ⇒ 抛**普通 Error**（**不带 `GATE_` 前缀**：2026-09-21 裁定「暂不新建拒码，迁移门禁再议」）。
+ */
+export declare function validateDepsStructure(tasks: WaveTask[]): void;
+/**
  * 判据（规格 `plan/debt-spec.md` §2.1 方案 R，**只读、零副作用**）：对每条 `layer === 'audit'` 的 task，
  * 取其 `deps` 中每条 `layer === 'exec'` 的入边 `E`（= 本 audit lane **认领**了一条 exec lane），
  * 若本 lane 的 `consume` **未覆盖 `E` 的任何交付产物**（`E.produce ∪ E.outputs`；两者皆空 ⇒ 视为覆盖缺失）
