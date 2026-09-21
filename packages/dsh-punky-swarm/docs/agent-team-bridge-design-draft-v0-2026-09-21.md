@@ -249,3 +249,10 @@ engine_team_settle { batchId, lane, note? }     // 成员唯一结算通道
 
 
 **终裁后本设计稿状态**：整线不再有可施工批；保留价值 = 语义资产（字段映射/状态映射/门禁汇总/负空间清单），供未来 teammate 重启时对账。
+## §12 B5 立稿输入（2026-09-22 04:4x 用户澄清，立稿时逐条继承）
+
+1. **B5.1 需要调整**：原 §4/§7-B5 按旧口径写的部分作废，立稿按 §11 原则（分离式 + 黑板交接）重写。
+2. **teammate 由 Leader 拉起**（`spawn_teammate`）——已确认，与官方设计一致。
+3. **无需探针**：原生工具（`list_agents`/`send_message`/`wait_agent`/`interrupt_agent`）即 Leader↔teammate 可达性，原 T0/B1 探针需求消解。
+4. **「成员 deny」精确语境**（非幻觉，代码在案）：S2（`0458e7e`）将连续控制族 4 件入 `suite.js:114-117`（`entry(name,kind,modeGate=false,memberDeny=true,…)`）⇒ deny 20 件；生效路径 = `buildStartRequest` 把 `SUITE_DENY_TOOLS` 注入 **dispatch 一次性 worker 的 `toolFilter.deny`**。⚠ 语境边界：该 deny 只作用于 **dispatch 通道**；teammate 由官方 `spawn_teammate` 拉起、不经过 `buildStartRequest` ⇒ deny 是否/如何延伸到 teammate（或依赖官方成员权限模型）= B5 立稿待定口径。
+5. **N3 意图澄清**（见当日日志/汇报）：E4 = 官方 `maxMembers` 槽位「真拦」活体实证（官方概念，引擎刻意不读；自建并发闸已随 Q-B 取消）；sig = 借 JiuwenSwarm J11 的任务内容指纹（`SHA-256`，lib 内已有 `verify/selector.js` canonicalizeArgs 先例），幂等判据；C-4 = 入参集合未裁。
