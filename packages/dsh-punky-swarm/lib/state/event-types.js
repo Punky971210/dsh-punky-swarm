@@ -275,3 +275,9 @@ export const EVT_CHAIN_STEP = 'chain.step';
 export const EVT_AUTO_SETTLE_TRIGGERED = 'auto.settle.triggered';
 export const EVT_AUTO_SETTLE_PAUSED = 'auto.settle.paused';
 export const EVT_AUTO_SETTLE_SKIPPED = 'auto.settle.skipped';
+
+// N1-R4-1b（K1 公共池）：**出池留痕**——派发（唯一出池动作）把 `owner` 写进任务声明面时落一条。
+//   载荷 `{ lane, owner, from }`：出池**是谁**、从哪个成员态派发，可供审计重放「池 → 已派发」的时间点。
+//   语义边界：**非改派**——已出池任务再派发时不覆盖 owner（K1：已派发即冻结；换人 = 作废 + 池内新增替代 + gap-list）。
+//   写端 = `store.setMember`（派发面唯一写盘点，与迁移同一次 atomicWrite）；读端 = 事件面（无门禁消费）。
+export const EVT_TASK_OWNER_ASSIGNED = 'task.owner.assigned';

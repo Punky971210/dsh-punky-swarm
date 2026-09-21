@@ -44,6 +44,11 @@ function mkBatch(store, S, batchId, tasks) {
   return plan;
 }
 
+// 与 `lib/tools/core.js#ownerOfExec` 同取值序（派发面 owner 唯一来源）
+function agentIdOf(exec) {
+  return exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.agent?.session?.id ?? null;
+}
+
 function toolByName(store, root) {
   const ctx = {
     tools: { register: () => {}, guard: () => () => {} },
@@ -117,6 +122,42 @@ test('R4-1a-4 task_pool：已派发 lane 不在可派发集合（K1：已派发�
   assert.equal(b.lanes.e1, 'running');
   // 读端判据（与 task_pool.execute 内一致）：lane 非 pending ⇒ ALREADY_DISPATCHED
   assert.equal(b.lanes.e1 === 'pending', false, '已派发 ⇒ 不可再视为池内可派发对象');
+});
+
+// ── R4-1b：派发 = **唯一出池动作**（`owner` 写入方）────────────────────────────────
+test('R4-1b-1 派发即出池：同一次 atomicWrite 写 task.owner + 落 task.owner.assigned', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-d1', [{ id: 'e1' }]);
+  const ownerOf = (b, id) => b.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === id)?.owner;
+  assert.equal(ownerOf(store.readBatch(S, 'b-d1'), 'e1'), null, '建批后未出池');
+  store.setMember(S, 'b-d1', 'e1', 'running', null, undefined, 'agent-9');
+  const b = store.readBatch(S, 'b-d1');
+  assert.equal(ownerOf(b, 'e1'), 'agent-9', '派发 ⇒ owner 写入声明面');
+  assert.equal(b.lanes.e1, 'running', '执行面同步');
+  assert.equal(b.events.filter((e) => e.type === 'task.owner.assigned').length, 1, '出池留痕恰好一条');
+});
+
+test('R4-1b-2 非改派：已出池任务再派发**不覆盖** owner（K1：已派发即冻结）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-d2', [{ id: 'e1', owner: 'preassigned' }]);
+  const ownerOf = (b, id) => b.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === id)?.owner;
+  assert.equal(ownerOf(store.readBatch(S, 'b-d2'), 'e1'), 'preassigned');
+  store.setMember(S, 'b-d2', 'e1', 'running', null, undefined, 'agent-9');
+  assert.equal(ownerOf(store.readBatch(S, 'b-d2'), 'e1'), 'preassigned', '已出池 ⇒ 不覆盖（换人须走作废+新增替代）');
+});
+
+test('R4-1b-3 派发后该任务**移出**池视图（owner 写入方闭环）', async () => {
+  const { store, root, S } = setup();
+  mkBatch(store, S, 'b-d3', [{ id: 'e1' }, { id: 'e2' }]);
+  const by = toolByName(store, root);
+  const exec = { agent: { session: { id: S } } };
+  const before = await by.task_pool.execute({ batchId: 'b-d3', session: S }, exec);
+  assert.equal(before.pooled, 2);
+  store.setMember(S, 'b-d3', 'e1', 'running', null, undefined, agentIdOf(exec));
+  const after = await by.task_pool.execute({ batchId: 'b-d3', session: S }, exec);
+  assert.equal(after.pooled, 1, 'e1 已出池 ⇒ 池内仅剩 e2');
+  assert.equal(after.dispatched, 1);
+  assert.ok(!after.pool.some((t) => t.id === 'e1'), '已派发任务不在池列表');
 });
 
 test('R4-1a-5 注册表：`task_pool` 入表、不占 deny、不占模式门（冻结序列零变化）', () => {

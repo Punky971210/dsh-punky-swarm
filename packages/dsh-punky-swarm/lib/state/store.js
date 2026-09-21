@@ -538,7 +538,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     return batch;
   }
 
-  function setMember(sessionId, batchId, lane, to, note = null, exempt = undefined) {
+  function setMember(sessionId, batchId, lane, to, note = null, exempt = undefined, owner = undefined) {
     let batch = readBatch(sessionId, batchId); // 终态清退经 laneProgressClear 返回新 batch（不突变入参）
     if (!batch) throw new Error('batch not found: ' + batchId);
     // 终态批次冻结：complete / aborted 之后不再接受任何成员迁移（防「已收口批次仍被改写成 running」的治理自相矛盾）
@@ -760,6 +760,26 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       batch = laneExemptClear(batch, lane); // 结算终态同步清退 longrun 豁免（免残留到后续批次读端）
     }
     batch.lanes[lane] = to;
+    // N1-R4-1b（K1 公共池）：**派发 = 唯一出池动作** ⇒ 在同一 atomicWrite 内把 `owner` 写进任务声明面。
+    //   · 只在派发面（`to === 'running'`）写；`owner` 非字符串（含缺省 undefined）⇒ **零写入**（既有行为不变）。
+    //   · 写的是 `wavePlan[].tasks[].owner`（声明面），与 `lanes[lane]`（执行面）**同一次落盘** ⇒ 二者不会漂移。
+    //   · **非改派**：已出池（owner 非空）⇒ **不覆盖**（K1：已派发即冻结；换人 = 作废 + 池内新增替代 + gap-list 留痕）。
+    if (to === 'running' && typeof owner === 'string' && owner.length > 0) {
+      const wp = Array.isArray(batch.wavePlan) ? batch.wavePlan : [];
+      for (let wi = 0; wi < wp.length; wi++) {
+        const tasks = wp[wi]?.tasks;
+        if (!Array.isArray(tasks)) continue;
+        const ti = tasks.findIndex((x) => x && x.id === lane);
+        if (ti < 0) continue;
+        if (typeof tasks[ti].owner === 'string' && tasks[ti].owner.length > 0) break; // 已出池 ⇒ 不覆盖
+        batch.wavePlan = wp.map((w, i) => (i !== wi ? w : {
+          ...w,
+          tasks: w.tasks.map((t, j) => (j !== ti ? t : { ...t, owner })),
+        }));
+        batch.events.push(newEvent(EVT.EVT_TASK_OWNER_ASSIGNED, { lane, owner, from }));
+        break;
+      }
+    }
     // 豁免授予落盘（与本次迁移同一 atomicWrite）：以最后一次派发面授予为准（覆盖旧记录，不设「已存在则拒」——
     // 避免阻塞 idle→running 重派；重派后阈值以新授予为准，探针侧 runningSince 亦从新 stint 起算）。
     // D7（2026-09-14，§6.2 **首选=继承**）：派发面无授予（exemptGrant 为 null）且 `to === 'running'` 时——

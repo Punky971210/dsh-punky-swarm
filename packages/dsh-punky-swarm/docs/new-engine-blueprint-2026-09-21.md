@@ -243,7 +243,18 @@ jiuwen 有 6 类探测器 + 4 档 severity + 分级处置 + 强度预算；蟛�
 | **判据** | 池内 = `owner == null`；可派发 = 上游 `deps` 全部 `isMemberTerminal` ∧ lane 仍 `pending`；否则 `blockers[]` **指名**（`GATE_HANDOFF_MISSING` / `ALREADY_DISPATCHED`），**不静默** |
 | **影响面（四类扫）** | 能力族 = 1 工具 + 1 可选字段；**恢复族/回滚族 = 无**；连带族 = 注册表（29→**30**）、`pkg-hashes`（370→**398** 件）、测试基线（147/1692/**8281**） |
 | **验证** | `test/task-pool-r41.test.js` **6/6**（含断言 `SUITE_DENY_TOOLS` 仍 14、`MODE_GATED_TOOLS` 仍 10、deny 序列首项不变）；`suite-consistency` + `wave-plan` + `batch-store` **52/52** |
-| **⚠ 未闭合（下片 R4-1b）** | **`owner` 目前无写入方**——派发（`dispatch.js:221` `setMember(...,'running')`）**不写** `owner`。⇒ 池视图当前恒等于「全部未派发 lane」，语义未闭环。写入方须与 `setMember` 同一次 `atomicWrite`（改 `setMember` 载荷面或新增派发面写点），属**写路径变更 ⇒ 独立批** |
+| **⚠ R4-1a 未闭环** | `owner` 当时无写入方 ⇒ 池视图恒等于「未派发 lane 集合」 |
+
+#### 7.4.0b R4-1b 施工结果：派发 = **唯一出池动作**（`owner` 写入方，✅ 已落地）
+
+| 项 | 内容 |
+|---|---|
+| **落点** | ① `event-types.js` 新增 `EVT_TASK_OWNER_ASSIGNED = 'task.owner.assigned'`（出池留痕）② `store.setMember` **第 7 参 `owner`**（可选项，`undefined` = 零写入 ⇒ 既有调用行为一字不变）③ 派发面调用点传 `ownerOfExec(exec)`：`core.js` `member_status` + `dispatch.js:221` |
+| **写入时机** | 仅 `to === 'running'`（派发面），写在 `batch.lanes[lane] = to` **之后、统一 `atomicWrite` 之前** ⇒ 声明面（`wavePlan[].tasks[].owner`）与执行面（`lanes[lane]`）**同一次落盘，不会漂移** |
+| **非改派** | 已出池（`owner` 非空）⇒ **不覆盖**：换人只能走「作废 + 池内新增替代 + gap-list 留痕」，不改 `owner`（K1） |
+| **fail-open 边界** | `ownerOfExec` 取不到 Agent 标识 ⇒ `null` ⇒ **零写入**（刻意）：owner 是声明面，缺失只影响池视图，**不阻断任何门禁** |
+| **影响面（四类扫）** | 能力族 = 1 事件常量 + 1 可选参数；**恢复族/回滚族 = 无**；连带族 = 基线 + `pkg-hashes`（**新增工具已在上片完成，本片无工具数变化**） |
+| **验证** | `task-pool-r41.test.js` **9/9**（含「派发即出池」「已出池不覆盖」「派发后移出池视图」三条） |
 
 ### 7.4.1 ★ N1 开工前置冲突（须先裁，否则不动 `lib/**`）
 

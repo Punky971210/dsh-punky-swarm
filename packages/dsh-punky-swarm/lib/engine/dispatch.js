@@ -48,6 +48,10 @@ export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
  * 不依赖引擎内存，重启后仍可核。
  */
 const LABEL_PREFIX = 'punky-swarm:';
+
+// N1-R4-1b：**派发面 owner 取值**（唯一来源 = 调用方 Agent 标识）。取不到 ⇒ `null` ⇒ `setMember` **零写入**
+//   （既有行为不变）——owner 是声明面，缺失只影响池视图，不阻断任何门禁。
+const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.agent?.session?.id ?? null;
 export function labelOf(batchId, lane) {
   return LABEL_PREFIX + String(batchId) + ':' + String(lane);
 }
@@ -218,7 +222,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   **零容量判定**（高并发不得被限流；`batch.concurrency` 只作声明 + 回显）。删除面与理由见本文件
   //   「并发闸 · 退役登记」段。
   // ① 置 running（含 Tier3 entry 门：consume 齐备 / condition / Manager 拉起）
-  const b = store.setMember(sessionId, batchId, lane, 'running', null, exempt);
+  // 第 7 参 owner：派发面写入 ⇒ **派发即出池**（K1）；取不到 ⇒ null ⇒ 零写入（行为不变）。
+  const b = store.setMember(sessionId, batchId, lane, 'running', null, exempt, ownerOfExec(exec));
   // ② 发放一次性句柄（任务包首行形态）
   const h = issueLaneHandle({ batchId, lane, sessionId });
   const base = { batchId, lane, status: b.lanes[lane], token: h.token, firstLine: h.firstLine, ttlMs: h.ttlMs };

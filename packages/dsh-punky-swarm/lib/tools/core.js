@@ -59,6 +59,10 @@ import {
 // P2 推进链：① `chain` 声明八条静态校验（纯函数，构造期原样透出码面）；② 事件驱动自动推进；③ 读端回显投影
 import { chainProblemsOf, chainOfBatch, chainEchoOf } from '../assembly/chain.js';
 import { isMemberTerminal } from '../schema.js'; // N1-R4-1a：公共池「上游是否已结算」判据（终态单一真源，勿另写）
+
+// N1-R4-1b：**派发面 owner 取值**（唯一来源 = 调用方 Agent 标识）。取不到 ⇒ `null` ⇒ `setMember` **零写入**
+//   （既有行为不变）；这是刻意的 fail-open 边界：owner 是声明面，缺失只影响池视图，不阻断任何门禁。
+const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.agent?.session?.id ?? null;
 // 【已清退 · 勿回加】`advanceChainAfterSettle`（`lib/engine/chain-runner.js`）的调用随 **G-02 死调用清退**
 //   （批次 `engine-debt-cleanup-2-20260918`）一并删除：链推进已全退役（2026-09-18 Q-A=C）⇒ 该调用**零行为**，
 //   结算后不再触发推进；推进缺口与 `chain.step` 冻结语义见 `lib/engine/chain-runner.js` 头注释。
@@ -1462,7 +1466,8 @@ export function createCoreTools(ctx, deps) {
         //   **Q-B 取消并发闸**（2026-09-18 用户裁决）整体删除：`member_status(status='running')` 直派面
         //   **不再做容量准入**（高并发不得被限流），`running` 迁移一律照常放行；本文件对该符号**零引用**。
         // 第 6 参 exempt：undefined = 既有行为零变化；非空对象 = 派发面授予（参数面强校验在 store 内）
-        const b = store.setMember(sessionId, args.batchId, args.lane, args.status, null, args.exempt);
+        // 第 7 参 owner：仅 `to==='running'`（派发面）写入 ⇒ 派发即出池（K1）；非派发面传值亦被忽略。
+        const b = store.setMember(sessionId, args.batchId, args.lane, args.status, null, args.exempt, ownerOfExec(exec));
         return { batchId: args.batchId, lane: args.lane, status: b.lanes[args.lane], settled: store.batchSettled(b) };
       },
     }),
