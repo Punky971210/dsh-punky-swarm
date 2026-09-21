@@ -1122,22 +1122,13 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       const g = gates.checkCompleteGate(batch);
       // B2（§8⑤ P-6 complete @audit）：`setPhase` 是**独立函数**（无 `setMember` 的收集器作用域）⇒
       //   本处自建同一发射器（共用 `makeContractMissingSink`，杜绝第二套语义）；落盘点 = 本函数尾部
-      //   同一次 `atomicWrite`（与 batch.phase / gate.manager_missing 事件同批落盘，不可分割）。
+      //   同一次 `atomicWrite`（与 batch.phase 事件同批落盘，不可分割）。
       emitContractMissing(g);
       if (!g.ok) {
         batch.events.push(newEvent(EVT.EVT_GATE_COMPLETE_BLOCKED, { code: g.code, pending: g.pending }));
         batch.updatedAt = new Date().toISOString();
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(g.code + (g.pending ? ': ' + g.pending.join(', ') : ''));
-      }
-      // 批次收口告警（非阻断）：**按声明触发**——声明 `managerPlan: 'raise'`（引擎缺省值即 raise）的批若未登记
-      // `batch.manager` → 落 `gate.manager_missing`（携带 execLanes 与 managerPlan 供读端定位）。
-      // 2026-09-14 由「按 exec lane 数 ≥3」改为「按声明」：原口径会把**显式声明 leader-direct** 的合法批
-      // 也报成「Manager 缺失」（声明与告警语义矛盾 = 误导）；无 assembly 的历史批次不告警（宽容，免追溯噪音）。
-      const managerPlan = batch.assembly?.managerPlan ?? null;
-      if (managerPlan === 'raise' && !batch.manager) {
-        const execLanes = (batch.wavePlan ?? []).flatMap((w) => w.tasks ?? []).filter((t) => (t.layer ?? 'exec') === 'exec').length;
-        batch.events.push(newEvent(EVT.EVT_GATE_MANAGER_MISSING, { execLanes, managerPlan }));
       }
     }
     batch.phase = to;

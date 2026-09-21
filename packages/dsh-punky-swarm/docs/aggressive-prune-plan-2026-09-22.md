@@ -59,3 +59,7 @@
 **建议**：五件按 R3g 方向**补 5 条断言**（对齐 exit gate 断言强度，成本极低）；不删。
 
 **批 5 · G1 ✅ 已执行删除**：R41 deny/modeGate 成员性与长度断言 7 行 + DB-1/DB-3 整用例删——全部被 SC-1/SC-2 精确全集 deepEqual 蕴含（同语义就删）；保留 DB-2（deny→toolFilter 落地面，SC 无此维度）与 R41 计数锁（总数 36，SC 无全名集 deepEqual）。**G2 阴性关闭**：\x60tool-schema-conformance TSC-1\x60 守 \x60CASES\x60 覆盖图键集，SC-4 守注册表权威——分工不同非重叠，无可删。
+
+## §11 批 4 终裁（2026-09-22 03:5x 用户裁定）
+- **`gate.manager_missing` ✂ 已删**（事件常量 + store.js 收口写点 + A2/A2b 用例 + 各处注释引用；防回生锁 retired-codes-lock 纳入在册）。
+- **其余四件保留**（targets 门拒/过侧、command 门拒侧、needHuman merged 面拒侧 = 在役门禁唯一持久留痕）。补 5 条断言的建议**仅适用四件**；是否补测待后续裁定。

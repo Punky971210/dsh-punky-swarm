@@ -617,11 +617,11 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 207,
-      "blankLines": 41,
-      "lines": 684,
+      "asserts": 201,
+      "blankLines": 40,
+      "lines": 649,
       "tautologies": 0,
-      "tests": 31,
+      "tests": 29,
       "todos": 0
     },
     "test/handoff-gate-hotconfig.test.js": {
@@ -907,7 +907,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 8,
-      "lines": 61,
+      "lines": 62,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1233,7 +1233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T19:55:00Z",
+  "generatedAt": "2026-09-21T20:08:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,15 +1244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 5 G1：deny/modeGate 子集断言收敛到 SC 精确全集（R41 7 行 + DB-1/DB-3 删）；批 4 五件判定留待裁决（唯一留痕面）",
+  "reason": "批 4 终裁：gate.manager_missing 删（用户裁定，roster_gap 承担留痕）；A2/A2b 随事件退役删除；其余四件保留",
   "schema": 1,
   "totals": {
-    "asserts": 8175,
-    "blankLines": 3989,
+    "asserts": 8169,
+    "blankLines": 3988,
     "files": 154,
-    "lines": 44043,
+    "lines": 44009,
     "tautologies": 0,
-    "tests": 1711,
+    "tests": 1709,
     "todos": 4
   }
 }

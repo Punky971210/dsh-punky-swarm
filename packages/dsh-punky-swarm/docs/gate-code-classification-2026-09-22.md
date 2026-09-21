@@ -122,7 +122,7 @@
 
 | 码 | prod | test | 写点 |
 |---|---:|---:|---|
-| `GATE_MANAGER_MISSING` | 2 | 0 | state\event-types.js · state\store.js |
+| `GATE_MANAGER_MISSING` | — | — | **✂ 已删（2026-09-22 用户裁定；防回生锁在册）** |
 | `GATE_TARGET_BLOCKED` | 3 | 0 | state\event-types.js · state\store.js |
 | `GATE_TARGET_PASSED` | 3 | 0 | state\event-types.js · state\store.js |
 | `GATE_EXIT_BLOCKED` | 3 | 0 | state\event-types.js · state\store.js |

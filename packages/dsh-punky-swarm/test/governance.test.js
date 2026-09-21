@@ -256,41 +256,6 @@ test('A3（K3 改判）：重派路径已去除 ⇒ review→running 被拒，�
   assert.ok(b.laneExempt?.x != null, 'D7/§6.2「不得静默清退」：豁免条目须仍在（实际=' + JSON.stringify(b.laneExempt ?? null) + '）');
 });
 
-// A2：声明 raise（引擎缺省口径）的批未登记 manager → complete 成功但留 gate.manager_missing 告警（非阻断）。
-// 2026-09-14 起触发口径 = **按声明**（不再是「按 exec lane 数 ≥3」）——见 A2b 的 leader-direct 反例。
-test('A2: 声明 raise 且未登记 manager → complete 成功 + gate.manager_missing 告警', () => {
-  const tasks = [
-    { id: 'e1', layer: 'exec', role: 'coder' }, { id: 'e2', layer: 'exec', role: 'tester' },
-    { id: 'e3', layer: 'exec', role: 'reviewer' }, { id: 'a1', layer: 'audit', role: 'supervisor' },
-  ];
-  fs.writeFileSync(toolsStore.batchFile('sess-ac', 'b-cplus'), JSON.stringify({
-    batchId: 'b-cplus', sessionId: 'sess-ac', phase: 'running', concurrency: 2, wavePlan: [{ tasks }],
-    assembly: { managerPlan: 'raise', auditLane: 'a1' },
-    lanes: { e1: 'merged', e2: 'merged', e3: 'merged', a1: 'merged' }, events: [], updatedAt: new Date().toISOString(),
-  }), 'utf8');
-  toolsStore.setPhase('sess-ac', 'b-cplus', 'complete');
-  const b = toolsStore.readBatch('sess-ac', 'b-cplus');
-  assert.equal(b.phase, 'complete');
-  const ev = b.events.find((e) => e.type === 'gate.manager_missing');
-  assert.ok(ev, '声明 raise 且未登记 manager 应留告警事件');
-  assert.equal(ev.execLanes, 3);
-  assert.equal(ev.managerPlan, 'raise', '告警携带声明口径（读端可核）');
-});
-
-test('A2b: 声明 leader-direct 且未登记 manager → 不落 manager_missing（修 F7 误报）', () => {
-  const tasks = [
-    { id: 'e1', layer: 'exec', role: 'coder' }, { id: 'a1', layer: 'audit', role: 'supervisor' },
-  ];
-  fs.writeFileSync(toolsStore.batchFile('sess-ac', 'b-ld'), JSON.stringify({
-    batchId: 'b-ld', sessionId: 'sess-ac', phase: 'running', concurrency: 2, wavePlan: [{ tasks }],
-    assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
-    lanes: { e1: 'merged', a1: 'merged' }, events: [], updatedAt: new Date().toISOString(),
-  }), 'utf8');
-  toolsStore.setPhase('sess-ac', 'b-ld', 'complete');
-  const b = toolsStore.readBatch('sess-ac', 'b-ld');
-  assert.equal(b.phase, 'complete');
-  assert.equal(b.events.some((e) => e.type === 'gate.manager_missing'), false, 'leader-direct 声明不应触发 Manager 缺失告警（声明与告警一政）');
-});
 
 test('assign_check render: C 类强提示 + escalationHint 追加', () => {
   const render = (v) => byName.assign_check.output.render({}, v);

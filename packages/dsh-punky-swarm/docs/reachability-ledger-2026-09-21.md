@@ -23,7 +23,7 @@
 | `GATE_TARGET_PASSED` | 2 | 0 | **① 可达**（事件型，非拒码） | `:693` `if (tg.declared)` 后落通过留痕 ⇒ 有生产路径 | 同上（补断言） |
 | `GATE_EXIT_BLOCKED` | 2 | 0 | **① 可达** | `:702` 命令 gate 失败（`checkCommandGate` 拒）落事件 | 补断言 |
 | `GATE_NEEDHUMAN_BLOCKED` | 2 | 0 | **① 可达** | `:725` merged 前置 needHuman 闸拒 | 补断言 |
-| `GATE_MANAGER_MISSING` | 2 | 0 | **① 可达**（告警型） | A2 用例路径：声明 `raise` 未登记 manager ⇒ 告警事件 | 补断言 |
+| `GATE_MANAGER_MISSING` | — | — | **已删（2026-09-22 用户裁定：收口告警退役，roster_gap 承担留痕）** | 防回生锁 retired-codes-lock | 不适用 |
 | `GATE_ROW_HEADROOM` | 3 | 0 | **非守卫（疑似解析常量）** | 名称形态为常量而非拒码；需核是否在 `throw` 路径上 | **从判读集剔除**（核后确认） |
 
 **⇒ 首轮结论：零断言的 6 条中，无一条是「结构性不可能」**——全部有生产路径、状态可构造，属**补测缺口**（按 R3g 纪律「真缺口 ⇒ 补测」），**不属冗余**。这与「冗余检查」是两回事，勿混。

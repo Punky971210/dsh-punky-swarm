@@ -832,7 +832,7 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
     // G2（2026-09-14 用户裁决 A）：**建批即拉起**——声明 `managerPlan: 'raise'` 的批，**首个 exec 派发前**必须已
     //   登记 Manager（`batch_phase({ manager: { agentId } })` 写批字段 `batch.manager`）。动机（用户口径）：执行模式
     //   应为「建批 → **建批即拉起 Manager** → Manager 调度、成员大规模并行（coder 施工与 tester 备测同 wave）」，
-    //   而原实现只有**批次收口时的告警**（`gate.manager_missing`，且仅 exec≥3 的批）⇒ 「拉起」实为自觉。
+    //   而原实现只有**批次收口时的告警**（仅 exec≥3 的批；**该收口告警已删**——2026-09-22 用户裁定）⇒ 「拉起」实为自觉。
     //   此处把时序前置到**派发面**。边界：只拦 **exec** lane（plan 层的设计/计划允许先于拉起）；走 `reject()`
     //   ⇒ 自动继承 G-1「空闲态不堵」（lane 为 idle 时降级为告警放行 + 留痕）。
     // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】

@@ -99,15 +99,11 @@ export const EVT_LANE_LONGRUN_CANDIDATE = 'lane.longrun.candidate';
 //   载荷 { lane, runningSince, durationMs, emittedAt, elapsedMs, unconsumedTimeoutMs, ackId }。
 // 纪律同 stalled/longrun：只写事件流，不改成员状态、不自动重派（重派裁决归 Manager/Leader）。
 export const EVT_LANE_LONGRUN_UNCONSUMED = 'lane.longrun.unconsumed';
-// C+ 批收口告警（**非阻断**）：exec 层 lane ≥3 的批次在 `complete` 时**未登记** `batch.manager`
-// （Leader 未按协议拉起 Manager 或未登记）→ 产本事件留痕。取告警而非硬门禁的理由：历史批次无该字段，
-// 硬校验会追溯性拦批；本事件使「C+ 强制是否落实」在事件流中可核（读端：batch_status / log_export）。
-export const EVT_GATE_MANAGER_MISSING = 'gate.manager_missing';
 // gate-lite 第二批 · A2（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）：**Manager 在册缺口**留痕。
 //   语义：引擎按 `assembly.managerPlan` 声明核验 **官方 Team roster**（`ctx.get('agentTeams')` →
 //   `listMembers(agent)`）中是否存在约定名成员 `manager`；声明 `raise` 而 **roster 可读且确无该成员** ⇒ 落本事件。
-//   与 `gate.manager_missing`（批次收口告警，按 `batch.manager` **字段**触发）分工：
-//   · 本事件判据 = **roster 事实**（新口径，官方为真源）；后者 = 批次字段（legacy 观察面，历史批可读）；
+  //   （原批次收口告警（按 `batch.manager` 字段触发）已删——2026-09-22 用户裁定；批次字段 legacy
+  //   不再留痕，本事件 = 「声明 raise 但无 Manager」的**唯一**留痕面）；
 //   · 只在 **roster 可读**时发射（服务不可用 = 非官方宿主**基线态** ⇒ 不落批次事件，避免把环境事实
 //     写成本批事实；该态由 `wave_plan.managerRoster.reason` / `batch_status.managerRoster.reason`
 //     **回显**承担可读性，不静默）；

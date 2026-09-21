@@ -33,6 +33,7 @@ const RETIRED_CODES = [
   'GATE_MANAGER_PHASE_INVALID', // 同上
   'GATE_MANAGER_AGENT_ID_REQUIRED', // 同上（空 agentId ⇒ 不写记录、不抛错）
   'GATE_TEAM_ASSET_MISSING', // team-asset 解析前置化（装配前缀来源切换）
+  'GATE_MANAGER_MISSING', // 收口告警删（2026-09-22 用户裁定：roster_gap 已承担在册缺口留痕；legacy 字段面退役）
 ];
 
 function libSources(dir, out = []) {
