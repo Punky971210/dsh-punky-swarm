@@ -207,7 +207,7 @@ export function subagentRuntimeOf(ctx) {
 //   · **降级「仅发句柄」两分支**（宿主无 `ctx.subagents` / 未配置 `config.dispatch.provider`）：
 //     **不得消费**——此时句柄是 Leader **人工直派形态**的唯一凭证（把 `firstLine` 原样写进子代理
 //     任务包首行），消费掉它等于把「直派形态」堵死；该形态的硬门禁属 C 阶段。
-//   · **失败路径**：维持既有消费（派发失败已回滚 lane 到 `review`，句柄若留在 pending 会被探针
+//   · **失败路径**：维持既有消费（派发失败已把 lane 置 `failed`（K3 起；此前为 `review`），句柄若留在 pending 会被探针
 //     报成悬挂意图）；语义等价「已回收」。
 //
 // @returns {Promise<{batchId, lane, status, token, firstLine, ttlMs, spawned: boolean,
@@ -282,16 +282,17 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   } catch (e) {
     const m = mapSpawnError(e); // B6 失败显式：归一为可读码面，绝不静默
     // D-3（2026-09-16 清债）：派发失败**必须回滚 lane**——否则 lane 停在 `running` 却无 worker。
-    //   回滚目标取 `review`：`running→idle` 按成员状态机非法、`running→review` 合法，
-    //   且 `review→running` 是既定返工入口 ⇒ 恢复路径唯一且可走通。回滚为 best-effort，**不吞原始错误**。
-    try { store.setMember(sessionId, batchId, lane, 'review', 'dispatch-failed'); } catch { /* best-effort */ }
+    //   K3（2026-09-21）改判：返工边 `review→running` 已去除 ⇒ 回滚到 `review` 会把 lane 卡在**非终态且无法重派**。
+    //   回滚目标改取 `failed`（`running→failed` 在迁移表内，**零新增边**）：派发失败即终态，
+    //   恢复按 K3 走「gap-list + 新任务批次」，**不再原地重派**。回滚为 best-effort，**不吞原始错误**。
+    try { store.setMember(sessionId, batchId, lane, 'failed', 'dispatch-failed'); } catch { /* best-effort */ }
     // N5 清债（2026-09-16 评审）：失败路径**必须作废已发放的句柄**——否则它留在 `pendingHandles` 里，
     //   绑定缺口观测（`bindingGapOf`）会把它报成 `token-ttl-expired` 幽灵信号。句柄面没有 revoke API，
     //   故用一次性消费（`consumeLaneHandle`）把它从 pending 中摘除：token 从此作废，语义等价「已回收」。
     try { consumeLaneHandle(h.token, { batchId, lane }); } catch { /* best-effort */ }
     throw new Error(m.code + ': ' + m.message
-      + ' ｜ 已回滚 lane=' + lane + ' 到 review（无 worker 挂载）⇒ 恢复步骤：修因后直接重派 '
-      + '`lane_dispatch({ batchId: "' + batchId + '", lane: "' + lane + '" })`（review→running 为既定返工入口）；'
+      + ' ｜ 已将 lane=' + lane + ' 置 failed（无 worker 挂载；派发失败即终态）⇒ 恢复步骤：记入 gap-list 并开新任务批次，'
+      + '**不可原地重派**（K3：返工边 review→running 已去除，重派会被 `invalid member transition` 拒）；'
       + '如需人工核查：`gate_status({ batchId: "' + batchId + '", lane: "' + lane + '" })`。');
   }
   // D-2（2026-09-16 清债）：worker 会话 id **定点取值**（契约字段 `id`），不再静默猜字段；

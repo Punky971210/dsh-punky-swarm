@@ -297,9 +297,9 @@
       "todos": 0
     },
     "test/dispatch-failure-rollback.test.js": {
-      "asserts": 18,
+      "asserts": 20,
       "blankLines": 12,
-      "lines": 106,
+      "lines": 113,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -441,9 +441,9 @@
       "todos": 0
     },
     "test/gates.test.js": {
-      "asserts": 198,
+      "asserts": 201,
       "blankLines": 66,
-      "lines": 1010,
+      "lines": 1024,
       "tautologies": 0,
       "tests": 49,
       "todos": 0
@@ -593,9 +593,9 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 206,
+      "asserts": 208,
       "blankLines": 41,
-      "lines": 688,
+      "lines": 691,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -761,9 +761,9 @@
       "todos": 0
     },
     "test/outcome-typing.test.js": {
-      "asserts": 46,
+      "asserts": 47,
       "blankLines": 18,
-      "lines": 209,
+      "lines": 215,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -915,7 +915,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 40,
       "blankLines": 17,
-      "lines": 297,
+      "lines": 298,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1169,7 +1169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T03:31:04Z",
+  "generatedAt": "2026-09-21T03:54:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1183,10 +1183,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8248,
+    "asserts": 8256,
     "blankLines": 3872,
     "files": 146,
-    "lines": 43630,
+    "lines": 43661,
     "tautologies": 0,
     "tests": 1686,
     "todos": 4

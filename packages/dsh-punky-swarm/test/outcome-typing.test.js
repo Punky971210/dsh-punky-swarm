@@ -115,30 +115,36 @@ test('C5-3 crashed/interrupted 不写成员态：schema 枚举/迁移/终端判�
   assert.ok(allLaneStates.every((s) => schema.isMemberState(s)), 'lanes 值域必须全为成员态');
 });
 
-test('C5-4 attempt 派生零变：crashed/interrupted 不入 member.settled，事件计数推导口径不变', () => {
+// K3（2026-09-21）改判：`attempt` 的派生源是 `member.settled(from=review, to=running)`——返工边去除后该事件**不再产生**，
+//   ⇒ attempt 恒为 0（返工改由 gap-list + 新任务批次表达）。本用例保留 crashed/interrupted 不入 member.settled 的覆盖。
+test('C5-4 attempt 派生零变：crashed/interrupted 不入 member.settled；K3 后 attempt 无派生源', () => {
   const { store, S } = setup();
-  // 带返工（review→running）→ 崩溃恢复 → 停滞回收 的复合事件流
+  // 崩溃恢复 → 停滞回收 的复合事件流（返工段已按 K3 去除）
   const bid = 'b-mix';
   const plan = buildWavePlan({ batchId: bid, tasks: [{ id: 'l1' }, { id: 'l2' }] });
   store.createBatch(S, { batchId: bid, wavePlan: plan, phase: 'running' });
-  // l1：running→review→running（attempt+1 的既有派生源）→review→conflict 终态
+  // l1：running→review（打回重跑被拒）→conflict 终态
   store.setMember(S, bid, 'l1', 'running');
   store.setMember(S, bid, 'l1', 'review');
-  store.setMember(S, bid, 'l1', 'running');
-  store.setMember(S, bid, 'l1', 'review');
+  assert.throws(
+    () => store.setMember(S, bid, 'l1', 'running'),
+    /invalid member transition: review -> running/,
+    'K3：返工边已去除 ⇒ 重跑必被拒',
+  );
   store.setMember(S, bid, 'l1', 'conflict', '评审驳回：用户 2026-09-14 裁决（grilling Q10=A）：新语义下 note 为必填，补参数不涉断言改写');
   // l2：running 中 crash（recoverBatches 记 crashed）
   store.setMember(S, bid, 'l2', 'running');
   store.recoverBatches();
   const b = store.readBatch(S, bid);
   // attempt 派生（对齐 api.js laneAttempts 口径：member.settled from=review && to=running）
+  // K3：返工边去除 ⇒ 该事件形态不再产生 ⇒ attempt 恒无计数（返工语义改由 gap-list + 新批次承载）
   const laneAttempts = {};
   for (const e of b.events) {
     if (e.type === 'member.settled' && e.from === 'review' && e.to === 'running') {
       laneAttempts[e.lane] = (laneAttempts[e.lane] ?? 0) + 1;
     }
   }
-  assert.equal(laneAttempts.l1, 1); // 数值语义与接线前一致
+  assert.equal(laneAttempts.l1, undefined, 'K3 后 attempt 无派生源（返工不再原地发生）');
   assert.equal(laneAttempts.l2, undefined); // crash 不产生 attempt 计数
   // crashed/interrupted 只出现在 outcome 分型字段，绝不作为 member.settled.to
   const settled = b.events.filter((e) => e.type === 'member.settled');

@@ -17,8 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 派发失败路径回归（2026-09-16 清债）：
 //   D-2 worker 会话 id **定点取值**（契约字段 `id`），兼容回落须**显式告警**、取不到**不静默**；
-//   D-3 派发失败必须**回滚 lane**（`running→review`，合法状态 + `review→running` 为返工入口），
-//       且在错误文案里给出**唯一**恢复步骤（旧行为：lane 停在 running 无 worker，靠心跳 gap 事后补救）。
+//   D-3 派发失败必须**回滚 lane**（K3 起目标为 `failed` 终态；此前为 `review`——返工边去除后该目标会把 lane
+//       卡在非终态且重派必被拒），且在错误文案里给出**唯一**恢复步骤（旧行为：lane 停在 running 无 worker，
+//       靠心跳 gap 事后补救）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -29,6 +30,7 @@ import { createStore } from '../lib/state/store.js';
 import { workerSessionIdOf } from '../lib/engine/dispatch.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import * as schema from '../lib/schema.js';
 
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team；其 skills 须可解析 ⇒ 先注入技能根。
 seedTeamAssetSkills('software-team');
@@ -69,19 +71,24 @@ async function harness(startContinuable) {
   return { by, exec, store };
 }
 
-test('DR-2 派发失败 ⇒ 报 GATE_* 码 + 回滚 lane 到 review + 给出唯一恢复步骤', async () => {
+// K3（2026-09-21）改判：返工边 `review→running` 已去除 ⇒ 派发失败的回滚目标由 `review` 改 `failed`。
+//   旧口径「回滚到 review，修因后原地重派」在去边后会把 lane 卡在**非终态且重派必被拒**（invalid member transition）。
+//   新语义：派发失败即终态 ⇒ 恢复按 K3 走「gap-list + 新任务批次」，**不可原地重派**。
+test('DR-2 派发失败 ⇒ 报 GATE_* 码 + 置 lane failed（终态） + 给出唯一恢复步骤（gap-list + 新批次）', async () => {
   const { by, exec, store } = await harness(async () => { throw new Error('provider "spawn" cannot enforce toolFilter'); });
   await assert.rejects(
     () => by.lane_dispatch.execute({ batchId: 'b-dr', lane: 'e1' }, exec),
     (e) => {
       assert.match(e.message, /GATE_DISPATCH_CAPABILITY_MISSING/, '须归一为可读码面');
-      assert.match(e.message, /已回滚 lane=e1 到 review/, '须回滚并写明');
-      assert.match(e.message, /lane_dispatch\(\{ batchId: "b-dr", lane: "e1" \}\)/, '须给唯一恢复调用样例');
+      assert.match(e.message, /已将 lane=e1 置 failed/, '须置终态并写明');
+      assert.match(e.message, /不可原地重派/, '须明确「不可原地重派」（去边后重派会被拒）');
+      assert.match(e.message, /gap-list/, '须指向 gap-list 恢复路径');
       return true;
     },
   );
   const b = store.readBatch(SID, 'b-dr');
-  assert.equal(b.lanes.e1, 'review', 'lane 必须落到合法可恢复态（不得停在 running）');
+  assert.equal(b.lanes.e1, 'failed', 'lane 必须落到终态（不得停在 running，亦不得停在非终态 review）');
+  assert.equal(schema.isMemberTerminal(b.lanes.e1), true, 'K3：派发失败即终态 ⇒ 恢复只能走新任务批次');
 });
 
 test('DR-3 宿主返回载荷缺 id 且无兼容字段 ⇒ 显式报错（带原始载荷），不静默绑定', async () => {

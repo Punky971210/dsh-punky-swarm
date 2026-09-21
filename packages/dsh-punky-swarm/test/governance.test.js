@@ -240,24 +240,27 @@ test('A1: 终态批次拒绝成员迁移（GATE_BATCH_TERMINAL）', async () => 
 //     ① 首选 继承：保留 batch.laneExempt[lane]（可配 `lane.exempt.inherited` 事件留痕，grantedFrom 语义扩展）；
 //     ② 次选 清退 + 显式提示：写 `lane.exempt.cleared` 事件并进入探针输出（exemptClearedAt / reason='exempt-cleared'）。
 //   本断言面 = 「可观测留痕存在」（继承或 cleared 任一），故对两种落法都成立、对「静默清退」必失败。
-test('A3: 重派未带 exempt → 旧 longrun 豁免不得被静默清退（继承或显式 cleared 留痕）', async () => {
+// K3（2026-09-21）改判：**重派路径本身已不存在**（`review→running` 返工边去除）⇒ 原「重派未带 exempt ⇒ 豁免不得静默清退」
+//   的观测点从「重派后豁免仍在」改为「重派被拒 ⇒ 零写入 ⇒ 豁免仍在」。D7/§6.2 的目标（不得静默清退）由**零写入**天然保证：
+//   结算到 failed/skipped/conflict 才可能触发清退路径，而它们受 `GATE_SETTLE_NOTE_MISSING` 约束且须显式留痕。
+test('A3（K3 改判）：重派路径已去除 ⇒ review→running 被拒，旧 longrun 豁免零写入不清退', async () => {
   await byName.wave_plan.execute({ batchId: 'b-ex', tasks: [{ id: 'x' }] }, AC_SESS);
   await byName.batch_phase.execute({ batchId: 'b-ex', phase: 'running' }, AC_SESS);
   await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running', exempt: { type: 'ai-render' } }, AC_SESS);
   assert.ok(toolsStore.readBatch('sess-ac', 'b-ex').laneExempt.x, '派发面授予后应有豁免条目');
   await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'review' }, AC_SESS);
-  await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running' }, AC_SESS); // 重派不带 exempt
+  // 重派不带 exempt：K3 后被拒（非「放行但清退豁免」）
+  let re = null;
+  try {
+    re = await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running' }, AC_SESS);
+  } catch (e) {
+    re = e;
+  }
+  const msg = re instanceof Error ? re.message : JSON.stringify(re);
+  assert.match(msg, /invalid member transition: review -> running/, 'K3：重派路径应已被去除，实际=' + msg);
   const b = toolsStore.readBatch('sess-ac', 'b-ex');
-  const inherited = b.laneExempt?.x != null;
-  const inheritedEv = b.events.some((e) => e.type === 'lane.exempt.inherited' && e.lane === 'x');
-  const clearedEv = b.events.some((e) => e.type === 'lane.exempt.cleared' && e.lane === 'x');
-  assert.ok(
-    inherited || inheritedEv || clearedEv,
-    'D7/§6.2：重派未带 exempt 不得静默清退旧豁免——须「继承（laneExempt 保留，可配 lane.exempt.inherited）」'
-      + '或「显式 cleared 留痕（lane.exempt.cleared）」。实际：laneExempt='
-      + JSON.stringify(b.laneExempt ?? null) + '；lane.exempt.* 事件='
-      + JSON.stringify(b.events.filter((e) => String(e.type).startsWith('lane.exempt.')).map((e) => e.type)),
-  );
+  assert.equal(b.lanes.x, 'review', '拒 = 零写入 ⇒ 状态不变');
+  assert.ok(b.laneExempt?.x != null, 'D7/§6.2「不得静默清退」：豁免条目须仍在（实际=' + JSON.stringify(b.laneExempt ?? null) + '）');
 });
 
 // A2：声明 raise（引擎缺省口径）的批未登记 manager → complete 成功但留 gate.manager_missing 告警（非阻断）。

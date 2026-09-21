@@ -226,7 +226,9 @@ test('Exit Gate exec：merged 前 outputs 缺失 → 拒绝', () => {
   assert.equal(store.readBatch(SID, 'b-ex').lanes.e1, 'review');
 });
 
-test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；写产物后通过（gate.passed 事件）', () => {
+// K3（2026-09-21）改判：返工边 `review→running` 已去除 ⇒ 门禁拒后**不可原地重来**（旧口径：补写产物后重跑同一 lane）。
+//   拒 = 零写入 ⇒ lane 停在 `review`；恢复路径按 K3 = **gap-list + 新任务批次**（此处用同规格新批验证可结算）。
+test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；拒后不可原地重来（恢复 = gap-list + 新批次）', () => {
   makePlan('b-au', tasks3());
   art('b-au', 'plan/spec.md'); art('b-au', 'plan/task-tree.json');
   runLane('b-au', 'p1');
@@ -234,10 +236,21 @@ test('Exit Gate audit：merged 前 produce 缺失 → 拒绝；写产物后通�
   runLane('b-au', 'e1');
   const r = runLane('b-au', 'a1'); // audit produce 未写
   assert.ok(r instanceof Error && /GATE_EXIT_MISSING_AUDIT/.test(r.message), String(r.message));
-  art('b-au', 'audit/review.md');
-  art('b-au', 'audit/gap-list.json');
-  const ok = runLane('b-au', 'a1');
-  assert.ok(!(ok instanceof Error), String(ok.message));
+  // 拒 = 零写入 ⇒ 状态不变（仍 review，非终态）
+  assert.equal(store.readBatch(SID, 'b-au').lanes.a1, 'review');
+  // 原地重派已被去边否决
+  const retry = set(SID, 'b-au', 'a1', 'running');
+  assert.ok(retry instanceof Error && /invalid member transition: review -> running/.test(retry.message), String(retry && retry.message));
+  // 恢复路径 = 新任务批次：同规格另开一批，产物齐备 ⇒ 正常结算并留 gate.passed
+  makePlan('b-au2', tasks3());
+  art('b-au2', 'plan/spec.md'); art('b-au2', 'plan/task-tree.json');
+  runLane('b-au2', 'p1');
+  art('b-au2', 'exec/e1/main.py');
+  runLane('b-au2', 'e1');
+  art('b-au2', 'audit/review.md');
+  art('b-au2', 'audit/gap-list.json');
+  const ok = runLane('b-au2', 'a1');
+  assert.ok(!(ok instanceof Error), String(ok && ok.message));
   assert.ok(ok.events.some((e) => e.type === 'gate.passed' && e.lane === 'a1'));
 });
 
@@ -922,27 +935,28 @@ test('O2 TARGETS_CLAIMED_RE：独立行行首锚定——`targets-claimed: true`
   assert.equal(TARGETS_CLAIMED_RE.test(''), false);
 });
 
-test('O2 T8：返工（review→running）重置基准——新 mtime 基准生效', () => {
+// K3（2026-09-21）改判：原用例靠「打回返工（review→running）」重置 targets mtime 基准；去边后该路径已不存在
+//   ⇒ 基准**不再被重置**（永远是首次派发 running 的时刻）。基准判据本身不变，仍须拒旧 mtime、放过新 mtime。
+test('O2 T8（K3 改判）：返工边去除 ⇒ review→running 被拒，targets 基准不重置（仍以首次 running 为准）', () => {
   const id = 'b-tg-t8';
   const target = mkTarget('t8');
   makeTargetBatch(id, [target]);
   // 首次 running（t0）→ target mtime 设于 t0 之后
   const r1 = set(SID, id, 'e1', 'running');
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
+  const t0 = r1.events.filter((e) => e.type === 'member.settled' && e.lane === 'e1' && e.to === 'running').pop().ts;
   setTargetMtime(target, Date.now() + 1000);
   set(SID, id, 'e1', 'review');
-  // 打回返工：review→running（push 新的 running 结算事件，基准重置为更晚时刻 t1）
-  const reworkAt = Date.now();
+  // 打回重跑：K3 后非法（返工 = gap-list + 新任务批次，不可原地重派）
   const rw = set(SID, id, 'e1', 'running');
-  assert.ok(!(rw instanceof Error), String(rw && rw.message));
-  const t1 = rw.events.filter((e) => e.type === 'member.settled' && e.lane === 'e1' && e.to === 'running').pop().ts;
-  // target mtime 设于首次 running 之后、返工 running 之前 → 返工后新基准下应拒（GATE_TARGET_UNCHANGED）
-  setTargetMtime(target, reworkAt - 500);
-  assert.ok(new Date(target ? fs.statSync(target).mtime : 0).getTime() < Date.parse(t1), '前置：mtime 早于返工 running');
-  set(SID, id, 'e1', 'review');
+  assert.ok(rw instanceof Error && /invalid member transition: review -> running/.test(rw.message), String(rw && rw.message));
+  assert.equal(store.readBatch(SID, id).lanes.e1, 'review', '拒 = 零写入 ⇒ 状态不变');
+  // 基准仍是 t0 ⇒ 早于 t0 的 mtime 应拒（GATE_TARGET_UNCHANGED）
+  setTargetMtime(target, Date.parse(t0) - 500);
+  assert.ok(fs.statSync(target).mtime.getTime() < Date.parse(t0), '前置：mtime 早于首次 running 基准');
   const r4 = set(SID, id, 'e1', 'merged');
-  assert.ok(r4 instanceof Error && /GATE_TARGET_UNCHANGED/.test(r4.message), '返工后旧 mtime 不再满足新基准: ' + String(r4 && r4.message));
-  // 更新 target（mtime 晚于返工 running）→ merged 通过
+  assert.ok(r4 instanceof Error && /GATE_TARGET_UNCHANGED/.test(r4.message), '基准未被重置：旧 mtime 仍不满足: ' + String(r4 && r4.message));
+  // 更新 target（mtime 晚于基准）→ merged 通过
   setTargetMtime(target, Date.now() + 60000);
   const r5 = set(SID, id, 'e1', 'merged');
   assert.ok(!(r5 instanceof Error), String(r5 && r5.message));

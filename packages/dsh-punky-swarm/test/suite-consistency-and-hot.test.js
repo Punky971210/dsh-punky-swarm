@@ -155,7 +155,8 @@ test('SC-2 dispatch.gate 热更：同一工具面下 warn → enforce 均不拦�
 });
 
 // ── SC-3 失败路径无残留句柄（N5） ───────────────────────────────────────────
-test('SC-3 派发失败 ⇒ lane 回滚 review 且**无残留句柄**（无幽灵 token-ttl-expired）', async () => {
+// K3（2026-09-21）改判：回滚目标由 `review` 改 `failed`（返工边 `review→running` 已去除 ⇒ 回滚到 review 会卡在非终态且重派必被拒）。
+test('SC-3 派发失败 ⇒ lane 置 failed 且**无残留句柄**（无幽灵 token-ttl-expired）', async () => {
   __resetLaneHandles();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-sc3-'));
   const store = createStore(root);
@@ -174,7 +175,7 @@ test('SC-3 派发失败 ⇒ lane 回滚 review 且**无残留句柄**（无幽�
   seedArtifacts(root, SID, 'b-sc3', ['e1'], { planProduct: 'plan/spec.md' });
 
   await assert.rejects(() => by.lane_dispatch.execute({ batchId: 'b-sc3', lane: 'e1' }, exec), /GATE_DISPATCH_FAILED/);
-  assert.equal(store.readBatch(SID, 'b-sc3').lanes.e1, 'review', '失败须回滚到合法可恢复态');
+  assert.equal(store.readBatch(SID, 'b-sc3').lanes.e1, 'failed', 'K3：派发失败即终态（不得停在 running，亦不得停在非终态 review）');
   const residual = pendingHandles().filter((h) => h.batchId === 'b-sc3' && h.lane === 'e1');
   assert.deepEqual(residual, [], '失败路径必须作废已发句柄（否则心跳报幽灵 token-ttl-expired）');
   __resetLaneHandles();
