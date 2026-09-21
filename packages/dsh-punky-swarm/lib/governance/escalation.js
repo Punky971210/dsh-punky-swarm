@@ -25,10 +25,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import * as EVT from '../state/event-types.js';
 
-// 配置默认值对齐（纯函数不读配置源——值由调用方注入，签名内默认缺省对齐语义）：
-//   windowMs 默认 600000（10 分钟）；primitives 默认 ['DENY','NARROW']（DENY/NARROW 计入，DEFER/PAUSE
-//   默认不计、可显式扩入；REQUIRE_APPROVAL 与状态门收据（ruleRefs=[]）由调用方过滤，本函数不判 ruleRefs）。
-export const DEFAULT_ESCALATION_WINDOW_MS = 600000;
 export const DEFAULT_ESCALATION_PRIMITIVES = ['DENY', 'NARROW'];
 
 /**
@@ -44,6 +40,7 @@ export const DEFAULT_ESCALATION_PRIMITIVES = ['DENY', 'NARROW'];
  *   - now 评估基准时刻（epoch 毫秒；缺省 = 调用时刻——调用方应显式注入以保确定性）
  * @returns {number} 窗口内计入违规数（不含 threshold 比较——阈值比较在调用点）
  */
+export const DEFAULT_ESCALATION_WINDOW_MS = 600000;
 export function countGovernanceRefusals(events, { windowMs = DEFAULT_ESCALATION_WINDOW_MS, primitives = DEFAULT_ESCALATION_PRIMITIVES, now } = {}) {
   const evs = events ?? [];
   const t = typeof now === 'number' ? now : Date.now();

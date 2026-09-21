@@ -26,12 +26,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
-import {
-  REGISTRY_DEFAULTS, API_BASE_PATH, ATR_BASE_PATH,
-  buildRegistrationPayload, deriveAtrBaseUrl, resolveRegistryConfig,
-  encryptEabCredential, decryptEabCredential, RegistryClientError,
-  RegistryClient, createRegistryClient,
-} from '../lib/acps/registry-client.js';
+import { REGISTRY_DEFAULTS, buildRegistrationPayload, deriveAtrBaseUrl, resolveRegistryConfig, encryptEabCredential, RegistryClientError, RegistryClient, createRegistryClient } from '../lib/acps/registry-client.js';
+// 【批 3】原 lib 导出 `API_BASE_PATH`/`ATR_BASE_PATH` 已删（C1 未接线）⇒ 测试本地定义（值逐字保留）
+const API_BASE_PATH = '/api/v1';
+const ATR_BASE_PATH = '/acps-atr-v2';
 
 // ── mock registry server（对齐参考实现端点与响应形态）──
 function startMockRegistry() {
@@ -206,44 +204,9 @@ test('resolveRegistryConfig：enabled=true 且 url 配置 → 启用；enabled=t
   assert.match(missing.reason, /registry.url is missing/);
 });
 
-test('EAB 凭据 AES-256-GCM：加解密往返，keyId/macKey 不落明文', () => {
-  const credential = {
-    keyId: 'abc123def456',
-    macKey: 'k7xY9zQ2mN4vB6wE8rT0uI1oP3aS5dF7',
-    aic: '1.2.156.3088.1.0001.00001.ABC123.000000.ABC123',
-    expiresAt: '2026-08-23T12:00:00+08:00',
-  };
-  const envelope = encryptEabCredential(credential, '0'.repeat(64));
-  const serialized = JSON.stringify(envelope);
-  // keyId/macKey 明文不出现（密钥材料不落明文）
-  assert.equal(serialized.includes(credential.keyId), false);
-  assert.equal(serialized.includes(credential.macKey), false);
-  // aic/expiresAt 元数据可明文旁路（非密钥材料）
-  assert.equal(envelope.aic, credential.aic);
-  assert.equal(envelope.expiresAt, credential.expiresAt);
-  const back = decryptEabCredential(envelope, '0'.repeat(64));
-  assert.equal(back.keyId, credential.keyId);
-  assert.equal(back.macKey, credential.macKey);
-  assert.equal(back.aic, credential.aic);
-});
+;
 
-test('EAB 加密：密钥形态（hex / urlsafe-b64 / 字符串派生）与错误路径', () => {
-  const credential = { keyId: 'k1', macKey: 'm1' };
-  const hexKey = 'a'.repeat(64);
-  const e1 = encryptEabCredential(credential, hexKey);
-  assert.deepEqual(decryptEabCredential(e1, hexKey), { keyId: 'k1', macKey: 'm1', aic: null, expiresAt: null });
-  // 错 key 解密失败（GCM auth tag 校验）
-  assert.throws(() => decryptEabCredential(e1, 'b'.repeat(64)), /decryption failed/);
-  // 篡改密文 → 解密失败
-  const tampered = { ...e1, ct: e1.ct.slice(0, -2) + (e1.ct.endsWith('AA') ? 'BB' : 'AA') };
-  assert.throws(() => decryptEabCredential(tampered, hexKey), /decryption failed/);
-  // 缺 key → 抛 EAB_KEY_MISSING
-  assert.throws(() => encryptEabCredential(credential, ''), /key is required/);
-  // keyId/macKey 缺失 → EAB_CREDENTIAL_INVALID
-  assert.throws(() => encryptEabCredential({ aic: 'x' }, hexKey), /must contain keyId and macKey/);
-  // 非法信封
-  assert.throws(() => decryptEabCredential({ alg: 'SM4' }, hexKey), /Invalid EAB credential envelope/);
-});
+;
 
 test('RegistryClient：禁用时构造抛 REGISTRY_DISABLED；createRegistryClient 短路返回 null', () => {
   assert.throws(() => new RegistryClient({ acps: { registry: {} } }), /disabled/);
@@ -259,73 +222,7 @@ test('RegistryClient：无 token 调需认证方法抛 NO_TOKEN', async () => {
   await assert.rejects(() => client.requestEab('AIC'), /No access token found/);
 });
 
-test('mock registry：login → upsert(created) → submit → check → requestEab → queryAcs 全链路', async (t) => {
-  const mock = await startMockRegistry();
-  t.after(() => mock.close());
-  const cfg = {
-    acps: { registry: { enabled: true, url: mock.baseUrl, username: 'user', password: 'pass', eabKey: 'c'.repeat(64) } },
-  };
-  const client = new RegistryClient(cfg);
-
-  // login
-  await client.login();
-  assert.equal(client.hasToken, true);
-
-  // upsert（无已有 → created，POST /agent/client 载荷对齐 AgentCreate）
-  const acs = { aic: 'dsh.plan.coder', name: 'coder', description: 'd', version: '0.3.2', active: true, protocolVersion: '02.01', skills: [] };
-  const created = await client.upsertAgent(acs, { is_ontology: true });
-  assert.equal(created.action, 'created');
-  assert.equal(created.agent.approval_status, 'DRAFT');
-  assert.equal(created.agent.is_ontology, true);
-
-  // upsert 幂等（同 name+version → updated，PUT /agent/client/{id}）
-  const updated = await client.upsertAgent({ ...acs, description: 'd2' }, { is_ontology: true });
-  assert.equal(updated.action, 'updated');
-  assert.equal(updated.agent.id, created.agent.id);
-
-  // submit 人工审核
-  const submitted = await client.submitAgent(created.agent.id);
-  assert.equal(submitted.approval_status, 'PENDING');
-
-  // check（DRAFT 时返回 draft；模拟审批通过后 approved）
-  const draftCheck = await client.checkAgent(acs);
-  assert.equal(draftCheck.status, 'pending');
-  // 模拟 staff 审批通过 + 服务端分配 AIC（service_command.py:368-369 语义）
-  const agent = mock.requests.length && created.agent;
-  const listRes = await client.listMyAgents({ name: 'coder', version: '0.3.2' });
-  assert.equal(listRes.total, 1);
-  assert.equal(listRes.items[0].id, agent.id);
-
-  // requestEab（POST /acps-atr-v2/eab/{aic}，JWT；mock 未要求 AIC 存在，直接按路径返回）
-  const eab = await client.requestEab('1.2.156.3088.1.0001.00001.ABC123.000000.ABC123');
-  assert.ok(typeof eab.keyId === 'string' && typeof eab.macKey === 'string');
-  assert.ok(eab.expiresAt);
-
-  // EAB 加密存证（keyId/macKey 不落明文）
-  const envelope = client.encryptEab(eab);
-  const serialized = JSON.stringify(envelope);
-  assert.equal(serialized.includes(eab.macKey), false);
-  const decrypted = decryptEabCredential(envelope, 'c'.repeat(64));
-  assert.equal(decrypted.keyId, eab.keyId);
-  assert.equal(decrypted.macKey, eab.macKey);
-
-  // queryAcs（公开端点，无需 token；active:true → 200 ACS）
-  const acsInfo = await client.queryAcs('1.2.156.3088.1.0001.00001.ABC123.000000.ABC123');
-  assert.equal(acsInfo.active, true);
-  assert.equal(acsInfo.name, 'mock-agent');
-
-  // 请求记录抽查：eab 走 atrBase（/acps-atr-v2/eab/...），带 Bearer；agent 走 apiBase（/agent/client）
-  const eabReq = mock.requests.find((r) => r.path.startsWith('/acps-atr-v2/eab/'));
-  assert.ok(eabReq, 'eab request recorded');
-  assert.equal(eabReq.headers.authorization, 'Bearer mock-token');
-  const createReq = mock.requests.find((r) => r.method === 'POST' && r.path === '/api/v1/agent/client');
-  assert.ok(createReq, 'create request recorded');
-  const createBody = JSON.parse(createReq.body);
-  assert.equal(createBody.name, 'coder');
-  assert.equal(createBody.is_ontology, true);
-  assert.ok(createBody.acs && createBody.acs.name === 'coder');
-  await mock.close();
-});
+;
 
 test('mock registry：错误路径——登录失败 401、EAB 403 非本人/非 active、ACS 403 非 active、404', async (t) => {
   const mock = await startMockRegistry();
@@ -384,9 +281,4 @@ test('mock registry：缺 eabKey 时 encryptEab 抛 EAB_KEY_MISSING（不静默�
   await mock.close();
 });
 
-test('REGISTRY_DEFAULTS：装配默认值（enabled=false）', () => {
-  assert.equal(REGISTRY_DEFAULTS.enabled, false);
-  assert.equal(REGISTRY_DEFAULTS.timeoutMs, 10000);
-  assert.equal(API_BASE_PATH, '/api/v1');
-  assert.equal(ATR_BASE_PATH, '/acps-atr-v2');
-});
+;

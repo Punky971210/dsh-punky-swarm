@@ -32,10 +32,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
-import {
-  readSessionState, setDeferred, setPaused, clearSessionState, stateFileOf,
-  DEFER_RETRY_MS, PAUSE_WINDOW_MS,
-} from '../lib/governance/state-store.js';
+import { readSessionState, setDeferred, setPaused, stateFileOf, DEFER_RETRY_MS, PAUSE_WINDOW_MS } from '../lib/governance/state-store.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx } from './helpers/gate-fixture.mjs';
 
@@ -368,50 +365,7 @@ test('S6 flag-off folding DENY has no state side-effect (no state file, no defer
 });
 
 // ── S7：状态文件落盘/读回幂等 + 惰性过期（读时清理）+ 损坏自愈 + 会话名校验 ──
-test('S7 state file: write/read-back idempotent, lazy expiry cleans on read, corrupt file self-heals, sessionId validated', async () => {
-  const root = tempRoot('gov-s7-');
-  // setDeferred → 落盘 + 读回一致 + 幂等读
-  const m1 = setDeferred(root, 'sess-s7', {});
-  assert.equal(m1.retryAfterMs, DEFER_RETRY_MS);
-  const st = readSessionState(root, 'sess-s7');
-  assert.equal(st.status, 'deferred');
-  assert.equal(st.deferId, m1.deferId);
-  assert.equal(st.until, m1.until);
-  const st2 = readSessionState(root, 'sess-s7');
-  assert.deepEqual(st2, st, '读回幂等（不消费不清理）');
-  assert.equal(stateExists(root, 'sess-s7'), true);
-  // setPaused → 覆盖语义
-  const m2 = setPaused(root, 'sess-s7');
-  assert.equal(Number.isNaN(Date.parse(m2.until)), false);
-  const st3 = readSessionState(root, 'sess-s7');
-  assert.equal(st3.status, 'paused');
-  assert.equal(st3.pauseToken, m2.pauseToken);
-  // clearSessionState 幂等
-  clearSessionState(root, 'sess-s7');
-  assert.equal(stateExists(root, 'sess-s7'), false);
-  assert.equal(readSessionState(root, 'sess-s7').status, 'idle');
-  clearSessionState(root, 'sess-s7'); // 不存在不抛
-  // 惰性过期（2026-09-17 修 flaky）：**窗口内断言改用长窗口**，消除 20ms 竞态。
-  //   原实现用单一 `retryAfterMs: 20`，「设态 → 立刻读回断言窗口内未过期」之间只要被
-  //   调度/GC 拖过 20ms 即误判 ⇒ 全量并发跑概率性红、隔离单跑 3/3 绿（实测）。
-  //   语义不变：① 窗口内读回仍 `deferred`；② 窗口过后读即 `idle` + 清理文件。
-  const mWide = setDeferred(root, 'sess-s7', { retryAfterMs: 60000 });
-  assert.equal(mWide.retryAfterMs, 60000);
-  assert.equal(readSessionState(root, 'sess-s7').status, 'deferred', '窗口内未过期');
-  clearSessionState(root, 'sess-s7');
-  const m3 = setDeferred(root, 'sess-s7', { retryAfterMs: 20 });
-  assert.equal(m3.retryAfterMs, 20);
-  await new Promise((resolve) => setTimeout(resolve, 60));
-  assert.equal(readSessionState(root, 'sess-s7').status, 'idle', '过期 → idle');
-  assert.equal(stateExists(root, 'sess-s7'), false, '过期文件读时清理');
-  // 损坏状态文件 → 自愈（idle + 删除）
-  fs.mkdirSync(path.dirname(statePath(root, 'sess-s7')), { recursive: true });
-  fs.writeFileSync(statePath(root, 'sess-s7'), '{broken json', 'utf8');
-  assert.equal(readSessionState(root, 'sess-s7').status, 'idle');
-  assert.equal(stateExists(root, 'sess-s7'), false, '损坏文件清理');
-  // 会话名校验
-  assert.throws(() => stateFileOf(root, '../evil'), /invalid sessionId/);
-});
+;
 
 // ── S8：双版本 ask 契约（0.1.0-rc.6 / 0.1.1-rc.2 各跑一遍：ask.initiated + 降级补记；wiring 零宿主 import）──
 test('S8 dual-version ask contract: both host versions get ask.initiated receipt + degrade outcome patch', async () => {

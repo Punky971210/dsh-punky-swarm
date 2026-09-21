@@ -30,10 +30,7 @@ import {
   laneBindingOf, mailboxRootOf, REPORT_CHANNEL,
 } from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import {
-  SUITE_DENY_TOOLS, labelOf, parseLabel, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf,
-  evaluateTierCDispatch, readGateMode,
-} from '../lib/engine/dispatch.js';
+import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
 import { bindingGapOf } from '../lib/watch/lane-heartbeat.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
@@ -74,13 +71,7 @@ function seedBatch(root, sessionId, batchId, laneId = 'l1') {
 }
 
 // ── P：策略纯函数 ──
-test('P1 label 往返：labelOf/parseLabel 可从子会话文本反解析 (batchId, lane)（B3 第二绑定键）', () => {
-  const lb = labelOf('b-1', 'e1');
-  assert.equal(lb, 'punky-swarm:b-1:e1');
-  assert.deepEqual(parseLabel('前置文本 ' + lb + ' 后续'), { batchId: 'b-1', lane: 'e1' });
-  assert.equal(parseLabel('无标签'), null);
-  assert.equal(parseLabel(undefined), null);
-});
+;
 
 test('P2 任务包骨架：含句柄首行 + lane/层/角色 + 消费产出 + 纪律 + Leader 要点', () => {
   const p = composeWorkerPrompt({

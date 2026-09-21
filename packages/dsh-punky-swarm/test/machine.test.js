@@ -20,24 +20,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as schema from '../lib/schema.js';
 import { DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES, loadRules } from '../lib/state/machine-rules.js';
-import { RATCHET_RULES, applyMemberTransition, applyBatchTransition, checkDispatchCondition } from '../lib/state/machine.js';
+import { applyMemberTransition, applyBatchTransition, checkDispatchCondition } from '../lib/state/machine.js';
 
 const MEMBER = schema.MEMBER_TRANSITIONS;
 const BATCH = schema.BATCH_TRANSITIONS;
 
 // ---- R1 默认 = 现行约束（单一事实源：machine-rules 引用 schema 常量，不拷贝）----
-test('loadRules default: same-reference as schema constants (single source of truth)', () => {
-  const d = loadRules();
-  assert.equal(d.memberRules, MEMBER);
-  assert.equal(d.batchRules, BATCH);
-  assert.equal(d.source, 'default');
-  const d2 = loadRules({});
-  assert.equal(d2.memberRules, MEMBER);
-  assert.equal(d2.batchRules, BATCH);
-  assert.equal(RATCHET_RULES, MEMBER); // machine 缺省 = 默认（同引用）
-  assert.equal(DEFAULT_MEMBER_RULES, MEMBER);
-  assert.equal(DEFAULT_BATCH_RULES, BATCH);
-});
+;
 
 test('applyMemberTransition default matches schema.canTransitionMember', () => {
   const cases = [

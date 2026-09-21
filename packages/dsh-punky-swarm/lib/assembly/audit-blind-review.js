@@ -33,16 +33,6 @@ export const BLIND_REVIEW_SKILLS = {
   'audit-critic': ['report-blind-audit'],                             // 独立复核 + 三态决议（endorse/challenge/block）
 };
 
-// ── 叠加顺序（verify 自动证据 → 盲审可选 → needHuman 人工闸；verify blocked 直接升级人工不进入盲审）──
-// 文档化常量：Leader/Manager 建批参照；三原则 = ① verify 内容证据底座（先跑、自动）② 盲审质量评审编排（后跑、可选）
-// ③ needHuman 人工闸（最后、引擎强制 gates.js checkNeedHumanGate）。任一层的 produce 都进 Tier3 门禁（缺则拒 merged）。
-export const BLIND_REVIEW_ORDER = Object.freeze({
-  steps: ['verify 自动证据裁决（先：advisory 记录 / enforce 拦截；产物 audit/verify-verdict.md）',
-    '盲审编排（可选：blindReview.enabled=true 时 panelist×N → aggregate → critic）',
-    'needHuman 人工闸（后：引擎强制，merged 需 note 含 human:<裁决人>:<时间>:<结论> 证据）'],
-  verifyBlocked: 'verify blocked（EVIDENCE_UNREADABLE/TRUNCATED）→ 直接升级人工（conflict/needHuman），不进入盲审——不可信证据不做评审',
-  needHumanOwner: '盲审 lane 的 needHuman 声明落 aggregate 产物——人工闸裁决对象=聚合结论，非单 panelist',
-});
 
 // ── 六任务契约模板（键名固定，供 assertAssemblyCompleteness 扩展视图与 Leader/Manager 建批取用）──
 const T_BUNDLE = `材料包准备（bundle，防评价污染）：

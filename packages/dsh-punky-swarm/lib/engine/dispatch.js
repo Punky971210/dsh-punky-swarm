@@ -71,15 +71,6 @@ const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.a
 export function labelOf(batchId, lane) {
   return LABEL_PREFIX + String(batchId) + ':' + String(lane);
 }
-/** @returns {{batchId: string, lane: string} | null} */
-export function parseLabel(text) {
-  if (typeof text !== 'string') return null;
-  const i = text.indexOf(LABEL_PREFIX);
-  if (i < 0) return null;
-  const rest = text.slice(i + LABEL_PREFIX.length);
-  const m = /^([^:\s]+):([^\s]+)/.exec(rest);
-  return m ? { batchId: m[1], lane: m[2] } : null;
-}
 
 /**
  * 成员任务包**骨架**（B1）：引擎侧给出「角色 / 目标 / 契约 / 产物 / 纪律」，Leader 的 `prompt` 作为任务要点追加。

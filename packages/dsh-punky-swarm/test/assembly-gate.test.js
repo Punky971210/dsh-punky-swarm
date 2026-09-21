@@ -25,10 +25,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { valueSchemaSpecToJsonSchema, parameterSchemaSpecToJsonSchema } from '@deepseek-ai/dsh-tools';
-import {
-  countExecLanes, isCPlusBatch, requiresAssemblyDecl, normalizeAssemblyDecl, assemblyGate, MANAGER_PLANS,
-  buildWavePlan, validateWavePlan, ROLE_WHITELIST,
-} from '../lib/wave-plan.js';
+import { countExecLanes, isCPlusBatch, requiresAssemblyDecl, normalizeAssemblyDecl, assemblyGate, buildWavePlan, validateWavePlan, ROLE_WHITELIST } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
@@ -355,9 +352,4 @@ test('T10 validateWavePlan：带 assembly 声明建批的 plan 仍通过（assem
 
 // ── 既有导出零破坏（spec §5 禁改面锚点）──
 
-test('既有导出签名零破坏：buildWavePlan/validateWavePlan/MANAGER_PLANS 常量', () => {
-  assert.deepEqual(MANAGER_PLANS, ['raise', 'leader-direct']);
-  const plan = buildWavePlan({ batchId: 'cpa-z', tasks: [{ id: 'a' }] });
-  assert.equal(validateWavePlan(plan), true);
-  assert.equal(plan.schema, 1);
-});
+;

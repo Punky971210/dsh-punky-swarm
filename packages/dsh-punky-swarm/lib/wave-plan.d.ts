@@ -26,7 +26,6 @@ export declare function collectRoleCompletenessWarnings(tasks: WaveTask[], waves
     task: string;
     missing?: undefined;
 })[];
-export declare const MANAGER_PLANS: readonly ["raise", "leader-direct"];
 export declare function countExecLanes(tasks: WaveTask[]): number;
 export declare function isCPlusBatch(tasks: WaveTask[]): boolean;
 export declare function requiresAssemblyDecl(tasks: WaveTask[]): boolean;

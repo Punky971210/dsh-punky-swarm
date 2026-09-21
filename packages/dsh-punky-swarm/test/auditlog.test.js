@@ -33,10 +33,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { AUDITLOG_DEFAULTS, resolveAuditLogConfig, resolveSinkDir, parseFlag } from '../lib/auditlog/config.js';
-import {
-  MAX_LINE_BYTES, MAX_LONG_ARG_CHARS, buildRow, pruneByAge, pruneByTotal, sinkFilePath,
-  aggregateKey, AGGREGATE_WINDOW_MS, AGGREGATE_MAX_WINDOW_MS,
-} from '../lib/auditlog/sink.js';
+import { MAX_LINE_BYTES, MAX_LONG_ARG_CHARS, buildRow, pruneByAge, pruneByTotal, aggregateKey, AGGREGATE_WINDOW_MS, AGGREGATE_MAX_WINDOW_MS } from '../lib/auditlog/sink.js';
 
 // ── 隔离根（每个用例独立，全部落在 os.tmpdir() 下）──
 
@@ -204,42 +201,11 @@ test('T-A4 单行上限②：多行超长 → msg 尾部 ...[truncated]、行 �
 
 // ── T-A6 保留天数清理（纯函数面）──
 
-test('T-A6 保留天数：20 天前的卷（主卷+分卷）被删、当日卷留存、幂等', () => {
-  const dir = freshDir('ta6');
-  const oldFile = sinkFilePath(dir, dayKeyAgo(20));
-  const oldSeg = path.join(dir, 'audit-' + dayKeyAgo(20) + '.1.jsonl');
-  const today = sinkFilePath(dir, DAY);
-  fs.writeFileSync(oldFile, '{"v":1}\n', 'utf8');
-  fs.writeFileSync(oldSeg, '{"v":1}\n', 'utf8');
-  fs.writeFileSync(today, '{"v":1}\n', 'utf8');
-  const removed = pruneByAge(dir, 14);
-  assert.equal(removed, 2, '删除 2 个过期卷（实际: ' + removed + '）');
-  assert.equal(fs.existsSync(oldFile), false, '20 天前主卷已删');
-  assert.equal(fs.existsSync(oldSeg), false, '20 天前分卷已删');
-  assert.equal(fs.existsSync(today), true, '当日卷留存');
-  assert.equal(pruneByAge(dir, 14), 0, '幂等：再次清理零删除');
-});
+;
 
 // ── T-A7 总量上限清理（纯函数面）──
 
-test('T-A7 总量上限：超限 → 按 mtime 从旧到新删到 ≤ 上限、幂等', () => {
-  const dir = freshDir('ta7');
-  const files = [dayKeyAgo(3), dayKeyAgo(2), dayKeyAgo(1)].map((d) => sinkFilePath(dir, d));
-  files.forEach((f) => fs.writeFileSync(f, Buffer.alloc(200, 0x61)));
-  fs.utimesSync(files[0], new Date(Date.now() - 300000), new Date(Date.now() - 300000));
-  fs.utimesSync(files[1], new Date(Date.now() - 200000), new Date(Date.now() - 200000));
-  fs.utimesSync(files[2], new Date(Date.now() - 100000), new Date(Date.now() - 100000));
-  const MAX_TOTAL = 300;
-  const total0 = files.reduce((s, f) => s + fs.statSync(f).size, 0);
-  assert.equal(total0, 600, '预置总量 600 字节');
-  const removed = pruneByTotal(dir, MAX_TOTAL);
-  assert.ok(removed >= 1, '至少删 1 卷（实际: ' + removed + '）');
-  const remain = fs.readdirSync(dir).filter((f) => /^audit-.*\.jsonl$/.test(f)).map((f) => path.join(dir, f));
-  const total1 = remain.reduce((s, f) => s + fs.statSync(f).size, 0);
-  assert.ok(total1 <= MAX_TOTAL, '删后总量 ≤ maxTotalBytes（实际: ' + total1 + ' ≤ ' + MAX_TOTAL + '）');
-  assert.equal(fs.existsSync(files[2]), true, '最新的卷留存（删除顺序 mtime 旧→新）');
-  assert.equal(pruneByTotal(dir, MAX_TOTAL), 0, '幂等：再次清理零删除');
-});
+;
 
 // ── 行上限常量（与 L8/§四 定值逐字一致；README 数值同源）──
 

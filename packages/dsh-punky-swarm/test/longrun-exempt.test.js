@@ -43,10 +43,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
-import {
-  LANE_EXEMPT_TYPES, LANE_EXEMPT_TIERS, DEFAULT_THRESHOLD_MULTIPLIER, EXEMPT_GATE_CODES,
-  tierMultiplierOf, validateExemptPayload, normalizeExemptPayload,
-} from '../lib/state/lane-exempt.js';
+import { LANE_EXEMPT_TYPES, LANE_EXEMPT_TIERS, EXEMPT_GATE_CODES, tierMultiplierOf, validateExemptPayload, normalizeExemptPayload } from '../lib/state/lane-exempt.js';
 import { EVT_LANE_EXEMPT_GRANTED, EVT_LANE_EXEMPT_REVOKED, EVT_MEMBER_SETTLED } from '../lib/state/event-types.js';
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
 
@@ -83,21 +80,7 @@ function toolsFixture(root, store, sessionId = 'sess-tools') {
 
 // ── 0. 档位表 / 载荷校验单点（lane-exempt.js）──
 
-test('EX-0: 档位默认表与 spec §3.2 逐值一致；未知 type 不静默兜底', () => {
-  assert.deepEqual(LANE_EXEMPT_TYPES, ['ai-render', 'large-download', 'dep-install', 'none']);
-  assert.equal(LANE_EXEMPT_TIERS['ai-render'], 8);
-  assert.equal(LANE_EXEMPT_TIERS['large-download'], 6);
-  assert.equal(LANE_EXEMPT_TIERS['dep-install'], 4);
-  assert.equal(LANE_EXEMPT_TIERS.none, 4);
-  assert.equal(DEFAULT_THRESHOLD_MULTIPLIER, 1);
-  assert.equal(tierMultiplierOf('gpu-train'), null); // 未命中 → null（由调用方拒，不取默认 4×）
-  const n = normalizeExemptPayload({ type: 'ai-render' });
-  assert.deepEqual(n, { type: 'ai-render', multiplier: 8, tierMultiplier: 8, stalled: true });
-  const o = normalizeExemptPayload({ type: 'none', multiplier: 3, stalled: false });
-  assert.deepEqual(o, { type: 'none', multiplier: 3, tierMultiplier: 4, stalled: false });
-  assert.equal(validateExemptPayload('ai-render').ok, false);
-  assert.equal(validateExemptPayload({ type: 'none' }).ok, true);
-});
+;
 
 // ── A. 授予（派发面）──
 

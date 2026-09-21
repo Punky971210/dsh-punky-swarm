@@ -157,9 +157,6 @@ export function isOntologyAic(aic) {
   return /^0+$/.test(parts[8]) && parts[8].length > 0;
 }
 
-export function isEntityAic(aic) {
-  return !isOntologyAic(aic);
-}
 
 // 随机 Base36 序列号（非全 0；len 1~9；确定性测试可注入）
 function randomBase36Serial(len, avoidZero = true) {

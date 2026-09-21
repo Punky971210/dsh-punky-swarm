@@ -33,19 +33,7 @@ export const ARTIFACT_TYPES = [
   { type: 'retrospective', dir: 'audit/', layer: 'audit', desc: '复盘报告（记忆沉淀输入，记忆工具开放语义）' },
 ];
 
-// 相对产物路径 → 类型名（按目录前缀匹配；绝对路径返回 null）
-export function artifactTypeOf(relPath) {
-  if (typeof relPath !== 'string') return null;
-  for (const t of ARTIFACT_TYPES) {
-    if (relPath.startsWith(t.dir)) return t.type;
-  }
-  return null;
-}
 
-// 层 → 该层注册的产物类型
-export function typesOfLayer(layer) {
-  return ARTIFACT_TYPES.filter((t) => t.layer === layer).map((t) => t.type);
-}
 
 // 产物类型注册表 → 回显视图（**唯一读端**，供 `lib/tools/core.js` 的 `artifact_types` 消费）。
 // 冻结契约（blueprint §2.2）：四字段逐字回显；新字段**纯增量**、**缺省不声明即不产键**

@@ -22,11 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 真实互通（插件 Leader ↔ 参考实现 discovery-server / demo-partner）不在本文件覆盖，本文件不依赖外部服务。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  createAcpsDiscoveryClient, createMiniAdsp, DiscoveryClientError,
-  buildDiscoveryRequest, parseDiscoveryResponse, flattenAgentSkills,
-  DISCOVERY_SCOPES, DISCOVERY_SCOPE_DEFAULT,
-} from '../lib/acps/discovery-client.js';
+import { createAcpsDiscoveryClient, createMiniAdsp, DiscoveryClientError, buildDiscoveryRequest, parseDiscoveryResponse, DISCOVERY_SCOPES, DISCOVERY_SCOPE_DEFAULT } from '../lib/acps/discovery-client.js';
 import { resolveAcpsDiscoveryConfig, ACPS_DISCOVERY_DEFAULTS } from '../lib/schema.js';
 import { successResponse } from '../lib/discovery/schema.js';
 
@@ -118,16 +114,7 @@ test('parseDiscoveryResponse: 成功响应 → { result }（acsMap/agents/agentS
   assert.equal(parsed.result.routes[0].status, 'ok');
 });
 
-test('flattenAgentSkills: 展平 agents 并关联 acsMap（对齐 iter_agent_skills models.py:609-626）', () => {
-  const rows = flattenAgentSkills(EXTERNAL_RESPONSE.result);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].aic, 'AIC-EXT-1');
-  assert.deepEqual(rows[0].acs, EXTERNAL_ACS['AIC-EXT-1']);
-  assert.equal(rows[0].group, '北京旅行');
-  // acs 缺失时兜底空对象
-  const rows2 = flattenAgentSkills({ acsMap: {}, agents: [{ group: 'g', agentSkills: [{ aic: 'X', skillId: 's' }] }] });
-  assert.deepEqual(rows2[0].acs, {});
-});
+;
 
 test('parseDiscoveryResponse: 协议级错误（HTTP 200 + error）→ 抛 DiscoveryClientError + adpError', () => {
   assert.throws(

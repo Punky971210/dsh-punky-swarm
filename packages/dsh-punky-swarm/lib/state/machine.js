@@ -23,8 +23,6 @@ import { DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES } from './machine-rules.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除——原「避免 machine→gates 依赖」由零依赖单点承担）
 import { findTask } from './task-utils.js';
 
-// 缺省规则 = 默认表（与 schema 常量同引用，行为不变）
-export const RATCHET_RULES = DEFAULT_MEMBER_RULES;
 
 // 成员迁移判定：查规则表（rules 可注入；缺省 = 默认强约束）
 // 返回 { ok: true } | { ok: false, code: 'INVALID_MEMBER_TRANSITION' }

@@ -19,10 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 覆盖：三角色映射 / 六模板契约 / applyAssemblyExtensions 开关语义 / buildAuditLaneSpec DAG 契约 / 叠加顺序条款 / 默认关零破坏
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  BLIND_REVIEW_ROLES, BLIND_REVIEW_SKILLS, BLIND_REVIEW_TEMPLATES, BLIND_REVIEW_ORDER,
-  applyAssemblyExtensions, buildAuditLaneSpec,
-} from '../lib/assembly/audit-blind-review.js';
+import { BLIND_REVIEW_ROLES, BLIND_REVIEW_SKILLS, BLIND_REVIEW_TEMPLATES, applyAssemblyExtensions, buildAuditLaneSpec } from '../lib/assembly/audit-blind-review.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 
 // fixture skillCatalog：断言"skill 名可解析"用（生产调用方传 ~/.agents/skills 存在性解析器）
@@ -136,18 +133,7 @@ test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、cr
   assert.equal(panelistTask.role, 'audit-panelist');
 });
 
-test('A3.5 叠加顺序 D-A7：文档化 + 模板文本含顺序条款（verify 先行 / blocked 升级人工 / needHuman 落 aggregate）', () => {
-  assert.equal(BLIND_REVIEW_ORDER.steps.length, 3, '三步叠加顺序');
-  assert.ok(BLIND_REVIEW_ORDER.steps[0].includes('verify'), '第 1 步 verify 自动证据');
-  assert.ok(BLIND_REVIEW_ORDER.steps[2].includes('needHuman'), '第 3 步 needHuman 人工闸');
-  assert.ok(BLIND_REVIEW_ORDER.verifyBlocked.includes('不进入盲审'), 'verify blocked 不进入盲审');
-  assert.ok(BLIND_REVIEW_ORDER.needHumanOwner.includes('聚合结论'), 'needHuman 裁决对象=聚合结论');
-  // 模板文本含顺序条款
-  assert.ok(BLIND_REVIEW_TEMPLATES.bundle.includes('verify 自动证据先行'), 'bundle 含 verify 先行条款');
-  assert.ok(BLIND_REVIEW_TEMPLATES.bundle.includes('不可信证据不做评审'), 'bundle 含 blocked 升级人工条款');
-  assert.ok(BLIND_REVIEW_TEMPLATES.aggregate.includes('needHuman: true'), 'aggregate 含 needHuman 声明条款');
-  assert.ok(BLIND_REVIEW_TEMPLATES.aggregate.includes('聚合结论'), 'aggregate 明确裁决对象=聚合结论');
-});
+;
 
 test('A3.6 默认不启用：base 装配一字不变 + 装配扩展默认关', () => {
   // 缺省 extensions → applyAssemblyExtensions 恒原样返回（零变化）

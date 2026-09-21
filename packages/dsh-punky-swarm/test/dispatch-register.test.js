@@ -34,10 +34,7 @@ import { EVT_MEMBER_DISPATCH, EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCAL
 import { apply } from '../lib/index.js';
 import { installDispatchRegistration, extractWorkerSessionId, DEFAULT_DISPATCH_TOOLS } from '../lib/bridge/dispatch-register.js';
 import { createCoreTools } from '../lib/tools/core.js';
-import {
-  issueLaneHandle, parseLaneHandleFromText, verifyLaneHandle, consumeLaneHandle,
-  pendingHandles, sweepExpiredHandles, textOfDispatchArgs, LANE_HANDLE_TTL_MS, __resetLaneHandles,
-} from '../lib/bridge/lane-handle.js';
+import { issueLaneHandle, parseLaneHandleFromText, verifyLaneHandle, consumeLaneHandle, pendingHandles, textOfDispatchArgs, LANE_HANDLE_TTL_MS, __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import { assemblyCtx, tempRoot } from './helpers/gate-fixture.mjs';
 
 // ── 装配级 fake ctx：`assemblyCtx()` 装配 ctx **基线**（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
@@ -287,38 +284,7 @@ test('R8: DEFAULT_DISPATCH_TOOLS = subagent/subagent_fork（send_message 已退�
 
 // ── R9：派发句柄纯函数（发放 / 解析 / 校验 / 一次性消费 / TTL / 悬挂视图）──
 // 依据：2026-09-15 用户裁决「不写 token 即禁止派发」——token（句柄）是 C 档派发的唯一凭证。
-test('R9: lane-handle——issue→parse→consume 一次性；未知/过期/批道不匹配一律拒；TTL 30min', () => {
-  __resetLaneHandles();
-  const t0 = 1_700_000_000_000;
-  const h = issueLaneHandle({ batchId: 'b', lane: 'l1', sessionId: 's', now: t0 });
-  assert.match(h.token, /^[0-9a-f]{16}$/, '句柄 = 16 hex');
-  assert.equal(h.firstLine, '[swarm-lane:b/l1#' + h.token + ']');
-  assert.equal(h.ttlMs, LANE_HANDLE_TTL_MS);
-  // 解析：首行、或夹在长文本中都成立；无句柄/非字符串 ⇒ null
-  assert.deepEqual(parseLaneHandleFromText('前言\n' + h.firstLine + '\n正文'), { batchId: 'b', lane: 'l1', token: h.token });
-  assert.equal(parseLaneHandleFromText('无句柄文本'), null);
-  assert.equal(parseLaneHandleFromText(undefined), null);
-  // 文本收集（宿主参数形态）：prompt / description（含数组）都能被扫到
-  assert.ok(textOfDispatchArgs({ prompt: h.firstLine }).includes(h.token));
-  assert.ok(textOfDispatchArgs({ description: [h.firstLine] }).includes(h.token));
-  assert.equal(textOfDispatchArgs(null), '');
-  // 校验：未过期 + 批/道匹配
-  assert.equal(verifyLaneHandle(h.token, { batchId: 'b', lane: 'l1', now: t0 + 1000 }).ok, true);
-  assert.equal(verifyLaneHandle(h.token, { batchId: 'other', now: t0 }).reason, 'batch-mismatch');
-  assert.equal(verifyLaneHandle(h.token, { lane: 'other', now: t0 }).reason, 'lane-mismatch');
-  assert.equal(verifyLaneHandle('0'.repeat(16), { now: t0 }).reason, 'unknown-handle');
-  // 一次性消费：二次消费拒
-  assert.equal(consumeLaneHandle(h.token, { now: t0 + 1000 }).ok, true);
-  assert.equal(consumeLaneHandle(h.token, { now: t0 + 1000 }).reason, 'handle-consumed');
-  // 过期：另一枚句柄在 TTL 之后消费 ⇒ 拒
-  const h2 = issueLaneHandle({ batchId: 'b', lane: 'l2', sessionId: 's', now: t0 });
-  assert.equal(consumeLaneHandle(h2.token, { now: t0 + LANE_HANDLE_TTL_MS + 1 }).reason, 'handle-expired');
-  // 悬挂视图 + 过期清理：sweep **按 TTL 清理、不区分是否已消费** ⇒ 两枚（已消费的 h + 过期的 h2）都被清
-  assert.equal(pendingHandles(t0).length, 1, '仅 h2 未消费（h 已消费）');
-  assert.equal(sweepExpiredHandles(t0 + LANE_HANDLE_TTL_MS + 1), 2, 'sweep 按 TTL 清理全部过期项（含已消费者）');
-  assert.equal(pendingHandles(t0).length, 0);
-  __resetLaneHandles();
-});
+;
 
 // ── R11：工具面接线自证 —— `createCoreTools` 必须暴露套件派发入口 `lane_dispatch` ──
 // 依据：2026-09-15 用户裁决「token 走新工具 lane_dispatch 取句柄」；本用例防「模块在、工具没接」的假绿。

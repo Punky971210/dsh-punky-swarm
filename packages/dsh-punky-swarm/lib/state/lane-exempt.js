@@ -40,8 +40,6 @@ export const LANE_EXEMPT_TIERS = {
   'none': 4,             // 显式只用默认
 };
 
-// 未命中档位表 / 非豁免 lane 的兜底倍率（= 1，语义「阈值不放大」）
-export const DEFAULT_THRESHOLD_MULTIPLIER = 1;
 
 // 显式倍率合法区间（闭区间；< 1 会收紧阈值，与「豁免」语义相反 → 拒）
 const EXEMPT_MULTIPLIER_MIN = 1;

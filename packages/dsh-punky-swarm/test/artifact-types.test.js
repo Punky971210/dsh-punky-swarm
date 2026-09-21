@@ -34,7 +34,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ARTIFACT_TYPES, artifactTypeOf, typesOfLayer, artifactTypesView } from '../lib/artifact-types.js';
+import { ARTIFACT_TYPES, artifactTypesView } from '../lib/artifact-types.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 
@@ -79,16 +79,7 @@ test('② 既有 10 条四字段**逐字不变**（冻结基线对照）', () =>
   assert.deepEqual(view, BASELINE);
 });
 
-test('② 映射函数未受影响：artifactTypeOf / typesOfLayer 逐字不变', () => {
-  assert.equal(artifactTypeOf('plan/x-spec.md'), 'plan');
-  assert.equal(artifactTypeOf('exec/vocabulary-layer.md'), 'code');
-  assert.equal(artifactTypeOf('audit/acceptance.md'), 'review'); // 按目录前缀取**首条**命中（audit/ 首条 = review）
-  assert.equal(artifactTypeOf('/abs/path/plan/x.md'), null);
-  assert.equal(artifactTypeOf(null), null);
-  assert.deepEqual(typesOfLayer('plan'), ['plan', 'spec', 'taskTree', 'survey']);
-  assert.deepEqual(typesOfLayer('exec'), ['code', 'testReport']);
-  assert.deepEqual(typesOfLayer('audit'), ['review', 'gapList', 'acceptance', 'retrospective']);
-});
+;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ / ④ 新字段：回显多两键；缺省不声明则键集不变

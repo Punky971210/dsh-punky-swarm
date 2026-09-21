@@ -30,20 +30,12 @@ import { engineVersion } from './tool-descriptor.js';
 // ACPs 协议版本（acsSchema.json examples：["02.01"]）
 export const ACS_PROTOCOL_VERSION = '02.01';
 
-// ACS AgentCapabilitySpec 必填 14 键（acsSchema.json required 数组原文）
-export const ACS_REQUIRED_FIELDS = Object.freeze([
-  'aic', 'active', 'lastModifiedTime', 'protocolVersion', 'name', 'description',
-  'version', 'provider', 'securitySchemes', 'endPoints', 'capabilities',
-  'defaultInputModes', 'defaultOutputModes', 'skills',
-]);
 
 // ACS AgentCapabilitySpec 可选键（acsSchema.json properties 全集 − required）
 export const ACS_OPTIONAL_FIELDS = Object.freeze([
   'iconUrl', 'documentationUrl', 'webAppUrl', 'entityUserId', 'entityMeta', 'certificate',
 ]);
 
-// ACS AgentSkill 必填 5 键（acsSchema.json $defs.AgentSkill required 数组原文）
-export const ACS_SKILL_REQUIRED_FIELDS = Object.freeze(['id', 'name', 'description', 'version', 'tags']);
 
 // ACS AgentSkill 可选键
 export const ACS_SKILL_OPTIONAL_FIELDS = Object.freeze(['examples', 'inputModes', 'outputModes']);

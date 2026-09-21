@@ -133,8 +133,3 @@ export function setPaused(root, sessionId, { pauseToken, windowMs } = {}) {
   return { pauseToken: token, until };
 }
 
-// 清空会话状态（幂等；文件不存在不抛错）。供测试与恢复清理。
-export function clearSessionState(root, sessionId) {
-  const file = stateFileOf(root, sessionId);
-  try { fs.unlinkSync(file); } catch { /* 不存在忽略（幂等） */ }
-}

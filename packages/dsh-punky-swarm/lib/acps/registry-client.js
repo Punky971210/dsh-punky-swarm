@@ -45,9 +45,6 @@ export const REGISTRY_DEFAULTS = Object.freeze({
   rejectUnauthorized: true,
 });
 
-export const API_BASE_PATH = '/api/v1';   // 对齐参考实现 settings.api_v1_str 默认（config.py api_v1_str）
-export const ATR_BASE_PATH = '/acps-atr-v2'; // 对齐参考实现 settings.atr_base_path 默认（config.py:277-278）
-
 // 注册请求结构（对齐参考实现 AgentCreate schema：registry-server/app/agent/schema.py:14-30）
 //   AgentCreate = { name, version, description?, logo_url?, acs?, is_ontology? }
 //   用户侧 upsert 载荷构造见 commands.py:382-391（name/version 取自 ACS 必填文本字段，
@@ -224,38 +221,6 @@ export function encryptEabCredential(credential, keyInput) {
   };
 }
 
-// 解密 EAB 凭据信封 → { keyId, macKey, aic, expiresAt }
-export function decryptEabCredential(envelope, keyInput) {
-  if (!envelope || typeof envelope !== 'object' || envelope.alg !== 'AES-256-GCM') {
-    throw new RegistryClientError('Invalid EAB credential envelope', { errorName: 'EAB_ENVELOPE_INVALID' });
-  }
-  const key = normalizeEabKey(keyInput);
-  const iv = unb64url(envelope.iv);
-  const tag = unb64url(envelope.tag);
-  const ct = unb64url(envelope.ct);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  let plaintext;
-  try {
-    plaintext = Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
-  } catch (err) {
-    throw new RegistryClientError('EAB credential decryption failed (wrong key or corrupted envelope)', {
-      errorName: 'EAB_DECRYPT_FAILED',
-    });
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(plaintext);
-  } catch {
-    throw new RegistryClientError('EAB credential payload is corrupted', { errorName: 'EAB_DECRYPT_FAILED' });
-  }
-  return {
-    keyId: parsed.keyId ?? null,
-    macKey: parsed.macKey ?? null,
-    aic: typeof envelope.aic === 'string' ? envelope.aic : null,
-    expiresAt: typeof envelope.expiresAt === 'string' ? envelope.expiresAt : null,
-  };
-}
 
 // ── HTTP 层（node:http/https 内建，零新依赖）──
 // 对齐参考实现 RegistryApiClient._request 语义（client.py:63-142）：

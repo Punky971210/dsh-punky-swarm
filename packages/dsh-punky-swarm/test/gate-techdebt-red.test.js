@@ -54,7 +54,7 @@ import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 工具面建批用例须给**有资产**的团队；
 //   其 skills 须可解析 ⇒ 隔离 HOME 下先注入宿主技能根（R-12 的正向对照随之补 team，被检面仍是装配门）。
 seedTeamAssetSkills('software-team');
-import { DEFAULT_ESCALATION_WINDOW_MS, DEFAULT_ESCALATION_PRIMITIVES } from '../lib/governance/escalation.js';
+import { DEFAULT_ESCALATION_PRIMITIVES } from '../lib/governance/escalation.js';
 import { MEMBER_STATES } from '../lib/schema.js';
 import * as EVT from '../lib/state/event-types.js';
 import * as STORE_EVT from '../lib/state/store.js';
@@ -213,7 +213,7 @@ function mkTeamRoot(team, mutate) {
 }
 
 // ── 治理面夹具 ──
-const ESC_ON = { enabled: true, threshold: 3, windowMs: DEFAULT_ESCALATION_WINDOW_MS, primitives: DEFAULT_ESCALATION_PRIMITIVES };
+const ESC_ON = { enabled: true, threshold: 3, windowMs: 600000, primitives: DEFAULT_ESCALATION_PRIMITIVES };
 function record(bid, i, over = {}) {
   return store.recordGovernanceRefusal(SID, bid, {
     lane: 'l1', receiptId: 'r' + i, primitive: 'DENY', ruleRefs: ['L3-W01'], tool: 'pwsh', escalation: ESC_ON, ...over,
@@ -600,7 +600,7 @@ ARCHIVED_CASES['R-16 单 lane ×3 可计入拒绝 ⇒ 批次**仍 running** ＋ 
   '  assert.equal(degs.length, 1, \'须恰 1 条 lane.governance-degrade——实测=\' + JSON.stringify(degs));',
   '  assert.equal(degs[0].lane, \'l1\', \'载荷须含 lane：\' + JSON.stringify(degs[0]));',
   '  assert.equal(degs[0].count, 3, \'载荷须含 count=3：\' + JSON.stringify(degs[0]));',
-  '  assert.equal(degs[0].windowMs, DEFAULT_ESCALATION_WINDOW_MS, \'载荷须含 windowMs：\' + JSON.stringify(degs[0]));',
+  '  assert.equal(degs[0].windowMs, , \'载荷须含 windowMs：\' + JSON.stringify(degs[0]));',
   '  assert.ok(Array.isArray(degs[0].receiptIds) && degs[0].receiptIds.length === 3, \'载荷须含 receiptIds（可回查）：\' + JSON.stringify(degs[0]));',
   '  assert.ok(b.governanceDegrade && b.governanceDegrade.l1, \'批次 JSON 须含 governanceDegrade[lane]：\' + JSON.stringify(b.governanceDegrade));',
   '  assert.equal(b.governanceDegrade.l1.count, 3, \'governanceDegrade[l1].count===3；实测=\' + JSON.stringify(b.governanceDegrade.l1));',

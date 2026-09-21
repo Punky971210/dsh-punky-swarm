@@ -155,15 +155,6 @@ export function collectRoleCompletenessWarnings(tasks, waves, opts = {}) {
     }
     return warnings;
 }
-// ── C+ 档装配门禁（建批时刻静态校验）──
-// 背景：C 类三层批次（≥3 个 exec lane）实跑频繁缺「批次级编排装配声明」（谁牵头调度 Manager、验收归哪条 audit lane），
-// 全靠 Leader 事后人工补救。本门禁把裁决前移到建批：凡 exec 层 lane ≥ 3（C+）的批次必须携带装配声明 assembly。
-// 档位语义（与既有 GATE_ROLE_MISSING 同族命名、语义分离、并存不合并）：
-//   - 缺 assembly（C+）→ 拒建批：GATE_ROLE_ASSEMBLY_MISSING（新码，编排装配声明缺失 = C+ 硬前置，不复用告警通道）；
-//   - 结构/引用非法 → 拒建批：GATE_ASSEMBLY_INVALID（fail-closed，对齐 deps 未知 id / targets 相对路径既有 throw 家族）；
-//   - roles 词法非法 → 告警：GATE_ROLE_INVALID（复用既有软告警通道，批次照建）。
-// 码经 throw 消息前缀暴露（建批拦截是 throw 非 gates.ts 返回码族，不进 GateErrorCode）。
-export const MANAGER_PLANS = ['raise', 'leader-direct']; // assembly.managerPlan 合法枚举（运行时事实源，与 contracts.ManagerPlan 字面量等价）
 // 统计口径：仅按 task 的 layer 字段计（layer==='exec' 的 lane 数）
 export function countExecLanes(tasks) {
     return tasks.filter((t) => t.layer === 'exec').length;

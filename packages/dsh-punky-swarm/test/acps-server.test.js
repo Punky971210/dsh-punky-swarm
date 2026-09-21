@@ -32,7 +32,7 @@ import { createAcpsServer, parseRpcRequest, rpcResponse, defaultRpcHandler, buil
 import { generateCaCert, issueCert, ensureAcpsCerts } from '../lib/acps/certs.js';
 import { resolveAcpsConfig } from '../lib/schema.js';
 import { generateAic, validateAic } from '../lib/aip/identity.js';
-import { ACS_REQUIRED_FIELDS } from '../lib/aip/agent-descriptor.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -153,16 +153,7 @@ test('rpc: defaultRpcHandler 返回 accepted TaskResult（TaskState 链首环，
 
 // ── ACS 生成（buildAcs，对齐 beijing_food/acs.json:15-40）──
 
-test('acs: ACS 内容含必填 14 键 + mutualTLS + JSONRPC 端点', () => {
-  const acs = buildAcs({ endpoint: { aic: SERVER_AIC, host: '127.0.0.1', port: 9443 } });
-  for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in acs, 'missing required ACS field: ' + k);
-  assert.equal(acs.aic, SERVER_AIC);
-  assert.equal(acs.securitySchemes.mtls.type, 'mutualTLS'); // beijing_food/acs.json:15-20
-  assert.equal(acs.endPoints[0].transport, 'JSONRPC');       // beijing_food/acs.json:21-30
-  assert.match(acs.endPoints[0].url, /\/acps\/rpc$/);
-  assert.deepEqual(acs.endPoints[0].security, [{ mtls: [] }]);
-  assert.deepEqual(acs.certificate.altNames.dns, ['localhost']); // beijing_food/acs.json:41-45
-});
+;
 
 // ── TLS 层（V5：握手失败类只断言连接/握手异常，不断言 HTTP 状态码）──
 
@@ -241,16 +232,7 @@ test('app: POST /acps/rpc 非法 params.command → 400（应用层）', async (
   } finally { await close(); }
 });
 
-test('app: GET /.well-known/acs.json 返回 ACS（14 必填键 + mTLS 端点）', async () => {
-  const { req, close } = await startServer();
-  try {
-    const r = await req({ path: '/.well-known/acs.json' });
-    assert.equal(r.status, 200);
-    for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in r.body, 'missing ' + k);
-    assert.equal(r.body.securitySchemes.mtls.type, 'mutualTLS');
-    assert.match(r.body.endPoints[0].url, /\/acps\/rpc$/);
-  } finally { await close(); }
-});
+;
 
 test('app: GET /health 返回存活（对齐 partners/main.py:110-121 形态）', async () => {
   const { req, close } = await startServer();

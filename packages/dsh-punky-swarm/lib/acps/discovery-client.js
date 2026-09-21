@@ -119,28 +119,6 @@ export function parseDiscoveryResponse(json, throwOnProtocolError = true) {
   return successResponse(result);
 }
 
-// 便利遍历：展平 result.agents[].agentSkills，关联 acsMap 中的 ACS——
-// 对齐 DiscoveryResult.iter_agent_skills（acps_sdk/adp/models.py:609-626）：
-// 返回 [{ aic, acs, skillId, ranking, memo, group }]，acs 缺失时为 {}
-export function flattenAgentSkills(result) {
-  const acsMap = (result && typeof result.acsMap === 'object' && !Array.isArray(result.acsMap)) ? result.acsMap : {};
-  const out = [];
-  const agents = Array.isArray(result?.agents) ? result.agents : [];
-  for (const group of agents) {
-    const skills = Array.isArray(group?.agentSkills) ? group.agentSkills : [];
-    for (const s of skills) {
-      out.push({
-        aic: s?.aic,
-        acs: acsMap[s?.aic] ?? {},
-        skillId: s?.skillId,
-        ranking: s?.ranking,
-        memo: s?.memo,
-        group: group?.group,
-      });
-    }
-  }
-  return out;
-}
 
 // 合并本地+外部响应（scope=both）：acsMap 键合并（外部优先）、agents 分组拼接、routes 拼接
 function mergeResponses(local, external) {

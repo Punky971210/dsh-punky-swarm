@@ -9,35 +9,35 @@
       "todos": 0
     },
     "test/acps-discovery-client.test.js": {
-      "asserts": 74,
+      "asserts": 69,
       "blankLines": 31,
-      "lines": 301,
+      "lines": 288,
       "tautologies": 0,
-      "tests": 24,
+      "tests": 23,
       "todos": 0
     },
     "test/acps-registry.test.js": {
-      "asserts": 89,
-      "blankLines": 31,
-      "lines": 393,
+      "asserts": 49,
+      "blankLines": 22,
+      "lines": 285,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 9,
       "todos": 0
     },
     "test/acps-server.test.js": {
-      "asserts": 70,
-      "blankLines": 35,
-      "lines": 319,
+      "asserts": 59,
+      "blankLines": 36,
+      "lines": 301,
       "tautologies": 0,
-      "tests": 20,
+      "tests": 18,
       "todos": 0
     },
     "test/agent-descriptor.test.js": {
-      "asserts": 70,
+      "asserts": 19,
       "blankLines": 19,
-      "lines": 217,
+      "lines": 127,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 5,
       "todos": 0
     },
     "test/aip-format.test.js": {
@@ -89,11 +89,11 @@
       "todos": 0
     },
     "test/artifact-types.test.js": {
-      "asserts": 37,
+      "asserts": 29,
       "blankLines": 22,
-      "lines": 167,
+      "lines": 158,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 10,
       "todos": 0
     },
     "test/assembly-gate-extra.test.js": {
@@ -105,11 +105,11 @@
       "todos": 0
     },
     "test/assembly-gate.test.js": {
-      "asserts": 95,
+      "asserts": 92,
       "blankLines": 39,
-      "lines": 364,
+      "lines": 356,
       "tautologies": 0,
-      "tests": 24,
+      "tests": 23,
       "todos": 0
     },
     "test/assembly-schema.test.js": {
@@ -129,11 +129,11 @@
       "todos": 0
     },
     "test/audit-blind-review.test.js": {
-      "asserts": 64,
+      "asserts": 55,
       "blankLines": 14,
-      "lines": 173,
+      "lines": 159,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 6,
       "todos": 0
     },
     "test/audit-contract-gate.test.js": {
@@ -153,11 +153,11 @@
       "todos": 0
     },
     "test/auditlog.test.js": {
-      "asserts": 97,
+      "asserts": 87,
       "blankLines": 36,
-      "lines": 327,
+      "lines": 293,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 9,
       "todos": 0
     },
     "test/auto-settle.test.js": {
@@ -257,9 +257,9 @@
       "todos": 0
     },
     "test/concurrency-gate.test.js": {
-      "asserts": 89,
+      "asserts": 86,
       "blankLines": 46,
-      "lines": 624,
+      "lines": 621,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -321,19 +321,19 @@
       "todos": 0
     },
     "test/dispatch-register.test.js": {
-      "asserts": 73,
+      "asserts": 54,
       "blankLines": 20,
-      "lines": 367,
+      "lines": 333,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 12,
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 87,
+      "asserts": 83,
       "blankLines": 23,
-      "lines": 338,
+      "lines": 329,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 16,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -425,11 +425,11 @@
       "todos": 0
     },
     "test/gate-lite-batch2.test.js": {
-      "asserts": 34,
+      "asserts": 32,
       "blankLines": 22,
-      "lines": 182,
+      "lines": 175,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 6,
       "todos": 0
     },
     "test/gate-lite-smoke.test.js": {
@@ -521,11 +521,11 @@
       "todos": 0
     },
     "test/governance-escalate.test.js": {
-      "asserts": 95,
+      "asserts": 75,
       "blankLines": 33,
-      "lines": 498,
+      "lines": 441,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 14,
       "todos": 0
     },
     "test/governance-harden-proto.test.js": {
@@ -593,11 +593,11 @@
       "todos": 0
     },
     "test/governance-state.test.js": {
-      "asserts": 103,
+      "asserts": 84,
       "blankLines": 27,
-      "lines": 442,
+      "lines": 396,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 7,
       "todos": 0
     },
     "test/governance-toolban.test.js": {
@@ -617,9 +617,9 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 208,
+      "asserts": 207,
       "blankLines": 41,
-      "lines": 688,
+      "lines": 684,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -657,11 +657,11 @@
       "todos": 0
     },
     "test/identity.test.js": {
-      "asserts": 100,
-      "blankLines": 39,
-      "lines": 293,
+      "asserts": 81,
+      "blankLines": 36,
+      "lines": 257,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 10,
       "todos": 0
     },
     "test/integration-comfyui-glue.test.js": {
@@ -705,11 +705,11 @@
       "todos": 0
     },
     "test/longrun-exempt.test.js": {
-      "asserts": 107,
+      "asserts": 96,
       "blankLines": 44,
-      "lines": 423,
+      "lines": 406,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 20,
       "todos": 0
     },
     "test/m1-on-removed.test.js": {
@@ -721,11 +721,11 @@
       "todos": 0
     },
     "test/machine.test.js": {
-      "asserts": 43,
+      "asserts": 35,
       "blankLines": 20,
-      "lines": 155,
+      "lines": 144,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 12,
       "todos": 0
     },
     "test/mailbox-sweep.test.js": {
@@ -848,6 +848,14 @@
       "tests": 12,
       "todos": 0
     },
+    "test/prune-verify.test.js": {
+      "asserts": 1,
+      "blankLines": 8,
+      "lines": 74,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
     "test/ratchet-wiring.test.js": {
       "asserts": 35,
       "blankLines": 28,
@@ -894,6 +902,14 @@
       "lines": 159,
       "tautologies": 0,
       "tests": 7,
+      "todos": 0
+    },
+    "test/retired-codes-lock.test.js": {
+      "asserts": 2,
+      "blankLines": 8,
+      "lines": 61,
+      "tautologies": 0,
+      "tests": 1,
       "todos": 0
     },
     "test/rework.test.js": {
@@ -1217,7 +1233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T18:14:33Z",
+  "generatedAt": "2026-09-21T19:47:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1228,15 +1244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": null,
+  "reason": "N2 批 3 收口：prune-verify 判读更正（DEFAULT_ESCALATION_WINDOW_MS/auditlogStats/sinkFilePath 移出删除清单，恢复为生产/观测在役）",
   "schema": 1,
   "totals": {
-    "asserts": 8425,
-    "blankLines": 3986,
-    "files": 152,
-    "lines": 44439,
+    "asserts": 8185,
+    "blankLines": 3991,
+    "files": 154,
+    "lines": 44056,
     "tautologies": 0,
-    "tests": 1738,
+    "tests": 1713,
     "todos": 4
   }
 }

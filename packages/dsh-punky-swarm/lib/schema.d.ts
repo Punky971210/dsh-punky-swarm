@@ -26,8 +26,6 @@ export declare function isMemberTerminal(s: unknown): s is MemberState;
 export declare function isBatchTerminal(p: unknown): p is BatchPhase;
 export declare function canTransitionMember(from: MemberState, to: MemberState): boolean;
 export declare function canTransitionBatch(from: BatchPhase, to: BatchPhase): boolean;
-export declare function assertMemberTransition(from: MemberState, to: MemberState): void;
-export declare function assertBatchTransition(from: BatchPhase, to: BatchPhase): void;
 export declare function assertMemberState(s: MemberState): void;
 export declare function assertBatchPhase(p: BatchPhase): void;
 export declare const TRAJECTORY_DEFAULTS: {

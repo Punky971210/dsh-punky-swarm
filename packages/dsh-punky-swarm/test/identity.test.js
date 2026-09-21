@@ -21,15 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {
-  AIC_PREFIX, BASE36_ALPHABET,
-  base36Encode, base36Decode,
-  crc16CcittFalse, parseSalt, calculateAicChecksum,
-  validateAic, normalizeAic, splitAic, isOntologyAic, isEntityAic,
-  generateAic, createMemoryStore,
-  registerIdentity, issueCredential, sign, verifySignature, verifyTrustChain,
-  SIGN_ALGORITHMS, DEFAULT_SIGN_ALGORITHM, CAI_DEFAULT_VALIDITY_DAYS, CAI_MAX_VALIDITY_DAYS,
-} from '../lib/aip/identity.js';
+import { AIC_PREFIX, BASE36_ALPHABET, base36Encode, base36Decode, crc16CcittFalse, parseSalt, calculateAicChecksum, validateAic, normalizeAic, splitAic, isOntologyAic, generateAic, createMemoryStore, registerIdentity, issueCredential, sign, verifySignature, verifyTrustChain, SIGN_ALGORITHMS, DEFAULT_SIGN_ALGORITHM, CAI_DEFAULT_VALIDITY_DAYS, CAI_MAX_VALIDITY_DAYS } from '../lib/aip/identity.js';
 import { CAPABILITY_REGISTRY, readCapability } from '../lib/assembly/schema.js';
 
 // ---- AIC 编码基础 ----
@@ -67,35 +59,7 @@ test('AIC：validateAic 接受 spec 示例（大小写/空白容忍），拒绝�
   assert.equal(validateAic('', { salt: '0x1234' }), false);
 });
 
-test('AIC：generateAic 产出 10 级合法码（本体/实体）', () => {
-  const onto = generateAic({ salt: '0x1234' });
-  assert.equal(validateAic(onto, { salt: '0x1234' }), true);
-  assert.equal(isOntologyAic(onto), true, '默认本体（第 9 级全 0）');
-  assert.equal(isEntityAic(onto), false);
-
-  const ent = generateAic({ salt: '0x1234', entity: true });
-  assert.equal(validateAic(ent, { salt: '0x1234' }), true);
-  assert.equal(isEntityAic(ent), true, '实体（第 9 级非全 0）');
-  assert.equal(isOntologyAic(ent), false);
-
-  // 前缀/分段
-  assert.ok(ent.startsWith(AIC_PREFIX + '.'));
-  const parts = splitAic(ent);
-  assert.equal(parts.length, 10);
-  assert.ok(/^[0-9]+$/.test(parts[0]) && /^[0-9]+$/.test(parts[1]) && /^[0-9]+$/.test(parts[2]) && /^[0-9]+$/.test(parts[3]));
-  assert.equal(parts[4].length, 1); // 版本
-  assert.ok(parts[5].length >= 1 && parts[5].length <= 6); // ARSP
-  assert.ok(parts[6].length >= 1 && parts[6].length <= 6); // 供应商
-  assert.ok(parts[7].length >= 1 && parts[7].length <= 9); // 本体
-  assert.ok(parts[8].length >= 1 && parts[8].length <= 9); // 实体
-  assert.equal(parts[9].length, 4); // 校验码
-
-  // 非法自定义段
-  assert.throws(() => generateAic({ version: '12' }));
-  assert.throws(() => generateAic({ arsp: '00*1' }));
-  assert.throws(() => generateAic({ vendor: '' }));
-  assert.throws(() => generateAic({ ontologySerial: '@@@' }));
-});
+;
 
 test('AIC：确定性注入（ontologySerial/instanceSerial 固定）', () => {
   const a = generateAic({ salt: '0x1234', ontologySerial: 'ABCDEF', instanceSerial: '123456' });

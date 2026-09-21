@@ -1,0 +1,3 @@
+export function sinkFilePath(sinkDir, dateKey = localDateKey(new Date())) {
+  return path.join(sinkDir, 'audit-' + dateKey + '.jsonl');
+}

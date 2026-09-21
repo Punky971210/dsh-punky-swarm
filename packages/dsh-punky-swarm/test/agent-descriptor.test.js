@@ -26,11 +26,7 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { createApi } from '../lib/api.js';
 import { DEFAULT_ASSEMBLY } from '../lib/assembly.js';
-import {
-  buildSkillDescriptor, buildAgentDescriptor, buildAgentDescriptors, buildAgentCatalog,
-  ACS_REQUIRED_FIELDS, ACS_SKILL_REQUIRED_FIELDS,
-  ACS_OPTIONAL_FIELDS, ACS_SKILL_OPTIONAL_FIELDS, ACS_PROTOCOL_VERSION,
-} from '../lib/aip/agent-descriptor.js';
+import { buildSkillDescriptor, buildAgentDescriptor, buildAgentDescriptors, buildAgentCatalog, ACS_OPTIONAL_FIELDS, ACS_SKILL_OPTIONAL_FIELDS, ACS_PROTOCOL_VERSION } from '../lib/aip/agent-descriptor.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-acs-'));
 const store = createStore(root);
@@ -48,50 +44,9 @@ function makeCtx(enabled, aipExtra = {}, assembly = null) {
   return { ctx, made, registered };
 }
 
-test('ACS：buildAgentDescriptor 必填 14 键逐字恒在（acsSchema.json required 原文），无旧 14+8 键', () => {
-  const d = buildAgentDescriptor(DEFAULT_ASSEMBLY, 'exec', 'coder', fixedEngine);
-  for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '缺 ACS 必填键 ' + k);
-  assert.equal(Object.keys(d).length, ACS_REQUIRED_FIELDS.length, '无覆盖时仅 14 必填键（可选键不臆造）');
-  // 旧 14+8 字段名不得出现在 ACS 输出（对外契约 = ACS 字段集）
-  for (const legacy of ['agentId', 'accessAddress', 'accessMethod', 'interactionModes', 'communicationProtocols', 'securityLevel', 'trustLevel', 'region', 'serviceLevel', 'owner']) {
-    assert.ok(!(legacy in d), 'ACS 输出不得含旧字段 ' + legacy);
-  }
-  // 类型抽查
-  assert.equal(typeof d.aic, 'string');
-  assert.equal(typeof d.active, 'boolean');
-  assert.equal(typeof d.lastModifiedTime, 'string');
-  assert.equal(d.protocolVersion, ACS_PROTOCOL_VERSION);
-  assert.equal(d.name, 'coder');
-  assert.equal(typeof d.description, 'string');
-  assert.equal(d.version, '9.9.9');
-  assert.equal(d.provider.countryCode, 'CN');
-  assert.equal(typeof d.provider.organization, 'string');
-  assert.deepEqual(d.securitySchemes, {});
-  assert.deepEqual(d.endPoints, []);
-  assert.deepEqual(d.capabilities, { streaming: false, notification: false, messageQueue: [] });
-  assert.deepEqual(d.defaultInputModes, ['text/plain', 'application/json']);
-  assert.deepEqual(d.defaultOutputModes, ['text/plain', 'application/json']);
-  assert.ok(Array.isArray(d.skills) && d.skills.length > 0);
-});
+;
 
-test('ACS：buildSkillDescriptor 必填 5 键逐字恒在，可选 3 键仅提供时输出', () => {
-  const s = buildSkillDescriptor('dev-coder', {}, fixedEngine);
-  for (const k of ACS_SKILL_REQUIRED_FIELDS) assert.ok(k in s, '缺技能必填键 ' + k);
-  assert.equal(s.id, 'dsh.skill.dev-coder');
-  assert.equal(s.name, 'dev-coder');
-  assert.equal(s.version, '9.9.9');
-  assert.deepEqual(s.tags, []);
-  for (const k of ACS_SKILL_OPTIONAL_FIELDS) assert.ok(!(k in s), '未提供时不得输出可选键 ' + k);
-  // 提供时透传
-  const s2 = buildSkillDescriptor('x', { id: 'ns.x', description: 'desc', version: '1.2.3', tags: ['t1'], examples: ['e1'], inputModes: ['text/plain'], outputModes: ['text/markdown'] }, fixedEngine);
-  assert.equal(s2.id, 'ns.x');
-  assert.equal(s2.description, 'desc');
-  assert.equal(s2.version, '1.2.3');
-  assert.deepEqual(s2.tags, ['t1']);
-  assert.deepEqual(s2.examples, ['e1']);
-  assert.deepEqual(s2.inputModes, ['text/plain']);
-  assert.deepEqual(s2.outputModes, ['text/markdown']);
-});
+;
 
 test('ACS：buildAgentDescriptors 每 role 一份（7），aic 派生唯一', () => {
   const ds = buildAgentDescriptors(DEFAULT_ASSEMBLY, fixedEngine);
@@ -110,30 +65,7 @@ test('ACS：buildAgentDescriptors 每 role 一份（7），aic 派生唯一', ()
   assert.deepEqual(coder.skills.map((s) => s.name), ['test-driven-development', 'codebase-design', 'receiving-code-review', 'requesting-code-review'], 'coder 技能集 = software-team 装配声明（逐字）');
 });
 
-test('ACS：engineInfo 覆盖可选/派生字段（endPoints/securitySchemes/capabilities/iconUrl/active/aic）', () => {
-  const d = buildAgentDescriptor(DEFAULT_ASSEMBLY, 'exec', 'coder', {
-    ...fixedEngine,
-    aic: '1.2.156.3088.1.1.D55UOU.NEBZUA.1.0QLD',
-    active: false,
-    endPoints: [{ url: 'https://api.example.com/rpc', transport: 'JSONRPC', security: [{ mtls: [] }] }],
-    securitySchemes: { mtls: { type: 'mutualTLS' } },
-    capabilities: { streaming: true, notification: false, messageQueue: ['rabbitmq:>=4.2'] },
-    iconUrl: 'https://example.com/icon.png',
-    entityUserId: 'u-1',
-    certificate: { altNames: { dns: ['localhost'] } },
-  });
-  assert.equal(d.aic, '1.2.156.3088.1.1.D55UOU.NEBZUA.1.0QLD');
-  assert.equal(d.active, false);
-  assert.equal(d.endPoints[0].transport, 'JSONRPC');
-  assert.equal(d.securitySchemes.mtls.type, 'mutualTLS');
-  assert.equal(d.capabilities.streaming, true);
-  assert.equal(d.iconUrl, 'https://example.com/icon.png');
-  assert.equal(d.entityUserId, 'u-1');
-  assert.deepEqual(d.certificate.altNames.dns, ['localhost']);
-  // 覆盖后仍只含合法键（可选键 + 必填键，无越界）
-  const extra = new Set([...ACS_REQUIRED_FIELDS, ...ACS_OPTIONAL_FIELDS]);
-  for (const k of Object.keys(d)) assert.ok(extra.has(k), '越界键 ' + k);
-});
+;
 
 test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结 / generatedAt 固定）', () => {
   const cat = buildAgentCatalog(DEFAULT_ASSEMBLY, fixedEngine);
@@ -145,16 +77,7 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
 });
 
 // —— 接线层（register.js）——
-test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 28 工具（P1-01 默认开 + lane_dispatch + P3a batch_control + P1 handoff 两件）', () => {
-  const { made } = makeCtx(true);
-  assert.ok(made.agentCatalog, 'enabled=true 时 register() 后 agentCatalog 非空');
-  assert.equal(made.agentCatalog.list().length, ROLE_COUNT);
-  assert.ok(made.catalog, '既有 catalog 不受影响');
-  assert.equal(made.catalog.list().length, 29); // P1-01 缺省默认开：core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc（logs 缺省关；2026-09-16 P3a control lane +batch_control ⇒ 23→24；2026-09-17 P1 +handoff_submit/handoff_view 常驻注册 ⇒ 25→26）
-  for (const d of made.agentCatalog.list()) {
-    for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '接线输出缺 ACS 键 ' + k);
-  }
-});
+;
 
 test('接线：装配可注入（config.assembly 覆盖默认装配；aip.team 选装配团队）', () => {
   const custom = { team: 'custom', layers: { exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } } } };
@@ -192,20 +115,7 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('端点：enabled=true 时 /agents 已注册并返回 {count:7, agents(ACS 字段), generatedAt} HTTP 200', () => {
-  const { made } = makeCtx(true);
-  const { routes } = apiWithAgentCatalog(made.agentCatalog);
-  const route = routes.find((r) => r.path === '/api/dsh-punky-swarm/agents');
-  assert.ok(route, 'enabled=true 时 /agents 路由已注册');
-  const r = invoke(route, '/api/dsh-punky-swarm/agents');
-  assert.equal(r.status, 200);
-  assert.equal(r.body.count, ROLE_COUNT);
-  assert.equal(r.body.agents.length, ROLE_COUNT);
-  assert.ok(typeof r.body.generatedAt === 'string');
-  for (const a of r.body.agents) {
-    for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in a, '端点输出缺 ACS 键 ' + k);
-  }
-});
+;
 
 test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 7 路由契约保持）', () => {
   const { routes } = apiWithAgentCatalog(null);

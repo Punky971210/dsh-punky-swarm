@@ -133,33 +133,6 @@ const state = {
  */
 const aggregateWindows = new Map();
 
-/**
- * 供测试与排障读取的运行期计数快照（只读投影，不改变状态）。
- */
-export function auditlogStats() {
-  return {
-    mounted: state.mounted,
-    sinkDir: state.sinkDir,
-    diagnosticsDir: state.diagnosticsDir,
-    filename: state.filename,
-    segment: state.segment,
-    attempts: state.attempts,
-    writes: state.writes,
-    failures: state.failures,
-    consecutiveFailures: state.consecutiveFailures,
-    skippedByBreaker: state.skippedByBreaker,
-    sinkErrorRecords: state.sinkErrorRecords,
-    sinkErrorRecordsFailed: state.sinkErrorRecordsFailed,
-    truncatedLines: state.truncatedLines,
-    stdoutWrites: state.stdoutWrites,
-    messagesSeen: state.messagesSeen,
-    formatFallbacks: state.formatFallbacks,
-    filteredByLevel: state.filteredByLevel,
-    collapsedMessages: state.collapsedMessages,
-    aggregateRows: state.aggregateRows,
-    lastError: state.lastError ? state.lastError.slice(0, MAX_ERROR_CHARS) : null,
-  };
-}
 
 // ── 基础工具 ──
 
@@ -867,7 +840,35 @@ export function flushDiagnostics(note) {
   flushAggregateWindows();
 }
 
-/** 主卷（当日 segment 0）路径：给定 sinkDir 与日期键 */
 export function sinkFilePath(sinkDir, dateKey = localDateKey(new Date())) {
   return path.join(sinkDir, 'audit-' + dateKey + '.jsonl');
+}
+
+
+/**
+ * 供测试与排障读取的运行期计数快照（只读投影，不改变状态）。
+ */
+export function auditlogStats() {
+  return {
+    mounted: state.mounted,
+    sinkDir: state.sinkDir,
+    diagnosticsDir: state.diagnosticsDir,
+    filename: state.filename,
+    segment: state.segment,
+    attempts: state.attempts,
+    writes: state.writes,
+    failures: state.failures,
+    consecutiveFailures: state.consecutiveFailures,
+    skippedByBreaker: state.skippedByBreaker,
+    sinkErrorRecords: state.sinkErrorRecords,
+    sinkErrorRecordsFailed: state.sinkErrorRecordsFailed,
+    truncatedLines: state.truncatedLines,
+    stdoutWrites: state.stdoutWrites,
+    messagesSeen: state.messagesSeen,
+    formatFallbacks: state.formatFallbacks,
+    filteredByLevel: state.filteredByLevel,
+    collapsedMessages: state.collapsedMessages,
+    aggregateRows: state.aggregateRows,
+    lastError: state.lastError ? state.lastError.slice(0, MAX_ERROR_CHARS) : null,
+  };
 }
