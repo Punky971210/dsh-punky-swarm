@@ -287,6 +287,7 @@ test('A3 反例：牵头角色悬空（不在该层/任一层）→ TEAM_ASSET_L
 
 // ── A4：生产口径可强制（同批产物根正/负例成对）──
 
+// 【预期红·搁置·B1】（2026-09-21 用户裁定：不 skip，跑红忽略）：deps 层序约束已全局化 ⇒ 本用例 prod1(exec) deps→a1(audit) 被结构性约束拒。团队资产整块搁置待引擎形态；解冻条件 = 引擎形态定稿并重定团队资产依赖形态。
 test('A4 生产门禁成对断言：producer lane 缺 audit 两产物 → GATE_ENTRY_MISSING 且不进入 running；补齐后可派', async () => {
   const { root, store, byName } = makeHarness();
   try {

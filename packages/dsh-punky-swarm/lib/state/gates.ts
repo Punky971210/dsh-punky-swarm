@@ -36,7 +36,7 @@ import { findTask } from './task-utils.js';
 // gate-techdebt 新增读端（G-2 / G-3 / S19①）：`entryRequiresOf`（入口要求的**真实来源**）/
 //   `consumeFieldOf`（consume 字段名读端）/ `declarationSummaryOf`（声明面可读汇总，含**未接线台账**）——
 //   三者均**只读复用** flows.js，不改该文件；`requiredBy` 标注取 `entryRequiresOf(flow).source`（G-3 修正）。
-import { flowsForBatch, flowOf, produceFieldOf, produceFieldsOf, packageRoot, entryRequiresOf, consumeFieldOf, declarationSummaryOf, contractOf, sectionProblemsOf, enabledByFlag, flagOf, globMatchesPath, ENGINE_BASELINE_PLAN_SECTIONS } from '../assembly/flows.js';
+import { flowsForBatch, flowOf, produceFieldOf, produceFieldsOf, packageRoot, entryRequiresOf, consumeFieldOf, declarationSummaryOf, contractOf, sectionProblemsOf, enabledByFlag, flagOf, globMatchesPath, ENGINE_BASELINE_PLAN_SECTIONS, ENGINE_BASELINE_CRITERIA_SECTION } from '../assembly/flows.js';
 // 未接线声明台账**单一来源**（team-asset.js `UNWIRED_DECLARATIONS`）＋ 团队资产读端（供台账的**顶层键**读法）。
 // 同样**只读复用**：`lib/assembly/team-asset.js` 不在本 lane 写域，逐字不改。
 import { loadTeamAsset, UNWIRED_DECLARATIONS } from '../assembly/team-asset.js';
@@ -897,12 +897,19 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
       if (anchors.length === 0) {
         return reject({ code: 'GATE_AUDIT_INPUT_MISSING', problems: consume, ...(criteriaFrom ? { criteriaFrom } : {}) });
       }
+      // ── 判据章节名（**配置化**，2026-09-21 用户裁定「判据改为全中文，且配置化」）──────────────
+      //   取值优先序：① `flow.audit_contract.criteria_section`（声明面，本轮新增键）
+      //             ② 回落引擎基线 `ENGINE_BASELINE_CRITERIA_SECTION`（全中文，单一真源）
+      //   ⇒ 规格与判据解耦：团队若用英文章节名（如 `## Acceptance Criteria`），声明即可，代码零改动。
+      const criteriaSection = ac && typeof ac.criteria_section === 'string' && ac.criteria_section.trim()
+        ? ac.criteria_section.trim()
+        : ENGINE_BASELINE_CRITERIA_SECTION;
       const problems: string[] = [];
       let okAnchor = false;
       for (const p of anchors) {
         try {
-          if (fs.readFileSync(resolveArtifact(sessionId, batchId, p), 'utf8').includes('## 验收标准')) { okAnchor = true; break; }
-          problems.push(p + ' lacks "## 验收标准"');
+          if (fs.readFileSync(resolveArtifact(sessionId, batchId, p), 'utf8').includes(criteriaSection)) { okAnchor = true; break; }
+          problems.push(p + ' lacks "' + criteriaSection + '"');
         } catch { problems.push(p + ' unreadable'); }
       }
       if (!okAnchor) return reject({ code: 'GATE_AUDIT_CRITERIA_MISSING', problems });
@@ -989,11 +996,14 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
         }
       } else if (p.endsWith('spec.md')) {
         // 引擎基线 spec.md 判据（E-2 正名，legacy-retire-20260915）：无 contract 声明时，对以 spec.md 结尾的
-        //   产物做两基线标题（ENGINE_BASELINE_PLAN_SECTIONS）的逐字 includes 校验——**行为与清退前逐字一致**，
+        //   产物做基线标题（`ENGINE_BASELINE_PLAN_SECTIONS`）的逐字 includes 校验——**行为与清退前逐字一致**，
         //   仅语义正名（原注释误称「legacySuffixMatch 旧口径」；实为引擎基线缺声明承接分支，S10 裸标题
         //   最低判据 sectionLineHit 在 :580 独立生效，编号变体仍拒）。
-        if (!content.includes('## 验收标准')) problems.push(p + ' lacks "## 验收标准"');
-        if (!content.includes('## 约束')) problems.push(p + ' lacks "## 约束"');
+        //   **配置化**（2026-09-21）：章节名一律从 `ENGINE_BASELINE_PLAN_SECTIONS` 取（单一真源，全中文），
+        //   本分支**不再写字面量**；团队要用非默认章节名 ⇒ 声明 `flows.plan.contract.required_sections`。
+        for (const s of ENGINE_BASELINE_PLAN_SECTIONS) {
+          if (!content.includes(s)) problems.push(p + ' lacks "' + s + '"');
+        }
       }
       if (p.endsWith('.json')) {
         try { JSON.parse(content); } catch { problems.push(p + ' invalid JSON'); }

@@ -7,14 +7,14 @@
 
 ---
 
-## §0 引擎改装现状摘要（2026-09-21 22:2x，生成时 HEAD `fe15416`）
+## §0 引擎改装现状摘要（2026-09-21 22:4x，生成时 HEAD `9d91047`）
 
 | 轴 | 现状 |
 |---|---|
-| **波次** | R1 → R2 清理波 → R3g → A1–A4 → K1–K4 → N0.5 → N1-R4-1a/1b/1c/2 → **夹具审计 F1–F5（已收尾）**（当前） |
+| **波次** | R1 → R2 → R3g → A1–A4 → K1–K4 → N0.5 → N1-R4-1a/1b/1c/2 → 夹具审计 F1–F5 → **三项裁定执行（B1 全局化 / A3 判据配置化 / A4 确认）**（当前） |
 | **形态** | 池 = `owner == null` 的**视图**（不是容器）；派发 = 唯一出池动作（Leader 单点，不引入 claim）；图变更 = **两个显式写入口**（`store.addPoolTasks` 追加任务 / `store.addTaskEdges` 加边），均单次 `atomicWrite`；不成环靠**结构性保证**（`deps` 只许指向已声明在先 + 同层或上游），不做禁止性断言 |
-| **门禁** | 拒码集合 **66 零增删**；无断言项 2（刻意不补）；套件工具 **32**；deny **16**；modeGate **12** |
-| **测试** | **1777 tests / 1773 pass / 0 fail / 4 todo**（本轮连环境类也全绿 ⇒ 该缺陷偶发性再次印证）⇒ 非环境类 **0**；基线 **151/1732/8403**（静态行数 44226） |
+| **门禁** | 拒码集合 **66 零增删**；无断言项 2（刻意不补）；套件工具 **32**；deny **16**；modeGate **12**；**plan 判据配置化**（`criteria_section` 新声明键 + 单一真源常量 `ENGINE_BASELINE_CRITERIA_SECTION`，判据全中文） |
+| **测试** | **1783 tests / 1757 pass / 22 fail / 4 todo**；22 fail = **4 条团队资产预期红**（B1 搁置，跑红忽略）+ **18 条环境类 git 回归**（merge-agent 9 · worktree 7 · resume 2，`invalid reference: punky/orch`）⇒ **非环境类 0**；基线 **152/1738/8419**（静态行数 44414） |
 | **可达性审计** | 已落成工序（扫描器 + 口径 + 判读台账），判读覆盖 **119/119**；真守卫 85 条中**无④**；④ 实际只有成环检查一项（已删） |
 | **夹具审计** | 已落成工序（`scripts/audit/fixtures.mjs` + `docs/fixture-audit-2026-09-21.md`）：**④死夹具 = 0** · ②空壳 = 技能桩 **33/43** · ③重复 = **24 个同名函数 / 32 对高相似**（F3+F4 后；原 35/156）· 团队资产写入面 **30 文件**。⇒ **F1–F5 全部落地**：技能空壳显式化 · 团队写入面单点 + 白名单 · 必合档 21→5 单点原语 · `assemblyCtx` 4 具名 builder + 同名冲突 14→0 · **门禁正向补测（真实资产名驱动，含负向对照）** |
 
@@ -54,6 +54,7 @@
 | 14 | **夹具审计 F3 · 必合档收敛**（台账 §3.3）：21 处定义 → **5 个单点原语** —— `writeRuntime`(9) · `laneHeartbeat`(4) · `tempRoot`(3) · `seedArtifactFile`(5) · `fakeCtx({warn,error})`(6)；落点 `gate-fixture.mjs`（无 lib 依赖）+ 新增 **`watch-fixture.mjs`**（唯一带 lib 依赖者 ⇒ 独立域内 helper）；`fakeCtx` 的 3 个非缺省变体用「别名导入 + 一行适配」⇒ **调用点零改动**；`hb` 正名 `laneHeartbeat`（4 文件 41 调用点同步改名）；新增取证工具 **`scripts/audit/dup-similarity.mjs`**（`--fn` 下钻）；**仅 `test/**` 与 `scripts/audit/**`**、`lib/**` 零 diff | 本批（09-21 21:4x） | 【实测】重复候选 33→**28**、高相似对 156→**70**、含高相似函数 21→14；全量 **1767 / 1745 / 18 fail 全为环境类 ⇒ 非环境类 0**；静态行数 44307→44191 |
 | 15 | **夹具审计 F4 · 选合档同名消歧 + `assemblyCtx` 拆名**（台账 §3.3）：`assemblyCtx`(11 同名副本) → **4 具名 builder**（`assemblyCtx`/`Pre`/`Web`/`Opts`，落 `gate-fixture.mjs`）；**14 处本地定义名撞共享导出** → 消歧清零（`runLane`×5→`runLaneOrError`/复用共享 · `threeTierTasks`×5→`With*` · `seedArtifacts`×3→`seedTier*` · `tempRoot`→`tempRootTracked`）；`freshRoot(prefix)` **6 处并入 `tempRoot`**（85 调用点）；新 `test/fixture-helper-ledger.test.js` **5 条**台账断言（★ F4-1 当场抓出漏项 `smoke-gate-v14.mjs`——我只滤了 `*.js`）；余下 6 个候选判**保留**（结构形状 ≥3 ⇒ 同名不同物）。工具升级 `dup-similarity.mjs` 加 `--group`（数形状）+ `--struct`（抹平字面量） | 本批（09-21 22:0x，`696f5cf`） | 【实测】重复候选 33→**24** · 高相似对 70→**32** · 同名冲突 13→**0**；全量 **1772 / 1750 / 18 fail 全为环境类 ⇒ 非环境类 0**；基线 150/1727/8382 |
 | 16 | **夹具审计 F5 · 门禁正向补测**（台账 §3.1/§4）：新 `test/skill-resolution-real-asset.test.js` **5 条** —— 以真实资产名驱动单一强制点 `assertTeamAssetReady`：① 正向放行（注入禁 `stub`，自证覆盖 ≥30 名）② ★ 解析到**包内真实正文**（逐字）而非桩 ③ 删技能整目录 ⇒ 拒 + missing **逐名指名、不多报**（顺带锁口径：删 `SKILL.md` 留空目录仍可解析）④ ★ **名单 ≡ 引擎所需最小补充集**（双向）⑤ 名单无空登记。**含负向对照**：夹具恒桩化 ⇒ F5-2 立刻红（已验证后恢复） | 本批（09-21 22:2x，`fe15416`） | 【实测】1777/1773/**0 fail**/4 todo；基线 150/1727/8382 → **151/1732/8403**；仅 `test/**`、`lib/**` 零 diff |
+| 17 | **三项裁定执行（B1/A3/A4）**（蓝图 §7.6）：① **B1 全局化** —— validateDepsStructure 在建批期启用（+追加/加边期 ⇒ 三期同一套）；影响面实测 4 例**全属团队资产** ⇒ 按裁定**整块搁置**（**不 skip**，用例上方【预期红·搁置·B1】登记，跑红忽略；解冻 = 引擎形态重定团队资产依赖形态）② **A3 判据全中文 + 配置化** —— flows.js 新增单一真源 ENGINE_BASELINE_CRITERIA_SECTION、ENGINE_BASELINE_PLAN_SECTIONS 改派生；锚点门读新键 audit_contract.criteria_section（team-asset.js 同步类型校验）；契约门缺声明分支改遍历常量；中文产出规格模板 docs/plan-spec-template-2026-09-21.md（宿主 spec-writing 的中文对应物 + 英中对照）；新 test/plan-criteria-config.test.js **6/6** ③ **A4 §2.3** 按建议确认 | 本批（09-21 22:4x） | 【实测】判据面 7 套件 **110/110**；全量 1783/1757/22 fail（4 预期红 + 18 环境类 ⇒ **非环境类 0**）；基线 152/1738/8419；pkg-hashes 419 |
 
 > R3g 子波：`fda041a`（R3-1 补测）· `035426d`（R3-2 判读）· `0d280ea`（R3-3 前提推翻 + fail-open）· `43c4b29`（R3-4 真 E2E）· `a3dcf22`（R3-3 冻结 + 源类型实证）· `a944759`（R3-5 强度台账）。
 

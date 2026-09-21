@@ -121,6 +121,7 @@ test('writing-team A1 资产通过加载期校验：loadTeamAsset ok:true 且 pr
 
 // ── ② 端到端建批冒烟（零 GATE_ROLE_INVALID / 零 GATE_ROLE_MISSING + 前缀逐字）──
 
+// 【预期红·搁置·B1】（2026-09-21 用户裁定：不 skip，跑红忽略）：deps 层序约束已全局化 ⇒ 本用例 prod1(exec) deps→a1(audit) 被结构性约束拒。团队资产整块搁置待引擎形态；解冻条件 = 引擎形态定稿并重定团队资产依赖形态。
 test('writing-team A2 建批：零 GATE_ROLE_INVALID / 零 GATE_ROLE_MISSING / 零 GATE_ROLE_MANAGER_AS_LANE，cmd 前缀逐字 = 资产声明（加载名）', async () => {
   const { root, byName } = makeHarness();
   try {
@@ -195,6 +196,7 @@ test('writing-team A3 自定义牵头静态判据：plan_leads / audit_leads 与
   assert.deepEqual([...a.roles.extra].sort(), [...layerRoles].sort(), 'roles.extra 必须等于各层角色并集');
 });
 
+// 【预期红·搁置·B1】（2026-09-21 用户裁定：不 skip，跑红忽略）：deps 层序约束已全局化 ⇒ 本用例 prod1(exec) deps→a1(audit) 被结构性约束拒。团队资产整块搁置待引擎形态；解冻条件 = 引擎形态定稿并重定团队资产依赖形态。
 test('writing-team A3 牵头运行面：writing-planner 承担 plan 牵头、writing-auditor 承担 audit 牵头（建批零 GATE_ROLE_MISSING）', async () => {
   const { root, byName } = makeHarness();
   try {
@@ -237,6 +239,7 @@ test('writing-team A3 牵头运行面：writing-planner 承担 plan 牵头、wri
 
 // ── ④ publisher 的「审核通过才交付」生产门禁（正/负例成对）──
 
+// 【预期红·搁置·B1】（2026-09-21 用户裁定：不 skip，跑红忽略）：deps 层序约束已全局化 ⇒ 本用例 prod1(exec) deps→a1(audit) 被结构性约束拒。团队资产整块搁置待引擎形态；解冻条件 = 引擎形态定稿并重定团队资产依赖形态。
 test('writing-team A4 生产门禁成对断言：publisher lane 缺 audit 两产物 → GATE_ENTRY_MISSING 且不进入 running；补齐后可派', async () => {
   const { root, byName } = makeHarness();
   try {

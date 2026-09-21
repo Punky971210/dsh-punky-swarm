@@ -855,11 +855,9 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   //   （给出「缺哪条边 / 缺哪件来源」），若后置会被 `topoWaves` 的 `depends on unknown id` 抢答 ⇒
   //   调用方拿不到新码语义（码面契约见 §7 判据 1/2）。非 deps 的其它拓扑违规仍由 `topoWaves` 原样报。
   checkHandoffDeclarations(tasks, { smoke: smoke === true, ...(handoffGate === undefined ? {} : { handoffGate }) });
-  // N1-R4-1d：**deps 结构约束**（已声明在先 + 同层或上游）。
-  //   ⚠ **建批期暂不启用**（2026-09-21）：启用后撞**真实反例**——`test/writing-team-asset.test.js` 的
-  //     `prod1`（exec）依赖 `a1`（audit），属「exec 依赖下游层」的既有合法构造 ⇒ 收紧会破坏既有建批。
-  //     ⇒ 冲突已上报，待裁（选项：改判用例 / 只用于追加期 / 层序降为告警）。函数已导出且**追加期在用**。
-  // validateDepsStructure(tasks);
+  // N1-R4-1d：**deps 结构约束**（已声明在先 + 同层或上游）——**全局**（建批期 + 追加期 + 加边期同一套）。
+  //   2026-09-21 用户裁定「全局化」；撞到的**团队资产**用例整块搁置（等引擎形态），见蓝图 §7.4.1c。
+  validateDepsStructure(tasks);
   const { waves } = topoWaves(tasks);
   validateLayerContract(tasks, { smoke: smoke === true });
   // 团队角色集（可拔插）——角色词法集 = 资产**各层声明角色** ∪ `roles.extra`（`unionRoleVocabulary`）；

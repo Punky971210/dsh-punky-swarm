@@ -832,6 +832,14 @@
       "tests": 8,
       "todos": 0
     },
+    "test/plan-criteria-config.test.js": {
+      "asserts": 16,
+      "blankLines": 17,
+      "lines": 184,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/preset-rules.test.js": {
       "asserts": 66,
       "blankLines": 38,
@@ -995,7 +1003,7 @@
     "test/team-assets-fill.test.js": {
       "asserts": 60,
       "blankLines": 29,
-      "lines": 377,
+      "lines": 378,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1203,13 +1211,13 @@
     "test/writing-team-asset.test.js": {
       "asserts": 60,
       "blankLines": 22,
-      "lines": 279,
+      "lines": 282,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T14:18:43Z",
+  "generatedAt": "2026-09-21T14:41:39Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1223,12 +1231,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8403,
-    "blankLines": 3969,
-    "files": 151,
-    "lines": 44226,
+    "asserts": 8419,
+    "blankLines": 3986,
+    "files": 152,
+    "lines": 44414,
     "tautologies": 0,
-    "tests": 1732,
+    "tests": 1738,
     "todos": 4
   }
 }

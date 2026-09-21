@@ -57,11 +57,26 @@ export function packageRoot() {
 }
 
 /**
+ * 引擎基线：**验收标准（criteria）章节名** —— 判据「全中文」的**单一真源**（2026-09-21 用户裁定）。
+ *
+ * 消费者（两处 plan 判据门，**不许再写字面量**）：
+ *   · `gates.ts` 锚点门 `GATE_AUDIT_CRITERIA_MISSING`（audit 派发前：consume 中的 plan 产物须带本章）；
+ *   · `gates.ts` 契约门 `GATE_PLAN_CONTRACT` 的**缺声明分支**（见下 `ENGINE_BASELINE_PLAN_SECTIONS`）。
+ *
+ * **配置化通道**（声明面优先，缺声明回落本常量）：
+ *   · plan 层内容契约：`flows.plan.contract.required_sections`（既有键）；
+ *   · audit 层职责声明：`flows.audit.audit_contract.criteria_section`（本轮新增键）。
+ *   ⇒ 规格与判据解耦：团队若用英文章节名，只需在资产里声明，代码零改动。
+ */
+export const ENGINE_BASELINE_CRITERIA_SECTION = '## 验收标准';
+
+/**
  * 引擎基线 plan 契约判据章节（E-2 正名，legacy-retire-20260915）：缺声明（无 contract）时的**唯一真源**。
  * 原 `LEGACY_PLAN_CONTRACT` 死常量已删除（lib/test 零 import，从未被读端消费）；本常量承接
- * `gates.ts` plan 契约门的缺声明判据（原 :549-550 字面量提为命名常量，语义零变化）。
+ * `gates.ts` plan 契约门的缺声明判据。**从 `ENGINE_BASELINE_CRITERIA_SECTION` 派生**（首项恒为 criteria 章）
+ * ⇒ 「验收标准」章节名全仓只有一个字面量。
  */
-export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze(['## 验收标准', '## 约束']);
+export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([ENGINE_BASELINE_CRITERIA_SECTION, '## 约束']);
 
 const CACHE = new Map(); // key: `${pkgRoot}::${team}` → { sig, out }（sig = 资产路径+mtime+size；变了即重读）
 

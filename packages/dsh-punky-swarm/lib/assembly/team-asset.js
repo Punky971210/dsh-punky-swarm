@@ -366,14 +366,18 @@ export function validateTeamAsset(asset) {
 
       // audit_contract（P2，2026-09-14 用户裁决 B）：audit 层的**职责声明**——与 `contract`（产出内容契约：
       //   artifact_globs/required_sections）**不同键**，避免语义混淆。结构校验（存在性由建批期门禁负责）：
-      //   { criteria_from?: string, consumes_required?: string[], verdict?: string[],
+      //   { criteria_from?: string, criteria_section?: string, consumes_required?: string[], verdict?: string[],
       //     exempt?: boolean, reason?: string }
+      //   · `criteria_section`（2026-09-21 新增）：**audit 依据章节名**（判据配置化的 audit 侧通道）——
+      //     读端 = `gates.ts` 锚点门 `GATE_AUDIT_CRITERIA_MISSING`；缺声明 ⇒ 回落引擎基线
+      //     `flows.js#ENGINE_BASELINE_CRITERIA_SECTION`（`## 验收标准`，全中文）。
       //   （`checklist_anchor` 于 2026-09-14「A 方案」移除：自由文本不可机器判定 ⇒ 归技能手册/文档面，不占声明面）
       if (flow.audit_contract != null) {
         if (!isPlainObject(flow.audit_contract)) push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract`, 'audit_contract 必须是对象');
         else {
           const ac = flow.audit_contract;
           if (ac.criteria_from != null && !isNonEmptyString(ac.criteria_from)) push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract.criteria_from`, 'criteria_from 必须是非空字符串');
+          if (ac.criteria_section != null && !isNonEmptyString(ac.criteria_section)) push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract.criteria_section`, 'criteria_section 必须是非空字符串（audit 依据章节名，如 `## 验收标准`）');
           if (ac.consumes_required != null && !isStringArray(ac.consumes_required)) push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract.consumes_required`, 'consumes_required 必须是非空字符串数组');
           if (ac.verdict != null && !isStringArray(ac.verdict)) push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract.verdict`, 'verdict 必须是非空字符串数组');
           if (ac.exempt != null && typeof ac.exempt !== 'boolean') push(TEAM_ASSET_CODES.BAD_TYPE, `${at}.audit_contract.exempt`, 'exempt 必须是布尔');
