@@ -32,6 +32,9 @@ import { EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCALATE, EVT_BATCH_PHASE 
 import { readRefusals } from '../lib/governance/receipt-store.js';
 import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
 
+// G7 下沉（2026-09-22）：seedBatch 并入 helpers/governance-fixture.mjs；别名导入保持调用点零改动。
+import { seedGovernanceBatch as seedBatch } from './helpers/governance-fixture.mjs';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SLEEP = 1000;
 const HOT_SETTLE = 200;
@@ -48,11 +51,6 @@ function execOf(name, args, sessionId) {
   };
 }
 // 预置 running 批（辅助 createStore 与 apply 内部 store 同 root 文件系统互见）
-function seedBatch(root, sessionId, batchId, laneId = 'l1') {
-  const aux = createStore(root);
-  aux.createBatch(sessionId, { batchId, wavePlan: buildWavePlan({ batchId, tasks: [{ id: laneId }] }), phase: 'running' });
-  return aux;
-}
 
 // 装配级静态 preset 生效：apply config.governance.hook.preset 展开装载（loader 从包 PRESETS_DIR 读真实三 JSON）
 test('装配-1 preset 键生效：apply 静态 preset:l1-sensitive → pre 命中 L1-D09（web_search 带凭据 URL DENY）', async () => {

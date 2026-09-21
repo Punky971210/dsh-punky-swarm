@@ -30,33 +30,15 @@ import { createStore } from '../lib/state/store.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
 
+// G7 下沉（2026-09-22）：harness 体迁入 helpers/dispatch-fixture.mjs；本文件一行适配（markCmd 断言标记）。
+import { makeDispatchHarness } from './helpers/dispatch-fixture.mjs';
+const harness = () => makeDispatchHarness({ SID: 'sess-dp', batchId: 'b-dp', markCmd: true });
+
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team；其 skills 须可解析 ⇒ 先注入技能根。
 seedTeamAssetSkills('software-team');
 
 const SID = 'sess-dp';
 
-async function harness() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-dp-'));
-  const store = createStore(root);
-  const captured = [];
-  const ctx = {
-    tools: { register: () => {}, guard: () => () => {} },
-    logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { start: async (provider, request) => { captured.push({ provider, ...request }); return { id: 'worker-stub-1', result: Promise.resolve({ output: [], stopReason: 'completed' }) }; } },
-  };
-  const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
-  const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
-  const exec = { agent: { session: { id: SID } } };
-  assessC(store, SID, { rationale: 'fixture：三层批建批前置评估（多线并行 ⇒ C 档）' });
-  const tasks = threeTierTasks(['e1'], { auditId: 'a1' });
-  // 给 plan/exec lane 各自的 cmd 打上可辨识标记，供断言
-  for (const t of tasks) t.cmd = 'CMD-MARK-' + t.id + ' 的任务说明';
-  await by.wave_plan.execute({ batchId: 'b-dp', tasks, assembly: { auditLane: 'a1' } }, exec);
-  await by.batch_phase.execute({ batchId: 'b-dp', phase: 'running' }, exec);
-  registerManager(store, SID, 'b-dp', 'mgr-1');
-  seedArtifacts(root, SID, 'b-dp', ['e1'], { planProduct: 'plan/spec.md' });
-  return { by, exec, captured };
-}
 
 test('DP-1 任务包携带 lane 的 cmd（wavePlan 为 wave 数组时不得退化为「未声明 cmd」）', async () => {
   const { by, exec, captured } = await harness();

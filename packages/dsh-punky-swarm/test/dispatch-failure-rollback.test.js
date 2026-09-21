@@ -30,6 +30,10 @@ import { createStore } from '../lib/state/store.js';
 import { workerSessionIdOf } from '../lib/engine/dispatch.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+
+// G7 下沉（2026-09-22）：harness 体迁入 helpers/dispatch-fixture.mjs；本文件一行适配（id 沿用原值）。
+import { makeDispatchHarness } from './helpers/dispatch-fixture.mjs';
+const harness = (start) => makeDispatchHarness({ SID: 'sess-dr', batchId: 'b-dr', start });
 import * as schema from '../lib/schema.js';
 
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team；其 skills 须可解析 ⇒ 先注入技能根。
@@ -54,24 +58,6 @@ test('DR-1 workerSessionIdOf：实现面 id 优先、类型面 childId 同认，
 // ── D-3 工具面（真派发失败 ⇒ 回滚 + 恢复指引） ───────────────────────────────
 // 【2026-09-22 · one-shot 化】stub 通道 `startContinuable` → `start(provider, request)`；
 //   成功形态 = `SubagentRun { id, result: Promise }`（result settle 后 activeRuns 自动摘除）。
-async function harness(start) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-dr-'));
-  const store = createStore(root);
-  const ctx = {
-    tools: { register: () => {}, guard: () => () => {} },
-    logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { start },
-  };
-  const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
-  const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
-  const exec = { agent: { session: { id: SID } } };
-  assessC(store, SID, { rationale: 'fixture：三层批建批前置评估（多线并行 ⇒ C 档）' });
-  await by.wave_plan.execute({ batchId: 'b-dr', tasks: threeTierTasks(['e1'], { auditId: 'a1' }), assembly: { auditLane: 'a1' } }, exec);
-  await by.batch_phase.execute({ batchId: 'b-dr', phase: 'running' }, exec);
-  registerManager(store, SID, 'b-dr', 'mgr-1');
-  seedArtifacts(root, SID, 'b-dr', ['e1'], { planProduct: 'plan/spec.md' });
-  return { by, exec, store };
-}
 
 // K3（2026-09-21）改判：返工边 `review→running` 已去除 ⇒ 派发失败的回滚目标由 `review` 改 `failed`。
 //   旧口径「回滚到 review，修因后原地重派」在去边后会把 lane 卡在**非终态且重派必被拒**（invalid member transition）。

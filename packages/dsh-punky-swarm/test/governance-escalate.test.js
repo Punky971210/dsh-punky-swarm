@@ -130,6 +130,9 @@ import { createTopicRuntime } from '../lib/comms/topic-runtime.js';
 import { subscribeTopic } from '../lib/comms/topic.js';
 import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
 
+// G7 下沉（2026-09-22）：seedBatch 并入 helpers/governance-fixture.mjs（与 preset-config 同形单轴差）；别名导入保持调用点零改动。
+import { seedGovernanceBatch as seedBatch } from './helpers/governance-fixture.mjs';
+
 // ── §2 helpers（store 层宿主：独立临时 root，与 §1 纯函数段零 IO 纪律互不干扰）──
 const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gesc-'));
 const S2 = 'sess-gesc';
@@ -187,11 +190,6 @@ const RULE_RM_RF = {
   violations: [{ code: 'V001', category: 'hard', message: '强制删除命令被护栏禁止' }],
 };
 // 装配批预置（辅助 createStore 与 apply 内部 store 同 root 文件系统互见；buildWavePlan 建 running 批）
-function seedBatch(root, sessionId, batchId) {
-  const aux = createStore(root);
-  aux.createBatch(sessionId, { batchId, wavePlan: buildWavePlan({ batchId, tasks: [{ id: 'l1' }] }), phase: 'running' });
-  return aux;
-}
 
 // ---- §2 T10-T15：store 方法升级链（记录/评估/棘轮升级/phase 闸/resume）----
 
