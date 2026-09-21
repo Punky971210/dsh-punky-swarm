@@ -256,3 +256,20 @@ engine_team_settle { batchId, lane, note? }     // 成员唯一结算通道
 3. **无需探针**：原生工具（`list_agents`/`send_message`/`wait_agent`/`interrupt_agent`）即 Leader↔teammate 可达性，原 T0/B1 探针需求消解。
 4. **「成员 deny」精确语境**（非幻觉，代码在案）：S2（`0458e7e`）将连续控制族 4 件入 `suite.js:114-117`（`entry(name,kind,modeGate=false,memberDeny=true,…)`）⇒ deny 20 件；生效路径 = `buildStartRequest` 把 `SUITE_DENY_TOOLS` 注入 **dispatch 一次性 worker 的 `toolFilter.deny`**。⚠ 语境边界：该 deny 只作用于 **dispatch 通道**；teammate 由官方 `spawn_teammate` 拉起、不经过 `buildStartRequest` ⇒ deny 是否/如何延伸到 teammate（或依赖官方成员权限模型）= B5 立稿待定口径。
 5. **N3 意图澄清**（见当日日志/汇报）：E4 = 官方 `maxMembers` 槽位「真拦」活体实证（官方概念，引擎刻意不读；自建并发闸已随 Q-B 取消）；sig = 借 JiuwenSwarm J11 的任务内容指纹（`SHA-256`，lib 内已有 `verify/selector.js` canonicalizeArgs 先例），幂等判据；C-4 = 入参集合未裁。
+## §13 deny 调用链清查 + E4 撤销（2026-09-22 04:5x 用户指令）
+
+### deny 调用链（全链唯一，grep 确证）
+
+1. **定义单点**：`suite.js:47` entry 工厂（name, kind, modeGate, memberDeny, write）⇒ 36 件注册表，`memberDeny:true` 共 20 件；
+2. **派生导出**：`suite.js:121-131` `memberDenyTools() → SUITE_DENY_TOOLS`（Object.freeze，注册表派生非字面量）；
+3. **唯一消费点**：`dispatch.js:59` import → :118 `buildStartRequest({ denyTools = SUITE_DENY_TOOLS, extraDeny })` → :125 `toolFilter.deny`（去重并集）→ :296 dispatchLaneCore 装配（+热更 `config.dispatch.denyTools` 追加）；
+4. **生效机制（宿主侧）**：`rt.start` 的 `request.toolFilter.deny` —— 宿主 subagent 机制把列名工具**从子会话移除且拒绝执行**（双保险，非审计拒绝而是「工具从成员面消失」）；
+5. **测试锁**：DB-2（deny→toolFilter 落地面唯一维度）· SC-1（全集精确权威）· engine-dispatch P3。
+
+**功能语义三类**：① 禁嵌套派发（subagent×2，2026-09-16 裁决：宿主 maxDepth 不约束子会话再派）② 禁黑板治理写面（wave_plan/member_status/batch_control/batch_phase/task_update/batch_tasks_add 等，成员写治理只许 member_settle/settle 族白名单例外）③ 禁连续控制族（S2 四件：一次性执行器无协作对象，控制权归 Leader 黑板面表达）。
+
+**边界**：deny 只作用于 **dispatch 通道**（buildStartRequest 唯一注入点）；teammate（官方 spawn_teammate）不经此路径，其工具收口机制 = B5 立稿待定口径。
+
+### E4 撤销
+
+**官方 `maxMembers` 超限由官方工具拦截**（用户裁定）⇒ 「槽位真拦实证」失去对象，E4 正式撤销（蓝图 §387 行随之闭合）；N3 剩余 = sig 幂等（另见 `docs/sig-fingerprint-design-2026-09-22.md`，待裁 D-sig-1..4）。
