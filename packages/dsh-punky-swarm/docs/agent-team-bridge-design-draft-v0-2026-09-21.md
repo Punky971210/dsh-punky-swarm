@@ -244,7 +244,7 @@ engine_team_settle { batchId, lane, note? }     // 成员唯一结算通道
 
    - **结论：\x60engine_team_settle\x60 无剩余独立作用，B2 建议撤销**（待确认）；teammate 若启用，成员结算直接走在役 \x60member_settle\x60。
 
-5. 其余项（B4/B5/四件保留事件补断言等）**待议**。
+5. **B1–B3 舍弃确认**（2026-09-22 04:3x 用户裁定）：B1（探针）/ B2（engine_team_settle，撤销获确认）/ B3（mirror）**正式舍弃**，非缓建——除非未来另立新设计重启。其余项（B4/B5 等）待议。
 
 
 

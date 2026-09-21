@@ -298,8 +298,8 @@
     },
     "test/dispatch-failure-rollback.test.js": {
       "asserts": 20,
-      "blankLines": 12,
-      "lines": 118,
+      "blankLines": 13,
+      "lines": 104,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -314,8 +314,8 @@
     },
     "test/dispatch-prompt-compose.test.js": {
       "asserts": 8,
-      "blankLines": 10,
-      "lines": 80,
+      "blankLines": 11,
+      "lines": 62,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -522,8 +522,8 @@
     },
     "test/governance-escalate.test.js": {
       "asserts": 75,
-      "blankLines": 33,
-      "lines": 441,
+      "blankLines": 34,
+      "lines": 439,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -562,8 +562,8 @@
     },
     "test/governance-preset-config.test.js": {
       "asserts": 36,
-      "blankLines": 18,
-      "lines": 268,
+      "blankLines": 19,
+      "lines": 266,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1233,7 +1233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T20:08:13Z",
+  "generatedAt": "2026-09-21T20:39:03Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,13 +1244,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 4 终裁：gate.manager_missing 删（用户裁定，roster_gap 承担留痕）；A2/A2b 随事件退役删除；其余四件保留",
+  "reason": "alpha.2 内核新基线 + G7 夹具下沉（tests 净变化）+ F2-6 允许名单双修",
   "schema": 1,
   "totals": {
     "asserts": 8169,
-    "blankLines": 3988,
+    "blankLines": 3992,
     "files": 154,
-    "lines": 44009,
+    "lines": 43973,
     "tautologies": 0,
     "tests": 1709,
     "todos": 4

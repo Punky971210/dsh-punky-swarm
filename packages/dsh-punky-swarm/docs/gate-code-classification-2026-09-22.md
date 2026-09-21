@@ -9,7 +9,7 @@
 | A1 拒码·在役（union 29 + 直抛 30） | **59** | **保留**（内核运行必要门禁） | 否 |
 | A2 事件留痕码 | **6** | **保留**（治理观察面） | 否 |
 | B 被遮蔽/内部分支 | **3** | 保留现状（R3-2 既有登记+绊线） | 否 |
-| B 零断言（事件型） | **5** | 保留 + 补测（R3g 既裁；随活体批） | 否 |
+| B 零断言（事件型） | **5** | **判定更正（04:3x）**：四件实有断言（事件字符串口径）；manager_missing 已删 | 否 |
 | C 退役/历史 | **8** | 注释保留 + 统一【已退役码·勿引用】前缀标记 | **✅ 须裁** |
 | D 模板/哨兵/常量 | **10** | 保留（拼接面/哨兵面） | 否 |
 | N 非守卫（配置键/解析器/兼容标记） | **21** | scanner 白名单剔除（防统计污染「66/112」口径） | **✅ 须裁** |
@@ -123,10 +123,10 @@
 | 码 | prod | test | 写点 |
 |---|---:|---:|---|
 | `GATE_MANAGER_MISSING` | — | — | **✂ 已删（2026-09-22 用户裁定；防回生锁在册）** |
-| `GATE_TARGET_BLOCKED` | 3 | 0 | state\event-types.js · state\store.js |
-| `GATE_TARGET_PASSED` | 3 | 0 | state\event-types.js · state\store.js |
-| `GATE_EXIT_BLOCKED` | 3 | 0 | state\event-types.js · state\store.js |
-| `GATE_NEEDHUMAN_BLOCKED` | 3 | 0 | state\event-types.js · state\store.js |
+| `GATE_TARGET_BLOCKED` | 3 | 0 | state| **判定更正（2026-09-22 04:3x）**：事件字符串断言在案（gates/batch-store/gate-spawn-fail/panel-render）——原「零断言」系普查口径漏判（大写码常量 grep 漏小写事件字符串） |event-types.js · state\store.js |
+| `GATE_TARGET_PASSED` | 3 | 0 | state| **判定更正（2026-09-22 04:3x）**：事件字符串断言在案（gates/batch-store/gate-spawn-fail/panel-render）——原「零断言」系普查口径漏判（大写码常量 grep 漏小写事件字符串） |event-types.js · state\store.js |
+| `GATE_EXIT_BLOCKED` | 3 | 0 | state| **判定更正（2026-09-22 04:3x）**：事件字符串断言在案（gates/batch-store/gate-spawn-fail/panel-render）——原「零断言」系普查口径漏判（大写码常量 grep 漏小写事件字符串） |event-types.js · state\store.js |
+| `GATE_NEEDHUMAN_BLOCKED` | 3 | 0 | state| **判定更正（2026-09-22 04:3x）**：事件字符串断言在案（gates/batch-store/gate-spawn-fail/panel-render）——原「零断言」系普查口径漏判（大写码常量 grep 漏小写事件字符串） |event-types.js · state\store.js |
 
 ### C 退役(注释)（7）—— 码已退役、仅注释/测试残留 ⇒ **建议：注释保留 + 统一前缀【已退役码·勿引用】标记**（防 grep 误判活码）——待裁
 

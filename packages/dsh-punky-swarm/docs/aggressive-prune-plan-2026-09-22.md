@@ -63,3 +63,8 @@
 ## §11 批 4 终裁（2026-09-22 03:5x 用户裁定）
 - **`gate.manager_missing` ✂ 已删**（事件常量 + store.js 收口写点 + A2/A2b 用例 + 各处注释引用；防回生锁 retired-codes-lock 纳入在册）。
 - **其余四件保留**（targets 门拒/过侧、command 门拒侧、needHuman merged 面拒侧 = 在役门禁唯一持久留痕）。补 5 条断言的建议**仅适用四件**；是否补测待后续裁定。【2026-09-22 04:0x 用户裁定：**暂不补断言**（暂缓，非否决）】
+
+## §12 断言现状更正 + alpha.2 基线（2026-09-22 04:3x）
+- **四件保留事件「零断言」判定更正**：实有断言在案——`gate.target_blocked`（gates O2 T2/T3 · batch-store C3）、`gate.target.passed`（gates ×9 · batch-store ×4 · techdebt ×1）、`gate.exit_blocked`（gates ×18 · spawn-fail ×4 · panel ×4）、`gate.needhuman_blocked`（gates ×2 · panel ×1）。原判系普查口径漏判（只 grep 大写码常量，漏小写事件字符串与 EVT 常量名）⇒ **补断言需求消解，R3g 缺口关闭**。
+- **普查方法教训**：门禁码/事件普查必须三形态并查（大写码常量 · 小写事件字符串 · EVT 常量名）。
+- **内核升级 0.1.6-alpha.2**（current 已指向）：全量 **1756/1728/24 fail/4 todo** = 4 团队资产预期红（writing-team×3 + team-assets-fill A4）+ 18 环境类（merge-agent 9 · worktree 7 · B6 2，与 alpha.1 同构）+ e2-1 基线漂移（G7 后未重生成，已重生成收口）+ F2-6（G7 helper 触发 withDefaultTeam 允许名单双向锁，已登记/移除双修）。⇒ **非环境类 0**，alpha.2 零回归。

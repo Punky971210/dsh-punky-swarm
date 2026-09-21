@@ -64,9 +64,9 @@ const WITH_DEFAULT_TEAM_ALLOWLIST = [
   'assembly-gate.test.js',
   'batch-control.test.js',
   'budget.test.js',
-  'dispatch-failure-rollback.test.js',
-  'dispatch-prompt-compose.test.js',
+  // G7 下沉（2026-09-22）：两文件改为委托 helpers/dispatch-fixture.mjs ⇒ 不再直接命中（使用者 = helper 本体）
   'governance.test.js',
+  'helpers/dispatch-fixture.mjs', // G7 下沉（2026-09-22）：dispatch 面统一 harness——建批是手段，不断言 team 门禁
   'merge-agent.test.js',
   'mode-gate.test.js',
   'resume.test.js',
