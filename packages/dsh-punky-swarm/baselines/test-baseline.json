@@ -915,17 +915,17 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 40,
       "blankLines": 17,
-      "lines": 298,
+      "lines": 301,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
-      "asserts": 35,
-      "blankLines": 19,
-      "lines": 174,
+      "asserts": 47,
+      "blankLines": 24,
+      "lines": 236,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 14,
       "todos": 0
     },
     "test/task-utils.test.js": {
@@ -995,7 +995,7 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 24,
-      "lines": 364,
+      "lines": 369,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1177,7 +1177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T05:24:21Z",
+  "generatedAt": "2026-09-21T05:48:28Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1191,12 +1191,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8291,
-    "blankLines": 3891,
+    "asserts": 8303,
+    "blankLines": 3896,
     "files": 147,
-    "lines": 43840,
+    "lines": 43910,
     "tautologies": 0,
-    "tests": 1695,
+    "tests": 1700,
     "todos": 4
   }
 }

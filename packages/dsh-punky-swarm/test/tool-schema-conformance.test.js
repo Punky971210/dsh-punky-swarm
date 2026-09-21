@@ -270,6 +270,11 @@ const CASES = {
     success: async (h) => h.byName.task_pool.execute({ batchId: C1 }, EXEC),
     reject: async (h) => h.byName.task_pool.execute({ batchId: 'census-nope' }, EXEC),
   },
+  // N1-R4-1c：池内追加任务（图变更写入口）。拒态 = 任务 id 与既有重复 ⇒ 抛普通错误（不新建 GATE_ 码）。
+  batch_tasks_add: {
+    success: async (h) => h.byName.batch_tasks_add.execute({ batchId: C2, tasks: [{ id: 'pool-add-1', layer: 'exec', role: 'coder' }], reason: '普查 fixture：池内追加' }, EXEC),
+    reject: async (h) => h.byName.batch_tasks_add.execute({ batchId: C2, tasks: [{ id: 'p1' }] }, EXEC),
+  },
 };
 
 /** 单次探测：返回值 ⇒ 逐条 schema 校验（双口径）；抛错 ⇒ 断言非 schema 形态。 */
@@ -287,7 +292,7 @@ async function probe(fn, h, tool) {
   }
 }
 
-test('TSC-1 全工具 output.schema 一致性普查：27 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
+test('TSC-1 全工具 output.schema 一致性普查：28 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
   const h = await makeHarness();
   const names = h.byName && Object.keys(h.byName);
   const registered = Object.keys(CASES).filter((n) => h.byName[n]);

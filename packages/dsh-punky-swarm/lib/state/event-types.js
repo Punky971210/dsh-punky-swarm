@@ -281,3 +281,8 @@ export const EVT_AUTO_SETTLE_SKIPPED = 'auto.settle.skipped';
 //   语义边界：**非改派**——已出池任务再派发时不覆盖 owner（K1：已派发即冻结；换人 = 作废 + 池内新增替代 + gap-list）。
 //   写端 = `store.setMember`（派发面唯一写盘点，与迁移同一次 atomicWrite）；读端 = 事件面（无门禁消费）。
 export const EVT_TASK_OWNER_ASSIGNED = 'task.owner.assigned';
+
+// N1-R4-1c：**图变更留痕**（池内追加任务）。载荷 `{ added:[taskId…], reason, author, revision }`。
+//   与 `task.owner.assigned` 分工：后者记「出池（谁领了）」，本条记「入池（谁加的、为什么加）」。
+//   写端 = `store.addPoolTasks`（单次 atomicWrite）；**不接回状态机**（不改成员态、不新增迁移）。
+export const EVT_PLAN_MUTATED = 'plan.mutated';

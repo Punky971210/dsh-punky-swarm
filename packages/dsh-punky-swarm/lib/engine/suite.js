@@ -46,7 +46,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 /** 表条目构造器（冻结单条 + 五字段定形，防后续代码顺手加字段悄悄扩面）。 */
 const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name, kind, modeGate, memberDeny, write });
 
-/** 套件工具全集（30 件 = 引擎注册套件工具 + 纳入治理的宿主派发工具 `subagent`/`subagent_fork`
+/** 套件工具全集（31 件 = 引擎注册套件工具 + 纳入治理的宿主派发工具 `subagent`/`subagent_fork`
  *  + P1 交接面 `handoff_submit`/`handoff_view`）。
  *  ⚠ 顺序约定：前 **14** 条即 `memberDeny:true` 的条目；其中「去掉 P3a 新增的 `batch_control` 后」的
  *  **13 条相对顺序 == 重构前 `dispatch.js` 的 `SUITE_DENY_TOOLS` 字面量顺序**（要求逐字不变）。
@@ -96,6 +96,8 @@ export const SUITE_TOOLS = Object.freeze([
   // `task_pool`：**只读**视图（池 = `owner == null` 的筛选面，不是容器）⇒ 不入 deny（成员亦可只读核查）、
   //   不占模式门（零写入、不触治理面）。追加在**第 15 条之后的非 deny 区块** ⇒ 前 14 条 deny 冻结序列零变化。
   entry('task_pool', 'read', false, false, false),
+  // `batch_tasks_add`：**图变更写入口**（池内追加任务）⇒ 入 deny（成员不得改图）+ 入模式门（写治理面）。
+  entry('batch_tasks_add', 'governance', true, true, true),
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */

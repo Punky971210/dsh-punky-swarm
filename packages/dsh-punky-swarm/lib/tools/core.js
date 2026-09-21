@@ -1525,6 +1525,37 @@ export function createCoreTools(ctx, deps) {
         };
       },
     }),
+    // ── N1-R4-1c（K1 公共池）：`batch_tasks_add` = **图变更的唯一写入口** ─────────────
+    // 用户裁定（2026-09-21 13:3x）：plan 层的**调查摸底/拆分本身就是独立任务**，其产物由下游 exec/audit
+    //   层 `consume` ⇒ **不存在「拆父任务」语义** ⇒ 原 `task_split` 设计前提不成立（已舍弃，见蓝图 §7.4.2）。
+    //   本工具只做一件事：**往池里加任务**（追加 lane），单次原子写完成归一化 + 播种 + 留痕 + 重跑分层校验。
+    //   ⚠ 只增不改：既有任务（含未派发的）一概不动（已派发即冻结）。
+    defineTool({
+      name: "batch_tasks_add",
+      description: "向批次**池内追加任务**（图变更的唯一写入口）：单次原子写完成「归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕」，并重跑建批期分层/环检测（判据与 `wave_plan` 同源）。⚠ **只增不改**：既有任务（含未派发的）一概不动（K1：已派发即冻结）；新任务 `owner` 缺省 `null` = **在池内**，须经 Leader 派发（`lane_dispatch`）才出池。plan 层的调查摸底/拆分本身即独立任务——其产物由下游 exec/audit 层 consume，**不存在「拆父任务」语义**。非法输入（id 重复/为空、deps 成环或悬空、批不存在）抛**普通错误**（不带 `GATE_` 前缀）；批次已终态抛 `GATE_BATCH_TERMINAL`。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"tasks":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"追加的任务数组；每项须含唯一非空 `id`，可选 `layer`/`role`/`cmd`/`deps`/`consume`/`produce`/`outputs`。`owner` 缺省 `null` = 在池内"},"reason":{"type":"string","description":"追加理由（落 `plan.mutated` 留痕，供审计复盘）"},"session":{"type":"string","description":"批次归属会话"}},
+      output: {
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"added":{"type":"array","items":{"type":"string"}},"planRevision":{"type":"integer"},"lanesCount":{"type":"integer"},"note":{"type":"string"}}},
+        render: (_args, value) => TEXT_OUTPUT('tasks added to ' + value.batchId + ': ' + (value.added ?? []).join(', ')
+          + ' (revision=' + value.planRevision + ', lanes=' + value.lanesCount + ')'),
+      },
+      async execute(args, exec) {
+        assertModeActive(deps, exec, '池内追加任务（batch_tasks_add）'); // 模式门（E 阶段）：非生效模式零治理写入，先于参数/状态校验
+        const sessionId = sessionOf(args, exec);
+        const list = Array.isArray(args.tasks) ? args.tasks : [];
+        const b = store.addPoolTasks(sessionId, args.batchId, list, {
+          reason: args.reason ?? null,
+          author: ownerOfExec(exec),
+        });
+        return {
+          batchId: args.batchId,
+          added: list.map((t) => String(t?.id ?? '')),
+          planRevision: b.planRevision ?? 1,
+          lanesCount: Object.keys(b.lanes ?? {}).length,
+          note: '追加的任务已在池内（`owner=null`）⇒ 须经 Leader 派发才出池；本次变更已落 `plan.mutated`。',
+        };
+      },
+    }),
   ];
 }
 

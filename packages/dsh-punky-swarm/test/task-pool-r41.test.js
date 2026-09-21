@@ -160,14 +160,76 @@ test('R4-1b-3 派发后该任务**移出**池视图（owner 写入方闭环）',
   assert.ok(!after.pool.some((t) => t.id === 'e1'), '已派发任务不在池列表');
 });
 
+// ── R4-1c：池内追加任务（图变更唯一写入口）──────────────────────────────────
+test('R4-1c-1 追加：lanes/handoffs 播种 + plan.mutated 留痕 + revision+1（单次原子写）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-add', [{ id: 'p1' }]);
+  const b = store.addPoolTasks(S, 'b-add', [
+    { id: 'x1', deps: ['p1'] }, // 无 layer（generic）⇒ 不触 three-tier 层族校验
+  ], { reason: '补一条被遗漏的任务', author: 'leader' });
+  assert.equal(b.lanes.x1, 'pending', '新任务播种 pending');
+  assert.equal(b.lanes.p1, 'pending', '既有任务不动');
+  assert.equal(b.handoffs.x1?.[0]?.from, 'p1', '按 deps 种 pending 交接（与建批期同形态）');
+  assert.equal(b.planRevision, 1, 'revision 递增');
+  const mut = b.events.filter((e) => e.type === 'plan.mutated');
+  assert.equal(mut.length, 1);
+  assert.deepEqual(mut[0].added, ['x1']);
+  assert.equal(mut[0].reason, '补一条被遗漏的任务');
+  // 追加的任务在池内（owner null = 未派发）
+  const owner = b.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'x1')?.owner;
+  assert.equal(owner, null, '新任务默认在池内（未派发）');
+});
+
+test('R4-1c-1b 判据同源：追加 exec 层而批内无 audit lane ⇒ 被建批期校验拒（不绕过）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-tier', [{ id: 'p1' }]);
+  assert.throws(
+    () => store.addPoolTasks(S, 'b-tier', [{ id: 'e1', layer: 'exec', role: 'coder' }]),
+    /three-tier/,
+    '追加走的是与 `wave_plan` **同一套**建批期校验，不得绕过',
+  );
+});
+
+test('R4-1c-2 只增不改：id 与既有重复 ⇒ 抛**普通错误**（不新建 GATE_ 码）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-dup', [{ id: 'p1' }]);
+  assert.throws(
+    () => store.addPoolTasks(S, 'b-dup', [{ id: 'p1' }]),
+    (e) => /task append rejected: 任务 id 已存在/.test(e.message) && !/GATE_/.test(e.message),
+    '非法输入须抛普通错误（不进 66 码集合）',
+  );
+});
+
+test('R4-1c-3 环检测：deps 成环 ⇒ 抛普通错误（判据与建批期同源 = topoWaves）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-cyc', [{ id: 'p1' }]);
+  assert.throws(
+    () => store.addPoolTasks(S, 'b-cyc', [
+      { id: 'c1', deps: ['c2'] }, { id: 'c2', deps: ['c1'] },
+    ]),
+    (e) => /task append rejected: 合并后的任务图不可分层/.test(e.message) && !/GATE_/.test(e.message),
+    '成环须被拦且不带 GATE_ 码',
+  );
+});
+
+test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）', () => {
+  const { store, S } = setup();
+  mkBatch(store, S, 'b-term', [{ id: 'p1' }]);
+  store.setPhase(S, 'b-term', 'aborted');
+  assert.throws(
+    () => store.addPoolTasks(S, 'b-term', [{ id: 'e1' }]),
+    /GATE_BATCH_TERMINAL/,
+  );
+});
+
 test('R4-1a-5 注册表：`task_pool` 入表、不占 deny、不占模式门（冻结序列零变化）', () => {
   const names = SUITE_TOOLS.map((t) => t.name);
   assert.ok(names.includes('task_pool'), '应已注册');
-  assert.equal(SUITE_TOOLS.length, 30, '套件工具全集 29 → 30');
+  assert.equal(SUITE_TOOLS.length, 31, '套件工具全集 29 → 30 → 31');
   assert.equal(SUITE_DENY_TOOLS.includes('task_pool'), false, '只读视图：不入成员 deny');
   assert.equal(MODE_GATED_TOOLS.includes('task_pool'), false, '零写入：不占模式门');
   // 前 14 条 deny 冻结序列的相对顺序零变化（新项只允许追加，不得重排）
-  assert.equal(SUITE_DENY_TOOLS.length, 14, 'deny 集仍 14 项');
+  assert.equal(SUITE_DENY_TOOLS.length, 15, 'deny 集 14 → 15（+batch_tasks_add）');
   assert.equal(SUITE_DENY_TOOLS[0], 'assign_check', 'deny 序列首项不变');
-  assert.equal(MODE_GATED_TOOLS.length, 10, '模式门集仍 10 项');
+  assert.equal(MODE_GATED_TOOLS.length, 11, '模式门集 10 → 11（+batch_tasks_add）');
 });

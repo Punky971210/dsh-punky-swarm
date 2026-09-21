@@ -37,6 +37,7 @@ import { laneProgressClear, laneProgressWrite } from './resume.js'; // 断点指
 import { EXEMPT_GATE_CODES, normalizeExemptPayload } from './lane-exempt.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除）
 import { findTask } from './task-utils.js';
+import { buildWavePlan, topoWaves } from '../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化 + 分层/环检测（判据与建批期同源）
 // 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
 // 违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
@@ -356,6 +357,75 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     }
     atomicWrite(file, batch);
     return batch;
+  }
+
+  // ── N1-R4-1c：池内追加任务（**图变更的唯一写入口**）─────────────────────────────
+  // 纪律（K1 + 2026-09-21 13:3x 用户裁定）：
+  //   ① 只**增**不改：既有任务（含未派发的）一概不动——「已派发即冻结」，且本接口不提供改任务语义。
+  //   ② **不新建拒码**（迁移门禁再议）⇒ 非法输入抛**普通 Error**（不带 `GATE_` 前缀，不进 66 码集合）；
+  //      唯一例外 = 批终态，复用既有 `GATE_BATCH_TERMINAL`。
+  //   ③ 单次 `atomicWrite`：wavePlan 重归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕同一次落盘。
+  //   ④ 判据与建批期**同源**：归一化走 `buildWavePlan`、分层/环检测走 `topoWaves`（不另写一份判据）。
+  function addPoolTasks(sessionId, batchId, incoming, { reason = null, author = null } = {}) {
+    const file = batchFile(sessionId, batchId);
+    const batch = readBatch(sessionId, batchId);
+    if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
+    if (schema.isBatchTerminal(batch.phase)) {
+      throw new Error('GATE_BATCH_TERMINAL: batch ' + batchId + ' is ' + batch.phase + ' (terminal); task append rejected');
+    }
+    const list = Array.isArray(incoming) ? incoming : [];
+    if (list.length === 0) throw new Error('task append rejected: tasks 为空（须至少给出一条）');
+    const existing = new Set(Object.keys(batch.lanes ?? {}));
+    const ids = [];
+    for (const t of list) {
+      const id = t && typeof t.id === 'string' ? t.id.trim() : '';
+      if (!id) throw new Error('task append rejected: 任务 id 须为非空字符串（实际=' + JSON.stringify(t?.id ?? null) + '）');
+      if (existing.has(id)) throw new Error('task append rejected: 任务 id 已存在 ⇒ ' + id + '（本接口只增不改）');
+      if (ids.includes(id)) throw new Error('task append rejected: 本次追加内 id 重复 ⇒ ' + id);
+      ids.push(id);
+    }
+    const baseTasks = (batch.wavePlan ?? []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
+    const merged = [...baseTasks, ...list.map((t) => ({ ...t, id: String(t.id).trim() }))];
+    // 环检测（判据同源 = `topoWaves`）：成环/悬空引用时它无法分层 ⇒ 前置拦截并给出可读提示（不静默）。
+    try {
+      // 注：`topoWaves` 返回 `{ waves, order }`（**不是数组**）；成环/悬空引用由它自抛（'cycle detected' / 'unknown id'）。
+      const res = topoWaves(merged);
+      if (!res || !Array.isArray(res.waves) || res.waves.length === 0) throw new Error('topoWaves 返回空');
+    } catch (e) {
+      throw new Error('task append rejected: 合并后的任务图不可分层（deps 成环或引用悬空）⇒ '
+        + ids.join(', ') + '（' + String(e?.message ?? e) + '）');
+    }
+    const plan = buildWavePlan({
+      batchId, tasks: merged, team: batch.team, concurrency: batch.concurrency ?? 5,
+    });
+    const lanes = { ...batch.lanes };
+    const handoffs = { ...(batch.handoffs ?? {}) };
+    const ts = new Date().toISOString();
+    for (const t of list) {
+      const id = String(t.id).trim();
+      lanes[id] = 'pending';
+      const deps = Array.isArray(t.deps) ? t.deps.filter((d) => typeof d === 'string' && d.length > 0) : [];
+      if (deps.length === 0) continue;
+      handoffs[id] = deps.map((from) => ({
+        from, to: id, batch: batchId, step: null,
+        artifacts: [], contract: { consumedFrom: from, assertions: [] },
+        status: 'pending', ts, officialTaskId: null,
+      }));
+    }
+    const revision = (batch.planRevision ?? 0) + 1;
+    const next = {
+      ...batch,
+      wavePlan: plan.wavePlan,
+      lanes,
+      handoffs,
+      planRevision: revision,
+      updatedAt: ts,
+      events: [...(batch.events ?? []), newEvent(EVT.EVT_PLAN_MUTATED, {
+        added: ids, reason: reason ?? null, author: author ?? null, revision,
+      })],
+    };
+    atomicWrite(file, next);
+    return next;
   }
 
   // 三态读取基础函数（readBatch 的语义来源，纯读取无副作用）：
@@ -1257,6 +1327,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   return {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
+    addPoolTasks, // N1-R4-1c：池内追加任务（图变更唯一写入口；单次 atomicWrite，只增不改）
     recordHandoff, // P1 交接门：交接记录唯一写入入口（`batch.handoffs` + `lane.handoff` 事件同一次 atomicWrite）
     markManagerRaised, // Manager 拉起登记唯一入口（批 event + 批字段，不改成员状态）
     revokeLaneExempt, // longrun 豁免撤销唯一入口（显式调用；不改成员状态）

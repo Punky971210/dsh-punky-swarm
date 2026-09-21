@@ -145,12 +145,12 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
 });
 
 // —— 接线层（register.js）——
-test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 27 工具（P1-01 默认开 + lane_dispatch + P3a batch_control + P1 handoff 两件）', () => {
+test('接线：aip.enabled=true 时 agentCatalog 非空（7 份 ACS 描述）；catalog 为缺省 28 工具（P1-01 默认开 + lane_dispatch + P3a batch_control + P1 handoff 两件）', () => {
   const { made } = makeCtx(true);
   assert.ok(made.agentCatalog, 'enabled=true 时 register() 后 agentCatalog 非空');
   assert.equal(made.agentCatalog.list().length, ROLE_COUNT);
   assert.ok(made.catalog, '既有 catalog 不受影响');
-  assert.equal(made.catalog.list().length, 27); // P1-01 缺省默认开：core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc（logs 缺省关；2026-09-16 P3a control lane +batch_control ⇒ 23→24；2026-09-17 P1 +handoff_submit/handoff_view 常驻注册 ⇒ 25→26）
+  assert.equal(made.catalog.list().length, 28); // P1-01 缺省默认开：core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc（logs 缺省关；2026-09-16 P3a control lane +batch_control ⇒ 23→24；2026-09-17 P1 +handoff_submit/handoff_view 常驻注册 ⇒ 25→26）
   for (const d of made.agentCatalog.list()) {
     for (const k of ACS_REQUIRED_FIELDS) assert.ok(k in d, '接线输出缺 ACS 键 ' + k);
   }
