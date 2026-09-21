@@ -211,7 +211,7 @@
     "test/chain-v2-pairing.test.js": {
       "asserts": 20,
       "blankLines": 19,
-      "lines": 222,
+      "lines": 220,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -371,7 +371,7 @@
     "test/gap-s12-chain-downgrade.test.js": {
       "asserts": 88,
       "blankLines": 33,
-      "lines": 463,
+      "lines": 461,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -467,7 +467,7 @@
     "test/governance-bootoverlay.test.js": {
       "asserts": 8,
       "blankLines": 11,
-      "lines": 112,
+      "lines": 108,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -475,7 +475,7 @@
     "test/governance-bridge.test.js": {
       "asserts": 23,
       "blankLines": 12,
-      "lines": 163,
+      "lines": 153,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -507,7 +507,7 @@
     "test/governance-denial-visibility.test.js": {
       "asserts": 44,
       "blankLines": 17,
-      "lines": 265,
+      "lines": 255,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -515,7 +515,7 @@
     "test/governance-escalate.test.js": {
       "asserts": 95,
       "blankLines": 33,
-      "lines": 523,
+      "lines": 519,
       "tautologies": 0,
       "tests": 17,
       "todos": 0
@@ -523,7 +523,7 @@
     "test/governance-harden-proto.test.js": {
       "asserts": 91,
       "blankLines": 40,
-      "lines": 459,
+      "lines": 447,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -531,7 +531,7 @@
     "test/governance-hotconfig.test.js": {
       "asserts": 58,
       "blankLines": 23,
-      "lines": 294,
+      "lines": 290,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -555,7 +555,7 @@
     "test/governance-preset-config.test.js": {
       "asserts": 36,
       "blankLines": 18,
-      "lines": 293,
+      "lines": 289,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -571,7 +571,7 @@
     "test/governance-proto.test.js": {
       "asserts": 43,
       "blankLines": 16,
-      "lines": 217,
+      "lines": 207,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -579,7 +579,7 @@
     "test/governance-receipt-anchor.test.js": {
       "asserts": 47,
       "blankLines": 14,
-      "lines": 192,
+      "lines": 190,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -587,7 +587,7 @@
     "test/governance-state.test.js": {
       "asserts": 103,
       "blankLines": 27,
-      "lines": 454,
+      "lines": 442,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -595,7 +595,7 @@
     "test/governance-toolban.test.js": {
       "asserts": 91,
       "blankLines": 37,
-      "lines": 423,
+      "lines": 419,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -603,7 +603,7 @@
     "test/governance-wiring.test.js": {
       "asserts": 77,
       "blankLines": 22,
-      "lines": 362,
+      "lines": 352,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -643,7 +643,7 @@
     "test/hot-config.test.js": {
       "asserts": 42,
       "blankLines": 19,
-      "lines": 212,
+      "lines": 208,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -795,7 +795,7 @@
     "test/p2-chain-autodrive.test.js": {
       "asserts": 84,
       "blankLines": 45,
-      "lines": 540,
+      "lines": 538,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -819,7 +819,7 @@
     "test/phase-reason.test.js": {
       "asserts": 33,
       "blankLines": 26,
-      "lines": 293,
+      "lines": 291,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1075,7 +1075,7 @@
     "test/w1-conditional-edges.test.js": {
       "asserts": 50,
       "blankLines": 32,
-      "lines": 352,
+      "lines": 350,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1083,7 +1083,7 @@
     "test/watch-bootoverlay.test.js": {
       "asserts": 23,
       "blankLines": 18,
-      "lines": 215,
+      "lines": 211,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1091,7 +1091,7 @@
     "test/watch-heartbeat.test.js": {
       "asserts": 95,
       "blankLines": 39,
-      "lines": 359,
+      "lines": 357,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -1099,7 +1099,7 @@
     "test/watch-hotconfig.test.js": {
       "asserts": 76,
       "blankLines": 26,
-      "lines": 431,
+      "lines": 427,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1107,7 +1107,7 @@
     "test/watch-longrun-exempt.test.js": {
       "asserts": 122,
       "blankLines": 31,
-      "lines": 629,
+      "lines": 627,
       "tautologies": 0,
       "tests": 21,
       "todos": 0
@@ -1115,7 +1115,7 @@
     "test/watch-longrun-integration.test.js": {
       "asserts": 66,
       "blankLines": 14,
-      "lines": 274,
+      "lines": 272,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1123,7 +1123,7 @@
     "test/watch-longrun.test.js": {
       "asserts": 111,
       "blankLines": 34,
-      "lines": 487,
+      "lines": 485,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -1193,7 +1193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T13:18:58Z",
+  "generatedAt": "2026-09-21T13:32:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1210,7 +1210,7 @@
     "asserts": 8367,
     "blankLines": 3942,
     "files": 149,
-    "lines": 44307,
+    "lines": 44191,
     "tautologies": 0,
     "tests": 1722,
     "todos": 4

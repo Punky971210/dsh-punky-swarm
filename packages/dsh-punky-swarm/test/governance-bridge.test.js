@@ -25,19 +25,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { readRefusals, appendRefusalEvent, eventStreamFileOf } from '../lib/governance/receipt-store.js';
+import { tempRoot } from './helpers/gate-fixture.mjs';
+import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
+// F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。
+const fakeCtx = () => makeFakeCtx({ warn: 'global' });
 
 // ── fake ctx（对齐 governance-state.test.js fakeCtx）──
-function fakeCtx() {
-  const listeners = new Map();
-  return {
-    listeners,
-    on(event, fn) {
-      listeners.set(event, fn);
-      return () => { listeners.delete(event); };
-    },
-    logger: { info: () => {}, warn: (msg) => { global.__govWarn = (global.__govWarn || []).concat([String(msg)]); } },
-  };
-}
 
 function execOf(name, args, extra = {}) {
   return {
@@ -49,9 +42,6 @@ function execOf(name, args, extra = {}) {
   };
 }
 
-function tempRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 // 1 条越界规则（hard → DENY）
 const DENY_CFG = {

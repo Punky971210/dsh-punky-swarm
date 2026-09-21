@@ -24,9 +24,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
-import { createLaneHeartbeat, buildSchedule, createHeartbeatTools } from '../lib/watch/lane-heartbeat.js';
+import { buildSchedule, createHeartbeatTools } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import * as schema from '../lib/schema.js';
+import { laneHeartbeat } from './helpers/watch-fixture.mjs';
 
 // 测试夹具：一个 running 批次 + running lane（generic 任务带声明产物，三层契约校验不介入）
 function setup() {
@@ -43,9 +44,6 @@ function setup() {
 }
 
 // 0ms 档位（每拍即追问）+ 硬停 3 拍：让 W1/W2 流程确定可测
-function hb(store, root, config = {}, opts = {}) {
-  return createLaneHeartbeat({ store, mailbox, config, root, ...opts });
-}
 const FAST = { capabilities: { watch: { enabled: true, intervalsMinutes: [0, 0, 0], maxMissed: 3 } } };
 const LANE_KEY = 'sess-hb/b-hb/l1';
 const inboxItems = (root, S, batchId) => mailbox.readUnacked(path.join(root, 'sessions', S, 'mailbox', batchId), { type: 'inbox' });
@@ -63,7 +61,7 @@ test('buildSchedule：分钟 → ms，档位单调化钳制，缺省 [10,20,30]'
 // ---- W1/W2：running lane 无产出 → 追问 → N 拍 stalled，此后停止追问，同 lane 至多 1 条 pending ----
 test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane.stalled，停止追问且不叠加', () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
 
   // 第 1 拍：发追问（W1）
   engine.tick();
@@ -105,7 +103,7 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
 // ---- W3：活动信号重置——产物 mtime / outbox / events 任一更新 → missed 归零、档位回 tier0 ----
 test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动拍不触发追问', async () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
 
@@ -128,7 +126,7 @@ test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动
 
 test('W3b：outbox 出现未 ack 消息 → 重置（活动信号 ②）', () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
   mailbox.send(path.join(root, 'sessions', S, 'mailbox', batchId), { type: 'outbox', lane }, { kind: 'report', text: 'progress' });
@@ -139,7 +137,7 @@ test('W3b：outbox 出现未 ack 消息 → 重置（活动信号 ②）', () =>
 
 test('W3c：batch.events 本 lane 事件更新 → 重置（活动信号 ①）', async () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
   // 事件 ts 由 store 在 appendEvent 时生成（进程时钟），与 lastSeenTs 同源同精度；竞态点在
@@ -158,7 +156,7 @@ test('W3c：batch.events 本 lane 事件更新 → 重置（活动信号 ①）'
 test('W4：退避档位（fake clock）——追问节奏 10min → 30min → 60min，间隔 10/20/30 单调递增', () => {
   const { root, store, S, batchId, lane } = setup();
   let fake = 0;
-  const engine = hb(store, root, { capabilities: { watch: { enabled: true, intervalsMinutes: [10, 20, 30], maxMissed: 3 } } }, { now: () => fake });
+  const engine = laneHeartbeat(store, root, { capabilities: { watch: { enabled: true, intervalsMinutes: [10, 20, 30], maxMissed: 3 } } }, { now: () => fake });
   const MIN = 60_000;
 
   engine.tick(); // t=0：新派发宽限，未到 base 档 → 不追问
@@ -189,7 +187,7 @@ test('W4：退避档位（fake clock）——追问节奏 10min → 30min → 60
 // ---- W5：生命周期——running→idle 后不得静默丢态；重派 running 计时重置 ----
 test('W5：recoverBatches → running→idle 后不得静默丢态；重派 running 计时重置', async () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick();
   engine.tick(); // missed=2（pending 合并）
   assert.equal(engine.status(LANE_KEY).missed, 2);
@@ -235,7 +233,7 @@ test('W6：lane_heartbeat 工具注册门控（P1-01 缺省默认开；显式 en
 
 test('W6b：lane_heartbeat 查询返回心跳状态；beat=true 手动触发一拍', async () => {
   const { root, store, S, batchId, lane } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick(); // missed=1
   const ctx = { tools: { register: () => {} } };
   const [tool] = createHeartbeatTools(ctx, {
@@ -276,7 +274,7 @@ test('W6c：lane_heartbeat 缺省 lane → 全批非终态 lane（idle/review/pe
   const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
   b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged', l6: 'review', l7: 'pending' };
   fs.writeFileSync(bf, JSON.stringify(b, null, 2));
-  const engine = hb(store, root); // 缺省 config：watch 默认开
+  const engine = laneHeartbeat(store, root); // 缺省 config：watch 默认开
   engine.tick(); // 首拍建心跳 entry（默认退避首档 10min 宽限 → 不追问）
   const ctx = { tools: { register: () => {} } };
   const [tool] = createHeartbeatTools(ctx, { store, root, heartbeat: engine });
@@ -322,7 +320,7 @@ test('W7：无新增成员状态（stalled 用事件表达，不碰 MEMBER_STATE
 // ---- 生命周期 API：reset(laneKey) 外部活动入口；dispose 幂等且 tick 后置为空操作 ----
 test('reset(laneKey) 外部活动入口；dispose 幂等', () => {
   const { root, store } = setup();
-  const engine = hb(store, root, FAST);
+  const engine = laneHeartbeat(store, root, FAST);
   engine.tick();
   assert.equal(engine.status(LANE_KEY).missed, 1);
   engine.reset(LANE_KEY);

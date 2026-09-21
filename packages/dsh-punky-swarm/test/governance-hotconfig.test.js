@@ -36,6 +36,7 @@ import { apply } from '../lib/index.js';
 import { createGovernanceKernel } from '../lib/governance/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,11 +74,6 @@ function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hotgov-'));
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 // 最小 ToolExecution 形态（无 agent → sessionId 'cli'，与 receipt-store 缺省口径一致）
 function execOf(name, args) {

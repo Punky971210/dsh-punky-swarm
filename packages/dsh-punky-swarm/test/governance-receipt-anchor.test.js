@@ -27,10 +27,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { writeRefusal, readRefusals, verifyRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { canonicalize, sha256Hex, hashContent, makeAnchor } from '../lib/governance/hash-utils.js';
+import { tempRoot } from './helpers/gate-fixture.mjs';
 
-function tempRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 // 直写收据对象（绕过 wiring/kernel；ts 显式传——控制链序，隔离时钟噪声）
 function receiptOf(id, ts, over = {}) {

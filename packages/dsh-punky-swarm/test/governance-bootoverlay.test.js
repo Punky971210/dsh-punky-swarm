@@ -31,6 +31,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 // ── 装配级 fake ctx（与 governance-hotconfig.test.js 同款 helper：ctx.on 追加式注册 + logger 计数）──
 function assemblyCtx() {
@@ -61,11 +62,6 @@ function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-bootgov-'));
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 // 静态侧显式 enabled:true + rules:[]（与 overlay 不同即触发启动对账 remount；governance-hotconfig T3 同款静态侧）
 const STATIC_GOV = { governance: { hook: { enabled: true, rules: [] } } };

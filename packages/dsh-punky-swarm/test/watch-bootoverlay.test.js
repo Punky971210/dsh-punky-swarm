@@ -41,6 +41,7 @@ import { apply } from '../lib/index.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MIN = 60_000;
@@ -76,11 +77,6 @@ function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wbo-'));
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 const bootRemountLines = (calls) => calls.info.filter((l) => l.includes('hot config: watch engine') && l.includes('[boot-overlay]'));
 const mountedLines = (calls) => calls.info.filter((l) => l.includes('watch capability enabled'));

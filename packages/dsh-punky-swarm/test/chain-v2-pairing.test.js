@@ -47,6 +47,7 @@ import { EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
+import { seedArtifactFile } from './helpers/gate-fixture.mjs';
 
 const SESSION = 'sess-chain-v2';
 const SESS = { agent: { session: { id: SESSION } } };
@@ -127,11 +128,8 @@ async function mkBatch(h, batchId) {
   }, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
 }
-function seed(h, batchId, rel, body = 'out') {
-  const abs = path.join(h.root, 'sessions', SESSION, 'artifacts', batchId, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, body, 'utf8');
-}
+// F3：收敛为单点（夹具审计 §3.3 必合档：5 份函数体逐字相同）⇒ 本文件只留 `SESSION` 绑定适配。
+const seed = (h, batchId, rel, body = 'out') => seedArtifactFile(h.root, SESSION, batchId, rel, body);
 async function settleLane(h, batchId, lane, status = 'merged') {
   const cur = () => h.store.readBatch(SESSION, batchId)?.lanes?.[lane];
   if (cur() !== 'running') await h.byName.member_status.execute({ batchId, lane, status: 'running' }, SESS);

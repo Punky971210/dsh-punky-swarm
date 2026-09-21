@@ -36,19 +36,10 @@ import {
   readSessionState, setDeferred, setPaused, clearSessionState, stateFileOf,
   DEFER_RETRY_MS, PAUSE_WINDOW_MS,
 } from '../lib/governance/state-store.js';
+import { tempRoot } from './helpers/gate-fixture.mjs';
+import { fakeCtx } from './helpers/gate-fixture.mjs';
 
 // ── fake ctx（对齐 governance-wiring.test.js fakeCtx）──
-function fakeCtx() {
-  const listeners = new Map();
-  return {
-    listeners,
-    on(event, fn) {
-      listeners.set(event, fn);
-      return () => { listeners.delete(event); };
-    },
-    logger: { info: () => {}, warn: () => {} },
-  };
-}
 
 function execOf(name, args, extra = {}) {
   return {
@@ -60,9 +51,6 @@ function execOf(name, args, extra = {}) {
   };
 }
 
-function tempRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 // 单收据读取（<sessionId>/ 下唯一 json，或按 receiptId 找）
 function readReceipt(root, sessionId, receiptId) {

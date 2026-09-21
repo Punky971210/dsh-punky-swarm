@@ -29,12 +29,13 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import {
-  createLaneHeartbeat, createHeartbeatTools, createLongrunTools,
+  createHeartbeatTools, createLongrunTools,
   judgeLongrun, stintRunningSinceOf, lastCheckpointTsOf, hasLongrunCandidate,
   resolveLongrunConfig, LONGRUN_DEFAULTS, LONGRUN_REASON,
 } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH, EVT_MEMBER_SETTLED, EVT_WORKTREE_CHECKPOINT } from '../lib/state/event-types.js';
+import { laneHeartbeat } from './helpers/watch-fixture.mjs';
 
 const MAX_D = LONGRUN_DEFAULTS.maxDurationMs; // 1200000
 const WINDOW = LONGRUN_DEFAULTS.noProgressWindowMs; // 300000
@@ -59,9 +60,6 @@ function setup() {
   store.createBatch(S, { batchId: 'b-lr', wavePlan: plan, phase: 'running' });
   store.setMember(S, 'b-lr', 'l1', 'running');
   return { root, store, S, batchId: 'b-lr', lane: 'l1' };
-}
-function hb(store, root, config = {}, opts = {}) {
-  return createLaneHeartbeat({ store, mailbox, config, root, ...opts });
 }
 function inboxItems(root, S, batchId) { return mailbox.readUnacked(path.join(root, 'sessions', S, 'mailbox', batchId), { type: 'inbox' }); }
 function bcastItems(root, S, batchId) { return mailbox.readUnacked(path.join(root, 'sessions', S, 'mailbox', batchId), { type: 'broadcast' }); }
@@ -208,7 +206,7 @@ test('T13 resolveLongrunConfig：缺省默认开（定案修订）+ 显式关 + 
 // ---- 引擎集成（T9/T10/T11/T12 + 验收 5：不改 lane 状态）----
 // 注入时钟驱动时长：dispatch 在真实 now 落下（事件 ts），引擎 now = 基准 + 偏移。
 function engineAt({ root, store, config, base, offsetMs }) {
-  return hb(store, root, config, { now: () => base + offsetMs });
+  return laneHeartbeat(store, root, config, { now: () => base + offsetMs });
 }
 
 // 直写批次文件 seeding（T16 自定义阈值分钟级判定用）：running batch + running lane + dispatch 事件
@@ -373,7 +371,7 @@ test('lane_longrun 缺省 lane → 全批非终态 lane（多 running；idle 纳
   const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
   b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged' };
   fs.writeFileSync(bf, JSON.stringify(b, null, 2));
-  const engine = hb(store, root); // 缺省 config：watch + longrun 默认开
+  const engine = laneHeartbeat(store, root); // 缺省 config：watch + longrun 默认开
   engine.tick(); // 首拍建心跳 entry（running lane 无 dispatch 事件 → no-running-since，零候选零噪音）
   const ctx = { tools: { register: () => {} } };
   const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
@@ -431,7 +429,7 @@ test('T16a 窗口生效正例：自定义阈值 60s/30s（注入时钟）——9
   // ① 自定义阈值引擎：90s 前 dispatch → duration 90s > 60s 阈值 → 首拍即候选
   const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16a-'));
   const storeA = seedDispatch(rootA, 'sess-lr-t16a', 'b-lr-t16a', 'l1', 90_000, base);
-  const eA = hb(storeA, rootA, LR_1MIN, { now: () => base });
+  const eA = laneHeartbeat(storeA, rootA, LR_1MIN, { now: () => base });
   eA.tick();
   const evsA = candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1');
   assert.equal(evsA.length, 1, '90s stint 超 1min 自定义阈值 → 首拍产候选');
@@ -452,7 +450,7 @@ test('T16a 窗口生效正例：自定义阈值 60s/30s（注入时钟）——9
   // ② 对照：默认阈值（20min）引擎对同 90s stint → 零候选——90s 远未超 20min，判定差异 = 自定义阈值生效证据
   const rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16b-'));
   const storeB = seedDispatch(rootB, 'sess-lr-t16b', 'b-lr-t16b', 'l1', 90_000, base);
-  const eB = hb(storeB, rootB, { capabilities: { watch: { enabled: true } } }, { now: () => base });
+  const eB = laneHeartbeat(storeB, rootB, { capabilities: { watch: { enabled: true } } }, { now: () => base });
   eB.tick();
   assert.equal(candEvents(storeB, 'sess-lr-t16b', 'b-lr-t16b', 'l1').length, 0, '默认阈值（20min）下同 stint 零候选（阈值即时生效的判定差异）');
   eB.dispose();
@@ -464,7 +462,7 @@ test('T16b 自定义阈值边界判定时机（严格 >）：duration 恰达 60s
   const store = seedDispatch(root, 'sess-lr-t16c', 'b-lr-t16c', 'l1', 30_000, base); // 30s stint
   const S = 'sess-lr-t16c', batchId = 'b-lr-t16c', lane = 'l1';
   // ① t = base+30s：duration = 60s == 60s 阈值 → 严格 > 不触发（零候选）
-  const e1 = hb(store, root, LR_1MIN, { now: () => base + 30_000 });
+  const e1 = laneHeartbeat(store, root, LR_1MIN, { now: () => base + 30_000 });
   e1.tick();
   assert.equal(candEvents(store, S, batchId, lane).length, 0, 'duration 恰达阈值不候选（严格 >）');
   const st1 = e1.longrunStatus(S, batchId, lane, base + 30_000);
@@ -473,7 +471,7 @@ test('T16b 自定义阈值边界判定时机（严格 >）：duration 恰达 60s
   assert.equal(st1.reason, 'duration-not-exceeded');
   e1.dispose();
   // ② t = base+31s：duration = 61s > 60s 阈值 → 产候选（判定时机 = 越过阈值后一拍）
-  const e2 = hb(store, root, LR_1MIN, { now: () => base + 31_000 });
+  const e2 = laneHeartbeat(store, root, LR_1MIN, { now: () => base + 31_000 });
   e2.tick();
   const evs = candEvents(store, S, batchId, lane);
   assert.equal(evs.length, 1, 'duration 超阈值 1s → 产候选');

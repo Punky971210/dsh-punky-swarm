@@ -40,21 +40,14 @@ import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { writeRefusal, readRefusals, verifyRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { makeAnchor } from '../lib/governance/hash-utils.js';
 import { apply } from '../lib/index.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
+import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
+// F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。
+const fakeCtx = () => makeFakeCtx({ error: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── fake ctx（捕获 ctx.on 注册的 listener；disposer 移除注册——cordis ctx.on 返回 dispose 语义）──
-function fakeCtx() {
-  const listeners = new Map();
-  return {
-    listeners,
-    on(event, fn) {
-      listeners.set(event, fn);
-      return () => { listeners.delete(event); };
-    },
-    logger: { info: () => {}, warn: () => {}, error: () => {} },
-  };
-}
 
 // ── 装配级 fake ctx（hotconfig 同款：事件→Set，可多 listener；preCount 观察）──
 function assemblyCtx() {
@@ -85,11 +78,6 @@ function freshRoot(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 // 最小 ToolExecution 形态（HTYPES:196-220）；callId 每次唯一（B 步骤同调用 pre/post 复用同一 exec）
 function execOf(name, args, extra = {}) {

@@ -26,19 +26,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { readRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
+import { fakeCtx } from './helpers/gate-fixture.mjs';
 
 // ── fake ctx（捕获 ctx.on 注册的 listener；disposer 移除注册——cordis ctx.on 返回 dispose 语义）──
-function fakeCtx() {
-  const listeners = new Map();
-  return {
-    listeners,
-    on(event, fn) {
-      listeners.set(event, fn);
-      return () => { listeners.delete(event); };
-    },
-    logger: { info: () => {}, warn: () => {} },
-  };
-}
 
 // 最小 ToolExecution 形态（HTYPES:196-220：name/arguments/callId/agent）
 function execOf(name, args, extra = {}) {

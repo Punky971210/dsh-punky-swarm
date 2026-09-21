@@ -32,7 +32,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import {
-  createLaneHeartbeat, createLongrunTools,
+  createLongrunTools,
   judgeLongrun, lastProgressTsOf, isStaleBatch, lastEventTsOf,
   hasLongrunUnconsumed, longrunCandidateOf,
   resolveLongrunConfig, LONGRUN_DEFAULTS,
@@ -45,6 +45,7 @@ import {
 import {
   LANE_EXEMPT_TIERS, EXEMPT_GATE_CODES,
 } from '../lib/state/lane-exempt.js';
+import { laneHeartbeat } from './helpers/watch-fixture.mjs';
 
 const MIN = 60_000;
 const HOUR = 3_600_000;
@@ -54,9 +55,6 @@ const mkEv = (tsMs, type, fields = {}) => ({ ts: new Date(tsMs).toISOString(), t
 
 // ── 夹具 ──
 function tmpRoot(tag) { return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lrex-' + tag + '-')); }
-function hb(store, root, config = {}, opts = {}) {
-  return createLaneHeartbeat({ store, mailbox, config, root, ...opts });
-}
 const boxRoot = (root, S, batchId) => path.join(root, 'sessions', S, 'mailbox', batchId);
 const inboxItems = (root, S, batchId) => mailbox.readUnacked(boxRoot(root, S, batchId), { type: 'inbox' });
 const bcastItems = (root, S, batchId) => mailbox.readUnacked(boxRoot(root, S, batchId), { type: 'broadcast' });
@@ -141,7 +139,7 @@ test('D19 lane_longrun 查询透出豁免态：豁免 lane 含 exempt/effectiveM
     events: [mkEv(now - MAX_D - MIN, EVT_MEMBER_DISPATCH, { lane: 'l1' }), mkEv(now - MAX_D - MIN, EVT_MEMBER_DISPATCH, { lane: 'l2' })],
     laneExempt: { l1: { grantedAt: new Date(now).toISOString(), grantedFrom: 'pending', type: 'ai-render', multiplier: 8, tierMultiplier: 8, stalled: true } },
   });
-  const engine = hb(store, root, {});
+  const engine = laneHeartbeat(store, root, {});
   const ctx = { tools: { register: () => {} } };
   const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
   const exec = { agent: { session: { id: S } } };
@@ -172,7 +170,7 @@ test('E20/E23 豁免 lane（stalled:true）连续 ≥4 拍无活动：无 lane.s
     events: [mkEv(base - 10 * MIN, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
     laneExempt: { l1: { grantedAt: new Date(base).toISOString(), grantedFrom: 'pending', type: 'large-download', multiplier: 6, tierMultiplier: 6, stalled: true } },
   });
-  const e = hb(store, root, FAST, { now: () => base + 5 * MIN });
+  const e = laneHeartbeat(store, root, FAST, { now: () => base + 5 * MIN });
   e.tick(); // 首拍建 entry（活动基线对齐历史事件 ts → 不立即追问）
   for (let i = 0; i < 5; i++) e.tick(); // 连续多拍：豁免 lane 不得累计 missed/不得追问
   const b = store.readBatch(S, batchId);
@@ -195,7 +193,7 @@ test('E21 豁免 lane 仍写 checkpoint：lane_checkpoint 写面零特判（work
     events: [mkEv(base - 10 * MIN, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
     laneExempt: { l1: { grantedAt: new Date(base).toISOString(), grantedFrom: 'pending', type: 'ai-render', multiplier: 8, tierMultiplier: 8, stalled: true } },
   });
-  const e = hb(store, root, FAST, { now: () => base + 5 * MIN });
+  const e = laneHeartbeat(store, root, FAST, { now: () => base + 5 * MIN });
   e.tick();
   for (let i = 0; i < 4; i++) e.tick();
   // 探针路径零改动 checkpoint 写面：直接 appendEvent（lane_checkpoint 工具的同一落点）照常可写
@@ -215,7 +213,7 @@ test('E22 回归锚：非豁免 lane 同设置下仍追问（≥maxMissed 拍）
     events: [mkEv(base - 10 * MIN, EVT_MEMBER_DISPATCH, { lane: 'l1' }), mkEv(base - 10 * MIN, EVT_MEMBER_DISPATCH, { lane: 'l2' })],
     laneExempt: { l1: { grantedAt: new Date(base).toISOString(), grantedFrom: 'pending', type: 'dep-install', multiplier: 4, tierMultiplier: 4, stalled: true } },
   });
-  const e = hb(store, root, FAST, { now: () => base + 5 * MIN });
+  const e = laneHeartbeat(store, root, FAST, { now: () => base + 5 * MIN });
   for (let i = 0; i < 4; i++) e.tick();
   const stalled = evsOf(store, S, batchId, EVT_LANE_STALLED);
   assert.equal(stalled.length, 1, '仅非豁免 lane l2 落 stalled');
@@ -240,7 +238,7 @@ test('F24/F29 D-2 产 unconsumed 事件（isAcked 判据）+ 事件载荷含 run
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  const e1 = hb(store, root, D2CFG(), { now: () => base });
+  const e1 = laneHeartbeat(store, root, D2CFG(), { now: () => base });
   e1.tick(); // duration 90s > 60s → 产候选（broadcast + inbox 双投递）
   const cand = evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, 'l1');
   assert.equal(cand.length, 1, 'D-3/G29：候选事件恰 1 条且带 ackId');
@@ -252,7 +250,7 @@ test('F24/F29 D-2 产 unconsumed 事件（isAcked 判据）+ 事件载荷含 run
   // 推进时钟 61s > unconsumedTimeoutMs（不 ack）→ 独立趟产 unconsumed
   // 时基锚定：候选 ts 由 appendEvent 打真实 ts（≈ base + 十余 ms 落盘开销），故断言不写死
   // [61000,61500) 这种「把 base 当候选时刻」的假区间——下界须锚定候选 ts 自身（tick 时刻 - ts ≥ 60000）。
-  const e2 = hb(store, root, D2CFG(), { now: () => base + 61_000 });
+  const e2 = laneHeartbeat(store, root, D2CFG(), { now: () => base + 61_000 });
   e2.tick();
   const un = evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED, 'l1');
   assert.equal(un.length, 1, '超时未 ack → 恰 1 条 lane.longrun.unconsumed');
@@ -276,14 +274,14 @@ test('F25 isAcked 判据：ack 候选 broadcast 后同条件 → 不产 unconsum
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  const e1 = hb(store, root, D2CFG(), { now: () => base });
+  const e1 = laneHeartbeat(store, root, D2CFG(), { now: () => base });
   e1.tick();
   const cand = evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, 'l1')[0];
   // 消费方 ack broadcast 那条（ack 默认删原消息文件）
   mailbox.ack(boxRoot(root, S, batchId), { type: 'broadcast' }, cand.ackId);
   assert.equal(mailbox.isAcked(boxRoot(root, S, batchId), { type: 'broadcast' }, cand.ackId), true);
   assert.equal(mailbox.readUnacked(boxRoot(root, S, batchId), { type: 'broadcast' }).length, 0, 'ack 后 readUnacked 读不到（故不可用 readUnacked 判「未消费」）');
-  const e2 = hb(store, root, D2CFG(), { now: () => base + 61_000 });
+  const e2 = laneHeartbeat(store, root, D2CFG(), { now: () => base + 61_000 });
   e2.tick();
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED).length, 0, '已消费 → 不产 unconsumed');
   e1.dispose(); e2.dispose();
@@ -298,11 +296,11 @@ test('F26 单次纪律：同 (lane,runningSince) 连续多拍仍只 1 条 uncons
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  hb(store, root, D2CFG(), { now: () => base }).tick();
-  const e = hb(store, root, D2CFG(), { now: () => base + 61_000 });
+  laneHeartbeat(store, root, D2CFG(), { now: () => base }).tick();
+  const e = laneHeartbeat(store, root, D2CFG(), { now: () => base + 61_000 });
   e.tick();
   e.tick();
-  hb(store, root, D2CFG(), { now: () => base + 120_000 }).tick(); // 新引擎实例（模拟重建）
+  laneHeartbeat(store, root, D2CFG(), { now: () => base + 120_000 }).tick(); // 新引擎实例（模拟重建）
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED, 'l1').length, 1, '同 stint 只产一次');
   e.dispose();
 });
@@ -316,9 +314,9 @@ test('F27 逃生阀：unconsumedTimeoutMs=0 → D-2 关闭（永不产 unconsume
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  hb(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base }).tick();
+  laneHeartbeat(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base }).tick();
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE).length, 1, '候选照产（D-2 关闭不影响候选档）');
-  hb(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base + 10 * MIN }).tick();
+  laneHeartbeat(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base + 10 * MIN }).tick();
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED).length, 0, 'unconsumedTimeoutMs=0 → D-2 关闭');
 });
 
@@ -332,7 +330,7 @@ test('G28/G30 候选双通道：broadcast 恰 1 条 + supervisor/inbox 恰 1 条
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  const e = hb(store, root, D2CFG(), { now: () => base });
+  const e = laneHeartbeat(store, root, D2CFG(), { now: () => base });
   e.tick();
   const bc = candOf(bcastItems(root, S, batchId));
   const inb = candOf(inboxItems(root, S, batchId));
@@ -360,7 +358,7 @@ test('H31 僵尸批过滤：末事件 25h 前（A）与缺 events 但 updatedAt 
   seedBatch(root, { S, batchId: 'b-h31-c', lanes: mkLane(), events: [], updatedAt: now - 25 * HOUR, laneExempt: undefined });
   const store = createStore(root);
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000 } } } };
-  hb(store, root, cfg, { now: () => now }).tick();
+  laneHeartbeat(store, root, cfg, { now: () => now }).tick();
   assert.equal(evsOf(store, S, 'b-h31-a', EVT_LANE_LONGRUN_CANDIDATE).length, 0, 'A 僵尸批整批跳过（零候选）');
   assert.equal(evsOf(store, S, 'b-h31-b', EVT_LANE_LONGRUN_CANDIDATE).length, 1, 'B 活跃批照常产候选');
   assert.equal(evsOf(store, S, 'b-h31-c', EVT_LANE_LONGRUN_CANDIDATE).length, 0, 'C 缺 events → 回退 updatedAt 判僵尸');
@@ -375,7 +373,7 @@ test('H32 逃生阀：staleBatchMs=0 → 关闭过滤，僵尸批照常参与（
     events: [mkEv(now - 25 * HOUR, EVT_MEMBER_DISPATCH, { lane: 'l1' })], updatedAt: now,
   });
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000, staleBatchMs: 0 } } } };
-  hb(store, root, cfg, { now: () => now }).tick();
+  laneHeartbeat(store, root, cfg, { now: () => now }).tick();
   assert.equal(evsOf(store, S, 'b-h32', EVT_LANE_LONGRUN_CANDIDATE, 'l1').length, 1, 'staleBatchMs=0 → 过滤关闭（逃生阀有效）');
 });
 
@@ -390,7 +388,7 @@ test('H33 回归：phase !== running 的批次与未超时的活跃批行为不�
   assert.equal(isStaleBatch(st.readBatch(S, 'b-h33-run'), now, LONGRUN_DEFAULTS.staleBatchMs), false);
   assert.equal(isStaleBatch(st.readBatch(S, 'b-h33-idle'), now, LONGRUN_DEFAULTS.staleBatchMs), false);
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000 } } } };
-  hb(st, root, cfg, { now: () => now }).tick();
+  laneHeartbeat(st, root, cfg, { now: () => now }).tick();
   assert.equal(evsOf(st, S, 'b-h33-run', EVT_LANE_LONGRUN_CANDIDATE, lane).length, 1);
   assert.equal(evsOf(st, S, 'b-h33-idle', EVT_LANE_LONGRUN_CANDIDATE, lane).length, 0, '非 running lane 不扫');
   // 纯函数层：lastEventTsOf 回退 updatedAt
@@ -505,7 +503,7 @@ test('AN3-c 引擎级实证：worker 只写磁盘 progress 快照（零 checkpoi
   //   引擎时钟取 base-2min 后：baselineTs = 派发 ts（10min 前），duration = 8min ≫ 1min 阈值。
   const engineNow = () => base - 2 * MIN;
   // ① 对照（RED）：无快照 → 判候选（复现假阳性条件）
-  const e1 = hb(store, root, cfg, { now: engineNow });
+  const e1 = laneHeartbeat(store, root, cfg, { now: engineNow });
   e1.tick();
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, lane).length, 1, '对照：无快照 → 判候选（复现假阳性）');
   e1.dispose();
@@ -526,7 +524,7 @@ test('AN3-c 引擎级实证：worker 只写磁盘 progress 快照（零 checkpoi
     fs.utimesSync(p, new Date(base - 2 * MIN), new Date(base - 2 * MIN)); // 窗内（2min 前 < 5min 窗）
   }
   assert.equal(evsOf(store2, S2, batchId2, EVT_WORKTREE_CHECKPOINT, lane).length, 0, '前置：零 worktree.checkpoint 事件（worker 未调 lane_checkpoint）');
-  const e2 = hb(store2, root, cfg, { now: engineNow });
+  const e2 = laneHeartbeat(store2, root, cfg, { now: engineNow });
   e2.tick();
   assert.equal(evsOf(store2, S2, batchId2, EVT_LANE_LONGRUN_CANDIDATE, lane).length, 0, '实证：有磁盘 progress 快照但无 checkpoint 事件 → 不再判 candidate（AN-3 修复生效）');
   assert.equal(candOf(bcastItems(root, S2, batchId2)).length, 0, '零候选消息（无噪音）');
@@ -554,7 +552,7 @@ test('AN3-d 受控对照：RED 无快照 → 判 stalled/追问；GREEN 有 prog
     updatedAt: base,
   });
   const run = (root, S, batchId, store) => {
-    const e = hb(store, root, cfg, { now: () => base - 2 * MIN }); // 引擎时钟早于 batch.created（同 AN3-c 口径）
+    const e = laneHeartbeat(store, root, cfg, { now: () => base - 2 * MIN }); // 引擎时钟早于 batch.created（同 AN3-c 口径）
     for (let i = 0; i < 4; i++) e.tick();
     const out = {
       stalled: store.readBatch(S, batchId).events.filter((x) => x.type === EVT_LANE_STALLED),
@@ -619,7 +617,7 @@ test('冻结面：D-2 事件常量 + 候选载荷只增不改 + 豁免档位表�
     S, batchId, lanes: { l1: 'running' },
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
-  hb(store, root, D2CFG(), { now: () => base }).tick();
+  laneHeartbeat(store, root, D2CFG(), { now: () => base }).tick();
   const ev = evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, 'l1')[0];
   for (const k of ['lane', 'runningSince', 'durationMs', 'maxDurationMs', 'noProgressWindowMs', 'lastCheckpointTs', 'lastActivityAt', 'checkpointFresh', 'activityFresh', 'reason']) {
     assert.equal(k in ev, true, '既有载荷字段保留：' + k);

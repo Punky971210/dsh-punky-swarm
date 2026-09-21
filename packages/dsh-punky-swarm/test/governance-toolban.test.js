@@ -35,6 +35,7 @@ import { createGovernanceKernel } from '../lib/governance/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { loadPresetTable } from '../lib/governance/preset-loader.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SETTLE = 200;
@@ -322,11 +323,6 @@ function assemblyCtx() {
 }
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-toolban-'));
-}
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
 }
 function execOf(name, args, sessionId) {
   return {

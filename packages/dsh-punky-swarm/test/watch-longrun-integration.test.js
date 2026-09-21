@@ -33,11 +33,12 @@ import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import { createMailboxTools } from '../lib/tools/mailbox-tools.js';
 import {
-  createLaneHeartbeat, createLongrunTools,
+  createLongrunTools,
   resolveLongrunConfig, LONGRUN_DEFAULTS, LONGRUN_REASON,
 } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH, EVT_MEMBER_SETTLED, EVT_WORKTREE_CHECKPOINT } from '../lib/state/event-types.js';
+import { laneHeartbeat } from './helpers/watch-fixture.mjs';
 
 const MAX_D = LONGRUN_DEFAULTS.maxDurationMs; // 1200000（20min）
 const WINDOW = LONGRUN_DEFAULTS.noProgressWindowMs; // 300000（5min）
@@ -52,9 +53,6 @@ function setup() {
   store.createBatch(S, { batchId: 'b-lri', wavePlan: plan, phase: 'running' });
   store.setMember(S, 'b-lri', 'l1', 'running'); // 首次派发：写 member.settled{to:running}，stint 起点 ≈ 真实 now
   return { root, store, S, batchId: 'b-lri', lane: 'l1' };
-}
-function hb(store, root, config = {}, opts = {}) {
-  return createLaneHeartbeat({ store, mailbox, config, root, ...opts });
 }
 function candEvents(store, S, batchId, lane) {
   return (store.readBatch(S, batchId)?.events ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE && e.lane === lane);
@@ -83,7 +81,7 @@ function appendEventAt(store, S, batchId, type, lane, atMs, extra = {}) {
 function timedEngine(store, root, config) {
   let off = 0;
   const base = Date.now();
-  const e = hb(store, root, config, { now: () => base + off });
+  const e = laneHeartbeat(store, root, config, { now: () => base + off });
   return { base, engine: e, at: (offsetMs) => { off = offsetMs; return e; } };
 }
 // Manager 读侧工具（mailbox_read/mailbox_ack 真面；sessionOf 直取 args.session）
@@ -98,8 +96,8 @@ test('IT-A Manager 读面：候选经 mailbox_read broadcast 可达且载荷齐�
   const { root, store, S, batchId, lane } = setup();
   const base = Date.now();
   const config = { capabilities: { watch: { enabled: true } } };
-  hb(store, root, config, { now: () => base }).tick(); // 首拍建心跳 entry
-  hb(store, root, config, { now: () => base + 26 * MIN }).tick(); // 26min：超阈值且无 checkpoint/活动 → 产候选
+  laneHeartbeat(store, root, config, { now: () => base }).tick(); // 首拍建心跳 entry
+  laneHeartbeat(store, root, config, { now: () => base + 26 * MIN }).tick(); // 26min：超阈值且无 checkpoint/活动 → 产候选
   const evs = candEvents(store, S, batchId, lane);
   assert.equal(evs.length, 1, '事件流恰 1 条候选');
   const ev = evs[0];
@@ -177,7 +175,7 @@ test('IT-D 默认开零误报：长跑超阈值但近窗有新 checkpoint → �
   const base = Date.now();
   // 注入近窗 checkpoint（事件流直写：真实 tick 引擎读事件流，时间轴用伪造 ts 对齐注入时钟）
   appendEventAt(store, S, batchId, EVT_WORKTREE_CHECKPOINT, lane, base + 20 * MIN, { message: 'cp-progress' });
-  const e = hb(store, root, { capabilities: { watch: { enabled: true } } }, { now: () => base + 21 * MIN });
+  const e = laneHeartbeat(store, root, { capabilities: { watch: { enabled: true } } }, { now: () => base + 21 * MIN });
   e.tick(); // 时长 21min > 20min；checkpoint 在 1min 前（<5min 窗）→ 有进展 → AND 抑制
   assert.equal(candEvents(store, S, batchId, lane).length, 0, '近窗 checkpoint → 不误报');
   assert.equal(candOf(bcastItems(root, S, batchId)).length, 0, 'broadcast 无噪音');
@@ -250,7 +248,7 @@ test('IT-G 出厂默认开：resolveLongrunConfig({}) enabled=true；空配置�
   b0.lanes[lane] = 'running'; // plan 初态 pending → running（直写）
   b0.events.push({ ts: new Date(Date.now() - 25 * MIN).toISOString(), type: EVT_MEMBER_DISPATCH, lane, workerSessionId: 'w1' });
   fs.writeFileSync(bf, JSON.stringify(b0, null, 2));
-  const engine = hb(store, root, {}); // 空配置：出厂默认开路径（无 capabilities.watch.longrun 键）
+  const engine = laneHeartbeat(store, root, {}); // 空配置：出厂默认开路径（无 capabilities.watch.longrun 键）
   engine.tick();
   assert.equal(candEvents(store, S, batchId, lane).length, 1, '空配置 tick 即产候选（默认开）');
   assert.equal(candOf(bcastItems(root, S, batchId)).length, 1);

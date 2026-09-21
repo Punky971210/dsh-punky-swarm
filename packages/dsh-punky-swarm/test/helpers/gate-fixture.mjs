@@ -25,6 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     · B5：audit 的 `consume` 必须锚到 plan 判据来源，且该产物正文含裸标题 `## 验收标准`。
 //   本模块只提供**构造器**（无副作用、不读真实状态根），供多个既有套件复用同一合规形态。
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 /** 满足 plan 契约门（裸标题 `## 验收标准` + `## 约束`）的 spec 正文。 */
@@ -93,6 +94,51 @@ export function seedArtifacts(root, session, batchId, laneIds, opts = {}) {
   return { spec, planId, auditId, execRels, auditRel };
 }
 
+/**
+ * 【F3 收敛】落**单个**任意产物文件（`<root>/sessions/<session>/artifacts/<batchId>/<rel>`，缺省正文 `'out'`）。
+ * 与 `seedArtifacts`（写 `threeTierTasks` 的标准三层产物集）不同：本函数写**调用方指定的任意相对路径**
+ * —— 收敛前 5 个套件各写一份同名的本地 `seed`（函数体**逐字相同**，10/10 对 100% 相似）。
+ * @returns {string} 落盘绝对路径
+ */
+export function seedArtifactFile(root, session, batchId, rel, body = 'out') {
+  const abs = path.join(root, 'sessions', session, 'artifacts', batchId, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, body, 'utf8');
+  return abs;
+}
+
+/**
+ * 【F3 收敛】治理钩子的 fake ctx：`on(event, fn)`（**单 listener**，disposer 按事件移除）+ `logger`。
+ * 收敛前 6 个套件各写一份（函数体 15/15 对 ≥70% 相似）；差异**只在一根轴** —— `warn` 汇（及是否补 `error`）：
+ *   · 缺省 `'silent'`：`warn(){}`（`governance-{proto,wiring,state}` 用）
+ *   · `'global'`：warn 文本追加到 `global.__govWarn`（`governance-bridge` 读它断言「留痕」）
+ *   · `'array'`：返回对象上带 `warns` 数组，并补 `error(){}`（`governance-denial-visibility` 读 `ctx.warns`）
+ * @param {{ warn?: 'silent'|'global'|'array', error?: boolean }} [opts]
+ */
+export function fakeCtx({ warn = 'silent', error = false } = {}) {
+  const listeners = new Map();
+  const warns = [];
+  const logger = { info: () => {} };
+  if (warn === 'global') {
+    logger.warn = (msg) => { global.__govWarn = (global.__govWarn || []).concat([String(msg)]); };
+  } else if (warn === 'array') {
+    logger.warn = (m) => warns.push(m);
+  } else {
+    logger.warn = () => {};
+  }
+  if (error || warn === 'array') logger.error = () => {};
+  const ctx = {
+    listeners,
+    on(event, fn) {
+      listeners.set(event, fn);
+      return () => { listeners.delete(event); };
+    },
+    logger,
+  };
+  if (warn === 'array') ctx.warns = warns;
+  return ctx;
+}
+
 /** 走完一条 lane 的合法结算链（running → review → merged）。 */
 export function runLane(store, session, batchId, lane) {
   store.setMember(session, batchId, lane, 'running');
@@ -131,4 +177,23 @@ export function assessC(store, session, { rationale = 'fixture：建批/成员�
 /** G2 种子：登记该批的 Manager（委托 `store.markManagerRaised`，与 `batch_phase({manager})` 同一入口）。 */
 export function registerManager(store, session, batchId, agentId = 'mgr-1', note = undefined) {
   return store.markManagerRaised(session, batchId, note ? { agentId, note } : { agentId });
+}
+
+// ── 【F3 收敛】跨套件原语（夹具审计 §3.3「必合档」；2026-09-21）─────────────────────────
+// 判据 = 「**逐字相同 × 高相似对占比 ≥50%**」（`node scripts/audit/dup-similarity.mjs`）：
+//   · `writeRuntime` 9 处 · **36/36 对 100%** 相同（最长 5 行）
+//   · `tempRoot` 3 处 · 3/6 对相同（第 4 处 `vocabulary.test.js` 带 `TMP_ROOTS` 清理登记 ⇒ **刻意不并入**）
+// ⚠ 依赖纪律：本模块**只依赖 node 内置**（被 39 个套件导入）⇒ 需要 lib 依赖的原语放各自域内的 helper
+//   （例：watch 域的 `laneHeartbeat` → `test/helpers/watch-fixture.mjs`）。
+
+/** 临时根（`os.tmpdir()` 下的本次用例根）。⚠ 只建目录，**不登记清理**（需登记的套件自留本地版本）。 */
+export function tempRoot(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+/** 写 `<root>/config/runtime.json`（热配置 / 启动覆盖层的统一落点）。 */
+export function writeRuntime(root, overlay) {
+  const dir = path.join(root, 'config');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
 }

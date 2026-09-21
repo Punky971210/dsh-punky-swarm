@@ -128,6 +128,7 @@ import { eventStreamFileOf } from '../lib/governance/receipt-store.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { createTopicRuntime } from '../lib/comms/topic-runtime.js';
 import { subscribeTopic } from '../lib/comms/topic.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 // ── §2 helpers（store 层宿主：独立临时 root，与 §1 纯函数段零 IO 纪律互不干扰）──
 const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gesc-'));
@@ -190,11 +191,6 @@ function assemblyCtx() {
 }
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gesc-assem-'));
-}
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
 }
 // 最小 ToolExecution（带 agent 会话 id——收据 sessionId 来源 = exec.agent.session.id，wiring.js:98）
 function execOf(name, args, sessionId) {

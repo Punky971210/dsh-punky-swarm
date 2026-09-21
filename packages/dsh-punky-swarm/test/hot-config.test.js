@@ -32,6 +32,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createConfigWatcher, validateOverlay, ALLOWED_TOP_KEYS } from '../lib/hot/config-watch.js';
 import { deepMerge, readCapability } from '../lib/assembly/schema.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,11 +53,6 @@ function staticConfig() {
   };
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 test('H1 缺省 {} 零行为变化：无 runtime.json → 快照 = 静态 config 原样；start 不广播', () => {
   const cfg = staticConfig();

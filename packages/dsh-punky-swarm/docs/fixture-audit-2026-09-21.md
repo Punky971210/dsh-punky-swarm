@@ -35,6 +35,8 @@
 
 ### 2.1 ③ 的强度证据（函数体相似度，去空行/注释后按行集合 Jaccard）
 
+**复跑**：`node scripts/audit/dup-similarity.mjs --top 25`（下表为 **F3 前**的快照，保留以存档；F3 后数据见 §3.3）。
+
 | 函数 | 定义处 | 最高相似 | ≥70% 的对 / 总对 |
 |---|---|---|---|
 | `writeRuntime` | 9 | **100%** | **36 / 36**（全部高度相同 ⇒ 同一实现复制 9 份） |
@@ -121,15 +123,33 @@
 | 合成资产混入 | 看不出哪些是自造 | **显式**：合成类必须走 `writeSyntheticTeam`（名字即标注），并在骨架 §E 按形态分类列出 |
 | 门禁遮蔽 | `withDefaultTeam` 注入 `team` ⇒ 「`team` 必填」门禁在 14 个套件里不可见 | **台账化**：`F2-6`/`F2-7` 双向锁允许名单（该门禁另有专项套件覆盖 ✓） |
 
-### 3.3 ③ 重复夹具：156 对高相似（可合并）
+### 3.3 ③ 重复夹具：**F3 已收敛必合档**（156 → **70** 对高相似）
 
-**处置建议（按证据强度分档）**
+**取证工具**（F3 新增，可复跑）：`node scripts/audit/dup-similarity.mjs`（`--top N` / `--fn <name>` 单函数下钻）。
+
+⚠ **工具自身的一处 bug 已修**（F3 施工期发现）：函数体起点原本用 `indexOf('{')` ⇒ 形参默认值里的 `{}`
+（如 `hb(store, root, config = {}, opts = {})`）被误判为函数体 ⇒ 该函数一律截成「1 行」。正解 = 先配平**圆括号**
+定位形参表结束，其后的第一个 `{` 才是函数体。修前 `hb` 显示 1 行、修后 3 行。
+
+**F3 已收敛（21 处定义 → 4 个单点原语，`lib/**` 零 diff）**
+
+| 原语 | 定义处 | 依据（相似对） | 落点 |
+|---|---|---|---|
+| `writeRuntime(root, overlay)` | 9 | **36/36 对 100%** | `gate-fixture.mjs`（无 lib 依赖） |
+| `laneHeartbeat(store, root, cfg, opts)` | 4 | **6/6 对 100%** | **`watch-fixture.mjs`**（需 lib 依赖 ⇒ 独立域内 helper，避免污染 39 个套件的 `gate-fixture`） |
+| `tempRoot(prefix)` | 3 | 3/6 对 100%（第 4 处 `vocabulary.test.js` 带 `TMP_ROOTS` 清理登记 ⇒ **刻意不并入**） | `gate-fixture.mjs` |
+| `seedArtifactFile(root, session, batchId, rel, body)` | 5 | **10/10 对 100%** | `gate-fixture.mjs`（与既有 `seedArtifacts` **不同物**：写任意单文件 vs 写标准三层产物集） |
+| `fakeCtx({ warn, error })` | 6 | **15/15 对 ≥70%**（差异**只在一根轴** = warn 汇：silent / `global.__govWarn` / `warns` 数组 + `error`） | `gate-fixture.mjs`；3 个非缺省变体用「别名导入 + 一行适配」⇒ **调用点零改动** |
+
+**收敛效果**：重复函数候选 **33 → 28**；含高相似对的函数 **21 → 14**；高相似对合计 **156 → 70**。
+
+**剩档（F4）**
 
 | 档 | 对象 | 依据 | 建议 |
 |---|---|---|---|
-| **必合** | `writeRuntime`(9) · `fakeCtx`(6) · `seed`(5) · `teamAsset`(3) · `tempRoot`(4) · `hb`(4) · `settleLane`(6) · `writeArt`(6) · `tasks3`(7) · `batchFileOf`(6) · `invoke`(7) | 相似对占比 ≥50%（多数 100%） | 抽到 `test/helpers/` 单点，各文件改用 import |
-| **选合** | `assemblyCtx`(11, 30/55) · `execOf`(11, 13/55) · `writeTempTeam`(6, 7/15) · `freshRoot`(16, 7/120) | 部分相似（同族内确有差异） | 先按「差异点」分组，能合的组合，不能合的**改名区分**（禁同名不同物） |
-| **禁按名合** | `makeHarness`(26, 2/325) · `writeTempTeam` 中的特化版 | 同名不同物 | 保持独立，或改名（`makeXxxHarness`）以消歧 |
+| **选合 / 改名消歧** | `assemblyCtx`(11) | 30/55（**5 个真实变体**：① 极简 `on(event,fn,opts)`+`{fn,opts}` 项 ② 同① + `calls/logger` ③ `on(event,fn)` 平面 fn 项 + `calls/logger` ④ 同③ + `ctx.preCount` ⑤ 同④ + `webServer` + `return {ctx,routes}`） | **不做一刀切合并**（选项化会变成 4 开关工厂）：按变体**拆名**（如 `assemblyCtxPre` / `webCtxRoutes`）或按「同变体组」小批合并；先做**改名消歧**（禁同名不同物） |
+| 选合 | `execOf`(11, 9/55) · `freshRoot`(16, 7/120) · `tasks3`(7, 4/21) · `invoke`(7, 4/21) · `settleLane`(6, 4/15) · `writeArt`(6, 4/15) · `batchFileOf`(6, 2/15) | 部分相似（同族内确有差异） | 按「差异点」分组，能合的组合，不能合的**改名区分** |
+| **禁按名合** | `makeHarness`(26, 0/325) · `makePlan`(3) · `seedArtifacts`(3) · `mkCtx`(3) · `makeCtx`(4) | 同名**不同物**（0 对 ≥70%） | 保持独立，或改名消歧 |
 
 ### 3.4 ④ 死夹具：**本次 0 个**
 
@@ -152,8 +172,8 @@
 |---|---|---|---|
 | **F1** | ②-A 空壳显式化：`HOST_ONLY_SKILLS` 名单 + 抛错分支 + 双向断言 | 无（可先行） | 全量**非环境类 fail = 0**；新名单与资产声明**双向相等**断言绿 |
 | **F2** | ②-B 团队资产写入面单点化 + 显式白名单（`team-fixture.mjs`：`writeTempTeam`/`writeRealTeam`/`writeSyntheticTeam`/`threeTierSyntheticTeam`）+ `fixture-team-ledger.test.js` 强制面 | F1 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；`fixtures.mjs` 重复候选 35→**33**、写入面 31→**30 文件（骨架 9 / 合成 19 / 直接写 5）**；`--accept` 基线已更新 |
-| **F3** | ③ 必合档收敛（11 个函数） | 无 | 同上；相似度表重跑后「必合档」清零 |
-| **F4** | ③ 选合档 + 改名消歧 | F3 | 同上 |
+| **F3** | ③ 必合档收敛（`writeRuntime` 9 · `laneHeartbeat` 4 · `tempRoot` 3 · `seedArtifactFile` 5 · `fakeCtx` 6 = 21 处定义 → 5 个单点原语） | 无 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；重复候选 33→**28**、高相似对 156→**70**；新增取证工具 `scripts/audit/dup-similarity.mjs`；`--accept` 基线已更新 |
+| **F4** | ③ 选合档 + **改名消歧**（`assemblyCtx` 5 变体优先；`makeHarness`/`makePlan`/`mkCtx`/`makeCtx`/`seedArtifacts` 为同名不同物） | F3 | 同上；相似度表重跑后「同名不同物」全部有区分名 |
 | **F5** | 门禁正向补测：以真实资产名驱动技能解析（替代空壳恒真） | F1 | 新增「资产技能名 ↔ 宿主技能根」正向用例（可用 `HOST_ONLY_SKILLS` 作声明面） |
 
 **通用纪律**：一批一 commit；每片「**先重生成基线、再跑全量**」；`node scripts/audit/fixtures.mjs --check` 零漂移（收敛导致 API 变化时 `--accept` 并登记）；`lib/**` 原则上零 diff（**F1/F2 只动 `test/**`**；若确需动读端 ⇒ 独立批）。

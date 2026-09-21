@@ -38,6 +38,7 @@ import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
 import { createLaneHeartbeat, createHeartbeatTools, createLongrunTools } from '../lib/watch/lane-heartbeat.js';
 import * as mailbox from '../lib/comms/mailbox.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // fs.watch 事件 → 防抖 300ms（createConfigWatcher 默认）→ reload → onChange；等待窗口对齐
@@ -78,11 +79,6 @@ function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-'));
 }
 
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
-}
 
 // remount 留痕日志行（'hot config: watch engine …'；初始 mount 为 'watch capability enabled' 不带此前缀）
 const remountLines = (calls) => calls.info.filter((l) => l.includes('hot config: watch engine'));

@@ -51,6 +51,7 @@ import {
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedHostSkills, declaredSkillsOf, seedTeamAssetSkills } from './helpers/host-skills.mjs';
+import { seedArtifactFile } from './helpers/gate-fixture.mjs';
 
 const SESSION = 'sess-p2-chain';
 const SESS = { agent: { session: { id: SESSION } } };
@@ -165,11 +166,8 @@ async function mkBatch(h, batchId) {
   await wavePlan(h, batchId);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
 }
-function seed(h, batchId, rel, body = 'out') {
-  const abs = path.join(h.root, 'sessions', SESSION, 'artifacts', batchId, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, body, 'utf8');
-}
+// F3：收敛为单点（夹具审计 §3.3 必合档：5 份函数体逐字相同）⇒ 本文件只留 `SESSION` 绑定适配。
+const seed = (h, batchId, rel, body = 'out') => seedArtifactFile(h.root, SESSION, batchId, rel, body);
 /** 走完一条 lane 的合法结算链（非 running ⇒ 先置 running，再 review ⇒ 结算目标态）。 */
 async function settleLane(h, batchId, lane, status) {
   const cur = () => h.store.readBatch(SESSION, batchId)?.lanes?.[lane];

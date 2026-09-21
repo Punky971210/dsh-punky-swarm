@@ -33,21 +33,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { readRefusals, verifyRefusals } from '../lib/governance/receipt-store.js';
+import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
+// F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。
+const fakeCtx = () => makeFakeCtx({ warn: 'array' });
 
 // ── fake ctx（捕获 ctx.on 注册的 listener；warn 收集供 V5 断言）──
-function fakeCtx() {
-  const listeners = new Map();
-  const warns = [];
-  return {
-    listeners,
-    warns,
-    on(event, fn) {
-      listeners.set(event, fn);
-      return () => { listeners.delete(event); };
-    },
-    logger: { info: () => {}, warn: (m) => warns.push(m), error: () => {} },
-  };
-}
 
 // 最小 ToolExecution 形态（name/arguments/callId/agent）
 function execOf(name, args, session = 'sess-dv') {

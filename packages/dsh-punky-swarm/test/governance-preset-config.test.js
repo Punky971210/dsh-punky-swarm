@@ -30,6 +30,7 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCALATE, EVT_BATCH_PHASE } from '../lib/state/event-types.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
+import { writeRuntime } from './helpers/gate-fixture.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SLEEP = 1000;
@@ -59,11 +60,6 @@ function assemblyCtx() {
 }
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-preset-cfg-'));
-}
-function writeRuntime(root, overlay) {
-  const dir = path.join(root, 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify(overlay, null, 2));
 }
 function execOf(name, args, sessionId) {
   return {
