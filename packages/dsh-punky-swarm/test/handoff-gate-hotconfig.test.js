@@ -40,6 +40,7 @@ import { createStore } from '../lib/state/store.js';
 import { createConfigWatcher } from '../lib/hot/config-watch.js';
 import { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV } from '../lib/wave-plan.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam, threeTierSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 
@@ -47,21 +48,6 @@ const SESSION = 'sess-hotcfg';
 const SESS = { agent: { session: { id: SESSION } } };
 const TEAM = 'hotcfg-team';
 
-function teamAsset() {
-  return {
-    team: TEAM,
-    layers: {
-      plan: { roles: ['designer'], skills: { designer: ['dev-designer'] } },
-      exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
-      audit: { roles: ['reviewer'], skills: { reviewer: ['report-blind-audit'] } },
-    },
-    flows: {
-      plan: { produce_field: 'produce', entry_requires: [] },
-      exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
-      audit: { produce_field: 'produce', entry_requires: ['consume'], audit_contract: { criteria_from: 'plan/**', verdict: ['pass', 'fail', 'skip'] } },
-    },
-  };
-}
 
 /** DAG：p1 → e1 → e2 → a1（e1/e2 均有下游 ⇒ 出口门对二者均可判）。 */
 function tasksChain() {
@@ -77,10 +63,9 @@ function tasksChain() {
 function makeHarness() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hotcfg-'));
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hotcfg-teams-'));
-  const dir = path.join(teamsRoot, 'presets', TEAM);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(teamAsset(), null, 2), 'utf8');
-  seedHostSkills(declaredSkillsOf(teamAsset()), undefined, { stub: true });
+  // F2：合成资产（最小三层）⇒ 走单点写入（'helpers/team-fixture.mjs'）。
+  writeSyntheticTeam(teamsRoot, TEAM, threeTierSyntheticTeam(TEAM));
+  seedHostSkills(declaredSkillsOf(threeTierSyntheticTeam(TEAM)), undefined, { stub: true });
   clearRoleCache();
   // 环境隔离：本套件验的是 **runtime.json 热配置**路径 ⇒ 必须先中和**环境变量兜底**，
   //   否则 ambient env（实测本机就有 `PSWARM_HANDOFF_GATE=1`）会把「缺省关/只开一段」的用例污染成「两段全开」。

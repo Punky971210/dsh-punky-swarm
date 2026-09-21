@@ -28,6 +28,7 @@ import { createStore } from '../lib/state/store.js';
 import { globMatchesPath } from '../lib/assembly/flows.js';
 import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
 import { anchorSpecOf, assessC, seedArtifacts, threeTierTasks } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -41,7 +42,6 @@ const SESS = { agent: { session: { id: 'sess-p2' } } };
 //   手工剥盘符但**未做 URL 解码** ⇒ 包路径含空格时得到 `%20`（实测：副本目录名带空格即 ENOENT）。
 //   统一改走 `fileURLToPath`（本仓其余测试/脚本均用此写法）。
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 
 function makeHarness() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-p2-'));
@@ -54,16 +54,6 @@ function makeHarness() {
   return { root, store, byName };
 }
 
-// 写一份「临时团队资产」：以包内 software-team 资产为骨架，按 mutate 改一处；返回 teamsRoot
-function writeTempTeam(prefix, team, mutate = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8'));
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return root;
-}
 
 function tasks3() {
   return [

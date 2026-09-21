@@ -45,6 +45,7 @@ import { buildWavePlan } from '../lib/wave-plan.js';
 import { clearFlowCache, resolveTeamFlows } from '../lib/assembly/flows.js';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
 import { seedHostSkills } from './helpers/host-skills.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import * as EVT from '../lib/state/event-types.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); // cwd 无关
@@ -82,8 +83,8 @@ function mkMinTeamRoot() {
       audit: { produce_field: 'produce', audit_contract: { criteria_from: 'plan/**', verdict: ['pass', 'fail', 'skip'] } },
     },
   };
-  fs.mkdirSync(path.join(root, 'presets', MIN_TEAM), { recursive: true });
-  fs.writeFileSync(path.join(root, 'presets', MIN_TEAM, 'team-asset.json'), JSON.stringify(asset), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(root, MIN_TEAM, asset);
   return root;
 }
 
@@ -361,9 +362,8 @@ test('B2 负控：团队资产声明齐备 ⇒ 零首触事件（判定逐字不
   const root9 = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-declared-'));
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-teams-'));
   const team = 'b2-declared-team';
-  const dir = path.join(teamsRoot, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify({
+  // F2：合成资产（本负控要的是「声明齐备」的受控形态）⇒ 单点写入。
+  writeSyntheticTeam(teamsRoot, team, {
     team,
     manifest: { version: 3, requires_engine: '>=0.4.4', hash: 'unhashed', source: 'B2 lane e1 负控夹具（声明齐备）' },
     layers: {
@@ -388,7 +388,7 @@ test('B2 负控：团队资产声明齐备 ⇒ 零首触事件（判定逐字不
     },
     // 【2026-09-18 清债】本负控夹具**不含**顶层 `state_machine`——该键已退役（零运行期消费者 ⇒ 声明即拒
     //   `TEAM_ASSET_FIELD_NOT_ALLOWED`）；负控以「声明齐备」为前提，含退役键会先吃 blocking、干扰判据。
-  }, null, 2), 'utf8');
+  }, { filename: 'team-asset.yml' });
   clearFlowCache();
   // 前置：临时团队资产必须**可解析**（不可解析 ⇒ flows=null ⇒ 退化为「未声明」侧，本负控即失效）
   const resolved = resolveTeamFlows(team, { root: teamsRoot });

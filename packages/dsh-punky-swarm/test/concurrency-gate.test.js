@@ -34,6 +34,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 跑法（**禁** build 前置）：`node --import ./test/helpers/isolated-home.preload.mjs --test test/concurrency-gate.test.js`
 // ─────────────────────────────────────────────────────────────────────────────
 import test from 'node:test';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -252,9 +253,8 @@ test('T5【退役锁 · Q-B】leader-direct 批零限流（与 assembly.managerP
  *  ⚠ 退役后 `chain` 段**不参与任何运行期决策**，本夹具保留它以自证「带 `chain` 段的批照常建批、照常零推进」。 */
 function seedChainBatch(root, sid, batchId, opts = {}) {
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-cg-teams-'));
-  const dir = path.join(teamsRoot, 'presets', TEAM_CG);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(TEAM_ASSET_CG, null, 2), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(teamsRoot, TEAM_CG, TEAM_ASSET_CG);
   const store = createStore(root);
   const artRoot = path.join(root, 'sessions', sid, 'artifacts', batchId);
   fs.mkdirSync(path.join(artRoot, 'plan'), { recursive: true });

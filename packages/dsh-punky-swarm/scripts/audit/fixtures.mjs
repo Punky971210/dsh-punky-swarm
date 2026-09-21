@@ -173,14 +173,28 @@ function scanDuplicateLocals(testFiles) {
 }
 
 /** 自建团队资产（②/③ 混合面）：哪些测试文件自己写 team-asset / 临时 team 目录。 */
+/**
+ * 团队资产写入面分类（F2 台账，2026-09-21）：
+ *   · `真实骨架` = 走 `team-fixture.mjs#writeTempTeam` / `writeRealTeam`（骨架 ≡ 包内真实资产）
+ *   · `合成`     = 走 `writeSyntheticTeam`（调用方自写层/流程 ⇒ 已显式标注为自造）
+ *   · `直接写`   = 仍 `writeFileSync('team-asset.…')` ⇒ 只应出现在 **loader/边界白名单**（5 文件）
+ *   · `本地 teamAsset()` = 收敛前的内联手写资产（F2 目标为 0）
+ * 判据与 `test/fixture-team-ledger.test.js` 同源（那里是**强制**面，本处只出人读骨架）。
+ */
 function scanLocalTeamAssets(testFiles) {
   const out = [];
   for (const tf of testFiles) {
     const t = read(path.join(ROOT, tf));
     const marks = [];
-    if (/writeTempTeam/.test(t)) marks.push('writeTempTeam');
-    if (/team-asset\.(yml|json)/.test(t) && /writeFileSync/.test(t)) marks.push('写 team-asset');
-    if (/function\s+(teamAsset|makeTeam|tempTeam)\b/.test(t)) marks.push('本地 teamAsset()');
+    if (/writeTempTeam\s*\(|writeRealTeam\s*\(/.test(t)) marks.push('真实骨架');
+    if (/writeSyntheticTeam\s*\(/.test(t)) marks.push('合成');
+      const lines = t.split('\n');
+    // 豁免判据文件自身（其文档串与判据行含 `writeFileSync('team-asset.…')` 字面量 ⇒ 自指命中）
+    if (tf !== 'test/fixture-team-ledger.test.js'
+      && lines.some((l) => /(writeFileSync|copyFileSync|appendFileSync)/.test(l) && l.includes('team-asset.'))) {
+      marks.push('直接写');
+    }
+    if (/function\s+(teamAsset|makeTeam|tempTeam)\s*\(/.test(t)) marks.push('本地 teamAsset()');
     if (marks.length) out.push({ file: tf, marks });
   }
   return out;
@@ -288,11 +302,19 @@ L.push('| 函数名 | 定义处数 | 文件 |');
 L.push('|---|---|---|');
 for (const d of dups) L.push('| `' + d.name + '` | ' + d.files.length + ' | ' + d.files.join(', ') + ' |');
 L.push('');
-L.push('## E. 自建团队资产（②/③ 混合面）');
+L.push('## E. 团队资产写入面（F2：单点 + 显式白名单）');
+L.push('');
+L.push('写入面 = `test/helpers/team-fixture.mjs`（`writeTempTeam` 真实骨架 / `writeSyntheticTeam` 合成）；');
+L.push('仍**直接写** `team-asset.*` 的只允许是 loader/边界自测族（须带 `【F2 白名单】` 标记）。');
 L.push('');
 L.push('| 测试文件 | 形态 |');
 L.push('|---|---|');
 for (const r of locals) L.push('| `' + r.file + '` | ' + r.marks.join(' + ') + ' |');
+L.push('');
+const directWriters = locals.filter((r) => r.marks.includes('直接写'));
+L.push('· 直接写 ' + directWriters.length + ' 个文件（期望 = 白名单 5：`team-asset.test` / `team-asset-snapshot` / `team-assets-fill` / `teams-root` / `writing-team-asset`）');
+L.push('· 本地 `teamAsset()` 定义 ' + locals.filter((r) => r.marks.includes('本地 teamAsset()')).length + ' 个文件（期望 0）');
+L.push('· 强制面：`test/fixture-team-ledger.test.js`（双向断言，违反 ⇒ 红）');
 L.push('');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -301,4 +323,7 @@ console.log('[fixtures] 骨架已写入 ' + path.relative(ROOT, SKELETON));
 console.log('[fixtures] 夹具 API ' + apis.length + ' · 桩分支（shape）' + stubs.filter((x) => x.kind === 'shape').length
   + ' / 附注（note）' + stubs.filter((x) => x.kind === 'note').length
   + ' · 技能空壳 ' + shells.shell + '/' + (shells.real + shells.shell)
-  + ' · 重复函数候选 ' + dups.length + ' · 自建团队资产文件 ' + locals.length);
+  + ' · 重复函数候选 ' + dups.length
+  + ' · 团队资产写入面 ' + locals.length + ' 文件（真实骨架 ' + locals.filter((r) => r.marks.includes('真实骨架')).length
+  + ' / 合成 ' + locals.filter((r) => r.marks.includes('合成')).length
+  + ' / 直接写 ' + locals.filter((r) => r.marks.includes('直接写')).length + '）');

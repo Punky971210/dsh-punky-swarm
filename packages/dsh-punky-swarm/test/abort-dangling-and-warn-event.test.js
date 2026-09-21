@@ -52,10 +52,9 @@ import { createTools } from '../lib/tools/register.js';
 import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC, seedArtifacts } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
-const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); // cwd 无关
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 const SESS_ID = 'sess-s3b';
 const SESS = { agent: { session: { id: SESS_ID } } };
 const DANGLING_EVT = EVT.EVT_BATCH_ABORT_DANGLING ?? 'batch.abort_dangling';
@@ -210,18 +209,6 @@ test('S3b-3b 回归锁：running / paused 相位不落 batch.abort_dangling（�
   assert.deepEqual(danglingEventsOf(store, 'b-phases2'), [], 'paused 相位不得落告警');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GAP-S9 · (4)(5) 告警事件化按码映射 + 反向锁
-// ═══════════════════════════════════════════════════════════════════════════════
-function writeTempTeam(prefix, team, mutate = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8')); // 复制真实资产骨架（不改仓库内资产）
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return root;
-}
 
 test('S9-1：坏 verdict 团队资产建批 ⇒ 告警事件 type = gate.complete_outcomes_empty（**不是** gate.role_invalid）', async () => {
   const { root, store, byName } = makeHarness('s9empty');

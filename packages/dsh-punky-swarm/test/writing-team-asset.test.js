@@ -209,6 +209,8 @@ test('writing-team A3 牵头运行面：writing-planner 承担 plan 牵头、wri
       const broken = rawAsset('writing-team');
       broken.roles = { ...broken.roles, plan_leads: ['dangling-planner'] };
       fs.mkdirSync(path.join(tmpRoot, 'presets', 'writing-team'), { recursive: true });
+// 【F2 白名单】本文件**故意**直接写 team-asset（loader/边界自测需要造「坏资产 / 缺文件 / 字符串原文」形态，
+//   而 `writeSyntheticTeam` 的形状下限校验会挡住它们）⇒ 登记在 test/fixture-team-ledger.test.js 的白名单内。
       fs.writeFileSync(path.join(tmpRoot, 'presets', 'writing-team', 'team-asset.yml'), JSON.stringify(broken), 'utf8');
       const bad = loadTeamAsset(tmpRoot, 'writing-team');
       // 【R2-3 一致性（2026-09-17 裁决）改语义】原断言 `assert.equal(bad.ok, false, '悬空牵头必须被拒载')`

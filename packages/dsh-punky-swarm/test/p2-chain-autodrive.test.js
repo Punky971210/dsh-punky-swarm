@@ -49,6 +49,7 @@ import {
   __resetLaneHandles, pendingHandles, verifyLaneHandle, issueLaneHandle, LANE_HANDLE_TTL_MS,
 } from '../lib/bridge/lane-handle.js';
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedHostSkills, declaredSkillsOf, seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 const SESSION = 'sess-p2-chain';
@@ -125,13 +126,12 @@ function makeHarness({ chain = chain5(), auditFlow = true, subagents = null } = 
   const ctx = { tools: { register: () => {} }, logger: { info() {}, warn() {}, error() {} } };
   if (subagents) ctx.subagents = subagents;
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-p2chain-teams-'));
-  const dir = path.join(teamsRoot, 'presets', TEAM);
-  fs.mkdirSync(dir, { recursive: true });
   const asset = { team: TEAM, layers: LAYERS, roles: ROLES, flows: flowsOf({ audit: auditFlow }) };
   // `chain: null` = **无 `chain` 声明**（⑤ 向后兼容锁）；缺省 = 五段链。
   //   注：不可用 `chain: undefined` 表达「无链」——解构缺省值会把 `undefined` 还原成缺省链（本文件实测踩过）。
   if (chain !== null) asset.chain = chain;
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(asset, null, 2), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(teamsRoot, TEAM, asset);
   seedHostSkills(declaredSkillsOf(asset), undefined, { stub: true });
   clearRoleCache();
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });

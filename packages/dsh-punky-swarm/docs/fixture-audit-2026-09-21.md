@@ -25,13 +25,13 @@
 
 ## §2 机器证据（`node scripts/audit/fixtures.mjs`）
 
-| 维度 | 实测 |
+| 维度 | 实测（**F2 后**；括号内为 F2 前） |
 |---|---|
-| 夹具 API（`test/helpers/**` 导出） | **23** 个；**④ 死夹具 = 0**（全部有直接消费者 / 显式间接加载 / 模块内自用） |
-| 桩分支线索（②） | **2** 条，均在 `test/helpers/host-skills.mjs`（`phrase` @L29 注释 + `shape` @L57 `fs.existsSync(real) ? 真实 : 造桩`） |
-| **技能空壳率** | 5 个团队资产共声明 **43** 个技能名，其中 **33 个（77%）在包内无真实 `SKILL.md`** ⇒ 夹具为空壳 |
-| 重复夹具候选（③） | **35** 个同名函数跨文件重复定义（≥3 处） |
-| 自建团队资产（②/③ 混合） | **31** 个测试文件自写 team-asset / 临时 team 目录（`writeTempTeam` 6 · 本地 `teamAsset()` 3） |
+| 夹具 API（`test/helpers/**` 导出） | **30** 个（F1 后 24 / 首版 23）；**④ 死夹具 = 0**（全部有直接消费者 / 显式间接加载 / 模块内自用） |
+| 桩分支线索（②） | **shape 1 + note 7**；`shape` 主证据在 `test/helpers/host-skills.mjs`（`fs.existsSync(real) ? 真实 : 造桩`），F1 起该分支**须显式 `{stub:true}`** 才可走 |
+| **技能空壳率** | 5 个团队资产共声明 **43** 个技能名，其中 **33 个（77%）在包内无真实 `SKILL.md`** ⇒ 夹具为空壳（F1 已把「造桩」从缺省改为显式，数量不变而**契约变硬**） |
+| 重复夹具候选（③） | **33** 个同名函数跨文件重复定义（F2 前 35 ⇒ 收敛 `writeTempTeam`×6 + `mkTeam*`×2） |
+| 团队资产写入面（②/③ 混合） | **30** 个测试文件（F2 前 31「自建」口径虚高）⇒ **真实骨架 9 / 合成 19 / 直接写 5（白名单）** |
 
 ### 2.1 ③ 的强度证据（函数体相似度，去空行/注释后按行集合 Jaccard）
 
@@ -42,8 +42,8 @@
 | `fakeCtx` | 6 | 100% | 15 / 15 |
 | `execOf` | 11 | 100% | 13 / 55 |
 | `seed` | 5 | 100% | 10 / 10 |
-| `writeTempTeam` | 6 | 100% | 7 / 15 |
-| `teamAsset` | 3 | 100% | 3 / 3 |
+| `writeTempTeam` | 6 | 100% | ~~7 / 15~~ ⇒ **F2 已收敛为单点**（剩余 1 处 = `gate-techdebt-red` 的命名委托，保留名字以便诊断字符串仍准确） |
+| `teamAsset` | 3 | 100% | ~~3 / 3~~ ⇒ **F2 已收敛**为 `threeTierSyntheticTeam` 单点 |
 | `hb` / `tempRoot` / `settleLane` / `writeArt` / `tasks3` / `invoke` / `batchFileOf` | 3–7 | 100% | 4–10 / 6–21 |
 | `freshRoot` | 16 | 100% | 7 / 120（多数仅弱相似 ⇒ **不可一刀切合并**） |
 | `makeHarness` | 26 | 100% | 2 / 325（同上：同名不同物，禁按名合并） |
@@ -87,21 +87,39 @@
 
 ⇒ 此后**改真实资产的技能名而不同步名单 ⇒ 立刻红**（F1-3），并且「包内副本被误删」也会红（F1-2）。**门禁正向不再是恒真命题。**
 
-### 3.2 ②-B 团队装配夹具：**自建资产与真实资产并存，语义可能漂移**（用户点名项 2）
+### 3.2 ②-B 团队装配夹具：**单点写入 + 显式白名单**（用户点名项 2 · F2 已落地）
 
-**事实**：31 个测试文件自建 team-asset（`writeTempTeam` 6 · 本地 `teamAsset()` 3 · 其余写文件）；另 `withDefaultTeam`（14 文件）默认注入 `team`。
+**首版判读更正（2026-09-21 F2 施工期实测）**
 
-**两层风险**
-1. **语义漂移**：自建资产的 `layers.roles` / `flows.*` 声明与真实 `presets/*/team-asset.yml` 可能不一致 ⇒ 这些套件测的是**自造资产**而非真实资产；而「真实资产能不能过」只有 `team-assets-fill` 等少数套件在测（且它的 A1/A2 用真实资产 ✓）。
-2. **门禁遮蔽**：`withDefaultTeam` 注入 `team` ⇒ 「`team` 必填」门禁在 14 个套件里不可见（该门禁另有专项套件测 ✓，故非缺口，但**适用面须受纪律约束**）。
-
-**处置建议（分层，不做一刀切）**
-
-| 分层 | 判据 | 处置 |
+| 首版说法 | 实测 | 更正 |
 |---|---|---|
-| 命题 = **装配语义** | 被测面涉及 `layers` / `roles` / `flows` / `cmd` 前缀 / 装配快照 | **必须用真实资产**（`presets/**` + `seedTeamAssetSkills`）；自建资产一律改判 |
-| 命题 = **与装配无关**（建批只是手段） | 被测面是别的门禁（handoff / complete / 相位 …） | 允许最小自建资产，但**收敛到单一 helper**（新增 `test/helpers/team-fixture.mjs#writeTempTeam`），禁各文件再抄 |
-| `withDefaultTeam` | 只用於「建批是手段」的套件 | 保留；在台账登记**允许名单**（避免「断言 team 必填」的套件误用） |
+| 「31 个测试文件**自建** team-asset」 | 真正**写** team-asset 文件的 = **29** 个；其中 12 个用**真实资产骨架**（`writeTempTeam` 6 + `mkTeam*` 2 + 就地 mutate 2 + 其它），剩 17 个为**合成**（手写 `{team, layers, roles, flows, chain}`） | 计数虚高：首版把「**装配（assembly）**夹具」（`validateAssembly` / `DEFAULT_ASSEMBLY` / `BASE_ASSEMBLY`）也算入团队资产 ⇒ 二者是**不同子系统**（`lib/assembly.js` vs `lib/assembly/team-asset.js`） |
+| `writeTempTeam` 属「自建资产」 | 它**本来就用真实资产骨架**（`SRC_ASSET = presets/software-team/team-asset.yml`，拷到临时根再 mutate） | 不是漂移风险；真问题是**6 份逐字重复**（③ 类） |
+| 真漂移风险 = 自建资产本身 | 真漂移风险 = ① **骨架被悄悄改小/改歪**（无从核对）+ ② **合成资产冒充真实资产**（看不出自造） | 处置改为「**保真可核 + 自造显式**」，见下 |
+
+**F2 落地（2026-09-21，`test/**` 内，`lib/**` 零 diff）**
+
+1. **单点写入面** `test/helpers/team-fixture.mjs`：
+   - `writeTempTeam(prefix, team, mutate, {srcTeam, setTeam})` —— **真实骨架**（读包内真实资产 → 临时根落盘；`setTeam` 缺省 false ⇒ 零行为变更，见 helper 注释）
+   - `writeRealTeam(root, team, mutate, opts)` —— 同上但不自建 `%TEMP%`（根由调用方给）
+   - `writeSyntheticTeam(root, team, asset, {filename})` —— **合成资产**（名字自带「这是自造的」语义）；含**形状下限校验**（团队名非空 / `layers` 非空对象 / 每层 `roles` 非空且 `skills` 为对象）⇒ fail-fast 挡手滑
+   - `threeTierSyntheticTeam(team)` —— 最小三层合成模板（收敛 3 份逐字相同的本地 `teamAsset()`）
+2. **收敛**：29 个写入者 → **全部走单点**；`直接写` 只剩 **5 个 loader/边界自测文件**。
+3. **强制面** `test/fixture-team-ledger.test.js`（8 条）：
+   - **双向**：`直接写` 集合 ≡ 白名单（新增直接写 ⇒ 红）
+   - **显式**：白名单文件必须带 `【F2 白名单】` 标记（登记 = 被审阅过的决定，不是沉默）
+   - **理由自证**：`writeSyntheticTeam` 确实拒绝「坏 JSON / 空层 / 空 roles / 缺 skills」⇒ 白名单确有其事
+   - **骨架保真**：`writeTempTeam` 未 mutate 的产物 **deepEqual** 包内真实资产 ⇒ 骨架被改小即红
+   - **`withDefaultTeam` 允许名单**（14 文件，双向）+ 「断言 team 必填的套件不得经过它」
+4. 实测收敛效果：`fixtures.mjs` 重复函数候选 **35 → 33**、团队资产写入面 **31 → 30 文件（真实骨架 9 / 合成 19 / 直接写 5）**、本地 `teamAsset()` 定义 **3 → 0**。
+
+**两层风险与现在的处置**
+
+| 层 | 首版风险描述 | F2 后的处置 |
+|---|---|---|
+| 骨架漂移 | 自建资产与真实资产可能不一致 | **可核**：真实骨架类走 `writeTempTeam`，`F2-4` 断言其产物 ≡ 包内真实资产 |
+| 合成资产混入 | 看不出哪些是自造 | **显式**：合成类必须走 `writeSyntheticTeam`（名字即标注），并在骨架 §E 按形态分类列出 |
+| 门禁遮蔽 | `withDefaultTeam` 注入 `team` ⇒ 「`team` 必填」门禁在 14 个套件里不可见 | **台账化**：`F2-6`/`F2-7` 双向锁允许名单（该门禁另有专项套件覆盖 ✓） |
 
 ### 3.3 ③ 重复夹具：156 对高相似（可合并）
 
@@ -133,7 +151,7 @@
 | 片 | 内容 | 前置 | 验收 |
 |---|---|---|---|
 | **F1** | ②-A 空壳显式化：`HOST_ONLY_SKILLS` 名单 + 抛错分支 + 双向断言 | 无（可先行） | 全量**非环境类 fail = 0**；新名单与资产声明**双向相等**断言绿 |
-| **F2** | ②-B 团队夹具分层：新增 `team-fixture.mjs#writeTempTeam` 单点；「装配语义」类套件改用真实资产 | F1（若同时改资产读端） | 同上；`fixtures.mjs` 重复候选数下降并 `--accept` 基线 |
+| **F2** | ②-B 团队资产写入面单点化 + 显式白名单（`team-fixture.mjs`：`writeTempTeam`/`writeRealTeam`/`writeSyntheticTeam`/`threeTierSyntheticTeam`）+ `fixture-team-ledger.test.js` 强制面 | F1 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；`fixtures.mjs` 重复候选 35→**33**、写入面 31→**30 文件（骨架 9 / 合成 19 / 直接写 5）**；`--accept` 基线已更新 |
 | **F3** | ③ 必合档收敛（11 个函数） | 无 | 同上；相似度表重跑后「必合档」清零 |
 | **F4** | ③ 选合档 + 改名消歧 | F3 | 同上 |
 | **F5** | 门禁正向补测：以真实资产名驱动技能解析（替代空壳恒真） | F1 | 新增「资产技能名 ↔ 宿主技能根」正向用例（可用 `HOST_ONLY_SKILLS` 作声明面） |
@@ -142,7 +160,8 @@
 
 ## §5 覆盖边界（诚实声明）
 
-1. 本扫描器**判不了**：夹具「语义是否与生产面一致」（那需要人工逐条比对资产/流程声明）——本台账 §3.2 的分层建议属人工判读。
+1. 本扫描器**判不了**：夹具「语义是否与生产面一致」（那需要人工逐条比对资产/流程声明）。§3.2 的 F2 处置只解决了**可核**（骨架保真断言）与**显式**（合成资产标注）两件事，「这份合成声明的语义对不对」仍只能人工判读。
 2. 相似度是**行集合 Jaccard**（去空行/注释），噪声敏感：短函数（<10 行）易虚高、长函数易虚低。⇒ 只作**排序线索**，合并前必须人眼 diff。
 3. 「桩分支」检测靠字面短语 + `existsSync`/`writeFileSync` 形态窗口 ⇒ **可能有漏网**（例如桩写在另一函数里）。已知边界：本仓当前仅命中 `host-skills.mjs`。
 4. 未评估**测试运行时长 / 资源占用**（夹具的内存/IO 成本）—— 本工序只查语义与冗余。
+5. **「直接写 team-asset」的判据是同一行明文匹配**（写调用 + `team-asset.<ext>`）⇒ **多行书写的调用可绕过**。本仓当前无此形态；强制面见 `test/fixture-team-ledger.test.js`（那里的边界同样如实写在注释里）。另：判据用带点的 `team-asset.` 以避开目录名 `sessions/…/team-assets` 的误命中。

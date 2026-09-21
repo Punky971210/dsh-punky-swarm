@@ -43,6 +43,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createGates, detectPendingMarker } from '../lib/state/gates.js';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { loadVocabulary, VOCABULARY_REL } from '../lib/state/vocabulary.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,12 +67,13 @@ function mkPkg() {
   return p;
 }
 
-/** 团队资产（形态与 `test/gate-flows.test.js#writeTeamFlow` 逐字同构 ⇒ 保证资产校验通过）。 */
+/** 团队资产（形态与 `test/gate-flows.test.js#writeTeamFlow` 同构 ⇒ 保证资产校验通过；F2 起二者共用单点）。 */
 function writeTeam(pkg, team, flows) {
-  const dir = path.join(pkg, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = { team, layers: { plan: { roles: ['designer'], skills: { designer: ['dev-designer'] } } }, flows };
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset), 'utf8');
+  return writeSyntheticTeam(pkg, team, {
+    team,
+    layers: { plan: { roles: ['designer'], skills: { designer: ['dev-designer'] } } },
+    flows,
+  }, { filename: 'team-asset.yml' });
 }
 
 /** 词表夹具（落**临时包根**，绝不写包内交付物）。`entries` 为本用例私有。 */

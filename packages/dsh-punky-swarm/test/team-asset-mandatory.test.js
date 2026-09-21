@@ -43,6 +43,7 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { loadTeamAsset, unwiredDeclarationsOf, UNWIRED_DECLARATIONS } from '../lib/assembly/team-asset.js';
 import { buildAgentDescriptor } from '../lib/aip/agent-descriptor.js';
@@ -188,8 +189,8 @@ function tmpAssetWithSkills(skills) {
 
 function mkTeamsRoot(asset) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-ta-mand-teams-'));
-  fs.mkdirSync(path.join(root, 'presets', 'ta-mand-team'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'presets', 'ta-mand-team', 'team-asset.json'), JSON.stringify(asset), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(root, 'ta-mand-team', asset);
   return root;
 }
 

@@ -48,6 +48,7 @@ import { chainOfBatch } from '../lib/assembly/chain.js';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { EVT_MEMBER_SETTLED, EVT_CHAIN_STEP } from '../lib/state/event-types.js';
 import { seedArtifacts, runLane } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import * as mailbox from '../lib/comms/mailbox.js';
 import { createLaneHeartbeat } from '../lib/watch/lane-heartbeat.js';
 
@@ -89,9 +90,8 @@ const WAVEPLAN = [{
 function mkHarness() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-replay-root-'));
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-replay-teams-'));
-  const dir = path.join(teamsRoot, 'presets', TEAM);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(asset, null, 2), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(teamsRoot, TEAM, asset);
   clearRoleCache();
   const store = createStore(root);
   return { root, store, teamsRoot, ctx: { logger: { info() {}, warn() {}, error() {} } } };

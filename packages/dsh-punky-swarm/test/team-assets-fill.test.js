@@ -261,6 +261,8 @@ test('A3 反例：牵头角色悬空（不在该层/任一层）→ TEAM_ASSET_L
     const broken = rawAsset('design-team');
     broken.roles = { ...broken.roles, plan_leads: ['dangling-planner'] };
     fs.mkdirSync(path.join(tmpRoot, 'presets', 'design-team'), { recursive: true });
+// 【F2 白名单】本文件**故意**直接写 team-asset（loader/边界自测需要造「坏资产 / 缺文件 / 字符串原文」形态，
+//   而 `writeSyntheticTeam` 的形状下限校验会挡住它们）⇒ 登记在 test/fixture-team-ledger.test.js 的白名单内。
     fs.writeFileSync(path.join(tmpRoot, 'presets', 'design-team', 'team-asset.yml'), JSON.stringify(broken), 'utf8');
     const r = loadTeamAsset(tmpRoot, 'design-team');
     // 【R2-3 一致性（2026-09-17）改语义】原断言 `assert.equal(r.ok, false, '悬空牵头必须被拒载')` 随新语义

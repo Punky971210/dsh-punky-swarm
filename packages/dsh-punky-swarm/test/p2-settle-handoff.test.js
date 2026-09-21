@@ -38,6 +38,7 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam, threeTierSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 import { schemaViolations } from './helpers/schema-conformance.mjs'; // task-26：schema 一致性校验共享单点
@@ -47,21 +48,6 @@ const SESSION = 'sess-p2-settle';
 const SESS = { agent: { session: { id: SESSION } } };
 const TEAM = 'p2-settle-team';
 
-function teamAsset() {
-  return {
-    team: TEAM,
-    layers: {
-      plan: { roles: ['designer'], skills: { designer: ['dev-designer'] } },
-      exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
-      audit: { roles: ['reviewer'], skills: { reviewer: ['report-blind-audit'] } },
-    },
-    flows: {
-      plan: { produce_field: 'produce', entry_requires: [] },
-      exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
-      audit: { produce_field: 'produce', entry_requires: ['consume'], audit_contract: { criteria_from: 'plan/**', verdict: ['pass', 'fail', 'skip'] } },
-    },
-  };
-}
 
 /** DAG：p1 → e1 → e2（e1 有下游 e2；e2 的下游是 a1）。 */
 function tasksChain() {
@@ -87,10 +73,9 @@ function tasksNoDownstream() {
 function makeHarness() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-p2settle-'));
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-p2settle-teams-'));
-  const dir = path.join(teamsRoot, 'presets', TEAM);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(teamAsset(), null, 2), 'utf8');
-  seedHostSkills(declaredSkillsOf(teamAsset()), undefined, { stub: true });
+  // F2：合成资产（最小三层）⇒ 走单点写入（'helpers/team-fixture.mjs'）。
+  writeSyntheticTeam(teamsRoot, TEAM, threeTierSyntheticTeam(TEAM));
+  seedHostSkills(declaredSkillsOf(threeTierSyntheticTeam(TEAM)), undefined, { stub: true });
   // 【task-27 纪律】测试**不得依赖 ambient env**：本套件用 env 择入开启态，而宿主/父进程可能已带
   //   `PSWARM_HANDOFF_GATE=1`（实测本机即如此）⇒ 不中和会让「以为门关」的派发步骤被 entry 门拦下。
   //   故此处保存并清除，`cleanup` 还原（进程级 env 归零，语义完全由本套件控制）。

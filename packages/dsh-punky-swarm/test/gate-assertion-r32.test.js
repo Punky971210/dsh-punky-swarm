@@ -49,6 +49,7 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
+import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedHostSkills, declaredSkillsOf, seedTeamAssetSkills } from './helpers/host-skills.mjs';
 import * as EVT from '../lib/state/event-types.js';
 
@@ -63,7 +64,6 @@ const PROBE = 'probe-team';
 const SETTLE_TEAM = 'r32-settle-team';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 
 // ── 夹具 ─────────────────────────────────────────────────────────────────────
 
@@ -71,15 +71,6 @@ const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
  * 写一份临时团队资产：以包内 `software-team` 资产为骨架，按 `mutate` 改一处；返回 teamsRoot。
  * 骨架法（而非手搓资产）保证「除被检面外全部合规」⇒ 拒因可**归因**到唯一改动点。
  */
-function writeTempTeam(prefix, team, mutate = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8'));
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return root;
-}
 
 /** 最小三层资产（出口交接门用例专用）：exec `e1` 有下游 `a1` ⇒ 该 lane 结算受出口门约束。 */
 function settleTeamAsset() {
@@ -280,9 +271,8 @@ test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 
   const h = makeHarness();
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-r32-settle-'));
   try {
-    const dir = path.join(teamsRoot, 'presets', SETTLE_TEAM);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(settleTeamAsset(), null, 2), 'utf8');
+    // F2：合成资产（本用例要的是「无 chain / 简化 flows」的受控形态）⇒ 走单点写入。
+    writeSyntheticTeam(teamsRoot, SETTLE_TEAM, settleTeamAsset());
     seedHostSkills(declaredSkillsOf(settleTeamAsset()), undefined, { stub: true });
 
     await h.byName.wave_plan.execute({

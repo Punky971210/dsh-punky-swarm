@@ -100,6 +100,8 @@ function mkTeamsRoot(team, asset, { writeFile = true } = {}) {
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-troot-teams-'));
   if (team) fs.mkdirSync(path.join(teamsRoot, 'presets', team), { recursive: true });
   if (writeFile && asset !== null) {
+// 【F2 白名单】本文件**故意**直接写 team-asset（loader/边界自测需要造「坏资产 / 缺文件 / 字符串原文」形态，
+//   而 `writeSyntheticTeam` 的形状下限校验会挡住它们）⇒ 登记在 test/fixture-team-ledger.test.js 的白名单内。
     fs.writeFileSync(path.join(teamsRoot, 'presets', team, 'team-asset.json'), typeof asset === 'string' ? asset : JSON.stringify(asset), 'utf8');
   }
   return teamsRoot;

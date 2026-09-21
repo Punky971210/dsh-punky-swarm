@@ -56,6 +56,7 @@ import { resolveTeamFlows } from '../lib/assembly/flows.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 // 【P1 同步 · 宿主技能根】工具面建批用例走 `team:'software-team'` ⇒ 其声明技能必须**可解析**
@@ -63,7 +64,6 @@ import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 seedTeamAssetSkills('software-team');
 
 const PKG = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 
 // ── 【r2 改写】createdAt 两极：**只用于证伪 legacy 分支残留**（非「旧批保护」） ──
 // 用户裁决：旧批一律废弃、新代码不得有 legacy 分支 ⇒ 两极结论必须逐字相同。
@@ -104,16 +104,6 @@ function writeBatchFile(batch) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, JSON.stringify(batch), 'utf8');
   return abs;
-}
-// 临时团队资产：以包内 software-team 为骨架改一处（只读源资产，写入自建 %TEMP% 根）
-function mkTeam(team, mutate = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gate-red-team-'));
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8'));
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return root;
 }
 // 前置自检：临时团队资产必须真的被加载（否则「豁免」会伪装成「资产加载失败 ⇒ 回落 legacy」）
 function assertTeamLoads(teamRoot, team, check) {
@@ -312,7 +302,7 @@ test('T11 免检路径不可达：空/缺声明全排列扫描（任何一条 ok
     }
   }
   // (2) exec consume 空/缺 × 团队声明形态（含未声明 entry_requires 的团队）
-  const noEntryRoot = mkTeam('t11-no-entry', (a) => {
+  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't11-no-entry', (a) => {
     a.team = 't11-no-entry';
     delete a.flows.exec.entry_requires;
   });
@@ -457,7 +447,7 @@ test('T17 团队声明 entry_requires:[consume] + lane consume 为空 ⇒ 拒派
 });
 
 test('T18 团队未声明 entry_requires（或 flows:null）+ lane consume 为空 ⇒ 仍必须拒（consume 强制不依赖团队声明）', (t) => {
-  const noEntryRoot = mkTeam('t18-no-entry', (a) => {
+  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't18-no-entry', (a) => {
     a.team = 't18-no-entry';
     delete a.flows.exec.entry_requires;
   });
@@ -692,7 +682,7 @@ test('T33 【r2 新增 / R-33】A1 建批期主防线**无法覆盖的漂移面*
 
 test('T23 standalone 不得自声明即放行（布尔/理由/上游事实核验/留痕四判据）', (t) => {
   // (a) 字符串 'true' 不认（在「未声明 entry_requires」团队上构造，使该分支真正可达）
-  const noEntryRoot = mkTeam('t23-no-entry', (a) => {
+  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't23-no-entry', (a) => {
     a.team = 't23-no-entry';
     delete a.flows.exec.entry_requires;
   });
@@ -739,7 +729,7 @@ test('T23 standalone 不得自声明即放行（布尔/理由/上游事实核验
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('T24 produce_field 取非 legacy 值（exec: outputs→produce）正负双向用例', (t) => {
-  const teamRoot = mkTeam('t24-pf', (a) => {
+  const teamRoot = writeTempTeam('punky-gate-red-team-', 't24-pf', (a) => {
     a.team = 't24-pf';
     a.flows.exec.produce_field = 'produce'; // legacy for exec = 'outputs' ⇒ 非 legacy 值
   });

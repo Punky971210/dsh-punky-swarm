@@ -48,6 +48,7 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan, assemblyGate } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 工具面建批用例须给**有资产**的团队；
@@ -92,7 +93,6 @@ const HISTORIC_EVENT_NAMES = [
 //   任何 `process.cwd()` 相关的夹具路径都会在产物根下 ENOENT ⇒ 一律以本文件位置解析。
 //   （驱动：A-② lane e2 的 gate 命令 GATE_EXIT_NONZERO 返工；仓库根运行行为逐字不变。）
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_ASSET = path.join(PKG_ROOT, 'presets', 'software-team', 'team-asset.yml');
 
 // ── 基础工具 ──
 const fixturesWritten = new Set(); // 已成功落盘的夹具批（供前置自检）
@@ -208,14 +208,8 @@ function mkRunning(bid, laneIds) {
 }
 /* 临时团队资产（自建根；以包内 software-team 为骨架改一处）*/
 function mkTeamRoot(team, mutate) {
-  const tp = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-techdebt-team-'));
-  const dir = path.join(tp, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8'));
-  asset.team = team;
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return tp;
+  // F2：单点委托——真实骨架 + `asset.team` 同步（见 helpers/team-fixture.mjs#writeTempTeam）。
+  return writeTempTeam('punky-techdebt-team-', team, (a) => { a.team = team; mutate(a); }, { setTeam: true });
 }
 
 // ── 治理面夹具 ──

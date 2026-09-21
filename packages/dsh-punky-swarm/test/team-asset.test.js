@@ -232,6 +232,8 @@ test('B-3 旧泛键标废：`flows.audit.contract` 声明 ⇒ 拒载 CONTRACT_LE
   // 拒载传导（读盘面）：同一份声明落成磁盘资产 ⇒ `loadTeamAsset().ok === false` + 其他问题码原样透出
   const root = tmpRoot();
   try {
+// 【F2 白名单】本文件**故意**直接写 team-asset（loader/边界自测需要造「坏资产 / 缺文件 / 字符串原文」形态，
+//   而 `writeSyntheticTeam` 的形状下限校验会挡住它们）⇒ 登记在 test/fixture-team-ledger.test.js 的白名单内。
     writeFileSync(join(root, 'presets', 'demo', 'team-asset.yml'), JSON.stringify(a), 'utf8');
     const r = loadTeamAsset(root, 'demo');
     assert.equal(r.ok, false, 'B-3：loadTeamAsset 声明旧泛键 ⇒ 拒载');

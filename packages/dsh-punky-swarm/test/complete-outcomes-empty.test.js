@@ -51,10 +51,9 @@ import { clearFlowCache } from '../lib/assembly/flows.js';
 import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
+import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
-const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); // cwd 无关
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 const SESS_ID = 'sess-s2';
 const SESS = { agent: { session: { id: SESS_ID } } };
 const CODE = 'GATE_COMPLETE_OUTCOMES_EMPTY';
@@ -75,13 +74,8 @@ function mkRoots() {
 }
 
 function writeTeamFlow(pkg, team, flows) {
-  fs.mkdirSync(path.join(pkg, 'presets', team), { recursive: true });
-  const asset = {
-    team,
-    layers: { plan: { roles: ['designer'], skills: { designer: ['spec-writing'] } } },
-    flows,
-  };
-  fs.writeFileSync(path.join(pkg, 'presets', team, 'team-asset.yml'), JSON.stringify(asset), 'utf8');
+  // F2：合成资产 ⇒ 走单点（显式标注为自造；本文件测的是 `createGates` 直读临时资产的门禁面）。
+  return writeSyntheticTeam(pkg, team, { team, layers: { plan: { roles: ['designer'], skills: { designer: ['spec-writing'] } } }, flows }, { filename: 'team-asset.yml' });
 }
 
 // wavePlan 持久形态 = [{ tasks }]（事实源：lib/state/task-utils.js 的 `for (const w of batch.wavePlan ?? [])`）
@@ -171,18 +165,6 @@ test('GAP-S2-A3：无 verdict 声明 ⇒ 回落引擎基线 [pass,skip]（放行
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// (4) 建批面：真工具面（wave_plan）告警 —— 正向触发 + 两态反向锁
-// ═══════════════════════════════════════════════════════════════════════════════
-function writeTempTeam(prefix, team, mutate = () => {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  const asset = JSON.parse(fs.readFileSync(SRC_ASSET, 'utf8')); // 复制真实资产骨架（不改仓库内资产）
-  mutate(asset);
-  fs.writeFileSync(path.join(dir, 'team-asset.yml'), JSON.stringify(asset, null, 2), 'utf8');
-  return root;
-}
 
 function makeHarness(tag) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 's2-tool-' + tag + '-'));

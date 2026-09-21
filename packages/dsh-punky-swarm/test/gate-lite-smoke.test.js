@@ -38,6 +38,7 @@ import { createStore } from '../lib/state/store.js';
 import { createGates, smokeOf } from '../lib/state/gates.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 // 临时团队资产以包内 `software-team` 为骨架 ⇒ 其 skills 必须可在宿主技能根解析（P1 起不可解析即拒建批）。
@@ -45,17 +46,8 @@ seedTeamAssetSkills('software-team');
 
 const SESS = { agent: { session: { id: 'sess-smoke' } } };
 const SID = SESS.agent.session.id;
-const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 const PLAIN_TEAM = 'probe-team';
 
-function writeTempTeam(prefix) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', PLAIN_TEAM);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(SRC_ASSET, path.join(dir, 'team-asset.yml'));
-  return root;
-}
 
 function makeHarness(prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -84,7 +76,7 @@ const orphanTasks = () => [{ id: 'probe', layer: 'plan', role: 'designer', produ
 
 test('T1 RED/GREEN：单 lane 冒烟批 smoke:true ⇒ 建批成功；同输入不传 smoke ⇒ 仍拒 GATE_PLAN_PRESENCE_MISSING', async () => {
   const { byName } = makeHarness('punky-smoke-t1-');
-  const teamsRoot = writeTempTeam('punky-smoke-t1-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t1-team-', PLAIN_TEAM);
 
   // 反例（既有语义）：不传 smoke ⇒ 建批被拒，码面逐字不变
   await assert.rejects(
@@ -101,7 +93,7 @@ test('T1 RED/GREEN：单 lane 冒烟批 smoke:true ⇒ 建批成功；同输入�
 
 test('T2 smoke 批跳过建批期 ORPHAN 面（声明产物但无人 consume）；反例仍拒 GATE_ORPHAN_PRODUCT', async () => {
   const { byName } = makeHarness('punky-smoke-t2-');
-  const teamsRoot = writeTempTeam('punky-smoke-t2-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t2-team-', PLAIN_TEAM);
   await assert.rejects(
     () => byName.wave_plan.execute({ batchId: 'smk-orphan-red', team: PLAIN_TEAM, teamsRoot, tasks: orphanTasks() }, SESS),
     /GATE_ORPHAN_PRODUCT/,
@@ -113,7 +105,7 @@ test('T2 smoke 批跳过建批期 ORPHAN 面（声明产物但无人 consume）�
 
 test('T3 留痕：建批落恰好 1 条 batch.smoke 事件；无该事件的批次判 false', async () => {
   const { store, byName } = makeHarness('punky-smoke-t3-');
-  const teamsRoot = writeTempTeam('punky-smoke-t3-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t3-team-', PLAIN_TEAM);
   await byName.wave_plan.execute({ batchId: 'smk-evt', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
   const b = store.readBatch(SID, 'smk-evt');
   const hits = b.events.filter((e) => e.type === EVT.EVT_BATCH_SMOKE);
@@ -128,7 +120,7 @@ test('T3 留痕：建批落恰好 1 条 batch.smoke 事件；无该事件的批�
 
 test('T4 读端可见：batch_status.smoke === true；非 smoke 批不写该键', async () => {
   const { store, byName } = makeHarness('punky-smoke-t4-');
-  const teamsRoot = writeTempTeam('punky-smoke-t4-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t4-team-', PLAIN_TEAM);
   await byName.wave_plan.execute({ batchId: 'smk-view', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
   const smokeView = await byName.batch_status.execute({ batchId: 'smk-view' }, SESS);
   assert.equal(smokeView.smoke, true, 'batch_status 回显 smoke:true（读端可见，不是隐性放行）');
@@ -139,7 +131,7 @@ test('T4 读端可见：batch_status.smoke === true；非 smoke 批不写该键'
 
 test('T5 运行期豁免：smoke 批 plan lane 在 checkExitGate 放行（载荷带 smoke/smokeSkipped）；对照批仍拒 GATE_PLAN_CONTRACT', async () => {
   const { root, store, byName } = makeHarness('punky-smoke-t5-');
-  const teamsRoot = writeTempTeam('punky-smoke-t5-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t5-team-', PLAIN_TEAM);
   await byName.wave_plan.execute({ batchId: 'smk-exit', team: PLAIN_TEAM, teamsRoot, tasks: orphanTasks(), smoke: true }, SESS);
   const gates = createGates(root);
   const smokeBatch = store.readBatch(SID, 'smk-exit');
@@ -157,7 +149,7 @@ test('T5 运行期豁免：smoke 批 plan lane 在 checkExitGate 放行（载荷
 
 test('T6 行为安全门仍在：smoke 批派发未声明 lane ⇒ 仍拒 GATE_LANE_NOT_IN_PLAN', async () => {
   const { root, store, byName } = makeHarness('punky-smoke-t6-');
-  const teamsRoot = writeTempTeam('punky-smoke-t6-team-');
+  const teamsRoot = writeTempTeam('punky-smoke-t6-team-', PLAIN_TEAM);
   await byName.wave_plan.execute({ batchId: 'smk-safety', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
   const gates = createGates(root);
   const b = store.readBatch(SID, 'smk-safety');

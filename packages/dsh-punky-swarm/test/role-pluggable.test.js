@@ -28,13 +28,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { buildWavePlan, collectRoleCompletenessWarnings, normalizeRole, VALID_ROLES, PLAN_LEAD_ROLES, AUDIT_LEAD_ROLES } from '../lib/wave-plan.js';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { resolveTeamRoles, clearRoleCache, packageRoot } from '../lib/assembly/flows.js';
 import { validateTeamAsset, TEAM_ASSET_CODES, loadTeamAsset } from '../lib/assembly/team-asset.js';
 
 function mkPkg(team, roles) {
   const pkg = mkdtempSync(join(tmpdir(), 'roles-pkg-'));
-  mkdirSync(join(pkg, 'presets', team), { recursive: true });
-  writeFileSync(join(pkg, 'presets', team, 'team-asset.yml'), JSON.stringify({
+  // F2：合成资产 ⇒ 单点写入（本套件验的是 `roles` 声明面）。
+  writeSyntheticTeam(pkg, team, {
     team,
     roles,
     layers: {
@@ -43,7 +44,7 @@ function mkPkg(team, roles) {
       audit: { roles: ['fact-checker'], skills: { 'fact-checker': ['report-blind-audit'] } },
     },
     flows: { plan: { produce_field: 'produce' } },
-  }), 'utf8');
+  }, { filename: 'team-asset.yml' });
   return pkg;
 }
 

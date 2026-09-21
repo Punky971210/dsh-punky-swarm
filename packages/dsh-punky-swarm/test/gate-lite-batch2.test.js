@@ -39,12 +39,12 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
+import { writeTempTeam } from './helpers/team-fixture.mjs';
 import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 seedTeamAssetSkills('software-team');
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_ASSET = path.join(PKG, 'presets', 'software-team', 'team-asset.yml');
 const SESS = { agent: { session: { id: 'sess-b2' } } };
 const SID = SESS.agent.session.id;
 
@@ -64,13 +64,6 @@ function makeHarness(prefix, rosterService) {
   return { root, store, byName };
 }
 
-function writeTempTeam(prefix) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const dir = path.join(root, 'presets', 'probe-team');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(SRC_ASSET, path.join(dir, 'team-asset.yml'));
-  return root;
-}
 
 // 三层批（含 audit lane）⇒ assembly 必备 ⇒ `managerPlan` 缺省 `raise` ⇒ 触发 A2 消费点
 const threeTier = () => [
@@ -89,7 +82,7 @@ const rosterService = (names) => ({ listMembers: () => names.map((n, i) => ({ id
 
 test('T1 A2：roster 命中约定名 manager ⇒ inRoster:true 且不落 gap 事件', async () => {
   const { store, byName } = makeHarness('punky-b2-t1-', rosterService(['lead', 'manager']));
-  const teamsRoot = writeTempTeam('punky-b2-t1-team-');
+  const teamsRoot = writeTempTeam('punky-b2-t1-team-', 'probe-team');
   const out = await buildBatch(byName, 'b2-ok', teamsRoot);
   assert.equal(out.managerPlan, 'raise', 'assembly.managerPlan 缺省 raise 随返回值回显');
   assert.equal(out.managerRoster.ok, true);
@@ -103,7 +96,7 @@ test('T1 A2：roster 命中约定名 manager ⇒ inRoster:true 且不落 gap 事
 
 test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.manager_roster_gap（可核事实，非拒态）', async () => {
   const { store, byName } = makeHarness('punky-b2-t2-', rosterService(['lead', 'worker']));
-  const teamsRoot = writeTempTeam('punky-b2-t2-team-');
+  const teamsRoot = writeTempTeam('punky-b2-t2-team-', 'probe-team');
   const out = await buildBatch(byName, 'b2-gap', teamsRoot);
   assert.equal(out.managerRoster.ok, true);
   assert.equal(out.managerRoster.inRoster, false, '无约定名 manager');
@@ -118,7 +111,7 @@ test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.ma
 test('T2b A2 降级：service 不可用 ⇒ service-unavailable（基线态，不落事件）；调用抛错 ⇒ not-a-team-member（异常态，不落事件）', async () => {
   // ① ctx 无 get（非官方宿主 / 单测 mock）：基线态 —— 回显承担可读性，不落批次事件
   const noSvc = makeHarness('punky-b2-t2b1-', undefined);
-  const tr1 = writeTempTeam('punky-b2-t2b1-team-');
+  const tr1 = writeTempTeam('punky-b2-t2b1-team-', 'probe-team');
   const o1 = await buildBatch(noSvc.byName, 'b2-nosvc', tr1);
   assert.equal(o1.managerRoster.ok, false);
   assert.equal(o1.managerRoster.reason, 'service-unavailable');
@@ -126,7 +119,7 @@ test('T2b A2 降级：service 不可用 ⇒ service-unavailable（基线态，�
   // ② service 在册但调用抛错（调用方非 Team 成员）：异常态 —— 回显 reason，同样不落批次事件
   const throwing = { listMembers: () => { throw new Error('not a team member'); } };
   const thr = makeHarness('punky-b2-t2b2-', throwing);
-  const tr2 = writeTempTeam('punky-b2-t2b2-team-');
+  const tr2 = writeTempTeam('punky-b2-t2b2-team-', 'probe-team');
   const o2 = await buildBatch(thr.byName, 'b2-throw', tr2);
   assert.equal(o2.managerRoster.ok, false);
   assert.match(o2.managerRoster.reason, /^not-a-team-member:/);

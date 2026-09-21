@@ -39,6 +39,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createGates } from '../lib/state/gates.js';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearFlowCache, packageRoot, matchGlob, produceFieldOf, entryRequiresOf, globMatchesPath, resolveTeamFlows } from '../lib/assembly/flows.js';
 
 const SESS = 'sess-gf';
@@ -53,13 +54,12 @@ function mkRoots() {
 }
 
 function writeTeamFlow(pkg, team, flows) {
-  mkdirSync(join(pkg, 'presets', team), { recursive: true });
-  const asset = {
+  // F2：合成资产（本套件验的是 **flows 声明面**）⇒ 单点写入。
+  return writeSyntheticTeam(pkg, team, {
     team,
     layers: { plan: { roles: ['designer'], skills: { designer: ['dev-designer'] } } },
     flows,
-  };
-  writeFileSync(join(pkg, 'presets', team, 'team-asset.yml'), JSON.stringify(asset), 'utf8');
+  }, { filename: 'team-asset.yml' });
 }
 
 function writeArtifact(state, batchId, rel, content) {

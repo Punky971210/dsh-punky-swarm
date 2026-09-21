@@ -40,6 +40,7 @@ import { clearRoleCache } from '../lib/assembly/flows.js';
 import { EVT_BATCH_PHASE } from '../lib/state/event-types.js';
 import { AUTO_SETTLE_TRIGGERS, autoSettleLane } from '../lib/engine/auto-settle.js';
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,9 +97,8 @@ function makeHarness({ chain = chainPause(), logs = false } = {}) {
   };
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-pr-teams-'));
   const asset = { team: TEAM, layers: LAYERS, roles: ROLES, flows: FLOWS, chain };
-  const dir = path.join(teamsRoot, 'presets', TEAM);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'team-asset.json'), JSON.stringify(asset, null, 2), 'utf8');
+  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
+  writeSyntheticTeam(teamsRoot, TEAM, asset);
   seedHostSkills(declaredSkillsOf(asset));
   clearRoleCache();
   const cfg = { dispatch: { provider: 'spawn-in-process' } };
