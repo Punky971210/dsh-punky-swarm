@@ -37,7 +37,7 @@ import { laneProgressClear, laneProgressWrite } from './resume.js'; // 断点指
 import { EXEMPT_GATE_CODES, normalizeExemptPayload } from './lane-exempt.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除）
 import { findTask } from './task-utils.js';
-import { buildWavePlan, topoWaves } from '../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化 + 分层/环检测（判据与建批期同源）
+import { buildWavePlan } from '../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化（判据与建批期同源）
 // 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
 // 违规计数纯函数（governance/escalation.js，零依赖纯模块——只 import state/event-types.js，
@@ -384,17 +384,25 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       if (ids.includes(id)) throw new Error('task append rejected: 本次追加内 id 重复 ⇒ ' + id);
       ids.push(id);
     }
+    // ★ 结构性保证（2026-09-21 18:5x 用户裁定）：**引擎不提供成环回路** ⇒ 不做「成环断言」（那属冗余检查）。
+    //   做法：追加任务的 `deps` **只许指向批次内既有任务**——不得指向本次新增的任务、不得自指。
+    //   ⇒ 新增任务之间无边、新增任务只依赖既有 ⇒ **成环在结构上不可能**（无需运行期检测）。
+    //   对比：原实现调 `topoWaves` 判环，属「为不可能发生的状态加禁止性断言」，已按裁定去除。
+    for (const t of list) {
+      const id = String(t.id).trim();
+      const deps = t && Array.isArray(t.deps) ? t.deps : [];
+      for (const d of deps) {
+        if (typeof d !== 'string' || d.trim().length === 0) {
+          throw new Error('task append rejected: deps 元素须为非空字符串（任务 ' + id + '）');
+        }
+        if (!existing.has(d)) {
+          throw new Error('task append rejected: deps 只能指向批次内**既有**任务 ⇒ ' + d
+            + '（不得指向本次新增的任务，亦不得自指；这是「不成环」的**结构性保证**，非断言检查）');
+        }
+      }
+    }
     const baseTasks = (batch.wavePlan ?? []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
     const merged = [...baseTasks, ...list.map((t) => ({ ...t, id: String(t.id).trim() }))];
-    // 环检测（判据同源 = `topoWaves`）：成环/悬空引用时它无法分层 ⇒ 前置拦截并给出可读提示（不静默）。
-    try {
-      // 注：`topoWaves` 返回 `{ waves, order }`（**不是数组**）；成环/悬空引用由它自抛（'cycle detected' / 'unknown id'）。
-      const res = topoWaves(merged);
-      if (!res || !Array.isArray(res.waves) || res.waves.length === 0) throw new Error('topoWaves 返回空');
-    } catch (e) {
-      throw new Error('task append rejected: 合并后的任务图不可分层（deps 成环或引用悬空）⇒ '
-        + ids.join(', ') + '（' + String(e?.message ?? e) + '）');
-    }
     const plan = buildWavePlan({
       batchId, tasks: merged, team: batch.team, concurrency: batch.concurrency ?? 5,
     });

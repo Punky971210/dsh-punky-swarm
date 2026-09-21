@@ -921,9 +921,9 @@
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
-      "asserts": 47,
+      "asserts": 50,
       "blankLines": 24,
-      "lines": 236,
+      "lines": 249,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1177,7 +1177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T05:48:28Z",
+  "generatedAt": "2026-09-21T10:54:58Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1191,10 +1191,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 8303,
+    "asserts": 8306,
     "blankLines": 3896,
     "files": 147,
-    "lines": 43910,
+    "lines": 43923,
     "tautologies": 0,
     "tests": 1700,
     "todos": 4

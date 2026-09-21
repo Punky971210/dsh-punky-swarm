@@ -200,16 +200,29 @@ test('R4-1c-2 只增不改：id 与既有重复 ⇒ 抛**普通错误**（不新
   );
 });
 
-test('R4-1c-3 环检测：deps 成环 ⇒ 抛普通错误（判据与建批期同源 = topoWaves）', () => {
+// 用户裁定（2026-09-21 18:5x）：**引擎不设成环回路** ⇒ 不做「成环断言」（冗余检查）。
+//   结构性保证 = 追加任务的 `deps` 只许指向**既有**任务 ⇒ 新增任务之间无边、只依赖既有 ⇒ 结构上不可能成环。
+//   故本用例断言的是**该结构约束**，而不是「检测到环后拒绝」。
+test('R4-1c-3 不成环 = 结构性保证：deps 只许指向既有任务（不得指向本次新增 / 不得自指）', () => {
   const { store, S } = setup();
   mkBatch(store, S, 'b-cyc', [{ id: 'p1' }]);
+  // ① 指向本次新增的同批 id ⇒ 拒（这类引用是成环的唯一可能入口）
   assert.throws(
     () => store.addPoolTasks(S, 'b-cyc', [
       { id: 'c1', deps: ['c2'] }, { id: 'c2', deps: ['c1'] },
     ]),
-    (e) => /task append rejected: 合并后的任务图不可分层/.test(e.message) && !/GATE_/.test(e.message),
-    '成环须被拦且不带 GATE_ 码',
+    (e) => /deps 只能指向批次内\*\*既有\*\*任务/.test(e.message) && !/GATE_/.test(e.message),
+    '互指须被结构约束拦下（不带 GATE_ 码）',
   );
+  // ② 自指 ⇒ 同样被结构约束拦下
+  assert.throws(
+    () => store.addPoolTasks(S, 'b-cyc', [{ id: 's1', deps: ['s1'] }]),
+    /deps 只能指向批次内\*\*既有\*\*任务/,
+  );
+  // ③ 指向既有任务 ⇒ 放行（正例：依赖既有任务是被允许的唯一形态）
+  const b = store.addPoolTasks(S, 'b-cyc', [{ id: 'ok1', deps: ['p1'] }]);
+  assert.equal(b.lanes.ok1, 'pending');
+  assert.equal(b.handoffs.ok1?.[0]?.from, 'p1');
 });
 
 test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）', () => {
