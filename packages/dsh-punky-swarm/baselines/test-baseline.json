@@ -745,11 +745,11 @@
       "todos": 0
     },
     "test/member-deny-boundary.test.js": {
-      "asserts": 5,
-      "blankLines": 9,
-      "lines": 49,
+      "asserts": 2,
+      "blankLines": 7,
+      "lines": 40,
       "tautologies": 0,
-      "tests": 3,
+      "tests": 1,
       "todos": 0
     },
     "test/member-transition-hint.test.js": {
@@ -977,9 +977,9 @@
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
-      "asserts": 85,
+      "asserts": 78,
       "blankLines": 34,
-      "lines": 416,
+      "lines": 412,
       "tautologies": 0,
       "tests": 24,
       "todos": 0
@@ -1233,7 +1233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T19:47:06Z",
+  "generatedAt": "2026-09-21T19:55:00Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,15 +1244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "N2 批 3 收口：prune-verify 判读更正（DEFAULT_ESCALATION_WINDOW_MS/auditlogStats/sinkFilePath 移出删除清单，恢复为生产/观测在役）",
+  "reason": "批 5 G1：deny/modeGate 子集断言收敛到 SC 精确全集（R41 7 行 + DB-1/DB-3 删）；批 4 五件判定留待裁决（唯一留痕面）",
   "schema": 1,
   "totals": {
-    "asserts": 8185,
-    "blankLines": 3991,
+    "asserts": 8175,
+    "blankLines": 3989,
     "files": 154,
-    "lines": 44056,
+    "lines": 44043,
     "tautologies": 0,
-    "tests": 1713,
+    "tests": 1711,
     "todos": 4
   }
 }

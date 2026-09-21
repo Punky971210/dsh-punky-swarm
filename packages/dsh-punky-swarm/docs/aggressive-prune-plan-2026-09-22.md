@@ -45,3 +45,17 @@
 | 5 | 断言重叠收敛 | 建议过 |
 
 回复「2–5 全过」或逐批口径，即继续。
+
+## §10 批 4/5 判定结论（2026-09-22 03:5x，口径：有同语义门禁/工具 ⇒ 删；核心功能 ⇒ 留待裁决）
+
+**批 4 · 五件零断言事件 —— 全部留下待裁决（无一可删）**：逐码取证写点（\x60store.js\x60:907/913/922/945/1140）判定——
+
+- \x60gate.target_blocked\x60/\x60gate.target.passed\x60 = targets 门（\x60checkTargetsGate\x60）拒侧/过侧**唯一持久留痕**（payload 携 code/missing/unchanged；throw 只进调用方响应不留盘）；门禁本体在役核心。
+
+- \x60gate.exit_blocked\x60 = command 门拒侧留痕（含 command/exitCode/escalation 转人工路径）；\x60gate.needhuman_blocked\x60 = merged 面人工闸缺证据拒侧留痕。均无同语义覆盖（\x60gate.exit_missing\x60 只覆盖 exit 形状门）。
+
+- \x60gate.manager_missing\x60 = complete 期「按声明 raise 且 batch.manager 未登记」收口告警。与 \x60gate.manager_roster_gap\x60（建批期 roster 面判定）**同意图但异源异时互补**（legacy 登记面 vs roster 成员面），非完全同语义 ⇒ 保守留。
+
+**建议**：五件按 R3g 方向**补 5 条断言**（对齐 exit gate 断言强度，成本极低）；不删。
+
+**批 5 · G1 ✅ 已执行删除**：R41 deny/modeGate 成员性与长度断言 7 行 + DB-1/DB-3 整用例删——全部被 SC-1/SC-2 精确全集 deepEqual 蕴含（同语义就删）；保留 DB-2（deny→toolFilter 落地面，SC 无此维度）与 R41 计数锁（总数 36，SC 无全名集 deepEqual）。**G2 阴性关闭**：\x60tool-schema-conformance TSC-1\x60 守 \x60CASES\x60 覆盖图键集，SC-4 守注册表权威——分工不同非重叠，无可删。

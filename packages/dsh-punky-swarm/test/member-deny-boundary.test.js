@@ -21,28 +21,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   背景（为何 deny 是唯一落实点）：宿主 `maxDepth` 判据是 `childDepth > maxDepth`
 //   （`dsh-subagent/lib/index.js:432-436`），我们传的 `maxDepth:1` 只约束「创建该子会话」，
 //   不约束子会话再派（它再派时用自己那层的 `tool-subagent` 配置，preset 未设 ⇒ 宿主默认 3）。
+// 【批 5 · G1（2026-09-22 用户裁定「同语义就删」）】原 DB-1（deny 含 subagent*/subagent_fork 成员性）与
+//   DB-3（leaked 普通工具/MCP 零泄漏 + length>=13）已删——均被 suite-consistency SC-1 的**精确全集 deepEqual**
+//   （FROZEN_DENY 20 项）蕴含 ⇒ 单一权威在 SC，本处只保留 SC 覆盖不到的唯一维度：DB-2 **deny → toolFilter
+//   落地面**（deny 常量必须真正经 buildStartRequest 进 worker 请求载荷，不是只写在常量里）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SUITE_DENY_TOOLS, buildStartRequest } from '../lib/engine/dispatch.js';
+import { buildStartRequest } from '../lib/engine/dispatch.js';
 
 const DISPATCH_TOOLS = ['subagent', 'subagent_fork'];
-
-test('DB-1 成员 deny 列表必须含 subagent / subagent_fork（禁止成员嵌套派发）', () => {
-  for (const t of DISPATCH_TOOLS) {
-    assert.ok(SUITE_DENY_TOOLS.includes(t), '成员 deny 列表缺失：' + t);
-  }
-});
 
 test('DB-2 上述 deny 必须真正落到 start request 的 toolFilter.deny（不是只写在常量里）', () => {
   const request = buildStartRequest({ batchId: 'b-db', lane: 'l1', parent: { id: 'a' }, prompt: 't' });
   const deny = request.toolFilter.deny;
   for (const t of DISPATCH_TOOLS) assert.ok(deny.includes(t), 'toolFilter.deny 缺失：' + t);
   assert.ok(deny.includes('wave_plan') && deny.includes('assign_check'), '原治理套件项不得丢失');
-});
-
-test('DB-3 边界：deny 列表只收治理/派发套件，**不得**收 MCP 等普通工具（用户口径）', () => {
-  const ordinary = ['read', 'write', 'edit', 'glob', 'grep', 'pwsh', 'bash', 'web_search', 'skill', 'todo_write'];
-  const leaked = SUITE_DENY_TOOLS.filter((t) => t.startsWith('mcp__') || ordinary.includes(t));
-  assert.deepEqual(leaked, [], '不得把 MCP / 普通工具列入成员 deny：' + JSON.stringify(leaked));
-  assert.ok(SUITE_DENY_TOOLS.length >= 13, '补入两件派发工具后应 ≥13 项，实测 ' + SUITE_DENY_TOOLS.length);
 });
