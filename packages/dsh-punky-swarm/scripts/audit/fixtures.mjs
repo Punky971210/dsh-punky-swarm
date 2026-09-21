@@ -101,9 +101,9 @@ function scanFixtureApis() {
 
 /**
  * 桩分支检测（②空壳夹具的机器线索，两路）：
- *   ① 字面短语（`桩` / `placeholder` / `最小 frontmatter` / `否则写` …）
- *   ② **形态**：同一处（±6 行窗口）既查真实资源存在性（`existsSync`）又写文件（`writeFileSync`）
+ *   ① `shape`（**主证据**）：同一处（±6 行窗口）既查真实资源存在性（`existsSync`）又写文件（`writeFileSync`）
  *      ／或写以 `---` 开头的 frontmatter 文本 —— 典型「真资源缺失 ⇒ 造最小桩」分支。
+ *   ② `note`（**附注**，不计入线索数）：注释行里提到桩语义 —— 只作判读参考，避免注释噪声淹没真实分支。
  */
 function scanStubBranches(helperFiles) {
   const out = [];
@@ -111,15 +111,17 @@ function scanStubBranches(helperFiles) {
   for (const hf of helperFiles) {
     const lines = read(path.join(ROOT, hf)).split('\n');
     lines.forEach((l, i) => {
-      if (PHRASES.test(l)) {
-        out.push({ file: hf, line: i + 1, kind: 'phrase', text: l.trim().slice(0, 160) });
-        return;
+      const isComment = /^\s*(\/\/|\*|\/\*)/.test(l);
+      if (!isComment && /existsSync/.test(l)) {
+        const win = lines.slice(Math.max(0, i - 6), i + 7).join('\n');
+        if (/writeFileSync/.test(win) && /(['"]---|桩|placeholder|stub)/.test(win)) {
+          out.push({ file: hf, line: i + 1, kind: 'shape', text: l.trim().slice(0, 160) });
+          return;
+        }
       }
-      if (!/existsSync/.test(l)) return;
-      const win = lines.slice(Math.max(0, i - 6), i + 7).join('\n');
-      if (!/writeFileSync/.test(win)) return;
-      if (!/(['"]---|桩|placeholder|stub)/.test(win)) return;
-      out.push({ file: hf, line: i + 1, kind: 'shape', text: l.trim().slice(0, 160) });
+      if (isComment && PHRASES.test(l)) {
+        out.push({ file: hf, line: i + 1, kind: 'note', text: l.trim().slice(0, 160) });
+      }
     });
   }
   return out;
@@ -256,9 +258,20 @@ for (const a of apis) {
 L.push('');
 L.push('## B. 桩分支线索（②空壳夹具）');
 L.push('');
-L.push('| 文件 | 行 | 检出方式 | 内容 |');
-L.push('|---|---|---|---|');
-for (const s of stubs) L.push('| `' + s.file + '` | ' + s.line + ' | ' + s.kind + ' | `' + s.text.replace(/\|/g, '\\|') + '` |');
+L.push('**主证据（`shape`）**：真实资源存在性分支 + 造桩写入同处 —— 这是「② 空壳」的机器判据。');
+L.push('');
+L.push('| 文件 | 行 | 内容 |');
+L.push('|---|---|---|');
+for (const s of stubs.filter((x) => x.kind === 'shape')) {
+  L.push('| `' + s.file + '` | ' + s.line + ' | `' + s.text.replace(/\|/g, '\\|') + '` |');
+}
+const notes = stubs.filter((x) => x.kind === 'note');
+L.push('');
+L.push('**附注（`note`，' + notes.length + ' 条，不计入线索数）**：注释里提及桩语义，仅供判读参考。');
+L.push('');
+L.push('| 文件 | 行 | 内容 |');
+L.push('|---|---|---|');
+for (const s of notes) L.push('| `' + s.file + '` | ' + s.line + ' | `' + s.text.replace(/\|/g, '\\|') + '` |');
 L.push('');
 L.push('## C. 技能空壳量化（团队资产声明 vs 包内真实技能）');
 L.push('');
@@ -285,6 +298,7 @@ L.push('');
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(SKELETON, L.join('\n'), 'utf8');
 console.log('[fixtures] 骨架已写入 ' + path.relative(ROOT, SKELETON));
-console.log('[fixtures] 夹具 API ' + apis.length + ' · 桩分支线索 ' + stubs.length
+console.log('[fixtures] 夹具 API ' + apis.length + ' · 桩分支（shape）' + stubs.filter((x) => x.kind === 'shape').length
+  + ' / 附注（note）' + stubs.filter((x) => x.kind === 'note').length
   + ' · 技能空壳 ' + shells.shell + '/' + (shells.real + shells.shell)
   + ' · 重复函数候选 ' + dups.length + ' · 自建团队资产文件 ' + locals.length);
