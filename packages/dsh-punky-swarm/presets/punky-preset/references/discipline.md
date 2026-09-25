@@ -309,6 +309,58 @@
 
 - **口径纪律**：`officialTaskId` 一类「双写」字段在本引擎**未接线**——无消费点、无校验、无判定；任何回显**不得**读作「已双写」。
 
+### 四、**三通道分治**（2026-09-24 用户口径）——三者**任务分配不共用**
+
+| 通道 | 适用任务 | 派发方式 | 黑板「执行者」锚点 |
+|---|---|---|---|
+| **team** | **固定任务**（角色与流程可预见；software 口径 = **7 角色 + leader**） | Leader `spawn_teammate`（官方 roster） | **`roster` 成员名**（黑板**引用** roster） |
+| **dispatch**（现役） | **需灵活分配的任务** | `lane_dispatch` → 引擎自派 subagent（`rt.start`） | `owner`（批的 owner 会话）+ **`member.dispatch{ workerSessionId, lane }`**（引擎**自动写**、唯一写路径） |
+| **裸 subagent**（B 档） | 简单 / 单步，**不进批** | Leader `subagent` | **无**（不进批次黑板） |
+
+- **硬口径**：**一个任务只走一条通道**，**不存在**"同一 lane 既可由席位也可由 dispatch worker 执行"的混用形态；三通道**彼此不互通**（含与 B 档裸 subagent）。
+- ⚠ **否弃「切换」叙事**：旧稿案「最终切换到 agent-team 模式」（及由此推出的"切换后 X 变多余"）**已作废**；各通道**各有其面**（如 `dispatch` 通道的句柄面**仍然必需**）。
+
+### 五、**team 通道语义**（席位怎么派、怎么接活、怎么回报）
+
+| 项 | 口径 |
+|---|---|
+| **成员名** | **Leader 拉起时定，拉起后即固定**（不再改名 / 重绑） |
+| **黑板引用** | **黑板记录引用 roster**（lane 记录持 roster 成员名）；**不是** roster 反向绑定 lane |
+| **池化** | **= 同类型角色的多实例池**：roster **绑成员类型**（如 `coder` / `tester`）；同类型**可拉起多个成员**，**各承接不同 lane**；`maxMembers` **预计 8–16**（以宿主实测为准）。Leader 按**合理吞吐自觉分配**（自动化后续优化） |
+| **分配** | **由 Leader 写黑板**把任务分配给成员（写 lane 的 `roster` 引用） |
+| **成员交接** | 成员**在黑板上交接**（`handoff_submit`，`from` = 自己所属 lane） |
+| **回报** | 成员**通知 Leader**（`swarm_report` / `send_message`）；**轮询机制后建**（本轮不建） |
+
+### 六、**写权双层**（谁碰这个批 / 能改哪条边）
+
+| 层 | 判据 | 现状 |
+|---|---|---|
+| **Layer 1** | 调用方限**该批 owner** 或**该批已登记 Manager** | ✅ 在役（`lane_dispatch` / `member_*` / `batch_phase`） |
+| **Layer 2** | **角色 / lane 粒度**：只写"**属于自己的待交接内容**" | ⚠ **未接线**（缺口已登记，见 §0p 七） |
+
+**Layer 2 的两种写法（两通道不共用）**：
+- **dispatch**：调用方 = **`workerSessionId`** ⇒ 查 `member.dispatch` ⇒ 得 lane ⇒ 仅准写该 lane；
+- **team**：调用方 = **roster 成员名** ⇒ 查"**哪些 lane 的 `roster` = 我**" ⇒ 仅准写这些 lane（池化时天然覆盖其承担的多条 lane）。
+
+### 七、**席位任务包 · 回报时序 · 未接线缺口**
+
+- **席位任务包须携带**：**`batchId`**（定位批——**查阅入口一律用 `batchId`**，不新造按 taskId/sig 反查的入口）＋ **本 lane 的 `sig`**（**任务包指纹**，`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))[:16]`，用于身份识别与对账；**不作查找键**）。
+- **⚠ 时序硬性步骤：先 `handoff_submit`，后 `swarm_report`** —— 反序会触发 `GATE_HANDOFF_MISSING` 并**停轮**（已**三次**独立踩坑实证）。
+- **回报可达性（2026-09-24 用户裁决 S-3）**：`send_message` **对成员已放开** ⇒ worker 可**直接推**给 Lead（`target='lead'`）；`interrupt_agent` / `list_agents` / `wait_agent` **维持 deny**。这是**判据边界修正**而非回退 S2——S2 原判据「one-shot **无唤醒对象**」对「**唤 Lead**」不成立（**Lead 是 durable 的，且正是要通知的对象**）。**成员不得互唤**（指引约束）。
+- **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner/Manager 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
+
+### 八、**roster 席位工具面**（只留交接必需，不给 Leader 治理工具）
+
+- **席位保留**（交接必需）：`handoff_submit` / `handoff_view` / `task_pool` / `swarm_report` / `send_message` / `member_settle`（结算必需）。
+- **席位不开放**（面向 Leader 的治理面）：`wave_plan` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `release` / `asset_claim` / `task_update` / `batch_tasks_add` / `assign_check`。
+- **实测背景（2026-09-24）**：teammate 席位当前**完全开放**（**22/22** 蟛蜞工具在场，含上述治理写面），而 dispatch worker 被 deny **19 件** ⇒ **两轨治理面不对称**是本节的直接动因。
+
+### 九、**Leader 收口纪律**（audit 层 + 恢复面，2026-09-24 实测沉淀）
+
+- **audit 层 lane 完成后【不会】自动结算**：`auto-settle` 的第四处 skip 分支 `isAuditLayerLane` 明写"**职责转移，不是失败**"——**批保持 `running` 供 Leader 显式结算**。⇒ **audit 层 lane 须 Leader 显式 `member_status(review)` → `member_settle(merged)`**；**且结算前先 `handoff_submit` 到其下游**（audit 层 lane **也有下游**，同 plan/exec 规矩）。
+- **进程恢复会把 in-flight lane 打回 `idle`**（事件 `system.recovered`）⇒ 走恢复路径 **`idle → running → review → merged`**（`idle` 是**空闲态**，不是崩溃态）。
+- **例行巡查用「四查」**（全部只读）：① `batch_status`（相位与 lanes）② `log_export`（**看 `auto.settle.*` 的 `reason`**——`already-settled` / `lane-terminal` / `phase-*` / `audit-explicit-settle-required` **语义不同**）③ 产物根 glob ④ **`lane_heartbeat` / `lane_longrun`（`beat:true` 可手动一拍）——看 `stalled` / `candidate` / `unconsumed`**。
+
 ## §1 任务指派
 
 - 用 `wave_plan` 按依赖 DAG 分层为 **waves**——**固定语义**，启动后**绝不中途重算**。
