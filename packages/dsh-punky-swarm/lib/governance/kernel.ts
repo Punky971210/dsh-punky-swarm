@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 治理内核组合根：规则匹配 → 违规收集 → classifyViolation → KernelDecision（同步、确定性、零 IO）。
 // 空 rules + 空 toolBan → { primitive:'ALLOW', priority:-1, reason:'', ruleRefs:[] }。
-// 第三类判定面（工具黑名单，用户裁决 2026-09-14）：toolBan 条目经 matchToolBan 判定（工具名 + 行为面），
+// 第三类判定面（工具黑名单）：toolBan 条目经 matchToolBan 判定（工具名 + 行为面），
 //   命中的违规与参数规则命中**同列汇入** violations/ruleRefs → 同一 classify 统一裁决（零分类器改动，
 //   收据 / 事件桥接 / 拒绝可见性链路天然复用）。
 // 零依赖纪律：本文件不 import 任何外部包/宿主模块——仅本目录相对导入；

@@ -23,7 +23,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ② 声明存在但字段缺省 → 按该字段的 tighten-only 缺省（见各读端函数头注释），**不回落成放宽**；
 //   ③ 声明的**新增强制**（如 entry_requires: ['consume']）只在声明显式写出时生效 —— 显式翻牌；
 //      但「缺声明」不再是免检，而是**拒**（B1 零依赖拒派：consume 强制不依赖团队声明）。
-//   ⚠ r1 的「缺声明逐字回落现状」措辞在 r2 已被 ① 取代（用户裁决 Q-r2②／原则①）；
 //     legacy-retire-20260915（完全清退）：LEGACY_* 常量已删除——引擎基线常量 / 读端缺省是**唯一真源**
 //     （`produceFieldOf` 缺声明返回 `null` = 信息性真空，与 `gateStrength.produceFieldDeclared` 同源）。
 //
@@ -138,7 +137,7 @@ function severityOfProblems(problems) {
 
 /**
  * 团队资产解析失败的**强警示载荷**（要求 5；`severity` / `blocking` / `problems` 供读端分流）。
- * 【gate-lite 第二批 · 放行 4（2026-09-17 用户裁决）】**原「团队资产缺失」码已删**
+ * **原「团队资产缺失」码已删**（勿回加）
  *   （2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码）：
  *   该码是同一语义的**第二生产点**（第一处 `lib/tools/core.js` 的死推点已随 C 项删除），
  *   保留它会让「已判死码」在两处回生 ⇒ 本载荷**不带码**，只带 severity/blocking/problems/note

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // engine/dispatch.js —— **引擎自派**（engine-side dispatch）：C 档集群派发的执行通道。
-// 定位（2026-09-16 用户裁决 + 调研批结论）：
+// 定位：
 //   · **可见性期收窄是唯一按次可用的收窄通道**：宿主 `subagent` 工具的模型面参数**不含** `toolFilter`
 //     （`dsh-tool-subagent/lib/index.js:402-428`；`toolFilter` 只在插件配置 zod schema `:255-269` = 部署期静态），
 //     而 `ctx.subagents.start(name, request)` 的 `request.toolFilter` 是**按次**的（one-shot 与 continuable 走
@@ -145,7 +145,7 @@ export function mapSpawnError(err) {
   return { code: 'GATE_DISPATCH_FAILED', message: '引擎自派失败：' + raw };
 }
 
-/** `rt.start` 返回的 `SubagentRun` → worker 会话 id（D-2 清债，2026-09-16；one-shot 化语义更新 2026-09-22）。
+/** `rt.start` 返回的 `SubagentRun` → worker 会话 id（one-shot 化语义）。
  *  **主字段 = `id`**（`SubagentRun.id` = 子会话 id，`dsh-subagent-in-process-driver` :166/:219 实证；
  *  与宿主 `subagent/end` 事件的 `info.id` 同源 —— V-3 已核，S3 观察桥据此对齐）。
  *  兼容回落 `childId`/`subagentId`（continuable 时代契约字段，防御宿主形态漂移）：回落命中**显式告警**。
@@ -290,13 +290,40 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   let start = null;
   try {
     if (!exec?.agent) throw new Error('缺少调用方 Agent —— 派发必须在工具流水线内调用（exec.agent 决定子会话挂载点）');
-    start = await rt.start(provider, buildStartRequest({
-      batchId, lane, parent: exec.agent, prompt,
-      // N2 清债（2026-09-16 评审）：denyTools/persona 同样读**热更快照**
-      denyTools: SUITE_DENY_TOOLS,
-      extraDeny: liveConfig?.dispatch?.denyTools ?? [],
-      persona: liveConfig?.dispatch?.persona,
-    }));
+    // 【2026-09-24 · 0.1.7-rc.1 兼容自愈（A 方案）】宿主 `tools.restrict()` 对 `toolFilter.deny` 里的
+    //   **未知工具名严格抛错**（不忽略）⇒ 名单残留一个**「该 scope 不可 restrict」**的名字即触发（实例：
+    //   `wait_agent` —— 它由 agent-team 层注册，**仅在启用该层的 profile 上可 restrict**；未启用则不在
+    //   `restrictableNames` 内），本次自派
+    //   即**确定性失败**、lane 落 `failed` 终态（K3 不可原地重派 ⇒ 代价 = 整批作废）。
+    //   自愈口径：从错误文案解析未知名 → **仅从本次 deny 名单移除** → **同一次派发内重试**（句柄只发放
+    //   一次、不重复消费）；非该形态的错误**照旧抛出**（绝不吞错，守 B6「失败显式」纪律）。
+    const denyAll = [...new Set([...SUITE_DENY_TOOLS, ...(liveConfig?.dispatch?.denyTools ?? [])])];
+    const denyDropped = new Set();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        start = await rt.start(provider, buildStartRequest({
+          batchId, lane, parent: exec.agent, prompt,
+          // denyTools/persona 同样读**热更快照**
+          denyTools: denyAll.filter((n) => !denyDropped.has(n)),
+          extraDeny: [], // 已并入 denyAll（合并后再过滤，避免两路名单各有未知名时自愈失效）
+          persona: liveConfig?.dispatch?.persona,
+        }));
+        break;
+      } catch (e) {
+        // 【P-2 修正（2026-09-24，独立复核发现）】宿主模板对 **≥2 个未知名** 用**复数**文案
+        //   `unknown global tools "X", "Y"`（`${unknown.length > 1 ? 's' : ''}`）⇒ 正则须收 `tools?`，
+        //   否则复数形态失配、`unknownName=null`、自愈静默退化为原始确定性失败（＝白做）。
+        const um = /unknown global tools?\s+["'`]?([A-Za-z0-9_.:-]+)/i.exec(String(e?.message ?? e));
+        const unknownName = um ? um[1] : null;
+        if (unknownName && !denyDropped.has(unknownName) && denyDropped.size < 8) {
+          denyDropped.add(unknownName);
+          ctx?.logger?.warn?.('[dsh-punky-swarm] lane_dispatch: 宿主工具面无 "' + unknownName
+            + '" ⇒ 从 deny 名单移除后重试（0.1.7 兼容自愈，第 ' + (attempt + 1) + ' 次）');
+          continue;
+        }
+        throw e;
+      }
+    }
   } catch (e) {
     const m = mapSpawnError(e); // B6 失败显式：归一为可读码面，绝不静默
     // D-3（2026-09-16 清债）：派发失败**必须回滚 lane**——否则 lane 停在 `running` 却无 worker。
@@ -313,7 +340,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
       + '**不可原地重派**（K3：返工边 review→running 已去除，重派会被 `invalid member transition` 拒）；'
       + '如需人工核查：`gate_status({ batchId: "' + batchId + '", lane: "' + lane + '" })`。');
   }
-  // D-2（2026-09-16 清债）：worker 会话 id **定点取值**（`SubagentRun.id` = 子会话 id），不再静默猜字段；
+  // worker 会话 id **定点取值**（`SubagentRun.id` = 子会话 id），不再静默猜字段；
   //   兼容回落会**显式告警**，取不到则带原始载荷显式报错（不静默 null ⇒ 不留「绑定失败但无根因」）。
   const workerSessionId = workerSessionIdOf(start, (msg) => ctx?.logger?.warn?.('[dsh-punky-swarm] ' + msg));
   if (!workerSessionId) {
@@ -333,12 +360,12 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
 }
 
 // ── C 阶段：C 档派发面门禁（**软启用**，防自锁） ─────────────────────────────────
-// 语义（2026-09-16 用户裁决「不写 token 即禁止派发」）：
+// 语义（「不写 token 即禁止派发」）：
 //   · **B 档**：`subagent`/`subagent_fork` **一律放行**（单步调研/单步派发，无 lane 绑定）；
 //   · **A 档**：由既有门禁 3 拒（本函数不重复判）；
 //   · **C 档**：须携带**有效 lane 句柄**（`lane_dispatch` 发放；一次性 + TTL）。
 // 落地形态 = `config.dispatch.gate`：`'warn'`（缺省，**只留痕告警不拦**）。
-// 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**`'enforce'` 拒态已删** —— 原码
+// **`'enforce'` 拒态已删**（勿回加）—— 原码
 //   `subagent`/`subagent_fork`（`dsh-experimental-agent-team-profile/cordis.patch.yml:10-14`）
 //   ⇒ 闸门拦的工具在官方场景不存在。现语义 = **只留痕不拦**（`evaluateTierCDispatch` 恒 `ok:true`
 //   + `warnNote`）；`readGateMode` 保留（配置面仍在，供审计/热更观测，不再决定拦截）。
@@ -382,7 +409,7 @@ export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inb
 
 /**
  * 纯函数：给定档位/工具名/参数文本/配置，判定 C 档派发面的**留痕**处置。
- * 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**恒 `ok:true`（不再拒）**：原 `mode==='enforce'`
+ * **恒 `ok:true`（不再拒）**：原 `mode==='enforce'`
 *   分支已随码删除（官方 profile 已 disable 宿主 `subagent`/`subagent_fork`）。
  *   `mode` 仍回显（`warn`/`enforce` = 配置面事实，供审计观测），但**不再影响判定**；无有效句柄一律产 `warnNote`。
  * @returns {{applies: boolean, ok: boolean, mode: 'warn'|'enforce', handleReason: string|null, denyReason: null, warnNote: string|null}}

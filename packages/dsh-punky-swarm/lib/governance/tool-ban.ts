@@ -17,11 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 护栏第三类判定面：工具黑名单（工具 × 行为）——判定内核（纯函数、零依赖、确定性）。
 //
-// 目的（2026-09-14 用户裁决）：让 Agent 写文件**默认走 edit / write / str-replace-editor 等在册工具**，
+// 目的：让 Agent 写文件**默认走 edit / write / str-replace-editor 等在册工具**，
 //   不经 shell（pwsh）自建写路径落盘——避免编码头/BOM 被写盘破坏（Windows 下 `>` 重定向与
 //   `Set-Content` / `Out-File` 可能写 GBK 或带 BOM；该损坏不可逆，与 AGENTS.md 编码铁律同源）。
 //
-// 拦截面（用户裁决 Q3「仅护栏禁止修改或写文件」）：只判「修改或写文件」这一类动作——
+// 拦截面（「仅护栏禁止修改或写文件」）：只判「修改或写文件」这一类动作——
 //   ① 重定向（`>` / `>>`）；② 写文件 cmdlet（Set-Content / Add-Content / Out-File / New-Item /
 //   Remove-Item / Move-Item / Copy-Item / Export-Csv…）；③ 段首写命令名（rm / mv / cp / del /
 //   mkdir / touch / tee / chmod…）；④ 落盘参数（-OutFile / find -exec 写侧）。
@@ -92,7 +92,7 @@ const WRITE_HEADS = new Set([
   'out-file', 'tee-object', 'export-csv', 'export-clixml',
 ]);
 
-// 纠正文本（用户裁决 Q4：拒绝后回复原因，如改用 edit、write 等工具）
+// 纠正文本（拒绝后回复原因，如改用 edit、write 等工具）
 export const WRITE_CHANNEL_HINT =
   '；文件写请改用 edit / write / str-replace-editor 等在册工具（护栏写通道路由：shell 写盘易破坏文件编码头）';
 

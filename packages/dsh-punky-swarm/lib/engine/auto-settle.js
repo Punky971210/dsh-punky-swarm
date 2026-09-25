@@ -33,7 +33,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ② 兼底路 `settle-request`（worker 显式交付意图）：成员侧 `swarm_report` 经身份反查
 //      （`laneBindingOf(store, callerSessionId)`，判据 = `member.dispatch` 事件）后调 `requestAutoSettle`。
 //   **两路共用同一个 `autoSettleLane`**（本文件唯一判定入口，禁第二套口径）；两路同时到达 ⇒
-//   幂等键去重后**单次结算**（第二路落 `auto.settle.skipped` 留痕，不重复写事件、不重复推进）。
+//   幂等键去重后**单次结算**（第二路 **no-op**：不重复写事件、不重复推进）。
+//   ⚠ **2026-09-24 用户裁决：幂等闸不再落 `auto.settle.skipped` 留痕** —— 该形态是**纯噪音**：
+//     兼底路（worker 主动 `settle-request`）抢先结算后，主路（宿主 `subagent/end`，实测晚 60–63 s）
+//     到达必命中该闸 ⇒ 每个 lane 正常结算都会多产一条 `already-settled`。幂等语义不变。
+//     其余三处 `auto.settle.skipped`（`lane-terminal` / `phase-*` / audit 职责转移）**保留**。
 //
 // ── 幂等去重（契约卡 §36：键 =（batchId, lane, 子会话 id）） ────────────────────────
 //   键落 `auto.settle.triggered.settleId`；判定**只查批次 JSON**（唯一跨重启持久事实源，
@@ -167,15 +171,10 @@ function isPhaseGateSkip(e) {
   return e?.type === EVT_AUTO_SETTLE_SKIPPED && typeof e.reason === 'string' && e.reason.startsWith('phase-');
 }
 
-/** 已落过「重复跳过」留痕否（与 `hasAutoSettleRecord` 同判据面，仅看 `skipped`）——用于「只落一次」幂等。
- *  瞬时/非幂等留痕同样不计入（理由见 `hasAutoSettleRecord`，单点判据 = `isTransientSkip`）：
- *  相位不对每次可留痕一次、audit 职责转移每次可留痕一次，但两者**都不算**「已判重」。 */
-function hasSkipRecord(batch, lane, settleId) {
-  const events = Array.isArray(batch?.events) ? batch.events : [];
-  return events.some((e) => e && e.type === EVT_AUTO_SETTLE_SKIPPED && e.lane === lane
-    && !isTransientSkip(e)
-    && settleIdOf(e.settleId ?? e.workerSessionId ?? null) === settleId);
-}
+/** ⚠ **已移除（2026-09-24）**：`hasSkipRecord(batch, lane, settleId)` —— 它唯一的调用点是**幂等闸的
+ *  「already-settled 只落一次」**；该留痕已按用户裁决**关闭**（纯噪音，见 `autoSettleLane` 幂等闸注释），
+ *  函数随之成为死代码 ⇒ 删除（不保留未用导出）。其余三处 `auto.settle.skipped`（`lane-terminal` /
+ *  `phase-*` / audit 职责转移）仍走各自的落点，与 `hasSkipRecord` 无关（它们本就不进幂等链）。 */
 
 /** 进程内并发闸（与持久幂等键互补，不替代）：同一 (session, batch, lane, settleId) 的判定段**同步执行**
  *  （本模块在首个 `await` 之前完成「读批 → 追加留痕事件 → setMember 落盘」），故同时到达的两路必然串行：
@@ -236,9 +235,12 @@ export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
     // 判据只读批次 JSON（唯一持久事实源）；**首见**同一 (lane, id) 的重复**落一条 skipped 留痕**
     // （「被跳过」可审计，不是静默丢弃）——但**只落一次**：重复超过两次时零新增（幂等自证）。
     if (settleId && hasAutoSettleRecord(batch, lane, settleId)) {
-      if (!hasSkipRecord(batch, lane, settleId)) {
-        store.appendEvent(sessionId, batchId, EVT_AUTO_SETTLE_SKIPPED, { lane, reason: 'already-settled', settleId, trigger });
-      }
+      // 【2026-09-24 用户裁决：关闭 skipped（仅幂等闸这一路）】本闸**不再落事件** —— 它是**纯噪音**：
+      //   兼底路（worker 主动 `settle-request`）抢先结算后，主路（宿主 `subagent/end`，实测晚 **60–63 s**）
+      //   到达必命中本闸 ⇒ **每个 lane 正常结算都会额外产出一条 `already-settled`**，稀释信噪比。
+      //   幂等语义**逐字不变**（仍跳过、不改状态、不重复推进）；只是不再往事件流写这条。
+      //   ⚠ 其余三处 `auto.settle.skipped` **保留**（`lane-terminal` / `phase-*` / audit 职责转移）：
+      //     它们是**异常路径**的诊断留痕（回答「为何不结算」），非每-lane 必产。
       out.action = 'skipped'; out.reason = 'already-settled';
       return out;
     }

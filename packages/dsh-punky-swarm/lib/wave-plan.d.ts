@@ -59,6 +59,29 @@ export declare function resumeClauseFor(task: WavePlanTask | null): string | nul
 /** 任务声明面并集（`produce ∪ outputs`，**保留声明原文**，去重保序）。 */
 export declare function declaredArtifactsOf(t: WaveTask): string[];
 export declare function assembleCmd(role: string | null, skills: string[] | null | undefined, cmd: string): string;
+/** 引擎注入前缀剥离（`assembleCmd` 的**幂等性**助手）：把 `cmd` **开头**连续出现的、且
+ *  **与本次装配值逐字相等**的 `[role=…]` / `[skills=…]` 段剥掉，返回剩余原文。
+ *
+ *  为什么必须幂等（本函数存在理由）：`buildWavePlan` 是**重归一化单点**——`store.addPoolTasks` /
+ *  `store.addTaskEdges` 会把**已落盘**的 wavePlan 任务（其 `cmd` 已含引擎前缀）重新喂进来。
+ *  旧实现无条件再拼一次前缀 ⇒ `cmd` 每被归一化一次就多长一截（`[role=coder] run` →
+ *  `[role=coder] [role=coder] run` …）。这既让任务包文本随无关操作变脏，也让**基于持久内容**的
+ *  sig 在「无关任务」上发生漂移（sig 的语义 = 内容变才变）。
+ *
+ *  A-1 加固（2026-09-22 修复轮）：**剥的条件从"形态"收紧为"值与本次装配逐字一致"**。
+ *  旧实现（无条件剥）的缺陷：用户自己的 `cmd` 原文恰好以 `[role=…]`/`[skills=…]` 开头时被**误剥**，
+ *  用户内容**丢失**（`'[role=other] 做某事'` → `'[role=coder] 做某事'`）。
+ *  判据（三段）：
+ *    · 只剥段字面量 ∈ { `[role=<本次 role>]`（role 非空时）, `[skills=<本次 skills 逗号拼接>]`（skills 非空时）}；
+ *    · **允许多次**（覆盖历史重复注入 `[role=coder] [role=coder] run` ⇒ `run`）；
+ *    · 遇到**不等于**本次装配值的同形段 ⇒ **停止剥离**，该段及其后原文逐字保留（"逐段停止"语义）。
+ *      选"逐段停止"而非"整体放弃"的理由：整体放弃会让 `'[role=coder] [role=other] run'` 每次
+ *      重归一化再累一段 ⇒ 前缀膨胀复发；逐段停止既清掉引擎注入面，又逐字保住用户自己的同形文本。
+ *  未传 `role` / `skills`（或二者均空）时**可剥集为空 ⇒ 原样返回**（不再有任何无条件剥面）。
+ *  已知边界（明示取舍，非缺陷）：同一批内**装配值变更**（如 skills 表变化）时，旧前缀段不再命中可剥集
+ *  ⇒ 该段保留（宁可留一段历史前缀，也不误剥用户同形原文）；装配表在批内稳定是既有前提。
+ *  非行首的同形文本（如 `见 [role=x]`）不受影响。 */
+export declare function stripCmdPrefix(cmd: unknown, role?: string | null | undefined, skills?: string[] | null | undefined): string;
 export declare const HANDOFF_GATE_ENV = "PSWARM_HANDOFF_GATE";
 export type HandoffGateStage = 'entry' | 'settle';
 export interface HandoffGateState {

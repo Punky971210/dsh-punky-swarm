@@ -91,6 +91,7 @@ let recoveredThisProcess = false;
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
+  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
   mkdirSync(root, { recursive: true });
   // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
@@ -578,7 +579,7 @@ export const apply = (ctx, config = {}) => {
   //   本扫描启动后补一次决策。**纪律**（四条，缺一即为「写了不生效」或「静默危害」）：
   //     ① 只处理 `running` 批 —— `paused` 是人工停轮（`resume` 是唯一恢复入口）、终态不追；
   //     ② 一律**只决策不派发**（`replayBatch` 内固定 `noDispatch`）：装配期无工具流水线 ⇒ 无挂载点，
-  //        真派仍由 Leader/Manager 在工具面执行（与 S12 裁决一致）；
+  //        真派仍由 Leader/Manager 在工具面执行；
   //     ③ 全程 try/catch 不抛，且**异步化**（不阻塞 `apply` 返回）；
   //     ④ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3），有补决策才 info 一行摘要。
   //   有界：会话数与批次数均设上限，防大批量启动时扫盘过久。
@@ -720,7 +721,7 @@ export const apply = (ctx, config = {}) => {
   let lastRatchetJson = JSON.stringify(config?.ratchet ?? null);
   const applyConfigChange = (change) => {
     const next = change.config;
-    // ⓪ ratchet（棘轮表）：**重启生效面**（G-3 收口，2026-09-15 用户裁决 Q-9=A）——棘轮表在装配期
+    // ⓪ ratchet（棘轮表）：**重启生效面**——棘轮表在装配期
     //   随 `createStore({ rules })` 注入（上方），热更**不应用**；但变化必须显式告警、非法必须当场校验
     //   （禁「写了不生效却不吭声」；`loadRules` fail-closed 语义不变——重启时非法配置仍会装配失败）。
     const rg = ratchetHotGuard({ next, lastJson: lastRatchetJson });

@@ -69,13 +69,16 @@ const FROZEN_DENY = [
   // N1-R4-2：池内任务**加边**（图变更写入口 #2）⇒ 同上（成员不得改图）
   'task_update',
   // S2（2026-09-22 · one-shot 化）：宿主连续控制族 ⇒ 成员整体 deny（一次性执行器无可唤/续聊/等待/打断对象）
-  'send_message',
+  // ⚠ 2026-09-24 用户裁决（S-3）：`send_message` **已从 deny 面移出** —— 放开「唤 Lead」（Lead 是 durable
+  //   的，且正是 worker 要通知的对象；S2 原判据「无唤醒对象」对其**不成立**）；本条不再列入。
   'interrupt_agent',
   'list_agents',
+  // ⚠ 2026-09-24（独立复核后修订）：`wait_agent` **条目保留** —— 它由 agent-team 层注册（非内核移除），
+  //   保留可保证「启用该层的 profile」上 deny 面完整；未启用该层的 profile 由 dispatch 容错自愈兜底。
   'wait_agent',
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
-const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent'];
+const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release', 'asset_claim',
@@ -276,7 +279,7 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   //   其「成员可调、不落模式门」的行为面证据落在 ④ 反向抽样。
   const { tools } = createTools(ctx, { store, root, config, readConfig: () => config });
   const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
-  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent']; // 宿主派发工具 + 宿主连续控制族（S2）+ 可选能力组（logs）
+  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent']; // 宿主派发工具 + 宿主连续控制族（S2；wait_agent 由 agent-team 层注册 ⇒ 未启用该层的 profile 下不在引擎注册面，条目保留 + dispatch 自愈兜底）+ 可选能力组（logs）
   assert.deepEqual(SUITE_TOOLS.map((t) => t.name).filter((n) => !byName[n]), NOT_REGISTERED_BY_DEFAULT,
     '表内未注册的只允许非默认注册三件（其余必须真实注册）');
   assert.deepEqual(tools.map((t) => t.name).filter((n) => !SUITE_TOOLS.some((t) => t.name === n)), [],

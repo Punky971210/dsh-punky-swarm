@@ -73,12 +73,12 @@ function parseJsonText(text) {
 export const ALLOWED_TOP_KEYS = new Set([
   'aip', 'acps', 'capabilities',
   'mailbox', 'resume', 'ratchet', 'escalation', 'governance',
-  // modes（E 阶段模式跟随，2026-09-16 用户裁决）：`modes.gate` 白名单 = 哪些 agent preset 启用蟛蜞治理。
+  // modes（模式跟随）：`modes.gate` 白名单 = 哪些 agent preset 启用蟛蜞治理。
   //   纳入热更 ⇒ 切模式/改白名单**无需重启**（guard 与套件工具读的是热更快照）。
   'modes',
   // dispatch（C/E 阶段派发面）：provider / gate 纳入热更，便于「先 warn 观察 → 配齐后切 enforce」不重启。
   'dispatch',
-  // gates（P1/P2 交接门开关；`task-27` 2026-09-17 用户裁决）：**门禁只与插件有关**——开关必须落在
+  // gates（P1/P2 交接门开关）：**门禁只与插件有关**——开关必须落在
   //   `<root>/config/runtime.json`（本白名单内），**不得**依赖启动父进程的环境块（Desktop 应用派生
   //   web 宿主的场景下 env 永远带不进来 ⇒ 门永远开不了/关不掉）。
   //   形态：`{ "gates": { "handoff": { "entry": true, "settle": true } } }`（两段可各自开关；

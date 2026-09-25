@@ -33,7 +33,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   }
 //   （**退役子键**不在本形状内、且**声明即拒**：`needHuman` —— 见文末「退役子键」）
 //
-// 唯一规范位（Leader 裁决 ①，2026-09-16）：`chain` **只认顶层**。增补草案的 `flows.chain` 位
+// 唯一规范位：`chain` **只认顶层**。增补草案的 `flows.chain` 位
 //   **不写兼容分支**（禁双真源）——显式声明 `flows.chain` 即拒（复用既有 `TEAM_ASSET_FIELD_NOT_ALLOWED`，
 //   零新造码）。注：该键本就会在同一次加载里被 `flows` 的层名白名单命中（`TEAM_ASSET_LAYER_UNKNOWN`）；
 //   此处独立报码是为了让「规范位」成为**机器可判**的规则，不靠读者记忆。
@@ -49,7 +49,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ⑧ 只收枚举 token  `onFail`/`anyFailure` ∈ {pause,review,failed}；`join` ∈ {all,any}；**禁表达式**
 //                                                                    → TEAM_ASSET_FIELD_NOT_ALLOWED
 //
-// 【M1 · 步级条件边 `on` **声明面已下线**（2026-09-17 用户裁决，批 `handoff-consolidation-m0m1-20260917`）】
+// 步级条件边 `on` **声明面已下线**：
 //   原 W1-② 条件边（`on` = 成员终态键域 `{merged,fail,skipped,conflict}`，2026-09-16）**整体撤销**：
 //   `on` 由「白名单键」变「未知键」⇒ **声明即拒**（校验 ⑧ 的拒绝面，报 `TEAM_ASSET_FIELD_NOT_ALLOWED`
 //   @ `chain.steps.<id>.on`，三版本同拒）。**刻意不静默失能**：「只删校验」会让声明被忽略（写了不生效，
@@ -82,16 +82,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 退役子键（`RETIRED_CHAIN_KEYS`，**声明即拒**：「写了不生效」比拒更糟，与步级 `on` 的 M1 裁决同款）：
 //   `chain.needHuman`（链级人工闸提示）原为「只声明不消费」的未接线子键——**零运行期读点**
 //   （人工闸的真实承载面 = 层声明 `flows.audit.needhuman` + Tier3 `checkNeedHumanGate`；同批五队资产亦已删除该键）
-//   ⇒ 2026-09-18 清债轮（用户裁决「清理冗余设计与死代码」）**从声明位摘除**，声明即拒
 //   `TEAM_ASSET_FIELD_NOT_ALLOWED`（复用既有码，零新造）。**唯一真源**：人工闸只认 `flows.audit.needhuman`。
 //   与此同口径的退役键：`state_machine` / 顶层 `rework` / `flows.*.progress_contract`（见 `team-asset.js:60-63`）。
 //   注：本键**不**登记进 `UNWIRED_DECLARATIONS`（那是**顶层键**台账，`chain` 已接线）。
 
 //   说明（契约面）：上列文档**不在本包分发面内**（`package.json` `files[]` 只登记 `docs/` 下的对外件）。
 //   `[docs-ref]` 展开如下（仅改注释、零语义：7 处引用逐条与出参逐字对齐）：
-//     · `w2`          = `docs/w2-assembly-spec-20260916.md`（W2 装配面规格）
-//     · `chain-model` = `docs/chain-model-upgrade-spec-20260916.md`（链模型升级规格）
-//     · `handoff`     = `docs/handoff-semantics-consolidation-20260917.md`（交接语义归并）
+//     · `w2`          = `w2-assembly-spec-20260916`（原文档未随仓分发）（W2 装配面规格）
+//     · `chain-model` = `chain-model-upgrade-spec-20260916`（原文档未随仓分发）（链模型升级规格）
+//     · `handoff`     = `handoff-semantics-consolidation-20260917`（原文档未随仓分发）（交接语义归并）
 //   `[docs-ref] <名> [§锚点]` = **外部台账**（workspace docs 树，本仓撰写期落盘处；该树未纳 VCS，
 //   其时效以包外引擎台账为准）指引 —— 本包内无同名文件，故不以包内相对路径书写。`[docs-ref] id` 为
 //   两日式短形（仅 `CHAIN_VERSIONS` 一处保留，兼容既有引用），按上列两条查名。
@@ -210,7 +209,7 @@ export function edgesOfStep(step) {
 export function resolveChainOf(asset) {
   const problems = [];
   if (!isPlainObject(asset)) return { chain: null, problems };
-  // 唯一规范位（Leader 裁决 ①）：`flows.chain` **不是**声明位，不解析、不合并、不留兼容分支。
+  // 唯一规范位：`flows.chain` **不是**声明位，不解析、不合并、不留兼容分支。
   const flowsChain = isPlainObject(asset.flows) ? asset.flows.chain : null;
   if (flowsChain != null) {
     problems.push({
@@ -231,7 +230,7 @@ export function resolveChainOf(asset) {
  *   的 `layers` 必填面承担（本函数不重复报码，避免同一声明双报）
  * @returns {{ok: boolean, problems: Array<{code,path,message,severity}>}}
  *
- * `ok` 语义（**R2-3 裁决 B，2026-09-17 改语义**）：`ok = 无 blocking`（`!hasBlockingProblems(problems)`），
+ * `ok` 语义：`ok = 无 blocking`（`!hasBlockingProblems(problems)`），
  *   **不再**是「零问题」。warning 级问题（severity 取自 `severityOfProblem`：本组码里
  *   `TEAM_ASSET_LEAD_NOT_IN_LAYERS` / `TEAM_ASSET_REWORK_INVALID` 落在 warning 侧）**只提示不否决**，
  *   且**逐条完整保留在 `problems` 返回值里**（不丢弃、不降级成日志）——读端自行按 severity 分流。
@@ -595,11 +594,10 @@ export function validateChain(chain, layers) {
         `join 只收 ${CHAIN_JOINS.join('/')}（收到：${JSON.stringify(s.join)}）`);
     }
     if (s.on == null) continue;
-    // ⑧【M1，2026-09-17 用户裁决】`on`（步级条件边）声明面**已下线** ⇒ 声明即拒（**不静默失能**）。
+    // ⑧ `on`（步级条件边）声明面**已下线** ⇒ 声明即拒（**不静默失能**）。
     //   `on` 从「白名单键」变为「未知键」，若只删校验会**静默忽略**（写了不生效，比拒更糟）⇒ 故必须显式拒。
     //   能力去处（外部台账 · `[docs-ref] handoff §10.1`）：
     //     `merged` 分支 → `next`；失败面（`fail`/`conflict`）→ 批次级策略
-    //     （`chain.join.anyFailure` / `chain.onFail`，M4 迁 `rework`）；`skipped` 分支 → `deps` + Leader 裁决。
     //   报码路径 = **父键 `on`**（不按旧键域逐键报）；三版本（v1/v2/v3）同拒。
     push(TEAM_ASSET_CODES.FIELD_NOT_ALLOWED, `chain.steps.${id}.on`,
       '`on`（步级条件边）已下线（M1，2026-09-17）：正路路由用 `next`，失败面用批次级策略 '
@@ -640,7 +638,7 @@ export function chainOfBatch(batch) {
 }
 
 // ── lane → step 映射（fail-closed，禁猜） ─────────────────────────────────────
-// 规则（Leader 裁决 ④，2026-09-16）：
+// 规则：
 //   ① `step.id === lane.id` **优先**（显式命名即显式归属）；
 //   ② 否则按 `(layer, role)` 命中链步 —— **多 lane 命中同一步 = 同层共享该步**，
 //      推进时机由该步的 `join` 决定（software-team 的 `exec-work` 双 exec lane 因此不歧义）；
@@ -764,7 +762,7 @@ export function chainNextOf(chain, step, outcome, { stepLanes = [], laneStates =
   //   边界（未变）：本规则只覆盖**触发面**（该 lane 自己结算 `skipped` 时是否推进），**不改汇合面**——
   //   `join:'all'` 下某兄弟 lane 结算 `skipped`、另一 lane 结算 `merged` 时，它仍算 `pending` ⇒ `wait`
   //   （`merged` 分支的 `pending` 过滤未变；汇合语义由作者用 `join` 声明，与边语义正交）。
-  //   去处：需要「跳过也推进」的资产改走 `deps` + Leader 裁决（**不静默推进**，见头注释 M1 段）。
+  //   去处：需要「跳过也推进」的资产改走 `deps` + Leader 裁决（**不静默推进**）。
   if (outcome === 'skipped') {
     return { action: 'none', to: null, via: null, reason: 'skipped-no-advance' };
   }
@@ -901,7 +899,7 @@ export function expandChainBranches(chain) {
       push(`chain.steps.${l.stepId}`, `展开 lane ${l.id} 反投影不到来源步（实际映射到：${m.step ? m.step.id : '链外'}）——展开规则与 lane→step 映射不自洽`);
     }
   }
-  // 【与 `validateChain`/`chainProblemsOf` 同口径（R2-3 裁决 B，2026-09-17）】本函数的 `push` **只产
+  // 【与 `validateChain`/`chainProblemsOf` 同口径】本函数的 `push` **只产
   //   `TEAM_ASSET_MISSING_FIELD`（∈ BLOCKING_CODES）**，故这行改动**行为等价**（今天两种写法同结果）；
   //   一致化动机 = `lib/tools/core.js:561-564` 已登记的坑：同族函数各持一套 `ok` 判定 ⇒ 读端易误判。
   return { ok: !hasBlockingProblems(problems), lanes, problems };

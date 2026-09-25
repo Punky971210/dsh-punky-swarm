@@ -4,7 +4,7 @@
     "version": 3,
     "requires_engine": ">=0.4.4",
     "hash": "unhashed",
-    "source": "三层自定义角色（research-planner / researcher / research-auditor）+ 本机既有调研技能池（spec-writing / decision-mapping / tech-benchmark-planning / ara-compiler / ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer）+ 本包自建手册（acceptance-gate）；技能声明值 = 宿主 SKILL.md frontmatter 的 name（加载名），非宿主目录名"
+    "source": "三层自定义角色（research-planner / researcher / research-auditor）+ 本机既有调研技能池（spec-writing / decision-mapping / tech-benchmark-planning / ara-compiler / ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer）+ 本包自建手册（acceptance-gate）；技能声明值 = 宿主 SKILL.md frontmatter 的 name（加载名），非宿主目录名；【2026-09-24 引擎 v2 对账标记（lane exec-asset / 批 onto-engine-v2-realign-20260924）】①`chain` 段仅受建批期八条静态校验：`pair_with` / `join.anyFailure` / `onFail` / `rework` 均已停消费（无运行期消费者；1:1 配对基数改由 audit lane 的 `deps` 表达、失败面用 gap-list 表达）——不得读作「失败自动 pause 的引擎行为」；②`manifest.version` / `requires_engine` / `hash` 为纯声明位（`lib/**` 零读端；`hash:\"unhashed\"` = 未计算占位，非校验值）；③派发形态双支持且不写死其一：形态由 `config.dispatch.provider` 配置位取值决定——一次性子代理形态下 worker 为 one-shot 会话，agent-team 形态下 worker 为长驻成员并由官方 roster 承抽（`ctx.get('agentTeams')`）；两形态下本资产的角色 / 技能 / 契约声明同等生效；④成员侧治理与派发面 20 件工具收窄不可达（`wave_plan` / `member_status` / `member_settle` / `lane_dispatch` / `lane_claim` 等），成员回报唯一通道 = `swarm_report`"
   },
   "roles": {
     "extra": ["research-planner", "researcher", "research-auditor"],
@@ -67,7 +67,7 @@
         "role": "research-planner",
         "template": { "produce": ["plan/${branch}-spec.md"] },
         "branches": [
-          { "id": "plan-researcher", "role": "research-planner", "template": { "cmd": "产出调研规格与验收标准（${branch}）" } }
+          { "id": "plan-researcher", "role": "research-planner", "template": { "cmd": "产出调研规格与验收标准，含裸标题「## 验收标准」与「## 约束」（${branch}）；用 write/edit 落盘、handoff_submit 交付下游；不得以引擎校验通过替代判据自证" } }
         ],
         "next": "exec"
       },
@@ -77,7 +77,7 @@
         "role": "researcher",
         "template": { "produce": ["exec/research-report.md"] },
         "branches": [
-          { "id": "exec-researcher", "role": "researcher", "template": { "cmd": "按规格执行调研并逐条溯源（${branch}）" } }
+          { "id": "exec-researcher", "role": "researcher", "template": { "cmd": "按规格执行调研并逐条溯源（${branch}）；用 web_search 检索、read/glob/grep 核对、write/edit 落盘、handoff_view 取上游件、swarm_report 回报结论；来源须分级且逐条可复现，不得编造引文或 DOI" } }
         ],
         "next": "audit-pair"
       },
@@ -86,7 +86,7 @@
         "layer": "audit",
         "role": "research-auditor",
         "pair_with": "exec",
-        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物，按 plan 判据逐条对照并核证据；用 handoff_view 取入边、read/grep 复跑核对、swarm_report 回报 verdict；未决项只进 gap-list，不得以「继续调查」为默认终点", "produce": ["audit/${lane}.md"] },
         "next": "accept"
       },
       {
@@ -95,7 +95,7 @@
         "role": "research-auditor",
         "join": "all",
         "terminal": true,
-        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照；先消重、标注冲突、核证据再下结论，分歧不掩盖、不以投票了事；产出 audit/acceptance-report.md", "produce": ["audit/acceptance-report.md"] }
       }
     ],
     "join": { "anyFailure": "pause" },

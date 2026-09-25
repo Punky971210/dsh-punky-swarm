@@ -226,9 +226,8 @@ test('D1: 同 id 重复 subagent/end（多 epoch / 重启重放）⇒ 第二次�
     const trig = after2.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED);
     assert.equal(trig.length, 1, 'auto.settle.triggered 不重复写');
     const skipped = after2.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
-    assert.equal(skipped.length, 1, '第二路落 auto.settle.skipped（可审计：不是静默丢弃）');
-    assert.equal(skipped[0].reason, 'already-settled');
-    assert.equal(skipped[0].lane, 'e1');
+    // 【2026-09-24 用户裁决：关闭幂等闸 skipped】第二路仍 no-op，但**不再落** skipped 留痕（纯噪音）
+    assert.equal(skipped.length, 0, '第二路 no-op：幂等闸不落 skipped 留痕（噪音已关闭）');
   } finally {
     reg.dispose();
   }
@@ -371,7 +370,7 @@ test('F3: 双路同时到达同一 lane ⇒ 单次结算（第二条经幂等键
     assert.equal(b.lanes.e1, 'merged');
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.lane === 'e1' && e.from !== 'pending').length, 2, '恰一次结算（running->review + review->merged）');
     assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length, 1, '触发留痕单条（第二路 no-op）');
-    assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED).length, 1, '第二路落 skipped 留痕');
+    assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED).length, 0, '第二路 no-op：幂等闸不落 skipped 留痕');
     assert.equal(b.phase, 'running', '无非法相位迁移');
   } finally {
     reg.dispose();

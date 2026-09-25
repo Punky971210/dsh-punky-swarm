@@ -91,7 +91,7 @@ export const EXEC_TOOLS = [
   'ssh_exec', 'ssh_cluster', 'ssh_upload', 'ssh_download', 'subagent', 'subagent_fork',
 ];
 
-// G1（2026-09-14 用户裁决 B，**严格档**；2026-09-15 用户裁决 **Q2=B 收窄**）：**成员面动作只允许 C 档会话**——
+// G1（**严格档**，后经 Q2=B 收窄）：**成员面动作只允许 C 档会话**——
 //   ① 建批（`wave_plan`）；② 写成员状态（`member_status` / `member_settle`）。
 //   动机（用户口径，2026-09-14）：成员协作只有一条轨道——**Leader 先评 C → `wave_plan` 建批 → 建批即拉起 Manager →
 //   由 Manager/Leader 调度、成员大规模并行**；**不是** Leader 以 A/B 档手工逐个 `subagent` 派单再手工 `member_status`
@@ -176,7 +176,7 @@ export function lockPath(root, sessionId, batchId, lane) { return join(root, 'se
 
 // 任务难度值门禁注册：guard 逻辑原样搬移自 lib/tools.js（一字不改），注册顺序保持现状（createTools 开头）
 export function installDifficultyGuard(ctx, deps) {
-  // N8 清债（2026-09-16 评审）：原此处绑定 `root: engineRoot` 并注释「供成员会话留痕写
+  // 原此处绑定 `root: engineRoot` 并注释「供成员会话留痕写
   //   <root>/governance/member-session-trace.log」——该绑定**全函数未使用**、该日志面**未实现**（grep 零命中），
   //   属死绑定 + 错注释（误导后来者以为有该日志面）。已删；确实需要审计日志面时另立设计，不再挂在 guard 里。
   const { store, config = {} } = deps;
@@ -194,7 +194,7 @@ export function installDifficultyGuard(ctx, deps) {
       // 修复显式传 session 时评估（args.session 落点）与拦截（只认 agent.session）不同步导致的误拦
       const sessionId = execution?.arguments?.session ?? execution?.agent?.session?.id;
       if (!sessionId) return undefined;
-      // ⓪′ 模式跟随（E 阶段，2026-09-16 用户裁决「全局装载、不全局生效」）：本模式不在 `config.modes.gate`
+      // ⓪′ 模式跟随（「全局装载、不全局生效」）：本模式不在 `config.modes.gate`
       //   白名单 ⇒ 难度门禁整体不介入——全放行且**不计数**（不写任何治理状态），其他模式零影响。
       //   判据缺省 = 全模式生效（向后兼容）；子会话继承父会话模式（见 dispatch.js modeActiveFor）。
       if (!modeActiveFor(readLiveConfig(deps), execution, (m) => {
@@ -248,7 +248,7 @@ export function installDifficultyGuard(ctx, deps) {
       }
       // 门禁 4（派发面 · C 阶段，2026-09-16）：C 档下 `subagent`/`subagent_fork` 建议携带**有效 lane 句柄**；
       //   **B 档不受影响**（单步调研/单步派发）；A 档由门禁 3 拒（本判不重复）。
-      //   【gate-lite 第二批 · B（2026-09-17 用户裁决）】**已改为只留痕不拦**，
+      //   **已改为只留痕不拦**，
       //   拒态随码删除（官方 agent-team profile 已 disable 宿主 `subagent`/`subagent_fork` ⇒ 官方场景下无拦截对象）。
       //   `dec.denyReason` 恒为 null（保留分支读法 = 结构不变，防读端漂移）；无句柄一律走 `warnNote` 留痕。
       //   句柄面：`lane_dispatch` 发放（一次性 + TTL）；引擎只读 `exec.arguments`，故句柄由任务包文本携带。
@@ -505,8 +505,8 @@ export function assertChainReady(team, { root = packageRoot() } = {}) {
   return c.chain;
 }
 
-// ── gate-lite Q-G2（2026-09-17 用户裁决：「**删除这一项**」）：成员回报**目标解析**（身份门已删） ──────
-// 背景（普查 `docs/gate-census-20260917.md` + 本轮实测）：官方 Team 成员由宿主 `spawn_teammate` 拉起，
+// ── 成员回报**目标解析**（身份门已删） ──────
+// 背景（普查 `gate-census-20260917`（原文档未随仓分发） + 本轮实测）：官方 Team 成员由宿主 `spawn_teammate` 拉起，
 //   **天然无 `member.dispatch` 绑定** ⇒ 「未绑定」是该场景的**常态**而非异常；原
 // 现口径 = **不再拒**，改 best-effort 解析（不猜批次、不静默）：
 //   ① 有 dispatch 绑定 ⇒ 既有路径逐字不变（owner 会话 + 绑定批次 + 绑定 lane）；
@@ -598,7 +598,7 @@ function managerViewOf(ctx, exec, batch) {
 }
 
 // ── P2-B（2026-09-17）：**legacy 标注**（用户裁决 Q2 暂缓 ⇒ **只标注不改行为**）────────────────────
-// 事实（`docs/member-governance-redesign-20260917.md` §7.1 事实分工）：**成员身份/状态的真源 = 官方 roster（5 态）**；
+// 事实（`member-governance-redesign-20260917`（原文档未随仓分发） §7.1 事实分工）：**成员身份/状态的真源 = 官方 roster（5 态）**；
 //   引擎的 `member.*` **八态**（`pending/running/review/merged/failed/skipped/conflict/idle`）是**引擎侧投影**，
 //   `member.settled` / `member_status` / `member_settle` 写的是这八态 ⇒ 一律**标 legacy**（不改判定、不删字段、
 //   不新增事件；仅回显面标注，使读端能看出「这是引擎投影、非官方真源」）。
@@ -664,7 +664,7 @@ export function createCoreTools(ctx, deps) {
         const asm = normalizeAssemblyDecl(args.assembly, teamRolesForAssembly.ok ? unionRoleVocabulary(teamRolesForAssembly) : []); // { decl, warnings }；结构非法 → GATE_ASSEMBLY_INVALID throw
         const asmGate = assemblyGate(plan.wavePlan.flatMap((w) => w.tasks), asm.decl); // C+ 缺声明 → 拒；悬空 lane id → throw
         if (asmGate !== 'ok') throw new Error(asmGate.code + ': ' + asmGate.message);
-        // P2（2026-09-14 用户裁决 B）：**audit 职责声明化**——批次含 audit lane 且**解析到团队资产**时，
+        // P2：**audit 职责声明化**——批次含 audit lane 且**解析到团队资产**时，
         //   `flows.audit.audit_contract` 必须存在（fail-closed：既然声明了流程，就必须声明 audit 职责）；
         //   缺 → 拒建批 `GATE_AUDIT_CONTRACT_MISSING`；**显式空 `{}` 或 `{exempt:true}`** → 放行但落 warning
         //   留痕 `GATE_AUDIT_CONTRACT_EXEMPT`（带 `reason` 时一并记）。**无团队资产**（generic / 退役团队 → legacy
@@ -722,7 +722,7 @@ export function createCoreTools(ctx, deps) {
             }
           }
         }
-        // exec 消费门（2026-09-18 用户裁决：E-A/E-B 一并加）——与上方 audit 的 `consumes_required` **同址同形**，
+        // exec 消费门（E-A / E-B）——与上方 audit 的 `consumes_required` **同址同形**，
         //   把「**exec 依赖 plan 产物执行**」从建批声明约定升为**引擎门禁**（拒建批、零批次落盘、未声明零感知）：
         //   · E-A `flows.exec.consumes_required`（**批级**）：每个声明前缀须至少被**一条** exec lane 的 consume 命中；
         //   · E-B `flows.exec.consumes_required_per_lane`（**逐 lane**）：**每一条** exec lane 须各自命中每个前缀。
@@ -782,7 +782,7 @@ export function createCoreTools(ctx, deps) {
           }
         }
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined, ...(teamsRoot ? { teamsRoot } : {}) });
-        // gate-lite Q-G1（2026-09-17 用户裁决「开显式豁免键」）：**冒烟/探针批**留痕——建批成功当刻落一条
+        // **冒烟/探针批**留痕（显式豁免键）——建批成功当刻落一条
         //   `batch.smoke` 事件（常量登记于 `lib/state/event-types.js`）⇒ 门禁读端（`lib/state/gates.ts#smokeOf`）
         //   与读端回显（`batch_status.smoke`）取**同一事实源**；批次 JSON 不新增字段（`store.createBatch`
         //   不在本批写域，且事件流本就是批次级留痕的既有载体，与 `laneStartedAt`/`gateStrengthOf` 同法读取）。
@@ -828,7 +828,7 @@ export function createCoreTools(ctx, deps) {
         const sessionId = sessionOf(args, exec);
         // Manager legacy 登记（留痕入口）：可与阶段迁移同一次调用。
         // 顺序：**先登记、后迁移**——这样「同一次调用里从 running 迁走」也能正常登记。
-        // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】原「准入 = 批次非终态 + agentId 必填」
+        // 原「准入 = 批次非终态 + agentId 必填」
         //   两处硬判**已删**（`「Manager 终态」码(已删)` / `_PHASE_INVALID` / `_AGENT_ID_REQUIRED` 三码不存在）：
         //   · 任意 phase 均可登记事实（幂等；不改阶段、不改成员状态）；
         //   · 空/缺 `agentId` ⇒ `markManagerRaised` 返回 null ⇒ 走下方「既无 phase 又无 manager」显式报错
@@ -845,7 +845,7 @@ export function createCoreTools(ctx, deps) {
         if (b.phase === 'complete' || b.phase === 'aborted') clearPendingBatch(store, sessionId); // 兜底清理旧锁
         const out = { batchId: args.batchId, phase: b.phase };
         if (manager) out.manager = manager;
-        // GAP-S3b（2026-09-16 用户裁决 = 折中方案）：`aborted` 收口时若本批仍存在**非终态成员**，
+        // `aborted` 收口时若本批仍存在**非终态成员**（折中方案）：
         //   **额外落一条告警事件 + 工具返回回显**（提醒「这批留了悬挂」）。
         // P3a control lane **抽取**：本判定的实现已移入单点 `lib/state/dangling.js` 的 `warnAbortDangling`
         //   ——`batch_phase`（本处）与新增 `batch_control(abort)` **共用同一份**，禁第二份实现。
@@ -955,7 +955,7 @@ export function createCoreTools(ctx, deps) {
         // ── P2-B 回显标注（2026-09-17；**只标注不改行为**）─────────────────────────────────────
         // ① 成员态来源标注：`source: engine|roster` 的**二值可辨**——引擎八态为 legacy 投影（`stateSource:'engine'`
         //    + `memberStatesLegacy:true`），官方 roster 5 态为真源（`managerRoster.source:'roster'`）。
-        //    消费者 = 本工具的**渲染面**（`state=engine(legacy)`），不再「写了不生效」（`task-27` 增量裁决）。
+        //    消费者 = 本工具的**渲染面**（`state=engine(legacy)`），不再「写了不生效」。
         // ② P1/P2 交接门**策略态**（`task-27`）：经**唯一解析点** `handoffGateStateOf(readLiveConfig(deps))` 取值
         //    ⇒ 真源 = runtime.json `gates.handoff.{entry,settle}`（env 兜底、缺省关）；`source` 如实回显
         //    （`runtime|env|default`）；渲染面同样显示（缺省关是策略、**不得隐形**）。
@@ -1036,7 +1036,7 @@ export function createCoreTools(ctx, deps) {
         if (args.multiRole) reasons.push('需要多角色协作（编码+测试+审查分离）');
         if (args.gate) reasons.push('需要门禁/审计（人审、验收、gap-list）');
         if (args.recoverable) reasons.push('需要跨轮治理/可恢复/可审计');
-        // ③ 交叉校验（2026-09-14 用户裁决 B「有解释的偏离」）：
+        // ③ 交叉校验（「有解释的偏离」）：
         //    derived = 五布尔**机械推导**的档位（任一 C 判据 → C；否则 needIsolation → B；否则 A）；
         //    difficulty 仍由 Leader 主动写入，二者关系分两支：
         //      · difficulty === derived → 常规放行；
@@ -1347,7 +1347,7 @@ export function createCoreTools(ctx, deps) {
         });
         const blocking = edges.flatMap((e) => e.gap);
         const pending = edges.filter((e) => e.status !== 'submitted').map((e) => e.from + '->' + args.lane);
-        // 存量批（无 handoffs 字段）⇒ 门整体放行（裁决 ①=B）⇒ ready:true + legacy 标记（不静默）
+        // 存量批（无 handoffs 字段）⇒ 门整体放行 ⇒ ready:true + legacy 标记（不静默）
         const ready = legacy ? true : blocking.length === 0;
         return { batchId: args.batchId, lane: args.lane, legacy, ready, deps, edges, pending, blocking };
       },
@@ -1462,7 +1462,7 @@ export function createCoreTools(ctx, deps) {
           throw new Error('GATE_EXEMPT_NOT_DISPATCH: 须给出 status（非终态迁移），或 revokeExempt=true（显式撤销豁免）');
         }
         // 【已删 · 勿回加】原「并发闸（批级容量准入）」段（段头注释 + `assertConcurrencyAdmit` 调用）随
-        //   **Q-B 取消并发闸**（2026-09-18 用户裁决）整体删除：`member_status(status='running')` 直派面
+        //   并发闸已取消：`member_status(status='running')` 直派面
         //   **不再做容量准入**（高并发不得被限流），`running` 迁移一律照常放行；本文件对该符号**零引用**。
         // 第 6 参 exempt：undefined = 既有行为零变化；非空对象 = 派发面授予（参数面强校验在 store 内）
         // 第 7 参 owner：仅 `to==='running'`（派发面）写入 ⇒ 派发即出池（K1）；非派发面传值亦被忽略。

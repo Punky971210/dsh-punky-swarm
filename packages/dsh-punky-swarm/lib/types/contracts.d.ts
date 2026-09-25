@@ -41,6 +41,7 @@ export interface WavePlanTaskInput {
     standaloneReason?: string;
     targetsNoChange?: boolean;
     owner?: string | null;
+    sig?: string | null;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
 export interface WavePlanTask {
@@ -76,6 +77,13 @@ export interface WavePlanTask {
      *  ⚠ **本字段只作声明面**：池 = `owner == null` 的**视图**（不是容器），不引入认领/claim 语义；
      *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
     owner: string | null;
+    /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
+     *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
+     *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化
+     *  分别做「新任务补算」「受影响任务重算、无关任务不变」）；`owner` 非空 ⇒ **冻结**（读旧值原样落盘）。
+     *  读端 `lib/sig-fingerprint.js#sigOf`（非 16 hex ⇒ `null`；**存量批无该字段 = 零感知**）。
+     *  ⚠ **不参与任何门禁判定**：sig 只作幂等判等的留痕依据（D-sig-2 = 不加新拒码、不阻断动作）。 */
+    sig?: string | null;
 }
 /** 交接契约（下游据此取件；`consumedFrom` = 消费证据，替代消息 ack 语义） */
 export interface LaneHandoffContract {
@@ -229,6 +237,11 @@ export interface Batch {
     laneProgress?: LaneProgressMap;
     handoffs?: LaneHandoffMap;
     laneExempt?: LaneExemptMap;
+    /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
+     *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js#recordSigDuplicate` 产出），值恒 `true`。
+     *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
+     *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
+    sigDuplicateLogged?: Record<string, boolean>;
     teamAsset?: TeamAssetRef;
     events: BatchEvent[];
     createdAt: string;
@@ -399,6 +412,19 @@ export type BatchEvent = BatchEventBase & ({
 } | {
     type: 'archive.failed';
     reason: string;
+} | {
+    type: 'sig.duplicate_detected';
+    lane: string;
+    sig: string;
+    matches: Array<{
+        lane: string;
+        state: string;
+    }>;
+    notice: Array<{
+        lane: string;
+        state: string;
+        layer: string | null;
+    }>;
 } | {
     type: 'system.recovered';
     batchId: string;

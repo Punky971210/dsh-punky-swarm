@@ -37,7 +37,7 @@ export const EVT_BATCH_CREATED = 'batch.created';
 //   键纪律（**非空才写键**）：`reason` 为空/空白 ⇒ **不写该键**，保持既有 `{from,to}` 形态零污染。
 export const EVT_BATCH_PHASE = 'batch.phase';
 export const EVT_BATCH_FAILED_ESCALATE = 'batch.failed-escalate';
-// 悬挂成员告警（GAP-S3b，2026-09-16 用户裁决 = **折中方案**）：批次被 `batch_phase({phase:'aborted'})`
+// 悬挂成员告警（**aborted 收口时留痕**）：批次被 `batch_phase({phase:'aborted'})`
 //   收口时若仍存在**非终态成员**（`lib/schema.js` 的 `isMemberTerminal` 判据；lane 级判定复用单点
 //   `lib/watch/lane-heartbeat.js` 的 `isDanglingLane`，不另立一套口径）⇒ **额外落一条本事件**。
 //   **不自动改成员状态**（不做隐式批量 `skipped`）：那些成员在终态批上永久无法回收（`member_settle`
@@ -58,7 +58,7 @@ export const EVT_BATCH_MANAGER_RAISED = 'batch.manager.raised';
 //   载荷键纪律：`type` 键承载**事件名**，载荷**不得**占用它（故严重级写 `severity`、问题串写 `problems`）；
 //   无资产批（无 hash 不可命名）**不落本事件**（只写 `ok:false` 字段）——保「缺省零差异」。
 export const EVT_BATCH_TEAM_ASSET_RESOLVED = 'batch.team-asset.resolved';
-// gate-lite Q-G1（2026-09-17 用户裁决「开显式豁免键」）：**冒烟/探针批豁免**建批留痕。
+// **冒烟/探针批豁免**建批留痕（显式豁免键 `smoke: true`）。
 //   语义：`wave_plan({ smoke: true })` ⇒ 本批声明为冒烟/探针批 ⇒ **跳过产物契约类门**
 //   （建批 `GATE_PLAN_PRESENCE_MISSING` / `GATE_ORPHAN_PRODUCT`；运行期 entry `consume`、exit
 //   `produce`∪`outputs`、`targets`、complete 的 plan 悬空产物判定）；
@@ -99,7 +99,7 @@ export const EVT_LANE_LONGRUN_CANDIDATE = 'lane.longrun.candidate';
 //   载荷 { lane, runningSince, durationMs, emittedAt, elapsedMs, unconsumedTimeoutMs, ackId }。
 // 纪律同 stalled/longrun：只写事件流，不改成员状态、不自动重派（重派裁决归 Manager/Leader）。
 export const EVT_LANE_LONGRUN_UNCONSUMED = 'lane.longrun.unconsumed';
-// gate-lite 第二批 · A2（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）：**Manager 在册缺口**留痕。
+// **Manager 在册缺口**留痕（该判定改由官方 roster 承抽）。
 //   语义：引擎按 `assembly.managerPlan` 声明核验 **官方 Team roster**（`ctx.get('agentTeams')` →
 //   `listMembers(agent)`）中是否存在约定名成员 `manager`；声明 `raise` 而 **roster 可读且确无该成员** ⇒ 落本事件。
   //   （原批次收口告警（按 `batch.manager` 字段触发）已删——2026-09-22 用户裁定；批次字段 legacy
@@ -173,19 +173,19 @@ export const EVT_GATE_TARGET_BLOCKED = 'gate.target_blocked';
 export const EVT_GATE_TARGET_PASSED = 'gate.target.passed';
 
 // ── P1 交接门事件（handoff gate；批次 p1-handoff-gate-20260917）────────────────────────────
-// 定式（`docs/p1-handoff-gate-changeplan-20260917.md` §2）：**读端真源 = `batch.handoffs`**（不做事件流重建），
+// 定式（`p1-handoff-gate-changeplan-20260917`（原文档未随仓分发） §2）：**读端真源 = `batch.handoffs`**（不做事件流重建），
 //   本两条是**审计面 + 缺口可读面**（事件不参与判定，判定只读 `batch.handoffs`）。
 // · `lane.handoff`（审计真源）：**每次交接提交一条**。写端 = `lib/state/store.js#recordHandoff`
 //   （唯一写路径内，与 `batch.handoffs` 同一次 atomicWrite ⇒ 「交了」与「记了」不可分叉）。
 //   载荷：`{ lane, from, to, artifacts[], assertions[], handoffBatch }`——载荷键纪律：`type` 槽位承载**事件名**，
 //   故批 id 写 `handoffBatch`（不得占用 `type`；引擎多处按 `e.type` 读事件名，占用即失名）。
 // · `lane.handoff.gap`（缺口留痕）：**拒下游时落**（`code:'GATE_HANDOFF_MISSING'` + `missing[]`：缺哪条边 / 缺哪件产物），
-//   以及**存量批放行时落**（`legacy:true`，裁决 ①=B：不静默、不砸存量）。
+//   以及**存量批放行时落**（`legacy:true`：不静默、不砸存量）。
 //   写端 = `lib/tools/core.js` 的两个交接工具面（拒态留痕）与 entry 门放行侧的存量留痕调用点。
 export const EVT_LANE_HANDOFF = 'lane.handoff';
 export const EVT_LANE_HANDOFF_GAP = 'lane.handoff.gap';
 
-// ── 派发套件事件（2026-09-15 用户裁决：集群内部同步事件走套件工具；写端/读端见括号） ──
+// ── 派发套件事件（集群内部同步事件一律走套件工具；写端/读端见括号） ──
 //   swarm.report       ← 成员侧套件工具 `swarm_report`（写端：lib/tools/core.js；读端：Leader mailbox inbox）
 //   swarm.cc           ← 成员侧套件工具 `swarm_cc`（写端：同上；读端：Manager 通道 supervisor/inbox）
 //   lane.binding_gap   ← 心跳探测（写端：lib/watch/lane-heartbeat.js；读端：Leader mailbox inbox + batch_status 事件清单）
@@ -266,9 +266,13 @@ export const EVT_CHAIN_STEP = 'chain.step';
 //   · `auto.settle.paused`：**停轮留痕**（缺省 `onFail=pause`）——载荷 `{ lane, action, reason, code, … }`，
 //     与「批 `running→paused`」是**同一次停轮的两面**：本事件先落（原因），`batch.phase` 后落（结果）。
 //     停轮**不写 failed、不 abort、不改成员状态**（沿用 P2 既有停轮口径，不新造语义）。
-//   · `auto.settle.skipped`：**幂等/资格留痕**——`already-settled`（同 (lane, settleId) 已结算，第二路 no-op）
-//     或 `lane-terminal`（触发资格：命中 lane 须非终态）。存在的意义 = 「第二路被跳过」**可审计**，
-//     而不是静默丢弃（与「零静默」纪律一致；同时是幂等自证：跨重启重放不再逐次追加事件）。
+//   · `auto.settle.skipped`：**资格/职责留痕**（**仅异常路径**）——`lane-terminal`（触发资格：命中 lane
+//     须非终态）、`phase-<相位>`（相位闸：`planning`/`paused`/`aborted` 不结算）、
+//     `audit-explicit-settle-required`（audit 层职责转移，留 Leader 显式结算）。存在的意义 = 回答
+//     「**为何不结算**」，而不是静默丢弃（与「零静默」纪律一致）。
+//     ⚠ **`already-settled` 形态已于 2026-09-24 按用户裁决关闭**（幂等闸**不再落事件**）：该形态是
+//     **纯噪音**——兼底路抢先结算后，主路（宿主 `subagent/end`，实测晚 60–63 s）到达必命中该闸，
+//     每个 lane 正常结算都会多产一条。**幂等语义不变**（仍跳过、不改状态、不重复推进）。
 // 载荷键纪律：同既有约定，`type` 键承载事件名，载荷不得占用（豁免类型故写 `exemptType` 之先例）。
 export const EVT_AUTO_SETTLE_TRIGGERED = 'auto.settle.triggered';
 export const EVT_AUTO_SETTLE_PAUSED = 'auto.settle.paused';
@@ -284,3 +288,12 @@ export const EVT_TASK_OWNER_ASSIGNED = 'task.owner.assigned';
 //   与 `task.owner.assigned` 分工：后者记「出池（谁领了）」，本条记「入池（谁加的、为什么加）」。
 //   写端 = `store.addPoolTasks`（单次 atomicWrite）；**不接回状态机**（不改成员态、不新增迁移）。
 export const EVT_PLAN_MUTATED = 'plan.mutated';
+
+// sig 任务内容指纹（N3-②）· **幂等判等留痕**（用户 D-sig-2 裁定 = **不加新拒码**，只事件留痕）。
+//   触发：消费点（`store.setMember` 的 dispatch/settle 写路径）检测到同批次内存在 `sig` 相同且状态 ∈
+//   {running, review, merged} 的**其他** lane（同层 ⇒ 计 `blocking` 记账项；跨层 ⇒ 只作 `notice`）。
+//   载荷 `{ lane, sig, matches:[{lane,state}…], notice[] }`（`type` 键承载事件名，载荷不得占用）。
+//   **非拒态**：**不新增 `GateErrorCode`**、不改任何判定、不改任何 exit code、不阻断动作、不新增治理状态
+//   ——本常量是**事件码**，不是 GATE 码。写端 = `lib/sig-fingerprint.js#recordSigDuplicate`
+//   （唯一写路径，由 `lib/state/store.js` 的 `setMember` 消费点调用；去重键记 `sigDuplicateLogged`）。
+export const EVT_SIG_DUPLICATE_DETECTED = 'sig.duplicate_detected';

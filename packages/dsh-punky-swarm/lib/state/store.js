@@ -44,6 +44,10 @@ import * as EVT from './event-types.js';
 //   无循环依赖：store.js → escalation.js → event-types.js 单向链）。默认计入原语集（DENY/NARROW）亦复用
 //   escalation.js 导出常量（单一事实源——config resolve 默认与纯函数签名缺省同源）。
 import { countGovernanceRefusals, DEFAULT_ESCALATION_PRIMITIVES } from '../governance/escalation.js';
+// sig 任务内容指纹（N3-②）· 消费点单点（幂等判等 + 留痕，**不加新拒码、不阻断**）：
+//   判据/写路径全在 `lib/sig-fingerprint.js`（与 `lib/wave-plan.ts` 的计算入口**同模块**，禁第二套口径）；
+//   本文件只做接线：`setMember` 的写路径在**迁移前态**上判等，命中即落 `sig.duplicate_detected`。
+import { duplicateSigLanesOf, sigDuplicateVerdict } from '../sig-fingerprint.js';
 
 const STORE_SCHEMA = BATCH_SCHEMA_V3;
 
@@ -239,6 +243,22 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     return { ts: new Date().toISOString(), type, ...fields };
   }
 
+  // ── sig 任务内容指纹（N3-②）· 消费点判定（`setMember` 写路径唯一调用；**不落盘**）──────────────
+  // 语义（用户 D-sig-2 裁定）：同批次内存在 `sig` 相同且状态 ∈ {running, review, merged} 的**其他** lane
+  //   ⇒ 本次迁移落事件 `sig.duplicate_detected` **留痕**；**不阻断、不加拒码、不新增治理状态**。
+  // 纪律要点：
+  //   · 判等只看**落盘 sig**（非 16 hex ⇒ 视为无指纹，读端单点 `sigOf`）——本函数**不重算**任何 sig
+  //     （计算点唯一 = `buildWavePlan`；此处重算即第二套计算入口）；
+  //   · 本 lane 计入自身排除；状态取**迁移前**快照（调用点位于 `batch.lanes[lane] = to` 之前）；
+  //   · **本函数零写入**：只回判定（`lib/sig-fingerprint.js#sigDuplicateVerdict`）——事件与去重记账键
+  //     由调用点在**同一次 atomicWrite** 内落盘。理由（实测踩过）：`appendEvent` 是**独立整文件写**，
+  //     若在此处即时写，随后调用点用它更早读到的 `batch` 快照再写一次 ⇒ **静默覆盖掉本条事件**
+  //     （去重键仍在、事件消失）。故唯一写盘点必须与迁移写同批。
+  // @returns {{log: boolean, reason?: string, key?: string|null, fields?: object, matches?: object[]}}
+  function sigDupVerdictOf(batch, lane) {
+    return sigDuplicateVerdict(batch, lane, duplicateSigLanesOf(batch, lane));
+  }
+
   // 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
   // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（调用点埋点固化），
   // 故必须在调用点埋。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
@@ -335,7 +355,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    // P1 交接门：按 `task.deps` 的**每条入边**种一条 `pending` 交接（建批期意图声明 = 裁决 ②=A 的判据来源）。
+    // P1 交接门：按 `task.deps` 的**每条入边**种一条 `pending` 交接（建批期意图声明 = 本门判据来源）。
     //   语义：下游 lane 一旦声明 deps，就在黑板（本批 handoffs）留下「我期望上游 X 交接过来」的**机器可判事实**；
     //   上游未提交（status 仍 pending）/产物不在场/契约不合规 ⇒ entry 门拒 `GATE_HANDOFF_MISSING`（缺哪条边、缺哪件产物）。
     //   此为**纯数据种入**（不写事件、不派发、不改任何成员态）——事件面只在 `recordHandoff`（真实交接）与拒态留痕发生。
@@ -760,6 +780,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
 
   function setMember(sessionId, batchId, lane, to, note = null, exempt = undefined, owner = undefined) {
     let batch = readBatch(sessionId, batchId); // 终态清退经 laneProgressClear 返回新 batch（不突变入参）
+    let sigDup = null; // sig 幂等留痕判定（见下方消费点；事件与去重键随本次迁移**同一次 atomicWrite** 落盘）
     if (!batch) throw new Error('batch not found: ' + batchId);
     // 终态批次冻结：complete / aborted 之后不再接受任何成员迁移（防「已收口批次仍被改写成 running」的治理自相矛盾）
     if (schema.isBatchTerminal(batch.phase)) {
@@ -812,6 +833,15 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         + '（`running -> ' + to + '` 不在迁移表内；review 为合并/跳过的唯一中转）'
       : '';
     if (!mv.ok) throw new Error('invalid member transition: ' + from + ' -> ' + to + d4Hint);
+    // ── sig 任务内容指纹（N3-②）· 消费点（D-sig-2 裁定：**只留痕不阻断**）────────────────────────
+    // 语义：本 lane 的 `sig` 与同批次内**其他** lane 相同、且该 lane 状态 ∈ {running, review, merged}
+    //   ⇒ 判定为「同内容任务被重复派发/重复结算」，落事件 `sig.duplicate_detected` **留痕**。
+    //   硬边界（逐条，防扩权）：**不阻断本次迁移**（不 throw、不加拒码、不动 `GateErrorCode` union、
+    //   不新增治理状态、不生 v2 字段）；判等用**迁移前**的 lanes 快照（此刻本 lane 尚未置 to）；
+    //   同层重复计 `blocking` 记账项、跨层只作 `notice`（层不同 ⇒ 任务语义不同域，避免假阳性）。
+    //   去重：同一 (lane, 对端集合) 只落一条（`sigDuplicateLogged`）；sig 平凡/零命中 ⇒ 零写入。
+    //   位置：置于入口门之前——留痕与门禁**互不影响**（门拒时本条已如实记账，不静默丢事实）。
+    sigDup = sigDupVerdictOf(batch, lane);
     // Tier3 门禁：派发（condition + entry）与结算（exit/Plan 契约）+ needHuman（review 挂起检测 / merged 人工裁决闸）
     if (to === 'running') {
       // 派发前条件校验（lane.condition 静态声明，DI fileExists）——不满足 → 不派发、自动落 skipped（既有终态迁移）+ lane.skipped 事件；wavePlan 不动不重算
@@ -845,7 +875,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         //   改后取非空者，两类门禁的抛错都带回提示。注：本条注释原引用的 「未拉起 Manager」码(已删) 已随
         //   gate-lite 第二批 A 项删除（该门整体移除），提示取非空者这一**机制**保留不变。
         const detail = (g.missing && g.missing.length) ? g.missing : (g.problems ?? []);
-        // P1 交接门拒态（2026-09-17）：码 = `GATE_HANDOFF_MISSING`（裁决 ④=A 新造独立码）⇒ 落**专用**缺口事件
+        // P1 交接门拒态：码 = `GATE_HANDOFF_MISSING`（独立码）⇒ 落**专用**缺口事件
         //   `lane.handoff.gap`（含**缺哪条边 / 缺哪件产物**，即 `missing[]`），**不再**复用 `gate.entry.missing`
         //   （语义独立、审计可辨：交接 ≠ consume 在场）。其余 entry 拒码（GATE_ENTRY_MISSING / STANDALONE_* /
         //   AUDIT_*）走原路径**逐字不变**。
@@ -858,7 +888,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         atomicWrite(batchFile(sessionId, batchId), batch);
         throw new Error(g.code + (detail.length ? ': ' + detail.join(', ') : ''));
       }
-      // P1 存量批放行留痕（裁决 ①=B：**不静默、不砸存量**）：本批无 `batch.handoffs` 字段（旧批）但该 lane
+      // P1 存量批放行留痕（**不静默、不砸存量**）：本批无 `batch.handoffs` 字段（旧批）但该 lane
       //   声明了 deps 入边 ⇒ 未交接门整体放行 ⇒ 落 `lane.handoff.gap{legacy:true}` 告警，使「本 lane 是在无
       //   交接约束下开工的」在事件流里**可核**（不阻断、不追溯拒批）。闸门判据来自 gates.ts 的放行标记
       //   `handoffLegacy`（门禁纯函数不写事件 ⇒ 落盘一律在本写路径，R-5 边界不变）。
@@ -877,7 +907,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       }
     }
     if (to === 'review') {
-      // audit lane 产物含 needHuman 声明 → 事件 lane.needhuman 留痕（Manager 转达人工裁决）
+      // audit 产物含 needHuman 声明 → 落 lane.needhuman 事件（人工裁决转达）
       const nh = gates.checkNeedHumanGate(sessionId, batchId, batch, lane, null);
       collect('escape', nh); // V-4 写端（e2）：review 态关闭档留痕（needhuman-off）
       emitContractMissing(nh); // B2（§8⑤ P-3 needhuman @audit）：首触留痕
@@ -948,7 +978,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         throw new Error(nh.code + ': ' + nh.message);
       }
       if (nh.declared) batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note })); // 人工裁决留痕（note 可回溯）
-      // ── P2-A（裁决 D3，2026-09-17）：出口侧收紧「有下游 ⇒ 须至少一条已成立交接」───────────────
+      // ── P2-A：出口侧收紧「有下游 ⇒ 须至少一条已成立交接」───────────────
       // 位置纪律：**放在既有门链末尾**（exit → targets → command → needHuman 之后、写盘点之前）⇒
       //   **既有门顺序与语义一字不动**（本批只**新增**判定；D2「保留 exit 门」由此自然成立）。
       // 语义：本 lane 有下游却无一条已成立交接 ⇒ 拒 `GATE_HANDOFF_MISSING` + 落 `lane.handoff.gap` 缺口事件；
@@ -1091,6 +1121,13 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
         }
       }
     }
+    // sig 幂等留痕（N3-②）：**事件 + 去重记账键**在同一次 atomicWrite 内落盘（与迁移不可分叉；
+    //   分两次写会被本函数随后的整文件写覆盖 —— 见 `sigDupVerdictOf` 头注）。事件载荷由
+    //   `lib/sig-fingerprint.js#sigDuplicateVerdict` 单点构造（`type` 键承载事件名，载荷不占用）。
+    if (sigDup?.log) {
+      batch.events.push(newEvent(EVT.EVT_SIG_DUPLICATE_DETECTED, sigDup.fields));
+      batch.sigDuplicateLogged = { ...(batch.sigDuplicateLogged ?? {}), [sigDup.key]: true };
+    }
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
     // 调用点埋点：member.settled（结算终态/返工入 review 等全部迁移）+ 伴随的 batch.phase（failed-escalate）
@@ -1108,7 +1145,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     const emitContractMissing = makeContractMissingSink(() => batch, () => null);
     schema.assertBatchPhase(to);
     const from = batch.phase;
-    // ── M0′-②（2026-09-17 裁决）：相位迁移**事由**（`reason`）随事件落盘 ──────────────────────
+    // ── 相位迁移**事由**（`reason`）随事件落盘 ──────────────────────
     //   动机：`batch.phase` 是「为何不推进」的唯一跨会话可核事实源（审计入口 = `log_export` markdown
     //   时间线）；只有 `{from,to}` 时，读端无法区分「链停轮」与「人工停轮」。
     //   归一化：仅**非空字符串**（trim 后）计事由，其余（缺省 / 空串 / 空白串 / 非字符串）一律 null
@@ -1157,7 +1194,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   }
 
   // Manager 拉起登记（唯一写入口）：写批次级 `manager` 字段 + `batch.manager.raised` 事件。
-  // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】**原 Manager 三码已删**
+  // 【改造为官方 roster 承抽】**原 Manager 三码已删**
   //   （2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码；语义见本段，勿再引用码名）
   //   ⇒ 登记**不再按 phase 或 agentId 拒绝**：
   //     · 任意 phase（含终态）均可登记事实（幂等；不改批次阶段、不改成员状态）；
@@ -1193,7 +1230,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   }
 
   // ---- P1 交接门：交接记录写入（**唯一写路径内新增**，裁决 ③=A）----
-  // 纪律（`docs/p1-handoff-gate-changeplan-20260917.md` §5「触碰唯一写路径」的缓解措施）：
+  // 纪律（`p1-handoff-gate-changeplan-20260917`（原文档未随仓分发） §5「触碰唯一写路径」的缓解措施）：
   //   · **只新增函数**，既有写入语义（createBatch/appendEvent/setMember/atomicWrite）一字不改；
   //   · `batch.handoffs` 与 `lane.handoff` 审计事件**同一次 atomicWrite** ⇒ 「交了」与「记了」不可分叉；
   //   · 交接成立性判据（artifacts 在场 / contract 合规）**不在本函数重判**（单点判定在 entry 门，禁双重判定）：
@@ -1447,7 +1484,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     return g;
   }
   // 评估过期判定：从未评估 / 距 lastAssign.at ≥ maxAgeMs(30min) / 时间戳非法。
-  // 【2026-09-16 用户裁决】原 `execCallsSince ≥ maxCalls(20)` 判据**已移除**：难度档位依据已彻底改写，
+  // 原 `execCallsSince ≥ maxCalls(20)` 判据**已移除**：难度档位依据已彻底改写，
   //   调用计数不再是档位/过期的依据（旧判据还会被只读侦察计数灌水误触发重评）。
   //   `maxCalls` 入参保留但**忽略**（向后兼容既有调用方与测试签名）。
   function stale(sessionId, { maxAgeMs = 30 * 60 * 1000 } = {}) {

@@ -93,6 +93,9 @@ export interface WavePlanTaskInput {
   targetsNoChange?: boolean;    // 零改动声明（只核 targets 存在性，跳过变更性判定；缺省 false）
   owner?: string | null;        // N1-R4-1（K1 公共池）：任务**归属声明**。缺省/非字符串 ⇒ 归一化落 `null` = **在池内**
                                 //   （未派发）；非空 = 已出池（已归属某执行方）。⚠ 本字段**只作声明面**，写方见 §7.4.2。
+  sig?: string | null;          // sig 任务内容指纹（N3-②）：16 位小写 hex；**只由 buildWavePlan 计算落盘**（唯一计算入口），
+                                //   `owner` 非空（已派发）⇒ 冻结不重算。**不参与任何门禁判定**、不进 `GateErrorCode` union；
+                                //   缺省 / 非 16 hex（存量批亦然）⇒ 读取口径一律 `null`（见 lib/sig-fingerprint.js#sigOf）。
 }
 
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
@@ -127,16 +130,23 @@ export interface WavePlanTask {
    *  ⚠ **本字段只作声明面**：池 = `owner == null` 的**视图**（不是容器），不引入认领/claim 语义；
    *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
   owner: string | null;
+  /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
+   *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
+   *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化
+   *  分别做「新任务补算」「受影响任务重算、无关任务不变」）；`owner` 非空 ⇒ **冻结**（读旧值原样落盘）。
+   *  读端 `lib/sig-fingerprint.js#sigOf`（非 16 hex ⇒ `null`；**存量批无该字段 = 零感知**）。
+   *  ⚠ **不参与任何门禁判定**：sig 只作幂等判等的留痕依据（D-sig-2 = 不加新拒码、不阻断动作）。 */
+  sig?: string | null;
 }
 
 // ── P1 交接门（handoff gate；R2/P1 批次，2026-09-17）──
-// 定位（`docs/p1-handoff-gate-changeplan-20260917.md` §2/§3）：**长生命周期成员 DAG 交接模型的核心硬门**——
+// 定位（`p1-handoff-gate-changeplan-20260917`（原文档未随仓分发） §2/§3）：**长生命周期成员 DAG 交接模型的核心硬门**——
 //   「保证 DAG 内下游成员可以稳定拿到上游产出的依赖」（用户 M-7 裁决 = 验收核心）。
 // 真源分工（禁双真源）：**读端真源 = `batch.handoffs`**（不做事后事件流重建，避免 O(n) 扫描）；
 //   审计真源 = 事件 `lane.handoff`（每次提交一条）；缺口留痕 = 事件 `lane.handoff.gap`（拒下游时落）。
-// 建批期意图声明（裁决 ②=A 的判据来源）：`buildWavePlan` 按 `task.deps` 的每条入边**种一条 pending 交接**——
+// 建批期意图声明（本门判据来源）：`buildWavePlan` 按 `task.deps` 的每条入边**种一条 pending 交接**——
 //   ⇒ 「该 lane 有交接声明来源」在建批期即成**机器可判事实**（下游定义了 deps 却解析不到上游声明 ⇒ 建批期拒）。
-// 缺省口径（裁决 ①=B）：存量批无 `batch.handoffs` 字段 ⇒ 未交接门**整体放行 + 落 `lane.handoff.gap` 告警**
+// 缺省口径：存量批无 `batch.handoffs` 字段 ⇒ 未交接门**整体放行 + 落 `lane.handoff.gap` 告警**
 //   （不静默、不砸存量）；新建批一律带该字段（空对象 = 无 deps 的批）。
 
 /** 交接契约（下游据此取件；`consumedFrom` = 消费证据，替代消息 ack 语义） */
@@ -306,6 +316,11 @@ export interface Batch {
   laneProgress?: LaneProgressMap; // v3 可选字段；非法形态经 migrateV2toV3 归一为 undefined（不写字段）
   handoffs?: LaneHandoffMap;      // P1 交接门：v3 纯增量可选字段。**缺省 undefined = 存量批** ⇒ 未交接门放行 + 落 `lane.handoff.gap`（裁决 ①=B）；新建批恒写（空对象 = 无 deps 的批，字段存在即「本批受新门约束」）
   laneExempt?: LaneExemptMap;     // v3 纯增量可选字段（缺省 undefined = 无豁免；空表整键删除，不写键；探针层只读消费）
+  /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
+   *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js#recordSigDuplicate` 产出），值恒 `true`。
+   *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
+   *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
+  sigDuplicateLogged?: Record<string, boolean>;
   teamAsset?: TeamAssetRef;       // §8③ 团队资产解析快照的批次级指纹引用（建批事务内落盘；不参与门禁判定）
   events: BatchEvent[];
   createdAt: string;            // ISO
@@ -362,6 +377,8 @@ export type BatchEvent = BatchEventBase & (
   | { type: 'gate.contract_missing'; cause: 'undeclared' | 'declared-off' | 'unresolvable'; gateKind: string; layer: string | null; lane: string | null; declared: boolean; source: string; degrade: { kind: string; note: string }; problems: string[] } // EVT_GATE_CONTRACT_MISSING
   | { type: 'batch.team-asset.resolved'; team: string; root: string; rootKind: 'package' | 'teams-root'; assetPath: string | null; assetHash: string | null; ok: boolean; severity: 'none' | 'strong' | 'blocking'; snapshotPath: string | null; snapshotWriteFailed?: boolean; problems: string[]; unwiredKeys: string[] } // EVT_BATCH_TEAM_ASSET_RESOLVED（载荷键不占用 type 槽位）
   | { type: 'archive.failed'; reason: string }                                        // EVT_ARCHIVE_FAILED
+  // sig 任务内容指纹（N3-②）· 幂等判等留痕（D-sig-2 裁定：**只留痕不阻断**，不加新拒码、不进 GateErrorCode）
+  | { type: 'sig.duplicate_detected'; lane: string; sig: string; matches: Array<{ lane: string; state: string }>; notice: Array<{ lane: string; state: string; layer: string | null }> } // EVT_SIG_DUPLICATE_DETECTED
   | { type: 'system.recovered'; batchId: string; sessionId: string; recoveredLanes: string[]; detail: unknown[] } // EVT_SYSTEM_RECOVERED
   // 兜底：扩展事件（lane.stalled / lane.over-budget / budget.rejected /
   //   worktree.created|checkpoint|merged|merge.conflict|merge.resolved /

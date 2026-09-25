@@ -4,7 +4,7 @@
     "version": 3,
     "requires_engine": ">=0.4.4",
     "hash": "unhashed",
-    "source": "角色与层职责见 skills/design-team/SKILL.md；执行侧能力指向 comfyui-use（Layer A 配方驱动：配方 -> 参数槽 -> 板1 comfy_* 工具序列 -> 质检 -> 审计回执），其迁入副本落 skills/design-team/references/comfyui/"
+    "source": "角色与层职责见 skills/design-team/SKILL.md；执行侧能力指向 comfyui-use（Layer A 配方驱动：配方 -> 参数槽 -> 板1 comfy_* 工具序列 -> 质检 -> 审计回执），其迁入副本落 skills/design-team/references/comfyui/；【2026-09-24 引擎 v2 对账标记（lane exec-asset / 批 onto-engine-v2-realign-20260924）】①`chain` 段仅受建批期八条静态校验：`pair_with` / `join.anyFailure` / `onFail` / `rework` 均已停消费（无运行期消费者；1:1 配对基数改由 audit lane 的 `deps` 表达、失败面用 gap-list 表达）——不得读作「失败自动 pause 的引擎行为」；②`manifest.version` / `requires_engine` / `hash` 为纯声明位（`lib/**` 零读端；`hash:\"unhashed\"` = 未计算占位，非校验值）；③派发形态双支持且不写死其一：形态由 `config.dispatch.provider` 配置位取值决定——一次性子代理形态下 worker 为 one-shot 会话，agent-team 形态下 worker 为长驻成员并由官方 roster 承抽（`ctx.get('agentTeams')`）；两形态下本资产的角色 / 技能 / 契约声明同等生效；④成员侧治理与派发面 20 件工具收窄不可达（`wave_plan` / `member_status` / `member_settle` / `lane_dispatch` / `lane_claim` 等），成员回报唯一通道 = `swarm_report`；⑤comfy 侧工具名以实际挂载的 `mcp__` 前缀工具为准，资产不预置未挂载的工具名"
   },
   "roles": {
     "extra": ["design-planner", "workflow-builder", "workflow-auditor", "producer"],
@@ -68,7 +68,7 @@
         "role": "design-planner",
         "template": { "produce": ["plan/${branch}-spec.md"] },
         "branches": [
-          { "id": "plan-designer", "role": "design-planner", "template": { "cmd": "产出设计规格与验收标准（${branch}）" } }
+          { "id": "plan-designer", "role": "design-planner", "template": { "cmd": "产出设计规格与验收标准，含裸标题「## 验收标准」与「## 约束」（${branch}）；用 write/edit 落盘、handoff_submit 交付下游；不得以引擎校验通过替代判据自证" } }
         ],
         "next": "exec-build"
       },
@@ -78,7 +78,7 @@
         "role": "workflow-builder",
         "template": { "produce": ["exec/${branch}/"] },
         "branches": [
-          { "id": "exec-workflow-builder", "role": "workflow-builder", "template": { "cmd": "搭建 ComfyUI 工作流（${branch}）" } }
+          { "id": "exec-workflow-builder", "role": "workflow-builder", "template": { "cmd": "搭建 ComfyUI 工作流（${branch}）；按 comfyui-use 技能给出的配方与工具序列取实际挂载的 comfy_* 工具、write/edit 落工作流与产物、lane_checkpoint 每子步骤快照、swarm_report 回报；不得编造未挂载的工具名" } }
         ],
         "next": "audit-pair"
       },
@@ -87,7 +87,7 @@
         "layer": "audit",
         "role": "workflow-auditor",
         "pair_with": "exec-build",
-        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物，按 plan 判据逐条对照并核证据；用 handoff_view 取入边、read/grep 复跑核对、swarm_report 回报 verdict；未决项只进 gap-list，不得以「继续调查」为默认终点", "produce": ["audit/${lane}.md"] },
         "next": "accept"
       },
       {
@@ -96,7 +96,7 @@
         "role": "workflow-auditor",
         "join": "all",
         "terminal": true,
-        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照；先消重、标注冲突、核证据再下结论，分歧不掩盖、不以投票了事；产出 audit/acceptance-report.md", "produce": ["audit/acceptance-report.md"] }
       }
     ],
     "join": { "anyFailure": "pause" },

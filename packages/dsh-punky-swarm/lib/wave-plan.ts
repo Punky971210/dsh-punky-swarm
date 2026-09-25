@@ -42,6 +42,9 @@ import { resolveTeamRoles, unionRoleVocabulary } from './assembly/flows.js';
 //   无环证明：`lib/**` 内导入 `wave-plan.js` 的只有 `lib/tools/core.js`（不在 gates.ts 的导入图内）。
 import { presenceJudge, declaredKindOf } from './state/gates.js';
 import { isAbsPath } from './state/constants.js'; // 单点（自有实现收敛改 import）
+// sig 任务内容指纹（N3-②）：唯一计算入口就在本函数（建批全量算；`addPoolTasks`/`addTaskEdges`
+//   经同一次重归一化分别做「新任务补算」「受影响任务重算」）；读端口径 `sigOf` 同为该模块单点。
+import { computeTaskSig, sigOf } from './sig-fingerprint.js';
 import type { ConditionClause, ConditionInput, Layer, Wave, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 
 // 两形态并集：拓扑/契约校验函数同时服务建批输入（WavePlanTaskInput）与持久化校验（WavePlanTask）——
@@ -181,7 +184,7 @@ export function isCPlusBatch(tasks: WaveTask[]): boolean {
   return threeTier && countExecLanes(tasks) >= 3;
 }
 
-// 装配声明必备判定（2026-09-14 用户裁决：Manager 见批即默认 raise，且该默认必须**可核**）：
+// 装配声明必备判定（Manager 见批即默认 raise，且该默认必须**可核**）：
 //   三层批形态（任一 task 声明 layer）**且含 audit 层 lane** → 建批必须携带批次级装配声明。
 //   为什么是这两个条件：① 声明里的 `auditLane` 必须指向 audit 层 lane ⇒ 「含 audit lane」是该声明可成立的前提；
 //   ② 只有声明落盘后，`managerPlan`（**缺省 raise**）才成为引擎侧可核事实——收口告警按**声明**触发（见 state/store.js），
@@ -253,7 +256,7 @@ export function normalizeAssemblyDecl(input: unknown, extraRoles: string[] | nul
 
 export type AssemblyGateResult = 'ok' | { code: 'GATE_ROLE_ASSEMBLY_MISSING'; message: string };
 
-// C+ 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
+// 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
 //   - decl 悬空 lane id（auditLane/coordinatorLane 不在 tasks）→ throw GATE_ASSEMBLY_INVALID（引用悬空 = 声明无意义，fail-closed）；
 //   - 层归属（结构前置）：三层批形态（任一 task 声明 layer）时 auditLane 须指向 audit 层 lane、
 //     coordinatorLane 须指向 plan 层 lane；层错配 → throw GATE_ASSEMBLY_INVALID（含层错配明细）。generic 批（无 layer 声明）
@@ -544,7 +547,7 @@ function validateLayerContract(tasks: WaveTask[], opts: { smoke?: boolean } = {}
   if (exec.length > 0 && audit.length === 0) {
     throw new Error('three-tier: exec layers require at least one audit lane');
   }
-  // P1（2026-09-14 用户裁决，**全局严格**）：**audit 的判据来源是设计不变量**——三层批中，
+  // P1（**全局严格**）：**audit 的判据来源是设计不变量**——三层批中，
   //   只要有 audit lane 声明了 `consume`，就必须**至少一条** audit lane 消费到 **plan 层产物**（验收标准载体）；
   //   否则拒建批 `GATE_AUDIT_INPUT_MISSING`。
   //   语义依据（2026-09-14 用户澄清）：audit 层对的是**总体任务验收**，判据来自 plan 的验收标准；
@@ -609,7 +612,7 @@ function validateLayerContract(tasks: WaveTask[], opts: { smoke?: boolean } = {}
   //   位置刻意置于函数末尾：既有拒因（跨层引用 / 路径契约 / 有 exec 必有 audit / audit 判据锚定 /
   //   skills 声明）的触发优先级与消息逐字不变（`contract.test.js` 的 `/not produced by any plan lane/`
   //   等既有断言不受影响），新增两道码只在既有检查全通过后才可能触发。
-  // gate-lite Q-G1（2026-09-17 用户裁决「开显式豁免键」）——**冒烟/探针批**（`smoke: true`）跳过本段：
+  // **冒烟/探针批**（`smoke: true`，显式豁免键）跳过本段：
   //   `GATE_PLAN_PRESENCE_MISSING` / `GATE_ORPHAN_PRODUCT` 均属**产物契约类**门，而冒烟批的全部意义就是
   //   「无产物契约地跑通一条通路」（单 lane、不声明产物）⇒ 硬拦即自相矛盾（本轮 Leader 实测两次被此两码拒）。
   //   边界（明示，防扩权）：只跳本段——本函数内其余拒因（有 exec 必有 audit / audit 判据锚定 / 路径契约 /
@@ -622,7 +625,47 @@ export function assembleCmd(role: string | null, skills: string[] | null | undef
   const parts: string[] = [];
   if (role) parts.push('[role=' + role + ']');
   if (Array.isArray(skills) && skills.length) parts.push('[skills=' + skills.join(',') + ']');
-  return parts.length ? parts.join(' ') + ' ' + (cmd ?? '') : (cmd ?? '');
+  return parts.length ? parts.join(' ') + ' ' + stripCmdPrefix(cmd, role, skills) : (cmd ?? '');
+}
+
+/** 引擎注入前缀剥离（`assembleCmd` 的**幂等性**助手）：把 `cmd` **开头**连续出现的、且
+ *  **与本次装配值逐字相等**的 `[role=…]` / `[skills=…]` 段剥掉，返回剩余原文。
+ *
+ *  为什么必须幂等（本函数存在理由）：`buildWavePlan` 是**重归一化单点**——`store.addPoolTasks` /
+ *  `store.addTaskEdges` 会把**已落盘**的 wavePlan 任务（其 `cmd` 已含引擎前缀）重新喂进来。
+ *  旧实现无条件再拼一次前缀 ⇒ `cmd` 每被归一化一次就多长一截（`[role=coder] run` →
+ *  `[role=coder] [role=coder] run` …）。这既让任务包文本随无关操作变脏，也让**基于持久内容**的
+ *  sig 在「无关任务」上发生漂移（sig 的语义 = 内容变才变）。
+ *
+ *  A-1 加固（2026-09-22 修复轮）：**剥的条件从"形态"收紧为"值与本次装配逐字一致"**。
+ *  旧实现（无条件剥）的缺陷：用户自己的 `cmd` 原文恰好以 `[role=…]`/`[skills=…]` 开头时被**误剥**，
+ *  用户内容**丢失**（`'[role=other] 做某事'` → `'[role=coder] 做某事'`）。
+ *  判据（三段）：
+ *    · 只剥段字面量 ∈ { `[role=<本次 role>]`（role 非空时）, `[skills=<本次 skills 逗号拼接>]`（skills 非空时）}；
+ *    · **允许多次**（覆盖历史重复注入 `[role=coder] [role=coder] run` ⇒ `run`）；
+ *    · 遇到**不等于**本次装配值的同形段 ⇒ **停止剥离**，该段及其后原文逐字保留（"逐段停止"语义）。
+ *      选"逐段停止"而非"整体放弃"的理由：整体放弃会让 `'[role=coder] [role=other] run'` 每次
+ *      重归一化再累一段 ⇒ 前缀膨胀复发；逐段停止既清掉引擎注入面，又逐字保住用户自己的同形文本。
+ *  未传 `role` / `skills`（或二者均空）时**可剥集为空 ⇒ 原样返回**（不再有任何无条件剥面）。
+ *  已知边界（明示取舍，非缺陷）：同一批内**装配值变更**（如 skills 表变化）时，旧前缀段不再命中可剥集
+ *  ⇒ 该段保留（宁可留一段历史前缀，也不误剥用户同形原文）；装配表在批内稳定是既有前提。
+ *  非行首的同形文本（如 `见 [role=x]`）不受影响。 */
+export function stripCmdPrefix(
+  cmd: unknown,
+  role: string | null | undefined = null,
+  skills: string[] | null | undefined = null,
+): string {
+  let s = typeof cmd === 'string' ? cmd : '';
+  const injected = new Set<string>();
+  if (role) injected.add('[role=' + role + ']');
+  if (Array.isArray(skills) && skills.length) injected.add('[skills=' + skills.join(',') + ']');
+  if (injected.size === 0) return s;
+  for (;;) {
+    const m = s.match(/^\[(?:role|skills)=[^\]\n]*\](\s*)/);
+    if (!m) return s;
+    if (!injected.has(m[0].trim())) return s; // 非本次装配值 ⇒ 停止剥离（用户同形原文逐字保留）
+    s = s.slice(m[0].length);
+  }
 }
 
 // P1（2026-09-16）：`team` 改为**必填**（原 `team = 'generic'` 缺省已删）——`generic` 已废除，
@@ -679,7 +722,7 @@ export function handoffGateEnabledOf(
   return handoffGateStateOf(liveConfig, env)[stage];
 }
 
-// ── P1 交接门：建批期校验（裁决 ②=A，2026-09-17）─────────────────────────────────────────────
+// ── P1 交接门：建批期校验 ─────────────────────────────────────────────
 // 判据（**只判一件事**，避免把「DAG 有依赖」误判成「缺交接」）：
 //   下游 lane 的某条 `deps` 入边，其**上游 lane 未声明任何交付产物**（`produce ∪ outputs` 皆空）
 //   ⇒ 该入边**不可能**产出交接（`handoff_submit` 的 artifacts 必填 ⇒ 无件可交）⇒ 下游永远拿不到依赖 ⇒ **建批期即拒**。
@@ -923,9 +966,24 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       const standaloneReason = typeof (t as unknown as { standaloneReason?: unknown }).standaloneReason === 'string'
         ? ((t as unknown as { standaloneReason?: unknown }).standaloneReason as string)
         : null;
+      // N1-R4-1（K1 公共池）：归属声明——非字符串（含缺省）⇒ `null`（= **在池内**，未派发）。
+      //   ⚠ 只作声明面：池 = `owner == null` 的**视图**，不是容器；不引入认领语义，派发仍 Leader 单点。
+      // sig 冻结判据（N3-②）与 owner 取值**同源**（单点读取，避免两处各自解释「已派发」）。
+      const ownerDecl = typeof (t as unknown as { owner?: unknown }).owner === 'string'
+        ? ((t as unknown as { owner?: unknown }).owner as string)
+        : null;
+      // 归一化产物（下面是 sig 的**哈希输入面**与持久面同一份值——顺序约束：先归一化、后取 sig 输入）：
+      //   · `cmd` = `assembleCmd` 产物（`[role=…] [skills=…] <原文>`）——**持久形态里的 `cmd` 就是它**；
+      //     sig 必须建立在持久字段上，才能让「读回落盘任务 → 重算 sig ⇒ 与落盘 sig 相等」成为**可机检不变量**
+      //     （消费点判等、增删任务重归一化、审计复算三处都依赖它）。**不含 `assemblyRef`**；
+      //     `role`/`skills` 经 `cmd` 进入（`cmd` 是持久面字段）——装配前缀因此**入指纹**：
+      //     role/skills 变 ⇒ 任务包内容变 ⇒ sig 变（与 D-sig-1「只含任务信息」不冲突：
+      //     `skills` 是**已解析进任务内容**的字段，`assemblyRef` 那类装配表签名才被 D-sig-1 排除）。
+      //   · `layer`/`role`：声明/归一化后的规范值（未声明 layer ⇒ null）；`deps/produce/outputs` 逐字保序。
+      const cmdAssembled = assembleCmd(role, skills, t.cmd ?? '');
       return {
         id: t.id,
-        cmd: assembleCmd(role, skills, t.cmd ?? ''),
+        cmd: cmdAssembled,
         deps: Array.isArray(t.deps) ? [...t.deps] : [],
         model: t.model ?? null,
         tools: Array.isArray(t.tools) ? [...t.tools] : null,
@@ -943,11 +1001,26 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
         targets: targetsContract.targets, // string[] | null（绝对路径目标文件声明；未声明 null = 零感知）
         targetsMarker: targetsContract.targetsMarker, // string | null（内容声明标记；缺省 null = 纯 mtime 校验）
         targetsNoChange: targetsContract.targetsNoChange, // true = 零改动声明（跳过变更性判定，仅核存在性）
-        // N1-R4-1（K1 公共池）：归属声明——非字符串（含缺省）⇒ `null`（= **在池内**，未派发）。
-        //   ⚠ 只作声明面：池 = `owner == null` 的**视图**，不是容器；不引入认领语义，派发仍 Leader 单点。
-        owner: typeof (t as unknown as { owner?: unknown }).owner === 'string'
-          ? ((t as unknown as { owner?: unknown }).owner as string)
-          : null,
+        owner: ownerDecl,
+        // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
+        //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
+        //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）
+        //      可达；建批输入面无 owner，故正常建批恒走 ②；旧值非 16 hex ⇒ `sigOf` 落 `null` 后回落 ②（自愈）；
+        //   ② 计算 `sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 16 hex
+        //      （D-sig-1 = 不含 `assemblyRef`；D-sig-3 = 16 hex）。
+        //   加边重算（D-sig-4）：`addTaskEdges` 改的是**受影响任务**的 `deps` ⇒ 该任务输入变 ⇒ sig 变；
+        //   其余任务输入逐字不变 ⇒ 重算得**同值**（「无关任务 sig 不变」的机理，非靠跳算保证）。
+        sig: (ownerDecl ? sigOf(t) : null) ?? computeTaskSig({
+          // 哈希输入 = **归一化后、即将落盘的同一份值**（`cmd` 用 `cmdAssembled`，其余同上文字面量）：
+          //   这条约束使「重算 = 落盘值」可机检，禁把未归一化输入混进来（否则同一任务有两个 sig 面）。
+          id: t.id,
+          layer: t.layer,
+          role: role ?? null,
+          deps: Array.isArray(t.deps) ? t.deps : [],
+          produce: Array.isArray(t.produce) ? t.produce : null,
+          outputs: Array.isArray(t.outputs) ? t.outputs : null,
+          cmd: cmdAssembled,
+        }),
       } as WavePlanTask; // 单点断言：`standaloneReason`（B4/R-01b）不在 `WavePlanTask` 类型面
       //   （lib/types/contracts.ts 非本 lane 写域）⇒ 仅类型层断言，运行期对象形态即上述字面量本身。
     }),
@@ -980,6 +1053,9 @@ export function validateWavePlan(plan: WavePlanDoc, opts: { smoke?: boolean } = 
       if (!t || typeof t.id !== 'string' || seen.has(t.id)) throw new Error('task id invalid/duplicate');
       seen.add(t.id);
       if (t.model !== null && typeof t.model !== 'string') throw new Error('task model must be string or null');
+      // sig（N3-②）形态校验：非 16 hex（含旧批脏值）**不拒**——只作类型面护栏（string 或 null/缺省），
+      //   读取一律走 `sigOf`（非 16 hex ⇒ null）。**不得**在此新增拒码（D-sig-2：拒码 union 恒 29）。
+      if (t.sig != null && typeof t.sig !== 'string') throw new Error('task sig must be string or null');
       if (t.cmd !== undefined && typeof t.cmd !== 'string') throw new Error('task cmd must be string');
       if (t.tools !== undefined && t.tools !== null && (!Array.isArray(t.tools) || t.tools.some((x: string) => typeof x !== 'string'))) throw new Error('task tools must be string array or null');
       if (t.layer != null && !LAYERS.includes(t.layer)) throw new Error('task layer invalid: ' + t.layer);

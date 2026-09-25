@@ -4,7 +4,7 @@
     "version": 3,
     "requires_engine": ">=0.4.4",
     "hash": "unhashed",
-    "source": "引擎自建团队（做 dsh-punky-swarm 引擎自身改造的团队）：v3 重设计依据 docs/team-assets-redesign-20260917.md §2（E-1/E-2/E-3 诊断）/§3（标准形态）/§4（草案）；v1 由 P1（2026-09-16，批次 p1-team-asset-mandatory-20260916）新增。2026-09-18 通用化轮（用户裁决：通用团队流程 + exec 形态自建 + 其余键/规则按 software-team 模版）：删 `chain.needHuman`（引擎自述未接线子键，且仅本队声明）、删 `flows.exec.contract`（全仓 `contractOf` 只以 plan 调用 ⇒ 无运行期读点，且仅本队声明）、`roles.extra` 收敛为空（层内角色已由并集覆盖）；exec 形态 = **单步并行**（`exec-coder` ∥ `exec-verifier` ∥ `exec-reviewer`，**分支无 `deps`**），`pair_with:\"exec\"` 指该步；补 exec 消费门两键（`consumes_required` / `consumes_required_per_lane` = `[\"plan/\"]`）。`manifest.version` 于 2026-09-18 跨队统一轮按用户裁决统一为 **3**（五队同值）。**【2026-09-18 清债】顶层 `state_machine` 已随全队退役删除（零运行期消费者 ⇒ 声明即拒）**"
+    "source": "引擎自建团队（做 dsh-punky-swarm 引擎自身改造的团队）：v3 重设计依据 docs/team-assets-redesign-20260917.md §2（E-1/E-2/E-3 诊断）/§3（标准形态）/§4（草案）；v1 由 P1（2026-09-16，批次 p1-team-asset-mandatory-20260916）新增。2026-09-18 通用化轮（用户裁决：通用团队流程 + exec 形态自建 + 其余键/规则按 software-team 模版）：删 `chain.needHuman`（引擎自述未接线子键，且仅本队声明）、删 `flows.exec.contract`（全仓 `contractOf` 只以 plan 调用 ⇒ 无运行期读点，且仅本队声明）、`roles.extra` 收敛为空（层内角色已由并集覆盖）；exec 形态 = **单步并行**（`exec-coder` ∥ `exec-verifier` ∥ `exec-reviewer`，**分支无 `deps`**），`pair_with:\"exec\"` 指该步；补 exec 消费门两键（`consumes_required` / `consumes_required_per_lane` = `[\"plan/\"]`）。`manifest.version` 于 2026-09-18 跨队统一轮按用户裁决统一为 **3**（五队同值）。**【2026-09-18 清债】顶层 `state_machine` 已随全队退役删除（零运行期消费者 ⇒ 声明即拒）**；【2026-09-24 引擎 v2 对账标记（lane exec-asset / 批 onto-engine-v2-realign-20260924）】①`chain` 段仅受建批期八条静态校验：`pair_with` / `join.anyFailure` / `onFail` / `rework` 均已停消费（无运行期消费者；1:1 配对基数改由 audit lane 的 `deps` 表达、失败面用 gap-list 表达）——不得读作「失败自动 pause 的引擎行为」；②`manifest.version` / `requires_engine` / `hash` 为纯声明位（`lib/**` 零读端；`hash:\"unhashed\"` = 未计算占位，非校验值）；③派发形态双支持且不写死其一：形态由 `config.dispatch.provider` 配置位取值决定——一次性子代理形态下 worker 为 one-shot 会话，agent-team 形态下 worker 为长驻成员并由官方 roster 承抽（`ctx.get('agentTeams')`）；两形态下本资产的角色 / 技能 / 契约声明同等生效；④成员侧治理与派发面 20 件工具收窄不可达（`wave_plan` / `member_status` / `member_settle` / `lane_dispatch` / `lane_claim` 等），成员回报唯一通道 = `swarm_report`"
   },
   "roles": {
     "extra": [],
@@ -67,7 +67,7 @@
         "role": "designer",
         "template": { "produce": ["plan/${branch}-spec.md"] },
         "branches": [
-          { "id": "plan-designer", "role": "designer", "template": { "cmd": "产出规格与验收标准（${branch}）" } }
+          { "id": "plan-designer", "role": "designer", "template": { "cmd": "产出规格与验收标准，含裸标题「## 验收标准」与「## 约束」（${branch}）；用 write/edit 落盘、handoff_submit 交付下游；不得以引擎校验通过替代判据自证" } }
         ],
         "next": "exec"
       },
@@ -77,9 +77,9 @@
         "role": "coder",
         "template": { "produce": ["exec/${branch}.md"] },
         "branches": [
-          { "id": "exec-coder", "role": "coder", "template": { "cmd": "实现变更并附自证读数（${branch}）" } },
-          { "id": "exec-verifier", "role": "reviewer", "template": { "cmd": "独立复跑套件/检查器并按 plan 判据给原始读数（${branch}）（只读，不改码）" } },
-          { "id": "exec-reviewer", "role": "reviewer", "template": { "cmd": "对抗式评审（${branch}）" } }
+          { "id": "exec-coder", "role": "coder", "template": { "cmd": "实现变更并附自证读数（${branch}）；用 write/edit 落代码与产物、lane_checkpoint 每子步骤快照、swarm_report 回报结论；成员侧 member_settle 与 lane_dispatch 收窄不可达，不得自行结算或自行派发" } },
+          { "id": "exec-verifier", "role": "reviewer", "template": { "cmd": "独立复跑套件/检查器并按 plan 判据给原始读数（${branch}）；用 read/pwsh 复跑、handoff_view 取件、swarm_report 回报；只读不改码，判据须带限定量词，不得裸称「零命中」" } },
+          { "id": "exec-reviewer", "role": "reviewer", "template": { "cmd": "对抗式评审（${branch}）；对照 spec 与验收标准输出结构化 verdict，缺陷走报告不自行修复；用 read/grep 核证据、swarm_report 回报" } }
         ],
         "next": "audit-pair"
       },
@@ -88,7 +88,7 @@
         "layer": "audit",
         "role": "supervisor",
         "pair_with": "exec",
-        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物（按 plan 判据逐条对照）", "produce": ["audit/${lane}.md"] },
+        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物，按 plan 判据逐条对照并核证据；用 handoff_view 取入边、read/grep 复跑核对、swarm_report 回报 verdict；未决项只进 gap-list，不得以「继续调查」为默认终点", "produce": ["audit/${lane}.md"] },
         "next": "accept"
       },
       {
@@ -97,7 +97,7 @@
         "role": "supervisor",
         "join": "all",
         "terminal": true,
-        "template": { "cmd": "交叉一致性核对 + 逐条判据对照", "produce": ["audit/acceptance-report.md"] }
+        "template": { "cmd": "交叉一致性核对 + 逐条判据对照；先消重、标注冲突、核证据再下结论，分歧不掩盖、不以投票了事；产出 audit/acceptance-report.md", "produce": ["audit/acceptance-report.md"] }
       }
     ],
     "join": { "anyFailure": "pause" },

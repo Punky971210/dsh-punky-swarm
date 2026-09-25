@@ -161,9 +161,9 @@
       "todos": 0
     },
     "test/auto-settle.test.js": {
-      "asserts": 127,
+      "asserts": 125,
       "blankLines": 35,
-      "lines": 625,
+      "lines": 624,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -936,6 +936,22 @@
       "tests": 5,
       "todos": 0
     },
+    "test/sig-fingerprint.test.js": {
+      "asserts": 80,
+      "blankLines": 26,
+      "lines": 420,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
+    "test/sig-host-smoke.test.js": {
+      "asserts": 13,
+      "blankLines": 10,
+      "lines": 97,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
     "test/skill-resolution-real-asset.test.js": {
       "asserts": 21,
       "blankLines": 14,
@@ -971,7 +987,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 40,
       "blankLines": 17,
-      "lines": 310,
+      "lines": 313,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1233,7 +1249,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-21T20:39:03Z",
+  "generatedAt": "2026-09-25T03:36:14Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,15 +1260,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "alpha.2 内核新基线 + G7 夹具下沉（tests 净变化）+ F2-6 允许名单双修",
+  "reason": "S-3 放开 send_message（memberDeny 20→19）+ 测试锁两处同步；Leader 收口期统一重生成",
   "schema": 1,
   "totals": {
-    "asserts": 8169,
-    "blankLines": 3992,
-    "files": 154,
-    "lines": 43973,
+    "asserts": 8260,
+    "blankLines": 4028,
+    "files": 156,
+    "lines": 44492,
     "tautologies": 0,
-    "tests": 1709,
+    "tests": 1724,
     "todos": 4
   }
 }

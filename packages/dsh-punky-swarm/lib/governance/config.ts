@@ -291,7 +291,7 @@ function resolveEscalationConfig(raw: ConfigGovernanceInput['escalation'], warn?
 
 // preset 引用归一（纯函数）：undefined → null（未配置）；**string[] 数组 = 唯一合法形态（多选）**；
 //   其余形态（单值字符串 / 数字 / 对象 / 数组内非 string / 空串 / 空数组）→ errors（装载失败由 resolve 回退空表 + warn）。
-// 2026-09-14 用户裁决：`preset` 的**单值字符串形态（单选遗产）已废除**——护栏配置一律多选 / 数组；
+// `preset` 的**单值字符串形态（单选遗产）已废除**——护栏配置一律多选 / 数组；
 //   旧写法 `preset: "l1-sensitive"` 判形态非法（回退空表 + warn），请改 `preset: ["l1-sensitive"]`。
 function normalizePresetRefs(preset: unknown): { refs: string[] | null; errors: string[] } {
   const errors: string[] = [];

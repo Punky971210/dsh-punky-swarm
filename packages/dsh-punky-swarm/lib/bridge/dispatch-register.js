@@ -132,7 +132,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
           + '（background jobId / foreground runId）——非静默降级，仅留痕不阻断');
         return next();
       }
-      // ③′-a **句柄优先**（2026-09-15 用户裁决「不写 token 即禁止派发」）：任务包内含有效 lane 句柄 ⇒
+      // ③′-a **句柄优先**（「不写 token 即禁止派发」）：任务包内含有效 lane 句柄 ⇒
       //   以句柄的 (batchId, lane) **精确登记**（一次性消费）。这修掉了原「单槽意图」缺陷——并行 N 条 lane
       //   同波派发时**全部可登记**，而非只登记最后一条。句柄是 C 档派发的**唯一凭证**（由 `lane_dispatch` 发放）；
       //   解析不到句柄时**退回既有意图路径**（本步只补登记、不引入拒绝——拒绝在 guard 档位门，另行落地）。

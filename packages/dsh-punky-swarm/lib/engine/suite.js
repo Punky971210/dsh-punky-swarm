@@ -23,8 +23,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派生规则（纯函数，无副作用、无 IO）：
 //   · `memberDenyTools()` ≡ `SUITE_TOOLS.filter(t => t.memberDeny).map(t => t.name)`
 //   · `modeGateTools()`   ≡ `SUITE_TOOLS.filter(t => t.modeGate).map(t => t.name)`
-//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（14 项，== 重构前 `dispatch.js` 字面量 + `batch_control`）
-//     / `MODE_GATED_TOOLS`（10 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
+//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（20 项 = 冻结的 14 条 + `batch_control` 之后的图变更写入口 2 件
+//     + S2 宿主连续控制族 4 件，见下方表头注释）
+//     / `MODE_GATED_TOOLS`（12 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
 //   语义幂等：集合比对一律排序后比（表内条目顺序不构成语义）；唯一受顺序约束的是
 //   `SUITE_DENY_TOOLS`——为使导出**逐字不变**，本表按 `memberDeny:true` 的原字面量顺序排布（见下方表头注释）。
 //
@@ -51,8 +52,10 @@ const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name,
  *  `list_agents`/`wait_agent`，2026-09-22 one-shot 化））。
  *  ⚠ 顺序约定：**前 14 条**的相对顺序为冻结面（去掉 P3a 新增的 `batch_control` 后 == 重构前
  *  `dispatch.js` 的 `SUITE_DENY_TOOLS` 字面量顺序，要求逐字不变；`batch_control` **插在 `batch_phase` 之后**）。
- *  ⚠ `memberDeny:true` 共 **20** 条 = 冻结的 14 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
- *  + S2 宿主连续控制族 4 件；追加位置在**冻结前缀之后** ⇒ 前 14 条相对顺序零变化（`SUITE_DENY_TOOLS` 前 14 项逐字不变）。
+ *  ⚠ `memberDeny:true` 共 **19** 条 = 冻结的 14 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
+ *  + S2 宿主连续控制族 3 件（`interrupt_agent` / `list_agents` / `wait_agent`）；**`send_message` 已于
+ *  2026-09-24 按用户裁决放开**（S-3，从 deny 面移出 ⇒ 计数 20→19）。
+ *  追加位置在**冻结前缀之后** ⇒ 前 14 条相对顺序零变化（`SUITE_DENY_TOOLS` 前 14 项逐字不变）。
  *  第 15 条起为其余条目，顺序不构成语义。 */
 export const SUITE_TOOLS = Object.freeze([
   entry('assign_check', 'governance', true, true, true), // 难度评估：成员不写难度（既裁）
@@ -111,9 +114,22 @@ export const SUITE_TOOLS = Object.freeze([
   // 该族是**宿主工具**（非引擎注册）⇒ `modeGate:false`（无 `assertModeActive` 落点，同 `subagent`/`subagent_fork`
   // 先例）；`SC-1` 不变量「模式门覆盖集 ⊆ deny 集」不受影响。登记入表 = 单点注册表原则（"哪件工具属于
   // 哪一面"一张表）；追加位置在冻结前缀之后 ⇒ 既有 deny 序列零变化。
-  entry('send_message', 'comms', false, true, true), // 成员不得互唤/唤 Lead（durable 信箱面；one-shot 无对象可唤）
+  // ⚠ **2026-09-24 用户裁决：`send_message` 对成员【放开】**（S-3）—— 原 S2 判据「one-shot 执行器
+  //   **无唤醒/续聊/等待/打断的对象**」对「**唤 Lead**」不成立：**Lead 是 durable 的，且正是 worker
+  //   要通知的对象**。此前 `swarm_report` 只落事件 + mailbox（不推送），Leader 只能轮询发现 ⇒ 回报
+  //   迟到（实测曾致「已完成未处理」）。放开后 worker 可**直接推**给 Lead，复用已被实测的推送通道。
+  //   ⚠ 属**判据边界修正**，非回退 S2：`interrupt_agent`/`list_agents`/`wait_agent` 三件**维持 deny**
+  //   （它们确实"无对象"）。安全边界：宜限定 `target`（仅唤 Lead）；宿主参数面是否支持校验待 P4 确认。
+  entry('send_message', 'comms', false, false, true), // 【S-3】成员可唤 Lead（推送回报）；不得互唤（指引约束）
   entry('interrupt_agent', 'comms', false, true, true), // 成员不得打断他人回合（控制权归 Leader，黑板面表达）
   entry('list_agents', 'read', false, true, false), // 成员名册只读面一并收（成员面无协作语义）
+  // ⚠ 0.1.7 兼容（2026-09-24；**同日经独立复核修订**）：`wait_agent` 条目**保留** —— 实测该工具
+  //   **并未从内核移除**，而由 `dsh-experimental-tool-agent-team/lib/index.js:332`（`name: "wait_agent"`）
+  //   注册 ⇒ **仅在启用 agent-team 层的 profile 上可 restrict**。保留条目以保住「启用该层的 profile 上
+  //   成员 deny 面完整」（删名会让该 profile 永久少 deny 一件 = 策略回退）。
+  //   对**未启用该层**的 profile：`toolFilter.deny` 含此名会让宿主 `tools.restrict()` 抛
+  //   `unknown global tool`（严格、不忽略）⇒ 由 `lib/engine/dispatch.js` 的**容错自愈**兜底
+  //   （解析未知名 → 本次名单移除 → 同次派发内重试）。**两 profile 自适应，无需静态减法**。
   entry('wait_agent', 'read', false, true, false), // 等待他人变化 = continuous 语义，一次性执行器无此面
 ]);
 

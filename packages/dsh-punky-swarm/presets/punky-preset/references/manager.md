@@ -9,7 +9,8 @@
 
 ## 1. 拉起时机（祈使）
 
-**默认口径 = 建批即拉起（`assembly.managerPlan` 默认 `raise`）**：批次 `batch_phase` 进入 **running** 后、**首个 exec 派发前**，Leader **必须拉起本角色**——以 **continuable subagent 一次注入**（注入内容 = 批次上下文 [batchId / session / 装配声明-Manager 拉起计划] + 调度循环说明，注入模板见 §5；**一次注入，不逐轮追加**）。**例外**：建批时显式声明 `assembly.managerPlan: 'leader-direct'` 的批由 Leader 代行调度（留痕「本批由 Leader 直驱」，见 `references/discipline.md#§0f`）；A/B 级**不拉起**。本角色被拉起前，该批**不得**进入首个 exec 派发（persona 纪律 0g / `references/discipline.md#§0g`）。**该时序自 2026-09-14 起由引擎在 entry 门禁硬拦**（G2）：声明 `raise` 的批未登记 `batch.manager` 时，exec 层 lane 派发即拒 `GATE_MANAGER_NOT_RAISED`（登记面 `batch_phase({ batchId, manager: { agentId } })`；plan 层 lane 不受限；lane 处于 `idle`（**空闲态**——非崩溃态，返工/续跑可调用）时的重派按 G-1 降级放行）。故「先派 exec 再补拉起」已**物理不可行**，Manager 无需自证时序合规。
+**默认口径 = 建批即拉起（`assembly.managerPlan` 默认 `raise`）**：批次 `batch_phase` 进入 **running** 后、**首个 exec 派发前**，Leader **应当拉起本角色**——以 **continuable subagent 一次注入**（注入内容 = 批次上下文 [batchId / session / 装配声明-Manager 拉起计划] + 调度循环说明，注入模板见 §5；**一次注入，不逐轮追加**）。**例外**：建批时显式声明 `assembly.managerPlan: 'leader-direct'` 的批由 Leader 代行调度（留痕「本批由 Leader 直驱」，见 `references/discipline.md#§0f`）；A/B 级**不拉起**。本角色被拉起前，该批**应当不**进入首个 exec 派发（persona 纪律 0g / `references/discipline.md#§0g`）。
+**【M-01 订正（2026-09-24）】该时序的引擎硬门已删，改为纪律**：原「声明 `raise` 的批未登记 `batch.manager` ⇒ exec 层 lane 派发即拒 `GATE_MANAGER_NOT_RAISED`（登记面 `batch_phase({ batchId, manager: { agentId } })`；lane 处于 `idle`（**空闲态**——非崩溃态，续跑/重派可调用）时的重派按 G-1 降级放行）」**已整体删除**——该码名在 `lib/**` 内**字面零命中**（2026-09-21 可达性审计按「码名已字面删除」处理）。**现役口径**：① `managerPlan` 缺省仍 `raise`（随 `batch.assembly` 持久化，`gate_status` 可读，属**引擎可核事实**）；② 在册判定 = **建批期官方 roster 承抽**（`ctx.get('agentTeams')` → `listMembers`，读端 `lib/tools/core.js#managerRosterOf`）——声明 `raise` 而 roster 无约定名 `manager` 成员 ⇒ 落**观察事件** `gate.manager_roster_gap`，`wave_plan` / `batch_status` 回显 `managerRoster`；③ `batch_phase` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised`，可查，**不构成在册判据**）。⇒「先派 exec 再补拉起」**不再被引擎拦**，故「时序合规」由本角色与 Leader **自负其责**（无门可代为背书）。
 
 **拉起失败处置**：恢复拉起，或上报用户裁决；**声明 `raise`（默认）的批不得**以 Leader 自担 watch 豁免拉起义务（persona 纪律 0f 不覆盖 `raise` 批，见 `references/discipline.md#§0f`）。
 
@@ -45,7 +46,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 | 4 | 收 worker 完成通知 | `mailbox_read`(outbox) |
 | 5 | 置评审态 | `member_status` running→review |
 | 6 | 结算裁决（可用 `gate_status` 复核门禁拒绝项） | `member_settle` |
-| 7 | 循环至批次全终态 → `report`「批次完成」给 Leader | — |
+| 7 | 循环至批次全终态 → `swarm_report`「批次完成」给 Leader | — |
 | 7a | **长程豁免消费（R-3 + D-2/D-3/D-4）**：与 §5.1 第 2 步同一拍读 `lane_longrun`（缺省全批），核对每 lane 的 `candidate` / `emitted` / `reason` 与 `exempt` / `effectiveMaxDurationMs` / `thresholdMultiplier`；命中候选 → 先看 `exempt`（豁免 lane 只是**阈值更晚**，不是不出候选）→ 再按 §6 处置，**候选不因「更晚」自动作废** | `lane_longrun` |
 | 7b | **候选须 ack 留痕**：候选同时投 broadcast 与 `supervisor/inbox`（**D-3 双投**），两处 `ackId` **互相独立**，Manager 须对两处**各 ack 一次**；未 ack 超 `unconsumedTimeoutMs` → 产 `lane.longrun.unconsumed`（**未 ack 即未消费，处置责任仍在消费方**） | `mailbox_ack` / `mailbox_read`(broadcast, inbox) |
 | 7c | **逐 lane 豁免授予 / 撤销**：仅**派发面**（`pending→running` / `idle→running`）可携带豁免参数，**成员不可自改**，**撤销须显式 `revokeExempt`**；非派发面带豁免参数一律拒（`GATE_EXEMPT_NOT_DISPATCH`）——门禁拒绝项用 `gate_status` 复核时，须先排除这类**参数位置错误**再报异常 | `member_status` / `gate_status` |
@@ -58,11 +59,11 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 ### 5.3 Leader 职责对应
 
-按 Manager 建议 `subagent` 派发 worker（depth-1 直系，任务包注明**双通道回执**）；worker `report` 完成 → Leader 只 `send_message` Manager 一行事件唤醒（**不做调度决策**，不读 worker 全文回执）。
+按 Manager 建议 `subagent` 派发 worker（depth-1 直系，任务包注明**双通道回执**）；worker `swarm_report` 完成 → Leader 只 `send_message` Manager 一行事件唤醒（**不做调度决策**，不读 worker 全文回执）。
 
 ### 5.4 回执与交互
 
-- **回执（双通道）**：worker `report` 回报 Leader（简短完成信号）+ `mailbox_send`(outbox) 通知 Manager（详细）；Manager **不读** `report` 全文（不经 Leader 转发全文）。**例外（`leader-direct` 批 = 无 Manager 的批）**：outbox 无消费者 ⇒ worker 走**单通道** `report`→Leader，**不写 `outbox`**（避免「发了没人读」的形式不统一；同口径见 `references/discipline.md#§4`）。
+- **回执（双通道）**：worker `swarm_report` 回报 Leader（简短完成信号；**G-05 订正**：旧文写的 `report` 工具在本部署不存在，成员回执的现役通道 = 引擎套件 `swarm_report`）+ `mailbox_send`(outbox) 通知 Manager（详细）；Manager **不读** `swarm_report` 全文（不经 Leader 转发全文）。**例外（`leader-direct` 批 = 无 Manager 的批）**：outbox 无消费者 ⇒ worker 走**单通道** `swarm_report`→Leader，**不写 `outbox`**（避免「发了没人读」的形式不统一；同口径见 `references/discipline.md#§4`）。
 - **建议派发边界（D-1 纪律版，与 `presets/punky-preset/agent.cordis.yml` 纪律 0i + `references/discipline.md#§0i` 口径一致）**：**不得建议裸 subagent 充当执行单元**——建议一律为 **wavePlan lane + 角色**（`batch_status` 黑板读取 sessionId/产物根注入任务包）；C 类批次的执行只能落在已建批 lane 上，临时拆活走**细拆补 lane**，不绕过 wavePlan 另起 subagent。
 - **豁免与长跑处置差异**：带豁免 lane 的候选**仍会产出**（只是阈值更晚，按倍率放大幅度判据），且其 **stalled 追问同时被豁免**（`stalled: true` 语义落在豁免授权内）——故此类 lane **不得**按常规 stalled 节奏追问；但**豁免 lane 仍须写 checkpoint / 心跳**（人工巡查与近窗判读依赖之），**近窗无 checkpoint 且无活动**仍属可处置候选；**僵尸批次活跃度过滤（D-4）**：批次整体超 `staleBatchMs` 无活动（默认 24h，`0` = 显式关闭过滤）时，longrun 档**整批跳过**、候选 `reason` 记 `stale-batch`——此类候选**不重派**，按 §5.2 ①异常上报并注明「僵尸批次过滤」。
 - **交互**：由 Leader `send_message` 事件唤醒；**不主动上报空闲**（无空闲上报协议）；跨轮信息走**产物 + mailbox**（只写元数据，不复制正文，persona 纪律 4 → `references/discipline.md#§4`）。

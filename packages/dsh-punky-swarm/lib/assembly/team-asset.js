@@ -45,7 +45,7 @@ export const TEAM_ASSET_DIR = 'presets';
 const TEAM_ASSET_FILENAMES = Object.freeze(['team-asset.json', 'team-asset.yml']);
 export const PRODUCE_LAYERS = Object.freeze(['plan', 'exec', 'audit']); // 有「产出存在性」语义的层
 export const FLOW_SECTIONS = Object.freeze([...PRODUCE_LAYERS]);
-// ↑ F-4（2026-09-15 用户裁决 Q-D=A，严控勿松）落点：原为 `Object.freeze([...PRODUCE_LAYERS, 'complete'])`，
+// ↑ 严控勿松落点：原为 `Object.freeze([...PRODUCE_LAYERS, 'complete'])`，
 //   现**移除**该层 ⇒ 显式声明 `flows.complete` 的团队资产在层名白名单校验处即拒载
 //   （`TEAM_ASSET_LAYER_UNKNOWN`，∈ BLOCKING_CODES ⇒ 整份资产不可交付）。**不降为告警、不加兼容分支、
 //   不为旧声明留豁免、不设「废弃但接受」集合**。`complete` 门禁白名单的唯一真源 = `flows.audit.audit_contract.verdict`。
@@ -53,9 +53,9 @@ export const FLOW_SECTIONS = Object.freeze([...PRODUCE_LAYERS]);
 export const PRODUCE_FIELDS = Object.freeze(['produce', 'outputs']); // 产物字段名白名单
 export const ENTRY_REQUIREMENTS = Object.freeze(['consume']); // 派发前可要求的项（白名单）
 export const CONSUME_FIELDS = Object.freeze(['consume']); // 消费字段名白名单（r2：读端只能收紧，见 flows.js consumeFieldOf）
-// 【2026-09-18 清债】原 `ESCALATIONS = ['human','none']` 常量**已删除**：其唯一消费点是**顶层 `rework`**
+// 原 `ESCALATIONS = ['human','none']` 常量**已删除**：其唯一消费点是**顶层 `rework`**
 //   校验（随该键退役一并清除）；**链级** `chain.rework` 的取值域由 `lib/assembly/chain.js` 自持，不经本常量。
-// 退役声明键（2026-09-18 清债，用户裁决「保留核心、清冗余」）：**零运行期消费者**的三个声明面
+// 退役声明键：**零运行期消费者**的三个声明面
 //   ——一旦声明即拒（`TEAM_ASSET_FIELD_NOT_ALLOWED`，∈ BLOCKING_CODES），不留「写了不生效」的静默面。
 //   · `RETIRED_FLOW_KEYS`：层内声明（原「仅结构校验」）
 //   · `RETIRED_TOP_KEYS`：顶层声明（原「仅加载期不变量校验」）
@@ -78,7 +78,7 @@ export const TEAM_ASSET_CODES = Object.freeze({
   ROLE_LEXICAL: 'TEAM_ASSET_ROLE_LEXICAL',
   SKILLS_MISMATCH: 'TEAM_ASSET_SKILLS_MISMATCH',
   REWORK_INVALID: 'TEAM_ASSET_REWORK_INVALID',
-  // 【2026-09-18 清债】三个 `STATE_*` 码**已删除**（`STATE_OVERRIDE_UNKNOWN_STATE` / `STATE_OVERRIDE_WIDENS` /
+  // 三个 `STATE_*` 码**已删除**（`STATE_OVERRIDE_UNKNOWN_STATE` / `STATE_OVERRIDE_WIDENS` /
   //   `STATE_KIND_INVALID`）：其**唯一消费点**是团队资产顶层 `state_machine` 的加载期校验，该键随本轮退役
   //   （零运行期消费者 ⇒ 声明即拒 `FIELD_NOT_ALLOWED`）⇒ 码面无消费方，一并清除（不留死码）。
   LEAD_NOT_IN_LAYERS: 'TEAM_ASSET_LEAD_NOT_IN_LAYERS',
@@ -100,9 +100,9 @@ export const TEAM_ASSET_SEVERITY = Object.freeze({ blocking: 'blocking', warning
 
 // blocking = **资产不可用**（文件/解析/技能可解析面不成立 ⇒ 声明面整体不可交付）；
 // 其余 = warning（**可用但退化**：引擎按 tighten-only 缺省侧继续，问题仍可读、不静默）。
-// 【Q1 回退（2026-09-17 用户裁决 Q1：「都不降（回到严格）」）】**撤回 gate-lite 第二批 · D 的降档**——
+// 【现行 = 严格档「都不降」】**已撤回此前的降档**——
 //   D 批曾把声明面六条码一律移出 BLOCKING_CODES（依据「旧构造面向短生命周期 subagent，现面向长生命周期
-//   Agent-team 交接任务」）；Q1 裁决回到严格：资产/链的**结构面与声明面**重归硬拦，`ok = !hasBlockingProblems`
+//   Agent-team 交接任务」）⇒ 现行口径回到严格：资产/链的**结构面与声明面**重归硬拦，`ok = !hasBlockingProblems`
 //   语义不变，但 blocking 集合**恢复为「除四条 advisory 码外全数」**。D 批依据的「新模型下错层名交给交接门 + 名册」
 //   一并作废——交接门是**运行期**产物门，不替代**载入期**资产声明拒绝（两者层次不同，不构成替代关系）。
 //   ⇒ **本文件为唯一严重级真源**（`severityOfProblem` 单点）。
@@ -113,7 +113,7 @@ export const TEAM_ASSET_SEVERITY = Object.freeze({ blocking: 'blocking', warning
 // **反例面（advisory / warning，只提示不否决，五条）**：`ROLE_LEXICAL`（扩展角色词法）/
 //   `LEAD_NOT_IN_LAYERS`（牵头角色悬空）/ `CONSUME_FIELD_NOT_ALLOWED`（读端回落 `consume`）/
 //   `REWORK_INVALID`（链级回边未承认）/ **`LAYER_UNKNOWN`（未知层）**。
-//   **末条 = 2026-09-18 用户裁决（原 K-2）**：本机**无外部自建 team**，未知层判定**暂时用不到** ⇒
+//   **末条（现行）**：本机**无外部自建 team**，未知层判定**暂时用不到** ⇒
 //   **先清理为 warning**（**码面保留、留痕可读、不拒载**），日后有需求再以其他方式补回。
 //   ⇒ 这是 **Q1「都不降（回到严格）」的单码例外**：其余一切码仍一律 blocking，不得据此放宽。
 //   **其余一切码（含 NOT_FOUND 缺资产 / BAD_JSON 不可解析 / SKILLS_MISMATCH 技能不可解析 /
@@ -150,7 +150,6 @@ export const UNWIRED_DECLARATIONS = Object.freeze([
   //   ⇒ 原缺口条目移除。**只改 `status` 不能消除误报**：读端 `unwiredDeclarationsOf`（见下）只按「该键是否被声明」
   //   过滤、不读 `status`，故必须整条删除。可达行为上限：白名单 `CONSUME_FIELDS=['consume']`（本文件 `:51` ＋
   //   `flows.js:255` 双源）⇒ 声明面行为上与「固定读 `'consume'`」等价，但口径不再撒谎。
-  // **2026-09-18 清债（用户裁决：保留引擎运行核心、清理冗余设计与技术债）**：三条历史条目全部移除 ——
   //   `state_machine`（顶层）/ `flows.<layer>.progress_contract` / `rework`（顶层）**均无运行期消费者**
   //   （前者仅加载期不变量校验，后两者仅结构校验）⇒ 其**声明面与校验器一并退役**：退役键**声明即拒**
   //   （`TEAM_ASSET_FIELD_NOT_ALLOWED`，见本文件 `RETIRED_TOP_KEYS` / `RETIRED_FLOW_KEYS`）
@@ -168,7 +167,7 @@ export const UNWIRED_DECLARATIONS = Object.freeze([
  */
 export function unwiredDeclarationsOf(source) {
   // 形状与签名保留（调用方：`flows.js#declarationSummaryOf`、`gates.js#unwiredEntriesOf` 及既有测试面）。
-  // 2026-09-18 清债后**台账为空** ⇒ 恒返回 `[]`（引擎当前无未接线声明 = 健康态）。
+  // **台账为空** ⇒ 恒返回 `[]`（引擎当前无未接线声明 = 健康态）。
   if (source === null || typeof source !== 'object') return [];
   return UNWIRED_DECLARATIONS.map((d) => ({ ...d }));
 }
@@ -289,11 +288,11 @@ export function validateTeamAsset(asset) {
       if (!FLOW_SECTIONS.includes(layer)) { push(TEAM_ASSET_CODES.LAYER_UNKNOWN, at, `未知层：${layer}（允许：${FLOW_SECTIONS.join('/')}）`); continue; }
       if (!isPlainObject(flow)) { push(TEAM_ASSET_CODES.BAD_TYPE, at, '层流程定义必须是对象'); continue; }
 
-      // complete 段（**F-4 已清退**，2026-09-15 用户裁决 Q-D=A）：
+      // complete 段（**已清退**）：
       //   ① `require_audit_outcomes` 类型校验已删（E-4，legacy-retire-20260915）；`complete` 白名单**唯一真源**
       //      = `flows.audit.audit_contract.verdict`（读端 gates.ts `completeOutcomesOf`）。
       //   ② `'complete'` 已从上方 `FLOW_SECTIONS` **移除** ⇒ 显式声明 `flows.complete` 在**层名白名单校验处**
-      //      即命中 `TEAM_ASSET_LAYER_UNKNOWN`（**2026-09-18 K-2 裁决后为 warning 级** ⇒ **不拒载**，该层被跳过、
+      //      即命中 `TEAM_ASSET_LAYER_UNKNOWN`（**现行 = warning 级** ⇒ **不拒载**，该层被跳过、
       //      其余层照常校验；码面与留痕保留）。历史 E-4 的「complete 层保留为合法声明位 + continue 短路」口径
       //      已被 F-4 清退；该短路分支**已于 2026-09-18 作为死码删除**（F-4 后永不可达）。
 
@@ -314,7 +313,7 @@ export function validateTeamAsset(asset) {
         }
       }
 
-      // exec 消费门两键（2026-09-18 用户裁决 E-A/E-B）——语义**镜像** audit 的
+      // exec 消费门两键（E-A / E-B）——语义**镜像** audit 的
       //   `flows.audit.audit_contract.consumes_required`（同一语汇族、同一建批期判定形，见 `lib/tools/core.js`）：
       //   · `consumes_required`（E-A，批级）：每个前缀须至少被**一条** exec lane 的 consume 命中；
       //   · `consumes_required_per_lane`（E-B，逐 lane）：**每一条** exec lane 都须各自命中每个前缀。
@@ -364,7 +363,7 @@ export function validateTeamAsset(asset) {
           + '`contract`（artifact_globs/required_sections）无运行期读点 ⇒ 双真源隐患，请改用 audit_contract 或删除本键');
       }
 
-      // audit_contract（P2，2026-09-14 用户裁决 B）：audit 层的**职责声明**——与 `contract`（产出内容契约：
+      // audit_contract：audit 层的**职责声明**——与 `contract`（产出内容契约：
       //   artifact_globs/required_sections）**不同键**，避免语义混淆。结构校验（存在性由建批期门禁负责）：
       //   { criteria_from?: string, criteria_section?: string, consumes_required?: string[], verdict?: string[],
       //     exempt?: boolean, reason?: string }
@@ -395,7 +394,7 @@ export function validateTeamAsset(asset) {
     }
   }
 
-  // ④⑤ 退役键守门（2026-09-18 清债）：顶层 `state_machine`（原「只许收紧」校验）与顶层 `rework`
+  // ④⑤ 退役键守门：顶层 `state_machine`（原「只许收紧」校验）与顶层 `rework`
   //   （原返工策略校验）**均零运行期消费者** ⇒ 声明面退役、**声明即拒**（不留静默失效、不留死码）。
   //   **引擎自身能力不受影响**：状态机真源 = `lib/schema.js` 的 `MEMBER_TRANSITIONS`/`BATCH_TRANSITIONS`
   //   （经 `lib/state/machine-rules.js` 接线）；返工策略真源 = **链级** `chain.rework`（`chainNextOf` 真消费）。
