@@ -33,10 +33,6 @@ import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
 import { clearFlowCache, ENGINE_BASELINE_CRITERIA_SECTION, ENGINE_BASELINE_PLAN_SECTIONS } from '../lib/assembly/flows.js';
 import { assessC, registerManager, seedArtifactFile } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-// 临时团队资产以包内 `software-team` 为骨架 ⇒ skills 与 software-team 同集 ⇒ 先注入宿主技能根。
-seedTeamAssetSkills('software-team');
 
 const SESS = { agent: { session: { id: 'sess-acfg' } } };
 const SID = SESS.agent.session.id;

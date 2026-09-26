@@ -23,11 +23,9 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步】① `team` 现为必填且必须解析到资产 ⇒ 本套件（建批只是手段、被检面是其它工具门）统一补包内软件团队；
-//   ② 该团队的 skills 必须可解析 ⇒ 隔离 HOME 下先显式注入宿主技能根（见 helpers/host-skills.mjs 口径）。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批只是手段、被检面是其它工具门）统一补包内软件团队。
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-tools-'));
 const store = createStore(root);

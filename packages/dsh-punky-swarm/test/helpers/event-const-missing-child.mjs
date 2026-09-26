@@ -44,7 +44,6 @@ import crypto from 'node:crypto';
 import { createStore } from '../../lib/state/store.js';
 import { buildWavePlan } from '../../lib/wave-plan.js';
 import * as EVT from '../../lib/state/event-types.js';
-import { seedTeamAssetSkills } from './host-skills.mjs';
 
 // 【防线】`node --test` 会把 `test/**` 下**所有**模块当测试文件收集执行（本仓既有惯例：
 //   `test/helpers/gate-fixture.mjs` 等各在运行日志里占一条文件级 Subtest）。
@@ -71,7 +70,6 @@ out.control.sabotageApplied = names.length === 0
     && GUARDED.filter((n) => !names.includes(n)).every((n) => typeof EVT[n] === 'string' && EVT[n].length > 0);
 
 try {
-  seedTeamAssetSkills('software-team');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-r34-e2e-'));
   out.root = root;
   const store = createStore(root);

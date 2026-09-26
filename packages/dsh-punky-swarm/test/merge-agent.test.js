@@ -35,11 +35,9 @@ import { fileURLToPath } from 'node:url';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 merge 治理）统一补 software-team；
-//   该团队的 skills 必须可解析 ⇒ 隔离 HOME 下先注入宿主技能根。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 merge 治理）统一补 software-team。
 
 const EXEC_SESS = { agent: { session: { id: 'sess-wt' } } };
 

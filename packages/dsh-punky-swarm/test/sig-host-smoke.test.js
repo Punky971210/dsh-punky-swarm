@@ -34,10 +34,8 @@ import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
 import { computeTaskSig, SIG_PATTERN } from '../lib/sig-fingerprint.js';
 import { assessC, seedArtifactFile, SPEC_OK } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 test('HOST-SIG 宿主链路：真实 wave_plan 工具建批 ⇒ 落盘 tasks[].sig 在场、16 hex、读回自洽、派发链零报错', async () => {
-  seedTeamAssetSkills('engine-team'); // 隔离宿主技能根（P1：建批须能解析资产声明的技能名）
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-sig-host-'));
   const store = createStore(root);
   const captured = [];

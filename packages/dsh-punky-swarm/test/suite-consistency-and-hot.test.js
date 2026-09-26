@@ -37,10 +37,9 @@ import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from '../lib/engine/dispatch.js';
 import { SUITE_TOOLS } from '../lib/engine/suite.js';
 import { pendingHandles, __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team；其 skills 须可解析 ⇒ 先注入技能根。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team。
 
 const SID = 'sess-sc';
 
@@ -76,9 +75,12 @@ const FROZEN_DENY = [
   // ⚠ 2026-09-24（独立复核后修订）：`wait_agent` **条目保留** —— 它由 agent-team 层注册（非内核移除），
   //   保留可保证「启用该层的 profile」上 deny 面完整；未启用该层的 profile 由 dispatch 容错自愈兜底。
   'wait_agent',
+  // AG-20（2026-09-25 用户裁决「③ 定向 deny」）：`spawn_teammate` 补入成员 deny 面 —— 成员不得自行拉起
+  //   teammate（席位归 Leader / 官方 roster；成员侧拉起绕过 lane 派发与三层门禁）。`workflow`/`ralph` 保持放行。
+  'spawn_teammate',
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
-const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent'];
+const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release', 'asset_claim',
@@ -94,7 +96,7 @@ const FROZEN_MODE_GATED = [
 const NEW_MODE_GATED = ['batch_phase', 'lane_claim', 'lane_release', 'asset_claim', 'assign_check'];
 const sortedUnique = (xs) => [...new Set(xs)].sort();
 
-test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（16 项，既有 13 项顺序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
+test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（20 项，既有 13 项顺序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
   // ① 只读清单与执行型清单同源（原断言保留）
   const leakedShell = SHELL_TOOLS.filter((t) => !EXEC_TOOLS.includes(t));
   assert.deepEqual(leakedShell, [], '只读判定只作用于 shell 类工具，二者必须同源');
@@ -109,7 +111,7 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（16 项，既
   }
   // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 13 项**顺序逐字不变 + P3a 追加项）
   const derivedDeny = SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
-  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（20 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 4 件；task-22 后 handoff_submit 不入 deny）');
+  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（20 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 3 件（send_message 已放开）+ AG-20 spawn_teammate 1 件；task-22 后 handoff_submit 不入 deny）');
   assert.deepEqual([...SUITE_DENY_TOOLS].filter((n) => !POST_LEGACY_DENY_ADDED.includes(n)), LEGACY_DENY,
     '去掉 P3a 之后追加的项后必须**逐字等于**旧 13 项序列（新项只允许追加，不得重排/删项）');
   assert.equal([...SUITE_DENY_TOOLS].indexOf('batch_control'), BATCH_CONTROL_INSERT_AT,
@@ -279,7 +281,10 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   //   其「成员可调、不落模式门」的行为面证据落在 ④ 反向抽样。
   const { tools } = createTools(ctx, { store, root, config, readConfig: () => config });
   const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
-  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent']; // 宿主派发工具 + 宿主连续控制族（S2；wait_agent 由 agent-team 层注册 ⇒ 未启用该层的 profile 下不在引擎注册面，条目保留 + dispatch 自愈兜底）+ 可选能力组（logs）
+  // 【AG-20】`spawn_teammate`（官方 Agent Team 席位拉起面）同属**宿主注册、非引擎注册**的未注册面
+  //   —— 由 `dsh-experimental-tool-agent-team` 层注册；未启用该层的 profile 下不在引擎注册面，
+  //   条目保留 + dispatch 容错自愈兜底（与 `wait_agent` 同一处置口径）。
+  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate']; // 宿主派发工具 + 宿主连续控制族（S2；wait_agent 由 agent-team 层注册 ⇒ 未启用该层的 profile 下不在引擎注册面，条目保留 + dispatch 自愈兜底）+ AG-20 席位拉起面（同上）+ 可选能力组（logs）
   assert.deepEqual(SUITE_TOOLS.map((t) => t.name).filter((n) => !byName[n]), NOT_REGISTERED_BY_DEFAULT,
     '表内未注册的只允许非默认注册三件（其余必须真实注册）');
   assert.deepEqual(tools.map((t) => t.name).filter((n) => !SUITE_TOOLS.some((t) => t.name === n)), [],

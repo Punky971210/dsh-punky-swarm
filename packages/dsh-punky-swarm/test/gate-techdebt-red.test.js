@@ -49,11 +49,6 @@ import { buildWavePlan, assemblyGate } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 工具面建批用例须给**有资产**的团队；
-//   其 skills 须可解析 ⇒ 隔离 HOME 下先注入宿主技能根（R-12 的正向对照随之补 team，被检面仍是装配门）。
-seedTeamAssetSkills('software-team');
 import { DEFAULT_ESCALATION_PRIMITIVES } from '../lib/governance/escalation.js';
 import { MEMBER_STATES } from '../lib/schema.js';
 import * as EVT from '../lib/state/event-types.js';

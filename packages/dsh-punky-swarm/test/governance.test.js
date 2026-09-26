@@ -25,11 +25,9 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { threeTierTasks, seedArtifacts, runLane, registerManager, tempRoot } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步 · 前置】团队资产的 skills 必须可解析（不可解析/技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）
-//   ⇒ 隔离 HOME 下先注入宿主技能根；本套件建批统一补 `software-team`（见各 harness 的 withDefaultTeam）。
-seedTeamAssetSkills('software-team');
+// 【P1 同步 · 前置】本套件建批统一补 `software-team`（见各 harness 的 withDefaultTeam）。
 
 
 // ---------- 1. governance store 层（batch-store.js） ----------
@@ -100,7 +98,7 @@ const toolsRoot = tempRoot('punky-gov-tools-');
 const toolsStore = createStore(toolsRoot);
 const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store: toolsStore, root: toolsRoot });
 // 【P1 同步】`team` 现为必填且必须解析到资产（无资产 ⇒ 构造期拒）⇒ 本套件（建批只是手段、被检面是治理门）统一补
-//   包内软件团队；其声明技能须可解析 ⇒ 隔离 HOME 下显式注入宿主技能根（见 helpers/host-skills.mjs 口径）。
+//   包内软件团队。
 const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
 const AC_SESS = { agent: { session: { id: 'sess-ac' } } };
 

@@ -45,15 +45,14 @@ import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
 } from '../lib/state/event-types.js';
 import { threeTierTasks, seedArtifacts, assessC, assemblyCtxOpts } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); // cwd 无关
 const SESS_ID = 'sess-control';
 const SESS = { agent: { session: { id: SESS_ID } } };
 const DANGLING_EVT = EVT_BATCH_ABORT_DANGLING ?? 'batch.abort_dangling';
 
-// P1 起建批须解析到团队资产（skills 须可在隔离宿主技能根解析）——与 `abort-dangling-and-warn-event.test.js` 同法
-seedTeamAssetSkills('software-team');
+// P1 起建批须解析到团队资产——与 `abort-dangling-and-warn-event.test.js` 同法
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 夹具：临时 store 根 + 真工具面（createTools）+ 合规三层批

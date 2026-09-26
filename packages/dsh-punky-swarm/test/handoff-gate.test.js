@@ -45,7 +45,6 @@ import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam, threeTierSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
-import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 import { schemaViolations } from './helpers/schema-conformance.mjs'; // task-26：schema 一致性校验共享单点
 import * as EVT from '../lib/state/event-types.js';
 
@@ -71,9 +70,6 @@ function makeHarness({ config = {} } = {}) {
   // F2：合成资产（最小三层）⇒ 走单点写入（'helpers/team-fixture.mjs'）。
   writeSyntheticTeam(teamsRoot, TEAM, threeTierSyntheticTeam(TEAM));
   const store = createStore(root);
-  // 宿主技能根（P1 起团队资产的 skills 必须**可解析**，否则 TEAM_ASSET_SKILLS_MISMATCH 拒建批）：
-  //   注入面 = 显式 env（隔离 HOME 的 .agents/skills），与引擎读端同源。
-  seedHostSkills(declaredSkillsOf(threeTierSyntheticTeam(TEAM)), undefined, { stub: true });
   const ctx = { tools: { register: () => {} }, logger: { info() {}, warn() {}, error() {} } };
   const { tools } = createTools(ctx, { store, root, config });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

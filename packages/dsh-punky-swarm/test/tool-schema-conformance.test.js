@@ -44,11 +44,9 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 import { outputSchemaOf, schemaViolations, crossCheckConformance, assertRejectionIsNotSchemaError }
   from './helpers/schema-conformance.mjs';
-
-seedTeamAssetSkills('software-team'); // P1：团队资产的技能名须可在隔离宿主技能根解析
 
 const SESSION = 'sess-schema-census';
 const EXEC = { agent: { session: { id: SESSION } } };

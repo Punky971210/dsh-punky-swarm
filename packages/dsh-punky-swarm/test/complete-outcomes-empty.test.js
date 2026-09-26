@@ -33,8 +33,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   (C) 反例锁：正常词表 / 缺声明两态**不得**误报；基线对账断言删除数为 0。
 //
 // 夹具纪律：**不修改仓库内任何 `presets/**` 真实资产** —— 「坏 verdict 资产」由临时 `teamsRoot`
-//   复制 `software-team` 资产骨架后**改一处**构造；技能名与 software-team 同集 ⇒ 由
-//   `seedTeamAssetSkills('software-team')` 注入隔离宿主技能根（P1 起建批期 skills 校验 fail-closed）。
+//   复制 `software-team` 资产骨架后**改一处**构造。
 // verdict 取值域（成员终态词）见 `presets/punky-preset/references/discipline.md` 的 verdict 行。
 
 import test from 'node:test';
@@ -52,14 +51,11 @@ import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
 import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 const SESS_ID = 'sess-s2';
 const SESS = { agent: { session: { id: SESS_ID } } };
 const CODE = 'GATE_COMPLETE_OUTCOMES_EMPTY';
 const EVT_COMPLETE_BLOCKED = EVT.EVT_GATE_COMPLETE_BLOCKED ?? 'gate.complete_blocked';
-
-seedTeamAssetSkills('software-team'); // 临时资产技能名与 software-team 同集 ⇒ 须可在隔离宿主技能根解析
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // (1)(2)(3) 纯门禁夹具：`createGates(state,{flowsRoot})` 直读临时资产（不经工具面 ⇒ 无技能面校验）

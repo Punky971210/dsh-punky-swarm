@@ -40,7 +40,6 @@ import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam, threeTierSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
-import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 import { schemaViolations } from './helpers/schema-conformance.mjs'; // task-26：schema 一致性校验共享单点
 import * as EVT from '../lib/state/event-types.js';
 
@@ -75,7 +74,6 @@ function makeHarness() {
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-p2settle-teams-'));
   // F2：合成资产（最小三层）⇒ 走单点写入（'helpers/team-fixture.mjs'）。
   writeSyntheticTeam(teamsRoot, TEAM, threeTierSyntheticTeam(TEAM));
-  seedHostSkills(declaredSkillsOf(threeTierSyntheticTeam(TEAM)), undefined, { stub: true });
   // 【task-27 纪律】测试**不得依赖 ambient env**：本套件用 env 择入开启态，而宿主/父进程可能已带
   //   `PSWARM_HANDOFF_GATE=1`（实测本机即如此）⇒ 不中和会让「以为门关」的派发步骤被 entry 门拦下。
   //   故此处保存并清除，`cleanup` 还原（进程级 env 归零，语义完全由本套件控制）。

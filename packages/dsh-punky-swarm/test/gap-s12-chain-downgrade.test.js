@@ -54,7 +54,6 @@ import {
 import { autoSettleLane, requestAutoSettle, AUTO_SETTLE_TRIGGERS } from '../lib/engine/auto-settle.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
-import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 import { seedArtifactFile } from './helpers/gate-fixture.mjs';
 
 const SESSION = 'sess-gap-s12';
@@ -134,7 +133,6 @@ function makeHarness({ chain = chainExec(), team = TEAM, subagents = null } = {}
   if (chain !== null) asset.chain = chain;
   // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
   writeSyntheticTeam(teamsRoot, team, asset);
-  seedHostSkills(declaredSkillsOf(asset));
   clearRoleCache();
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

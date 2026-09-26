@@ -28,11 +28,9 @@ import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
 import { readUnacked } from '../lib/comms/mailbox.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 mailbox 预算）统一补 software-team；
-//   该团队 skills 必须可解析（不可解析/技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）⇒ 先注入隔离技能根。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 mailbox 预算）统一补 software-team。
 
 // ---------- B1/B2/B3：纯函数三拒绝码 ----------
 

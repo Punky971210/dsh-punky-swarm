@@ -39,10 +39,6 @@ import { createGates, smokeOf } from '../lib/state/gates.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-// 临时团队资产以包内 `software-team` 为骨架 ⇒ 其 skills 必须可在宿主技能根解析（P1 起不可解析即拒建批）。
-seedTeamAssetSkills('software-team');
 
 const SESS = { agent: { session: { id: 'sess-smoke' } } };
 const SID = SESS.agent.session.id;

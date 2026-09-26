@@ -34,7 +34,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { packageRootOf } from './host-skills.mjs';
+import { packageRootOf } from './skill-paths.mjs';
 
 /** 包内真实资产的**默认骨架来源团队**（唯一有全量 flows/chain 声明的团队资产）。 */
 export const SKELETON_TEAM = 'software-team';
@@ -80,7 +80,7 @@ export function writeTempTeam(prefix, team, mutate = () => {}, { srcTeam = SKELE
 /**
  * **①' 真实骨架夹具（写入调用方给定的根）**：同上，但不新建 `%TEMP%` 目录。
  * 用于「根已在别处建好」的场景（例如拷好的 pkg 副本、或用例自管的 `teamsRoot`）。
- * @returns {object} 写入后的资产对象（调用方常需据此 `seedHostSkills(declaredSkillsOf(asset))`）
+ * @returns {object} 写入后的资产对象
  */
 export function writeRealTeam(root, team, mutate = () => {}, { srcTeam = SKELETON_TEAM, setTeam = false } = {}) {
   const asset = readRealTeamAsset(srcTeam).asset;

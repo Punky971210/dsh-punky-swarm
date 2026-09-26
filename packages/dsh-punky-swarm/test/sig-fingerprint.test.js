@@ -36,7 +36,6 @@ import { createStore } from '../lib/state/store.js';
 import { EVT_SIG_DUPLICATE_DETECTED } from '../lib/state/event-types.js';
 import { createTools } from '../lib/tools/register.js';
 import { assessC, seedArtifactFile, SPEC_OK } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 const REPO_ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const flatOf = (plan) => plan.wavePlan.flatMap((w) => w.tasks);
@@ -197,7 +196,6 @@ test('SIG-5⑤ 已派发（owner 非空）⇒ sig 冻结：派发后与再归一
 
 // ── ⑥ 重复 sig ⇒ 事件留痕且不阻断（负向对照） ─────────────────────────────────
 test('SIG-6⑥ 同 sig 双 lane：派发**不被阻断**且落 sig.duplicate_detected（留痕只此一处，不加拒码）', async () => {
-  seedTeamAssetSkills('engine-team'); // 隔离宿主技能根（P1 起建批须能解析资产声明的技能名）
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-sig-dup-'));
   const store = createStore(root);
   const ctx = {

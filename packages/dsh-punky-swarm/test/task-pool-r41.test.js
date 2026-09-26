@@ -235,10 +235,10 @@ test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）',
   );
 });
 
-test('R4-1a-5 注册表：`task_pool`/`task_update` 入表 + 总数冻结（36）', () => {
+test('R4-1a-5 注册表：`task_pool`/`task_update` 入表 + 总数冻结（37）', () => {
   const names = SUITE_TOOLS.map((t) => t.name);
   assert.ok(names.includes('task_pool'), '应已注册');
-  assert.equal(SUITE_TOOLS.length, 36, '套件工具全集 29 → 30 → 31 → 32 → 36（S2 宿主连续控制族 4 件）');
+  assert.equal(SUITE_TOOLS.length, 37, '套件工具全集 29 → 30 → 31 → 32 → 36（S2 宿主连续控制族 4 件）→ 37（AG-20 spawn_teammate 1 件）');
   // 【批 5 · G1（2026-09-22 用户裁定「同语义就删」）】原 deny/modeGate 成员性与长度断言（task_pool ∉ deny/
   //   ∉ modeGate、deny length 20、首项、task_update ∈ 双集、modeGate length 12）已删——
   //   全部被 suite-consistency SC-1/SC-2 的**精确全集 deepEqual**（FROZEN_DENY/FROZEN_MODE_GATED + 注册表派生）

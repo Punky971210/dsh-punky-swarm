@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 判读结论（逐枚；本文件覆盖其中 4 枚**真缺口**，另 4 枚裁定见蓝图 §6）：
 //   · 真缺口 → 本文件补测（4 枚 / 5 例）：
 //       GATE_EXEC_INPUT_MISSING ×3（E-A 批级拒 + E-A 对照放行 + E-B 逐 lane 拒）
-//       GATE_SKILL_MISSING      ×2（覆盖层声明不可解析技能 ⇒ 留痕 / 全可解析 ⇒ 零告警）
+//   GATE_SKILL_MISSING      ×3（资产面声明不可解析技能 ⇒ 留痕 / 覆盖层声明不可解析技能 ⇒ 留痕 / 全可解析 ⇒ 零告警）
 //       GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH ×1（出口门开启 + 存量批 ⇒ 放行 + 落码）
 //       GATE_EVENT_CONST_MISSING ×2（围栏 + 前置面；**降级覆盖**，理由见该例注释）
 //         → R3-4 已把该枚的 E2E 补上（`test/gate-event-const-e2e-r34.test.js`）；本两例保留为**源码面围栏**
@@ -50,13 +50,7 @@ import { createStore } from '../lib/state/store.js';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
 import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
-import { seedHostSkills, declaredSkillsOf, seedTeamAssetSkills } from './helpers/host-skills.mjs';
 import * as EVT from '../lib/state/event-types.js';
-
-// 【P1 同步 · 宿主技能根】本套件的 `probe-team` 以包内 `software-team` 资产为骨架 ⇒ 其 skills 与
-//   software-team 同集；P1 起这些 skills 必须**可解析**（否则构造期 `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）
-//   ⇒ 隔离 HOME 下先显式注入宿主技能根（与 `audit-contract-gate.test.js` 同一手法）。
-seedTeamAssetSkills('software-team');
 
 const SESSION = 'sess-r32';
 const SESS = { agent: { session: { id: SESSION } } };
@@ -203,12 +197,36 @@ test('R3-2 E-B：flows.exec.consumes_required_per_lane 未被满足 ⇒ 拒建�
 });
 
 // ── 真缺口 ②：`GATE_SKILL_MISSING`（技能名存在性告警）────────────────────────────────────
-// 推入点：`lib/tools/core.js:776`（`plan.warnings.push`，非阻断）。读取面 = `assembly.layers[*].skills[*]`，
-//   其中 `assembly = resolveAssembly(teamName, config.assembly, …)`（`lib/tools/core.js:644`）。
-// 可达路径**唯一**：`config.assembly` 覆盖层。理由是设计使然——资产面（`declaredSkillNamesOf`）
-//   已由构造期硬门 `TEAM_ASSET_SKILLS_MISMATCH` 把关（`lib/tools/core.js:460-477`），且
-//   `resolveAssembly` 在无覆盖时**逐字返回资产 layers**（`lib/assembly.js:57-59`）⇒ 无覆盖时本告警恒不触发。
-// 缺口成因：既有套件从未注入 `config.assembly`（全仓 grep `config.assembly` 在 `test/` 零命中）。
+// 推入点：`lib/tools/core.js#wave_plan.execute` 的告警块（`plan.warnings.push`，非阻断）。**判定面 = 两源并集**
+//   （2026-09-25 recommend 起）：① **资产面** `declaredSkillNamesOf(teamAsset)`；② `config.assembly` 覆盖层
+//   `assembly.layers[*].skills[*]`（`assembly = resolveAssembly(teamName, config.assembly, …)`）——
+//   两源并入**同一 Set**（同名消重），走同一 `GATE_SKILL_MISSING` 码与同一事件通道。
+// 【retire（2026-09-25）】原注释命题「资产面已由构造期硬门 `TEAM_ASSET_SKILLS_MISMATCH` 把关
+//   （`lib/tools/core.js:460-477`）⇒ 无覆盖时本告警恒不触发」**已失效**：该构造期硬门已按用户裁决
+//   （「技能、工具进任务包是 recommend 式，不是装配式」）撤销 ⇒ 资产面同样只留痕、不拒建批。
+//   相应新增资产面用例（下一条）——原「覆盖层 ×2」扩为「×3」。
+// 缺口成因（历史）：既有套件从未注入 `config.assembly`（全仓 grep `config.assembly` 在 `test/` 零命中）。
+
+test('R3-2 GATE_SKILL_MISSING【资产面】：资产层声明不可解析技能 ⇒ 留痕告警且不阻断建批', async () => {
+  const h = makeHarness(); // 无 `config.assembly` ⇒ 判定面只剩**资产面**
+  try {
+    // `threeTierSyntheticTeam` 的三个声明名（r32-designer / r32-coder / r32-reviewer）在隔离 HOME 下
+    //   **无宿主技能根**（不造桩、不写 SKILL.md）——但按现行语义：技能根不可用 ⇒ 守 `if (res.ok)` 守卫 ⇒
+    //   **不告警**。故先 `mkdirSync` 一个**空技能根目录**（零 SKILL.md、零技能名目录），使 `res.ok === true`，
+    //   资产面的三个名才落到 ② 态（点名告警）——这是本用例告警可被断言所必需的**可达构造**。
+    fs.mkdirSync(path.join(process.env.USERPROFILE, '.agents', 'skills'), { recursive: true });
+    const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-r32-asset-'));
+    writeSyntheticTeam(teamsRoot, SETTLE_TEAM, settleTeamAsset());
+    const out = await h.byName.wave_plan.execute({
+      batchId: 'r32-sk-asset', team: SETTLE_TEAM, teamsRoot, tasks: settleTasks(),
+      assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
+    }, SESS);
+    const w = out.warnings.find((x) => x.code === 'GATE_SKILL_MISSING');
+    assert.ok(w, '资产面的不可解析技能须落 GATE_SKILL_MISSING 告警（recommend 留痕）：' + JSON.stringify(out.warnings));
+    assert.match(String(w.missing ?? ''), /r32-coder/, '须点名缺失技能：' + JSON.stringify(w));
+    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-sk-asset')), true, 'recommend 语义：不阻断建批');
+  } finally { cleanup(h); }
+});
 
 test('R3-2 GATE_SKILL_MISSING：config.assembly 覆盖层声明不可解析技能 ⇒ 留痕告警且不阻断建批', async () => {
   const h = makeHarness({
@@ -247,9 +265,17 @@ test('R3-2 GATE_SKILL_MISSING 对照：覆盖层技能全可解析 ⇒ 零该码
     },
   });
   try {
-    // 与上例的**唯一差异** = 三个技能名已注入宿主技能根（见本文件 setup 的种子面）
-    seedHostSkills(['r32-designer', 'r32-coder', 'r32-reviewer'], undefined, { stub: true });
+    // ⚠ 【如实登记 · lane 未自行改断言】原 setup 用**已删除的写盘夹具**（三件退役符号之一，见批
+    //   `onto-fixture-purge-20260925` 的删除清单；本文件内已**零字面引用**）把三个覆盖层名造成可解析；该夹具
+    //   已按用户裁决撤除（「不造空桩」）⇒ 本 lane 只删该行、**未改下方断言**。结果是本用例在改后**转红**，
+    //   且**红因正当**：2026-09-25 recommend 起资产面声明名一并进同一判定面（`declaredSkillNamesOf(teamAsset)`），
+    //   而本用例的 `probe-team` 资产以包内 `software-team` 为骨架（声明 13 个技能名），隔离 HOME 下宿主技能根
+    //   无内容 ⇒ 这批名必然不可解析 ⇒ 必然落 `GATE_SKILL_MISSING`。即「全可解析 ⇒ 零该码告警」这一命题的
+    //   **可达构造**在本批环境约束下已不存在（构造它要么造桩、要么造技能名目录，两件都被本批红线禁止）。
+    //   ⇒ 提请 Leader 裁认（见 lane 产物 `exec/tests-c.md` §偏离 D-2）：本用例需按 recommend 语义重述
+    //   （属「改断言」，超出本 lane 授权）。
     const teamsRoot = writeTempTeam('punky-r32-skok-', PROBE);
+    fs.mkdirSync(path.join(process.env.USERPROFILE, '.agents', 'skills'), { recursive: true });
     const out = await h.byName.wave_plan.execute({
       batchId: 'r32-skok', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
     }, SESS);
@@ -273,7 +299,6 @@ test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 
   try {
     // F2：合成资产（本用例要的是「无 chain / 简化 flows」的受控形态）⇒ 走单点写入。
     writeSyntheticTeam(teamsRoot, SETTLE_TEAM, settleTeamAsset());
-    seedHostSkills(declaredSkillsOf(settleTeamAsset()), undefined, { stub: true });
 
     await h.byName.wave_plan.execute({
       batchId: 'r32-sl', team: SETTLE_TEAM, teamsRoot, tasks: settleTasks(), assembly: { auditLane: 'a1' },

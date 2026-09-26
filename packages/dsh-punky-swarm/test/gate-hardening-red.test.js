@@ -57,11 +57,6 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-// 【P1 同步 · 宿主技能根】工具面建批用例走 `team:'software-team'` ⇒ 其声明技能必须**可解析**
-//   （P1 §3：不可解析 / 技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）⇒ 隔离 HOME 下先注入技能根。
-seedTeamAssetSkills('software-team');
 
 const PKG = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 

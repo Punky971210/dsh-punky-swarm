@@ -29,13 +29,7 @@ import { globMatchesPath } from '../lib/assembly/flows.js';
 import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
 import { anchorSpecOf, assessC, seedArtifacts, threeTierTasks } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 import { fileURLToPath } from 'node:url';
-
-// 【P1 同步 · 宿主技能根】本套件的临时团队资产（`probe-team`）以包内 `software-team` 资产为骨架 ⇒
-//   其 skills 与 software-team 同集；P1 起这些 skills 必须**可解析**（不可解析 / 技能根缺失 ⇒
-//   `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）⇒ 隔离 HOME 下先显式注入宿主技能根。
-seedTeamAssetSkills('software-team');
 
 const SESS = { agent: { session: { id: 'sess-p2' } } };
 // 【可移植性修复 2026-09-16】原写法 `new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1')`

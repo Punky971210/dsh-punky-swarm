@@ -35,8 +35,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   A1 用例**只改持久化 `wavePlan`**（`layersOf` 只读 `wavePlan`）正是该形态的最小复现。
 //
 // 夹具纪律：不修改仓库内任何 `presets/**` 真实资产（直接用包内 `software-team`，`team` 不传 `teamsRoot`
-//   即解析包内资产）；技能名由 `seedTeamAssetSkills('software-team')` 注入隔离宿主技能根
-//   （P1 起建批期技能面 fail-closed）。
+//   即解析包内资产）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,7 +49,6 @@ import { createTools } from '../lib/tools/register.js';
 import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 const SESS_ID = 'sess-r3';
 const SESS = { agent: { session: { id: SESS_ID } } };
@@ -58,8 +56,6 @@ const TEAM = 'software-team';
 const CODE_NO_AUDIT = 'GATE_COMPLETE_NO_AUDIT';
 const CODE_EXEC_PENDING = 'GATE_COMPLETE_EXEC_PENDING';
 const EVT_COMPLETE_BLOCKED = EVT.EVT_GATE_COMPLETE_BLOCKED ?? 'gate.complete_blocked';
-
-seedTeamAssetSkills(TEAM); // P1 起建批期技能必须可在隔离宿主技能根解析（fail-closed）
 
 // ── 夹具 ─────────────────────────────────────────────────────────────────────
 // `software-team` 的 `flows.audit.audit_contract.consumes_required` = ['plan/','exec/']

@@ -40,9 +40,6 @@ import { createStore } from '../lib/state/store.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-seedTeamAssetSkills('software-team');
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESS = { agent: { session: { id: 'sess-b2' } } };

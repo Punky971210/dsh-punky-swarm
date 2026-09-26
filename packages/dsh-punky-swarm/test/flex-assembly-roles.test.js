@@ -38,11 +38,6 @@ import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { resolveTeamRoles, resolveTeamFlows, unionRoleVocabulary, clearRoleCache, clearFlowCache, packageRoot } from '../lib/assembly/flows.js';
 import { teamAssetSignature } from '../lib/assembly/team-asset.js';
-import { seedHostSkills } from './helpers/host-skills.mjs';
-
-// 【P1 同步 · 宿主技能根】自建临时团队的 `skills` 同样必须**可解析**（P1 §3：不可解析 ⇒ 拒载拒建批；
-//   技能根不存在 ⇒ 同码拒）⇒ 隔离 HOME 下显式注入本套件临时资产的技能名（显式 env 面，零新变量）。
-seedHostSkills(['SPEC-SKILL', 'EXEC-SKILL', 'AUDIT-SKILL'], undefined, { stub: true });
 
 const SESS = { agent: { session: { id: 'sess-flexroles' } } };
 const TEAM = 'flex-team';

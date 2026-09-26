@@ -37,8 +37,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ⑥ 基线对账：断言删除数 0（新增断言数 > 0）。
 //
 // 夹具纪律：**不修改仓库内任何 `presets/**` 真实资产** —— 「坏 verdict 资产」由临时 `teamsRoot`
-//   复制 `software-team` 资产骨架后**改一处**构造；技能名与 software-team 同集 ⇒ 由
-//   `seedTeamAssetSkills('software-team')` 注入隔离宿主技能根（P1 起建批期 skills 校验 fail-closed）。
+//   复制 `software-team` 资产骨架后**改一处**构造。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,7 +52,6 @@ import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC, seedArtifacts } from './helpers/gate-fixture.mjs';
 import { writeTempTeam } from './helpers/team-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
 
 const SESS_ID = 'sess-s3b';
 const SESS = { agent: { session: { id: SESS_ID } } };
@@ -61,8 +59,6 @@ const DANGLING_EVT = EVT.EVT_BATCH_ABORT_DANGLING ?? 'batch.abort_dangling';
 const OUTCOMES_EMPTY_EVT = EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY ?? 'gate.complete_outcomes_empty';
 const ROLE_INVALID_EVT = EVT.EVT_GATE_ROLE_INVALID ?? 'gate.role_invalid';
 const OUTCOMES_EMPTY_CODE = 'GATE_COMPLETE_OUTCOMES_EMPTY';
-
-seedTeamAssetSkills('software-team'); // 临时资产技能名与 software-team 同集 ⇒ 须可在隔离宿主技能根解析
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 夹具：临时 store 根 + 真工具面（createTools）

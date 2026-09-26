@@ -43,7 +43,6 @@ import { clearRoleCache } from '../lib/assembly/flows.js';
 import { threeTierTasks } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION = 'sess-m1';
@@ -254,7 +253,6 @@ function makeHarness({ chain }) {
   const asset = { team: TEAM, layers: LAYERS, roles: ROLES, flows: FLOWS, chain };
   // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
   writeSyntheticTeam(teamsRoot, TEAM, asset);
-  seedHostSkills(declaredSkillsOf(asset));
   clearRoleCache();
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

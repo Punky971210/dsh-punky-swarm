@@ -50,7 +50,6 @@ import {
 } from '../lib/bridge/lane-handle.js';
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
-import { seedHostSkills, declaredSkillsOf, seedTeamAssetSkills } from './helpers/host-skills.mjs';
 import { seedArtifactFile } from './helpers/gate-fixture.mjs';
 
 const SESSION = 'sess-p2-chain';
@@ -133,7 +132,6 @@ function makeHarness({ chain = chain5(), auditFlow = true, subagents = null } = 
   if (chain !== null) asset.chain = chain;
   // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
   writeSyntheticTeam(teamsRoot, TEAM, asset);
-  seedHostSkills(declaredSkillsOf(asset), undefined, { stub: true });
   clearRoleCache();
   const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
@@ -215,7 +213,6 @@ async function assertAdvanceRetiredP2(h, batchId, { lane = 'plan' } = {}) {
 
 test('P2-1 链声明正向：五段链八条静态校验 problems=[]；真资产 engine-team 的 chain 亦通过；`flows.chain` 位置拒', () => {
   assert.deepEqual(validateChain(chain5(), LAYERS).problems, [], '五段链（' + specChain(chain5()) + '）必须八条全过');
-  seedTeamAssetSkills('engine-team');
   const real = loadChainOf({ team: 'engine-team' });
   assert.equal(real.ok, true, 'engine-team 资产的 chain 必须通过八条校验：' + JSON.stringify(real.problems));
   assert.ok(real.chain && Array.isArray(real.chain.steps) && real.chain.steps.length >= 3, 'engine-team 必须声明链步');

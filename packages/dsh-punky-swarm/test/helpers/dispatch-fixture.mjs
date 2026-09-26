@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createTools } from '../../lib/tools/register.js';
 import { createStore } from '../../lib/state/store.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './gate-fixture.mjs';
-import { withDefaultTeam } from './host-skills.mjs';
+import { withDefaultTeam } from './skill-paths.mjs';
 
 /**
  * dispatch 面测试统一 harness（G7 下沉，2026-09-22：dispatch-failure-rollback /

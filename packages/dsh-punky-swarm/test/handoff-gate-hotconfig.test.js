@@ -42,7 +42,6 @@ import { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV } from '../l
 import { assessC } from './helpers/gate-fixture.mjs';
 import { writeSyntheticTeam, threeTierSyntheticTeam } from './helpers/team-fixture.mjs';
 import { clearRoleCache } from '../lib/assembly/flows.js';
-import { seedHostSkills, declaredSkillsOf } from './helpers/host-skills.mjs';
 
 const SESSION = 'sess-hotcfg';
 const SESS = { agent: { session: { id: SESSION } } };
@@ -65,7 +64,6 @@ function makeHarness() {
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-hotcfg-teams-'));
   // F2：合成资产（最小三层）⇒ 走单点写入（'helpers/team-fixture.mjs'）。
   writeSyntheticTeam(teamsRoot, TEAM, threeTierSyntheticTeam(TEAM));
-  seedHostSkills(declaredSkillsOf(threeTierSyntheticTeam(TEAM)), undefined, { stub: true });
   clearRoleCache();
   // 环境隔离：本套件验的是 **runtime.json 热配置**路径 ⇒ 必须先中和**环境变量兜底**，
   //   否则 ambient env（实测本机就有 `PSWARM_HANDOFF_GATE=1`）会把「缺省关/只开一段」的用例污染成「两段全开」。

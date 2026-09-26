@@ -28,14 +28,13 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
 // G7 下沉（2026-09-22）：harness 体迁入 helpers/dispatch-fixture.mjs；本文件一行适配（markCmd 断言标记）。
 import { makeDispatchHarness } from './helpers/dispatch-fixture.mjs';
 const harness = () => makeDispatchHarness({ SID: 'sess-dp', batchId: 'b-dp', markCmd: true });
 
-// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team；其 skills 须可解析 ⇒ 先注入技能根。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team。
 
 const SID = 'sess-dp';
 

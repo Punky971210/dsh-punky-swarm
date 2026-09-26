@@ -32,10 +32,9 @@ import {
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills, withDefaultTeam } from './helpers/host-skills.mjs';
+import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
-// 【P1 同步】`team` 必填且必须解析到资产 ⇒ 建批统一补 software-team；其 skills 须可解析 ⇒ 先注入隔离技能根。
-seedTeamAssetSkills('software-team');
+// 【P1 同步】`team` 必填且必须解析到资产 ⇒ 建批统一补 software-team。
 
 // ── fixtures（与 assembly-gate.test.js 同构：p1(plan/designer) + 3 exec/coder + a1(audit/supervisor) → C+）──
 // 【P1 同步 · 形态收紧】a1 追加 consume 各 exec 产物（团队 `audit_contract.consumes_required=['plan/','exec/']`）；
