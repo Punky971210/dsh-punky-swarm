@@ -52,8 +52,8 @@ function freshTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-preset-loader-'));
 }
 
-test('L-1 注册枚举：PRESET_IDS = 3 注册 id（l1/l2 + 第三类 l3-tool-ban；compose 组合项已废除）；PRESETS_DIR 指向随包 presets/hook-rules', () => {
-  assert.deepEqual([...PRESET_IDS], ['l1-sensitive', 'l2-resource', 'l3-tool-ban']);
+test('L-1 注册枚举：PRESET_IDS = 4 注册 id（l1/l2 + 第三类 l3-tool-ban + l5-wait-ban；compose 组合项已废除）；PRESETS_DIR 指向随包 presets/hook-rules', () => {
+  assert.deepEqual([...PRESET_IDS], ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban']);
   assert.equal(path.basename(PRESETS_DIR), 'hook-rules');
   assert.equal(path.basename(path.dirname(PRESETS_DIR)), 'presets');
   for (const id of PRESET_IDS) {
@@ -61,15 +61,18 @@ test('L-1 注册枚举：PRESET_IDS = 3 注册 id（l1/l2 + 第三类 l3-tool-ba
   }
 });
 
-test('L-2 loadPresetTable()：双表分派（rules 面 3 id + toolBan 面 l3-tool-ban）、_meta 剥离、errors 空', () => {
-  // rules 面：l1/l2 —— l3-tool-ban 无 rules ⇒ 不入 table（catalog 计数由两表并计）
+test('L-2 loadPresetTable()：双表分派（rules 面 2 id + toolBan 面 l3/l5 两 id）、_meta 剥离、errors 空', () => {
+  // rules 面：l1/l2 —— l3-tool-ban / l5-wait-ban 无 rules ⇒ 不入 table（catalog 计数由两表并计）
   assert.deepEqual(Object.keys(REAL.table), ['l1-sensitive', 'l2-resource']);
-  // toolBan 面（第三类判定面）：仅 l3-tool-ban 有黑名单条目
-  assert.deepEqual(Object.keys(REAL.banTable), ['l3-tool-ban']);
+  // toolBan 面（第三类判定面）：l3-tool-ban（写通道路由）+ l5-wait-ban（等待能力禁用，2026-09-26 新增）
+  assert.deepEqual(Object.keys(REAL.banTable), ['l3-tool-ban', 'l5-wait-ban']);
   assert.deepEqual(REAL.errors, []);
   assert.equal(REAL.table['l1-sensitive'].length, 12);
   assert.equal(REAL.table['l2-resource'].length, 6);
   assert.equal(REAL.banTable['l3-tool-ban'].length, 1);
+  // 2026-09-26 扩面：L5 等待能力禁用（wait_agent + sleep）
+  assert.equal(REAL.banTable['l5-wait-ban'].length, 3);
+  assert.deepEqual(REAL.banTable['l5-wait-ban'].map((e) => e.id), ['L5-W01', 'L5-W02', 'L5-W03']);
   for (const id of Object.keys(REAL.table)) {
     for (const r of REAL.table[id]) {
       assert.equal('_meta' in r, false, `${id} 规则 ${r.id} 不应含 _meta（剥离语义：loader 只剥 _meta 不洗规则）`);
@@ -93,26 +96,28 @@ test('L-3 loadPresetFile：注册 id 单文件装载成功；未知 id 拒绝（
 });
 
 test('L-4 坏目录容错：单文件失败 → 该 id 不入表 + errors 收集，其余照常（不 throw）', () => {
-  // (a) 全坏：坏 JSON / 顶层非 wrapper / 黑名单形状坏 → 3 id 全失败、errors 逐文件收集、双表皆空
+  // (a) 全坏：坏 JSON / 顶层非 wrapper / 黑名单形状坏 → 4 id 全失败、errors 逐文件收集、双表皆空
   const dirAll = freshTmp();
   fs.writeFileSync(path.join(dirAll, 'l1-sensitive.json'), '{ not json');
   fs.writeFileSync(path.join(dirAll, 'l2-resource.json'), JSON.stringify({ rules: 'nope' }));
   fs.writeFileSync(path.join(dirAll, 'l3-tool-ban.json'), banWrapper([banEntry('L3-W01', { behavior: 'bogus' })]));
+  fs.writeFileSync(path.join(dirAll, 'l5-wait-ban.json'), banWrapper([banEntry('L5-W01', { behavior: 'bogus' })]));
   const rAll = loadPresetTable(dirAll);
   assert.deepEqual(Object.keys(rAll.table), [], '全坏目录 → 零 id 入 rules 表');
   assert.deepEqual(Object.keys(rAll.banTable), [], '全坏目录 → 零 id 入 toolBan 表');
-  assert.equal(rAll.errors.length, 3, '每文件一条错误（实际: ' + rAll.errors.join(' | ') + '）');
+  assert.equal(rAll.errors.length, 4, '每文件一条错误（实际: ' + rAll.errors.join(' | ') + '）');
   assert.ok(rAll.errors.some((e) => e.includes('JSON.parse 失败')));
   assert.ok(rAll.errors.some((e) => e.includes('顶层结构非法')));
   assert.ok(rAll.errors.some((e) => e.includes('behavior 非法')), '黑名单形状错误定位到 behavior（实际: ' + rAll.errors.join(' | ') + '）');
-  // (b) 单坏：l2 坏、l1/l3 好 → rules 表 1 id、toolBan 表 1 id、errors 仅指向坏 id
+  // (b) 单坏：l2 坏、l1/l3/l5 好 → rules 表 1 id、toolBan 表 2 id、errors 仅指向坏 id
   const dirOne = freshTmp();
   fs.writeFileSync(path.join(dirOne, 'l1-sensitive.json'), wrapper([rule('R1')]));
   fs.writeFileSync(path.join(dirOne, 'l2-resource.json'), wrapper([{ id: 'R2' }])); // violations 缺失 → 形状坏
   fs.writeFileSync(path.join(dirOne, 'l3-tool-ban.json'), banWrapper([banEntry('L3-W01')]));
+  fs.writeFileSync(path.join(dirOne, 'l5-wait-ban.json'), banWrapper([banEntry('L5-W01')]));
   const rOne = loadPresetTable(dirOne);
   assert.deepEqual(Object.keys(rOne.table), ['l1-sensitive'], '坏文件单 id 不入表、其余照常');
-  assert.deepEqual(Object.keys(rOne.banTable), ['l3-tool-ban'], 'toolBan 面照常装载（与 rules 面互不影响）');
+  assert.deepEqual(Object.keys(rOne.banTable), ['l3-tool-ban', 'l5-wait-ban'], 'toolBan 面照常装载（与 rules 面互不影响）');
   assert.ok(rOne.errors.length >= 1, '坏文件错误按条收集（该文件形状错误逐条入 errors）');
   assert.ok(rOne.errors.every((e) => e.includes('l2-resource')), '错误全部定位到坏 preset id（实际: ' + rOne.errors.join(' | ') + '）');
 });

@@ -39,7 +39,9 @@ import type { Rule, ToolBanEntry } from './types.js';
 import { validatePresetRules, validateToolBanEntries, validateToolBanTable } from './config.js';
 
 // 注册 id 枚举（唯一权威；runtime.json governance.hook.preset 仅接受这些 id，不接受任意路径）
-export const PRESET_IDS: readonly string[] = ['l1-sensitive', 'l2-resource', 'l3-tool-ban'];
+//   2026-09-26 扩面：新增 `l5-wait-ban`（等待能力禁用：wait_agent + sleep），与 L1/L2（rules 面）、
+//   L3（写通道路由，toolBan 面）并列。
+export const PRESET_IDS: readonly string[] = ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban'];
 
 // 随包预设目录：<pkg>/presets/hook-rules/（由本模块位置上溯三级定位——lib/governance/preset-loader.js
 //   → lib → 包根；开发/发布同构，files 已含 presets 整目录随包发布）

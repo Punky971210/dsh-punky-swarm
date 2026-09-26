@@ -53,13 +53,14 @@ import { readSessionState, setDeferred, setPaused } from './state-store.js';
 
 // ── 规则引用工具（拒绝正文与受控补正共用）──
 // preset 归属映射（rule id 前缀 → preset 注册 id）：L1-* → l1-sensitive、L2-* → l2-resource、
-// L3-* → l3-tool-ban（第三类判定面：工具黑名单条目 id 前缀）
-// （三类规则集各自独立前缀；compose 组合项已废除，不再有复用 L1/L2 原 id 的引用形态）；
+// L3-* → l3-tool-ban（第三类判定面：写通道路由）、L5-* → l5-wait-ban（第三类判定面：等待能力禁用）
+// （各类规则集各自独立前缀；compose 组合项已废除，不再有复用 L1/L2 原 id 的引用形态）；
 // 自定义规则（无前缀）→ null（省略 preset 归属，仅列 id）。
 const PRESET_OF_RULE_PREFIX = [
   ['L1-', 'l1-sensitive'],
   ['L2-', 'l2-resource'],
   ['L3-', 'l3-tool-ban'],
+  ['L5-', 'l5-wait-ban'],
 ];
 
 function presetOfRuleId(id) {

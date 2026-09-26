@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "presetId": "l5-wait-ban",
+    "schemaVersion": 1,
+    "layer": "L5",
+    "ruleCount": 3,
+    "title": "等待能力禁用（wait_agent + sleep）",
+    "kind": "tool-ban",
+    "source": "用户裁决 2026-09-26：禁用 `wait_agent` 工具与 sleep 能力，避免 Agent 滥用等待功能——等待应由「成员回报」驱动（`swarm_report` / `send_message` 到达即唤醒），而非轮询阻塞",
+    "intent": "让 Agent 不要用轮询式等待白占执行轮次与上下文：需要等成员/事件时依赖回报通道，需要查状态时用 `batch_status` / `log_export` / 产物根 glob",
+    "scope": "① `wait_agent` 工具**整体禁用**（`tool-disabled`，不看参数）；② `pwsh` / `bash` 的**段首等待命令**（Start-Sleep / sleep / Wait-Event / Wait-Process / Wait-Job / Wait-Service / wait / timeout）",
+    "not_in_scope": "执行 / 构建 / 测试 / 包管理 / 网络一律放行——`npm test`、`npm run build`、`node x.mjs`、`git status`、`Get-ChildItem` 均不命中（段首不是等待命令）；**成员回报通道**（`swarm_report` / `send_message`）与**状态查询工具**（`batch_status` / `log_export` / `lane_heartbeat` / `handoff_view`）完全不受影响",
+    "boundary": "启发式、非沙箱：别名、脚本文件（`pwsh -File x.ps1`）、内联解释器（`node -e \"setTimeout(...)\"` / `python -c \"time.sleep(5)\"`）**不在列**——只收敛「直调 `wait_agent`」与「shell 里直接 sleep / 等待」两条主路径，不承诺等价于 OS 级隔离",
+    "behavior": "tool-disabled",
+    "tools": [
+      "wait_agent",
+      "pwsh",
+      "bash"
+    ],
+    "notes": [
+      "条目走**第三类判定面**（`toolBan` 表），与 L1/L2 参数规则面、L3 写通道面**并列且可任意叠加**（id 前缀互不重叠 ⇒ 不会被装载层唯一性校验拒）。",
+      "**本层与 L3 同走 `toolBan` 面但语义不同**：L3 = 写通道路由（引导 `edit`/`write`）；L5 = 等待能力禁用（引导回报通道与状态查询）。",
+      "`behavior` 语义：`tool-disabled` = **工具整体禁用**（不看参数；用于**没有 `command` 参数**的工具如 `wait_agent`）；`wait-sleep` = 按**命令段首 token** 判等待类。两个行为面于 **2026-09-26 随本 preset 一并扩面**（同批同步 `TOOL_BAN_BEHAVIORS` + `judgeBehavior`）。",
+      "原语档：category hard → 引擎 P2 硬违 → DENY（拒绝执行 + 收据 `ruleRefs=[L5-W0x]`）。",
+      "热加载：等价的 inline 形态可写 `<root>/config/runtime.json` 的 `governance.hook.toolBan`（免重启生效）；本 preset 文件为**随包资产**，需 **boot 装载一次（重启宿主一次）**方可被 `preset` 引用键识别。",
+      "分级上线：本层属**负向约束**（禁止某类动作），与 L1/L2 的正向内容与资源判定互不影响；建议在 L2/L1 之后上线，单独观察拒绝收据再扩面。"
+    ]
+  },
+  "toolBan": [
+    {
+      "id": "L5-W01",
+      "tool": "wait_agent",
+      "behavior": "tool-disabled",
+      "code": "L5-W01",
+      "category": "hard",
+      "message": "[preset L5] `wait_agent` 已被护栏整体禁用（用户裁决 2026-09-26）：**等待应由「成员回报」驱动**——成员完成/失败后会主动回报（`swarm_report` / `send_message` 到达即唤醒 Leader），轮询式等待只白占执行轮次与上下文；需要推进时用 `send_message` 派活，用 `batch_status` / `log_export` / 产物根 glob 查状态"
+    },
+    {
+      "id": "L5-W02",
+      "tool": "pwsh",
+      "behavior": "wait-sleep",
+      "code": "L5-W02",
+      "category": "hard",
+      "message": "[preset L5] pwsh 命令含 sleep / 等待动作（Start-Sleep / sleep / Wait-Event / Wait-Process / Wait-Job / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环"
+    },
+    {
+      "id": "L5-W03",
+      "tool": "bash",
+      "behavior": "wait-sleep",
+      "code": "L5-W03",
+      "category": "hard",
+      "message": "[preset L5] bash 命令含 sleep / 等待动作（sleep / wait / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环"
+    }
+  ]
+}

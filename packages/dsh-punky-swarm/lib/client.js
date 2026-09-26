@@ -485,6 +485,7 @@ window.__ModuleLoader__.load({
       "gov.preset.l1": "敏感数据防护（凭据/私钥）",
       "gov.preset.l2": "资源上限（超时/并发）",
       "gov.preset.l3": "工具黑名单（pwsh 写文件）",
+      "gov.preset.l5": "等待能力禁用（wait_agent / sleep）",
       "gov.preset.custom": "检测到非受控 preset 引用，保存将沿用原文",
       "gov.preset.manual": "检测到 {n} 条手工规则，预设切换需先手工移除",
       "gov.esc.title": "违规自动升级",
@@ -681,6 +682,7 @@ window.__ModuleLoader__.load({
       "gov.preset.l1": "Sensitive-data guard (credentials/keys)",
       "gov.preset.l2": "Resource limits (timeout/concurrency)",
       "gov.preset.l3": "Tool blacklist (pwsh file writes)",
+      "gov.preset.l5": "Wait capability ban (wait_agent / sleep)",
       "gov.preset.custom": "Non-listed preset reference detected; saving keeps it verbatim",
       "gov.preset.manual": "{n} custom rules present; switch the preset only after removing them manually",
       "gov.esc.title": "Auto-escalation",
@@ -1757,15 +1759,17 @@ window.__ModuleLoader__.load({
     function pickNum(a, b, d) { return typeof a === 'number' && isFinite(a) ? a : typeof b === 'number' && isFinite(b) ? b : d; }
     function clockOf(d) { try { return d.toTimeString().slice(0, 8); } catch { return ''; } }
     // 可选装载复选集 = 全部注册规则集（三个平级多选项：L1 敏感 / L2 资源 / L3 工具黑名单）——
-    //   组合 = 勾选叠加本身（如「规则预设」全勾 = ['l1-sensitive','l2-resource','l3-tool-ban']），
+    //   组合 = 勾选叠加本身（如「规则预设」全勾 = ['l1-sensitive','l2-resource','l3-tool-ban','l5-wait-ban']），
     //   不再有 compose 这一「组合项」（该注册 id 已废除）；'compose' 仅在 formPresetOf 里作一次性旧值迁移。
-    function presetOptionIds() { return ['l1-sensitive', 'l2-resource', 'l3-tool-ban']; }
+    //   2026-09-26 扩面：新增 l5-wait-ban（wait_agent + sleep 禁用，用户裁决）。
+    function presetOptionIds() { return ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban']; }
     function escPrimitives() { return ['DENY', 'NARROW', 'DEFER', 'PAUSE']; } // REQUIRE_APPROVAL 红线不可经表单（引擎契约），不出现
     function presetMeaningKey(id) {
       switch (id) {
         case 'l1-sensitive': return 'gov.preset.l1';
         case 'l2-resource': return 'gov.preset.l2';
         case 'l3-tool-ban': return 'gov.preset.l3';
+        case 'l5-wait-ban': return 'gov.preset.l5';
         default: return null;
       }
     }

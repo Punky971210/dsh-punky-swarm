@@ -107,7 +107,12 @@ export interface Rule {
 // 语义 = 「写通道路由」纪律：Agent 写文件走 edit / write / str-replace-editor 等在册工具，
 //   不经 shell（pwsh）自建写路径落盘（编码头/BOM 易被写盘破坏，且不可逆）。
 // 判定内核见 tool-ban.ts（纯函数、零依赖；**与执行引擎侧 lib/tools/readonly.js 无关**——用户裁决 Q4）。
-export type ToolBanBehavior = 'file-write';   // 首批仅 'file-write'；扩面需同步 TOOL_BAN_BEHAVIORS 与判定实现
+// 行为面（**2026-09-26 扩面**：原仅 'file-write'）：
+//   `file-write`    —— shell 命令含「修改或写文件」动作（重定向 / 写 cmdlet / 写命令名 / 落盘参数）
+//   `tool-disabled` —— **无条件禁用该工具**（不看参数；用于 `wait_agent` 这类**没有 `command` 参数**的工具）
+//   `wait-sleep`    —— 命令为**等待 / 休眠**类（`Start-Sleep` / `sleep` / `timeout` / `Wait-*`）
+// ⚠ 扩面须**同步三处**：本类型 + `TOOL_BAN_BEHAVIORS`（config.ts）+ `judgeBehavior` 判定实现（tool-ban.ts）。
+export type ToolBanBehavior = 'file-write' | 'tool-disabled' | 'wait-sleep';
 
 export interface ToolBanEntry {
   id: string;                    // 条目 id（收据 ruleRefs 溯源；编号红线同 Rule：无来源编号禁止）

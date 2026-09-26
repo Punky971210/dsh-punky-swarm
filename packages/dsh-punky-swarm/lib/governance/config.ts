@@ -127,9 +127,12 @@ export function validateRuleTable(rules: readonly unknown[]): { ok: boolean; err
 
 // ── 第三类判定面（工具黑名单）校验纯函数（零 IO；preset-loader 与 resolve 共用，供单测直引）──
 
-// 行为面合法值域（首批仅 file-write；未知值装载期早失败——判定内核侧对未知行为不命中，
-//   双保险：装载层拒绝坏资产、运行期不误判）
-export const TOOL_BAN_BEHAVIORS: readonly string[] = ['file-write'];
+// 行为面合法值域（**2026-09-26 扩面**：原仅 `file-write`；新增 `tool-disabled` / `wait-sleep`，
+//   用于「禁用 wait_agent 工具 + sleep 能力」——用户裁决 2026-09-26：避免 Agent 滥用等待功能）。
+//   未知值**装载期早失败**（下方 :148 拒绝）；判定内核侧对未知行为 **fail-closed 命中**
+//   （2026-09-15 B1 修订：此前返回 hit:false = fail-open，条目在册却被静默绕过）
+//   ⇒ 双保险：装载层拒绝坏资产、运行期不误放行。
+export const TOOL_BAN_BEHAVIORS: readonly string[] = ['file-write', 'tool-disabled', 'wait-sleep'];
 
 // 工具黑名单条目形状校验（preset 文件与 inline 共用）：条目须为对象；id / code / message / tool
 //   须为非空 string（编号红线：无来源编号禁止）；behavior ∈ TOOL_BAN_BEHAVIORS；
@@ -350,7 +353,7 @@ export function resolveGovernanceConfig(
         const hasBan = Array.isArray(foundBan);
         // 缺 table（接线漏注入）或查无（两类判定面皆无）→ 未知 id 装载失败（出厂/缺省表不识别任何引用）
         if (!hasRules && !hasBan) {
-          errs.push(`governance.hook.preset: 未知 preset id '${ref}'（注册 id 枚举：l1-sensitive / l2-resource / l3-tool-ban；组合请用数组引用或直接写 inline rules / inline toolBan）`);
+          errs.push(`governance.hook.preset: 未知 preset id '${ref}'（注册 id 枚举：l1-sensitive / l2-resource / l3-tool-ban / l5-wait-ban；组合请用数组引用或直接写 inline rules / inline toolBan）`);
         } else {
           // preset 引用同时展开**两类判定面**：l1-sensitive / l2-resource = 参数规则；
           //   l3-tool-ban = 工具黑名单（第三类，条目进 mergedBan）
@@ -362,9 +365,15 @@ export function resolveGovernanceConfig(
     const inline = Array.isArray(c.rules) ? c.rules as Rule[] : [];
     const inlineBan = Array.isArray(c.toolBan) ? c.toolBan as ToolBanEntry[] : [];
     const finalBan = [...mergedBan, ...inlineBan];
+    // ⚠ 形状校验（2026-09-26 对称化修复）：此前本分支**只校验 id 唯一**（validateToolBanTable），
+    //   而 `else`（无 preset）分支两者都校验 ⇒ **inline 坏条目在 preset 分支下被静默武装**：
+    //   缺 code/message/tool 时拒绝文案 code=undefined、未知 behavior 永不命中（fail-open）；
+    //   与 `else` 分支注释声称的「现接同一校验器」**不符**。现补**同一校验器**，两侧对称。
+    const vBanEntries = validateToolBanEntries(finalBan);
     const vBan = validateToolBanTable(finalBan);
-    if (errs.length > 0 || !vBan.ok) {
+    if (errs.length > 0 || !vBanEntries.ok || !vBan.ok) {
       for (const e of errs) warn?.(`[governance] ${e}；装载失败回退空表（宁空勿半——出厂空表=零拦截，请修正后热更重挂生效）`);
+      for (const e of vBanEntries.errors) warn?.(`[governance] preset 装载失败（toolBan 形状）：${e}；回退空表（宁空勿半——修正后热更重挂生效）`);
       for (const e of vBan.errors) warn?.(`[governance] preset 装载失败（toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
       rules = [];
       toolBan = [];

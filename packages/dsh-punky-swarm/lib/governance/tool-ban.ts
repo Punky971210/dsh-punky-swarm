@@ -55,6 +55,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   收据可溯源）；装载层另有双保险（validateToolBanEntries 拒绝非法 behavior，见 config.ts）。
 
 import type { ToolBanEntry, ToolBanBehavior, Violation } from './types.js';
+// 合法行为面枚举（用于「未实现」退路的提示文案；config.ts 不 import 本模块 ⇒ 无循环依赖）
+import { TOOL_BAN_BEHAVIORS } from './config.js';
 
 // 引号字面量掩码（替代符刻意选无语义 token：不会被写指示符命中，也不会被当命令名）
 const QUOTE_MASK = '__Q__';
@@ -91,6 +93,44 @@ const WRITE_HEADS = new Set([
   'move-item', 'copy-item', 'rename-item', 'set-acl',
   'out-file', 'tee-object', 'export-csv', 'export-clixml',
 ]);
+
+// ⑤ 等待 / 休眠类命令名（**2026-09-26 新增**：用户裁决「禁用 wait_agent 工具和 sleep 能力，
+//   避免 Agent 滥用等待功能」）。只在**段首命令位**判定（与 ④ 写命令名同构）。
+//   边界（同 file-write 的启发式口径，如实声明）：别名、脚本文件（`pwsh -File x.ps1`）、
+//   内联解释器（`node -e "setTimeout(...)"` / `python -c "time.sleep(5)"`）**不在列**——
+//   本判定只收敛「shell 里直接 sleep / 等待」这一主路径，不承诺等价于 OS 级隔离。
+const WAIT_SLEEP_HEADS = new Set([
+  // PowerShell
+  'start-sleep', 'sleep', 'wait-event', 'wait-process', 'wait-job', 'wait-service',
+  // POSIX / cmd
+  'wait', 'timeout',
+]);
+
+// 判定单条 shell 命令是否属于「等待 / 休眠」（`wait-sleep` 行为面）。
+//   判定链与 judgeFileWriteCommand 同构：空/非串 → 不命中；未闭合引号 → fail-closed 命中；
+//   按 `;` `&&` `||` `|` 换行分段 → 段首 token 命中即拒；其余放行。
+//   ⇒ 放行面举例：`npm test`（段首是 npm）、`Get-ChildItem`、`git status`。
+export function judgeWaitSleepCommand(command: unknown): FileWriteVerdict {
+  if (typeof command !== 'string' || command.trim().length === 0) {
+    return { hit: false, reason: '命令为空或非字符串（无等待动作可判）' };
+  }
+  const masked = maskQuoted(stripStreamMerges(command));
+  if (!masked.ok) {
+    return { hit: true, reason: '含未闭合引号，命令边界不明（fail-closed 按等待处理）' };
+  }
+  for (const seg of masked.masked.split(/;|&&|\|\||\||\r?\n/)) {
+    let s = seg.trim();
+    if (s.length === 0) continue;
+    const afterAssign = s.replace(ASSIGN_RE, '');
+    if (afterAssign !== s) s = afterAssign.trim();
+    if (s.length === 0) continue;
+    const head = headToken(s);
+    if (head.length > 0 && WAIT_SLEEP_HEADS.has(head)) {
+      return { hit: true, reason: '段首为等待/休眠命令: ' + head, segment: seg.trim() };
+    }
+  }
+  return { hit: false, reason: '不含等待/休眠动作（执行 / 构建 / 只读命令，放行）' };
+}
 
 // 纠正文本（拒绝后回复原因，如改用 edit、write 等工具）
 export const WRITE_CHANNEL_HINT =
@@ -168,9 +208,21 @@ export function judgeFileWriteCommand(command: unknown): FileWriteVerdict {
 //    fail-closed 口径对齐。理由写明未实现的行为面，落进 Violation.message 供收据溯源。）
 function judgeBehavior(behavior: ToolBanBehavior, command: unknown): FileWriteVerdict {
   if (behavior === 'file-write') return judgeFileWriteCommand(command);
+  if (behavior === 'wait-sleep') return judgeWaitSleepCommand(command);
+  // `tool-disabled`：**无条件禁用该工具** —— 不看任何参数。
+  //   用途：`wait_agent` 这类**没有 `command` 参数**的工具（走 file-write 会因「命令为空」而放行）。
+  if (behavior === 'tool-disabled') {
+    return { hit: true, reason: '工具已被护栏整体禁用（tool-disabled：不看参数）' };
+  }
+  // 未实现 / 未知行为面 ⇒ **fail-closed 命中**（2026-09-15 B1：此前 hit:false 属 fail-open）
   return {
     hit: true,
-    reason: UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX + String(behavior) + '（该行为面无判定实现，保守按命中处理；合法值: file-write）',
+    reason:
+      UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX +
+      String(behavior) +
+      '（该行为面无判定实现，保守按命中处理；合法值: ' +
+      TOOL_BAN_BEHAVIORS.join(' / ') +
+      '）',
   };
 }
 

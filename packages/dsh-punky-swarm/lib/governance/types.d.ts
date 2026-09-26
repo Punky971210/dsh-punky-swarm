@@ -42,7 +42,7 @@ export interface Rule {
     violations: Violation[];
     narrow?: NarrowBounds[];
 }
-export type ToolBanBehavior = 'file-write';
+export type ToolBanBehavior = 'file-write' | 'tool-disabled' | 'wait-sleep';
 export interface ToolBanEntry {
     id: string;
     tool: string;

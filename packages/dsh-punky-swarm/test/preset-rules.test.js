@@ -40,8 +40,10 @@ function loadPreset(file) {
 const L1 = loadPreset('l1-sensitive.json');
 const L2 = loadPreset('l2-resource.json');
 // 第三类判定面（工具黑名单，2026-09-14）：独立 toolBan 面
-// （compose 组合项 2026-09-14 已废除——注册表只剩三项，组合由多选 / 数组引用表达）
+// （compose 组合项 2026-09-14 已废除——注册表只剩四项，组合由多选 / 数组引用表达）
 const L3 = loadPreset('l3-tool-ban.json');
+// 第三类判定面 · 等待能力禁用（2026-09-26 用户裁决：禁 wait_agent + sleep）
+const L5 = loadPreset('l5-wait-ban.json');
 
 // ── T-1 P-1 结构 ──
 
@@ -365,20 +367,20 @@ test('R-4 大小写：Password=/password= 与 sk-/SK- 变体命中一致', () =>
   }
 });
 
-// ── T-3 V9 审阅清单一致性：README 逐条表条目标识集 == L1 12 ∪ L2 6 ∪ L3 1（JSON 解析对照）──
-// 载体（决策包第五节）：presets/hook-rules/README.md「逐条审阅清单」三表（L1 12 行 + L2 6 行 + L3 1 行），
-// 每行首列 = 条目 id（L1-[A-Z]\d{2} / L2-R\d{2} / L3-W\d{2}）；compose 组合项已废除（README 仅留废除声明，不列正文）。
-test('V9 README 逐条审阅清单：表条目标识集 == l1-sensitive 12 ∪ l2-resource 6 ∪ l3-tool-ban 1；compose 废除声明在档', () => {
+// ── T-3 V9 审阅清单一致性：README 逐条表条目标识集 == L1 12 ∪ L2 6 ∪ L3 1 ∪ L5 3（JSON 解析对照）──
+// 载体（决策包第五节）：presets/hook-rules/README.md「逐条审阅清单」四表（L1 12 行 + L2 6 行 + L3 1 行 + L5 3 行），
+// 每行首列 = 条目 id（L1-[A-Z]\d{2} / L2-R\d{2} / L3-W\d{2} / L5-W\d{2}）；compose 组合项已废除（README 仅留废除声明，不列正文）。
+test('V9 README 逐条审阅清单：表条目标识集 == l1-sensitive 12 ∪ l2-resource 6 ∪ l3-tool-ban 1 ∪ l5-wait-ban 3；compose 废除声明在档', () => {
   const readme = readFileSync(join(presetsDir, 'README.md'), 'utf8');
   assert.ok(!readme.startsWith('\uFEFF'), 'README 不应含 UTF-8 BOM');
   // 表数据行 = 行首 '| ' + 规范条目 id（仅清单表以 id 为首列；文件/内容表首列为反引号文件名不命中）
   const tableIds = [];
   for (const line of readme.split('\n')) {
-    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2}|L3-W\d{2})\s*\|/.exec(line);
+    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2}|L3-W\d{2}|L5-W\d{2})\s*\|/.exec(line);
     if (m) tableIds.push(m[1]);
   }
-  const expected = [...L1.rules, ...L2.rules, ...L3.toolBan].map((r) => r.id).sort();
-  assert.equal(tableIds.length, 19, '逐条表恰 19 行（L1 12 + L2 6 + L3 1，三类判定面全覆盖）');
+  const expected = [...L1.rules, ...L2.rules, ...L3.toolBan, ...L5.toolBan].map((r) => r.id).sort();
+  assert.equal(tableIds.length, 22, '逐条表恰 22 行（L1 12 + L2 6 + L3 1 + L5 3，四类判定面全覆盖）');
   assert.deepEqual([...new Set(tableIds)].sort(), expected,
     'README 逐条表条目标识集须与 l1/l2/l3 JSON 完全一致（漏行/超集/改 id 均拒绝）');
   // 表头字段契约（rule id / preset 归属 / … / violation message）在档（用户可逐条审阅的载体存在）

@@ -569,9 +569,9 @@
       "todos": 0
     },
     "test/governance-preset-loader.test.js": {
-      "asserts": 76,
+      "asserts": 78,
       "blankLines": 25,
-      "lines": 266,
+      "lines": 271,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -851,7 +851,7 @@
     "test/preset-rules.test.js": {
       "asserts": 66,
       "blankLines": 38,
-      "lines": 393,
+      "lines": 395,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1025,11 +1025,11 @@
       "todos": 0
     },
     "test/team-asset.test.js": {
-      "asserts": 139,
-      "blankLines": 41,
-      "lines": 539,
+      "asserts": 121,
+      "blankLines": 42,
+      "lines": 517,
       "tautologies": 0,
-      "tests": 24,
+      "tests": 23,
       "todos": 0
     },
     "test/teams-root.test.js": {
@@ -1241,7 +1241,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-26T10:49:58Z",
+  "generatedAt": "2026-09-26T14:14:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1252,15 +1252,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-26 去组件化：删除 4 个内容类测试（team-assets-fill / software-team-asset / writing-team-asset / team-asset-mandatory，归档于 reports/archived-tests-20260926/）；用户裁决：团队内容只是模版、不再作为组件 ⇒ 相关测试不再检验。同时修正 fixture-team-ledger 的 DIRECT_WRITE_ALLOWLIST 与 F2-7（已删测试无对象）",
+  "reason": "2026-09-26 L5 落地：新建 l5-wait-ban preset 三条目 + 扩两个行为面 tool-disabled/wait-sleep + 注册与配置面板 + README；另修一处引擎缺陷：config.ts 的 preset 分支补 validateToolBanEntries 形状校验（与 else 分支对称化）",
   "schema": 1,
   "totals": {
-    "asserts": 8300,
-    "blankLines": 4083,
+    "asserts": 8284,
+    "blankLines": 4084,
     "files": 155,
-    "lines": 44840,
+    "lines": 44825,
     "tautologies": 0,
-    "tests": 1729,
+    "tests": 1728,
     "todos": 4
   }
 }

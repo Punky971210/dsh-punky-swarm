@@ -39,9 +39,9 @@ function optionIds() {
   return m[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
 }
 
-test('W1 规则预设多选项：presetOptionIds = [l1-sensitive, l2-resource, l3-tool-ban]（L3 在面板内）', () => {
-  assert.deepEqual(optionIds(), ['l1-sensitive', 'l2-resource', 'l3-tool-ban'],
-    '三个规则集平级多选；L3（工具黑名单）必须在面板选项内——否则面板看不到新规则集');
+test('W1 规则预设多选项：presetOptionIds = [l1-sensitive, l2-resource, l3-tool-ban, l5-wait-ban]（L3/L5 在面板内）', () => {
+  assert.deepEqual(optionIds(), ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban'],
+    '四个规则集平级多选；L3（工具黑名单）与 L5（等待能力禁用）必须在面板选项内——否则面板看不到新规则集');
 });
 
 test('W2 单选遗产已清除：选项集合不含 compose；面板不再做任何 compose / 单值自动迁移', () => {
