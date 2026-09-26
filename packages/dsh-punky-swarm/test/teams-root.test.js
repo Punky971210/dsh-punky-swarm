@@ -38,18 +38,17 @@ import { assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { clearRoleCache, packageRoot } from '../lib/assembly/flows.js';
 import { resolveTeamsRootOption, assertTeamsRootLexical } from '../lib/tools/core.js';
 import { loadTeamAsset } from '../lib/assembly/team-asset.js';
-import { declaredSkillsOf, readTeamAssetSource, seedHostSkills } from './helpers/host-skills.mjs';
 
 // ── fixtures ──
 
 const SESS = { agent: { session: { id: 'sess-troot' } } };
 const TMP_TEAM = 'tmp-team';
 
-// 【P1 同步 · 宿主技能根】P1 起团队资产的 `skills` 必须**可解析**（不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批；
-//   技能根不存在/不可读 ⇒ **同码拒**，不静默跳过）⇒ 隔离 HOME 下必须先造出「这些技能已安装」的宿主技能根。
-//   注入面 = **显式 env**（`USERPROFILE || HOME` + `.agents/skills`，与引擎读端同源，零新变量）。
-const TMP_SKILLS = ['TMP-PLAN-SKILL', 'TMP-EXEC-SKILL', 'TMP-AUDIT-SKILL'];
-seedHostSkills([...TMP_SKILLS, ...declaredSkillsOf(readTeamAssetSource('software-team').asset)], undefined, { stub: true });
+// 【2026-09-25 反转 · 宿主技能根】旧口径：P1 起团队资产的 `skills` 必须**可解析**
+//   （不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批；技能根不存在/不可读 ⇒ **同码拒**，不静默跳过）。
+//   现行口径（recommend 语义，见 `plan/recommend-spec.md` §1.3 三态表）：**技能根不存在/不可读 ⇒ 不拒建批**
+//   ——该态**不落**告警（守既有 `if (res.ok)` 守卫）⇒ 本文件两处「精确空 warnings」断言（T1 / T5）语义不变。
+//   据此：本文件**不再**注入宿主技能根（原写盘播种夹具已随批 `onto-fixture-purge-20260925` 撤除）。
 
 // 临时团队资产（技能前缀刻意与包内不同 ⇒ lane cmd 前缀可反证来源）
 function tmpAsset() {

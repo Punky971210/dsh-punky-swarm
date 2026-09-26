@@ -40,11 +40,6 @@ import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
 import { packageRoot } from '../lib/assembly/flows.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { seedTeamAssetSkills } from './helpers/host-skills.mjs';
-
-// 【P1 同步 · 宿主技能根】本套件建批用 `software-team`（TEAM 常量）⇒ 该团队声明技能必须可解析
-//   （P1 §3：不可解析 / 技能根缺失 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` 拒建批）⇒ 隔离 HOME 下先注入技能根。
-seedTeamAssetSkills('software-team');
 
 const SESSION = 'sess-b1-snapshot';
 const TEAM = 'software-team';

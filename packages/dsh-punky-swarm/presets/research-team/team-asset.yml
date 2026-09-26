@@ -52,7 +52,6 @@
       "entry_requires": ["consume"],
       "needhuman": true,
       "audit_contract": {
-        "criteria_from": "plan/**",
         "consumes_required": ["plan/", "exec/"],
         "verdict": ["pass", "fail", "skip"]
       }

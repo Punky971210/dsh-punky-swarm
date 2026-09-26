@@ -6,7 +6,10 @@ import { join, resolve } from 'node:path';
 
 const OUT = join(process.cwd(), 'scripts', 'audit', 'out');
 // 输出路径可覆盖（`REGISTER_OUT=scripts/audit/out/frozen-register.preview.md`）⇒ 使「生成物 vs 版本控制内文件」
-//   的**漂移可校验**（生成到 `out/` 后 diff），而不必覆盖正档。缺省 = 正档（行为不变）。
+//   的**漂移可校验**（生成到 `out/` 后 diff），而不必覆盖正档。
+//   **限定词（C-9）**：本脚本**无** `--check` / `--dry-run`，**不读** `process.argv`（传 `--check` 被静默忽略）；
+//   执行即写盘 ⇒ **缺省 = 覆写正档** `docs/frozen-register-2026-09-21.md`（含其人工注记），**无告警**。
+//   要「只读校验」须显式设 `REGISTER_OUT`（落到 `scripts/audit/out/`）后再 diff；`--check` 档位属 `gates.mjs`。
 const OUT_MD = process.env.REGISTER_OUT || join('docs', 'frozen-register-2026-09-21.md');
 const unwired = JSON.parse(fs.readFileSync(join(OUT, 'unwired-summary.json'), 'utf8'));
 const ledger = JSON.parse(fs.readFileSync(join(OUT, 'gate-ledger.json'), 'utf8'));
@@ -60,7 +63,7 @@ lines.push('> 本文件是**冻结项的单一台账**。冻结 = 「已声明�
 lines.push('> **纪律：本表内任何符号不得被当作 AI 幻觉产物删除。** 撤销冻结必须回到本表逐项改判并留痕。');
 lines.push('');
 lines.push('- 基线：`e3e8cd0` → 清理波后 `5a6ce2a` → 台账修正 `c995832`');
-lines.push('- 裁定依据：W2（未接线不接）/ W4（schema 随新引擎形态取舍）/ ②（无断言门禁：复核后**不删**，冻结）/ ①（B1 残留 10 项先留着）/ ③（审计追踪：生成器入库 + `--check` 软比对）');
+lines.push('- 裁定依据：W2（未接线不接）/ W4（schema 随新引擎形态取舍）/ ②（无断言门禁：复核后**不删**，冻结）/ ①（B1 残留 10 项先留着）/ ③（审计追踪：生成器入库 + `REGISTER_OUT` 预览 diff 比对；**本脚本无 `--check` 档**，`--check` 属 `gates.mjs`）');
 lines.push('- 生成器：`scripts/audit/gen-register.mjs`（2026-09-21 由 gitignore 的 `out/` 迁入版本控制 ⇒ 登记可复现）');
 lines.push('- 复现：`node scripts/audit/dead-code2.mjs && node scripts/audit/classify.mjs && node scripts/audit/gates.mjs && node scripts/audit/gen-register.mjs`');
 lines.push('');

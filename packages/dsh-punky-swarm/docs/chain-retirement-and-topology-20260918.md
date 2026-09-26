@@ -96,7 +96,7 @@
 
 ## 5. 官方任务板双写（M-6）= **未启用**（如实登记）
 
-- **事实**：本引擎**未接线**官方任务板——`lib/**` 无任何 `team_task_create` 调用点；宿主工具面亦无该工具（`tools_search` 检索词「official task board team_task_create 官方任务板 双写」，命中清单中无此工具）。
+- **事实**：本引擎**未接线**官方任务板——`lib/**` 无任何 `team_task_create` 调用点；宿主工具面**有**这些工具（`team_task_create` / `team_task_get` / `team_task_list` / `team_task_update`，可实调；`tools_search` 检索词「official task board team_task_create 官方任务板 双写」命中），**但引擎侧无消费点、无校验、无判定** ⇒ 不构成治理真源（**宿主有工具 ≠ 引擎已接线**；本行口径与 `lib/tools/core.js:1239` 的 `handoff_submit` 工具描述同源）。
 - **因此**：`handoff_submit` 的 `officialTaskId` 参数是**调用方自填**的原样回填位（不填恒 `null`），引擎**不写、不校验、不据以判定**；`handoff_view` 逐边回显的 `officialTaskId` 同属该面。
 - **读端纪律**：任何回显**不得**读作「已双写」。参数本身**保留**（删参数会破既有调用方与测试）。
 - **字段落点**：`store.recordHandoff({..., officialTaskId})` 仅在调用方显式给出时写入（`lib/state/store.js`），默认 `null`。
