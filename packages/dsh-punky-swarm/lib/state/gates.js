@@ -58,7 +58,7 @@ export { isAbsPath };
 function taskOf(batch, lane) {
     return findTask(batch, lane);
 }
-// ── gate-lite Q-G1（2026-09-17 用户裁决「开显式豁免键」）：冒烟/探针批判定**单点** ──────────────────
+// ── 冒烟/探针批判定**单点**（显式豁免键） ──────────────────
 // 语义：批在 `wave_plan({ smoke: true })` 建批时落一条 `batch.smoke` 事件（`event-types.js` 登记常量）
 //   ⇒ 本批为冒烟/探针批 ⇒ **跳过产物契约类门**（entry `consume` / exit `produce`∪`outputs` /
 //   `targets` / complete 的 plan 悬空产物判定；建批期的 `GATE_PLAN_PRESENCE_MISSING` /
@@ -321,7 +321,7 @@ function reasonVocabularyNote(v) {
 // 拒绝免检（presence 硬约束）判据族 —— **唯一实现 presenceJudge**（判据同源，O-4.3）
 //   mode:'declare' = 建批期静态面（P1–P5；调用点 lib/wave-plan.ts，e2 导入）
 //   mode:'runtime' = 运行期含文件面（P1–P9；调用点本文件的 entry / plan / exit 三门）
-// 口径（用户裁决 Q-r2② + O-4）：声明的产物**必须在场**（不存在 / 0 字节 / 形态不符 ⇒ 拒）；
+// 口径：声明的产物**必须在场**（不存在 / 0 字节 / 形态不符 ⇒ 拒）；
 //   空内容唯一合法通道 = 独立行 `empty-reason: <非空文本>`（有 ⇒ 放行 + 留痕；无 ⇒ 拒）。
 // 两条 Leader 裁定的实现口径：
 //   · R-1（声明形态二分，**按声明原文判定，禁尾斜杠规范化**）：`/` 结尾 ⇒ 目录语义（须存在且非空）；
@@ -553,7 +553,6 @@ export function createGates(root, opts = {}) {
     // · **排除 idle→running 恢复重派**（system.recovered 落 idle 后按 G-1 重派 ⇒ 基线不得后移——否则恢复后的 lane
     //   因 targets 门永远判「未变更」而无法收口，与 G-1「恢复路径永不可堵」/引擎 D-8「不得出现僵局」相悖；
     //   实证：gate-techdebt/e2-gov-repair 于 18:11:26.031Z idle→running 重派后基线后移，store.js mtime 17:41:06Z
-    //   被误判未变更。修复：批次 gate-targets-baseline-fix / lane e1-fix-baseline，用户裁决 C）；
     // · 无可用事件 → 回退 batch.createdAt（防御；正常 merged 必有 running 事件）。遍历模式仿 store.js lastActiveAtOf。
     // e.type === EVT 常量值（'member.settled'）在 BatchEvent 判别联合下收窄；兜底分支字段 unknown 与 === 比较不受影响
     function laneStartedAt(batch, lane) {
@@ -635,7 +634,7 @@ export function createGates(root, opts = {}) {
         const orphansOf = (layer) => declared[layer].filter((p) => !consumed.has(p));
         return { plan: orphansOf('plan'), exec: orphansOf('exec'), audit: orphansOf('audit') };
     }
-    // Q-7（用户裁决）：complete = 执行完成**且通过验收** ⇒ 有效白名单 = 声明 ∩ {pass, skip}；fail / conflict 恒拒
+    // complete = 执行完成**且通过验收** ⇒ 有效白名单 = 声明 ∩ {pass, skip}；fail / conflict 恒拒
     function completeOutcomesOf(batch) {
         const af = flowOf(flowsOf(batch).flows, 'audit');
         const verdict = af && af.audit_contract && Array.isArray(af.audit_contract.verdict) && af.audit_contract.verdict.length > 0
@@ -683,11 +682,11 @@ export function createGates(root, opts = {}) {
         });
     }
     // ── P1 交接门（handoff gate，2026-09-17）单点判定辅助 ───────────────────────────────────────
-    // 判据（`docs/p1-handoff-gate-changeplan-20260917.md` §2/§3，**单点**：只在本函数判，禁第二处）：
+    // 判据（`p1-handoff-gate-changeplan-20260917`（原文档未随仓分发） §2/§3，**单点**：只在本函数判，禁第二处）：
     //   · 入边集合 = `task.deps`（DAG 入边，**每条入边 ⇔ 一条** `batch.handoffs[lane]` 记录）；
     //   · 每条记录须 `status:'submitted'` + `artifacts[]` 非空且**逐个存在** + `contract` 合规
     //     （`consumedFrom` 指回该入边 + `assertions[]` 非空字符串数组）；
-    //   · **存量批**（`batch.handoffs === undefined`，裁决 ①=B）⇒ 整门放行 + `legacy:true`（留痕由调用侧承担）；
+    //   · **存量批**（`batch.handoffs === undefined`）⇒ 整门放行 + `legacy:true`（留痕由调用侧承担）；
     //   · **裁决 ②=A 的建批期判据**：`handoffs` 字段存在但**该入边的声明条目缺失**（= 建批期种条的来源没了）⇒ 拒。
     function depsOf(t) {
         const out = [];
@@ -699,7 +698,7 @@ export function createGates(root, opts = {}) {
                 out.push(d);
         return out;
     }
-    // ── 交接判据的**单点实现**（P2-A 裁决 ②，2026-09-17）────────────────────────────────────────
+    // ── 交接判据的**单点实现** ────────────────────────────────────────
     // 纪律（用户裁决）：「**复用**，禁在出口门里再写一遍判定逻辑」——故把「一条交接记录是否成立」抽成本函数，
     //   **entry 门（`handoffVerdictOf`）与出口门（`checkSettleHandoffGate`）两处都调它**。
     //   抽取面 = **单条记录的成立性**（status / artifacts 逐个在场 / contract{consumedFrom,assertions}）；
@@ -750,7 +749,7 @@ export function createGates(root, opts = {}) {
         const map = batch.handoffs;
         if (deps.length === 0)
             return { ok: true, legacy: false, missing: [], problems: [], pending: [] };
-        // 存量批（无 `handoffs` 字段）⇒ 不受新门约束（裁决 ①=B）：放行 + 留痕（调用侧落 `lane.handoff.gap`）
+        // 存量批（无 `handoffs` 字段）⇒ 不受新门约束：放行 + 留痕（调用侧落 `lane.handoff.gap`）
         if (map === undefined || map === null)
             return { ok: true, legacy: true, missing: [], problems: [], pending: [] };
         const byTo = (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
@@ -837,13 +836,13 @@ export function createGates(root, opts = {}) {
                     + '"（词表未登记 ⇒ 拒：Q-3=B 只对**新增写点**强制注册）'),
             });
         }
-        // G2（2026-09-14 用户裁决 A）：**建批即拉起**——声明 `managerPlan: 'raise'` 的批，**首个 exec 派发前**必须已
+        // G2：**建批即拉起**——声明 `managerPlan: 'raise'` 的批，**首个 exec 派发前**必须已
         //   登记 Manager（`batch_phase({ manager: { agentId } })` 写批字段 `batch.manager`）。动机（用户口径）：执行模式
         //   应为「建批 → **建批即拉起 Manager** → Manager 调度、成员大规模并行（coder 施工与 tester 备测同 wave）」，
         //   而原实现只有**批次收口时的告警**（仅 exec≥3 的批；**该收口告警已删**——2026-09-22 用户裁定）⇒ 「拉起」实为自觉。
         //   此处把时序前置到**派发面**。边界：只拦 **exec** lane（plan 层的设计/计划允许先于拉起）；走 `reject()`
         //   ⇒ 自动继承 G-1「空闲态不堵」（lane 为 idle 时降级为告警放行 + 留痕）。
-        // 【gate-lite 第二批 · A（2026-09-17 用户裁决「全删 + 改造为官方 roster 承抽」）】
+        // 【改造为官方 roster 承抽】
         //   **原「未拉起 Manager」硬门已删**（2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码）：
         //   Manager 在册判定改由**官方 roster** 承抽
         //   （读端 `lib/tools/core.js#managerRosterOf` / `managerViewOf`：`ctx.get('agentTeams')` →
@@ -888,7 +887,7 @@ export function createGates(root, opts = {}) {
         }
         if (failed.length)
             return reject({ code: 'GATE_ENTRY_MISSING', missing: failed, problems: shapeProblems });
-        // P1 内容面（2026-09-14 用户裁决 Q3=B，**全局生效**）：**audit 的判据来源内容校验**——其 `consume` 中的
+        // P1 内容面（**全局生效**）：**audit 的判据来源内容校验**——其 `consume` 中的
         //   plan 层产物至少有一份正文含裸标题行 `## 验收标准`（与 `GATE_PLAN_CONTRACT` 同判据）；否则拒派
         //   `GATE_AUDIT_CRITERIA_MISSING`。建批期已锚定「存在 plan 产物」；本层补「该产物真的带验收标准」——
         //   路径锚上而内容是空壳/跑题 ⇒ audit 仍无标准可依（长跑根因 R1 的另一半）。
@@ -937,7 +936,7 @@ export function createGates(root, opts = {}) {
             if (!okAnchor)
                 return reject({ code: 'GATE_AUDIT_CRITERIA_MISSING', problems });
         }
-        // 放行侧回传（P1 交接门）：`handoffLegacy` = 存量批标记（裁决 ①=B）——写端（`store.setMember`）据此落
+        // 放行侧回传（P1 交接门）：`handoffLegacy` = 存量批标记——写端（`store.setMember`）据此落
         //   `lane.handoff.gap{legacy:true}` 告警（不静默、不砸存量）。**仅新增本键**：其余放行载荷逐字不变。
         // R1 词表 E1 放行侧载荷（`vocabNote`）：`{}` = 零感知；有停用词条命中 ⇒ `escapes[{kind:'vocabulary-restated'}]`；
         //   词表不可用 ⇒ `escapes[{kind:'vocabulary-unavailable'}]` + `vocabCode:'GATE_VOCAB_INVALID'`（告警级，不拒批）。
@@ -1784,8 +1783,8 @@ export function createGates(root, opts = {}) {
     function gateStatusMapOfBatch(sessionId, batchId) {
         return gateStatusOfBatch(sessionId, batchId);
     }
-    // ── P2-A（裁决 D3，2026-09-17）：出口侧「有下游 ⇒ 须至少一条已成立交接」────────────────────────
-    // 定位（`docs/p2-settle-narrowing-changeplan-20260917.md` §7）：**结算出口收紧**——`merged` 前判本 lane 的
+    // ── P2-A：出口侧「有下游 ⇒ 须至少一条已成立交接」────────────────────────
+    // 定位（`p2-settle-narrowing-changeplan-20260917`（原文档未随仓分发） §7）：**结算出口收紧**——`merged` 前判本 lane 的
     //   **交接是否已成立**。与既有门的分工（§2 校正 A，D2 由此成立）：
     //     · `checkExitGate` 看**本 lane 自己的** `produce ∪ outputs` 在场（防**空结算**）⇒ 原样保留；
     //     · 本门看**交给下游的那批产物**（`handoff.artifacts`）是否已交付 ⇒ 两者**对象不同、非重复判定**。
@@ -1794,7 +1793,7 @@ export function createGates(root, opts = {}) {
     //   ② **有无已成立交接**：`batch.handoffs[*]` 中 `from === lane` 且 `status:'submitted'` +
     //      `artifacts` 非空且**逐个在场** + `contract{consumedFrom, assertions}` 合规 —— **至少一条**即算成立。
     // 豁免/例外（三条，均**不改其它门**）：① `smoke` 批 ⇒ 豁免（与 P1 同键口径）；② 存量批（无 `batch.handoffs`
-    //   字段）⇒ 放行 + `legacy` 标记（裁决 ①=B 在出口侧的同一口径：不静默、不砸存量）；③ **Leader 例外**：
+    //   字段）⇒ 放行 + `legacy` 标记（出口侧同一口径：不静默、不砸存量）；③ **Leader 例外**：
     //   `merged` 的 note 含 `human:<裁决人>:<时间>:<结论>` ⇒ 放行 + `humanException`（留痕由写端落，判据同源 =
     //   与 `checkNeedHumanGate` 同一正则形态）。
     // 开关（`task-27`）：经**唯一解析点** `handoffGateEnabledOf(readCfg(),'settle')` 取值

@@ -168,7 +168,7 @@ export function isCPlusBatch(tasks) {
     const threeTier = tasks.some((t) => t.layer != null && LAYERS.includes(t.layer));
     return threeTier && countExecLanes(tasks) >= 3;
 }
-// 装配声明必备判定（2026-09-14 用户裁决：Manager 见批即默认 raise，且该默认必须**可核**）：
+// 装配声明必备判定（Manager 见批即默认 raise，且该默认必须**可核**）：
 //   三层批形态（任一 task 声明 layer）**且含 audit 层 lane** → 建批必须携带批次级装配声明。
 //   为什么是这两个条件：① 声明里的 `auditLane` 必须指向 audit 层 lane ⇒ 「含 audit lane」是该声明可成立的前提；
 //   ② 只有声明落盘后，`managerPlan`（**缺省 raise**）才成为引擎侧可核事实——收口告警按**声明**触发（见 state/store.js），
@@ -295,7 +295,7 @@ export function normalizeChannelDecl(channel, tasks) {
     }
     return { channel: declaredChannel, declared: true };
 }
-// C+ 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
+// 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
 //   - decl 悬空 lane id（auditLane/coordinatorLane 不在 tasks）→ throw GATE_ASSEMBLY_INVALID（引用悬空 = 声明无意义，fail-closed）；
 //   - 层归属（结构前置）：三层批形态（任一 task 声明 layer）时 auditLane 须指向 audit 层 lane、
 //     coordinatorLane 须指向 plan 层 lane；层错配 → throw GATE_ASSEMBLY_INVALID（含层错配明细）。generic 批（无 layer 声明）
@@ -597,7 +597,7 @@ function validateLayerContract(tasks, opts = {}) {
     if (exec.length > 0 && audit.length === 0) {
         throw new Error('three-tier: exec layers require at least one audit lane');
     }
-    // P1（2026-09-14 用户裁决，**全局严格**）：**audit 的判据来源是设计不变量**——三层批中，
+    // P1（**全局严格**）：**audit 的判据来源是设计不变量**——三层批中，
     //   只要有 audit lane 声明了 `consume`，就必须**至少一条** audit lane 消费到 **plan 层产物**（验收标准载体）；
     //   否则拒建批 `GATE_AUDIT_INPUT_MISSING`。
     //   语义依据（2026-09-14 用户澄清）：audit 层对的是**总体任务验收**，判据来自 plan 的验收标准；
@@ -667,7 +667,7 @@ function validateLayerContract(tasks, opts = {}) {
     //   位置刻意置于函数末尾：既有拒因（跨层引用 / 路径契约 / 有 exec 必有 audit / audit 判据锚定 /
     //   skills 声明）的触发优先级与消息逐字不变（`contract.test.js` 的 `/not produced by any plan lane/`
     //   等既有断言不受影响），新增两道码只在既有检查全通过后才可能触发。
-    // gate-lite Q-G1（2026-09-17 用户裁决「开显式豁免键」）——**冒烟/探针批**（`smoke: true`）跳过本段：
+    // **冒烟/探针批**（`smoke: true`，显式豁免键）跳过本段：
     //   `GATE_PLAN_PRESENCE_MISSING` / `GATE_ORPHAN_PRODUCT` 均属**产物契约类**门，而冒烟批的全部意义就是
     //   「无产物契约地跑通一条通路」（单 lane、不声明产物）⇒ 硬拦即自相矛盾（本轮 Leader 实测两次被此两码拒）。
     //   边界（明示，防扩权）：只跳本段——本函数内其余拒因（有 exec 必有 audit / audit 判据锚定 / 路径契约 /
@@ -771,7 +771,7 @@ export function handoffGateStateOf(liveConfig, env = process.env) {
 export function handoffGateEnabledOf(liveConfig, stage = 'entry', env = process.env) {
     return handoffGateStateOf(liveConfig, env)[stage];
 }
-// ── P1 交接门：建批期校验（裁决 ②=A，2026-09-17）─────────────────────────────────────────────
+// ── P1 交接门：建批期校验 ─────────────────────────────────────────────
 // 判据（**只判一件事**，避免把「DAG 有依赖」误判成「缺交接」）：
 //   下游 lane 的某条 `deps` 入边，其**上游 lane 未声明任何交付产物**（`produce ∪ outputs` 皆空）
 //   ⇒ 该入边**不可能**产出交接（`handoff_submit` 的 artifacts 必填 ⇒ 无件可交）⇒ 下游永远拿不到依赖 ⇒ **建批期即拒**。
