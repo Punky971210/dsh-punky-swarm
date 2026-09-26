@@ -1,117 +1,31 @@
 {
   "team": "software-team",
-  "manifest": {
-    "version": 3,
-    "requires_engine": ">=0.4.4",
-    "hash": "unhashed",
-    "source": "角色作用（skills/software-team/references/roles/*.md）+ superpowers 技能池 + 本包自建手册（review-execution / acceptance-gate / retro-and-memory）；装配资产说明与用途见 skills/software-team/SKILL.md（原退役技能已并入）；「池」（Coder 池 / Tester 池）声明：仅在 **agent-team 派发形态**下有语义（worker 为长驻成员、可多实例并行）；**subagent 派发形态**下 worker 为一次性子代理会话，本声明不承载分配语义（引擎对「池」零校验，两形态均不因它改变派发行为）——不得读作「仅 Agent-team 方案使用」；【2026-09-24 引擎 v2 对账标记（lane exec-asset / 批 onto-engine-v2-realign-20260924）】①`chain` 段仅受建批期八条静态校验：`pair_with` / `join.anyFailure` / `onFail` / `rework` 均已停消费（无运行期消费者；1:1 配对基数改由 audit lane 的 `deps` 表达、失败面用 gap-list 表达）——不得读作「失败自动 pause 的引擎行为」；②`manifest.version` / `requires_engine` / `hash` 为纯声明位（`lib/**` 零读端；`hash:\"unhashed\"` = 未计算占位，非校验值）；③派发形态双支持且不写死其一：形态由 `config.dispatch.provider` 配置位取值决定——一次性子代理形态下 worker 为 one-shot 会话，agent-team 形态下 worker 为长驻成员并由官方 roster 承抽（`ctx.get('agentTeams')`）；两形态下本资产的角色 / 技能 / 契约声明同等生效；④成员侧治理与派发面 20 件工具收窄不可达（`wave_plan` / `member_status` / `member_settle` / `lane_dispatch` / `lane_claim` 等），成员回报唯一通道 = `swarm_report`"
-  },
-  "roles": { "extra": [] },
   "layers": {
     "plan": {
       "roles": ["coordinator", "designer"],
       "skills": {
         "coordinator": ["brainstorming", "writing-plans"],
-        "designer": ["brainstorming", "writing-plans", "spec-writing"]
+        "designer": ["spec-writing", "writing-plans"]
       }
     },
     "exec": {
-      "roles": ["coder", "tester", "reviewer"],
+      "roles": ["coder", "tester"],
       "skills": {
-        "coder": ["test-driven-development", "codebase-design", "receiving-code-review", "requesting-code-review"],
-        "tester": ["verification-before-completion", "systematic-debugging"],
-        "reviewer": ["review-execution"]
+        "coder": ["test-driven-development", "systematic-debugging"],
+        "tester": ["verification-before-completion"]
       }
     },
     "audit": {
-      "roles": ["supervisor", "doc-manager"],
+      "roles": ["reviewer", "supervisor"],
       "skills": {
-        "supervisor": ["acceptance-gate", "verification-before-completion"],
-        "doc-manager": ["doc-generator", "retro-and-memory"]
+        "reviewer": ["review-execution"],
+        "supervisor": ["acceptance-gate", "verification-before-completion", "retro-and-memory"]
       }
     }
   },
   "flows": {
-    "plan": {
-      "produce_field": "produce",
-      "entry_requires": [],
-      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
-    },
-    "exec": {
-      "produce_field": "outputs",
-      "consume_field": "consume",
-      "entry_requires": ["consume"],
-      "consumes_required": ["plan/"],
-      "consumes_required_per_lane": ["plan/"],
-      "targets": true,
-      "gate_command": true
-    },
-    "audit": {
-      "produce_field": "produce",
-      "consume_field": "consume",
-      "entry_requires": ["consume"],
-      "needhuman": true,
-      "audit_contract": {
-        "criteria_from": "plan/**",
-        "consumes_required": ["plan/", "exec/"],
-        "verdict": ["pass", "fail", "skip"]
-      }
-    }
-  },
-  "chain": {
-    "version": 3,
-    "steps": [
-      {
-        "id": "plan",
-        "layer": "plan",
-        "role": "coordinator",
-        "template": { "produce": ["plan/${branch}-spec.md"] },
-        "branches": [
-          { "id": "plan-coordinator", "role": "coordinator", "template": { "cmd": "编排出任务树与调度口径（${branch}）；用 write/edit 落 plan 产物、lane_checkpoint 逐步快照、handoff_submit 交付下游；治理与派发面工具对成员收窄不可达，不得自称已建批或已派发" } },
-          { "id": "plan-designer", "role": "designer", "deps": ["plan-coordinator"], "template": { "cmd": "产出规格与验收标准，含裸标题「## 验收标准」与「## 约束」（${branch}）；用 write/edit 落盘、handoff_submit 交付下游；不得以引擎校验通过替代判据自证" } }
-        ],
-        "next": "exec-work"
-      },
-      {
-        "id": "exec-work",
-        "layer": "exec",
-        "role": "coder",
-        "template": { "produce": ["exec/${branch}.md"] },
-        "branches": [
-          { "id": "exec-coder", "role": "coder", "template": { "cmd": "实现变更（${branch}）；用 write/edit 落代码与产物、lane_checkpoint 每子步骤快照、swarm_report 回报结论；成员侧 member_settle 与 lane_dispatch 收窄不可达，不得自行结算或自行派发" } },
-          { "id": "exec-tester", "role": "tester", "template": { "cmd": "验证行为（${branch}）；用 read/glob/grep 核对、pwsh 跑套件取原始读数、handoff_view 取上游件、swarm_report 回报；判据须带限定量词，不得裸称「零命中」" } }
-        ],
-        "next": "exec-review"
-      },
-      {
-        "id": "exec-review",
-        "layer": "exec",
-        "role": "reviewer",
-        "template": { "produce": ["exec/${branch}.md"] },
-        "branches": [
-          { "id": "exec-reviewer", "role": "reviewer", "template": { "cmd": "独立复跑测试并给出评审结论（${branch}）；用 read/pwsh 复跑、handoff_view 取件对照 plan 判据、swarm_report 回报；只读不改码，缺陷走报告不自行修复" } }
-        ],
-        "next": "audit-pair"
-      },
-      {
-        "id": "audit-pair",
-        "layer": "audit",
-        "role": "supervisor",
-        "pair_with": "exec-review",
-        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物，按 plan 判据逐条对照并核证据；用 handoff_view 取入边、read/grep 复跑核对、swarm_report 回报 verdict；未决项只进 gap-list，不得以「继续调查」为默认终点", "produce": ["audit/${lane}.md"] },
-        "next": "accept"
-      },
-      {
-        "id": "accept",
-        "layer": "audit",
-        "role": "supervisor",
-        "join": "all",
-        "terminal": true,
-        "template": { "cmd": "交叉一致性核对 + 逐条判据对照；先消重、标注冲突、核证据再下结论，分歧不掩盖、不以投票了事；产出 audit/acceptance-report.md", "produce": ["audit/acceptance-report.md"] }
-      }
-    ],
-    "join": { "anyFailure": "pause" },
-    "onFail": "pause",
-    "rework": { "allowed": true, "max_attempts": 2, "escalate": "human" }
+    "plan": { "produce_field": "produce" },
+    "exec": { "produce_field": "outputs" },
+    "audit": { "produce_field": "produce", "audit_contract": {} }
   }
 }

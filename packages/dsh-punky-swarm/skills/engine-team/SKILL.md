@@ -1,193 +1,202 @@
 ---
 name: engine-team
 description: |
-  引擎团队指引（团队层 skill，与 software-team / design-team / research-team / writing-team 平级）：
-  做 dsh-punky-swarm 引擎自身改造的团队——三层角色 designer / coder / reviewer / supervisor 的
-  职责边界、每层技能装配（spec-writing、codebase-design、dev-coder、efficient-edit、
-  review-execution、acceptance-gate、verification-before-completion 共 7 件）、
-  产物契约（plan/ exec/ audit/）与交接门禁要点。
-  装配数据（角色 × 层 × 技能 × flows × chain）的唯一来源是引擎团队资产
-  `presets/engine-team/team-asset.yml`——本技能不复制该数据，只声明指针与用途。
+  引擎团队模版（引擎的**下游指引**，不作为引擎组件使用）：做 dsh-punky-swarm
+  引擎自身改造的三层 5 角色（plan coordinator·designer / exec coder / audit reviewer·supervisor）
+  的职责边界、产物契约、任务包规格（按 spec-writing）、回报与交接通道，
+  以及 team 成员的管理面（官方工具，不用 member_*）。coder 可池化。
   当需要确定引擎团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按该团队的三层链路产出可核查的改造产物时加载本技能。
-version: "1.0.0"
+version: "2.0.0"
 kind: skill
 triggers:
   - "引擎团队"
   - "engine-team"
   - "引擎改造团队"
-  - "引擎团队装配"
   - "引擎自身改造"
-  - "引擎团队角色"
+  - "三层角色"
+  - "任务包"
+  - "team 成员管理"
 ---
 
-# engine-team — 引擎团队指引（三层角色 × 技能装配 × 产物契约）
+# engine-team · 引擎团队模版
 
-> **装配数据唯一来源声明**：本技能**不承载**装配数据。角色/层/技能/flows/chain 的唯一权威是引擎团队资产
-> `presets/engine-team/team-asset.yml`（随包分发，引擎按 `presets/<team>/team-asset.yml` 解析）。
-> 本技能只写**用途、职责边界与契约**，避免"技能与引擎资产两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md`、
-> `skills/research-team/SKILL.md`）。行为层（persona 纪律、三层门禁 Tier3、Manager 定义）由 dsh-punky-swarm 承担，本技能不重复。
+> **定位**：本文件是**模版**（引擎的**下游指引**），**不作为引擎组件**使用。
+> **依据**：2026-09-26 用户裁决 —— 团队内容只是模版，相当于引擎的下游指引，不再作为组件使用，相关测试不再检验。
+> **搭配**：同目录 `team-asset.yml`（**最小骨架**，仅供引擎解析存在性；不含 `manifest`/`chain`/`contract`/`entry_requires`/`audit_contract`）。
 
-## 团队定位（何时加载）
+---
 
-| 场景 | 本技能给什么 |
-|---|---|
-| Leader 选团队建批（`wave_plan({team:'engine-team'})`） | 该团队的层归属、角色集与产物契约 |
-| Leader / Manager 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
-| 引擎自身改造收口 | 判据来源：plan 的规格与验收标准 → exec 的实测读数 → audit 的逐条对照 |
-| 排查"引擎团队角色缺操作手册" | 技能映射的**读端位置**与当前取值（真源在团队资产，不在本文件） |
+## 一、这个团队是干什么的
 
-## 三层角色（4 个声明角色，覆盖 3 层）
+**做 dsh-punky-swarm 引擎自身改造**：引擎是「集群治理 on dsh」的治理内核（三层批、门禁、事件流、锁），本团队负责改它、验它、别把它改坏。
 
-| 层 | 角色 | 职责（一句话） | 牵头 |
-|---|---|---|:--:|
-| plan | `designer` | 界定改造范围并写死**验收标准与约束**（可核判据 + 证据点），不写实现 | ✔ |
-| exec | `coder` | 按 plan 规格实现变更，附**实测读数**与产物 | — |
-| exec | `reviewer` | 按 plan 判据验证行为（跑校验与套件给读数）并做对抗式评审 | — |
-| audit | `reviewer` | 验收：按 plan 判据**逐条对照**，未闭合项进 gap-list | ✔ |
-| audit | `supervisor` | 交叉一致性核对 + 终门禁裁决（人审面） | — |
+**适用信号**：任务落在 `packages/dsh-punky-swarm/**`（`lib/` · `scripts/` · `presets/` · `test/` · `docs/`）；或需要改治理语义、门禁码、状态机、事件类型。
 
-> `reviewer` 同时出现在 exec 与 audit 两层，`supervisor` 只在 audit 层——层归属以资产 `layers` 为准；
-> 角色到技能的映射**只在资产里**，本文件不复制逐角色清单。
+**不适用**：业务代码（走 software-team）｜写文章（走 writing-team）｜出设计稿（走 design-team）｜做调研（走 research-team）。
 
-## 每层技能装配（7 件，按角色归层）
+---
 
-> 下表只列**层 → 技能**这层信息（可读摘要）；**角色 → 技能**的逐条映射以资产为准。
+## 二、三层与角色（**5 个席位 · `coder` 可池化**）
 
-| 层 | 装配技能（加载名 = 宿主 `SKILL.md` frontmatter 的 `name`） | 该层要用它做什么 |
-|---|---|---|
-| plan | `spec-writing`、`codebase-design` | 写可被门禁接受的规格（必含裸标题 `## 验收标准` 与 `## 约束`）；先摸清被改造代码的既有形态再定方案 |
-| exec | `dev-coder`、`efficient-edit` | 按规格落地实现；改动面收敛，只碰本 lane 写域，避免误覆写既有文件 |
-| exec（验证/评审） | `review-execution` | 对照规格与验收标准做对抗式审查，输出结构化 verdict（approve / reject + blocking issues + followups），只读不改码 |
-| audit | `review-execution`、`acceptance-gate` | 逐条判据对照；全量验收 + gap-list 对账后给出门禁结论 |
-| audit（终门禁） | `acceptance-gate`、`verification-before-completion` | 收口前完成验证前置：未跑不得报数、未实测值不得预填，判据未闭合不得判通过 |
+```text
+plan  ┌ coordinator ── 任务摸底 + 可并行内容拆解  ⇒ 产出「并行任务线清单」
+      └ designer ────── 按任务线产出「单步任务包」 ⇒ 产物 = 任务包（验收单元）
+exec  └ coder  ─────── 按包实现（可多实例）
+audit ┌ reviewer ────── 对抗式审查（只读不改码）
+      └ supervisor ──── 逐条验收 + 复盘沉淀
+```
 
-七件技能名汇总（便于核对）：`spec-writing` / `codebase-design` / `dev-coder` / `efficient-edit` / `review-execution` / `acceptance-gate` / `verification-before-completion`。
-
-## 产物契约（三层，沿用引擎既有目录约定，不新增产物类型）
-
-| 层 | 产物路径 | 契约要点 |
-|---|---|---|
-| plan | `plan/*spec.md` | 由资产 `flows.plan.contract` 强制：须含**独立裸标题行** `## 验收标准` 与 `## 约束`（编号/前缀变体一律被 `GATE_PLAN_CONTRACT` 拒）；进度快照落 `<lane>/progress/NN-<slug>.md` |
-| exec | `exec/*.md` | **内容判据不来自资产**：`flows.exec.contract` 键**无运行期读点**（全仓 `contractOf` 只以 `plan` 调用：`lib/assembly/flows.js:503`、`lib/state/gates.js:778`）⇒ 该键已从本队资产**删除**（2026-09-18）；exec 的**硬门** = entry `consume` 在场 / exit `produce ∪ outputs` 在场 / `targets`（声明即核落盘）/ 命令 gate（产物独立行 `gate:`）。产物统一落批次产物根，进度快照落 `<lane>/progress/NN-<slug>.md` |
-| audit | `audit/**` | 判据源取 `plan/**`（资产 `audit_contract.criteria_from`），且必须同时消费 `plan/` 与 `exec/`；verdict ∈ pass / fail / skip |
-
-> 层间入口要求由资产 `flows` 强制（exec/audit 的 `entry_requires: ["consume"]`）：上游产物缺失时派发被拒
-> （`GATE_ENTRY_MISSING`），这是门禁行为而非流程建议。audit 层另带 `needhuman`，收口需人工裁决证据。
-
-## 链步形态（engine-team **自建** · 2026-09-18 用户裁决）
-
-> 通用团队流程 = 一套共用骨架（`plan → exec → audit → accept`），**层内形态按队自建**（裁语：「exec 形态自建」）；
-> 五队统一口径 = **exec 层内不限 lane 数量、分支间无 `deps`（可高并发并行）**（2026-09-18 用户裁决）。
-> 本队 exec 形态 = **单步三分支并行**（`exec-coder` ∥ `exec-verifier` ∥ `exec-reviewer`）——与 software-team 的
-> 「work 并行（coder ∥ tester）+ review 串行」并列，差别只在**分支数与角色集**，不在依赖形态。
-
-| 序 | 链步 | lane id（= 分支 id，R-4 命名纪律） | 角色 | 产物与职责 |
-|---|---|---|---|---|
-| 1 | `plan` | `plan-designer` | designer | `plan/plan-designer-spec.md`——验收标准与约束（可核判据 + 证据点） |
-| 2 | `exec` | `exec-coder` | coder | `exec/exec-coder.md`——实现变更 + 自证读数 |
-| 2 | `exec`（同一步） | `exec-verifier` | reviewer | `exec/exec-verifier.md`——**独立复跑**套件/检查器，给原始读数（只读、不改码） |
-| 2 | `exec`（同一步） | `exec-reviewer` | reviewer | `exec/exec-reviewer.md`——对抗式评审（对照 plan 判据） |
-| 3 | `audit-pair` | `audit-exec-coder` / `audit-exec-verifier` / `audit-exec-reviewer` | supervisor | `audit/exec-coder.md` 等——按 plan 判据**逐条对照**（**逐分支各一条 lane**） |
-| 4 | `accept` | `accept` | supervisor | `audit/acceptance-report.md`——交叉一致性核对 + 终门禁 |
-
-- **为何是「一步三分支」而不是「三步串行」**：`pair_with` 只指向**步 id**，配对步按「上游步在本批的**每条 lane** 1:1」实例化（`lib/assembly/chain.js:821-836`）——一步三分支 ⇒ `audit-pair` 派生 **3 条** lane，audit 面**逐分支留痕**（口径同 software-team 的 Q-A1=③：配对对象 = 链末 exec 步的**全部** lane，不合并成一条）；`pair_with: "exec"` 指的就是该 exec 步本身。
-- **为何并行而非串行**：用户裁决「exec 层内不限 lane 数量、可高并发并行」⇒ 三条 lane **同 wave 起**（分支间**无 `deps`**）；时序保障**不靠串行排步**，而靠 ① plan 产物在场（exec 消费门 `consumes_required: ["plan/"]` ⇒ plan 产物不在场即派不出）② 复核类 lane 的判据一律取 `plan/plan-designer-spec.md`（**不依赖 coder 的中间态**）。
-- **实测展开**（`expandChainBranches(chain)`，2026-09-18 实测）：plan 1 / exec 3 / audit-pair 3 / accept 1，共 **8 lane**（`plan-designer`｜`exec-coder`·`exec-verifier`·`exec-reviewer`｜`audit-exec-coder`·`audit-exec-verifier`·`audit-exec-reviewer`｜`accept`）；`loadTeamAsset` 与 `chainProblemsOf` 均 `problems: []`、`expand.ok = true`。
-
-- **命令 gate 的 cwd 是「批次产物根」，不是包根（2026-09-18 实测）**：exec 产物若声明 `gate: <命令>`，**行内必须自带 `cd /d <包根>` 或全部使用绝对路径**——否则在产物根下**必然 exit 1** ⇒ 拒 merged `GATE_EXIT_NONZERO` + `auto.settle` **`pause`**（批 `panel-redesign-20260918` 首轮实测的「门禁假红」）。真源 = `lib/state/gates.js` `commandCwd()` 三级兜底（lane worktree → env `GATE_REPO_ROOT` → 产物根）；口径见 `references/discipline.md` §0e D-9 + 附录 A.4。
-
-## 交接与门禁要点
-
-- **门禁看资产，不看本文件**：`flows` 的 `entry_requires` / `contract.required_sections`（**仅 plan 层有读点**）与 `chain` 的 `join` / `onFail` / `rework` 是运行期判据；本文件只做解释，冲突以资产为准。
-  **「无读点」键的现役口径（2026-09-18 清债轮更新）**：`chain.needHuman`（链级人工闸提示）与 `flows.*.progress_contract`
-  **均已退役**——零运行期读点 ⇒ **声明即拒** `TEAM_ASSET_FIELD_NOT_ALLOWED`（台账 `lib/assembly/chain.js` `RETIRED_CHAIN_KEYS`、
-  `lib/assembly/team-asset.js` `RETIRED_FLOW_KEYS`），自此**不存在「写了不生效」的静默面**；链级人工闸的**唯一**承载面
-  = `flows.audit.needhuman: true`（**不设双真源**）。`flows.exec.contract` 仍为**未接线声明**（仅加载期结构校验、
-  零运行期读点）⇒ 同样**非**运行期判据。
-- **写域先切分再动手**：exec lane 的写域按**文件粒度**切分（每个 lane 只碰自己声明的文件），跨 lane 依赖用
-  `handoff_submit` 表达；上游未交接即开工会被 entry 门拒。
-- **收口不拼接成员输出**：终门禁先消重、标注冲突、核证据再下结论；分歧不掩盖、不以投票了事（口径同 `acceptance-gate`）。
-- **实测读数优先**：报数须带命令与原始输出；未跑写「未测」，不得以断言冒充（口径同 `verification-before-completion`）。
-
-## 本轮新件入册（工程文档指针）
-
-> **口径**：本节登记**本轮新增的工程文档指针**（清债波 & 面板重构批的产物与规格）。
-> **两类树须分清**：`包内` = 本仓 `docs/**`（随包分发）；`外部台账` = 撰写期落盘的 workspace `docs/` 树（**未纳 VCS**、不在本包分发面内）。
-> **外部台账一律写绝对路径**：包内相对路径 `docs/<名>.md` 在此树**不存在** ⇒ 按相对写法即产生悬空引用（同 `lib/assembly/chain.js` 的 F-5 缺陷形态）。
-
-| 指针 | 树 | 绝对路径 / 包内路径 | 用途（何时读） |
+| 层 | 角色 | 干什么 | 产物契约 |
 |---|---|---|---|
-| 面板重构规格（设计稿 + 五条用户裁决） | 外部台账 | `D:\AI_Workspace\DSH\DSH\docs\panel-redesign-spec-20260918.md` | 改面板（`lib/panel/**`）前读；Q-2 密度边界出处 |
-| 面板重构侦察底稿（改造前的现状盘点） | 外部台账 | `D:\AI_Workspace\DSH\DSH\docs\panel-survey-20260918.md` | 判断面板某段改动的影响面时对照 |
-| 引擎台账（结项/技术债/「本轮新件」登记位） | 外部台账 | `D:\AI_Workspace\DSH\DSH\docs\engine-status-and-debt-20260918.md` | 收口前核「该项是否已结项」；技术债编号（TD-*）真源 |
-| 冻结节拍 · 清债波（`cleanup-wave-*` 批） | 批次产物根 | `…\artifacts\<批次>\plan\<batch>-spec.md`（根见工作区台账） | 该批 exec/audit 的判据源（写域矩阵 / 验收标准 / 约束） |
-| 面板模型段（本包新增件） | 包内 | `lib/panel/panel-model.js` | 面板纯逻辑段（过滤器 / 排序 / 派生视图）；改面板前先读它再读视图段 |
+| **plan** | **`coordinator`** | **任务摸底**（现状、约束、**消费方契约**）+ **可并行内容拆解**：切成**可并行**的任务线，逐线标 **写域互斥**与依赖 | `plan/<name>-recon.md`（摸底报告 + 任务线清单） |
+| | **`designer`** | **按每条任务线产出「单步任务包」**，**严格按 `spec-writing` 的规格写**（见 §三） | `plan/<name>-taskpack-<n>.md`，含**裸标题** `## 验收标准`（每条可判）+ `## 约束` |
+| **exec** | **`coder`** | 照包**实现**；自证读数（原始回显） | `exec/<name>-impl.md`（改动 + 原始读数 + 逐条判据对照） |
+| **audit** | **`reviewer`** | **对抗式审查**：对照包挑缺陷，**只读不改码** | 结构化 verdict（approve/reject + blocking + followup） |
+| | **`supervisor`** | **验收**（按包的 `## 验收标准` **逐条核对**，不做二次评审）**＋ 复盘** | `audit/acceptance-report.md` + `audit/gap-list.json` + `audit/retrospective-report.md` |
 
-> **维护纪律（防二次漂移）**：新增/改名/删除上述任一文件 ⇒ **同批**回改本表；**本表是「本轮新件」的唯一登记位**
-> （包外台账只留一句结论，不重复登记指针）。本表**不承载**装配数据——角色/层/技能/flows 的唯一权威仍是
-> `presets/engine-team/team-asset.yml`（见 §维护纪律）。
+### 三条铁律
 
-## 与引擎读端的关系
+1. **`reviewer` 只在 audit 层**（**不在 exec 层**）—— 改代码的人不评自己的代码；评审必须在上游之外。
+2. **plan 层两步不可合并**：**先摸底拆线（coordinator）⇒ 再逐线出包（designer）**。摸底没做完就出包 = 猜。
+3. **下游统一按任务包验收** —— **任务包是唯一验收单元**；包外的追加要求一律回 plan 层补包。
 
-| 读端 | 作用 | 位置 |
+> **本团队没有 `tester` 席位**：引擎改造的验证面多落在 `reviewer` 的**独立复现**（复跑套件/探针、给原始读数）里。若某批确需独立测试工件，**在任务包里显式派给 `coder` 的第二条 lane**，或**另开 software-team 批**。
+
+### 池化（同类型多实例）
+
+**`coder` 可在团队内池化**：
+
+- **同类型可拉起多个成员**（如 `coder-1` / `coder-2`）；
+- **Leader 按吞吐情况分配**：把不同任务包派给不同的同类型成员（**并行吞吐**）；
+- **roster 名 = 成员名**（`tasks[].roster` 必须与 `spawn_teammate` 的 `name` 逐字一致 —— 引擎据此判定写权归属）；
+- 管理面见 §七（**官方工具**）。
+
+---
+
+## 三、任务包规格（**按 `spec-writing` 写**）
+
+`designer` 出包**必须遵循 `spec-writing` 的规格**，最小结构：
+
+| 段 | 内容 | 硬性 |
 |---|---|---|
-| `loadTeamAsset(root, team)` | 加载 + 加载期不变量校验（拒载非法声明） | `lib/assembly/team-asset.js` |
-| `resolveAssembly(team, config.assembly)` | 解析 `layers`（角色 + 技能），建批时注入 `[skills=…]` 前缀 | `lib/assembly.js` |
-| `resolveTeamFlows(team)` / `resolveTeamRoles(team)` | 解析 `flows` 与 `roles`（扩展角色、额外牵头） | `lib/assembly/flows.js` |
+| **角色** | 谁来执行（coder / reviewer / …） | 必填 |
+| **目标** | 一步活，**可独立交付** | 必填 |
+| **关键契约** | 要遵守的接口/数据形状/不变量 | 必填 |
+| **`## 验收标准`** | **逐条可判**，每条给**可核读数形态** | **必填**（**裸标题**，audit 判据源锚点） |
+| **`## 约束`** | 边界（写域、不许动什么、依赖前提） | **必填** |
+| **产物契约** | 落盘路径与文件名 | 必填 |
+| **期望输出格式** | 汇报里要有什么（原始读数 / 表格 / 清单） | 必填 |
+| **预算行** | `W ≈ …M（C≈…K × T≈…轮）；切法：…` | 必填 |
 
-**维护纪律**：改装配 = 改 `presets/engine-team/team-asset.yml`，再同步本文件的作用描述与技能名清单，
-然后跑 `node scripts/check-team-assets.mjs` 复核一致性。该检查器**只以正向两项判失败**——
-「资产引用了但技能根（宿主根 ∪ 包内根）不可解析」（`unresolved`）与「资产引用了但团队文档未提及」（`notInDoc`）；
-反向差集 `docOnlySkills`（文档提及但资产未装配）**仅是 ⚠ 信息项、不参与失败判定**——跨团队引用、自指与路径段都会计入，
-非空属正常，**不得为了让它归零而删掉跨团队引用**。
+**判据措辞纪律**：**带限定量词**（禁裸「零命中」；写「`lib/` 内零**调用**」这类可核形态）。
 
-## 两个技能根的边界（易混点）
+**粗判据（超任一即改拆法）**：改动 >8 文件 ｜ 跨模块 >2 ｜ 全量套件 >3 轮 ｜ 预估 >45 轮。
 
-| 根 | 读端 | 本文件的关系 |
+---
+
+## 四、每层的动作序（照做）
+
+### plan · coordinator（摸底 + 拆线）
+
+1. **只读侦察先行**：`read` / `glob` / `grep` + 只读 shell；
+2. **消费方契约摸底**（要改的引擎面，**先找它的校验实现，以其报错分支为约束文档**；对照仓库内合规样例；跑最小探针）；
+3. **拆线**：切出**可并行**任务线，逐线写清**写域**（哪些文件/目录）⇒ **写域互斥**；有依赖的画 DAG；
+4. 落 `plan/<name>-recon.md` + 进度快照；
+5. `handoff_submit` 交下游 designer。
+
+### plan · designer（出单步任务包）
+
+1. 读 coordinator 的任务线清单；
+2. **逐线出包**（§三的规格）；
+3. 落 `plan/<name>-taskpack-<n>.md` + 进度快照；
+4. `handoff_submit` 交 exec。
+
+### exec · coder（实现）
+
+1. **读批**：`batch_status({ batchId, session: '<批次归属 session 键>' })` —— **不带 `session` 会 `batch not found`**；
+2. 照包做，**每完成一子步骤**即落 `exec/progress/NN-<slug>.md`（**禁止攒批**）；
+3. ⚠ **落盘只用 `write`/`edit`** —— 本机 `pwsh` 写盘会被 L3 护栏拒（`L3-W01`）；
+4. **自证**：每条结论配**原始回显**（不转述、不美化、**未验证就写「未验证」**）；
+5. `handoff_submit` ⇒ **双写回报**（见 §五）。
+
+### audit · reviewer / supervisor
+
+1. **读判据源**（任务包的 `## 验收标准`）+ 上游产物；
+2. **逐条核对**（**不做二次评审**）；**独立复现**关键读数（**不得只转述上游**）；
+3. 出 `audit/acceptance-report.md` + `audit/gap-list.json`；`supervisor` 另出复盘；
+4. **未决项只进 gap-list** ⇒ **不得以「继续调查」收尾**。
+
+---
+
+## 五、回报与交接通道
+
+| 通道 | 用途 | 要害 |
 |---|---|---|
-| 包内技能根 `<pkgRoot>/skills/` | 一致性检查器取「宿主根 ∪ 包内根」的并集 | 本文件所在之处 |
-| 宿主技能根 `<home>/.agents/skills` | 运行期技能门**只读此根** | 包内新增经资产同步落到此根后才对运行期可见 |
+| **`handoff_submit`** | **交接**（上游→下游，写 `handoffs` + `lane.handoff` 事件） | 下游开工的**硬前提**；**先交后报** |
+| **`swarm_report({batchId, lane, …})`** | **审计面**（落 `swarm.report` 事件） | ⚠ **必须带 `batchId`**，否则不落事件流 |
+| **`send_message(target='lead')`** | **唤醒面**（真推送） | 成员的**唯一真推送**通道 |
 
-> 因此「检查器绿」只证明**声明与文档一致**，不等于运行期可加载；运行期可见性属于资产同步（部署窗口）的事，
-> 不是本文件能担保的面。
+**⇒ 成员回报 = 双写**（`swarm_report` + `send_message`）：**只发前者 ⇒ 留痕不唤醒；只发后者 ⇒ 唤醒不留痕。**
 
-## 使用方式
+**写权**：成员**只能写自己 lane 的出边**；越权 ⇒ `GATE_HANDOFF_UNAUTHORIZED` **且零写入**（安全，不是 bug）。
 
-| 场景 | 本技能给什么 |
+---
+
+## 六、实机踩过的坑（务必读）
+
+| # | 坑 | 真相 |
+|---|---|---|
+| 1 | **`batch not found`** | 成员是新会话 ⇒ 读批**必须传 `session: 'session-<uuid>'`**（裸 UUID、命名黑板形态**都不命中**） |
+| 2 | **越权探针「没反应」** | `handoff_submit` 的拒态**有固定门序**：**产物在场性 → R-2 覆盖保护 → 权限判定**。指向一条**已 `submitted`** 的入边会被 `GATE_HANDOFF_OVERWRITE_UNDECLARED` **遮蔽** ⇒ 测权限须避开前两步 |
+| 3 | **`log_export` 计数对不上** | **裸计数在并发席位下会被污染** ⇒ 零写入判据须取「**事件类型 + 记录在场性**」，**裸计数不构成证据** |
+| 4 | **`swarm_report` 显示 `unbound`** | **预期**（team 席位无 `member.dispatch` 绑定）⇒ 只要**带 `batchId`** 就照样落事件流 |
+| 5 | **`pwsh` 报 L3 拒绝** | 本机护栏禁 shell 写盘 ⇒ 一律走 `write`/`edit` |
+| 6 | **技能解析不到** | `GATE_SKILL_MISSING` **只告警不拒建批**（recommend 语义） |
+
+---
+
+## 七、team 成员的管理面（**官方工具**）
+
+> ⚠ **铁律：team 方案【不走】`member_status` / `member_settle` 这类 `member_*` 工具收口。**
+> **理由（引擎事实）**：`member_*` 改的是**批次里 lane 的状态**（状态文件），**不触达成员的会话**；且引擎侧**没有任何 team 成员生命周期接线**（全仓 `spawnTeammate` / `interruptAgent` / `teamTask*` **零调用**，唯一消费 `agentTeams` 的地方是 `managerRosterOf` —— 判定 Manager 是否在册）。
+> ⇒ ⇒ **用 `member_*` 管 team 成员 = 改了一个成员看不见的字段**。
+
+**正确的成员管理面**：
+
+| 想做什么 | 用什么 |
 |---|---|
-| Leader 选团队建批（`wave_plan({team})`） | 层归属、角色集与产物契约的**读解**（真源是资产，不是本文件） |
-| Leader / Manager 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
-| worker 收工自检 | 产物落点与门禁要求（产物契约 + 交接件） |
-| 排查「角色缺操作手册」 | 技能映射的读端位置与当前取值 |
+| **看成员在不在、在不在跑** | **`list_agents`**（`inactive` = 无轮在执行；**不代表任务完成/失败**） |
+| **给成员派活 / 通知收工 / 追问** | **`send_message(target=<成员名>)`** —— 运行中的成员在**最近步骤边界**收到；**inactive 成员会被唤醒** |
+| **打断成员当前轮** | **`interrupt_agent(target=<成员名>)`** —— 保留其待处理收件箱 |
+| **等成员动静** | **`wait_agent`** —— 只观察**调用之后**的变化；**不会唤醒**任何成员；无其他成员在跑时立刻返回 |
+| **拉起新成员** | **`spawn_teammate(name, description, prompt)`** |
 
-> **不做判档**：难度（A/B/C）由 Leader 用 `assign_check({difficulty, rationale, scope:'full'})` 主动写入；本技能不判档、不替代 `wave_plan` 门禁。
+**⇒ 收口动作序（team 方向）**：
 
-## 三层门禁（Tier3 · 引擎强制）
+1. **`list_agents`** 确认成员状态；
+2. 成员仍在跑且不需要了 ⇒ **`interrupt_agent`**（打断）；
+3. 需要它继续/收工 ⇒ **`send_message`**（告知结论或收工指令）；
+4. **批相位收口** ⇒ **`batch_phase(complete)`**（**须先经 `running`**；`planning → complete` 非法）。
 
-| 门 | 触发点 | 拒绝码 |
-|---|---|---|
-| Plan 契约 | plan lane merged 前：产物含**独立裸标题行** `## 验收标准` / `## 约束` | `GATE_PLAN_CONTRACT` |
-| Entry | exec/audit lane 派发前：`consume` 齐备且逐个在场；DAG 入边须已 `handoff_submit` | `GATE_ENTRY_MISSING` / `GATE_HANDOFF_MISSING` |
-| Exit | merged 前：`produce ∪ outputs` 在场（以 `/` 结尾者按**目录**判：存在且非空） | `GATE_ARTIFACT_MISSING` / `GATE_ARTIFACT_NOT_A_FILE` |
-| Targets | lane 声明 `targets` 时逐一核落盘（存在性 + 变更性） | `GATE_TARGET_MISSING` / `GATE_TARGET_UNCHANGED` |
-| 命令 gate | exec 产物独立行 `gate: <命令>` ⇒ merged 前执行，exit 0 通过 | `GATE_EXIT_*` |
-| 人工闸 | audit 产物独立行 `needHuman: true` ⇒ merged 须带 `human:<裁决人>:<时间>:<结论>` | `GATE_NEEDHUMAN_PENDING` |
-| 终态冻结 | 批次终态（`complete`/`aborted`）后任何成员态迁移一律拒 | `GATE_BATCH_TERMINAL` |
+**⇒ 关于 `roster` 与 lane**：`wave_plan` 建批时 `tasks[].roster` 只作**声明**（引擎只做词法校验 + 写权归属判定）；**真正把活交到成员手上的是 `send_message`**。
 
-## 蟛蜞治理集成（worker 视角）
+**⇒ 关于 lane 状态**（2026-09-26 用户裁决）：**team 批只保留 `member_status`** —— 它只用于**登记 lane 进度**（让 `batch_status` 的 lane 跃迁可见），**`member_settle` 不用于 team 批**（它管不了成员，写 lane 终态对 team 无治理意义）。**lane 终态与批相位一律由 `batch_phase` 推进。**
 
-- **lane id 纪律**：须逐字等于资产 `branches[].id`，否则链推进落 `no-lane-for-step`。
-- **交接顺序**：产出后**先 `handoff_submit`、再发 `settle-request`**（顺序反了 auto-settle 判 `GATE_HANDOFF_MISSING` 并使批暂停）。
-- **exec ↔ plan 依赖（**三道门**）**：**exec 分支之间无 `deps`**（可高并发并行、lane 数不限），但**每个 exec lane 必须消费 plan 产物**——由引擎在建批期强制：`flows.exec.consumes_required_per_lane: ["plan/"]`（**逐 lane**，任一 exec lane 缺该前缀 ⇒ 拒建批 `GATE_EXEC_INPUT_MISSING`）＋ `flows.exec.consumes_required: ["plan/"]`（**批级**覆盖）；另 `GATE_ORPHAN_PRODUCT` 保证 plan 产物不被孤儿化（plan 层硬拒），entry 门 `GATE_ENTRY_MISSING` 保证声明的 consume **逐个在场**后才派发。⇒ **exec 形态自由（无 deps），但与 plan 的依赖是硬门禁**；lane 间真实依赖由建批 `tasks[].deps` 声明。
-- **通信**：`mailbox_send`（inbox/outbox/broadcast）只写元数据；`swarm_report` 回 Leader、`swarm_cc` 抄送 Manager。
-- **进度**：每完成一子步骤落 `<lane>/progress/NN-<slug>.md`（**lane 域**，勿落层域）。
-- **长程**：longrun 豁免由 Leader **派发时附带**，成员不得自改。
-- **止轮与收口**：需止住自动推进用 `batch_control(pause)`（非终态、可逆）；**先了结成员态（`member_settle`）→ 再迁相位到终态**（写成员态属 C 档动作）。
+---
 
-## 边界
+## 八、完成判据（DoD）
 
-- 本技能**不承载装配数据**：唯一权威是 `presets/engine-team/team-asset.yml`；本文件只写用途、职责边界与契约，冲突以资产为准。
-- **不替代引擎门禁**：文中「须/必须」若落在**非运行期判据**上（`flows.exec.contract` = 未接线声明；`chain.needHuman`、`flows.*.progress_contract` = **已退役、声明即拒**），视为约定而非门禁行为。
-- 只声明**本团队**角色与技能；跨团队引用只作指针，不复制他队角色定义。
-- 不新增产物类型：只用引擎既有 `plan/` `exec/` `audit/` 前缀。
+- **产物落盘**（批次产物根，**不落工作区根**）；
+- **每条结论有原始读数**（可复核）；
+- **交接已 `submitted`**（下游 `handoff_view` 报 `READY`）；
+- **验收标准逐条对照**（audit 出 verdict）；
+- ⚠ **产出运行于宿主/消费路径时，完成判据必含一次真实加载/启动冒烟**（语法的 `node --check`、单测**不算**完成）—— 先搭会失败的版本（RED）再做到通过（GREEN），**禁攒批到终验**。
+
+---
+
+## 九、Leader 收口
+
+1. **发现完成**（worker 完成**不推送**给 Leader 之外的观察面）：① `batch_status`（lane 跃迁）② `log_export`（`swarm.report` / `member.settled` / `lane.handoff` / `auto.settle.*` 的 `reason`）③ 产物根 glob；
+2. **成员管理** ⇒ 见 §七（**官方工具**，**不是 `member_*`**）；
+3. **批终态**：`batch_phase(complete)`（**须先经 `running`**）。
