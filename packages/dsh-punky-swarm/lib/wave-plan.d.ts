@@ -33,13 +33,12 @@ export declare function normalizeAssemblyDecl(input: unknown, extraRoles?: strin
     decl: WavePlanAssemblyDecl | null;
     warnings: WavePlanDoc['warnings'];
 };
-/** R-3（P4 授权修复批，2026-09-25）：roster 合法形态 `^[a-z0-9]+(-[a-z0-9]+)*$`（非空、无空白、lower-kebab-case）。 */
+/** roster 合法形态：非空、无空白、lower-kebab-case 兼容（同 `plan/fix-spec.md` §2.3.4）。 */
 export declare const ROSTER_NAME_RE: RegExp;
-/** R-3 roster 归一化：非字符串（含缺省）⇒ `null`；字符串 ⇒ `trim()`；trim 后空 ⇒ `null`；非空 ⇒ `trim()` 原样保留。 */
+/** roster 归一化（纯函数，导出供读端与测试共用）：非字符串（含缺省）⇒ `null`；字符串 ⇒ `trim()`；
+ *  trim 后空（空串/纯空白）⇒ `null`；非空 ⇒ `trim()` 原样保留。
+ *  **非法形态在此不抛**（拒态须回显 `task`）——词法判据单点 = `buildWavePlan` 建批期，抛 `GATE_ROSTER_INVALID`。 */
 export declare function normalizeRoster(raw: unknown): string | null;
-/** R-5（P4 授权修复批，2026-09-25）：批级通道归属声明的归一化 + 一致性校验（单点判定）。
- *  枚举非法 ⇒ throw `GATE_CHANNEL_INVALID`；`team` 缺 roster / `dispatch` 带 roster / `mixed` 零 roster ⇒ throw `GATE_CHANNEL_UNRESOLVED`；
- *  缺省（`undefined`/`null`）⇒ `{ channel: 'dispatch', declared: false }`（`declared:false` = 调用方**不写** `batch.channel` 键）。 */
 export declare function normalizeChannelDecl(channel: unknown, tasks: WaveTask[]): {
     channel: ChannelDecl;
     declared: boolean;

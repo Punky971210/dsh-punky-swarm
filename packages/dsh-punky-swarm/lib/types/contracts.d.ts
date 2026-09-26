@@ -41,9 +41,12 @@ export interface WavePlanTaskInput {
     standaloneReason?: string;
     targetsNoChange?: boolean;
     owner?: string | null;
-    /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（team 通道执行者标识）。
-     *  **不设唯一性约束**（一成员多 lane / 同类型多成员各书其名均合法）；
-     *  非法形态（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）⇒ 建批期拒 `GATE_ROSTER_INVALID`。 */
+    /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（`docs/b5-teammate-seat-design-v1-2026-09-25.md` §1/§3）。
+     *  语义 = 「team 通道执行者标识」：写权判据读端按「哪些 lane 的 `roster` = 我」定 lane 写权（池化时天然覆盖其多条 lane）。
+     *  **不设唯一性约束**——同一 roster 名可出现在多条 lane（一成员多 lane）、同类型多成员各书其名，均合法。
+     *  归一化（`buildWavePlan` **恒写**）：缺省/非字符串/空串/纯空白 ⇒ `null`；非空字符串 ⇒ `trim()` 原样保留。
+     *  非法形态（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）⇒ 建批期拒 `GATE_ROSTER_INVALID`（fail-closed）。
+     *  ⚠ **不参与 `sig` 指纹**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）。 */
     roster?: string | null;
     sig?: string | null;
 }
@@ -82,8 +85,11 @@ export interface WavePlanTask {
      *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
     owner: string | null;
     /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（team 通道执行者标识）。
-     *  `buildWavePlan` 归一化**恒写**（缺省/非字符串/空串/纯空白 ⇒ `null`；非空 ⇒ `trim()` 原样保留）。
-     *  **不设唯一性约束**（不产告警）；与 `owner` **并存互不替代**；⚠ **不参与 `sig`**。 */
+     *  `buildWavePlan` 归一化**恒写**（缺省/非字符串/空串 ⇒ `null`，与 `targetsMarker` 同风格：不落 undefined）；
+     *  非空字符串 ⇒ `trim()` 后原样保留（须匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`，否则建批期拒 `GATE_ROSTER_INVALID`）。
+     *  **不设唯一性约束**（一成员多 lane 合法、同类型多成员各书其名合法，均不产告警）；与 `owner` **并存互不替代**
+     *  （`owner` 仍是公共池归属声明面、不参与门禁；`roster` 是 team 通道写权判据的输入）。
+     *  ⚠ **不参与 `sig`**（`computeTaskSig` 输入面逐字不变）。 */
     roster: string | null;
     /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
      *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
@@ -158,8 +164,8 @@ export interface WavePlanDoc {
 /** 编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批，O0f 兜底协议） */
 export type ManagerPlan = 'raise' | 'leader-direct';
 /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4）：批级**通道归属声明**枚举。
- *  `dispatch` = 现有 dispatch 通道语义（**归一化缺省**，存量批零变化）；`team` = roster 席位通道；`mixed` = 两者并存。
- *  归一化/静态校验单点 = `lib/wave-plan.js#normalizeChannelDecl`（非法值拒 `GATE_CHANNEL_INVALID`、
+ *  `dispatch` = 现有 dispatch 通道语义（**缺省**，存量批零变化）；`team` = roster 席位通道；
+ *  `mixed` = 两者并存。归一化/静态校验单点 = `lib/wave-plan.js#normalizeChannelDecl`（非法值拒 `GATE_CHANNEL_INVALID`、
  *  与 lane `roster` 分布矛盾拒 `GATE_CHANNEL_UNRESOLVED`）；落盘位 = `Batch.channel`。 */
 export type ChannelDecl = 'dispatch' | 'team' | 'mixed';
 /**
@@ -269,9 +275,12 @@ export interface Batch {
     sigDuplicateLogged?: Record<string, boolean>;
     teamAsset?: TeamAssetRef;
     /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4.3）：批级**通道归属声明**真源。
-     *  **纯增量可选字段**（缺省 `undefined` = 存量批/未声明 ⇒ 读端放行 + 留痕，同 `handoffs` 存量口径）。
-     *  **未声明时不写键**（「缺省 `dispatch`」是归一化读端的有效值，不是落盘值）。
-     *  写端 = 建批路径（`lib/tools/core.js` 消费 `normalizeChannelDecl`）；禁从事件流事后重建（§约束 6）。 */
+     *  · **纯增量可选字段**（缺省 `undefined` = 存量批/未声明）⇒ 读端放行 + 可核留痕，与 `handoffs` 存量口径同形。
+     *  · **未声明时不写键**（键不存在），**不落 `'dispatch'` 默认值**——「缺省 `dispatch`」是**归一化读端**的
+     *    有效值（`normalizeChannelDecl` 回 `{ channel:'dispatch', declared:false }`），不是落盘值；故建无 `channel`
+     *    字段的批读端零感知、零写入（R5-a/R5-d 的实现取值，见 `exec/contract-change.md`）。
+     *  · 写端 = 建批路径（`lib/tools/core.js` 消费 `normalizeChannelDecl` 后落盘）；**单点判定**，运行期不再二次判定。
+     *  · 禁双真源：通道归属真源**恒** `batch.channel`，不得从事件流事后重建（`plan/fix-spec.md` §约束 6）。 */
     channel?: ChannelDecl;
     events: BatchEvent[];
     createdAt: string;
