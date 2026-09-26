@@ -5,12 +5,6 @@
       "research-planner",
       "researcher",
       "research-auditor"
-    ],
-    "plan_leads": [
-      "research-planner"
-    ],
-    "audit_leads": [
-      "research-auditor"
     ]
   },
   "layers": {

@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派发侧注入固定任务包条款（RESUME_CLAUSE）。
 // 类型化说明：输入面 WavePlanTaskInput（id 必填其余可选）/ 持久面 WavePlanTask（缺省落 null/[]/false），
 //   buildWavePlan 是两形态间的唯一规范化桥；topoWaves 产物 id 必命中 tasks（find 单点断言）；
-//   PLAN_LEAD_ROLES.has(effectiveRole(t)) 经显式空值守卫（Set.has(null) 运行期即 false，非行为缺陷）——
+// （历史注记：本处曾有 plan/audit 牵头角色判定，2026-09-26 用户裁决全链删除 —— 详见下方函数头）
 //   全部消解路径均为类型适配，运行期语义零变更。
 //
 // r2 扩域（e2，**仅追加式最小编辑**）：建批期 presence 硬约束 + A1 悬空产物**主防线**（O-1 双点强制）。
@@ -45,10 +45,17 @@ import { isAbsPath } from './state/constants.js'; // 单点（自有实现收敛
 import { computeTaskSig, sigOf } from './sig-fingerprint.js';
 const SCHEMA_VERSION = 1;
 export const LAYERS = ['plan', 'exec', 'audit'];
-// 合法角色集合（software-team 8 角色，任务权威；大小写兼容，内部归一化小写）
-// 合法角色集合：`manager` 仅为**声明面**保留（`assembly.roles` 可声明它），
-// **不得用作 lane.role**——Manager 是引擎层功能角色（不属任一层、不占 lane，见纪律 §0g）；
-// 误用会产专属告警 `GATE_ROLE_MANAGER_AS_LANE`（见 collectRoleCompletenessWarnings）。
+// 合法角色集合（**角色标识**：lane 的 `role` 声明面；大小写兼容，内部归一化小写）。
+// ⚠ 语义边界（2026-09-26 用户澄清 + 核对）：`role` = **team 中的角色**（如 software-team 的
+//   coordinator / designer / coder / tester / reviewer / supervisor），与 team 通道的 `roster`
+//   （成员名）**并列不替代**；**非 team 角色不入此集**。
+// · `manager` 仅为**声明面**保留（`assembly.roles` 可声明它），**不得用作 lane.role** ——
+//   Manager 是引擎层功能角色（不属任一层、不占 lane，见纪律 §0g）；误用产专属告警
+//   `GATE_ROLE_MANAGER_AS_LANE`（见 collectRoleCompletenessWarnings）。
+// · `doc-manager` 保留为**历史/兼容角色名**（software-team 已裁为 6 席位、不再含它；
+//   其他团队/存量批次声明该名仍走白名单，不误报 GATE_ROLE_INVALID）。
+// · 团队自有角色名（如 design-planner / research-planner）经 `extraRoles` 扩展入集 ——
+//   `extraRoles = unionRoleVocabulary(resolveTeamRoles(...))` = 各层声明角色 ∪ `roles.extra`。
 export const VALID_ROLES = ['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
 // 装配扩展角色（盲审三角色，与 assembly/schema.js BLIND_REVIEW_ROLES 同源；装配可插拔扩展点）
 export const ROLE_EXTENSIONS = BLIND_REVIEW_ROLES;
@@ -83,8 +90,6 @@ export function defaultRoleForLayer(layer) {
 // C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义：事件留痕、不阻断建批，与 GATE_ROLE_INVALID 一致；后续可配 enforce）——
 // 背景：实跑证实 C 类批次（多 wave/多 lane/跨层）常缺 plan 层 designer 与 audit 层 supervisor（被 planner/auditor 或 Leader 代劳）。
 // C 类形态判定（复用 wavePlan 拓扑信息）：wave 数 >1 或 lane 数 >1 或存在跨 layer 依赖；单 lane 批次（非 C 类形态）不触发本门禁。
-export const PLAN_LEAD_ROLES = new Set(['designer', 'coordinator']); // plan 层牵头角色（**不含 manager**：Manager 是引擎层常驻功能角色——continuable subagent，由 Leader 直系拉起，不属任何层、不占 lane，故不得充当 plan 层牵头）
-export const AUDIT_LEAD_ROLES = new Set(['supervisor', 'doc-manager']); // audit 层牵头角色
 // 跨 layer 依赖：任一任务的 deps 中存在 layer 与自身不同的依赖（DAG 跨层编排）
 function hasCrossLayerDep(tasks) {
     const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -108,40 +113,12 @@ function effectiveRole(t, opts = {}) {
 }
 // C 类批次角色齐备检查：plan 层 lane 需至少一个 designer/coordinator；audit 层 lane 需至少一个 supervisor/doc-manager；
 // 层不存在（无该层 lane）不检查（validateLayerContract 既有语义不变）；非 C 类形态（单 lane 批次）不触发
-// `opts.planLeads` / `opts.auditLeads` = 团队声明的额外牵头角色（**并集**进基础集，不替换——保证引擎地基不被删减）
 export function collectRoleCompletenessWarnings(tasks, waves, opts = {}) {
     if (!isCClassBatch(tasks, waves))
         return [];
     const extraRoles = Array.isArray(opts.extraRoles) ? opts.extraRoles : [];
-    const planLeads = new Set([...PLAN_LEAD_ROLES, ...(Array.isArray(opts.planLeads) ? opts.planLeads : [])]);
-    const auditLeads = new Set([...AUDIT_LEAD_ROLES, ...(Array.isArray(opts.auditLeads) ? opts.auditLeads : [])]);
     const roleOpts = { extraRoles };
     const warnings = [];
-    const planLanes = tasks.filter((t) => t.layer === 'plan');
-    if (planLanes.length > 0 && !planLanes.some((t) => {
-        // 空值守卫：effectiveRole 返回 string|null；Set.has(null) 运行期恒 false，显式守卫类型适配、判定结果不变
-        const r = effectiveRole(t, roleOpts);
-        return r !== null && planLeads.has(r);
-    })) {
-        warnings.push({
-            code: 'GATE_ROLE_MISSING',
-            layer: 'plan',
-            missing: [...new Set(['designer', 'coordinator', ...(Array.isArray(opts.planLeads) ? opts.planLeads : [])])].join('|'),
-            message: 'C-class batch requires at least one plan lane with role ' + ['designer', 'coordinator', ...(Array.isArray(opts.planLeads) ? opts.planLeads : [])].join('/') + ' (effective: ' + planLanes.map((t) => effectiveRole(t, roleOpts) ?? t.role ?? '(default)').join('/') + ')',
-        });
-    }
-    const auditLanes = tasks.filter((t) => t.layer === 'audit');
-    if (auditLanes.length > 0 && !auditLanes.some((t) => {
-        const r = effectiveRole(t, roleOpts);
-        return r !== null && auditLeads.has(r);
-    })) {
-        warnings.push({
-            code: 'GATE_ROLE_MISSING',
-            layer: 'audit',
-            missing: [...new Set(['supervisor', 'doc-manager', ...(Array.isArray(opts.auditLeads) ? opts.auditLeads : [])])].join('|'),
-            message: 'C-class batch requires at least one audit lane with role ' + ['supervisor', 'doc-manager', ...(Array.isArray(opts.auditLeads) ? opts.auditLeads : [])].join('/') + ' (effective: ' + auditLanes.map((t) => effectiveRole(t, roleOpts) ?? t.role ?? '(default)').join('/') + ')',
-        });
-    }
     // manager 作为 lane 角色的**语义错位**提示（专属码，不混入 GATE_ROLE_MISSING 以免误读为「缺牵头角色」）：
     // Manager 是引擎层功能角色（不属 plan/exec/audit 任一层、不占 lane），它出现在 lane.role 上通常意味着
     // 「该域缺自己的计划/验收角色」。仅提示、不阻断（与既有告警通道一致）。
@@ -974,8 +951,6 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
     const extraRoles = teamRoles.ok ? unionRoleVocabulary(teamRoles) : [];
     const roleOpts = {
         extraRoles,
-        planLeads: teamRoles.ok ? teamRoles.planLeads : [],
-        auditLeads: teamRoles.ok ? teamRoles.auditLeads : [],
     };
     // role 集合校验（GATE_ROLE_INVALID，warning 语义：事件留痕、不阻断建批、保持兼容）——
     // 仅「显式声明且非空、但不在合法集合」的 role 触发告警；未声明（走默认值）与归一化后合法的角色不告警

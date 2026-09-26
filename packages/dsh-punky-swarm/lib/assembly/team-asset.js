@@ -263,19 +263,6 @@ export function validateTeamAsset(asset) {
           }
         }
       }
-      for (const key of ['plan_leads', 'audit_leads']) {
-        if (asset.roles[key] == null) continue;
-        if (!Array.isArray(asset.roles[key])) { push(TEAM_ASSET_CODES.BAD_TYPE, 'roles.' + key, key + ' 必须是数组'); continue; }
-        const seenLead = new Set();
-        for (const r of asset.roles[key]) {
-          if (!isNonEmptyString(r) || !ROLE_EXTRA_RE.test(r)) push(TEAM_ASSET_CODES.ROLE_LEXICAL, 'roles.' + key, `牵头角色词法非法：${JSON.stringify(r)}（要求 kebab-case）`);
-          else if (seenLead.has(r)) push(TEAM_ASSET_CODES.ROLE_LEXICAL, 'roles.' + key, `牵头角色重复：${r}`);
-          else {
-            seenLead.add(r);
-            if (!allLayerRoles.has(r)) push(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS, 'roles.' + key, `牵头角色 ${r} 未出现在任何 layers[*].roles（声明悬空）`);
-          }
-        }
-      }
     }
   }
 
@@ -423,7 +410,7 @@ export function teamAssetCandidates(root, team) {
 // 资产签名（路径 + mtime + size）：缓存读端（flows.js 的 CACHE / ROLE_CACHE）据此判「文件是否已变」。
 // 由来（实测缺口）：缓存键曾只含 `root::team`，同进程内**改资产文件不重载** —— Leader 的灵活装配
 // 典型循环（写资产 → 建批 → 见告警 → 补声明 → 重建批）在长驻进程里第二步仍读旧值，修正「隔空失效」
-// （探针 C4：run2 资产已含 roles.extra，仍报 5×GATE_ROLE_INVALID + 2×GATE_ROLE_MISSING）。
+// （探针 C4：run2 资产已含 roles.extra，仍报 5×GATE_ROLE_INVALID）。
 // 语义：返回 null = 无资产文件（顺序并列：不存在/不可 stat）；同签名 ⇒ 内容判定为同一份（零重读）。
 export function teamAssetSignature(root, team) {
   if (typeof team !== 'string' || team.trim().length === 0) return null;

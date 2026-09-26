@@ -6,12 +6,6 @@
       "workflow-builder",
       "workflow-auditor",
       "producer"
-    ],
-    "plan_leads": [
-      "design-planner"
-    ],
-    "audit_leads": [
-      "workflow-auditor"
     ]
   },
   "layers": {

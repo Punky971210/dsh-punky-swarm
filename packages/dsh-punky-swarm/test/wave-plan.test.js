@@ -125,47 +125,13 @@ test('B2 normalizeResumeContract：独立规范化入口', () => {
   assert.deepEqual(normalizeResumeContract({ id: 'x' }), { checkpoint: null, resume: false });
 });
 
-test('role 合法性：8 角色集合 + 大小写归一化（Designer→designer）', () => {
-  assert.deepEqual(VALID_ROLES, ['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager']);
-  assert.equal(normalizeRole('Designer'), 'designer');
-  assert.equal(normalizeRole('CODER'), 'coder');
-  assert.equal(normalizeRole('doc-manager'), 'doc-manager');
-  assert.equal(normalizeRole('planner'), null, '非法角色 → null');
-  assert.equal(normalizeRole(null), null);
-  const plan = buildWavePlan({ batchId: 'b-role', tasks: [
-    { id: 'x', role: 'Designer', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'y', role: 'CODER', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/y/o'], deps: ['x'] },
-    { id: 'z', role: 'reviewer', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['y'] },
-  ] });
-  const flat = Object.fromEntries(plan.wavePlan.flatMap((w) => w.tasks).map((t) => [t.id, t]));
-  assert.equal(flat.x.role, 'designer', 'Designer → designer（内部归一化）');
-  assert.equal(flat.y.role, 'coder');
-  assert.equal(flat.z.role, 'reviewer');
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], '合法角色不触发非法告警');
-  // C 类批次（3 lane 跨层）audit 层 reviewer 非 supervisor/doc-manager → 齐备告警（warning 语义）
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1);
-  assert.equal(miss[0].layer, 'audit');
-  assert.equal(validateWavePlan(plan), true);
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「role 合法性：8 角色集合 + 大小写归一化（Designer→designer）', …」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('role 非法（planner/auditor）→ GATE_ROLE_INVALID 告警不阻断，role 保留原值', () => {
-  const plan = buildWavePlan({ batchId: 'b-role', tasks: [
-    { id: 'p1', role: 'planner', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'a1', role: 'auditor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['p1'] },
-  ] });
-  assert.equal(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').length, 2, '两个非法角色各一条非法告警');
-  assert.ok(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').every((w) => w.code === 'GATE_ROLE_INVALID'));
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID').map((w) => w.role).sort(), ['auditor', 'planner']);
-  // C 类批次（跨层依赖）plan/audit 层均缺牵头角色 → 各一条齐备告警（与非法告警并存）
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 2);
-  assert.deepEqual(miss.map((w) => w.layer).sort(), ['audit', 'plan']);
-  const flat = Object.fromEntries(plan.wavePlan.flatMap((w) => w.tasks).map((t) => [t.id, t]));
-  assert.equal(flat.p1.role, 'planner', '非法角色保留原值（兼容）');
-  assert.equal(flat.a1.role, 'auditor');
-  assert.equal(validateWavePlan(plan), true, '告警不阻断建批');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「role 非法（planner/auditor）→ GATE_ROLE_INVALID 告警…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
 test('role 默认值修正：plan→designer / audit→supervisor / exec→coder；generic 无 layer 保持 null', () => {
   assert.equal(defaultRoleForLayer('plan'), 'designer');
@@ -189,21 +155,9 @@ test('role 默认值修正：plan→designer / audit→supervisor / exec→coder
   assert.equal(validateWavePlan(plan), true);
 });
 
-test('role 盲审扩展角色（audit-panelist 等）为合法角色：不触发 GATE_ROLE_INVALID；C 类批次 audit 层无 supervisor/doc-manager 触发 GATE_ROLE_MISSING（warning，不阻断）', () => {
-  const plan = buildWavePlan({ batchId: 'b-role', tasks: [
-    { id: 'p1', role: 'audit-panelist', layer: 'audit', produce: ['audit/r.md'] },
-    { id: 'p2', role: 'audit-aggregate', layer: 'audit', deps: ['p1'] },
-    { id: 'p3', role: 'audit-critic', layer: 'audit', deps: ['p2'] },
-  ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], '盲审扩展角色为合法角色，不触发非法告警');
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, 'C 类多 lane 批次 audit 层缺 supervisor/doc-manager → 齐备告警（warning 语义）');
-  assert.equal(miss[0].layer, 'audit');
-  assert.equal(plan.wavePlan[0].tasks[0].role, 'audit-panelist');
-  assert.equal(validateWavePlan(plan), true, 'warning 不阻断建批');
-});
-
-// ---- C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义） ----
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「role 盲审扩展角色（audit-panelist 等）为合法角色：不触发 GATE_RO…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
 test('C 类形态判定：多 wave / 多 lane / 跨 layer 依赖任一命中即 C 类；单 lane 单 wave 无跨层依赖非 C 类', () => {
   assert.equal(isCClassBatch([{ id: 'a' }], [['a']]), false, '单 lane 单 wave 无跨层依赖 → 非 C 类');
@@ -213,103 +167,38 @@ test('C 类形态判定：多 wave / 多 lane / 跨 layer 依赖任一命中即 
   assert.deepEqual(collectRoleCompletenessWarnings([{ id: 'a' }], [['a']]), [], '非 C 类形态零告警');
 });
 
-test('C 类三层批次缺 plan 层 designer/coordinator → GATE_ROLE_MISSING（不阻断建批）', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'coder', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', role: 'supervisor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, '仅 plan 层缺牵头角色');
-  assert.equal(miss[0].layer, 'plan');
-  assert.equal(miss[0].missing, 'designer|coordinator');
-  assert.equal(validateWavePlan(plan), true, 'warning 语义：不阻断建批');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次缺 plan 层 designer/coordinator → GATE_RO…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('C 类三层批次缺 audit 层 supervisor/doc-manager → GATE_ROLE_MISSING', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'designer', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', role: 'tester', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, '仅 audit 层缺牵头角色');
-  assert.equal(miss[0].layer, 'audit');
-  assert.equal(miss[0].missing, 'supervisor|doc-manager');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次缺 audit 层 supervisor/doc-manager → GATE…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('C 类三层批次角色齐备（designer + coder + supervisor）→ 无 GATE_ROLE_MISSING', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'designer', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', role: 'supervisor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), []);
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次角色齐备（designer + coder + supervisor）→ 无 …」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('C 类三层批次未声明 role：默认值补全（plan→designer / audit→supervisor）→ 无 GATE_ROLE_MISSING', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], '默认值补全后齐备，不告警');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次未声明 role：默认值补全（plan→designer / audit→su…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('C 类三层批次 manager 作 plan 牵头 → 不再满足 plan 牵头（Manager 属引擎层、不占 lane，2026-09-13 裁决）→ GATE_ROLE_MISSING(plan)', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'manager', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', role: 'supervisor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, 'manager 不属 PLAN_LEAD_ROLES → plan 层牵头缺失告警');
-  assert.equal(miss[0].layer, 'plan');
-  assert.equal(miss[0].missing, 'designer|coordinator', '缺 role 文案不含 manager');
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_INVALID'), [], 'manager 仍是合法角色（VALID_ROLES 含 manager），不误报非法');
-  // D1 收尾：manager 作 lane 角色另有**专属**告警（不混入 GATE_ROLE_MISSING，避免被读成「缺牵头角色」）
-  const mgr = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MANAGER_AS_LANE');
-  assert.equal(mgr.length, 1, 'manager 出现在 lane.role ⇒ 专属告警一条');
-  assert.equal(mgr[0].task, 'p1');
-  assert.equal(mgr[0].layer, 'plan');
-  assert.match(mgr[0].message, /engine-layer role/);
-  assert.equal(validateWavePlan(plan), true, 'warning 语义：不阻断建批');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次 manager 作 plan 牵头 → 不再满足 plan 牵头（Manag…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('单 lane 批次（非 C 类形态）不触发 GATE_ROLE_MISSING', () => {
-  // 【r2 同步 · A1/B3】旧 fixture 为「单 lane **plan** 批」——新语义下 plan 产物必须被至少一条 lane consume
-  //   （A1 主防线）⇒ 单 plan lane 批一律拒建批 `GATE_ORPHAN_PRODUCT`（V-3 硬约束：不得建 plan-only 批）。
-  //   本用例的被测点只在于「**非 C 类单 lane 形态**不触发角色齐备门禁」⇒ 改以单 audit lane 表达同一形态
-  //   （仍是有 layer 的单 lane 批、非 C 类）。plan 层的角色告警面由下方三条用例（三层批）覆盖。
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'coder', layer: 'audit', produce: ['audit/r.md'] },
-  ] });
-  assert.deepEqual(plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING'), [], '单 lane 批次非 C 类形态，不告警');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「单 lane 批次（非 C 类形态）不触发 GATE_ROLE_MISSING', () =…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('plan 层非法角色（planner）：GATE_ROLE_INVALID 与 GATE_ROLE_MISSING 并存（互不遮蔽）', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'p1', role: 'planner', layer: 'plan', produce: ['plan/s.md'] },
-    { id: 'e1', role: 'coder', layer: 'exec', consume: ['plan/s.md'], outputs: ['exec/e1/o'], deps: ['p1'] },
-    { id: 'a1', role: 'supervisor', layer: 'audit', consume: ['plan/s.md'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  const codes = plan.warnings.map((w) => w.code);
-  assert.ok(codes.includes('GATE_ROLE_INVALID'), 'planner 非法角色告警');
-  assert.ok(codes.includes('GATE_ROLE_MISSING'), 'plan 层缺 designer/coordinator 告警');
-  assert.equal(plan.warnings.find((w) => w.code === 'GATE_ROLE_MISSING').layer, 'plan');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「plan 层非法角色（planner）：GATE_ROLE_INVALID 与 GATE_R…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-test('C 类批次无 plan 层 lane：仅按存在的层检查（audit 缺 supervisor → 仅 audit 告警）', () => {
-  const plan = buildWavePlan({ batchId: 'b-c-role', tasks: [
-    { id: 'e1', role: 'coder', layer: 'exec', outputs: ['exec/e1/o'] },
-    { id: 'a1', role: 'tester', layer: 'audit', consume: ['exec/e1/o'], produce: ['audit/r.md'], deps: ['e1'] },
-  ] });
-  const miss = plan.warnings.filter((w) => w.code === 'GATE_ROLE_MISSING');
-  assert.equal(miss.length, 1, '无 plan 层不检查 plan 角色');
-  assert.equal(miss[0].layer, 'audit');
-});
+// ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类批次无 plan 层 lane：仅按存在的层检查（audit 缺 supervisor…」
+//   该 test 依托 `plan_leads`/`audit_leads` 或 `GATE_ROLE_MISSING`/`PLAN_LEAD_ROLES` —— 已随
+//   用户裁决全链移除（引擎并集逻辑 + 资产级 LEAD_NOT_IN_LAYERS 校验 + 三队资产子键）。
 
-// ---- targets 声明契约 ----
 test('O2 targets 契约：合法绝对路径 targets/targetsMarker 建批透传成功 + validateWavePlan 通过', () => {
   const plan = buildWavePlan({ batchId: 'b-tg-ok', tasks: [
     { id: 'e1', layer: 'exec', role: 'coder', outputs: ['exec/e1/o'], targets: ['D:\\repo\\x\\src\\a.js', 'D:/repo/x/docs/api.md'], targetsMarker: 'targets-claimed: true', cmd: 'x' },

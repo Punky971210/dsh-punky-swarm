@@ -6,26 +6,16 @@ export declare const ROLE_EXTENSIONS: string[];
 export declare const ROLE_WHITELIST: Set<string>;
 export declare function normalizeRole(role: unknown, extraRoles?: string[] | null): string | null;
 export declare function defaultRoleForLayer(layer: Layer | null | undefined): string | null;
-export declare const PLAN_LEAD_ROLES: Set<string>;
-export declare const AUDIT_LEAD_ROLES: Set<string>;
 export declare function isCClassBatch(tasks: WaveTask[], waves: string[][]): boolean;
 export declare function collectRoleCompletenessWarnings(tasks: WaveTask[], waves: string[][], opts?: {
     extraRoles?: string[];
-    planLeads?: string[];
-    auditLeads?: string[];
-}): ({
-    code: string;
-    layer: string;
-    missing: string;
-    message: string;
-} | {
+}): {
     role: string;
     message: string;
     layer?: Layer | undefined;
     code: string;
     task: string;
-    missing?: undefined;
-})[];
+}[];
 export declare function countExecLanes(tasks: WaveTask[]): number;
 export declare function isCPlusBatch(tasks: WaveTask[]): boolean;
 export declare function requiresAssemblyDecl(tasks: WaveTask[]): boolean;

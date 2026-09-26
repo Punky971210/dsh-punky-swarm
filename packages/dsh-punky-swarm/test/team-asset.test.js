@@ -386,26 +386,20 @@ test('readTeamAsset 与 loadTeamAsset 对不存在团队均返回结构化结果
 // 背景：`chain.js` 已在 R2-3 对齐该口径；资产级同族函数此前仍为「零问题」⇒
 //   `assertTeamAssetReady`（`lib/tools/core.js:447`）把**仅 warning** 的资产也当「不可用」拒载。
 // 口径：`ok = !hasBlockingProblems(problems)`；warning 只提示不否决，且**逐条完整保留**在 `problems`。
-// 资产级 warning 码恰三条：`ROLE_LEXICAL` / `LEAD_NOT_IN_LAYERS` / `CONSUME_FIELD_NOT_ALLOWED`。
+// 资产级 warning 码：`ROLE_LEXICAL` / `CONSUME_FIELD_NOT_ALLOWED`
+//   （原第三条 `LEAD_NOT_IN_LAYERS` 的**资产级产出点**已随 2026-09-26 裁决删除 —— `roles.plan_leads` /
+//    `roles.audit_leads` 两个子键全链移除；该常量仍保留并被 `chain.js` 用于**链声明侧**的角色悬空校验。）
 test('R2-3-a 仅 warning ⇒ ok=true 且 problems **非空**（warning 不丢弃、不降级为日志）', () => {
-  // ① 牵头角色悬空（LEAD_NOT_IN_LAYERS ∈ warning 侧）
-  const a = baseAsset();
-  a.roles = { plan_leads: ['ghost-lead'] };
-  const r1 = validateTeamAsset(a);
-  assert.equal(r1.ok, true, '仅 warning ⇒ ok:true：' + JSON.stringify(r1.problems));
-  assert.ok(r1.problems.length > 0, 'problems 必须非空（warning 逐条保留）');
-  assert.equal(CODES(r1).includes(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS), true, '码面原样保留');
-  assert.equal(r1.problems.every((p) => p.severity === 'warning'), true, '逐条须带 severity=warning');
-
-  // ② 扩展角色词法非法（ROLE_LEXICAL ∈ warning 侧）
+  // ① 扩展角色词法非法（ROLE_LEXICAL ∈ warning 侧）
   const b = baseAsset();
   b.roles = { extra: ['Not_Kebab'] };
   const r2 = validateTeamAsset(b);
   assert.equal(r2.ok, true, '仅 warning（词法）⇒ ok:true：' + JSON.stringify(r2.problems));
   assert.ok(r2.problems.length > 0, 'problems 必须非空');
   assert.equal(CODES(r2).includes(TEAM_ASSET_CODES.ROLE_LEXICAL), true, '码面原样保留');
+  assert.equal(r2.problems.every((p) => p.severity === 'warning'), true, '逐条须带 severity=warning');
 
-  // ③ consume_field 非白名单（CONSUME_FIELD_NOT_ALLOWED ∈ warning 侧；读端回落 'consume'）
+  // ② consume_field 非白名单（CONSUME_FIELD_NOT_ALLOWED ∈ warning 侧；读端回落 'consume'）
   const c = baseAsset();
   c.flows.exec.consume_field = 'nope';
   const r3 = validateTeamAsset(c);
@@ -413,8 +407,8 @@ test('R2-3-a 仅 warning ⇒ ok=true 且 problems **非空**（warning 不丢弃
   assert.ok(r3.problems.length > 0, 'problems 必须非空');
   assert.equal(CODES(r3).includes(TEAM_ASSET_CODES.CONSUME_FIELD_NOT_ALLOWED), true, '码面原样保留');
 
-  // 三条 warning 码均**不是** blocking 级（与 team-asset.js 的 BLOCKING_CODES 分档一致）
-  for (const code of [TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS, TEAM_ASSET_CODES.ROLE_LEXICAL, TEAM_ASSET_CODES.CONSUME_FIELD_NOT_ALLOWED]) {
+  // warning 码均**不是** blocking 级（与 team-asset.js 的 BLOCKING_CODES 分档一致）
+  for (const code of [TEAM_ASSET_CODES.ROLE_LEXICAL, TEAM_ASSET_CODES.CONSUME_FIELD_NOT_ALLOWED]) {
     assert.equal(severityOfProblem({ code }), 'warning', code + ' 须为 warning 级');
   }
 });
@@ -430,11 +424,11 @@ test('R2-3-b 存在 blocking ⇒ ok=false（warning 与 blocking 并存时以 bl
 
   // blocking + warning 并存：仍拒，且 warning 条目**在场**（不得被吞）
   const b = baseAsset();
-  b.roles = { plan_leads: ['ghost-lead'] };   // warning
+  b.roles = { extra: ['Not_Kebab'] };         // warning（ROLE_LEXICAL）
   b.flows.plan.produce_field = 'nope';        // blocking
   const r2 = validateTeamAsset(b);
   assert.equal(r2.ok, false, 'blocking 与 warning 并存 ⇒ 仍拒：' + JSON.stringify(r2.problems));
-  assert.equal(CODES(r2).includes(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS), true, '共存 warning 不得被吞');
+  assert.equal(CODES(r2).includes(TEAM_ASSET_CODES.ROLE_LEXICAL), true, '共存 warning 不得被吞');
   assert.equal(CODES(r2).includes(TEAM_ASSET_CODES.FIELD_NOT_ALLOWED), true, 'blocking 条目在场');
 });
 

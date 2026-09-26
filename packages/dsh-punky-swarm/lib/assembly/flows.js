@@ -289,7 +289,7 @@ function consumeFieldProblemOf(flow, layer) {
 //   ② `roles.extra` = 引擎基础集之外的**补充**角色名（与 ① 并集；可与 ① 重叠）；
 //   ③ `roles.plan_leads` / `roles.audit_leads` = 该团队认可的**额外牵头角色**（与引擎基础牵头集并集，不替换）。
 // 缺口修复（实测，2026-09-14）：`extra` 曾只读 ②，于是「按资产把自有角色写进 layers」这种最自然写法
-//   建批时每个自定义角色被判 `GATE_ROLE_INVALID`、计划/验收位报 `GATE_ROLE_MISSING`——指引（放开层/角色/技能组装）
+//   建批时每个自定义角色被判 `GATE_ROLE_INVALID`——指引（放开层/角色/技能组装）
 //   与白名单（8 基础角色 ∪ 盲审三角色）对不上。现以 `unionRoleVocabulary` 把 ①∪② 作为**该团队的角色词法集**，
 //   白名单与资产声明面**同源**：声明了 = 可用（②变成可选补充，不再是隐藏必填项）。
 const ROLE_CACHE = new Map(); // key → { sig, out }（sig 同 CACHE：改资产即时生效，不需重启）
@@ -322,7 +322,7 @@ export function resolveTeamRoles(team, { root = packageRoot(), useCache = true }
     const hit = ROLE_CACHE.get(key);
     if (hit && hit.sig === sig) return hit.out;
   }
-  const empty = { ok: false, team: team ?? null, extra: [], layerRoles: [], layerRolesByLayer: {}, planLeads: [], auditLeads: [], path: null, problems: [] };
+  const empty = { ok: false, team: team ?? null, extra: [], layerRoles: [], layerRolesByLayer: {}, path: null, problems: [] };
   let out = empty;
   if (typeof team === 'string' && team.trim().length > 0) {
     const r = loadTeamAsset(root, team);
@@ -349,8 +349,6 @@ export function resolveTeamRoles(team, { root = packageRoot(), useCache = true }
         extra: Array.isArray(roles.extra) ? [...roles.extra] : [],
         layerRoles: flat,
         layerRolesByLayer: byLayer,
-        planLeads: Array.isArray(roles.plan_leads) ? [...roles.plan_leads] : [],
-        auditLeads: Array.isArray(roles.audit_leads) ? [...roles.audit_leads] : [],
         path: r.path ?? null,
         problems: [],
       };

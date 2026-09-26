@@ -929,11 +929,11 @@
       "todos": 0
     },
     "test/role-pluggable.test.js": {
-      "asserts": 27,
+      "asserts": 0,
       "blankLines": 14,
-      "lines": 140,
+      "lines": 76,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 0,
       "todos": 0
     },
     "test/s2-prime-wake-probe.test.js": {
@@ -1025,9 +1025,9 @@
       "todos": 0
     },
     "test/team-asset.test.js": {
-      "asserts": 121,
-      "blankLines": 42,
-      "lines": 517,
+      "asserts": 118,
+      "blankLines": 41,
+      "lines": 511,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -1193,11 +1193,11 @@
       "todos": 0
     },
     "test/wave-plan.test.js": {
-      "asserts": 123,
-      "blankLines": 35,
-      "lines": 359,
+      "asserts": 73,
+      "blankLines": 34,
+      "lines": 248,
       "tautologies": 0,
-      "tests": 30,
+      "tests": 19,
       "todos": 0
     },
     "test/webui-config-trust.test.js": {
@@ -1241,7 +1241,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-26T17:02:25Z",
+  "generatedAt": "2026-09-26T18:11:36Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1252,15 +1252,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-26 用户裁决：技能 recommend 不再设门禁 —— 彻底移除 GATE_SKILL_MISSING（core.js 产出点 + 事件注释 + 两个孤儿函数 resolvableSkillNames/declaredSkillNamesOf + 工具描述两处）；测试面同步（删 3 条围绕该码的空转 test、改 2 处 benign 集、清注释引用）；顺带三队资产同款瘦身（删 manifest+chain）与 wave-plan.d.ts 补指针型 JSDoc",
+  "reason": "2026-09-26 Q-8-C 全链删除 plan_leads/audit_leads（用户裁决 C）：三队资产子键 + flows.js 解析 + team-asset.js 资产级 LEAD_NOT_IN_LAYERS 校验块 + wave-plan.ts 的 PLAN_LEAD_ROLES/AUDIT_LEAD_ROLES 与两段 GATE_ROLE_MISSING 判定；测试面同步（wave-plan 删 11 条 / role-pluggable 删 5 条 + 修 import / team-asset 的 R2-3-a-b 改用 ROLE_LEXICAL 作 warning 代表）",
   "schema": 1,
   "totals": {
-    "asserts": 8274,
-    "blankLines": 4087,
+    "asserts": 8194,
+    "blankLines": 4085,
     "files": 155,
-    "lines": 44816,
+    "lines": 44635,
     "tautologies": 0,
-    "tests": 1724,
+    "tests": 1708,
     "todos": 4
   }
 }
