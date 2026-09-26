@@ -69,7 +69,7 @@ const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.a
 // P3a 自动结算（规格 §2/§3）：**单点判定**（`lib/engine/auto-settle.js`）——本文件只用其兼底路入口
 //   （`swarm_report(type='settle-request')` 显式交付意图）；主路 `subagent/end` 的装配期订阅在 `lib/index.js`，
 //   两路共用同一判定函数（禁第二套口径）。
-import { autoSettleLane, AUTO_SETTLE_TRIGGERS } from '../engine/auto-settle.js';
+import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL } from '../engine/auto-settle.js';
 import * as swarmMailbox from '../comms/mailbox.js'; // 成员回报投递（文件 mailbox）
 
 // 建批期告警码 → 事件 type 映射表（GAP-S9）：`wave_plan` 的告警事件化**按码映射**，不再把「非
@@ -437,7 +437,8 @@ export function assertTeamAssetReady(team, { root = packageRoot() } = {}) {
  * 无 `chain` 声明 ⇒ 放行（R5 向后兼容锁：无链 = 无推进，行为逐字不变）。
  * 首个问题**原样透出**码面（与 `assertTeamAssetReady` 同形的 fail-closed 形态，便于反例用例逐码断言）。
  * 为何不折进 `validateTeamAsset`：那里的码面按 `BLOCKING_CODES` 分严重级，而本组码里
- * `TEAM_ASSET_LEAD_NOT_IN_LAYERS` / `TEAM_ASSET_REWORK_INVALID` 是 warning 级 —— 折进去会让同一份声明
+ * warning 级码（如 `TEAM_ASSET_REWORK_INVALID`；原同列的「牵头角色悬空」码已随链声明侧校验退役、
+ * 2026-09-26 删除）—— 折进去会让同一份声明
  * 经两条严重级通道重复报告；本函数是**单一强制点**（详见 `lib/assembly/chain.js` 头注释「加载期口径」）。
  */
 export function assertChainReady(team, { root = packageRoot() } = {}) {
@@ -1475,8 +1476,25 @@ export function createCoreTools(ctx, deps) {
           ? await autoSettleLane({ ctx, store, root, liveConfig: readLiveConfig(deps) }, {
             sessionId: tgt.sessionId, batchId: tgt.batchId, lane: tgt.lane,
             workerSessionId: tgt.caller, trigger: AUTO_SETTLE_TRIGGERS.settleRequest,
+            // 【2026-09-26 用户裁决：门禁拒派要"打回成员"而非"停轮"】
+            //   `report` ⇒ 判定失败时**不落 `auto.settle.paused`、不改 `batch.phase`**，
+            //   把 gate 拒因原样回传 ⇒ 下方立即 `throw` ⇒ **本次工具调用失败** ⇒
+            //   成员收到拒因全文，**自行修改产物后重试**（批保持 `running`，无需 Leader 介入）。
+            //   缺省 `pause` 路径（宿主 `subagent/end` 主路）逐字不变。
+            onFail: AUTO_SETTLE_ON_FAIL.report,
           })
           : null;
+        // 打回（2026-09-26 用户裁决）：**gate 类形态错误**（`GATE_*`）⇒ 工具调用失败，让成员改。
+        //   ▸ 投递与留痕**已先行完成**（`deliverSwarmMessage` + `appendSwarmEventOf` + `auto.settle.skipped`
+        //     带 `gate-rejected-to-member:` 前缀）⇒ 「消息已投递 + 事件已落」这一既有事实**不被抹掉**，
+        //     只有【gate 结论】从「返回值」升级为「工具调用失败」。
+        //   ▸ 非 `GATE_*`（如 `error` / `no-lane-binding`）**不打回**，保持既有返回语义。
+        if (settle && settle.ok === false && typeof settle.code === 'string' && settle.code.startsWith('GATE_')) {
+          throw new Error(settle.code + ': ' + settle.reason
+            + '【打回：批未停轮】被拒产物 = ' + (args.artifactPath ?? '(未声明 artifactPath)')
+            + '；修正后请【重新】handoff_submit（如交接断言需同步）并再次 swarm_report(type=\'settle-request\')。'
+            + '若确认产物无需修改，请携 reason 原文回报 Leader 裁决。');
+        }
         // 唤醒 Leader（规格 §2.5）：位置在 `appendSwarmEventOf`（**留痕先于唤醒**）之后 ⇒
         //   唤醒失败/被节流都**不损**「消息已投递 + 事件已落」这一既有事实；返回值只并入 `wake` 键。
         //   Leader 会话来源**逐字复用** `tgt.sessionId`（有 dispatch 绑定 = 批 owner 会话；无绑定 =

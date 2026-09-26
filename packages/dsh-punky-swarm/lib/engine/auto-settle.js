@@ -110,6 +110,14 @@ const SETTLEABLE_STOP_REASONS = Object.freeze(['completed']);
  *  本轮只实现缺省值；`review` / `failed` 为后续项（未落未实现分支）。 */
 export const DEFAULT_ON_FAIL = 'pause';
 
+/** 【2026-09-26 用户裁决 · 落地 `onFail` 的第二态】判定失败处置的**实现态枚举**（承上方 §3 规划）：
+ *  · `pause`（= `DEFAULT_ON_FAIL`）＝ 落 `auto.settle.paused` + `batch.phase=paused`（**停轮**，等人工介入）；
+ *  · `report` ＝ **不落 paused、不改相位**，把 gate 拒因**原样回传调用方** ⇒ 调用方 `throw` ⇒
+ *    **工具调用失败打回成员**，成员自行修改后重试（批保持 `running`，**不停轮、不需 Leader 介入**）。
+ *  取向：**可归因的形态错误（`GATE_*`）打回生产者；不可归因的失败（`error` / `no-lane-binding`）仍走 `pause`**。
+ *  ⚠ 规格 §3 提到的 `review` / `failed` 两态**仍未实现**（本次只落 `report`）。 */
+export const AUTO_SETTLE_ON_FAIL = Object.freeze({ pause: DEFAULT_ON_FAIL, report: 'report' });
+
 /** audit 层 lane 的**结算职责转移**码（(b) 定案）：本模块遇到 audit 层 lane 时的 `auto.settle.skipped.reason`。
  *  **沿用既有事件类型**（`auto.settle.skipped`），与 `phase-*` / `lane-terminal` / `already-settled` 同列
  *  ⇒ **不新增事件常量**、不新增 `GATE_*` 拒绝码（拒面仍由 `GATE_SETTLE_NOTE_MISSING` /
@@ -215,6 +223,7 @@ function pauseForFail(store, sessionId, batchId, { lane, reason, code, trigger, 
  *   **不抛错**（观察者纪律；异常隔离为 `{ok:false, action:'error'}`）。
  */
 export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
+  onFail = AUTO_SETTLE_ON_FAIL.pause,
   sessionId, batchId, lane, workerSessionId = null, stopReason = null, trigger,
 } = {}) {
   const out = { ok: true, action: 'none', reason: null, lane: lane ?? null, status: null };
@@ -298,6 +307,19 @@ export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
     } catch (e) {
       const msg = String(e?.message ?? e);
       gateCode = (/^[A-Z][A-Z0-9_]+/.exec(msg) ?? [null])[0];
+      // 【2026-09-26 用户裁决】onFail 二态：
+      //   · 'pause'（缺省，存量行为逐字不变）：落 auto.settle.paused + batch.phase=paused（停轮，等人工）
+      //   · 'report'（兼底路 settle-request 用）：**不落 paused、不改相位**，把 gate 拒因**回传调用方**
+      //     ⇒ 调用方（工具 execute）据此 throw ⇒ **工具调用失败打回成员**，成员自行修改后重试。
+      //     设计意图：可归因的形态错误（GATE_*）应打回生产者；不可归因的失败（error 等）仍走 pause。
+      if (onFail === AUTO_SETTLE_ON_FAIL.report) {
+        store.appendEvent(sessionId, batchId, EVT_AUTO_SETTLE_SKIPPED, {
+          lane, reason: 'gate-rejected-to-member: ' + msg, code: gateCode, trigger, settleId, workerSessionId, status: from,
+        });
+        out.ok = false; out.action = 'rejected'; out.reason = msg; out.code = gateCode;
+        out.status = (store.readBatch(sessionId, batchId)?.lanes ?? {})[lane] ?? null;
+        return out;
+      }
       const p = pauseForFail(store, sessionId, batchId, {
         lane, reason: msg, code: gateCode, trigger, settleId, workerSessionId, startPhase: batch.phase,
       });
