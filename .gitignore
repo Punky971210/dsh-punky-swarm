@@ -10,6 +10,11 @@ node_modules/
 # local rollback anchors (not for distribution)
 backups/
 
+# 本地回滚备份（Leader 落盘的 .bak / .bak-<date> / 目录备份 —— 不入库）
+**/.bak-*/
+*.bak
+*.bak-*
+
 # editor / OS
 .DS_Store
 Thumbs.db
