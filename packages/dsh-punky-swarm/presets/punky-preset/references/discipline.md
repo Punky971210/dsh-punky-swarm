@@ -70,6 +70,21 @@
 - **载体**：`plan/assembly-statement.md`，或 spec 内 `## 角色装配声明` 章节（推荐独立文件）。
 - **契约地位**：该声明文件是**人可读的载体**，引擎侧的强制点是**上面那条入参校验**，**不读** plan 产物内容（只交文档、不传 `assembly` 入参 → 建批被拒）⇒ 二者**同时**满足：入参给全 + 文档落盘（可选地把文档声明为 plan `produce` 与 exec `consume`，用 Tier3 契约把「文档齐备」变成门禁）。
 
+### 四、`team` 参数（2026-09-26 订正：**必填，勿漏**）
+
+- **症状**：漏传 ⇒ **宿主参数校验直接报** `invalid arguments: missing required property "team"`（**注意：这不是引擎的 `GATE_*` 门禁码**，而是工具 schema 层拒收 ⇒ 查 `gate_status` 也查不到，容易误判为"引擎坏了"）。
+- **它不是「装配声明」那么简单**：引擎拿 `team` 当 **4 个东西的数据源**——
+  1. **`flows`**：`team-asset:entry_requires`（**入口门禁**）；
+  2. **`chain`**：链路/分层校验（规范位在资产顶层）；
+  3. **`criteria_from`**：**audit 判据源锚点**（`flows.js:524`）；
+  4. **`snapshot` / `teamAssetSignature`**：资产指纹（快照与判据锚）。
+  ⇒ 实现见 `lib/assembly/team-asset.js`（`loadTeamAsset` / `teamAssetSignature`）与 `chain.js:627`、`flows.js:100·112·221·320·328·524`、`snapshot.js:165·175`。
+- **⇒ 灵活分配（dispatch 通道）≠ 无需 `team`**：**传任一存在的 team 名即可**。**当前可解析 5 个**：`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`（枚举自 `presets/*/team-asset.{json,yml}`）。
+- **⚠ 严格禁止的两个值**：`punky-preset`（那是**预设模式**资产、**目录内无 `team-asset.yml`** ⇒ `TEAM_ASSET_*` 必拒）｜`generic`（**已废除**）。
+- **选型**：按**任务领域就近**（软件改造 → `software-team`；引擎自身改造 → `engine-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`；**拿不准就按「产物形态最接近」选**）。
+- **⚠ 资产内容当前「搁置/未优化」**（用户 2026-09-24/26 裁决）⇒ `team` 目前**只用于让引擎解析到资产存在性**，**实际装配按成员槽位 + 指引走**，**不必等资产整理**。
+- **远期立项（2026-09-26 用户裁决）**：**②** 引擎侧让 `team` 可选（缺省跳过资产类校验；**代价** = dispatch 批同时失去入口门禁与判据锚点，**风险较高**，故定为**远期**）｜**③** 新增轻量 `dispatch-team` 资产（**推荐方向**，可立项；资产极简：有 `id`/`roles`，**无 chain/flows**）。
+
 ## §0c 职责分工
 
 - **Manager = 引擎层功能角色**（不属任一层、**不占 lane**，归属见 §0g 三）：只**代劳指挥**——收发消息（`mailbox` 元数据）、读任务状态（`batch_status` / `gate_status`）、**建议**指派（空闲节点发现）；**不产 plan 产物、不得充当 plan 层牵头**（牵头集见 §0g 三）。
@@ -89,72 +104,6 @@
 - **任务包强制项（D-6，2026-09-15）：写文件一律走 `edit` / `write` 在册工具**——任务包**必须显式写明**此条，并写明「shell 写盘（`>` 重定向 / `Set-Content` / `Out-File` / `New-Item` / `Copy-Item` 等）会被 **`L3-W01` 当场 DENY**」。**依据（实测根因）**：本会话三次批次因同一 `L3-W01`（阈 3 / 600s）达阈自动暂停 ⇒ 属**任务包缺该条**的行为面根因，非偶发。**配套口径**：① 写盘被拒**不得第四次重试同一命令**（换路径即解）；② 中间文件用 `edit`/`write` 落盘，临时探针可落 `%TEMP%` 但**仍须用在册工具**；③ 审计 / 探针 lane 同样适用。
 
 - **任务包强制项（D-9，2026-09-18 实测）：`gate:` 行必须 cwd 无关**——产物若声明命令 gate，任务包**必须写明**「**命令在 lane 产物根（非包根）执行**，故 `gate:` 行内**必须自带 `cd /d <包根>` 或全部使用绝对路径**」（真源与范式见附录 A.4）。**依据（实测根因）**：批 `panel-redesign-20260918` 首轮因裸相对路径（`node --import ./test/helpers/…`）在产物根下 exit 1，被自动结算判 `GATE_EXIT_NONZERO` 并 `pause` —— 属**任务包缺该条**的行为面根因，非功能缺陷（修正 gate 行后 exit 0）。
-
-## §0f L0 watch 消费协议
-
-- **代行范围**：**未拉起 Manager 的批**（= 显式声明 `leader-direct`，或 A/B 级直做）由 Leader 代行；**声明 `raise` 的批** running 后调度与 watch 归 Manager（§0g）。
-- **代行动作**：每次 worker 结算（`member_settle`）或确认空闲时——`mailbox_read(broadcast)` 查 `longrun.candidate` 广播，再以 `lane_longrun`（缺省全批）核对探针态（`candidate` / `emitted` / `reason`）。
-- **命中候选的三分支处置**：
-  1. lane 近窗有 checkpoint / 活动 → **等待继续观察**；
-  2. 确无进展且重派价值明确 → `interrupt_agent` 停当前轮后 `member_status(idle→running)` 重派，或重开新批次；
-  3. 处置存疑 → **上报用户裁决**。
-- **`raise` 批禁止代行**：声明 `raise` 的批 running 后须按 §0g 拉起 Manager；拉起失败或 Manager 缺席时**恢复拉起或上报用户裁决**，**不得**以自担 watch 豁免 §0g 义务。
-- **豁免留痕**：Leader 代行（`leader-direct` 批）时，批备注 / 事件须写明「**本批由 Leader 直驱**」。
-
-## §0g Leader 唤醒协议（Manager 代劳指挥）
-
-### 一、拉起时机（硬序）
-
-- worker 由 **Leader 派发**（depth-1 直系，可 `send_message` 唤醒）。
-- **默认口径 = 拉起（纪律口径；M-01 订正：引擎硬门已删）**：**建批即默认拉起 Manager**（`assembly.managerPlan` 缺省 `raise`）——经 `batch_phase` 进入 **running** 后、**首个 exec 派发前**，Leader **应当拉起 Manager**——以 continuable subagent **一次注入**（批次上下文 + 调度循环，注入模板见 `presets/punky-preset/references/manager.md`），并 `batch_phase({ batchId, manager: { agentId } })` 登记（写批字段 `batch.manager` + `batch.manager.raised` 事件，`batch_status` 可查）。
-  - **该登记自 2026-09-21 起 = legacy 登记面，不再是派发前置**：未登记 Manager **不拒派**（原码 `GATE_MANAGER_NOT_RAISED` 已删，`lib/**` 内字面零命中）；在册判定改由**建批期官方 roster 承抽**（读端 `lib/tools/core.js#managerRosterOf`：`ctx.get('agentTeams')` → `listMembers`），无约定名 `manager` 成员时落**观察事件** `gate.manager_roster_gap`，并回显 `managerRoster`。⇒「必须先拉起再派 exec」从**引擎门**降为**纪律**：不拉起不会报错，但**无调度代管者**，watch / 结算节奏的责任回到 Leader（§0f）。
-- **需 Leader 直驱时**：建批**显式**声明 `assembly.managerPlan: 'leader-direct'`（**退出默认 raise**，属显式选择而非缺省）；此时调度按 §0f 由 Leader 代行并留痕「本批由 Leader 直驱」。
-  - **适用范围收口（2026-09-24）**：① **逐批显式**——`leader-direct` 只对本批生效，不继承、不粘连历史批（判据 = 批次 JSON `assembly.managerPlan`，不做运行时推断）；② **不触发 `gate.manager_roster_gap`**（引擎侧按 `managerPlan` 前置分支判定，`leader-direct` 批本无 Manager 消费者）；③ 该批内**链不消费 lane 命名**（§11 R-4 已随之订正），lane id 可自由命名但须在批内自证「链不消费」；④ 该批 worker 回执走**单通道** `swarm_report`（→Leader），不写 `outbox`（无 Manager 消费者，§4）。
-- **A / B 级**：豁免（不拉起）。
-
-### 二、拉起后的指挥循环（Leader 侧）
-
-1. Manager 经 mailbox **建议派发**（读 `batch_status` 黑板 → 建议 lane / 角色）→ Leader 按建议 `subagent` 派发 worker；
-2. worker report 完成 → Leader **只** `send_message` Manager「X 完成」（一行事件信号，**不做调度决策**）；
-3. Manager 收 worker mailbox 通知 → `member_status` / `member_settle` 结算裁决 → 建议下一派；
-4. 批次全终态 → Manager report「批次完成」→ Leader **终门禁**。
-
-- Leader **不做调度决策**（不读 worker 全文回执、不决定派发顺序）——调度循环在 **Manager 上下文**，Leader 上下文只留**粗拆 / 唤醒 / 终门禁**（操作见 §1 / §4 / §5）。
-
-### 三、层归属（裁决口径，不可改）
-
-- Manager 是**引擎层功能角色**（continuable subagent，由 Leader 直系拉起），**不属 plan / exec / audit 任一层、不占 lane**。
-- **不得充当 plan 层牵头**——`PLAN_LEAD_ROLES` 仅含 `designer` / `coordinator`；plan 层牵头须由**该领域自己的计划角色**承担（软件工程团队 = designer / coordinator；设计与写作等非工程流程 = 其团队技能声明的计划角色，走各自装配，不复用软件工程角色编制）。
-- Manager 与其拉起计划写成 plan 层产物（`plan/assembly-statement.md`）时，只是**声明载体**，不代表 Manager 属 plan 层。
-
-## §0h longrun 长程豁免（R-3）
-
-- **触发**：成员负责**长程第三方调用**（AI 渲染 / 大文件下载 / 依赖库安装等，远超常规时长）。
-- **授予面**：由 **Leader 派遣时一并附带**——`member_status` 的**派发面**参数（`pending→running` / `idle→running` 两处）。**成员不可自改**。
-- **撤销**：须**显式**调 `member_status.revokeExempt`（落 `lane.exempt.revoked`）；**不随其它状态操作隐式生效**。
-- **豁免是「本次派发」的属性（自动清退）**：① 结算终态（merged/failed/skipped/conflict）时同步清退该 lane 的豁免；② **重派未带 `exempt` 时旧豁免自动失效**（静默清退、不产 `lane.exempt.revoked`——该事件专表 Leader 显式撤销；读端以**最近一次** `lane.exempt.granted` 为准判读）。若不如此，重派 lane 会继承旧放大阈值与 stalled 豁免 → 真停滞者被漏判。
-- **拒载码**：非派发面带豁免参数（`to !== 'running'`）一律拒 **`GATE_EXEMPT_NOT_DISPATCH`**；带豁免但既非派发也非撤销（无 `status`）拒**同码**。
-- **语义**：**阈值按倍率放宽**——`effectiveMaxDurationMs = maxDurationMs × multiplier`（默认 **4×**；档位表：
-
-| `exemptType` | 默认倍率 | 典型场景 |
-|---|---|---|
-| `ai-render` | **8** | AI 渲染 / 生成类比长时任务 |
-| `large-download` | **6** | 大文件下载 |
-| `dep-install` | **4** | 依赖库安装 |
-| `none` | **4** | 无特定类型（等同默认） |
-
-  - 可显式 `multiplier` 覆盖档位倍率；未知 `type` 拒 `GATE_EXEMPT_TYPE_UNKNOWN`，非法 `multiplier` 拒 `GATE_EXEMPT_INVALID`。
-- **`stalled` 联动**：豁免 lane **同时豁免 stalled 追问**（`stalled: true` 为默认）；但仍须写 checkpoint / 心跳（供人工巡查与近窗判读）。
-- **边界**：豁免**只放宽时长阈值**，**不放宽 `noProgressWindowMs`**。
-- **载荷键名**：授予 / 撤销载荷类型一律写 **`exemptType`**——`type` 键承载事件名，**不可占用**。
-
-## §0i 消费留痕与 D-1 纪律版
-
-- **ack 留痕**：longrun 候选与 stalled 追问**均须 `mailbox_ack`**；未 ack 超 `unconsumedTimeoutMs` 即产 `lane.longrun.unconsumed`。
-- **未 ack 即未消费**：处置责任仍在消费方（管理态**不因广播送达而转移**）；判据锚定 `isAcked`——**不得**按消息文件存在与否反推消费。
-- **D-1 红线**：C 类批次的执行**一律经 wavePlan lane**（`wave_plan` 建批 + `member_status` 派发），**禁用裸 subagent** 充当执行单元——裸 subagent 不在探测扫描面（`phase=running ∧ lane=running`）内、不进 DAG、不落门禁，派出去即**脱离治理**；临时拆活走**细拆补 lane**。
-- **进度快照**：**每完成一个子步骤立刻**落盘可独立读取的进度快照 `<lane>/progress/NN-<slug>.md`（含 `step N/total` 与产物落点），**禁止攒批**。此处 `<lane>` = **lane id**（**非层名**）；完整绝对路径 = `<artifacts>/<batchId>/<lane>/progress/NN-<slug>.md`，`<lane>/progress/` 目录**由 worker 自建**（引擎不建目录、不校验落点）。
-  - 双重作用：① 崩溃后续跑地基（**物理留存，不触发自动续跑**）；② 探针可见的**非 git 进度信号**（无事件无产物期间，欠快照即被判停滞）。
 
 ## §0j 临时组队与 Leader 编排纪律
 
@@ -237,9 +186,9 @@
 
 | 字段 | 消费点（引擎在哪读它） | 语义 |
 |---|---|---|
-| `criteria_from` | **entry 期**（`gates.ts checkEntryGate`）：声明存在时按其 **glob 指名**锚点产物，**未被指名的 plan 产物带 `## 验收标准` 不顶用**；缺省回落（consume 中 plan 产物任一） | 判据来自哪份 plan 产物 |
+| `criteria_from` | **entry 期**（`gates.js checkEntryGate`）：声明存在时按其 **glob 指名**锚点产物，**未被指名的 plan 产物带 `## 验收标准` 不顶用**；缺省回落（consume 中 plan 产物任一） | 判据来自哪份 plan 产物 |
 | `consumes_required` | **建批期**（`core.js`）：声明的**每个层前缀**须至少被一条 audit lane 的 `consume` 命中，否则拒建批 `GATE_AUDIT_INPUT_MISSING`（团队叠加约束） | audit 必须覆盖哪些层 |
-| `verdict` | **complete 门禁**（`gates.ts checkCompleteGate`）：**唯一真源**；团队未声明时按**引擎基线** `['pass','skip']`（legacy `flows.complete.require_audit_outcomes` 回落已**完全清退**）。取值 ∈ `{pass, skip, fail, conflict}` | audit 结论取值域 |
+| `verdict` | **complete 门禁**（`gates.js checkCompleteGate`）：**唯一真源**；团队未声明时按**引擎基线** `['pass','skip']`（legacy `flows.complete.require_audit_outcomes` 回落已**完全清退**）。取值 ∈ `{pass, skip, fail, conflict}` | audit 结论取值域 |
 | `exempt` / `reason` | **建批期**：`exempt` 决定豁免分支，`reason` 进 `GATE_AUDIT_CONTRACT_EXEMPT` 告警载荷 | 显式豁免 + 理由 |
 | ~~`checklist_anchor`~~ | **已移除**：自由文本**不可机器判定** ⇒ 归**技能手册/文档面**（`acceptance-gate/SKILL.md §2.5`），不占引擎声明面 | — |
 - **建批期门禁**：批次**含 audit lane** 且**解析到团队资产**时，缺 `audit_contract` → **拒建批** `GATE_AUDIT_CONTRACT_MISSING`；**显式空 `{}` 或 `{exempt:true}`** → 放行但落**留痕告警** `GATE_AUDIT_CONTRACT_EXEMPT`（带 `reason` 则一并记）。
@@ -304,7 +253,7 @@
 | 方案 | 内容 | 状态 |
 |---|---|---|
 | **A** | roster 4 件用官方；**任务与交接一律走蟛蜞自建** | **已认可**；本批落指引（本节） |
-| **B** | onto 的 dispatch 增 **`provider:'agent-team'`** 分支：用 `spawn_teammate` 替代宿主 `rt.start` seam 承载 lane worker；**任务 / 交接 / 黑板仍全走 onto** | **方向（待实施，未排期）**——现役唯一实现 = 宿主 subagent seam（`config.dispatch.provider`，本机取值 `subagent`；`lib/engine/dispatch.js` 走 `rt.start`）。引擎内**今日**与官方 Agent Teams 的关系只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`，§0g 一）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）——**没有** `provider:'agent-team'` 派发分支（设计稿：`docs/agent-team-bridge-design-draft-v0-2026-09-21.md`） |
+| **B** | onto 的 dispatch 增 **`provider:'agent-team'`** 分支：用 `spawn_teammate` 替代宿主 `rt.start` seam 承载 lane worker；**任务 / 交接 / 黑板仍全走 onto** | **作废**（历史记录）——依据用户 C1「**不做 provider 分离方案**」；现役唯一实现 = 宿主 subagent seam（`config.dispatch.provider`，本机取值 `subagent`；`lib/engine/dispatch.js` 走 `rt.start`）。引擎内**今日**与官方 Agent Teams 的关系只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`，§0g 一）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）——**没有** `provider:'agent-team'` 派发分支（设计稿：`docs/agent-team-bridge-design-draft-v0-2026-09-21.md`） |
 | **C** | 在 `member_settle` 路径**镜像双写官方板**（真填 `officialTaskId`） | **不做（正式确认）**——会把上表 8 项缺陷引入治理链；官方板为实验性、契约不稳定 |
 
 - **口径纪律**：`officialTaskId` 一类「双写」字段在本引擎**未接线**——无消费点、无校验、无判定；任何回显**不得**读作「已双写」。
@@ -314,7 +263,7 @@
 | 通道 | 适用任务 | 派发方式 | 黑板「执行者」锚点 |
 |---|---|---|---|
 | **team** | **固定任务**（角色与流程可预见；software 口径 = **7 角色 + leader**） | Leader `spawn_teammate`（官方 roster） | **`roster` 成员名**（黑板**引用** roster） |
-| **dispatch**（现役） | **需灵活分配的任务** | `lane_dispatch` → 引擎自派 subagent（`rt.start`） | `owner`（批的 owner 会话）+ **`member.dispatch{ workerSessionId, lane }`**（引擎**自动写**、唯一写路径） |
+| **dispatch**（现役） | **需灵活分配、较轻量**的任务 | `lane_dispatch` → 引擎自派 subagent（`rt.start`） | `owner`（批的 owner 会话）+ **`member.dispatch{ workerSessionId, lane }`**（引擎**自动写**、唯一写路径） |
 | **裸 subagent**（B 档） | 简单 / 单步，**不进批** | Leader `subagent` | **无**（不进批次黑板） |
 
 - **硬口径**：**一个任务只走一条通道**，**不存在**"同一 lane 既可由席位也可由 dispatch worker 执行"的混用形态；三通道**彼此不互通**（含与 B 档裸 subagent）。
@@ -360,6 +309,65 @@
 - **audit 层 lane 完成后【不会】自动结算**：`auto-settle` 的第四处 skip 分支 `isAuditLayerLane` 明写"**职责转移，不是失败**"——**批保持 `running` 供 Leader 显式结算**。⇒ **audit 层 lane 须 Leader 显式 `member_status(review)` → `member_settle(merged)`**；**且结算前先 `handoff_submit` 到其下游**（audit 层 lane **也有下游**，同 plan/exec 规矩）。
 - **进程恢复会把 in-flight lane 打回 `idle`**（事件 `system.recovered`）⇒ 走恢复路径 **`idle → running → review → merged`**（`idle` 是**空闲态**，不是崩溃态）。
 - **例行巡查用「四查」**（全部只读）：① `batch_status`（相位与 lanes）② `log_export`（**看 `auto.settle.*` 的 `reason`**——`already-settled` / `lane-terminal` / `phase-*` / `audit-explicit-settle-required` **语义不同**）③ 产物根 glob ④ **`lane_heartbeat` / `lane_longrun`（`beat:true` 可手动一拍）——看 `stalled` / `candidate` / `unconsumed`**。
+
+### 十、两方向规格差异表（2026-09-25 用户 C1 裁决）
+
+> 本表 6 维为**唯一权威表**；`docs/b5-teammate-seat-design-v1-2026-09-25.md` §1a 与本表逐维对齐。跨文件一律**引路径**、禁复制正文（防两处漂移）。
+
+| 维度 | **dispatch 方向** | **agent-team 方向** |
+|---|---|---|
+| **派发工具** | **只用 `subagent` 工具**（宿主 subagent seam；引擎侧 `lane_dispatch` → `rt.start`，`lib/engine/dispatch.js`） | **Leader 按 team 规格拉起成员**（`spawn_teammate`，官方 roster） |
+| **谁写黑板** | **Leader 写黑板**（`wave_plan` 建批 + `lane_dispatch` 派发；`member.dispatch` 由**引擎自动写**，是唯一写路径） | **Leader 拉起后写黑板通知成员**（写 lane 的 `roster` 引用；「通知」= 任务包投递，非邮箱推送） |
+| **推进方式** | **引擎自动派发**（派发即写 `owner`；结算由 `auto-settle` 消费事件判定） | **由事件队列进行交接**（`handoff_submit` → `batch.handoffs` + `lane.handoff`；入边 `submitted` 为下游开工硬前提） |
+| **共用面** | **只共用 `wave_plan` 黑板的模式**（Q-3）——批次 JSON 单写者 + 三层（plan/exec/audit）+ 依赖 DAG + 产物契约 + 门禁语义，两方向**同源** | 同左（**不做**第二套建批面；**不新造** team 专用建批工具 / 自有黑板） |
+| **写黑板字段** | `owner`（批 owner 会话；公共池归属声明面，**不参与门禁**）+ **`member.dispatch{ workerSessionId, lane }`**（引擎自动写） | **`roster` 成员名**（= **R-3** 已落字段；真源恒 `wavePlan.tasks[].roster`）；与 `owner` **并存、互不替代**（Q-2，零新造字段） |
+| **选型判据** | 需**灵活分配、较轻量**的工作（迭代频繁、粒度细、无跨轮续跑需求） | **固定工作**（角色与流程可预见；需 durable 席位 / 跨轮续跑 / 长任务） |
+| **语义 / 功能** | **相互隔离**（含与 B 档裸 subagent 不互通） | **相互隔离**；**不混用**（一批一方向，Q-4） |
+| **provider 分离** | **不做**（C1 正式裁决） | **不做** —— `provider:'agent-team'` 分支方案**作废** |
+| **选型主体** | **Leader 自行判断** | 同左 |
+
+### 十一、选型判据（Leader 自行判断）
+
+**Leader 选型 4 条（Q-4 落地形态，逐条照判）**：
+
+1. 任务是否**固定可预见**（角色 / 流程定死、有官方 roster 对应成员类型）⇒ **是则 team**；
+2. 是否需要 **durable 席位**（跨轮续跑、可再唤起、活性可查）⇒ **是则 team**；
+3. 是否需**灵活分配、粒度细、较轻量**、一次性执行即可 ⇒ **则 dispatch（`subagent`）**；
+4. 判不准时按 Q-3 先建 `wave_plan` 批，**批级**声明 `channel`（`dispatch` | `team`），**一批不改向**。
+
+- **批级 `channel` 声明面（R-5）用法**：`channel` 是**批级**声明（非 lane 级），建批时定死；`dispatch` ⇒ 该批 lane **零条**带 `roster`；`team` ⇒ 该批**每条** lane 均带 `roster`——这是「**不混用**」的机读形态（同 `docs/b5-teammate-seat-design-v1-2026-09-25.md` V9）。
+- **⚠ Q-4 张力登记（不得掩盖）**：引擎 `channel` 枚举含 **`mixed`**，且 `mixed` 在引擎内**合法**；**用户 Q-4 = 不能混用** ⇒ **指引口径 = 建批只取 `dispatch` 或 `team`，`mixed` 不作为建议形态**。引擎「**允许**」≠ 指引「**推荐**」；若实际出现 `mixed`，**须由 Leader 显式裁认留痕**，且不得据此改写 Q-4 口径。本项**不改引擎**（本批零引擎改造）。
+- **口径边界**：选型只决定「**一批走哪条方向**」，不改变两方向**共用 `wave_plan` 黑板**的事实（Q-3）；team 方向**不新造建批面**。
+
+### 十二、事件流口径（Q-1）
+
+**Q-1 三项，逐条落文字（不得扩写）**：
+
+| 项 | 口径 |
+|---|---|
+| **事件流优先** | agent-team 方向的**交接真源 = 批事件流**：`handoff_submit` 一次原子写同时落 `batch.handoffs` 与 `lane.handoff` 事件；可审计导出走 `log_export`。下游开工**硬前提** = 该入边 `handoff_view` 报 `submitted`；缺失即 `GATE_HANDOFF_MISSING`（**引擎 entry 门，非纪律**） |
+| **mailbox 搁置** | **搁置范围仅限**「把官方 mailbox（`wait_agent` 等）或蟛蜞 `mailbox_*` 用作 agent-team 方向的**交接 / 唤醒通道**」。`mailbox_*` 工具面**维持现状不动**——§0f（longrun 候选）与 §0i（消费留痕，**未 ack 即未消费**）的既有纪律**不因本裁决改变** |
+| **`send_message` 待议** | **本轮不落规格**：是否作为「Leader→席位」或「席位→Lead」的唤醒通道，**登记为未决项**（归 Leader 另批裁）。已知事实（**不构成裁决**）：S-3 已对成员放开 `send_message`（可推 Lead）；`interrupt_agent` / `list_agents` / `wait_agent` 维持 deny |
+
+- **边界**：本节只改 agent-team 方向的**交接 / 唤醒通道选型**，不触碰 §0f / §0i 的消费留痕纪律，也不改引擎工具面。
+
+### 十三、两方向规格（2026-09-25 用户 C1/C2 裁决；注入面条目 `0p` 的详情面）
+
+**一句话口径**：**两方向语义与功能相互隔离，只共用 `wave_plan` 黑板的模式，不混用（一批一方向）。**
+
+| 面 | **dispatch 方向** | **agent-team 方向** |
+|---|---|---|
+| **成员从哪来** | **引擎自派 subagent**（`lane_dispatch` 一次性句柄 + 引擎 `ctx.subagents` 自派）；主 Agent 只在 B 档直调 `subagent` 工具 | **Leader 按 team 规格 `spawn_teammate` 拉起** |
+| **黑板谁写** | **Leader 写**黑板；**引擎自动派发** | **Leader 拉起后写黑板通知成员**；**由事件队列进行交接** |
+| **黑板锚点字段** | `owner` + `member.dispatch{workerSessionId, lane}`（引擎写） | **`roster` 成员名**（Leader 拉起时写） |
+| **交接通道** | `handoff_submit` → `handoff_view`（入边 `submitted` 是硬前提） | 同左（事件流为真源） |
+| **选型判据** | **需灵活分配、较轻量的工作** | **固定工作**（如 software 口径固定 7 角色 + leader） |
+
+- **共用与不混用**：**共用 `wave_plan` 建批**，但**每批任务写各自的 `wave_plan` 给单独方向的成员使用**；**不做 provider 分离方案**（历史上 §11 已正式废弃 B1–B3 与 fork 方案；`tasks[].officialTaskId` 与 `dispatch.provider:'fork'` 为**永不实施**项）。
+- **选型归 Leader 自判**（C2：agent-team 包启用时**优先** agent-team；两族工具当前**共存**，非互斥）。
+- **Q-1 落点**（见本节 §三）：事件流优先｜mailbox 搁置｜`send_message` 视为**已开放的汇报通道**。
+- **团队装配口径**：团队资产内容当前「搁置/未优化」⇒ **只按成员槽位 + 指引装配**，**不校验资产合规**。
+- **⚠ `team` 参数仍必填**（详见 **§0b 四**）：**灵活分配 ≠ 无需 `team`**——引擎用它做 flows / chain / `criteria_from` / snapshot 的数据源；**传任一存在的 team 名即可**（`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`）。
 
 ## §1 任务指派
 
@@ -451,6 +459,11 @@
 - **步骤级断点保全**：worker 每完成一子步骤即落盘可独立读取的进度快照（含 `step N/total` 与产物落点），**禁止攒批**；崩溃后由新 worker 读取快照**跳过已完成步骤**；保全**只做物理留存**，**不触发自动续跑**。
   - **配套工具面（G-10 补名）**：`lane_checkpoint`（在 lane worktree 内 `git add -A && git commit`，无变更则 no-op；可带 `progress:{step,total}`——commit message 与 `worktree.checkpoint` 事件内嵌 `step N/total`）／`lane_checkpoint_status`（**只读**：从批次事件流读该 lane 的 checkpoint 历史与 latest 进度，**不依赖 git 调用**）——续跑前的唯一查询入口。
 - Leader 直做产物用 `asset_claim` 复制归位进批次资产根。
+- **abort 批的悬挂 lane 是【预期残留】，不是收口遗漏**（2026-09-26 用户裁决写明口径）：
+  - `batch_control(abort)` 把批推至 `aborted`（**终态冻结**：`GATE_BATCH_TERMINAL` ⇒ 此后任何成员迁移一律拒），而**未完成 lane 停在非终态** ⇒ 引擎在 `batch_status` 里**恒显** `danglingLanes`（批次已终态、成员非终态），并落一条 `batch.abort_dangling` 告警（含 `danglingLanes` 名单与 `count`）。
+  - ⇒ **abort 时无须（也不能）把它们改写成终态** —— 这是**设计如此**（引擎侧 `danglingLanes` 不产候选、不受僵尸批过滤，**只为供人工核查收口遗漏**）。
+  - ⇒ **audit / 复盘见到 `danglingLanes` 【不得判为缺陷】**；若其中某 lane 的成果仍要用 ⇒ **另开新批承接**（K3：失败 lane 为终态、**重做=重开新批**）。
+  - **实测规模参考**（2026-09-26 双轨评估）：本会话 4 批 abort 共留 **8 条**悬挂 lane（`p4-authz-fix` 4 / `team-prune-and-compat` 2 / `guidance-refactor` 1 / `skill-recommend` 1），**全部为预期残留**。
 
 ## §8 输出偏好
 
@@ -492,7 +505,7 @@
 
 - **用户口径**：「audit 审核 exec 层内容时**也要消费 plan 层产物做对照**，并不是盲审」。
 - **引擎侧已内建（逐 lane 硬门，不是批级放松）** —— 实现位 = `lib/state/gates.js` 的 **`checkEntryGate`**（audit 判据源锚点段；行号易漂，按符号定位）：
-  - audit lane **派发前**：其 `consume` 中若无**判据源锚点**的产物 ⇒ **拒派** `GATE_AUDIT_INPUT_MISSING`（**不吃 plan 产物根本派不出去 ⇒ 盲审在引擎上不可能**）。锚点取值**二态**（判据在 `lib/state/gates.ts:705-708`）：① **声明 `criteria_from`** 的资产按其 **glob 指名**锚点（engine / design / research / writing 四资产均 `"plan/**"`，`software-team` 原为精确路径 `plan/plan-designer-spec.md`）；② **未声明**的资产回落**引擎既有口径**——`isPlanProduct`：`consume` 中以 `plan/` 前缀者即锚点，**任一带 `## 验收标准` 即放行**。**software-team 于 2026-09-17 采用 ②**（删键，用户裁决）：精确路径式指名是**更窄的前置约束**（audit lane 每多列一份 plan 产物就多一处失配面），而 ② 与其余四资产**同一判据面**，且不缩小验收强度——判据源仍在 `consume` 声明面（Leader 侧）强制；
+  - audit lane **派发前**：其 `consume` 中若无**判据源锚点**的产物 ⇒ **拒派** `GATE_AUDIT_INPUT_MISSING`（**不吃 plan 产物根本派不出去 ⇒ 盲审在引擎上不可能**）。锚点取值**二态**（实现在 `lib/state/gates.js` 的 `checkEntryGate`，判据段 = `criteriaFrom` / `isPlanProduct`；**行号易漂，按符号定位**）：① **声明 `criteria_from`** 的资产按其 **glob 指名**锚点——**该读点引擎仍保留**（`criteriaFrom` 非空 ⇒ `anchors = consume.filter(p => globMatchesPath(criteriaFrom, p))`），但**五个内置团队资产今日均已不声明该键**（**2026-09-25 依用户裁决删除五资产 `criteria_from`**：design / engine / research / software / writing，grep 命中 0）；② **未声明**的资产回落**引擎既有口径**——`isPlanProduct`：`consume` 中以 `plan/` 前缀者，**或**他 lane `produce ∪ outputs` 中已声明的 plan 产物（`criteriaFrom` 空 ⇒ `anchors = consume.filter(isPlanProduct)`），**任一带 `## 验收标准` 即放行**。⇒ **今日实机五资产全部走 ②，判据面唯一且同一**；删键方向是**减声明面**——精确路径式指名是**更窄的前置约束**（audit lane 每多列一份 plan 产物就多一处失配面），而 ② 不缩小验收强度，判据源仍在 `consume` 声明面（Leader 侧）强制；
   - 命中的锚点产物**正文须含裸标题行 `## 验收标准`**，否则 `GATE_AUDIT_CRITERIA_MISSING`（路径对上、内容空壳/跑题仍拒）。
   - 建批期另有两条：`GATE_AUDIT_CONTRACT_MISSING`（解析到团队资产且含 audit lane ⇒ 资产必须声明 `audit_contract`）＋ `consumes_required` 的**批级**前缀覆盖（每个前缀 ≥1 条 audit lane 命中）。
 - **资产表达面（原「唯一缺口」；M-05 订正后已随链退役消解）**：`chain.steps[].template` **只解释 `id` / `cmd` / `produce`**，**不支持 `consume`**；而 `chain` 的建批期展开消费点已清退（`expandChainBranches` 在 `lib/**` 内**零调用点**，唯一命中 = 定义行）⇒ 该模板**今日无展开消费者**，此缺口**不再构成约束**。**不变的部分**：判据源只能由**建批 tasks 的 `consume`**（Leader 侧）表达（本节硬要求）。

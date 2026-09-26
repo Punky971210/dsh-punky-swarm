@@ -36,9 +36,16 @@ const SYNC_FILES = [
   'asset-manifest.json',
 ];
 
-// 详情面白名单：这些小节**刻意不进注入面**（引擎接线细节，Leader/Manager 按需读正文即可）。
+// 详情面白名单：这些小节**刻意不进注入面**（引擎接线细节，按需读正文即可）。
 //   0m 派发套件落地细节｜0n 模式跟随装载口径｜0o 团队资产必填与缺省链的内部校验序
-const DETAIL_ONLY = new Set(['0m', '0n', '0o']);
+//   0j 临时组队与 Leader 编排纪律｜0l 能力发现前置（本部署实机检索口径）
+// ⚠ 2026-09-26 用户裁决「**指引中不提及挂起内容**；落盘挂起内容快照，之后再回写」⇒ 已从正文**整体移出** 4 节：
+//   §0f（L0 watch 消费协议）｜§0g（Leader 唤醒协议 · Manager 代劳指挥）｜
+//   §0h（longrun 长程豁免 R-3）｜§0i（消费留痕与 D-1 纪律版）
+//   ⇒ 原文**逐字**存档于 `reports/onto-suspended-items-snapshot-20260926.md`（§三），解挂时按该件回写。
+//   ⇒ 故本白名单**同步移除** `0f`/`0g`/`0h`（正文已无该节，留着是永不匹配的死项）
+//     与 `0r`（本就无正文节，属历史残留）。
+const DETAIL_ONLY = new Set(['0m', '0n', '0o', '0j', '0l']);
 
 const USAGE = `用法：
   node scripts/check-guidance-sync.mjs [--live <dir>] [--no-live] [--json]
@@ -83,7 +90,18 @@ function inlineEntriesOf(guidanceText) {
   // 2026-09-18 清债轮：原载荷含 `line: i + 1`——全文件**零读点**（失败文案只用 `e.id`）⇒ 连同 `forEach` 的
   //   下标参数一并删除（死字段 + 死参数）。只保留有消费的两项：`id`（清单/反向查重）与 `pointers`（正向校验）。
   guidanceText.split(/\r?\n/).forEach((line) => {
-    const m = /^\s{6}([0-9]{1,2}[a-z]?)\.\s+(\S.*)$/.exec(line);
+    // ⚠ 2026-09-25 改动：缩进判定由**恰好 6 空格**放宽为 **≥6 空格**（`/^\s{6,}/`）。
+    //   ■ 改动当时的名义理由：注入面据称要改为 `@deepseek-ai/dsh-agent-preset` 的 `plugins` 形态，
+    //     条目会多一层缩进 ⇒ 严格 6 匹配落空。
+    //   ■ ⚠ **该前提已不成立**：A-3（改 `plugins` 形态）**已于同日回滚**（repo=live=`CC517E91E3550D62`）。
+    //   ■ ⚠ 且此放宽**疑似「未裁决的设计」**（用户 2026-09-26 裁决：**需注明背景、不下结论**）。
+    //   ■ 现状事实（2026-09-26，由 onto-worker-notify 批 accept lane 报出 AU-05）：**放宽是 load-bearing** ——
+    //     当前注入面条目缩进 > 6（`cordis.patch.yml` 的 `prefix:` 段内）⇒ **严格 6 会解析到 0 条**、
+    //     放宽得 26 条；**两种口径都 exit 0**（条目数下降**不等价于**失败，故不会自曝）。
+    //   ■ ⇒ **待裁项**：① 认定放宽正确（并在正文注明其 load-bearing）｜② 改为**按结构解析**
+    //     （在 `prefix:` 段内按 `NN.` / `NNa.` 行匹配，不依赖缩进宽度）。
+    //   ■ **未裁前保持现状（放宽），不得单方面改回严格。**
+    const m = /^\s{6,}([0-9]{1,2}[a-z]?)\.\s+(\S.*)$/.exec(line);
     if (!m) return;
     const pointers = [...m[2].matchAll(/#§([0-9]+[a-z]?)/g)].map((x) => x[1]);
     out.push({ id: m[1], pointers });
