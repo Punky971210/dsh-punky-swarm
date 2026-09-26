@@ -81,7 +81,8 @@ export const TEAM_ASSET_CODES = Object.freeze({
   // 三个 `STATE_*` 码**已删除**（`STATE_OVERRIDE_UNKNOWN_STATE` / `STATE_OVERRIDE_WIDENS` /
   //   `STATE_KIND_INVALID`）：其**唯一消费点**是团队资产顶层 `state_machine` 的加载期校验，该键随本轮退役
   //   （零运行期消费者 ⇒ 声明即拒 `FIELD_NOT_ALLOWED`）⇒ 码面无消费方，一并清除（不留死码）。
-  LEAD_NOT_IN_LAYERS: 'TEAM_ASSET_LEAD_NOT_IN_LAYERS',
+  // 原「牵头角色悬空」码（`TEAM_ASSET_LEAD_*`）**已删除**（onto-engine-slim-20260926 · 2026-09-26 裁决）：
+  //   其两条产出点（`chain.js` 的步角色悬空 / 分支角色悬空）随**链声明侧校验退役**同批清除 ⇒ 码面零消费方，不留死码。
   // 旧泛键标废（B-3，2026-09-15 批次 core-techdebt-close-20260915）：`flows.audit.contract` 是 **旧泛键**，
   //   现役真源 = `flows.audit.audit_contract.*`（读端 `flows.js:496-509` `auditContract`，consumer 为 entry/建批/complete 三门）。
   //   旧泛键**无任何运行期读点**（`contractOf` 只取 plan 层），声明它 = 写了不生效 + 与 audit_contract 构成双真源隐患 ⇒ 标废。
@@ -110,9 +111,10 @@ export const TEAM_ASSET_SEVERITY = Object.freeze({ blocking: 'blocking', warning
 //   （`ok = problems.length === 0`）改为 **`ok = !hasBlockingProblems(problems)`**；`chain.js` 同批同改
 //   （R2-3 + R2-3 一致性收尾）⇒ 两处不再存在「同一 severity 两种 `ok` 口径」，`chain.js` 头注释中
 //   「刻意不折进本文件」的**严重级理由**随之失效（残留理由仅为「单一强制点 + 不重复报码」）。
-// **反例面（advisory / warning，只提示不否决，五条）**：`ROLE_LEXICAL`（扩展角色词法）/
-//   `LEAD_NOT_IN_LAYERS`（牵头角色悬空）/ `CONSUME_FIELD_NOT_ALLOWED`（读端回落 `consume`）/
+// **反例面（advisory / warning，只提示不否决，四条）**：`ROLE_LEXICAL`（扩展角色词法）/
+//   `CONSUME_FIELD_NOT_ALLOWED`（读端回落 `consume`）/
 //   `REWORK_INVALID`（链级回边未承认）/ **`LAYER_UNKNOWN`（未知层）**。
+//   （原第五条「牵头角色悬空」码已随**链声明侧校验退役**整条删除 —— onto-engine-slim-20260926 · 2026-09-26 裁决。）
 //   **末条（现行）**：本机**无外部自建 team**，未知层判定**暂时用不到** ⇒
 //   **先清理为 warning**（**码面保留、留痕可读、不拒载**），日后有需求再以其他方式补回。
 //   ⇒ 这是 **Q1「都不降（回到严格）」的单码例外**：其余一切码仍一律 blocking，不得据此放宽。
@@ -395,9 +397,11 @@ export function validateTeamAsset(asset) {
   // 【R2-3 一致性收尾（2026-09-17）】`ok` 语义与 chain.js 同口径：`ok = 无 blocking`（**不再是「零问题」**）。
   //   动机（`lib/tools/core.js:561-564` 已登记的缺陷）：同族函数各持一套 `ok` 判定 ⇒ 读端
   //   （`assertTeamAssetReady`）把**仅 warning** 的资产也当「不可用」拒载，与 `BLOCKING_CODES` 分档不自洽。
-  //   warning 级码（`BLOCKING_CODES` 未收录者，本函数可产者恰三条：`ROLE_LEXICAL` /
-  //   `LEAD_NOT_IN_LAYERS` / `CONSUME_FIELD_NOT_ALLOWED`）**只提示不否决**，且**逐条完整保留在
+  //   warning 级码（`BLOCKING_CODES` 未收录者）**只提示不否决**，且**逐条完整保留在
   //   `problems` 返回值里**（不丢弃、不降级为日志）——读端按 `severity`/`hasBlockingProblems` 自行分流。
+  //   【onto-engine-slim-20260926】原枚举「本函数可产者恰三条」含**已退役**的「牵头角色悬空」码，
+  //   且漏列本函数真产的 `LAYER_UNKNOWN` / `CONTRACT_EMPTY` ⇒ 该枚举与计数**不可靠**，已按 M-1 登记
+  //   （见 `exec/e3-assembly.md` 第二段）；此处只删不可靠枚举，**不新增计数口径**（免以新错换旧错）。
   return { ok: !hasBlockingProblems(problems), problems, unwired: unwiredDeclarationsOf(asset) };
 }
 

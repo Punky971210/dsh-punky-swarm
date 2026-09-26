@@ -196,11 +196,11 @@ test('W2-V3-8 V5：pair_with + perLane 同声明 / 悬空 / 自指 ⇒ MISSING_F
   assert.equal(codesOf(validateChain(self, LAYERS).problems).includes('TEAM_ASSET_MISSING_FIELD'), true, '自指');
 });
 
-test('W2-V3-9 V7：分支角色悬空 ⇒ LEAD_NOT_IN_LAYERS；层未知 ⇒ LAYER_UNKNOWN（层先于角色）', () => {
+test('W2-V3-9 V7：分支角色悬空【已退役】⇒ 零码；层未知 ⇒ LAYER_UNKNOWN（层先于角色）', () => {
   const badRole = v3Model();
   badRole.steps[0].branches[1].role = 'supervisor';
   const r1 = validateChain(badRole, LAYERS);
-  assert.equal(codesOf(r1.problems).includes('TEAM_ASSET_LEAD_NOT_IN_LAYERS'), true, '分支角色须在本层 roles');
+  assert.deepEqual(codesOf(r1.problems), [], '分支角色悬空已随链声明侧校验退役（2026-09-26）⇒ 零问题：防回退锁');
 
   const badLayer = v3Model();
   badLayer.steps[0].layer = 'review';
@@ -252,17 +252,17 @@ test('W2-V3-13 反例 R3：pair_with 指同层下游步 ⇒ 成环 ⇒ REWORK_IN
 
 // ── R2-3（裁决 B）ok 语义：`ok = 无 blocking` ──────────────────────────────────
 // 背景：旧语义 `ok = problems.length === 0` 与 `team-asset.js` 的 BLOCKING_CODES 分档不自洽——
-//   本组八条校验里 `LEAD_NOT_IN_LAYERS` / `REWORK_INVALID` 是 **warning** 级（chain.js:70-73 已登记），
-//   却被旧 `ok` 判成「链不可用」。新语义 = 只有 blocking 否决，warning 只提示（problems 逐条保留）。
+//   本组校验产的 warning 码（现行 `REWORK_INVALID` / `LAYER_UNKNOWN`）被旧 `ok` 判成「链不可用」。
+//   新语义 = 只有 blocking 否决，warning 只提示（problems 逐条保留）；样本随退役换为「未知层」。
 test('R2-3-1 仅 warning ⇒ ok=true 且 problems **非空**（warning 不丢弃、不降级为日志）', () => {
-  // warning 来源①：步角色悬空（TEAM_ASSET_LEAD_NOT_IN_LAYERS ∈ warning 侧）
-  const badRole = v3Model();
-  badRole.steps[0].branches[1].role = 'supervisor';
-  const r1 = validateChain(badRole, LAYERS);
+  // warning 来源①：层未知（TEAM_ASSET_LAYER_UNKNOWN ∈ warning 侧）
+  const badLayer = v3Model();
+  badLayer.steps[0].layer = 'review';
+  const r1 = validateChain(badLayer, LAYERS);
   assert.equal(r1.ok, true, '仅 warning ⇒ ok:true：' + JSON.stringify(r1.problems));
   assert.ok(r1.problems.length > 0, 'problems 必须非空');
   assert.equal(r1.problems.every((p) => p.severity === 'warning'), true, '逐条须带 severity=warning');
-  assert.equal(codesOf(r1.problems).includes('TEAM_ASSET_LEAD_NOT_IN_LAYERS'), true, '码面原样保留');
+  assert.equal(codesOf(r1.problems).includes('TEAM_ASSET_LAYER_UNKNOWN'), true, '码面原样保留');
   // warning 来源②：无 rework 承认的回边（TEAM_ASSET_REWORK_INVALID ∈ warning 侧）
   const cyc = v3Model();
   delete cyc.rework;
@@ -288,14 +288,14 @@ test('R2-3-2 存在 blocking ⇒ ok=false（且 warning 与 blocking 并存时�
   assert.equal(bl.ok, true, 'K-2：未知层不再拒载（warning 级）');
   assert.equal(codesOf(bl.problems).includes('TEAM_ASSET_LAYER_UNKNOWN'), true, 'K-2：码面保留（留痕可读）');
   assert.equal(bl.problems.every((p) => p.severity !== 'blocking'), true, 'K-2：该例不得含 blocking 条目');
-  // blocking + warning 并存：仍以 blocking 否决，且 warning **不被吞掉**
+  // blocking + warning 并存：仍以 blocking 否决，且 warning **不被吞掉**（warning 样本已随退役换为「未知层」）
   const mixed = v3Model();
-  mixed.steps[0].next = 'ghost';            // blocking
-  mixed.steps[0].branches[1].role = 'supervisor'; // warning
+  mixed.steps[0].next = 'ghost';   // blocking（悬空 next）
+  mixed.steps[0].layer = 'review'; // warning（未知层）
   const m = validateChain(mixed, LAYERS);
   assert.equal(m.ok, false, 'blocking 与 warning 并存 ⇒ 仍拒：' + JSON.stringify(m.problems));
   assert.equal(codesOf(m.problems).includes('TEAM_ASSET_MISSING_FIELD'), true, 'blocking 条目在场');
-  assert.equal(codesOf(m.problems).includes('TEAM_ASSET_LEAD_NOT_IN_LAYERS'), true, '共存 warning 不得被吞');
+  assert.equal(codesOf(m.problems).includes('TEAM_ASSET_LAYER_UNKNOWN'), true, '共存 warning 不得被吞');
 });
 
 test('R2-3-3 `chainProblemsOf` 同口径：resolved 面与 validate 面问题并集后按 blocking 判 ok', () => {

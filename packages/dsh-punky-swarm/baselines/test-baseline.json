@@ -440,6 +440,14 @@
       "tests": 6,
       "todos": 0
     },
+    "test/gate-reject-to-member.test.js": {
+      "asserts": 21,
+      "blankLines": 15,
+      "lines": 119,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/gate-spawn-fail.test.js": {
       "asserts": 31,
       "blankLines": 15,
@@ -1241,7 +1249,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-26T18:11:36Z",
+  "generatedAt": "2026-09-26T19:54:51Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1252,15 +1260,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-26 Q-8-C 全链删除 plan_leads/audit_leads（用户裁决 C）：三队资产子键 + flows.js 解析 + team-asset.js 资产级 LEAD_NOT_IN_LAYERS 校验块 + wave-plan.ts 的 PLAN_LEAD_ROLES/AUDIT_LEAD_ROLES 与两段 GATE_ROLE_MISSING 判定；测试面同步（wave-plan 删 11 条 / role-pluggable 删 5 条 + 修 import / team-asset 的 R2-3-a-b 改用 ROLE_LEXICAL 作 warning 代表）",
+  "reason": "2026-09-26 引擎改动：门禁失败「打回成员」而非「停轮」—— autoSettleLane 增 opts.onFail 二态（pause 缺省=存量 / report=回传调用方）+ 新增 AUTO_SETTLE_ON_FAIL 枚举（承规格 §3 的 onFail 规划）+ swarm_report(settle-request) 传 report 并在 GATE_* 失败时 throw（投递与留痕先行，只把 gate 结论从返回值升级为工具调用失败）；新增 test/gate-reject-to-member.test.js（4 条）",
   "schema": 1,
   "totals": {
-    "asserts": 8194,
-    "blankLines": 4085,
-    "files": 155,
-    "lines": 44635,
+    "asserts": 8215,
+    "blankLines": 4100,
+    "files": 156,
+    "lines": 44754,
     "tautologies": 0,
-    "tests": 1708,
+    "tests": 1712,
     "todos": 4
   }
 }

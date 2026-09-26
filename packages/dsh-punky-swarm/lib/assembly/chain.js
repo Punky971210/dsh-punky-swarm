@@ -40,7 +40,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 八条静态校验（逐条复用既有 `TEAM_ASSET_*` 码面，**零新造码**）：
 //   ① 层白名单      step.layer ∈ layers 键集                        → TEAM_ASSET_LAYER_UNKNOWN
-//   ② 角色悬空      step.role ∈ layers[step.layer].roles             → TEAM_ASSET_LEAD_NOT_IN_LAYERS
+//   ② 角色悬空      ——【**已退役**】原判据 step.role ∈ layers[step.layer].roles → 专用码（已于 2026-09-26 删除）
 //   ③ 悬空 next     目标 id ∈ steps[].id                            → TEAM_ASSET_MISSING_FIELD
 //   ④ 到不了的环节  自链首步沿 `next`（v2/v3 另含 `deps`/`perLane`/`pair_with`）的可达集 = 全集 → TEAM_ASSET_MISSING_FIELD
 //   ⑤ 环须由 rework 承认  存在回边 ⇒ rework.allowed===true；环数 ≤ max_attempts → TEAM_ASSET_REWORK_INVALID
@@ -70,8 +70,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   **刻意不折进 `validateTeamAsset`**：折进去会让「同一份声明」经**两条通道重复报码**（本模块八条 +
 //   资产层不变量各报一次）⇒ 改为**纯校验器单点**（本模块）+ 构造期原样透出首个问题码
 //   （与 P1 `assertTeamAssetReady` 同形的 fail-closed 形态）。
-//   【2026-09-17 订正】原文另给的「严重级不一致」理由**已失效**：本组码里 `LEAD_NOT_IN_LAYERS` /
-//   `REWORK_INVALID` 是 warning 级，旧 `validateTeamAsset` 的 `ok = problems.length === 0` 会把它们判死，
+//   【2026-09-17 订正】原文另给的「严重级不一致」理由**已失效**：本组 warning 级码（现行 `REWORK_INVALID` /
+//   `LAYER_UNKNOWN`；原同列的「牵头角色悬空」码已随 ② 退役、2026-09-26 删除）旧 `validateTeamAsset` 的
+//   `ok = problems.length === 0` 会把它们判死，
 //   故当时不能折入；现两侧 `ok` 已**同口径**（`ok = !hasBlockingProblems(problems)`，见本文件 `:190-203`
 //   与 `team-asset.js` 的严重级段）⇒ 剩下的分离理由**只有「单一强制点 + 不重复报码」**这一条。
 //
@@ -232,7 +233,7 @@ export function resolveChainOf(asset) {
  *
  * `ok` 语义：`ok = 无 blocking`（`!hasBlockingProblems(problems)`），
  *   **不再**是「零问题」。warning 级问题（severity 取自 `severityOfProblem`：本组码里
- *   `TEAM_ASSET_LEAD_NOT_IN_LAYERS` / `TEAM_ASSET_REWORK_INVALID` 落在 warning 侧）**只提示不否决**，
+ *   `TEAM_ASSET_REWORK_INVALID` / `TEAM_ASSET_LAYER_UNKNOWN` 落在 warning 侧）**只提示不否决**，
  *   且**逐条完整保留在 `problems` 返回值里**（不丢弃、不降级成日志）——读端自行按 severity 分流。
  *   旧语义（`problems.length === 0`）与 `team-asset.js` 的 `BLOCKING_CODES` 分档**不自洽**：
  *   它把本模块头注释已登记的两条 warning 码（`:70-73`）也判成「链不可用」。改后与
@@ -312,7 +313,10 @@ export function validateChain(chain, layers) {
     }
   }
 
-  // ①② 层白名单 / 角色悬空
+  // ① 层白名单
+  //   （原 ②「步角色悬空」判据已随**链声明侧校验退役**整条删除 —— onto-engine-slim-20260926 · 2026-09-26 裁决；
+  //    其专用码亦同批从 `TEAM_ASSET_CODES` 清除。删除后本循环只余 ① —— 原 ② 所属的 `const def` / `const roles`
+  //    两行被本改动孤立（零引用）⇒ 按「不留死码/不留空块」一并移除，属同块**连带**，留痕见 `exec/e3-assembly.md`。）
   const hasLayers = isPlainObject(layers);
   const layerKeys = hasLayers ? Object.keys(layers) : [];
   for (const [id, s] of byId) {
@@ -320,13 +324,7 @@ export function validateChain(chain, layers) {
     if (!isNonEmptyString(s.layer) || !layerKeys.includes(s.layer)) {
       push(TEAM_ASSET_CODES.LAYER_UNKNOWN, `chain.steps.${id}.layer`,
         `未知层：${JSON.stringify(s.layer ?? null)}（允许：${layerKeys.join('/') || '（无）'}）`);
-      continue; // 层未定 ⇒ 角色判据无意义，跳过（避免级联双报）
-    }
-    const def = layers[s.layer];
-    const roles = isPlainObject(def) && Array.isArray(def.roles) ? def.roles.map((r) => String(r).trim().toLowerCase()) : [];
-    if (!isNonEmptyString(s.role) || !roles.includes(String(s.role).trim().toLowerCase())) {
-      push(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS, `chain.steps.${id}.role`,
-        `步角色悬空：role=${JSON.stringify(s.role ?? null)} 不在 layers.${s.layer}.roles（${roles.join('/') || '（无）'}）`);
+      continue; // 层未定 ⇒ 后续判据无意义，跳过（避免级联双报）
     }
   }
 
@@ -432,10 +430,9 @@ export function validateChain(chain, layers) {
         const at = `chain.steps.${id}.branches[${i}]`;
         if (b.role != null) {
           // 层未定 ⇒ 已由 ① 报 LAYER_UNKNOWN，此处跳过（避免级联双报）
-          if (roles !== null && (!isNonEmptyString(b.role) || !roles.includes(String(b.role).trim().toLowerCase()))) {
-            push(TEAM_ASSET_CODES.LEAD_NOT_IN_LAYERS, `${at}.role`,
-              `分支角色悬空：role=${JSON.stringify(b.role ?? null)} 不在 layers.${s.layer}.roles（${roles.join('/') || '（无）'}）`);
-          } else if (roles === null && !isNonEmptyString(b.role)) {
+          // （原「分支角色悬空」判据已随**链声明侧校验退役**整条删除 —— onto-engine-slim-20260926 · 2026-09-26 裁决；
+          //   其专用码同批清除；`roles` 现仅余下方「非空字符串」判据使用，故相关声明原样保留、无死码。）
+          if (roles === null && !isNonEmptyString(b.role)) {
             push(TEAM_ASSET_CODES.MISSING_FIELD, `${at}.role`, '分支 role 必须是非空字符串（缺省 = 继承步 role）');
           }
         }
