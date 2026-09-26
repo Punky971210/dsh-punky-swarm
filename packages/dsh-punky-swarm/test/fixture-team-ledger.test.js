@@ -34,7 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { packageRootOf, declaredSkillsOf } from './helpers/host-skills.mjs';
+import { packageRootOf, declaredSkillsOf } from './helpers/skill-paths.mjs';
 import {
   writeTempTeam, writeRealTeam, writeSyntheticTeam, threeTierSyntheticTeam,
   readRealTeamAsset, SKELETON_TEAM,
@@ -53,9 +53,10 @@ const SCANNER_EXEMPT = ['helpers/team-fixture.mjs', 'fixture-team-ledger.test.js
 const DIRECT_WRITE_ALLOWLIST = [
   'team-asset-snapshot.test.js',
   'team-asset.test.js',
-  'team-assets-fill.test.js',
   'teams-root.test.js',
-  'writing-team-asset.test.js',
+  // 2026-09-26 移除（用户裁决「团队内容只是模版、不再作为组件 ⇒ 相关测试不再检验」，
+  //   三件已整体删除并归档于 reports/archived-tests-20260926/）：
+  //   'team-assets-fill.test.js' / 'writing-team-asset.test.js'
 ];
 
 /** `withDefaultTeam` 的允许名单：只允许「建批是手段、被检面是别的门禁」的套件（F2 台账化）。 */
@@ -184,7 +185,7 @@ test('F2-5 合成资产：`threeTierSyntheticTeam` 声明面齐备（三层三�
     }
   }
   assert.deepEqual(declaredSkillsOf(a).sort(), ['dev-coder', 'dev-designer', 'report-blind-audit'],
-    '声明技能集合稳定（这些名是**合成**的 ⇒ 调用方须显式 `{ stub: true }` 注入宿主技能根，见 host-skills.mjs）');
+    '声明技能集合稳定（这些名是**合成**的）');
 });
 
 // ── ⑤ `withDefaultTeam` 允许名单：双向 ──────────────────────────────────────
@@ -202,10 +203,11 @@ test('F2-6 `withDefaultTeam` 使用者 ≡ 允许名单（双向；断言 team �
     + '实际：' + JSON.stringify(actual));
 });
 
-test('F2-7 断言 `team` 必填/无资产的套件**不得**经过 `withDefaultTeam`', () => {
-  for (const rel of ['team-asset-mandatory.test.js', 'team-assets-fill.test.js', 'writing-team-asset.test.js']) {
-    const src = fs.readFileSync(path.join(TEST_DIR, rel), 'utf8');
-    assert.ok(!/withDefaultTeam\s*\(/.test(src),
-      rel + ' 的命题含「team 必填 / 资产无」⇒ 经 `withDefaultTeam` 注入 team 会让该命题恒真');
-  }
-});
+// ── F2-7 已删（2026-09-26）───────────────────────────────────────────────────
+// 原测对象 `team-asset-mandatory.test.js` / `team-assets-fill.test.js` /
+//   `writing-team-asset.test.js` 三件已整体删除（用户裁决「团队内容只是模版、不再作为组件
+//   ⇒ 相关测试不再检验」；归档于 reports/archived-tests-20260926/）
+//   ⇒ 该测试**无对象可测**，且其 `fs.readFileSync` 会对不存在的文件抛错。
+// ⚠ **其语义未失效**：原命题 = 「断言 `team` 必填/无资产的套件**不得**误用 `withDefaultTeam`」
+//   （`withDefaultTeam` 会注入 `team` ⇒ 遮蔽「team 必填」门禁 ⇒ 命题恒真）。
+//   ⇒ 若日后新增同类套件，**应恢复本测试**并把文件名重新登记。
