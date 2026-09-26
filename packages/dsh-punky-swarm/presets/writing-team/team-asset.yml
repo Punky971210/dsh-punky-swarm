@@ -1,30 +1,65 @@
 {
   "team": "writing-team",
-  "manifest": { "version": 3, "requires_engine": ">=0.4.4", "hash": "unhashed", "source": "写作团队（writing-team）装配资产：三层角色 writing-planner（plan）/ drafter·polisher·publisher（exec）/ writing-auditor（audit）；角色职责与写作纪律见 skills/writing-team/SKILL.md，能力层指向本机既有写作技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）。2026-09-18 通用化轮：版本号统一为 3、plan 产物改用 ${branch} 插值、**发布（publisher）退出团队链步**——由 Leader 在交接后于后台执行（同 design-team 的生产口径）；另补 manifest.source；【2026-09-24 引擎 v2 对账标记（lane exec-asset / 批 onto-engine-v2-realign-20260924）】①`chain` 段仅受建批期八条静态校验：`pair_with` / `join.anyFailure` / `onFail` / `rework` 均已停消费（无运行期消费者；1:1 配对基数改由 audit lane 的 `deps` 表达、失败面用 gap-list 表达）——不得读作「失败自动 pause 的引擎行为」；②`manifest.version` / `requires_engine` / `hash` 为纯声明位（`lib/**` 零读端；`hash:\"unhashed\"` = 未计算占位，非校验值）；③派发形态双支持且不写死其一：形态由 `config.dispatch.provider` 配置位取值决定——一次性子代理形态下 worker 为 one-shot 会话，agent-team 形态下 worker 为长驻成员并由官方 roster 承抽（`ctx.get('agentTeams')`）；两形态下本资产的角色 / 技能 / 契约声明同等生效；④成员侧治理与派发面 20 件工具收窄不可达（`wave_plan` / `member_status` / `member_settle` / `lane_dispatch` / `lane_claim` 等），成员回报唯一通道 = `swarm_report`" },
   "roles": {
-    "extra": ["writing-planner", "drafter", "polisher", "publisher", "writing-auditor"],
-    "plan_leads": ["writing-planner"],
-    "audit_leads": ["writing-auditor"]
+    "extra": [
+      "writing-planner",
+      "drafter",
+      "polisher",
+      "publisher",
+      "writing-auditor"
+    ],
+    "plan_leads": [
+      "writing-planner"
+    ],
+    "audit_leads": [
+      "writing-auditor"
+    ]
   },
   "layers": {
     "plan": {
-      "roles": ["writing-planner"],
+      "roles": [
+        "writing-planner"
+      ],
       "skills": {
-        "writing-planner": ["spec-writing", "writing-trio", "wechat-writing-style"]
+        "writing-planner": [
+          "spec-writing",
+          "writing-trio",
+          "wechat-writing-style"
+        ]
       }
     },
     "exec": {
-      "roles": ["drafter", "polisher", "publisher"],
+      "roles": [
+        "drafter",
+        "polisher",
+        "publisher"
+      ],
       "skills": {
-        "drafter": ["writing-trio", "wechat-writing-style"],
-        "polisher": ["humanizer", "lieflat-less-ai-tone", "revision-patterns", "writing-trio"],
-        "publisher": ["baoyu-markdown-to-html"]
+        "drafter": [
+          "writing-trio",
+          "wechat-writing-style"
+        ],
+        "polisher": [
+          "humanizer",
+          "lieflat-less-ai-tone",
+          "revision-patterns",
+          "writing-trio"
+        ],
+        "publisher": [
+          "baoyu-markdown-to-html"
+        ]
       }
     },
     "audit": {
-      "roles": ["writing-auditor"],
+      "roles": [
+        "writing-auditor"
+      ],
       "skills": {
-        "writing-auditor": ["acceptance-gate", "review-execution", "humanizer"]
+        "writing-auditor": [
+          "acceptance-gate",
+          "review-execution",
+          "humanizer"
+        ]
       }
     }
   },
@@ -32,71 +67,49 @@
     "plan": {
       "produce_field": "produce",
       "entry_requires": [],
-      "contract": { "artifact_globs": ["plan/*spec.md"], "required_sections": ["## 验收标准", "## 约束"] }
+      "contract": {
+        "artifact_globs": [
+          "plan/*spec.md"
+        ],
+        "required_sections": [
+          "## 验收标准",
+          "## 约束"
+        ]
+      }
     },
     "exec": {
       "produce_field": "outputs",
       "consume_field": "consume",
-      "entry_requires": ["consume"],
-      "consumes_required": ["plan/"],
-      "consumes_required_per_lane": ["plan/"],
+      "entry_requires": [
+        "consume"
+      ],
+      "consumes_required": [
+        "plan/"
+      ],
+      "consumes_required_per_lane": [
+        "plan/"
+      ],
       "targets": true,
       "gate_command": true
     },
     "audit": {
       "produce_field": "produce",
       "consume_field": "consume",
-      "entry_requires": ["consume"],
+      "entry_requires": [
+        "consume"
+      ],
       "needhuman": true,
       "audit_contract": {
-        "consumes_required": ["plan/", "exec/"],
-        "verdict": ["pass", "fail", "skip"]
+        "consumes_required": [
+          "plan/",
+          "exec/"
+        ],
+        "verdict": [
+          "pass",
+          "fail",
+          "skip"
+        ]
       }
     }
-  },
-  "chain": {
-    "version": 3,
-    "steps": [
-      {
-        "id": "plan",
-        "layer": "plan",
-        "role": "writing-planner",
-        "template": { "produce": ["plan/${branch}-spec.md"] },
-        "branches": [
-          { "id": "plan-writer", "role": "writing-planner", "template": { "cmd": "产出写作规格与验收标准，含裸标题「## 验收标准」与「## 约束」（${branch}）；用 write/edit 落盘、handoff_submit 交付下游；不得以引擎校验通过替代判据自证" } }
-        ],
-        "next": "exec"
-      },
-      {
-        "id": "exec",
-        "layer": "exec",
-        "role": "drafter",
-        "template": { "produce": ["exec/${branch}/"] },
-        "branches": [
-          { "id": "exec-drafter", "role": "drafter", "template": { "cmd": "按规格成稿（${branch}）；用 write/edit 落稿、read 复核、lane_checkpoint 每子步骤快照、swarm_report 回报；素材不足时研究或缩短，不得灌字数凑篇幅" } },
-          { "id": "exec-polisher", "role": "polisher", "template": { "cmd": "修订去 AI 痕（${branch}）；用 read 对照原稿、edit 定点替换、swarm_report 回报；只改 AI 痕迹，不得改动文章框架或未命中规则的原文" } }
-        ],
-        "next": "audit-pair"
-      },
-      {
-        "id": "audit-pair",
-        "layer": "audit",
-        "role": "writing-auditor",
-        "pair_with": "exec",
-        "template": { "id": "audit-${lane}", "cmd": "验收分支 ${lane} 的产物，按 plan 判据逐条对照并核证据；用 handoff_view 取入边、read/grep 复跑核对、swarm_report 回报 verdict；未决项只进 gap-list，不得以「继续调查」为默认终点", "produce": ["audit/${lane}.md"] },
-        "next": "accept"
-      },
-      {
-        "id": "accept",
-        "layer": "audit",
-        "role": "writing-auditor",
-        "join": "all",
-        "terminal": true,
-        "template": { "cmd": "交叉一致性核对 + 逐条判据对照；先消重、标注冲突、核证据再下结论，分歧不掩盖、不以投票了事；产出 audit/acceptance-report.md", "produce": ["audit/acceptance-report.md"] }
-      }
-    ],
-    "join": { "anyFailure": "pause" },
-    "onFail": "pause",
-    "rework": { "allowed": true, "max_attempts": 2, "escalate": "human" }
   }
 }
