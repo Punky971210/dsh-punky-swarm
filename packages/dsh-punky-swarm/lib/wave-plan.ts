@@ -286,6 +286,12 @@ export function normalizeRoster(raw: unknown): string | null {
 //     「存量批零破坏」（§8）会被追溯性打破；该取舍记为**实现决定**，见 `exec/contract-change.md`。
 // 调用点 = 建批路径（`lib/tools/core.js`：`normalizeChannelDecl(channel, tasks)` → 声明时落盘 `batch.channel`）；
 // 本函数**零副作用**（不读写批次状态、不产事件），可被测试直调。
+/** 批级通道归属声明的归一化 + 一致性校验（**单点判定**）。
+ *  **实现与完整口径 = 上方源码的 `//` 详述块**（本行起的 JSDoc 是**指针** —— tsc 只把 JSDoc emit 到
+ *  `lib/wave-plan.d.ts`，`//` 不会；故此处只给速查摘录、**不重复正文**，避免双真源漂移）。
+ *  摘录：枚举非法 ⇒ throw `GATE_CHANNEL_INVALID`；`team` 缺 roster / `dispatch` 带 roster /
+ *  `mixed` 零 roster ⇒ throw `GATE_CHANNEL_UNRESOLVED`；缺省（`undefined`/`null`）⇒
+ *  `{ channel:'dispatch', declared:false }`（`declared:false` = 调用方**不写** `batch.channel` 键）。 */
 export function normalizeChannelDecl(channel: unknown, tasks: WaveTask[]): { channel: ChannelDecl; declared: boolean } {
   if (channel == null) return { channel: 'dispatch', declared: false };
   if (channel !== 'dispatch' && channel !== 'team' && channel !== 'mixed') {

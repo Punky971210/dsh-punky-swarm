@@ -39,6 +39,12 @@ export declare const ROSTER_NAME_RE: RegExp;
  *  trim 后空（空串/纯空白）⇒ `null`；非空 ⇒ `trim()` 原样保留。
  *  **非法形态在此不抛**（拒态须回显 `task`）——词法判据单点 = `buildWavePlan` 建批期，抛 `GATE_ROSTER_INVALID`。 */
 export declare function normalizeRoster(raw: unknown): string | null;
+/** 批级通道归属声明的归一化 + 一致性校验（**单点判定**）。
+ *  **实现与完整口径 = 上方源码的 `//` 详述块**（本行起的 JSDoc 是**指针** —— tsc 只把 JSDoc emit 到
+ *  `lib/wave-plan.d.ts`，`//` 不会；故此处只给速查摘录、**不重复正文**，避免双真源漂移）。
+ *  摘录：枚举非法 ⇒ throw `GATE_CHANNEL_INVALID`；`team` 缺 roster / `dispatch` 带 roster /
+ *  `mixed` 零 roster ⇒ throw `GATE_CHANNEL_UNRESOLVED`；缺省（`undefined`/`null`）⇒
+ *  `{ channel:'dispatch', declared:false }`（`declared:false` = 调用方**不写** `batch.channel` 键）。 */
 export declare function normalizeChannelDecl(channel: unknown, tasks: WaveTask[]): {
     channel: ChannelDecl;
     declared: boolean;
