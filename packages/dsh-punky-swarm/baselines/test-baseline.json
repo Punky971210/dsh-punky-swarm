@@ -57,9 +57,9 @@
       "todos": 0
     },
     "test/api-config.test.js": {
-      "asserts": 85,
+      "asserts": 84,
       "blankLines": 30,
-      "lines": 364,
+      "lines": 367,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -688,6 +688,14 @@
       "tests": 3,
       "todos": 0
     },
+    "test/l5-wait-ban.test.js": {
+      "asserts": 36,
+      "blankLines": 20,
+      "lines": 165,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
     "test/legacy-fix.test.js": {
       "asserts": 20,
       "blankLines": 16,
@@ -1249,7 +1257,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-26T19:54:51Z",
+  "generatedAt": "2026-09-26T21:57:54Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1260,15 +1268,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-26 引擎改动：门禁失败「打回成员」而非「停轮」—— autoSettleLane 增 opts.onFail 二态（pause 缺省=存量 / report=回传调用方）+ 新增 AUTO_SETTLE_ON_FAIL 枚举（承规格 §3 的 onFail 规划）+ swarm_report(settle-request) 传 report 并在 GATE_* 失败时 throw（投递与留痕先行，只把 gate 结论从返回值升级为工具调用失败）；新增 test/gate-reject-to-member.test.js（4 条）",
+  "reason": "2026-09-27 gap-list 收口：① 新增 test/l5-wait-ban.test.js（14 条 —— L5 判定内核行为测试：judgeWaitSleepCommand 段首判定 8 head/分段/赋值前缀/引号掩码/fail-closed + matchToolBan 三分支与未知 fail-closed + TOOL_BAN_BEHAVIORS 枚举一致性）；② 删除 test/api-config.test.js 的 catalog 计数断言（用户裁决「删除 catalog 断言，这个对维护毫无作用」）；③ GR-3 lib/assembly/schema.js 能力注册表注释 11→12 键（补 auditlog，默认开 ⇒ 7→8 键默认开）；④ GR-9 scripts/copy-ts-built.mjs 头注释 governance 8→9 组",
   "schema": 1,
   "totals": {
-    "asserts": 8215,
-    "blankLines": 4100,
-    "files": 156,
-    "lines": 44754,
+    "asserts": 8250,
+    "blankLines": 4120,
+    "files": 157,
+    "lines": 44922,
     "tautologies": 0,
-    "tests": 1712,
+    "tests": 1726,
     "todos": 4
   }
 }

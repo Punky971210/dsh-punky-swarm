@@ -90,7 +90,10 @@ test('端点：GET /config 页载取数 → 200 overlay（磁盘 governance 原�
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.overlay, { hook: { preset: ['l1-sensitive'] } });
   assert.equal(r.body.applied.hook.enabled, true, 'applied = 装配侧解析快照');
-  assert.deepEqual(r.body.presets.map((p) => p.count), [12, 6, 1]); // l1 12 / l2 6 / l3-tool-ban 1（compose 废除后 catalog 三项）
+  // 【2026-09-27 用户裁决】catalog 计数断言已删除 —— 用户口径：「删除 catalog 断言，这个对维护毫无作用」。
+  //   原断言：`assert.deepEqual(r.body.presets.map((p) => p.count), [12, 6, 1])`，
+  //   它每次扩面（如 2026-09-26 新增 l5-wait-ban）都需同步，且不校验语义。
+  //   ⇒ 端点存活由上方 `overlay` + `applied` 两条断言保证；catalog 的内容面不再纳入测试面。
 });
 
 test('端点：GET /config overlay 无 governance → overlay null；文件缺失 → 200 空 overlay', () => {

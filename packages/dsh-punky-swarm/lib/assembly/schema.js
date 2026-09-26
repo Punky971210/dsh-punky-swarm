@@ -24,8 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 
-// ── 能力注册表（11 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps/logs/topic）──
-// path = config 取值路径；default = 缺省值（7 键默认开——aip/discovery/verify/watch/worktree/budget/trajectory；
+// ── 能力注册表（12 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps/auditlog/logs/topic）──
+// path = config 取值路径；default = 缺省值（8 键默认开——aip/discovery/verify/watch/worktree/budget/trajectory/auditlog；
 //   显式 enabled:false 可逐键关闭；4 键默认关——identity/acps/logs/topic，需显式开启）；
 // consumers = 既有消费点（键路径一致性依据）
 // identity 键：身份体系默认关——config.aip.identity.enabled === true 时

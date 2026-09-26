@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const built = join(root, '.tsbuild'); // rootDir:lib → 产物相对 lib 的结构直接落在 .tsbuild 根（lib/schema.ts → .tsbuild/schema.js）
 
-// 回拷清单（.js + .d.ts）：schema 5 组 + contracts + governance 8 组（纯函数内核，lib/governance/）；
+// 回拷清单（.js + .d.ts）：schema 5 组 + contracts + governance 9 组（纯函数内核，lib/governance/）；
 // 未转 .js 原样保留在 lib，不回拷
 const files = [
   'schema.js', 'schema.d.ts',
