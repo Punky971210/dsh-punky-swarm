@@ -22,7 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 //   三臂（一臂一用例）：
 //     ①a 技能根**不存在** + 资产声明名解析不到 ⇒ 建批成功 + 批次落盘 + **不落** GATE_SKILL_MISSING（③ 态守卫）
-//     ①b 技能根**存在**（**空目录**）+ 资产声明名解析不到 ⇒ 建批成功 + 批次落盘 + GATE_SKILL_MISSING 点名
+//     ①b（已删）：原「技能根存在（空目录）⇒ 落 GATE_SKILL_MISSING 点名」——该码已移除，见下方删除说明
 //     ①c 结构段哨兵：同一临时资产某 role **缺 `skills` 字段** ⇒ **仍拒** TEAM_ASSET_SKILLS_MISMATCH
 //         （证明本批只翻转「存在性」，未误伤「结构」校验）
 //
@@ -82,11 +82,11 @@ function mkTeamsRoot() {
   return { teamsRoot, asset };
 }
 
-test('①a 技能根不存在 + 声明技能不可解析 ⇒ 建批成功 + 不落 GATE_SKILL_MISSING（三态表 ③）', async () => {
+test('①a 技能根不存在 + 声明技能不可解析 ⇒ 建批成功（技能可解析性不参与建批判定）', async () => {
   const h = makeHarness();
   const { teamsRoot } = mkTeamsRoot();
   try {
-    // 隔离 HOME 下**不造** `.agents/skills` ⇒ `resolvableSkillNames().ok === false` ⇒ 守 `if (res.ok)` 守卫、不告警
+    // 隔离 HOME 下**不造** `.agents/skills` ⇒ 技能根不可用；2026-09-26 裁决后该态**无任何引擎侧后果**
     assert.equal(fs.existsSync(hostSkillsRootOf()), false, '前置：技能根不存在（本臂的可达构造）');
     const out = await h.byName.wave_plan.execute({
       batchId: 'rec-arm-a', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
@@ -94,34 +94,19 @@ test('①a 技能根不存在 + 声明技能不可解析 ⇒ 建批成功 + 不�
     }, SESS);
     assert.equal(out.batchId, 'rec-arm-a', 'recommend 语义：skills 不可解析不得拒建批');
     assert.equal(fs.existsSync(batchFileOf(h.root, 'rec-arm-a')), true, '不得零批次落盘（原「拒后零落盘」已翻转）');
-    assert.equal((out.warnings ?? []).some((x) => x.code === 'GATE_SKILL_MISSING'), false,
-      '技能根不可用 ⇒ 该态不落告警（不误报全部缺失）：' + JSON.stringify(out.warnings));
+    // ⚠ 原「不落 GATE_SKILL_MISSING」断言已删（2026-09-26）：该码已从引擎彻底移除
+    //   ⇒ 继续断它**恒真** = 空转校验（纪律 §15 ⑤「无命中构造即空转」）⇒ 一并删除，不留空转。
   } finally {
     fs.rmSync(h.root, { recursive: true, force: true });
     fs.rmSync(teamsRoot, { recursive: true, force: true });
   }
 });
 
-test('①b 技能根存在（空目录）+ 声明技能不可解析 ⇒ 建批成功 + GATE_SKILL_MISSING 点名', async () => {
-  const h = makeHarness();
-  const { teamsRoot } = mkTeamsRoot();
-  try {
-    // **空技能根**：只建目录，零 SKILL.md、零技能名目录 ⇒ `res.ok === true` 且 `known` 为空集
-    fs.mkdirSync(hostSkillsRootOf(), { recursive: true });
-    const out = await h.byName.wave_plan.execute({
-      batchId: 'rec-arm-b', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
-      assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
-    }, SESS);
-    assert.equal(out.batchId, 'rec-arm-b', 'recommend 语义：skills 不可解析不得拒建批');
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'rec-arm-b')), true, '不得零批次落盘（原「拒后零落盘」已翻转）');
-    const w = (out.warnings ?? []).find((x) => x.code === 'GATE_SKILL_MISSING');
-    assert.ok(w, '解析不到的技能名须落 GATE_SKILL_MISSING 告警（recommend 留痕，非阻断）：' + JSON.stringify(out.warnings));
-    assert.match(String(w.missing ?? ''), /rec-noskill-coder-xyz/, '告警须点名缺失技能名：' + JSON.stringify(w));
-  } finally {
-    fs.rmSync(h.root, { recursive: true, force: true });
-    fs.rmSync(teamsRoot, { recursive: true, force: true });
-  }
-});
+// ── 已删（2026-09-26，用户裁决「技能 recommend 不再设门禁」）────────────────────────────────
+//   原 test「①b 技能根存在（空目录）」整条锚定已删除的 `GATE_SKILL_MISSING` 告警（该码已从引擎彻底移除：
+//   产出点 + 事件注释 + 两个孤儿函数；见 lib/tools/core.js 与 lib/state/event-types.js）。
+//   语义现为：技能可解析性**完全不参与建批判定** ⇒ 无论解析得到与否，建批照落、零告警。
+
 
 test('①c 结构段哨兵：某 role 缺 skills 条目 ⇒ 仍拒 TEAM_ASSET_SKILLS_MISMATCH（未误伤结构校验）', async () => {
   const h = makeHarness();

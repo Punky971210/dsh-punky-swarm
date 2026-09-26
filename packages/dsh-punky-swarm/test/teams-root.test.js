@@ -360,7 +360,7 @@ test('T5 向后兼容：缺省 teamsRoot → 包内 software-team 技能前缀�
     // 注（2026-09-26 团队资产瘦身）：新骨架显式写 `audit_contract: {}` ⇒ 必然产生
     //   GATE_AUDIT_CONTRACT_EXEMPT 留痕（空声明 = 声明无契约，合法态，非缺陷）。
     //   ⇒ 本用例不测告警 ⇒ 断言口径改为「除去骨架留痕后为空」。
-    const benignT5 = new Set(['GATE_AUDIT_CONTRACT_EXEMPT', 'GATE_SKILL_MISSING']);
+    const benignT5 = new Set(['GATE_AUDIT_CONTRACT_EXEMPT']);
     assert.deepEqual(out.warnings.filter((w) => !benignT5.has(w.code)), [], '包内声明齐备 ⇒ 无角色告警（除去骨架两条留痕）');
     // 前缀来源自证：逐字等于包内资产声明（独立读盘对照；根由模块位置推导，**不依赖 cwd**——
     // 命令 gate 的 cwd 契约是 worktree/GATE_REPO_ROOT 兜底 artifacts 根，故测试不得用 process.cwd()）

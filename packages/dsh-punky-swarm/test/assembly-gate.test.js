@@ -231,9 +231,9 @@ test('T2 execute：C+ 带合规 assembly → 通过 + batch JSON 顶层 assembly
   assert.deepEqual(out.assembly, decl, '返回含归一化 assembly 视图');
 // 注（2026-09-26 团队资产瘦身）：夹具以包内 software-team 最小骨架为源 ⇒ 必然产生两类**留痕告警**：
     //   GATE_AUDIT_CONTRACT_EXEMPT（骨架显式写 audit_contract:{} = 声明无契约）
-    //   GATE_SKILL_MISSING（骨架 skills 名在隔离 HOME 下解析不到；recommend 语义只留痕不阻断）
+    //   （骨架 skills 名在隔离 HOME 下解析不到已无引擎侧后果：2026-09-26 起技能 recommend 不设门禁、零告警）
     //   ⇒ 本用例**不测告警**，故断言口径改为「无【本用例关心的】告警」（过滤上述两类）。
-  const benign = new Set(['GATE_AUDIT_CONTRACT_EXEMPT', 'GATE_SKILL_MISSING']);
+  const benign = new Set(['GATE_AUDIT_CONTRACT_EXEMPT']);
   assert.deepEqual(out.warnings.filter((w) => !benign.has(w.code)), [], '合规声明 warnings 无新增（除去骨架两条留痕）');
   const raw = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-t2'), 'utf8'));
   assert.equal(raw.schema, 3, 'batch schema 不升');

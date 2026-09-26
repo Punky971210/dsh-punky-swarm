@@ -215,7 +215,7 @@ export const EVT_GATE_ROLE_INVALID = 'gate.role_invalid';
 //   归类时会把它误读成「role 非法」（载荷 `code` 正确、事件 type 误导）。
 // 写端：`lib/tools/core.js` 的 `wave_plan` 告警事件化**按码映射表**（`WARN_EVENT_OF`）。
 // 读端：`log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效）。
-// **残留（GAP-S9）**：映射表未命中的告警码（如 `GATE_AUDIT_CONTRACT_EXEMPT` / `GATE_SKILL_MISSING`）
+// **残留（GAP-S9）**：映射表未命中的告警码（如 `GATE_AUDIT_CONTRACT_EXEMPT`）
 //   **保持现状 = `gate.role_invalid`**（向后兼容：不迁移既有事件 type，避免既有断言与外部消费者漂移）；
 //   未来把每个告警码都映射到专用类型属后续批，本任务不做。
 export const EVT_GATE_COMPLETE_OUTCOMES_EMPTY = 'gate.complete_outcomes_empty';

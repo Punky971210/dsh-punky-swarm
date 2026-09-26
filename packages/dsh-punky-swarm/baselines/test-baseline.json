@@ -385,11 +385,11 @@
       "todos": 0
     },
     "test/gate-assertion-r32.test.js": {
-      "asserts": 29,
-      "blankLines": 38,
-      "lines": 421,
+      "asserts": 21,
+      "blankLines": 40,
+      "lines": 341,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 6,
       "todos": 0
     },
     "test/gate-criteria-parity-r33.test.js": {
@@ -969,11 +969,11 @@
       "todos": 0
     },
     "test/skill-recommend-semantics.test.js": {
-      "asserts": 10,
-      "blankLines": 15,
-      "lines": 155,
+      "asserts": 5,
+      "blankLines": 16,
+      "lines": 140,
       "tautologies": 0,
-      "tests": 3,
+      "tests": 2,
       "todos": 0
     },
     "test/store-corrupt.test.js": {
@@ -1241,7 +1241,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-26T15:32:29Z",
+  "generatedAt": "2026-09-26T17:02:25Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1252,15 +1252,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "团队资产瘦身收口：D2 contractSections 实测投影为 null（未声明 ≠ 空声明）",
+  "reason": "2026-09-26 用户裁决：技能 recommend 不再设门禁 —— 彻底移除 GATE_SKILL_MISSING（core.js 产出点 + 事件注释 + 两个孤儿函数 resolvableSkillNames/declaredSkillNamesOf + 工具描述两处）；测试面同步（删 3 条围绕该码的空转 test、改 2 处 benign 集、清注释引用）；顺带三队资产同款瘦身（删 manifest+chain）与 wave-plan.d.ts 补指针型 JSDoc",
   "schema": 1,
   "totals": {
-    "asserts": 8287,
-    "blankLines": 4084,
+    "asserts": 8274,
+    "blankLines": 4087,
     "files": 155,
-    "lines": 44911,
+    "lines": 44816,
     "tautologies": 0,
-    "tests": 1728,
+    "tests": 1724,
     "todos": 4
   }
 }

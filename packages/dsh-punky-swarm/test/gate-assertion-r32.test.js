@@ -24,7 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 判读结论（逐枚；本文件覆盖其中 4 枚**真缺口**，另 4 枚裁定见蓝图 §6）：
 //   · 真缺口 → 本文件补测（4 枚 / 5 例）：
 //       GATE_EXEC_INPUT_MISSING ×3（E-A 批级拒 + E-A 对照放行 + E-B 逐 lane 拒）
-//   GATE_SKILL_MISSING      ×3（资产面声明不可解析技能 ⇒ 留痕 / 覆盖层声明不可解析技能 ⇒ 留痕 / 全可解析 ⇒ 零告警）
+//   （原 GATE_SKILL_MISSING ×3 —— 该码已随 2026-09-26 裁决彻底移除，相关 test 已删）
 //       GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH ×1（出口门开启 + 存量批 ⇒ 放行 + 落码）
 //       GATE_EVENT_CONST_MISSING ×2（围栏 + 前置面；**降级覆盖**，理由见该例注释）
 //         → R3-4 已把该枚的 E2E 补上（`test/gate-event-const-e2e-r34.test.js`）；本两例保留为**源码面围栏**
@@ -207,101 +207,21 @@ test('R3-2 E-B：flows.exec.consumes_required_per_lane 未被满足 ⇒ 拒建�
 //   相应新增资产面用例（下一条）——原「覆盖层 ×2」扩为「×3」。
 // 缺口成因（历史）：既有套件从未注入 `config.assembly`（全仓 grep `config.assembly` 在 `test/` 零命中）。
 
-test('R3-2 GATE_SKILL_MISSING【资产面】：资产层声明不可解析技能 ⇒ 留痕告警且不阻断建批', async () => {
-  const h = makeHarness(); // 无 `config.assembly` ⇒ 判定面只剩**资产面**
-  try {
-    // `threeTierSyntheticTeam` 的三个声明名（r32-designer / r32-coder / r32-reviewer）在隔离 HOME 下
-    //   **无宿主技能根**（不造桩、不写 SKILL.md）——但按现行语义：技能根不可用 ⇒ 守 `if (res.ok)` 守卫 ⇒
-    //   **不告警**。故先 `mkdirSync` 一个**空技能根目录**（零 SKILL.md、零技能名目录），使 `res.ok === true`，
-    //   资产面的三个名才落到 ② 态（点名告警）——这是本用例告警可被断言所必需的**可达构造**。
-    fs.mkdirSync(path.join(process.env.USERPROFILE, '.agents', 'skills'), { recursive: true });
-    const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-r32-asset-'));
-    writeSyntheticTeam(teamsRoot, SETTLE_TEAM, settleTeamAsset());
-    const out = await h.byName.wave_plan.execute({
-      batchId: 'r32-sk-asset', team: SETTLE_TEAM, teamsRoot, tasks: settleTasks(),
-      assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
-    }, SESS);
-    const w = out.warnings.find((x) => x.code === 'GATE_SKILL_MISSING');
-    assert.ok(w, '资产面的不可解析技能须落 GATE_SKILL_MISSING 告警（recommend 留痕）：' + JSON.stringify(out.warnings));
-    assert.match(String(w.missing ?? ''), /r32-coder/, '须点名缺失技能：' + JSON.stringify(w));
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-sk-asset')), true, 'recommend 语义：不阻断建批');
-  } finally { cleanup(h); }
-});
+// ── 已删（2026-09-26，用户裁决「技能 recommend 不再设门禁」）────────────────────────────────
+//   原 test「R3-2 GATE_SKILL_MISSING【资产面】」整条锚定已删除的 `GATE_SKILL_MISSING` 告警（该码已从引擎彻底移除：
+//   产出点 + 事件注释 + 两个孤儿函数；见 lib/tools/core.js 与 lib/state/event-types.js）。
+//   语义现为：技能可解析性**完全不参与建批判定** ⇒ 无论解析得到与否，建批照落、零告警。
 
-test('R3-2 GATE_SKILL_MISSING：config.assembly 覆盖层声明不可解析技能 ⇒ 留痕告警且不阻断建批', async () => {
-  const h = makeHarness({
-    config: {
-      assembly: {
-        layers: {
-          plan: { roles: ['designer'], skills: { designer: ['r32-nope-designer'] } },
-          exec: { roles: ['coder'], skills: { coder: ['r32-nope-coder'] } },
-          audit: { roles: ['reviewer'], skills: { reviewer: ['r32-nope-reviewer'] } },
-        },
-      },
-    },
-  });
-  try {
-    const teamsRoot = writeTempTeam('punky-r32-sk-', PROBE);
-    const out = await h.byName.wave_plan.execute({
-      batchId: 'r32-sk', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-    }, SESS);
-    const w = out.warnings.find((x) => x.code === 'GATE_SKILL_MISSING');
-    assert.ok(w, '覆盖层的不可解析技能须落 GATE_SKILL_MISSING 告警：' + JSON.stringify(out.warnings));
-    assert.match(String(w.missing ?? ''), /r32-nope-coder/, '须点名缺失技能：' + JSON.stringify(w));
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-sk')), true, 'warning 语义：不阻断建批');
-  } finally { cleanup(h); }
-});
 
-test('R3-2 GATE_SKILL_MISSING 对照：覆盖层技能全可解析 ⇒ 零该码告警（拒因可归因）', async () => {
-  const h = makeHarness({
-    config: {
-      assembly: {
-        layers: {
-          plan: { roles: ['designer'], skills: { designer: ['r32-designer'] } },
-          exec: { roles: ['coder'], skills: { coder: ['r32-coder'] } },
-          audit: { roles: ['reviewer'], skills: { reviewer: ['r32-reviewer'] } },
-        },
-      },
-    },
-  });
-  try {
-    // ⚠ 【如实登记 · lane 未自行改断言】原 setup 用**已删除的写盘夹具**（三件退役符号之一，见批
-    //   `onto-fixture-purge-20260925` 的删除清单；本文件内已**零字面引用**）把三个覆盖层名造成可解析；该夹具
-    //   已按用户裁决撤除（「不造空桩」）⇒ 本 lane 只删该行、**未改下方断言**。结果是本用例在改后**转红**，
-    //   且**红因正当**：2026-09-25 recommend 起资产面声明名一并进同一判定面（`declaredSkillNamesOf(teamAsset)`），
-    //   而本用例的 `probe-team` 资产以包内 `software-team` 为骨架（声明 13 个技能名），隔离 HOME 下宿主技能根
-    //   无内容 ⇒ 这批名必然不可解析 ⇒ 必然落 `GATE_SKILL_MISSING`。即「全可解析 ⇒ 零该码告警」这一命题的
-    //   **可达构造**在本批环境约束下已不存在（构造它要么造桩、要么造技能名目录，两件都被本批红线禁止）。
-    //   ⇒ 提请 Leader 裁认（见 lane 产物 `exec/tests-c.md` §偏离 D-2）：本用例需按 recommend 语义重述
-    //   （属「改断言」，超出本 lane 授权）。
-    const teamsRoot = writeTempTeam('punky-r32-skok-', PROBE);
-    fs.mkdirSync(path.join(process.env.USERPROFILE, '.agents', 'skills'), { recursive: true });
-    const out = await h.byName.wave_plan.execute({
-      batchId: 'r32-skok', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-    }, SESS);
-    // 注（2026-09-26 团队资产瘦身 · Leader 裁认，承上方 :272-276 的裁认提请）：
-  //   本用例原命题「覆盖层技能全可解析 ⇒ 零 GATE_SKILL_MISSING」的**可达构造在隔离 HOME 下不存在**
-  //   （造桩/造技能目录两件都被红线禁止）⇒ 按 **recommend 语义**重述为：
-  //   **告警必须可归因** —— 出现的 GATE_SKILL_MISSING 逐条对得上骨架声明的技能名，
-  //   且**不得出现非技能类的误报**。
-  const skillWarns = out.warnings.filter((x) => x.code === 'GATE_SKILL_MISSING');
-  const otherWarns = out.warnings.filter((x) => x.code !== 'GATE_SKILL_MISSING' && x.code !== 'GATE_AUDIT_CONTRACT_EXEMPT');
-  assert.deepEqual(otherWarns, [], '不得出现技能类之外的误报：' + JSON.stringify(out.warnings));
-  for (const w of skillWarns) {
-    assert.ok(String(w.missing ?? '').length > 0 || String(w.message ?? '').length > 0,
-      '技能告警须可归因（带 missing 名单或说明）：' + JSON.stringify(w));
-  }
-  } finally { cleanup(h); }
-});
+// ── 已删（2026-09-26，用户裁决「技能 recommend 不再设门禁」）────────────────────────────────
+//   原 test「R3-2 GATE_SKILL_MISSING：config.assembly 覆盖层」整条锚定已删除的 `GATE_SKILL_MISSING` 告警（该码已从引擎彻底移除：
+//   产出点 + 事件注释 + 两个孤儿函数；见 lib/tools/core.js 与 lib/state/event-types.js）。
+//   语义现为：技能可解析性**完全不参与建批判定** ⇒ 无论解析得到与否，建批照落、零告警。
 
-// ── 真缺口 ③：`GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH`（出口侧存量批放行留痕）──────────────
-// 落点：`lib/state/store.js:742`（`batch.events.push(newEvent(EVT_LANE_HANDOFF_GAP, {code: …}))`）。
-// 触发条件（`lib/state/gates.ts:1676-1695`，三条**全须**成立）：
-//   ① 出口门开启（`handoffGateEnabledOf(readCfg(),'settle')`，缺省关）→ 否则 `disabled:true` 早退；
-//   ② 该 lane 在 DAG 中**有下游**（他人 `deps` 引用 / 本 lane `next` 指向存在的步）；
-//   ③ `batch.handoffs === undefined | null`（存量批形态）。
-// 缺口成因：入口侧同族码 `GATE_HANDOFF_LEGACY_PASSTHROUGH` 有 `handoff-gate.test.js` P1-H6 覆盖，
-//   **出口侧从未被驱动**（全仓 `LEGACY_PASSTHROUGH` 在 `test/` 零命中）。
+
+// ── 已删（2026-09-26）：原 test「R3-2 GATE_SKILL_MISSING 对照：覆盖层…」断的是已被彻底移除的
+//   `GATE_SKILL_MISSING` ⇒ 码不存在后该断言**恒真 = 空转校验**（纪律 §15 ⑤）⇒ 删除不留空转。
+
 
 test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 ⇒ 放行并落码留痕', async () => {
   const h = makeHarness();

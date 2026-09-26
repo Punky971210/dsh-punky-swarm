@@ -94,9 +94,9 @@ test('roles 语义（execute）：C+ 含扩展角色混合大小写 roles → �
   assert.ok(out.lanes.a1 === 'pending', '批次照建');
 // 注（2026-09-26 团队资产瘦身）：夹具以包内 software-team 最小骨架为源 ⇒ 必然产生两类**留痕告警**：
     //   GATE_AUDIT_CONTRACT_EXEMPT（骨架显式写 audit_contract:{} = 声明无契约）
-    //   GATE_SKILL_MISSING（骨架 skills 名在隔离 HOME 下解析不到；recommend 语义只留痕不阻断）
+    //   （骨架 skills 名在隔离 HOME 下解析不到已无引擎侧后果：2026-09-26 起技能 recommend 不设门禁、零告警）
     //   ⇒ 本用例**不测告警**，故断言口径改为「无【本用例关心的】告警」（过滤上述两类）。
-  const benignRoles = new Set(['GATE_AUDIT_CONTRACT_EXEMPT', 'GATE_SKILL_MISSING']);
+  const benignRoles = new Set(['GATE_AUDIT_CONTRACT_EXEMPT']);
   assert.deepEqual(out.warnings.filter((w) => !benignRoles.has(w.code)), [], '合规 roles 无告警（除去骨架两条留痕）');
   const raw = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-roles'), 'utf8'));
   assert.deepEqual(raw.assembly.roles, roles, 'batch JSON 顶层 assembly.roles 原样持久化（含扩展角色与大小写变体）');
