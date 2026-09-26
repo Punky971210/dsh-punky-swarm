@@ -68,35 +68,17 @@ function tmpRoot() {
   return root;
 }
 
-test('包内 software-team 声明：加载通过且与装配语义等价（层/字段/契约/流程开关/收紧）', () => {
-  const r = loadTeamAsset(REPO_ROOT, 'software-team');
-  assert.equal(r.ok, true, '真实声明必须通过加载期校验：' + JSON.stringify(r.problems));
-  assert.equal(r.asset.team, 'software-team');
-  // 现状语义对照：exec→outputs、plan/audit→produce
-  assert.equal(r.asset.flows.plan.produce_field, 'produce');
-  assert.equal(r.asset.flows.exec.produce_field, 'outputs');
-  assert.equal(r.asset.flows.audit.produce_field, 'produce');
-  // 现状 plan 契约 = 两标题（软件工程体裁由模板声明，不再硬编码）；串带 `## ` 前缀以与 legacy 子串口径逐字等价
-  assert.deepEqual(r.asset.flows.plan.contract.required_sections, ['## 验收标准', '## 约束']);
-  // R1-g 翻牌：consume 强制化（缺口修复）——exec/audit lane 必须声明非空 consume，否则拒派
-  //   （lane 确实无上游时用任务级 `standalone: true` 显式逃生并留痕）
-  assert.deepEqual(r.asset.flows.exec.entry_requires, ['consume']);
-  assert.deepEqual(r.asset.flows.audit.entry_requires, ['consume']);
-  assert.deepEqual(r.asset.flows.plan.entry_requires, [], 'plan 层无入口要求（其上游是 Leader 决策包，不落 consume）');
-  // 现状 audit 无内容契约（只校 produce 存在）
-  assert.equal(r.asset.flows.audit.contract, undefined);
-  // 三层装配与 DEFAULT_ASSEMBLY 同源
-  assert.deepEqual(r.asset.layers.plan.roles, ['coordinator', 'designer']);
-  assert.deepEqual(r.asset.layers.audit.roles, ['supervisor', 'doc-manager']);
-  // 状态机声明面**已退役**（2026-09-18 清债：零运行期消费者 ⇒ 声明即拒）；引擎状态机真源 =
-  //   `lib/schema.js` 的 `MEMBER_TRANSITIONS`（经 `machine-rules.js` 接线），与团队资产无关。
-  assert.equal(r.asset.state_machine, undefined, '2026-09-18 清债：顶层 state_machine 已退役（声明即拒）');
-  // 退役语义：punky-preset 团队装配已弃用（资产文件已删）→ 拒载且**不静默回落**任何内置装配
-  const jf = loadTeamAsset(REPO_ROOT, 'punky-preset');
-  assert.equal(jf.ok, false, 'punky-preset 团队装配已退役：资产文件不存在，必须拒载');
-  assert.deepEqual(CODES(jf), [TEAM_ASSET_CODES.NOT_FOUND]);
-  assert.equal(jf.asset, null, '拒载时不返回半成品资产');
-});
+// ── 已删（2026-09-26，用户裁决「删这两条」）────────────────────────────────────
+// 原 `包内 software-team 声明：加载通过且与装配语义等价（层/字段/契约/流程开关/收紧）` 测试**整条锚定旧资产形状**
+//   （`flows.plan.contract.required_sections` / `layers.audit.roles` = [supervisor, doc-manager] /
+//    `entry_requires` 三态 / `state_machine` 退役面 等），而**这些正是「团队内容改为模版、不再作为组件」
+//   要去掉的**（见 `presets/software-team/team-asset.yml` 现为 859 B 最小骨架）⇒ 该断言在新骨架下**永不成立**。
+// ⇒ 团队资产的**加载期合法性**仍由以下两处覆盖，未留缺口：
+//   ① 本文件其余用例（`loadTeamAsset` / `validateTeamAsset` 的通用分支与码面）
+//   ② **宿主级冒烟**（以 `team:'software-team'` 真实 `wave_plan` 建批，验 `teamAsset.ok=true` 且读的是新骨架）
+// ⚠ 若日后需要「包内资产声明面」的对照，请**对当前骨架重写**（只断言 `team` 非空 + `layers[*].roles/skills` 结构），
+//   不要恢复对 `contract` / `DEFAULT_ASSEMBLY` 的逐键对照。
+
 
 test('读端容忍 BOM（U+FEFF 前缀不导致 BAD_JSON）', () => {
   const text = '\uFEFF' + JSON.stringify(baseAsset());
@@ -507,15 +489,11 @@ test('R1-e：resolveAssembly 解析顺序 —— config 覆盖层优先 → 包�
   // ① 覆盖层优先（与重构前逐字一致）
   const custom = { team: 'custom', layers: { plan: { roles: ['designer'], skills: { designer: ['x'] } } } };
   assert.equal(resolveAssembly('punky-preset', custom), custom, 'config.assembly 整份优先');
-  // ② 包内资产为权威源：software-team 声明派生结果 = DEFAULT_ASSEMBLY **减去本批 D-3 清理的悬空键**
-  //    `layers.audit.skills.reviewer`（reviewer 属 **exec 层**，audit 层角色只有 supervisor/doc-manager）
-  //    ⇒ 引擎缺省 `DEFAULT_ASSEMBLY` **刻意不动**（Leader G-1 裁决：缺省是回退面，不被单个团队的清理牵动），
-  //      故此处以**显式差异对照**取代原「逐字等价」断言：等价性锚保留（差异被写死），不静默丢失。
-  const expectedSoftware = structuredClone(DEFAULT_ASSEMBLY);
-  delete expectedSoftware.layers.audit.skills.reviewer;
-  const st = resolveAssembly('software-team');
-  assert.deepEqual(st, expectedSoftware, '包内 software-team 声明 ≡ DEFAULT_ASSEMBLY − layers.audit.skills.reviewer（显式差异对照）');
-  assert.deepEqual(assemblyFromTeamAsset('software-team'), expectedSoftware);
+  // ② ⚠ 原「包内 software-team 声明 ≡ DEFAULT_ASSEMBLY − layers.audit.skills.reviewer」的**显式差异对照已删**
+  //    （2026-09-26，用户裁决「删这两条」）：该断言锚定**旧资产形状**（逐键对照 DEFAULT_ASSEMBLY），
+  //    而新骨架（859 B 最小骨架）已不承载装配内容 ⇒ 对照永不成立。
+  //    ⇒ 「包内资产能派生装配」仍由下方 ⑤（临时包根下的自定义团队）覆盖；
+  //      「包内资产能加载」由宿主级冒烟覆盖。
   assert.equal(DEFAULT_ASSEMBLY.team, 'software-team', 'DEFAULT_ASSEMBLY 已转为 software-team 装配的兼容导出（不再是 punky-preset 内置常量）');
   // ③ **退役语义**：punky-preset 团队装配已弃用（资产文件已删）⇒ 无内置常量兜底，无资产即 null
   assert.equal(resolveAssembly('punky-preset'), null, 'punky-preset 退役：不再回落到任何内置装配常量');
