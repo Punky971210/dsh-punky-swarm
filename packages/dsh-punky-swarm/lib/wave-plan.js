@@ -240,6 +240,61 @@ export function normalizeAssemblyDecl(input, extraRoles = null) {
     }
     return { decl, warnings };
 }
+// ── R-3（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.3）：roster 承载字段 ──
+// `roster` = lane ← **roster 成员名**（team 通道执行者标识）。**不设唯一性约束**：
+//   · 同类型多成员：`coder-1` / `coder-2` 各书其名（成员名在 `spawn_teammate` 时已固定）；
+//   · 一成员多 lane：同一 roster 名出现在多条 lane 的 `roster` 上 ⇒ 合法，**不产告警**（不去重、不查重）。
+// ⚠ 与 `owner` **并存互不替代**：`owner` 是公共池归属声明面（不参与门禁），`roster` 是写权判据的输入。
+// ⚠ **不参与 `sig`**：`computeTaskSig` 输入面 `{id,layer,role,deps,produce,outputs,cmd}` 逐字不变 ⇒ 既有 sig 基线零漂移。
+/** roster 合法形态：非空、无空白、lower-kebab-case 兼容（同 `plan/fix-spec.md` §2.3.4）。 */
+export const ROSTER_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** roster 归一化（纯函数，导出供读端与测试共用）：非字符串（含缺省）⇒ `null`；字符串 ⇒ `trim()`；
+ *  trim 后空（空串/纯空白）⇒ `null`；非空 ⇒ `trim()` 原样保留。
+ *  **非法形态在此不抛**（拒态须回显 `task`）——词法判据单点 = `buildWavePlan` 建批期，抛 `GATE_ROSTER_INVALID`。 */
+export function normalizeRoster(raw) {
+    if (typeof raw !== 'string')
+        return null;
+    const trimmed = raw.trim();
+    return trimmed ? trimmed : null;
+}
+// ── R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4）：批级通道归属声明的归一化与一致性校验 ──
+// **单点判定**（§2.4.4「混用被拒还是告警」= **拒**；且「运行期不再二次判定，禁双重」）：
+//   · 枚举非法（非 `dispatch|team|mixed`，含非字符串）⇒ throw `GATE_CHANNEL_INVALID`（回显原值）；
+//   · 一致性三条（**仅显式声明时施加**）：
+//       `team`     ⇒ **每条** lane 的 `roster` 非空，否则 throw `GATE_CHANNEL_UNRESOLVED`；
+//       `dispatch` ⇒ **零条** lane 的 `roster` 非空（写了 roster 即矛盾）；
+//       `mixed`    ⇒ 允许并存，但**至少一条** lane 的 `roster` 非空（否则应声明 team/dispatch）；
+//   · 缺省（`undefined`/`null`）⇒ `{ channel: 'dispatch', declared: false }`：`channel` 是**归一化读端的有效值**
+//     （「缺省 `dispatch`，存量语义零变化」），`declared:false` 指示调用方**不写 `batch.channel` 键**
+//     （键不存在 ⇒ 存量读端零感知、零写入，满足 §6.4 R5-d；R5-a「未声明 ⇒ `undefined`/`'dispatch'`」取 **undefined**）。
+//     ⚠ 一致性三条**只在显式声明时**施加：未声明（有效值 dispatch）却写了 roster 的形态**放行**——否则
+//     「存量批零破坏」（§8）会被追溯性打破；该取舍记为**实现决定**，见 `exec/contract-change.md`。
+// 调用点 = 建批路径（`lib/tools/core.js`：`normalizeChannelDecl(channel, tasks)` → 声明时落盘 `batch.channel`）；
+// 本函数**零副作用**（不读写批次状态、不产事件），可被测试直调。
+export function normalizeChannelDecl(channel, tasks) {
+    if (channel == null)
+        return { channel: 'dispatch', declared: false };
+    if (channel !== 'dispatch' && channel !== 'team' && channel !== 'mixed') {
+        throw new Error('GATE_CHANNEL_INVALID: channel must be one of dispatch|team|mixed (got: ' + String(channel) + ')');
+    }
+    const declaredChannel = channel; // 单点断言：上方三字面量守卫后仅剩合法枚举（断言纯类型层）
+    const laneList = Array.isArray(tasks) ? tasks : [];
+    const withRoster = [];
+    const withoutRoster = [];
+    for (const t of laneList) {
+        (normalizeRoster(t.roster) === null ? withoutRoster : withRoster).push(String(t.id));
+    }
+    if (declaredChannel === 'team' && withoutRoster.length) {
+        throw new Error('GATE_CHANNEL_UNRESOLVED: channel "team" requires every lane to declare a non-empty roster (lanes missing roster: ' + withoutRoster.join(', ') + ')');
+    }
+    if (declaredChannel === 'dispatch' && withRoster.length) {
+        throw new Error('GATE_CHANNEL_UNRESOLVED: channel "dispatch" forbids roster declarations (lanes with roster: ' + withRoster.join(', ') + ')');
+    }
+    if (declaredChannel === 'mixed' && !withRoster.length) {
+        throw new Error('GATE_CHANNEL_UNRESOLVED: channel "mixed" requires at least one lane to declare a non-empty roster');
+    }
+    return { channel: declaredChannel, declared: true };
+}
 // C+ 装配门禁裁决（纯函数，导出供工具与测试共用）：工具 execute 在 validateWavePlan 与 createBatch 之间调用——
 //   - decl 悬空 lane id（auditLane/coordinatorLane 不在 tasks）→ throw GATE_ASSEMBLY_INVALID（引用悬空 = 声明无意义，fail-closed）；
 //   - 层归属（结构前置）：三层批形态（任一 task 声明 layer）时 auditLane 须指向 audit 层 lane、
@@ -894,6 +949,16 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
     validateDepsStructure(tasks);
     const { waves } = topoWaves(tasks);
     validateLayerContract(tasks, { smoke: smoke === true });
+    // R-3（`plan/fix-spec.md` §2.3.4）：`roster` 词法**建批期 fail-closed 拒**——与 `role` 的**软告警**口径不同：
+    //   roster 是 team 通道写权判据的输入，非法值只能拒。**先于任何产物构造**抛 ⇒ 「命中即零批次落盘」（R3-e）。
+    //   可达构造（反例）：`roster: 'Coder One'`（含空格/大写）⇒ `GATE_ROSTER_INVALID`（回显 `task` 与 `value`）。
+    //   准入形态（正例）：`'coder-1'` / `'  coder-1  '`（trim 后合法）⇒ 放行；`'coder-1'` 书两条 lane ⇒ 放行且零告警。
+    for (const t of tasks) {
+        const rosterTrimmed = normalizeRoster(t.roster);
+        if (rosterTrimmed !== null && !ROSTER_NAME_RE.test(rosterTrimmed)) {
+            throw new Error('GATE_ROSTER_INVALID: task ' + t.id + ' roster "' + rosterTrimmed + '" must be non-empty lower-kebab-case matching ^[a-z0-9]+(-[a-z0-9]+)*$');
+        }
+    }
     // 团队角色集（可拔插）——角色词法集 = 资产**各层声明角色** ∪ `roles.extra`（`unionRoleVocabulary`）；
     //   `plan_leads` / `audit_leads`（额外牵头角色）另计、与引擎基础牵头集并集。
     //   缺声明/加载失败 → 空集 = 与重构前逐字一致。
@@ -1003,6 +1068,11 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 targetsMarker: targetsContract.targetsMarker, // string | null（内容声明标记；缺省 null = 纯 mtime 校验）
                 targetsNoChange: targetsContract.targetsNoChange, // true = 零改动声明（跳过变更性判定，仅核存在性）
                 owner: ownerDecl,
+                // R-3（`plan/fix-spec.md` §2.3.1/§2.3.2）：roster **恒写**（缺省/非字符串/空串/纯空白 ⇒ `null`，
+                //   与 `targetsMarker` 同风格：缺省落 `null` 不落 `undefined`）；非空 ⇒ `trim()` 原样保留。
+                //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含 `roster` ⇒ 既有 sig 基线零漂移）。
+                //   ⚠ **不设唯一性约束**：同 roster 名书多条 lane 合法（不去重、不告警）。
+                roster: normalizeRoster(t.roster),
                 // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
                 //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
                 //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）

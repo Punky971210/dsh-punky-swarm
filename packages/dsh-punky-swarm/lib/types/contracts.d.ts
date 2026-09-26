@@ -41,6 +41,10 @@ export interface WavePlanTaskInput {
     standaloneReason?: string;
     targetsNoChange?: boolean;
     owner?: string | null;
+    /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（team 通道执行者标识）。
+     *  **不设唯一性约束**（一成员多 lane / 同类型多成员各书其名均合法）；
+     *  非法形态（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）⇒ 建批期拒 `GATE_ROSTER_INVALID`。 */
+    roster?: string | null;
     sig?: string | null;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
@@ -77,6 +81,10 @@ export interface WavePlanTask {
      *  ⚠ **本字段只作声明面**：池 = `owner == null` 的**视图**（不是容器），不引入认领/claim 语义；
      *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
     owner: string | null;
+    /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（team 通道执行者标识）。
+     *  `buildWavePlan` 归一化**恒写**（缺省/非字符串/空串/纯空白 ⇒ `null`；非空 ⇒ `trim()` 原样保留）。
+     *  **不设唯一性约束**（不产告警）；与 `owner` **并存互不替代**；⚠ **不参与 `sig`**。 */
+    roster: string | null;
     /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
      *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
      *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化
@@ -89,6 +97,15 @@ export interface WavePlanTask {
 export interface LaneHandoffContract {
     consumedFrom: string;
     assertions: string[];
+}
+/** R-2（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.2）：交接**覆盖留痕**快照（`LaneHandoff.history` 元素形态）。
+ *  语义 = 「被覆盖掉的**旧值**」：每次 `handoff_submit(overwrite:true)` 覆盖已 `submitted` 的边时 push 一条，
+ *  **追加式**（不得替换或清空历史）⇒ `history.length` = 该边被覆盖的次数。 */
+export interface LaneHandoffHistoryEntry {
+    ts: string;
+    artifacts: string[];
+    assertions: string[];
+    officialTaskId?: string | null;
 }
 /** 单条交接记录（`batch.handoffs[toLaneId][]` 值形态） */
 export interface LaneHandoff {
@@ -103,6 +120,9 @@ export interface LaneHandoff {
     /** 官方任务板镜像（M-6 双写，**只读回显**）：由 Leader 侧 `team_task_create` 后回填；
      *  **不参与任何判定**（判定只看黑板 = 本字段所在对象），写失败只落 `mirror.gap`、不进拒绝路径。 */
     officialTaskId?: string | null;
+    /** R-2（P4 授权修复批，2026-09-25）：覆盖历史（追加式；缺省 undefined / 空数组 = 从未被覆盖 ⇒ 存量边零感知）。
+     *  读端 `handoff_view` 与审计据此核「旧值留痕」；**不参与写权判定**。 */
+    history?: LaneHandoffHistoryEntry[];
 }
 /** 交接表：**toLaneId** → 该 lane 的入边交接列表（批次级可选字段；缺省 undefined = 存量批 ⇒ 门整体放行 + 留痕） */
 export type LaneHandoffMap = Record<string, LaneHandoff[]>;
@@ -137,6 +157,11 @@ export interface WavePlanDoc {
 }
 /** 编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批，O0f 兜底协议） */
 export type ManagerPlan = 'raise' | 'leader-direct';
+/** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4）：批级**通道归属声明**枚举。
+ *  `dispatch` = 现有 dispatch 通道语义（**归一化缺省**，存量批零变化）；`team` = roster 席位通道；`mixed` = 两者并存。
+ *  归一化/静态校验单点 = `lib/wave-plan.js#normalizeChannelDecl`（非法值拒 `GATE_CHANNEL_INVALID`、
+ *  与 lane `roster` 分布矛盾拒 `GATE_CHANNEL_UNRESOLVED`）；落盘位 = `Batch.channel`。 */
+export type ChannelDecl = 'dispatch' | 'team' | 'mixed';
 /**
  * 批次级装配声明（建批方随 wave_plan 传入；normalizeAssemblyDecl 归一化后经 createBatch
  * 持久化为 batch JSON 顶层可选字段，schema 不升、旧批零迁移）。
@@ -243,6 +268,11 @@ export interface Batch {
      *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
     sigDuplicateLogged?: Record<string, boolean>;
     teamAsset?: TeamAssetRef;
+    /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4.3）：批级**通道归属声明**真源。
+     *  **纯增量可选字段**（缺省 `undefined` = 存量批/未声明 ⇒ 读端放行 + 留痕，同 `handoffs` 存量口径）。
+     *  **未声明时不写键**（「缺省 `dispatch`」是归一化读端的有效值，不是落盘值）。
+     *  写端 = 建批路径（`lib/tools/core.js` 消费 `normalizeChannelDecl`）；禁从事件流事后重建（§约束 6）。 */
+    channel?: ChannelDecl;
     events: BatchEvent[];
     createdAt: string;
     updatedAt: string;
@@ -436,7 +466,7 @@ export type BatchEvent = BatchEventBase & ({
     [k: string]: unknown;
 });
 /** 门禁失败错误码全量枚举（按层后缀/门禁族；不设通配符，保持穷尽性收益） */
-export type GateErrorCode = 'GATE_ENTRY_MISSING' | 'GATE_HANDOFF_MISSING' | 'GATE_AUDIT_INPUT_MISSING' | 'GATE_AUDIT_CRITERIA_MISSING' | 'GATE_BATCH_REQUIRES_C' | 'GATE_MEMBER_REQUIRES_C' | 'GATE_PLAN_CONTRACT' | 'GATE_TOKEN_UNKNOWN' | 'GATE_VOCAB_INVALID' | 'GATE_EXIT_MISSING_EXEC' | 'GATE_EXIT_MISSING_AUDIT' | 'GATE_NEEDHUMAN_PENDING' | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT' | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO' | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED' | 'GATE_COMPLETE_NO_AUDIT' | 'GATE_EXIT_PENDING_AUDIT' | 'GATE_COMPLETE_AUDIT_FAILED' | 'GATE_COMPLETE_EXEC_PENDING' | 'GATE_COMPLETE_OUTCOMES_EMPTY' | 'GATE_SETTLE_NOTE_MISSING' | 'GATE_EXEMPT_NOT_DISPATCH' | 'GATE_EXEMPT_INVALID' | 'GATE_EXEMPT_TYPE_UNKNOWN' | 'GATE_EXEMPT_REVOKE_REQUIRED';
+export type GateErrorCode = 'GATE_ENTRY_MISSING' | 'GATE_HANDOFF_MISSING' | 'GATE_AUDIT_INPUT_MISSING' | 'GATE_AUDIT_CRITERIA_MISSING' | 'GATE_BATCH_REQUIRES_C' | 'GATE_MEMBER_REQUIRES_C' | 'GATE_PLAN_CONTRACT' | 'GATE_TOKEN_UNKNOWN' | 'GATE_VOCAB_INVALID' | 'GATE_EXIT_MISSING_EXEC' | 'GATE_EXIT_MISSING_AUDIT' | 'GATE_NEEDHUMAN_PENDING' | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT' | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO' | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED' | 'GATE_COMPLETE_NO_AUDIT' | 'GATE_EXIT_PENDING_AUDIT' | 'GATE_COMPLETE_AUDIT_FAILED' | 'GATE_COMPLETE_EXEC_PENDING' | 'GATE_COMPLETE_OUTCOMES_EMPTY' | 'GATE_SETTLE_NOTE_MISSING' | 'GATE_EXEMPT_NOT_DISPATCH' | 'GATE_EXEMPT_INVALID' | 'GATE_EXEMPT_TYPE_UNKNOWN' | 'GATE_EXEMPT_REVOKE_REQUIRED' | 'GATE_HANDOFF_UNAUTHORIZED' | 'GATE_HANDOFF_IDENTITY_UNKNOWN' | 'GATE_HANDOFF_OVERWRITE_UNDECLARED' | 'GATE_ROSTER_INVALID' | 'GATE_CHANNEL_INVALID' | 'GATE_CHANNEL_UNRESOLVED';
 /** 门禁通过：ok: true + 各门禁可选载荷 */
 export interface GateOk {
     ok: true;

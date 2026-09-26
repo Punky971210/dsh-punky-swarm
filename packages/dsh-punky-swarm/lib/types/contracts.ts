@@ -93,6 +93,13 @@ export interface WavePlanTaskInput {
   targetsNoChange?: boolean;    // 零改动声明（只核 targets 存在性，跳过变更性判定；缺省 false）
   owner?: string | null;        // N1-R4-1（K1 公共池）：任务**归属声明**。缺省/非字符串 ⇒ 归一化落 `null` = **在池内**
                                 //   （未派发）；非空 = 已出池（已归属某执行方）。⚠ 本字段**只作声明面**，写方见 §7.4.2。
+  /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（`docs/b5-teammate-seat-design-v1-2026-09-25.md` §1/§3）。
+   *  语义 = 「team 通道执行者标识」：写权判据读端按「哪些 lane 的 `roster` = 我」定 lane 写权（池化时天然覆盖其多条 lane）。
+   *  **不设唯一性约束**——同一 roster 名可出现在多条 lane（一成员多 lane）、同类型多成员各书其名，均合法。
+   *  归一化（`buildWavePlan` **恒写**）：缺省/非字符串/空串/纯空白 ⇒ `null`；非空字符串 ⇒ `trim()` 原样保留。
+   *  非法形态（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）⇒ 建批期拒 `GATE_ROSTER_INVALID`（fail-closed）。
+   *  ⚠ **不参与 `sig` 指纹**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）。 */
+  roster?: string | null;
   sig?: string | null;          // sig 任务内容指纹（N3-②）：16 位小写 hex；**只由 buildWavePlan 计算落盘**（唯一计算入口），
                                 //   `owner` 非空（已派发）⇒ 冻结不重算。**不参与任何门禁判定**、不进 `GateErrorCode` union；
                                 //   缺省 / 非 16 hex（存量批亦然）⇒ 读取口径一律 `null`（见 lib/sig-fingerprint.js#sigOf）。
@@ -130,6 +137,13 @@ export interface WavePlanTask {
    *  ⚠ **本字段只作声明面**：池 = `owner == null` 的**视图**（不是容器），不引入认领/claim 语义；
    *     派发仍由 Leader 单点发起（`lane_dispatch`）。写入方见 `docs/new-engine-blueprint-2026-09-21.md §7.4.2`。 */
   owner: string | null;
+  /** R-3（P4 授权修复批，2026-09-25）：lane ← **roster 成员名**承载（team 通道执行者标识）。
+   *  `buildWavePlan` 归一化**恒写**（缺省/非字符串/空串 ⇒ `null`，与 `targetsMarker` 同风格：不落 undefined）；
+   *  非空字符串 ⇒ `trim()` 后原样保留（须匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`，否则建批期拒 `GATE_ROSTER_INVALID`）。
+   *  **不设唯一性约束**（一成员多 lane 合法、同类型多成员各书其名合法，均不产告警）；与 `owner` **并存互不替代**
+   *  （`owner` 仍是公共池归属声明面、不参与门禁；`roster` 是 team 通道写权判据的输入）。
+   *  ⚠ **不参与 `sig`**（`computeTaskSig` 输入面逐字不变）。 */
+  roster: string | null;
   /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
    *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
    *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化
@@ -155,6 +169,16 @@ export interface LaneHandoffContract {
   assertions: string[];         // 上游给出的**可核断言**（下游对照用；非空）
 }
 
+/** R-2（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.2）：交接**覆盖留痕**快照（`LaneHandoff.history` 元素形态）。
+ *  语义 = 「被覆盖掉的**旧值**」：每次 `handoff_submit(overwrite:true)` 覆盖已 `submitted` 的边时 push 一条，
+ *  **追加式**（不得替换或清空历史）⇒ `history.length` = 该边被覆盖的次数。 */
+export interface LaneHandoffHistoryEntry {
+  ts: string;                   // 旧值时刻（ISO；= 被覆盖前记录的 ts）
+  artifacts: string[];          // 旧 artifacts（整体快照）
+  assertions: string[];         // 旧 contract.assertions（整体快照）
+  officialTaskId?: string | null; // 旧官方 task 镜像（可空；M-6 双写未启用时恒 null）
+}
+
 /** 单条交接记录（`batch.handoffs[toLaneId][]` 值形态） */
 export interface LaneHandoff {
   from: string;                 // 上游 lane id（= 下游 deps 的某条入边）
@@ -168,6 +192,9 @@ export interface LaneHandoff {
   /** 官方任务板镜像（M-6 双写，**只读回显**）：由 Leader 侧 `team_task_create` 后回填；
    *  **不参与任何判定**（判定只看黑板 = 本字段所在对象），写失败只落 `mirror.gap`、不进拒绝路径。 */
   officialTaskId?: string | null;
+  /** R-2（P4 授权修复批，2026-09-25）：覆盖历史（追加式；缺省 undefined / 空数组 = 从未被覆盖 ⇒ 存量边零感知）。
+   *  读端 `handoff_view` 与审计据此核「旧值留痕」；**不参与写权判定**。 */
+  history?: LaneHandoffHistoryEntry[];
 }
 
 /** 交接表：**toLaneId** → 该 lane 的入边交接列表（批次级可选字段；缺省 undefined = 存量批 ⇒ 门整体放行 + 留痕） */
@@ -209,6 +236,12 @@ export interface WavePlanDoc {
 
 /** 编排牵头形态：raise=拉起 Manager lane 代管调度；leader-direct=Leader 直管派发（无 Manager 批，O0f 兜底协议） */
 export type ManagerPlan = 'raise' | 'leader-direct';
+
+/** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4）：批级**通道归属声明**枚举。
+ *  `dispatch` = 现有 dispatch 通道语义（**缺省**，存量批零变化）；`team` = roster 席位通道；
+ *  `mixed` = 两者并存。归一化/静态校验单点 = `lib/wave-plan.js#normalizeChannelDecl`（非法值拒 `GATE_CHANNEL_INVALID`、
+ *  与 lane `roster` 分布矛盾拒 `GATE_CHANNEL_UNRESOLVED`）；落盘位 = `Batch.channel`。 */
+export type ChannelDecl = 'dispatch' | 'team' | 'mixed';
 
 /**
  * 批次级装配声明（建批方随 wave_plan 传入；normalizeAssemblyDecl 归一化后经 createBatch
@@ -322,6 +355,14 @@ export interface Batch {
    *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
   sigDuplicateLogged?: Record<string, boolean>;
   teamAsset?: TeamAssetRef;       // §8③ 团队资产解析快照的批次级指纹引用（建批事务内落盘；不参与门禁判定）
+  /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4.3）：批级**通道归属声明**真源。
+   *  · **纯增量可选字段**（缺省 `undefined` = 存量批/未声明）⇒ 读端放行 + 可核留痕，与 `handoffs` 存量口径同形。
+   *  · **未声明时不写键**（键不存在），**不落 `'dispatch'` 默认值**——「缺省 `dispatch`」是**归一化读端**的
+   *    有效值（`normalizeChannelDecl` 回 `{ channel:'dispatch', declared:false }`），不是落盘值；故建无 `channel`
+   *    字段的批读端零感知、零写入（R5-a/R5-d 的实现取值，见 `exec/contract-change.md`）。
+   *  · 写端 = 建批路径（`lib/tools/core.js` 消费 `normalizeChannelDecl` 后落盘）；**单点判定**，运行期不再二次判定。
+   *  · 禁双真源：通道归属真源**恒** `batch.channel`，不得从事件流事后重建（`plan/fix-spec.md` §约束 6）。 */
+  channel?: ChannelDecl;
   events: BatchEvent[];
   createdAt: string;            // ISO
   updatedAt: string;            // ISO
@@ -437,7 +478,20 @@ export type GateErrorCode =
   | 'GATE_EXEMPT_NOT_DISPATCH'   // exempt 出现在 to!=='running'；或 revoke 与 status 并用（lane-exempt.js:54 常量 → store.js:527 抛；工具面 lib/tools/core.js:612/619 直抛）
   | 'GATE_EXEMPT_INVALID'        // 载荷结构非法（lane-exempt.js:55 常量 → normalizeExemptPayload lane-exempt.js:94 抛）
   | 'GATE_EXEMPT_TYPE_UNKNOWN'   // type 不在四值白名单（lane-exempt.js:56 常量 → normalizeExemptPayload lane-exempt.js:98 抛）
-  | 'GATE_EXEMPT_REVOKE_REQUIRED'; // revokeExempt 但该 lane 无既有豁免（lane-exempt.js:57 常量 → store.js:463 抛）
+  | 'GATE_EXEMPT_REVOKE_REQUIRED' // revokeExempt 但该 lane 无既有豁免（lane-exempt.js:57 常量 → store.js:463 抛）
+  // ── P4 授权修复批（2026-09-25 · `plan/fix-spec.md` §8「新拒码登记：6 码入 union（两处同改）」）──
+  //   R-1 写权校验（Layer 2）· 2 码：判据链 ⑤fail-closed 与「有身份但无权」分码。
+  | 'GATE_HANDOFF_UNAUTHORIZED'      // 调用方身份可解析、但对该 lane 出边**无写权**（`lib/state/store.js` recordHandoff）
+  | 'GATE_HANDOFF_IDENTITY_UNKNOWN' // 调用方身份**不可解析**（既非 owner/Manager，又无 dispatch 绑定）⇒ fail-closed 拒
+  //   R-2 覆盖显式化 · 1 码：同边二次提交但未声明 `overwrite: true`。
+  | 'GATE_HANDOFF_OVERWRITE_UNDECLARED' // 入边已 `submitted` 且 `overwrite !== true`（`handoff_submit` 唯一判点）
+  //   R-3 roster 承载 · 1 码：`roster` 词法非法（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）。
+  //     与 `role` 的**软告警**口径不同：roster 是 team 通道写权判据的输入 ⇒ 只能拒（fail-closed）。
+  //     写端 = `lib/wave-plan.ts` `buildWavePlan`（建批期，抛点带 `task` 与 `value`）。
+  | 'GATE_ROSTER_INVALID'
+  //   R-5 通道归属 · 2 码：枚举非法 与 一致性矛盾（单点判定 = `lib/wave-plan.ts#normalizeChannelDecl`）。
+  | 'GATE_CHANNEL_INVALID'          // `channel` 非 `dispatch|team|mixed`（回显原值）
+  | 'GATE_CHANNEL_UNRESOLVED';      // 声明与 lane `roster` 分布自相矛盾（team 缺 roster／dispatch 带 roster／mixed 零 roster）
 
 
 /** 门禁通过：ok: true + 各门禁可选载荷 */

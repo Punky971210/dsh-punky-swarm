@@ -1,4 +1,4 @@
-import type { ConditionClause, ConditionInput, Layer, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
+import type { ChannelDecl, ConditionClause, ConditionInput, Layer, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 type WaveTask = WavePlanTaskInput | WavePlanTask;
 export declare const LAYERS: readonly ["plan", "exec", "audit"];
 export declare const VALID_ROLES: readonly ["coordinator", "manager", "designer", "coder", "tester", "reviewer", "supervisor", "doc-manager"];
@@ -32,6 +32,17 @@ export declare function requiresAssemblyDecl(tasks: WaveTask[]): boolean;
 export declare function normalizeAssemblyDecl(input: unknown, extraRoles?: string[] | null): {
     decl: WavePlanAssemblyDecl | null;
     warnings: WavePlanDoc['warnings'];
+};
+/** R-3（P4 授权修复批，2026-09-25）：roster 合法形态 `^[a-z0-9]+(-[a-z0-9]+)*$`（非空、无空白、lower-kebab-case）。 */
+export declare const ROSTER_NAME_RE: RegExp;
+/** R-3 roster 归一化：非字符串（含缺省）⇒ `null`；字符串 ⇒ `trim()`；trim 后空 ⇒ `null`；非空 ⇒ `trim()` 原样保留。 */
+export declare function normalizeRoster(raw: unknown): string | null;
+/** R-5（P4 授权修复批，2026-09-25）：批级通道归属声明的归一化 + 一致性校验（单点判定）。
+ *  枚举非法 ⇒ throw `GATE_CHANNEL_INVALID`；`team` 缺 roster / `dispatch` 带 roster / `mixed` 零 roster ⇒ throw `GATE_CHANNEL_UNRESOLVED`；
+ *  缺省（`undefined`/`null`）⇒ `{ channel: 'dispatch', declared: false }`（`declared:false` = 调用方**不写** `batch.channel` 键）。 */
+export declare function normalizeChannelDecl(channel: unknown, tasks: WaveTask[]): {
+    channel: ChannelDecl;
+    declared: boolean;
 };
 export type AssemblyGateResult = 'ok' | {
     code: 'GATE_ROLE_ASSEMBLY_MISSING';

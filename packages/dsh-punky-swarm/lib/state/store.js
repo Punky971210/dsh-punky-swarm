@@ -313,7 +313,12 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   // 【2026-09-18 · Q-B 取消并发闸】形参 `concurrency`（缺省 5）与下方落盘位**逐字不变**（纯声明 + 回显）：
   //   引擎内**不再有任何分支读它做准入**（原唯一执行点 = `lib/engine/dispatch.js` 的并发闸，已随 Q-B 删除）；
   //   保留字段的判据 = 既有批次 JSON 读取 / 面板数字 / `batch_status` 回显 / 既有测试断言逐字不变。
-  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, teamsRoot }) {
+  // 【G-1 接线 · 2026-09-26】形参 `channel`（R-5 批级通道归属声明，归一化后值 = `dispatch|team|mixed`）：
+  //   与 `assembly` 同一「**未声明不写键**」模式落盘为批次顶层字段（`batch.channel` = 通道归属唯一事实源，
+  //   禁从事件流事后重建）；缺省 `undefined` ⇒ 键不存在 ⇒ 旧批/未声明批读端零感知、schema 不升、零迁移。
+  //   本函数**只落盘**归一化结果，不做任何判定（单点判定 = `lib/wave-plan.ts#normalizeChannelDecl`，
+  //   由建批路径 `lib/tools/core.js` 在 `createBatch` 之前调用并 throw）。
+  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, teamsRoot, channel }) {
     schema.assertBatchPhase(phase);
     const file = batchFile(sessionId, batchId);
     if (fs.existsSync(file)) throw new Error('batch already exists: ' + batchId);
@@ -342,6 +347,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       handoffs: handoffsDefaults(),
       archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
       ...(assembly !== undefined ? { assembly } : {}), // 装配声明（C+ 归一化 decl）；未声明不写键（旧批/非 C+ 批零噪音）
+      ...(channel !== undefined ? { channel } : {}), // R-5 通道归属（G-1）；未声明不写键（R5-d 存量批零破坏）
       // 会话级临时团队资产根（显式给出时才写键）：门禁读端据此解析该团队的 `flows` 声明
       // （否则 flows 只按包根解析 → 临时团队的 entry_requires/contract/needhuman/complete 不生效）
       ...(teamsRoot ? { teamsRoot } : {}),
@@ -1237,16 +1243,97 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   //     本函数只判**结构性前提**（批次存在 / 入边已在建批期种条 / artifacts 非空 / assertions 非空 / consumedFrom 指回入边），
   //     存在性事实由 `tools/core.js` 的交接工具面在**调用前**判定并回显缺口（与门禁判据同源：`presenceOfArtifact`）。
   const HANDOFF_MISSING = 'GATE_HANDOFF_MISSING';
-  function recordHandoff(sessionId, batchId, { from, to, artifacts, assertions, officialTaskId = null } = {}) {
+  // ── R-1（P4 授权修复批 `onto-p4-authz-r2-20260925`，2026-09-25 · `plan/fix-spec.md` §2.1）：交接写权 ──
+  // 需求真源 = `docs/b5-teammate-seat-design-v1-2026-09-25.md` §3 + 用户四项裁决；**实现落点 = 本函数**
+  //   （唯一写路径 ⇒ 判据与写入同点，杜绝「先写后校验」）。
+  const HANDOFF_UNAUTHORIZED = 'GATE_HANDOFF_UNAUTHORIZED';       // 身份可解析但不持该边写权
+  const HANDOFF_IDENTITY_UNKNOWN = 'GATE_HANDOFF_IDENTITY_UNKNOWN'; // 身份不可解析（fail-closed）
+  const HANDOFF_OVERWRITE_UNDECLARED = 'GATE_HANDOFF_OVERWRITE_UNDECLARED'; // R-2：已 submitted 且未显式声明覆盖
+  // 判据链（**顺序即优先级**，`plan/fix-spec.md` §2.1 逐行）：
+  //   ① 批 owner（`batch.sessionId`）⇒ 全批；② 已登记 Manager（`batch.manager.agentId`）⇒ 全批；
+  //   ③ dispatch worker（本批 `member.dispatch.workerSessionId → lane`）⇒ 仅其自身 lane 的出边；
+  //   ④ team 席位（`lane.roster` 命中调用方 roster 名）⇒ 其名下 lane 的出边；
+  //   ⑤ 其余 ⇒ 拒（fail-closed）。
+  // ⚠ **不新增第二套 dispatch 反查口径**：本函数只读**本批**事件流（`batch.events`），与 canonical 实现
+  //   `lib/engine/dispatch.js#laneBindingOf`（跨批复查）**同一 `member.dispatch` 事实源**、同一字段名
+  //   （`workerSessionId`/`lane`）；差异仅在查询范围（单批 vs 全批）——见实现说明的「登记」条。
+  // ⚠ **拒态零写入**：本段只做**读判定**，不碰 `batch.handoffs`、不 push 事件、不落盘（写点全在下方成功分支）。
+  //   三类拒态（UNAUTHORIZED / IDENTITY_UNKNOWN / OVERWRITE_UNDECLARED）一律 `write:false` ⇒ 批 JSON 与
+  //   事件流**双零新增**（本 lane 任务包判据 2「拒时批 JSON 与事件流均无新增」）；拒因经工具面**显式抛错
+  //   回显**（不静默）。其余结构性拒态（缺产物/缺断言/未声明入边）保持 R-1 之前**逐字行为**（照落 `lane.handoff.gap`）。
+  function handoffAuthorityOf(batch, caller) {
+    const raw = (caller && typeof caller === 'object') ? caller : {};
+    const from = typeof raw.from === 'string' && raw.from ? raw.from : null; // 被交出的 lane（上游）
+    const callerSessionId = (() => {
+      const sid = raw.sessionId !== undefined && raw.sessionId !== null ? raw.sessionId : raw.callerSessionId;
+      return typeof sid === 'string' && sid.length ? sid : null; // 空白/非字符串 ⇒ null（与未提供同态）
+    })();
+    const rosterNames = Array.isArray(raw.rosterNames)
+      ? raw.rosterNames.filter((n) => typeof n === 'string' && n.trim().length).map((n) => n.trim())
+      : [];
+    // ①② 批 owner / 已登记 Manager ⇒ 全批（保留 Leader 代提交入边能力）
+    if (callerSessionId && callerSessionId === batch.sessionId) return { ok: true, role: 'owner' };
+    if (callerSessionId && batch.manager && batch.manager.agentId === callerSessionId) return { ok: true, role: 'manager' };
+    // ③ dispatch worker：本批事件流反查（只认 workerSessionId 严格相等 + lane 非空）
+    const dispatchLanes = [];
+    for (const ev of batch.events ?? []) {
+      if (ev && ev.type === 'member.dispatch' && ev.workerSessionId === callerSessionId && ev.lane) {
+        if (!dispatchLanes.includes(ev.lane)) dispatchLanes.push(ev.lane);
+      }
+    }
+    if (dispatchLanes.length) {
+      if (!from) return { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };
+      return dispatchLanes.includes(from) ? { ok: true, role: 'dispatch' } : { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };
+    }
+    // ④ team 席位：名 = `lane.roster`（R-3 承载字段，真源恒 `wavePlan.tasks[].roster`）
+    const rosterLanes = [];
+    for (const w of batch.wavePlan ?? []) {
+      for (const t of w?.tasks ?? []) {
+        if (t && typeof t.id === 'string' && typeof t.roster === 'string' && t.roster && rosterNames.includes(t.roster)) {
+          if (!rosterLanes.includes(t.id)) rosterLanes.push(t.id);
+        }
+      }
+    }
+    if (rosterLanes.length) {
+      if (!from) return { ok: false, role: 'roster', allowedFrom: rosterLanes };
+      return rosterLanes.includes(from) ? { ok: true, role: 'roster' } : { ok: false, role: 'roster', allowedFrom: rosterLanes };
+    }
+    // ⑤ fail-closed：无法解析的陌生会话（含未提供身份）
+    return { ok: false, role: 'unresolved', allowedFrom: [], resolution: 'no-owner/manager/dispatch/roster match' };
+  }
+  function recordHandoff(sessionId, batchId, { from, to, artifacts, assertions, officialTaskId = null, overwrite = false, caller = null } = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
-    const fail = (problems, missing) => {
-      const r = { ok: false, code: HANDOFF_MISSING, problems, missing };
-      batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, { lane: to ?? null, code: HANDOFF_MISSING, missing, problems }));
-      batch.updatedAt = new Date().toISOString();
-      atomicWrite(batchFile(sessionId, batchId), batch);
+    // 拒态留痕统一入口：`write !== false` ⇒ 落既有缺口事件 `lane.handoff.gap`（R1-c 要求：拒态非静默）；
+    //   `write === false` ⇒ **零写入**（R-1④「拒时零写入」：批 JSON 与事件流均无新增）。
+    const fail = (problems, missing, { code = HANDOFF_MISSING, callerRole = null, write = true } = {}) => {
+      const r = { ok: false, code, problems, missing };
+      if (write) {
+        batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, {
+          lane: to ?? null, code, ...(callerRole ? { callerRole } : {}), missing, problems,
+        }));
+        batch.updatedAt = new Date().toISOString();
+        atomicWrite(batchFile(sessionId, batchId), batch);
+      }
       return r;
     };
+    // R-1 授权：**先于任何写入**。身份不可解析 ⇒ `GATE_HANDOFF_IDENTITY_UNKNOWN`（fail-closed）；
+    //   可解析但 `from` 不属本人 lane ⇒ `GATE_HANDOFF_UNAUTHORIZED`（回显 `allowedFrom`）。
+    const auth = handoffAuthorityOf(batch, caller ? { ...caller, from: from ?? caller.from ?? null } : null);
+    if (!auth.ok) {
+      if (auth.role === 'unresolved') {
+        return fail(
+          ['调用方身份不可解析（既非批 owner / 已登记 Manager，又无 member.dispatch 绑定、无 lane.roster 命中）⇒ fail-closed 拒（不猜、不静默）'],
+          ['caller-identity'],
+          { code: HANDOFF_IDENTITY_UNKNOWN, callerRole: 'unresolved', write: false },
+        );
+      }
+      return fail(
+        ['调用方（' + auth.role + '）对 lane "' + String(from ?? '') + '" 的出边无写权 ⇒ 越权写入被拒'],
+        ['from:' + String(from ?? '')],
+        { code: HANDOFF_UNAUTHORIZED, callerRole: auth.role, write: false },
+      );
+    }
     if (typeof from !== 'string' || !from.length) return fail(['handoff from 必填（上游 lane id）'], ['from']);
     if (typeof to !== 'string' || !to.length) return fail(['handoff to 必填（下游 lane id）'], ['to']);
     // 存量批（无 `handoffs` 字段）⇒ 不受新门约束 ⇒ 交接**不可登记**（否则会给存量批凭空开新门）：
@@ -1265,15 +1352,52 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     if (arts.length === 0) { problems.push('artifacts 必填（至少一件上游交付产物）'); missing.push('artifacts'); }
     if (asrt.length === 0) { problems.push('contract.assertions 必填（至少一条下游可核断言）'); missing.push('contract.assertions'); }
     if (problems.length) return fail(problems, missing);
+    // ── R-2（§2.2）：覆盖式改显式 —— 已 `submitted` 的边重交须**显式声明**，且旧值必留痕 ──
+    //   · 未声明（`overwrite !== true`）⇒ 拒 `GATE_HANDOFF_OVERWRITE_UNDECLARED`（回显 `existingAssertions.length` / `existingTs`）；
+    //   · 声明 ⇒ 放行覆盖：**追加式** push 旧值快照（`history`，禁替换/禁清空）+ 事件带 `previousAssertions`/`overwrite`；
+    //   · **首次提交语义一字不改**（`status !== 'submitted'` ⇒ 下方赋值路径与 R-2 之前逐字相同）。
+    const alreadySubmitted = rec.status === 'submitted';
+    if (alreadySubmitted && overwrite !== true) {
+      const existingAssertions = (rec.contract && Array.isArray(rec.contract.assertions)) ? rec.contract.assertions : [];
+      const existingTs = rec.ts ?? null;
+      const rejected = fail(
+        ['入边 ' + from + '->' + to + ' 已 submitted ⇒ 重交须显式声明 overwrite:true（R-2 覆盖保护：禁静默覆盖）'],
+        ['overwrite'],
+        { code: HANDOFF_OVERWRITE_UNDECLARED, callerRole: auth.role, write: false },
+      );
+      // §2.2.2 要求回显（不落盘、不改批）：`existingAssertions.length` 与 `existingTs`
+      return { ...rejected, existingAssertionsLength: existingAssertions.length, existingTs };
+    }
+    const prevArtifacts = Array.isArray(rec.artifacts) ? [...rec.artifacts] : [];
+    const prevAssertions = (rec.contract && Array.isArray(rec.contract.assertions)) ? [...rec.contract.assertions] : [];
+    if (alreadySubmitted) {
+      const prev = {
+        ts: rec.ts ?? null,
+        artifacts: prevArtifacts,
+        assertions: prevAssertions,
+        officialTaskId: rec.officialTaskId ?? null,
+      };
+      rec.history = [...(Array.isArray(rec.history) ? rec.history : []), prev]; // 追加式：不替换、不清空历史
+    }
     rec.artifacts = [...arts];
     rec.contract = { consumedFrom: from, assertions: [...asrt] };
     rec.status = 'submitted';
     rec.ts = new Date().toISOString();
     if (officialTaskId !== null && officialTaskId !== undefined) rec.officialTaskId = String(officialTaskId);
-    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF, { lane: to, from, to, artifacts: [...arts], assertions: [...asrt], handoffBatch: batchId }));
+    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF, {
+      lane: to, from, to, artifacts: [...arts], assertions: [...asrt], handoffBatch: batchId,
+      // R-2 事件侧留痕（§2.2.3 / R2-d）：`previousAssertions` 首交 = `[]`；`overwrite` 恒布尔。
+      previousAssertions: [...prevAssertions],
+      overwrite: alreadySubmitted,
+      // 引擎/Leader 侧口径（本 lane 任务包点名）：`replaced` = 旧值快照（首交 = `null`）。
+      replaced: alreadySubmitted ? { artifacts: [...prevArtifacts], assertions: [...prevAssertions] } : null,
+    }));
     batch.updatedAt = new Date().toISOString();
     atomicWrite(batchFile(sessionId, batchId), batch);
-    return { ok: true, code: null, from, to, artifacts: [...arts], assertions: [...asrt], record: { ...rec } };
+    return {
+      ok: true, code: null, from, to, artifacts: [...arts], assertions: [...asrt],
+      overwrite: alreadySubmitted, previousAssertions: [...prevAssertions], record: { ...rec },
+    };
   }
 
   // ---- 环防护 budget：chains 状态读写（批次 v3 字段，原子写复用 atomicWrite）----
