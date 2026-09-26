@@ -17,14 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // engine/suite.js —— **套件工具注册表单点**（SUITE_TOOLS）：
 //   成员 deny 集（`memberDeny`）与模式门覆盖集（`modeGate`）此前各自散落在工具实现里
-//   （`dispatch.js` 的 13 项字面量 + `core.js` 的 9 处 `assertModeActive` 调用点），
+//   （**重构前**：`dispatch.js` 的 13 项字面量 + `core.js` 的 9 处 `assertModeActive` 调用点），
 //   两侧口径靠人肉同步 ⇒ 本模块把「哪件工具属于哪一面」收敛成**一张表 + 两个派生函数**。
 //
 // 派生规则（纯函数，无副作用、无 IO）：
 //   · `memberDenyTools()` ≡ `SUITE_TOOLS.filter(t => t.memberDeny).map(t => t.name)`
 //   · `modeGateTools()`   ≡ `SUITE_TOOLS.filter(t => t.modeGate).map(t => t.name)`
-//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（20 项 = 冻结的 14 条 + `batch_control` 之后的图变更写入口 2 件
-//     + S2 宿主连续控制族 4 件，见下方表头注释）
+//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（**20 项** = 冻结前缀 **14 条** + 图变更写入口 2 件
+//     （`batch_tasks_add` / `task_update`）+ S2 宿主连续控制族 **3 件**（`send_message` 已于 2026-09-24 放开）
+//     + 席位拉起面 1 件（`spawn_teammate`，AG-20），见下方表头注释）
 //     / `MODE_GATED_TOOLS`（12 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
 //   语义幂等：集合比对一律排序后比（表内条目顺序不构成语义）；唯一受顺序约束的是
 //   `SUITE_DENY_TOOLS`——为使导出**逐字不变**，本表按 `memberDeny:true` 的原字面量顺序排布（见下方表头注释）。
@@ -47,14 +48,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 /** 表条目构造器（冻结单条 + 五字段定形，防后续代码顺手加字段悄悄扩面）。 */
 const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name, kind, modeGate, memberDeny, write });
 
-/** 套件工具全集（**36 件** = 引擎注册套件工具 + 纳入治理的宿主派发工具 `subagent`/`subagent_fork`
+/** 套件工具全集（**37 件** = 引擎注册套件工具 + 纳入治理的宿主派发工具 `subagent`/`subagent_fork`
  *  + P1 交接面 `handoff_submit`/`handoff_view` + S2 宿主连续控制族 4 件（`send_message`/`interrupt_agent`/
- *  `list_agents`/`wait_agent`，2026-09-22 one-shot 化））。
+ *  `list_agents`/`wait_agent`，2026-09-22 one-shot 化）+ AG-20 席位拉起面 1 件（`spawn_teammate`））。
  *  ⚠ 顺序约定：**前 14 条**的相对顺序为冻结面（去掉 P3a 新增的 `batch_control` 后 == 重构前
  *  `dispatch.js` 的 `SUITE_DENY_TOOLS` 字面量顺序，要求逐字不变；`batch_control` **插在 `batch_phase` 之后**）。
- *  ⚠ `memberDeny:true` 共 **19** 条 = 冻结的 14 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
- *  + S2 宿主连续控制族 3 件（`interrupt_agent` / `list_agents` / `wait_agent`）；**`send_message` 已于
- *  2026-09-24 按用户裁决放开**（S-3，从 deny 面移出 ⇒ 计数 20→19）。
+ *  ⚠ `memberDeny:true` 共 **20** 条 = 冻结的 14 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
+ *  + S2 宿主连续控制族 3 件（`interrupt_agent` / `list_agents` / `wait_agent`；**`send_message` 已于
+ *  2026-09-24 按用户裁决放开**，S-3，从 deny 面移出 ⇒ 计数 20→19）
+ *  + 席位拉起面 1 件（`spawn_teammate`，AG-20，2026-09-25 用户裁决定向 deny ⇒ 计数 19→20）。
  *  追加位置在**冻结前缀之后** ⇒ 前 14 条相对顺序零变化（`SUITE_DENY_TOOLS` 前 14 项逐字不变）。
  *  第 15 条起为其余条目，顺序不构成语义。 */
 export const SUITE_TOOLS = Object.freeze([
@@ -131,6 +133,19 @@ export const SUITE_TOOLS = Object.freeze([
   //   `unknown global tool`（严格、不忽略）⇒ 由 `lib/engine/dispatch.js` 的**容错自愈**兜底
   //   （解析未知名 → 本次名单移除 → 同次派发内重试）。**两 profile 自适应，无需静态减法**。
   entry('wait_agent', 'read', false, true, false), // 等待他人变化 = continuous 语义，一次性执行器无此面
+  // ── AG-20（2026-09-25 用户裁决「③ 定向 deny」）：官方 Agent Team 席位拉起面 ────────────────────
+  // `spawn_teammate`：**宿主工具**（`dsh-experimental-tool-agent-team/lib/index.js` 注册，同 `wait_agent` 家族）
+  //   ⇒ 成员**不得自行拉起 teammate** —— 席位是 Leader / 官方 roster 的面；成员侧自行拉起即**绕过 lane 派发
+  //   与三层门禁**（无 lane 绑定、无产物契约、无交接门）。⇒ 入 deny。
+  //   `modeGate:false`（宿主工具，无 `assertModeActive` 落点，同 `subagent`/`subagent_fork` 与 S2 族先例 ⇒
+  //   `SC-1` 不变量「模式门覆盖集 ⊆ deny 集」不受影响）。
+  //   ⚠ **`workflow` / `ralph` 保持放行**（用户同裁：本次只定向 deny 本件，不做三件齐收）。
+  //   ⚠ 0.1.7 兼容：未启用 agent-team 层的 profile 上 `toolFilter.deny` 含此名会让宿主 `tools.restrict()`
+  //   抛 `unknown global tool` ⇒ 由 `lib/engine/dispatch.js` 的**容错自愈**兜底（同 `wait_agent` 处置）。
+  //   ⚠ 语义边界：本 deny 生效路径 = `buildStartRequest` 注入**dispatch 一次性 worker** 的 `toolFilter.deny`；
+  //   官方席位（由 Lead 调本工具拉起）**不经**该路径 ⇒ 席位工具面不因本条收窄（席位收窄属 B5 待定口径）。
+  //   追加位置在**冻结前缀与既有 36 条之后** ⇒ 前 14 条冻结序列零变化（计数 36→37 / deny 19→20）。
+  entry('spawn_teammate', 'dispatch', false, true, true),
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */

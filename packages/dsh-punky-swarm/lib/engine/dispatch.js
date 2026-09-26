@@ -93,7 +93,7 @@ export function composeWorkerPrompt({
   L.push('## 纪律');
   L.push('1. 写盘只用 `edit`/`write`；临时件用 `node -e` 的 `fs`；UTF-8 无 BOM、LF。');
   L.push('2. 禁 `git` 写；禁重启宿主；只碰本 lane 文件域。');
-  L.push('3. 工具被折叠 ≠ 不存在：先 `tools_schema`/`tools_search` 检索，勿凭印象断言「没有」。');
+  L.push('3. 断言「没有某工具/技能」前先实机核：`grep`/`glob` 扫宿主安装面与引擎源码，或按名直调看回执（折叠 ≠ 禁用），勿凭印象断言「没有」。');
   L.push('4. 完成/失败均**显式回报**（不给静默降级）；回报只给元数据与结论，不复制正文。');
   if (leaderPrompt) {
     L.push('');
