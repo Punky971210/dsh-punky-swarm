@@ -213,9 +213,12 @@ async function assertAdvanceRetiredP2(h, batchId, { lane = 'plan' } = {}) {
 
 test('P2-1 链声明正向：五段链八条静态校验 problems=[]；真资产 engine-team 的 chain 亦通过；`flows.chain` 位置拒', () => {
   assert.deepEqual(validateChain(chain5(), LAYERS).problems, [], '五段链（' + specChain(chain5()) + '）必须八条全过');
+  // 注（2026-09-26 团队资产瘦身）：`engine-team` 现为 **757 B 最小骨架**、**不含 `chain`**
+  //   ⇒ `loadChainOf` 应回 `{ ok: true, chain: null }`（无链 = 合法态，不是失败）。
+  //   ⇒ 原「engine-team 必须声明链步」改为「**无链亦为合法**」；链步语义由本文件 `chain5()` 夹具覆盖。
   const real = loadChainOf({ team: 'engine-team' });
-  assert.equal(real.ok, true, 'engine-team 资产的 chain 必须通过八条校验：' + JSON.stringify(real.problems));
-  assert.ok(real.chain && Array.isArray(real.chain.steps) && real.chain.steps.length >= 3, 'engine-team 必须声明链步');
+  assert.equal(real.ok, true, 'engine-team 无 chain ⇒ ok:true（无链不是失败）：' + JSON.stringify(real.problems));
+  assert.equal(real.chain, null, 'engine-team 最小骨架未声明 chain ⇒ chain=null');
   const pos = resolveChainOf({ flows: { chain: chain5() }, chain: chain5() });
   assert.ok(pos.problems.some((p) => p.code === 'TEAM_ASSET_FIELD_NOT_ALLOWED'),
     '`flows.chain` 不是规范位（唯一规范位 = 顶层 `chain`，禁双真源）');

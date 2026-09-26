@@ -59,7 +59,12 @@ function tasks3() {
 
 test('P2：团队资产声明了 audit_contract → 建批通过且无豁免告警', async () => {
   const { byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-ok-', 'probe-team');
+  // 注（2026-09-26 团队资产瘦身）：夹具源 = 包内 software-team **最小骨架**，其 audit_contract 为显式空 `{}`
+  //   ⇒ 建批必然产生 GATE_AUDIT_CONTRACT_EXEMPT 留痕（空声明 = 声明「无契约」，合法态）。
+  //   ⇒ 本用例命题是「**实内容声明**不应产生豁免告警」⇒ 须在 mutate 里补一份**实内容** audit_contract。
+  const teamsRoot = writeTempTeam('punky-p2-ok-', 'probe-team', (a) => {
+    a.flows.audit.audit_contract = { consumes_required: ['plan/', 'exec/'], verdict: ['pass', 'fail', 'skip'] };
+  });
   const out = await byName.wave_plan.execute({
     batchId: 'p2-ok', team: 'probe-team', teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
   }, SESS);

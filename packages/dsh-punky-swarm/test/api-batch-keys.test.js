@@ -101,13 +101,19 @@ test.after(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ── P-1：面板读端七新键在场（条件键按条件缺省）────────────────────────────────
-test('P-1 七新键在场：danglingLanes / handoffs / assembly / teamAsset / chain / lanesGate / aipSession', () => {
+// ── P-1：面板读端键在场（`chain` 为**条件键**：仅当资产声明 chain 时在）──────────
+test('P-1 键在场：danglingLanes / handoffs / assembly / teamAsset / lanesGate / aipSession（`chain` 条件）', () => {
   const r = invokeBatch('b-five');
   assert.equal(r.status, 200);
-  for (const key of ['danglingLanes', 'handoffs', 'assembly', 'teamAsset', 'chain', 'lanesGate', 'aipSession']) {
+  // 注（2026-09-26 团队资产瘦身，用户裁决「团队内容改为模版、不再作为组件」）：
+  //   `chain` 原为**必在场键**；`software-team` 最小骨架（859 B）**已不含 chain**
+  //   ⇒ 引擎不再写该键（`chain` 语义 = 资产声明的推进链）⇒ 转为**条件键**：
+  //     资产有 chain ⇒ 在场；无 chain ⇒ **不写键**（而非写 null）。
+  //   本批 `buildWavePlan({ team: 'software-team' })` ⇒ 断言 `chain` **不得在场**。
+  for (const key of ['danglingLanes', 'handoffs', 'assembly', 'teamAsset', 'lanesGate', 'aipSession']) {
     assert.ok(Object.prototype.hasOwnProperty.call(r.body, key), '缺键: ' + key);
   }
+  assert.ok(!('chain' in r.body), 'software-team 最小骨架未声明 chain ⇒ 不得写 chain 键');
   // 条件键缺省（未登记 Manager、非冒烟批）⇒ **不写键**（不是 `null` 之类的空占位）
   assert.ok(!('manager' in r.body), 'manager 未登记时不得写键');
   assert.ok(!('smoke' in r.body), '非冒烟批不得写 smoke 键');

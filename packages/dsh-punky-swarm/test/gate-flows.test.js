@@ -120,10 +120,15 @@ test('R-06 复活（T-13）：显式声明团队 vs 无资产团队 ⇒ required
     //   同时补 punky-preset 反例，把「团队来源 vs 引擎缺省来源」的可区分性判到位。
     const b6 = batchOf('software-team', [{ id: 'e9', layer: 'exec', outputs: ['exec/o.md'] }]);
     const r6 = g.checkEntryGate(SESS, 'b1', b6, 'e9');
-    assert.equal(r6.ok, false, '显式声明 entry_requires:[consume] ⇒ 空 consume 拒派');
+    assert.equal(r6.ok, false, '空 consume 拒派（零依赖拒派，不依赖团队声明）');
     assert.equal(r6.code, 'GATE_ENTRY_MISSING');
-    assert.equal(r6.requiredBy, 'team-asset:entry_requires',
-      '实测：显式声明团队 ⇒ 来源标注为团队资产；实测=' + JSON.stringify(r6.requiredBy));
+    // 注（2026-09-26 团队资产瘦身）：`software-team` 最小骨架**不再声明 `entry_requires`**
+    //   ⇒ 来源回落引擎缺省 `tighten-only-default`（原期望 `team-asset:entry_requires`）。
+    //   ⚠ 「**显式声明团队 ⇒ 来源标注 `team-asset:entry_requires`**」这条覆盖**未丢失**：
+    //     由 `test/gate-techdebt-red.test.js` 的 `R-06 正向对照` 承担（该处改用 `mkTeamRoot`
+    //     构造显式声明 `entry_requires` 的团队）。
+    assert.equal(r6.requiredBy, 'tighten-only-default',
+      '新骨架未声明 entry_requires ⇒ 来源为引擎缺省；实测=' + JSON.stringify(r6.requiredBy));
     const b6b = batchOf('punky-preset', [{ id: 'e9', layer: 'exec', outputs: ['exec/o.md'] }]);
     const r6b = g.checkEntryGate(SESS, 'b1', b6b, 'e9');
     assert.equal(r6b.ok, false, 'punky-preset 退役（无资产）同样拒派：缺声明即拒');
@@ -399,9 +404,12 @@ test('R1-g：software-team 声明翻牌后 consume 强制化 + standalone 显式
     // ① 无 consume 的 exec lane → 拒派（缺口修复：此前"不声明即免检"）
     const b1 = batchOf('software-team', [{ id: 'e1', layer: 'exec', outputs: ['exec/o.md'] }]);
     const r1 = g.checkEntryGate(SESS, 'b1', b1, 'e1');
-    assert.equal(r1.ok, false, 'software-team 声明 entry_requires:[consume] ⇒ 空 consume 拒派');
+    assert.equal(r1.ok, false, '空 consume 拒派（零依赖拒派，不依赖团队声明）');
     assert.equal(r1.code, 'GATE_ENTRY_MISSING');
-    assert.equal(r1.requiredBy, 'team-asset:entry_requires');
+    // 注（2026-09-26 团队资产瘦身）：`software-team` 最小骨架不再声明 `entry_requires`
+    //   ⇒ 来源回落 `tighten-only-default`；「声明团队 ⇒ 来源标注 `team-asset:entry_requires`」
+    //     的覆盖改由 `test/gate-techdebt-red.test.js` 的 `R-06 正向对照` 承担（改用 mkTeamRoot）。
+    assert.equal(r1.requiredBy, 'tighten-only-default');
     // ② audit lane 同理
     const b2 = batchOf('software-team', [{ id: 'a1', layer: 'audit', produce: ['audit/r.md'] }]);
     assert.equal(g.checkEntryGate(SESS, 'b1', b2, 'a1').ok, false);
@@ -411,7 +419,9 @@ test('R1-g：software-team 声明翻牌后 consume 强制化 + standalone 显式
     const r3 = g.checkEntryGate(SESS, 'b1', b3, 'e2');
     assert.equal(r3.ok, true);
     assert.equal(r3.standalone, true);
-    assert.equal(r3.requiredBy, 'team-asset:entry_requires', '逃生放行仍标注强制来源（留痕）');
+    // 注（2026-09-26 团队资产瘦身）：software-team 最小骨架无 entry_requires ⇒ 来源为引擎缺省；
+    //   「声明团队 ⇒ 标注 team-asset:entry_requires」由 gate-techdebt-red 的 R-06 返例覆盖。
+    assert.equal(r3.requiredBy, 'tighten-only-default', '逃生放行仍标注来源（留痕）');
     // ③b 缺 standaloneReason 的自声明 ⇒ 拒（B4 事实核验）
     const b3b = batchOf('software-team', [{ id: 'e2', layer: 'exec', outputs: ['exec/o.md'], standalone: true }]);
     const r3b = g.checkEntryGate(SESS, 'b1', b3b, 'e2');

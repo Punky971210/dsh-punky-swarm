@@ -174,7 +174,10 @@ test('D2 有资产批：会话级正档（格式/命名）+ batch.teamAsset + �
   //   ⇒ 台账为空、投影面为空。断言由「含某键」改为「**为空**」（更强：封堵回填无注解条目）。
   assert.deepEqual(doc.unwired, [], '2026-09-18 清债：台账为空 ⇒ 快照 unwired 面为空（无未接线声明）');
   assert.deepEqual(doc.summary.produceFields.exec, ['produce', 'outputs'], '被检面恒并集');
-  assert.equal(doc.summary.entryRequires.exec.source, 'team-asset:entry_requires');
+  // 注（2026-09-26 团队资产瘦身）：`software-team` 最小骨架不声明 `entry_requires`
+  //   ⇒ 来源回落引擎缺省（原期望 `team-asset:entry_requires`）。
+  assert.equal(doc.summary.entryRequires.exec.source, 'tighten-only-default',
+    '新骨架未声明 entry_requires ⇒ 来源为引擎缺省');
   assert.equal(doc.summary.flagsResolved['exec.targets'].effective, true);
   assert.ok(!Object.prototype.hasOwnProperty.call(doc, 'asset'), '不复制资产正文');
   assert.ok(!raw.includes('"skills"'), '档内不含资产正文片段');
@@ -187,9 +190,14 @@ test('D2 有资产批：会话级正档（格式/命名）+ batch.teamAsset + �
   assert.equal(bj.teamAsset.ok, true);
   assert.equal(bj.teamAsset.severity, doc.resolved.severity);
   assert.deepEqual(bj.teamAsset.summaryKeys.produceFields, ['produce', 'outputs']);
-  assert.equal(bj.teamAsset.summaryKeys.entryRequiresSource.exec, 'team-asset:entry_requires');
+  // 注（2026-09-26 团队资产瘦身）：新骨架未声明 entry_requires ⇒ 来源回落引擎缺省；
+  //   新骨架 plan 亦无 contract ⇒ `contractSections` 为空（后者由下一步断言对照）。
+  assert.equal(bj.teamAsset.summaryKeys.entryRequiresSource.exec, 'tighten-only-default');
   assert.deepEqual(bj.teamAsset.summaryKeys.unwiredKeys, [], '2026-09-18 清债：批次侧 unwiredKeys 亦为空');
-  assert.equal(bj.teamAsset.summaryKeys.contractSections.join('|'), '## 验收标准|## 约束');
+  // 注（2026-09-26 团队资产瘦身）：新骨架 `flows.plan` 不含 `contract` ⇒ 契约章节表为空
+  //   （原期望 `## 验收标准|## 约束` 来自旧资产的 plan 契约声明）。
+  //   实测投影为 **`null`**（未声明 ≠ 空声明）⇒ 断言接受 `null`（并显式禁非空表）。
+  assert.equal(bj.teamAsset.summaryKeys.contractSections, null, '新骨架未声明 plan 契约 ⇒ 章节表为 null');
   assert.ok(!(('summary' in bj.teamAsset) || ('asset' in bj.teamAsset)), '批字段只带指纹 + 键级摘要');
 
   // ④ 事件落盘且不占用 type 槽位

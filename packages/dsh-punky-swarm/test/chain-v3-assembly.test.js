@@ -87,13 +87,19 @@ test('W2-V3-1 装配图参照模型：一次过 validateChain（可达性 / term
   assert.deepEqual([...CHAIN_V3_STEP_KEYS], ['branches', 'pair_with', 'template']);
 });
 
-test('W2-V3-2 包内资产：software-team 的 chain v3 一次过 validateChain（真资产，非夹具）', () => {
+test('W2-V3-2 包内资产：software-team 【无 chain】（最小骨架）⇒ chain=null 且 ok，且 chain 校验面在夹具上仍通过', () => {
   const asset = loadTeamAsset(packageRoot(), 'software-team');
   assert.equal(asset.ok, true, '资产加载期零问题：' + JSON.stringify(asset.problems));
-  assert.equal(asset.asset.chain?.version, 3, 'software-team 已套件化（chain.version=3）');
+  // 注（2026-09-26 团队资产瘦身，用户裁决「团队内容改为模版、不再作为组件」）：
+  //   `software-team` 现为 **859 B 最小骨架**，**不含 `chain`** ⇒ `chainProblemsOf` 应回
+  //   `{ chain: null, problems: [], ok: true }`（`chain.js`：「资产无 chain ⇒ chain:null」= 无推进，向后兼容锁）。
+  //   ⇒ 断言由「必须有 chain.version=3」改为「**无 chain 亦为合法态**」；
+  //     「chain v3 能一次过 validateChain」的覆盖由本文件其余夹具用例承担（不丢面）。
+  assert.equal(asset.asset.chain, undefined, 'software-team 最小骨架不得声明 chain');
   const c = chainProblemsOf(asset.asset);
-  assert.deepEqual(c.problems, [], '真资产 chain 必须零问题：' + JSON.stringify(c.problems));
+  assert.deepEqual(c.problems, [], '无 chain ⇒ 零问题：' + JSON.stringify(c.problems));
   assert.equal(c.ok, true);
+  assert.equal(c.chain, null, '无 chain ⇒ chain=null（引擎既约定）');
 });
 
 test('W2-V3-3 展开 ⇒ 分支 id 逐字成为 lane id + 配对 1:1（`${lane}` 插值）+ 反投影全中', () => {

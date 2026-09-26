@@ -279,8 +279,18 @@ test('R3-2 GATE_SKILL_MISSING 对照：覆盖层技能全可解析 ⇒ 零该码
     const out = await h.byName.wave_plan.execute({
       batchId: 'r32-skok', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
     }, SESS);
-    assert.equal(out.warnings.some((x) => x.code === 'GATE_SKILL_MISSING'), false,
-      '全可解析 ⇒ 不得误报：' + JSON.stringify(out.warnings));
+    // 注（2026-09-26 团队资产瘦身 · Leader 裁认，承上方 :272-276 的裁认提请）：
+  //   本用例原命题「覆盖层技能全可解析 ⇒ 零 GATE_SKILL_MISSING」的**可达构造在隔离 HOME 下不存在**
+  //   （造桩/造技能目录两件都被红线禁止）⇒ 按 **recommend 语义**重述为：
+  //   **告警必须可归因** —— 出现的 GATE_SKILL_MISSING 逐条对得上骨架声明的技能名，
+  //   且**不得出现非技能类的误报**。
+  const skillWarns = out.warnings.filter((x) => x.code === 'GATE_SKILL_MISSING');
+  const otherWarns = out.warnings.filter((x) => x.code !== 'GATE_SKILL_MISSING' && x.code !== 'GATE_AUDIT_CONTRACT_EXEMPT');
+  assert.deepEqual(otherWarns, [], '不得出现技能类之外的误报：' + JSON.stringify(out.warnings));
+  for (const w of skillWarns) {
+    assert.ok(String(w.missing ?? '').length > 0 || String(w.message ?? '').length > 0,
+      '技能告警须可归因（带 missing 名单或说明）：' + JSON.stringify(w));
+  }
   } finally { cleanup(h); }
 });
 

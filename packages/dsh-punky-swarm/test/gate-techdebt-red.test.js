@@ -412,15 +412,19 @@ test('R-05 generic（无资产）＋ exec 空 consume ⇒ 拒 且 requiredBy !==
     'G-3：无资产团队**未声明** entry_requires ⇒ requiredBy 须为真实来源 tighten-only-default，不得失真为团队来源；实测=' + JSON.stringify(r.requiredBy));
 });
 
-test('R-06 正向对照：software-team（entry_requires:["consume"]）＋ 空 consume ⇒ requiredBy === "team-asset:entry_requires"【回归保护】', () => {
-  const bid = mkPlanExec('r06');
+test('R-06 正向对照：显式声明 entry_requires:["consume"] 的团队 ＋ 空 consume ⇒ requiredBy === "team-asset:entry_requires"【回归保护】', () => {
+  // 注（2026-09-26 团队资产瘦身）：原用包内 `software-team` 作「显式声明团队」的样本；
+  //   该队最小骨架**已不含 `entry_requires`** ⇒ 改用 `mkTeamRoot` 构造**显式声明**的临时团队，
+  //   以保住「团队声明来源可区分」这条覆盖（与 R-05 的 generic 无资产反例成对）。
+  const tp = mkTeamRoot('r06-team', (a) => { a.flows.exec.entry_requires = ['consume']; });
+  const bid = mkBase('r06', {}, {}, { team: 'r06-team', teamsRoot: tp });
   declareLaneField(bid, 'e1', { consume: [] });
   const r = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'checkEntryGate(software-team, consume=[])', r);
-  assert.equal(r.ok, false, '显式声明强制项须生效（当前已通过）');
+  obs(null, 'checkEntryGate(r06-team(entry_requires), consume=[])', r);
+  assert.equal(r.ok, false, '显式声明强制项须生效');
   assert.equal(r.code, 'GATE_ENTRY_MISSING', '拒码=' + r.code);
   assert.equal(r.requiredBy, 'team-asset:entry_requires',
-    '正向对照【GREEN-as-is】：已声明团队仍报团队来源 ⇒ 证明修正不是「无差别抹掉」');
+    '正向对照：已声明团队须报团队来源 ⇒ 证明「无资产回落」不是「无差别抹掉」；实测=' + JSON.stringify(r.requiredBy));
 });
 
 test('R-07 团队级 entry_requires:[] ＋ exec 空 consume ⇒ 仍拒 GATE_ENTRY_MISSING【回归保护】', () => {

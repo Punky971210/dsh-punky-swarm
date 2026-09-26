@@ -118,7 +118,9 @@ test('C4 锚点门·缺声明回落引擎基线（全中文）：只认 ## 验�
   const { root, store, byName } = makeHarness();
   // plan 契约声明 `## 需求`（**不动** audit）⇒ 证明 plan/audit 两条配置通道互不影响。
   const teamsRoot = writeTempTeam('punky-acfg-fb-', 'acfg-team', (a) => {
-    a.flows.plan.contract.required_sections = ['## 需求'];
+    // 注（2026-09-26 团队资产瘦身）：夹具骨架不再预置 `flows.<layer>.contract`
+    //   ⇒ 须**显式建对象**后再写章节（否则 `Cannot set properties of undefined`）。
+    a.flows.plan.contract = { ...(a.flows.plan.contract ?? {}), required_sections: ['## 需求'] };
   });
   clearFlowCache();
   // 4a 负例：过契约门（## 需求）但缺默认 criteria 章 ⇒ a1 拒（回落 `## 验收标准`，不认 ## Accept）
@@ -143,7 +145,8 @@ test('C4 锚点门·缺声明回落引擎基线（全中文）：只认 ## 验�
 test('C5 契约门·required_sections 声明覆盖：按声明章节判（缺 ⇒ 拒且指名）', async () => {
   const { root, store, byName } = makeHarness();
   const teamsRoot = writeTempTeam('punky-acfg-plan-', 'acfg-team', (a) => {
-    a.flows.plan.contract.required_sections = ['## 需求'];
+    // 注（2026-09-26 团队资产瘦身）：同 C4 —— 夹具骨架无 `contract`，须显式建对象。
+    a.flows.plan.contract = { ...(a.flows.plan.contract ?? {}), required_sections: ['## 需求'] };
   });
   clearFlowCache();
   // 5a 负例：spec 只含默认两章 ⇒ p1 merged 拒（契约门按声明 `## 需求` 判）
@@ -154,7 +157,13 @@ test('C5 契约门·required_sections 声明覆盖：按声明章节判（缺 �
   const msgNeg = String(p1neg?.message ?? p1neg);
   assert.ok(p1neg instanceof Error, '缺声明章节须拒：' + msgNeg);
   assert.ok(msgNeg.includes('GATE_PLAN_CONTRACT'), msgNeg);
-  assert.ok(msgNeg.includes('lacks "## 需求"'), msgNeg);
+  // 注（2026-09-26）：引擎对**自定义 required_sections 缺失**的文案已更新为
+  //   `no plan artifact carries a criteria section (## 需求)`（原为 `lacks "## 需求"`）。
+  //   ⇒ 两种文案都接受（判据是「被拒 + 指名缺失章节」，不是措辞）。
+  assert.ok(
+    msgNeg.includes('lacks "## 需求"') || msgNeg.includes('no plan artifact carries a criteria section (## 需求)'),
+    '须指名缺失的声明章节：' + msgNeg,
+  );
   // 5b 正例：含 ## 需求 ⇒ p1 merged 放行（并顺带走完 e1；a1 锚点按默认中文判 ⇒ spec 须含 ## 验收标准）
   const runA1 = await driveBatch(byName, store, root, {
     batchId: 'acfg-plan-ok', teamsRoot, team: 'acfg-team',

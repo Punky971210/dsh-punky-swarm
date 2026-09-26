@@ -144,12 +144,18 @@ test('F2 装配声明面同源：assembly.roles 写资产声明角色 ⇒ 零 GA
 });
 
 // ── ③ 兼容：`roles.extra` 字段语义不变（仍是「显式声明的扩展角色」），union 是**额外**读端 ──
-test('F3 兼容：software-team roles.extra 仍为空；unionRoleVocabulary = 各层声明角色 ∪ roles.extra', () => {
+test('F3 兼容：software-team roles.extra 为空（最小骨架未声明）；unionRoleVocabulary = 各层声明角色 ∪ roles.extra', () => {
   clearRoleCache();
   const sw = resolveTeamRoles('software-team', { root: packageRoot() });
   assert.equal(sw.ok, true);
-  assert.deepEqual([...sw.extra], [], 'software-team 无扩展角色声明（字段语义未变）');
-  assert.deepEqual([...sw.layerRoles].sort(), ['coder', 'coordinator', 'designer', 'doc-manager', 'reviewer', 'supervisor', 'tester'], '各层声明角色并集');
+  assert.deepEqual([...sw.extra], [], 'software-team 无扩展角色声明（最小骨架不含 roles.extra；字段语义未变）');
+  // 注（2026-09-26 团队资产瘦身）：新骨架 6 角色（plan coordinator+designer / exec coder+tester /
+  //   audit reviewer+supervisor）—— 原期望值含 `doc-manager`（已随复盘并入 supervisor 而移除）。
+  assert.deepEqual(
+    [...sw.layerRoles].sort(),
+    ['coder', 'coordinator', 'designer', 'reviewer', 'supervisor', 'tester'],
+    '各层声明角色并集（新骨架 6 角色）',
+  );
   assert.deepEqual(unionRoleVocabulary(sw).sort(), [...sw.layerRoles].sort(), 'union = 各层 ∪ extra（extra 空 ⇒ 等于各层）');
   assert.deepEqual(unionRoleVocabulary(null), [], '缺声明 → 空集（回落基础集）');
   assert.deepEqual(unionRoleVocabulary({ layerRoles: ['A-Role'], extra: ['b-role'] }), ['a-role', 'b-role'], '小写归一 + 去重');

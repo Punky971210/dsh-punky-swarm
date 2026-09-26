@@ -60,8 +60,10 @@ function makeHarness() {
 /** 建批文件路径（与 store 落盘同址）。 */
 const batchFileOf = (root, batchId) => path.join(root, 'sessions', SESSION, 'batches', batchId + '.json');
 
-/** 三层任务（plan → exec → audit；audit 消费 plan/ + exec/ 以满 audit_contract）。 */
-function threeTierTasks() {
+/** 三层任务（plan → exec → audit；audit 消费 plan/ + exec/ 以满 audit_contract）。
+ *  ⚠ 名带 `ForRecommend` 后缀：`test/helpers/team-fixture.mjs` 也导出 `threeTierTasks`
+ *    ⇒ 本地同名会触发 `F4-1`（本地 function 与共享 helper 导出名不得相交，防「一名两义」）。 */
+function threeTierTasksForRecommend() {
   return [
     { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'plan-it' },
     { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1.md'], deps: ['p1'], cmd: 'build-it' },
@@ -87,7 +89,7 @@ test('①a 技能根不存在 + 声明技能不可解析 ⇒ 建批成功 + 不�
     // 隔离 HOME 下**不造** `.agents/skills` ⇒ `resolvableSkillNames().ok === false` ⇒ 守 `if (res.ok)` 守卫、不告警
     assert.equal(fs.existsSync(hostSkillsRootOf()), false, '前置：技能根不存在（本臂的可达构造）');
     const out = await h.byName.wave_plan.execute({
-      batchId: 'rec-arm-a', team: TEAM, teamsRoot, tasks: threeTierTasks(),
+      batchId: 'rec-arm-a', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS);
     assert.equal(out.batchId, 'rec-arm-a', 'recommend 语义：skills 不可解析不得拒建批');
@@ -107,7 +109,7 @@ test('①b 技能根存在（空目录）+ 声明技能不可解析 ⇒ 建批�
     // **空技能根**：只建目录，零 SKILL.md、零技能名目录 ⇒ `res.ok === true` 且 `known` 为空集
     fs.mkdirSync(hostSkillsRootOf(), { recursive: true });
     const out = await h.byName.wave_plan.execute({
-      batchId: 'rec-arm-b', team: TEAM, teamsRoot, tasks: threeTierTasks(),
+      batchId: 'rec-arm-b', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
       assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
     }, SESS);
     assert.equal(out.batchId, 'rec-arm-b', 'recommend 语义：skills 不可解析不得拒建批');
@@ -138,7 +140,7 @@ test('①c 结构段哨兵：某 role 缺 skills 条目 ⇒ 仍拒 TEAM_ASSET_SK
     let sentinelMsg = null;
     try {
       await h.byName.wave_plan.execute({
-        batchId: 'rec-arm-c', team: TEAM, teamsRoot, tasks: threeTierTasks(),
+        batchId: 'rec-arm-c', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
         assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
       }, SESS);
     } catch (e) { sentinelMsg = String(e?.message ?? e); }
