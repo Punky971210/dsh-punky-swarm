@@ -39,7 +39,7 @@
 | 2 | **状态机单一事实源** | 批次 5 态 / 成员 8 态的迁移只认状态文件 + 事件流；**`idle` = 空闲态（非崩溃态）**，`idle→running` 是返工/续跑入口 | `lib/state/store.js` + `machine-rules`（棘轮：只许收紧） |
 | 3 | **门禁不靠自觉** | 入口/出口/完成三类门由引擎强制；命令 gate 在 merged 前**实际执行**并以退出码判定 | `lib/state/gates.*`；`gate:` 行须 cwd 无关 |
 | 4 | **可审计留痕** | 每次判定/降级/逃生都产事件（`gate.*` / `member.*` / `batch.*`）；**拒载侧与放行侧留痕口径不同**（B2 首触只在放行/降级侧发射），不得混谈 | `lib/state/event-types.js` |
-| 5 | **装配资产化** | 层/角色/技能/flows 全在资产；**技能只写指针，不写装配数据** | `presets/<team>/team-asset.yml` + `scripts/check-team-assets.mjs` |
+| 5 | **装配资产化** | 层/角色/技能/flows 全在资产；**技能只写指针，不写装配数据** | `presets/<team>/team-asset.yml` |
 | 6 | **难度路由（无默认档）** | Leader 主动写入 A/B/C + 判据；**单线程不建批**；G1 档位×工具面；G2 建批即拉起 Manager | `assign_check` / `wave_plan({assembly})` |
 | 7 | **快照可核** | 建批回显 `batch.teamAsset{assetHash, snapshotPath}` + 会话级正档可复核 | `lib/assembly/snapshot.js` |
 | 8 | **契约缺声明可见** | 团队未声明某检查项而引擎缺省接管时**首触留痕**（`gate.contract_missing`），判定不变 | 同 #4 |
@@ -77,6 +77,7 @@
 
 ## 六、维护与核验
 
-- **资产一致性核验**：`node scripts/check-team-assets.mjs` —— 逐团队校验「资产引用的技能是否可解析」「团队技能文档与资产的角色/技能是否一致」，输出差异清单；
+- ~~**资产一致性核验**：`node scripts/check-team-assets.mjs`~~ —— **已退役（2026-09-26）**：该脚本的判据是「团队 SKILL.md 必须**逐条提及**资产声明的每个技能名」，属**组件式装配文档**口径；团队内容改为**模版（引擎的下游指引）、不再作为组件**后该判据不再成立（5 队全 FAIL）⇒ 脚本删除。
+  现行核验面：**加载期校验**（`loadTeamAsset`，见下条）+ **技能可解析性 = recommend 语义**（解析不到 ⇒ `GATE_SKILL_MISSING` 非阻断告警，不拒建批）；
 - **加载期校验**：`loadTeamAsset(root, team)` —— 非法声明拒载并给 `TEAM_ASSET_*` 码；
 - **门禁查询**：`gate_status`（lane 缺什么产物 / 契约问题 / 批次 `assembly` 声明与 Manager 登记）；批次全貌用 `batch_status`。
