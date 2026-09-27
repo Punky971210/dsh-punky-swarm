@@ -80,8 +80,23 @@ test('P2 任务包骨架：含句柄首行 + lane/层/角色 + 消费产出 + �
     firstLine: '[swarm-lane:b-1/e1#0123456789abcdef]', leaderPrompt: '先读规格再动手', artifactsRoot: 'R:/artifacts/b-1',
   });
   assert.ok(p.startsWith('[swarm-lane:b-1/e1#0123456789abcdef]'), '首行必须是句柄（唯一凭证）');
-  for (const k of ['`e1`', '`exec`', '`coder`', 'plan/spec.md', 'exec/e1/outputs/x.md', 'R:/artifacts/b-1', '禁 `git` 写', '先读规格再动手']) {
+  for (const k of ['`e1`', '`exec`', '`coder`', 'plan/spec.md', 'exec/e1/outputs/x.md', 'R:/artifacts/b-1', '禁 `git` 写', '先读规格再动手',
+    // 【2026-09-27 引导缺口补强】交接纪律须进所有层的任务包（本会话 4 次漏交 audit lane ⇒ 停轮）
+    'handoff_submit', 'GATE_HANDOFF_MISSING']) {
     assert.ok(p.includes(k), '任务包缺要素：' + k);
+  }
+  // exec 层**不应**带 plan 专属的六标题纪律（按层裁剪，防空转）
+  assert.equal(p.includes('六个【裸标题】'), false, '非 plan 层不应带六标题纪律');
+});
+
+test('P2b 任务包骨架 · plan 层：额外带「六标题齐备」纪律（本会话 1 次缺 ## 约束 ⇒ GATE_PLAN_CONTRACT 停轮）', () => {
+  const p = composeWorkerPrompt({
+    batchId: 'b-2', lane: 'p1', cmd: '定规格', layer: 'plan', role: 'coordinator',
+    produce: ['plan/spec.md'], firstLine: '[swarm-lane:b-2/p1#0123456789abcdef]', artifactsRoot: 'R:/artifacts/b-2',
+  });
+  for (const k of ['六个【裸标题】', '`## 概述`', '`## 问题`', '`## 方案`', '`## 需求`', '`## 验收标准`', '`## 约束`',
+    '内容允许为空', 'GATE_PLAN_CONTRACT', 'handoff_submit']) {
+    assert.ok(p.includes(k), 'plan 层任务包缺要素：' + k);
   }
 });
 

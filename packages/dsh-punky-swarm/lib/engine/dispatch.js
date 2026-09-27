@@ -95,6 +95,18 @@ export function composeWorkerPrompt({
   L.push('2. 禁 `git` 写；禁重启宿主；只碰本 lane 文件域。');
   L.push('3. 断言「没有某工具/技能」前先实机核：`grep`/`glob` 扫宿主安装面与引擎源码，或按名直调看回执（折叠 ≠ 禁用），勿凭印象断言「没有」。');
   L.push('4. 完成/失败均**显式回报**（不给静默降级）；回报只给元数据与结论，不复制正文。');
+  // ── 【2026-09-27 引导缺口补强】收本会话 5 次 `auto.settle.paused` 的教训 ──────────────
+  //   实证：批 onto-engine-slim-20260926 中 4 次停轮源于「exec 线漏向聚合 audit lane 交接」
+  //   （`GATE_HANDOFF_MISSING`）、1 次源于「plan 产物缺裸标题 `## 约束`」（`GATE_PLAN_CONTRACT`）。
+  //   **根因不是成员失职，而是任务包没写清** —— 故在此把两条硬要求前置到骨架里。
+  L.push('5. **【交接】完成时必须 `handoff_submit` 向【本 lane 的全部出边】交接**（含**聚合 audit lane**）——');
+  L.push('   若本批含 audit 层而本 lane 是 plan/exec 层，则该边**必须交**；漏交会被 `GATE_HANDOFF_MISSING` 拒，');
+  L.push('   批会被停轮。对 `a1-*` 这类**聚合 audit lane**（有多个入边），**每条上游线都要各自交一次**。');
+  if (layer === 'plan') {
+    L.push('6. **【plan 产物】正文必须含六个【裸标题】**（行首恰为该串，非 `###`、无缩进/前缀）：');
+    L.push('   `## 概述` / `## 问题` / `## 方案` / `## 需求` / `## 验收标准` / `## 约束`；');
+    L.push('   **内容允许为空，标题一个都不能缺** —— 缺任一即被 `GATE_PLAN_CONTRACT` 拒（内容不校，只校标题）。');
+  }
   if (leaderPrompt) {
     L.push('');
     L.push('## 任务要点（Leader 补充）');

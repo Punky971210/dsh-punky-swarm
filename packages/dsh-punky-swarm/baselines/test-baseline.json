@@ -337,11 +337,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 83,
-      "blankLines": 23,
-      "lines": 329,
+      "asserts": 85,
+      "blankLines": 24,
+      "lines": 344,
       "tautologies": 0,
-      "tests": 16,
+      "tests": 17,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -1257,7 +1257,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T07:45:32Z",
+  "generatedAt": "2026-09-27T07:54:48Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1268,15 +1268,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-27 用户裁 B：L1-L5 校验路径平行化 —— preset 装载期补 validateRuleTable（rules 的 id 唯一，与 toolBan 对称）；config.ts 两分支的 rules 面补 validatePresetRules（形状，与 inline toolBan 对齐）；config.ts:141 旧注释「inline 形状宽容」作废，改两面同严口径；preset-rules.test.js 的 R-3 拆为 R-3a（装载层拒重复 id）+ R-3b（收据层去重，绕过装载层）；governance-config.test.js 的 I2-2 夹具补合法 violations",
+  "reason": "2026-09-27 A 项：任务包骨架补 2 条纪律（收本会话 5 次 auto.settle.paused 教训）—— 第 5 条交接纪律（出边须含聚合 audit lane，漏交 GATE_HANDOFF_MISSING）、plan 层专属第 6 条（六标题齐备，GATE_PLAN_CONTRACT）；engine-dispatch.test.js 补 P2 断言 + 新增 P2b",
   "schema": 1,
   "totals": {
-    "asserts": 8251,
-    "blankLines": 4122,
+    "asserts": 8253,
+    "blankLines": 4123,
     "files": 157,
-    "lines": 44939,
+    "lines": 44954,
     "tautologies": 0,
-    "tests": 1727,
+    "tests": 1728,
     "todos": 4
   }
 }
