@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派生规则（纯函数，无副作用、无 IO）：
 //   · `memberDenyTools()` ≡ `SUITE_TOOLS.filter(t => t.memberDeny).map(t => t.name)`
 //   · `modeGateTools()`   ≡ `SUITE_TOOLS.filter(t => t.modeGate).map(t => t.name)`
-//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（**20 项** = 冻结前缀 **14 条** + 图变更写入口 2 件
+//   · 结果集**冻结**：`SUITE_DENY_TOOLS`（**17 项** = 冻结前缀 **11 条** + 图变更写入口 2 件
 //     （`batch_tasks_add` / `task_update`）+ S2 宿主连续控制族 **3 件**（`send_message` 已于 2026-09-24 放开）
 //     + 席位拉起面 1 件（`spawn_teammate`，AG-20），见下方表头注释）
 //     / `MODE_GATED_TOOLS`（12 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
@@ -35,6 +35,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · `kind`      门类：`governance` / `dispatch` / `comms` / `read`；
 //   · `modeGate`  是否受模式门 `config.modes.gate` 约束（true ⇒ 该工具 `execute` 首行落 `assertModeActive`）；
 //   · `memberDeny` 是否从成员调用面移除（true ⇒ 入 `SUITE_DENY_TOOLS`）；
+//     【2026-09-27 变更】三项放开（`gate_status` / `artifact_types` / `asset_claim`）⇒ deny 由 20 → **17**；
+//     冻结前缀由 14 → **11**（三者原在冻结前缀内）。
 //   · `write`     是否写面/副作用（元数据）。
 //
 // 口径边界（承 `dispatch.js` 原注释，勿丢）：
@@ -69,9 +71,9 @@ export const SUITE_TOOLS = Object.freeze([
   entry('lane_dispatch', 'dispatch', true, true, true),
   entry('lane_claim', 'dispatch', true, true, true), // lane 锁：归 Leader/Manager
   entry('lane_release', 'dispatch', true, true, true),
-  entry('gate_status', 'read', false, true, false), // 治理读面（成员看产物即可）
-  entry('artifact_types', 'read', false, true, false),
-  entry('asset_claim', 'governance', true, true, true),
+  entry('gate_status', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查自己 lane 缺什么 ⇒ 放开成员面
+  entry('artifact_types', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查层/目录约定 ⇒ 放开成员面
+  entry('asset_claim', 'governance', true, true, true), // 【2026-09-27】用户曾裁「三项全放」，但撞上不变量「modeGate ⊆ memberDeny」（模式门工具必须 deny 成员）⇒ 暂维持 deny，待裁
   entry('subagent', 'dispatch', false, true, true), // 禁成员嵌套派发（2026-09-16 用户裁决补入）
   entry('subagent_fork', 'dispatch', false, true, true),
   // ── 以下不入 deny、不占模式门（元数据面） ──────────────────────────────────────

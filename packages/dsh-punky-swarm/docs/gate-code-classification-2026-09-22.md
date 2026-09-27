@@ -65,7 +65,7 @@
 | `GATE_BATCH_TERMINAL` | 15 | 11 | state\dangling.js · state\event-types.js |
 | `GATE_PLAN_PRESENCE_MISSING` | 15 | 9 | state\event-types.js · state\gates.js |
 | `GATE_ORPHAN_PRODUCT` | 16 | 19 | state\event-types.js · state\gates.js |
-| `GATE_SKILL_MISSING` | 6 | 7 | state\event-types.js · tools\core.js |
+| ~~`GATE_SKILL_MISSING`~~ | ~~6~~ | ~~7~~ | ~~state\event-types.js · tools\core.js~~ ⇒ **2026-09-27 已退役，见 §3** |
 | `GATE_CONTRACT_MISSING` | 5 | 9 | state\event-types.js · state\store.js |
 | `GATE_ESCAPE` | 4 | 19 | state\event-types.js · state\gates.js |
 | `GATE_DEGRADE` | 4 | 10 | state\event-types.js · state\gates.js |
@@ -224,3 +224,21 @@
 
 ---
 **口径说明**：`prod` = lib js+ts 字面量写点数（含注释命中——退役码正是靠此暴露）；`test` = test/** 命中数。与 reachability 台账（119 守卫全集）/ 门禁拒码 66 口径不同源，本表为**全量字面量**口径（最宽，用于必要性裁决）。
+
+---
+
+## §3 追加：2026-09-27 变更（用户裁「按既有退役流程补登」）
+
+> **背景**：本台账落于 2026-09-22；此后引擎有 3 批变化未回写。本节补登，**处置流程沿用本文件既有机制**
+> （数据源 = 本文件，加码 = `test/retired-codes-lock.test.js` 的 `RETIRED_CODES`）。
+
+| # | 码/族 | 本台账原位置 | **2026-09-27 现状** | 处置 |
+|---|---|---|---|---|
+| **1** | **`GATE_SKILL_MISSING`** | A1 直抛 | **代码已彻底移除**（提交 `b8380a8`，用户裁「技能 recommend 不再设门禁」） | ✅ **已加入退役锁** + 本表 A1 行已标删 |
+| **2** | **`TEAM_ASSET_*`（19 个）** | A1 / D / N 分散 | **`team-asset` 方案全面弃用**（2026-09-27 用户裁决，见 `reports/decision-team-asset-retire-20260927.md`） | ⏸ **随弃用 4 批计划的批 3** 清（删码表 + 断引用 + 入退役锁） |
+| **3** | **`GATE_CONCURRENCY_EXCEEDED`** | C 退役 | 已在退役锁（`:31`） | ✅ 无动作（**记录以免再次被误判为孤儿码**） |
+| **4** | **`GATE_CONCURRENCY_BLOCKED`（事件常量）** | — | 常量**冻结**（读历史批用，无新写点），见 `chain-retirement-and-topology-20260918.md:111` | ✅ 无动作（**有意冻结，非废码**） |
+| **5** | **判据面变更** | — | `ENGINE_BASELINE_PLAN_SECTIONS` 由 2 项扩为 **6 项**（提交 `7060ab0`）⇒ `GATE_PLAN_CONTRACT` 的**判定集合扩面**（**码本身未变**） | 📝 登记（**码面无新增**） |
+| **6** | **拒态文案变更** | — | 四处拒绝路径（`GATE_PLAN_CONTRACT` / `GATE_HANDOFF_MISSING` / `GATE_ENTRY_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`）**追加「【怎么做】」指引项**（提交 `892afcb`） | 📝 登记（**只加文案，判据集合逐字不变**） |
+
+**⇒ 处置纪律（沿用本文件 §0）**：**A 类保留 / C 类退役入锁 / N 类 scanner 白名单剔除**；新增退役码**只需入 `RETIRED_CODES`**。

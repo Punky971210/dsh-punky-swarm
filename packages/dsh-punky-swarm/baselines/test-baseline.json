@@ -931,7 +931,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 8,
-      "lines": 62,
+      "lines": 63,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1011,7 +1011,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 40,
       "blankLines": 17,
-      "lines": 318,
+      "lines": 323,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1257,7 +1257,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T12:26:45Z",
+  "generatedAt": "2026-09-27T19:23:39Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1268,13 +1268,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-27 运行时回调指引（用户裁：worker 不补文档用法，改由工具回调说明 + 门禁码锁行为）：gates.ts 四处拒绝路径（GATE_PLAN_CONTRACT / GATE_HANDOFF_MISSING / GATE_ENTRY_MISSING / GATE_AUDIT_CRITERIA_MISSING）在 problems 末尾追加「【怎么做】」指引项（只加文案，判据集合逐字不变）；api.test.js 与 api-batch-keys.test.js 的 contractProblems 断言按语义拆分为「判据项 1 条 + 指引项在场」",
+  "reason": "2026-09-27 成员 deny 面 20→18（放开 gate_status/artifact_types；asset_claim 因不变量 modeGate 子集 memberDeny 保留）+ 退役锁补登 GATE_SKILL_MISSING（现 9 码）+ 台账补 §3",
   "schema": 1,
   "totals": {
     "asserts": 8255,
     "blankLines": 4123,
     "files": 157,
-    "lines": 44961,
+    "lines": 44967,
     "tautologies": 0,
     "tests": 1728,
     "todos": 4

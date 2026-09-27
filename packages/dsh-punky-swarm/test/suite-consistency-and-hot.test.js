@@ -49,10 +49,15 @@ const SID = 'sess-sc';
 //     ——P3a control lane 的 `batch_control` 紧跟 `batch_phase` 之后插入（相位工具相邻，见下方 LEGACY 注释））、不含 `mcp__*`；
 //   · 模式门：表内 `modeGate` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**10 项**：既有 9 项 + P3a `batch_control`）、不含 `mcp__*`。
 // 实现面（调用点 / 行为）与注册表的**双向**比对落 SC-4 —— 本用例只负责「表 ↔ 导出」这一侧。
-// 旧 13 项冻结序列（**项与项之间的相对顺序是本用例真正锁的东西**；新项只允许**插入**、不得重排）：
+// 冻结序列（**项与项之间的相对顺序是本用例真正锁的东西**；新项只允许**插入**、不得重排）：
+// 【2026-09-27 变更登记】`gate_status` / `artifact_types` 从 deny 面移出（用户裁「三项全放」的一部分；
+//   依据：两者**均不在模式门**、只读、不触治理状态）⇒ 本序列由 13 项 → **11 项**；
+//   ⚠ `asset_claim` **保留** —— 它 `modeGate=true`，受不变量「**modeGate ⊆ memberDeny**」约束
+//   （模式门工具必须 deny 成员，否则未启模式时会写出脏数据），故不随本次放开。
 const LEGACY_DENY = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
-  'lane_dispatch', 'lane_claim', 'lane_release', 'gate_status', 'artifact_types', 'asset_claim',
+  'lane_dispatch', 'lane_claim', 'lane_release',
+  'asset_claim',
   'subagent', 'subagent_fork',
 ];
 // 现值 = 旧序列前 5 项 + P3a 追加的 `batch_control`（紧跟 `batch_phase`，相位工具相邻）+ 旧序列剩余 8 项。
@@ -96,7 +101,7 @@ const FROZEN_MODE_GATED = [
 const NEW_MODE_GATED = ['batch_phase', 'lane_claim', 'lane_release', 'asset_claim', 'assign_check'];
 const sortedUnique = (xs) => [...new Set(xs)].sort();
 
-test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（20 项，既有 13 项顺序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
+test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_DENY.length + ' 项，冻结序列项序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
   // ① 只读清单与执行型清单同源（原断言保留）
   const leakedShell = SHELL_TOOLS.filter((t) => !EXEC_TOOLS.includes(t));
   assert.deepEqual(leakedShell, [], '只读判定只作用于 shell 类工具，二者必须同源');

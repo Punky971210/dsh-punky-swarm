@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 退役码登记锁（N2 收口 · G3 合并，2026-09-22）：
+// 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING）：
 //   数据源 = docs/gate-code-classification-2026-09-22.md C 类（码已退役、无任何拒态来源）。
 //   单表遍历断言 lib/** 零字面量命中 —— 取代此前散布在 gate-lite-batch2 / concurrency-gate /
 //   governance / writing-team-asset 四处的手写「已删零命中」变体（激进删除批 2，用户裁定）。
@@ -34,6 +34,7 @@ const RETIRED_CODES = [
   'GATE_MANAGER_AGENT_ID_REQUIRED', // 同上（空 agentId ⇒ 不写记录、不抛错）
   'GATE_TEAM_ASSET_MISSING', // team-asset 解析前置化（装配前缀来源切换）
   'GATE_MANAGER_MISSING', // 收口告警删（2026-09-22 用户裁定：roster_gap 已承担在册缺口留痕；legacy 字段面退役）
+  'GATE_SKILL_MISSING', // 【2026-09-27 补登】用户裁「技能 recommend 不再设门禁」⇒ 码已从引擎彻底移除（提交 b8380a8）
 ];
 
 function libSources(dir, out = []) {
@@ -49,7 +50,7 @@ function libSources(dir, out = []) {
   return out;
 }
 
-test('退役码登记锁：C 类 7 码在 lib/** 零字面量命中（防回生；散布锁已合并至此）', () => {
+test('退役码登记锁：C 类 ' + RETIRED_CODES.length + ' 码在 lib/** 零字面量命中（防回生；散布锁已合并至此）', () => {
   const sources = libSources(join(process.cwd(), 'lib'));
   assert.ok(sources.length > 100, 'lib 源文件扫描面异常（应 >100 件）：' + sources.length);
   for (const code of RETIRED_CODES) {
