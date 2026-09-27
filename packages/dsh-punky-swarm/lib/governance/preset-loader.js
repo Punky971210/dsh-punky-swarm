@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   PresetBanTable（toolBan 面，第三类）。l1-sensitive / l2-resource 走 rules 面，
 //   l3-tool-ban 走 toolBan 面（该文件 rules 为空 ⇒ 不进 PresetTable）。
 // 装载语义：
-//   - PRESET_IDS = 注册 id 枚举（唯一权威，与 presets/hook-rules/ 三文件 stem 一致；
+//   - PRESET_IDS = 注册 id 枚举（唯一权威，与 presets/hook-rules/ 四文件 stem 一致；
 //     compose 组合项 2026-09-14 已废除——组合由多选叠加表达，不再是注册 id）；
 //   - wrapper{_meta, rules?, toolBan?} 结构：JSON.parse → _meta 剥离只取 rules/toolBan（不洗条目对象——
 //     kernel 消费纯 Rule[]/ToolBanEntry[]，零扩展字段）；形状校验（受控资产早失败）；
