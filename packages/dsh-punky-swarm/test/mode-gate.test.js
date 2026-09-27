@@ -160,27 +160,36 @@ test('H2 热更快照生效：同一工具面，白名单由热更快照切换�
   assert.match(reasons[0], /\[task-difficulty-gate\]/);
 });
 
-// ── 模式门反向用例：注册表本批新补 5 件（批 `suite-registry-20260916`） ─────────
+// ── 模式门反向用例：注册表本批新补 4 件（批 `suite-registry-20260916`）+ P3a `batch_control` ──
 // 口径同 T1，**逐件一条**：非白名单模式 + 最小合法入参 ⇒ 拒 `GATE_MODE_INACTIVE`，且**零治理写入**
-//   （`lane_claim` 不落锁、`asset_claim` 不复制、`assign_check` 不写 `lastAssign`）。
+//   （`lane_claim` 不落锁、`assign_check` 不写 `lastAssign`）。
+// 【2026-09-27 三项全放】`asset_claim` **已撤模式门**（成员认领刚需 ⇒ 放开成员面，而受模式门的工具必须
+//   deny 成员 ⇒ 二者不可兼得）⇒ 其反向用例已不成立，从本名单移出，改由 T3 内的**正向断言**锁住新契约
+//   （注册表不含 + 行为面不再报 GATE_MODE_INACTIVE），断言数净不降。
 // 用例名单与注册表对账：每件必须在 `MODE_GATED_TOOLS` 内（防「用例写了但表里没有」的两面漂移）。
 const NEW_GATED_CASES = [
   ['batch_phase', { batchId: 'b-x', phase: 'running' }],
   ['lane_claim', { batchId: 'b-x', lane: 'e1' }],
   ['lane_release', { batchId: 'b-x', lane: 'e1', token: 'tok-x' }],
-  ['asset_claim', { batchId: 'b-x', source: 'C:\\tmp\\probe.md', target: 'probe.md' }],
   ['assign_check', { difficulty: 'C', rationale: '反向用例占位判据（模式门先于档位校验，不入 governance）' }],
-  // 【P3a control lane 追加】`batch_control` 亦须受模式门（非生效模式零治理写入）——追加在既有 5 件之后，
-  //   既有 5 件的顺序与判据零变化。
+  // 【P3a control lane 追加】`batch_control` 亦须受模式门（非生效模式零治理写入）——追加在既有 4 件之后，
+  //   既有 4 件的顺序与判据零变化。
   ['batch_control', { batchId: 'b-x', action: 'pause' }],
 ];
 
-test('T3 模式门反向用例（注册表新补 6 件）：非白名单模式逐件拒 GATE_MODE_INACTIVE 且零治理写入', async () => {
+test('T3 模式门反向用例（注册表新补 5 件）：非白名单模式逐件拒 GATE_MODE_INACTIVE 且零治理写入', async () => {
   const h = newHarness({ modes: { gate: [MODE] } });
   const sid = 's-standard';
-  assert.equal(NEW_GATED_CASES.length, 6, '本批新补 6 件须各一条反向用例（batch_phase/lane_claim/lane_release/asset_claim/assign_check + P3a batch_control）');
+  assert.equal(NEW_GATED_CASES.length, 5, '本批新补用例须各一条（batch_phase/lane_claim/lane_release/assign_check + P3a batch_control，共 5 条；asset_claim 已于 2026-09-27 撤门 ⇒ 移出反向名单）');
   for (const [name] of NEW_GATED_CASES) {
     assert.ok(MODE_GATED_TOOLS.includes(name), name + ' 必须在注册表 modeGate 集内（用例名单与注册表对账）');
+  }
+  // 【2026-09-27 三项全放】正向契约：`asset_claim` **不在** modeGate 集内（成员放开的前置：撤模式门）
+  assert.equal(MODE_GATED_TOOLS.includes('asset_claim'), false,
+    'asset_claim 已放开成员面 ⇒ 必须撤模式门（不得出现在 MODE_GATED_TOOLS）');
+  // 同批放开的另外两件（只读、本就不落模式门）并检 —— 模式门面须与「三项全放」口径整体一致。
+  for (const n of ['gate_status', 'artifact_types']) {
+    assert.equal(MODE_GATED_TOOLS.includes(n), false, '三项全放：' + n + ' 不得出现在 MODE_GATED_TOOLS');
   }
   assert.equal(h.store.readGovernance(sid)?.execToolCount ?? 0, 0, '前置：非白名单会话未被计数');
   const govBefore = h.store.readGovernance(sid) ?? null;
@@ -193,4 +202,12 @@ test('T3 模式门反向用例（注册表新补 6 件）：非白名单模式�
     );
     assert.deepEqual(h.store.readGovernance(sid) ?? null, govBefore, name + '：被拒时不得写治理状态（零介入面）');
   }
+  // 【2026-09-27 顺带行为面正向】撤门后，非白名单模式下 `asset_claim` 不再因模式门被拒（走到业务校验：
+  //   批次不存在 ⇒ 业务错），且不写治理状态 —— 即「成员可调用」这一新契约的行为面证据。
+  await assert.rejects(
+    () => h.byName.asset_claim.execute({ batchId: 'b-x', source: 'C:\\tmp\\probe.md', target: 'probe.md' }, sess('standard')),
+    (e) => /batch not found/.test(e.message) && !/GATE_MODE_INACTIVE/.test(e.message),
+    'asset_claim：已撤模式门 ⇒ 非白名单模式不得再报 GATE_MODE_INACTIVE（应落到业务校验）',
+  );
+  assert.deepEqual(h.store.readGovernance(sid) ?? null, govBefore, 'asset_claim：撤门后亦不写治理状态');
 });

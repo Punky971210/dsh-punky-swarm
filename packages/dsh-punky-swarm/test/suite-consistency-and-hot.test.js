@@ -45,22 +45,24 @@ const SID = 'sess-sc';
 
 // ── SC-1 套件一致性（全量，批 `suite-registry-20260916`） ──────────────────────
 // 断言的**事实源是注册表**（`lib/engine/suite.js` 的 `SUITE_TOOLS`），不是人肉清单：
-//   · deny：表内 `memberDeny` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**14 项**：既有 13 项**相对顺序逐字不变**
+//   · deny：表内 `memberDeny` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**17 项**，2026-09-27 三项放开后；
+//     批 `suite-registry-20260916` 时为 **14 项** = 既有 13 项**相对顺序逐字不变**
 //     ——P3a control lane 的 `batch_control` 紧跟 `batch_phase` 之后插入（相位工具相邻，见下方 LEGACY 注释））、不含 `mcp__*`；
-//   · 模式门：表内 `modeGate` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**10 项**：既有 9 项 + P3a `batch_control`）、不含 `mcp__*`。
+//   · 模式门：表内 `modeGate` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**11 项**，2026-09-27 三项放开后；
+//     批 `suite-registry-20260916` 时为 **10 项** = 既有 9 项 + P3a `batch_control`）、不含 `mcp__*`。
 // 实现面（调用点 / 行为）与注册表的**双向**比对落 SC-4 —— 本用例只负责「表 ↔ 导出」这一侧。
 // 冻结序列（**项与项之间的相对顺序是本用例真正锁的东西**；新项只允许**插入**、不得重排）：
-// 【2026-09-27 变更登记】`gate_status` / `artifact_types` 从 deny 面移出（用户裁「三项全放」的一部分；
-//   依据：两者**均不在模式门**、只读、不触治理状态）⇒ 本序列由 13 项 → **11 项**；
-//   ⚠ `asset_claim` **保留** —— 它 `modeGate=true`，受不变量「**modeGate ⊆ memberDeny**」约束
-//   （模式门工具必须 deny 成员，否则未启模式时会写出脏数据），故不随本次放开。
+// 【2026-09-27 变更登记】`gate_status` / `artifact_types` / `asset_claim` 三者从 deny 面移出（用户裁「三项全放」）：
+//   前两者依据「**均不在模式门**、只读、不触治理状态」直接放开；`asset_claim` 依据「agent-team 成员**认领任务
+//   刚需**」放开，并**同时撤其模式门**（`modeGate:false`）以守住不变量「**modeGate ⊆ memberDeny**」
+//   （工具一旦受模式门就必须 deny 成员，否则未启模式时会写出脏数据）⇒ 本序列由 13 项 → **10 项**。
 const LEGACY_DENY = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release',
-  'asset_claim',
   'subagent', 'subagent_fork',
 ];
-// 现值 = 旧序列前 5 项 + P3a 追加的 `batch_control`（紧跟 `batch_phase`，相位工具相邻）+ 旧序列剩余 8 项。
+// 现值 = 旧序列前 5 项 + P3a 追加的 `batch_control`（紧跟 `batch_phase`，相位工具相邻）+ 旧序列剩余 5 项
+//   （2026-09-27 三项放开后；批时剩余 8 项）。
 // 【task-22 变更登记】P1 `handoff_submit` **不入 deny**（改归 `comms` 族 / 成员面）⇒ 本序列回到 **14 项**，
 //   与 `task-21` 的临时 15 项相比：**旧 13 项相对顺序零变化**，变更显式登记于本注释 + `suite.js` 表条目注释。
 const BATCH_CONTROL_INSERT_AT = 5;
@@ -88,20 +90,22 @@ const FROZEN_DENY = [
 const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
-  'lane_dispatch', 'lane_claim', 'lane_release', 'asset_claim',
+  'lane_dispatch', 'lane_claim', 'lane_release',
   // 【P3a control lane 追加】人工干预面同样受模式门（非生效模式零治理写入）
   'batch_control',
   // 【task-22 变更登记】P1 `handoff_submit` **不入模式门**（归 `comms` 族：交接是生产者的动作，
   //   须成员可调用 ⇒ 不落 `assertModeActive`）；【N1-R4-1c】+`batch_tasks_add`、【N1-R4-2】+`task_update`
-  //   （两件均为图变更写入口）⇒ **12 项**。
+  //   （两件均为图变更写入口）；【2026-09-27 三项全放】`asset_claim` **撤门**（成员放开的前置条件，
+  //   见 `LEGACY_DENY` 上方变更登记）⇒ 现为 **11 项**。
   'batch_tasks_add',
   'task_update',
 ];
-// 本批（`suite-registry-20260916`）新补的模式门 5 件：原实现面无覆盖（`assign_check` 文档表误标 ✅）
-const NEW_MODE_GATED = ['batch_phase', 'lane_claim', 'lane_release', 'asset_claim', 'assign_check'];
+// 本批（`suite-registry-20260916`）新补的模式门 5 件：原实现面无覆盖（`assign_check` 文档表误标 ✅）。
+// 【2026-09-27】`asset_claim` 已撤模式门（成员放开）⇒ 本名单由 5 件减为 4 件。
+const NEW_MODE_GATED = ['batch_phase', 'lane_claim', 'lane_release', 'assign_check'];
 const sortedUnique = (xs) => [...new Set(xs)].sort();
 
-test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_DENY.length + ' 项，冻结序列项序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（12 项，含新补 5 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
+test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_DENY.length + ' 项，冻结序列项序逐字不变）；modeGate 覆盖集 ≡ 注册表派生（11 项，含新补 4 件 + P3a batch_control + R4 两件图写入口）；均不含 mcp__*', () => {
   // ① 只读清单与执行型清单同源（原断言保留）
   const leakedShell = SHELL_TOOLS.filter((t) => !EXEC_TOOLS.includes(t));
   assert.deepEqual(leakedShell, [], '只读判定只作用于 shell 类工具，二者必须同源');
@@ -114,11 +118,11 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_D
     assert.equal(typeof t.memberDeny, 'boolean', t.name + '：memberDeny 须为布尔');
     assert.ok(Object.isFrozen(t), t.name + '：表条目须冻结');
   }
-  // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 13 项**顺序逐字不变 + P3a 追加项）
+  // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 10 项**顺序逐字不变 + P3a 追加项）
   const derivedDeny = SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
-  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（20 项：旧 13 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 3 件（send_message 已放开）+ AG-20 spawn_teammate 1 件；task-22 后 handoff_submit 不入 deny）');
+  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（17 项：冻结前缀 10 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 3 件（send_message 已放开）+ AG-20 spawn_teammate 1 件；task-22 后 handoff_submit 不入 deny；2026-09-27 三项全放后 gate_status/artifact_types/asset_claim 均已移出）');
   assert.deepEqual([...SUITE_DENY_TOOLS].filter((n) => !POST_LEGACY_DENY_ADDED.includes(n)), LEGACY_DENY,
-    '去掉 P3a 之后追加的项后必须**逐字等于**旧 13 项序列（新项只允许追加，不得重排/删项）');
+    '去掉 P3a 之后追加的项后必须**逐字等于** `LEGACY_DENY`（2026-09-27 三项放开后为 10 项）序列（新项只允许追加，不得重排/删项）');
   assert.equal([...SUITE_DENY_TOOLS].indexOf('batch_control'), BATCH_CONTROL_INSERT_AT,
     'P3a 新项落位 = 紧跟 batch_phase（相位工具相邻；落位是断言面，防静默挪位）');
   assert.deepEqual([...SUITE_DENY_TOOLS], derivedDeny, 'deny 必须由注册表派生（表 → 导出单向同源，不退回字面量）');
@@ -126,9 +130,9 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_D
   assert.deepEqual(SUITE_DENY_TOOLS.filter((t) => t.startsWith('mcp__')), [], 'MCP 等普通工具不得入 deny（用户口径）');
   assert.ok(SUITE_DENY_TOOLS.includes('subagent') && SUITE_DENY_TOOLS.includes('subagent_fork'), '禁成员嵌套派发');
   assert.ok(SUITE_DENY_TOOLS.includes('batch_control'), '人工干预面（batch_control）必须对成员移除');
-  // ④ 模式门面：注册表派生 ≡ 再导出 ≡ 现值（10 项，含本批新补 5 件 + P3a batch_control）
+  // ④ 模式门面：注册表派生 ≡ 再导出 ≡ 现值（11 项，含本批新补 4 件 + P3a batch_control + R4 两件图写入口）
   const derivedGate = SUITE_TOOLS.filter((t) => t.modeGate).map((t) => t.name);
-  assert.deepEqual(sortedUnique([...MODE_GATED_TOOLS]), sortedUnique(FROZEN_MODE_GATED), '模式门覆盖集 = 10 项现值（task-22 后 handoff_submit 不入模式门）');
+  assert.deepEqual(sortedUnique([...MODE_GATED_TOOLS]), sortedUnique(FROZEN_MODE_GATED), '模式门覆盖集 = 11 项现值（task-22 后 handoff_submit 不入模式门；2026-09-27 三项全放后 asset_claim 撤门）');
   assert.deepEqual(sortedUnique([...MODE_GATED_TOOLS]), sortedUnique(derivedGate), 'modeGate 覆盖集必须由注册表派生');
   assert.ok(Object.isFrozen(MODE_GATED_TOOLS), 'MODE_GATED_TOOLS 派生结果须冻结');
   for (const n of NEW_MODE_GATED) {
@@ -139,6 +143,10 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_D
   // ⑤ 两面关系：模式门覆盖集 ⊆ deny 集（模式门工具均属套件写面）
   assert.deepEqual(MODE_GATED_TOOLS.filter((n) => !SUITE_DENY_TOOLS.includes(n)), [],
     '模式门覆盖集必须落在 deny 集内（两面同源于一张表）');
+  // ⑥ 【2026-09-27 三项全放】`asset_claim` 两面皆出：成员可调用（∉ deny）**且**不再落模式门（∉ modeGate）
+  //   —— 两半是同一件事（不变量 `modeGate ⊆ memberDeny` 要求放开成员面必须先撤模式门），故并检。
+  assert.equal(SUITE_DENY_TOOLS.includes('asset_claim'), false, 'asset_claim 已放开成员面 ⇒ 不得入 deny 集');
+  assert.equal(MODE_GATED_TOOLS.includes('asset_claim'), false, 'asset_claim 撤模式门是放开成员面的前置 ⇒ 不得入 modeGate 集');
 });
 
 // ── SC-2 热更真生效（N2/H3） ────────────────────────────────────────────────
@@ -268,7 +276,7 @@ function minArgs(def) {
   return out;
 }
 
-test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate 集（双向，含新补 5 件真生效）', async () => {
+test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate 集（双向，含新补 4 件真生效）', async () => {
   const derivedGate = sortedUnique(SUITE_TOOLS.filter((t) => t.modeGate).map((t) => t.name));
   // ① 静态声明面 ↔ 注册表（双向）
   assert.deepEqual(sortedUnique(staticModeGateDecls(TOOLS_DIR)), derivedGate,
@@ -308,7 +316,9 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   // ④ 反向抽样：表内 modeGate:false 的工具不得误报模式门（防「门面铺得过宽」）。
   //   【task-22 补入】`handoff_submit`（`comms` 族 / 成员面 / modeGate:false）——本项即「成员可调、
   //   不落模式门」的**行为面证据**：非生效模式下它不得抛 `GATE_MODE_INACTIVE`（业务侧报错不算违规）。
-  for (const n of ['batch_status', 'artifact_types', 'gate_status', 'handoff_submit']) {
+  //   【2026-09-27 补入】`asset_claim`（三项全放 / 撤模式门）——同属该证据面：非生效模式下亦**不得**因模式门被拒
+  //   （最小入参走到业务校验：批次不存在 ⇒ 业务错，不算违规）。
+  for (const n of ['batch_status', 'artifact_types', 'gate_status', 'asset_claim', 'handoff_submit']) {
     assert.ok(byName[n], n + ' 应真实注册（常驻注册：交接两工具不再随 env 出现/消失）');
     let msg = '';
     try { await byName[n].execute(minArgs(byName[n]), exec); } catch (e) { msg = String(e.message); }

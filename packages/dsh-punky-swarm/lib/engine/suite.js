@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · 结果集**冻结**：`SUITE_DENY_TOOLS`（**17 项** = 冻结前缀 **11 条** + 图变更写入口 2 件
 //     （`batch_tasks_add` / `task_update`）+ S2 宿主连续控制族 **3 件**（`send_message` 已于 2026-09-24 放开）
 //     + 席位拉起面 1 件（`spawn_teammate`，AG-20），见下方表头注释）
-//     / `MODE_GATED_TOOLS`（12 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
+//     / `MODE_GATED_TOOLS`（11 项，含 `batch_control`；P1 交接面**不入**两集，见 `handoff_submit` 条目注释）。
 //   语义幂等：集合比对一律排序后比（表内条目顺序不构成语义）；唯一受顺序约束的是
 //   `SUITE_DENY_TOOLS`——为使导出**逐字不变**，本表按 `memberDeny:true` 的原字面量顺序排布（见下方表头注释）。
 //
@@ -36,7 +36,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · `modeGate`  是否受模式门 `config.modes.gate` 约束（true ⇒ 该工具 `execute` 首行落 `assertModeActive`）；
 //   · `memberDeny` 是否从成员调用面移除（true ⇒ 入 `SUITE_DENY_TOOLS`）；
 //     【2026-09-27 变更】三项放开（`gate_status` / `artifact_types` / `asset_claim`）⇒ deny 由 20 → **17**；
-//     冻结前缀由 14 → **11**（三者原在冻结前缀内）。
+//     冻结前缀由 14 → **11**（三者原在冻结前缀内）；其中 `asset_claim` **同时**由 `modeGate:true` 改 `false`
+//     —— 不变量「modeGate ⊆ memberDeny」要求「放开成员面 ⇒ 必须先撤模式门」⇒ `MODE_GATED_TOOLS` 12 → **11**。
 //   · `write`     是否写面/副作用（元数据）。
 //
 // 口径边界（承 `dispatch.js` 原注释，勿丢）：
@@ -55,11 +56,14 @@ const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name,
  *  `list_agents`/`wait_agent`，2026-09-22 one-shot 化）+ AG-20 席位拉起面 1 件（`spawn_teammate`））。
  *  ⚠ 顺序约定：**前 14 条**的相对顺序为冻结面（去掉 P3a 新增的 `batch_control` 后 == 重构前
  *  `dispatch.js` 的 `SUITE_DENY_TOOLS` 字面量顺序，要求逐字不变；`batch_control` **插在 `batch_phase` 之后**）。
- *  ⚠ `memberDeny:true` 共 **20** 条 = 冻结的 14 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
+ *  ⚠ `memberDeny:true` 现共 **17** 条 = 冻结前缀 **11** 条 + 末尾追加的两件图变更写入口（`batch_tasks_add` / `task_update`）
  *  + S2 宿主连续控制族 3 件（`interrupt_agent` / `list_agents` / `wait_agent`；**`send_message` 已于
  *  2026-09-24 按用户裁决放开**，S-3，从 deny 面移出 ⇒ 计数 20→19）
- *  + 席位拉起面 1 件（`spawn_teammate`，AG-20，2026-09-25 用户裁决定向 deny ⇒ 计数 19→20）。
- *  追加位置在**冻结前缀之后** ⇒ 前 14 条相对顺序零变化（`SUITE_DENY_TOOLS` 前 14 项逐字不变）。
+ *  + 席位拉起面 1 件（`spawn_teammate`，AG-20，2026-09-25 用户裁决定向 deny ⇒ 计数 19→20）；
+ *  【2026-09-27 · 三项全放】`gate_status` / `artifact_types` / `asset_claim` 移出 ⇒ 再 20→17
+ *  （冻结前缀 14→11；其中 `asset_claim` 为成员认领刚需，随放开一并撤模式门，见上方字段语义段）。
+ *  追加位置在**冻结前缀之后** ⇒ 前 14 条的相对顺序零变化（三项放开只**摘项**、不重排：导出序列中
+ *  冻结前缀现为 **11** 项，其相对顺序逐字不变）。
  *  第 15 条起为其余条目，顺序不构成语义。 */
 export const SUITE_TOOLS = Object.freeze([
   entry('assign_check', 'governance', true, true, true), // 难度评估：成员不写难度（既裁）
@@ -73,7 +77,7 @@ export const SUITE_TOOLS = Object.freeze([
   entry('lane_release', 'dispatch', true, true, true),
   entry('gate_status', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查自己 lane 缺什么 ⇒ 放开成员面
   entry('artifact_types', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查层/目录约定 ⇒ 放开成员面
-  entry('asset_claim', 'governance', true, true, true), // 【2026-09-27】用户曾裁「三项全放」，但撞上不变量「modeGate ⊆ memberDeny」（模式门工具必须 deny 成员）⇒ 暂维持 deny，待裁
+  entry('asset_claim', 'governance', false, false, true), // 【2026-09-27 已裁 · 三项全放】agent-team 成员认领任务**刚需**本件 ⇒ 放开成员面；同撤其模式门（modeGate:false）以守不变量「modeGate ⊆ memberDeny」（成员面不得存在会撞 GATE_MODE_INACTIVE 的工具）
   entry('subagent', 'dispatch', false, true, true), // 禁成员嵌套派发（2026-09-16 用户裁决补入）
   entry('subagent_fork', 'dispatch', false, true, true),
   // ── 以下不入 deny、不占模式门（元数据面） ──────────────────────────────────────

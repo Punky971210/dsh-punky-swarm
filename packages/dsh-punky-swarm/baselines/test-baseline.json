@@ -793,9 +793,9 @@
       "todos": 0
     },
     "test/mode-gate.test.js": {
-      "asserts": 48,
+      "asserts": 52,
       "blankLines": 22,
-      "lines": 197,
+      "lines": 214,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1009,9 +1009,9 @@
       "todos": 0
     },
     "test/suite-consistency-and-hot.test.js": {
-      "asserts": 40,
+      "asserts": 42,
       "blankLines": 17,
-      "lines": 323,
+      "lines": 333,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1265,7 +1265,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T21:33:40Z",
+  "generatedAt": "2026-09-27T22:48:17Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1276,13 +1276,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "team 降为可选标签：测试面等价反转 + 新增 3 例",
+  "reason": "asset_claim 放开成员面：两测试文件按新真值更新（断言净增）+ 连带撤模式门",
   "schema": 1,
   "totals": {
-    "asserts": 8275,
+    "asserts": 8281,
     "blankLines": 4136,
     "files": 158,
-    "lines": 45092,
+    "lines": 45119,
     "tautologies": 0,
     "tests": 1731,
     "todos": 4
