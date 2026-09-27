@@ -61,7 +61,7 @@
 ### 二、批次装配声明（三层批必填；2026-09-14 **扩面**）
 
 - **强制面（2026-09-14 扩面）**：必备判定 = `requiresAssemblyDecl(tasks)`（三层批形态 **且含 audit 层 lane**）。因引擎另有不变量「含 exec 层的三层批必须有 audit lane」（`validateLayerContract`），该判定**等价于所有可建的三层批**；唯一例外是无 audit 层的三层形态（如 plan-only）。
-- **唯一生效形态 = `wave_plan` 顶层入参**：`wave_plan({ batchId, tasks, team, assembly: { auditLane, managerPlan?, coordinatorLane?, roles? } })`。**`auditLane` 必填**（须指向本批 audit 层 lane）；**`managerPlan` 缺省 `raise`**（省略即建批即拉起 Manager；需 Leader 直驱才**显式**写 `leader-direct`）。引擎在建批时刻（`createBatch` 之前）静态校验该入参——缺则**拒建批** `GATE_ROLE_ASSEMBLY_MISSING`；结构非法 / 悬空 lane id 拒建批 `GATE_ASSEMBLY_INVALID`；`roles` 词法非法仅告警 `GATE_ROLE_INVALID`（**告警不阻断建批**）。
+- **唯一生效形态 = `wave_plan` 顶层入参**：`wave_plan({ batchId, tasks, team?, assembly: { auditLane, managerPlan?, coordinatorLane?, roles? } })`——**`team` 现为可选标签**（2026-09-27 裁决 · `7f481d3`：不传 / 空白 ⇒ 跳过整个团队资产面，批次照常落盘；详见 §0b 四）。**`auditLane` 必填**（须指向本批 audit 层 lane）；**`managerPlan` 缺省 `raise`**（省略即建批即拉起 Manager；需 Leader 直驱才**显式**写 `leader-direct`）。引擎在建批时刻（`createBatch` 之前）静态校验该入参——缺则**拒建批** `GATE_ROLE_ASSEMBLY_MISSING`；结构非法 / 悬空 lane id 拒建批 `GATE_ASSEMBLY_INVALID`；`roles` 词法非法仅告警 `GATE_ROLE_INVALID`（**告警不阻断建批**）。
 - **可核性**：归一化后的 `managerPlan` 随批持久化（`batch.assembly`，`gate_status` 可读），收口告警按**声明**触发（见 §0b 一）⇒「默认 raise」是**引擎可核事实**。
 - 该批的 plan lane 产物**必须**含**角色装配声明**，内容三要素：
   1. **Manager 拉起计划**（何时拉 / 注入内容）；
@@ -72,18 +72,13 @@
 
 ### 四、`team` 参数（2026-09-26 订正：**必填，勿漏**）
 
-- **症状**：漏传 ⇒ **宿主参数校验直接报** `invalid arguments: missing required property "team"`（**注意：这不是引擎的 `GATE_*` 门禁码**，而是工具 schema 层拒收 ⇒ 查 `gate_status` 也查不到，容易误判为"引擎坏了"）。
-- **它不是「装配声明」那么简单**：引擎拿 `team` 当 **4 个东西的数据源**——
-  1. **`flows`**：`team-asset:entry_requires`（**入口门禁**）；
-  2. **`chain`**：链路/分层校验（规范位在资产顶层）；
-  3. **`criteria_from`**：**audit 判据源锚点**（`flows.js:524`）；
-  4. **`snapshot` / `teamAssetSignature`**：资产指纹（快照与判据锚）。
-  ⇒ 实现见 `lib/assembly/team-asset.js`（`loadTeamAsset` / `teamAssetSignature`）与 `chain.js:627`、`flows.js:100·112·221·320·328·524`、`snapshot.js:165·175`。
-- **⇒ 灵活分配（dispatch 通道）≠ 无需 `team`**：**传任一存在的 team 名即可**。**当前可解析 5 个**：`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`（枚举自 `presets/*/team-asset.{json,yml}`）。
-- **⚠ 严格禁止的两个值**：`punky-preset`（那是**预设模式**资产、**目录内无 `team-asset.yml`** ⇒ `TEAM_ASSET_*` 必拒）｜`generic`（**已废除**）。
-- **选型**：按**任务领域就近**（软件改造 → `software-team`；引擎自身改造 → `engine-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`；**拿不准就按「产物形态最接近」选**）。
-- **⚠ 资产内容当前「搁置/未优化」**（用户 2026-09-24/26 裁决）⇒ `team` 目前**只用于让引擎解析到资产存在性**，**实际装配按成员槽位 + 指引走**，**不必等资产整理**。
-- **远期立项（2026-09-26 用户裁决）**：**②** 引擎侧让 `team` 可选（缺省跳过资产类校验；**代价** = dispatch 批同时失去入口门禁与判据锚点，**风险较高**，故定为**远期**）｜**③** 新增轻量 `dispatch-team` 资产（**推荐方向**，可立项；资产极简：有 `id`/`roles`，**无 chain/flows**）。
+> **2026-09-27 订正（提交 `7f481d3`，用户裁决「`team-asset` 装配方案全面弃用」「`team` 接口与对应门禁已无使用价值」「`teamsRoot` 家族一并删除」）**：`team` **已降为可选标签**；本节保留的 2026-09-26「必填，勿漏」词句为**历史沿革**，**现役判据以下方「现语义」为准**。
+- **现语义 = 可选标签（`string | null`）**：`wave_plan` 的 `team` 不传 / `null` / 空白 / 非字符串 ⇒ 工具面 `normalizeTeamLabel` 归一为 `null`，**跳过整个团队资产面**，批次**照常落盘**（**漏传不再是错误，也没有任何宿主 schema 拒收**）。给出标签 ⇒ 按标签**尽力**解析 `presets/<team>/team-asset.{json,yml}`（显式 `teamsRoot` 时改按 `<teamsRoot>/presets/<team>/…`、**不回落**包内）用于装配 / `[skills=…]` 前缀补全。**解析不到 / 资产非法 / `chain` 非法 / `teamsRoot` 不可用，一律不再拒建批**：原 `TEAM_ASSET_*` 码与非门禁留痕码 `TEAMS_ROOT_IGNORED` 降级为**返回值 `warnings`** + 建批期事件留痕。标签**可自取、不要求已注册**（仅作批次归类）。工具面**不再调用** `assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady`（三函数**保留在模块内**，待后续批次清理）。
+- **它现在还是什么的数据源**：给出标签**且资产可解析**时，引擎仍用它做 ① `flows` 入口门禁（`entry_requires`）② `chain` 声明（**今日仅八条静态校验的判据，且只留痕**，见 §0o）③ `criteria_from` 判据源锚点 ④ 资产指纹（`snapshot` / `teamAssetSignature`）——**四条均不构成建批前置**（资产不可解析 ⇒ 整面跳过）。实现见 `lib/assembly/team-asset.js`（`loadTeamAsset` / `teamAssetSignature`）与 `chain.js`、`flows.js`、`snapshot.js`（**按符号定位，行号易漂**——本节旧引的 `flows.js:524` 等行号仅作历史辅助）。
+- **标签取值**：**任意字符串**（仅「给出 `teamsRoot`」时须过 kebab-case 白名单才参与资产查找）。**已登记的包内有资产团队 5 个**：`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`（枚举自 `presets/*/team-asset.{json,yml}`）。**选型**：仍建议按**任务领域就近**（软件改造 → `software-team`；引擎自身改造 → `engine-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`；**拿不准就按「产物形态最接近」选**）——**但选错 / 不选都不再产生拒态**。
+- **历史（保留可读）**：旧口径把 `punky-preset`（**预设模式**资产、目录内无 `team-asset.yml`）与 `generic`（**已废除**）列为**「严格禁止的两个值」**（`TEAM_ASSET_*` 必拒）——**该禁令已随 2026-09-27 裁决失效**：两者作标签**只走「无资产」路径 + 留痕**，**不再拒建批**。命名空间消歧仍是事实：`presets/<team>/team-asset.*` = **团队资产**，`presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/`），**不是团队资产**。
+- **资产内容当前「搁置/未优化」**（用户 2026-09-24/26 裁决）⇒ **实际装配按成员槽位 + 指引走**，**不必等资产整理**；2026-09-27 起资产面**整体不参与建批判定**。
+- **历史（保留可读）· 原「远期立项」（2026-09-26 用户裁决）**：**②** 引擎侧让 `team` 可选（缺省跳过资产类校验；代价 = dispatch 批失去入口门禁与判据锚点）——**已于 2026-09-27（`7f481d3`）提前落地**，风险由「留痕可见」承担；**③** 新增轻量 `dispatch-team` 资产（推荐方向，可立项）——**随 team-asset 方案全面弃用而作废**（不再立项）。
 
 ## §0c 职责分工
 
@@ -109,22 +104,21 @@
 
 ### 一、临时组队（无预置团队时）
 
-- **形态与落点**：无预置团队时，Leader 可在**会话级** `teamsRoot` 下写临时团队资产，并以 `wave_plan({team, teamsRoot})` 建批；落点 `<teamsRoot>/presets/<team>/team-asset.json`（JSON 优先；`team-asset.yml` 亦可，按 JSON 子集书写、容忍 BOM），建议 `teamsRoot = <批次产物根>/teams`（绝对路径）。
-- **`teamsRoot` 参数契约**：
-  - 类型 `string`，**必须绝对路径**；缺省（不传）= **包内 `presets/<team>/team-asset.{json,yml}` 解析**。
-  - **装配数据的唯一权威来源 = 团队资产**：引擎**不再**以内置常量兜底任何团队装配。**punky-preset 团队装配已弃用**（`presets/punky-preset/team-asset.yml` 已移除）——`team='punky-preset'` 等价于「无资产的团队」；各团队以自身资产为准。**无资产时构造期拒建批**（`TEAM_ASSET_NOT_FOUND`；零批次 JSON 落盘、`pendingBatch` 保留可补声明重试）——旧「告警 + 照常建批」的**假绿灯已废**（旧码 `GATE_TEAM_ASSET_MISSING` 在 `lib/**` 内**零命中**，退役码锁 `test/retired-codes-lock.test.js` 登记；同口径见 §0o 第一条）。
+- **形态与落点（2026-09-27 订正 · `7f481d3`：机制保留、拒态退出）**：无预置团队时，Leader 可在**会话级** `teamsRoot` 下写临时团队资产，并以 `wave_plan({team, teamsRoot})` 建批（**须同时给出 `team` 标签，该根才参与资产查找**）；落点 `<teamsRoot>/presets/<team>/team-asset.json`（JSON 优先；`team-asset.yml` 亦可，按 JSON 子集书写、容忍 BOM），建议 `teamsRoot = <批次产物根>/teams`（绝对路径）。
+- **`teamsRoot` 参数契约（2026-09-27 订正：只忽略、不拒）**：
+  - 类型 `string`；**显式给出时须为绝对路径、不含 `..` 段，且标签须 kebab-case**——任一不满足 ⇒ **忽略该根**（`TEAMS_ROOT_IGNORED` 留痕、**不写批次键**、批次照常落盘），**不再拒建批**。缺省（不传）= **包内 `presets/<team>/team-asset.{json,yml}` 解析**。
+  - **未声明 `team` 标签而同给 `teamsRoot`** ⇒ 整个团队资产面跳过、该根**不被使用**（`TEAMS_ROOT_IGNORED`，reason `no-team`）——**明示忽略、不静默吞掉**。
+  - **团队资产已整体弃用（2026-09-27 用户裁决「team-asset 装配方案全面弃用」）**：引擎**不再**以内置常量兜底任何团队装配，也**不再**要求资产在场。**punky-preset 团队装配已弃用**（`presets/punky-preset/team-asset.yml` 已移除）——`team='punky-preset'` 现等价于「**无资产标签**」：**不再拒建批**，只留痕。**历史（保留可读）**：旧口径为「无资产时构造期拒建批 `TEAM_ASSET_NOT_FOUND`；零批次 JSON 落盘、`pendingBatch` 保留可补声明重试」，且曾以「告警 + 照常建批 = 假绿灯」为由废掉告警面（旧码 `GATE_TEAM_ASSET_MISSING` 早已在 `lib/**` 内**零命中**，退役码锁 `test/retired-codes-lock.test.js` 登记）。
   - 语义 = **资产根**：loader 在其下解析 `presets/<team>/team-asset.{json,yml}`（loader 的资产目录常量即 `presets`）。
   - 生命周期：会话 / 批次内，**不进包**；随产物根留存可审计。登记口径：建批返回值 + plan spec 装配段落记「临时团队」来源与 `teamsRoot` 绝对值；**不改**包内 `presets/` 与 asset-manifest。
-- **加载期校验与拒载码（不回落）**：
-  - `teamsRoot` 非字符串 / 非绝对路径 / 含 `..` 路径段 → 拒建批 **`GATE_TEAMS_ROOT_INVALID`**；
-  - `team` 名不匹配 `^[a-z][a-z0-9-]*$`（含 `/`、`\`、`..`、空白、绝对路径片段）→ 拒建批 **`GATE_TEAMS_ROOT_INVALID`**；
-  - 词法 / 防逃逸校验**先于任何 resolve**执行；
-  - `<teamsRoot>/presets/<team>/team-asset.{json,yml}` 均不存在 → **`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`**（**不**回落包内 `presets/` 兜底）；
-  - 资产存在但加载期不变量校验不过 → **原样透出** `TEAM_ASSET_*` 码（见附录 A）；
-  - 双保险：解析出的资产路径须落在 `<teamsRoot>/presets/<team>/` 前缀内，越界 → `GATE_TEAMS_ROOT_INVALID`；
-  - 拒建批时**无批次 JSON 落盘**；**拒绝静默回落**（回落会把非法临时资产静默降级为内置资产，造「建批成功但装配不是临时团队」的假绿灯）。
-- **`config.assembly` 的优先级**：`config.assembly` **整份存在时优先于 `teamsRoot`**——此时技能前缀仍来自 `config.assembly`，临时资产仍被强制要求存在且合法（无静默回落口子）。
-- **内置团队并存**：团队资产每团队一份（D-1）——**内置团队走包内 `presets/<team>/`、临时团队走会话级根**；两者走**同一加载器、同一加载期校验器、同一 Tier3 门禁**（装配面同级）。
+- **`teamsRoot` / 资产面现役处置（2026-09-27 订正 · `7f481d3`：一律留痕、零拒态）**：
+  - 判据**逐字保留**（词法 / 防逃逸 / 资产查找），**出口由 `throw` 改留痕**——原 `GATE_TEAMS_ROOT_INVALID` / `GATE_TEAMS_ROOT_ASSET_NOT_FOUND` 两码**已退出工具面**（用户裁决「`teamsRoot` 家族一并删除」）；不可用 ⇒ **忽略该根** + `TEAMS_ROOT_IGNORED` 留痕（进返回值 `warnings` 且落批次事件）。
+  - `<teamsRoot>/presets/<team>/team-asset.{json,yml}` 均不存在 / 加载期不变量校验不过 ⇒ 该标签走「**无资产**」路径，原 `TEAM_ASSET_*` 码**原样进 `warnings`**（查错根 = 实际使用的根；**不回落**包内 `presets/`）。
+  - **不静默、不回落、不写无效批次键**：原「拒建批时无批次 JSON 落盘」的**立意（防假绿灯）改由留痕承担**——建批照常成功，但「忽略了什么、为什么」在返回值与事件流里逐条可见。
+  - **保留面（待后续批次清理）**：`assertTeamsRootLexical` / `assertTeamsRootAsset` / `resolveTeamsRootOption` 仍**保留在模块内**（前者仍被 `resolveTeamAssetFace` 复用 ⇒ 词法判据单一来源）；**直调 lib 仍走旧拒态 = 已登记差异（W-2），不在本批消**。
+  - **历史（保留可读）**：旧口径 = 「三态一律 `throw` 拒建批」（非字符串/非绝对路径/含 `..`/标签非 kebab-case ⇒ `GATE_TEAMS_ROOT_INVALID`；资产均不存在 ⇒ `GATE_TEAMS_ROOT_ASSET_NOT_FOUND`；资产非法 ⇒ 原样透出 `TEAM_ASSET_*`），且「**拒绝静默回落**」是当时的硬要求（回落会把非法临时资产静默降级为内置资产，造「建批成功但装配不是临时团队」的假绿灯）。
+- **`config.assembly` 的优先级**：`config.assembly` **整份存在时优先于 `teamsRoot`**——此时技能前缀仍来自 `config.assembly`。**2026-09-27 订正**：原句「临时资产仍被强制要求存在且合法（无静默回落口子）」**已作废**——资产面整体退出拒态，临时资产**不再被强制要求存在**，缺失只留痕。
+- **内置团队并存**：团队资产每团队一份（D-1）——**内置团队走包内 `presets/<team>/`、临时团队走会话级根**；两者走**同一加载器、同一加载期校验器**。**2026-09-27 订正**：原句「同一 **Tier3 门禁**（装配面同级）」**已作废**——资产面今日**不构成建批拒态**（只出 `warnings`）。**仍可达的建批拒态**只有：装配声明门（`GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID`）、`GATE_CHANNEL_*`、以及**需先解析到资产才生效**的契约门——`GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_INPUT_MISSING`（audit `consumes_required`）/ `GATE_EXEC_INPUT_MISSING`（exec `consumes_required*`）；五队资产仍在包内 ⇒ 这些门**仍可达、一字未减**。
 
 ### 二、红线（不可绕过）
 
@@ -139,16 +133,17 @@
 
 ### 四、如实披露（硬要求，防「假契约」）
 
-- **装配面与 `flows` 面均已生效（同级）**：建批时 `teamsRoot` 随批次**持久化**（批次字段 `teamsRoot`，缺省不写键），门禁读端据此解析该团队的 `flows` 声明——判据**按临时资产生效**，与内置团队走**同一解析器与门禁语义**。解析根优先级：① 批次级 `teamsRoot` → ② 引擎注入的 `flowsRoot`（测试缝）→ ③ 包根。
+- **装配面与 `flows` 面均已生效（同级）**：建批时 `teamsRoot` **只在可用时**才随批次**持久化**（批次字段 `teamsRoot`，缺省不写键）——**2026-09-27 订正 · `7f481d3`**：根不可用（缺 `team` 标签 / 非绝对路径 / 含 `..` / 标签非 kebab-case）⇒ **忽略 + `TEAMS_ROOT_IGNORED` 留痕 + 不写批次键**（`lib/tools/core.js#resolveTeamAssetFace` 保证「显式根不可用时不回落包内」）。解析根优先级：① 批次级 `teamsRoot` → ② 引擎注入的 `flowsRoot`（测试缝）→ ③ 包根。
 - **缺省（内置团队）**：`teamsRoot` 不写键 ⇒ flows 按包根解析，行为与重构前逐字一致。
 
 ### 五、自定义团队的角色声明（实证口径，2026-09-14 订正）
 
 - **角色词法集 = 资产声明面（同源）**：`layers[<层>].roles` 里的角色名**即为**该团队的合法角色——`task.role` 与 `assembly.roles` 都按「引擎基础集（8）∪ 装配扩展（盲审三角色）∪ **资产各层声明角色** ∪ `roles.extra`」判定；`roles.extra` 是**可选补充**，**不是**隐藏必填项。
   - 2026-09-14 前的旧口径（**已作废**）：`extra` 只读 `roles.extra` ⇒ 「角色写进 layers 却没抄进 `roles.extra`」的团队每个自定义角色被判 `GATE_ROLE_INVALID`（实测 5 条非法告警 + 2 条缺牵头告警）。
-- **牵头角色仍须显式声明**（本次未改，语义保留）：引擎基础牵头集 = `designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）；自定义团队若用**其它角色**承担计划/验收牵头，须在资产 `roles.plan_leads` / `roles.audit_leads` 显式声明（与引擎基础集**并集**，不替换）。**未声明** → 建批产生 `GATE_ROLE_MISSING` 告警（**不是**引擎锁死角色）——「角色可用」与「角色可牵头」是两件事。
-- **实证**（探针 `scripts/probes/flex-assembly-audit.mjs` + 回归 `test/flex-assembly-roles.test.js` F1–F5）：资产只在 layers 写自有角色、另声明 `plan_leads`/`audit_leads` → **`warnings=[]`**，技能前缀按资产注入（`[role=brief-owner] [skills=SPEC-SKILL]`）；负向对照：未在任何层 / `roles.extra` 出现的角色仍判 `GATE_ROLE_INVALID`。
-- **资产改动即时生效**：读端缓存以「资产路径 + mtime + size」签名判新旧（`lib/assembly/team-asset.js#teamAssetSignature`）——同进程内补声明后**重建批即消警**（旧行为：缓存陈旧 ⇒ 第二次仍读旧值直到重启）。
+- **牵头角色声明面已整体删除（2026-09-26 裁决 Q-8=C · `d3dfcc5` 订正）**：`roles.plan_leads` / `roles.audit_leads` **两子键全链删除**——`resolveTeamRoles` **不再解析**它们（现只读 `layers[*].roles` ∪ `roles.extra`，`unionRoleVocabulary` 与建批白名单**同源**）；原「未声明 → 建批产生 `GATE_ROLE_MISSING` 告警」**已无发射点**（`collectRoleCompletenessWarnings` 现**只产** `GATE_ROLE_MANAGER_AS_LANE` 一条；`GATE_ROLE_MISSING` 仅存 `lib/tools/core.js` 的**事件映射**，**零产出点**）。**牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——自定义团队若用其它角色承担计划/验收牵头，**今日不再有资产侧声明位可写**（该面随 Q-8=C 整体退役）。「角色可用」与「角色可牵头」仍是两件事，但后者**不再由资产声明面表达**。
+  - **历史（保留可读）**：2026-09-14 旧口径 = 资产须在 `roles.plan_leads` / `roles.audit_leads` **显式声明**额外牵头角色（与引擎基础集**并集**、不替换），**未声明** ⇒ 建批产生 `GATE_ROLE_MISSING` 告警（**不是**引擎锁死角色）——**该口径已作废**，勿再按旧文找该码的产出点。
+- **历史实证（2026-09-14，`plan_leads` / `audit_leads` 面已作废；探针 `scripts/probes/flex-assembly-audit.mjs` + 回归 `test/flex-assembly-roles.test.js` F1–F5）**：资产只在 layers 写自有角色、另声明 `plan_leads`/`audit_leads` → **`warnings=[]`**，技能前缀按资产注入（`[role=brief-owner] [skills=SPEC-SKILL]`）——**其中 `plan_leads`/`audit_leads` 部分随 Q-8=C 退役**；仍成立的负向对照：未在任何层 / `roles.extra` 出现的角色仍判 `GATE_ROLE_INVALID`。
+- **资产改动即时生效**：读端缓存以「资产路径 + mtime + size」签名判新旧（`lib/assembly/team-asset.js#teamAssetSignature`）——同进程内补声明后**重建批即读到新值**（旧行为：缓存陈旧 ⇒ 第二次仍读旧值直到重启）。现役例 = 补 `layers[*].roles` / `roles.extra`（角色词法集）；**`plan_leads` / `audit_leads` 已退役**（2026-09-26 裁决 Q-8=C）——补它**不参与任何判定**。
 - **配套**：`assembly` 须由调用方按**同一 root** 解析后传入（`resolveAssembly(team, null, {root: teamsRoot})`）——只给 `teamsRoot` 不带 `assembly` 时，lane 只有 `[role=…]`、**无** `[skills=…]` 前缀（`wave_plan` 工具面已接线，直调 lib 者自行对齐）。
 
 ### 六、已知踩坑与运行事实（如实记录）
@@ -366,8 +361,8 @@
 - **共用与不混用**：**共用 `wave_plan` 建批**，但**每批任务写各自的 `wave_plan` 给单独方向的成员使用**；**不做 provider 分离方案**（历史上 §11 已正式废弃 B1–B3 与 fork 方案；`tasks[].officialTaskId` 与 `dispatch.provider:'fork'` 为**永不实施**项）。
 - **选型归 Leader 自判**（C2：agent-team 包启用时**优先** agent-team；两族工具当前**共存**，非互斥）。
 - **Q-1 落点**（见本节 §三）：事件流优先｜mailbox 搁置｜`send_message` 视为**已开放的汇报通道**。
-- **团队装配口径**：团队资产内容当前「搁置/未优化」⇒ **只按成员槽位 + 指引装配**，**不校验资产合规**。
-- **⚠ `team` 参数仍必填**（详见 **§0b 四**）：**灵活分配 ≠ 无需 `team`**——引擎用它做 flows / chain / `criteria_from` / snapshot 的数据源；**传任一存在的 team 名即可**（`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`）。
+- **团队装配口径（2026-09-27 订正 · `7f481d3`）**：团队资产内容当前「搁置/未优化」，且 **`team-asset` 装配方案已全面弃用**（用户裁决）⇒ **只按成员槽位 + 指引装配**，**不校验资产合规**，**资产问题不构成任何拒态**（只出 `warnings` 留痕）。
+- **`team` 参数现为可选标签**（2026-09-27 裁决 · `7f481d3`；详见 **§0b 四**）：**不传 / 空白 ⇒ 跳过整个团队资产面，批次照常落盘**（旧文「仍必填」**已作废**）。给出标签时它仍是 flows / chain / `criteria_from` / snapshot 的数据源，但**四条均不构成建批前置**——解析不到只留痕。**已登记的包内有资产团队 5 个**：`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`。
 
 ## §1 任务指派
 
@@ -423,22 +418,26 @@
 
 ## §0o 团队资产必填与缺省链口径（P1 必填化 + P2 接线，2026-09-16）
 
-- **`team` 必填，且必须解析到资产**：`wave_plan` 的 `team` 缺失 / 空串 ⇒ 构造期拒建批（`TEAM_ASSET_MISSING_FIELD`）；解析不到资产 ⇒ 构造期拒建批（`TEAM_ASSET_NOT_FOUND`）——**拒后零批次 JSON 落盘**、`pendingBatch` 不释放（补声明可重试），不再有「告警 + 照常建批」的假绿灯。判定序全 fail-closed：① `team` 词法/必填 → ② 资产加载 + 加载期不变量 → ③ `skills` 可解析 → ④ 才进 `buildWavePlan` / `createBatch`；拒态文案**可读可自救**（点名「该团队无资产 ⇒ 改用有资产的团队」）。
-- **无资产的 `team` 名一律拒**：含已废除的 `generic`、**已退役的 `jiufeng`**（`presets/jiufeng/team-asset.yml` 早已移除）、以及**模式名误用**如 `punky-preset`。「legacy 兜底」只是直调 `buildWavePlan` 的**已登记差异面（W-2）**，**不得在工具面构成「有资产」**。
-- **命名空间消歧**：`presets/<team>/team-asset.{json,yml}` = **团队资产**（装配声明：层 × 角色 × 技能 × flows）；`presets/punky-preset/`（或旧 id `jiufeng/`）= **预设（模式）资产**（`agent.cordis.yml` / `references/` / `preset.yml`），**不是团队资产** ⇒ 把模式名当 `team` 传同样「无资产 ⇒ 拒」。可用团队以**动态扫描** `presets/*/team-asset.{json,yml}` 为准。
-- **团队资产要求（内置与自建团队同门同码）**：资产取 `<root>/presets/<team>/team-asset.{json,yml}`（显式 `teamsRoot` 时只读该根、**不回落**包内）；结构须合法（层/角色/**牵头角色不悬空**）；每个 role 的 `skills` 须**非空且可在宿主技能根 `~/.agents/skills` 解析**（可解析名 = 技能**目录名** ∪ `SKILL.md` frontmatter 的 `name`；技能根不存在/不可读**同码拒**、不静默跳过）——不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` **整份拒载、拒建批**。
+> **标题为历史命名（R-1：`## §X` 标题逐字保留，§13 反向校验依赖它）**；**内容已按 2026-09-27 裁决（提交 `7f481d3`：「`team-asset` 装配方案全面弃用」）整体订正**——「团队资产必填」**已不成立**（`team` 退为可选标签、资产面退出拒态）。本节凡标「历史（保留可读）」的段落**只作沿革，勿按现役读**。
+
+- **`team` 现为可选标签（2026-09-27 裁决 · `7f481d3`）**：`wave_plan` 的 `team` 不传 / `null` / 空白 / 非字符串 ⇒ 工具面 `normalizeTeamLabel` 归一为 `null`，**跳过整个团队资产面**，批次**照常落盘**；给出标签则**尽力**解析资产（可解析 ⇒ 用于装配 / `[skills=…]` 前缀补全）——**解析不到 / 资产非法 / `chain` 非法 / `teamsRoot` 不可用，一律不再拒建批**：原 `TEAM_ASSET_*` 码降级为**返回值 `warnings`** + 建批期事件留痕（另加**非门禁**留痕码 `TEAMS_ROOT_IGNORED`）。**标签可自取、不要求已注册**（仅作批次归类）。
+  - **历史（保留可读）**：P1 旧口径 = 「`team` 必填，且必须解析到资产」——缺失 / 空串 ⇒ `TEAM_ASSET_MISSING_FIELD`；无资产 ⇒ `TEAM_ASSET_NOT_FOUND`；**拒后零批次 JSON 落盘**、`pendingBatch` 不释放；**判定序全 fail-closed**：① `team` 词法/必填 → ② 资产加载 + 加载期不变量 → ③ `skills` 可解析 → ④ 才进 `buildWavePlan` / `createBatch`。**①〜④ 已随 2026-09-27 裁决整体退出工具面**；`assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady` 三函数**保留在模块内但不再被调用**。
+- **无资产的 `team` 名不再拒（2026-09-27 订正）**：任何标签——含旧「无资产」示例 `generic`（已废除）、**已退役的 `jiufeng`**（`presets/jiufeng/team-asset.yml` 早已移除）、**模式名误用**如 `punky-preset`——都**只走「无资产」路径 + 留痕**，批次照常落盘。**历史（保留可读）**：旧口径为「无资产的 `team` 名一律拒」；「legacy 兜底」只是直调 `buildWavePlan` 的**已登记差异面（W-2）**，**仍不得在工具面构成「有资产」**。
+- **命名空间消歧（不变）**：`presets/<team>/team-asset.{json,yml}` = **团队资产**（装配声明：层 × 角色 × 技能 × flows）；`presets/punky-preset/`（或旧 id `jiufeng/`）= **预设（模式）资产**（`agent.cordis.yml` / `references/` / `preset.yml`），**不是团队资产**。**2026-09-27 订正**：原句「把模式名当 `team` 传同样『无资产 ⇒ 拒』」**已作废**（不拒，只留痕）。**已登记的包内有资产团队 5 个**（以**动态扫描** `presets/*/team-asset.{json,yml}` 为准）：`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`。
+- **团队资产要求（2026-09-27 订正：要求降为留痕、建批一律放行）**：资产取 `<root>/presets/<team>/team-asset.{json,yml}`（显式可用 `teamsRoot` 时只读该根、**不回落**包内）。加载期不变量（结构合法 / 层 / 角色）与 `layers.*.skills` 的合法性**均不再拒建批**——问题码**原样进 `warnings`**。其中 **`skills` 名可解析性 = 纯 recommend**（2026-09-25 / 09-26 用户裁决，提交 `b8380a8` 彻底移除 `GATE_SKILL_MISSING`）⇒ **不设门禁、零告警**；「不可解析即拒载」属**旧口径**。**牵头角色悬空面已整体删除**（`TEAM_ASSET_LEAD_*` 码随 2026-09-26 裁决 Q-8=C 退役，见附录 A.2）。
+  - **历史（保留可读）**：旧口径 = 「每个 role 的 `skills` 须**非空且可在宿主技能根 `~/.agents/skills` 解析**（可解析名 = 技能**目录名** ∪ `SKILL.md` frontmatter 的 `name`；技能根不存在/不可读**同码拒**、不静默跳过）——不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` **整份拒载、拒建批**」。
 - **缺省链口径**：无 `chain` 声明 ⇒ 引擎缺省退化链 = **现行 3 层直线链 `plan → exec → audit`**（字段映射逐字不变，向后兼容）；含 `tester`/`review` 的多段链（`plan→exec→tester→review→audit`）**由团队资产各自声明**，属团队执行模式、**不属引擎缺省**。
-- **`chain` 的运行期推进已整体退役（M-05 订正 · Q-A=C，2026-09-18）**：**唯一规范位 = 顶层 `chain`**（与资产顶层平级；显式声明 `flows.chain` 即拒 `TEAM_ASSET_FIELD_NOT_ALLOWED`，禁双真源、不设兼容分支）；**八条静态校验**（层白名单 / 角色悬空 / 悬空 `next` / 到不了的环节 / 环须由 `rework` 承认 / 链尾唯一 / `join:any` 必带 `anyFailure` / 只收枚举 token）在**构造期**（`wave_plan`，`createBatch` **之前**）fail-closed 执行，逐条复用既有 `TEAM_ASSET_*` 码（零新造）——**这是 `chain` 段今日唯一的消费面**（容忍期：五队资产仍带 `chain` 段 ⇒ 不报错、不静默改语义）。P1 的「只登记不接线」台账条目（`UNWIRED_DECLARATIONS` 的 `key:'chain'`）已整条删除——回归锁见 `test/team-asset-mandatory.test.js` P1-4a。
+- **`chain` 的运行期推进已整体退役（M-05 订正 · Q-A=C，2026-09-18）**：**唯一规范位 = 顶层 `chain`**（与资产顶层平级；显式声明 `flows.chain` 即拒 `TEAM_ASSET_FIELD_NOT_ALLOWED`，禁双真源、不设兼容分支）；**八条静态校验**（层白名单 / 角色悬空 / 悬空 `next` / 到不了的环节 / 环须由 `rework` 承认 / 链尾唯一 / `join:any` 必带 `anyFailure` / 只收枚举 token）的**判据逐字保留**，但**出口已由 `throw` 改留痕**（2026-09-27 裁决 · `7f481d3`：`chainProblemsOf` 纯判据复用，结果并入 `plan.warnings` 的 `chainWarnings`）——**不再拒建批**（原口径 = 「在**构造期**（`wave_plan`，`createBatch` **之前**）fail-closed 执行，逐条复用既有 `TEAM_ASSET_*` 码（零新造）」，**已作废**；判据本身一字未改）。**这是 `chain` 段今日唯一的消费面**（容忍期：五队资产仍带 `chain` 段 ⇒ 不报错、不静默改语义）。P1 的「只登记不接线」台账条目（`UNWIRED_DECLARATIONS` 的 `key:'chain'`）已整条删除——回归锁见 `test/team-asset-mandatory.test.js` P1-4a。
   - **已退役面（勿再按旧文理解）**：`member.settled` **不再**触发「算下一环 + 自派」；`chain.step` **不再新增**（写点已删）；`onFail` / `join.anyFailure` / `pair_with` / `rework` / `template` **无运行期消费者**。入口 `advanceChainAfterSettle`（`lib/engine/chain-runner.js`）**首行 no-op**（自述「链运行期推进 · 已退役」，返回 `reason:'retired'` / `note:'chain-advance-retired-20260918'`），`lib/` 内 **`CALL=0 / IMPORT=0`**；建批期展开的消费点亦已清退——`expandChainBranches` 在 `lib/**` 内**唯一命中 = 其定义行**（**零调用点**）。
   - **失败面改由什么承载**：失败 / 冲突 lane 即**终态**（K3 去返工边），失败面用 **gap-list（`blocking` / `followup`）** 表达，重做 = **开新任务批次**；`pair_with` 的 1:1 配对语义改由 **audit lane 的 `deps`** 表达。
 - **`chain` / 拓扑的现行口径（M-05 订正）**：`chain` = **仅八条静态校验**（容忍期；建批期**不再展开**）；**运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**，判定单点 = `lib/state/gates.js` 的 `handoffRecordVerdictOf`；`chain.step` 仅作**历史事件**回显（读端 `chainEchoOf` / `log_export`），新批**恒零新增**。两条现行硬口径——
   - **链推进对全部批恒 no-op（原 `leader-direct` 专属分支的推广）**：原判据 = 批次 JSON 的 `assembly.managerPlan`（`chain-runner.js` 前置分支，先于相位闸、不看 roster）。链退役后该分支结果对 `leader-direct` 与 `raise` **恒同为 no-op** ⇒ 两形态在链推进面上**不再有差异**，其**现行**差别只在调度与 watch（§0f / §0g）。
   - **`batch.phase` 事件带 `reason`**（暂停类必须带 source 前缀，禁裸文案）：词表 = `chain:<分支>` / `auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`，存量两源 `failed-escalate` / `governance-escalate` 不动；**空/空白 ⇒ 不写该键**（既有 `{from,to}` 形态零污染）；读端渲染 `<from> -> <to> | <reason>`（`log_export` markdown = 「为何不推进」的唯一解释入口）。
-  - **步级条件边 `on` 声明面已下线（M1）**：声明即拒 `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.steps.<id>.on`（**不静默失能**——只删校验会让声明被忽略，比拒更糟）；正路路由用 `next`，失败面用批次级策略（`chain.join.anyFailure` / `chain.onFail`，M4 迁 `rework`）。**读侧保留历史兼容**：历史 `chain.step` 事件的 `via` 照常回显（`chainEchoOf` 不校验 `via`），写侧白名单已收窄（新写不可能产出历史 `on` 族取值）。
+  - **步级条件边 `on` 声明面已下线（M1）**：声明即留痕 `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.steps.<id>.on`（2026-09-27 订正 · `7f481d3`：原「**声明即拒**」随资产 / `chain` 面退出拒态而**降级为 `warnings` 留痕**；**立意不变**——**不静默失能**，只删校验会让声明被忽略，比留痕更糟）；正路路由用 `next`，失败面用批次级策略（`chain.join.anyFailure` / `chain.onFail`，M4 迁 `rework`）。**读侧保留历史兼容**：历史 `chain.step` 事件的 `via` 照常回显（`chainEchoOf` 不校验 `via`），写侧白名单已收窄（新写不可能产出历史 `on` 族取值）。
 - **两段式拒态（G-2，排查建批失败必先分段）**：`wave_plan` 的拒态由**两段不同来源**产生，读拒态文案时必须先判段，勿把两段混作一谈——
-  - **段一 · 框架参数面**：宿主在进入 `execute` **之前**按工具参数 schema 拒（`required` 缺失 / 类型或枚举非法 / `additionalProperties:false` 命中）。特征：文案由**宿主**生成（形如 `missing required property "team"` / `invalid arguments`），**不带** `TEAM_ASSET_*` / `GATE_*` 引擎码；本插件对该段**无构造序控制权**。
-  - **段二 · 业务构造期面**：进入 `wave_plan.execute` 后的判定序（① `team` 词法/必填 → ② `teamsRoot` 面 → ③ 资产加载 + 加载期不变量 + `skills` 可解析 → ④ `chain` 八条静态校验 → ⑤ 装配声明门 → ⑥ audit 契约门），全部位于 `store.createBatch` **之前**。特征：文案**首行原样透出引擎码**（`TEAM_ASSET_*` / `GATE_*`），可照码分流与自救。
-  - **共同判据**：两段拒后均为「**零批次 JSON 落盘** + `pendingBatch` 保留（补声明可重试）」；故「批没建起来」的正确诊断入口 = 先看文案属于哪一段，再决定是补参数形态（段一）还是改声明/资产（段二）。
+  - **段一 · 框架参数面**：宿主在进入 `execute` **之前**按工具参数 schema 拒（`required` 缺失 / 类型或枚举非法 / `additionalProperties:false` 命中）。特征：文案由**宿主**生成（形如 `missing required property "batchId"` / `invalid arguments`），**不带** `TEAM_ASSET_*` / `GATE_*` 引擎码；本插件对该段**无构造序控制权**（2026-09-27 订正 · `7f481d3`：旧示例 `missing required property "team"` **已不可达**——`team` 已从 schema `required` 移除，段一今日只剩 `batchId` / `tasks` 两键可触发）。
+  - **段二 · 业务构造期面（2026-09-27 订正 · `7f481d3`：判定序 6 条 → 2 条拒 + 4 条留痕）**：进入 `wave_plan.execute` 后的判定序现为——**拒态（`throw`）**：⑤ 装配声明门 → ⑥ audit 契约门（另含 exec 侧契约门 `GATE_EXEC_INPUT_MISSING`）；**留痕（`warnings`，不拒）**：① `team` 标签归一化（`normalizeTeamLabel`，恒不抛）→ ② `teamsRoot` 面（`TEAMS_ROOT_IGNORED`）→ ③ 资产加载 + 加载期不变量（原 `TEAM_ASSET_*` 原样）→ ④ `chain` 八条静态校验。全部位于 `store.createBatch` **之前**。特征：**拒态**文案**首行原样透出引擎码**（`GATE_*`，及仍可达的 `TEAM_ASSET_*`），可照码分流与自救。**⚠ ①〜④ 不产生拒态** ⇒ 「建批成功」**不等于**资产 / `chain` 无问题，须另读返回值 `warnings`。
+  - **共同判据（不变）**：段一与**段二现存的拒态（⑤⑥）**之后均为「**零批次 JSON 落盘** + `pendingBatch` 保留（补声明可重试）」；故「批没建起来」的正确诊断入口 = 先看文案属于哪一段，再决定是补参数形态（段一）还是改声明（段二）。**注意**：段二的 ①〜④ 已改为放行 + 留痕 ⇒ 「批建起来了」也不能据以判「声明面干净」。
 
 ## §5 事件回写与终门禁综合
 
@@ -633,13 +632,19 @@
 
 ## 附录 A 门禁码表（码 → 触发条件 → 载荷 / 处置）
 
-> 本表**不杜撰**语义，与引擎实现冲突时以引擎为准（`TEAM_ASSET_*` 15 枚为复用码，不新增、不改码）。载荷为抛出的 `Error.message` 单行形态（`<...>` 为占位）。
+> 本表**不杜撰**语义，与引擎实现冲突时以引擎为准（`TEAM_ASSET_*` 为复用码，不新增、不改码）。载荷为抛出的 `Error.message` 单行形态（`<...>` 为占位）。
+
+> **⚠ 2026-09-27 判决性订正（提交 `7f481d3`；用户裁决「`team-asset` 装配方案全面弃用」「`team` 接口与对应门禁已无使用价值」「`teamsRoot` 家族一并删除」）——本附录「拒建批」两族码已退出工具面**：① `GATE_TEAMS_ROOT_INVALID` / `GATE_TEAMS_ROOT_ASSET_NOT_FOUND`（`teamsRoot` 词法 / 防逃逸 / 资产查找族）② 原「`team` 必填 + 资产加载 + `chain` 八条静态校验」三门前置段。**现役口径 = 一律留痕**：原 `TEAM_ASSET_*` 码与**非门禁**留痕码 `TEAMS_ROOT_IGNORED` 一律进**返回值 `warnings` + 建批期事件**，**批次照常落盘**。⇒ 本附录中凡标「**拒建批 / 拒载**」的 `TEAM_ASSET_*` / `GATE_TEAMS_ROOT_*` 行，其「处置」列**须读作「留痕（不拒）」**（表内已逐行订正的以其订正为准；装载器与码面**保留待后续批次清理**，**直调 lib 仍走旧拒态 = 已登记差异 W-2**）。
+>
+> **不受影响（仍拒，一字未改）**：装配声明门 `GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID`、`GATE_CHANNEL_*`、`GATE_ROSTER_INVALID`、audit / exec 契约门 `GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_INPUT_MISSING` / `GATE_EXEC_INPUT_MISSING`、单写者锁、终态冻结（`GATE_BATCH_TERMINAL`）。
+>
+> **档位归口纪律的例外路径**：本次是**用户裁决**下的**反向降档**（① 拒态 → ②/③ 留痕），属「**反向须用户裁决**」的既有例外，**不破**下文 §A 归口纪律。
 
 **三档可判定性分级（D-1）** — 每枚码**必须**归入且仅归入一档（防「绿灯但无约束」的假安全感）：
 
 | 档 | 语义 | 判据 | 代表码（分组示例，非穷举） |
 |---|---|---|---|
-| **① 拒态（blocking）** | 拒绝该动作、**状态不前进**、必留痕 | 唯一写面 + 结构性拒绝（码 + 事件 + 载荷） | A.1/A.3/A.4/A.5 表中「拒 / 拒派 / 拒建批 / 拒 merged」类（含 `GATE_EXIT_*`、`TEAM_ASSET_*` 拒载类） |
+| **① 拒态（blocking）** | 拒绝该动作、**状态不前进**、必留痕 | 唯一写面 + 结构性拒绝（码 + 事件 + 载荷） | A.3/A.4/A.5 表中「拒 / 拒派 / 拒建批 / 拒 merged」类（含 `GATE_EXIT_*`）——**2026-09-27 订正**：`TEAM_ASSET_*` 拒载类**已整体移出本档**（降级为 ②/③ 留痕，见上方订正说明与 A.1/A.2 逐行）；A.1 的 `GATE_TEAMS_ROOT_*` 两枚同样移出 |
 | **② 留痕放行（escape / warned pass）** | **放行但必留痕**（有意逃生阀） | 走 `escape` 载荷 + 事件（`gate.escape{kind:…}`） | G-1 空闲态放行（`idle-recovery-passthrough`）、`standalone`、`env-gate-disabled`（`GATE_ENABLED=false`）、`command-declared-off`/`targets-off`/`needhuman-off`、`empty-artifact-noted`、`GATE_AUDIT_CONTRACT_EXEMPT`、`GATE_ROLE_INVALID` |
 | **③ 观察（observe-only）** | **非拒态、只上报** | 事件落盘 + 计数，不改判定 | `gate.contract_missing`（首触）、`gate.degrade{kind:'produce-field-widened'}`、`lane.over-budget`、`lane.stalled`、`lane.longrun.candidate`、`governance.refusal` |
 
@@ -650,10 +655,14 @@
 
 | 码 | 触发条件 | 载荷（message 形态） | 处置 |
 |---|---|---|---|
-（含 `/`、`..`、空白）；⑤（双保险）资产路径经 `relative()` 越出 `<teamsRoot>/presets/<team>/` | `GATE_TEAMS_ROOT_INVALID: <判定句> (got: <原值>)`；判定句五种（非空绝对路径 / 不含 `..` 段 / 须为绝对路径 / `team` 词法 / 路径越界），英文原句见 `lib/assembly/team-asset.js` | throw → **拒建批**（无批次 JSON 落盘）；判定在**词法面** |
-| `GATE_TEAMS_ROOT_ASSET_NOT_FOUND` | 显式 `teamsRoot` 且 `<teamsRoot>/presets/<team>/team-asset.{json,yml}` **均不存在** | `GATE_TEAMS_ROOT_ASSET_NOT_FOUND: no team asset under <期望目录> (expected team-asset.json / team-asset.yml; explicit teamsRoot does not fall back to the packaged presets/)` | throw → **拒建批**；**不回落**包内 `presets/` 兜底 |
+| ~~`GATE_TEAMS_ROOT_INVALID`~~ | **已退出工具面（2026-09-27 裁决 · `7f481d3`）**——判据**逐字保留**：`teamsRoot` 非空 / 绝对路径 / 不含 `..` 段 / `team` 标签须 kebab-case（`^[a-z][a-z0-9-]*$`；含 `/`、`\`、`..`、空白、绝对路径片段即非法）；⑤（双保险）解析出的资产路径经 `relative()` **不得越出** `<teamsRoot>/presets/<team>/`。**现出口 = 忽略该根 + 留痕** | 载荷形态保留：`GATE_TEAMS_ROOT_INVALID: <判定句> (got: <原值>)`；判定句五种（非空绝对路径 / 不含 `..` 段 / 须为绝对路径 / `team` 词法 / 路径越界），英文原句见 `lib/tools/core.js#assertTeamsRootLexical` / `#assertTeamsRootAsset`——**该串现只出现在 `TEAMS_ROOT_IGNORED` 条目的 `message` 里**（`code` = `TEAMS_ROOT_IGNORED`，reason ∈ `lexical` / `label-not-kebab` / `no-team`） | **不再拒建批**（批次照常落盘、**不写批次键**、不回落包内）；本码**不再可产**（函数保留在模块内，直调 lib 仍走旧拒态 = 已登记差异 W-2） |
+| ~~`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`~~ | **已退出工具面（2026-09-27 裁决 · `7f481d3`）**——原触发条件（显式 `teamsRoot` 且 `<teamsRoot>/presets/<team>/team-asset.{json,yml}` **均不存在**）**现只留痕**：该标签走「无资产」路径，`TEAM_ASSET_NOT_FOUND`（含 `teamsRoot` 期望目录）进 `warnings` | 载荷形态保留：`TEAM_ASSET_NOT_FOUND: <path> — <原 message>（2026-09-27 裁决：资产问题**不再拒建批**，留痕于此）`；旧英文句 `no team asset under … (explicit teamsRoot does not fall back to the packaged presets/)` **随拒态一并退出工具面** | **不再拒建批**（批次照常落盘）；**仍不回落**包内 `presets/`（显式根不可用时不查包内，由 `resolveTeamAssetFace` 保证）；本码**不再可产** |
 
 ### A.2 团队资产加载期不变量（`TEAM_ASSET_*` 15 枚复用）
+
+> **2026-09-27 订正（提交 `7f481d3`）**：本表列的**装载器**（`lib/assembly/team-asset.js`）问题码——**码面与判据均保留**，但**工具面不再据此拒建批**：一律降级为**返回值 `warnings` + 建批期事件**（**批次照常落盘**）。表中个别行内的「整份拒载 / 拒建批」等**处置表述须读作**「装载器判 blocking，**工具面出口 = 留痕**」；**直调 lib** 面仍走旧拒态 = **已登记差异 W-2**。
+>
+> **计数漂移（如实登记，本次未擅改）**：标题中的「**15 枚**」是 2026-09-15 批的计数，已随 `STATE_*` 3 枚（M-14）与 `TEAM_ASSET_LEAD_*` 族（2026-09-26 Q-8=C）退役而漂移；**实际枚数待 Leader 复核后订正**（见交付报告「漂移面」）。
 
 | 码 | 触发条件 |
 |---|---|
@@ -664,14 +673,14 @@
 | `TEAM_ASSET_FIELD_NOT_ALLOWED` | 出现未允许字段 |
 | `TEAM_ASSET_ENTRY_REQUIRE_UNKNOWN` | `entry_requires` 取值未知 |
 | `TEAM_ASSET_CONTRACT_EMPTY` | `contract` 声明为空 |
-| `TEAM_ASSET_LAYER_UNKNOWN` | **flows 段的层名不在允许层集**（`lib/assembly/team-asset.js` 白名单，**允许集恰为 `plan`/`exec`/`audit`**；**F-4 起 `complete` 已移除**）⇒ **整份拒载**（`severity='blocking'`，**不降为告警 / 不加兼容分支**）；处置 = **删除该段** |
+| `TEAM_ASSET_LAYER_UNKNOWN` | **flows 段的层名不在允许层集**（`lib/assembly/team-asset.js` 白名单，**允许集恰为 `plan`/`exec`/`audit`**；**F-4 起 `complete` 已移除**）⇒ 装载器判 **blocking**（`severity='blocking'`，**不降为告警 / 不加兼容分支**）；处置 = **删除该段**。**2026-09-27 订正**：原「**整份拒载**」的**出口已改留痕**——工具面不据此拒建批（进 `warnings`，批次照常落盘）；该表述今日只对**直调 lib / 依赖 `loadTeamAsset` 的读端**成立（已登记差异 W-2） |
 | `TEAM_ASSET_ROLE_LEXICAL` | 角色名词法非法 |
-| `TEAM_ASSET_SKILLS_MISMATCH` | 每个 role 必须有**非空** `skills` 数组。**本行只描述「资产层结构校验段」**（`lib/assembly/team-asset.js` 只判**非空**）；**技能可解析性由构造期另一单点承载**——`lib/assembly/schema.js` 的 `assertAssemblyCompleteness`（要求 `skillCatalog.has(name)`，生产侧 = 宿主技能根 `~/.agents/skills/<name>/SKILL.md` 的存在性解析）⇒ 不可解析即**拒载、拒建批**（M-09 订正：旧文「只校验非空，不校验技能存在」**表述过宽**） |
+| `TEAM_ASSET_SKILLS_MISMATCH` | 每个 role 必须有**非空** `skills` 数组（`lib/assembly/team-asset.js` 只判**非空**）。**2026-09-25 / 09-26 用户裁决 + 提交 `b8380a8`：技能可解析性 = 纯 recommend ⇒ 不设门禁、零告警**（`GATE_SKILL_MISSING` 已彻底移除）；**2026-09-27 裁决 · `7f481d3`：本码整体不再拒建批** ⇒ 出口 = `warnings` 留痕，批次照常落盘。**历史（保留可读）**：M-09 旧订正曾写「技能可解析性由构造期另一单点承载——`lib/assembly/schema.js` 的 `assertAssemblyCompleteness`（要求 `skillCatalog.has(name)`，生产侧 = 宿主技能根 `~/.agents/skills/<name>/SKILL.md` 的存在性解析）⇒ 不可解析即**拒载、拒建批**」——**该口径已作废**，勿再据以判 `skills` |
 | ~~`TEAM_ASSET_STATE_OVERRIDE_UNKNOWN_STATE`~~ / ~~`TEAM_ASSET_STATE_OVERRIDE_WIDENS`~~ / ~~`TEAM_ASSET_STATE_KIND_INVALID`~~ | **三码已退役（M-14 订正，2026-09-24）**：`state_machine` 族随 2026-09-18 清债轮改为**声明即拒**（`TEAM_ASSET_FIELD_NOT_ALLOWED`）后整体退场，三码**无任何实现**——本行原为「退役后未摘的旧行」。限定量词：三码在**引擎与测试面（`lib/**` + `test/**`）零命中**（2026-09-24 复跑），本表即为包内**唯一**字面出处；已按退役摘除，保留本注记以免读者再从旧稿找码 |
 | `TEAM_ASSET_REWORK_INVALID` | `rework` 声明非法 |
-| `TEAM_ASSET_LEAD_NOT_IN_LAYERS` | 声明的 lead 角色（`roles.plan_leads` / `roles.audit_leads`）**未出现在任何层的 `layers[*].roles` 中**（声明悬空）。本码只判「是否存在于某一层」，**不判层次归属**——该层是否构成牵头，由 `lane.layer` + 牵头集（引擎基础集 ∪ 团队 `plan_leads`/`audit_leads`）判定；**牵头角色 ≠ Manager**（见 §0g） |
+| ~~`TEAM_ASSET_LEAD_NOT_IN_LAYERS`~~ | **码已整体退役（2026-09-26 裁决 Q-8=C · 提交 `d3dfcc5`）**：`roles.plan_leads` / `roles.audit_leads` **两子键全链删除**——`resolveTeamRoles` **不再解析**它们（现只读 `layers[*].roles` ∪ `roles.extra`，`unionRoleVocabulary` 与建批白名单同源）；本码**在 `lib/**` 零字面命中**（已从 `TEAM_ASSET_CODES` 删除，注释登记见 `lib/assembly/team-asset.js`）。**牵头集 = 引擎基础集**（`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）），**资产侧扩展牵头角色声明位已不存在**；**牵头角色 ≠ Manager**（见 §0g）。**历史（保留可读）**：本码原判「声明的 lead 角色未出现在任何层的 `layers[*].roles` 中」（声明悬空），**不判层次归属**；当时牵头集 = 引擎基础集 ∪ 团队 `plan_leads`/`audit_leads` |
 
-- **透出形态**（显式 `teamsRoot` 时）：`<原码>: <path> — <原 message> (temporary team asset rejected; explicit teamsRoot does not fall back to the packaged presets/)`；原码**原样透出**（调用方可按原码分流），**不降级**为内置资产。
+- **透出形态（2026-09-27 订正 · `7f481d3`：已不是拒态载荷，而是 `warnings` 条目）**：显式 `teamsRoot` 下资产问题以 `{code, path, message}` 进**返回值 `warnings`**；`code` 与 `path` **原样保留**（调用方仍可按原码分流），**不降级**为内置资产；`message` 末尾现为「（2026-09-27 裁决：资产问题**不再拒建批**，留痕于此）」/「（团队 "…" 的 `chain` 声明非法 ⇒ 2026-09-27 裁决后**不再拒建批**，留痕于此）」。**原拒态错句 `temporary team asset rejected; explicit teamsRoot does not fall back to the packaged presets/` 已随拒态一并退出工具面**（函数体保留，见 `lib/tools/core.js#assertTeamsRootAsset`）。
 - **消费点裁决（防假契约；逐条给结论不留悬置）**：
 
 | 声明 | 裁决 | 依据 |
@@ -680,7 +689,7 @@
 | `flows.audit.audit_contract`（`criteria_from` / `consumes_required` / `verdict`） | **有**消费点 | P2：entry 读 `criteria_from`、建批读 `consumes_required`、complete 读 `verdict` |
 | `flows.*.consume_field` | **已接线**（非假契约） | entry 门经 `consumeFieldNameOf` 按声明取字段名 |
 | `flows.audit.contract`（旧泛键） | **已标废删除** | 现役真源 = `audit_contract`；保留 = 双真源隐患 |
-| 顶层 `state_machine` / `flows.<layer>.progress_contract` / 顶层 `rework` / 链级 `chain.needHuman` | **已退役（声明即拒）** | 原为「仅加载期校验、**无运行期消费者**」的声明位；2026-09-18 清债轮（用户裁决「保留引擎运行的核心内容，清理冗余设计/技术债/死代码」）改为**声明即拒** `TEAM_ASSET_FIELD_NOT_ALLOWED`（台账 `lib/assembly/team-asset.js` `RETIRED_TOP_KEYS`/`RETIRED_FLOW_KEYS`、`lib/assembly/chain.js` `RETIRED_CHAIN_KEYS`）——「写了不生效」比拒更糟（同步级 `on` 的 M1 裁决）。已接线的 `config.ratchet`（经 `createStore({rules})` 生效、台账 `status:'wired'`）不受影响 |
+| 顶层 `state_machine` / `flows.<layer>.progress_contract` / 顶层 `rework` / 链级 `chain.needHuman` | **已退役（声明即拒）** | 原为「仅加载期校验、**无运行期消费者**」的声明位；2026-09-18 清债轮（用户裁决「保留引擎运行的核心内容，清理冗余设计/技术债/死代码」）改为**声明即留痕** `TEAM_ASSET_FIELD_NOT_ALLOWED`（台账 `lib/assembly/team-asset.js` `RETIRED_TOP_KEYS`/`RETIRED_FLOW_KEYS`、`lib/assembly/chain.js` `RETIRED_CHAIN_KEYS`）——「写了不生效」比留痕更糟（同步级 `on` 的 M1 裁决）。**2026-09-27 订正 · `7f481d3`**：该码随资产 / `chain` 面整体退出拒态，**原「声明即拒」降级为 `warnings` 留痕**（装载器 `severity` 判据一字未改，工具面出口改留痕）。已接线的 `config.ratchet`（经 `createStore({rules})` 生效、台账 `status:'wired'`）不受影响 |
 | 事件 `gate.target_blocked` / `gate.target.passed` | **不删，维持既有留痕**（原「无写端无读端」经复核证伪） | 写端 `lib/state/store.js` 的 target-gate 判定段（旧引 `:632` / `:638` = **陈旧行号**，M-08 订正；按符号/段落定位，勿照抄行号）；读端 `test/gates.test.js` O2 组、`test/batch-store.test.js:309/:323` |
 - `standalone` / `disabledBy` 仅有**返回值契约**（`standalone: true`、`disabledBy: 'team-asset:*'`），**未落事件**——审计需读返回值，**不得**称「已留痕」。
 - 蓝图 §8③（解析结果落快照）/ §8⑤（运行期首触校验）**已落地，两处均有读端**（2026-09-15 订正，**2026-09-24 复锚 M-08**）：快照读端 `lib/assembly/snapshot.js:155`（`teamAssetRefOf` 定义行——本组锚点中**唯一逐字复核命中**的一条）→ `lib/state/store.js:320` 写批字段 `batch.teamAsset`（事件 `batch.team-asset.resolved`）+ `lib/state/gates.js:1606`（`teamAssetViewOf` **定义行**；旧引 `:1158` = 陈旧行号，该行实为局部变量声明）；首触读端 `lib/state/store.js:126`（`contractMissingEvents` 定义行；旧引 `:121` = 陈旧行号，发 `gate.contract_missing`，档位 ③ 观察档见附录 A 分级）。**锚点纪律**：本文件内 `path:line` 一律按**符号定位 + 落笔时重读**（§15.2），行号仅作辅助。
