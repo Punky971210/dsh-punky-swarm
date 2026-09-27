@@ -28,8 +28,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-/** 满足 plan 契约门（裸标题 `## 验收标准` + `## 约束`）的 spec 正文。 */
-export const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+/** 满足 plan 契约门（**必要裸标题六项**，2026-09-27 扩面：概述 / 问题 / 方案 / 需求 / 验收标准 / 约束）的 spec 正文。
+ *  来源：用户裁决「引擎需要校验技能中的所有提到的必要裸标题」⇒ `ENGINE_BASELINE_PLAN_SECTIONS` 由 2 项扩为 6 项。
+ *  ⚠ 与 `~/.agents/skills/spec-writing/SKILL.md` 的 ★ 标题**必须同步**（改任一侧须同步另一侧）。 */
+export const SPEC_OK = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 
 /**
  * 【Q-A4 opt-2 · 2026-09-18 用户裁决】夹具锚点**按团队资产声明自适应**。

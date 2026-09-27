@@ -44,7 +44,7 @@ const B = 'b1';
 //   与 r2「拒绝免检」冲突：① 无 `layer` 的 lane 不得整 lane 免检（B2 ⇒ `GATE_LANE_LAYER_MISSING`）；
 //   ② 零执行零验收不得 complete（B3 ⇒ `GATE_COMPLETE_NO_TIER`）；③ plan 产物必须被下游 consume（A1）。
 //   ⇒ 统一构造**合规三层形态**：laneIds 归 exec 层，附 plan 层（产物被消费）+ audit 层。
-const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC_OK = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 function makeBatch(store, batchId, laneIds) {
   const wavePlan = {
     team: 'generic',

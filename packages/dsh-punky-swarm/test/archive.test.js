@@ -31,7 +31,7 @@ import { threeTierTasks, seedArtifacts } from './helpers/gate-fixture.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-arc-'));
 const store = createStore(root);
 const SID = 's-arc';
-const specOk = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
+const specOk = '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- done\n## 约束\n- none\n';
 
 function makePlan(batchId, tasks, opts = {}) {
   const plan = buildWavePlan({ batchId, tasks, team: 'punky-preset', ...opts });

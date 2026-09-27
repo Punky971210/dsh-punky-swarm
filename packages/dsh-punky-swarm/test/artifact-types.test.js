@@ -90,12 +90,12 @@ test('③ 带 elements/subsections 的条目 ⇒ 回显含两键且键序 = type
   const row = {
     type: 'spec', dir: 'plan/', layer: 'plan', desc: '执行规范',
     elements: ['goal', 'constraints'],
-    subsections: { '## 验收标准': 2 },
+    subsections: { '## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准': 2 },
   };
   const [v] = artifactTypesView([row]);
   assert.deepEqual(Object.keys(v), ['type', 'dir', 'layer', 'desc', 'elements', 'subsections']);
   assert.deepEqual(v.elements, ['goal', 'constraints']);
-  assert.deepEqual(v.subsections, { '## 验收标准': 2 });
+  assert.deepEqual(v.subsections, { '## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准': 2 });
 });
 
 test('③ subsections 数组形（等价 level 2）与对象形**原样**回显（不归一化）', () => {

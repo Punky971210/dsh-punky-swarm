@@ -484,7 +484,7 @@ function g2Harness(prefix, { assembly = { managerPlan: 'raise', auditLane: 'a1' 
     seedPlan(sessId, batchId, rel = 'plan/spec.md') {
       const abs = path.join(root, 'sessions', sessId, 'artifacts', batchId, rel);
       fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, '# spec\n## 验收标准\n- x\n## 约束\n- y\n');
+      fs.writeFileSync(abs, '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n');
     },
     /** 直写批次 JSON 把 lane 置指定态（镜像既有套件的 laneState 直写法；本用例只判门禁降级面）。 */
     setLane(sessId, batchId, lane, state) {

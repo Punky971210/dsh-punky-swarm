@@ -199,12 +199,12 @@ test('plan 契约：无声明 → 引擎基线两标题口径（缺 → GATE_PLA
     const g = createGates(state, { flowsRoot: pkg });
     const tasks = [{ id: 'p1', layer: 'plan', produce: ['plan/spec.md'] }];
     const b = batchOf('no-asset-team', tasks);
-    writeArtifact(state, 'b1', 'plan/spec.md', '# S\n## 验收标准\nx\n');
+    writeArtifact(state, 'b1', 'plan/spec.md', '# S\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\nx\n');
     const r1 = g.checkExitGate(SESS, 'b1', b, 'p1');
     assert.equal(r1.ok, false, '缺 ## 约束 → 拒');
     assert.equal(r1.code, 'GATE_PLAN_CONTRACT');
     assert.ok(r1.problems.some((p) => p.includes('## 约束')));
-    writeArtifact(state, 'b1', 'plan/spec.md', '# S\n## 验收标准\nx\n## 约束\ny\n');
+    writeArtifact(state, 'b1', 'plan/spec.md', '# S\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\nx\n## 约束\ny\n');
     assert.equal(g.checkExitGate(SESS, 'b1', b, 'p1').ok, true, '两标题齐 → 过');
   } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
@@ -220,7 +220,7 @@ test('plan 契约：punky-preset 团队装配退役（无资产 → 引擎基线
     const r = g.checkExitGate(SESS, 'b1', b, 'p1');
     assert.equal(r.ok, false, '编号变体仍被拒（声明串带 ## 前缀 ⇒ 与引擎基线裸标题行口径等价）');
     assert.equal(r.code, 'GATE_PLAN_CONTRACT');
-    writeArtifact(state, 'b1', 'plan/spec.md', '## 验收标准\n## 约束\n');
+    writeArtifact(state, 'b1', 'plan/spec.md', "# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- x\n");
     assert.equal(g.checkExitGate(SESS, 'b1', b, 'p1').ok, true);
   } finally { rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
@@ -304,7 +304,7 @@ test('R1 复核修复：绝对路径 plan 产物仍受内容契约约束（末�
     assert.equal(r.code, 'GATE_PLAN_CONTRACT');
     assert.ok(r.problems.some((p) => p.includes('## 验收标准')), JSON.stringify(r.problems));
     // 补齐裸标题 → 通过
-    writeFileSync(abs, '# S\n## 验收标准\n## 约束\n', 'utf8');
+    writeFileSync(abs, '# S\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n## 约束\n', 'utf8');
     assert.equal(g.checkExitGate(SESS, 'b1', b, 'p1').ok, true);
     // 末段回退的纯函数面
     assert.equal(globMatchesPath('plan/*spec.md', abs), true, '绝对路径末段回退命中');

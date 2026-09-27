@@ -71,13 +71,16 @@ async function driveBatch(byName, store, root, { batchId, teamsRoot, team, specB
 }
 
 /** 默认契约门（两章）+ 附加章节的产物正文。 */
-const baseSpec = (extra = '') => '# spec\n\n## 验收标准\n- a\n\n## 约束\n- b\n' + extra;
+// 【2026-09-27 扩面】spec 夹具补足必要裸标题六项（对齐 ENGINE_BASELINE_PLAN_SECTIONS）
+const baseSpec = (extra = '') =>
+  '# spec\n\n## 概述\n- a\n\n## 问题\n- a\n\n## 方案\n- a\n\n## 需求\n- a\n\n## 验收标准\n- a\n\n## 约束\n- b\n' + extra;
 
-test('C1 判据真源：ENGINE_BASELINE_CRITERIA_SECTION 全中文且为 PLAN_SECTIONS 首项（单一字面量）', () => {
+test('C1 判据真源：ENGINE_BASELINE_CRITERIA_SECTION 全中文且为 PLAN_SECTIONS 成员（单一字面量）', () => {
   assert.equal(ENGINE_BASELINE_CRITERIA_SECTION, '## 验收标准');
-  assert.ok(Array.isArray(ENGINE_BASELINE_PLAN_SECTIONS) && ENGINE_BASELINE_PLAN_SECTIONS.length === 2);
-  assert.equal(ENGINE_BASELINE_PLAN_SECTIONS[0], ENGINE_BASELINE_CRITERIA_SECTION, '契约门首项必须派生自 criteria 真源');
-  assert.equal(ENGINE_BASELINE_PLAN_SECTIONS[1], '## 约束');
+  // 【2026-09-27 扩面】2 项 → 6 项（用户裁决：引擎校验技能的所有必要裸标题）
+  assert.ok(Array.isArray(ENGINE_BASELINE_PLAN_SECTIONS) && ENGINE_BASELINE_PLAN_SECTIONS.length === 6);
+  assert.equal(ENGINE_BASELINE_PLAN_SECTIONS.includes(ENGINE_BASELINE_CRITERIA_SECTION), true, '契约门须含 criteria 真源');
+  assert.deepEqual([...ENGINE_BASELINE_PLAN_SECTIONS], ['## 概述', '## 问题', '## 方案', '## 需求', '## 验收标准', '## 约束']);
   assert.ok(Object.isFrozen(ENGINE_BASELINE_PLAN_SECTIONS), '基线章节集须冻结');
   // 单一字面量：flows.js 中 `## 验收标准` 只允许出现在常量定义处（防再硬编码）——
   // 由 fixture-helper-ledger 的全文扫描口径覆盖，此处锁运行期引用面。
@@ -152,7 +155,7 @@ test('C5 契约门·required_sections 声明覆盖：按声明章节判（缺 �
   // 5a 负例：spec 只含默认两章 ⇒ p1 merged 拒（契约门按声明 `## 需求` 判）
   const p1neg = await driveBatch(byName, store, root, {
     batchId: 'acfg-plan-neg', teamsRoot, team: 'acfg-team',
-    specBody: baseSpec(),
+    specBody: baseSpec().replace('## 需求\n- a\n\n', ''),   // 【扩面适配】负例须缺【声明的 ## 需求】
   }).then((runA1) => runA1).catch((e) => e);
   const msgNeg = String(p1neg?.message ?? p1neg);
   assert.ok(p1neg instanceof Error, '缺声明章节须拒：' + msgNeg);

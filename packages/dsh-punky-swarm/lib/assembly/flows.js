@@ -70,12 +70,34 @@ export function packageRoot() {
 export const ENGINE_BASELINE_CRITERIA_SECTION = '## 验收标准';
 
 /**
+ * 引擎基线：**必要结构章节名**（除 criteria 外的 skill 骨架章节）—— 2026-09-27 用户裁决新增。
+ *
+ * 裁决原话：「把技能内容改为中文，**引擎需要校验技能中的所有提到的必要裸标题**」。
+ * 来源：`~/.agents/skills/spec-writing/SKILL.md` 的**必要标题**（骨架里标 ★ 者）；
+ *   可选标题（API 设计 / 关键依赖 / API 契约引用 / 测试策略 / 成功指标 / 时间线 / 待决问题）
+ *   **不入本表** —— 它们**项目特定**（有的规格无 API、无时间线）⇒ 不校验。
+ *
+ * **判据面**：只校验**裸标题行是否存在**（`gates.ts` `sectionLineHit`）；**章节内容允许为空**。
+ * **同步纪律**：本表与 `spec-writing` skill 的 ★ 标题**必须一致**；改任一侧须同步另一侧。
+ */
+export const ENGINE_BASELINE_REQUIRED_SECTIONS = Object.freeze(['## 概述', '## 问题', '## 方案', '## 需求']);
+
+/**
  * 引擎基线 plan 契约判据章节（E-2 正名，legacy-retire-20260915）：缺声明（无 contract）时的**唯一真源**。
  * 原 `LEGACY_PLAN_CONTRACT` 死常量已删除（lib/test 零 import，从未被读端消费）；本常量承接
  * `gates.ts` plan 契约门的缺声明判据。**从 `ENGINE_BASELINE_CRITERIA_SECTION` 派生**（首项恒为 criteria 章）
  * ⇒ 「验收标准」章节名全仓只有一个字面量。
+ *
+ * 【2026-09-27 扩面】按用户裁决，判定集由「criteria + 约束」两项**扩为必要标题全六项**：
+ *   `## 概述` / `## 问题` / `## 方案` / `## 需求`（来自 `ENGINE_BASELINE_REQUIRED_SECTIONS`）
+ *   + `## 验收标准`（`ENGINE_BASELINE_CRITERIA_SECTION`）+ `## 约束`。
+ *   ⇒ **章节内容允许为空**（只判标题在场）；**可选标题不入表**。
  */
-export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([ENGINE_BASELINE_CRITERIA_SECTION, '## 约束']);
+export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([
+  ...ENGINE_BASELINE_REQUIRED_SECTIONS,
+  ENGINE_BASELINE_CRITERIA_SECTION,
+  '## 约束',
+]);
 
 const CACHE = new Map(); // key: `${pkgRoot}::${team}` → { sig, out }（sig = 资产路径+mtime+size；变了即重读）
 

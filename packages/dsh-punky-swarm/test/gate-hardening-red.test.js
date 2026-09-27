@@ -70,7 +70,7 @@ const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gate-red-'));
 const gates = createGates(ROOT);
 const SID = 's-red';
 
-const SPEC_OK = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
+const SPEC_OK = '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- done\n## 约束\n- none\n';
 
 // ── 基础构造器 ──
 function artDir(bid) { return path.join(ROOT, 'sessions', SID, 'artifacts', bid); }

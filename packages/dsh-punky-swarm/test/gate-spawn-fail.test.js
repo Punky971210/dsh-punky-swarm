@@ -50,7 +50,7 @@ function makeBatch(root, store, S, batchId, gateCmd) {
   const artDir = path.join(root, 'sessions', S, 'artifacts', batchId);
   fs.mkdirSync(path.join(artDir, 'plan'), { recursive: true });
   fs.mkdirSync(path.join(artDir, 'exec'), { recursive: true });
-  fs.writeFileSync(path.join(artDir, 'plan', 'spec.md'), '# Spec\n## 验收标准\n- x\n## 约束\n- y\n');
+  fs.writeFileSync(path.join(artDir, 'plan', 'spec.md'), '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n');
   fs.writeFileSync(path.join(artDir, 'exec', 'test-report.md'), '# 验证\n- ok\ngate: ' + gateCmd + '\n');
   return artDir;
 }
@@ -130,7 +130,7 @@ test('GAP-05e：命令 gate 失败 + needHuman 声明 → 转人工闸（escalat
   const artDir = path.join(root, 'sessions', S, 'artifacts', batchId);
   fs.mkdirSync(path.join(artDir, 'plan'), { recursive: true });
   fs.mkdirSync(path.join(artDir, 'exec'), { recursive: true });
-  fs.writeFileSync(path.join(artDir, 'plan', 'spec.md'), '# Spec\n## 验收标准\n- x\n## 约束\n- y\n');
+  fs.writeFileSync(path.join(artDir, 'plan', 'spec.md'), '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n');
   fs.writeFileSync(path.join(artDir, 'exec', 'test-report.md'), '# 验证\ngate: nonexistent_cmd_xyz\nneedHuman: true\n');
   assert.ok(!(set(store, S, batchId, 'p1', 'running') instanceof Error));
   assert.ok(!(set(store, S, batchId, 'p1', 'review') instanceof Error));

@@ -94,7 +94,7 @@ const LANE = 'e1';
 function seedBatch(store, root, { ownerSession = OWNER, batchId, lane = LANE, workerSessionId = WORKER } = {}) {
   const artifactsRoot = path.join(root, 'sessions', ownerSession, 'artifacts', batchId);
   fs.mkdirSync(path.join(artifactsRoot, 'plan'), { recursive: true });
-  fs.writeFileSync(path.join(artifactsRoot, 'plan', 'spec.md'), '# 规格夹具\n## 验收标准\n- 夹具\n', 'utf8');
+  fs.writeFileSync(path.join(artifactsRoot, 'plan', 'spec.md'), '# 规格夹具\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- 夹具\n', 'utf8');
   store.createBatch(ownerSession, {
     batchId,
     wavePlan: buildWavePlan({

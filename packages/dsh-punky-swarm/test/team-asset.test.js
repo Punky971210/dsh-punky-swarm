@@ -141,7 +141,7 @@ test('D5 红测①：`contract.elements` 非字符串数组 ⇒ BAD_TYPE（block
   ];
   for (const bad of cases) {
     const a = baseAsset();
-    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'], elements: bad };
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准'], elements: bad };
     const v = validateTeamAsset(a);
     assert.ok(CODES(v).includes(TEAM_ASSET_CODES.BAD_TYPE),
       `elements=${JSON.stringify(bad)} 必须产 BAD_TYPE；实测=` + JSON.stringify(v.problems));
@@ -160,7 +160,7 @@ test('D5 红测②：`contract.pending_marker` 非 `{ literal: string }` ⇒ BAD
   ];
   for (const bad of cases) {
     const a = baseAsset();
-    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'], pending_marker: bad };
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准'], pending_marker: bad };
     const v = validateTeamAsset(a);
     assert.ok(CODES(v).includes(TEAM_ASSET_CODES.BAD_TYPE),
       `pending_marker=${JSON.stringify(bad)} 必须产 BAD_TYPE；实测=` + JSON.stringify(v.problems));
@@ -171,7 +171,7 @@ test('D5 红测②：`contract.pending_marker` 非 `{ literal: string }` ⇒ BAD
 test('D5 正例（缺省不启用）：合法形态 / 空数组 / 未声明 / 显式 null 四态均零行为变化（ok=true）', () => {
   const shape = (mut) => {
     const a = baseAsset();
-    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准'] };
+    a.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准'] };
     mut(a.flows.plan.contract);
     return a;
   };
@@ -196,7 +196,7 @@ test('D5 正例（缺省不启用）：合法形态 / 空数组 / 未声明 / �
 // 口径：标废**不留兼容**——声明即在载入期产 `CONTRACT_LEGACY`（∈ BLOCKING_CODES）⇒ 拒载。
 test('B-3 旧泛键标废：`flows.audit.contract` 声明 ⇒ 拒载 CONTRACT_LEGACY（blocking，且不静默忽略）', () => {
   const a = baseAsset();
-  a.flows.audit.contract = { artifact_globs: ['audit/*report.md'], required_sections: ['## 验收标准'] };
+  a.flows.audit.contract = { artifact_globs: ['audit/*report.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准'] };
   const v = validateTeamAsset(a);
   assert.equal(v.ok, false, 'B-3：声明旧泛键 ⇒ 整份资产拒载（不得静默忽略）');
   const p = v.problems.find((x) => x.path === 'flows.audit.contract');
@@ -233,7 +233,7 @@ test('B-3 负例：未声明 `flows.audit.contract` ⇒ 零影响（plan 现役�
   assert.equal(hasBlockingProblems(v.problems), false, 'B-3：未声明 ⇒ 不得借新码升 blocking');
   // ② 闸门只认 audit 层：plan / exec 的 `contract` 是**现役**声明面（`flows.js` `contractOf(plan)`）⇒ 不得误标废
   const b = baseAsset();
-  b.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准', '## 约束'] };
+  b.flows.plan.contract = { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] };
   b.flows.exec.contract = { artifact_globs: ['exec/*.md'], required_sections: ['## 结果'] };
   const bv = validateTeamAsset(b);
   assert.equal(CODES(bv).includes(TEAM_ASSET_CODES.CONTRACT_LEGACY), false, 'B-3：plan/exec 契约不得被误标旧泛键');

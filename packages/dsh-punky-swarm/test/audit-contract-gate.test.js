@@ -142,7 +142,7 @@ test('A：criteria_from 指名锚点 → 未被指名的 plan 产物带标题不
     /GATE_AUDIT_CRITERIA_MISSING/,
     '指名口径下，未被指名的 plan 产物带标题不应顶用',
   );
-  write('plan/spec.md', '# spec\n## 验收标准\n- ok\n');
+  write('plan/spec.md', '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- ok\n');
   const r = await byName.member_status.execute({ batchId: 'p2-cf', lane: 'a1', status: 'running' }, SESS);
   assert.equal(r.status, 'running', '补上指名锚点的裸标题行后放行');
 });

@@ -80,7 +80,7 @@ test('validateWavePlan rejects forged condition (non-normalized form)', () => {
 //   · B2 拒绝免检：无 `layer` 的 lane 不得整 lane 免检（exit 门拒 `GATE_LANE_LAYER_MISSING`）；
 //   · B3 零执行零验收不得 complete / A1 plan 产物必须被下游 consume ⇒ **不得建 plan-only 批**。
 //   ⇒ 条件测试的被测 lane 归 **exec 层**，并纳入合规三层批（plan 产物被 exec/audit consume）。
-const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC_OK = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 function writeArtifact(batchId, rel, content) {
   const abs = path.join(root, 'sessions', S, 'artifacts', batchId, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });

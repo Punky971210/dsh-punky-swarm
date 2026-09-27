@@ -297,7 +297,7 @@ function makeTargetPlan(batchId, targets) {
   const art = (rel, content) => {
     const abs = path.join(root, 'sessions', S, 'artifacts', batchId, rel);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content ?? (rel.endsWith('spec.md') ? '# Spec\n## 验收标准\n- x\n## 约束\n- y\n' : 'code'));
+    fs.writeFileSync(abs, content ?? (rel.endsWith('spec.md') ? '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n' : 'code'));
   };
   art('plan/spec.md');
   store.setMember(S, batchId, 'p1', 'running');

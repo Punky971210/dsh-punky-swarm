@@ -373,7 +373,7 @@ test('B2 负控：团队资产声明齐备 ⇒ 零首触事件（判定逐字不
       plan: {
         produce_field: 'produce',
         entry_requires: [],
-        contract: { artifact_globs: ['plan/*spec.md'], required_sections: ['## 验收标准', '## 约束'] },
+        contract: { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] },
       },
       exec: {
         produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'],

@@ -55,7 +55,7 @@ import { seedArtifactFile } from './helpers/gate-fixture.mjs';
 const SESSION = 'sess-p2-chain';
 const SESS = { agent: { session: { id: SESSION } } };
 const TEAM = 'p2-chain-team';
-const SPEC = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 
 // ── 夹具：三层 × 五段链（含 `tester`/`review`：spec §缺省链口径明示「由团队资产各自声明，非引擎缺省」）──
 const LAYERS = {
@@ -68,7 +68,7 @@ const ROLES = { plan_leads: ['designer'], audit_leads: ['reviewer'] };
 /** flows 面：`audit:false` 用于 G-3（有资产但**无** `flows.audit`）。 */
 function flowsOf({ audit = true } = {}) {
   const flows = {
-    plan: { produce_field: 'produce', entry_requires: [], contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 验收标准', '## 约束'] } },
+    plan: { produce_field: 'produce', entry_requires: [], contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] } },
     exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
   };
   if (audit) {

@@ -43,7 +43,7 @@ test('schema rejects review -> running (返工边已去，K3)', () => {
 //   · B2：无 `layer` 的 lane 不得整 lane 免检 ⇒ 结算时拒 `GATE_LANE_LAYER_MISSING`；
 //   · B3/A1：批次须有 exec 或 audit 层、且 plan 产物必须被下游 consume（不得建 plan-only 批）。
 //   ⇒ 统一改**合规三层批**：laneIds 归 exec 层，附 plan 层（产物被消费）与 audit 层。
-const SPEC_OK = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC_OK = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 function threeTierLean(laneIds) {
   return [
     { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },

@@ -47,7 +47,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSION = 'sess-pr';
 const SESS = { agent: { session: { id: SESSION } } };
 const TEAM = 'pr-team';
-const SPEC = '# spec\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 const LAYERS = {
   plan: { roles: ['designer'], skills: { designer: ['spec-writing'] } },
   exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
@@ -55,7 +55,7 @@ const LAYERS = {
 };
 const ROLES = { plan_leads: ['designer'], audit_leads: ['reviewer'] };
 const FLOWS = {
-  plan: { produce_field: 'produce', entry_requires: [], contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 验收标准', '## 约束'] } },
+  plan: { produce_field: 'produce', entry_requires: [], contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] } },
   exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
   audit: {
     produce_field: 'produce', consume_field: 'consume', entry_requires: ['consume'],

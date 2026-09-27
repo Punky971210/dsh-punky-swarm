@@ -57,7 +57,7 @@ const EVT_CONCURRENCY_BLOCKED = EVENT_TYPES.EVT_GATE_CONCURRENCY_BLOCKED;
 /** 并发闸拒码：`lib/engine/dispatch.js` 的导出**已删除** ⇒ 退役后本变量恒 `undefined`（T10c 显式断言）。 */
 const CONCURRENCY_CODE = dispatchMod.CONCURRENCY_EXCEEDED_CODE;
 
-const SPEC_OK = '# 规格夹具\n## 验收标准\n- x\n## 约束\n- y\n';
+const SPEC_OK = '# 规格夹具\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 
 
 function mkCtx(runtime) {
@@ -293,7 +293,7 @@ const TEAM_ASSET_CG = {
   },
   roles: { plan_leads: ['designer'], audit_leads: ['supervisor'] },
   flows: {
-    plan: { produce_field: 'produce', contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 验收标准', '## 约束'] } },
+    plan: { produce_field: 'produce', contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] } },
     exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
     audit: { produce_field: 'produce', consume_field: 'consume', entry_requires: ['consume'] },
   },

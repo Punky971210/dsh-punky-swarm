@@ -27,7 +27,7 @@ import { detectNeedHuman, detectGate, createGates, TARGETS_CLAIMED_RE } from '..
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gates-'));
 const store = createStore(root);
 const SID = 's-gate';
-const specOk = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
+const specOk = '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- done\n## 约束\n- none\n';
 
 // 套件对齐归档（批次 gate-techdebt · lane e2-gov-repair · 用户裁决 Q1=C）：
 //   失效红条的**原用例体逐字**保存在本对象中（活字符串数据，零执行）；
@@ -105,7 +105,7 @@ test('P1-a：audit lane 只消费 exec 产物 → 拒建批 GATE_AUDIT_INPUT_MIS
   assert.ok(buildWavePlan({ batchId: 'b-p1a-ok2', tasks: [t[0], t[1], { ...t[2], consume: ['plan/spec.md', 'exec/e1/main.py'] }], team: 'punky-preset' }));
 });
 
-test('P1-b：audit 派发前 plan 产物缺 `## 验收标准` → 拒派 GATE_AUDIT_CRITERIA_MISSING；补齐正文后放行', () => {
+test('P1-b：audit 派发前 plan 产物缺 `## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准` → 拒派 GATE_AUDIT_CRITERIA_MISSING；补齐正文后放行', () => {
   makePlan('b-audit-crit', tasksAuditCriteria());
   art('b-audit-crit', 'plan/spec.md', '# Spec\n（本文件故意不含验收标准标题）\n');
   const r = set(SID, 'b-audit-crit', 'a1', 'running');
@@ -633,7 +633,7 @@ test('命令 gate V9【复活·T-14·裁剪】：非 exec/audit 层（plan）产
   //   命令声明行（exit 7）⇒ 必须真执行并拒 GATE_EXIT_NONZERO」），此处不重复建例，只保留与 S16 作用域不矛盾的
   //   **plan 层零感知**段（判据同源：命令门只对 exec/audit 层生效）。
   makePlan('b-cg-v9-plan', CMD_TASKS);
-  art('b-cg-v9-plan', 'plan/spec.md', '# Spec\n## 验收标准\n- x\ngate: node -e "process.exit(1)"\n## 约束\n- y\n');
+  art('b-cg-v9-plan', 'plan/spec.md', '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\ngate: node -e "process.exit(1)"\n## 约束\n- y\n');
   const r1 = runLaneOrError('b-cg-v9-plan', 'p1'); // plan lane 产物含 gate 行但为 plan 层
   assert.ok(!(r1 instanceof Error), String(r1 && r1.message));
   assert.equal(r1.lanes.p1, 'merged');
@@ -652,7 +652,7 @@ ARCHIVED_CASES['命令 gate V9：非 exec 层（plan/audit）产物含 gate 行 
   '    assert.equal(r2.lanes.a1, \'merged\');',
   '    assert.ok(!r2.events.some((e) => e.type === \'gate.exit\' || e.type === \'gate.exit_blocked\'), \'audit 层零感知\');',
   '  makePlan(\'b-cg-v9-plan\', CMD_TASKS);',
-  '  art(\'b-cg-v9-plan\', \'plan/spec.md\', \'# Spec\\n## 验收标准\\n- x\\ngate: node -e "process.exit(1)"\\n## 约束\\n- y\\n\');',
+  '  art(\'b-cg-v9-plan\', \'plan/spec.md\', \'# Spec\\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\\n- x\\ngate: node -e "process.exit(1)"\\n## 约束\\n- y\\n\');',
   '  const r1 = runLaneOrError(\'b-cg-v9-plan\', \'p1\'); // plan lane 产物含 gate 行但为 plan 层',
   '  assert.ok(!(r1 instanceof Error), String(r1 && r1.message));',
   '  assert.equal(r1.lanes.p1, \'merged\');',

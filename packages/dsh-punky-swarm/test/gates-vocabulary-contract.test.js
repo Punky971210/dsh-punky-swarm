@@ -106,7 +106,7 @@ const ENTRY_RETIRED = {
   note: '停用而非删除：既有产物仍解析通过',
 };
 
-const SPEC_OK = '# Spec\n## 验收标准\n- done\n## 约束\n- none\n';
+const SPEC_OK = '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- done\n## 约束\n- none\n';
 
 /** 门禁返回值上的**全部** escape 种类（写端 `store.js#gateEscapeEvents` 同时消费 `escape` 与 `escapes[]`）。 */
 const escapeKinds = (r) => [
@@ -121,7 +121,7 @@ function flowFixtures(planContract = {}) {
       entry_requires: [],
       contract: {
         artifact_globs: ['plan/*spec.md'],
-        required_sections: ['## 验收标准', '## 约束'],
+        required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'],
         ...planContract,
       },
     },
