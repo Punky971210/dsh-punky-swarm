@@ -628,7 +628,7 @@ export const apply = (ctx, config = {}) => {
   //   （GET /config presets 源：id = 已成功装载的注册 id、count = 条目数——装载失败不入目录，
   //   装配侧已对 errors 逐条 warn；derived from 双表，装载后一次性派生）
   //   两表并计：rules 面（l1-sensitive / l2-resource）+ 第三类 toolBan 面（l3-tool-ban），
-  //   count = 两类条目数之和（l3 仅有 toolBan 条目，l1/l2 仅有 rules；compose 组合项已废除）
+  //   count = 各类条目数之和（l3/l5 仅有 toolBan 条目，l1/l2 仅有 rules；compose 组合项已废除）
   const presetCatalog = PRESET_IDS
     .filter((id) => Array.isArray(presetTable[id]) || Array.isArray(presetBanTable[id]))
     .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));

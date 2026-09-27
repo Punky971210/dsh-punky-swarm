@@ -38,7 +38,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     //   后端 runtime-config.js 换算 ×1000 归一为 windowMs 落盘——UI 提交层单位约定，引擎侧不改。
     // preset 语义（2026-09-14 改：全部规则集平级多选）：装载键 = string | string[]；
     //   勾选集 = ["l1-sensitive","l2-resource","l3-tool-ban"] 的任意子集——**组合由勾选叠加表达**，
-    //   面板不存在也不接受 compose 这一「组合项」（`compose` 注册 id 已废除：引擎注册表只剩三项，
+    //   面板不存在也不接受 compose 这一「组合项」（`compose` 注册 id 已废除：引擎注册表只剩四项，
     //   旧配置若含它须经下方一次性回显迁移转成 l1+l2 才能保存）。
     //   三个规则集 id 互不重叠（L1/L2 走 rules 面、L3 走 toolBan 面），多选叠加不会被引擎唯一性校验拒；
     //   全不勾 = 省略 preset 键（后端删键回出厂零规则；空数组/空串会被后端 400 拒）。
@@ -572,7 +572,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const presetSel = Array.isArray(form.preset) ? form.preset : [];            // 勾选集（保序；仅注册选项）
       const customRef = form.preset !== null && !Array.isArray(form.preset);      // { custom: 原文 }（无勾选位可表，保存原样）
       const countOf = (id) => { const m = meta.presets; return typeof m[id] === 'number' ? m[id] : 0; };
-      const presetTotal = presetSel.reduce((s, id) => s + countOf(id), 0);        // 条目数合计：三项全勾 = 12 + 6 + 1 = 19（多选叠加）
+      const presetTotal = presetSel.reduce((s, id) => s + countOf(id), 0);        // 条目数合计：四项全勾 = 12 + 6 + 1 + 3 = 22（多选叠加）
       const liveSt = pending ? STATE.running : STATE.merged;
       const chipLabel = state === 'saving' ? tt('gov.saving') : state === 'confirming' ? tt('gov.saved') : tt('gov.live');
       const btnBase = {
@@ -603,7 +603,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           })
         ),
 
-        // 卡片 B 规则预设（多选：L1/L2/L3 三个平级勾选项；组合 = 勾选叠加本身，无 compose 组合项语义）
+        // 卡片 B 规则预设（多选：L1/L2/L3/L5 四个平级勾选项；组合 = 勾选叠加本身，无 compose 组合项语义）
         React.createElement(GovCard, { title: tt('gov.preset.title') },
           React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.5 } }, tt('gov.preset.hint')),
           selOptions.map((id) => React.createElement(PresetCheckRow, {
