@@ -138,7 +138,7 @@ export declare function buildWavePlan({ batchId, tasks, concurrency, team, assem
     batchId: string;
     tasks: WavePlanTaskInput[];
     concurrency?: number;
-    team: string;
+    team: string | null;
     assembly?: {
         layers?: Record<string, {
             skills?: Record<string, string[]>;

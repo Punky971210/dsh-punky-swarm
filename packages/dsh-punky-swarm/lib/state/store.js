@@ -326,8 +326,8 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     for (const w of wavePlan.wavePlan) {
       for (const t of w.tasks) lanes[t.id] = 'pending';
     }
-    // P1（2026-09-16，D-3）：`?? 'generic'` 兜底已清退——建批面 `team` 必填（`lib/tools/core.js` 构造期拒），
-    //   此处再回落 `'generic'` 会成**第二个默认值真源**（历史批自带 `team:'generic'` 字段，读取侧零迁移）。
+    // D-3 口径不变：`?? 'generic'` 兜底已清退（防第二默认值真源；历史批自带 `team:'generic'` 字段，读取侧零迁移）。
+    //   【2026-09-27】建批面 `team` 降为**可选标签** ⇒ 无标签批的 `wavePlan.team` = `null`，此处**不代造默认值**。
     const team = wavePlan.team;
     const ta = teamAssetRefFor(sessionId, team, teamsRoot);
     if (ta.warning) log.warn?.(ta.warning);

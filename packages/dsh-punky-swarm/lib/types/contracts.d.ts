@@ -149,7 +149,7 @@ export interface Wave {
 export interface WavePlanDoc {
     schema: number;
     batchId: string;
-    team: string;
+    team: string | null;
     wavePlan: Wave[];
     concurrency: number;
     warnings: Array<{
@@ -258,7 +258,7 @@ export interface Batch {
     batchId: string;
     phase: BatchPhase;
     concurrency: number;
-    team: string;
+    team: string | null;
     wavePlan: Wave[];
     lanes: Record<string, MemberState>;
     chains: ChainsState;

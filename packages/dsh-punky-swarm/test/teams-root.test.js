@@ -15,12 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 会话级临时团队资产根（teamsRoot）：wave_plan 工具面接线 + 加载期拒载 + 防逃逸 + 门禁不可绕过
-// 契约（以 `lib/tools/core.js` 实现与 `presets/punky-preset/references/discipline.md#§0j` 为准）：
-//   ① 显式 teamsRoot ⇒ 资产根**替换**为 <teamsRoot>/presets/<team>/（loader 口径 TEAM_ASSET_DIR='presets'），
-//      **不回落**包内 presets/ 与 legacy 兜底：缺失 → GATE_TEAMS_ROOT_ASSET_NOT_FOUND；非法 → 原 TEAM_ASSET_* 码；
-//   ② teamsRoot/team 词法 + 防逃逸（非绝对路径 / 含 .. 段 / team 非 kebab-case）→ GATE_TEAMS_ROOT_INVALID；
-//   ③ 缺省 teamsRoot ⇒ 既有行为逐字不变；
+// 会话级临时团队资产根（teamsRoot）：wave_plan 工具面接线 + 「尽力」资产面 + 防逃逸 + 门禁不可绕过
+// 契约（以 `lib/tools/core.js#resolveTeamAssetFace` 为准；【2026-09-27 用户裁决 · 全批反转】）：
+//   ① 显式且可用的 teamsRoot ⇒ 资产查找**替换**为 <teamsRoot>/presets/<team>/（loader 口径 TEAM_ASSET_DIR='presets'），
+//      **不回落**包内 presets/：资产缺失/非法 ⇒ 建批照常 + 原 `TEAM_ASSET_*` 码进 `warnings` 留痕（**不拒建批**）；
+//   ② teamsRoot/team 词法 + 防逃逸（非绝对路径 / 含 `..` 段 / team 非 kebab-case）⇒ **忽略该根**
+//      （`TEAMS_ROOT_IGNORED` 留痕、不写批次键）——原 `GATE_TEAMS_ROOT_INVALID` / `GATE_TEAMS_ROOT_ASSET_NOT_FOUND`
+//      拒态家族**已删除**；纯校验函数（`resolveTeamsRootOption` / `assertTeamsRootLexical`）保留在模块内、已退出工具面调用；
+//   ③ 缺省 teamsRoot ⇒ 包内 presets/ 面「尽力」解析（无资产标签照常建批 + 留痕）；
 //   ④ 临时团队批次**同受 Tier3 门禁**（entry 缺 consume 拒派 / audit 未验收拒 complete）。
 //
 // 覆盖分组：T1 正向（技能前缀来源）+ T2 缺失 + T3 非法 + T4 逃逸/词法 + T5 向后兼容 + T6 门禁 + T7 入参契约。
@@ -212,17 +214,14 @@ test('T1 正向：teamsRoot 临时资产建批成功，lane cmd 技能前缀按�
     // 批次落盘：team 记录为临时团队
     const raw = JSON.parse(fs.readFileSync(batchFileOf(root, 'troot-t1'), 'utf8'));
     assert.equal(raw.team, TMP_TEAM);
-    // 同任务 + 缺省 teamsRoot（包内无 tmp-team 资产）⇒ 【P1 反转 + 同步】旧口径「无前缀 + GATE_ROLE_INVALID 告警 +
-    //   **照常建批**」已废除：P1 起「无资产 ⇒ 构造期拒、零批次 JSON 落盘」——对照面由「告警」升级为「拒」（判据未删）。
-    let ctlMsg = null;
-    try {
-      await byName.wave_plan.execute({ batchId: 'troot-t1-ctl', tasks: tmpTasks(), team: TMP_TEAM, assembly: { auditLane: 'a1' } }, SESS);
-    } catch (e) {
-      ctlMsg = String(e?.message ?? e);
-    }
-    assert.notEqual(ctlMsg, null, '缺省 teamsRoot 时包内无 tmp-team 资产 ⇒ 构造期拒（P1；原「告警 + 照常建批」已废除）');
-    assert.match(ctlMsg, /TEAM_ASSET_NOT_FOUND/, '拒态须原样透出资产码：' + String(ctlMsg));
-    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t1-ctl')), false, '拒后零批次 JSON 落盘');
+    // 同任务 + 缺省 teamsRoot（包内无 tmp-team 资产）⇒ 【2026-09-27 反转】P1 的「无资产 ⇒ 构造期拒 + 零批次 JSON
+    //   落盘」已按用户裁决退役：现口径 = **照常建批 + 原 `TEAM_ASSET_NOT_FOUND` 码进 `warnings` 留痕**
+    //   （判据面未删：由「拒态码 + 零落盘」等价翻转为「同一原码留痕 + 批次落盘」）。
+    const ctl = await byName.wave_plan.execute({ batchId: 'troot-t1-ctl', tasks: tmpTasks(), team: TMP_TEAM, assembly: { auditLane: 'a1' } }, SESS);
+    const ctlHit = ctl.warnings.find((w) => /^TEAM_ASSET_/.test(w.code));
+    assert.ok(ctlHit, '无资产标签须留原码留痕（不再拒建批）：' + JSON.stringify(ctl.warnings));
+    assert.equal(ctlHit.code, 'TEAM_ASSET_NOT_FOUND', '留痕码 = 原拒态码（零新造）');
+    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t1-ctl')), true, '批次 JSON 落盘（P1 的「拒后零落盘」已反转）');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(teamsRoot, { recursive: true, force: true });
@@ -230,23 +229,25 @@ test('T1 正向：teamsRoot 临时资产建批成功，lane cmd 技能前缀按�
   }
 });
 
-// ── T2 反例 1：资产缺失 → GATE_TEAMS_ROOT_ASSET_NOT_FOUND（不回落包内）──
+// ── T2 反例 1【2026-09-27 反转】：资产缺失（不回落包内）⇒ 建批照常 + TEAM_ASSET_NOT_FOUND 留痕 ──
 
-test('T2 资产缺失：目录不存在 / 目录存在但文件缺失 → GATE_TEAMS_ROOT_ASSET_NOT_FOUND，且无批次落盘', async () => {
+test('T2 资产缺失【反转】：目录不存在 / 目录存在但文件缺失 ⇒ 建批成功 + 批次 JSON 落盘 + TEAM_ASSET_NOT_FOUND 留痕', async () => {
   const { root, byName } = makeHarness();
   const emptyRoot = mkTeamsRoot('', null, { writeFile: false }); // teamsRoot 下无 presets/
   const dirOnly = mkTeamsRoot('ghost-team', null, { writeFile: false }); // 目录在、文件缺
   try {
-    await assert.rejects(
-      () => byName.wave_plan.execute({ batchId: 'troot-t2a', tasks: tmpTasks(), team: 'ghost-team', teamsRoot: emptyRoot }, SESS),
-      /GATE_TEAMS_ROOT_ASSET_NOT_FOUND: no team asset under .*presets[\\/]ghost-team/,
-    );
-    await assert.rejects(
-      () => byName.wave_plan.execute({ batchId: 'troot-t2b', tasks: tmpTasks(), team: 'ghost-team', teamsRoot: dirOnly }, SESS),
-      /GATE_TEAMS_ROOT_ASSET_NOT_FOUND/,
-    );
-    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t2a')), false, '拒建批：无批次 JSON 落盘');
-    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t2b')), false, '拒建批：无批次 JSON 落盘');
+    // 旧口径（P1 起）：`GATE_TEAMS_ROOT_ASSET_NOT_FOUND` 拒建批 + 零批次 JSON 落盘（拒态家族**已删除**）。
+    //   现口径：临时根可用（绝对路径、无 `..` 段）但**资产缺失** ⇒ 该标签走「无资产」路径 + 原 `TEAM_ASSET_NOT_FOUND`
+    //   码留痕，**建批照常**（判据面未删，只等价反转读数两侧：拒→留痕、零落盘→落盘）。`assembly` 为夹具必需
+    //   （本批含 audit 层 ⇒ `GATE_ASSEMBLY_*` 门仍在，与本批被检面无涉）。
+    const o1 = await byName.wave_plan.execute({ batchId: 'troot-t2a', tasks: tmpTasks(), team: 'ghost-team', teamsRoot: emptyRoot, assembly: { auditLane: 'a1' } }, SESS);
+    const o2 = await byName.wave_plan.execute({ batchId: 'troot-t2b', tasks: tmpTasks(), team: 'ghost-team', teamsRoot: dirOnly, assembly: { auditLane: 'a1' } }, SESS);
+    for (const [bid, out] of [['troot-t2a', o1], ['troot-t2b', o2]]) {
+      assert.equal(out.batchId, bid, bid + '：资产缺失不得再拒建批');
+      assert.ok(out.warnings.some((w) => w.code === 'TEAM_ASSET_NOT_FOUND'),
+        bid + '：缺失须留痕 TEAM_ASSET_NOT_FOUND：' + JSON.stringify(out.warnings));
+      assert.equal(fs.existsSync(batchFileOf(root, bid)), true, bid + '：批次 JSON 落盘（原「拒建批：无批次 JSON 落盘」已反转）');
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(emptyRoot, { recursive: true, force: true });
@@ -254,9 +255,9 @@ test('T2 资产缺失：目录不存在 / 目录存在但文件缺失 → GATE_T
   }
 });
 
-// ── T3 反例 2：资产存在但非法 → 原样透出 TEAM_ASSET_* 码（不回落、不静默降级）──
+// ── T3 反例 2【2026-09-27 反转】：资产存在但非法 ⇒ 原码留痕 + 建批照常（不回落、不静默降级）──
 
-test('T3 资产非法：层 / 角色词法 / 字段缺失 / 坏 JSON → 原 TEAM_ASSET_* 码透出，且无批次落盘', async () => {
+test('T3 资产非法【反转】：层 / 角色词法 / 字段缺失 / 坏 JSON ⇒ 原 TEAM_ASSET_* 码留痕 + 建批成功', async () => {
   const { root, byName } = makeHarness();
   const cases = [
     ['troot-t3-entry', 'bad-entry', { ...tmpAsset(), team: 'bad-entry', flows: { ...tmpAsset().flows, plan: { ...tmpAsset().flows.plan, entry_requires: ['nope'] } } }, /^TEAM_ASSET_ENTRY_REQUIRE_UNKNOWN/],
@@ -281,16 +282,15 @@ test('T3 资产非法：层 / 角色词法 / 字段缺失 / 坏 JSON → 原 TEA
     for (const [batchId, team, asset] of cases) {
       const teamsRoot = mkTeamsRoot(team, asset);
       roots.push(teamsRoot);
-      await assert.rejects(
-        () => byName.wave_plan.execute({ batchId, tasks: tmpTasks(), team, teamsRoot }, SESS),
-        (err) => {
-          const code = String(err.message).split(':')[0];
-          seen.push(code);
-          return /^TEAM_ASSET_/.test(code);
-        },
-        batchId + ' 必须以 TEAM_ASSET_* 码拒载',
-      );
-      assert.equal(fs.existsSync(batchFileOf(root, batchId)), false, '拒建批：' + batchId + ' 无批次 JSON 落盘');
+      // 【2026-09-27 反转】旧口径「非法资产 ⇒ 构造期拒（`TEAM_ASSET_*` 码原样透出）+ 零批次 JSON 落盘」已退役：
+      //   现口径 = **建批照常**（team = 可选标签）+ 同一原码进 `warnings` 留痕。**判据面逐字保留**：仍是
+      //   「四类 / 同序 / 一类一码」，只把读数源由 `throw` 的 message 换成 `warning.code`；`assembly` 为夹具必需
+      //   （本批含 audit 层 ⇒ `GATE_ASSEMBLY_*` 门仍在，与本批被检面无涉）。
+      const out = await byName.wave_plan.execute({ batchId, tasks: tmpTasks(), team, teamsRoot, assembly: { auditLane: 'a1' } }, SESS);
+      const hit = out.warnings.find((w) => /^TEAM_ASSET_/.test(w.code));
+      assert.ok(hit, batchId + ' 必须以 TEAM_ASSET_* 码留痕：' + JSON.stringify(out.warnings));
+      seen.push(hit.code);
+      assert.equal(fs.existsSync(batchFileOf(root, batchId)), true, '建批照常：' + batchId + ' 批次 JSON 落盘（原「拒建批：无批次 JSON 落盘」已反转）');
     }
     assert.deepEqual(seen, ['TEAM_ASSET_ENTRY_REQUIRE_UNKNOWN', 'TEAM_ASSET_SKILLS_MISMATCH', 'TEAM_ASSET_MISSING_FIELD', 'TEAM_ASSET_BAD_JSON'], '四类非法资产各自的原始码（**结构逐字保留**：四类 / 同序 / 一类一码；第 1 项随 K-2 换码 LAYER_UNKNOWN → ENTRY_REQUIRE_UNKNOWN（前者已降 warning、不再拒载），第 2 项随 R2-3 ⓑ 换码 ROLE_LEXICAL → SKILLS_MISMATCH）');
     // K-2 留痕面（2026-09-18 用户裁决）：**未知层（warning 级）不得否决建批**——与上四例「资产非法 ⇒ 拒」成对照
@@ -308,28 +308,42 @@ test('T3 资产非法：层 / 角色词法 / 字段缺失 / 坏 JSON → 原 TEA
   }
 });
 
-// ── T4 反例 3：逃逸与词法违规 → GATE_TEAMS_ROOT_INVALID ──
+// ── T4 反例 3【2026-09-27 反转】：逃逸与词法违规 ⇒ 忽略该根 + TEAMS_ROOT_IGNORED 留痕（工具面）；
+//      纯校验函数面（`resolveTeamsRootOption` / `assertTeamsRootLexical`）逐字保留 ──
 
-test('T4 逃逸/词法：team 穿越、teamsRoot 相对路径与 .. 段 → GATE_TEAMS_ROOT_INVALID（工具面 + 纯校验面）', async () => {
+test('T4 逃逸/词法【反转】：team 穿越、teamsRoot 相对路径与 .. 段 ⇒ 建批照常 + TEAMS_ROOT_IGNORED 留痕 + 不写批次键（工具面 + 纯校验面）', async () => {
   const { root, byName } = makeHarness();
   const teamsRoot = mkTeamsRoot(TMP_TEAM, tmpAsset());
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-troot-outside-'));
-  // 逃逸目标：伪造 <teamsRoot>/../evil/presets/evil 资产，证明穿越被词法面挡在 resolve 之前
+  // 逃逸目标：伪造 <teamsRoot>/../evil/presets/evil 资产，证「穿越面**不再被读**」（词法判据仍在，但出口从拒改为忽略）
   fs.mkdirSync(path.join(outside, 'presets', 'evil'), { recursive: true });
   fs.writeFileSync(path.join(outside, 'presets', 'evil', 'team-asset.json'), JSON.stringify({ ...tmpAsset(), team: 'evil' }), 'utf8');
   const traversals = [
-    ['troot-t4-team-dotdot', { team: '../evil', teamsRoot }, /GATE_TEAMS_ROOT_INVALID: team must match/],
-    ['troot-t4-team-backslash', { team: '..\\evil', teamsRoot }, /GATE_TEAMS_ROOT_INVALID: team must match/],
-    ['troot-t4-team-slash', { team: 'evil/presets', teamsRoot }, /GATE_TEAMS_ROOT_INVALID: team must match/],
-    ['troot-t4-root-relative', { team: TMP_TEAM, teamsRoot: 'relative/dir' }, /GATE_TEAMS_ROOT_INVALID: teamsRoot must be an absolute path/],
-    ['troot-t4-root-dotdot', { team: TMP_TEAM, teamsRoot: teamsRoot + path.sep + '..' + path.sep + 'evil' }, /GATE_TEAMS_ROOT_INVALID: teamsRoot must not contain a "\.\." path segment/],
+    ['troot-t4-team-dotdot', { team: '../evil', teamsRoot }, 'label-not-kebab'],
+    ['troot-t4-team-backslash', { team: '..\\evil', teamsRoot }, 'label-not-kebab'],
+    ['troot-t4-team-slash', { team: 'evil/presets', teamsRoot }, 'label-not-kebab'],
+    ['troot-t4-root-relative', { team: TMP_TEAM, teamsRoot: 'relative/dir' }, 'lexical'],
+    ['troot-t4-root-dotdot', { team: TMP_TEAM, teamsRoot: teamsRoot + path.sep + '..' + path.sep + 'evil' }, 'lexical'],
   ];
   try {
-    for (const [batchId, args, re] of traversals) {
-      await assert.rejects(() => byName.wave_plan.execute({ batchId, tasks: tmpTasks(), ...args }, SESS), re, batchId);
-      assert.equal(fs.existsSync(batchFileOf(root, batchId)), false, '拒建批：' + batchId + ' 无批次 JSON 落盘');
+    // 旧口径：五例一律 `GATE_TEAMS_ROOT_INVALID` 拒建批 + 零批次落盘（该拒态家族**已删除**）。
+    //   现口径：不可用根 ⇒ **忽略 + 留痕 + 建批照常**；防逃逸判据（kebab-case 白名单 / 绝对路径 / 禁 `..`）**逐字未删**，
+    //   只是出口由「拒」改为「忽略」，且「忽略」必须在返回值与批次键上**可见**（不静默、不写无效声明）。
+    for (const [batchId, args, reason] of traversals) {
+      const out = await byName.wave_plan.execute({ batchId, tasks: tmpTasks(), assembly: { auditLane: 'a1' }, ...args }, SESS);
+      assert.equal(out.batchId, batchId, batchId + '：不可用根不得再拒建批');
+      const w = out.warnings.find((x) => x.code === 'TEAMS_ROOT_IGNORED');
+      assert.ok(w, batchId + '：忽略须留痕 TEAMS_ROOT_IGNORED（不静默）：' + JSON.stringify(out.warnings));
+      assert.equal(w.reason, reason, batchId + '：忽略理由须可辨（' + reason + '）');
+      const raw = JSON.parse(fs.readFileSync(batchFileOf(root, batchId), 'utf8'));
+      assert.equal('teamsRoot' in raw, false, batchId + '：被忽略的根**不得**写批次键（防「声明了却不生效」）');
+      assert.equal(fs.existsSync(batchFileOf(root, batchId)), true, batchId + '：批次 JSON 落盘');
+      // 防逃逸：穿越目标未被读入（既无该路径的资产留痕，也无该标签的技能前缀）
+      assert.ok(!out.warnings.some((x) => x.path && String(x.path).includes('evil')), batchId + '：穿越目标不得被读入');
+      assert.ok(!out.wavePlan.flatMap((w2) => w2.tasks).some((t) => /evil/.test(String(t.cmd ?? ''))), batchId + '：穿越标签不得进技能前缀面');
     }
-    // 纯校验面（不经宿主 arg 类型校验）：非字符串 teamsRoot → 新码
+    // 纯校验面（**保留**：这两个函数仍在模块内、判据逐字未变，只是已退出工具面调用）：
+    // 不经宿主 arg 类型校验：非字符串 teamsRoot → 旧码（函数级契约）
     assert.throws(() => resolveTeamsRootOption(TMP_TEAM, 42), /GATE_TEAMS_ROOT_INVALID: teamsRoot must be a non-empty absolute path string/);
     assert.throws(() => assertTeamsRootLexical(TMP_TEAM, '   '), /GATE_TEAMS_ROOT_INVALID/);
     // 合法路径经词法面通过（对照组）
@@ -368,19 +382,14 @@ test('T5 向后兼容：缺省 teamsRoot → 包内 software-team 技能前缀�
     assert.equal(pkgAsset.ok, true);
     assert.deepEqual(pkgAsset.asset.layers.plan.skills.designer, ['spec-writing', 'writing-plans'],
       '前缀来源自证：逐字等于新骨架声明（859 B 最小骨架，2026-09-26 瘦身）');
-    // ② punky-preset（**预设/模式资产**，非团队资产；团队装配已退役、资产文件不存在）：
-    //    【P1 反转 + 同步】旧口径「无前缀 + 「团队资产缺失」码(已删) 告警 + **不阻断建批**」已废除 ⇒
-    //    P1 起「`team` 必填且必须解析到资产；无资产 ⇒ **构造期拒**、**零批次 JSON 落盘**」。
-    //    （断言强度：只把「放行」改为「拒」，判据面由「前缀为空」升级为「拒态码 + 零落盘」，未删任何判据）
-    let jfMsg = null;
-    try {
-      await byName.wave_plan.execute({ batchId: 'troot-t5-jf', tasks: pkgTasks(), team: 'punky-preset', assembly: { auditLane: 'a1' } }, SESS);
-    } catch (e) {
-      jfMsg = String(e?.message ?? e);
-    }
-    assert.notEqual(jfMsg, null, '无资产的 team 名（punky-preset 是模式名，不是团队名）⇒ 构造期拒（P1）');
-    assert.match(jfMsg, /TEAM_ASSET_NOT_FOUND/, '拒态须原样透出资产码：' + String(jfMsg));
-    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t5-jf')), false, '拒后零批次 JSON 落盘（P1 反转原「告警不阻断建批」）');
+    // ② punky-preset（**预设/模式资产**，非团队资产；团队资产文件不存在）：
+    //    【2026-09-27 反转】P1 的「无资产 ⇒ 构造期拒 + 零批次 JSON 落盘」已退役 ⇒ 回到「不阻断建批」，
+    //    但**不再静默**：原 `TEAM_ASSET_NOT_FOUND` 码进 warnings 留痕（判据面等价：码面与落盘两侧都还在，只是读数反转）。
+    const jf = await byName.wave_plan.execute({ batchId: 'troot-t5-jf', tasks: pkgTasks(), team: 'punky-preset', assembly: { auditLane: 'a1' } }, SESS);
+    const jfHit = jf.warnings.find((w) => w.code === 'TEAM_ASSET_NOT_FOUND');
+    assert.ok(jfHit, 'punky-preset 是模式名、不是团队资产 ⇒ 须留痕 TEAM_ASSET_NOT_FOUND：' + JSON.stringify(jf.warnings));
+    assert.ok(!cmdsOf(jf).some((c) => /\[skills=/.test(c)), '无资产 ⇒ 不加任何技能前缀（前缀面判据逐字不变）');
+    assert.equal(fs.existsSync(batchFileOf(root, 'troot-t5-jf')), true, '批次 JSON 落盘（P1 的「拒后零落盘」已反转）');
     // ③ 对照：同 tasks 传临时根（team=tmp-team）→ 前缀换成临时资产（证明 ①② 的包内前缀不是偶然）
     const outTmp = await byName.wave_plan.execute({ batchId: 'troot-t5-tmp', tasks: tmpTasks(), team: TMP_TEAM, teamsRoot, assembly: { auditLane: 'a1' } }, SESS);
     assert.match(outTmp.wavePlan[0].tasks[0].cmd, /\[skills=TMP-PLAN-SKILL\]/);

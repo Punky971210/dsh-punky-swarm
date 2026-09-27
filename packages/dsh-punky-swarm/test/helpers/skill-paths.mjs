@@ -82,13 +82,12 @@ export function listTeamAssetNames(root = packageRootOf()) {
 }
 
 /**
- * 【P1 同步 · 建批面默认团队】P1 起 `wave_plan` 的 `team` **必填**（缺 ⇒ 参数面即拒；名字无资产 ⇒ 构造期拒）
- * ⇒ 既有套件里「没写 team」的建批调用需要补一个**有资产**的团队名。本函数把该默认值**收在夹具一处**：
- * 包一层 `execute`，`{ team, ...args }` ⇒ **调用方显式传的 team 优先**（不覆盖、不改写既有断言面）。
- * 纪律：只在「建批只是手段、被检面是别的门禁」的套件里使用；断言 `team` 必填/无资产拒的用例（如
- * `team-asset-mandatory.test.js`）**不得**经过本包装。
+ * 【P1 期 · 建批面默认团队（**历史注记已订正 2026-09-27**）】P1（2026-09-16）曾把 `wave_plan` 的 `team` 设为**必填**
+ * （缺 ⇒ 参数面即拒；名字无资产 ⇒ 构造期拒），此后各套件为「没写 team」的建批调用补一个**有资产**的团队名。
+ * 2026-09-27 用户裁决后 `team` 降为**可选标签**（缺省不再拒），本包装仍保留：它现在承担的是**显式声明批次标签**
+ * （`team: 'software-team'`）与「建批只是手段」套件的统一来源，**不再是绕开门禁的手段**。
  * @param {object} byName 工具名 → 工具对象（`createTools` 产物）
- * @param {string} team 默认团队名（须是包内**有资产**的团队）
+ * @param {string} team 默认团队名（缺省仍取包内 `software-team`：装配/skill 前缀面按真实资产注入）
  */
 export function withDefaultTeam(byName, team = 'software-team') {
   const raw = byName?.wave_plan;

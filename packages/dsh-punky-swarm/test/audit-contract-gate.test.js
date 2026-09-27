@@ -93,22 +93,19 @@ test('P2：显式空 audit_contract → 放行并落豁免告警（带 reason �
   assert.match(w.reason ?? '', /显式豁免/);
 });
 
-test('【P1 反转 + 同步】无团队资产（未注册团队名）⇒ 构造期拒 TEAM_ASSET_NOT_FOUND + 零批次落盘', async () => {
+test('【2026-09-27 反转】无团队资产（未注册团队名）⇒ 建批成功 + 批次 JSON 落盘 + TEAM_ASSET_NOT_FOUND 留痕', async () => {
   const { root, byName } = makeHarness();
-  // 旧口径：「无资产 ⇒ **跳过** audit_contract 检查（零感知）、建批照常」——P1 §1/§2 已废除该路径
-  //   （`team` 必填且必须解析到资产；无资产 ⇒ 构造期拒）⇒ 「零感知」在本门内**不再可达**，
-  //   断言由「建批照常」反转成「拒 + 零批次 JSON 落盘」，判据未删（仍逐字核对同一入参形态）。
-  let msg = null;
-  try {
-    await byName.wave_plan.execute({
-      batchId: 'p2-none', team: 'no-such-team-xyz', tasks: tasks3(), assembly: { auditLane: 'a1' },
-    }, SESS);
-  } catch (e) {
-    msg = String(e?.message ?? e);
-  }
-  assert.notEqual(msg, null, 'P1：无资产团队不得再走「跳过检查 + 建批照常」');
-  assert.match(msg, /TEAM_ASSET_NOT_FOUND/, '拒态须原样透出资产码：' + String(msg));
-  assert.equal(fs.existsSync(path.join(root, 'sessions', SESS.agent.session.id, 'batches', 'p2-none.json')), false, '拒后零批次 JSON 落盘');
+  // 口径沿革：① 旧旧口径「无资产 ⇒ 跳过 audit_contract 检查（零感知）、建批照常」→ ② P1（2026-09-16）反转为
+  //   「无资产 ⇒ 构造期拒 `TEAM_ASSET_NOT_FOUND` + 零批次 JSON 落盘」（本用例上一版即断言 ②）→ ③ 2026-09-27 用户裁决
+  //   「team-asset 装配方案全面弃用 / `team` 降为可选标签」⇒ 构造期拒门删除，回到「建批照常」，但**不再静默**：
+  //   原码进 `warnings` 留痕（判据面逐字保留：同一入参形态取读数，读数两侧等价反转）。
+  const out = await byName.wave_plan.execute({
+    batchId: 'p2-none', team: 'no-such-team-xyz', tasks: tasks3(), assembly: { auditLane: 'a1' },
+  }, SESS);
+  assert.equal(out.batchId, 'p2-none', '无资产团队不得再被构造期拒（team 已是可选标签）');
+  assert.ok(out.warnings.some((w) => w.code === 'TEAM_ASSET_NOT_FOUND'),
+    '无资产须留痕原资产码（不静默）：' + JSON.stringify(out.warnings));
+  assert.equal(fs.existsSync(path.join(root, 'sessions', SESS.agent.session.id, 'batches', 'p2-none.json')), true, '批次 JSON 落盘（原「拒后零批次 JSON 落盘」已反转）');
 });
 
 // ── A 方案（2026-09-14）：三个字段的**消费点**测试（此前为声明白契约，无消费） ──

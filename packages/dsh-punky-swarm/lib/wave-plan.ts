@@ -707,11 +707,10 @@ export function stripCmdPrefix(
   }
 }
 
-// P1（2026-09-16）：`team` 改为**必填**（原 `team = 'generic'` 缺省已删）——`generic` 已废除，
-//   **不再有任何第二默认值真源**（读端 `?? 'generic'` 同批清退：store/snapshot/agent-descriptor）。
-//   运行期缺 `team` ⇒ 本函数**不代造默认值**（落 `team: team`），构造期拒由工具面负责
-//   （`lib/tools/core.js` `assertTeamNameRequired` / `assertTeamAssetReady`，在 `createBatch` 之前 throw）：
-//   **直调本函数不走同一门 = 已登记差异 W-2**（P1 不消，超范围——不在此处新增硬拦）。
+// P1（2026-09-16）曾把 `team` 改为**必填**；【2026-09-27 用户裁决】`team` 降为**可选标签**（team-asset 装配方案
+//   全面弃用）⇒ 建批面**不再拒**：`null` = 无团队标签（跳过整个团队资产面），由工具面 `normalizeTeamLabel` 产出，
+//   资产/`chain`/`teamsRoot` 问题一律降级为 `warnings` 留痕（`lib/tools/core.js`，不再有构造期拒）。
+//   本函数**不代造默认值**（落 `team: team`，可为 `null`）；读端（store/snapshot/gates）按「非字符串 = 无团队」处理。
 // ── P1/P2 交接门开关（`task-27` 2026-09-17 设计修正）：**唯一解析点** ────────────────────────────
 // 背景（用户裁决）：「门禁应该**只与插件有关**，和父进程无关，也和 dsh 底座无关」——原实现读
 //   `process.env.PSWARM_HANDOFF_GATE` ⇒ 插件行为被**启动父进程的环境块**绑架（本机 web 宿主由常驻
@@ -915,7 +914,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   batchId: string;
   tasks: WavePlanTaskInput[];
   concurrency?: number;
-  team: string;
+  team: string | null; // 【2026-09-27】可选标签：`null` = 无团队标签（不再必填、不再拒建批）
   assembly?: { layers?: Record<string, { skills?: Record<string, string[]> }> } | null;
   teamsRoot?: string;
   smoke?: boolean;
@@ -1085,7 +1084,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   return {
     schema: SCHEMA_VERSION,
     batchId,
-    team: team, // P1：删除 `|| 'generic'` 兜底（第二默认值真源清退）；缺 team 的批在工具面已被构造期拒
+    team: team, // 不代造默认值（`|| 'generic'` 兜底已清退）；`null` = 无团队标签（2026-09-27 起可选、不拒建批）
     wavePlan,
     concurrency: concurrencyN,
     warnings, // role 校验告警（GATE_ROLE_INVALID，warning 语义：不阻断建批；事件留痕由调用方落批次）

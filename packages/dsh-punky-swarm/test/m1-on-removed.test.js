@@ -269,20 +269,19 @@ const TASKS = () => ([
  *  （`leader-direct` 在 M0′-① 后链推进全程 no-op，与本套件的判据面无关，故刻意不选）。 */
 const ASSEMBLY = { managerPlan: 'raise', auditLane: 'audit' };
 
-test('M1-11 真工具路：声明 `on` 的资产 ⇒ 建批拒 TEAM_ASSET_FIELD_NOT_ALLOWED 且零批次 JSON 落盘', async () => {
+test('M1-11 真工具路【2026-09-27 反转】：声明 `on` 的资产 ⇒ 建批成功 + TEAM_ASSET_FIELD_NOT_ALLOWED 留痕 + 批次 JSON 落盘', async () => {
   const h = makeHarness({ chain: chainWithOn(1) });
   const batchId = 'm1-reject';
-  let msg = null;
-  try {
-    await h.byName.wave_plan.execute({ batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: TASKS(), assembly: ASSEMBLY }, SESS);
-  } catch (e) {
-    msg = String(e?.message ?? e);
-  }
-  assert.notEqual(msg, null, '声明 `on` 必须在 `createBatch` 之前拒（不得建批）');
-  assert.ok(String(msg).startsWith('TEAM_ASSET_FIELD_NOT_ALLOWED'), '拒态码须原样透出：' + String(msg).slice(0, 160));
+  // 旧口径：非法资产在构造期拒（原 `assertTeamAssetReady` 首码原样透出）+ 零批次 JSON 落盘。2026-09-27 用户裁决
+  //   「team-asset 全面弃用 / team 降为可选标签」⇒ 拒门删除；**判据面逐字保留**（同一资产的**同一原码**仍被观测），
+  //   只把读数两侧等价反转：throw 的 message → `warnings[].code`；零落盘 → 落盘。
+  const out = await h.byName.wave_plan.execute({ batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: TASKS(), assembly: ASSEMBLY }, SESS);
+  const hit = out.warnings.find((w) => /^TEAM_ASSET_/.test(String(w.code)));
+  assert.ok(hit, '声明 `on` 的资产须留痕原码（不得静默）：' + JSON.stringify(out.warnings));
+  assert.equal(hit.code, 'TEAM_ASSET_FIELD_NOT_ALLOWED', '留痕码须与原拒态码逐字一致：' + String(hit.code));
   assert.equal(
-    fs.existsSync(path.join(h.root, 'sessions', SESSION, 'batches', batchId + '.json')), false,
-    '拒后零批次 JSON 落盘',
+    fs.existsSync(path.join(h.root, 'sessions', SESSION, 'batches', batchId + '.json')), true,
+    '批次 JSON 落盘（原「拒后零落盘」已反转）',
   );
 });
 

@@ -272,17 +272,24 @@ export function installDifficultyGuard(ctx, deps) {
   }
 }
 
-// ── 会话级临时团队资产根（teamsRoot）：词法/防逃逸 + 资产加载期校验 ───────────────
-// 契约：`wave_plan` 显式给出 `teamsRoot` 时，团队资产根**替换**为 `<teamsRoot>/presets/<team>/`
-//   （loader 口径 TEAM_ASSET_DIR='presets'）；**不回落**包内 `presets/`，也不走 legacy 兜底——
-//   资产缺失 → GATE_TEAMS_ROOT_ASSET_NOT_FOUND；资产非法 → 原样透出原始 `TEAM_ASSET_*` 码；
-//   `teamsRoot` / `team` 本身非法 → GATE_TEAMS_ROOT_INVALID。三者一律 **throw 拒建批**（fail-closed）。
-// 判定位置理由：`resolveAssembly` 自身失败**不抛错**（按引擎基线处理——legacy 间接层已于 2026-09-15 完全清退），故「不静默回落」只能在此层完成。
-// 顺序不可调换：① 词法/防逃逸（封堵 join 逃逸面）→ ② 资产加载期校验 → ③ 才进 resolve/build。
+// ── 会话级临时团队资产根（teamsRoot）：词法/防逃逸 + 「尽力」资产面 ───────────────
+// 【2026-09-27 用户裁决 · 契约改写】原契约 = 「三态一律 `throw` 拒建批」（GATE_TEAMS_ROOT_ASSET_NOT_FOUND /
+//   GATE_TEAMS_ROOT_INVALID / 原样透出 `TEAM_ASSET_*`）——该**拒态家族连同工具面接线已整体删除**。
+// 现契约（工具面）：`teamsRoot` 显式给出时，团队资产根**替换**为 `<teamsRoot>/presets/<team>/`
+//   （loader 口径 TEAM_ASSET_DIR='presets'）；**不回落**包内 `presets/`；根不可用（缺 `team` 标签 /
+//   非绝对路径 / 含 `..` 段 / 标签非 kebab-case）⇒ **忽略该根**（`TEAMS_ROOT_IGNORED` 留痕、不写批次键）；
+//   资产缺失/非法 ⇒ 该标签走「无资产」路径 + 原 `TEAM_ASSET_*` 码留痕 ⇒ 一律**不拒建批**。
+// 判定位置理由（不变）：`resolveAssembly` 自身失败**不抛错**（按引擎基线处理——legacy 间接层已于 2026-09-15 完全清退），
+//   故「不静默」只能在此层完成——现由**留痕**承担，不再由拒态承担。
+// 顺序不可调换：① 词法/防逃逸（封堵 join 逃逸面）→ ② 资产加载（留痕）→ ③ 才进 resolve/build。
+// 下方三个函数（`assertTeamsRootLexical` / `assertTeamsRootAsset` / `resolveTeamsRootOption`）**保留在模块内**：
+//   前者仍被 `resolveTeamAssetFace`（见下）复用 ⇒ 词法判据单一来源（禁第二份实现）；后两者已退出工具面调用
+//   （保留待后续批次清理，直调仍按旧拒态走 = **已登记差异**，不在本批消）。
 const TEAM_NAME_RE = /^[a-z][a-z0-9-]*$/; // 口径同 team-asset 的 ROLE_EXTRA_RE（kebab-case）
 
 // ① teamsRoot 词法/防逃逸：非空字符串 + 绝对路径 + 不含 `..` 段；team 名过 kebab-case 白名单
 //   （防 `join(root,'presets',team)` 逃逸：禁 `/`、`\`、`..`、空白、绝对路径片段）
+//   【2026-09-27】本函数**不再是工具面门禁**（其 `throw` 被 `resolveTeamAssetFace` 包成留痕）；词法判据本身逐字不变。
 export function assertTeamsRootLexical(team, teamsRoot) {
   if (typeof teamsRoot !== 'string' || teamsRoot.trim().length === 0) {
     throw new Error('GATE_TEAMS_ROOT_INVALID: teamsRoot must be a non-empty absolute path string (got: ' + JSON.stringify(teamsRoot ?? null) + ')');
@@ -300,6 +307,7 @@ export function assertTeamsRootLexical(team, teamsRoot) {
 }
 
 // ② 资产加载期校验（显式 teamsRoot 时）：缺失 → 新码；存在但非法 → 原样透出 TEAM_ASSET_* 码；不回落
+//   【2026-09-27】已退出工具面调用（保留待后续批次清理；旧拒态仅供 `resolveTeamsRootOption` 直调面）。
 function assertTeamsRootAsset(root, team) {
   const dir = join(root, TEAM_ASSET_DIR, team);
   const r = loadTeamAsset(root, team);
@@ -320,28 +328,108 @@ function assertTeamsRootAsset(root, team) {
 }
 
 // 校验总入口：显式 teamsRoot 时返回规范化根（供 resolve/build 面**同源**使用）
+//   【2026-09-27】**已退出工具面调用**（保留导出供直调面/既有测试）；工具面改走下方 `resolveTeamAssetFace`。
 export function resolveTeamsRootOption(team, teamsRoot) {
   const root = assertTeamsRootLexical(team, teamsRoot);
   assertTeamsRootAsset(root, team);
   return root;
 }
 
-// ── P1（2026-09-16，批次 p1-team-asset-mandatory-20260916）：团队资产**必填化** ──────────────
-// 规格：`plan/spec.md` §1/§2/§3。**构造期拒的唯一落点 = 本工具 `wave_plan.execute` 前置段**
-//   （`createBatch` 之前 throw ⇒ 拒后零批次 JSON 落盘、`pendingBatch` 不释放 ⇒ 补声明可重试）。
-// 判定序（①②④ fail-closed；③ 自 2026-09-25 起为 **recommend**；顺序不可调换——与 spec §1「判定序」逐条对齐）：
-//   ① `team` 词法/必填（缺失/空串 ⇒ `TEAM_ASSET_MISSING_FIELD`；`generic` 已废除 ⇒ `TEAM_ASSET_NOT_FOUND`）
-//   ② 资产加载 + 加载期不变量（无资产 ⇒ `TEAM_ASSET_NOT_FOUND`；非法 ⇒ **首个 blocking 码原样透出**；
-//      `layers.*.skills` **结构**非法（非「非空字符串数组」）仍在本步以 blocking 码 `TEAM_ASSET_SKILLS_MISMATCH` 拒）
-//   ③ 资产 `layers.*.skills` 名**可解析性** = **recommend 语义**（2026-09-25 用户裁决：「技能、工具进任务包是
-//      recommend 式，不是装配式」）⇒ 技能名解析不到 / 技能根不可用**均不拒建批**，降级为建批期**非阻断告警**
-//      （P1 期此处曾 fail-closed 拒；2026-09-26 用户裁决：技能 recommend 不再设门禁）
-//   ④ 才进 `buildWavePlan` / `createBatch`
-// 码面**零新造**：一律复用 `lib/assembly/team-asset.js` 既有 `TEAM_ASSET_*` 码（不新码、不改码）。
-// 命名空间消歧（Leader 口径 2026-09-16）：`presets/<team>/team-asset.{json,yml}` = **团队资产**（team 取值面）；
-//   `presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/` …），**不是团队资产**——
-//   故 `team:'punky-preset'` 属「无资产 ⇒ 拒」（本机实测该目录无 `team-asset.yml`），拒态文案必须点明此区别。
-// 作用域：只保证**工具面**（本工具）。直调 `buildWavePlan` 不走同一门 = **已登记差异 W-2**，P1 **不消**（超范围）。
+// ── 【2026-09-27 用户裁决 · team-asset 装配方案全面弃用】工具面**新语义**（构造期拒建批门整体删除） ──
+// 三条纪律（本组函数是工具面**唯一**判定点，禁第二份实现）：
+//   ① `team` = **可选标签**：缺省/`null`/空白/非字符串 ⇒ `null`（**不抛**）——原 `assertTeamNameRequired`
+//      的 `TEAM_ASSET_MISSING_FIELD` / `generic ⇒ TEAM_ASSET_NOT_FOUND` 两码**不再被工具面调用**；
+//   ② 资产 / `chain` 声明问题**不再拒建批**：原 `TEAM_ASSET_*` 码降级为返回值 `warnings`（可见 + 事件留痕），
+//      `assertTeamAssetReady` / `assertChainReady` 的调用点删除（函数体保留，待后续批次清理）；
+//   ③ `teamsRoot` 拒态家族（`GATE_TEAMS_ROOT_*`）删除：不可用 ⇒ **只忽略 + 留痕**（`TEAMS_ROOT_IGNORED`），
+//      **不静默**（返回值可见）、**不回落**包内 `presets/`、**不写批次键**。
+// 资产查找的安全边界：标签必须过 `TEAM_NAME_RE`（kebab-case）才参与 `<root>/presets/<label>/` 拼接
+//   （防 `join` 逃逸）；不匹配 ⇒ 不做资产查找并留一条 `TEAM_ASSET_NOT_FOUND`（含原因文案）。
+
+/** `teamsRoot` 不可用时的留痕码（**非门禁**：不阻断建批，只让「忽略」在返回值与事件流里可见）。 */
+export const TEAMS_ROOT_IGNORED = 'TEAMS_ROOT_IGNORED';
+
+/** team 标签归一化（**恒不抛**）：字符串且非空白 ⇒ trim 后的标签；否则（缺省/null/空白/非字符串）⇒ `null`。 */
+export function normalizeTeamLabel(team) {
+  return typeof team === 'string' && team.trim().length > 0 ? team.trim() : null;
+}
+
+/**
+ * 「尽力」团队资产面解析（**恒不抛**；工具面唯一入口）。
+ * @param {string|null} teamLabel `normalizeTeamLabel(args.team)` 的产物
+ * @param {unknown} rawTeamsRoot 原始 `args.teamsRoot`
+ * @returns {{ root: string|null, lookupLabel: string|null, warnings: Array<object> }}
+ *   · `root`：可用且显式给出的临时根（规范化后绝对路径）；`null` = 无可用临时根（调用方按
+ *     `lookupLabel !== null ? packageRoot() : 不查` 处置——**显式根不可用时不回落包内**由本函数保证：
+ *     此二态下恒 `lookupLabel === null`）；
+ *   · `lookupLabel`：可安全参与 `<root>/presets/<label>/` 拼接的资产键（**仅 kebab-case**）；否则 `null`；
+ *   · `warnings`：`{code, reason?, path?, message}`，由调用方并入 `plan.warnings`（建批期事件留痕 + 返回值可见）。
+ */
+export function resolveTeamAssetFace(teamLabel, rawTeamsRoot) {
+  const out = { root: null, lookupLabel: null, warnings: [] };
+  // 「给出」判定：`undefined` / `null` 视为未给出（与旧 `args.teamsRoot === undefined` 分支同形，`null` 亦不误判为显式根）
+  const rootGiven = rawTeamsRoot !== undefined && rawTeamsRoot !== null;
+  const ignore = (reason, message) => {
+    out.warnings.push({ code: TEAMS_ROOT_IGNORED, reason, message });
+    return out;
+  };
+  if (teamLabel === null) {
+    // 未声明标签 ⇒ 整个团队资产面跳过；`teamsRoot` 同给时**不得静默吞掉**（明确忽略 + 返回值可见）
+    return rootGiven
+      ? ignore('no-team', 'teamsRoot 已给出但未声明 team 标签 ⇒ 该根**不被使用**（团队资产面整体跳过），批次照常落盘')
+      : out;
+  }
+  if (!TEAM_NAME_RE.test(teamLabel)) {
+    // 标签非 kebab-case ⇒ 不做资产查找（防 `join(root,'presets',label)` 逃逸）：两个根面都不查，逐条留痕
+    const reason = 'team 标签 "' + teamLabel + '" 不是 kebab-case（' + TEAM_NAME_RE.source + '）⇒ 不做资产查找（防 join 逃逸）';
+    if (rootGiven) return ignore('label-not-kebab', reason + '；teamsRoot 一并忽略，批次照常落盘');
+    out.warnings.push({
+      code: TEAM_ASSET_CODES.NOT_FOUND, path: null,
+      message: TEAM_ASSET_CODES.NOT_FOUND + ': ' + reason + '（2026-09-27 裁决：资产问题**不再拒建批**，留痕于此）',
+    });
+    return out;
+  }
+  let effectiveRoot = packageRoot();
+  if (rootGiven) {
+    try {
+      effectiveRoot = assertTeamsRootLexical(teamLabel, rawTeamsRoot);
+      out.root = effectiveRoot;
+    } catch (e) {
+      // 旧拒态（GATE_TEAMS_ROOT_INVALID）在此**降级为留痕**：不改判据，只改出口（拒 → 忽略 + 可见）
+      return ignore('lexical', 'teamsRoot 不可用（' + String(e?.message ?? e) + '）⇒ 忽略该根（不回落包内 presets/），批次照常落盘');
+    }
+  }
+  out.lookupLabel = teamLabel;
+  // 资产加载探测：不可用 ⇒ 原码原样留痕（**不抛**）；仅 warning 级的资产仍视为可用（ok = 无 blocking）
+  const probe = loadTeamAsset(effectiveRoot, teamLabel);
+  if (probe.ok && probe.asset) return out;
+  const problems = Array.isArray(probe.problems) ? probe.problems : [];
+  const p = problems.find((x) => x && x.severity === TEAM_ASSET_SEVERITY.blocking)
+    ?? problems[0]
+    ?? { code: TEAM_ASSET_CODES.NOT_FOUND, path: teamAssetCandidates(effectiveRoot, teamLabel).join(' | '), message: '团队资产被拒但无 problem 条目' };
+  out.warnings.push({
+    code: p.code,
+    path: p.path ?? null,
+    message: p.code + ': ' + (p.path ? p.path + ' — ' : '') + p.message
+      + '（2026-09-27 裁决：资产问题**不再拒建批**，该标签走「无资产」路径，留痕于此）',
+  });
+  return out;
+}
+
+// ── P1（2026-09-16）团队资产**必填化** → 【2026-09-27 用户裁决】**整体退役** ──────────────────────
+// 历史（保留可读性）：P1 把建批时的团队资产做成**构造期拒**——唯一落点 = `wave_plan.execute` 前置段，
+//   判定序 ① `team` 词法/必填（缺失/空串 ⇒ `TEAM_ASSET_MISSING_FIELD`；`generic` ⇒ `TEAM_ASSET_NOT_FOUND`）
+//   → ② 资产加载 + 加载期不变量（无资产 ⇒ `TEAM_ASSET_NOT_FOUND`；非法 ⇒ 首个 blocking 码原样透出）
+//   → ③ `layers.*.skills` 名**可解析性**（2026-09-25 起 = recommend 语义、不拒）→ ④ `chain` 八条静态校验。
+// 现口径（2026-09-27 用户裁决「team-asset 装配方案全面弃用」「`team` 接口与对应门禁已无使用价值」）：
+//   **构造期拒建批门整体删除** —— `team` 降为**可选标签**；资产 / `chain` / `teamsRoot` 问题一律降级为留痕
+//   （返回值 `warnings` + 建批期事件），批次照常落盘。码面**零新造**（复用既有 `TEAM_ASSET_*`；
+//   `teamsRoot` 面另加**非门禁**留痕码 `TEAMS_ROOT_IGNORED`）。
+// 保留面（后续批次才清理）：装载器 `lib/assembly/team-asset.js`、`TEAM_ASSET_*` 码面，以及
+//   `assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady` 三函数（**保留在模块内**、不再被工具面调用）。
+// 命名空间消歧（不变）：`presets/<team>/team-asset.{json,yml}` = **团队资产**；
+//   `presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/` …），**不是团队资产**。
+// 作用域：只保证**工具面**（本工具）。直调 `buildWavePlan` 不走同一门 = **已登记差异 W-2**，本批**不消**（超范围）。
 const RETIRED_TEAM_NAME = 'generic'; // 已废除的旧缺省团队名（P1 前读端兜底值；现建批面显式拒）
 
 /** 宿主技能根：`USERPROFILE || HOME` + `.agents/skills`（不新增 env）。 */
@@ -383,6 +471,8 @@ function teamRecoveryHint(root) {
 /**
  * P1 判定 ①：`team` 词法/必填（缺失/空串 ⇒ `TEAM_ASSET_MISSING_FIELD`；`generic` 已废除 ⇒ `TEAM_ASSET_NOT_FOUND`）。
  * 单独导出以便**判定序**可读：本步先于 teamsRoot 面（否则缺 `team` 时会先落 `GATE_TEAMS_ROOT_*`，与 spec §2 码表不符）。
+ * 【2026-09-27 用户裁决】工具面**已不再调用**本函数（`team` 降为可选标签 ⇒ 缺省走 `normalizeTeamLabel` 返回 `null`）：
+ *   函数体与两码**保留在模块内**，清理归后续批次 —— 直调面行为逐字不变。
  */
 export function assertTeamNameRequired(team) {
   if (typeof team !== 'string' || team.trim().length === 0) {
@@ -404,6 +494,8 @@ export function assertTeamNameRequired(team) {
  * @param team 团队名（应先过 `assertTeamNameRequired`；本函数亦**幂等复检**，直调亦安全）
  * @param root 资产根：packaged 面 = `packageRoot()`；`teamsRoot` 面 = 规范化后的临时根
  * @returns 已加载的资产对象（`loadTeamAsset().asset`）——**返回签名与返回值不变**（供告警块并入资产面声明名）
+ * 【2026-09-27 用户裁决】工具面**已不再调用**本函数（资产问题降级为留痕，见 `resolveTeamAssetFace`）：
+ *   函数体与全部拒态码**保留在模块内**，清理归后续批次。
  */
 export function assertTeamAssetReady(team, { root = packageRoot() } = {}) {
   const name = assertTeamNameRequired(team);
@@ -440,6 +532,7 @@ export function assertTeamAssetReady(team, { root = packageRoot() } = {}) {
  * warning 级码（如 `TEAM_ASSET_REWORK_INVALID`；原同列的「牵头角色悬空」码已随链声明侧校验退役、
  * 2026-09-26 删除）—— 折进去会让同一份声明
  * 经两条严重级通道重复报告；本函数是**单一强制点**（详见 `lib/assembly/chain.js` 头注释「加载期口径」）。
+ * 【2026-09-27 用户裁决】工具面**已不再调用**本函数（`chain` 非法降级为留痕）：函数体与拒态码**保留在模块内**。
  */
 export function assertChainReady(team, { root = packageRoot() } = {}) {
   const r = loadTeamAsset(root, team);
@@ -693,8 +786,8 @@ export function createCoreTools(ctx, deps) {
 
   return [
     defineTool({
-      name: "wave_plan",      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 punky-preset）。【P1 · 2026-09-16】`team` **必填且必须有资产**：无资产（含已废除的 `generic`）/资产非法/资产 `skills` **结构**非法 ⇒ **构造期拒建批**（复用既有 `TEAM_ASSET_*` 码、零批次落盘、`pendingBatch` 保留可补声明重试）。【2026-09-25 订正 · recommend 语义】资产 `skills` 的**可解析性已不再拒建批**（用户裁决：「技能、工具进任务包是 recommend 式，不是装配式」）：**技能可解析性已完全不参与建批判定**（用户裁决 2026-09-26：技能 recommend 不再设门禁）——技能名解析不到 ⇒ **建批照常落盘、无告警**。**含 audit 层的三层批**建批必须携带批次级装配声明 assembly：{ managerPlan?: 'raise'|'leader-direct'（**缺省 raise**）, auditLane: '<audit lane id>', coordinatorLane?, roles? }——缺失/结构非法/悬空 lane id 拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）。**缺省即 raise**（建批即拉起 Manager 代管调度轮；收口按声明核验，未登记 Manager 的在册缺口由建批期 `gate.manager_roster_gap` 留痕（收口告警已删））；确需 Leader 直驱时显式写 leader-direct。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。【装配门作用域｜当前态】assembly 门**只在工具面（本工具）生效**：**直调 `buildWavePlan` 不走本门**（不抛 GATE_ROLE_ASSEMBLY_MISSING）——这是**已登记的有意差异**，登记于 `plan/techdebt-design.md §3`（决策 D-③；反例判据 R-DE-1/R-DE-2/R-DE-3/R-DE-4）。【当前态｜W-2 批将移除本句：Q6=A 已裁「门下沉到 buildWavePlan 本体」，届时本句作废，直调亦受同一门约束】`chain`（团队资产顶层）只做**建批期展开 + 静态校验**；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`，本工具不重算拓扑。",
-      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发**声明**（默认 5）；**已不参与运行期准入**（Q-B 取消并发闸，2026-09-18）：不再有超限拒绝与排队，字段仅落盘声明 + 回显（面板数字照显、`batch_status.concurrency` 照回）"},"smoke":{"type":"boolean","description":"**冒烟/探针批豁免键**（gate-lite Q-G1 · 2026-09-17 用户裁决「开显式豁免键」）：显式 `true` ⇒ 本批为 smoke ⇒ **跳过产物契约类门**（建批 GATE_PLAN_PRESENCE_MISSING / GATE_ORPHAN_PRODUCT；运行期 entry consume、exit produce∪outputs、targets、complete 的 plan 悬空产物判定），**行为安全门一字不减**（派发准入：lane 存在性 + Manager 拉起；单写者锁；终态冻结 GATE_BATCH_TERMINAL；needHuman；命令门；验收判据门）。建批成功即落 `batch.smoke` 事件（留痕）+ `batch_status.smoke` 回显（读端可见）。缺省（不传）⇒ 既有行为逐字不变。"},"team":{"type":"string","required":true,"description":"装配团队（**P1 起必填**，无缺省值）：必须解析到**团队资产** `presets/<team>/team-asset.{json,yml}`（显式 teamsRoot 时改按 `<teamsRoot>/presets/<team>/…`）——无资产 / 资产非法 / 资产声明的 skills **结构**非法 ⇒ **构造期拒建批**（零批次 JSON 落盘；码面零新造，复用既有 TEAM_ASSET_* 码，文案给可自救替代团队）；**skills 名可解析性 = 纯 recommend**（用户裁决 2026-09-26：不再设门禁）：解析不到 ⇒ 建批照落、**零告警**。`team:'generic'` 已废除；注意 `presets/punky-preset/` 是**预设（模式）资产**、不是团队资产，不可当 team 名。实际可解析团队 = 运行时枚举 `presets/*/team-asset.*`（如 engine-team / software-team）。"},"teamsRoot":{"type":"string","description":"会话级临时团队资产根（绝对路径，可选）：给出时团队声明改按 <teamsRoot>/presets/<team>/team-asset.{json,yml} 解析（loader 口径 TEAM_ASSET_DIR='presets'），**不回落**包内 presets/ 与 legacy 兜底——资产缺失拒建批（GATE_TEAMS_ROOT_ASSET_NOT_FOUND）、资产非法原样透出 TEAM_ASSET_* 码、teamsRoot 非绝对路径/含 .. 段或 team 非 kebab-case 拒 GATE_TEAMS_ROOT_INVALID。缺省 = 既有行为逐字不变（包内 presets/ + legacy 兜底）。"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"},"channel":{"type":"string","description":"批级通道归属声明（**可选**；R-5）。合法值 `dispatch`=引擎自派 worker（禁 lane 写 roster）｜`team`=官方 Team 席位（**每条** lane 必须写 roster）｜`mixed`=两者并存（**至少一条** lane 写 roster）。**本参数不写 `enum`**：合法值集合的**单点判定** = `lib/wave-plan.js#normalizeChannelDecl`（非法枚举拒 GATE_CHANNEL_INVALID、与 lane roster 分布矛盾拒 GATE_CHANNEL_UNRESOLVED），在 createBatch 之前 throw ⇒ 零批次 JSON 落盘；参数层再写 enum 会在工具面抢先拒、使 GATE_CHANNEL_INVALID 在工具面**不可达**（双重判定，与「单点判定」纪律相悖）。通过 ⇒ 落盘批次顶层 `channel`（通道归属唯一事实源）；缺省（不传）⇒ **不写键**，存量行为逐字不变。"},"assembly":{"type":"object","additionalProperties":false,"description":"批次级装配声明（可选顶层参数，与 batchId/tasks 平级）：**含 audit 层的三层批**必填（2026-09-14 扩面，原为「exec 层 lane≥3」）——managerPlan 编排牵头形态（**缺省 = raise**：建批即拉起 Manager 代管调度；leader-direct：Leader 直驱，须显式写出以退出默认）+ auditLane 验收归属 lane id；coordinatorLane/roles 可选；缺失/结构/引用非法拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）","properties":{"managerPlan":{"type":"string","enum":["raise","leader-direct"],"description":"编排牵头形态（**缺省 = raise**）：raise=建批即拉起 Manager 代管调度（可省略）；leader-direct=Leader 直管派发（须显式写出）"},"auditLane":{"type":"string","required":true,"description":"验收归属 lane id：本批承担最终验收的 lane（须为 audit 层 lane 且存在于 tasks；层错配/悬空 → 拒建批 GATE_ASSEMBLY_INVALID）"},"coordinatorLane":{"type":"string","description":"可选：协调/细拆 lane id（须为 plan 层 lane 且存在于 tasks；声明后承担 CBM 代码摸底→细拆履职）；缺省无"},"roles":{"type":"array","items":{"type":"string"},"description":"可选：本批声明参与的角色集（词法白名单校验；非法词条 → GATE_ROLE_INVALID 告警，批次照建）"}}}},
+      name: "wave_plan",      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 punky-preset）。【2026-09-27 用户裁决 · `team` 降为**可选标签**（team-asset 装配方案全面弃用）】不传/空白 ⇒ **跳过整个团队资产面**，批次照常落盘；给出时按标签**尽力**解析 `presets/<team>/team-asset.{json,yml}`（显式 `teamsRoot` 时改按 `<teamsRoot>/presets/<team>/…`、不回落包内）用于装配 / skill 前缀补全——**解析不到 / 资产非法 / `chain` 非法 / `teamsRoot` 不可用，一律不再拒建批**：原 `TEAM_ASSET_*` 码与 `TEAMS_ROOT_IGNORED` 降级为返回值 `warnings` 留痕（工具面不再调用 `assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady`；装载器与该码面保留待后续批次清理）。【2026-09-25 订正 · recommend 语义】资产 `skills` 的**可解析性已不再拒建批**（用户裁决：「技能、工具进任务包是 recommend 式，不是装配式」）：**技能可解析性已完全不参与建批判定**（用户裁决 2026-09-26：技能 recommend 不再设门禁）——技能名解析不到 ⇒ **建批照常落盘、无告警**。**含 audit 层的三层批**建批必须携带批次级装配声明 assembly：{ managerPlan?: 'raise'|'leader-direct'（**缺省 raise**）, auditLane: '<audit lane id>', coordinatorLane?, roles? }——缺失/结构非法/悬空 lane id 拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）。**缺省即 raise**（建批即拉起 Manager 代管调度轮；收口按声明核验，未登记 Manager 的在册缺口由建批期 `gate.manager_roster_gap` 留痕（收口告警已删））；确需 Leader 直驱时显式写 leader-direct。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。【装配门作用域｜当前态】assembly 门**只在工具面（本工具）生效**：**直调 `buildWavePlan` 不走本门**（不抛 GATE_ROLE_ASSEMBLY_MISSING）——这是**已登记的有意差异**，登记于 `plan/techdebt-design.md §3`（决策 D-③；反例判据 R-DE-1/R-DE-2/R-DE-3/R-DE-4）。【当前态｜W-2 批将移除本句：Q6=A 已裁「门下沉到 buildWavePlan 本体」，届时本句作废，直调亦受同一门约束】`chain`（团队资产顶层）只做**建批期展开 + 静态校验**；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`，本工具不重算拓扑。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发**声明**（默认 5）；**已不参与运行期准入**（Q-B 取消并发闸，2026-09-18）：不再有超限拒绝与排队，字段仅落盘声明 + 回显（面板数字照显、`batch_status.concurrency` 照回）"},"smoke":{"type":"boolean","description":"**冒烟/探针批豁免键**（gate-lite Q-G1 · 2026-09-17 用户裁决「开显式豁免键」）：显式 `true` ⇒ 本批为 smoke ⇒ **跳过产物契约类门**（建批 GATE_PLAN_PRESENCE_MISSING / GATE_ORPHAN_PRODUCT；运行期 entry consume、exit produce∪outputs、targets、complete 的 plan 悬空产物判定），**行为安全门一字不减**（派发准入：lane 存在性 + Manager 拉起；单写者锁；终态冻结 GATE_BATCH_TERMINAL；needHuman；命令门；验收判据门）。建批成功即落 `batch.smoke` 事件（留痕）+ `batch_status.smoke` 回显（读端可见）。缺省（不传）⇒ 既有行为逐字不变。"},"team":{"type":"string","description":"**可选标签**（2026-09-27 用户裁决：team-asset 装配方案全面弃用 ⇒ 不再必填、不再拒建批）：不传/空白 ⇒ **跳过整个团队资产面**，批次照常落盘；给出时按标签**尽力**解析团队资产 `presets/<team>/team-asset.{json,yml}`（显式 `teamsRoot` 时改按 `<teamsRoot>/presets/<team>/…`、不回落包内）用于装配 / skill 前缀补全——**解析不到 / 资产非法 / `skills` 结构非法 / `chain` 非法，一律不拒建批**：原 `TEAM_ASSET_*` 码降级为返回值 `warnings` 留痕。标签仅作批次归类（可自取，不要求已注册），`presets/punky-preset/` 是**预设（模式）资产**、不是团队资产。**skills 名可解析性 = 纯 recommend**（用户裁决 2026-09-26：不再设门禁）：解析不到 ⇒ 建批照落、**零告警**。"},"teamsRoot":{"type":"string","description":"会话级临时团队资产根（绝对路径，可选；**仅与 `team` 标签同用**）：给出时资产查找改按 <teamsRoot>/presets/<team>/team-asset.{json,yml}（loader 口径 TEAM_ASSET_DIR='presets'），**不回落**包内 presets/。**拒态家族已删除**（2026-09-27 用户裁决：GATE_TEAMS_ROOT_ASSET_NOT_FOUND / GATE_TEAMS_ROOT_INVALID 一并撤销）：根不可用（未声明 `team` 标签 / 非绝对路径 / 含 `..` 段 / 标签非 kebab-case）⇒ **忽略该根**（**不静默**：返回值 warnings 携 `TEAMS_ROOT_IGNORED` 留痕、不写批次键），批次照常落盘；资产缺失/非法 ⇒ 该标签走「无资产」路径 + 原 `TEAM_ASSET_*` 码留痕，同样**不拒建批**。缺省 = 按包内 presets/ 尽力解析。"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"},"channel":{"type":"string","description":"批级通道归属声明（**可选**；R-5）。合法值 `dispatch`=引擎自派 worker（禁 lane 写 roster）｜`team`=官方 Team 席位（**每条** lane 必须写 roster）｜`mixed`=两者并存（**至少一条** lane 写 roster）。**本参数不写 `enum`**：合法值集合的**单点判定** = `lib/wave-plan.js#normalizeChannelDecl`（非法枚举拒 GATE_CHANNEL_INVALID、与 lane roster 分布矛盾拒 GATE_CHANNEL_UNRESOLVED），在 createBatch 之前 throw ⇒ 零批次 JSON 落盘；参数层再写 enum 会在工具面抢先拒、使 GATE_CHANNEL_INVALID 在工具面**不可达**（双重判定，与「单点判定」纪律相悖）。通过 ⇒ 落盘批次顶层 `channel`（通道归属唯一事实源）；缺省（不传）⇒ **不写键**，存量行为逐字不变。"},"assembly":{"type":"object","additionalProperties":false,"description":"批次级装配声明（可选顶层参数，与 batchId/tasks 平级）：**含 audit 层的三层批**必填（2026-09-14 扩面，原为「exec 层 lane≥3」）——managerPlan 编排牵头形态（**缺省 = raise**：建批即拉起 Manager 代管调度；leader-direct：Leader 直驱，须显式写出以退出默认）+ auditLane 验收归属 lane id；coordinatorLane/roles 可选；缺失/结构/引用非法拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）","properties":{"managerPlan":{"type":"string","enum":["raise","leader-direct"],"description":"编排牵头形态（**缺省 = raise**）：raise=建批即拉起 Manager 代管调度（可省略）；leader-direct=Leader 直管派发（须显式写出）"},"auditLane":{"type":"string","required":true,"description":"验收归属 lane id：本批承担最终验收的 lane（须为 audit 层 lane 且存在于 tasks；层错配/悬空 → 拒建批 GATE_ASSEMBLY_INVALID）"},"coordinatorLane":{"type":"string","description":"可选：协调/细拆 lane id（须为 plan 层 lane 且存在于 tasks；声明后承担 CBM 代码摸底→细拆履职）；缺省无"},"roles":{"type":"array","items":{"type":"string"},"description":"可选：本批声明参与的角色集（词法白名单校验；非法词条 → GATE_ROLE_INVALID 告警，批次照建）"}}}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true},"warnings":{"type":"array","items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"managerPlan":{"type":"string"},"managerRoster":{"type":"object","additionalProperties":true}}},
         render: (_args, value) => TEXT_OUTPUT('wavePlan created: ' + value.batchId + ' @' + value.sessionId + ' (' + value.wavePlan.length + ' waves)' + (value.smoke ? '; SMOKE (产物契约类门已豁免)' : '') + (value.warnings?.length ? '; role warnings: ' + value.warnings.length : '')),
@@ -702,29 +795,45 @@ export function createCoreTools(ctx, deps) {
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec);
         assertMemberActionTierC(store, sessionId, exec, 'batch', {}, deps); // G1（Q2=B 收窄）：建批只认**本会话自己的 C 档**（无父档继承）
-        // P1（2026-09-16）构造期拒（**唯一落点**，全在 createBatch 之前）：判定序 ① team 词法/必填（含 `generic` 废除）
-        //   → ② teamsRoot 面（既有 GATE_TEAMS_ROOT_* 码，行为不变）→ ③ 资产加载 + 不变量 + `skills` 可解析（TEAM_ASSET_* 码原样透出）。
-        //   顺序不可调换：team 必填先于 teamsRoot 面（否则缺 team 会先落 GATE_TEAMS_ROOT_*，与 spec §2 码表不符）。
-        //   拒后：**零批次 JSON 落盘**、pendingBatch 不释放（补声明可重试）。作用域 = 工具面（直调 buildWavePlan 属已登记差异 W-2，P1 不消）。
-        const teamName = assertTeamNameRequired(args.team); // 判定 ①：词法/必填（返回归一化（trim）后的团队名，全流程同源）
-        // teamsRoot（会话级临时团队资产根）：显式给出时才走新面——先词法/防逃逸，再资产加载期校验
-        // （缺失/非法一律 throw 拒建批，**不回落**包内 presets/ 与 legacy 兜底）；缺省 null = 既有行为逐字不变
-        const teamsRoot = args.teamsRoot === undefined ? null : resolveTeamsRootOption(teamName, args.teamsRoot);
-        // P1 判定 ②③：packaged 面按包根、teamsRoot 面按临时根——判据与 `resolveAssembly` 的根选择**同源**
-        //   ②（资产加载 + 不变量）仍 fail-closed；③（`skills` 名可解析性）**已按 2026-09-25 裁决翻转为 recommend**
-        //   ⇒ 本调用只保留 ② 的拒态。返回值 = 资产对象，供下方告警块并入**资产面**声明的技能名（与覆盖层同一通道）。
-        const teamAsset = assertTeamAssetReady(teamName, { root: teamsRoot ?? packageRoot() });
-        // P2 判定 ④：`chain` 声明八条静态校验（纯函数，**首个问题码原样透出**）。
-        //   与 P1 三项同族：全在 `createBatch` 之前 throw ⇒ 拒后零批次 JSON 落盘、pendingBatch 保留可重试。
-        //   无 `chain` 声明 ⇒ 放行（向后兼容锁）；`flows.chain` 位非法 ⇒ 本步以 FIELD_NOT_ALLOWED 拒。
-        assertChainReady(teamName, { root: teamsRoot ?? packageRoot() });
-        const assembly = resolveAssembly(teamName, config.assembly, teamsRoot ? { root: teamsRoot } : {});
+        // 【2026-09-27 用户裁决 · team-asset 装配方案全面弃用】原 P1 构造期拒（**唯一落点** = 本前置段）**整体删除**：
+        //   ① `team` 降为**可选标签**（缺省/null/空白 ⇒ `null`，**不抛**）；② assets / `chain` / `teamsRoot` 问题
+        //   一律**降级为留痕**（并入 `plan.warnings` ⇒ 返回值可见 + 建批期事件留痕），**不再拒建批**。
+        //   保留面（后续批次清理）：`assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady` 不再被调用，
+        //   装载器与 `TEAM_ASSET_*` 码面**不删**。作用域 = 工具面（直调 buildWavePlan 属已登记差异 W-2，本批不消）。
+        const teamName = normalizeTeamLabel(args.team); // 标签归一化：非字符串/空白 ⇒ null（全流程同源；原判定 ① 不抛版）
+        // teamsRoot（会话级临时团队资产根）：显式给出且可用 ⇒ 作为资产根（**不回落**包内 presets/）；
+        //   不可用（缺标签 / 非绝对路径 / 含 `..` / 标签非 kebab-case）⇒ **忽略 + 留痕**（TEAMS_ROOT_IGNORED），
+        //   绝不静默、绝不拒建批。`assets.lookupLabel` = 可安全参与 `<root>/presets/<label>/` 拼接的资产键。
+        const assets = resolveTeamAssetFace(teamName, args.teamsRoot);
+        const teamsRoot = assets.root;
+        // 资产面**尽力解析**：查不到 / 非法 ⇒ 原 `TEAM_ASSET_*` 码原样进 `assets.warnings`（下方并入 plan.warnings）。
+        //   注：资产对象本身由 `resolveAssembly` / `resolveTeamRoles` / `resolveTeamFlows` 在同一根上读取（读端未改）。
+        const assetLookupLabel = assets.lookupLabel;
+        // P1 判定 ④（`chain` 八条静态校验）**不再拒建批**：原 `assertChainReady` 的判据**逐字复用**
+        //   （`chainProblemsOf` 纯函数），只把出口从 `throw` 改为**留痕**（`chainWarnings` 并入 plan.warnings）。
+        //   查错根 = 实际使用的资产根（显式可用临时根，否则包根）；无资产面（标签缺失/不可用）⇒ 不查。
+        const chainWarnings = [];
+        if (assetLookupLabel !== null) {
+          const chainProbe = loadTeamAsset(teamsRoot ?? packageRoot(), assetLookupLabel);
+          if (chainProbe.ok && chainProbe.asset) {
+            const c = chainProblemsOf(chainProbe.asset);
+            if (!c.ok && c.chain != null) {
+              const p = c.problems.find((x) => x && x.severity === TEAM_ASSET_SEVERITY.blocking) ?? c.problems[0];
+              chainWarnings.push({
+                code: p.code, path: p.path ?? null,
+                message: p.code + ': ' + (p.path ? p.path + ' — ' : '') + p.message
+                  + '（团队 "' + assetLookupLabel + '" 的 `chain` 声明非法 ⇒ 2026-09-27 裁决后**不再拒建批**，留痕于此）',
+              });
+            }
+          }
+        }
+        const assembly = resolveAssembly(assetLookupLabel, config.assembly, teamsRoot ? { root: teamsRoot } : {});
         const smoke = args.smoke === true; // gate-lite Q-G1：显式豁免键（非真值一律 false ⇒ 既有行为零变化）
         // P1 交接门策略（`task-27`）：由**工具面**用热更快照经**唯一解析点**解析后传入建批——单一真源 =
         //   `wave-plan.ts#handoffGateEnabledOf`（runtime.json `gates.handoff.entry` > env 兜底 > 缺省关）；
         //   `wave-plan` 自身不再读 env/config（禁两套读取）。
         const planArgs = { batchId: args.batchId, tasks: args.tasks, concurrency: args.concurrency ?? 5, team: teamName, assembly, smoke, handoffGate: handoffGateEnabledOf(readLiveConfig(deps), 'entry') };
-        if (teamsRoot) planArgs.teamsRoot = teamsRoot; // 透传（缺省不写键 = 既有签名语义不变）
+        if (teamsRoot) planArgs.teamsRoot = teamsRoot; // 透传（缺省/不可用不写键 = 既有签名语义不变 + 不写「无效声明」）
         const plan = buildWavePlan(planArgs);
         validateWavePlan(plan, { smoke }); // gate-lite Q-G1：二级校验与建批同一豁免口径（否则 smoke 批仍被 GATE_PLAN_PRESENCE_MISSING 拒）
         // R-5 通道归属声明（**G-1 接线 · 2026-09-26**）：本行是 `normalizeChannelDecl` 的**唯一调用点**——
@@ -742,7 +851,9 @@ export function createCoreTools(ctx, deps) {
         // 通过 → 归一化 decl 随 createBatch 持久化（batch JSON 顶层可选字段，schema 不升）；roles 词法告警并入返回 warnings
         // 复核补齐：装配声明面同样接受团队声明的角色（与 buildWavePlan 同源读端：各层声明角色 ∪ roles.extra）
         // 给出 teamsRoot 时技能前缀面与建批面**同源**（同一临时根），否则装配声明的扩展角色仍读包内
-        const teamRolesForAssembly = resolveTeamRoles(args.team, teamsRoot ? { root: teamsRoot } : {});
+        // 【2026-09-27】入参改用**归一化标签 / 资产查找键**（`args.team` 原样直传会在 `team` 缺失时把
+        //   `undefined` 送进读端、在标签含空白时与建批面漂移）——读端本身不变（非字符串 ⇒ 空集）。
+        const teamRolesForAssembly = resolveTeamRoles(assetLookupLabel, teamsRoot ? { root: teamsRoot } : {});
         const asm = normalizeAssemblyDecl(args.assembly, teamRolesForAssembly.ok ? unionRoleVocabulary(teamRolesForAssembly) : []); // { decl, warnings }；结构非法 → GATE_ASSEMBLY_INVALID throw
         const asmGate = assemblyGate(plan.wavePlan.flatMap((w) => w.tasks), asm.decl); // C+ 缺声明 → 拒；悬空 lane id → throw
         if (asmGate !== 'ok') throw new Error(asmGate.code + ': ' + asmGate.message);
@@ -752,12 +863,12 @@ export function createCoreTools(ctx, deps) {
         //   留痕 `GATE_AUDIT_CONTRACT_EXEMPT`（带 `reason` 时一并记）。**无团队资产**（generic / 退役团队 → legacy
         //   flows）→ 跳过（零感知，不新增强制面）。仅批次含 audit lane 时生效。
         if (plan.wavePlan.some((w) => (w.tasks ?? []).some((t) => t.layer === 'audit'))) {
-          const tf = resolveTeamFlows(args.team, teamsRoot ? { root: teamsRoot } : {});
+          const tf = resolveTeamFlows(assetLookupLabel, teamsRoot ? { root: teamsRoot } : {});
           const auditFlow = tf && tf.ok && tf.flows ? flowOf(tf.flows, 'audit') : null;
           if (auditFlow) {
             const ac = auditFlow.audit_contract;
             if (ac == null) {
-              throw new Error('GATE_AUDIT_CONTRACT_MISSING: team "' + args.team + '" declares flows.audit but no audit_contract — '
+              throw new Error('GATE_AUDIT_CONTRACT_MISSING: team "' + teamName + '" declares flows.audit but no audit_contract — '
                 + '声明 audit 职责（`consumes_required` / `verdict` 为**必填**；`criteria_from` 为**可选增强键**——声明则按其 glob 指名判据源锚点，**缺省回落**「consume 中 plan 层产物任一」，二态见 lib/state/gates.js 的 A 方案），或显式写空 `audit_contract: {}` 表示无契约（会留痕告警）');
             }
             // GAP-S2（B，2026-09-16）：`verdict` **已声明**却与 complete 白名单 `{pass,skip}` **交集为空**
@@ -777,7 +888,7 @@ export function createCoreTools(ctx, deps) {
             if (Array.isArray(ac.verdict) && ac.verdict.length > 0
               && !ac.verdict.some((v) => v === 'pass' || v === 'skip')) {
               plan.warnings.push({
-                code: 'GATE_COMPLETE_OUTCOMES_EMPTY', team: args.team,
+                code: 'GATE_COMPLETE_OUTCOMES_EMPTY', team: teamName,
                 declared: ac.verdict, values: [],
                 message: 'flows.audit.audit_contract.verdict 与 complete 白名单 {pass,skip} 交集为空（declared='
                   + JSON.stringify(ac.verdict) + '）——该批 audit lane 即使 merged 也会被 complete 门拒；'
@@ -787,7 +898,7 @@ export function createCoreTools(ctx, deps) {
             }
             if (Object.keys(ac).length === 0 || ac.exempt === true) {
               plan.warnings.push({
-                code: 'GATE_AUDIT_CONTRACT_EXEMPT', team: args.team, ...(ac.reason ? { reason: ac.reason } : {}),
+                code: 'GATE_AUDIT_CONTRACT_EXEMPT', team: teamName, ...(ac.reason ? { reason: ac.reason } : {}),
                 message: 'audit_contract 显式豁免（空声明 / exempt:true）——本批 audit 职责无契约约束（留痕告警，不阻断）',
               });
             } else if (Array.isArray(ac.consumes_required) && ac.consumes_required.length > 0) {
@@ -799,7 +910,7 @@ export function createCoreTools(ctx, deps) {
               const gaps = ac.consumes_required.filter((prefix) => !auditLanes.some((t) => (t.consume ?? []).some((p) => typeof p === 'string' && p.startsWith(prefix))));
               if (gaps.length > 0) {
                 throw new Error('GATE_AUDIT_INPUT_MISSING: audit_contract.consumes_required not satisfied for ' + JSON.stringify(gaps)
-                  + ' — no audit lane consumes a product under those prefixes (team "' + args.team + '")');
+                  + ' — no audit lane consumes a product under those prefixes (team "' + teamName + '")');
               }
             }
           }
@@ -812,7 +923,7 @@ export function createCoreTools(ctx, deps) {
         //   ⇒ **不排斥**「reviewer 同时消费 tester 产物与 plan 产物」这类合法形态，只排除「**没有 plan 依据的 exec lane**」。
         //   拒绝码 `GATE_EXEC_INPUT_MISSING` 与 `GATE_AUDIT_INPUT_MISSING` 同族同位置（对称性优先）。
         if (plan.wavePlan.some((w) => (w.tasks ?? []).some((t) => t.layer === 'exec'))) {
-          const tfExec = resolveTeamFlows(args.team, teamsRoot ? { root: teamsRoot } : {});
+          const tfExec = resolveTeamFlows(assetLookupLabel, teamsRoot ? { root: teamsRoot } : {});
           const execFlow = tfExec && tfExec.ok && tfExec.flows ? flowOf(tfExec.flows, 'exec') : null;
           if (execFlow) {
             const execLanes = plan.wavePlan.flatMap((w) => w.tasks ?? []).filter((t) => t.layer === 'exec');
@@ -823,7 +934,7 @@ export function createCoreTools(ctx, deps) {
               const gaps = batchReq.filter((prefix) => !execLanes.some((t) => hitsPrefix(t, prefix)));
               if (gaps.length > 0) {
                 throw new Error('GATE_EXEC_INPUT_MISSING: flows.exec.consumes_required not satisfied for ' + JSON.stringify(gaps)
-                  + ' — no exec lane consumes a product under those prefixes (team "' + args.team + '")');
+                  + ' — no exec lane consumes a product under those prefixes (team "' + teamName + '")');
               }
             }
             if (perLaneReq.length > 0) {
@@ -833,18 +944,18 @@ export function createCoreTools(ctx, deps) {
               }
               if (offenders.length > 0) {
                 throw new Error('GATE_EXEC_INPUT_MISSING: flows.exec.consumes_required_per_lane not satisfied — exec lane(s) missing required consume prefix: '
-                  + JSON.stringify(offenders) + ' (team "' + args.team + '")');
+                  + JSON.stringify(offenders) + ' (team "' + teamName + '")');
               }
             }
           }
         }
-        if (asm.warnings.length > 0) plan.warnings.push(...asm.warnings); // roles 词法告警并入（事件随既有循环留痕、返回值暴露）
-        // 团队资产缺失告警（B4）：**已删码**（gate-lite 第二批 · C，2026-09-17）——原码 `「团队资产缺失」码(已删)`
-        //   自述「P1 后不可达」（无资产 / 资产**结构**非法已在构造期前置为拒 `TEAM_ASSET_NOT_FOUND` /
-        //   `TEAM_ASSET_SKILLS_MISMATCH`——**仅结构段**；技能名的**可解析性**自 2026-09-25 起为 recommend、
-        //   不再在构造期拒，见 `assertTeamAssetReady` ③ 与下方告警块，`createBatch` 之前 throw）
-        //   ⇒ 死码占用告警通道且与「无资产即拒」的口径自相矛盾，按普查结论整条删除；
-        //   防回生断言见 `test/gate-lite-batch2.test.js`（源码面不得再出现该字面量）。
+        // 建批期**留痕告警**并入（返回值 `warnings` 可见 + 下方既有循环按 `WARN_EVENT_OF` 落事件）：
+        //   来源 ① `asm.warnings` = roles 词法告警（原有）
+        //   来源 ② `assets.warnings` = 资产面「尽力」解析缺口（原 `TEAM_ASSET_*` 码原样 + `TEAMS_ROOT_IGNORED`）
+        //   来源 ③ `chainWarnings` = `chain` 声明非法（原 `assertChainReady` 判据，出口由 `throw` 改留痕）
+        // 【2026-09-27】②③ 在本日之前都是 `createBatch` 之前的 `throw`（拒建批、零批次落盘）⇒ 现**一律不阻断建批**，
+        //   只保证「问题可见」（静默才是本批要消的反面）。原「团队资产缺失」死码**仍保持已删状态**（勿回加）。
+        plan.warnings.push(...asm.warnings, ...assets.warnings, ...chainWarnings);
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined, ...(teamsRoot ? { teamsRoot } : {}), ...(channelDecl.declared ? { channel: channelDecl.channel } : {}) });
         // **冒烟/探针批**留痕（显式豁免键）——建批成功当刻落一条
         //   `batch.smoke` 事件（常量登记于 `lib/state/event-types.js`）⇒ 门禁读端（`lib/state/gates.ts#smokeOf`）

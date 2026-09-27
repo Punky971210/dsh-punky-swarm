@@ -24,7 +24,7 @@ import { packageRoot } from './assembly/flows.js';
 // ── 权威源：**包内团队资产** ──
 //   解析顺序：① `config.assembly`（外部覆盖层，整份优先）；
 //             ② 包内 `presets/<team>/team-asset.yml` 的 `layers` 段（**装配数据唯一权威来源**）；
-//             ③ 无资产 → **null**（不补 skills；无资产/不可解析已在**构造期前置拒载** `TEAM_ASSET_NOT_FOUND` / `TEAM_ASSET_SKILLS_MISMATCH`；原 `「团队资产缺失」码(已删)` 码与告警已删，见 `lib/tools/core.js:691-694`）。
+//             ③ 无资产 → **null**（不补 skills；【2026-09-27 用户裁决】资产问题**不再拒建批**，只在工具面留 `TEAM_ASSET_*` 痕；原 `「团队资产缺失」码(已删)` 码与告警已删）。
 //   punky-preset 团队装配**已弃用**：引擎不再以内置常量兜底 punky-preset 装配；各团队以自身资产为准
 //   （software-team 及其它团队）。DEFAULT_ASSEMBLY 保留仅为兼容导出，内容 = software-team 装配。
 export const DEFAULT_ASSEMBLY = {
@@ -55,7 +55,8 @@ export const DEFAULT_ASSEMBLY = {
 
 export function resolveAssembly(team, configAssembly = null, { root = packageRoot() } = {}) {
   if (configAssembly) return configAssembly;
-  // 团队资产优先且唯一：缺资产 → null（不静默回落任何内置常量；原 `「团队资产缺失」码(已删)` 告警已删——无资产/不可解析在构造期即拒载，见 `lib/tools/core.js:691-694`）
+  // 团队资产优先且唯一：缺资产 → null（不静默回落任何内置常量；原 `「团队资产缺失」码(已删)` 告警已删——
+  // 【2026-09-27 用户裁决】无资产/不可解析**不再在构造期拒建批**：改由工具面留痕，见 `lib/tools/core.js#resolveTeamAssetFace`）
   return assemblyFromTeamAsset(team, root);
 }
 

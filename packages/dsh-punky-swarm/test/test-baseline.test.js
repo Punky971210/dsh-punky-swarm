@@ -103,7 +103,16 @@ test('e2-1 基线自洽：baselines/test-baseline.json 与当前 test/ 树逐文
 test('e2-2 判红：断言总数低于基线 ⇒ ok:false，且逐文件 diff 点名到文件与数量', () => {
   const scan = scanTree(ROOT);
   const base = readBaseline(ROOT);
-  const lowered = { ...base, totals: { ...base.totals, asserts: base.totals.asserts + 1 } };
+  // 【2026-09-27 漂移免疫】合成基线锚到 **live scan**（`scan.totals.asserts + 1`）而非落盘基线值：
+  //   本用例测的是**比较器**的判红语义（「基线高于实测 ⇒ 必须红」），与「基线文件是否与当前测试树逐字节一致」
+  //   是两件事——后者由 e2-1 单点负责。锚落盘基线会让本用例在**基线尚未重生成的窗口**里假红（断言数只会增），
+  //   命题未变、断言未删，只是把合成输入改成自洽形态。
+  // 合成输入同时锚定 tests/tautologies（与 live scan 一致）⇒ 「只把 asserts 抬高 1」这一**单变量**成立，
+  //   下方 `cmp.tests.delta === 0`（用例数未变不误报）才是在测比较器、而不是在测基线是否新鲜。
+  const lowered = {
+    ...base,
+    totals: { ...base.totals, asserts: scan.totals.asserts + 1, tests: scan.totals.tests, tautologies: scan.totals.tautologies },
+  };
   const cmp = compareBaseline(lowered, scan);
   assert.equal(cmp.ok, false, '断言数低于基线必须判红');
   assert.equal(cmp.asserts.delta, -1, '差值如实为 -1');

@@ -157,8 +157,9 @@ export function teamAssetRefOf({ sessionDirAbs, team, teamsRoot = null, now = ne
   // 优先级 ②（DI 缝 `flowsRoot`）在建批侧不可达（`createStore` 不接收 flowsRoot）⇒ 不写 `flows-root` 枚举值。
   const rootKind = teamsRoot ? 'teams-root' : 'package';
   const root = path.resolve(teamsRoot ?? packageRoot());
-  // P1（2026-09-16，D-3）：`?? 'generic'` 兜底已清退（建批面必填后成死码 ⇒ 防第二默认值真源）。
-  //   缺 team ⇒ 空串（= 「无团队」事实，不再**代造成团队名**）；下游 `resolveTeamFlows('')` 如实走「无资产」路径。
+  // D-3 口径不变：`?? 'generic'` 兜底已清退（防第二默认值真源）。
+  //   缺 team（含 2026-09-27 起的**可选标签**缺省态 `null`）⇒ 空串（= 「无团队」事实，不**代造成团队名**）；
+  //   下游 `resolveTeamFlows('')` 如实走「无资产」路径。
   const teamName = typeof team === 'string' && team.trim().length > 0 ? team : '';
   const resolved = resolveTeamFlows(teamName, teamsRoot ? { root: teamsRoot } : {});
   // 整份资产（供未接线台账的**顶层键**读法：`state_machine` / `rework`——`resolveTeamFlows().flows` 只有子对象）

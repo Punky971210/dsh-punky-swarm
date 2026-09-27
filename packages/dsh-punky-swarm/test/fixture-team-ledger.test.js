@@ -190,7 +190,7 @@ test('F2-5 合成资产：`threeTierSyntheticTeam` 声明面齐备（三层三�
 
 // ── ⑤ `withDefaultTeam` 允许名单：双向 ──────────────────────────────────────
 
-test('F2-6 `withDefaultTeam` 使用者 ≡ 允许名单（双向；断言 team 必填的套件不得误用）', () => {
+test('F2-6 `withDefaultTeam` 使用者 ≡ 允许名单（双向；登记「注入默认 team 标签」的套件集合）', () => {
   const actual = collectTestFiles()
     .filter((rel) => {
       const src = fs.readFileSync(path.join(TEST_DIR, rel), 'utf8');
@@ -198,8 +198,10 @@ test('F2-6 `withDefaultTeam` 使用者 ≡ 允许名单（双向；断言 team �
     })
     .sort();
   assert.deepEqual(actual, WITH_DEFAULT_TEAM_ALLOWLIST,
-    '`withDefaultTeam` 会注入 `team` ⇒ 遮蔽「team 必填」门禁，只允许「建批是手段」的套件使用。\n'
-    + '  若新增使用：确认该套件**不**断言 team 相关门禁，然后登记进允许名单。\n'
+    '`withDefaultTeam` 会**注入** `team` 标签（调用方显式传的优先）⇒ 它决定了「该套件的建批面是显式声明团队标签、'
+    + '还是裸标签」这一归类事实 ⇒ 仍须双向登记（防注入面悄悄扩散）。\n'
+    + '  注（2026-09-27）：`team` 已降为**可选标签**、不再必填 ⇒ 本条**不再**是「遮蔽门禁」的防误用锁，'
+    + '而是**归类/归属锁**（断言未删、集合形状未变）。\n'
     + '实际：' + JSON.stringify(actual));
 });
 
@@ -208,6 +210,8 @@ test('F2-6 `withDefaultTeam` 使用者 ≡ 允许名单（双向；断言 team �
 //   `writing-team-asset.test.js` 三件已整体删除（用户裁决「团队内容只是模版、不再作为组件
 //   ⇒ 相关测试不再检验」；归档于 reports/archived-tests-20260926/）
 //   ⇒ 该测试**无对象可测**，且其 `fs.readFileSync` 会对不存在的文件抛错。
-// ⚠ **其语义未失效**：原命题 = 「断言 `team` 必填/无资产的套件**不得**误用 `withDefaultTeam`」
+// ⚠ **语义沿革**：原命题 = 「断言 `team` 必填/无资产的套件**不得**误用 `withDefaultTeam`」
 //   （`withDefaultTeam` 会注入 `team` ⇒ 遮蔽「team 必填」门禁 ⇒ 命题恒真）。
+//   2026-09-27 用户裁决后 `team` 降为可选标签、该门禁**已退役** ⇒ 上述「遮蔽」语义不再成立；
+//   本台账锁**保留**（断言未删），性质改为**归类/归属锁**：登记哪些套件的建批面被注入了默认标签。
 //   ⇒ 若日后新增同类套件，**应恢复本测试**并把文件名重新登记。

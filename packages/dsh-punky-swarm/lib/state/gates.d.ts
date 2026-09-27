@@ -955,7 +955,7 @@ export declare function createGates(root: string, opts?: {
         lane: string;
         layer: Layer | null;
         state: import("../types/contracts.js").MemberState;
-        team: string;
+        team: string | null;
         gates: string;
         consume: string[];
         produce: string[];
@@ -1041,7 +1041,7 @@ export declare function createGates(root: string, opts?: {
         lane: string;
         layer: Layer | null;
         state: import("../types/contracts.js").MemberState;
-        team: string;
+        team: string | null;
         gates: string;
         consume: string[];
         produce: string[];
@@ -1111,7 +1111,7 @@ export declare function createGates(root: string, opts?: {
         lane: string;
         layer: Layer | null;
         state: import("../types/contracts.js").MemberState;
-        team: string;
+        team: string | null;
         gates: string;
         consume: string[];
         produce: string[];

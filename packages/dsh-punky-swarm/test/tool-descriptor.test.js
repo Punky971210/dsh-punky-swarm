@@ -107,9 +107,10 @@ test('生成：4 项透传 2 项派生（inputParam 与 defineTool 归一化结�
       assert.deepEqual(d.inputParam.properties.box.enum, ['inbox', 'outbox', 'broadcast']);
     }
   }
-  // 抽样：wave_plan required=['batchId','tasks','team']（【P1 同步】`team` 已改必填无缺省）；
+  // 抽样：wave_plan required=['batchId','tasks']（【2026-09-27 反转】`team` 降为**可选标签** ⇒ 退出 required 数组；
+  //       原断言 ['batchId','tasks','team'] 的「P1 起必填」口径已按用户裁决退役，判据面（required 逐字）未删）；
   //       mailbox_read required=['batchId','box']（源码实标 req）
-  assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks', 'team']);
+  assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks']);
   assert.deepEqual(byName.mailbox_read.inputParam.required, ['batchId', 'box']);
   assert.equal(byName.wave_plan.inputParam.type, 'object');
   // outputParam 与 output.schema 同构（深比较，键序无关）

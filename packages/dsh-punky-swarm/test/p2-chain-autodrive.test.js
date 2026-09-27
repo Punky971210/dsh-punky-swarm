@@ -249,19 +249,16 @@ test('P2-1b 退役链级子键：`chain.needHuman` 声明即拒（FIELD_NOT_ALLO
   assert.deepEqual([...RETIRED_CHAIN_KEYS], ['needHuman'], '退役清单须可读（派生自事由表）');
 });
 
-// ── ② 三反例：构造期拒 + 零批次 JSON 落盘 ─────────────────────────────────
+// ── ② 三反例【2026-09-27 反转】：`chain` 声明非法 ⇒ **不再拒建批**（原 `assertChainReady` 构造期拒已退出工具面接线） ──
 
-/** 断言「构造期拒 + 码面原样透出 + 零批次 JSON 落盘」三件套。 */
-async function expectConstructReject(h, batchId, code, label) {
-  let msg = null;
-  try {
-    await wavePlan(h, batchId);
-  } catch (e) {
-    msg = String(e?.message ?? e);
-  }
-  assert.notEqual(msg, null, label + '：必须在 `createBatch` 之前拒（不得建批）');
-  assert.ok(String(msg).startsWith(code), label + '：拒态码须为 ' + code + '（实得：' + String(msg).slice(0, 120) + '）');
-  assert.equal(fs.existsSync(batchFileOf(h.root, batchId)), false, label + '：拒后零批次 JSON 落盘');
+/** 断言「建批成功 + 原码留痕 + 批次 JSON 落盘」三件套（等价反转原 `expectConstructReject` 的「拒 + 原码 + 零落盘」）。 */
+async function expectWarnAccept(h, batchId, code, label) {
+  const out = await wavePlan(h, batchId); // 不得抛（2026-09-27：chain 问题降级为留痕）
+  assert.equal(out.batchId, batchId, label + '：建批成功（返回批 id）');
+  const w = out.warnings.find((x) => x.code === code);
+  assert.ok(w, label + '：原码须留痕 ' + code + '（实得：' + JSON.stringify(out.warnings.map((x) => x.code)) + '）');
+  assert.equal(fs.existsSync(batchFileOf(h.root, batchId)), true, label + '：批次 JSON 必须落盘（原「拒后零批次 JSON 落盘」已反转）');
+  return out;
 }
 
 test('P2-2a 反例①环未被 `rework` 承认 ⇒ **R2-3 后不再构造期拒**：建批成功 + warning 留痕（口径变更）', async () => {
@@ -283,15 +280,15 @@ test('P2-2a 反例①环未被 `rework` 承认 ⇒ **R2-3 后不再构造期拒*
     '新口径下必须建批成功（批次 JSON 落盘）');
 });
 
-test('P2-2b 反例②`join:any` 缺 `anyFailure` ⇒ 构造期拒 TEAM_ASSET_MISSING_FIELD + 零批次落盘', async () => {
-  await expectConstructReject(
+test('P2-2b 反例②`join:any` 缺 `anyFailure`【2026-09-27 反转】⇒ 建批成功 + TEAM_ASSET_MISSING_FIELD 留痕 + 批次 JSON 落盘', async () => {
+  await expectWarnAccept(
     makeHarness({ chain: mutateChain((c) => { c.steps[1].join = 'any'; delete c.join.anyFailure; }) }),
     'p2-rej-anyfail', 'TEAM_ASSET_MISSING_FIELD', 'join:any 缺 anyFailure',
   );
 });
 
-test('P2-2c 反例③链尾不唯一（terminal 两处）⇒ 构造期拒 TEAM_ASSET_MISSING_FIELD + 零批次落盘', async () => {
-  await expectConstructReject(
+test('P2-2c 反例③链尾不唯一（terminal 两处）【2026-09-27 反转】⇒ 建批成功 + TEAM_ASSET_MISSING_FIELD 留痕 + 批次 JSON 落盘', async () => {
+  await expectWarnAccept(
     makeHarness({ chain: mutateChain((c) => { c.steps[3].terminal = true; }) }), 'p2-rej-terminal', 'TEAM_ASSET_MISSING_FIELD', '链尾不唯一',
   );
 });

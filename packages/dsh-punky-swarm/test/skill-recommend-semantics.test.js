@@ -108,30 +108,29 @@ test('①a 技能根不存在 + 声明技能不可解析 ⇒ 建批成功（技�
 //   语义现为：技能可解析性**完全不参与建批判定** ⇒ 无论解析得到与否，建批照落、零告警。
 
 
-test('①c 结构段哨兵：某 role 缺 skills 条目 ⇒ 仍拒 TEAM_ASSET_SKILLS_MISMATCH（未误伤结构校验）', async () => {
+test('①c 结构段哨兵【2026-09-27 反转】：某 role 缺 skills 条目 ⇒ 原码 TEAM_ASSET_SKILLS_MISMATCH 仍被观测（改走 warnings 留痕，非静默）', async () => {
   const h = makeHarness();
   const { teamsRoot, asset } = mkTeamsRoot();
   try {
     // 唯一改动点：`layers.exec` 的 `roles` 多一个**没有对应 skills 条目**的角色
     //   ⇒ 结构段 `layers.exec.skills.<role>` 缺非空字符串数组（`lib/assembly/team-asset.js:237-239`）
-    //   ⇒ 拒 `TEAM_ASSET_SKILLS_MISMATCH`。与「名不可解析」（存在性）分属两段，正是本臂要证的**未误伤**。
+    //   ⇒ 原码 `TEAM_ASSET_SKILLS_MISMATCH`。与「名不可解析」（存在性）分属两段，正是本臂要证的**未误伤**。
     writeSyntheticTeam(teamsRoot, TEAM, {
       ...asset,
       layers: { ...asset.layers, exec: { roles: ['coder', 'rec-structural-sentinel'], skills: { coder: ['rec-noskill-coder-xyz'] } } },
     });
-    // 断言形态：`try/catch` 捕获 + 锚定正则逐字核对（`/^TEAM_ASSET_SKILLS_MISMATCH/`）——
-    //   Node 本机实测 `assert.rejects(fn, /^RE/, 'msg')` 的三参形态在该版本下不校验正则，故不采用；
-    //   断言强度不降：仍要求**抛**且**首段码逐字**为 `TEAM_ASSET_SKILLS_MISMATCH`。
-    let sentinelMsg = null;
-    try {
-      await h.byName.wave_plan.execute({
-        batchId: 'rec-arm-c', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
-        assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
-      }, SESS);
-    } catch (e) { sentinelMsg = String(e?.message ?? e); }
-    assert.match(String(sentinelMsg), /^TEAM_ASSET_SKILLS_MISMATCH/,
-      '结构段（每 role 必须有非空 skills 数组）**未被本批误伤**，仍拒建批：' + String(sentinelMsg));
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'rec-arm-c')), false, '结构非法 ⇒ 零批次 JSON 落盘');
+    // 【2026-09-27 反转】旧口径「结构非法 ⇒ 构造期拒（`TEAM_ASSET_SKILLS_MISMATCH`）+ 零批次 JSON 落盘」已退役：
+    //   现口径 = **建批照常**（team = 可选标签）+ 同一原码进 `warnings` 留痕。**判据面逐字保留**：仍要求
+    //   「该资产的**首码**逐字为 `TEAM_ASSET_SKILLS_MISMATCH`」，只把读数源由 throw 的 message 换成 `warning.code`。
+    const out = await h.byName.wave_plan.execute({
+      batchId: 'rec-arm-c', team: TEAM, teamsRoot, tasks: threeTierTasksForRecommend(),
+      assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
+    }, SESS);
+    const hit = out.warnings.find((w) => /^TEAM_ASSET_/.test(String(w.code)));
+    assert.ok(hit, '结构段非法须留痕原码（不静默）：' + JSON.stringify(out.warnings));
+    assert.equal(hit.code, 'TEAM_ASSET_SKILLS_MISMATCH',
+      '结构段（每 role 必须有非空 skills 数组）**未被本批误伤**，原码仍被观测：' + String(hit.code));
+    assert.equal(fs.existsSync(batchFileOf(h.root, 'rec-arm-c')), true, '批次 JSON 落盘（原「结构非法 ⇒ 零落盘」已反转）');
   } finally {
     fs.rmSync(h.root, { recursive: true, force: true });
     fs.rmSync(teamsRoot, { recursive: true, force: true });

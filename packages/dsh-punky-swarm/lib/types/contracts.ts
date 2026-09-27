@@ -219,7 +219,7 @@ export interface Wave {
 export interface WavePlanDoc {
   schema: number;               // SCHEMA_VERSION = 1
   batchId: string;
-  team: string;                 // P1（2026-09-16）：必填、无缺省（原 `'generic'` 兜底已废除）
+  team: string | null;          // 【2026-09-27】可选标签：`null` = 无团队标签（原「P1 起必填、无缺省」已按用户裁决退役）
   wavePlan: Wave[];
   concurrency: number;          // 正整数兜底 5
   warnings: Array<{
@@ -339,7 +339,7 @@ export interface Batch {
   batchId: string;
   phase: BatchPhase;
   concurrency: number;
-  team: string;
+  team: string | null;          // 【2026-09-27】建批 `team` 降为可选标签 ⇒ 无标签批落 `null`（读端按「非字符串 = 无团队」处置）
   wavePlan: Wave[];             // 注意：是 Wave 数组（buildWavePlan 产物 .wavePlan 字段）
   lanes: Record<string, MemberState>; // laneId → 成员态（建批全 'pending'）
   chains: ChainsState;          // v3 字段（chainsDefaults 兜底）

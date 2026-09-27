@@ -258,18 +258,17 @@ test('W1C-9 反转 · `onFail` 的 review/failed 两 token 仍为 hold（只留�
 
 // ── 3. 端到端（真工具路）：拒绝面 + 零落盘 + 新 via 取值 ───────────────────────
 
-test('W1C-10 端到端 · 声明 `on` 的资产 ⇒ 建批拒 FIELD_NOT_ALLOWED 且**零批次 JSON 落盘**', async () => {
+test('W1C-10 端到端【2026-09-27 反转】 · 声明 `on` 的资产 ⇒ 建批**成功** + FIELD_NOT_ALLOWED 留痕 + 批次 JSON 落盘', async () => {
   const h = makeHarness({ chain: chainWithOn() });
   const B = 'w1c-reject';
-  let msg = null;
-  try {
-    await h.byName.wave_plan.execute({ batchId: B, team: TEAM, teamsRoot: h.teamsRoot, tasks: TASKS(), assembly: ASSEMBLY }, SESS);
-  } catch (e) {
-    msg = String(e?.message ?? e);
-  }
-  assert.notEqual(msg, null, '构造期必须拒（`createBatch` 之前）');
-  assert.ok(String(msg).startsWith('TEAM_ASSET_FIELD_NOT_ALLOWED'), '拒态码原样透出：' + String(msg).slice(0, 140));
-  assert.equal(fs.existsSync(batchFileOf(h.root, B)), false, '拒后零批次 JSON 落盘');
+  // 旧口径：`assertTeamAssetReady` 首码（`TEAM_ASSET_FIELD_NOT_ALLOWED`）在 `createBatch` 之前 throw ⇒ 零落盘。
+  //   2026-09-27 用户裁决「team-asset 全面弃用 / team 降为可选标签」⇒ 拒门删除、原码改走 `warnings` 留痕
+  //   （**判据面逐字保留**：同一原码仍须被观测；读数两侧等价反转：throw→留痕、零落盘→落盘）。
+  const out = await h.byName.wave_plan.execute({ batchId: B, team: TEAM, teamsRoot: h.teamsRoot, tasks: TASKS(), assembly: ASSEMBLY }, SESS);
+  const hit = out.warnings.find((w) => /^TEAM_ASSET_/.test(String(w.code)));
+  assert.ok(hit, '声明 `on` 的资产须留痕原码（不静默）：' + JSON.stringify(out.warnings));
+  assert.equal(hit.code, 'TEAM_ASSET_FIELD_NOT_ALLOWED', '留痕码须与原拒态码逐字一致：' + String(hit.code));
+  assert.equal(fs.existsSync(batchFileOf(h.root, B)), true, '批次 JSON 落盘（原「拒后零落盘」已反转）');
 });
 
 test('W1C-11【退役锁 · Q-A=C】端到端 · `next`-only 链 plan merged ⇒ 不再推进 exec（零 chain.step、exec 保持 pending、相位不变）', async () => {
