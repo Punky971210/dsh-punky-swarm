@@ -31,7 +31,7 @@ graph TD
     CR -->|代码| RV
     TE -->|测试报告| RV
     RV -->|PASS/REWORK（review.md）| SV
-    SV -->|acceptance-report + gap-list.json + CBM 对账| DM
+    SV -->|acceptance-report + gap-list.json + 图谱对账| DM
     DM -->|retrospective-report → 记忆沉淀| CO
 ```
 

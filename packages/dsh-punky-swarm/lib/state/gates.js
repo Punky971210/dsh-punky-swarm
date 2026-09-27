@@ -858,7 +858,20 @@ export function createGates(root, opts = {}) {
         }
         // ── P1 交接门拒态判定（判据在函数头部求值，见 `hv`）─────────────────────────────────────────
         if (!hv.ok) {
-            return reject({ code: 'GATE_HANDOFF_MISSING', missing: hv.missing, problems: hv.problems });
+            // 【2026-09-27 用户裁决 · 运行时回调指引】拒的同时给出「怎么做」（见 GATE_PLAN_CONTRACT 处同段说明）
+            //   实证（批 onto-engine-slim-20260926）：**4 次停轮**源于「exec 线漏向聚合 audit lane 交接」
+            //   ⇒ 若此处直接给出 `handoff_submit` 的正确调用形态与「含聚合 audit lane」的提醒，worker 当场可自救。
+            return reject({
+                code: 'GATE_HANDOFF_MISSING',
+                missing: hv.missing,
+                problems: [
+                    ...hv.problems,
+                    '【怎么做】用 `handoff_submit({ batchId, from: "<本 lane>", to: "<下游 lane>", '
+                        + 'artifacts: [<产物相对路径…>], assertions: [<下游可核断言…>] })` 向【本 lane 的全部出边】交接 —— '
+                        + '**含聚合 audit lane**（`a1-*` 这类多入边 lane，**每条上游线各自交一次**）。'
+                        + ' `artifacts` 里每个路径**必须已在场**（缺则仍拒）；`assertions` 不得为空。',
+                ],
+            });
         }
         if (hvLegacy) {
             // 放行侧标记：写端据此落 `lane.handoff.gap{legacy:true}` 告警（不静默、不砸存量）
@@ -885,8 +898,20 @@ export function createGates(root, opts = {}) {
                     shapeProblems.push(pr);
             }
         }
-        if (failed.length)
-            return reject({ code: 'GATE_ENTRY_MISSING', missing: failed, problems: shapeProblems });
+        if (failed.length) {
+            // 【2026-09-27 用户裁决 · 运行时回调指引】拒的同时给出「怎么做」（同 GATE_PLAN_CONTRACT 段说明）
+            return reject({
+                code: 'GATE_ENTRY_MISSING',
+                missing: failed,
+                problems: [
+                    ...shapeProblems,
+                    '【怎么做】本 lane 的入口门要求**上游产物已在场**：'
+                        + '① 先用 `handoff_view({ batchId, lane })` 看入边是否 `submitted` —— 未交则等上游交；'
+                        + '② 若上游 lane 还没派 ⇒ 报 Leader 派（本 lane 不自行派发）；'
+                        + '③ 若 `consume` 的路径声明本身就写错 ⇒ 由 Leader 用 `task_update` 改声明。',
+                ],
+            });
+        }
         // P1 内容面（**全局生效**）：**audit 的判据来源内容校验**——其 `consume` 中的
         //   plan 层产物至少有一份正文含裸标题行 `## 验收标准`（与 `GATE_PLAN_CONTRACT` 同判据）；否则拒派
         //   `GATE_AUDIT_CRITERIA_MISSING`。建批期已锚定「存在 plan 产物」；本层补「该产物真的带验收标准」——
@@ -933,8 +958,18 @@ export function createGates(root, opts = {}) {
                     problems.push(p + ' unreadable');
                 }
             }
-            if (!okAnchor)
-                return reject({ code: 'GATE_AUDIT_CRITERIA_MISSING', problems });
+            if (!okAnchor) {
+                // 【2026-09-27 用户裁决 · 运行时回调指引】拒的同时给出「怎么做」（同 GATE_PLAN_CONTRACT 段说明）
+                return reject({
+                    code: 'GATE_AUDIT_CRITERIA_MISSING',
+                    problems: [
+                        ...problems,
+                        '【怎么做】audit lane 的判据源只能是 **plan 层产物**（本 lane `consume` 里 `plan/` 前缀的件），'
+                            + '其正文须含裸标题行 `' + criteriaSection + '`（**行首恰为该串**，非 `###`、无编号前缀）。'
+                            + ' plan 产物缺它 ⇒ **回 plan 层补该标题**（内容可空），**不得在本 lane 自造判据**。',
+                    ],
+                });
+            }
         }
         // 放行侧回传（P1 交接门）：`handoffLegacy` = 存量批标记——写端（`store.setMember`）据此落
         //   `lane.handoff.gap{legacy:true}` 告警（不静默、不砸存量）。**仅新增本键**：其余放行载荷逐字不变。
@@ -1061,8 +1096,20 @@ export function createGates(root, opts = {}) {
         // 最低内容判据（S10）：在场产物至少一份携带判据章节（全部缺失在场性时由在场性问题单独定罪，不叠加噪音）
         if (present > 0 && !criteriaHit)
             problems.push(lane + ': no plan artifact carries a criteria section (' + requiredSections.join(' / ') + ')');
-        if (problems.length)
+        // ── 【2026-09-27 用户裁决 · 运行时回调指引】拒的同时给出「怎么做」──────────────────────────────
+        //   设计意图（用户原话）：「**通过工具调用回调说明和门禁码锁住 worker 行为并给出对应指引**」
+        //   —— 用**机制**锁行为，不用**文档**教行为：文档会漂移、worker 未必读；回调**每次必达**。
+        //   实证（批 onto-engine-slim-20260926）：plan 产物缺 `## 约束` ⇒ `GATE_PLAN_CONTRACT`
+        //   ⇒ `auto.settle.paused` **停轮** ⇒ 由 Leader **批外补正**才恢复。若此处直接告诉 worker
+        //   「该写哪六个标题」，它**当场就能自救**，不必停轮。
+        //   ⚠ **只追加文案**：`code` / `problems` 的**判定集合**逐字不变（新增项仅为指引，不作判据输入）。
+        if (problems.length) {
+            problems.push('【怎么做】plan 产物正文须含六个【裸标题】（行首恰为该串，非 `###`、无缩进/前缀）：'
+                + '`## 概述` / `## 问题` / `## 方案` / `## 需求` / `## 验收标准` / `## 约束`'
+                + ' —— **内容允许为空，标题一个都不能缺**（本门只校标题在场，不校内容）。'
+                + ' 改完产物后重跑即可；若是交接后才补，重新 `handoff_submit` 该边。');
             return { ok: false, code: 'GATE_PLAN_CONTRACT', lane, problems, missing: [] };
+        }
         // ── P4 待确认（R1 §2.4 #4；U-1 锁定面 = **仅 plan 层**）──────────────────────────────────────────
         // 声明位：`flows.plan.contract.pending_marker:{literal:"<非空字符串>"}`（R1 冻结唯一合法字面量 = `[待确认]`）。
         //   **未声明 ⇒ 立即零感知返回**（`markerLiteral === null` 短路在 `t.layer` 判定**之前** ⇒ 不读产物、不加 IO）。

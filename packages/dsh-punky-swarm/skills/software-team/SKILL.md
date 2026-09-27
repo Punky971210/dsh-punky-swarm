@@ -1,11 +1,11 @@
 ---
 name: software-team
 description: |
-  软件工程团队模版（引擎的**下游指引**，不作为引擎组件使用）：三层 6 角色
-  （plan coordinator·designer / exec coder·tester / audit reviewer·supervisor）
+  软件工程团队模版（引擎的**下游指引**，不作为引擎组件使用）：三层 7 角色
+  （plan coordinator·designer / exec coder·tester·reviewer / audit supervisor·docManager[可选]）
   的职责边界、产物契约、任务包规格（按 spec-writing）、回报与交接通道，
   以及 team 成员的管理面（官方工具，不用 member_*）。
-  coder / tester 可池化（同类型多实例），Leader 按吞吐分配。
+  吞吐分层：coordinator/designer/reviewer/supervisor/docManager = 低~中吞吐；coder/tester = 高吞吐且可池化（同类型多实例），Leader 按吞吐分配。
   当需要确定软件团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按该团队的三层链路交付可核查的改动时加载本技能。
 version: "2.0.0"
@@ -24,7 +24,8 @@ triggers:
 
 > **定位**：本文件是**模版**（引擎的**下游指引**），**不作为引擎组件**使用。
 > **依据**：2026-09-26 用户裁决 —— 团队内容只是模版，相当于引擎的下游指引，不再作为组件使用，相关测试不再检验。
-> **搭配**：同目录 `team-asset.yml`（**最小骨架**，仅供引擎解析存在性；不含 `manifest`/`chain`/`contract`/`entry_requires`/`audit_contract`）。
+> **角色职责依据**：**2026-09-27 用户裁决**（`C-1` reviewer 合并职责 / `C-2` designer 四件套+任务包并列 / `C-3` docManager 可选 / `E-1` 弃用旧代码图谱工具、改用 `codegraph` 等 MCP）—— 角色职责**以用户版为准**。
+> **⚠ `team-asset.yml` 已全面弃用**（2026-09-27 用户裁决）：本 skill **不再依赖**该资产；同目录若仍存在该文件，**属待清理面**。
 
 ---
 
@@ -38,30 +39,32 @@ triggers:
 
 ---
 
-## 二、三层与角色（**6 个席位 · 可池化**）
+## 二、三层与角色（**7 个席位 · coder/tester 可池化**）
 
 ```text
-plan  ┌ coordinator ── 任务摸底 + 可并行内容拆解  ⇒ 产出「并行任务线清单」
-      └ designer ────── 按任务线产出「单步任务包」 ⇒ 产物 = 任务包（验收单元）
-exec  ┌ coder  ─────── 按包实现（可多实例）
-      └ tester ─────── 按【同一个包】写测试套件，与 coder 并行（可多实例）
-audit ┌ reviewer ────── 对抗式代码评审（只读不改码）
-      └ supervisor ──── 逐条验收 + 复盘沉淀
+plan  ┌ coordinator ── 现状摸底 + 可并行内容拆解  ⇒ 产出「并行任务线清单」（为 designer 提供依据）   [低]
+      └ designer ────── ① 四件套（线路级） ② 单步任务包（任务级）⇒ 串行提交队列，提交即启动下游      [中]
+exec  ┌ coder  ─────── 照包实现（高吞吐，可多实例）                                                [高·池化]
+      └ tester ─────── 照【同一个包】写测试套件，与 coder 并行                                     [高·池化]
+      └ reviewer ───── ① 跑测试套件 + 出测试报告 ② 对抗式审查（MUST/SHOULD/FYI，只读不改码）        [低]
+audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 + 通过/返工建议 + 复盘                       [低]
+      └ docManager ──── 记忆沉淀 + 文档/知识库归档（**可选席位**）                                  [低·可选]
 ```
 
-| 层 | 角色 | 干什么 | 产物契约 |
-|---|---|---|---|
-| **plan** | **`coordinator`** | **任务摸底**（现状、约束、**消费方契约**）+ **可并行内容拆解**：切成**可并行**的任务线，逐线标 **写域互斥**与依赖 | `plan/<name>-recon.md`（摸底报告 + 任务线清单） |
-| | **`designer`** | **按每条任务线产出「单步任务包」**，**严格按 `spec-writing` 的规格写**（见 §三） | `plan/<name>-taskpack-<n>.md`，含**裸标题** `## 验收标准`（每条可判）+ `## 约束` |
-| **exec** | **`coder`** | 照包**实现**；自证读数（原始回显） | `exec/<name>-impl.md`（改动 + 原始读数 + 逐条判据对照） |
-| | **`tester`** | **照【同一个任务包】写测试套件** —— 不是"事后验 coder"，而是**与 coder 并行**独立产出测试工件 | `exec/<name>-tests.md`（测试套件路径 + **真实命令的原始输出** + 覆盖了哪几条验收标准） |
-| **audit** | **`reviewer`** | **对抗式代码评审**：对照包挑缺陷，**只读不改码** | 结构化 verdict（approve/reject + blocking + followup） |
-| | **`supervisor`** | **验收**（按包的 `## 验收标准` **逐条核对**，不做二次评审）**＋ 复盘**（可复用经验沉淀到**跨会话记忆**） | `audit/acceptance-report.md` + `audit/gap-list.json` + `audit/retrospective-report.md` |
+| 层 | 角色 | 吞吐 | 干什么 | 产物契约 |
+|---|---|---|---|---|
+| **plan** | **`coordinator`** | 低 | **任务摸底**（现状、约束、**消费方契约**）+ **可并行内容拆解**：切成**可并行**的任务线，逐线标 **写域互斥**与依赖，**为 designer 提供依据** | `plan/<name>-recon.md`（摸底报告 + 任务线清单） |
+| | **`designer`** | 中 | **① 线路级：设计四件套**；**② 任务级：单步任务包**（**每包一份独立 spec**）。**同线路任务包产出串行**；**每包串行提交队列，提交即启动下游，不等全量** | `plan/...` 四件套 + `plan/<name>-taskpack-<n>.md` |
+| **exec** | **`coder`** | **高·池化** | 照包**实现**；自证读数（原始回显） | `exec/<name>-impl.md`（改动 + 原始读数 + 逐条判据对照） |
+| | **`tester`** | **高·池化** | **照【同一个任务包】写测试套件** —— 不是"事后验 coder"，而是**与 coder 并行**独立产出测试工件 | `exec/<name>-tests.md`（测试套件路径 + **真实命令的原始输出** + 覆盖了哪几条验收标准） |
+| | **`reviewer`** | 低 | **① 执行测试**：消费 `tester` 的套件，**在真实环境跑一遍**，出**测试报告**；**② 对抗式审查**：对照包挑缺陷，**只读不改码** | 测试报告 + 结构化 verdict（approve/reject + blocking + followup） |
+| **audit** | **`supervisor`** | 低 | **逐条验收**（按包的 `## 验收标准`，不做二次评审）+ **漂移/未实现评判** + **通过或返工建议** + **复盘** | `audit/acceptance-report.md` + `audit/gap-list.json` + `audit/retrospective-report.md` |
+| | **`docManager`**（**可选**） | 低 | **记忆沉淀**（`dsh-mneme` 优先）+ **文档/知识库归档** | `audit/retrospective-report.md` 等 |
 
 ### 四条铁律
 
-1. **`reviewer` 只在 audit 层**（**不在 exec 层**）—— 写代码的人不评自己的代码；评审必须在上游之外。
-2. **`tester` 与 `coder`【并行】、同源不同向**：**两者读【同一个任务包】**；coder 产出**实现**，tester 产出**测试套件**。⇒ **tester 不是"验收 coder 的产物"**（那是 auditor 的活），而是**把任务包里的验收标准翻译成可执行的测试**。⇒ 并行意味着 **tester 不等 coder 完成**。
+1. **`reviewer` 在 exec 层做「初步审查」**（**含跑测试**），**总体验收归 audit 层 `supervisor`** —— `reviewer` 的 `approve` **不等于**批次验收通过，**不可替代** audit 层结论；**reviewer 只读不改码**（缺陷走报告，修复须新批次）。
+2. **`tester` 与 `coder`【并行】、同源不同向**：**两者读【同一个任务包】**；coder 产出**实现**，tester 产出**测试套件**。⇒ **tester 不是"验收 coder 的产物"**（那是 `supervisor` 的活），而是**把任务包里的验收标准翻译成可执行的测试**。⇒ 并行意味着 **tester 不等 coder 完成**。
 3. **plan 层两步不可合并**：**先摸底拆线（coordinator）⇒ 再逐线出包（designer）**。摸底没做完就出包 = 猜。
 4. **下游统一按任务包验收** —— **任务包是唯一验收单元**；包外的追加要求一律回 plan 层补包。
 
@@ -123,12 +126,21 @@ audit ┌ reviewer ────── 对抗式代码评审（只读不改码）
 5. **自证**：每条结论配**原始回显**（不转述、不美化、**未验证就写「未验证」**）；
 6. `handoff_submit` ⇒ **双写回报**（见 §五）。
 
-### audit · reviewer / supervisor
+### exec · reviewer（**跑测试 + 对抗审查**，2026-09-27 `C-1`）
 
-1. **读判据源**（任务包的 `## 验收标准`）+ 上游产物（**实现与测试两件都要读**）；
+1. **等 coder 与 tester 都出件**（单个任务包的 code、test 完成产出后）；
+2. **① 跑测试**：**执行 `tester` 的测试套件**（真实环境），产出**测试报告**（命令原文 + 原始输出 + 通过/失败清单）；
+3. **② 对抗审查**：对照包挑缺陷，输出 **MUST/SHOULD/FYI 分级** + 结构化 `verdict`（approve/reject + blocking + followup）；
+4. **只读不改码**：缺陷走报告，**修复须新批次 exec**；
+5. ⚠ **`reviewer` 的 `approve` ≠ 批次验收通过** —— 总体验收归 audit 层 `supervisor`。
+
+### audit · supervisor（**全量验收 + 复盘**）
+
+1. **读判据源**（任务包的 `## 验收标准`）+ 上游产物（**实现与测试两件都要读**，含 `reviewer` 的测试报告）；
 2. **逐条核对**（**不做二次评审**）；**独立复现**关键读数（**不得只转述上游**，**测试要自己重跑**）；
-3. 出 `audit/acceptance-report.md` + `audit/gap-list.json`；`supervisor` 另出复盘；
-4. **未决项只进 gap-list** ⇒ **不得以「继续调查」收尾**。
+3. **漂移评判**：给出**未实现内容**与**任务实现漂移**的评判 + **通过/返工建议**；
+4. 出 `audit/acceptance-report.md` + `audit/gap-list.json`；`supervisor` 另出复盘；
+5. **未决项只进 gap-list** ⇒ **不得以「继续调查」收尾**。
 
 ---
 

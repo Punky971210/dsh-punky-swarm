@@ -186,6 +186,9 @@ test('GET /batch returns lanesGate（r2 同步：三层批的 layer 读数 + 缺
   assert.deepEqual(r2.body.lanesGate.e1.consumeMissing, ['plan/spec.md']);
   assert.deepEqual(r2.body.lanesGate.e1.outputsMissing, ['exec/e1/a.py']);
   assert.deepEqual(r2.body.lanesGate.a1.produceMissing, ['audit/review.md']);
-  assert.equal(r2.body.lanesGate.p1.contractProblems.length, 1); // spec.md 缺失 → plan 契约问题
+  // 【2026-09-27 运行时回调指引】`contractProblems` 现含 1 条判据项（spec.md 缺失）+ 1 条「【怎么做】」指引
+  const p1p = r2.body.lanesGate.p1.contractProblems;
+  assert.equal(p1p.filter((x) => !String(x).startsWith('【怎么做】')).length, 1); // 判据项仍 1 条
+  assert.ok(p1p.some((x) => String(x).startsWith('【怎么做】')), '拒态须带运行时指引');
 });
 

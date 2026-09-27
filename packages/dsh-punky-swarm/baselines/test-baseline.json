@@ -49,9 +49,9 @@
       "todos": 0
     },
     "test/api-batch-keys.test.js": {
-      "asserts": 27,
+      "asserts": 28,
       "blankLines": 19,
-      "lines": 190,
+      "lines": 194,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -73,9 +73,9 @@
       "todos": 0
     },
     "test/api.test.js": {
-      "asserts": 40,
+      "asserts": 41,
       "blankLines": 23,
-      "lines": 192,
+      "lines": 195,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1257,7 +1257,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T07:54:48Z",
+  "generatedAt": "2026-09-27T12:26:45Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1268,13 +1268,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-27 A 项：任务包骨架补 2 条纪律（收本会话 5 次 auto.settle.paused 教训）—— 第 5 条交接纪律（出边须含聚合 audit lane，漏交 GATE_HANDOFF_MISSING）、plan 层专属第 6 条（六标题齐备，GATE_PLAN_CONTRACT）；engine-dispatch.test.js 补 P2 断言 + 新增 P2b",
+  "reason": "2026-09-27 运行时回调指引（用户裁：worker 不补文档用法，改由工具回调说明 + 门禁码锁行为）：gates.ts 四处拒绝路径（GATE_PLAN_CONTRACT / GATE_HANDOFF_MISSING / GATE_ENTRY_MISSING / GATE_AUDIT_CRITERIA_MISSING）在 problems 末尾追加「【怎么做】」指引项（只加文案，判据集合逐字不变）；api.test.js 与 api-batch-keys.test.js 的 contractProblems 断言按语义拆分为「判据项 1 条 + 指引项在场」",
   "schema": 1,
   "totals": {
-    "asserts": 8253,
+    "asserts": 8255,
     "blankLines": 4123,
     "files": 157,
-    "lines": 44954,
+    "lines": 44961,
     "tautologies": 0,
     "tests": 1728,
     "todos": 4

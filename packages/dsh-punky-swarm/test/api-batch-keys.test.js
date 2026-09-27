@@ -144,7 +144,11 @@ test('P-2 gateStatusMapOfBatch 与逐 lane gateStatus 深比较全等（兼容�
   assert.equal(map.e2.layer, 'exec');
   assert.deepEqual(map.e2.produceMissing, []);
   assert.deepEqual(map.p1.produceMissing, ['plan/spec.md']);
-  assert.equal(map.p1.contractProblems.length, 1);
+  // 【2026-09-27 运行时回调指引】`contractProblems` 现 = 判据项 + 1 条「【怎么做】」指引项
+  //   ⇒ 断言**按语义拆分**：判据项仍 1 条；指引项在场（用户裁「用回调锁行为」的落地证据）
+  const p1Problems = map.p1.contractProblems;
+  assert.equal(p1Problems.filter((x) => !String(x).startsWith('【怎么做】')).length, 1);
+  assert.ok(p1Problems.some((x) => String(x).startsWith('【怎么做】')), '拒态须带运行时指引：' + JSON.stringify(p1Problems));
 });
 
 // ── P-3：读计数（AC-07 双口径）───────────────────────────────────────────────
