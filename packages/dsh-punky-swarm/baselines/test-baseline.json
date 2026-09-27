@@ -507,7 +507,7 @@
     "test/governance-config.test.js": {
       "asserts": 16,
       "blankLines": 12,
-      "lines": 85,
+      "lines": 89,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -865,11 +865,11 @@
       "todos": 0
     },
     "test/preset-rules.test.js": {
-      "asserts": 66,
-      "blankLines": 38,
-      "lines": 395,
+      "asserts": 67,
+      "blankLines": 40,
+      "lines": 405,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 13,
       "todos": 0
     },
     "test/prune-verify.test.js": {
@@ -1257,7 +1257,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T06:03:54Z",
+  "generatedAt": "2026-09-27T07:45:32Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1268,15 +1268,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "2026-09-27 用户裁决「引擎需要校验技能中的所有提到的必要裸标题」：ENGINE_BASELINE_PLAN_SECTIONS 由 2 项（验收标准/约束）扩为 6 项（+概述/问题/方案/需求）；spec-writing skill 中文化并与引擎裸标题对齐；测试夹具同步（gate-fixture.SPEC_OK 主夹具 + 13 个内联模板 + 回退 2 处被误伤的断言正则 + C5 负例改为「缺声明的 ## 需求」）",
+  "reason": "2026-09-27 用户裁 B：L1-L5 校验路径平行化 —— preset 装载期补 validateRuleTable（rules 的 id 唯一，与 toolBan 对称）；config.ts 两分支的 rules 面补 validatePresetRules（形状，与 inline toolBan 对齐）；config.ts:141 旧注释「inline 形状宽容」作废，改两面同严口径；preset-rules.test.js 的 R-3 拆为 R-3a（装载层拒重复 id）+ R-3b（收据层去重，绕过装载层）；governance-config.test.js 的 I2-2 夹具补合法 violations",
   "schema": 1,
   "totals": {
-    "asserts": 8250,
-    "blankLines": 4120,
+    "asserts": 8251,
+    "blankLines": 4122,
     "files": 157,
-    "lines": 44925,
+    "lines": 44939,
     "tautologies": 0,
-    "tests": 1726,
+    "tests": 1727,
     "todos": 4
   }
 }

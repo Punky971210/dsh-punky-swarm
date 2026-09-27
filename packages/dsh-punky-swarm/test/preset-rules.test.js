@@ -332,14 +332,24 @@ test('R-2 反例：内容/资源面干净参数不命中（正反成对）', () 
 
 // ── T-2 R-3 同 id 重复（F1 修正后断言：kernel 收据层去重、violations 不去重如实固化）──
 
-test('R-3 同 id 重复规则：ruleRefs 单条（收据层去重）、reason 双份（violations 不去重）', () => {
-  const dupRule = (id) => ({
-    id,
-    tools: ['bash'],
-    match: { path: '/cmd', op: 'regex', pattern: 'rm -rf' },
-    violations: [{ code: id, category: 'hard', message: '危险命令 rm -rf' }],
-  });
-  const kernel = createGovernanceKernel(resolveGovernanceConfig({ rules: [dupRule('R-DUP'), dupRule('R-DUP')] }));
+const dupRuleOf = (id) => ({
+  id,
+  tools: ['bash'],
+  match: { path: '/cmd', op: 'regex', pattern: 'rm -rf' },
+  violations: [{ code: id, category: 'hard', message: '危险命令 rm -rf' }],
+});
+
+// 【2026-09-27 拆条 · 上半】装载层：inline rules 的重复 id ⇒ **被拒**（用户裁 B：inline 与 preset 两面同严）
+test('R-3a 同 id 重复规则 · 装载层：inline rules 重复 id ⇒ 拒且回退空表（两面同严）', () => {
+  const cfg = resolveGovernanceConfig({ rules: [dupRuleOf('R-DUP'), dupRuleOf('R-DUP')] });
+  assert.deepEqual(cfg.rules, [], '★ 重复 id 在装载层即被拒（修前会直通内核）');
+});
+
+// 【2026-09-27 拆条 · 下半】收据层：**绕过装载层**手工构造重复规则 ⇒ ruleRefs 去重、violations 不去重
+test('R-3b 同 id 重复规则 · 收据层：ruleRefs 单条（去重）、reason 双份（violations 不去重）', () => {
+  const cfg = resolveGovernanceConfig({ rules: [dupRuleOf('R-DUP')] });
+  // 绕过装载层（装载层已拒重复 id）：直接构造「同 id 两条」喂 kernel，专测收据层口径
+  const kernel = createGovernanceKernel({ ...cfg, rules: [dupRuleOf('R-DUP'), dupRuleOf('R-DUP')] });
   const d = kernel.decide({ name: 'bash', arguments: { cmd: 'rm -rf /' } });
   assert.equal(d.primitive, 'DENY');
   assert.deepEqual(d.ruleRefs, ['R-DUP']); // 收据层去重：只一条

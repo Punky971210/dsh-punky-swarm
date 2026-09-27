@@ -48,7 +48,11 @@ test('I2-1 默认合并：resolveGovernanceConfig(undefined) 与 resolveGovernan
 });
 
 test('I2-2 部分覆盖保留默认：传 {rules:[...]} → enabled 仍 true、flags 仍默认、defaults.deny 仍 DENY', () => {
-  const c = resolveGovernanceConfig({ rules: [{ id: 'R1', match: {}, violations: [] }] });
+  // 【2026-09-27 用户裁 B 适配】inline rules 现走**形状校验**（与 preset 两面同严）
+  //   ⇒ 夹具须合 `validatePresetRules`：`violations` **非空**且含合法 `code`/`category`（原 `violations: []` 被拒）。
+  const c = resolveGovernanceConfig({
+    rules: [{ id: 'R1', match: {}, violations: [{ code: 'R1', category: 'hard', message: 'm' }] }],
+  });
   assert.equal(c.enabled, true);
   assert.deepEqual(c.flags, { pause: false, narrow: false, defer: false });
   assert.equal(c.defaults.deny, 'DENY');

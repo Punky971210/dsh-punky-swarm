@@ -369,28 +369,61 @@ export function resolveGovernanceConfig(
     //   而 `else`（无 preset）分支两者都校验 ⇒ **inline 坏条目在 preset 分支下被静默武装**：
     //   缺 code/message/tool 时拒绝文案 code=undefined、未知 behavior 永不命中（fail-open）；
     //   与 `else` 分支注释声称的「现接同一校验器」**不符**。现补**同一校验器**，两侧对称。
+    const final = [...merged, ...inline];
+    // ── 【2026-09-27 修 · R2-α 面间独立】两个判定面**各清各的**（用户裁 α）──────────────
+    //   修前：本分支把「rules 面坏」与「toolBan 面坏」合并判定（任一坏 ⇒ **两表全清**），
+    //     而 `else` 分支是**面间独立**的 ⇒ **两分支行为不对称**（gap-list `e2-R3-03` CASE_E 实证：
+    //     有效的 toolBan 会被无关的 rules 错误静默清空 ⇒ 与 `config.ts:157` 自述
+    //     「防『以为武装实则裸奔』」**反向**）。
+    //   修后：**唯一跨面连带的只剩 `errs`（preset 引用本身非法）** —— 那时**两面都不可信**，
+    //     清两表是对的；其余情况**面间不连坐**。
     const vBanEntries = validateToolBanEntries(finalBan);
     const vBan = validateToolBanTable(finalBan);
-    if (errs.length > 0 || !vBanEntries.ok || !vBan.ok) {
+    if (errs.length > 0) {
       for (const e of errs) warn?.(`[governance] ${e}；装载失败回退空表（宁空勿半——出厂空表=零拦截，请修正后热更重挂生效）`);
-      for (const e of vBanEntries.errors) warn?.(`[governance] preset 装载失败（toolBan 形状）：${e}；回退空表（宁空勿半——修正后热更重挂生效）`);
-      for (const e of vBan.errors) warn?.(`[governance] preset 装载失败（toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
       rules = [];
       toolBan = [];
     } else {
-      const final = [...merged, ...inline];
-      const v = validateRuleTable(final);
-      if (v.ok) {
-        rules = final;
+      // ① toolBan 面（独立判定）
+      if (vBanEntries.ok && vBan.ok) {
         toolBan = finalBan;
       } else {
+        for (const e of vBanEntries.errors) warn?.(`[governance] preset 装载失败（toolBan 形状）：${e}；回退空表（宁空勿半——修正后热更重挂生效）`);
+        for (const e of vBan.errors) warn?.(`[governance] preset 装载失败（toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
+        toolBan = [];
+      }
+      // ② rules 面（独立判定；**形状 + id 唯一**双检 —— 2026-09-27 用户裁 B：inline 与 preset 两面同严）
+      const vShape = validatePresetRules(final);
+      const v = validateRuleTable(final);
+      if (vShape.ok && v.ok) {
+        rules = final;
+      } else {
+        for (const e of vShape.errors) warn?.(`[governance] preset 装载失败（rules 形状）：${e}；回退空表（宁空勿半——修正后热更重挂生效）`);
         for (const e of v.errors) warn?.(`[governance] preset 装载失败：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
         rules = [];
-        toolBan = [];
       }
     }
   } else {
-    rules = Array.isArray(c.rules) ? c.rules as Rule[] : [...GOVERNANCE_DEFAULTS.rules];
+    // ── 【2026-09-27 修 · R1a】inline rules 补 `validateRuleTable`（id 唯一）──────────────
+    //   修前：本分支 rules **零校验**（直赋）⇒ **重复 id 直通内核**（gap-list `e2-R3-03` CASE_A 实证：
+    //     `no_preset` 下重复 id 被武装、warns=0），与 `config.ts:104-105` 自述「故装载层拒绝」**不符**。
+    //   修后：与 `preset` 分支**用同一套 id 唯一校验**（`validateRuleTable`）；
+    //     ⚠ **形状校验仍不施加** —— `validatePresetRules:141` 注释明说「inline 规则形状沿现状宽容」，
+    //     属**有意设计**（受控资产早失败 vs 热加载通道宽容），本次**不改**（R1b 不动）。
+    // 【2026-09-27 用户裁 B · 两面同严】inline 通道的 rules 面**也走形状校验**（`validatePresetRules`），
+    //   与 inline toolBan 面（走 `validateToolBanEntries`）**口径一致**；`validatePresetRules:141` 原注释
+    //   「inline 规则形状沿现状宽容」**已作废**（那是本改动前的旧口径）——现两面同规则：
+    //   **preset 文件 = 形状 + id（装载期全检）；inline = 形状 + id（resolve 期全检）；判定面统一 fail-closed 兜底。**
+    const inlineRules: Rule[] = Array.isArray(c.rules) ? c.rules as Rule[] : [...GOVERNANCE_DEFAULTS.rules];
+    const vRulesShape = validatePresetRules(inlineRules);
+    const vRulesTable = validateRuleTable(inlineRules);
+    if (vRulesShape.ok && vRulesTable.ok) {
+      rules = inlineRules;
+    } else {
+      for (const e of vRulesShape.errors) warn?.(`[governance] inline rules 装载失败（热加载通道 governance.hook.rules，形状）：${e}；回退空表（宁空勿半——修正后热更重挂生效）`);
+      for (const e of vRulesTable.errors) warn?.(`[governance] inline rules 装载失败（热加载通道 governance.hook.rules）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
+      rules = [];
+    }
     // 第三类判定面 inline 通道（**热加载主干**）：runtime.json 写 governance.hook.toolBan →
     //   本快照变化即触发 dispose+重挂（remount JSON 比较），免重启生效、无需 preset 装载。
     //   ⚠ 形状校验（2026-09-15 B1 修复，fail-open → fail-closed）：本通道此前**直赋** c.toolBan
