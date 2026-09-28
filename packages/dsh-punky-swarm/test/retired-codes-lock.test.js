@@ -15,7 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING + teamsRoot 两码）：
+// 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING + teamsRoot 两码；
+//   2026-09-27 批 3 补登 team-asset 全族 19 项 ⇒ 11 + 19 = **30**）：
 //   数据源 = docs/gate-code-classification-2026-09-22.md C 类（码已退役、无任何拒态来源）。
 //   单表遍历断言 lib/** 零字面量命中 —— 取代此前散布在 gate-lite-batch2 / concurrency-gate /
 //   governance / writing-team-asset 四处的手写「已删零命中」变体（激进删除批 2，用户裁定）。
@@ -39,6 +40,39 @@ const RETIRED_CODES = [
   //   （覆盖性快照 reports/decision-team-optional-and-gate-retire-20260927.md §三 A 级「立即可退役」）：
   'GATE_TEAMS_ROOT_INVALID', // teamsRoot 词法/防逃逸拒态退役——原 `assert` 出口改「纯判定返回值」（`teamsRootLexicalProblem`），判据逐字保留、不再抛
   'GATE_TEAMS_ROOT_ASSET_NOT_FOUND', // teamsRoot 资产查找拒态退役——未接线函数 `assertTeamsRootAsset` 与本码同批删除（无 import/调用/测试引用）
+  // ── 【2026-09-27 补登 · 批 3 `retire-team-chain-20260927` / lane `exec-delete-assets`】team-asset **全族退役** ──
+  //   事由：用户 2026-09-27 裁决「team 类引擎内资产全部退役」；本批 D-5 = 「码面随本体删除 ⇒ **全部入退役锁**；
+  //   锁前置 = `lib/**` **零字面量（含注释）**」。前置**已实测达成**（`lib/**` 110 件，排除 `*.d.ts`，逐码 0 命中；
+  //   自扫原始输出见 `exec/delete-assets.md` §三）。本体删除 = `lib/assembly/team-asset.js`（装载器 + 码族）。
+  //   · 码 **13 个**（原 `TEAM_ASSET_CODES` 全表）——其中 6 个（MISSING_FIELD / FIELD_NOT_ALLOWED / BAD_TYPE /
+  //     SKILLS_MISMATCH / LAYER_UNKNOWN / REWORK_INVALID）亦曾被 `lib/assembly/chain.js` 的链校验复用
+  //     （判据源 B-2 实测 59 处）：**链校验码族与资产码族同值同族**（`CHAIN_CODES` 逐字等于同名码值）
+  //     ⇒ 不另立前缀、不重复登记；
+  'TEAM_ASSET_NOT_FOUND',
+  'TEAM_ASSET_BAD_JSON',
+  'TEAM_ASSET_BAD_TYPE',
+  'TEAM_ASSET_MISSING_FIELD',
+  'TEAM_ASSET_FIELD_NOT_ALLOWED',
+  'TEAM_ASSET_ENTRY_REQUIRE_UNKNOWN',
+  'TEAM_ASSET_CONSUME_FIELD_NOT_ALLOWED',
+  'TEAM_ASSET_CONTRACT_EMPTY',
+  'TEAM_ASSET_CONTRACT_LEGACY',
+  'TEAM_ASSET_LAYER_UNKNOWN',
+  'TEAM_ASSET_ROLE_LEXICAL',
+  'TEAM_ASSET_SKILLS_MISMATCH',
+  'TEAM_ASSET_REWORK_INVALID',
+  //   · 码族**本体定义项 4 个**（非码的标识符：码表 / 严重级表 / 资产目录名 / 资产文件名白名单）——
+  //     判据源 A-10「登记范围 = `TEAM_ASSET_*` **全族**」⇒ 随本体删除者同入锁，防「族回生」；
+  'TEAM_ASSET_CODES',
+  'TEAM_ASSET_SEVERITY',
+  'TEAM_ASSET_DIR',
+  'TEAM_ASSET_FILENAMES',
+  //   · 已删子族的**前缀**（原「牵头角色悬空」`TEAM_ASSET_LEAD_*` 码族，2026-09-26 `onto-engine-slim` 批删除；
+  //     本批补登：锁前缀 = 锁全族，且当前 `lib/**` 零命中）；
+  'TEAM_ASSET_LEAD_',
+  //   · `teamsRoot` **留痕码**（判决源 A-10 明列于登记范围）：用户裁决 D-3「`teamsRoot` 参数一并退役」
+  //     ⇒ 该码在 wave 3 已无发射点、`lib/**` 归零（实测 hits=0）；
+  'TEAMS_ROOT_IGNORED',
 ];
 
 function libSources(dir, out = []) {

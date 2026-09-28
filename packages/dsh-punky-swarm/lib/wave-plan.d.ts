@@ -134,7 +134,7 @@ export declare function validateDepsStructure(tasks: WaveTask[]): void;
  * 且逐条消费其产物（认领即须消费）。
  */
 export declare function collectAuditPairingWarnings(tasks: WaveTask[]): WavePlanDoc['warnings'];
-export declare function buildWavePlan({ batchId, tasks, concurrency, team, assembly, teamsRoot, smoke, handoffGate }: {
+export declare function buildWavePlan({ batchId, tasks, concurrency, team, assembly, smoke, handoffGate }: {
     batchId: string;
     tasks: WavePlanTaskInput[];
     concurrency?: number;
@@ -144,7 +144,8 @@ export declare function buildWavePlan({ batchId, tasks, concurrency, team, assem
             skills?: Record<string, string[]>;
         }>;
     } | null;
-    teamsRoot?: string;
+    /** 【2026-09-27 · team-asset 全量退役】**已删除**：原「会话级临时团队资产根」。
+     *  资产面不存在 ⇒ 无对象；直调方若仍传该键，JS 侧被忽略（构造期不再有任何资产查找）。 */
     smoke?: boolean;
     /** P1 交接门策略（`task-27`）：由**调用方**（工具面持 liveConfig）经 `handoffGateEnabledOf` 解析后传入；
      *  缺省 undefined ⇒ 本函数内按**缺省配置**兜底解析（env → 缺省关），直调调用方行为不变。 */

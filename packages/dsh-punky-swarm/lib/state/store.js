@@ -28,7 +28,7 @@ import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 // 团队资产解析快照写单点（§8③：解析结果落会话级正档 + 批次级指纹引用）——本文件只做**建批侧接线**：
 //   解析 + 写档 + 字段/事件载荷的构建全在 lib/assembly/snapshot.js，store 不复制其语义
-import * as snapshot from '../assembly/snapshot.js';
+//   【2026-09-27 · 批 3】资产面全量退役 ⇒ 该接线（`import * as snapshot` + 建批侧写档）**已整条删除**。
 import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单
 import { SESSION_RE } from './constants.js'; // 单点（原本文件定义迁出）
 import { laneProgressClear, laneProgressWrite } from './resume.js'; // 断点指针：结算终态清退 + 原子写合并（纯函数，本文件落盘）
@@ -289,24 +289,9 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     };
   }
 
-  // 团队资产解析快照（§8③，批次 `a3-snapshot-b1-20260915`）：**建批侧**写档单点（`lib/assembly/snapshot.js`）——
-  //   · 档 = 会话级派生观察档（`<sessionDir>/team-assets/<team>.<hash>.json`），**不参与任何门禁判定**；
-  //   · 时点 = 本事务内（档先于批次落盘），与批次字段/事件同一次 atomicWrite ⇒ 无「批已存在、解析记录还没写」的中间态；
-  //   · **不得**把写盘挂到 `resolveTeamFlows`（读端）：`gate_status`/面板/20+ 判定点的共同取数入口不得成写者；
-  //   · 无资产 ⇒ 只写 `ok:false` 字段（不写档、不落事件）；写档失败 ⇒ 告警 + 字段/事件双留痕，**不拒建批**。
-  function teamAssetRefFor(sessionId, team, teamsRoot) {
-    try {
-      return snapshot.teamAssetRefOf({ sessionDirAbs: sessionDir(sessionId), team, teamsRoot: teamsRoot ?? null });
-    } catch (error) {
-      // 防御：快照面任何意外都不得阻断建批（观察面故障 ≠ 治理面拒态）
-      return {
-        field: { team: team ?? null, snapshotWriteFailed: true, ok: false },
-        event: null,
-        snapshotPath: null,
-        warning: '[dsh-punky-swarm] team-asset snapshot skipped: ' + String(error && error.message),
-      };
-    }
-  }
+  // 【2026-09-27 · 批 3】原「团队资产解析快照」建批侧接线（`teamAssetRefFor` + `lib/assembly/snapshot.js` 导入）
+  //   **已整条删除**：资产面全量退役 ⇒ 无资产可解析、无指纹可写、无事件可落。本文件对该面**零 I/O、零引用**。
+  //   历史批磁盘上仍可能带 `teamAsset` / `teamsRoot` 键（读取侧零迁移，不解析、不回显）。
 
   // C+ 档装配声明（assembly，batch JSON 顶层可选字段）：缺省 undefined → 不写键（仿 laneProgress 零噪音模式，
   // schema 不升、旧批无键读取兼容零迁移——C+ 门禁归一化产物随建批持久化，供运行期/审计按需消费）
@@ -318,7 +303,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   //   禁从事件流事后重建）；缺省 `undefined` ⇒ 键不存在 ⇒ 旧批/未声明批读端零感知、schema 不升、零迁移。
   //   本函数**只落盘**归一化结果，不做任何判定（单点判定 = `lib/wave-plan.ts#normalizeChannelDecl`，
   //   由建批路径 `lib/tools/core.js` 在 `createBatch` 之前调用并 throw）。
-  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, teamsRoot, channel }) {
+  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, channel }) {
     schema.assertBatchPhase(phase);
     const file = batchFile(sessionId, batchId);
     if (fs.existsSync(file)) throw new Error('batch already exists: ' + batchId);
@@ -329,8 +314,6 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
     // D-3 口径不变：`?? 'generic'` 兜底已清退（防第二默认值真源；历史批自带 `team:'generic'` 字段，读取侧零迁移）。
     //   【2026-09-27】建批面 `team` 降为**可选标签** ⇒ 无标签批的 `wavePlan.team` = `null`，此处**不代造默认值**。
     const team = wavePlan.team;
-    const ta = teamAssetRefFor(sessionId, team, teamsRoot);
-    if (ta.warning) log.warn?.(ta.warning);
     const batch = {
       schema: STORE_SCHEMA,
       sessionId,
@@ -348,15 +331,11 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
       archived: false, // 单向归档标记（v3 可选字段，缺省 false；complete 归档后置 true）
       ...(assembly !== undefined ? { assembly } : {}), // 装配声明（C+ 归一化 decl）；未声明不写键（旧批/非 C+ 批零噪音）
       ...(channel !== undefined ? { channel } : {}), // R-5 通道归属（G-1）；未声明不写键（R5-d 存量批零破坏）
-      // 会话级临时团队资产根（显式给出时才写键）：门禁读端据此解析该团队的 `flows` 声明
-      // （否则 flows 只按包根解析 → 临时团队的 entry_requires/contract/needhuman/complete 不生效）
-      ...(teamsRoot ? { teamsRoot } : {}),
-      // §8③ 团队资产解析冻结的**指纹引用**（不复制资产正文、不复制完整 summary；旧批无本键 = 读取兼容零迁移）
-      teamAsset: ta.field,
+      // 【2026-09-27 · 批 3】原「会话级临时团队资产根」（`teamsRoot` 落键）与「资产解析冻结指纹引用」
+      //   （`teamAsset` 落键）**两键同批删除**：资产面退役 ⇒ 临时资产根无对象、指纹无来源。
+      //   历史批磁盘上仍可能带这两键（读取侧零迁移，不解析、不回显）。
       events: [
         newEvent(EVT.EVT_BATCH_CREATED, { batchId, sessionId }),
-        // 解析冻结事件：与批次字段同一次 atomicWrite（无资产 ⇒ ta.event 为 null ⇒ 不落本事件）
-        ...(ta.event ? [newEvent(EVT.EVT_BATCH_TEAM_ASSET_RESOLVED, ta.event)] : []),
       ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

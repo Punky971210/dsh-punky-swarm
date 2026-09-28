@@ -36,10 +36,9 @@ import { findTask } from './task-utils.js';
 // gate-techdebt 新增读端（G-2 / G-3 / S19①）：`entryRequiresOf`（入口要求的**真实来源**）/
 //   `consumeFieldOf`（consume 字段名读端）/ `declarationSummaryOf`（声明面可读汇总，含**未接线台账**）——
 //   三者均**只读复用** flows.js，不改该文件；`requiredBy` 标注取 `entryRequiresOf(flow).source`（G-3 修正）。
-import { flowsForBatch, flowOf, produceFieldOf, produceFieldsOf, packageRoot, entryRequiresOf, consumeFieldOf, declarationSummaryOf, contractOf, sectionProblemsOf, enabledByFlag, flagOf, globMatchesPath, ENGINE_BASELINE_PLAN_SECTIONS, ENGINE_BASELINE_CRITERIA_SECTION } from '../assembly/flows.js';
-// 未接线声明台账**单一来源**（team-asset.js `UNWIRED_DECLARATIONS`）＋ 团队资产读端（供台账的**顶层键**读法）。
-// 同样**只读复用**：`lib/assembly/team-asset.js` 不在本 lane 写域，逐字不改。
-import { loadTeamAsset, UNWIRED_DECLARATIONS } from '../assembly/team-asset.js';
+import { flowsForBatch, flowOf, produceFieldOf, produceFieldsOf, entryRequiresOf, consumeFieldOf, contractOf, sectionProblemsOf, enabledByFlag, flagOf, globMatchesPath, ENGINE_BASELINE_PLAN_SECTIONS, ENGINE_BASELINE_CRITERIA_SECTION } from '../assembly/flows.js';
+// 【2026-09-27 · team-asset 全量退役】原资产读端 import（装载器 + 未接线声明台账常量）**整体删除**：
+//   flows / roles 面只走**引擎基线** ⇒ 本文件不再读任何团队资产（A-5 判据：import 面归零）。
 // R1「契约三小件」·词表读端（exec-1 lane 交付 `lib/state/vocabulary.json` / `vocabulary.js`）。
 //   本文件**只读**词表，不写、不改词表真源；判定**单点**复用 `reasonTokenKnown`（其内部 `knownOf` 是
 //   gate/reason 两 kind 的唯一实现）⇒ entry 门（E1）与命令门（C3）共用同一 tokenOf，禁两套口径。
@@ -503,8 +502,9 @@ export function presenceJudge(input: {
 
 export function createGates(root: string, opts: { flowsRoot?: string; readConfig?: () => unknown; vocabularyRoot?: string } = {}) {
   const sessionsDir = path.join(root, 'sessions');
-  // 声明解析根（DI 缝，测试可指向临时包根；生产缺省 = 包根 packageRoot()）
-  const flowsRoot = opts && typeof opts.flowsRoot === 'string' ? opts.flowsRoot : null;
+  // 【2026-09-27 · team-asset 全量退役】原「声明解析根」DI 缝（`opts.flowsRoot` → 临时包根）
+  //   **已无对象**：团队资产不再被解析 ⇒ 无根可注入。签名里的 `flowsRoot` 字段**保形保留**
+  //   （调用方与测试签名零变化），读端**不再消费**它，也不得据此恢复读盘。
   // R1 词表读取根（DI 缝，与 `flowsRoot` **同形**：测试可指向临时包根；生产缺省 = 包根 ⇒ 零行为变化）。
   //   存在理由：S-④ 要求「停用词条 ⇒ 既有产物解析通过 / 新写点被拒」的**两态可分**用例必须注入
   //   私有词表夹具；而交付物 `lib/state/vocabulary.json` 不得被测试污染（exec-1 同口径）。
@@ -517,22 +517,11 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
   const readCfg: () => unknown = (opts && typeof opts.readConfig === 'function')
     ? opts.readConfig
     : () => readRuntimeSnapshot({});
-  // 声明解析根优先级：① 批次级 `teamsRoot`（会话级临时团队资产，建批时持久化）→ 该团队声明的 flows 生效；
-  //                       ② DI 缝 `flowsRoot`（测试可指向临时包根）；③ 缺省 = 包根（packageRoot()）。
-  const flowsOf = (batch: Batch) => flowsForBatch(batch, batch.teamsRoot ? { root: batch.teamsRoot } : (flowsRoot ? { root: flowsRoot } : {}));
-  // 团队资产读端（**只读复用** `lib/assembly/team-asset.js`，不改该文件）：与 `flowsOf` **同一根解析优先级**
-  //   （批次 `teamsRoot` → DI `flowsRoot` → 包根）。**用途仅限**未接线台账的**顶层键读法**
-  //   （`state_machine` / `rework` 等顶层声明键——`resolveTeamFlows().flows` 只带 `flows` 子对象，读不到顶层）。
-  // 语义边界（防误读为放宽）：资产校验失败时 `flowsOf().flows` 为 null（tighten-only 侧）；
-  //   本读端只供**只读台账/标注面**（`gateStrength.unwired`），**不参与任何门禁判定**。
-  function teamAssetOf(batch: Batch | null | undefined) {
-    const team = batch && typeof batch.team === 'string' ? batch.team : null;
-    if (!team || team.trim().length === 0) return null;
-    const r = batch && batch.teamsRoot
-      ? loadTeamAsset(batch.teamsRoot, team)
-      : (flowsRoot ? loadTeamAsset(flowsRoot, team) : loadTeamAsset(packageRoot(), team));
-    return r && r.asset ? r.asset : null;
-  }
+  // 声明解析（【2026-09-27 · team-asset 全量退役】资产根面已不存在）：
+  //   原优先级 ① 批次级 `teamsRoot`（临时团队资产）→ ② DI 缝 `flowsRoot` → ③ 包根 三态**全部作废**：
+  //   团队资产不再被解析 ⇒ `flowsForBatch` 恒回「无声明」⇒ 读端一律走**引擎基线**（tighten-only 缺省）。
+  //   形参 `flowsRoot` **保形保留**（DI 缝，测试签名零变化）；现已不被读，也不得据此恢复读盘。
+  const flowsOf = (batch: Batch) => flowsForBatch(batch);
 
   function sessionDir(sessionId: string) {
     if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
@@ -1512,59 +1501,28 @@ export function createGates(root: string, opts: { flowsRoot?: string; readConfig
     return pass;
   }
   // 未接线声明台账读端（S19② / S20）——**只读视图**：不参与任何门禁判定。
-  //   单一来源 = `lib/assembly/team-asset.js` 的 `UNWIRED_DECLARATIONS`（经 flows.js `declarationSummaryOf()`
-  //   `.unwired` 读出，**不复制台账数据**）。两处如实补检（不改台账本体，理由见产物「口径偏差登记」）：
-  //   ① **层内声明读法**：台账对 `rework` 只读**顶层**键（`team-asset.js` `topHas`），而声明也可落在层内
-  //      （`flows.<layer>.rework`）⇒ 按台账键在**任一层 flow** 的声明面补检（键仍取台账，不新造键）；
-  //   ② **引擎级配置键 `config.ratchet`**：它是**引擎配置键**（注入端 `lib/index.js:108-112` ⇒
-  //      `rules: loadRules(config)` ⇒ 读点 `lib/state/store.js:155`；**已接线**：A-① 落地），
-  //      **不是团队声明键** ⇒ 台账结构上不承载；按 S20 以引擎级条目显式标注（条目口径见下方 `:915`）。
-  function unwiredEntriesOf(batch: Batch): Array<Record<string, unknown>> {
-    const flows = flowsOf(batch).flows;
-    const ledger = declarationSummaryOf(flows, teamAssetOf(batch)) as { unwired?: Array<Record<string, unknown>> };
-    const out: Array<Record<string, unknown>> = (Array.isArray(ledger.unwired) ? ledger.unwired : [])
-      .map((d) => ({ name: d.key, ...d }));
-    const has = (k: string) => out.some((e) => e.name === k);
-    const declaredInFlows = (key: string) =>
-      Object.values(flows ?? {}).some((f: unknown) => f !== null && typeof f === 'object' && (f as Record<string, unknown>)[key] != null);
-    // 台账为 `Object.freeze` 的 readonly 常量（team-asset.js）⇒ 经 unknown 断言只读遍历（不复制、不改写）
-    for (const d of (UNWIRED_DECLARATIONS as unknown as Array<Record<string, unknown>>)) {
-      const key = String(d.key);
-      if (has(key) || !declaredInFlows(key)) continue;
-      out.push({ name: key, ...d });
-    }
-    if (!has('config.ratchet')) {
-      out.push({
-        name: 'config.ratchet', at: 'config.ratchet', status: 'wired',
-        readEnd: 'lib/index.js:108-112（装配点 createStore 注入 `rules: loadRules(config)`，**整份 config** ⇒ 内部取 config.ratchet）⇒ lib/state/store.js:155（`rules ?? loadRules()`）⇒ 消费点 :331 / :462 / :690',
-        consumer: '装配点 lib/index.js:108-112（rules: loadRules(config)）／读点 lib/state/store.js:155（原注 :79 为过期行号）／消费点 lib/state/store.js:331（批次迁移）· :462（成员迁移）· :690（批次阶段迁移）',
-        note: '引擎级配置键（**非团队声明键**）：**已接线**（A-① 落地——注入端 lib/index.js:108-112 ⇒ 读点 store.js:155）。缺省（无 config.ratchet 键）⇒ 返回默认表且与 schema 常量**同引用**（machine-rules.js:82-84，行为零差异）；非法棘轮配置在**装配期 throw**（fail-closed，不静默回落默认规则）。本条目保留「引擎级配置键可读性」既有能力（R-14 依赖其在列）',
-      });
-    }
+  //   【2026-09-27 · team-asset 全量退役】声明台账本体（团队资产侧常量）与 `flows` 层内声明读法
+  //   随资产面**整体删除**：无声明面 ⇒ 无「未接线声明」条目可列。
+  //   保留项 = **引擎级配置键 `config.ratchet`**：它是**引擎配置键**（注入端 `lib/index.js:108-112` ⇒
+  //   `rules: loadRules(config)` ⇒ 读点 `lib/state/store.js:155`；**已接线**：A-① 落地），
+  //   **不是团队声明键** ⇒ 台账结构上不承载；按 S20 以引擎级条目显式标注（条目口径见下方）。
+  function unwiredEntriesOf(_batch: Batch): Array<Record<string, unknown>> {
+    const out: Array<Record<string, unknown>> = [];
+    out.push({
+      name: 'config.ratchet', at: 'config.ratchet', status: 'wired',
+      readEnd: 'lib/index.js:108-112（装配点 createStore 注入 `rules: loadRules(config)`，**整份 config** ⇒ 内部取 config.ratchet）⇒ lib/state/store.js:155（`rules ?? loadRules()`）⇒ 消费点 :331 / :462 / :690',
+      consumer: '装配点 lib/index.js:108-112（rules: loadRules(config)）／读点 lib/state/store.js:155（原注 :79 为过期行号）／消费点 lib/state/store.js:331（批次迁移）· :462（成员迁移）· :690（批次阶段迁移）',
+      note: '引擎级配置键（**非团队声明键**）：**已接线**（A-① 落地——注入端 lib/index.js:108-112 ⇒ 读点 store.js:155）。缺省（无 config.ratchet 键）⇒ 返回默认表且与 schema 常量**同引用**（machine-rules.js:82-84，行为零差异）；非法棘轮配置在**装配期 throw**（fail-closed，不静默回落默认规则）。本条目保留「引擎级配置键可读性」既有能力（R-14 依赖其在列）',
+    });
     return out;
   }
-  // §8③ 团队资产解析快照的**读端**（批次 `a3-snapshot-b1-20260915`）：按 `batch.teamAsset.snapshotPath`
-  //   （相对 `<sessionDir>`）读会话级正档，返回 `{teamAsset, declaration, declarationMissing}`。
-  //   纪律（四条，规格 §2.2 / §5 P6）：
-  //     ① **只读观察面**：不参与任何门禁判定（判定面仍走 `flowsOf` 的实时解析，热生效语义零变化）；
-  //     ② 读失败 / 缺档 / 路径非法 ⇒ `declaration:null` + `declarationMissing:true`，**不 throw**；
-  //     ③ **不回落现算**（回落 = 悄悄换权威源，正是 Q-4 取消的双值形态）——批次字段的 `summaryKeys` 仍在，信息不丢；
-  //     ④ 单值纪律：只给冻结值，**不产** `liveAssetHash` / `declarationDrift` / 漂移事件。
-  function teamAssetViewOf(batch: Batch | null | undefined): { teamAsset: unknown; declaration: unknown; declarationMissing: boolean } {
-    const field = batch ? (batch as unknown as { teamAsset?: unknown }).teamAsset : undefined;
-    if (!field || typeof field !== 'object') return { teamAsset: field ?? null, declaration: null, declarationMissing: true };
-    const rel = (field as { snapshotPath?: unknown }).snapshotPath;
-    const sid = (batch as unknown as { sessionId?: unknown }).sessionId;
-    if (typeof rel !== 'string' || rel.length === 0 || isAbsPath(rel)) return { teamAsset: field, declaration: null, declarationMissing: true };
-    const segs = rel.split(/[\\/]/).filter((s: string) => s.length > 0 && s !== '.');
-    if (segs.length === 0 || segs.includes('..')) return { teamAsset: field, declaration: null, declarationMissing: true };
-    if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return { teamAsset: field, declaration: null, declarationMissing: true };
-    try {
-      const doc = JSON.parse(fs.readFileSync(path.join(sessionDir(sid), ...segs), 'utf8'));
-      return { teamAsset: field, declaration: doc, declarationMissing: false };
-    } catch {
-      return { teamAsset: field, declaration: null, declarationMissing: true };
-    }
+  // §8③ 团队资产解析快照的**读端**（批次 `a3-snapshot-b1-20260915`）。
+  //   【2026-09-27 · team-asset 全量退役】快照写盘面与档读端**整体删除**（判据源 T-7：删资产指纹面）：
+  //   无资产 ⇒ 无档可写、无可读 ⇒ 恒 `{teamAsset:null, declaration:null, declarationMissing:true}`，
+  //   零 I/O、零副作用、**不回落现算**。**保形保留导出**：`lib/state/store.js` 与工具面按既有符号名消费
+  //   （该文件不在本 lane 写域 ⇒ 删导出会造成 ESM 缺符号断链）。
+  function teamAssetViewOf(_batch: Batch | null | undefined): { teamAsset: unknown; declaration: unknown; declarationMissing: boolean } {
+    return { teamAsset: null, declaration: null, declarationMissing: true };
   }
   // 门禁强度摘要（原则②的载体）：**只增不改** —— 纯只读视图，不参与任何门禁判定
   function gateStrengthOf(batch: Batch) {

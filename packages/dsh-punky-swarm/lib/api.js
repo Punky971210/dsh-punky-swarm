@@ -22,7 +22,6 @@ import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';
 // 面板读端增量（冻结节拍 §2.1）：三处投影一律复用**既有单点纯函数**（禁在 api.js 复制第二份判定）
 import { danglingLanesOf } from './state/dangling.js';
-import { chainOfBatch, chainEchoOf } from './assembly/chain.js';
 import { smokeOf } from './state/gates.js';
 // 事件读端字面量收敛：EVT 常量单源 lib/state/event-types.js
 import * as EVT from './state/event-types.js';
@@ -107,16 +106,18 @@ export function createApi(ctx, deps) {
           upgrades[lane] = (laneAttempts[lane] ?? 0) >= 3 && (b.lanes[lane] === 'review' || b.lanes[lane] === 'failed');
         }
         // 面板读端增量（冻结节拍 §2.1，**纯加法**：既有键语义/形状零改动，旧客户端零感知）：
-        //   danglingLanes / handoffs / manager / assembly / teamAsset / chain / smoke。
+        //   danglingLanes / handoffs / manager / assembly / teamAsset / smoke。
         //   取值纪律 = 「零新真源」：只从 ① 批次 JSON 字段 或 ② 既有单点纯函数取得——
         //     · danglingLanesOf  = batch_status.danglingLanes 的同一实现（lib/state/dangling.js）
-        //     · chainEchoOf + chainOfBatch = batch_status.chain 的同一实现（lib/assembly/chain.js）
         //     · smokeOf          = 门禁侧同源判据（lib/state/gates.ts#smokeOf）
+        // 【2026-09-27 · 批 3 D-4 删净】原「链回显投影」（`lib/assembly/chain.js` 的两个纯函数）**已删除**：
+        //   链声明面与回显面全量退役（不做冻结兼容读）⇒ 两读端（本文件 / 工具面 `lib/tools/core.js`）**同口径**，
+        //   原「两读端口径分裂」缺口（`exec/consumers.md` §6.1 R-2）随之闭合。运行期 DAG 真源 =
+        //   批次 `wavePlan[].tasks[].deps` + `batch.handoffs`（逐边取件见 `handoff_view`）。
         //   条件键与 batch_status 同款（无值不写键）；handoffs 恒在场（空对象 = 该批无 deps ⇒ 未交接门恒放行）。
         //   明确不做（登记见冻结节拍 §2.4）：lanesState（= lanes 同值键）、managerRoster（需 live agent）、
         //   gates{strength}（= lanesGate[<任一 lane>].gateStrength 已有）、watch/handoffGate/declaration。
         const danglingLanes = danglingLanesOf(b);
-        const chainView = chainEchoOf(b, chainOfBatch(b).chain);
         sendJson(res, 200, {
           batchId: b.batchId, session, phase: b.phase, concurrency: b.concurrency,
           lanes: b.lanes, wavePlan: b.wavePlan,
@@ -131,7 +132,6 @@ export function createApi(ctx, deps) {
           ...(b.manager ? { manager: b.manager } : {}),
           ...(b.assembly ? { assembly: b.assembly } : {}),
           ...(b.teamAsset ? { teamAsset: b.teamAsset } : {}),
-          ...(chainView ? { chain: chainView } : {}),
           ...(smokeOf(b) ? { smoke: true } : {}),
           // 【TD-21 / N-13，2026-09-18 清理波已落地】批级一次扫描（原「逐 lane N 次整批读盘」已收敛）：
           //   `store.gateStatusMapOfBatch` 一次读批 → `{lane: gateView}`，键序/形状/取值与改前逐 lane 展开

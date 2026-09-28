@@ -36,7 +36,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
 // 团队角色集（可拔插）——各层声明角色 ∪ 扩展角色 ∪ 额外牵头角色，缺声明回落引擎基础集
-import { resolveTeamRoles, unionRoleVocabulary } from './assembly/flows.js';
+// 【2026-09-27 · team-asset 全量退役】原角色读端 import（资产各层声明角色 ∪ `roles.extra`）**整体删除**：
+//   `extraRoles` 恒 `[]` ⇒ 角色白名单 = **引擎基础集**（D-1 裁决：per-team roles 随资产退役一并消失）。
+//   （A-5 判据：本文件对 `team-asset` 的间接读面归零。）
 // 判据同源（O-4.3 / I-1 / I-2）：建批期**导入**运行期唯一 presence 判据实现（含「声明形态」判据），
 //   禁两套逻辑（T35 L3 要求 `lib/wave-plan.js` 内 `presenceJudge` **定义处 = 0** 且**引用**该标识符）。
 //   无环证明：`lib/**` 内导入 `wave-plan.js` 的只有 `lib/tools/core.js`（不在 gates.ts 的导入图内）。
@@ -64,8 +66,9 @@ export const LAYERS = ['plan', 'exec', 'audit'] as const;
 //   `GATE_ROLE_MANAGER_AS_LANE`（见 collectRoleCompletenessWarnings）。
 // · `doc-manager` 保留为**历史/兼容角色名**（software-team 已裁为 6 席位、不再含它；
 //   其他团队/存量批次声明该名仍走白名单，不误报 GATE_ROLE_INVALID）。
-// · 团队自有角色名（如 design-planner / research-planner）经 `extraRoles` 扩展入集 ——
-//   `extraRoles = unionRoleVocabulary(resolveTeamRoles(...))` = 各层声明角色 ∪ `roles.extra`。
+// · 团队自有角色名（如 design-planner / research-planner）曾由 `extraRoles` 扩展入集 ——
+//   【2026-09-27 · team-asset 全量退役】该读端（各层声明角色 ∪ `roles.extra`）已删除 ⇒
+//   **`extraRoles` 恒空**（= 引擎基础集），团队特有角色名触发 `GATE_ROLE_INVALID` 告警（非拒态，D-1 已裁决接受）。
 export const VALID_ROLES = ['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'] as const;
 // 装配扩展角色（盲审三角色，与 assembly/schema.js BLIND_REVIEW_ROLES 同源；装配可插拔扩展点）
 export const ROLE_EXTENSIONS = BLIND_REVIEW_ROLES;
@@ -179,10 +182,10 @@ export function requiresAssemblyDecl(tasks: WaveTask[]): boolean {
 //   非对象 / managerPlan 非枚举 / auditLane、coordinatorLane 非非空字符串；
 // roles 词法非法（词条非字符串、或不在合法角色集合 VALID_ROLES∪扩展）→ warnings（GATE_ROLE_INVALID，
 //   软告警不阻断建批；事件经既有 gate.role_invalid 通道留痕）。归一化 decl 供 createBatch 持久化（batch JSON 顶层可选字段）。
-// 复核补齐：assembly.roles 的词法判定**也**接受团队声明的角色
+// 复核补齐：assembly.roles 的词法判定**曾**接受团队声明的角色
 //  （若只认引擎基础集 ∪ 盲审三角色 ⇒ 非工程团队在装配声明里写自有角色会被误判 GATE_ROLE_INVALID）
-// 读端同源（2026-09-14）：调用方传入的 extraRoles 应为 `unionRoleVocabulary(resolveTeamRoles(...))`
-//  （= 资产各层声明角色 ∪ roles.extra），与 task.role 判定同一读端，消除「两处白名单不一致」。
+// 【2026-09-27 · team-asset 全量退役】该「读端同源」已作废：资产声明面不存在 ⇒ 调用方 ExtraRoles 恒 `[]`
+//  （= 引擎基础集）；`task.role` 与 `assembly.roles` 仍走**同一份** extraRoles，口径不分裂。
 export function normalizeAssemblyDecl(input: unknown, extraRoles: string[] | null = null): { decl: WavePlanAssemblyDecl | null; warnings: WavePlanDoc['warnings'] } {
   if (input == null) return { decl: null, warnings: [] };
   if (typeof input !== 'object' || Array.isArray(input)) {
@@ -707,10 +710,9 @@ export function stripCmdPrefix(
   }
 }
 
-// P1（2026-09-16）曾把 `team` 改为**必填**；【2026-09-27 用户裁决】`team` 降为**可选标签**（team-asset 装配方案
-//   全面弃用）⇒ 建批面**不再拒**：`null` = 无团队标签（跳过整个团队资产面），由工具面 `normalizeTeamLabel` 产出，
-//   资产/`chain`/`teamsRoot` 问题一律降级为 `warnings` 留痕（`lib/tools/core.js`，不再有构造期拒）。
-//   本函数**不代造默认值**（落 `team: team`，可为 `null`）；读端（store/snapshot/gates）按「非字符串 = 无团队」处理。
+// P1（2026-09-16）曾把 `team` 改为**必填**；【2026-09-27 用户裁决 + 批 3 资产面全量退役】`team` 降为**可选自由标签**：
+//   `null` = 无团队标签，由工具面就地归一化（**纯归类字段**，不参与任何解析）。
+//   本函数**不代造默认值**（落 `team: team`，可为 `null`）；读端（store/gates）按「非字符串 = 无团队」处理。
 // ── P1/P2 交接门开关（`task-27` 2026-09-17 设计修正）：**唯一解析点** ────────────────────────────
 // 背景（用户裁决）：「门禁应该**只与插件有关**，和父进程无关，也和 dsh 底座无关」——原实现读
 //   `process.env.PSWARM_HANDOFF_GATE` ⇒ 插件行为被**启动父进程的环境块**绑架（本机 web 宿主由常驻
@@ -910,13 +912,14 @@ export function collectAuditPairingWarnings(tasks: WaveTask[]): WavePlanDoc['war
 
 // ── 建批主函数 ──────────────────────────────────────────────────────────────
 
-export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly, teamsRoot = undefined, smoke = false, handoffGate = undefined }: {
+export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly, smoke = false, handoffGate = undefined }: {
   batchId: string;
   tasks: WavePlanTaskInput[];
   concurrency?: number;
-  team: string | null; // 【2026-09-27】可选标签：`null` = 无团队标签（不再必填、不再拒建批）
+  team: string | null; // 【2026-09-27】可选标签：`null` = 无团队标签（纯归类字段，**不参与任何解析**）
   assembly?: { layers?: Record<string, { skills?: Record<string, string[]> }> } | null;
-  teamsRoot?: string;
+  /** 【2026-09-27 · team-asset 全量退役】**已删除**：原「会话级临时团队资产根」。
+   *  资产面不存在 ⇒ 无对象；直调方若仍传该键，JS 侧被忽略（构造期不再有任何资产查找）。 */
   smoke?: boolean;
   /** P1 交接门策略（`task-27`）：由**调用方**（工具面持 liveConfig）经 `handoffGateEnabledOf` 解析后传入；
    *  缺省 undefined ⇒ 本函数内按**缺省配置**兜底解析（env → 缺省关），直调调用方行为不变。 */
@@ -942,13 +945,12 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       throw new Error('GATE_ROSTER_INVALID: task ' + t.id + ' roster "' + rosterTrimmed + '" must be non-empty lower-kebab-case matching ^[a-z0-9]+(-[a-z0-9]+)*$');
     }
   }
-  // 团队角色集（可拔插）——角色词法集 = 资产**各层声明角色** ∪ `roles.extra`（`unionRoleVocabulary`）；
-  //   `plan_leads` / `audit_leads`（额外牵头角色）另计、与引擎基础牵头集并集。
-  //   缺声明/加载失败 → 空集 = 与重构前逐字一致。
-  //   缺口修复（2026-09-14）：extraRoles 曾只取 `roles.extra` ⇒ 「角色已写进资产 layers 但没抄进 roles.extra」
-  //   的团队，每个自定义角色被判 GATE_ROLE_INVALID（指引说放开角色组装、白名单却只认 roles.extra）——现同源。
-  const teamRoles = resolveTeamRoles(team, teamsRoot ? { root: teamsRoot } : {});
-  const extraRoles = teamRoles.ok ? unionRoleVocabulary(teamRoles) : [];
+  // 角色词法集（【2026-09-27 · team-asset 全量退役】）：
+  //   原读端 `resolveTeamRoles(team, {root: teamsRoot})` → `unionRoleVocabulary(...)` **已删除**
+  //   （资产面不存在 ⇒ `team` / `teamsRoot` 均不再参与角色解析）。
+  //   现语义 = **引擎基础角色集**：`extraRoles` 恒空 ⇒ 仅 `VALID_ROLES` ∪ `ROLE_EXTENSIONS` 可用；
+  //   团队特有角色名触发 `GATE_ROLE_INVALID` **告警**（非拒态，D-1 已裁决接受）。
+  const extraRoles: string[] = [];
   const roleOpts = {
     extraRoles,
   };

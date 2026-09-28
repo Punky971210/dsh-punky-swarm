@@ -147,6 +147,35 @@
 | ~~`GATE_TEAMS_ROOT_INVALID`~~ | ~~7~~ | ~~10~~ | ~~tools\core.js~~ ⇒ **2026-09-27 退役：`lib/**` 零字面量命中、已入 `RETIRED_CODES`（防回生）** |
 | ~~`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`~~ | ~~3~~ | ~~5~~ | ~~tools\core.js~~ ⇒ **同上（同批退役）** |
 
+### C 退役(已入防回生锁)（19）—— **2026-09-27 批 3 补登**（`team-asset` 全族；事由 / 依据见 §3 第 9 条）
+
+> **口径**：原 `lib/assembly/team-asset.js#TEAM_ASSET_CODES` **全表 13 码** ＋ 码族本体定义项 **4 个**（非码的标识符）
+> ＋ 已删子族前缀 **1 个** ＋ `teamsRoot` 留痕码 **1 个** = **19 项**（判据源 A-10「登记范围 = `TEAM_ASSET_*` 全族」）。
+> `prod` 列 = **本批删净后实测**（`lib/**` 110 件，排除 `*.d.ts`）；`test` 列 = **本批未动 `test/**` 的实测残留**
+> （170 件，等值反转 / 删除归 `exec-tests-baseline`，判据源 D-6）。
+
+| 码 / 标识符 | prod | test | 写点 |
+|---|---:|---:|---|
+| `TEAM_ASSET_NOT_FOUND` | **0** | 18 | 删净（本体 `assembly\team-asset.js` 同批删除） |
+| `TEAM_ASSET_BAD_JSON` | **0** | 5 | 同上 |
+| `TEAM_ASSET_BAD_TYPE` | **0** | 6 | 同上（亦曾被 `assembly\chain.js` 链校验复用） |
+| `TEAM_ASSET_MISSING_FIELD` | **0** | 25 | 同上（链校验复用） |
+| `TEAM_ASSET_FIELD_NOT_ALLOWED` | **0** | 23 | 同上（链校验复用） |
+| `TEAM_ASSET_ENTRY_REQUIRE_UNKNOWN` | **0** | 3 | 同上 |
+| `TEAM_ASSET_CONSUME_FIELD_NOT_ALLOWED` | **0** | 3 | 同上 |
+| `TEAM_ASSET_CONTRACT_EMPTY` | **0** | 1 | 同上 |
+| `TEAM_ASSET_CONTRACT_LEGACY` | **0** | 2 | 同上 |
+| `TEAM_ASSET_LAYER_UNKNOWN` | **0** | 11 | 同上（链校验复用） |
+| `TEAM_ASSET_ROLE_LEXICAL` | **0** | 1 | 同上 |
+| `TEAM_ASSET_SKILLS_MISMATCH` | **0** | 13 | 同上（链校验复用） |
+| `TEAM_ASSET_REWORK_INVALID` | **0** | 11 | 同上（链校验复用） |
+| `TEAM_ASSET_CODES`（标识符） | **0** | 53 | 同上（码表本体） |
+| `TEAM_ASSET_SEVERITY`（标识符） | **0** | 1 | 同上（严重级表本体） |
+| `TEAM_ASSET_DIR`（标识符） | **0** | 2 | 同上（资产目录名常量） |
+| `TEAM_ASSET_FILENAMES`（标识符） | **0** | 2 | 同上（资产文件名白名单常量） |
+| `TEAM_ASSET_LEAD_`（前缀） | **0** | 3 | 同上（原「牵头角色悬空」子族，2026-09-26 已删；本批补登前缀） |
+| `TEAMS_ROOT_IGNORED` | **0** | 11 | 同上（`teamsRoot` 留痕码；D-3 退役后 wave 3 已无发射点） |
+
 ### C 事件常量冻结(历史读端)（1）—— 事件常量冻结保留（历史批磁盘读端不变）⇒ **保留**
 
 | 码 | prod | test | 写点 |
@@ -249,8 +278,23 @@
 | **6** | **拒态文案变更** | — | 四处拒绝路径（`GATE_PLAN_CONTRACT` / `GATE_HANDOFF_MISSING` / `GATE_ENTRY_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`）**追加「【怎么做】」指引项**（提交 `892afcb`） | 📝 登记（**只加文案，判据集合逐字不变**） |
 | **7** | **`GATE_TEAMS_ROOT_INVALID`** | A1 直抛（`tools\core.js`；prod 7 / test 10） | **已退役**（2026-09-27）。**原语义** = 显式 `teamsRoot` 词法 / 防逃逸**拒建批**（非空绝对路径 / 不含 `..` 段 / 标签须 kebab-case / 资产路径越界双保险）。**退役事由** = 用户裁「`team` 降为**可选标签**（内容宽松）⇒ **相关门禁做退役处理**」，本码属 A 级「立即可退役」：拒态家族随 `team` 可选化整体退出工具面——**判据逐字保留**，出口由 `throw` 改**纯判定返回值**（`teamsRootLexicalProblem`，恒不抛；不可用 ⇒ `TEAMS_ROOT_IGNORED` 留痕 + 不写批次键）。**依据** = 用户裁决（覆盖性快照 `reports/decision-team-optional-and-gate-retire-20260927.md` §三 A 级）+ 本批（工作树基线 `4412a9f`；提交由 Leader 复核后进行） | ✅ **已加入退役锁**（`RETIRED_CODES` 9 ⇒ 11）+ 本表 A1 行标删、C 类已收 |
 | **8** | **`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`** | A1 直抛（`tools\core.js`；prod 3 / test 5） | **已退役**（2026-09-27，与第 7 条同批）。**原语义** = 显式 `teamsRoot` 下 `<teamsRoot>/presets/<team>/team-asset.{json,yml}` **均不存在** ⇒ 拒建批（不回落包内 `presets/`）。**退役事由** = 承接函数 `assertTeamsRootAsset` **未接线**（全仓无 import / 调用 / 测试引用）+ 工具面出口早已降级为「无资产」路径 + `TEAM_ASSET_NOT_FOUND` 留痕 ⇒ 本批删函数即**两码在 `lib/**` 归零**。**依据** = 同上（用户裁决覆盖性快照 §三 A 级 + 本批） | ✅ **已加入退役锁**（同批 9 ⇒ 11）+ 本表 A1 行标删、C 类已收 |
+| **9** | **`TEAM_ASSET_*` 全族（19 项）**（承接第 2 条） | A1 / D / N 分散（原记「19 个」） | **已退役（2026-09-27 · 批 3 `retire-team-chain-20260927` / lane `exec-delete-assets`）**。本体 `lib/assembly/team-asset.js`（装载器 + 码表 + 严重级表 + 未接线台账 + 校验器）**整件删除**；5 件 `presets/{design,engine,research,software,writing}-team/team-asset.yml` **删除、不留空壳**（D-2）；`lib/**`（110 件，排除 `*.d.ts`）**逐项零字面量命中（含注释）**；锁内计数 **11 ⇒ 30**。**退役事由** = 用户 2026-09-27 裁决「team 类引擎内资产全部退役」+ `team` 降为**可选纯归类标签**（不解析、不校验、不拒建批）。**依据** = 覆盖性快照 `reports/decision-team-optional-and-gate-retire-20260927.md` §三 + 判据源 `plan/retire-spec.md`（D-2 / D-5 / A-10）+ 自扫原始输出 `exec/delete-assets.md` §三 | ✅ **已加入退役锁**（`RETIRED_CODES` **11 ⇒ 30**，19 项逐条零命中）+ 本表 C 类新增小节（19 项）。**第 2 条的「⏸ 随批 3 清」至此闭环**（该行原文不动，属历史登记） |
+| **10** | **链面（`chain` 声明 / 回显）** | 本表**无独立码行**（链校验复用 `TEAM_ASSET_*` 的码**值**，见第 9 条 B-2 口径） | **已删净（2026-09-27 · 批 3，Leader 裁决 D-4 = 删净、不做冻结兼容读）**：`lib/assembly/chain.js`（八条静态校验 + 全部投影函数，975 行）+ `lib/engine/chain-runner.js`（含唯一在役导出 `redispatchableFrom`，判据源 B-4 偏差）+ 事件常量 `EVT_CHAIN_STEP`（原 `state\event-types.js:258`）+ 链回显面（工具面 `tools\core.js` / panel 读端 `lib/api.js` / 面板推入点 `panel\batch-detail.js` / 4 个 locale 键）**全删**。**零字面量实测**：`EVT_CHAIN_STEP｜chainEchoOf｜chainOfBatch｜assembly\.chain｜event\.chain\.step` 在 `lib/**` **= 0 命中**（含重拼装产物 `lib/client.js`） | 📝 **登记（无新码可入锁）**：链校验码族与资产码族**同值同族** ⇒ 已由第 9 条覆盖；`EVT_CHAIN_STEP` 是**事件常量**（非门禁码），按本表 C 类口径**不入** `RETIRED_CODES`（防回生由 A-8 的 `lib/**` 零字面量判据承担） |
 
 > **同批实测补注（不改写历史读数）**：D 模板前缀行 `GATE_TEAMS_ROOT_`（本表 §D，2026-09-22 计数 prod 3 / test 0）的写点已随本批**归零**（三函数删/改后，`lib/**` 不再拼该家族前缀）；该行按「历史普查读数」原样保留。
+> **同批实测补注（批 3 · 2026-09-27，不改写历史读数）**：
+> ① 本表 §D 模板前缀行 `GATE_TEAM_ASSET_`（2026-09-22 读数 prod 0 / test 5）的**写点已随本批归零**（资产面全删）；
+>    该行按历史普查读数原样保留，test 面残留归 `exec-tests-baseline` 处置。
+> ② 本表 §「C 事件常量冻结(历史读端)」行的结论**不受本批影响**（该行指 `GATE_CONCURRENCY_BLOCKED`，非链面）。
+> ③ **链面在役残留保留（有意，非遗漏）**：`panel\panel-model.js` 的 `auto.settle` 分类器键 `event.chain.settle`、
+>    分类标签 `event.filter.chain` 与 `EVENT_CATEGORIES` 的 `'chain'` 三处**在役**（`lib/engine/auto-settle.js` 现役写
+>    `auto.settle.*` 三事件）⇒ 盲删会破坏在役事件人话标签；本批**保留**，并把任务包行号范围
+>    `panel-model.js:142-143` 收窄为 `:142`（偏离留痕见 `exec/delete-assets.md` §五）。
+> ④ **未达零前置、明确留待（红 4）**：`TEAM_ASSET_RESOLVED` 仍是事件常量 `EVT_BATCH_TEAM_ASSET_RESOLVED`
+>    （`state\event-types.js:46/60`、`state\store.js` 已停止发射、`types\contracts.ts:419`、面板 `panel-model.js` 分类器键
+>    `event.phase.team`）的组成部分 ⇒ **前置未达、不入锁**，如实登记留待 Leader 路由（本批写入域不含该事件面）。
 > **自证读数（2026-09-27 本批）**：`lib/**` 两码**零字面量命中**（含注释）；`RETIRED_CODES.length` = **11**。
+> **自证读数（批 3 · 2026-09-27）**：`lib/**`（110 件，排除 `*.d.ts`）**19 项逐条零字面量命中（含注释）**；
+> `RETIRED_CODES.length` = **30**（11 ⇒ 30）；`node --test test/retired-codes-lock.test.js` ⇒ `pass 1 / fail 0`（exit 0）。
 
 **⇒ 处置纪律（沿用本文件 §0）**：**A 类保留 / C 类退役入锁 / N 类 scanner 白名单剔除**；新增退役码**只需入 `RETIRED_CODES`**。

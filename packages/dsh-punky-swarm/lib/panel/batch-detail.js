@@ -216,9 +216,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     }
 
     // 装配与门禁条：团队资产 / 装配声明 / Manager 登记 / 并发声明（**未启用限流**，Q-B 2026-09-18）/ 门禁总览（复用 lanesGate 的 gateStrength，
-    //   不新增第二份门禁判定）/ 冒烟批 / 装配声明静态回显（`chain` = **建批期展开 + 静态校验**，非运行期真源：运行期 DAG 真源 =
-    //   `lanes[].deps` + `batch.handoffs`；G-10#4 已去「链」叙事——标签文案见 `assembly.chain` locale 键，改前作「链」会把静态声明
-    //   读成运行期推进面）。
+    //   不新增第二份门禁判定）/ 冒烟批。
+    //   【2026-09-27 · 批 3 D-4 删净】原「装配声明静态回显」一项（建批期展开 + 静态校验）**已整条删除**：
+    //   链声明面与回显面全量退役 ⇒ 标签文案键同批删除（原键 = 本组件下方 push 的第一参）。
+    //   运行期 DAG 真源 = 批次的 `lanes[].deps` + `batch.handoffs`（逐边取件见 `handoff_view` 工具）。
     function AssemblyBar({ d }) {
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
@@ -237,9 +238,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       push('concurrency', d.concurrency != null ? tt('concurrency') + ' ' + d.concurrency : null);
       if (gs) push('assembly.gates', gs.level + ' · ' + (gs.lanes ? ('plan ' + gs.lanes.plan + ' / exec ' + gs.lanes.exec + ' / audit ' + gs.lanes.audit) : '') + ((gs.escapes || []).length ? ' · escape ' + gs.escapes.length : '') + ((gs.degrades || []).length ? ' · degrade ' + gs.degrades.length : ''));
       if (d.smoke) push('assembly.smoke', tt('assembly.smoke'));
-      if (d.chain && Array.isArray(d.chain.steps) && d.chain.steps.length) {
-        push('assembly.chain', d.chain.steps.map((s) => (s && s.id) || '?').join(' → '));
-      }
       if (!items.length) return null;
       return React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }) },
         React.createElement(SectionTitle, null, tt('assembly.title')),

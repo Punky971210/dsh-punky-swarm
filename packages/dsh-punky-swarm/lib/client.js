@@ -150,7 +150,6 @@ window.__ModuleLoader__.load({
       { re: /^gate\.(passed|exit)$/, key: 'event.gate.passed', category: 'gate', severity: 'info' },
       { re: /^gate\./, key: 'event.gate.blocked', category: 'gate', severity: 'error' },
       { re: /^governance\./, key: 'event.governance', category: 'gate', severity: 'warn' },
-      { re: /^chain\./, key: 'event.chain.step', category: 'chain', severity: 'info' },
       { re: /^auto\.settle\./, key: 'event.chain.settle', category: 'chain', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
@@ -389,7 +388,6 @@ window.__ModuleLoader__.load({
       "assembly.managerHint": "在册校验属工具面",
       "assembly.gates": "门禁",
       "assembly.smoke": "冒烟批",
-      "assembly.chain": "声明环节（静态）",
       "focus.title": "当前关注",
       "focus.pick": "点选即筛选左栏",
       "focus.decision": "待裁决",
@@ -454,7 +452,6 @@ window.__ModuleLoader__.load({
       "event.gate.role": "角色不合规",
       "event.gate.target": "目标校验",
       "event.governance": "护栏拒绝",
-      "event.chain.step": "链推进",
       "event.chain.settle": "自动结算",
       "event.phase.created": "建批",
       "event.phase.changed": "相位变更",
@@ -586,7 +583,6 @@ window.__ModuleLoader__.load({
       "assembly.managerHint": "roster check belongs to the tool surface",
       "assembly.gates": "gates",
       "assembly.smoke": "smoke batch",
-      "assembly.chain": "declared steps (static)",
       "focus.title": "In focus",
       "focus.pick": "click to filter the left list",
       "focus.decision": "need decision",
@@ -651,7 +647,6 @@ window.__ModuleLoader__.load({
       "event.gate.role": "role invalid",
       "event.gate.target": "target check",
       "event.governance": "guardrail refusal",
-      "event.chain.step": "chain step",
       "event.chain.settle": "auto settle",
       "event.phase.created": "batch created",
       "event.phase.changed": "phase changed",
@@ -1205,9 +1200,10 @@ window.__ModuleLoader__.load({
     }
 
     // 装配与门禁条：团队资产 / 装配声明 / Manager 登记 / 并发声明（**未启用限流**，Q-B 2026-09-18）/ 门禁总览（复用 lanesGate 的 gateStrength，
-    //   不新增第二份门禁判定）/ 冒烟批 / 装配声明静态回显（`chain` = **建批期展开 + 静态校验**，非运行期真源：运行期 DAG 真源 =
-    //   `lanes[].deps` + `batch.handoffs`；G-10#4 已去「链」叙事——标签文案见 `assembly.chain` locale 键，改前作「链」会把静态声明
-    //   读成运行期推进面）。
+    //   不新增第二份门禁判定）/ 冒烟批。
+    //   【2026-09-27 · 批 3 D-4 删净】原「装配声明静态回显」一项（建批期展开 + 静态校验）**已整条删除**：
+    //   链声明面与回显面全量退役 ⇒ 标签文案键同批删除（原键 = 本组件下方 push 的第一参）。
+    //   运行期 DAG 真源 = 批次的 `lanes[].deps` + `batch.handoffs`（逐边取件见 `handoff_view` 工具）。
     function AssemblyBar({ d }) {
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
@@ -1226,9 +1222,6 @@ window.__ModuleLoader__.load({
       push('concurrency', d.concurrency != null ? tt('concurrency') + ' ' + d.concurrency : null);
       if (gs) push('assembly.gates', gs.level + ' · ' + (gs.lanes ? ('plan ' + gs.lanes.plan + ' / exec ' + gs.lanes.exec + ' / audit ' + gs.lanes.audit) : '') + ((gs.escapes || []).length ? ' · escape ' + gs.escapes.length : '') + ((gs.degrades || []).length ? ' · degrade ' + gs.degrades.length : ''));
       if (d.smoke) push('assembly.smoke', tt('assembly.smoke'));
-      if (d.chain && Array.isArray(d.chain.steps) && d.chain.steps.length) {
-        push('assembly.chain', d.chain.steps.map((s) => (s && s.id) || '?').join(' → '));
-      }
       if (!items.length) return null;
       return React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }) },
         React.createElement(SectionTitle, null, tt('assembly.title')),

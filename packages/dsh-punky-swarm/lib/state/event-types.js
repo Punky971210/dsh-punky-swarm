@@ -253,9 +253,11 @@ export const EVT_BATCH_GOVERNANCE_ESCALATE = 'batch.governance-escalate';
 //   ⇒ 该事件在本批**无消费者**，按「不添加未被要求的灵活性」不预留常量（若将来实施，先登记常量再接调用点）。
 export const EVT_GATE_ESCAPE = 'gate.escape';
 export const EVT_GATE_DEGRADE = 'gate.degrade';
-// 【退役登记（N2 第一批 C1 判读，docs/c1-wiring-audit-2026-09-22.md）】chain 自动推进已退役（Q-A=C，单通道）
-//   ⇒ `chain.step` 事件无生产写端；常量**冻结保留**（历史批磁盘事件读端不变），勿引用其可达性。
-export const EVT_CHAIN_STEP = 'chain.step';
+// 【2026-09-27 · 批 3 D-4 删净】原链推进事件常量（`'chain.step'`）**已整条删除**（用户裁决 D-4 = 删净，
+//   不做冻结兼容读）⇒ 引擎侧不再有任何常量 / 回显投影；磁盘上历史批的事件仍在事件流内，
+//   `log_export` 的 json 面（按 type 原样回显）不受影响。原退役登记见
+//   docs/c1-wiring-audit-2026-09-22.md、docs/frozen-register-2026-09-21.md（两文件的「冻结保留」结论
+//   在本批被 D-4 覆盖，本批之后以本条为准）。
 
 // P3a 自动结算（规格 §2/§3/§4）：**引擎自动**判定 lane 交付 ⇒ 全绿自动 `merged`，任一不满足 ⇒ 停轮。
 // 三事件分工（写端 = `lib/engine/auto-settle.js`；读端 = `log_export` 事件清单 + `batch_status` recentEvents）：

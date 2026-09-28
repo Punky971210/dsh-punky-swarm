@@ -15,18 +15,15 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 团队资产解析（包内 presets/<team>/team-asset.yml）与包根解析
-import { loadTeamAsset } from './assembly/team-asset.js';
-import { packageRoot } from './assembly/flows.js';
-
-// 可插拔装配数据：team → layer → role → skills
-// 引擎只认 "role 契约 + skill 前缀" 通用格式，不感知 team；换团队 = 换装配（外部路径 config.assembly 或团队资产）
-// ── 权威源：**包内团队资产** ──
-//   解析顺序：① `config.assembly`（外部覆盖层，整份优先）；
-//             ② 包内 `presets/<team>/team-asset.yml` 的 `layers` 段（**装配数据唯一权威来源**）；
-//             ③ 无资产 → **null**（不补 skills；【2026-09-27 用户裁决】资产问题**不再拒建批**，只在工具面留 `TEAM_ASSET_*` 痕；原 `「团队资产缺失」码(已删)` 码与告警已删）。
-//   punky-preset 团队装配**已弃用**：引擎不再以内置常量兜底 punky-preset 装配；各团队以自身资产为准
-//   （software-team 及其它团队）。DEFAULT_ASSEMBLY 保留仅为兼容导出，内容 = software-team 装配。
+// 装配解析（【2026-09-27 · team-asset 全量退役】已无资产读端）与包根解析
+// ─────────────────────────────────────────────────────────────────────────────
+// 现语义：**装配数据唯一真源 = `config.assembly`**（外部覆盖层，整份优先）；无覆盖层 ⇒ `null`
+//   （调用方自行回落内置常量，如 `lib/tools/register.js` / `lib/acps/server.js` 用 `DEFAULT_ASSEMBLY`）。
+//   「包内 `presets/<team>/team-asset.yml` 的 `layers` 段」这一权威源**已随资产面整体删除**
+//   （A-5 判据：本文件对 `team-asset` 的 import 面归零）。
+//   **零新默认值**：不得在此代造任何 `team → 装配` 映射（`team` 参数自 2026-09-27 起 = 纯归类标签）。
+//   punky-preset 团队装配**已弃用**（同上）；`DEFAULT_ASSEMBLY` 保留仅为兼容导出，内容 = software-team 装配。
+// 历史（保留可读）：原解析顺序 = ① `config.assembly` → ② 包内团队资产 → ③ 无资产即 `null`。
 export const DEFAULT_ASSEMBLY = {
   team: 'software-team',
   layers: {
@@ -53,18 +50,24 @@ export const DEFAULT_ASSEMBLY = {
   },
 };
 
-export function resolveAssembly(team, configAssembly = null, { root = packageRoot() } = {}) {
-  if (configAssembly) return configAssembly;
-  // 团队资产优先且唯一：缺资产 → null（不静默回落任何内置常量；原 `「团队资产缺失」码(已删)` 告警已删——
-  // 【2026-09-27 用户裁决】无资产/不可解析**不再在构造期拒建批**：改由工具面留痕，见 `lib/tools/core.js#resolveTeamAssetFace`）
-  return assemblyFromTeamAsset(team, root);
+/**
+ * 装配解析（**唯一真源 = `config.assembly`**）。
+ * 【2026-09-27 · team-asset 全量退役】原「包内团队资产」分支**已整体删除** ⇒ `team` 参数
+ *   **不再参与解析**（纯归类标签）；无覆盖层 ⇒ 返回 `null`（调用方按自身缺省处置，本函数不代造默认值）。
+ * @param _team 保留形参（调用方签名稳定；**不再被读**）
+ * @param configAssembly 外部覆盖层（整份优先）
+ * @returns 覆盖层本身；未给出 ⇒ `null`
+ */
+export function resolveAssembly(team, configAssembly = null, _opts = {}) {
+  void team;
+  return configAssembly ?? null;
 }
 
-// 从包内 `presets/<team>/team-asset.yml` 的 layers 段构造装配（团队资产为权威源）
-// 失败/缺资产 → null（调用方按**引擎基线**处理——legacy 间接层已于 2026-09-15 完全清退）；**不抛错**（加载期问题由 team-asset 校验面报告）
-export function assemblyFromTeamAsset(team, root = packageRoot()) {
-  if (typeof team !== 'string' || team.trim().length === 0) return null;
-  const r = loadTeamAsset(root, team);
-  if (!r.ok || !r.asset || !r.asset.layers || typeof r.asset.layers !== 'object') return null;
-  return { team, layers: r.asset.layers };
+/**
+ * 从团队资产构造装配。
+ * 【2026-09-27 · team-asset 全量退役】**资产面已不存在** ⇒ 恒 `null`（不再读盘、不再解析 yml）。
+ *   导出**保形保留**（既有调用方/用例的形状零变化）；本身零副作用、零 I/O。
+ */
+export function assemblyFromTeamAsset(_team, _root) {
+  return null;
 }

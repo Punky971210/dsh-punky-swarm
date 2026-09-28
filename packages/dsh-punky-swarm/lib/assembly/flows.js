@@ -26,14 +26,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     legacy-retire-20260915（完全清退）：LEGACY_* 常量已删除——引擎基线常量 / 读端缺省是**唯一真源**
 //     （`produceFieldOf` 缺声明返回 `null` = 信息性真空，与 `gateStrength.produceFieldDeclared` 同源）。
 //
-// 加载语义（**K1 订正，2026-09-14**）：**热生效**——缓存键含资产签名（路径 + mtime + size），
-//   每次调用重验签名（`teamAssetSignature`）⇒ 资产改动在同进程内**下一次读端调用即生效（免重启）**。
-//   原注释自述「冷加载 / 进程内缓存一次（重启生效）」与本模块实现**直接冲突**（convergence-design §10 K1），
-//   此处**以实现为准**；独立印证：`docs/engine-intro.md:28`「资产改动以『路径 + mtime + size』签名判新旧，
-//   改后即时生效（免重启）」。仍**不进** runtime.json 热更新面（热更新面仅 governance.hook 与 watch 探针参数）
-//   —— 团队资产不是 config 覆盖层。
+// 加载语义（【2026-09-27 · team-asset 全量退役】改写）：**本模块已无加载面**——
+//   资产装载器读端（`loadTeamAsset`）与资产签名缓存（`teamAssetSignature` + `CACHE` / `ROLE_CACHE`）
+//   随 `lib/assembly/team-asset.js` 退役**整体删除** ⇒ 本模块**恒不读盘、无缓存、零 I/O**：
+//   `resolveTeamFlows` / `resolveTeamRoles` 恒返回「**无声明**」事实，读端一律按引擎基线缺省处置。
+//   历史（保留可读）：K1 订正（2026-09-14）曾把缓存键设为「资产路径 + mtime + size」签名以支持热生效。
 //
-// 读端（见 lib/state/gates.js；**r2 生效口径**）：
+// 读端（见 lib/state/gates.js；**引擎基线口径**）：
 //   entry      → entryRequiresOf(flow)（**缺声明 ⇒ enforced:true = 拒派**（tighten-only）；显式条目才按声明）
 //                留痕读端 entryRequiresOf(flow)（区分「团队声明显式强制」与「引擎 tighten-only 缺省」）
 //   plan 契约  → contractOf(flow)（缺声明 ⇒ null，调用方**必须**走引擎基线裸标题判据，禁空契约免检）
@@ -45,10 +44,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //                rework 的**未接线标注**，来源 team-asset.js 的台账；`consume_field` 已于 S19① 接线 ⇒ 不在台账）
 
 import { fileURLToPath } from 'node:url';
-import {
-  loadTeamAsset, teamAssetSignature,
-  TEAM_ASSET_CODES, TEAM_ASSET_SEVERITY, hasBlockingProblems, unwiredDeclarationsOf,
-} from './team-asset.js';
+// 【2026-09-27 · team-asset 全量退役】原 import 面（资产装载器 / 资产签名 / 码族常量表 /
+//   严重级常量表 / blocking 判据 / 未接线台账读函数 —— 字面量见上游 team-asset.js）
+//   随资产读端**整体删除**（A-5 / A-6 判据：本文件对 `team-asset` 的 import 面与码面归零）。
 
 /** 包根目录（lib/assembly/flows.js → 包根；与 lib/assets.js packageRoot 同源口径）。 */
 export function packageRoot() {
@@ -99,84 +97,34 @@ export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([
   '## 约束',
 ]);
 
-const CACHE = new Map(); // key: `${pkgRoot}::${team}` → { sig, out }（sig = 资产路径+mtime+size；变了即重读）
-
-/** 清缓存（测试/诊断用；生产不调用——声明是冷加载资产）。
- *  【C1 判读（N2 第一批，docs/c1-wiring-audit-2026-09-22.md）】降级为测试隔离钩，**不接热更**：
- *  缓存是 sig 自愈型（资产 mtime/size 变即重读），热更/资产变更无需清。 */
+/** 缓存已退役（【2026-09-27】资产面删除 ⇒ 无缓存对象）。
+ *  函数**保形保留**：既有调用方（测试隔离钩，67+ 处）逐字不改即可继续调用；现在是纯 no-op。 */
 export function clearFlowCache() {
-  CACHE.clear();
+  // no-op：本模块已无缓存（`CACHE` 随资产面退役删除）。
 }
 
 /**
  * 解析某团队的 flows 声明。
+ *
+ * 【2026-09-27 · team-asset 全量退役】**资产读端已整体删除**：不再读盘、不再有缓存与资产签名，
+ *   引擎也不再消费任何团队声明 ⇒ 本函数恒返回「**无声明**」事实（`ok:false` / `flows:null`）。
+ *   下游一律按 **tighten-only 缺省** 处置 ⇒ flows 面**只走引擎基线**
+ *   （`ENGINE_BASELINE_PLAN_SECTIONS` / `ENGINE_BASELINE_CRITERIA_SECTION` / `entryRequiresOf` 缺省侧）。
+ *   导出**保形保留**（调用方形状零变化）；本身零副作用、零 I/O。
  * @returns {{ ok: boolean, team: string|null, flows: object|null, path: string|null, problems: string[],
  *            severity: 'none'|'strong'|'blocking', blocking: boolean, escalation: object|null }}
- *   缺声明/加载失败 → ok:false 且 flows:null（调用方按 **tighten-only** 处置：缺声明路径不得放宽，
- *   consume 强制不依赖团队声明，见 `entryRequiresOf`）。
- *   `severity` / `blocking` / `escalation` = **强警示面**（读端据此机器化分流「资产完全不可用」与「可用但退化」；
- *   要求 5 / design §6「flows-unresolved」降级项）；本批**不阻断建批**（理由见 `teamAssetEscalationOf`）。
+ *   恒 `flows:null` ⇒ 调用方按 **tighten-only** 处置（consume 强制不依赖团队声明，见 `entryRequiresOf`）。
  */
-export function resolveTeamFlows(team, { root = packageRoot(), useCache = true } = {}) {
-  const key = root + '::' + String(team);
-  const sig = teamAssetSignature(root, team);
-  if (useCache) {
-    const hit = CACHE.get(key);
-    if (hit && hit.sig === sig) return hit.out; // 同签名 ⇒ 同一份资产，零重读
-  }
-  let out;
-  if (typeof team !== 'string' || team.trim().length === 0) {
-    out = {
-      ok: false, team: team ?? null, flows: null, path: null, problems: ['no-team'],
-      severity: 'none', blocking: false, escalation: null,
-    };
-  } else {
-    const r = loadTeamAsset(root, team);
-    const rawProblems = Array.isArray(r.problems) ? r.problems : [];
-    const problems = rawProblems.map((p) => p.code + (p.path ? '@' + p.path : ''));
-    out = {
-      ok: r.ok === true && r.asset != null,
-      team,
-      flows: r.ok === true && r.asset ? (r.asset.flows ?? null) : null,
-      path: r.path ?? null,
-      problems,
-      severity: severityOfProblems(rawProblems),
-      blocking: hasBlockingProblems(rawProblems),
-      escalation: teamAssetEscalationOf(team, rawProblems),
-    };
-  }
-  if (useCache) CACHE.set(key, { sig, out });
-  return out;
-}
-
-/** 问题严重级（强警示面）：任一 blocking ⇒ 'blocking'；否则有 warning ⇒ 'strong'；无问题 ⇒ 'none'。 */
-function severityOfProblems(problems) {
-  const list = Array.isArray(problems) ? problems : [];
-  if (list.some((p) => p && p.severity === TEAM_ASSET_SEVERITY.blocking)) return 'blocking';
-  if (list.some((p) => p && p.severity === TEAM_ASSET_SEVERITY.warning)) return 'strong';
-  return 'none';
-}
-
-/**
- * 团队资产解析失败的**强警示载荷**（要求 5；`severity` / `blocking` / `problems` 供读端分流）。
- * **原「团队资产缺失」码已删**（勿回加）
- *   （2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码）：
- *   该码是同一语义的**第二生产点**（第一处 `lib/tools/core.js` 的死推点已随 C 项删除），
- *   保留它会让「已判死码」在两处回生 ⇒ 本载荷**不带码**，只带 severity/blocking/problems/note
- *   （读端按 `blocking` 分流即可，不依赖码名）。
- * 逐条 `problems` 自带其原始 `TEAM_ASSET_*` 码 ⇒ 归因能力不丢。
- * 口径：**强警示（不阻断）**——无资产是既有合法形态，阻断化 = 扩张门禁面。
- */
-function teamAssetEscalationOf(team, problems) {
-  const list = Array.isArray(problems) ? problems : [];
-  if (list.length === 0) return null;
+export function resolveTeamFlows(team, _opts = {}) {
   return {
-    team: team ?? null,
-    severity: severityOfProblems(list),
-    blocking: hasBlockingProblems(list),
-    problems: list.map((p) => p.code + (p.path ? '@' + p.path : '')),
-    note: '强警示（r2 口径，非阻断）：资产不可用 ⇒ 该团队的装配前缀 / 声明面整体失效（假绿灯面）。'
-      + '归因请看 problems 里的 `TEAM_ASSET_*` 码（本载荷不再自带汇总码）。',
+    ok: false,
+    team: typeof team === 'string' && team.trim().length > 0 ? team : (team ?? null),
+    flows: null,
+    path: null,
+    problems: [],
+    severity: 'none',
+    blocking: false,
+    escalation: null,
   };
 }
 
@@ -305,19 +253,15 @@ function consumeFieldProblemOf(flow, layer) {
     + ' 不在白名单 ' + JSON.stringify([...CONSUME_FIELDS]) + ' ⇒ 回落 "consume"（声明面只能收紧）';
 }
 
-// ── 团队角色集（可拔插）──
-// 语义（三条，缺声明/加载失败 → 空集 ⇒ 调用方按引擎基础角色集判定）：
-//   ① `layers[layer].roles` = 该团队的**角色清单**（技能映射的键、建批 lane 的 role 取值来源）；
-//   ② `roles.extra` = 引擎基础集之外的**补充**角色名（与 ① 并集；可与 ① 重叠）；
-//   ③ `roles.plan_leads` / `roles.audit_leads` = 该团队认可的**额外牵头角色**（与引擎基础牵头集并集，不替换）。
-// 缺口修复（实测，2026-09-14）：`extra` 曾只读 ②，于是「按资产把自有角色写进 layers」这种最自然写法
-//   建批时每个自定义角色被判 `GATE_ROLE_INVALID`——指引（放开层/角色/技能组装）
-//   与白名单（8 基础角色 ∪ 盲审三角色）对不上。现以 `unionRoleVocabulary` 把 ①∪② 作为**该团队的角色词法集**，
-//   白名单与资产声明面**同源**：声明了 = 可用（②变成可选补充，不再是隐藏必填项）。
-const ROLE_CACHE = new Map(); // key → { sig, out }（sig 同 CACHE：改资产即时生效，不需重启）
-/** 清角色缓存（测试隔离钩；C1 判读 = 降级不接热更，理由同 clearFlowCache——sig 自愈）。 */
+// ── 团队角色集（【2026-09-27 · team-asset 全量退役】已无资产读端）──
+// 现语义：**角色词法集 = 引擎基础集**（D-1 裁决：per-team roles 随资产退役一并消失）。
+//   `resolveTeamRoles` 恒返回空集 ⇒ `unionRoleVocabulary(空)` = `[]` ⇒ 建批 `extraRoles = []`，
+//   白名单 = 引擎基础角色集（团队特有角色名不再可用，触发 `GATE_ROLE_INVALID` **告警**，非拒态）。
+// 历史（保留可读）：曾按 `layers[layer].roles` ∪ `roles.extra` 组成该团队的角色词法集，
+//   使「按资产把自有角色写进 layers」即可用于建批；`plan_leads` / `audit_leads` 已于 2026-09-26 全链删除。
+/** 清角色缓存（资产面删除 ⇒ 无缓存对象）。函数**保形保留**：既有调用方（测试隔离钩，85+ 处）逐字不改。 */
 export function clearRoleCache() {
-  ROLE_CACHE.clear();
+  // no-op：本模块已无角色缓存（`ROLE_CACHE` 随资产面退役删除）。
 }
 // 角色词法集（建批/装配声明共用的单一读端）：① 各层声明角色 ∪ ② roles.extra → 小写去重。
 export function unionRoleVocabulary(teamRoles) {
@@ -337,49 +281,24 @@ export function unionRoleVocabulary(teamRoles) {
   }
   return out;
 }
-export function resolveTeamRoles(team, { root = packageRoot(), useCache = true } = {}) {
-  const key = root + '::' + String(team);
-  const sig = teamAssetSignature(root, team);
-  if (useCache) {
-    const hit = ROLE_CACHE.get(key);
-    if (hit && hit.sig === sig) return hit.out;
-  }
-  const empty = { ok: false, team: team ?? null, extra: [], layerRoles: [], layerRolesByLayer: {}, path: null, problems: [] };
-  let out = empty;
-  if (typeof team === 'string' && team.trim().length > 0) {
-    const r = loadTeamAsset(root, team);
-    if (r.ok && r.asset) {
-      const roles = r.asset.roles && typeof r.asset.roles === 'object' ? r.asset.roles : {};
-      const byLayer = {};
-      const flat = [];
-      const seen = new Set();
-      const layers = r.asset.layers && typeof r.asset.layers === 'object' ? r.asset.layers : {};
-      for (const [layer, def] of Object.entries(layers)) {
-        const list = [];
-        for (const raw of (def && Array.isArray(def.roles) ? def.roles : [])) {
-          if (typeof raw !== 'string') continue;
-          const n = raw.trim().toLowerCase();
-          if (!n) continue;
-          list.push(n);
-          if (!seen.has(n)) { seen.add(n); flat.push(n); }
-        }
-        byLayer[layer] = list;
-      }
-      out = {
-        ok: true,
-        team,
-        extra: Array.isArray(roles.extra) ? [...roles.extra] : [],
-        layerRoles: flat,
-        layerRolesByLayer: byLayer,
-        path: r.path ?? null,
-        problems: [],
-      };
-    } else {
-      out = { ...empty, problems: (r.problems ?? []).map((p) => p.code) };
-    }
-  }
-  if (useCache) ROLE_CACHE.set(key, { sig, out });
-  return out;
+/**
+ * 解析某团队的 roles 声明。
+ *
+ * 【2026-09-27 · team-asset 全量退役】**资产读端已整体删除** ⇒ 恒返回**空集**：
+ *   ① 无 `layers[*].roles`、② 无 `roles.extra`、③ `path` 恒 `null`、④ `ok` 恒 `false`。
+ *   调用方据此**回落引擎基础角色集**（`unionRoleVocabulary(空)` = `[]` ⇒ `extraRoles = []`）。
+ *   导出**保形保留**（调用方形状零变化）；本身零副作用、零 I/O、无缓存。
+ */
+export function resolveTeamRoles(team, _opts = {}) {
+  return {
+    ok: false,
+    team: typeof team === 'string' && team.trim().length > 0 ? team : (team ?? null),
+    extra: [],
+    layerRoles: [],
+    layerRolesByLayer: {},
+    path: null,
+    problems: [],
+  };
 }
 
 /** 简易 glob（`*` 不跨 `/`；`**` 跨目录）→ 全串匹配；路径分隔符归一为 `/`。 */export function matchGlob(pattern, relPath) {
@@ -505,7 +424,8 @@ export function sectionProblemsOf(relPath, content, contract) {
 /**
  * flows 声明的**tighten-only 生效视图**（纯函数，不读盘）。
  * @param flows `resolveTeamFlows().flows`（原始声明；**本函数不改写它**——原样保留是 T18/T15 的前提）
- * @param asset 可选：`loadTeamAsset().asset`（用于读出**未接线声明**台账；缺省时按 flows 的键推断）
+ * @param asset **【2026-09-27 已失效】**原为 `loadTeamAsset().asset`（读出未接线声明台账）；
+ *   资产面退役后**不再被读**（`unwired` 恒 `[]`），形参保形保留以免调用方签名漂移。
  */
 export function declarationSummaryOf(flows, asset = null) {
   const layers = ['plan', 'exec', 'audit'];
@@ -543,8 +463,9 @@ export function declarationSummaryOf(flows, asset = null) {
     auditContract: ac
       ? { criteriaFrom: ac.criteria_from ?? null, consumesRequired: ac.consumes_required ?? null, verdict: ac.verdict ?? null, source: 'team-asset' }
       : null,
-    // 零读端声明的**显式未接线标注**（要求 7）：来自 team-asset.js 的声明台账（单一来源）
-    unwired: unwiredDeclarationsOf(asset ?? flows),
+    // 【2026-09-27 · team-asset 退役】声明台账（`UNWIRED_DECLARATIONS`）随资产面删除 ⇒ 「未接线声明」恒空。
+    //   引擎级条目（`config.ratchet`）由 gates.ts 的 `unwiredEntriesOf` 自行补齐，不在本汇总内。
+    unwired: [],
   };
 }
 

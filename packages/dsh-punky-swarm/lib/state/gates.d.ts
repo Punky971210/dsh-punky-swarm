@@ -1177,7 +1177,7 @@ export declare function createGates(root: string, opts?: {
         };
         vocabulary: VocabularyView;
     }>;
-    teamAssetViewOf: (batch: Batch | null | undefined) => {
+    teamAssetViewOf: (_batch: Batch | null | undefined) => {
         teamAsset: unknown;
         declaration: unknown;
         declarationMissing: boolean;
