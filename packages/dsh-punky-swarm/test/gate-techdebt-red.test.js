@@ -48,7 +48,8 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan, assemblyGate } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 已删
+//   （真实骨架 5 件已删 T-4/A-9；该导出亦已随 helper 收口删除，`mkTeamRoot` 五处消费点全部去前置）。
 import { DEFAULT_ESCALATION_PRIMITIVES } from '../lib/governance/escalation.js';
 import { MEMBER_STATES } from '../lib/schema.js';
 import * as EVT from '../lib/state/event-types.js';
@@ -201,11 +202,10 @@ function mkRunning(bid, laneIds) {
   fixturesWritten.add(bid);
   return bid;
 }
-/* 临时团队资产（自建根；以包内 software-team 为骨架改一处）*/
-function mkTeamRoot(team, mutate) {
-  // F2：单点委托——真实骨架 + `asset.team` 同步（见 helpers/team-fixture.mjs#writeTempTeam）。
-  return writeTempTeam('punky-techdebt-team-', team, (a) => { a.team = team; mutate(a); }, { setTeam: true });
-}
+/* 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 `mkTeamRoot(team, mutate)` 「临时团队资产（自建根；以包内
+   software-team 为骨架改一处）」——其数据源 `presets/software-team/team-asset.yml` 已随 T-4/A-9 删除、
+   装载器随 T-1 删除 ⇒ 调用即抛；本批的全部消费点（R-03 / R-06 / R-07 / R-14 / R-15 / R-15b / R-25 / R-28）
+   已按「面消失随删」或「去退役前置」逐条处置 ⇒ 该助手成为孤儿代码，一并删除。 */
 
 // ── 治理面夹具 ──
 const ESC_ON = { enabled: true, threshold: 3, windowMs: 600000, primitives: DEFAULT_ESCALATION_PRIMITIVES };
@@ -298,46 +298,15 @@ test('R-02 idle 恢复降级放行 ⇒ batch.events 含 gate.escape{kind:"idle-r
 //   且「只读视图（gate_status）绝不得发射事件」（B-4）。⇒ **正确形态 = 经 `setMember`/`runLane` 端到端驱动**
 //   （同 R-01/R-02/R-27a 的已绿形态）。本条**不得**被读成「未实现」。
 // 原用例体逐字保留于下方 `ARCHIVED_CASES`（活字符串数据、不执行），正确断言留待独立小批复活。
-test('R-03【复活·T-1】produce_field 错位触发并集降级 ⇒ batch.events 含 gate.degrade{kind:"produce-field-widened"}（端到端驱动）', () => {
-  // 【复活要点·2026-09-15 批次 core-debt-parallel-20260915 / lane e2】原形态为何失效：归档体**直调**
-  //   `gates.checkExitGate` 后读事件 ⇒ 与「写端唯一在 store.js 写路径 / 只读视图零事件」纪律错位（只读面必然 0 条）。
-  //   本次改动：① 保留返回值 `degrades` 断言（可读面，GREEN-as-is）＋ 增补「只读直调零事件」硬边界断言；
-  //   ② 事件面改由 `store.setMember`（review→merged）**端到端驱动**（写端 store.js:550 / :674-682）。
-  const tp = mkTeamRoot('r03-team', (a) => { a.flows.exec.produce_field = 'produce'; });
-  const bid = mkBase('r03', { consume: null, outputs: ['exec/e1.md'] }, {}, { team: 'r03-team', teamsRoot: tp });
-  writeArt(bid, 'exec/e1.md', 'out');
-  setLaneState(bid, 'e1', 'review');
-  const deg = gates.checkExitGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'checkExitGate(produce_field=produce, 仅 outputs)', deg);
-  assert.equal(deg.ok, true, '前置：降级路径本身仍放行（降级非拒码）；实测=' + JSON.stringify(deg));
-  assert.ok(Array.isArray(deg.degrades) && deg.degrades.some((d) => d.kind === 'produce-field-widened'),
-    'S8/原则②：字段错位触发并集降级 ⇒ 返回值须带 degrade（可读面，当前已通过 = GREEN-as-is）；实测=' + JSON.stringify(deg.degrades));
-  assert.equal(withType(bid, E_DEGRADE).length, 0,
-    'B-4：只读视图/直调门禁函数**零事件**（写端唯一在 store.js 写路径）；实测=' + JSON.stringify(withType(bid, E_DEGRADE)));
-  const r = trySet(bid, 'e1', 'merged');
-  obs(null, 'setMember(e1, merged)', r instanceof Error ? r.message : { lane: r.lanes.e1 });
-  obs(null, 'events[type=gate.degrade]', withType(bid, E_DEGRADE));
-  expectAccepted('S8：字段错位降级不得演变成拒（降级非拒码）', r);
-  const evs = withType(bid, E_DEGRADE);
-  assert.ok(evs.some((e) => e.kind === 'produce-field-widened'),
-    'V-4：降级路径必须在**写路径**上真落 batch.events（原直调形态恒 0 条）；实测=' + JSON.stringify(evs));
-});
-ARCHIVED_CASES['R-03 produce_field 错位触发并集降级 ⇒ batch.events 含 gate.degrade{kind:"produce-field-widened"}'] = [
-  '【已复活 ⇒ 见用例「R-03【复活·T-1】…（端到端驱动）」（批次 core-debt-parallel-20260915 · lane e2）】',
-  '  const tp = mkTeamRoot(\'r03-team\', (a) => { a.flows.exec.produce_field = \'produce\'; });',
-  '  const bid = mkBase(\'r03\', { consume: null, outputs: [\'exec/e1.md\'] }, {}, { team: \'r03-team\', teamsRoot: tp });',
-  '  writeArt(bid, \'exec/e1.md\', \'out\');',
-  '  setLaneState(bid, \'e1\', \'review\');',
-  '  const deg = gates.checkExitGate(SID, bid, store.readBatch(SID, bid), \'e1\');',
-  '  obs(null, \'checkExitGate(produce_field=produce, 仅 outputs)\', deg);',
-  '  assert.equal(deg.ok, true, \'前置：降级路径本身仍放行（降级非拒码）；实测=\' + JSON.stringify(deg));',
-  '  assert.ok(Array.isArray(deg.degrades) && deg.degrades.some((d) => d.kind === \'produce-field-widened\'),',
-  '    \'S8/原则②：字段错位触发并集降级 ⇒ 返回值须带 degrade（可读面，当前已通过 = GREEN-as-is）；实测=\' + JSON.stringify(deg.degrades));',
-  '  const evs = withType(bid, E_DEGRADE);',
-  '  obs(null, \'events[type=gate.degrade]\', evs);',
-  '  assert.ok(evs.some((e) => e.kind === \'produce-field-widened\'),',
-  '    \'V-4：降级路径必须在**写路径**上真落 batch.events（当前全 lib 无写端 ⇒ 恒 0 条）；实测=\' + JSON.stringify(evs));',
-];
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「R-03【复活·T-1】produce_field 错位触发并集降级
+//    ⇒ batch.events 含 gate.degrade{kind:"produce-field-widened"}（端到端驱动）」＋ 其 ARCHIVED_CASES 登记 ──
+//   面已消失 = **`flows.exec.produce_field` 声明面**（T-6 读端删除 + T-1 本体删除；`mkTeamRoot` 读已删的真实骨架
+//   ⇒ 调用即抛）。声明面不存在 ⇒ 「声明错位」这一构造**不可达** ⇒ `produce-field-widened` 降级动作无发射源
+//   （`lib/**` 零写端）⇒ 该用例的四条断言（`deg.ok === true` / `degrades` 含该 kind / 直调零事件 / 写路径落事件）
+//   整体失去被检面，不可等值反转（反转成「零 degrades」即恒真空转校验，违纪律 15⑤）。
+//   **未以删除断言换绿**：`gate.degrade` / `gate.escape` 的**写路径**覆盖由本文件 R-01 / R-02 / R-08 / R-26 / R-27
+//   （standalone / idle-recovery / env-gate-disabled / 命令声明关闭）等在册用例承担。
+
 
 test('R-04 只读不发射：连续两次 gate_status 后 batch.events 长度不变（B-4 / J-5）', async () => {
   const bid = mkSettled('r04');
@@ -412,24 +381,21 @@ test('R-05 generic（无资产）＋ exec 空 consume ⇒ 拒 且 requiredBy !==
     'G-3：无资产团队**未声明** entry_requires ⇒ requiredBy 须为真实来源 tighten-only-default，不得失真为团队来源；实测=' + JSON.stringify(r.requiredBy));
 });
 
-test('R-06 正向对照：显式声明 entry_requires:["consume"] 的团队 ＋ 空 consume ⇒ requiredBy === "team-asset:entry_requires"【回归保护】', () => {
-  // 注（2026-09-26 团队资产瘦身）：原用包内 `software-team` 作「显式声明团队」的样本；
-  //   该队最小骨架**已不含 `entry_requires`** ⇒ 改用 `mkTeamRoot` 构造**显式声明**的临时团队，
-  //   以保住「团队声明来源可区分」这条覆盖（与 R-05 的 generic 无资产反例成对）。
-  const tp = mkTeamRoot('r06-team', (a) => { a.flows.exec.entry_requires = ['consume']; });
-  const bid = mkBase('r06', {}, {}, { team: 'r06-team', teamsRoot: tp });
-  declareLaneField(bid, 'e1', { consume: [] });
-  const r = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'checkEntryGate(r06-team(entry_requires), consume=[])', r);
-  assert.equal(r.ok, false, '显式声明强制项须生效');
-  assert.equal(r.code, 'GATE_ENTRY_MISSING', '拒码=' + r.code);
-  assert.equal(r.requiredBy, 'team-asset:entry_requires',
-    '正向对照：已声明团队须报团队来源 ⇒ 证明「无资产回落」不是「无差别抹掉」；实测=' + JSON.stringify(r.requiredBy));
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「R-06 正向对照：显式声明 entry_requires:["consume"] 的团队
+//    ＋ 空 consume ⇒ requiredBy === "team-asset:entry_requires"【回归保护】」──
+//   面已消失 = **团队资产 `flows.<layer>.entry_requires` 声明面**（T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」；
+//   T-1：`lib/assembly/team-asset.js` 本体删除）。`entryRequiresOf(...).source` 今日**只有一态** =
+//   `tighten-only-default`（引擎基线，见本文件 R-05 与 `gate-flows` 的 `:111` 用例）⇒ 该用例断言的真值
+//   （`team-asset:entry_requires` 来源）**结构性不可达**，属「面已消失」、不可等值反转（反转即与 R-05 重复、恒真空转）。
+//   R-05（generic 无资产 ⇒ `requiredBy !== 'team-asset:entry_requires'`）在册保留 ⇒ 来源面覆盖不丢。
+
 
 test('R-07 团队级 entry_requires:[] ＋ exec 空 consume ⇒ 仍拒 GATE_ENTRY_MISSING【回归保护】', () => {
-  const tp = mkTeamRoot('r07-team', (a) => { a.flows.exec.entry_requires = []; });
-  const bid = mkBase('r07', {}, {}, { team: 'r07-team', teamsRoot: tp });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `mkTeamRoot` 造「团队级 entry_requires:[]」样本；
+  //   团队声明面已随 T-1/T-6 删净（`mkTeamRoot` 读包内真实骨架，5 件 yml 已删 ⇒ 调用即抛）
+  //   ⇒ 去掉该前置：改用**无声明批**——引擎基线下 `entry_requires` 恒为「未声明」，正是原命题所指的**最宽档**。
+  //   断言逐条保留（`ok:false` + `GATE_ENTRY_MISSING`）；命题「团队级 [] 不得成为放行入口」在引擎基线下永真。
+  const bid = mkBase('r07', {}, {}, { team: 'r07-team' });
   declareLaneField(bid, 'e1', { consume: [] });
   const r = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
   obs(null, 'checkEntryGate(团队 entry_requires:[], consume=[])', r);
@@ -540,11 +506,14 @@ test('R-13 gateStrength.entryRequires[<layer>] 必须为对象且含 source 字�
 });
 
 test('R-14 gateStrength.unwired 须由台账真值驱动（单源；区分性构造含 rework）', () => {
-  const tp = mkTeamRoot('r14-team', (a) => { a.flows.exec.rework = 'unwired-decl'; });
-  const bid = mkBase('r14', {}, {}, { team: 'r14-team', teamsRoot: tp });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `mkTeamRoot('r14-team', a => a.flows.exec.rework = 'unwired-decl')`
+  //   造「声明面驱动 unwired」样本；团队声明面已随 T-1/T-6 删净（`mkTeamRoot` 读已删的真实骨架 ⇒ 调用即抛）
+  //   ⇒ 去掉该前置，改用无声明批：`gateStrength.unwired` 今日的唯一真值来源 = **引擎级台账**（`config.ratchet`）。
+  //   断言逐条保留，并把原「区分性构造」的语义如实标注为**引擎级单源**（声明面已不存在，无法再构造声明项）。
+  const bid = mkBase('r14', {}, {}, { team: 'r14-team' });
   const gs = gates.gateStatus(SID, bid).gateStrength;
   const list = (Array.isArray(gs.unwired) ? gs.unwired : []).map((x) => (typeof x === 'string' ? x : x && x.name));
-  obs(null, 'gateStrength.unwired（临时团队声明 rework）', gs.unwired);
+  obs(null, 'gateStrength.unwired（引擎级台账单源）', gs.unwired);
   const hardcoded = ['progress_contract', 'state_machine', 'config.ratchet', 'consume_field'];
   obs(null, '硬编码 4 项对照（不含 rework）', hardcoded);
   assert.ok(list.length > 0, 'S19②：unwired 不得为空（台账有未接线项）；实测=' + JSON.stringify(gs.unwired));
@@ -752,46 +721,13 @@ test('R-24 needHuman 声明行只写在 audit 的 outputs 所指产物 ⇒ 必�
 //   且「只读视图（gate_status）绝不得发射事件」（B-4）。⇒ **正确形态 = 经 `setMember`/`runLane` 端到端驱动**
 //   （同 R-01/R-02/R-27a 的已绿形态）。本条**不得**被读成「未实现」。
 // 原用例体逐字保留于下方 `ARCHIVED_CASES`（活字符串数据、不执行），正确断言留待独立小批复活。
-test('R-25【复活·T-8】团队 needhuman:false ⇒ disabledBy ＋ 写路径落 gate.escape{kind:"needhuman-off"}（端到端驱动）', () => {
-  // 【复活要点·2026-09-15 批次 core-debt-parallel-20260915 / lane e2】原形态为何失效：归档体**直调**
-  //   `gates.checkNeedHumanGate` 后读事件 ⇒ 只读面恒 0 条（写端唯一在 store.js）。本次改动：返回值 `disabledBy`
-  //   断言保留（GREEN-as-is）＋ 增补「直调零事件」硬边界；事件面改由 `store.setMember`（a1 review→merged）端到端驱动
-  //   （写端 store.js:599 的 merged 前置收集）。
-  const tp = mkTeamRoot('r25-team', (a) => { a.flows.audit.needhuman = false; });
-  const bid = mkBase('r25', {}, { produce: ['audit/a25.md'] }, { team: 'r25-team', teamsRoot: tp });
-  const b = store.readBatch(SID, bid);
-  b.lanes.p1 = 'merged'; b.lanes.e1 = 'merged'; b.lanes.a1 = 'review';
-  fs.writeFileSync(batchFileOf(bid), JSON.stringify(b, null, 2), 'utf8');
-  writeArt(bid, 'audit/a25.md', 'review\nneedHuman: true\n');
-  const nh = gates.checkNeedHumanGate(SID, bid, store.readBatch(SID, bid), 'a1', null);
-  obs(null, 'checkNeedHumanGate（团队 needhuman:false）', nh);
-  assert.equal(nh.ok, true, 'S13：关闭档判定结果**不变**（仍放行）；实测=' + JSON.stringify(nh));
-  assert.equal(nh.disabledBy, 'team-asset:needhuman', 'S13：须返回 disabledBy 标注（可区分「关闭」与「未声明」）；实测=' + JSON.stringify(nh));
-  assert.equal(withType(bid, E_ESCAPE).length, 0,
-    'B-4：直调门禁函数零事件（写端唯一在 store.js 写路径）；实测=' + JSON.stringify(withType(bid, E_ESCAPE)));
-  const r = trySet(bid, 'a1', 'merged');
-  obs(null, 'setMember(a1, merged)', r instanceof Error ? r.message : { lane: r.lanes.a1 });
-  expectAccepted('S13：needhuman 关闭档 ⇒ merged 放行（关闭能力保留）', r);
-  const esc = withType(bid, E_ESCAPE).filter((e) => e.kind === 'needhuman-off');
-  assert.equal(esc.length, 1,
-    'S13/R-S13：关闭能力保留但**必须留痕** escape{kind:"needhuman-off"}；实测=' + JSON.stringify(withType(bid, E_ESCAPE)));
-});
-ARCHIVED_CASES['R-25 团队 needhuman:false ⇒ checkNeedHumanGate 返 disabledBy ＋ 事件落 gate.escape{kind:"needhuman-off"}（S13）'] = [
-  '【已复活 ⇒ 见用例「R-25【复活·T-8】…（端到端驱动）」（批次 core-debt-parallel-20260915 · lane e2）】',
-  '  const tp = mkTeamRoot(\'r25-team\', (a) => { a.flows.audit.needhuman = false; });',
-  '  const bid = mkBase(\'r25\', {}, { produce: [\'audit/a25.md\'] }, { team: \'r25-team\', teamsRoot: tp });',
-  '  const b = store.readBatch(SID, bid);',
-  '  b.lanes.p1 = \'merged\'; b.lanes.e1 = \'merged\'; b.lanes.a1 = \'review\';',
-  '  fs.writeFileSync(batchFileOf(bid), JSON.stringify(b, null, 2), \'utf8\');',
-  '  writeArt(bid, \'audit/a25.md\', \'review\\nneedHuman: true\\n\');',
-  '  const r = gates.checkNeedHumanGate(SID, bid, store.readBatch(SID, bid), \'a1\', null);',
-  '  obs(null, \'checkNeedHumanGate（团队 needhuman:false）\', r);',
-  '  assert.equal(r.ok, true, \'S13：关闭档判定结果**不变**（仍放行）；实测=\' + JSON.stringify(r));',
-  '  assert.equal(r.disabledBy, \'team-asset:needhuman\', \'S13：须返回 disabledBy 标注（可区分「关闭」与「未声明」）；实测=\' + JSON.stringify(r));',
-  '  const esc = withType(bid, E_ESCAPE).filter((e) => e.kind === \'needhuman-off\');',
-  '  assert.equal(esc.length, 1,',
-  '    \'S13/R-S13：关闭能力保留但**必须留痕** escape{kind:"needhuman-off"}（当前零事件）；实测=\' + JSON.stringify(withType(bid, E_ESCAPE)));',
-];
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「R-25【复活·T-8】团队 needhuman:false ⇒ disabledBy
+//    ＋ 写路径落 gate.escape{kind:"needhuman-off"}（端到端驱动）」＋ 其 ARCHIVED_CASES 登记 ──
+//   面已消失 = **`flows.audit.needhuman` 声明关闭档**（T-6 读端删除 + T-1 本体删除；`mkTeamRoot` 读已删真实骨架
+//   ⇒ 调用即抛）⇒ 「声明关闭 ⇒ `disabledBy: 'team-asset:needhuman'` + `needhuman-off` 逃生留痕」的**被检面不存在**，
+//   不可等值反转（反转成「零 disabledBy / 零 escape」= 恒真空转，违纪律 15⑤）。
+//   env 级关闭档（`GATE_ENABLED=false` ⇒ `env-gate-disabled`）仍在册（R-26）⇒ 逃生留痕写路径覆盖不丢。
+
 
 
 // 用户 2026-09-14 裁决（grilling Q11=A）：失效红条转 test.todo ＋ 逐字引注（模板同 Q1=C）。
@@ -924,40 +860,12 @@ ARCHIVED_CASES['R-27 显式禁用命令行 ⇒ 放行 ＋ escape{kind:"command-d
 //   且「只读视图（gate_status）绝不得发射事件」（B-4）。⇒ **正确形态 = 经 `setMember`/`runLane` 端到端驱动**
 //   （同 R-01/R-02/R-27a 的已绿形态）。本条**不得**被读成「未实现」。
 // 原用例体逐字保留于下方 `ARCHIVED_CASES`（活字符串数据、不执行），正确断言留待独立小批复活。
-test('R-28【复活·T-11】团队 targets:false ⇒ disabledBy ＋ 写路径落 escape{kind:"targets-off"}（端到端驱动）', () => {
-  // 【复活要点·2026-09-15 批次 core-debt-parallel-20260915 / lane e2】原形态为何失效：归档体**直调**
-  //   `gates.checkTargetsGate` 后读事件 ⇒ 只读面恒 0 条。本次改动：返回值 `ok`/`disabledBy` 断言保留
-  //   （GREEN-as-is）＋ 增补「直调零事件」；事件面改由 `store.setMember`（e1 running→review→merged）端到端驱动
-  //   （写端 store.js:563）。
-  const tp = mkTeamRoot('r28-team', (a) => { a.flows.exec.targets = false; });
-  const bid = mkBase('r28', { targets: [path.join(ROOT, 'absent-r28.txt')] }, {}, { team: 'r28-team', teamsRoot: tp });
-  writeArt(bid, 'exec/e1.md', 'out');
-  const tg = gates.checkTargetsGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'checkTargetsGate（团队 targets:false）', tg);
-  assert.equal(tg.ok, true, 'S18：判定结果不变（仍放行，不得因留痕而改判）；实测=' + JSON.stringify(tg));
-  assert.equal(tg.disabledBy, 'team-asset:targets', 'S18：团队级关闭须给 disabledBy（可区分「关闭」与「未声明」）；实测=' + JSON.stringify(tg));
-  assert.equal(withType(bid, E_ESCAPE).length, 0,
-    'B-4：直调门禁函数零事件；实测=' + JSON.stringify(withType(bid, E_ESCAPE)));
-  trySet(bid, 'e1', 'running'); trySet(bid, 'e1', 'review');
-  const r = trySet(bid, 'e1', 'merged');
-  obs(null, 'setMember(e1, merged)', r instanceof Error ? r.message : { lane: r.lanes.e1 });
-  expectAccepted('S18：团队 targets:false ⇒ merged 放行（判定不变）', r);
-  const esc = withType(bid, E_ESCAPE).filter((e) => e.kind === 'targets-off');
-  assert.equal(esc.length, 1,
-    'S18/R-S18：团队 targets:false 须补留痕 escape{kind:"targets-off"}；实测=' + JSON.stringify(withType(bid, E_ESCAPE)));
-});
-ARCHIVED_CASES['R-28 团队 targets:false ⇒ checkTargetsGate 返 disabledBy ＋ 目标面留痕（S18）'] = [
-  '【已复活 ⇒ 见用例「R-28【复活·T-11】…（端到端驱动）」（批次 core-debt-parallel-20260915 · lane e2）】',
-  '  const tp = mkTeamRoot(\'r28-team\', (a) => { a.flows.exec.targets = false; });',
-  '  const bid = mkBase(\'r28\', { targets: [path.join(ROOT, \'absent-r28.txt\')] }, {}, { team: \'r28-team\', teamsRoot: tp });',
-  '  const tg = gates.checkTargetsGate(SID, bid, store.readBatch(SID, bid), \'e1\');',
-  '  obs(null, \'checkTargetsGate（团队 targets:false）\', tg);',
-  '  assert.equal(tg.ok, true, \'S18：判定结果不变（仍放行，不得因留痕而改判）；实测=\' + JSON.stringify(tg));',
-  '  assert.equal(tg.disabledBy, \'team-asset:targets\', \'S18：团队级关闭须给 disabledBy（可区分「关闭」与「未声明」）；实测=\' + JSON.stringify(tg));',
-  '  const esc = withType(bid, E_ESCAPE).filter((e) => e.kind === \'targets-off\');',
-  '  assert.equal(esc.length, 1,',
-  '    \'S18/R-S18：团队 targets:false 须补留痕 escape{kind:"targets-off"}（当前零事件）；实测=\' + JSON.stringify(withType(bid, E_ESCAPE)));',
-];
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「R-28【复活·T-11】团队 targets:false ⇒ disabledBy
+//    ＋ 写路径落 escape{kind:"targets-off"}（端到端驱动）」＋ 其 ARCHIVED_CASES 登记 ──
+//   面已消失 = **`flows.exec.targets` 声明关闭档**（T-6 读端删除 + T-1 本体删除）⇒「声明关闭 ⇒
+//   `disabledBy: 'team-asset:targets'` + `targets-off` 逃生留痕」的被检面不存在，不可等值反转（同 R-25 理由）。
+//   任务级「零改动声明位」（`targetsNoChange`，R-1-g 用例）与引擎基线变更性判据（`GATE_TARGET_UNCHANGED`）仍在册 ⇒ 覆盖不丢。
+
 
 
 // 复活记录（批次 core-pending-a-20260915 · lane e2 · Leader 裁决：走 **P-1** 合规最小可判别形态）：
@@ -972,12 +880,14 @@ ARCHIVED_CASES['R-28 团队 targets:false ⇒ checkTargetsGate 返 disabledBy �
 //      不得再以未接线语义出现在 `gateStrength.unwired`」（该条在台账修复前 RED、修复后 GREEN）。
 //   ④ 原断言文本逐字保留于下方 `ARCHIVED_CASES`（活字符串数据、不执行）供追溯（P-1 要求）。
 test('R-15【P-1 复活】团队 consume_field:"consume"（合规声明）+ lane consume 缺件 ⇒ entry 门按声明字段名检，且该键已不在未接线台账', () => {
-  const tp = mkTeamRoot('r15-team', (a) => { a.flows.exec.consume_field = 'consume'; });
-  const bid = mkBase('r15', {}, {}, { team: 'r15-team', teamsRoot: tp });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `mkTeamRoot` 声明 `consume_field:"consume"`；
+  //   团队声明面已随 T-1/T-6 删净 ⇒ 去掉该前置。引擎基线下 exec/audit 层的 `consume_field` **恒为 `'consume'`**
+  //   （`ENGINE_BASELINE` 口径）⇒ 本用例被检的「被检字段名 = 该层 consume_field」命题**逐条成立**、断言逐条保留。
+  const bid = mkBase('r15', {}, {}, { team: 'r15-team' });
   declareLaneField(bid, 'e1', { consume: ['exec/absent.md'] });
   const gs = gates.gateStatus(SID, bid).gateStrength;
   const r = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'gateStrength.consumeField（资产显式声明 consume_field="consume"）', gs.consumeField);
+  obs(null, 'gateStrength.consumeField（引擎基线 consume_field="consume"）', gs.consumeField);
   obs(null, 'checkEntryGate(consume_field="consume", consume 缺件)', r);
   obs(null, 'gateStrength.unwired（该键已接线 ⇒ 不得在列）', gs.unwired);
   assert.equal(gs.consumeField && gs.consumeField.exec, 'consume',
@@ -994,8 +904,10 @@ test('R-15【P-1 复活】团队 consume_field:"consume"（合规声明）+ lane
   //   检面字段名与 `missing[]` 须同值 —— 证明读端走的是**同一单点**（`consumeFieldNameOf`），而非两条逻辑。
   //   ⚠ 诚实标注：因白名单只允许 `'consume'`，本核对**不是区分性构造**（两态必然同值）；真正的区分性构造
   //   （声明 `'inputs'` ⇒ 检面按 `inputs`）在合规资产下不可达，原因见上方 ①。
-  const tp2 = mkTeamRoot('r15-nodecl', (a) => { delete a.flows.exec.consume_field; delete a.flows.audit.consume_field; });
-  const bid2 = mkBase('r15-nodecl', {}, {}, { team: 'r15-nodecl', teamsRoot: tp2 });
+  //   【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原第二态用 `mkTeamRoot('r15-nodecl', …delete consume_field)`
+  //   构造「无该声明（缺省回落）」；团队声明面已随 T-1/T-6 删净 ⇒ 去掉该前置，第二态直接以**无声明批**构造
+  //   （引擎基线下即「缺省回落」态）。两条同值断言（`consumeField.exec` / `missing[]`）**逐字保留**。
+  const bid2 = mkBase('r15-nodecl', {}, {}, { team: 'r15-nodecl' });
   declareLaneField(bid2, 'e1', { consume: ['exec/absent.md'] });
   const gs2 = gates.gateStatus(SID, bid2).gateStrength;
   const r2 = gates.checkEntryGate(SID, bid2, store.readBatch(SID, bid2), 'e1');
@@ -1030,15 +942,18 @@ ARCHIVED_CASES['R-15 团队 consume_field:"inputs" + lane 写 inputs ⇒ 门禁�
 ];
 
 test('R-15b 越界声明 consume_field:"outputs"（白名单外）⇒ 回落 consume 且问题可读', () => {
-  const tp = mkTeamRoot('r15b-team', (a) => { a.flows.exec.consume_field = 'outputs'; });
-  const bid = mkBase('r15b', {}, {}, { team: 'r15b-team', teamsRoot: tp });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `mkTeamRoot` 声明越界值 `consume_field:"outputs"`；
+  //   团队声明面已随 T-1/T-6 删净 ⇒ 去掉该前置（「越界声明」这一构造不再可达）。
+  //   条件「读端须落在白名单内唯一值 `consume`」在引擎基线下**恒成立** ⇒ 断言逐条保留（精确等值，非放宽）。
+  //   ⚠ 如实标注：本用例今日断言的是**引擎基线单源**，不再是对「越界声明回落」的区分性证明。
+  const bid = mkBase('r15b', {}, {}, { team: 'r15b-team' });
   declareLaneField(bid, 'e1', { consume: [] });
   const gs = gates.gateStatus(SID, bid).gateStrength;
   const r = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  obs(null, 'gateStrength.consumeField（越界声明）', gs.consumeField);
-  obs(null, 'checkEntryGate（越界声明 + 空 consume）', r);
+  obs(null, 'gateStrength.consumeField（引擎基线）', gs.consumeField);
+  obs(null, 'checkEntryGate（引擎基线 + 空 consume）', r);
   assert.equal(gs.consumeField && gs.consumeField.exec, 'consume',
-    'R-S19b：白名单外的 consume_field 必须回落 consume；实测=' + JSON.stringify(gs.consumeField));
+    'R-S19b：consume_field 须恒为白名单内唯一值 consume；实测=' + JSON.stringify(gs.consumeField));
   assert.equal(r.ok, false, '回落 consume 后空 consume 仍须拒；实测=' + JSON.stringify(r));
 });
 

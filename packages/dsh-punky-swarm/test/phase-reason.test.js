@@ -282,7 +282,10 @@ test('PR-8 源码锁：生产文件的 `setPhase(` 调用点全部带 `{ reason`
   assert.equal(calls.length, 3, '生产写点须恰 3 处（自动结算停轮 / batch_phase / batch_control）：' + JSON.stringify(calls.map((c) => c.rel + ':' + c.n)));
   const bare = calls.filter((c) => !c.text.includes('{ reason'));
   assert.deepEqual(bare, [], '不得存在裸 setPhase 调用（实参串必须含 `{ reason`）：' + JSON.stringify(bare));
-  const crCalls = fs.readFileSync(path.join(ROOT, 'lib/engine/chain-runner.js'), 'utf8').split('\n')
-    .filter((line) => line.includes('setPhase(') && !/^\s*(\/\/|\*|\/\*)/.test(line));
-  assert.deepEqual(crCalls, [], '[退役锁] `lib/engine/chain-runner.js` 零 setPhase 调用点（链停轮写点已删除）');
+  // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`setPhase` 写点纪律）】原件第三处读的是
+  //   `lib/engine/chain-runner.js` 的零 setPhase 调用点；该文件**已随 T-3 整体删除**（A-7）
+  //   ⇒ 真值反转为「文件不存在」（原「文件在、零调用点」）。断言强度不减：仍为**精确等值**断言，
+  //   若该文件回生（或任何替代文件恢复链停轮写点），本断言仍会红。
+  assert.equal(fs.existsSync(path.join(ROOT, 'lib/engine/chain-runner.js')), false,
+    '[退役锁] `lib/engine/chain-runner.js` 本体已删除（T-3）⇒ 链停轮写点面整体不存在');
 });

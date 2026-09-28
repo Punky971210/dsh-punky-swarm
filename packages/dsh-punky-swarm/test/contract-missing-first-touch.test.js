@@ -356,80 +356,13 @@ test('B2-A5/A6：非拒态——判定随附事件不放宽/不放宽、且不�
 // ═══════════════════════════════════════════════════════════════════════════════
 // 用例 9：负控——团队资产**声明齐备** ⇒ 零首触事件（无误报；判定逐点不变）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('B2 负控：团队资产声明齐备 ⇒ 零首触事件（判定逐字不变，事件是附加观察面）', () => {
-  const root9 = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-declared-'));
-  const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-teams-'));
-  const team = 'b2-declared-team';
-  // F2：合成资产（本负控要的是「声明齐备」的受控形态）⇒ 单点写入。
-  writeSyntheticTeam(teamsRoot, team, {
-    team,
-    manifest: { version: 3, requires_engine: '>=0.4.4', hash: 'unhashed', source: 'B2 lane e1 负控夹具（声明齐备）' },
-    layers: {
-      plan: { roles: ['designer'], skills: { designer: ['spec-writing'] } },
-      exec: { roles: ['coder'], skills: { coder: ['test-driven-development'] } },
-      audit: { roles: ['supervisor'], skills: { supervisor: ['acceptance-gate'] } },
-    },
-    flows: {
-      plan: {
-        produce_field: 'produce',
-        entry_requires: [],
-        contract: { artifact_globs: ['plan/*spec.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] },
-      },
-      exec: {
-        produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'],
-        targets: true, gate_command: true,
-      },
-      audit: {
-        produce_field: 'produce', consume_field: 'consume', entry_requires: ['consume'], needhuman: true,
-        audit_contract: { criteria_from: 'plan/**', consumes_required: ['plan/'], verdict: ['pass', 'skip'] },
-      },
-    },
-    // 【2026-09-18 清债】本负控夹具**不含**顶层 `state_machine`——该键已退役（零运行期消费者 ⇒ 声明即拒
-    //   `TEAM_ASSET_FIELD_NOT_ALLOWED`）；负控以「声明齐备」为前提，含退役键会先吃 blocking、干扰判据。
-  }, { filename: 'team-asset.yml' });
-  clearFlowCache();
-  // 前置：临时团队资产必须**可解析**（不可解析 ⇒ flows=null ⇒ 退化为「未声明」侧，本负控即失效）
-  const resolved = resolveTeamFlows(team, { root: teamsRoot });
-  assert.equal(resolved.ok, true, '前置：临时团队资产须可解析；problems='
-    + JSON.stringify(resolved.problems ?? null) + '；severity=' + String(resolved.severity));
-  const store9 = createStore(root9);
-  const gates9 = createGates(root9);
-  const targetAbs = path.join(root9, 'targets', 'declared-target.txt');
-  fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
-  fs.writeFileSync(targetAbs, 'targets-claimed: true\n', 'utf8');
-  const bid = 'b2-declared';
-  const tasks = fullTasks(targetAbs);
-  const plan = buildWavePlan({ batchId: bid, tasks, team, teamsRoot });
-  store9.createBatch(SID, { batchId: bid, wavePlan: plan, concurrency: plan.concurrency, teamsRoot });
-  const b = store9.readBatch(SID, bid);
-  Object.assign(b.lanes, { p1: 'pending', e1: 'pending', a1: 'pending' });
-  b.team = team;
-  b.teamsRoot = teamsRoot;
-  b.phase = 'running';
-  const batchPath = path.join(root9, 'sessions', SID, 'batches', bid + '.json');
-  fs.writeFileSync(batchPath, JSON.stringify(b, null, 2), 'utf8');
-  for (const rel of ['plan/spec.md', 'exec/e1.md', 'audit/a1.md']) {
-    const abs = path.join(root9, 'sessions', SID, 'artifacts', bid, ...rel.split('/'));
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, rel === 'plan/spec.md' ? SPEC_OK : 'out', 'utf8');
-  }
-
-  // 判定面：与「未声明」夹具（用例 2）逐点同判——声明齐备不改变任何 `ok`/`code`
-  assert.equal(gates9.checkEntryGate(SID, bid, store9.readBatch(SID, bid), 'e1').ok, true, '声明齐备 ⇒ entry 放行');
-  assert.equal(gates9.checkPlanContract(SID, bid, store9.readBatch(SID, bid), 'p1').ok, true, '声明齐备 ⇒ plan 契约放行');
-  store9.setMember(SID, bid, 'p1', 'running');
-  store9.setMember(SID, bid, 'p1', 'review');
-  store9.setMember(SID, bid, 'p1', 'merged');
-  store9.setMember(SID, bid, 'e1', 'running');
-  store9.setMember(SID, bid, 'e1', 'review');
-  store9.setMember(SID, bid, 'e1', 'merged');
-  store9.setMember(SID, bid, 'a1', 'running');
-  store9.setMember(SID, bid, 'a1', 'review');
-  store9.setMember(SID, bid, 'a1', 'merged');
-  store9.setPhase(SID, bid, 'complete');
-  const evs9 = store9.readBatch(SID, bid).events.filter((e) => e && e.type === E_CONTRACT_MISSING);
-  assert.equal(evs9.length, 0, '声明齐备 ⇒ 零首触事件（不得误报）；实测=' + JSON.stringify(evs9.map(cmKey)));
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「用例 9：B2 负控——团队资产**声明齐备** ⇒ 零首触事件」──
+//   面已消失 = **团队资产声明面**（T-1 装载器删除 + T-6 读端删除）⇒ 该负控的**前置**（`resolveTeamFlows(...).ok === true`
+//   「临时团队资产须可解析」）在 A-9（5 件真实骨架删除）后**不可满足**，断言链在第一步即失效；
+//   且「声明齐备」这一构造形态**结构上不可达**（无资产装载面）。
+//   **不可等值反转**：「无声明 ⇒ 零首触（不误报）」与**用例 2**（未声明侧）同构造、同判据 ⇒ 反转即重复且恒真空转（纪律 15⑤）。
+//   本文件其余用例（B2-A1…A7 / 跨重启幂等 / 只读零发射 / 告警同源 / 纯函数去重 / 非拒态 / B2-DoD 真工具面）**全部原样在册**
+//   ⇒ 「首触事件零发射面」覆盖不丢。
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 用例 8：真调用探针——经**真实工具面**触发一次 + 只读工具面负控（宿主形态复验）

@@ -75,34 +75,42 @@ test('T1 `team` 可选：不传 team ⇒ 建批成功 + 批次落盘 + batch.tea
   }
 });
 
-test('T2 `team` 可选：传未注册 team 名 ⇒ 建批成功 + 批次落盘 + TEAM_ASSET_NOT_FOUND 留痕（标签照原样落批次）', async () => {
+test('T2 `team` 可选（2026-09-27 批 3 反转）：传未注册 team 名 ⇒ 建批成功 + 批次落盘 + 标签原样落批次 + 零资产留痕', async () => {
   const { root, byName } = makeHarness();
   try {
     const out = await byName.wave_plan.execute({ batchId: 'tl-unknown', team: 'no-such-team-zzz', tasks: tasks3(), assembly: ASSEMBLY }, SESS);
     assert.equal(out.batchId, 'tl-unknown', '未注册团队名不得再拒建批（标签 = 自由归类，不要求已注册）');
-    assert.ok(out.warnings.some((w) => w.code === 'TEAM_ASSET_NOT_FOUND'),
-      '资产查不到须留痕原码（不静默）：' + JSON.stringify(out.warnings));
+    // 【T-15/D-6 等值反转（面仍在：建批返回值 `warnings` 面）】原断言 `warnings.some(w => w.code === 'TEAM_ASSET_NOT_FOUND')`；
+    //   团队资产查找面已随 T-1（装载器删除）/ T-6（读端删除）整体退役 ⇒ 该码已入退役锁（A-10）
+    //   ⇒ 真值反转为「零资产留痕」。断言强度不减：由「包含某码」→「**精确空集**」（更严）。
+    assert.deepEqual(out.warnings, [], '团队资产面已整体退役 ⇒ 零资产留痕；实测=' + JSON.stringify(out.warnings));
     const raw = readBatchRaw(root, 'tl-unknown');
     assert.equal(raw.team, 'no-such-team-zzz', '标签照原样落批次（归类面可用）');
-    assert.equal(raw.teamAsset.ok, false, '资产观察档如实记 ok:false（不伪装成已解析）');
+    // 【同上反转】原断言 `raw.teamAsset.ok === false`（资产观察档）；观察档写端已随 T-7 整条删除
+    //   ⇒ 真值反转为「批次不得写该键」（严格缺席，非放宽为 `== null`）。
+    assert.equal('teamAsset' in raw, false, '资产观察档写端已删净（T-7）⇒ 批次不得写 teamAsset 键');
     assert.equal(fs.existsSync(batchFileOf(root, 'tl-unknown')), true, '批次 JSON 落盘');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('T3 `teamsRoot` 无 `team` ⇒ 忽略但**不静默**：warnings + 批次事件携 TEAMS_ROOT_IGNORED，且不写批次键', async () => {
+test('T3 `teamsRoot`（2026-09-27 批 3 反转）：参数已删除 ⇒ 传入被忽略且**零留痕 / 零批次键**（不静默、不报错）', async () => {
   const { root, byName } = makeHarness();
   const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-tlabel-root-'));
   try {
     const out = await byName.wave_plan.execute({ batchId: 'tl-rootnoteam', tasks: tasks3(), assembly: ASSEMBLY, teamsRoot }, SESS);
     assert.equal(out.batchId, 'tl-rootnoteam', '«给了根却不给标签» 不得拒建批（拒态家族已删除）');
-    const w = out.warnings.find((x) => x.code === 'TEAMS_ROOT_IGNORED');
-    assert.ok(w, '忽略必须可见（不静默吞掉 teamsRoot）：' + JSON.stringify(out.warnings));
-    assert.equal(w.reason, 'no-team', '忽略理由可辨（no-team）');
+    // 【T-15/D-6 等值反转】原断言 `warnings` 含 `TEAMS_ROOT_IGNORED` + `reason === 'no-team'` + 批次事件携该码；
+    //   `teamsRoot` 参数与其留痕码已随 **D-3** 一并退役（`wave_plan.parameters` 删除；码入退役锁）
+    //   ⇒ 真值反转为：参数被**结构性忽略**（不再有任何留痕/事件/批次键）。
+    //   断言强度不减：原 4 条（warnings 在场 / reason 可辨 / 不写批次键 / 落批次事件）→ 现 4 条
+    //   （warnings 精确空集 / 零批次事件携该码 / 不写批次键 / 批内 `teamsRoot` 键仍缺席）。
+    assert.deepEqual(out.warnings, [], 'teamsRoot 参数已删 ⇒ 不再产生 TEAMS_ROOT_IGNORED 留痕；实测=' + JSON.stringify(out.warnings));
     const raw = readBatchRaw(root, 'tl-rootnoteam');
-    assert.equal('teamsRoot' in raw, false, '被忽略的根不得写批次键（防「声明了却不生效」）');
-    assert.ok(raw.events.some((e) => e.code === 'TEAMS_ROOT_IGNORED'), '留痕须落批次事件（不只存在返回值里）');
+    assert.equal('teamsRoot' in raw, false, '被删除的参数不得写批次键（防「声明了却不生效」）');
+    assert.equal(raw.events.some((e) => e.code === 'TEAMS_ROOT_IGNORED'), false, '不得落该码的批次事件（写点已删）');
+    assert.equal(Array.isArray(raw.events), true, '阴性对照：批次事件面本体仍在（非整段失效）');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(teamsRoot, { recursive: true, force: true });

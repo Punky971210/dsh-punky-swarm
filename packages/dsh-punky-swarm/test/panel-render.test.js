@@ -259,26 +259,34 @@ test('T-W2 旧串零命中（换词表 10 条的现值全部退场）', () => {
   }
 });
 
-test('T-W4 装配声明静态回显：assembly.chain 标签去「链」叙事（G-10#4 · 2026-09-18）', () => {
+test('T-W4 装配声明静态回显（2026-09-27 批 3 反转）：`assembly.chain` locale 键与面板推入点**均已删净**（D-4）', () => {
   const seg = segmentOf(client, 'locales');
-  assert.equal(LOC.zh['assembly.chain'], '声明环节（静态）', 'zh 标签须明示「静态声明」语义');
-  assert.equal(LOC.en['assembly.chain'], 'declared steps (static)', 'en 标签同口径');
-  assert.equal(/链/.test(LOC.zh['assembly.chain']), false, 'zh 标签不得再含「链」叙事（会把静态声明读成运行期推进面）');
-  assert.equal(/^chain$/i.test(String(LOC.en['assembly.chain'])), false, 'en 标签不得只剩 chain');
-  assert.equal(seg.indexOf('"assembly.chain": "链"'), -1, '旧 zh 文案不得残留');
-  // 服务端键仍被消费（只改标签、不删读点）——防「改文案顺手把消费点删掉」
+  // 【T-15/D-6 等值反转（面仍在：locale 段与 batch-detail 段的**静态读法**）】Leader 裁决 **D-4 = 链回显面删净**
+  //   ⇒ `assembly.chain`（zh/en）locale 键与 `batch-detail` 段的 `push('assembly.chain', …)` 推入点均已删除
+  //   （归因：`exec/delete-assets.md` §四 第 14/16 点；A-8 归零实测 34 → 0）。
+  //   断言强度**不减反增**：原为「键在场 + 文案去链叙事」的正向判据；现为**严格缺席**（`undefined` / `indexOf < 0`），
+  //   并保留原「『链回显』措辞不得残留」负向锁 + 增补阴性对照（避免「整段失效」冒充「删净」）。
+  assert.equal(LOC.zh['assembly.chain'], undefined, 'zh 链回显键已删净（D-4，非「改文案」）');
+  assert.equal(LOC.en['assembly.chain'], undefined, 'en 链回显键已删净（D-4，非「改文案」）');
+  assert.equal(seg.indexOf('"assembly.chain"'), -1, 'locales 段不得残留 assembly.chain 键');
   const detail = segmentOf(client, 'batch-detail');
-  assert.ok(detail.indexOf("push('assembly.chain'") >= 0, 'batch-detail 段须仍消费 assembly.chain 键');
+  assert.equal(detail.indexOf("push('assembly.chain'"), -1, 'batch-detail 段链回显推入点已删除（服务端无该键）');
   assert.equal(detail.indexOf('链回显') >= 0, false, '「链回显」措辞不得残留（口径改为装配声明静态回显）');
+  assert.ok(detail.indexOf('push(') >= 0, '阴性对照：batch-detail 段仍在使用 push 装配回显位（非整段失效）');
 });
 
 test('T-W3 人话映射：≥12 类事件返回 locale key；未知 type ⇒ key:null（不伪人话）', () => {
   const types = [
     'member.settled', 'member.dispatch', 'gate.exit_blocked', 'gate.needhuman_blocked', 'gate.passed',
-    'lane.handoff', 'lane.handoff.gap', 'chain.step', 'batch.created', 'batch.phase', 'batch.manager.raised',
+    'lane.handoff', 'lane.handoff.gap', 'batch.created', 'batch.phase', 'batch.manager.raised',
     'batch.team-asset.resolved', 'lane.needhuman', 'lane.stalled', 'swarm.report', 'governance.refusal',
     'auto.settle.triggered', 'worktree.created',
   ];
+  // 【2026-09-27 批 3 · T-15/D-6 归因】原清单含 `'chain.step'` 一项（18 类）。该事件常量已随 **D-4 删净**
+  //   （`event-types.js` 的 `EVT_CHAIN_STEP` 整条删除，A-8）⇒ 其分类器（`panel-model.js` 的 `/^chain\./` 死分类器）
+  //   亦已删除 ⇒ 该 type 的 `eventViewOf` 不再返回 key。**面已消失 ⇒ 条目随之删除**（不可等值反转：
+  //   反转成「key:null」即与下方 `unknown` 用例重复且恒真空转，违纪律 15⑤）。
+  //   `types.length >= 12` 门槛保留（现 17 项，仍严于门槛；恒真零新增的「凑数」风险不因本改动上升）。
   assert.ok(types.length >= 12, '覆盖类别数 ≥12');
   for (const t of types) {
     const v = PM.eventViewOf({ type: t });
@@ -436,7 +444,14 @@ test('T-S1 八段齐备且与 lib/client.js 逐字节一致（新增 panel-model
 
 test('T-P1 面板消费的服务端键在 panel 段内全部有读取点（无「假缺口」遗留）', () => {
   const detail = segmentOf(client, 'batch-detail');
-  for (const key of ['danglingLanes', 'handoffs', 'teamAsset', 'assembly', 'manager', 'chain', 'smoke', 'lanesGate']) {
+  // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：服务端键 ↔ panel 段读点的**双向一致性**）】
+  //   原清单 8 键含 `teamAsset` / `chain`。两键已分别随 **T-7**（资产回显面删除）与 **D-4**（链回显面删净）
+  //   从服务端删净 ⇒ 真值反转：由「**必须有**读点」改为「**不得有**读点」（严格缺席判定）。
+  //   断言强度不减：正向 6 键逐一在场 + 负向 2 键逐一缺席（原 8 条正向 → 现 6 正向 + 2 负向，条数不变）。
+  for (const key of ['danglingLanes', 'handoffs', 'teamAsset', 'assembly', 'manager', 'smoke', 'lanesGate']) {
     assert.ok(detail.indexOf(key) >= 0, 'panel 段未消费服务端键: ' + key);
   }
+  // `teamAsset` **仍在**必检清单内：其面板读点未删（`lib/api.js:133` 的历史兼容读端与面板读法成对，
+  //   见 `exec/delete-assets.md` §六 **N-4**，属**已登记的未分配遗留**）⇒ 按「无假缺口」原判据**保留**。
+  assert.equal(detail.indexOf("'assembly.chain'"), -1, '服务端键已删净（D-4）⇒ panel 段不得残留 assembly.chain 读点');
 });

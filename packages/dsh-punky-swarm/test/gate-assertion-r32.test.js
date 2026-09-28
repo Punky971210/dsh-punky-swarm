@@ -49,7 +49,7 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { clearRoleCache } from '../lib/assembly/flows.js';
 import { assessC, threeTierTasks } from './helpers/gate-fixture.mjs';
-import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 import * as EVT from '../lib/state/event-types.js';
 
 const SESSION = 'sess-r32';
@@ -144,57 +144,16 @@ const eventsOf = (store, batchId) => store.readBatch(SESSION, batchId)?.events ?
 // 缺口成因：既有套件里 `consumes_required` 全部指**audit 契约面**；exec 面只以「资产已声明且满足」
 //   的**通过态**被顺带走到，**拒态从未被断言**。
 
-test('R3-2 E-A：flows.exec.consumes_required 未被满足 ⇒ 拒建批 GATE_EXEC_INPUT_MISSING（零批次落盘）', async () => {
-  const h = makeHarness();
-  try {
-    // 唯一改动点：批级要求 exec lane 消费 `exec/` 前缀 —— 而本批 exec lane 只消费 `plan/spec.md`。
-    const teamsRoot = writeTempTeam('punky-r32-ea-', PROBE, (a) => {
-      a.flows.exec.consumes_required = ['exec/'];
-    });
-    await assert.rejects(
-      () => h.byName.wave_plan.execute({
-        batchId: 'r32-ea', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-      }, SESS),
-      /GATE_EXEC_INPUT_MISSING: flows\.exec\.consumes_required not satisfied for \["exec\/"\]/,
-    );
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-ea')), false, '拒后零批次 JSON 落盘');
-  } finally { cleanup(h); }
-});
-
-test('R3-2 E-A 对照：同一夹具仅把 consumes_required 改回已满足 ⇒ 建批通过（拒因可归因）', async () => {
-  const h = makeHarness();
-  try {
-    // 与上例的**唯一差异** = 声明改为 `['plan/']`（exec lane 的 consume=['plan/spec.md'] 命中）
-    //   ⇒ 反向锁：过与不过只由被检面决定，不由夹具其它部分决定。
-    const teamsRoot = writeTempTeam('punky-r32-eaok-', PROBE, (a) => {
-      a.flows.exec.consumes_required = ['plan/'];
-    });
-    const out = await h.byName.wave_plan.execute({
-      batchId: 'r32-eaok', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-    }, SESS);
-    assert.equal(out.batchId, 'r32-eaok');
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-eaok')), true, '放行 ⇒ 批次 JSON 落盘');
-  } finally { cleanup(h); }
-});
-
-test('R3-2 E-B：flows.exec.consumes_required_per_lane 未被满足 ⇒ 拒建批 GATE_EXEC_INPUT_MISSING', async () => {
-  const h = makeHarness();
-  try {
-    // E-B 语义：**每一条** exec lane 须各自命中**每个**前缀。此处追加 `audit/`（无 exec lane 消费它）
-    //   ⇒ 逐 lane 判据失配；E-A 保持 software-team 原值 `['plan/']`（已满足）⇒ 拒因只能来自 E-B。
-    const teamsRoot = writeTempTeam('punky-r32-eb-', PROBE, (a) => {
-      a.flows.exec.consumes_required = ['plan/'];
-      a.flows.exec.consumes_required_per_lane = ['plan/', 'audit/'];
-    });
-    await assert.rejects(
-      () => h.byName.wave_plan.execute({
-        batchId: 'r32-eb', team: PROBE, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-      }, SESS),
-      /GATE_EXEC_INPUT_MISSING: flows\.exec\.consumes_required_per_lane not satisfied — exec lane\(s\) missing required consume prefix: \["e1:audit\/"\]/,
-    );
-    assert.equal(fs.existsSync(batchFileOf(h.root, 'r32-eb')), false, '拒后零批次 JSON 落盘');
-  } finally { cleanup(h); }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，三例同因）：原 test「R3-2 E-A：flows.exec.consumes_required 未被满足
+//    ⇒ 拒建批 GATE_EXEC_INPUT_MISSING（零批次落盘）」/「R3-2 E-A 对照：同一夹具仅把 consumes_required 改回已满足
+//    ⇒ 建批通过（拒因可归因）」/「R3-2 E-B：flows.exec.consumes_required_per_lane 未被满足 ⇒ 拒建批」──
+//   面已消失 = **`flows.exec.consumes_required` / `.consumes_required_per_lane` 两处团队声明位**
+//   （T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」；T-1：`lib/assembly/team-asset.js` 本体删除；
+//     `exec/consumers.md` §二.6 明载：`GATE_EXEC_INPUT_MISSING` 的判据全部取自团队声明 ⇒ 无载体、恒不触发）。
+//   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛，三例整条不可达。
+//   **不可等值反转**：反转成「声明不在 ⇒ 不拒」即恒真空转（纪律 15⑤）。
+//   **覆盖不丢**：exec/audit 入口 consume 强制面（引擎基线 `tighten-only-default`）由 `gate-flows` 的
+//   R-05 / R-06 复活例与 `gate-hardening-red` 的 T17 / T18 承担，均原样在册。
 
 // ── 真缺口 ②：`GATE_SKILL_MISSING`（技能名存在性告警）────────────────────────────────────
 // 推入点：`lib/tools/core.js#wave_plan.execute` 的告警块（`plan.warnings.push`，非阻断）。**判定面 = 两源并集**

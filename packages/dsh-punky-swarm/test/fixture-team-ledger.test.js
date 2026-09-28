@@ -36,8 +36,7 @@ import { fileURLToPath } from 'node:url';
 
 import { packageRootOf, declaredSkillsOf } from './helpers/skill-paths.mjs';
 import {
-  writeTempTeam, writeRealTeam, writeSyntheticTeam, threeTierSyntheticTeam,
-  readRealTeamAsset, SKELETON_TEAM,
+  writeSyntheticTeam, threeTierSyntheticTeam,
 } from './helpers/team-fixture.mjs';
 
 const PKG = packageRootOf();
@@ -49,14 +48,23 @@ const SCANNER_EXEMPT = ['helpers/team-fixture.mjs', 'fixture-team-ledger.test.js
 /**
  * 显式白名单：**loader/边界自测族**——它们的命题就是「坏资产/缺文件被正确拒」，必须直接写。
  * 维护：若确需新增，请同时在该文件加 `【F2 白名单】` 注释说明理由。
+ *
+ * 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：直接写集合 ≡ 白名单的双向判据）】
+ *   **清空为 `[]`**：原三名成员（`team-asset-snapshot.test.js` / `team-asset.test.js` / `teams-root.test.js`）
+ *   的命题 = 「装载器/`teamsRoot` 边界自测」⇒ 其被检本体已随 **T-1 / T-2 / T-3 / T-4 / D-3** 整体退役
+ *   （A-9 的 5 件资产 + 三个 lib 本体 + `teamsRoot` 参数），三件用例已按 D-6「面已消失者随删」整体删除
+ *   ⇒ 白名单**无对象**。
+ *   判据强度**不减**：F2-1 仍是**双向精确相等**（`deepEqual(actual, [])`）——任何**新增**一处直接写仍会红
+ *   （这正是本锁的用途）；F2-2（白名单文件须带 `【F2 白名单】` 标记）在空集上恒成立，保留为「新增时必须显式登记」的入口。
+ *   实测（本批收口时点）：`directTeamAssetWriters()` = `[]`（全 `test/**` 已无 `team-asset.*` 直接写入者，
+ *   写入面收敛到 `helpers/team-fixture.mjs#writeSyntheticTeam` 单点）。
  */
 const DIRECT_WRITE_ALLOWLIST = [
-  'team-asset-snapshot.test.js',
-  'team-asset.test.js',
-  'teams-root.test.js',
   // 2026-09-26 移除（用户裁决「团队内容只是模版、不再作为组件 ⇒ 相关测试不再检验」，
   //   三件已整体删除并归档于 reports/archived-tests-20260926/）：
   //   'team-assets-fill.test.js' / 'writing-team-asset.test.js'
+  // 2026-09-27 批 3 移除（**T-1/T-2/T-3/T-4/D-3 全量退役**：装载器 + 链本体 + 推进器壳 + 5 件资产 + `teamsRoot`）：
+  //   'team-asset-snapshot.test.js' / 'team-asset.test.js' / 'teams-root.test.js' —— 三件已随本体整体删除。
 ];
 
 /** `withDefaultTeam` 的允许名单：只允许「建批是手段、被检面是别的门禁」的套件（F2 台账化）。 */
@@ -111,8 +119,8 @@ test('F2-1 团队资产直接写：集合 ≡ 白名单（新增直接写 ⇒ �
   const actual = directTeamAssetWriters();
   assert.deepEqual(actual, DIRECT_WRITE_ALLOWLIST,
     '团队资产的直接写入者必须与白名单**双向相等**。\n'
-    + '  若你新增了一处直接写：请改用 `helpers/team-fixture.mjs` 的 `writeTempTeam`（真实骨架）'
-    + '或 `writeSyntheticTeam`（合成）；\n'
+    + '  若你新增了一处直接写：请改用 `helpers/team-fixture.mjs` 的 `writeSyntheticTeam`（合成单点；'
+    + '真实骨架夹具 `writeTempTeam` 已随 T-4/A-9 删除）；\n'
     + '  若确属 loader/边界自测（须造坏 JSON / 缺字段 / 字符串原文）⇒ 加进白名单**并**在该文件加 `【F2 白名单】` 注释。\n'
     + '实际：' + JSON.stringify(actual));
 });
@@ -146,31 +154,15 @@ test('F2-3 白名单理由自证：`writeSyntheticTeam` 拒绝 loader 自测所�
     /非空团队名/, '团队名须非空');
 });
 
-// ── ③ 真实骨架保真：未 mutate 时与包内资产**深等**（防骨架被悄悄改小） ─────────
-
-test('F2-4 真实骨架保真：`writeTempTeam` 未 mutate 的产物 ≡ 包内真实资产（防漂移）', () => {
-  const team = 'f2-fidelity-team';
-  const root = writeTempTeam('f2-fidelity-', team);
-  const written = JSON.parse(fs.readFileSync(path.join(root, 'presets', team, 'team-asset.yml'), 'utf8'));
-  const packaged = readRealTeamAsset(SKELETON_TEAM).asset;
-  assert.deepEqual(written, packaged,
-    '「真实骨架」用例产出的资产须与 `presets/' + SKELETON_TEAM + '/team-asset.yml` **逐字段相等**；'
-    + '若你要的是另一形态 ⇒ 那是**合成**资产，请改用 `writeSyntheticTeam`（并接受「与真实资产脱节」已被显式标注）');
-  // 缺省**不**改 `asset.team`（读端不校验它与目录名一致，见 helper 注释）⇒ 保留源团队名
-  assert.equal(written.team, SKELETON_TEAM, '缺省保留源 team 字段（零行为变更）');
-  // 显式 `setTeam` 才同步
-  const root2 = writeTempTeam('f2-fidelity2-', 'other-team', () => {}, { setTeam: true });
-  const w2 = JSON.parse(fs.readFileSync(path.join(root2, 'presets', 'other-team', 'team-asset.yml'), 'utf8'));
-  assert.equal(w2.team, 'other-team', '`setTeam: true` ⇒ 同步 asset.team');
-});
-
-test('F2-4b 写入面可写入调用方给定的根（`writeRealTeam`）且可回读', () => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || process.env.TEMP || '/tmp'), 'f2-real-'));
-  const asset = writeRealTeam(root, 'r-team', (a) => { a.flows.exec.produce_field = 'produce'; });
-  assert.equal(asset.flows.exec.produce_field, 'produce', 'mutate 生效');
-  const back = JSON.parse(fs.readFileSync(path.join(root, 'presets', 'r-team', 'team-asset.yml'), 'utf8'));
-  assert.deepEqual(back, asset, '落盘内容 ≡ 返回对象');
-});
+// ── ③ 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「F2-4 真实骨架保真：`writeTempTeam` 未 mutate 的产物
+//     ≡ 包内真实资产（防漂移）」＋「F2-4b 写入面可写入调用方给定的根（`writeRealTeam`）且可回读」──
+//   面已消失 = **真实骨架的来源本体 `presets/<team>/team-asset.{json,yml}`（5 件）**（T-4/A-9：实测 5 件全部删除，
+//   不留空壳 D-2；`lib/assembly/team-asset.js` 装载器亦删除，T-1）⇒ `readRealTeamAsset()` 无对象可读、抛
+//   「真实团队资产不存在」；两个用例的被检面（「真实骨架保真」与「真实骨架写入面」）**整体不存在**。
+//   ⇒ 按 D-6 删除；`helpers/team-fixture.mjs` 的三个真实骨架 API（`readRealTeamAsset` / `writeRealTeam` /
+//   `writeTempTeam`）连同 `SKELETON_TEAM` / `REAL_FILENAME` 已随之删除（防「读已删路径」的调用地雷）。
+//   **存活面**：F2-1 / F2-2 / F2-3 / F2-5 / F2-6（直接写集合 = 白名单、白名单显式标记、合成夹具形状下限、
+//   `threeTierSyntheticTeam` 声明面、`withDefaultTeam` 允许名单）**全部原样在册** ⇒ 夹具纪律覆盖不丢。
 
 // ── ④ 合成资产：声明面齐备（可被 declaredSkillsOf 正常消费） ─────────────────
 

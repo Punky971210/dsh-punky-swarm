@@ -29,51 +29,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
-import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js'`
+//   已删（**本体已删除**，A-5/A-6/A-9 实测 0 命中 ⇒ 该 import 是文件级 ESM 缺符号的直接根因）；
+//   原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 亦删（真实骨架已删，T-4/A-9）。
 import { clearFlowCache, ENGINE_BASELINE_CRITERIA_SECTION, ENGINE_BASELINE_PLAN_SECTIONS } from '../lib/assembly/flows.js';
 import { assessC, registerManager, seedArtifactFile } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】`writeTempTeam` 导入已随 C2–C6 五例删除（真实骨架已删）。
 
 const SESS = { agent: { session: { id: 'sess-acfg' } } };
 const SID = SESS.agent.session.id;
 
-function makeHarness() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-acfg-'));
-  const store = createStore(root);
-  const ctx = { tools: { register: () => {}, guard: () => {} }, logger: console };
-  const tools = createTools(ctx, { store, root });
-  const byName = Object.fromEntries(tools.tools.map((t) => [t.name, t]));
-  assessC(store, SID, { rationale: 'fixture：判据配置化套件建批前置评估（多 lane 并行 ⇒ C 档）' });
-  return { root, store, byName };
-}
-
-function tasks3() {
-  return [
-    { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
-    { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/o.md'], deps: ['p1'], cmd: 'code' },
-    { id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/spec.md', 'exec/e1/o.md'], produce: ['audit/a.md'], deps: ['e1'], cmd: 'accept' },
-  ];
-}
-
-/** 建批 + 写产物 + 走完 p1/e1 ⇒ 返回「派发 a1」的 thunk（锚点门在此触发）。 */
-async function driveBatch(byName, store, root, { batchId, teamsRoot, team, specBody }) {
-  await byName.wave_plan.execute({ batchId, team, teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' } }, SESS);
-  registerManager(store, SID, batchId, 'mgr-' + batchId);
-  seedArtifactFile(root, SID, batchId, 'plan/spec.md', specBody);
-  seedArtifactFile(root, SID, batchId, 'exec/e1/o.md', 'out\n');
-  const ms = (lane, status) => byName.member_status.execute({ batchId, lane, status }, SESS);
-  const settle = (lane, status) => byName.member_settle.execute({ batchId, lane, status }, SESS);
-  for (const [lane, st] of [['p1', 'running'], ['p1', 'review'], ['p1', 'merged'], ['e1', 'running'], ['e1', 'review'], ['e1', 'merged']]) {
-    // 终态（merged/skipped/…）走 `member_settle`（状态机结算面）；中间态走 `member_status`。
-    await (st === 'merged' ? settle : ms)(lane, st);
-  }
-  return () => ms('a1', 'running');
-}
-
-/** 默认契约门（两章）+ 附加章节的产物正文。 */
-// 【2026-09-27 扩面】spec 夹具补足必要裸标题六项（对齐 ENGINE_BASELINE_PLAN_SECTIONS）
-const baseSpec = (extra = '') =>
-  '# spec\n\n## 概述\n- a\n\n## 问题\n- a\n\n## 方案\n- a\n\n## 需求\n- a\n\n## 验收标准\n- a\n\n## 约束\n- b\n' + extra;
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，五例同因）：原 test「C2 锚点门·声明覆盖（正例）」
+//    / 「C3 锚点门·声明覆盖（负例）」/ 「C4 锚点门·缺声明回落引擎基线（全中文）」/ 「C5 契约门·required_sections
+//    声明覆盖」/ 「C6 声明面校验：criteria_section 非字符串 ⇒ TEAM_ASSET_BAD_TYPE」──
+//   面已消失 = **A3「判据配置化」所依赖的团队资产声明面**（`audit_contract.criteria_section` /
+//   `flows.plan.contract.required_sections`）：T-6（`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」）+ T-1
+//   （`lib/assembly/team-asset.js` 本体删除，`TEAM_ASSET_BAD_TYPE` 等 13 码入退役锁，A-10）⇒ 五例的**被检面整体不存在**；
+//   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛。
+//   **不可等值反转**：C4 的「缺声明回落」若反转即与本文件 C1 + `gate-flows` 的引擎基线用例重复且恒真空转（纪律 15⑤）；
+//   C6 的「坏声明面校验」无载体（`loadTeamAsset` 已不存在）。
+//   **存活面**：C1（判据真源常量：`ENGINE_BASELINE_CRITERIA_SECTION` 为 `ENGINE_BASELINE_PLAN_SECTIONS` 成员、
+//   六裸标题、冻结、单一字面量）——这正是「锚点**今日仅一态 = 引擎基线**」的机检锚，原样在册。
+//   随之删除的死代码：`makeHarness` / `tasks3` / `driveBatch` / `baseSpec` 四处助手（其全部调用点仅在被删五例内）。
 
 test('C1 判据真源：ENGINE_BASELINE_CRITERIA_SECTION 全中文且为 PLAN_SECTIONS 成员（单一字面量）', () => {
   assert.equal(ENGINE_BASELINE_CRITERIA_SECTION, '## 验收标准');
@@ -86,106 +63,5 @@ test('C1 判据真源：ENGINE_BASELINE_CRITERIA_SECTION 全中文且为 PLAN_SE
   // 由 fixture-helper-ledger 的全文扫描口径覆盖，此处锁运行期引用面。
 });
 
-test('C2 锚点门·声明覆盖（正例）：criteria_section=## Accept 且产物含之 ⇒ a1 派发放行', async () => {
-  const { root, store, byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-acfg-ok-', 'acfg-team', (a) => {
-    a.flows.audit.audit_contract.criteria_section = '## Accept';
-  });
-  clearFlowCache();
-  const runA1 = await driveBatch(byName, store, root, {
-    batchId: 'acfg-ok', teamsRoot, team: 'acfg-team',
-    specBody: baseSpec('\n## Accept\n- c\n'),
-  });
-  await runA1(); // 不抛 ⇒ 锚点门按声明章节放行
-});
+// （C2 / C3 / C4 / C5 / C6 五例已删，归因见上方「已删用例」区块；本文件仅保留 C1 判据真源机检锚）
 
-test('C3 锚点门·声明覆盖（负例）：产物缺声明章节 ⇒ 拒且 problems 逐字指名', async () => {
-  const { root, store, byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-acfg-neg-', 'acfg-team', (a) => {
-    a.flows.audit.audit_contract.criteria_section = '## Accept';
-  });
-  clearFlowCache();
-  const runA1 = await driveBatch(byName, store, root, {
-    batchId: 'acfg-neg', teamsRoot, team: 'acfg-team',
-    specBody: baseSpec(), // 含默认两章但**不含** ## Accept
-  });
-  await assert.rejects(() => runA1(), (e) => {
-    const msg = String(e?.message ?? e);
-    assert.ok(msg.includes('GATE_AUDIT_CRITERIA_MISSING'), '须为锚点门码：' + msg);
-    assert.ok(msg.includes('lacks "## Accept"'), 'problems 须按**声明章节名**指名：' + msg);
-    return true;
-  });
-});
-
-test('C4 锚点门·缺声明回落引擎基线（全中文）：只认 ## 验收标准，不认英文章节（且两通道独立）', async () => {
-  const { root, store, byName } = makeHarness();
-  // plan 契约声明 `## 需求`（**不动** audit）⇒ 证明 plan/audit 两条配置通道互不影响。
-  const teamsRoot = writeTempTeam('punky-acfg-fb-', 'acfg-team', (a) => {
-    // 注（2026-09-26 团队资产瘦身）：夹具骨架不再预置 `flows.<layer>.contract`
-    //   ⇒ 须**显式建对象**后再写章节（否则 `Cannot set properties of undefined`）。
-    a.flows.plan.contract = { ...(a.flows.plan.contract ?? {}), required_sections: ['## 需求'] };
-  });
-  clearFlowCache();
-  // 4a 负例：过契约门（## 需求）但缺默认 criteria 章 ⇒ a1 拒（回落 `## 验收标准`，不认 ## Accept）
-  const runA1neg = await driveBatch(byName, store, root, {
-    batchId: 'acfg-fb-neg', teamsRoot, team: 'acfg-team',
-    specBody: '# spec\n\n## 需求\n- r\n\n## Accept\n- c\n',
-  });
-  await assert.rejects(() => runA1neg(), (e) => {
-    const msg = String(e?.message ?? e);
-    assert.ok(msg.includes('GATE_AUDIT_CRITERIA_MISSING'), msg);
-    assert.ok(msg.includes('lacks "## 验收标准"'), '缺声明须回落全中文基线：' + msg);
-    return true;
-  });
-  // 4b 正例：补上 ## 验收标准 ⇒ 放行
-  const runA1ok = await driveBatch(byName, store, root, {
-    batchId: 'acfg-fb-ok', teamsRoot, team: 'acfg-team',
-    specBody: '# spec\n\n## 需求\n- r\n\n## 验收标准\n- a\n',
-  });
-  await runA1ok();
-});
-
-test('C5 契约门·required_sections 声明覆盖：按声明章节判（缺 ⇒ 拒且指名）', async () => {
-  const { root, store, byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-acfg-plan-', 'acfg-team', (a) => {
-    // 注（2026-09-26 团队资产瘦身）：同 C4 —— 夹具骨架无 `contract`，须显式建对象。
-    a.flows.plan.contract = { ...(a.flows.plan.contract ?? {}), required_sections: ['## 需求'] };
-  });
-  clearFlowCache();
-  // 5a 负例：spec 只含默认两章 ⇒ p1 merged 拒（契约门按声明 `## 需求` 判）
-  const p1neg = await driveBatch(byName, store, root, {
-    batchId: 'acfg-plan-neg', teamsRoot, team: 'acfg-team',
-    specBody: baseSpec().replace('## 需求\n- a\n\n', ''),   // 【扩面适配】负例须缺【声明的 ## 需求】
-  }).then((runA1) => runA1).catch((e) => e);
-  const msgNeg = String(p1neg?.message ?? p1neg);
-  assert.ok(p1neg instanceof Error, '缺声明章节须拒：' + msgNeg);
-  assert.ok(msgNeg.includes('GATE_PLAN_CONTRACT'), msgNeg);
-  // 注（2026-09-26）：引擎对**自定义 required_sections 缺失**的文案已更新为
-  //   `no plan artifact carries a criteria section (## 需求)`（原为 `lacks "## 需求"`）。
-  //   ⇒ 两种文案都接受（判据是「被拒 + 指名缺失章节」，不是措辞）。
-  assert.ok(
-    msgNeg.includes('lacks "## 需求"') || msgNeg.includes('no plan artifact carries a criteria section (## 需求)'),
-    '须指名缺失的声明章节：' + msgNeg,
-  );
-  // 5b 正例：含 ## 需求 ⇒ p1 merged 放行（并顺带走完 e1；a1 锚点按默认中文判 ⇒ spec 须含 ## 验收标准）
-  const runA1 = await driveBatch(byName, store, root, {
-    batchId: 'acfg-plan-ok', teamsRoot, team: 'acfg-team',
-    specBody: '# spec\n\n## 需求\n- r\n\n## 验收标准\n- a\n',
-  });
-  await runA1();
-});
-
-test('C6 声明面校验：criteria_section 非字符串 ⇒ TEAM_ASSET_BAD_TYPE（fail-closed，不留静默面）', () => {
-  const teamsRoot = writeTempTeam('punky-acfg-bad-', 'acfg-team', (a) => {
-    a.flows.audit.audit_contract.criteria_section = 123;
-  });
-  clearFlowCache();
-  const r = loadTeamAsset(teamsRoot, 'acfg-team');
-  assert.equal(r.ok, false, '非法类型须拒载');
-  const dump = JSON.stringify(r.problems);
-  const hit = r.problems.some((p) => {
-    const s = typeof p === 'string' ? p : JSON.stringify(p);
-    return s.includes('TEAM_ASSET_BAD_TYPE') && s.includes('criteria_section');
-  });
-  assert.ok(hit, '须有 criteria_section 的 BAD_TYPE 条目：' + dump);
-});

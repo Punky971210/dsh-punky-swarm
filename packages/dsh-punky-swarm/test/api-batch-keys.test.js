@@ -101,19 +101,21 @@ test.after(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ── P-1：面板读端键在场（`chain` 为**条件键**：仅当资产声明 chain 时在）──────────
-test('P-1 键在场：danglingLanes / handoffs / assembly / teamAsset / lanesGate / aipSession（`chain` 条件）', () => {
+// ── P-1：面板读端键在场（`chain` / `teamAsset` 两键**已随退役删净**，D-4 + T-7）──────────
+test('P-1 键在场：danglingLanes / handoffs / assembly / lanesGate / aipSession（`chain`·`teamAsset` 条件键已删净）', () => {
   const r = invokeBatch('b-five');
   assert.equal(r.status, 200);
-  // 注（2026-09-26 团队资产瘦身，用户裁决「团队内容改为模版、不再作为组件」）：
-  //   `chain` 原为**必在场键**；`software-team` 最小骨架（859 B）**已不含 chain**
-  //   ⇒ 引擎不再写该键（`chain` 语义 = 资产声明的推进链）⇒ 转为**条件键**：
-  //     资产有 chain ⇒ 在场；无 chain ⇒ **不写键**（而非写 null）。
-  //   本批 `buildWavePlan({ team: 'software-team' })` ⇒ 断言 `chain` **不得在场**。
-  for (const key of ['danglingLanes', 'handoffs', 'assembly', 'teamAsset', 'lanesGate', 'aipSession']) {
+  // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`batch_status` 键集判定）】沿革：
+  //   ① 原 `chain` 为**必在场键**；② 2026-09-26 资产瘦身后降为**条件键**（无 chain 段 ⇒ 不写键）；
+  //   ③ 本批 Leader 裁决 **D-4 = 链回显面删净**（`core.js` 侧 `batch_status.chain` 删除，A-8）
+  //     + **T-7** 资产回显面删除（`batch_status.teamAsset` 键删除，`exec/consumers.md` §二.6）
+  //   ⇒ 真值反转为：两键**恒不在场**（而非「条件在场」）。断言强度不减：原为 `!('chain' in body)`
+  //     的负向锁，现并列保留并**新增** `teamAsset` 的同形负向锁（严格 `in` 判定，非 `== null` 放宽）。
+  assert.ok(!('chain' in r.body), '链回显面已删净（D-4）⇒ 不得写 chain 键');
+  assert.ok(!('teamAsset' in r.body), '资产回显面已删净（T-7）⇒ 不得写 teamAsset 键');
+  for (const key of ['danglingLanes', 'handoffs', 'assembly', 'lanesGate', 'aipSession']) {
     assert.ok(Object.prototype.hasOwnProperty.call(r.body, key), '缺键: ' + key);
   }
-  assert.ok(!('chain' in r.body), 'software-team 最小骨架未声明 chain ⇒ 不得写 chain 键');
   // 条件键缺省（未登记 Manager、非冒烟批）⇒ **不写键**（不是 `null` 之类的空占位）
   assert.ok(!('manager' in r.body), 'manager 未登记时不得写键');
   assert.ok(!('smoke' in r.body), '非冒烟批不得写 smoke 键');

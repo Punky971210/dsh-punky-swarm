@@ -1,11 +1,11 @@
 {
   "files": {
     "test/abort-dangling-and-warn-event.test.js": {
-      "asserts": 39,
-      "blankLines": 34,
-      "lines": 258,
+      "asserts": 27,
+      "blankLines": 31,
+      "lines": 235,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 6,
       "todos": 0
     },
     "test/acps-discovery-client.test.js": {
@@ -49,9 +49,9 @@
       "todos": 0
     },
     "test/api-batch-keys.test.js": {
-      "asserts": 28,
+      "asserts": 29,
       "blankLines": 19,
-      "lines": 194,
+      "lines": 196,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -137,11 +137,11 @@
       "todos": 0
     },
     "test/audit-contract-gate.test.js": {
-      "asserts": 42,
-      "blankLines": 26,
-      "lines": 269,
+      "asserts": 24,
+      "blankLines": 21,
+      "lines": 196,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 5,
       "todos": 0
     },
     "test/auditlog-mount.test.js": {
@@ -200,28 +200,12 @@
       "tests": 14,
       "todos": 0
     },
-    "test/chain-v2-declaration.test.js": {
-      "asserts": 36,
-      "blankLines": 28,
-      "lines": 210,
-      "tautologies": 0,
-      "tests": 12,
-      "todos": 0
-    },
     "test/chain-v2-pairing.test.js": {
       "asserts": 20,
       "blankLines": 19,
       "lines": 218,
       "tautologies": 0,
       "tests": 3,
-      "todos": 0
-    },
-    "test/chain-v3-assembly.test.js": {
-      "asserts": 70,
-      "blankLines": 34,
-      "lines": 326,
-      "tautologies": 0,
-      "tests": 17,
       "todos": 0
     },
     "test/channel-roster.test.js": {
@@ -249,11 +233,11 @@
       "todos": 0
     },
     "test/complete-outcomes-empty.test.js": {
-      "asserts": 43,
-      "blankLines": 26,
-      "lines": 277,
+      "asserts": 18,
+      "blankLines": 25,
+      "lines": 206,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 3,
       "todos": 0
     },
     "test/complete-tier-gate-e2e.test.js": {
@@ -265,11 +249,11 @@
       "todos": 0
     },
     "test/concurrency-gate.test.js": {
-      "asserts": 86,
-      "blankLines": 46,
-      "lines": 621,
+      "asserts": 68,
+      "blankLines": 39,
+      "lines": 493,
       "tautologies": 0,
-      "tests": 19,
+      "tests": 16,
       "todos": 0
     },
     "test/config-watch-robust.test.js": {
@@ -281,11 +265,11 @@
       "todos": 0
     },
     "test/contract-missing-first-touch.test.js": {
-      "asserts": 51,
-      "blankLines": 34,
-      "lines": 485,
+      "asserts": 47,
+      "blankLines": 33,
+      "lines": 418,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 8,
       "todos": 0
     },
     "test/contract.test.js": {
@@ -361,35 +345,19 @@
       "todos": 0
     },
     "test/fixture-team-ledger.test.js": {
-      "asserts": 15,
-      "blankLines": 25,
-      "lines": 218,
-      "tautologies": 0,
-      "tests": 7,
-      "todos": 0
-    },
-    "test/flex-assembly-roles.test.js": {
-      "asserts": 24,
-      "blankLines": 18,
-      "lines": 208,
+      "asserts": 10,
+      "blankLines": 23,
+      "lines": 210,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
     },
-    "test/gap-s12-chain-downgrade.test.js": {
-      "asserts": 88,
-      "blankLines": 33,
-      "lines": 459,
-      "tautologies": 0,
-      "tests": 10,
-      "todos": 0
-    },
     "test/gate-assertion-r32.test.js": {
-      "asserts": 21,
-      "blankLines": 40,
-      "lines": 341,
+      "asserts": 15,
+      "blankLines": 38,
+      "lines": 300,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 3,
       "todos": 0
     },
     "test/gate-criteria-parity-r33.test.js": {
@@ -401,25 +369,25 @@
       "todos": 0
     },
     "test/gate-event-const-e2e-r34.test.js": {
-      "asserts": 38,
+      "asserts": 40,
       "blankLines": 19,
-      "lines": 178,
+      "lines": 186,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
     },
     "test/gate-flows.test.js": {
-      "asserts": 96,
-      "blankLines": 29,
-      "lines": 571,
+      "asserts": 69,
+      "blankLines": 26,
+      "lines": 423,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 11,
       "todos": 0
     },
     "test/gate-hardening-red.test.js": {
-      "asserts": 69,
+      "asserts": 66,
       "blankLines": 130,
-      "lines": 1202,
+      "lines": 1199,
       "tautologies": 0,
       "tests": 37,
       "todos": 0
@@ -427,7 +395,7 @@
     "test/gate-lite-batch2.test.js": {
       "asserts": 32,
       "blankLines": 21,
-      "lines": 172,
+      "lines": 171,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -435,7 +403,7 @@
     "test/gate-lite-smoke.test.js": {
       "asserts": 19,
       "blankLines": 19,
-      "lines": 156,
+      "lines": 153,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -457,19 +425,19 @@
       "todos": 0
     },
     "test/gate-techdebt-red.test.js": {
-      "asserts": 114,
-      "blankLines": 72,
-      "lines": 1147,
+      "asserts": 99,
+      "blankLines": 76,
+      "lines": 1062,
       "tautologies": 0,
-      "tests": 39,
+      "tests": 35,
       "todos": 4
     },
     "test/gates-vocabulary-contract.test.js": {
-      "asserts": 60,
-      "blankLines": 51,
-      "lines": 419,
+      "asserts": 51,
+      "blankLines": 50,
+      "lines": 406,
       "tautologies": 0,
-      "tests": 24,
+      "tests": 21,
       "todos": 0
     },
     "test/gates.test.js": {
@@ -736,14 +704,6 @@
       "tests": 20,
       "todos": 0
     },
-    "test/m1-on-removed.test.js": {
-      "asserts": 39,
-      "blankLines": 33,
-      "lines": 321,
-      "tautologies": 0,
-      "tests": 13,
-      "todos": 0
-    },
     "test/machine.test.js": {
       "asserts": 35,
       "blankLines": 20,
@@ -824,14 +784,6 @@
       "tests": 20,
       "todos": 0
     },
-    "test/p2-chain-autodrive.test.js": {
-      "asserts": 84,
-      "blankLines": 45,
-      "lines": 535,
-      "tautologies": 0,
-      "tests": 13,
-      "todos": 0
-    },
     "test/p2-settle-handoff.test.js": {
       "asserts": 36,
       "blankLines": 23,
@@ -843,7 +795,7 @@
     "test/panel-render.test.js": {
       "asserts": 104,
       "blankLines": 50,
-      "lines": 443,
+      "lines": 458,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -851,17 +803,17 @@
     "test/phase-reason.test.js": {
       "asserts": 33,
       "blankLines": 26,
-      "lines": 289,
+      "lines": 292,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/plan-criteria-config.test.js": {
-      "asserts": 16,
-      "blankLines": 16,
-      "lines": 192,
+      "asserts": 5,
+      "blankLines": 10,
+      "lines": 68,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 1,
       "todos": 0
     },
     "test/preset-rules.test.js": {
@@ -904,18 +856,10 @@
       "tests": 7,
       "todos": 0
     },
-    "test/replay-integration.test.js": {
-      "asserts": 48,
-      "blankLines": 26,
-      "lines": 299,
-      "tautologies": 0,
-      "tests": 7,
-      "todos": 0
-    },
     "test/replay-recovery.test.js": {
-      "asserts": 16,
+      "asserts": 17,
       "blankLines": 14,
-      "lines": 79,
+      "lines": 84,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -931,7 +875,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 8,
-      "lines": 67,
+      "lines": 101,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -942,14 +886,6 @@
       "lines": 108,
       "tautologies": 0,
       "tests": 4,
-      "todos": 0
-    },
-    "test/role-pluggable.test.js": {
-      "asserts": 0,
-      "blankLines": 14,
-      "lines": 76,
-      "tautologies": 0,
-      "tests": 0,
       "todos": 0
     },
     "test/s2-prime-wake-probe.test.js": {
@@ -985,11 +921,11 @@
       "todos": 0
     },
     "test/skill-recommend-semantics.test.js": {
-      "asserts": 6,
-      "blankLines": 16,
-      "lines": 139,
+      "asserts": 3,
+      "blankLines": 17,
+      "lines": 119,
       "tautologies": 0,
-      "tests": 2,
+      "tests": 1,
       "todos": 0
     },
     "test/store-corrupt.test.js": {
@@ -1003,7 +939,7 @@
     "test/stream.test.js": {
       "asserts": 71,
       "blankLines": 29,
-      "lines": 367,
+      "lines": 371,
       "tautologies": 0,
       "tests": 18,
       "todos": 0
@@ -1032,36 +968,12 @@
       "tests": 7,
       "todos": 0
     },
-    "test/team-asset-snapshot.test.js": {
-      "asserts": 102,
-      "blankLines": 47,
-      "lines": 428,
-      "tautologies": 0,
-      "tests": 6,
-      "todos": 0
-    },
-    "test/team-asset.test.js": {
-      "asserts": 118,
-      "blankLines": 41,
-      "lines": 511,
-      "tautologies": 0,
-      "tests": 23,
-      "todos": 0
-    },
     "test/team-label-optional.test.js": {
       "asserts": 15,
       "blankLines": 13,
-      "lines": 111,
+      "lines": 119,
       "tautologies": 0,
       "tests": 3,
-      "todos": 0
-    },
-    "test/teams-root.test.js": {
-      "asserts": 51,
-      "blankLines": 33,
-      "lines": 464,
-      "tautologies": 0,
-      "tests": 8,
       "todos": 0
     },
     "test/test-baseline.test.js": {
@@ -1142,14 +1054,6 @@
       "lines": 394,
       "tautologies": 0,
       "tests": 32,
-      "todos": 0
-    },
-    "test/w1-conditional-edges.test.js": {
-      "asserts": 50,
-      "blankLines": 32,
-      "lines": 347,
-      "tautologies": 0,
-      "tests": 14,
       "todos": 0
     },
     "test/watch-bootoverlay.test.js": {
@@ -1265,7 +1169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-28T00:19:16Z",
+  "generatedAt": "2026-09-28T04:42:25Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1276,15 +1180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "GATE_TEAMS_ROOT_* 两码退役：删未接线两函数 + lexical 改纯判定；测试面等价反转（断言 +2）",
+  "reason": "retire-team-chain-20260927：测试面随本体退役（D-6 删除/等值反转）",
   "schema": 1,
   "totals": {
-    "asserts": 8283,
-    "blankLines": 4136,
-    "files": 158,
-    "lines": 45131,
+    "asserts": 7421,
+    "blankLines": 3726,
+    "files": 146,
+    "lines": 40218,
     "tautologies": 0,
-    "tests": 1731,
+    "tests": 1560,
     "todos": 4
   }
 }

@@ -34,7 +34,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 跑法（**禁** build 前置）：`node --import ./test/helpers/isolated-home.preload.mjs --test test/concurrency-gate.test.js`
 // ─────────────────────────────────────────────────────────────────────────────
 import test from 'node:test';
-import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeSyntheticTeam } from './helpers/team-fixture.mjs'`
+//   已删：其唯一消费点（T6 系列 `seedChainBatch`）随 `chain-runner.js`（T-3）与 chain 声明面（T-2）一并退役。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -44,12 +45,13 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { createCoreTools } from '../lib/tools/core.js';
 import {
-  EVT_MEMBER_DISPATCH, EVT_MEMBER_SETTLED, EVT_LANE_STALLED, EVT_CHAIN_STEP, EVT_BATCH_SMOKE,
+  EVT_MEMBER_DISPATCH, EVT_MEMBER_SETTLED, EVT_LANE_STALLED, EVT_BATCH_SMOKE,
 } from '../lib/state/event-types.js';
+// 【2026-09-27 批 3 · D-4 删净】原 `EVT_CHAIN_STEP` 具名导入已摘（`event-types.js` 该常量整条删除，A-8）；
+//   原 `import { advanceChainAfterSettle } from '../lib/engine/chain-runner.js'` 亦随本体删除（T-3/A-7）。
 import * as EVENT_TYPES from '../lib/state/event-types.js';
 import * as dispatchMod from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import { advanceChainAfterSettle } from '../lib/engine/chain-runner.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 
 /** 并发闸拒态事件名：常量**冻结保留**（历史批磁盘事件面读端不变），但**写点已随闸删除**。 */
@@ -248,143 +250,13 @@ test('T5【退役锁 · Q-B】leader-direct 批零限流（与 assembly.managerP
   __resetLaneHandles();
 });
 
-// ── T6 系列：自动派发路径（chain-runner）——链运行期推进已退役 ⇒ 三个用例改为退役锁 ──
-/** 单批 chain 夹具（team 资产 + `chain` 声明走真实读端：`chainOfBatch` → `loadChainOf`）。
- *  ⚠ 退役后 `chain` 段**不参与任何运行期决策**，本夹具保留它以自证「带 `chain` 段的批照常建批、照常零推进」。 */
-function seedChainBatch(root, sid, batchId, opts = {}) {
-  const teamsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-cg-teams-'));
-  // F2：合成资产 ⇒ 单点写入（helpers/team-fixture.mjs）。
-  writeSyntheticTeam(teamsRoot, TEAM_CG, TEAM_ASSET_CG);
-  const store = createStore(root);
-  const artRoot = path.join(root, 'sessions', sid, 'artifacts', batchId);
-  fs.mkdirSync(path.join(artRoot, 'plan'), { recursive: true });
-  fs.writeFileSync(path.join(artRoot, 'plan', 'spec.md'), SPEC_OK, 'utf8');
-  for (const id of ['e1', 'e2', 'x1']) {
-    const rel = path.join(artRoot, 'exec', id, 'outputs');
-    fs.mkdirSync(rel, { recursive: true });
-    fs.writeFileSync(path.join(rel, 'x.md'), 'out', 'utf8');
-  }
-  const wp = buildWavePlan({
-    batchId, team: TEAM_CG, teamsRoot,
-    tasks: [
-      { id: 'p1', cmd: 'plan', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], outputs: ['plan/spec.md'] },
-      { id: 'e1', cmd: 'build', layer: 'exec', role: 'coder', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/e1/outputs/x.md'] },
-      { id: 'e2', cmd: 'build', layer: 'exec', role: 'coder', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/e2/outputs/x.md'] },
-      // 链外 lane（layer exec / role tester 不命中任何链步）：仅作「占满旧容量」的填充位
-      { id: 'x1', cmd: 'filler', layer: 'exec', role: 'tester', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/x1/outputs/x.md'] },
-      { id: 'a1', cmd: 'accept', layer: 'audit', role: 'supervisor', deps: ['e1', 'e2'], consume: ['plan/spec.md'] },
-    ],
-  });
-  store.createBatch(sid, {
-    batchId, wavePlan: wp, phase: 'running', concurrency: opts.concurrency ?? 1,
-    assembly: { managerPlan: 'raise', auditLane: 'a1' },
-    teamsRoot, // ★ 必须随批持久化：`chainOfBatch` 按 `batch.teamsRoot` 解析资产（否则回落包根 ⇒ 无链）
-  });
-  return store;
-}
-
-const TEAM_CG = 'cg-concurrency-team';
-const TEAM_ASSET_CG = {
-  team: TEAM_CG,
-  layers: {
-    plan: { roles: ['designer'], skills: { designer: ['spec-writing'] } },
-    exec: { roles: ['coder', 'tester'], skills: { coder: ['dev-coder'], tester: ['dev-tester'] } },
-    audit: { roles: ['supervisor'], skills: { supervisor: ['acceptance-gate'] } },
-  },
-  roles: { plan_leads: ['designer'], audit_leads: ['supervisor'] },
-  flows: {
-    plan: { produce_field: 'produce', contract: { artifact_globs: ['plan/*.md'], required_sections: ['## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准', '## 约束'] } },
-    exec: { produce_field: 'outputs', consume_field: 'consume', entry_requires: ['consume'] },
-    audit: { produce_field: 'produce', consume_field: 'consume', entry_requires: ['consume'] },
-  },
-  chain: {
-    version: 1,
-    steps: [
-      { id: 'p1', layer: 'plan', role: 'designer', next: 'exec' },
-      { id: 'exec', layer: 'exec', role: 'coder', join: 'all', next: 'a1' },
-      { id: 'a1', layer: 'audit', role: 'supervisor', terminal: true },
-    ],
-    join: { anyFailure: 'pause' },
-    onFail: 'pause',
-  },
-};
-
-/** 触发一次链推进入口（**已退役 no-op**）：`p1` merged ⇒ 旧闸本应算下一环并逐 lane 派发。 */
-function advanceFromP1(store, root, sid, batchId, ctx) {
-  return advanceChainAfterSettle(
-    { store, root, liveConfig: { dispatch: { provider: 'spawn-in-process' } } },
-    ctx,
-    { agent: { session: { id: sid } } },
-    { sessionId: sid, batchId, lane: 'p1', status: 'merged' },
-  );
-}
-
-/** 退役锁公共前置：把 `p1` 走完合法结算链（终态）。 */
-function settleP1(store, sid, batchId) {
-  store.setMember(sid, batchId, 'p1', 'running');
-  store.setMember(sid, batchId, 'p1', 'review');
-  store.setMember(sid, batchId, 'p1', 'merged');
-}
-
-test('T6【退役锁 · Q-A=C】chain-runner 入口 = no-op：零 chain.step / 零派发 / 零拒态 / 零容量判定', async () => {
-  __resetLaneHandles();
-  const SID = 'sess-cg-t6';
-  const root = tempRoot('punky-cg-t6-');
-  const store = seedChainBatch(root, SID, 'b-t6', { concurrency: 1 });
-  const spawned = [];
-  const ctx = mkCtx(fakeRuntime(spawned));
-  settleP1(store, SID, 'b-t6');
-  store.setMember(SID, 'b-t6', 'x1', 'running');
-  assert.equal(store.readBatch(SID, 'b-t6').phase, 'running', '前置：批相位 running');
-
-  const out = await advanceFromP1(store, root, SID, 'b-t6', ctx);
-  assert.equal(out.ok, true, '[退役锁] 入口恒不抛错：' + JSON.stringify(out.reason));
-  assert.equal(out.action, 'none', '[退役锁] action 恒 none');
-  assert.equal(out.reason, 'retired', '[退役锁] reason 恒 retired（链运行期推进已退役）');
-  assert.equal(spawned.length, 0, '[退役锁] 零真实 spawn（链不再派发）');
-  const b = store.readBatch(SID, 'b-t6');
-  assert.equal(b.phase, 'running', '[退役锁] 相位不变（no-op 不写相位）');
-  assert.equal(b.lanes.e1, 'pending', '[退役锁] e1 保持 pending（无自动派）');
-  assert.equal(b.lanes.e2, 'pending', '[退役锁] e2 保持 pending（无自动派）');
-  assert.equal(eventsOf(store, SID, 'b-t6', EVT_CHAIN_STEP).length, 0, '[退役锁] 零 chain.step（写点已删）');
-  assertNoBlockedEvent(store, SID, 'b-t6', 'T6');
-  __resetLaneHandles();
-});
-
-test('T6b【退役锁 · Q-A=C】混合场景无意义：入口 no-op ⇒ 既无 spawned 也无 deferred，零 chain.step', async () => {
-  __resetLaneHandles();
-  const SID = 'sess-cg-t6b';
-  const root = tempRoot('punky-cg-t6b-');
-  const store = seedChainBatch(root, SID, 'b-t6b', { concurrency: 1 });
-  const spawned = [];
-  const ctx = mkCtx(fakeRuntime(spawned));
-  settleP1(store, SID, 'b-t6b');
-  const out = await advanceFromP1(store, root, SID, 'b-t6b', ctx);
-  assert.equal(out.action, 'none');
-  assert.deepEqual(out.dispatched, [], '[退役锁] 零派发明细（既无 spawned 也无 deferred）');
-  assert.equal(eventsOf(store, SID, 'b-t6b', EVT_CHAIN_STEP).length, 0, '[退役锁] 零 chain.step');
-  assert.equal(store.readBatch(SID, 'b-t6b').phase, 'running');
-  assert.equal(store.readBatch(SID, 'b-t6b').lanes.e1, 'pending');
-  assert.equal(store.readBatch(SID, 'b-t6b').lanes.e2, 'pending');
-  assertNoBlockedEvent(store, SID, 'b-t6b', 'T6b');
-  __resetLaneHandles();
-});
-
-test('T6c【退役锁 · Q-A=C】容量充足亦不派：链推进退役与容量无关（零 chain.step 与 concurrency 取值无关）', async () => {
-  __resetLaneHandles();
-  const SID = 'sess-cg-t6c';
-  const root = tempRoot('punky-cg-t6c-');
-  const store = seedChainBatch(root, SID, 'b-t6c', { concurrency: 4 });
-  const spawned = [];
-  const ctx = mkCtx(fakeRuntime(spawned));
-  settleP1(store, SID, 'b-t6c');
-  const out = await advanceFromP1(store, root, SID, 'b-t6c', ctx);
-  assert.equal(out.action, 'none', '[退役锁] 容量充足也不推进（退役与容量无关）');
-  assert.equal(spawned.length, 0, '[退役锁] 零 spawn');
-  assert.equal(eventsOf(store, SID, 'b-t6c', EVT_CHAIN_STEP).length, 0, '[退役锁] 零 chain.step');
-  assertNoBlockedEvent(store, SID, 'b-t6c', 'T6c');
-  __resetLaneHandles();
-});
+// ── T6 系列（原「自动派发路径（chain-runner）」）：**整段删除**（2026-09-27 批 3 · D-6 归因）──
+//   面已消失：`lib/engine/chain-runner.js` 本体（T-3/A-7，`advanceChainAfterSettle` 随文件删除）与
+//   chain 声明面（T-2，`chain.js` / `batch_status.chain` / `EVT_CHAIN_STEP`，D-4 删净）均已退役
+//   ⇒ T6 / T6b / T6c（原「入口 no-op ⇒ 零 chain.step / 零派发 / 零容量判定」）的被测面整体不存在，
+//   随之删除；`seedChainBatch` / `TEAM_CG` / `TEAM_ASSET_CG` / `advanceFromP1` / `settleP1` 五处
+//   仅服务这三例，一并删除（防「只为已删用例而存在的死代码」）。
+//   ⇒ 本文件的并发闸（Q-B）命题与断言**一字未动**（T1…T14b 全部保留）。
 
 // ── T7：终态 lane 面（原通过用例，逐字保留 + 零拒态） ──────────────────────────
 test('T7 终态不计入：4 条 running 全部走 running→review→merged ⇒ occupied=0，可继续派', async () => {

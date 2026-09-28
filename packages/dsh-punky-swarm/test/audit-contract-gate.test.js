@@ -26,9 +26,11 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { globMatchesPath } from '../lib/assembly/flows.js';
-import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { loadTeamAsset, TEAM_ASSET_CODES } from '../lib/assembly/team-asset.js'`
+//   已删（**本体已删除**：A-5/A-6/A-9 实测 0 命中 ⇒ 该 import 是文件级 ESM 缺符号的直接根因）。
 import { anchorSpecOf, assessC, seedArtifacts, threeTierTasks } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 已删
+//   （真实骨架 5 件已删，T-4/A-9；`writeTempTeam` 导出本身已随 helper 收口删除）。
 import { fileURLToPath } from 'node:url';
 
 const SESS = { agent: { session: { id: 'sess-p2' } } };
@@ -57,92 +59,44 @@ function tasks3() {
   ];
 }
 
-test('P2：团队资产声明了 audit_contract → 建批通过且无豁免告警', async () => {
-  const { byName } = makeHarness();
-  // 注（2026-09-26 团队资产瘦身）：夹具源 = 包内 software-team **最小骨架**，其 audit_contract 为显式空 `{}`
-  //   ⇒ 建批必然产生 GATE_AUDIT_CONTRACT_EXEMPT 留痕（空声明 = 声明「无契约」，合法态）。
-  //   ⇒ 本用例命题是「**实内容声明**不应产生豁免告警」⇒ 须在 mutate 里补一份**实内容** audit_contract。
-  const teamsRoot = writeTempTeam('punky-p2-ok-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { consumes_required: ['plan/', 'exec/'], verdict: ['pass', 'fail', 'skip'] };
-  });
-  const out = await byName.wave_plan.execute({
-    batchId: 'p2-ok', team: 'probe-team', teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-  }, SESS);
-  assert.equal(out.batchId, 'p2-ok');
-  assert.equal(out.warnings.some((w) => w.code === 'GATE_AUDIT_CONTRACT_EXEMPT'), false, '实内容声明不应产生豁免告警');
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，三例同因）：原 test「P2：团队资产声明了 audit_contract → 建批通过且
+//    无豁免告警」/「P2：团队资产缺 audit_contract → 拒建批 GATE_AUDIT_CONTRACT_MISSING」/「P2：显式空
+//    audit_contract → 放行并落豁免告警」──
+//   面已消失 = **`flows.audit.audit_contract` 团队声明面**（T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」；
+//   T-1：`lib/assembly/team-asset.js` 本体删除）⇒ 三例所断言的「声明驱动建批门」**无载体、恒不触发**
+//   （`exec/consumers.md` §二.6 逐字记载：`GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_CONTRACT_EXEMPT` 的判据
+//    全部取自团队声明 ⇒ 声明面不存在后为空转面，删除 = 零行为变更）；
+//   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛，三例整条不可达。
+//   ⇒ 按 D-6「面已消失者随删 + 归因」删除；**不可等值反转**（反转成「零告警」= 恒真空转，纪律 15⑤）。
+//   **存活面**（本文件其余用例全部原样在册）：锚点门（引擎基线单态）、`globMatchesPath` 末段回退回归、
+//   Q-A4 opt-2 的纯函数三态与两构造器契约。引擎默认判据源锚点门（`GATE_AUDIT_INPUT_MISSING` /
+//   `GATE_AUDIT_CRITERIA_MISSING`）由 `gates-vocabulary-contract` / `gate-hardening-red` T10 等在册用例覆盖。
 
-test('P2：团队资产缺 audit_contract → 拒建批 GATE_AUDIT_CONTRACT_MISSING', async () => {
-  const { byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-miss-', 'probe-team', (a) => { delete a.flows.audit.audit_contract; });
-  await assert.rejects(
-    () => byName.wave_plan.execute({ batchId: 'p2-miss', team: 'probe-team', teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' } }, SESS),
-    /GATE_AUDIT_CONTRACT_MISSING: team "probe-team" declares flows\.audit but no audit_contract/,
-  );
-});
-
-test('P2：显式空 audit_contract → 放行并落豁免告警（带 reason 时一并携带）', async () => {
-  const { byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-exempt-', 'probe-team', (a) => { a.flows.audit.audit_contract = { exempt: true, reason: '冒烟：本团队无 audit 契约，显式豁免' }; });
-  const out = await byName.wave_plan.execute({
-    batchId: 'p2-exempt', team: 'probe-team', teamsRoot, tasks: tasks3(), assembly: { auditLane: 'a1' },
-  }, SESS);
-  const w = out.warnings.find((x) => x.code === 'GATE_AUDIT_CONTRACT_EXEMPT');
-  assert.ok(w, '显式豁免须落留痕告警');
-  assert.equal(w.team, 'probe-team');
-  assert.match(w.reason ?? '', /显式豁免/);
-});
-
-test('【2026-09-27 反转】无团队资产（未注册团队名）⇒ 建批成功 + 批次 JSON 落盘 + TEAM_ASSET_NOT_FOUND 留痕', async () => {
+test('【2026-09-27 批 3 反转·二次】无团队资产（未注册团队名）⇒ 建批成功 + 批次 JSON 落盘 + **零资产留痕**', async () => {
   const { root, byName } = makeHarness();
   // 口径沿革：① 旧旧口径「无资产 ⇒ 跳过 audit_contract 检查（零感知）、建批照常」→ ② P1（2026-09-16）反转为
-  //   「无资产 ⇒ 构造期拒 `TEAM_ASSET_NOT_FOUND` + 零批次 JSON 落盘」（本用例上一版即断言 ②）→ ③ 2026-09-27 用户裁决
-  //   「team-asset 装配方案全面弃用 / `team` 降为可选标签」⇒ 构造期拒门删除，回到「建批照常」，但**不再静默**：
-  //   原码进 `warnings` 留痕（判据面逐字保留：同一入参形态取读数，读数两侧等价反转）。
+  //   「无资产 ⇒ 构造期拒 `TEAM_ASSET_NOT_FOUND` + 零批次 JSON 落盘」→ ③ 2026-09-27（上一批）「team 降为可选标签」
+  //   反转为「建批照常 + 原码进 `warnings` 留痕」→ ④ **本批（批 3）二次反转**：`team` 降为**可选自由标签**、
+  //   **团队资产面整体退役**（T-1/T-6）⇒ 资产查找面**不存在**，`warnings` **恒为空**（不再有 `TEAM_ASSET_*` 留痕）。
+  //   ⇒ 真值再反转一次：由「必须有 `TEAM_ASSET_NOT_FOUND` 留痕」改为「**零资产留痕**」；建批成功 + 批次 JSON 落盘
+  //   两条存活断言**逐字保留**（断言数不减：原 3 条 → 现 3 条，把「留痕在场」严格换为「留痕为空集」）。
   const out = await byName.wave_plan.execute({
     batchId: 'p2-none', team: 'no-such-team-xyz', tasks: tasks3(), assembly: { auditLane: 'a1' },
   }, SESS);
-  assert.equal(out.batchId, 'p2-none', '无资产团队不得再被构造期拒（team 已是可选标签）');
-  assert.ok(out.warnings.some((w) => w.code === 'TEAM_ASSET_NOT_FOUND'),
-    '无资产须留痕原资产码（不静默）：' + JSON.stringify(out.warnings));
-  assert.equal(fs.existsSync(path.join(root, 'sessions', SESS.agent.session.id, 'batches', 'p2-none.json')), true, '批次 JSON 落盘（原「拒后零批次 JSON 落盘」已反转）');
+  assert.equal(out.batchId, 'p2-none', '无资产团队不得再被构造期拒（team 已是可选自由标签）');
+  assert.deepEqual(out.warnings, [],
+    '团队资产面已整体退役 ⇒ 零资产留痕（原 `TEAM_ASSET_NOT_FOUND` 码已入退役锁，A-10）；实测=' + JSON.stringify(out.warnings));
+  assert.equal(fs.existsSync(path.join(root, 'sessions', SESS.agent.session.id, 'batches', 'p2-none.json')), true, '批次 JSON 落盘');
 });
 
 // ── A 方案（2026-09-14）：三个字段的**消费点**测试（此前为声明白契约，无消费） ──
 
-test('A：consumes_required 未被满足 → 拒建批（建批期加强门禁生效）', async () => {
-  const { byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-cr-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { consumes_required: ['plan/', 'exec/'], verdict: ['pass', 'fail', 'skip'] };
-  });
-  const tasks = tasks3().map((t) => (t.id === 'a1' ? { ...t, consume: ['plan/spec.md'] } : t)); // audit 只消费 plan
-  await assert.rejects(
-    () => byName.wave_plan.execute({ batchId: 'p2-cr', team: 'probe-team', teamsRoot, tasks, assembly: { auditLane: 'a1' } }, SESS),
-    /GATE_AUDIT_INPUT_MISSING: audit_contract\.consumes_required not satisfied for \["exec\/"\]/,
-  );
-});
-
-test('A：criteria_from 指名锚点 → 未被指名的 plan 产物带标题不顶用（entry 期）', async () => {
-  const { store, byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-cf-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { criteria_from: 'plan/spec.md', verdict: ['pass', 'fail', 'skip'] };
-  });
-  const tasks = tasks3().map((t) => (t.id === 'a1' ? { ...t, consume: ['plan/spec.md', 'plan/other.md', 'exec/e1/o.md'] } : t));
-  await byName.wave_plan.execute({ batchId: 'p2-cf', team: 'probe-team', teamsRoot, tasks, assembly: { auditLane: 'a1' } }, SESS);
-  const dir = store.artifactsDirOf('sess-p2', 'p2-cf');
-  const write = (rel, body) => { const abs = path.join(dir, rel); fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, body, 'utf8'); };
-  write('plan/spec.md', '# spec（被指名的锚点，故意无标题）\n');
-  write('plan/other.md', '# other\n## 验收标准\n- ok\n'); // 带标题，但**不是**指名的锚点
-  write('exec/e1/o.md', 'out');
-  await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'p2-cf', lane: 'a1', status: 'running' }, SESS),
-    /GATE_AUDIT_CRITERIA_MISSING/,
-    '指名口径下，未被指名的 plan 产物带标题不应顶用',
-  );
-  write('plan/spec.md', '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- ok\n');
-  const r = await byName.member_status.execute({ batchId: 'p2-cf', lane: 'a1', status: 'running' }, SESS);
-  assert.equal(r.status, 'running', '补上指名锚点的裸标题行后放行');
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，两例同因）：原 test「A：consumes_required 未被满足 → 拒建批
+//    （建批期加强门禁生效）」/「A：criteria_from 指名锚点 → 未被指名的 plan 产物带标题不顶用（entry 期）」──
+//   面已消失 = **`audit_contract.consumes_required` / `.criteria_from` 两处团队声明位**（T-1/T-6）
+//   ⇒ ① `GATE_AUDIT_INPUT_MISSING` 的团队声明分支**无载体**（引擎默认面 `plan/` 前缀锚点在册，覆盖不丢）；
+//      ② `criteria_from` 指名锚点面删净（判据源 A-8 基线含 `criteria_from`；指引 §12 已改为
+//         「锚点**今日仅一态 = 引擎基线**」）⇒ 「按 glob 指名」不可构造，**不可等值反转**（反转即恒真空转）。
 
 // ── 回归：`globMatchesPath` 末段回退缺陷（2026-09-14 修）──
 // 缺陷：末段回退把 `plan/**` 的末段 `**` 退化成「匹配任意路径」⇒ `plan/**` 会命中 `exec/e1/o.md`，
@@ -157,29 +111,31 @@ test('glob 回归：`plan/**` 不再命中 exec 路径；绝对路径末段回�
   assert.equal(globMatchesPath('plan/*spec.md', 'D:/x/sess/artifacts/b1/exec/design-spec.md'), false, '末段回退只在末段命中时生效，不跨目录放宽');
 });
 
-test('A：verdict 成为 complete 门禁唯一真源（legacy require_audit_outcomes 不再生效）', () => {
+test('A：complete 门禁白名单（2026-09-27 批 3 反转）：声明面删净 ⇒ 引擎基线 {pass,skip} ⇒ skipped **放行**', () => {
   const { store } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-p2-vd-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { verdict: ['pass'] };             // 唯一真源：只允许 pass
-    // 【legacy-retire-20260915 · E-4 措辞正名】原注释「legacy 更宽（若仍生效则不会拒）」——
-    //   legacy 键已清退：若引擎仍读它，白名单会取更宽的 ['pass','skip'] ⇒ skipped 放行；
-    //   本用例**拒**即活证据：verdict 是唯一真源，引擎已忽略该键。
-    // 【F-4（2026-09-15 用户裁决 Q-D=A）· 原 `a.flows.complete = { require_audit_outcomes: ['pass','skip'] };` 行删除】
-    //   F-4 后 `complete` 已退出 `FLOW_SECTIONS` ⇒ 该夹具键会使本资产**整份拒载** ⇒ 读端回落引擎基线
-    //   {pass,skip} ⇒ skipped 放行 ⇒ 下方 `assert.throws(/GATE_COMPLETE_AUDIT_FAILED/)` 反而失真（假证据）。
-    //   故删该 1 行夹具键、**用例与 `assert.throws` 断言逐字保留**：其活证据语义为「资产经加载期校验
-    //   通过（无非法层）⇒ 只剩 `verdict` 驱动 complete 门禁 ⇒ skip 结局被拒」= verdict 是唯一真源。
-    //   原「废键不再生效」这一证据面**迁为下方独立拒载反例用例**（断言该资产现被拒载，比 E-4 的
-    //   「被引擎忽略」更强）。**不删用例、不删断言、不弱化断言**（Leader 追加裁决 #1）。
-  });
   const bf = store.batchFile('sess-p2', 'p2-vd');
   fs.mkdirSync(path.dirname(bf), { recursive: true });
   fs.writeFileSync(bf, JSON.stringify({
-    batchId: 'p2-vd', sessionId: 'sess-p2', team: 'probe-team', teamsRoot, phase: 'running', concurrency: 2,
+    batchId: 'p2-vd', sessionId: 'sess-p2', team: 'probe-team', phase: 'running', concurrency: 2,
     wavePlan: [{ tasks: tasks3() }], lanes: { p1: 'merged', e1: 'merged', a1: 'skipped' }, events: [], updatedAt: new Date().toISOString(),
   }), 'utf8');
-  // audit 结局 = skipped（outcome 'skip'）不在 verdict ['pass'] 内 ⇒ complete 门禁应拒（证明 verdict 生效）
-  assert.throws(() => store.setPhase('sess-p2', 'p2-vd', 'complete'), /GATE_COMPLETE_AUDIT_FAILED/);
+  // 【T-15/D-6 等值反转（面仍在：complete 门禁本体）】原用例以「团队资产 `verdict: ['pass']` 声明」为唯一真源
+  //   断言 `store.setPhase(..., 'complete')` **抛** `GATE_COMPLETE_AUDIT_FAILED`。裁决面（verdict 声明）已随
+  //   T-1/T-6 删净 ⇒ complete 白名单回落**引擎基线 {pass,skip}**（`lib/state/gates.js` 的 Q-7 基线）
+  //   ⇒ `skipped` 属白名单 ⇒ 真值反转：**不抛**。
+  //   断言强度不减：① `doesNotThrow`（原 `throws` 的对偶，精确判定）；② **并列补正控制**（audit=failed ⇒ 仍抛
+  //   同一既有码）——证明「不抛」不是门禁失效，而是白名单口径改变；③ 白名单真源标注精确等值。
+  assert.doesNotThrow(() => store.setPhase('sess-p2', 'p2-vd', 'complete'),
+    '引擎基线白名单含 skip ⇒ skipped 审计 lane 可 complete（原 verdict 收窄面已退役）');
+  const bf2 = store.batchFile('sess-p2', 'p2-vd2');
+  fs.writeFileSync(bf2, JSON.stringify({
+    batchId: 'p2-vd2', sessionId: 'sess-p2', team: 'probe-team', phase: 'running', concurrency: 2,
+    wavePlan: [{ tasks: tasks3() }], lanes: { p1: 'merged', e1: 'merged', a1: 'failed' }, events: [], updatedAt: new Date().toISOString(),
+  }), 'utf8');
+  assert.throws(() => store.setPhase('sess-p2', 'p2-vd2', 'complete'), /GATE_COMPLETE_AUDIT_FAILED/,
+    '正控制：audit=failed ⇒ 仍拒同一既有码（门禁未失效）');
+  const b2 = store.readBatch('sess-p2', 'p2-vd2');
+  assert.equal(b2.phase, 'running', '被拒后相位不得推进（零静默改写）');
 });
 
 // 【F-4 拒载反例 → **2026-09-18 K-2 翻牌**】承接上方用例迁出的证据面：
@@ -188,22 +144,14 @@ test('A：verdict 成为 complete 门禁唯一真源（legacy require_audit_outc
 //   **K-2（2026-09-18 用户裁决）**：本机无外部自建 team ⇒ 未知层判定暂时用不到 ⇒ 该码**退出 BLOCKING_CODES**
 //   ⇒ 资产**不再拒载**（`ok:true`），改以 **warning 留痕**（码面/文案/严重级三重锚**逐字保留**，断言强度不减）。
 //   本用例与 `team-asset.test.js`（单元级）、`gate-flows.test.js`（集成级）构成三处同码同形态锚。
-test('F-4 + K-2：声明 flows.complete（E-4 废键所在层）⇒ LAYER_UNKNOWN **warning 级**（不拒载、留痕可读）', () => {
-  const teamsRoot = writeTempTeam('punky-p2-f4-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { verdict: ['pass'] };              // 真源仍在（不因该层降档而另建兼容面）
-    a.flows.complete = { require_audit_outcomes: ['pass', 'skip'] };   // F-4：显式声明即命中未知层
-  });
-  const r = loadTeamAsset(teamsRoot, 'probe-team');
-  assert.equal(r.ok, true, 'K-2：未知层为 warning ⇒ 不拒载（与 Q1「都不降」的单码例外一致）');
-  const p = r.problems.find((x) => x.path === 'flows.complete');
-  assert.equal(p.code, TEAM_ASSET_CODES.LAYER_UNKNOWN);
-  assert.equal(p.severity, 'warning', 'K-2：warning 级（码面保留、留痕可读）');
-  assert.ok(p.message.includes('未知层：complete'), p.message);
-  assert.ok(p.message.includes('允许：plan/exec/audit'), p.message); // 允许集**不含** complete（文案锚）
-  assert.notEqual(r.asset, null, '仍回传已解析对象（既有口径）');
-  // K-2 语义锚（补留痕）：未知层**被跳过** ⇒ 不对该层做字段校验（无 produce_field 的 MISSING_FIELD 级联）
-  assert.equal(r.problems.some((x) => String(x.path).startsWith('flows.complete.')), false, '未知层不做后续字段校验');
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「F-4 + K-2：声明 flows.complete（E-4 废键所在层）
+//    ⇒ LAYER_UNKNOWN warning 级（不拒载、留痕可读）」＋ 其上方 legacy-retire / K-2 沿革注释块 ──
+//   面已消失 = ① `flows.complete` 团队声明位（T-1 装载器删除 + T-6 读端删除）；② 用例直接消费
+//   `loadTeamAsset()` 与 `TEAM_ASSET_CODES.LAYER_UNKNOWN` —— **本体与码族均已删除**（A-5/A-6/A-9 = 0 命中；A-10 入锁）；
+//   ③ 夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛。
+//   ⇒ 「未知层 warning 级」四重锚（码面 / 严重级 / 文案 / 层被跳过）的**载体不存在**，按 D-6 删除；
+//   **不可等值反转**（反转成「零 problem」= 恒真空转）。同码同形态锚的**存活面**见
+//   `gate-flows` 的 complete 重写用例（无声明 ⇒ 引擎基线放行，`jf.ok === true` 臂）。
 
 // ── Q-A4 opt-2（2026-09-18 用户裁决）：夹具锚点**按资产声明自适应** ──────────────────────
 // 根因（GAP-A1，已定案）：夹具缺省 `spec = 'plan/spec.md'`（`helpers/gate-fixture.mjs:41/:58`）与
@@ -234,35 +182,14 @@ test('Q-A4 opt-2：两构造器接受 opts.asset，且 opts.spec 显式给出时
   assert.equal(t2[0].produce[0], 'plan/pinned.md', 'opts.spec 压过自适应');
 });
 
-test('Q-A4 opt-2：五份现役资产的自适应值 = 缺省（零行为变化）', () => {
-  for (const team of ['software-team', 'engine-team', 'design-team', 'research-team', 'writing-team']) {
-    const r = loadTeamAsset(PKG, team);
-    assert.equal(r.ok, true, team + ' 资产加载通过');
-    assert.equal(anchorSpecOf(r.asset), 'plan/spec.md', team + ' 现无「具体路径」式声明 ⇒ 缺省不变');
-  }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，两例同因）：原 test「Q-A4 opt-2：五份现役资产的自适应值 = 缺省
+//    （零行为变化）」/「Q-A4 opt-2：同一具体路径资产下——旧缺省必失配（控件）/ 喂 asset 后 entry 门放行（活证据）」──
+//   面已消失 = ① 两例的**被检对象**是「五份现役团队资产」（`presets/{software,engine,design,research,writing}-team/
+//      team-asset.yml`）与「资产 `criteria_from` 具体路径声明」：5 件资产已随 **T-4/A-9** 删除、装载器随 **T-1** 删除
+//      ⇒ `loadTeamAsset(PKG, team)` 与 `writeTempTeam`（读真实骨架）**均不可调用**（调用即抛 / ESM 缺符号）；
+//   ② 「收窄式 `criteria_from`（具体路径）与夹具锚点失配」这一**事故形态**的载体已不存在
+//      （判据源 A-8 + 指引 §12：锚点**今日仅一态 = 引擎基线**）⇒ 控件臂与活证据臂同时失去对象。
+//   **不可等值反转**：反转成「零失配」= 恒真空转（纪律 15⑤：无命中构造即空转）。
+//   **存活面**：Q-A4 opt-2 的**纯函数三态**（`anchorSpecOf` 未声明/glob/具体路径）与**两构造器契约**
+//   （`threeTierTasks` 接受 `opts.asset` / `opts.spec` 优先级）两例**原样在册**——它们不依赖任何团队资产文件。
 
-test('Q-A4 opt-2：同一具体路径资产下——旧缺省必失配（控件）/ 喂 asset 后 entry 门放行（活证据）', async () => {
-  const { root, byName } = makeHarness();
-  const teamsRoot = writeTempTeam('punky-q-a4-', 'probe-team', (a) => {
-    a.flows.audit.audit_contract = { criteria_from: 'plan/plan-designer-spec.md', consumes_required: ['plan/'], verdict: ['pass', 'fail', 'skip'] };
-  });
-  const asset = JSON.parse(fs.readFileSync(path.join(teamsRoot, 'presets', 'probe-team', 'team-asset.yml'), 'utf8'));
-
-  // 控件：旧缺省（不喂 asset）⇒ 锚点 glob 与在场产物失配 ⇒ 拒（复现上一批 6 红的形态）
-  const stale = threeTierTasks(['e1'], { auditId: 'a1' });
-  await byName.wave_plan.execute({ batchId: 'q-a4-stale', team: 'probe-team', teamsRoot, tasks: stale, assembly: { auditLane: 'a1' } }, SESS);
-  seedArtifacts(root, 'sess-p2', 'q-a4-stale', ['e1'], { auditId: 'a1' });
-  await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'q-a4-stale', lane: 'a1', status: 'running' }, SESS),
-    /GATE_AUDIT_INPUT_MISSING/,
-    '控件：夹具缺省 plan/spec.md 对不上具体路径锚点 ⇒ 必须拒（这就是 6 条红的形态）',
-  );
-
-  // 活证据：同一资产 + 喂 opts.asset ⇒ 锚点对齐 ⇒ 放行
-  const adapted = threeTierTasks(['e1'], { auditId: 'a1', asset });
-  await byName.wave_plan.execute({ batchId: 'q-a4-ok', team: 'probe-team', teamsRoot, tasks: adapted, assembly: { auditLane: 'a1' } }, SESS);
-  seedArtifacts(root, 'sess-p2', 'q-a4-ok', ['e1'], { auditId: 'a1', asset });
-  const r = await byName.member_status.execute({ batchId: 'q-a4-ok', lane: 'a1', status: 'running' }, SESS);
-  assert.equal(r.status, 'running', '自适应后口径对齐 ⇒ entry 门放行（不再需要「删键」这种掩盖式解法）');
-});

@@ -265,19 +265,21 @@ test('#5 反例：已登记 token ⇒ entry 放行', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// #3 plan 契约门 P3「元素 / 小节」
+// #3 plan 契约门 P3「元素 / 小节」 —— 【2026-09-27 批 3 · T-15/D-6 归因：该面**已删净**】
+// #4 plan 契约门 P4「待确认」    —— 同上
 // ═══════════════════════════════════════════════════════════════════════════════
-
-test('#3 plan 契约门 P3：声明 elements / subsections ⇒ 逐条核（缺 ⇒ GATE_PLAN_CONTRACT）', () => {
-  const { state, g } = gatesWith([], { elements: ['goal'], subsections: { '## 风险': 2 } });
-  writeArt(state, 'b1', 'plan/spec.md', SPEC_OK);
-  const b = batchOf(TEAM, [{ id: 'p1', layer: 'plan', produce: ['plan/spec.md'] }]);
-  const r = g.checkPlanContract(SESS, 'b1', b, 'p1');
-  assert.equal(r.ok, false, JSON.stringify(r));
-  assert.equal(r.code, 'GATE_PLAN_CONTRACT', '复用既有码，不新增拒码');
-  assert.ok(r.problems.some((p) => /lacks element "goal"/.test(p)), JSON.stringify(r.problems));
-  assert.ok(r.problems.some((p) => /lacks subsection "## 风险"/.test(p)), JSON.stringify(r.problems));
-});
+// 已删用例（三例同因）：
+//   · 「#3 plan 契约门 P3：声明 elements / subsections ⇒ 逐条核（缺 ⇒ GATE_PLAN_CONTRACT）」
+//   · 「#3 行首锚定：`element:` 行须独立整行（内嵌提及不命中）」
+//   · 「#4 命中 pending_marker.literal（plan 层）⇒ 拒 GATE_NEEDHUMAN_PENDING + pendingMarker 载荷」
+// 面已消失 = **`flows.plan.contract.elements` / `.subsections` / `.pending_marker` 三处声明位**
+//   （T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」；T-1：`lib/assembly/team-asset.js` 本体删除，
+//    其 `CONTRACT_*` 码族已入退役锁 A-10）。三例的 `gatesWith(..., {elements|pending_marker})` 声明**无任何载体**
+//   ⇒ 被检面（按声明逐条核 / 按声明命中待确认标记）不存在。
+//   **不可等值反转**：反转成「声明不在 ⇒ 零拒绝」= 恒真空转校验（纪律 15⑤）。
+//   **存活面**（本文件其余用例**全部原样在册**）：#1 `detectPendingMarker` 纯函数、#2 命令门词表、
+//   #2 行首锚定、#3 反例/零感知、#4 反例 A/B、#4 优先级、#5 entry 词表、#6 `vocabulary` 展示位、
+//   U-2 严格生效、契约码面、P11 生成物同批、词表读端契约自证。
 
 test('#3 反例：产物携带 `element: <id>` 独立行 + 裸小节标题 ⇒ 放行', () => {
   const { state, g } = gatesWith([], { elements: ['goal'], subsections: ['## 风险'] });
@@ -294,28 +296,13 @@ test('#3 零感知：未声明 elements / subsections ⇒ 行为逐字不变（�
   assert.equal(g.checkPlanContract(SESS, 'b1', b, 'p1').ok, true);
 });
 
-test('#3 行首锚定：`element:` 行须独立整行（内嵌提及不命中）', () => {
-  const { state, g } = gatesWith([], { elements: ['goal'] });
-  writeArt(state, 'b1', 'plan/spec.md', SPEC_OK + '本节描述 element: goal 的写法（内嵌，不命中）\n');
-  const b = batchOf(TEAM, [{ id: 'p1', layer: 'plan', produce: ['plan/spec.md'] }]);
-  const r = g.checkPlanContract(SESS, 'b1', b, 'p1');
-  assert.equal(r.ok, false, '内嵌行不得充当元素声明：' + JSON.stringify(r));
-});
+// （#3 行首锚定 / #4 pending_marker 两例已删，归因见上方「已删用例」区块）
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // #4 plan 契约门 P4「待确认」（U-1：判定面仅 plan 层；复用既有码）
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#4 命中 pending_marker.literal（plan 层）⇒ 拒**既有码** GATE_NEEDHUMAN_PENDING + pendingMarker 载荷', () => {
-  const { state, g } = gatesWith([], { pending_marker: { literal: '[待确认]' } });
-  writeArt(state, 'b1', 'plan/spec.md', SPEC_OK + '\n[待确认] 本节口径待人工裁决\n');
-  const b = batchOf(TEAM, [{ id: 'p1', layer: 'plan', produce: ['plan/spec.md'] }]);
-  const r = g.checkPlanContract(SESS, 'b1', b, 'p1');
-  assert.equal(r.ok, false, JSON.stringify(r));
-  assert.equal(r.code, 'GATE_NEEDHUMAN_PENDING', '码字面量恒为既有码（不造新码）');
-  assert.equal(r.pendingMarker && r.pendingMarker.path, 'plan/spec.md');
-  assert.equal(typeof r.pendingMarker.index, 'number');
-});
+// （#4 命中 pending_marker.literal 一例已删，归因见上方「已删用例」区块；下方两条反例与优先级例在册）
 
 test('#4 反例 A：**未声明** pending_marker ⇒ 同产物零感知放行', () => {
   const { state, g } = gatesWith([], {});

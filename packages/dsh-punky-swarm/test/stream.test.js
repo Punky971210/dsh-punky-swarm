@@ -343,7 +343,7 @@ test('S18 读端反例（AC-2）：坏 JSON ⇒ 仍 null 且不向调用方抛�
   assert.equal(notifyEventCount('missing'), null, '存在性短路路径不变 ⇒ null');
 });
 
-test('S19 静态（AC-4）：命名 stripBom 定义仍恰 2 处；stream.js 无内联 BOM 剥除副本', () => {
+test('S19 静态（AC-4）：命名 stripBom 定义仍恰 1 处；stream.js 无内联 BOM 剥除副本', () => {
   const libDir = fileURLToPath(new URL('../lib/', import.meta.url));
   const hits = [];
   const walk = (dir) => {
@@ -357,7 +357,11 @@ test('S19 静态（AC-4）：命名 stripBom 定义仍恰 2 处；stream.js 无�
     }
   };
   walk(libDir);
-  assert.deepEqual(hits.sort(), ['assembly/team-asset.js', 'hot/config-watch.js'], '禁第三份副本：命名定义仍恰 2 处');
+  // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在）】原期望 `['assembly/team-asset.js', 'hot/config-watch.js']`（恰 2 处）。
+  //   第二处（`lib/assembly/team-asset.js`，其自带 `export function stripBom` 副本）**已随本体删除**（T-1/A-9）
+  //   ⇒ 真值由「恰 2 处」反转为「恰 1 处」；断言强度不减（仍是**精确集合相等**，非放宽为 `>=1` / `includes`）：
+  //   若再出现第二份副本（回生），本断言仍会红。
+  assert.deepEqual(hits.sort(), ['hot/config-watch.js'], '禁第二处副本：命名定义恰 1 处（原第二处 `assembly/team-asset.js` 已退役删除）');
   const src = fs.readFileSync(new URL('../lib/panel/stream.js', import.meta.url), 'utf8');
   assert.equal(src.includes('\\uFEFF'), false, 'stream.js 无 uFEFF 字面量内联');
   assert.equal(/charCodeAt\s*\(\s*0\s*\)/.test(src), false, 'stream.js 无 charCodeAt(0) 内联判断');

@@ -50,7 +50,9 @@ import { clearFlowCache } from '../lib/assembly/flows.js';
 import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
-import { writeTempTeam, writeSyntheticTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `writeTempTeam` 具名导入已删除项（真实骨架已删，T-4/A-9）；
+//   `writeSyntheticTeam` 仍由 `writeTeamFlow` 使用 ⇒ 保留。
+import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 
 const SESS_ID = 'sess-s2';
 const SESS = { agent: { session: { id: SESS_ID } } };
@@ -97,28 +99,12 @@ function flowsWithVerdict(verdict) {
   return { plan: { produce_field: 'produce' }, exec: { produce_field: 'outputs' }, audit };
 }
 
-test('GAP-S2-A1：verdict 与 {pass,skip} 交集为空 ⇒ 专用码 + declared/narrowed/values 载荷（audit merged 仍拒）', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    writeTeamFlow(pkg, 'bad-verdict', flowsWithVerdict(['approve', 'reject']));
-    const g = createGates(state, { flowsRoot: pkg });
-    const r = g.checkCompleteGate(batchWithAuditState('bad-verdict', 'merged'));
-    assert.equal(r.ok, false, '空白名单 + audit 已 merged ⇒ 仍拒（本改动为零放宽，不放行）');
-    assert.equal(r.code, CODE, '专用码须区别于「审计真没通过」（原同码 GATE_COMPLETE_AUDIT_FAILED）');
-    assert.deepEqual(r.declared, ['approve', 'reject'], '回显声明的 verdict 词表（一眼看出资产词域写错）');
-    assert.deepEqual(r.narrowed, ['approve', 'reject'], '回显被 {pass,skip} 剔除的词');
-    assert.deepEqual(r.values, [], '有效白名单 = 空集（故障本体）');
-    assert.deepEqual(r.requiredOutcomes, [], '原载荷字段逐字保留（空白名单）');
-    assert.deepEqual(r.offenders, [{ lane: 'a1', state: 'merged' }], 'offenders 逐字保留');
-    assert.equal(r.completeOutcomes.source, 'flows.audit.audit_contract.verdict ∩ {pass,skip}', '真源标注逐字保留');
-    assert.equal(r.escapeRoute.phase, 'aborted', 'D-8 终态可退出面逐字保留（不形成僵局）');
-  } finally {
-    fs.rmSync(pkg, { recursive: true, force: true });
-    fs.rmSync(state, { recursive: true, force: true });
-    clearFlowCache();
-  }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「GAP-S2-A1：verdict 与 {pass,skip} 交集为空 ⇒ 专用码
+//    + declared/narrowed/values 载荷（audit merged 仍拒）」──
+//   面已消失 = **团队资产 `flows.audit.audit_contract.verdict` 声明面**（T-6 读端删除 ⇒ 恒返「无声明」；
+//   T-1 `lib/assembly/team-asset.js` 本体删除）⇒「空白名单 + 专用码 `GATE_COMPLETE_OUTCOMES_EMPTY`」**无发射源**
+//   （`lib/**` 零命中）。**不可等值反转**：反转成「引擎基线 ⇒ merged 放行」与下方 A3 用例**同构造重复**
+//   ⇒ 恒真空转（纪律 15⑤）。A2 / A3 两例（引擎基线口径的放行/拒面）**原样在册** ⇒ complete 门禁覆盖不丢。
 
 test('GAP-S2-A2：verdict 含 pass ⇒ 判定逐字不变（merged/skipped 放行；fail/conflict 恒拒且仍用原码）', () => {
   const { pkg, state } = mkRoots();
@@ -184,79 +170,22 @@ function tasks3() {
 
 const warnCodes = (out) => (out.warnings ?? []).map((w) => w.code);
 
-test('GAP-S2-B1：坏 verdict 资产建批 ⇒ 批次照建 + warnings 含同码告警（零拒建批、零 TEAM_ASSET_*）', async () => {
-  const { root, store, byName } = makeHarness('bad');
-  const teamsRoot = writeTempTeam('s2-bad-', 's2-bad-team', (a) => {
-    a.flows.audit.audit_contract.verdict = ['approve', 'reject']; // 唯一改动：词域从成员终态词换成产物层裁决词
-  });
-  const out = await byName.wave_plan.execute({
-    batchId: 's2-bad', team: 's2-bad-team', teamsRoot, tasks: tasks3(),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
-  }, SESS);
-  assert.equal(out.batchId, 's2-bad', '告警不阻断建批：建批成功返回');
-  assert.equal(fs.existsSync(path.join(root, 'sessions', SESS_ID, 'batches', 's2-bad.json')), true, '批次 JSON 照落盘');
-  const w = (out.warnings ?? []).find((x) => x.code === CODE);
-  assert.ok(w, '须产留痕告警（实测 warnings=' + JSON.stringify(warnCodes(out)) + '）');
-  assert.equal(w.team, 's2-bad-team', '告警可归因到团队');
-  assert.deepEqual(w.declared, ['approve', 'reject'], '告警回显声明的词表');
-  assert.deepEqual(w.values, [], '告警回显有效白名单 = 空集');
-  assert.equal(warnCodes(out).some((c) => String(c).startsWith('TEAM_ASSET_')), false,
-    '不得经 team-asset.js 的 problems 通道打成「资产不可用」（GAP-S7 面，本任务绕开）');
-  const evs = (store.readBatch(SESS_ID, 's2-bad').events ?? []).filter((e) => e && e.code === CODE);
-  assert.equal(evs.length, 1, '告警随建批落一条事件（既有 warnings -> 事件统一循环；事件 type 为共享通道，载荷 code 归因）');
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，三例同因）：原 test「GAP-S2-B1：坏 verdict 资产建批 ⇒ 批次照建
+//    + warnings 含同码告警」/「GAP-S2-B2 反向锁：verdict 含 pass ⇒ 零告警」/「GAP-S2-B3 反向锁：verdict 缺声明
+//    ⇒ 零告警」──
+//   面已消失 = ① **`verdict` 声明面 + 其 `warnings` 留痕通道**（T-6/T-1；`exec/consumers.md` §二.6 明载：
+//               「来源②资产缺口 / ③链非法随删，已无发射点」⇒ 建批返回值今日不含任何资产相关 `warnings`）；
+//              ② 夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛，三例整条不可达。
+//   **不可等值反转**：反转成「零告警」是**恒真空转**（无发射源 ⇒ 恒真），违纪律 15⑤。
+//   A2 / A3 两例（引擎基线口径）原样在册。
 
-test('GAP-S2-B2 反向锁：verdict 含 pass（正常词表）⇒ 零告警（防误报）', async () => {
-  const { store, byName } = makeHarness('ok');
-  const teamsRoot = writeTempTeam('s2-ok-', 's2-ok-team'); // 未 mutate：沿用 software-team 的 ['pass','fail','skip']
-  const out = await byName.wave_plan.execute({
-    batchId: 's2-ok', team: 's2-ok-team', teamsRoot, tasks: tasks3(),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
-  }, SESS);
-  assert.equal(out.batchId, 's2-ok', '正常资产照常建批');
-  assert.equal(warnCodes(out).includes(CODE), false, '正常词表不得误报（实测 warnings=' + JSON.stringify(warnCodes(out)) + '）');
-  assert.equal((store.readBatch(SESS_ID, 's2-ok').events ?? []).some((e) => e && e.code === CODE), false, '事件面同样零误报');
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「GAP-S2-A4 真机路径复现（smoke-chain-20260916）：
+//    坏 verdict 批 audit merged 后 complete 拒专用码」──
+//   面已消失 = 同上（`verdict` 声明面 + 其专用码 `GATE_COMPLETE_OUTCOMES_EMPTY` 无发射源）+ 夹具 `writeTempTeam`
+//   读已删的真实骨架（T-4/A-9）⇒ 用例不可达。**不可等值反转**：引擎基线口径下 audit merged ⇒ `complete` **放行**，
+//   反转即与 A2 用例（merged 放行）重复、且原「专用码归因」面不存在 ⇒ 恒真空转。
+//   A2 / A3（引擎基线放行面 + 拒面 + `requiredOutcomes`/`narrowedOutcomes` 载荷）原样在册。
 
-test('GAP-S2-B3 反向锁：verdict 缺声明（回落引擎基线）⇒ 零告警（不把「未声明」误报成「写错」）', async () => {
-  const { byName } = makeHarness('nodecl');
-  const teamsRoot = writeTempTeam('s2-nodecl-', 's2-nodecl-team', (a) => {
-    delete a.flows.audit.audit_contract.verdict; // audit_contract 仍存在（非豁免）⇒ 只缺 verdict 一键
-  });
-  const out = await byName.wave_plan.execute({
-    batchId: 's2-nodecl', team: 's2-nodecl-team', teamsRoot, tasks: tasks3(),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
-  }, SESS);
-  assert.equal(out.batchId, 's2-nodecl', '缺 verdict 不影响建批');
-  assert.equal(warnCodes(out).includes(CODE), false, '缺声明 ⇒ 引擎基线接管 ⇒ 零告警（实测 warnings=' + JSON.stringify(warnCodes(out)) + '）');
-});
-
-test('GAP-S2-A4 真机路径复现（smoke-chain-20260916）：坏 verdict 批 audit merged 后 complete 拒专用码', async () => {
-  const { root, store, byName } = makeHarness('e2e');
-  const teamsRoot = writeTempTeam('s2-e2e-', 's2-e2e-team', (a) => {
-    a.flows.audit.audit_contract.verdict = ['approve', 'reject'];
-  });
-  await byName.wave_plan.execute({
-    batchId: 's2-e2e', team: 's2-e2e-team', teamsRoot, tasks: tasks3(),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
-  }, SESS);
-  await byName.batch_phase.execute({ batchId: 's2-e2e', phase: 'running' }, SESS);
-  for (const entry of [['plan/spec.md', SPEC_OK], ['exec/e1.md', 'out'], ['audit/a1.md', 'review']]) {
-    const abs = path.join(root, 'sessions', SESS_ID, 'artifacts', 's2-e2e', ...entry[0].split('/'));
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, entry[1], 'utf8');
-  }
-  for (const lane of ['p1', 'e1', 'a1']) {
-    store.setMember(SESS_ID, 's2-e2e', lane, 'running');
-    store.setMember(SESS_ID, 's2-e2e', lane, 'review');
-    store.setMember(SESS_ID, 's2-e2e', lane, 'merged');
-  }
-  assert.throws(() => store.setPhase(SESS_ID, 's2-e2e', 'complete'), new RegExp(CODE),
-    'audit 已 merged 仍拒（零放宽），但拒码可归因到「资产词表写错」而非「验收未过」');
-  const blocked = (store.readBatch(SESS_ID, 's2-e2e').events ?? []).filter((e) => e && e.type === EVT_COMPLETE_BLOCKED);
-  assert.equal(blocked.length, 1, 'gate.complete_blocked 落痕一次');
-  assert.equal(blocked[0].code, CODE, '事件载荷带上专用码（原先这里的 code 是 GATE_COMPLETE_AUDIT_FAILED，无从定位）');
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // (5) 断言删除数为 0（与 `scripts/baseline-snapshot.mjs --check` 同源对账）

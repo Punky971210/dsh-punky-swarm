@@ -127,8 +127,16 @@ test('R3-4 E2E：event-types.js 缺 EVT_GATE_ESCAPE ⇒ 抛 GATE_EVENT_CONST_MIS
 
     const disk = eventsOnDisk(out);
     assert.equal(disk.some((e) => typeof e.type !== 'string'), false, '磁盘复读：不得有失名事件');
-    assert.equal(disk.length, 2, '磁盘事件仍只有建批期两条（batch.created / batch.team-asset.resolved）：'
+    // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：建批期磁盘事件面）】原断言 `disk.length === 2`
+    //   （建批期两条：`batch.created` / `batch.team-asset.resolved`）。资产正档写端已随 **T-7** 删除
+    //   （`exec/delete-assets.md` §四 第 7/12 点：`store.js` 的 `teamAssetRefFor()` 与
+    //    `EVT_BATCH_TEAM_ASSET_RESOLVED` 发射点整条删除）⇒ 建批期磁盘事件**只剩 1 条**，真值反转。
+    //   断言强度不减：由「条数 = 2」→「条数 = 1 **且** 逐字点名唯一在册事件 type」（点名校验比原断言更严）。
+    assert.equal(disk.length, 1, '磁盘事件仍只有建批期一条（batch.created；原 `batch.team-asset.resolved` 写点已随 T-7 删除）：'
       + JSON.stringify(disk.map((e) => e.type)));
+    assert.equal(disk[0].type, 'batch.created', '逐字点名唯一在册建批期事件 type');
+    assert.equal(disk.some((e) => e.type === 'batch.team-asset.resolved'), false,
+      '资产正档事件已随 T-7 删净（不得回生）');
   } finally { cleanup(out); }
 });
 

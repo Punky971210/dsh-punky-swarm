@@ -38,7 +38,10 @@ import { createStore } from '../lib/state/store.js';
 import { createGates, smokeOf } from '../lib/state/gates.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 已删：
+//   该夹具读包内真实骨架 `presets/<team>/team-asset.{json,yml}`，而 5 件资产已删（T-4/A-9）⇒ 调用即抛错；
+//   且 `teamsRoot` 参数本身已退役（D-3，`wave_plan.parameters` 删除）。本套件命题（smoke 豁免面）与团队资产**无关**
+//   ⇒ 处置 = **去掉退役前置**（不再传 `teamsRoot`、不再造根），**断言一字未动**。
 
 const SESS = { agent: { session: { id: 'sess-smoke' } } };
 const SID = SESS.agent.session.id;
@@ -72,37 +75,34 @@ const orphanTasks = () => [{ id: 'probe', layer: 'plan', role: 'designer', produ
 
 test('T1 RED/GREEN：单 lane 冒烟批 smoke:true ⇒ 建批成功；同输入不传 smoke ⇒ 仍拒 GATE_PLAN_PRESENCE_MISSING', async () => {
   const { byName } = makeHarness('punky-smoke-t1-');
-  const teamsRoot = writeTempTeam('punky-smoke-t1-team-', PLAIN_TEAM);
 
   // 反例（既有语义）：不传 smoke ⇒ 建批被拒，码面逐字不变
   await assert.rejects(
-    () => byName.wave_plan.execute({ batchId: 'smk-red', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks() }, SESS),
+    () => byName.wave_plan.execute({ batchId: 'smk-red', team: PLAIN_TEAM, tasks: bareProbeTasks() }, SESS),
     /GATE_PLAN_PRESENCE_MISSING/,
     '不传 smoke 的同一输入仍必须拒（既有行为零变化）',
   );
 
   // 正例（Q-G1）：smoke:true ⇒ 建批成功
-  const out = await byName.wave_plan.execute({ batchId: 'smk-green', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
+  const out = await byName.wave_plan.execute({ batchId: 'smk-green', team: PLAIN_TEAM, tasks: bareProbeTasks(), smoke: true }, SESS);
   assert.equal(out.batchId, 'smk-green');
   assert.equal(out.smoke, true, 'wave_plan 返回值回显 smoke:true');
 });
 
 test('T2 smoke 批跳过建批期 ORPHAN 面（声明产物但无人 consume）；反例仍拒 GATE_ORPHAN_PRODUCT', async () => {
   const { byName } = makeHarness('punky-smoke-t2-');
-  const teamsRoot = writeTempTeam('punky-smoke-t2-team-', PLAIN_TEAM);
   await assert.rejects(
-    () => byName.wave_plan.execute({ batchId: 'smk-orphan-red', team: PLAIN_TEAM, teamsRoot, tasks: orphanTasks() }, SESS),
+    () => byName.wave_plan.execute({ batchId: 'smk-orphan-red', team: PLAIN_TEAM, tasks: orphanTasks() }, SESS),
     /GATE_ORPHAN_PRODUCT/,
     '非 smoke 批：plan 产物无消费者仍必须拒建批',
   );
-  const out = await byName.wave_plan.execute({ batchId: 'smk-orphan-green', team: PLAIN_TEAM, teamsRoot, tasks: orphanTasks(), smoke: true }, SESS);
+  const out = await byName.wave_plan.execute({ batchId: 'smk-orphan-green', team: PLAIN_TEAM, tasks: orphanTasks(), smoke: true }, SESS);
   assert.equal(out.batchId, 'smk-orphan-green');
 });
 
 test('T3 留痕：建批落恰好 1 条 batch.smoke 事件；无该事件的批次判 false', async () => {
   const { store, byName } = makeHarness('punky-smoke-t3-');
-  const teamsRoot = writeTempTeam('punky-smoke-t3-team-', PLAIN_TEAM);
-  await byName.wave_plan.execute({ batchId: 'smk-evt', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
+  await byName.wave_plan.execute({ batchId: 'smk-evt', team: PLAIN_TEAM, tasks: bareProbeTasks(), smoke: true }, SESS);
   const b = store.readBatch(SID, 'smk-evt');
   const hits = b.events.filter((e) => e.type === EVT.EVT_BATCH_SMOKE);
   assert.equal(hits.length, 1, 'batch.smoke 事件恰好 1 条');
@@ -116,8 +116,7 @@ test('T3 留痕：建批落恰好 1 条 batch.smoke 事件；无该事件的批�
 
 test('T4 读端可见：batch_status.smoke === true；非 smoke 批不写该键', async () => {
   const { store, byName } = makeHarness('punky-smoke-t4-');
-  const teamsRoot = writeTempTeam('punky-smoke-t4-team-', PLAIN_TEAM);
-  await byName.wave_plan.execute({ batchId: 'smk-view', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
+  await byName.wave_plan.execute({ batchId: 'smk-view', team: PLAIN_TEAM, tasks: bareProbeTasks(), smoke: true }, SESS);
   const smokeView = await byName.batch_status.execute({ batchId: 'smk-view' }, SESS);
   assert.equal(smokeView.smoke, true, 'batch_status 回显 smoke:true（读端可见，不是隐性放行）');
   seedPlainBatch(store, 'smk-plain-4', orphanTasks());
@@ -127,8 +126,7 @@ test('T4 读端可见：batch_status.smoke === true；非 smoke 批不写该键'
 
 test('T5 运行期豁免：smoke 批 plan lane 在 checkExitGate 放行（载荷带 smoke/smokeSkipped）；对照批仍拒 GATE_PLAN_CONTRACT', async () => {
   const { root, store, byName } = makeHarness('punky-smoke-t5-');
-  const teamsRoot = writeTempTeam('punky-smoke-t5-team-', PLAIN_TEAM);
-  await byName.wave_plan.execute({ batchId: 'smk-exit', team: PLAIN_TEAM, teamsRoot, tasks: orphanTasks(), smoke: true }, SESS);
+  await byName.wave_plan.execute({ batchId: 'smk-exit', team: PLAIN_TEAM, tasks: orphanTasks(), smoke: true }, SESS);
   const gates = createGates(root);
   const smokeBatch = store.readBatch(SID, 'smk-exit');
   const g = gates.checkExitGate(SID, 'smk-exit', smokeBatch, 'probe');
@@ -145,8 +143,7 @@ test('T5 运行期豁免：smoke 批 plan lane 在 checkExitGate 放行（载荷
 
 test('T6 行为安全门仍在：smoke 批派发未声明 lane ⇒ 仍拒 GATE_LANE_NOT_IN_PLAN', async () => {
   const { root, store, byName } = makeHarness('punky-smoke-t6-');
-  const teamsRoot = writeTempTeam('punky-smoke-t6-team-', PLAIN_TEAM);
-  await byName.wave_plan.execute({ batchId: 'smk-safety', team: PLAIN_TEAM, teamsRoot, tasks: bareProbeTasks(), smoke: true }, SESS);
+  await byName.wave_plan.execute({ batchId: 'smk-safety', team: PLAIN_TEAM, tasks: bareProbeTasks(), smoke: true }, SESS);
   const gates = createGates(root);
   const b = store.readBatch(SID, 'smk-safety');
   const g = gates.checkEntryGate(SID, 'smk-safety', b, 'no-such-lane');

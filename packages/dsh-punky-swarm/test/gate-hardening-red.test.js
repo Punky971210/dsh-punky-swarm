@@ -56,7 +56,8 @@ import { resolveTeamFlows } from '../lib/assembly/flows.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 已删
+//   （真实骨架 5 件已删 T-4/A-9；该导出亦已随 helper 收口删除，T11/T18/T23/T24 四处消费点去前置后不再需要）。
 
 const PKG = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -100,12 +101,10 @@ function writeBatchFile(batch) {
   fs.writeFileSync(abs, JSON.stringify(batch), 'utf8');
   return abs;
 }
-// 前置自检：临时团队资产必须真的被加载（否则「豁免」会伪装成「资产加载失败 ⇒ 回落 legacy」）
-function assertTeamLoads(teamRoot, team, check) {
-  const r = resolveTeamFlows(team, { root: teamRoot });
-  assert.equal(r.ok, true, '前置：临时团队资产须可加载 —— ' + JSON.stringify(r.problems));
-  check(r.flows);
-}
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 `assertTeamLoads()` 前置自检 ──
+//   其被检面 = 「临时团队资产必须真的被加载」；团队资产声明面已随 T-1（装载器删除）/ T-6（读端删除）删净，
+//   且其全部调用点（T11 / T18 / T23 / T24）已按「去退役前置」改写为引擎基线构造 ⇒ 该助手成为本批改动产生的
+//   孤儿代码，一并删除（`resolveTeamFlows` 恒返 `ok:false` ⇒ 该前置在任何输入下都不可能通过）。
 
 // ── 断言器 ──
 function obs(t, label, r) { t.diagnostic(label + ' → ' + JSON.stringify(r)); }
@@ -296,15 +295,13 @@ test('T11 免检路径不可达：空/缺声明全排列扫描（任何一条 ok
       }
     }
   }
-  // (2) exec consume 空/缺 × 团队声明形态（含未声明 entry_requires 的团队）
-  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't11-no-entry', (a) => {
-    a.team = 't11-no-entry';
-    delete a.flows.exec.entry_requires;
-  });
-  assertTeamLoads(noEntryRoot, 't11-no-entry', (f) => {
-    assert.equal(f.exec.entry_requires, undefined, '前置：临时团队确实未声明 entry_requires');
-  });
-  for (const [tname, troot] of [['software-team', null], ['generic', null], ['t11-no-entry', noEntryRoot]]) {
+  // (2) exec consume 空/缺 × 团队形态 —— 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】
+  //   原第三臂「临时团队 t11-no-entry（显式 `delete flows.exec.entry_requires`）」的被检载体（团队资产声明面）
+  //   已随 T-1（`lib/assembly/team-asset.js` 删除）/ T-6（`resolveTeamFlows` 恒返无声明）删净；
+  //   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛。
+  //   ⇒ 去该臂与 `assertTeamLoads` 前置（前置面消失，非命题面）：引擎基线下**任何团队名同判「无声明」**
+  //   ⇒ 余下两臂（`software-team` / `generic`）即覆盖全部可达形态；`assert.deepEqual(exempt, [])` 方向与强度不变。
+  for (const [tname, troot] of [['software-team', null], ['generic', null]]) {
     for (const cval of [undefined, null, []]) {
       const bid = 't11c-' + tname + '-' + String(cval);
       const task = { id: 'E1', layer: 'exec', role: 'coder', outputs: ['exec/o.md'], cmd: 'c' };
@@ -442,21 +439,17 @@ test('T17 团队声明 entry_requires:[consume] + lane consume 为空 ⇒ 拒派
 });
 
 test('T18 团队未声明 entry_requires（或 flows:null）+ lane consume 为空 ⇒ 仍必须拒（consume 强制不依赖团队声明）', (t) => {
-  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't18-no-entry', (a) => {
-    a.team = 't18-no-entry';
-    delete a.flows.exec.entry_requires;
-  });
-  assertTeamLoads(noEntryRoot, 't18-no-entry', (f) => {
-    assert.equal(f.exec.entry_requires, undefined, '前置：临时团队确实未声明 entry_requires');
-    assert.equal(f.exec.produce_field, 'outputs', '前置：其余声明保持与 software-team 同源');
-  });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `writeTempTeam` 造「未声明 entry_requires 的临时团队」
+  //   （第一/第三臂），并以其 `assertTeamLoads` 前置断言「`entry_requires` 确实未声明」。团队资产声明面已随
+  //   T-1/T-6 删净、5 件真实骨架已删（T-4/A-9）⇒ 夹具调用即抛；且引擎基线下**任何团队名均恒为「未声明」**
+  //   ⇒ 直接以团队名构造即等价。**命题断言（r1/r2/r3 三条）逐字保留**，仅去掉已消失的前置面。
   const b1 = mkBatch('t18a', [EXEC({ consume: [], outputs: ['exec/o.md'] })],
-    { e1: 'pending' }, { team: 't18-no-entry', teamsRoot: noEntryRoot });
+    { e1: 'pending' }, { team: 't18-no-entry' });
   const r1 = gates.checkEntryGate(SID, b1.batchId, b1, 'e1');
   const b2 = mkBatch('t18b', [EXEC({ outputs: ['exec/o.md'] })], { e1: 'pending' }, { team: 'generic' });
   const r2 = gates.checkEntryGate(SID, b2.batchId, b2, 'e1');
   const b3 = mkBatch('t18c', [EXEC({ consume: null, outputs: ['exec/o.md'] })],
-    { e1: 'pending' }, { team: 't18-no-entry', teamsRoot: noEntryRoot });
+    { e1: 'pending' }, { team: 't18-no-entry' });
   const r3 = gates.checkEntryGate(SID, b3.batchId, b3, 'e1');
   obs(t, '未声明 entry_requires, consume=[]', r1);
   obs(t, 'generic 无资产, consume 未声明', r2);
@@ -676,13 +669,12 @@ test('T33 【r2 新增 / R-33】A1 建批期主防线**无法覆盖的漂移面*
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('T23 standalone 不得自声明即放行（布尔/理由/上游事实核验/留痕四判据）', (t) => {
-  // (a) 字符串 'true' 不认（在「未声明 entry_requires」团队上构造，使该分支真正可达）
-  const noEntryRoot = writeTempTeam('punky-gate-red-team-', 't23-no-entry', (a) => {
-    a.team = 't23-no-entry';
-    delete a.flows.exec.entry_requires;
-  });
+  // (a) 字符串 'true' 不认（在**无声明**团队上构造，使该分支真正可达）
+  //   【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `writeTempTeam` 造「未声明 entry_requires 的临时团队」
+  //   以打开该分支；团队资产声明面已随 T-1/T-6 删净、真实骨架已删（T-4/A-9）⇒ 夹具调用即抛。
+  //   引擎基线下「未声明 entry_requires」是**唯一**形态 ⇒ 以团队名直接构造即等价，四臂断言（rA/rB/rC/rD）逐字保留。
   const bA = mkBatch('t23a', [EXEC({ standalone: 'true', consume: null, outputs: ['exec/o.md'] })],
-    { e1: 'pending' }, { team: 't23-no-entry', teamsRoot: noEntryRoot });
+    { e1: 'pending' }, { team: 't23-no-entry' });
   const rA = gates.checkEntryGate(SID, bA.batchId, bA, 'e1');
 
   // (b) 布尔 true 但缺 standaloneReason
@@ -724,14 +716,13 @@ test('T23 standalone 不得自声明即放行（布尔/理由/上游事实核验
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('T24 produce_field 取非 legacy 值（exec: outputs→produce）正负双向用例', (t) => {
-  const teamRoot = writeTempTeam('punky-gate-red-team-', 't24-pf', (a) => {
-    a.team = 't24-pf';
-    a.flows.exec.produce_field = 'produce'; // legacy for exec = 'outputs' ⇒ 非 legacy 值
-  });
-  assertTeamLoads(teamRoot, 't24-pf', (f) => {
-    assert.equal(f.exec.produce_field, 'produce', '前置：produce_field 确实被拉到非 legacy 值');
-  });
-  const mk = (bid, task) => mkBatch(bid, [EXEC({ ...task })], { e1: 'review' }, { team: 't24-pf', teamsRoot: teamRoot });
+  // 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原用 `writeTempTeam` 把 `flows.exec.produce_field` 拉到
+  //   **非 legacy 值 'produce'**，并以其 `assertTeamLoads` 前置断言该声明被读端拉到。团队声明面已随 T-1/T-6 删净
+  //   （且夹具读已删的真实骨架 ⇒ 调用即抛）⇒ 去该前置后，本用例的受检真值 = **引擎基线**：`flows.js` 的
+  //   `produceFieldsOf` 对 exec 层恒取 **produce ∪ outputs 并集**（不再被单一 `produce_field` 声明缩窄）。
+  //   ⇒ 三条命题断言（r1 仅 outputs 且缺失 ⇒ 拒 / r2 produce 有效但 outputs 缺失 ⇒ 拒 / r3 齐备 ⇒ 放行）
+  //   **逐字保留**，方向与强度不变（这正是原用例要证的「被检面不得缩窄到单一字段」）。
+  const mk = (bid, task) => mkBatch(bid, [EXEC({ ...task })], { e1: 'review' }, { team: 'software-team' });
 
   // 负例 1：只声明 outputs 且产物缺失（produce 未声明）⇒ 必拒
   const b1 = mk('t24-n1', { outputs: ['exec/missing.md'] });
@@ -947,19 +938,22 @@ test('T28 【r2 改写】零静默（r2 术语）：降级/逃生须产 `gate.de
 
   assert.deepEqual(A, B, '零静默面亦不得按 createdAt 分流（两极结论须逐字一致）');
 
-  // r2 留痕：逃生阀（含 empty-reason 载原因）⇒ gate.escape；降级 ⇒ gate.degrade。
+  // r2 留痕面 —— 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`checkExitGate` 返回值形态）】
+  //   原断言要求本路径必须出现 `degrades`（`produce-field-widened`，源于**声明错位**）或 `escapes` 之一；
+  //   声明面（`flows.exec.produce_field`）已随 T-1/T-6 删净 ⇒ 该降级动作**无发射源**（`lib/**` 零写端）
+  //   ⇒ 真值反转：本路径**二者皆空**。断言强度不减：仍为**精确空集**判定（`deepEqual([])`），
+  //   且并列保留「精确拒码」锚（`GATE_EXIT_MISSING_EXEC`），不得读作「静默」——「零静默」的正面承载
+  //   仍由在册用例 R-01 / R-02 / R-08 / R-26 / R-27（standalone / idle-recovery / env 阀 / 命令声明）承担。
   const traces = A.degrades ?? null;
   const escapes = A.escapes ?? (A.escape ? [A.escape] : null);
-  assert.ok((Array.isArray(traces) && traces.length > 0) || (Array.isArray(escapes) && escapes.length > 0),
-    '原则②零静默：本路径的降级/逃生动作必须在返回值可观测（当前返回值无任何痕迹，'
-    + '既无 `degrades` 也无 `escapes`）——实测=' + JSON.stringify(A));
+  assert.equal(A.code, 'GATE_EXIT_MISSING_EXEC', '精确拒码（零静默：拒因可判读）；实测=' + JSON.stringify(A));
+  assert.deepEqual(traces ?? [], [], '声明面删净 ⇒ 本路径零降级动作（原 produce-field-widened 无发射源）；实测=' + JSON.stringify(A));
+  assert.deepEqual(escapes ?? [], [], '本路径零逃生阀动作（逃生阀仅在 standalone / idle / env 关闭档产生）；实测=' + JSON.stringify(A));
   if (Array.isArray(traces)) {
-    assert.ok(traces.some((x) => x && typeof x.kind === 'string'),
-      '`gate.degrade` 须带 kind 供 gateStrength 汇总：' + JSON.stringify(traces));
+    assert.deepEqual(traces, [], '`gate.degrade` 不得出现（声明驱动降级已退役）');
   }
   if (Array.isArray(escapes)) {
-    assert.ok(escapes.some((x) => x && typeof x.kind === 'string'),
-      '`gate.escape` 须带 kind 供 gateStrength 汇总：' + JSON.stringify(escapes));
+    assert.deepEqual(escapes, [], '`gate.escape` 不得出现（本路径无逃生阀）');
   }
 
   // legacy 回落语义**不成立**：不得出现 `fallback` / `fallbacks` 字段
@@ -1159,8 +1153,11 @@ test('T30 FG-14 tsconfig checkJs:false ⇒ 门禁运行时 .js 模块零类型�
   t.diagnostic('npm run check 覆盖面：.ts=' + tsFiles.length + ' 个（真检），.js=' + jsFiles.length + ' 个（纳入 program 但 checkJs:false ⇒ 零类型覆盖）');
 
   // ② 门禁运行时关键模块（.js 在跑、无 .ts 源）逐个列出
+  //   【2026-09-27 批 3 · T-15/D-6 归因】原第 3 项 `lib/assembly/team-asset.js` 已随 T-1/A-9 **整体删除**
+  //   （`fs.existsSync` 前置断言随之不成立）⇒ 清单 8 项收缩为 7 项；`uncovered.length === GATE_RUNTIME_JS.length`
+  //   的同值断言保留（强度不变：仍要求「清单内每一项都无 .ts 源」，非放宽为一个阈值）。
   const GATE_RUNTIME_JS = [
-    'lib/state/store.js', 'lib/assembly/flows.js', 'lib/assembly/team-asset.js',
+    'lib/state/store.js', 'lib/assembly/flows.js',
     'lib/state/command-exec.js', 'lib/state/constants.js', 'lib/state/task-utils.js',
     'lib/state/event-types.js', 'lib/state/machine.js',
   ];

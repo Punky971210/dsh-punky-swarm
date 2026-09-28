@@ -51,14 +51,15 @@ import { createTools } from '../lib/tools/register.js';
 import * as EVT from '../lib/state/event-types.js';
 import { compareBaseline, findRepoRoot, readBaseline, scanTree } from '../scripts/baseline-snapshot-core.mjs';
 import { SPEC_OK, assessC, seedArtifacts } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'`
+//   已删：唯一消费点（S9-1 / S9-2 两例的临时团队资产）随**团队资产声明面**整体退役而删除（见下方登记）。
 
 const SESS_ID = 'sess-s3b';
 const SESS = { agent: { session: { id: SESS_ID } } };
 const DANGLING_EVT = EVT.EVT_BATCH_ABORT_DANGLING ?? 'batch.abort_dangling';
-const OUTCOMES_EMPTY_EVT = EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY ?? 'gate.complete_outcomes_empty';
-const ROLE_INVALID_EVT = EVT.EVT_GATE_ROLE_INVALID ?? 'gate.role_invalid';
-const OUTCOMES_EMPTY_CODE = 'GATE_COMPLETE_OUTCOMES_EMPTY';
+// 【2026-09-27 批 3 · T-15/D-6 归因】原 `OUTCOMES_EMPTY_EVT` / `ROLE_INVALID_EVT` / `OUTCOMES_EMPTY_CODE`
+//   三常量已随 S9-1 / S9-2 两例删除（其全部读取点仅在那两例内）；团队资产声明驱动告警的事件 type 映射面
+//   已随 T-1/T-6 退役，不再有可核对象。
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 夹具：临时 store 根 + 真工具面（createTools）
@@ -206,42 +207,18 @@ test('S3b-3b 回归锁：running / paused 相位不落 batch.abort_dangling（�
 });
 
 
-test('S9-1：坏 verdict 团队资产建批 ⇒ 告警事件 type = gate.complete_outcomes_empty（**不是** gate.role_invalid）', async () => {
-  const { root, store, byName } = makeHarness('s9empty');
-  const teamsRoot = writeTempTeam('s3b-s9-bad-', 's9-bad-team', (a) => {
-    a.flows.audit.audit_contract.verdict = ['approve', 'reject']; // 唯一改动：词域换成产物层裁决词
-  });
-  const out = await makeBatch(byName, root, 'b-s9-empty', { team: 's9-bad-team', teamsRoot });
-  assert.equal(out.batchId, 'b-s9-empty', '告警不阻断建批（批次照建）');
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，两例同因）：原 test「S9-1：坏 verdict 团队资产建批 ⇒ 告警事件 type
+//    = gate.complete_outcomes_empty」＋「S9-2 反向锁：catch-all 面的告警码事件 type 仍为 gate.role_invalid」──
+//   面已消失 = ① **团队资产 `flows.audit.audit_contract.verdict` 声明面**（T-1：`lib/assembly/team-asset.js` 整体删除；
+//               T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」）⇒ 「坏 verdict 资产建批 ⇒ 告警 + 专用事件 type」
+//               与「catch-all 面 `GATE_AUDIT_CONTRACT_EXEMPT` ⇒ `gate.role_invalid`」两条链路**均无发射源**；
+//              ② 夹具 `writeTempTeam` 读包内 5 件真实骨架（T-4/A-9 已删）⇒ 调用即抛，两例整条不可达。
+//   ⇒ 两例的被检面（声明驱动告警的事件 type 映射）不存在；**不可等值反转**（反转成「零告警 / 零事件」即恒真空转，
+//      违纪律 15⑤：无命中构造即空转）。断言强度与覆盖不因此类删除而失真 —— 本文件 S3b 系列（`batch.abort_dangling`
+//      悬挂告警）**全部原样在册**，与事件 type 映射无关。
+//   随例删除的死代码：`OUTCOMES_EMPTY_EVT` / `ROLE_INVALID_EVT` / `OUTCOMES_EMPTY_CODE` 三个模块级常量
+//      （其**全部**读取点仅在这两例内，已核对）——一并删除，防「只为已删用例而存在」的残留。
 
-  const evs = (store.readBatch(SESS_ID, 'b-s9-empty').events ?? []).filter((e) => e && e.code === OUTCOMES_EMPTY_CODE);
-  assert.equal(evs.length, 1, '告警随建批落一条事件');
-  assert.equal(evs[0].type, OUTCOMES_EMPTY_EVT, '事件 type 须为专用常量；实测=' + evs[0].type);
-  assert.equal(evs[0].type === ROLE_INVALID_EVT, false, '不得再落成 catch-all 的 gate.role_invalid（GAP-S9 本体）');
-  assert.equal(evs[0].code, OUTCOMES_EMPTY_CODE, '载荷 code 逐字保留（字段形态零增删）');
-  assert.ok(Object.prototype.hasOwnProperty.call(evs[0], 'task'), '载荷既有字段形态保持（task 键仍在）');
-  assert.ok(Object.prototype.hasOwnProperty.call(evs[0], 'layer'), '载荷既有字段形态保持（layer 键仍在）');
-});
-
-test('S9-2 反向锁：catch-all 面的告警码事件 type **仍为** gate.role_invalid（证明未迁移既有码）', async () => {
-  const { root, store, byName } = makeHarness('s9catch');
-  const teamsRoot = writeTempTeam('s3b-s9-exempt-', 's9-exempt-team', (a) => {
-    a.flows.audit.audit_contract = {}; // 唯一改动：audit_contract 显式豁免（空声明）⇒ GATE_AUDIT_CONTRACT_EXEMPT
-  });
-  const out = await makeBatch(byName, root, 'b-s9-exempt', { team: 's9-exempt-team', teamsRoot });
-  assert.equal(out.batchId, 'b-s9-exempt', '豁免告警不阻断建批');
-  const codes = (out.warnings ?? []).map((w) => w.code);
-  assert.equal(codes.includes('GATE_AUDIT_CONTRACT_EXEMPT'), true, '夹具须命中透传面告警；实测 warnings=' + JSON.stringify(codes));
-
-  const evs = (store.readBatch(SESS_ID, 'b-s9-exempt').events ?? []).filter((e) => e && e.code === 'GATE_AUDIT_CONTRACT_EXEMPT');
-  assert.equal(evs.length, 1, '豁免告警落一条事件');
-  assert.equal(evs[0].type, ROLE_INVALID_EVT, '未命中映射的码**逐字保持现状** = gate.role_invalid（向后兼容锁）');
-  assert.equal(evs[0].type === OUTCOMES_EMPTY_EVT, false, '不得被新映射误伤');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// (6) 断言删除数为 0（与 `scripts/baseline-snapshot.mjs --check` 同源对账）
-// ═══════════════════════════════════════════════════════════════════════════════
 test('S3b-S9-C6：基线对账——断言零下降 / 恒真零新增，且本文件已登记（新增断言数 > 0）', () => {
   const ROOT = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
   const baseline = readBaseline(ROOT);

@@ -39,7 +39,10 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import * as EVT from '../lib/state/event-types.js';
 import { assessC } from './helpers/gate-fixture.mjs';
-import { writeTempTeam } from './helpers/team-fixture.mjs';
+// 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'`
+//   已删：该夹具读包内真实骨架 `presets/<team>/team-asset.{json,yml}`，5 件资产已删（T-4/A-9）⇒ 调用即抛；
+//   且 `teamsRoot` 参数本身已退役（D-3，`wave_plan.parameters` 删除）。A2 roster 读端命题与团队资产**无关**
+//   ⇒ 处置 = 去掉退役前置（不再造根、不再传 `teamsRoot`），**断言一字未动**。
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESS = { agent: { session: { id: 'sess-b2' } } };
@@ -69,9 +72,9 @@ const threeTier = () => [
   { id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/spec.md', 'exec/e1/o.md'], produce: ['audit/a.md'], deps: ['e1'], cmd: 'accept' },
 ];
 
-async function buildBatch(byName, batchId, teamsRoot) {
+async function buildBatch(byName, batchId) {
   return await byName.wave_plan.execute({
-    batchId, team: 'probe-team', teamsRoot, tasks: threeTier(), assembly: { auditLane: 'a1' },
+    batchId, team: 'probe-team', tasks: threeTier(), assembly: { auditLane: 'a1' },
   }, SESS);
 }
 
@@ -79,8 +82,7 @@ const rosterService = (names) => ({ listMembers: () => names.map((n, i) => ({ id
 
 test('T1 A2：roster 命中约定名 manager ⇒ inRoster:true 且不落 gap 事件', async () => {
   const { store, byName } = makeHarness('punky-b2-t1-', rosterService(['lead', 'manager']));
-  const teamsRoot = writeTempTeam('punky-b2-t1-team-', 'probe-team');
-  const out = await buildBatch(byName, 'b2-ok', teamsRoot);
+  const out = await buildBatch(byName, 'b2-ok');
   assert.equal(out.managerPlan, 'raise', 'assembly.managerPlan 缺省 raise 随返回值回显');
   assert.equal(out.managerRoster.ok, true);
   assert.equal(out.managerRoster.source, 'roster');
@@ -93,8 +95,7 @@ test('T1 A2：roster 命中约定名 manager ⇒ inRoster:true 且不落 gap 事
 
 test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.manager_roster_gap（可核事实，非拒态）', async () => {
   const { store, byName } = makeHarness('punky-b2-t2-', rosterService(['lead', 'worker']));
-  const teamsRoot = writeTempTeam('punky-b2-t2-team-', 'probe-team');
-  const out = await buildBatch(byName, 'b2-gap', teamsRoot);
+  const out = await buildBatch(byName, 'b2-gap');
   assert.equal(out.managerRoster.ok, true);
   assert.equal(out.managerRoster.inRoster, false, '无约定名 manager');
   assert.equal(out.managerRoster.member, null);
@@ -108,16 +109,14 @@ test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.ma
 test('T2b A2 降级：service 不可用 ⇒ service-unavailable（基线态，不落事件）；调用抛错 ⇒ not-a-team-member（异常态，不落事件）', async () => {
   // ① ctx 无 get（非官方宿主 / 单测 mock）：基线态 —— 回显承担可读性，不落批次事件
   const noSvc = makeHarness('punky-b2-t2b1-', undefined);
-  const tr1 = writeTempTeam('punky-b2-t2b1-team-', 'probe-team');
-  const o1 = await buildBatch(noSvc.byName, 'b2-nosvc', tr1);
+  const o1 = await buildBatch(noSvc.byName, 'b2-nosvc');
   assert.equal(o1.managerRoster.ok, false);
   assert.equal(o1.managerRoster.reason, 'service-unavailable');
   assert.equal(noSvc.store.readBatch(SID, 'b2-nosvc').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP).length, 0);
   // ② service 在册但调用抛错（调用方非 Team 成员）：异常态 —— 回显 reason，同样不落批次事件
   const throwing = { listMembers: () => { throw new Error('not a team member'); } };
   const thr = makeHarness('punky-b2-t2b2-', throwing);
-  const tr2 = writeTempTeam('punky-b2-t2b2-team-', 'probe-team');
-  const o2 = await buildBatch(thr.byName, 'b2-throw', tr2);
+  const o2 = await buildBatch(thr.byName, 'b2-throw');
   assert.equal(o2.managerRoster.ok, false);
   assert.match(o2.managerRoster.reason, /^not-a-team-member:/);
   assert.equal(thr.store.readBatch(SID, 'b2-throw').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP).length, 0);

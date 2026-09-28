@@ -166,32 +166,11 @@ test('entry 门禁：无声明 → 仍强制 consume（零依赖拒派，不再�
   } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
 
-test('entry 门禁：声明 entry_requires:["consume"] → 才强制非空（显式翻牌）', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    writeTeamFlow(pkg, 'strict-team', {
-      plan: { produce_field: 'produce', entry_requires: [] },
-      exec: { produce_field: 'outputs', entry_requires: ['consume'] },
-      audit: { produce_field: 'produce', entry_requires: [] },
-      // 【E-4 fixture 清理】原含 `complete: { require_audit_outcomes: ['pass'] }`（legacy 废键）——
-      //   清退后引擎不读该键且与本用例被检面（entry 门）无关，删除属零行为差的废键清理。
-    });
-    const g = createGates(state, { flowsRoot: pkg });
-    const b = batchOf('strict-team', [{ id: 'e1', layer: 'exec' }]);
-    const r = g.checkEntryGate(SESS, 'b1', b, 'e1');
-    assert.equal(r.ok, false, '声明强制 → 空 consume 拒派');
-    assert.equal(r.code, 'GATE_ENTRY_MISSING');
-    assert.equal(r.requiredBy, 'team-asset:entry_requires');
-    // 【E-5 换锚】原两行断言 `enforcesConsumeEntry({entry_requires:[...]}) === true/false` 随死函数删除，
-    //   等价换锚到唯一读端 entryRequiresOf（enforced 布尔承载同一判定语义，source 如实标注）：
-    assert.deepEqual(entryRequiresOf({ entry_requires: ['consume'] }),
-      { enforced: true, declared: true, values: ['consume'], source: 'team-asset:entry_requires' });
-    assert.deepEqual(entryRequiresOf({ entry_requires: [] }),
-      { enforced: false, declared: true, values: [], source: 'team-asset:entry_requires' });
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
-
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「entry 门禁：声明 entry_requires:["consume"] → 才强制非空（显式翻牌）」──
+//   面已消失 = **团队资产的 `flows.<layer>.entry_requires` 声明面**（T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返回「无声明」；
+//   `lib/assembly/team-asset.js` 本体亦已删除，T-1/A-9）⇒ 该用例的**被检面**（按声明翻牌）不存在。
+//   仍存在的等价真值（「consume 强制不依赖团队声明」）由本文件 `:140` 的「entry 门禁：无声明 → 仍强制 consume」
+//   与 `:111` 的 R-06 复活用例承担 ⇒ 覆盖不丢，未以删除断言换绿。
 test('plan 契约：无声明 → 引擎基线两标题口径（缺 → GATE_PLAN_CONTRACT）', () => {
   const { pkg, state } = mkRoots();
   try {
@@ -225,30 +204,10 @@ test('plan 契约：punky-preset 团队装配退役（无资产 → 引擎基线
   } finally { rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
 
-test('plan 契约：自定义章节声明（非工程团队）→ 按声明判定', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    writeTeamFlow(pkg, 'writing-team', {
-      plan: { produce_field: 'produce', entry_requires: [], contract: { artifact_globs: ['plan/*outline*.md'], required_sections: ['## 取材范围', '## 修订基线'] } },
-      exec: { produce_field: 'outputs' },
-      audit: { produce_field: 'produce' },
-      // 【E-4 fixture 清理】原含 `complete: { require_audit_outcomes: ['pass'] }`（legacy 废键）——删除，理由同 strict-team。
-    });
-    const g = createGates(state, { flowsRoot: pkg });
-    const tasks = [{ id: 'p1', layer: 'plan', produce: ['plan/article-outline.md', 'plan/spec.md'] }];
-    const b = batchOf('writing-team', tasks);
-    // 命中 glob 的文件缺自定义章节 → 拒；未命中 glob 的 spec.md 在本声明下不查章节（但 plan 产物存在性仍查）
-    writeArtifact(state, 'b1', 'plan/article-outline.md', '# 大纲\n');
-    writeArtifact(state, 'b1', 'plan/spec.md', '# 软工 spec（不命中 glob，不查章节）\n');
-    const r1 = g.checkExitGate(SESS, 'b1', b, 'p1');
-    assert.equal(r1.ok, false);
-    assert.ok(r1.problems.some((p) => p.includes('## 取材范围')), JSON.stringify(r1.problems));
-    // 补齐自定义章节 → 过
-    writeArtifact(state, 'b1', 'plan/article-outline.md', '# 大纲\n## 取材范围\n## 修订基线\n');
-    assert.equal(g.checkExitGate(SESS, 'b1', b, 'p1').ok, true);
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「plan 契约：自定义章节声明（非工程团队）→ 按声明判定」──
+//   面已消失 = **`flows.plan.contract.required_sections` / `artifact_globs` 声明面**（T-6 读端删除 + T-1 本体删除）。
+//   仍存在的等价真值 = 引擎基线章节集（`ENGINE_BASELINE_PLAN_SECTIONS` 六裸标题），由本文件「plan 契约：无声明」两例
+//   与「punky-preset 团队装配退役」例承担 ⇒ 覆盖不丢。
 
 test('exit 门禁：产物字段可声明（audit 用 outputs）→ 声明生效；缺省 null（信息性，E-3 清退后不再虚构字段名）', () => {
   const { pkg, state } = mkRoots();
@@ -320,81 +279,13 @@ test('matchGlob：* 不跨 /，** 跨目录', () => {
   assert.equal(matchGlob('plan/spec.md', 'plan/spec.md.bak'), false);
 });
 
-test('命令 gate：声明 gate_command:false → 跳过（失败命令也不拒）；缺声明 → 引擎基线执行并拒', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    const flows = {
-      plan: { produce_field: 'produce' },
-      exec: { produce_field: 'outputs', gate_command: false },
-      audit: { produce_field: 'produce' },
-      // 【E-4 fixture 清理】原含 `complete: { require_audit_outcomes: ['pass','skip'] }`（legacy 废键）——删除（零行为差）。
-    };
-    writeTeamFlow(pkg, 'nocmd-team', flows);
-    const tasks = [{ id: 'e1', layer: 'exec', outputs: ['exec/o.md'] }];
-    const b = batchOf('nocmd-team', tasks);
-    writeArtifact(state, 'b1', 'exec/o.md', 'body\ngate: node -e "process.exit(3)"\n');
-    const g = createGates(state, { flowsRoot: pkg });
-    const r = g.checkCommandGate(SESS, 'b1', b, 'e1', { runCommand: () => ({ ok: false, exitCode: 3, durationMs: 1 }) });
-    assert.equal(r.ok, true, '声明关闭 → 不执行命令 gate');
-    assert.equal(r.declared, false);
-    assert.equal(r.disabledBy, 'team-asset:gate_command');
-    // 对照：引擎基线（无声明团队）同输入 → 命中失败命令 → 拒
-    const b2 = batchOf('no-asset-team', tasks);
-    const r2 = createGates(state, { flowsRoot: pkg }).checkCommandGate(SESS, 'b1', b2, 'e1', { runCommand: () => ({ ok: false, exitCode: 3, durationMs: 1 }) });
-    assert.equal(r2.ok, false);
-    assert.equal(r2.code, 'GATE_EXIT_NONZERO');
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
-
-test('targets 门禁：声明 targets:false → 跳过；缺声明 → 引擎基线判未变更拒 merged', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    const target = writeArtifact(state, 'b1', 'exec/target.txt', 'x'); // mtime = 现在，但 lane 启动基准晚于它
-    writeTeamFlow(pkg, 'notarget-team', {
-      plan: { produce_field: 'produce' },
-      exec: { produce_field: 'outputs', targets: false },
-      audit: { produce_field: 'produce' },
-      // 【E-4 fixture 清理】原含 `complete: { require_audit_outcomes: ['pass','skip'] }`（legacy 废键）——删除（零行为差）。
-    });
-    const tasks = [{ id: 'e1', layer: 'exec', outputs: ['exec/o.md'], targets: [target] }];
-    const b = batchOf('notarget-team', tasks);
-    // lane 启动时间设为未来 → 文件 mtime 必然早于基准 → 引擎基线判 unchanged
-    b.events.push({ ts: new Date(Date.now() + 3600_000).toISOString(), type: 'member.settled', lane: 'e1', to: 'running' });
-    const g = createGates(state, { flowsRoot: pkg });
-    const r = g.checkTargetsGate(SESS, 'b1', b, 'e1');
-    assert.equal(r.ok, true, '声明关闭 → 不做变更性判定');
-    assert.equal(r.disabledBy, 'team-asset:targets');
-    const b2 = batchOf('no-asset-team', tasks);
-    b2.events.push({ ts: new Date(Date.now() + 3600_000).toISOString(), type: 'member.settled', lane: 'e1', to: 'running' });
-    const r2 = createGates(state, { flowsRoot: pkg }).checkTargetsGate(SESS, 'b1', b2, 'e1');
-    assert.equal(r2.ok, false);
-    assert.equal(r2.code, 'GATE_TARGET_UNCHANGED');
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
-
-test('needHuman 门禁：声明 needhuman:false → 跳过；缺声明 → 引擎基线拒（缺 human 证据）', () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    writeTeamFlow(pkg, 'nohuman-team', {
-      plan: { produce_field: 'produce' },
-      exec: { produce_field: 'outputs' },
-      audit: { produce_field: 'produce', needhuman: false },
-      // 【E-4 fixture 清理】原含 `complete: { require_audit_outcomes: ['pass','skip'] }`（legacy 废键）——删除（零行为差）。
-    });
-    const tasks = [{ id: 'a1', layer: 'audit', produce: ['audit/r.md'] }];
-    writeArtifact(state, 'b1', 'audit/r.md', 'needHuman: true\n');
-    const g = createGates(state, { flowsRoot: pkg });
-    const r = g.checkNeedHumanGate(SESS, 'b1', batchOf('nohuman-team', tasks), 'a1', null);
-    assert.equal(r.ok, true, '声明关闭 → 不需要 human 证据');
-    assert.equal(r.disabledBy, 'team-asset:needhuman');
-    const r2 = createGates(state, { flowsRoot: pkg }).checkNeedHumanGate(SESS, 'b1', batchOf('no-asset-team', tasks), 'a1', null);
-    assert.equal(r2.ok, false);
-    assert.equal(r2.code, 'GATE_NEEDHUMAN_PENDING');
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因，三例同因）：原 test「命令 gate：声明 gate_command:false → 跳过」
+//    / 「targets 门禁：声明 targets:false → 跳过」/ 「needHuman 门禁：声明 needhuman:false → 跳过」──
+//   面已消失 = **`flows.<layer>.gate_command` / `targets` / `needhuman` 三处「声明关闭档」**（T-6 读端删除 + T-1 本体删除）
+//    ⇒ 三例的**被检面**（按声明跳过）不存在；其对照臂（「缺声明 → 引擎基线执行并拒」）仍存在的等价真值由
+//    `gate-hardening-red` 的引擎基线用例（`GATE_EXIT_NONZERO` / `GATE_TARGET_UNCHANGED` / `GATE_NEEDHUMAN_PENDING`）
+//    与 `gate-techdebt-red` 的 R-26/R-27（env 阀、命令声明）承担 ⇒ 引擎基线侧拒态覆盖不丢。
+//    未以删除断言换绿：三例原断言方向为「声明关闭 ⇒ 放行」，属**面已消失**、不可等值反转（反转即断言恒真空转）。
 
 test('R1-g：software-team 声明翻牌后 consume 强制化 + standalone 显式逃生（缺口修复锚）', () => {
   const { state } = mkRoots();
@@ -440,7 +331,11 @@ test('R1-g：software-team 声明翻牌后 consume 强制化 + standalone 显式
     const flows = resolveTeamFlows('punky-preset', { root: packageRoot() });
     assert.equal(flows.ok, false, 'punky-preset 无资产 ⇒ 读端如实 ok:false（无声明，非加载出声明）');
     assert.equal(flows.flows, null);
-    assert.ok(flows.problems.some((p) => p.startsWith('TEAM_ASSET_NOT_FOUND')), '拒载原因可归因：' + JSON.stringify(flows.problems));
+    assert.deepEqual(flows.problems, [],
+      '【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`resolveTeamFlows` 读端）】'
+      + '原断言 `problems.some(p => p.startsWith("TEAM_ASSET_NOT_FOUND"))`（拒载原因可归因）；'
+      + 'T-1/T-6 后读端零资产 I/O ⇒ 恒返「无声明」且 **problems 为空**（精确空集，非放宽）⇒ 真值反转。'
+      + '实测=' + JSON.stringify(flows.problems));
     const b6 = batchOf('punky-preset', [{ id: 'e9', layer: 'exec', outputs: ['exec/o.md'] }]);
     const r6 = g.checkEntryGate(SESS, 'b1', b6, 'e9');
     assert.equal(r6.ok, false, '退役团队同样拒派：缺声明即拒（引擎基线收紧侧，非 legacy 免检）');
@@ -484,7 +379,7 @@ test('R1-g：targets 零改动声明位 —— noChange 跳过变更性判定但
   } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
 
-test('complete 判据唯一真源：verdict 声明收窄可拒 skipped；缺声明 ⇒ 引擎基线白名单（skipped 放行）', () => {
+test('complete 判据（2026-09-27 批 3 反转）：无声明 ⇒ 引擎基线白名单 {pass,skip}（skipped 放行 / fail 恒拒）', () => {
   const { pkg, state } = mkRoots();
   try {
     clearFlowCache();
@@ -492,79 +387,36 @@ test('complete 判据唯一真源：verdict 声明收窄可拒 skipped；缺声�
       { id: 'e1', layer: 'exec', outputs: ['exec/o.md'] },
       { id: 'a1', layer: 'audit', produce: ['audit/r.md'] },
     ];
-    const mk = (team) => {
+    const mk = (team, auditState) => {
       const b = batchOf(team, tasks);
-      b.lanes = { e1: 'merged', a1: 'skipped' };
+      b.lanes = { e1: 'merged', a1: auditState };
       return b;
     };
-    // 缺声明（no-asset-team）→ 引擎基线白名单 {pass,skip}：skipped 属终态且非 failed/conflict → 通过
-    const legacy = createGates(state, { flowsRoot: pkg }).checkCompleteGate(mk('no-asset-team'));
-    assert.equal(legacy.ok, true, '引擎基线白名单：skipped 审计 lane 放行');
-    // 【E-4 换真源锚点】原 fixture 声明 `complete: { require_audit_outcomes: ['pass'] }`（legacy 键）——
-    //   清退后引擎不再读该键 ⇒ 改锚唯一真源 `audit.audit_contract.verdict: ['pass']`；下方拒断言
-    //   （GATE_COMPLETE_AUDIT_FAILED / requiredOutcomes ['pass'] / offenders）**原样保留** = 断言语义零放水。
-    writeTeamFlow(pkg, 'strict-complete', {
-      plan: { produce_field: 'produce' },
-      exec: { produce_field: 'outputs' },
-      audit: { produce_field: 'produce', audit_contract: { verdict: ['pass'] } },
-    });
-    const strict = createGates(state, { flowsRoot: pkg }).checkCompleteGate(mk('strict-complete'));
-    assert.equal(strict.ok, false);
-    assert.equal(strict.code, 'GATE_COMPLETE_AUDIT_FAILED');
-    assert.deepEqual(strict.requiredOutcomes, ['pass']);
-    assert.deepEqual(strict.offenders, [{ lane: 'a1', state: 'skipped' }]);
-    // source 两态（E-4 后 legacy 第三态消失）：声明 verdict ⇒ verdict 真源串
-    assert.equal(strict.completeOutcomes.source, 'flows.audit.audit_contract.verdict ∩ {pass,skip}',
-      'E-4：source 只剩 verdict / engine:Q-7-baseline 两态');
-    // 包内 punky-preset 团队装配退役（无声明）→ complete 读端走引擎基线白名单（skipped 放行），退役面不崩
-    const jf = createGates(state, { flowsRoot: packageRoot() }).checkCompleteGate(mk('punky-preset'));
+    // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：complete 门禁本体）】
+    //   原用例被检面 = 「团队资产 `audit_contract.verdict` 声明为唯一真源」⇒ 该声明面已随 T-1/T-6 删净
+    //   （`lib/assembly/team-asset.js` 删除 + `resolveTeamFlows` 恒返无声明）⇒ 该臂删除；
+    //   **存活臂 = 引擎基线白名单**（面仍在）**等值保留并加固**：放行侧（skipped）+ 拒侧（failed）双构造，
+    //   断言数由 7 条保持为 7 条（不得以删除断言换绿）。
+    const noAsset = createGates(state, { flowsRoot: pkg }).checkCompleteGate(mk('no-asset-team', 'skipped'));
+    assert.equal(noAsset.ok, true, '引擎基线白名单：skipped 审计 lane 放行');
+    const jf = createGates(state, { flowsRoot: packageRoot() }).checkCompleteGate(mk('punky-preset', 'skipped'));
     assert.equal(jf.ok, true, 'punky-preset 退役 ⇒ 无声明 ⇒ 引擎基线白名单 {pass,skip} ⇒ skipped 放行');
+    const failed = createGates(state, { flowsRoot: pkg }).checkCompleteGate(mk('no-asset-team', 'failed'));
+    assert.equal(failed.ok, false, '引擎基线白名单下 fail 恒拒（拒侧面不变）');
+    assert.equal(failed.code, 'GATE_COMPLETE_AUDIT_FAILED', '缺声明 ⇒ values 非空 ⇒ 走原分支、原码');
+    assert.deepEqual(failed.requiredOutcomes, ['pass', 'skip'], '引擎基线白名单可核（非空集）');
+    assert.deepEqual(failed.narrowedOutcomes, [], '缺声明 ⇒ narrowed 为空（零收窄）');
+    assert.equal(failed.completeOutcomes.source, 'engine:Q-7-baseline ∩ {pass,skip}',
+      'source 真源标注：声明面删净后仅剩引擎基线一态（原 verdict 真源态已随 T-1/T-6 退役）');
   } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
 });
 
-// 【legacy-retire-20260915 · 正向清退断言（E-4）＋ F-4 拒载翻牌（2026-09-15 用户裁决 Q-D=A）】
-//   E-4 口径：声明已废键 `flows.complete.require_audit_outcomes` 不再产生任何门禁效果（引擎不读该键）。
-//   F-4 口径（**本用例现锚**）：该键所属的 `complete` 层已退出 `FLOW_SECTIONS` ⇒ 声明它 ⇒ 资产**整份拒载**
-//     （`TEAM_ASSET_LAYER_UNKNOWN`，blocking；无豁免、无降级、不降告警）⇒ 读端 `flows===null` ⇒ complete
-//     白名单回落**引擎基线** `{pass,skip}` ⇒ skipped 放行。
-//   **语义变更如实标注**：下方 `r.ok===true` 数值不变，但语义已从「引擎忽略废键」变为「资产拒载 ⇒ 回落引擎基线」
-//     —— 不得把它当作「废键被忽略」的假证据；历史面（E-4 正向清退）已由 `:531` 的**断言反转**升级为更严的拒载形态。
-//   断言纪律：既有断言零删除、零弱化（规格约束 3 允许的形态 (b) 断言增强 + (c) 断言反转）。
-//   原断言文本（E-4 形态，逐字留档，便于审计对账「哪些是反转、哪些是换 message、有无删除」）：
-//     · `assert.equal(r.ok, true, '已废键不产生门禁效果：白名单仍 {pass,skip} ⇒ skipped 放行（AC-3）');`
-//       ⇒ **表达式保留**（`r.ok === true` 仍为事实），仅 message 按新语义改写（旧 message 在新语义下是假话）。
-//     · `assert.equal(lr.ok, true, 'complete 段保持合法声明位（方案 B），废键不拒载');`
-//       ⇒ **断言反转**为 `assert.equal(lr.ok, false, …)` + 新增码/严重级/文案三重锚（见下方行内注释）。
-//     · 删除的**非断言**行仅 1 条：`complete: { require_audit_outcomes: ['pass'] }, // 已废键：显式声明以证明引擎不读`
-//       ⇒ 该键**保留**（本用例已升级为拒载锚的夹具），只改其尾注；与 `:531` 反转配套。
-test('F-4 + K-2 锚：声明 flows.complete ⇒ LAYER_UNKNOWN **warning 级**（不拒载）⇒ 读端回落引擎基线 ⇒ skipped 放行', async () => {
-  const { pkg, state } = mkRoots();
-  try {
-    clearFlowCache();
-    const tasks = [
-      { id: 'e1', layer: 'exec', outputs: ['exec/o.md'] },
-      { id: 'a1', layer: 'audit', produce: ['audit/r.md'] },
-    ];
-    const b = batchOf('legacy-key-team', tasks);
-    b.lanes = { e1: 'merged', a1: 'skipped' };
-    writeTeamFlow(pkg, 'legacy-key-team', {
-      plan: { produce_field: 'produce' },
-      exec: { produce_field: 'outputs' },
-      audit: { produce_field: 'produce' },
-      complete: { require_audit_outcomes: ['pass'] }, // F-4：该层已退出 FLOW_SECTIONS ⇒ 命中未知层（K-2 后 warning）
-    });
-    const r = createGates(state, { flowsRoot: pkg }).checkCompleteGate(b);
-    assert.equal(r.ok, true, 'K-2 语义：未知层为 warning ⇒ 资产**可用**、读端回落引擎基线 {pass,skip} ⇒ skipped 放行');
-    // 【K-2 翻牌（2026-09-18 用户裁决）】原断言为「声明 flows.complete ⇒ 拒载（blocking）」；
-    //   K-2 后 `LAYER_UNKNOWN` 退出 BLOCKING_CODES ⇒ 不拒载、改 **warning 留痕**。断言强度不减：
-    //   由单条 `ok:false` 改为「**码面 + 严重级 + 文案 + 层被跳过**」四重锚（不得以删除断言了事）。
-    const { loadTeamAsset } = await import('../lib/assembly/team-asset.js');
-    const lr = loadTeamAsset(pkg, 'legacy-key-team');
-    assert.equal(lr.ok, true, 'K-2：未知层 warning ⇒ 不拒载（资产可用）');
-    assert.ok(lr.problems.map((p) => p.code).includes('TEAM_ASSET_LAYER_UNKNOWN'), 'K-2：码面保留（留痕可读）');
-    const lp = lr.problems.find((p) => p.path === 'flows.complete');
-    assert.equal(lp.code, 'TEAM_ASSET_LAYER_UNKNOWN');
-    assert.equal(lp.severity, 'warning', 'K-2：warning 级（非 blocking）');
-    assert.ok(lp.message.includes('允许：plan/exec/audit'), lp.message);
-  } finally { rmSync(pkg, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); clearFlowCache(); }
-});
+// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「F-4 + K-2 锚：声明 flows.complete ⇒ LAYER_UNKNOWN warning 级
+//    ⇒ 读端回落引擎基线 ⇒ skipped 放行」＋ 其上方 15 行 legacy-retire 沿革注释块 ──
+//   面已消失 = ① 团队资产 `flows.complete` **声明面**（T-1：装载器与码族整体删除；本批 `lib/**` 对该键零读端）；
+//             ② 该用例直接 `await import('../lib/assembly/team-asset.js')` 并断言 `lr.problems[].code/severity/message`
+//                —— **本体已删除**（A-5/A-6/A-9 实测 0 命中）⇒ ESM 缺符号、用例整条不可达；
+//             ③ `TEAM_ASSET_LAYER_UNKNOWN` 已入退役锁（`RETIRED_CODES` 30 项，A-10）。
+//   ⇒ 「K-2 未知层 warning 级」四重锚（码面 / 严重级 / 文案 / 层被跳过）的被检**载体**不存在，
+//     按 D-6「面已消失者随删 + 归因」删除；其**存活语义**（未知层不再拒载 ⇒ 读端回落引擎基线 ⇒ skipped 放行）
+//     由上方重写后的 complete 用例（`jf.ok === true` 臂）等值承担 ⇒ 覆盖不丢。

@@ -69,9 +69,14 @@ test('R-4【退役锁】重放动作边界已消失：空壳入口零派发、�
   assert.equal(typeof replayMod.pendingAdvancesOf, 'undefined', '[退役锁] 判据面已删 ⇒ 不存在「逐 lane 重放」通路');
 });
 
-test('R-5【退役锁】重放不新增事件类型：既有 `chain.step` 常量冻结保留，但**写点已删**', async () => {
+test('R-5【退役锁】重放不新增事件类型：原 `chain.step` 常量已**删净**（D-4），写点亦已删', async () => {
   const evt = await import('../lib/state/event-types.js');
-  assert.equal(evt.EVT_CHAIN_STEP, 'chain.step', '[退役锁] 事件常量冻结保留（历史批磁盘事件面读端不变）');
+  // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`event-types.js` 导出面）】原断言为
+  //   `evt.EVT_CHAIN_STEP === 'chain.step'`（「常量冻结保留」）；Leader 裁决 **D-4 = 删净**
+  //   （`event-types.js:258` 整条删除，A-8）⇒ 真值反转为「该常量**不再导出**」。
+  //   断言强度不减：仍为**精确等值**（`undefined`）+ 负向锁（不得以同名回生）。
+  assert.equal(evt.EVT_CHAIN_STEP, undefined, '[退役锁] 事件常量已随 D-4 删净（原「冻结保留」口径作废）');
+  assert.equal(Object.hasOwn(evt, 'EVT_CHAIN_STEP'), false, '[退役锁] 导出面零残留（不得以同名回生）');
   assert.equal(typeof replayBatch, 'function', '[退役锁] 入口保留（写域外调用点的加载期兼容）');
   const out = await replayBatch({}, {}, { sessionId: 's', batchId: 'b' });
   assert.equal(out.ok, true, '[退役锁] 空壳恒 ok（零新事件类型引入）');

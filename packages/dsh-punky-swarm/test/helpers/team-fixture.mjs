@@ -32,65 +32,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     扫描全 `test/**`，白名单外的直接写入 ⇒ 红）；
 //   · **合成资产必须走 `writeSyntheticTeam`**（名字自带「这是自造的」语义，人工一眼可辨，禁与真实资产混淆）。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { packageRootOf } from './skill-paths.mjs';
 
-/** 包内真实资产的**默认骨架来源团队**（唯一有全量 flows/chain 声明的团队资产）。 */
-export const SKELETON_TEAM = 'software-team';
+// 【2026-09-27 批 3 · T-15/D-6 归因：**真实骨架三 API 已整体删除**】
+//   删除项：`SKELETON_TEAM` / `REAL_FILENAME` / `readRealTeamAsset()` / `writeTempTeam()` / `writeRealTeam()`。
+//   理由 = 其**唯一数据源**（`presets/<team>/team-asset.{json,yml}`，5 件）已随 **T-4/A-9** 整体删除（不留空壳 D-2），
+//   且 `lib/assembly/team-asset.js` 装载器本体亦删除（**T-1**）⇒ 保留它们只会成为「读已删路径即抛」的调用地雷，
+//   属**本批改动产生的孤儿面**（纪律：删除因本次改动而失效的代码）。
+//   **存活面**（合成夹具，零真实资产依赖）：`writeSyntheticTeam()` / `SYNTHETIC_FILENAME` / `threeTierSyntheticTeam()`
+//   —— 这三者不读包内资产，是本批后仍成立的夹具契约（`test/fixture-team-ledger.test.js` F2-5 / F2-6 在册）。
 
-/** 团队资产文件名（读端与 `lib/assembly/team-asset.js` 的 `TEAM_ASSET_FILENAMES` 同源）。 */
-const REAL_FILENAME = 'team-asset.yml';
+/** 团队资产文件名（合成夹具用；`team-asset.json` 与已删读端同名，保持形态可读）。 */
 const SYNTHETIC_FILENAME = 'team-asset.json';
-
-/**
- * 读包内真实团队资产（**只读**，不改仓库；不存在 ⇒ 抛错，不静默回退）。
- * @param {string} team 团队名
- * @param {string} root 包根（缺省 = 本包）
- * @returns {{ path: string, asset: object }}
- */
-export function readRealTeamAsset(team = SKELETON_TEAM, root = packageRootOf()) {
-  for (const f of ['team-asset.json', 'team-asset.yml']) {
-    const p = path.join(root, 'presets', team, f);
-    if (fs.existsSync(p)) return { path: p, asset: JSON.parse(fs.readFileSync(p, 'utf8')) };
-  }
-  throw new Error('真实团队资产不存在：presets/' + team + '/team-asset.{json,yml} @ ' + root);
-}
-
-/**
- * **① 真实骨架夹具**：以包内真实资产为骨架，写入**自建 %TEMP% 根**的 `presets/<team>/team-asset.yml`。
- * 仓库内资产**只读**（绝不改动）⇒ 同一份骨架可被任意用例 mutate 而不互相干扰。
- *
- * @param {string} prefix `mkdtemp` 前缀（便于失败时定位是哪个用例留下的目录）
- * @param {string} team 目标团队名（决定目录名）
- * @param {(asset: object) => void} mutate 就地改骨架（缺省不改 = 纯拷贝）
- * @param {{ srcTeam?: string, setTeam?: boolean }} [opts]
- *   `srcTeam` 骨架来源（缺省 `software-team`）；`setTeam` 是否把 `asset.team` 同步为目标团队名
- *   —— 缺省 **false**（保留源 `team` 字段）：读端**不校验** `asset.team` 与目录名一致
- *   （`lib/assembly/team-asset.js` 只要求它非空字符串）⇒ 保留缺省以免改变既有夹具语义；
- *   新用例若希望声明面自洽，显式传 `true`（或自行在 `mutate` 里赋值）。
- * @returns {string} 自建根（供 `teamsRoot` / `root` 使用）
- */
-export function writeTempTeam(prefix, team, mutate = () => {}, { srcTeam = SKELETON_TEAM, setTeam = false } = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  writeRealTeam(root, team, mutate, { srcTeam, setTeam });
-  return root;
-}
-
-/**
- * **①' 真实骨架夹具（写入调用方给定的根）**：同上，但不新建 `%TEMP%` 目录。
- * 用于「根已在别处建好」的场景（例如拷好的 pkg 副本、或用例自管的 `teamsRoot`）。
- * @returns {object} 写入后的资产对象
- */
-export function writeRealTeam(root, team, mutate = () => {}, { srcTeam = SKELETON_TEAM, setTeam = false } = {}) {
-  const asset = readRealTeamAsset(srcTeam).asset;
-  if (setTeam) asset.team = team;
-  mutate(asset);
-  const dir = path.join(root, 'presets', team);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, REAL_FILENAME), JSON.stringify(asset, null, 2), 'utf8');
-  return asset;
-}
 
 /**
  * **② 合成资产夹具**：把调用方**自写**的资产对象写到 `root/presets/<team>/team-asset.json`。
