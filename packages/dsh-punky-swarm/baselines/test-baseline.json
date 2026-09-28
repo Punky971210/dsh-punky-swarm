@@ -321,11 +321,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 85,
-      "blankLines": 24,
-      "lines": 344,
+      "asserts": 93,
+      "blankLines": 27,
+      "lines": 396,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 20,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -371,7 +371,7 @@
     "test/gate-event-const-e2e-r34.test.js": {
       "asserts": 40,
       "blankLines": 19,
-      "lines": 186,
+      "lines": 189,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -795,7 +795,7 @@
     "test/panel-render.test.js": {
       "asserts": 104,
       "blankLines": 50,
-      "lines": 458,
+      "lines": 462,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -875,7 +875,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 8,
-      "lines": 101,
+      "lines": 107,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1169,7 +1169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-28T04:42:25Z",
+  "generatedAt": "2026-09-28T06:14:23Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1180,15 +1180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "retire-team-chain-20260927：测试面随本体退役（D-6 删除/等值反转）",
+  "reason": "cleanup-tail-20260927：清理面词法变化（engine-dispatch 用例 +3，其余为注释/拼装）",
   "schema": 1,
   "totals": {
-    "asserts": 7421,
-    "blankLines": 3726,
+    "asserts": 7429,
+    "blankLines": 3729,
     "files": 146,
-    "lines": 40218,
+    "lines": 40283,
     "tautologies": 0,
-    "tests": 1560,
+    "tests": 1563,
     "todos": 4
   }
 }

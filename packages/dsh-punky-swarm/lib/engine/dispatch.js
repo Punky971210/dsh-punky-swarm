@@ -78,6 +78,9 @@ export function labelOf(batchId, lane) {
  */
 export function composeWorkerPrompt({
   batchId, lane, cmd, layer, role, consume = [], produce = [], outputs = [], firstLine, leaderPrompt = '', artifactsRoot,
+  // 【2026-09-27 · GR-13】「单件写盘 lane」显式声明位（缺省 `false` ⇒ 既有任务包逐字不变）。
+  //   直调调用方可显式置 `true`；派发路径的**自动判定**见函数内 `singleArtifactWriteLane`。
+  singleArtifactWrite = false,
 }) {
   const L = [];
   L.push(firstLine); // 首行：句柄标记（唯一凭证；引擎只读 exec.arguments，不注入参数）
@@ -91,21 +94,47 @@ export function composeWorkerPrompt({
   if (artifactsRoot) L.push('- **批次产物根**：`' + artifactsRoot + '`（产物落此处，勿落工作区根）');
   L.push('');
   L.push('## 纪律');
-  L.push('1. 写盘只用 `edit`/`write`；临时件用 `node -e` 的 `fs`；UTF-8 无 BOM、LF。');
-  L.push('2. 禁 `git` 写；禁重启宿主；只碰本 lane 文件域。');
-  L.push('3. 断言「没有某工具/技能」前先实机核：`grep`/`glob` 扫宿主安装面与引擎源码，或按名直调看回执（折叠 ≠ 禁用），勿凭印象断言「没有」。');
-  L.push('4. 完成/失败均**显式回报**（不给静默降级）；回报只给元数据与结论，不复制正文。');
+  // 【2026-09-27 · 规则编号动态化】原为**字面 1..6**（第 6 条按层裁剪）⇒ 新增规则会撞号。
+  //   改为**计数器**逐条编号：规则文本逐字不变，仅编号由 `rule()` 递增产出（缺规则也不会跳号）。
+  let ruleNo = 0;
+  const rule = (text) => { ruleNo += 1; L.push(ruleNo + '. ' + text); };
+  rule('写盘只用 `edit`/`write`；临时件用 `node -e` 的 `fs`；UTF-8 无 BOM、LF。');
+  rule('禁 `git` 写；禁重启宿主；只碰本 lane 文件域。');
+  rule('断言「没有某工具/技能」前先实机核：`grep`/`glob` 扫宿主安装面与引擎源码，或按名直调看回执（折叠 ≠ 禁用），勿凭印象断言「没有」。');
+  rule('完成/失败均**显式回报**（不给静默降级）；回报只给元数据与结论，不复制正文。');
   // ── 【2026-09-27 引导缺口补强】收本会话 5 次 `auto.settle.paused` 的教训 ──────────────
   //   实证：批 onto-engine-slim-20260926 中 4 次停轮源于「exec 线漏向聚合 audit lane 交接」
   //   （`GATE_HANDOFF_MISSING`）、1 次源于「plan 产物缺裸标题 `## 约束`」（`GATE_PLAN_CONTRACT`）。
   //   **根因不是成员失职，而是任务包没写清** —— 故在此把两条硬要求前置到骨架里。
-  L.push('5. **【交接】完成时必须 `handoff_submit` 向【本 lane 的全部出边】交接**（含**聚合 audit lane**）——');
+  rule('**【交接】完成时必须 `handoff_submit` 向【本 lane 的全部出边】交接**（含**聚合 audit lane**）——');
   L.push('   若本批含 audit 层而本 lane 是 plan/exec 层，则该边**必须交**；漏交会被 `GATE_HANDOFF_MISSING` 拒，');
   L.push('   批会被停轮。对 `a1-*` 这类**聚合 audit lane**（有多个入边），**每条上游线都要各自交一次**。');
   if (layer === 'plan') {
-    L.push('6. **【plan 产物】正文必须含六个【裸标题】**（行首恰为该串，非 `###`、无缩进/前缀）：');
+    rule('**【plan 产物】正文必须含六个【裸标题】**（行首恰为该串，非 `###`、无缩进/前缀）：');
     L.push('   `## 概述` / `## 问题` / `## 方案` / `## 需求` / `## 验收标准` / `## 约束`；');
     L.push('   **内容允许为空，标题一个都不能缺** —— 缺任一即被 `GATE_PLAN_CONTRACT` 拒（内容不校，只校标题）。');
+  }
+  // ── 【2026-09-27 · GR-12】回报编号口径消歧（收「exec 验收项被写成 spec 自检项编号」的停轮教训）──
+  //   背景：任务包曾把「exec 报告的验收项」称作自检项的编号；而判据源 `## 验收标准` 章内的自检项编号
+  //   与 **exec 验收项**（在判据源 **§6**，形如 `L-AC-1..L-AC-N`）是**两套编号** ⇒ worker 按错位编号回报。
+  rule('**【回报编号口径】**本 lane 的**验收项**编号以**判据源 §6** 为准（形如 `L-AC-1..L-AC-N`）；');
+  L.push('   判据源 `## 验收标准` 章内的自检项编号属于**规格自检**，**不是**本 lane 的验收项。');
+  L.push('   回报引用验收项时：**照抄 §6 的编号 + 原文**（禁自行重排、禁把自检项编号当作验收项回填）。');
+  // ── 【2026-09-27 · GR-13】「单件写盘 lane」与纪律 progress 快照的冲突处置 ──
+  //   背景：audit 聚合 lane 的硬约束「只写一件」（判据源明列）与「每完成一子步骤即落 progress 快照」
+  //   直接冲突，worker 只能靠自行判断 ⇒ 引擎侧按 lane 的**写盘约束**自动抑制 progress 行。
+  //   判定（保守、可机检）：① 显式 `singleArtifactWrite === true`；**或** ② **audit 层**且声明写盘面
+  //   （`produce ∪ outputs` 去重）**恰一件**。exec / plan 层**不自动判**（progress 是其工作流组成部分）
+  //   ⇒ 只走显式声明位。
+  const writeTargets = [...new Set([...produce, ...outputs].filter((p) => typeof p === 'string' && p.trim().length > 0))];
+  const singleArtifactWriteLane = singleArtifactWrite === true || (layer === 'audit' && writeTargets.length === 1);
+  if (singleArtifactWriteLane) {
+    rule('**【progress 快照 · 本 lane = 单件写盘 lane】**写盘约束 = **只写声明的这一件产物**；');
+    L.push('   ⇒ 本任务包**自动抑制**「每完成一子步骤即落 progress 快照」一行（该纪律与本 lane 的**单件写盘约束直接冲突**，'
+      + '两条打架时**以更严者为准** = 单件约束）；');
+    L.push('   子步骤记录写进**该件产物正文**或**汇报**里，**不得**另开进度快照文件（多写一件即越界）。');
+  } else {
+    rule('**【progress 快照】**每完成一个子步骤即落 `<lane>/progress/NN-<slug>.md`（禁攒批；崩溃后新 worker 据此跳过已完成步骤）。');
   }
   if (leaderPrompt) {
     L.push('');
@@ -294,6 +323,10 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     batchId, lane, cmd: laneTask?.cmd, layer: laneTask?.layer, role: laneTask?.role,
     consume: laneTask?.consume ?? [], produce: laneTask?.produce ?? [], outputs: laneTask?.outputs ?? [],
     firstLine: h.firstLine, leaderPrompt, artifactsRoot,
+    // 【2026-09-27 · GR-13】lane 声明位的**直读**（`buildWavePlan` 归一化面**未持久化**该字段 ⇒ 今日恒 `false`；
+    //   真实生效路径 = `composeWorkerPrompt` 内「audit 层 + 声明写盘面恰一件」的**自动判定**）。
+    //   保留本行 = 为「直调派发 / 未来持久化该字段」留显式逃生位，不构成当前行为的唯一依赖。
+    singleArtifactWrite: laneTask?.singleArtifactWrite === true,
   });
   // 【2026-09-22 · one-shot 化】`startContinuable(spec)` → **`rt.start(provider, request)`**：
   //   one-shot 请求**平铺**（label/prompt/parent/signal/toolFilter/persona/maxDepth 同层）；

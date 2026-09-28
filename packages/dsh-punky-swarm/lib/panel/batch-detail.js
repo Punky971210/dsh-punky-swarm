@@ -224,6 +224,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
       const gs = firstLane ? (lg[firstLane] || {}).gateStrength || null : null;
+      // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**，存量批 JSON 真值里仍可能带它
+      //   ⇒ 本读点**保留**（与 HTTP 侧同源读点成对，Q-1 裁决 = 双侧同保留）：删读端 = 主动丢历史可复盘面；
+      //   该键**零发射点** ⇒ 无「写了不生效」的静默面。**禁为求绿删本读点或其断言**。
       const ta = d.teamAsset || null;
       const asm = d.assembly || null;
       const items = [];

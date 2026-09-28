@@ -131,6 +131,11 @@ export function createApi(ctx, deps) {
           handoffs: b.handoffs ?? {},
           ...(b.manager ? { manager: b.manager } : {}),
           ...(b.assembly ? { assembly: b.assembly } : {}),
+          // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**（工具面回显同批删净），
+          //   但**存量批 JSON 真值里仍可能带它**（读取侧零迁移）⇒ 本行按「读得到就原样回显、读不到不写键」
+          //   处置，**不解析、不回写、不参与任何门禁判定**。
+          //   Q-1 裁决 = **双侧同保留**（此处 + 面板同源读点）：删读端 = 主动丢历史可复盘面；该键**零发射点**
+          //   ⇒ 不存在「写了不生效」的静默面风险。**禁为求绿删本行或删面板侧断言**。
           ...(b.teamAsset ? { teamAsset: b.teamAsset } : {}),
           ...(smokeOf(b) ? { smoke: true } : {}),
           // 【TD-21 / N-13，2026-09-18 清理波已落地】批级一次扫描（原「逐 lane N 次整批读盘」已收敛）：

@@ -100,6 +100,58 @@ test('P2b 任务包骨架 · plan 层：额外带「六标题齐备」纪律（�
   }
 });
 
+// ── 【2026-09-27 · GR-12 / GR-13】任务包引导缺口两条新规则的**可达断言** ──
+//   GR-12：exec/audit 报告的验收项编号以判据源 **§6** 为准，**不等于**判据源 `## 验收标准` 章内的**自检项**编号。
+//   GR-13：「单件写盘 lane」（写盘约束 = 只写一件）与纪律「每步落 progress 快照」**直接冲突** ⇒ 引擎自动抑制。
+//   ⚠ 两条断言均为**可达构造**（规则缺失即变红，禁空转 —— 纪律 §15⑤）：
+//     GR-12 缺规则 ⇒ `§6` / `L-AC` 断言红；GR-13 缺分支 ⇒ 单件 lane 仍带默认 progress 行 ⇒ 反向断言红。
+test('P2c 任务包骨架 · GR-12：验收项编号口径以判据源 §6 为准（≠ 判据源自检项编号）', () => {
+  const p = composeWorkerPrompt({
+    batchId: 'b-ac', lane: 'e1', cmd: '实现 X', layer: 'exec', role: 'coder',
+    consume: ['plan/spec.md'], produce: ['exec/e1/'], outputs: ['exec/e1/outputs/x.md'],
+    firstLine: '[swarm-lane:b-ac/e1#0123456789abcdef]', artifactsRoot: 'R:/artifacts/b-ac',
+  });
+  for (const k of ['§6', 'L-AC', '自检项', '照抄 §6 的编号']) {
+    assert.ok(p.includes(k), 'GR-12 口径缺要素：' + k);
+  }
+});
+
+test('P2d 任务包骨架 · GR-13 默认支：非单件写盘 lane 必须列 progress 快照行（纪律 §0i）', () => {
+  const p = composeWorkerPrompt({
+    batchId: 'b-sw0', lane: 'e1', cmd: '实现 X', layer: 'exec', role: 'coder',
+    produce: ['exec/e1/'], outputs: ['exec/e1/outputs/x.md'], // 写盘面 2 件 ⇒ 非单件
+    firstLine: '[swarm-lane:b-sw0/e1#0123456789abcdef]',
+  });
+  assert.ok(p.includes('progress/NN-<slug>.md'), '默认支须列 progress 快照行');
+  assert.equal(p.includes('单件写盘 lane'), false, '非单件 lane 不得走抑制支');
+});
+
+test('P2e 任务包骨架 · GR-13 抑制支：audit 层 + 声明写盘面恰一件 ⇒ 自动抑制 progress 行（冲突时从更严者）', () => {
+  const single = composeWorkerPrompt({
+    batchId: 'b-sw1', lane: 'a1', cmd: '聚合验收', layer: 'audit', role: 'supervisor',
+    consume: ['plan/spec.md'], produce: ['audit/slim-summary.md'], outputs: ['audit/slim-summary.md'],
+    firstLine: '[swarm-lane:b-sw1/a1#0123456789abcdef]', artifactsRoot: 'R:/artifacts/b-sw1',
+  });
+  assert.ok(single.includes('单件写盘 lane'), '须显式声明本 lane 为单件写盘 lane');
+  assert.ok(single.includes('自动抑制'), '须写明 progress 行被自动抑制');
+  assert.equal(single.includes('progress/NN-<slug>.md'), false,
+    '抑制支不得再出现默认 progress 行（否则两条纪律仍在打架）');
+  // 显式声明位（直调逃生阀）：exec 层亦可强制走抑制支
+  const forced = composeWorkerPrompt({
+    batchId: 'b-sw2', lane: 'e2', cmd: '单件产出', layer: 'exec', role: 'coder',
+    produce: ['exec/e2/'], outputs: ['exec/e2/one.md'], singleArtifactWrite: true,
+    firstLine: '[swarm-lane:b-sw2/e2#0123456789abcdef]',
+  });
+  assert.ok(forced.includes('单件写盘 lane'), 'singleArtifactWrite:true ⇒ 显式走抑制支');
+  // 反向：audit 层但声明写盘面 2 件 ⇒ **不**自动判单件（防过度抑制）
+  const two = composeWorkerPrompt({
+    batchId: 'b-sw3', lane: 'a3', cmd: '两份报告', layer: 'audit', role: 'supervisor',
+    produce: ['audit/slim-summary.md', 'audit/gap-list.json'], outputs: [],
+    firstLine: '[swarm-lane:b-sw3/a3#0123456789abcdef]',
+  });
+  assert.equal(two.includes('单件写盘 lane'), false, '写盘面 2 件不得自动判单件');
+});
+
 test('P3 startRequest（one-shot 平铺）：label + toolFilter.deny（套件自带 + 追加、去重）+ maxDepth=1 + parent', () => {
   const parent = { id: 'agent-1' };
   const request = buildStartRequest({ batchId: 'b-1', lane: 'e1', parent, prompt: 'task' });

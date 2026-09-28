@@ -154,7 +154,9 @@ window.__ModuleLoader__.load({
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
       { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
-      { re: /^batch\.team-asset\.resolved$/, key: 'event.phase.team', category: 'phase', severity: 'info' },
+      // 【2026-09-28 · 批 `cleanup-tail-20260927` E-4】原 `/^batch\.team-asset\.resolved$/` 分类器
+      //   （→ 面板 locale 的 phase 族 team 键）**已删**：该事件常量零发射点且已随本批删净 ⇒ 分类器
+      //   为**死分类器**；其配套 locale 键（`lib/panel/locales.js` zh/en 各一条）同批删除。
       { re: /^batch\.smoke$/, key: 'event.phase.smoke', category: 'phase', severity: 'none' },
       { re: /^batch\.abort_dangling$/, key: 'event.phase.dangling', category: 'phase', severity: 'warn' },
       { re: /^batch\.(failed-escalate|governance-escalate)$/, key: 'event.phase.escalate', category: 'phase', severity: 'error' },
@@ -456,7 +458,6 @@ window.__ModuleLoader__.load({
       "event.phase.created": "建批",
       "event.phase.changed": "相位变更",
       "event.phase.manager": "Manager 已拉起",
-      "event.phase.team": "团队资产已解析",
       "event.phase.smoke": "冒烟批",
       "event.phase.dangling": "悬挂成员告警",
       "event.phase.escalate": "违规升级",
@@ -651,7 +652,6 @@ window.__ModuleLoader__.load({
       "event.phase.created": "batch created",
       "event.phase.changed": "phase changed",
       "event.phase.manager": "manager raised",
-      "event.phase.team": "team asset resolved",
       "event.phase.smoke": "smoke batch",
       "event.phase.dangling": "dangling lanes warning",
       "event.phase.escalate": "escalation",
@@ -1208,6 +1208,9 @@ window.__ModuleLoader__.load({
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
       const gs = firstLane ? (lg[firstLane] || {}).gateStrength || null : null;
+      // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**，存量批 JSON 真值里仍可能带它
+      //   ⇒ 本读点**保留**（与 HTTP 侧同源读点成对，Q-1 裁决 = 双侧同保留）：删读端 = 主动丢历史可复盘面；
+      //   该键**零发射点** ⇒ 无「写了不生效」的静默面。**禁为求绿删本读点或其断言**。
       const ta = d.teamAsset || null;
       const asm = d.assembly || null;
       const items = [];
