@@ -648,6 +648,22 @@
       "tests": 10,
       "todos": 0
     },
+    "test/install-selfcheck.test.js": {
+      "asserts": 23,
+      "blankLines": 19,
+      "lines": 182,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/install-smoke-contract.test.js": {
+      "asserts": 23,
+      "blankLines": 12,
+      "lines": 96,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/integration-comfyui-glue.test.js": {
       "asserts": 6,
       "blankLines": 14,
@@ -1169,7 +1185,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-28T06:14:23Z",
+  "generatedAt": "2026-09-28T13:12:20Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1180,15 +1196,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "cleanup-tail-20260927：清理面词法变化（engine-dispatch 用例 +3，其余为注释/拼装）",
+  "reason": "onekey-install-20260927：新增自检/冒烟 harness（+46 asserts / +10 tests，100% 来自 2 个新用例文件）",
   "schema": 1,
   "totals": {
-    "asserts": 7429,
-    "blankLines": 3729,
-    "files": 146,
-    "lines": 40283,
+    "asserts": 7475,
+    "blankLines": 3760,
+    "files": 148,
+    "lines": 40561,
     "tautologies": 0,
-    "tests": 1563,
+    "tests": 1573,
     "todos": 4
   }
 }
