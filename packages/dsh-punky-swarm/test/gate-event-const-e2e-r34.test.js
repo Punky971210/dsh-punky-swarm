@@ -128,9 +128,12 @@ test('R3-4 E2E：event-types.js 缺 EVT_GATE_ESCAPE ⇒ 抛 GATE_EVENT_CONST_MIS
     const disk = eventsOnDisk(out);
     assert.equal(disk.some((e) => typeof e.type !== 'string'), false, '磁盘复读：不得有失名事件');
     // 【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：建批期磁盘事件面）】原断言 `disk.length === 2`
-    //   （建批期两条：`batch.created` / `batch.team-asset.resolved`）。资产正档写端已随 **T-7** 删除
-    //   （`exec/delete-assets.md` §四 第 7/12 点：`store.js` 的 `teamAssetRefFor()` 与
-    //    `EVT_BATCH_TEAM_ASSET_RESOLVED` 发射点整条删除）⇒ 建批期磁盘事件**只剩 1 条**，真值反转。
+    //   （建批期两条：`batch.created` / 资产正档解析事件）。资产正档写端已随 **T-7** 删除
+    //   （`exec/delete-assets.md` §四 第 7/12 点：`store.js` 的 `teamAssetRefFor()` 与该事件常量
+    //   的发射点整条删除）⇒ 建批期磁盘事件**只剩 1 条**，真值反转。
+    //   【2026-09-28 批 4 `cleanup-tail-20260927` E-4(d)】该事件**常量本体与全部读端**已随 E-4 **删净**
+    //   （并已并入退役锁 `test/retired-codes-lock.test.js`）⇒ 下方 `disk.some(...)` 的反向断言**逐字保留**：
+    //   它比对的是**磁盘事件 `type` 字面量**，不依赖已删常量或面板分类器 ⇒ 仍具防回生价值，**不属删断言换绿**。
     //   断言强度不减：由「条数 = 2」→「条数 = 1 **且** 逐字点名唯一在册事件 type」（点名校验比原断言更严）。
     assert.equal(disk.length, 1, '磁盘事件仍只有建批期一条（batch.created；原 `batch.team-asset.resolved` 写点已随 T-7 删除）：'
       + JSON.stringify(disk.map((e) => e.type)));

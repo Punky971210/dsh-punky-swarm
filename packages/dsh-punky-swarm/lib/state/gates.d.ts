@@ -1000,12 +1000,7 @@ export declare function createGates(root: string, opts?: {
                 audit: string[];
             };
             emptyNoted: never[];
-            auditContract: {
-                criteriaFrom: any;
-                consumesRequired: any;
-                verdict: any;
-                source: string;
-            } | null;
+            auditContract: null;
             completeOutcomes: {
                 source: string;
                 declared: string[] | null;
@@ -1086,12 +1081,7 @@ export declare function createGates(root: string, opts?: {
                 audit: string[];
             };
             emptyNoted: never[];
-            auditContract: {
-                criteriaFrom: any;
-                consumesRequired: any;
-                verdict: any;
-                source: string;
-            } | null;
+            auditContract: null;
             completeOutcomes: {
                 source: string;
                 declared: string[] | null;
@@ -1156,12 +1146,7 @@ export declare function createGates(root: string, opts?: {
                 audit: string[];
             };
             emptyNoted: never[];
-            auditContract: {
-                criteriaFrom: any;
-                consumesRequired: any;
-                verdict: any;
-                source: string;
-            } | null;
+            auditContract: null;
             completeOutcomes: {
                 source: string;
                 declared: string[] | null;

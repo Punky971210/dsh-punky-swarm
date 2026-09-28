@@ -23,12 +23,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     键级摘要 `summaryKeysOf` / `flagsResolvedOf`）随资产面**整体删除**（判据源 T-7）；
 //   · 本模块现为**保形空实现**：恒返回「本批无团队资产解析记录」这一事实（`field: null`）、
 //     不落事件、不写盘、不读盘、零 I/O、零副作用。
-//   · 保形理由：调用方 `lib/state/store.js#createBatch` 经 `teamAssetRefFor` 消费本函数
-//     （该文件**不在本 lane 写域**）⇒ 删导出会造成 ESM 缺符号断链；故改为「诚实的空实现」，
-//     而非保留一条「读已删除资产」的死路径（判据源 A-13：禁「写了不生效」的静默面）。
+//   · 保形理由（**【2026-09-28 · 批 `cleanup-tail-20260927` E-2 订正】**）：原写「调用方
+//     `lib/state/store.js#createBatch` 经 `teamAssetRefFor` 消费本函数（该文件不在写域）⇒ 删导出会断链」
+//     —— **该接线已随批 3 整体删除**（`lib/state/store.js:292`/`:294` 自陈），且本文件在 `lib/**`+`test/**`
+//     的 **`import` 语句命中 = 0**（实测）⇒ 原「删导出会断链」理由**已失效**，本文件是**零 importer 的标废件**。
+//   · **标废而非删文件的理由**（E-2 采「标废」分支）：`docs/engine-intro.md:45`（**冻结面，本批禁改**）与
+//     `lib/state/store.js:30` 的注释仍指向本文件 ⇒ 删文件会在**禁改文档留悬空指针**。
+//   · 口径不变：改为「诚实的空实现」，而非保留一条「读已删除资产」的死路径（判据源 A-13：禁「写了不生效」的静默面）。
 //
 // 冻结面归属（**勿回加写盘点**）：
-//   · `batch.teamAsset` 字段仍由 `store.createBatch` 写入（`field` 现恒 `null` = 无解析记录）；
+//   · `batch.teamAsset` **已停写**（`store.createBatch` 的该接线随批 3 删除；`field` 现恒 `null` = 无解析记录）；
+//     历史批磁盘 JSON 上**仍可能带该键** ⇒ 存量读端按「历史兼容读」处置（`lib/api.js:134` /
+//     `lib/panel/batch-detail.js:227`，零迁移、不解析、不回显）；
 //   · `gate_status` / `batch_status` 的 `teamAsset` 回显、`gateAssetViewOf` 的档读端已随本批**删净**。
 //
 // 历史（保留可读）：原语义 = 「解析结果派生观察档，**不参与任何门禁判定**」；落点 = 会话级正档；

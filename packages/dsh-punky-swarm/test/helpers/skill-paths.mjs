@@ -17,14 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 【技能路径 helper · 只读半边】本模块是拆模块（批 `onto-fixture-purge-20260925`）后的**只读**半边——
 //   旧 helper 模块（技能夹具与纯函数混装，本批已拆；迁移记录见批次产物 `exec/helper-change.md`）中
-//   包根解析（`packageRootOf`）/ 宿主技能根推导（`hostSkillsRoot`）/ 团队资产读端
-//   （`declaredSkillsOf` / `readTeamAssetSource` / `listTeamAssetNames`）/ 建批面默认团队包装
+//   包根解析（`packageRootOf`）/ 宿主技能根推导（`hostSkillsRoot`）/ 资产声明技能名读端
+//   （`declaredSkillsOf`）/ 建批面默认团队包装
 //   （`withDefaultTeam`）。
+//   【2026-09-28 · 批 `cleanup-tail-20260927` E-1 订正】原名单中的另两名（两个读团队资产文件的只读导出）
+//   **已删除**：二者读的是已随批 3（`retire-team-chain-20260927`）整体退役的团队资产文件面 ⇒ 恒返
+//   `null` / `[]` 的**孤儿导出**（零调用点、零消费方；实测佐证见 `plan/cleanup-spec.md` E-1）。
 //
 // ⚠ 本模块的**分界线是「只读 + 纯计算」**：文件在、目录不在。
 //   写盘播种的夹具（`seedHostSkills` / `seedTeamAssetSkills`）与宿主侧技能名单（`HOST_ONLY_SKILLS`）
 //   已随 `onto-fixture-purge-20260925` 删除，**不得**以任何形式回流到本文件——
 //   本文件内**零** `node:fs` 写盘调用（建目录 / 写文件 / 删改重命名 / 流式写入各类 API 一律不出现，判据 J-4）。
+//   【2026-09-28 · cleanup-tail】E-1 删两导出后本文件对 `node:fs` **零引用** ⇒ `import fs` 同步删除
+//   （留死 import 违「不留死码」；本模块自此**无任何 fs 依赖**，与上句口径同向收窄）。
 //
 // 为什么拒绝写穿真实 home（迁移前 F2 纪律，原样留存；根因见 `reports/onto-skills-root-rca.md`）：
 //   原 `seedHostSkills` 缺省 `home = process.env.USERPROFILE || process.env.HOME`：在**未加载隔离 preload**
@@ -38,7 +43,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ——夹具为**任意**名字都造出可解析技能 ⇒ 资产里技能名拼错 / 改名 / 真实技能被删，测试全绿。
 //   ⇒ 新纪律：夹具内容必须**显式签入可审**，且「造桩」这件事不得再散落在测试进程的任意时点。
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,26 +63,6 @@ export function declaredSkillsOf(asset) {
     for (const arr of Object.values(layer?.skills ?? {})) for (const s of arr ?? []) out.add(s);
   }
   return [...out];
-}
-
-/** 读包内团队资产原文（`.json` → `.yml`，内容是 JSON 子集）；不存在 ⇒ null（不静默回退）。 */
-export function readTeamAssetSource(team, root = packageRootOf()) {
-  for (const f of ['team-asset.json', 'team-asset.yml']) {
-    const p = path.join(root, 'presets', team, f);
-    if (fs.existsSync(p)) return { path: p, asset: JSON.parse(fs.readFileSync(p, 'utf8')) };
-  }
-  return null;
-}
-
-/** 动态扫描包内**有资产**的团队名（`presets/<team>/team-asset.{json,yml}`）——禁把「预设/模式名」当团队名。 */
-export function listTeamAssetNames(root = packageRootOf()) {
-  const dir = path.join(root, 'presets');
-  const out = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!e.isDirectory()) continue;
-    if (['team-asset.json', 'team-asset.yml'].some((f) => fs.existsSync(path.join(dir, e.name, f)))) out.push(e.name);
-  }
-  return out.sort();
 }
 
 /**

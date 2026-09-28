@@ -75,14 +75,19 @@ const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.a
 import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL } from '../engine/auto-settle.js';
 import * as swarmMailbox from '../comms/mailbox.js'; // 成员回报投递（文件 mailbox）
 
-// 建批期告警码 → 事件 type 映射表（GAP-S9）：`wave_plan` 的告警事件化**按码映射**，不再把「非
-//   `GATE_ROLE_MISSING`」的一切告警都事件化成 `gate.role_invalid`（后者会把 `GATE_COMPLETE_OUTCOMES_EMPTY`
+// 建批期告警码 → 事件 type 映射表（GAP-S9）：`wave_plan` 的告警事件化**按码映射**，不把**未命中映射**的
+//   一切告警都事件化成 `gate.role_invalid`（后者会把 `GATE_COMPLETE_OUTCOMES_EMPTY`
 //   误标成「role 非法」——载荷 `code` 正确、事件 type 误导读端）。
+//   【2026-09-28 · 批 `cleanup-tail-20260927` E-5 订正】原措辞以「非 `<某已删码>`」描述本映射的动机 ——
+//   该码的映射行已随其零发射点一并删除 ⇒ 措辞改为**按码映射的通用表述**（不再援引已删码名）。
 // 未命中映射的码**保持现状 = `EVT_GATE_ROLE_INVALID`**（向后兼容：`GATE_AUDIT_CONTRACT_EXEMPT` /
 //   既有码的事件 type 不迁移，避免既有断言与外部消费者漂移）。GAP-S9 残留：未来
 //   把每个告警码都映射到专用类型（本任务不迁移）。
 const WARN_EVENT_OF = {
-  GATE_ROLE_MISSING: EVT.EVT_GATE_ROLE_MISSING,
+  // 【2026-09-28 · 批 `cleanup-tail-20260927` E-5】原 `GATE_ROLE_MISSING` → 事件映射行**已删**：
+  //   该码**零发射点**（`collectRoleCompletenessWarnings`，`lib/wave-plan.js:119-140`，现只 push
+  //   `GATE_ROLE_MANAGER_AS_LANE`）⇒ 该键**恒不命中**；映射行与其事件常量（`lib/state/event-types.js`）
+  //   同批删除，全仓 `lib/**` 零残留（含注释）。下方在役映射**逐字保留**。
   GATE_COMPLETE_OUTCOMES_EMPTY: EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY,
 };
 
@@ -627,7 +632,10 @@ export function createCoreTools(ctx, deps) {
         //   不在本批写域，且事件流本就是批次级留痕的既有载体，与 `laneStartedAt`/`gateStrengthOf` 同法读取）。
         //   零静默：跳过什么、保留什么见 event-types.js 常量处的语义边界声明。
         if (smoke) store.appendEvent(sessionId, plan.batchId, EVT.EVT_BATCH_SMOKE, { batchId: plan.batchId });
-        // role 校验告警留痕（GATE_ROLE_INVALID / GATE_ROLE_MISSING / assembly.roles 词法告警，warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
+        // role 校验告警留痕（`GATE_ROLE_INVALID` / `assembly.roles` 词法告警等，**按码映射**见 `WARN_EVENT_OF`；
+        //   warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
+        //   【2026-09-28 · 批 `cleanup-tail-20260927` E-5 订正】原按码枚举式措辞已改为**按码映射的通用表述**
+        //   （被枚举的两个码中，有一个已随零发射点删除 ⇒ 措辞不得再点名它）。
         // GAP-S9：事件 type 改走 `WARN_EVENT_OF` 按码映射（`GATE_COMPLETE_OUTCOMES_EMPTY` 有自己的专用类型）；
         //   未命中映射的码**逐字保持现状** = `gate.role_invalid`；载荷字段形态**零增删**（`code` 仍在）。
         for (const w of plan.warnings ?? []) {

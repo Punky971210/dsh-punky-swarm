@@ -1639,7 +1639,9 @@ export function createGates(root, opts = {}) {
         }
         const af = layerFlow('audit');
         const ef = layerFlow('exec');
-        const ac = af && af.audit_contract && typeof af.audit_contract === 'object' ? af.audit_contract : null;
+        // 【2026-09-28 · 批 `cleanup-tail-20260927` E-3】原 `ac`（`af.audit_contract` 提取）随下方恒不可达三元同批删除：
+        //   资产面退役 ⇒ `flows` 恒 `null` ⇒ `af` 恒 `undefined` ⇒ `ac` 恒 `null` ⇒ 该变量**只服务恒 `null` 的三元**
+        //   ⇒ 删三元后成死码，一并清除（`af` / `ef` 仍被下方 `disabled` 判据消费，保留）。
         const disabled = [];
         if (af && af.needhuman === false)
             disabled.push('needhuman@team-asset');
@@ -1679,7 +1681,11 @@ export function createGates(root, opts = {}) {
             evaluatedAt: ['running', 'merged'],
             orphanProducts: orphanProductsOf(batch),
             emptyNoted: [],
-            auditContract: ac ? { criteriaFrom: ac.criteria_from ?? null, consumesRequired: ac.consumes_required ?? null, verdict: ac.verdict ?? null, source: 'team-asset' } : null,
+            // 【2026-09-28 · 批 `cleanup-tail-20260927` E-3】原三元（`ac ? { … } : null`，其 `source` 值指向
+            //   **团队资产**来源）已删：资产面退役 ⇒ `flows` 恒 `null` ⇒ `af`/`ac` 恒 `undefined`/`null`
+            //   ⇒ 该三元**恒走 `null` 支**（恒不可达分支），其「团队资产」来源标注**恒不产生**
+            //   ⇒ 键保形保留、值恒 `null`。
+            auditContract: null,
             completeOutcomes: outcomes,
             completeSemantics: 'Q-7：complete = 执行完成且通过验收 ⇒ 仅 pass / skip 可 complete；fail / conflict 恒拒且带 escapeRoute{phase:"aborted"}（D-8 终态可退出）',
         };

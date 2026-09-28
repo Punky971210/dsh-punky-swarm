@@ -416,15 +416,19 @@ export type BatchEvent = BatchEventBase & (
   //   非拒态（**不是** GateErrorCode，故不进下方枚举）；去重键 (batchId, gateKind, layer)「只报一次/批」；
   //   只由 store 写路径发射（只读视图零事件）。载荷键**不占用 `type`**（事件名槽位）。
   | { type: 'gate.contract_missing'; cause: 'undeclared' | 'declared-off' | 'unresolvable'; gateKind: string; layer: string | null; lane: string | null; declared: boolean; source: string; degrade: { kind: string; note: string }; problems: string[] } // EVT_GATE_CONTRACT_MISSING
-  | { type: 'batch.team-asset.resolved'; team: string; root: string; rootKind: 'package' | 'teams-root'; assetPath: string | null; assetHash: string | null; ok: boolean; severity: 'none' | 'strong' | 'blocking'; snapshotPath: string | null; snapshotWriteFailed?: boolean; problems: string[]; unwiredKeys: string[] } // EVT_BATCH_TEAM_ASSET_RESOLVED（载荷键不占用 type 槽位）
+  // 【2026-09-28 · 批 `cleanup-tail-20260927` E-4 删净】原「团队资产解析」事件的联合成员**已删**：
+  //   该事件常量零发射点（写端随批 3 删除）⇒ 本批连同其读端（面板分类器 / locale 键）一并删净，
+  //   其码已并入退役锁。历史批数据仍经下方 `{ type: string; [k: string]: unknown }` 兜底可读。
   | { type: 'archive.failed'; reason: string }                                        // EVT_ARCHIVE_FAILED
   // sig 任务内容指纹（N3-②）· 幂等判等留痕（D-sig-2 裁定：**只留痕不阻断**，不加新拒码、不进 GateErrorCode）
   | { type: 'sig.duplicate_detected'; lane: string; sig: string; matches: Array<{ lane: string; state: string }>; notice: Array<{ lane: string; state: string; layer: string | null }> } // EVT_SIG_DUPLICATE_DETECTED
   | { type: 'system.recovered'; batchId: string; sessionId: string; recoveredLanes: string[]; detail: unknown[] } // EVT_SYSTEM_RECOVERED
   // 兜底：扩展事件（lane.stalled / lane.over-budget / budget.rejected /
   //   worktree.created|checkpoint|merged|merge.conflict|merge.resolved /
-  //   gate.role_missing / gate.role_invalid / archive.done / system.restored 等）
+  //   gate.role_invalid / archive.done / system.restored 等）
   //   与未来新增事件——ts+type 必备，其余字段保持 unknown 可读
+  //   【2026-09-28 · 批 `cleanup-tail-20260927` E-5】原枚举里的 role 缺失码名已随其零发射点删除
+  //   （事件常量与 `lib/tools/core.js` 的映射行同批删除）⇒ 本枚举不再点名已删码。
   | { type: string; [k: string]: unknown }
 );
 

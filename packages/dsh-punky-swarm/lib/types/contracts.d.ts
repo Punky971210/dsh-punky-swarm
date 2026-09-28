@@ -436,19 +436,6 @@ export type BatchEvent = BatchEventBase & ({
     };
     problems: string[];
 } | {
-    type: 'batch.team-asset.resolved';
-    team: string;
-    root: string;
-    rootKind: 'package' | 'teams-root';
-    assetPath: string | null;
-    assetHash: string | null;
-    ok: boolean;
-    severity: 'none' | 'strong' | 'blocking';
-    snapshotPath: string | null;
-    snapshotWriteFailed?: boolean;
-    problems: string[];
-    unwiredKeys: string[];
-} | {
     type: 'archive.failed';
     reason: string;
 } | {

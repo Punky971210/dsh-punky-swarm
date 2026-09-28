@@ -279,14 +279,18 @@ test('T-W3 人话映射：≥12 类事件返回 locale key；未知 type ⇒ key
   const types = [
     'member.settled', 'member.dispatch', 'gate.exit_blocked', 'gate.needhuman_blocked', 'gate.passed',
     'lane.handoff', 'lane.handoff.gap', 'batch.created', 'batch.phase', 'batch.manager.raised',
-    'batch.team-asset.resolved', 'lane.needhuman', 'lane.stalled', 'swarm.report', 'governance.refusal',
+    'lane.needhuman', 'lane.stalled', 'swarm.report', 'governance.refusal',
     'auto.settle.triggered', 'worktree.created',
   ];
   // 【2026-09-27 批 3 · T-15/D-6 归因】原清单含 `'chain.step'` 一项（18 类）。该事件常量已随 **D-4 删净**
   //   （`event-types.js` 的 `EVT_CHAIN_STEP` 整条删除，A-8）⇒ 其分类器（`panel-model.js` 的 `/^chain\./` 死分类器）
   //   亦已删除 ⇒ 该 type 的 `eventViewOf` 不再返回 key。**面已消失 ⇒ 条目随之删除**（不可等值反转：
   //   反转成「key:null」即与下方 `unknown` 用例重复且恒真空转，违纪律 15⑤）。
-  //   `types.length >= 12` 门槛保留（现 17 项，仍严于门槛；恒真零新增的「凑数」风险不因本改动上升）。
+  // 【2026-09-28 批 4 `cleanup-tail-20260927` · E-4(d) 归因】原清单另含「团队资产解析」事件一项（17 类）：
+  //   该常量零发射点、随本批 E-4 **删净**（常量本体 + 面板分类器 `/^batch\.team-asset\.resolved$/`
+  //   + locale 键 `event.phase.team` 同批删除）⇒ 判据同上：**面已消失 ⇒ 条目随之删除**
+  //   （不可等值反转 —— 反转成「key:null」与下方 `unknown` 用例重复且恒真空转）。
+  //   `types.length >= 12` 门槛保留（现 16 项，仍严于门槛；恒真零新增的「凑数」风险不因本改动上升）。
   assert.ok(types.length >= 12, '覆盖类别数 ≥12');
   for (const t of types) {
     const v = PM.eventViewOf({ type: t });

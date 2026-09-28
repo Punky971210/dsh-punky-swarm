@@ -448,8 +448,6 @@ export function declarationSummaryOf(flows, asset = null) {
       if (v !== null) flags[l + '.' + flag] = v;
     }
   }
-  const af = flowOf(flows, 'audit');
-  const ac = af && af.audit_contract && typeof af.audit_contract === 'object' ? af.audit_contract : null;
   return {
     resolved: flows != null && typeof flows === 'object',
     produceFields,                             // 被检面（恒并集，tighten-only）
@@ -460,9 +458,11 @@ export function declarationSummaryOf(flows, asset = null) {
     flags,                                     // 显式声明的布尔开关（缺声明不出现 ⇒ 门禁生效侧）
     contract: contractOf(flowOf(flows, 'plan')),
     presenceGlobs: presenceGlobsOf(contractOf(flowOf(flows, 'plan'))), // plan 契约 glob 的规范化展开
-    auditContract: ac
-      ? { criteriaFrom: ac.criteria_from ?? null, consumesRequired: ac.consumes_required ?? null, verdict: ac.verdict ?? null, source: 'team-asset' }
-      : null,
+    // 【2026-09-28 · 批 `cleanup-tail-20260927` E-3】原三元（`ac ? { … } : null`，其 `source` 值指向
+    //   **团队资产**来源）已删：资产面退役 ⇒ `flows` 恒 `null` ⇒ `flowOf(flows,'audit')` 恒 `undefined`
+    //   ⇒ `ac` 恒 `null` ⇒ 该三元**恒走 `null` 支**（恒不可达分支），其「团队资产」来源标注**恒不产生**。
+    //   ⇒ 键**保形保留**（读端形状零变化）、值恒 `null`；不留恒不可达死分支，也不留假来源标注。
+    auditContract: null,
     // 【2026-09-27 · team-asset 退役】声明台账（`UNWIRED_DECLARATIONS`）随资产面删除 ⇒ 「未接线声明」恒空。
     //   引擎级条目（`config.ratchet`）由 gates.ts 的 `unwiredEntriesOf` 自行补齐，不在本汇总内。
     unwired: [],

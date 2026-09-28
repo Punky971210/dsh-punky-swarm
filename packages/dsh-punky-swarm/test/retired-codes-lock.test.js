@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING + teamsRoot 两码；
-//   2026-09-27 批 3 补登 team-asset 全族 19 项 ⇒ 11 + 19 = **30**）：
+//   2026-09-27 批 3 补登 team-asset 全族 19 项 ⇒ 11 + 19 = 30；
+//   2026-09-28 批 4 补登「团队资产解析」事件码 1 项 ⇒ 30 + 1 = **31**）：
 //   数据源 = docs/gate-code-classification-2026-09-22.md C 类（码已退役、无任何拒态来源）。
 //   单表遍历断言 lib/** 零字面量命中 —— 取代此前散布在 gate-lite-batch2 / concurrency-gate /
 //   governance / writing-team-asset 四处的手写「已删零命中」变体（激进删除批 2，用户裁定）。
@@ -73,6 +74,11 @@ const RETIRED_CODES = [
   //   · `teamsRoot` **留痕码**（判决源 A-10 明列于登记范围）：用户裁决 D-3「`teamsRoot` 参数一并退役」
   //     ⇒ 该码在 wave 3 已无发射点、`lib/**` 归零（实测 hits=0）；
   'TEAMS_ROOT_IGNORED',
+  //   · 【2026-09-28 补登 · 批 4 `cleanup-tail-20260927` / lane `exec-cleanup-lib`】**事件码 1 个**：
+  //     「团队资产解析」事件（常量 `EVT_BATCH_TEAM_ASSET_RESOLVED`）的**码值** —— 其发射点随批 3 删除后，
+  //     该常量成为「定义在、零发射点」的死常量；本批按 Q-2 红线「要么接线、要么标废」**删净**
+  //     其常量本体与全部读端（面板分类器 / locale 键 `event.phase.team` / 事件类型联合成员）⇒ 码面入锁防回生。
+  'batch.team-asset.resolved',
 ];
 
 function libSources(dir, out = []) {

@@ -43,21 +43,19 @@ export const EVT_BATCH_FAILED_ESCALATE = 'batch.failed-escalate';
 //   **不自动改成员状态**（不做隐式批量 `skipped`）：那些成员在终态批上永久无法回收（`member_settle`
 //   被拒 `GATE_BATCH_TERMINAL`），`batch_status.danglingLanes` 会永久显示它们 ⇒ 本事件是该事实的
 //   **告警留痕**（写端：`lib/tools/core.js` 的 `batch_phase`；读端：`batch_status` / `log_export` 事件清单）。
-//   载荷：`{ danglingLanes: [laneId...], count }`（载荷键纪律同 `EVT_BATCH_TEAM_ASSET_RESOLVED`：不得占用 `type` 键）。
+//   载荷：`{ danglingLanes: [laneId...], count }`（载荷键纪律：`type` 键承载**事件名**，载荷**不得**占用它）。
 //   **反例锁**：无悬挂成员（全终态）的批 abort **不落**本事件；`running` / `paused` / `complete` 三相位零差异。
 export const EVT_BATCH_ABORT_DANGLING = 'batch.abort_dangling';
 // Manager 拉起登记：C+ 批由 Leader 拉起 Manager（引擎层角色，不占 lane、不落 lanes）时登记本事件 +
 // 批次级 `manager` 字段，使「Manager 是否真被拉起」成为治理层**可核事实**（事件流可查），
 // 而非仅靠 manager-notes 一类自述旁证。载荷 { agentId, note? }。
 export const EVT_BATCH_MANAGER_RAISED = 'batch.manager.raised';
-// 团队资产解析快照落盘（批次 `a3-snapshot-b1-20260915` · §8③）：**建批事务内**与批次字段
-//   `batch.teamAsset` 同一次 atomicWrite 落盘（档先于批次落盘）——使「这一批按哪份声明冻结」可核。
-//   载荷（调用点 = `lib/state/store.js` 的 `createBatch`；构建单点 = `lib/assembly/snapshot.js`）：
-//     { team, root, rootKind, assetPath, assetHash, ok, severity, snapshotPath, problems[], unwiredKeys[],
-//       snapshotWriteFailed?: true }
-//   载荷键纪律：`type` 键承载**事件名**，载荷**不得**占用它（故严重级写 `severity`、问题串写 `problems`）；
-//   无资产批（无 hash 不可命名）**不落本事件**（只写 `ok:false` 字段）——保「缺省零差异」。
-export const EVT_BATCH_TEAM_ASSET_RESOLVED = 'batch.team-asset.resolved';
+// 【2026-09-28 · 批 `cleanup-tail-20260927` E-4 删净】原「团队资产解析快照落盘」事件常量
+//   （常量 `EVT_BATCH_TEAM_ASSET_RESOLVED`，批次 `a3-snapshot-b1-20260915` · §8③）
+//   已**整体删除**：发射点随批 3 删除（写端 = `lib/state/store.js` 的 `createBatch` 接线；构建单点 =
+//   `lib/assembly/snapshot.js`），读端同批删净（面板分类器 / 面板 locale 的 phase 族 team 键 / 事件类型联合）
+//   ⇒ 属「**定义在、零发射点**」的死常量，本批按 Q-2「要么接线、要么标废」红线**删净**。
+//   该事件码已并入**退役码登记锁**（`test/retired-codes-lock.test.js` 的 `RETIRED_CODES`）⇒ 防回生。
 // **冒烟/探针批豁免**建批留痕（显式豁免键 `smoke: true`）。
 //   语义：`wave_plan({ smoke: true })` ⇒ 本批声明为冒烟/探针批 ⇒ **跳过产物契约类门**
 //   （建批 `GATE_PLAN_PRESENCE_MISSING` / `GATE_ORPHAN_PRODUCT`；运行期 entry `consume`、exit
@@ -208,7 +206,10 @@ export const EVT_GATE_COMPLETE_BLOCKED = 'gate.complete_blocked';
 //     limitSource, occupiedLanes[], candidateLanes[] }`。
 // 读端（不变）：`log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效）。
 export const EVT_GATE_CONCURRENCY_BLOCKED = 'gate.concurrency_blocked';
-export const EVT_GATE_ROLE_MISSING = 'gate.role_missing';
+// 【2026-09-28 · 批 `cleanup-tail-20260927` E-5 删净】原 `GATE_ROLE_MISSING` 码的事件常量**已删**：
+//   该码**零发射点**（`lib/wave-plan.js:119-140` 的 `collectRoleCompletenessWarnings` 现只 push
+//   `GATE_ROLE_MANAGER_AS_LANE`）⇒ 常量唯一消费方是 `lib/tools/core.js` 的告警事件映射表
+//   （该映射行同批删除）⇒ 属「定义在、零发射点、零消费方」的死常量。
 export const EVT_GATE_ROLE_INVALID = 'gate.role_invalid';
 // 建批期告警**按码专用化**（GAP-S9）：`GATE_COMPLETE_OUTCOMES_EMPTY`（audit_contract.verdict 与 complete
 //   白名单 {pass,skip} 交集为空）此前落在**共享 catch-all** 事件 `gate.role_invalid` 上 ⇒ 审计按事件 type
