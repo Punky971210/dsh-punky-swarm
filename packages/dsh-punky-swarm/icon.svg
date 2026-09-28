@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="dsh-punky-swarm">
+  <title>dsh-punky-swarm</title>
+  <desc>蟛蜞（小蟹）几何标记：甲壳 + 上举双螯 + 六足，酸绿描线于深色底；本批（onekey-install-20260927）新建。</desc>
+  <rect width="64" height="64" rx="14" fill="#0E1116"/>
+  <g fill="none" stroke="#2BD98A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 34c-5 0-8-4-8-8 0-2 2-4 4-3 1 0 2 1 2 2 0 2 2 3 4 3"/>
+    <path d="M44 34c5 0 8-4 8-8 0-2-2-4-4-3-1 0-2 1-2 2 0 2-2 3-4 3"/>
+    <path d="M23 45l-6 4"/>
+    <path d="M41 45l6 4"/>
+    <path d="M27 48l-3 6"/>
+    <path d="M37 48l3 6"/>
+  </g>
+  <path d="M17 37c0-9 6-15 15-15s15 6 15 15c0 5-4 8-9 8H26c-5 0-9-3-9-8z" fill="#2BD98A"/>
+  <circle cx="27" cy="28" r="2.4" fill="#0E1116"/>
+  <circle cx="37" cy="28" r="2.4" fill="#0E1116"/>
+</svg>
