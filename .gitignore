@@ -39,3 +39,7 @@ CONTRIBUTING.md
 
 # user-local decisions (not uploaded)
 **/docs/decisions/
+
+# 本地代码索引产物（codegraph / code-review-graph 派生，可由工具重建，不入库）
+.codegraph/
+.code-review-graph/
