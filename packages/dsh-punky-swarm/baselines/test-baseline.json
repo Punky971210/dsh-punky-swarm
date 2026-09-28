@@ -931,7 +931,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 8,
-      "lines": 63,
+      "lines": 67,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1057,9 +1057,9 @@
       "todos": 0
     },
     "test/teams-root.test.js": {
-      "asserts": 49,
+      "asserts": 51,
       "blankLines": 33,
-      "lines": 456,
+      "lines": 464,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1265,7 +1265,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-27T22:48:17Z",
+  "generatedAt": "2026-09-28T00:19:16Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1276,13 +1276,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "asset_claim 放开成员面：两测试文件按新真值更新（断言净增）+ 连带撤模式门",
+  "reason": "GATE_TEAMS_ROOT_* 两码退役：删未接线两函数 + lexical 改纯判定；测试面等价反转（断言 +2）",
   "schema": 1,
   "totals": {
-    "asserts": 8281,
+    "asserts": 8283,
     "blankLines": 4136,
     "files": 158,
-    "lines": 45119,
+    "lines": 45131,
     "tautologies": 0,
     "tests": 1731,
     "todos": 4

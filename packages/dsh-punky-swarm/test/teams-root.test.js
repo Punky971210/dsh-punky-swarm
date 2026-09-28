@@ -20,8 +20,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ① 显式且可用的 teamsRoot ⇒ 资产查找**替换**为 <teamsRoot>/presets/<team>/（loader 口径 TEAM_ASSET_DIR='presets'），
 //      **不回落**包内 presets/：资产缺失/非法 ⇒ 建批照常 + 原 `TEAM_ASSET_*` 码进 `warnings` 留痕（**不拒建批**）；
 //   ② teamsRoot/team 词法 + 防逃逸（非绝对路径 / 含 `..` 段 / team 非 kebab-case）⇒ **忽略该根**
-//      （`TEAMS_ROOT_IGNORED` 留痕、不写批次键）——原 `GATE_TEAMS_ROOT_INVALID` / `GATE_TEAMS_ROOT_ASSET_NOT_FOUND`
-//      拒态家族**已删除**；纯校验函数（`resolveTeamsRootOption` / `assertTeamsRootLexical`）保留在模块内、已退出工具面调用；
+//      （`TEAMS_ROOT_IGNORED` 留痕、不写批次键；reason ∈ `lexical` / `label-not-kebab`）——原两枚 teamsRoot
+//      拒态码**已退役**（进退役锁 `test/retired-codes-lock.test.js`：`lib/**` 零字面量、防回生）；
+//      未接线两函数已删，词法判据改由**纯判定** `teamsRootLexicalProblem` 承担（返回 `null | {reason, detail}`，恒不抛）；
 //   ③ 缺省 teamsRoot ⇒ 包内 presets/ 面「尽力」解析（无资产标签照常建批 + 留痕）；
 //   ④ 临时团队批次**同受 Tier3 门禁**（entry 缺 consume 拒派 / audit 未验收拒 complete）。
 //
@@ -38,7 +39,7 @@ import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { assessC, registerManager } from './helpers/gate-fixture.mjs';
 import { clearRoleCache, packageRoot } from '../lib/assembly/flows.js';
-import { resolveTeamsRootOption, assertTeamsRootLexical } from '../lib/tools/core.js';
+import { teamsRootLexicalProblem } from '../lib/tools/core.js';
 import { loadTeamAsset } from '../lib/assembly/team-asset.js';
 
 // ── fixtures ──
@@ -236,7 +237,7 @@ test('T2 资产缺失【反转】：目录不存在 / 目录存在但文件缺�
   const emptyRoot = mkTeamsRoot('', null, { writeFile: false }); // teamsRoot 下无 presets/
   const dirOnly = mkTeamsRoot('ghost-team', null, { writeFile: false }); // 目录在、文件缺
   try {
-    // 旧口径（P1 起）：`GATE_TEAMS_ROOT_ASSET_NOT_FOUND` 拒建批 + 零批次 JSON 落盘（拒态家族**已删除**）。
+    // 旧口径（P1 起）：以已退役的 teamsRoot 资产缺失拒态码拒建批 + 零批次 JSON 落盘（拒态家族**已删除**）。
     //   现口径：临时根可用（绝对路径、无 `..` 段）但**资产缺失** ⇒ 该标签走「无资产」路径 + 原 `TEAM_ASSET_NOT_FOUND`
     //   码留痕，**建批照常**（判据面未删，只等价反转读数两侧：拒→留痕、零落盘→落盘）。`assembly` 为夹具必需
     //   （本批含 audit 层 ⇒ `GATE_ASSEMBLY_*` 门仍在，与本批被检面无涉）。
@@ -309,7 +310,7 @@ test('T3 资产非法【反转】：层 / 角色词法 / 字段缺失 / 坏 JSON
 });
 
 // ── T4 反例 3【2026-09-27 反转】：逃逸与词法违规 ⇒ 忽略该根 + TEAMS_ROOT_IGNORED 留痕（工具面）；
-//      纯校验函数面（`resolveTeamsRootOption` / `assertTeamsRootLexical`）逐字保留 ──
+//      纯判定面（`teamsRootLexicalProblem`，判据逐字保留、出口由 `throw` 改返回值）──
 
 test('T4 逃逸/词法【反转】：team 穿越、teamsRoot 相对路径与 .. 段 ⇒ 建批照常 + TEAMS_ROOT_IGNORED 留痕 + 不写批次键（工具面 + 纯校验面）', async () => {
   const { root, byName } = makeHarness();
@@ -326,7 +327,7 @@ test('T4 逃逸/词法【反转】：team 穿越、teamsRoot 相对路径与 .. 
     ['troot-t4-root-dotdot', { team: TMP_TEAM, teamsRoot: teamsRoot + path.sep + '..' + path.sep + 'evil' }, 'lexical'],
   ];
   try {
-    // 旧口径：五例一律 `GATE_TEAMS_ROOT_INVALID` 拒建批 + 零批次落盘（该拒态家族**已删除**）。
+    // 旧口径：五例一律以已退役的 teamsRoot 词法拒态码拒建批 + 零批次落盘（该拒态家族**已删除**）。
     //   现口径：不可用根 ⇒ **忽略 + 留痕 + 建批照常**；防逃逸判据（kebab-case 白名单 / 绝对路径 / 禁 `..`）**逐字未删**，
     //   只是出口由「拒」改为「忽略」，且「忽略」必须在返回值与批次键上**可见**（不静默、不写无效声明）。
     for (const [batchId, args, reason] of traversals) {
@@ -342,12 +343,19 @@ test('T4 逃逸/词法【反转】：team 穿越、teamsRoot 相对路径与 .. 
       assert.ok(!out.warnings.some((x) => x.path && String(x.path).includes('evil')), batchId + '：穿越目标不得被读入');
       assert.ok(!out.wavePlan.flatMap((w2) => w2.tasks).some((t) => /evil/.test(String(t.cmd ?? ''))), batchId + '：穿越标签不得进技能前缀面');
     }
-    // 纯校验面（**保留**：这两个函数仍在模块内、判据逐字未变，只是已退出工具面调用）：
-    // 不经宿主 arg 类型校验：非字符串 teamsRoot → 旧码（函数级契约）
-    assert.throws(() => resolveTeamsRootOption(TMP_TEAM, 42), /GATE_TEAMS_ROOT_INVALID: teamsRoot must be a non-empty absolute path string/);
-    assert.throws(() => assertTeamsRootLexical(TMP_TEAM, '   '), /GATE_TEAMS_ROOT_INVALID/);
-    // 合法路径经词法面通过（对照组）
-    assert.equal(typeof assertTeamsRootLexical(TMP_TEAM, teamsRoot), 'string');
+    // 纯判定面（**2026-09-27 等价反转**：拒态家族退役 ⇒ 出口由 `throw` 改返回值 `null | {reason, detail}`，
+    //   判据逐字保留；原「`assert.throws` + 旧码正则」→「断非 null + reason/detail 对照」，断言强度不降、数量不减）：
+    // 不经宿主 arg 类型校验：非字符串 teamsRoot（函数级契约）
+    const p42 = teamsRootLexicalProblem(TMP_TEAM, 42);
+    // 旧断言：assert.throws(() => resolveTeamsRootOption(TMP_TEAM, 42), /<已退役码>: teamsRoot must be a non-empty absolute path string/)
+    assert.equal(p42?.reason, 'lexical');
+    assert.match(p42?.detail ?? '', /teamsRoot must be a non-empty absolute path string/);
+    // 旧断言：assert.throws(() => assertTeamsRootLexical(TMP_TEAM, '   '), /<已退役码>/)
+    assert.equal(teamsRootLexicalProblem(TMP_TEAM, '   ')?.reason, 'lexical');
+    // 标签非 kebab-case（防 join 逃逸判据）⇒ reason 与 TEAMS_ROOT_IGNORED 口径一致（旧断言的面由 T4 工具面五例承担）
+    assert.equal(teamsRootLexicalProblem('../evil', teamsRoot)?.reason, 'label-not-kebab');
+    // 合法路径经词法面通过（对照组：旧断言断「返回 string」，现断「可用 = null」）
+    assert.equal(teamsRootLexicalProblem(TMP_TEAM, teamsRoot), null);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(teamsRoot, { recursive: true, force: true });

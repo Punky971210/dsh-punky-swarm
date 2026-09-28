@@ -78,8 +78,8 @@
 | `GATE_EXIT_NO_DECLARATION` | 4 | 7 | state\gates.js · state\gates.ts |
 | `GATE_COMPLETE_NO_TIER` | 4 | 14 | state\gates.js · state\gates.js |
 | `GATE_EVENT_CONST_MISSING` | 5 | 12 | state\store.js · state\store.js |
-| `GATE_TEAMS_ROOT_ASSET_NOT_FOUND` | 3 | 5 | tools\core.js · tools\core.js |
-| `GATE_TEAMS_ROOT_INVALID` | 7 | 10 | tools\core.js · tools\core.js |
+| ~~`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`~~ | ~~3~~ | ~~5~~ | ~~tools\core.js · tools\core.js~~ ⇒ **2026-09-27 已退役，见 §3 第 8 条** |
+| ~~`GATE_TEAMS_ROOT_INVALID`~~ | ~~7~~ | ~~10~~ | ~~tools\core.js · tools\core.js~~ ⇒ **2026-09-27 已退役，见 §3 第 7 条** |
 | `GATE_ROLE_ASSEMBLY_MISSING` | 12 | 13 | tools\core.js · tools\core.js |
 | `GATE_ASSEMBLY_INVALID` | 30 | 22 | tools\core.js · tools\core.js |
 | `GATE_AUDIT_CONTRACT_MISSING` | 2 | 5 | tools\core.js · tools\core.js |
@@ -139,6 +139,13 @@
 | `GATE_TEAM_ASSET_MISSING` | 0 | 3 | — |
 | `GATE_MANAGER_PHASE_INVALID` | 0 | 1 | — |
 | `GATE_MANAGER_AGENT_ID_REQUIRED` | 0 | 1 | — |
+
+### C 退役(已入防回生锁)（2）—— **2026-09-27 补登**（原 A1 直抛 ⇒ 退役；事由 / 依据见 §3 第 7、8 条）
+
+| 码 | prod | test | 写点 |
+|---|---:|---:|---|
+| ~~`GATE_TEAMS_ROOT_INVALID`~~ | ~~7~~ | ~~10~~ | ~~tools\core.js~~ ⇒ **2026-09-27 退役：`lib/**` 零字面量命中、已入 `RETIRED_CODES`（防回生）** |
+| ~~`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`~~ | ~~3~~ | ~~5~~ | ~~tools\core.js~~ ⇒ **同上（同批退役）** |
 
 ### C 事件常量冻结(历史读端)（1）—— 事件常量冻结保留（历史批磁盘读端不变）⇒ **保留**
 
@@ -240,5 +247,10 @@
 | **4** | **`GATE_CONCURRENCY_BLOCKED`（事件常量）** | — | 常量**冻结**（读历史批用，无新写点），见 `chain-retirement-and-topology-20260918.md:111` | ✅ 无动作（**有意冻结，非废码**） |
 | **5** | **判据面变更** | — | `ENGINE_BASELINE_PLAN_SECTIONS` 由 2 项扩为 **6 项**（提交 `7060ab0`）⇒ `GATE_PLAN_CONTRACT` 的**判定集合扩面**（**码本身未变**） | 📝 登记（**码面无新增**） |
 | **6** | **拒态文案变更** | — | 四处拒绝路径（`GATE_PLAN_CONTRACT` / `GATE_HANDOFF_MISSING` / `GATE_ENTRY_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`）**追加「【怎么做】」指引项**（提交 `892afcb`） | 📝 登记（**只加文案，判据集合逐字不变**） |
+| **7** | **`GATE_TEAMS_ROOT_INVALID`** | A1 直抛（`tools\core.js`；prod 7 / test 10） | **已退役**（2026-09-27）。**原语义** = 显式 `teamsRoot` 词法 / 防逃逸**拒建批**（非空绝对路径 / 不含 `..` 段 / 标签须 kebab-case / 资产路径越界双保险）。**退役事由** = 用户裁「`team` 降为**可选标签**（内容宽松）⇒ **相关门禁做退役处理**」，本码属 A 级「立即可退役」：拒态家族随 `team` 可选化整体退出工具面——**判据逐字保留**，出口由 `throw` 改**纯判定返回值**（`teamsRootLexicalProblem`，恒不抛；不可用 ⇒ `TEAMS_ROOT_IGNORED` 留痕 + 不写批次键）。**依据** = 用户裁决（覆盖性快照 `reports/decision-team-optional-and-gate-retire-20260927.md` §三 A 级）+ 本批（工作树基线 `4412a9f`；提交由 Leader 复核后进行） | ✅ **已加入退役锁**（`RETIRED_CODES` 9 ⇒ 11）+ 本表 A1 行标删、C 类已收 |
+| **8** | **`GATE_TEAMS_ROOT_ASSET_NOT_FOUND`** | A1 直抛（`tools\core.js`；prod 3 / test 5） | **已退役**（2026-09-27，与第 7 条同批）。**原语义** = 显式 `teamsRoot` 下 `<teamsRoot>/presets/<team>/team-asset.{json,yml}` **均不存在** ⇒ 拒建批（不回落包内 `presets/`）。**退役事由** = 承接函数 `assertTeamsRootAsset` **未接线**（全仓无 import / 调用 / 测试引用）+ 工具面出口早已降级为「无资产」路径 + `TEAM_ASSET_NOT_FOUND` 留痕 ⇒ 本批删函数即**两码在 `lib/**` 归零**。**依据** = 同上（用户裁决覆盖性快照 §三 A 级 + 本批） | ✅ **已加入退役锁**（同批 9 ⇒ 11）+ 本表 A1 行标删、C 类已收 |
+
+> **同批实测补注（不改写历史读数）**：D 模板前缀行 `GATE_TEAMS_ROOT_`（本表 §D，2026-09-22 计数 prod 3 / test 0）的写点已随本批**归零**（三函数删/改后，`lib/**` 不再拼该家族前缀）；该行按「历史普查读数」原样保留。
+> **自证读数（2026-09-27 本批）**：`lib/**` 两码**零字面量命中**（含注释）；`RETIRED_CODES.length` = **11**。
 
 **⇒ 处置纪律（沿用本文件 §0）**：**A 类保留 / C 类退役入锁 / N 类 scanner 白名单剔除**；新增退役码**只需入 `RETIRED_CODES`**。

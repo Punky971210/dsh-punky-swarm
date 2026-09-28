@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING）：
+// 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING + teamsRoot 两码）：
 //   数据源 = docs/gate-code-classification-2026-09-22.md C 类（码已退役、无任何拒态来源）。
 //   单表遍历断言 lib/** 零字面量命中 —— 取代此前散布在 gate-lite-batch2 / concurrency-gate /
 //   governance / writing-team-asset 四处的手写「已删零命中」变体（激进删除批 2，用户裁定）。
@@ -35,6 +35,10 @@ const RETIRED_CODES = [
   'GATE_TEAM_ASSET_MISSING', // team-asset 解析前置化（装配前缀来源切换）
   'GATE_MANAGER_MISSING', // 收口告警删（2026-09-22 用户裁定：roster_gap 已承担在册缺口留痕；legacy 字段面退役）
   'GATE_SKILL_MISSING', // 【2026-09-27 补登】用户裁「技能 recommend 不再设门禁」⇒ 码已从引擎彻底移除（提交 b8380a8）
+  // 【2026-09-27 补登 · 本批】依据用户裁决「team 降为可选标签（内容宽松）⇒ 相关门禁做退役处理」
+  //   （覆盖性快照 reports/decision-team-optional-and-gate-retire-20260927.md §三 A 级「立即可退役」）：
+  'GATE_TEAMS_ROOT_INVALID', // teamsRoot 词法/防逃逸拒态退役——原 `assert` 出口改「纯判定返回值」（`teamsRootLexicalProblem`），判据逐字保留、不再抛
+  'GATE_TEAMS_ROOT_ASSET_NOT_FOUND', // teamsRoot 资产查找拒态退役——未接线函数 `assertTeamsRootAsset` 与本码同批删除（无 import/调用/测试引用）
 ];
 
 function libSources(dir, out = []) {
