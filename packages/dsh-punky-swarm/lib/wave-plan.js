@@ -1054,6 +1054,13 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含 `roster` ⇒ 既有 sig 基线零漂移）。
                 //   ⚠ **不设唯一性约束**：同 roster 名书多条 lane 合法（不去重、不告警）。
                 roster: normalizeRoster(t.roster),
+                // 【2026-09-29 · 批 `cleanup-settle-20260929` G-4（**甲 · 补持久化**）】「单件写盘 lane」的**显式声明位**
+                //   **归一化保留**：原实现只在 `composeWorkerPrompt` 的入参面读该字段，而建批归一化**不落**它 ⇒
+                //   派发路径（`lib/engine/dispatch.js` 的直读点）**恒读 `undefined`** ⇒ 声明面「写了不生效」。
+                //   本批把声明面**接通**：声明 `true` 的 lane 经建批后于批次 JSON 内**可见**，派发时即可走显式抑制支。
+                //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移；与 `roster` 同款处置）。
+                //   ⚠ **不改变抑制语义本身**（`composeWorkerPrompt` 内「audit 层 + 写盘面恰一件」的**自动判定**保留）。
+                singleArtifactWrite: t.singleArtifactWrite === true,
                 // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
                 //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
                 //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）

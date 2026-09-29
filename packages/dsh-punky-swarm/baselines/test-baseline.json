@@ -640,6 +640,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/hygiene-comment-literals.test.js": {
+      "asserts": 5,
+      "blankLines": 12,
+      "lines": 94,
+      "tautologies": 0,
+      "tests": 1,
+      "todos": 0
+    },
     "test/identity.test.js": {
       "asserts": 81,
       "blankLines": 36,
@@ -1193,7 +1201,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-29T12:39:25Z",
+  "generatedAt": "2026-09-29T15:35:30Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1204,15 +1212,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "dualline-fix-20260929：承接批 6 preset lane 新增双副本机检用例（+4 tests/+21 asserts）",
+  "reason": "cleanup-settle-20260929：新增归一化守卫 test/hygiene-comment-literals.test.js",
   "schema": 1,
   "totals": {
-    "asserts": 7496,
-    "blankLines": 3780,
-    "files": 149,
-    "lines": 40756,
+    "asserts": 7501,
+    "blankLines": 3792,
+    "files": 150,
+    "lines": 40850,
     "tautologies": 0,
-    "tests": 1577,
+    "tests": 1578,
     "todos": 4
   }
 }
