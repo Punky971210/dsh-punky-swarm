@@ -123,7 +123,7 @@
     "test/assets.test.js": {
       "asserts": 43,
       "blankLines": 27,
-      "lines": 298,
+      "lines": 295,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1201,7 +1201,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-29T15:35:30Z",
+  "generatedAt": "2026-09-29T18:29:38Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1212,13 +1212,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "cleanup-settle-20260929：新增归一化守卫 test/hygiene-comment-literals.test.js",
+  "reason": "debt-cleanup-20260930：发货面双侧同删致 test/assets.test.js 夹具随表同删",
   "schema": 1,
   "totals": {
     "asserts": 7501,
     "blankLines": 3792,
     "files": 150,
-    "lines": 40850,
+    "lines": 40847,
     "tautologies": 0,
     "tests": 1578,
     "todos": 4

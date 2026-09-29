@@ -38,11 +38,10 @@ const TARGET_ROOTS = {
 /** 内置默认资产表（清单不可用时的降级表；落点与冻结值逐字等价）。 */
 const DEFAULT_ASSETS = [
   { rel: 'presets/punky-preset', target: { root: 'preset', subpath: 'punky-preset' } },
-  // P1（2026-09-16）：引擎自建团队资产随包发布 + 同步登记（与 asset-manifest.json 同批同形，两处必须一致）。
-  //   注意（如实标注）：**运行期真源始终是包内** `presets/engine-team/team-asset.yml`（读端 `packageRoot()`）；
-  //   本条的落点 `<home>/.dsh/.agent-presets/engine-team/` 是**交付/审计副本**，不是 teamsRoot 形态
-  //   （teamsRoot 解析 `<root>/presets/<team>/team-asset.*`），故它不被引擎当资产根读——登记目的是「资产随包可审计」。
-  { rel: 'presets/engine-team', target: { root: 'preset', subpath: 'engine-team' } },
+  // 退役（2026-09-30 · 批 debt-cleanup-20260930）：原 `presets/engine-team` 条目已随**团队资产装配面整体退役**
+  //   一并删除（装配面进了退役锁；该目录为空壳且不被版本控制跟踪 ⇒ 同步恒 missing-source）。
+  //   与 `asset-manifest.json` **双侧同删**（两表条目 10 → 9，两处必须一致）。
+  //   ⇒ 该 rel **不再作为资产真源列出**（本段属**否定式退役登记**，不是现役指针）。
   { rel: 'skills/software-team', target: { root: 'skill', subpath: 'software-team' } },
   // P1（2026-09-17）：engine-team 技能文档随包发布 + 同步登记（与 asset-manifest.json 同批同形，两处必须一致）。
   { rel: 'skills/engine-team', target: { root: 'skill', subpath: 'engine-team' } },
