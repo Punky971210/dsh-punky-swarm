@@ -363,6 +363,12 @@
                   enableRunInBackground: false
                   maxDepth: provider-managed
 
+              # ── 双线适配（0.1.7-rc.2 / 0.2.0-rc.1）依据 · 单行两线通吃 ─────────────────────
+              # `@deepseek-ai/dsh-base` 在 0.1.7-rc.1 / 0.1.7-rc.2 / 0.2.0-rc.1 **三版全部**依赖本包
+              #   ⇒ 本行**不需要**按宿主版本分支（内核**无**宿主版本变量 ⇒ 条件行不可达；见批 6 取证 §二/§四）。
+              # **禁**回加旧推进器行：那会在两线之一新增**必失败行**，且旧线存在同服务**双挂载**风险。
+              # 双副本一致性（本行 ↔ `presets/punky-preset/agent.cordis.yml` 的同一行）由
+              #   `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'
                 config:

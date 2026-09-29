@@ -62,7 +62,7 @@
     "gates"
   ],
   "dependencies": {
-    "@deepseek-ai/dsh-experimental-agent-team-profile": "^0.1.7-rc.1"
+    "@deepseek-ai/dsh-experimental-agent-team-profile": "^0.1.7-rc.1 || ^0.2.0-rc.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
