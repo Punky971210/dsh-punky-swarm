@@ -8,9 +8,10 @@ description: |
   `Comfyui-use`）的 Layer A（自研配方驱动：配方 → 参数槽 → 板1 comfy_*
   工具序列 → 质检 → 审计回执），Layer A 正文与 recipes/ 全树已迁入
   references/comfyui/。
-  角色 → 技能的装配数据**唯一来源**是 `presets/design-team/team-asset.yml`，
-  本技能只声明指针、不复制装配数据；生产走**新批次**（`producer` lane 必须
-  consume audit 产物，审核通过才开产）。
+  角色 → 技能的装配数据面**已整体退役**（2026-09-27 用户裁决 ＋ 批
+  retire-team-chain-20260927 清尾，**进退役锁**）：引擎不再解析团队资产，
+  **现行装配 = 引擎基线 ＋ 成员槽位 ＋ 指引**；本技能只写用途、职责与纪律。
+  生产走**新批次**（`producer` lane 必须 consume audit 产物，审核通过才开产）。
   当需要确定设计团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按配方驱动链路产出设计产物/图像底图时加载本技能。
 version: "1.1.0"
@@ -31,12 +32,12 @@ triggers:
 
 > roles 为子目录 `references/roles/`；三层产物契约沿用引擎既有 `plan/` `exec/` `audit/` 目录约定；行为层（hardening/rail / 治理工具）由 dsh-punky-swarm 承担。
 
-## 装配数据唯一来源（先读这一条）
+## 装配面（已退役 · 先读这一条）
 
-- **装配数据（角色 × 层 × 技能 × flows）唯一来源 = `presets/design-team/team-asset.yml`**；本技能**不复制**装配数据，只给指针。
-- 引擎建批时按该资产的 `layers[*].roles` / `layers[*].skills` 注入角色前缀与技能前缀；本文件的层级职责表用于**人读与角色选型**（装配面见「三层职责与产物契约」一节）。
-- 修改装配（增删角色、调整某角色的技能集、改 flows 口径）**只改资产文件**；本文件的角色名/产物路径必须与资产保持可对账（角色集合相等、产物路径一致）。
-- 口径对照：本技能与 `skills/software-team/SKILL.md` §装配资产（team-asset）说明与用途同类 —— 「团队技能说的是**怎么用**，资产说的是**怎么装**」（该章节由已退役的独立装配说明技能并入，落点即此）。
+- **装配数据面已整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）：引擎**不再解析**任何团队资产，按团队解析的「角色 × 层 × 技能 × flows」声明面**已不存在**。
+- **现行装配面 = 引擎基线（引擎基础角色集与缺省门禁）＋ 成员槽位（roster / lane 角色）＋ 指引（本技能的角色编制表与 persona 纪律）**；本文件的「三层职责与产物契约」即这一层的**人读与角色选型**依据。
+- 增删角色 / 调整技能集 / 改流程口径**只改本指引**（无资产文件可改）；角色名与产物路径以引擎既有 `plan/` `exec/` `audit/` 约定为准。
+- 本技能只写**用途、职责与纪律**（口径同 `skills/software-team/SKILL.md` 的团队资产退役说明）。
 
 ## 团队定位
 
@@ -134,14 +135,14 @@ triggers:
 | exec ⚡ | `exec/<lane>/` | `exec/workflow.json`、`exec/smoke-report.md`、`exec/production/*`、`exec/production-report.md`、`runs.json` 记账、质检回执、步骤级进度快照 `<lane>/progress/NN-<slug>.md` |
 | audit 🛡️ | `audit/` | `audit/workflow-review.md`、`audit/gap-list.json`（验收结论与未闭合项） |
 
-- **角色声明以资产为准**：本团队 4 个角色（`design-planner` / `workflow-builder` / `producer` / `workflow-auditor`）的可派发性由 `presets/design-team/team-asset.yml` 声明；另可声明引擎基础角色（`coordinator` / `designer` 用作计划角色，`reviewer` / `supervisor` 用作审核角色）。**本文件不复述声明的字段内容**。
+- **角色编制以本指引为准**：本团队 4 个角色（`design-planner` / `workflow-builder` / `producer` / `workflow-auditor`）是**团队指引层的事实编制**（装配面已退役 ⇒ 无资产声明面）；另可用引擎基础角色（`coordinator` / `designer` 用作计划角色，`reviewer` / `supervisor` 用作审核角色）。建批 `role` 取值落在**引擎基础集**之外时，引擎按**告警**（`GATE_ROLE_INVALID`）处置、**不阻断建批**——故 `task.cmd` 须**内联**本团队角色的职责边界（这正是本文件的价值）。**本文件不复述任何装配声明字段**。
 - **不新增产物类型**：产物目录只用既有 `plan/` `exec/` `audit/` 前缀。
 - **禁止**产出名为 `spec.md` 的 plan 产物：Plan Contract 门禁对任何 `spec.md` 强制软件工程体裁的两章（`## 验收标准` / `## 约束`），设计团队以**其他命名**承载设计规格（`design-spec.md` / `<配方>-contract.md`），**不改引擎门禁**。
 - `exec/` 下产物按 lane 独占目录书写；`references/comfyui/recipes/` 为**只读**参考树，实机产物不写回该树。
 
 ## 使用方式
 
-1. **查装配**：读 `presets/design-team/team-asset.yml`（角色 / 层 / 技能 / flows 的唯一真源）。
+1. **查装配**：装配面**已退役**（无资产文件）⇒ 角色集回落**引擎基础集**；本团队的角色编制与产物契约以本文件「三层职责与产物契约」一节为准。
 2. **查角色**：读本文件「三层职责与产物契约」；基础角色另有 `references/roles/<role>.md`（Persona / 职责与产出 / 权限边界 / 协作方式）。
 3. **查能力层**：读本文件 §Layer A（迁入副本）与 `references/comfyui/recipes/<配方>/*.md` 配方卡。
 4. **建批**：Leader/Manager 按资产装配面派 lane —— plan 层 `design-planner`、exec 层 `workflow-builder`、audit 层 `workflow-auditor`；生产另开批次派 `producer` 并 `consume` 两个 audit 产物。角色边界要点内联进 `task.cmd`。
@@ -150,10 +151,10 @@ triggers:
 ## 边界
 
 - 本技能**不含**操作流程手册本体（用 spec-writing / interaction-design-principles / acceptance-gate / review-execution 等能力层）与运行时调度（用 dsh-punky-swarm 工具）。
-- 本技能**不复制**装配数据（角色×层×技能×flows），唯一真源 = `presets/design-team/team-asset.yml`。
+- 本技能**不承载**装配数据：装配面**已整体退役**（**进退役锁**）⇒ **无资产文件**；**现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 本指引**。
 - 本技能**不承载** Manager 通用定义（落点 `presets/punky-preset/references/manager.md`）。
 - 本技能**不复制** Layer B（`expert/`）任何文件，只写引用指针。
-- 角色职责与产物契约以本文件「三层职责与产物契约」为准；装配生效以资产文件为准。
+- 角色职责与产物契约**以本文件「三层职责与产物契约」为准**（装配面已退役 ⇒ 无资产文件可为准）。
 
 ---
 

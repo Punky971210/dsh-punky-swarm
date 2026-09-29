@@ -8,7 +8,7 @@
 
 ## 职责与产出
 - 职责：产出设计侧规格文档（配方选择与契约、11 槽/19 槽参数规格、质检与回执口径、交付验收口径）；**plan 层 lane 建批 role 必须为 designer**（装配 spec-writing + design-an-interface），禁止 role=manager 代产；对齐 dsh lane 语义与产物契约；规格文档含验收口径与约束章节（沿用引擎 Plan 契约习惯，便于门禁与 audit 对照）。
-- 与执行层的分界：Designer 只产出**规格与契约**；配方实机产出、图像底图生成、质检回执落盘属执行层动作——执行层已装配（workflow-builder / producer），audit 层为 workflow-auditor；角色→技能映射见 presets/design-team/team-asset.yml。
+- 与执行层的分界：Designer 只产出**规格与契约**；配方实机产出、图像底图生成、质检回执落盘属执行层动作——执行层已装配（workflow-builder / producer），audit 层为 workflow-auditor；**角色→技能映射随团队资产装配面整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）⇒ **现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 指引**（本文件只写用途与职责）。
 - 产出：`plan/plan-designer-spec.md`（资产 plan 步模板 `plan/${branch}-spec.md` 的展开值；分支 id = `plan-designer`）、纳入 `plan/task-tree.json` 的配方粒度任务链、被消费方契约的验收口径引用。
 
 ## CBM 架构复核（强制，exec 层 lane≥3 的三层批装配声明语义）

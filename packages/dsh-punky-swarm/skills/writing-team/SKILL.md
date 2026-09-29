@@ -5,8 +5,9 @@ description: |
   writing-planner（plan）/ drafter·polisher·publisher（exec）/ writing-auditor（audit）的职责边界、
   产物契约（plan/ exec/ audit/）与写作交付纪律（按规格成稿 → 修订去 AI 痕 → 判据对照审稿 →
   审核通过才排版交付）。
-  装配数据（角色 × 层 × 技能 × flows）的唯一来源是引擎团队资产
-  `presets/writing-team/team-asset.yml`——本技能不复制该数据，只声明指针与用途。
+  装配数据面**已整体退役**（2026-09-27 用户裁决 ＋ 批 retire-team-chain-20260927 清尾，**进退役锁**）：
+  引擎不再解析任何团队资产，**现行装配 = 引擎基线 ＋ 成员槽位 ＋ 指引**。
+  本技能只写用途、职责与纪律（不承载、也不指向装配数据）。
   能力层指向本机既有写作技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）：
   spec-writing / writing-trio / wechat-writing-style / humanizer / lieflat-less-ai-tone /
   revision-patterns / baoyu-markdown-to-html / acceptance-gate / review-execution。
@@ -30,9 +31,9 @@ triggers:
 
 # writing-team — 写作团队指引（三层 5 角色 × 产物契约 × 写作交付纪律）
 
-> **装配数据唯一来源声明**：本技能**不承载**装配数据。角色/层/技能/flows 的唯一权威是引擎团队资产
-> `presets/writing-team/team-asset.yml`（随包分发，引擎按 `presets/<team>/team-asset.yml` 解析）。
-> 本技能只写**用途、职责与纪律**，避免"技能与引擎资产两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md` §装配资产（team-asset）说明与用途）。
+> **装配面已退役声明**：团队资产装配方案**已整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）——引擎**不再解析**任何团队资产，`team` 退为可选自由标签。
+> **现行装配面** = **引擎基线（引擎基础角色集与缺省门禁）＋ 成员槽位（roster / lane 角色）＋ 指引（本团队 skill 与 persona 纪律）**；本技能**不承载、也不指向**装配数据。
+> 本技能只写**用途、职责与纪律**，避免"技能与引擎两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md` 的团队资产退役说明）。
 > 行为层（persona 纪律 0–10、三层门禁 Tier3、Manager 定义）由 dsh-punky-swarm 承担，本技能不重复。
 
 ## 团队用途（何时加载）
@@ -117,9 +118,11 @@ triggers:
 |---|---|---|
 | `resolveAssembly(team, config.assembly)` | 解析 `layers`（角色 + 技能），建批时注入 `[skills=…]` 前缀 | `lib/assembly.js` |
 | `resolveTeamFlows(team)` / `resolveTeamRoles(team)` | 解析 `flows` 与 `roles`（扩展角色、额外牵头） | `lib/assembly/flows.js` |
-| `loadTeamAsset(root, team)` | 加载 + 加载期不变量校验（拒载非法声明） | `lib/assembly/team-asset.js` |
+> ⚠ **装配面已整体退役**（2026-09-27 裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）⇒ 上表**不含资产装载行**；
+> `resolveTeamFlows` / `resolveTeamRoles` 为**保形空实现**（恒返「无声明」/ 空集），角色集回落**引擎基础集**。
 
-**维护纪律**：改装配 = 改 `presets/writing-team/team-asset.yml`，再同步本技能的作用描述；
+**维护纪律**：装配面**已退役**（无资产文件可改）——现行装配只随**引擎基线 / 成员槽位 / 本指引**三者变化；
+改本文件的作用描述即可，**不得**再引入按团队解析的装配数据。
 装配引用的技能必须能被宿主加载（技能声明值 = 宿主 `SKILL.md` 的 frontmatter `name`，**不是**宿主目录名）。
 
 ## 使用方式

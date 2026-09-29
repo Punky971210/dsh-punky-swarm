@@ -4,8 +4,9 @@ description: |
   调研团队指引（团队层 skill，与 software-team / design-team 平级）：三层角色
   research-planner / researcher / research-auditor 的职责边界、粒度口径与产物契约
   （plan/ exec/ audit/），以及调研纪律（来源分级 A/B/C、逐条溯源、audit 抽查 ≥3 条引用可复现）。
-  装配数据（角色 × 层 × 技能 × flows）的唯一来源是引擎团队资产
-  `presets/research-team/team-asset.yml`——本技能不复制该数据，只声明指针与用途。
+  装配数据面**已整体退役**（2026-09-27 用户裁决 ＋ 批 retire-team-chain-20260927 清尾，**进退役锁**）：
+  引擎不再解析任何团队资产，**现行装配 = 引擎基线 ＋ 成员槽位 ＋ 指引**。
+  本技能只写用途、职责与纪律（不承载、也不指向装配数据）。
   能力层指向本机既有调研技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）：
   spec-writing / decision-mapping / tech-benchmark-planning / ara-compiler /
   ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer / acceptance-gate。
@@ -25,9 +26,9 @@ triggers:
 
 # research-team — 调研团队指引（三层角色 × 产物契约 × 调研纪律）
 
-> **装配数据唯一来源声明**：本技能**不承载**装配数据。角色/层/技能/flows 的唯一权威是引擎团队资产
-> `presets/research-team/team-asset.yml`（随包分发，引擎按 `presets/<team>/team-asset.yml` 解析）。
-> 本技能只写**用途、职责与纪律**，避免"技能与引擎资产两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md` §装配资产（team-asset）说明与用途）。
+> **装配面已退役声明**：团队资产装配方案**已整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）——引擎**不再解析**任何团队资产，`team` 退为可选自由标签。
+> **现行装配面** = **引擎基线（引擎基础角色集与缺省门禁）＋ 成员槽位（roster / lane 角色）＋ 指引（本团队 skill 与 persona 纪律）**；本技能**不承载、也不指向**装配数据。
+> 本技能只写**用途、职责与纪律**，避免"技能与引擎两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md` 的团队资产退役说明）。
 > 行为层（persona 纪律 0–10、三层门禁 Tier3、Manager 定义）由 dsh-punky-swarm 承担，本技能不重复。
 
 ## 团队用途（何时加载）
@@ -79,9 +80,11 @@ triggers:
 |---|---|---|
 | `resolveAssembly(team, config.assembly)` | 解析 `layers`（角色 + 技能），建批时注入 `[skills=…]` 前缀 | `lib/assembly.js` |
 | `resolveTeamFlows(team)` / `resolveTeamRoles(team)` | 解析 `flows` 与 `roles`（扩展角色、额外牵头） | `lib/assembly/flows.js` |
-| `loadTeamAsset(root, team)` | 加载 + 加载期不变量校验（拒载非法声明） | `lib/assembly/team-asset.js` |
+> ⚠ **装配面已整体退役**（2026-09-27 裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）⇒ 上表**不含资产装载行**；
+> `resolveTeamFlows` / `resolveTeamRoles` 为**保形空实现**（恒返「无声明」/ 空集），角色集回落**引擎基础集**。
 
-**维护纪律**：改装配 = 改 `presets/research-team/team-asset.yml`，再同步本技能的作用描述；
+**维护纪律**：装配面**已退役**（无资产文件可改）——现行装配只随**引擎基线 / 成员槽位 / 本指引**三者变化；
+改本文件的作用描述即可，**不得**再引入按团队解析的装配数据。
 装配引用的技能必须能被宿主加载（技能声明值 = 宿主 `SKILL.md` 的 frontmatter `name`，**不是**宿主目录名——例如
 宿主目录 `research-compiler` 的加载名是 `ara-compiler`，目录 `rigor-reviewer` 的加载名是 `ara-rigor-reviewer`）。
 
@@ -120,7 +123,7 @@ triggers:
 
 ## 边界
 
-- 本技能**不承载装配数据**：唯一权威是 `presets/research-team/team-asset.yml`；本文件只写用途、职责边界与契约，冲突以资产为准。
+- 本技能**不承载装配数据**：装配面**已整体退役**（2026-09-27 裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）⇒ **无资产可为准**；**现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 指引**，本文件只写**用途、职责边界与契约**。
 - **不替代引擎门禁**：文中「须/必须」若落在**非运行期判据**上（`flows.exec.contract` = 未接线声明；`chain.needHuman`、`flows.*.progress_contract` = **已退役、声明即拒**），视为约定而非门禁行为。
 - 只声明**本团队**角色与技能；跨团队引用只作指针，不复制他队角色定义。
 - 不新增产物类型：只用引擎既有 `plan/` `exec/` `audit/` 前缀。

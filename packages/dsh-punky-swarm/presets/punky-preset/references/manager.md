@@ -72,14 +72,12 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 逐 lane 用 `member_status`（running→review）+ `member_settle`（merged/failed/skipped/conflict）结算；**失败 lane 为终态**，重做 = **重开新批次**（persona 纪律 0b → `references/discipline.md#§0b`）。
 
-### 5.6 临时团队（`teamsRoot`）协作面（与 persona 纪律 0j 同口径）
+### 5.6 临时组队面（**已退役**）
 
-- **适用**：复杂任务、**无预置团队**时，Leader 在**会话级**资产根下临时组队——落点 `<teamsRoot>/presets/<team>/team-asset.json`，以 `wave_plan({team, teamsRoot})` 建批（persona 纪律 0j → `references/discipline.md#§0j`）。
-- **同一校验、同一门禁**：临时团队与内置团队走**同一加载器 + 同一加载期校验器 + 同一 Tier3 门禁**（装配面同级）；显式 `teamsRoot` 时资产缺失 / 非法**拒建批且不回落包内**——故 Manager 在派发建议前**无需**区分团队来源，按同一 `batch_status` 黑板判读即可。
-- **本角色不变更**：Manager **不创建**临时团队资产（归 Leader / plan 层产出）、**不新建** subagent、**不写** `presets/**`；临时团队的资产根登记（`teamsRoot` 绝对值 + 团队来源）在建批与 plan spec 装配段落，Manager 只消费。
-- **`flows` 面如实口径**：临时团队的 `flows`（`entry_requires` / `contract` / `produce_field` / `needhuman` / `complete`）在门禁读端**按临时资产生效**——建批时 `teamsRoot` 随批次持久化（批次字段 `teamsRoot`），门禁解析根优先级 = ① 批次级 `teamsRoot` → ② 引擎注入的 `flowsRoot`（测试缝）→ ③ 包根。**派发/结算判读仍以引擎给出的门禁码为准**（`gate_status` 复核）。
-- **资产改动即时生效（免重启）**：资产读端缓存以「资产路径 + mtime + size」签名判新旧——同进程内改写临时资产（补角色 / 改 `flows`）后**下一次建批即按新值**，无需清缓存或重启。
-- **红线不变**：临时团队批次同样**不得**建议裸 subagent；执行单元仍必须是 wavePlan lane（D-1）。
+- **处置**：会话级临时团队资产根（`teamsRoot`）与团队资产装配面**已整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）⇒ 本小节原「临时组队落点 ＋ 按临时资产生效的校验/门禁/`flows` 面」**整体作废**：**无资产根可登记、无临时资产可写**，也不存在「临时团队 vs 内置团队」之别。
+- **现行建批方式**：`wave_plan({ batchId, tasks, assembly })` —— `team` 为**可选自由标签**（不解析、不校验、不拒建批）；含 audit 层的三层批必带 `assembly`（`auditLane` 必填）。**现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 指引**（无按团队解析的声明面）。
+- **本角色不变更**：Manager **不创建**任何团队资产、**不新建** subagent、**不写** `presets/**`；派发建议一律按 `batch_status` 黑板判读。
+- **红线不变**：任何批次都**不得**建议裸 subagent；执行单元仍必须是 wavePlan lane（D-1）。派发 / 结算判读仍以引擎给出的门禁码为准（`gate_status` 复核）。
 
 ## 6. 长程候选消费协议（Manager 侧，同步 persona 纪律 0f / 0h → `references/discipline.md#§0f`、`#§0h`）
 

@@ -9,7 +9,8 @@
     },
     {
       "rel": "presets/engine-team",
-      "note": "引擎自建团队资产（team-asset.yml：层/角色/技能/flows/chain 声明；P1 2026-09-16 新增）；运行期真源仍是包内 presets/engine-team/，本落点为交付/审计副本（非 teamsRoot 形态）",
+      "note": "引擎团队资产落点登记：仅交付/审计副本（非运行期真源、不被引擎当资产根读）。团队资产装配面已整体退役（进退役锁）⇒ 源目录为空壳（无文件、且空目录不入版本控制），同步状态恒 missing-source（非致命）。",
+      "rationale": "保留条目的理由（此键不受 schema 校验，长文放这里以避免 note 越界）：① 与 lib/assets.js 内置默认表 DEFAULT_ASSETS 同批同形（该文件自陈两处必须一致），单侧删除即口径分裂，而 lib/** 不在本 lane 写域；② 本条目仅登记交付/审计副本，从不是运行期真源。实物现状：源目录为空壳（批 3 删件后无文件、空目录不被版本控制跟踪）⇒ 同步状态恒 missing-source（非致命，lib/assets.js:232 显式建模）。建议后续批双侧同删（本清单 ＋ DEFAULT_ASSETS）以达成「与实物一致」终态。",
       "target": { "root": "preset", "subpath": "engine-team" }
     },
     {
@@ -19,7 +20,7 @@
     },
     {
       "rel": "skills/engine-team",
-      "note": "引擎团队技能（三层角色与产物契约；装配数据真源仍在 presets/engine-team/team-asset.yml）",
+      "note": "引擎团队技能（三层角色与产物契约；装配面已退役，本技能只写用途、职责与纪律）",
       "target": { "root": "skill", "subpath": "engine-team" }
     },
     {
@@ -44,12 +45,12 @@
     },
     {
       "rel": "skills/research-team",
-      "note": "调研团队技能（三层角色 research-planner / researcher / research-auditor 的职责与产物契约；装配数据真源仍在 presets/research-team/team-asset.yml）",
+      "note": "调研团队技能（三层角色 research-planner / researcher / research-auditor 的职责与产物契约；装配面已退役，本技能只写用途、职责与纪律）",
       "target": { "root": "skill", "subpath": "research-team" }
     },
     {
       "rel": "skills/writing-team",
-      "note": "写作团队技能（三层角色 writing-planner / drafter·polisher·publisher / writing-auditor 的职责与产物契约；装配数据真源仍在 presets/writing-team/team-asset.yml）",
+      "note": "写作团队技能（三层角色 writing-planner / drafter·polisher·publisher / writing-auditor 的职责与产物契约；装配面已退役，本技能只写用途、职责与纪律）",
       "target": { "root": "skill", "subpath": "writing-team" }
     }
   ]
