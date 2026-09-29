@@ -816,6 +816,14 @@
       "tests": 23,
       "todos": 0
     },
+    "test/patch-preset-duplicate-consistency.test.js": {
+      "asserts": 21,
+      "blankLines": 20,
+      "lines": 195,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/phase-reason.test.js": {
       "asserts": 33,
       "blankLines": 26,
@@ -1185,7 +1193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-28T13:12:20Z",
+  "generatedAt": "2026-09-29T12:39:25Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1196,15 +1204,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "onekey-install-20260927：新增自检/冒烟 harness（+46 asserts / +10 tests，100% 来自 2 个新用例文件）",
+  "reason": "dualline-fix-20260929：承接批 6 preset lane 新增双副本机检用例（+4 tests/+21 asserts）",
   "schema": 1,
   "totals": {
-    "asserts": 7475,
-    "blankLines": 3760,
-    "files": 148,
-    "lines": 40561,
+    "asserts": 7496,
+    "blankLines": 3780,
+    "files": 149,
+    "lines": 40756,
     "tautologies": 0,
-    "tests": 1573,
+    "tests": 1577,
     "todos": 4
   }
 }

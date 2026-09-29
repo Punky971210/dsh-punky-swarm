@@ -47,6 +47,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     ⇒ 本冒烟证明的是「**在干净 home 上一条命令装完并起得来**」，不是「用户既有 profile 可用」。
 //   · 上游团队包走 npm 网络拉取 ⇒ 无网时不具备可复跑性（脚本会以明确读数失败，**不伪造通过**）。
 //
+// ── 批 dualline-fix-20260929 加固（F-1 / F-2 / 形态 B 响亮化）────────────────────────────
+//   ① **F-1 硬判据（两处齐备）**：`--dump-config` **与真启动**文本中 `disabling profile plugin row`
+//      计数**均须 = 0**。批 6 假绿教训：三面断言（引擎行 / 模式行 / 技能指针）**均不涉及**上游三条团队
+//      子包行 ⇒ 只按三面判会让「上游行被静默停用」冒充通过。
+//   ② **F-2(a) 解析层确定性**：读 profile 锁文件 ⇒ 团队族（`-profile` + 三个子包）**distinct 版本数各 = 1**；
+//      并可选在临时 profile 内 `pnpm install --lockfile-only` **复解析**后复算（`--no-lock-probe` 可关）。
+//      ⚠ **候选来源（批 7 新前提）**：团队族四件的**唯一候选来源 = 安装命令的显式 spec**
+//      （`dsh plugin add <tarball> <team-spec>`，精确钉 `<HOST_RC>`）——**不是**本包 `dependencies`
+//      （批 7 · `exec-deps-fix` 已把该键整体删除，本脚本以机械化守卫防回生，见下 ⑤）。
+//   ⑤ **必要条件消除的结构守卫（防回生）**：本包 `package.json` 的 `dependencies` **不得**声明团队族 `-profile`
+//      —— 该声明是「旧线候选可被解析」的**唯一**来源；加回来即重建非确定性 ⇒ 守卫当场变红。
+//   ③ **安装后确定性校验 + 上限重试**：`dsh plugin add` 非 0（**形态 B**）⇒ 有上限重试
+//      （`INSTALL_RETRY_LIMIT`，理由见该常量）；仍失败 ⇒ **响亮**：回显 status 并采集
+//      `@deepseek-ai/dsh/lib/plugin-Dr5KNRuz.js:78` 所指 `logPath` 的诊断全文（**禁静默放过**）。
+//   ④ 形态 B 属**环境 / 包管理器侧**（resolver / 共享 store / registry 往返），本批**不承诺修复**（D-8）：
+//      只要求它**响亮**并可核（status + logPath 诊断），**不得**用它解释形态 A（静默混合）。
+//
 // 用法：
 //   node scripts/smoke-install.mjs [--keep] [--boot-timeout <ms>] [--skip-boot] [--pack-dir <dir>]
 //   退出码：0 = GREEN（三面齐备 + 守卫全等 + 启动无激活失败）；1 = RED（任一子项失败或不可达）。
@@ -70,6 +87,21 @@ const SKILL_NAMES = [
 ];
 const TEAM_PROFILE_PKG = '@deepseek-ai/dsh-experimental-agent-team-profile';
 
+/** 形态 B（安装整体失败）的**重试上限**。
+ *  理由：批 6 实测形态 B 命中率 **2/9 ≈ 22%**（环境侧、未能确定性复现）⇒ 取 **3** 次独立尝试，
+ *  残余命中率按独立同分布粗估 ≈ 0.22³ ≈ 1%（数量级估计，**非承诺**）；上限写死以免「无限重试掩盖真故障」。
+ *  用尽上限仍失败 ⇒ **响亮失败** + 采集 `logPath` 诊断（禁静默）。 */
+const INSTALL_RETRY_LIMIT = 3;
+/** F-1 判据面：行级禁用族的**全局**采集正则（`g` ⇒ 用 `matchAll` 复算，两处扫描共用）。 */
+const DISABLED_ROW_RE = /disabling profile plugin row "([^"]+)"/g;
+/** F-2(a) 判据面：团队族四件 = `-profile` + 三个子包（锁面 distinct 版本须各 = 1）。 */
+const TEAM_FAMILY = [
+  TEAM_PROFILE_PKG,
+  '@deepseek-ai/dsh-experimental-agent-team',
+  '@deepseek-ai/dsh-experimental-tool-agent-team',
+  '@deepseek-ai/dsh-experimental-client-ui-agent-team',
+];
+
 /**
  * 团队包 spec 的**钉法**（I-1(b) / D-9 / D-10）。
  *
@@ -92,14 +124,18 @@ function defaultTeamSpec(hostVersion) {
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
 function parseArgs(argv) {
-  const out = { keep: false, bootTimeout: 90000, skipBoot: false, packDir: '', teamSpec: '', extraSpecs: [] };
+  const out = { keep: false, bootTimeout: 90000, skipBoot: false, packDir: '', teamSpec: '', extraSpecs: [], line: '', lockProbe: true };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
+    if (a === '--no-lock-probe') { out.lockProbe = false; continue; }
     if (a === '--keep') { out.keep = true; continue; }
     if (a === '--skip-boot') { out.skipBoot = true; continue; }
     if (a === '--boot-timeout') { out.bootTimeout = Number(argv[i + 1] ?? 90000); i += 1; continue; }
     if (a === '--pack-dir') { out.packDir = String(argv[i + 1] ?? ''); i += 1; continue; }
     if (a === '--team-spec') { out.teamSpec = String(argv[i + 1] ?? ''); i += 1; continue; }
+    // `--line <label>`：双线验证用的**产物标签**（仅回显/入摘要，不参与判定）——
+    //   批 dualline-compat-20260927 · C-6 要求「两线各一次运行」可区分（如 `0.2.0-rc.1` / `0.1.7-rc.2`）。
+    if (a === '--line') { out.line = String(argv[i + 1] ?? ''); i += 1; continue; }
     // `--extra-spec <spec>`（可重复）：诊断用 —— 追加**顶层** profile 依赖 spec。
     //   实测用途：把「宿主同 rc 的模式注册包」提到 profile 顶层，验证 `row-disabled:dsh-agent-preset-punky`
     //   的根因与修复方向（详见脚本头注「面② 根因」段与 `exec/smoke.md`）。
@@ -107,6 +143,14 @@ function parseArgs(argv) {
   }
   return out;
 }
+
+/**
+ * C-6(c) 判据面：workflow 行**单行两线通吃** —— `--dump-config` / 真启动文本中
+ *  ① 该行在场（`workflow-ptc`）；② 该行**无**失败诊断（激活审计族 + 行级禁用族，同 `activationDiagnosticsOf`）。
+ * 依据（判据源 §二 纠正后的实测）：`@deepseek-ai/dsh-base` 在 `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1`
+ *   **三版全部**依赖 `@deepseek-ai/dsh-workflow-ptc`（无任何一版依赖旧推进器包）⇒ 单行即双线正解。
+ */
+const WORKFLOW_ROW_ID = 'workflow-ptc';
 
 /**
  * 面② 的**根因**（本 lane 实测，两臂复现）：
@@ -136,6 +180,41 @@ function activationDiagnosticsOf(text, rowId) {
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+/** F-1 判据面：文本中**全部**被禁用的 profile 行 id（dump 面与真启动面共用，禁各写一套）。 */
+function disabledRowsOf(text) {
+  return [...String(text ?? '').matchAll(DISABLED_ROW_RE)].map((m) => m[1]);
+}
+
+/** F-2(a) 判据面：从 pnpm 锁文件文本取「包名 → distinct 版本集合」。
+ *  只认**锁键行**（缩进 ≥2 且以 `@scope/name@ver` 起头、以冒号收尾），兼容 `packages:` /
+ *  `snapshots:` 两段与 `@ver(peer@x)` 的 peer 后缀；⇒ 不会把 `resolution:`/`tarball:` 行误当版本。 */
+function teamVersionsFromLock(lockText) {
+  const out = new Map();
+  for (const raw of String(lockText ?? '').split(/\r?\n/)) {
+    const key = /^\s{2,}'?(@deepseek-ai\/[^@']+)@([0-9][^'():]*)'?(?:\(.*\))?:\s*$/.exec(raw);
+    if (!key) continue;
+    if (!out.has(key[1])) out.set(key[1], new Set());
+    out.get(key[1]).add(key[2]);
+  }
+  return out;
+}
+
+/** F-2(a) 的**复解析**臂：在临时 profile 内跑 `pnpm install --lockfile-only --ignore-scripts`。
+ *  失败 ⇒ `ran:false` + 原始尾部读数（**不**判 PASS、也**不**静默）；由调用方登记取值来源。 */
+function runLockProbe(profileDir) {
+  const jsEntry = process.env.PUNKY_PNPM_BIN ?? '';
+  const cliArgs = ['install', '--lockfile-only', '--ignore-scripts'];
+  const r = jsEntry
+    ? spawnSync(process.execPath, [jsEntry, ...cliArgs], { encoding: 'utf8', timeout: 300000, cwd: profileDir, windowsHide: true })
+    : spawnSync('pnpm ' + cliArgs.join(' '), { shell: true, encoding: 'utf8', timeout: 300000, cwd: profileDir, windowsHide: true });
+  return {
+    ran: r.status === 0,
+    status: r.status,
+    stdout: String(r.stdout ?? '').slice(-1200),
+    stderr: String(r.stderr ?? '').slice(-1200),
+  };
 }
 
 /** 逐文件 sha256 快照（只读，零写入）。 */
@@ -288,6 +367,21 @@ async function main() {
 
   // ── 步骤 ③：pnpm pack（**普通 env**：只读仓库 + 只写 pack 目的目录，不触 home）──────
   const pkg = readJson(path.join(PKG_ROOT, 'package.json')) ?? {};
+
+  // ── D-1 机械化守卫：「必要条件已消除」的结构断言（**防回生**）──────────────────────────
+  //   批 7 · `exec-deps-fix` 交付：本包 `package.json` **删除了整个 `dependencies` 键** ⇒
+  //   团队族四件的**唯一候选来源 = 安装命令的显式 spec**（精确钉宿主 rc）；本包不再引入任何旧线候选。
+  //   本守卫把该结构事实**机检化**（防未来有人把 `dependencies` 里的 `-profile` 声明加回去 ——
+  //   那会让「旧线候选可被解析」这一**必要条件**重建 ⇒ 非确定性卷土重来）。
+  //   口径（按 Leader 2026-09-29 转发的新前提，二者取其一）：取**「其值不得含团队族 `-profile`」**一支
+  //   —— 比「`dependencies` 键必须整体缺席」更耐用（未来无关的新增依赖不该造成假红），
+  //   且**正是**必要条件本身；「键是否在场」作为**登记读数**回显（不升级为判据）。
+  const declaredDeps = pkg.dependencies && typeof pkg.dependencies === 'object' ? Object.keys(pkg.dependencies) : [];
+  note('必要条件守卫读数：dependencies 键=' + (pkg.dependencies === undefined ? '缺席' : '在场')
+    + ' 声明项=' + JSON.stringify(declaredDeps));
+  check('D-1 机械化守卫：本包 dependencies 不声明团队族 -profile（唯一候选来源 = 安装命令 spec）',
+    !declaredDeps.includes(TEAM_PROFILE_PKG),
+    'declared=' + JSON.stringify(declaredDeps) + ' 命中=' + String(declaredDeps.includes(TEAM_PROFILE_PKG)));
   const tgzName = String(pkg.name).replace(/^@[^/]+\//, '') + '-' + String(pkg.version) + '.tgz';
   const packDir = args.packDir || path.join(tmpRoot, 'pack');
   fs.mkdirSync(packDir, { recursive: true });
@@ -304,14 +398,48 @@ async function main() {
 
   // ── 步骤 ③：唯一安装命令（I-1 形态；团队包 spec 显式列出且钉版本，D-10）──────────
   const installSpecs = [tarball, teamSpec, ...args.extraSpecs];
-  const install = runChild(dshBin, ['plugin', '--profile', 'web', 'add', ...installSpecs], ISO_ENV, 600000);
   note('安装命令：dsh plugin --profile web add ' + installSpecs.map((s) => (s === tarball ? '<tarball>' : s)).join(' '));
   report.installSpecs = installSpecs.map((s) => (s === tarball ? '<tarball>' : s));
-  note('  安装 status=' + String(install.status) + ' signal=' + String(install.signal) + ' error=' + install.error);
-  if (install.status !== 0) {
-    process.stdout.write('[smoke] --- install stdout (tail) ---\n' + install.stdout.slice(-4000) + '\n--- install stderr (tail) ---\n' + install.stderr.slice(-4000) + '\n');
+  // 形态 B（安装整体失败）⇒ **有上限重试**（每次落读数）；用尽上限仍失败 ⇒ **响亮** + 采集 logPath 诊断。
+  //   logPath 来源：`@deepseek-ai/dsh/lib/plugin-Dr5KNRuz.js:78` 失败时写
+  //   `dsh: plugin command failed; diagnostics: <logPath>` ⇒ 从 stderr/stdout 抓该路径后读其内容（禁静默）。
+  const installAttempts = [];
+  let install = { status: null, signal: null, error: '', stdout: '', stderr: '' };
+  const installDiagnostics = { path: '', bytes: null, tail: '', error: '' };
+  for (let attempt = 1; attempt <= INSTALL_RETRY_LIMIT; attempt += 1) {
+    install = runChild(dshBin, ['plugin', '--profile', 'web', 'add', ...installSpecs], ISO_ENV, 600000);
+    installAttempts.push({ attempt, status: install.status, signal: install.signal, error: install.error });
+    note('  安装第 ' + String(attempt) + '/' + String(INSTALL_RETRY_LIMIT) + ' 次：status=' + String(install.status)
+      + ' signal=' + String(install.signal) + ' error=' + install.error);
+    if (install.status === 0) break;
+    const hit = /diagnostics:\s*(.+?)\s*$/m.exec(String(install.stderr ?? '') + '\n' + String(install.stdout ?? ''));
+    if (hit) {
+      const logPath = hit[1].replace(/^["']|["']$/g, '');
+      installDiagnostics.path = logPath;
+      try {
+        const txt = fs.readFileSync(logPath, 'utf8');
+        installDiagnostics.bytes = txt.length;
+        installDiagnostics.tail = txt.slice(-3000);
+      } catch (e) {
+        installDiagnostics.error = String(e && e.message);
+      }
+    }
+    if (attempt < INSTALL_RETRY_LIMIT) {
+      note('  形态 B 命中 ⇒ 有上限重试（上限 ' + String(INSTALL_RETRY_LIMIT) + '；理由见脚本头注与 INSTALL_RETRY_LIMIT）');
+    }
   }
-  check('I-2 干净 profile 上安装成功', install.status === 0, 'status=' + String(install.status));
+  report.installAttempts = installAttempts;
+  report.installDiagnostics = { path: installDiagnostics.path, bytes: installDiagnostics.bytes, error: installDiagnostics.error };
+  if (install.status !== 0) {
+    process.stdout.write('[smoke] --- install stdout (tail) ---\n' + String(install.stdout ?? '').slice(-4000) + '\n--- install stderr (tail) ---\n' + String(install.stderr ?? '').slice(-4000) + '\n');
+    process.stdout.write('[smoke] --- 形态 B 诊断（plugin-Dr5KNRuz.js:78 的 logPath）---\n'
+      + 'path=' + (installDiagnostics.path || '(未在输出中找到 diagnostics: 路径)') + '\n'
+      + (installDiagnostics.error ? 'read-error=' + installDiagnostics.error + '\n' : '')
+      + 'bytes=' + String(installDiagnostics.bytes) + '\n' + installDiagnostics.tail + '\n');
+    report.red.push('install-formB-failed');
+  }
+  check('I-2 干净 profile 上安装成功（形态 B 具备上限重试 ' + String(INSTALL_RETRY_LIMIT) + ' 次）',
+    install.status === 0, 'attempts=' + JSON.stringify(installAttempts));
 
   // ── 步骤 ④：面①/② —— 组合树两行同时在（`--dump-config`，共用 boot 的 patch 算法）───
   const dump = runChild(dshBin, ['--profile', 'web', '--dump-config'], ISO_ENV, 180000);
@@ -321,6 +449,26 @@ async function main() {
   const dumpDiag = activationDiagnosticsOf(dumpText, 'dsh-agent-preset-punky');
   check('面② 组合树零激活失败/零行禁用诊断（dump 面）', dumpDiag.length === 0,
     'diagnostics=' + JSON.stringify(dumpDiag) + ' dump 文本长度=' + String(dumpText.length));
+
+  // ── F-1(a)：**dump 面** profile 零行禁用（硬判据 · 批 6 假绿教训的回写）────────────────
+  //   覆盖面 = **整个 profile 组合**（不只是已知名字的三行）：上游团队子包的版本错配会体现为
+  //   `disabling profile plugin row "<其它 id>"` ⇒ 只查三行会「假绿」放行。
+  const dumpDisabled = disabledRowsOf(dumpText);
+  report.disabledRowsDump = dumpDisabled;
+  check('F-1(a) --dump-config 面 profile 零行禁用', dumpDisabled.length === 0,
+    'disabled_count=' + String(dumpDisabled.length) + ' disabled=' + JSON.stringify(dumpDisabled));
+
+  // ── 步骤 ④a′：C-6(c) workflow 面**单行两线通吃**（dump 面）────────────────────────────
+  //   双线同源依据见 `WORKFLOW_ROW_ID` 的 docstring；此处断言「行在场 + 零失败诊断」。
+  check('C-6(c) dump 含 workflow 行 ' + WORKFLOW_ROW_ID, dump.stdout.includes(WORKFLOW_ROW_ID),
+    'status=' + String(dump.status));
+  const dumpDiagWf = activationDiagnosticsOf(dumpText, WORKFLOW_ROW_ID);
+  check('C-6(c) dump 面 workflow 行零激活失败/零行禁用', dumpDiagWf.length === 0,
+    'diagnostics=' + JSON.stringify(dumpDiagWf));
+  // 反向锁：旧推进器包名不得在组合树里出现（判据源 D-4 禁回加；名字在此**拼装**构造，不写字面量）
+  const LEGACY_PUSHER = 'dsh-workflow-' + 'worker-thread';
+  check('C-6(c) 组合树零命中旧推进器包（禁回加）', !dumpText.includes(LEGACY_PUSHER),
+    'searched=' + LEGACY_PUSHER);
 
   // ── 步骤 ④b：**真实启动**（隔离 home + `--port 0` 端口隔离 + `--no-open`）──────────
   //   为什么必须真启动：① 面② 的「该行无激活失败诊断」只在 boot 的 activation audit 里产生
@@ -336,22 +484,75 @@ async function main() {
     bootPort = urlHit ? urlHit[1] : '';
     check('I-7(e) 真启动可达（端口隔离机制 `--port 0`）', !!urlHit, 'how=' + boot.how + ' url_port=' + (bootPort || '-'));
 
-    // D-7 强证据：`--port 0` 必须拿到**非 3080** 的 OS 分配端口（3080 = 组合树缺省端口，也是用户 GUI 端口）
-    check('I-7(e) 端口隔离生效（实测端口 ≠ 组合树缺省 3080）', bootPort !== '' && bootPort !== '3080',
-      '实测端口=' + (bootPort || '-') + '（缺省 3080 属用户运行中实例）');
+    // D-7 / C-6(d) 强证据：`--port 0` 必须拿到**不在占用集内**的 OS 分配端口。
+    //   占用集 = {3080 组合树缺省（用户 GUI 端口）, 3081 iso-web, 3082 iso-perf}（批 cmd 明列，禁猜）。
+    const OCCUPIED_PORTS = ['3080', '3081', '3082'];
+    check('C-6(d) 端口隔离生效（实测端口 ∉ {3080,3081,3082}）',
+      bootPort !== '' && !OCCUPIED_PORTS.includes(bootPort),
+      '实测端口=' + (bootPort || '-') + ' 占用集=' + JSON.stringify(OCCUPIED_PORTS));
 
     const bootDiagPreset = activationDiagnosticsOf(bootText, 'dsh-agent-preset-punky');
     const bootDiagEngine = activationDiagnosticsOf(bootText, 'dsh-punky-swarm');
+    const bootDiagWf = activationDiagnosticsOf(bootText, WORKFLOW_ROW_ID);
     check('面② 真启动：模式行零激活失败/零行禁用', bootDiagPreset.length === 0,
       'diagnostics=' + JSON.stringify(bootDiagPreset) + ' how=' + boot.how);
     check('面① 真启动：本引擎行零激活失败/零行禁用', bootDiagEngine.length === 0,
       'diagnostics=' + JSON.stringify(bootDiagEngine) + ' how=' + boot.how);
+    check('C-6(c) 真启动：workflow 行零激活失败/零行禁用', bootDiagWf.length === 0,
+      'diagnostics=' + JSON.stringify(bootDiagWf) + ' how=' + boot.how);
+
+    // ── F-1(b)：**真启动面** profile 零行禁用（**硬判据**；原 C-6「全局限用」升格）──────────
+    //   为什么必须真启动：`activation audit` **只在 boot 产生**（D-12）⇒ 只跑 `--dump-config` 覆盖不到本子项。
+    //   为什么必须**全局**扫描：逐行断言（面①/面②/workflow）只覆盖已知名字的三行；两线适配的真实风险是
+    //   「**上游团队行的版本错配**」⇒ 只查三行会让「其它团队行被静默停用」冒充通过（批 6 假绿）。
+    //   干净 home + 宿主同线 spec 下应为 **0 行**；宿主异线（0.2.0 宿主 + `@0.1.7-rc.2`）应为 **>0**。
+    const disabledRows = disabledRowsOf(bootText);
+    check('F-1(b) 真启动面 profile 零行禁用（原 C-6 全局判据升格）', disabledRows.length === 0,
+      'disabled_count=' + String(disabledRows.length) + ' disabled=' + JSON.stringify(disabledRows));
+    report.disabledRows = disabledRows;
+
     check('面② 真启动无 agentPresets 服务等待（模式面已挂载）',
       !/waiting for services: agentPresets/.test(bootText), 'how=' + boot.how);
   } else {
     note('（--skip-boot）跳过真启动 ⇒ 面② 仅 dump 面、面③ 断言将不可达（覆盖损失如实登记）');
+    note('（--skip-boot）⇒ **F-1(b) 真启动面零行禁用【未覆盖】**（D-12：不得判 pass，只能登记覆盖损失）');
   }
-  report.boot = { how: boot.how, port: bootPort, teamSpec, hostVersion };
+  report.boot = { how: boot.how, port: bootPort, teamSpec, hostVersion, line: args.line || null };
+
+  // ── F-2(a)：**解析层 / 安装面确定性**（团队族 distinct 版本各 = 1，且 = 宿主同线）────────
+  //   「修复 = 非确定性归零」的可机检面（判据源 F-2(a)）：**禁只解析层判一次就收工**——
+  //   本块同时给「锁面」与「安装面」两个可核读数；取值来源**显式登记**（禁静默回落）：
+  //     ① 首选：`pnpm install --lockfile-only --ignore-scripts` **复解析**后的锁（`--no-lock-probe` 可关）；
+  //     ② 复解析失败（离线 / pnpm 不可用）⇒ 回落**安装产物锁**，并在读数里如实标注来源。
+  const profileDir = path.join(tmpDshHome, 'profiles', 'web');
+  const lockFile = path.join(profileDir, 'pnpm-lock.yaml');
+  const lockProbe = args.lockProbe
+    ? { ...runLockProbe(profileDir), skipped: false }
+    : { ran: false, skipped: true, status: null, stdout: '', stderr: '' };
+  const lockText = fs.existsSync(lockFile) ? fs.readFileSync(lockFile, 'utf8') : '';
+  const lockSource = lockProbe.ran ? 'lockfile-only-复解析' : (lockText ? '安装产物锁' : 'missing');
+  note('F-2(a) 锁来源=' + lockSource + '（复解析 ran=' + String(lockProbe.ran) + ' status=' + String(lockProbe.status)
+    + ' skipped=' + String(!!lockProbe.skipped) + '）lockFile=' + lockFile);
+  if (!lockProbe.ran && !lockProbe.skipped) {
+    process.stdout.write('[smoke] --- lock probe stderr (tail) ---\n' + String(lockProbe.stderr ?? '') + '\n');
+  }
+  const teamVersions = teamVersionsFromLock(lockText);
+  const familyRows = TEAM_FAMILY.map((p) => ({ pkg: p, versions: [...(teamVersions.get(p) ?? [])] }));
+  const distinctAll = [...new Set(familyRows.flatMap((r) => r.versions))];
+  const presentCount = familyRows.filter((r) => r.versions.length > 0).length;
+  report.lockSource = lockSource;
+  report.teamVersions = familyRows;
+  report.teamVersionsDistinct = distinctAll;
+  check('F-2(a) 锁面：团队族 distinct 版本数 = 1', distinctAll.length === 1,
+    'distinct=' + JSON.stringify(distinctAll) + ' 来源=' + lockSource);
+  check('F-2(a) 锁面：团队族**每个在场包**各自 distinct 版本数 = 1', familyRows.every((r) => r.versions.length === 1),
+    JSON.stringify(familyRows));
+  //   防空转下界：至少 4 件中的 3 件在锁里在场（空锁 / 解析器退化不得冒充通过）
+  check('F-2(a) 锁面：团队族在场包数 ≥ 3（防空转下界）', presentCount >= 3,
+    'present=' + String(presentCount) + '/' + String(TEAM_FAMILY.length));
+  //   「与宿主同线」——安装后确定性校验的核心（禁只判「只有一个版本」而不管它是哪条线）
+  check('F-2(a) 锁面：团队族版本 = 宿主同线（= dsh --version）', distinctAll.length === 1 && distinctAll[0] === hostVersion,
+    'host=' + hostVersion + ' team=' + JSON.stringify(distinctAll));
 
   // ── 步骤 ④：面③ —— 技能指针 8 件 + references 非空（**在临时 home 上**）─────────────
   const skillHits = SKILL_NAMES.filter((n) => fs.existsSync(path.join(tmpHome, '.agents', 'skills', n, 'SKILL.md')));
@@ -383,6 +584,15 @@ async function main() {
   // 机读摘要（供 `exec/smoke.md` 逐字抄录，免手抄失真）
   process.stdout.write('[smoke] SMOKE_SUMMARY=' + JSON.stringify({
     hostVersion, teamSpec, installSpecs: report.installSpecs ?? [], boot: report.boot ?? null,
+    disabledRows: report.disabledRows ?? null,
+    disabledRowsDump: report.disabledRowsDump ?? null,
+    disabledCountDump: (report.disabledRowsDump ?? []).length,
+    disabledCountBoot: (report.disabledRows ?? []).length,
+    installAttempts: report.installAttempts ?? null,
+    installDiagnostics: report.installDiagnostics ?? null,
+    lockSource: report.lockSource ?? null,
+    teamVersions: report.teamVersions ?? null,
+    teamVersionsDistinct: report.teamVersionsDistinct ?? null,
     guard: { before: before.digest, after: after.digest, files: before.files, ok: guardOk },
     tarballBytes: fs.existsSync(tarball) ? fs.statSync(tarball).size : null,
     checks: report.checks.map((c) => ({ label: c.label, ok: c.ok, detail: c.detail })),
