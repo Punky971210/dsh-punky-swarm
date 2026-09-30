@@ -36,6 +36,8 @@
 
 Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）时按本节注入。**Manager 定位：代劳指挥——只指挥不执行、不派发子代理**（worker 由 Leader 派发，depth-1 直系）；Manager 只读黑板/mailbox、做结算裁决，**不经 subagent 创建 worker**。
 
+**D 档分支（2026-10-01 补，C1）**：**D 档批**（team 方向 · durable 席位）中，Manager 建议 → **Leader 以 `send_message` 派活给席位**（席位派活**不经** `lane_dispatch`、**不经** `subagent`）；**lane 状态与相位仍由 `member_*` / `batch_phase` 记** —— 即 **官方工具管「人」｜引擎 `member_*` 管「lane」**（分工铁律全表见 `references/discipline.md` 的 **§0p 十四**）。**席位完成后须 `handoff_submit` + Leader 显式结算**（audit 层 lane 不自动结算，见同文件 §0p 九）。
+
 ### 5.1 指挥循环（每 turn）
 
 | 序 | 动作 | 工具 |
@@ -60,6 +62,8 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 ### 5.3 Leader 职责对应
 
 按 Manager 建议 `subagent` 派发 worker（depth-1 直系，任务包注明**双通道回执**）；worker `swarm_report` 完成 → Leader 只 `send_message` Manager 一行事件唤醒（**不做调度决策**，不读 worker 全文回执）。
+
+**D 档分支（2026-10-01 补，C2）**：同上口径，但**派活通道 = `send_message` → 席位**（**不是** `subagent`；席位任务包须注明 `batchId` + 本 lane 的 `sig`）；**D 档的 Manager 面未试行**（本会话 **12/12** 批为 `leader-direct`，无 Manager 在册；该事实**不构成**对 D 档 Manager 面的否定）。
 
 ### 5.4 回执与交互
 
