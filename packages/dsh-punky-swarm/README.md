@@ -89,6 +89,8 @@ dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-0.5.0.tgz @deepseek
 - **四件同 rc**：四件（两件显式 spec + `-profile` 带出的子件）应落在**同一条 rc 线**（= 宿主 rc，形如 `0.1.7-rc.x` / `0.2.0-rc.x`），**请勿混用不同 rc**。
 - **`workflow-ptc` 由内核提供（两线同源 ⇒ 无需额外装）**：`@deepseek-ai/dsh-base` 在 `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1` **三版全部**依赖 `@deepseek-ai/dsh-workflow-ptc` ⇒ 用户**不必**安装任何 workflow 相关包，**也禁**自行回加旧推进器行（见 §九 禁项）。
 - **适配声明的两个面**：**机读** = 上方 `peerDependencies` 中 `@deepseek-ai/dsh-*` 条目的范围（内核兼容门**唯一**判据面，三版全通过）；**人读** = §3.2 双线支持矩阵。⇒ **不引入任何包内新声明件**（无 `compatibility.json`、无自创字段 —— 二者内核**都不读**）。
+- **本包对团队服务的依赖声明（2026-09-30 批 `decl-face-and-logging-20260930`）**：本引擎消费宿主团队服务 **`agentTeams`**（`ctx.get('agentTeams')` → `listMembers`，Manager 在册判定真源）⇒ 该依赖声明**落在装配面**（`cordis.patch.yml` 的探针行 `inject: [agentTeams]`），**不进 `dependencies`**（批 7 不变量：该键已整体移除；上游包只由安装命令的显式 spec 提供）。缺该服务时该行进入 **pending**（启动审计**响亮**：`pending (waiting for service: agentTeams)`），**同级引擎行与模式行照常存活**（宿主为 per-entry fail-soft）。
+- **`engines.dsh`：本轮裁「不落」（零效力文档位 · 刻意不写）** —— 消费者实证：`evaluatePluginCompatibility`（`dsh-app-boot` 的兼容门）**只读 `peerDependencies`**、且只判 `@deepseek-ai/dsh` / `@deepseek-ai/dsh-` 前缀 ⇒ **`engines.dsh` 不被任何门禁消费**；且 `package.json` **无法就地注释**，写入极易被误读为「会被执行的约束」⇒ 本包**不落该字段**，内核兼容面**只由 `peerDependencies` ＋ §3.2 双线矩阵承载**（该字段既非强制，也不参与拒装与校验）。
 
 ---
 
