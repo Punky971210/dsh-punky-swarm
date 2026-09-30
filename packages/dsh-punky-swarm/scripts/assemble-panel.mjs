@@ -27,7 +27,33 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'); // scripts/.. = 包根
 const PANEL_DIR = join(ROOT, 'lib', 'panel');
-const OUT = join(ROOT, 'lib', 'client.js');
+
+// —— 落点通道（K-6 / 技术债 T-1）：`--out <dir|file>` 可把产物写到仓外任意位置，
+//    使「字节级比对」在只读面可复现（此前 OUT 为硬编码常量 ⇒ 复跑必须写仓内固定路径）。
+//    缺省（不带 --out）⇒ 落点与既有行为逐字相同 = <包根>/lib/client.js（零破坏）。
+//    零新增 import：只用已导入的 join 与全局 process。
+const OUT_DEFAULT = join(ROOT, 'lib', 'client.js');
+
+/** 绝对路径判定（免给 `node:path` 增加新符号）：POSIX 前导斜杠，或 Windows 盘符。 */
+function isAbsoluteLike(p) {
+  return p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+}
+
+/** 解析 `--out`：返回**绝对路径**落点；未给出 ⇒ null。
+ *  值以 `.js` 结尾 ⇒ 视作文件路径；否则视作目录 ⇒ 在其内落 `client.js`（与默认落点同名）。 */
+function resolveOutArg(argv) {
+  const i = argv.indexOf('--out');
+  if (i < 0) return null;
+  const raw = argv[i + 1];
+  if (raw === undefined || raw.startsWith('--')) {
+    console.error('[assemble-panel] --out 需要一个路径参数（<dir|file>）');
+    process.exit(2);
+  }
+  const base = isAbsoluteLike(raw) ? raw : join(process.cwd(), raw);
+  return raw.toLowerCase().endsWith('.js') ? base : join(base, 'client.js');
+}
+
+const OUT = resolveOutArg(process.argv.slice(2)) ?? OUT_DEFAULT;
 
 // 外壳头 = AGPL 头 + 原 client.js 行 1-10（window.__ModuleLoader__.load 闭包开头 + react seed require）
 // AGPL 头前置：每次拼装产物 client.js 顶部都恰有一个 AGPL 头，重生成幂等。
