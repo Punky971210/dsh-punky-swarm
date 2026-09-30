@@ -11,6 +11,7 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
+    "./service-probe": "./lib/service-probe.js",
     "./package.json": "./package.json"
   },
   "files": [

@@ -652,9 +652,12 @@ export function createCoreTools(ctx, deps) {
           store.appendEvent(sessionId, plan.batchId, EVT.EVT_GATE_MANAGER_ROSTER_GAP, {
             managerPlan, rosterName: managerRoster.rosterName, memberCount: managerRoster.memberCount ?? 0,
           });
-        } else if (managerPlan === 'raise' && !managerRoster.ok && managerRoster.reason !== 'service-unavailable') {
-          ctx.logger?.warn?.('[dsh-punky-swarm] managerPlan=raise 但官方 roster 读取失败（' + managerRoster.reason
-            + '）⇒ 无法核验 Manager 在册；已回显 managerRoster，不落批次事件');
+        } else if (managerPlan === 'raise' && !managerRoster.ok && managerRoster.reason === 'service-unavailable') {
+          // A(d) 补 warn（2026-09-30 批 decl-face-and-logging-20260930）：`service-unavailable` 原被上一条
+          //   `else if` 显式排除、而首条 `if` 又要求 `managerRoster.ok` ⇒ 两分支皆不命中 = **完全静默**。
+          //   本分支**只补日志**：不 throw、不落批次事件、不改 `managerRoster` 回显与函数返回结构（降级行为逐字不变）。
+          ctx.logger?.warn?.('[dsh-punky-swarm] managerPlan=raise 但宿主团队服务不可用（agentTeams 缺失）'
+            + ' ⇒ 无法核验 Manager 在册；已回显 managerRoster，不落批次事件（服务面齐备后本警告不再出现）');
         }
         const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [], ...(smoke ? { smoke: true } : {}), ...(managerPlan ? { managerPlan, managerRoster } : {}) };
         if (asm.decl) out.assembly = asm.decl; // 归一化装配声明视图（closed output.schema 已扩 properties；未声明不写键）

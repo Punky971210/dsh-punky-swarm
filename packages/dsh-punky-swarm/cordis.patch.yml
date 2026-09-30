@@ -1,4 +1,9 @@
 # dsh-punky-swarm bundle patch — the layer applied when a profile lists this bundle.
+# 声明面注记（2026-09-30 批 decl-face-and-logging-20260930）：
+#   ① 本包对宿主团队服务 `agentTeams` 的依赖**只在此装配面声明**（下方 ① 块的探针行 `inject: [agentTeams]`），
+#      **不进 `dependencies`**（批 7 不变量）；缺该服务 ⇒ 该行 pending（启动审计响亮）。
+#   ② `engines.dsh` = **零效力的文档位**（无消费者；兼容门只读 `peerDependencies`）⇒ 本包**刻意不写**该字段
+#      （`package.json` 无法就地注释，写入易被误读为会被执行的约束）；详见 README §四。
 - insert:
     - id: dsh-punky-swarm
       name: 'dsh-punky-swarm'
@@ -116,6 +121,16 @@
               pause: false     # 原语开关（feature-flag 式；默认关 → 该原语回退 DENY）
               narrow: false
               defer: false
+    # ------------------------------------------------------------
+    # 服务依赖探针行（A(a) 声明面 · 2026-09-30 批 decl-face-and-logging-20260930）
+    #   本引擎消费宿主团队服务 `agentTeams`（`ctx.get('agentTeams')` → `listMembers`，Manager 在册判定真源）。
+    #   独立 id 独立行：**不得**给上方引擎主体行自身加 inject —— 那会使引擎面在缺面时整体 pending（灾难性）。
+    #   缺该服务 ⇒ 本行进入 pending（启动审计响亮：`pending (waiting for service: agentTeams)`）；
+    #   同级引擎行与模式行照常存活（DSH 0.1.7-rc.1 为 per-entry fail-soft）。服务面齐备时零新增 warning。
+    # ------------------------------------------------------------
+    - id: dsh-punky-swarm-agentteams-decl
+      name: 'dsh-punky-swarm/service-probe'
+      inject: [agentTeams]
 # ============================================================
 # ============================================================
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）
