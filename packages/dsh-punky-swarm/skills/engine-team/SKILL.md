@@ -70,7 +70,9 @@ audit ┌ reviewer ────── 对抗式审查（只读不改码）
 
 - **同类型可拉起多个成员**（如 `coder-1` / `coder-2`）；
 - **Leader 按吞吐情况分配**：把不同任务包派给不同的同类型成员（**并行吞吐**）；
-- **roster 名 = 成员名**（`tasks[].roster` 必须与 `spawn_teammate` 的 `name` 逐字一致 —— 引擎据此判定写权归属）；
+- **`roster` 是声明，不是席位名**：`tasks[].roster` 写**成员名作声明**（引擎据此判定写权归属）；**不要求**与 `spawn_teammate` 的 `name` **逐字一致**（2026-10-01 用户裁决 Q4=C，原「逐字一致」铁律**已删**）；
+- **席位不限**：同类型成员**按需拉起**（`coder-1…N` / `tester-1…N` / …），无固定席位数；
+- **席位不足时的合规复用**：复用须**登记**（落批次产物根，如 `exec/roster-deviation.md`）**并在 lane 记录中注明实际执行者**；**无登记不得复用**；
 - 管理面见 §七（**官方工具**）。
 
 ---
@@ -159,9 +161,11 @@ audit ┌ reviewer ────── 对抗式审查（只读不改码）
 
 ## 七、team 成员的管理面（**官方工具**）
 
-> ⚠ **铁律：team 方案【不走】`member_status` / `member_settle` 这类 `member_*` 工具收口。**
-> **理由（引擎事实）**：`member_*` 改的是**批次里 lane 的状态**（状态文件），**不触达成员的会话**；且引擎侧**没有任何 team 成员生命周期接线**（全仓 `spawnTeammate` / `interruptAgent` / `teamTask*` **零调用**，唯一消费 `agentTeams` 的地方是 `managerRosterOf` —— 判定 Manager 是否在册）。
-> ⇒ ⇒ **用 `member_*` 管 team 成员 = 改了一个成员看不见的字段**。
+> ⚠ **分工铁律（2026-10-01 用户裁决 Q3=A）：官方工具管「人」｜引擎 `member_*` 管「lane」。两本账并列，不互替。**
+> · **人（成员生命周期）** ⇒ **官方工具**：`spawn_teammate` 拉起 · `send_message` 派活/唤醒 · `list_agents` 查状态 · `wait_agent` 等动静 · `interrupt_agent` 打断当前轮。
+> · **lane（引擎真源）** ⇒ **`member_status` / `member_settle`**：登记 lane **进度**与**终态**（使 `batch_status` 的 lane 跃迁可见、使下游交接与 audit 结算的入边前提成立）；**批相位**由 `batch_phase` 推进。
+> **为什么必须两本账**：`member_*` 改的是**批次里 lane 的状态**（状态文件），**不触达成员的会话**；反之官方工具**只管人、不改 lane 状态**。⇒ 少一本账就会出现两种坏账：「成员在做、lane 无痕」或「lane 已结、成员还在跑」。
+> **口径源头**：本分工与 `discipline.md` 的 **§0p 九** 同源（**两侧互指**，勿单侧改）；与 `skills/software-team/SKILL.md` §七 **同口径**。
 
 **正确的成员管理面**：
 
@@ -180,9 +184,25 @@ audit ┌ reviewer ────── 对抗式审查（只读不改码）
 3. 需要它继续/收工 ⇒ **`send_message`**（告知结论或收工指令）；
 4. **批相位收口** ⇒ **`batch_phase(complete)`**（**须先经 `running`**；`planning → complete` 非法）。
 
-**⇒ 关于 `roster` 与 lane**：`wave_plan` 建批时 `tasks[].roster` 只作**声明**（引擎只做词法校验 + 写权归属判定）；**真正把活交到成员手上的是 `send_message`**。
+**⇒ 关于 `roster` 与 lane**：`wave_plan` 建批时 `tasks[].roster` 只作**声明**（引擎只做词法校验 + 写权归属判定）。
 
-**⇒ 关于 lane 状态**（2026-09-26 用户裁决）：**team 批只保留 `member_status`** —— 它只用于**登记 lane 进度**（让 `batch_status` 的 lane 跃迁可见），**`member_settle` 不用于 team 批**（它管不了成员，写 lane 终态对 team 无治理意义）。**lane 终态与批相位一律由 `batch_phase` 推进。**
+**两条通道并列（勿混为一谈 · 2026-10-01 消歧 Q3=A）**：
+
+| 动作 | 用什么 | 要害 |
+|---|---|---|
+| **派活 / 唤醒 / 通知收工 / 追问** | **`send_message(target=<成员名>)`** | **真正把活交到成员手上**的是它；成员的**唯一真推送**通道（inactive 成员会被唤醒） |
+| **交接**（上游→下游，DAG 硬前提） | **`handoff_submit(from, to, artifacts, assertions)`** | **成员自交**（Leader 可代交）；下游 `handoff_view` 报 `READY` 才开工 |
+
+**⇒ 关于 lane 状态（2026-10-01 用户裁决 Q3=A 订正）**：**team 批两条 `member_*` 都用** ——
+
+- **`member_status`** 登记 lane **进度**（`pending` / `running` / `review` / `idle` 的跃迁在 `batch_status` 可见）；
+- **`member_settle`** 登记 lane **终态**（`merged` / `failed` / `conflict` / `skipped`）。
+
+**旧口径「`member_settle` 不用于 team 批」已废止**（内容冲突，不可两立）：聚合 audit lane 的成员完成后**不会自动结算**（引擎 `auto.settle.skipped` 的 `audit-explicit-settle-required`）⇒ **必须由 Leader 显式 `member_status(review)` → `member_settle(merged|conflict)`**，否则**批会永久挂在 `running`**。⇒ 省掉这一步 = **批收不了口**。
+
+**批相位**仍由 **`batch_phase`** 推进（`complete` 须先经 `running`）；**lane 终态与批相位是两本账，各管各的**（见 §七 开头的分工铁律）。
+
+> 口径源头：`discipline.md` 的 **§0p 九**（与本节**同源、互指**，勿单侧改）；与 `skills/software-team/SKILL.md` §七 **同口径**。
 
 ---
 
