@@ -40,11 +40,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ② **逐项计数入固定字段**：既有 `rowCountsByPkg`（**带 dash 口径，语义不动**）＋ 新增
 //      `rowCountsByPkgCompat`（两形态并集）与 `rowCountsByForm`（分形态）—— 不以文本长度/总条数推断；
 //   ③ **写盘前建父目录**：`--out` 落盘前 `mkdirSync(<dir>, { recursive: true })`。
-//   ④ **孤儿面（新增）**：`dsh.profile.bundles` 有而 `dependencies` 无 ⇒ 包管理器**不会装**（**降级路径**）；
-//      须**同时**给「原始」与「剔除内核自带后的真孤儿」两组字段 —— 内核自带（`@deepseek-ai/dsh-base` /
-//      `@deepseek-ai/dsh-web-app`）**不在 `dependencies` 属正常设计**，**不得**计入「待处置孤儿」（防长期假阳性）。
-//   ⑤ **双读数（新增，同一 dump）**：`anchorProbe.anchorOldHits`（旧锚，预期 `0`）vs
-//      `anchorProbe.anchorNewHits`（新锚，预期 `>=3`）⇒ 证两形态兼容**有区分力、非空转**（**禁**以不同文件凑数）。
+//   ④ **孤儿面（新增；Q-2 归位后落 `layer1.orphans`）**：`dsh.profile.bundles` 有而 `dependencies` 无 ⇒
+//      包管理器**不会装**（**降级路径**）；须**同时**给「原始」与「剔除内核自带后的真孤儿」两组字段 ——
+//      内核自带（`@deepseek-ai/dsh-base` / `@deepseek-ai/dsh-web-app`）**不在 `dependencies` 属正常设计**，
+//      **不得**计入「待处置孤儿」（防长期假阳性）。
+//   ⑤ **双读数（新增，同一 dump；Q-2 归位后落 `layer3.anchorProbe`）**：`anchorOldHits`（旧锚，预期 `0`）vs
+//      `anchorNewHits`（新锚，预期 `>=3`）⇒ 证两形态兼容**有区分力、非空转**（**禁**以不同文件凑数）。
 //
 // 用法（**参数面 fail-closed**：未知参数/缺值 ⇒ 用法打 stderr、exit 2；**任何内部异常 ⇒ exit 2**）：
 //   node scripts/dtier-machinecheck.mjs [--profile <dir>] [--log <file>] [--dump <file>]
@@ -57,20 +58,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 退出码（**fail-closed**）：0 = 四层全过；1 = 任一层命中异常（团队面缺失/漂移）；2 = 参数错误或内部异常。
 //
-// 输出字段（**固定**，取用方可直接消费；批 `mcheck-improvements-20261001` **只增**：既有字段语义不动）：
+// 输出字段（**固定**，取用方可直接消费；批 `mcheck-improvements-20261001` **只增**：既有字段语义不动；
+//   **Q-2 归位**（2026-10-01 裁决）：游离在顶层的字段**按语义收进所属层** —— 读端请按层取，勿再在顶层找）：
 //   layer1 { profile, packageJson, declared, installed, declaredNotInstalled, installedNotDeclared,
-//            expectedMissingInstalled, verdict }
+//            expectedMissingInstalled,
+//            orphans { orphanBundles, orphanCount, trueOrphans, trueOrphanCount, builtinExcluded },
+//            verdict }
 //   layer2 { log, pendingWaitingService, patchEntryNotFound, sampleLines, verdict }
 //   layer3 { dump, rowCountsByPkg, rowCountsByPkgCompat, rowCountsByForm, rowsPresentOnlyViaNewAnchor,
-//            rowsMissing, toolsExpected, sessionProbe, verdict }
+//            rowsMissing, toolsExpected, sessionProbe,
+//            anchorProbe { dump, anchorOldHits, anchorNewHits, byForm { withDash, withoutDash }, discriminates },
+//            verdict }
 //   layer4 { serviceUnavailable, verdict }
-//   anchorProbe { dump, anchorOldHits, anchorNewHits, byForm { withDash, withoutDash }, discriminates }  ← 新增（双读数）
-//   orphanBundles [ … ]     ← 新增（原始：`bundles` 有而 `dependencies` 无）
-//   orphanCount <n>         ← 新增
-//   trueOrphans [ … ]       ← 新增（剔除内核自带后的真孤儿）
-//   trueOrphanCount <n>     ← 新增
-//   builtinExcluded [ … ]   ← 新增（内核自带；**不是**异常）
-//   skippedLayers [ … ]     ← 新增（verdict = 'skipped' 的层名）
+//   ── 批级字段（跨层汇总；与 verdict / exitCode 同级，**不属**任何 layerN）──
+//   skippedLayers [ … ]     （verdict = 'skipped' 的层名）
 //   expected { packages, tools }
 //   verdict  'pass' | 'fail'
 //   exitCode 0 | 1（**fail-closed**：0 全过 / 1 任一层命中异常 / 2 参数错误或内部异常）
@@ -241,14 +242,14 @@ function layer3(dumpPath) {
     rowsMissing: [],
     toolsExpected: EXPECTED_TOOLS,
     sessionProbe: 'skipped',
+    anchorProbe: null,
     verdict: 'skipped',
   };
-  if (dumpPath === null) return { layer3: empty, anchorProbe: null };
+  if (dumpPath === null) return { layer3: empty };
   const abs = path.resolve(dumpPath);
   if (!fs.existsSync(abs)) {
     return {
       layer3: { ...empty, dump: abs, rowsMissing: EXPECTED_PACKAGES, sessionProbe: 'error', verdict: 'error' },
-      anchorProbe: null,
     };
   }
   const lines = fs.readFileSync(abs, 'utf8').split('\n');
@@ -286,15 +287,15 @@ function layer3(dumpPath) {
       rowsMissing,
       toolsExpected: EXPECTED_TOOLS,
       sessionProbe: 'not_applicable_static',
+      // 双读数（**同一 dump**）：证两形态兼容**有区分力、非空转**（禁以不同文件凑数）
+      anchorProbe: {
+        dump: abs,
+        anchorOldHits,
+        anchorNewHits,
+        byForm: { withDash: anchorOldHits, withoutDash: anchorNewHits },
+        discriminates: anchorOldHits !== anchorNewHits,
+      },
       verdict: rowsMissing.length === 0 ? 'pass' : 'fail',
-    },
-    // 双读数（**同一 dump**）：证两形态兼容**有区分力、非空转**（禁以不同文件凑数）
-    anchorProbe: {
-      dump: abs,
-      anchorOldHits,
-      anchorNewHits,
-      byForm: { withDash: anchorOldHits, withoutDash: anchorNewHits },
-      discriminates: anchorOldHits !== anchorNewHits,
     },
   };
 }
@@ -355,16 +356,13 @@ function main() {
   if (l3.layer3.verdict === 'skipped') skippedLayers.push('layer3');
   if (l24.layer4.verdict === 'skipped') skippedLayers.push('layer4');
   const result = {
-    layer1: l1,
+    // Q-2 归位：孤儿面属层①（「声明↔实装」的降级路径盲区）⇒ 收进 layer1.orphans
+    layer1: { ...l1, orphans },
     layer2: l24.layer2,
+    // Q-2 归位：双读数属层③ ⇒ anchorProbe 已在 layer3() 内合并
     layer3: l3.layer3,
     layer4: l24.layer4,
-    anchorProbe: l3.anchorProbe,
-    orphanBundles: orphans.orphanBundles,
-    orphanCount: orphans.orphanCount,
-    trueOrphans: orphans.trueOrphans,
-    trueOrphanCount: orphans.trueOrphanCount,
-    builtinExcluded: orphans.builtinExcluded,
+    // ── 批级字段（跨层汇总；与 verdict / exitCode 同级，**不属**任何 layerN）──
     skippedLayers,
     expected: { packages: EXPECTED_PACKAGES, tools: EXPECTED_TOOLS },
     verdict: failed ? 'fail' : 'pass',
@@ -388,8 +386,8 @@ function main() {
     process.stdout.write('[dtier-machinecheck] ② pendingWaitingService=' + l24.layer2.pendingWaitingService
       + ' patchEntryNotFound=' + l24.layer2.patchEntryNotFound + ' → ' + l24.layer2.verdict + '\n');
     process.stdout.write('[dtier-machinecheck] ③ rowsMissing=' + l3.layer3.rowsMissing.length
-      + '（两形态并集）byForm.withDash=' + (l3.anchorProbe === null ? 'n/a' : l3.anchorProbe.byForm.withDash)
-      + ' byForm.withoutDash=' + (l3.anchorProbe === null ? 'n/a' : l3.anchorProbe.byForm.withoutDash)
+      + '（两形态并集）byForm.withDash=' + (l3.layer3.anchorProbe === null ? 'n/a' : l3.layer3.anchorProbe.byForm.withDash)
+      + ' byForm.withoutDash=' + (l3.layer3.anchorProbe === null ? 'n/a' : l3.layer3.anchorProbe.byForm.withoutDash)
       + ' → ' + l3.layer3.verdict + '\n');
     process.stdout.write('[dtier-machinecheck] ④ serviceUnavailable=' + l24.layer4.serviceUnavailable + ' → ' + l24.layer4.verdict + '\n');
     process.stdout.write('[dtier-machinecheck] ⑤ orphanBundles=' + orphans.orphanCount
