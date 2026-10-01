@@ -101,6 +101,8 @@ export const EXEC_TOOLS = [
 
 // G1（**严格档**，后经 Q2=B 收窄）：**成员面动作只允许 C 档会话**——
 //   ① 建批（`wave_plan`）；② 写成员状态（`member_status` / `member_settle`）。
+//   **D 档并入**（Q-3=B / P-1，2026-10-01 裁决）：D = team 方案、与 C 同属集群建批档 ⇒ 同受本门。
+//   （函数名保留 `assertMemberActionTierC` 不动：改名会牵动导入面与既有读端，属零收益改名。）
 //   动机（用户口径，2026-09-14）：成员协作只有一条轨道——**Leader 先评 C → `wave_plan` 建批 → 建批即拉起 Manager →
 //   由 Manager/Leader 调度、成员大规模并行**；**不是** Leader 以 A/B 档手工逐个 `subagent` 派单再手工 `member_status`
 //   管状态——那既与并行执行模式相悖，又会让批次落在 worker 会话名下（归属错位）。
@@ -118,7 +120,7 @@ export function assertMemberActionTierC(store, sessionId, exec, action, opts = {
   const what = action === 'batch' ? '建批（wave_plan）' : '写成员状态（member_status / member_settle）';
   const caller = exec?.agent?.session?.id ?? null;          // 调用方自己的会话（≠ 批归属会话）
   const own = tierOf(caller ?? sessionId);                  // 判据落在**调用方**，不落批归属会话（否则 worker 借 C 档批会话绕过）
-  if (own === 'C') return;
+  if (own === 'C' || own === 'D') return; // P-1：D 与 C 同属建批档
   const batchId = opts.batchId ?? null;
   if (action !== 'batch' && batchId) {
     const b = store.readBatch(sessionId, batchId);          // 批归属会话 = sessionOf(args, exec)
@@ -126,7 +128,7 @@ export function assertMemberActionTierC(store, sessionId, exec, action, opts = {
   }
   throw new Error(code + ': ' + what + ' 只允许出现在 **C 档**会话（本会话档位 = ' + String(own ?? '未评估')
     + (caller && caller !== sessionId ? '，批归属会话 = ' + sessionId : '') + '）——'
-    + '成员协作只有一条轨道：Leader 先 assign_check({ difficulty: "C", rationale }) 再 wave_plan 建批 → **建批即拉起 Manager** → '
+    + '成员协作只有一条轨道：Leader 先 assign_check({ difficulty: "C" 或 "D", rationale }) 再 wave_plan 建批 → **建批即拉起 Manager** → '
     + '由 Manager/Leader 按批内流程派发与结算。**成员仅作为会话存在，不可写成员状态**（2026-09-15 用户裁决 Q2=B）；'
     + 'A/B 档 subagent 仅限「不占主上下文的调研」或「已明确上下文的单步派发」，不得承担成员施工、不得建批、不得写成员状态。');
 }
@@ -244,12 +246,12 @@ export function installDifficultyGuard(ctx, deps) {
       let reason;
       // 门禁 1：从未评估 / 旧记录缺 difficulty（升级前写法，按未评估处理：宁严勿松）/ 已过期 → 要求先侦察再评估
       if (!g?.lastAssign?.form || !g?.lastAssign?.difficulty || store.stale(sessionId)) {
-        reason = '[task-difficulty-gate] 本回合尚未进行任务难度评估（A/B/C）。**先用只读侦察摸清任务**'
+        reason = '[task-difficulty-gate] 本回合尚未进行任务难度评估（A/B/C/D）。**先用只读侦察摸清任务**'
           + '（read/glob/grep 与只读 shell 命令已开放），再 assign_check({ difficulty, rationale, scope: "full" })'
           + ' 写入难度与判据（判据必填，供审计），之后才能执行 ' + execution.name;
-      } else if (g.lastAssign.form === 'C' && g.pendingBatch) {
-        // 门禁 2：判 C 且未建批 → 拒绝执行型（必须先 wave_plan 建批）
-        reason = '[task-difficulty-gate] 任务难度=C（集群方案），必须先 wave_plan 建批。已直做产物用 asset_claim 归位，然后建批派发。（口径：C 判据是**多线并行或多依赖**；**单线程任务**应重评为 A/B 带上下文直做，不必建批。）';
+      } else if ((g.lastAssign.form === 'C' || g.lastAssign.form === 'D') && g.pendingBatch) {
+        // 门禁 2：判 C/D 且未建批 → 拒绝执行型（必须先 wave_plan 建批）；D 与 C 同属建批档（P-1）
+        reason = '[task-difficulty-gate] 任务难度=' + g.lastAssign.form + '（集群方案），必须先 wave_plan 建批。已直做产物用 asset_claim 归位，然后建批派发。（口径：C 判据是**多线并行或多依赖**；**单线程任务**应重评为 A/B 带上下文直做，不必建批；D = team 方案，同受本门。）';
       } else if ((execution.name === 'subagent' || execution.name === 'subagent_fork') && g.lastAssign.form === 'A') {
         // 门禁 3（一致性）：A 类不派发 subagent（需要独立上下文请重评 B）
         reason = '[task-difficulty-gate] A 类任务不派发 subagent；如确实需要独立上下文请重评 B。';
@@ -598,6 +600,15 @@ export function createCoreTools(ctx, deps) {
         //   未声明（undefined/null）⇒ declared:false ⇒ **不写批次键**（R5-d：存量批零破坏、读端零感知）。
         //   `GATE_CHANNEL_*` 的判据语义、合法值集合、门禁码集合**一字未改**（只做接线，不做语义变更）。
         const channelDecl = normalizeChannelDecl(args.channel, plan.wavePlan.flatMap((w) => w.tasks));
+        // D 档 × channel 一致性**提示**（Q-3=P-3，2026-10-01 裁决）：D = team 方案 ⇒ 建批宜声明
+        //   `channel: team|mixed`。**仅提示、不硬拒** —— 硬拒会与上方 `normalizeChannelDecl` 的通道一致性
+        //   判定构成**双重判定**（违「单点判定」纪律）。载体沿用既有 `plan.warnings` 管道（下方按码映射留痕）；
+        //   未命中 `WARN_EVENT_OF` 的码逐字保持现状（回落 `gate.role_invalid` 事件类型，载荷 `code` 字段可区分，
+        //   与 GAP-S9 既有口径一致，**不新增事件类型**）。硬拦仍只归 `normalizeChannelDecl` 一处。
+        if ((store.readGovernance(sessionId)?.lastAssign?.difficulty ?? null) === 'D'
+          && channelDecl.channel === 'dispatch') {
+          plan.warnings.push({ code: 'WARN_DTIER_CHANNEL_UNDECLARED' });
+        }
         // 批次装配门禁（建批时刻，validateWavePlan 后、createBatch 前）：**含 audit 层的三层批**必须携带
         // 批次级装配声明 assembly（auditLane 必填；managerPlan **缺省 = raise**）。拒建批（throw：GATE_ROLE_ASSEMBLY_MISSING 缺声明 /
         // GATE_ASSEMBLY_INVALID 结构/引用非法）→ 无批次 JSON 落盘、pendingBatch 锁保留（Leader 补声明后重试）；
@@ -847,13 +858,13 @@ export function createCoreTools(ctx, deps) {
     }),
     defineTool({
       name: "assign_check",
-      description: "委派形态判定：**主动写入**本次任务的难度值 difficulty（A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批）+ 判据 rationale（必填、≥12 字，落 governance.json 供审计）——**无默认档**，不填即拒（GATE_DIFFICULTY_INVALID / GATE_DIFFICULTY_RATIONALE_MISSING）。并行/多角色/门禁/可恢复/需独立上下文这五个布尔入参降为**交叉校验**输入：声明与特征矛盾即拒（GATE_DIFFICULTY_MISMATCH，如「声明 C 但四项 C 判据全 false」= 单线程不许建批、「声明 A 但 needIsolation」）。**只读侦察先行**：read/glob/grep 与只读 shell 命令在评估前即已开放（判据须引用侦察证据）。每次调用写入会话治理状态（governance.lastAssign{ difficulty, rationale, form, reasons } + history），guard 依据其做执行型工具门禁。显式 session 时输出回显 sessionId 并镜像到执行会话（guard 兼容不误拦）；缺省=当前执行会话，cli 兜底并提示。**有解释的偏离（2026-09-14 用户裁决 B）**：`derived` = 五布尔机械推导的档位；当 `difficulty !== derived` 时，须在 `rationale` 写明三要素（① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限）方可放行（记 `override: true`，`derived`/`override` 随 `lastAssign` 落盘供审计），无解释仍拒 `GATE_DIFFICULTY_MISMATCH`。",
-      parameters: {"difficulty":{"type":"string","required":true,"enum":["A","B","C"],"description":"**主动写入的难度值**（必填，无默认档）：A=Leader 直做（单线程/低风险/可自验）；B=单个 subagent（不占主上下文的调研，或已明确上下文的单步派发）；C=集群 wave_plan 建批（判据只有两条：多线并行 ≥2 条任务线，或多依赖需 DAG 分层）。"},"rationale":{"type":"string","required":true,"description":"**判据**（必填，≥12 字，供审计）：写明定档依据 + 已完成的只读侦察证据（读到什么/探测到什么），不得写空话。"},"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）——入参降为**交叉校验**输入"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string","description":"显式指定评估落点会话（当前会话 ID 或命名黑板）；缺省=当前执行会话，cli 兜底；与执行会话不同时自动镜像到执行会话（guard 兼容）"}},
+      description: "委派形态判定：**主动写入**本次任务的难度值 difficulty（A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批 / D=集群团队方案）+ 判据 rationale（必填、≥12 字，落 governance.json 供审计）——**无默认档**，不填即拒（GATE_DIFFICULTY_INVALID / GATE_DIFFICULTY_RATIONALE_MISSING）。并行/多角色/门禁/可恢复/需独立上下文这五个布尔入参降为**交叉校验**输入：声明与特征矛盾即拒（GATE_DIFFICULTY_MISMATCH，如「声明 C 但四项 C 判据全 false」= 单线程不许建批、「声明 A 但 needIsolation」）。**只读侦察先行**：read/glob/grep 与只读 shell 命令在评估前即已开放（判据须引用侦察证据）。每次调用写入会话治理状态（governance.lastAssign{ difficulty, rationale, form, reasons } + history），guard 依据其做执行型工具门禁。显式 session 时输出回显 sessionId 并镜像到执行会话（guard 兼容不误拦）；缺省=当前执行会话，cli 兜底并提示。**有解释的偏离（2026-09-14 用户裁决 B）**：`derived` = 五布尔机械推导的档位；当 `difficulty !== derived` 时，须在 `rationale` 写明三要素（① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限）方可放行（记 `override: true`，`derived`/`override` 随 `lastAssign` 落盘供审计），无解释仍拒 `GATE_DIFFICULTY_MISMATCH`。",
+      parameters: {"difficulty":{"type":"string","required":true,"enum":["A","B","C","D"],"description":"**主动写入的难度值**（必填，无默认档）：A=Leader 直做（单线程/低风险/可自验）；B=单个 subagent（不占主上下文的调研，或已明确上下文的单步派发）；C=集群 wave_plan 建批（判据只有两条：多线并行 ≥2 条任务线，或多依赖需 DAG 分层）；D=集群团队方案（team 通道：durable 席位 + 事件队列交接；与 C 同属建批档、同受建批门禁，见 discipline.md ### 十四、）。"},"rationale":{"type":"string","required":true,"description":"**判据**（必填，≥12 字，供审计）：写明定档依据 + 已完成的只读侦察证据（读到什么/探测到什么），不得写空话。"},"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）——入参降为**交叉校验**输入"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string","description":"显式指定评估落点会话（当前会话 ID 或命名黑板）；缺省=当前执行会话，cli 兜底；与执行会话不同时自动镜像到执行会话（guard 兼容）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"difficulty":{"type":"string","required":true},"rationale":{"type":"string","required":true},"derived":{"type":"string","required":true},"override":{"type":"boolean","required":true},"form":{"type":"string","required":true},"allowed":{"type":"boolean","required":true},"reasons":{"type":"array","required":true,"items":{"type":"string"}},"next":{"type":"array","required":true,"items":{"type":"string"}},"execToolCount":{"type":"integer","required":true},"escalationHint":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"mirroredTo":{"type":"string"},"notice":{"type":"string"},"history":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
         render: (_args, value) => {
           const d = value.difficulty ?? value.form;
-          let s = 'assign difficulty: ' + d + (d === 'C' ? ' (must use batch) → next: wave_plan' : ' (allowed)') + (value.sessionId ? ' @' + value.sessionId : '');
+          let s = 'assign difficulty: ' + d + ((d === 'C' || d === 'D') ? ' (must use batch) → next: wave_plan' : ' (allowed)') + (value.sessionId ? ' @' + value.sessionId : '');
           if (value.override) s += ' [override: derived=' + value.derived + ' → ' + d + ']';
           if (value.mirroredTo) s += ' [mirror→' + value.mirroredTo + ']';
           if (value.escalationHint) s += ' ⚠ ' + value.escalationHint;
@@ -866,8 +877,8 @@ export function createCoreTools(ctx, deps) {
         const sessionId = sessionOf(args, exec);
         // ① 主动写入的难度（必填，无默认档）：不接受「推导代替判断」——档位由 Leader 声明，引擎只做交叉校验
         const difficulty = args.difficulty;
-        if (!['A', 'B', 'C'].includes(difficulty)) {
-          throw new Error('GATE_DIFFICULTY_INVALID: difficulty 必填且只能是 A|B|C（收到 ' + JSON.stringify(difficulty ?? null) + '）——'
+        if (!['A', 'B', 'C', 'D'].includes(difficulty)) {
+          throw new Error('GATE_DIFFICULTY_INVALID: difficulty 必填且只能是 A|B|C|D（收到 ' + JSON.stringify(difficulty ?? null) + '）——'
             + '本门禁**无默认档**：先用只读侦察摸清任务，再主动写入难度，不得以默认值代替判据');
         }
         // ② 判据（必填，供审计）：留空/套话不算，长度下限 12 字
@@ -883,6 +894,8 @@ export function createCoreTools(ctx, deps) {
         if (args.recoverable) reasons.push('需要跨轮治理/可恢复/可审计');
         // ③ 交叉校验（「有解释的偏离」）：
         //    derived = 五布尔**机械推导**的档位（任一 C 判据 → C；否则 needIsolation → B；否则 A）；
+        //    **D 不参与推导**（五布尔推不出「团队方案」）⇒ 声明 D 时恒 `override: true`、rationale 须给三要素
+        //    （P-4，2026-10-01 裁决 Q-3=B）；无需新增旁路 —— 既有「有解释才放行」机制天然覆盖 D。
         //    difficulty 仍由 Leader 主动写入，二者关系分两支：
         //      · difficulty === derived → 常规放行；
         //      · difficulty !== derived → **有解释才放行**（记 override:true），无解释 → 拒 GATE_DIFFICULTY_MISMATCH。
@@ -914,7 +927,7 @@ export function createCoreTools(ctx, deps) {
         const history = [...(g0.history ?? []), entry];
         const hasActive = store.hasActiveBatch(sessionId);
         const patch = { lastAssign: { difficulty, form, scope, rationale, derived, override, at: now, reasons, execCallsSince: 0 }, history };
-        if (form === 'C' && !hasActive) { patch.pendingBatch = true; patch.pendingSince = now; }
+        if ((form === 'C' || form === 'D') && !hasActive) { patch.pendingBatch = true; patch.pendingSince = now; }
         // 新评估总是把 pendingBatch 收敛到正确状态——已有活跃批次，或残留 pendingBatch（C 判定后重评为 A/B），一律清锁
         else if (hasActive || g0.pendingBatch) { patch.pendingBatch = false; patch.pendingSince = null; }
         // session-compat：显式 session 与执行会话不同 → 镜像到执行会话（guard 落点兼容）。
@@ -924,7 +937,7 @@ export function createCoreTools(ctx, deps) {
         //   动机（实测）：为写「他会话」夹具而调 assign_check 时，镜像会把 Leader 自己已记录的 C 档覆盖成夹具档位
         //   ⇒ 写夹具顺手削弱自身保护。跳过时在 `notice` 里如实回显，可审计。
         const execSessionId = exec?.agent?.session?.id ?? null;
-        const tierRank = (t) => (t === 'C' ? 3 : t === 'B' ? 2 : t === 'A' ? 1 : 0);
+        const tierRank = (t) => (t === 'D' ? 4 : t === 'C' ? 3 : t === 'B' ? 2 : t === 'A' ? 1 : 0); // P-2：D=4 最强（D 蕴含 C 全部 + team 通道）
         const execGov0 = execSessionId ? store.readGovernance(execSessionId) : null;
         const execRank0 = tierRank(execGov0?.lastAssign?.difficulty);
         const downgradeSkip = Boolean(args?.session && execSessionId && args.session !== execSessionId
@@ -959,7 +972,8 @@ export function createCoreTools(ctx, deps) {
               + String(execGov0?.lastAssign?.difficulty) + ' 强于本次 ' + difficulty + '，保留其原记录不动'
             : '');
         // 条件构造返回对象：不触发镜像时镜像字段完全缺席——undefined/null 值均会触发 harness lossless JSON 校验拒绝
-        const out = { difficulty, rationale, derived, override, form, allowed: form !== 'C', reasons, next: form === 'C' ? ['wave_plan'] : [], execToolCount, escalationHint, notice, sessionId, history: g.history };
+        const needsBatch = form === 'C' || form === 'D'; // P-1：D 与 C 同属建批档
+        const out = { difficulty, rationale, derived, override, form, allowed: !needsBatch, reasons, next: needsBatch ? ['wave_plan'] : [], execToolCount, escalationHint, notice, sessionId, history: g.history };
         if (mirroredTo) out.mirroredTo = mirroredTo;
         return out;
       },

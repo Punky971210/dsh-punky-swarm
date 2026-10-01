@@ -8,7 +8,7 @@
 
 ## §0 难度路由门禁
 
-- **无默认档（2026-09-14 用户裁决，原 `default to C` 已废止）**：动手执行（有副作用的执行型工具）前必须先完成评估——**主动写入**难度值 + 判据 + 执行主体，缺一即拒。**拒收的两种可观测形态**：`difficulty` 缺失/非 `A|B|C`（含 `C+`）由**工具参数 schema 层**先拦（宿主文案 `invalid arguments: "difficulty" must be one of ["A","B","C"]`），`rationale` 缺失/过短同形（`missing required property "rationale"`）；码字 `GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 是同一拒收在**内核显式分支**的命名，仅在绕过 schema 的调用路径可见——**勿当作可 grep 的外部错误码**。
+- **无默认档（2026-09-14 用户裁决，原 `default to C` 已废止）**：动手执行（有副作用的执行型工具）前必须先完成评估——**主动写入**难度值 + 判据 + 执行主体，缺一即拒。**拒收的两种可观测形态**：`difficulty` 缺失/非 `A|B|C|D`（含 `C+`）由**工具参数 schema 层**先拦（宿主文案 `invalid arguments: "difficulty" must be one of ["A","B","C","D"]`），`rationale` 缺失/过短同形（`missing required property "rationale"`）；码字 `GATE_DIFFICULTY_INVALID` / `GATE_DIFFICULTY_RATIONALE_MISSING` 是同一拒收在**内核显式分支**的命名，仅在绕过 schema 的调用路径可见——**勿当作可 grep 的外部错误码**。
 - **只读侦察先行（用户裁决）**：`read` / `glob` / `grep` 与**只读 shell 命令**（**命令级**判定，实现见 `lib/tools/readonly.js`：只读白名单 + 写指示符拒绝 + 默认拒绝）在任何评估状态下**放行且不计数**（不占 `execCallsSince`）——**评估必须发生在侦察之后**，不得零信息编档位（这正是「默认 C 建批错派」的根因）。⚠ 该判定是**启发式、非沙箱**（可经别名 / 脚本 / 转义绕过），只收敛「无意识地用写入命令做侦察」，不承诺等价于 OS 级隔离。
 - **只读判定口径（复核后修正）**：引号字面量先**掩码**——引号内的 `>` / `|` / `;` / 命令名**不参与判定**（此前把引号内 `|` 当管道分段 / `>` 当重定向属误拒，已修）；`2>&1` / `2>$null` 属**流合并**，放行（真重定向如 `> f.txt` / `2>err.txt` 仍拒）；**赋值前缀**（`$x = ` / `x=`）与 **`git` 前缀选项**（`-C <dir>` / `--no-pager` / `-P` / `--paginate`）剥离后按剩余命令判定（只剥前缀，右侧是写命令照样拒）；**未闭合引号** fail-closed。仍是**执行类**（不因上述放松而放行）：`node` / `npm` / `pnpm` / `python -c` / `bash -c` 等解释器命令、`>` 落盘重定向、包管理器与网络工具。
 - **档位定义全集**：
@@ -18,18 +18,19 @@
 | **A** | Leader 直做 | 单线程（无并行任务线、无依赖链）、低风险、可自验；零治理开销 |
 | **B** | 单个 subagent | **仅限两类**：① 需独立子代理做**不占主 Agent 上下文**的调研（查代码 / 读大文档 / 跑探针）；② **已明确上下文、可简单派发**的单步任务。**⚠ 固定任务形态（角色与流程可预见）不属 B 档** ⇒ 其执行主体 = **team 席位**（**D 档**，见 §0p 十四） |
 | **C** | 集群 `wave_plan` 建批 | **判据（最高优先级）：明确多线并行**（≥2 条可并行推进的任务线）**或 多依赖**（任务间存在依赖链、需 DAG 分层 / 多波次） |
+| **D** | 集群 **team 方案** | **固定任务形态**（角色与流程可预见）⇒ 用 **team 席位**（durable 席位 + 事件队列交接）。**与 C 同属建批档**（同受 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`），差异在**交接机制**而非难度；细则见 §0p 十四 |
 
-- **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举只有 `A|B|C`。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）；**`managerPlan` 默认 `raise`**，确需 Leader 直驱才显式写 `leader-direct`。
+- **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）；**`managerPlan` 默认 `raise`**，确需 Leader 直驱才显式写 `leader-direct`。
 - **判据必填（供审计）**：`assign_check({ difficulty, rationale, scope: "full" })` —— `rationale` **≥12 字**且写明**定档依据 + 已完成的只读侦察证据**；落 `governance.json` 的 `lastAssign` 与 `history` **双留痕**。
 - **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 含三要素：**① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。
 - **评估对象**：用户请求的**完整目标任务**（`scope=full`，含未来步骤），**非**本轮动作。
 - **并发度优先（最高优先级判据）**：**单线程任务一律不建批**——同一回合内的多步串行**亦属单线程**；`execToolCount` 只是弱旁证，不构成理由（`escalationHint` 与本条同源）。
 - **B 档边界**：需主 Agent 上下文才能继续、或需来回对话澄清者**不得**降 B（那是 A 直做）。
 - **惰性化**：纯查询轮（`read` / `glob` / `grep` / `ask_user_question` / 只读 shell）免评；**执行型工具**（有副作用：`write` / `edit` / 非只读 shell / `subagent` …）调用前必须已评估。
-- **输出格式**：每回合文本输出 `[难度评估: A|B|C + 一句理由 + 执行主体]`。
+- **输出格式**：每回合文本输出 `[难度评估: A|B|C|D + 一句理由 + 执行主体]`。
 - **落点**：调用 `assign_check({ difficulty, rationale, scope: "full" })` 写入治理状态；**旧记录（有 `form` 无 `difficulty`）按未评估处理**，升级后须重评一次（宁严勿松）。
-- **门禁**：判 C 而未建批前，**禁止**任何执行型动作。
-- **档位 × 工具面一致性（G1，用户裁决）**：档位不只约束 Leader 自己的执行面——**建批与成员面工具一律要求当前会话已写入 `difficulty: 'C'`**（两枚码：`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`，判定与内核符号见附录 A.3.1）；**「未评估」与 A/B 同罚**（宁严勿松）。用户口径：**成员协作只有一条轨道 = 建批 → 拉起 Manager → 派发**，不存在「低档位也能派成员」的旁路。**收窄口径（2026-09-15 用户裁决 Q2=B：「成员仅会话，不可写状态」）**：**取消父档继承**——建批**只认本会话自己的 C 档**（worker / Manager 子会话一律建不了批；B 档仅承载单个「单步独立任务」，不进 `wave_plan`）；成员状态**仅 `调用方会话自己 C 档（Leader）` 或 `该批已登记的 Manager 会话`（`batch.manager.agentId`，宿主口径 = Manager 会话 id）可写**，其余子会话（含 C 档父会话下的 exec worker）一律拒——判据落**调用方**而非批归属会话，故「worker 借用 C 档批会话的 `session` 参数借道」同样被拒。
+- **门禁**：判 C/D 而未建批前，**禁止**任何执行型动作。
+- **档位 × 工具面一致性（G1，用户裁决）**：档位不只约束 Leader 自己的执行面——**建批与成员面工具一律要求当前会话已写入 `difficulty: 'C'` 或 `'D'`**（两枚码：`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`，判定与内核符号见附录 A.3.1）；**「未评估」与 A/B 同罚**（宁严勿松）。用户口径：**成员协作只有一条轨道 = 建批 → 拉起 Manager → 派发**，不存在「低档位也能派成员」的旁路。**收窄口径（2026-09-15 用户裁决 Q2=B：「成员仅会话，不可写状态」）**：**取消父档继承**——建批**只认本会话自己的 C/D 档**（worker / Manager 子会话一律建不了批；B 档仅承载单个「单步独立任务」，不进 `wave_plan`）；成员状态**仅 `调用方会话自己 C 档（Leader）` 或 `该批已登记的 Manager 会话`（`batch.manager.agentId`，宿主口径 = Manager 会话 id）可写**，其余子会话（含 C 档父会话下的 exec worker）一律拒——判据落**调用方**而非批归属会话，故「worker 借用 C 档批会话的 `session` 参数借道」同样被拒。
 
 ## §0a 会话显式化（session-compat）
 
