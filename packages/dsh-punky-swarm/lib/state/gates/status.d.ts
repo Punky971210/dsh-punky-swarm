@@ -60,7 +60,7 @@ export declare function buildStatus(cx: GatesCx): {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -141,7 +141,7 @@ export declare function buildStatus(cx: GatesCx): {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -206,7 +206,7 @@ export declare function buildStatus(cx: GatesCx): {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -271,7 +271,7 @@ export declare function buildStatus(cx: GatesCx): {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];

@@ -885,7 +885,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -966,7 +966,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -1031,7 +1031,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: any;
+        contractProblems: unknown;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
