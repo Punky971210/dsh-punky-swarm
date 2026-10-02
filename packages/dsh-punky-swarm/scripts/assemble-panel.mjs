@@ -74,6 +74,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+// ⚠ 构建产物 · 勿手改 —— 本文件由 scripts/assemble-panel.mjs 从 lib/panel/*.js 八段拼装生成；
+//   手改会在下次重生成时丢失。要改请改 lib/panel/ 下的源段，然后重跑：
+//     node scripts/assemble-panel.mjs
+
 window.__ModuleLoader__.load({
   id: "dsh-punky-swarm",
   factory: (require) => {
