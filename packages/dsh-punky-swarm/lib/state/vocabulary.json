@@ -11,14 +11,14 @@
   "sources": [
     {
       "id": "gate-entry",
-      "path": "lib/state/gates.ts",
-      "line": 598,
+      "path": "lib/state/gates/entry.ts",
+      "line": 42,
       "note": "GATE_* 拒码面（Entry 门入口 checkEntryGate）"
     },
     {
       "id": "reason-empty-line",
-      "path": "lib/state/gates.ts",
-      "line": 206,
+      "path": "lib/state/gates/presence.ts",
+      "line": 25,
       "note": "reason 载体行族（EMPTY_REASON_RE / empty-reason: 独立行）"
     }
   ],
