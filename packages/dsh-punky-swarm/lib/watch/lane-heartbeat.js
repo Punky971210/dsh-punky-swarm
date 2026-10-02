@@ -29,20 +29,40 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 本文件仅导出引擎与工具定义；lane_heartbeat 工具的组装（lane-tools.js/register.js）
 // 组装进 lane-tools.js（避免与 lane-tools 主文件耦合）；本模块只动
 // watch/ 新域 + index.js 挂载 + schema.js watch 配置键 + cordis.patch.yml 注释。
-import { join, dirname } from 'node:path';
+import { join } from 'node:path'; // `dirname` 随 cx 组装下沉 `./heartbeat/context.js`（波 2；本文件不再直引）
 import { statSync, readdirSync, existsSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { resolveWatchConfig, WATCH_DEFAULTS } from '../schema.js';
 // 状态域只读消费：非终态扫描面 / 批次终态判定单一来源（禁硬编码状态字符串，零迁移）
 import * as schema from '../schema.js';
 import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // watch 域不再 import tools/core（共享辅助下沉零依赖 shared.js）
-import { isAbsPath } from '../state/constants.js'; // 单点（原内联正则收敛）
+// `isAbsPath` 单点（原内联正则收敛）随 `resolveArtifact` 下沉 `./heartbeat/context.js`（波 2；本文件不再直引）。
 import { findTask } from '../state/task-utils.js'; // 单点（原本地定义删除）
 // lane.stalled 事件字面量（发端 + 读端）改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
 import { pendingHandles } from '../bridge/lane-handle.js'; // D2：未消费派发句柄（TTL 缺口探测）
 // W1-① 重放/恢复（周期兜底）：与装配期扫描（lib/index.js）**同一单点**，不另写第二套判定
-import { replayBatch } from '../engine/replay.js';
+// 【波 2】`replayBatch` 直引随重放档下沉 `./heartbeat/replay.js`（本文件不再直引）。
+
+// ── 【2026-10-02 · 内务批 波 2】`createLaneHeartbeat` 巨型函数（799 行 / 闭包工厂）按**探针档**拆分 ────────
+//   实现落 `lib/watch/heartbeat/*.js`：`primitives`（私有常量/纯函数单点）/ `context`（共享上下文 `cx` +
+//   路径与产物解析）/ `activity`（内存条目与四信号活动判定）/ `evidence`（U-4 证据通道）/ `notice`
+//   （提示档留痕）/ `longrun`（长跑候选·消费超时·扫描·查询）/ `stalled`（stalled 追问档 tick）/
+//   `replay`（W1-① 重放兜底）/ `state-surface`（状态面查询与生命周期）。
+//   本文件 = **≤40 行组合器** + 模块级判据（judgeLongrun / blindRunVerdict / 导出面）+ 工具定义两件。
+//   外部导出符号集合与拆分前**逐字相同**；`cx` 每引擎实例一份（**不**提升为模块级单例 ⇒ 不新增真源）。
+//   环依赖说明：`heartbeat/*` 反向 import 本文件的**函数声明**（供探针调用），ESM 实例化期即初始化，
+//   运行期调用安全（无 TDZ）。
+import { createHeartbeatContext } from './heartbeat/context.js';
+import {
+  REASON_DANGLING_MEMBER, REASON_NOT_SCANNED_PLANNING, REASON_PAUSED_DWELL,
+  REASON_PENDING_UNDISPATCHED, REASON_REVIEW_AWAITING_SETTLE, REASON_IDLE_AWAITING_RESUME,
+  REASON_BLIND_RUN_NO_DEPS, REASON_BLIND_RUN_UPSTREAM_MISSING, REASON_BLIND_RUN_UPSTREAM_NEVER_READY,
+  parseEvTs, isScannedLaneState, stateAnchorOf, batchPausedAnchorOf, laneConsumePathsOf,
+} from './heartbeat/primitives.js';
+import { probeTick } from './heartbeat/stalled.js';
+import { longrunStatusOf } from './heartbeat/longrun.js';
+import { laneStatusOf, resetLane, disposeEngine, replayInFlightOf } from './heartbeat/state-surface.js';
 
 // ── D2（2026-09-16）：**绑定缺口探测**（派发收进引擎的观测面） ─────────────────────
 // 与既有 stalled / longrun **同档族**（同一 tick、同一内存表、同一「只标记不自动处置」纪律）：
@@ -186,21 +206,12 @@ const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
 //    从 `batch.lanes` 映射得出。两处**不重复**：e1 只出 lane 级行 + 逐行 `dangling:true`，
 //    e2 出批次级聚合；二者取值同源（同一 `batch.lanes`），不做交叉校验、不互为前置。
 // =====================================================================================
-const REASON_DANGLING_MEMBER = 'dangling-member';
-const REASON_NOT_SCANNED_PLANNING = 'not-scanned-planning';
-const REASON_PAUSED_DWELL = 'paused-awaiting-decision';
-const REASON_PENDING_UNDISPATCHED = 'pending-undispatched';
-const REASON_REVIEW_AWAITING_SETTLE = 'review-awaiting-settle';
-const REASON_IDLE_AWAITING_RESUME = 'idle-awaiting-resume';
-const REASON_BLIND_RUN_NO_DEPS = 'blind-run-no-deps';
-const REASON_BLIND_RUN_UPSTREAM_MISSING = 'blind-run-upstream-missing';
-const REASON_BLIND_RUN_UPSTREAM_NEVER_READY = 'blind-run-upstream-never-ready';
+// 【2026-10-02 · 内务批 波 2】探针 `reason` 常量与状态阈值映射 `STATE_WINDOW_KEY` 已下沉
+//   `./heartbeat/primitives.js`（**单点**；顶部 import 取用），本文件不再持有私有副本。
 // 豁免清退显式提示（D7 次选方案的探针侧可见面）：
 //   读端事件名走**字面量**——`lib/state/event-types.js` 本批无写者，不得越域新增常量（design §9）。
 export const REASON_EXEMPT_CLEARED = 'exempt-cleared';
 const EVT_LANE_EXEMPT_CLEARED_LITERAL = 'lane.exempt.cleared';
-// 状态 → 专属阈值键（§2 判据分派表单点；查询面复算与探针判定共用同一映射，禁两套表）
-const STATE_WINDOW_KEY = { pending: 'pendingWindowMs', review: 'reviewWindowMs', idle: 'idleWindowMs', paused: 'pausedWindowMs' };
 
 export function resolveLongrunConfig(config) {
   const c = config?.capabilities?.watch?.longrun ?? {};
@@ -225,11 +236,7 @@ export function resolveLongrunConfig(config) {
   };
 }
 
-// 纯事件流读取（零依赖批次对象）：runningSince（stint 起点）＝最近 member.dispatch 或 member.settled{to:'running'}
-function parseEvTs(e) {
-  const n = Date.parse(e?.ts ?? '');
-  return Number.isFinite(n) ? n : null;
-}
+// 纯事件流读取 `parseEvTs` 已随波 2 下沉 `./heartbeat/primitives.js`（顶部 import 取用）。
 export function stintRunningSinceOf(batch, lane) {
   const evs = batch?.events ?? [];
   for (let i = evs.length - 1; i >= 0; i--) {
@@ -300,10 +307,7 @@ export function isStaleBatch(batch, nowTs, staleBatchMs) {
 export function laneStateOf(batch, lane) {
   return batch?.lanes?.[lane] ?? null;
 }
-function isScannedLaneState(batch, lane) {
-  const s = laneStateOf(batch, lane);
-  return s !== null && !schema.isMemberTerminal(s);
-}
+// `isScannedLaneState` 已随波 2 下沉 `./heartbeat/primitives.js`（顶部 import 取用）。
 export function isDanglingLane(batch, lane) {
   // 悬挂成员 = 批次**终态** ∧ lane **非终态**（快照式，无阈值；不产候选，不受僵尸批过滤）
   return schema.isBatchTerminal(batch?.phase) && isScannedLaneState(batch, lane);
@@ -311,46 +315,8 @@ export function isDanglingLane(batch, lane) {
 
 // ---- 状态锚点（§2 实现要点 1）：纯事件流反向扫描，返回**与 state 匹配**的最近迁移 ts ----
 // 锚点与状态同源（state 现读 batch.lanes[lane]，不缓存）；缺锚点 → null（state 照常透出）。
-function stateAnchorOf(batch, lane) {
-  const st = laneStateOf(batch, lane);
-  if (st === null) return null;
-  const evs = batch?.events ?? [];
-  if (st === 'running') return stintRunningSinceOf(batch, lane); // = 最近 member.dispatch ∨ member.settled{to:'running'}
-  if (st === 'pending') {
-    // pending 计时锚点 = 最近 batch.phase→running 事件 ts（**不是** member.dispatch——pending lane 无 dispatch）
-    for (let i = evs.length - 1; i >= 0; i--) {
-      const e = evs[i];
-      if (e?.type !== EVT.EVT_BATCH_PHASE || e?.to !== 'running') continue;
-      const ts = parseEvTs(e);
-      if (ts !== null) return ts;
-    }
-    return null;
-  }
-  if (st === 'review' || st === 'idle') {
-    // 最近一次 →review / →idle 迁移事件 ts（member.settled{to} 为主；兼容 member_status 直写镜像的 to 字段）
-    for (let i = evs.length - 1; i >= 0; i--) {
-      const e = evs[i];
-      if (e?.lane !== lane) continue;
-      if (e?.type !== EVT.EVT_MEMBER_SETTLED && e?.type !== EVT.EVT_MEMBER_DISPATCH) continue;
-      if (e?.to !== st) continue;
-      const ts = parseEvTs(e);
-      if (ts !== null) return ts;
-    }
-    return null;
-  }
-  return null; // 其余态（终态/未知）无时间判据 ⇒ 无锚点
-}
-// 批次档锚点：最近 batch.phase→paused（paused 档的先判锚点）
-function batchPausedAnchorOf(batch) {
-  const evs = batch?.events ?? [];
-  for (let i = evs.length - 1; i >= 0; i--) {
-    const e = evs[i];
-    if (e?.type !== EVT.EVT_BATCH_PHASE || e?.to !== 'paused') continue;
-    const ts = parseEvTs(e);
-    if (ts !== null) return ts;
-  }
-  return null;
-}
+// 【2026-10-02 · 内务批 波 2】`stateAnchorOf` / `batchPausedAnchorOf` 已下沉
+//   `./heartbeat/primitives.js`（顶部 import 取用）；判据一字未改。
 // 豁免清退显式留痕读端（D7 次选方案的探针侧可见面）：逐通道取「有值即返」，全无 → null。
 //   `lib/state/event-types.js` 无写者 ⇒ 事件名走字面量；字段名候选覆盖 e2 两种落法
 //   （批量级 laneExemptCleared / 事件载荷 clearedAt / 条目内 clearedAt），归一为单一时间戳。
@@ -416,11 +382,7 @@ export function lastProgressTsOf(progressDir, { maxDepth = PROGRESS_DIR_MAX_DEPT
 // 路径解析口径与 gates.resolveArtifact 同源：`<artifactsDirOf(sessionId,batchId)>/<rel>`；
 //   **可解析 = 存在且非空**（空文件不算就绪）。
 // =====================================================================================
-function laneConsumePathsOf(batch, lane) {
-  const t = findTask(batch, lane);
-  if (!t) return []; // wavePlan 缺该项 ⇒ 零观测面（BR-1/BR-3 反例；不存在即「不可判」而非「可判为真」）
-  return Array.isArray(t.consume) ? t.consume.filter((p) => typeof p === 'string' && p) : [];
-}
+// 【2026-10-02 · 内务批 波 2】`laneConsumePathsOf` 已下沉 `./heartbeat/primitives.js`（顶部 import 取用）。
 // 「空依赖」判定（BR-1 的**必要性收紧**，实测校准 —— 见产物「BR-1 精度」一节与 gap）：
 //   `consume` **显式声明为空数组** ∧ 该批 wavePlan 无任何依赖边 ∧ 批内只有该一条 lane。
 //   为什么必须收紧（三条实测依据，缺一条就会误报）：
@@ -735,803 +697,19 @@ export function judgeLongrun({
 }
 
 export function createLaneHeartbeat({ store, mailbox, config, root, now, liveConfig, logger }) {
-  const cfg = resolveWatchConfig(config);
-  const lrCfg = resolveLongrunConfig(config); // longrun 档配置（出厂默认开；关态 tick 不跑判定）
-  const schedule = buildSchedule(cfg.intervalsMinutes);
-  const hardStop = cfg.maxMissed; // 硬停拍数：连续 N 拍无活动 → stalled
-  const clock = typeof now === 'function' ? now : () => Date.now();
-  const engineRoot = root ?? (store?.sessionsDir ? dirname(store.sessionsDir) : null);
-  // 重放档的 ctx：`logger` 透传给 `replayBatch`（其失败隔离路径用它 warn；缺省 = 静默降级，不 throw）。
-  const ctxOf = () => ({ logger });
-  // 状态表 Map<laneKey, { lastActivityAt, lastSeenTs, lastProbeAt, missedCount, stalled, pendingProbeId }>
-  // laneKey = `${sessionId}/${batchId}/${lane}`
-  const state = new Map();
-  let disposed = false;
-  // W1-① 重放的 in-flight 句柄（`tick()` 同步返回，重放是异步只读+补决策）：测试/调用方可据此
-  //   等待本拍补决策落盘（生产路径不等待——与装配期扫描的「异步化、不阻塞启动」纪律同构）。
-  let replayInFlight = null;
-
-  function mailboxRootOf(sessionId, batchId) {
-    if (!engineRoot) throw new Error('lane-heartbeat: no root (pass deps.root or store.sessionsDir)');
-    return join(engineRoot, 'sessions', sessionId, 'mailbox', batchId);
-  }
-  const laneKeyOf = (sessionId, batchId, lane) => `${sessionId}/${batchId}/${lane}`;
-
-  // 产物解析（自持只读实现，与 gates.js resolveArtifact/fileExistsNonEmpty 同源模式，避免循环依赖）
-  function resolveArtifact(sessionId, batchId, rel) {
-    const base = store.artifactsDirOf(sessionId, batchId);
-    return isAbsPath(rel) ? rel : join(base, rel);
-  }
-  // 该 lane 在引擎产物根下的目录 = <artifacts>/<batchId>/<lane>（progress 快照与 lane 产物同源落盘约定；
-  //   实测即 <artifacts>/<batchId>/<lane>/progress/NN-*.md）。
-  //   用原始 laneId 拼接：sanitize 只做 mailbox 路径安全，产物路径须与 worker 实际落盘逐字一致。
-  function laneProgressDirOf(sessionId, batchId, lane) {
-    return join(store.artifactsDirOf(sessionId, batchId), lane);
-  }
-  // 进度快照信号的**扫描面收窄**（两条，二者互补，只增不减信号面）：
-  //   ① <lane>/progress/ 子树 —— 快照落盘约定路径（实测口径）；
-  //   ② <lane>/*.md 顶层 —— 非约定式落盘的兜底（部分 worker 直写 lane 根）。
-  //   为什么要收窄：lane 根下还挂着**声明产物**（outputs/produce 的绝对路径，如 exec/exempt/x.md）——
-  //   那是「开工前不存在、收尾才写」的交付物，若把整棵子树当快照扫，一次收尾写盘会连带把
-  //   lastSeenTs 推进到交付时刻，掩盖此后真实停滞（假绿：把「已交完货」读成「还在跑」）。
-  //   故快照信号只看 progress/ 子树 + lane 根 .md 文件；不做全树无差别扫描。
-  function progressSnapshotTsOf(sessionId, batchId, lane) {
-    const laneRoot = laneProgressDirOf(sessionId, batchId, lane);
-    const a = lastProgressTsOf(join(laneRoot, 'progress'));
-    const b = lastProgressTsOf(laneRoot, { maxDepth: 0, onlyMarkdown: true });
-    if (a === null) return b;
-    if (b === null) return a;
-    return Math.max(a, b);
-  }
-
-  // ---- U-4 证据通道：consume 路径的「派发时刻可解析」台账（BR-2 的唯一可判定来源）----
-  // 可解析 = 存在**且非空**（与 gates.resolveArtifact/fileExistsNonEmpty 同口径；空文件不算就绪）。
-  // 只读、失败即静默（不存在/不可读/是目录 → false），永不 throw。
-  function resolvableArtifact(sessionId, batchId, rel) {
-    try {
-      const p = resolveArtifact(sessionId, batchId, rel);
-      const st = statSync(p);
-      return st.isFile() && st.size > 0;
-    } catch { return false; }
-  }
-  // 台账记录（**观测而非判定**）：只写「某时刻看到的可解析性」，不写任何 reason/candidate。
-  //   · resolvedAtTs：**首个可解析观测**的时刻（0 = 尚未观测到可解析）；
-  //   · neverResolvable：该窗内**从未**可解析（首个观测即全不可解析 → true；此后一旦可解析即翻 false）；
-  //   · observedTs：最近一次观测时刻（供「派发之后」的时序判定用，见 upstreamMissingEvidenceOf）；
-  //   · resolvableNow：最近一次观测的可解析性（BR-2 判「探针时刻不可解析」）。
-  // 台账挂在内存 entry 上，随 entry 生命周期存活（**不再有主动丢态路径**——见 tick 的非终态保留语义）；
-  //   进程/引擎重启 ⇒ 台账清空 ⇒ BR-2 证据缺失 ⇒ 不产候选（design §4.1 明文反例：宁可少报不误报）。
-  function recordConsumeObservation(entry, sessionId, batchId, batch, lane, nowTs) {
-    const paths = laneConsumePathsOf(batch, lane);
-    if (paths.length === 0) { entry.consumeObs = null; return; }
-    let any = false;
-    for (const rel of paths) {
-      if (resolvableArtifact(sessionId, batchId, rel)) { any = true; break; }
-    }
-    const prev = entry.consumeObs;
-    const obs = {
-      resolvedAtTs: any ? (prev?.resolvedAtTs > 0 ? prev.resolvedAtTs : nowTs) : (prev?.resolvedAtTs ?? 0),
-      neverResolvable: any ? false : (prev ? prev.neverResolvable : true),
-      observedTs: nowTs,
-      resolvableNow: any,
-      paths,
-    };
-    entry.consumeObs = obs;
-  }
-  // 判定侧入参：可解析性回调（judgeLongrun 的 resolveConsume）+ 台账快照（consumeObs）
-  function consumeCtxOf(sessionId, batchId, batch, lane, entry) {
-    return {
-      resolveConsume: (rel) => resolvableArtifact(sessionId, batchId, rel),
-      consumeObs: entry?.consumeObs ? { ...entry.consumeObs } : null,
-    };
-  }
-  // 运维现场因果链（本插件真实现场，非推演）：**成员在写代码/读代码期间不产生事件、不落盘产物**，
-  //   该窗口内事件流、outbox、声明产物三条通道全部无信号 ⇒ lane_heartbeat / lane_longrun 探针与外部 liveness 判读
-  //   **同时看不见进展** ⇒ 同一批**两次误杀正在干活的成员**（w1 空窗 24 min、w2 空窗 26 min 后被中断；
-  //   而 w2 被中断后继续把 3 处失败断言全部修完 —— 事后证明确实在干活，静默 ≠ 停滞）。
-  // 故进度信号必须纳入产物根 progress 快照 mtime（上方 progressSnapshotTsOf 收窄扫描 = 本判据的落点），
-  //   并同步要求成员**每完成一个子步骤即落盘快照**（含 step N/total）：快照落盘本身即被本函数识别为非 git 进度信号，
-  //   **把「静默长跑」的误判在机制上消除**，同时充当崩溃后续跑的物理地基（人工可抢救，不触发自动续跑）。
-
-  function freshEntry(nowTs) {
-    return {
-      lastActivityAt: nowTs,
-      lastSeenTs: nowTs,
-      lastProbeAt: nowTs, // 新派发 lane 先给 base 档宽限，不立即追问（重派 running 计时重置语义）
-      missedCount: 0,
-      stalled: false,
-      pendingProbeId: null,
-      consumeObs: null, // U-4 派发后可解析性观测台账（BR-2 证据来源；**不得**静默丢弃，见 tick 保留语义）
-      stintRunningSinceTs: null, // 已登记的 stint 起点（重派检测用；跨态存活的 entry 靠它实现「重派即重置」）
-    };
-  }
-  function resetEntry(entry, nowTs) {
-    entry.lastActivityAt = nowTs;
-    entry.lastSeenTs = nowTs;
-    entry.lastProbeAt = nowTs;
-    entry.missedCount = 0;
-    entry.stalled = false;
-    entry.pendingProbeId = null;
-    // consumeObs **不在 reset 内清空**：活动重置的是「无活动计时」，不是「派发后观测到的既定事实」——
-    //   否则活跃 lane 每次重置都会丢掉 BR-2 的证据（证据一旦观测到即不可变）。
-  }
-
-  // ---- 活动判定（三信号任一，防「长任务无产出误判」）----
-  // ① batch.events：本 lane 可归因事件比上次扫描新（lane.stalled / lane.longrun.candidate 为引擎自写事件，
-  //    排除防自重置——写事件零侵入的既有 stalled 纪律扩面到 longrun 档）
-  //    **并排除「把本 lane 落到其当前态的那条迁移事件」**（`e.to === 当前 lane 态`，如重派的
-  //    `member.settled{to:'running'}`）：它是**计时重置**（新 stint 起算），不是「有人在干活」的活动信号。
-  //    不排除的后果：非终态扩面后 entry 不再被删/重建 ⇒ 首个 tick 窥见该事件即判 activity → `resetEntry`
-  //    并 `continue` → **重派后首拍恒不累计 missed**（W5 回归：期望 missed=1，实得 0）。
-  function laneEventActivity(batch, lane, sinceTs, laneState = null) {
-    const evs = batch.events ?? [];
-    for (let i = evs.length - 1; i >= 0; i--) {
-      const e = evs[i];
-      if (e.type === EVT.EVT_LANE_STALLED || e.type === EVT.EVT_LANE_LONGRUN_CANDIDATE
-        || e.type === EVT.EVT_LANE_BINDING_GAP) continue; // D2：绑定缺口同为**引擎自写**事件，须排除防自重置
-      if (laneState !== null && e.to === laneState) continue; // 落到当前态的迁移事件 = 计时重置，不算活动
-      if (e.lane === lane) {
-        const ts = Date.parse(e.ts ?? '');
-        if (Number.isFinite(ts) && ts > sinceTs) return true;
-      }
-    }
-    return false;
-  }
-  // ② outbox：该 lane outbox 目录出现未 ack 消息
-  function outboxActivity(sessionId, batchId, lane) {
-    try {
-      return mailbox.readUnacked(mailboxRootOf(sessionId, batchId), { type: 'outbox', lane }).length > 0;
-    } catch { return false; }
-  }
-  // ③ 产物 mtime：artifacts/<batchId>/ 下该 lane 声明产物（outputs/produce）mtime 变化
-  function artifactActivity(sessionId, batchId, batch, lane, sinceTs) {
-    const t = findTask(batch, lane);
-    const rels = [...(t?.outputs ?? []), ...(t?.produce ?? [])];
-    for (const rel of rels) {
-      try {
-        if (statSync(resolveArtifact(sessionId, batchId, rel)).mtimeMs > sinceTs) return true;
-      } catch { /* 不存在/不可读 → 无活动 */ }
-    }
-    return false;
-  }
-  // ④ 磁盘进度快照 mtime（进度快照信号）——非 git 进度信号通道：
-  //    「worker 直写 <artifacts>/<batchId>/<lane>/progress/ 下快照、未调 lane_checkpoint
-  //    （禁 worktree 批恒 no-op）」的实测场景下，既有三信号全为 false → 对在跑 lane 误报 stalled/longrun。
-  //    **判据必须用新鲜度窗，不能只用「晚于基线」**：首次建 entry 时 baselineTs 已把 lastSeenTs 对齐到
-  //    快照 mtime（见下），此后 `m > lastSeenTs` 恒 false → 持续写快照的 lane 照样被判 stalled
-  //    （实测复现：tick1 missed=1 → tick2 missed=2 → tick3 stalled=true，即两次误报的真实路径）。
-  //    故本信号按「快照落入 noProgressWindowMs 窗内」判活跃——与 longrun 档的 checkpoint 新鲜度同口径；
-  //    参考下界取 min(lastSeenTs, nowTs - 窗)，使「窗内新写」与「窗内但早于基线」两种情形都算活跃。
-  //    停止写快照 → 超窗即回到原判据，stalled 照常触发（探针不被稀释）。
-  function progressActivity(sessionId, batchId, lane, sinceTs, nowTs, windowMs) {
-    const m = progressSnapshotTsOf(sessionId, batchId, lane);
-    if (m === null) return false;
-    const windowStart = nowTs - windowMs;
-    const ref = Math.min(sinceTs, windowStart);
-    return m > ref;
-  }
-  function hasActivity(sessionId, batchId, batch, lane, sinceTs, nowTs, laneState = null) {
-    return laneEventActivity(batch, lane, sinceTs, laneState)
-      || outboxActivity(sessionId, batchId, lane)
-      || artifactActivity(sessionId, batchId, batch, lane, sinceTs)
-      || progressActivity(sessionId, batchId, lane, sinceTs, nowTs, lrCfg.noProgressWindowMs);
-  }
-
-  // 首次追踪某 lane 时把 lastSeenTs 基线对齐到「已知信号最新时间」（本 lane 事件 ts / 声明产物 mtime /
-  // 磁盘进度快照 mtime 的最大值）。
-  // 防时钟偏移/测试注入时钟时把历史活动误判为新鲜活动（历史事件 ts > 冷启动 nowTs 时会被误判持续活动）
-  function baselineTs(sessionId, batchId, batch, lane, nowTs) {
-    let t = nowTs;
-    const evs = batch.events ?? [];
-    for (let i = evs.length - 1; i >= 0; i--) {
-      const e = evs[i];
-      if (e.type === EVT.EVT_LANE_STALLED || e.type === EVT.EVT_LANE_LONGRUN_CANDIDATE
-        || e.type === EVT.EVT_LANE_BINDING_GAP) continue; // D2：绑定缺口同为**引擎自写**事件，须排除防自重置
-      if (e.lane === lane) {
-        const ts = Date.parse(e.ts ?? '');
-        if (Number.isFinite(ts) && ts > t) t = ts;
-      }
-    }
-    const task = findTask(batch, lane);
-    for (const rel of [...(task?.outputs ?? []), ...(task?.produce ?? [])]) {
-      try {
-        const m = statSync(resolveArtifact(sessionId, batchId, rel)).mtimeMs;
-        if (m > t) t = m;
-      } catch { /* 不存在 → 忽略 */ }
-    }
-    const pm = progressSnapshotTsOf(sessionId, batchId, lane);
-    if (pm !== null && pm > t) t = pm;
-    return t;
-  }
-
-  // 同 lane 至多 1 条 pending 追问（多拍合并语义：mailbox 无 replace → 读 inbox 未 ack 追问，存在则跳过）。
-  // 追问 ts 早于最近一次活动 → 视为已被活动满足的陈旧追问，不再当作未答拍（活动后 reset 语义）
-  function pendingProbe(sessionId, batchId, lane, sinceTs) {
-    try {
-      const items = mailbox.readUnacked(mailboxRootOf(sessionId, batchId), { type: 'inbox' });
-      for (const it of items) {
-        if (it.message?.kind !== 'probe' || it.message?.lane !== lane) continue;
-        const ts = Date.parse(it.ts ?? '');
-        if (Number.isFinite(ts) && ts < sinceTs) continue; // 陈旧追问：活动发生在它之后
-        return it;
-      }
-      return null;
-    } catch { return null; }
-  }
-
-  function probeText(lane, batchId, missed) {
-    if (cfg.probeTemplate) {
-      return cfg.probeTemplate
-        .replaceAll('{lane}', lane)
-        .replaceAll('{batchId}', batchId)
-        .replaceAll('{missed}', String(missed));
-    }
-    // 轻量追问模板：≤5 句、含 lane 标识、不调工具、不复盘全部历史
-    return [
-      `Manager 心跳：lane「${lane}」（批次 ${batchId}）已连续 ${missed} 拍无活动信号。`,
-      '请用 ≤3 句汇报当前进度或阻塞点（走 outbox）。',
-      '不调工具、不复盘全部历史。',
-      '本消息为自动追问，任何活动即重置计时。',
-    ].join('\n');
-  }
-
-  function markStalled(sessionId, batchId, lane, entry, nowTs) {
-    try {
-      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_STALLED, { lane, missed: entry.missedCount });
-    } catch { /* 批次已终态/不存在等 → 忽略（下轮不再扫） */ }
-    entry.stalled = true;
-    entry.lastSeenTs = nowTs; // 自写事件不触发自身重置
-    entry.lastProbeAt = null;
-  }
-
-  // ---- longrun 档（超时重派探针）：----
-  // 与 stalled 档互不干扰：同一 tick 扫描、同一内存表；只读判定 + 候选产出（动作即止），不改 lane 状态、
-  // 不 interrupt、不重派（成员控制归 Leader）。判定前置于心跳扫描执行：内存 entry 尚为本 tick 前状态
-  // （无 fresh 宽限污染——引擎重启后内存空 → 以事件/产物基线兜底）。
-  // lastActivityAt 来源：state 内存 entry.lastActivityAt（含 outbox 未 ack 活动信号）；entry 缺失 → baselineTs 兜底。
-  // baselineTs 已并入磁盘进度快照 mtime（非 git 进度信号），故「worker 直写快照」的 lane
-  //   在 entry 缺失（引擎重启）时也不会被当成「零活动」。
-  function longrunLastActivityAt(sessionId, batchId, batch, lane) {
-    const entry = state.get(laneKeyOf(sessionId, batchId, lane));
-    if (entry?.lastActivityAt != null) return entry.lastActivityAt;
-    return baselineTs(sessionId, batchId, batch, lane, 0); // 无内存条目 → 事件/产物/快照最新信号（无信号=0→非新鲜）
-  }
-  // 长程豁免读取（唯一读端，可选链 + 无值即 null）：豁免落**批次级字段** batch.laneExempt[lane]
-  //   （**不是** batch.lanes[lane]——后者保持纯字符串，10+ 处字符串消费面零破坏）。
-  //   旧批次/未授予 lane → undefined → 归一为 null，倍率按 1×（行为与今日完全一致，零迁移）。
-  function laneExemptOf(batch, lane) {
-    return batch?.laneExempt?.[lane] ?? null;
-  }
-  // 提示档留痕（零静默的**单次纪律**）：同一 (lane, reason, stateAnchorTs) 只落一条，跨重启幂等。
-  //   为什么单次：提示档（BR-3 / T3 paused / T4 review·idle·pending）本就会在**每拍**重算为真，
-  //   若每拍写一条即事件流噪音 + batch.updatedAt 被自写事件不断推高（掩盖真实停滞，反向伤害探测）。
-  //   事件类型复用既有 `lane.longrun.candidate`（不新增常量：event-types.js 本批无写者）——
-  //   以 `{candidate:false, tier:'T-notice', notice:true}` 与真候选区分（真候选判据恒 candidate=true，
-  //   hasLongrunCandidate / emitUnconsumed 均不受影响）。
-  const NOTICE_REASONS = new Set([
-    REASON_BLIND_RUN_UPSTREAM_NEVER_READY,
-    REASON_PAUSED_DWELL,
-    REASON_REVIEW_AWAITING_SETTLE,
-    REASON_IDLE_AWAITING_RESUME,
-    REASON_PENDING_UNDISPATCHED,
-  ]);
-  const noticeKeyOf = (lane, reason, anchor) => `${lane}\u0000${reason}\u0000${anchor ?? ''}`;
-  function hasNotice(batch, lane, reason, anchor) {
-    const key = noticeKeyOf(lane, reason, anchor);
-    return (batch?.events ?? []).some((e) => {
-      if (e?.type !== EVT.EVT_LANE_LONGRUN_CANDIDATE || e?.notice !== true || e?.lane !== lane) return false;
-      return noticeKeyOf(e.lane, e.reason, e.stateAnchorTs) === key;
-    });
-  }
-  function emitNotice(sessionId, batchId, batch, verdict) {
-    if (!verdict?.reason || !NOTICE_REASONS.has(verdict.reason)) return;
-    if (hasNotice(batch, verdict.lane, verdict.reason, verdict.stateAnchorTs)) return;
-    try {
-      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_LONGRUN_CANDIDATE, {
-        lane: verdict.lane,
-        state: verdict.state,
-        reason: verdict.reason,
-        candidate: false,
-        tier: 'T-notice',
-        notice: true,
-        stateAnchorTs: verdict.stateAnchorTs,
-        stateResidentMs: verdict.stateResidentMs,
-      });
-    } catch { /* 批次终态/不存在 → 静默（提示档无候选义务；视图面仍由 lane_heartbeat 实时给出） */ }
-  }
-
-  // 候选产出（动作即止）：① 事件流留痕（载荷携带 broadcast 那条的 ackId 供消费判据用）
-  // ② mailbox broadcast 直写（Leader 兜底路径读 broadcast——纪律 0f 口径）
-  // ③ 同投 supervisor/inbox（Manager 通道；实测该通道可达——实测两次 stalled 追问经它送达）。
-  // 事件流去重（同 stint 已产 → skip）覆盖同 tick/多次 tick/引擎重启恢复三种情形；先事件后消息
-  // （事件失败 → 不写消息；消息失败仅 warn 语义静默——事件为唯一事实源，面板/Leader 可查）。
-  // 两条投递**各自 ackId 独立**，事件载荷锚定 broadcast 那条（锚 inbox 会把
-  //   「Manager 忙」误判成「无人消费」）。
-  function emitLongrunCandidate(sessionId, batchId, batch, lane, nowTs) {
-    const entry = state.get(laneKeyOf(sessionId, batchId, lane));
-    const verdict = judgeLongrun({
-      batch, lane, nowTs,
-      maxDurationMs: lrCfg.maxDurationMs,
-      noProgressWindowMs: lrCfg.noProgressWindowMs,
-      lastActivityAtMs: longrunLastActivityAt(sessionId, batchId, batch, lane),
-      exempt: laneExemptOf(batch, lane), // R-3：豁免倍率放宽时长阈值
-      progressTsMs: progressSnapshotTsOf(sessionId, batchId, lane), // 进度快照信号（扫描面收窄：progress/ 子树 + lane 根 *.md）
-      staleBatchMs: lrCfg.staleBatchMs, // 僵尸批阈值
-      // 状态面新增入参（同源单点：阈值取 lrCfg，证据取内存台账 + 只读解析回调）
-      pendingWindowMs: lrCfg.pendingWindowMs,
-      reviewWindowMs: lrCfg.reviewWindowMs,
-      idleWindowMs: lrCfg.idleWindowMs,
-      pausedWindowMs: lrCfg.pausedWindowMs,
-      blindRunGraceMs: lrCfg.blindRunGraceMs,
-      exemptClearedAtMs: exemptClearedAtOf(batch, lane),
-      ...consumeCtxOf(sessionId, batchId, batch, lane, entry),
-    });
-    if (!verdict.candidate) {
-      // 提示档（BR-3 / review / idle / pending / paused 滞留）**不产候选**；但零静默要求「可被观测」：
-      //   留痕走**既有**事件类型 `lane.longrun.candidate`（**不新增常量**：event-types.js 本批无写者，
-      //   禁越域），以 payload `{candidate:false, tier:'T-notice', notice:true}` 与真候选区分
-      //   （既有 hasLongrunCandidate 判据只认 candidate 候选，不受影响；消费超时档也不受污染）。
-      //   **不在这里写事件**（否则每拍对每个非候选 lane 写一条 → 事件流噪音，且引擎自写事件会推高
-      //   batch.updatedAt 掩盖真实停滞）——改由 tick 按「状态+锚点」去重后落一次、跨重启幂等。
-      emitNotice(sessionId, batchId, batch, verdict);
-      return;
-    }
-    // 事件流去重（同 stint；盲跑候选亦锚 (lane, runningSinceTs)）
-    if (hasLongrunCandidate(batch, lane, verdict.runningSinceTs)) return;
-    const payload = {
-      lane,
-      state: verdict.state, // D2：reason 与 state 对齐（新增，既有读端零破坏）
-      stateAnchorTs: verdict.stateAnchorTs,
-      stateResidentMs: verdict.stateResidentMs,
-      specialTask: verdict.specialTask,
-      blindRun: verdict.blindRun,
-      runningSince: verdict.runningSince,
-      durationMs: verdict.durationMs,
-      maxDurationMs: verdict.maxDurationMs,
-      noProgressWindowMs: verdict.noProgressWindowMs,
-      lastCheckpointTs: verdict.lastCheckpointTs,
-      lastActivityAt: verdict.lastActivityAt,
-      checkpointFresh: verdict.checkpointFresh,
-      activityFresh: verdict.activityFresh,
-      reason: verdict.reason,
-      // 只增不改的扩展字段（既有读端零破坏；面板/日志容忍多余字段）
-      effectiveMaxDurationMs: verdict.effectiveMaxDurationMs,
-      thresholdMultiplier: verdict.thresholdMultiplier,
-      lastProgressTs: verdict.lastProgressTs,
-      progressFresh: verdict.progressFresh,
-      exemptClearedAt: verdict.exemptClearedAt,
-    };
-    const root = mailboxRootOf(sessionId, batchId);
-    let broadcastAckId = null;
-    // 消费判据的「句柄」= broadcast 那条的 ackId。先投递（拿 ackId）后落事件——事件载荷因此一次写全
-    //   （避免「先写事件再补 ackId」的两次写盘）；反序的唯一代价是「消息已成而事件写失败」，
-    //   该情形下消息无事件可指（惰性孤儿，同 stint 无事件则下轮仍会重产），属可接受退化。
-    try {
-      const r = mailbox.send(root, { type: 'broadcast' }, {
-        kind: 'longrun.candidate', sessionId, batchId, ...payload,
-      });
-      broadcastAckId = r?.ackId ?? null;
-    } catch { /* 消息写失败：事件仍须留痕（事件为唯一事实源），静默 */ }
-    // 同投 supervisor/inbox（{type:'inbox'} → <root>/supervisor/inbox）。ackId 与 broadcast 独立，
-    //   消费判据仍锚 broadcast 那条。
-    try {
-      mailbox.send(root, { type: 'inbox' }, {
-        kind: 'longrun.candidate', channel: 'inbox', sessionId, batchId, ...payload,
-      });
-    } catch { /* 第二条投递失败：事件仍留痕，静默（同 stint 去重不再重发） */ }
-    try {
-      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_LONGRUN_CANDIDATE, { ...payload, ackId: broadcastAckId });
-    } catch { /* 批次终态/不存在 → 静默（无事件则同 stint 下轮会重产，不丢探测能力） */ }
-  }
-  // 候选消费超时 → lane.longrun.unconsumed（只产事件不改成员态）。
-  // 独立一趟扫描（**不得**挂在 hasLongrunCandidate 的 early-return 之后——那会让本分支永不执行）：
-  //   扫描面与 longrunTick 同一口径（listSessions → listBatches → phase==='running' → running lane）；
-  //   对每个 running lane 取**当前 stint 的候选事件**，判据：
-  //     elapsed = nowTs - Date.parse(candidate.ts) > unconsumedTimeoutMs
-  //     ∧ candidate.ackId 存在 ∧ !mailbox.isAcked(root, {type:'broadcast'}, candidate.ackId)
-  //   **必须用 isAcked**：ack 默认删原消息文件，readUnacked 会把「已消费」读成「不存在」→ 永久误报。
-  //   单次纪律：以 (lane, runningSince) 去重（hasLongrunUnconsumed 同构，跨引擎重建幂等）。
-  //   unconsumedTimeoutMs <= 0（显式 0 = 关闭该档）→ 整趟跳过。
-  function emitUnconsumed(sessionId, batchId, batch, lane, nowTs) {
-    if (!(lrCfg.unconsumedTimeoutMs > 0)) return;
-    const runningSinceTs = stintRunningSinceOf(batch, lane);
-    if (runningSinceTs === null) return;
-    const cand = longrunCandidateOf(batch, lane, runningSinceTs);
-    if (!cand?.ackId) return; // 无候选 / 旧候选无 ackId（升级前产的事件）→ 无从判消费
-    const emittedAt = Date.parse(cand.ts ?? '');
-    if (!Number.isFinite(emittedAt)) return;
-    const elapsedMs = nowTs - emittedAt;
-    if (!(elapsedMs > lrCfg.unconsumedTimeoutMs)) return;
-    let acked = false;
-    try { acked = mailbox.isAcked(mailboxRootOf(sessionId, batchId), { type: 'broadcast' }, cand.ackId); }
-    catch { return; /* 判据不可得 → 本轮不判（保守：宁可晚报也不误报） */ }
-    if (acked) return;
-    if (hasLongrunUnconsumed(batch, lane, runningSinceTs)) return; // 单次纪律
-    try {
-      store.appendEvent(sessionId, batchId, EVT.EVT_LANE_LONGRUN_UNCONSUMED, {
-        lane,
-        runningSince: cand.runningSince,
-        durationMs: cand.durationMs,
-        emittedAt: cand.ts,
-        elapsedMs,
-        unconsumedTimeoutMs: lrCfg.unconsumedTimeoutMs,
-        ackId: cand.ackId,
-      });
-    } catch { /* 批次终态/不存在 → 静默 */ }
-  }
-  // longrun 扫描档（状态面扩面后的准入矩阵，§1.2）：
-  //   批次 {running, paused} 扫；批次 {planning} 不扫成员（只许登记）；批次终态 {aborted, complete} 整批跳过
-  //   （悬挂视图由只读查询面恒显，探针侧**不产任何候选/不写任何事件**——终态批不可再写）。
-  //   lane 侧：**非终态全集合** {pending, running, review, idle} 各走自身判据（一态一判据）；终态 lane 跳过。
-  //   僵尸批次（末事件早于 staleBatchMs）整批跳过——其 running 是历史残留，扫描只产噪音；
-  //   阈值 0 = 显式关闭过滤（逃生阀）。过滤只作用本档，不影响 stalled 档与批次状态
-  //   （**悬挂视图不受该过滤**——终态批天然「末事件早于 24h」，沿用会让该视图自我抹掉）。
-  function longrunTick(nowTs) {
-    for (const sessionId of store.listSessions()) {
-      for (const batchId of store.listBatches(sessionId)) {
-        const batch = store.readBatch(sessionId, batchId);
-        if (!batch) continue;
-        if (schema.isBatchTerminal(batch.phase)) continue; // 终态批：只出悬挂视图，不产候选、不写事件
-        if (batch.phase === 'planning') continue; // planning：只许 Manager 登记，不扫成员判据
-        if (isStaleBatch(batch, nowTs, lrCfg.staleBatchMs)) continue; // 僵尸批跳过
-        for (const lane of Object.keys(batch.lanes ?? {})) {
-          if (!isScannedLaneState(batch, lane)) continue; // 非终态全集合；终态 lane 不扫
-          try { emitLongrunCandidate(sessionId, batchId, batch, lane, nowTs); }
-          catch { /* 单 lane 探针失败隔离（不阻断整轮扫描） */ }
-          // 消费超时档只对 running lane 有意义（候选只在 running 态产出）
-          if (laneStateOf(batch, lane) !== 'running') continue;
-          try { emitUnconsumed(sessionId, batchId, batch, lane, nowTs); } // 消费超时独立趟（不挂 early-return 后）
-          catch { /* 单 lane 失败隔离 */ }
-        }
-      }
-    }
-  }
-  // 只读：单 lane longrun 探针状态（lane_longrun 工具查询用；不依赖本 tick 是否已跑——实时判定）
-  function longrunStatus(sessionId, batchId, lane, nowTs) {
-    const batch = store.readBatch(sessionId, batchId);
-    if (!batch) {
-      return {
-        laneKey: laneKeyOf(sessionId, batchId, lane),
-        sessionId, batchId, lane,
-        tracked: false, candidate: false, reason: 'batch-not-found',
-        state: null, stateAnchorTs: null, stateResidentMs: null, dangling: false, specialTask: false,
-      };
-    }
-    const t = nowTs ?? clock();
-    const entry = state.get(laneKeyOf(sessionId, batchId, lane));
-    const verdict = judgeLongrun({
-      batch, lane, nowTs: t,
-      maxDurationMs: lrCfg.maxDurationMs,
-      noProgressWindowMs: lrCfg.noProgressWindowMs,
-      lastActivityAtMs: longrunLastActivityAt(sessionId, batchId, batch, lane),
-      exempt: laneExemptOf(batch, lane),
-      progressTsMs: progressSnapshotTsOf(sessionId, batchId, lane),
-      staleBatchMs: lrCfg.staleBatchMs,
-      // 状态面新增入参（与 tick 侧逐字同源：同一 lrCfg / 同一台账 / 同一只读解析回调）
-      pendingWindowMs: lrCfg.pendingWindowMs,
-      reviewWindowMs: lrCfg.reviewWindowMs,
-      idleWindowMs: lrCfg.idleWindowMs,
-      pausedWindowMs: lrCfg.pausedWindowMs,
-      blindRunGraceMs: lrCfg.blindRunGraceMs,
-      exemptClearedAtMs: exemptClearedAtOf(batch, lane),
-      ...consumeCtxOf(sessionId, batchId, batch, lane, entry),
-    });
-    return {
-      laneKey: laneKeyOf(sessionId, batchId, lane),
-      sessionId, batchId, lane,
-      tracked: state.has(laneKeyOf(sessionId, batchId, lane)),
-      enabled: lrCfg.enabled,
-      maxDurationMs: lrCfg.maxDurationMs,
-      noProgressWindowMs: lrCfg.noProgressWindowMs,
-      // 豁免态透出（R-3/R-4 可观测性）：未豁免 lane = null / 基础阈值 / 1
-      exempt: verdict.exempt,
-      effectiveMaxDurationMs: verdict.effectiveMaxDurationMs,
-      thresholdMultiplier: verdict.thresholdMultiplier,
-      staleBatchMs: lrCfg.staleBatchMs,
-      staleBatch: verdict.staleBatch,
-      runningSince: verdict.runningSince,
-      runningSinceTs: verdict.runningSinceTs,
-      durationMs: verdict.durationMs,
-      lastCheckpointTs: verdict.lastCheckpointTs,
-      lastProgressTs: verdict.lastProgressTs,
-      lastActivityAt: verdict.lastActivityAt,
-      checkpointFresh: verdict.checkpointFresh,
-      progressFresh: verdict.progressFresh,
-      activityFresh: verdict.activityFresh,
-      candidate: verdict.candidate,
-      emitted: hasLongrunCandidate(batch, lane, verdict.runningSinceTs),
-      reason: verdict.reason,
-      // ---- 状态面新增字段（D2：state / stateAnchorTs / stateResidentMs；reason 与之对齐）----
-      state: verdict.state,
-      stateAnchorTs: verdict.stateAnchorTs,
-      stateResidentMs: verdict.stateResidentMs,
-      dangling: verdict.dangling,
-      specialTask: verdict.specialTask,
-      exemptClearedAt: verdict.exemptClearedAt,
-      blindRun: verdict.blindRun,
-    };
-  }
-
-  // 扫描全部会话（状态面扩面后的准入矩阵）：
-  // - **非终态 lane 全集合** {pending, running, review, idle} 全部保留在心跳 state 表内
-  //   （原「非 running ⇒ state.delete」静默丢态路径已删：悬挂成员不可见的第二重成因）；
-  // - 批次 {running, paused} 扫；终态批**保留悬挂视图**（entry 不删，只读查询恒可见）但不追问；
-  //   planning 只许登记，不扫成员；
-  // - **追问（inbox probe / missedCount / lane.stalled）只对「running 批 + running lane」发生**——
-  //   非 running 态的判据是「时长」而非「无活动」（§2），对它们发追问既无判据依据、也会把
-  //   review/idle 的静默误读成停滞（review 本来就不活动）。
-  // ── W1-① 重放/恢复：**周期兜底**（本 tick 涉及的全部 `running` 批） ─────────────────────
-  // 为什么要在心跳里再跑一次（缺口，实测口径见 `lib/engine/replay.js` 文件头）：
-  //   链推进由 `member.settled` 驱动；若**推进发生在运行期**且失败/无人补（门禁挂起、进程退出、
-  //   装配期扫描窗口未覆盖），批次会永久停在「lane 已 merged、下一环从未被决策」。装配期只扫一次，
-  //   覆盖不到「启动之后才死的」，故需一个**周期兜底**。心跳 tick 是既有唯一周期面 ⇒ 挂在这里。
-  //
-  // ★ 语义边界（**必须与原纪律并读，不得混同**）：
-  //   心跳既有的 stalled / longrun / binding-gap 三档是「**只标记不自动处置**」——它们只产候选/留痕，
-  //   成员状态与批次相位**一律不动**（Manager/Leader 人审）。本档**不是**自动处置：
-  //   `replayBatch` 固定 `noDispatch: true` ⇒ 只**补一条链推进决策**（落 `chain.step{dispatch.mode:'manual-pending'}`），
-  //   **不派发**、**不改相位**、**不改任何成员状态**（真派仍归 Leader/Manager，与 S12 裁决一致）。
-  //   两者同处一 tick 但**互不影响**：本档不读也不写心跳 state 表，三档的判据/阈值/输出一字未改。
-  //   边界自证：本档命中时批相位恒为 `running`（`replayBatch` 内的相位闸），故不可能与
-  //   「终态批只出悬挂视图」「paused 批次档」等路径交叉。
-  //
-  // 三条硬纪律（与装配期扫描 `lib/index.js` **逐字同源**，防「写了不生效」或「静默危害」）：
-  //   ① 只处理 `running` 批（`replayBatch` 内相位闸 + 此处预筛，双保险）；
-  //   ② 一律只决策不派发（`replayBatch` 内固定 `noDispatch`）；
-  //   ③ 全程 try/catch 不抛（单批隔离）+ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3）。
-  // 有界：会话数与批次数均设上限（同装配期常量），防大批量时本拍扫盘过久。
-  // 去重/幂等不在本档重复实现：`replayBatch` 的 `advancedAfter(ts >= 结算时刻)` 判据保证
-  //   「同一现场重复重放 ⇒ 零新增 `chain.step`」⇒ 本 tick 反复跑不会重复推进（RI-2 回归锁）。
-  const REPLAY_MAX_SESSIONS = 5;
-  const REPLAY_MAX_BATCHES = 20;
-  async function replayTick() {
-    const hits = [];
-    let replayed = 0;
-    try {
-      const targets = [];
-      const sessions = (typeof store.listSessions === 'function' ? store.listSessions() : []).slice(0, REPLAY_MAX_SESSIONS);
-      for (const sessionId of sessions) {
-        const ids = typeof store.listBatches === 'function' ? store.listBatches(sessionId) : [];
-        for (const batchId of ids) {
-          if (targets.length >= REPLAY_MAX_BATCHES) break;
-          try { if (store.readBatch(sessionId, batchId)?.phase === 'running') targets.push({ sessionId, batchId }); }
-          catch { /* 坏批跳过（与装配期扫描同隔离口径） */ }
-        }
-        if (targets.length >= REPLAY_MAX_BATCHES) break;
-      }
-      for (const t of targets) {
-        try {
-          const r = await replayBatch({ store, root: engineRoot, liveConfig: liveConfig ?? config }, ctxOf(), t);
-          if (r && r.replayed > 0) { replayed += r.replayed; hits.push(t.batchId); }
-        } catch { /* 单批隔离：一批失败不影响其余 */ }
-      }
-      if (replayed > 0) {
-        // 有补决策才 info 一行（**零命中零日志**）；措辞与装配期扫描（lib/index.js）对齐，
-        //   便于两条路径在同一日志面上辨认来源。logger 缺省（测试/旧调用方）⇒ 静默，不 throw。
-        try {
-          logger?.info?.('[dsh-punky-swarm] replay(心跳)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
-            + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
-        } catch { /* 日志失败不影响补决策已落盘的事实 */ }
-      }
-    } catch { /* 扫描面失败不影响心跳 */ }
-    return { replayed, batches: hits };
-  }
-
-  function tick() {
-    if (disposed) return;
-    const nowTs = clock();
-    // longrun 档（并列，同 tick 同引擎）：置于心跳扫描之前执行——此时内存 entry 为本 tick 前状态
-    // （freshEntry 宽限不污染 lastActivityAt 判定；重启后 entry 缺失 → baselineTs 兜底）。
-    if (lrCfg.enabled) longrunTick(nowTs);
-    // W1-① 重放/恢复周期兜底（独立于 longrun 档开关：重放不是候选档，watch.longrun.enabled=false 也应兜底）。
-    //   不 await（tick 同步语义与既有 watchdog 调用点不变）；异常在 replayTick 内已全程隔离。
-    replayInFlight = replayTick();
-    for (const sessionId of store.listSessions()) {
-      for (const batchId of store.listBatches(sessionId)) {
-        const batch = store.readBatch(sessionId, batchId);
-        if (!batch) continue;
-        if (schema.isBatchTerminal(batch.phase) || batch.phase === 'planning') {
-          // 终态批：**保留悬挂视图**（不再 dropBatchEntries 整批丢态）；planning：不扫成员。
-          //   entry 若存在则推进 lastSeenTs（避免解冻后以陈旧基线瞬时判 stalled），但不追问。
-          touchBatchEntries(sessionId, batchId, batch, nowTs);
-          continue;
-        }
-        for (const [lane] of Object.entries(batch.lanes ?? {})) {
-          const laneKey = laneKeyOf(sessionId, batchId, lane);
-          const st = laneStateOf(batch, lane);
-          let entry = state.get(laneKey);
-          if (entry == null) {
-            entry = freshEntry(nowTs);
-            entry.lastSeenTs = baselineTs(sessionId, batchId, batch, lane, entry.lastSeenTs);
-            state.set(laneKey, entry);
-          }
-          // U-4：派发后可解析性观测（**观测先于判定**：本 tick 的观测即本 tick 判定的证据）
-          recordConsumeObservation(entry, sessionId, batchId, batch, lane, nowTs);
-          if (st !== 'running') {
-            // 非 running：只保留视图，**不追问**（§2：review/idle/pending 的判据是时长而非无活动）。
-            // lastSeenTs 续到「本 lane 已知信号最新时刻」（不是裸 nowTs）——否则下一次 tick 会把**已经
-            // 计入基线的那条事件**再判一次「有新活动」（laneEventActivity 用严格 `ts > sinceTs`），
-            // 在时钟几乎不前进的场景（同一毫秒内 tick）造成重派后 missed 恒 0（W5 回归）。
-            entry.lastSeenTs = Math.max(nowTs, baselineTs(sessionId, batchId, batch, lane, nowTs));
-            continue;
-          }
-          // **新 stint 检测（重派计时重置）**：非终态 lane 的 entry 现在跨态存活（原实现靠 `state.delete`
-          //   隐式重建实现「重派即重置」）⇒ 必须显式核 stint 起点：runningSince 变化（新的 dispatch/
-          //   结算→running 事件）⇒ 复位为 fresh 语义（missed=0/stalled=false/pendingProbeId=null），
-          //   否则恢复重派后的 lane 会**接着崩溃前的拍数继续累计**（W5：期望 missed=1，实得 3）。
-          const stintNow = stintRunningSinceOf(batch, lane);
-          if (entry.stintRunningSinceTs !== stintNow) {
-            resetEntry(entry, nowTs);
-            entry.stintRunningSinceTs = stintNow;
-            entry.gapReported = null; // D2：新 stint ⇒ 缺口留痕重置（同一缺口每 stint 只报一次）
-          }
-          // D2 绑定缺口探测（只标记不处置；与 stalled/longrun 同档族、同 tick）
-          {
-            const gap = bindingGapOf(batch, lane, nowTs, entry.stintRunningSinceTs);
-            if (gap.hit && entry.gapReported !== gap.reason) {
-              entry.gapReported = gap.reason;
-              store.appendEvent(sessionId, batchId, EVT.EVT_LANE_BINDING_GAP, { lane, reason: gap.reason, missed: entry.missedCount });
-              // 通道决策（2026-09-16 实测得出的契约结论）：**三个既有 box 都不可挪用**——
-              //   · `inbox`（supervisor/inbox）被「追问（kind:'probe'）」的**消息计数契约**占用（实测：多一条即打破 W1「inbox 恰 1 条追问」）；
-              //   · `broadcast` 被「长跑候选双通道」契约占用（IT-B 断言 broadcast+inbox 各恰 1 条）；
-              //   · `outbox` 是**lane 活动信号**（`laneEventActivity` 信号②：未 ack outbox ⇒ 判为有活动）。
-              //   ⇒ 绑定缺口**只落事件** `lane.binding_gap`（Leader/Manager/审计经事件面读，`batch_status`/`log_export` 均可见），
-              //     不新增 box、不扰动任何既有通道计数。若将来确需「主动推消息」，须先为 mailbox 引入**按 kind 的独立通道**再开。
-              void 0;
-            }
-          }
-          // 活动 → 重置回 tier0（W3）
-          // 注：hasActivity 现含第 ④ 信号「磁盘进度快照 mtime」，故「worker 直写快照、
-          //     不调 lane_checkpoint」的 lane 不再被误报 stalled 追问（两次实测误报的同类修复）。
-          if (hasActivity(sessionId, batchId, batch, lane, entry.lastSeenTs, nowTs, st)) { resetEntry(entry, nowTs); continue; }
-          // R-4 长程豁免：lane 声明 laneExempt[lane].stalled === true → 本拍不发 inbox probe、
-          //   不累计 missedCount、不写 lane.stalled（与 longrun 档的倍率豁免并列的另一半）。
-          //   语义边界：仍留在心跳 state 表内（tracked: true，lane_heartbeat 查询照常可见）；
-          //   **仍写 checkpoint/心跳**——lane_checkpoint 写面零特判（豁免只关「追问 + stalled 标记」，
-          //   不许把 lane 变成不可观测）；豁免撤销后下一拍即回到原追问语义（无粘滞状态）。
-          if (laneExemptOf(batch, lane)?.stalled === true) continue;
-          // 已 stalled：只标记，停止追问（W2）
-          if (entry.stalled) continue;
-          // 退避档位：tier = min(missedCount, len-1)，档位单调（W4）
-          const tier = Math.min(entry.missedCount, schedule.length - 1);
-          if (entry.lastProbeAt !== null && nowTs - entry.lastProbeAt < schedule[tier]) continue;
-          // 一拍 = 一次追问轮次；同 lane 至多 1 条 pending（W1），pending 存在则这一拍=已发未答
-          const pending = pendingProbe(sessionId, batchId, lane, entry.lastActivityAt);
-          if (!pending) {
-            const r = mailbox.send(mailboxRootOf(sessionId, batchId), { type: 'inbox' }, {
-              kind: 'probe',
-              lane,
-              batchId,
-              missed: entry.missedCount + 1,
-              text: probeText(lane, batchId, entry.missedCount + 1),
-            });
-            entry.pendingProbeId = r.ackId;
-          }
-          entry.missedCount += 1;
-          entry.lastProbeAt = nowTs;
-          // 硬停：连续 N 拍无活动 → lane.stalled（只标记不自动处置，不新增成员状态）
-          if (entry.missedCount >= hardStop) markStalled(sessionId, batchId, lane, entry, nowTs);
-        }
-      }
-    }
-  }
-
-  // 内存条目保留策略（design §1.2「必须删除的既有短路」）：
-  //   原 `dropBatchEntries(batch)`（整批 `state.delete`）与逐 lane `state.delete(laneKey)` 会**主动清除内存条目**
-  //   ⇒「非 running lane 不可见」+「终态批整批不可见」= 悬挂成员不可见的第二重成因。
-  //   现语义：**非终态 lane 的条目一律保留**（只读查询面恒可见）；批次转终态/planning 时也不删，
-  //   只把 lastSeenTs 推进到当前拍（解冻/恢复后不因陈旧基线瞬时判 stalled），**不追问、不产候选**。
-  //   唯一的 `state.delete` 落在 dispose()（显式销毁语义），不再存在任何静默丢态路径。
-  function touchBatchEntries(sessionId, batchId, batch, nowTs) {
-    for (const lane of Object.keys(batch.lanes ?? {})) {
-      const entry = state.get(laneKeyOf(sessionId, batchId, lane));
-      if (entry) entry.lastSeenTs = nowTs;
-    }
-  }
-
-  // 只读：lastActivityAt/当前档位/missed/stalled/pendingProbeId + 状态面字段（state/stateAnchorTs/
-  //   stateResidentMs/dangling）。ctx 由工具侧传入（batch + 派生所见）；缺省 = 老调用点零变化。
-  //   注：`tracked` 语义已随「删静默丢态」扩面——非终态 lane 一律 tracked（entry 恒在），
-  //   不再等于「running 才被追踪」（旧口径见 C-2/§W-6）。
-  function status(laneKey, ctx = null) {
-    const entry = state.get(laneKey);
-    // laneKey = `${sessionId}/${batchId}/${lane}`；lane 未约束可含 '/'，按前两个斜杠定位
-    const i1 = laneKey.indexOf('/');
-    const i2 = i1 >= 0 ? laneKey.indexOf('/', i1 + 1) : -1;
-    const sessionId = i1 >= 0 ? laneKey.slice(0, i1) : null;
-    const batchId = i2 >= 0 ? laneKey.slice(i1 + 1, i2) : null;
-    const lane = i2 >= 0 ? laneKey.slice(i2 + 1) : null;
-    // 状态面字段（与 longrunStatus 同源：同一阶梯 + 同一阈值映射；reason 由调用方给 override 时优先取之）
-    const stateFields = deriveStateFields(ctx?.batch ?? null, lane, ctx?.nowTs ?? null, ctx?.reasonOverride ?? null);
-    if (!entry) {
-      return {
-        laneKey, tracked: false, lastActivityAt: null, tier: 0, intervalMs: schedule[0],
-        missed: 0, stalled: false, pendingProbeId: null, lastProbeAt: null,
-        sessionId, batchId, lane, ...stateFields,
-      };
-    }
-    const tier = Math.min(entry.missedCount, schedule.length - 1);
-    return {
-      laneKey,
-      tracked: true,
-      sessionId,
-      batchId,
-      lane,
-      lastActivityAt: new Date(entry.lastActivityAt).toISOString(),
-      tier,
-      intervalMs: schedule[tier],
-      missed: entry.missedCount,
-      stalled: entry.stalled,
-      pendingProbeId: entry.pendingProbeId,
-      lastProbeAt: entry.lastProbeAt ? new Date(entry.lastProbeAt).toISOString() : null,
-      ...stateFields,
-    };
-  }
-
-  // 状态面派生（只读、纯）：state = 批次档优先（终态/planning/paused 三档先判，与 judgeLongrun 同序），
-  //   批次档不覆盖 lane 时取 lane 自身态；锚点取 stateAnchorOf / batchPausedAnchorOf（与 state 同源）；
-  //   reason 用**同一套阶梯**（§2 分派表 + U-3 优先级）在查询面复算——lane_heartbeat 与 lane_longrun
-  //   对同一 lane 必须给出同一 (state, reason)（U-5：同一 state 语义不能在多工具面分裂）。
-  //   （盲跑档 BR-* 需解析回调与台账，只在 longrunStatus 侧产出；查询面命中即取之——见 createHeartbeatTools。）
-  function deriveStateFields(batch, lane, nowTsRef, reasonOverride = null) {
-    const out = {
-      state: null, stateAnchorTs: null, stateResidentMs: null, dangling: false,
-      exemptClearedAt: null, reason: null,
-    };
-    if (!batch || lane == null) return out;
-    const laneSt = laneStateOf(batch, lane);
-    const tNow = nowTsRef ?? clock();
-    out.exemptClearedAt = (() => {
-      const ms = exemptClearedAtOf(batch, lane);
-      return ms === null ? null : new Date(ms).toISOString();
-    })();
-    out.dangling = isDanglingLane(batch, lane);
-    let state = laneSt;
-    let anchorTs = null;
-    let reason;
-    if (schema.isBatchTerminal(batch.phase)) {
-      // 终态批：快照式（无阈值、无锚点）；非终态 lane = 悬挂成员，不产候选
-      state = laneSt; anchorTs = null;
-      reason = out.dangling ? REASON_DANGLING_MEMBER : 'batch-terminal-lane-terminal';
-    } else if (batch.phase === 'planning') {
-      state = laneSt; anchorTs = null;
-      reason = REASON_NOT_SCANNED_PLANNING;
-    } else if (batch.phase === 'paused') {
-      state = 'paused'; anchorTs = batchPausedAnchorOf(batch);
-      const over = anchorTs !== null && (tNow - anchorTs) > lrCfg.pausedWindowMs;
-      reason = over ? REASON_PAUSED_DWELL : 'paused-in-window';
-    } else {
-      state = laneSt; anchorTs = stateAnchorOf(batch, lane);
-      const over = anchorTs !== null && (tNow - anchorTs) > lrCfg[STATE_WINDOW_KEY[state] ?? ''] ;
-      if (state === 'running') reason = null; // running 的 reason 由 longrunStatus 的完整判定给出
-      else if (state === 'review') reason = over ? REASON_REVIEW_AWAITING_SETTLE : 'review-in-window';
-      else if (state === 'idle') reason = over ? REASON_IDLE_AWAITING_RESUME : 'idle-in-window';
-      else if (state === 'pending') reason = over ? REASON_PENDING_UNDISPATCHED : 'pending-in-window';
-      else reason = 'lane-terminal-not-scanned';
-    }
-    out.state = state;
-    out.stateAnchorTs = anchorTs === null ? null : new Date(anchorTs).toISOString();
-    out.stateResidentMs = anchorTs === null ? null : tNow - anchorTs;
-    out.reason = reasonOverride ?? reason;
-    return out;
-  }
-
-  // 活动信号外部入口：missedCount=0 回 tier0
-  function reset(laneKey) {
-    const entry = state.get(laneKey);
-    if (entry) resetEntry(entry, clock());
-  }
-
-  function dispose() {
-    disposed = true;
-    state.clear();
-  }
-
-  // `replayInFlight()`：返回本拍 W1-① 重放的 in-flight Promise（未跑过 ⇒ null）。
-  //   生产路径不消费它（tick 同步返回即结束）；测试/审计用它把「本拍补决策已落盘」变成可等待的事实，
-  //   避免用 sleep 猜时序（GAP-S11 的 20ms 时序 flake 同类陷阱）。
-  const replayInFlightOf = () => replayInFlight;
-  return { tick, status, reset, dispose, longrunStatus, replayInFlight: replayInFlightOf };
+  // 闭包上下文 `cx`：承载原闭包内共享变量（cfg/lrCfg/schedule/hardStop/clock/engineRoot/ctxOf/state
+  //   + disposed/replayInFlight 两个可变位），**每引擎实例一份**——不得提升为模块级单例（纪律：不新增真源）。
+  const cx = createHeartbeatContext({ store, mailbox, config, root, now, liveConfig, logger });
+  // 各探针档从**同一 `cx`** 取值；返回键序 = 拆分前 `return { ... }` 的键序（行为零变更）。
+  //   薄包装保持原签名与形参表（arity 逐字不变）：tick（stalled 档，内嵌 longrun 扫描与重放兜底）/
+  //   status / reset / dispose / longrunStatus / replayInFlight。
+  function tick() { return probeTick(cx); }
+  function status(laneKey, ctx = null) { return laneStatusOf(cx, laneKey, ctx); }
+  function reset(laneKey) { return resetLane(cx, laneKey); }
+  function dispose() { return disposeEngine(cx); }
+  function longrunStatus(sessionId, batchId, lane, nowTs) { return longrunStatusOf(cx, sessionId, batchId, lane, nowTs); }
+  function replayInFlight() { return replayInFlightOf(cx); }
+  return { tick, status, reset, dispose, longrunStatus, replayInFlight };
 }
 
 // lane_heartbeat / lane_longrun 共用的**缺省 lane 过滤**（C-2 / §6.1 A 栏②；F6 归因更正后落点 = 本文件）：
