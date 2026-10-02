@@ -1,66 +1,15 @@
-import { runCommand } from './command-exec.js';
 import { isAbsPath } from './constants.js';
-import type { Batch, Layer } from '../types/contracts.js';
+import type { Batch } from '../types/contracts.js';
 export { isAbsPath };
-export declare function smokeOf(batch: Batch | null | undefined): boolean;
-export type ContractMissingPayload = {
-    contractMissing: {
-        cause: 'undeclared';
-        gateKind: string;
-        layer: string;
-        declared: false;
-        source: string;
-        degrade: {
-            kind: string;
-            note: string;
-        };
-        problems: string[];
-    };
-};
-export declare const TARGETS_CLAIMED_RE: RegExp;
-export declare function detectNeedHuman(artifactsDir: string, producePaths: string[]): {
-    declared: boolean;
-    path: null;
-} | {
-    declared: boolean;
-    path: string;
-};
-export declare function detectPendingMarker(content: string, literal: string): {
-    declared: boolean;
-    index: number;
-};
-export declare const GATE_LINE_RE: RegExp;
-export declare const GATE_EMPTY_LINE_RE: RegExp;
-export declare function detectGate(artifactsDir: string, paths: string[]): {
-    declared: boolean;
-    commands: string[];
-    path: string | null;
-    emptyCommand: string | null;
-};
-export interface ReasonTokenDecl {
-    token: string;
-    path: string;
-    index: number;
-}
-export interface ReasonVocabularyVerdict {
-    ok: boolean;
-    declarations: ReasonTokenDecl[];
-    unknown: ReasonTokenDecl[];
-    restated: Array<ReasonTokenDecl & {
-        entryId: string | null;
-    }>;
-    degrade: {
-        kind: string;
-        code: string;
-        problems: string[];
-    } | null;
-}
-/** 词表只读视图（§2.4 #6 的**纯展示位**形态：恰好三键，不参与任何判定）。 */
-export interface VocabularyView {
-    loaded: boolean;
-    version: number | null;
-    source: string | null;
-}
+import type { PresenceInput, PresenceVerdict, PresenceNote } from './gates/presence.js';
+import { declaredKindOf } from './gates/presence.js';
+import type { ReasonTokenDecl, ReasonVocabularyVerdict, VocabularyView } from './gates/reason-vocabulary.js';
+export { smokeOf, detectNeedHuman, detectPendingMarker, detectGate, TARGETS_CLAIMED_RE, GATE_LINE_RE, GATE_EMPTY_LINE_RE } from './gates/detect.js';
+export type { ContractMissingPayload } from './gates/detect.js';
+export { declaredKindOf };
+export type { PresenceMode } from './gates/presence.js';
+export type { PresenceNote, PresenceVerdict };
+export type { ReasonVocabularyVerdict, ReasonTokenDecl, VocabularyView };
 /**
  * 词表判定（**单点**：`checkEntryGate` E1 与 `checkCommandGate` C3 同调本函数）：
  *   · 未登记 token ⇒ `ok:false` + `unknown[]` ⇒ 调用方拒 `GATE_TOKEN_UNKNOWN`（Q-3=B 的收紧面）；
@@ -73,38 +22,11 @@ export interface VocabularyView {
 export declare function reasonVocabularyVerdict(artifactsDir: string, paths: string[], opts?: {
     root?: string | null;
 }): ReasonVocabularyVerdict;
-export type PresenceMode = 'declare' | 'runtime';
-/** 空内容原因行留痕（`gate.escape{kind:'empty-artifact-noted'}` 的载荷）。 */
-export interface PresenceNote {
-    artifact: string;
-    reason: string;
-}
-export interface PresenceVerdict {
-    ok: boolean;
-    mode: PresenceMode;
-    layer: string | null;
-    declaredKind: string | null;
-    path: string | null;
-    kind: 'file' | 'dir';
-    code: string | null;
-    problems: string[];
-    notes: PresenceNote[];
-}
-/** 声明形态（R-1）：按**声明原文**判定（`/` 结尾 = 目录语义），不做尾斜杠规范化。 */
-export declare function declaredKindOf(declared: string): 'file' | 'dir';
 /**
  * presence 判据唯一实现（判据同源：建批期 `mode:'declare'` / 运行期 `mode:'runtime'`）。
  * `abs` / `content` 只对**单件声明**有效（多件声明由调用方逐件调用，或建批期只走静态面）。
  */
-export declare function presenceJudge(input?: {
-    mode?: PresenceMode;
-    layer?: string | null;
-    declared?: unknown;
-    declaredKind?: string | null;
-    abs?: string | null;
-    content?: string | null;
-    artifactsRoot?: string | null;
-}): PresenceVerdict;
+export declare function presenceJudge(input?: PresenceInput): PresenceVerdict;
 export declare function createGates(root: string, opts?: {
     flowsRoot?: string;
     readConfig?: () => unknown;
@@ -380,7 +302,7 @@ export declare function createGates(root: string, opts?: {
         problems?: undefined;
     };
     checkPlanContract: (sessionId: string, batchId: string, batch: Batch, lane: string) => Record<string, unknown>;
-    checkExitGate: (sessionId: string, batchId: string, batch: Batch, lane: string) => Record<string, unknown>;
+    checkExitGate: (sessionId: string, batchId: string, batch: Batch, lane: string) => import("./gates/cx.js").GateVerdict;
     checkNeedHumanGate: (sessionId: string, batchId: string, batch: Batch, lane: string, note?: string | null) => {
         ok: boolean;
         declared: boolean;
@@ -444,7 +366,7 @@ export declare function createGates(root: string, opts?: {
         escape?: undefined;
     };
     checkCommandGate: (sessionId: string, batchId: string, batch: Batch, lane: string, deps?: {
-        runCommand?: typeof runCommand;
+        runCommand?: typeof import("./command-exec.js").runCommand;
     }) => {
         ok: boolean;
         declared: boolean;
@@ -953,7 +875,7 @@ export declare function createGates(root: string, opts?: {
     };
     gateStatus: (sessionId: string, batchId: string, lane: string) => {
         lane: string;
-        layer: Layer | null;
+        layer: import("../types/contracts.js").Layer | null;
         state: import("../types/contracts.js").MemberState;
         team: string | null;
         gates: string;
@@ -963,7 +885,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: unknown;
+        contractProblems: any;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -1034,7 +956,7 @@ export declare function createGates(root: string, opts?: {
     };
     gateStatusOfBatch: (sessionId: string, batchId: string) => Record<string, {
         lane: string;
-        layer: Layer | null;
+        layer: import("../types/contracts.js").Layer | null;
         state: import("../types/contracts.js").MemberState;
         team: string | null;
         gates: string;
@@ -1044,7 +966,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: unknown;
+        contractProblems: any;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
@@ -1099,7 +1021,7 @@ export declare function createGates(root: string, opts?: {
     }>;
     gateStatusMapOfBatch: (sessionId: string, batchId: string) => Record<string, {
         lane: string;
-        layer: Layer | null;
+        layer: import("../types/contracts.js").Layer | null;
         state: import("../types/contracts.js").MemberState;
         team: string | null;
         gates: string;
@@ -1109,7 +1031,7 @@ export declare function createGates(root: string, opts?: {
         consumeMissing: string[];
         outputsMissing: string[];
         produceMissing: string[];
-        contractProblems: unknown;
+        contractProblems: any;
         targets: string[];
         targetsMissing: string[];
         targetsUnchanged: string[];
