@@ -100,7 +100,7 @@ interface ConfigInput {
     capabilities?: ConfigCapabilitiesInput;
     acps?: ConfigAcpsInput;
 }
-interface ResolvedWatchConfig {
+export interface ResolvedWatchConfig {
     enabled: boolean;
     intervalsMinutes: readonly number[];
     maxMissed: number;
