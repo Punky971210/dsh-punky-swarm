@@ -21,6 +21,43 @@ import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, ownerOfExec } from './tier-gate.js';
 import { isMemberTerminal } from '../schema.js'; // N1-R4-1a：公共池「上游是否已结算」判据（终态单一真源，勿另写）
 
+// ── 池判据单点（K1 公共池）：`task_pool` 工具面与只读 HTTP 投影（`/batch.pool`）**共用本函数** ──
+// 为什么抽到这里：`lib/api.js` 的 `/batch` 帧亦需向面板下发池视图（B-2），而「池 = `owner == null`
+//   的视图 + 上游未结算/lane 已离开 pending 两类 blocker」这套判定若在 api.js 再写一份，即**两个读端
+//   各自解释池**（判据分裂）。故以本函数为唯一真源：api.js 只 `import` 调用，不重写等价逻辑。
+// 返回形状与 `task_pool` 工具输出同源（pooled / dispatched / pool），工具面只做外加身份与 note。
+export function poolViewOf(batch) {
+  const lanes = (batch && batch.lanes) || {};
+  const tasks = ((batch && batch.wavePlan) || []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
+  const pool = [];
+  let dispatched = 0;
+  for (const t of tasks) {
+    if (!t || typeof t.id !== 'string') continue;
+    // 出池判据 = **声明面** `owner` 非空（唯一真源；不靠 lane 状态反推——状态是执行面，二者不许混用）。
+    const owner = typeof t.owner === 'string' ? t.owner : null;
+    if (owner !== null) { dispatched += 1; continue; }
+    const laneState = lanes[t.id] ?? null;
+    const deps = Array.isArray(t.deps) ? t.deps : [];
+    const blockers = [];
+    for (const d of deps) {
+      if (!isMemberTerminal(lanes[d])) {
+        blockers.push('GATE_HANDOFF_MISSING: 上游 ' + d + ' 未结算（当前 ' + String(lanes[d] ?? 'unknown') + '）');
+      }
+    }
+    // K1：已派发/已启动（lane 已离开 `pending`）⇒ 冻结，不得视为可重派对象。
+    if (laneState !== null && laneState !== 'pending') {
+      blockers.push('ALREADY_DISPATCHED: lane=' + t.id + ' 状态 ' + laneState + '（已派发即冻结，K1）');
+    }
+    pool.push({
+      id: t.id, layer: t.layer ?? null, role: t.role ?? null, cmd: t.cmd ?? '',
+      deps, owner: null, laneState,
+      dispatchable: blockers.length === 0,
+      blockers,
+    });
+  }
+  return { pooled: pool.length, dispatched, pool };
+}
+
 export function buildTaskTools(cx) {
   const { deps, store } = cx;
   return [
@@ -42,38 +79,11 @@ export function buildTaskTools(cx) {
         const sessionId = sessionOf(args, exec);
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
-        const lanes = b.lanes ?? {};
-        const tasks = (b.wavePlan ?? []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
-        const pool = [];
-        let dispatched = 0;
-        for (const t of tasks) {
-          if (!t || typeof t.id !== 'string') continue;
-          // 出池判据 = **声明面** `owner` 非空（唯一真源；不靠 lane 状态反推——状态是执行面，二者不许混用）。
-          const owner = typeof t.owner === 'string' ? t.owner : null;
-          if (owner !== null) { dispatched += 1; continue; }
-          const laneState = lanes[t.id] ?? null;
-          const deps = Array.isArray(t.deps) ? t.deps : [];
-          const blockers = [];
-          for (const d of deps) {
-            if (!isMemberTerminal(lanes[d])) {
-              blockers.push('GATE_HANDOFF_MISSING: 上游 ' + d + ' 未结算（当前 ' + String(lanes[d] ?? 'unknown') + '）');
-            }
-          }
-          // K1：已派发/已启动（lane 已离开 `pending`）⇒ 冻结，不得视为可重派对象。
-          if (laneState !== null && laneState !== 'pending') {
-            blockers.push('ALREADY_DISPATCHED: lane=' + t.id + ' 状态 ' + laneState + '（已派发即冻结，K1）');
-          }
-          pool.push({
-            id: t.id, layer: t.layer ?? null, role: t.role ?? null, cmd: t.cmd ?? '',
-            deps, owner: null, laneState,
-            dispatchable: blockers.length === 0,
-            blockers,
-          });
-        }
+        const view = poolViewOf(b);
         return {
           batchId: args.batchId, sessionId,
-          pooled: pool.length, dispatched,
-          pool,
+          pooled: view.pooled, dispatched: view.dispatched,
+          pool: view.pool,
           note: '池 = `owner == null` 的**视图**（不是容器）：本工具只读、不认领；派发 = Leader 单点（`lane_dispatch`），派发即门禁。',
         };
       },

@@ -43,6 +43,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             produce: Array.isArray(t.produce) ? t.produce : [],
             outputs: Array.isArray(t.outputs) ? t.outputs : [],
             deps: Array.isArray(t.deps) ? t.deps : [],
+            // 【B-3】归属声明（出池唯一真源）：`null` = 在池内（未派发）；非空串 = 已派发给该 owner。
+            //   归一化形状与引擎建批期**同源**（非字符串 ⇒ null），故面板不做二次判定、不自造「已派发」语义。
+            owner: typeof t.owner === 'string' ? t.owner : null,
             condition: t.condition === undefined ? null : t.condition,
             targets: Array.isArray(t.targets) ? t.targets : []
           };
@@ -77,6 +80,40 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         produce: Array.isArray(m.produce) ? m.produce : [],
         outputs: Array.isArray(m.outputs) ? m.outputs : []
       };
+    }
+
+    // 装配串 → 原文（B-7）：持久形态 `cmd` = 引擎装配产物 `[role=…] [skills=…] <原文>`。
+    //   为什么本段要自带一份：客户端段经 `window.__ModuleLoader__` 拼接执行、**无 ESM import 能力** ⇒ 无法
+    //   复用引擎的 stripCmdPrefix；本函数即其**同判据手工同步副本**（与 `main.js` 的 TERMINAL 副本同性质）。
+    //   判据：只剥**与本次 role/skills 逐字相等**的行首前缀段，遇不等段即停 ⇒ 用户以同形文本开头的原文不被误剥。
+    function plainCmdOf(cmd, role, skills) {
+      let s = typeof cmd === 'string' ? cmd : '';
+      const injected = [];
+      if (role) injected.push('[role=' + role + ']');
+      if (Array.isArray(skills) && skills.length) injected.push('[skills=' + skills.join(',') + ']');
+      for (;;) {
+        let hit = null;
+        for (const p of injected) { if (s.slice(0, p.length) === p) { hit = p; break; } }
+        if (!hit) break;
+        s = s.slice(hit.length);
+        if (s.charAt(0) === ' ') s = s.slice(1);
+      }
+      return s;
+    }
+
+    // 批次简述（B-6）：左栏 `/batches` 帧不含 tasks ⇒ **选中批次**改以 `/batch` 帧的 wavePlan 取简述
+    //   （T-1=②：不动 `/batches` 帧的形状）。取**声明序首条**原文非空的任务（plan 层先行）——
+    //   面板不猜「哪条像标题」，也不自造 title/brief 字段（wavePlan 无此字段）。
+    function batchBriefOf(detail) {
+      const waves = (detail && detail.wavePlan) || [];
+      for (const w of waves) {
+        for (const t of (w && w.tasks) || []) {
+          if (!t || typeof t.id !== 'string') continue;
+          const text = plainCmdOf(t.cmd, t.role, t.skills);
+          if (text) return text;
+        }
+      }
+      return '';
     }
 
     // 门禁徽章（有缺口才出，无缺口零噪音）：去重；!gate.layer ⇒ 早退（保留既有语义）
@@ -126,6 +163,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       { re: /^lane\.binding_gap$/, key: 'event.member.binding', category: 'member', severity: 'warn' },
       { re: /^human\.decision$/, key: 'event.member.decision', category: 'member', severity: 'info' },
       { re: /^asset\.claimed$/, key: 'event.member.claimed', category: 'member', severity: 'none' },
+      // 【B-5】出池留痕（`member.js` 派发时写 `{lane, owner, from}`）此前无人话规则 ⇒ 回退裸 type。
+      //   归 member 面（语义 = 派发/归属），与上方 `member.dispatch` 同族但**不同源**（后者是引擎自派事件）。
+      { re: /^task\.owner\.assigned$/, key: 'event.member.assigned', category: 'member', severity: 'info' },
       { re: /^lane\.handoff\.gap$/, key: 'event.handoff.gap', category: 'handoff', severity: 'error' },
       { re: /^lane\.handoff$/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
       { re: /^handoff/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
@@ -140,6 +180,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       { re: /^gate\./, key: 'event.gate.blocked', category: 'gate', severity: 'error' },
       { re: /^governance\./, key: 'event.governance', category: 'gate', severity: 'warn' },
       { re: /^auto\.settle\./, key: 'event.chain.settle', category: 'chain', severity: 'info' },
+      // 【B-5】图变更留痕（`batch_tasks_add` / `task_update` 各写一条，`plan-mutate.js`）此前无规则
+      //   ⇒ 面板显示裸 type。归 phase 面：它是**批级计划状态**变更（非某 lane 的成员状态），且事件不带 lane。
+      { re: /^plan\.mutated$/, key: 'event.plan.mutated', category: 'phase', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
       { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
@@ -163,7 +206,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         lane: (e && e.lane) || null,
         from: (e && e.from) || null,
         to: (e && e.to) || null,
-        path: (e && e.path) || null
+        path: (e && e.path) || null,
+        // 【B-5】`task.owner.assigned` 的受派方（渲染层据此把「已派发」说成「派给谁」；其余事件恒 null）
+        owner: (e && e.owner) || null
       };
       for (const r of EVENT_VIEW_RULES) {
         if (r.re.test(raw)) {
@@ -175,6 +220,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
     // 协议值原样 + 中文括注的**文案 key**（协议字段不译；文案落 locales 段，本段保持零 tt）：
     //   merged/failed/conflict/skipped/「review>running」（返工） ⇒ verdict.* ；其余 ⇒ 空串（无括注）
+    // 【B-9 · T-2=① 登记为**历史兼容读**】`review>running` 这一迁移已自引擎迁移表删除 ⇒ **新批不可达**；
+    //   本行及其渲染链（`batch-detail.js` 的 `panelEventText` / `AttemptBadge`、`lib/api.js` 的
+    //   laneAttempts/upgrades 推导）只为**存量批**保留可复盘面。**不得**据它推导新批行为。
     function verdictNoteOf(raw) {
       const v = String(raw || '');
       if (v === 'merged') return 'verdict.merged';
@@ -241,7 +289,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       if (idle > 0) out.push({ key: 'stuck', n: idle });
       const gaps = gateGapCountOf((d && d.lanesGate) || {});
       if (gaps > 0) out.push({ key: 'gate', n: gaps });
-      if (d && d.phase === 'running') out.push({ key: 'running', n: 1 });
+      // 【B-10 同口径补点】本块与左栏筛选/主行动卡同问「该批是否进行中」⇒ 必须走同一相位单点；
+      //   否则 planning 批在左栏算「进行中」、在其引力条上却零块（同一批两处读数互相打脸）。
+      if (phaseInProgressOf(d)) out.push({ key: 'running', n: 1 });
       const m = mail || {};
       const mn = ((m.inbox || []).length) + ((m.broadcast || []).length);
       if (mn > 0) out.push({ key: 'mail', n: mn });
@@ -254,10 +304,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return n;
     }
 
+    // 「进行中」相位单点（B-10）：`planning` 与 `running` 同档。修复的口径分裂 = 左栏筛选（`batch-list.js`
+    //   原已把 planning 归「运行中」）vs 主行动卡排序（原把 planning 落到最后一档 = 与终态同语义）。
+    //   两处此后共用本函数，禁止各自解释相位。
+    function phaseInProgressOf(b) {
+      const p = b && b.phase;
+      return p === 'running' || p === 'planning';
+    }
+
     function actionRankOf(b) {
       if (issueLanesOf(b) > 0) return 0;
       if (b && b.phase === 'paused') return 1;
-      if (b && b.phase === 'running') return 2;
+      if (phaseInProgressOf(b)) return 2;
       return 3;
     }
 
@@ -290,7 +348,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         reasonKey = 'action.why.paused';
       } else if (order === 2) {
         reasonKey = 'action.why.running';
-        args.n = Object.values(scope.lanes || {}).filter((s) => s === 'running').length;
+        // 【B-10】「进行中」读数 = **未结算** lane 数：planning 批的 lane 多为 pending，按 `state === 'running'`
+        //   计会得 0（与「planning 归进行中」自相矛盾）；此口径也与主行动卡的大数字（main.js 未结算计数）同源。
+        args.n = Object.values(scope.lanes || {}).filter((s) => LANE_TERMINAL.indexOf(s) < 0).length;
       } else {
         const vals = Object.values(scope.lanes || {});
         reasonKey = vals.length && vals.every((s) => LANE_TERMINAL.indexOf(s) >= 0) ? 'action.why.done' : 'action.why.idle';

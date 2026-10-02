@@ -89,9 +89,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "focus.title": "当前关注",
       "focus.pick": "点选即筛选左栏",
       "focus.decision": "待裁决",
-      "focus.stuck": "待恢复",
+      // 【B-11】`idle` = **空闲态**（引擎纪律：「字面意义的空闲，非崩溃态」）；原 zh「待恢复」把空闲误述为
+      //   待修复状态，且与同键 en 值（"idle"）自相矛盾 ⇒ 两语统一到空闲语义。
+      "focus.stuck": "空闲态",
       "focus.gate": "门禁缺口",
-      "focus.running": "运行",
+      "focus.running": "进行中",
       "focus.mail": "邮箱",
       "action.title": "主行动",
       "action.why": "为什么最重要",
@@ -99,7 +101,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "action.goto": "去处理",
       "action.why.issue": "有 {n} 条子任务异常，需先处理",
       "action.why.paused": "批次已停轮，等你恢复",
-      "action.why.running": "{n} 条子任务运行中",
+      // 【B-10】读数 = 未结算 lane 数，故文案用「进行中」（`planning` 批同档，见 panel-model 的相位单点）
+      "action.why.running": "{n} 条子任务进行中",
       "action.why.done": "全部子任务已结算，可收口",
       "action.why.idle": "暂无异常，等待新事件",
       "event.filter.all": "全部",
@@ -117,7 +120,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "dangling.badge": "悬挂 {n}",
       "list.filter.all": "全部",
       "list.filter.issue": "异常",
-      "list.filter.running": "运行中",
+      // 【B-10】与 `phaseInProgressOf` 同义：`planning` 与 `running` 都归本筛选项
+      "list.filter.running": "进行中",
       "list.filter.done": "已完结",
       "list.search": "搜索批次",
       "list.settleable": "待收口",
@@ -138,6 +142,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "event.member.binding": "成员绑定缺口",
       "event.member.decision": "人工裁决",
       "event.member.claimed": "产物归位",
+      // 【B-5】出池留痕（`task.owner.assigned`）的人话键
+      "event.member.assigned": "任务已派发",
       "event.member.worktree": "工作树流转",
       "event.handoff.submitted": "已交接",
       "event.handoff.gap": "交接缺口",
@@ -152,6 +158,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "event.governance": "护栏拒绝",
       "event.chain.settle": "自动结算",
       "event.phase.created": "建批",
+      // 【B-5】图变更留痕（`plan.mutated`）的人话键
+      "event.plan.mutated": "计划变更",
       "event.phase.changed": "相位变更",
       "event.phase.manager": "Manager 已拉起",
       "event.phase.smoke": "冒烟批",
@@ -165,6 +173,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "verdict.conflict": "（冲突）",
       "verdict.skipped": "（跳过）",
       "verdict.running": "（返工）",
+      // ===== 波 B：状态机 i18n（8 态 / 5 相）+ 池化面 + 计划版本 =====
+      // 【B-8】键 = `<枚举前缀>.<协议值>`：8 态取自引擎 MEMBER_STATES、5 相取自 BATCH_PHASES（键集与引擎一致）；
+      //   协议值本身不译（工程师面照旧可切原始串），本表只给展示层人话。
+      "state.pending": "待派发",
+      "state.running": "运行中",
+      "state.review": "待结算",
+      "state.merged": "已合并",
+      "state.failed": "已失败",
+      "state.skipped": "已跳过",
+      "state.conflict": "冲突",
+      "state.idle": "空闲",
+      "phase.planning": "计划中",
+      "phase.running": "进行中",
+      "phase.paused": "已停轮",
+      "phase.aborted": "已中止",
+      "phase.complete": "已完成",
+      "plan.revision": "计划版本 {n}",
+      "owner.pooled": "在池内",
+      "owner.assigned": "已派发给 {owner}",
+      "pool.title": "任务池（未派发）",
+      "pool.summary": "池内 {n} · 可派发 {m} · 已派发 {k}",
+      "pool.dispatchable": "可派发",
+      "pool.blocked": "待解锁",
       // ===== 治理配置页（settings.section: governance-config）=====
       "nav.governance": "蟛蜞治理配置",
       "gov.title.live": "蟛蜞治理配置 · {n} 条规则生效",
@@ -332,6 +363,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "event.member.binding": "member binding gap",
       "event.member.decision": "human decision",
       "event.member.claimed": "artifact claimed",
+      "event.member.assigned": "task assigned",
       "event.member.worktree": "worktree",
       "event.handoff.submitted": "handoff submitted",
       "event.handoff.gap": "handoff gap",
@@ -346,6 +378,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "event.governance": "guardrail refusal",
       "event.chain.settle": "auto settle",
       "event.phase.created": "batch created",
+      "event.plan.mutated": "plan changed",
       "event.phase.changed": "phase changed",
       "event.phase.manager": "manager raised",
       "event.phase.smoke": "smoke batch",
@@ -359,6 +392,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       "verdict.conflict": "(conflict)",
       "verdict.skipped": "(skipped)",
       "verdict.running": "(rework)",
+      // ===== Wave B: state-machine i18n (8 states / 5 phases) + pool + plan revision =====
+      "state.pending": "pending",
+      "state.running": "running",
+      "state.review": "in review",
+      "state.merged": "merged",
+      "state.failed": "failed",
+      "state.skipped": "skipped",
+      "state.conflict": "conflict",
+      "state.idle": "idle",
+      "phase.planning": "planning",
+      "phase.running": "in progress",
+      "phase.paused": "paused",
+      "phase.aborted": "aborted",
+      "phase.complete": "complete",
+      "plan.revision": "plan v{n}",
+      "owner.pooled": "in pool",
+      "owner.assigned": "assigned to {owner}",
+      "pool.title": "Task pool (undispatched)",
+      "pool.summary": "{n} pooled · {m} dispatchable · {k} dispatched",
+      "pool.dispatchable": "dispatchable",
+      "pool.blocked": "blocked",
       // ===== Governance config page (settings.section: governance-config) =====
       "nav.governance": "Punky Governance Config",
       "gov.title.live": "Punky Governance Config · {n} rules live",
@@ -407,3 +461,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
     function tt(k) { return zh[k] || en[k] || k; }
+
+    // 协议值 → 展示标签（B-8）：8 态 / 5 相的 i18n 查表单点（此前渲染原始协议串）。
+    //   查不到 ⇒ **回退原串**：既不冒充人话、也不把 locale key 泄进界面（协议值本身保持可见）。
+    function protocolLabelOf(prefix, value) {
+      const v = value === undefined || value === null ? '' : String(value);
+      const k = prefix + '.' + v;
+      const hit = tt(k);
+      return hit === k ? v : hit;
+    }

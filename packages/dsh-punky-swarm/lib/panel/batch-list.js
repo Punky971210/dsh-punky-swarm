@@ -18,13 +18,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // ===== [panel-segment] batch-list.js =====
     // 左栏：筛选 chips（全部/异常/运行中/已完结）+ 搜索 + 关注度角标（异常 N / 待收口）+ 异常优先排序。
     // 排序只做「异常置顶」，其余保持聚合顺序（聚合顺序真源 = main.js aggregateBatches）。
-    function BatchList({ batches, selected, onSelect, loading, filter, onFilter }) {
+    function BatchList({ batches, selected, onSelect, loading, filter, onFilter, detail }) {
       const [query, setQuery] = useState('');
       const active = filter || 'all';
       const all = batches || [];
       const issueNOf = (b) => Object.values(b.lanes || {}).filter((s) => s === 'failed' || s === 'conflict').length;
       const isIssue = (b) => issueNOf(b) > 0;
-      const isRunning = (b) => b.phase === 'running' || b.phase === 'paused' || b.phase === 'planning';
+      // 【B-10】「进行中」判定走 panel-model 的相位单点（原为本段手写复本：planning/paused/running 三项）
+      //   ⇒ 与主行动卡排序共用同一判据；`paused` 亦属「未完结」（本筛选的语义 = 非终态）。
+      const isRunning = (b) => phaseInProgressOf(b) || (b && b.phase === 'paused');
       const isDone = (b) => !isRunning(b);
       const q = query.trim().toLowerCase();
       const matches = (b) => {
@@ -86,6 +88,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const sel = selected && (typeof selected === 'object'
                   ? selected.session === b.session && selected.batchId === b.batchId
                   : selected === b.batchId);
+                // 【B-6】左栏无摘要来源（`/batches` 帧不含 tasks）⇒ **选中批次**的卡片改由 `/batch` 帧
+                //   （T-1=②：不动 `/batches` 帧、不逐批多拉一次）取简述；未选中项不渲染摘要行（零噪音）。
+                const brief = sel && detail && detail.batchId === b.batchId ? batchBriefOf(detail) : '';
                 return React.createElement('button', {
                   key: b.session ? b.session + ':' + b.batchId : b.batchId,
                   type: 'button',
@@ -100,9 +105,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                   })
                 },
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-                    React.createElement(Chip, { st: st }, b.phase),
+                    React.createElement(Chip, { st: st }, protocolLabelOf('phase', b.phase)),
                     React.createElement('span', { style: { flex: 1, fontWeight: 700, fontSize: 12.5, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, b.batchId)
                   ),
+                  brief
+                    ? React.createElement('div', {
+                        // 【B-6】批次简述（选中项）：只读源码 = 选中批次的 `/batch` 帧 wavePlan 首条任务原文
+                        style: { fontSize: 10.5, color: T.text2, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+                      }, brief)
+                    : null,
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                     React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
                     // 【波 A · A-1】批次卡的进度读数（12/16）= 该卡的关键数据 ⇒ 上调次级文本。

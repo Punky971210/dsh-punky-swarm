@@ -379,7 +379,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         React.createElement(FocusStrip, { blocks: focus, onPick: (key) => setListFilter(focusFilterOf(key)) }),
         React.createElement(ActionCard, { card: card, pending: cardPending, onGo: (c) => selectBatch({ batchId: c.batchId, session: c.session || sid }) }),
         React.createElement('div', { className: 'psw-panes' },
-          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: selectBatch, loading: true, filter: listFilter, onFilter: setListFilter }),
+          // 【B-6】detail = 选中批次的 `/batch` 帧（T-1=②：左栏摘要只对选中项、只读已拉取的那一份，零额外请求）
+          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: selectBatch, loading: true, filter: listFilter, onFilter: setListFilter, detail: selDetail }),
           React.createElement(BatchDetail, { d: detail })
         )
       );

@@ -58,6 +58,9 @@ window.__ModuleLoader__.load({
             produce: Array.isArray(t.produce) ? t.produce : [],
             outputs: Array.isArray(t.outputs) ? t.outputs : [],
             deps: Array.isArray(t.deps) ? t.deps : [],
+            // 【B-3】归属声明（出池唯一真源）：`null` = 在池内（未派发）；非空串 = 已派发给该 owner。
+            //   归一化形状与引擎建批期**同源**（非字符串 ⇒ null），故面板不做二次判定、不自造「已派发」语义。
+            owner: typeof t.owner === 'string' ? t.owner : null,
             condition: t.condition === undefined ? null : t.condition,
             targets: Array.isArray(t.targets) ? t.targets : []
           };
@@ -92,6 +95,40 @@ window.__ModuleLoader__.load({
         produce: Array.isArray(m.produce) ? m.produce : [],
         outputs: Array.isArray(m.outputs) ? m.outputs : []
       };
+    }
+
+    // 装配串 → 原文（B-7）：持久形态 `cmd` = 引擎装配产物 `[role=…] [skills=…] <原文>`。
+    //   为什么本段要自带一份：客户端段经 `window.__ModuleLoader__` 拼接执行、**无 ESM import 能力** ⇒ 无法
+    //   复用引擎的 stripCmdPrefix；本函数即其**同判据手工同步副本**（与 `main.js` 的 TERMINAL 副本同性质）。
+    //   判据：只剥**与本次 role/skills 逐字相等**的行首前缀段，遇不等段即停 ⇒ 用户以同形文本开头的原文不被误剥。
+    function plainCmdOf(cmd, role, skills) {
+      let s = typeof cmd === 'string' ? cmd : '';
+      const injected = [];
+      if (role) injected.push('[role=' + role + ']');
+      if (Array.isArray(skills) && skills.length) injected.push('[skills=' + skills.join(',') + ']');
+      for (;;) {
+        let hit = null;
+        for (const p of injected) { if (s.slice(0, p.length) === p) { hit = p; break; } }
+        if (!hit) break;
+        s = s.slice(hit.length);
+        if (s.charAt(0) === ' ') s = s.slice(1);
+      }
+      return s;
+    }
+
+    // 批次简述（B-6）：左栏 `/batches` 帧不含 tasks ⇒ **选中批次**改以 `/batch` 帧的 wavePlan 取简述
+    //   （T-1=②：不动 `/batches` 帧的形状）。取**声明序首条**原文非空的任务（plan 层先行）——
+    //   面板不猜「哪条像标题」，也不自造 title/brief 字段（wavePlan 无此字段）。
+    function batchBriefOf(detail) {
+      const waves = (detail && detail.wavePlan) || [];
+      for (const w of waves) {
+        for (const t of (w && w.tasks) || []) {
+          if (!t || typeof t.id !== 'string') continue;
+          const text = plainCmdOf(t.cmd, t.role, t.skills);
+          if (text) return text;
+        }
+      }
+      return '';
     }
 
     // 门禁徽章（有缺口才出，无缺口零噪音）：去重；!gate.layer ⇒ 早退（保留既有语义）
@@ -141,6 +178,9 @@ window.__ModuleLoader__.load({
       { re: /^lane\.binding_gap$/, key: 'event.member.binding', category: 'member', severity: 'warn' },
       { re: /^human\.decision$/, key: 'event.member.decision', category: 'member', severity: 'info' },
       { re: /^asset\.claimed$/, key: 'event.member.claimed', category: 'member', severity: 'none' },
+      // 【B-5】出池留痕（`member.js` 派发时写 `{lane, owner, from}`）此前无人话规则 ⇒ 回退裸 type。
+      //   归 member 面（语义 = 派发/归属），与上方 `member.dispatch` 同族但**不同源**（后者是引擎自派事件）。
+      { re: /^task\.owner\.assigned$/, key: 'event.member.assigned', category: 'member', severity: 'info' },
       { re: /^lane\.handoff\.gap$/, key: 'event.handoff.gap', category: 'handoff', severity: 'error' },
       { re: /^lane\.handoff$/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
       { re: /^handoff/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
@@ -155,6 +195,9 @@ window.__ModuleLoader__.load({
       { re: /^gate\./, key: 'event.gate.blocked', category: 'gate', severity: 'error' },
       { re: /^governance\./, key: 'event.governance', category: 'gate', severity: 'warn' },
       { re: /^auto\.settle\./, key: 'event.chain.settle', category: 'chain', severity: 'info' },
+      // 【B-5】图变更留痕（`batch_tasks_add` / `task_update` 各写一条，`plan-mutate.js`）此前无规则
+      //   ⇒ 面板显示裸 type。归 phase 面：它是**批级计划状态**变更（非某 lane 的成员状态），且事件不带 lane。
+      { re: /^plan\.mutated$/, key: 'event.plan.mutated', category: 'phase', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
       { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
@@ -178,7 +221,9 @@ window.__ModuleLoader__.load({
         lane: (e && e.lane) || null,
         from: (e && e.from) || null,
         to: (e && e.to) || null,
-        path: (e && e.path) || null
+        path: (e && e.path) || null,
+        // 【B-5】`task.owner.assigned` 的受派方（渲染层据此把「已派发」说成「派给谁」；其余事件恒 null）
+        owner: (e && e.owner) || null
       };
       for (const r of EVENT_VIEW_RULES) {
         if (r.re.test(raw)) {
@@ -190,6 +235,9 @@ window.__ModuleLoader__.load({
 
     // 协议值原样 + 中文括注的**文案 key**（协议字段不译；文案落 locales 段，本段保持零 tt）：
     //   merged/failed/conflict/skipped/「review>running」（返工） ⇒ verdict.* ；其余 ⇒ 空串（无括注）
+    // 【B-9 · T-2=① 登记为**历史兼容读**】`review>running` 这一迁移已自引擎迁移表删除 ⇒ **新批不可达**；
+    //   本行及其渲染链（`batch-detail.js` 的 `panelEventText` / `AttemptBadge`、`lib/api.js` 的
+    //   laneAttempts/upgrades 推导）只为**存量批**保留可复盘面。**不得**据它推导新批行为。
     function verdictNoteOf(raw) {
       const v = String(raw || '');
       if (v === 'merged') return 'verdict.merged';
@@ -256,7 +304,9 @@ window.__ModuleLoader__.load({
       if (idle > 0) out.push({ key: 'stuck', n: idle });
       const gaps = gateGapCountOf((d && d.lanesGate) || {});
       if (gaps > 0) out.push({ key: 'gate', n: gaps });
-      if (d && d.phase === 'running') out.push({ key: 'running', n: 1 });
+      // 【B-10 同口径补点】本块与左栏筛选/主行动卡同问「该批是否进行中」⇒ 必须走同一相位单点；
+      //   否则 planning 批在左栏算「进行中」、在其引力条上却零块（同一批两处读数互相打脸）。
+      if (phaseInProgressOf(d)) out.push({ key: 'running', n: 1 });
       const m = mail || {};
       const mn = ((m.inbox || []).length) + ((m.broadcast || []).length);
       if (mn > 0) out.push({ key: 'mail', n: mn });
@@ -269,10 +319,18 @@ window.__ModuleLoader__.load({
       return n;
     }
 
+    // 「进行中」相位单点（B-10）：`planning` 与 `running` 同档。修复的口径分裂 = 左栏筛选（`batch-list.js`
+    //   原已把 planning 归「运行中」）vs 主行动卡排序（原把 planning 落到最后一档 = 与终态同语义）。
+    //   两处此后共用本函数，禁止各自解释相位。
+    function phaseInProgressOf(b) {
+      const p = b && b.phase;
+      return p === 'running' || p === 'planning';
+    }
+
     function actionRankOf(b) {
       if (issueLanesOf(b) > 0) return 0;
       if (b && b.phase === 'paused') return 1;
-      if (b && b.phase === 'running') return 2;
+      if (phaseInProgressOf(b)) return 2;
       return 3;
     }
 
@@ -305,7 +363,9 @@ window.__ModuleLoader__.load({
         reasonKey = 'action.why.paused';
       } else if (order === 2) {
         reasonKey = 'action.why.running';
-        args.n = Object.values(scope.lanes || {}).filter((s) => s === 'running').length;
+        // 【B-10】「进行中」读数 = **未结算** lane 数：planning 批的 lane 多为 pending，按 `state === 'running'`
+        //   计会得 0（与「planning 归进行中」自相矛盾）；此口径也与主行动卡的大数字（main.js 未结算计数）同源。
+        args.n = Object.values(scope.lanes || {}).filter((s) => LANE_TERMINAL.indexOf(s) < 0).length;
       } else {
         const vals = Object.values(scope.lanes || {});
         reasonKey = vals.length && vals.every((s) => LANE_TERMINAL.indexOf(s) >= 0) ? 'action.why.done' : 'action.why.idle';
@@ -399,9 +459,11 @@ window.__ModuleLoader__.load({
       "focus.title": "当前关注",
       "focus.pick": "点选即筛选左栏",
       "focus.decision": "待裁决",
-      "focus.stuck": "待恢复",
+      // 【B-11】`idle` = **空闲态**（引擎纪律：「字面意义的空闲，非崩溃态」）；原 zh「待恢复」把空闲误述为
+      //   待修复状态，且与同键 en 值（"idle"）自相矛盾 ⇒ 两语统一到空闲语义。
+      "focus.stuck": "空闲态",
       "focus.gate": "门禁缺口",
-      "focus.running": "运行",
+      "focus.running": "进行中",
       "focus.mail": "邮箱",
       "action.title": "主行动",
       "action.why": "为什么最重要",
@@ -409,7 +471,8 @@ window.__ModuleLoader__.load({
       "action.goto": "去处理",
       "action.why.issue": "有 {n} 条子任务异常，需先处理",
       "action.why.paused": "批次已停轮，等你恢复",
-      "action.why.running": "{n} 条子任务运行中",
+      // 【B-10】读数 = 未结算 lane 数，故文案用「进行中」（`planning` 批同档，见 panel-model 的相位单点）
+      "action.why.running": "{n} 条子任务进行中",
       "action.why.done": "全部子任务已结算，可收口",
       "action.why.idle": "暂无异常，等待新事件",
       "event.filter.all": "全部",
@@ -427,7 +490,8 @@ window.__ModuleLoader__.load({
       "dangling.badge": "悬挂 {n}",
       "list.filter.all": "全部",
       "list.filter.issue": "异常",
-      "list.filter.running": "运行中",
+      // 【B-10】与 `phaseInProgressOf` 同义：`planning` 与 `running` 都归本筛选项
+      "list.filter.running": "进行中",
       "list.filter.done": "已完结",
       "list.search": "搜索批次",
       "list.settleable": "待收口",
@@ -448,6 +512,8 @@ window.__ModuleLoader__.load({
       "event.member.binding": "成员绑定缺口",
       "event.member.decision": "人工裁决",
       "event.member.claimed": "产物归位",
+      // 【B-5】出池留痕（`task.owner.assigned`）的人话键
+      "event.member.assigned": "任务已派发",
       "event.member.worktree": "工作树流转",
       "event.handoff.submitted": "已交接",
       "event.handoff.gap": "交接缺口",
@@ -462,6 +528,8 @@ window.__ModuleLoader__.load({
       "event.governance": "护栏拒绝",
       "event.chain.settle": "自动结算",
       "event.phase.created": "建批",
+      // 【B-5】图变更留痕（`plan.mutated`）的人话键
+      "event.plan.mutated": "计划变更",
       "event.phase.changed": "相位变更",
       "event.phase.manager": "Manager 已拉起",
       "event.phase.smoke": "冒烟批",
@@ -475,6 +543,29 @@ window.__ModuleLoader__.load({
       "verdict.conflict": "（冲突）",
       "verdict.skipped": "（跳过）",
       "verdict.running": "（返工）",
+      // ===== 波 B：状态机 i18n（8 态 / 5 相）+ 池化面 + 计划版本 =====
+      // 【B-8】键 = `<枚举前缀>.<协议值>`：8 态取自引擎 MEMBER_STATES、5 相取自 BATCH_PHASES（键集与引擎一致）；
+      //   协议值本身不译（工程师面照旧可切原始串），本表只给展示层人话。
+      "state.pending": "待派发",
+      "state.running": "运行中",
+      "state.review": "待结算",
+      "state.merged": "已合并",
+      "state.failed": "已失败",
+      "state.skipped": "已跳过",
+      "state.conflict": "冲突",
+      "state.idle": "空闲",
+      "phase.planning": "计划中",
+      "phase.running": "进行中",
+      "phase.paused": "已停轮",
+      "phase.aborted": "已中止",
+      "phase.complete": "已完成",
+      "plan.revision": "计划版本 {n}",
+      "owner.pooled": "在池内",
+      "owner.assigned": "已派发给 {owner}",
+      "pool.title": "任务池（未派发）",
+      "pool.summary": "池内 {n} · 可派发 {m} · 已派发 {k}",
+      "pool.dispatchable": "可派发",
+      "pool.blocked": "待解锁",
       // ===== 治理配置页（settings.section: governance-config）=====
       "nav.governance": "蟛蜞治理配置",
       "gov.title.live": "蟛蜞治理配置 · {n} 条规则生效",
@@ -642,6 +733,7 @@ window.__ModuleLoader__.load({
       "event.member.binding": "member binding gap",
       "event.member.decision": "human decision",
       "event.member.claimed": "artifact claimed",
+      "event.member.assigned": "task assigned",
       "event.member.worktree": "worktree",
       "event.handoff.submitted": "handoff submitted",
       "event.handoff.gap": "handoff gap",
@@ -656,6 +748,7 @@ window.__ModuleLoader__.load({
       "event.governance": "guardrail refusal",
       "event.chain.settle": "auto settle",
       "event.phase.created": "batch created",
+      "event.plan.mutated": "plan changed",
       "event.phase.changed": "phase changed",
       "event.phase.manager": "manager raised",
       "event.phase.smoke": "smoke batch",
@@ -669,6 +762,27 @@ window.__ModuleLoader__.load({
       "verdict.conflict": "(conflict)",
       "verdict.skipped": "(skipped)",
       "verdict.running": "(rework)",
+      // ===== Wave B: state-machine i18n (8 states / 5 phases) + pool + plan revision =====
+      "state.pending": "pending",
+      "state.running": "running",
+      "state.review": "in review",
+      "state.merged": "merged",
+      "state.failed": "failed",
+      "state.skipped": "skipped",
+      "state.conflict": "conflict",
+      "state.idle": "idle",
+      "phase.planning": "planning",
+      "phase.running": "in progress",
+      "phase.paused": "paused",
+      "phase.aborted": "aborted",
+      "phase.complete": "complete",
+      "plan.revision": "plan v{n}",
+      "owner.pooled": "in pool",
+      "owner.assigned": "assigned to {owner}",
+      "pool.title": "Task pool (undispatched)",
+      "pool.summary": "{n} pooled · {m} dispatchable · {k} dispatched",
+      "pool.dispatchable": "dispatchable",
+      "pool.blocked": "blocked",
       // ===== Governance config page (settings.section: governance-config) =====
       "nav.governance": "Punky Governance Config",
       "gov.title.live": "Punky Governance Config · {n} rules live",
@@ -717,6 +831,15 @@ window.__ModuleLoader__.load({
 
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
     function tt(k) { return zh[k] || en[k] || k; }
+
+    // 协议值 → 展示标签（B-8）：8 态 / 5 相的 i18n 查表单点（此前渲染原始协议串）。
+    //   查不到 ⇒ **回退原串**：既不冒充人话、也不把 locale key 泄进界面（协议值本身保持可见）。
+    function protocolLabelOf(prefix, value) {
+      const v = value === undefined || value === null ? '' : String(value);
+      const k = prefix + '.' + v;
+      const hit = tt(k);
+      return hit === k ? v : hit;
+    }
 // ===== [panel-segment] theme.js =====
     // ================= theme-aware palette =================
     // DSH 主题开关：body[data-ds-dark-theme]（深色）vs 默认浅色。令牌 var(--dsw-alias-*)
@@ -903,13 +1026,15 @@ window.__ModuleLoader__.load({
 // ===== [panel-segment] batch-list.js =====
     // 左栏：筛选 chips（全部/异常/运行中/已完结）+ 搜索 + 关注度角标（异常 N / 待收口）+ 异常优先排序。
     // 排序只做「异常置顶」，其余保持聚合顺序（聚合顺序真源 = main.js aggregateBatches）。
-    function BatchList({ batches, selected, onSelect, loading, filter, onFilter }) {
+    function BatchList({ batches, selected, onSelect, loading, filter, onFilter, detail }) {
       const [query, setQuery] = useState('');
       const active = filter || 'all';
       const all = batches || [];
       const issueNOf = (b) => Object.values(b.lanes || {}).filter((s) => s === 'failed' || s === 'conflict').length;
       const isIssue = (b) => issueNOf(b) > 0;
-      const isRunning = (b) => b.phase === 'running' || b.phase === 'paused' || b.phase === 'planning';
+      // 【B-10】「进行中」判定走 panel-model 的相位单点（原为本段手写复本：planning/paused/running 三项）
+      //   ⇒ 与主行动卡排序共用同一判据；`paused` 亦属「未完结」（本筛选的语义 = 非终态）。
+      const isRunning = (b) => phaseInProgressOf(b) || (b && b.phase === 'paused');
       const isDone = (b) => !isRunning(b);
       const q = query.trim().toLowerCase();
       const matches = (b) => {
@@ -971,6 +1096,9 @@ window.__ModuleLoader__.load({
                 const sel = selected && (typeof selected === 'object'
                   ? selected.session === b.session && selected.batchId === b.batchId
                   : selected === b.batchId);
+                // 【B-6】左栏无摘要来源（`/batches` 帧不含 tasks）⇒ **选中批次**的卡片改由 `/batch` 帧
+                //   （T-1=②：不动 `/batches` 帧、不逐批多拉一次）取简述；未选中项不渲染摘要行（零噪音）。
+                const brief = sel && detail && detail.batchId === b.batchId ? batchBriefOf(detail) : '';
                 return React.createElement('button', {
                   key: b.session ? b.session + ':' + b.batchId : b.batchId,
                   type: 'button',
@@ -985,9 +1113,15 @@ window.__ModuleLoader__.load({
                   })
                 },
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-                    React.createElement(Chip, { st: st }, b.phase),
+                    React.createElement(Chip, { st: st }, protocolLabelOf('phase', b.phase)),
                     React.createElement('span', { style: { flex: 1, fontWeight: 700, fontSize: 12.5, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, b.batchId)
                   ),
+                  brief
+                    ? React.createElement('div', {
+                        // 【B-6】批次简述（选中项）：只读源码 = 选中批次的 `/batch` 帧 wavePlan 首条任务原文
+                        style: { fontSize: 10.5, color: T.text2, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+                      }, brief)
+                    : null,
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                     React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
                     // 【波 A · A-1】批次卡的进度读数（12/16）= 该卡的关键数据 ⇒ 上调次级文本。
@@ -1077,6 +1211,9 @@ window.__ModuleLoader__.load({
       const line = contractLineOf(m);
       const deps = m.deps && m.deps.length ? m.deps : null;
       const outList = line.produce.concat(line.outputs);
+      // 【B-7】持久 `cmd` 是装配串（`[role=…] [skills=…] 原文`）⇒ 渲染前剥前缀取原文：下方 role/skills 行
+      //   已单独承载角色与技能，再原样显示整串即是同一信息的第二遍（且首段不是「任务是什么」）。
+      const plainCmd = plainCmdOf(m.cmd, m.role, m.skills);
       const contractText = (line.consume.length || outList.length)
         ? tt('contract.line').replace('{a}', line.consume.length ? line.consume.join(', ') : '—').replace('{b}', outList.length ? outList.join(', ') : '—')
         : tt('contract.none');
@@ -1089,12 +1226,12 @@ window.__ModuleLoader__.load({
       },
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
           React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, lane),
-          React.createElement(Chip, { st: st }, state),
+          React.createElement(Chip, { st: st }, protocolLabelOf('state', state)),
           React.createElement(HandoffBadge, { badge: handoff })
         ),
-        m.cmd ? React.createElement('div', {
+        plainCmd ? React.createElement('div', {
           style: { fontSize: 11, color: T.text2, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
-        }, m.cmd) : null,
+        }, plainCmd) : null,
         React.createElement('div', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, wordBreak: 'break-all' } }, contractText),
         m.role || (m.skills && m.skills.length)
           // 【波 A · A-1】角色/技能是 lane 卡的任务元数据正文（与上一行契约行同级）⇒ 上调次级文本。
@@ -1106,7 +1243,17 @@ window.__ModuleLoader__.load({
           React.createElement(AttemptBadge, { n: attempt, upgrade }),
           // 【波 A · A-1】依赖列表是 DAG 关系正文（用户据以判断上下游是否解锁）⇒ 原 label-dimmed
           //   （宿主语义 = 占位/禁用）既非其义、又低于可读基线 ⇒ 直接上调次级文本。
-          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
+          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null,
+          // 【B-3】归属徽章：`owner === null` ⇒ 在池内（未派发）；非空 ⇒ 已派发给谁。
+          //   仅在 meta 有该键时渲染：孤儿 lane（`lanes` 有而 wavePlan 无）没有归属声明可读，故零噪音不猜。
+          m.owner !== undefined
+            ? React.createElement('span', {
+                style: {
+                  fontSize: 10.5, fontFamily: T.mono, whiteSpace: 'nowrap',
+                  color: m.owner === null ? T.text2 : T.success
+                }
+              }, m.owner === null ? tt('owner.pooled') : tt('owner.assigned').replace('{owner}', m.owner))
+            : null
         ),
         lastTs ? React.createElement('div', {
           // 【波 A · A-1】保留弱层级（时间戳属旁注），但纠令牌语义：label-dimmed=占位/禁用 ⇒ 换 label-tertiary。
@@ -1125,6 +1272,8 @@ window.__ModuleLoader__.load({
         return head + tt(v.key) + '：' + String(a.to || '') + tt(verdictNoteOf(verdictRaw));
       }
       if (v.raw === 'member.dispatch') return head + tt(v.key);
+      // 【B-5】出池留痕：带上受派方（面板读者据此知道「派给谁」，而非只知「派过」）
+      if (v.raw === 'task.owner.assigned') return head + tt(v.key) + (a.owner ? ' → ' + a.owner : '');
       if (v.raw === 'gate.needhuman_blocked' && a.path) return head + tt(v.key) + '（' + a.path + '）';
       if (a.from && a.to) return head + tt(v.key) + ' ' + a.from + '→' + a.to;
       return head + tt(v.key);
@@ -1279,6 +1428,38 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // 任务池视图（B-4）：数据源 = 服务端 `/batch.pool` 投影（判据单点在 `task-tools.poolViewOf`）——
+    //   面板**不自行判定**「哪些任务在池内 / 是否可派发」，只渲染投影给出的 pooled/dispatchable/blockers。
+    //   零噪音：池内无任务 ⇒ 整块不渲染（已派发计数在 lane 卡徽章上已可读）。
+    //   blockers 是引擎判据串（含 GATE_* 码）⇒ 原样显示，不译、不加工（协议面在工程师侧照旧可读）。
+    function PoolView({ pool, meta }) {
+      const items = pool && Array.isArray(pool.pool) ? pool.pool : [];
+      if (!items.length) return null;
+      const dispatchable = items.filter((t) => t.dispatchable).length;
+      const summary = tt('pool.summary')
+        .replace('{n}', String(items.length)).replace('{m}', String(dispatchable))
+        .replace('{k}', String(pool.dispatched || 0));
+      return React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }) },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          React.createElement(SectionTitle, null, tt('pool.title')),
+          React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, summary)
+        ),
+        items.map((t, i) => {
+          const m = (meta || {})[t.id] || {};
+          const text = plainCmdOf(t.cmd, m.role, m.skills);
+          return React.createElement('div', { key: t.id || i, style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+            React.createElement('span', { style: { fontSize: 11, fontWeight: 600, fontFamily: T.mono, color: T.text } }, String(t.id)),
+            React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, color: t.dispatchable ? T.success : T.warn } },
+              tt(t.dispatchable ? 'pool.dispatchable' : 'pool.blocked')),
+            text ? React.createElement('span', { style: { flex: 1, fontSize: 10.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, text) : React.createElement('span', { style: { flex: 1 } }),
+            (t.blockers || []).length
+              ? React.createElement('span', { style: { fontSize: 10.5, color: T.warn, fontFamily: T.mono } }, t.blockers.join(' · '))
+              : null
+          );
+        })
+      );
+    }
+
     function BatchDetail({ d }) {
       if (!d) {
         return React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' } },
@@ -1303,7 +1484,7 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { className: 'psw-scroll', style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 } },
         React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }) },
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' } },
-            React.createElement(Chip, { st: st }, d.phase + (d.viewSettled ? ' ✓' : '')),
+            React.createElement(Chip, { st: st }, protocolLabelOf('phase', d.phase) + (d.viewSettled ? ' ✓' : '')),
             React.createElement('span', { style: { fontWeight: 700, fontSize: 14, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, d.batchId),
             React.createElement('span', { style: { flex: 1 } }),
             dangling.length
@@ -1321,10 +1502,15 @@ window.__ModuleLoader__.load({
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
-            React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency)
+            React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency),
+            // 【B-1 消费点】计划版本：>1 即「本批计划被追加/加边改过」，读数由服务端帧提供（此前帧内无该键）
+            d.planRevision != null
+              ? React.createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmtCount(tt('plan.revision'), d.planRevision))
+              : null
           )
         ),
         React.createElement(AssemblyBar, { d: d }),
+        React.createElement(PoolView, { pool: d.pool, meta: meta }),
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
           groups.map((g) => React.createElement('div', { key: g.layer, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
             React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
@@ -1715,7 +1901,8 @@ window.__ModuleLoader__.load({
         React.createElement(FocusStrip, { blocks: focus, onPick: (key) => setListFilter(focusFilterOf(key)) }),
         React.createElement(ActionCard, { card: card, pending: cardPending, onGo: (c) => selectBatch({ batchId: c.batchId, session: c.session || sid }) }),
         React.createElement('div', { className: 'psw-panes' },
-          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: selectBatch, loading: true, filter: listFilter, onFilter: setListFilter }),
+          // 【B-6】detail = 选中批次的 `/batch` 帧（T-1=②：左栏摘要只对选中项、只读已拉取的那一份，零额外请求）
+          React.createElement(BatchList, { batches: batches, selected: sel, onSelect: selectBatch, loading: true, filter: listFilter, onFilter: setListFilter, detail: selDetail }),
           React.createElement(BatchDetail, { d: detail })
         )
       );

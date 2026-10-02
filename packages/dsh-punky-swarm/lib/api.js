@@ -23,6 +23,9 @@ import { createStreamHub } from './panel/stream.js';
 // 面板读端增量（冻结节拍 §2.1）：三处投影一律复用**既有单点纯函数**（禁在 api.js 复制第二份判定）
 import { danglingLanesOf } from './state/dangling.js';
 import { smokeOf } from './state/gates.js';
+// 池视图投影（B-2）：判据单点在 `task-tools.js#poolViewOf`（与 `task_pool` 工具面**同一函数**）——
+//   api.js 只 import 调用，**不得**在此重写一份等价的 owner/blocker 判定（否则两个读端各自解释池）。
+import { poolViewOf } from './tools/task-tools.js';
 // 事件读端字面量收敛：EVT 常量单源 lib/state/event-types.js
 import * as EVT from './state/event-types.js';
 // WebUI 治理配置写通道：/config 端点 trusted 判定（自复刻宿主 /api
@@ -95,6 +98,9 @@ export function createApi(ctx, deps) {
         const b = store.readBatch(session, batchId);
         if (!b) return sendJson(res, 404, { error: 'batch-not-found' });
         // 每 lane attempt（review->running 返工计数）与升级标记（>=3）由事件推导
+        //   【B-9 · T-2=① 登记为**历史兼容读**】该迁移（review → running）已自迁移表删除 ⇒ **新批不可达**；
+        //   本段只为**存量批**保留可复盘面（删读端 = 主动丢历史，与下方 teamAsset 历史兼容读同一条纪律）。
+        //   ⚠ **不得**据 laneAttempts / upgrades 推导新批行为、不得据其产出门禁结论。
         const laneAttempts = {};
         const upgrades = {};
         for (const e of b.events) {
@@ -144,6 +150,14 @@ export function createApi(ctx, deps) {
           //   的 P-2 深比较全等 + P-3 读计数）；handler 自身 :96 的 readBatch 仍不可消除（按 AC-07 双口径计的
           //   「+1」）。逐 lane 兼容外壳 `store.gateStatus` 保留（`gate_status` 工具面 lib/tools/core.js 零改动）。
           lanesGate: store.gateStatusMapOfBatch(session, batchId),
+          // 【B-1 · 计划变更可见性】`planRevision` 此前**不在帧内** ⇒ 面板对「计划被改过」零感知。
+          //   取值纪律同上「零新真源」：只读批次 JSON 字段（`b` 已在手 ⇒ 零额外读盘）。沿用工具面既有
+          //   读数约定 `?? 1`（未发生过 `plan.mutated` 的批次 = 初始版本 1），不另立默认值口径。
+          planRevision: b.planRevision ?? 1,
+          // 【B-2 · 池化渲染读端】pool = 未派发任务视图（`owner == null`）+ 逐条可派发性/blockers。
+          //   判据**单点**在 `lib/tools/task-tools.js#poolViewOf`（与 `task_pool` 工具面同一实现，见文件头
+          //   import 注释）——本处只调用，**不复制**等价判定。恒在场（空池 = 0/0/[]），与 `handoffs` 同款。
+          pool: poolViewOf(b),
           // 装配注入 aipFormat 时附 ACPs Session 投影（纯函数，不改存储；缺省不附 → 既有响应不变）
           ...(aipFormat ? { aipSession: aipFormat.toAipSession(b) } : {}),
         });

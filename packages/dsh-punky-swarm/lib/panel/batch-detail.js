@@ -62,6 +62,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const line = contractLineOf(m);
       const deps = m.deps && m.deps.length ? m.deps : null;
       const outList = line.produce.concat(line.outputs);
+      // 【B-7】持久 `cmd` 是装配串（`[role=…] [skills=…] 原文`）⇒ 渲染前剥前缀取原文：下方 role/skills 行
+      //   已单独承载角色与技能，再原样显示整串即是同一信息的第二遍（且首段不是「任务是什么」）。
+      const plainCmd = plainCmdOf(m.cmd, m.role, m.skills);
       const contractText = (line.consume.length || outList.length)
         ? tt('contract.line').replace('{a}', line.consume.length ? line.consume.join(', ') : '—').replace('{b}', outList.length ? outList.join(', ') : '—')
         : tt('contract.none');
@@ -74,12 +77,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       },
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
           React.createElement('span', { style: { fontSize: 11.5, fontWeight: 600, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 } }, lane),
-          React.createElement(Chip, { st: st }, state),
+          React.createElement(Chip, { st: st }, protocolLabelOf('state', state)),
           React.createElement(HandoffBadge, { badge: handoff })
         ),
-        m.cmd ? React.createElement('div', {
+        plainCmd ? React.createElement('div', {
           style: { fontSize: 11, color: T.text2, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
-        }, m.cmd) : null,
+        }, plainCmd) : null,
         React.createElement('div', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, wordBreak: 'break-all' } }, contractText),
         m.role || (m.skills && m.skills.length)
           // 【波 A · A-1】角色/技能是 lane 卡的任务元数据正文（与上一行契约行同级）⇒ 上调次级文本。
@@ -91,7 +94,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           React.createElement(AttemptBadge, { n: attempt, upgrade }),
           // 【波 A · A-1】依赖列表是 DAG 关系正文（用户据以判断上下游是否解锁）⇒ 原 label-dimmed
           //   （宿主语义 = 占位/禁用）既非其义、又低于可读基线 ⇒ 直接上调次级文本。
-          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
+          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null,
+          // 【B-3】归属徽章：`owner === null` ⇒ 在池内（未派发）；非空 ⇒ 已派发给谁。
+          //   仅在 meta 有该键时渲染：孤儿 lane（`lanes` 有而 wavePlan 无）没有归属声明可读，故零噪音不猜。
+          m.owner !== undefined
+            ? React.createElement('span', {
+                style: {
+                  fontSize: 10.5, fontFamily: T.mono, whiteSpace: 'nowrap',
+                  color: m.owner === null ? T.text2 : T.success
+                }
+              }, m.owner === null ? tt('owner.pooled') : tt('owner.assigned').replace('{owner}', m.owner))
+            : null
         ),
         lastTs ? React.createElement('div', {
           // 【波 A · A-1】保留弱层级（时间戳属旁注），但纠令牌语义：label-dimmed=占位/禁用 ⇒ 换 label-tertiary。
@@ -110,6 +123,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         return head + tt(v.key) + '：' + String(a.to || '') + tt(verdictNoteOf(verdictRaw));
       }
       if (v.raw === 'member.dispatch') return head + tt(v.key);
+      // 【B-5】出池留痕：带上受派方（面板读者据此知道「派给谁」，而非只知「派过」）
+      if (v.raw === 'task.owner.assigned') return head + tt(v.key) + (a.owner ? ' → ' + a.owner : '');
       if (v.raw === 'gate.needhuman_blocked' && a.path) return head + tt(v.key) + '（' + a.path + '）';
       if (a.from && a.to) return head + tt(v.key) + ' ' + a.from + '→' + a.to;
       return head + tt(v.key);
@@ -264,6 +279,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       );
     }
 
+    // 任务池视图（B-4）：数据源 = 服务端 `/batch.pool` 投影（判据单点在 `task-tools.poolViewOf`）——
+    //   面板**不自行判定**「哪些任务在池内 / 是否可派发」，只渲染投影给出的 pooled/dispatchable/blockers。
+    //   零噪音：池内无任务 ⇒ 整块不渲染（已派发计数在 lane 卡徽章上已可读）。
+    //   blockers 是引擎判据串（含 GATE_* 码）⇒ 原样显示，不译、不加工（协议面在工程师侧照旧可读）。
+    function PoolView({ pool, meta }) {
+      const items = pool && Array.isArray(pool.pool) ? pool.pool : [];
+      if (!items.length) return null;
+      const dispatchable = items.filter((t) => t.dispatchable).length;
+      const summary = tt('pool.summary')
+        .replace('{n}', String(items.length)).replace('{m}', String(dispatchable))
+        .replace('{k}', String(pool.dispatched || 0));
+      return React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }) },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          React.createElement(SectionTitle, null, tt('pool.title')),
+          React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, summary)
+        ),
+        items.map((t, i) => {
+          const m = (meta || {})[t.id] || {};
+          const text = plainCmdOf(t.cmd, m.role, m.skills);
+          return React.createElement('div', { key: t.id || i, style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+            React.createElement('span', { style: { fontSize: 11, fontWeight: 600, fontFamily: T.mono, color: T.text } }, String(t.id)),
+            React.createElement('span', { style: { fontSize: 10.5, fontWeight: 600, color: t.dispatchable ? T.success : T.warn } },
+              tt(t.dispatchable ? 'pool.dispatchable' : 'pool.blocked')),
+            text ? React.createElement('span', { style: { flex: 1, fontSize: 10.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, text) : React.createElement('span', { style: { flex: 1 } }),
+            (t.blockers || []).length
+              ? React.createElement('span', { style: { fontSize: 10.5, color: T.warn, fontFamily: T.mono } }, t.blockers.join(' · '))
+              : null
+          );
+        })
+      );
+    }
+
     function BatchDetail({ d }) {
       if (!d) {
         return React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' } },
@@ -288,7 +335,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return React.createElement('div', { className: 'psw-scroll', style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', paddingRight: 4 } },
         React.createElement('div', { className: 'psw-card', style: Object.assign({}, cardBase, { padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }) },
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' } },
-            React.createElement(Chip, { st: st }, d.phase + (d.viewSettled ? ' ✓' : '')),
+            React.createElement(Chip, { st: st }, protocolLabelOf('phase', d.phase) + (d.viewSettled ? ' ✓' : '')),
             React.createElement('span', { style: { fontWeight: 700, fontSize: 14, fontFamily: T.mono, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, d.batchId),
             React.createElement('span', { style: { flex: 1 } }),
             dangling.length
@@ -306,10 +353,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
-            React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency)
+            React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency),
+            // 【B-1 消费点】计划版本：>1 即「本批计划被追加/加边改过」，读数由服务端帧提供（此前帧内无该键）
+            d.planRevision != null
+              ? React.createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmtCount(tt('plan.revision'), d.planRevision))
+              : null
           )
         ),
         React.createElement(AssemblyBar, { d: d }),
+        React.createElement(PoolView, { pool: d.pool, meta: meta }),
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
           groups.map((g) => React.createElement('div', { key: g.layer, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
             React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
