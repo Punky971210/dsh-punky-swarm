@@ -721,14 +721,17 @@ window.__ModuleLoader__.load({
     // ================= theme-aware palette =================
     // DSH 主题开关：body[data-ds-dark-theme]（深色）vs 默认浅色。令牌 var(--dsw-alias-*)
     // 会随主题自动切换；这里只负责「令牌缺失时」的兜底色板，并按主题切换重渲染。
-    let CURRENT_THEME = 'dark';
+    // 【波 A · A-2】探测不到（body 未就绪 / 无 document）时按**宿主默认浅色**兜底：原缺省 'dark'
+    //   会让「段求值早于 body 就绪」的加载序停在暗色兜底色板（#7f8ca3 落在浅色卡上 = 用户看到的浅灰字）。
+    //   初始探测点同时由 main.js 的 apply() 补齐（mount 立即调用 + documentElement 子树观察）。
+    let CURRENT_THEME = 'light';
     function detectTheme() {
       try {
         if (typeof document !== 'undefined' && document.body) {
           return document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light';
         }
       } catch {}
-      return 'dark';
+      return 'light'; // body 未就绪 ⇒ 按宿主默认浅色（token 缺失时的兜底档，见上注）
     }
     try { CURRENT_THEME = detectTheme(); } catch {}
 
@@ -771,6 +774,13 @@ window.__ModuleLoader__.load({
       get text2() { return 'var(--dsw-alias-label-secondary, ' + pal().text2 + ')'; },
       get text3() { return 'var(--dsw-alias-label-tertiary, ' + pal().text3 + ')'; },
       get dim() { return 'var(--dsw-alias-label-dimmed, ' + pal().dim + ')'; },
+      // 【波 A · A-3】实心控件上的前景（开关圆点 / 勾选对勾 / accent 填充上的文字）：
+      //   宿主对 `background: --dsw-alias-button-primary-fill` 的同款配法就是 label-primary-foreground
+      //   ⇒ 这一处白色前景改由宿主皮肤接管（原为裸 '#fff'，换肤不跟随）。
+      get onAccent() { return 'var(--dsw-alias-label-primary-foreground, #fff)'; },
+      // 【波 A · A-3】门禁缺口徽章底色：宿主 `--dsw-alias-state-warn-tertiary` 的定义与用法即
+      //   「warn-primary 前景 + tertiary 底色」的条/芯片（本面板对侧前景 = T.warn = state-warn-primary）。
+      get gateBg() { return 'var(--dsw-alias-state-warn-tertiary, ' + pal().gateBg + ')'; },
       get accent() { return 'var(--dsw-alias-brand-primary, ' + pal().accent + ')'; },
       get success() { return 'var(--dsw-alias-state-success-primary, ' + pal().success + ')'; },
       get warn() { return 'var(--dsw-alias-state-warn-primary, ' + pal().warn + ')'; },
@@ -779,20 +789,29 @@ window.__ModuleLoader__.load({
       get skeleton() { return 'var(--dsw-alias-bg-skeleton, ' + pal().skeleton + ')'; },
       get selBg() { return 'var(--dsw-alias-interactive-bg-active, ' + pal().selBg + ')'; },
       get font() { return 'var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)'; },
-      get mono() { return 'var(--dsw-font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace)'; }
+      // 【波 A · 附】宿主 --dsw-font-mono **def=0（不存在）** ⇒ 原写法恒走硬编码栈。
+      //   改用宿主实有的等宽令牌 --ds-font-family-code（def=1，宿主 markdown-code 族的底令牌）；
+      //   仍把 --dsw-font-mono 留在链首：若某版宿主补上该令牌则优先，不补也不影响解析。
+      get mono() { return 'var(--dsw-font-mono, var(--ds-font-family-code, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace))'; }
     };
 
-    function chip(fgKey, bgKey, fgVar) {
+    // 芯片：fg 走令牌（缺则兜底色）；底色【波 A · A-3】原为直返 pal()（不跟随宿主换肤）⇒
+    //   分出 bgCss = var(--dsw-alias-*, 兜底色)。保留 bg = 纯兜底色值：面板 chip 对比度回归断言
+    //   （test/panel-render.test.js T-R2）逐色解析的正是 bg（该断言审的就是「令牌缺失时的兜底档」）。
+    function chip(fgKey, bgKey, fgVar, bgVar) {
       return {
         get fg() { return fgVar ? 'var(' + fgVar + ', ' + pal()[fgKey] + ')' : pal()[fgKey]; },
-        get bg() { return pal()[bgKey]; }
+        get bg() { return pal()[bgKey]; },
+        get bgCss() { return bgVar ? 'var(' + bgVar + ', ' + pal()[bgKey] + ')' : pal()[bgKey]; }
       };
     }
+    // 四参 chip(..., bgVar)：仅**宿主确有同款软底色 alias** 的三档加 bgVar（warn/business/success 各一）。
+    //   其余档（pending/skipped/idle/failed/conflict）宿主无对应软底色令牌 ⇒ 保留兜底色，登记为已知边界。
     const STATE = {
       pending: chip('text2', 'chipPending', '--dsw-alias-label-secondary'),
-      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
-      review: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
-      merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary', '--dsw-alias-state-warn-tertiary'),
+      review: chip('info', 'chipReview', '--dsw-alias-state-business-primary', '--dsw-alias-state-business-tertiary'),
+      merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary', '--dsw-alias-state-success-tertiary'),
       failed: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
       skipped: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
       conflict: chip('escFg', 'chipConflict', '--dsw-alias-state-warn-primary'),
@@ -800,10 +819,10 @@ window.__ModuleLoader__.load({
     };
     const PHASE = {
       planning: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
-      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
-      paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary', '--dsw-alias-state-warn-tertiary'),
+      paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary', '--dsw-alias-state-business-tertiary'),
       aborted: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
-      complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary')
+      complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary', '--dsw-alias-state-success-tertiary')
     };
     // =======================================================
 // ===== [panel-segment] widgets.js =====
@@ -819,7 +838,7 @@ window.__ModuleLoader__.load({
         'aria-label': text,
         style: Object.assign({
           display: 'inline-flex', alignItems: 'center', gap: 4,
-          color: c.fg, background: c.bg,
+          color: c.fg, background: c.bgCss,
           borderRadius: 999, padding: '1px 8px', fontSize: 10.5,
           fontWeight: 600, letterSpacing: 0.2, lineHeight: '16px',
           fontFamily: T.mono, whiteSpace: 'nowrap'
@@ -846,7 +865,9 @@ window.__ModuleLoader__.load({
       return React.createElement('div', {
         style: Object.assign({}, cardBase, { padding: '6px 10px', minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 })
       },
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, lineHeight: 1.2 } }, label),
+        // 【波 A · A-1】读数名（总批次/运行中/已完结/异常）是用户读来理解数字含义的正文，不是极弱提示
+        //   ⇒ label-tertiary（宿主最低强调级）上调到次级文本令牌。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2, lineHeight: 1.2 } }, label),
         React.createElement('span', { style: numStyle }, value)
       );
     }
@@ -875,7 +896,8 @@ window.__ModuleLoader__.load({
         })
       },
         React.createElement('span', { style: { fontSize: 15, fontWeight: 700, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', color: tone || T.text } }, n),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, label)
+        // 【波 A · A-1】引力块标签（待裁决/门禁缺口/运行…）与 Stat 读数名同理：是正文，不是极弱提示。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, label)
       );
     }
 // ===== [panel-segment] batch-list.js =====
@@ -968,9 +990,12 @@ window.__ModuleLoader__.load({
                   ),
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                     React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
-                    React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
+                    // 【波 A · A-1】批次卡的进度读数（12/16）= 该卡的关键数据 ⇒ 上调次级文本。
+                    React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
                   ),
-                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3, flexWrap: 'wrap' } },
+                  // 【波 A · A-1】该行承载会话前缀 + 收口/进度语义（可自动收口 / 已完结 / 异常 N / 待收口）
+                  //   ⇒ 是卡片正文而非极弱提示；行内异常/待收口另有语义色覆盖，不冲突。
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
                     b.sessionShort && !b.isOwnSession
                       ? React.createElement('span', { title: b.session, style: { fontFamily: T.mono, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 } }, b.sessionShort + ' ·')
                       : null,
@@ -1017,9 +1042,10 @@ window.__ModuleLoader__.load({
         items.map((it, i) => React.createElement('span', {
           key: i,
           title: KIND[it.kind] + ': ' + it.path,
-          style: { color: T.warn, background: pal().gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10.5, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
+          style: { color: T.warn, background: T.gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10.5, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
         }, tt('gate.missing') + ' ' + it.path)),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, '— ' + tt('gate.fix.hint'))
+        // 【波 A · A-1】「— 补上即可结算」是缺口的**行动指引正文**（用户读它才知道下一步做什么）⇒ 上调次级文本。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, '— ' + tt('gate.fix.hint'))
       );
     }
 
@@ -1071,16 +1097,20 @@ window.__ModuleLoader__.load({
         }, m.cmd) : null,
         React.createElement('div', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, wordBreak: 'break-all' } }, contractText),
         m.role || (m.skills && m.skills.length)
-          ? React.createElement('div', { style: { fontSize: 10.5, color: T.text3 } },
+          // 【波 A · A-1】角色/技能是 lane 卡的任务元数据正文（与上一行契约行同级）⇒ 上调次级文本。
+          ? React.createElement('div', { style: { fontSize: 10.5, color: T.text2 } },
               tt('role.skills').replace('{role}', m.role || '—').replace('{skills}', (m.skills || []).length ? m.skills.join(', ') : '—'))
           : null,
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' } },
           React.createElement(GateBadge, { gate }),
           React.createElement(AttemptBadge, { n: attempt, upgrade }),
-          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
+          // 【波 A · A-1】依赖列表是 DAG 关系正文（用户据以判断上下游是否解锁）⇒ 原 label-dimmed
+          //   （宿主语义 = 占位/禁用）既非其义、又低于可读基线 ⇒ 直接上调次级文本。
+          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
         ),
         lastTs ? React.createElement('div', {
-          style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' },
+          // 【波 A · A-1】保留弱层级（时间戳属旁注），但纠令牌语义：label-dimmed=占位/禁用 ⇒ 换 label-tertiary。
+          style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' },
           title: tt('lane.recentHint')
         }, tt('lane.lastActive').replace('{t}', String(lastTs).slice(11, 19))) : null
       );
@@ -1112,7 +1142,7 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' } },
         React.createElement(Dot, { color: color }),
         React.createElement('span', { style: { flex: 1, fontSize: 11.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
       );
     }
 
@@ -1128,7 +1158,9 @@ window.__ModuleLoader__.load({
           React.createElement(SectionTitle, null, tt('event.timeline')),
           React.createElement('span', { style: { flex: 1 } }),
           React.createElement('span', {
-            style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' }
+            // 【波 A · A-1】「近 N 条 / 共 M 条」是**事件窗口是否被截断**的唯一读数（口径见 panel-model 尾窗注释）
+            //   ⇒ 属正文读数，上调次级文本；非装饰性计数。
+            style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' }
           }, tt('event.tail').replace('{n}', String(shown.length)).replace('{m}', String(eventCount == null ? (evs || []).length : eventCount)))
         ),
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', margin: '4px 0 6px' } },
@@ -1196,8 +1228,10 @@ window.__ModuleLoader__.load({
         ),
         rows.length
           ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-              React.createElement('div', { style: { fontSize: 10.5, color: T.dim } }, tt('mailbox.meta')),
-              rows.slice(0, 8).map((r, i) => React.createElement('div', { key: i, style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+              // 【波 A · A-1】「元数据（不贴正文）」是列表小标题：保留弱层级，纠令牌语义（dimmed=占位/禁用 ⇒ tertiary）。
+              React.createElement('div', { style: { fontSize: 10.5, color: T.text3 } }, tt('mailbox.meta')),
+              // 【波 A · A-1】邮箱元数据行（时刻 · 箱 · type · lane · 字段数）是用户实际读的数据行 ⇒ 上调次级文本。
+              rows.slice(0, 8).map((r, i) => React.createElement('div', { key: i, style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
                 (String(r.it.ts || '').slice(11, 19) || '--:--:--') + ' · ' + tt(r.box) + ' · ' + (r.it.type || '-') + ' · ' + (r.it.lane || '-') + ' · ' + Object.keys(r.it.meta || {}).length)
               )
             )
@@ -1236,7 +1270,9 @@ window.__ModuleLoader__.load({
         React.createElement(SectionTitle, null, tt('assembly.title')),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 10 } },
           items.map((it, i) => React.createElement('span', { key: i, style: { fontSize: 10.5, color: T.text2 } },
-            React.createElement('span', { style: { color: T.text3 } }, tt(it.k) + ' '),
+            // 【波 A · A-1】键名（团队/编排/验收 lane/Manager 登记/门禁）是可读字段名：值常为 mono 编码串，
+            //   离开键名不可解读 ⇒ 上调次级文本（值本身同层，故此处无层级差）。
+            React.createElement('span', { style: { color: T.text2 } }, tt(it.k) + ' '),
             React.createElement('span', { style: { fontFamily: T.mono } }, it.v)
           ))
         )
@@ -1280,9 +1316,9 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             React.createElement(Progress, { value: lanes.length ? (done / lanes.length) * 100 : 0, color: issues ? T.error : (lanes.length && done === lanes.length) ? T.success : (d.phase === 'running' || d.phase === 'paused') ? T.warn : T.dim }),
-            React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + lanes.length)
+            React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + lanes.length)
           ),
-          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text3, flexWrap: 'wrap' } },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
             React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency)
@@ -1390,7 +1426,8 @@ window.__ModuleLoader__.load({
           key: b.key, label: tt('focus.' + b.key), n: b.n, tone: tone(b.key),
           onClick: () => onPick(b.key)
         })),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, tt('focus.pick'))
+        // 【波 A · A-1】「点选即筛选左栏」是操作说明正文（用户读它才知道引力块可点）⇒ 上调次级文本。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, tt('focus.pick'))
       );
     }
 
@@ -1417,7 +1454,8 @@ window.__ModuleLoader__.load({
         ),
         React.createElement('div', { style: { fontSize: 11, color: T.text2, lineHeight: 1.45 } },
           React.createElement('span', { style: { color: T.text3 } }, tt('action.why') + '：'), why),
-        React.createElement('div', { style: { fontSize: 11, color: T.text3, lineHeight: 1.45 } },
+        // 【波 A · A-1】「你能做什么」整句是行动指引正文 ⇒ 上调次级文本（与上一行「为什么最重要」的答案同级）。
+        React.createElement('div', { style: { fontSize: 11, color: T.text2, lineHeight: 1.45 } },
           tt('action.next') + '：' + tt('focus.pick'))
       );
     }
@@ -1437,16 +1475,20 @@ window.__ModuleLoader__.load({
       const sid = sessionId || '';
 
       // 跟随 web UI 主题（body[data-ds-dark-theme]）切换兜底色板并重渲染
+      // 【波 A · A-2】原实现只在「属性变化 / matchMedia 变化」时调用 apply ⇒ 段求值早于 body 就绪时，
+      //   兜底色板会一直停在初始档。两处补齐：① mount 立即探测一次；② 观察点从 body 换成
+      //   documentElement（恒存在）+ subtree —— body 未就绪时旧写法根本不注册 observer，此后永不跟随。
       useEffect(() => {
         const apply = () => {
           const t = detectTheme();
           if (t !== CURRENT_THEME) { CURRENT_THEME = t; setThemeTick((x) => x + 1); }
         };
+        apply();
         let mo = null;
         try {
-          if (typeof MutationObserver !== 'undefined' && document.body) {
+          if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.documentElement) {
             mo = new MutationObserver(apply);
-            mo.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] });
+            mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-dark-theme'], subtree: true });
           }
         } catch {}
         let mq = null;
@@ -1963,7 +2005,8 @@ window.__ModuleLoader__.load({
         React.createElement('div', { style: { flex: 1, minWidth: 0 } },
           React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
           desc
-            ? React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.45, marginTop: 3 } }, desc)
+            // 【波 A · A-1】开关行说明是配置语义正文（读它才知道开了会发生什么）⇒ 上调次级文本。
+            ? React.createElement('div', { style: { fontSize: G().sub, color: T.text2, lineHeight: 1.45, marginTop: 3 } }, desc)
             : null
         ),
         React.createElement('button', {
@@ -1986,7 +2029,8 @@ window.__ModuleLoader__.load({
             style: {
               position: 'absolute', top: 2, left: on ? 18 : 2,
               width: 14, height: 14, borderRadius: 999,
-              background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)',
+              // 【波 A · A-3】实心开关圆点原为裸 '#fff'（换肤不跟随）⇒ 走宿主 on-accent 前景令牌。
+              background: T.onAccent, boxShadow: '0 1px 2px rgba(0,0,0,.25)',
               transition: 'left .15s ease'
             }
           })
@@ -1999,7 +2043,8 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10 } },
         React.createElement('div', { style: { flex: 1, minWidth: 0 } },
           React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
-          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, fontFamily: T.mono, lineHeight: 1.45, marginTop: 3 } }, sub)
+          // 【波 A · A-1】副标题（预设 id · 规则数）是该行唯一可读标识，且 id 是配置唯一键 ⇒ 上调次级文本。
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, marginTop: 3 } }, sub)
         ),
         React.createElement('button', {
           type: 'button',
@@ -2022,7 +2067,8 @@ window.__ModuleLoader__.load({
                 style: {
                   position: 'absolute', top: 3, left: 5,
                   width: 5, height: 9,
-                  border: 'solid #fff', borderWidth: '0 2px 2px 0',
+                  // 【波 A · A-3】勾选对勾原为裸 '#fff' ⇒ 同走 on-accent 前景令牌。
+                  border: 'solid ' + T.onAccent, borderWidth: '0 2px 2px 0',
                   transform: 'rotate(45deg)'
                 }
               })
@@ -2058,7 +2104,8 @@ window.__ModuleLoader__.load({
             style: {
               fontFamily: T.mono, fontSize: G().chip, fontWeight: 700, letterSpacing: 0.3,
               padding: '3px 10px', borderRadius: 999, cursor: disabled ? 'default' : 'pointer',
-              color: on ? '#fff' : T.text2,
+              // 【波 A · A-3】选中态文本（落在 accent 实心填充上）原为裸 '#fff' ⇒ on-accent 前景令牌。
+              color: on ? T.onAccent : T.text2,
               background: on ? T.accent : 'transparent',
               border: '1px solid ' + (on ? T.accent : T.border),
               opacity: disabled ? 0.55 : 1
@@ -2300,7 +2347,8 @@ window.__ModuleLoader__.load({
 
         // 卡片 B 规则预设（多选：L1/L2/L3/L5 四个平级勾选项；组合 = 勾选叠加本身，无 compose 组合项语义）
         React.createElement(GovCard, { title: tt('gov.preset.title') },
-          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.5 } }, tt('gov.preset.hint')),
+          // 【波 A · A-1】预设说明是装载语义正文（「全不选 = 出厂空表（零拦截）」）⇒ 上调次级文本。
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text2, lineHeight: 1.5 } }, tt('gov.preset.hint')),
           selOptions.map((id) => React.createElement(PresetCheckRow, {
             key: id,
             checked: presetSel.indexOf(id) >= 0,
@@ -2429,7 +2477,8 @@ window.__ModuleLoader__.load({
             onClick: handleSave,
             disabled: saveDisabled,
             style: Object.assign({}, btnBase, {
-              background: T.accent, color: '#fff', border: '1px solid transparent',
+              // 【波 A · A-3】主按钮文字原为裸 '#fff'（落在 accent 实心填充上）⇒ on-accent 前景令牌。
+              background: T.accent, color: T.onAccent, border: '1px solid transparent',
               opacity: saveDisabled ? 0.5 : 1, cursor: saveDisabled ? 'default' : 'pointer'
             })
           }, tt('gov.save')),

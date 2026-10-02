@@ -28,7 +28,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         'aria-label': text,
         style: Object.assign({
           display: 'inline-flex', alignItems: 'center', gap: 4,
-          color: c.fg, background: c.bg,
+          color: c.fg, background: c.bgCss,
           borderRadius: 999, padding: '1px 8px', fontSize: 10.5,
           fontWeight: 600, letterSpacing: 0.2, lineHeight: '16px',
           fontFamily: T.mono, whiteSpace: 'nowrap'
@@ -55,7 +55,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return React.createElement('div', {
         style: Object.assign({}, cardBase, { padding: '6px 10px', minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 })
       },
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, lineHeight: 1.2 } }, label),
+        // 【波 A · A-1】读数名（总批次/运行中/已完结/异常）是用户读来理解数字含义的正文，不是极弱提示
+        //   ⇒ label-tertiary（宿主最低强调级）上调到次级文本令牌。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2, lineHeight: 1.2 } }, label),
         React.createElement('span', { style: numStyle }, value)
       );
     }
@@ -84,6 +86,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         })
       },
         React.createElement('span', { style: { fontSize: 15, fontWeight: 700, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', color: tone || T.text } }, n),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, label)
+        // 【波 A · A-1】引力块标签（待裁决/门禁缺口/运行…）与 Stat 读数名同理：是正文，不是极弱提示。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, label)
       );
     }

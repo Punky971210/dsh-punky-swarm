@@ -27,9 +27,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         items.map((it, i) => React.createElement('span', {
           key: i,
           title: KIND[it.kind] + ': ' + it.path,
-          style: { color: T.warn, background: pal().gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10.5, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
+          style: { color: T.warn, background: T.gateBg, borderRadius: 999, padding: '1px 7px', fontSize: 10.5, fontWeight: 600, fontFamily: T.mono, whiteSpace: 'nowrap' }
         }, tt('gate.missing') + ' ' + it.path)),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, '— ' + tt('gate.fix.hint'))
+        // 【波 A · A-1】「— 补上即可结算」是缺口的**行动指引正文**（用户读它才知道下一步做什么）⇒ 上调次级文本。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, '— ' + tt('gate.fix.hint'))
       );
     }
 
@@ -81,16 +82,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }, m.cmd) : null,
         React.createElement('div', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, wordBreak: 'break-all' } }, contractText),
         m.role || (m.skills && m.skills.length)
-          ? React.createElement('div', { style: { fontSize: 10.5, color: T.text3 } },
+          // 【波 A · A-1】角色/技能是 lane 卡的任务元数据正文（与上一行契约行同级）⇒ 上调次级文本。
+          ? React.createElement('div', { style: { fontSize: 10.5, color: T.text2 } },
               tt('role.skills').replace('{role}', m.role || '—').replace('{skills}', (m.skills || []).length ? m.skills.join(', ') : '—'))
           : null,
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' } },
           React.createElement(GateBadge, { gate }),
           React.createElement(AttemptBadge, { n: attempt, upgrade }),
-          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
+          // 【波 A · A-1】依赖列表是 DAG 关系正文（用户据以判断上下游是否解锁）⇒ 原 label-dimmed
+          //   （宿主语义 = 占位/禁用）既非其义、又低于可读基线 ⇒ 直接上调次级文本。
+          deps ? React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono } }, tt('task.deps') + ': ' + deps.join(', ')) : null
         ),
         lastTs ? React.createElement('div', {
-          style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' },
+          // 【波 A · A-1】保留弱层级（时间戳属旁注），但纠令牌语义：label-dimmed=占位/禁用 ⇒ 换 label-tertiary。
+          style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' },
           title: tt('lane.recentHint')
         }, tt('lane.lastActive').replace('{t}', String(lastTs).slice(11, 19))) : null
       );
@@ -122,7 +127,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' } },
         React.createElement(Dot, { color: color }),
         React.createElement('span', { style: { flex: 1, fontSize: 11.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.dim, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' } }, (e.ts || '').slice(11, 19))
       );
     }
 
@@ -138,7 +143,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           React.createElement(SectionTitle, null, tt('event.timeline')),
           React.createElement('span', { style: { flex: 1 } }),
           React.createElement('span', {
-            style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' }
+            // 【波 A · A-1】「近 N 条 / 共 M 条」是**事件窗口是否被截断**的唯一读数（口径见 panel-model 尾窗注释）
+            //   ⇒ 属正文读数，上调次级文本；非装饰性计数。
+            style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums' }
           }, tt('event.tail').replace('{n}', String(shown.length)).replace('{m}', String(eventCount == null ? (evs || []).length : eventCount)))
         ),
         React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', margin: '4px 0 6px' } },
@@ -206,8 +213,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         ),
         rows.length
           ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-              React.createElement('div', { style: { fontSize: 10.5, color: T.dim } }, tt('mailbox.meta')),
-              rows.slice(0, 8).map((r, i) => React.createElement('div', { key: i, style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+              // 【波 A · A-1】「元数据（不贴正文）」是列表小标题：保留弱层级，纠令牌语义（dimmed=占位/禁用 ⇒ tertiary）。
+              React.createElement('div', { style: { fontSize: 10.5, color: T.text3 } }, tt('mailbox.meta')),
+              // 【波 A · A-1】邮箱元数据行（时刻 · 箱 · type · lane · 字段数）是用户实际读的数据行 ⇒ 上调次级文本。
+              rows.slice(0, 8).map((r, i) => React.createElement('div', { key: i, style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
                 (String(r.it.ts || '').slice(11, 19) || '--:--:--') + ' · ' + tt(r.box) + ' · ' + (r.it.type || '-') + ' · ' + (r.it.lane || '-') + ' · ' + Object.keys(r.it.meta || {}).length)
               )
             )
@@ -246,7 +255,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         React.createElement(SectionTitle, null, tt('assembly.title')),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 10 } },
           items.map((it, i) => React.createElement('span', { key: i, style: { fontSize: 10.5, color: T.text2 } },
-            React.createElement('span', { style: { color: T.text3 } }, tt(it.k) + ' '),
+            // 【波 A · A-1】键名（团队/编排/验收 lane/Manager 登记/门禁）是可读字段名：值常为 mono 编码串，
+            //   离开键名不可解读 ⇒ 上调次级文本（值本身同层，故此处无层级差）。
+            React.createElement('span', { style: { color: T.text2 } }, tt(it.k) + ' '),
             React.createElement('span', { style: { fontFamily: T.mono } }, it.v)
           ))
         )
@@ -290,9 +301,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           ),
           React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             React.createElement(Progress, { value: lanes.length ? (done / lanes.length) * 100 : 0, color: issues ? T.error : (lanes.length && done === lanes.length) ? T.success : (d.phase === 'running' || d.phase === 'paused') ? T.warn : T.dim }),
-            React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + lanes.length)
+            React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + lanes.length)
           ),
-          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text3, flexWrap: 'wrap' } },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
             React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency)

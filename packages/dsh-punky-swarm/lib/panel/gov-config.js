@@ -268,7 +268,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         React.createElement('div', { style: { flex: 1, minWidth: 0 } },
           React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
           desc
-            ? React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.45, marginTop: 3 } }, desc)
+            // 【波 A · A-1】开关行说明是配置语义正文（读它才知道开了会发生什么）⇒ 上调次级文本。
+            ? React.createElement('div', { style: { fontSize: G().sub, color: T.text2, lineHeight: 1.45, marginTop: 3 } }, desc)
             : null
         ),
         React.createElement('button', {
@@ -291,7 +292,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             style: {
               position: 'absolute', top: 2, left: on ? 18 : 2,
               width: 14, height: 14, borderRadius: 999,
-              background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)',
+              // 【波 A · A-3】实心开关圆点原为裸 '#fff'（换肤不跟随）⇒ 走宿主 on-accent 前景令牌。
+              background: T.onAccent, boxShadow: '0 1px 2px rgba(0,0,0,.25)',
               transition: 'left .15s ease'
             }
           })
@@ -304,7 +306,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10 } },
         React.createElement('div', { style: { flex: 1, minWidth: 0 } },
           React.createElement('div', { style: { fontSize: G().row, fontWeight: 600, color: T.text, lineHeight: 1.35 } }, title),
-          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, fontFamily: T.mono, lineHeight: 1.45, marginTop: 3 } }, sub)
+          // 【波 A · A-1】副标题（预设 id · 规则数）是该行唯一可读标识，且 id 是配置唯一键 ⇒ 上调次级文本。
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text2, fontFamily: T.mono, lineHeight: 1.45, marginTop: 3 } }, sub)
         ),
         React.createElement('button', {
           type: 'button',
@@ -327,7 +330,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 style: {
                   position: 'absolute', top: 3, left: 5,
                   width: 5, height: 9,
-                  border: 'solid #fff', borderWidth: '0 2px 2px 0',
+                  // 【波 A · A-3】勾选对勾原为裸 '#fff' ⇒ 同走 on-accent 前景令牌。
+                  border: 'solid ' + T.onAccent, borderWidth: '0 2px 2px 0',
                   transform: 'rotate(45deg)'
                 }
               })
@@ -363,7 +367,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             style: {
               fontFamily: T.mono, fontSize: G().chip, fontWeight: 700, letterSpacing: 0.3,
               padding: '3px 10px', borderRadius: 999, cursor: disabled ? 'default' : 'pointer',
-              color: on ? '#fff' : T.text2,
+              // 【波 A · A-3】选中态文本（落在 accent 实心填充上）原为裸 '#fff' ⇒ on-accent 前景令牌。
+              color: on ? T.onAccent : T.text2,
               background: on ? T.accent : 'transparent',
               border: '1px solid ' + (on ? T.accent : T.border),
               opacity: disabled ? 0.55 : 1
@@ -605,7 +610,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         // 卡片 B 规则预设（多选：L1/L2/L3/L5 四个平级勾选项；组合 = 勾选叠加本身，无 compose 组合项语义）
         React.createElement(GovCard, { title: tt('gov.preset.title') },
-          React.createElement('div', { style: { fontSize: G().sub, color: T.text3, lineHeight: 1.5 } }, tt('gov.preset.hint')),
+          // 【波 A · A-1】预设说明是装载语义正文（「全不选 = 出厂空表（零拦截）」）⇒ 上调次级文本。
+          React.createElement('div', { style: { fontSize: G().sub, color: T.text2, lineHeight: 1.5 } }, tt('gov.preset.hint')),
           selOptions.map((id) => React.createElement(PresetCheckRow, {
             key: id,
             checked: presetSel.indexOf(id) >= 0,
@@ -734,7 +740,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             onClick: handleSave,
             disabled: saveDisabled,
             style: Object.assign({}, btnBase, {
-              background: T.accent, color: '#fff', border: '1px solid transparent',
+              // 【波 A · A-3】主按钮文字原为裸 '#fff'（落在 accent 实心填充上）⇒ on-accent 前景令牌。
+              background: T.accent, color: T.onAccent, border: '1px solid transparent',
               opacity: saveDisabled ? 0.5 : 1, cursor: saveDisabled ? 'default' : 'pointer'
             })
           }, tt('gov.save')),

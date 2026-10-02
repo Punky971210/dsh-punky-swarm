@@ -19,14 +19,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     // ================= theme-aware palette =================
     // DSH 主题开关：body[data-ds-dark-theme]（深色）vs 默认浅色。令牌 var(--dsw-alias-*)
     // 会随主题自动切换；这里只负责「令牌缺失时」的兜底色板，并按主题切换重渲染。
-    let CURRENT_THEME = 'dark';
+    // 【波 A · A-2】探测不到（body 未就绪 / 无 document）时按**宿主默认浅色**兜底：原缺省 'dark'
+    //   会让「段求值早于 body 就绪」的加载序停在暗色兜底色板（#7f8ca3 落在浅色卡上 = 用户看到的浅灰字）。
+    //   初始探测点同时由 main.js 的 apply() 补齐（mount 立即调用 + documentElement 子树观察）。
+    let CURRENT_THEME = 'light';
     function detectTheme() {
       try {
         if (typeof document !== 'undefined' && document.body) {
           return document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light';
         }
       } catch {}
-      return 'dark';
+      return 'light'; // body 未就绪 ⇒ 按宿主默认浅色（token 缺失时的兜底档，见上注）
     }
     try { CURRENT_THEME = detectTheme(); } catch {}
 
@@ -69,6 +72,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       get text2() { return 'var(--dsw-alias-label-secondary, ' + pal().text2 + ')'; },
       get text3() { return 'var(--dsw-alias-label-tertiary, ' + pal().text3 + ')'; },
       get dim() { return 'var(--dsw-alias-label-dimmed, ' + pal().dim + ')'; },
+      // 【波 A · A-3】实心控件上的前景（开关圆点 / 勾选对勾 / accent 填充上的文字）：
+      //   宿主对 `background: --dsw-alias-button-primary-fill` 的同款配法就是 label-primary-foreground
+      //   ⇒ 这一处白色前景改由宿主皮肤接管（原为裸 '#fff'，换肤不跟随）。
+      get onAccent() { return 'var(--dsw-alias-label-primary-foreground, #fff)'; },
+      // 【波 A · A-3】门禁缺口徽章底色：宿主 `--dsw-alias-state-warn-tertiary` 的定义与用法即
+      //   「warn-primary 前景 + tertiary 底色」的条/芯片（本面板对侧前景 = T.warn = state-warn-primary）。
+      get gateBg() { return 'var(--dsw-alias-state-warn-tertiary, ' + pal().gateBg + ')'; },
       get accent() { return 'var(--dsw-alias-brand-primary, ' + pal().accent + ')'; },
       get success() { return 'var(--dsw-alias-state-success-primary, ' + pal().success + ')'; },
       get warn() { return 'var(--dsw-alias-state-warn-primary, ' + pal().warn + ')'; },
@@ -77,20 +87,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       get skeleton() { return 'var(--dsw-alias-bg-skeleton, ' + pal().skeleton + ')'; },
       get selBg() { return 'var(--dsw-alias-interactive-bg-active, ' + pal().selBg + ')'; },
       get font() { return 'var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)'; },
-      get mono() { return 'var(--dsw-font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace)'; }
+      // 【波 A · 附】宿主 --dsw-font-mono **def=0（不存在）** ⇒ 原写法恒走硬编码栈。
+      //   改用宿主实有的等宽令牌 --ds-font-family-code（def=1，宿主 markdown-code 族的底令牌）；
+      //   仍把 --dsw-font-mono 留在链首：若某版宿主补上该令牌则优先，不补也不影响解析。
+      get mono() { return 'var(--dsw-font-mono, var(--ds-font-family-code, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace))'; }
     };
 
-    function chip(fgKey, bgKey, fgVar) {
+    // 芯片：fg 走令牌（缺则兜底色）；底色【波 A · A-3】原为直返 pal()（不跟随宿主换肤）⇒
+    //   分出 bgCss = var(--dsw-alias-*, 兜底色)。保留 bg = 纯兜底色值：面板 chip 对比度回归断言
+    //   （test/panel-render.test.js T-R2）逐色解析的正是 bg（该断言审的就是「令牌缺失时的兜底档」）。
+    function chip(fgKey, bgKey, fgVar, bgVar) {
       return {
         get fg() { return fgVar ? 'var(' + fgVar + ', ' + pal()[fgKey] + ')' : pal()[fgKey]; },
-        get bg() { return pal()[bgKey]; }
+        get bg() { return pal()[bgKey]; },
+        get bgCss() { return bgVar ? 'var(' + bgVar + ', ' + pal()[bgKey] + ')' : pal()[bgKey]; }
       };
     }
+    // 四参 chip(..., bgVar)：仅**宿主确有同款软底色 alias** 的三档加 bgVar（warn/business/success 各一）。
+    //   其余档（pending/skipped/idle/failed/conflict）宿主无对应软底色令牌 ⇒ 保留兜底色，登记为已知边界。
     const STATE = {
       pending: chip('text2', 'chipPending', '--dsw-alias-label-secondary'),
-      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
-      review: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
-      merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary', '--dsw-alias-state-warn-tertiary'),
+      review: chip('info', 'chipReview', '--dsw-alias-state-business-primary', '--dsw-alias-state-business-tertiary'),
+      merged: chip('success', 'chipMerged', '--dsw-alias-state-success-primary', '--dsw-alias-state-success-tertiary'),
       failed: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
       skipped: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
       conflict: chip('escFg', 'chipConflict', '--dsw-alias-state-warn-primary'),
@@ -98,9 +117,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     };
     const PHASE = {
       planning: chip('text2', 'chipSkipped', '--dsw-alias-label-secondary'),
-      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary'),
-      paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary'),
+      running: chip('warn', 'chipRunning', '--dsw-alias-state-warn-primary', '--dsw-alias-state-warn-tertiary'),
+      paused: chip('info', 'chipReview', '--dsw-alias-state-business-primary', '--dsw-alias-state-business-tertiary'),
       aborted: chip('error', 'chipFailed', '--dsw-alias-state-error-primary'),
-      complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary')
+      complete: chip('success', 'chipMerged', '--dsw-alias-state-success-primary', '--dsw-alias-state-success-tertiary')
     };
     // =======================================================

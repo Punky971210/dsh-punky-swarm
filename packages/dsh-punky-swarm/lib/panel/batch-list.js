@@ -105,9 +105,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                   ),
                   React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                     React.createElement(Progress, { value: total ? (done / total) * 100 : 0, color: st.fg, height: 3 }),
-                    React.createElement('span', { style: { fontSize: 10.5, color: T.text3, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
+                    // 【波 A · A-1】批次卡的进度读数（12/16）= 该卡的关键数据 ⇒ 上调次级文本。
+                    React.createElement('span', { style: { fontSize: 10.5, color: T.text2, fontFamily: T.mono, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }, done + '/' + total)
                   ),
-                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text3, flexWrap: 'wrap' } },
+                  // 【波 A · A-1】该行承载会话前缀 + 收口/进度语义（可自动收口 / 已完结 / 异常 N / 待收口）
+                  //   ⇒ 是卡片正文而非极弱提示；行内异常/待收口另有语义色覆盖，不冲突。
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: T.text2, flexWrap: 'wrap' } },
                     b.sessionShort && !b.isOwnSession
                       ? React.createElement('span', { title: b.session, style: { fontFamily: T.mono, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 } }, b.sessionShort + ' ·')
                       : null,

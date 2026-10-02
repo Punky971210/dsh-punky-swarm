@@ -90,7 +90,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
           key: b.key, label: tt('focus.' + b.key), n: b.n, tone: tone(b.key),
           onClick: () => onPick(b.key)
         })),
-        React.createElement('span', { style: { fontSize: 10.5, color: T.text3 } }, tt('focus.pick'))
+        // 【波 A · A-1】「点选即筛选左栏」是操作说明正文（用户读它才知道引力块可点）⇒ 上调次级文本。
+        React.createElement('span', { style: { fontSize: 10.5, color: T.text2 } }, tt('focus.pick'))
       );
     }
 
@@ -117,7 +118,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         ),
         React.createElement('div', { style: { fontSize: 11, color: T.text2, lineHeight: 1.45 } },
           React.createElement('span', { style: { color: T.text3 } }, tt('action.why') + '：'), why),
-        React.createElement('div', { style: { fontSize: 11, color: T.text3, lineHeight: 1.45 } },
+        // 【波 A · A-1】「你能做什么」整句是行动指引正文 ⇒ 上调次级文本（与上一行「为什么最重要」的答案同级）。
+        React.createElement('div', { style: { fontSize: 11, color: T.text2, lineHeight: 1.45 } },
           tt('action.next') + '：' + tt('focus.pick'))
       );
     }
@@ -137,16 +139,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const sid = sessionId || '';
 
       // 跟随 web UI 主题（body[data-ds-dark-theme]）切换兜底色板并重渲染
+      // 【波 A · A-2】原实现只在「属性变化 / matchMedia 变化」时调用 apply ⇒ 段求值早于 body 就绪时，
+      //   兜底色板会一直停在初始档。两处补齐：① mount 立即探测一次；② 观察点从 body 换成
+      //   documentElement（恒存在）+ subtree —— body 未就绪时旧写法根本不注册 observer，此后永不跟随。
       useEffect(() => {
         const apply = () => {
           const t = detectTheme();
           if (t !== CURRENT_THEME) { CURRENT_THEME = t; setThemeTick((x) => x + 1); }
         };
+        apply();
         let mo = null;
         try {
-          if (typeof MutationObserver !== 'undefined' && document.body) {
+          if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.documentElement) {
             mo = new MutationObserver(apply);
-            mo.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] });
+            mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-dark-theme'], subtree: true });
           }
         } catch {}
         let mq = null;
