@@ -46,6 +46,8 @@ import { mountVerify } from './verify/mount.js';
 // tools/pre-execute + tools/post-execute（双阶段零宿主改造）——6 原语纯函数内核裁决 +
 // 拒绝收据落盘（receipt-store.js）；装配对齐 mountVerify 模式。
 import { installGovernanceHook } from './governance/wiring.js';
+// 【L-1 · 随 P2 引入】governance 增量冲刷单点：用于插件卸载/热重载时闭合「未落盘计数」窗口
+import { flushDirtyGovernance } from './state/store/governance.js';
 // governance 键热更：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
 //   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount 模式，不引入 updateConfig API）
 import { resolveGovernanceConfig } from './governance/config.js';
@@ -810,6 +812,10 @@ export const apply = (ctx, config = {}) => {
     governanceHook?.dispose();
     dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
     autoSettle?.dispose?.(); // 自动结算主路（subagent/end）退订（幂等；兼底路随工具面存续）
+    // 【L-1】冲刷 governance 未落盘增量：P2 的 flush 三时机（阈值/定时/process.once('exit')）
+    //   中 exit 只覆盖进程退出，**不覆盖「插件卸载而宿主继续运行」**的场景 ⇒ 此处补一次显式冲刷。
+    //   幂等；零脏会话时为空操作（不产生 I/O、不挂钩子）。
+    try { flushDirtyGovernance(); } catch {}
     if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
   };
 };
