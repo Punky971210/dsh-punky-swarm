@@ -200,3 +200,32 @@ export function touchBatchEntries(cx, sessionId, batchId, batch, nowTs) {
     if (entry) entry.lastSeenTs = nowTs;
   }
 }
+
+// ── P1（phase 预筛）：预筛跳过批的**前缀式**条目推进 ────────────────────────────────────
+// 为什么需要：phase 预筛命中（planning/complete/aborted）的批**不 parse** ⇒ 拿不到 `batch.lanes`，
+//   故按 laneKey 前缀推进：entry key = `${sessionId}/${batchId}/${lane}`（`laneKeyOf` 单点），
+//   前缀 = 前两段（sessionId / batchId 均不含 `/`：`SESSION_RE` 在 store 路径面已保证；lane 可含 `/`）。
+// 等价性：原 `touchBatchEntries` 遍历 `batch.lanes` 逐个 `state.get(laneKeyOf(...))` 推进——
+//   · 前缀命中的 entry 必属该批；
+//   · 该批 lane 集合之外的陈旧 entry 原实现不碰，但**终态/planning 批的 entry 不参与任何判定**
+//     （longrun 档与 stalled 档都整批跳过；唯一读端是只读查询面，其按 batch.lanes 取值）
+//     ⇒ 推进与否无可观测差异。
+// 索引一次建好（**不在每个预筛批上全表扫描**）：Map<`${sessionId}/${batchId}`, entry[]>。
+export function batchEntryIndex(cx) {
+  const index = new Map();
+  for (const [key, entry] of cx.state) {
+    const i1 = key.indexOf('/');
+    if (i1 < 0) continue;
+    const i2 = key.indexOf('/', i1 + 1);
+    if (i2 < 0) continue;
+    const prefix = key.slice(0, i2);
+    const list = index.get(prefix);
+    if (list) list.push(entry); else index.set(prefix, [entry]);
+  }
+  return index;
+}
+export function touchBatchEntriesByPrefix(index, nowTs, sessionId, batchId) {
+  const list = index.get(sessionId + '/' + batchId);
+  if (!list) return;
+  for (const entry of list) entry.lastSeenTs = nowTs;
+}

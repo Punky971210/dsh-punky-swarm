@@ -43,21 +43,13 @@ import { replayBatch } from '../../engine/replay.js';
 //   「同一现场重复重放 ⇒ 零新增 `chain.step`」⇒ 本 tick 反复跑不会重复推进（RI-2 回归锁）。
 const REPLAY_MAX_SESSIONS = 5;
 const REPLAY_MAX_BATCHES = 20;
-export async function replayTick(cx) {
+// 目标集合：P1 起由**单趟全库扫描行**（`scan.js`）给出 ⇒ 本档不再单独读盘。
+//   缺省（`rows` 为 null，独立调用方/旧调用点）⇒ 原逐批读盘路径**逐字保留**（行为零变更）。
+export async function replayTick(cx, rows = null) {
   const hits = [];
   let replayed = 0;
   try {
-    const targets = [];
-    const sessions = (typeof cx.store.listSessions === 'function' ? cx.store.listSessions() : []).slice(0, REPLAY_MAX_SESSIONS);
-    for (const sessionId of sessions) {
-      const ids = typeof cx.store.listBatches === 'function' ? cx.store.listBatches(sessionId) : [];
-      for (const batchId of ids) {
-        if (targets.length >= REPLAY_MAX_BATCHES) break;
-        try { if (cx.store.readBatch(sessionId, batchId)?.phase === 'running') targets.push({ sessionId, batchId }); }
-        catch { /* 坏批跳过（与装配期扫描同隔离口径） */ }
-      }
-      if (targets.length >= REPLAY_MAX_BATCHES) break;
-    }
+    const targets = rows ? replayTargetsOfRows(rows) : replayTargetsByRead(cx);
     for (const t of targets) {
       try {
         const r = await replayBatch({ store: cx.store, root: cx.engineRoot, liveConfig: cx.liveConfig ?? cx.config }, cx.ctxOf(), t);
@@ -74,4 +66,42 @@ export async function replayTick(cx) {
     }
   } catch { /* 扫描面失败不影响心跳 */ }
   return { replayed, batches: hits };
+}
+
+// 扫描行 → 目标清单：**选取规则与原实现逐字同源**（前 REPLAY_MAX_SESSIONS 个会话 / 仅 `running` 批 /
+//   至多 REPLAY_MAX_BATCHES 条；会话序与批序 = 行序 = `listSessions()`→`listBatches()` 序）。
+//   `row.batch` 为空（phase 预筛命中终态/planning，或不存在/损坏）时用 `row.phase` 兜底判相位；
+//   两者都不为 `running` ⇒ 与原 `readBatch()?.phase === 'running'` 判据等价。
+function replayTargetsOfRows(rows) {
+  const targets = [];
+  let sessions = 0;
+  let lastSession = null;
+  for (const row of rows) {
+    if (row.sessionId !== lastSession) {
+      lastSession = row.sessionId;
+      sessions += 1;
+      if (sessions > REPLAY_MAX_SESSIONS) break; // 会话上限（原 `sessions.slice(0, 5)`）
+    }
+    if (targets.length >= REPLAY_MAX_BATCHES) break; // 批上限（原内层 break + 外层 break）
+    const phase = row.batch ? row.batch.phase : row.phase;
+    if (phase !== 'running') continue;
+    targets.push({ sessionId: row.sessionId, batchId: row.batchId });
+  }
+  return targets;
+}
+
+// 原目标收集路径（逐批读盘；`rows` 缺省时的兜底，代码与 P1 改造前逐字一致）
+function replayTargetsByRead(cx) {
+  const targets = [];
+  const sessions = (typeof cx.store.listSessions === 'function' ? cx.store.listSessions() : []).slice(0, REPLAY_MAX_SESSIONS);
+  for (const sessionId of sessions) {
+    const ids = typeof cx.store.listBatches === 'function' ? cx.store.listBatches(sessionId) : [];
+    for (const batchId of ids) {
+      if (targets.length >= REPLAY_MAX_BATCHES) break;
+      try { if (cx.store.readBatch(sessionId, batchId)?.phase === 'running') targets.push({ sessionId, batchId }); }
+      catch { /* 坏批跳过（与装配期扫描同隔离口径） */ }
+    }
+    if (targets.length >= REPLAY_MAX_BATCHES) break;
+  }
+  return targets;
 }

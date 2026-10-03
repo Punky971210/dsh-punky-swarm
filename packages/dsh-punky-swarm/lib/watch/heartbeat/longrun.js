@@ -26,6 +26,7 @@ import {
   laneStateOf, longrunCandidateOf, stintRunningSinceOf,
 } from '../lane-heartbeat.js';
 import { isScannedLaneState } from './primitives.js';
+import { scanBatchesOnce } from './scan.js';
 import { laneExemptOf, laneKeyOf, mailboxRootOf, progressSnapshotTsOf } from './context.js';
 import { longrunLastActivityAt } from './activity.js';
 import { consumeCtxOf } from './evidence.js';
@@ -157,23 +158,25 @@ export function emitUnconsumed(cx, sessionId, batchId, batch, lane, nowTs) {
 //   僵尸批次（末事件早于 staleBatchMs）整批跳过——其 running 是历史残留，扫描只产噪音；
 //   阈值 0 = 显式关闭过滤（逃生阀）。过滤只作用本档，不影响 stalled 档与批次状态
 //   （**悬挂视图不受该过滤**——终态批天然「末事件早于 24h」，沿用会让该视图自我抹掉）。
-export function longrunScan(cx, nowTs) {
-  for (const sessionId of cx.store.listSessions()) {
-    for (const batchId of cx.store.listBatches(sessionId)) {
-      const batch = cx.store.readBatch(sessionId, batchId);
-      if (!batch) continue;
-      if (schema.isBatchTerminal(batch.phase)) continue; // 终态批：只出悬挂视图，不产候选、不写事件
-      if (batch.phase === 'planning') continue; // planning：只许 Manager 登记，不扫成员判据
-      if (isStaleBatch(batch, nowTs, cx.lrCfg.staleBatchMs)) continue; // 僵尸批跳过
-      for (const lane of Object.keys(batch.lanes ?? {})) {
-        if (!isScannedLaneState(batch, lane)) continue; // 非终态全集合；终态 lane 不扫
-        try { emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs); }
-        catch { /* 单 lane 探针失败隔离（不阻断整轮扫描） */ }
-        // 消费超时档只对 running lane 有意义（候选只在 running 态产出）
-        if (laneStateOf(batch, lane) !== 'running') continue;
-        try { emitUnconsumed(cx, sessionId, batchId, batch, lane, nowTs); } // 消费超时独立趟（不挂 early-return 后）
-        catch { /* 单 lane 失败隔离 */ }
-      }
+//   ★ P1：扫描面改由**单趟全库扫描行**（`scan.js`）驱动——`rows` 缺省时自行扫描（独立调用方零破坏）。
+//     跳过判据**一字未改**（本函数内三道 guard 逐字保留）：预筛行（batch 为 null = phase 命中
+//     planning/complete/aborted）与原「读整批 → 判终态/planning → continue」等价。
+export function longrunScan(cx, nowTs, rows = null) {
+  const list = rows ?? scanBatchesOnce(cx);
+  for (const row of list) {
+    const { sessionId, batchId, batch } = row;
+    if (!batch) continue; // phase 预筛命中（终态/planning）⇒ 与原「读后判终态/planning → 整批跳过」等价
+    if (schema.isBatchTerminal(batch.phase)) continue; // 终态批：只出悬挂视图，不产候选、不写事件
+    if (batch.phase === 'planning') continue; // planning：只许 Manager 登记，不扫成员判据
+    if (isStaleBatch(batch, nowTs, cx.lrCfg.staleBatchMs)) continue; // 僵尸批跳过
+    for (const lane of Object.keys(batch.lanes ?? {})) {
+      if (!isScannedLaneState(batch, lane)) continue; // 非终态全集合；终态 lane 不扫
+      try { emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs); }
+      catch { /* 单 lane 探针失败隔离（不阻断整轮扫描） */ }
+      // 消费超时档只对 running lane 有意义（候选只在 running 态产出）
+      if (laneStateOf(batch, lane) !== 'running') continue;
+      try { emitUnconsumed(cx, sessionId, batchId, batch, lane, nowTs); } // 消费超时独立趟（不挂 early-return 后）
+      catch { /* 单 lane 失败隔离 */ }
     }
   }
 }
