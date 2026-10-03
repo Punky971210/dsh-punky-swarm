@@ -57,21 +57,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       for (const s of sessions) {
         if (s && s.sessionId && s.sessionId !== sid) ids.push(s.sessionId);
       }
-      const out = [];
-      for (const id of ids) {
+      // 【性能】all 档原为 `for…of + await` **串行 N+1**（实测 28 次往返合计 32.5 s，载荷仅 51 KB）；
+      //   改为 Promise.all 并发 —— 结果按 ids 顺序返回 ⇒ **行为等价**，仅把「N 次串行等待」压成一批并发。
+      //   注：宿主 HTTP 层的「首触停顿」（冷态秒级 / 暖态毫秒级，**静态路由同样中招** ⇒ 与插件读端无关）
+      //   不在本处修复范围，已单独立项。
+      const parts = await Promise.all(ids.map(async (id) => {
         let items = [];
         try {
           const r = await api('/batches', id);
           items = (r && r.batches) || [];
         } catch {}
-        for (const b of items) {
-          out.push(Object.assign({}, b, {
-            session: id,
-            sessionShort: String(id).slice(0, 8),
-            isOwnSession: id === sid
-          }));
-        }
-      }
+        return items.map((b) => Object.assign({}, b, {
+          session: id,
+          sessionShort: String(id).slice(0, 8),
+          isOwnSession: id === sid
+        }));
+      }));
+      const out = [];
+      for (const part of parts) out.push(...part);
       return out;
     }
 
