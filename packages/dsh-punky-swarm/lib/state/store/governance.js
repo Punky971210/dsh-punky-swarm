@@ -51,6 +51,20 @@ function envPositiveInt(name, fallback) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
+// ── P3（2026-10-03）`history` **有界化**：只保留最近 N 条**完整**记录 ─────────────────────
+// 背景（实测）：`governance.json` 的 `history` 数组**无界增长**——每条存**完整 rationale**
+//   （172–636 字符），最重会话 history 195 条 / gov 218 KB / 768 次执行型调用 ⇒ guard 单次成本随文件线性上升。
+// 用户裁决 T-1=乙（2026-10-03）：**只保留最近 N 条完整记录**——刻意**不**选「截断 rationale 字段」，
+//   完整条目比截断字符串更有审计价值；N 默认 100，环境旋钮沿用 P2 `PUNKY_GOV_EXEC_FLUSH_*` 惯例。
+// 裁剪时机 = **写入时**（两个写点 `writeGovernance` / `flushExecCount` 共用单点 `boundHistory`）；
+//   读侧 `readGovernance` 亦套同一投影 ⇒ 存量超界文件不必等一次写入才收敛（读数与写盘契约同界）。
+// 留痕：发生裁剪时落 `historyTruncated: { dropped, since }`——`dropped` = **累计**丢弃条数（跨次累加），
+//   `since` = 最早保留条目的 `at`（可追溯「更早的记录去哪了」），**不得无声消失**。
+// 语义边界（明示）：裁剪只改「**存多少**」，**不改「怎么判」**——`history` 不被任何门禁/判定读取
+//   （guard 只读 lastAssign / pendingBatch，见 lib/tools/tier-gate.js）；唯一非展示读端 = assign_check 的
+//   `turn` 编号（按 history 长度递增）⇒ 已改为「累计丢弃 + 现存条数 + 1」，保证编号裁剪后仍单调不重号。
+const GOV_HISTORY_MAX = envPositiveInt('PUNKY_GOV_HISTORY_MAX', 100);
+
 let govStoreSeq = 0; // store 实例序号（键前缀：同 root 多 store 实例不互相覆盖）
 const govPending = new Map(); // key -> { count, callsSince, since }：未落盘增量
 const govSnapshot = new Map(); // key -> 最近一次读/写到的磁盘全量（供 bump 免读盘构造对外读数）
@@ -169,6 +183,28 @@ export function buildGovernance(cx) {
     }
     return next;
   }
+  // P3：`history` 有界化**单点**（**纯函数**：不并入参；未超界时原对象返回，零拷贝零副作用）。
+  //   超界 ⇒ 保留**最近** N 条（`slice(-N)`：顺序与内容逐字不动，不截断任何字段）＋累计 `dropped`
+  //   ＋`since` = 最早保留条目的 `at`；未超界 ⇒ 原样返回（既存 `historyTruncated` 标记随之保留，
+  //   不因某次未裁剪而丢失）。裁剪只动 `history` / `historyTruncated` 两键，其余键逐字透传。
+  function boundHistory(g) {
+    const hist = Array.isArray(g?.history) ? g.history : [];
+    const droppedNow = hist.length - GOV_HISTORY_MAX;
+    if (droppedNow <= 0) return g;
+    const kept = hist.slice(-GOV_HISTORY_MAX);
+    const prev = g.historyTruncated ?? null;
+    return {
+      ...g,
+      history: kept,
+      historyTruncated: {
+        dropped: (prev?.dropped ?? 0) + droppedNow,
+        since: kept[0]?.at ?? prev?.since ?? null,
+      },
+    };
+  }
+  // P3：读侧同界投影（**不写盘**）——`readGovernance` / 快照播种 / 冲刷读盘三处共用，避免各写一份裁剪。
+  function readGovernanceBounded(sessionId) { return boundHistory(readGovernanceDisk(sessionId)); }
+
   // 纯磁盘读（P2 拆分：原 `readGovernance` 逐字保留，仅更名）——不含未落盘增量
   function readGovernanceDisk(sessionId) {
     const file = governanceFile(sessionId);
@@ -178,7 +214,7 @@ export function buildGovernance(cx) {
   }
   // 无文件/损坏 → 返回默认（调用方无需判空）；**读取侧 = 磁盘 + 未落盘增量**（对外读数严格不减）
   function readGovernance(sessionId) {
-    const disk = readGovernanceDisk(sessionId);
+    const disk = readGovernanceBounded(sessionId); // P3：读侧同界投影（存量超界文件不必等一次写入才收敛）
     const key = govKeyOf(sessionId);
     // 顺带刷新快照：guard 每次执行型调用先读治理态 ⇒ `bumpExecCount` 免二次读盘。
     //   快照只经本函数的合并拷贝对外（`mergeExecPending` 必拷贝），不存在共享可变引用。
@@ -189,7 +225,9 @@ export function buildGovernance(cx) {
   //   【P2】落盘即**冲刷**该会话未落盘增量（值已进磁盘 ⇒ 清增量），故任何治理写入都不丢计数。
   function writeGovernance(sessionId, patch) {
     const key = govKeyOf(sessionId);
-    const next = { ...readGovernance(sessionId), ...patch };
+    // P3：合并后**再裁剪一次**——`patch.history`（调用方按「已界内 history + 新条目」构造）在此收敛到 N 条，
+    //   故「history 追加路径」（assign_check）无需改动即得界内落盘，裁剪留痕同时写入。
+    const next = boundHistory({ ...readGovernance(sessionId), ...patch });
     atomicWrite(governanceFile(sessionId), next);
     govPending.delete(key);
     govFlushers.delete(key);
@@ -202,7 +240,7 @@ export function buildGovernance(cx) {
     const key = govKeyOf(sessionId);
     const pend = govPending.get(key);
     if (!pend) return false;
-    const next = mergeExecPending(readGovernanceDisk(sessionId), pend);
+    const next = boundHistory(mergeExecPending(readGovernanceBounded(sessionId), pend));
     atomicWrite(governanceFile(sessionId), next);
     govPending.delete(key);
     govFlushers.delete(key);
@@ -211,9 +249,9 @@ export function buildGovernance(cx) {
   }
   // 快照播种（缺快照时的唯一一次读盘：每会话首触 +1 次读）
   function seedExecSnapshot(sessionId, key) {
-    const disk = readGovernanceDisk(sessionId);
-    govSnapshot.set(key, disk);
-    return disk;
+    const boundedDisk = readGovernanceBounded(sessionId);
+    govSnapshot.set(key, boundedDisk);
+    return boundedDisk;
   }
   // 执行型工具调用计数（**纯观察面**）：execToolCount 累计 + lastAssign.execCallsSince 递增。
   // 【2026-09-16 用户裁决】这两项**仅作提示/观察**，**不作为升档或评估过期依据**——

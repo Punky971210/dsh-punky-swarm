@@ -90,7 +90,11 @@ export function buildAssignTools(cx) {
         const now = new Date().toISOString();
         const scope = args.scope ?? 'full';
         const g0 = store.readGovernance(sessionId);
-        const entry = { turn: (g0.history?.length ?? 0) + 1, difficulty, form, derived, override, at: now, reasons, rationale };
+        // 【P3（2026-10-03）】turn 编号随 `history` 有界化同步修正：`history` 只保留最近 N 条后，
+        //   若仍按 `history.length + 1` 编号，到界后长度恒定 ⇒ 编号卡死重号。改为
+        //   「累计丢弃数（裁剪标记 `historyTruncated.dropped`）+ 现存条数 + 1」，编号恢复单调不重号；
+        //   未发生裁剪时 `dropped` 缺省 0 ⇒ 与旧行为**逐字等价**。
+        const entry = { turn: (g0.historyTruncated?.dropped ?? 0) + (g0.history?.length ?? 0) + 1, difficulty, form, derived, override, at: now, reasons, rationale };
         const history = [...(g0.history ?? []), entry];
         const hasActive = store.hasActiveBatch(sessionId);
         const patch = { lastAssign: { difficulty, form, scope, rationale, derived, override, at: now, reasons, execCallsSince: 0 }, history };
