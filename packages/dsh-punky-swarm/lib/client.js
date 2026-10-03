@@ -1550,9 +1550,25 @@ window.__ModuleLoader__.load({
       return res.json();
     }
 
-    // 跨会话聚合：/sessions 取全部有批次的会话 → 逐会话 /batches 合并为统一列表；
-    // 当前对话会话（sid）批次优先，其后按会话展示；列表项携带 session 归属字段
+    // 批次列表取数（两档）：
+    //   · own 档（sid 非空）= **只列当前对话会话**的批次 —— R1 硬约束：跨会话条目不得混入，
+    //     且不得调用 /sessions（否则等于做了跨会话聚合）；
+    //   · all 档（sid 为空）= 跨会话聚合：/sessions 取全部有批次的会话 → 逐会话 /batches 合并。
+    // 列表项均携带 session 归属字段与 isOwnSession 标记。
     async function aggregateBatches(sid) {
+      // own 档短路：只取当前会话，不触 /sessions（R1）
+      if (sid) {
+        let own = [];
+        try {
+          const r = await api('/batches', sid);
+          own = (r && r.batches) || [];
+        } catch {}
+        return own.map((b) => Object.assign({}, b, {
+          session: sid,
+          sessionShort: String(sid).slice(0, 8),
+          isOwnSession: true
+        }));
+      }
       let sessions = [];
       try {
         const r = await api('/sessions');
