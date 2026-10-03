@@ -30,6 +30,56 @@ import { SESSION_RE } from '../constants.js';
 //   escalation.js 导出常量（单一事实源——config resolve 默认与纯函数签名缺省同源）。
 import { countGovernanceRefusals, DEFAULT_ESCALATION_PRIMITIVES } from '../../governance/escalation.js';
 
+// ── P2（2026-10-03）执行型计数**节流落盘**：模块级共享态 ─────────────────────────────
+// 背景（实测）：`bumpExecCount` 原为「每次执行型工具调用：读盘 → 合并 → **全量重写**」，
+//   单次成本随会话 `governance.json` 线性增长（2.4 KB 新会话 1.51 ms → 218 KB 长会话 4.38 ms，p95 8.52），
+//   而该字段**源码自带依据为纯观察量**（见下方 `bumpExecCount` 处的【2026-09-16 用户裁决】注释：
+//   「不作为升档或评估过期依据，仅作观察」）⇒ 节流**不改任何门禁/判定语义**，仅降低写盘频率。
+// 设计：内存累加（未落盘增量 `govPending`）+ 按阈值（每 N 次）/定时（每 T ms）落盘；
+//   读取侧 `readGovernance` 返回「磁盘 + 未落盘增量」的合并值 ⇒ 对外读数**严格不减**（不跳号、不回退）。
+// 三个关键时机冲刷：① 阈值/定时（本文件）② **进程退出钩子** `process.once('exit')`（重启不丢最终值）
+//   ③ 显式入口 `flushDirtyGovernance()`（宿主插件卸载/热重载侧可调用，见本文件导出面）。
+// 【已知边界 · 如实登记】节流必然存在「已计数、未落盘」窗口 ⇒ 进程**非正常终止**（SIGKILL / 崩溃 /
+//   插件热重载且未调用 `flushDirtyGovernance()`）时最多丢失 `< N` 次未落盘计数。N 越小丢失上界越小；
+//   本仓未在 `lib/index.js` 的 disposer 上挂钩（写域约束），故热重载路径的兜底为**登记项**而非既成事实。
+const EXEC_FLUSH_EVERY = envPositiveInt('PUNKY_GOV_EXEC_FLUSH_EVERY', 10);
+const EXEC_FLUSH_INTERVAL_MS = envPositiveInt('PUNKY_GOV_EXEC_FLUSH_INTERVAL_MS', 30 * 1000);
+
+// 环境旋钮解析：非法/缺省 → 回落默认（绝不产生 0/NaN 阈值——0 会让「节流」退化为每调必写）
+function envPositiveInt(name, fallback) {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+let govStoreSeq = 0; // store 实例序号（键前缀：同 root 多 store 实例不互相覆盖）
+const govPending = new Map(); // key -> { count, callsSince, since }：未落盘增量
+const govSnapshot = new Map(); // key -> 最近一次读/写到的磁盘全量（供 bump 免读盘构造对外读数）
+const govFlushers = new Map(); // key -> () => void：脏会话冲刷器（退出钩子/定时器遍历面）
+let govFlushTimer = null;
+let govExitBound = false;
+
+// 一致性冲刷入口（同步）：退出钩子 / 定时器 / 宿主侧显式 flush 共用**单点**。
+// 单会话失败不阻断其余会话（退出路径尤其不得抛）。
+export function flushDirtyGovernance() {
+  for (const flush of [...govFlushers.values()]) {
+    try { flush(); } catch { /* 隔离：单会话冲刷失败不阻断其余会话 */ }
+  }
+}
+
+// 钩子首次挂载（惰性：只在出现脏会话时挂，零脏会话零钩子零定时器）
+function bindExecFlushHooks() {
+  if (!govExitBound) {
+    govExitBound = true;
+    // 进程退出钩子（关键时机 flush）：atomicWrite 为同步写，可在 exit 处理器内安全执行。
+    process.once('exit', () => { flushDirtyGovernance(); });
+  }
+  if (govFlushTimer) return;
+  govFlushTimer = setInterval(() => {
+    try { flushDirtyGovernance(); } catch { /* 定时冲刷失败不抛（下一拍重试） */ }
+  }, EXEC_FLUSH_INTERVAL_MS);
+  govFlushTimer.unref?.(); // 不因本定时器拖延进程退出（进程存活期间照常按拍触发）
+}
+
 export function buildGovernance(cx) {
   const { readBatch, newEvent, commitBatch, escalatePausedWrite, emitStateChange, ratchet, sessionDir, atomicWrite, listBatches } = cx;
 
@@ -103,28 +153,87 @@ export function buildGovernance(cx) {
     if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
     return path.join(sessionDir(sessionId), 'governance.json');
   }
-  // 无文件/损坏 → 返回默认（调用方无需判空）
-  function readGovernance(sessionId) {
+  // 本 store 实例的键前缀：`governanceFile` 绝对路径已含会话隔离，再加实例序号
+  //   ⇒ 同 root 多 store 实例各自持有独立增量/快照（互不吞并，也不跨实例误冲刷）。
+  const govKeyPrefix = 'gov#' + (++govStoreSeq) + '|';
+  const govKeyOf = (sessionId) => govKeyPrefix + governanceFile(sessionId);
+
+  // 未落盘增量与磁盘态的合并（**纯函数式：不改 base**）：
+  //   execToolCount 单调累加；lastAssign 缺位时增量无落点（与既有 bump 语义一致：只计 execToolCount）。
+  function mergeExecPending(base, pend) {
+    const next = { ...base };
+    if (!pend) return next;
+    next.execToolCount = (base.execToolCount ?? 0) + pend.count;
+    if (next.lastAssign) {
+      next.lastAssign = { ...next.lastAssign, execCallsSince: (next.lastAssign.execCallsSince ?? 0) + pend.callsSince };
+    }
+    return next;
+  }
+  // 纯磁盘读（P2 拆分：原 `readGovernance` 逐字保留，仅更名）——不含未落盘增量
+  function readGovernanceDisk(sessionId) {
     const file = governanceFile(sessionId);
     if (!fs.existsSync(file)) return govDefaults();
     try { return { ...govDefaults(), ...JSON.parse(fs.readFileSync(file, 'utf8')) }; }
     catch { return govDefaults(); }
   }
-  // 原子写：读当前（或默认）→ 合并 patch → 落盘
+  // 无文件/损坏 → 返回默认（调用方无需判空）；**读取侧 = 磁盘 + 未落盘增量**（对外读数严格不减）
+  function readGovernance(sessionId) {
+    const disk = readGovernanceDisk(sessionId);
+    const key = govKeyOf(sessionId);
+    // 顺带刷新快照：guard 每次执行型调用先读治理态 ⇒ `bumpExecCount` 免二次读盘。
+    //   快照只经本函数的合并拷贝对外（`mergeExecPending` 必拷贝），不存在共享可变引用。
+    govSnapshot.set(key, disk);
+    return mergeExecPending(disk, govPending.get(key));
+  }
+  // 原子写：读当前（磁盘 + 未落盘增量）→ 合并 patch → 落盘。
+  //   【P2】落盘即**冲刷**该会话未落盘增量（值已进磁盘 ⇒ 清增量），故任何治理写入都不丢计数。
   function writeGovernance(sessionId, patch) {
+    const key = govKeyOf(sessionId);
     const next = { ...readGovernance(sessionId), ...patch };
     atomicWrite(governanceFile(sessionId), next);
+    govPending.delete(key);
+    govFlushers.delete(key);
+    govSnapshot.set(key, next);
     return next;
+  }
+  // 单会话冲刷：**真读盘**（读-改-写，保留他方写入）→ 原子写（`tmp + rename`，沿用既有 atomicWrite）→ 清增量。
+  //   返回是否实际落盘（无增量 = no-op，零写盘）。
+  function flushExecCount(sessionId) {
+    const key = govKeyOf(sessionId);
+    const pend = govPending.get(key);
+    if (!pend) return false;
+    const next = mergeExecPending(readGovernanceDisk(sessionId), pend);
+    atomicWrite(governanceFile(sessionId), next);
+    govPending.delete(key);
+    govFlushers.delete(key);
+    govSnapshot.set(key, next);
+    return true;
+  }
+  // 快照播种（缺快照时的唯一一次读盘：每会话首触 +1 次读）
+  function seedExecSnapshot(sessionId, key) {
+    const disk = readGovernanceDisk(sessionId);
+    govSnapshot.set(key, disk);
+    return disk;
   }
   // 执行型工具调用计数（**纯观察面**）：execToolCount 累计 + lastAssign.execCallsSince 递增。
   // 【2026-09-16 用户裁决】这两项**仅作提示/观察**，**不作为升档或评估过期依据**——
   //   难度档位依据已彻底改写为「每回合主动写入的 difficulty + 判据」（见 lib/tools/core.js 门禁 1）。
+  // 【P2（2026-10-03）节流】改为**内存累加 + 阈值/定时落盘**：
+  //   每次调用零写盘（合并读亦可走快照 ⇒ 多数情形零读盘），每 N 次或距首次未落盘 ≥ T ms 才落盘一次；
+  //   返回值 = 合并后真实值（快照 + 当前增量）⇒ 既有调用点与测试读到的数值语义**逐字不变**。
   function bumpExecCount(sessionId) {
-    const g = readGovernance(sessionId);
-    g.execToolCount = (g.execToolCount ?? 0) + 1;
-    if (g.lastAssign) g.lastAssign.execCallsSince = (g.lastAssign.execCallsSince ?? 0) + 1;
-    atomicWrite(governanceFile(sessionId), g);
-    return g;
+    const key = govKeyOf(sessionId);
+    let pend = govPending.get(key);
+    if (!pend) { pend = { count: 0, callsSince: 0, since: Date.now() }; govPending.set(key, pend); }
+    pend.count += 1;
+    pend.callsSince += 1;
+    if (!govFlushers.has(key)) govFlushers.set(key, () => { flushExecCount(sessionId); });
+    bindExecFlushHooks();
+    if (pend.count >= EXEC_FLUSH_EVERY || Date.now() - pend.since >= EXEC_FLUSH_INTERVAL_MS) {
+      flushExecCount(sessionId); // 阈值/定时到达 → 落盘一次（此后快照即已落盘态）
+    }
+    const base = govSnapshot.get(key) ?? seedExecSnapshot(sessionId, key);
+    return mergeExecPending(base, govPending.get(key));
   }
   // 评估过期判定：从未评估 / 距 lastAssign.at ≥ maxAgeMs(30min) / 时间戳非法。
   // 原 `execCallsSince ≥ maxCalls(20)` 判据**已移除**：难度档位依据已彻底改写，
