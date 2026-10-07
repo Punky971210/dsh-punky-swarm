@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   注：`batch_phase` / `batch_control`（两处 `setPhase(` 写点）**留在 core.js** —— 源码锁 `test/phase-reason.test.js`
 //   PR-8 硬编码文件面 `lib/tools/core.js` 且要求「须至少一处 setPhase 调用点」，测试不得修改 ⇒ 该两件不迁出。
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, normalizeChannelDecl, handoffGateEnabledOf } from '../wave-plan.js';
+import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, normalizeChannelDecl, handoffGateEnabledOf, consumeDepsAsymmetryOf } from '../wave-plan.js';
 import { resolveAssembly } from '../assembly.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertMemberActionTierC, readLiveConfig, clearPendingBatch } from './tier-gate.js';
@@ -50,7 +50,7 @@ export function buildWavePlanTools(cx) {
       name: "wave_plan",      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（wavePlan 固定语义，绝不在中途重算）。Tier3：任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验；team 装配按 role 注入 skill 前缀（可插拔，不绑定 punky-preset）。【2026-09-27 用户裁决 · `team` 降为**可选标签**；同批（批 3）**资产读端已全量退役**】`team` = **纯归类字段**：不解析、不校验、不拒建批；**不参与**装配 / skill 前缀 / flows / roles 任何解析（工具面**零团队资产查找**）。【2026-09-25 订正 · recommend 语义】资产 `skills` 的**可解析性已不再拒建批**（用户裁决：「技能、工具进任务包是 recommend 式，不是装配式」）：**技能可解析性已完全不参与建批判定**（用户裁决 2026-09-26：技能 recommend 不再设门禁）——技能名解析不到 ⇒ **建批照常落盘、无告警**。**含 audit 层的三层批**建批必须携带批次级装配声明 assembly：{ managerPlan?: 'raise'|'leader-direct'（**缺省 raise**）, auditLane: '<audit lane id>', coordinatorLane?, roles? }——缺失/结构非法/悬空 lane id 拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）。**缺省即 raise**（建批即拉起 Manager 代管调度轮；收口按声明核验，未登记 Manager 的在册缺口由建批期 `gate.manager_roster_gap` 留痕（收口告警已删））；确需 Leader 直驱时显式写 leader-direct。批次绑定当前会话。产物落盘契约：引擎产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对路径均解析到该根下（worker 落盘按此根，勿落工作区根）。【装配门作用域｜当前态】assembly 门**只在工具面（本工具）生效**：**直调 `buildWavePlan` 不走本门**（不抛 GATE_ROLE_ASSEMBLY_MISSING）——这是**已登记的有意差异**，登记于 `plan/techdebt-design.md §3`（决策 D-③；反例判据 R-DE-1/R-DE-2/R-DE-3/R-DE-4）。【当前态｜W-2 批将移除本句：Q6=A 已裁「门下沉到 buildWavePlan 本体」，届时本句作废，直调亦受同一门约束】【2026-09-27 批 3】`chain` 声明面与回显面**全量退役**（D-4 删净：`batch_status.chain` 与建批期链静态校验探针同批删除）；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`，本工具不重算拓扑。",
       parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID（kebab-case）"},"tasks":{"type":"array","required":true,"description":"任务列表 [{id, cmd, deps?, model?, tools?, layer?, role?, skills?, consume?, produce?, outputs?}]","items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","description":"并发**声明**（默认 5）；**已不参与运行期准入**（Q-B 取消并发闸，2026-09-18）：不再有超限拒绝与排队，字段仅落盘声明 + 回显（面板数字照显、`batch_status.concurrency` 照回）"},"smoke":{"type":"boolean","description":"**冒烟/探针批豁免键**（gate-lite Q-G1 · 2026-09-17 用户裁决「开显式豁免键」）：显式 `true` ⇒ 本批为 smoke ⇒ **跳过产物契约类门**（建批 GATE_PLAN_PRESENCE_MISSING / GATE_ORPHAN_PRODUCT；运行期 entry consume、exit produce∪outputs、targets、complete 的 plan 悬空产物判定），**行为安全门一字不减**（派发准入：lane 存在性 + Manager 拉起；单写者锁；终态冻结 GATE_BATCH_TERMINAL；needHuman；命令门；验收判据门）。建批成功即落 `batch.smoke` 事件（留痕）+ `batch_status.smoke` 回显（读端可见）。缺省（不传）⇒ 既有行为逐字不变。"},"team":{"type":"string","description":"**可选自由标签**（纯归类字段）：不传 / 空白 ⇒ 无标签（`null`），批次照常落盘。**不解析、不校验、不拒建批**：不参与装配 / skill 前缀 / flows / roles 任何解析（团队资产面已于 2026-09-27 批 3 全量退役）。"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"},"channel":{"type":"string","description":"批级通道归属声明（**可选**；R-5）。合法值 `dispatch`=引擎自派 worker（禁 lane 写 roster）｜`team`=官方 Team 席位（**每条** lane 必须写 roster）｜`mixed`=两者并存（**至少一条** lane 写 roster）。**本参数不写 `enum`**：合法值集合的**单点判定** = `lib/wave-plan.js#normalizeChannelDecl`（非法枚举拒 GATE_CHANNEL_INVALID、与 lane roster 分布矛盾拒 GATE_CHANNEL_UNRESOLVED），在 createBatch 之前 throw ⇒ 零批次 JSON 落盘；参数层再写 enum 会在工具面抢先拒、使 GATE_CHANNEL_INVALID 在工具面**不可达**（双重判定，与「单点判定」纪律相悖）。通过 ⇒ 落盘批次顶层 `channel`（通道归属唯一事实源）；缺省（不传）⇒ **不写键**，存量行为逐字不变。"},"assembly":{"type":"object","additionalProperties":false,"description":"批次级装配声明（可选顶层参数，与 batchId/tasks 平级）：**含 audit 层的三层批**必填（2026-09-14 扩面，原为「exec 层 lane≥3」）——managerPlan 编排牵头形态（**缺省 = raise**：建批即拉起 Manager 代管调度；leader-direct：Leader 直驱，须显式写出以退出默认）+ auditLane 验收归属 lane id；coordinatorLane/roles 可选；缺失/结构/引用非法拒建批（GATE_ROLE_ASSEMBLY_MISSING / GATE_ASSEMBLY_INVALID），roles 词法非法告警（GATE_ROLE_INVALID）","properties":{"managerPlan":{"type":"string","enum":["raise","leader-direct"],"description":"编排牵头形态（**缺省 = raise**）：raise=建批即拉起 Manager 代管调度（可省略）；leader-direct=Leader 直管派发（须显式写出）"},"auditLane":{"type":"string","required":true,"description":"验收归属 lane id：本批承担最终验收的 lane（须为 audit 层 lane 且存在于 tasks；层错配/悬空 → 拒建批 GATE_ASSEMBLY_INVALID）"},"coordinatorLane":{"type":"string","description":"可选：协调/细拆 lane id（须为 plan 层 lane 且存在于 tasks；声明后承担 CBM 代码摸底→细拆履职）；缺省无"},"roles":{"type":"array","items":{"type":"string"},"description":"可选：本批声明参与的角色集（词法白名单校验；非法词条 → GATE_ROLE_INVALID 告警，批次照建）"}}}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true},"warnings":{"type":"array","items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"managerPlan":{"type":"string"},"managerRoster":{"type":"object","additionalProperties":true}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"wavePlan":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"concurrency":{"type":"integer","required":true},"lanes":{"type":"object","required":true,"additionalProperties":true},"warnings":{"type":"array","items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"managerPlan":{"type":"string"},"managerRoster":{"type":"object","additionalProperties":true},"consumeDepsAsymmetry":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
         render: (_args, value) => TEXT_OUTPUT('wavePlan created: ' + value.batchId + ' @' + value.sessionId + ' (' + value.wavePlan.length + ' waves)' + (value.smoke ? '; SMOKE (产物契约类门已豁免)' : '') + (value.warnings?.length ? '; role warnings: ' + value.warnings.length : '')),
       },
       async execute(args, exec) {
@@ -123,6 +123,21 @@ export function buildWavePlanTools(cx) {
         //   不在本批写域，且事件流本就是批次级留痕的既有载体，与 `laneStartedAt`/`gateStrengthOf` 同法读取）。
         //   零静默：跳过什么、保留什么见 event-types.js 常量处的语义边界声明。
         if (smoke) store.appendEvent(sessionId, plan.batchId, EVT.EVT_BATCH_SMOKE, { batchId: plan.batchId });
+        // `consume` × `deps` 不对称 · **非拒观察面**（2026-10-04 · 批 `consume-deps-guard-20261004`）：
+        //   域 B = 来源 lane 为 `plan` 层 ∧ 消费方非 audit 层且缺边 ⇒ **不拒建批**，只落非拒事件 `gate.consume_deps_asymmetry`
+        //   （逐三元组一条）+ 返回值回显 `consumeDepsAsymmetry`，把静默不对称变成可见。
+        //   判定**不在本行**：`consumeDepsAsymmetryOf` 是 `lib/wave-plan.ts` 内**单点判定**的唯一实现，
+        //   本处只取 `domain === 'observed'` 分支消费（强制域 `forced` 分支已在 `buildWavePlan` 内拒建批 ⇒ 到不了本行）。
+        //   `smoke: true` 批**不落**：本门属产物契约类，与 `checkPlanPresenceContract` / `checkHandoffDeclarations` 同键豁免
+        //   （行为安全门一字不减：派发准入 / 单写者锁 / 终态冻结 / needHuman / 命令门 / 验收判据门均不受本键影响）。
+        const observedAsymmetry = smoke
+          ? []
+          : consumeDepsAsymmetryOf(plan.wavePlan.flatMap((w) => w.tasks)).filter((r) => r.domain === 'observed');
+        for (const r of observedAsymmetry) {
+          store.appendEvent(sessionId, plan.batchId, EVT.EVT_GATE_CONSUME_DEPS_ASYMMETRY, {
+            lane: r.lane, from: r.from, artifact: r.artifact,
+          });
+        }
         // role 校验告警留痕（`GATE_ROLE_INVALID` / `assembly.roles` 词法告警等，**按码映射**见 `WARN_EVENT_OF`；
         //   warning 语义：事件留痕、不阻断建批；Leader 经返回值 warnings 可见）
         //   【2026-09-28 · 批 `cleanup-tail-20260927` E-5 订正】原按码枚举式措辞已改为**按码映射的通用表述**
@@ -150,7 +165,10 @@ export function buildWavePlanTools(cx) {
           ctx.logger?.warn?.('[dsh-punky-swarm] managerPlan=raise 但宿主团队服务不可用（agentTeams 缺失）'
             + ' ⇒ 无法核验 Manager 在册；已回显 managerRoster，不落批次事件（服务面齐备后本警告不再出现）');
         }
-        const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [], ...(smoke ? { smoke: true } : {}), ...(managerPlan ? { managerPlan, managerRoster } : {}) };
+        // 回显键 `consumeDepsAsymmetry`（**闭集 output.schema 已登记 properties**，未登记键会被剥掉）：
+        //   逐条 `{ lane, from, artifact }`（R-4 契约形态，不带内部分域字段）；仅非空时写键
+        //   （与 `smoke` / `assembly` 既有条件键同风格：未命中的批零键、读端零感知）。
+        const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [], ...(smoke ? { smoke: true } : {}), ...(managerPlan ? { managerPlan, managerRoster } : {}), ...(observedAsymmetry.length ? { consumeDepsAsymmetry: observedAsymmetry.map((r) => ({ lane: r.lane, from: r.from, artifact: r.artifact })) } : {}) };
         if (asm.decl) out.assembly = asm.decl; // 归一化装配声明视图（closed output.schema 已扩 properties；未声明不写键）
         return out;
       },

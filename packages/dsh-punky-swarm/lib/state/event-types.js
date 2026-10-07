@@ -300,3 +300,18 @@ export const EVT_PLAN_MUTATED = 'plan.mutated';
 //   ——本常量是**事件码**，不是 GATE 码。写端 = `lib/sig-fingerprint.js#recordSigDuplicate`
 //   （唯一写路径，由 `lib/state/store.js` 的 `setMember` 消费点调用；去重键记 `sigDuplicateLogged`）。
 export const EVT_SIG_DUPLICATE_DETECTED = 'sig.duplicate_detected';
+
+// ── 建批期 `consume` × `deps` 不对称 · **非拒观察面**（2026-10-04 · 批 `consume-deps-guard-20261004`）──────
+// 语义：某 lane 的 `consume` 引用了**本批他 lane** 声明的产物（`produce ∪ outputs`，**精确字符串相等**），
+//   而其 `deps` 未声明该 lane 的边；且该来源 lane **是 `plan` 层**、消费方 **非 audit 层**（**域 B**）⇒
+//   **不拒建批**，只落本事件把静默不对称变成可见（逐三元组一条）。
+// 分工（与同批拒态的关系，**写死**）：来源 lane **非 `plan` 层**（域 A audit 面 ∪ 域 C 同层链）时**不落本事件**，
+//   由建批期硬门拒 `GATE_CONSUME_DEPS_ASYMMETRY`（单点判定 = `lib/wave-plan.ts#validateLayerContract`）；
+//   来源 `plan` 层 ∧ 消费方 `audit` 层（静默豁免：audit 消费 plan 判据源属**批级**不变量）⇒ 不拒、不落事件。
+// 载荷契约：`{ lane, from, artifact }`——下游 lane / 上游声明 lane / 被消费产物声明原文。
+//   `type` 键承载事件名，载荷字段**不得**占用它（同既有约定）。
+// 纪律：**非拒态**——不改任何判定（判定已在建批期完成）、不改任何 exit code、不改成员态、不新增成员态、
+//   不阻断动作；本常量是**事件码**，不是 GATE 码（拒码面另有 `GateErrorCode` 登记）。
+// 写端 = `lib/tools/wave-plan-tools.js`（建批成功后；`smoke: true` 批**不落**，与产物契约类门同键豁免）；
+//   读端 = `log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效）。
+export const EVT_GATE_CONSUME_DEPS_ASYMMETRY = 'gate.consume_deps_asymmetry';

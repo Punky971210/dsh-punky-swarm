@@ -64,6 +64,19 @@ export declare const RESUME_CLAUSE = "\u82E5\u672C lane \u5B58\u5728 checkpoint\
 export declare function resumeClauseFor(task: WavePlanTask | null): string | null;
 /** 任务声明面并集（`produce ∪ outputs`，**保留声明原文**，去重保序）。 */
 export declare function declaredArtifactsOf(t: WaveTask): string[];
+/** `consume` × `deps` 缺边行（**唯一判定产物**，`domain` 即分域结论）。 */
+export interface ConsumeDepsAsymmetryRow {
+    /** 下游 lane（持有 `consume` 的消费方） */
+    lane: string;
+    /** 上游 lane（以 `produce ∪ outputs` 声明了被消费产物、却不在 `lane.deps` 内） */
+    from: string;
+    /** 被消费的产物声明原文（精确字符串） */
+    artifact: string;
+    /** `forced` = 强制域（上游非 `plan` ⇒ 缺边即拒）｜`observed` = 观察面（上游 `plan` 且下游非 audit ⇒ 非拒留痕） */
+    domain: 'forced' | 'observed';
+}
+/** 逐 lane 逐 `consume` 项求缺边并按域分流（**单点判定**，口径见上方注释块）。 */
+export declare function consumeDepsAsymmetryOf(tasks: WaveTask[]): ConsumeDepsAsymmetryRow[];
 export declare function assembleCmd(role: string | null, skills: string[] | null | undefined, cmd: string): string;
 /** 引擎注入前缀剥离（`assembleCmd` 的**幂等性**助手）：把 `cmd` **开头**连续出现的、且
  *  **与本次装配值逐字相等**的 `[role=…]` / `[skills=…]` 段剥掉，返回剩余原文。

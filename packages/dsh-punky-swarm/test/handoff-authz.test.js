@@ -57,7 +57,7 @@ function tasks({ rosterOf = {} } = {}) {
     withRoster('p1', { id: 'p1', layer: 'plan', role: ROLE.designer, produce: ['plan/spec.md'], cmd: 'plan-it' }),
     withRoster('e1', { id: 'e1', layer: 'exec', role: ROLE.coder, consume: ['plan/spec.md'], outputs: ['exec/e1.md'], deps: ['p1'], cmd: 'build-it' }),
     withRoster('e2', { id: 'e2', layer: 'exec', role: ROLE.coder, consume: ['exec/e1.md'], outputs: ['exec/e2.md'], deps: ['e1'], cmd: 'build-more' }),
-    withRoster('a1', { id: 'a1', layer: 'audit', role: ROLE.reviewer, consume: ['plan/spec.md', 'exec/e1.md', 'exec/e2.md'], produce: ['audit/a1.md'], deps: ['e2'], cmd: 'verify-it' }),
+    withRoster('a1', { id: 'a1', layer: 'audit', role: ROLE.reviewer, consume: ['plan/spec.md', 'exec/e1.md', 'exec/e2.md'], produce: ['audit/a1.md'], deps: ['e1', 'e2'], cmd: 'verify-it' }),
   ];
 }
 

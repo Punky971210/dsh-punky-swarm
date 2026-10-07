@@ -99,7 +99,7 @@
     "test/assembly-gate-extra.test.js": {
       "asserts": 8,
       "blankLines": 12,
-      "lines": 104,
+      "lines": 106,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -107,7 +107,7 @@
     "test/assembly-gate.test.js": {
       "asserts": 92,
       "blankLines": 39,
-      "lines": 359,
+      "lines": 363,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -264,6 +264,14 @@
       "tests": 3,
       "todos": 0
     },
+    "test/consume-deps-asymmetry-gate.test.js": {
+      "asserts": 60,
+      "blankLines": 26,
+      "lines": 311,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
     "test/contract-missing-first-touch.test.js": {
       "asserts": 47,
       "blankLines": 33,
@@ -321,11 +329,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 93,
-      "blankLines": 27,
-      "lines": 396,
+      "asserts": 132,
+      "blankLines": 36,
+      "lines": 514,
       "tautologies": 0,
-      "tests": 20,
+      "tests": 28,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -347,7 +355,7 @@
     "test/fixture-team-ledger.test.js": {
       "asserts": 10,
       "blankLines": 23,
-      "lines": 210,
+      "lines": 213,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1201,7 +1209,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-09-29T18:29:38Z",
+  "generatedAt": "2026-10-07T12:09:46Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1212,15 +1220,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "debt-cleanup-20260930：发货面双侧同删致 test/assets.test.js 夹具随表同删",
+  "reason": "role-injection-refactor-20261006：e02-inject 新增 8 用例（test/engine-dispatch.test.js tests+8/asserts+39/lines+118）致 test 树词法计数上升；baselines 单写者=Leader（§15③），时点合规（A 批 exec 全收口，§15④）；含 e03-guidance 改指引面（presets 两件 + cordis.patch.yml）与 e01-roles-kb 改 7 件 role 文件，均不改 test 树词法计数",
   "schema": 1,
   "totals": {
-    "asserts": 7501,
-    "blankLines": 3792,
-    "files": 150,
-    "lines": 40847,
+    "asserts": 7600,
+    "blankLines": 3827,
+    "files": 151,
+    "lines": 41285,
     "tautologies": 0,
-    "tests": 1578,
+    "tests": 1598,
     "todos": 4
   }
 }

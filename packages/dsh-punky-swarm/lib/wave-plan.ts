@@ -575,6 +575,74 @@ function checkPlanPresenceContract(tasks: WaveTask[]): void {
   }
 }
 
+// ── 建批期 `consume` × `deps` 不对称护栏（2026-10-04 · 批 `consume-deps-guard-20261004`）────────────
+// 依据：判据源 `plan/consume-deps-spec.md` ＋ `docs/consume-deps-asymmetry-gap-2026-10-04.md`
+//   （GAP-CONSUME-DEPS-2026-10-04：`consume` 引用他 lane 产物而 `deps` 未声明边 ⇒ 上游一结算该边**永久不可补**
+//   ——`task_update` 加边要求上游未结算、且不提供删边）。
+// 为什么分域（本门的存在理由）：`consume` = 产物**在场**、`deps` = **等待交接**是两种关系（`plan-mutate.js`
+//   的拒态文案自认该分叉）⇒ 只在**真实等待语义**的面强制对齐：audit 面（域 A）＋ 同层链（域 C）；
+//   `exec/plan` 消费 `plan` 产物维持「在场性」语义（域 B，只观察不拒）。
+// 判定口径（逐 lane 逐 `consume` 项；**精确字符串相等**，与 `orphanPlanProductsOf` 同口径，
+//   **不做** glob／目录语义／归一化）：`declaredArtifactsOf(T) = produce ∪ outputs`（去重保序）；
+//   对每条 lane `L` 的每个 `c ∈ L.consume`：`S(c) = { T | T.id ≠ L.id ∧ c ∈ declaredArtifactsOf(T) }`；
+//   缺边集合 = `{ (T, c) | T ∈ S(c) ∧ T.id ∉ L.deps }`。分流（按**声明方** `T` 的层）：
+//     · `T.layer !== 'plan'` ⇒ **强制域**（域 A audit 面 ∪ 域 C 同层链）⇒ 拒建批（新拒码，登记见
+//       `lib/types/contracts.ts` 的 `GateErrorCode` 与下方 `checkConsumeDepsSymmetry` 的唯一 throw）；
+//     · `T.layer === 'plan'` ∧ `L.layer !== 'audit'` ⇒ **观察面**（域 B）⇒ 非拒，落 `gate.consume_deps_asymmetry`；
+//     · `T.layer === 'plan'` ∧ `L.layer === 'audit'` ⇒ **静默豁免**（audit 消费 plan 判据源属**批级**不变量，
+//       见本文件 `GATE_AUDIT_INPUT_MISSING` 段注释与 `references/discipline.md#§12`）——不拒、不落事件。
+// 单点判定（R-1，硬）：缺边的**发现与分域**只在本段实现一处；`validateLayerContract` 取 `forced` 分支抛、
+//   工具面取 `observed` 分支落事件——两处消费**同一份**判定结论，**无第二实现**。
+// 开销（N-2）：建批期一次性 `O(Σ|consume| × |tasks|)`（与 `orphanPlanProductsOf` 同量级），不进任何运行期热路。
+
+/** `consume` × `deps` 缺边行（**唯一判定产物**，`domain` 即分域结论）。 */
+export interface ConsumeDepsAsymmetryRow {
+  /** 下游 lane（持有 `consume` 的消费方） */
+  lane: string;
+  /** 上游 lane（以 `produce ∪ outputs` 声明了被消费产物、却不在 `lane.deps` 内） */
+  from: string;
+  /** 被消费的产物声明原文（精确字符串） */
+  artifact: string;
+  /** `forced` = 强制域（上游非 `plan` ⇒ 缺边即拒）｜`observed` = 观察面（上游 `plan` 且下游非 audit ⇒ 非拒留痕） */
+  domain: 'forced' | 'observed';
+}
+
+/** 逐 lane 逐 `consume` 项求缺边并按域分流（**单点判定**，口径见上方注释块）。 */
+export function consumeDepsAsymmetryOf(tasks: WaveTask[]): ConsumeDepsAsymmetryRow[] {
+  // 声明面索引：`artifact` → 声明它的 lane（`declaredArtifactsOf` 已去重 ⇒ 同一 lane 不会重复计一条缺口）
+  const declared = tasks.map((t) => ({
+    id: t.id,
+    layer: (t as WavePlanTask).layer ?? null,
+    artifacts: declaredArtifactsOf(t),
+  }));
+  const rows: ConsumeDepsAsymmetryRow[] = [];
+  for (const l of tasks) {
+    const lLayer = (l as WavePlanTask).layer ?? null;
+    const deps = new Set<string>(Array.isArray(l.deps) ? (l.deps as string[]) : []);
+    for (const c of (l.consume ?? []) as string[]) {
+      if (typeof c !== 'string' || c.trim().length === 0) continue;
+      for (const d of declared) {
+        if (d.id === l.id) continue;        // 自消费不构成边（不判，与「deps 不得自指」同族）
+        if (!d.artifacts.includes(c)) continue;
+        if (deps.has(d.id)) continue;       // 边已声明 ⇒ 无缺口
+        if (d.layer !== 'plan') rows.push({ lane: l.id, from: d.id, artifact: c, domain: 'forced' });
+        else if (lLayer !== 'audit') rows.push({ lane: l.id, from: d.id, artifact: c, domain: 'observed' });
+        // else：静默豁免（上游 plan ∧ 下游 audit）——不拒、不落事件
+      }
+    }
+  }
+  return rows;
+}
+
+/** 强制域（域 A ∪ 域 C）缺边 ⇒ **一次聚合拒建批**（新拒码，消息逐缺口回显；本文件内唯一 throw 点）。 */
+function checkConsumeDepsSymmetry(tasks: WaveTask[]): void {
+  const forced = consumeDepsAsymmetryOf(tasks).filter((r) => r.domain === 'forced');
+  if (forced.length === 0) return;
+  throw new Error('GATE_CONSUME_DEPS_ASYMMETRY: consume references product(s) of lane(s) not declared in deps'
+    + ' (audit face / same-tier chain require the edge) — '
+    + forced.map((r) => 'lane ' + r.lane + ' consumes ' + JSON.stringify(r.artifact) + ' of ' + r.from).join('; '));
+}
+
 // 三层契约静态校验（仅当任一 lane 声明 layer 时启用；generic 批次跳过）
 function validateLayerContract(tasks: WaveTask[], opts: { smoke?: boolean } = {}) {
   const plan = tasks.filter((t) => t.layer === 'plan');
@@ -659,7 +727,13 @@ function validateLayerContract(tasks: WaveTask[], opts: { smoke?: boolean } = {}
   //   「无产物契约地跑通一条通路」（单 lane、不声明产物）⇒ 硬拦即自相矛盾（本轮 Leader 实测两次被此两码拒）。
   //   边界（明示，防扩权）：只跳本段——本函数内其余拒因（有 exec 必有 audit / audit 判据锚定 / 路径契约 /
   //   skills 声明）与**行为安全门**（派发准入 lane 存在性、单写者锁、终态冻结 `GATE_BATCH_TERMINAL`）一字不动。
-  if (opts.smoke !== true) checkPlanPresenceContract(tasks);
+  //   【2026-10-04 · 批 `consume-deps-guard-20261004`】同分支**追加** `consume` × `deps` 不对称门
+  //   （`GATE_CONSUME_DEPS_ASYMMETRY`，域 A ∪ 域 C）。追加位置 = 本函数内**全部既有 throw 之后**（C-4：
+  //   既有拒因的触发优先级与消息逐字不变）；与 `checkPlanPresenceContract` **同键豁免**（同属产物契约类门）。
+  if (opts.smoke !== true) {
+    checkPlanPresenceContract(tasks);
+    checkConsumeDepsSymmetry(tasks);
+  }
 }
 
 // 引擎注入 cmd 前缀：按 role 契约 + 装配的 skill 能力，Leader 只写任务内容

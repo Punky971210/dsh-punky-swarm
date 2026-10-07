@@ -43,6 +43,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     —— 两方案共用黑板与门禁，**不共用会话语义**。
 //   · 依据：`docs/dispatch-one-shot-redesign-plan-2026-09-21.md` + 活体核
 //     `docs/dispatch-one-shot-verification-2026-09-21.md`（V-1/V-2/V-3 全过）。
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { issueLaneHandle, consumeLaneHandle, firstLineOf } from '../bridge/lane-handle.js';
 // 派发登记事件常量（原在 `lib/tools/core.js` 侧引用；派发核心抽出后由本模块写，故此处直引）
 // 【2026-09-18 · Q-B 取消并发闸】原同址直引的 `EVT_GATE_CONCURRENCY_BLOCKED` 已从本模块写端移除（唯一写点
@@ -72,6 +75,297 @@ export function labelOf(batchId, lane) {
   return LABEL_PREFIX + String(batchId) + ':' + String(lane);
 }
 
+// ── role 数据面（P2 · 批 `role-injection-refactor-20261006` / lane `e02-inject`）─────────────────
+// 三处注入（依据判据源 `plan/role-injection-spec.md` 的 R-3/R-4/R-5 ＋ 计划 §2.3/§2.4）：
+//   ① `composeWorkerPrompt()`：role 独占「## 你的职责 / ## 你被授权决定 / ## 交付要求」三段；
+//   ② `buildStartRequest().persona`：由 role 的 `title` + `mission` + 工作方式（正文 Persona 段）派生
+//      —— 同 role 跨批稳定；
+//   ③ `buildStartRequest().toolFilter.deny`：由 `tools.allow` **反推**，与冻结集 `SUITE_DENY_TOOLS` 合并。
+// **结构隔离代替优先级判定**（计划 §2.4）：Leader 的 `prompt` 只有一个落点
+//   `## 任务要点（Leader 补充）`，role 三段与「## 纪律」段 Leader **无位置可写** ⇒ 不存在覆盖问题；
+//   故本段**不含**任何「谁优先」的判定器（一处都不许有 —— 那是被明令否决的实现路径）。
+// **降级路径**（计划 §10.4 Q-5 = 乙→甲）：role **已声明但解析不到** ⇒ **拒派**（`GATE_ROLE_UNRESOLVED`），
+//   **不得**静默退回硬编码骨架（零静默，C-8）。**未声明 role**（`null` / `undefined` / 空串，如 generic
+//   lane）不是「查不到」⇒ 维持既有骨架形态（**零行为变化**）。
+// **单点真源**（N-1）：role 解析 + allow→deny 反推各只有一处实现（本段）；`lib/wave-plan.ts` 只做 role
+//   **归一化与合法集校验**（layer 缺省 + `GATE_ROLE_INVALID` 告警），不持有任何数据面解析。
+
+/** role 解析不到的**拒派码**（与「能力位前置 = 拒派」同口径；零静默）。 */
+export const ROLE_UNRESOLVED_CODE = 'GATE_ROLE_UNRESOLVED';
+
+/** 三段**裸标题**（行首逐字、**无后缀**）：写成 `## 你的职责（…）` 会让裸标题判据失配。 */
+export const ROLE_SECTION_TITLES = Object.freeze({
+  responsibilities: '## 你的职责',
+  authorities: '## 你被授权决定',
+  deliverables: '## 交付要求',
+});
+
+/** 六必填字段（计划 §3.2「缺一即拒」）。**只对文件解析面生效**：模块级直调传入的 role 对象不强制，
+ *  因为直调只构造需要的字段位（见判据源 L-AC-3/L-AC-4 的可达构造）。 */
+export const ROLE_MANDATORY_FIELDS = Object.freeze(['id', 'title', 'layer', 'mission', 'responsibilities', 'deliverables']);
+
+/** 默认团队（同 id 跨团队重名时的**团队序首位**）。依据 = 仓库既有约定
+ *  `test/helpers/skill-paths.mjs` 的 `withDefaultTeam(byName, team = 'software-team')`，非本段新造。 */
+const DEFAULT_ROLE_TEAM = 'software-team';
+const ROLE_DIR_SEGMENTS = ['references', 'roles'];
+
+/** 包根（`lib/engine/` → 包根）：role 语料库（`<包根>/skills/<team>/references/roles/`）的起点。 */
+export function roleCorpusRoot() {
+  return fileURLToPath(new URL('../../', import.meta.url));
+}
+
+/** 角色语料目录（**团队序**：默认团队优先，其余按目录名字典序）。目录不在场 ⇒ 该团队不参与解析。 */
+export function roleTeamDirs({ root = roleCorpusRoot(), fsImpl = fs } = {}) {
+  const skillsRoot = path.join(root, 'skills');
+  let names = [];
+  try {
+    names = fsImpl.readdirSync(skillsRoot, { withFileTypes: true })
+      .filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch { return []; }
+  const withRoles = names.filter((n) => {
+    try { return fsImpl.statSync(path.join(skillsRoot, n, ...ROLE_DIR_SEGMENTS)).isDirectory(); } catch { return false; }
+  });
+  const ordered = (withRoles.includes(DEFAULT_ROLE_TEAM) ? [DEFAULT_ROLE_TEAM] : [])
+    .concat(withRoles.filter((n) => n !== DEFAULT_ROLE_TEAM).sort());
+  return ordered.map((n) => path.join(skillsRoot, n, ...ROLE_DIR_SEGMENTS));
+}
+
+// ── YAML frontmatter 子集解析（**无第三方依赖**，只覆盖 role 语料的实际形态）──────────────────────
+// 覆盖面：顶层 `key: 标量` / `key: [a, b]` / `key:` + `  - 标量` / `key:` + `  - k: v`（含续行）
+//         / 嵌套映射（`tools:` + `  allow: […]`）。**不覆盖**多行块标量、锚点、注释块——语料内不存在。
+const KV_LINE = /^([A-Za-z_][A-Za-z0-9_-]*):(?:\s*(.*))?$/;
+
+function stripQuotes(raw) {
+  const s = String(raw ?? '').trim();
+  if (s.length >= 2 && ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+/** inline 列表 `[a, b]` → 数组（**引号内的逗号不算分隔符**）；非列表形态 ⇒ null。 */
+function inlineListOf(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s.startsWith('[') || !s.endsWith(']')) return null;
+  const out = [];
+  let cur = '';
+  let quote = null;
+  for (const ch of s.slice(1, -1)) {
+    if (quote) { if (ch === quote) quote = null; else cur += ch; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === ',') { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map(stripQuotes).filter((x) => x !== '');
+}
+
+function yamlScalar(raw) {
+  const t = String(raw ?? '').trim();
+  const list = inlineListOf(t);
+  if (list) return list;
+  if (t === 'true') return true;
+  if (t === 'false') return false;
+  return stripQuotes(t);
+}
+
+/** 块体解析：`- 标量` 列表 / `- k: v`（含续行）对象列表 / 映射。 */
+function yamlBlockOf(blockLines) {
+  if (blockLines.some((l) => /^\s*-\s/.test(l))) {
+    const items = [];
+    let cur = null;
+    for (const line of blockLines) {
+      const dash = /^\s*-\s*(.*)$/.exec(line);
+      if (dash) {
+        const kv = KV_LINE.exec(dash[1].trim());
+        cur = kv ? { map: { [kv[1]]: yamlScalar(kv[2]) } } : { scalar: yamlScalar(dash[1]) };
+        items.push(cur);
+        continue;
+      }
+      const kv = KV_LINE.exec(line.trim());
+      if (kv && cur?.map) cur.map[kv[1]] = yamlScalar(kv[2]);
+    }
+    return items.map((it) => (it.map ? it.map : it.scalar));
+  }
+  const map = {};
+  for (const line of blockLines) {
+    const kv = KV_LINE.exec(line.trim());
+    if (kv) map[kv[1]] = yamlScalar(kv[2]);
+  }
+  return map;
+}
+
+/** 解析 role 文件的 YAML frontmatter（`---` 围栏之间的顶层键）。无围栏 ⇒ null。 */
+export function parseRoleFrontmatter(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? ''));
+  if (!m) return null;
+  const lines = m[1].split(/\r?\n/);
+  const out = {};
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const kv = KV_LINE.exec(line);
+    if (!kv) continue;
+    const rest = kv[2];
+    if (rest !== undefined && rest.trim() !== '') { out[kv[1]] = yamlScalar(rest); continue; }
+    const block = [];
+    while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1])) block.push(lines[++i]);
+    out[kv[1]] = block.length ? yamlBlockOf(block) : '';
+  }
+  return out;
+}
+
+/** 正文段抽取（行首恰为 `## <heading>` 起、至下一个 `## ` 前）：取「工作方式」= `## Persona（注入用）`。 */
+function bodySectionOf(text, heading) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const at = lines.findIndex((l) => l.trim() === heading);
+  if (at < 0) return '';
+  const out = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) break;
+    if (lines[i].trim()) out.push(lines[i].trim());
+  }
+  return out.join(' ');
+}
+
+function missingMandatoryOf(fm) {
+  return ROLE_MANDATORY_FIELDS.filter((k) => {
+    const v = fm[k];
+    return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+  });
+}
+
+/** 文件文本 → role 数据对象（六必填缺一即抛 `GATE_ROLE_UNRESOLVED`）。 */
+function roleDataOfText(text, source) {
+  const fm = parseRoleFrontmatter(text);
+  if (!fm) throw new Error(ROLE_UNRESOLVED_CODE + ': 角色文件无可用 YAML frontmatter · ' + source);
+  const missing = missingMandatoryOf(fm);
+  if (missing.length) {
+    throw new Error(ROLE_UNRESOLVED_CODE + ': 角色 ' + String(fm.id ?? '(无 id)') + ' 缺六必填字段 '
+      + missing.join('/') + ' · ' + source);
+  }
+  return { ...fm, persona_text: bodySectionOf(text, '## Persona（注入用）'), source };
+}
+
+/**
+ * role 解析（**单点真源**）：
+ *   · 已是对象 ⇒ 原样直用（模块级直调 / 引擎内部已解析面）；对象缺字段**不**在此强制（直调只构造需要的位）；
+ *   · 非空字符串 ⇒ 按团队序在语料库内查 `<team>/references/roles/<id>.md`；零命中 ⇒ **抛 `GATE_ROLE_UNRESOLVED`**；
+ *     多命中（同 id 跨团队重名，如 `designer` / `coordinator`）⇒ 按团队序取首个并**留痕告警**（确定性 + 可复现）；
+ *   · `null` / `undefined` / 空串 ⇒ **null**（= 未声明，**不是**「查不到」）⇒ 调用方维持既有形态。
+ * @returns {object|null} role 数据对象
+ */
+export function resolveRoleRef(roleRef, { root = roleCorpusRoot(), team, fsImpl = fs, warn } = {}) {
+  if (roleRef && typeof roleRef === 'object') return roleRef;
+  const id = typeof roleRef === 'string' ? roleRef.trim() : '';
+  if (!id) return null;
+  const dirs = team
+    ? [path.join(root, 'skills', String(team), ...ROLE_DIR_SEGMENTS)]
+    : roleTeamDirs({ root, fsImpl });
+  const hits = [];
+  for (const dir of dirs) {
+    const file = path.join(dir, id + '.md');
+    try { if (fsImpl.statSync(file).isFile()) hits.push(file); } catch { /* 该团队无此 role */ }
+  }
+  if (!hits.length) {
+    throw new Error(ROLE_UNRESOLVED_CODE + ': role "' + id + '" 在 ' + dirs.length + ' 个角色目录内零命中'
+      + '（' + (team ? 'team=' + team : '团队序=' + dirs.join(' | ')) + '）'
+      + ' ⇒ 拒派（role 数据面缺失**不得**静默退回硬编码骨架）');
+  }
+  if (hits.length > 1) {
+    warn?.('[dsh-punky-swarm] role "' + id + '" 在 ' + hits.length + ' 个团队内重名 ⇒ 按团队序取首个：'
+      + hits[0] + '（其余：' + hits.slice(1).join(' · ') + '）');
+  }
+  return roleDataOfText(fsImpl.readFileSync(hits[0], 'utf8'), hits[0]);
+}
+
+function allowOfRole(roleData) {
+  const allow = roleData?.tools?.allow;
+  return Array.isArray(allow) ? allow.filter((t) => typeof t === 'string' && t.trim() !== '') : [];
+}
+
+/**
+ * 引擎 role 语料库的**工具词汇表** = 全部 role 文件 `tools.allow` 的并集（保序去重）。
+ * ⚠ 结构安全（**这是「反推全集」的选型理由，勿改回 `SUITE_TOOLS`**）：词汇表**只由 role 语料自身生成**
+ *   ⇒ 它**结构上不可能**含引擎治理面工具（`handoff_submit` / `swarm_report` / `lane_checkpoint` /
+ *   `batch_status` … 都不在任何 role 的 allow 内）⇒ 反推**不可能** deny 掉 worker 的回报/交接面。
+ *   若把全集取成 `SUITE_TOOLS`（37 件），反推会把上述治理面整体 deny ⇒ **worker 再也交不了接、回不了报**
+ *   （与任务包纪律「必须 `handoff_submit`」直接矛盾）—— 该路径已实测排除。
+ */
+export function roleToolVocabulary({ root = roleCorpusRoot(), fsImpl = fs, warn } = {}) {
+  const vocab = [];
+  for (const dir of roleTeamDirs({ root, fsImpl })) {
+    let files = [];
+    try { files = fsImpl.readdirSync(dir).filter((f) => f.endsWith('.md')).sort(); } catch { continue; }
+    for (const f of files) {
+      const full = path.join(dir, f);
+      try {
+        for (const t of allowOfRole(roleDataOfText(fsImpl.readFileSync(full, 'utf8'), full))) {
+          if (!vocab.includes(t)) vocab.push(t);
+        }
+      } catch (e) {
+        warn?.('[dsh-punky-swarm] role 语料解析跳过 ' + full + '：' + String(e?.message ?? e));
+      }
+    }
+  }
+  return vocab;
+}
+
+/** `tools.allow` **反推 deny**（R-5）：`词汇表 \ allow`。
+ *  未声明 / 空 `allow` ⇒ 返回 `[]`（**不反推**）—— 否则「无工具声明」会被反推成「全词汇表 deny」，
+ *  静默阉割 worker 的读写能力（零静默：宁可不禁，不许误禁）。 */
+export function deriveDenyTools(allow, opts = {}) {
+  const list = (Array.isArray(allow) ? allow : [])
+    .filter((t) => typeof t === 'string' && t.trim() !== '')
+    .map((t) => t.trim());
+  if (!list.length) return [];
+  return roleToolVocabulary(opts).filter((t) => !list.includes(t));
+}
+
+/** 人格级注入（R-4）：`title` + `mission` + 工作方式（role 正文 `## Persona（注入用）` 段）。 */
+export function personaOfRole(roleData) {
+  if (!roleData || typeof roleData !== 'object') return undefined;
+  const parts = [roleData.title, roleData.mission, roleData.persona_text]
+    .map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean);
+  return parts.length ? parts.join('；') : undefined;
+}
+
+function listOf(v) { return Array.isArray(v) ? v : []; }
+
+/** 任务级三段渲染（R-3）——**role 独占**：职责（含 mission）/ 授权 / 交付要求（`must_contain` + `acceptance_hints`）。 */
+function appendRoleSections(L, roleData) {
+  L.push('');
+  L.push(ROLE_SECTION_TITLES.responsibilities);
+  const mission = typeof roleData.mission === 'string' ? roleData.mission.trim() : '';
+  if (mission) L.push('- **使命**：' + mission);
+  for (const r of listOf(roleData.responsibilities)) L.push('- ' + r);
+  L.push('');
+  L.push(ROLE_SECTION_TITLES.authorities);
+  const authorities = listOf(roleData.authorities);
+  if (authorities.length) for (const a of authorities) L.push('- ' + a);
+  else L.push('- （role 未声明）');
+  L.push('');
+  L.push(ROLE_SECTION_TITLES.deliverables);
+  const deliverables = listOf(roleData.deliverables);
+  for (const d of deliverables) {
+    const rel = typeof d === 'string' ? d : String(d?.path ?? '');
+    const must = (d && typeof d === 'object' && Array.isArray(d.must_contain)) ? d.must_contain : [];
+    L.push('- 交付件：`' + rel + '`');
+    if (must.length) L.push('  - 必含结构：' + must.map((x) => '`' + x + '`').join(' / '));
+  }
+  const hints = listOf(roleData.acceptance_hints);
+  if (!deliverables.length && !hints.length) L.push('- （role 未声明）');
+  for (const h of hints) L.push('- 达标提示：' + h);
+}
+
+/** 头行「角色」格：`<裸 role 名>（<title>）` —— **保留裸名**（既有读端断言 `` `coder` `` 不破）＋ 补标题。 */
+function roleCellOf(roleRef, roleData) {
+  const bare = (typeof roleRef === 'string' && roleRef.trim())
+    ? roleRef.trim()
+    : String(roleData?.id ?? roleData?.title ?? '-');
+  return roleData?.title ? '`' + bare + '`（' + roleData.title + '）' : '`' + bare + '`';
+}
+
 /**
  * 成员任务包**骨架**（B1）：引擎侧给出「角色 / 目标 / 契约 / 产物 / 纪律」，Leader 的 `prompt` 作为任务要点追加。
  * 契约要点（与 discipline §0e 一致）：只给要素、不写实现；写盘走 edit/write；产物落批次产物根。
@@ -81,17 +375,24 @@ export function composeWorkerPrompt({
   // 【2026-09-27 · GR-13】「单件写盘 lane」显式声明位（缺省 `false` ⇒ 既有任务包逐字不变）。
   //   直调调用方可显式置 `true`；派发路径的**自动判定**见函数内 `singleArtifactWriteLane`。
   singleArtifactWrite = false,
+  // 【2026-10-07 · P2】role 语料定位位（缺省 = 包根 `skills/`）；直调与隔离测试可显式指定。
+  roleRoot, roleTeam,
 }) {
+  // role 解析（**单点真源**）：对象直用 / id 串查语料库（查不到 ⇒ 抛 `GATE_ROLE_UNRESOLVED`）/ 未声明 ⇒ null。
+  const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
   const L = [];
   L.push(firstLine); // 首行：句柄标记（唯一凭证；引擎只读 exec.arguments，不注入参数）
   L.push('');
   L.push('# 任务包（引擎自派 · ' + labelOf(batchId, lane) + '）');
-  L.push('- **lane**：`' + lane + '`｜**层**：`' + (layer ?? '-') + '`｜**角色**：`' + (role ?? '-') + '`');
+  L.push('- **lane**：`' + lane + '`｜**层**：`' + (layer ?? '-') + '`｜**角色**：' + roleCellOf(role, roleData));
   L.push('- **目标**：' + String(cmd ?? '（未声明 cmd）'));
   if (consume.length) L.push('- **消费件**：' + consume.map((p) => '`' + p + '`').join('、'));
   if (produce.length) L.push('- **产出面**：' + produce.map((p) => '`' + p + '`').join('、'));
   if (outputs.length) L.push('- **产物**：' + outputs.map((p) => '`' + p + '`').join('、'));
   if (artifactsRoot) L.push('- **批次产物根**：`' + artifactsRoot + '`（产物落此处，勿落工作区根）');
+  // 【2026-10-07 · P2】role 三段（**结构隔离**，计划 §2.4）：本段由 role 数据独占，Leader 的 `leaderPrompt`
+  //   只落在末尾的 `## 任务要点（Leader 补充）` ⇒ **结构上不存在覆盖关系**（无「谁优先」判定器）。
+  if (roleData) appendRoleSections(L, roleData);
   L.push('');
   L.push('## 纪律');
   // 【2026-09-27 · 规则编号动态化】原为**字面 1..6**（第 6 条按层裁剪）⇒ 新增规则会撞号。
@@ -156,15 +457,24 @@ export function composeWorkerPrompt({
  *  调用方可注入自有 signal 以显式支持取消。
  *  `label`（B3）由宿主快照进子会话 descriptor（`dsh-subagent/lib/index.js:3155-3159`）⇒ 重启后仍可核。 */
 export function buildStartRequest({
-  batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, maxDepth = 1, signal,
+  batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, role, roleRoot, roleTeam,
+  maxDepth = 1, signal,
 }) {
+  // 【2026-10-07 · P2】role 派生面（**单点真源**：与 `composeWorkerPrompt` 同一解析函数 `resolveRoleRef`）：
+  //   ② 人格级 `persona`（R-4）：调用方**显式给值优先**（缺省派生位），否则由 role 的
+  //      `title` + `mission` + 工作方式（正文 Persona 段）派生 —— 同 role 跨批稳定；
+  //   ③ 权限级 `toolFilter.deny`（R-5）：冻结集 `SUITE_DENY_TOOLS` ∪ **allow 反推集** ∪ 追加集，
+  //      **去重后保序**（冻结集逐项不缩水）。
+  const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
+  const effectivePersona = persona !== undefined ? persona : personaOfRole(roleData);
+  const derivedDeny = deriveDenyTools(roleData?.tools?.allow, { root: roleRoot ?? roleCorpusRoot() });
   return {
     label: labelOf(batchId, lane),
     signal: signal ?? new AbortController().signal,
     parent,
     prompt: [{ type: 'text', text: prompt }],
-    toolFilter: { deny: [...new Set([...denyTools, ...extraDeny])] },
-    ...(persona !== undefined ? { persona } : {}),
+    toolFilter: { deny: [...new Set([...denyTools, ...derivedDeny, ...extraDeny])] },
+    ...(effectivePersona !== undefined ? { persona: effectivePersona } : {}),
     maxDepth,
   };
 }
@@ -269,6 +579,22 @@ export function activeRunCount() {
 //                    workerSessionId?: string, spawnNote?: string}>}
 //   硬失败（spawn 抛错 / 取不到 worker 会话 id）**抛错**：错误文案自带回滚事实与恢复步骤。
 export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt }) {
+  // ⓿ 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
+  //   判据源 L-AC-5 ②「role 查不到 ⇒ 拒派」。若把解析留在 ④ 的任务包组装处，则 `setMember(running)` 已落、
+  //   句柄已发放 ⇒ 拒派会留下「lane=running、无 worker、句柄悬空」的僵尸态（正是本文件 B4 段登记过的坑）。
+  //   故此处先读 laneTask 并解析 role：解析失败 ⇒ 抛 `GATE_ROLE_UNRESOLVED`，**零状态变更、零句柄发放**。
+  //   ⚠ 任务包里的 `batch.wavePlan` 存的是 **wave 数组**（`[{wave, tasks:[…]}]`），旧写法读 `wavePlan.tasks`
+  //     恒取不到 ⇒ 任务包「目标」位退化成 `（未声明 cmd）`。此处拍平所有 wave 的 tasks（B1 活体教训）。
+  let laneTask = null;
+  try {
+    const wp = store.readBatch(sessionId, batchId)?.wavePlan ?? [];
+    const flat = Array.isArray(wp) ? wp.flatMap((w) => w?.tasks ?? []) : (wp.tasks ?? []);
+    laneTask = flat.find((t) => t && t.id === lane) ?? null;
+  } catch { laneTask = null; }
+  const roleData = resolveRoleRef(laneTask?.role, { warn: (m) => ctx?.logger?.warn?.(m) });
+  const artifactsRoot = root
+    ? String(root).replace(/[\\/]+$/, '') + '/sessions/' + sessionId + '/artifacts/' + batchId
+    : undefined;
   // ⓿ 【2026-09-18 · Q-B 取消并发闸】原「闸位单点」调用 `assertConcurrencyAdmit(...)` 已删 ⇒ 本函数
   //   **零容量判定**（高并发不得被限流；`batch.concurrency` 只作声明 + 回显）。删除面与理由见本文件
   //   「并发闸 · 退役登记」段。
@@ -306,21 +632,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     ctx?.logger?.warn?.('[dsh-punky-swarm] lane_dispatch: 未配置 config.dispatch.provider ⇒ 仅发句柄（不猜 provider）· lane=' + lane);
     return { ...base, spawned: false, spawnNote: '未配置 config.dispatch.provider ⇒ 仅发句柄（补配置后重派，或用 firstLine 直派）' };
   }
-  // ④ 任务包骨架：lane 契约 + 纪律 + 句柄首行（B2/B3 由 buildStartRequest 注入 toolFilter/label）
-  // ⚠ 活体实测（2026-09-16，批次 suite-live-20260916 首派成功后发现）：`batch.wavePlan` 存的是
-  //   **wave 数组**（`[{ wave, tasks:[…] }]`），旧写法读 `wavePlan.tasks` **恒取不到** ⇒ 任务包「目标」位
-  //   退化成 `（未声明 cmd）`。此处拍平所有 wave 的 tasks。
-  let laneTask = null;
-  try {
-    const wp = store.readBatch(sessionId, batchId)?.wavePlan ?? [];
-    const flat = Array.isArray(wp) ? wp.flatMap((w) => w?.tasks ?? []) : (wp.tasks ?? []);
-    laneTask = flat.find((t) => t && t.id === lane) ?? null;
-  } catch { laneTask = null; }
-  const artifactsRoot = root
-    ? String(root).replace(/[\\/]+$/, '') + '/sessions/' + sessionId + '/artifacts/' + batchId
-    : undefined;
+  // ④ 任务包骨架：lane 契约 + role 三段 + 纪律 + 句柄首行（B2/B3 由 buildStartRequest 注入 toolFilter/label）
+  // 【2026-10-07 · P2】`laneTask` / `artifactsRoot` 的读取已**上移**到 ⓿（role 拒派须先于状态变更）；
+  //   `role` 传**已解析的 role 对象**（非裸名）⇒ 三段注入生效，且「同 role 跨批稳定」。
   const prompt = composeWorkerPrompt({
-    batchId, lane, cmd: laneTask?.cmd, layer: laneTask?.layer, role: laneTask?.role,
+    batchId, lane, cmd: laneTask?.cmd, layer: laneTask?.layer, role: roleData,
     consume: laneTask?.consume ?? [], produce: laneTask?.produce ?? [], outputs: laneTask?.outputs ?? [],
     firstLine: h.firstLine, leaderPrompt, artifactsRoot,
     // 【2026-09-27 · GR-13】lane 声明位的**直读**（`buildWavePlan` 归一化面**未持久化**该字段 ⇒ 今日恒 `false`；
@@ -348,10 +664,12 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
       try {
         start = await rt.start(provider, buildStartRequest({
           batchId, lane, parent: exec.agent, prompt,
-          // denyTools/persona 同样读**热更快照**
+          // denyTools/persona 同样读**热更快照**；【2026-10-07 · P2】`role` 传已解析对象 ⇒
+          //   ② persona 由 role 派生（R-4：`title` + `mission` + 工作方式），③ deny 并入 allow 反推集（R-5）。
           denyTools: denyAll.filter((n) => !denyDropped.has(n)),
           extraDeny: [], // 已并入 denyAll（合并后再过滤，避免两路名单各有未知名时自愈失效）
           persona: liveConfig?.dispatch?.persona,
+          role: roleData,
         }));
         break;
       } catch (e) {

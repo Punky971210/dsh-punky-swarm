@@ -495,7 +495,17 @@ export type GateErrorCode =
   | 'GATE_ROSTER_INVALID'
   //   R-5 通道归属 · 2 码：枚举非法 与 一致性矛盾（单点判定 = `lib/wave-plan.ts#normalizeChannelDecl`）。
   | 'GATE_CHANNEL_INVALID'          // `channel` 非 `dispatch|team|mixed`（回显原值）
-  | 'GATE_CHANNEL_UNRESOLVED';      // 声明与 lane `roster` 分布自相矛盾（team 缺 roster／dispatch 带 roster／mixed 零 roster）
+  | 'GATE_CHANNEL_UNRESOLVED'      // 声明与 lane `roster` 分布自相矛盾（team 缺 roster／dispatch 带 roster／mixed 零 roster）
+  // ── 建批期 `consume` × `deps` 不对称（2026-10-04 · 批 `consume-deps-guard-20261004`）──────────────
+  //   本门 = 建批期（**单点判定** = `lib/wave-plan.ts#validateLayerContract`）：lane `L` 的某个 `consume` 项 `c`
+  //   被**他 lane** `T` 以 `produce ∪ outputs` 声明（**精确字符串相等**，与 `orphanPlanProductsOf` 同口径，
+  //   不做 glob／目录语义）、但 `T.id ∉ L.deps` ⇒ 分域处置：
+  //     · `T.layer !== 'plan'`（**强制域** = audit 面 ∪ 同层链）⇒ 抛本码（一次聚合抛，消息逐缺口回显，零批次落盘）；
+  //     · `T.layer === 'plan'` 且 `L.layer !== 'audit'`（**观察面**）⇒ **非拒**，落事件 `gate.consume_deps_asymmetry`
+  //       并在 `wave_plan` 返回值回显 `consumeDepsAsymmetry`；
+  //     · `T.layer === 'plan'` 且 `L.layer === 'audit'`（**静默豁免**：audit 消费 plan 判据源属**批级**不变量）。
+  //   与 `GATE_HANDOFF_MISSING` / `GATE_ORPHAN_PRODUCT` 同族（产物契约类）⇒ `smoke: true` 批同键豁免。
+  | 'GATE_CONSUME_DEPS_ASYMMETRY';
 
 
 /** 门禁通过：ok: true + 各门禁可选载荷 */

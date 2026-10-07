@@ -31,6 +31,8 @@ import {
 } from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
+// 【2026-10-07 · P2（批 role-injection-refactor-20261006 / lane e02-inject）】role 数据面注入面的读端。
+import { resolveRoleRef, deriveDenyTools, roleToolVocabulary, ROLE_SECTION_TITLES, ROLE_UNRESOLVED_CODE } from '../lib/engine/dispatch.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
 import { bindingGapOf } from '../lib/watch/lane-heartbeat.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
@@ -46,7 +48,7 @@ function mkCtx(runtime) {
   if (runtime) ctx.subagents = runtime;
   return ctx;
 }
-function seedBatch(root, sessionId, batchId, laneId = 'l1') {
+function seedBatch(root, sessionId, batchId, laneId = 'l1', laneRole = 'coder') {
   const store = createStore(root);
   // Tier3 entry 门：exec 层 lane 须声明 consume，且上游产物须落盘 ⇒ 夹具补 plan 产物
   const artRoot = path.join(root, 'sessions', sessionId, 'artifacts', batchId);
@@ -58,7 +60,7 @@ function seedBatch(root, sessionId, batchId, laneId = 'l1') {
       batchId,
       tasks: [
         { id: 'p1', cmd: 'plan 规格（夹具）', layer: 'plan', role: 'coordinator', produce: ['plan/spec.md'], outputs: ['plan/spec.md'] },
-        { id: laneId, cmd: '实现 X', layer: 'exec', role: 'coder', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/' + laneId + '/outputs/x.md'] },
+        { id: laneId, cmd: '实现 X', layer: 'exec', role: laneRole, deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/' + laneId + '/outputs/x.md'] },
         { id: 'a-' + laneId, cmd: '按验收标准逐条核对', layer: 'audit', role: 'supervisor', deps: [laneId], consume: ['plan/spec.md'] },
       ],
     }),
@@ -391,5 +393,121 @@ test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISP
   await assert.rejects(() => ld.execute({ batchId: 'b-ed4', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }), /GATE_DISPATCH_CAPABILITY_MISSING/);
   // 失败不得落登记（不留「幽灵绑定」）
   assert.equal(store.readBatch('sess-c', 'b-ed4').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0);
+  __resetLaneHandles();
+});
+
+// ── 【2026-10-07 · P2（批 `role-injection-refactor-20261006` / lane `e02-inject`）】role 数据面三处注入 ──
+// 判据源 = `plan/role-injection-spec.md`：R-3（任务级三段）/ R-4（persona）/ R-5（allow 反推 deny），
+// 对应验收项 **L-AC-3 / L-AC-4 / L-AC-5**；`L-AC-12 / L-AC-13` 为批级共用项（本节给 lane 侧自证面）。
+// ⚠ 全部断言为**可达构造**（行为缺失即变红，禁空转，纪律 §15⑤）：裸标题逐行比对 / 集合包含 / 逐字 substring / 抛错码面。
+const ROLE_FIXTURE = {
+  title: 'T', mission: 'M', responsibilities: ['r1', 'r2'], authorities: ['a1'],
+  deliverables: [{ path: 'p', must_contain: ['## 来源分级'] }], acceptance_hints: ['h1'],
+  tools: { allow: ['read', 'write'], deny_derived: true },
+};
+const ROLE_IDS = ['coder', 'coordinator', 'designer', 'doc-manager', 'reviewer', 'supervisor', 'tester',
+  'research-planner', 'researcher', 'research-auditor'];
+// 「引擎治理面」= worker 必备的回报 / 交接 / 检查点 / 状态读面（deny 掉任一件即功能自毁）。
+const GOVERNANCE_FACES = [...SUITE_DENY_TOOLS, 'handoff_submit', 'handoff_view', 'swarm_report', 'swarm_cc',
+  'lane_checkpoint', 'lane_checkpoint_status', 'batch_status', 'gate_status', 'artifact_types', 'asset_claim',
+  'task_pool', 'log_export', 'mailbox_read', 'mailbox_ack', 'mailbox_send', 'send_message'];
+
+test('RO-1 L-AC-3：role 驱动任务级三段（裸标题行各 ≥1 ＋ 逐条命中 ＋ 结构隔离）', () => {
+  const p = composeWorkerPrompt({
+    batchId: 'b-ro', lane: 'l1', cmd: 'c', layer: 'exec', role: ROLE_FIXTURE,
+    firstLine: '[swarm-lane:b-ro/l1#0123456789abcdef]', leaderPrompt: 'LEADER-ONLY-TEXT', artifactsRoot: 'R:/x',
+  });
+  const lines = p.split('\n');
+  for (const t of [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables]) {
+    assert.equal(lines.filter((l) => l === t).length, 1, '裸标题行须**行首逐字**存在（不得带后缀）：' + t);
+  }
+  for (const r of ROLE_FIXTURE.responsibilities) assert.ok(p.includes(r), '职责逐条命中：' + r);
+  assert.ok(p.includes('## 来源分级'), 'deliverables[].must_contain 逐条命中');
+  assert.ok(p.includes('h1'), 'acceptance_hints 命中');
+  assert.ok(p.includes('M'), 'mission 命中（R-3 口径含 mission）');
+  // 结构隔离（计划 §2.4）：Leader 文本只能在 `## 任务要点（Leader 补充）`，不得进 role 三段
+  const three = p.slice(p.indexOf(ROLE_SECTION_TITLES.responsibilities), p.indexOf('## 纪律'));
+  assert.equal(three.includes('LEADER-ONLY-TEXT'), false, 'Leader 文本不得出现在 role 三段内');
+  assert.ok(p.indexOf('LEADER-ONLY-TEXT') > p.indexOf('## 任务要点'), 'Leader 文本只在任务要点段');
+});
+
+test('RO-2 L-AC-4：persona 与 toolFilter.deny 由 role 派生（⊇ 反推集 ＋ 冻结集不缩水 ＋ 无重复）', () => {
+  const req = buildStartRequest({ batchId: 'b-ro', lane: 'l1', parent: {}, prompt: 't', role: ROLE_FIXTURE });
+  assert.equal(typeof req.persona, 'string', 'persona 须为非空字符串');
+  assert.ok(req.persona.length > 0);
+  assert.ok(req.persona.includes('T') && req.persona.includes('M'), 'persona 含 title + mission 逐字（2/2）');
+  const deny = new Set(req.toolFilter.deny);
+  const derived = deriveDenyTools(ROLE_FIXTURE.tools.allow);
+  assert.ok(derived.length > 0, '反推集须非空（否则本断言为空转）');
+  for (const t of derived) assert.ok(deny.has(t), 'deny ⊇ deriveDeny(allow)：' + t);
+  for (const t of SUITE_DENY_TOOLS) assert.ok(deny.has(t), 'deny ⊇ SUITE_DENY_TOOLS（冻结集不缩水）：' + t);
+  assert.equal(req.toolFilter.deny.length, deny.size, 'deny 去重后长度相等（无重复项）');
+});
+
+test('RO-3 反向断言：十件 role 的反推集 ∩ 引擎治理面 = ∅（worker 回报/交接面不可被 deny）', () => {
+  const all = [...new Set(ROLE_IDS.flatMap((id) => deriveDenyTools(resolveRoleRef(id).tools.allow)))];
+  assert.ok(all.length > 0, '反推集非空（构造可达）');
+  const clash = all.filter((t) => GOVERNANCE_FACES.includes(t));
+  assert.deepEqual(clash, [], '反推不得 deny 引擎治理面：' + JSON.stringify(clash));
+  // 词汇表本身也不得含治理面（结构安全的**根因**：词汇表只由 role 语料自身生成）
+  const vocab = roleToolVocabulary();
+  assert.ok(vocab.length > 0);
+  assert.deepEqual(vocab.filter((t) => GOVERNANCE_FACES.includes(t)), [], '工具词汇表 ∩ 治理面 = ∅');
+});
+
+test('RO-4 语料可达：十件 role 逐件解析出 title/responsibilities/deliverables/tools.allow', () => {
+  let n = 0;
+  for (const id of ROLE_IDS) {
+    const d = resolveRoleRef(id);
+    assert.equal(typeof d.title, 'string', id + ' · title');
+    assert.ok(d.title.length > 0, id + ' · title 非空');
+    assert.ok(Array.isArray(d.responsibilities) && d.responsibilities.length > 0, id + ' · responsibilities');
+    assert.ok(Array.isArray(d.deliverables) && d.deliverables.length > 0, id + ' · deliverables');
+    assert.ok(Array.isArray(d.tools?.allow) && d.tools.allow.length > 0, id + ' · tools.allow');
+    n++;
+  }
+  assert.equal(n, 10, '逐件解析件数');
+});
+
+test('RO-5 L-AC-5：role 查不到 ⇒ 拒派（GATE_ROLE_UNRESOLVED）；未声明 ⇒ 维持既有骨架（零回归）', () => {
+  assert.throws(() => resolveRoleRef('no-such-role-xyz'),
+    (e) => e.message.includes(ROLE_UNRESOLVED_CODE) && e.message.includes('no-such-role-xyz'));
+  assert.throws(() => composeWorkerPrompt({ batchId: 'b', lane: 'l', cmd: 'c', layer: 'exec', role: 'no-such-role-xyz', firstLine: 'h' }),
+    /GATE_ROLE_UNRESOLVED/);
+  // 未声明 role（null/undefined/空串）**不是**「查不到」⇒ 既有形态零变化
+  const legacy = composeWorkerPrompt({ batchId: 'b', lane: 'l', cmd: 'c', layer: 'exec', role: null, firstLine: 'h' });
+  assert.ok(legacy.includes('**角色**：`-`'), '未声明 role ⇒ 头行保持既有形态');
+  assert.equal(legacy.includes('## 你的职责'), false, '未声明 role 不得注入三段');
+  const noRole = buildStartRequest({ batchId: 'b', lane: 'l', parent: {}, prompt: 'x' });
+  assert.deepEqual(noRole.toolFilter.deny, [...SUITE_DENY_TOOLS], '无 role ⇒ deny 逐位等于冻结集');
+  assert.equal(noRole.persona, undefined, '无 role ⇒ 不写 persona 字段');
+});
+
+test('RO-6 派发真形态：字符串 role id ⇒ 三段出现且头行**保留裸名**（既有读端零破）', () => {
+  const p = composeWorkerPrompt({ batchId: 'b', lane: 'l1', cmd: 'c', layer: 'exec', role: 'coder', firstLine: 'h' });
+  assert.ok(p.includes('`coder`（'), '头行须保留裸 role 名并补 title');
+  assert.ok(p.includes(ROLE_SECTION_TITLES.responsibilities), '字符串 id ⇒ 三段生效');
+  const req = buildStartRequest({ batchId: 'b', lane: 'l1', parent: {}, prompt: 'x', role: 'coder' });
+  assert.ok(req.persona.includes(resolveRoleRef('coder').title), 'persona 由 role 派生（含 title）');
+});
+
+test('RO-7 未声明 tools.allow ⇒ 不反推（返回 []／deny 保持冻结集，防误禁阉割）', () => {
+  assert.deepEqual(deriveDenyTools(undefined), []);
+  assert.deepEqual(deriveDenyTools([]), []);
+  const r = buildStartRequest({ batchId: 'b', lane: 'l', parent: {}, prompt: 'x', role: { title: 'T', mission: 'M' } });
+  assert.deepEqual(r.toolFilter.deny, [...SUITE_DENY_TOOLS], '未声明 allow ⇒ 不得强加收窄');
+});
+
+test('RO-8 拒派先于状态变更：role 查不到 ⇒ 抛 GATE_ROLE_UNRESOLVED 且 lane 仍 pending、零登记', async () => {
+  __resetLaneHandles();
+  const root = tempRoot('punky-ro8-');
+  const store = seedBatch(root, 'sess-c', 'b-ro8', 'l1', 'no-such-role-xyz');
+  const ctx = mkCtx({ start: async () => { throw new Error('不该被调用：role 查不到必须先拒派'); } });
+  const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
+  const ld = tools.find((t) => t.name === 'lane_dispatch');
+  await assert.rejects(() => ld.execute({ batchId: 'b-ro8', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }),
+    /GATE_ROLE_UNRESOLVED/);
+  assert.equal(store.readBatch('sess-c', 'b-ro8').lanes.l1, 'pending', '拒派零状态变更（lane 仍 pending）');
+  assert.equal(store.readBatch('sess-c', 'b-ro8').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, '拒派零登记');
   __resetLaneHandles();
 });

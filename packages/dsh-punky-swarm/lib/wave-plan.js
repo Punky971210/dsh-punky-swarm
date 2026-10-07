@@ -568,6 +568,47 @@ function checkPlanPresenceContract(tasks) {
             + ' — A1 主防线（O-1）：plan 产物必须被至少一条 lane 的 consume 引用；exec/audit 层悬空仅告警不拒（有意不对称）');
     }
 }
+/** 逐 lane 逐 `consume` 项求缺边并按域分流（**单点判定**，口径见上方注释块）。 */
+export function consumeDepsAsymmetryOf(tasks) {
+    // 声明面索引：`artifact` → 声明它的 lane（`declaredArtifactsOf` 已去重 ⇒ 同一 lane 不会重复计一条缺口）
+    const declared = tasks.map((t) => ({
+        id: t.id,
+        layer: t.layer ?? null,
+        artifacts: declaredArtifactsOf(t),
+    }));
+    const rows = [];
+    for (const l of tasks) {
+        const lLayer = l.layer ?? null;
+        const deps = new Set(Array.isArray(l.deps) ? l.deps : []);
+        for (const c of (l.consume ?? [])) {
+            if (typeof c !== 'string' || c.trim().length === 0)
+                continue;
+            for (const d of declared) {
+                if (d.id === l.id)
+                    continue; // 自消费不构成边（不判，与「deps 不得自指」同族）
+                if (!d.artifacts.includes(c))
+                    continue;
+                if (deps.has(d.id))
+                    continue; // 边已声明 ⇒ 无缺口
+                if (d.layer !== 'plan')
+                    rows.push({ lane: l.id, from: d.id, artifact: c, domain: 'forced' });
+                else if (lLayer !== 'audit')
+                    rows.push({ lane: l.id, from: d.id, artifact: c, domain: 'observed' });
+                // else：静默豁免（上游 plan ∧ 下游 audit）——不拒、不落事件
+            }
+        }
+    }
+    return rows;
+}
+/** 强制域（域 A ∪ 域 C）缺边 ⇒ **一次聚合拒建批**（新拒码，消息逐缺口回显；本文件内唯一 throw 点）。 */
+function checkConsumeDepsSymmetry(tasks) {
+    const forced = consumeDepsAsymmetryOf(tasks).filter((r) => r.domain === 'forced');
+    if (forced.length === 0)
+        return;
+    throw new Error('GATE_CONSUME_DEPS_ASYMMETRY: consume references product(s) of lane(s) not declared in deps'
+        + ' (audit face / same-tier chain require the edge) — '
+        + forced.map((r) => 'lane ' + r.lane + ' consumes ' + JSON.stringify(r.artifact) + ' of ' + r.from).join('; '));
+}
 // 三层契约静态校验（仅当任一 lane 声明 layer 时启用；generic 批次跳过）
 function validateLayerContract(tasks, opts = {}) {
     const plan = tasks.filter((t) => t.layer === 'plan');
@@ -658,8 +699,13 @@ function validateLayerContract(tasks, opts = {}) {
     //   「无产物契约地跑通一条通路」（单 lane、不声明产物）⇒ 硬拦即自相矛盾（本轮 Leader 实测两次被此两码拒）。
     //   边界（明示，防扩权）：只跳本段——本函数内其余拒因（有 exec 必有 audit / audit 判据锚定 / 路径契约 /
     //   skills 声明）与**行为安全门**（派发准入 lane 存在性、单写者锁、终态冻结 `GATE_BATCH_TERMINAL`）一字不动。
-    if (opts.smoke !== true)
+    //   【2026-10-04 · 批 `consume-deps-guard-20261004`】同分支**追加** `consume` × `deps` 不对称门
+    //   （`GATE_CONSUME_DEPS_ASYMMETRY`，域 A ∪ 域 C）。追加位置 = 本函数内**全部既有 throw 之后**（C-4：
+    //   既有拒因的触发优先级与消息逐字不变）；与 `checkPlanPresenceContract` **同键豁免**（同属产物契约类门）。
+    if (opts.smoke !== true) {
         checkPlanPresenceContract(tasks);
+        checkConsumeDepsSymmetry(tasks);
+    }
 }
 // 引擎注入 cmd 前缀：按 role 契约 + 装配的 skill 能力，Leader 只写任务内容
 export function assembleCmd(role, skills, cmd) {

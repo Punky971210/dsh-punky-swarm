@@ -108,7 +108,8 @@ export function applyAssemblyExtensions(assembly, extensions) {
 
 // ── 盲审子 lane 任务包骨架（Leader/Manager 建批用）──
 // 返回 { config, templates, tasks }：tasks 可直接喂 buildWavePlan（固定 DAG：panelist×N → aggregate → critic；
-// aggregate deps=全部 panelist、critic deps=aggregate）；consume/produce 契约 + 模板引用齐备，不预写实现（0e）。
+// aggregate deps=全部 panelist、critic deps=全部 panelist + aggregate——等待边与消费边一致，满足 consume×deps 对称门）；
+// consume/produce 契约 + 模板引用齐备，不预写实现（0e）。
 // deps = 外部依赖路径数组（如 exec 产物 + audit/verify-verdict.md），作为 panelist/aggregate/critic 的共享 consume。
 export function buildAuditLaneSpec({ panelistCount, deps = [], threshold, criticRequired } = {}) {
   const n = Number.isInteger(panelistCount) && panelistCount >= 1 ? panelistCount : T_CONFIG.panelistCount;
@@ -142,7 +143,7 @@ export function buildAuditLaneSpec({ panelistCount, deps = [], threshold, critic
     id: 'audit-critic',
     layer: 'audit',
     role: 'audit-critic',
-    deps: ['audit-aggregate'],
+    deps: [...panelistIds, 'audit-aggregate'],
     consume: [...depList, ...panelistProduces, 'audit/aggregate.md'],
     produce: ['audit/critic.md'],
     template: 'critic',

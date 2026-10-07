@@ -78,7 +78,7 @@ function chainPause() {
 const TASKS = () => ([
   { id: 'plan', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
   { id: 'exec', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/exec.md'], cmd: 'build' },
-  { id: 'audit', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md', 'exec/exec.md'], produce: ['audit/audit.md'], cmd: 'accept' },
+  { id: 'audit', layer: 'audit', role: 'reviewer', consume: ['plan/spec.md', 'exec/exec.md'], produce: ['audit/audit.md'], deps: ['exec'], cmd: 'accept' },
 ]);
 /** 含 audit 层的三层批必带装配声明；用**缺省 `raise`** 形态（`leader-direct` 在 M0′-① 后链推进全程
  *  no-op ⇒ 本套件的「链停轮写 reason」判据必须在非 leader-direct 批上取）。 */

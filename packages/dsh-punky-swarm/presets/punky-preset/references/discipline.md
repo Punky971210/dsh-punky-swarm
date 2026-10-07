@@ -551,6 +551,8 @@
 - **资产表达面 → 已无对象（本批订正）**：原缺口为「`chain.steps[].template` **只解释 `id` / `cmd` / `produce`**、**不支持 `consume`**」——**模板声明面与 `chain` 建批期展开点均已删净**（`lib/assembly/chain.js` 本体删除）⇒ 该缺口**不再存在**。**不变的部分**：判据源只能由**建批 tasks 的 `consume`**（Leader 侧）表达（本节硬要求）。
 - **建批规范（Leader 必做，即时生效）**：每条 audit lane 的 `consume` **必须**含 ① **plan 层判据源**（如 `plan/<…>spec.md`）② **本链上游 exec 产物**；聚合 lane（如 `accept`）还需含其**全部入边**的 audit 产物。**实测反例**：本会话示例批首次建批即被 `GATE_AUDIT_INPUT_MISSING` 拒（audit 只声明了 exec 产物），补 `plan/demo-spec.md` 后才建成。
 - **引擎候选：整条作废（本批订正）**：原候选「给 `template` 增 `consume` 字段（带 `${lane}`/`${branch}` 插值）⇒ 让「非盲审」成为**资产默认**」——`template` 与资产面**均已删净** ⇒ **无承载对象，登记作废**（不作本批外夹带）。
+- **`consume` × `deps` 对称性必核（2026-10-04 新增；建批期硬门 ＋ 非拒观察面）**：`consume` = 产物**在场**、`deps` = **等待交接**，两者是两种关系 ⇒ 只在**真实等待语义**的面强制对齐。**单点判定** = `lib/wave-plan.ts#validateLayerContract`（口径：`consume` 项与**他 lane** 的 `produce ∪ outputs` **精确字符串相等**，与 `orphanPlanProductsOf` 同源，**不做** glob／目录语义／归一化）：对每条 lane `L` 的每个 `consume` 项 `c`，凡 `c` 由他 lane `T` 声明、而 `T.id ∉ L.deps` ⇒ 按 `T` 的层分流——① `T` **非 `plan` 层**（**强制域**：audit 面 ＋ 同层链）⇒ **拒建批** `GATE_CONSUME_DEPS_ASYMMETRY`（一次聚合抛，消息逐缺口回显；**零批次落盘**）；② `T` 为 `plan` 层且 `L` 非 audit（**观察面**）⇒ **不拒**、不改相位，落非拒事件 `gate.consume_deps_asymmetry` 并在 `wave_plan` 返回值回显 `consumeDepsAsymmetry: [{lane, from, artifact}]`；③ `T` 为 `plan` 层且 `L` 为 audit（**静默豁免**）⇒ 不拒、不落事件（上文「audit 消费 plan 判据源」是**批级**不变量，**非**逐 lane 交接）。`smoke: true` 批与产物契约类门**同键豁免**（行为安全门一字不减）。**Leader 侧纪律**：写 `consume` 时**逐条核对**每条来源 lane 是否已在 `deps` 里——上游一旦结算，缺边**永久不可补**（`task_update` 加边要求上游未结算，且引擎**不提供删边**）。
+
 
 ## §13 指引维护（Guidance maintenance）
 

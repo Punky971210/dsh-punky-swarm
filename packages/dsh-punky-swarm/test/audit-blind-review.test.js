@@ -99,7 +99,7 @@ test('A3.3 applyAssemblyExtensions：关 → 原样返回（零变化）；开 �
   assert.deepEqual(merged.layers.plan, BASE_ASSEMBLY.layers.plan, '非 audit 层不变');
 });
 
-test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、critic deps=aggregate）经 buildWavePlan 通过', () => {
+test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、critic deps=全部 panelist+aggregate，与 consume 边一致）经 buildWavePlan 通过', () => {
   const deps = ['exec/artifact.md', 'audit/verify-verdict.md'];
   const spec = buildAuditLaneSpec({ panelistCount: 2, deps });
   assert.equal(spec.tasks.length, 4, 'panelist×2 + aggregate + critic');
@@ -109,7 +109,7 @@ test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、cr
   // DAG 契约
   const byId = new Map(spec.tasks.map((t) => [t.id, t]));
   assert.deepEqual(byId.get('audit-aggregate').deps, ['audit-panelist-1', 'audit-panelist-2'], 'aggregate deps=全部 panelist');
-  assert.deepEqual(byId.get('audit-critic').deps, ['audit-aggregate'], 'critic deps=aggregate');
+  assert.deepEqual(byId.get('audit-critic').deps, ['audit-panelist-1', 'audit-panelist-2', 'audit-aggregate'], 'critic deps=全部 panelist + aggregate（等待边与消费边一致）');
   assert.deepEqual(byId.get('audit-panelist-1').deps, [], 'panelist 无内部依赖');
   // consume/produce 契约：aggregate 消费全部 panelist 产物；critic 消费聚合产物
   assert.ok(byId.get('audit-aggregate').consume.includes('audit/panelist-1.md') && byId.get('audit-aggregate').consume.includes('audit/panelist-2.md'));

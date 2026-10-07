@@ -49,7 +49,9 @@ function cplusTasks(execN) {
     execRels.push(rel);
     tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: [rel], deps: ['p1'], cmd: 'impl' });
   }
-  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/s.md', ...execRels], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
+  // 【consume-deps-guard-20261004 同步】a1 消费各 exec 产物 ⇒ `deps` 逐条声明全部来源 lane（新门强制域）；
+  //   原形态只声明末条 `e<execN>`（GAP-CONSUME-DEPS-2026-10-04 的不对称形态）。断言强度未变。
+  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/s.md', ...execRels], produce: ['audit/r.md'], deps: execRels.map((_, i) => 'e' + (i + 1)), cmd: 'verify' });
   return tasks;
 }
 

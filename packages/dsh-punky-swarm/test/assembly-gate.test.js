@@ -54,7 +54,11 @@ function cplusTasks(execN, { coordinator = false } = {}) {
     execRels.push(rel);
     tasks.push({ id: 'e' + i, layer: 'exec', role: 'coder', consume: ['plan/s.md'], outputs: [rel], deps: ['p1'], cmd: 'impl' });
   }
-  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: [...(coordinator ? ['plan/tree.json'] : []), 'plan/s.md', ...execRels], produce: ['audit/r.md'], deps: ['e' + execN], cmd: 'verify' });
+  // 【consume-deps-guard-20261004 同步】a1 消费各 exec 产物 ⇒ `deps` **必须逐条声明全部来源 lane**
+  //   （新门 `GATE_CONSUME_DEPS_ASYMMETRY`：audit 面属强制域，「上游非 plan 且 `T.id ∉ deps`」即拒建批）。
+  //   原形态只声明末条 `e<execN>`，正是 GAP-CONSUME-DEPS-2026-10-04 记录的不对称形态（本批新门把它暴露出来）。
+  //   形态收紧：判据强度未变（未删任何断言），只是把夹具补成**对称**形态。
+  tasks.push({ id: 'a1', layer: 'audit', role: 'supervisor', consume: [...(coordinator ? ['plan/tree.json'] : []), 'plan/s.md', ...execRels], produce: ['audit/r.md'], deps: execRels.map((_, i) => 'e' + (i + 1)), cmd: 'verify' });
   return tasks;
 }
 
