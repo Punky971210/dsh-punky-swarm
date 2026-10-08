@@ -18,9 +18,9 @@ authorities:
   - 来源级别归类（A / B / C）
 
 deliverables:
-  - path: exec/research-report.md
+  - form: 调研报告（Markdown）
     must_contain: ["## 引用清单", "## 来源分级", "## 未知项清单"]
-  - path: exec/evidence.json
+  - form: 证据清单（JSON）
     must_contain: ["结论", "出处", "获取方式", "时间"]
 
 acceptance_hints:

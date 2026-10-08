@@ -100,9 +100,12 @@ export const ROLE_SECTION_TITLES = Object.freeze({
   deliverables: '## 交付要求',
 });
 
-/** 六必填字段（计划 §3.2「缺一即拒」）。**只对文件解析面生效**：模块级直调传入的 role 对象不强制，
+/** 必填字段（计划 §3.2「缺一即拒」）。**`deliverables` 不在其中**（本批 R-1 起转**可选**）：
+ *  它是角色级**形态提示**，不是硬真源 —— 批次级产物路径归 `wavePlan.produce/outputs` ＋ `handoff_submit`；
+ *  故缺席**不判缺、不抛 `GATE_ROLE_UNRESOLVED`、不回落**（零静默由「交付要求段少行/占位」表达，不由拒派表达）。
+ *  **只对文件解析面生效**：模块级直调传入的 role 对象不强制，
  *  因为直调只构造需要的字段位（见判据源 L-AC-3/L-AC-4 的可达构造）。 */
-export const ROLE_MANDATORY_FIELDS = Object.freeze(['id', 'title', 'layer', 'mission', 'responsibilities', 'deliverables']);
+export const ROLE_MANDATORY_FIELDS = Object.freeze(['id', 'title', 'layer', 'mission', 'responsibilities']);
 
 /** 默认团队（同 id 跨团队重名时的**团队序首位**）。依据 = 仓库既有约定
  *  `test/helpers/skill-paths.mjs` 的 `withDefaultTeam(byName, team = 'software-team')`，非本段新造。 */
@@ -235,13 +238,13 @@ function missingMandatoryOf(fm) {
   });
 }
 
-/** 文件文本 → role 数据对象（六必填缺一即抛 `GATE_ROLE_UNRESOLVED`）。 */
+/** 文件文本 → role 数据对象（必填缺一即抛 `GATE_ROLE_UNRESOLVED`）。 */
 function roleDataOfText(text, source) {
   const fm = parseRoleFrontmatter(text);
   if (!fm) throw new Error(ROLE_UNRESOLVED_CODE + ': 角色文件无可用 YAML frontmatter · ' + source);
   const missing = missingMandatoryOf(fm);
   if (missing.length) {
-    throw new Error(ROLE_UNRESOLVED_CODE + ': 角色 ' + String(fm.id ?? '(无 id)') + ' 缺六必填字段 '
+    throw new Error(ROLE_UNRESOLVED_CODE + ': 角色 ' + String(fm.id ?? '(无 id)') + ' 缺必填字段 '
       + missing.join('/') + ' · ' + source);
   }
   return { ...fm, persona_text: bodySectionOf(text, '## Persona（注入用）'), source };
@@ -348,13 +351,23 @@ function appendRoleSections(L, roleData) {
   L.push(ROLE_SECTION_TITLES.deliverables);
   const deliverables = listOf(roleData.deliverables);
   for (const d of deliverables) {
-    const rel = typeof d === 'string' ? d : String(d?.path ?? '');
+    // 【本批 R-2/R-3】只读**形态**（`form`）：`path` 键**不读、不回落** ⇒ 段内「零路径」由**代码保证**，
+    //   不依赖语料侧自觉（语料漏改也不会把路径渲进任务包）。
+    //   形态**不加反引号**：反引号在本渲染色里表示「可照抄的字面量」，形态是自然语言，加引号会误导。
+    //   缺形态 ⇒ 显式占位**非空串**（省成空串会渲染出空反引号对，破 R-2b 的零空反引号护栏）。
+    const form = (typeof d === 'string') ? d.trim() : String(d?.form ?? '').trim();
     const must = (d && typeof d === 'object' && Array.isArray(d.must_contain)) ? d.must_contain : [];
-    L.push('- 交付件：`' + rel + '`');
+    L.push('- 交付件：' + (form || '（形态未声明）'));
     if (must.length) L.push('  - 必含结构：' + must.map((x) => '`' + x + '`').join(' / '));
   }
+  // 【本批 R-4】role 的 `skills:` 字段**成为注入源**（通道 B · 规格指向）：保序、原样、不筛选、不去重。
+  //   与 `lib/wave-plan.ts` 的 `[skills=…]` 前缀通道（通道 A · 装配声明）**无优先级关系** —— B **不回填** A
+  //   （不写 `t.skills`、不进 `cmd`、不入任务 sig）；两通道**并存渲染、零仲裁器**。
+  //   `skills` **不进** `ROLE_MANDATORY_FIELDS`：未声明 ⇒ 本段**少一行**（可见、不静默），不拒派、不回落。
+  const skills = listOf(roleData.skills);
+  if (skills.length) L.push('- 规格：见技能 ' + skills.map((s) => '`' + s + '`').join(' / '));
   const hints = listOf(roleData.acceptance_hints);
-  if (!deliverables.length && !hints.length) L.push('- （role 未声明）');
+  if (!deliverables.length && !skills.length && !hints.length) L.push('- （role 未声明）');
   for (const h of hints) L.push('- 达标提示：' + h);
 }
 

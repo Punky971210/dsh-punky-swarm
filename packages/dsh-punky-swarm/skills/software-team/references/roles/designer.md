@@ -17,15 +17,15 @@ authorities:
   - 架构复核采用的图谱查询方式（只读）
 
 deliverables:
-  - path: artifacts/<batchId>/design/spec.md
+  - form: 设计规格（Markdown）
     must_contain: ["## 验收标准", "## 约束"]
-  - path: artifacts/<batchId>/design/plan.md
+  - form: 设计计划（Markdown）
     must_contain: ["## 线路拆解"]
-  - path: artifacts/<batchId>/plan/<name>-taskpack-<n>.md
+  - form: 任务包（Markdown）
     must_contain: ["## 验收标准", "## 约束"]
 
 acceptance_hints:
-  - spec 与 task-tree 引用架构复核依据（coordinator 的 codebase-survey.md 或图谱复核结论）
+  - spec 与 task-tree 引用架构复核依据（coordinator 的代码摸底报告或图谱复核结论）
   - 每个任务包自带验收标准与约束章节（门禁依赖）
 
 tools:
@@ -54,12 +54,12 @@ discipline_refs: [0c, 0e, 9, 14]
 - 产出 spec（及**按需声明的** task-tree）前必须用**代码图谱 MCP 复核架构**（推荐 `codegraph_explore`；或 `code-review-graph` 的 `get_architecture` / `query_graph` / `trace_path`，均只读）；
 - spec 与（**按需声明的**）task-tree 须引用架构复核依据（coordinator 的 codebase-survey.md 或 **图谱复核结论**），缺则 audit 判装配不完整（验收矩阵 A1）。
 - 备注（Leader 决策包 vs 四件套分界）：Leader 粗拆决策包（leader-decision-pack，plan/）属 Leader 产物、允许；Designer 四件套（plan/coder-tasks/tester-tasks/spec）必须 designer 角色产出，两者分开。
-- 产出：artifacts/<batchId>/design/plan.md、coder-tasks.md、tester-tasks.md、spec.md
+- 产出：设计目录下 plan.md、coder-tasks.md、tester-tasks.md、spec.md（落批次产物根）
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / skill / write / edit + memory_search（跨会话记忆查询）+ **代码图谱 MCP 只读查询**（`codegraph_explore` / `codegraph_search` / `trace_path`；或 `code-review-graph` 的 `search_code` / `semantic_search_nodes` / `trace_path`）
-- 产出契约（四件套）：`artifacts/<batchId>/design/plan.md`、`coder-tasks.md`、`tester-tasks.md`、`spec.md`
-- 产出契约（任务包）：`artifacts/<batchId>/plan/<name>-taskpack-<n>.md`（**每包独立 spec**）
+- 产出契约（四件套）：`plan.md`、`coder-tasks.md`、`tester-tasks.md`、`spec.md`（落批次产物根的设计目录）
+- 产出契约（任务包）：`<name>-taskpack-<n>.md`（落批次产物根的任务包目录；**每包独立 spec**）
 - 授权面：设计粒度（线路级 / 任务级）；任务包拆分与提交顺序；图谱复核方式（只读）
 - 归属面：代码改动归 Coder；本角色产出以「含验收标准/约束章节」为交付前提（门禁依赖）
 - 约束：公共约束见 SKILL.md §worker 公共约束；本角色差异：设计前可查跨会话记忆/代码图谱复用既有方案

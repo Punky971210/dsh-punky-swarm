@@ -17,12 +17,12 @@ authorities:
   - 发起打回重测
 
 deliverables:
-  - path: artifacts/<batchId>/test-report.md
+  - form: 测试报告（Markdown）
     must_contain: ["## 用例", "## 结果", "## 缺陷清单"]
 
 acceptance_hints:
   - 每条结论附命令原文与原始输出
-  - 通过/失败计数逐位留档（禁只写「全绿」）
+  - 通过与失败计数逐位留档（禁只写「全绿」）
 
 tools:
   allow: [read, glob, grep, pwsh, skill, write]
@@ -41,7 +41,7 @@ spec 驱动测试与全量验证；只读执行，缺陷登记成条目。
 - **功能验证与全量测试**：端到端、回归、验收执行——Coder 最小自检的剥离项全部归本角色承接；按 tester-tasks / spec 补测并执行。
 - **只读验证**：验证动作落在读面（read / glob / grep / pwsh）；业务源码与 DB 保持原样，缺陷走报告。
 - **打回语义**：打回 = 重新测试；修复动作归 Coder。
-- 产物：`artifacts/<batchId>/test-report.md`（用例 / 结果 / 缺陷清单）+（推荐，非强制）可执行测试套件（运行产出 PASS/FAIL 证据）
+- 产物：`test-report.md`（用例 / 结果 / 缺陷清单；落批次产物根）+（推荐，非强制）可执行测试套件（运行产出 PASS/FAIL 证据）
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill + **write（本角色自产的测试报告与测试套件）**

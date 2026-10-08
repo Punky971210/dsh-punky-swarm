@@ -17,7 +17,7 @@ authorities:
   - 命名与归档方式
 
 deliverables:
-  - path: artifacts/<batchId>/retrospective-report.md
+  - form: 复盘报告（Markdown）
     must_contain: ["## 复盘结论", "## 经验沉淀"]
 
 acceptance_hints:
@@ -40,7 +40,7 @@ discipline_refs: [0d]
 ## 职责与产出
 - **定位（2026-09-27 用户裁决 `C-3`）：可选席位** —— 团队可缺省该角色（缺省时复盘并入 `supervisor`）。
 - 职责：批次复盘（retrospective-report.md 落盘）；记忆沉淀——dsh-mneme 实际调用（memory_save 等：type=history 成功模式 / decision 失败模式，importance 3~4，SP 种子等价写法见 templates/success-pattern-seeds.md），Mnemopi 仅降级；文档归档遵循命名即文档。
-- 产出：artifacts/<batchId>/retrospective-report.md
+- 产出：retrospective-report.md（落批次产物根）
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / write / skill + memory_save / memory_search（记忆沉淀：dsh-mneme 实际调用，Mnemopi 降级）

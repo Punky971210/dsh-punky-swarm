@@ -17,9 +17,9 @@ authorities:
   - 代码图谱索引的建立与更新时机
 
 deliverables:
-  - path: artifacts/<batchId>/codebase-survey.md
+  - form: 代码摸底报告（Markdown）
     must_contain: ["## 约束清单", "## 依赖与风险", "## 支持矩阵"]
-  - path: artifacts/<batchId>/task-tree.json
+  - form: 任务树（JSON）
     must_contain: ["est_tokens", "basis"]
 
 acceptance_hints:
@@ -48,7 +48,7 @@ API 粒度细拆与代码摸底；产出细拆供编排，不参与实现。
 - 细拆前先经 `codegraph`（codegraph_explore）或 `code-review-graph` 的索引 建立/更新代码索引（索引状态核对），以图谱为据取代裸读；
 - 代码摸底以 代码图谱/检索为据（get_architecture/search_code 等），产出 codebase-survey.md 须声明消费 图谱探针结论（约束清单/依赖与风险/支持矩阵）；
 - 可执行追加：代码图谱 MCP（`codegraph_explore` / `codegraph_search` / `trace_path` 等只读）（index_repository/index_status/get_architecture/search_code/query_graph/trace_path）
-- 产出：artifacts/<batchId>/codebase-survey.md + artifacts/<batchId>/task-tree.json（**按需声明**：需要任务树的批次由建批 `tasks` 面声明，未声明即不产出）
+- 产出：codebase-survey.md + task-tree.json（均落批次产物根；**按需声明**：需要任务树的批次由建批 `tasks` 面声明，未声明即不产出）
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill / write

@@ -329,11 +329,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 132,
-      "blankLines": 36,
-      "lines": 514,
+      "asserts": 166,
+      "blankLines": 48,
+      "lines": 674,
       "tautologies": 0,
-      "tests": 28,
+      "tests": 35,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -1209,7 +1209,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-07T12:09:46Z",
+  "generatedAt": "2026-10-08T05:21:46Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1220,15 +1220,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "role-injection-refactor-20261006：e02-inject 新增 8 用例（test/engine-dispatch.test.js tests+8/asserts+39/lines+118）致 test 树词法计数上升；baselines 单写者=Leader（§15③），时点合规（A 批 exec 全收口，§15④）；含 e03-guidance 改指引面（presets 两件 + cordis.patch.yml）与 e01-roles-kb 改 7 件 role 文件，均不改 test 树词法计数",
+  "reason": "role-deliverable-inject-fix-20261008：e01-impl 新增 7 用例（+34 asserts），并改 lib/engine/dispatch.js 渲染与新工具；baselines 单写者=Leader（§15③），时点合规（本批 exec 已全收口，§15④）",
   "schema": 1,
   "totals": {
-    "asserts": 7600,
-    "blankLines": 3827,
+    "asserts": 7634,
+    "blankLines": 3839,
     "files": 151,
-    "lines": 41285,
+    "lines": 41445,
     "tautologies": 0,
-    "tests": 1598,
+    "tests": 1605,
     "todos": 4
   }
 }

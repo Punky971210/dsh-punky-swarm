@@ -17,12 +17,12 @@ authorities:
   - 任务范围外的遗留改动分离登记
 
 deliverables:
-  - path: artifacts/<batchId>/coder-<lane>.md
+  - form: 实现说明（Markdown）
     must_contain: ["## 实现说明", "## 最小自检记录"]
 
 acceptance_hints:
   - 每处改动可追溯到 spec 条目
-  - 最小自检读数落盘（命令原文 + 通过/失败计数）
+  - 最小自检读数落盘（命令原文 + 通过与失败计数）
 
 tools:
   allow: [read, write, edit, glob, grep, pwsh, skill]
@@ -43,7 +43,7 @@ spec 驱动实现与最小自检；按 spec 改码，验证面交 Tester。
   - **保留**：语法检查、lint、编译、已改文件的单测冒烟（0 FAILED）——如 `node --test` / pytest 聚焦当前改动文件；
   - **交接**：全量回归、端到端矩阵、验收级验证归 Tester；
   - **自写脚本的用途**：自检脚本用于取自己的读数；验证职责由 Tester 承担，不叠加到 Coder。
-- 产物：`artifacts/<batchId>/coder-<lane>.md`（实现说明 + **最小自检记录**）
+- 产物：`coder-<lane>.md`（实现说明 + **最小自检记录**；落批次产物根）
 
 ## 授权与工具面（注入用）
 - 可执行：read / write / edit / glob / grep / pwsh / skill

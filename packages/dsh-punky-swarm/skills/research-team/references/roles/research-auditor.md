@@ -17,9 +17,9 @@ authorities:
   - 未闭合项分级（blocking / followup）
 
 deliverables:
-  - path: audit/source-verification.md
+  - form: 来源核查报告（Markdown）
     must_contain: ["## 核查结论", "blocking issues", "followups"]
-  - path: audit/gap-list.json
+  - form: 缺口清单（JSON）
     must_contain: ["blocking", "followup"]
 
 acceptance_hints:

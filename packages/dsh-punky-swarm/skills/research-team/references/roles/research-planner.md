@@ -17,9 +17,9 @@ authorities:
   - 停止条件的设定
 
 deliverables:
-  - path: plan/plan-researcher-spec.md
+  - form: 研究规格（Markdown）
     must_contain: ["## 验收标准", "## 约束"]
-  - path: plan/task-tree.json
+  - form: 任务树（JSON）
     must_contain: ["lanes", "est_tokens", "basis"]
 
 acceptance_hints:

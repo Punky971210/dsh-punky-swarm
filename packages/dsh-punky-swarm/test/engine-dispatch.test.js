@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
-import { buildWavePlan } from '../lib/wave-plan.js';
+import { buildWavePlan, assembleCmd } from '../lib/wave-plan.js';
 import { createCoreTools } from '../lib/tools/core.js';
 import { EVT_MEMBER_DISPATCH, EVT_SWARM_REPORT, EVT_SWARM_CC } from '../lib/state/event-types.js';
 import {
@@ -32,7 +32,9 @@ import {
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
 import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
 // 【2026-10-07 · P2（批 role-injection-refactor-20261006 / lane e02-inject）】role 数据面注入面的读端。
-import { resolveRoleRef, deriveDenyTools, roleToolVocabulary, ROLE_SECTION_TITLES, ROLE_UNRESOLVED_CODE } from '../lib/engine/dispatch.js';
+// 【2026-10-08 · 本批 role-deliverable-inject-fix-20261008 / lane e01-impl】补 `ROLE_MANDATORY_FIELDS`（R-1 判据面）
+//   与 `roleCorpusRoot`（L-AC-9 的仓库面扫描起点）。
+import { resolveRoleRef, deriveDenyTools, roleToolVocabulary, ROLE_SECTION_TITLES, ROLE_UNRESOLVED_CODE, ROLE_MANDATORY_FIELDS, roleCorpusRoot } from '../lib/engine/dispatch.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
 import { bindingGapOf } from '../lib/watch/lane-heartbeat.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
@@ -400,9 +402,39 @@ test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISP
 // 判据源 = `plan/role-injection-spec.md`：R-3（任务级三段）/ R-4（persona）/ R-5（allow 反推 deny），
 // 对应验收项 **L-AC-3 / L-AC-4 / L-AC-5**；`L-AC-12 / L-AC-13` 为批级共用项（本节给 lane 侧自证面）。
 // ⚠ 全部断言为**可达构造**（行为缺失即变红，禁空转，纪律 §15⑤）：裸标题逐行比对 / 集合包含 / 逐字 substring / 抛错码面。
+
+// ── 【2026-10-08 · 本批 `role-deliverable-inject-fix-20261008` / lane `e01-impl`】注入面去路径化判据助手 ──
+// 判据源 = `plan/scope-spec.md`（R-1..R-6 / L-AC-1..L-AC-9）；两个助手的口径与判据源 §5 附探针**逐字一致**。
+// ⚠ 执行面提示：本检出缺 `@deepseek-ai/dsh-tools`（判据源 §7.2-2）⇒ 本文件当前不可执行；
+//   机检读数以判据源 §5 附探针为准，本节断言为**词法面**（`baseline-snapshot` 可扫、可核）。
+
+/** `## 交付要求` **段**提取（判据源 §5 口径：行首**恰为**该串起，至下一个行首 `## ` 前）。 */
+function deliverablesSectionOf(promptText) {
+  const lines = String(promptText).split('\n');
+  const at = lines.findIndex((l) => l === ROLE_SECTION_TITLES.deliverables);
+  if (at < 0) return null;
+  const rest = lines.slice(at + 1);
+  const end = rest.findIndex((l) => l.startsWith('## '));
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n');
+}
+
+/** 段内「路径噪声」五项计数（判据源 §5 逐字口径：出现**次数**，非布尔）。 */
+function pathNoiseOf(sectionText) {
+  const t = String(sectionText ?? '');
+  return {
+    j1: (t.match(/[^\s`]\/[^\s`]/g) ?? []).length,          // 无空白紧邻的斜杠
+    j2: t.split('artifacts/').length - 1,                    // 宿主视角产物前缀
+    j3: t.split('<batchId>').length - 1,                     // 批次占位符
+    j4: (t.match(/\.(md|json|ya?ml|txt)\b/g) ?? []).length,  // 文件名后缀形态
+    j5: (t.match(/``/g) ?? []).length,                       // 空反引号对
+  };
+}
+
 const ROLE_FIXTURE = {
   title: 'T', mission: 'M', responsibilities: ['r1', 'r2'], authorities: ['a1'],
-  deliverables: [{ path: 'p', must_contain: ['## 来源分级'] }], acceptance_hints: ['h1'],
+  // 【本批 R-2/R-5】夹具同步去路径化：`deliverables` 只声明**形态**（`form`），`path` 键不再参与渲染。
+  deliverables: [{ form: '来源分级清单（Markdown）', must_contain: ['## 来源分级'] }], acceptance_hints: ['h1'],
+  skills: ['spec-writing'],
   tools: { allow: ['read', 'write'], deny_derived: true },
 };
 const ROLE_IDS = ['coder', 'coordinator', 'designer', 'doc-manager', 'reviewer', 'supervisor', 'tester',
@@ -425,6 +457,13 @@ test('RO-1 L-AC-3：role 驱动任务级三段（裸标题行各 ≥1 ＋ 逐条
   assert.ok(p.includes('## 来源分级'), 'deliverables[].must_contain 逐条命中');
   assert.ok(p.includes('h1'), 'acceptance_hints 命中');
   assert.ok(p.includes('M'), 'mission 命中（R-3 口径含 mission）');
+  // 【本批 R-2/R-3】渲染色三要素：形态（**不加反引号**）＋ 必含结构 ＋ 规格指向；且**零路径**。
+  assert.ok(p.includes('- 交付件：来源分级清单（Markdown）'), 'R-3(a)：形态逐字渲染，且不得包反引号');
+  assert.equal(p.includes('- 交付件：`'), false, 'R-2：形态**不得**加反引号（旧写法 `- 交付件：\\`…\\``）');
+  assert.ok(p.includes('- 规格：见技能 `spec-writing`'), 'R-4：role 的 skills 字段成为注入源（规格指向行）');
+  const sec = deliverablesSectionOf(p);
+  assert.deepEqual(pathNoiseOf(sec), { j1: 0, j2: 0, j3: 0, j4: 0, j5: 0 },
+    'R-2：交付要求段零路径（j1..j4）＋ 零空反引号（j5）');
   // 结构隔离（计划 §2.4）：Leader 文本只能在 `## 任务要点（Leader 补充）`，不得进 role 三段
   const three = p.slice(p.indexOf(ROLE_SECTION_TITLES.responsibilities), p.indexOf('## 纪律'));
   assert.equal(three.includes('LEADER-ONLY-TEXT'), false, 'Leader 文本不得出现在 role 三段内');
@@ -463,6 +502,12 @@ test('RO-4 语料可达：十件 role 逐件解析出 title/responsibilities/del
     assert.ok(d.title.length > 0, id + ' · title 非空');
     assert.ok(Array.isArray(d.responsibilities) && d.responsibilities.length > 0, id + ' · responsibilities');
     assert.ok(Array.isArray(d.deliverables) && d.deliverables.length > 0, id + ' · deliverables');
+    // 【本批 R-2/R-5】形态面：逐条须有非空 `form`，且**不得**保留 `path` 键（去路径化的单元级判据）。
+    for (const it of d.deliverables) {
+      assert.equal(typeof it.form, 'string', id + ' · deliverables[].form 须为形态串');
+      assert.ok(it.form.trim().length > 0, id + ' · form 非空');
+      assert.equal('path' in it, false, id + ' · 不得保留 path 键');
+    }
     assert.ok(Array.isArray(d.tools?.allow) && d.tools.allow.length > 0, id + ' · tools.allow');
     n++;
   }
@@ -510,4 +555,119 @@ test('RO-8 拒派先于状态变更：role 查不到 ⇒ 抛 GATE_ROLE_UNRESOLVE
   assert.equal(store.readBatch('sess-c', 'b-ro8').lanes.l1, 'pending', '拒派零状态变更（lane 仍 pending）');
   assert.equal(store.readBatch('sess-c', 'b-ro8').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, '拒派零登记');
   __resetLaneHandles();
+});
+
+// ── 【2026-10-08 · 本批 `role-deliverable-inject-fix-20261008` / lane `e01-impl`】R-1..R-6 判据面（L-AC-1..L-AC-9）──
+// 分母一律写死（判据源 §6 口径）；断言均为**可达构造**，行为回退即变红。
+
+test('RO-9 L-AC-1：ROLE_MANDATORY_FIELDS 收缩为五元组（deliverables 转可选、skills 不入表）', () => {
+  assert.deepEqual([...ROLE_MANDATORY_FIELDS], ['id', 'title', 'layer', 'mission', 'responsibilities']);
+  assert.equal(ROLE_MANDATORY_FIELDS.length, 5, 'R-1a：元组长度 = 5');
+  assert.equal(ROLE_MANDATORY_FIELDS.includes('deliverables'), false, 'R-1a：deliverables 必须移出必填表');
+  assert.equal(ROLE_MANDATORY_FIELDS.includes('skills'), false, 'R-4：skills 保持可选（不进必填表）');
+});
+
+test('RO-10 L-AC-2：无 deliverables 的 role 文件不判缺、不抛、裸标题恰 1 行、回退占位在场', () => {
+  const root = tempRoot('punky-lac2-');
+  const dir = path.join(root, 'skills', 'software-team', 'references', 'roles');
+  fs.mkdirSync(dir, { recursive: true });
+  // 夹具 frontmatter **只含五必填**（无 deliverables / 无 skills / 无 acceptance_hints）
+  fs.writeFileSync(path.join(dir, 'probe-nodeadline.md'), [
+    '---', 'id: probe-nodeadline', 'title: 无 deliverables 夹具', 'layer: exec',
+    'mission: 验证 deliverables 缺席不判缺', 'responsibilities:', '  - 占位', '---', '',
+  ].join('\n'), 'utf8');
+  const d = resolveRoleRef('probe-nodeadline', { root });
+  assert.ok(d && typeof d === 'object', 'R-1b：缺席不得拒派（须返回对象，而非抛 GATE_ROLE_UNRESOLVED）');
+  assert.equal(d.deliverables, undefined, 'R-1b：缺席 ⇒ undefined（不回落、不造默认值）');
+  assert.ok(d.title.length > 0 && d.responsibilities.length > 0, 'R-1b：其余必填面不受影响');
+  const p = composeWorkerPrompt({
+    batchId: 'b-lac2', lane: 'l1', cmd: 'c', layer: 'exec', role: 'probe-nodeadline', firstLine: 'h', roleRoot: root,
+  });
+  assert.equal(p.split('\n').filter((l) => l === ROLE_SECTION_TITLES.deliverables).length, 1, 'R-2b：裸标题行恰 1 行');
+  // 段末自带一个空行（`composeWorkerPrompt` 在段后推 `''` 再推 `## 纪律`）⇒ 比对前 trim。
+  assert.equal((deliverablesSectionOf(p) ?? '').trim(), '- （role 未声明）',
+    'R-2：deliverables ∧ skills ∧ hints 三者皆空 ⇒ 回退占位（零静默）');
+});
+
+test('RO-11 L-AC-3/L-AC-4：十件 role 交付要求段零路径（j1..j4）＋ 零空反引号（j5）', () => {
+  const agg = { j1: 0, j2: 0, j3: 0, j4: 0, j5: 0 };
+  for (const id of ROLE_IDS) {
+    const d = resolveRoleRef(id);
+    const p = composeWorkerPrompt({ batchId: 'b-lac3', lane: 'l1', cmd: 'c', layer: d.layer, role: id, firstLine: 'h' });
+    const sec = deliverablesSectionOf(p);
+    assert.ok(sec !== null && sec.length > 0, id + ' · 交付要求段须在场且非空');
+    const n = pathNoiseOf(sec);
+    for (const k of Object.keys(agg)) agg[k] += n[k];
+  }
+  // 判据源 L-AC-3 分母 = 10 件合计**出现次数**（等价于 40 个布尔读数全 0）
+  assert.deepEqual(agg, { j1: 0, j2: 0, j3: 0, j4: 0, j5: 0 }, 'R-2a/R-2b：段内路径噪声与空反引号合计须为 0');
+});
+
+test('RO-12 L-AC-5/L-AC-6：三要素齐备（形态 ≥18 ＋ must_contain 43/43 ＋ 规格指向 10/10）＋ skills 16/16', () => {
+  let formLines = 0, specLines = 0, mustTotal = 0, mustHit = 0, skillTotal = 0, skillHit = 0;
+  for (const id of ROLE_IDS) {
+    const d = resolveRoleRef(id);
+    const p = composeWorkerPrompt({ batchId: 'b-lac5', lane: 'l1', cmd: 'c', layer: d.layer, role: id, firstLine: 'h' });
+    const sec = deliverablesSectionOf(p);
+    const secLines = sec.split('\n');
+    formLines += secLines.filter((l) => l.startsWith('- 交付件：')).length;
+    specLines += secLines.filter((l) => l.startsWith('- 规格：见技能')).length;
+    for (const it of (d.deliverables ?? [])) {
+      for (const m of (it?.must_contain ?? [])) { mustTotal++; if (sec.includes('`' + m + '`')) mustHit++; }
+    }
+    for (const s of (d.skills ?? [])) { skillTotal++; if (sec.includes('`' + s + '`')) skillHit++; }
+  }
+  assert.ok(formLines >= 18, 'R-3(a)：形态行 ≥ 18，实得 ' + formLines);
+  assert.equal(mustTotal, 43, 'R-3(b) 分母：10 件 must_contain 合计 43 条');
+  assert.equal(mustHit, mustTotal, 'R-3(b)：必含结构逐条命中 ' + mustHit + '/' + mustTotal);
+  assert.equal(specLines, 10, 'R-3(c)：规格指向行 10/10（每件恰 1 行）');
+  assert.equal(skillTotal, 16, 'R-4a 分母：10 件 skills 合计 16 条');
+  assert.equal(skillHit, skillTotal, 'R-4a：skills 逐条命中 ' + skillHit + '/' + skillTotal);
+});
+
+test('RO-13 L-AC-8：十件语料去路径化（frontmatter path: 0 / form: 18 / 全文产物前缀 0 / must_contain 18）', () => {
+  // 拆段拼接构造产物前缀 token：避免本断言自身的源码文本构成「仍保留路径」的假样本。
+  const artefactPrefix = ['artifacts', '<batchId>'].join('/');
+  let files = 0, pathKey = 0, formKey = 0, mustKey = 0, artefact = 0;
+  for (const id of ROLE_IDS) {
+    const src = resolveRoleRef(id).source;
+    assert.equal(typeof src, 'string', id + ' · source 须为语料文件绝对路径');
+    files++;
+    const text = fs.readFileSync(src, 'utf8');
+    const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
+    pathKey += (head.match(/path:/g) ?? []).length;
+    formKey += (head.match(/form:/g) ?? []).length;
+    mustKey += (head.match(/must_contain:/g) ?? []).length;
+    artefact += text.split(artefactPrefix).length - 1;
+  }
+  assert.equal(files, 10, 'R-5 面内文件数 = 10（7 件 software-team ＋ 3 件 research-team）');
+  assert.equal(pathKey, 0, 'R-5：frontmatter path: 须归零');
+  assert.equal(formKey, 18, 'R-5：frontmatter form: 须为 18 条');
+  assert.equal(artefact, 0, 'R-5：全文产物前缀须归零（正文同步去路径化）');
+  assert.equal(mustKey, 18, 'R-5：must_contain 键 18 —— 语义面零丢失');
+});
+
+test('RO-14 L-AC-7③：双通道写死 —— role 语料 skills 不回填装配前缀通道', () => {
+  assert.equal(assembleCmd('designer', null, 'c'), '[role=designer] c', 'R-4b：null ⇒ 无 skills 前缀段');
+  assert.equal(assembleCmd('designer', [], 'c'), '[role=designer] c', 'R-4b：[] ⇒ 无 skills 前缀段');
+  assert.equal(assembleCmd('designer', ['a', 'b'], 'c'), '[role=designer] [skills=a,b] c', 'R-4b：显式 t.skills ⇒ 出段');
+});
+
+test('RO-15 L-AC-9：负判据 —— 未新增 deliverables × produce 一致性检查（字面量命中 0）', () => {
+  // 自指护栏：模式**拆段拼接**构造（本行因此不含被禁字面量本身，否则断言自己的源码就会命中 ⇒ 假红）。
+  const FORBIDDEN = new RegExp(['role' + '_deliverable', 'ROLE' + '_DELIVERABLE', 'deliverable' + '_mismatch'].join('|'), 'i');
+  const scan = (dir, hits) => {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return hits; }
+    for (const e of ents) {
+      if (e.name === 'node_modules' || e.name === '.git') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) scan(full, hits);
+      else if (/\.(m?[jt]s)$/.test(e.name) && FORBIDDEN.test(fs.readFileSync(full, 'utf8'))) hits.push(full);
+    }
+    return hits;
+  };
+  const pkg = roleCorpusRoot();
+  const hits = ['lib', 'test', 'scripts'].flatMap((s) => scan(path.join(pkg, s), []));
+  assert.deepEqual(hits, [], 'R-6：不得出现一致性检查字面量（不落事件、不落门禁）');
 });
