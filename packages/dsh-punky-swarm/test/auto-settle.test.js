@@ -33,7 +33,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { createGates } from '../lib/state/gates.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
-import { threeTierTasks, seedArtifacts, assemblyCtxOpts, tempRoot } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assemblyCtxOpts, tempRoot, writeRuntime, assemblyCtxWeb } from './helpers/gate-fixture.mjs';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
   EVT_MEMBER_SETTLED, EVT_BATCH_PHASE, EVT_MEMBER_DISPATCH, EVT_SWARM_REPORT,
@@ -48,6 +48,9 @@ import { createCoreTools } from '../lib/tools/core.js';
 import { validateOverlay, ALLOWED_TOP_KEYS } from '../lib/hot/config-watch.js';
 import { mailboxRootOf, REPORT_CHANNEL } from '../lib/engine/dispatch.js';
 import { readUnacked } from '../lib/comms/mailbox.js';
+// J8/J9（R-5 热更 + boot 对账）需要**装配级**驱动：`apply` + runtime.json 热写
+//   （写法镜像 `test/watch-hotconfig.test.js` / `test/watch-bootoverlay.test.js`）
+import { apply } from '../lib/index.js';
 
 // ── 装配级 fake ctx：`assemblyCtxOpts()` `on` 项存 `{ fn, opts }`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 // 合规三层批（plan/exec/audit）——判据链复用 gate-fixture（与既有套件同一份契约形态）
@@ -628,5 +631,265 @@ test('I6: 【专门用例·同判据回归】`verdict: pass` ⇒ 完成门判定
   store.setMember(S, 'i6', 'a1', 'merged', 'artifact-verdict: pass');
   const g = completeGateOf(root, store, S, 'i6');
   assert.equal(g.ok, true, '白名单 ∩{pass,skip} 的既有判定逐字不变（merged 放行 —— 与改前同判据）');
+});
+
+// ── J：auto-settle **停用开关**（2026-10-09 批 `auto-settle-disable-switch-20261009`）──────────────
+//   开关形态 = `config.autoSettle.enabled`（顶层键）；判据源 = `plan/autosettle-switch-spec.md` §6
+//   （L-AC-1..L-AC-14）。本组覆盖 L-AC-1..L-AC-12（L-AC-13 热更端到端 / L-AC-14 导出表 diff 属验收矩阵，
+//   登记为交接项交 Tester 承接）。
+//   事实源纪律同 A/B/G/I 组：断言一律读 `store.readBatch` 的批次 JSON（**不读模块内部状态**）。
+//   ⚠ 本组的存在理由（判据源 RK-1「**半停用**」= 本形态头号坑）：只证「主路不装」是不够的——必须**同时**
+//     证明「兼底路回报照发」且「兼底路不再结算」；只落其一 ⇒ 开关形同虚设（J4+J5 分别压两侧）。
+/** 停用留痕的 `reason` 字面量：与 `lib/engine/auto-settle.js` 内 `AUTO_SETTLE_DISABLED_REASON` 同值。
+ *  该常量**刻意不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 测试侧按同字面量断言。 */
+const DISABLED_REASON = 'auto-settle-disabled';
+
+test('J1: 【R-1 缺省兼容 · L-AC-1】未声明开关键 ⇒ 主路照装（installed:true / 恰 1 条 subagent/end / opts={global:true} / count()=0）', () => {
+  const root = tempRoot('punky-as-j1-');
+  const ctx = assemblyCtxOpts();
+  // 现状调用形态逐字同（`lib/index.js` 装配点去掉新键后的原样：deps **不含**任何开关键）
+  const reg = installAutoSettle(ctx, { store: createStore(root), dispatchIndex: new Map(), root, logger: ctx.logger });
+  try {
+    assert.equal(reg.installed, true, '缺省（undefined）⇒ 等价 true（R-1 向后兼容）');
+    const hooks = [...(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? [])];
+    assert.equal(hooks.length, 1, '恰一条 subagent/end 订阅');
+    assert.deepEqual(hooks[0].opts, { global: true }, 'global 硬要求不变（C-4：缺则被 scope 化的 ctx 漏收）');
+    assert.equal(reg.count(), 0, 'count() 初始为 0');
+  } finally {
+    reg.dispose();
+    assert.equal((ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? []).size, 0, 'dispose 退订（幂等）');
+  }
+});
+
+test('J2: 【R-1 · L-AC-2/L-AC-3】缺省 ≡ 显式 true；7 取值采样只有 false 命中停用（非布尔/假值不得越权关停）', () => {
+  const mountOf = (enabled) => {
+    const ctx = assemblyCtxOpts();
+    const deps = { store: createStore(tempRoot('punky-as-j2-')), dispatchIndex: new Map(), root: '/x', logger: ctx.logger };
+    if (enabled !== undefined) deps.enabled = enabled; // `undefined` 走「键不出现」形态
+    const reg = installAutoSettle(ctx, deps);
+    const shape = {
+      installed: reg.installed,
+      // 停用 ⇒ 该事件从未注册过 ⇒ `get()` 返回 undefined（用 `?.size ?? 0`，不能对 `?? []` 取 `.size`）
+      listeners: ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END)?.size ?? 0,
+      count: reg.count(),
+    };
+    reg.dispose();
+    return shape;
+  };
+  const absent = mountOf(undefined);
+  const explicitTrue = mountOf(true);
+  assert.deepEqual(explicitTrue, absent, 'L-AC-2：显式 true 与缺省的挂载形态差异为 0');
+  assert.deepEqual(absent, { installed: true, listeners: 1, count: 0 }, '缺省 = 启用 + 恰 1 条订阅');
+  // L-AC-3：7 取值采样（只有显式 false 停用），停用命中恰 1
+  const samples = [false, undefined, null, 0, '', 'false', 'no'];
+  let disabledHits = 0;
+  for (const v of samples) {
+    const s = mountOf(v);
+    if (v === false) {
+      assert.equal(s.installed, false, '显式 false ⇒ 停用');
+      assert.equal(s.listeners, 0, '停用 ⇒ 零订阅');
+      disabledHits += 1;
+    } else {
+      assert.equal(s.installed, true, '取值 ' + JSON.stringify(v) + ' **不得**越权关停（RK-3：禁真值判断）');
+      assert.equal(s.listeners, 1);
+    }
+  }
+  assert.equal(disabledHits, 1, '采样点 7、停用命中 1（=== false 严格判定）');
+});
+
+test('J3: 【R-2 ① · L-AC-4/L-AC-5/L-AC-10】enabled:false ⇒ 零订阅 + reason 自证可辨 + count()=0 + dispose() 不抛 + 停用日志不谎报 mounted', async () => {
+  const root = tempRoot('punky-as-j3-');
+  const S = 'sess-j3';
+  const store = seedBatch(root, S, 'j3');
+  const ctx = assemblyCtxOpts();
+  const reg = installAutoSettle(ctx, {
+    enabled: false, store, root,
+    dispatchIndex: new Map([['ws-j3', { sessionId: S, batchId: 'j3', lane: 'e1' }]]),
+    logger: ctx.logger,
+  });
+  assert.equal(reg.installed, false, '停用 ⇒ installed:false（真实挂载态，非降级伪装）');
+  assert.equal(typeof reg.reason, 'string');
+  assert.ok(reg.reason.length > 0, 'R-2 ①：reason 非空字符串');
+  assert.equal(reg.reason, DISABLED_REASON, 'reason 自证为停用（约束 8：禁笼统 skipped）');
+  assert.notEqual(reg.reason, 'ctx.on unavailable or store missing', 'C-6：与宿主能力缺失成因**可辨**');
+  assert.equal(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END)?.size ?? 0, 0, 'L-AC-4：主路零订阅');
+  assert.equal(reg.count(), 0, 'L-AC-4：count() === 0');
+  assert.doesNotThrow(() => reg.dispose(), 'L-AC-4：dispose() 不抛（返回形态同形，C-5）');
+  // R-3 / L-AC-10 非静默：≥1 条 info 含配置键名或停用字样；**0** 条含旧谎报行
+  const infos = ctx.calls.info;
+  assert.ok(infos.some((l) => /autoSettle|disabled|停用/.test(l)), '停用必留痕（≥1 条 info）');
+  assert.equal(infos.filter((l) => l.includes('auto-settle mounted')).length, 0, '不得谎报 mounted（RK-4）');
+  assert.equal(ctx.calls.warn.length, 0, '停用不是异常路径 ⇒ 零 warn 噪音');
+  // L-AC-5：停用态即使人工投递 subagent/end 也零动作（订阅集合应为空；构造等价于「总线上仍有他人监听」时本插件不回）
+  const before = store.readBatch(S, 'j3').events.length;
+  await emitSubagentEnd(ctx, endInfo('ws-j3'));
+  const b = store.readBatch(S, 'j3');
+  assert.equal(b.lanes.e1, 'running', 'L-AC-5：lane 零状态变化');
+  assert.equal(b.phase, 'running', 'L-AC-5：批次相位保持 running（R-3：不得静默改相位）');
+  assert.equal(settleEventsOf(store, S, 'j3').length, 0, 'L-AC-5：auto.settle.* 事件计数 0');
+  assert.equal(b.events.length, before, 'L-AC-5：事件流零新增');
+});
+
+test('J4: 【R-2 ② 回报全留 · L-AC-6】停用时 swarm_report(settle-request) 投递面一字不少：delivered + swarm.report 事件 + Leader broadcast 各恰 1', async () => {
+  const root = tempRoot('punky-as-j4-');
+  const S = 'sess-j4';
+  const cfg = { autoSettle: { enabled: false } };
+  const store = seedBatch(root, S, 'j4');
+  store.appendEvent(S, 'j4', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-j4' });
+  const ctx = assemblyCtxOpts();
+  const tools = createCoreTools(ctx, { store, root, config: cfg, readConfig: () => cfg });
+  const rep = tools.find((t) => t.name === 'swarm_report');
+  assert.ok(rep, 'swarm_report 仍注册（既有轨道零回归）');
+  const exec = { name: 'swarm_report', arguments: {}, agent: { session: { id: 'ws-j4' } } };
+  const out = await rep.execute({ type: 'settle-request', summary: 'lane 交付完成，请求结算', artifactPath: 'exec/e1.md' }, exec);
+  assert.equal(out.delivered, true, '★回报仍投递（R-2 ②：用户原话「成员只能使用 swarm_report **回报**」⇒ 回报通道必须活）');
+  assert.equal(out.eventWritten, true, '批事件照写');
+  assert.equal(out.batchId, 'j4', '目标批次可核（绑定 lane e1 的批次）');
+  assert.equal(out.lane, 'e1');
+  assert.equal(out.settle, undefined, 'L-AC-7：返回值不含 settle 键（或为 null）—— 不新增输出键（C-12）');
+  const b = store.readBatch(S, 'j4');
+  assert.equal(b.events.filter((e) => e.type === EVT_SWARM_REPORT).length, 1, 'L-AC-6：批事件 swarm.report 恰 1 条');
+  // L-AC-6：Leader 通道（broadcast，`REPORT_CHANNEL.leader`）收到恰 1 条
+  const inbox = readUnacked(mailboxRootOf(root, S, 'j4'), { type: REPORT_CHANNEL.leader });
+  assert.equal(inbox.length, 1, 'L-AC-6：Leader broadcast 恰 1 条');
+  // `mailbox.send(root, box, message, meta)` ⇒ channel 在 `box`、载荷在 `message`（meta 为 null）
+  assert.equal(inbox[0].box.type, REPORT_CHANNEL.leader, 'Leader 通道 = broadcast（取件箱可核）');
+  assert.equal(inbox[0].message.kind, 'settle-request', '报文 kind 可核（回报类型不变）');
+  assert.equal(inbox[0].message.lane, 'e1', '报文带 lane（成员回报口径不变）');
+});
+
+test('J5: 【R-2 ② 不结算 + R-3 留痕 · L-AC-7/L-AC-8/L-AC-9】停用 ⇒ lane 仍 running、判定器零调用；跳过留痕连触 3 次各留一次（不进幂等链）', async () => {
+  const root = tempRoot('punky-as-j5-');
+  const S = 'sess-j5';
+  const cfg = { autoSettle: { enabled: false } };
+  const store = seedBatch(root, S, 'j5');
+  store.appendEvent(S, 'j5', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-j5' });
+  const ctx = assemblyCtxOpts();
+  const tools = createCoreTools(ctx, { store, root, config: cfg, readConfig: () => cfg });
+  const rep = tools.find((t) => t.name === 'swarm_report');
+  const exec = { name: 'swarm_report', arguments: {}, agent: { session: { id: 'ws-j5' } } };
+  for (let i = 1; i <= 3; i += 1) {
+    await rep.execute({ type: 'settle-request', summary: '第 ' + i + ' 次请求结算' }, exec);
+  }
+  const b = store.readBatch(S, 'j5');
+  assert.equal(b.lanes.e1, 'running', '★L-AC-7：**不得** merged（半停用 = 判据源 RK-1 头号坑）');
+  assert.equal(b.phase, 'running', 'R-3：停用不改相位（批保持 running）');
+  assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length, 0, 'L-AC-7：判定器零调用 ⇒ 零 auto.settle.triggered');
+  assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_PAUSED).length, 0, 'L-AC-10 尾：零 auto.settle.paused');
+  assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.from !== 'pending').length, 0, 'L-AC-7：零结算迁移');
+  // L-AC-8 / L-AC-9：跳过留痕每次各留一次（**不进幂等链**）
+  const skips = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
+  assert.equal(skips.length, 3, 'L-AC-9：连触 3 次 ⇒ 留痕计数 === 3（**不得**为 1；该族不进幂等链）');
+  for (const s of skips) {
+    assert.equal(s.reason, DISABLED_REASON, 'L-AC-8：reason === auto-settle-disabled（自证）');
+    assert.equal(s.trigger, AUTO_SETTLE_TRIGGERS.settleRequest, 'L-AC-8：trigger === settle-request（自证为兼底路）');
+    assert.equal(s.lane, 'e1', 'L-AC-8：lane 可核');
+  }
+  assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED && e.reason === 'already-settled').length, 0, 'L-AC-9：already-settled 计数 0');
+});
+
+test('J6: 【R-5 白名单 · L-AC-12】autoSettle 过 validateOverlay（新顶层键不静默失效）；未登记顶层键仍被拒', () => {
+  assert.equal(ALLOWED_TOP_KEYS.has('autoSettle'), true, 'autoSettle 已入 ALLOWED_TOP_KEYS（漏加 ⇒ 配置写了不生效且不报错，RK-2）');
+  const ok = validateOverlay({ autoSettle: { enabled: false } });
+  assert.equal(ok.ok, true, '正向：新键过校验');
+  assert.deepEqual(ok.errors, [], '零 errors');
+  const bad = validateOverlay({ autoSettleX: {} });
+  assert.equal(bad.ok, false, '反向：未登记顶层键仍被拒（校验器未被放宽）');
+  assert.ok(bad.errors[0].includes('unknown top-level key'), '拒因文案含 unknown top-level key');
+});
+
+test('J7: 【R-4 结算归位 · L-AC-11】停用后 Leader 两步经既有写路径收口；review→failed 空 note 仍被拒（既有强制零改动）', () => {
+  const root = tempRoot('punky-as-j7-');
+  const S = 'sess-j7';
+  const store = seedBatch(root, S, 'j7');
+  // 停用态下 lane 停在 running（J5 已证）；Leader 显式两步 = `member_status`/`member_settle` 的**同一写路径**
+  //   （工具面 `lib/tools/member-tools.js` 亦经 `store.setMember`，无第二套判定）
+  store.setMember(S, 'j7', 'e1', 'review');
+  store.setMember(S, 'j7', 'e1', 'merged');
+  const b = store.readBatch(S, 'j7');
+  assert.deepEqual(
+    b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.lane === 'e1' && e.from !== 'pending').map((e) => e.from + '->' + e.to),
+    ['running->review', 'review->merged'],
+    'L-AC-11：两步序列 running->review->merged',
+  );
+  assert.equal(b.lanes.e1, 'merged', 'L-AC-11：lane 收口到 merged');
+  // 既有强制逐字不变（C-13）：review→failed 必须带非空 note
+  const store2 = seedBatch(root, 'sess-j7b', 'j7b');
+  store2.setMember('sess-j7b', 'j7b', 'e1', 'review');
+  assert.throws(
+    () => store2.setMember('sess-j7b', 'j7b', 'e1', 'failed'),
+    /GATE_SETTLE_NOTE_MISSING/,
+    'review→failed 缺 note 仍被既有写路径拒（本次开关零新参数）',
+  );
+});
+
+// ── J8/J9：R-5 生效方式（**热更** vs **boot 对账**）────────────────────────────────────────────
+//   两例均为**装配级**（`apply` + `<root>/config/runtime.json` 真实落盘 + fs.watch 通道），
+//   观察面 = 假 ctx 的 `listeners.get('subagent/end')`（= 主路订阅条数，1 ↔ 0 是**主路装没装**的直接读数）
+//   + `ctx.calls.info` 热切留痕。等待窗口对齐 watch-hotconfig 先例（fs.watch → 防抖 300ms → reload → onChange）。
+const hotSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const HOT_SETTLE = 300;   // 装配后余量
+const HOT_SLEEP = 1000;   // 防抖 300ms + 事件 + 解析余量（先例 `watch-hotconfig.test.js:46`）
+const subagentEndCount = (ctx) => ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END)?.size ?? 0;
+
+test('J8: 【R-5 热更生效 · L-AC-13】runtime.json 写 autoSettle.enabled:false ⇒ 主路订阅 1→0（无需重启）；写回 true ⇒ 0→1', async () => {
+  const root = tempRoot('punky-as-j8-');
+  writeRuntime(root, {}); // 预建 runtime.json（文件级 watch 需文件存在；初始 overlay {} 零变化）
+  const { ctx } = assemblyCtxWeb();
+  const disposer = apply(ctx, { root }); // 静态 config **不含** autoSettle ⇒ 缺省启用
+  try {
+    await hotSleep(HOT_SETTLE);
+    assert.equal(subagentEndCount(ctx), 1, '装配后主路已挂（缺省 = 启用，R-1）');
+    // true → false：热写即退订（**无需重启**）
+    writeRuntime(root, { autoSettle: { enabled: false } });
+    await hotSleep(HOT_SLEEP);
+    assert.equal(subagentEndCount(ctx), 0, 'L-AC-13：热写 false ⇒ 订阅 1 → 0');
+    assert.ok(
+      ctx.calls.info.some((l) => l.includes('auto-settle disabled') && l.includes('autoSettle.enabled')),
+      '热切停用留痕（含配置键名与停用字样）：' + ctx.calls.info.filter((l) => l.includes('auto-settle')).join(' || '),
+    );
+    assert.equal(ctx.calls.warn.length, 0, '停用热切不是异常路径 ⇒ 零 warn');
+    // 等效重写（无生效变化）⇒ 零操作（幂等，RK-8：不抖动）
+    ctx.calls.info.length = 0;
+    writeRuntime(root, { autoSettle: { enabled: false } });
+    await hotSleep(HOT_SLEEP);
+    assert.equal(subagentEndCount(ctx), 0, '仍 0（不重复处置）');
+    assert.equal(
+      ctx.calls.info.filter((l) => l.includes('auto-settle')).length, 0,
+      '等效重写 ⇒ 零 auto-settle 日志（无生效变化零操作）',
+    );
+    // false → true：重新订阅（恢复）
+    writeRuntime(root, { autoSettle: { enabled: true } });
+    await hotSleep(HOT_SLEEP);
+    assert.equal(subagentEndCount(ctx), 1, 'L-AC-13：热写 true ⇒ 订阅 0 → 1（自动结算恢复）');
+    assert.ok(ctx.calls.info.some((l) => l.includes('auto-settle re-mounted')), '恢复热切留痕');
+  } finally {
+    disposer();
+  }
+});
+
+test('J9: 【R-5 boot 对账】runtime.json **预置** autoSettle.enabled:false ⇒ 静态 config 缺省也不得漏停（防「重启后开关失效」）', async () => {
+  const root = tempRoot('punky-as-j9-');
+  // 持久策略：模拟「用户写好 runtime.json 后重启宿主」——静态 config 依然不含 autoSettle
+  writeRuntime(root, { autoSettle: { enabled: false } });
+  const { ctx } = assemblyCtxWeb();
+  const disposer = apply(ctx, { root });
+  try {
+    await hotSleep(HOT_SETTLE);
+    assert.equal(
+      subagentEndCount(ctx), 0,
+      'boot 对账生效：主路 0 订阅（缺此对账则「写了 false、重启后又挂上」= 本开关最危险的静默形态）',
+    );
+    assert.ok(
+      ctx.calls.info.some((l) => l.includes('[boot-overlay]') && l.includes('auto-settle')),
+      'boot 对账留痕带 [boot-overlay] tag（与热更路径可区分）：'
+        + ctx.calls.info.filter((l) => l.includes('auto-settle')).join(' || '),
+    );
+    assert.equal(ctx.calls.info.filter((l) => l.includes('hot config: auto-settle disabled')).length, 1, '恰一次停用对账');
+    assert.equal(ctx.calls.warn.length, 0, 'boot 对账零 warn（runtime.json 合法）');
+    assert.equal(ctx.calls.error.length, 0, 'boot 对账零 error');
+  } finally {
+    disposer();
+  }
 });
 
