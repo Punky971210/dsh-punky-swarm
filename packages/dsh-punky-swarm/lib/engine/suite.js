@@ -152,6 +152,26 @@ export const SUITE_TOOLS = Object.freeze([
   //   官方席位（由 Lead 调本工具拉起）**不经**该路径 ⇒ 席位工具面不因本条收窄（席位收窄属 B5 待定口径）。
   //   追加位置在**冻结前缀与既有 36 条之后** ⇒ 前 14 条冻结序列零变化（计数 36→37 / deny 19→20）。
   entry('spawn_teammate', 'dispatch', false, true, true),
+  // ── 【本批 `role-guide-extract-20261008` · D-1（R-3）】role 取件口 ──────────────────────────────
+  // `role_guide`：取某 role 的**已渲染三段**（职责 / 授权 / 交付要求；标题字面量只活在单点
+  //   `ROLE_SECTION_TITLES`，本注释刻意不复写标题原文 —— L-AC-6① 按**裸标题**扫 `lib/**/*.js`），
+  //   供 Leader 自写任务包（C-2 人工直派 / D-1 team 席位）时**取件拼装**，与引擎自派（C-1）**同源**。
+  //   三个布尔位**写死**（依据逐条对齐判据源 `## 方案` 4，实现与之一致）：
+  //   · `kind: 'read'` —— 只读**语料查询**（读 role 文件 + 纯函数渲染），同族先例 `gate_status`
+  //     （:78）/ `artifact_types`（:79）/ `task_pool`（:111）均 `('read', false, false, false)`；
+  //     宿主 = `lib/tools/query-tools.js`（只读查询族），**非**产物面（故不选 `asset-tools.js`）。
+  //   · `modeGate: false` —— 零写面、不触治理状态，**不落** `assertModeActive`；且不变量
+  //     「`modeGate ⊆ memberDeny`」要求「放开成员面的工具不得受模式门」（否则成员可用的工具会在
+  //     非生效模式下撞 `GATE_MODE_INACTIVE` 写出脏面）—— 同 `asset_claim` 撤门口径（:80 注）。
+  //   · `memberDeny: false`（＝**成员可用**）—— ① 零写面、零治理风险；② 与 2026-09-27 用户裁决
+  //     「三项全放」**同构**：`gate_status`（只读查自己缺什么）/ `artifact_types`（只读查层与目录
+  //     约定）均因「只读查询」放开成员面，`role_guide`（只读查自己的角色指引）同类；③ 收紧为 deny
+  //     会把 `SUITE_DENY_TOOLS` 由 17 抬到 18 —— 触发一条冻结序列变更而**零收益**。
+  //   · `write: false` —— 不写状态、不落事件（与 `gate_status` / `artifact_types` 同形）。
+  //   派生后果：`SUITE_TOOLS.length` 37 → **38**；`SUITE_DENY_TOOLS` 仍 **17** 项逐字不变；
+  //     `MODE_GATED_TOOLS` 仍 **11** 项逐字不变（本件不入两集）。追加位置在**冻结前缀与既有 37 条之后**
+  //     ⇒ 前 14 条冻结序列零变化，既有条目相对顺序逐字不变。
+  entry('role_guide', 'read', false, false, false),
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */

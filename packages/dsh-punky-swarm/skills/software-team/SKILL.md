@@ -35,12 +35,13 @@ triggers:
 
 1. **查 team-skill**：加载本 skill（`software-team`），据其**角色 / 层 / 产物契约**（§二）定分工。
 2. **定 roster**：按层定名册 —— plan（`coordinator-*` / `designer-*`）· exec（`coder-*` / `tester-*` / `reviewer-*`）· audit（`supervisor-*` / 可选 `docManager-*`）；**不限席**；席位不足时**合规复用**（复用须登记 + lane 记录注明实际执行者，见 §二 池化条目）。
-3. **逐个拉起席位**：`spawn_teammate({ name, description, prompt })` —— **逐个**建 **durable 席位**（**不是**一次性 subagent）。
-4. **写黑板 `wave_plan`**：复用既有 `batch` / `wave_plan`（**不新黑板**）；`tasks[].roster` 写成员名作**声明**；难度档在**引擎层写 `D`**（team 通道档；引擎枚举 `A|B|C|D`——D 与 C **同属建批档、同受建批门禁**，历史以 `C` 声明者仍兼容）。
-5. **派活**：`send_message(target=<成员名>, message=…)` —— **派活与唤醒的唯一正式通道**。
-6. **入边交接**：上游出件后 `handoff_submit(from, to, artifacts, assertions)`（**成员自交**，Leader 可代交）⇒ 下游 `handoff_view` 报 `READY` 才开工。
-7. **lane 进度与终态**：`member_status`（进度）→ `member_status(review)` → **`member_settle(merged|failed|conflict|skipped)`**；**audit 席位必须显式 settle**（不 settle ⇒ 批永久挂 `running`）。
-8. **批相位收口**：`batch_phase(complete)`（**须先经 `running`**；`planning → complete` 非法）。
+3. **逐个拉起席位（先取件 → 再拼装）**：**先调 `role_guide({ role })` 取件**，把返回的 `guide` 三段（`## 你的职责` / `## 你被授权决定` / `## 交付要求`）**原样拼进 `prompt`**（即 `spawn_teammate` 的 `prompt`）—— 引擎侧**同源单点**，**禁手抄**；随后 `spawn_teammate({ name, description, prompt })` —— **逐个**建 **durable 席位**（**不是**一次性 subagent）。
+4. **人工直派同样先取件**：不经 `spawn_teammate`、由 Leader **自写任务包**时（`lane_dispatch` 取回 `firstLine` 后自写首行），**同样先调 `role_guide({ role })` 取件**，把三段**落进任务包**正文，**禁手抄** —— 两条派发路径共用同一取件口，产出与 C-1（引擎自派）**逐字同源**。
+5. **写黑板 `wave_plan`**：复用既有 `batch` / `wave_plan`（**不新黑板**）；`tasks[].roster` 写成员名作**声明**；难度档在**引擎层写 `D`**（team 通道档；引擎枚举 `A|B|C|D`——D 与 C **同属建批档、同受建批门禁**，历史以 `C` 声明者仍兼容）。
+6. **派活**：`send_message(target=<成员名>, message=…)` —— **派活与唤醒的唯一正式通道**。
+7. **入边交接**：上游出件后 `handoff_submit(from, to, artifacts, assertions)`（**成员自交**，Leader 可代交）⇒ 下游 `handoff_view` 报 `READY` 才开工。
+8. **lane 进度与终态**：`member_status`（进度）→ `member_status(review)` → **`member_settle(merged|failed|conflict|skipped)`**；**audit 席位必须显式 settle**（不 settle ⇒ 批永久挂 `running`）。
+9. **批相位收口**：`batch_phase(complete)`（**须先经 `running`**；`planning → complete` 非法）。
 
 ### 流转时序（谁唤醒谁）
 

@@ -329,11 +329,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 166,
-      "blankLines": 48,
-      "lines": 674,
+      "asserts": 203,
+      "blankLines": 55,
+      "lines": 789,
       "tautologies": 0,
-      "tests": 35,
+      "tests": 41,
       "todos": 0
     },
     "test/failed-escalate.test.js": {
@@ -1209,7 +1209,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-08T05:21:46Z",
+  "generatedAt": "2026-10-08T07:27:14Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1220,15 +1220,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "role-deliverable-inject-fix-20261008：e01-impl 新增 7 用例（+34 asserts），并改 lib/engine/dispatch.js 渲染与新工具；baselines 单写者=Leader（§15③），时点合规（本批 exec 已全收口，§15④）",
+  "reason": "role-guide-extract-20261008：e01-impl 新增 role_guide 工具（D-0 抽取 renderRoleGuide + D-1 工具注册）并新增用例；baselines 单写者=Leader（§15③），时点=本批 exec 全收口后（§15④）",
   "schema": 1,
   "totals": {
-    "asserts": 7634,
-    "blankLines": 3839,
+    "asserts": 7671,
+    "blankLines": 3846,
     "files": 151,
-    "lines": 41445,
+    "lines": 41560,
     "tautologies": 0,
-    "tests": 1605,
+    "tests": 1611,
     "todos": 4
   }
 }

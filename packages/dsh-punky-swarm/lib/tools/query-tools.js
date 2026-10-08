@@ -26,6 +26,12 @@ import { handoffGateStateOf } from '../wave-plan.js';
 import { laneStateOf, isDanglingLane } from '../watch/lane-heartbeat.js';
 import { managerViewOf, MERGE_STATE_SOURCE, MEMBER_STATES_LEGACY } from './host-surface.js';
 import * as EVT from '../state/event-types.js';
+// 【本批 `role-guide-extract-20261008` · D-1 / R-2】`role_guide` 取的正是**引擎侧同一份**渲染单点
+//   （解析 `resolveRoleRef` ＋ 渲染 `renderRoleGuide`，二者均在 `lib/engine/dispatch.js`）——本文件
+//   **不自带任何三段模板/标题字面量**（R-5 渲染色同源的**结构性**保证，见 L-AC-6 ②④）。
+//   依赖方向单向：`lib/tools/*` → `lib/engine/*`；`dispatch.js` 只引 node 内置 + `../bridge` + `../state`
+//   + `./suite.js` ⇒ **无环**。
+import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE } from '../engine/dispatch.js';
 
 export function buildBatchStatusTools(cx) {
   const { ctx, deps, store } = cx;
@@ -123,6 +129,73 @@ export function buildGateTools(cx) {
           ...(batch.manager ? { manager: batch.manager } : {}),
           ...(batch.assembly ? { assembly: batch.assembly } : {}),
         };
+      },
+    }),
+  ];
+}
+
+/** `role_guide`（D-1 / R-2）：**只读取件口**——Leader 自写任务包时（C-2 人工直派 / D-1 team 席位）
+ *  从引擎取该 role 的**已渲染三段**，与 C-1（引擎自派）**同源**（R-5）。
+ *
+ *  **为什么是「取件口」而非「自动注入」**：`spawn_teammate` 参数面无 role 位 ⇒ 闭环只能是
+ *  「引擎给件 → Leader 取件拼装」；本工具即那个可调用、可核、报错显式的取件口。
+ *
+ *  **薄壳（零模板）**：`guide` = `renderRoleGuide(resolveRoleRef(role, { team }))` 的**原样输出**
+ *  —— 本函数**不**做任何拼装/改写/裁剪，故三段与任务包内出现的字节**逐字一致**。
+ *
+ *  **零静默（三条报错路径，均抛 `GATE_ROLE_UNRESOLVED`，禁返回空串/部分结果）**：
+ *   ① `role` 缺失 / 非字符串 / 空串 / 纯空白 ⇒ **本层先判空后抛**。**禁**透传 `resolveRoleRef` 的
+ *      `null` 语义——它对空串返回 `null`（不抛），透传会渲染出空 `guide`，即静默降级；
+ *   ② `role` 非空但零命中 ⇒ 由 `resolveRoleRef` 抛同一码（**复用**，不新造码）；
+ *   ③ 报错发生在**任何返回值构造之前** ⇒ 不存在 `{ guide: '' }` 这类部分结果。
+ *
+ *  **工具面定位**（R-3）：`lib/engine/suite.js` 登记为 `('read', false, false, false)`
+ *  —— 只读语料查询（同族先例 `gate_status` / `artifact_types` / `task_pool`）、零写面、
+ *  **成员可用**（只读查自己的角色指引，与 2026-09-27 用户裁决「三项全放」同构）。
+ *
+ *  **`output.schema` 的 `team` 用 `oneOf` 而非 `type:"string"`**（消费方契约实测，非偏好）：
+ *  判据源 §4 规定 `team` 未传时为 **`null`**，而宿主 `@deepseek-ai/dsh-tools@0.2.0-rc.2` 的
+ *  `assertSupportedJsonSchema` **拒绝 type 数组**（`type arrays are not supported`）且对声明为
+ *  `type:"string"` 的字段收到 `null` 会判 `must be a string` —— 正是本仓 task-25「已落盘却报
+ *  假失败」的同一形态。`oneOf:[{type:"string"},{type:"null"}]` 经**真实宿主校验函数**实测为零违例
+ *  （见 `exec/e01-impl/provenance/schema-check.mjs` 读数）。 */
+export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars -- 签名与同文件其余 builder 齐一（cx 由 register 侧统一注入）
+  return [
+    defineTool({
+      name: "role_guide",
+      description: "取某个 role 的**已渲染三段**（职责 / 授权 / 交付要求；标题字面量只活在单点 `ROLE_SECTION_TITLES`，本描述刻意不复写标题原文），供 Leader 在**自写任务包**时取件拼装——C-2 人工直派（`lane_dispatch` 取 `firstLine` 后自写首行）与 D-1 team 席位（`spawn_teammate` 的 `prompt`）**都走本件**，不得手抄。**渲染色同源**：`guide` 与引擎自派（C-1）任务包内的同一 role 三段**逐字一致**（同一单点 `renderRoleGuide`，本工具是薄壳、不自带模板）。**未解析到 role 一律明确报错**（`GATE_ROLE_UNRESOLVED`，含 `role` 缺失/非字符串/空串/纯空白与零命中两路），**不静默返回空串**。只读、零副作用。",
+      parameters: {
+        "role": {"type":"string","required":true,"description":"role id（如 `coordinator` / `coder`）；**不得**传对象——本工具只走解析路径"},
+        "team": {"type":"string","description":"限定团队目录；缺省 = 既有团队序（`software-team` 优先，余按字典序）"}
+      },
+      output: {
+        // ⚠ 本字段是**宿主的 value schema DSL**（`@deepseek-ai/dsh-tools` 的 `valueSchemaSpecToJsonSchema`），
+        //   **不是**裸 JSON Schema —— 两处实测口径（`exec/e01-impl/provenance/schema-check.mjs` 读数）：
+        //   ① `required` **只能**写成**逐属性** `required: true`（根节点不允许 `required` 数组：
+        //      写数组会被拒 `schema.required is not supported by the value schema DSL`）；
+        //   ② `type` **不接受数组**（`type arrays are not supported`）⇒ 可空字段只能走 `oneOf`。
+        //   `additionalProperties` 在 object 节点**必须显式给布尔**。
+        schema: {"type":"object","additionalProperties":false,"properties":{
+          "role":{"type":"string","required":true},
+          "team":{"oneOf":[{"type":"string"},{"type":"null"}],"required":true},
+          "source":{"type":"string","required":true},
+          "guide":{"type":"string","required":true},
+        }},
+        render: (_args, value) => TEXT_OUTPUT('role_guide ' + value.role + ' <- ' + value.source),
+      },
+      async execute(args) {
+        // ① 判空前置（**先于**解析）：缺失 / 非字符串 / 空串 / 纯空白 ⇒ 显式抛，禁透传 null 语义。
+        const role = args?.role;
+        if (typeof role !== 'string' || role.trim() === '') {
+          throw new Error(ROLE_UNRESOLVED_CODE + ': role_guide 的 `role` 参数缺失/非字符串/空串/纯空白'
+            + '（实得 ' + JSON.stringify(role) + '）⇒ 拒绝渲染（零静默：不得返回空 guide）');
+        }
+        const team = (typeof args?.team === 'string' && args.team.trim() !== '') ? args.team : undefined;
+        // ② 非空零命中 ⇒ 由 `resolveRoleRef` 抛 `GATE_ROLE_UNRESOLVED`（复用既有码，本工具不新造码）。
+        const roleData = resolveRoleRef(role, { team });
+        // ③ 单点渲染（薄壳）：不做拼装/裁剪/改写 ⇒ 与 C-1 任务包内三段逐字一致。
+        const guide = renderRoleGuide(roleData);
+        return { role, team: args?.team ?? null, source: String(roleData?.source ?? ''), guide };
       },
     }),
   ];

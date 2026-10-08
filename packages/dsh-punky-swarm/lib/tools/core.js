@@ -52,7 +52,7 @@ import { assertModeActive, clearPendingBatch } from './tier-gate.js';
 import { warnAbortDangling, danglingLanesOf } from '../state/dangling.js';
 
 import { buildWavePlanTools } from './wave-plan-tools.js';
-import { buildBatchStatusTools, buildGateTools } from './query-tools.js';
+import { buildBatchStatusTools, buildGateTools, buildRoleGuideTools } from './query-tools.js';
 import { buildArtifactTools, buildAssetClaimTools } from './asset-tools.js';
 import { buildAssignTools } from './assign-tools.js';
 import { buildLaneTools, buildDispatchTools, buildMemberStatusTools } from './member-tools.js';
@@ -200,6 +200,7 @@ export function createCoreTools(ctx, deps) {
     ...buildAssignTools(cx),
     ...buildAssetClaimTools(cx),
     ...buildGateTools(cx),
+    ...buildRoleGuideTools(cx),
     ...buildLaneTools(cx),
     ...buildHandoffTools(cx),
     ...buildDispatchTools(cx),

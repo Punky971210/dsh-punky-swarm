@@ -34,7 +34,10 @@ import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapS
 // 【2026-10-07 · P2（批 role-injection-refactor-20261006 / lane e02-inject）】role 数据面注入面的读端。
 // 【2026-10-08 · 本批 role-deliverable-inject-fix-20261008 / lane e01-impl】补 `ROLE_MANDATORY_FIELDS`（R-1 判据面）
 //   与 `roleCorpusRoot`（L-AC-9 的仓库面扫描起点）。
-import { resolveRoleRef, deriveDenyTools, roleToolVocabulary, ROLE_SECTION_TITLES, ROLE_UNRESOLVED_CODE, ROLE_MANDATORY_FIELDS, roleCorpusRoot } from '../lib/engine/dispatch.js';
+import { resolveRoleRef, deriveDenyTools, roleToolVocabulary, ROLE_SECTION_TITLES, ROLE_UNRESOLVED_CODE, ROLE_MANDATORY_FIELDS, roleCorpusRoot, renderRoleGuide } from '../lib/engine/dispatch.js';
+// 【2026-10-08 · 本批 `role-guide-extract-20261008` / lane `e01-impl`】D-1（R-3）工具面登记表的读端：
+//   `SUITE_TOOLS` 计数与 `MODE_GATED_TOOLS` 逐项比对（L-AC-4）。
+import { SUITE_TOOLS, MODE_GATED_TOOLS } from '../lib/engine/suite.js';
 import { issueLaneHandle, LANE_HANDLE_TTL_MS } from '../lib/bridge/lane-handle.js';
 import { bindingGapOf } from '../lib/watch/lane-heartbeat.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
@@ -670,4 +673,116 @@ test('RO-15 L-AC-9：负判据 —— 未新增 deliverables × produce 一致�
   const pkg = roleCorpusRoot();
   const hits = ['lib', 'test', 'scripts'].flatMap((s) => scan(path.join(pkg, s), []));
   assert.deepEqual(hits, [], 'R-6：不得出现一致性检查字面量（不落事件、不落门禁）');
+});
+
+// ── 【本批 `role-guide-extract-20261008` / lane `e01-impl`】D-0 单点抽取 ＋ D-1 `role_guide` 取件口 ──────
+// 判据源 = `plan/role-guide-spec.md`；对应验收项 **L-AC-1 / L-AC-2 / L-AC-3 / L-AC-4 / L-AC-6**。
+// ⚠ 执行面提示（沿用本文件既有登记，判据源 §7.2-2 同源）：本检出缺 `@deepseek-ai/dsh-tools` ⇒ 本文件
+//   **当前不可执行**（`Cannot find package '@deepseek-ai/dsh-tools'`）。本节断言为**行为面**，
+//   lane 侧的**可执行**读数由 `exec/e01-impl/provenance/probe-lac.mjs` 给出（harness 解析钩子把该
+//   specifier 重定向到**从宿主 app.asar 提取的真件**，不改仓库）。
+
+test('RO-16 L-AC-1①②：`renderRoleGuide` 单点导出 ＋ `appendRoleSections` 内三段标题命中 0', () => {
+  assert.equal(typeof renderRoleGuide, 'function', 'D-0：纯渲染单点须导出自 lib/engine/dispatch.js');
+  assert.equal(renderRoleGuide.length, 1, '签名恰 1 个入参（只吃**已解析**的 role 对象，不吃 id 字符串）');
+  // 裸标题原文口径（与 L-AC-6 的可达构造一致）：注释里复写标题原文同样计入命中。
+  const RAW = [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables];
+  const src = fs.readFileSync(path.join(roleCorpusRoot(), 'lib', 'engine', 'dispatch.js'), 'utf8');
+  const bodyOf = (marker) => { const at = src.indexOf(marker); return at < 0 ? '' : src.slice(at, src.indexOf('\n}', at)); };
+  const appendBody = bodyOf('function appendRoleSections');
+  const renderBody = bodyOf('export function renderRoleGuide');
+  assert.ok(appendBody.includes('renderRoleGuide('), 'appendRoleSections 须**改调**单点（薄适配器）');
+  for (const t of RAW) {
+    assert.equal(appendBody.split(t).length - 1, 0, 'appendRoleSections 内不得复写标题原文：' + t);
+    assert.equal(renderBody.split(t).length - 1, 0, 'renderRoleGuide 内不得复写标题原文（标题只经 ROLE_SECTION_TITLES）：' + t);
+  }
+});
+
+test('RO-17 L-AC-1③④：行为守恒 —— 三段块边界恰如约定；未声明 role 仍整体缺席', () => {
+  const guide = renderRoleGuide(ROLE_FIXTURE);
+  assert.equal(guide.split('\n')[0], ROLE_SECTION_TITLES.responsibilities, '首行**恰为**裸标题（无前导空行）');
+  assert.equal(guide.startsWith('\n'), false, '前导空行归调用方，不得吸进单点');
+  assert.equal(guide.endsWith('\n'), false, '尾随空行归 composeWorkerPrompt，不得吸进单点');
+  assert.ok(guide.trim().length > 0, '末行非空');
+  const p = composeWorkerPrompt({ batchId: 'b-ro', lane: 'l1', cmd: 'c', layer: 'exec', role: ROLE_FIXTURE });
+  assert.equal(p.includes(guide), true, 'C-1：三段块须在任务包内**逐字**在场');
+  assert.equal(p.split(guide).length - 1, 1, 'C-1：三段块恰命中 1 次');
+  const pNull = composeWorkerPrompt({ batchId: 'b-ro', lane: 'l1', cmd: 'c', layer: 'exec', role: null });
+  assert.equal(pNull.split(ROLE_SECTION_TITLES.responsibilities).length - 1, 0, '未声明 role ⇒ 三段整体缺席（防「抽取顺手改成恒渲染」）');
+});
+
+test('RO-18 L-AC-2/R-5：`role_guide` 注册面恰 1 件 ＋ 三段与 C-1 逐字同源（薄壳零模板）', async () => {
+  const root = tempRoot('punky-lac2-rg-');
+  const store = seedBatch(root, 'sess-c', 'b-rg1');
+  const tools = createCoreTools(mkCtx(null), { store, root, config: {} });
+  const hits = tools.filter((t) => t.name === 'role_guide');
+  assert.equal(hits.length, 1, 'role_guide 须恰注册 1 件');
+  const r = await hits[0].execute({ role: 'coder' }, {});
+  assert.deepEqual(Object.keys(r).sort(), ['guide', 'role', 'source', 'team'], '返回键集合 ⊇ {role,team,source,guide}');
+  assert.equal(r.role, 'coder', 'role = 入参原样');
+  assert.equal(r.team, null, 'team 未传 ⇒ null');
+  assert.equal(path.isAbsolute(r.source) && r.source.endsWith('coder.md'), true, 'source = 命中的角色文件绝对路径');
+  const RAW = [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables];
+  for (const t of RAW) assert.ok(r.guide.split(t).length - 1 >= 1, '三段裸标题各 ≥1：' + t);
+  assert.equal(r.guide.split('\n')[0], ROLE_SECTION_TITLES.responsibilities, 'guide 首行恰为裸标题（无前导空行）');
+  const prompt = composeWorkerPrompt({ batchId: 'b-ro', lane: 'l1', cmd: 'c', layer: 'exec', role: 'coder' });
+  assert.equal(prompt.includes(r.guide), true, '同源：guide 是 C-1 任务包输出的逐字 substring');
+  assert.equal(prompt.split(r.guide).length - 1, 1, '同源：命中恰 1 次');
+  assert.equal(r.guide, renderRoleGuide(resolveRoleRef('coder')), 'R-5：工具是薄壳，`guide === renderRoleGuide(resolveRoleRef(role))` 逐字相等');
+  assert.equal((await hits[0].execute({ role: 'coder', team: 'software-team' }, {})).team, 'software-team', 'team 显式传入 ⇒ 原样回显');
+});
+
+test('RO-19 L-AC-3：非法/未解析 role 一律抛错（零静默；含宿主参数校验前置拦截的如实口径）', async () => {
+  const root = tempRoot('punky-lac3-rg-');
+  const store = seedBatch(root, 'sess-c', 'b-rg2');
+  const tools = createCoreTools(mkCtx(null), { store, root, config: {} });
+  const tool = tools.find((t) => t.name === 'role_guide');
+  assert.ok(tool, 'role_guide 已注册');
+  // 第 3 列 = 是否**达工具层**：宿主 `defineTool` 先按参数 DSL 校验实参（`role` 声明 `required:true`）
+  //   ⇒「缺参数 / 非字符串」两路由 `ToolArgsError` 前置拦截，不可能呈现 `GATE_ROLE_UNRESOLVED`。
+  //   六路**全部抛错、零空 guide** ⇒ 零静默成立（判据源偏差登记见 `exec/e01-impl.md`）。
+  const cases = [
+    ['role 空串', { role: '' }, true],
+    ['role 纯空白', { role: '   ' }, true],
+    ['role 零命中', { role: 'no-such-role-xyz' }, true],
+    ['缺 role 参数', {}, false],
+    ['role 非字符串', { role: 123 }, false],
+    ['role = null', { role: null }, false],
+  ];
+  for (const [label, args, reachesToolLayer] of cases) {
+    let threw = false; let msg = ''; let value = null;
+    try { value = await tool.execute(args, {}); } catch (e) { threw = true; msg = String(e?.message ?? e); }
+    assert.equal(threw, true, label + ' ⇒ 必须抛错（禁返回空 guide/部分结果）');
+    assert.equal(value, null, label + ' ⇒ 不得有返回值');
+    if (reachesToolLayer) assert.match(msg, /GATE_ROLE_UNRESOLVED/, label + ' ⇒ 工具层显式判空/复用既有码');
+    else assert.match(msg, /invalid arguments/, label + ' ⇒ 宿主参数 DSL 前置拦截（未达工具层）');
+  }
+});
+
+test('RO-20 L-AC-4：`role_guide` 工具面定位（四字段 ＋ 派生后果 ＋ 不变量）', () => {
+  const e = SUITE_TOOLS.find((t) => t.name === 'role_guide');
+  assert.ok(e, 'suite.js 须登记 role_guide');
+  assert.deepEqual({ kind: e.kind, modeGate: e.modeGate, memberDeny: e.memberDeny, write: e.write },
+    { kind: 'read', modeGate: false, memberDeny: false, write: false },
+    'R-3：kind=read（只读语料查询）/ modeGate=false（零写面，守 modeGate ⊆ memberDeny）/ memberDeny=false（成员可用）/ write=false');
+  assert.equal(SUITE_TOOLS.length, 38, '派生后果：SUITE_TOOLS 37 → 38');
+  assert.equal(SUITE_DENY_TOOLS.length, 17, '派生后果：SUITE_DENY_TOOLS 仍 17 项');
+  assert.equal(MODE_GATED_TOOLS.length, 11, '派生后果：MODE_GATED_TOOLS 仍 11 项');
+  assert.equal(SUITE_DENY_TOOLS.includes('role_guide'), false, '＝成员可用（只读查自己的角色指引）');
+  assert.equal(MODE_GATED_TOOLS.includes('role_guide'), false);
+  assert.equal(MODE_GATED_TOOLS.every((n) => SUITE_DENY_TOOLS.includes(n)), true, '不变量 modeGate ⊆ memberDeny 保持');
+});
+
+test('RO-21 L-AC-6②④：工具宿主零模板 —— `lib/tools/**` 不得出现三段标题/正文模板', () => {
+  const RAW = [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables];
+  // 正文模板字面量**拆段拼接**构造：避免本断言自身的源码构成假样本。
+  const TEMPLATES = ['- **' + '使命**：', '- ' + '交付件：', '- ' + '达标提示：', '- 规格：' + '见技能'];
+  const toolsDir = path.join(roleCorpusRoot(), 'lib', 'tools');
+  const hits = [];
+  for (const f of fs.readdirSync(toolsDir).filter((n) => n.endsWith('.js'))) {
+    const t = fs.readFileSync(path.join(toolsDir, f), 'utf8');
+    const n = RAW.reduce((a, x) => a + (t.split(x).length - 1), 0) + TEMPLATES.reduce((a, x) => a + (t.split(x).length - 1), 0);
+    if (n > 0) hits.push(f + ':' + n);
+  }
+  assert.deepEqual(hits, [], 'R-5：三段正文**只有一个真源**（lib/engine/dispatch.js），工具侧禁第二套模板');
 });

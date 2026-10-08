@@ -292,7 +292,7 @@ function allowOfRole(roleData) {
  * ⚠ 结构安全（**这是「反推全集」的选型理由，勿改回 `SUITE_TOOLS`**）：词汇表**只由 role 语料自身生成**
  *   ⇒ 它**结构上不可能**含引擎治理面工具（`handoff_submit` / `swarm_report` / `lane_checkpoint` /
  *   `batch_status` … 都不在任何 role 的 allow 内）⇒ 反推**不可能** deny 掉 worker 的回报/交接面。
- *   若把全集取成 `SUITE_TOOLS`（37 件），反推会把上述治理面整体 deny ⇒ **worker 再也交不了接、回不了报**
+ *   若把全集取成 `SUITE_TOOLS`（38 件），反推会把上述治理面整体 deny ⇒ **worker 再也交不了接、回不了报**
  *   （与任务包纪律「必须 `handoff_submit`」直接矛盾）—— 该路径已实测排除。
  */
 export function roleToolVocabulary({ root = roleCorpusRoot(), fsImpl = fs, warn } = {}) {
@@ -335,21 +335,35 @@ export function personaOfRole(roleData) {
 
 function listOf(v) { return Array.isArray(v) ? v : []; }
 
-/** 任务级三段渲染（R-3）——**role 独占**：职责（含 mission）/ 授权 / 交付要求（`must_contain` + `acceptance_hints`）。 */
-function appendRoleSections(L, roleData) {
-  L.push('');
+/** 任务级三段渲染**单点**（D-0 / R-1）——**role 独占**：职责（含 mission）/ 授权 / 交付要求
+ *  （形态 `form` + `must_contain` + 规格指向 `skills` + `acceptance_hints`）。
+ *
+ *  **边界约定（防行为漂移，逐字受判据源 `## 方案` 3 约束）**：
+ *   · 返回**不含前导空行**、**不含尾随空行**的三段块文本（以 `\n` 连接）；
+ *   · 首行**恰为** `ROLE_SECTION_TITLES.responsibilities`；末行 = 最后一条交付件/达标提示行；
+ *   · 前导空行归**调用方**（`appendRoleSections` 的 `L.push('')`）、尾随空行归 `composeWorkerPrompt`
+ *     —— **二者都不得**被吸进本单点（吸进来即改变 C-1 产出的字节）。
+ *
+ *  **纯函数、零 IO**：只吃**已解析**的 role 对象。**禁**把 `resolveRoleRef` 搬进来、**禁**接受 role id 字符串
+ *  —— 解析单点（`resolveRoleRef`）与渲染单点（本函数）**两个单点、不许合并**（N-1）。
+ *  三段标题**只**经 `ROLE_SECTION_TITLES` 产出（R-5：禁在别处再写字面量）。
+ * @param {object} roleData 已解析的 role 数据对象
+ * @returns {string} 三段块文本
+ */
+export function renderRoleGuide(roleData) {
+  const L = [];
   L.push(ROLE_SECTION_TITLES.responsibilities);
-  const mission = typeof roleData.mission === 'string' ? roleData.mission.trim() : '';
+  const mission = typeof roleData?.mission === 'string' ? roleData.mission.trim() : '';
   if (mission) L.push('- **使命**：' + mission);
-  for (const r of listOf(roleData.responsibilities)) L.push('- ' + r);
+  for (const r of listOf(roleData?.responsibilities)) L.push('- ' + r);
   L.push('');
   L.push(ROLE_SECTION_TITLES.authorities);
-  const authorities = listOf(roleData.authorities);
+  const authorities = listOf(roleData?.authorities);
   if (authorities.length) for (const a of authorities) L.push('- ' + a);
   else L.push('- （role 未声明）');
   L.push('');
   L.push(ROLE_SECTION_TITLES.deliverables);
-  const deliverables = listOf(roleData.deliverables);
+  const deliverables = listOf(roleData?.deliverables);
   for (const d of deliverables) {
     // 【本批 R-2/R-3】只读**形态**（`form`）：`path` 键**不读、不回落** ⇒ 段内「零路径」由**代码保证**，
     //   不依赖语料侧自觉（语料漏改也不会把路径渲进任务包）。
@@ -364,11 +378,20 @@ function appendRoleSections(L, roleData) {
   //   与 `lib/wave-plan.ts` 的 `[skills=…]` 前缀通道（通道 A · 装配声明）**无优先级关系** —— B **不回填** A
   //   （不写 `t.skills`、不进 `cmd`、不入任务 sig）；两通道**并存渲染、零仲裁器**。
   //   `skills` **不进** `ROLE_MANDATORY_FIELDS`：未声明 ⇒ 本段**少一行**（可见、不静默），不拒派、不回落。
-  const skills = listOf(roleData.skills);
+  const skills = listOf(roleData?.skills);
   if (skills.length) L.push('- 规格：见技能 ' + skills.map((s) => '`' + s + '`').join(' / '));
-  const hints = listOf(roleData.acceptance_hints);
+  const hints = listOf(roleData?.acceptance_hints);
   if (!deliverables.length && !skills.length && !hints.length) L.push('- （role 未声明）');
   for (const h of hints) L.push('- 达标提示：' + h);
+  return L.join('\n');
+}
+
+/** `composeWorkerPrompt` 侧的三段**适配器**（薄壳，零逻辑）：前导空行由本层给，三段块本体来自单点。
+ *  等价式（判据源 `## 方案` 3 写死）：`appendRoleSections(L, roleData)` ≡ `L.push('')`
+ *  ＋ `L.push(...renderRoleGuide(roleData).split('\n'))`。**禁**在此再写任何三段模板/标题字面量。 */
+function appendRoleSections(L, roleData) {
+  L.push('');
+  L.push(...renderRoleGuide(roleData).split('\n'));
 }
 
 /** 头行「角色」格：`<裸 role 名>（<title>）` —— **保留裸名**（既有读端断言 `` `coder` `` 不破）＋ 补标题。 */
