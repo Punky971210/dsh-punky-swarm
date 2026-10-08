@@ -61,9 +61,9 @@
 
 - `validateAssembly` 已删（lib/assembly/schema.js；撤函数保常量表：BLIND_REVIEW_ROLES/BLIND_REVIEW_TEMPLATE_KEYS/CAPABILITY_REGISTRY/EXCLUSIONS/REQUIRED_ROLES 全保留）。
 
-- 判定真源 = 在役 `assertAssemblyCompleteness`（视图 1 严格覆盖原形状校验且更强；在役消费方 `audit-blind-review.js`）。
+- 判定真源 = **测试专用守卫** `assertAssemblyCompleteness`（视图 1 严格覆盖原形状校验且更强；**【2026-10-08 订正】lib 生产路径零调用，唯一消费者 = `test/assembly-schema.test.js`（14 调用点）；`audit-blind-review.js` 仅注释提及**）。
 
-- 测试迁移：assembly-schema.test.js 两个自产自销用例 → 迁移到在役判定源（DEFAULT_ASSEMBLY ok + 5 类畸形 not ok），行为覆盖不丢。
+- 测试迁移：assembly-schema.test.js 两个自产自销用例 → 迁移到该测试专用守卫（DEFAULT_ASSEMBLY ok + 5 类畸形 not ok），行为覆盖不丢。
 
 - 验收：受影响套件绿；全量 1783/1757/22 fail/4 todo（4 预期红 + 18 环境类 ⇒ 非环境类 0）；基线 152/1738/8425（asserts -2）；pkg-hashes 424。
 

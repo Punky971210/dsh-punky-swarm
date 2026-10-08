@@ -765,9 +765,13 @@ test('RO-20 L-AC-4：`role_guide` 工具面定位（四字段 ＋ 派生后果 �
   assert.deepEqual({ kind: e.kind, modeGate: e.modeGate, memberDeny: e.memberDeny, write: e.write },
     { kind: 'read', modeGate: false, memberDeny: false, write: false },
     'R-3：kind=read（只读语料查询）/ modeGate=false（零写面，守 modeGate ⊆ memberDeny）/ memberDeny=false（成员可用）/ write=false');
-  assert.equal(SUITE_TOOLS.length, 38, '派生后果：SUITE_TOOLS 37 → 38');
-  assert.equal(SUITE_DENY_TOOLS.length, 17, '派生后果：SUITE_DENY_TOOLS 仍 17 项');
-  assert.equal(MODE_GATED_TOOLS.length, 11, '派生后果：MODE_GATED_TOOLS 仍 11 项');
+  // 【T-10（2026-10-08 · 批 `engine-techdebt-cleanup-20261008`）】原三条**字面量总数断言**已删：
+  //   ① `SUITE_DENY_TOOLS.length === 17` / `MODE_GATED_TOOLS.length === 11` 与
+  //      `suite-consistency-and-hot.test.js` SC-1 的**精确全集 deepEqual**（`FROZEN_DENY` / `FROZEN_MODE_GATED`）
+  //      **纯重复** ⇒ 单一权威在 SC，本处不再重复（防双权威漂移；同 2026-09-22 `task-pool-r41` 先例）；
+  //   ② `SUITE_TOOLS.length === 38` 属硬编码总数 ⇒ 「每加一个工具就漂移」的病根 ⇒ 本处不再冻结总数。
+  //   「总量冻结」意图的唯一权威 = SC-1/SC-2；本处只留**局部事实**断言。
+  assert.equal(SUITE_TOOLS.filter((t) => t.name === 'role_guide').length, 1, 'role_guide 恰登记 1 条（替代原字面量总数，无硬编码）');
   assert.equal(SUITE_DENY_TOOLS.includes('role_guide'), false, '＝成员可用（只读查自己的角色指引）');
   assert.equal(MODE_GATED_TOOLS.includes('role_guide'), false);
   assert.equal(MODE_GATED_TOOLS.every((n) => SUITE_DENY_TOOLS.includes(n)), true, '不变量 modeGate ⊆ memberDeny 保持');

@@ -457,6 +457,11 @@ test('H1: 插件入口真加载冒烟——createTools 工具数 26（本模块�
   const root = tempRoot('punky-as-h1-');
   const ctx = assemblyCtxOpts();
   const bundle = createTools(ctx, { store: createStore(root), root, config: {}, readConfig: () => ({}) });
+  // 【T-10 关系说明（2026-10-08 · 批 `engine-techdebt-cleanup-20261008`，AC-G4-2）】
+  //   `bundle.tools` **≠** 注册面集合 `SUITE_TOOLS`：前者 = `createTools` 在**给定 ctx/config 下实际放行**的
+  //   工具（受 modeGate / config / 宿主能力位影响），后者 = 注册表**全集**。故现值 29 与 `SUITE_TOOLS` 的 38
+  //   属**不同面**；且本处**无同源派生源**可直接取值 ⇒ 按 AC-G4-2 **保留字面量**（不作删除要求）。
+  //   ⇒ **登记 followup（批后待办）**：若 `createTools` 将来暴露「按 config 派生的放行集」，本条改为派生取值。
   assert.equal(bundle.tools.length, 29, '工具面数量 = 26（自动结算不新增/不删除对外工具；P3a control lane 另加 batch_control 一件；【2026-09-17 P1】+handoff_submit/handoff_view ⇒ 24 → 26）');
   const names = bundle.tools.map((t) => t.name);
   assert.ok(names.includes('swarm_report') && names.includes('member_settle'), '既有成员面工具零回归');

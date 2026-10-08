@@ -147,7 +147,7 @@ export function validateCapabilities(config = {}) {
 // ── 完整性断言（三视图，入测试门禁）──
 // 【C1 判读（N2 第二批，docs/c1-wiring-audit-2026-09-22.md）】原 `validateAssembly`（纯形状校验）已删：
 //   生产零调用 + 测试自产自销；形状判定真源 = 本函数视图 1（严格覆盖且更强：+技能可解析性 +REQUIRED_ROLES
-//   反向对齐，在役消费方 `audit-blind-review.js`）。
+//   反向对齐）。**校验器：当前唯一消费者 = `test/assembly-schema.test.js`（14 调用点）**；lib 生产路径零调用，`audit-blind-review.js:37` 仅注释提及）
 // 视图 1 正向：装配表自洽（∀ (layer, role)：skills[role] 非空字符串数组且每个 skill 可解析）
 // 视图 2 反向：software-team 装配表 7 角色（manager 显式豁免）全部出现且映射非空
 // 视图 3 扩展：extensions.blindReview.enabled=true 时三角色映射非空 + 六模板键齐备

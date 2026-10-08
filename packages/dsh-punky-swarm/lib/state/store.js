@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import path from 'node:path';
 import fs from 'node:fs';
-// 团队资产解析快照写单点（§8③：解析结果落会话级正档 + 批次级指纹引用）——本文件只做**建批侧接线**：
+// 【历史·已退役，保留可读】团队资产解析快照写单点（§8③：解析结果落会话级资产解析档 + 批次级指纹引用）——本文件只做**建批侧接线**：
 //   解析 + 写档 + 字段/事件载荷的构建全在 lib/assembly/snapshot.js，store 不复制其语义
 //   【2026-09-27 · 批 3】资产面全量退役 ⇒ 该接线（`import * as snapshot` + 建批侧写档）**已整条删除**。
 
@@ -145,8 +145,9 @@ function composeStore(cx) {
     //   的 `gateStatusOfLane` 单点），差别只在读盘次数（投影段由 N 次降为 1 次）。
     gateStatusOfBatch: gates.gateStatusOfBatch,
     gateStatusMapOfBatch: gates.gateStatusMapOfBatch,
-    // §8③ 快照读端（只读视图：读 `batch.teamAsset.snapshotPath` 指向的会话级正档，缺档 ⇒ declarationMissing；
-    //   **不参与任何门禁判定**、读路径不 throw、缺档不回落现算）
+    // §8③ 快照读端（只读视图：实现为 `lib/state/gates/complete.js:142-144` 的**常量返回**
+    //   `{teamAsset:null, declaration:null, declarationMissing:true}`——零 I/O、不读档、不回落现算；
+    //   **不参与任何门禁判定**、读路径不 throw）
     teamAssetViewOf: gates.teamAssetViewOf,
     readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, governanceFile,
     // 损坏旁路清单：幂等登记 / 只读清单 / 人工修复后清除标记（透传 corrupt-registry）

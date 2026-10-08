@@ -111,6 +111,11 @@ export function clearFlowCache() {
  *   下游一律按 **tighten-only 缺省** 处置 ⇒ flows 面**只走引擎基线**
  *   （`ENGINE_BASELINE_PLAN_SECTIONS` / `ENGINE_BASELINE_CRITERIA_SECTION` / `entryRequiresOf` 缺省侧）。
  *   导出**保形保留**（调用方形状零变化）；本身零副作用、零 I/O。
+ * 【2026-10-08 · 批 `engine-techdebt-cleanup-20261008` G-1 评估（**T-4**，Leader 裁决 D-3）】
+ *   复核消费者：**外部 lib 零消费**（除本文件内部自调用外无 importer）；**内部生产调用点 = 2**（`:140` `flowsForBatch` ← 被 `lib/state/gates.js:44` 消费；`:477` `flowsDeclarationOf`）
+ *   ／测试消费者 = 3 文件／`scripts/audit/out/dead-code-classified.json` 既有计数 `prod:14 / testUse:14`。
+ *   ⇒ **非死代码**：「被内部调用」即本函数的**正常形态**；(a) 内联/降私有属**风格优化、非债清理**，
+ *   且须改**活门禁路径**而收益为 0、牵动 3 个测试文件 ⇒ **采 (b) 保留 + 订正注释**。
  * @returns {{ ok: boolean, team: string|null, flows: object|null, path: string|null, problems: string[],
  *            severity: 'none'|'strong'|'blocking', blocking: boolean, escalation: object|null }}
  *   恒 `flows:null` ⇒ 调用方按 **tighten-only** 处置（consume 强制不依赖团队声明，见 `entryRequiresOf`）。

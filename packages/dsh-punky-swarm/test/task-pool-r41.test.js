@@ -235,10 +235,13 @@ test('R4-1c-4 批终态 ⇒ 复用既有 GATE_BATCH_TERMINAL（唯一例外）',
   );
 });
 
-test('R4-1a-5 注册表：`task_pool`/`task_update` 入表 + 总数冻结（38）', () => {
+test('R4-1a-5 注册表：`task_pool`/`task_update` 入表（**总数冻结的唯一权威 = suite-consistency SC-1/SC-2**）', () => {
   const names = SUITE_TOOLS.map((t) => t.name);
   assert.ok(names.includes('task_pool'), '应已注册');
-  assert.equal(SUITE_TOOLS.length, 38, '套件工具全集 29 → 30 → 31 → 32 → 36（S2 宿主连续控制族 4 件）→ 37（AG-20 spawn_teammate 1 件）→ 38（role-guide-extract-20261008 · D-1：+role_guide 1 件）');
+  // 【T-10（2026-10-08 · 批 `engine-techdebt-cleanup-20261008`）】原「注册表总数冻结」断言（**套件工具全集 length = 38**）
+  //   **字面量已删**：注册面字面量计数「每加一个工具就漂移」（上一批实测 15 条漂移 / 7 文件）——
+  //   与下方 2026-09-22 对 deny/modeGate 长度断言的处置**同口径** ⇒ 本处改为**局部事实**断言。
+  assert.equal(names.filter((n) => n === 'task_pool').length, 1, 'task_pool 恰登记 1 条（替代原总数冻结，无硬编码）');
   // 【批 5 · G1（2026-09-22 用户裁定「同语义就删」）】原 deny/modeGate 成员性与长度断言（task_pool ∉ deny/
   //   ∉ modeGate、deny length 20、首项、task_update ∈ 双集、modeGate length 12）已删——
   //   全部被 suite-consistency SC-1/SC-2 的**精确全集 deepEqual**（FROZEN_DENY/FROZEN_MODE_GATED + 注册表派生）

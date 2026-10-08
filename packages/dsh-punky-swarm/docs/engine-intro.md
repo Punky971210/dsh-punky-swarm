@@ -42,7 +42,7 @@
 | 4 | **可审计留痕** | 每次判定/降级/逃生都产事件（`gate.*` / `member.*` / `batch.*`）；**拒载侧与放行侧留痕口径不同**（B2 首触只在放行/降级侧发射），不得混谈 | `lib/state/event-types.js` |
 | 5 | **装配资产化** | 层/角色/技能/flows 全在资产；**技能只写指针，不写装配数据** | `presets/<team>/team-asset.yml`（**已裁弃用、待退役**） |
 | 6 | **难度路由（无默认档）** | Leader 主动写入 A/B/C + 判据；**单线程不建批**；G1 档位×工具面；G2 建批即拉起 Manager | `assign_check` / `wave_plan({assembly})` |
-| 7 | **快照可核** | 建批回显 `batch.teamAsset{assetHash, snapshotPath}` + 会话级正档可复核 | `lib/assembly/snapshot.js` |
+| 7 | **快照可核**（**【2026-10-08 订正】能力已退役**） | 原判据「建批回显 `batch.teamAsset{assetHash, snapshotPath}` + 会话级正档可复核」**已失实**：写端（`lib/state/store.js:24-26`）与档读端（`lib/assembly/snapshot.js:35-38`）均已整体退役；`teamAssetViewOf` 现为**常量返回** `{teamAsset:null,declaration:null,declarationMissing:true}`（`lib/state/gates/complete.js:142-144`，零 I/O）。违反本文件 §三·补2 红线 5「文档-实现同源」⇒ 本条按事实订正 | `lib/assembly/snapshot.js`（**标废保留**，见 T-1） |
 | 8 | **契约缺声明可见** | 团队未声明某检查项而引擎缺省接管时**首触留痕**（`gate.contract_missing`），判定不变 | 同 #4 |
 | 9 | **宿主级自验证** | 完成判据含真实宿主加载/启动冒烟；语法/单测只是中间 checkpoint | 纪律 §10 |
 | 10 | **消费方契约摸底先行** | 消费宿主 API/DSL 前先落契约卡（约束清单 + 支持矩阵 + 证据来源） | 纪律 §9 |

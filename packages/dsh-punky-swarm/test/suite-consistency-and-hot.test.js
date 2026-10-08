@@ -330,3 +330,40 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   assert.equal(SUITE_DENY_TOOLS.includes('handoff_view'), false, 'handoff_view 为只读面 ⇒ 不得入 deny 集');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+// ── T-10（2026-10-08 · 批 `engine-techdebt-cleanup-20261008`）可达反例（AC-G4-3）──────────────
+// 口径：**测试内注入** 1 条合成工具（不改仓库、不改冻结源），跑**双读数**：
+//   读数①「改前」（旧形态 = 硬编码字面量总数）⇒ 须 ≥2 站点变红；
+//   读数②「改后」（新形态 = 派生/结构不变式，无字面量）⇒ 须 0 站点变红。
+test('T-10 可达反例：注入 1 条合成工具 ⇒ 旧字面量形态 ≥2 站点变红、新派生形态 0 站点变红', () => {
+  // 合成条目带 memberDeny + modeGate ⇒ 同时扰动 总数/deny/modeGate 三个面（否则只动 1 站、无法证 ≥2）
+  const SYNTHETIC = { name: '__t10_synthetic_probe__', kind: 'read', modeGate: true, memberDeny: true, write: false };
+  const synthetic = [...SUITE_TOOLS, SYNTHETIC];
+  const synNames = synthetic.map((t) => t.name);
+  const synDeny = synthetic.filter((t) => t.memberDeny).map((t) => t.name);
+  const synGate = synthetic.filter((t) => t.modeGate).map((t) => t.name);
+
+  // ── 读数①：旧形态（本批已删的硬编码字面量）逐站点判定 ──
+  const OLD = [
+    ['SUITE_TOOLS.length === 38', synthetic.length === 38],
+    ['SUITE_DENY_TOOLS.length === 17', synDeny.length === 17],
+    ['MODE_GATED_TOOLS.length === 11', synGate.length === 11],
+  ];
+  const oldRed = OLD.filter(([, pass]) => !pass).map(([n]) => n);
+  assert.ok(oldRed.length >= 2,
+    '读数①：旧字面量形态须 ≥2 站点变红（实测 ' + oldRed.length + '）：' + oldRed.join(' / '));
+
+  // ── 读数②：新形态（派生/结构不变式；跨**独立来源**核对 —— 冻结清单 vs 注入后派生集，非自比）逐站点判定 ──
+  const NEW = [
+    ['name 唯一（与 SC-1 同款判据）', JSON.stringify(sortedUnique(synNames)) === JSON.stringify([...synNames].sort())],
+    ['冻结 deny 集 ⊆ 注入后派生 deny 集', FROZEN_DENY.every((n) => synDeny.includes(n))],
+    ['冻结 modeGate 集 ⊆ 注入后派生 modeGate 集', FROZEN_MODE_GATED.every((n) => synGate.includes(n))],
+    ['不变量 modeGate ⊆ memberDeny', synGate.every((n) => synDeny.includes(n))],
+  ];
+  const newRed = NEW.filter(([, pass]) => !pass).map(([n]) => n);
+  assert.equal(newRed.length, 0,
+    '读数②：新派生形态须 0 站点变红（实测 ' + newRed.length + '）：' + newRed.join(' / '));
+
+  console.log('[T-10 可达反例] 读数①旧形态变红站点 = ' + oldRed.length + '（' + oldRed.join(' / ')
+    + '）／读数②新形态变红站点 = ' + newRed.length);
+});

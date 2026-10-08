@@ -217,8 +217,8 @@ test('validateCapabilities: disabled capability illegal values are ignored (zero
 
 // ── 装配形状校验（A1.4）──
 // 【C1 判读（N2 第二批，docs/c1-wiring-audit-2026-09-22.md）】原 `validateAssembly` 已删（生产零调用、
-//   测试自产自销；判定真源 = 在役 `assertAssemblyCompleteness`，其视图 1 严格覆盖形状检查且更强——
-//   含技能可解析性 + REQUIRED_ROLES 反向对齐）。本组用例迁移到在役判定源，行为覆盖不丢。
+//   测试自产自销；判定真源 = **测试专用守卫** `assertAssemblyCompleteness`（lib 生产路径零调用），其视图 1 严格覆盖形状检查且更强——
+//   含技能可解析性 + REQUIRED_ROLES 反向对齐）。本组用例迁移到该测试专用守卫，行为覆盖不丢。
 const shapeCatalog = { has: () => true }; // 形状判读用目录（技能可解析性不构成本组变量）
 
 test('assembly shape (ex-validateAssembly): DEFAULT_ASSEMBLY 通过完整性与形状校验', () => {

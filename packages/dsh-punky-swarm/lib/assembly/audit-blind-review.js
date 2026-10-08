@@ -16,10 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 盲审编排装配数据（review-workflow 借鉴）
-// 纯数据 + 辅助函数，零依赖（被 assembly-schema.js 断言扩展视图引用，独立可加载）：
+// 纯数据 + 辅助函数，零依赖、独立可加载。
+// 【2026-10-08 订正 · 批 `engine-techdebt-cleanup-20261008` **T-15**】**本文件整文件当前零 lib importer**
+//   （实测：全仓 `import` 命中仅 `test/audit-blind-review.test.js:22`）；**唯一消费者 = 测试**。
+//   保留原因（Leader 裁决）：本文件是 **blindReview 启用路径的完整实现面**（与 `applyAssemblyExtensions` /
+//   `buildAuditLaneSpec` **同族**，单独删任一件会造出**半条链路**），且其服务的**盲审角色语义面在役**
+//   （`lib/wave-plan.js:35` 的 `ROLE_EXTENSIONS` 取自 `assembly/schema.js:66` 的同字面量 `BLIND_REVIEW_ROLES`）
+//   ⇒ 判「**留 + 订正**」，**非死代码**（当前无 lib 消费者 ≠ 该删）。
+//   ⚠ 原注「被 assembly-schema.js 断言扩展视图引用」**失实**：`schema.js` **自带**同字面量清单（`:66`），**未** import 本文件。
 //   - BLIND_REVIEW_ROLES / BLIND_REVIEW_SKILLS：audit-panelist/audit-aggregate/audit-critic 三角色映射
 //   - BLIND_REVIEW_TEMPLATES：六任务契约模板（bundle/panelist/aggregate/critic/checklist/config，键名固定供断言）
 //   - applyAssemblyExtensions(assembly, extensions)：装配扩展合并（默认关——blindReview 未启用时原样返回，base 一字不改）
+//     ⚠ **lib 生产路径当前零调用**；为 blindReview 启用路径**预留**；唯一消费者 = `test/audit-blind-review.test.js`（9 处调用点）
 //   - buildAuditLaneSpec({panelistCount, deps})：Leader/Manager 建批用——生成盲审子 lane 任务包骨架
 //     （consume/produce 契约 + 模板引用；不预写实现，0e 不越权；可直接喂 buildWavePlan 走 wavePlan 固定 DAG）
 // 范围红线：零引擎改动（wave-plan.js / gates.js / store.js 等一律不碰）——盲审 = 装配数据 + 既有工具编排。

@@ -163,7 +163,7 @@
     "test/auto-settle.test.js": {
       "asserts": 125,
       "blankLines": 35,
-      "lines": 624,
+      "lines": 629,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -329,9 +329,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 203,
+      "asserts": 201,
       "blankLines": 55,
-      "lines": 789,
+      "lines": 793,
       "tautologies": 0,
       "tests": 41,
       "todos": 0
@@ -985,17 +985,17 @@
       "todos": 0
     },
     "test/suite-consistency-and-hot.test.js": {
-      "asserts": 42,
-      "blankLines": 17,
-      "lines": 333,
+      "asserts": 44,
+      "blankLines": 21,
+      "lines": 370,
       "tautologies": 0,
-      "tests": 4,
+      "tests": 5,
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
       "asserts": 78,
       "blankLines": 34,
-      "lines": 412,
+      "lines": 415,
       "tautologies": 0,
       "tests": 24,
       "todos": 0
@@ -1209,7 +1209,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-08T07:27:14Z",
+  "generatedAt": "2026-10-08T13:36:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1220,15 +1220,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "role-guide-extract-20261008：e01-impl 新增 role_guide 工具（D-0 抽取 renderRoleGuide + D-1 工具注册）并新增用例；baselines 单写者=Leader（§15③），时点=本批 exec 全收口后（§15④）",
+  "reason": "engine-techdebt-cleanup-20261008：G-3 注释订正 7 处（零行为变更）+ G-1 零删除仅注释订正 + G-4 T-10 注册面计数断言动态化（站点 5→1，tests +1、asserts Δ0）；baselines 单写者=Leader（§15③），时点=本批三条 exec 全收口后（§15④）",
   "schema": 1,
   "totals": {
     "asserts": 7671,
-    "blankLines": 3846,
+    "blankLines": 3850,
     "files": 151,
-    "lines": 41560,
+    "lines": 41609,
     "tautologies": 0,
-    "tests": 1611,
+    "tests": 1612,
     "todos": 4
   }
 }
