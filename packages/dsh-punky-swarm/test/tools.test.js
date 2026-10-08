@@ -40,20 +40,33 @@ const EXEC_SESS = { agent: { session: { id: 'sess-leader' } } };
 //   执行会话评估为 C（与 `assign_check({difficulty:'C'})` 同一落盘函数；旧 fixture 无此状态会被新门拦下）。
 assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置评估（三层批全流程 ⇒ C 档）' });
 
-// 缺省默认开：core 12 + mailbox 3 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 26（logs 缺省关，log_export 不在内）
+// 缺省默认开面 = 下列 `TOOL_NAMES` **冻结名单**；**计数一律由名单长度派生（禁字面量）**。
+// 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原 `DEFAULT_TOOL_COUNT` 为**数字字面量**
+//   ⇒ 每加一个工具就漂移（上批 +`role_guide` 后实测 **30**，字面量未同步 ⇒ 本文件 2 用例红）。
+//   现改为**派生**（先例：`test/tool-descriptor.test.js:37-38`；本项目自有形态）并配**精确集合断言 + 差集诊断**：
+//   失败信息直接指出「多了/少了哪个工具」，而非只报一个数字。
+//   ⚠ **面不可混用**：本面（缺省注册集，30）**≠** `SUITE_TOOLS`（注册表全集，38）⇒ **不得互相派生**。
+// 历史（保留可读）：core 12 + mailbox 3 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch +
+//   swarm_report + swarm_cc + handoff_submit + handoff_view；+batch_control（23→24）、+handoff 两件（25→26）、
+//   +task_pool / batch_tasks_add / task_update、+`role_guide`（上批 D-1）⇒ 现 30。
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口：发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
-// 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
-// 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**）⇒ 25 → 26。
-const DEFAULT_TOOL_COUNT = 29;
+// 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）。
+// 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**）。
+// 名单来源：`lib/tools/register.js:40` 的合成结果**实测枚举**（core + mailbox + lane + log 四族），非手抄。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const DEFAULT_TOOL_COUNT = TOOL_NAMES.length;
 
-test('all 26 tools registered（P1-01 缺省默认开 + lane_dispatch + batch_control + P1 handoff 两件）', () => {
-  assert.equal(tools.length, DEFAULT_TOOL_COUNT);
+test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，计数由派生常量核定）', () => {
+  // 【R-1/T-10】原 `assert.equal(tools.length, DEFAULT_TOOL_COUNT)` 仅比**数字** ⇒ 失败信息不指名工具。
+  //   现改为**精确集合断言 + 差集诊断**：失败时直接给出「多了哪个 / 少了哪个」。
+  assert.deepEqual(tools.map((t) => t.name).slice().sort(), TOOL_NAMES.slice().sort(),
+    '注册名集必须**精确等于**冻结名单 `TOOL_NAMES`（差集即多/少的具体工具名）');
   for (const n of ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(byName[n], 'missing tool ' + n);
   }
 });
 
-test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非空（26 描述，readCapability 默认合并）', () => {
+test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非空（描述数 = 派生常量，readCapability 默认合并）', () => {
   const reg = [];
   const ctxA = { tools: { register: (t) => reg.push(t) }, logger: console };
   const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
@@ -62,8 +75,41 @@ test('aip.enabled 缺省默认开启：无 config 时 register() 后 catalog 非
   assert.equal(t.catalog, null); // register() 前恒 null（懒生成）
   t.register();
   assert.ok(t.catalog, '缺省配置必须实际默认开启（catalog 非空）');
-  assert.equal(t.catalog.list().length, DEFAULT_TOOL_COUNT); // 26 工具 6 属性描述齐备
+  assert.equal(t.catalog.list().length, DEFAULT_TOOL_COUNT); // 描述数 = 派生常量 DEFAULT_TOOL_COUNT（禁字面量）
   assert.equal(reg.length, DEFAULT_TOOL_COUNT); // 工具注册数与 catalog 一致（P1-01 缺省默认开）
+});
+
+// ── R-1/T-10 可达反例（**AC-R1-2 硬门**）────────────────────────────────────────
+// 构造：**测试内注入** 1 条合成工具到派生源（**不改仓库、不改冻结名单本体**）。
+//   读数①「改前」旧形态 = 只比**数字** ⇒ 须 ≥2 站点变红，且失败信息**不指名**该工具；
+//   读数②「改后」新形态 = **精确集合断言** ⇒ 失败信息**指名**该工具（差集诊断）。
+// 注：注入只作用于本用例的**局部副本**，`TOOL_NAMES` 本体零改动。
+test('R-1 可达反例：注入 1 条合成工具 ⇒ 旧「计数」形态 ≥2 站点变红且不指名；新「集合」形态指名该工具', () => {
+  const SYNTH = '__r1_synthetic_probe__';
+  const injected = [...TOOL_NAMES, SYNTH];
+
+  // 读数①：旧形态（数字比较）逐站点判定 + 收集其诊断文本
+  const oldDiag = [];
+  const OLD = [
+    ['注册面 length 计数', () => assert.equal(injected.length, DEFAULT_TOOL_COUNT)],
+    ['catalog 面 length 计数', () => assert.equal(new Set(injected).size, DEFAULT_TOOL_COUNT)],
+  ];
+  let oldRed = 0;
+  for (const [label, probe] of OLD) {
+    try { probe(); } catch (e) { oldRed += 1; oldDiag.push(label + ': ' + String(e.message)); }
+  }
+  const oldNamesTool = oldDiag.some((m) => m.includes(SYNTH));
+  assert.ok(oldRed >= 2, '读数①：旧计数形态须 ≥2 站点变红（实测 ' + oldRed + '）');
+  assert.equal(oldNamesTool, false, '读数①：旧形态诊断**不得**指名工具（实测 ' + oldNamesTool + '）');
+
+  // 读数②：新形态（精确集合断言）⇒ 诊断须指名该工具
+  let newDiag = '';
+  try { assert.deepEqual(injected.slice().sort(), TOOL_NAMES.slice().sort()); }
+  catch (e) { newDiag = String(e.message); }
+  assert.ok(newDiag.length > 0, '读数②：新集合形态须变红');
+  assert.ok(newDiag.includes(SYNTH), '读数②：新集合形态须**指名**该工具（差集诊断）');
+
+  console.log('[R-1 可达反例] 读数①旧形态变红站点 = ' + oldRed + '（指名工具=' + oldNamesTool + '）／读数②新形态变红且指名 = true');
 });
 
 test('aip.enabled=false 显式关闭：register() 后 catalog 恒 null（/tools 不注册）', () => {

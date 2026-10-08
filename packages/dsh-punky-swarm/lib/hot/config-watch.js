@@ -85,6 +85,14 @@ export const ALLOWED_TOP_KEYS = new Set([
   //   也可写段级 `"enabled": true` 作两段共同缺省）。**放入本白名单 = 允许热更**——漏加会被
   //   `validateOverlay` 判 `unknown top-level key` 而**静默保持旧快照**（本类改动的经典坑）。
   'gates',
+  // autoSettle（**引擎级结算面开关**，与 `gates` 同族）：`{ "autoSettle": { "enabled": false } }` ⇒
+  //   停用引擎自动结算的**两条触发路**（主路 `subagent/end` 不装、兼底路 `swarm_report(settle-request)`
+  //   只回报不结算），**成员经 `swarm_report` 的回报投递完整保留**；缺省/未声明 ⇒ 等价 `true`（既有批零行为变化）。
+  //   2026-10-09 用户裁决 E-1=甲（先停用 auto.settle，成员只能使用 `swarm_report` **回报**）⇒ 开关落
+  //   `<root>/config/runtime.json`（本白名单内 = 允许热更），**不依赖启动父进程 env**（与 `gates` 同理由）。
+  //   ⚠ **漏加本键 = 静默不生效**：`validateOverlay` 会把 `autoSettle` 判 `unknown top-level key`，
+  //   watcher 保持旧快照且**不抛错** ⇒ 用户看到「配置写了但不生效」（C-1/RK-2）。必须与开关同批落。
+  'autoSettle',
 ]);
 
 // ── 模块级「最近一次生效快照」访问器（`task-27`）───────────────────────────────────────────────

@@ -349,9 +349,11 @@ test('G1：running 相位既有行为零回归——同批同触发正常结算�
   assert.equal(eventsOf(store, 'b-ok', EVT_AUTO_SETTLE_SKIPPED).length, 0, 'running 面零跳过留痕');
 });
 
-test('G2：插件入口真加载——createTools 工具数 25 → 26，batch_control 已注册且参数面闭集', async () => {
+test('G2：插件入口真加载——createTools 可装配，batch_control 已注册且参数面闭集（总数面权威见 test/tools.test.js 冻结名单）', async () => {
   const { root, byName } = makeHarness('g2');
-  assert.equal(Object.keys(byName).length, 29, '本 lane 新增 batch_control ⇒ 23 → 24；【2026-09-17 P1】handoff 两件常驻注册 ⇒ 25 → 26');
+  // 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原 `assert.equal(Object.keys(byName).length, 29, …)`
+  //   已删：缺省注册集总数面的**唯一权威** = `test/tools.test.js` 的冻结名单 `TOOL_NAMES`（精确集合断言 + 差集诊断）；
+  //   本用例**被检面** = `batch_control` 注册与参数面闭集（下一行起），与总数无关（防双权威漂移）。
   const t = byName.batch_control;
   assert.ok(t, 'batch_control 须真实注册');
   assert.deepEqual(Object.keys(t.parameters.properties), ['batchId', 'action', 'session'], '参数面 = 最小干预面三键');

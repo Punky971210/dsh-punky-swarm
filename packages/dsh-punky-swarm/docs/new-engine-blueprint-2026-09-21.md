@@ -423,3 +423,7 @@ jiuwen 有 6 类探测器 + 4 档 severity + 分级处置 + 强度预算；蟛�
 2. 任一波施工后：`git diff --stat -- lib` 有 diff 时须说明**是否触碰 §1 硬约束**；触碰即回本文件改判并留痕。
 3. 全量测试 `fail = 0`；形态波允许**基线数值变化**，但须先重生成基线再跑（防 `e2-1`/`e2-2` 误红）。
 4. 任何解冻动作须回 `docs/frozen-register-2026-09-21.md` 逐项改判留痕。
+
+---
+
+**【2026-10-08 订正】**（批 `engine-techdebt-cleanup-20261008` · `R-3@techdebt2`）：本文件 §（C1 生产未接线 26 项，`:150`）保留的旧裁决「`validateAssembly` / `assertAssemblyCompleteness` → **删**（保常量表）」**未执行**；`assertAssemblyCompleteness` 的现行处置**以 `docs/rebuild-blueprint-2026-09-21.md:91` 为准** —— 「`validateAssembly` / `assertAssemblyCompleteness` | 删函数保常量表 | **冻结**（W2 明示"再考虑重新引入或清理"）。常量表已列入保留」⇒ **判「留 + 订正误述」**（三处假「在役」已订正为「测试专用守卫」）。**旧裁决文本保留可读**（史实不删）。同源**自冲突**（`docs/frozen-register-2026-09-21.md` `:56` 主张「只能保留」 / `:57` 主张「删」）另见该文件订正段。

@@ -153,6 +153,13 @@ const CASES = {
     success: async (h) => h.byName.gate_status.execute({ batchId: C1 }, EXEC),
     reject: async (h) => h.byName.gate_status.execute({ batchId: 'ghost-batch' }, EXEC),
   },
+  role_guide: {
+    // 【R-1 补登（2026-10-09 · 批 `engine-techdebt-cleanup-r2-20261008`）】上批 D-1 新增了 `role_guide`，
+    //   本普查**漏登** ⇒ `CASES 键集 ≡ 已注册名集` 双向相等断言不成立（普查漏测）。此处补齐：只读语料查询，
+    //   已知 role ⇒ 成功；未知 role ⇒ 工具层显式 `GATE_ROLE_UNRESOLVED`（拒态）。
+    success: async (h) => h.byName.role_guide.execute({ role: 'coder' }, EXEC),
+    reject: async (h) => h.byName.role_guide.execute({ role: '__no_such_role__' }, EXEC),
+  },
   lane_claim: {
     // ⚠ 用**独立批 + 独立 lane**：`handoff_submit` 会做「写权转移」（提交成功即 from 释放 / to 获取锁）
     //   ⇒ 夹具批里的下游 lane 锁已被交接占着，直接 claim 会恒冲突（那是合法返回值，但不是"认领成功"路径）。
@@ -300,7 +307,7 @@ async function probe(fn, h, tool) {
   }
 }
 
-test('TSC-1 全工具 output.schema 一致性普查：29 件逐工具三态（成功 / 拒态 / 显式 SKIPPED）', async () => {
+test('TSC-1 全工具 output.schema 一致性普查：逐工具三态（成功 / 拒态 / 显式 SKIPPED），件数由注册名集派生', async () => {
   const h = await makeHarness();
   const names = h.byName && Object.keys(h.byName);
   const registered = Object.keys(CASES).filter((n) => h.byName[n]);

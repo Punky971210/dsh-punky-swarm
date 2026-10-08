@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 盲审编排装配数据（review-workflow 借鉴）
 // 纯数据 + 辅助函数，零依赖、独立可加载。
-// 【2026-10-08 订正 · 批 `engine-techdebt-cleanup-20261008` **T-15**】**本文件整文件当前零 lib importer**
+// 【2026-10-08 订正 · 批 `engine-techdebt-cleanup-20261008` **T-15@techdebt1**】**本文件整文件当前零 lib importer**
 //   （实测：全仓 `import` 命中仅 `test/audit-blind-review.test.js:22`）；**唯一消费者 = 测试**。
 //   保留原因（Leader 裁决）：本文件是 **blindReview 启用路径的完整实现面**（与 `applyAssemblyExtensions` /
 //   `buildAuditLaneSpec` **同族**，单独删任一件会造出**半条链路**），且其服务的**盲审角色语义面在役**

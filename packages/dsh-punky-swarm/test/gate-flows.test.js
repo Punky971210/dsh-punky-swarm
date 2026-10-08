@@ -332,7 +332,7 @@ test('R1-g：software-team 声明翻牌后 consume 强制化 + standalone 显式
     assert.equal(flows.ok, false, 'punky-preset 无资产 ⇒ 读端如实 ok:false（无声明，非加载出声明）');
     assert.equal(flows.flows, null);
     assert.deepEqual(flows.problems, [],
-      '【2026-09-27 批 3 · T-15/D-6 等值反转（面仍在：`resolveTeamFlows` 读端）】'
+      '【退役面等值反转 · R2-3】原说明已集中 ⇒ docs/retired-faces-ledger.md §1（原文逐字归档）'
       + '原断言 `problems.some(p => p.startsWith("TEAM_ASSET_NOT_FOUND"))`（拒载原因可归因）；'
       + 'T-1/T-6 后读端零资产 I/O ⇒ 恒返「无声明」且 **problems 为空**（精确空集，非放宽）⇒ 真值反转。'
       + '实测=' + JSON.stringify(flows.problems));

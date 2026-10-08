@@ -51,6 +51,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadRules, DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES } from '../lib/state/machine-rules.js';
+// R-5@techdebt2：探针子进程**不继承**主测试进程的 `--import` ⇒ 解析钩子须**显式注入** argv
+//   （惰性回退：本地可解析时零介入；依据见 `test/helpers/host-dep-fallback.mjs` 头注与 lane 产物 proof/）
+import { hostDepFallbackImportArgs } from './helpers/host-dep-fallback.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');
@@ -194,7 +197,7 @@ function runProbe(tag, ratchet) {
     PUNKY_PROBE_BATCH: 'rw-' + tag,
     PUNKY_PROBE_RATCHET: ratchet === undefined ? 'none' : JSON.stringify(ratchet),
   };
-  const stdout = execFileSync(process.execPath, [probeFile()], { env: childEnv, encoding: 'utf8', timeout: 180000 });
+  const stdout = execFileSync(process.execPath, [...hostDepFallbackImportArgs(), probeFile()], { env: childEnv, encoding: 'utf8', timeout: 180000 });
   const marker = '__PROBE_JSON__';
   const idx = stdout.lastIndexOf(marker);
   assert.ok(idx >= 0, '探测体必须输出结果标记（实际 stdout 尾部: ' + stdout.slice(-500) + '）');

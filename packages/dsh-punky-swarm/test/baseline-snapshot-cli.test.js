@@ -38,6 +38,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+// R-5@techdebt2：夹具子进程**不继承**主测试进程的 `--import` ⇒ 解析钩子显式注入 argv
+//   （惰性回退：本地可解析时零介入；本站点当前实测不受影响，注入属按同一规则的防御面，见 lane 产物 proof/03）
+import { hostDepFallbackImportArgs } from './helpers/host-dep-fallback.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -81,7 +84,7 @@ function makeFixture() {
 
 /** 跑夹具 CLI（cwd = 夹具根；`node` 取 `process.execPath`，不依赖 PATH）。 */
 function runCli(tmp, args) {
-  return spawnSync(process.execPath, [path.join(tmp, 'scripts', 'baseline-snapshot.mjs'), ...args], {
+  return spawnSync(process.execPath, [...hostDepFallbackImportArgs(), path.join(tmp, 'scripts', 'baseline-snapshot.mjs'), ...args], {
     cwd: tmp,
     encoding: 'utf8',
   });

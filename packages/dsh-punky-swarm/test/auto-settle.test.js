@@ -36,7 +36,7 @@ import { buildWavePlan } from '../lib/wave-plan.js';
 import { threeTierTasks, seedArtifacts, assemblyCtxOpts, tempRoot } from './helpers/gate-fixture.mjs';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
-  EVT_MEMBER_SETTLED, EVT_BATCH_PHASE, EVT_MEMBER_DISPATCH,
+  EVT_MEMBER_SETTLED, EVT_BATCH_PHASE, EVT_MEMBER_DISPATCH, EVT_SWARM_REPORT,
 } from '../lib/state/event-types.js';
 import {
   AUTO_SETTLE_SUBAGENT_END, AUTO_SETTLE_TRIGGERS, DEFAULT_ON_FAIL, AUDIT_SETTLE_DEFERRAL_REASON,
@@ -44,6 +44,10 @@ import {
 } from '../lib/engine/auto-settle.js';
 import { createTools } from '../lib/tools/register.js';
 import { createCoreTools } from '../lib/tools/core.js';
+// J 组（停用开关）追加的只读依赖：配置键白名单校验（L-AC-12）+ Leader broadcast 取件（L-AC-6）
+import { validateOverlay, ALLOWED_TOP_KEYS } from '../lib/hot/config-watch.js';
+import { mailboxRootOf, REPORT_CHANNEL } from '../lib/engine/dispatch.js';
+import { readUnacked } from '../lib/comms/mailbox.js';
 
 // ── 装配级 fake ctx：`assemblyCtxOpts()` `on` 项存 `{ fn, opts }`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 // 合规三层批（plan/exec/audit）——判据链复用 gate-fixture（与既有套件同一份契约形态）
@@ -452,17 +456,17 @@ test('G3: 终态 lane 再触发 ⇒ skipped（触发资格：命中 lane 须非�
   );
 });
 
-// ── H：工具面真加载（插件入口不炸 + 工具数不回归）──
-test('H1: 插件入口真加载冒烟——createTools 工具数 26（本模块不新增对外工具；+1 来自 P3a control lane 的 batch_control；【2026-09-17 P1】+handoff_submit/handoff_view 常驻注册 ⇒ 24 → 26）且新增模块可被入口装配路径解析', async () => {
+// ── H：工具面真加载（插件入口不炸 + 成员面工具零回归；总数面权威见 test/tools.test.js 冻结名单）──
+test('H1: 插件入口真加载冒烟——createTools 可装配且新增模块可被入口装配路径解析', async () => {
   const root = tempRoot('punky-as-h1-');
   const ctx = assemblyCtxOpts();
   const bundle = createTools(ctx, { store: createStore(root), root, config: {}, readConfig: () => ({}) });
-  // 【T-10 关系说明（2026-10-08 · 批 `engine-techdebt-cleanup-20261008`，AC-G4-2）】
-  //   `bundle.tools` **≠** 注册面集合 `SUITE_TOOLS`：前者 = `createTools` 在**给定 ctx/config 下实际放行**的
-  //   工具（受 modeGate / config / 宿主能力位影响），后者 = 注册表**全集**。故现值 29 与 `SUITE_TOOLS` 的 38
-  //   属**不同面**；且本处**无同源派生源**可直接取值 ⇒ 按 AC-G4-2 **保留字面量**（不作删除要求）。
-  //   ⇒ **登记 followup（批后待办）**：若 `createTools` 将来暴露「按 config 派生的放行集」，本条改为派生取值。
-  assert.equal(bundle.tools.length, 29, '工具面数量 = 26（自动结算不新增/不删除对外工具；P3a control lane 另加 batch_control 一件；【2026-09-17 P1】+handoff_submit/handoff_view ⇒ 24 → 26）');
+  // 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原字面量总数断言
+  //   原「工具面数量断言（length 字面量 + 旧计数叙事）」已删：
+  //   ① `bundle.tools` 是 `createTools` 在给定 ctx/config 下**实际放行**的工具面（受 modeGate / config /
+  //      宿主能力位影响），与 `SUITE_TOOLS`（注册表全集 38）**不是同一集合**；
+  //   ② 该总数面的**唯一权威** = `test/tools.test.js` 的冻结名单 `TOOL_NAMES`（精确集合断言 + 差集诊断）；
+  //   ③ 本用例**被检面** = 插件入口真加载 + 成员面工具零回归（下一行），与总数无关（防双权威漂移）。
   const names = bundle.tools.map((t) => t.name);
   assert.ok(names.includes('swarm_report') && names.includes('member_settle'), '既有成员面工具零回归');
   // 入口模块可解析（装配期 will import installAutoSettle —— 这里自证模块面无循环依赖/无语法错）

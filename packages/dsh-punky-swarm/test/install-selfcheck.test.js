@@ -37,6 +37,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+// R-5@techdebt2：自检子进程**不继承**主测试进程的 `--import`；其模块图含本包代码
+//   （`scripts/selfcheck-install.mjs` → `lib/assets.js`）⇒ 解析钩子显式注入 argv
+//   （惰性回退：本地可解析时零介入；本站点当前实测不受影响，注入属按同一规则的防御面，见 lane 产物 proof/03）
+import { hostDepFallbackImportArgs } from './helpers/host-dep-fallback.mjs';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SELFCHECK = path.join(PKG, 'scripts', 'selfcheck-install.mjs');
@@ -104,7 +108,7 @@ function syntheticInstalledHome() {
 }
 
 function runSelfcheck(args, extraEnv = {}) {
-  const r = spawnSync(process.execPath, [SELFCHECK, ...args], {
+  const r = spawnSync(process.execPath, [...hostDepFallbackImportArgs(), SELFCHECK, ...args], {
     cwd: PKG,
     encoding: 'utf8',
     timeout: 120000,

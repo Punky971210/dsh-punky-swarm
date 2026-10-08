@@ -43,7 +43,7 @@ const SID = SESS.agent.session.id;
 //    / 「C3 锚点门·声明覆盖（负例）」/ 「C4 锚点门·缺声明回落引擎基线（全中文）」/ 「C5 契约门·required_sections
 //    声明覆盖」/ 「C6 声明面校验：criteria_section 非字符串 ⇒ TEAM_ASSET_BAD_TYPE」──
 //   面已消失 = **A3「判据配置化」所依赖的团队资产声明面**（`audit_contract.criteria_section` /
-//   `flows.plan.contract.required_sections`）：T-6（`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」）+ T-1
+//   【退役面等值反转 · R2-8】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）
 //   （`lib/assembly/team-asset.js` 本体删除，`TEAM_ASSET_BAD_TYPE` 等 13 码入退役锁，A-10）⇒ 五例的**被检面整体不存在**；
 //   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛。
 //   **不可等值反转**：C4 的「缺声明回落」若反转即与本文件 C1 + `gate-flows` 的引擎基线用例重复且恒真空转（纪律 15⑤）；

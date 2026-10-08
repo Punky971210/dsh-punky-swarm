@@ -23,7 +23,9 @@ import { REPORT_CHANNEL } from '../engine/dispatch.js';
 // P3a 自动结算（规格 §2/§3）：**单点判定**（`lib/engine/auto-settle.js`）——本文件只用其兼底路入口
 //   （`swarm_report(type='settle-request')` 显式交付意图）；主路 `subagent/end` 的装配期订阅在 `lib/index.js`，
 //   两路共用同一判定函数（禁第二套口径）。
-import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL } from '../engine/auto-settle.js';
+//   2026-10-09 批 `auto-settle-disable-switch-20261009`：本路增 `settleIdOf`（**既有导出**，非新增）
+//   仅为停用跳过留痕带回幂等键第三元（`(lane, settleId)` 可核；不引入新口径）。
+import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL, settleIdOf } from '../engine/auto-settle.js';
 import { readLiveConfig } from './tier-gate.js';
 import { reportTargetOf, deliverSwarmMessage, appendSwarmEventOf, WAKE_TYPES, wakeLeaderForReport, UNBOUND_BATCH_KEY } from './swarm-comms.js';
 
@@ -52,7 +54,19 @@ export function buildSwarmTools(cx) {
         //   失败隔离：`autoSettleLane` **不抛错**（异常隔离为 `{ok:false}`）⇒ 回报的投递事实不被拖累；
         //   停轮/门拒只落批次事件（`auto.settle.*` + `batch.phase`），工具返回值如实回显 `settle` 明细。
         //   Q-G2 连带：无批次可解析（未绑定且未自报 batchId）时**不结算**（无批可结算），仍不拒。
-        const settle = (args.type === 'settle-request' && tgt.batchId)
+        //
+        // ── R-2 ②【2026-10-09 批 `auto-settle-disable-switch-20261009`】停用开关：**只回报、不结算** ──
+        //   语义来源 = 用户裁决 E-1=甲「成员只能使用 `swarm_report` **回报**」⇒ **回报面全留、结算面全停**：
+        //   上面的 `deliverSwarmMessage`（Leader broadcast）+ `appendSwarmEventOf`（批事件 `swarm.report`）
+        //   **一字不少**（位置与顺序均不变），仅把本段 `autoSettleLane` 的调用短路掉。
+        //   判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**（`!== false`：只有**显式**
+        //   `false` 才停用；缺省/非布尔 ⇒ 启用）。该模块的判定函数与 reason 常量**刻意不导出**
+        //   （判据源 L-AC-14 要求导出符号净增 0）⇒ 此处按同形判定镜像；两处任一漂移即成第二套开关口径。
+        //   读端 = `readLiveConfig(deps)`（热更快照；与 `lib/tools/wave-plan-tools.js:69` 的
+        //   `handoffGateEnabledOf(readLiveConfig(deps), 'entry')` 同一读法）⇒ runtime.json 改写即生效。
+        const settleRequested = args.type === 'settle-request' && !!tgt.batchId;
+        const autoSettleEnabled = readLiveConfig(deps)?.autoSettle?.enabled !== false;
+        const settle = (settleRequested && autoSettleEnabled)
           ? await autoSettleLane({ ctx, store, root, liveConfig: readLiveConfig(deps) }, {
             sessionId: tgt.sessionId, batchId: tgt.batchId, lane: tgt.lane,
             workerSessionId: tgt.caller, trigger: AUTO_SETTLE_TRIGGERS.settleRequest,
@@ -64,6 +78,21 @@ export function buildSwarmTools(cx) {
             onFail: AUTO_SETTLE_ON_FAIL.report,
           })
           : null;
+        // ── R-3 非静默（判据源 §3）：兼底路被开关跳过 ⇒ 落既有 `auto.settle.skipped` ──────────────
+        //   复用既有事件常量（**不新增事件类型 / 不新增 `GATE_*` 码**）；`reason` 取自证值
+        //   `auto-settle-disabled`（约束 8：禁写笼统 `skipped`）、`trigger` 自证为兼底路。
+        //   该留痕**不进幂等链**——接收单点 = `lib/engine/auto-settle.js#isAutoSettleDisabledSkip`
+        //   （已并入 `isTransientSkip`）⇒ 停用期每次触发各留一次痕；且开关重新启用后，同
+        //   `(lane, settleId)` 的首个真实触发**不会**被这些留痕判成 `already-settled`（不被毒化）。
+        //   留痕失败不抛：消息与 `swarm.report` 事件的投递事实已先行落定，不因留痕面拖累（观察者纪律）。
+        if (settleRequested && !autoSettleEnabled) {
+          try {
+            store.appendEvent(tgt.sessionId, tgt.batchId, EVT.EVT_AUTO_SETTLE_SKIPPED, {
+              lane: tgt.lane, reason: 'auto-settle-disabled',
+              trigger: AUTO_SETTLE_TRIGGERS.settleRequest, settleId: settleIdOf(tgt.caller),
+            });
+          } catch { /* 留痕失败不拖累回报（消息 + swarm.report 事件已落） */ }
+        }
         // 打回（2026-09-26 用户裁决）：**gate 类形态错误**（`GATE_*`）⇒ 工具调用失败，让成员改。
         //   ▸ 投递与留痕**已先行完成**（`deliverSwarmMessage` + `appendSwarmEventOf` + `auto.settle.skipped`
         //     带 `gate-rejected-to-member:` 前缀）⇒ 「消息已投递 + 事件已落」这一既有事实**不被抹掉**，

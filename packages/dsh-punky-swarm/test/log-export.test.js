@@ -61,20 +61,26 @@ async function makeBatch(store, bid, events = EVENTS) {
 
 function batchFileOf(root, bid) { return path.join(root, 'sessions', 'sess-log', 'batches', bid + '.json'); }
 
-test('T3.1 默认关：logs 未配置/disabled → log_export 不注册（工具总数 27 = P1-01 缺省默认开 + lane_dispatch + P3a batch_control + P1 handoff 两件，不含 log_export）', () => {
+test('T3.1 默认关：logs 未配置/disabled → log_export 不注册（总数面权威见 test/tools.test.js 冻结名单）', () => {
   for (const cfg of [{}, { capabilities: {} }, { capabilities: { logs: {} } }, { capabilities: { logs: { enabled: false } } }]) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-log-off-'));
     const store = createStore(root);
     const { tools } = createTools({ tools: { register: () => {} }, logger: console }, { store, root, config: cfg });
-    assert.equal(tools.length, 29, '缺省/disabled 配置下工具总数保持 26（core 12 + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view，logs 默认关）');
+    // 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原「工具总数断言（length 字面量 + 旧计数叙事）」
+    //   已删 —— 它是「缺省注册集总数」面的**纯重复**（唯一权威 = `test/tools.test.js` 的 `TOOL_NAMES` 精确集合断言）；
+    //   本用例**被检面** = `log_export` 是否注册（下一行），与总数无关（防双权威漂移）。
     assert.equal(tools.some((t) => t.name === 'log_export'), false);
   }
 });
 
-test('T3.1b 启用后 log_export 注册且仅 +1', async () => {
+test('T3.1b 启用后 log_export 注册且仅 +1（**差值派生**：以关态为基线，零字面量）', async () => {
   const { byName } = setup(true);
   assert.equal(typeof byName.log_export?.execute, 'function');
-  assert.equal(Object.keys(byName).length, 30); // 26 + log_export + task_pool + batch_tasks_add（P3a control lane：23 → 24；【2026-09-17 P1】handoff 两件常驻注册：25 → 26）
+  // 【R-1/T-10】原 `assert.equal(Object.keys(byName).length, 30)` 为字面量 ⇒ 改为**差值**：与「logs 关」面
+  //   同源构造对比，断言**恰 +1** —— 正是本用例标题所述语义，且不随工具总数漂移。
+  const offRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-log-delta-'));
+  const { tools: offTools } = createTools({ tools: { register: () => {} }, logger: console }, { store: createStore(offRoot), root: offRoot, config: {} });
+  assert.equal(Object.keys(byName).length, offTools.length + 1, '启用 logs ⇒ 相对关态**恰 +1**（log_export）');
 });
 
 test('T3.2 全量导出：eventCount=exported=events.length，items 与 readBatch 逐条保序一致', async () => {

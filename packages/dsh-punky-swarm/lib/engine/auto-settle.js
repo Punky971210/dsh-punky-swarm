@@ -124,6 +124,23 @@ export const AUTO_SETTLE_ON_FAIL = Object.freeze({ pause: DEFAULT_ON_FAIL, repor
  *  `GATE_COMPLETE_AUDIT_FAILED` 承担）。指引附录 A 的登记条目见本批 exec 产物「待 Leader 收进指引」段。 */
 export const AUDIT_SETTLE_DEFERRAL_REASON = 'audit-explicit-settle-required';
 
+/** 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-2/R-3】停用开关的**自证取值**（约束 8：
+ *  禁写笼统 `skipped`，须自证）。两个消费点共用同一枚举值：
+ *    ① 装配期停用 ⇒ `installAutoSettle()` 返回体的 `reason`；
+ *    ② 兼底路被开关跳过 ⇒ `auto.settle.skipped.reason`。
+ *  ⚠ **刻意不导出**：判据源 `L-AC-14` 要求导出符号**净增 0** ⇒ 兼底路（`lib/tools/swarm-tools.js`）按**同字面量**
+ *  写入；两处注释互指，`isAutoSettleDisabledSkip` 是本模块侧的接收单点（幂等链排除面）。 */
+const AUTO_SETTLE_DISABLED_REASON = 'auto-settle-disabled';
+
+/** 开关**生效值**解析（R-1 向后兼容的判据本身）：**只有显式 `false` 才停用**。
+ *  `undefined`（键缺省）/ 键缺失 / 任何非布尔值 ⇒ `true`（既有批行为**逐字不变**）。
+ *  ⚠ **禁真值判断**：`!enabled` 会把 `0` / `''` / `null` 一并当停用 ⇒ **越权关停**（判据源 RK-3）。
+ *  热更「生效变化」比对（`lib/index.js#remountAutoSettle`）与兼底路短路（`lib/tools/swarm-tools.js`）
+ *  按**同形**判定镜像（`!== false`）——三处同形是本开关的硬要求，任一处漂移即成第二套口径。 */
+function autoSettleEnabledOf(enabled) {
+  return enabled !== false;
+}
+
 /** audit 层 lane 判定（单点）：lane 的层取 `batch.wavePlan[].tasks` 中 `id === lane` 的 `layer` 字段
  *  （经 `findTask` 单点，**不新造第二套遍历**；同款读法见 `lib/tools/core.js:712`）。
  *  **缺失 / 非法层 ⇒ 不作为 audit**（保守：仍走既有全自动路，零行为变化）——层是 `wavePlan` 的静态声明，
@@ -140,11 +157,24 @@ function isAuditSettleDeferral(e) {
   return e?.type === EVT_AUTO_SETTLE_SKIPPED && e?.reason === AUDIT_SETTLE_DEFERRAL_REASON;
 }
 
-/** 瞬时/非幂等留痕的**统一排除面**（单点）：相位闸留痕 + audit 职责转移留痕。
- *  两族语义不同（前者「本拍相位不对」，后者「本 lane 的结算职责不在引擎」），但**幂等口径相同**
- *  ⇒ 在此合流，避免两处各自维护「哪些 skipped 不算判重」而漂移。 */
+/** 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-3】停用留痕判定（单点）：
+ *  `auto.settle.skipped` 且 `reason` = `AUTO_SETTLE_DISABLED_REASON`（字面量来源见该常量注释；
+ *  兼底路在 `lib/tools/swarm-tools.js` 按同字面量写入）。
+ *  **不进幂等链**（与 `isPhaseGateSkip` / `isAuditSettleDeferral` 同族）：该留痕是「本批策略为**停用**」的
+ *  **持久策略事实**，不是「已结算/已判重」——
+ *    · 计入会让停用期每次触发都判 `already-settled` 而**不再留痕**（停用可见性被幂等键吞掉）；
+ *    · 更严重：开关**重新启用**后，同 `(lane, settleId)` 的首个真实触发会被这些留痕判成 `already-settled`
+ *      ⇒ lane **永远结算不了**（与相位闸毒化同型的「恢复入口被毒化」）。
+ *  故停用期**每次触发各留一次痕**。 */
+function isAutoSettleDisabledSkip(e) {
+  return e?.type === EVT_AUTO_SETTLE_SKIPPED && e?.reason === AUTO_SETTLE_DISABLED_REASON;
+}
+
+/** 瞬时/非幂等留痕的**统一排除面**（单点）：相位闸留痕 + audit 职责转移留痕 + **停用策略留痕**。
+ *  三族语义不同（相位不对 / 职责不在引擎 / 本批策略为停用），但**幂等口径相同**
+ *  ⇒ 在此合流，避免多处各自维护「哪些 skipped 不算判重」而漂移。 */
 function isTransientSkip(e) {
-  return isPhaseGateSkip(e) || isAuditSettleDeferral(e);
+  return isPhaseGateSkip(e) || isAuditSettleDeferral(e) || isAutoSettleDisabledSkip(e);
 }
 
 /** 幂等键归一：`(batchId, lane, 子会话 id)` 的第三元（缺 id 时**不得**伪造键 ⇒ 返回 null，调用方拒）。 */
@@ -394,10 +424,29 @@ async function onSubagentEnd(info, { store, dispatchIndex, ctx, root, liveConfig
  *   `ctx.on('subagent/end', onChildEnd, { global: true })`——**`{ global: true }` 为硬性要求**
  *   （契约卡 #8/#9：被 scope 化的插件 ctx 默认监听漏收；`global` 短路一切 scope 过滤）。
  *   返回 `{ installed, reason?, count(), dispose() }`；`ctx.on` 缺失 ⇒ inert 静默降级（宿主能力缺失不炸）。
- *   `count()` = **监听调用次数**（每次事件都进回调；命中与否由 `dispatchIndex` 过滤，未命中零写入）。 */
+ *   `count()` = **监听调用次数**（每次事件都进回调；命中与否由 `dispatchIndex` 过滤，未命中零写入）。
+ *
+ *   【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-2 ①】新增 `deps.enabled` 开关键：
+ *   开关**停用**（生效值 false）⇒ **零订阅**、`installed:false`、`reason='auto-settle-disabled'`、
+ *   `count()` 恒 0、`dispose()` 空操作（**返回形态与启用态同形**，C-5 的卸载路径 `?.dispose?.()` 不受影响）。
+ *   缺省 / 非 `false` ⇒ 逐字走既有装配路（R-1 向后兼容）。 */
 export function installAutoSettle(ctx, deps = {}) {
-  const { store, dispatchIndex, root, liveConfig, logger = ctx?.logger } = deps;
+  const { store, dispatchIndex, root, liveConfig, enabled, logger = ctx?.logger } = deps;
   const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
+  // ── R-2 ① 停用分支（2026-10-09）───────────────────────────────────────────────────────────────
+  //   位置**先于**宿主能力闸：停用是**策略**（用户裁决 E-1=甲），不是能力缺失 ⇒ `reason` 必须可与 C-6 的
+  //   `'ctx.on unavailable or store missing'` 区分（判据源 R-2 ① / C-6「成因可辨」）。
+  //   停用**不订阅** ⇒ 主路对 `subagent/end` 零动作（`installed:false` 是**真实**挂载态，不是降级伪装）。
+  //   R-3 非静默：停用**必须**留一行可观测日志（含配置键名 + 停用字样）；且**不得**出现
+  //   `auto-settle mounted`（谎报挂载，判据源 RK-4——`lib/index.js` 的既有 mounted 行由 `installed` 把关）。
+  //   也不得在此改相位/落 `auto.settle.paused`：停用不是失败，是策略（判据源 R-3 末两条）。
+  if (!autoSettleEnabledOf(enabled)) {
+    try {
+      logger?.info?.('[dsh-punky-swarm] auto-settle disabled (autoSettle.enabled === false)：主路 subagent/end 未订阅；'
+        + '结算责任归 Leader（member_status(review) → member_settle(...)）；兼底路 swarm_report 回报面照常，不再触发结算');
+    } catch { /* 日志失败不炸装配（观察者隔离） */ }
+    return inert(AUTO_SETTLE_DISABLED_REASON);
+  }
   if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
   let hits = 0;
   const handler = (info) => {

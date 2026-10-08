@@ -104,7 +104,7 @@ function writeBatchFile(batch) {
 // ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 `assertTeamLoads()` 前置自检 ──
 //   其被检面 = 「临时团队资产必须真的被加载」；团队资产声明面已随 T-1（装载器删除）/ T-6（读端删除）删净，
 //   且其全部调用点（T11 / T18 / T23 / T24）已按「去退役前置」改写为引擎基线构造 ⇒ 该助手成为本批改动产生的
-//   孤儿代码，一并删除（`resolveTeamFlows` 恒返 `ok:false` ⇒ 该前置在任何输入下都不可能通过）。
+//   孤儿代码，一并删除。【退役面等值反转 · R2-4】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）。
 
 // ── 断言器 ──
 function obs(t, label, r) { t.diagnostic(label + ' → ' + JSON.stringify(r)); }
@@ -297,7 +297,7 @@ test('T11 免检路径不可达：空/缺声明全排列扫描（任何一条 ok
   }
   // (2) exec consume 空/缺 × 团队形态 —— 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】
   //   原第三臂「临时团队 t11-no-entry（显式 `delete flows.exec.entry_requires`）」的被检载体（团队资产声明面）
-  //   已随 T-1（`lib/assembly/team-asset.js` 删除）/ T-6（`resolveTeamFlows` 恒返无声明）删净；
+  //   【退役面等值反转 · R2-5】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）；
   //   夹具 `writeTempTeam` 读已删的 5 件真实骨架（T-4/A-9）⇒ 调用即抛。
   //   ⇒ 去该臂与 `assertTeamLoads` 前置（前置面消失，非命题面）：引擎基线下**任何团队名同判「无声明」**
   //   ⇒ 余下两臂（`software-team` / `generic`）即覆盖全部可达形态；`assert.deepEqual(exempt, [])` 方向与强度不变。

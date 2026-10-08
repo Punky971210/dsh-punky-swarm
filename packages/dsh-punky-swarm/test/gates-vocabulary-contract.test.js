@@ -273,7 +273,7 @@ test('#5 反例：已登记 token ⇒ entry 放行', () => {
 //   · 「#3 行首锚定：`element:` 行须独立整行（内嵌提及不命中）」
 //   · 「#4 命中 pending_marker.literal（plan 层）⇒ 拒 GATE_NEEDHUMAN_PENDING + pendingMarker 载荷」
 // 面已消失 = **`flows.plan.contract.elements` / `.subsections` / `.pending_marker` 三处声明位**
-//   （T-6：`resolveTeamFlows` 读端删除 ⇒ 恒返「无声明」；T-1：`lib/assembly/team-asset.js` 本体删除，
+//   【退役面等值反转 · R2-7】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）；
 //    其 `CONTRACT_*` 码族已入退役锁 A-10）。三例的 `gatesWith(..., {elements|pending_marker})` 声明**无任何载体**
 //   ⇒ 被检面（按声明逐条核 / 按声明命中待确认标记）不存在。
 //   **不可等值反转**：反转成「声明不在 ⇒ 零拒绝」= 恒真空转校验（纪律 15⑤）。

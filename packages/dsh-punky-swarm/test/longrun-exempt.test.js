@@ -30,7 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   C13   无既有豁免撤销 → GATE_EXEMPT_REVOKE_REQUIRED
 //   C14   revokeExempt 与 status 并用 → GATE_EXEMPT_NOT_DISPATCH（工具面）
 //   C15   撤销不改成员状态（lanes 不变、无新增 member.settled）
-//   J38/J39 工具总数仍 26；member_status 新参透传；member_settle 调用点仍 5 参
+//   J38/J39 工具面注册（总数面权威见 test/tools.test.js 冻结名单）；member_status 新参透传；member_settle 调用点仍 5 参
 //   反例  工具层旧调用（不带 exempt/不带 status）仍可用；空表不留空对象键
 //
 // 纪律：本文件走隔离 home 预载运行（package.json test 脚本 / gate 命令均带 --import preload），
@@ -325,10 +325,12 @@ test('EX-C15: 撤销不改成员状态（lanes 不变、无新增 member.settled
 
 // ── 工具面（J38/J39 + C14）──
 
-test('EX-J38: 工具总数仍 26（含 lane_dispatch/swarm_report/swarm_cc + P3a batch_control + P1 handoff 两件）；member_status 参数表按冻结清单扩两键，既有 4 键与顺序不变', () => {
+test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与顺序不变（总数面权威见 test/tools.test.js 冻结名单）', () => {
   const { store, root } = setup();
-  const { tools, byName } = toolsFixture(root, store);
-  assert.equal(tools.length, 29); // 【2026-09-16 P3a control lane】23 → 24（+batch_control）；【2026-09-17 P1】+handoff_submit/handoff_view 常驻注册 ⇒ 25 → 26
+  const { byName } = toolsFixture(root, store);
+  // 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原「工具总数断言 + 旧计数叙事」
+  //   原「工具总数断言（length 字面量）」已删：缺省注册集总数面的**唯一权威** = `test/tools.test.js` 的
+  //   `TOOL_NAMES` 精确集合断言；本用例**被检面** = `member_status` 参数表，与总数无关（防双权威漂移）。
   const ms = byName.member_status;
   // defineTool 归一化后：parameters = { type:'object', properties:{...}, required:[...] }（声明顺序即 Object.keys 顺序）
   assert.deepEqual(Object.keys(ms.parameters.properties), ['batchId', 'lane', 'status', 'session', 'exempt', 'revokeExempt']);

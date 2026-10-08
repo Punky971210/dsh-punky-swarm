@@ -147,7 +147,7 @@
     "test/auditlog-mount.test.js": {
       "asserts": 197,
       "blankLines": 69,
-      "lines": 780,
+      "lines": 783,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -161,7 +161,7 @@
       "todos": 0
     },
     "test/auto-settle.test.js": {
-      "asserts": 125,
+      "asserts": 124,
       "blankLines": 35,
       "lines": 629,
       "tautologies": 0,
@@ -171,15 +171,15 @@
     "test/baseline-snapshot-cli.test.js": {
       "asserts": 39,
       "blankLines": 21,
-      "lines": 213,
+      "lines": 216,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/batch-control.test.js": {
-      "asserts": 69,
+      "asserts": 68,
       "blankLines": 37,
-      "lines": 376,
+      "lines": 378,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -379,7 +379,7 @@
     "test/gate-event-const-e2e-r34.test.js": {
       "asserts": 40,
       "blankLines": 19,
-      "lines": 189,
+      "lines": 194,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -667,7 +667,7 @@
     "test/install-selfcheck.test.js": {
       "asserts": 23,
       "blankLines": 19,
-      "lines": 182,
+      "lines": 186,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -721,17 +721,17 @@
       "todos": 0
     },
     "test/log-export.test.js": {
-      "asserts": 58,
+      "asserts": 57,
       "blankLines": 21,
-      "lines": 221,
+      "lines": 227,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
     },
     "test/longrun-exempt.test.js": {
-      "asserts": 96,
+      "asserts": 95,
       "blankLines": 44,
-      "lines": 406,
+      "lines": 408,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -875,7 +875,7 @@
     "test/ratchet-wiring.test.js": {
       "asserts": 35,
       "blankLines": 28,
-      "lines": 314,
+      "lines": 317,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1027,7 +1027,7 @@
     "test/tool-descriptor.test.js": {
       "asserts": 60,
       "blankLines": 19,
-      "lines": 219,
+      "lines": 222,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1035,17 +1035,17 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
-      "lines": 377,
+      "lines": 384,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
     },
     "test/tools.test.js": {
-      "asserts": 125,
-      "blankLines": 48,
-      "lines": 602,
+      "asserts": 132,
+      "blankLines": 52,
+      "lines": 648,
       "tautologies": 0,
-      "tests": 27,
+      "tests": 28,
       "todos": 0
     },
     "test/topic-attach.test.js": {
@@ -1201,15 +1201,15 @@
       "todos": 0
     },
     "test/worktree-tools.test.js": {
-      "asserts": 80,
+      "asserts": 79,
       "blankLines": 19,
-      "lines": 299,
+      "lines": 302,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-08T13:36:04Z",
+  "generatedAt": "2026-10-08T17:17:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1220,15 +1220,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "engine-techdebt-cleanup-20261008：G-3 注释订正 7 处（零行为变更）+ G-1 零删除仅注释订正 + G-4 T-10 注册面计数断言动态化（站点 5→1，tests +1、asserts Δ0）；baselines 单写者=Leader（§15③），时点=本批三条 exec 全收口后（§15④）",
+  "reason": "engine-techdebt-cleanup-r2-20261008：三条 exec 全收口后一次性重生成 —— e01 R-1 净 asserts +2（5 文件各 -1 删纯重复 + tools.test.js +7 含可达反例用例）；e02 R-5 五文件 asserts:0/lines 变（子进程解析钩子，新建 test/helpers/ 不入基线对账面）；e03 R-2/R-3/R-6/R-7 文档与注释面、baselines 0 行",
   "schema": 1,
   "totals": {
-    "asserts": 7671,
-    "blankLines": 3850,
+    "asserts": 7673,
+    "blankLines": 3854,
     "files": 151,
-    "lines": 41609,
+    "lines": 41696,
     "tautologies": 0,
-    "tests": 1612,
+    "tests": 1613,
     "todos": 4
   }
 }

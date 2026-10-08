@@ -41,6 +41,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+// R-5@techdebt2：子进程 argv 的 `--import` 之一（解析钩子）由**单一 helper** 生成
+//   ⇒ 6 处站点不再各自硬编码路径（判据源 §4-3「防再次漂移」；`file:///` 形态由 helper 保证）
+import { hostDepFallbackImportArgs } from './helpers/host-dep-fallback.mjs';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHILD = path.join(PKG, 'test', 'helpers', 'event-const-missing-child.mjs');
@@ -62,7 +65,9 @@ function runChild(names = [], { weakenGuard = false } = {}) {
   else delete env.PSWARM_SABOTAGE_CONSTS;
   if (weakenGuard) env.PSWARM_WEAKEN_GUARD = '1';
   else delete env.PSWARM_WEAKEN_GUARD;
-  const args = [];
+  // R-5@techdebt2：解析钩子（惰性回退）经**单一 helper** 生成 argv（`file:///` 形态），
+  //   避免各站点各自硬编码路径而再次漂移（判据源 §4-3）。
+  const args = [...hostDepFallbackImportArgs()];
   for (const p of PRELOADS) args.push('--import', p);
   args.push(CHILD);
   const stdout = execFileSync(process.execPath, args, { cwd: PKG, env, encoding: 'utf8' });

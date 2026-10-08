@@ -871,7 +871,7 @@ ARCHIVED_CASES['R-27 显式禁用命令行 ⇒ 放行 ＋ escape{kind:"command-d
 // 复活记录（批次 core-pending-a-20260915 · lane e2 · Leader 裁决：走 **P-1** 合规最小可判别形态）：
 //   ① 原构造为何**不可达**（本 lane 逐条复核）：`flows.exec.consume_field='inputs'` 会被资产校验白名单拒 ——
 //      `CONSUME_FIELDS` 是**双源真源**（`lib/assembly/flows.js:255` ＋ `lib/assembly/team-asset.js:51`，值均为 `['consume']`）
-//      ⇒ 命中 `TEAM_ASSET_CONSUME_FIELD_NOT_ALLOWED`（`team-asset.js:281-283`）⇒ `resolveTeamFlows().ok=false`
+//      ⇒ 【退役面等值反转 · R2-1】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）
 //      ⇒ `flows=null` ⇒ `consumeFieldOf` 只能回落 `'consume'`（`flows.js:263-267`）⇒ 门禁按 `consume` 检
 //      （该 lane 无 `consume`）⇒ 原用例第 2/3 条断言在合规资产下**恒不成立**（不是「未实现」，是「构造非法」）。
 //   ② 未采纳的 P-2（把 `'inputs'` 纳入白名单）＝ 放宽「声明面只能收紧」的引擎级语义，属产品决策（须用户裁决）⇒ 本批**不扩白名单**。
@@ -923,7 +923,7 @@ ARCHIVED_CASES['R-15 团队 consume_field:"inputs" + lane 写 inputs ⇒ 门禁�
   '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
   '  本条因「构造非法 ⇒ 不可达」转 todo。',
   '说明（Leader 裁决 2，以 `plan/spec.md` **F-3** 为准，该文与 I-7 冲突）：`flows.exec.consume_field=\'inputs\'`',
-  '  会被资产校验拒（`TEAM_ASSET_CONSUME_FIELD_NOT_ALLOWED`）⇒ `resolveTeamFlows().ok=false`、`flows=null`',
+  '  【退役面等值反转 · R2-2】原说明已集中 ⇒ docs/retired-faces-ledger.md §1（原文逐字归档）',
   '  ⇒ `consumeFieldOf` 只能回落 `\'consume\'` ⇒ 本用例的构造**在合规资产下不可达**（逃逸阀不成立），',
   '  断言文本逐字保留于测试体内（`test.todo` 不执行回调），正确断言留待独立小批。',
   '  const bid = mkBase(\'r15\', { inputs: [\'exec/absent-input.md\'] }, {}, { team: \'r15-team\', teamsRoot: tp });',

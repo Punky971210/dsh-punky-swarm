@@ -570,11 +570,41 @@ export const apply = (ctx, config = {}) => {
     dispatchIndex, // 与读侧骨架 / 登记点共享同一 Map（登记后无需重启即命中）
     root,
     liveConfig: config, // 与 `member_settle` 链推进同源（`apply` 的 config；热更经 readLiveConfig 在工具面）
+    // 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-1/R-2 ①】停用开关按**原始值**透传：
+    //   严格判定由 `installAutoSettle` 单点内的 `autoSettleEnabledOf` 承担——**只有显式 `false` 才停用**，
+    //   `undefined`（键缺省）/ 非布尔 ⇒ 启用 ⇒ 未声明开关的既有批**行为逐字不变**（R-1 最硬一条）。
+    //   ⚠ 装配期读的是**静态 config**；`<root>/config/runtime.json` 覆盖在 watcher.start() 后才并入快照
+    //   ⇒ 必须由下方 boot 对账补一次，否则「runtime.json 写了 false、重启后开关失效」= 最危险的静默形态。
+    enabled: config?.autoSettle?.enabled,
     logger: ctx.logger,
   });
   if (autoSettle.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] auto-settle mounted: 宿主 subagent/end（global:true）→ 引擎自动结算判定（复用 Tier3 校验链；缺省 onFail=pause 停轮）');
   }
+  // 热更「生效变化」基线（约束 11：以**严格布尔解析后的值**比对 ⇒ `undefined` 与 `true` 同值，
+  //   不触发无意义重挂）。判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**——
+  //   该函数刻意**不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 此处为同形镜像；两处任一漂移即成第二套开关口径。
+  const autoSettleEnabledOf = (cfg) => cfg?.autoSettle?.enabled !== false;
+  let autoSettleEnabled = autoSettleEnabledOf(config);
+  // 停用开关**热切**（R-5/N-8「热更生效」，镜像 `remountGovernanceHook` / `remountWatchEngine` 既有语义）：
+  //   `autoSettle.enabled` **生效变化** ⇒ dispose 旧路 + 按新快照重装（`false` 时 `installAutoSettle`
+  //   自身走停用分支：零订阅 + 停用日志 + `installed:false` + `reason='auto-settle-disabled'`）。
+  //   幂等：**无生效变化零操作**（防 fs 抖动重挂，RK-8）。停用**不改相位、不落 `auto.settle.paused`**（R-3）。
+  const remountAutoSettle = (nextConfig, logTag) => {
+    const nextEnabled = autoSettleEnabledOf(nextConfig);
+    if (nextEnabled === autoSettleEnabled) return false;
+    autoSettle?.dispose?.();
+    autoSettle = installAutoSettle(ctx, {
+      store, dispatchIndex, root, liveConfig: nextConfig, logger: ctx.logger,
+      enabled: nextConfig?.autoSettle?.enabled,
+    });
+    autoSettleEnabled = nextEnabled;
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: auto-settle ' + (autoSettle.installed
+      ? 're-mounted (autoSettle.enabled 生效值 → true：宿主 subagent/end 重新订阅，自动结算恢复)'
+      : 'disabled (autoSettle.enabled 生效值 → false：主路已退订；结算责任归 Leader：member_status(review) → member_settle(...))')
+      + (logTag ? ' [' + logTag + ']' : ''));
+    return true;
+  };
   // ── W1-① 重放/恢复（装配期**有界**扫描；蓝图 §W1-①）────────────────────────────────
   //   缺口（实测）：链推进由 `member.settled` 驱动；若进程死在「**已结算**」与「**已推进**」之间
   //   （或推进因门禁/挂载点失败而无人补），批次会永久停在「lane 已 merged、下一环从未被决策」。
@@ -773,6 +803,10 @@ export const apply = (ctx, config = {}) => {
     // ⑤ governance hook（热切）：governance.hook 生效变化 → dispose + 重挂
     //   （逻辑见 remountGovernanceHook；幂等——无生效变化零操作；启动对账见 apply 尾部 hotConfig.start() 之后）
     remountGovernanceHook(next);
+    // ⑥ auto-settle 停用开关（热切）：`autoSettle.enabled` **生效变化** → dispose 旧路 + 按开关重装/停用
+    //   （逻辑见 remountAutoSettle；幂等——严格布尔同值 ⇒ 零操作，约束 11）。
+    //   放末位：与其余 5 个消费面同族且互不依赖；`autoSettle` 不在 `allKeys` 内时 onChange 不会为本键触发。
+    remountAutoSettle(next);
   };
   hotConfig = createConfigWatcher({
     root, config,
@@ -796,6 +830,12 @@ export const apply = (ctx, config = {}) => {
   //   装配不一致 → 同样 dispose+重建+重挂——保证持久化 watch 覆盖（阈值键随比较集扩展一并纳入）
   //   「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
   remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay');
+  // auto-settle 停用开关 boot 对账（R-5 关键补丁）：`autoSettle.enabled:false` 是**持久**策略，而装配期
+  //   （上方 `installAutoSettle`）读的是**静态 config**，watcher.start() 应用初始 runtime.json overlay 时
+  //   **刻意不广播**（重启语义，见 `config-watch.js#start`）⇒ 不补此对账则「写在 runtime.json 里的停用
+  //   在重启后失效（主路照装）」——那是本开关最危险的静默形态（配置写了、看着生效、实际没生效）。
+  //   与 governance / watch 两条既有 boot 对账同法同序；幂等：生效值一致 ⇒ 零操作。
+  remountAutoSettle(hotConfig.readSnapshot(), 'boot-overlay');
 
   return () => {
     hotConfig?.dispose();

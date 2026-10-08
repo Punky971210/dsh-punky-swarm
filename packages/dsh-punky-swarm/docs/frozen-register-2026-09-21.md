@@ -56,6 +56,8 @@
 2. **降级**：测试专用面显式登记为测试钩子（去 `export` 则断测试，故只能保留）。
 3. **删**：无价值者（`validateAssembly` / `assertAssemblyCompleteness` 撤函数**保常量表**——`BLIND_REVIEW_ROLES` 被 `wave-plan.ts` 消费、`PRODUCE_LAYERS` / `FLOW_SECTIONS` 被 `team-asset.js` 消费）。
 
+**【2026-10-08 订正】**（批 `engine-techdebt-cleanup-20261008` · `R-3@techdebt2`）：上述第 3 项（本文件 `:57`）的「**删**」**未执行**，且与**同文件 `:56`** 构成**自相冲突** —— `:56` 主张「测试专用面显式登记为测试钩子（**去 `export` 则断测试，故只能保留**）」，`:57` 主张「删」。`assertAssemblyCompleteness` 的处置**以 `docs/rebuild-blueprint-2026-09-21.md:91` 为准**（「`validateAssembly` / `assertAssemblyCompleteness` | 删函数保常量表 | **冻结**（W2 明示"再考虑重新引入或清理"）。常量表已列入保留」）⇒ **判「留」**。原文 `:56` / `:57` **均保留可读**（史实不删）。
+
 ---
 
 ## 2. B1 残留 · 真死但自带声明语义（10 项，冻结不删）

@@ -34,8 +34,11 @@ const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口，发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
 // 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
 // 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**；工具是机制、门是策略）⇒ 25 → 26。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'handoff_submit', 'handoff_view', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status', 'task_pool', 'batch_tasks_add', 'task_update'];
-const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 29（N1-R4-1a +task_pool；R4-1c +batch_tasks_add；R4-2 +task_update）
+// 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】名单补 `role_guide`（上批 D-1 新增工具）——
+//   原名单 29 项**陈旧** ⇒ `DEFAULT_TOOL_COUNT` 派生为 29 而实测 **30** ⇒ 本文件 6 用例红。
+//   名单来源 = `lib/tools/register.js:40` 四族合成结果的**实测枚举**（非手抄）。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'handoff_submit', 'handoff_view', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status', 'task_pool', 'batch_tasks_add', 'task_update', 'role_guide'];
+const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 派生（N1-R4-1a +task_pool；R4-1c +batch_tasks_add；R4-2 +task_update；R-1 +role_guide）
 
 // 注册上下文（enabled 开关两态）
 function makeCtx(enabled) {
