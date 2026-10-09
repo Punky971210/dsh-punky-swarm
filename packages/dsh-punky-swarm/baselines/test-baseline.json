@@ -128,6 +128,14 @@
       "tests": 12,
       "todos": 0
     },
+    "test/assign-tier-downgrade-guard.test.js": {
+      "asserts": 47,
+      "blankLines": 24,
+      "lines": 217,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/audit-blind-review.test.js": {
       "asserts": 55,
       "blankLines": 14,
@@ -1217,7 +1225,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-09T09:03:42Z",
+  "generatedAt": "2026-10-09T12:32:51Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1228,15 +1236,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 swarm-report-wake-autodispatch-20261009 / lane e01-impl：新增 test/lane-wake-autodispatch.test.js（甲+乙+D-3甲+真宿主冒烟，12 用例 / 56 断言）；test/auto-settle.test.js J8 订阅计数等值反转（+6 行注释说明，判据由 D-2 甲授权）——断言数只增不减（+56）、恒真形态 0→0",
+  "reason": "批 assign-tier-downgrade-guard-20261009 / lane e01-impl（T4 回归用例）：新增 test/assign-tier-downgrade-guard.test.js（在跑批不降档守卫 6 用例 / 47 断言）⇒ 基线补登新文件；既有文件计数零删减",
   "schema": 1,
   "totals": {
-    "asserts": 7798,
-    "blankLines": 3907,
-    "files": 152,
-    "lines": 42388,
+    "asserts": 7845,
+    "blankLines": 3931,
+    "files": 153,
+    "lines": 42605,
     "tautologies": 0,
-    "tests": 1634,
+    "tests": 1640,
     "todos": 4
   }
 }
