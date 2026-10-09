@@ -42,6 +42,11 @@ export function buildSwarmTools(cx) {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"type":{"type":"string","required":true},"delivered":{"type":"boolean","required":true},"unbound":{"type":"boolean"},"eventWritten":{"type":"boolean"},"notice":{"type":"string"},"wake":{"type":"object","additionalProperties":true},"settle":{"type":"object","additionalProperties":true}}},
         render: (_args, v) => TEXT_OUTPUT('swarm.report → Leader（' + v.batchId + '/' + v.lane + '，' + v.type + '）'
           + (v.unbound ? ' [unbound: best-effort]' : '')
+          // 【批 `lane-wake-addressing-fix-20261009`】**U-09 同批修（纯可见性）**：唤醒结果此前只进返回值、
+          //   不进渲染面 ⇒ 模型可见面上 `woke` 出现 0 次，worker 无法判断 Leader 是否真被唤醒（静默）。
+          //   本行**只读**既有返回键 `wake`（该键已在 `output.schema` 与返回对象内）⇒ 返回键集零变更
+          //   （约束 C-4：`additionalProperties:false` 下不得新增键）。
+          + (v.wake ? '\n唤醒：woke=' + String(v.wake.woke === true) + '（reason=' + String(v.wake.reason ?? '') + '）' : '')
           + (v.settle ? '\n自动结算：' + String(v.settle.action ?? '') + (v.settle.reason ? '（' + v.settle.reason + '）' : '') : '')),
       },
       async execute(args, exec) {
@@ -109,11 +114,18 @@ export function buildSwarmTools(cx) {
         }
         // 唤醒 Leader（规格 §2.5）：位置在 `appendSwarmEventOf`（**留痕先于唤醒**）之后 ⇒
         //   唤醒失败/被节流都**不损**「消息已投递 + 事件已落」这一既有事实；返回值只并入 `wake` 键。
-        //   Leader 会话来源**逐字复用** `tgt.sessionId`（有 dispatch 绑定 = 批 owner 会话；无绑定 =
-        //   宿主父会话；两者缺一即退化为 caller 自身 ⇒ 被 `self` 闸拦下）——**禁另写一套映射**（规格 §2.3）。
+        //   ── 【批 `lane-wake-addressing-fix-20261009` · U-08 修复】**唤醒寻址与治理落点分流** ──────────
+        //   ▸ **标废（原口径，保留以存因果，勿据以拒改）**：「Leader 会话来源**逐字复用** `tgt.sessionId`」——
+        //     其隐含前提「批 owner 会话 = 宿主 agent 会话」（`lib/index.js:605-606` 同款）在**命名黑板批**
+        //     上不成立：那里 `tgt.sessionId` 是**黑板名**，取不到 live 句柄 ⇒ `leader-not-live` 静默。
+        //   ▸ **现行口径**：唤醒目标取 `tgt.wakeSessionId`（= agent 亲缘，由 `reportTargetOf`
+        //     **单点解析**）；治理落点三处（`:49` / `:50` / `:74`）**仍逐字** `tgt.sessionId`，一字未动。
+        //   ▸ 回退安全：未绑定分支**不产生** `wakeSessionId` ⇒ `?? tgt.sessionId` 取回其既有值
+        //     （父会话 / 退化为 caller 后由 `self` 闸拦下）⇒ 未绑定行为零变更。
+        //   ▸ **禁另写一套映射**（规格 §2.3 / 约束 C-2）：本文件**不得**自行读 `exec.agent.session.header`。
         const wake = WAKE_TYPES.has(args.type)
           ? wakeLeaderForReport(ctx, {
-            callerSessionId: tgt.caller, leaderSessionId: tgt.sessionId,
+            callerSessionId: tgt.caller, leaderSessionId: tgt.wakeSessionId ?? tgt.sessionId,
             batchId: tgt.batchId, lane: tgt.lane, type: args.type,
             summary: args.summary, artifactPath: args.artifactPath ?? null,
           })

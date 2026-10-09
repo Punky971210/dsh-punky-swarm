@@ -39,7 +39,24 @@ export function reportTargetOf(store, exec, args) {
   const declaredBatchId = typeof args?.batchId === 'string' && args.batchId.trim() ? args.batchId.trim() : null;
   const declaredLane = typeof args?.lane === 'string' && args.lane.trim() ? args.lane.trim() : null;
   if (bind) {
-    return { caller, bound: true, sessionId: bind.sessionId, batchId: declaredBatchId ?? bind.batchId, lane: declaredLane ?? bind.lane };
+    // 【批 `lane-wake-addressing-fix-20261009`】**唤醒寻址与治理落点解耦**（U-08 修复；判据源 `plan/scope.md`）：
+    //   · `sessionId` = **治理落点**，语义**逐字不变**（mailbox / 批事件 / 结算；命名黑板批下 = 黑板名）。
+    //   · `wakeSessionId` = **唤醒寻址**，新增加的一路值：agent 亲缘 = 调用方会话头
+    //     `session.header.parentSession`，即**发起建批的那个 agent 会话**（源码链 `lib/engine/dispatch.js:701-702`
+    //     `parent: exec.agent` → 宿主 `SubagentRuntime.start` → `child-agent.ts:107,112`；运行期双样本见
+    //     `p01-scope/progress/02`）。根因：命名黑板批的 `bind.sessionId` 是**黑板名而非 agent 会话**，
+    //     旧实现把它当唤醒目标 ⇒ `agents.get(黑板名)` = undefined ⇒ `leader-not-live`（静默）。
+    //   · 回退（约束 C-3，**硬**）：`parentSession` 缺失 / 空串 / 非字符串 ⇒ `wakeSessionId` **恰等于**
+    //     `bind.sessionId` ⇒ 与改前行为逐字相同（既有夹具 `execOf(WORKER)` 不带 header ⇒ 零改动仍绿）。
+    //     注意：此处**不能**只用 `??`——空串会被 `??` 放行，进而在唤醒侧退化成 `no-leader-session`，
+    //     与「回退 = bind.sessionId」不符。
+    //   · **唯一映射点**（约束 C-2）：父会话只在本函数内解析；`lib/tools/swarm-tools.js` **只做取值**，
+    //     不得自行读 `exec.agent.session.header`（同处 `:112-113` 明文禁第二套映射）。
+    //   · 未绑定分支**零改动**（其 `sessionId` 本就取父会话，见下方 `:44-49`）⇒ 不新增本键，
+    //     由消费方 `wakeSessionId ?? sessionId` 自然回退。
+    const parentSession = exec?.agent?.session?.header?.parentSession;
+    const wakeSessionId = (typeof parentSession === 'string' && parentSession.length > 0) ? parentSession : bind.sessionId;
+    return { caller, bound: true, sessionId: bind.sessionId, wakeSessionId, batchId: declaredBatchId ?? bind.batchId, lane: declaredLane ?? bind.lane };
   }
   return {
     caller, bound: false,
