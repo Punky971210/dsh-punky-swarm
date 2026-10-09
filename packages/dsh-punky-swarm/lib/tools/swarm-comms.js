@@ -73,15 +73,32 @@ export function appendSwarmEventOf(store, tgt, evtType, kind) {
 //   用宿主自用原语 `Agent.followup(msg)`（`dsh-agent-loop/lib/index.js:800-814`，语义 =
 //   `send(msg, 'next-turn', wake=true)`：idle ⇒ **同步**开新 turn；running ⇒ latch 进 next-turn 队列）。
 //   口径澄清（承 S-2 裁认）：只有 `followup` 是「推送」；`inject()` wake=false **不唤醒**（J-7）。
-// 硬边界（J-4）：本能力**只落 `swarm_report` 兼底路**；`subagent/end` 主路（`lib/engine/auto-settle.js`）
-//   全文零变更——主路回调内 handle disposal 先于 emit，**不得**取子句柄（该文件 `:31-32` 的原口径）。
+// 硬边界（J-4）——【2026-10-09 用户裁定 **D-2 甲**：适用范围**扩展**；原句按本仓「标废而非删」教义**改注、不删**】：
+//   ▸ 原文（**标废**，保留以存因果，勿据以拒改）：「本能力**只落 `swarm_report` 兼底路**；
+//     `subagent/end` 主路（`lib/engine/auto-settle.js`）全文零变更——主路回调内 handle disposal 先于 emit，
+//     **不得**取子句柄（该文件 `:31-32` 的原口径）。」
+//   ▸ **仍有效（未被废）的那半**：`subagent/end` emit 时子 run 已收尾（handle disposal 先于 emit，
+//     宿主 `dsh-subagent/lib/index.js:267-272` / `:317-323` 实测）⇒ **不得取子句柄**（`info.id` 对应的子代理
+//     handle）。J-4 的**保护目标**在扩展后完整保留。
+//   ▸ **被扩展的那半**：主路**不再**「全文零变更」——用户 2026-10-09 裁定 **D-2 = 甲（准）**：允许在
+//     `subagent/end` 面**并行新增一路订阅**（唤醒 Leader），附**三条件**：① 仅取 **Leader 句柄**
+//     （`ctx.get('agents')`，Leader 是**父会话**，其生命周期与子 run 无关），**不取子句柄**；
+//     ② **不改**既有 `onSubagentEnd` 的结算逻辑（`lib/engine/auto-settle.js` 既有判定链一字不动）；
+//     ③ 新增订阅**独立**且 `dispose` 可热切（先例 `lib/index.js` 的 `installAutoSettle` 装配段）。
+//     落点 = `lib/index.js` 装配段的独立订阅（与 `installAutoSettle` 并列、互不依赖、互不 await）；
+//     判据源 = `plan/survey-and-options.md` §待裁点回填 D-2。
 // 通道取舍（J-8）：**不用** `send_message` / `ctx.subagents.sendMessage`——one-shot lane worker 必抛
 //   `UNAUTHORIZED`（`dsh-subagent/lib/index.js:1762-1775`）。
 // 注入面取舍（J-6）：**不把 `agents` 加进插件 `inject`**（`lib/index.js:86`）——加硬 inject 会使本插件在
 //   未挂官方 agent 服务的宿主上**失去加载能力**；故走 `ctx.get('agents')` **非注入读**（先例同文件
 //   `:572` 的 `ctx.get('agentTeams')`：cordis「无 inject 要求，服务未提供即 undefined」）。
 // 幂等 / 防自激 / 节流：见 `wakeLeaderForReport` 内注释（`self` 闸 + leading-edge 合并窗 + `merged` 计数）。
-export const WAKE_TYPES = new Set(['blocked', 'settle-request']); // 触发集固定：progress 保持「留痕不打扰」
+// 触发集：`blocked`（阻塞）/ `settle-request`（请求结算）/ `completed`（**完成类**，D-5 甲新增）。
+//   `progress` **保持**「留痕不打扰」（Q-2 明文；逐字不变）。
+//   ⚠ `completed` 与 `settle-request` **语义解耦**（D-5 甲裁定）：前者**只唤醒、不结算**——
+//     结算仅由 `args.type === 'settle-request'` 触发（见 `lib/tools/swarm-tools.js` 的 `settleRequested`），
+//     故 `autoSettle.enabled=false` 的连带影响**不波及** `completed` 的唤醒面。
+export const WAKE_TYPES = new Set(['blocked', 'settle-request', 'completed']);
 // 合并窗 = **30s**（leading-edge：窗内首报立即唤醒，其后只累加合并计数）。
 //   依据（`plan/notify-spec.md` §3.2）：① 一次唤醒 = Leader 一整轮 LLM，波次密集收口下 N 报 N 轮不可接受；
 //   ② 一个波次收口跨度为秒级 ⇒ 30s 覆盖「一波多报 ⇒ 1 次唤醒」；③ 唤醒次数 ≤ ⌈跨度/W⌉+1，**与报告条数解耦**（可判）。
@@ -104,11 +121,22 @@ function leaderAgentOf(ctx, leaderSessionId) {
 }
 
 /** 唤醒消息（**零依赖手工构造**，形状 = `dsh-llm` `createUserMessage`；UUID 先例 `lib/governance/kernel.js:196`）。
- *  纪律（J-9）：**只传摘要元数据，零复制正文**——载体是调用方显式给出的 `type` / `summary` / `artifactPath`。 */
+ *  纪律（J-9）：**只传摘要元数据，零复制正文**——载体是调用方显式给出的 `type` / `summary` / `artifactPath`
+ *  与 `candidates`（后者 = lane **id 清单**，D-3 甲「只建议不派发」的候选面，仍是元数据、非正文）。
+ *  候选清单的显示上限（本模块内单点，不导出）= `WAKE_CANDIDATES_MAX`：超出只报总数，防超大批次撑爆消息。 */
+const WAKE_CANDIDATES_MAX = 12;
+
 function leaderWakeMessageOf(input, merged) {
+  const candidates = Array.isArray(input.candidates) ? input.candidates : [];
   const line = '[swarm] ' + (input.batchId ?? UNBOUND_BATCH_KEY) + '/' + (input.lane ?? UNBOUND_LANE_KEY)
     + ' ' + input.type + '：' + input.summary
     + (input.artifactPath ? '\n产物：' + input.artifactPath : '')
+    // D-3 甲（用户 2026-10-09 裁定）：引擎**只建议不派发** —— 候选 = `poolViewOf()` 判为可派发的 lane id；
+    //   派发仍由 Leader 单点经 `lane_dispatch` 发起（K1：池是只读视图、不引入 claim 自领）。
+    + (candidates.length > 0
+      ? '\n可派发候选（引擎只建议，派发仍由 Leader 决定）：' + candidates.slice(0, WAKE_CANDIDATES_MAX).join(', ')
+        + (candidates.length > WAKE_CANDIDATES_MAX ? ' 等 ' + candidates.length + ' 条' : '')
+      : '')
     + (merged > 0 ? '\n（另合并 ' + merged + ' 条同类回报）' : '');
   return {
     // id 不可省、不可复用：inbox 投影对 pending 消息做 id 去重，重复即抛

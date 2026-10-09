@@ -24,6 +24,14 @@ import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
 import { createTools } from './tools/register.js';
+// 【2026-10-09 批 `swarm-report-wake-autodispatch-20261009` · D-2 甲 / D-3 甲】主路并行唤醒的**两个既有单点**：
+//   · `wakeLeaderForReport`（`lib/tools/swarm-comms.js`）= 唤醒**唯一动作**（节流窗 / Leader 句柄非注入读 /
+//     四类降级回显 / 永不抛）——乙路**复用**，**禁另写第二套节流口径**；
+//   · `poolViewOf`（`lib/tools/task-tools.js`）= 「可派发性」**唯一判据**（deps 已结算 + `owner===null` +
+//     lane `pending`）——D-3 甲候选**复用**，**禁重写**。
+//   ⚠ 本批**零新增导出**：两件均为既有导出，仅新增 import（验收②「导出面净增 0」）。
+import { wakeLeaderForReport } from './tools/swarm-comms.js';
+import { poolViewOf } from './tools/task-tools.js';
 import { createApi } from './api.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
@@ -31,7 +39,7 @@ import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 
 // P3a 自动结算主路（规格 §2/§3/§4）：宿主 `subagent/end` 生命周期事件 → 引擎自动判定 ⇒ 全绿自动 merged /
 //   任一判据不满足 ⇒ 停轮（缺省 onFail=pause）。**必须**以 `{ global: true }` 注册（契约卡
 //   `plan/host-completion-probe-spec.md` #8/#9：被 scope 化的插件 ctx 下默认监听漏收）。
-import { installAutoSettle } from './engine/auto-settle.js';
+import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settle.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
@@ -586,6 +594,75 @@ export const apply = (ctx, config = {}) => {
   //   该函数刻意**不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 此处为同形镜像；两处任一漂移即成第二套开关口径。
   const autoSettleEnabledOf = (cfg) => cfg?.autoSettle?.enabled !== false;
   let autoSettleEnabled = autoSettleEnabledOf(config);
+  // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
+  //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
+  //   定位：本块 = **装配层 wiring**（本文件即装配层）；所有判定下沉到既有单点，本块自己只做三件事：
+  //     ① 过滤：经**同一** `dispatchIndex` 命中 lane（进程级广播会夹带非本套件子会话 ⇒ 未命中**静默丢弃**，
+  //        与结算主路同纪律、零事件零状态变化）；
+  //     ② 候选：`poolViewOf()` 单点算「可派发」lane id 清单 = **D-3 甲**的「只建议」面；
+  //     ③ 唤醒：`wakeLeaderForReport()` 单点（30s 合并窗 / Leader 句柄非注入读 / 四类降级回显 / 永不抛）。
+  //   ⚠ **禁止**在本块调用 `dispatchLaneCore` 真派（D-3 甲；派发 = Leader 单点 `lane_dispatch`，K1 不引入 claim 自领）。
+  //   ⚠ **不取子句柄**（条件① / J-4 保护目标）：`info.id` 只作映射键；唤醒用的是 `dispatchIndex` 记的
+  //     **批 owner 会话**（= Leader/父会话）句柄，与子 run 生命周期无关。
+  //   ⚠ **不改**结算路（条件②）：与 `installAutoSettle` **各自独立**注册、互不 await、互不共享状态；
+  //     两路共用既有节流窗（同批同 Leader 共一窗）⇒ 甲/乙 唤醒**不叠加**。
+  //   ⚠ 已知边界（如实登记、不静默）：映射 miss 的**惰性重建**由结算主路承担（`lib/engine/auto-settle.js
+  //     #onSubagentEnd`，注册序在前 ⇒ 同事件同步段先跑并写回同一 Map）⇒ 本路**不复制第二套重建**
+  //     （禁第二套口径）；「索引冷 + 本路先跑」的窄窗内可能漏唤醒，下一事件即恢复。
+  let laneWake = null;
+  /** 唤醒路的**单次动作**：全程 try/catch 且不抛（观察者纪律，与结算主路同款）。 */
+  const onLaneWorkerEnd = async (info) => {
+    try {
+      if (!info || typeof info !== 'object') return;
+      const id = info.id;
+      if (typeof id !== 'string' || id.length === 0) return; // 无 durable 子会话 id ⇒ 静默丢弃
+      const hit = dispatchIndex instanceof Map ? dispatchIndex.get(id) : null;
+      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return; // 非本套件派发 ⇒ 静默丢弃
+      // ② 候选（**只读**，D-3 甲）：`poolViewOf` 单点判「deps 已结算 + owner===null + lane pending」。
+      let candidates = null;
+      try {
+        const view = poolViewOf(store.readBatch(hit.sessionId, hit.batchId));
+        const ids = (view.pool ?? []).filter((t) => t.dispatchable).map((t) => t.id);
+        if (ids.length > 0) candidates = ids;
+      } catch { candidates = null; /* 批次不可读 ⇒ 无候选面（不影响唤醒本身） */ }
+      // 终态语义（契约卡 §1.1）：宿主正常路带 `stopReason`；异常路固定 `'error'`（`dsh-subagent/lib/index.js:274-277`）
+      //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
+      const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : 'completed';
+      // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
+      wakeLeaderForReport(ctx, {
+        callerSessionId: id, leaderSessionId: hit.sessionId,
+        batchId: hit.batchId, lane: hit.lane, type: stopReason,
+        summary: '子代理已结束（主路 subagent/end；stopReason=' + stopReason + '）',
+        candidates,
+      });
+    } catch (e) {
+      try { ctx?.logger?.warn?.('[dsh-punky-swarm] lane-wake subagent/end handler failed (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
+    }
+  };
+  /** 装配置点（**独立**，条件③）：与 `installAutoSettle` 并列；返回形态同形（`{installed, reason?, count(), dispose()}`）。 */
+  const installLaneWake = () => {
+    const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
+    if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
+    let hits = 0;
+    const handler = (info) => {
+      hits += 1;
+      // 不 await：宿主对 listener 的 containment 不覆盖异步悬空 ⇒ 自行 catch（onLaneWorkerEnd 内亦已包 try/catch）。
+      return onLaneWorkerEnd(info).catch((e) => {
+        try { ctx.logger?.warn?.('[dsh-punky-swarm] lane-wake handler rejected (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
+      });
+    };
+    // `{ global: true }` **硬性要求**（与结算主路同判据、同纪律）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
+    //   resolver 为 `null`（受 scope 过滤）⇒ 被 scope 化的插件 ctx（preset standing mount）默认漏收；
+    //   缺则本路**静默失效**（探针实测先例见 `lib/engine/auto-settle.js` 头注释 §①）。
+    const dispose = ctx.on(AUTO_SETTLE_SUBAGENT_END, handler, { global: true });
+    return { installed: true, count: () => hits, dispose() { try { if (typeof dispose === 'function') dispose(); } catch { /* 幂等 */ } } };
+  };
+  // 停用开关（`autoSettle.enabled`）的**生效值**复用上方单点：本路属引擎**主路面** ⇒ 与结算路同生共死；
+  //   兼底路（`swarm_report`）唤醒面 = 甲，与开关**无关**、不受影响（D-5 甲的解耦面）。
+  if (autoSettleEnabled) laneWake = installLaneWake();
+  if (laneWake?.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] lane-wake mounted: 宿主 subagent/end（global:true，与结算主路**并列独立**）→ 命中 lane ⇒ 取 Leader 句柄唤醒 + 附可派发候选（只建议，不派发）');
+  }
   // 停用开关**热切**（R-5/N-8「热更生效」，镜像 `remountGovernanceHook` / `remountWatchEngine` 既有语义）：
   //   `autoSettle.enabled` **生效变化** ⇒ dispose 旧路 + 按新快照重装（`false` 时 `installAutoSettle`
   //   自身走停用分支：零订阅 + 停用日志 + `installed:false` + `reason='auto-settle-disabled'`）。
@@ -598,6 +675,16 @@ export const apply = (ctx, config = {}) => {
       store, dispatchIndex, root, liveConfig: nextConfig, logger: ctx.logger,
       enabled: nextConfig?.autoSettle?.enabled,
     });
+    // 【D-2 甲】主路唤醒路与结算路**同生共死**（同属引擎主路面）：同一开关生效变化 ⇒ 同步退订 / 重挂；
+    //   幂等由上方 `nextEnabled === autoSettleEnabled` 早退保证（无生效变化 ⇒ 本段零操作，零日志抖动）。
+    laneWake?.dispose?.();
+    laneWake = nextEnabled ? installLaneWake() : null;
+    if (!nextEnabled) {
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake unsubscribed（引擎主路面停用 ⇒ 结算 + 主路唤醒一并退订；'
+        + '兼底路 swarm_report 的唤醒/回报面不受影响）' + (logTag ? ' [' + logTag + ']' : ''));
+    } else if (laneWake?.installed) {
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake re-mounted（主路唤醒路随结算路恢复）' + (logTag ? ' [' + logTag + ']' : ''));
+    }
     autoSettleEnabled = nextEnabled;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: auto-settle ' + (autoSettle.installed
       ? 're-mounted (autoSettle.enabled 生效值 → true：宿主 subagent/end 重新订阅，自动结算恢复)'
@@ -852,6 +939,7 @@ export const apply = (ctx, config = {}) => {
     governanceHook?.dispose();
     dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
     autoSettle?.dispose?.(); // 自动结算主路（subagent/end）退订（幂等；兼底路随工具面存续）
+    laneWake?.dispose?.(); // 【D-2 甲】主路唤醒路（subagent/end 第二路订阅）退订（幂等；独立装配 ⇒ 独立释放）
     // 【L-1】冲刷 governance 未落盘增量：P2 的 flush 三时机（阈值/定时/process.once('exit')）
     //   中 exit 只覆盖进程退出，**不覆盖「插件卸载而宿主继续运行」**的场景 ⇒ 此处补一次显式冲刷。
     //   幂等；零脏会话时为空操作（不产生 I/O、不挂钩子）。

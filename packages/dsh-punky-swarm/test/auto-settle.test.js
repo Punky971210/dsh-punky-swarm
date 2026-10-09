@@ -825,8 +825,14 @@ test('J7: 【R-4 结算归位 · L-AC-11】停用后 Leader 两步经既有写�
 
 // ── J8/J9：R-5 生效方式（**热更** vs **boot 对账**）────────────────────────────────────────────
 //   两例均为**装配级**（`apply` + `<root>/config/runtime.json` 真实落盘 + fs.watch 通道），
-//   观察面 = 假 ctx 的 `listeners.get('subagent/end')`（= 主路订阅条数，1 ↔ 0 是**主路装没装**的直接读数）
+//   观察面 = 假 ctx 的 `listeners.get('subagent/end')`（= 主路订阅条数，2 ↔ 0 是**引擎主路面装没装**的直接读数）
 //   + `ctx.calls.info` 热切留痕。等待窗口对齐 watch-hotconfig 先例（fs.watch → 防抖 300ms → reload → onChange）。
+//   ⚠ 【2026-10-09 批 `swarm-report-wake-autodispatch-20261009` · 用户裁定 D-2 = 甲（准）】**计数口径等值反转**
+//     （非删判据）：主路 `subagent/end` 自本批起**并行两路**订阅 —— ① 结算路（`installAutoSettle`）
+//     + ② 唤醒路（`lib/index.js` 独立装配的 lane-wake）。两路均受同一 `autoSettle.enabled` 生效值同生共死
+//     ⇒ 「1 ↔ 0」变为「2 ↔ 0」，**开关的读写语义与 L-AC-13 判据本身逐字不变**（只是主路订阅数由 1 变 2）。
+//     判据源：`plan/survey-and-options.md` §待裁点回填 D-2（附三条件：仅取 Leader 句柄 / 不改结算逻辑 /
+//     新增订阅独立且 dispose 可热切）。单路面（`installAutoSettle` 自身恰 1 条）由 A1/J1/J2/J3 逐字保留。
 const hotSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SETTLE = 300;   // 装配后余量
 const HOT_SLEEP = 1000;   // 防抖 300ms + 事件 + 解析余量（先例 `watch-hotconfig.test.js:46`）
@@ -839,7 +845,7 @@ test('J8: 【R-5 热更生效 · L-AC-13】runtime.json 写 autoSettle.enabled:f
   const disposer = apply(ctx, { root }); // 静态 config **不含** autoSettle ⇒ 缺省启用
   try {
     await hotSleep(HOT_SETTLE);
-    assert.equal(subagentEndCount(ctx), 1, '装配后主路已挂（缺省 = 启用，R-1）');
+    assert.equal(subagentEndCount(ctx), 2, '装配后引擎主路面已挂（结算路 + 唤醒路两订阅；缺省 = 启用，R-1）');
     // true → false：热写即退订（**无需重启**）
     writeRuntime(root, { autoSettle: { enabled: false } });
     await hotSleep(HOT_SLEEP);
@@ -861,7 +867,7 @@ test('J8: 【R-5 热更生效 · L-AC-13】runtime.json 写 autoSettle.enabled:f
     // false → true：重新订阅（恢复）
     writeRuntime(root, { autoSettle: { enabled: true } });
     await hotSleep(HOT_SLEEP);
-    assert.equal(subagentEndCount(ctx), 1, 'L-AC-13：热写 true ⇒ 订阅 0 → 1（自动结算恢复）');
+    assert.equal(subagentEndCount(ctx), 2, 'L-AC-13：热写 true ⇒ 订阅 0 → 2（结算路 + 唤醒路一并恢复）');
     assert.ok(ctx.calls.info.some((l) => l.includes('auto-settle re-mounted')), '恢复热切留痕');
   } finally {
     disposer();

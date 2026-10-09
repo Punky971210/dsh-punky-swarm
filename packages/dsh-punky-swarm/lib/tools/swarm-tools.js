@@ -34,8 +34,8 @@ export function buildSwarmTools(cx) {
   return [
     defineTool({
       name: "swarm_report",
-      description: '成员 → **Leader** 回报（成员侧套件通信入口；2026-09-16 裁决：集群内部同步事件走套件工具，不再散落用通用通信工具）。**身份 best-effort 解析**（`member.dispatch.workerSessionId` → `{batchId, lane}`）。【gate-lite Q-G2 · 2026-09-17 用户裁决「删除这一项」】**身份未绑定不再拒**（官方 Team 成员天然无 lane 绑定 = 常态）：消息照发、事件照留痕（解析到批次才落事件），回显 `unbound` / `eventWritten` / `notice`。参数最小化：类型 + 摘要 + 产物路径，**不复制正文**。留痕双写：批事件 `swarm.report` + Leader 通道（broadcast，与 0f 口径一致）。**`type=settle-request` 兼底触发自动结算**（P3a 规格 §2）：回报落盘后调引擎自动结算判定器（与主路 `subagent/end` **同一单点判定**，见 `lib/engine/auto-settle.js`）——全绿自动 `merged`，任一判据不满足按 `onFail` 缺省 `pause` 停轮；判定失败**不影响**本次回报的投递事实（返回 `settle` 明细供调用方核）。',
-      parameters: {"type":{"type":"string","required":true,"enum":["progress","blocked","settle-request"]},"summary":{"type":"string","required":true,"description":"一句话摘要（元数据，勿贴正文）"},"artifactPath":{"type":"string","description":"产物相对路径（可选）"},"batchId":{"type":"string","description":"可选：目标批次（**仅在无 `member.dispatch` 绑定时**用于自报归属——官方 Team 成员场景；给得出批次则事件面也能落）"},"lane":{"type":"string","description":"可选：目标 lane（同上，仅在无绑定时使用；缺省占位 `(unbound)`）"}},
+      description: '成员 → **Leader** 回报（成员侧套件通信入口；2026-09-16 裁决：集群内部同步事件走套件工具，不再散落用通用通信工具）。**身份 best-effort 解析**（`member.dispatch.workerSessionId` → `{batchId, lane}`）。【gate-lite Q-G2 · 2026-09-17 用户裁决「删除这一项」】**身份未绑定不再拒**（官方 Team 成员天然无 lane 绑定 = 常态）：消息照发、事件照留痕（解析到批次才落事件），回显 `unbound` / `eventWritten` / `notice`。参数最小化：类型 + 摘要 + 产物路径，**不复制正文**。留痕双写：批事件 `swarm.report` + Leader 通道（broadcast，与 0f 口径一致）。**`type=settle-request` 兼底触发自动结算**（P3a 规格 §2）：回报落盘后调引擎自动结算判定器（与主路 `subagent/end` **同一单点判定**，见 `lib/engine/auto-settle.js`）——全绿自动 `merged`，任一判据不满足按 `onFail` 缺省 `pause` 停轮；判定失败**不影响**本次回报的投递事实（返回 `settle` 明细供调用方核）。【D-5 甲 · 用户 2026-10-09 裁定】`type=completed` = **完成类**回报：**只唤醒 Leader、不触发结算**（与 `settle-request` 的结算语义解耦，不受 `autoSettle.enabled` 连带）；`progress` 保持「留痕不打扰」。',
+      parameters: {"type":{"type":"string","required":true,"enum":["progress","blocked","settle-request","completed"]},"summary":{"type":"string","required":true,"description":"一句话摘要（元数据，勿贴正文）"},"artifactPath":{"type":"string","description":"产物相对路径（可选）"},"batchId":{"type":"string","description":"可选：目标批次（**仅在无 `member.dispatch` 绑定时**用于自报归属——官方 Team 成员场景；给得出批次则事件面也能落）"},"lane":{"type":"string","description":"可选：目标 lane（同上，仅在无绑定时使用；缺省占位 `(unbound)`）"}},
       output: {
         // `wake` 为新增键 ⇒ **必须**同步声明（`additionalProperties:false`！）否则宿主判 `invalid output` **假失败**，
         //   且被 `test/tool-schema-conformance.test.js` 的 TSC-1 判违规（同类真实先例：`handoff_submit` 的 `code:null`）。
@@ -64,6 +64,9 @@ export function buildSwarmTools(cx) {
         //   （判据源 L-AC-14 要求导出符号净增 0）⇒ 此处按同形判定镜像；两处任一漂移即成第二套开关口径。
         //   读端 = `readLiveConfig(deps)`（热更快照；与 `lib/tools/wave-plan-tools.js:69` 的
         //   `handoffGateEnabledOf(readLiveConfig(deps), 'entry')` 同一读法）⇒ runtime.json 改写即生效。
+        // 【D-5 甲 · 用户 2026-10-09 裁定】**唤醒与结算解耦**：本判定式**只认** `settle-request`——
+        //   新增的完成类 `type='completed'` **不**进入本分支（只唤醒、不结算），故本行**逐字不变**即已满足裁定；
+        //   连带效果：`autoSettle.enabled=false` 只停结算面，`completed` 的唤醒面不受牵连（`WAKE_TYPES` 与开关无关）。
         const settleRequested = args.type === 'settle-request' && !!tgt.batchId;
         const autoSettleEnabled = readLiveConfig(deps)?.autoSettle?.enabled !== false;
         const settle = (settleRequested && autoSettleEnabled)

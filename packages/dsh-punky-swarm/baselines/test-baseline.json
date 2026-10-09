@@ -163,7 +163,7 @@
     "test/auto-settle.test.js": {
       "asserts": 193,
       "blankLines": 46,
-      "lines": 896,
+      "lines": 902,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -696,6 +696,14 @@
       "tests": 14,
       "todos": 0
     },
+    "test/lane-wake-autodispatch.test.js": {
+      "asserts": 56,
+      "blankLines": 42,
+      "lines": 419,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
     "test/legacy-fix.test.js": {
       "asserts": 20,
       "blankLines": 16,
@@ -1209,7 +1217,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-08T17:58:52Z",
+  "generatedAt": "2026-10-09T09:03:42Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1220,15 +1228,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "auto-settle-disable-switch-20261009：e01-impl 新增 auto-settle 开关（4 源文件）+ test/auto-settle.test.js J 组 9 例（+9 tests / +69 asserts）；baselines 单写者=Leader（§15③），时点=本批 exec 全收口后（§15④）",
+  "reason": "批 swarm-report-wake-autodispatch-20261009 / lane e01-impl：新增 test/lane-wake-autodispatch.test.js（甲+乙+D-3甲+真宿主冒烟，12 用例 / 56 断言）；test/auto-settle.test.js J8 订阅计数等值反转（+6 行注释说明，判据由 D-2 甲授权）——断言数只增不减（+56）、恒真形态 0→0",
   "schema": 1,
   "totals": {
-    "asserts": 7742,
-    "blankLines": 3865,
-    "files": 151,
-    "lines": 41963,
+    "asserts": 7798,
+    "blankLines": 3907,
+    "files": 152,
+    "lines": 42388,
     "tautologies": 0,
-    "tests": 1622,
+    "tests": 1634,
     "todos": 4
   }
 }
