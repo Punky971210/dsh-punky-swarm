@@ -40,7 +40,11 @@
     "docs/webui-governance-config.en.md",
     "docs/upstream-defects.md",
     "docs/integrations/comfyui-glue.md",
-    "docs/integrations/comfyui-glue.en.md"
+    "docs/integrations/comfyui-glue.en.md",
+    "docs/audit-log.md",
+    "docs/audit-log.en.md",
+    "docs/assets-sync.md",
+    "docs/assets-sync.en.md"
   ],
   "engines": {
     "node": ">=22"
