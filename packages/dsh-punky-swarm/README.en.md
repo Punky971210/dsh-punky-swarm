@@ -10,6 +10,7 @@
 
 - **Engine surface**: `wave_plan` (layer tasks into waves by dependency DAG, **never recomputed mid-batch**) → `lane_dispatch` / `member_status` (dispatch) → `handoff_submit` (per-edge handoff) → `member_settle` (settlement); plus `gate_status` (gate state) and `log_export` (event export). `lane_heartbeat` / `lane_longrun` are **maintenance-frozen** (surface kept, **no longer maintained**; user ruling 2026-10-09) and are not recommended as live capabilities.
 - **Governance rules**: **27 items in 9 groups** (difficulty routing / handoff & batch / run modes / audit & acceptance / settlement / recovery & supervision / output · capability · guidance / two-direction spec · numbering / knowledge-first pre-check). Details in `references/discipline.md`; the Manager-side definition is `references/manager.md`.
+- **What it fixes**: four failure modes of running a team of agents — a downstream lane starting before its upstream artifacts exist, hours of work lost to a single crash, several members writing the same file at once, and a rejection nobody can explain. The tools were never the problem; what is missing is a gate in the flow. Once the gates live inside the engine, discipline becomes a machine criterion instead of each member's self-restraint.
 - **The `0.5.0` baseline**: with the team-asset and `chain` declaration faces retired, **assembly follows "engine baseline + member slots + guidance"**, and the runtime DAG source of truth is the batch's `lanes[].deps` + `handoffs`.
 
 ---
