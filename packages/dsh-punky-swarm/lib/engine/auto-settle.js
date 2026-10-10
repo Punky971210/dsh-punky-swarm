@@ -88,7 +88,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · 监听器全程 `try/catch` 且**不抛**（契约卡约束 6）：宿主对每 listener 独立 containment，
 //     但插件侧异常会污染自身状态面。
 import { isMemberTerminal } from '../schema.js';
-import { laneBindingOf } from './dispatch.js';
+import { laneBindingOf, ownerSessionIdOf, dispatchIndexEntryOf } from './dispatch.js';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
 } from '../state/event-types.js';
@@ -400,7 +400,11 @@ async function onSubagentEnd(info, { store, dispatchIndex, ctx, root, liveConfig
           const b = store.readBatch(sessionId, batchId);
           for (const ev of b?.events ?? []) {
             if (ev?.type === 'member.dispatch' && ev.workerSessionId === id && ev.lane) {
-              hit = { sessionId, batchId, lane: ev.lane };
+              // 【批 `lane-wake-mainpath-fix-20261010` · W-4】重建值**必须**同步携带唤醒寻址字段：
+              //   本路（注册序在前）先跑并写回**共享** `dispatchIndex`（`lib/index.js:609-611` 明写「映射 miss 的
+              //   惰性重建由结算主路承担 ⇒ 唤醒路不复制第二套重建」）⇒ 这里漏复制 ⇒ 唤醒路只在**冷索引/重启后**
+              //   拿到无 owner 的索引值、静默回退 `sessionId`（R-3 间歇缺陷）。经唯一解析单点取值（§约束 2）。
+              hit = dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev));
               if (dispatchIndex instanceof Map) dispatchIndex.set(id, hit);
               break;
             }

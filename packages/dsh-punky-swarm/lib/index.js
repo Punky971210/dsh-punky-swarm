@@ -40,6 +40,10 @@ import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 
 //   任一判据不满足 ⇒ 停轮（缺省 onFail=pause）。**必须**以 `{ global: true }` 注册（契约卡
 //   `plan/host-completion-probe-spec.md` #8/#9：被 scope 化的插件 ctx 下默认监听漏收）。
 import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settle.js';
+// 【批 `lane-wake-mainpath-fix-20261010` · W-3】唤醒寻址的两个取值口 = `lib/engine/dispatch.js` 的**唯一解析单点**
+//   （§约束 2 / C-2：本文件**不得**自写 `ownerSessionId` 字段名；重建用 `ownerSessionIdOf`，唤醒本通用
+//   `wakeAddressOf`（含 C-3 回退，禁在调用点直连 `??`——空串会被 `??` 放行））。
+import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
@@ -536,7 +540,10 @@ export const apply = (ctx, config = {}) => {
       if (!batch?.events) continue;
       for (const ev of batch.events) {
         if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
-          dispatchIndex.set(ev.workerSessionId, { sessionId, batchId, lane: ev.lane });
+          // 【本批 W-3】复制唤醒寻址字段（经唯一解析单点；未记录 ⇒ 该字段缺失 ⇒ 读端回退 `sessionId`）。
+          //   ⚠ `sessionId`（批归属键）本身**逐字不动**（治理落点 = 批文件 / mailbox / 结算 / 候选面）；
+          //   索引值形状由 `dispatchIndexEntryOf` 单点统一构造（既有 3 键形状冻结，见该函数注释）。
+          dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
           n++;
         }
       }
@@ -629,8 +636,13 @@ export const apply = (ctx, config = {}) => {
       //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
       const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : 'completed';
       // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
+      //   【批 `lane-wake-mainpath-fix-20261010` · W-3】**唯一寻址点**：`leaderSessionId` 改取
+      //   `wakeAddressOf(hit)` = 「派发期记录的发起方 agent 会话」∨ 回退 `hit.sessionId`。
+      //   改前取 `hit.sessionId`：命名黑板批下该值是**黑板名**而非活 agent ⇒ `leader-not-live`、静默
+      //   （worker 忘了回报时本路是唯一通道 ⇒ 整路价值归零，P-1/P-3）。
+      //   治理落点（`:624` 的 `readBatch(hit.sessionId, …)`）与命中判据（`:620`）**逐字不动**（L-AC-5）。
       wakeLeaderForReport(ctx, {
-        callerSessionId: id, leaderSessionId: hit.sessionId,
+        callerSessionId: id, leaderSessionId: wakeAddressOf(hit),
         batchId: hit.batchId, lane: hit.lane, type: stopReason,
         summary: '子代理已结束（主路 subagent/end；stopReason=' + stopReason + '）',
         candidates,

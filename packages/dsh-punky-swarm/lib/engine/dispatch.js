@@ -75,6 +75,57 @@ export function labelOf(batchId, lane) {
   return LABEL_PREFIX + String(batchId) + ':' + String(lane);
 }
 
+// ── 唤醒寻址（批 `lane-wake-mainpath-fix-20261010`；判据源 `plan/scope.md`）────────────────────
+// 缺陷（P-1/P-2）：主路 `subagent/end`（`lib/index.js:597-665`）把**治理落点**（批归属键；命名黑板批下 =
+//   黑板名）当**唤醒寻址**用 ⇒ `ctx.get('agents').get(黑板名)` = undefined ⇒ `leader-not-live`、静默；
+//   而 `subagent/end` 的 `info` 载荷**不含**任何父会话键（L-AC-1 前置命题）⇒ 唯一解 = **派发期记录**
+//   「发起该次派发的 agent 会话 id」进 `member.dispatch` 载荷，读端按它寻址。
+// 分工（§约束 1 / L-AC-5）：`ownerSessionId` **只**解决「唤醒谁」；批归属键（`member.dispatch` 的读端
+//   `sessionId` / 批文件落盘路径 / mailbox / 结算入参 / 候选面）**逐字不变**。
+// **唯一解析单点**（§约束 2 / C-2）：字段名只在本段解析；三处读点
+//   （`lib/index.js` 的启动重建与唤醒本体、`lib/engine/auto-settle.js` 的惰性重建）一律经本段取值，
+//   **禁**各处自写字段名（同批1 的「唯一映射点」纪律）。
+// 回退语义（C-3，**硬**）：缺失 / 空串 / 非字符串 ⇒ 寻址值**恰等于** `hit.sessionId` ⇒ 与 `dd1fbf0` 逐字相同。
+//   ⚠ **不得**用 `??` 直连字段：空串会被 `??` 放行 ⇒ 唤醒侧退化成 `no-leader-session`（批1 已因此收紧过一次）。
+// 取值式（R-6 钉死）：**统一** `exec?.agent?.session?.id` —— 与派发面 `parent: exec.agent`（`:701-702`）的父会
+//   话口径同源，且与 `ctx.get('agents')` 的**会话 id 键**同族；**不**复用 `ownerOfExec`（其
+//   `agent.id ?? agent.agentId ?? session.id` 键序会与写点 B 落值分叉 —— 见判据源 R-6）。
+// R-7：取不到会话 ⇒ 不得写该键（`'cli'` 一类兜底值永不可能 live，进载荷即制造死地址）。
+const asSessionId = (v) => (typeof v === 'string' && v.length > 0 ? v : null);
+/** 写侧单点：`exec` → 发起该次派发的 agent **会话 id**（两写点共用；取不到 ⇒ `null`，不猜兜底）。 */
+export function ownerSessionIdOfExec(exec) {
+  return asSessionId(exec?.agent?.session?.id);
+}
+/** 读侧单点：`member.dispatch` 事件 / `dispatchIndex` 值 → 已记录的 owner 会话 id（非法形态 ⇒ `null`）。 */
+export function ownerSessionIdOf(source) {
+  return asSessionId(source?.ownerSessionId);
+}
+/** 唤醒寻址单点（含回退）：记录值合法 ⇒ 用之；否则回退批归属键（= 改前行为，逐字）。 */
+export function wakeAddressOf(hit) {
+  return ownerSessionIdOf(hit) ?? hit?.sessionId ?? null;
+}
+/**
+ * `dispatchIndex` **值构造单点**（三写点共用：装配启动重建 / 结算路惰性重建 / 登记点热更新）。
+ *
+ * 形状契约（**既有**，不得改）：索引值的对外形状 = `{ sessionId, batchId, lane }`。它是**在案冻结面**——
+ *   `installDispatchRegistration().mapping()` 的回显形状，且 `test/dispatch-register.test.js` 以 4 条
+ *   `deepEqual` 形状锁（R2 / R2b / R6 / R10）逐字钉住它（判据源 L-AC-11 要求该套件**零新增失败**）。
+ *   ⇒ 本批新增的唤醒寻址读数**不得**让值变成 4 键。
+ * 承载方式：`ownerSessionId` 以**非枚举自有属性**附加 ⇒ `Object.keys` / `deepStrictEqual` / JSON 序列化 /
+ *   面板回显**逐字保持既有形状**；取值面 `ownerSessionIdOf` 按属性名直读 ⇒ 三读点读数一致。
+ *   ⚠ 这是**声明式附加**而非遮蔽：`Object.getOwnPropertyNames(v)` 可见该字段；`member.dispatch` **载荷**里
+ *     它是普通**可枚举键**（落盘可见、审计可核）。被冻结的只有**索引值的形状**。
+ */
+export function dispatchIndexEntryOf(sessionId, batchId, lane, ownerSessionId) {
+  const entry = { sessionId, batchId, lane };
+  if (ownerSessionId) {
+    Object.defineProperty(entry, 'ownerSessionId', {
+      value: ownerSessionId, enumerable: false, writable: true, configurable: true,
+    });
+  }
+  return entry;
+}
+
 // ── role 数据面（P2 · 批 `role-injection-refactor-20261006` / lane `e02-inject`）─────────────────
 // 三处注入（依据判据源 `plan/role-injection-spec.md` 的 R-3/R-4/R-5 ＋ 计划 §2.3/§2.4）：
 //   ① `composeWorkerPrompt()`：role 独占「## 你的职责 / ## 你被授权决定 / ## 交付要求」三段；
@@ -750,7 +801,14 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   // 【2026-09-22 · one-shot 化】run 生命周期属主登记（持引用防 GC 语义歧义；终态自动摘除；失败显式告警）。
   trackOneShotRun(workerSessionId, start, (msg) => ctx?.logger?.warn?.('[dsh-punky-swarm] ' + msg));
   // ⑤ B5 唯一写路径：自派成功即由引擎直接登记（不依赖 post-execute 事后观察）
-  store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, { lane, workerSessionId });
+  //   【批 `lane-wake-mainpath-fix-20261010` · W-1】载荷**纯加法**：既有 2 键语义一字不动，
+  //   追加 `ownerSessionId` = 本次派发的发起方 agent 会话 id（写侧单点取值）。取不到 ⇒ **不写该键**
+  //   （R-7：不得写 `'cli'`/空串一类死地址；读端按「缺失」走 C-3 回退 ⇒ 与改前逐字相同）。
+  //   该值是主路（`subagent/end`）唤醒的**唯一**寻址来源（`info` 载荷不含父会话，L-AC-1）。
+  const ownerSessionId = ownerSessionIdOfExec(exec);
+  store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, ownerSessionId
+    ? { lane, workerSessionId, ownerSessionId }
+    : { lane, workerSessionId });
   // ⑥ **P0**：成功自派 ⇒ 立即作废句柄（口径见本函数头「自派即发放即作废、仅直派形态需长期有效」）。
   //   顺序要点：必须在 `member.dispatch` 登记**之后**——先有绑定事实、再无悬赏意图，
   //   否则「无 dispatch 事件 + 句柄已消费」会在探针面构造成一个无人认领的中间态。

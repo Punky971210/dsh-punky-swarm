@@ -27,6 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   member_status(status=running) 的派发意图（时序：先置 running 再派发 worker）。
 // 语义红线：漏计不误暂停（安全侧）——解析不出批上下文宁可跳过；不引入任何批级状态迁移。
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
+import { ownerSessionIdOfExec, dispatchIndexEntryOf } from '../engine/dispatch.js'; // 【本批 W-2】写侧取值/索引值构造单点（禁在本文件自写取值式或值形状）
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
 import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from './lane-handle.js'; // 派发句柄（C 档唯一凭证）
 
@@ -94,10 +95,17 @@ export function installDispatchRegistration(ctx, deps = {}) {
   const indexMap = dispatchIndex instanceof Map ? dispatchIndex : null;
   let registered = 0;
 
-  const register = (sessionId, batchId, lane, workerSessionId) => {
+  const register = (sessionId, batchId, lane, workerSessionId, ownerSessionId = null) => {
     if (indexMap?.has(workerSessionId)) return false; // 幂等：已映射（含重启后重建）不重复登记
-    store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, { lane, workerSessionId });
-    indexMap?.set(workerSessionId, { sessionId, batchId, lane });
+    // 【批 `lane-wake-mainpath-fix-20261010` · W-2】载荷**纯加法**：既有两个键（`lane`/`workerSessionId`）
+    //   语义一字不动，追加 `ownerSessionId` = 发起该次派发的 agent 会话 id（写侧单点取值）。
+    //   取不到 ⇒ **不写该键**（R-7：`'cli'` 兜底值永不可能 live，进载荷即制造死地址；读端按「缺失」走 C-3 回退）。
+    //   索引值同步携带该字段（与 `lib/index.js` 的启动重建同形 ⇒ 冷/热两路读数逐字相同，L-AC-8）。
+    const entry = ownerSessionId ? { lane, workerSessionId, ownerSessionId } : { lane, workerSessionId };
+    store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, entry);
+    // 索引值走**统一构造单点**（既有 3 键形状冻结、附加读数以非枚举承载 —— 见 `dispatchIndexEntryOf` 注释）：
+    //   与 `lib/index.js` 启动重建 / `lib/engine/auto-settle.js` 惰性重建**同形** ⇒ 冷/热读数逐字相同（L-AC-8）。
+    indexMap?.set(workerSessionId, dispatchIndexEntryOf(sessionId, batchId, lane, ownerSessionId));
     registered++;
     return true;
   };
@@ -106,6 +114,9 @@ export function installDispatchRegistration(ctx, deps = {}) {
     try {
       if (!exec || typeof exec.name !== 'string') return next();
       const caller = exec?.agent?.session?.id ?? 'cli';
+      // 【本批 W-2】写侧取值**单点**（与 W-1 同源）：**不**复用 `caller` —— `caller` 带 `'cli'` 兜底且
+      //   不校验空串，而载荷要求「取不到 ⇒ 不写该键」（R-7）⇒ 两者取值式相同、**语义不同**，不得合并。
+      const ownerSessionId = ownerSessionIdOfExec(exec);
       // ① member_status(status=running) → 记录派发意图（swarm 工具同流经 post-execute；非 running 清意图防 stale）
       if (exec.name === 'member_status') {
         const a = exec.arguments ?? {};
@@ -141,7 +152,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
       if (parsed) {
         const c = consumeLaneHandle(parsed.token, { batchId: parsed.batchId, lane: parsed.lane });
         if (c.ok) {
-          if (register(c.entry.sessionId, c.entry.batchId, c.entry.lane, workerSessionId)) intentBySession.delete(caller);
+          if (register(c.entry.sessionId, c.entry.batchId, c.entry.lane, workerSessionId, ownerSessionId)) intentBySession.delete(caller);
           return next();
         }
         logger?.warn?.('[dsh-punky-swarm] lane handle rejected: ' + c.reason + '（lane=' + parsed.lane + '，退回意图路径）');
@@ -157,7 +168,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
         ? resolveBatchContext(exec, { workerSessionId, result })
         : (intentBySession.get(caller) ?? null);
       if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return next(); // 未取到批上下文 → 不登记
-      if (register(hit.sessionId, hit.batchId, hit.lane, workerSessionId)) {
+      if (register(hit.sessionId, hit.batchId, hit.lane, workerSessionId, ownerSessionId)) {
         intentBySession.delete(caller); // 消费意图（一次 running → 一次派发登记）
       }
     } catch (e) {
