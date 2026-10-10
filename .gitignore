@@ -41,8 +41,14 @@ CONTRIBUTING.md
 **/docs/decisions/
 
 # 包内 docs/ 亦不入库（随 npm 包分发：见 packages/dsh-punky-swarm/package.json#files）
-# 注：上方 `docs/` 与 `docs/*` 按「任意层级同名目录」匹配；目录本身由 `!docs/` 反取回（以便规则能穿过它）。
+# 注：上方 `docs/` 与 `docs/*` **覆盖不到本路径** —— `docs/*` 含中部斜杠 ⇒ 锚定仓库根；
+#     `docs/` 只忽略同名「目录」、且被 `!docs/` 反取回 ⇒ 包内 docs 的内容实际未受保护。
+#     （实测：删掉本行后 `git status` 立刻出现 51 条 `??`。）
+#     故作如下显式规则；**用 `/**` 忽略*内容*而不是忽略目录本身** —— git 不允许在被忽略的
+#     目录里反取回文件，故必须继续放行 `integrations/` 这一层。
 # 已于 2026-10-10 用 `git rm -r --cached packages/dsh-punky-swarm/docs` 把 49 个已跟踪文件移出索引（工作区保留）。
+packages/dsh-punky-swarm/docs/**
+!packages/dsh-punky-swarm/docs/integrations/
 #
 # ⚠ 例外 —— 以下文档**必须保留在仓库内**（故显式反取回）：
 #   test/integration-comfyui-glue.test.js 直接读盘它们做「声明文档防漂移」断言，
