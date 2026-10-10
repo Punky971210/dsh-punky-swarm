@@ -20,6 +20,17 @@ jobs:
       - name: Install dependencies
         working-directory: packages/dsh-punky-swarm
         run: npm ci
+      # I-6(a)（test/install-selfcheck.test.js）的**前置**：该用例断言「自检脚本对
+      # **真实 home**（os.userInfo().homedir）零写入」，并要求守卫面**可达构造**
+      # （真实 home 下须有技能/预设文件，否则前后两次快照都是空的、守卫沦为空转）。
+      # 干净的 CI runner 不存在这些目录 ⇒ 先前 CI 稳定失败于
+      # `实测 files=0`。这里预置最小基线（两个目录各一个文件），使守卫在 CI 上
+      # 也**非空转**——这比「无前置就跳过」更强：跳过等于把该守卫永久移出 CI。
+      - name: Seed real-home fixture (precondition for I-6(a))
+        run: |
+          mkdir -p "$HOME/.agents/skills/ci-seed" "$HOME/.dsh/.agent-presets/punky-preset"
+          printf 'seed\n' > "$HOME/.agents/skills/ci-seed/SKILL.md"
+          printf 'seed\n' > "$HOME/.dsh/.agent-presets/punky-preset/ci-seed.md"
       - name: Run tests
         working-directory: packages/dsh-punky-swarm
         run: npm test

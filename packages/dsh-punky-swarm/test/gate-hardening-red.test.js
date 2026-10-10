@@ -374,8 +374,13 @@ test('T15 【r2 改写】目录/文件声明形态二分：声明以 `/` 结尾 
       fs.writeFileSync(path.join(artDir(b.batchId), decl.replace(/\/$/, ''), 'child.txt'), 'x', 'utf8');
     }
     else if (shape === 'dir-empty') mkdirArt(b.batchId, decl.replace(/\/$/, ''));
-    else if (shape === 'file-nonempty') writeArt(b.batchId, decl, 'print(1)\n');
-    else if (shape === 'file-empty') writeArt(b.batchId, decl, '');
+    // ⚠ 夹具路径必须**去掉尾斜杠**再落盘：子例 (f) 要表达的是
+    //   「声明是目录语义（`/` 结尾）、实际落的是**文件** ⇒ 应拒」，
+    //   而 POSIX 下 `writeFileSync('…/weird/')`（路径以 `/` 结尾）**直接抛 EISDIR**
+    //   ⇒ 测试会在引擎跑之前就崩（Windows 容忍尾分隔符，故本地不显形；
+    //   CI 上表现为 T15 整体 ✖）。语义不变，只修夹具的平台可表达性。
+    else if (shape === 'file-nonempty') writeArt(b.batchId, decl.replace(/\/$/, ''), 'print(1)\n');
+    else if (shape === 'file-empty') writeArt(b.batchId, decl.replace(/\/$/, ''), '');
     else if (shape === 'none') { /* 不落盘 */ }
     return gates.checkExitGate(SID, b.batchId, b, 'e1');
   };
