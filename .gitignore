@@ -40,6 +40,13 @@ CONTRIBUTING.md
 # user-local decisions (not uploaded)
 **/docs/decisions/
 
+# 包内 docs/ 亦不入库（随 npm 包分发：见 packages/dsh-punky-swarm/package.json#files）
+# 注：上方 `docs/` 与 `docs/*` 按「任意层级同名目录」匹配，已覆盖本路径；此处显式写出便于检索与核对。
+# ⚠ 现状：`packages/dsh-punky-swarm/docs/**` 尚有 49 个文件**仍被 git 跟踪** ——
+#   .gitignore 对**已跟踪**文件无效，故本规则不会自动把它们移出仓库；
+#   须 `git rm -r --cached packages/dsh-punky-swarm/docs`（保工作区）才真正离开仓库。
+packages/dsh-punky-swarm/docs/
+
 # 本地代码索引产物（codegraph / code-review-graph 派生，可由工具重建，不入库）
 .codegraph/
 .code-review-graph/

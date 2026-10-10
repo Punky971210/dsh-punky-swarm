@@ -61,87 +61,17 @@ English: [README.en.md](README.en.md)
 
 ## 护栏与规则
 
-工具调用级护栏默认**出厂零拦截**（规则表为空），装上即用、不改变既有行为；规则按需启用。
+工具调用级护栏默认**出厂零拦截**（规则表为空），装上即用、不改变既有行为；规则按需启用。随包提供可选**规则预设**（敏感数据防护 / 资源边界 / 两者合并），一句启用一套。
 
-随包提供可选**规则预设**，一句启用一套护栏：
+被拦时收到的不是泛化提示，而是护栏标注、命中规则与违规说明，并落**可验篡改的拒绝收据**——Agent 知道为什么被拦，可按说明修正后重发合规调用。配置入口在 Web UI 设置区的治理配置页，保存即时生效、免重启。
 
-- **敏感数据防护**：私钥块 / 凭据签名进入子任务参数、消息信道、搜索与远程命令面时的内容检测（硬性拦截 + 人工复核两档）；
-- **资源边界**：命令超时、并发数、目标轮数等数值上限，超限拒绝并给收窄指引（可按指引重试为合规调用）；
-- **全量合并**：以上两套的逐条等价合并，一条配置启用全部。
+## 审计日志
 
-**自 0.4.3 起的三项新能力：**
+内置**进程级本地审计日志**：把引擎与本插件产生的日志逐行落到本地磁盘，供事后核对。**默认开启**（审计入口的意义在常态可用），**不做任何远程上报**——这是硬约束，不是默认值。
 
-- **拒绝可见性**——工具调用送入人工审批后被拒绝（含审批服务不可达等降级情形）时，收到的拒绝不再是「用户拒绝了该工具」的泛化文本，而携带护栏标注、命中规则、违规说明与查阅路径；Agent 与用户都能识别「这是护栏在拦疑似敏感调用」，并可按违规说明修正后重发合规调用。非拦截场景行为保持不变。
-- **拒绝文本携带命中规则**——拒绝原因末尾追加命中的规则与预设归属；人工审批请求与直接拒绝两条路径均携带，用户在批准/拒绝前即可核对触发的具体规则。
-- **逐条规则审阅清单**——随包提供护栏规则的逐条审阅清单：按规则编号 / 预设归属 / 类别 / 生效裁决档 / 触发面 / 匹配摘要 / 违规说明逐条成表，供用户与 Agent 主动审阅护栏全集（配套一致性断言守护清单与规则文件同步）。装规则前先审一遍，心里有数。
+## 包内资产与实装去向
 
-配置入口：Web UI 设置区的治理配置页可调护栏开关、规则与窗口，保存即时生效、免重启。
-
-## 审计日志（audit log）
-
-插件内置一个**进程级审计日志 sink**：把引擎与本插件产生的日志逐行落到本地磁盘，供事后核对。**默认开启**——审计入口的意义在常态可用：默认关等于只在「事先想到要开」时才留证据，恰是排障最需要证据时缺失。日志形态、字段、落点、开关如下，逐条可核验。
-
-**落点**：`<DSH_HOME>\logs\punky-swarm\audit-YYYY-MM-DD.jsonl`（文件名日期取**本地日期**，进程启动时定名、进程内不变）；单卷写满 64 MiB 后转分卷 `audit-YYYY-MM-DD.1.jsonl`、`.2.jsonl`… 该落点**不在会话工作区内、也不在插件产物根内**；运行期诊断面另落同根下 `diagnostics\sink-diagnostics.json`。`<DSH_HOME>` 依次取 `PUNKY_AUDITLOG_SINK_DIR` → 插件配置子键 `capabilities.auditlog.sinkDir` → `DSH_HOME` → `~/.dsh`（前项为空则用下一项），再拼 `logs/punky-swarm`。
-
-**关闭它**（两种渠道，均需**重启宿主**才生效）：
-
-1. 环境变量 `PUNKY_AUDITLOG`：`0` / `false` / `off` / `no` 任一即关（大小写不敏感、去空白）；`1` / `true` / `on` / `yes` 即开；未设或空值 = 不干预。
-2. 插件配置键 `capabilities.auditlog.enabled: false`，写进 `cordis.patch.yml` 或 `runtime.json`。
-
-**关闭聚合**（同样需**重启宿主**才生效）：聚合计数是一个**默认开**的独立开关——环境变量 `PUNKY_AUDITLOG_AGGREGATE`（`0` / `false` / `off` / `no` 即关，`1` / `true` / `on` / `yes` 即开，未设或空值 = 不干预）或插件配置键 `capabilities.auditlog.aggregate: false`。关闭后逐行落盘、零 `log-aggregate` 行，等价于聚合引入前的旧行为，被折叠消息计数器恒为 0。
-
-**优先级**：env 覆盖 config，**逐键**按此规则（`PUNKY_AUDITLOG_SINK_DIR` / `PUNKY_AUDITLOG_KEEP_DAYS` / `PUNKY_AUDITLOG_MAX_FILE_BYTES` / `PUNKY_AUDITLOG_MAX_TOTAL_BYTES` / `PUNKY_AUDITLOG_LEVELS_DEFAULT` / `PUNKY_AUDITLOG_AGGREGATE` / `PUNKY_LOGGER_STDOUT` 同理）。**关闭态零代价**：不创建 sink 目录、不注册 exporter、不写一个字节；**热改不生效**——只有重启宿主后新配置才生效，运行中的进程不会中途挂上或卸下 sink（挂载是启动期一次性的副作用，本插件不提供运行期开关）。
-
-**输出到 stdout**：另有一道 `PUNKY_LOGGER_STDOUT` 开关控制是否把**同一行**同时写到 stdout，**默认关**；只有 `1` / `true` / `on` / `yes` 才开启，其余一律视为关。关闭时本模块不向 stdout 写任何字节。
-
-**一行一个 JSON（JSONL）**，10 个字段：
-
-| 字段 | 含义 |
-|---|---|
-| `v` | 行格式版本，当前恒为 `1` |
-| `ts` | 事件时间，ISO 8601（UTC） |
-| `level` | 级别：`error` / `warn` / `info` / `debug`；sink 自产诊断行为 `sink-error` |
-| `name` | 日志来源名，缺省为 `root` |
-| `msg` | 渲染后的消息文本（与宿主日志同一渲染路径） |
-| `args` | 原始参数（不可序列化值降级为 `<unserializable>`） |
-| `sn` | 内核侧序列号 |
-| `truncated` | 该行是否发生过截断 |
-| `pid` | 进程号 |
-| `kind` | 记录种类：`log`（普通日志行）/ `log-aggregate`（窗口闭环计数行）/ `sink-error`（sink 自产诊断行） |
-
-单行硬上限 32 KiB：超限时先截 `args` 段、再截 `msg` 段，截断处留 `...[truncated]` 标记并把 `truncated` 置真，**不丢记录、不中断日志**。
-
-**重复行的聚合计数（默认开）**：同一 `(level,name,msg)` 的消息在 **60 秒滑动窗口**内只落盘**首行**（形态与不开聚合时逐字节相同：10 个字段、`kind:"log"`、不写 `count`），窗口闭环时再补写**一行计数行**——`kind:"log-aggregate"`，在该行原有的 10 个字段之外**附加** `count` 与 `aggKey`。闭环行的 `ts` 取窗口内**最后一条被抑制消息**的时间（不是闭环时刻），`sn` 与 `args` 取**首行**的值（保留「首次出现」的可回溯锚点）；闭环行先于触发它的那条新首行落盘，文件内时间序不倒退。
-
-窗口右界随每次被抑制的到达**刷新**（一次重扫风暴整串折叠），另有 **10 分钟硬上限**防止长跑窗口无限膨胀（超限即闭环并按当前消息重开窗口）；窗口长度属内部实现细节，**不作为配置项暴露**。默认开是因为噪声的量级：实测同一来源（`skill-filesystem`）的同一句告警速率约 **13 次/分**（单进程口径，42 分钟内落盘 834 行），而审计日志的价值在「异常可查」，不在「同一句话抄 800 遍」。
-
-闭环只有三处落点，且**不引入任何定时器**（惰性结算）：① 同键新消息到达且已越过窗口右界；② 进程 `exit` 钩子；③ 运行期 `flushDiagnostics()`。
-
-`log-aggregate` 行在 10 个字段之外附加的两个字段（**附加，不替换、也不重命名任何既有字段**；首行不写 `count`）：
-
-| 附加字段 | 含义 |
-|---|---|
-| `count` | 该窗口内包含首行的消息总条数（`1 + 被折叠条数`） |
-| `aggKey` | 聚合键：`sha256(level ⊕ name ⊕ msg)` 的前 16 位十六进制（不含 `ts` / `sn` / `pid` / `args`） |
-
-**轮转与保留上限**：单卷 **64 MiB** 硬分割（新卷 `-1` / `-2` … 单调递增，不重排、不回退）；**保留 14 天**（按分卷名内日期判定，早于「今天 − 14 天」的已收盘卷删除）；**总量 512 MiB**（超出时按最旧优先清理）。
-
-**不做任何远程上报**：审计日志只写本地磁盘，无网络出口、无远端 sink、无 OTel 导出——这是硬约束，不是默认值。
-
-**保真边界（诚实声明）**：聚合保证的是**消息数量可核**——被折叠的消息另立计数器，消息面恒等式 `messagesSeen = (writes − aggregateRows) + filteredByLevel + collapsedMessages + failures` 恒成立（`writes` 是**成功写盘的行数**，闭环行也算一行、故在消息面等式里须整体扣除；`aggregateRows` = 产出的闭环行数）——**不是「每行原样保留」**。逐条：
-
-- **B1 被抑制行的精确时间戳必然丢失**：只保留窗口**首行**的真实时间与闭环行的**末条**时间；窗口内其余 `count-2` 条消息的精确时刻**无法从 sink 恢复**，据此重算逐条到达间隔是不可能的。
-- **B2 被抑制行的 `sn` 丢失**：只留首行 `sn`，序列号连续性不能再用来证明「无丢弃」。
-- **B3 被抑制行的 `args` 丢失**：聚合键只含 `(level,name,msg)`，**同一句话、不同参数**的消息也会被折叠，且这种折叠**无法从落盘内容辨出**。
-- **B4 折叠可能跨「逻辑上不同」的事件**：同一句告警在不同 tick / 会话重复出现，语义上本就是多次事件，落盘后只剩一个 `count` 数值。
-- **B5 未闭环窗口在强杀下丢失计数**：进程被强制结束（不触发 `exit` 钩子）时，末窗口的闭环行未写、`count` 只在内存里，日志中该窗口只剩首行。运行期诊断面 `diagnostics/sink-diagnostics.json` 的 `aggregate` 段（`windowOpen` / `collapsedTotal` / `keys`）是它**唯一**的补救线索。
-- **B6 聚合是跨来源行为**：折叠按 `(level,name,msg)` 进行，与下面「捕获面无法按 ctx / 插件收窄」叠加，读者**不能用来源名反推**被折叠的是哪一条（本插件自身的关键 warn 与例行 info 也共用同一来源名）。
-
-**第三方审计须知**：看到 `kind:"log-aggregate"` 即表示该窗口内另有 `count-1` 条消息**没有逐行落盘**，它们的精确时间戳不可得。因此：行数不再等于消息数；对**已闭环**的窗口，消息数 = 该窗口首行的 1 条 + 其闭环行的 `count`；**未闭环**的窗口（进程仍在运行，或已被强杀）只有首行，其折叠数只存在于运行期计数器与诊断面（见 B5）。
-
-**捕获面（诚实声明）**：日志内容是**诊断文本 + 绝对路径 + 会话/批次标识符 + Error 堆栈**，属**元数据级**，不记录业务数据本身。**注意捕获面无法按 ctx / 插件收窄**：logger 的 exporter 注册表是进程级全局的，本插件拿不到「按上下文隔离」的能力，也就无法承诺「只记自己的日志」——装上本插件意味着进程内日志会被一并记入。按来源名收窄同样不可靠：本插件自身的关键 warn 与例行 info 共用同一来源名 `dsh-punky-swarm`。
-
-**已知边界**：不支持多进程写同一 sink 根——同机多个 dsh 实例共用一个 `DSH_HOME` 时，同一卷会被并发追加（单次写入 ≤ 32 KiB，行不会交错），分卷计数可能各自从 `.1` 起并互相覆盖同名分卷；需要多个隔离实例共存的，请用 `PUNKY_AUDITLOG_SINK_DIR` 给每个实例指定各自目录。审计 sink 只做排查取证用的本地留痕，不构成安全审计或合规审计能力。
+本插件随包携带**预设本体**（蟛蜞模式纪律与装配面）与**团队技能**（`software-team` / `design-team`）；装入 dsh 后由启动期同步到你的用户目录，技能由此可被运行期加载。
 
 ## 安装
 
@@ -155,62 +85,6 @@ dsh web restart
 
 > 备选：`npm install -g dsh-punky-swarm` 后以 `dsh plugin --profile <profile> add dsh-punky-swarm` 装入；开发路线亦可 `link:` 指向本地包目录。
 
-## 包内资产与实装去向
-
-本插件随包携带**预设本体**（蟛蜞模式纪律与装配面）与**团队技能**（`software-team` / `design-team`）。装入 dsh 后，这些资产会被同步到你的用户目录，技能由此可被运行期加载。
-
-### 包内路径 → 实装去向
-
-| 包内路径 | 实装去向（用户目录） | 性质 |
-|---|---|---|
-| `presets/jiufeng/` | `~/.dsh/.agent-presets/jiufeng/` | 用户机实装面：随预设同步 |
-| `presets/jiufeng/asset-manifest.json` | `~/.dsh/.agent-presets/jiufeng/asset-manifest.json` | 用户机实装面：资产清单本身，也是下表同步项的声明来源 |
-| `skills/software-team/` | `~/.agents/skills/software-team/` | 用户机实装面：技能目录，供 `skill` 工具加载 |
-| `skills/design-team/` | `~/.agents/skills/design-team/` | 同上 |
-| `presets/hook-rules/` | **无用户机落点** | 包内原地读取面：随插件安装目录原地读取（启动时装载一次），**不复制到 `~/.dsh` 或 `~/.agents`**，故不会出现在你的用户目录里 |
-
-### 触发时机
-
-- **同步发生在插件启动/重载时**（dsh 载入本插件的 `apply` 阶段），每个进程执行一次；不是每次工具调用、也不提供任意时刻的手动触发命令。
-- 因此：**运行中改了包内资产，需要重启 dsh 才生效**。
-- **同步由包内清单 `presets/jiufeng/asset-manifest.json` 驱动**——清单声明「同步哪些包内路径、各自落到哪里」，而不是把路径写死在代码里；新增或调整资产改清单即可（清单的落点根只有两个枚举：`preset` = `~/.dsh/.agent-presets`、`skill` = `~/.agents/skills`，不能写绝对路径）。
-- **清单缺失或损坏时不会静默不同步**：清单文件不存在、读取失败、JSON 非法或字段不合规时，机制**回落到内置默认三条**（上表前三行）并照常同步，同时在启动日志给出告警：`asset manifest 不可用（…），已回退内置默认资产表；用户机实装面可能与包内清单声明不一致`。也就是说，最坏情形下三份资产仍然会被装上，只是清单的声明性失效——你有日志可查、不是无声跳过。
-
-### 资产清单（人读版 schema）
-
-清单是包内 `presets/jiufeng/asset-manifest.json`，把「包内相对路径 → 落点根 → 目标子路径」写成 JSON。字段与出厂值：
-
-```json
-{
-  "manifestVersion": 1,
-  "description": "蟛蜞模式（jiufeng）资产清单：声明包内预设与团队技能到用户机实装面的单向同步（真源=包内 skills/，不反向同步）",
-  "assets": [
-    { "rel": "presets/jiufeng", "note": "蟛蜞模式预设本体", "target": { "root": "preset", "subpath": "jiufeng" } },
-    { "rel": "skills/software-team", "note": "软件工程团队技能（真源）", "target": { "root": "skill", "subpath": "software-team" } },
-    { "rel": "skills/design-team", "note": "设计团队技能（真源）", "target": { "root": "skill", "subpath": "design-team" } }
-  ]
-}
-```
-
-| 字段 | 含义与约束 |
-|---|---|
-| `manifestVersion` | 清单 schema 版本，当前为 `1` |
-| `description` | 一句话说明（单行） |
-| `assets[].rel` | 包内相对路径（`/` 分隔，不得含 `..`、`\`、`:` 或前导 `/`） |
-| `assets[].note` | 该条用途（人类可读，可选） |
-| `assets[].target.root` | 落点根类型，仅 `preset` / `skill` 两值 |
-| `assets[].target.subpath` | 落点根内的目标子路径（路径规则同 `rel`） |
-
-**真源方向是单向的**：包内 `skills/` 是唯一真源，同步方向为 包内 → 用户机；你在 `~/.agents/skills/` 下的改动**不会**回流到包内。
-
-### 幂等与注意
-
-- **幂等**：目标内容与包内一致时跳过（不重复写），不一致时整体覆盖重写。
-- **会做**：**活目标根内多余文件会被覆盖清除**（例如包内已无 `stale.md`，同步后目标根里的 `stale.md` 也会消失）。
-- **不会做**：**旧目标根目录不被删除**。资产改名或移除后，条目的旧目标根不再有同步动作，`syncDir` 无 job 即无动作，**旧目录会残留在用户目录**（历史上技能由 `jiufeng-team` 更名为 `software-team` 时，旧目录即留存下来）。
-- **清理须手工**：技能更名后旧目录应手工删除，否则两个名字的技能并存，技能目录加载与装配断言可能双命中；同理，**清单中移除某条 = 只停止同步，不会清理用户机上已有副本**，清理同样须手工。
-- 自举条（清单文件本体）每次同步都会重拷一份到用户目录，以保证那里的清单副本恒不旧于本次实际执行的声明；**目录类资产才走内容一致判定，文件类资产（如自举条）每次整拷**。
-
 ## 快速开始
 
 1. **启用插件**：执行上方安装命令并重启 dsh。
@@ -218,20 +92,6 @@ dsh web restart
 3. **看进度**：Web UI 批次面板查看阶段、子任务状态与事件时间线；批次完成后产物归档，全程可查。
 
 交互演示页与界面截图将后续补充。
-
-## 文档
-
-随包维护中英双语主题文档（7 组、每组含中英两版，随 npm 包分发），仓库内目录：[packages/dsh-punky-swarm/docs](packages/dsh-punky-swarm/docs)：
-
-| 主题 | 文档（同目录附对应 `.en.md` 英文版） |
-|---|---|
-| 治理技术细节（门禁语义、状态机、装配与工具参考） | [governance-technical.md](packages/dsh-punky-swarm/docs/governance-technical.md) |
-| 治理配置页说明（Web UI 护栏开关与能力开关的保存生效口径） | [webui-governance-config.md](packages/dsh-punky-swarm/docs/webui-governance-config.md) |
-| 护栏挂钩机制（调用级护栏运行期语义、规则示例与收据验签） | [guardrails-hook.md](packages/dsh-punky-swarm/docs/guardrails-hook.md) |
-| 单机能力边界（本地单机治理能力声明） | [single-machine-capabilities.md](packages/dsh-punky-swarm/docs/single-machine-capabilities.md) |
-| 合规对齐（AIP 描述结构：工具属性 / 智能体描述 / 消息映射） | [aip-compliance.md](packages/dsh-punky-swarm/docs/aip-compliance.md) |
-| 通讯扩展（ACPs：对外端点 / 注册 / 发现，默认关闭） | [acps-communication.md](packages/dsh-punky-swarm/docs/acps-communication.md) |
-| 治理边界（能力边界声明：哈希链与 canonical 边界、规则同步维护口径） | [governance-boundaries.md](packages/dsh-punky-swarm/docs/governance-boundaries.md) |
 
 ## 兼容性与边界
 
