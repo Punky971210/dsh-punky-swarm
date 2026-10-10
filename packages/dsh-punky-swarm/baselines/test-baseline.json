@@ -403,7 +403,7 @@
     "test/gate-hardening-red.test.js": {
       "asserts": 66,
       "blankLines": 130,
-      "lines": 1199,
+      "lines": 1204,
       "tautologies": 0,
       "tests": 37,
       "todos": 0
@@ -1233,7 +1233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-09T17:42:20Z",
+  "generatedAt": "2026-10-10T04:22:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,13 +1244,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 lane-wake-mainpath-fix-20261010 新增进仓常驻回归锁 test/swarm-wake-addressing.test.js（16 用例）=> 用例/断言计数上升（非下降、非删断言）；Leader 按 D-5 裁决授权更新（baselines/** 单写者为 Leader，故该文件不在 e01 写域内，由 Leader 直做）。",
+  "reason": "T15 夹具平台可表达性修复（落盘前去尾斜杠）+ CI 增 I-6(a) 前置 seed 步",
   "schema": 1,
   "totals": {
     "asserts": 7940,
     "blankLines": 3980,
     "files": 154,
-    "lines": 43261,
+    "lines": 43266,
     "tautologies": 0,
     "tests": 1656,
     "todos": 4
