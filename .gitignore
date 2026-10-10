@@ -41,11 +41,16 @@ CONTRIBUTING.md
 **/docs/decisions/
 
 # 包内 docs/ 亦不入库（随 npm 包分发：见 packages/dsh-punky-swarm/package.json#files）
-# 注：上方 `docs/` 与 `docs/*` 按「任意层级同名目录」匹配，已覆盖本路径；此处显式写出便于检索与核对。
-# ⚠ 现状：`packages/dsh-punky-swarm/docs/**` 尚有 49 个文件**仍被 git 跟踪** ——
-#   .gitignore 对**已跟踪**文件无效，故本规则不会自动把它们移出仓库；
-#   须 `git rm -r --cached packages/dsh-punky-swarm/docs`（保工作区）才真正离开仓库。
-packages/dsh-punky-swarm/docs/
+# 注：上方 `docs/` 与 `docs/*` 按「任意层级同名目录」匹配；目录本身由 `!docs/` 反取回（以便规则能穿过它）。
+# 已于 2026-10-10 用 `git rm -r --cached packages/dsh-punky-swarm/docs` 把 49 个已跟踪文件移出索引（工作区保留）。
+#
+# ⚠ 例外 —— 以下文档**必须保留在仓库内**（故显式反取回）：
+#   test/integration-comfyui-glue.test.js 直接读盘它们做「声明文档防漂移」断言，
+#   移出会让 CI 直接红（实测：A2-1 missing declaration doc: docs/integrations/comfyui-glue.md）。
+#   ⇒ 再移出任何 docs 之前，先核依赖面：
+#       grep -rn "['\"]docs/" packages/dsh-punky-swarm/test packages/dsh-punky-swarm/scripts
+!packages/dsh-punky-swarm/docs/integrations/comfyui-glue.md
+!packages/dsh-punky-swarm/docs/integrations/comfyui-glue.en.md
 
 # 本地代码索引产物（codegraph / code-review-graph 派生，可由工具重建，不入库）
 .codegraph/
