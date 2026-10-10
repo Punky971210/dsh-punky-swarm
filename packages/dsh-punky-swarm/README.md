@@ -8,8 +8,8 @@
 
 ## 一、这是什么
 
-- **引擎面**：`wave_plan`（按依赖 DAG 分层为 waves，**建批后不中途重算**）→ `lane_dispatch` / `member_status`（派发）→ `handoff_submit`（逐边交接）→ `member_settle`（结算）；辅以 `gate_status`（门禁态）、`log_export`（事件导出）、`lane_heartbeat` / `lane_longrun`（监管）。
-- **治理纪律**：24 条（难度路由 / 三层门禁 / 交接与批 / 运行模式 / 审计验收 / 恢复监管 / 输出与指引 / 两方向规格），细则见 `references/discipline.md`；Manager 侧通用定义见 `references/manager.md`。
+- **引擎面**：`wave_plan`（按依赖 DAG 分层为 waves，**建批后不中途重算**）→ `lane_dispatch` / `member_status`（派发）→ `handoff_submit`（逐边交接）→ `member_settle`（结算）；辅以 `gate_status`（门禁态）、`log_export`（事件导出）。`lane_heartbeat` / `lane_longrun` 属**停维面**（**维护冻结：功能保留、不继续维护**，2026-10-09 用户裁定），不作为在役能力推荐。
+- **治理纪律**：**27 条 / 9 组**（评估派发 / 批与交接 / 运行模式 / 审计验收 / 结算 / 恢复监管 / 输出·能力·指引 / 两方向·编号 / 执行前经验检索），细则见 `references/discipline.md`；Manager 侧通用定义见 `references/manager.md`。
 - **`0.5.0` 新基线**：团队资产与 `chain` 声明面退役后，**装配按「引擎基线 + 成员槽位 + 指引」**；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`。
 
 ---

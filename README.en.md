@@ -233,7 +233,7 @@ Bilingual topic documentation ships with the package (7 groups, each with a Chin
 
 ## Compatibility & boundaries
 
-The current version is sourced from `packages/dsh-punky-swarm/package.json` (see `CHANGELOG.md`); 900+ tests passing (measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.
+The current version is sourced from `packages/dsh-punky-swarm/package.json` (see `CHANGELOG.md`); the test baseline is **154 test files / 1656 tests / 7940 assertions, all green** (single source of truth: `packages/dsh-punky-swarm/baselines/test-baseline.json`; measured on Node 24, CI covers Node 22/24); peer dependencies @deepseek-ai/dsh-tools (^0.1.0-rc.6 \|\| ^0.1.1-rc.2 \|\| ^0.1.5-rc.1 \|\| ^0.1.6-alpha.1 \|\| ^0.1.7-rc.1 \|\| ^0.2.0-rc.1) and @deepseek-ai/cordis (^4.0.1); listed on awesome-dsh-plugin.
 
 Honest boundaries: in-process governance for a single machine — no distributed cluster sync, no cost control, no model-tier routing; zero cloud dependencies and no network exposure by default; failure is terminal and rework means a new batch, never auto-resume.
 

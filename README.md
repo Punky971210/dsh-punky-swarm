@@ -235,7 +235,7 @@ dsh web restart
 
 ## 兼容性与边界
 
-当前版本以 `packages/dsh-punky-swarm/package.json` 为单一真源（见 `CHANGELOG.md` 变更记录）；900+ 项测试全绿（实测于 Node 24，CI 覆盖 Node 22/24）；peer 依赖 @deepseek-ai/dsh-tools（^0.1.0-rc.6 \|\| ^0.1.1-rc.2）与 @deepseek-ai/cordis（^4.0.1）；已收录 awesome-dsh-plugin。
+当前版本以 `packages/dsh-punky-swarm/package.json` 为单一真源（见 `CHANGELOG.md` 变更记录）；测试基线 **154 个测试文件 / 1656 个测试 / 7940 条断言，全绿**（单一真源 `packages/dsh-punky-swarm/baselines/test-baseline.json`，实测于 Node 24，CI 覆盖 Node 22/24）；peer 依赖 @deepseek-ai/dsh-tools（^0.1.0-rc.6 \|\| ^0.1.1-rc.2 \|\| ^0.1.5-rc.1 \|\| ^0.1.6-alpha.1 \|\| ^0.1.7-rc.1 \|\| ^0.2.0-rc.1）与 @deepseek-ai/cordis（^4.0.1）；已收录 awesome-dsh-plugin。
 
 诚实边界：面向单机进程内治理——不做分布式集群同步、无成本控制、无模型分层路由，零云依赖、默认零网络暴露；失败即终态，重做即新建批次，不自动续跑。
 

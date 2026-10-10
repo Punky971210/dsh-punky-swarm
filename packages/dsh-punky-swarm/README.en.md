@@ -8,8 +8,8 @@
 
 ## 1. What this is
 
-- **Engine surface**: `wave_plan` (layer tasks into waves by dependency DAG, **never recomputed mid-batch**) → `lane_dispatch` / `member_status` (dispatch) → `handoff_submit` (per-edge handoff) → `member_settle` (settlement); plus `gate_status` (gate state), `log_export` (event export) and `lane_heartbeat` / `lane_longrun` (supervision).
-- **Governance rules**: 24 items (difficulty routing / three-layer gates / handoff & batch / run modes / audit & acceptance / recovery & supervision / output & guidance / two-direction spec). Details in `references/discipline.md`; the Manager-side definition is `references/manager.md`.
+- **Engine surface**: `wave_plan` (layer tasks into waves by dependency DAG, **never recomputed mid-batch**) → `lane_dispatch` / `member_status` (dispatch) → `handoff_submit` (per-edge handoff) → `member_settle` (settlement); plus `gate_status` (gate state) and `log_export` (event export). `lane_heartbeat` / `lane_longrun` are **maintenance-frozen** (surface kept, **no longer maintained**; user ruling 2026-10-09) and are not recommended as live capabilities.
+- **Governance rules**: **27 items in 9 groups** (difficulty routing / handoff & batch / run modes / audit & acceptance / settlement / recovery & supervision / output · capability · guidance / two-direction spec · numbering / knowledge-first pre-check). Details in `references/discipline.md`; the Manager-side definition is `references/manager.md`.
 - **The `0.5.0` baseline**: with the team-asset and `chain` declaration faces retired, **assembly follows "engine baseline + member slots + guidance"**, and the runtime DAG source of truth is the batch's `lanes[].deps` + `handoffs`.
 
 ---
