@@ -52,7 +52,7 @@
   "scripts": {
     "check": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
-    "test": "npm run build && node --import ./test/helpers/isolated-home.preload.mjs --test"
+    "test": "npm run build && node scripts/test-evidence-guard.mjs"
   },
   "keywords": [
     "dsh",

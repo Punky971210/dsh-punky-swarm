@@ -56,10 +56,10 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 
 // ── 注册表完整性（A1.1/A1.2）──
 
-test('CAPABILITY_REGISTRY registers all 12 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog）', () => {
+test('CAPABILITY_REGISTRY registers all 13 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog；L2 注入预算新增 injectBudget）', () => {
   assert.deepEqual(
     new Set(CAPABILITY_REGISTRY.map((e) => e.key)),
-    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
+    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'injectBudget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
   );
 });
 
@@ -84,7 +84,7 @@ test('registry paths match existing consumer key paths', () => {
 });
 
 test('all registry defaults are ON by default except identity/acps/logs/topic (off — 默认关能力)', () => {
-  // 口径：7 键默认开（aip/discovery/verify/watch/worktree/budget/trajectory）+ 4 键默认关；
+  // 口径：8 键默认开（aip/discovery/verify/watch/worktree/budget/injectBudget/trajectory）+ 4 键默认关；
   // identity 例外：身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）；
   // acps 例外：ACPs 通讯能力默认关（显式开启——对外 mTLS 端点/内部桥均默认不激活，安全默认）；
   // logs 例外：日志导出默认关，patch 显式 logs.enabled:true 开启；

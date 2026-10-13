@@ -127,6 +127,22 @@ export const EVT_LANE_EXEMPT_INHERITED = 'lane.exempt.inherited';
 export const EVT_LANE_EXEMPT_CLEARED = 'lane.exempt.cleared';
 export const EVT_LANE_OVER_BUDGET = 'lane.over-budget';
 export const EVT_BUDGET_REJECTED = 'budget.rejected';
+// inject.omitted 与上方两枚**语义正交、不得混用**：上方两枚分别属「步数预算」与「mailbox 链环防护」
+//   两个**既有**预算族（常量本身即在本文件上方，逐字不改）；本枚 = **注入面文本字节预算**的省略留痕。
+//   前缀刻意**不用 `budget.`**：面板事件分类器按 `/^budget\./` 把该前缀整族映射为「超预算」人话标签
+//   （lib/client.js:176-177 / lib/panel/panel-model.js:161-162）⇒ 用该前缀会被**误标为步数预算**。
+//   写端（唯一发射点）：lib/tools/swarm-tools.js 的 `swarm_report.execute`（该处已在写事件）；
+//   只读视图 `handoff_view` **不发射**（保其零写入 docstring —— 省略事实由返回值 omissions[] + 文本标记承载）。
+export const EVT_INJECT_OMITTED = 'inject.omitted';
+// memory.stale.recommended：**批次终态收口**（complete / aborted）时「派生记忆待抑制」的**建议**留痕。
+//   语义边界（硬）：本事件只是**建议**，不是抑制动作本身 —— 引擎 `lib/**` **调不到 mneme**
+//   （mneme 是**宿主工具面** `memory_*`，见 lib/verify/evidence.js 的 CONTROL_PLANE_TOOLS 名单）⇒
+//   写成引擎直调即**不可达的强耦合**。故本模块只**登记**、写端只**发射留痕 + 落清单**，
+//   实际 `archive`/`forget` **执行权归 Leader / Manager**（两者**均可逆**，不删）。
+//   写端（唯一）：lib/state/store/member-gates.js 的 `setPhase` 终态分支（`complete` 与 `aborted` 同落）。
+//   相位边界：`to` 为 `complete` / `aborted` 才发射；`running` / `paused` / `planning` **不发射**。
+//   配对产物：同一分支落 `<批次产物根>/memory-stale-recommended.json`（清单与事件同时产出，互不替代）。
+export const EVT_MEMORY_STALE_RECOMMENDED = 'memory.stale.recommended';
 // ── worktree 与门禁事件（**注释订正**：B3 盲审项，2026-09-15）──────────────────────────────
 // 【订正留痕】本段原注释称「本组 9 枚经复核核实为**预留未接线**：lib 内无写端也无读端，仅常量行本身存在；
 //   真正有写端的是 worktree.checkpoint / gate.exit / gate.exit_blocked / gate.entry.missing」——

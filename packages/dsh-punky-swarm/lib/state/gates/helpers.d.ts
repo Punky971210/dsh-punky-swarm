@@ -43,6 +43,14 @@ export declare function buildHelpers(cx: HelpersBase): {
     };
     presenceOfArtifact: (sessionId: string, batchId: string, layer: string | null, p: string) => PresenceVerdict;
     depsOf: (t: WavePlanTask | null | undefined) => string[];
+    declaredInboundEdgesOf: (batch: Batch | null | undefined, lane: string, t?: WavePlanTask | null) => {
+        edges: string[];
+        records: Record<string, unknown>[];
+        sources: Array<{
+            from: string;
+            source: "deps" | "accept";
+        }>;
+    };
     handoffRecordVerdict: (sessionId: string, batchId: string, layer: string | null | undefined, rec: Record<string, unknown> | null, from: string, to: string) => {
         ok: boolean;
         missing: string[];

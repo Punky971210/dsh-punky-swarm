@@ -15,6 +15,10 @@ const files = [
   'schema.js', 'schema.d.ts',
   'state/schema-v3.js', 'state/schema-v3.d.ts',
   'state/machine-rules.js', 'state/machine-rules.d.ts',
+  // 【2026-10-13 · P2 波次 · lane e2-l4-propagate】L4 传播判定内核（`lib/state/rule-propagation.ts`）：
+  //   .ts 源 → 同目录 .js/.d.ts 回拷。**漏本行 ⇒ lib 下无该模块 ⇒ 运行期 ERR_MODULE_NOT_FOUND**
+  //   （症状 = 「.tsbuild 里有、调用即找不到」；本 lane 已取到该 RED 读数）。
+  'state/rule-propagation.js', 'state/rule-propagation.d.ts',
   'state/gates.js', 'state/gates.d.ts',
   // 【2026-10-02 · 内务批 波 4】createGates 拆分子产物（lib/state/gates/**）：.ts 源 → 同目录 .js/.d.ts 回拷。
   'state/gates/cx.js', 'state/gates/cx.d.ts',

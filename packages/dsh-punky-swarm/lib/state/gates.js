@@ -300,7 +300,11 @@ export function createGates(root, opts = {}) {
     const cx = {};
     Object.assign(cx, { root, sessionsDir, vocabOpts, readCfg, flowsOf, laneStartedAt, presenceJudge, reasonVocabularyVerdict, vocabularyViewOf });
     const parts = assembleGates(cx);
-    return composeGates(parts);
+    // 【G-10 修复 · lane `e3-toolface`】「已声明入边」单点**透出给读端**（唯一读端 = `lib/tools/handoff-tools.js#handoff_view`）：
+    //   取的是 `assembleGates` 首行 `Object.assign(cx, buildHelpers(cx))` 装进 `cx` 的**同一个函数实例**
+    //   ⇒ 视图与门禁**同源**、非新增实现、非二次实例（红线 C-4：禁第二套边校验）。
+    //   既有 13 键**逐字不变**（键序即对外契约）⇒ 新键**追加在末尾**。
+    return { ...composeGates(parts), declaredInboundEdgesOf: cx.declaredInboundEdgesOf };
 }
 /** 逐 builder 构建并**立即并入 cx**（构建期解构依赖前序槽位；返回面由 {@link composeGates} 装配）。 */
 function assembleGates(cx) {

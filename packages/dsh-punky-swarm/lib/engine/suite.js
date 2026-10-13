@@ -172,6 +172,28 @@ export const SUITE_TOOLS = Object.freeze([
   //     `MODE_GATED_TOOLS` 仍 **11** 项逐字不变（本件不入两集）。追加位置在**冻结前缀与既有 37 条之后**
   //     ⇒ 前 14 条冻结序列零变化，既有条目相对顺序逐字不变。
   entry('role_guide', 'read', false, false, false),
+  // ── 【G-10 修复 · 批 `g10-fix-20261012` · lane `e4-toolface`】受限反向声明工具面（成员可调用）───────
+  // `handoff_accept`：**下游 lane 声明接受批运行中追加的后置上游**（`lib/tools/handoff-tools.js`，
+  //   判定单点 = `lib/state/store/handoff-accept.js#recordHandoffAccept`）。三个布尔位**写死**（依据逐条对齐
+  //   判据源 `plan/scope.md` R-1/R-5 + 用户裁决 Q-H1/Q-H2，并与既有同类条目**同形**）：
+  //   · `kind: 'comms'` —— 同族先例 = `handoff_submit`（本表 :104，`comms` / 成员面）：**声明动作是
+  //     消费方成员的动作**，与「提交交接」同一家族（同一条黑板真源 `batch.handoffs`、同一事件面），
+  //     故**不另立族**（形态对照：`:104 handoff_submit` 与本条字段位**逐位一致**）。
+  //   · `modeGate: false` —— 零治理相位写面（不落 `assertModeActive`）：交接是生产者/消费方的动作、
+  //     判定点为「门 + store 受限开面」而非模式门；且不变量「`modeGate ⊆ memberDeny`」要求放开成员面的
+  //     工具不得受模式门（`false ⊆ false` ✅，与 `handoff_submit` / `asset_claim` 撤门口径同）。
+  //   · `memberDeny: false`（＝**成员可用**）—— 本通道存在的**唯一理由**就是「下游 lane 自己声明」；
+  //     收紧为 deny 会让该通道在实网**不可用**（worker 无力声明）而**零收益**（声明不改图、不弱化任何门，
+  //     只**增加**一条 `from` 的必交义务 ⇒ **净收紧**）。
+  //   · `write: true` —— 写黑板真源（`handoffs[to]` 追加声明条）+ 落事件（`plan.mutated{accepts}`）
+  //     + `planRevision+1`，同 `handoff_submit` 的写面口径。
+  //   派生后果：`SUITE_TOOLS` 38 → **39**；`SUITE_DENY_TOOLS` 仍 **17** 项逐字不变；`MODE_GATED_TOOLS`
+  //     仍 **11** 项逐字不变（本件不入两集 ⇒ **不扰动冻结序列**）。⚠ **插位规则**：本件 `memberDeny:false`
+  //     ⇒ 唯一受顺序约束的 `SUITE_DENY_TOOLS` 冻结前缀（表头 :57-:66）**不受影响**；追加位置取**表尾**
+  //     （`role_guide` 之后）＝与同类「非 deny 追加」先例（`:111 task_pool` / `:174 role_guide`）同插法。
+  //     对照说明：`batch_control`（:74）插在 `batch_phase` 之后，是因它 `memberDeny:true` **落在冻结前缀内**
+  //     ⇒ 与本次情形不可类比；本条的同类对照物是 `role_guide`（末位追加、非 deny）。
+  entry('handoff_accept', 'comms', false, false, true),
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */

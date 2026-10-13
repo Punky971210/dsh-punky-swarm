@@ -597,10 +597,17 @@ test('T-9d 【L-AC-11】索引值形状冻结：既有 3 键形状逐字不变�
 test('T-10 【L-AC-14】导出面 / 事件常量 / `GATE_*` 码净增 0；写域外文件不被本批触碰', () => {
   const exportNamesOf = (src) => [...src.matchAll(/^export\s+(?:const|function|class|let)\s+([A-Za-z0-9_$]+)/gm)].map((m) => m[1]).sort();
   assert.deepEqual(exportNamesOf(read('lib/index.js')), ['apply', 'inject', 'name'], '装配入口导出面逐字不变');
+  // 【L2 注入预算】该「逐字不变」断言属**精确全集**口径 ⇒ 新增**一个**合法导出必须同批同步
+  //   （与 `test/assembly-schema.test.js` 的 T1 12→13 同类成本项，非可选项）。
+  //   新增者：`budgetSummaryForReport` —— 面 C（lane 回报）的**单点薄壳**：读 `capabilities.injectBudget`
+  //   阈值 + 对回报摘要施加**层①单条目**（`wake.summary`），返回 `{ injectBudget, summary, omissions }`。
+  //   之所以必须新开一个导出（而非复用既有 8 项）：预算是**本批新增的能力**，而既有 8 项的语义/签名
+  //   均被既有调用方与既有测试逐字钉住（改签名 = 更大的破坏面）；且该薄壳把「读阈值 + 施加层①」
+  //   收成一个单点，避免工具层各自散落读配置（禁第二套口径）。
   assert.deepEqual(exportNamesOf(read('lib/tools/swarm-comms.js')),
     ['LEADER_WAKE_WINDOWS', 'UNBOUND_BATCH_KEY', 'WAKE_MIN_INTERVAL_MS', 'WAKE_TYPES',
-      'appendSwarmEventOf', 'deliverSwarmMessage', 'reportTargetOf', 'wakeLeaderForReport'],
-    '唤醒单点模块导出面逐字不变（净增 0）');
+      'appendSwarmEventOf', 'budgetSummaryForReport', 'deliverSwarmMessage', 'reportTargetOf', 'wakeLeaderForReport'],
+    '唤醒单点模块导出面 = 既有 8 项 + 1 项 L2 注入预算薄壳（净增 1，已在批内登记）');
   assert.deepEqual(exportNamesOf(read('lib/tools/swarm-tools.js')), ['buildSwarmTools'], '工具面导出净增 0');
   assert.equal(read('lib/state/event-types.js').includes('swarm.wake'), false, '不新增唤醒类事件常量');
   assert.deepEqual([...new Set(read('lib/index.js').match(/GATE_[A-Z0-9_]+/g) ?? [])].sort(), ['GATE_ENABLED'], '装配段不新增任何 `GATE_*` 码');

@@ -345,10 +345,16 @@ test('乙-8 (验收② 净增 0)：导出面 / 事件常量 / `GATE_*` 码净增
     'lib/tools/swarm-tools.js': exportNamesOf(read('lib/tools/swarm-tools.js')),
   });
   assert.deepEqual(exportNamesOf(read('lib/index.js')), ['apply', 'inject', 'name'], '装配入口导出面逐字不变');
+  // 【跨批登记 · 批次 `d-override-fix-20261011` / lane `e3-tests`】导出面多出 `budgetSummaryForReport`：
+  //   该薄壳由**前序批次** `punky-spec-adopt-l1l2-20261011`（注入预算面）加入 `lib/tools/swarm-comms.js`，
+  //   并由 `lib/tools/swarm-tools.js:60` 真实消费（`swarm_report` 的 summary 预算）⇒ 属另一次已收口改造的
+  //   合法新增；**本批零触碰该文件**（`git status` 的 M 项为前序 lane 遗留）。同符号已在该前序批次的
+  //   `test/swarm-wake-addressing.test.js:609` 自己的冻结清单里登记 ⇒ 本处属**遗留未同步**。
+  //   断言强度不降：仍为逐字 `deepEqual` 冻结（增删任一符号即红），只是把存量事实如实入册。
   assert.deepEqual(exportNamesOf(read('lib/tools/swarm-comms.js')),
     ['LEADER_WAKE_WINDOWS', 'UNBOUND_BATCH_KEY', 'WAKE_MIN_INTERVAL_MS', 'WAKE_TYPES',
-      'appendSwarmEventOf', 'deliverSwarmMessage', 'reportTargetOf', 'wakeLeaderForReport'],
-    '唤醒单点模块导出面净增 0（乙路复用既有导出，不新增符号）');
+      'appendSwarmEventOf', 'budgetSummaryForReport', 'deliverSwarmMessage', 'reportTargetOf', 'wakeLeaderForReport'],
+    '唤醒单点模块导出面冻结（乙路净增 0 + 跨批如实登记 1：budgetSummaryForReport）');
   assert.deepEqual(exportNamesOf(read('lib/tools/swarm-tools.js')), ['buildSwarmTools'], '工具面导出净增 0');
   // 事件常量/门禁码：本改造**零新增**（唤醒路不落任何事件；completed 复用既有 `swarm.report`）
   const evtSrc = read('lib/state/event-types.js');

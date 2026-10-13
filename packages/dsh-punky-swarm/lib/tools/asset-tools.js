@@ -38,7 +38,10 @@ export function buildArtifactTools(cx) {
 }
 
 export function buildAssetClaimTools(cx) {
-  const { store } = cx;
+  const { store, deps = {} } = cx;
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】批归属会话 resolver（注入单点；
+  //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、零行为变化）。
+  const { resolveBatchSession } = deps;
   return [
     defineTool({
       name: "asset_claim",
@@ -53,7 +56,7 @@ export function buildAssetClaimTools(cx) {
         //   `assertModeActive`：成员认领任务刚需 asset_claim，而受模式门的工具必须 deny 成员（不变量
         //   「modeGate ⊆ memberDeny」），二者不可兼得 ⇒ 取「成员可调用」，代价 = 非生效模式下亦允许归位
         //   （写面仍受「批次须存在 + target 防逃逸 + source 须为文件」约束，见 store.claimAsset）。
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         const r = store.claimAsset(sessionId, args.batchId, { source: args.source, target: args.target });
         return { ok: r.ok, claimedPath: r.claimedPath, batchId: r.batchId };
       },

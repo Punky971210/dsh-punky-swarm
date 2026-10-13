@@ -19,6 +19,33 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   导出面经 `lib/tools/core.js` re-export 保持（WAKE_MIN_INTERVAL_MS / LEADER_WAKE_WINDOWS / wakeLeaderForReport）。
 import { laneBindingOf, mailboxRootOf } from '../engine/dispatch.js';
 import * as swarmMailbox from '../comms/mailbox.js'; // 成员回报投递（文件 mailbox）
+import { readCapability } from '../assembly/schema.js'; // 注入预算阈值唯一取值源（注册表 default 缺省合并）
+import { applyInjectionBudget } from '../comms/inject-budget.js';
+
+// ── 面 C · lane 回报：注入预算（阈值唯一取值源 = `capabilities.injectBudget`）──────────────
+// ⚠ **本模块导出面受 `test/swarm-wake-addressing.test.js#T-10`（L-AC-14「净增 0」）逐字钉住**
+//   ⇒ 下列内部步骤一律**模块私有**；对外**只新增一个薄壳导出** `budgetSummaryForReport`
+//   （该导出名需同步更新 T-10 的期望清单 —— 本批正在做，理由与替代方案见 exec 产物偏差登记）。
+/** 读注入预算阈值（缺省合并注册表 default ⇒ 默认开）。**模块私有**，只由下方薄壳消费。 */
+function injectBudgetCfgOf(config) {
+  return readCapability(config, 'injectBudget');
+}
+
+// 面 C · 层①单条目：回报摘要（`wake.summary`）在**投递前**按单条目层收窄，收窄结果**同源**用于
+//   ① mailbox 消息体 ② 唤醒消息体 ⇒ 两处共用同一份文本（禁两套口径）。
+//   本函数**模块私有**（不新增导出面：`test/swarm-wake-addressing.test.js#T-10` 对本模块导出面逐字钉住）。
+//   本模块内**唯一消费者** = `budgetSummaryForReport`（下方，唯一的薄壳导出）。
+function budgetWakeSummaryOf(summary, injectCfg) {
+  if (injectCfg?.enabled !== true) return { summary, omissions: [] };
+  const r = applyInjectionBudget(summary, { surface: 'wake.summary', thresholds: injectCfg, kind: 'perItem' });
+  return { summary: r.text, omissions: r.omissions };
+}
+
+/** 面 C 编排面（唯一导出薄壳，供 `swarm-report` 工具层单点调用）：读阈值 + 摘要层① 一并返回。 */
+export function budgetSummaryForReport(config, summary) {
+  const cfg = injectBudgetCfgOf(config);
+  return { injectBudget: cfg, ...budgetWakeSummaryOf(summary, cfg) };
+}
 
 // ── 成员回报**目标解析**（身份门已删） ──────
 // 背景（普查 `gate-census-20260917`（原文档未随仓分发） + 本轮实测）：官方 Team 成员由宿主 `spawn_teammate` 拉起，
@@ -155,13 +182,21 @@ function leaderWakeMessageOf(input, merged) {
         + (candidates.length > WAKE_CANDIDATES_MAX ? ' 等 ' + candidates.length + ' 条' : '')
       : '')
     + (merged > 0 ? '\n（另合并 ' + merged + ' 条同类回报）' : '');
+  // 面 C · 层②总量：唤醒消息体（`wake.total`）是**真正注入 Leader 上下文**的面 ⇒ 在组装完成后、
+  //   送出**之前**施加总量层。固定顺序 = 摘要（层①，已在 `budgetWakeSummaryOf` 施加）→ 消息体（层②）。
+  //   未超限 ⇒ 文本**原值**、omissions 空 ⇒ 既有唤醒行为逐字不变（零回归）。送达失败/被节流
+  //   都**不影响**本处预算语义（预算只改文本，不改是否会送）。
+  const budgeted = applyInjectionBudget(line, { surface: 'wake.total', thresholds: input.injectBudget, kind: 'total' });
   return {
     // id 不可省、不可复用：inbox 投影对 pending 消息做 id 去重，重复即抛
     //   `message "<id>" is already pending`（`dsh-agent-loop/lib/index.js:190-193`）——该抛会被本函数 catch 吞掉 ⇒ 静默丢唤醒。
-    id: globalThis.crypto.randomUUID(),
-    role: 'user',
-    content: [{ type: 'text', text: line }],
-    source: { kind: 'user' },
+    message: {
+      id: globalThis.crypto.randomUUID(),
+      role: 'user',
+      content: [{ type: 'text', text: budgeted.text }],
+      source: { kind: 'user' },
+    },
+    omissions: budgeted.omissions,
   };
 }
 
@@ -197,11 +232,15 @@ export function wakeLeaderForReport(ctx, input) {
     if (!leader || typeof leader.followup !== 'function') { out.reason = 'leader-not-live'; return out; }
     // ④ 唤醒：上一次窗内被合并的条数随本次消息**可见**（合并不丢信息）并清零。
     const merged = win ? win.merged : 0;
-    leader.followup(leaderWakeMessageOf(input, merged));
+    // 面 C 层②（`wake.total`）：消息体在送出前已按总量预算收窄；省略事实回显于 `out.omissions`
+    //   （**不发射事件**：本单点零批面写，见上方契约 —— 发射面唯一在 `swarm_report.execute`）。
+    const assembled = leaderWakeMessageOf(input, merged);
+    leader.followup(assembled.message);
     LEADER_WAKE_WINDOWS.set(key, { at: now, merged: 0 });
     out.woke = true;
     out.reason = 'woke';
     out.merged = merged;
+    if (assembled.omissions.length > 0) out.omissions = assembled.omissions;
     return out;
   } catch (e) {
     // fail-safe（规格约束 3）：任何异常（含宿主抛错、UUID 不可用…）一律收敛为回显，**不得**外抛。

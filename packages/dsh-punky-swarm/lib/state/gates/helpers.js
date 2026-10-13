@@ -191,6 +191,45 @@ export function buildHelpers(cx) {
                 out.push(d);
         return out;
     }
+    // ── G-10（批 `g10-fix-20261012`）：**「已声明入边」的单点判定** ────────────────────────────────
+    // 语义（`plan/design.md` §A.2 推荐候选 ② / `plan/scope.md` R-1）：`lane` 的「已声明入边」=
+    //   `deps(lane)` ∪ `{ h.from | h ∈ batch.handoffs[lane] }` —— 后者即**下游经 `handoff_accept`
+    //   声明接受的后置上游边**（`lib/state/store/handoff-accept.js` 的写入产物，`source:'accept'`）。
+    // 为什么是**并集**而不是「只读 deps」：追加 lane 恒落声明序末尾 ⇒ 它**结构性不可能**成为既有
+    //   下游的 `deps`（`plan-mutate.js#addTaskEdges` 的「已声明在先」约束）⇒ 唯一可行的声明位就是
+    //   下游自己的入边表 `handoffs[lane]`（**写方 = 下游**）。**不写 `deps`** ⇒ 拓扑真源零改动。
+    // 单点纪律（红线 C-4）：本函数是**唯一**合成口径；逐边来源（`deps` / `accept`）随之单点产出，
+    //   读端（`handoffVerdictOf` 的判据、settle 出口门的「有无下游」集合）**一律取本函数**，禁第二套。
+    // 零回归：`handoffs` 缺失（存量批）⇒ 集合与 `depsOf` 逐字相同（不新增任何边）。
+    function declaredInboundEdgesOf(batch, lane, t) {
+        const edges = [];
+        const sources = [];
+        const push = (from, source) => {
+            if (edges.includes(from))
+                return;
+            edges.push(from);
+            sources.push({ from, source });
+        };
+        for (const d of depsOf(t))
+            push(d, 'deps');
+        const map = batch?.handoffs;
+        const records = [];
+        if (map && typeof map === 'object' && !Array.isArray(map)) {
+            const list = map[lane];
+            if (Array.isArray(list)) {
+                for (const r of list) {
+                    if (!r || typeof r !== 'object' || Array.isArray(r))
+                        continue;
+                    const rec = r;
+                    records.push(rec);
+                    if (typeof rec.from === 'string' && rec.from.length > 0) {
+                        push(rec.from, rec.source === 'accept' ? 'accept' : 'deps');
+                    }
+                }
+            }
+        }
+        return { edges, records, sources };
+    }
     // ── 交接判据的**单点实现** ────────────────────────────────────────
     // 纪律（用户裁决）：「**复用**，禁在出口门里再写一遍判定逻辑」——故把「一条交接记录是否成立」抽成本函数，
     //   **entry 门（`handoffVerdictOf`）与出口门（`checkSettleHandoffGate`）两处都调它**。
@@ -238,16 +277,15 @@ export function buildHelpers(cx) {
         return { ok: missing.length === 0, missing, problems, pending };
     }
     function handoffVerdictOf(sessionId, batchId, batch, lane, t) {
-        const deps = depsOf(t);
+        // 【G-10 修复】集合口径改由**单点**给出（`deps ∪ handoffs[lane]` 的 `from` 集合，含 `accept` 边）；
+        //   零回归：`batch.handoffs` 缺失时该集合与 `depsOf(t)` 逐字相同（下方 legacy 分支语义不变）。
+        const { edges: deps, records } = declaredInboundEdgesOf(batch, lane, t);
         const map = batch.handoffs;
         if (deps.length === 0)
             return { ok: true, legacy: false, missing: [], problems: [], pending: [] };
         // 存量批（无 `handoffs` 字段）⇒ 不受新门约束：放行 + 留痕（调用侧落 `lane.handoff.gap`）
         if (map === undefined || map === null)
             return { ok: true, legacy: true, missing: [], problems: [], pending: [] };
-        const byTo = (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
-        const list = Array.isArray(byTo[lane]) ? byTo[lane] : [];
-        const records = list.filter((r) => !!r && typeof r === 'object' && !Array.isArray(r));
         const missing = [];
         const problems = [];
         const pending = [];
@@ -260,5 +298,5 @@ export function buildHelpers(cx) {
         }
         return { ok: missing.length === 0, legacy: false, missing, problems, pending };
     }
-    return { sessionDir, artifactsDirOf, batchFile, readBatch, resolveArtifact, declaredArtifactsOf, consumeFieldNameOf, consumeArtifactsOf, layersOf, orphanProductsOf, completeOutcomesOf, standaloneVerdict, presenceOfArtifact, depsOf, handoffRecordVerdict, handoffVerdictOf };
+    return { sessionDir, artifactsDirOf, batchFile, readBatch, resolveArtifact, declaredArtifactsOf, consumeFieldNameOf, consumeArtifactsOf, layersOf, orphanProductsOf, completeOutcomesOf, standaloneVerdict, presenceOfArtifact, depsOf, declaredInboundEdgesOf, handoffRecordVerdict, handoffVerdictOf };
 }

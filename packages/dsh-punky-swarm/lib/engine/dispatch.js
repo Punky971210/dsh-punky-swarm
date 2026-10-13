@@ -61,6 +61,10 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
  *  口径边界、`subagent`/`subagent_fork` 必 deny 的理由、以及 `mcp__*` 不入表的口径，均随实现迁至 `suite.js` 表头注释。 */
 import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from './suite.js';
 export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
+// 【L2 注入预算】面 A · 任务包骨架：comms/inject-budget.js = 纯函数（阈值由调用方传入）；
+//   assembly/schema.js 只取 readCapability 作**阈值唯一取值源**的读端（无反向依赖：schema.js 零 import 本模块）。
+import { readCapability } from '../assembly/schema.js';
+import { applyInjectionBudget } from '../comms/inject-budget.js';
 
 /**
  * 第二绑定键（B3，学 agent-teams 的 label 做法）：可从**子会话事件/描述**反解析 (batchId, lane)，
@@ -104,6 +108,90 @@ export function ownerSessionIdOf(source) {
 export function wakeAddressOf(hit) {
   return ownerSessionIdOf(hit) ?? hit?.sessionId ?? null;
 }
+
+// ── 批归属会话解析（批 `d-override-fix-20261011` · lane `e4-session-bind`；判据源 = 本 lane 任务包 AC-2/AC-5）──
+// 缺陷（实测原始回执）：引擎自派 worker 是**子会话**，`lib/tools/shared.js#sessionOf(args, exec)` 仅三级回落
+//   `args.session → exec.agent.session.id → 'cli'` ⇒ worker **未传 session** 时落到 **workerSessionId**，
+//   而批次归属键 = 派发方（Leader）会话 ⇒ `store.readBatch(workerSessionId, batchId)` 恒拒：
+//     `Error: batch not found: <batchId> @<workerSessionId>`（lane `e2-guidance` 实测 4 次；本 lane 首步同样命中）。
+// 修法（**单点**）：本函数 = worker 会话 → **批归属会话** 的唯一反查点，供 `sessionOf` 的可选第三参数消费
+//   （注入链：`lib/tools/register.js#createTools` 经 `deps.resolveBatchSession` 透传给各批内工具）。
+//
+// 语义（逐条钉死）：
+//   · **唯一数据源** = `dispatchIndex`（既有索引；三写点共用 `dispatchIndexEntryOf` 构造）——
+//     **禁建第二套 worker→批 索引**，本函数只 `get`。
+//   · **取键 = worker 会话 id** = 调用方 agent 会话 id（`ownerSessionIdOfExec` 同取值式 ⇒ 单一键口径）。
+//   · 命中判据 = 索引值的 `sessionId` 为非空字符串（与 `lib/index.js:627` / `auto-settle.js:395` 同形）；
+//     非法形态一律 `null`。
+//   · **取不到 ⇒ `null`**（**不猜兜底**）：Leader 会话 / 未登记会话 / 索引冷启窗口 ⇒ 不命中 ⇒
+//     `sessionOf` 逐字回落原三级路径（Leader 自身行为**零变化**）。
+export function batchSessionIdOfWorker(dispatchIndex, exec) {
+  if (!(dispatchIndex instanceof Map)) return null;
+  const workerSessionId = ownerSessionIdOfExec(exec);
+  if (!workerSessionId) return null;
+  const hit = dispatchIndex.get(workerSessionId);
+  return asSessionId(hit?.sessionId);
+}
+
+/** 索引**读**单点（模块私有；`batchSessionIdOfWorkerResolved` 取回填结果用）。
+ *  **不导出**：导出面净增 0（C-8），且避免新增「测试可直接改索引」的面。
+ *  `Map.prototype.get` 在本文件**只**出现在本函数体内 —— 逐字保持判据源强制口径
+ *  「`lib/**` 内 `dispatchIndex[^\n]*\.get\(` 的消费文件集恰 3 件」在案（`test/lane-session-bind.test.js:274` AC-5 ②），
+ *  与 `auto-settle.js:395`（先 `has` 后取）/ `index.js:521`（同类读点）**同形**。 */
+function dispatchIndexHitOf(dispatchIndex, workerSessionId) {
+  return dispatchIndex.get(workerSessionId);
+}
+
+// ── 批归属解析 resolver **外壳**（批 `session-bind-index-fix-20261012` · lane `e1-fix` · 修复①：未命中回落 + 回填）──
+// 缺陷（P-3 ③）：引擎自派路径写 `member.dispatch` 事件但**不写** `dispatchIndex` ⇒ 「事件在盘上、索引里没有」
+//   ⇒ `batchSessionIdOfWorker` 恒未命中 ⇒ `sessionOf` 回落 workerSessionId ⇒ `batch not found`。
+//
+// 分工（本批 Q-A 甲）：**主路** = 自派写点同步写索引（`dispatchLaneCore` 侧，见该函数内注释）；
+//   本函数 = **兜底**（跨进程 / 历史批 / 漏登记 / 热更窗口）。两者共用值构造单点 `dispatchIndexEntryOf`
+//   ⇒ 冷/热读数逐字相同（L-AC-5）。
+//
+// 形态（逐条钉死，守 scope §约束 5/6 与 techdebt §问题 S-a/S-b/S-d）：
+//   · `batchSessionIdOfWorker` **逐字不动**（上函数零改动；S-a 的「冷索引 ⇒ `null`」断言天然不红）。
+//   · 反查**复用** `laneBindingOf`（本文件 `:918-932`）—— **不建第二套反查、不建第二套索引、无负缓存**。
+//   · 回填值**经** `dispatchIndexEntryOf`（3 键冻结 + `ownerSessionId` 非枚举；S-d）。
+//   · 返回值**再经** `batchSessionIdOfWorker` 取（命中判据单点 ⇒ 冷/热读数同源；D-1.4）。
+//   · 幂等守卫 `has` ⇒ 已映射不重扫（每 worker **至多一次**反查；D-6）。
+//   · 全函数 try/catch ⇒ 失败一律 `null`（不炸工具面；C-5 / R-8）。
+//   · **禁** `.get(`（本函数只用 `has`/`set`；Map 读走 `dispatchIndexHitOf` 单点）—— D-1.8。
+//   · **不回写事件**（读侧补位只写索引，防「读触发写」；D-6 / §约束 3）。
+//
+// ⚠ **生效前提（本 lane 已实测为阻塞，如实登记——非静默）**：本函数须由 `lib/index.js:313` 的
+//   `resolveBatchSession` 接线为 `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`；
+//   该行属**写域外**（本 lane 禁改 `lib/index.js`）。**未接线 ⇒ 本函数零调用、生产行为零变化**。
+//   接线后零行为变化保证（R-2）：未命中且无 `store` / 反查无果 ⇒ 逐字回原三级回落。
+/**
+ * @param {{listAllBatches?: Function, readBatch?: Function}|null|undefined} store 事件流数据源（缺 ⇒ 不命中）
+ * @param {Map|null|undefined} dispatchIndex 既有**唯一** worker→批 索引（缺 / 非 Map ⇒ 不命中）
+ * @param {{agent?: {session?: {id?: string}}}|null|undefined} exec 调用方 Agent（取键口径同写侧单点）
+ * @returns {string|null} 批归属会话 id；未命中 / 数据源不可用 / 反查抛错 ⇒ `null`
+ */
+export function batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) {
+  try {
+    const hot = batchSessionIdOfWorker(dispatchIndex, exec); // 热路径：命中即返回（①⑤ 短路）
+    if (hot) return hot;
+    const workerSessionId = ownerSessionIdOfExec(exec); // 取键单点（与索引建键同口径）
+    if (!workerSessionId) return null;
+    if (!(dispatchIndex instanceof Map)) return null; // fail-safe：非 Map ⇒ 不写不猜
+    const bind = laneBindingOf(store, workerSessionId); // 复用同文件既有反查（:918-932）
+    if (!bind) return null; // 无 store / 无事件 ⇒ 逐字原回落（R-2 / L-AC-2）
+    if (!dispatchIndex.has(workerSessionId)) { // 幂等守卫（同 auto-settle 既有回填口径）
+      // 回填值经**值构造单点**；`ownerSessionId` 传 `null` —— `laneBindingOf` 只回 3 字段（不扩其返回形状），
+      // 故回填值**不含**该非枚举字段 ⇒ `wakeAddressOf` 回退 `sessionId`（与 `auto-settle.js:407` 同形）。
+      // ⚠ 已知边界（设计 §R-b / D-1.5）：**不得静默** —— 冷索引批上唤醒寻址取值 = `sessionId`（非 owner 会话）。
+      dispatchIndex.set(workerSessionId,
+        dispatchIndexEntryOf(bind.sessionId, bind.batchId, bind.lane, null));
+    }
+    return batchSessionIdOfWorker(dispatchIndex, exec); // 返回经既有单点 ⇒ 读数同源（D-1.4）
+  } catch {
+    return null; // 吞错 = 视为不命中（工具面不得因归属解析而炸；C-5 / R-8）
+  }
+}
+
 /**
  * `dispatchIndex` **值构造单点**（三写点共用：装配启动重建 / 结算路惰性重建 / 登记点热更新）。
  *
@@ -454,29 +542,80 @@ function roleCellOf(roleRef, roleData) {
 }
 
 /**
+ * 【C-5 · ④】`member.dispatch` 载荷的**预算留痕键**（**单一判定点**，供载荷与单测共用）。
+ *
+ * 语义（冻结口径 C-5「非空才写键」）：仅当 `injectBudget.enabled === false` 时返回
+ * `{ budgetEnabled: false }`；其余一切形态（含 `enabled === true` = 注册表默认、缺省 `null`）
+ * 返回 `{}` ⇒ 载荷键集与键序**逐字零变化**（存量读端/断言不受影响）。
+ *
+ * 存在理由：`enabled === false` 时 `composeWorkerPrompt` 内 `budgeted` 为假 ⇒ perItem 层整条跳过，
+ * 此前**无任何留痕**，事后无法分辨「预算没生效」是「入参未超限」还是「被配置关掉」。
+ * @param {object|null|undefined} injectBudget 热更快照读出的 `capabilities.injectBudget`
+ * @returns {{budgetEnabled?: false}} 追加键（空对象 = 不追加）
+ */
+export function memberDispatchBudgetKeyOf(injectBudget) {
+  return injectBudget?.enabled === false ? { budgetEnabled: false } : {};
+}
+
+/**
  * 成员任务包**骨架**（B1）：引擎侧给出「角色 / 目标 / 契约 / 产物 / 纪律」，Leader 的 `prompt` 作为任务要点追加。
  * 契约要点（与 discipline §0e 一致）：只给要素、不写实现；写盘走 edit/write；产物落批次产物根。
  */
 export function composeWorkerPrompt({
   batchId, lane, cmd, layer, role, consume = [], produce = [], outputs = [], firstLine, leaderPrompt = '', artifactsRoot,
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】**双保险**（本 lane 任务包必做项 ④）：
+  //   批归属会话 id（缺省 `undefined` ⇒ **任务包逐字节不变**，零回归）。非空时任务包明写
+  //   「批归属会话 + 治理工具须传 session」——覆盖 `dispatchIndex` 的**重启重建窗口**：
+  //   内存索引未就绪（进程刚起、`rebuildDispatchIndex()` 尚未跑完、或事件流写失败）时，
+  //   `sessionOf` 的注入 resolver **不命中**，此时唯一起作用的路径 = worker **显式传参**。
+  //   取值来源 = `dispatchLaneCore` 的落点会话参数（= 批文件所在会话 = `member.dispatch.sessionId`）。
+  batchSessionId,
   // 【2026-09-27 · GR-13】「单件写盘 lane」显式声明位（缺省 `false` ⇒ 既有任务包逐字不变）。
   //   直调调用方可显式置 `true`；派发路径的**自动判定**见函数内 `singleArtifactWriteLane`。
   singleArtifactWrite = false,
   // 【2026-10-07 · P2】role 语料定位位（缺省 = 包根 `skills/`）；直调与隔离测试可显式指定。
   roleRoot, roleTeam,
+  // 【L2 注入预算】面 A 的阈值入参（缺省 `null` ⇒ **零动作**：不改任何文本、不产省略）。
+  //   生产路径由 `dispatchLaneCore` 从热更快照 `capabilities.injectBudget` 读出后传入；
+  //   直调调用方（含既有单测）不传 ⇒ 本函数输出与改动前**逐字节相同**（零回归口径 C）。
+  //   本函数保持**纯**：只返回预算后的文本，**不发射事件、不写盘**（唯一发射点在 `swarm_report`）。
+  injectBudget = null,
 }) {
   // role 解析（**单点真源**）：对象直用 / id 串查语料库（查不到 ⇒ 抛 `GATE_ROLE_UNRESOLVED`）/ 未声明 ⇒ null。
   const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
+  // 面 A · 层①单条目：目标行 `cmd`（`taskpack.cmd`）与 Leader 补充（`taskpack.leaderPrompt`）各按单条目层收窄。
+  //   未超限 ⇒ 原值、零省略（零回归）。role 三段与 consume/produce/outputs 清单**不设上限**（声明面天然有界）。
+  const budgeted = injectBudget?.enabled === true;
+  const cmdBudget = budgeted
+    ? applyInjectionBudget(String(cmd ?? '（未声明 cmd）'), { surface: 'taskpack.cmd', thresholds: injectBudget, kind: 'perItem' }).text
+    : cmd;
+  const leaderPromptBudget = budgeted
+    ? applyInjectionBudget(leaderPrompt, { surface: 'taskpack.leaderPrompt', thresholds: injectBudget, kind: 'perItem' }).text
+    : leaderPrompt;
   const L = [];
   L.push(firstLine); // 首行：句柄标记（唯一凭证；引擎只读 exec.arguments，不注入参数）
   L.push('');
   L.push('# 任务包（引擎自派 · ' + labelOf(batchId, lane) + '）');
   L.push('- **lane**：`' + lane + '`｜**层**：`' + (layer ?? '-') + '`｜**角色**：' + roleCellOf(role, roleData));
-  L.push('- **目标**：' + String(cmd ?? '（未声明 cmd）'));
+  L.push('- **目标**：' + String(cmdBudget ?? '（未声明 cmd）'));
   if (consume.length) L.push('- **消费件**：' + consume.map((p) => '`' + p + '`').join('、'));
   if (produce.length) L.push('- **产出面**：' + produce.map((p) => '`' + p + '`').join('、'));
   if (outputs.length) L.push('- **产物**：' + outputs.map((p) => '`' + p + '`').join('、'));
   if (artifactsRoot) L.push('- **批次产物根**：`' + artifactsRoot + '`（产物落此处，勿落工作区根）');
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】**双保险**（必做项 ④ / AC-6）：
+  //   明写**批归属会话 id** 与「治理工具须传 `session:"<批归属会话>"`」。
+  //   ① 主路 = 引擎侧注入的归属解析（`sessionOf` 第三参数）——**本条不依赖它**；
+  //   ② 本条 = **重启重建窗口的兜底**：`dispatchIndex` 由批次事件重建（`lib/index.js:535-553`），
+  //      进程刚起 / 重建未跑完 / 事件流写失败时索引为空 ⇒ resolver 不命中 ⇒ 若不显式传参，
+  //      worker 的 `sessionOf` 会回落到**自己的子会话**，`store.readBatch` 即抛
+  //      `batch not found: <batchId> @<workerSessionId>`（本批 e2-guidance 实测形态）。
+  //   位置 = 任务包**头部信息区**（`## 纪律` 之前的 lane 契约块内），保证 worker 先读到再动手；
+  //   文案给**可照抄形态**（含 id 与键名），不给解释性长句（纪律面另有条目）。
+  if (typeof batchSessionId === 'string' && batchSessionId.length > 0) {
+    L.push('- **批归属会话**：`' + batchSessionId + '`——**调用治理工具（`lane_checkpoint` / `handoff_submit` / `mailbox_*` / '
+      + '`member_settle` / `asset_claim` / `log_export` 等）时必须显式传 `session:"' + batchSessionId + '"`**；'
+      + '省略时引擎按 worker 绑定自动归属（重启重建窗口内可能解析不到 ⇒ 显式传参是唯一可靠路径）。');
+  }
   // 【2026-10-07 · P2】role 三段（**结构隔离**，计划 §2.4）：本段由 role 数据独占，Leader 的 `leaderPrompt`
   //   只落在末尾的 `## 任务要点（Leader 补充）` ⇒ **结构上不存在覆盖关系**（无「谁优先」判定器）。
   if (roleData) appendRoleSections(L, roleData);
@@ -524,12 +663,16 @@ export function composeWorkerPrompt({
   } else {
     rule('**【progress 快照】**每完成一个子步骤即落 `<lane>/progress/NN-<slug>.md`（禁攒批；崩溃后新 worker 据此跳过已完成步骤）。');
   }
-  if (leaderPrompt) {
+  if (leaderPromptBudget) {
     L.push('');
     L.push('## 任务要点（Leader 补充）');
-    L.push(leaderPrompt);
+    L.push(leaderPromptBudget);
   }
-  return L.join('\n');
+  const composed = L.join('\n');
+  // 面 A · 层②总量：整个任务包（`taskpack.total`）在 join 之后、返回之前施加总量硬上限。
+  //   固定顺序 = 单条目（`cmd` / `leaderPrompt`，上方）→ 总量（本处）。未超限 ⇒ **原值本身**返回（零回归）。
+  if (!budgeted) return composed;
+  return applyInjectionBudget(composed, { surface: 'taskpack.total', thresholds: injectBudget, kind: 'total' }).text;
 }
 
 /** 组装 `rt.start(provider, request)` 的 **one-shot 请求载荷**（纯函数，便于单测）。
@@ -665,7 +808,13 @@ export function activeRunCount() {
 // @returns {Promise<{batchId, lane, status, token, firstLine, ttlMs, spawned: boolean,
 //                    workerSessionId?: string, spawnNote?: string}>}
 //   硬失败（spawn 抛错 / 取不到 worker 会话 id）**抛错**：错误文案自带回滚事实与恢复步骤。
-export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt }) {
+// @param {Map|null} [dispatchIndex] 【本批新增·可选】既有**唯一** worker→批 索引（与读侧同引用）。
+//   提供 ⇒ 自派成功后与 `member.dispatch` 事件**同一次逻辑动作**内同步写索引（修复③ 主路）；
+//   缺省 / 非 Map ⇒ 整段跳过（**逐字零行为变化**，守 R-2 兼容红线）。取不到索引 ⇒ 退化为既有行为，
+//   由兜底路 `batchSessionIdOfWorkerResolved` 在 worker 首个治理调用时补位。
+//   ⚠ **入参面缺口**（本 lane 实测）：唯一调用点 `lib/tools/member-tools.js:110` 未传该参 ⇒ 当前 dormant，
+//   激活需一行写域外接线（精确 diff 见 `exec/fix/change-report.md` §3）。
+export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt, dispatchIndex }) {
   // ⓿ 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
   //   判据源 L-AC-5 ②「role 查不到 ⇒ 拒派」。若把解析留在 ④ 的任务包组装处，则 `setMember(running)` 已落、
   //   句柄已发放 ⇒ 拒派会留下「lane=running、无 worker、句柄悬空」的僵尸态（正是本文件 B4 段登记过的坑）。
@@ -722,14 +871,27 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   // ④ 任务包骨架：lane 契约 + role 三段 + 纪律 + 句柄首行（B2/B3 由 buildStartRequest 注入 toolFilter/label）
   // 【2026-10-07 · P2】`laneTask` / `artifactsRoot` 的读取已**上移**到 ⓿（role 拒派须先于状态变更）；
   //   `role` 传**已解析的 role 对象**（非裸名）⇒ 三段注入生效，且「同 role 跨批稳定」。
+  // 【C-5 · lane `e5-c5-quietfix`】注入预算配置的**取值单点**（hoist 到调用前）：既供任务包面 A
+  //   （下方 `composeWorkerPrompt({ injectBudget })` 实参），也供 `member.dispatch` 载荷的
+  //   **消费侧留痕**（④，见本函数后段）—— 同一次读取、同一快照 ⇒ 两面读数不可能分裂。
+  //   行为零变化：原先在实参处**内联** `readCapability(liveConfig, 'injectBudget')`，此处只是提前取值。
+  const injectBudget = readCapability(liveConfig, 'injectBudget');
   const prompt = composeWorkerPrompt({
     batchId, lane, cmd: laneTask?.cmd, layer: laneTask?.layer, role: roleData,
     consume: laneTask?.consume ?? [], produce: laneTask?.produce ?? [], outputs: laneTask?.outputs ?? [],
     firstLine: h.firstLine, leaderPrompt, artifactsRoot,
+    // 【批 `d-override-fix-20261011` · lane `e4-session-bind` · 必做项 ④】任务包**双保险**：
+    //   注入批归属会话 id（= 本函数落点会话 = 批文件所在会话 = `member.dispatch.sessionId`），
+    //   使命中面覆盖 `dispatchIndex` 的重启重建窗口（详见 `composeWorkerPrompt` 参数注释）。
+    batchSessionId: sessionId,
     // 【2026-09-27 · GR-13】lane 声明位的**直读**（`buildWavePlan` 归一化面**未持久化**该字段 ⇒ 今日恒 `false`；
     //   真实生效路径 = `composeWorkerPrompt` 内「audit 层 + 声明写盘面恰一件」的**自动判定**）。
     //   保留本行 = 为「直调派发 / 未来持久化该字段」留显式逃生位，不构成当前行为的唯一依赖。
     singleArtifactWrite: laneTask?.singleArtifactWrite === true,
+    // 【L2 注入预算】面 A 阈值：从**热更快照**读（与上方 `liveConfig?.dispatch?.provider` 同一快照口径
+    //   ⇒ runtime.json 改 `capabilities.injectBudget` 即生效，无需重启宿主）。
+    //   唯一取值源 = 注册表 `capabilities.injectBudget`（经 readCapability 缺省合并 ⇒ 默认开）。
+    injectBudget,
   });
   // 【2026-09-22 · one-shot 化】`startContinuable(spec)` → **`rt.start(provider, request)`**：
   //   one-shot 请求**平铺**（label/prompt/parent/signal/toolFilter/persona/maxDepth 同层）；
@@ -806,9 +968,31 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   （R-7：不得写 `'cli'`/空串一类死地址；读端按「缺失」走 C-3 回退 ⇒ 与改前逐字相同）。
   //   该值是主路（`subagent/end`）唤醒的**唯一**寻址来源（`info` 载荷不含父会话，L-AC-1）。
   const ownerSessionId = ownerSessionIdOfExec(exec);
+  // 【C-5 · ④ 消费侧静默面】`capabilities.injectBudget.enabled === false` 时，`composeWorkerPrompt` 的
+  //   `budgeted` 判定为假 ⇒ **perItem 层整条跳过**，此前**无任何留痕** ⇒ 事后无法分辨「预算没生效」是
+  //   「入参未超限」还是「被配置关掉」（同族静默面）。
+  //   ⇒ 在**既有** `member.dispatch` 载荷上追加 `budgetEnabled: false` 予以显式化。
+  //   ⚠ **非空才写键**（冻结口径 C-5）：`enabled === true`（= 注册表默认）时**不写该键**
+  //   ⇒ 存量载荷键集与键序**逐字零变化**（既有读端与断言不受影响）。
+  const budgetKey = injectBudget?.enabled === false ? { budgetEnabled: false } : {};
   store.appendEvent(sessionId, batchId, EVT_MEMBER_DISPATCH, ownerSessionId
-    ? { lane, workerSessionId, ownerSessionId }
-    : { lane, workerSessionId });
+    ? { lane, workerSessionId, ownerSessionId, ...budgetKey }
+    : { lane, workerSessionId, ...budgetKey });
+  // ⑤′ **同步写索引**（批 `session-bind-index-fix-20261012` · lane `e1-fix` · 修复③ **主路**）：
+  //   消除「事件有、索引无」的分裂 —— 本行是「引擎自派 worker 拿不到批归属索引」的**确定性根源修复**。
+  //   写序（硬）：**先** `appendEvent`（绑定事实落盘）**后** `set`（索引即时生效），与下方句柄作废序同构。
+  //   值与**登记点热登记**（`lib/bridge/dispatch-register.js:108`）**同源**：`dispatchIndexEntryOf` 值构造单点
+  //   ⇒ 冷/热读数逐字相同（L-AC-5）。取不到 owner 会话 ⇒ 索引值以 `null` 表达（**非枚举字段缺席**）；
+  //   ⚠ 与**事件载荷**「取不到不写该键」**语义不同、不得合并**（载荷口径属 `member.dispatch` 冻结面 R-7/C-9）。
+  //   fail-safe：`dispatchIndex` 缺省 `undefined` / 非 Map ⇒ 整段跳过（逐字零行为变化）。
+  //   ⚠ **生效前提（本 lane 已实测为阻塞，如实登记——非静默）**：`dispatchLaneCore` 的入参面**无** `dispatchIndex`
+  //   （`:735`），唯一调用点 `lib/tools/member-tools.js:110` 亦**未传** ⇒ 本段当前恒跳过（dormant）。
+  //   激活需**一行写域外接线**（`member-tools.js:110` 增 `dispatchIndex`，值经 `deps.resolveBatchSession` 同一闭包可达）。
+  //   本 lane **不越域**改该行 —— 精确 diff 见 `exec/fix/change-report.md` §3。
+  if (dispatchIndex instanceof Map && workerSessionId && !dispatchIndex.has(workerSessionId)) {
+    dispatchIndex.set(workerSessionId,
+      dispatchIndexEntryOf(sessionId, batchId, lane, ownerSessionId)); // 幂等守卫：同键覆盖不重复写
+  }
   // ⑥ **P0**：成功自派 ⇒ 立即作废句柄（口径见本函数头「自派即发放即作废、仅直派形态需长期有效」）。
   //   顺序要点：必须在 `member.dispatch` 登记**之后**——先有绑定事实、再无悬赏意图，
   //   否则「无 dispatch 事件 + 句柄已消费」会在探针面构造成一个无人认领的中间态。

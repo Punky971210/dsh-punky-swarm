@@ -29,7 +29,9 @@ import type { Batch } from '../../types/contracts.js';
 import type { GatesCx } from './cx.js';
 
 export function buildHandoff(cx: GatesCx) {
-  const { handoffRecordVerdict, readCfg } = cx;
+  // 【G-10 修复】「已声明入边」单点判定（`lib/state/gates/helpers.ts#declaredInboundEdgesOf`）：
+  //   本门「有无下游」集合的并集侧消费它 —— 与 entry 门/提交前置**同一份**口径（红线 C-4 单点判定）。
+  const { handoffRecordVerdict, readCfg, declaredInboundEdgesOf } = cx;
 
   // ── P2-A：出口侧「有下游 ⇒ 须至少一条已成立交接」────────────────────────
   // 定位（`p2-settle-narrowing-changeplan-20260917`（原文档未随仓分发） §7）：**结算出口收紧**——`merged` 前判本 lane 的
@@ -52,14 +54,20 @@ export function buildHandoff(cx: GatesCx) {
   ): { ok: boolean; code: string | null; missing: string[]; problems: string[]; disabled?: boolean; smoke?: boolean; legacy?: boolean; humanException?: boolean; downstream?: string[] } {
     if (!handoffGateEnabledOf(readCfg(), 'settle')) return { ok: true, code: null, missing: [], problems: [], disabled: true };
     if (smokeOf(batch)) return { ok: true, code: null, missing: [], problems: [], smoke: true };
-    // ① 有无下游（禁猜：只按 wavePlan 的静态声明判定）
+    // ① 有无下游（禁猜：按**声明**判定 —— 静态 `deps` 引用 **∪** 「已声明入边」）
+    //   【G-10 修复 · 批 `g10-fix-20261012`】原实现**只**遍历 `wavePlan[].tasks[].deps` ⇒ 追加的后置 lane
+    //   因「无出边」而**没有对象**、缺口**不转红**（静默本体）。修法 = **扩为并集**：凡本 lane 出现在任何
+    //   下游的「已声明入边」集合中（含下游经 `handoff_accept` 声明接受的后置边）⇒ 本 lane **必须有**一条
+    //   已成立交接，否则本门拒 `GATE_HANDOFF_MISSING` + 落 `lane.handoff.gap`。
+    //   方向 = **净收紧**（只增义务、不减），且集合口径**单点**取自 `declaredInboundEdgesOf`（红线 C-4）。
     const t = taskOf(batch, lane);
     const downstream: string[] = [];
     for (const w of batch.wavePlan ?? []) {
       for (const x of w.tasks ?? []) {
         if (!x || typeof x.id !== 'string' || x.id.length === 0 || x.id === lane) continue;
         const deps = Array.isArray((x as unknown as { deps?: unknown }).deps) ? ((x as unknown as { deps?: unknown }).deps as unknown[]) : [];
-        if (deps.some((d) => d === lane)) downstream.push(x.id);
+        const declared = declaredInboundEdgesOf(batch, x.id, x).edges;
+        if (deps.some((d) => d === lane) || declared.includes(lane)) downstream.push(x.id);
       }
     }
     const nextOf = (t as unknown as { next?: unknown } | null | undefined)?.next;

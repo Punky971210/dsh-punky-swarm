@@ -21,11 +21,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { runCommand } from '../command-exec.js';
 import { flowOf, enabledByFlag, flagOf } from '../../assembly/flows.js';
-import { taskOf, contractMissingPayload, detectNeedHuman, detectGate, detectGateOff } from './detect.js';
+import { taskOf, contractMissingPayload, detectNeedHuman, detectGate, detectGateOff,
+  detectScriptAnchors, scriptTokensOf, normalizeScriptKey } from './detect.js';
 import { reasonVocabularyNote } from './reason-vocabulary.js';
 import type { Batch } from '../../types/contracts.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import type { GatesCx } from './cx.js';
 
@@ -35,12 +37,111 @@ export function buildCommand(cx: GatesCx) {
   // 命令 gate（V1）：exec 层产物声明行 `gate: <命令>` → merged 前置确定性执行 → 退出码判定
   // 签名与既有门禁一致（batch 显式传入，不持有状态）；执行器经 deps.runCommand 注入（DI，默认真实执行器，测试可注入 mock）
   // cwd 契约：lane worktree 根（若已建）→ GATE_REPO_ROOT（批次 repo 根配置，V1 env 注入）→ artifacts 根兜底
-  function commandCwd(sessionId: string, batchId: string, lane: string) {
+  // ⚠ 单点：解析根**只有这一处**（下方 `commandCwd` 即 `commandRoots().cwd`）。L8 的脚本候选解析与
+  //   位置告警**同源复用**本函数（禁第二套 cwd 解析；否则同一批产物两处根不同 ⇒ 锚定永不命中）。
+  function commandRoots(sessionId: string, batchId: string, lane: string) {
     const wt = path.join(sessionDir(sessionId), 'worktrees', batchId, lane);
-    try { if (fs.statSync(wt).isDirectory()) return wt; } catch { /* 未建 worktree，继续 */ }
+    let cwd: string | null = null;
+    try { if (fs.statSync(wt).isDirectory()) cwd = wt; } catch { /* 未建 worktree，继续 */ }
     const repoRoot = process.env.GATE_REPO_ROOT;
-    if (repoRoot) { try { if (fs.statSync(repoRoot).isDirectory()) return repoRoot; } catch { /* 无效则跳过 */ } }
-    return artifactsDirOf(sessionId, batchId);
+    if (cwd === null && repoRoot) { try { if (fs.statSync(repoRoot).isDirectory()) cwd = repoRoot; } catch { /* 无效则跳过 */ } }
+    return { laneRoot: wt, artifactsDir: artifactsDirOf(sessionId, batchId), cwd: cwd ?? artifactsDirOf(sessionId, batchId) };
+  }
+  function commandCwd(sessionId: string, batchId: string, lane: string) {
+    return commandRoots(sessionId, batchId, lane).cwd;
+  }
+  // ── L8 判据脚本信任锚（2026-10-13 · 批 `punky-spec-adopt-p2-20261013`）判定面 ─────────────────────
+  // 位置：**执行命令之前**的预扫（先扫全部 `gate:` 命令的脚本候选，再进执行循环）——因采预扫，
+  //   锚定不符时**零命令被执行**（避免「首条已跑、次条才拒」的部分执行副作用）。
+  // 三态（冻结）：有锚定且不符 ⇒ 拒 `GATE_SCRIPT_CHANGED`｜无锚定 ⇒ 告警 + 放行（零回归）｜
+  //   脚本落在 lane worktree / 产物根内 ⇒ 告警（**位置缺口降级**：全仓无引擎强制的 lane 写域 ⇒
+  //   「必须在 X 之外」没有可判的 X，硬凑只会得到可绕过的假约束）。
+  const sha256OfFile = (file: string): string | null => {
+    try { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; }
+  };
+  const isInsideDir = (child: string, parent: string): boolean => {
+    const rel = path.relative(parent, child);
+    return rel.length > 0 && !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  // 告警通道选择（**互斥使用**）：恰 1 条 ⇒ 单值 `escape`（冻结声明形态逐字点名 `escape{kind:…}`）；
+  //   ≥2 条 ⇒ `escapes[]` 多值通道（与 `reason-vocabulary` 同一通道）。**二者不并用**——
+  //   `lib/state/store/events.js:50-53#gateEscapeEvents` 把 `escape` 与 `escapes[]` **合并**成事件清单
+  //   ⇒ 并用即同一事实**双事件**（留痕重复）。
+  function escapeWarnings(list: Array<Record<string, unknown>>) {
+    if (list.length === 0) return {};
+    return list.length === 1 ? { escape: list[0] } : { escapes: list };
+  }
+  // ① 候选抽取（**纯 fs 探测**）：命令中「在解析根下确实存在的普通文件」token。
+  //    无候选 ⇒ 调用方**不读**锚定文件 ⇒ 无脚本命令（`node -e '…'`）**零额外 IO、零感知**。
+  function scriptCandidatesOf(commands: string[], roots: { laneRoot: string; artifactsDir: string; cwd: string }) {
+    const candidates: Array<{ command: string; key: string; abs: string }> = [];
+    for (const command of commands) {
+      for (const token of scriptTokensOf(command)) {
+        const abs = path.resolve(roots.cwd, token);
+        let st; try { st = fs.statSync(abs); } catch { continue; }
+        if (!st.isFile()) continue;
+        // 候选**限于解析根内**（⇒ 键恒为根相对路径，与锚定声明的 `<相对路径>` 同口径；
+        //   根外工具链（PATH 可执行、根外绝对路径）不进锚定面 ⇒ 不误报「无锚定」）。
+        if (!isInsideDir(abs, roots.cwd)) continue;
+        const key = normalizeScriptKey(path.relative(roots.cwd, abs));
+        if (key.length === 0) continue;
+        if (!candidates.some((c) => c.abs === abs)) candidates.push({ command, key, abs });
+      }
+    }
+    return candidates;
+  }
+  // ② 位置告警 + ③ 锚定比对（三态：拒 / 告警+放行 / 零感知）
+  function scriptAnchorVerdict(
+    candidates: Array<{ command: string; key: string; abs: string }>,
+    roots: { laneRoot: string; artifactsDir: string; cwd: string },
+    anchors: Record<string, string>, anchorPath: string | null,
+  ) {
+    const warnings: Array<Record<string, unknown>> = [];
+    let reject: {
+      code: string; command: string; exitCode: number | null; detail: string;
+      script: string; expected: string; actual: string; anchorPath: string | null; problems: string[];
+    } | null = null;
+    // 位置告警（**独立于锚定**：脚本落在被检方自身可写的根内 ⇒ 位置缺口可观测、降级不拒）
+    for (const c of candidates) {
+      if (isInsideDir(c.abs, roots.laneRoot) || isInsideDir(c.abs, roots.artifactsDir)) {
+        warnings.push({
+          kind: 'gate-script-lane-local', gate: 'command', path: c.key,
+          reason: '被引用脚本落在 lane worktree / 产物根内（位置缺口：该根由被检方自身可写）⇒ 降级为告警，不拒',
+        });
+      }
+    }
+    // 锚定比对（有锚定且不符 ⇒ 拒；无锚定 ⇒ 告警 + 放行）
+    for (const c of candidates) {
+      const declared = anchors[c.key];
+      if (declared === undefined) {
+        warnings.push({
+          kind: 'gate-script-unanchored', gate: 'command', path: c.key,
+          reason: '被引用脚本无 `gate-script-sha256:` 锚定声明 ⇒ 内容不可判（告警 + 放行；存量产物零回归）',
+        });
+        continue;
+      }
+      const actual = sha256OfFile(c.abs);
+      if (actual === null) {
+        // 读不到 ⇒ 无法证实（唯一可达路径 = stat 成功后读失败/竞态删除）⇒ fail-open + **显式告警**留痕；
+        //   不为它新造第二枚拒码（本批冻结「仅 1 枚新码」）⇒ 登记于 exec 产物「残余开口」。
+        warnings.push({
+          kind: 'gate-script-unhashed', gate: 'command', path: c.key,
+          reason: '脚本可 stat 但内容不可读（哈希不可得）⇒ 无法比对，告警 + 放行',
+        });
+        continue;
+      }
+      if (actual !== declared) {
+        reject = {
+          code: 'GATE_SCRIPT_CHANGED', command: c.command, exitCode: null,
+          script: c.key, expected: declared, actual, anchorPath,
+          detail: '脚本内容与锚定不符：' + c.key + ' 声明 ' + declared.slice(0, 12) + '… 实得 ' + actual.slice(0, 12)
+            + '…（脚本自声明之后被改）⇒ 拒（命令门不得被自我满足）',
+          problems: ['gate-script-sha256 mismatch: ' + c.key],
+        };
+        break;
+      }
+    }
+    return { warnings, reject };
   }
   function checkCommandGate(
     sessionId: string, batchId: string, batch: Batch, lane: string,
@@ -141,7 +242,20 @@ export function buildCommand(cx: GatesCx) {
     const results: Array<{ command: string; exitCode: number | null; durationMs: number }> = [];
     let failed: { code: string; command: string; exitCode: number | null; detail: string } | null = null;
     let outputTruncated = false;
+    // ── L8 判据脚本信任锚：**执行命令之前**的预扫（三态：拒 / 告警+放行 / 零感知）───────────────
+    //   声明面 = 产物 `gate-script-sha256: <相对路径>=<64hex>`（可多行）；判定面 = 取解析根（`commandRoots`，
+    //   与 `commandCwd` **同源**）下确实存在的普通文件 token 重算 sha256 比对。
+    //   **锚定值不是信任根**（声明侧与脚本本体同一写者可写）⇒ 本层堵的是「**声明之后**内容被改」⇒ 拒。
+    const roots = commandRoots(sessionId, batchId, lane);
+    const scriptCandidates = scriptCandidatesOf(det.commands, roots);
+    const anchorRead = scriptCandidates.length === 0
+      ? { anchors: {} as Record<string, string>, path: null }   // 无脚本候选 ⇒ **不读**锚定文件（零额外 IO）
+      : detectScriptAnchors(artifactsDirOf(sessionId, batchId), fields);
+    const anchorVerdict = scriptAnchorVerdict(scriptCandidates, roots, anchorRead.anchors, anchorRead.path);
+    const anchorNotes = escapeWarnings(anchorVerdict.warnings);
+    if (anchorVerdict.reject) failed = anchorVerdict.reject; // 预扫即拒 ⇒ 下列循环**零命令被执行**
     for (const command of det.commands) {
+      if (failed) break; // 预扫已拒 ⇒ 不进执行（无「首条已跑、次条才拒」的部分执行副作用）
       const r = run({ command, cwd: commandCwd(sessionId, batchId, lane) });
       if (r.truncated) outputTruncated = true;
       const res = { command, exitCode: r.exitCode ?? null, durationMs: r.durationMs ?? 0 };
@@ -155,9 +269,9 @@ export function buildCommand(cx: GatesCx) {
     if (failed) {
       // 失败且产物同时声明 needHuman → 转人工闸（不抛错，store 接线转 checkNeedHumanGate 语义）
       const nh = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
-      return { ok: false, ...failed, declared: true, needHumanEscalation: nh.declared, path: det.path };
+      return { ok: false, ...failed, declared: true, needHumanEscalation: nh.declared, path: det.path, ...anchorNotes };
     }
-    return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path, ...(cmCommand ?? {}), ...vocabNote };
+    return { ok: true, declared: true, commands: det.commands, results, outputTruncated, path: det.path, ...(cmCommand ?? {}), ...vocabNote, ...anchorNotes };
   }
 
   return { checkCommandGate };

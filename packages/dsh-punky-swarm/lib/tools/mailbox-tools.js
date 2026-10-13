@@ -40,7 +40,7 @@ function budgetText(message) {
 }
 
 export function createMailboxTools(ctx, deps) {
-  const { root, store, config = {} } = deps;
+  const { root, store, config = {}, resolveBatchSession } = deps; // resolveBatchSession：批归属会话 resolver（e4-session-bind 注入单点；缺省 undefined ⇒ 原三级回落）
 
   return [
     defineTool({
@@ -53,7 +53,7 @@ export function createMailboxTools(ctx, deps) {
       },
       async execute(args, exec) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         const batchId = args.batchId;
         const rootDir = boxRoot(root, sessionId, batchId);
         // 环防护接线（缺省默认开——readCapability 合并注册表 default {enabled:true}；
@@ -101,7 +101,7 @@ export function createMailboxTools(ctx, deps) {
       },
       async execute(args, exec) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return { items: mailbox.readUnacked(boxRoot(root, sessionOf(args, exec), args.batchId), b, { sinceTs: args.since ?? 0 }) };
+        return { items: mailbox.readUnacked(boxRoot(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, { sinceTs: args.since ?? 0 }) };
       },
     }),
     defineTool({
@@ -114,7 +114,7 @@ export function createMailboxTools(ctx, deps) {
       },
       async execute(args, exec) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return mailbox.ack(boxRoot(root, sessionOf(args, exec), args.batchId), b, args.ackId);
+        return mailbox.ack(boxRoot(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, args.ackId);
       },
     }),
   ];

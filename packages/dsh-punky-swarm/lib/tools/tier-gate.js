@@ -20,6 +20,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   导出面经 `lib/tools/core.js` re-export 逐字保持（既有消费方零感知）。
 import { join } from 'node:path';
 import { isReadOnlyShellCall, SHELL_TOOLS } from './readonly.js';
+// 批次终态判定**单点**（`lib/schema.js#isBatchTerminal`）：本批门禁 5 的「活跃批」判据复用该单点
+//   （与 `lib/state/store/governance.js#hasActiveBatch` **同源**）——禁另造第二套活跃判定。
+import * as schema from '../schema.js';
 import {
   labelOf, evaluateTierCDispatch, // labelOf：既有导入（本批未增删其消费者；属既存未用项，按「精准修改」不清理）
   modeActiveFor, presetOfSession, MODE_INACTIVE_CODE,
@@ -193,10 +196,41 @@ export function installDifficultyGuard(ctx, deps) {
           + ' 写入难度与判据（判据必填，供审计），之后才能执行 ' + execution.name;
       } else if ((g.lastAssign.form === 'C' || g.lastAssign.form === 'D') && g.pendingBatch) {
         // 门禁 2：判 C/D 且未建批 → 拒绝执行型（必须先 wave_plan 建批）；D 与 C 同属建批档（P-1）
-        reason = '[task-difficulty-gate] 任务难度=' + g.lastAssign.form + '（集群方案），必须先 wave_plan 建批。已直做产物用 asset_claim 归位，然后建批派发。（口径：C 判据是**多线并行或多依赖**；**单线程任务**应重评为 A/B 带上下文直做，不必建批；D = team 方案，同受本门。）';
+        reason = '[task-difficulty-gate] 任务难度=' + g.lastAssign.form + '（集群方案），必须先 wave_plan 建批。已直做产物用 asset_claim 归位，然后建批派发。（口径：C 判据是**多线并行或多依赖**；**单线程任务**应重评为 A/B 带上下文直做，不必建批；D = team 方案（建批档 + team 通道），同受本门 —— 通道面未落实（derivedChannel=dispatch）时，须先重评 durableSeats:true 或显式降级为 C，再建批。）';
       } else if ((execution.name === 'subagent' || execution.name === 'subagent_fork') && g.lastAssign.form === 'A') {
         // 门禁 3（一致性）：A 类不派发 subagent（需要独立上下文请重评 B）
         reason = '[task-difficulty-gate] A 类任务不派发 subagent；如确实需要独立上下文请重评 B。';
+      }
+      // 门禁 5（D 档通道一致性 · **Q-2 硬消费**，本批 `d-override-fix-20261011`；编号避开既有
+      //   「门禁 4 = 派发面 lane 句柄留痕」——该支紧随本支之后，其编号与语义**逐字不动**）：D 的正当形态 ≡
+      //   **建批档 + team 通道**（`derivedChannel='team'`，由 `assign_check({durableSeats:true})` 推出）⇒ 通道轴为
+      //   `dispatch` 时本会话**不得开工**（先重评或显式降级为 C）。这是 `derivedChannel` 的**机器读端**（真消费端，
+      //   非死声明——消 S-1「消费端空转」）。
+      //   【门序】本支**必须**排在门禁 1/2/3 **之后**：门禁 1（未评估/过期）须先行，否则未评估态也会报通道错（误导）。
+      //   【白名单（三条，供 audit 核）】
+      //     ① `wave_plan`：**放行**——建批面自带正式判定（`lib/tools/wave-plan-tools.js` 的 D×通道硬拒），
+      //        本支若也拦它即形成「拒建批 ⇒ 无法消解 ⇒ 死锁」；D 的通道面正是**靠建批**落地的。
+      //     ② 只读面（`isReadOnlyShellCall`）：**已在 `:186` 先行放行**（本支到不了）；
+      //     ③ 治理/查询类（`batch_status` / `gate_status` / `member_status` / `handoff_view` 等）：**本就不在
+      //        `EXEC_TOOLS`**（`:165` 已先行放行）⇒ 本支对它们不可能生效。
+      //   【已有 team 批则不拦】：该会话任一**活跃（非终态）**批的 `batch.channel ∈ {team,mixed}` ⇒ 通道事实已成立
+      //     （真消费事实在场，避免与建批面口径冲突）。「活跃」判据复用 `schema.isBatchTerminal` 单点（与
+      //     `store.hasActiveBatch` 同源），不另造第二套活跃判定。
+      //   【缺省零破坏】旧 `governance.json` 无 `derivedChannel` ⇒ 严格等于 `'dispatch'` 不成立 ⇒ 本支不生效
+      //     （旧记录不被误拦），与判据源「缺省读法」一致。
+      if (!reason && g.lastAssign.difficulty === 'D' && g.lastAssign.derivedChannel === 'dispatch'
+        && execution.name !== 'wave_plan') {
+        const channelOk = store.listBatches(sessionId).some((id) => {
+          const b = store.readBatch(sessionId, id);
+          return Boolean(b) && !schema.isBatchTerminal(b.phase) && (b.channel === 'team' || b.channel === 'mixed');
+        });
+        if (!channelOk) {
+          reason = 'GATE_DIFFICULTY_CHANNEL_UNRESOLVED: 本会话声明 difficulty=D，但通道轴推导为 dispatch'
+            + '（assign_check 未声明 durableSeats）——**D ≡ 建批档 + team 通道**，通道未落实前不得执行 ' + execution.name + '。'
+            + '两条正范式：① 确需 durable 席位 ⇒ 重评 assign_check({ difficulty:"D", durableSeats:true, rationale, scope:"full" })，'
+            + '再以 channel:"team"|"mixed" 建批；② 确属引擎自派 ⇒ 显式降级为 C（rationale 写明降级原因，'
+            + '与 discipline.md §0b 十四⑤「团队面缺失须显式降级、禁静默降级」同源）。';
+        }
       }
       // 门禁 4（派发面 · C 阶段，2026-09-16）：C 档下 `subagent`/`subagent_fork` 建议携带**有效 lane 句柄**；
       //   **B 档不受影响**（单步调研/单步派发）；A 档由门禁 3 拒（本判不重复）。

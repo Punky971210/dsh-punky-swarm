@@ -127,7 +127,7 @@ function seedBatch(root, sessionId, batchId, laneIds, opts = {}) {
   store.createBatch(sessionId, args);
   store.writeGovernance(sessionId, {
     lastAssign: {
-      difficulty: 'C', form: 'C', scope: 'full', derived: 'C', override: false,
+      difficulty: 'C', form: 'C', scope: 'full', derived: 'C', derivedChannel: 'dispatch', override: false, overrideKind: null,
       rationale: 'fixture：并发闸用例前置评估（多线并行 ⇒ C 档）', reasons: [], at: new Date().toISOString(), execCallsSince: 0,
     },
   });

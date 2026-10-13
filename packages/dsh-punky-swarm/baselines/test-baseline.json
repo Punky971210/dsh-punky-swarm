@@ -3,7 +3,7 @@
     "test/abort-dangling-and-warn-event.test.js": {
       "asserts": 27,
       "blankLines": 31,
-      "lines": 235,
+      "lines": 241,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -83,7 +83,7 @@
     "test/archive.test.js": {
       "asserts": 53,
       "blankLines": 14,
-      "lines": 219,
+      "lines": 234,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -129,11 +129,19 @@
       "todos": 0
     },
     "test/assign-tier-downgrade-guard.test.js": {
-      "asserts": 47,
-      "blankLines": 24,
-      "lines": 217,
+      "asserts": 70,
+      "blankLines": 32,
+      "lines": 303,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/atomic-write-ordering.test.js": {
+      "asserts": 63,
+      "blankLines": 40,
+      "lines": 273,
+      "tautologies": 0,
+      "tests": 9,
       "todos": 0
     },
     "test/audit-blind-review.test.js": {
@@ -187,7 +195,7 @@
     "test/batch-control.test.js": {
       "asserts": 68,
       "blankLines": 37,
-      "lines": 378,
+      "lines": 384,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -238,6 +246,14 @@
       "lines": 342,
       "tautologies": 0,
       "tests": 26,
+      "todos": 0
+    },
+    "test/command-script-anchor.test.js": {
+      "asserts": 62,
+      "blankLines": 21,
+      "lines": 312,
+      "tautologies": 0,
+      "tests": 9,
       "todos": 0
     },
     "test/complete-outcomes-empty.test.js": {
@@ -363,9 +379,33 @@
     "test/fixture-team-ledger.test.js": {
       "asserts": 10,
       "blankLines": 23,
-      "lines": 213,
+      "lines": 218,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/g10-accept-edge.test.js": {
+      "asserts": 55,
+      "blankLines": 24,
+      "lines": 317,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/g10-host-smoke.test.js": {
+      "asserts": 12,
+      "blankLines": 12,
+      "lines": 116,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/g10-toolface.test.js": {
+      "asserts": 26,
+      "blankLines": 17,
+      "lines": 191,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/gate-assertion-r32.test.js": {
@@ -609,11 +649,11 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 201,
-      "blankLines": 40,
-      "lines": 647,
+      "asserts": 237,
+      "blankLines": 49,
+      "lines": 742,
       "tautologies": 0,
-      "tests": 29,
+      "tests": 32,
       "todos": 0
     },
     "test/handoff-authz.test.js": {
@@ -672,6 +712,22 @@
       "tests": 10,
       "todos": 0
     },
+    "test/inject-budget-config-gate.test.js": {
+      "asserts": 47,
+      "blankLines": 26,
+      "lines": 221,
+      "tautologies": 0,
+      "tests": 15,
+      "todos": 0
+    },
+    "test/inject-budget.test.js": {
+      "asserts": 104,
+      "blankLines": 75,
+      "lines": 689,
+      "tautologies": 1,
+      "tests": 31,
+      "todos": 0
+    },
     "test/install-selfcheck.test.js": {
       "asserts": 23,
       "blankLines": 19,
@@ -704,10 +760,18 @@
       "tests": 14,
       "todos": 0
     },
+    "test/lane-session-bind.test.js": {
+      "asserts": 115,
+      "blankLines": 43,
+      "lines": 675,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
     "test/lane-wake-autodispatch.test.js": {
       "asserts": 56,
       "blankLines": 42,
-      "lines": 419,
+      "lines": 425,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -790,6 +854,14 @@
       "lines": 68,
       "tautologies": 0,
       "tests": 2,
+      "todos": 0
+    },
+    "test/memory-stale-recommended.test.js": {
+      "asserts": 61,
+      "blankLines": 26,
+      "lines": 308,
+      "tautologies": 0,
+      "tests": 11,
       "todos": 0
     },
     "test/merge-agent.test.js": {
@@ -920,6 +992,14 @@
       "tests": 5,
       "todos": 0
     },
+    "test/replay-verify.test.js": {
+      "asserts": 69,
+      "blankLines": 31,
+      "lines": 300,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
     "test/resume.test.js": {
       "asserts": 31,
       "blankLines": 19,
@@ -942,6 +1022,14 @@
       "lines": 108,
       "tautologies": 0,
       "tests": 4,
+      "todos": 0
+    },
+    "test/rule-propagation.test.js": {
+      "asserts": 55,
+      "blankLines": 27,
+      "lines": 197,
+      "tautologies": 1,
+      "tests": 13,
       "todos": 0
     },
     "test/s2-prime-wake-probe.test.js": {
@@ -1011,7 +1099,7 @@
     "test/swarm-wake-addressing.test.js": {
       "asserts": 95,
       "blankLines": 49,
-      "lines": 656,
+      "lines": 663,
       "tautologies": 0,
       "tests": 16,
       "todos": 0
@@ -1048,10 +1136,18 @@
       "tests": 18,
       "todos": 0
     },
+    "test/test-evidence-guard.test.js": {
+      "asserts": 130,
+      "blankLines": 76,
+      "lines": 590,
+      "tautologies": 0,
+      "tests": 21,
+      "todos": 0
+    },
     "test/tool-descriptor.test.js": {
       "asserts": 60,
       "blankLines": 19,
-      "lines": 222,
+      "lines": 224,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1059,7 +1155,7 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
-      "lines": 384,
+      "lines": 402,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1067,7 +1163,7 @@
     "test/tools.test.js": {
       "asserts": 132,
       "blankLines": 52,
-      "lines": 648,
+      "lines": 650,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -1225,15 +1321,15 @@
       "todos": 0
     },
     "test/worktree-tools.test.js": {
-      "asserts": 79,
-      "blankLines": 19,
-      "lines": 302,
+      "asserts": 102,
+      "blankLines": 26,
+      "lines": 366,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 10,
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-10T04:22:13Z",
+  "generatedAt": "2026-10-13T12:40:37Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1244,15 +1340,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "T15 夹具平台可表达性修复（落盘前去尾斜杠）+ CI 增 I-6(a) 前置 seed 步",
+  "reason": "P2 close-out: e6-blocking-fix synced test/archive.test.js (A4 behavior-assertion construction via side-effect form #7) and test/fixture-team-ledger.test.js (allowlist, order-sensitive). Any test-tree edit shifts the meta-face baseline (registry form #6). Leader is sole writer of baselines/**.",
   "schema": 1,
   "totals": {
-    "asserts": 7940,
-    "blankLines": 3980,
-    "files": 154,
-    "lines": 43266,
-    "tautologies": 0,
-    "tests": 1656,
+    "asserts": 8821,
+    "blankLines": 4422,
+    "files": 166,
+    "lines": 47767,
+    "tautologies": 2,
+    "tests": 1811,
     "todos": 4
   }
 }

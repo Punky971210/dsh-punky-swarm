@@ -463,6 +463,14 @@ export type GateErrorCode =
   // 命令 gate（V1）——GATE_EXIT_* 全族
   | 'GATE_EXIT_NO_COMMAND' | 'GATE_EXIT_FORBIDDEN' | 'GATE_EXIT_TIMEOUT'
   | 'GATE_EXIT_SPAWN_FAIL' | 'GATE_EXIT_NONZERO'
+  // 命令 gate 之 **L8 判据脚本信任锚**（2026-10-13 · 批 `punky-spec-adopt-p2-20261013`）：产物声明的
+  //   `gate-script-sha256: <路径>=<64hex>` 锚定值与脚本**实际内容**不符（脚本自声明之后被改）⇒ 拒。
+  //   **不复用** `GATE_EXIT_FORBIDDEN`——其现语义 = **只读黑名单命中（不执行）** ⇒ 复用即两拒因共一码，
+  //   与本 union 内 `GATE_HANDOFF_MISSING` 的既有取向（「新造独立码…语义独立、审计可辨」）相悖。
+  //   全批仅此 1 枚新码。写端 = `lib/state/gates/command.ts#checkCommandGate`：**执行命令之前**预扫全部
+  //   `gate:` 命令的脚本候选，锚定不符即拒；因采预扫，拒时**零命令被执行**（无部分执行副作用）。
+  //   无锚定声明 ⇒ 告警（`escape{kind:'gate-script-unanchored'}`）+ 放行（存量产物**零回归**）。
+  | 'GATE_SCRIPT_CHANGED'
   // targets 门禁
   | 'GATE_TARGET_MISSING' | 'GATE_TARGET_UNCHANGED'
   // complete 门禁

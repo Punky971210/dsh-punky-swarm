@@ -144,8 +144,14 @@ test('S3b-1：abort 含非终态成员的批 ⇒ 落 batch.abort_dangling（载�
   const b = store.readBatch(SESS_ID, 'b-dangling');
   assert.deepEqual(b.lanes, lanesBefore, '成员状态逐字未变（不做隐式批量 skipped）');
   const newEvs = b.events.slice(eventsBefore.length);
-  assert.deepEqual(newEvs.map((e) => e.type), [EVT.EVT_BATCH_PHASE, DANGLING_EVT],
-    'abort 只多落「相位迁移 + 悬挂告警」两条事件，零成员迁移事件');
+  // 【L9 记忆溯源（批 `punky-spec-adopt-p2-20261013` 的 `e4-l9-memorysrc`）】**必要同步**：
+  //   `aborted` 是**批次终态收口** ⇒ `setPhase` 终态分支新增落一条 `memory.stale.recommended`
+  //   ——**批级留痕**（载荷 `{phase,count,lanes,manifest,executor,reversible,...}`），**不含 lane 成员态迁移**
+  //   ⇒ 本断言的**语义未变**（仍锁「零**成员迁移**事件」），只是**精确序列**多了一条批级事件。
+  //   与 `test/assembly-schema.test.js` 的 12→13 / `swarm-wake-addressing` 的 8→9 **同类**：
+  //   「既有**精确全集**断言遇新增合法事件」的**被动同步**（Leader 已批准本次扩写域，见 exec 产物偏离登记）。
+  assert.deepEqual(newEvs.map((e) => e.type), [EVT.EVT_BATCH_PHASE, EVT.EVT_MEMORY_STALE_RECOMMENDED, DANGLING_EVT],
+    'abort 只多落「相位迁移 + 记忆待抑制建议（批级）+ 悬挂告警」三条事件，零成员迁移事件');
   assert.equal(batchBytes(root, 'b-dangling').length > 0, true, '批文件照常可读（改动不得损坏落盘）');
 
   // 终态冻结语义逐字不变（悬挂成员永久无法回收 —— 本告警要显式化的既有事实）

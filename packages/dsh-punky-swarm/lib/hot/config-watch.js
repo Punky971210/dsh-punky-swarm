@@ -36,7 +36,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   本模块只负责文件 watch → 快照 → onChange 回调（可单测，无宿主依赖）
 import { watch, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { deepMerge, CAPABILITY_REGISTRY } from '../assembly/schema.js';
+import { deepMerge, CAPABILITY_REGISTRY, injectBudgetValueErrors } from '../assembly/schema.js';
 import { loadRules } from '../state/machine-rules.js';
 
 // cordis 总线事件名（config.changed 广播契约；装配侧 ctx.emit 用）
@@ -153,6 +153,17 @@ export function validateOverlay(overlay) {
       for (const ck of Object.keys(v)) {
         if (!ALLOWED_CAPS_KEYS.has(ck)) {
           errors.push('unknown capabilities key: ' + ck + ' (allowed: ' + [...ALLOWED_CAPS_KEYS].join(', ') + ')');
+          continue;
+        }
+        // 【C-5 · lane `e5-c5-quietfix`】**热更通道的值校验**（本函数此前只校验键名白名单、零值校验 ⇒
+        //   `runtime.json` 写 `injectBudget:{enabled:true,totalBytes:-1}` 会**静默降级**、无人报错）。
+        //   与启动期 `validateCapabilities` 的 `DEP-6` **共用同一判定点** `injectBudgetValueErrors`
+        //   ⇒ 两通道同判、文案同源、零漂移（只改 `schema.js` 会**只堵一半**：热更这条通道仍旧静默）。
+        //   ⚠ 作用域**刻意收窄到 `injectBudget`**：不在此对全部 capabilities 键重跑 `validateCapabilities`
+        //   —— 本函数只拿到**覆盖层片段**（拿不到 base 配置），部分覆盖层（如只写 `trajectory.autoFail`
+        //   而未写 `enabled`）会被 DEP-2 误拒 ⇒ 那是**存量行为变化**，超出本 lane 范围。
+        if (ck === 'injectBudget') {
+          errors.push(...injectBudgetValueErrors(v[ck]));
         }
       }
     }

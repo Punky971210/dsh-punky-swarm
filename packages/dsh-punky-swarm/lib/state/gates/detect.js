@@ -169,3 +169,73 @@ export function detectGateOff(artifactsDir, paths) {
     }
     return { declared: false, path: null };
 }
+// ── L8 判据脚本信任锚：声明行族 + 命令行 token 切分（**纯函数/解析面**，零副作用）───────────────
+// 声明面 = 产物内**独立行** `gate-script-sha256: <相对路径>=<64 hex>`（可多行，每脚本一行）——
+//   与 `GATE_LINE_RE` / `GATE_EMPTY_LINE_RE` / `GATE_OFF_LINE_RE` **同族**（行首锚定 + 独立行；
+//   内嵌/注释/非行首不误判）。
+// 语义（判定侧在 `command.ts`，执行命令**之前**）：把「本产物引用的脚本内容」钉成 sha256 ⇒ 内容变更即**可判**。
+//   **锚定值不是信任根**：它与脚本本体由同一写者可写 ⇒ 只证「自声明时刻起内容未变」，**不证声明者可信**
+//   （一个先改脚本、再写自洽锚定值的写者本机制不拒）。⇒ 完整信任模型需**独立锚定值来源**（交接面契约，
+//   不在本批）。本机制堵的是 `RED-4`：**声明之后**的任何内容变更 ⇒ 不一致 ⇒ 拒。
+export const GATE_SCRIPT_SHA_RE = /^gate-script-sha256:[ \t]*(\S+?)[ \t]*=[ \t]*([0-9a-f]{64})[ \t]*$/gm;
+/** 锚定键归一（**单点**）：反斜杠→`/`、剥前导 `./`、去尾 `/`。
+ *  与 `command.ts` 侧「候选脚本键」**必须同一口径**（否则同一文件两处键不等 ⇒ 锚定永不命中）。 */
+export function normalizeScriptKey(p) {
+    return String(p).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+}
+// 锚定声明解析（同 detectNeedHuman 模式：缺失/空/目录跳过、零感知）：
+// 遍历 produce/outputs 并集 → 收集 `路径=sha256` → `{anchors, path}`（path = 首个含锚定行的产物，供返工定位）。
+// **同键取首**（后出现的同键行**不改判定**）⇒ 追加行无法覆盖既有锚定（防「后补一行翻案」）。
+// 非法/非 64 hex/空键的行**不构成锚定**（`\S+?` + `[0-9a-f]{64}` 双约束）；重复声明不报错（幂等首取）。
+export function detectScriptAnchors(artifactsDir, paths) {
+    const anchors = {};
+    let anchorPath = null;
+    if (!Array.isArray(paths) || paths.length === 0)
+        return { anchors, path: anchorPath };
+    for (const p of paths) {
+        const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+        let content;
+        try {
+            const st = fs.statSync(abs);
+            if (st.isDirectory() || st.size === 0)
+                continue;
+            content = fs.readFileSync(abs, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        GATE_SCRIPT_SHA_RE.lastIndex = 0; // /g 正则复用防 lastIndex 泄漏（与 GATE_LINE_RE 同法）
+        let m;
+        while ((m = GATE_SCRIPT_SHA_RE.exec(content)) !== null) {
+            const key = normalizeScriptKey(m[1]);
+            if (key.length === 0)
+                continue;
+            if (anchors[key] === undefined)
+                anchors[key] = m[2].toLowerCase();
+            if (!anchorPath)
+                anchorPath = p;
+        }
+    }
+    return { anchors, path: anchorPath };
+}
+// 命令行 token 切分（**纯字符串函数，零 IO**）：空白切分 + 去**成对**引号 + 跳过空 token 与选项 token（`-x`/`--x`）。
+// 职责边界：本函数只做**候选抽取**；「是否真的是解析根下的普通文件」由调用方（`command.ts`）用 fs 判定
+//   （解析根 = `commandCwd` 单点 ⇒ 本函数不持 root、不碰 fs）。⇒ `node -e '…'` 这类无文件形态的命令
+//   恒零候选，命令门对它们**零感知**（连锚定文件都不读）。
+export function scriptTokensOf(command) {
+    const out = [];
+    if (typeof command !== 'string' || command.length === 0)
+        return out;
+    for (const raw of command.split(/\s+/)) {
+        if (raw.length === 0)
+            continue;
+        let t = raw;
+        const quoted = (t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'));
+        if (quoted && t.length >= 2)
+            t = t.slice(1, -1);
+        if (t.length === 0 || t.startsWith('-'))
+            continue; // 选项不是文件候选
+        out.push(t);
+    }
+    return out;
+}

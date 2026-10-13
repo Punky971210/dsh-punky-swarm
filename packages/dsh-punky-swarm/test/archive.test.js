@@ -101,7 +101,10 @@ test('A1：complete 后自动归档——快照逐文件一致 + manifest 可查
   assert.deepEqual(m.lanes, { p1: 'merged', e1: 'merged', a1: 'merged' }); // lanes 终态快照
   assert.equal(m.eventCount, b.events.length); // 归档前事件数快照
   const paths = m.artifacts.map((a) => a.path).sort();
-  assert.deepEqual(paths, ['audit/review.md', 'exec/e1/main.py', 'plan/spec.md'].sort());
+  // 【形态④ 显式登记】归档快照 = `artifacts/<bid>/` 的**逐文件全集**；L9 收口清单
+  //   `memory-stale-recommended.json` 按设计正文落**批次产物根**（L9 §4.3 / AC-17）⇒ 必然入集。
+  //   ⚠ 仍为**精确 deepEqual**（不放松）：下一条新产物面若未在此登记，本断言照旧转红。
+  assert.deepEqual(paths, ['audit/review.md', 'exec/e1/main.py', 'memory-stale-recommended.json', 'plan/spec.md'].sort());
   for (const a of m.artifacts) {
     assert.equal(typeof a.size, 'number');
     assert.match(a.sha256, /^[0-9a-f]{64}$/);
@@ -147,13 +150,24 @@ test('A4：归档失败不阻断 complete——archive.failed + complete 已置�
     const e = runLaneOrError('b-fail', lane);
     if (e instanceof Error) throw e;
   }
-  fs.rmSync(path.join(root, 'sessions', SID, 'artifacts', 'b-fail'), { recursive: true, force: true });
+  // 【形态⑦ 副作用面 · 构造前提重建】原构造「删掉本批产物根」已被新增写点撤销：收口点 L9 会
+  //   `fs.mkdirSync(path.dirname(manifestPath), { recursive: true })`（member-gates.js:278）**重建**该目录
+  //   ⇒ 归档的 `existsSync(srcDir)`（archive.js:139）为真 ⇒ 归档不再失败 ⇒ 命题「归档失败不阻断 complete」
+  //   **失去被检对象**（这不是期望集合没同步，只有换构造才能保住断言原文）。
+  //   改为把产物根的**父目录**替换成普通文件：L9 的 recursive mkdir 报 ENOTDIR（被其 catch 吞，如实记
+  //   `manifestError`，**不回滚相位**），而归档 `existsSync(srcDir)` 仍为 false ⇒ **归档照旧失败**。
+  //   额外覆盖增益：本构造同时验到 L9 自身契约「清单落盘失败不回滚相位」。
+  const artifactsParent = path.join(root, 'sessions', SID, 'artifacts');
+  fs.rmSync(artifactsParent, { recursive: true, force: true });
+  fs.writeFileSync(artifactsParent, 'blocked\n');
   const r = store.setPhase(SID, 'b-fail', 'complete');
   assert.equal(r.phase, 'complete'); // 不被阻断
   const bf = store.readBatch(SID, 'b-fail');
   assert.ok(bf.events.some((e) => e.type === 'archive.failed' && /artifacts dir missing/.test(e.reason)));
   assert.equal(store.archive.readManifest(SID, 'b-fail'), null);
-  // 补齐产物后重试归档成功（恢复流程语义）
+  // 补齐产物后重试归档成功（恢复流程语义）：先把被占用的产物根父目录恢复成目录
+  fs.rmSync(artifactsParent, { force: true });
+  fs.mkdirSync(artifactsParent, { recursive: true });
   art('b-fail', 'explore/findings.txt', 'found');
   const ret = store.archive.archiveBatch(SID, 'b-fail');
   assert.ok(ret === null || !(ret.ok === false), 'retry archive failed: ' + JSON.stringify(ret));
@@ -207,7 +221,8 @@ test('A6：v2 存量批次 complete → 迁移兜底（schema 升 3 + chains + a
   const m = store.archive.readManifest(SID, 'b-v2');
   assert.ok(m, 'v2 manifest missing');
   assert.equal(m.schema, 3);
-  assert.deepEqual(m.artifacts.map((a) => a.path), ['audit/review.md']);
+  // 【形态④ 显式登记】同 A1：L9 收口清单落批次产物根 ⇒ 入归档快照全集（**仍为精确 deepEqual**）
+  assert.deepEqual(m.artifacts.map((a) => a.path), ['audit/review.md', 'memory-stale-recommended.json']);
   assert.equal(fs.readFileSync(path.join(root, 'sessions', SID, 'archive', 'b-v2', 'audit', 'review.md'), 'utf8'), 'legacy-review');
 });
 

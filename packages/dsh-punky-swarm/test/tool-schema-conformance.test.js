@@ -205,6 +205,24 @@ const CASES = {
     success: async (h) => h.byName.handoff_view.execute({ batchId: C1, lane: 'a1' }, EXEC), // 已交接 ⇒ ready 态
     reject: async (h) => h.byName.handoff_view.execute({ batchId: 'ghost-batch', lane: 'a1' }, EXEC),
   },
+  // 【G-10 · 批 `g10-fix-20261012` · lane `e4-toolface`】受限反向声明（`handoff_accept`）——
+  //   ⚠ 用**独立批 + 独立后置 lane**：本工具要求 `from` 是**批运行中追加**的 lane（真源 =
+  //   `plan.mutated.added[]`）且 `to` 为 audit 层，而在**夹具既有批**上追加会扰动其成员态/交接面
+  //   （同 `lane_claim`/`lane_release` 的处置口径：独立批避免互扰）。
+  handoff_accept: {
+    success: async (h) => {
+      await freshBatch(h, 'census-acc1');
+      // 后置 lane：`deps: ['l1']` ⇒ 声明序落在 audit `la1` **之前**（S-c 可过）；
+      //   同时令 `handoffs.la1` 预先保有一条 `l1` 条目 —— 命中的是**未提交**分支（拒态）而非「已有该边」幂等分支。
+      h.store.addPoolTasks(SESSION, 'census-acc1', [
+        { id: 'l1x', layer: 'exec', consume: ['plan/spec.md'], outputs: ['exec/l1x.md'], deps: ['l1'], cmd: 'late' },
+      ], { reason: 'TSC-1 夹具：后置 lane', author: 'census' });
+      return h.byName.handoff_accept.execute(
+        { batchId: 'census-acc1', from: 'l1x', to: 'la1', reason: 'TSC-1 普查：下游接受后置上游', author: 'census' }, EXEC);
+    },
+    reject: async (h) => h.byName.handoff_accept.execute(
+      { batchId: 'ghost-batch', from: 'l1x', to: 'la1' }, EXEC),
+  },
   lane_dispatch: {
     success: async (h) => h.byName.lane_dispatch.execute({ batchId: C2, lane: 'x1' }, EXEC),
     reject: async (h) => h.byName.lane_dispatch.execute({ batchId: C2, lane: 'ghost-lane' }, EXEC),

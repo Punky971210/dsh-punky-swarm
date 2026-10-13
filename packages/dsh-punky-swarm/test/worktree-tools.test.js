@@ -23,6 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起；enabled=false → 不注册（工具总数 14 不变）
 // T6 progress checkpoint：事件含 step/total + commit message 内嵌 "step N/total"（git log 可查）；向后兼容
 // T7 lane_checkpoint_status：只读查询 checkpoint 历史 + latest；不依赖 git（git 不可用也可查）
+// T8 L5 可判定：reason 枚举穷尽三分支（created/reused/recreated-after-residual）+ isolated/baseFiles 单一判定位
+//    + output.schema 同步声明（RED：ok:true + reused:true + baseFiles===0 不得被判为隔离生效）
 // 备注：本文件在 git 可用环境运行（git 是本能力硬依赖）；
 //       引擎状态根内布局 <root>/sessions/<sessionId>/worktrees/<batchId>/{_repo,orch,<laneId>}
 import test from 'node:test';
@@ -36,6 +38,7 @@ import { createStore } from '../lib/state/store.js';
 import * as lock from '../lib/lock.js';
 import { assessC } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
+import { assertOutputConforms, outputSchemaOf } from './helpers/schema-conformance.mjs';
 
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件（建批是手段、被检面是 worktree 工具）统一补 software-team。
 
@@ -112,10 +115,15 @@ test('T1 创建：worktree 目录/分支存在、基线=orch HEAD、幂等复用
   assert.equal(laneHead.ok, true);
   assert.equal(laneHead.stdout, orchHead.stdout);
   assert.equal(r.base, orchHead.stdout);
+  // 【L5 可判定】三新字段：reason 枚举穷尽分支 / isolated 单一判定位 / baseFiles 基线受控文件数
+  assert.equal(r.reason, 'created', '全新创建（无残留证据）⇒ created');
+  assert.equal(typeof r.isolated, 'boolean', 'isolated 为 boolean');
+  assert.equal(Number.isInteger(r.baseFiles), true, 'baseFiles 为整数');
   // 幂等：重复创建复用同一 worktree
   const r2 = await byName.lane_worktree_create.execute({ batchId: 'b-wt1', laneId: 'l1' }, EXEC_SESS);
   assert.equal(r2.ok, true);
   assert.equal(r2.reused, true);
+  assert.equal(r2.reason, 'reused', '已注册命中 ⇒ reused');
   assert.equal(r2.worktree, r.worktree);
 });
 
@@ -298,4 +306,60 @@ test('T7 B2 lane_checkpoint_status：只读查询 checkpoint 历史 + latest；�
   // 未知 lane / 未知批次 → 清晰错误
   await assert.rejects(() => byName.lane_checkpoint_status.execute({ batchId: 'b-wt7', laneId: 'nope' }, EXEC_SESS), /unknown lane/);
   await assert.rejects(() => byName.lane_checkpoint_status.execute({ batchId: 'b-wt7-nope', laneId: 'l1' }, EXEC_SESS), /batch not found/);
+});
+
+// ── T8 L5 隔离结果可判定（RED：**创建成功 ≠ 隔离生效**）────────────────────────────
+// 冻结判据：`isolated = (baseFiles > 0) && worktree 注册命中`。当前空 seed 形态（lane 基线 = `_repo` 的
+//   空种子提交）⇒ `baseFiles` 恒 0 ⇒ `isolated` 恒 false —— 这是**正确读数**，本套件要证的正是它。
+// 三件套核验的锚点 = `_repo`：这些 worktree 注册在 `_repo` 内（真项目仓视角只有主工作树一行 ⇒ 用真仓作
+//   锚点会恒判「未创建」）。本用例只取「注册命中」这一半锚定面，故经 `repoPath()` 直问 `_repo`。
+test('T8 L5 可判定：reason 枚举穷尽三分支 + isolated/baseFiles 单一判定位 + schema 同步声明（RED-5）', async () => {
+  const { root, byName } = setup();
+  const tool = byName.lane_worktree_create;
+
+  // ① schema 同步声明（`additionalProperties:false` 下漏声明 ⇒ 宿主判 invalid output **假失败** ⇒
+  //    写入已成功却报失败 ⇒ 调用方重试 ⇒ 重复建树）
+  const schema = outputSchemaOf(tool);
+  assert.ok(schema, 'lane_worktree_create 须暴露 output.schema');
+  assert.equal(schema.additionalProperties, false, '前提：schema 为 additionalProperties:false');
+  assert.deepEqual(schema.properties.reason.enum, ['created', 'reused', 'recreated-after-residual'],
+    'reason 枚举闭集（无 other/unknown 兜底）');
+  assert.equal(schema.properties.isolated.type, 'boolean');
+  assert.equal(schema.properties.baseFiles.type, 'integer');
+
+  await byName.wave_plan.execute({ batchId: 'b-wt8', tasks: [{ id: 'l1' }, { id: 'l2' }, { id: 'l3' }] }, EXEC_SESS);
+
+  // ② 全新创建（无任何残留证据）⇒ reason='created'
+  const r1 = await tool.execute({ batchId: 'b-wt8', laneId: 'l1' }, EXEC_SESS);
+  assert.equal(r1.reason, 'created');
+  assert.equal(r1.reused, false);
+  assert.equal(r1.baseFiles, 0, '空 seed 形态：基线受控文件数 = 0（可达反例，现成）');
+  assert.equal(r1.isolated, false, '空 seed ⇒ 隔离未生效');
+  assertOutputConforms(tool, r1, 'created 分支返回值');
+
+  // ③ 幂等复用 ⇒ reason='reused'；RED-5：`ok:true + reused:true + baseFiles===0` 仍**不得**判为隔离生效
+  const r2 = await tool.execute({ batchId: 'b-wt8', laneId: 'l1' }, EXEC_SESS);
+  assert.equal(r2.ok, true);
+  assert.equal(r2.reused, true);
+  assert.equal(r2.reason, 'reused');
+  assert.equal(r2.baseFiles, 0);
+  assert.equal(r2.isolated, false, 'RED-5：「创建成功」不得被判为隔离生效');
+  assertOutputConforms(tool, r2, 'reused 分支返回值');
+
+  // ④ 残留后重建（lane 分支留存 = 崩溃/未合并残留）⇒ reason='recreated-after-residual'
+  await tool.execute({ batchId: 'b-wt8', laneId: 'l2' }, EXEC_SESS);
+  fs.rmSync(lanePath(root, 'b-wt8', 'l2'), { recursive: true, force: true }); // 注册与目录同时抹掉
+  assert.equal(git(['-C', repoPath(root, 'b-wt8'), 'worktree', 'prune']).ok, true, '构造：清注册');
+  assert.equal(refExists(root, 'b-wt8', 'refs/heads/punky/l2'), true, '构造前提：残留 lane 分支仍在');
+  const r3 = await tool.execute({ batchId: 'b-wt8', laneId: 'l2' }, EXEC_SESS);
+  assert.equal(r3.reason, 'recreated-after-residual', '残留分支在场 ⇒ 清理重建（挂载既有分支）');
+  assertOutputConforms(tool, r3, 'recreated-after-residual 分支返回值');
+
+  // ⑤ 残留孤儿目录（未注册但目录在场）⇒ 同属残留重建分支（枚举穷尽：不存在第四值）
+  fs.mkdirSync(lanePath(root, 'b-wt8', 'l3'), { recursive: true });
+  const r4 = await tool.execute({ batchId: 'b-wt8', laneId: 'l3' }, EXEC_SESS);
+  assert.equal(r4.reason, 'recreated-after-residual', '孤儿残留目录 ⇒ 清理重建');
+  for (const v of [r1, r2, r3, r4]) {
+    assert.ok(schema.properties.reason.enum.includes(v.reason), 'reason 取值恒落在枚举闭集内：' + v.reason);
+  }
 });

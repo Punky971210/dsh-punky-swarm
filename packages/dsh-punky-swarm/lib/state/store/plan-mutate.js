@@ -32,6 +32,10 @@ export function buildPlanMutate(cx) {
   //   ② **不新建拒码**（迁移门禁再议）⇒ 非法输入抛**普通 Error**（不带 `GATE_` 前缀，不进 66 码集合）；
   //      唯一例外 = 批终态，复用既有 `GATE_BATCH_TERMINAL`。
   //   ③ 单次 `atomicWrite`：wavePlan 重归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕同一次落盘。
+  //      **【G-10/Q-H2 修复 · lane `e3-toolface`】本次播种的入边**逐条写进该事件的 `declared:[{from,to}]`** ——
+  //      修前载荷只有 `added:[laneId]`，外部读端**无法从数据面区分**「合法补边（追加即声明）」与「手改批 JSON」
+  //      （本批 `p1-spec -> e2-g10` 即因此被终验误判为手改注入；实为本次播种，见 `exec/g10-toolface/progress/01`）。
+  //      `planRevision` 递增与拒态语义**一字未动**（只增一个只读载荷键）。
   //   ④ 判据与建批期**同源**：归一化走 `buildWavePlan`、分层/环检测走 `topoWaves`（不另写一份判据）。
   function addPoolTasks(sessionId, batchId, incoming, { reason = null, author = null } = {}) {
     const file = batchFile(sessionId, batchId);
@@ -86,6 +90,9 @@ export function buildPlanMutate(cx) {
     const lanes = { ...batch.lanes };
     const handoffs = { ...(batch.handoffs ?? {}) };
     const ts = new Date().toISOString();
+    // 【G-10/Q-H2 · lane `e3-toolface`】声明留痕：把本次按 `deps` 播种的**入边声明**逐条记下（行形态与
+    //   `handoff-accept.js` 的 `accepts:[{from,to}]` **同形** ⇒ 两条「补边」路径在读端可同构解析）。
+    const declared = [];
     for (const t of list) {
       const id = String(t.id).trim();
       lanes[id] = 'pending';
@@ -96,6 +103,7 @@ export function buildPlanMutate(cx) {
         artifacts: [], contract: { consumedFrom: from, assertions: [] },
         status: 'pending', ts, officialTaskId: null,
       }));
+      for (const from of deps) declared.push({ from, to: id });
     }
     const revision = (batch.planRevision ?? 0) + 1;
     const next = {
@@ -106,7 +114,7 @@ export function buildPlanMutate(cx) {
       planRevision: revision,
       updatedAt: ts,
       events: [...(batch.events ?? []), newEvent(EVT.EVT_PLAN_MUTATED, {
-        added: ids, reason: reason ?? null, author: author ?? null, revision,
+        added: ids, declared, reason: reason ?? null, author: author ?? null, revision,
       })],
     };
     atomicWrite(file, next);

@@ -131,7 +131,7 @@ export function createLogTools(ctx, deps) {
   // logs 注册表默认关：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
   //   显式 logs.enabled=true（patch 全开）→ 注册 log_export。
   if (readCapability(config, 'logs')?.enabled !== true) return [];
-  const { root, store } = deps;
+  const { root, store, resolveBatchSession } = deps; // resolveBatchSession：批归属会话 resolver（e4-session-bind 注入单点；缺省 undefined ⇒ 原三级回落）
 
   return [
     defineTool({
@@ -143,7 +143,7 @@ export function createLogTools(ctx, deps) {
         render: (_args, value) => TEXT_OUTPUT('log_export: ' + value.exported + '/' + value.eventCount + ' events' + (value.writtenTo ? ' -> ' + value.writtenTo : '')),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         if (!SAFE_ID.test(sessionId)) throw new Error('invalid session: ' + sessionId);
         if (!SAFE_ID.test(args.batchId)) throw new Error('invalid batchId: ' + args.batchId);
         if (args.since != null && !Number.isFinite(Date.parse(args.since))) throw new Error('invalid since: ' + args.since + ' (must be ISO timestamp)');

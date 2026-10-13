@@ -45,3 +45,12 @@ export declare function detectGateOff(artifactsDir: string, paths: string[]): {
     declared: boolean;
     path: string;
 };
+export declare const GATE_SCRIPT_SHA_RE: RegExp;
+/** 锚定键归一（**单点**）：反斜杠→`/`、剥前导 `./`、去尾 `/`。
+ *  与 `command.ts` 侧「候选脚本键」**必须同一口径**（否则同一文件两处键不等 ⇒ 锚定永不命中）。 */
+export declare function normalizeScriptKey(p: string): string;
+export declare function detectScriptAnchors(artifactsDir: string, paths: string[]): {
+    anchors: Record<string, string>;
+    path: string | null;
+};
+export declare function scriptTokensOf(command: string): string[];

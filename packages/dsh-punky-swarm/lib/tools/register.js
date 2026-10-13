@@ -36,7 +36,23 @@ import { readCapability } from '../assembly/schema.js';
 export function createTools(ctx, deps) {
   // guard 注册顺序保持现状：createTools 开头、工具数组构造之前（guard 回调闭包依赖 store/config）
   installDifficultyGuard(ctx, deps);
-
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】批归属会话 resolver **注入单点**（AC-3/AC-5）。
+  //   消费面：`lib/tools/shared.js#sessionOf(args, exec, resolveBatchSession)` 的可选第三参数（四级回落）。
+  //   构造面：`deps.resolveBatchSession`（缺省 `undefined` ⇒ 各工具 `sessionOf` 逐字回落原三级路径，
+  //     **零行为变化**——Leader 会话 / 未登记会话 / 未接线部署均不受影响）。
+  //   **本文件不构造第二套判定**：resolver 本体是 `lib/engine/dispatch.js#batchSessionIdOfWorker`
+  //     （唯一 worker→批 反查点，数据源 = 既有 `dispatchIndex`）；装配层（`lib/index.js`）以
+  //     `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)` 注入 —— 闭包捕获**同一个** Map 引用，
+  //     `rebuildDispatchIndex()` / 登记点热更新对该 Map 的写入**无需重挂即被看见**（惰性求值）。
+  //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring`】同一 `dispatchIndex` 引用**同时**经 `deps` 下传
+  //     供**写侧**消费（修复③ 主路）：`lib/tools/member-tools.js#buildDispatchTools` 的 `lane_dispatch` ⇒
+  //     `dispatchLaneCore({ ..., dispatchIndex: deps?.dispatchIndex })` ⇒ 自派成功后同步 `set` 同一 Map
+  //     ⇒ worker 首个治理调用**立即**命中（无需等兜底反查）。读侧（resolver 闭包）与写侧（deps）**同一引用**，
+  //     禁在任一侧另建 Map（单点判定；`mapCtor = ['lib/index.js']`）。
+  //   透传形态 = `deps` 原样下传（各 `build*Tools` / 工具工厂经 `cx.deps` 取用），
+  //     故本处**无需**逐工具改签名 ⇒ 不引入第二个注入面。
+  //   ⚠ `deps.dispatchIndex` 不可序列化（Map 实例）⇒ 只走 JS 侧装配（`lib/index.js` 直传），yml 静态块不适用；
+  //     缺省 `undefined` ⇒ `lane_dispatch` 逐字回原行为（`dispatchLaneCore` 内 `instanceof Map` 守卫，零行为变化）。
   const tools = [
     ...createCoreTools(ctx, deps),
     ...createMailboxTools(ctx, deps),

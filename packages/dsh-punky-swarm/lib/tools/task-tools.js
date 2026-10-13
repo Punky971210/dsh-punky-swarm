@@ -60,6 +60,11 @@ export function poolViewOf(batch) {
 
 export function buildTaskTools(cx) {
   const { deps, store } = cx;
+  // 【批 `d-override-fix-20261011` · lane `e6-index-wiring`】批归属会话 resolver（与 e4 同形；
+  //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、零行为变化）。**只接 `task_pool` 一处**：
+  //   同文件 `batch_tasks_add` / `task_update` 在 `lib/engine/suite.js#SUITE_DENY_TOOLS` 面内
+  //   （成员够不到 ⇒ 无功能缺口，Leader 侧本就以批归属会话调用）⇒ 按最小改动**不改**（e4 D-2 同判）。
+  const { resolveBatchSession } = deps;
   return [
     // ── N1-R4-1a（K1 公共池）：`task_pool` = 只读视图 ────────────────────────────────
     // 定位：池 = `owner == null` 的**筛选视图**（蓝图 §3.2 P-A），**不是容器**（P-B 撞 H3 不取）。
@@ -76,7 +81,7 @@ export function buildTaskTools(cx) {
           + ' 可派发=' + (value.pool ?? []).filter((t) => t.dispatchable).length),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
         const view = poolViewOf(b);

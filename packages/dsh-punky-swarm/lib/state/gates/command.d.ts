@@ -275,6 +275,8 @@ export declare function buildCommand(cx: GatesCx): {
         detail?: undefined;
         problems?: undefined;
     } | {
+        escape?: undefined;
+        escapes?: undefined;
         declared: boolean;
         needHumanEscalation: boolean;
         path: string | null;
@@ -283,93 +285,50 @@ export declare function buildCommand(cx: GatesCx): {
         exitCode: number | null;
         detail: string;
         ok: boolean;
-        escape?: undefined;
         disabledBy?: undefined;
         lane?: undefined;
         token?: undefined;
         source?: undefined;
         problems?: undefined;
     } | {
-        vocabCode: string;
-        escapes: {
-            kind: string;
-            reason: string;
-        }[];
-        contractMissing?: {
-            cause: "undeclared";
-            gateKind: string;
-            layer: string;
-            declared: false;
-            source: string;
-            degrade: {
-                kind: string;
-                note: string;
-            };
-            problems: string[];
-        } | undefined;
-        ok: boolean;
-        declared: boolean;
-        commands: string[];
-        results: {
-            command: string;
-            exitCode: number | null;
-            durationMs: number;
-        }[];
-        outputTruncated: boolean;
-        path: string | null;
-        escape?: undefined;
-        disabledBy?: undefined;
-        code?: undefined;
-        lane?: undefined;
-        command?: undefined;
-        exitCode?: undefined;
-        needHumanEscalation?: undefined;
-        token?: undefined;
-        source?: undefined;
-        detail?: undefined;
-        problems?: undefined;
-    } | {
-        escapes: {
-            kind: string;
-            reason: string;
-        }[];
-        vocabCode?: undefined;
-        contractMissing?: {
-            cause: "undeclared";
-            gateKind: string;
-            layer: string;
-            declared: false;
-            source: string;
-            degrade: {
-                kind: string;
-                note: string;
-            };
-            problems: string[];
-        } | undefined;
-        ok: boolean;
-        declared: boolean;
-        commands: string[];
-        results: {
-            command: string;
-            exitCode: number | null;
-            durationMs: number;
-        }[];
-        outputTruncated: boolean;
-        path: string | null;
-        escape?: undefined;
-        disabledBy?: undefined;
-        code?: undefined;
-        lane?: undefined;
-        command?: undefined;
-        exitCode?: undefined;
-        needHumanEscalation?: undefined;
-        token?: undefined;
-        source?: undefined;
-        detail?: undefined;
-        problems?: undefined;
-    } | {
-        vocabCode?: undefined;
+        escape: Record<string, unknown>;
         escapes?: undefined;
+        declared: boolean;
+        needHumanEscalation: boolean;
+        path: string | null;
+        code: string;
+        command: string;
+        exitCode: number | null;
+        detail: string;
+        ok: boolean;
+        disabledBy?: undefined;
+        lane?: undefined;
+        token?: undefined;
+        source?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: Record<string, unknown>[];
+        escape?: undefined;
+        declared: boolean;
+        needHumanEscalation: boolean;
+        path: string | null;
+        code: string;
+        command: string;
+        exitCode: number | null;
+        detail: string;
+        ok: boolean;
+        disabledBy?: undefined;
+        lane?: undefined;
+        token?: undefined;
+        source?: undefined;
+        problems?: undefined;
+    } | {
+        escape?: undefined;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode: string;
         contractMissing?: {
             cause: "undeclared";
             gateKind: string;
@@ -392,7 +351,267 @@ export declare function buildCommand(cx: GatesCx): {
         }[];
         outputTruncated: boolean;
         path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escape: Record<string, unknown>;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode: string;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: Record<string, unknown>[];
         escape?: undefined;
+        vocabCode: string;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escape?: undefined;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escape: Record<string, unknown>;
+        escapes: {
+            kind: string;
+            reason: string;
+        }[];
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escapes: Record<string, unknown>[];
+        escape?: undefined;
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escape?: undefined;
+        escapes?: undefined;
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
+        disabledBy?: undefined;
+        code?: undefined;
+        lane?: undefined;
+        command?: undefined;
+        exitCode?: undefined;
+        needHumanEscalation?: undefined;
+        token?: undefined;
+        source?: undefined;
+        detail?: undefined;
+        problems?: undefined;
+    } | {
+        escape: Record<string, unknown>;
+        escapes?: undefined;
+        vocabCode?: undefined;
+        contractMissing?: {
+            cause: "undeclared";
+            gateKind: string;
+            layer: string;
+            declared: false;
+            source: string;
+            degrade: {
+                kind: string;
+                note: string;
+            };
+            problems: string[];
+        } | undefined;
+        ok: boolean;
+        declared: boolean;
+        commands: string[];
+        results: {
+            command: string;
+            exitCode: number | null;
+            durationMs: number;
+        }[];
+        outputTruncated: boolean;
+        path: string | null;
         disabledBy?: undefined;
         code?: undefined;
         lane?: undefined;

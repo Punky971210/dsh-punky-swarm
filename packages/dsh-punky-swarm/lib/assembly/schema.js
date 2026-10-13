@@ -24,8 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 
-// ── 能力注册表（12 键：aip/identity/discovery/verify/watch/worktree/budget/trajectory/acps/auditlog/logs/topic）──
-// path = config 取值路径；default = 缺省值（8 键默认开——aip/discovery/verify/watch/worktree/budget/trajectory/auditlog；
+// ── 能力注册表（13 键：aip/identity/discovery/verify/watch/worktree/budget/injectBudget/trajectory/acps/auditlog/logs/topic）──
+// path = config 取值路径；default = 缺省值（9 键默认开——aip/discovery/verify/watch/worktree/budget/injectBudget/trajectory/auditlog；
 //   显式 enabled:false 可逐键关闭；4 键默认关——identity/acps/logs/topic，需显式开启）；
 // consumers = 既有消费点（键路径一致性依据）
 // identity 键：身份体系默认关——config.aip.identity.enabled === true 时
@@ -43,6 +43,12 @@ export const CAPABILITY_REGISTRY = [
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
   { key: 'budget', path: ['capabilities', 'budget'], default: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 }, consumers: ['comms/budget.js + mailbox-tools.js 发送检查'] },
+  // injectBudget 键：注入面字节预算（四层：每源软上限 / 总量硬上限 / head-tail 截断 / 显式省略标记）。
+  //   与上一行 budget 键**语义正交、互不复用**：budget = mailbox 链环防护（hop/round-trip），本键 = 注入文本字节上限。
+  //   默认开 ⇒ 与「零回归靠未超限不动作、不靠默认关」的取值口径一致（无需进测试 OFF_KEYS）。
+  //   阈值取值唯一源 = 本条目；实现侧禁止散落字面量。位宽对齐宿主日志行物理上限（auditlog 的 MAX_LINE_BYTES）。
+  //   消费点：engine/dispatch.js 任务包、tools/handoff-tools.js 交接注入、tools/swarm-comms.js lane 回报。
+  { key: 'injectBudget', path: ['capabilities', 'injectBudget'], default: { enabled: true, perItemBytes: 3072, perBlockBytes: 12288, totalBytes: 32768, headBytes: 2048, tailBytes: 1024 }, consumers: ['comms/inject-budget.js + engine/dispatch.js + tools/handoff-tools.js + tools/swarm-comms.js'] },
   { key: 'trajectory', path: ['capabilities', 'trajectory'], default: TRAJECTORY_DEFAULTS, consumers: ['index.js 桥接订阅'] },
   // logs 键：日志导出工具注册开关——默认关（与 cordis.patch.yml 显式 logs.enabled:true 相合）；
   //   消费点经 readCapability(config,'logs') 缺省读取，显式 enabled:false 可关。
@@ -93,6 +99,55 @@ export function readCapability(config, key) {
   return deepMerge(entry.default, val);
 }
 
+// ── C-5 · 坏配置加载期 fail-closed（消除静默降级）────────────────────────────
+// 存在理由：`capabilities.injectBudget` 的五个阈值此前**无任何校验** ⇒ `runtime.json` 写
+//   `{enabled:true,totalBytes:-1}` 会**通过白名单后静默降级**（`inject-budget.js` 的「无可用阈值 ⇒ 零动作」
+//   是**契约**，故不会报错，只会静默地把整条预算关掉）⇒ 本组校验把该形态改为**可见的拒绝**。
+// 语义边界（**不得混淆**）：本组只管「**坏配置**」；`inject-budget.js` 中「未超限 / 开关关 / 无可用阈值 ⇒
+//   返回入参原值本身、零省略」是**文档化契约**（`:165` 逐字），**不是**本组要消除的对象 —— 该件一字不动。
+//
+// 五个阈值字段（**唯一字段清单**；禁第二套字面量表）。
+export const INJECT_BUDGET_LIMIT_FIELDS = Object.freeze([
+  'perItemBytes',
+  'perBlockBytes',
+  'totalBytes',
+  'headBytes',
+  'tailBytes',
+]);
+
+/**
+ * **单一判定点**（`DEP-N` 值校验）：`injectBudget` 是否为**可用的有限正数阈值**。
+ * 两个调用方共用本函数 ⇒ 启动期与热更通道**同判、文案同源、零漂移**：
+ *   · `validateCapabilities`（本文件；经 `lib/index.js` 装配期 warn）
+ *   · `validateOverlay`（`lib/hot/config-watch.js`；**热更通道**，拒则整份 overlay 不采用）
+ *
+ * 判定口径：
+ *   · `enabled !== true` ⇒ **零校验**（与 DEP-1..DEP-5 同形：禁用能力零校验零开销）；
+ *   · 五字段**逐个**：`!== undefined` 才查（缺省不误伤），须为**有限正数**
+ *     （`0` / 负 / `NaN` / `Infinity` / 字符串 全拒）；文案含**字段名**与**实得值**。
+ * @param {unknown} block `capabilities.injectBudget` 显式声明的值
+ * @returns {string[]} 错误文案（空数组 = 合法）
+ */
+export function injectBudgetValueErrors(block) {
+  const errors = [];
+  if (block === undefined || block === null) return errors;
+  if (typeof block !== 'object' || Array.isArray(block)) {
+    // 非对象（`5` / `"on"` / `true`）：`?.enabled` 取不到 ⇒ 预算会被**静默禁用且无痕**（同族静默面）。
+    errors.push('DEP-6: capabilities.injectBudget must be an object (got ' + JSON.stringify(block) + ')');
+    return errors;
+  }
+  if (block.enabled !== true) return errors;
+  for (const field of INJECT_BUDGET_LIMIT_FIELDS) {
+    const v = block[field];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      errors.push('DEP-6: capabilities.injectBudget.' + field
+        + ' must be a finite positive number (got ' + JSON.stringify(v) + ')');
+    }
+  }
+  return errors;
+}
+
 // ── 校验：仅对显式 enabled 的非法组合报错；禁用能力零校验零开销 ──
 export function validateCapabilities(config = {}) {
   const errors = [];
@@ -133,6 +188,20 @@ export function validateCapabilities(config = {}) {
     if (c.watch.scanIntervalMinutes !== undefined && (!Number.isFinite(c.watch.scanIntervalMinutes) || c.watch.scanIntervalMinutes < 0.1)) {
       errors.push('DEP-5: capabilities.watch.scanIntervalMinutes must be >= 0.1 (got ' + JSON.stringify(c.watch.scanIntervalMinutes) + ')');
     }
+  }
+
+  // DEP-6（包内写作 `DEP-N`）：injectBudget 五阈值在 `enabled === true` 时须为**有限正数**。
+  //   落点理由：该键此前**零校验** ⇒ `totalBytes:-1` 一类坏值通过白名单后被**静默降级**（无任何报错）。
+  //   与 DEP-1..DEP-5 **同形**：仅显式 `enabled === true` 时校验值、字段缺省不误伤、文案 `DEP-6: …(got …)`。
+  //
+  // ⚠ **调用门不得写成 `c.injectBudget?.enabled === true`**（本 lane 自测抓出的真实缺陷，见 progress 03）：
+  //   非对象形态（`injectBudget: 5`）取 `?.enabled` 得 `undefined` ⇒ 门为假 ⇒ **判定点根本看不到它**
+  //   ⇒ 「坏配置被静默吞掉」的原病照旧（`5` 经 `deepMerge` 后同样让预算静默失效）。
+  //   ⇒ 门只按「**是否显式声明**」开：`!== undefined` 即交判定点；`enabled !== true` 的**零校验**语义
+  //     由判定点自己实现（`injectBudgetValueErrors`），**既不误伤禁用态、也不漏放非对象**。
+  //   `null` 不入判定点：`deepMerge(default, null)` 回落到注册表默认（预算照常生效）⇒ 无静默危害，不拒。
+  if (c.injectBudget !== undefined) {
+    errors.push(...injectBudgetValueErrors(c.injectBudget));
   }
 
   // MUTEX：互斥表（当前空表，无天然互斥；心跳/预算/worktree/verify/trajectory/aip 两两可叠加）

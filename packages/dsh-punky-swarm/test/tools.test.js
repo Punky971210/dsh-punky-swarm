@@ -52,8 +52,10 @@ assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置�
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口：发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
 // 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）。
 // 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**）。
+// 【2026-10-13 G-10 修订 · 批 `g10-fix-20261012` · lane `e4-toolface`】+`handoff_accept`
+//   （受限反向声明，常驻注册；「缺省默认开面」的**必然增量** ⇒ 冻结名单须同步，否则本用例红）。
 // 名单来源：`lib/tools/register.js:40` 的合成结果**实测枚举**（core + mailbox + lane + log 四族），非手抄。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length;
 
 test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，计数由派生常量核定）', () => {

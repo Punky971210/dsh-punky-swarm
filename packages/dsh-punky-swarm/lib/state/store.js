@@ -21,6 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import path from 'node:path';
 import fs from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto'; // L7：身份快照 sha256 + 原子写 tmp 唯一 token
 // 【历史·已退役，保留可读】团队资产解析快照写单点（§8③：解析结果落会话级资产解析档 + 批次级指纹引用）——本文件只做**建批侧接线**：
 //   解析 + 写档 + 字段/事件载荷的构建全在 lib/assembly/snapshot.js，store 不复制其语义
 //   【2026-09-27 · 批 3】资产面全量退役 ⇒ 该接线（`import * as snapshot` + 建批侧写档）**已整条删除**。
@@ -38,6 +39,9 @@ import { buildEvents } from './store/events.js';
 import { buildBatch } from './store/batch.js';
 import { buildPlanMutate } from './store/plan-mutate.js';
 import { buildHandoff } from './store/handoff.js';
+// G-10（批 `g10-fix-20261012`）：受限反向声明写入口 —— 「下游经 `handoff_accept` 声明接受后置上游」。
+//   与 `buildHandoff`（提交面）**分工不重叠**：本件只**补声明条目**（不提交、不改任何门判据）。
+import { buildHandoffAccept } from './store/handoff-accept.js';
 import { buildLifecycle } from './store/lifecycle.js';
 import { buildMemberGates } from './store/member-gates.js';
 import { buildMemberExempt } from './store/member-exempt.js';
@@ -86,13 +90,128 @@ function resolveGateEventTypes(evt = EVT) {
     contractMissing: requireEventType(evt, 'EVT_GATE_CONTRACT_MISSING'),
   };
 }
-function atomicWrite(file, data) {
+// ── L7 写路径原子性（批次 `punky-spec-adopt-p2-20261013` / lane `e1-l7-atomic`）────────────
+// 三处改动，**全部落在既有单点内、不新增文件、不接锁**：
+//   ① tmp 名每次调用唯一：原名仅含 `process.pid` ⇒ **同进程并发两次写到同一目标 = 同一 tmp 路径**（互踩：
+//      内容可交错、两次 rename 竞争）。现名追加**每次调用唯一成分**（单调计数 + 随机后缀）。
+//   ② 有界重试 + 显式耗尽：`renameSync` 对**可重试类**错误（EPERM/EBUSY/EACCES）做**有限次退避重试**；
+//      耗尽后**显式抛**（带重试次数与最后错误）。**注意**：`renameSync` 是**同步** API ⇒ 退避必须是
+//      **同步等待**（不能 `await sleep`，那会把落盘点改成异步、破坏既有同步写路径语义）。
+//   ③ 文件身份快照 + 比对纯函数（**只读新增 API**，不触碰既有读路径）。
+// **不变量**：① 原子性不变（目标文件永不为半成品）；② 单写成功路径**逐字不变**（仅在原先「必抛」处
+//   改为「重试后可能成功」⇒ **不引入新失败**）；③ 重试有界且耗尽即抛（禁无限重试、禁静默吞错）。
+//
+// ⚠ **两条必须留在源码里的事实**（防后人误改；本 lane 直读实测）：
+//   (a) 下方 `commitBatch` 的历史注释曾称「与 `lane_claim` 的单写者锁构成双层保证」——**该说法不成立**：
+//       `lib/lock.js`（65 行）是**纯 O_EXCL 锁文件助手**，其 import 点**只有工具面**三处
+//       （`lib/tools/handoff-tools.js:24` / `lib/tools/lane-tools.js:48` / `lib/tools/member-tools.js:23`），
+//       本文件 `atomicWrite` 体内**零 `lock` 调用**。⇒ `lane_claim` 是**逻辑/协议层**锁，`commitBatch` 是
+//       **无锁物理直写**；任何**绕过工具面**直接调 store 写函数的调用方（`member_settle`/`appendEvent`/
+//       `handoff_submit`/`setPhase`/`setMember` 内部路径）**都不被锁挡**。本 lane **不**把锁接进写路径
+//       （那会扩张并发语义）⇒ 该缺口的**可判能力**由 ③ 的读端身份快照承载。
+//   (b) `EPERM` 的两条确切路径（**两种原先都无重试**）：**跨进程** —— 双方 tmp 名不同（含各自 pid）⇒ 不互踩
+//       tmp，但后到的 `renameSync` 可能因目标被另一进程持有句柄而抛；**同进程并发** —— tmp 名**相同** ⇒
+//       **互踩** ⇒ 内容可交错 + 两次 rename 竞争。② 的统一重试覆盖两者。
+
+/** 可重试类错误码（**只覆盖资源竞争类**；其余错误码一律立即上抛，不掩盖真实故障）。 */
+const ATOMIC_WRITE_RETRYABLE = new Set(['EPERM', 'EBUSY', 'EACCES']);
+/** 重试上限（**有界**：总尝试次数 = 该值；耗尽即抛）。 */
+const ATOMIC_WRITE_MAX_ATTEMPTS = 5;
+/** 退避基数（毫秒）：第 n 次重试等待 `BASE * n`（线性退避，上限 `MAX`）。 */
+const ATOMIC_WRITE_BACKOFF_MS = 2;
+/** 退避单次等待上限（毫秒）。 */
+const ATOMIC_WRITE_BACKOFF_CAP_MS = 40;
+
+/** 每次调用唯一成分（单调计数 + 随机后缀）：同进程并发时两次调用的 tmp 名**必不相同**。 */
+let atomicWriteSeq = 0;
+function nextAtomicWriteToken() {
+  atomicWriteSeq += 1;
+  return process.pid + '.' + atomicWriteSeq + '.' + randomUUID().slice(0, 8);
+}
+
+/**
+ * **同步**退避等待。`renameSync` 是同步 API ⇒ 不能 `await`（会把落盘点变异步）。
+ * 优先 `Atomics.wait`（真阻塞、不烧 CPU）；不可用时回落 `Date.now()` 忙等（有界：单次 ≤ `BACKOFF_CAP`）。
+ */
+function sleepSyncSync(ms) {
+  const budget = Math.max(0, Math.floor(ms));
+  if (budget === 0) return;
+  try {
+    const cell = new Int32Array(new SharedArrayBuffer(4));
+    Atomics.wait(cell, 0, 0, budget);
+    return;
+  } catch {
+    const until = Date.now() + budget;
+    while (Date.now() < until) { /* 有界忙等：budget ≤ ATOMIC_WRITE_BACKOFF_CAP_MS */ }
+  }
+}
+
+/**
+ * 原子落盘：写 `<目标名>.<每次唯一 token>.tmp` → `renameSync` 覆盖目标（原子替换，目标永不为半成品）。
+ * 对可重试类错误**有限次退避重试**；耗尽后抛错**带重试次数与最后错误**，并清理本次 tmp。
+ * @param {string} file 目标文件绝对路径
+ * @param {unknown} data 待序列化并落盘的数据
+ * @param {{renameFn?: (from: string, to: string) => void}} [opts] 可注入缝：
+ *   `renameFn` 缺省 = `fs.renameSync`（**生产路径逐字不变**）；仅供单测注入故障以实测重试语义。
+ */
+export function atomicWrite(file, data, { renameFn } = {}) {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(dir, '.' + path.basename(file) + '.' + process.pid + '.tmp');
+  // tmp 名**一次生成、重试期间复用**（不在重试中换名 ⇒ 失败路径不遗留多份 tmp）
+  const tmp = path.join(dir, '.' + path.basename(file) + '.' + nextAtomicWriteToken() + '.tmp');
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file); // Windows: MoveFileEx REPLACE_EXISTING
+  const rename = typeof renameFn === 'function' ? renameFn : fs.renameSync;
+
+  let lastErr = null;
+  for (let attempt = 1; attempt <= ATOMIC_WRITE_MAX_ATTEMPTS; attempt++) {
+    try {
+      rename(tmp, file); // Windows: MoveFileEx REPLACE_EXISTING
+      return;             // 成功路径：与改动前**逐字同效**（仅 tmp 名不同）
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code;
+      if (!ATOMIC_WRITE_RETRYABLE.has(code) || attempt >= ATOMIC_WRITE_MAX_ATTEMPTS) {
+        try { fs.unlinkSync(tmp); } catch { /* best-effort：目标文件不受影响 */ }
+        // 不可重试类 ⇒ 立即上抛原错误（**不掩盖**）；耗尽 ⇒ 显式带次数与最后错误
+        if (!ATOMIC_WRITE_RETRYABLE.has(code)) throw e;
+        const err = new Error('atomicWrite 重试耗尽（尝试 ' + attempt + '/' + ATOMIC_WRITE_MAX_ATTEMPTS
+          + '）：最后错误 ' + code + ' ' + String((lastErr && lastErr.message) || lastErr));
+        err.code = code;
+        err.attempts = attempt;
+        err.retryExhausted = true;
+        err.lastError = lastErr;
+        err.target = file;
+        throw err;
+      }
+      sleepSyncSync(Math.min(ATOMIC_WRITE_BACKOFF_MS * attempt, ATOMIC_WRITE_BACKOFF_CAP_MS));
+    }
+  }
 }
+
+/**
+ * **文件身份快照**（只读）：`{size, mtimeMs, sha256, path}` —— 供读端判「读到的文件是否已被换过」。
+ * 与 `atomicWrite` 的原子替换配合：读者读前取一份、读后取一份，`fileIdentityChanged` 为 true ⇒
+ * 「本次读取期间文件被换过，读到的可能是旧/新混合视图」，调用方可据此重读（**可判**，非强制）。
+ * @param {string} file 文件绝对路径
+ */
+export function fileIdentityOf(file) {
+  const st = fs.statSync(file);
+  const sha256 = createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  return { path: file, size: st.size, mtimeMs: st.mtimeMs, sha256 };
+}
+
+/**
+ * 身份比对**纯函数**：判「文件是否已被换过」。
+ * 口径（**显式**）：内容身份 = `size` **且** `sha256`；`mtimeMs` 仅作辅助信号、**不单独判不等**
+ * （同内容重写会变 mtime）。⇒ 返回 true 的条件 = 一方缺位 ∨ size 不等 ∨ sha256 不等。
+ * @param {{size?: number, sha256?: string}|null|undefined} before
+ * @param {{size?: number, sha256?: string}|null|undefined} after
+ */
+export function fileIdentityChanged(before, after) {
+  if (!before || !after) return true;
+  return before.size !== after.size || before.sha256 !== after.sha256;
+}
+
 
   // ── V-4 统一写盘点（e2-gov-repair）：逃生/降级载荷 → 批次事件 ──────────────────────────
   // 时序：在 member.settled 之前、统一 atomicWrite 之内 ⇒ 「门禁已判 + 留痕同批落盘」不可分割。
@@ -120,7 +239,8 @@ function composeStore(cx) {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
     addPoolTasks, addTaskEdges,
-    recordHandoff, markManagerRaised, revokeLaneExempt, recordGovernanceRefusal,
+    recordHandoff, recordHandoffAccept, markManagerRaised, revokeLaneExempt, recordGovernanceRefusal,
+    declaredInboundEdgesOf, // 【G-10 · e3-toolface】门禁侧「已声明入边」单点（只读透出，见下方导出注释）
     readChains, updateChains, updateLaneProgress,
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, artifactsDirOf,
@@ -134,6 +254,14 @@ function composeStore(cx) {
     addPoolTasks, // N1-R4-1c：池内追加任务（图变更唯一写入口；单次 atomicWrite，只增不改）
     addTaskEdges, // N1-R4-2：池内任务**加边**（只增不删；已派发即冻结 K1；单次 atomicWrite）
     recordHandoff, // P1 交接门：交接记录唯一写入入口（`batch.handoffs` + `lane.handoff` 事件同一次 atomicWrite）
+    // G-10：受限反向声明唯一写入入口（**写方 = 下游**）—— 只补 `handoffs[to]` 声明条目 + `plan.mutated{accepts}`
+    //   留痕 + `planRevision+1`；**不写 `deps`**、不提交任何交接、不改任何门判据（净收紧：补一条声明义务）。
+    recordHandoffAccept,
+    // 【G-10 修复 · lane `e3-toolface`】门禁侧「已声明入边」单点（`deps(lane) ∪ {handoffs[lane].from}`，逐边带来源）
+    //   **只读透出**给读端：唯一读端 = `lib/tools/handoff-tools.js#handoff_view`（修前该视图只读 `deps` ⇒
+    //   `handoff_accept` 声明的入边在视图**结构性不可见** ⇒ 视图与门禁口径分叉，`L-AC-9` fail）。
+    //   本键即 `lib/state/gates.ts` 透出的**同一函数实例**（红线 C-4 单点判定：视图与门禁同源，禁第二套）。
+    declaredInboundEdgesOf: gates.declaredInboundEdgesOf,
     markManagerRaised, // Manager 拉起登记唯一入口（批 event + 批字段，不改成员状态）
     revokeLaneExempt, // longrun 豁免撤销唯一入口（显式调用；不改成员状态）
     recordGovernanceRefusal, // 违规计数记录 + 窗口评估 + 升级（批事件流单一事实源）
@@ -183,11 +311,16 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   Object.assign(cx, buildPaths(cx));
   const { batchFile } = cx;
   // 构建顺序 = 依赖拓扑序（子模块 ← 组合器，单向依赖；各 builder 仅定义函数、无副作用）
-  for (const build of [buildEvents, buildBatch, buildPlanMutate, buildHandoff, buildLifecycle,
+  for (const build of [buildEvents, buildBatch, buildPlanMutate, buildHandoff, buildHandoffAccept, buildLifecycle,
     buildMemberExempt, buildMemberGates, buildMember, buildGovernance]) Object.assign(cx, build(cx));
 
   // 批次 JSON 的**统一落盘点**（单写者真源）：凡以 `batchFile(sessionId, batchId)` 定位的写路径
-  //   一律经此函数落盘 ⇒ 写面单点不分散（与 lane_claim 的单写者锁构成双层保证）。
+  //   一律经此函数落盘 ⇒ 写面单点不分散。
+  //   ⚠ **订正（L7 / lane `e1-l7-atomic`，直读实测）**：本注释原称「与 `lane_claim` 的单写者锁构成
+  //   **双层保证**」——**该说法不成立，已据实更正**：`lib/lock.js` 的 import 点**只有工具面三处**
+  //   （`lib/tools/handoff-tools.js:24` / `lib/tools/lane-tools.js:48` / `lib/tools/member-tools.js:23`），
+  //   `atomicWrite` 体内**零 `lock` 调用** ⇒ `lane_claim` 是**逻辑层**锁、本函数是**无锁物理直写**；
+  //   **绕过工具面**直接调 store 写函数的路径**都不被锁挡**。详见上方 L7 段 `(a)`。
   function commitBatch(sessionId, batchId, batch) {
     atomicWrite(batchFile(sessionId, batchId), batch);
   }

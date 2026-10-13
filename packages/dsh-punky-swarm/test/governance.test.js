@@ -644,3 +644,98 @@ test('两阶段锚定：只读侦察 → 写入判据 → 全工具面开放（C
   assert.ok(call('write', {}).includes('必须先 wave_plan 建批'));
   assert.equal(call('pwsh', { command: 'git log -n 3 --oneline' }), undefined);
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 双轴判据（难度轴 `derived` + 通道轴 `derivedChannel`）· D 场景三例
+// 判据源：`plan/scope.md` AC-3（关键格①）/ AC-4 / AC-7（关键格②）/ AC-8（Q-5）
+// 归属批次：`d-override-fix-20261011`（lane `e3-tests`；被检实现归 `e1-engine`）
+// 口径：D ≡ **建批档 + team 通道**；**D 不入难度轴**（难度轴仍为 A/B/C）
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** D 场景夹具：真 store + 真工具面（与既有 `makeGuarded` 同源形态，写点全落隔离临时根）。 */
+function makeDAxisHarness(prefix, sessionId) {
+  const root = tempRoot(prefix);
+  const st = createStore(root);
+  const { tools: tls } = makeGuarded({ store: st, root });
+  const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
+  return { st, by, ctx: { agent: { session: { id: sessionId } } } };
+}
+
+test('AC-3（关键格①）双轴判据：声明 D + durableSeats:true ⇒ derived=C / derivedChannel=team / override=false / overrideKind=null', async () => {
+  const h = makeDAxisHarness('punky-gov-daxis-', 'sess-d-axis');
+  // 关键点：**不填任何 C 判据布尔**（parallel/multiRole/gate/recoverable 全缺省），且 rationale 不含
+  //   A/B/C 特征词 —— 这正是「原实现 D 恒 override=true ⇒ 合规 D 被误拒、只能塞话术」的修复面。
+  const rationale = '只读侦察：本任务需 durable 席位与 team 通道的事件队列交接（而非 subagent 的一次性派发）；'
+    + '通道方向与上限：不泛化为全批，团队面缺失时显式降级为 C';
+  const r = await h.by.assign_check.execute(
+    { difficulty: 'D', durableSeats: true, needIsolation: true, rationale, scope: 'full' }, h.ctx);
+
+  assert.equal(r.derived, 'C', '难度轴：durableSeats=true ⇒ 机械推导 C（D 不入难度轴）');
+  assert.equal(r.derivedChannel, 'team', '通道轴：durableSeats=true ⇒ team（独立推导，与难度轴无耦合）');
+  assert.equal(r.override, false, 'AC-3 关键格①：D 正当形态 ⇒ 回归常规路径（不得记偏离）');
+  assert.equal(r.overrideKind, null, 'AC-3：overrideKind 恒 null（闭集 schema 已登记该键）');
+  assert.equal(r.allowed, false, 'D 与 C 同属建批档 ⇒ 不得直做');
+  assert.deepEqual(r.next, ['wave_plan'], 'D 档下一步仍要求建批');
+  assert.equal(r.notice, '', '常规路径不得夹带任何提示/告警');
+
+  const g = h.st.readGovernance('sess-d-axis');
+  assert.equal(g.lastAssign.difficulty, 'D', '档位面照写 D');
+  assert.equal(g.lastAssign.derived, 'C');
+  assert.equal(g.lastAssign.derivedChannel, 'team', 'AC-6：lastAssign 逐键落 derivedChannel');
+  assert.equal(g.lastAssign.overrideKind, null, 'AC-6：lastAssign 逐键落 overrideKind');
+  assert.equal(g.pendingBatch, true, 'D 档未建批 ⇒ 照旧挂 pendingBatch（门禁 2 生效面）');
+  const tail = g.history[g.history.length - 1];
+  assert.equal(tail.derivedChannel, 'team', 'AC-6：history 末条含 derivedChannel');
+  assert.equal(tail.override, false);
+});
+
+test('AC-7（关键格②）+AC-4：声明 D 而通道轴=dispatch ⇒ 拒（逐项列缺 + 两条正范式 + 零写入）；补全通道三要素 ⇒ 放行 override=true / overrideKind=channel', async () => {
+  const h = makeDAxisHarness('punky-gov-dchan-', 'sess-d-chan');
+  // ① 无通道依据（只写「按团队方案推进」这类空话 ⇒ 要素②③ 缺）⇒ 拒
+  const emptyTalkRationale = '测试：本次直接评 D 档建批，按团队方案推进';
+  await assert.rejects(
+    () => h.by.assign_check.execute({ difficulty: 'D', rationale: emptyTalkRationale, parallel: true }, h.ctx),
+    (e) => {
+      const m = String(e?.message ?? e);
+      assert.match(m, /GATE_DIFFICULTY_MISMATCH/, '缺通道依据须拒（复用既有码）');
+      assert.match(m, /通道偏离须解释/, '文案须分叉说「通道偏离」（存量 tier 支文案不得混用）');
+      assert.match(m, /② 为何 durable 而非 subagent/, '缺项须逐项列出（② 缺）');
+      assert.match(m, /③ 通道方向与上限/, '缺项须逐项列出（③ 缺）');
+      assert.match(m, /durableSeats:true/, '正范式①：给出可照做的重评调用');
+      assert.match(m, /显式降级为 C/, '正范式②：给出显式降级出口（禁静默降级）');
+      return true;
+    });
+  assert.equal(h.st.readGovernance('sess-d-chan').lastAssign, null, 'AC-7：拒态零治理写入（lastAssign 不落盘）');
+
+  // ② 补齐通道三要素 ⇒ 放行，且为「唯一保留的偏离」：override=true / overrideKind='channel'
+  const rationale = '测试：本任务引用 team 通道与 durable 席位面；为何 durable 而非 subagent（需事件队列交接，'
+    + '而非一次性派发）；通道方向与上限：不泛化为全批，team 面缺失须显式降级为 C';
+  const r = await h.by.assign_check.execute({ difficulty: 'D', rationale, parallel: true }, h.ctx);
+  assert.equal(r.derivedChannel, 'dispatch', 'durableSeats 缺省 ⇒ 通道轴 dispatch（偏离根因）');
+  assert.equal(r.derived, 'C', 'parallel=true ⇒ 难度轴 C（与通道轴独立）');
+  assert.equal(r.override, true, 'D 通道变体 = 唯一保留的偏离');
+  assert.equal(r.overrideKind, 'channel', 'overrideKind 分叉到 channel（不得误记为 tier）');
+  const g = h.st.readGovernance('sess-d-chan');
+  assert.equal(g.lastAssign.overrideKind, 'channel', '落盘逐键一致');
+  assert.equal(g.lastAssign.derivedChannel, 'dispatch');
+});
+
+test('AC-8（Q-5 留痕提示）：fixedRole=true 而判 B ⇒ 不硬拒 + notice 含 WARN_DTIER_FIXED_ROLE_AS_LOWER + 档位照写', async () => {
+  const h = makeDAxisHarness('punky-gov-dfixed-', 'sess-d-fixed');
+  // 偏离支（声明 B 而机械推导 C）仍按存量语义过**原三要素**：needIsolation（① 特征面）/「本例的例外」（②）/「上限」（③）
+  const rationale = '测试：本任务角色与流程固定（三层席位形态）但本次仅单步 needIsolation 调研，'
+    + '本例的例外是固定形态尚未落到席位面；判据偏保守不升档，上限不超过 B';
+  const r = await h.by.assign_check.execute(
+    { difficulty: 'B', fixedRole: true, needIsolation: true, rationale, scope: 'full' }, h.ctx);
+
+  assert.match(String(r.notice ?? ''), /WARN_DTIER_FIXED_ROLE_AS_LOWER/, 'Q-5：固定形态判低档须留痕提示码');
+  assert.match(String(r.notice ?? ''), /固定任务形态/, '提示须点明成因（固定任务形态）');
+  assert.match(String(r.notice ?? ''), /D（team 席位/, '提示须给正解：固定任务宜评 D（team 席位）');
+  assert.match(String(r.notice ?? ''), /不硬拒/, '须显式声明「首期仅留痕提示，不硬拒」');
+  assert.equal(r.difficulty, 'B', '不硬拒：声明档位照写（未被改写）');
+  const text = h.by.assign_check.output.render({}, r)[0].text;
+  assert.match(text, /⚠ WARN_DTIER_FIXED_ROLE_AS_LOWER/, 'render 须以 `⚠ ` 前缀外显（工具行可见）');
+  const g = h.st.readGovernance('sess-d-fixed');
+  assert.equal(g.lastAssign.difficulty, 'B', 'AC-8：lastAssign.difficulty 保持 B');
+  assert.equal(g.pendingBatch, false, 'B 档不挂批锁');
+});

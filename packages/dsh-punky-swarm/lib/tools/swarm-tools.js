@@ -27,7 +27,7 @@ import { REPORT_CHANNEL } from '../engine/dispatch.js';
 //   仅为停用跳过留痕带回幂等键第三元（`(lane, settleId)` 可核；不引入新口径）。
 import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL, settleIdOf } from '../engine/auto-settle.js';
 import { readLiveConfig } from './tier-gate.js';
-import { reportTargetOf, deliverSwarmMessage, appendSwarmEventOf, WAKE_TYPES, wakeLeaderForReport, UNBOUND_BATCH_KEY } from './swarm-comms.js';
+import { reportTargetOf, deliverSwarmMessage, appendSwarmEventOf, budgetSummaryForReport, WAKE_TYPES, wakeLeaderForReport, UNBOUND_BATCH_KEY } from './swarm-comms.js';
 
 export function buildSwarmTools(cx) {
   const { ctx, deps, store, root } = cx;
@@ -39,7 +39,7 @@ export function buildSwarmTools(cx) {
       output: {
         // `wake` 为新增键 ⇒ **必须**同步声明（`additionalProperties:false`！）否则宿主判 `invalid output` **假失败**，
         //   且被 `test/tool-schema-conformance.test.js` 的 TSC-1 判违规（同类真实先例：`handoff_submit` 的 `code:null`）。
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"type":{"type":"string","required":true},"delivered":{"type":"boolean","required":true},"unbound":{"type":"boolean"},"eventWritten":{"type":"boolean"},"notice":{"type":"string"},"wake":{"type":"object","additionalProperties":true},"settle":{"type":"object","additionalProperties":true}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"type":{"type":"string","required":true},"delivered":{"type":"boolean","required":true},"unbound":{"type":"boolean"},"eventWritten":{"type":"boolean"},"notice":{"type":"string"},"wake":{"type":"object","additionalProperties":true},"settle":{"type":"object","additionalProperties":true},"omissions":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
         render: (_args, v) => TEXT_OUTPUT('swarm.report → Leader（' + v.batchId + '/' + v.lane + '，' + v.type + '）'
           + (v.unbound ? ' [unbound: best-effort]' : '')
           // 【批 `lane-wake-addressing-fix-20261009`】**U-09 同批修（纯可见性）**：唤醒结果此前只进返回值、
@@ -47,11 +47,20 @@ export function buildSwarmTools(cx) {
           //   本行**只读**既有返回键 `wake`（该键已在 `output.schema` 与返回对象内）⇒ 返回键集零变更
           //   （约束 C-4：`additionalProperties:false` 下不得新增键）。
           + (v.wake ? '\n唤醒：woke=' + String(v.wake.woke === true) + '（reason=' + String(v.wake.reason ?? '') + '）' : '')
-          + (v.settle ? '\n自动结算：' + String(v.settle.action ?? '') + (v.settle.reason ? '（' + v.settle.reason + '）' : '') : '')),
+          + (v.settle ? '\n自动结算：' + String(v.settle.action ?? '') + (v.settle.reason ? '（' + v.settle.reason + '）' : '') : '')
+          // 注入面省略事实（本工具的 `omissions` 键已同步声明于 output.schema）——注入文本自带标记，
+          //   此处再落一行汇总，使「哪个面省略了多少」不必反解标记即可读。
+          + ((v.omissions ?? []).length ? '\n省略：' + (v.omissions ?? []).map((o) => o.surface + ' ' + o.omittedBytes + 'B').join(', ') : '')),
       },
       async execute(args, exec) {
         const tgt = reportTargetOf(store, exec, args);
-        const delivered = deliverSwarmMessage(root, tgt, REPORT_CHANNEL.leader, args, args.type);
+        // 面 C · 层①单条目（`wake.summary`）：摘要**在投递前**按单条目层收窄，且收窄结果**同源**用于
+        //   ① mailbox 消息体（下方 `deliverSwarmMessage`）② 唤醒消息体（`wakeLeaderForReport` 的 `summary`）
+        //   ⇒ 两处共用同一份收窄文本，禁两套口径。未超限 ⇒ 摘要原值、omissions 空（零回归）。
+        const summaryBud = budgetSummaryForReport(readLiveConfig(deps), args.summary);
+        const injectCfg = summaryBud.injectBudget;
+        const budgetedArgs = summaryBud.summary === args.summary ? args : { ...args, summary: summaryBud.summary };
+        const delivered = deliverSwarmMessage(root, tgt, REPORT_CHANNEL.leader, budgetedArgs, args.type);
         const eventWritten = appendSwarmEventOf(store, tgt, EVT.EVT_SWARM_REPORT, args.type);
         // P3a 兼底路（规格 §2）：`settle-request` = 显式交付意图 ⇒ 触发**同一**自动结算判定器。
         //   定位说明：主路 = 宿主 `subagent/end`（`lib/index.js` 装配期 `{global:true}` 订阅），
@@ -127,9 +136,29 @@ export function buildSwarmTools(cx) {
           ? wakeLeaderForReport(ctx, {
             callerSessionId: tgt.caller, leaderSessionId: tgt.wakeSessionId ?? tgt.sessionId,
             batchId: tgt.batchId, lane: tgt.lane, type: args.type,
-            summary: args.summary, artifactPath: args.artifactPath ?? null,
+            summary: budgetedArgs.summary, artifactPath: args.artifactPath ?? null,
+            // 面 C · 层②总量（`wake.total`）所需阈值：由本处单点从唯一取值源读出后传入
+            //   （`leaderWakeMessageOf` 只消费、不读配置；两路唤醒共用同一判定，禁第二套口径）。
+            injectBudget: injectCfg,
           })
           : { attempted: false, woke: false, reason: 'type-not-in-wake-set', merged: 0 };
+        // 面 C 省略事实汇总：层①（摘要，本处）+ 层②（唤醒消息体，由唤醒单点回传）。
+        const omissions = [...summaryBud.omissions, ...(Array.isArray(wake?.omissions) ? wake.omissions : [])];
+        // ── 省略事实的**唯一事件发射点**（本批唯一）────────────────────────────────────────────
+        //   位置：在「消息已投递 + `swarm.report` 已落 + 唤醒已尝试」之后 ⇒ 留痕失败**不拖累**
+        //   回报的投递事实（同 `auto.settle.skipped` 的观察者纪律）；无批次可解析 ⇒ 无事件面，
+        //   与 `appendSwarmEventOf` 同判据（不静默：`omissions` 仍在返回值与渲染面回显）。
+        //   载荷 = `{surface, omittedBytes, keptBytes}`；**`type` 键承载事件名，载荷不得占用**。
+        //   注：本事件与既有「步数预算」「链环防护」两个预算族**语义正交**（后二者的常量名在
+        //   `lib/state/event-types.js` 内**逐字未改**，本批零触碰）；前缀刻意不用 `budget.`（面板
+        //   `/^budget\./` 分类器会误标为「超预算」）。
+        for (const o of (tgt.batchId && tgt.sessionId ? omissions : [])) {
+          try {
+            store.appendEvent(tgt.sessionId, tgt.batchId, EVT.EVT_INJECT_OMITTED, {
+              surface: o.surface, omittedBytes: o.omittedBytes, keptBytes: o.keptBytes,
+            });
+          } catch { /* 留痕失败不拖累回报（消息 + swarm.report 事件已落） */ }
+        }
         return {
           batchId: tgt.batchId ?? UNBOUND_BATCH_KEY, lane: tgt.lane, type: args.type, delivered,
           unbound: !tgt.bound, eventWritten,
@@ -138,6 +167,7 @@ export function buildSwarmTools(cx) {
               + (delivered ? '已投递' : '未投递（无可用会话）') + '，批次事件' + (eventWritten ? '已落' : '未落（未给出可解析的 batchId；如需事件面请带 batchId 重发）'),
           } : {}),
           wake,
+          omissions,
           ...(settle ? { settle: { action: settle.action, ok: settle.ok, reason: settle.reason, status: settle.status } } : {}),
         };
       },

@@ -43,6 +43,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END, AUTO_SETTLE_TRIGGERS } fro
 import {
   EVT_BATCH_PHASE, EVT_BATCH_ABORT_DANGLING, EVT_MEMBER_SETTLED,
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
+  EVT_MEMORY_STALE_RECOMMENDED, // L9：终态收口的批级留痕（本批 e4-l9-memorysrc 新增）
 } from '../lib/state/event-types.js';
 import { threeTierTasks, seedArtifacts, assessC, assemblyCtxOpts } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
@@ -244,8 +245,13 @@ test('E1：abort 有悬挂成员 ⇒ 复用 batch.abort_dangling（事件 + 回�
   assert.deepEqual(dg[0].danglingLanes, ['e1', 'a1']);
   assert.equal(dg[0].count, 2);
   const newEvs = store.readBatch(SESS_ID, 'b-dg').events.slice(evLen);
-  assert.deepEqual(newEvs.map((e) => e.type), [EVT_BATCH_PHASE, DANGLING_EVT],
-    'abort 只多落「相位迁移 + 悬挂告警」两条，零成员迁移事件');
+  // 【L9 记忆溯源（批 `punky-spec-adopt-p2-20261013` 的 `e4-l9-memorysrc`）】**必要同步**：
+  //   `aborted` 是**终态收口** ⇒ `setPhase` 的终态分支新增落一条 `memory.stale.recommended`
+  //   （**批级**事件：载荷 `{phase,count,lanes,manifest,executor,reversible,...}`，**不含 lane 成员态迁移**）。
+  //   ⇒ 本断言的**语义**（「零**成员迁移**事件」）**未变**，只是**精确序列**多了这一条批级留痕；
+  //   与 12→13 / 8→9 同类，属「精确全集断言遇新增合法事件」的**被动同步**，非放宽判据。
+  assert.deepEqual(newEvs.map((e) => e.type), [EVT_BATCH_PHASE, EVT_MEMORY_STALE_RECOMMENDED, DANGLING_EVT],
+    'abort 只多落「相位迁移 + 记忆待抑制建议 + 悬挂告警」三条，零成员迁移事件');
   assert.deepEqual(lanesOf(store, 'b-dg'), lanesBefore, '成员状态逐字未变');
 });
 

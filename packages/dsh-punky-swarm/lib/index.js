@@ -43,7 +43,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 // 【批 `lane-wake-mainpath-fix-20261010` · W-3】唤醒寻址的两个取值口 = `lib/engine/dispatch.js` 的**唯一解析单点**
 //   （§约束 2 / C-2：本文件**不得**自写 `ownerSessionId` 字段名；重建用 `ownerSessionIdOf`，唤醒本通用
 //   `wakeAddressOf`（含 C-3 回退，禁在调用点直连 `??`——空串会被 `??` 放行））。
-import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf } from './engine/dispatch.js';
+import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
@@ -299,7 +299,24 @@ export const apply = (ctx, config = {}) => {
       return config;
     }
   };
-  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current });
+  // ── 批归属会话解析索引（读侧骨架）────────────────────────────────────────────────────
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind` · 由本 lane 交付的写域外接线补丁】
+  //   本声明由下方 `:534` 原址**前移**到此处：`createTools` 的 `resolveBatchSession` 需要捕获它的**引用**
+  //   （闭包惰性求值 ⇒ 填充时机无关；但声明必须早于 `createTools` 的求值点，否则 TDZ）。
+  //   语义一字不动：仍是同一个 `Map`，仍由下方 `rebuildDispatchIndex()` 启动重建、登记点热更新填充。
+  const dispatchIndex = new Map();
+
+  // 工具表：deps 注入批归属 resolver（缺省不可用 ⇒ `sessionOf` 逐字回落原三级路径，零行为变化）。
+  //   resolver 本体 = `lib/engine/dispatch.js#batchSessionIdOfWorker`（唯一 worker→批 反查点，
+  //   **不建第二套索引**）；此处只做**接线**（构造闭包），不自造判定。
+  //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring` · 解除 dormant】接线改用**新签名**外壳
+  //   `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`：热路径短路仍走既有 `batchSessionIdOfWorker`；
+  //   miss 时经 `laneBindingOf` 反查事件流并**回填同一 `dispatchIndex`**（兜底路 = 跨进程 / 历史批 / 漏登记 / 热更窗口）。
+  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:134` / `:307`）⇒ **零新增捕获**、不挂全局。
+  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
+    dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
+    // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
+    resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) });
   tools.register();
 
   // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
@@ -531,7 +548,6 @@ export const apply = (ctx, config = {}) => {
   //   workerSessionId → { sessionId, batchId, lane }——从全部批次事件 member.dispatch 幂等重建
   //   （镜像 trajectory.js rebuildFromEvents 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
   //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（安全侧）。
-  const dispatchIndex = new Map();
   const rebuildDispatchIndex = () => {
     dispatchIndex.clear();
     let n = 0;

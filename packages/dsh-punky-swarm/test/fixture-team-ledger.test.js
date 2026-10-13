@@ -79,6 +79,11 @@ const WITH_DEFAULT_TEAM_ALLOWLIST = [
   // G7 下沉（2026-09-22）：两文件改为委托 helpers/dispatch-fixture.mjs ⇒ 不再直接命中（使用者 = helper 本体）
   'governance.test.js',
   'helpers/dispatch-fixture.mjs', // G7 下沉（2026-09-22）：dispatch 面统一 harness——建批是手段，不断言 team 门禁
+  // P2 收口（2026-10-13 · L9 `e4-l9-memorysrc`）：新测试件同样以 `withDefaultTeam` 作**手段**，
+  //   被检面是 L9 收口（清单落批次产物根 + `memory.stale.recommended` 留痕事件），**非** team 标签门禁
+  //   ⇒ 按本名单机制**显式登记**（形态⑤：名单式白名单；登记是被审阅过的决定，不是沉默）。
+  //   ⚠ 位置须遵本名单的**字典序**：`memory-` < `merge-`（第 3 字符 `m` < `r`）⇒ 本项在 `merge-agent` **之前**。
+  'memory-stale-recommended.test.js',
   'merge-agent.test.js',
   'mode-gate.test.js',
   'resume.test.js',

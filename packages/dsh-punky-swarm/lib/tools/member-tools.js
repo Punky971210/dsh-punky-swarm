@@ -30,6 +30,9 @@ import {
 
 export function buildLaneTools(cx) {
   const { deps, store, root } = cx;
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】批归属会话 resolver（注入单点，
+  //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、零行为变化）。
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "lane_claim",
@@ -41,7 +44,7 @@ export function buildLaneTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, 'lane 锁认领（lane_claim）'); // 模式门（E 阶段）：非生效模式不得落锁（零治理写入），先于取锁
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         const r = await lock.acquire(lockPath(root, sessionId, args.batchId, args.lane), { waitMs: args.waitMs ?? 0, force: args.force === true });
         if (!r.ok) return { ok: false, conflict: true, reason: 'lane locked' };
         return { ok: true, token: r.token };
@@ -57,7 +60,7 @@ export function buildLaneTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, 'lane 锁释放（lane_release）'); // 模式门（E 阶段）：非生效模式不介入治理面（认领侧同样被门），先于释放
-        return lock.release(lockPath(root, sessionOf(args, exec), args.batchId, args.lane), args.token);
+        return lock.release(lockPath(root, sessionOf(args, exec, resolveBatchSession), args.batchId, args.lane), args.token);
       },
     }),
     defineTool({
@@ -69,7 +72,7 @@ export function buildLaneTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' settled -> ' + value.status),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1（Q2=B 收窄）：写成员状态 = 调用方自己 C 档，或该批已登记的 Manager
         const b = store.setMember(sessionId, args.batchId, args.lane, args.status, args.note ?? null);
         // 【G-02 死调用清退 · 2026-09-18】原此处调 `advanceChainAfterSettle`（结算事实落盘后触发链推进）。
@@ -84,6 +87,7 @@ export function buildLaneTools(cx) {
 
 export function buildDispatchTools(cx) {
   const { ctx, deps, store, root } = cx;
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "lane_dispatch",
@@ -96,7 +100,7 @@ export function buildDispatchTools(cx) {
           + '\n' + value.firstLine),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1：与 member_status 同源（内含模式门 E 阶段）
         // P2（2026-09-16，lane e-chain）：**派发核心已抽出**至 `lib/engine/dispatch.js` 的 `dispatchLaneCore`
         //   ——工具面与推进链的自动派发走**同一条**路径（同 Tier3 entry 门、同句柄、同任务包骨架、同
@@ -105,6 +109,7 @@ export function buildDispatchTools(cx) {
         //   两处降级「仅发句柄」分支 **不消费**（句柄须保持有效供人工直派形态）——口径与实现同在核心头注释。
         return await dispatchLaneCore({
           ctx, store, root, liveConfig: readLiveConfig(deps), exec, sessionId,
+          dispatchIndex: deps?.dispatchIndex,   // 修复③：自派写点同步写索引（与读侧同一 Map 引用）
           batchId: args.batchId, lane: args.lane,
           leaderPrompt: args.prompt ?? '', exempt: args.exempt,
         });
@@ -115,6 +120,7 @@ export function buildDispatchTools(cx) {
 
 export function buildMemberStatusTools(cx) {
   const { deps, store } = cx;
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "member_status",
@@ -125,7 +131,7 @@ export function buildMemberStatusTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' status -> ' + value.status),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1（Q2=B 收窄）：写成员状态 = 调用方自己 C 档，或该批已登记的 Manager
         // 撤销与派发两条面互斥（R-5/R-6）：撤销是独立显式动作，携带 status 即拒（零写入）。
         // 撤销走 store.revokeLaneExempt（唯一入口）：删 laneExempt 条目 + lane.exempt.revoked 事件，

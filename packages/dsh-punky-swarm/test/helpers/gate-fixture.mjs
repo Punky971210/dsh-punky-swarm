@@ -161,16 +161,19 @@ export function runLane(store, session, batchId, lane) {
 //   · `assessC` 用 `store.writeGovernance`（`assign_check` 的同一写入函数，同一 `lastAssign` 形状）；
 //   · `registerManager` 直接委托 `store.markManagerRaised`（`batch_phase({manager})` 的唯一入口）。
 
-/** G1 种子：把会话治理状态写成「已评估为 C 档」（等价 `assign_check({difficulty:'C', ...})` 的落盘形态）。 */
+/** G1 种子：把会话治理状态写成「已评估为 C 档」（等价 `assign_check({difficulty:'C', ...})` 的落盘形态）。
+ *  【本批 `d-override-fix-20261011` · AC-6】新增 `derivedChannel` / `overrideKind` 两键 ⇒ 与引擎实际落盘形态
+ *  **字段面一致**（旧种子缺键虽被门禁按缺省读法兼容，但字段面不等价属夹具漂移）。C 档下两键取值 =
+ *  `derivedChannel:'dispatch'` / `overrideKind:null`（C 非 D ⇒ 门禁 5 的 D 分支不可达，语义零变化）。 */
 export function assessC(store, session, { rationale = 'fixture：建批/成员面用例的前置评估（多线并行 ⇒ C 档）', at = new Date().toISOString() } = {}) {
   const prev = store.readGovernance(session);
   const entry = {
     turn: (prev.history?.length ?? 0) + 1,
-    difficulty: 'C', form: 'C', derived: 'C', override: false, at,
+    difficulty: 'C', form: 'C', derived: 'C', derivedChannel: 'dispatch', override: false, overrideKind: null, at,
     reasons: ['fixture：多线并行/多依赖（建批面用例前置）'], rationale,
   };
   const next = store.writeGovernance(session, {
-    lastAssign: { difficulty: 'C', form: 'C', scope: 'full', rationale, derived: 'C', override: false, at, reasons: entry.reasons, execCallsSince: 0 },
+    lastAssign: { difficulty: 'C', form: 'C', scope: 'full', rationale, derived: 'C', derivedChannel: 'dispatch', override: false, overrideKind: null, at, reasons: entry.reasons, execCallsSince: 0 },
     history: [...(prev.history ?? []), entry],
   });
   return next.lastAssign;

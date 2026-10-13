@@ -35,6 +35,10 @@ import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE } from '../engine
 
 export function buildBatchStatusTools(cx) {
   const { ctx, deps, store } = cx;
+  // 【批 `d-override-fix-20261011` · lane `e6-index-wiring`】批归属会话 resolver（**注入单点**；
+  //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、**零行为变化**）。与 e4 已接线的 20 处**同形**，
+  //   不自造第二套回落顺序、不自持索引（resolver 本体 = `lib/engine/dispatch.js#batchSessionIdOfWorker`）。
+  const { resolveBatchSession } = deps;
   return [
     defineTool({
       name: "batch_status",
@@ -55,7 +59,7 @@ export function buildBatchStatusTools(cx) {
         },
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         // D6 批次级派生视图（零写入面纯投影）：取值与探针面**同源**（`laneStateOf` / `isDanglingLane` 两个
         //   单点，均来自 lib/watch/lane-heartbeat.js），本文件不另写任何状态判定。
         //   · lanesState = lane→**成员原态**映射（不取批次档覆盖值）：与 batch.lanes 同为原始态读端，
@@ -106,7 +110,11 @@ export function buildBatchStatusTools(cx) {
 }
 
 export function buildGateTools(cx) {
-  const { store } = cx;
+  const { store, deps } = cx;
+  // 【批 `d-override-fix-20261011` · lane `e6-index-wiring`】批归属会话 resolver（与 e4 同形；
+  //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、零行为变化）——`gate_status` 是**成员可达**工具，
+  //   `member_settle` 拒态文案明确指示 worker 调它做人工核查 ⇒ 未接线时 worker 侧恒拒 `batch not found`。
+  const { resolveBatchSession } = deps;
   return [
     defineTool({
       name: "gate_status",
@@ -117,7 +125,7 @@ export function buildGateTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)' + (value.assembly ? ' · assembly' : '') + (value.manager ? ' · manager=' + value.manager.agentId : '')),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
         const batch = store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);
         const ids = args.lane ? [args.lane] : Object.keys(batch.lanes);

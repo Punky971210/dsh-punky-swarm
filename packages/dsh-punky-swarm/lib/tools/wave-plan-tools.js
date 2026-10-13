@@ -80,14 +80,25 @@ export function buildWavePlanTools(cx) {
         //   未声明（undefined/null）⇒ declared:false ⇒ **不写批次键**（R5-d：存量批零破坏、读端零感知）。
         //   `GATE_CHANNEL_*` 的判据语义、合法值集合、门禁码集合**一字未改**（只做接线，不做语义变更）。
         const channelDecl = normalizeChannelDecl(args.channel, plan.wavePlan.flatMap((w) => w.tasks));
-        // D 档 × channel 一致性**提示**（Q-3=P-3，2026-10-01 裁决）：D = team 方案 ⇒ 建批宜声明
-        //   `channel: team|mixed`。**仅提示、不硬拒** —— 硬拒会与上方 `normalizeChannelDecl` 的通道一致性
-        //   判定构成**双重判定**（违「单点判定」纪律）。载体沿用既有 `plan.warnings` 管道（下方按码映射留痕）；
-        //   未命中 `WARN_EVENT_OF` 的码逐字保持现状（回落 `gate.role_invalid` 事件类型，载荷 `code` 字段可区分，
-        //   与 GAP-S9 既有口径一致，**不新增事件类型**）。硬拦仍只归 `normalizeChannelDecl` 一处。
-        if ((store.readGovernance(sessionId)?.lastAssign?.difficulty ?? null) === 'D'
-          && channelDecl.channel === 'dispatch') {
-          plan.warnings.push({ code: 'WARN_DTIER_CHANNEL_UNDECLARED' });
+        // D 档 × channel 一致性**硬拒 + 显式降级出口**（**本批 Q-4 裁决，2026-10-11**）：原为「仅提示」
+        //   （Q-3=P-3 / 2026-10-01 裁决曾 push 一个「D 档 × 通道未声明」告警码）—— **该码已停止发射**
+        //   （判据源 AC-11：本文件内该码字面量零残留；历史登记面另在 `scripts/audit/**` 可留），
+        //   若不同处改判将留下「提示」与「硬拒」**两条互斥口径**，故同处改判为硬拒。动机链保留：D ≡
+        //   **建批档 + team 通道**（`discipline.md` §0p 十四）⇒ 通道面为 `dispatch`（含**未声明**归一为 dispatch）
+        //   即与本会话声明的 D 不自洽，必须拒建批并给**两条正范式**，不得静默降级。
+        //   ⚠ 与上方 `normalizeChannelDecl`（:82）**不重叠**：本判定读**档位声明**（`lastAssign.difficulty`），
+        //     `normalizeChannelDecl` 读 **lane roster 分布** ⇒ 两条判据作用于**不同输入**，非双重判定
+        //     （「单点判定」纪律：同一判据不得两处判）。
+        //   ⚠ 位置：**必须**在 `normalizeChannelDecl`（:82）之后、`createBatch` 之前 ⇒ 拒时**零批次 JSON 落盘**、
+        //     `pendingBatch` 锁保留（Leader 改声明/重评后可直接重试）。
+        const govD = store.readGovernance(sessionId)?.lastAssign ?? null;
+        if (govD?.difficulty === 'D' && channelDecl.channel === 'dispatch') {
+          throw new Error('GATE_DIFFICULTY_CHANNEL_UNRESOLVED: 本会话声明 difficulty=D（team 通道档），'
+            + '而本批 channel=' + (channelDecl.declared ? "'dispatch'" : '未声明（归一为 dispatch）') + ' —— **D 与通道面不一致，拒建批**。'
+            + '两条正范式：① 确需 durable 席位 ⇒ 保持 { difficulty:"D", durableSeats:true } 并以 channel:"team"|"mixed" 建批'
+            + '（每条 lane 须写非空 roster，见 lib/wave-plan.js#normalizeChannelDecl）；'
+            + '② 确属引擎自派 worker ⇒ 显式降级：重评 assign_check({ difficulty:"C", rationale:"<写明降级原因>", scope:"full" })'
+            + ' 后以 channel:"dispatch" 建批（禁静默降级，同源 discipline.md §0b 十四⑤）。');
         }
         // 批次装配门禁（建批时刻，validateWavePlan 后、createBatch 前）：**含 audit 层的三层批**必须携带
         // 批次级装配声明 assembly（auditLane 必填；managerPlan **缺省 = raise**）。拒建批（throw：GATE_ROLE_ASSEMBLY_MISSING 缺声明 /
