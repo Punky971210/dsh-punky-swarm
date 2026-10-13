@@ -49,7 +49,6 @@
                 14. **任务包预算**：单 lane `W` ∈ 4M–10M（`W ≈ 轮次 × 232K`）；派发前必带预算行（`预算：W≈…M；切法：…`）。细则见 #§14。
                 15. 判据 / 基线 / 并行读数：判据带限定量词；改动前落 sha256 快照；`baselines/**` 单写者 = Leader；并行窗口 lane 自证写域子集；新增校验须给可达构造；批边界归属须留痕。细则见 #§15。
                 0d. 记忆语义：复盘 / 归档产物落盘即可，记忆沉淀优先 dsh-mneme。细则见 #§0d。
-                0i. 执行形态：C 类批一律走 wavePlan lane 派发；每完成一子步骤即落 `<lane>/progress/NN-<slug>.md` 进度快照，禁攒批。
                 0k. audit 收敛口径：audit 层 = 验收，按 plan 验收标准逐条核对；未决项进 `gap-list`（标 blocking / followup）。细则见 #§0k。
                 0p. 两方向规格：dispatch 方向 = 写黑板后引擎自动派发（`owner` + `member.dispatch`）；team 方向 = `spawn_teammate` 拉起并写黑板（`roster`），由事件队列交接；一批一方向，不混用。细则见 #§0p 与 #§0o。
                 0s. 编号规范：跨批引用带批次短码（如 `AG-04@realign`）；`AG-xx` 权威定义面 = 批 A `audit/gap-list.md`。
