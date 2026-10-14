@@ -1,5 +1,15 @@
-## 0.5.0（2026-10-12）
 ## 0.5.1（2026-10-14）
+
+### 发布面落版与判据尺子固化（批 `punky-release-0.5.1-20261014`）
+
+- **`R-1`（唯一发布阻塞）已解 —— 版本史与版本面结构性对齐**：`package.json:3` 早已是 `0.5.0`，而版本史顶部仍是「未发布（Unreleased）」、首版本标题停在 `## 0.4.4`。本次**真落**：原「未发布」段体**落版为 `## 0.5.0（2026-10-12）`**（**段体一字未改**，sha16 `d6eeb75b36ba38e7`），并在其上新建本段；版本行 → `0.5.1`。
+- **注释订正（`F-1`）**：`lib/sig-fingerprint.js:35` 原注「不进 `GateErrorCode` union（**拒码面恒 29 保持不变**）」**已为假**（实测 union = **37**）⇒ 改为**指向 `lib/types/contracts.ts` 的 union 为唯一真源、不写数字**（规模随授权批演进，写死即漂移源）。改动面 = **恰 1 减 1 加、两行均注释行**，`node --check` 双态 exit 0。
+- **判据尺子固化（`D-04`）**：新增 `scripts/audit/tool-face-count.mjs`（**按块解析 + 四口径阶梯 + 三态退出码**）。原命令只覆盖双引号 ⇒ **26 ≠ 32**；实測病根是**两条叠加**：**引号**（+4，全在 `lib/tools/lane-tools.js` 的单引号 `name`）与**扫描面**（+2，`lib/watch/lane-heartbeat.js` 的 2 件 `defineTool` —— **不在 `lib/tools/*.js` 内**）⇒「只补引号」天花板为 **30**。
+- **锚点类文档入库（`PA-1`）**：`docs/` **54 件**逐件 `git add -f`（禁通配）。根因 = `.gitignore:50` 忽略整个 `docs/**`，且 `:49` 记录 2026-10-10 已 `rm --cached` 49 件 ⇒ 属「**在库 → 只在工作树**」的退化。入库后三读数 **37/37** 符合预期（`check-ignore` 仍报 `:50` = **未改规则**）。
+- **新增技能**：`skills/video-team/`（三层 7 角色 team skill + 宪法 6 章 24 条 + 模板 6 件 + `check-video-team-density.mjs` S1–S7 机检）。
+- **读数**：`58 files changed, 13054 insertions(+), 3 deletions(-)`（发布面）+ `17 files changed, 1869 insertions(+)`（video-team）。
+
+## 0.5.0（2026-10-12）
 
 ### 抄规格体系 P0/P1/P2 三波次 + 三个已验收外部批（`a4a2779`，91 件 / +9407 −236）
 
