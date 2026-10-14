@@ -32,7 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     已派发（`owner` 非空）任务在 `buildWavePlan` 内**冻结**（读旧 sig 原样落盘，见 `lib/wave-plan.ts`）。
 //   · **消费点**（D-sig-2 裁定 = **不加新拒码**，仅事件留痕）：同批次内存在 sig 相同且状态 ∈
 //     {running, review, merged} 的**其他** lane ⇒ 只落事件 `sig.duplicate_detected`，**不阻断动作**、
-//     **不新增治理状态**、**不进 `GateErrorCode` union**（拒码面恒 29 保持不变）。
+//     **不新增治理状态**、**不进 `GateErrorCode` union**（union 真源见 `lib/types/contracts.ts` 的 `GateErrorCode`；**本注释不写规模数字**——规模随授权批演进，写死即漂移源）。
 //
 // 零依赖纪律：本模块**只 import node:crypto**——
 //   它被 `lib/wave-plan.ts`（TS 源码）与 `lib/state/store.js`（手写 JS）**共同** import，

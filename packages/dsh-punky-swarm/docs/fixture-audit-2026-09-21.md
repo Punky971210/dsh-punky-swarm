@@ -1,0 +1,217 @@
+# 夹具审计 · 工序与判读台账（2026-09-21）
+
+> 与 `docs/reachability-audit-2026-09-21.md`（守卫可达性）**同族的第二条审计工序**：
+> 那条查「守卫是否可达」，这条查「**夹具是否在稀释门禁语义 / 是否冗余**」。
+> 机器侧 = `scripts/audit/fixtures.mjs`（枚举 + 消费者计数 + 桩分支检测 + 空壳量化 + 重复度）；
+> 人工侧 = 本文件（判读 + 处置 + 执行程序）。
+
+---
+
+## §1 判读口径（四分类）
+
+| 类 | 定义 | 判据（机器可判部分） | 处置 |
+|---|---|---|---|
+| **① 必要夹具** | 造的是**被测系统真正需要的输入**，且不掩盖任何门禁 | 有消费者；语义与生产面同源 | 保留 |
+| **② 空壳夹具** | 为让门禁通过而造**假前置条件** ⇒ 门禁语义被稀释（「乐观污染」的夹具形态） | 桩分支（`existsSync(真实资源) ? 真实 : 造桩`） | **替换为真实资产**，或**把桩降为显式声明** |
+| **③ 重复夹具** | 同一语义在 N 处各写一份（语义漂移 + 维护成本） | 同名函数跨文件定义 ≥3；函数体相似度 ≥70% | 收敛到单点 helper |
+| **④ 死夹具** | 无任何消费者（含间接加载） | 直接消费者 = 0 ∧ 间接加载 = 0 ∧ 无模块内自用 | 删 |
+
+**判读顺序**（防误判，与可达性审计同纪律）：
+1. 先问「**它造的东西，生产面是否也这样得到**」——是 ⇒ ①；不是（生产面需要真实资产/真实环境）⇒ ② 候选。
+2. 再问「删了会红吗」——不会红 ⇒ ④；会红但语义重复 ⇒ ③。
+3. ⚠ **不得仅凭注释自述判定**（承 `assets.js` 判读更正的教训：注释说「不可达」≠ 真不可达）。
+
+---
+
+## §2 机器证据（`node scripts/audit/fixtures.mjs`）
+
+| 维度 | 实测（**F2 后**；括号内为 F2 前） |
+|---|---|
+| 夹具 API（`test/helpers/**` 导出） | **30** 个（F1 后 24 / 首版 23）；**④ 死夹具 = 0**（全部有直接消费者 / 显式间接加载 / 模块内自用） |
+| 桩分支线索（②） | **shape 1 + note 7**；`shape` 主证据在 `test/helpers/host-skills.mjs`（`fs.existsSync(real) ? 真实 : 造桩`），F1 起该分支**须显式 `{stub:true}`** 才可走 |
+| **技能空壳率** | 5 个团队资产共声明 **43** 个技能名，其中 **33 个（77%）在包内无真实 `SKILL.md`** ⇒ 夹具为空壳（F1 已把「造桩」从缺省改为显式，数量不变而**契约变硬**） |
+| 重复夹具候选（③） | **24** 个同名函数跨文件重复定义（≥3 处；F3+F4 后由 35 降至此） |
+| 团队资产写入面（②/③ 混合） | **30** 个测试文件（F2 前 31「自建」口径虚高）⇒ **真实骨架 9 / 合成 19 / 直接写 5（白名单）** |
+
+### 2.1 ③ 的强度证据（函数体相似度，去空行/注释后按行集合 Jaccard）
+
+**复跑**：`node scripts/audit/dup-similarity.mjs --top 25`（下表为 **F3 前**的快照，保留以存档；F3 后数据见 §3.3）。
+
+| 函数 | 定义处 | 最高相似 | ≥70% 的对 / 总对 |
+|---|---|---|---|
+| `writeRuntime` | 9 | **100%** | **36 / 36**（全部高度相同 ⇒ 同一实现复制 9 份） |
+| `assemblyCtx` | 11 | 100% | 30 / 55 |
+| `fakeCtx` | 6 | 100% | 15 / 15 |
+| `execOf` | 11 | 100% | 13 / 55 |
+| `seed` | 5 | 100% | 10 / 10 |
+| `writeTempTeam` | 6 | 100% | ~~7 / 15~~ ⇒ **F2 已收敛为单点**（剩余 1 处 = `gate-techdebt-red` 的命名委托，保留名字以便诊断字符串仍准确） |
+| `teamAsset` | 3 | 100% | ~~3 / 3~~ ⇒ **F2 已收敛**为 `threeTierSyntheticTeam` 单点 |
+| `hb` / `tempRoot` / `settleLane` / `writeArt` / `tasks3` / `invoke` / `batchFileOf` | 3–7 | 100% | 4–10 / 6–21 |
+| `freshRoot` | 16 | 100% | 7 / 120（多数仅弱相似 ⇒ **不可一刀切合并**） |
+| `makeHarness` | 26 | 100% | 2 / 325（同上：同名不同物，禁按名合并） |
+
+⇒ 含高相似对的函数 **23 / 35**，高相似对**合计 156 对**。⚠ 反过来：`makeHarness`（26 处）只有 2 对相似 ⇒ **同名不同物**，收敛须逐个看，不能按名字批量合并。
+
+---
+
+## §3 判读与处置
+
+### 3.1 ②-A 技能装配：**空壳使门禁正向恒真**（用户点名项 1）
+
+**事实**：`seedHostSkills`（`test/helpers/host-skills.mjs:48-63`）对每个技能名：包内 `skills/<name>/SKILL.md` 存在 ⇒ 复制真实正文；否则 **写最小 frontmatter 桩**。实测 43 个声明技能中 33 个走桩分支。
+
+**风险（要害）**：门禁 `TEAM_ASSET_SKILLS_MISMATCH` 的**正向命题**（「团队资产声明的技能名可在宿主技能根解析」）在测试里**恒真** —— 夹具会为**任意**名字造出可解析的技能 ⇒ 资产里技能名**拼错 / 改名 / 真实技能被删**，测试全部照绿。
+（负向命题已测：`team-asset-mandatory.test.js:198` 「不可解析 ⇒ 拒」✓ ⇒ 缺的是正向。）
+
+**根因（结构性，非谁偷懒）**：被装配的具体技能（`spec-writing` / `dev-coder` / `humanizer` …）是**宿主侧资产**（用户 `~/.agents/skills`）；包内 `skills/` 只有 **8 个团队技能包**（`skills/<team>/`，内容是角色定义摘要），**本来就不是被装配技能的家**。⇒ 包内无从校验其真实性。
+
+**处置建议（推荐 B）**
+
+| 方案 | 内容 | 评价 |
+|---|---|---|
+| A. 维持现状 | 台账登记「门禁正向在测试里恒真」 | 零成本，但风险常驻 |
+| **B. 桩降为「显式声明」**（建议） | 改 `seedHostSkills`：包内无真实 `SKILL.md` 且**未在显式名单** `HOST_ONLY_SKILLS` 中 ⇒ **抛错**；名单内才写桩。并新增双向断言：`包内真实技能 ∪ HOST_ONLY_SKILLS ⊇ 全部资产声明技能`。 | **结构性保证**（承 R4-1d 纪律）：日后资产新增/改名技能而两边都没登记 ⇒ **测试立刻红**，由人裁定「宿主侧合法 / 拼错」 |
+| C. 把 33 个技能的真实 `SKILL.md` 收进包 | 彻底，但体积 + 资产归属（宿主技能不属本包）⇒ 不取 | ❌ |
+
+⚠ 方案 B 的**影响面**（须先评估再施工）：39 个测试文件调用 `seedTeamAssetSkills`；名单初次落地时若遗漏 ⇒ **立即大片红**（这正是它的价值，但必须一次把名单取全：从 5 份资产的 33 个名字生成，再由人工逐条确认「确属宿主侧」）。
+
+**✅ 执行结果（2026-09-21 21:1x，F1 已落地）**
+
+| 项 | 落地 |
+|---|---|
+| 名单 | `host-skills.mjs` 新增 **`HOST_ONLY_SKILLS`（27 个，冻结数组）**——「真实资产声明 ∩ 包内无副本」的显式快照 |
+| 行为变更 | `seedHostSkills(names, home, { stub = false })`：包内无副本 ∧ 未登记 ∧ 未显式声明 ⇒ **抛错**（提示两种正解：补名单 / 收副本）；`seedTeamAssetSkills` 走缺省 **⇒ 读真实资产这条路径受保护** |
+| 显式声明 | **10 处调用点**（9 文件）改传 `{ stub: true }`：`contract-missing-first-touch` · `flex-assembly-roles` · `gate-assertion-r32`×2 · `teams-root` · `handoff-gate-hotconfig` · `handoff-gate` · `p2-settle-handoff` · `team-asset-mandatory` · `p2-chain-autodrive` |
+| 双向断言 | 新 `test/fixture-skill-ledger.test.js` **4 条**：① 名单 ⊆ 资产声明 ② 名单 ∩ 包内副本 = ∅ ③ **资产声明 = 包内副本 ∪ 名单（无遗漏）** ④ 负向：未登记名字走缺省 ⇒ 真抛错 |
+| **保护已生效的实证** | 施工中立刻抓到 **2 个从未被质疑过的未登记自造名**：`dev-tester`（`p2-chain-autodrive` 自造资产）+ `ta-mand-seeded-skill`（`team-asset-mandatory`）⇒ 它们此前靠「静默造桩」蒙过，现在必须显式声明或改判 |
+| 验收 | 全量 **1757 tests / 1735 pass / 18 fail（全为环境类）⇒ 非环境类 0**；基线 files 147→**148** / tests 1710→**1714** / asserts 8341→**8351** |
+| 影响面 | **仅 `test/**`**（helper + 10 处调用点 + 1 新测试）；`lib/**` 零 diff |
+
+⇒ 此后**改真实资产的技能名而不同步名单 ⇒ 立刻红**（F1-3），并且「包内副本被误删」也会红（F1-2）。⚠ **但 F1 的保护在夹具层**（`seedHostSkills` 抛错）——它证明「夹具不再为任意名字造桩」，**还没证明「引擎的正向命题真的可失败」** ⇒ 该缺口由 **F5** 补（见下）。
+
+**✅ 执行结果（2026-09-21 22:1x，F5 已落地 —— 补「引擎层」正向证据）**
+
+`test/skill-resolution-real-asset.test.js`（新，**仅 `test/**`**）：以**真实资产名**驱动引擎的**单一强制点** `assertTeamAssetReady(team)`（`lib/tools/core.js:448`，`wave-plan.js:644` 调用它）。
+
+| 用例 | 命题 | 为什么**可失败**（非恒真） |
+|---|---|---|
+| F5-1 | 每份真实资产按「包内副本 ∪ `HOST_ONLY_SKILLS`」注入 ⇒ **放行**（注入路径**禁** `stub`） | 资产改名/新增而名单未同步 ⇒ `seedHostSkills` 抛错；且自证「声明集非空 + 覆盖 ≥30 名」防空转 |
+| **F5-2 ★** | 解析到的是**包内真实正文**（与 `skills/<name>/SKILL.md` **逐字相同**）、桩另带**可辨认标记** | **实测注入 `false &&` 恒桩化后本用例立刻红**（负向对照已验证）⇒ 直接反证「空壳恒真」 |
+| F5-3 | 引擎**只读宿主技能根**、**不回落**包内 `skills/`：删该技能整目录 ⇒ 拒，missing **逐名指名**、且**不多报**（已可解析者不得出现在缺失清单） | 若门禁回落包内副本 ⇒ 会放行 ⇒ 本用例红；若「任一不匹配即一律拒」⇒ 指名/不多报断言红。**顺带锁口径**：只删 `SKILL.md` 留空目录**仍可解析**（可解析名 = 目录名 ∪ frontmatter `name`）—— 这是口径，非缺陷 |
+| **F5-4 ★** | **名单即引擎所需的最小补充集**（双向）：只注入包内副本 ⇒ missing **≡** `declared ∩ HOST_ONLY_SKILLS`；补齐名单 ⇒ 同资产转绿 | 名单**多登记**某名 ⇒ 「不许出现」断言红；名单**少登记** ⇒ 转绿那半红。⇒ 用**引擎行为**而非夹具代码核对名单 |
+| F5-5 | 名单**无空登记**：`HOST_ONLY_SKILLS ⊆ ∪声明技能`（补全 F1-1 的方向） | 名单里若混入从未被声明的名字 ⇒ 红（空登记会掩盖资产侧的删除） |
+
+⇒ 与 F1 合起来，正向命题在两个层面都可失败：**夹具层**（不为任意名字造桩，F1）+ **引擎层**（真解析真内容、真按名拒，F5）。
+
+
+### 3.2 ②-B 团队装配夹具：**单点写入 + 显式白名单**（用户点名项 2 · F2 已落地）
+
+**首版判读更正（2026-09-21 F2 施工期实测）**
+
+| 首版说法 | 实测 | 更正 |
+|---|---|---|
+| 「31 个测试文件**自建** team-asset」 | 真正**写** team-asset 文件的 = **29** 个；其中 12 个用**真实资产骨架**（`writeTempTeam` 6 + `mkTeam*` 2 + 就地 mutate 2 + 其它），剩 17 个为**合成**（手写 `{team, layers, roles, flows, chain}`） | 计数虚高：首版把「**装配（assembly）**夹具」（`validateAssembly` / `DEFAULT_ASSEMBLY` / `BASE_ASSEMBLY`）也算入团队资产 ⇒ 二者是**不同子系统**（`lib/assembly.js` vs `lib/assembly/team-asset.js`） |
+| `writeTempTeam` 属「自建资产」 | 它**本来就用真实资产骨架**（`SRC_ASSET = presets/software-team/team-asset.yml`，拷到临时根再 mutate） | 不是漂移风险；真问题是**6 份逐字重复**（③ 类） |
+| 真漂移风险 = 自建资产本身 | 真漂移风险 = ① **骨架被悄悄改小/改歪**（无从核对）+ ② **合成资产冒充真实资产**（看不出自造） | 处置改为「**保真可核 + 自造显式**」，见下 |
+
+**F2 落地（2026-09-21，`test/**` 内，`lib/**` 零 diff）**
+
+1. **单点写入面** `test/helpers/team-fixture.mjs`：
+   - `writeTempTeam(prefix, team, mutate, {srcTeam, setTeam})` —— **真实骨架**（读包内真实资产 → 临时根落盘；`setTeam` 缺省 false ⇒ 零行为变更，见 helper 注释）
+   - `writeRealTeam(root, team, mutate, opts)` —— 同上但不自建 `%TEMP%`（根由调用方给）
+   - `writeSyntheticTeam(root, team, asset, {filename})` —— **合成资产**（名字自带「这是自造的」语义）；含**形状下限校验**（团队名非空 / `layers` 非空对象 / 每层 `roles` 非空且 `skills` 为对象）⇒ fail-fast 挡手滑
+   - `threeTierSyntheticTeam(team)` —— 最小三层合成模板（收敛 3 份逐字相同的本地 `teamAsset()`）
+2. **收敛**：29 个写入者 → **全部走单点**；`直接写` 只剩 **5 个 loader/边界自测文件**。
+3. **强制面** `test/fixture-team-ledger.test.js`（8 条）：
+   - **双向**：`直接写` 集合 ≡ 白名单（新增直接写 ⇒ 红）
+   - **显式**：白名单文件必须带 `【F2 白名单】` 标记（登记 = 被审阅过的决定，不是沉默）
+   - **理由自证**：`writeSyntheticTeam` 确实拒绝「坏 JSON / 空层 / 空 roles / 缺 skills」⇒ 白名单确有其事
+   - **骨架保真**：`writeTempTeam` 未 mutate 的产物 **deepEqual** 包内真实资产 ⇒ 骨架被改小即红
+   - **`withDefaultTeam` 允许名单**（14 文件，双向）+ 「断言 team 必填的套件不得经过它」
+4. 实测收敛效果：`fixtures.mjs` 重复函数候选 **35 → 33**、团队资产写入面 **31 → 30 文件（真实骨架 9 / 合成 19 / 直接写 5）**、本地 `teamAsset()` 定义 **3 → 0**。
+
+**两层风险与现在的处置**
+
+| 层 | 首版风险描述 | F2 后的处置 |
+|---|---|---|
+| 骨架漂移 | 自建资产与真实资产可能不一致 | **可核**：真实骨架类走 `writeTempTeam`，`F2-4` 断言其产物 ≡ 包内真实资产 |
+| 合成资产混入 | 看不出哪些是自造 | **显式**：合成类必须走 `writeSyntheticTeam`（名字即标注），并在骨架 §E 按形态分类列出 |
+| 门禁遮蔽 | `withDefaultTeam` 注入 `team` ⇒ 「`team` 必填」门禁在 14 个套件里不可见 | **台账化**：`F2-6`/`F2-7` 双向锁允许名单（该门禁另有专项套件覆盖 ✓） |
+
+### 3.3 ③ 重复夹具：**F3 已收敛必合档**（156 → **70** 对高相似）
+
+**取证工具**（F3 新增，可复跑）：`node scripts/audit/dup-similarity.mjs`（`--top N` / `--fn <name>` 单函数下钻）。
+
+⚠ **工具自身的一处 bug 已修**（F3 施工期发现）：函数体起点原本用 `indexOf('{')` ⇒ 形参默认值里的 `{}`
+（如 `hb(store, root, config = {}, opts = {})`）被误判为函数体 ⇒ 该函数一律截成「1 行」。正解 = 先配平**圆括号**
+定位形参表结束，其后的第一个 `{` 才是函数体。修前 `hb` 显示 1 行、修后 3 行。
+
+**F3 已收敛（21 处定义 → 4 个单点原语，`lib/**` 零 diff）**
+
+| 原语 | 定义处 | 依据（相似对） | 落点 |
+|---|---|---|---|
+| `writeRuntime(root, overlay)` | 9 | **36/36 对 100%** | `gate-fixture.mjs`（无 lib 依赖） |
+| `laneHeartbeat(store, root, cfg, opts)` | 4 | **6/6 对 100%** | **`watch-fixture.mjs`**（需 lib 依赖 ⇒ 独立域内 helper，避免污染 39 个套件的 `gate-fixture`） |
+| `tempRoot(prefix)` | 3 | 3/6 对 100%（第 4 处 `vocabulary.test.js` 带 `TMP_ROOTS` 清理登记 ⇒ **刻意不并入**） | `gate-fixture.mjs` |
+| `seedArtifactFile(root, session, batchId, rel, body)` | 5 | **10/10 对 100%** | `gate-fixture.mjs`（与既有 `seedArtifacts` **不同物**：写任意单文件 vs 写标准三层产物集） |
+| `fakeCtx({ warn, error })` | 6 | **15/15 对 ≥70%**（差异**只在一根轴** = warn 汇：silent / `global.__govWarn` / `warns` 数组 + `error`） | `gate-fixture.mjs`；3 个非缺省变体用「别名导入 + 一行适配」⇒ **调用点零改动** |
+
+**收敛效果**：重复函数候选 **33 → 28**；含高相似对的函数 **21 → 14**；高相似对合计 **156 → 70**。
+
+**F4 执行结果（2026-09-21 22:0x，`lib/**` 零 diff）**
+
+判据工具升级：`dup-similarity.mjs` 新增 **`--group <fn>`**（按归一化函数体聚类 ⇒ 直接数出「**实际有几个形状**」）
+与 **`--struct`**（抹平字符串/数字字面量 ⇒ 暴露「同一结构、仅常量不同」的族）。⚠ 这一步是必需的：
+不加 `--struct` 时 `freshRoot` 显示 12 个形状，加了才是 **4 个**（各文件仅 tmp 前缀常量不同）。
+
+| 处置 | 对象 | 依据 | 结果 |
+|---|---|---|---|
+| **拆名（4 形状）** | `assemblyCtx`(11) | 4 个形状且**全部不可合并**（后三个只在「加性 trait」上不同，但 ③ 连**返回形状**都变、④ 的 `on` 项存 `{fn,opts}` 且被 `auto-settle:101` **逐字断言**） | 4 个具名 builder：`assemblyCtx` / `assemblyCtxPre` / `assemblyCtxWeb` / `assemblyCtxOpts`（落 `gate-fixture.mjs`，三变体共用私有基线实现）；11 文件 51 处调用点改名 |
+| **同名消歧** | 14 处与**共享导出**同名的本地定义 | `runLane`×**5** / `threeTierTasks`×5 / `seedArtifacts`×3 / `tempRoot`×1 —— grep 会得到互相冲突的契约（这是**真隐患**，非风格问题） | `gates`+`archive`+**`smoke-gate-v14.mjs`** → **`runLaneOrError`**（差别：返回 Error 而非抛出）；`threeTierTasks` → `threeTierWithTaskTree` / `threeTierWithProbe` / `threeTierLean` / `threeTierWithRoleFn` / `threeTierNamedRoles`；`seedArtifacts` → `seedTierFiles` / `seedTierArtifacts`；`tempRoot` → `tempRootTracked` ⇒ **同名冲突清零** |
+| **复用共享** | `topic-wiring.runLane`（签名与共享版逐字相同）· `rework.runLane`（语义相同、仅绑定模块级 `store/S`） | 逐字等同 / 一行适配 | 前者直接 import；后者 `import { runLane as sharedRunLane }` + 一行适配（调用点零改动） |
+| **合入共享** | `freshRoot(prefix)` 6 处（`auto-settle`/`dispatch-register`/`governance-harden-proto`/`governance`/`concurrency-gate`/`engine-dispatch`） | 与既有 `tempRoot` **逐字同形**（`mkdtempSync(path.join(os.tmpdir(), prefix))`） | 删本地 6 份副本，85 处调用点改用 `tempRoot` |
+| **判为保留** | `execOf`(11→**7 形状**) · `mkBatch`(12→**11**) · `invoke`(7→**6**) · `makeHarness`(26→**21**) · `settleLane`/`writeArt`/`batchFileOf`(各 6→**4**) · `tasks3`(7→**3**) · `set`/`runLane`/`writeArtifact`(各 4→**3**) · `freshRoot`(10→**2**) | 形状数 ≥3 ⇒ **同名不同物**（差异在字段/签名/副作用，非常量）；各「2 处相同」组均为**文件本地 + 依赖本地符号** ⇒ 抽出去要加适配层，收益低于耦合代价 | **保持独立**（台账口径「能合的组合，不能合的**改名区分**」——此处两者都不做：既非同一物，强行抽公共件会耦合无关套件）；`freshRoot` 余 10 处为「逐文件 tmp 前缀」的 1 行变体，另 2 处已消歧为 `freshRootTracked` |
+| **判为不可达** | `threeTierTasks` 剩余的**共享版 vs 本地版语义差异** | 共享版 audit 消费 exec 产物且产物名 `audit/<auditId>.md`；`rework` 本地版产物名 `audit/r.md` 且不消费 exec 产物 ⇒ 换成共享版会与它自己的 `seedTierArtifacts` 写的路径**对不上** | 不改判（保持本地），已在消歧表列明 |
+
+**收敛效果（F3+F4 累计）**：重复候选 35 → **24**；含高相似对的函数 21 → **11**；高相似对 **156 → 32**；与共享导出同名的本地定义 13 → **0**；`assemblyCtx` 同名副本 11 → **4 具名**。
+
+⚠ **一处方法论教训（本波由断言抓出）**：我第一轮的「同名冲突」扫描只滤了 `**/*.js` ⇒ **漏掉 `test/smoke-gate-v14.mjs`**（第 14 处 `runLane`）。
+是台账断言 **F4-1**（本地 `function` 名 ∩ 共享导出名 = ∅）把它抓出来的 —— 这正是「**把纪律做成可执行断言**」的价值：
+人写的检查脚本会漏，断言不会。⇒ 纪律：**`test/**` 的遍历一律用 `/\.(js|mjs)$/`**（`.mjs` 与 `.js` 同权，`node --test` 二者都收集）。
+
+⚠ **判读更正**：台账首版本估「选合档按差异点分组即可合」**偏乐观**——实测多数候选在**结构层面**就是不同物（`mkBatch` 12 处 11 形状、`execOf` 11 处 7 形状）。**同名不同物的正解是「认出它不是同一物」，而不是「想办法合掉」**；本波只对 3 类真同源者动手（`assemblyCtx` 一份契约抄 11 次 / `freshRoot` 一份实现抄 6 次 / 13 处名撞共享导出）。
+
+### 3.4 ④ 死夹具：**本次 0 个**
+
+23 个夹具 API 全有消费者（含 `event-const-loader` / `event-const-missing-child` / `event-const-sabotage.preload` 三件套 —— 经**显式**间接加载判据确认由 `gate-event-const-e2e-r34.test.js` 使用，非孤儿）。⇒ 与可达性审计不同，**这里没有可删的死代码**，问题集中在 ② 与 ③。
+
+### 3.5 ⑤ 其他疑似（已判读，结论：**合理但须登记**，防日后误判）
+
+| 夹具 | 它绕的是什么 | 判读 |
+|---|---|---|
+| `assessC`（39 文件）| 直接 `store.writeGovernance` 把会话难度置 C ⇒ 绕过 `assign_check` 的**交互前置** | **合理**：绕的是「操作前置」而非「被检门禁」；被检门禁（C 档校验本身）另有套件覆盖 |
+| `SPEC_OK` / `anchorSpecOf`（12 / 1 文件）| 造含 `## 验收标准` 的 spec 内容 | **合理**：锚点门禁另有专项套件；但它是 ② 的**同族风险**（内容桩让锚点门禁在多数套件里恒真）⇒ 登记 |
+| `seedArtifacts`（23 文件）| 造产物在场以过 presence 门 | **合理**：presence 门禁判的就是「产物存在」，造在场即其语义 |
+| `isolated-home.preload.mjs` | 重定向 HOME（隔离安全面） | **合理且必需**（纪律明令不得改动/绕过） |
+
+---
+
+## §4 执行程序（分片，各片独立验收）
+
+| 片 | 内容 | 前置 | 验收 |
+|---|---|---|---|
+| **F1** | ②-A 空壳显式化：`HOST_ONLY_SKILLS` 名单 + 抛错分支 + 双向断言 | 无（可先行） | 全量**非环境类 fail = 0**；新名单与资产声明**双向相等**断言绿 |
+| **F2** | ②-B 团队资产写入面单点化 + 显式白名单（`team-fixture.mjs`：`writeTempTeam`/`writeRealTeam`/`writeSyntheticTeam`/`threeTierSyntheticTeam`）+ `fixture-team-ledger.test.js` 强制面 | F1 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；`fixtures.mjs` 重复候选 35→**33**、写入面 31→**30 文件（骨架 9 / 合成 19 / 直接写 5）**；`--accept` 基线已更新 |
+| **F3** | ③ 必合档收敛（`writeRuntime` 9 · `laneHeartbeat` 4 · `tempRoot` 3 · `seedArtifactFile` 5 · `fakeCtx` 6 = 21 处定义 → 5 个单点原语） | 无 | ✅ **已落地**（2026-09-21）：全量非环境类 fail = 0；重复候选 33→**28**、高相似对 156→**70**；新增取证工具 `scripts/audit/dup-similarity.mjs`；`--accept` 基线已更新 |
+| **F4** | ③ 选合档 + **改名消歧**（`assemblyCtx` 11 处 / 13 处本地定义名撞共享导出 / `freshRoot(prefix)` 6 处） | 无 | ✅ **已落地**（2026-09-21 22:0x）：全量非环境类 fail = 0；`assemblyCtx` → **4 具名 builder**；同名冲突 13 → **0**；`freshRoot(prefix)` 6 处并入 `tempRoot`；其余判**保留**（结构形状 ≥3 ⇒ 非同物）。重复候选 28 → **24**、高相似对 70 → **32**；详见 §3.3 |
+| **F5** | 门禁正向补测：以真实资产名驱动技能解析（替代空壳恒真） | F1 | ✅ **已落地**（2026-09-21 22:1x）：新 `test/skill-resolution-real-asset.test.js` **5 条**（正向放行 / **真实正文逐字** / 删整目录即拒+逐名指名 / **名单 ≡ 引擎所需补充集**（双向）/ 名单无空登记）；含**负向对照**（恒桩化注入 ⇒ 立刻红，已验证后恢复）。仅 `test/**`，`lib/**` 零 diff |
+
+**通用纪律**：一批一 commit；每片「**先重生成基线、再跑全量**」；`node scripts/audit/fixtures.mjs --check` 零漂移（收敛导致 API 变化时 `--accept` 并登记）；`lib/**` 原则上零 diff（**F1/F2 只动 `test/**`**；若确需动读端 ⇒ 独立批）。
+
+## §5 覆盖边界（诚实声明）
+
+1. 本扫描器**判不了**：夹具「语义是否与生产面一致」（那需要人工逐条比对资产/流程声明）。§3.2 的 F2 处置只解决了**可核**（骨架保真断言）与**显式**（合成资产标注）两件事，「这份合成声明的语义对不对」仍只能人工判读。
+2. 相似度是**行集合 Jaccard**（去空行/注释），噪声敏感：短函数（<10 行）易虚高、长函数易虚低。⇒ 只作**排序线索**，合并前必须人眼 diff。
+3. 「桩分支」检测靠字面短语 + `existsSync`/`writeFileSync` 形态窗口 ⇒ **可能有漏网**（例如桩写在另一函数里）。已知边界：本仓当前仅命中 `host-skills.mjs`。
+4. 未评估**测试运行时长 / 资源占用**（夹具的内存/IO 成本）—— 本工序只查语义与冗余。
+5. **「直接写 team-asset」的判据是同一行明文匹配**（写调用 + `team-asset.<ext>`）⇒ **多行书写的调用可绕过**。本仓当前无此形态；强制面见 `test/fixture-team-ledger.test.js`（那里的边界同样如实写在注释里）。另：判据用带点的 `team-asset.` 以避开目录名 `sessions/…/team-assets` 的误命中。

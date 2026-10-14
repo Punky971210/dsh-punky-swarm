@@ -1,4 +1,17 @@
-## 未发布（Unreleased）
+## 0.5.0（2026-10-12）
+## 0.5.1（2026-10-14）
+
+### 抄规格体系 P0/P1/P2 三波次 + 三个已验收外部批（`a4a2779`，91 件 / +9407 −236）
+
+- **范围**：一次收口提交，含三批主交付（P0 抄规格 L1 事件重放校验腿 + L2 上下文注入预算；P1 抄规格 L3 测试证据自证 / L5 隔离可判定 / L6 宿主兼容第三维；P2 抄规格 L7 写路径原子性 / L4 规则变更传播 / L8 判据脚本信任模型 / L9 记忆溯源 / C-5 坏配置 fail-closed）与**三个已验收外部批**（各自 `verdict = approve`、`blocking = 0`）。
+- **要点**：新增 1 枚拒码（`GATE_SCRIPT_CHANGED`，语义独立于只读黑名单命中，以保审计可辨）；`lib/comms/inject-budget.js` 新建（四层结构 + 显式省略标记）；`lib/state/rule-propagation.ts` 新建（规则变更传播，随 `scripts/copy-ts-built.mjs` 回拷清单同步）。
+- **读数**：`91 files changed, 9407 insertions(+), 236 deletions(-)`。
+
+### 指引同步改造 —— 10 项 + 2 附带（`431b873`，2 件 / +77 −7）
+
+- **范围**：把 L1~L9 的规格口径落进指引（正文 `references/discipline.md`）＋**移除注入面 `0i` 行**（挂起内容不得在注入面出现）。
+- **要点**：判据类落 `### 15.16`–`### 15.20`、操作类入各自同族 §；**不新增 `## §X`**（故不影响注入面↔正文双向检查）；收口以 `node scripts/check-guidance-sync.mjs` **GREEN（exit 0）** 为准。
+- **读数**：`2 files changed, 77 insertions(+), 7 deletions(-)`。
 
 ### 未发布补录：D 档偏离语义修复 + 引擎自派 worker 批归属索引填充面修复（2026-10-12，批 `session-bind-index-fix-20261012`；同段补录前批 `d-override-fix-20261011`）
 
