@@ -61,3 +61,11 @@ packages/dsh-punky-swarm/docs/**
 # 本地代码索引产物（codegraph / code-review-graph 派生，可由工具重建，不入库）
 .codegraph/
 .code-review-graph/
+
+# 本地调试残留（探针 / 一次性快速验证的临时目录与占位文件，不入库）
+# 注：`.tmp-*` = 各批次探针脚本的临时工作目录；`sess-*` = 批会话调试快照；
+#     `FINAL` = 早期手写占位（无扩展名）。三者均为历史残留，非交付物。
+#     若将来出现同名的正式文件，须先从本清单移除再提交。
+packages/dsh-punky-swarm/.tmp-*/
+packages/dsh-punky-swarm/FINAL
+packages/dsh-punky-swarm/sess-*/
