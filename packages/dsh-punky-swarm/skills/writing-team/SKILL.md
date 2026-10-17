@@ -5,15 +5,18 @@ description: |
   writing-planner（plan）/ drafter·polisher·publisher（exec）/ writing-auditor（audit）的职责边界、
   产物契约（plan/ exec/ audit/）与写作交付纪律（按规格成稿 → 修订去 AI 痕 → 判据对照审稿 →
   审核通过才排版交付）。
+  另含**论证型稿件审核分线**四角色（可选启用，替代单一 writing-auditor 审核位）：
+  theory-mapper（plan，判据源）/ logic-auditor·structure-auditor·evidence-auditor（audit 三线独立核查）。
   装配数据面**已整体退役**（2026-09-27 用户裁决 ＋ 批 retire-team-chain-20260927 清尾，**进退役锁**）：
   引擎不再解析任何团队资产，**现行装配 = 引擎基线 ＋ 成员槽位 ＋ 指引**。
   本技能只写用途、职责与纪律（不承载、也不指向装配数据）。
   能力层指向本机既有写作技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）：
   spec-writing / writing-trio / wechat-writing-style / humanizer / lieflat-less-ai-tone /
-  revision-patterns / baoyu-markdown-to-html / acceptance-gate / review-execution。
+  revision-patterns / baoyu-markdown-to-html / acceptance-gate / review-execution /
+  event-authenticity-check。
   当需要确定写作团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按写作链路产出可交付稿件（成稿 / 改稿 / 排版交付）时加载本技能。
-version: "1.0.0"
+version: "1.1.0"
 kind: skill
 triggers:
   - "写作团队"
@@ -27,6 +30,16 @@ triggers:
   - "排版交付"
   - "公众号排版"
   - "写作任务派发"
+  - "写作审核团队"
+  - "论证审核"
+  - "理论映射"
+  - "逻辑核查"
+  - "结构核查"
+  - "证据核查"
+  - "theory-mapper"
+  - "logic-auditor"
+  - "structure-auditor"
+  - "evidence-auditor"
 ---
 
 # writing-team — 写作团队指引（三层 5 角色 × 产物契约 × 写作交付纪律）
@@ -54,6 +67,25 @@ triggers:
 | exec | `polisher` | 修订 / 去 AI 痕 / 密度压缩（逐处改动与依据留痕） | `exec/polish-report.md` |
 | audit | `writing-auditor` | 判据对照审稿（结构完整、风格一致、事实与引用可核、AI 痕清单命中）；**只读不改稿**，牵头 audit 层 | `audit/editorial-review.md` + `audit/gap-list.json` |
 | **Leader**（最后交付） | `publisher` | 排版与交付（如公众号 HTML）——**由 Leader 在交接后执行**，**不占团队链步** | `exec/publish/<platform>.html` + `exec/delivery-report.md` |
+
+## 论证型稿件审核分线（4 角色，可选启用）
+
+论证型稿件（立场文、评论、理论拆解）的 audit 面可拆成**三条独立审核线 ＋ 一条判据源**，**替代**上表中的 `writing-auditor` 单一审核位（同一批次二者不并用，避免同一验收面双写）。四角色的角色定义文件位于本团队 `references/roles/`，由引擎 `resolveRoleRef` 按 `team=writing-team` 解析。
+
+| 层 | 角色 | 职责（一句话） | 关键产物 |
+|---|---|---|---|
+| plan | `theory-mapper` | 把文章主张映射成**可判据化的概念骨架**（主张清单 / 概念边界 / 论证链 / 概念家族分层），牵头 plan 层，交付三线审核的**判据源** | `plan/plan-theory-map.md`（含 `## 验收标准` / `## 约束`）+ `plan/task-tree.json` |
+| audit | `logic-auditor` | **逐跳逻辑核查**（跳跃 / 循环 / 偷换 / 滑坡 / 稻草人 / 外来框架忠实性），只读不改稿 | `audit/logic-review.md` + `audit/gap-list.json` |
+| audit | `structure-auditor` | **结构核查**（章节顺序 / 层级关系 / 靠后交代 / 篇幅配比 / 术语漂移），只读不改稿 | `audit/structure-review.md` + `audit/gap-list.json` |
+| audit | `evidence-auditor` | **证据核查**（事实主张清点 / 引用忠实性 / 抽查 ≥3 条可复现 / 敏感指控表述层级），只读不改稿 | `audit/evidence-review.md` + `audit/gap-list.json` |
+
+**分线纪律**：
+
+- `theory-mapper` 是**判据源唯一产出者**：三条 audit 线**必须 consume** `plan/plan-theory-map.md`（否则各自按自己的理解审，结论不可交叉核对），建批时逐 lane 声明 `consume`，并把它写进各 audit lane 的 `deps`。
+- 三条 audit 线**相互独立**：各自出报告、各自维护 gap-list 的对应条目；同一主张被多条线标记时**在报告中标注交叉命中**，不由单线合并改写。
+- `theory-mapper` 只出判据，**不审稿、不成稿**；三条 audit 线**只读核查**，缺陷走报告与新批次 exec 承接，均**不自行改稿**。
+- 分层口径单一：概念家族的分层（层数与各层判定条件）由 `theory-mapper` 定义一次，structure-auditor 与 evidence-auditor **沿用同一套**，不得各立一套。
+- 角色名不在引擎基础角色集内 ⇒ 用作 lane `role` 时会有 `GATE_ROLE_INVALID` **告警**（非拒态，D-1 已裁决接受），建批期可按需忽略；但**角色定义文件必须在场**，否则派发被 `GATE_ROLE_UNRESOLVED` 拒。
 
 > 五个角色名均不在引擎基础角色集内，故在团队资产里全部按自定义（扩展）角色声明，并由该资产的
 > `plan_leads` / `audit_leads` 认可 `writing-planner` / `writing-auditor` 承担对应层的牵头
