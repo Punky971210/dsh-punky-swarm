@@ -47,6 +47,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { issueLaneHandle, consumeLaneHandle, firstLineOf } from '../bridge/lane-handle.js';
+// 【P2 · arch-context】架构上下文注入件（独立成件；逻辑不进本文件 —— 本文件已逾千行）。
+import { renderArchContext } from './arch-context.js';
 // 派发登记事件常量（原在 `lib/tools/core.js` 侧引用；派发核心抽出后由本模块写，故此处直引）
 // 【2026-09-18 · Q-B 取消并发闸】原同址直引的 `EVT_GATE_CONCURRENCY_BLOCKED` 已从本模块写端移除（唯一写点
 //   随闸删除）；常量本体仍在 `lib/state/event-types.js` **冻结保留**（历史批磁盘事件面读端逐字不变）。
@@ -580,6 +582,9 @@ export function composeWorkerPrompt({
   //   直调调用方（含既有单测）不传 ⇒ 本函数输出与改动前**逐字节相同**（零回归口径 C）。
   //   本函数保持**纯**：只返回预算后的文本，**不发射事件、不写盘**（唯一发射点在 `swarm_report`）。
   injectBudget = null,
+  // 【P2 · arch-context】架构约束段（调用方已裁剪好的文本，来自 `.punky/arch.yml`）。
+  //   缺省 `null` ⇒ **不 push 任何行** ⇒ 任务包与改动前**逐字节相同**（零回归口径，与 `injectBudget` 同款）。
+  archContext = null,
 }) {
   // role 解析（**单点真源**）：对象直用 / id 串查语料库（查不到 ⇒ 抛 `GATE_ROLE_UNRESOLVED`）/ 未声明 ⇒ null。
   const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
@@ -592,6 +597,13 @@ export function composeWorkerPrompt({
   const leaderPromptBudget = budgeted
     ? applyInjectionBudget(leaderPrompt, { surface: 'taskpack.leaderPrompt', thresholds: injectBudget, kind: 'perItem' }).text
     : leaderPrompt;
+  // 【P2 · arch-context】架构约束段**同受单条目预算**（与 `cmd` / `leaderPrompt` 同构：
+  //   面名 `taskpack.archContext`、层① `perItem`；未超限 ⇒ 原值本身、零省略）。
+  //   面名口径据 `inject-budget.js`「本模块不校验集合，校验归调用方/测试」⇒ 新增面名无需登记表；
+  //   超限时省略标记形如 `…[omitted <N>B @ taskpack.archContext]`，消费方当场可辨。
+  const archContextBudget = budgeted && typeof archContext === 'string' && archContext.length > 0
+    ? applyInjectionBudget(archContext, { surface: 'taskpack.archContext', thresholds: injectBudget, kind: 'perItem' }).text
+    : archContext;
   const L = [];
   L.push(firstLine); // 首行：句柄标记（唯一凭证；引擎只读 exec.arguments，不注入参数）
   L.push('');
@@ -619,6 +631,13 @@ export function composeWorkerPrompt({
   // 【2026-10-07 · P2】role 三段（**结构隔离**，计划 §2.4）：本段由 role 数据独占，Leader 的 `leaderPrompt`
   //   只落在末尾的 `## 任务要点（Leader 补充）` ⇒ **结构上不存在覆盖关系**（无「谁优先」判定器）。
   if (roleData) appendRoleSections(L, roleData);
+  // 【P2 · arch-context】架构约束段：位置 = **role 三段之后、`## 纪律` 之前**
+  //   （结构隔离：既不挤占 role 独占段，也不挤占末尾的 Leader 补充段）。
+  //   缺省 `null` ⇒ 不 push ⇒ 既有任务包逐字节不变（零回归）。
+  if (typeof archContextBudget === 'string' && archContextBudget.length > 0) {
+    L.push('');
+    L.push(archContextBudget);
+  }
   L.push('');
   L.push('## 纪律');
   // 【2026-09-27 · 规则编号动态化】原为**字面 1..6**（第 6 条按层裁剪）⇒ 新增规则会撞号。
@@ -892,6 +911,10 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   ⇒ runtime.json 改 `capabilities.injectBudget` 即生效，无需重启宿主）。
     //   唯一取值源 = 注册表 `capabilities.injectBudget`（经 readCapability 缺省合并 ⇒ 默认开）。
     injectBudget,
+    // 【P2 · arch-context】架构上下文：按本 lane 的**目标文件**（`targets`，绝对路径，见
+    //   `types/contracts.ts`）裁剪 `.punky/arch.yml`，让 worker 开工即知「涉域 + 允许依赖 + 禁区」。
+    //   取不到 targets（缺省 null）/ 取不到 arch.yml / 域集合为空 ⇒ 返回 `null` ⇒ 任务包零变化（零回归）。
+    archContext: renderArchContext({ targets: laneTask?.targets ?? null }),
   });
   // 【2026-09-22 · one-shot 化】`startContinuable(spec)` → **`rt.start(provider, request)`**：
   //   one-shot 请求**平铺**（label/prompt/parent/signal/toolFilter/persona/maxDepth 同层）；

@@ -1,0 +1,156 @@
+# .punky/arch.yml — 架构真源（机读）
+#
+# 用途：给「执行期 Agent」读的架构约束，而非给人看的架构图。
+#   ① 约束面：新增的跨域依赖若不在 `rules.allowed` 白名单内 ⇒ 门拒（lane 拒绝 merged）
+#   ② 上下文面：按 lane 涉及的文件裁剪本文件的 domains/allowed，注入 worker 任务包
+#
+# 口径 = **棘轮（ratchet）**：白名单**冻结当前实测现状**，只阻止「新增坏边」，不追溯历史。
+#   ⇒ 初始即 GREEN（零误报），工程上可落地；历史债务登记在 rules.debt，不阻断、只登记。
+#
+# 生成依据（★实测，可复跑）：
+#   探针 = 静态 import 扫描 `lib/**`（相对路径解析），归并到域
+#   目标仓 = packages/dsh-punky-swarm @ HEAD c17c5e1（v0.5.1）
+#   读数 = 173 文件 / 640 specifier / 204 条跨域边 / 63 个域对 / 15 对双向依赖
+#   复跑 = `node arch-probe.mjs <repoRoot> [out.json]`（本文件 allowed 段即矩阵逐对导出）
+#
+# 维护纪律：新增白名单条目**必须**在提交信息里给出理由；本文件改动应由人/Leader 审核。
+
+version: 1
+generated_at: "2026-10-15"
+basis_head: "c17c5e1"
+domain_root: "packages/dsh-punky-swarm/lib"
+mode: ratchet
+
+# ── 域注册（供上下文注入：告诉 Agent「你改的文件属于哪个域」）────────────────────
+domains:
+  "(lib-root)": "包级根文件（index / wave-plan / schema / api / assets / client / lock / service-probe / sig-fingerprint）"
+  state: "批次与成员状态机、门禁、存储、schema-v3"
+  tools: "治理工具面（注册与实现：core / member-tools / admin-tools 等）"
+  assembly: "装配（flows / roles / 团队资产解析与契约）"
+  engine: "派发引擎（dispatch / auto-settle / 引擎策略）"
+  comms: "通信（mailbox / 注入预算 inject-budget 等）"
+  watch: "监管探针（心跳 lane-heartbeat / 长跑 longrun）"
+  bridge: "桥接（lane-handle / dispatch-register / agent-teams seam）"
+  governance: "治理规则（hook-rules / preset-loader / tool-ban）"
+  panel: "Web UI 面板后端（gov-config 等）"
+  webui: "Web UI 装配"
+  acps: "ACPS 协议族"
+  aip: "AIP 身份与能力"
+  hot: "热更快照"
+  verify: "校验"
+  discovery: "发现"
+  auditlog: "审计日志（sink 等）"
+  types: "类型契约（叶子域：只被依赖、不依赖他人）"
+
+# ── 规则 ───────────────────────────────────────────────────────────────────────
+rules:
+  mode: ratchet
+  # 允许的域→域依赖（= 实测现状基线，63 对；格式 "<from> -> <to>"）
+  allowed:
+    - "state -> (lib-root)"
+    - "state -> assembly"
+    - "state -> types"
+    - "tools -> state"
+    - "(lib-root) -> state"
+    - "tools -> (lib-root)"
+    - "watch -> state"
+    - "watch -> (lib-root)"
+    - "tools -> assembly"
+    - "tools -> comms"
+    - "tools -> engine"
+    - "(lib-root) -> comms"
+    - "(lib-root) -> tools"
+    - "(lib-root) -> governance"
+    - "acps -> aip"
+    - "engine -> state"
+    - "governance -> state"
+    - "(lib-root) -> engine"
+    - "(lib-root) -> assembly"
+    - "(lib-root) -> acps"
+    - "(lib-root) -> panel"
+    - "(lib-root) -> webui"
+    - "bridge -> state"
+    - "engine -> (lib-root)"
+    - "(lib-root) -> hot"
+    - "(lib-root) -> bridge"
+    - "(lib-root) -> aip"
+    - "(lib-root) -> types"
+    - "state -> hot"
+    - "tools -> watch"
+    - "tools -> aip"
+    - "acps -> discovery"
+    - "acps -> (lib-root)"
+    - "acps -> comms"
+    - "assembly -> (lib-root)"
+    - "assembly -> auditlog"
+    - "bridge -> engine"
+    - "bridge -> tools"
+    - "bridge -> (lib-root)"
+    - "bridge -> assembly"
+    - "comms -> (lib-root)"
+    - "engine -> bridge"
+    - "engine -> assembly"
+    - "engine -> comms"
+    - "hot -> assembly"
+    - "hot -> state"
+    - "(lib-root) -> watch"
+    - "(lib-root) -> discovery"
+    - "(lib-root) -> verify"
+    - "(lib-root) -> auditlog"
+    - "panel -> comms"
+    - "panel -> hot"
+    - "state -> watch"
+    - "state -> governance"
+    - "tools -> bridge"
+    - "verify -> state"
+    - "verify -> assembly"
+    - "verify -> (lib-root)"
+    - "watch -> engine"
+    - "watch -> tools"
+    - "watch -> bridge"
+    - "webui -> hot"
+    - "webui -> governance"
+
+  # 已知双向依赖（环）——**登记不阻断**，只作为"想拆环时从哪下手"的清单
+  debt:
+    - pair: ["state", "watch"]
+      counts: { "state -> watch": 1, "watch -> state": 10 }
+      note: "watch 强依赖 state（10）而 state 仅回指 1 处 ⇒ 单向化成本低，优先候选"
+    - pair: ["(lib-root)", "state"]
+      counts: { "(lib-root) -> state": 11, "state -> (lib-root)": 21 }
+      note: "包级根文件与 state 互相缠绕，拆解需先定「根文件应只做再导出」的边界"
+    - pair: ["(lib-root)", "tools"]
+      counts: { "(lib-root) -> tools": 4, "tools -> (lib-root)": 10 }
+    - pair: ["(lib-root)", "comms"]
+      counts: { "(lib-root) -> comms": 4, "comms -> (lib-root)": 1 }
+    - pair: ["(lib-root)", "acps"]
+      counts: { "(lib-root) -> acps": 3, "acps -> (lib-root)": 1 }
+    - pair: ["(lib-root)", "assembly"]
+      counts: { "(lib-root) -> assembly": 3, "assembly -> (lib-root)": 1 }
+    - pair: ["(lib-root)", "engine"]
+      counts: { "(lib-root) -> engine": 3, "engine -> (lib-root)": 2 }
+    - pair: ["(lib-root)", "bridge"]
+      counts: { "(lib-root) -> bridge": 2, "bridge -> (lib-root)": 1 }
+    - pair: ["(lib-root)", "watch"]
+      counts: { "(lib-root) -> watch": 1, "watch -> (lib-root)": 7 }
+    - pair: ["(lib-root)", "verify"]
+      counts: { "(lib-root) -> verify": 1, "verify -> (lib-root)": 1 }
+    - pair: ["bridge", "engine"]
+      counts: { "bridge -> engine": 1, "engine -> bridge": 1 }
+    - pair: ["bridge", "tools"]
+      counts: { "bridge -> tools": 1, "tools -> bridge": 1 }
+    - pair: ["governance", "state"]
+      counts: { "governance -> state": 3, "state -> governance": 1 }
+    - pair: ["hot", "state"]
+      counts: { "hot -> state": 1, "state -> hot": 2 }
+    - pair: ["tools", "watch"]
+      counts: { "tools -> watch": 2, "watch -> tools": 1 }
+
+# ── 文件级例外（结构：{ file: 相对路径, to_domain: 目标域, reason: 理由, expires: 日期 }）──
+exceptions: []
+
+# ── 上下文注入参数（P2 用；按 lane 涉及文件裁剪本文件）────────────────────────────
+context:
+  max_domains_per_lane: 4        # 单条 lane 最多注入几个域的约束，防上下文膨胀
+  include_debt: false            # 是否把 debt 一并注入（默认否，只给 allowed 与禁区）
+  include_domains_desc: true     # 是否注入域简述

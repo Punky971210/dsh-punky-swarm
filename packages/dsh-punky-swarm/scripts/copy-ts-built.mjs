@@ -45,6 +45,9 @@ const files = [
   'governance/kernel.js', 'governance/kernel.d.ts',
   'governance/preset-loader.js', 'governance/preset-loader.d.ts',
   'governance/index.js', 'governance/index.d.ts',
+  // 【P2 · arch-context】架构上下文注入件（`lib/engine/arch-context.ts`）：.ts 源 → 同目录 .js/.d.ts 回拷。
+  //   漏本行 ⇒ lib 下无该模块 ⇒ `dispatch.js` 的 import 运行期 `ERR_MODULE_NOT_FOUND`。
+  'engine/arch-context.js', 'engine/arch-context.d.ts',
 ];
 
 for (const f of files) {
