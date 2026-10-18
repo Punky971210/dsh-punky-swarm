@@ -18,7 +18,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `laneStartedAt` 不在本文件：它被源码文本面断言钉在 `gates.ts`（`batch.createdAt` 恰 2 行）。
 //   【2026-10-02 · 内务批 波 4】随 `createGates` 巨型函数拆分下沉；
 //   依赖方向单向：`gates.ts`（组合器）→ 本文件，本文件不反向 import 组合器（零环）。
-import { SESSION_RE, isAbsPath } from '../constants.js';
+import { isAbsPath } from '../constants.js';
+// 路径三族单点（W2/A-3 收敛）：本文件只留单行委托，校验与抛错原文在 batch-paths.js
+//   ⚠ `batchFile` 的 batchId 校验在单点里用 `SESSION_RE`（与收敛前逐字等价；语义上应 `BATCH_RE`，
+//   本波原样保全，登记 followup W2-FU-1）。
+import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf } from '../batch-paths.js';
 // 声明驱动：层语义（产物字段 / 入口要求 / 内容契约）改从团队声明读取——缺声明走**引擎基线**常量/缺省
 //   （tighten-only；legacy-retire-20260915 清退后无 LEGACY_* 回落层）
 // gate-techdebt 新增读端（G-2 / G-3 / S19①）：`entryRequiresOf`（入口要求的**真实来源**）/
@@ -31,19 +35,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 export function buildHelpers(cx) {
     const { flowsOf, presenceJudge, sessionsDir } = cx;
-    function sessionDir(sessionId) {
-        if (!SESSION_RE.test(sessionId))
-            throw new Error('invalid sessionId: ' + sessionId);
-        return path.join(sessionsDir, sessionId);
-    }
-    function artifactsDirOf(sessionId, batchId) {
-        return path.join(sessionDir(sessionId), 'artifacts', batchId);
-    }
-    function batchFile(sessionId, batchId) {
-        if (!SESSION_RE.test(batchId))
-            throw new Error('invalid batchId');
-        return path.join(sessionDir(sessionId), 'batches', batchId + '.json');
-    }
+    function sessionDir(sessionId) { return sessionDirOf(sessionsDir, sessionId); }
+    function artifactsDirOf(sessionId, batchId) { return artifactsDirOfAt(sessionsDir, sessionId, batchId); }
+    function batchFile(sessionId, batchId) { return batchFilePathOf(sessionsDir, sessionId, batchId); }
     function readBatch(sessionId, batchId) {
         const file = batchFile(sessionId, batchId);
         if (!fs.existsSync(file))

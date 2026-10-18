@@ -31,11 +31,13 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
 import { SAFE_ID, TERMINAL } from '../state/constants.js'; // 单点（原定义迁出）
 import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
+// 产物路径单点（W2/A-3 第四份收敛）：本文件只留单行委托；收敛后非法 sessionId 由静默拼路径变 throw（W2-FU-2）
+import { artifactsDirOf as artifactsDirOfAt } from '../state/batch-paths.js';
 // 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
 import * as EVT from '../state/event-types.js';
 
 function artifactsDirOf(root, sessionId, batchId) {
-  return path.join(root, 'sessions', sessionId, 'artifacts', batchId);
+  return artifactsDirOfAt(path.join(root, 'sessions'), sessionId, batchId);
 }
 
 // 路径防逃逸（同 store.claimAsset 语义）：批次内相对路径，拒绝绝对路径/盘符前缀/../空段

@@ -21,21 +21,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { SESSION_RE, isAbsPath } from '../constants.js'; // 单点（原本文件定义迁出）
+import { isAbsPath } from '../constants.js'; // 单点（原本文件定义迁出）
+// 路径三族单点（W2/A-3 收敛）：本文件只留单行委托，校验与抛错原文在 batch-paths.js
+import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf } from '../batch-paths.js';
 
 export function buildPaths(cx) {
   const { sessionsDir, legacyDir } = cx;
 
-  function sessionDir(sessionId) {
-    if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
-    return path.join(sessionsDir, sessionId);
-  }
+  function sessionDir(sessionId) { return sessionDirOf(sessionsDir, sessionId); }
   function batchesDirOf(sessionId) {
     return path.join(sessionDir(sessionId), 'batches');
   }
-  function artifactsDirOf(sessionId, batchId) {
-    return path.join(sessionDir(sessionId), 'artifacts', batchId);
-  }
+  function artifactsDirOf(sessionId, batchId) { return artifactsDirOfAt(sessionsDir, sessionId, batchId); }
   // condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——相对路径解析到批次产物根，绝对路径直接用；存在性判定（existsSync）
   function conditionFileExists(sessionId, batchId) {
     const artifactsDir = artifactsDirOf(sessionId, batchId);
@@ -57,10 +54,7 @@ export function buildPaths(cx) {
     return moved;
   }
 
-  function batchFile(sessionId, batchId) {
-    if (!SESSION_RE.test(batchId)) throw new Error('invalid batchId');
-    return path.join(batchesDirOf(sessionId), batchId + '.json');
-  }
+  function batchFile(sessionId, batchId) { return batchFilePathOf(sessionsDir, sessionId, batchId); }
 
   return { sessionDir, batchesDirOf, artifactsDirOf, conditionFileExists, migrateLegacy, batchFile };
 }

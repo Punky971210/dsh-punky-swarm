@@ -30,26 +30,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { migrateV2toV3 } from './schema-v3.js';
-import { SESSION_RE } from './constants.js'; // 单点（原定义迁出）
+// 路径三族单点（W2/A-3 收敛）：本文件只留单行委托，校验与抛错原文在 batch-paths.js
+import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf } from './batch-paths.js';
+// listArchived 的目录名过滤仍用 SAFE_ID 字符集：原 `const BATCH_RE = SESSION_RE` 别名删除，
+//   改为直接引单点常量（同一正则对象，行为逐字等价）
+import { SESSION_RE } from './constants.js';
 // 事件字面量改引 EVT 常量单点（archive.failed/archive.done）
 import * as EVT from './event-types.js';
-
-const BATCH_RE = SESSION_RE; // 同款正则（batchId 与 sessionId 共用 SAFE_ID 字符集）
 
 export function createArchive(root) {
   const sessionsDir = path.join(root, 'sessions');
 
-  function sessionDir(sessionId) {
-    if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
-    return path.join(sessionsDir, sessionId);
-  }
-  function batchFileOf(sessionId, batchId) {
-    if (!BATCH_RE.test(batchId)) throw new Error('invalid batchId');
-    return path.join(sessionDir(sessionId), 'batches', batchId + '.json');
-  }
-  function artifactsDirOf(sessionId, batchId) {
-    return path.join(sessionDir(sessionId), 'artifacts', batchId);
-  }
+  function sessionDir(sessionId) { return sessionDirOf(sessionsDir, sessionId); }
+  function batchFileOf(sessionId, batchId) { return batchFilePathOf(sessionsDir, sessionId, batchId); }
+  function artifactsDirOf(sessionId, batchId) { return artifactsDirOfAt(sessionsDir, sessionId, batchId); }
   // 归档目标：sessions/<sessionId>/archive/<batchId>/（与 batches/、artifacts/ 平级）
   function archiveDirOf(sessionId, batchId) {
     return path.join(sessionDir(sessionId), 'archive', batchId);
@@ -88,7 +82,7 @@ export function createArchive(root) {
     const dir = path.join(sessionDir(sessionId), 'archive');
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir)
-      .filter((f) => BATCH_RE.test(f) && fs.existsSync(path.join(dir, f, 'manifest.json')))
+      .filter((f) => SESSION_RE.test(f) && fs.existsSync(path.join(dir, f, 'manifest.json')))
       .sort();
   }
 
