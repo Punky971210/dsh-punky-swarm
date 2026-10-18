@@ -43,15 +43,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   零读端声明  → declarationSummaryOf(flows) 汇总 `unwired`（state_machine / progress_contract /
 //                rework 的**未接线标注**，来源 team-asset.js 的台账；`consume_field` 已于 S19① 接线 ⇒ 不在台账）
 
-import { fileURLToPath } from 'node:url';
 // 【2026-09-27 · team-asset 全量退役】原 import 面（资产装载器 / 资产签名 / 码族常量表 /
 //   严重级常量表 / blocking 判据 / 未接线台账读函数 —— 字面量见上游 team-asset.js）
 //   随资产读端**整体删除**（A-5 / A-6 判据：本文件对 `team-asset` 的 import 面与码面归零）。
 
-/** 包根目录（lib/assembly/flows.js → 包根；与 lib/assets.js packageRoot 同源口径）。 */
-export function packageRoot() {
-  return fileURLToPath(new URL('../../', import.meta.url));
-}
+/** 包根目录：**单点** = `lib/assets.js`（W1a/A-4 收敛；本文件不再自算 `import.meta.url` 深度）。 */
+export { packageRoot } from '../assets.js';
 
 /**
  * 引擎基线：**验收标准（criteria）章节名** —— 判据「全中文」的**单一真源**（2026-09-21 用户裁定）。

@@ -39,6 +39,8 @@ import { DEFAULT_ASSEMBLY } from '../assembly.js';
 import { engineVersion } from '../aip/tool-descriptor.js';
 import { ensureAcpsCerts } from './certs.js';
 import { AIP_COMMAND_TYPES as TASK_COMMAND_TYPES, TASK_STATES } from '../comms/aip-format.js';
+// JSON 响应写端单点（(lib-root) 中立件；与 lib/api.js 同源）
+import { sendJson } from '../json-response.js';
 
 // ── AIP RPC 常量（对齐参考实现 aip_base_model.py:23-49 / aip_rpc_model.py:15-57）──
 export const JSONRPC_VERSION = '2.0';
@@ -167,12 +169,6 @@ function readBody(req) {
     });
   }
   return Promise.resolve({});
-}
-
-function sendJson(res, status, data) {
-  const body = JSON.stringify(data);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(body);
 }
 
 /**

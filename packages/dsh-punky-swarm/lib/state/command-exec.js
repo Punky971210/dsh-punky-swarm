@@ -27,6 +27,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       超时：spawnSync timeout + killSignal（Windows 上 SIGTERM/SIGKILL 均映射 TerminateProcess，两段式在同步执行器中等价；
 //       POSIX 两段式 kill 若需细化留后续评估——见 code-change-summary 披露）。
 import { spawnSync } from 'node:child_process';
+// shell 文本预处理单点（(lib-root) 中立件；与 lib/tools/readonly.js 同源）
+import { stripStreamMerges } from '../shell-text.js';
 
 // ---- 默认值（env 可调，全部有默认）----
 function envNumber(name, def) {
@@ -109,10 +111,7 @@ const WRITE_HEADS = new Set(['rm', 'mv', 'cp', 'del', 'mkdir', 'touch', 'tee', '
 //   未闭合引号退化为「只看引号外文本」）——这是与 tool-ban 的**有意差异**，登记于 fix-e3.md。
 const QUOTE_MASK = '__Q__';
 
-// 流合并不算写（L3 同款判据）：`2>&1` / `2>$null` 只合并或丢弃流，不落盘。
-function stripStreamMerges(text) {
-  return text.replace(/2>&1/g, ' ').replace(/2>\$null/gi, ' ');
-}
+// 流合并不算写（L3 同款判据）：`2>&1` / `2>$null` 只合并或丢弃流，不落盘（实现单点 = lib/shell-text.js）。
 
 // 引号掩码函数（下方 maskQuoted）：`"…"` / `'…'` 字面量整体替成一个无语义 token（内容不入判定）。
 function maskQuoted(text) {

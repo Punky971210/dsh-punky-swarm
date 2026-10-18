@@ -31,12 +31,8 @@ import * as EVT from './state/event-types.js';
 // WebUI 治理配置写通道：/config 端点 trusted 判定（自复刻宿主 /api
 //   护栏语义，宿主未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
 import { isTrustedConfigRequest } from './webui/config-trust.js';
-
-function sendJson(res, status, data) {
-  const body = JSON.stringify(data);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(body);
-}
+// JSON 响应写端单点（(lib-root) 中立件；与 lib/acps/server.js 同源）
+import { sendJson } from './json-response.js';
 
 function q(url) {
   return Object.fromEntries(new URL(url, 'http://localhost').searchParams.entries());

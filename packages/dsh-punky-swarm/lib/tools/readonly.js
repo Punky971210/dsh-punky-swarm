@@ -15,6 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { stripStreamMerges } from '../shell-text.js';
+
 // 只读 shell 判定（难度门禁「只读侦察面」的判定内核）
 //
 // 目的：难度路由门禁原先把 shell 类工具（pwsh/bash）一刀切当执行型 ⇒ 主 Agent 在评估前
@@ -164,10 +166,7 @@ function maskQuoted(text) {
   return { ok: true, masked: out };
 }
 
-// ① 流合并不算写：`2>&1` / `2>$null` 只合并或丢弃流，不落盘
-function stripStreamMerges(text) {
-  return text.replace(/2>&1/g, ' ').replace(/2>\$null/gi, ' ');
-}
+// ① 流合并不算写：`2>&1` / `2>$null` 只合并或丢弃流，不落盘（实现单点 = lib/shell-text.js）
 
 // ④ 段首 token（跳过 `(` `&` `.` 包裹；引号字面量已掩码，故 `["']?` 只为兜底）
 function headToken(seg) {
