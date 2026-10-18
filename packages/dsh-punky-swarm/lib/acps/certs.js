@@ -81,10 +81,6 @@ function derPrintable(s) {
   return derWrap(0x13, Buffer.from(s, 'ascii'));
 }
 
-function derNull() {
-  return Buffer.from([0x05, 0x00]);
-}
-
 function derBool(v) {
   return Buffer.from([0x01, 0x01, v ? 0xff : 0x00]);
 }

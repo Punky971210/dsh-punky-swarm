@@ -802,10 +802,6 @@ function trackOneShotRun(workerSessionId, run, warn) {
     },
   );
 }
-/** 在飞 one-shot worker 数（观测面；测试与心跳探针用，**零判定**）。 */
-export function activeRunCount() {
-  return activeRuns.size;
-}
 
 
 // ── 派发核心（**唯一实现**：工具面与链引擎共用，禁第二套） ──────────────────────

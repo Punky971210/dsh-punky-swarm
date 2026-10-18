@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 宿主面读端单点（自 `lib/tools/core.js` **原样搬移**，行为零变更）：宿主技能根 / 官方 roster（Manager 在册）/
-//   交接调用方身份采集 / legacy 标注常量。导出面经 `lib/tools/core.js` re-export 保持。
-import { join } from 'node:path';
+//   交接调用方身份采集 / legacy 标注常量。宿主技能根函数零引用已删（W3a）；其余导出面由消费者直接 import。
 
 // ── 【2026-09-27 · team-asset 全量退役】原「会话级临时团队资产根（teamsRoot）」整面**已删除** ──────────
 //   删除清单（逐项对 A-5 / A-6 / A-11 判据归零）：
@@ -42,12 +41,6 @@ import { join } from 'node:path';
 // 现口径：**构造期拒建批门与资产读端全部删除** —— `team` 降为**可选自由标签**（纯归类字段），
 //   资产 / `chain` / `teamsRoot` 三面在引擎内**不再存在**（本批的删除动作见上一段清单）。
 
-
-/** 宿主技能根：`USERPROFILE || HOME` + `.agents/skills`（不新增 env）。 */
-export function hostSkillsRoot() {
-  const home = process.env.USERPROFILE || process.env.HOME;
-  return home ? join(home, '.agents', 'skills') : null;
-}
 
 // 【2026-09-27 · team-asset 全量退役】原 `packagedTeamsWithAsset`（包内资产枚举）与
 //   `teamRecoveryHint`（拒态自救文案）**已删除**：无资产面 ⇒ 无候选可枚举、无自救指引可给。

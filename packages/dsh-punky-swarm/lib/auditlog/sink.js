@@ -440,10 +440,6 @@ function segmentPath(day, segment) {
     : path.join(state.sinkDir, 'audit-' + day + '.' + segment + '.jsonl');
 }
 
-function mainSegmentPath() {
-  return segmentPath(localDateKey(new Date()), 0);
-}
-
 function currentSegmentPath() {
   return segmentPath(localDateKey(new Date()), state.segment);
 }

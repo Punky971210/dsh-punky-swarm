@@ -190,10 +190,6 @@ function b64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function unb64url(str) {
-  return Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-}
-
 // 加密 EAB 凭据（keyId/macKey 不落明文）→ 信封对象 { v, alg, aic, expiresAt, iv, tag, ct }
 export function encryptEabCredential(credential, keyInput) {
   if (!credential || typeof credential !== 'object') {

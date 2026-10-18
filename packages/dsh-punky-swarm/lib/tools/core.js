@@ -63,7 +63,6 @@ import { buildTaskTools } from './task-tools.js';
 // ── 对外导出面（**逐字保持**）：原 `lib/tools/core.js` 的具名导出经下方 re-export 原样透出 ──────────
 export { TEXT_OUTPUT, sessionOf } from './shared.js'; // re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
 export { EXEC_TOOLS, assertMemberActionTierC, assertModeActive, lockPath, installDifficultyGuard } from './tier-gate.js';
-export { hostSkillsRoot } from './host-surface.js';
 export { WAKE_MIN_INTERVAL_MS, LEADER_WAKE_WINDOWS, wakeLeaderForReport } from './swarm-comms.js';
 
 // ── 相位两件（`batch_phase` / `batch_control`）：**留在 core.js**，不迁出 ────────────────────

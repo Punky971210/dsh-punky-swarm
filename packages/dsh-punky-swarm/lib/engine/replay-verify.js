@@ -31,7 +31,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 【禁 throw（fail-safe）】`events` 缺失 / 非数组 / 空 ⇒ 不抛，返回 `eventsScanned:0` + 空差异
 //   + `degraded:'no-events'`（退化可判读，不静默、不拒态）。
 
-import { MEMBER_STATES, BATCH_TRANSITIONS, isMemberTerminal } from '../schema.js';
+import { MEMBER_STATES, BATCH_TRANSITIONS } from '../schema.js';
 
 // ── 事件类型字面量（**只读匹配用**，非发射面）─────────────────────────────────
 // 取值依据（直读锚点）：
@@ -137,15 +137,4 @@ export function replayVerifyVerdict(batch) {
   };
   if (events === null || events.length === 0) verdict.degraded = 'no-events';
   return verdict;
-}
-
-// ── 只读辅助（供诊断产物登记；不参与判定）────────────────────────────────────
-/**
- * 终态判定透传（单点 = `lib/schema.js#isMemberTerminal`）——供消费方在同一真源上判读末态，
- * 避免各处自行拼字面量表。
- * @param {unknown} state 成员态
- * @returns {boolean}
- */
-export function isTerminalLaneState(state) {
-  return typeof state === 'string' && isMemberTerminal(state);
 }
