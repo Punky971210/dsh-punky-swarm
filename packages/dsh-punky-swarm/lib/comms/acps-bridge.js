@@ -27,8 +27,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   桥不自带监听——/rpc 监听归 endpoint 侧（衔接点见 handleInbound/toTaskResult 签名）。
 // - 生命周期：start/stop/dispose 幂等（开→关销毁、关→开重建，秒级无迁移）。
 
-import { join } from 'node:path';
 import * as mailbox from './mailbox.js';
+import { mailboxRootOf } from './mailbox-paths.js';
 import {
   toAipMessage,
   toAipTask,
@@ -41,10 +41,6 @@ import { resolveBridgeConfig } from '../schema.js';
 
 // lane 合法性（与 mailbox.js sanitizeLane 同正则，fail-soft：外部输入不合法 → null 而非 throw）
 const LANE_RE = /^[a-zA-Z0-9._-]+$/;
-
-function boxRoot(root, sessionId, batchId) {
-  return join(root, 'sessions', sessionId, 'mailbox', batchId);
-}
 
 // ── inbound：ACPs TaskCommand → mailbox 消息（纯转换，不写存储）──
 // lane 推导：mentions 单元素数组/非 'all' 字符串 → 该值；否则 groupId；均非法 → null（inbox 无 lane 概念，
@@ -86,7 +82,7 @@ export function deliverInbound(root, sessionId, batchId, taskCommand, { inboundE
     return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false: external writes to mailbox disabled' };
   }
   const { message, meta } = taskCommandToInbound(taskCommand);
-  const res = mailbox.send(boxRoot(root, sessionId, batchId), { type: 'inbox' }, message, meta);
+  const res = mailbox.send(mailboxRootOf(root, sessionId, batchId), { type: 'inbox' }, message, meta);
   return { ok: res.ok, ackId: res.ackId, lane: meta.lane };
 }
 

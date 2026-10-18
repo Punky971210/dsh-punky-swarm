@@ -24,11 +24,9 @@ import * as mailbox from '../comms/mailbox.js';
 import { chainFor, checkBudget, recordChain } from '../comms/budget.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
 import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
-import { join } from 'node:path';
+import { mailboxRootOf } from '../comms/mailbox-paths.js'; // mailbox 落盘根单点（W1b/A-5）
 // budget.rejected 事件字面量改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
-
-function boxRoot(root, sessionId, batchId) { return join(root, 'sessions', sessionId, 'mailbox', batchId); }
 
 // 发送方/接收方/文本推导（budget 判定输入；缺省值保证无 meta 的调用仍可记账）
 function budgetFrom(args) { return args.meta?.from ?? args.lane ?? 'worker'; }
@@ -55,7 +53,7 @@ export function createMailboxTools(ctx, deps) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         const batchId = args.batchId;
-        const rootDir = boxRoot(root, sessionId, batchId);
+        const rootDir = mailboxRootOf(root, sessionId, batchId);
         // 环防护接线（缺省默认开——readCapability 合并注册表 default {enabled:true}；
         //   显式 capabilities.budget.enabled:false 可关 → 零感知零开销；inbox 永不受限——Manager 追问/派发绝不因链预算被拒）
         const budgetCfg = readCapability(config, 'budget');
@@ -101,7 +99,7 @@ export function createMailboxTools(ctx, deps) {
       },
       async execute(args, exec) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return { items: mailbox.readUnacked(boxRoot(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, { sinceTs: args.since ?? 0 }) };
+        return { items: mailbox.readUnacked(mailboxRootOf(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, { sinceTs: args.since ?? 0 }) };
       },
     }),
     defineTool({
@@ -114,7 +112,7 @@ export function createMailboxTools(ctx, deps) {
       },
       async execute(args, exec) {
         const b = args.box === 'outbox' ? { type: 'outbox', lane: args.lane } : { type: args.box };
-        return mailbox.ack(boxRoot(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, args.ackId);
+        return mailbox.ack(mailboxRootOf(root, sessionOf(args, exec, resolveBatchSession), args.batchId), b, args.ackId);
       },
     }),
   ];

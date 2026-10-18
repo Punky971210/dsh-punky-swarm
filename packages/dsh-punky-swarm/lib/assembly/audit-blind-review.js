@@ -33,7 +33,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 范围红线：零引擎改动（wave-plan.js / gates.js / store.js 等一律不碰）——盲审 = 装配数据 + 既有工具编排。
 
 // ── 三角色映射（layer=audit，skills 手册前缀；Leader 显式声明或经 applyAssemblyExtensions 合并补全）──
-export const BLIND_REVIEW_ROLES = ['audit-panelist', 'audit-aggregate', 'audit-critic'];
+// 单点 = `lib/assembly/schema.js:BLIND_REVIEW_ROLES`（W1b/A-2 收敛）；本文件**保留同名 re-export**
+//   （`test/audit-blind-review.test.js` 从本文件 import 该符号，导入面不得断）。
+//   两条语句各有职责：`import` 供本文件内部消费（:applyAssemblyExtensions 遍历），
+//   `export … from` 保导出面 —— 纯 re-export **不创建本地绑定**，故不可省 import。
+import { BLIND_REVIEW_ROLES } from './schema.js';
+export { BLIND_REVIEW_ROLES } from './schema.js';
 
 export const BLIND_REVIEW_SKILLS = {
   'audit-panelist': ['report-blind-audit', 'code-review-guideline'], // 事实核验 + 对抗式打分（rubric/checklist）

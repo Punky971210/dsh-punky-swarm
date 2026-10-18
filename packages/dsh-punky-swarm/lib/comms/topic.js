@@ -23,8 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   - subscribeTopicPrefix（前缀订阅，SSE hub 订阅 `swarm.` 用，签名零改动）；
 //   - 装配开关 capabilities.topic.enabled（CAPABILITY_REGISTRY 注册表默认关，显式开启才接线）；
 //   - 消费点不得绕过 mailbox 公共接口（与既有广播语义同源：mailbox.send/readUnacked）。
-import { join } from 'node:path';
 import { send as mailboxSend, readUnacked } from './mailbox.js';
+import { mailboxRootOf } from './mailbox-paths.js';
 
 const registry = new Map(); // Map<topic, Set<handler>>
 const prefixRegistry = new Map(); // Map<prefix, Set<handler>>（前缀订阅，emitTopic 按 startsWith 分发）
@@ -33,10 +33,6 @@ function assertTopic(topic) {
   if (typeof topic !== 'string' || topic.length === 0) {
     throw new Error('invalid topic: ' + String(topic));
   }
-}
-
-function boxRoot(root, sessionId, batchId) {
-  return join(root, 'sessions', sessionId, 'mailbox', batchId);
 }
 
 export function subscribeTopic(topic, handler) {
@@ -100,7 +96,7 @@ export function emitTopic(topic, payload, ctx = {}) {
   const { root, sessionId, batchId } = ctx;
   if (root && sessionId && batchId) {
     const msg = { topic, payload, ts: new Date().toISOString() };
-    const res = mailboxSend(boxRoot(root, sessionId, batchId), { type: 'broadcast' }, msg);
+    const res = mailboxSend(mailboxRootOf(root, sessionId, batchId), { type: 'broadcast' }, msg);
     sent = res.ok ? 1 : 0;
     ackId = res.ackId ?? null;
   }
@@ -108,7 +104,7 @@ export function emitTopic(topic, payload, ctx = {}) {
 }
 
 export function readTopic(root, { sessionId, batchId, topic, sinceTs = 0 } = {}) {
-  const items = readUnacked(boxRoot(root, sessionId, batchId), { type: 'broadcast' }, { sinceTs });
+  const items = readUnacked(mailboxRootOf(root, sessionId, batchId), { type: 'broadcast' }, { sinceTs });
   return items
     .filter((it) => it.message?.topic === topic)
     .map((it) => ({ ackId: it.ackId, topic: it.message.topic, payload: it.message.payload, ts: it.message.ts }));
