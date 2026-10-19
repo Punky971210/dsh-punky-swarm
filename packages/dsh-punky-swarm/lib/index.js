@@ -557,6 +557,180 @@ const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
   return rebuildDispatchIndex;
 };
 
+const mountDispatchRegistration = ({ ctx, config, store, dispatchIndex }) => {
+  // 派发写侧登记点（dispatch-register.js）：
+  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
+  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
+  //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
+  //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，
+  //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
+  //   读侧骨架零改动（写侧只追加事件 + 维护同一 Map）。
+  let dispatchReg = installDispatchRegistration(ctx, {
+    store,
+    dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
+    config,
+    // 装配注入面：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
+    //   缺省 undefined → 模块内 member_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
+    //   yml 静态块不适用时走兜底意图——两路共存，静默降级语义保持。
+    resolveBatchContext: config?.dispatch?.resolveBatchContext,
+    logger: ctx.logger,
+  });
+  if (dispatchReg.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（零宿主改造）');
+  }
+  return dispatchReg;
+};
+const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) => {
+  // 自动结算**主路**（P3a 规格 §2）：装配期一次注册宿主 `subagent/end`。
+  //   `{ global: true }` **硬性要求**（契约卡 #6/#8/#9）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
+  //   resolver 为 `null`（受 scope 过滤）⇒ 探针实测**被 scope 化的插件 ctx（preset standing mount）默认漏收**，
+  //   `global` 短路一切 scope 过滤（`cordis/lib/index.js:263`）。不得以「根 ctx 收得到」为由省略（#7 仅因未 tag）。
+  //   映射与幂等：`info.id`（durable 子会话 id，**非** runId）→ 本 closure 的 `dispatchIndex`
+  //   → `autoSettleLane` 单点判定（与兼底路 `swarm_report(settle-request)` **同一函数**）；
+  //   未命中（进程级广播夹带非本套件子会话）⇒ 静默丢弃（零事件零状态变化）。
+  //   回调内**不**解析子句柄（契约卡 #12：handle disposal 先于 emit），结算信息只来自 payload。
+  //   失败隔离：`installAutoSettle` 内部全程 try/catch 且不抛（观察者纪律）。
+  let autoSettle = installAutoSettle(ctx, {
+    store,
+    dispatchIndex, // 与读侧骨架 / 登记点共享同一 Map（登记后无需重启即命中）
+    root,
+    liveConfig: config, // 与 `member_settle` 链推进同源（`apply` 的 config；热更经 readLiveConfig 在工具面）
+    // 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-1/R-2 ①】停用开关按**原始值**透传：
+    //   严格判定由 `installAutoSettle` 单点内的 `autoSettleEnabledOf` 承担——**只有显式 `false` 才停用**，
+    //   `undefined`（键缺省）/ 非布尔 ⇒ 启用 ⇒ 未声明开关的既有批**行为逐字不变**（R-1 最硬一条）。
+    //   ⚠ 装配期读的是**静态 config**；`<root>/config/runtime.json` 覆盖在 watcher.start() 后才并入快照
+    //   ⇒ 必须由下方 boot 对账补一次，否则「runtime.json 写了 false、重启后开关失效」= 最危险的静默形态。
+    enabled: config?.autoSettle?.enabled,
+    logger: ctx.logger,
+  });
+  if (autoSettle.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] auto-settle mounted: 宿主 subagent/end（global:true）→ 引擎自动结算判定（复用 Tier3 校验链；缺省 onFail=pause 停轮）');
+  }
+  return autoSettle;
+};
+  // 热更「生效变化」基线（约束 11：以**严格布尔解析后的值**比对 ⇒ `undefined` 与 `true` 同值，
+  //   不触发无意义重挂）。判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**——
+  //   该函数刻意**不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 此处为同形镜像；两处任一漂移即成第二套开关口径。
+  const autoSettleEnabledOf = (cfg) => cfg?.autoSettle?.enabled !== false;
+const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) => {
+  // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
+  //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
+  //   定位：本块 = **装配层 wiring**（本文件即装配层）；所有判定下沉到既有单点，本块自己只做三件事：
+  //     ① 过滤：经**同一** `dispatchIndex` 命中 lane（进程级广播会夹带非本套件子会话 ⇒ 未命中**静默丢弃**，
+  //        与结算主路同纪律、零事件零状态变化）；
+  //     ② 候选：`poolViewOf()` 单点算「可派发」lane id 清单 = **D-3 甲**的「只建议」面；
+  //     ③ 唤醒：`wakeLeaderForReport()` 单点（30s 合并窗 / Leader 句柄非注入读 / 四类降级回显 / 永不抛）。
+  //   ⚠ **禁止**在本块调用 `dispatchLaneCore` 真派（D-3 甲；派发 = Leader 单点 `lane_dispatch`，K1 不引入 claim 自领）。
+  //   ⚠ **不取子句柄**（条件① / J-4 保护目标）：`info.id` 只作映射键；唤醒用的是 `dispatchIndex` 记的
+  //     **批 owner 会话**（= Leader/父会话）句柄，与子 run 生命周期无关。
+  //   ⚠ **不改**结算路（条件②）：与 `installAutoSettle` **各自独立**注册、互不 await、互不共享状态；
+  //     两路共用既有节流窗（同批同 Leader 共一窗）⇒ 甲/乙 唤醒**不叠加**。
+  //   ⚠ 已知边界（如实登记、不静默）：映射 miss 的**惰性重建**由结算主路承担（`lib/engine/auto-settle.js
+  //     #onSubagentEnd`，注册序在前 ⇒ 同事件同步段先跑并写回同一 Map）⇒ 本路**不复制第二套重建**
+  //     （禁第二套口径）；「索引冷 + 本路先跑」的窄窗内可能漏唤醒，下一事件即恢复。
+  let laneWake = null;
+  /** 唤醒路的**单次动作**：全程 try/catch 且不抛（观察者纪律，与结算主路同款）。 */
+  const onLaneWorkerEnd = async (info) => {
+    try {
+      if (!info || typeof info !== 'object') return;
+      const id = info.id;
+      if (typeof id !== 'string' || id.length === 0) return; // 无 durable 子会话 id ⇒ 静默丢弃
+      const hit = dispatchIndex instanceof Map ? dispatchIndex.get(id) : null;
+      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return; // 非本套件派发 ⇒ 静默丢弃
+      // ② 候选（**只读**，D-3 甲）：`poolViewOf` 单点判「deps 已结算 + owner===null + lane pending」。
+      let candidates = null;
+      try {
+        const view = poolViewOf(store.readBatch(hit.sessionId, hit.batchId));
+        const ids = (view.pool ?? []).filter((t) => t.dispatchable).map((t) => t.id);
+        if (ids.length > 0) candidates = ids;
+      } catch { candidates = null; /* 批次不可读 ⇒ 无候选面（不影响唤醒本身） */ }
+      // 终态语义（契约卡 §1.1）：宿主正常路带 `stopReason`；异常路固定 `'error'`（`dsh-subagent/lib/index.js:274-277`）
+      //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
+      const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : 'completed';
+      // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
+      //   【批 `lane-wake-mainpath-fix-20261010` · W-3】**唯一寻址点**：`leaderSessionId` 改取
+      //   `wakeAddressOf(hit)` = 「派发期记录的发起方 agent 会话」∨ 回退 `hit.sessionId`。
+      //   改前取 `hit.sessionId`：命名黑板批下该值是**黑板名**而非活 agent ⇒ `leader-not-live`、静默
+      //   （worker 忘了回报时本路是唯一通道 ⇒ 整路价值归零，P-1/P-3）。
+      //   治理落点（`:624` 的 `readBatch(hit.sessionId, …)`）与命中判据（`:620`）**逐字不动**（L-AC-5）。
+      wakeLeaderForReport(ctx, {
+        callerSessionId: id, leaderSessionId: wakeAddressOf(hit),
+        batchId: hit.batchId, lane: hit.lane, type: stopReason,
+        summary: '子代理已结束（主路 subagent/end；stopReason=' + stopReason + '）',
+        candidates,
+      });
+    } catch (e) {
+      try { ctx?.logger?.warn?.('[dsh-punky-swarm] lane-wake subagent/end handler failed (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
+    }
+  };
+  /** 装配置点（**独立**，条件③）：与 `installAutoSettle` 并列；返回形态同形（`{installed, reason?, count(), dispose()}`）。 */
+  const installLaneWake = () => {
+    const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
+    if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
+    let hits = 0;
+    const handler = (info) => {
+      hits += 1;
+      // 不 await：宿主对 listener 的 containment 不覆盖异步悬空 ⇒ 自行 catch（onLaneWorkerEnd 内亦已包 try/catch）。
+      return onLaneWorkerEnd(info).catch((e) => {
+        try { ctx.logger?.warn?.('[dsh-punky-swarm] lane-wake handler rejected (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
+      });
+    };
+    // `{ global: true }` **硬性要求**（与结算主路同判据、同纪律）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
+    //   resolver 为 `null`（受 scope 过滤）⇒ 被 scope 化的插件 ctx（preset standing mount）默认漏收；
+    //   缺则本路**静默失效**（探针实测先例见 `lib/engine/auto-settle.js` 头注释 §①）。
+    const dispose = ctx.on(AUTO_SETTLE_SUBAGENT_END, handler, { global: true });
+    return { installed: true, count: () => hits, dispose() { try { if (typeof dispose === 'function') dispose(); } catch { /* 幂等 */ } } };
+  };
+  // 停用开关（`autoSettle.enabled`）的**生效值**复用上方单点：本路属引擎**主路面** ⇒ 与结算路同生共死；
+  //   兼底路（`swarm_report`）唤醒面 = 甲，与开关**无关**、不受影响（D-5 甲的解耦面）。
+  if (autoSettleEnabled) laneWake = installLaneWake();
+  if (laneWake?.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] lane-wake mounted: 宿主 subagent/end（global:true，与结算主路**并列独立**）→ 命中 lane ⇒ 取 Leader 句柄唤醒 + 附可派发候选（只建议，不派发）');
+  }
+  return { laneWake, installLaneWake };
+};
+const replayStartupGaps = ({ ctx, config, store, root }) => {
+  // ── W1-① 重放/恢复（装配期**有界**扫描；蓝图 §W1-①）────────────────────────────────
+  //   缺口（实测）：链推进由 `member.settled` 驱动；若进程死在「**已结算**」与「**已推进**」之间
+  //   （或推进因门禁/挂载点失败而无人补），批次会永久停在「lane 已 merged、下一环从未被决策」。
+  //   本扫描启动后补一次决策。**纪律**（四条，缺一即为「写了不生效」或「静默危害」）：
+  //     ① 只处理 `running` 批 —— `paused` 是人工停轮（`resume` 是唯一恢复入口）、终态不追；
+  //     ② 一律**只决策不派发**（`replayBatch` 内固定 `noDispatch`）：装配期无工具流水线 ⇒ 无挂载点，
+  //        真派仍由 Leader/Manager 在工具面执行；
+  //     ③ 全程 try/catch 不抛，且**异步化**（不阻塞 `apply` 返回）；
+  //     ④ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3），有补决策才 info 一行摘要。
+  //   有界：会话数与批次数均设上限，防大批量启动时扫盘过久。
+  try {
+    const MAX_SESSIONS = 5;
+    const MAX_BATCHES = 20;
+    const sessions = (typeof store.listSessions === 'function' ? store.listSessions() : []).slice(0, MAX_SESSIONS);
+    const targets = [];
+    for (const sid of sessions) {
+      const ids = typeof store.listBatches === 'function' ? store.listBatches(sid) : [];
+      for (const bid of ids) {
+        if (targets.length >= MAX_BATCHES) break;
+        try { if (store.readBatch(sid, bid)?.phase === 'running') targets.push({ sessionId: sid, batchId: bid }); } catch { /* 坏批跳过 */ }
+      }
+      if (targets.length >= MAX_BATCHES) break;
+    }
+    if (targets.length > 0) {
+      void (async () => {
+        let replayed = 0; const hits = [];
+        for (const t of targets) {
+          try {
+            const r = await replayBatch({ store, root, liveConfig: config }, ctx, t);
+            if (r && r.replayed > 0) { replayed += r.replayed; hits.push(t.batchId); }
+          } catch { /* 单批隔离 */ }
+        }
+        if (replayed > 0) {
+          ctx.logger?.info?.('[dsh-punky-swarm] replay(装配期)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
+            + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
+        }
+      })();
+    }
+  } catch { /* 启动期扫描失败不影响插件装载 */ }
+};
+
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
@@ -642,130 +816,14 @@ export const apply = (ctx, config = {}) => {
   const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => governanceInstalledCfg });
   const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
-  // 派发写侧登记点（dispatch-register.js）：
-  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
-  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
-  //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
-  //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，
-  //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
-  //   读侧骨架零改动（写侧只追加事件 + 维护同一 Map）。
-  let dispatchReg = installDispatchRegistration(ctx, {
-    store,
-    dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
-    config,
-    // 装配注入面：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
-    //   缺省 undefined → 模块内 member_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
-    //   yml 静态块不适用时走兜底意图——两路共存，静默降级语义保持。
-    resolveBatchContext: config?.dispatch?.resolveBatchContext,
-    logger: ctx.logger,
-  });
-  if (dispatchReg.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] dispatch registration mounted: tools/post-execute 观察派发工具 → member.dispatch 登记（零宿主改造）');
-  }
-  // 自动结算**主路**（P3a 规格 §2）：装配期一次注册宿主 `subagent/end`。
-  //   `{ global: true }` **硬性要求**（契约卡 #6/#8/#9）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
-  //   resolver 为 `null`（受 scope 过滤）⇒ 探针实测**被 scope 化的插件 ctx（preset standing mount）默认漏收**，
-  //   `global` 短路一切 scope 过滤（`cordis/lib/index.js:263`）。不得以「根 ctx 收得到」为由省略（#7 仅因未 tag）。
-  //   映射与幂等：`info.id`（durable 子会话 id，**非** runId）→ 本 closure 的 `dispatchIndex`
-  //   → `autoSettleLane` 单点判定（与兼底路 `swarm_report(settle-request)` **同一函数**）；
-  //   未命中（进程级广播夹带非本套件子会话）⇒ 静默丢弃（零事件零状态变化）。
-  //   回调内**不**解析子句柄（契约卡 #12：handle disposal 先于 emit），结算信息只来自 payload。
-  //   失败隔离：`installAutoSettle` 内部全程 try/catch 且不抛（观察者纪律）。
-  let autoSettle = installAutoSettle(ctx, {
-    store,
-    dispatchIndex, // 与读侧骨架 / 登记点共享同一 Map（登记后无需重启即命中）
-    root,
-    liveConfig: config, // 与 `member_settle` 链推进同源（`apply` 的 config；热更经 readLiveConfig 在工具面）
-    // 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-1/R-2 ①】停用开关按**原始值**透传：
-    //   严格判定由 `installAutoSettle` 单点内的 `autoSettleEnabledOf` 承担——**只有显式 `false` 才停用**，
-    //   `undefined`（键缺省）/ 非布尔 ⇒ 启用 ⇒ 未声明开关的既有批**行为逐字不变**（R-1 最硬一条）。
-    //   ⚠ 装配期读的是**静态 config**；`<root>/config/runtime.json` 覆盖在 watcher.start() 后才并入快照
-    //   ⇒ 必须由下方 boot 对账补一次，否则「runtime.json 写了 false、重启后开关失效」= 最危险的静默形态。
-    enabled: config?.autoSettle?.enabled,
-    logger: ctx.logger,
-  });
-  if (autoSettle.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] auto-settle mounted: 宿主 subagent/end（global:true）→ 引擎自动结算判定（复用 Tier3 校验链；缺省 onFail=pause 停轮）');
-  }
-  // 热更「生效变化」基线（约束 11：以**严格布尔解析后的值**比对 ⇒ `undefined` 与 `true` 同值，
-  //   不触发无意义重挂）。判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**——
-  //   该函数刻意**不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 此处为同形镜像；两处任一漂移即成第二套开关口径。
-  const autoSettleEnabledOf = (cfg) => cfg?.autoSettle?.enabled !== false;
+  let dispatchReg = null;
+  dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
+  let autoSettle = null;
+  autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });
   let autoSettleEnabled = autoSettleEnabledOf(config);
-  // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
-  //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
-  //   定位：本块 = **装配层 wiring**（本文件即装配层）；所有判定下沉到既有单点，本块自己只做三件事：
-  //     ① 过滤：经**同一** `dispatchIndex` 命中 lane（进程级广播会夹带非本套件子会话 ⇒ 未命中**静默丢弃**，
-  //        与结算主路同纪律、零事件零状态变化）；
-  //     ② 候选：`poolViewOf()` 单点算「可派发」lane id 清单 = **D-3 甲**的「只建议」面；
-  //     ③ 唤醒：`wakeLeaderForReport()` 单点（30s 合并窗 / Leader 句柄非注入读 / 四类降级回显 / 永不抛）。
-  //   ⚠ **禁止**在本块调用 `dispatchLaneCore` 真派（D-3 甲；派发 = Leader 单点 `lane_dispatch`，K1 不引入 claim 自领）。
-  //   ⚠ **不取子句柄**（条件① / J-4 保护目标）：`info.id` 只作映射键；唤醒用的是 `dispatchIndex` 记的
-  //     **批 owner 会话**（= Leader/父会话）句柄，与子 run 生命周期无关。
-  //   ⚠ **不改**结算路（条件②）：与 `installAutoSettle` **各自独立**注册、互不 await、互不共享状态；
-  //     两路共用既有节流窗（同批同 Leader 共一窗）⇒ 甲/乙 唤醒**不叠加**。
-  //   ⚠ 已知边界（如实登记、不静默）：映射 miss 的**惰性重建**由结算主路承担（`lib/engine/auto-settle.js
-  //     #onSubagentEnd`，注册序在前 ⇒ 同事件同步段先跑并写回同一 Map）⇒ 本路**不复制第二套重建**
-  //     （禁第二套口径）；「索引冷 + 本路先跑」的窄窗内可能漏唤醒，下一事件即恢复。
-  let laneWake = null;
-  /** 唤醒路的**单次动作**：全程 try/catch 且不抛（观察者纪律，与结算主路同款）。 */
-  const onLaneWorkerEnd = async (info) => {
-    try {
-      if (!info || typeof info !== 'object') return;
-      const id = info.id;
-      if (typeof id !== 'string' || id.length === 0) return; // 无 durable 子会话 id ⇒ 静默丢弃
-      const hit = dispatchIndex instanceof Map ? dispatchIndex.get(id) : null;
-      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return; // 非本套件派发 ⇒ 静默丢弃
-      // ② 候选（**只读**，D-3 甲）：`poolViewOf` 单点判「deps 已结算 + owner===null + lane pending」。
-      let candidates = null;
-      try {
-        const view = poolViewOf(store.readBatch(hit.sessionId, hit.batchId));
-        const ids = (view.pool ?? []).filter((t) => t.dispatchable).map((t) => t.id);
-        if (ids.length > 0) candidates = ids;
-      } catch { candidates = null; /* 批次不可读 ⇒ 无候选面（不影响唤醒本身） */ }
-      // 终态语义（契约卡 §1.1）：宿主正常路带 `stopReason`；异常路固定 `'error'`（`dsh-subagent/lib/index.js:274-277`）
-      //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
-      const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : 'completed';
-      // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
-      //   【批 `lane-wake-mainpath-fix-20261010` · W-3】**唯一寻址点**：`leaderSessionId` 改取
-      //   `wakeAddressOf(hit)` = 「派发期记录的发起方 agent 会话」∨ 回退 `hit.sessionId`。
-      //   改前取 `hit.sessionId`：命名黑板批下该值是**黑板名**而非活 agent ⇒ `leader-not-live`、静默
-      //   （worker 忘了回报时本路是唯一通道 ⇒ 整路价值归零，P-1/P-3）。
-      //   治理落点（`:624` 的 `readBatch(hit.sessionId, …)`）与命中判据（`:620`）**逐字不动**（L-AC-5）。
-      wakeLeaderForReport(ctx, {
-        callerSessionId: id, leaderSessionId: wakeAddressOf(hit),
-        batchId: hit.batchId, lane: hit.lane, type: stopReason,
-        summary: '子代理已结束（主路 subagent/end；stopReason=' + stopReason + '）',
-        candidates,
-      });
-    } catch (e) {
-      try { ctx?.logger?.warn?.('[dsh-punky-swarm] lane-wake subagent/end handler failed (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
-    }
-  };
-  /** 装配置点（**独立**，条件③）：与 `installAutoSettle` 并列；返回形态同形（`{installed, reason?, count(), dispose()}`）。 */
-  const installLaneWake = () => {
-    const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
-    if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
-    let hits = 0;
-    const handler = (info) => {
-      hits += 1;
-      // 不 await：宿主对 listener 的 containment 不覆盖异步悬空 ⇒ 自行 catch（onLaneWorkerEnd 内亦已包 try/catch）。
-      return onLaneWorkerEnd(info).catch((e) => {
-        try { ctx.logger?.warn?.('[dsh-punky-swarm] lane-wake handler rejected (isolated): ' + String(e?.message ?? e)); } catch { /* 隔离 */ }
-      });
-    };
-    // `{ global: true }` **硬性要求**（与结算主路同判据、同纪律）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
-    //   resolver 为 `null`（受 scope 过滤）⇒ 被 scope 化的插件 ctx（preset standing mount）默认漏收；
-    //   缺则本路**静默失效**（探针实测先例见 `lib/engine/auto-settle.js` 头注释 §①）。
-    const dispose = ctx.on(AUTO_SETTLE_SUBAGENT_END, handler, { global: true });
-    return { installed: true, count: () => hits, dispose() { try { if (typeof dispose === 'function') dispose(); } catch { /* 幂等 */ } } };
-  };
-  // 停用开关（`autoSettle.enabled`）的**生效值**复用上方单点：本路属引擎**主路面** ⇒ 与结算路同生共死；
-  //   兼底路（`swarm_report`）唤醒面 = 甲，与开关**无关**、不受影响（D-5 甲的解耦面）。
-  if (autoSettleEnabled) laneWake = installLaneWake();
-  if (laneWake?.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] lane-wake mounted: 宿主 subagent/end（global:true，与结算主路**并列独立**）→ 命中 lane ⇒ 取 Leader 句柄唤醒 + 附可派发候选（只建议，不派发）');
-  }
+  const laneWakePath = installLaneWakePath({ ctx, store, dispatchIndex, autoSettleEnabled });
+  let laneWake = laneWakePath.laneWake;
+  const { installLaneWake } = laneWakePath;
   // 停用开关**热切**（R-5/N-8「热更生效」，镜像 `remountGovernanceHook` / `remountWatchEngine` 既有语义）：
   //   `autoSettle.enabled` **生效变化** ⇒ dispose 旧路 + 按新快照重装（`false` 时 `installAutoSettle`
   //   自身走停用分支：零订阅 + 停用日志 + `installed:false` + `reason='auto-settle-disabled'`）。
@@ -795,45 +853,7 @@ export const apply = (ctx, config = {}) => {
       + (logTag ? ' [' + logTag + ']' : ''));
     return true;
   };
-  // ── W1-① 重放/恢复（装配期**有界**扫描；蓝图 §W1-①）────────────────────────────────
-  //   缺口（实测）：链推进由 `member.settled` 驱动；若进程死在「**已结算**」与「**已推进**」之间
-  //   （或推进因门禁/挂载点失败而无人补），批次会永久停在「lane 已 merged、下一环从未被决策」。
-  //   本扫描启动后补一次决策。**纪律**（四条，缺一即为「写了不生效」或「静默危害」）：
-  //     ① 只处理 `running` 批 —— `paused` 是人工停轮（`resume` 是唯一恢复入口）、终态不追；
-  //     ② 一律**只决策不派发**（`replayBatch` 内固定 `noDispatch`）：装配期无工具流水线 ⇒ 无挂载点，
-  //        真派仍由 Leader/Manager 在工具面执行；
-  //     ③ 全程 try/catch 不抛，且**异步化**（不阻塞 `apply` 返回）；
-  //     ④ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3），有补决策才 info 一行摘要。
-  //   有界：会话数与批次数均设上限，防大批量启动时扫盘过久。
-  try {
-    const MAX_SESSIONS = 5;
-    const MAX_BATCHES = 20;
-    const sessions = (typeof store.listSessions === 'function' ? store.listSessions() : []).slice(0, MAX_SESSIONS);
-    const targets = [];
-    for (const sid of sessions) {
-      const ids = typeof store.listBatches === 'function' ? store.listBatches(sid) : [];
-      for (const bid of ids) {
-        if (targets.length >= MAX_BATCHES) break;
-        try { if (store.readBatch(sid, bid)?.phase === 'running') targets.push({ sessionId: sid, batchId: bid }); } catch { /* 坏批跳过 */ }
-      }
-      if (targets.length >= MAX_BATCHES) break;
-    }
-    if (targets.length > 0) {
-      void (async () => {
-        let replayed = 0; const hits = [];
-        for (const t of targets) {
-          try {
-            const r = await replayBatch({ store, root, liveConfig: config }, ctx, t);
-            if (r && r.replayed > 0) { replayed += r.replayed; hits.push(t.batchId); }
-          } catch { /* 单批隔离 */ }
-        }
-        if (replayed > 0) {
-          ctx.logger?.info?.('[dsh-punky-swarm] replay(装配期)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
-            + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
-        }
-      })();
-    }
-  } catch { /* 启动期扫描失败不影响插件装载 */ }
+  replayStartupGaps({ ctx, config, store, root });
   // 未挂载（`ctx.on` 缺失 = 受限/最小 ctx）⇒ **不 warn**：正式宿主恒提供 `ctx.on`（同 dispatch-register.js 的
   //   `inert` 静默降级口径），warn 只会让「缺省配置零 warn」契约（legacy-fix T4.3）误报；
   //   此时自动结算走兼底路 `swarm_report(settle-request)`，能力缺失不炸宿主。
