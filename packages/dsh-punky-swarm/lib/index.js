@@ -385,6 +385,178 @@ const installTrajectoryBridge = ({ ctx, config, store }) => {
   return trajectory;
 };
 
+const installTopicRuntime = ({ ctx, config, root, topicSink, panelStream, topicAttachUn }) => {
+  // topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
+  // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
+  // 关闭时零挂载零路径（与 acps/bridge config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
+  // 热更新（config.changed）可实时启停本运行时（见下方 applyConfigChange）。
+  let topicRuntime = null;
+  if (readCapability(config, 'topic')?.enabled) {
+    topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
+    topicRuntime.start();
+    topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+    // hub 触发源接线（attachTopic('swarm.')，幂等——已接线不重复订阅）——
+    // 订阅后 store.setMember/setPhase 状态事件（swarm.member.settled / swarm.batch.phase）经 hub 路由推送 SSE
+    if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
+    ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
+  }
+  return { topicRuntime, topicAttachUn };
+};
+const mountAcpsBridge = ({ ctx, config, root }) => {
+  // 内部 ACPs 桥接（config.acps.bridge，默认关）：enabled=false 时 mountBridge 短路返回 null——
+  // 不实例化、零运行时路径（config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关：
+  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递由 endpoint 侧承担。
+  const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
+  if (bridge) {
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: in-process bridge mounted (inbound='
+      + (config?.acps?.bridge?.inbound === true) + ')');
+  }
+  return bridge;
+};
+const installRegistryClient = ({ ctx, config }) => {
+  // 半自动注册客户端（config.acps.registry）：默认关——enabled=true 且
+  // registry.url 配置时创建 RegistryClient 实例（能力装配，不自动发起注册——V3 人工审核不自动化
+  // 跳过，注册动作由用户经脚本/工具显式触发：login→upsert→submit→人工审批→requestEab）。
+  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径。
+  const registryCfg = resolveRegistryConfig(config);
+  const registryClient = registryCfg.enabled ? createRegistryClient(registryCfg) : null;
+  if (registryCfg.enabled && !registryClient) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] acps.registry: ' + (registryCfg.reason ?? 'unable to create client'));
+  } else if (registryClient) {
+    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: semi-automatic registration client ready ('
+      + registryCfg.apiBaseUrl + ')');
+  }
+  return registryClient;
+};
+const installAcpsEndpoint = ({ ctx, config, root, bridge }) => {
+  // ACPs 对外 mTLS 服务端点：acps.enabled && acps.endpoint.enabled 双真才装配——
+  // 默认双关 = 零加载零监听零定时器（config 短路，关闭时无运行时路径）。
+  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
+  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀，/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
+  const acpsCfg = resolveAcpsConfig(config);
+  let acpsEndpoint = null;
+  if (acpsCfg.enabled && acpsCfg.endpoint?.enabled) {
+    try {
+      const endpointCfg = {
+        ...acpsCfg,
+        endpoint: {
+          ...acpsCfg.endpoint,
+          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // 默认数据目录（引擎根内）
+        },
+      };
+      // /acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
+      // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
+      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回独立 accepted（向后兼容）。
+      const rpcHandler = bridge ? createEndpointRpcHandler(bridge, { logger: ctx.logger }) : undefined;
+      acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
+      if (acpsEndpoint.error) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] ' + acpsEndpoint.error + '（acps endpoint 保持禁用）');
+        acpsEndpoint = null;
+      } else {
+        acpsEndpoint.listen().then((addr) => {
+          ctx.logger?.info?.('[dsh-punky-swarm] acps endpoint enabled: mTLS listener https://' + addr.address + ':' + addr.port
+            + ' (TLSv1.3 + CERT_REQUIRED, devInsecure=' + endpointCfg.endpoint.devInsecure + ')');
+        }).catch((e) => {
+          ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint listen failed: ' + String(e) + '（保持禁用）');
+          acpsEndpoint = null;
+        });
+      }
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint disabled: ' + String(e.message));
+      acpsEndpoint = null;
+    }
+  }
+  return acpsEndpoint;
+};
+const installVerifyCapture = ({ ctx, config, root }) => {
+  // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
+  // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。verify 出厂默认开（resolveVerifyConfig 缺省 enabled=true）；仅显式 enabled=false 才
+  // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
+  let verifyMount = mountVerify(ctx, { root, config });
+  if (verifyMount.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
+  }
+  return verifyMount;
+};
+const createRefusalEventBridge = ({ ctx, root, store, dispatchIndex, rebuildIndex, getGovernanceInstalledCfg }) => {
+  // 工具调用级护栏（governance hook）：governance.hook.enabled 缺省 true——
+  // 订阅宿主 tools/pre-execute + tools/post-execute；rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
+  // 双层桥接：注入 onRefusal → 收据落盘时写批级事件流
+  //   <root>/governance/events/refusal-<sessionId>.jsonl（governance.refusal.recorded；仅事件可见性，
+  //   不触发批级状态迁移）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
+  // governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
+  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults / escalation）经 applyConfigChange
+  //   dispose + 重挂即时生效（对齐 verifyMount 模式；重挂后 refusals count 归零、pendingAsks 清空——
+  //   运行时状态重置契约，交互处置详见 remountGovernanceHook 注释）。
+  // 违规升级桥接扩展（escalation.enabled=true 时）：收据经「会话→批次归属」映射
+  //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（升级链
+  //   在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → 静默降级
+  //   （仅 jsonl 可见、批事件流零新增、零升级——不误暂停）。
+  //   宿主派发流（member_status → subagent spawn）无 batchId/lane 结构化字段，归属登记点（写侧）
+  //   由装配观察登记（见 bridge/dispatch-register.js）；读侧索引缺登记时恒空 → 出厂 enabled=false
+  //   零路径 + 即使开启也静默降级（安全侧：漏计不误暂停）。读侧索引经 rebuildDispatchIndex 幂等重建，
+  //   登记点落地（写 member.dispatch）后无需改动即可生效。
+  // 装配层桥接回调（remount 复用：旧实例 dispose 断开回调后，新实例重新注入——桥接随动不断链）
+  const refusalEventBridge = (receipt) => {
+    try {
+      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt); // jsonl 事件可见性
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] governance refusal event bridge failed (isolated): ' + String(e?.message ?? e));
+    }
+    // 违规升级链（观察者纪律：任一失败仅 warn，不阻断 deny 裁决）
+    try {
+      const esc = getGovernanceInstalledCfg()?.escalation; // 热更感知：remount 后 governanceInstalledCfg 已更新
+      if (esc?.enabled !== true) return;              // T20：enabled=false 零路径（出厂默认）
+      const sessionId = receipt?.sessionId ?? 'cli';
+      if (sessionId === 'cli') return;                // cli 未归属不计数
+      let hit = dispatchIndex.get(sessionId);         // 归属映射（member.dispatch 重建）
+      if (!hit) {
+        // miss 惰性重建：运行中登记点（写 member.dispatch）落地后，下一 refusal 即可命中（无需重启/热更）；
+        // 重建幂等（镜像 trajectory rebuildFromEvents）；refusal 为低频事件，全扫成本可接受
+        rebuildIndex();
+        hit = dispatchIndex.get(sessionId);
+      }
+      if (!hit) return;                               // 映射缺失 → 仅 jsonl、零批事件、零升级
+      store.recordGovernanceRefusal(hit.sessionId, hit.batchId, {
+        lane: hit.lane,
+        receiptId: receipt?.receiptId,
+        primitive: receipt?.decision?.primitive,
+        ruleRefs: receipt?.ruleRefs,
+        tool: receipt?.tool,
+        escalation: { enabled: true, threshold: esc.threshold, windowMs: esc.windowMs, primitives: esc.primitives },
+      });
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] governance escalation bridge failed (isolated): ' + String(e?.message ?? e));
+    }
+  };
+  return refusalEventBridge;
+};
+const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
+  // 归属读侧索引（读侧骨架先行）：
+  //   workerSessionId → { sessionId, batchId, lane }——从全部批次事件 member.dispatch 幂等重建
+  //   （镜像 trajectory.js rebuildFromEvents 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
+  //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（安全侧）。
+  const rebuildDispatchIndex = () => {
+    dispatchIndex.clear();
+    let n = 0;
+    for (const { sessionId, batchId } of store.listAllBatches()) {
+      const batch = store.readBatch(sessionId, batchId);
+      if (!batch?.events) continue;
+      for (const ev of batch.events) {
+        if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
+          // 【本批 W-3】复制唤醒寻址字段（经唯一解析单点；未记录 ⇒ 该字段缺失 ⇒ 读端回退 `sessionId`）。
+          //   ⚠ `sessionId`（批归属键）本身**逐字不动**（治理落点 = 批文件 / mailbox / 结算 / 候选面）；
+          //   索引值形状由 `dispatchIndexEntryOf` 单点统一构造（既有 3 键形状冻结，见该函数注释）。
+          dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
+          n++;
+        }
+      }
+    }
+    return n;
+  };
+  return rebuildDispatchIndex;
+};
+
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
@@ -454,161 +626,21 @@ export const apply = (ctx, config = {}) => {
   let trajectory = null;
   trajectory = installTrajectoryBridge({ ctx, config, store });
 
-  // topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
-  // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
-  // 关闭时零挂载零路径（与 acps/bridge config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
-  // 热更新（config.changed）可实时启停本运行时（见下方 applyConfigChange）。
   let topicRuntime = null;
-  if (readCapability(config, 'topic')?.enabled) {
-    topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
-    topicRuntime.start();
-    topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
-    // hub 触发源接线（attachTopic('swarm.')，幂等——已接线不重复订阅）——
-    // 订阅后 store.setMember/setPhase 状态事件（swarm.member.settled / swarm.batch.phase）经 hub 路由推送 SSE
-    if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
-    ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
-  }
+  ({ topicRuntime, topicAttachUn } = installTopicRuntime({ ctx, config, root, topicSink, panelStream, topicAttachUn }));
 
-  // 内部 ACPs 桥接（config.acps.bridge，默认关）：enabled=false 时 mountBridge 短路返回 null——
-  // 不实例化、零运行时路径（config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关：
-  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递由 endpoint 侧承担。
-  const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
-  if (bridge) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: in-process bridge mounted (inbound='
-      + (config?.acps?.bridge?.inbound === true) + ')');
-  }
+  const bridge = mountAcpsBridge({ ctx, config, root });
 
-  // 半自动注册客户端（config.acps.registry）：默认关——enabled=true 且
-  // registry.url 配置时创建 RegistryClient 实例（能力装配，不自动发起注册——V3 人工审核不自动化
-  // 跳过，注册动作由用户经脚本/工具显式触发：login→upsert→submit→人工审批→requestEab）。
-  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径。
-  const registryCfg = resolveRegistryConfig(config);
-  const registryClient = registryCfg.enabled ? createRegistryClient(registryCfg) : null;
-  if (registryCfg.enabled && !registryClient) {
-    ctx.logger?.warn?.('[dsh-punky-swarm] acps.registry: ' + (registryCfg.reason ?? 'unable to create client'));
-  } else if (registryClient) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: semi-automatic registration client ready ('
-      + registryCfg.apiBaseUrl + ')');
-  }
+  const registryClient = installRegistryClient({ ctx, config });
 
-  // ACPs 对外 mTLS 服务端点：acps.enabled && acps.endpoint.enabled 双真才装配——
-  // 默认双关 = 零加载零监听零定时器（config 短路，关闭时无运行时路径）。
-  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
-  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀，/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
-  const acpsCfg = resolveAcpsConfig(config);
   let acpsEndpoint = null;
-  if (acpsCfg.enabled && acpsCfg.endpoint?.enabled) {
-    try {
-      const endpointCfg = {
-        ...acpsCfg,
-        endpoint: {
-          ...acpsCfg.endpoint,
-          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // 默认数据目录（引擎根内）
-        },
-      };
-      // /acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
-      // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
-      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回独立 accepted（向后兼容）。
-      const rpcHandler = bridge ? createEndpointRpcHandler(bridge, { logger: ctx.logger }) : undefined;
-      acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
-      if (acpsEndpoint.error) {
-        ctx.logger?.warn?.('[dsh-punky-swarm] ' + acpsEndpoint.error + '（acps endpoint 保持禁用）');
-        acpsEndpoint = null;
-      } else {
-        acpsEndpoint.listen().then((addr) => {
-          ctx.logger?.info?.('[dsh-punky-swarm] acps endpoint enabled: mTLS listener https://' + addr.address + ':' + addr.port
-            + ' (TLSv1.3 + CERT_REQUIRED, devInsecure=' + endpointCfg.endpoint.devInsecure + ')');
-        }).catch((e) => {
-          ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint listen failed: ' + String(e) + '（保持禁用）');
-          acpsEndpoint = null;
-        });
-      }
-    } catch (e) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint disabled: ' + String(e.message));
-      acpsEndpoint = null;
-    }
-  }
+  acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
 
-  // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
-  // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。verify 出厂默认开（resolveVerifyConfig 缺省 enabled=true）；仅显式 enabled=false 才
-  // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
-  let verifyMount = mountVerify(ctx, { root, config });
-  if (verifyMount.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
-  }
+  let verifyMount = null;
+  verifyMount = installVerifyCapture({ ctx, config, root });
 
-  // 工具调用级护栏（governance hook）：governance.hook.enabled 缺省 true——
-  // 订阅宿主 tools/pre-execute + tools/post-execute；rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
-  // 双层桥接：注入 onRefusal → 收据落盘时写批级事件流
-  //   <root>/governance/events/refusal-<sessionId>.jsonl（governance.refusal.recorded；仅事件可见性，
-  //   不触发批级状态迁移）。回调抛错由 wiring 观察者纪律隔离（warn 不阻断）。
-  // governance 键已纳入热更新白名单（config-watch.js ALLOWED_TOP_KEYS）——
-  //   governance.hook 任一子键生效变化（enabled 翻转 / rules / flags / defaults / escalation）经 applyConfigChange
-  //   dispose + 重挂即时生效（对齐 verifyMount 模式；重挂后 refusals count 归零、pendingAsks 清空——
-  //   运行时状态重置契约，交互处置详见 remountGovernanceHook 注释）。
-  // 违规升级桥接扩展（escalation.enabled=true 时）：收据经「会话→批次归属」映射
-  //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（升级链
-  //   在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → 静默降级
-  //   （仅 jsonl 可见、批事件流零新增、零升级——不误暂停）。
-  //   宿主派发流（member_status → subagent spawn）无 batchId/lane 结构化字段，归属登记点（写侧）
-  //   由装配观察登记（见 bridge/dispatch-register.js）；读侧索引缺登记时恒空 → 出厂 enabled=false
-  //   零路径 + 即使开启也静默降级（安全侧：漏计不误暂停）。读侧索引经 rebuildDispatchIndex 幂等重建，
-  //   登记点落地（写 member.dispatch）后无需改动即可生效。
-  // 装配层桥接回调（remount 复用：旧实例 dispose 断开回调后，新实例重新注入——桥接随动不断链）
-  const refusalEventBridge = (receipt) => {
-    try {
-      appendRefusalEvent(root, receipt?.sessionId ?? 'cli', receipt); // jsonl 事件可见性
-    } catch (e) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] governance refusal event bridge failed (isolated): ' + String(e?.message ?? e));
-    }
-    // 违规升级链（观察者纪律：任一失败仅 warn，不阻断 deny 裁决）
-    try {
-      const esc = governanceInstalledCfg?.escalation; // 热更感知：remount 后 governanceInstalledCfg 已更新
-      if (esc?.enabled !== true) return;              // T20：enabled=false 零路径（出厂默认）
-      const sessionId = receipt?.sessionId ?? 'cli';
-      if (sessionId === 'cli') return;                // cli 未归属不计数
-      let hit = dispatchIndex.get(sessionId);         // 归属映射（member.dispatch 重建）
-      if (!hit) {
-        // miss 惰性重建：运行中登记点（写 member.dispatch）落地后，下一 refusal 即可命中（无需重启/热更）；
-        // 重建幂等（镜像 trajectory rebuildFromEvents）；refusal 为低频事件，全扫成本可接受
-        rebuildDispatchIndex();
-        hit = dispatchIndex.get(sessionId);
-      }
-      if (!hit) return;                               // 映射缺失 → 仅 jsonl、零批事件、零升级
-      store.recordGovernanceRefusal(hit.sessionId, hit.batchId, {
-        lane: hit.lane,
-        receiptId: receipt?.receiptId,
-        primitive: receipt?.decision?.primitive,
-        ruleRefs: receipt?.ruleRefs,
-        tool: receipt?.tool,
-        escalation: { enabled: true, threshold: esc.threshold, windowMs: esc.windowMs, primitives: esc.primitives },
-      });
-    } catch (e) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] governance escalation bridge failed (isolated): ' + String(e?.message ?? e));
-    }
-  };
-  // 归属读侧索引（读侧骨架先行）：
-  //   workerSessionId → { sessionId, batchId, lane }——从全部批次事件 member.dispatch 幂等重建
-  //   （镜像 trajectory.js rebuildFromEvents 先例；映射独立于 trajectory 桥实例存在，不依赖桥挂载）。
-  //   登记点（写 member.dispatch）落地前索引恒空 → 静默降级（安全侧）。
-  const rebuildDispatchIndex = () => {
-    dispatchIndex.clear();
-    let n = 0;
-    for (const { sessionId, batchId } of store.listAllBatches()) {
-      const batch = store.readBatch(sessionId, batchId);
-      if (!batch?.events) continue;
-      for (const ev of batch.events) {
-        if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
-          // 【本批 W-3】复制唤醒寻址字段（经唯一解析单点；未记录 ⇒ 该字段缺失 ⇒ 读端回退 `sessionId`）。
-          //   ⚠ `sessionId`（批归属键）本身**逐字不动**（治理落点 = 批文件 / mailbox / 结算 / 候选面）；
-          //   索引值形状由 `dispatchIndexEntryOf` 单点统一构造（既有 3 键形状冻结，见该函数注释）。
-          dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
-          n++;
-        }
-      }
-    }
-    return n;
-  };
+  const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => governanceInstalledCfg });
+  const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
   // 派发写侧登记点（dispatch-register.js）：
   //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
