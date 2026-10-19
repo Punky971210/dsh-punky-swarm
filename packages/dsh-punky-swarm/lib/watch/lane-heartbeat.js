@@ -40,6 +40,8 @@ import { sessionOf, TEXT_OUTPUT } from '../tools/shared.js'; // watch 域不再 
 import { findTask } from '../state/task-utils.js'; // 单点（原本地定义删除）
 // lane.stalled 事件字面量（发端 + 读端）改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
+// 状态域谓词单点（W4 拆环：`state -> watch` 归零）；本文件原定义处改为保形再导出
+import { laneStateOf, isScannedLaneState, isDanglingLane } from '../state/lane-state.js';
 import { pendingHandles } from '../bridge/lane-handle.js'; // D2：未消费派发句柄（TTL 缺口探测）
 // W1-① 重放/恢复（周期兜底）：与装配期扫描（lib/index.js）**同一单点**，不另写第二套判定
 // 【波 2】`replayBatch` 直引随重放档下沉 `./heartbeat/replay.js`（本文件不再直引）。
@@ -58,7 +60,7 @@ import {
   REASON_DANGLING_MEMBER, REASON_NOT_SCANNED_PLANNING, REASON_PAUSED_DWELL,
   REASON_PENDING_UNDISPATCHED, REASON_REVIEW_AWAITING_SETTLE, REASON_IDLE_AWAITING_RESUME,
   REASON_BLIND_RUN_NO_DEPS, REASON_BLIND_RUN_UPSTREAM_MISSING, REASON_BLIND_RUN_UPSTREAM_NEVER_READY,
-  parseEvTs, isScannedLaneState, stateAnchorOf, batchPausedAnchorOf, laneConsumePathsOf,
+  parseEvTs, stateAnchorOf, batchPausedAnchorOf, laneConsumePathsOf,
 } from './heartbeat/primitives.js';
 import { probeTick } from './heartbeat/stalled.js';
 import { longrunStatusOf } from './heartbeat/longrun.js';
@@ -303,15 +305,9 @@ export function isStaleBatch(batch, nowTs, staleBatchMs) {
   return nowTs - lastTs > staleBatchMs;
 }
 
-// ---- 状态域（§1.1/§1.2）：扫描面 = 非终态；终态集合与判定单一来源 = lib/schema.js（不硬编码字符串）----
-export function laneStateOf(batch, lane) {
-  return batch?.lanes?.[lane] ?? null;
-}
-// `isScannedLaneState` 已随波 2 下沉 `./heartbeat/primitives.js`（顶部 import 取用）。
-export function isDanglingLane(batch, lane) {
-  // 悬挂成员 = 批次**终态** ∧ lane **非终态**（快照式，无阈值；不产候选，不受僵尸批过滤）
-  return schema.isBatchTerminal(batch?.phase) && isScannedLaneState(batch, lane);
-}
+// ---- 状态域（§1.1/§1.2）：谓词已下沉 `../state/lane-state.js`（W4 拆环：`state -> watch` 归零）----
+//   保形再导出：原路径/原名可继续导入（22 个导出名一个不少），本文件内部消费走顶部 import。
+export { laneStateOf, isScannedLaneState, isDanglingLane };
 
 // ---- 状态锚点（§2 实现要点 1）：纯事件流反向扫描，返回**与 state 匹配**的最近迁移 ts ----
 // 锚点与状态同源（state 现读 batch.lanes[lane]，不缓存）；缺锚点 → null（state 照常透出）。

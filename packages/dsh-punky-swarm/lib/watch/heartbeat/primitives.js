@@ -22,9 +22,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   环依赖说明：`laneStateOf` / `stintRunningSinceOf` 取自 `../lane-heartbeat.js` 的**函数声明**
 //   （ESM 实例化期即初始化；本文件顶层不调用它们）⇒ 无 TDZ、运行期安全。
 import { findTask } from '../../state/task-utils.js'; // 单点（原本地定义删除）
-import * as schema from '../../schema.js'; // 状态域只读消费：非终态扫描面 / 批次终态判定单一来源（禁硬编码状态字符串，零迁移）
 import * as EVT from '../../state/event-types.js';
-import { laneStateOf, stintRunningSinceOf } from '../lane-heartbeat.js';
+// `isScannedLaneState` 经 `lane-heartbeat.js` 的保形再导出取（W4：不新引 state 域、导出面不变）
+import { laneStateOf, isScannedLaneState, stintRunningSinceOf } from '../lane-heartbeat.js';
 
 const REASON_DANGLING_MEMBER = 'dangling-member';
 const REASON_NOT_SCANNED_PLANNING = 'not-scanned-planning';
@@ -42,12 +42,6 @@ const STATE_WINDOW_KEY = { pending: 'pendingWindowMs', review: 'reviewWindowMs',
 function parseEvTs(e) {
   const n = Date.parse(e?.ts ?? '');
   return Number.isFinite(n) ? n : null;
-}
-
-// ---- 状态域（§1.1/§1.2）：扫描面 = 非终态；终态集合与判定单一来源 = lib/schema.js（不硬编码字符串）----
-function isScannedLaneState(batch, lane) {
-  const s = laneStateOf(batch, lane);
-  return s !== null && !schema.isMemberTerminal(s);
 }
 
 // ---- 状态锚点（§2 实现要点 1）：纯事件流反向扫描，返回**与 state 匹配**的最近迁移 ts ----

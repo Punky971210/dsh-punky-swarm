@@ -16,7 +16,7 @@
 # 维护纪律：新增白名单条目**必须**在提交信息里给出理由；本文件改动应由人/Leader 审核。
 
 version: 1
-generated_at: "2026-10-15"
+generated_at: "2026-10-20"
 basis_head: "c17c5e1"
 domain_root: "packages/dsh-punky-swarm/lib"
 mode: ratchet
@@ -99,7 +99,6 @@ rules:
     - "(lib-root) -> auditlog"
     - "panel -> comms"
     - "panel -> hot"
-    - "state -> watch"
     - "state -> governance"
     - "tools -> bridge"
     - "verify -> state"
@@ -114,8 +113,8 @@ rules:
   # 已知双向依赖（环）——**登记不阻断**，只作为"想拆环时从哪下手"的清单
   debt:
     - pair: ["state", "watch"]
-      counts: { "state -> watch": 1, "watch -> state": 10 }
-      note: "watch 强依赖 state（10）而 state 仅回指 1 处 ⇒ 单向化成本低，优先候选"
+      counts: { "watch -> state": 11 }
+      note: "watch 强依赖 state（11）；state -> watch 已清零（W4 拆环）"
     - pair: ["(lib-root)", "state"]
       counts: { "(lib-root) -> state": 11, "state -> (lib-root)": 21 }
       note: "包级根文件与 state 互相缠绕，拆解需先定「根文件应只做再导出」的边界"

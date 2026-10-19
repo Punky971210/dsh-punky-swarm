@@ -32,7 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · lane 名单口径 = `Object.keys(batch.lanes)`（与 `batch_status` 的 `derivedOf` 同源）。
 //
 // 纪律：本模块**绝不改成员状态**（`batch.lanes` 前后逐字不变）——只读判定 + 落一条事件。
-import { isDanglingLane } from '../watch/lane-heartbeat.js';
+import { isDanglingLane } from './lane-state.js';
 import { EVT_BATCH_ABORT_DANGLING } from './event-types.js';
 
 /** 悬挂成员名单（纯函数）：批次终态 ∧ lane 非终态的 lane id 列表。 */
