@@ -25,7 +25,6 @@ import { sectionLineHit, elementLineHit } from './presence.js';
 import type { PresenceNote } from './presence.js';
 import type { Batch } from '../../types/contracts.js';
 import fs from 'node:fs';
-import path from 'node:path';
 
 import type { GatesCx } from './cx.js';
 

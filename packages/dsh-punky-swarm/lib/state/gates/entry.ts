@@ -25,7 +25,6 @@ import { reasonVocabularyNote } from './reason-vocabulary.js';
 import { handoffGateEnabledOf } from '../../wave-plan.js';
 import type { Batch } from '../../types/contracts.js';
 import fs from 'node:fs';
-import path from 'node:path';
 
 import type { GatesCx } from './cx.js';
 

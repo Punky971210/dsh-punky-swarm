@@ -23,7 +23,6 @@ import { flowOf, produceFieldOf, enabledByFlag, flagOf } from '../../assembly/fl
 import { taskOf, smokeOf, contractMissingPayload, detectNeedHuman } from './detect.js';
 import type { TaskArrayField } from './detect.js';
 import type { Batch } from '../../types/contracts.js';
-import path from 'node:path';
 
 import type { GatesCx } from './cx.js';
 
