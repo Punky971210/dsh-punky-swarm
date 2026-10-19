@@ -253,30 +253,7 @@ const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbe
   return tools;
 };
 
-export const apply = (ctx, config = {}) => {
-  const rawRoot = config.root ?? '~/.dsh/punky-preset';
-  const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
-  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
-  mkdirSync(root, { recursive: true });
-  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
-  ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
-
-  mountStartupPrelude({ ctx, config, root });
-
-  const { store, topicSink } = createEngineStore({ ctx, config, root });
-
-  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
-  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
-  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
-  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
-    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
-  }
-
-  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
-  let sweepTimer = null;
-
-  sweepTimer = installStartupRecovery({ ctx, config, store, root });
-
+const installWatchRuntime = ({ ctx, config, store, root }) => {
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
   // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
@@ -314,30 +291,9 @@ export const apply = (ctx, config = {}) => {
     },
     scanIntervalMinutes: watchCfg.scanIntervalMinutes,
   };
-  // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
-  //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
-  // readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
-  //   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
-  //   hotConfig 在本函数体下方（let 声明晚于此处）⇒ 读取器内部用 try/catch 兜住 TDZ/异常，回落静态 config。
-  const readConfig = () => {
-    try {
-      return hotConfig ? hotConfig.readSnapshot() : config;
-    } catch {
-      return config;
-    }
-  };
-  // ── 批归属会话解析索引（读侧骨架）────────────────────────────────────────────────────
-  // 【批 `d-override-fix-20261011` · lane `e4-session-bind` · 由本 lane 交付的写域外接线补丁】
-  //   本声明由下方 `:534` 原址**前移**到此处：`createTools` 的 `resolveBatchSession` 需要捕获它的**引用**
-  //   （闭包惰性求值 ⇒ 填充时机无关；但声明必须早于 `createTools` 的求值点，否则 TDZ）。
-  //   语义一字不动：仍是同一个 `Map`，仍由下方 `rebuildDispatchIndex()` 启动重建、登记点热更新填充。
-  const dispatchIndex = new Map();
-
-  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex });
-  tools.register();
-
-  // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
-  // 显式 enabled=false 时不挂——零运行时开销；缺省默认开即挂（watchCfg.enabled && heartbeat）。ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
+  return { watchCfg, longrunCfg, heartbeatRef, heartbeat, watchInstalledCfg };
+};
+const installWatchdog = ({ ctx, watchCfg, heartbeatRef, heartbeat }) => {
   let watchTimer = null;
   if (watchCfg.enabled && heartbeat) {
     const scanMs = Math.max(1000, Math.round(watchCfg.scanIntervalMinutes * 60_000));
@@ -350,14 +306,11 @@ export const apply = (ctx, config = {}) => {
     }
     ctx.logger?.info?.('[dsh-punky-swarm] watch capability enabled: lane heartbeat watchdog mounted (scan ' + scanMs + 'ms)');
   }
-
-  // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
-  // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
-  // panelStream hub 由装配层创建并注入 deps.panelStream（api.js 注入面复用），dispose 归本层
-  //   （api.js 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
+  return watchTimer;
+};
+const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
   let apiDispose = null;
   let panelStream = null;
-  let topicAttachUn = null;
   if (ctx.webServer) {
     // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
@@ -402,13 +355,13 @@ export const apply = (ctx, config = {}) => {
       configEndpoints: {
         runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
         trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
-        applied: () => governanceInstalledCfg,
+        applied: () => getGovernanceInstalledCfg(),
         // watch 生效快照 getter：watchInstalledCfg 初始化于上方 watch 引擎装配
         //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ。
         //   生效快照随比较集扩展自动携带 longrun 阈值（maxDurationMs/noProgressWindowMs）
         //   → GET /config applied.watch 即面板回显与 watchSig 确认轮询的完整数据源（无需装配侧再加工）
-        appliedWatch: () => watchInstalledCfg,
-        presets: () => presetCatalog,
+        appliedWatch: () => getWatchInstalledCfg(),
+        presets: () => getPresetCatalog(),
       },
     }).dispose;
 
@@ -416,7 +369,9 @@ export const apply = (ctx, config = {}) => {
     //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源（下方 topic 运行时装配分支与热更新通道对称接线）；
     //   topic 关闭时 hub 仍装配（fs.watch 与心跳通道不变），attachTopic 零调用零路径。
   }
-
+  return { apiDispose, panelStream };
+};
+const installTrajectoryBridge = ({ ctx, config, store }) => {
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
   // trajectory 出厂默认开（isTrajectoryEnabled 经 readCapability 合并注册表 default enabled:true）——仅显式 capabilities.trajectory.enabled:false 时桥接不创建不挂载（零运行时开销，行为与既有版本一致）
   // 生命周期：start() 挂订阅/轮询；stop() 退订/清定时器（经 apply 返回的 dispose 释放，进程重启后桥接随插件重建、映射从批次事件幂等恢复）
@@ -427,6 +382,77 @@ export const apply = (ctx, config = {}) => {
       ctx.logger?.info?.('[dsh-punky-swarm] trajectory bridge subscribed (autoFail=' + (config?.capabilities?.trajectory?.autoFail === true) + ')');
     }
   }
+  return trajectory;
+};
+
+export const apply = (ctx, config = {}) => {
+  const rawRoot = config.root ?? '~/.dsh/punky-preset';
+  const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
+  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
+  mkdirSync(root, { recursive: true });
+  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
+  ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
+
+  mountStartupPrelude({ ctx, config, root });
+
+  const { store, topicSink } = createEngineStore({ ctx, config, root });
+
+  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
+  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
+  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
+  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
+  }
+
+  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
+  let sweepTimer = null;
+
+  sweepTimer = installStartupRecovery({ ctx, config, store, root });
+
+  const watchRuntime = installWatchRuntime({ ctx, config, store, root });
+  const { watchCfg, longrunCfg, heartbeatRef } = watchRuntime;
+  let heartbeat = watchRuntime.heartbeat;
+  let watchInstalledCfg = watchRuntime.watchInstalledCfg;
+  // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
+  //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
+  // readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
+  //   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
+  //   hotConfig 在本函数体下方（let 声明晚于此处）⇒ 读取器内部用 try/catch 兜住 TDZ/异常，回落静态 config。
+  const readConfig = () => {
+    try {
+      return hotConfig ? hotConfig.readSnapshot() : config;
+    } catch {
+      return config;
+    }
+  };
+  // ── 批归属会话解析索引（读侧骨架）────────────────────────────────────────────────────
+  // 【批 `d-override-fix-20261011` · lane `e4-session-bind` · 由本 lane 交付的写域外接线补丁】
+  //   本声明由下方 `:534` 原址**前移**到此处：`createTools` 的 `resolveBatchSession` 需要捕获它的**引用**
+  //   （闭包惰性求值 ⇒ 填充时机无关；但声明必须早于 `createTools` 的求值点，否则 TDZ）。
+  //   语义一字不动：仍是同一个 `Map`，仍由下方 `rebuildDispatchIndex()` 启动重建、登记点热更新填充。
+  const dispatchIndex = new Map();
+
+  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex });
+  tools.register();
+
+  // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
+  // 显式 enabled=false 时不挂——零运行时开销；缺省默认开即挂（watchCfg.enabled && heartbeat）。ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
+  let watchTimer = null;
+  watchTimer = installWatchdog({ ctx, watchCfg, heartbeatRef, heartbeat });
+
+  // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
+  // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
+  // panelStream hub 由装配层创建并注入 deps.panelStream（api.js 注入面复用），dispose 归本层
+  //   （api.js 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
+  let apiDispose = null;
+  let panelStream = null;
+  let topicAttachUn = null;
+  const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => watchInstalledCfg, getGovernanceInstalledCfg: () => governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
+  apiDispose = web.apiDispose;
+  panelStream = web.panelStream;
+
+  let trajectory = null;
+  trajectory = installTrajectoryBridge({ ctx, config, store });
 
   // topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
   // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
