@@ -102,14 +102,7 @@ export const inject = ['tools', 'webServer', 'subagents'];
 // 恢复语义：每个进程只执行一次（无论插件按进程级还是会话级挂载）
 let recoveredThisProcess = false;
 
-export const apply = (ctx, config = {}) => {
-  const rawRoot = config.root ?? '~/.dsh/punky-preset';
-  const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
-  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
-  mkdirSync(root, { recursive: true });
-  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
-  ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
-
+const mountStartupPrelude = ({ ctx, config, root }) => {
   // 审计日志挂载（唯一挂载点，代码内挂载：cordis loader 行 schema 无 logger 装配位）——
   // 必须在下方 validateCapabilities warn / GATE_ENABLED warn / syncAssets 三条 warn 之前，
   // 否则「配置非法 / 门禁逃生阀 / 资产清单不可用」这些启动期审计信号永久缺席；挂载失败不炸宿主。
@@ -128,7 +121,8 @@ export const apply = (ctx, config = {}) => {
   for (const err of validateCapabilities(config).errors) {
     ctx.logger?.warn?.('[dsh-punky-swarm] config: ' + err);
   }
-
+};
+const createEngineStore = ({ ctx, config, root }) => {
   // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
   const topicSink = { emit: null };
   const store = createStore(root, {
@@ -142,17 +136,10 @@ export const apply = (ctx, config = {}) => {
     // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
     onStateChange: (ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } },
   });
-
-  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
-  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
-  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
-  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
-    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
-  }
-
-  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
+  return { store, topicSink };
+};
+const installStartupRecovery = ({ ctx, config, store, root }) => {
   let sweepTimer = null;
-
   // 存量迁移：root/batches/*.json -> sessions/legacy/batches/（仅一次，幂等）
   if (!recoveredThisProcess) {
     try {
@@ -249,6 +236,46 @@ export const apply = (ctx, config = {}) => {
       ctx.logger?.info?.('[dsh-punky-swarm] mailbox periodic sweep mounted (interval ' + sweepIntervalMs + 'ms)');
     }
   }
+  return sweepTimer;
+};
+const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex }) => {
+  // 工具表：deps 注入批归属 resolver（缺省不可用 ⇒ `sessionOf` 逐字回落原三级路径，零行为变化）。
+  //   resolver 本体 = `lib/engine/dispatch.js#batchSessionIdOfWorker`（唯一 worker→批 反查点，
+  //   **不建第二套索引**）；此处只做**接线**（构造闭包），不自造判定。
+  //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring` · 解除 dormant】接线改用**新签名**外壳
+  //   `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`：热路径短路仍走既有 `batchSessionIdOfWorker`；
+  //   miss 时经 `laneBindingOf` 反查事件流并**回填同一 `dispatchIndex`**（兜底路 = 跨进程 / 历史批 / 漏登记 / 热更窗口）。
+  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:134` / `:307`）⇒ **零新增捕获**、不挂全局。
+  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
+    dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
+    // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
+    resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) });
+  return tools;
+};
+
+export const apply = (ctx, config = {}) => {
+  const rawRoot = config.root ?? '~/.dsh/punky-preset';
+  const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
+  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
+  mkdirSync(root, { recursive: true });
+  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
+  ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
+
+  mountStartupPrelude({ ctx, config, root });
+
+  const { store, topicSink } = createEngineStore({ ctx, config, root });
+
+  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
+  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
+  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
+  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
+  }
+
+  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
+  let sweepTimer = null;
+
+  sweepTimer = installStartupRecovery({ ctx, config, store, root });
 
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
@@ -306,17 +333,7 @@ export const apply = (ctx, config = {}) => {
   //   语义一字不动：仍是同一个 `Map`，仍由下方 `rebuildDispatchIndex()` 启动重建、登记点热更新填充。
   const dispatchIndex = new Map();
 
-  // 工具表：deps 注入批归属 resolver（缺省不可用 ⇒ `sessionOf` 逐字回落原三级路径，零行为变化）。
-  //   resolver 本体 = `lib/engine/dispatch.js#batchSessionIdOfWorker`（唯一 worker→批 反查点，
-  //   **不建第二套索引**）；此处只做**接线**（构造闭包），不自造判定。
-  //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring` · 解除 dormant】接线改用**新签名**外壳
-  //   `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`：热路径短路仍走既有 `batchSessionIdOfWorker`；
-  //   miss 时经 `laneBindingOf` 反查事件流并**回填同一 `dispatchIndex`**（兜底路 = 跨进程 / 历史批 / 漏登记 / 热更窗口）。
-  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:134` / `:307`）⇒ **零新增捕获**、不挂全局。
-  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
-    dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
-    // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
-    resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) });
+  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex });
   tools.register();
 
   // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
