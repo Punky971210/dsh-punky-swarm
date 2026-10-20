@@ -47,6 +47,26 @@ const HOT_SLEEP = 1000;
 const HOT_SETTLE = 300;
 const MIN = 60_000;
 
+// 有界轮询（H1 去 flake；形态判据源 = plan/scope.md §3.2，五字段诊断）：
+//   条件达即返回；超时**失败并打印五个诊断字段** —— 让下次 flake 能自证是「等不够久」还是「条件真没发生」。
+//   纪律：禁止写成「固定等一个更大的值」（那不是有界轮询，是换个数字复现同一个 bug）；
+//   也禁止去掉间隔的忙等（必须 await intervalMs）。
+async function waitFor(label, check, { timeoutMs = 4000, intervalMs = 25, expected = '' } = {}) {
+  const startedAt = Date.now();
+  let lastObserved;
+  for (;;) {
+    lastObserved = check();                       // 返回 truthy 即满足
+    if (lastObserved) return lastObserved;
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error('waitFor timeout: ' + JSON.stringify({
+        label, timeoutMs, elapsedMs: Date.now() - startedAt,
+        lastObserved: String(lastObserved), expected,
+      }));
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 const CONFIG_PATH = '/api/dsh-punky-swarm/config';
 const TRUSTED_HEADERS = { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:3080' };
 
@@ -112,7 +132,11 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    await sleep(HOT_SETTLE);
+    // 基线等待：原「固定等 HOT_SETTLE=300ms」→ 有界轮询（条件达即返回）。
+    //   boot 对账在 apply() 内**同步**完成（readRuntimeSnapshot → reconcile，config-watch.js:106）⇒ 本条件首轮即成立；
+    //   因此这里的作用是「立刻确认出厂快照已就位 + 零 remount」，真正的等待在下方热更段（fs.watch 防抖 300ms）。
+    await waitFor('h1-baseline', () => getConfig(routes).applied?.watch?.enabled === true && remountLines(ctx.calls).length === 0,
+      { expected: 'applied.watch 出厂快照已就位 + boot 对账零 remount' });
     // 基线：出厂快照 5 键全形 {enabled:true, longrun:{enabled:true, maxDurationMs:1200000, noProgressWindowMs:300000},
     //   scanIntervalMinutes:1}；boot 对账幂等零 remount
     assert.deepEqual(getConfig(routes).applied.watch,
@@ -121,7 +145,9 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     assert.equal(remountLines(ctx.calls).length, 0, '快照与静态一致 → boot 对账 no-op（无 remount 日志）');
     // 热写 longrun.enabled:false → 生效面变化 → dispose+重建（re-mounted，logTag 缺省=热更路径）
     writeRuntime(root, { capabilities: { watch: { longrun: { enabled: false } } } });
-    await sleep(HOT_SLEEP);
+    // 热更等待：原「固定等 HOT_SLEEP=1000ms」→ 有界轮询到 remount 留痕出现（fs.watch → 防抖 300ms → reload → onChange）。
+    await waitFor('h1-remount', () => remountLines(ctx.calls).length >= 1,
+      { expected: 're-mounted 日志恰 1（longrun=false 生效面）' });
     const lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1, 'remount 恰 1 行（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=false\)/, '重建日志含生效面（longrun=false）');
@@ -131,6 +157,20 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
       'applied.watch 生效快照已随 remount 更新（watchInstalledCfg；enabled 翻转阈值保留默认）');
     assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
+    // AC-6 可证伪自检：构造一次**真的会超时**的等待，验证诊断五字段
+    //   （label / timeoutMs / elapsedMs / lastObserved / expected）确实落进错误文本——
+    //   不靠注释声明，靠断言证明。构造预算 80ms（不拖慢用例），只验证 helper 的失败模式。
+    await assert.rejects(
+      () => waitFor('h1-timeout-probe', () => false, { timeoutMs: 80, intervalMs: 20, expected: '永不满足（构造超时）' }),
+      (err) => {
+        const msg = String(err && err.message);
+        for (const field of ['label', 'timeoutMs', 'elapsedMs', 'lastObserved', 'expected']) {
+          assert.ok(msg.includes('"' + field + '"'), '超时诊断缺字段 ' + field + '：' + msg);
+        }
+        assert.match(msg, /"label":"h1-timeout-probe"/, 'label 值回填（可据以定位是哪个等待点超时）');
+        return true;
+      },
+    );
   } finally {
     disposer();
   }
