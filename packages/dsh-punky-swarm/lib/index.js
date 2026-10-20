@@ -839,6 +839,203 @@ const createWatchRemounter = ({ ctx, config, store, mailbox, root, heartbeatRef,
   };
   return remountWatchEngine;
 };
+// ── d1 seam：`rt` 的唯一创建点（W7f）────────────────────────────────────────────────
+//   无 sink ⇒ 返回纯对象（生产零 Proxy/零 trap，与手写字面量同构）；注入 sink ⇒ Proxy set trap 记字段名，
+//   供测试断言「某分支只写了哪些字段」（单写 vs 双写可区分性 = L3）。字段集 **冻结 20 项**（p1 §3.1）。
+const createRuntimeState = (onWrite) => {
+  const base = {
+    hotConfig: null, watchTimer: null, sweepTimer: null, heartbeat: null, heartbeatRef: null,
+    watchInstalledCfg: null, apiDispose: null, trajectory: null, topicRuntime: null, topicAttachUn: null,
+    panelStream: null, verifyMount: null, governanceHook: null, governanceInstalledCfg: null,
+    dispatchReg: null, autoSettle: null, autoSettleEnabled: null, laneWake: null, acpsEndpoint: null,
+    lastRatchetJson: null,
+  };
+  if (typeof onWrite !== 'function') return base;
+  return new Proxy(base, { set(target, key, value) { target[key] = value; onWrite(String(key)); return true; } });
+};
+
+// GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
+// 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
+// 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
+const warnGateEscapeValve = (ctx) => {
+  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
+  }
+};
+
+// readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
+//   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
+//   `rt.hotConfig` 在本函数体内下方才赋值 ⇒ 读取器内 try/catch 兜住 TDZ/异常，回落静态 config（G-7 契约）。
+const createReadConfig = ({ config, rt }) => () => {
+  try {
+    const hot = rt.hotConfig;
+    return hot ? hot.readSnapshot() : config;
+  } catch {
+    return config;
+  }
+};
+
+// 释放面（W7f #9）：读 rt 的 15 个资源字段 + flush；幂等（置 null 的 5 项二次调用零操作）。
+const releaseAll = (rt) => {
+  rt.hotConfig?.dispose();
+  if (rt.watchTimer) { clearInterval(rt.watchTimer); rt.watchTimer = null; }
+  if (rt.sweepTimer) { clearInterval(rt.sweepTimer); rt.sweepTimer = null; }
+  rt.heartbeat?.dispose();
+  rt.apiDispose?.();
+  rt.trajectory?.stop();
+  rt.topicRuntime?.stop();
+  // attachTopic 退订 + hub dispose（装配层创建者负责，api.js 注入时不重复 dispose）
+  if (rt.topicAttachUn) { rt.topicAttachUn(); rt.topicAttachUn = null; }
+  if (rt.panelStream) { rt.panelStream.dispose(); rt.panelStream = null; }
+  rt.verifyMount?.dispose();
+  rt.governanceHook?.dispose();
+  rt.dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
+  rt.autoSettle?.dispose?.(); // 自动结算主路（subagent/end）退订（幂等；兼底路随工具面存续）
+  rt.laneWake?.dispose?.(); // 【D-2 甲】主路唤醒路（subagent/end 第二路订阅）退订（幂等；独立装配 ⇒ 独立释放）
+  // 【L-1】冲刷 governance 未落盘增量：P2 的 flush 三时机（阈值/定时/process.once('exit')）
+  //   中 exit 只覆盖进程退出，**不覆盖「插件卸载而宿主继续运行」**的场景 ⇒ 此处补一次显式冲刷。
+  //   幂等；零脏会话时为空操作（不产生 I/O、不挂钩子）。
+  try { flushDirtyGovernance(); } catch {}
+  if (rt.acpsEndpoint) { rt.acpsEndpoint.close().catch(() => {}); rt.acpsEndpoint = null; }
+};
+
+// boot 对账（W7f #8）：watcher.start() 应用初始 runtime.json overlay 但不广播（重启语义）——若启动时
+//   overlay 已含 governance / watch / autoSettle 变化，装配侧仍按静态 config 挂载 ⇒ 此处按当前快照补一次
+//   对账重挂（「配置即状态」不滞后一写）。**不直接写字段**（只调三个 remount；幂等 ⇒ 一致时零操作）。
+const reconcileBootOverlay = ({ rt, remountGovernanceHook, remountWatchEngine, remountAutoSettle }) => {
+  const snapshot = rt.hotConfig.readSnapshot();
+  remountGovernanceHook(snapshot, 'boot-overlay');
+  remountWatchEngine(snapshot, 'boot-overlay');
+  remountAutoSettle(snapshot, 'boot-overlay');
+};
+
+// 两个 remount（W7e 工厂）的访问器装配（W7f）：① watch 与 ⑤ governance 的 rt 写点全部收拢在本工厂内
+//   ——写集 {heartbeat, watchTimer, watchInstalledCfg} / {governanceHook, governanceInstalledCfg} 各字段唯一写点。
+const mountRemounters = ({ ctx, config, store, root, mailbox, refusalEventBridge, presetTable, presetBanTable, governanceWarn, rt }) => {
+  const readInstalled = () => rt.governanceInstalledCfg;
+  const writeInstalled = (v) => { rt.governanceInstalledCfg = v; };
+  const readHook = () => rt.governanceHook;
+  const writeHook = (v) => { rt.governanceHook = v; };
+  const remountGovernanceHook = createGovernanceRemounter({ ctx, store, root, refusalEventBridge, presetTable, presetBanTable, governanceWarn, readInstalled, writeInstalled, readHook, writeHook });
+  const readHeartbeat = () => rt.heartbeat;
+  const writeHeartbeat = (v) => { rt.heartbeat = v; };
+  const readWatchTimer = () => rt.watchTimer;
+  const writeWatchTimer = (v) => { rt.watchTimer = v; };
+  //   注：E3 的 installed 快照是 watchInstalledCfg（≠ E2 的 governanceInstalledCfg）⇒ 就地绑定、不复用 E2 访问器
+  const remountWatchEngine = createWatchRemounter({
+    ctx, config, store, mailbox, root, heartbeatRef: rt.heartbeatRef,
+    readHeartbeat, writeHeartbeat, readWatchTimer, writeWatchTimer,
+    readInstalled: () => rt.watchInstalledCfg, writeInstalled: (v) => { rt.watchInstalledCfg = v; },
+  });
+  return { remountGovernanceHook, remountWatchEngine };
+};
+
+// ⑥ auto-settle 停用开关**热切**（R-5/N-8「热更生效」，镜像 governance / watch 两个 remount 语义）：
+//   `autoSettle.enabled` **生效变化** ⇒ dispose 旧路 + 按新快照重装（`false` 时 `installAutoSettle`
+//   自身走停用分支：零订阅 + 停用日志 + `installed:false` + `reason='auto-settle-disabled'`）。
+//   幂等：**无生效变化零操作**（防 fs 抖动重挂，RK-8）。停用**不改相位、不落 `auto.settle.paused`**（R-3）。
+//   写集 = {autoSettle, laneWake, autoSettleEnabled}（各 1 次，顺序固定 943 → 950 → 957）。
+const createAutoSettleRemounter = ({ ctx, store, dispatchIndex, root, rt, installLaneWake }) => (nextConfig, logTag) => {
+  const nextEnabled = autoSettleEnabledOf(nextConfig);
+  if (nextEnabled === rt.autoSettleEnabled) return false;
+  rt.autoSettle?.dispose?.();
+  rt.autoSettle = installAutoSettle(ctx, {
+    store, dispatchIndex, root, liveConfig: nextConfig, logger: ctx.logger,
+    enabled: nextConfig?.autoSettle?.enabled,
+  });
+  // 【D-2 甲】主路唤醒路与结算路**同生共死**（同属引擎主路面）：同一开关生效变化 ⇒ 同步退订 / 重挂；
+  //   幂等由上方 `nextEnabled === rt.autoSettleEnabled` 早退保证（无生效变化 ⇒ 本段零操作，零日志抖动）。
+  rt.laneWake?.dispose?.();
+  rt.laneWake = nextEnabled ? installLaneWake() : null;
+  if (!nextEnabled) {
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake unsubscribed（引擎主路面停用 ⇒ 结算 + 主路唤醒一并退订；'
+      + '兼底路 swarm_report 的唤醒/回报面不受影响）' + (logTag ? ' [' + logTag + ']' : ''));
+  } else if (rt.laneWake?.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake re-mounted（主路唤醒路随结算路恢复）' + (logTag ? ' [' + logTag + ']' : ''));
+  }
+  rt.autoSettleEnabled = nextEnabled;
+  ctx.logger?.info?.('[dsh-punky-swarm] hot config: auto-settle ' + (rt.autoSettle.installed
+    ? 're-mounted (autoSettle.enabled 生效值 → true：宿主 subagent/end 重新订阅，自动结算恢复)'
+    : 'disabled (autoSettle.enabled 生效值 → false：主路已退订；结算责任归 Leader：member_status(review) → member_settle(...))')
+    + (logTag ? ' [' + logTag + ']' : ''));
+  return true;
+};
+
+// 热更新装配（W7f #7：就地启停，叠加非替换）：
+// 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
+// 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果；
+//   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播
+// 生效范围：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
+//   对外能力（acps/bridge/acps.discovery/identity）不纳入热切
+// 写集：⓪{lastRatchetJson} ②{trajectory} ③{topicRuntime, topicAttachUn} ④{verifyMount}（①⑤⑥ 在各自 remount 内）
+const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle }) => {
+  // ratchet 热更守卫的基线：与 createStore 注入所用的同一份 config 对齐（装配期生效的棘轮表）
+  rt.lastRatchetJson = JSON.stringify(config?.ratchet ?? null);
+  const applyConfigChange = (change) => {
+    const next = change.config;
+    // ⓪ ratchet（棘轮表）：**重启生效面**——棘轮表在装配期
+    //   随 `createStore({ rules })` 注入（上方），热更**不应用**；但变化必须显式告警、非法必须当场校验
+    //   （禁「写了不生效却不吭声」；`loadRules` fail-closed 语义不变——重启时非法配置仍会装配失败）。
+    const rg = ratchetHotGuard({ next, lastJson: rt.lastRatchetJson });
+    if (rg.changed) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] hot config: ' + rg.message);
+      rt.lastRatchetJson = rg.json;
+    }
+    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——7 键 {enabled, longrun.enabled,
+    //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
+    //   longrun.unconsumedTimeoutMs} 任一变化 → dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
+    //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转与阈值变更经同一通道即时生效。
+    remountWatchEngine(next);
+    // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
+    const trajOn = isTrajectoryEnabled(next);
+    if (trajOn && !rt.trajectory) {
+      rt.trajectory = createTrajectoryBridge(ctx, { store, config: next, mailbox });
+      const st = rt.trajectory.start();
+      if (st.subscribed) ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge started');
+    } else if (!trajOn && rt.trajectory) {
+      rt.trajectory.stop(); rt.trajectory = null;
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge stopped');
+    }
+    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动 + hub attachTopic 对称退订）
+    const topicCfg = readCapability(next, 'topic');
+    if (topicCfg?.enabled && !rt.topicRuntime) {
+      rt.topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
+      rt.topicRuntime.start();
+      topicSink.emit = (ev) => { try { rt.topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
+      if (rt.panelStream && !rt.topicAttachUn) rt.topicAttachUn = rt.panelStream.attachTopic('swarm.');
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime started');
+    } else if (!topicCfg?.enabled && rt.topicRuntime) {
+      rt.topicRuntime.stop(); rt.topicRuntime = null;
+      topicSink.emit = null;
+      if (rt.topicAttachUn) { rt.topicAttachUn(); rt.topicAttachUn = null; }
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
+    }
+    // ④ verify 挂载（可选）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
+    const vc = resolveVerifyConfig(next);
+    if (vc.enabled !== rt.verifyMount.installed) {
+      rt.verifyMount.dispose?.();
+      rt.verifyMount = mountVerify(ctx, { root, config: next });
+      ctx.logger?.info?.('[dsh-punky-swarm] hot config: verify capture ' + (vc.enabled ? 'mounted' : 'unmounted'));
+    }
+    // ⑤ governance hook（热切）与 ⑥ auto-settle（热切）——逻辑见各自 remount；幂等：无生效变化零操作
+    remountGovernanceHook(next);
+    remountAutoSettle(next);
+  };
+  rt.hotConfig = createConfigWatcher({
+    root, config,
+    onChange: (change) => {
+      // ① 进程内广播（cordis 总线事件，宿主可用时；SSE hub/未来订阅方经 ctx.on 订阅）
+      try { ctx.emit?.(CONFIG_CHANGED_EVENT, change); } catch { /* 宿主事件缺失静默 */ }
+      // ② topic 镜像（可选）：topic.enabled 时同步 emitTopic('swarm.config.changed')，仅进程内分发
+      if (rt.topicRuntime) { try { rt.topicRuntime.publishConfigChanged(change); } catch { /* 隔离 */ } }
+      // ③ 就地启停
+      applyConfigChange(change);
+    },
+    logger: ctx.logger,
+  });
+  rt.hotConfig.start();
+  reconcileBootOverlay({ rt, remountGovernanceHook, remountWatchEngine, remountAutoSettle });
+};
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
@@ -846,257 +1043,47 @@ export const apply = (ctx, config = {}) => {
   mkdirSync(root, { recursive: true });
   // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
-
   mountStartupPrelude({ ctx, config, root });
-
   const { store, topicSink } = createEngineStore({ ctx, config, root });
 
-  // GATE_ENABLED=false 逃生阀启动级留痕——gates.js checkCommandGate/checkTargetsGate 命中逃生阀时
-  // 内部静默返回零感知（{ ok:true, declared:false }，行为语义不变），装配侧在此检测并落启动级 warn，
-  // 保证「门禁被禁用」状态可查（审计/排障经启动日志即可见，无需翻 gates.js 源码）。
-  if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
-    ctx.logger?.warn?.('[dsh-punky-swarm] GATE_ENABLED=false: 命令门禁/targets 门禁整体放行（应急逃生阀，零感知语义），禁用状态已留痕于启动日志');
-  }
+  warnGateEscapeValve(ctx);
+  // 装配期唯一可变句柄容器（P-8：禁模块级；d1 seam：注入 ctx.rtWriteLog 才装 Proxy trap；cordis 对未声明属性取值即抛 ⇒ 取值 try/catch 守卫）
+  const rtOnWrite = (() => { try { return typeof ctx?.rtWriteLog?.push === 'function' ? (k) => ctx.rtWriteLog.push(k) : null; } catch { return null; } })();
+  const rt = createRuntimeState(rtOnWrite);
 
-  // mailbox 周期 sweep 定时器（config.mailbox.sweepIntervalMs>0 时挂载；默认 0=关，零隐式行为）——提升到 apply 作用域供 disposer 清理
-  let sweepTimer = null;
-
-  sweepTimer = installStartupRecovery({ ctx, config, store, root });
-
+  rt.sweepTimer = installStartupRecovery({ ctx, config, store, root });
   const watchRuntime = installWatchRuntime({ ctx, config, store, root });
-  const { watchCfg, longrunCfg, heartbeatRef } = watchRuntime;
-  let heartbeat = watchRuntime.heartbeat;
-  let watchInstalledCfg = watchRuntime.watchInstalledCfg;
-  // lane_heartbeat/lane_longrun 工具经 getHeartbeat 执行时解引用（工具注册面仍启动静态——运行期关闭只停扫描、
-  //   工具查询返回 disabled 状态不抛错，见 lane-heartbeat.js 工具侧）
-  // readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
-  //   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
-  //   hotConfig 在本函数体下方（let 声明晚于此处）⇒ 读取器内部用 try/catch 兜住 TDZ/异常，回落静态 config。
-  const readConfig = () => {
-    try {
-      return hotConfig ? hotConfig.readSnapshot() : config;
-    } catch {
-      return config;
-    }
-  };
-  // ── 批归属会话解析索引（读侧骨架）────────────────────────────────────────────────────
-  // 【批 `d-override-fix-20261011` · lane `e4-session-bind` · 由本 lane 交付的写域外接线补丁】
-  //   本声明由下方 `:534` 原址**前移**到此处：`createTools` 的 `resolveBatchSession` 需要捕获它的**引用**
-  //   （闭包惰性求值 ⇒ 填充时机无关；但声明必须早于 `createTools` 的求值点，否则 TDZ）。
-  //   语义一字不动：仍是同一个 `Map`，仍由下方 `rebuildDispatchIndex()` 启动重建、登记点热更新填充。
+  ({ heartbeatRef: rt.heartbeatRef, heartbeat: rt.heartbeat, watchInstalledCfg: rt.watchInstalledCfg } = watchRuntime);
+  const readConfig = createReadConfig({ config, rt });
+  // 批归属会话解析索引（读侧骨架）：声明须早于 `createTools` 求值点（TDZ）；仍是同一个 Map，由下方启动重建/登记点热更新填充
   const dispatchIndex = new Map();
-
-  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex });
+  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat: rt.heartbeat, heartbeatRef: rt.heartbeatRef, dispatchIndex });
   tools.register();
-
-  // watchdog 挂载：setInterval(scanIntervalMinutes) 经 heartbeatRef.current 调 heartbeat.tick() 扫描全部 running lane。
-  // 显式 enabled=false 时不挂——零运行时开销；缺省默认开即挂（watchCfg.enabled && heartbeat）。ctx.effect（宿主可用时）与 apply 返回的 disposer 双保险清理（幂等）
-  let watchTimer = null;
-  watchTimer = installWatchdog({ ctx, watchCfg, heartbeatRef, heartbeat });
-
-  // 只读治理 API（工作台用）；agentCatalog：ACS 描述目录（aip.enabled 门控，register 后非空）
-  // aipFormat 随装配导出给 api.js 只读端点（mailbox/batch 响应附 ACPs 投影；纯函数不改存储）
-  // panelStream hub 由装配层创建并注入 deps.panelStream（api.js 注入面复用），dispose 归本层
-  //   （api.js 仅自建者 push disposer——注入时不重复 dispose）；topicAttachUn 保存 attachTopic 退订句柄
-  let apiDispose = null;
-  let panelStream = null;
-  let topicAttachUn = null;
-  const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => watchInstalledCfg, getGovernanceInstalledCfg: () => governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
-  apiDispose = web.apiDispose;
-  panelStream = web.panelStream;
-
-  let trajectory = null;
-  trajectory = installTrajectoryBridge({ ctx, config, store });
-
-  let topicRuntime = null;
-  ({ topicRuntime, topicAttachUn } = installTopicRuntime({ ctx, config, root, topicSink, panelStream, topicAttachUn }));
-
+  rt.watchTimer = installWatchdog({ ctx, watchCfg: watchRuntime.watchCfg, heartbeatRef: rt.heartbeatRef, heartbeat: rt.heartbeat });
+  const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => rt.watchInstalledCfg, getGovernanceInstalledCfg: () => rt.governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
+  ({ apiDispose: rt.apiDispose, panelStream: rt.panelStream } = web);
+  rt.trajectory = installTrajectoryBridge({ ctx, config, store });
+  ({ topicRuntime: rt.topicRuntime, topicAttachUn: rt.topicAttachUn } = installTopicRuntime({ ctx, config, root, topicSink, panelStream: rt.panelStream, topicAttachUn: rt.topicAttachUn }));
   const bridge = mountAcpsBridge({ ctx, config, root });
-
   const registryClient = installRegistryClient({ ctx, config });
-
-  let acpsEndpoint = null;
-  acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
-
-  let verifyMount = null;
-  verifyMount = installVerifyCapture({ ctx, config, root });
-
-  const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => governanceInstalledCfg });
+  rt.acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
+  rt.verifyMount = installVerifyCapture({ ctx, config, root });
+  const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => rt.governanceInstalledCfg });
   const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
-  let dispatchReg = null;
-  dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
-  let autoSettle = null;
-  autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });
-  let autoSettleEnabled = autoSettleEnabledOf(config);
-  const laneWakePath = installLaneWakePath({ ctx, store, dispatchIndex, autoSettleEnabled });
-  let laneWake = laneWakePath.laneWake;
-  const { installLaneWake } = laneWakePath;
-  // 停用开关**热切**（R-5/N-8「热更生效」，镜像 `remountGovernanceHook` / `remountWatchEngine` 既有语义）：
-  //   `autoSettle.enabled` **生效变化** ⇒ dispose 旧路 + 按新快照重装（`false` 时 `installAutoSettle`
-  //   自身走停用分支：零订阅 + 停用日志 + `installed:false` + `reason='auto-settle-disabled'`）。
-  //   幂等：**无生效变化零操作**（防 fs 抖动重挂，RK-8）。停用**不改相位、不落 `auto.settle.paused`**（R-3）。
-  const remountAutoSettle = (nextConfig, logTag) => {
-    const nextEnabled = autoSettleEnabledOf(nextConfig);
-    if (nextEnabled === autoSettleEnabled) return false;
-    autoSettle?.dispose?.();
-    autoSettle = installAutoSettle(ctx, {
-      store, dispatchIndex, root, liveConfig: nextConfig, logger: ctx.logger,
-      enabled: nextConfig?.autoSettle?.enabled,
-    });
-    // 【D-2 甲】主路唤醒路与结算路**同生共死**（同属引擎主路面）：同一开关生效变化 ⇒ 同步退订 / 重挂；
-    //   幂等由上方 `nextEnabled === autoSettleEnabled` 早退保证（无生效变化 ⇒ 本段零操作，零日志抖动）。
-    laneWake?.dispose?.();
-    laneWake = nextEnabled ? installLaneWake() : null;
-    if (!nextEnabled) {
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake unsubscribed（引擎主路面停用 ⇒ 结算 + 主路唤醒一并退订；'
-        + '兼底路 swarm_report 的唤醒/回报面不受影响）' + (logTag ? ' [' + logTag + ']' : ''));
-    } else if (laneWake?.installed) {
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: lane-wake re-mounted（主路唤醒路随结算路恢复）' + (logTag ? ' [' + logTag + ']' : ''));
-    }
-    autoSettleEnabled = nextEnabled;
-    ctx.logger?.info?.('[dsh-punky-swarm] hot config: auto-settle ' + (autoSettle.installed
-      ? 're-mounted (autoSettle.enabled 生效值 → true：宿主 subagent/end 重新订阅，自动结算恢复)'
-      : 'disabled (autoSettle.enabled 生效值 → false：主路已退订；结算责任归 Leader：member_status(review) → member_settle(...))')
-      + (logTag ? ' [' + logTag + ']' : ''));
-    return true;
-  };
+  rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
+  rt.autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });
+  rt.autoSettleEnabled = autoSettleEnabledOf(config);
+  const { laneWake: laneWakeInstalled, installLaneWake } = installLaneWakePath({ ctx, store, dispatchIndex, autoSettleEnabled: rt.autoSettleEnabled });
+  rt.laneWake = laneWakeInstalled;
+
   replayStartupGaps({ ctx, config, store, root });
-  // 未挂载（`ctx.on` 缺失 = 受限/最小 ctx）⇒ **不 warn**：正式宿主恒提供 `ctx.on`（同 dispatch-register.js 的
-  //   `inert` 静默降级口径），warn 只会让「缺省配置零 warn」契约（legacy-fix T4.3）误报；
-  //   此时自动结算走兼底路 `swarm_report(settle-request)`，能力缺失不炸宿主。
   const { governanceWarn, presetTable, presetBanTable, presetCatalog, installedCfg, hook } = installGovernanceSurface({ ctx, config, store, root, refusalEventBridge });
-  let governanceInstalledCfg = installedCfg;
-  let governanceHook = hook;
+  rt.governanceInstalledCfg = installedCfg;
+  rt.governanceHook = hook;
+  const { remountGovernanceHook, remountWatchEngine } = mountRemounters({ ctx, config, store, root, mailbox, refusalEventBridge, presetTable, presetBanTable, governanceWarn, rt });
+  const remountAutoSettle = createAutoSettleRemounter({ ctx, store, dispatchIndex, root, rt, installLaneWake });
+  mountHotConfigRuntime({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle });
 
-  const readInstalled = () => governanceInstalledCfg;
-  const writeInstalled = (v) => { governanceInstalledCfg = v; };
-  const readHook = () => governanceHook;
-  const writeHook = (v) => { governanceHook = v; };
-  const remountGovernanceHook = createGovernanceRemounter({ ctx, store, root, refusalEventBridge, presetTable, presetBanTable, governanceWarn, readInstalled, writeInstalled, readHook, writeHook });
-
-  const readHeartbeat = () => heartbeat;
-  const writeHeartbeat = (v) => { heartbeat = v; };
-  const readWatchTimer = () => watchTimer;
-  const writeWatchTimer = (v) => { watchTimer = v; };
-  //   注：E3 的 installed 快照是 watchInstalledCfg（≠ E2 的 governanceInstalledCfg）⇒ 就地绑定、不复用 E2 访问器
-  const remountWatchEngine = createWatchRemounter({ ctx, config, store, mailbox, root, heartbeatRef, readHeartbeat, writeHeartbeat, readWatchTimer, writeWatchTimer, readInstalled: () => watchInstalledCfg, writeInstalled: (v) => { watchInstalledCfg = v; } });
-
-  // ── 热更新装配（就地启停，叠加非替换）──
-  // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
-  // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果；
-  //   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播
-  // 生效范围：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
-  //   对外能力（acps/bridge/acps.discovery/identity）不纳入热切
-  let hotConfig = null;
-  // ratchet 热更守卫的基线：与 createStore 注入所用的同一份 config 对齐（装配期生效的棘轮表）
-  let lastRatchetJson = JSON.stringify(config?.ratchet ?? null);
-  const applyConfigChange = (change) => {
-    const next = change.config;
-    // ⓪ ratchet（棘轮表）：**重启生效面**——棘轮表在装配期
-    //   随 `createStore({ rules })` 注入（上方），热更**不应用**；但变化必须显式告警、非法必须当场校验
-    //   （禁「写了不生效却不吭声」；`loadRules` fail-closed 语义不变——重启时非法配置仍会装配失败）。
-    const rg = ratchetHotGuard({ next, lastJson: lastRatchetJson });
-    if (rg.changed) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] hot config: ' + rg.message);
-      lastRatchetJson = rg.json;
-    }
-    // ① watch 引擎（lane 过期检测 + longrun 档）：生效变化通道——7 键 {enabled, longrun.enabled,
-    //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
-    //   longrun.unconsumedTimeoutMs} 任一变化 →
-    //   dispose+重建+重挂 timer+更新 heartbeatRef/watchInstalledCfg
-    //   （逻辑见 remountWatchEngine；幂等无变化零操作）。longrun.enabled 翻转与阈值变更经同一通道即时生效
-    //   （watch.enabled 翻转既有语义保留并统一进 remount；阈值键纳入后手工 runtime.json
-    //   阈值热写即时 remount、重启 boot 对账对齐，不再滞后）
-    remountWatchEngine(next);
-    // ② trajectory 桥：enabled 翻转 → stop + 以新快照重建（映射经批次事件幂等恢复）
-    const trajOn = isTrajectoryEnabled(next);
-    if (trajOn && !trajectory) {
-      trajectory = createTrajectoryBridge(ctx, { store, config: next, mailbox });
-      const st = trajectory.start();
-      if (st.subscribed) ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge started');
-    } else if (!trajOn && trajectory) {
-      trajectory.stop(); trajectory = null;
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: trajectory bridge stopped');
-    }
-    // ③ topic 运行时：readCapability 缺省关 → enabled 翻转 → 启/停（状态事件发布钩子随动 + hub attachTopic 对称退订）
-    const topicCfg = readCapability(next, 'topic');
-    if (topicCfg?.enabled && !topicRuntime) {
-      topicRuntime = createTopicRuntime(ctx, { root, logger: ctx.logger });
-      topicRuntime.start();
-      topicSink.emit = (ev) => { try { topicRuntime.publishStateChange(ev); } catch { /* 隔离 */ } };
-      if (panelStream && !topicAttachUn) topicAttachUn = panelStream.attachTopic('swarm.');
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime started');
-    } else if (!topicCfg?.enabled && topicRuntime) {
-      topicRuntime.stop(); topicRuntime = null;
-      topicSink.emit = null;
-      if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
-    }
-    // ④ verify 挂载（可选）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
-    const vc = resolveVerifyConfig(next);
-    if (vc.enabled !== verifyMount.installed) {
-      verifyMount.dispose?.();
-      verifyMount = mountVerify(ctx, { root, config: next });
-      ctx.logger?.info?.('[dsh-punky-swarm] hot config: verify capture ' + (vc.enabled ? 'mounted' : 'unmounted'));
-    }
-    // ⑤ governance hook（热切）：governance.hook 生效变化 → dispose + 重挂
-    //   （逻辑见 remountGovernanceHook；幂等——无生效变化零操作；启动对账见 apply 尾部 hotConfig.start() 之后）
-    remountGovernanceHook(next);
-    // ⑥ auto-settle 停用开关（热切）：`autoSettle.enabled` **生效变化** → dispose 旧路 + 按开关重装/停用
-    //   （逻辑见 remountAutoSettle；幂等——严格布尔同值 ⇒ 零操作，约束 11）。
-    //   放末位：与其余 5 个消费面同族且互不依赖；`autoSettle` 不在 `allKeys` 内时 onChange 不会为本键触发。
-    remountAutoSettle(next);
-  };
-  hotConfig = createConfigWatcher({
-    root, config,
-    onChange: (change) => {
-      // ① 进程内广播（cordis 总线事件，宿主可用时；SSE hub/未来订阅方经 ctx.on 订阅）
-      try { ctx.emit?.(CONFIG_CHANGED_EVENT, change); } catch { /* 宿主事件缺失静默 */ }
-      // ② topic 镜像（可选）：topic.enabled 时同步 emitTopic('swarm.config.changed')，仅进程内分发
-      if (topicRuntime) { try { topicRuntime.publishConfigChanged(change); } catch { /* 隔离 */ } }
-      // ③ 就地启停
-      applyConfigChange(change);
-    },
-    logger: ctx.logger,
-  });
-  hotConfig.start();
-  // 启动对账：watcher.start() 应用初始 runtime.json overlay 但不广播（重启语义）——若启动时 overlay
-  //   已含 governance 变化（如 enabled:false / rules 覆盖），装配侧（上方）仍按静态 config 挂载 →
-  //   此处按当前快照补一次对账重挂，保证护栏「配置即状态」不滞后一写（仅 governance 补对账，维持既有启动语义）。
-  remountGovernanceHook(hotConfig.readSnapshot(), 'boot-overlay');
-  // watch boot 对账（缺口补）：持久化到 runtime.json
-  //   的 capabilities.watch.* 覆盖（watch.enabled / longrun.enabled / 长跑阈值等）在重启后经快照解析与静态
-  //   装配不一致 → 同样 dispose+重建+重挂——保证持久化 watch 覆盖（阈值键随比较集扩展一并纳入）
-  //   「重启即对齐」（幂等：快照一致时零操作，logTag='boot-overlay'）
-  remountWatchEngine(hotConfig.readSnapshot(), 'boot-overlay');
-  // auto-settle 停用开关 boot 对账（R-5 关键补丁）：`autoSettle.enabled:false` 是**持久**策略，而装配期
-  //   （上方 `installAutoSettle`）读的是**静态 config**，watcher.start() 应用初始 runtime.json overlay 时
-  //   **刻意不广播**（重启语义，见 `config-watch.js#start`）⇒ 不补此对账则「写在 runtime.json 里的停用
-  //   在重启后失效（主路照装）」——那是本开关最危险的静默形态（配置写了、看着生效、实际没生效）。
-  //   与 governance / watch 两条既有 boot 对账同法同序；幂等：生效值一致 ⇒ 零操作。
-  remountAutoSettle(hotConfig.readSnapshot(), 'boot-overlay');
-
-  return () => {
-    hotConfig?.dispose();
-    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
-    if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
-    heartbeat?.dispose();
-    apiDispose?.();
-    trajectory?.stop();
-    topicRuntime?.stop();
-    // attachTopic 退订 + hub dispose（装配层创建者负责，api.js 注入时不重复 dispose）
-    if (topicAttachUn) { topicAttachUn(); topicAttachUn = null; }
-    if (panelStream) { panelStream.dispose(); panelStream = null; }
-    verifyMount?.dispose();
-    governanceHook?.dispose();
-    dispatchReg?.dispose?.(); // 派发登记点退订（幂等）
-    autoSettle?.dispose?.(); // 自动结算主路（subagent/end）退订（幂等；兼底路随工具面存续）
-    laneWake?.dispose?.(); // 【D-2 甲】主路唤醒路（subagent/end 第二路订阅）退订（幂等；独立装配 ⇒ 独立释放）
-    // 【L-1】冲刷 governance 未落盘增量：P2 的 flush 三时机（阈值/定时/process.once('exit')）
-    //   中 exit 只覆盖进程退出，**不覆盖「插件卸载而宿主继续运行」**的场景 ⇒ 此处补一次显式冲刷。
-    //   幂等；零脏会话时为空操作（不产生 I/O、不挂钩子）。
-    try { flushDirtyGovernance(); } catch {}
-    if (acpsEndpoint) { acpsEndpoint.close().catch(() => {}); acpsEndpoint = null; }
-  };
+  return () => releaseAll(rt);
 };
