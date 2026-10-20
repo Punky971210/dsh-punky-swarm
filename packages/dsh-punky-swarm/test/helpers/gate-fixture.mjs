@@ -234,6 +234,54 @@ export function assemblyCtxWeb() {
   return { ctx, routes };
 }
 
+/**
+ * 基线 **+ `ctx.effect` 提供模式**（W7e · G-5 缺口：既有三个变体都**没有** `effect` 键 ⇒
+ *   `lib/index.js` 两处 `if (ctx.effect) { ctx.effect(...) }` 分支在**任何既有测试里从未执行**
+ *   （mailbox sweep :233-234、watch heartbeat :304-305））。
+ *
+ * 与 ①②③ 的关系（为什么不并进既有变体）：`effect` 是**新增能力位**，合并进基线会改变
+ *   既有 39 个消费套件的 ctx 形状（它们**刻意**以「无 effect」姿态跑，正好是 G-5 的证据面）⇒
+ *   按本模块 §F4 纪律「按变体拆名、不选项化」单列一支。
+ *
+ * 提供面（**全部为测试可观测位，非产品 API**）：
+ *   · `preCount()`      —— `tools/pre-execute` 已挂监听数（同 `assemblyCtxPre`）；
+ *   · `effect(fn,label)`—— 记录注册（对齐宿主语义：`fn` 是**返回 cleanup 的工厂**）；
+ *   · `effects[]`       —— `{ factory, label }` 清单，供断言注册数/注册序；
+ *   · `runEffects()`    —— 逐个执行工厂并调用其 cleanup（模拟宿主卸载），返回 `[{label, ok, error?}]`；
+ *   · `registered[]`    —— `ctx.tools.register` 收到的工具（供按名取 `lane_heartbeat` 等真实注册实例）；
+ *   · `routes[]`        —— `ctx.webServer.register` 收到的路由（供 GET /config 读 `applied` 快照）。
+ *
+ * ⚠ **返回 `{ ctx, routes }`**（与 `assemblyCtxWeb` 同形，因为两条断言都需要路由面）。
+ */
+export function assemblyCtxEffect() {
+  const ctx = baseAssemblyCtx();
+  const routes = [];
+  const registered = [];
+  const effects = [];
+  ctx.routes = routes;
+  ctx.registered = registered;
+  ctx.effects = effects;
+  ctx.preCount = () => ctx.listeners.get('tools/pre-execute')?.size ?? 0;
+  ctx.webServer = { register: (r) => { routes.push(r); return () => {}; } };
+  ctx.tools = { register: (t) => { registered.push(t); return () => {}; } };
+  // 宿主语义同形：`ctx.effect(factory, label)`，`factory()` 返回 cleanup（可能为 undefined）
+  ctx.effect = (factory, label) => {
+    const rec = { factory, label };
+    effects.push(rec);
+    return () => { const i = effects.indexOf(rec); if (i >= 0) effects.splice(i, 1); };
+  };
+  ctx.runEffects = () => effects.map((rec) => {
+    try {
+      const cleanup = rec.factory();
+      if (typeof cleanup === 'function') cleanup();
+      return { label: rec.label, ok: true };
+    } catch (e) {
+      return { label: rec.label, ok: false, error: String(e?.message ?? e) };
+    }
+  });
+  return { ctx, routes };
+}
+
 /** `on` 项存 **`{ fn, opts }`**（对齐三参 `ctx.on(ev, fn, opts)`）⇒ 供断言 `opts` 内容（如 `{global:true}`）。 */
 export function assemblyCtxOpts() {
   const listeners = new Map();

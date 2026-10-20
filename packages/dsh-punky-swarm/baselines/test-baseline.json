@@ -1232,6 +1232,14 @@
       "tests": 32,
       "todos": 0
     },
+    "test/w7e-remount-surface.test.js": {
+      "asserts": 51,
+      "blankLines": 34,
+      "lines": 340,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/watch-bootoverlay.test.js": {
       "asserts": 23,
       "blankLines": 18,
@@ -1345,7 +1353,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-20T10:47:38Z",
+  "generatedAt": "2026-10-20T14:48:08Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1356,15 +1364,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-debt-fix-20261020-e2-test T1-T5 测试债落地（2 新建 + 3 追加）=> 条目 167 -> 169",
+  "reason": "punky-w7e-20261020-e2-w7e-test 新增 test/w7e-remount-surface.test.js（T-1/T-2/T-3 三面）=> 条目 168 -> 169",
   "schema": 1,
   "totals": {
-    "asserts": 8948,
-    "blankLines": 4490,
-    "files": 168,
-    "lines": 48520,
+    "asserts": 8999,
+    "blankLines": 4524,
+    "files": 169,
+    "lines": 48860,
     "tautologies": 2,
-    "tests": 1836,
+    "tests": 1842,
     "todos": 4
   }
 }
