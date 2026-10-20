@@ -1240,6 +1240,14 @@
       "tests": 6,
       "todos": 0
     },
+    "test/w7f-rt-write-surface.test.js": {
+      "asserts": 74,
+      "blankLines": 44,
+      "lines": 506,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
     "test/watch-bootoverlay.test.js": {
       "asserts": 23,
       "blankLines": 18,
@@ -1353,7 +1361,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-20T14:48:08Z",
+  "generatedAt": "2026-10-20T15:39:23Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1364,15 +1372,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-w7e-20261020-e2-w7e-test 新增 test/w7e-remount-surface.test.js（T-1/T-2/T-3 三面）=> 条目 168 -> 169",
+  "reason": "punky-w7f-20261020-e2-w7f-test 新增 test/w7f-rt-write-surface.test.js（T-1 L1 / T-2 L2 / T-3 六分支序列 / T-4 自证+D-1 回归）=> 条目 169 -> 170",
   "schema": 1,
   "totals": {
-    "asserts": 8999,
-    "blankLines": 4524,
-    "files": 169,
-    "lines": 48860,
+    "asserts": 9073,
+    "blankLines": 4568,
+    "files": 170,
+    "lines": 49366,
     "tautologies": 2,
-    "tests": 1842,
+    "tests": 1853,
     "todos": 4
   }
 }
