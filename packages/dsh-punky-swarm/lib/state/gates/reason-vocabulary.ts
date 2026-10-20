@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   【2026-10-02 · 内务批 波 4】随 `createGates` 巨型函数拆分下沉；
 //   依赖方向单向：`gates.ts`（组合器）→ 本文件，本文件不反向 import 组合器（零环）。
 
-import { isAbsPath } from '../constants.js';
+import { resolveArtifactIn } from '../batch-paths.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -43,7 +43,8 @@ export function detectReasonTokens(artifactsDir: string, paths: string[]): Reaso
   const out: ReasonTokenDecl[] = [];
   if (!Array.isArray(paths) || paths.length === 0) return out;
   for (const p of paths) {
-    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let abs: string;
+    try { abs = resolveArtifactIn(artifactsDir, p); } catch { continue; }
     let content;
     try {
       const st = fs.statSync(abs);

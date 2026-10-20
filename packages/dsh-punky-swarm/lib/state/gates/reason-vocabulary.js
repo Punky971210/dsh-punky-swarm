@@ -18,9 +18,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   判定单点 `reasonVocabularyVerdict` 仍在 `gates.ts`（源码文本面断言锚：`gates.js` 须含 `GATE_TOKEN_UNKNOWN`）。
 //   【2026-10-02 · 内务批 波 4】随 `createGates` 巨型函数拆分下沉；
 //   依赖方向单向：`gates.ts`（组合器）→ 本文件，本文件不反向 import 组合器（零环）。
-import { isAbsPath } from '../constants.js';
+import { resolveArtifactIn } from '../batch-paths.js';
 import fs from 'node:fs';
-import path from 'node:path';
 const REASON_DECL_RE = /^reason:[ \t]*(\S[^\n]*)$/gm;
 /** 解析产物内的 `reason: <token>` 声明行（保序；`token` 取 trim 后原文，空则不计入）。 */
 export function detectReasonTokens(artifactsDir, paths) {
@@ -28,7 +27,13 @@ export function detectReasonTokens(artifactsDir, paths) {
     if (!Array.isArray(paths) || paths.length === 0)
         return out;
     for (const p of paths) {
-        const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+        let abs;
+        try {
+            abs = resolveArtifactIn(artifactsDir, p);
+        }
+        catch {
+            continue;
+        }
         let content;
         try {
             const st = fs.statSync(abs);

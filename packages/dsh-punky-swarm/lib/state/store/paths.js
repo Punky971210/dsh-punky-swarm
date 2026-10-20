@@ -21,9 +21,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { isAbsPath } from '../constants.js'; // 单点（原本文件定义迁出）
 // 路径三族单点（W2/A-3 收敛）：本文件只留单行委托，校验与抛错原文在 batch-paths.js
-import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf } from '../batch-paths.js';
+import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf, resolveArtifactIn } from '../batch-paths.js';
 
 export function buildPaths(cx) {
   const { sessionsDir, legacyDir } = cx;
@@ -33,10 +32,12 @@ export function buildPaths(cx) {
     return path.join(sessionDir(sessionId), 'batches');
   }
   function artifactsDirOf(sessionId, batchId) { return artifactsDirOfAt(sessionsDir, sessionId, batchId); }
-  // condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——相对路径解析到批次产物根，绝对路径直接用；存在性判定（existsSync）
+  // condition 校验的 fileExists DI（machine 纯逻辑，路径解析在本侧）——声明路径经单点解析，逃逸 ⇒ false（不探根外）
   function conditionFileExists(sessionId, batchId) {
     const artifactsDir = artifactsDirOf(sessionId, batchId);
-    return (p) => fs.existsSync(isAbsPath(p) ? p : path.join(artifactsDir, p));
+    return (p) => {
+      try { return fs.existsSync(resolveArtifactIn(artifactsDir, p)); } catch { return false; }
+    };
   }
 
   // 存量迁移：root/batches/*.json -> sessions/legacy/batches/（一次，幂等）

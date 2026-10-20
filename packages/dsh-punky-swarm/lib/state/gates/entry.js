@@ -22,6 +22,8 @@ import { taskOf, smokeOf, contractMissingPayload } from './detect.js';
 import { reasonVocabularyNote } from './reason-vocabulary.js';
 import { handoffGateEnabledOf } from '../../wave-plan.js';
 import fs from 'node:fs';
+// 产物声明路径解析单点（WD-3b）：判据源直读改走 fail-closed 解析（逃逸 ⇒ 既有 catch 记 unreadable）
+import { resolveArtifactIn } from '../batch-paths.js';
 export function buildEntry(cx) {
     const { artifactsDirOf, consumeArtifactsOf, consumeFieldNameOf, declaredArtifactsOf, flowsOf, handoffVerdictOf, presenceOfArtifact, readCfg, reasonVocabularyVerdict, resolveArtifact, standaloneVerdict, vocabOpts } = cx;
     // Entry Gate：exec / audit lane 派发前 consume 必须**已声明且全部在场**
@@ -205,7 +207,7 @@ export function buildEntry(cx) {
             let okAnchor = false;
             for (const p of anchors) {
                 try {
-                    if (fs.readFileSync(resolveArtifact(sessionId, batchId, p), 'utf8').includes(criteriaSection)) {
+                    if (fs.readFileSync(resolveArtifactIn(artifactsDirOf(sessionId, batchId), p), 'utf8').includes(criteriaSection)) {
                         okAnchor = true;
                         break;
                     }

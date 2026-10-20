@@ -21,6 +21,8 @@ import { flowOf, contractOf, sectionProblemsOf, ENGINE_BASELINE_PLAN_SECTIONS } 
 import { taskOf, smokeOf, contractMissingPayload, detectPendingMarker } from './detect.js';
 import { sectionLineHit, elementLineHit } from './presence.js';
 import fs from 'node:fs';
+// 产物声明路径解析单点（WD-3b）：pending-marker stat/read 改走 fail-closed 解析（逃逸 ⇒ 跳过）
+import { resolveArtifactIn } from '../batch-paths.js';
 export function buildPlanContract(cx) {
     const { artifactsDirOf, declaredArtifactsOf, flowsOf, presenceJudge, resolveArtifact } = cx;
     // Plan 契约门（(c) 收敛，拒绝免检）：声明必须存在 → 形态/在场 → 内容判据
@@ -172,7 +174,13 @@ export function buildPlanContract(cx) {
         })();
         if (markerLiteral !== null && t.layer === 'plan') {
             for (const p of declared) {
-                const abs = resolveArtifact(sessionId, batchId, p);
+                let abs;
+                try {
+                    abs = resolveArtifactIn(artifactsDirOf(sessionId, batchId), p);
+                }
+                catch {
+                    continue;
+                }
                 let content = '';
                 try {
                     const st = fs.statSync(abs);

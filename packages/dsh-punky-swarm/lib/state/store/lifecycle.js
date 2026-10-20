@@ -24,7 +24,9 @@ import path from 'node:path';
 import * as schema from '../../schema.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除）
 import { findTask } from '../task-utils.js';
-import { SESSION_RE, isAbsPath } from '../constants.js';
+import { SESSION_RE } from '../constants.js';
+// 产物声明路径解析单点（WD-3b）：产出清单的 stat 探测改走 fail-closed 解析（逃逸 ⇒ 既有 catch ⇒ false）
+import { resolveArtifactIn } from '../batch-paths.js';
 import * as EVT from '../event-types.js';
 
 export function buildLifecycle(cx) {
@@ -67,7 +69,7 @@ export function buildLifecycle(cx) {
     const artifactsDir = artifactsDirOf(sessionId, batchId);
     const existsNonEmpty = (p) => {
       try {
-        const st = fs.statSync(isAbsPath(p) ? p : path.join(artifactsDir, p));
+        const st = fs.statSync(resolveArtifactIn(artifactsDir, p));
         return st.isDirectory() || st.size > 0;
       } catch { return false; }
     };

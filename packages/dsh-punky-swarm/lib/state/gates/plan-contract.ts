@@ -25,6 +25,8 @@ import { sectionLineHit, elementLineHit } from './presence.js';
 import type { PresenceNote } from './presence.js';
 import type { Batch } from '../../types/contracts.js';
 import fs from 'node:fs';
+// 产物声明路径解析单点（WD-3b）：pending-marker stat/read 改走 fail-closed 解析（逃逸 ⇒ 跳过）
+import { resolveArtifactIn } from '../batch-paths.js';
 
 import type { GatesCx } from './cx.js';
 
@@ -153,7 +155,8 @@ export function buildPlanContract(cx: GatesCx) {
     })();
     if (markerLiteral !== null && t.layer === 'plan') {
       for (const p of declared) {
-        const abs = resolveArtifact(sessionId, batchId, p);
+        let abs: string;
+        try { abs = resolveArtifactIn(artifactsDirOf(sessionId, batchId), p); } catch { continue; }
         let content = '';
         try {
           const st = fs.statSync(abs);
