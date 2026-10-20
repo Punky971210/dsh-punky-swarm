@@ -25,6 +25,8 @@ import { createRequire } from 'node:module';
 import * as schema from '../../schema.js';
 import * as machine from '../machine.js';
 import * as EVT from '../event-types.js';
+// 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
+import { humanEvidenceOf } from '../constants.js';
 
 // ── L4 规则变更传播：**可选模块**（本批 e2-l4-propagate 新建；接线点归本 lane = e4-l9-memorysrc）──
 //   纪律（C-7）：本 lane **只负责在正确位置调用**，**不复制**其判定逻辑；调用签名**逐字冻结**：
@@ -159,7 +161,7 @@ export function buildMemberGates(cx) {
     batch.events.push(newEvent(EVT.EVT_GATE_EXIT_BLOCKED, { lane, code: cg.code, command: cg.command ?? null, exitCode: cg.exitCode ?? null, detail: cg.detail ?? null, escalation: cg.needHumanEscalation === true }));
     if (cg.needHumanEscalation) {
       // 转人工闸：复用 needHuman 证据契约（note 含 `human:<裁决人>:<时间>:<结论>`）；无证据 → GATE_NEEDHUMAN_PENDING 挂起
-      const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+      const evidence = humanEvidenceOf(note);
       if (!evidence) {
         batch.updatedAt = new Date().toISOString();
         commitBatch(sessionId, batchId, batch);

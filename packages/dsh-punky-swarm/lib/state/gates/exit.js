@@ -19,6 +19,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   依赖方向单向：`gates.ts`（组合器）→ 本文件，本文件不反向 import 组合器（零环）。
 import { flowOf, produceFieldOf, enabledByFlag, flagOf } from '../../assembly/flows.js';
 import { taskOf, smokeOf, contractMissingPayload, detectNeedHuman } from './detect.js';
+// 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
+import { humanEvidenceOf } from '../constants.js';
 export function buildExit(cx) {
     const { artifactsDirOf, checkPlanContract, declaredArtifactsOf, flowsOf, presenceOfArtifact, standaloneVerdict } = cx;
     // Exit Gate：(a) 收敛 —— 无 layer / 脱轨 lane 不再整 lane 免检；被检面 = produce ∪ outputs；空声明 ⇒ 拒
@@ -121,7 +123,7 @@ export function buildExit(cx) {
         const det = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
         if (!det.declared)
             return { ok: true, declared: false, path: null, ...(cmNeedhuman ?? {}) };
-        const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+        const evidence = humanEvidenceOf(note);
         if (evidence)
             return { ok: true, declared: true, path: det.path, evidence, ...(cmNeedhuman ?? {}) };
         return {

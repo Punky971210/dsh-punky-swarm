@@ -22,6 +22,8 @@ import { taskOf, smokeOf } from './detect.js';
 // P1/P2 交接门开关：**唯一解析点**在 `lib/wave-plan.ts#handoffGateEnabledOf`（读 runtime.json `gates.handoff.*`，
 //   env 仅兜底）；本文件只**调用**它，不自行读 env/config 判据（禁两套读取）。
 import { handoffGateEnabledOf } from '../../wave-plan.js';
+// 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
+import { humanEvidenceOf } from '../constants.js';
 export function buildHandoff(cx) {
     // 【G-10 修复】「已声明入边」单点判定（`lib/state/gates/helpers.ts#declaredInboundEdgesOf`）：
     //   本门「有无下游」集合的并集侧消费它 —— 与 entry 门/提交前置**同一份**口径（红线 C-4 单点判定）。
@@ -105,7 +107,7 @@ export function buildHandoff(cx) {
         if (anySatisfied)
             return { ok: true, code: null, missing: [], problems: [], downstream };
         // ③ Leader 例外（note 含 human: 证据）⇒ 放行 + 留痕标记
-        const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+        const evidence = humanEvidenceOf(note);
         if (evidence)
             return { ok: true, code: null, missing: [], problems: [], downstream, humanException: true };
         missing.unshift('handoff:' + lane + '->(' + downstream.join('/') + ')');

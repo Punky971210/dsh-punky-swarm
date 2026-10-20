@@ -23,6 +23,8 @@ import { flowOf, produceFieldOf, enabledByFlag, flagOf } from '../../assembly/fl
 import { taskOf, smokeOf, contractMissingPayload, detectNeedHuman } from './detect.js';
 import type { TaskArrayField } from './detect.js';
 import type { Batch } from '../../types/contracts.js';
+// 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
+import { humanEvidenceOf } from '../constants.js';
 
 import type { GatesCx } from './cx.js';
 
@@ -118,7 +120,7 @@ export function buildExit(cx: GatesCx) {
     }
     const det = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
     if (!det.declared) return { ok: true, declared: false, path: null, ...(cmNeedhuman ?? {}) };
-    const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+    const evidence = humanEvidenceOf(note);
     if (evidence) return { ok: true, declared: true, path: det.path, evidence, ...(cmNeedhuman ?? {}) };
     return {
       ok: false, code: 'GATE_NEEDHUMAN_PENDING', declared: true, path: det.path,

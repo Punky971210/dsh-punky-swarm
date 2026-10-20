@@ -25,6 +25,8 @@ import { taskOf, smokeOf } from './detect.js';
 //   env 仅兜底）；本文件只**调用**它，不自行读 env/config 判据（禁两套读取）。
 import { handoffGateEnabledOf } from '../../wave-plan.js';
 import type { Batch } from '../../types/contracts.js';
+// 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
+import { humanEvidenceOf } from '../constants.js';
 
 import type { GatesCx } from './cx.js';
 
@@ -100,7 +102,7 @@ export function buildHandoff(cx: GatesCx) {
     }
     if (anySatisfied) return { ok: true, code: null, missing: [], problems: [], downstream };
     // ③ Leader 例外（note 含 human: 证据）⇒ 放行 + 留痕标记
-    const evidence = typeof note === 'string' ? (note.match(/^human:.+/m) ?? [null])[0] : null;
+    const evidence = humanEvidenceOf(note);
     if (evidence) return { ok: true, code: null, missing: [], problems: [], downstream, humanException: true };
     missing.unshift('handoff:' + lane + '->(' + downstream.join('/') + ')');
     problems.unshift('lane ' + lane + ' 在 DAG 中有下游（' + downstream.join('/') + '）但**无一条已成立交接**'

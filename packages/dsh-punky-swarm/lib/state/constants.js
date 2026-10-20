@@ -35,3 +35,13 @@ export function isAbsPath(p) {
 
 // 成员终态数组（原散落 3 处：log-tools / client.js / panel main.js；batch-list/batch-detail 引用共享段定义）
 export const TERMINAL = ['merged', 'failed', 'skipped', 'conflict'];
+
+// 人工裁决证据契约单点（note 契约 `human:<裁决人>:<时间>:<结论>`）
+// 兼容式裁决（leader-adjudication7 R-1）：人/时间分隔符兼容 `@` 与 `:`；
+// 存量 21/21 通过，仍拒 human:x / human::2026-08-21:accept / human:user:26-8-21:ok
+export const HUMAN_EVIDENCE_RE = /^human:[^\s:@]+[@:]\d{4}-\d{2}-\d{2}[^\s:]*:[^\s].*/m;
+
+/** 从 note 提取人工裁决证据；无证据返回 null（与既有 `(note.match(...) ?? [null])[0]` 语义一致）。 */
+export function humanEvidenceOf(note) {
+  return typeof note === 'string' ? (note.match(HUMAN_EVIDENCE_RE) ?? [null])[0] : null;
+}
