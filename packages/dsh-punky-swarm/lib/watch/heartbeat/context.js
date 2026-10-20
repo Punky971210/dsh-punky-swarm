@@ -22,7 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   （纪律：不新增真源）。初始化顺序与拆分前逐字一致：cfg → lrCfg → schedule → hardStop → clock →
 //   engineRoot → ctxOf → state；`disposed` / `replayInFlight` 为可变位（原闭包 `let`，同一实例内唯一）。
 import { join, dirname } from 'node:path';
-import { isAbsPath } from '../../state/constants.js'; // 单点（原内联正则收敛）
+import { resolveArtifactIn } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）
 import { resolveWatchConfig } from '../../schema.js';
 import { lastProgressTsOf, resolveLongrunConfig, buildSchedule } from '../lane-heartbeat.js';
 
@@ -54,10 +54,12 @@ export function mailboxRootOf(cx, sessionId, batchId) {
 }
 export const laneKeyOf = (sessionId, batchId, lane) => `${sessionId}/${batchId}/${lane}`;
 
-// 产物解析（自持只读实现，与 gates.js resolveArtifact/fileExistsNonEmpty 同源模式，避免循环依赖）
+// 产物解析（WD-3b P6）：改调 fail-closed 单点 `resolveArtifactIn` ——
+//   声明面非法（根外绝对 / `..` 逃逸）⇒ **throw**（R-4 声明期口径），由三个消费点的既有 try/catch
+//   落为「不可判定」（activity:83/129、evidence:30），不再 stat 到根外；运行期缺失仍原样返回路径。
 export function resolveArtifact(cx, sessionId, batchId, rel) {
   const base = cx.store.artifactsDirOf(sessionId, batchId);
-  return isAbsPath(rel) ? rel : join(base, rel);
+  return resolveArtifactIn(base, rel);
 }
 // 该 lane 在引擎产物根下的目录 = <artifacts>/<batchId>/<lane>（progress 快照与 lane 产物同源落盘约定；
 //   实测即 <artifacts>/<batchId>/<lane>/progress/NN-*.md）。

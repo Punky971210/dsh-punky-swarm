@@ -18,9 +18,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // P1 交接门工具面（自 `lib/tools/core.js` **原样搬移**）：handoff_submit / handoff_view。
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { existsSync, statSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import * as EVT from '../state/event-types.js';
+// 产物声明路径解析单点（WD-3b P7）：逃逸声明按「缺件 / 不可读」处理，不再探到根外
+import { resolveArtifactIn } from '../state/batch-paths.js';
 import * as lock from '../lock.js';
 import { lockPath } from './tier-gate.js';
 import { handoffCallerIdentityOf } from './host-surface.js';
@@ -79,7 +80,10 @@ export function buildHandoffTools(cx) {
         const assertions = Array.isArray(args.assertions) ? args.assertions.filter((a) => typeof a === 'string' && a.trim().length > 0) : [];
         // 产物在场判定（判据同源：相对路径按批次产物根解析）——缺则拒 + 回显**缺哪件产物**（与 entry 门同判据）
         const dir = store.artifactsDirOf(sessionId, args.batchId);
-        const missingArtifacts = artifacts.filter((p) => !existsSync(isAbsolute(p) ? p : join(dir, p)));
+        // 逃逸声明 ⇒ 判缺（`resolveArtifactIn` throw），不再 existsSync 到根外
+        const missingArtifacts = artifacts.filter((p) => {
+          try { return !existsSync(resolveArtifactIn(dir, p)); } catch { return true; }
+        });
         // 官方任务板回填位（M-6）**未启用**（2026-09-18 如实降级）：此处只把**调用方自填**的值原样透传给 store
         //   （引擎不写、不校验、不据以判定）；保留透传 = 不破既有调用方与 `store.recordHandoff` 形参面。
         //   「已双写」的读端语义已同步降级（见本工具 `description` / `parameters.officialTaskId`）。
@@ -196,9 +200,13 @@ export function buildHandoffTools(cx) {
           // 产物在场判定与 entry 门**同判据**（同一解析规则 + 同一「文件且非空」语义）——下游据此判断**能不能稳定取件**
           const arts = (rec && Array.isArray(rec.artifacts)) ? rec.artifacts : [];
           const artifactViews = arts.map((p) => {
-            const abs = isAbsolute(p) ? p : join(dir, p);
+            // 逃逸声明 ⇒ abs:null / readable:false（不探根外；R-4 声明期口径）
+            let abs = null;
             let readable = false;
-            try { const st = statSync(abs); readable = st.isFile() && st.size > 0; } catch { readable = false; }
+            try {
+              abs = resolveArtifactIn(dir, p);
+              const st = statSync(abs); readable = st.isFile() && st.size > 0;
+            } catch { abs = null; readable = false; }
             return { path: p, abs, readable };
           });
           const s = rec ? String(rec.status ?? 'pending') : 'undeclared';
