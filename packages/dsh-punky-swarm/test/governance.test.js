@@ -24,6 +24,8 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
+// W7F-FU-U1：治理落盘的**显式冲刷入口**（与 `lib/index.js` disposer 同一单点）
+import { flushDirtyGovernance } from '../lib/state/store/governance.js';
 import { threeTierTasks, seedArtifacts, runLane, registerManager, tempRoot } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
@@ -738,4 +740,57 @@ test('AC-8（Q-5 留痕提示）：fixedRole=true 而判 B ⇒ 不硬拒 + notic
   const g = h.st.readGovernance('sess-d-fixed');
   assert.equal(g.lastAssign.difficulty, 'B', 'AC-8：lastAssign.difficulty 保持 B');
   assert.equal(g.pendingBatch, false, 'B 档不挂批锁');
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════
+// W7F-FU-U1 · `bumpExecCount` 节流 + `flushDirtyGovernance()` 落盘增量与幂等
+//   batch `punky-debt-sweep-20261020` · lane `e3-tests`｜判据源 `plan/scope.md` §5.2（B1-B4）
+//
+// 判据形态（Lead 特别强调，勿退化为「不抛异常」）：
+//   ❌「二次 flush 不抛异常」—— 什么都不做也不抛；
+//   ✅「二次 flush **无新增写**」= 磁盘字节前后**逐字节相同**，且对照「第一次 flush **确有** +1」。
+// 观测面 = **磁盘文件** `<root>/sessions/<S>/governance.json` 的字节与 JSON 字段（不是返回值）。
+// 节流常量：`EXEC_FLUSH_EVERY = 10`、`EXEC_FLUSH_INTERVAL_MS = 30s` ⇒ 1 次 bump 必留在内存。
+// ══════════════════════════════════════════════════════════════════════════════════════
+test('W7F-FU-U1 bumpExecCount 节流：1 次未落盘（磁盘差 0）→ flush 后 +1 → 二次 flush 幂等（字节不变）', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-u1-flush-'));
+  const st = createStore(root, { logger: { warn() {}, info() {}, error() {} } });
+  const SU = 'sess-u1-flush'; // 独立会话键：不与其他用例的 pending 互扰
+
+  // 前置（阳性基线）：先把 governance.json 落盘一次 ⇒ 文件存在、`execToolCount` 可读
+  st.writeGovernance(SU, {});
+  const file = st.governanceFile(SU);
+  assert.equal(fs.existsSync(file), true, '前置：governance.json 须已落盘（否则「字节不变」没有对象）');
+  const before = fs.readFileSync(file);
+  const beforeCount = st.readGovernance(SU).execToolCount;
+  assert.equal(beforeCount, 0, '前置：初始 execToolCount 须为 0（实测 ' + beforeCount + '）');
+
+  // ── B1：bump 1 次（< 10 阈值）⇒ **磁盘字节差 0**（未落盘） ──────────────────────────
+  // 阳性对照（同块内）：**返回值**必须已 +1 —— 证明计数确实发生在内存，
+  //   否则「磁盘不变」可以由「bump 根本没做事」造成（不可证伪）。
+  const merged = st.bumpExecCount(SU);
+  assert.equal(merged.execToolCount, beforeCount + 1,
+    'B1 阳性对照：bump 的合并返回值须 +1（实测 ' + merged.execToolCount + '）');
+  const afterBump = fs.readFileSync(file);
+  assert.equal(Buffer.compare(before, afterBump), 0, 'B1：1 次 bump（<阈值）后磁盘字节须**逐字节相同**（未落盘）');
+  // 观测面纪律：**必须直读磁盘**。`readGovernance()` 是「磁盘 + 内存 pending」的**合并读**（设计如此：
+  //   让调用方不必等落盘即可看到真值）⇒ 拿它当「磁盘真值」会读到 +1 的假值（本件首轮即踩中，
+  //   由本行下方断言抓住）。判据要的是「落盘了没有」⇒ 只能看文件字节。
+  assert.equal(JSON.parse(afterBump.toString('utf8')).execToolCount, beforeCount,
+    'B1：磁盘内的 execToolCount 须仍为旧值（未经 flush 不得落盘）');
+
+  // ── B2：`flushDirtyGovernance()` 后 ⇒ 磁盘 `execToolCount` **+1**（B1 的 0 差是它的前置）──
+  flushDirtyGovernance();
+  const afterFlush = fs.readFileSync(file);
+  assert.equal(Buffer.compare(before, afterFlush) === 0, false, 'B2：flush 后磁盘字节须**已变化**（阳性：确有落盘）');
+  assert.equal(JSON.parse(afterFlush.toString('utf8')).execToolCount, beforeCount + 1,
+    'B2：flush 后磁盘 execToolCount 须恰 +1（实测 ' + JSON.parse(afterFlush.toString('utf8')).execToolCount + '）');
+
+  // ── B3：再次 flush ⇒ 磁盘字节**逐字不变**（幂等，无重复累加 +2） ─────────────────────
+  flushDirtyGovernance();
+  const afterSecond = fs.readFileSync(file);
+  assert.equal(Buffer.compare(afterFlush, afterSecond), 0,
+    'B3：二次 flush 须**无新增写**（字节逐字相同）；增量 = ' + (afterSecond.length - afterFlush.length));
+  assert.equal(JSON.parse(afterSecond.toString('utf8')).execToolCount, beforeCount + 1,
+    'B3：二次 flush 不得累加成 +2（实测 ' + JSON.parse(afterSecond.toString('utf8')).execToolCount + '）');
 });

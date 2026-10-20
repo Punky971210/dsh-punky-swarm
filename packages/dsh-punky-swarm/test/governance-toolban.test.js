@@ -450,36 +450,78 @@ test('T4-2 写盘面（file-write）：5 分隔符 × 「后缀写⇒hit」「�
   assert.equal(judgeFileWriteCommand('Get-ChildItem & xargs rm').hit, false, '阳性对照：`rm` 在参数位 ⇒ 放行');
 });
 
-test('T4-3 `.ts` 与回拷 `.js` 一致性：同一输入双跑结果逐条相等（两处内核）', async (t) => {
-  let tsMod;
+test('T4-3 `.ts` 与回拷 `.js`：可载走功能双跑；不可载走源级 parity（双路径，均不 skip）', async (t) => {
+  // 【DEBT-4 · S-2】原实现在 catch 分支内直接 skip ⇒ 缺少 .ts type stripping 的运行时**静默跳过**
+  //   ⇒ 该断言在那些运行时形同不存在（不可证伪）。本批改为**双路径**（两条都跑断言，无 skip 出口）：
+  //     · .ts 可载 ⇒ **功能双跑**（≥15 样本，含 hit/miss 两极性）；
+  //     · .ts 不可载 ⇒ **源级 parity**（单点接线 / 分隔符正则已清除 / 自持分段已清除，三条）。
+  //   两条路径**都**跑断言，`t.diagnostic('T4-3 path=…')` 记录实际走了哪条（报告可核）。
+  const PKG = path.join(import.meta.dirname, '..');
+  let tsMod = null;
+  let loadErr = null;
   try {
-    // Node 原生 type stripping（Node ≥22.18 / ≥23.6 起免 flag）；不可用时显式 skip，不伪装通过
+    // Node 原生 type stripping（Node ≥22.18 / ≥23.6 起免 flag）
     tsMod = await import('../lib/governance/tool-ban.ts');
   } catch (e) {
-    t.diagnostic('本运行时无法直接载入 lib/governance/tool-ban.ts（' + (e?.code ?? e?.name) + '）⇒ 双跑一致性本次未执行');
-    t.skip('运行时缺少 .ts type stripping 支持');
+    loadErr = e;
+    tsMod = null;
+  }
+
+  if (tsMod) {
+    t.diagnostic('T4-3 path=functional（.ts 原生载入成功）');
+    const jsMod = await import('../lib/governance/tool-ban.js');
+    const cases = [
+      ...TOOLBAN_SEPARATORS.flatMap((sep) => [
+        sep.join('Get-ChildItem', 'sleep 5'),
+        sep.join('Get-ChildItem', 'Set-Content -Path a.txt -Value x'),
+        sep.join('Get-ChildItem', 'Get-Date'),
+      ]),
+      'npm test', 'Get-ChildItem', 'rm -rf x', 'ls & rm -rf x',
+      'Set-Content "a.txt', // 未闭合引号：两处均应 fail-closed（边界不明）
+    ];
+    let compared = 0;
+    for (const c of cases) {
+      assert.equal(tsMod.judgeWaitSleepCommand(c).hit, jsMod.judgeWaitSleepCommand(c).hit,
+        '等待面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
+      assert.equal(tsMod.judgeFileWriteCommand(c).hit, jsMod.judgeFileWriteCommand(c).hit,
+        '写盘面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
+      compared++;
+    }
+    // 双极阳性对照（**不得削弱**）：样本须同时含命中与放行两类，
+    //   否则「两侧都 false」也会被读成「一致」（空转）。
+    assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === true), '一致性样本须含命中样本（非全放行空转）');
+    assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === false), '一致性样本须含放行样本');
+    assert.ok(cases.some((c) => tsMod.judgeWaitSleepCommand(c).hit === true), '等待面样本须含命中（否则等待面双跑空转）');
+    assert.ok(compared >= 15, '样本量须 ≥15（实测 ' + compared + '）');
     return;
   }
-  const jsMod = await import('../lib/governance/tool-ban.js');
-  const cases = [
-    ...TOOLBAN_SEPARATORS.flatMap((sep) => [
-      sep.join('Get-ChildItem', 'sleep 5'),
-      sep.join('Get-ChildItem', 'Set-Content -Path a.txt -Value x'),
-      sep.join('Get-ChildItem', 'Get-Date'),
-    ]),
-    'npm test', 'Get-ChildItem', 'rm -rf x', 'ls & rm -rf x',
-    'Set-Content "a.txt', // 未闭合引号：两处均应 fail-closed（边界不明）
-  ];
-  let compared = 0;
-  for (const c of cases) {
-    assert.equal(tsMod.judgeWaitSleepCommand(c).hit, jsMod.judgeWaitSleepCommand(c).hit,
-      '等待面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
-    assert.equal(tsMod.judgeFileWriteCommand(c).hit, jsMod.judgeFileWriteCommand(c).hit,
-      '写盘面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
-    compared++;
-  }
-  // 阳性对照（防「两侧都是 false 也算一致」的空转）：样本须同时含命中与放行两类
-  assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === true), '一致性样本须含命中样本（非全放行空转）');
-  assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === false), '一致性样本须含放行样本');
-  assert.ok(compared >= 15, '样本量须 ≥15（实测 ' + compared + '）');
+
+  // ── 兜底路径：源级 parity（**不 skip**）──────────────────────────────────────────────
+  t.diagnostic('T4-3 path=source-parity（.ts 载入失败：' + (loadErr?.code ?? loadErr?.name ?? 'unknown') + '）');
+  const readSrc = (rel) => fs.readFileSync(path.join(PKG, rel), 'utf8');
+  const tsSrc = readSrc('lib/governance/tool-ban.ts');
+  const jsSrc = readSrc('lib/governance/tool-ban.js');
+  const countOf = (hay, needle) => hay.split(needle).length - 1;
+
+  // ① 单点接线：两文件各自 `import { segmentCommands }` **恰 1**，且**都在用**（调用 ≥2）
+  assert.equal(countOf(tsSrc, 'import { segmentCommands }'), 1, 'P2① tool-ban.ts 须恰 1 处 import segmentCommands');
+  assert.equal(countOf(jsSrc, 'import { segmentCommands }'), 1, 'P2① tool-ban.js 须恰 1 处 import segmentCommands');
+  assert.ok(countOf(tsSrc, 'segmentCommands(') >= 2,
+    'P2① 阳性对照：ts 须实际调用 segmentCommands ≥2 次（只 import 不用 = 未单点化；实测 '
+    + countOf(tsSrc, 'segmentCommands(') + '）');
+  assert.ok(countOf(jsSrc, 'segmentCommands(') >= 2,
+    'P2① 阳性对照：js 回拷须同样调用 ≥2 次（实测 ' + countOf(jsSrc, 'segmentCommands(') + '）');
+
+  // ② 分隔符正则已清除：两文件内该字面量 == 0；**阳性对照** = 单点自身必须恰有 1 份
+  //   （否则搜索串写错时「处处为 0」也会绿 —— 这正是本批要堵的空转）
+  const DELIM_LITERAL = '/;|&&|\\|\\||\\||&|\\r?\\n/';
+  const shellSrc = readSrc('lib/shell-text.js');
+  assert.equal(countOf(shellSrc, DELIM_LITERAL), 1,
+    'P2② 阳性对照：单点 lib/shell-text.js 内分隔符正则须恰 1 份（实测 ' + countOf(shellSrc, DELIM_LITERAL) + '）');
+  assert.equal(countOf(tsSrc, DELIM_LITERAL), 0, 'P2② tool-ban.ts 不得自持分隔符正则');
+  assert.equal(countOf(jsSrc, DELIM_LITERAL), 0, 'P2② tool-ban.js 回拷不得自持分隔符正则');
+
+  // ③ 自持分段已清除：两文件内 `.split(` == 0（分段一律走单点）
+  assert.equal(countOf(tsSrc, '.split('), 0, 'P2③ tool-ban.ts 不得再自持分段 split(');
+  assert.equal(countOf(jsSrc, '.split('), 0, 'P2③ tool-ban.js 回拷不得再自持分段 split(');
 });

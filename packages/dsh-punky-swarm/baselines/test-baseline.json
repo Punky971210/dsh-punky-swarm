@@ -497,11 +497,11 @@
       "todos": 4
     },
     "test/gates-needhuman-evidence.test.js": {
-      "asserts": 37,
-      "blankLines": 20,
-      "lines": 234,
+      "asserts": 47,
+      "blankLines": 28,
+      "lines": 339,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 8,
       "todos": 0
     },
     "test/gates-vocabulary-contract.test.js": {
@@ -649,9 +649,9 @@
       "todos": 0
     },
     "test/governance-toolban.test.js": {
-      "asserts": 104,
-      "blankLines": 44,
-      "lines": 486,
+      "asserts": 114,
+      "blankLines": 49,
+      "lines": 528,
       "tautologies": 0,
       "tests": 25,
       "todos": 0
@@ -665,11 +665,11 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 237,
-      "blankLines": 49,
-      "lines": 742,
+      "asserts": 246,
+      "blankLines": 54,
+      "lines": 797,
       "tautologies": 0,
-      "tests": 32,
+      "tests": 33,
       "todos": 0
     },
     "test/handoff-authz.test.js": {
@@ -1265,9 +1265,9 @@
       "todos": 0
     },
     "test/watch-hotconfig.test.js": {
-      "asserts": 76,
-      "blankLines": 26,
-      "lines": 406,
+      "asserts": 79,
+      "blankLines": 27,
+      "lines": 446,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1361,7 +1361,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-20T15:39:23Z",
+  "generatedAt": "2026-10-20T17:22:35Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1372,15 +1372,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-w7f-20261020-e2-w7f-test 新增 test/w7f-rt-write-surface.test.js（T-1 L1 / T-2 L2 / T-3 六分支序列 / T-4 自证+D-1 回归）=> 条目 169 -> 170",
+  "reason": "punky-debt-sweep-20261020-e3-tests S-1/W7F-FU-U1/S-2 三条测试落地 + 吸收 e2-h1 的 watch-hotconfig 变更 => 条目保持 170",
   "schema": 1,
   "totals": {
-    "asserts": 9073,
-    "blankLines": 4568,
+    "asserts": 9105,
+    "blankLines": 4587,
     "files": 170,
-    "lines": 49366,
+    "lines": 49608,
     "tautologies": 2,
-    "tests": 1853,
+    "tests": 1856,
     "todos": 4
   }
 }

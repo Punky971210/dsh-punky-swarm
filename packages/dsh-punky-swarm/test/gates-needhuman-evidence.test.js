@@ -40,6 +40,8 @@ import path from 'node:path';
 
 import { HUMAN_EVIDENCE_RE, humanEvidenceOf } from '../lib/state/constants.js';
 import { detectNeedHuman, createGates } from '../lib/state/gates.js';
+import { createStore } from '../lib/state/store.js';
+import { buildWavePlan } from '../lib/wave-plan.js';
 
 const SID = 'sess-needhuman';
 
@@ -230,4 +232,107 @@ test('WD1-6 三处消费点结构自证：`humanEvidenceOf` 的调用点恰落�
   const dup = ['lib/state/gates/exit.js', 'lib/state/gates/handoff.js', 'lib/state/store/member-gates.js']
     .filter((rel) => /HUMAN_EVIDENCE_RE\s*=/.test(read(rel)));
   assert.deepEqual(dup, [], '消费点不得私建证据正则（须复用 constants.js 单点）: ' + JSON.stringify(dup));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════
+// S-1 · 命令 gate 失败 + needHuman：**弱证据**被拒且 lane 留 review（DEBT-4 三项之一）
+//   batch `punky-debt-sweep-20261020` · lane `e3-tests`｜判据源 `plan/scope.md` §5.1（A1-A4）
+//
+// 为什么必须带阳性对照（Lead 强调 / AC-18）：这条链路的拒绝是**两个条件**的合取
+//   （命令 gate 失败 ∧ 证据不足）。若门恒拒（或命令恒失败导致永不放行），
+//   「弱证据被拒」这条断言**在没有证据契约实现时也会绿** ⇒ 不可证伪。
+//   故 A1/A2/A3 **每条同块内**先证明「合法证据在同一夹具形态上 → merged」，再证明本形态被拒。
+//
+// 路径 = `lib/state/store/member-gates.js` 的命令 gate 段（与 `gate-spawn-fail.test.js` GAP-05e 同一写路径）：
+//   产物独立行 `gate: <必失败命令>` + `needHuman: true` ⇒ `cg.needHumanEscalation === true`
+//   ⇒ merged 前置 `humanEvidenceOf(note)`：无证据 / 弱证据 ⇒ 抛 `GATE_NEEDHUMAN_PENDING`，lane 留 review。
+// ══════════════════════════════════════════════════════════════════════════════════════
+
+const SILENT = { warn() {}, info() {}, error() {} };
+// 与既有 GAP-05a/05e 同一必失败命令（平台分支 GATE_EXIT_NONZERO / SPAWN_FAIL 均可，不影响本判据）
+const FAILING_CMD = 'nonexistent_cmd_xyz';
+const VALID_EVIDENCE = 'human:user@2026-10-20:accept';
+
+/** 三层批次夹具：exec 产物声明「必失败命令 + needHuman:true」（与 gate-spawn-fail GAP-05e 同形）。 */
+function setupCmdGateNeedHuman(batchId) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-s1-'));
+  const store = createStore(root, { logger: SILENT });
+  const S = 'sess-s1-cmdgate';
+  const plan = buildWavePlan({
+    batchId,
+    team: 'generic',
+    tasks: [
+      { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
+      { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/test-report.md'], cmd: 'code', deps: ['p1'] },
+      // 三层契约要求：有 exec 层必须有 audit 层（`wave-plan.js#validateLayerContract`）——
+      //   本用例不推进 a1，仅为让夹具通过建批期校验（与 `gate-spawn-fail.test.js` 的 TASKS 同形：
+      //   a1 **不声明 consume**——一旦声明 consume，就必须锚到 plan 层判据源 `GATE_AUDIT_INPUT_MISSING`）。
+      { id: 'a1', layer: 'audit', role: 'reviewer', produce: ['audit/acceptance.md'], cmd: 'review', deps: ['e1'] },
+    ],
+  });
+  store.createBatch(S, { batchId, wavePlan: plan });
+  const artDir = path.join(root, 'sessions', S, 'artifacts', batchId);
+  fs.mkdirSync(path.join(artDir, 'plan'), { recursive: true });
+  fs.mkdirSync(path.join(artDir, 'exec'), { recursive: true });
+  fs.writeFileSync(path.join(artDir, 'plan', 'spec.md'),
+    '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n');
+  fs.writeFileSync(path.join(artDir, 'exec', 'test-report.md'),
+    '# 验证\n- ok\ngate: ' + FAILING_CMD + '\nneedHuman: true\n');
+  return { root, store, S, batchId };
+}
+
+/** 把 exec lane 推到 review（plan lane 先 merged）。设置失败即抛（夹具不自洽要立刻暴露）。 */
+function advanceToExecReview(store, S, batchId) {
+  const set = (lane, to) => {
+    const r = store.setMember(S, batchId, lane, to);
+    if (r instanceof Error) throw r;
+    return r;
+  };
+  set('p1', 'running'); set('p1', 'review'); set('p1', 'merged');
+  set('e1', 'running'); set('e1', 'review');
+}
+
+/** 尝试把 exec lane 结算为 merged（返回批次或 Error）。 */
+function tryMerged(store, S, batchId, note) {
+  try { return store.setMember(S, batchId, 'e1', 'merged', note); } catch (e) { return e; }
+}
+
+test('S-1 命令 gate 失败 + needHuman：3 类弱证据全拒且 lane 留 review（每类先证合法证据 ⇒ merged）', () => {
+  for (const [name, weakNote] of WEAK_3) {
+    // ── 阳性对照（同块内先跑）：**合法证据**在同一夹具形态上必须 merged ────────────────
+    const okFix = setupCmdGateNeedHuman('b-s1-ok-' + Math.random().toString(36).slice(2, 7));
+    advanceToExecReview(okFix.store, okFix.S, okFix.batchId);
+    const okRes = tryMerged(okFix.store, okFix.S, okFix.batchId, VALID_EVIDENCE);
+    assert.equal(okRes instanceof Error, false,
+      '[' + name + '] 阳性对照：合法证据 ' + VALID_EVIDENCE + ' 必须 merged（否则下面的拒绝可能是「门恒拒」）: '
+      + String(okRes && okRes.message));
+    assert.equal(okRes.lanes.e1, 'merged', '[' + name + '] 阳性对照：lane 须落 merged');
+
+    // ── 被测：弱证据 ⇒ 抛 GATE_NEEDHUMAN_PENDING + lane 留 review ─────────────────
+    const fix = setupCmdGateNeedHuman('b-s1-weak-' + Math.random().toString(36).slice(2, 7));
+    advanceToExecReview(fix.store, fix.S, fix.batchId);
+    const r = tryMerged(fix.store, fix.S, fix.batchId, weakNote);
+    assert.equal(r instanceof Error, true, '[' + name + '] 弱证据必须拒 merged: ' + JSON.stringify(weakNote));
+    assert.match(String(r.message), /GATE_NEEDHUMAN_PENDING/,
+      '[' + name + '] 拒码须为 GATE_NEEDHUMAN_PENDING（实测: ' + String(r.message) + '）');
+    const b = fix.store.readBatch(fix.S, fix.batchId);
+    assert.equal(b.lanes.e1, 'review', '[' + name + '] 被拒后 lane 须仍为 review（不得被推进终态）');
+    // 事件面留痕：escalation 转人工闸必须可核（零静默）
+    assert.equal(b.events.some((e) => e.type === 'gate.exit_blocked' && e.escalation === true), true,
+      '[' + name + '] 须落 gate.exit_blocked{escalation:true} 事件');
+  }
+});
+
+test('S-1 A4 合法证据 → merged（与弱证据用例同夹具，差异只在 note）', () => {
+  const fix = setupCmdGateNeedHuman('b-s1-a4');
+  advanceToExecReview(fix.store, fix.S, fix.batchId);
+  // 前置：无证据先拒（证明本夹具确实处在「需人工裁决」态，而非无需裁决的常态）
+  const r0 = tryMerged(fix.store, fix.S, fix.batchId, undefined);
+  assert.match(String(r0 && r0.message), /GATE_NEEDHUMAN_PENDING/, '前置：无证据须先被拒: ' + String(r0 && r0.message));
+  // A4：合法证据（`@` 分隔形态）⇒ merged + human.decision 留痕
+  const r = tryMerged(fix.store, fix.S, fix.batchId, VALID_EVIDENCE);
+  assert.equal(r instanceof Error, false, 'A4 合法证据必须 merged: ' + String(r && r.message));
+  assert.equal(r.lanes.e1, 'merged', 'A4 lane 须 merged');
+  assert.equal(r.events.some((e) => e.type === 'human.decision' && e.lane === 'e1'), true,
+    'A4 merged 须落 human.decision 留痕（note 可回溯）');
 });
