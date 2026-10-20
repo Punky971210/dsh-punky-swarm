@@ -142,7 +142,7 @@ function matchWritePath(command) {
   if (WRITE_CMDLET_RE.test(text)) return '含写文件 cmdlet';
   if (WRITE_OUTFILE_RE.test(text)) return '含落盘参数 -OutFile';
   if (WRITE_FIND_EXEC_RE.test(text)) return '含 find -exec 写侧';
-  for (const seg of text.split(/;|&&|\|\||\||\r?\n/)) {
+  for (const seg of text.split(/;|&&|\|\||\||&|\r?\n/)) {
     const s = seg.trim();
     if (s.length === 0) continue;
     const head = headToken(s);
