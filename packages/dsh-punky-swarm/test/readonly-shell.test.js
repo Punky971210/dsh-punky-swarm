@@ -220,3 +220,80 @@ test('未评估态端到端：写旗标 find 被门禁拦下（未执行 ⇒ 不
   assert.equal(call('find . -name x'), undefined, '纯只读 find 仍走只读侦察豁免');
   assert.equal(call('find . -type f -print0'), undefined, '只读 -print0 不受写旗标收紧影响');
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// DT-GAP-1 · T3：分隔符表驱动（`&` / `&&` / `;` / `|` / 换行）
+//   （batch `punky-debt-fix-20261020` / lane `e2-test`；判据源 `plan/scope.md` §2 T3）
+//
+// 债面：只读面有两处按分隔符切段——
+//   ① 主分段判定（`judgeSegment` 前的 `split(/;|&&|\|\||\||&|\r?\n/)`）；
+//   ② **find 原文复扫**（`findWriteFlagInRaw`，同一套分隔符，只对段首为 `find` 的段复扫写侧旗标）。
+//   两处都必须把 `&` 当作**真分隔符**：前缀只读不得「掩护」后缀的写动作。
+// 表结构（AC-4 阳性对照）：**每个分隔符同一行给三格** ——
+//   ① 后缀 = 写命令 ⇒ `readonly:false`；② 后缀 = 只读命令 ⇒ `readonly:true`（同分隔符的阴性对照，
+//   证明拒的不是「出现了分隔符」）；③ 后缀 = find 写旗标 ⇒ `false` 且原因点名 find（覆盖第 ② 处）。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// 分隔符单表：**同一张表**驱动只读/写两侧，避免两套口径各判一套
+const SEPARATORS = [
+  { name: '&（单与号）', join: (a, b) => a + ' & ' + b },
+  { name: '&&（双与号）', join: (a, b) => a + ' && ' + b },
+  { name: ';（分号）', join: (a, b) => a + ' ; ' + b },
+  { name: '|（管道）', join: (a, b) => a + ' | ' + b },
+  { name: '换行', join: (a, b) => a + '\n' + b },
+];
+
+test('T3-1 分隔符表驱动：同分隔符「后接写命令⇒拒」「后接只读⇒放」（5 分隔符 × 双侧，阳性对照成对）', () => {
+  for (const sep of SEPARATORS) {
+    // ① 后缀为写命令 ⇒ 整条非只读（分段口径：任一段非只读即整条非只读）
+    const writeCmd = sep.join('Get-ChildItem', 'rm -rf x');
+    const rw = judgeShellCommand(writeCmd);
+    assert.equal(rw.readonly, false, '[' + sep.name + '] 后缀写命令须拒: ' + JSON.stringify(writeCmd));
+    assert.ok(typeof rw.reason === 'string' && rw.reason.length > 0, '[' + sep.name + '] 拒绝须给原因');
+
+    // ② **同分隔符阴性对照**：后缀换成只读命令 ⇒ 必须放行
+    const roCmd = sep.join('Get-ChildItem', 'Get-Date');
+    assert.equal(judgeShellCommand(roCmd).readonly, true,
+      '[' + sep.name + '] 阳性对照：同分隔符后缀只读 ⇒ 须放行（否则「见分隔符即拒」不可证伪）: ' + JSON.stringify(roCmd));
+
+    // ③ `ls & sleep 5` 类形态：sleep 不在只读白名单 ⇒ 拒，且原因点名 sleep（不是点名分隔符）
+    const sleepCmd = sep.join('Get-ChildItem', 'sleep 5');
+    const rs = judgeShellCommand(sleepCmd);
+    assert.equal(rs.readonly, false, '[' + sep.name + '] 后缀 sleep 须拒: ' + JSON.stringify(sleepCmd));
+    assert.ok(rs.reason.includes('sleep'), '[' + sep.name + '] 拒因须点名 sleep 段（证明切段生效）: ' + rs.reason);
+  }
+});
+
+test('T3-2 `ls & rm -rf x` 类形态：写命令在 `&` 后缀 ⇒ 非只读（与 `;`/`|`/`&&` 同判据）', () => {
+  const forms = ['Get-ChildItem & rm -rf x', 'Get-ChildItem && rm -rf x', 'Get-ChildItem ; rm -rf x',
+    'Get-ChildItem | rm -rf x', 'Get-ChildItem\nrm -rf x'];
+  for (const c of forms) {
+    const r = judgeShellCommand(c);
+    assert.equal(r.readonly, false, '须拒: ' + JSON.stringify(c));
+    assert.ok(r.reason.includes('rm'), '拒因须点名 rm（写/执行类段）: ' + r.reason);
+  }
+  // 阳性对照：同一条命令把 `rm -rf x` 换成只读 `Get-Date` ⇒ 放行
+  assert.equal(judgeShellCommand('Get-ChildItem & Get-Date').readonly, true, '阳性对照：两侧只读 ⇒ 放行');
+});
+
+test('T3-3 find 原文复扫（第 ② 处）：`&` 后缀的 find 写旗标须拒且点名 find（含引号包裹形态）', () => {
+  for (const sep of SEPARATORS) {
+    const bad = sep.join('Get-ChildItem', 'find . "-fprint" out.txt');
+    const rb = judgeShellCommand(bad);
+    assert.equal(rb.readonly, false, '[' + sep.name + '] find 写旗标须拒: ' + JSON.stringify(bad));
+    assert.ok(rb.reason.includes('find'), '[' + sep.name + '] 拒因须点名 find 写侧动作: ' + rb.reason);
+
+    // **同分隔符阴性对照**：同一 find 命令去掉写旗标 ⇒ 必须放行
+    const ok = sep.join('Get-ChildItem', 'find . -name "*.md"');
+    assert.equal(judgeShellCommand(ok).readonly, true,
+      '[' + sep.name + '] 阳性对照：纯只读 find ⇒ 须放行: ' + JSON.stringify(ok));
+  }
+});
+
+test('T3-4 `isReadOnlyShellCall` 通道：`&` 后缀写命令拿不到只读豁免（同形只读命令仍豁免）', () => {
+  const pwshCall = (command) => ({ name: 'pwsh', arguments: { command } });
+  assert.equal(isReadOnlyShellCall(pwshCall('Get-ChildItem & rm -rf x')), false, '`&` 后缀写 ⇒ 不豁免');
+  assert.equal(isReadOnlyShellCall(pwshCall('Get-ChildItem & Get-Date')), true, '阳性对照：`&` 后缀只读 ⇒ 豁免');
+  assert.equal(isReadOnlyShellCall({ name: 'bash', arguments: { command: 'ls & rm -rf x' } }), false, 'bash 通道同判');
+  assert.equal(isReadOnlyShellCall({ name: 'bash', arguments: { command: 'ls & ls -la' } }), true, '阳性对照：bash 后缀只读 ⇒ 豁免');
+});

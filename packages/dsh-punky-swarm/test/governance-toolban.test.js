@@ -28,7 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
 import {
-  judgeFileWriteCommand, matchToolBan, WRITE_CHANNEL_HINT,
+  judgeFileWriteCommand, judgeWaitSleepCommand, matchToolBan, WRITE_CHANNEL_HINT,
   UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX, UNKNOWN_VIOLATION_CODE,
 } from '../lib/governance/tool-ban.js';
 import { createGovernanceKernel } from '../lib/governance/kernel.js';
@@ -395,4 +395,91 @@ test('A-4 装配级：runtime.json 坏条目 ⇒ 载入期 warn 指名条目 + �
   } finally {
     disposer();
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// DT-GAP-1 · T4：分隔符表驱动覆盖 tool-ban 两处 + `.ts` ↔ 回拷 `.js` 双跑一致性
+//   （batch `punky-debt-fix-20261020` / lane `e2-test`；判据源 `plan/scope.md` §2 T4）
+//
+// 两处消费点（同一 `maskQuoted` + 同一套分隔符切段）：
+//   ① 等待面 `judgeWaitSleepCommand`（wait-sleep 判定内核）；
+//   ② 写盘面 `judgeFileWriteCommand`（file-write 判定内核）。
+// 债面：`&` 作为命令分隔符时两处都必须切段——「只读前缀 & 违禁后缀」不得靠前缀掩护。
+// 表结构（AC-4 阳性对照）：**同一张分隔符表**逐格给「后缀 = 违禁动作 ⇒ hit:true」与
+//   「后缀 = 只读动作 ⇒ hit:false」两侧成对；另加「`&` 两侧只读 ⇒ 放行」的结构性阴性对照。
+// `tool-ban.js` 是 `tool-ban.ts` 的回拷生成物（`scripts/copy-ts-built.mjs` 白名单）⇒ 双跑一致性
+//   钉住「改 `.ts` 忘 build」这类漂移；本环境 Node 支持原生 type stripping 时真跑，
+//   否则**显式 skip（可计数、不静默通过）**。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+const TOOLBAN_SEPARATORS = [
+  { name: '&', join: (a, b) => a + ' & ' + b },
+  { name: '&&', join: (a, b) => a + ' && ' + b },
+  { name: ';', join: (a, b) => a + ' ; ' + b },
+  { name: '|', join: (a, b) => a + ' | ' + b },
+  { name: '换行', join: (a, b) => a + '\n' + b },
+];
+
+test('T4-1 等待面（wait-sleep）：5 分隔符 × 「后缀 sleep⇒hit」「后缀只读⇒放行」成对', () => {
+  for (const sep of TOOLBAN_SEPARATORS) {
+    const hitCmd = sep.join('Get-ChildItem', 'sleep 5');
+    const v = judgeWaitSleepCommand(hitCmd);
+    assert.equal(v.hit, true, '[' + sep.name + '] 后缀 sleep 须命中: ' + JSON.stringify(hitCmd));
+    assert.ok(String(v.reason).includes('sleep'), '[' + sep.name + '] 命中原因须点名 sleep 段: ' + v.reason);
+
+    // **同分隔符阴性对照**：只换后缀 ⇒ 必须放行（否则「见分隔符即拒」不可证伪）
+    const okCmd = sep.join('Get-ChildItem', 'Select-Object -First 1');
+    assert.equal(judgeWaitSleepCommand(okCmd).hit, false,
+      '[' + sep.name + '] 阳性对照：同分隔符后缀只读 ⇒ 放行: ' + JSON.stringify(okCmd));
+  }
+  // 结构性阴性对照：`&` 两侧只读 ⇒ 放行（证明命中的是后缀动作，不是 `&` 本身）
+  assert.equal(judgeWaitSleepCommand('Get-ChildItem & Get-Date').hit, false, '阳性对照：`&` 两侧只读 ⇒ 放行');
+});
+
+test('T4-2 写盘面（file-write）：5 分隔符 × 「后缀写⇒hit」「后缀只读⇒放行」成对', () => {
+  for (const sep of TOOLBAN_SEPARATORS) {
+    const hitCmd = sep.join('Get-ChildItem', 'Set-Content -Path a.txt -Value x');
+    assert.equal(judgeFileWriteCommand(hitCmd).hit, true, '[' + sep.name + '] 后缀写盘须命中: ' + JSON.stringify(hitCmd));
+
+    const okCmd = sep.join('Get-ChildItem', 'Get-Date');
+    assert.equal(judgeFileWriteCommand(okCmd).hit, false,
+      '[' + sep.name + '] 阳性对照：同分隔符后缀只读 ⇒ 放行: ' + JSON.stringify(okCmd));
+  }
+  // 段首写命令名形态（与写指示符形态互补，与 command-exec 的 WRITE_HEADS 同口径）
+  assert.equal(judgeFileWriteCommand('Get-ChildItem & rm -rf x').hit, true, '`&` 后缀段首 rm ⇒ 命中');
+  assert.equal(judgeFileWriteCommand('Get-ChildItem & xargs rm').hit, false, '阳性对照：`rm` 在参数位 ⇒ 放行');
+});
+
+test('T4-3 `.ts` 与回拷 `.js` 一致性：同一输入双跑结果逐条相等（两处内核）', async (t) => {
+  let tsMod;
+  try {
+    // Node 原生 type stripping（Node ≥22.18 / ≥23.6 起免 flag）；不可用时显式 skip，不伪装通过
+    tsMod = await import('../lib/governance/tool-ban.ts');
+  } catch (e) {
+    t.diagnostic('本运行时无法直接载入 lib/governance/tool-ban.ts（' + (e?.code ?? e?.name) + '）⇒ 双跑一致性本次未执行');
+    t.skip('运行时缺少 .ts type stripping 支持');
+    return;
+  }
+  const jsMod = await import('../lib/governance/tool-ban.js');
+  const cases = [
+    ...TOOLBAN_SEPARATORS.flatMap((sep) => [
+      sep.join('Get-ChildItem', 'sleep 5'),
+      sep.join('Get-ChildItem', 'Set-Content -Path a.txt -Value x'),
+      sep.join('Get-ChildItem', 'Get-Date'),
+    ]),
+    'npm test', 'Get-ChildItem', 'rm -rf x', 'ls & rm -rf x',
+    'Set-Content "a.txt', // 未闭合引号：两处均应 fail-closed（边界不明）
+  ];
+  let compared = 0;
+  for (const c of cases) {
+    assert.equal(tsMod.judgeWaitSleepCommand(c).hit, jsMod.judgeWaitSleepCommand(c).hit,
+      '等待面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
+    assert.equal(tsMod.judgeFileWriteCommand(c).hit, jsMod.judgeFileWriteCommand(c).hit,
+      '写盘面双跑不一致（改 .ts 忘 build？）: ' + JSON.stringify(c));
+    compared++;
+  }
+  // 阳性对照（防「两侧都是 false 也算一致」的空转）：样本须同时含命中与放行两类
+  assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === true), '一致性样本须含命中样本（非全放行空转）');
+  assert.ok(cases.some((c) => tsMod.judgeFileWriteCommand(c).hit === false), '一致性样本须含放行样本');
+  assert.ok(compared >= 15, '样本量须 ≥15（实测 ' + compared + '）');
 });

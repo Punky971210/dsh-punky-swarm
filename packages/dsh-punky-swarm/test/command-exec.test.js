@@ -339,3 +339,78 @@ test('D1-A12（基线护栏加固）：D1 净增断言非空转——写盘面�
   assert.ok(live.asserts >= d1AssertLines, '断言总数须不小于写盘面样本数（实测=' + live.asserts + '）');
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════════
+// DT-GAP-1 · T1：`&` 分隔符反例 + 端到端副作用 + 控制组
+//   （batch `punky-debt-fix-20261020` / lane `e2-test`；判据源 `plan/scope.md` §2 T1）
+//
+// 债面：`matchWritePath` 的分段正则含 `&`（单 `&`，区别于 `&&`），故「只读前缀 & 写命令后缀」
+//   必须与「`;` / `&&` / `|` / 换行」**同等**判为命中。本组把它钉住。
+// 纪律（AC-4 阳性对照）：每条「被拦」断言都在**同一测试内**配一条同前缀、只换后半段的对照，
+//   证明被拦的是「后半段是写命令」，而不是「命令里有 `&`」或前缀本身命中。
+//   ① T1-1/T1-2 的对照 = T1-4 中 `Get-ChildItem & Get-Date`（同为 `&` 结构、两侧只读 ⇒ 必须放行）；
+//   ② T1-3 的对照 = 同一条删除动作**不经黑名单时**真的把文件删掉 ⇒ 「victim 存活」不是永真。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+test('T1-1 `&` 反例①：`echo ok & del <file>` ⇒ 命中（写命令位于 `&` 后缀段）', () => {
+  const victim = path.join(tmp, 't1-dash-victim-' + Date.now() + '.txt');
+  fs.writeFileSync(victim, 'SENTINEL-T1');
+  const cmd = 'echo ok & del "' + victim + '"';
+  assert.equal(matchesForbidden(cmd, DEFAULT_FORBIDDEN_PATTERNS), true, '`&` 后的 del 须判写（实测命令: ' + cmd + '）');
+  // 阳性对照：同一条命令去掉 `&` 后缀段 ⇒ 必须放行（证明命中的是后缀，不是 `echo ok`）
+  assert.equal(matchesForbidden('echo ok', DEFAULT_FORBIDDEN_PATTERNS), false, '阳性对照：纯 `echo ok` 须放行');
+});
+
+test('T1-2 `&` 反例②：`echo ok & rm -rf x` ⇒ 命中', () => {
+  assert.equal(matchesForbidden('echo ok & rm -rf x', DEFAULT_FORBIDDEN_PATTERNS), true, '`&` 后的 rm 须判写');
+  // 阳性对照：`rm` 移到参数位（非段首）⇒ 放行，证明命中的是「段首写命令」判据
+  assert.equal(matchesForbidden('echo ok & xargs rm', DEFAULT_FORBIDDEN_PATTERNS), false, '阳性对照：`rm` 在参数位须放行');
+});
+
+test('T1-3 `&` 端到端副作用：runCommand 后 victim 文件**仍存在**（断文件存活，不断返回字段）', () => {
+  const victim = path.join(tmp, 't1-e2e-victim-' + Date.now() + '.txt');
+  fs.writeFileSync(victim, 'SENTINEL-T1-E2E');
+  assert.equal(fs.existsSync(victim), true, '前置：夹具文件已落盘');
+
+  const r = runCommand({ command: 'echo ok & del "' + victim + '"', timeoutMs: 5000, retries: 0 });
+  assert.equal(r.forbidden, true, JSON.stringify(r));
+  assert.equal(r.ok, false);
+  assert.equal(r.exitCode, null);
+  assert.equal(r.error, 'GATE_EXIT_FORBIDDEN');
+  // 判据核心：**断副作用**而非断返回字段——文件必须还在，且内容未被改写
+  assert.equal(fs.existsSync(victim), true, '被拦命令须**未被执行**：victim 文件必须仍存在');
+  assert.equal(fs.readFileSync(victim, 'utf8'), 'SENTINEL-T1-E2E', 'victim 内容不得被改写');
+
+  // 阳性对照：同一条删除动作**换一种黑名单不覆盖的形态**（`node -e unlinkSync`，见 D1-A9 已知未覆盖面）
+  //   ⇒ 必须放行**并真的把文件删掉**。没有这一步，「victim 仍存在」在「runCommand 根本跑不动删除」时也成立（不可证伪）。
+  const control = path.join(tmp, 't1-e2e-control-' + Date.now() + '.txt');
+  fs.writeFileSync(control, 'SENTINEL-T1-CTRL');
+  const delCmd = 'node -e "require(\'fs\').unlinkSync(process.env.T1_VICTIM)"';
+  const r2 = runCommand({ command: delCmd, timeoutMs: 5000, retries: 0, env: { ...process.env, T1_VICTIM: control } });
+  assert.equal(r2.forbidden, false, '阳性对照：该形态不在黑名单内（D1-A9 已知未覆盖）' + JSON.stringify(r2));
+  assert.equal(r2.ok, true, JSON.stringify(r2));
+  assert.equal(fs.existsSync(control), false, '阳性对照：命令真被执行且真的删除了文件 ⇒ 「存活」判据有分辨力');
+});
+
+test('T1-4 控制组 7 形态：`&&`/`;`/`|`/换行/引号内 `&`/`2>&1`/`2>$null` 行为不变', () => {
+  // ① 四种**真分隔符**：写命令在后缀段 ⇒ 一律命中（与单 `&` 同判据）
+  const separatorWrites = [
+    'echo ok && del victim.txt',
+    'echo ok ; del victim.txt',
+    'echo ok | del victim.txt',
+    'echo ok\ndel victim.txt',
+  ];
+  for (const c of separatorWrites) {
+    assert.equal(matchesForbidden(c, DEFAULT_FORBIDDEN_PATTERNS), true, '真分隔符后接写命令须命中: ' + JSON.stringify(c));
+  }
+  // ② `&` 结构但两侧只读 ⇒ 必须放行（**同结构阳性对照**：证明「有 `&`」本身不是拒绝理由）
+  assert.equal(matchesForbidden('Get-ChildItem & Get-Date', DEFAULT_FORBIDDEN_PATTERNS), false,
+    '阳性对照：`&` 两侧均为只读 ⇒ 放行（否则 `&` 反例会退化为「见 & 即拒」的不可证伪断言）');
+  // ③ 引号字面量内的 `&` 不是分隔符 ⇒ 放行（掩码口径同 D1-A3）
+  assert.equal(matchesForbidden('echo "a & b"', DEFAULT_FORBIDDEN_PATTERNS), false, '引号内 `&` 不得当分隔符');
+  assert.equal(matchesForbidden('Select-String -Pattern "a & b" -Path x.md', DEFAULT_FORBIDDEN_PATTERNS), false,
+    '引号内含 `&` 的只读命令须放行');
+  // ④ 流合并不等于落盘（与 D1-A4 同口径，此处复跑一次确保 `&` 分段改动未波及）
+  assert.equal(matchesForbidden('Get-ChildItem 2' + GT + '&1 | Select-Object -First 1', DEFAULT_FORBIDDEN_PATTERNS), false, '`2>&1` 不算落盘');
+  assert.equal(matchesForbidden('echo a 2' + GT + '$null', DEFAULT_FORBIDDEN_PATTERNS), false, '`2>$null` 不算落盘');
+});
+

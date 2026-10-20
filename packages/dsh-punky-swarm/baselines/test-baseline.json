@@ -241,11 +241,11 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 71,
-      "blankLines": 37,
-      "lines": 342,
+      "asserts": 91,
+      "blankLines": 44,
+      "lines": 417,
       "tautologies": 0,
-      "tests": 26,
+      "tests": 30,
       "todos": 0
     },
     "test/command-script-anchor.test.js": {
@@ -408,6 +408,14 @@
       "tests": 3,
       "todos": 0
     },
+    "test/gate-artifact-containment.test.js": {
+      "asserts": 42,
+      "blankLines": 25,
+      "lines": 280,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
     "test/gate-assertion-r32.test.js": {
       "asserts": 15,
       "blankLines": 38,
@@ -487,6 +495,14 @@
       "tautologies": 0,
       "tests": 35,
       "todos": 4
+    },
+    "test/gates-needhuman-evidence.test.js": {
+      "asserts": 37,
+      "blankLines": 20,
+      "lines": 234,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
     },
     "test/gates-vocabulary-contract.test.js": {
       "asserts": 51,
@@ -633,11 +649,11 @@
       "todos": 0
     },
     "test/governance-toolban.test.js": {
-      "asserts": 91,
-      "blankLines": 37,
-      "lines": 399,
+      "asserts": 104,
+      "blankLines": 44,
+      "lines": 486,
       "tautologies": 0,
-      "tests": 22,
+      "tests": 25,
       "todos": 0
     },
     "test/governance-wiring.test.js": {
@@ -977,11 +993,11 @@
       "todos": 0
     },
     "test/readonly-shell.test.js": {
-      "asserts": 25,
-      "blankLines": 15,
-      "lines": 223,
+      "asserts": 40,
+      "blankLines": 24,
+      "lines": 300,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 11,
       "todos": 0
     },
     "test/replay-recovery.test.js": {
@@ -1329,7 +1345,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-13T12:40:37Z",
+  "generatedAt": "2026-10-20T10:47:38Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1340,15 +1356,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "P2 close-out: e6-blocking-fix synced test/archive.test.js (A4 behavior-assertion construction via side-effect form #7) and test/fixture-team-ledger.test.js (allowlist, order-sensitive). Any test-tree edit shifts the meta-face baseline (registry form #6). Leader is sole writer of baselines/**.",
+  "reason": "punky-debt-fix-20261020-e2-test T1-T5 测试债落地（2 新建 + 3 追加）=> 条目 167 -> 169",
   "schema": 1,
   "totals": {
-    "asserts": 8821,
-    "blankLines": 4422,
-    "files": 166,
-    "lines": 47767,
+    "asserts": 8948,
+    "blankLines": 4490,
+    "files": 168,
+    "lines": 48520,
     "tautologies": 2,
-    "tests": 1811,
+    "tests": 1836,
     "todos": 4
   }
 }
