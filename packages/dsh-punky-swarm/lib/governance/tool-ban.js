@@ -16,6 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 // 合法行为面枚举（用于「未实现」退路的提示文案；config.ts 不 import 本模块 ⇒ 无循环依赖）
 import { TOOL_BAN_BEHAVIORS } from './config.js';
+// 命令**分段**单点（(lib-root) 中立件）：护栏不自抄分隔正则（DEBT-3 真单点化）；
+//   arch 授权对 `governance -> (lib-root)` 已在 .punky/arch.yml 登记（理由：共享既有 shell 文本预处理单点）。
+import { segmentCommands } from '../shell-text.js';
 // 引号字面量掩码（替代符刻意选无语义 token：不会被写指示符命中，也不会被当命令名）
 const QUOTE_MASK = '__Q__';
 // 段内赋值的环境前缀（PowerShell `$x = ` / POSIX `x=`）：只剥前缀，右侧照原判定
@@ -68,7 +71,7 @@ export function judgeWaitSleepCommand(command) {
     if (!masked.ok) {
         return { hit: true, reason: '含未闭合引号，命令边界不明（fail-closed 按等待处理）' };
     }
-    for (const seg of masked.masked.split(/;|&&|\|\||\||&|\r?\n/)) {
+    for (const seg of segmentCommands(masked.masked)) {
         let s = seg.trim();
         if (s.length === 0)
             continue;
@@ -137,7 +140,7 @@ export function judgeFileWriteCommand(command) {
         if (re.test(text))
             return { hit: true, reason: why };
     }
-    for (const seg of text.split(/;|&&|\|\||\||&|\r?\n/)) {
+    for (const seg of segmentCommands(text)) {
         let s = seg.trim();
         if (s.length === 0)
             continue;

@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { stripStreamMerges } from '../shell-text.js';
+import { stripStreamMerges, segmentCommands } from '../shell-text.js';
 
 // 只读 shell 判定（难度门禁「只读侦察面」的判定内核）
 //
@@ -185,7 +185,7 @@ function secondToken(seg) {
 //   已知误拒边界（落在 fail-closed 侧，接受）：`find . -name "-delete"`（把被引号包裹的**旗标名**
 //   当字面文件名检索）会判非只读；需检索该字面名时改用前导非引号的写法（如 `find . -name '*-delete*'`）。
 function findWriteFlagInRaw(command) {
-  for (const raw of command.split(/;|&&|\|\||\||&|\r?\n/)) {
+  for (const raw of segmentCommands(command)) {
     const seg = raw.replace(ASSIGN_RE, '').trim();
     const head = headToken(seg);
     if (head !== 'find' && head !== 'find.exe') continue;
@@ -249,7 +249,7 @@ export function judgeShellCommand(command) {
   // ②′ 掩码后的文本看不到引号内的旗标 ⇒ 对原文的 find 段复扫一次（口径与收窄理由见 findWriteFlagInRaw）
   const rawFind = findWriteFlagInRaw(command);
   if (rawFind) return { readonly: false, reason: rawFind };
-  for (const seg of text.split(/;|&&|\|\||\||&|\r?\n/)) {
+  for (const seg of segmentCommands(text)) {
     const reason = judgeSegment(seg);
     if (reason != null) return { readonly: false, reason, segment: seg.trim() };
   }

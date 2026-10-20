@@ -64,6 +64,7 @@ rules:
     - "acps -> aip"
     - "engine -> state"
     - "governance -> state"
+    - "governance -> (lib-root)"
     - "(lib-root) -> engine"
     - "(lib-root) -> assembly"
     - "(lib-root) -> acps"

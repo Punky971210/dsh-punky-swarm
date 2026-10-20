@@ -28,7 +28,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       POSIX 两段式 kill 若需细化留后续评估——见 code-change-summary 披露）。
 import { spawnSync } from 'node:child_process';
 // shell 文本预处理单点（(lib-root) 中立件；与 lib/tools/readonly.js 同源）
-import { stripStreamMerges } from '../shell-text.js';
+import { stripStreamMerges, segmentCommands } from '../shell-text.js';
 
 // ---- 默认值（env 可调，全部有默认）----
 function envNumber(name, def) {
@@ -142,7 +142,7 @@ function matchWritePath(command) {
   if (WRITE_CMDLET_RE.test(text)) return '含写文件 cmdlet';
   if (WRITE_OUTFILE_RE.test(text)) return '含落盘参数 -OutFile';
   if (WRITE_FIND_EXEC_RE.test(text)) return '含 find -exec 写侧';
-  for (const seg of text.split(/;|&&|\|\||\||&|\r?\n/)) {
+  for (const seg of segmentCommands(text)) {
     const s = seg.trim();
     if (s.length === 0) continue;
     const head = headToken(s);
