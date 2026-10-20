@@ -118,7 +118,7 @@ export function judgeWaitSleepCommand(command: unknown): FileWriteVerdict {
   if (!masked.ok) {
     return { hit: true, reason: '含未闭合引号，命令边界不明（fail-closed 按等待处理）' };
   }
-  for (const seg of masked.masked.split(/;|&&|\|\||\||\r?\n/)) {
+  for (const seg of masked.masked.split(/;|&&|\|\||\||&|\r?\n/)) {
     let s = seg.trim();
     if (s.length === 0) continue;
     const afterAssign = s.replace(ASSIGN_RE, '');
@@ -189,7 +189,7 @@ export function judgeFileWriteCommand(command: unknown): FileWriteVerdict {
   for (const [re, why] of GLOBAL_WRITE) {
     if (re.test(text)) return { hit: true, reason: why };
   }
-  for (const seg of text.split(/;|&&|\|\||\||\r?\n/)) {
+  for (const seg of text.split(/;|&&|\|\||\||&|\r?\n/)) {
     let s = seg.trim();
     if (s.length === 0) continue;
     const afterAssign = s.replace(ASSIGN_RE, '');
