@@ -22,6 +22,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `batchFilePathOf` 校验失败抛 `invalid batchId`（不回显 id）；`artifactsDirOf` 不校验 batchId（与四处现状一致）。
 import path from 'node:path';
 import { SESSION_RE } from './constants.js';
+// 根内判据**复用**（D 轨 WD-3a）：`presence.ts` 的根内判定是唯一实现，禁止在此复制第二份
+import { isInsideRoot } from './gates/presence.js';
 
 export function sessionDirOf(sessionsDir, sessionId) {
   if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
@@ -35,4 +37,19 @@ export function artifactsDirOf(sessionsDir, sessionId, batchId) {
 export function batchFilePathOf(sessionsDir, sessionId, batchId) {
   if (!SESSION_RE.test(batchId)) throw new Error('invalid batchId');
   return path.join(sessionDirOf(sessionsDir, sessionId), 'batches', batchId + '.json');
+}
+
+/**
+ * 产物声明路径解析（**声明解析唯一入口**，fail-closed；D 轨 WD-3a）：
+ *   · 合法声明（相对路径 / 根内绝对路径）⇒ 返回绝对路径（与旧式
+ *     `isAbsPath(p) ? p : path.join(artifactsDir, p)` 语义等价，仅多一次路径规范化）；
+ *   · 声明面非法（根外绝对路径 / `..` 逃逸 / 命名空间外逃逸）⇒ **throw**
+ *     `artifact path escapes batch root: <rel>`（R-4 声明期口径）；
+ *   · **不判存在性**：合法但未落盘 ⇒ 原样返回，由消费点沿用既有 missing 语义（R-4 运行期口径）。
+ * 根内判据**复用** `presence.ts` 的根内判定（不复制第二份逻辑）。
+ */
+export function resolveArtifactIn(artifactsDir, rel) {
+  const abs = path.resolve(artifactsDir, rel);
+  if (!isInsideRoot(abs, artifactsDir)) throw new Error('artifact path escapes batch root: ' + rel);
+  return abs;
 }

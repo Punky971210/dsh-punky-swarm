@@ -19,13 +19,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   【2026-10-02 · 内务批 波 4】随 `createGates` 巨型函数拆分下沉；
 //   依赖方向单向：`gates.ts`（组合器）→ 本文件，本文件不反向 import 组合器（零环）。
 
-import { isAbsPath } from '../constants.js';
 // findTask 单点：收敛至 task-utils.js（原本地定义删除，调用点不变）
 import { findTask } from '../task-utils.js';
 import * as EVT from '../event-types.js';
 import type { Batch, WavePlanTask } from '../../types/contracts.js';
 import fs from 'node:fs';
-import path from 'node:path';
+// 产物声明路径解析**唯一入口**（D 轨 WD-3a）：根内判据复用 presence.isInsideRoot；
+//   四个消费点只在 catch 里跳过（不复制任何校验逻辑），声明面非法 ⇒ 单点 throw。
+import { resolveArtifactIn } from '../batch-paths.js';
 
 // 局部类型化包装：findTask（task-utils.js，保持 JS）返回 object|null → 属性访问全报"属性不存在"。
 // taskOf 为唯一断言点：findTask 遍历 batch.wavePlan[].tasks 按 t.id === lane 返回 buildWavePlan 持久形态任务
@@ -94,7 +95,8 @@ export const TARGETS_CLAIMED_RE = /^targets-claimed:\s*true$/m;
 export function detectNeedHuman(artifactsDir: string, producePaths: string[]) {
   if (!Array.isArray(producePaths) || producePaths.length === 0) return { declared: false, path: null };
   for (const p of producePaths) {
-    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let abs: string;
+    try { abs = resolveArtifactIn(artifactsDir, p); } catch { continue; }
     let content;
     try {
       const st = fs.statSync(abs);
@@ -144,7 +146,8 @@ export function detectGate(artifactsDir: string, paths: string[]) {
   let declaredPath: string | null = null;
   let emptyCommandPath: string | null = null; // S-F7：首个含空 `gate:` 行的产物相对路径（声明面，与 declared 分离）
   for (const p of paths) {
-    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let abs: string;
+    try { abs = resolveArtifactIn(artifactsDir, p); } catch { continue; }
     let content;
     try {
       const st = fs.statSync(abs);
@@ -176,7 +179,8 @@ const GATE_OFF_LINE_RE = /^gate:[ \t]*false[ \t]*$/m;
 export function detectGateOff(artifactsDir: string, paths: string[]) {
   if (!Array.isArray(paths) || paths.length === 0) return { declared: false, path: null };
   for (const p of paths) {
-    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let abs: string;
+    try { abs = resolveArtifactIn(artifactsDir, p); } catch { continue; }
     let content;
     try {
       const st = fs.statSync(abs);
@@ -213,7 +217,8 @@ export function detectScriptAnchors(artifactsDir: string, paths: string[]) {
   let anchorPath: string | null = null;
   if (!Array.isArray(paths) || paths.length === 0) return { anchors, path: anchorPath };
   for (const p of paths) {
-    const abs = isAbsPath(p) ? p : path.join(artifactsDir, p);
+    let abs: string;
+    try { abs = resolveArtifactIn(artifactsDir, p); } catch { continue; }
     let content;
     try {
       const st = fs.statSync(abs);
