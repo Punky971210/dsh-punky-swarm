@@ -731,6 +731,114 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
   } catch { /* 启动期扫描失败不影响插件装载 */ }
 };
 
+// ── W7e E1：governance 装载面（preset 双表 + 注册目录元数据 + hook 安装）下沉为顶层工厂 ──
+//   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / installWebSurface 的惰性 getter）。
+const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge }) => {
+  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 四 JSON → 双表注入 resolve
+  //   presetTable（参数级规则面：governance.hook.preset 引用展开源）与 presetBanTable
+  //   （第三类工具黑名单面：同一引用键，条目进 toolBan）。errors（文件缺失/损坏/形状坏）→ 逐条 warn
+  //   留痕，不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
+  // resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
+  //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
+  const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
+  const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
+  for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
+  // WebUI 治理配置写通道：preset 注册目录元数据
+  //   （GET /config presets 源：id = 已成功装载的注册 id、count = 条目数——装载失败不入目录，
+  //   装配侧已对 errors 逐条 warn；derived from 双表，装载后一次性派生）
+  //   两表并计：rules 面（l1-sensitive / l2-resource）+ 第三类 toolBan 面（l3-tool-ban），
+  //   count = 各类条目数之和（l3/l5 仅有 toolBan 条目，l1/l2 仅有 rules；compose 组合项已废除）
+  const presetCatalog = PRESET_IDS
+    .filter((id) => Array.isArray(presetTable[id]) || Array.isArray(presetBanTable[id]))
+    .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));
+  // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
+  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable });
+  if (governanceHook.installed) {
+    ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
+      + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
+  }
+  return { governanceWarn, presetTable, presetBanTable, presetCatalog, installedCfg: governanceInstalledCfg, hook: governanceHook };
+};
+
+// ── W7e E2：governance hook 热切重挂器（句柄经 read/write 访问器与 apply 作用域交互）──
+const createGovernanceRemounter = ({ ctx, store, root, refusalEventBridge, presetTable, presetBanTable, governanceWarn, readInstalled, writeInstalled, readHook, writeHook }) => {
+  // 热切重挂（生效变化通道 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
+  //   = enabled 翻转或 rules/flags/defaults 实际变更；JSON 序敏感——规则序参与裁决，变化即重挂）→
+  //   dispose + 以新快照重挂。kernel 闭包持有旧 cfg（createGovernanceKernel(cfg) 捕获引用）→ 最小改动
+  //   统一走 dispose+重挂，不引入 updateConfig API。幂等：无生效变化零操作。
+  //   交互处置：
+  //   - 桥接（onRefusal）：dispose 置空旧实例 refusalCb（断开）→ 新实例重新注入 refusalEventBridge
+  //     → remount 后批级事件流随动（bridge 事件不因重挂丢失接线）；
+  //   - 状态机：pendingAsks 为 hook 实例内存态（跨 pre/post 存活）→ 重挂清空——跨重挂在途 ask 的
+  //     outcome 补记丢失（收据 ask.initiated 已在 pre 落盘不丢审计，outcome 保持 initiated 态；重挂仅
+  //     发生在 governance 配置变化时，窗口极小）；DEFER/PAUSE 会话状态为文件态（state-store）→ 不随重挂丢失；
+  //   - refusals count 随新实例归零（运行时状态重置契约：重挂后 refusals count 等运行时状态重置）。
+  const remountGovernanceHook = (nextConfig, logTag) => {
+    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
+    if (JSON.stringify(govCfg) === JSON.stringify(readInstalled())) return false;
+    const wasInstalled = readHook()?.installed === true;
+    readHook()?.dispose?.();
+    writeHook(installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable }));
+    writeInstalled(govCfg);
+    const nowInstalled = readHook()?.installed === true;
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled
+      ? 're-mounted (governance.hook 生效变化已热切，新 rules/flags/defaults/enabled 生效)'
+      : 'unmounted (governance.hook.enabled=false 或装配前置缺失)')
+      + (logTag ? ' [' + logTag + ']' : '') + ' [was=' + wasInstalled + ' now=' + nowInstalled + ']');
+    return true;
+  };
+  return remountGovernanceHook;
+};
+
+// ── W7e E3：watch 引擎热切重挂器（heartbeat / watchTimer 经访问器写回 apply 作用域；heartbeatRef 原文透传）──
+const createWatchRemounter = ({ ctx, config, store, mailbox, root, heartbeatRef, readHeartbeat, writeHeartbeat, readWatchTimer, writeWatchTimer, readInstalled, writeInstalled }) => {
+  // watch 引擎重挂（热更生效变化通道 + 启动对账共用；镜像
+  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（7 键 {enabled, longrun.enabled,
+  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
+  //   longrun.unconsumedTimeoutMs}）
+  //   → 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
+  //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
+  //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
+  //   运行时状态重置契约：引擎内存状态表随 dispose 清空、重建后从事件流/产物 mtime 基线重算
+  //   （lane-heartbeat baselineTs 兜底）——不会误 stalled；longrun 候选去重以事件流 runningSince 为准，
+  //   跨重建不重复产 candidate。工具注册面仍启动静态：运行期关闭只停扫描，lane_heartbeat/lane_longrun
+  //   查询返回 disabled 状态（lane-heartbeat.js 工具侧 getHeartbeat 执行时解引用）。
+  const remountWatchEngine = (nextConfig, logTag) => {
+    const wc = resolveWatchConfig(nextConfig);
+    const lr = resolveLongrunConfig(nextConfig);
+    const nextInstalled = {
+      enabled: wc.enabled,
+      longrun: {
+        enabled: lr.enabled,
+        maxDurationMs: lr.maxDurationMs,
+        noProgressWindowMs: lr.noProgressWindowMs,
+        staleBatchMs: lr.staleBatchMs,
+        unconsumedTimeoutMs: lr.unconsumedTimeoutMs,
+      },
+      scanIntervalMinutes: wc.scanIntervalMinutes,
+    };
+    if (JSON.stringify(nextInstalled) === JSON.stringify(readInstalled())) return false;
+    if (readWatchTimer()) { clearInterval(readWatchTimer()); writeWatchTimer(null); }
+    if (readHeartbeat()) { readHeartbeat().dispose(); writeHeartbeat(null); heartbeatRef.current = null; }
+    if (wc.enabled) {
+      writeHeartbeat(createLaneHeartbeat({ store, mailbox, config: nextConfig, root, liveConfig: nextConfig, logger: ctx.logger }));
+      heartbeatRef.current = readHeartbeat();
+      const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
+      writeWatchTimer(setInterval(() => {
+        try { heartbeatRef.current?.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
+      }, scanMs));
+      if (typeof readWatchTimer().unref === 'function') readWatchTimer().unref();
+    }
+    writeInstalled(nextInstalled);
+    ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch engine ' + (wc.enabled
+      ? 're-mounted (scan ' + Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000)) + 'ms, longrun=' + lr.enabled + ')'
+      : 'unmounted (watch disabled)')
+      + (logTag ? ' [' + logTag + ']' : ''));
+    return true;
+  };
+  return remountWatchEngine;
+};
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
@@ -857,100 +965,22 @@ export const apply = (ctx, config = {}) => {
   // 未挂载（`ctx.on` 缺失 = 受限/最小 ctx）⇒ **不 warn**：正式宿主恒提供 `ctx.on`（同 dispatch-register.js 的
   //   `inert` 静默降级口径），warn 只会让「缺省配置零 warn」契约（legacy-fix T4.3）误报；
   //   此时自动结算走兼底路 `swarm_report(settle-request)`，能力缺失不炸宿主。
-  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 四 JSON → 双表注入 resolve
-  //   presetTable（参数级规则面：governance.hook.preset 引用展开源）与 presetBanTable
-  //   （第三类工具黑名单面：同一引用键，条目进 toolBan）。errors（文件缺失/损坏/形状坏）→ 逐条 warn
-  //   留痕，不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
-  // resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
-  //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
-  const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
-  const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
-  for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
-  // WebUI 治理配置写通道：preset 注册目录元数据
-  //   （GET /config presets 源：id = 已成功装载的注册 id、count = 条目数——装载失败不入目录，
-  //   装配侧已对 errors 逐条 warn；derived from 双表，装载后一次性派生）
-  //   两表并计：rules 面（l1-sensitive / l2-resource）+ 第三类 toolBan 面（l3-tool-ban），
-  //   count = 各类条目数之和（l3/l5 仅有 toolBan 条目，l1/l2 仅有 rules；compose 组合项已废除）
-  const presetCatalog = PRESET_IDS
-    .filter((id) => Array.isArray(presetTable[id]) || Array.isArray(presetBanTable[id]))
-    .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));
-  // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
-  let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable });
-  if (governanceHook.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
-      + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
-  }
-  // 热切重挂（生效变化通道 + 启动对账共用）：解析 next 快照 governance.hook → 与当前挂载快照比较（生效变化
-  //   = enabled 翻转或 rules/flags/defaults 实际变更；JSON 序敏感——规则序参与裁决，变化即重挂）→
-  //   dispose + 以新快照重挂。kernel 闭包持有旧 cfg（createGovernanceKernel(cfg) 捕获引用）→ 最小改动
-  //   统一走 dispose+重挂，不引入 updateConfig API。幂等：无生效变化零操作。
-  //   交互处置：
-  //   - 桥接（onRefusal）：dispose 置空旧实例 refusalCb（断开）→ 新实例重新注入 refusalEventBridge
-  //     → remount 后批级事件流随动（bridge 事件不因重挂丢失接线）；
-  //   - 状态机：pendingAsks 为 hook 实例内存态（跨 pre/post 存活）→ 重挂清空——跨重挂在途 ask 的
-  //     outcome 补记丢失（收据 ask.initiated 已在 pre 落盘不丢审计，outcome 保持 initiated 态；重挂仅
-  //     发生在 governance 配置变化时，窗口极小）；DEFER/PAUSE 会话状态为文件态（state-store）→ 不随重挂丢失；
-  //   - refusals count 随新实例归零（运行时状态重置契约：重挂后 refusals count 等运行时状态重置）。
-  const remountGovernanceHook = (nextConfig, logTag) => {
-    const govCfg = resolveGovernanceConfig(nextConfig?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
-    if (JSON.stringify(govCfg) === JSON.stringify(governanceInstalledCfg)) return false;
-    const wasInstalled = governanceHook?.installed === true;
-    governanceHook?.dispose?.();
-    governanceHook = installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable });
-    governanceInstalledCfg = govCfg;
-    const nowInstalled = governanceHook?.installed === true;
-    ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled
-      ? 're-mounted (governance.hook 生效变化已热切，新 rules/flags/defaults/enabled 生效)'
-      : 'unmounted (governance.hook.enabled=false 或装配前置缺失)')
-      + (logTag ? ' [' + logTag + ']' : '') + ' [was=' + wasInstalled + ' now=' + nowInstalled + ']');
-    return true;
-  };
+  const { governanceWarn, presetTable, presetBanTable, presetCatalog, installedCfg, hook } = installGovernanceSurface({ ctx, config, store, root, refusalEventBridge });
+  let governanceInstalledCfg = installedCfg;
+  let governanceHook = hook;
 
-  // watch 引擎重挂（热更生效变化通道 + 启动对账共用；镜像
-  //   remountGovernanceHook 模式）：解析 next 快照 watch.* 生效面（7 键 {enabled, longrun.enabled,
-  //   scanIntervalMinutes, longrun.maxDurationMs, longrun.noProgressWindowMs, longrun.staleBatchMs,
-  //   longrun.unconsumedTimeoutMs}）
-  //   → 与当前安装快照 JSON 比较——任一变化 → dispose 旧引擎 + 清 timer → enabled
-  //   时以合并快照（change.config，含 longrun.enabled/阈值/scan 值传播）重建 + 重挂 watchdog + 更新
-  //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
-  //   运行时状态重置契约：引擎内存状态表随 dispose 清空、重建后从事件流/产物 mtime 基线重算
-  //   （lane-heartbeat baselineTs 兜底）——不会误 stalled；longrun 候选去重以事件流 runningSince 为准，
-  //   跨重建不重复产 candidate。工具注册面仍启动静态：运行期关闭只停扫描，lane_heartbeat/lane_longrun
-  //   查询返回 disabled 状态（lane-heartbeat.js 工具侧 getHeartbeat 执行时解引用）。
-  const remountWatchEngine = (nextConfig, logTag) => {
-    const wc = resolveWatchConfig(nextConfig);
-    const lr = resolveLongrunConfig(nextConfig);
-    const nextInstalled = {
-      enabled: wc.enabled,
-      longrun: {
-        enabled: lr.enabled,
-        maxDurationMs: lr.maxDurationMs,
-        noProgressWindowMs: lr.noProgressWindowMs,
-        staleBatchMs: lr.staleBatchMs,
-        unconsumedTimeoutMs: lr.unconsumedTimeoutMs,
-      },
-      scanIntervalMinutes: wc.scanIntervalMinutes,
-    };
-    if (JSON.stringify(nextInstalled) === JSON.stringify(watchInstalledCfg)) return false;
-    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
-    if (heartbeat) { heartbeat.dispose(); heartbeat = null; heartbeatRef.current = null; }
-    if (wc.enabled) {
-      heartbeat = createLaneHeartbeat({ store, mailbox, config: nextConfig, root, liveConfig: nextConfig, logger: ctx.logger });
-      heartbeatRef.current = heartbeat;
-      const scanMs = Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000));
-      watchTimer = setInterval(() => {
-        try { heartbeatRef.current?.tick(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] heartbeat tick failed: ' + String(e)); }
-      }, scanMs);
-      if (typeof watchTimer.unref === 'function') watchTimer.unref();
-    }
-    watchInstalledCfg = nextInstalled;
-    ctx.logger?.info?.('[dsh-punky-swarm] hot config: watch engine ' + (wc.enabled
-      ? 're-mounted (scan ' + Math.max(1000, Math.round(wc.scanIntervalMinutes * 60_000)) + 'ms, longrun=' + lr.enabled + ')'
-      : 'unmounted (watch disabled)')
-      + (logTag ? ' [' + logTag + ']' : ''));
-    return true;
-  };
+  const readInstalled = () => governanceInstalledCfg;
+  const writeInstalled = (v) => { governanceInstalledCfg = v; };
+  const readHook = () => governanceHook;
+  const writeHook = (v) => { governanceHook = v; };
+  const remountGovernanceHook = createGovernanceRemounter({ ctx, store, root, refusalEventBridge, presetTable, presetBanTable, governanceWarn, readInstalled, writeInstalled, readHook, writeHook });
+
+  const readHeartbeat = () => heartbeat;
+  const writeHeartbeat = (v) => { heartbeat = v; };
+  const readWatchTimer = () => watchTimer;
+  const writeWatchTimer = (v) => { watchTimer = v; };
+  //   注：E3 的 installed 快照是 watchInstalledCfg（≠ E2 的 governanceInstalledCfg）⇒ 就地绑定、不复用 E2 访问器
+  const remountWatchEngine = createWatchRemounter({ ctx, config, store, mailbox, root, heartbeatRef, readHeartbeat, writeHeartbeat, readWatchTimer, writeWatchTimer, readInstalled: () => watchInstalledCfg, writeInstalled: (v) => { watchInstalledCfg = v; } });
 
   // ── 热更新装配（就地启停，叠加非替换）──
   // 触发源：<root>/config/runtime.json（fs.watch + 防抖 300ms + 原子读重试）→ deepMerge 快照 → config.changed 广播
