@@ -1064,6 +1064,14 @@
       "tests": 5,
       "todos": 0
     },
+    "test/shell-text.test.js": {
+      "asserts": 12,
+      "blankLines": 10,
+      "lines": 72,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/sig-fingerprint.test.js": {
       "asserts": 80,
       "blankLines": 26,
@@ -1361,7 +1369,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-20T17:22:35Z",
+  "generatedAt": "2026-10-20T18:46:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1372,15 +1380,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-debt-sweep-20261020-e3-tests S-1/W7F-FU-U1/S-2 三条测试落地 + 吸收 e2-h1 的 watch-hotconfig 变更 => 条目保持 170",
+  "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 9105,
-    "blankLines": 4587,
-    "files": 170,
-    "lines": 49608,
+    "asserts": 9117,
+    "blankLines": 4597,
+    "files": 171,
+    "lines": 49680,
     "tautologies": 2,
-    "tests": 1856,
+    "tests": 1861,
     "todos": 4
   }
 }
