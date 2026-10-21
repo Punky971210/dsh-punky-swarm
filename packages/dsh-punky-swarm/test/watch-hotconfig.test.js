@@ -40,8 +40,11 @@ import { createLaneHeartbeat, createHeartbeatTools, createLongrunTools } from '.
 import * as mailbox from '../lib/comms/mailbox.js';
 import { writeRuntime, assemblyCtxWeb } from './helpers/gate-fixture.mjs';
 
-// 等待纪律（本批）：固定等待已全部替换为「到达（waitFor）+ 保持（waitQuiet）」双极；
-//   迟到异常地平线 1500ms ⇒ 静默窗 quietMs 默认 1600ms（必须 > 1500ms）。
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// fs.watch 事件 → 防抖 300ms（createConfigWatcher 默认）→ reload → onChange；等待窗口对齐
+// governance-hotconfig HOT_SLEEP 1000 先例（防抖 + 事件 + 解析余量）
+const HOT_SLEEP = 1000;
+const HOT_SETTLE = 300;
 const MIN = 60_000;
 
 // 有界轮询（H1 去 flake；形态判据源 = plan/scope.md §3.2，五字段诊断）：
@@ -61,32 +64,6 @@ async function waitFor(label, check, { timeoutMs = 4000, intervalMs = 25, expect
       }));
     }
     await new Promise((r) => setTimeout(r, intervalMs));
-  }
-}
-
-// 静态保持（双极的「超了」侧）：读数在连续 quietMs 窗口内**不再变化**才返回最后读数；
-//   任何一次变化都会重置静默计时并记入 changes（那是「迟到变化」的证据）；总等待超过 timeoutMs 仍不静默 ⇒ 抛错。
-//   与 waitFor 分工不可互替：waitFor = 到达（正向），waitQuiet = 保持（反向）。
-//   quietMs 默认 1600ms 必须 > 1500ms（变异注入的迟到地平线）。
-async function waitQuiet(label, read, { quietMs = 1600, intervalMs = 25, timeoutMs = 6000, expected = '' } = {}) {
-  const startedAt = Date.now();
-  const changes = [];
-  let last = read();
-  let lastChangeAt = startedAt;
-  for (;;) {
-    await new Promise((r) => setTimeout(r, intervalMs));
-    const now = read();
-    if (now !== last) {
-      changes.push({ at: Date.now() - startedAt, from: String(last), to: String(now) });
-      last = now; lastChangeAt = Date.now();
-    }
-    if (Date.now() - lastChangeAt >= quietMs) return last;
-    if (Date.now() - startedAt >= timeoutMs) {
-      throw new Error('waitQuiet timeout: ' + JSON.stringify({
-        label, timeoutMs, quietMs, elapsedMs: Date.now() - startedAt,
-        lastObserved: String(last), changes, expected,
-      }));
-    }
   }
 }
 
@@ -155,7 +132,7 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    // 基线等待：原「固定等 300ms」→ 有界轮询（条件达即返回）。
+    // 基线等待：原「固定等 HOT_SETTLE=300ms」→ 有界轮询（条件达即返回）。
     //   boot 对账在 apply() 内**同步**完成（readRuntimeSnapshot → reconcile，config-watch.js:106）⇒ 本条件首轮即成立；
     //   因此这里的作用是「立刻确认出厂快照已就位 + 零 remount」，真正的等待在下方热更段（fs.watch 防抖 300ms）。
     await waitFor('h1-baseline', () => getConfig(routes).applied?.watch?.enabled === true && remountLines(ctx.calls).length === 0,
@@ -168,7 +145,7 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     assert.equal(remountLines(ctx.calls).length, 0, '快照与静态一致 → boot 对账 no-op（无 remount 日志）');
     // 热写 longrun.enabled:false → 生效面变化 → dispose+重建（re-mounted，logTag 缺省=热更路径）
     writeRuntime(root, { capabilities: { watch: { longrun: { enabled: false } } } });
-    // 热更等待：原「固定等 1000ms」→ 有界轮询到 remount 留痕出现（fs.watch → 防抖 300ms → reload → onChange）。
+    // 热更等待：原「固定等 HOT_SLEEP=1000ms」→ 有界轮询到 remount 留痕出现（fs.watch → 防抖 300ms → reload → onChange）。
     await waitFor('h1-remount', () => remountLines(ctx.calls).length >= 1,
       { expected: 're-mounted 日志恰 1（longrun=false 生效面）' });
     const lines = remountLines(ctx.calls);
@@ -206,14 +183,11 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    await waitFor('h2-baseline', () => getConfig(routes).applied?.watch?.enabled === true, { expected: true });
-    await waitQuiet('h2-baseline-quiet', () => remountLines(ctx.calls).length, { expected: 0 });
+    await sleep(HOT_SETTLE);
     assert.equal(getConfig(routes).applied.watch.enabled, true, '出厂默认开');
     // ① enabled:false → unmounted（引擎 dispose + timer 清；工具查询 disabled——见 H5）
     writeRuntime(root, { capabilities: { watch: { enabled: false } } });
-    await waitFor('h2-unmount', () => remountLines(ctx.calls).length === 1, { expected: 1 });
-    const heldUnmount = await waitQuiet('h2-unmount-quiet', () => remountLines(ctx.calls).length, { expected: 1 });
-    assert.equal(heldUnmount, 1, 'unmount 后 remount 计数稳定为 1（迟到第 2 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     let lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1);
     assert.match(lines[0], /unmounted \(watch disabled\)/, 'enabled=false → unmounted 方向（实际: ' + lines[0] + '）');
@@ -222,9 +196,7 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
       '关闭态 applied.watch.enabled=false（watchInstalledCfg 仍记快照全形含阈值，供面板回显）');
     // ② enabled:true → 以合并快照重建（re-mounted）
     writeRuntime(root, { capabilities: { watch: { enabled: true } } });
-    await waitFor('h2-remount', () => remountLines(ctx.calls).length === 2, { expected: 2 });
-    const heldRemount = await waitQuiet('h2-remount-quiet', () => remountLines(ctx.calls).length, { expected: 2 });
-    assert.equal(heldRemount, 2, '二次重挂后计数稳定为 2（第 3 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     lines = remountLines(ctx.calls);
     assert.equal(lines.length, 2, '二次 remount 留痕');
     assert.match(lines[1], /re-mounted/, 'enabled=true → re-mounted');
@@ -241,13 +213,10 @@ test('H3 scanIntervalMinutes 变更 → remount（scan 档期重挂）；applied
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    await waitFor('h3-baseline', () => getConfig(routes).applied?.watch?.enabled === true, { expected: true });
-    await waitQuiet('h3-baseline-quiet', () => remountLines(ctx.calls).length, { expected: 0 });
+    await sleep(HOT_SETTLE);
     // 热写 scanIntervalMinutes:0.5（watcher 白名单放行 capabilities.watch 深层；watch 级键仅手工 runtime.json 路径）
     writeRuntime(root, { capabilities: { watch: { scanIntervalMinutes: 0.5 } } });
-    await waitFor('h3-scan', () => remountLines(ctx.calls).length === 1, { expected: 1 });
-    const heldScan = await waitQuiet('h3-scan-quiet', () => remountLines(ctx.calls).length, { expected: 1 });
-    assert.equal(heldScan, 1, 'scan 变化后计数稳定为 1（迟到第 2 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     const lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1, 'scan 变化触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 30000ms, longrun=true\)/, '重挂档期 0.5min → 30000ms');
@@ -267,15 +236,12 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    await waitFor('h4-baseline', () => getConfig(routes).applied?.watch?.enabled === true, { expected: true });
-    await waitQuiet('h4-baseline-quiet', () => remountLines(ctx.calls).length, { expected: 0 });
+    await sleep(HOT_SETTLE);
     // ① 热写阈值（分钟级：maxDurationMs 60000=1min / noProgressWindowMs 30000=30s）→ 生效面 5 键第 4/5 键变化
     //    → remount 恰 1 次（dispose 旧引擎 + 以合并快照 nextConfig 重建——新阈值经 createLaneHeartbeat
     //    resolveLongrunConfig 捕获，判定时机验证见 T16）
     writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
-    await waitFor('h4-threshold', () => remountLines(ctx.calls).length === 1, { expected: 1 });
-    const heldThreshold = await waitQuiet('h4-threshold-quiet', () => remountLines(ctx.calls).length, { expected: 1 });
-    assert.equal(heldThreshold, 1, '阈值变更后计数稳定为 1（迟到第 2 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     const lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1, '阈值-only 变化现触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=true\)/, '重建日志 re-mounted（阈值变化不翻 enabled/longrun/scan）');
@@ -287,9 +253,8 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ② 同值重写 → nextInstalled 与 watchInstalledCfg JSON 相等 → 幂等 no-op（零新增 remount，快照不变）
     writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
-    await waitFor('h4-idem', () => remountLines(ctx.calls).length === 1, { expected: 1 });
-    const heldH4Idem = await waitQuiet('h4-idem-quiet', () => remountLines(ctx.calls).length, { quietMs: 1600, expected: 1 });
-    assert.equal(heldH4Idem, 1, '同值重写幂等 no-op：remount 仍恰 1 次（迟到第 2 次 ⇒ quiet 超时，实际: ' + ctx.calls.info.join(' || ') + '）');
+    await sleep(HOT_SLEEP);
+    assert.equal(remountLines(ctx.calls).length, 1, '同值重写幂等 no-op：remount 仍恰 1 次（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       '同值重写后生效快照不变');
@@ -309,14 +274,11 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    const heldH7Baseline = await waitQuiet('h7-baseline-quiet', () => remountLines(ctx.calls).length, { expected: 0 });
-    assert.equal(heldH7Baseline, 0, '基线 boot 对账 no-op（静默窗内迟到 remount ⇒ quiet 超时）');
+    await sleep(HOT_SETTLE);
     assert.equal(remountLines(ctx.calls).length, 0, '基线 boot 对账 no-op');
     // ① 热写 staleBatchMs=0（显式关闭僵尸批过滤）→ 生效面第 6 键变化 → remount 恰 1 次
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0 } } } });
-    await waitFor('h7-stale', () => remountLines(ctx.calls).length === 1, { expected: 1 });
-    const heldStale = await waitQuiet('h7-stale-quiet', () => remountLines(ctx.calls).length, { expected: 1 });
-    assert.equal(heldStale, 1, 'staleBatchMs 变化后计数稳定为 1（迟到第 2 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     let lines = remountLines(ctx.calls);
     assert.equal(lines.length, 1, 'staleBatchMs 变化触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
@@ -324,9 +286,7 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
       '快照携带 staleBatchMs=0（显式 0 被当合法值透传，而非回退默认 24h）');
     // ② 热写 unconsumedTimeoutMs=60000（D-2 阈值收紧）→ 第 7 键变化 → 再 remount 1 次
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
-    await waitFor('h7-unconsumed', () => remountLines(ctx.calls).length === 2, { expected: 2 });
-    const heldUnconsumed = await waitQuiet('h7-unconsumed-quiet', () => remountLines(ctx.calls).length, { expected: 2 });
-    assert.equal(heldUnconsumed, 2, 'unconsumedTimeoutMs 后计数稳定为 2（第 3 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
     lines = remountLines(ctx.calls);
     assert.equal(lines.length, 2, 'unconsumedTimeoutMs 变化再次 remount');
     assert.deepEqual(getConfig(routes).applied.watch,
@@ -336,9 +296,8 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ③ 同值重写幂等：零新增 remount
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
-    await waitFor('h7-idem', () => remountLines(ctx.calls).length === 2, { expected: 2 });
-    const heldH7Idem = await waitQuiet('h7-idem-quiet', () => remountLines(ctx.calls).length, { quietMs: 1600, expected: 2 });
-    assert.equal(heldH7Idem, 2, '同值重写幂等 no-op（迟到第 3 次 ⇒ quiet 超时）');
+    await sleep(HOT_SLEEP);
+    assert.equal(remountLines(ctx.calls).length, 2, '同值重写幂等 no-op');
   } finally {
     disposer();
   }
