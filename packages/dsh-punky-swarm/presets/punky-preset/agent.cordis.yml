@@ -20,7 +20,12 @@
 # ── identity ────────────────────────────────────────────────────────────────
 
 # The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` resolves from the agent's own route. 工作目录不要用 cwd 变量：本内核只注册 provider/model 两个变量，未知变量会 throw。
+# `{{model}}` resolves from the agent's own route.
+# ⚠ 模板变量白名单：本内核**只注册 provider 与 model 两个**变量；任何其他双花括号变量
+#   （如 cwd、cmd）在**会话启动时即抛错**，症状是「报需要 provider 和 model」/会话起不来，
+#   且重装 profile/bundle 后以同样方式复发。工作目录请按「系统提示中的 Working Directory 段」取。
+#   2026-10-20 两次实证：cwd 变量 → `fix(preset)` 移除；cmd 变量 → 用户侧已修。
+#   （本节刻意不写双花括号字面量，避免被「扫残留模板变量」的检查误判为真变量。）
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
