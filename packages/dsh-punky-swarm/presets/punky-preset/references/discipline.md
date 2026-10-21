@@ -603,9 +603,9 @@
 
 - **双层结构**：`agent.cordis.yml` = **注入面**（每会话必进系统提示，只放规范句 + `#§X` 指针）｜`references/discipline.md` = **正文**（按需读，放细则/码表/证据）。**正文小节必须同时在注入面有一条**（详情面白名单 **5 项**：§0m/§0n/§0o/§0j/§0l；真值见 `scripts/check-guidance-sync.mjs` 的 `DETAIL_ONLY`）。
 - **双副本纪律**：preset 五件（`agent.cordis.yml` / `references/discipline.md` / `references/manager.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）与 **live**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**必须同 sha256**；改一份即改另一份。
-- **收口命令（硬）**：`node scripts/check-guidance-sync.mjs` —— **四条判据**：① repo↔live 五件同 sha ② 注入面指针 `#§X` 在正文真实存在 ③ **反向**：正文每个 `## §X` 都在注入面有条目（白名单除外）④ **persona 两份定义一致**（见下条）。**GREEN（exit 0）才算收口**；未跑即视为未收口。
-- **persona 有两份定义，必须同源（2026-10-21 新增，判据 ④）**：`cordis.patch.yml`（插件 patch，**boot 期由 loader 组合进 profile ⇒ 实际注入源**）与 `presets/punky-preset/agent.cordis.yml`（preset 分发面）是**同一份 persona 的两份定义**。二者须满足：**纪律条目集合相同 ＋ 每条正文逐字相等**。历史事实：两份曾长期分叉（patch 缺 `0i`、§0 为旧短版），期间无人发现 ⇒ 判据 ④ 即为此防复发。**归属原则（2026-10-21 用户裁决）**：**工具能力归工具定义**（`lib/tools/*.js` 的 description：参数、取值域、拒码语义）；**引擎调度指引与主 Agent 操作规范归 preset**（何时必须调、顺序、红线）。persona 里不得复写工具能力细节，只留操作规范 ＋ `#§X` 指针。
-- **判据 ④ 的可证伪性（必跑）**：`node scripts/check-guidance-sync.mjs --self-test` 跑合成夹具（等价必绿 / 缺条目·改文本·多条目必红）；`--root <沙箱>` 支持在临时副本上做变异测试。**任何「一致/通过」类判据若不配可失败对照，就分不清「检查通过」与「检查根本没生效」。**
+- **收口命令（硬）**：`node scripts/check-guidance-sync.mjs` —— 三条判据：① repo↔live 五件同 sha ② 注入面指针 `#§X` 在正文真实存在 ③ **反向**：正文每个 `## §X` 都在注入面有条目（白名单除外）。**GREEN（exit 0）才算收口**；未跑即视为未收口。
+- **归属原则（2026-10-21 用户裁决；**人工自维护约定，不设机器门禁**）**：**工具能力归工具定义**（`lib/tools/*.js` 的 description：参数、取值域、拒码语义、状态机）；**引擎调度指引与主 Agent 操作规范归 preset**（persona 注入面：何时必须调、顺序、红线）。persona 里不复写工具能力细节，只留操作规范 ＋ `#§X` 指针。
+- **persona 有两份定义（**自维护**，靠人工保证同源）**：`cordis.patch.yml`（插件 patch，**boot 期由 loader 组合进 profile ⇒ 实际注入源**）与 `presets/punky-preset/agent.cordis.yml`（preset 分发面）是同一份 persona 的两份定义，**改一份即改另一份**。历史事实：两份曾长期分叉（patch 缺 `0i`、§0 为旧短版）而无人发现 ⇒ **改动时两份同时改是本条的落点**（不新增脚本判据）。
 - **反例（本规则的由来）**：2026-09-17 新增 §11/§12 时只写了正文、漏了注入面 ⇒ 新规则「写了但注入不到」，下一会话的 Leader 看不到。该漂移本可被 ③ 自动拦住。
 
 ---

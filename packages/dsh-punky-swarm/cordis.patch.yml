@@ -169,7 +169,7 @@
                 8. 输出偏好：总结用「对比表 + 清单 + 摘要」三层；对用户只报治理结论与关键状态。细则见 #§8。
                 9. 消费方契约摸底先行：实现前先摸底被消费方约束（摸底归 plan 层 produce、实现 lane 只 consume，缺则拒派）；产物 `survey/<target>-contract.md`。细则见 #§9。
                 10. 宿主级自验证 DoD：产出运行于真实宿主 / 消费路径时，完成判据必含宿主级加载 / 启动冒烟（RED→GREEN 作中间 checkpoint）。细则见 #§10。
-                11. 运行模式：星型直驱（`leader-direct`）——R-1 结算即派 ｜ R-2 复核并行 ｜ R-3 单点派发 ｜ R-4 真源 = `lanes[].deps` + `handoffs` ｜ R-5 监管二源 ｜ R-6 模式可退出。细则见 #§11。
+                11. 运行模式：星型直驱（`leader-direct`）——结算即派、复核并行、单点派发、真源 = `lanes[].deps` + `handoffs`、监管二源、模式可退出。细则见 #§11。
                 12. **audit 非盲审**：audit 审核 exec 层必须**消费 plan 层产物做对照**（`consume` 缺 `plan/` 锚点即拒派，锚点正文须含裸标题 `## 验收标准`）。**`consume` 与 `deps` 须逐条对齐**，且**上游结算后缺边永久不可补** ⇒ 写 `consume` 时即核 `deps`。拒建批码、三档分流与豁免条件见工具定义（`wave_plan`）。细则见 #§12。
                 13. **指引维护**：改注入面或正文后必须跑 `node scripts/check-guidance-sync.mjs`（五件同 sha ＋ 双向指针）；**GREEN（exit 0）才算收口**。细则见 #§13。
                 14. **任务包预算**：单 lane `W` ∈ 4M–10M（`W ≈ 轮次 × 232K`）；派发前必带预算行（`预算：W≈…M；切法：…`）。细则见 #§14。
@@ -177,7 +177,7 @@
                 0d. 记忆语义：复盘 / 归档产物落盘即可，记忆沉淀优先 dsh-mneme。细则见 #§0d。
                 0i. 执行形态：C 类批一律走 wavePlan lane 派发；每完成一子步骤即落 `<lane>/progress/NN-<slug>.md` 进度快照，禁攒批。
                 0k. audit 收敛口径：audit 层 = 验收，按 plan 验收标准逐条核对；未决项进 `gap-list`（标 blocking / followup）。细则见 #§0k。
-                0p. 两方向规格：dispatch 方向 = 写黑板后引擎自动派发（`owner` + `member.dispatch`）；team 方向 = `spawn_teammate` 拉起并写黑板（`roster`），由事件队列交接；一批一方向，不混用。细则见 #§0p 与 #§0o。
+                0p. 两方向规格：dispatch = 写黑板后引擎自动派发；team = `spawn_teammate` 拉起并写黑板、由事件队列交接；**一批一方向，不混用**。细则见 #§0p 与 #§0o。
                 0s. 编号规范：跨批引用带批次短码（如 `AG-04@realign`）；`AG-xx` 权威定义面 = 批 A `audit/gap-list.md`。
                 0t. 完成发现与结算：audit lane 不自动结算 ⇒ 显式 `member_status(review)` → `member_settle(merged|conflict)`；完成发现靠三查（`batch_status` / `log_export` / 产物根 glob）；abort 批的 `danglingLanes` 属预期残留。
                 0u. 执行前经验检索：每任务第一步 = `weknora_search` 查知识库经验；命中即按其「正向做法」执行并登记来源，无命中照常推进；库不可达记一行后继续。细则见 #§0u。
