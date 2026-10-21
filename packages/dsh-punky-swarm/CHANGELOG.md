@@ -1,3 +1,26 @@
+## 0.5.2（2026-10-21）
+
+### 结构优化：`apply` 873 → 51 行 + 八项单点化收敛（41 笔提交 / 83 文件 / `+3925 −487`）
+
+本次以**结构**为主、行为零变更：把长期堆在单一入口里的逻辑拆成可独立验证的单元，并把重复实现收敛到单点。**所有改动均以「行为等价」为验收前提**（块 sha 等价 / 逐文件回归 / 架构棘轮不破）。
+
+- **入口瘦身 —— `apply` 873 → 51 行（−94%）**：
+  - `W7a`–`W7d` 四波把内联块函数化（4 + 4 + 7 + 5 块），`apply` 依次 873 → 739 → 633 → 493 → 339；**零逻辑变更**，逐波以块 sha 等价证明。
+  - `W7e` 把 `governance` 装载与两个 remount 下沉为顶层工厂，`apply` 339 → 261。
+  - `W7f` 把运行期真源收拢为 `createRuntimeState`（**20 字段**）并把六个区间外移为 8 个工厂，`apply` 261 → 51。**顶层工厂数 0 → 30**（v0.5.1 时全部内联在 `apply` 内）。
+- **八项单点化收敛**（`W1a`/`W1b`/`W2`/`W3a`/`W3b`/`W4`/`W5`）：
+  - `sendJson` / `packageRoot` / `stripStreamMerges` 三处重复实现合一（`W1a`）；`BLIND_REVIEW_ROLES` / `boxRoot` 单点化（`W1b`）。
+  - **产物路径函数四处收敛**到 `lib/state/batch-paths.js`（`W2`）；`DEFAULT_ASSEMBLY` 迁出到 `assembly/defaults.js`（保形再导出，`W5`）。
+  - 删除 5 个零引用符号与 `core` 再导出（`W3a`）、三个 `gates/*.ts` 的未使用 `node:path` 导入（`W3b`）；拆掉 `state -> watch` 回指边，三谓词下沉 `state/lane-state.js`（`W4`）。
+  - **命令分段器真单点化**：5 处完全相同正则（`command-exec` / `readonly`×2 / `tool-ban.ts`×2）收敛为 `lib/shell-text.js#segmentCommands`，**生产代码正则字面量物理只剩 1 处**；`detect.ts` 的分词正则未动（分词 ≠ 分段）。
+- **架构真源与越界门**：新增 `.punky/arch.yml` 作为架构真源、`scripts/arch-check.mjs` 为**棘轮门**（禁止新增跨域依赖）、`arch-context` 在派发期注入架构上下文。本次为分段器单点化**授权 +1 对** `governance -> (lib-root)`（`allowedPairs` 62 → 63），理由写入提交正文。
+- **安全面收口到 fail-closed 单点（4 处）**：产物声明路径解析（`cc62ffd`）、产物读面 5 点（`8f7bbd2`）、人工闸 `human:` 证据判定（`e6427e2`）、`P6` watch stat 与 `P7` handoff 在场/可读（`57a28d8`）。所有收口均配**根内正例对照**，防「一刀切把功能打死」。
+- **测试债补齐 —— 166 → 171 个测试文件**：此前安全修复**零仓内测试**，本次补 `gate-artifact-containment` / `gates-needhuman-evidence` / `w7e-remount-surface` / `w7f-rt-write-surface` / `shell-text` 五件；**每条「返回空 / 被拒 / 不抛」断言均配同输入阳性对照**，防不可证伪的绿灯。
+- **写序列可观测化**：`createRuntimeState(onWrite)` 在注入 `ctx.rtWriteLog` 时返回 Proxy 记录字段写入序列，未注入时返回纯对象（**生产路径零开销**）。使「`rt` 单写 vs 双写」这类**终态同构、仅写序列不同**的缺陷首次可被判据抓住。
+- **指引层去重与同源**：`persona` 按「**工具能力归工具定义、调度指引与操作规范归 preset**」原则去重，注入面 **6442 → 5858 字符**；`cordis.patch.yml` 与 `presets/punky-preset/agent.cordis.yml` 两份 persona 定义**对齐为 27 条、逐条文本差异 0**（此前 patch 缺 `0i`、§0 为旧短版）；补**模板变量白名单**约束（本内核只注册 `provider`/`model`，其他双花括号变量在会话启动时即抛错）。
+- **技术债跨批总账**：新增 `reports/tech-debt-ledger-20261021.md`，登记跨批未闭合项（含**取证后的「不做」结论**与不可消除的原因），使「已修 / 有意保留 / 已知不阻断」三类可追溯。
+- **读数**：`83 files changed, 3925 insertions(+), 487 deletions(-)`；`apply 873 → 51`、顶层工厂 `0 → 30`、测试文件 `166 → 171`；`guard` A=B=171（1896 tests / 1889 pass / **0 fail** / 4 todo）GREEN；`arch-check` `181 / 667 / 214 / 63` `[ok]`；`check-guidance-sync` GREEN（repo ↔ live 五件同 sha）。
+
 ## 0.5.1（2026-10-14）
 
 ### 发布面落版与判据尺子固化（批 `punky-release-0.5.1-20261014`）
