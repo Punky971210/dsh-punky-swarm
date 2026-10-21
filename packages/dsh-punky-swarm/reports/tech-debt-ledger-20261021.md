@@ -1,0 +1,47 @@
+# 技术债台账（跨批，截至 2026-10-21）
+
+> **存在理由**：`punky-debt-sweep-20261020` 的 `audit/gap-list.json` 生成于 2026-10-21 01:40，之后又有多笔提交把其中 10 项处理掉了，但 JSON 未回写；且「后期订正」留痕原本只落在 **session artifacts**（可被清理）。
+> 本件把跨批未闭合项收成**一份仓库内可版本化的总账**，避免台账散落与丢失。
+> **本件只登记状态与证据指针，不复制正文**（正文在对应产物 / `discipline.md` 里）。
+
+## 一、已闭合（10 项）
+
+| 编号 | 原缺口 | 处置落点 | 证据 |
+| --- | --- | --- | --- |
+| `SWEEP-FU-SEG-2` | `segmentCommands` 非字符串分支无直接单测 | `test/shell-text.test.js`（5 例，含「恒返回 [] 必红」阳性对照） | commit `9c0bf45`；baseline 170→171 |
+| `R4-prime-rollout` | R4′（连续块 ∧ 逐字全命中）未落地为口径 | `references/discipline.md` §0k「等价复算（R4′）」表 | commit `9c0bf45`；`discipline.md:212` |
+| `isolated-home-standard` | 合跑必须带 `isolated-home.preload` 未标准化 | `references/discipline.md` §0k「合跑须隔离 HOME」表 | commit `9c0bf45`；`discipline.md:213` |
+| `Q3-correction` | `impl-w7f.md` §9 O-2 写点 42 为笔误 | 该件 O-2 已订正为 **41**（34 直接 + 7 解构，`.current` 不计） | `punky-w7f-20261020/exec/impl-w7f.md:203` |
+| `W7F-DOC-N2` | d1 §4.5 判据分工方向写反（L1 能抓「写点存在但运行时没走到」） | 该件追加「## 后期订正」节，**原文未改** | `punky-w7f-20261020/plan/rt-write-observability.md:305` |
+| `M-1` | `scope.md` §6 T-1④「`ctx.effect` 注册数 ≥2」缺前提（默认 `sweepIntervalMs=0`） | 追加「## 后期订正」节，给出正确前提 | `punky-w7e-20261020/plan/scope.md:211` |
+| `M-2` | `scope.md` §6 T-3①「`tracked: true`」缺前提（须 beat 一拍） | 同上 | `punky-w7e-20261020/plan/scope.md:211` |
+| `SWEEP-DOC-AC4` | AC-4「+N/−0」与 §2.2「须改写头注释」互斥；AC-1「全文命中==1」实为 2（含测试注释） | 追加「## 后期订正」节 | `punky-debt-sweep-20261020/plan/scope.md:264` |
+| `SWEEP-DOC-Q4` | `e4-s3` lane `cmd` 写「6/6 逐字（DEBT-2=甲）」，与 SWEEP-B=乙 冲突 | 同上：判定**以乙为准**，`cmd` 为建批期冻结字段不改 | `punky-debt-sweep-20261020/plan/scope.md:264` |
+| `GAP-06` | 批次停在 `phase=planning`（未做相位迁移） | 该批已 `batch_phase(running)` → `complete` | 批次事件流 |
+
+**口径说明**：`W7F-DOC-N2` / `M-1` / `M-2` / `SWEEP-DOC-*` 采用「**追加订正节、原文不动**」方式（用户裁决：历史判据源不改写）—— 保留「当时按什么标准验收」的可审计性，同时让读者看到正确口径。
+
+## 二、有意保留（2 项，非遗漏）
+
+| 编号 | 内容 | 保留理由 | 触发条件 |
+| --- | --- | --- | --- |
+| `remaining-12-sleep` | `test/watch-hotconfig.test.js` 其余 12 处固定 `sleep` 未改 | 用户裁决 **DEBT-1 = 只修 H1**（最小面），其余 12 处为**有意保留的边界** | 再次出现该文件相关 flake 时，按同样 `waitFor` 形态改造 |
+| `Q4-RISK` | 不强制 RED-first：测试无法自证「缺陷复发会变红」 | 用户否决 RED-first 要求；残余风险已知并接受 | 触碰相关测试文件的批次应**补阳性对照**（本批已按此执行） |
+
+## 三、已知问题（2 项，不阻断）
+
+| 编号 | 内容 | 判定 |
+| --- | --- | --- |
+| `K-1` | guard 计数口径随批次变化（A=B 条目数会涨） | 非缺陷：guard 用**运行期枚举**，不写死期望值 |
+| `K-2` | `HOST skip` 1 例（`lane-wake-autodispatch`） | 非缺陷：宿主级用例在本机环境 skip，`t.skip` 显式 |
+
+## 四、跨批指引层变更（2026-10-21，供后人追溯）
+
+| 变更 | 落点 | commit |
+| --- | --- | --- |
+| persona 两份定义对齐（patch 缺 `0i`、§0 旧短版 → 27 条 / 差异 0） | `cordis.patch.yml` + `presets/punky-preset/agent.cordis.yml` | `554418e` |
+| persona 去重（工具能力归工具定义 / 调度指引与操作规范归 preset） | 同上，persona 6,442 → 5,858 字符 | `554418e`、`911603b` |
+| 模板变量白名单（内核只注册 `provider` / `model`，其他双花括号变量启动即抛） | `agent.cordis.yml` 头注释 | `6dafe83` |
+| 指引维护改回**三条判据**；persona 一致性为**人工自维护约定**（不设机器门禁） | `references/discipline.md` §13 | `911603b` |
+
+> **注意**：`cordis.patch.yml` 在 boot 期由 loader 组合进 profile ⇒ 上述指引改动**需重启宿主**才进入在役。
