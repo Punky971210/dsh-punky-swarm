@@ -28,6 +28,10 @@ const ROOT = path.resolve(HERE, '..');
 const PRESET_REL = path.join('presets', 'punky-preset');
 const GUIDANCE = 'agent.cordis.yml';
 const BODY = path.join('references', 'discipline.md');
+// 2026-10-21 新增：`cordis.patch.yml` 是**实际注入源**（boot 期由 loader 组合进 profile)。
+//   它与 preset 的 `agent.cordis.yml` 是同一份 persona 的**两份定义**，历史上曾分叉
+//   （patch 缺 0i、§0 为旧短版）而长期无人发现 ⇒ 本脚本新增 persona 一致性检查。
+const PATCH = 'cordis.patch.yml';
 const SYNC_FILES = [
   GUIDANCE,
   BODY,
@@ -52,15 +56,24 @@ const USAGE = `用法：
 
   --live <dir>  live preset 目录（缺省 ${path.join('%USERPROFILE%', '.dsh', '.agent-presets', 'punky-preset')}）
   --no-live     跳过 repo↔live 面
+  --root <dir>  以指定目录为包根（缺省=脚本上级目录）；仅用于变异测试/CI 隔离沙箱
+  --self-test   跑检查逻辑的自证夹具（等价必绿 / 缺条目·改文本·多条目必红）
   --json        机读输出
 `;
 
 function parseArgs(argv) {
-  const out = { live: undefined, noLive: false, json: false, error: null };
+  const out = { live: undefined, noLive: false, json: false, selfTest: false, root: undefined, error: null };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--json') { out.json = true; continue; }
     if (a === '--no-live') { out.noLive = true; continue; }
+    if (a === '--self-test') { out.selfTest = true; continue; }
+    if (a === '--root') {
+      if (out.root !== undefined) { out.error = '--root 重复出现'; return out; }
+      const v = argv[i + 1];
+      if (!v || v.startsWith('--')) { out.error = '--root 缺少目录参数'; return out; }
+      out.root = v; i += 1; continue;
+    }
     if (a === '--live') {
       if (out.live !== undefined) { out.error = '--live 重复出现'; return out; }
       const v = argv[i + 1];
@@ -109,8 +122,62 @@ function inlineEntriesOf(guidanceText) {
   return out;
 }
 
+// 2026-10-21 新增：逐条抽取纪律条目（id → 正文），用于两份 persona 定义的一致性比对。
+//   判据刻意用「结构行匹配」`^\s+NN[a-z]?\.` 而非缩进宽度 —— 与 AU-05 待裁的缩进口径**解耦**，
+//   避免本检查被那个未裁项连带（该待裁项明令「未裁前保持现状，不得单方面改回严格」）。
+function personaRulesOf(text) {
+  const out = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s+([0-9]{1,2}[a-z]?)\.\s+(\S.*)$/.exec(line);
+    if (m) out.set(m[1], m[2].trim());
+  }
+  return out;
+}
+
+// 纯函数：比对两份纪律条目，返回失败项（供主流程与 --self-test 共用，保证「测的就是跑的」）。
+function diffPersonaRules(a, b, labelA, labelB) {
+  const out = [];
+  for (const id of a.keys()) {
+    if (!b.has(id)) out.push(`§${id} 仅存在于 ${labelA}`);
+  }
+  for (const id of b.keys()) {
+    if (!a.has(id)) out.push(`§${id} 仅存在于 ${labelB}`);
+  }
+  for (const [id, ta] of a) {
+    const tb = b.get(id);
+    if (tb !== undefined && tb !== ta) out.push(`§${id} 文本不一致（${labelA} 与 ${labelB}）`);
+  }
+  return out;
+}
+
+// 2026-10-21 新增自查：证明「本检查真的会红」。
+//   纪律依据：任何「一致/通过」类判据若不配可失败对照，就无法区分「检查通过」与「检查根本没生效」。
+//   本函数用三组合成夹具断言 —— 等价必绿、缺条目必红、改文本必红。
+function runSelfTest() {
+  const base = personaRulesOf('                0. alpha\n                1. beta\n');
+  const same = personaRulesOf('                0. alpha\n                1. beta\n');
+  const missing = personaRulesOf('                0. alpha\n');
+  const changed = personaRulesOf('                0. alpha\n                1. beta-CHANGED\n');
+  const extra = personaRulesOf('                0. alpha\n                1. beta\n                2. gamma\n');
+
+  const rows = [];
+  const eq = diffPersonaRules(base, same, 'A', 'B');
+  if (eq.length !== 0) rows.push('✗ 等价两份被误判为不一致：' + eq.join('; '));
+  if (!diffPersonaRules(base, missing, 'A', 'B').some((d) => d.includes('仅存在于'))) rows.push('✗ 缺条目未被检出');
+  if (!diffPersonaRules(base, changed, 'A', 'B').some((d) => d.includes('文本不一致'))) rows.push('✗ 文本漂移未被检出');
+  if (!diffPersonaRules(base, extra, 'A', 'B').some((d) => d.includes('仅存在于'))) rows.push('✗ 多出条目未被检出');
+
+  if (rows.length) {
+    process.stderr.write(rows.join('\n') + '\n');
+    return 1;
+  }
+  process.stdout.write('[guidance] SELF-TEST PASS：等价必绿 / 缺条目必红 / 文本漂移必红 / 多出条目必红\n');
+  return 0;
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.selfTest) process.exit(runSelfTest());
   if (args.error) {
     process.stderr.write(`[guidance] 参数错误：${args.error}\n`);
     process.stderr.write(USAGE);
@@ -119,7 +186,10 @@ function main() {
 
   const failures = [];
   const notes = [];
-  const repoPreset = path.join(ROOT, PRESET_REL);
+  // `--root` 仅用于变异测试 / CI 隔离沙箱：让检查跑在临时副本上，从而能证明「它真的会红」，
+  //   不必改动受版本控制的真实文件。
+  const rootDir = args.root ? path.resolve(args.root) : ROOT;
+  const repoPreset = path.join(rootDir, PRESET_REL);
   const guidancePath = path.join(repoPreset, GUIDANCE);
   const bodyPath = path.join(repoPreset, BODY);
   for (const p of [guidancePath, bodyPath]) {
@@ -171,6 +241,20 @@ function main() {
         if (sa !== sb) failures.push({ check: 'sync', detail: `副本不一致：${rel} repo=${sa.slice(0, 16)} live=${sb.slice(0, 16)}` });
       }
     }
+  }
+
+  // ④ 2026-10-21 新增：实际注入源（cordis.patch.yml）与 preset 的 persona 必须一致。
+  //    历史事实：两份曾分叉（patch 缺 0i、§0 为旧短版）且长期无人发现 —— 本检查即为防复发。
+  const patchPath = path.join(rootDir, PATCH);
+  const presetRules = personaRulesOf(guidanceText);
+  const personaRows = [];
+  if (!fs.existsSync(patchPath)) {
+    failures.push({ check: 'persona', detail: `缺实际注入源：${PATCH}` });
+  } else {
+    const patchRules = personaRulesOf(fs.readFileSync(patchPath, 'utf8'));
+    const diffs = diffPersonaRules(presetRules, patchRules, GUIDANCE, PATCH);
+    personaRows.push({ preset: presetRules.size, patch: patchRules.size, diffs: diffs.length });
+    for (const d of diffs) failures.push({ check: 'persona', detail: d });
   }
 
   const result = {
