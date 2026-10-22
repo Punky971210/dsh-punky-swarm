@@ -44,7 +44,9 @@
     "docs/audit-log.md",
     "docs/audit-log.en.md",
     "docs/assets-sync.md",
-    "docs/assets-sync.en.md"
+    "docs/assets-sync.en.md",
+    "scripts",
+    "!scripts/audit/out"
   ],
   "engines": {
     "node": ">=22"

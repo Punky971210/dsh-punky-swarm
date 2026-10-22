@@ -30,7 +30,8 @@
 **Step 1 — build the distributable package** (run inside the package directory):
 
 ```bash
-pnpm pack                 # ⇒ dsh-punky-swarm-0.5.0.tgz
+VERSION=$(node -p "require('./package.json').version")   # version comes from package.json only — never hard-coded in docs
+pnpm pack                 # ⇒ dsh-punky-swarm-$VERSION.tgz
 ```
 
 **Step 2 — the single install command** (dev / offline; on a clean `DSH_HOME` one command installs everything):
@@ -42,7 +43,7 @@ dsh --version
 ```
 
 ```bash
-dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-0.5.0.tgz @deepseek-ai/dsh-experimental-agent-team-profile@<HOST_RC> @deepseek-ai/dsh-agent-preset@<HOST_RC>
+dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz @deepseek-ai/dsh-experimental-agent-team-profile@<HOST_RC> @deepseek-ai/dsh-agent-preset@<HOST_RC>
 ```
 
 **Three hard requirements (do not skip)**:

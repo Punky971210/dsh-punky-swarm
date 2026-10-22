@@ -136,10 +136,17 @@ export function buildMemberStatusTools(cx) {
   const { deps, store } = cx;
   const { resolveBatchSession } = deps ?? {};
   return [
+    // 【批 `punky-fix-house-20261023` · lane `h4-toolface`】`status` 闭集**移除 `idle`**（**对齐现状，非放宽**）：
+    //   `idle` 在迁移表里**无入边**——`MEMBER_TRANSITIONS` 中 `idle` 只有出边 `idle -> running`；
+    //   入 idle 的唯一通道是 `RECOVERY_IDLE_FROM`（from = running/review）+ 单点写入口
+    //   `laneIdleOnRecovery`（`lib/state/store/lifecycle.js` 模块级，恢复/回收专用，不导出）。
+    //   故经本工具设 `status='idle'` 必被 `setMember` 的迁移判定拒（`invalid member transition: X -> idle`）。
+    //   原 enum 声明「可设」= 声明面与运行期相矛盾 ⇒ 本次只让**声明面**回到现实，状态机语义**零改**
+    //   （不得反向修：把 `idle` 做成可设 = 动迁移表语义，属另一批）。
     defineTool({
       name: "member_status",
-      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）；revokeExempt=true 为显式撤销（本条不得再带 status，撤销不改成员状态）。终态结算请用 member_settle。批次按会话隔离。',
-      parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","enum":["pending","running","review","idle"],"description":"目标成员态；revokeExempt=true 时不得携带（撤销是独立显式动作）"},"session":{"type":"string","description":"批次归属会话"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（仅 status=running 时允许出现；缺省 undefined = 无豁免意图）。type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4），未知 type 拒 GATE_EXEMPT_TYPE_UNKNOWN；multiplier 可选显式倍率 [1,100]，非法拒 GATE_EXEMPT_INVALID；stalled 可选（缺省 true）= 是否同时豁免 heartbeat stalled 追问","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}},"revokeExempt":{"type":"boolean","description":"显式撤销该 lane 的 longrun 豁免（不改成员状态）；与 status 不得并用（并用 → GATE_EXEMPT_NOT_DISPATCH）；lane 无既有豁免 → GATE_EXEMPT_REVOKE_REQUIRED"}},
+      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；`idle` 只能由恢复/回收进入（不许经 member_status 设置）——故 `status` 闭集不含 `idle`，`idle -> running` 的恢复重派仍照旧可用；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）；revokeExempt=true 为显式撤销（本条不得再带 status，撤销不改成员状态）。终态结算请用 member_settle。批次按会话隔离。',
+      parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","enum":["pending","running","review"],"description":"目标成员态（**不含 `idle`**：该态只能由恢复/回收经单点入口进入，经本工具设置必被状态机拒）；revokeExempt=true 时不得携带（撤销是独立显式动作）"},"session":{"type":"string","description":"批次归属会话"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（仅 status=running 时允许出现；缺省 undefined = 无豁免意图）。type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4），未知 type 拒 GATE_EXEMPT_TYPE_UNKNOWN；multiplier 可选显式倍率 [1,100]，非法拒 GATE_EXEMPT_INVALID；stalled 可选（缺省 true）= 是否同时豁免 heartbeat stalled 追问","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}},"revokeExempt":{"type":"boolean","description":"显式撤销该 lane 的 longrun 豁免（不改成员状态）；与 status 不得并用（并用 → GATE_EXEMPT_NOT_DISPATCH）；lane 无既有豁免 → GATE_EXEMPT_REVOKE_REQUIRED"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' status -> ' + value.status),

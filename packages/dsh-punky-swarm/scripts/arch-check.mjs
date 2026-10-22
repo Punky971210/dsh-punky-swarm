@@ -2,7 +2,8 @@
 // arch-check.mjs — 架构越界门（棘轮口径：白名单外的新增跨域依赖即拒）
 //
 // 定位：把 `.punky/arch.yml` 里的架构规则变成**可执行、fail-closed** 的判定：
-//   退出码 0 = 无新增越界；1 = 有违规；2 = 用法/配置错误。
+//   退出码 0 = 无新增越界；1 = 有违规；2 = 参数/解析/扫描错误；
+//              3 = 架构真源缺位（**本门是开发态门**，安装态不适用 —— ≠ 通过）。
 //   本脚本**零第三方依赖**（不用 yaml 包），用针对性行扫描解析 arch.yml 的本文件子集；
 //   脚本本身随仓库提交 ⇒ 可在 lane worktree 内执行（引擎命令门的 cwd 契约）。
 //
@@ -23,6 +24,11 @@ import { fileURLToPath } from 'node:url';
 // 包根 = 本脚本所在目录的上一级。**必须**由脚本自身位置推导，不能用 cwd ——
 // 因为引擎命令门在 lane worktree 根执行，cwd ≠ 包目录（否则配置与 lib 都找不到）。
 export const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** 退出码单点：本门的退出码契约。`2` 只留给「参数 / 解析 / 扫描」真错；
+ *  缺真源是「**不适用**」而非「错」（安装态没有 `.punky/arch.yml`，真源随 monorepo 根），
+ *  故单列 3 —— 3 ≠ 0，fail-closed 不变，但不再与真错混装同一码。 */
+export const EXIT_CONFIG_NOT_APPLICABLE = 3;
 
 /** 从 start 起向上查找 `.punky/arch.yml`（最多 5 层），兼容"真源在仓库根"的布局。 */
 export function findArch(start) {
@@ -244,8 +250,10 @@ function main() {
 
   if (!existsSync(archPath)) {
     console.error(`[error] arch/config-missing: 找不到架构真源 ${archPath}`);
-    console.error('        修复: 在仓库根创建 .punky/arch.yml（可复用 arch-probe.mjs 生成白名单）');
-    process.exit(2);
+    console.error('        本门是**开发态门**：真源 .punky/arch.yml 随 monorepo 根，不在 npm 包内。');
+    console.error('        安装态 ⇒ 本门**不适用**（≠ 通过）；退出码 3 专表此态，不得读作 [ok]。');
+    console.error('        两条处置：① --arch <path> 显式指定真源；② 在含 .punky 的仓库目录内执行。');
+    process.exit(EXIT_CONFIG_NOT_APPLICABLE);
   }
   const arch = parseArch(readFileSync(archPath, 'utf8'));
   if (arch.errors.length) {

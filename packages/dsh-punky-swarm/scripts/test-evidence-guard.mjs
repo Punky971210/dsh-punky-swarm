@@ -297,14 +297,18 @@ export function decideVerdict(input) {
     failedFiles.length === 0 &&
     incompleteFiles.length === 0;
 
+  // 汇总列：`skipped` 与 TAP 摘要同名（`RE_SUMMARY` 已解析），`cancelled` 只为让
+  //   `tests = pass + fail + skipped + cancelled + todo` 这条恒等式**可判**（不参与 ok）。
   const totals = records.reduce(
     (acc, r) => ({
       tests: acc.tests + (r.tests ?? 0),
       pass: acc.pass + (r.pass ?? 0),
       fail: acc.fail + (r.fail ?? 0),
+      skipped: acc.skipped + (r.skipped ?? 0),
+      cancelled: acc.cancelled + (r.cancelled ?? 0),
       todo: acc.todo + (r.todo ?? 0),
     }),
-    { tests: 0, pass: 0, fail: 0, todo: 0 },
+    { tests: 0, pass: 0, fail: 0, skipped: 0, cancelled: 0, todo: 0 },
   );
 
   return {
@@ -330,6 +334,7 @@ export function decideVerdict(input) {
       tests: r.tests,
       pass: r.pass,
       fail: r.fail,
+      skipped: r.skipped,
       fileRootSubtest: r.fileRootSubtest,
     })),
   };
@@ -497,6 +502,9 @@ export async function runGuard(options = {}) {
       tests: parsed.summary.tests ?? 0,
       pass: parsed.summary.pass ?? 0,
       fail: parsed.summary.fail ?? 0,
+      // `skipped` 进 per-file record（有消费方：汇总列 + 人工排查单文件）；
+      // `cancelled` **刻意不进** record —— 它只为让 totals 的算术恒等式可判，避免无消费字段扩散。
+      skipped: parsed.summary.skipped ?? 0,
       todo: parsed.summary.todo ?? 0,
       fileRootSubtest: parsed.fileRootSubtests.length > 0,
       topSubtests: parsed.topSubtests.length,
@@ -548,8 +556,24 @@ function renderVerdict(verdict, options) {
       verdict.totals.pass +
       ' fail=' +
       verdict.totals.fail +
+      ' skipped=' +
+      verdict.totals.skipped +
       ' todo=' +
       verdict.totals.todo,
+  );
+  // 算术自洽读数：**只展示、不参与 ok、不改退出码**（把它做成硬门 = 新增判据，须单独裁决）。
+  const sumParts = verdict.totals.pass + verdict.totals.fail + verdict.totals.skipped
+    + verdict.totals.cancelled + verdict.totals.todo;
+  lines.push(
+    GUARD_TAG +
+      ' sum-check tests=' +
+      verdict.totals.tests +
+      ' pass+fail+skipped+cancelled+todo=' +
+      sumParts +
+      '（cancelled=' +
+      verdict.totals.cancelled +
+      '）⇒ ' +
+      (verdict.totals.tests === sumParts ? '齐' : '不齐'),
   );
   for (const record of verdict.files) {
     if (record.outcome === 'passed') continue;

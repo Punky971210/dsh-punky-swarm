@@ -30,7 +30,8 @@
 **Step 1 —— 产出可分发包**（在包目录内执行）：
 
 ```bash
-pnpm pack                 # ⇒ dsh-punky-swarm-0.5.0.tgz
+VERSION=$(node -p "require('./package.json').version")   # 版本号只从 package.json 取，文档不写死
+pnpm pack                 # ⇒ dsh-punky-swarm-$VERSION.tgz
 ```
 
 **Step 2 —— 唯一安装命令**（dev / 离线环境；干净 `DSH_HOME` 上一条命令装齐）：
@@ -42,7 +43,7 @@ dsh --version
 ```
 
 ```bash
-dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-0.5.0.tgz @deepseek-ai/dsh-experimental-agent-team-profile@<HOST_RC> @deepseek-ai/dsh-agent-preset@<HOST_RC>
+dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz @deepseek-ai/dsh-experimental-agent-team-profile@<HOST_RC> @deepseek-ai/dsh-agent-preset@<HOST_RC>
 ```
 
 **三条硬要求（不要省）**：

@@ -166,3 +166,47 @@
 3. **改判留痕**：撤销冻结时，在本文件对应行加「解冻日期 + 依据 + commit」。
 4. **单一强制点**：接线时不得新写一套，必须接既有实现（`tools/core.js:349` 逐字「禁各写一套」）。
 5. **不得以「无断言」为删除理由**：`testHits = 0` 只证明**测试没覆盖**，不证明**代码是死的**。缺断言 ⇒ 先补测（生产路径 E2E），补完再判要不要删。
+
+---
+
+## 后期订正
+
+> 【2026-10-23 · 批 `punky-fix-house-20261023`（H-E）】本节只**追加**，不改写上方历史。
+> 动机：§2 标题「B1 残留（10 项）」是 **2026-09-21 的实测**；此后经团队资产退役与 B 批清理，实扫已变
+> （**正档 10 项 / B 批前实扫 8 项 / B 批后实扫 7 项**）。本节把正档与实扫逐条对账，使**差额可追溯**，
+> **不重生成正档** —— 重生成 = 另开批：`scripts/audit/gen-register.mjs` 会**整档覆写**，且会把 chain 退役、
+> B 批等历史漂移混入同一笔 diff，违背「一批一事」与「不改写历史」。
+
+### B1 对账（正档 10 项 + 实扫新入 1 项 = 11 行）
+
+| 符号 | 位置（正档行） | 现状 | 原因分类 | 证据 |
+|---|---|---|---|---|
+| `CHAIN_VERSION` | §2 | **已离册** | **已删** | `lib/assembly/chain.js` **整文件删除**（`ec4efc2` 团队类引擎内资产全量退役）；生产 / 测试 / 脚本零引用，仅 `scripts/audit/gen-register.mjs` 的 `WHY` 映射与 docs 留痕 |
+| `CHAIN_GUIDANCE_INJECTS` | §2 | **已离册** | **已删** | 同上（同一文件同批删除） |
+| `flowsDeclarationOf` | §2 | **已离册** | **仅注释提及**（非「生产调用」） | `lib/assembly/flows.js` 定义 + 同文件注释自陈；`dead-code2` 判 `selfUse:1` ⇒ `classify.mjs` 归 **B2**（B1 判据要求 `selfUse === 0`）⇒ **属扫描器未去注释的口径副作用**，见下「待修口径」 |
+| `assemblyFromTeamAsset` | **无此行** | **在册** | **从未登记**（反向差额） | `lib/assembly.js` 定义；B1 实扫**新入册**，正档缺此行 |
+| `FORWARD_DEPTH_LIMIT_DEFAULT` | §2 | 在册 | 一致 | 零引用（外部规范对齐表） |
+| `FORWARD_FANOUT_LIMIT_DEFAULT` | §2 | 在册 | 一致 | 同上 |
+| `FORWARD_EACH_TIMEOUT_MS_DEFAULT` | §2 | 在册 | 一致 | 同上 |
+| `FORWARD_TOTAL_TIMEOUT_MS_DEFAULT` | §2 | 在册 | 一致 | 同上 |
+| `workerResumeChapter` | §2 | 在册 | 一致 | 骨架声明（`enabled:false`） |
+| `renderVerdictReport` | §2 | 在册 | 一致 | 预留落盘格式 |
+| `REASON_EXEMPT_CLEARED` | §2 | **已离册** | **已删（B 批）** | `9aba643` 逐字删除该 `export const` ⇒ 解释「B 批后 8 → 7」 |
+
+**差额恒等式**：正档 10 − 已删 3 − 仅注释 1 + 反向新入 1 = **实扫 7**。
+
+### 复算口径（不写死行号）
+
+- **B1 判据**（`scripts/audit/classify.mjs`）：`prod + testUse + other === 0` **且** `selfUse === 0`。
+- **复算命令**：`node scripts/audit/dead-code2.mjs && node scripts/audit/classify.mjs` ⇒ 读 `out/unwired-summary.json` 的 `B1` 数组。
+  ⚠ 该两步**会写 `scripts/audit/out/`**（`.gitignore` 覆盖）；只读环境请在整包副本内跑，或跑完 `rm -rf scripts/audit/out`。
+- **2026-10-23 实测**（本批在**整包副本**内重生成取得，未污染真仓 `out/`）：`B1 = 7` —— `assemblyFromTeamAsset`、`FORWARD_DEPTH_LIMIT_DEFAULT`、`FORWARD_FANOUT_LIMIT_DEFAULT`、`FORWARD_EACH_TIMEOUT_MS_DEFAULT`、`FORWARD_TOTAL_TIMEOUT_MS_DEFAULT`、`workerResumeChapter`、`renderVerdictReport`。
+- **删除了哪个提交**：`git log --oneline -S 'REASON_EXEMPT_CLEARED' -- lib`（命中 `9aba643`）；chain 面用 `git log --oneline --diff-filter=D -- lib/assembly/chain.js`（命中 `ec4efc2`）。
+- **本文件 §1 / §3 的口径不受本节影响**：本节只对账 §2，不重判 §1（C1 · 生产未接线）与 §3（无断言门禁）。
+
+### 一条待修的口径副作用（登记 followup，本批不修）
+
+`selfUse` 计数**未去注释** ⇒ 「在注释里提一句自己的名字」即可把符号从 B1 移出（`flowsDeclarationOf` 即此形态：
+其 `selfUse:1` 来自**注释**，不是调用）。属 `scripts/audit/dead-code2.mjs` 的**口径缺陷**；修它会改变历史分类结果 ⇒
+须单开批处理，本批只登记**不动手**。同理留意的还有 `gates.mjs` 的 `shieldComments`（§3 已登记去注释口径）——
+两处口径**方向不一致**（一个去注释、一个不去），属同一族欠账。

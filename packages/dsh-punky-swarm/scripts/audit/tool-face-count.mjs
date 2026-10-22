@@ -32,11 +32,17 @@ const TOOLS_DIR = 'lib/tools';
 const LIB_DIR = 'lib';
 
 // ── 上一批基线（**只读对照面，禁止改数**）─────────────────────────────────────
+// 【基线订正 2026-10-23 · 批 punky-fix-house-20261023（H-C1）】
+//   requiredKeys: 63 → 24。**63 不可复现**：五个候选口径实测全部给 24
+//   （blockLevel 24 / fileLevel 24 / parametersFace 11 / outputFace 13 / libTree 24），
+//   且同口径下 definitions(32) 与 declaredKeys(145) 仍逐项对齐 ⇒ 只有该一项失配。
+//   ⇒ 认定 63 为**不可复现的历史读数**，订正为现行冻结口径的确定读数 24。
+//   复算：node scripts/audit/tool-face-count.mjs（原生只读，零写盘）
 const BASELINE = {
   definitions: 32,
   files: 14,
   declaredKeys: 145,
-  requiredKeys: 63,
+  requiredKeys: 24,
   readUndeclared: 0,
   zeroRead: 0,
   indirect: 29,

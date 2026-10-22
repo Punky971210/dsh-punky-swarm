@@ -54,8 +54,30 @@
 | 变更 | 落点 | commit |
 | --- | --- | --- |
 | persona 两份定义对齐（patch 缺 `0i`、§0 旧短版 → 27 条 / 差异 0） | `cordis.patch.yml` + `presets/punky-preset/agent.cordis.yml` | `554418e` |
-| persona 去重（工具能力归工具定义 / 调度指引与操作规范归 preset） | 同上，persona 6,442 → 5,858 字符 | `554418e`、`911603b` |
+| persona 去重（工具能力归工具定义 / 调度指引与操作规范归 preset） | 同上，**净减**（读数一律现算，不写死数字） | `554418e`、`911603b` |
 | 模板变量白名单（内核只注册 `provider` / `model`，其他双花括号变量启动即抛） | `agent.cordis.yml` 头注释 | `6dafe83` |
 | 指引维护改回**三条判据**；persona 一致性为**人工自维护约定**（不设机器门禁） | `references/discipline.md` §13 | `911603b` |
+
+> **〔订正 2026-10-23 · 批 `punky-fix-house-20261023`（H-F2）〕** 上表原记的「某数 → 某数 字符」一对具体数字**不可复现**（旧读数未写明口径：整文件字符数、`prefix: >-` 块原样字节数、去缩进后码点数，三种口径均算不出旧读数）⇒ **该对数字不再复写**（避免不可复现读数被继续复制）；下方改为**可复算口径 + 实算读数**。
+>
+> **口径（本仓唯一）**：锚点 = `presets/punky-preset/agent.cordis.yml`（镜像载体 `cordis.patch.yml`）中 `- id: persona` 行 → 其后首个 `prefix: >-` 行 → 取其后**缩进更深**的块（遇缩进 ≤ `prefix:` 行的行终止）→ **去掉块内公共缩进**（= YAML `>-` 折叠语义）→ 数码点（`chars`）与 UTF-8 字节（`bytes`）。**不含** YAML 缩进、不含键名行。
+>
+> **复算**（`scripts/persona-count.mjs` 随包提供；未落地前用下列同口径内联版，二者判据相同）：
+> ```bash
+> node scripts/persona-count.mjs presets/punky-preset/agent.cordis.yml cordis.patch.yml
+> # 同口径内联版（无脚本时可用）：
+> node -e 'const fs=require("fs"),f=process.argv[1],L=fs.readFileSync(f,"utf8").split(/\r?\n/);
+> const i=L.findIndex(l=>/^\s*-\s*id:\s*persona\s*$/.test(l));let j=-1;
+> for(let k=i+1;k<L.length;k++){if(/^\s*prefix:\s*>-\s*$/.test(L[k])){j=k;break;}}
+> const ind=L[j].match(/^\s*/)[0].length,b=[];for(let k=j+1;k<L.length;k++){if(L[k].trim()===""){b.push("");continue;}
+> if(L[k].match(/^\s*/)[0].length<=ind)break;b.push(L[k]);}
+> while(b.length&&b[b.length-1].trim()==="")b.pop();
+> const m=Math.min(...b.filter(l=>l.trim()).map(l=>l.match(/^\s*/)[0].length)),s=b.map(l=>l.slice(m)).join("\n");
+> console.log(f+": chars="+[...s].length+" bytes="+Buffer.byteLength(s,"utf8")+" lines="+b.length)' presets/punky-preset/agent.cordis.yml
+> ```
+>
+> **2026-10-23 实测（本口径）**：两载体互为镜像、读数**逐字相等** ⇒ `chars=2976 / bytes=5697`。
+> **历史快照同法复算**：`git show 554418e^:packages/dsh-punky-swarm/presets/punky-preset/agent.cordis.yml` 与 `git show 554418e:…` 各存临时文件后同法读 ⇒ `chars 3576 → 3051`、`bytes 6478 → 5788`（= 该次去重的真实净减幅度，与上方「净减」一致）。
+> ⇒ **此后 persona 读数一律「口径 + 复算命令」，不写死数字。**
 
 > **注意**：`cordis.patch.yml` 在 boot 期由 loader 组合进 profile ⇒ 上述指引改动**需重启宿主**才进入在役。

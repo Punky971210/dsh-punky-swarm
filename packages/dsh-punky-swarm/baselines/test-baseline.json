@@ -361,11 +361,11 @@
       "todos": 0
     },
     "test/esm-first-eval.test.js": {
-      "asserts": 12,
-      "blankLines": 18,
-      "lines": 222,
+      "asserts": 21,
+      "blankLines": 30,
+      "lines": 381,
       "tautologies": 0,
-      "tests": 4,
+      "tests": 7,
       "todos": 0
     },
     "test/f1-apply-root-guard.test.js": {
@@ -1521,7 +1521,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-22T17:47:00Z",
+  "generatedAt": "2026-10-22T18:53:29Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1532,15 +1532,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-fix-p2-20261023 tester 新增 6 文件 52 test / +174 asserts",
+  "reason": "punky-fix-house-20261023 h5-tester 测试文件结构改为纯追加（helper 还原 + 新增 buildGraphWithDynamic）",
   "schema": 1,
   "totals": {
-    "asserts": 9787,
-    "blankLines": 5036,
+    "asserts": 9796,
+    "blankLines": 5048,
     "files": 190,
-    "lines": 53849,
+    "lines": 54008,
     "tautologies": 2,
-    "tests": 1984,
+    "tests": 1987,
     "todos": 4
   }
 }

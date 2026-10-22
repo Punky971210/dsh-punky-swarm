@@ -2,6 +2,8 @@
 //   用法：cd packages/dsh-punky-swarm
 //     node scripts/audit/gates.mjs            # 生成台账（scripts/audit/out/gate-ledger.json）
 //     node scripts/audit/gates.mjs --check    # 与留档基线比对漂移（**默认不阻断**，退出码恒 0）
+//                                             #   **唯一只读形态**：--check 之下不写盘
+//     node scripts/audit/gates.mjs --check --write   # 比对**并**落盘（显式要求写盘时用）
 //
 // ── 口径演进（2026-09-21，两次勘误，均由「乐观污染」触发）────────────────────────
 // v1（原始）：在**源码原文**上数 `\bGATE_[A-Z0-9_]+\b`，把一切 `GATE_*` 标识符当门禁码。
@@ -30,6 +32,41 @@ const SELF_AUDIT = join(ROOT, 'scripts', 'audit');
 const BASELINE = join(ROOT, 'docs', 'audit-2026-09-21-gate-ledger.json');
 const CHECK = process.argv.includes('--check');
 const SELFTEST = process.argv.includes('--selftest');
+// 唯一写闸（**D′ 取向**：只有 `--check` 只读）——
+//   默认（无 --check）仍生成台账 ⇒ `gen-register.mjs` 的生成链零破坏；
+//   `--check` 是审计比对形态，事故面（缺陷 A1-P3-06：只读审计环境被污染）只在这一档
+//   ⇒ 本闸精确消灭该事故面，`--write` 可显式要求「比对 + 落盘」。
+const WRITE = !CHECK || process.argv.includes('--write');
+
+// 已登记漂移（**纯标注面**：不参与任何判定、不改退出码、不进 `codes`/`libOnly` 口径）
+//   来源：2026-10-23 批 punky-fix-house-20261023（H-C2）逐码亲核 ——
+//     新增 10 项：`git log --reverse --format='%h %s' -S <码> -- lib` 取引入提交；
+//     消失 7 项：同法取末次变更提交（后 4 项为**注释留痕**态：已不在 union、无抛点，
+//               以注释自陈的退役批 + 末次码面变更为据，可复算复核）。
+//   ⚠ 本表**只允许追加**，且每条必须带 commit 短码（否则漂移会被"合法化"成不可归因）。
+const KNOWN_DRIFT = {
+  added: {
+    GATE_CHANNEL_INVALID: '7e33f90 channel 通道归属',
+    GATE_CHANNEL_UNRESOLVED: '7e33f90 channel 通道归属',
+    GATE_HANDOFF_IDENTITY_UNKNOWN: '7e33f90 channel 通道归属',
+    GATE_HANDOFF_OVERWRITE_UNDECLARED: '7e33f90 channel 通道归属（R-2 覆盖保护）',
+    GATE_HANDOFF_UNAUTHORIZED: '7e33f90 channel 通道归属',
+    GATE_ROSTER_INVALID: '7e33f90 channel 通道归属',
+    GATE_DIFFICULTY_CHANNEL_UNRESOLVED: 'a4a2779 规格体系 P0/P1/P2 三波',
+    GATE_SCRIPT_CHANGED: 'a4a2779 规格体系 P0/P1/P2 三波',
+    GATE_CONSUME_DEPS_ASYMMETRY: 'c2bd46e consume×deps 建批期硬门',
+    GATE_ROLE_UNRESOLVED: 'c2bd46e role 注入与指引重构',
+  },
+  gone: {
+    GATE_TEAMS_ROOT_INVALID: '6922a0e 码退役',
+    GATE_TEAMS_ROOT_ASSET_NOT_FOUND: '6922a0e 码退役',
+    GATE_SKILL_MISSING: 'b8380a8 技能 recommend 不再设门禁',
+    GATE_AUDIT_CONTRACT_EXEMPT: 'ec4efc2 团队资产退役（仅提及残留）',
+    GATE_AUDIT_CONTRACT_MISSING: 'ec4efc2 团队资产退役（仅提及残留）',
+    GATE_EXEC_INPUT_MISSING: 'ec4efc2 团队资产退役（仅提及残留）',
+    GATE_ROLE_MISSING: 'cdfe509 cleanup-tail E-5 退役收尾（仅提及残留）',
+  },
+};
 
 if (SELFTEST) {
   const n = strengthSelfTest();
@@ -210,6 +247,14 @@ if (CHECK) {
     console.log('消失拒码 (' + gone.length + ')：' + (gone.join(' ') || '—'));
     console.log('新增「无断言」项 (' + newUntested.length + ')：' + (newUntested.join(' ') || '—'));
     console.log('已消除「无断言」项 (' + fixed.length + ')：' + (fixed.join(' ') || '—'));
+    // ── 漂移分档（**只读标注面**：不改 added/gone 判定，不动退出码）──────────────
+    const regAdded = added.filter((x) => x in KNOWN_DRIFT.added);
+    const regGone = gone.filter((x) => x in KNOWN_DRIFT.gone);
+    const unreg = [...added.filter((x) => !(x in KNOWN_DRIFT.added)),
+      ...gone.filter((x) => !(x in KNOWN_DRIFT.gone))].sort();
+    console.log('基线时点 = R3-1（2026-09-21，' + rel(BASELINE) + ' 刻意停在此刻度）');
+    console.log('已登记漂移 = 新增 ' + regAdded.length + ' / 消失 ' + regGone.length + '（来源 KNOWN_DRIFT）');
+    console.log('未登记漂移 = ' + unreg.length + (unreg.length ? '（点名：' + unreg.join(' ') + '）' : ''));
     console.log('（提示：漂移≠错误；冻结项会随新引擎形态合法变更。本模式**不阻断**、退出码恒 0。）');
   }
 }
@@ -249,6 +294,12 @@ for (const r of rows) {
   console.log(`  ${mark} ${r.id.padEnd(34)} [${r.kind.padEnd(10)}] gates=${String(r.selfGates).padStart(3)}  prodFiles=${String(r.prodFiles).padStart(2)}  testFiles=${String(r.testFiles).padStart(2)}  testHits=${String(r.testHits).padStart(4)}`);
 }
 
-mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, 'gate-ledger.json'), JSON.stringify(rows, null, 2));
-console.log('\n-> scripts/audit/out/gate-ledger.json');
+// 写盘受唯一写闸约束：`--check` 之下**不创建、不改写** `scripts/audit/out/`
+//   （该目录被 `.gitignore` 覆盖 ⇒ 污染在 `git status` 里看不出来，故必须由代码闸住，不能靠人自律）。
+if (WRITE) {
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, 'gate-ledger.json'), JSON.stringify(rows, null, 2));
+  console.log('\n-> scripts/audit/out/gate-ledger.json');
+} else {
+  console.log('\n(未写盘：--check 为只读形态；需落盘请加 --write)');
+}
