@@ -360,6 +360,110 @@
       "tests": 41,
       "todos": 0
     },
+    "test/f1-apply-root-guard.test.js": {
+      "asserts": 18,
+      "blankLines": 9,
+      "lines": 88,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/f1-dispatch-activation-gate.test.js": {
+      "asserts": 62,
+      "blankLines": 23,
+      "lines": 276,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/f1-dispatch-owner-backfill.test.js": {
+      "asserts": 32,
+      "blankLines": 23,
+      "lines": 167,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/f1-dispatch-register-multislot.test.js": {
+      "asserts": 47,
+      "blankLines": 25,
+      "lines": 251,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/f2-artifact-containment-link.test.js": {
+      "asserts": 36,
+      "blankLines": 29,
+      "lines": 184,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
+    "test/f2-dispatch-desc-and-docs.test.js": {
+      "asserts": 48,
+      "blankLines": 30,
+      "lines": 279,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/f2-lane-claim-warn.test.js": {
+      "asserts": 9,
+      "blankLines": 15,
+      "lines": 105,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/f2-lock-takeover.test.js": {
+      "asserts": 66,
+      "blankLines": 30,
+      "lines": 256,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/f2-log-export-writeto.test.js": {
+      "asserts": 12,
+      "blankLines": 17,
+      "lines": 108,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
+    "test/f3-anchors.test.js": {
+      "asserts": 28,
+      "blankLines": 21,
+      "lines": 270,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/f3-claim-writeface.test.js": {
+      "asserts": 36,
+      "blankLines": 27,
+      "lines": 260,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/f3-lane-claim-reason.test.js": {
+      "asserts": 24,
+      "blankLines": 17,
+      "lines": 145,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
+    "test/f3-rev-cas.test.js": {
+      "asserts": 74,
+      "blankLines": 33,
+      "lines": 392,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
     "test/failed-escalate.test.js": {
       "asserts": 30,
       "blankLines": 19,
@@ -817,11 +921,11 @@
       "todos": 0
     },
     "test/log-export.test.js": {
-      "asserts": 57,
-      "blankLines": 21,
-      "lines": 227,
+      "asserts": 61,
+      "blankLines": 22,
+      "lines": 251,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 12,
       "todos": 0
     },
     "test/longrun-exempt.test.js": {
@@ -1369,7 +1473,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-20T18:46:33Z",
+  "generatedAt": "2026-10-22T16:31:41Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1380,15 +1484,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": null,
+  "reason": "A 收尾：archive 写面归一经 commitBatch（含测试判据更新：由「钉住残余」改为「正向判据 + 结构面反向断言」）",
   "schema": 1,
   "totals": {
-    "asserts": 9117,
-    "blankLines": 4597,
-    "files": 171,
-    "lines": 49680,
+    "asserts": 9613,
+    "blankLines": 4897,
+    "files": 184,
+    "lines": 52485,
     "tautologies": 2,
-    "tests": 1861,
+    "tests": 1932,
     "todos": 4
   }
 }

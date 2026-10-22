@@ -31,9 +31,18 @@ import { laneProgressWrite } from '../resume.js';
 // 单点（原本文件定义迁出）
 import { isAbsPath } from '../constants.js';
 import * as EVT from '../event-types.js';
+// 写面「根内判据」**单点**（A1-P1-03 · F2）＝ 词法 + realpath 解权双档、fail-closed；
+//   本文件**不得**再有第二份词法前缀判据（`startsWith` + `base` 形态）实现（F2-G01 / 不变量 2 单点判定）。
+//   无环：`batch-paths.js` → `constants.js` + `gates/presence.js`，均不反向依赖 store（`store/paths.js` 已用同一 import）。
+import { resolveWriteTargetIn } from '../batch-paths.js';
+
+/** `asset_claim` 的 rev 冲突重试上限（**有界**；仅对 `BATCH_VERSION_CONFLICT` 重试，其它错误立即上抛）。 */
+const REV_RETRY_MAX = 3;
 
 export function buildBatch(cx) {
-  const { batchFile, artifactsDirOf, corruptRegistry, log, atomicWrite, commitBatch, newEvent, emitStateChange } = cx;
+  // 【F3 / K-1 单点】**不再**解构 `atomicWrite`：本文件的建批落盘改经 `commitBatch`（rev CAS 单点），
+  //   直写 `atomicWrite` 会绕开 rev 判据（= 第二条写路径）。孤儿解构随之移除（防未使用告警）。
+  const { batchFile, artifactsDirOf, corruptRegistry, log, commitBatch, newEvent, emitStateChange } = cx;
 
   // 【2026-09-27 · 批 3】原「团队资产解析快照」建批侧接线（`teamAssetRefFor` + `lib/assembly/snapshot.js` 导入）
   //   **已整条删除**：资产面全量退役 ⇒ 无资产可解析、无指纹可写、无事件可落。本文件对该面**零 I/O、零引用**。
@@ -106,7 +115,15 @@ export function buildBatch(cx) {
         batch.handoffs[t.id] = list;
       }
     }
-    atomicWrite(file, batch);
+    // 【F3 / K-1 · C-4】建批落盘改经 `commitBatch` ⇒ 批次 JSON **写点归一为单点**（不变量 2）：
+    //   - `commitBatch` 在 `buildBatch(cx)` 时已解构可用（函数声明提升，`cx` 在 builders 执行前装配）；
+    //   - 首写时盘上文件**不存在** ⇒ `diskRevOf` 按契约 ⑤ 视 `0`；本对象**不含** `__rev` ⇒ `revOf` 也视 `0`
+    //     ⇒ `0 === 0` 通过 ⇒ 写盘置 `__rev: 1` 并**回写本对象** ⇒ 返回值携带 `__rev: 1`。
+    //   - 字面量（63-88 行）**刻意不写** `__rev: 0`：否则该字段有两个赋值点（字面量 0 + 此处置 1），
+    //     且会破坏「建批对象形态逐字不变」的等价边界。**rev 只由 `commitBatch` 赋值**（单点）。
+    //   - 建批前刚判过 `!fs.existsSync(file)` ⇒ `diskRevOf` 必为 0 ⇒ 结构中不可能冲突
+    //     （除非在 `existsSync` 与本行之间被外部进程建了同名文件 —— 此时**如实抛冲突**，属期望行为）。
+    commitBatch(sessionId, batchId, batch);
     return batch;
   }
 
@@ -211,9 +228,16 @@ export function buildBatch(cx) {
   }
 
   // asset_claim 归位：Leader 已直做产物复制进批次 artifacts/<batchId>/（保留内容，不移动），事件留痕。
-  // 安全：target 必须是批次内相对路径——拒绝绝对路径、盘符前缀、.. / . / 空段；解析后仍须落在 artifacts 目录内（纵深防御）。
+  // 安全（两层，**纵深防御不减**）：
+  //   ① **词法档**（本函数前置，逐字保留）：`target` 必须是批次内相对路径——拒绝绝对路径 / 盘符前缀 /
+  //      `..` / `.` / 空段 ⇒ 错误优先级与修前**逐字不变**（`test/batch-store.test.js:146-160` 依赖它）；
+  //   ② **根内判据单点** = `resolveWriteTargetIn`（`lib/state/batch-paths.js`：词法 + realpath 解权双档、
+  //      fail-closed）⇒ 修 F2-G01：`mkdirSync`/`copyFileSync` 会**跟随** junction/软链，修前仅比对词法前缀
+  //      ⇒ 批次产物根内建一个指向根外的 junction 即可真实写到根外（实测已发生）。
+  //      ⚠ 本文件**不得**再有第二份词法前缀判据（`startsWith` + `base`）实现（单点判定；错误文案随单点统一为
+  //      `writeTo escapes artifacts dir: <abs>`，与 `log_export.writeTo` 同族）。
   function claimAsset(sessionId, batchId, { source, target }) {
-    const batch = readBatch(sessionId, batchId);
+    const batch = readBatch(sessionId, batchId); // 保序：读批仍在函数最前（错误优先级逐字不变）
     if (!batch) throw new Error('batch not found: ' + batchId);
     if (typeof target !== 'string' || !target.length) throw new Error('invalid target path: ' + target + ' (must be batch-relative)');
     if (isAbsPath(target) || /^[A-Za-z]:/.test(target)) throw new Error('invalid target path: ' + target + ' (must be batch-relative, no absolute path)');
@@ -225,14 +249,41 @@ export function buildBatch(cx) {
     try { st = fs.statSync(source); } catch { throw new Error('source not found: ' + source); }
     if (!st.isFile()) throw new Error('source is not a file: ' + source);
     const artifactsDir = artifactsDirOf(sessionId, batchId);
-    const dest = path.join(artifactsDir, ...segments);
-    const base = path.resolve(artifactsDir) + path.sep;
-    if (!path.resolve(dest).startsWith(base)) throw new Error('target escapes artifacts dir: ' + target);
+    // 判据**必须在** `mkdirSync` / `copyFileSync` **之前**（顺序不可调）⇒ junction → 根外时**根外零落盘**。
+    //   `allowMissing` 档：`artifacts/<sid>/<batch>/` 可能尚未创建（首次 claim）—— F2 已修 root 侧对称解权，
+    //   不会把「合法但根尚不存在」误判为逃逸。
+    const dest = resolveWriteTargetIn(artifactsDir, path.join(artifactsDir, ...segments));
     fs.mkdirSync(path.dirname(dest), { recursive: true });
+    // 【F2-G10 · TOCTOU-RESIDUAL】判据 → `copyFileSync` 之间仍有窗口。本**复判**消除下面这一**具体**路径：
+    //   首判时中间段尚不存在（由本次 `mkdirSync` 创建）⇒ 复判时它已存在 ⇒ `nearestExistingAncestorOf`
+    //   取到它 ⇒ `realpathSync` 暴露「刚创建就被换成 junction/软链」。窗口因此从「首判 → copy 全程
+    //   （含 mkdir 的 I/O）」收窄到「复判 → copyFileSync」之间的**一次 syscall 间隙**。
+    //   残余（**未闭合，勿表述为已闭合**）：该间隙内祖先被替换仍可把写入重定向到根外；彻底闭合需
+    //   `openat`/`O_NOFOLLOW` 语义（Node 跨平台不可用）或文件锁（K-1 已否决）。
+    //   威胁模型：与引擎同用户、能建 junction/symlink 的本地进程 —— 此类主体已具备与引擎**相同的写权限**
+    //   ⇒ **不构成提权**；本判据保证的是「引擎不把写入送到根外」，不承诺对同权限竞争者的物理隔离。
+    resolveWriteTargetIn(artifactsDir, dest);
     fs.copyFileSync(source, dest); // 保留内容，不移动（避免破坏已引用）
-    batch.events.push(newEvent(EVT.EVT_ASSET_CLAIMED, { lane: null, source, target }));
-    batch.updatedAt = new Date().toISOString();
-    commitBatch(sessionId, batchId, batch);
+    // ── rev CAS 有界重试（**仅**「事件 + 落盘」段；copy 与判据留在循环外）─────────────────────
+    //   ① `copyFileSync` 幂等（同内容覆盖）⇒ 不必重跑；
+    //   ② `asset.claimed` 事件在 `commitBatch` 之内 ⇒ 冲突那次**未落盘** ⇒ 重试**不会**重复事件；
+    //   ③ worker 结算前归位产物与 Leader 的 settle/事件写并发概率**最高**；
+    //   ④ 重试代价 = 一次 commit（无门禁、无子进程）。
+    //   重试时**必须重读**（否则拿着旧对象二次提交 = 必然再冲突）；非冲突类错误**立即上抛**（不回退）。
+    let attempt = 1;
+    for (;;) {
+      const cur = attempt === 1 ? batch : readBatch(sessionId, batchId);
+      if (!cur) throw new Error('batch not found: ' + batchId);
+      cur.events.push(newEvent(EVT.EVT_ASSET_CLAIMED, { lane: null, source, target }));
+      cur.updatedAt = new Date().toISOString();
+      try {
+        commitBatch(sessionId, batchId, cur);
+        break;
+      } catch (err) {
+        if (!(err && err.code === 'BATCH_VERSION_CONFLICT') || attempt >= REV_RETRY_MAX) throw err;
+        attempt += 1;
+      }
+    }
     return { ok: true, claimedPath: target, batchId };
   }
 

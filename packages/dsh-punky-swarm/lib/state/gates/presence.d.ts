@@ -42,3 +42,19 @@ export declare function sectionLineHit(content: string, section: string): boolea
 export declare function elementLineHit(content: string, id: string): boolean;
 /** 路径归属判定（P8）：绝对路径产物必须在批次产物根内。 */
 export declare function isInsideRoot(absPath: string, rootDir: string): boolean;
+/** 解权档选项。 */
+export interface InsideRootResolvedOptions {
+    /**
+     * `true` = 目标**允许尚不存在**（写面：目标由本次调用创建）⇒ 解权「最近既有祖先」+ 剩余段。
+     * `false`（缺省）= 目标本身须可解权；解不了（不存在/断链/权限）⇒ `false`。
+     */
+    allowMissing?: boolean;
+}
+/**
+ * 路径归属判定（**解权档** · A1-P1-03）：绝对路径产物在**解权后**必须仍在批次产物根内。
+ *   · 词法档必过（既有拒绝面逐字保留：`../` / 根外绝对 / 跨盘盘符 / UNC 一律先拒）；
+ *   · **两侧都 realpath**（禁「未解权 root + 已解权 abs」混用：Windows 大小写/短名差异会造成假逃逸）；
+ *   · 根内软链 → 根内目标 ⇒ `true`（不误拒）；根内软链/junction → 根外 ⇒ `false`；
+ *   · 根不可解 / 目标不可解（不存在、断链、权限）⇒ `false`（fail-closed）。
+ */
+export declare function isInsideRootResolved(absPath: string, rootDir: string, opts?: InsideRootResolvedOptions): boolean;

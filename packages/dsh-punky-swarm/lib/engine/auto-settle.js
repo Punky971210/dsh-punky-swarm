@@ -142,7 +142,7 @@ function autoSettleEnabledOf(enabled) {
 }
 
 /** audit 层 lane 判定（单点）：lane 的层取 `batch.wavePlan[].tasks` 中 `id === lane` 的 `layer` 字段
- *  （经 `findTask` 单点，**不新造第二套遍历**；同款读法见 `lib/tools/core.js:712`）。
+ *  （经 `findTask` 单点（定义见 `lib/state/task-utils.js#findTask`），**不新造第二套遍历**）。
  *  **缺失 / 非法层 ⇒ 不作为 audit**（保守：仍走既有全自动路，零行为变化）——层是 `wavePlan` 的静态声明，
  *  不读任何产物正文。 */
 export function isAuditLayerLane(batch, lane) {

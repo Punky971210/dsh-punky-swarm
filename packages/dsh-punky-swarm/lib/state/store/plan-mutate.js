@@ -24,7 +24,14 @@ import * as EVT from '../event-types.js';
 import { buildWavePlan, LAYERS } from '../../wave-plan.js'; // N1-R4-1c：池内追加任务的归一化（判据与建批期同源）
 
 export function buildPlanMutate(cx) {
-  const { batchFile, readBatch, newEvent, atomicWrite } = cx;
+  // 【F3 / K-1 单点】**不再**解构 `atomicWrite` / `batchFile`：本文件两处落盘改经 `commitBatch`（rev CAS 单点）。
+  //   修前它们是 `atomicWrite(file, next)` —— **绕开** `commitBatch` ⇒ `next = {...batch}` 把 `__rev` **原值带过**
+  //   ⇒ 既不推进 rev、也不参与比对。后果：若本文件在别的写者「readBatch → commitBatch」之间提交，
+  //   后者的 CAS 会读到 `actual === expected` 而**照常通过**并整份覆盖 ⇒ **静默 lost update 原样保留、且判绿**
+  //   （比修前更危险：修前至少是「无版本裸写」）。故归一为单点写入（规格 S3-3 亦已把本文件列为「冲突上抛、不重试」）。
+  //   行为面唯一变化 = 多一次盘上重读 + 可能抛 `BATCH_VERSION_CONFLICT`（规格 S3-3 判为可接受：本通道是**留痕/图变更**
+  //   写，冲突上抛 = 「本轮写入被并发挤掉」这一事实本身，自动重试会把它掩盖成「写成功了」）。
+  const { readBatch, newEvent, commitBatch } = cx;
 
   // ── N1-R4-1c：池内追加任务（**图变更的唯一写入口**）─────────────────────────────
   // 纪律（K1 + 2026-09-21 13:3x 用户裁定）：
@@ -38,7 +45,6 @@ export function buildPlanMutate(cx) {
   //      `planRevision` 递增与拒态语义**一字未动**（只增一个只读载荷键）。
   //   ④ 判据与建批期**同源**：归一化走 `buildWavePlan`、分层/环检测走 `topoWaves`（不另写一份判据）。
   function addPoolTasks(sessionId, batchId, incoming, { reason = null, author = null } = {}) {
-    const file = batchFile(sessionId, batchId);
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
     if (schema.isBatchTerminal(batch.phase)) {
@@ -117,7 +123,7 @@ export function buildPlanMutate(cx) {
         added: ids, declared, reason: reason ?? null, author: author ?? null, revision,
       })],
     };
-    atomicWrite(file, next);
+    commitBatch(sessionId, batchId, next); // 【F3 / K-1】写面归一（rev CAS 单点；见 buildPlanMutate 头注）
     return next;
   }
 
@@ -135,7 +141,6 @@ export function buildPlanMutate(cx) {
   //   （**保留既有条目状态**——禁重建丢档）+ `plan.mutated` 留痕（带 `edges`）+ `planRevision+1`。
   // 只增不删：**不提供删边**——删边会毁掉既有交接声明与下游已消费的事实，属「重算」，撞 K1 红线。
   function addTaskEdges(sessionId, batchId, edges, { reason = null, author = null } = {}) {
-    const file = batchFile(sessionId, batchId);
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
     if (schema.isBatchTerminal(batch.phase)) {
@@ -249,7 +254,7 @@ export function buildPlanMutate(cx) {
         edges: edgesLog, reason: reason ?? null, author: author ?? null, revision,
       })],
     };
-    atomicWrite(file, next);
+    commitBatch(sessionId, batchId, next); // 【F3 / K-1】写面归一（rev CAS 单点）
     return next;
   }
 

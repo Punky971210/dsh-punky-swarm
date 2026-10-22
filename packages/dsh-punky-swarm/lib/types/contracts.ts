@@ -485,12 +485,12 @@ export type GateErrorCode =
   // 本会话新增拒绝码（B7-a 盲审缺口；此前 **只抛不枚举** —— 抛点在本面之外被穷尽枚举漏采，
   //   检索口径：全仓 `GATE_[A-Z_]+` 字面量与 `code:` 抛点逐枚对照，见 exec/e4/outputs/fix-e4.md 对照表）。
   //   成员面/批次面参数非法（store.js 直抛，无 GateResult 载荷）
-  | 'GATE_SETTLE_NOTE_MISSING'   // review→failed/skipped/conflict 缺非空 note（lib/state/store.js:541）
+  | 'GATE_SETTLE_NOTE_MISSING'   // review→failed/skipped/conflict 缺非空 note（`lib/state/store/member.js#setMember` 直抛）
   //   派发面豁免参数非法（常量单点 lib/state/lane-exempt.js:53-58）
-  | 'GATE_EXEMPT_NOT_DISPATCH'   // exempt 出现在 to!=='running'；或 revoke 与 status 并用（lane-exempt.js:54 常量 → store.js:527 抛；工具面 lib/tools/core.js:612/619 直抛）
+  | 'GATE_EXEMPT_NOT_DISPATCH'   // exempt 出现在 to!=='running'；或 revoke 与 status 并用（lane-exempt.js:54 常量 → `lib/state/store/member.js#setMember` 拒；工具面 `lib/tools/member-tools.js` 的两处 GATE_EXEMPT_NOT_DISPATCH throw 直抛）
   | 'GATE_EXEMPT_INVALID'        // 载荷结构非法（lane-exempt.js:55 常量 → normalizeExemptPayload lane-exempt.js:94 抛）
   | 'GATE_EXEMPT_TYPE_UNKNOWN'   // type 不在四值白名单（lane-exempt.js:56 常量 → normalizeExemptPayload lane-exempt.js:98 抛）
-  | 'GATE_EXEMPT_REVOKE_REQUIRED' // revokeExempt 但该 lane 无既有豁免（lane-exempt.js:57 常量 → store.js:463 抛）
+  | 'GATE_EXEMPT_REVOKE_REQUIRED' // revokeExempt 但该 lane 无既有豁免（lane-exempt.js:57 常量 → `lib/state/store/member-exempt.js#buildMemberExempt` 拒）
   // ── P4 授权修复批（2026-09-25 · `plan/fix-spec.md` §8「新拒码登记：6 码入 union（两处同改）」）──
   //   R-1 写权校验（Layer 2）· 2 码：判据链 ⑤fail-closed 与「有身份但无权」分码。
   | 'GATE_HANDOFF_UNAUTHORIZED'      // 调用方身份可解析、但对该 lane 出边**无写权**（`lib/state/store.js` recordHandoff）

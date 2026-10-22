@@ -103,7 +103,7 @@ function resolveGateEventTypes(evt = EVT) {
 //
 // ⚠ **两条必须留在源码里的事实**（防后人误改；本 lane 直读实测）：
 //   (a) 下方 `commitBatch` 的历史注释曾称「与 `lane_claim` 的单写者锁构成双层保证」——**该说法不成立**：
-//       `lib/lock.js`（65 行）是**纯 O_EXCL 锁文件助手**，其 import 点**只有工具面**三处
+//       `lib/lock.js`（**F2 后 272 行；建此注释时 65 行**，规模随接管/fencing 改造演进，勿写死为判据）是**纯锁文件助手**，其 import 点**只有工具面**三处
 //       （`lib/tools/handoff-tools.js:24` / `lib/tools/lane-tools.js:48` / `lib/tools/member-tools.js:23`），
 //       本文件 `atomicWrite` 体内**零 `lock` 调用**。⇒ `lane_claim` 是**逻辑/协议层**锁，`commitBatch` 是
 //       **无锁物理直写**；任何**绕过工具面**直接调 store 写函数的调用方（`member_settle`/`appendEvent`/
@@ -231,6 +231,95 @@ export function fileIdentityChanged(before, after) {
     }
   }
 
+// ── F3 / K-1：批级 rev CAS（B1，用户已裁）────────────────────────────────────────────────
+// 缺陷面（K-1）：批 JSON 的写函数是「整份读 → 内存突变 → 整份覆盖写」。写前执行的门禁链
+//   （`command gate` 起子进程可达秒级、`claimAsset` 的文件复制）期间，任何其它写者提交的事件/状态
+//   会被**静默抹掉**且无矛盾读数。`lane_claim` 的锁是 **lane 作用域**且不覆盖批级物理写（见上方 L7 段 (a)）
+//   ⇒ 加锁解决不了它：锁只串行化「写」这一瞬间，管不了「读到的已经是旧快照」。
+//   ⇒ 本批只做**可判**（CAS），**不**做互斥（用户 K-1 已否决把锁接进写路径）。
+//
+// 契约（rev 判据**唯一实现点** = 下方 `commitBatch`；`__rev` 键名唯一字面量 = 本常量）：
+//   ① `__rev` = 批次 JSON 顶层**非负整数**。双下划线前缀 = **引擎内部字段**（非 schema-v3 契约字段）⇒
+//      **工具面禁回显**（`batch_status` / 面板均不加 rev 位，防内部字段升格为公开契约）。
+//      不得用既有字段替代：`updatedAt` 同毫秒多写同值 ⇒ 检测不出并发；`events.length` 在
+//      `updateChains` / `updateLaneProgress` 零事件 push 也写盘 ⇒ 漏检这两类写。
+//   ② 写前**同步重读盘上记录**取 `__rev`，与**调用方对象声明值**比对：相等 ⇒ 递增后写盘；
+//      不等 ⇒ 抛**普通错误**（非 `GATE_` 前缀）且**零落盘**，由上层重读后重试。
+//      比对**必须紧邻** `atomicWrite`（= 本函数内），不能上移到写函数入口：否则窗口含整段门禁执行
+//      （含子进程），残余窗口从 μs 级膨胀到秒级。本仓调用形态天然满足（`commitBatch` 是每个写函数的最后一句）。
+//   ③ 成功后**就地回写调用方对象** `batch.__rev = next` —— 这是**正确性条件**，不是优化：
+//      不回写 ⇒ 同一对象连续两次 commit ⇒ 第二次 `expected=旧值 / actual=新值` ⇒ **自冲突**。
+//      ⚠ **禁止**「由单点重新读取盘上值 +1」：那等于忽略调用方声明 ⇒ CAS 退化为**无条件覆盖** ⇒
+//      K-1 要防的「读到旧快照再写」正好被放过（两个口径名相似、语义相反）。
+//   ④ 兼容面冻结：旧文件无 `__rev` ⇒ 视 `0`；调用方对象也缺 ⇒ 视 `0` ⇒ `0 === 0` 通过 ⇒ 首次写升级为 `1`，
+//      **不得拒写**、**不做批量回填迁移**（no backfill：不写的文件永远没有该键，也不影响它被读）。
+//      非整数 / 负值 / 字符串数字一律归一为 `0`（不抛：旧数据或手工编辑的脏值不该砸掉写能力，
+//      且首次写即被纠正为合法整数）。
+//   ⑤ `ENOENT` ⇒ `0`（建批首写档——`createBatch` 刚判过 `!existsSync`）；**JSON 损坏 ⇒ 抛、绝不覆盖**
+//      （`readBatch` 已把损坏批次登记 `corrupt-batches.json`；此处静默当 0 覆盖 = 数据丢失，属倒退）；
+//      其余读失败（EACCES / EBUSY…）**原样上抛**，不降级为 0（不把真故障当兼容面）。
+//
+// ⚠ **残余窗口（如实登记；禁表述为「已根治」）**：`diskRevOf` 读完 → `atomicWrite` 的 `renameSync`
+//   完成之间（两次文件系统调用，μs~ms 级）。两个写者若都在该窗口内「读→比对→写」，会以相同 `actual`
+//   双双通过 ⇒ **后写覆盖先写（lost update）仍可能发生**。本批的收窄是**真实的**：窗口从「整段
+//   read-modify-write（含门禁链、`command gate` 子进程、`claimAsset` 的文件复制）」压到「两次 fs 调用之间」，
+//   且不再是**静默**覆盖（被覆盖方下一次同对象 commit 会因 `actual` 跳变立刻抛冲突 ⇒ 事实不消失）。
+//   **彻底闭合所需条件（本批不做，登记）**：OS 级「写前有条件替换」原语（Linux `renameat2(RENAME_NOREPLACE)`
+//   一次写；Windows 无等价语义）或文件锁（K-1 已明确否决）。威胁模型侧不构成提权：并发写者本就具备与
+//   引擎相同的写盘权限，CAS 只影响「谁的事实留下」，不影响「能写到哪」。
+//   ⇒ 允许措辞：`已可判` / `窗口收窄至两次 fs 调用` / `残余已登记`；**禁止**：`fixed` / `彻底解决` / `已根治`。
+const BATCH_REV_KEY = '__rev';
+
+/** 声明值归一：缺失 / 非整数 / 负数 ⇒ `0`（旧文件视 0；**不抛** —— 兼容面冻结，脏值首次写即被纠正）。 */
+function revOf(obj) {
+  const v = obj ? obj[BATCH_REV_KEY] : undefined;
+  return Number.isInteger(v) && v >= 0 ? v : 0;
+}
+
+/** 盘上值：文件不存在 ⇒ `0`；**JSON 损坏 ⇒ 抛**（绝不把 corrupt 当 0 覆盖）；其它读失败原样上抛。 */
+function diskRevOf(file, batchId) {
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return 0; // 建批首写档（唯一允许的 `return 0`）
+    throw err; // EACCES / EBUSY…：真故障不降级为 0
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    // 普通错误（**非 `GATE_` 前缀**，零新造拒码）。写面绝不覆盖损坏文件 ——
+    //   读端口径是「登记 corrupt-batches.json 后返回 null」，静默当 0 覆盖 = 数据丢失。
+    throw new Error('batch file is not valid JSON, refuse to overwrite: ' + batchId
+      + ' (' + String((err && err.message) || err) + ')');
+  }
+  return revOf(parsed);
+}
+
+/**
+ * rev 冲突错误（**普通错误**，**非 `GATE_` 前缀**；不参与任何门禁语义）。
+ * 四段式文案：① 事实（expected/actual 两个数）② 判别（有并发写者在本轮读取之后提交过）
+ * ③ **零副作用**声明 ④ **修复提示**（重读后重试 / 先 `batch_status` 确认盘上状态）。
+ * 为何带修复提示：本仓纪律「报错必须自带下一步」（同 `store/member.js` 的 `d4Hint`）——
+ *   冲突的下一步是**唯一确定的**（重读重试），不写在第 4 段，Leader 就得猜。
+ * `err.code` 承载语义码是安全的：工具面只读**输出字段** `value.code`，不读 error 对象的 `code`；
+ *   `atomicWrite` 内部只对它自己 catch 的 rename 错误判 `code` ⇒ 不与 Node syscall code 语义冲突。
+ */
+function batchVersionConflictOf(batchId, expected, actual) {
+  const err = new Error(
+    'batch version conflict: ' + batchId
+    + ' —— 本次读取的 __rev=' + expected + '，盘上已是 __rev=' + actual
+    + '；有并发写者在本轮读取之后提交过。本次写入未落盘（零副作用）。'
+    + '修复：重新读取该批次后重试（store.readBatch → 同一写函数；或先 batch_status 确认盘上状态）。',
+  );
+  err.code = 'BATCH_VERSION_CONFLICT'; // 普通字符串码，**非 GATE_ 前缀**（仅供程序可判）
+  err.batchId = batchId;
+  err.expected = expected;
+  err.actual = actual;
+  return err;
+}
+
 // 组合器：仅做导出面装配（键序与原 `return` 逐字一致 ⇒ 消费方零感知）
 //   【2026-10-02 · 波 3】`createStore` 降为 ≤40 行组合器，导出面装配移出为模块级函数；
 //   原 `return {...}` 字面量（含其历史登记注释）逐字保留于下方。
@@ -285,7 +374,7 @@ function composeStore(cx) {
   };
 }
 
-export function createStore(root, { rules, logger, onStateChange, readConfig } = {}) {
+export function createStore(root, { rules, logger, onStateChange, readConfig, revRaceHook } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
   // 门禁侧的**热配置读取器**（`task-27`）：装配点可注入（与工具面 `deps.readConfig` 同源）；
@@ -303,11 +392,19 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   //   其返回与注入默认表**同引用**（machine-rules.js:82-84）⇒ 缺省零差异。
   const ratchet = rules ?? loadRules();
   // 归档器装配（createStore 签名不变；归档目标 = <root>/sessions/<sid>/archive/<bid>/）
-  const archive = createArchive(root);
+  // 【2026-10-22 · 原 F3 D-2 残余收尾】把 `commitBatch` 注入归档器：归档写批次 JSON 时同样走 rev CAS
+  //   （否则归档后 `__rev` 不推进 ⇒ 并发下可用旧 rev 覆盖 ⇒ rev 回退 + 后续虚假冲突）。
+  //   传的是**函数引用**（`commitBatch` 为同作用域函数声明，具备提升）⇒ 无 TDZ、无循环 import。
+  const archive = createArchive(root, { commitBatch });
 
   // ── 波 3：闭包上下文 `cx`（每 createStore 实例一份；禁提升为模块级单例）+ 写面单点 ──
   const cx = { root, sessionsDir, legacyDir, gates, corruptRegistry, log, ratchet, archive,
-    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch };
+    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch,
+    // F3 / K-1：rev CAS 的**确定性构造缝**（`fn({sessionId,batchId,file,expected})`）。
+    //   **唯一扩面已登记**（规格 N-2）：生产调用点不传 ⇒ `undefined` ⇒ `commitBatch` 内 `typeof` 判否
+    //   ⇒ **零行为**。唯一用途 = 单测确定性构造「对手在我读完之后、落盘之前提交了一次」。
+    //   与 F2 的 `atomicWrite(file, data, { renameFn })` 注入缝**同族先例**（同为测试缝、同为缺省零行为）。
+    revRaceHook };
   Object.assign(cx, buildPaths(cx));
   const { batchFile } = cx;
   // 构建顺序 = 依赖拓扑序（子模块 ← 组合器，单向依赖；各 builder 仅定义函数、无副作用）
@@ -321,7 +418,25 @@ export function createStore(root, { rules, logger, onStateChange, readConfig } =
   //   （`lib/tools/handoff-tools.js:24` / `lib/tools/lane-tools.js:48` / `lib/tools/member-tools.js:23`），
   //   `atomicWrite` 体内**零 `lock` 调用** ⇒ `lane_claim` 是**逻辑层**锁、本函数是**无锁物理直写**；
   //   **绕过工具面**直接调 store 写函数的路径**都不被锁挡**。详见上方 L7 段 `(a)`。
+  //   F3 / K-1：本函数升级为 **rev CAS 写入**（契约见上方 `BATCH_REV_KEY` 段）——「可判」而非「互斥」。
   function commitBatch(sessionId, batchId, batch) {
+    const file = batchFile(sessionId, batchId);
+    const expected = revOf(batch); // 调用方声明值（旧文件/新对象缺 `__rev` ⇒ 0）
+    if (typeof revRaceHook === 'function') {
+      // 仅测试注入缝（生产不传 ⇒ 本分支不进）。**必须在 `diskRevOf` 之前**调用，
+      //   否则观测不到「对手刚提交」这一时序（构造无效）。缝自身抛错**不阻断**写路径。
+      try { revRaceHook({ sessionId, batchId, file, expected }); } catch { /* 缝失败不阻断 */ }
+    }
+    // 比对**紧邻** `atomicWrite`：中间只余一次赋值 ⇒ 残余窗口 = 两次文件系统调用之间（见上方契约段）。
+    const actual = diskRevOf(file, batchId);
+    // 失配 ⇒ 抛（本次**零落盘**：尚未写 tmp、尚未 rename）⇒ 由上层重读后重试。
+    if (actual !== expected) throw batchVersionConflictOf(batchId, expected, actual);
+    // 回写**先于**落盘（契约 ③）：即便 `atomicWrite` 抛（重试耗尽 / 不可重试码），调用方对象已带新 rev
+    //   ⇒ 调用方若错误地重试**同一对象**，会拿到**清晰的冲突**而不是二次覆盖（有意为之）。
+    batch[BATCH_REV_KEY] = actual + 1;
+    // ⚠ **保持该字面调用形态**（禁改写为 `atomicWrite(file, batch)`）：`test/gate-assertion-r32.test.js`
+    //   R3-2④ 的源码面围栏以 `'atomicWrite(batchFile(sessionId, batchId), batch)'` 为锚点，断言
+    //   「常量解析早于统一原子写」。改成 `file` 变量会让该围栏失锚（R3-2 结构性证据失效）。
     atomicWrite(batchFile(sessionId, batchId), batch);
   }
   return composeStore(cx);

@@ -29,7 +29,7 @@ import {
 } from '../engine/dispatch.js';
 
 export function buildLaneTools(cx) {
-  const { deps, store, root } = cx;
+  const { ctx, deps, store, root } = cx;
   // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】批归属会话 resolver（注入单点，
   //   缺省 `undefined` ⇒ `sessionOf` 逐字回落原三级路径、零行为变化）。
   const { resolveBatchSession } = deps ?? {};
@@ -45,8 +45,22 @@ export function buildLaneTools(cx) {
       async execute(args, exec) {
         assertModeActive(deps, exec, 'lane 锁认领（lane_claim）'); // 模式门（E 阶段）：非生效模式不得落锁（零治理写入），先于取锁
         const sessionId = sessionOf(args, exec, resolveBatchSession);
-        const r = await lock.acquire(lockPath(root, sessionId, args.batchId, args.lane), { waitMs: args.waitMs ?? 0, force: args.force === true });
-        if (!r.ok) return { ok: false, conflict: true, reason: 'lane locked' };
+        // 【Leader 直做 · F2 AC-8 工具面接线（e1-lock 交接项）】`warn` 透传：force 接管是**治理事件**
+        //   （接管了他人的单写者锁），生产路径必须留一行日志，否则「接管可审计」只存在于返回载荷里。
+        //   复用 `cx.ctx.logger`（**注意**：`createTools(cx)` 把 `ctx` 放在 `cx` 顶层，`deps` 里没有 `ctx`
+        //   —— 2026-10-22 真机验证抓到：写成 `deps?.ctx?.logger` 会静默落到空，接管零留痕）；
+        //   缺 logger 时静默降级（不阻断取锁）。**不加前缀**：`lib/lock.js` 的 warn 文本自带 `[dsh-punky-swarm]`。
+        const warn = (m) => { try { ctx?.logger?.warn?.(m); } catch { /* 留痕失败不阻断取锁 */ } };
+        const r = await lock.acquire(lockPath(root, sessionId, args.batchId, args.lane), { waitMs: args.waitMs ?? 0, force: args.force === true, warn });
+        // 【F2-G07 · 批 `punky-fix-f3-20261022`】失败成因**透传**（原处把成因硬折叠成**同一句固定文案**，
+        //   把 `takeover-contended` / `lock-legacy-format` / `lock-unparseable` 全抹平 ⇒ 调用方
+        //   无法区分「他人持有」与「锁文件格式陈旧」，处置动作也就无从选择）。
+        //   回落仅限 `r.reason` **不是非空字符串**（无 reason 的旧实现/桩 ⇒ 文案逐字回旧，防 `undefined`
+        //   泄漏进 schema）；成功路径返回形状**零变更**（不附加 reason 键）。
+        if (!r.ok) {
+          const reason = (typeof r.reason === 'string' && r.reason) ? r.reason : 'lane locked';
+          return { ok: false, conflict: true, reason };
+        }
         return { ok: true, token: r.token };
       },
     }),
@@ -91,7 +105,7 @@ export function buildDispatchTools(cx) {
   return [
     defineTool({
       name: "lane_dispatch",
-      description: '集群派发入口（C 档套件）：为指定 lane **发放一次性句柄 + 置 running + 由引擎自派 worker**。门禁语义同 `member_status(status=running)`（调用方限该批 owner 或该批已登记的 Manager；exec 层 lane 需 consume 齐备）。引擎自派时：① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具 ⇒ 在成员会话里这些工具**不出现**）；② 以 `label=punky-swarm:<batchId>:<lane>` 建立**第二绑定键**（可从子会话事件反解析归属）；③ 成功后由引擎**直接写** `member.dispatch`（唯一写路径，不再依赖事后观察）；④ **能力位前置**：provider 不支持 `toolFilter`/`depthLimit` ⇒ **拒派**（不「以弱换强」）。若宿主未提供 `ctx.subagents` ⇒ **降级为「仅发句柄」**（返回 `spawned:false` 与原因，不静默）。句柄一次性、TTL 30 分钟；`firstLine` 供人工直派形态粘贴（该形态的硬门禁属 C 阶段）。',
+      description: '集群派发入口（C 档套件）：为指定 lane **发放一次性句柄 + 置 running + 由引擎自派 worker**。门禁语义同 `member_status(status=running)`（调用方限该批 owner 或该批已登记的 Manager；exec 层 lane 需 consume 齐备）。引擎自派时：① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具 ⇒ 在成员会话里这些工具**不出现**）；② 以 `label=punky-swarm:<batchId>:<lane>` 建立**第二绑定键**（可从子会话事件反解析归属）；③ 成功后由引擎**直接写** `member.dispatch`（唯一写路径，不再依赖事后观察）；④ **宿主形态 / 能力位前置（fail-closed）**：旧 `start(provider, request)` 形态（`request.toolFilter`/`persona` 按次生效）⇒ **正常自派**；provider 不支持 `toolFilter`/`depthLimit` ⇒ **拒派**（不「以弱换强」）；宿主 subagent 服务为 `startActivation(spec)` 形态（该形态**不承载** `toolFilter`/`persona`）⇒ **同样拒派**（抛 `GATE_DISPATCH_CAPABILITY_MISSING`；迁移方向 = 由 **Agent Preset** 承载 toolFilter/persona，单开批承接；且**打在状态变更之前**：lane 保持待派发、无句柄、无 `member.dispatch` 事件、批相位不变）。⑤ **仅当** `ctx.subagents` 不可取、或服务在位但两入口（`startActivation`/`start`）皆不可调用 ⇒ **降级为「仅发句柄」**（返回 `spawned:false` 与**分档成因**文案，不静默）。句柄一次性、TTL 30 分钟；`firstLine` 供人工直派形态粘贴（该形态的硬门禁属 C 阶段）。',
       parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"session":{"type":"string","description":"批次归属会话"},"prompt":{"type":"string","description":"Leader 补充的任务要点（可选）：引擎给出「角色/契约/纪律」骨架后拼接在末尾"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（同 member_status 派发面）：type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4）；multiplier 可选显式倍率 [1,100]；stalled 可选（缺省 true）","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"token":{"type":"string","required":true},"firstLine":{"type":"string","required":true},"ttlMs":{"type":"number","required":true},"spawned":{"type":"boolean","required":true},"workerSessionId":{"type":"string"},"spawnNote":{"type":"string"}}},

@@ -235,7 +235,16 @@ export function installDifficultyGuard(ctx, deps) {
       // 门禁 4（派发面 · C 阶段，2026-09-16）：C 档下 `subagent`/`subagent_fork` 建议携带**有效 lane 句柄**；
       //   **B 档不受影响**（单步调研/单步派发）；A 档由门禁 3 拒（本判不重复）。
       //   **已改为只留痕不拦**，
-      //   拒态随码删除（官方 agent-team profile 已 disable 宿主 `subagent`/`subagent_fork` ⇒ 官方场景下无拦截对象）。
+      //   拒态随码删除。**结论方向**：**不得**据此假设「派发工具恒缺席」——工具面随宿主 / deployment
+      //   装配而变，任何单份快照都不能当恒定事实。
+      //   举证面修正（F2-G03 · 批 `punky-fix-f3-20261022`）：原注释把**宿主顶层 profile 的模块行区段**
+      //   （仓库外文件 `~/.dsh/profiles/desktop/cordis.yml` 的历史行号，**已删**）当作「宿主已禁用
+      //   派发工具」的反证 —— 该文件随用户配置演进、行号随时漂移，**审计不可复核**，故不再作为判据；
+      //   宿主顶层 profile **曾写** `disabled: true` 仅属时点性事实，本身不作证据。
+      //   现行判定以 **preset 层**为准：仓库内可核的 `presets/punky-preset/agent.cordis.yml:220-232`
+      //   （`tool-subagent` / `tool-subagent-fork` 两行**未禁用**），与宿主 profile 的 preset 段
+      //   `cordis.yml:770-780` 同形。
+      //   （原「官方 profile 已禁用宿主派发工具」的单边断言即由此作废，2026-10-22 修订。）
       //   `dec.denyReason` 恒为 null（保留分支读法 = 结构不变，防读端漂移）；无句柄一律走 `warnNote` 留痕。
       //   句柄面：`lane_dispatch` 发放（一次性 + TTL）；引擎只读 `exec.arguments`，故句柄由任务包文本携带。
       if (!reason && (execution.name === 'subagent' || execution.name === 'subagent_fork')) {

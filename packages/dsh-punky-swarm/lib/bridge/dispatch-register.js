@@ -88,12 +88,40 @@ export function installDispatchRegistration(ctx, deps = {}) {
   const inert = (reason) => ({ installed: false, reason, count: () => 0, mapping: () => ({}), dispose() {} });
   if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
   const toolSet = new Set(tools);
-  // 兜底意图表：callerSession -> { sessionId, batchId, lane }（member_status(status=running) 观察落点，
-  //   0g 时序「先置 running 再派发 worker」；注册成功后消费（delete）——一次 running 对应一次 worker 派发，
-  //   防 stale intent 误归属后续无关 subagent）
+  // 兜底意图表：callerSession -> **FIFO 队列** [{ sessionId, batchId, lane }, …]（member_status(status=running)
+  //   观察落点，0g 时序「先置 running 再派发 worker」；注册成功后**消费最早一条**（shift）——一次 running
+  //   对应一次 worker 派发，防 stale intent 误归属后续无关 subagent）。
+  //   【A1-P1-05 · 2026-10-22】**值由单槽改为每 caller 一条队列**：`caller` 取 `exec.agent.session.id ?? 'cli'`
+  //   （宿主不保证每个派发调用方都有 agent 会话 id）⇒ 两个无 agent 会话的调用方共享同一 `'cli'` 键时，
+  //   单槽 `set` 会让后登记者**覆盖**先登记者 ⇒ A 批意图被 B 批派发消费（**串批归属**：member.dispatch 登记、
+  //   结算、产物根判定全链跟着错）。队列保证「先声明先消费」（不丢、不互覆），且仍是**同一张表**
+  //   （caller → 意图，只是每键多槽）⇒ **不新增第二套「谁在派发」索引**（真源仍只有这一张）。
   const intentBySession = new Map();
   const indexMap = dispatchIndex instanceof Map ? dispatchIndex : null;
   let registered = 0;
+
+  // 意图**入队**（同 caller 多槽）。同一 `(batchId, lane, sessionId)` 三连重复登记**不重复入队**：宿主可能对
+  //   同一条 lane 重发 running/重试，重复项入队会在消费侧制造假歧义（并挤压真实队列深度）。
+  const intentEnqueue = (caller, intent) => {
+    const q = intentBySession.get(caller);
+    if (!Array.isArray(q)) { intentBySession.set(caller, [intent]); return; }
+    if (q.some((v) => v.batchId === intent.batchId && v.lane === intent.lane && v.sessionId === intent.sessionId)) return;
+    q.push(intent);
+  };
+  // 意图**出队**（FIFO：消费最早一条；返回被消费项，队列空即删键——既有 stale 清理语义逐字保留）。
+  //   【A1-P1-05 · D-3.5 · 歧义留痕】队列长度 > 1 时一律 warn：无 caller 会话 id 时**无法从 exec 区分调用方**
+  //   （宿主信息缺口）⇒ 本档只保证「不丢、不静默」，**不假装能正确归属**（遗留风险 R-2）。
+  const intentShift = (caller) => {
+    const q = intentBySession.get(caller);
+    if (!Array.isArray(q) || q.length === 0) { intentBySession.delete(caller); return null; }
+    if (q.length > 1) {
+      logger?.warn?.('[dsh-punky-swarm] 同调用方多条派发意图待消费（caller=' + caller + ', pending=' + q.length
+        + '）⇒ 取最早一条（FIFO）——后登记批次的归属无法从 exec 区分，本行只保证不丢失、不静默');
+    }
+    const head = q.shift();
+    if (q.length === 0) intentBySession.delete(caller);
+    return head;
+  };
 
   const register = (sessionId, batchId, lane, workerSessionId, ownerSessionId = null) => {
     if (indexMap?.has(workerSessionId)) return false; // 幂等：已映射（含重启后重建）不重复登记
@@ -121,7 +149,8 @@ export function installDispatchRegistration(ctx, deps = {}) {
       if (exec.name === 'member_status') {
         const a = exec.arguments ?? {};
         if (a.status === 'running' && a.batchId && a.lane) {
-          intentBySession.set(caller, { sessionId: sessionOf(a, exec), batchId: a.batchId, lane: a.lane });
+          // 【A1-P1-05】入队（不覆盖）：同 caller 再登一条 ⇒ 两条意图并存，消费侧按 FIFO 取最早一条。
+          intentEnqueue(caller, { sessionId: sessionOf(a, exec), batchId: a.batchId, lane: a.lane });
         } else {
           intentBySession.delete(caller);
         }
@@ -152,24 +181,50 @@ export function installDispatchRegistration(ctx, deps = {}) {
       if (parsed) {
         const c = consumeLaneHandle(parsed.token, { batchId: parsed.batchId, lane: parsed.lane });
         if (c.ok) {
-          if (register(c.entry.sessionId, c.entry.batchId, c.entry.lane, workerSessionId, ownerSessionId)) intentBySession.delete(caller);
+          // 【A1-P1-05 · D-3.3】登记成功 ⇒ 从该 caller 队列 **shift() 一条**（消费最早一条；队列空才删键）。
+          //   原 `delete(caller)` 会一次清空整个键 —— 单槽时等价，多槽后必须收敛为「一条派发消费一条意图」。
+          if (register(c.entry.sessionId, c.entry.batchId, c.entry.lane, workerSessionId, ownerSessionId)) intentShift(caller);
           return next();
         }
         logger?.warn?.('[dsh-punky-swarm] lane handle rejected: ' + c.reason + '（lane=' + parsed.lane + '，退回意图路径）');
       } else if (exec.name === 'subagent' || exec.name === 'subagent_fork') {
         // B6（修 W5「静默降级」）：派发工具**未携带句柄**时**显式留痕**，再走既有意图兜底。
-        //   对应拒绝分支已删（官方 profile 已 `disabled` 宿主委派工具）；此处的职责只有一个——**不静默**。
+        //   对应拒绝分支已删；此处的职责只有一个——**不静默**。
+        //   【A1-P2-04 · 2026-10-22 口径更正】**原写「宿主委派工具已由官方 profile 停用」——该断言顶层成立、preset 层不成立**，
+        //   故**不得据此假设派发工具缺席**（**双层真相**）：宿主顶层 profile 的派发工具区段
+        //   （**由 loader 在 boot 期重写、行号不稳定 ⇒ 刻意不引行号**）
+        //   写 `disabled: true`，而 preset 层 `cordis.yml:770-780` 与 `presets/punky-preset/agent.cordis.yml:220-232`
+        //   **未禁用**（两行 `tool-subagent` / `tool-subagent-fork` 实为**已注册**）。
+        //   （曾把该区段误称「实为已注册」，属**错位引用**：它实写 `disabled: true`。）
+        //   故「派发工具不带句柄」是**常态路**而非禁用路的残余：
+        //   Leader 直派 / 非 C 档派发都不会带句柄 ⇒ 本行只是「常态路的留痕」，不构成本包对宿主工具面的假设。
         logger?.warn?.('[dsh-punky-swarm] dispatch without lane handle（' + exec.name + ' · caller=' + caller
-          + '）⇒ 走意图兜底登记（**不再有拒绝码**：宿主委派工具已由官方 profile `disabled`、'
-          + '本行只保证不静默）');
+          + '）⇒ 走意图兜底登记（**不设拒绝码**：宿主已注册委派工具、无句柄属常态路，本行只保证不静默）');
       }
-      // ③ resolveBatchContext(exec)：显式注入优先，缺省 = 同会话派发意图兜底（装配注入 resolveBatchContext 兜底）
-      const hit = typeof resolveBatchContext === 'function'
+      // ③ resolveBatchContext(exec)：显式注入优先，缺省 = 同会话派发意图兜底（装配注入 resolveBatchContext 兜底）。
+      //   【A1-P1-05】意图表已多槽 ⇒ 兜底读**队首**（不在这里消费；登记成功后由 intentShift 消费最早一条）。
+      const hasResolver = typeof resolveBatchContext === 'function';
+      const hit = hasResolver
         ? resolveBatchContext(exec, { workerSessionId, result })
-        : (intentBySession.get(caller) ?? null);
-      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return next(); // 未取到批上下文 → 不登记
+        : (intentBySession.get(caller)?.[0] ?? null);
+      if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) {
+        // 【A1-P1-05 · D-3.4 · 零静默】原此处**零留痕**直接 `return next()`，是同函数唯一的静默丢弃面
+        //   （`:170` 提取失败、`:189` 句柄被拒均有 warn）。现拆成**可辨成因三档**，各带 tool/caller/成因。
+        //   留痕载体只能是 `logger.warn`（硬论证，见规格 §方案 3）：「取不到批上下文」的定义即**结构性无 batchId**
+        //   ⇒ 任何批次事件都写不进去（`lane.binding_gap` 的写端要求已有 batchId+lane）⇒ 故**不新增事件类型**、
+        //   不进 `store.appendEvent`；**零新造拒码**（拒码前缀一字不加；本档不产生拒绝，观察者纪律：仍 `next()`）。
+        const cause = hit
+          ? '批上下文不完整（缺 sessionId / batchId / lane）'
+          : (hasResolver
+            ? 'resolveBatchContext 反查无果（且该调用方无待消费派发意图）'
+            : '该调用方无待消费派发意图（未注入 resolveBatchContext）');
+        logger?.warn?.('[dsh-punky-swarm] dispatch register unbound（取不到批上下文 ⇒ 本次不登记 · tool='
+          + exec.name + ' · caller=' + caller + '）：' + cause + '——非静默丢弃，仅留痕不阻断');
+        return next();
+      }
       if (register(hit.sessionId, hit.batchId, hit.lane, workerSessionId, ownerSessionId)) {
-        intentBySession.delete(caller); // 消费意图（一次 running → 一次派发登记）
+        // 【A1-P1-05 · D-3.3】消费意图（一次 running → 一次派发登记）；多槽下按 FIFO 消费最早一条。
+        intentShift(caller);
       }
     } catch (e) {
       logger?.warn?.('[dsh-punky-swarm] dispatch registration failed (isolated, does not block): ' + String(e?.message ?? e));
@@ -181,7 +236,10 @@ export function installDispatchRegistration(ctx, deps = {}) {
     installed: true,
     count: () => registered,
     mapping: () => (indexMap ? Object.fromEntries([...indexMap.entries()]) : {}),
-    pendingIntents: () => [...intentBySession.entries()].map(([s, v]) => ({ caller: s, ...v })),
+    // 【A1-P1-05】回显形状**逐字不变**（仍 `[{ caller, sessionId, batchId, lane }]`）：多槽值按队列**展平**，
+    //   同一 caller 的多条意图各占一行（消费一个少一行），调用面零变化。
+    pendingIntents: () => [...intentBySession.entries()].flatMap(([s, q]) => (Array.isArray(q) ? q : [q])
+      .map((v) => ({ caller: s, ...v }))),
     dispose() { try { if (typeof dispose === 'function') dispose(); } catch { /* 幂等 */ } },
   };
 }

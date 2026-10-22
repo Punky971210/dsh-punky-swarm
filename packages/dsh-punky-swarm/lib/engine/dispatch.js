@@ -17,21 +17,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // engine/dispatch.js —— **引擎自派**（engine-side dispatch）：C 档集群派发的执行通道。
 // 定位：
-//   · **可见性期收窄是唯一按次可用的收窄通道**：宿主 `subagent` 工具的模型面参数**不含** `toolFilter`
+//   · **按次收窄是唯一按次可用的收窄通道**：宿主 `subagent` 工具的模型面参数**不含** `toolFilter`
 //     （`dsh-tool-subagent/lib/index.js:402-428`；`toolFilter` 只在插件配置 zod schema `:255-269` = 部署期静态），
-//     而 `ctx.subagents.start(name, request)` 的 `request.toolFilter` 是**按次**的（one-shot 与 continuable 走
+//     而调用面 `rt.start(provider, request)` 的 `request.toolFilter` 是**按次**的（one-shot 与 continuable 走
 //     **同一** `applyChildComposition`，`dsh-subagent-in-process-driver/lib/index.js:173-176`）
 //     ⇒ 只有程序化调用者（= 本模块）能按次收窄。
+//   · **宿主两代启动入口（2026-10-22 · A1-P2-04 校正；原「`start`/`startContinuable` 二选一」表述作废）**：
+//       - `start(provider, request)` = **旧形态**：`request.toolFilter` / `request.persona` **按次生效**
+//         ⇒ 本模块**唯一调用形态**（探针 `form==='start'`）；
+//       - `startActivation(spec)` = **新形态**：spec **不承载** `toolFilter`/`persona`（宿主只按 `agentPreset`
+//         组子会话 composition）⇒ 本模块**不接调用**，改**前置 fail-closed 拒派**
+//         （`GATE_DISPATCH_CAPABILITY_MISSING`，见 `dispatchLaneCore` ⓿）：照调 = worker 拿到**未收窄**的完整工具面
+//         （含治理工具），与「能力位前置 / 不以弱换强」直接冲突；迁移（Agent Preset 承载）由单开批 F4 承接。
 //   · **能力位前置**（调研收敛点 K4，5 源共识）：provider 不支持 `toolFilter` 时**拒派**，不「以弱换强」。
 //   · **唯一写路径**（改善 W6）：自派成功后由引擎**直接写** `member.dispatch{lane, workerSessionId}`，
 //     不再依赖 post-execute 事后观察（观察保留为兜底，覆盖 Leader 直派旧形态）。
 //   · **失败显式**（修 W5）：任何失败路径都给出可读原因，不静默降级。
-// 本模块是**纯函数 + 策略常量**（便于单测）；真正的 spawn 调用在 `lib/tools/core.js` 的 `lane_dispatch` 内
-//   （必须在**工具流水线内**执行：`exec.agent` 在场，子会话才能正确挂到本会话）。
+// 本模块是**纯函数 + 策略常量**（便于单测）；真正的调用点 = `lib/tools/member-tools.js:110` 的 `lane_dispatch`
+//   （经 `dispatchLaneCore`；必须在**工具流水线内**执行：`exec.agent` 在场，子会话才能正确挂到本会话）。
+//   【A1-P2-04 · 2026-10-22】原写「在 `lib/tools/core.js` 的 `lane_dispatch` 内」为**陈旧锚点**（该文件现 209 行、
+//   无 `lane_dispatch`）——同一处错误的第二落点，一并订正，勿回写。
 //
 // ── 【2026-09-22 · one-shot 化（用户裁定「dispatch 彻底改为一次性执行器语义」）】 ──────────
-//   · **spawn 通道**：`startContinuable` → **`rt.start(provider, request)`**（one-shot，fire-and-forget）：
-//     run 生命周期属主 = 本模块 `activeRuns` 持有的 run 对象（`dsh-subagent-in-process-driver` 文件头：
+//   · **spawn 通道**：**`rt.start(provider, request)`**（one-shot，fire-and-forget；探测判据 `form==='start'`）：
+//     ⚠ 新宿主形态 `startActivation(spec)` **不接调用** ⇒ `dispatchLaneCore` ⓿ 前置拒派
+//     （零状态变更 / 零句柄 / 零 `member.dispatch`）；run 生命周期属主 = 本模块 `activeRuns` 持有的 run 对象（`dsh-subagent-in-process-driver` 文件头：
 //     "the one quiescent lifecycle owner held by the provider's caller"），**与 Leader 工具回合无关**；
 //     引擎持引用、不调 `dispose` ⇒ worker 跑到完成（V-1 三层互证，见活体核报告）。
 //   · **signal 纪律（禁透传 `exec.signal`）**：官方工具 foreground 用 `exec.signal`、background **故意新建
@@ -157,14 +167,15 @@ function dispatchIndexHitOf(dispatchIndex, workerSessionId) {
 //   · 反查**复用** `laneBindingOf`（本文件 `:918-932`）—— **不建第二套反查、不建第二套索引、无负缓存**。
 //   · 回填值**经** `dispatchIndexEntryOf`（3 键冻结 + `ownerSessionId` 非枚举；S-d）。
 //   · 返回值**再经** `batchSessionIdOfWorker` 取（命中判据单点 ⇒ 冷/热读数同源；D-1.4）。
-//   · 幂等守卫 `has` ⇒ 已映射不重扫（每 worker **至多一次**反查；D-6）。
+//   · 幂等判据（2026-10-22 · A1-P1-04 起，**取代**原「`has` 守卫」）三条：① 首写（索引无该键）⇒ 写；
+//     ② 已存在但**缺 owner** 且本次反查取到**真值** ⇒ 就地升级（覆盖同一键）；③ 已带 owner ⇒ 整段不写（不重扫）。
 //   · 全函数 try/catch ⇒ 失败一律 `null`（不炸工具面；C-5 / R-8）。
-//   · **禁** `.get(`（本函数只用 `has`/`set`；Map 读走 `dispatchIndexHitOf` 单点）—— D-1.8。
+//   · **禁**写字面 `.get(`（Map 读一律走 `dispatchIndexHitOf` 单点）—— D-1.8。
 //   · **不回写事件**（读侧补位只写索引，防「读触发写」；D-6 / §约束 3）。
 //
-// ⚠ **生效前提（本 lane 已实测为阻塞，如实登记——非静默）**：本函数须由 `lib/index.js:313` 的
-//   `resolveBatchSession` 接线为 `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`；
-//   该行属**写域外**（本 lane 禁改 `lib/index.js`）。**未接线 ⇒ 本函数零调用、生产行为零变化**。
+// ✅ **已接线（2026-10-22 · A1-P2-04 校正；原「未接线 ⇒ 本函数零调用」表述作废）**：`lib/index.js` 的
+//   `installTools` 已注入 `resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`
+//   （按符号检索 `resolveBatchSession` —— 本批另一 lane 正在 `lib/index.js` 并行改动，行号会漂移，勿写死行号）。
 //   接线后零行为变化保证（R-2）：未命中且无 `store` / 反查无果 ⇒ 逐字回原三级回落。
 /**
  * @param {{listAllBatches?: Function, readBatch?: Function}|null|undefined} store 事件流数据源（缺 ⇒ 不命中）
@@ -181,12 +192,27 @@ export function batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) {
     if (!(dispatchIndex instanceof Map)) return null; // fail-safe：非 Map ⇒ 不写不猜
     const bind = laneBindingOf(store, workerSessionId); // 复用同文件既有反查（:918-932）
     if (!bind) return null; // 无 store / 无事件 ⇒ 逐字原回落（R-2 / L-AC-2）
-    if (!dispatchIndex.has(workerSessionId)) { // 幂等守卫（同 auto-settle 既有回填口径）
-      // 回填值经**值构造单点**；`ownerSessionId` 传 `null` —— `laneBindingOf` 只回 3 字段（不扩其返回形状），
-      // 故回填值**不含**该非枚举字段 ⇒ `wakeAddressOf` 回退 `sessionId`（与 `auto-settle.js:407` 同形）。
-      // ⚠ 已知边界（设计 §R-b / D-1.5）：**不得静默** —— 冷索引批上唤醒寻址取值 = `sessionId`（非 owner 会话）。
+    // 【2026-10-22 · A1-P1-04】回填**取真值 owner**（改前此处硬传 `null`）：
+    //   ① 改前的 `null` 让 `wakeAddressOf` 在该 worker 上**永久**退化为批归属键（冷索引批的唤醒投错会话）；
+    //   ② 改前的 `has` 守卫一旦为真就**永不再写** ⇒ 把 `auto-settle.js` 主路「带 owner 的惰性重建」**永久压制**
+    //      （那条重建只在 `!hit` 时触发，而本函数已先把键写进去 ⇒ 重建永不触发）。
+    //   取真值的唯一来源 = `laneBindingOf` 按解析单点 `ownerSessionIdOf(ev)` 带回的非枚举字段（同一反查、不建第二套）。
+    //   命中判据（**允许覆盖**这条；幂等性以「已带 owner 则整段不写」守住，故不退化）：
+    //     · 首写（无该键） ⇒ 写；
+    //     · 已存在但**缺 owner** 且本次取到真值 ⇒ 就地升级（覆盖同一键）；
+    //     · 已带 owner ⇒ 不写。
+    //   ⚠ **末句可达面（如实登记，勿当「已修」读）**：热路径 `batchSessionIdOfWorker` 命中即短路
+    //     （`test/lane-session-bind.test.js` 回归-b 以「二次调用零扫盘」锁死该短路）⇒ 「既有条目 sessionId **合法**
+    //     但缺 owner」这一形态**走不到本段**（规格 §B T-2.3 与该锁结构性冲突，已登记待裁决）。
+    //     本段升级分句的可达面 = 既有条目 **sessionId 非法/空**（热路径不命中）⇒ 以真值修复它。
+    //     正常缺 owner 条目的处置：冷/热重建侧（启动重建 `lib/index.js`、登记点、`auto-settle` 惰性重建）本就
+    //     经 `ownerSessionIdOf(ev)` 带值 ⇒ 重启后不再存在这类条目（Q5 口径「改完不重启」⇒ 重启后自然消解）。
+    //   值仍经**值构造单点** `dispatchIndexEntryOf` ⇒ 枚举键恒为 3 键（`ownerSessionId` 非枚举，形状锁不变）。
+    const existing = dispatchIndexHitOf(dispatchIndex, workerSessionId); // 读单点（禁本函数写字面 `.get(`）
+    const owner = ownerSessionIdOf(bind);
+    if (!existing || (ownerSessionIdOf(existing) === null && owner)) {
       dispatchIndex.set(workerSessionId,
-        dispatchIndexEntryOf(bind.sessionId, bind.batchId, bind.lane, null));
+        dispatchIndexEntryOf(bind.sessionId, bind.batchId, bind.lane, owner));
     }
     return batchSessionIdOfWorker(dispatchIndex, exec); // 返回经既有单点 ⇒ 读数同源（D-1.4）
   } catch {
@@ -764,20 +790,58 @@ export function workerSessionIdOf(start, warn) {
   return null;
 }
 
-/** `ctx.subagents` 是否可用（能力探测；缺省即降级为「仅发句柄」，不硬失败）。
+/** 宿主 subagent 服务的**形态探针**（能力探测**单点**；`subagentRuntimeOf` 是本函数的薄壳）。
+ *
  *  ⚠ 活体实测（2026-09-16，本批 suite-live-20260916 首派抓出）：cordis 对**未在 inject 声明的服务**
  *  在取属性时**直接抛** `cannot get property "subagents" without inject`（不是返回 undefined）
  *  ⇒ 取用必须包 try/catch，否则引擎自派以原始 cordis 错崩掉，而不是走既定的「仅发句柄」降级分支（B1 语义）。
  *  正解是 `lib/index.js` 的 `inject` 补 `subagents`（声明依赖）；本 try/catch 是兜底不崩。
- *  【2026-09-22 · one-shot 化】探测面 `startContinuable` → **`start`**（one-shot 唯一通道）。 */
-export function subagentRuntimeOf(ctx) {
+ *
+ *  【2026-10-22 · A1-P1-01】探测面**从「有没有 `start`」升级为「是哪一形态」**（判定序**只在下面一处**）：
+ *    ① `ctx?.subagents` 取值抛错 / 为假 ⇒ `{ rt:null, form:null, reason:'runtime-unavailable' }`
+ *    ② `typeof rt.startActivation === 'function'` ⇒ `form:'activation'`（新形态：不承载 `toolFilter`/`persona`）
+ *    ③ 否则 `typeof rt.start === 'function'` ⇒ `form:'start'`（旧形态：按次收窄生效 = 唯一调用形态）
+ *    ④ 否则 ⇒ `{ rt:null, form:null, reason:'no-start-entry' }`
+ *       （`startContinuable` 一类历史桩**落此档**：它不是 activation 形态，也不可调用 —— 既有两个测试锁钉死这一点）
+ *
+ *  **`rt` 的口径 = 本模块可调用的运行时**（仅 `form==='start'` 时为服务对象，否则 `null`）：
+ *    · `form==='activation'` ⇒ 本模块**拒派**（不调用）⇒ 不给出句柄，防任何按 `rt` 真值判「可派」的读端误判；
+ *    · `form===null` ⇒ `rt===null`，与改前 `subagentRuntimeOf` 的「不可用」语义**逐字一致**（既有测试锁不变）。
+ *  真实成因由 `form` / `reason` 承载，降级文案据此分档（见 `spawnNoteOfProbe`），**不靠 `rt` 表达**。
+ * @returns {{rt: object|null, form: 'activation'|'start'|null, reason: 'runtime-unavailable'|'no-start-entry'|null}}
+ */
+export function subagentRuntimeProbeOf(ctx) {
   let rt = null;
   try {
     rt = ctx?.subagents ?? null;
   } catch {
-    return null; // 未注入/注入守卫抛错 ⇒ 视为不可用（降级为「仅发句柄」，不崩）
+    return { rt: null, form: null, reason: 'runtime-unavailable' }; // 未注入/注入守卫抛错 ⇒ 不可取（降级，不崩）
   }
-  return rt && typeof rt.start === 'function' ? rt : null;
+  if (!rt) return { rt: null, form: null, reason: 'runtime-unavailable' };
+  // 判定序固定：新形态优先识别（宿主若同时具备两入口，产物面差异由 activation 分支决定 ⇒ 必须按新形态判）。
+  if (typeof rt.startActivation === 'function') return { rt: null, form: 'activation', reason: null };
+  if (typeof rt.start === 'function') return { rt, form: 'start', reason: null };
+  return { rt: null, form: null, reason: 'no-start-entry' };
+}
+
+/** 兼容**薄壳**（导出面与返回形状**逐字不变**）：服务可调用 ⇒ 原服务对象；否则 `null`。
+ *  判据唯一来源 = 上面的探针单点（本函数**不重复**判 `typeof start`）。
+ *  `{ startContinuable }` 一类历史桩 ⇒ `null`（既有测试锁：2026-09-22 one-shot 化后 `start` 是唯一调用通道）。 */
+export function subagentRuntimeOf(ctx) {
+  return subagentRuntimeProbeOf(ctx).rt;
+}
+
+/** 降级文案**三档单点**（`form===null` 时）：每档互不相同、各含自身成因关键词。
+ *  ⚠ **禁反向归因**：本机真实态是「服务在、入口形态不匹配」，把它写成「宿主没给这个服务」
+ *  会让后面每一次排障都从错误的一侧开始 —— 这正是 A1-P1-01 的第二个缺陷面。
+ *  `form==='activation'` **不可达本函数**（函数头已前置拒派）；若将来有人删掉那个拒派，本函数会落到
+ *  `no-start-entry` 档的文案 ⇒ 必须同步恢复拒派，而不是在此伪造成因。 */
+function spawnNoteOfProbe(probe) {
+  const tail = '⇒ 仅发句柄（请把 firstLine 交给直派形态；该形态门禁属 C 阶段）';
+  if (probe?.reason === 'runtime-unavailable') {
+    return 'ctx.subagents 不可取（宿主 subagent 服务未注入，或取值被注入守卫拒绝）' + tail;
+  }
+  return '宿主 subagent 服务在位，但不含可用启动入口（startActivation / start 皆不可调用）' + tail;
 }
 
 // ── 【2026-09-22 · one-shot 化】run 生命周期属主登记 ──────────────────────────────
@@ -823,14 +887,32 @@ function trackOneShotRun(workerSessionId, run, warn) {
 // @returns {Promise<{batchId, lane, status, token, firstLine, ttlMs, spawned: boolean,
 //                    workerSessionId?: string, spawnNote?: string}>}
 //   硬失败（spawn 抛错 / 取不到 worker 会话 id）**抛错**：错误文案自带回滚事实与恢复步骤。
-// @param {Map|null} [dispatchIndex] 【本批新增·可选】既有**唯一** worker→批 索引（与读侧同引用）。
+// @param {Map|null} [dispatchIndex] 既有**唯一** worker→批 索引（与读侧同引用）。
 //   提供 ⇒ 自派成功后与 `member.dispatch` 事件**同一次逻辑动作**内同步写索引（修复③ 主路）；
 //   缺省 / 非 Map ⇒ 整段跳过（**逐字零行为变化**，守 R-2 兼容红线）。取不到索引 ⇒ 退化为既有行为，
 //   由兜底路 `batchSessionIdOfWorkerResolved` 在 worker 首个治理调用时补位。
-//   ⚠ **入参面缺口**（本 lane 实测）：唯一调用点 `lib/tools/member-tools.js:110` 未传该参 ⇒ 当前 dormant，
-//   激活需一行写域外接线（精确 diff 见 `exec/fix/change-report.md` §3）。
+//   ✅ **写点存活（2026-10-22 · A1-P2-04 校正；原「入参面无该参 ⇒ 恒跳过（dormant）」表述作废）**：
+//   本参数**在签名内**；唯一调用点 `lib/tools/member-tools.js` 的 `dispatchLaneCore({ ..., dispatchIndex: deps?.dispatchIndex })`
+//   **已传**，`lib/index.js` 的 `installTools` deps 面亦**已注入**同一 Map 引用
+//   （按符号检索 `dispatchIndex`，勿写死行号 —— 本批另一 lane 正在 `lib/index.js` 并行改动）。
 export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt, dispatchIndex }) {
-  // ⓿ 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
+  // ⓿ 【2026-10-22 · A1-P1-01（规格「后期订正 1」）】宿主**形态前置**：探针单点 → 新形态**前置 fail-closed 拒派**。
+  //   位置**硬要求**：必须早于 ① `store.setMember(...,'running')` 与 ② 句柄发放（与下方 role 前置拒派同族）
+  //   ⇒ 效果 = **零状态变更 / 零句柄发放 / 零 `member.dispatch` 事件**（工具调用直接失败，lane 仍 `pending`）。
+  //   语义：新宿主 `startActivation(spec)` **不承载** `request.toolFilter` / `request.persona`（宿主只按
+  //   `agentPreset` 组子会话 composition）⇒ 若照调，worker 会拿到**未收窄**的完整工具面（含治理工具）
+  //   ⇒ 按「能力位前置 / 不以弱换强」拒派（**不实现** `startActivation` 调用，避免死代码）。
+  //   迁移（Agent Preset 承载 `toolFilter`/`persona`）属单开批 F4，本批只拒派 + 给迁移指向。
+  //   ⚠ 探针只在**此处**算一次：`probe` 同时供下方 ③ 的降级分档 ⇒ 单次取值、单点判定（禁二次探）。
+  const probe = subagentRuntimeProbeOf(ctx);
+  if (probe.form === 'activation') {
+    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 服务为 `startActivation(spec)` 形态，'
+      + '该新形态**不承载** `request.toolFilter` / `request.persona`（宿主按 agentPreset 组子会话 composition）'
+      + ' ⇒ 按「能力位前置 / 不以弱换强」**拒派**：照调会让 worker 拿到**未收窄**的完整工具面（治理工具不被 deny）；'
+      + ' 迁移方向 = 由 Agent Preset 承载 toolFilter/persona（单开批 F4 承接），本批不实现 `startActivation` 调用。'
+      + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
+  }
+  // ⓿-b 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
   //   判据源 L-AC-5 ②「role 查不到 ⇒ 拒派」。若把解析留在 ④ 的任务包组装处，则 `setMember(running)` 已落、
   //   句柄已发放 ⇒ 拒派会留下「lane=running、无 worker、句柄悬空」的僵尸态（正是本文件 B4 段登记过的坑）。
   //   故此处先读 laneTask 并解析 role：解析失败 ⇒ 抛 `GATE_ROLE_UNRESOLVED`，**零状态变更、零句柄发放**。
@@ -855,11 +937,14 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   // ② 发放一次性句柄（任务包首行形态）
   const h = issueLaneHandle({ batchId, lane, sessionId });
   const base = { batchId, lane, status: b.lanes[lane], token: h.token, firstLine: h.firstLine, ttlMs: h.ttlMs };
-  // ③ 能力探测（缺 ctx.subagents ⇒ 优雅降级为「仅发句柄」，**不消费句柄**）
-  const rt = subagentRuntimeOf(ctx);
-  if (!rt) {
-    return { ...base, spawned: false, spawnNote: '宿主未提供 ctx.subagents ⇒ 仅发句柄（请把 firstLine 交给直派形态；该形态门禁属 C 阶段）' };
+  // ③ 形态分派（探针已在函数头算过一次，此处**不重探**）：
+  //   · `form==='start'` ⇒ 继续走下述 ④→ 旧路径 `rt.start(provider, request)`（逐字保留）
+  //   · `form==='activation'` ⇒ **不可达**（函数头已前置拒派）
+  //   · `form===null` ⇒ 降级「仅发句柄」：文案由 `spawnNoteOfProbe` 按**真实成因**分档（未注入 / 无启动入口）
+  if (probe.form !== 'start') {
+    return { ...base, spawned: false, spawnNote: spawnNoteOfProbe(probe) };
   }
+  const rt = probe.rt;
   // N2/D6 三事实（2026-09-18 债清 3 · 逐条实测，勿再按印象改写）：
   //   ① **可热更**：`dispatch` 在 `lib/hot/config-watch.js:80` 的 `ALLOWED_TOP_KEYS` 白名单内
   //      ⇒ `<root>/config/runtime.json` 的 `dispatch.*` 改动经 watcher 生效，**无需重启宿主**。
@@ -870,7 +955,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //      （2026-09-18 实读 573 B）顶层键只有 `gates` / `governance` / `capabilities`，**没有 `dispatch` 段**
   //      ⇒ `liveConfig.dispatch` 为 undefined ⇒ `provider` 恒 null ⇒ 走「仅发句柄」降级分支（下文 B4）。
   //      **排查顺序**：先看 `runtime.json` 有没有写 `dispatch.provider`，再怀疑热更链路。
-  //   · **调用点唯 1 处**：`lib/tools/core.js:1369`（`lane_dispatch` 工具面）。
+  //   · **调用点唯 1 处**：`lib/tools/member-tools.js:110`（`lane_dispatch` → `dispatchLaneCore`）。
+  //     原引 `lib/tools/core.js` 的 `:1369` 为**陈旧锚点**（该文件现 209 行、无 `lane_dispatch`），勿回写。
   //     历史「多调用点」表述随链推进全退役（2026-09-18 Q-A=C，`lib/engine/chain-runner.js:51`
   //     已改为「派发只剩工具面单通道」）**作废**，勿回加。
   const provider = liveConfig?.dispatch?.provider ?? null; // 热更快照（见上三事实；原读静态 config ⇒ 假热更）
@@ -1004,10 +1090,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   ⇒ 冷/热读数逐字相同（L-AC-5）。取不到 owner 会话 ⇒ 索引值以 `null` 表达（**非枚举字段缺席**）；
   //   ⚠ 与**事件载荷**「取不到不写该键」**语义不同、不得合并**（载荷口径属 `member.dispatch` 冻结面 R-7/C-9）。
   //   fail-safe：`dispatchIndex` 缺省 `undefined` / 非 Map ⇒ 整段跳过（逐字零行为变化）。
-  //   ⚠ **生效前提（本 lane 已实测为阻塞，如实登记——非静默）**：`dispatchLaneCore` 的入参面**无** `dispatchIndex`
-  //   （`:735`），唯一调用点 `lib/tools/member-tools.js:110` 亦**未传** ⇒ 本段当前恒跳过（dormant）。
-  //   激活需**一行写域外接线**（`member-tools.js:110` 增 `dispatchIndex`，值经 `deps.resolveBatchSession` 同一闭包可达）。
-  //   本 lane **不越域**改该行 —— 精确 diff 见 `exec/fix/change-report.md` §3。
+  //   ✅ **写点存活（2026-10-22 · A1-P2-04 校正；原「入参面无该参 ⇒ 恒跳过（dormant）」表述作废）**：
+  //   本参数在 `dispatchLaneCore` 签名内；唯一调用点 `lib/tools/member-tools.js` 的 `dispatchLaneCore({...})`
+  //   已传 `dispatchIndex: deps?.dispatchIndex`，`lib/index.js` 的 `installTools` deps 面亦已注入同一 Map 引用
+  //   （按符号检索 `dispatchIndex`，勿写死行号 —— 本批另一 lane 正在 `lib/index.js` 并行改动）。
+  //   ⇒ 生产路径**本段确实在写**（`test/lane-session-bind.test.js` 的「回归-c」即以真实组装面锁定这一点）。
   if (dispatchIndex instanceof Map && workerSessionId && !dispatchIndex.has(workerSessionId)) {
     dispatchIndex.set(workerSessionId,
       dispatchIndexEntryOf(sessionId, batchId, lane, ownerSessionId)); // 幂等守卫：同键覆盖不重复写
@@ -1039,10 +1126,16 @@ export function readGateMode(config) {
 // 【gate-lite 第一批 · E① 清理（2026-09-17）】**已删 `UNBOUND_REPORT_CODE` 导出与「未绑定即拒」语义**：
 //   官方 Team 成员（宿主 `spawn_teammate` 拉起）**天然无 lane 绑定** ⇒ 未绑定是**常态**，硬拒即误拦
 //   （实测命中 `replay-lock` / `asset-chain`）。现口径 = best-effort：消息照发、事件按「批次可否解析」
-//   如实落/不落、回显 `unbound`/`eventWritten`/`notice`（唯一实现见 `lib/tools/core.js#reportTargetOf`）。
+//   如实落/不落、回显 `unbound`/`eventWritten`/`notice`（唯一实现见 `lib/tools/swarm-comms.js:63` 的 `reportTargetOf`；
+//   原引 `lib/tools/core.js#reportTargetOf` 为**陈旧锚点**——该文件现 209 行、无此函数）。
 //   本段只留史迹，**不再提供常量导出**（防读端回生旧语义）。
 
-/** 从批次事件流反查该会话绑定的 lane（worksWith 引擎自派与直派两种登记形态）。 */
+/** 从批次事件流反查该会话绑定的 lane（worksWith 引擎自派与直派两种登记形态）。
+ *
+ *  【2026-10-22 · A1-P1-04】返回值**同时带回唤醒寻址字段**：事件带 `ownerSessionId` ⇒ 以**非枚举自有属性**
+ *  附加上去（与 `dispatchIndexEntryOf` **同法**，不引入第二种附加机制）；取值统一经解析单点 `ownerSessionIdOf`。
+ *  ⇒ `Object.keys` / `deepStrictEqual` / JSON 序列化**逐字仍是 3 键**（既有形状锁不变）；
+ *     事件**不带** owner（R-7 事件侧口径：取不到即不写该键）⇒ **不附加**该属性（键**缺席**，不是 `null`）。 */
 export function laneBindingOf(store, sessionId) {
   if (!sessionId || !store || typeof store.listAllBatches !== 'function') return null;
   let all = [];
@@ -1052,7 +1145,14 @@ export function laneBindingOf(store, sessionId) {
     try { b = store.readBatch(ownerSession, batchId); } catch { continue; }
     for (const ev of b?.events ?? []) {
       if (ev?.type === 'member.dispatch' && ev.workerSessionId === sessionId && ev.lane) {
-        return { sessionId: ownerSession, batchId, lane: ev.lane };
+        const bind = { sessionId: ownerSession, batchId, lane: ev.lane };
+        const owner = ownerSessionIdOf(ev); // 解析单点（禁在本函数直读字段名）
+        if (owner) {
+          Object.defineProperty(bind, 'ownerSessionId', {
+            value: owner, enumerable: false, writable: true, configurable: true,
+          });
+        }
+        return bind;
       }
     }
   }
@@ -1070,7 +1170,11 @@ export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inb
 /**
  * 纯函数：给定档位/工具名/参数文本/配置，判定 C 档派发面的**留痕**处置。
  * **恒 `ok:true`（不再拒）**：原 `mode==='enforce'`
-*   分支已随码删除（官方 profile 已 disable 宿主 `subagent`/`subagent_fork`）。
+*   分支已随码删除（**双层真相**：宿主顶层 profile 的派发工具区段写 `disabled: true`
+*   ——**该文件由 loader 在 boot 期重写，行号不稳定 ⇒ 本注释刻意不引行号**，
+*   而 preset 层 `cordis.yml:770-780` 与 `presets/punky-preset/agent.cordis.yml:220-232` **未禁用**
+*   ⇒「官方 profile 已 disable」只在顶层成立；与 `lib/bridge/dispatch-register.js` 的订正同口径，
+*   见 gap-list A1-P2-04）。
  *   `mode` 仍回显（`warn`/`enforce` = 配置面事实，供审计观测），但**不再影响判定**；无有效句柄一律产 `warnNote`。
  * @returns {{applies: boolean, ok: boolean, mode: 'warn'|'enforce', handleReason: string|null, denyReason: null, warnNote: string|null}}
  */

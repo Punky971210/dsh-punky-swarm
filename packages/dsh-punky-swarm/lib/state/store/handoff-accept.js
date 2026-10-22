@@ -66,7 +66,13 @@ import * as schema from '../../schema.js';
 import * as EVT from '../event-types.js';
 
 export function buildHandoffAccept(cx) {
-  const { batchFile, readBatch, newEvent, atomicWrite } = cx;
+  // 【F3 / K-1 单点】**不再**解构 `atomicWrite` / `batchFile`：本文件落盘改经 `commitBatch`（rev CAS 单点）。
+  //   修前 `atomicWrite(file, next)` **绕开** `commitBatch`，而 `next = {...batch}` 把 `__rev` **原值带过**
+  //   ⇒ 既不推进 rev、也不参与比对 ⇒ 若本通道在别的写者「readBatch → commitBatch」之间提交，后者的 CAS
+  //   读到 `actual === expected` 会**照常通过**并整份覆盖 ⇒ **静默 lost update 原样保留、且判绿**。
+  //   归一后新增的唯一行为面 = 多一次盘上重读 + 可能抛 `BATCH_VERSION_CONFLICT`（规格 S3-3：本通道
+  //   属**留痕/声明**写，冲突上抛即「本轮写入被并发挤掉」这一事实本身，自动重试会把它掩盖成写成功）。
+  const { readBatch, newEvent, commitBatch } = cx;
 
   // 单条接受声明的记录形态（**与建批期种子同形态** + 两个可核标注键）：
   //   `source:'accept'` = 边来源标注（读端据此区分「建批期 `deps` 声明」与「运行期下游接受」，防审计误读）；
@@ -81,7 +87,6 @@ export function buildHandoffAccept(cx) {
   }
 
   function recordHandoffAccept(sessionId, batchId, { from, to, reason = null, author = null } = {}) {
-    const file = batchFile(sessionId, batchId);
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
     if (typeof from !== 'string' || !from.trim().length) throw new Error('handoff accept rejected: from 必填（上游 lane id）');
@@ -165,7 +170,7 @@ export function buildHandoffAccept(cx) {
         accepts: [{ from: fromId, to: toId }], reason: reason ?? null, author: author ?? null, revision,
       })],
     };
-    atomicWrite(file, next);
+    commitBatch(sessionId, batchId, next); // 【F3 / K-1】写面归一（rev CAS 单点；见 buildHandoffAccept 头注）
     return { ok: true, idempotent: false, from: fromId, to: toId, revision, record: { ...rec } };
   }
 

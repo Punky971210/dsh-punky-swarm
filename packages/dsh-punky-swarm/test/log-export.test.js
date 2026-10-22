@@ -120,19 +120,43 @@ test('T3.3b type 前缀匹配：type=member 命中 member.*，type=gate 命中 g
   assert.ok(r2.items.every((e) => e.type.startsWith('gate')));
 });
 
-test('T3.3c since 过滤：仅返回该时刻之后事件；叠加过滤；空结果 → items=[]/exported=0', async () => {
+test('T3.3c since 过滤（开区间下界）：仅返回该时刻之后事件；叠加过滤；空结果 → items=[]/exported=0', async () => {
   const { store, byName } = setup(true);
   await makeBatch(store, 'b-since');
   const batch = store.readBatch('sess-log', 'b-since');
   const mid = batch.events[Math.floor(batch.events.length / 2)].ts;
   const r = await byName.log_export.execute({ batchId: 'b-since', since: mid }, EXEC_SESS);
-  assert.ok(r.exported >= 1 && r.exported <= batch.events.length);
-  assert.ok(r.items.every((e) => Date.parse(e.ts) >= Date.parse(mid)));
+  // 【A1-P2-05 · AC-5 · 2026-10-22】`since` = **开区间下界**（严格大于），与参数描述「仅返回该时刻之后的事件」一致。
+  //   本条断言原为 `>=`（等于边界也返回）——它把**闭区间反向语义锁成了契约**；修 `since` 必须同步改本断言，
+  //   否则「改描述把缺陷合法化」会成为更省事的错修法。
+  assert.ok(r.items.every((e) => Date.parse(e.ts) > Date.parse(mid)), '等于边界的事件不得返回');
+  assert.equal(r.exported, batch.events.filter((e) => Date.parse(e.ts) > Date.parse(mid)).length, 'exported = 严格大于边界的事件数');
   // 叠加 lane + type + since（未来时间戳 → 空）
   const future = new Date(Date.now() + 60_000).toISOString();
   const r2 = await byName.log_export.execute({ batchId: 'b-since', lane: 'l1', type: 'member', since: future }, EXEC_SESS);
   assert.equal(r2.exported, 0);
   assert.deepEqual(r2.items, []);
+});
+
+test('T3.3d since 边界（AC-5）：等于某事件 ts ⇒ 该事件不返回；早 1ms ⇒ 全量；增量轮询不重复读边界', async () => {
+  const { store, byName } = setup(true);
+  await makeBatch(store, 'b-bound');
+  const batch = store.readBatch('sess-log', 'b-bound');
+  const T0 = batch.events[0].ts;
+  const eqT0 = batch.events.filter((e) => e.ts === T0).length;
+  // 负例：since === T0 ⇒ ts===T0 的事件一个都不返回（旧 `<` 实现在此会返回**全量** ⇒ 本条即证伪器）
+  const rEq = await byName.log_export.execute({ batchId: 'b-bound', since: T0 }, EXEC_SESS);
+  assert.equal(rEq.items.some((e) => e.ts === T0), false, '等于边界的事件不得出现在结果中');
+  assert.equal(rEq.exported, batch.events.length - eqT0, 'exported = eventCount - count(ts===T0)');
+  // 阳性对照 1：早 1ms ⇒ 全量（证明过滤判据在工作，不是「一律空」）
+  const before = new Date(Date.parse(T0) - 1).toISOString();
+  const rBefore = await byName.log_export.execute({ batchId: 'b-bound', since: before }, EXEC_SESS);
+  assert.equal(rBefore.exported, batch.events.length, '边界之前 1ms ⇒ 全量');
+  // 增量轮询语义：以「首批最后一条 ts」作下一次 since ⇒ 第二批必为空（不重复读回边界事件）
+  const first = await byName.log_export.execute({ batchId: 'b-bound', since: before }, EXEC_SESS);
+  const cursor = first.items[first.items.length - 1].ts;
+  const second = await byName.log_export.execute({ batchId: 'b-bound', since: cursor }, EXEC_SESS);
+  assert.equal(second.exported, 0, '以首批末条 ts 作游标 ⇒ 第二批 0 条');
 });
 
 test('T3.4 markdown 报告：批次头+时间线表+尾部汇总，内容与 json 形态一致', async () => {

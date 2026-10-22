@@ -38,8 +38,19 @@ import { SESSION_RE } from './constants.js';
 // 事件字面量改引 EVT 常量单点（archive.failed/archive.done）
 import * as EVT from './event-types.js';
 
-export function createArchive(root) {
+export function createArchive(root, deps = {}) {
   const sessionsDir = path.join(root, 'sessions');
+  // 【2026-10-22 · 原 F3 D-2 残余收尾】批次 JSON 的**写点归一**：归档会写批次 JSON（archived 标记 /
+  //   archive.done / archive.failed），若绕过 `commitBatch` 则 `__rev` 不推进；此时若另一写方在
+  //   「归档读 → 归档写」之间提交，归档会用**旧数据 + 旧 rev** 整份覆盖 ⇒ rev 回退 ⇒ 后续正常写入拿到
+  //   **虚假冲突**。故批次 JSON 一律经注入的 `commitBatch`（store.js 在装配点传入，见 `createArchive(root, { commitBatch })`）。
+  //   缺省（未注入，如纯只读调用/测试直建）：退回 `atomicWrite`，与改造前逐字等价（**不静默改变**旧行为）。
+  //   manifest（`manifestFileOf`）不是批次 JSON、不受 rev 约束 ⇒ 仍走 atomicWrite。
+  const commitBatch = typeof deps.commitBatch === 'function' ? deps.commitBatch : null;
+  const writeBatchJson = (sessionId, batchId, batch) => {
+    if (commitBatch) return commitBatch(sessionId, batchId, batch);
+    return atomicWrite(batchFileOf(sessionId, batchId), batch);
+  };
 
   function sessionDir(sessionId) { return sessionDirOf(sessionsDir, sessionId); }
   function batchFileOf(sessionId, batchId) { return batchFilePathOf(sessionsDir, sessionId, batchId); }
@@ -115,7 +126,7 @@ export function createArchive(root) {
       nb.events = nb.events ?? [];
       nb.events.push({ ts: new Date().toISOString(), type: EVT.EVT_ARCHIVE_FAILED, reason });
       nb.updatedAt = new Date().toISOString();
-      atomicWrite(batchFileOf(sessionId, batchId), nb);
+      writeBatchJson(sessionId, batchId, nb);
     } catch { /* 兜底也失败：静默（审计可经 archive/ 目录状态判断） */ }
   }
 
@@ -156,7 +167,7 @@ export function createArchive(root) {
       next.events = next.events ?? [];
       next.events.push({ ts: archivedAt, type: EVT.EVT_ARCHIVE_DONE, archivedAt });
       next.updatedAt = archivedAt;
-      atomicWrite(batchFileOf(sessionId, batchId), next);
+      writeBatchJson(sessionId, batchId, next);
       return manifest;
     } catch (err) {
       recordFailure(sessionId, batchId, String((err && err.message) || err));

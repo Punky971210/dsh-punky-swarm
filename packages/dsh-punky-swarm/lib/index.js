@@ -245,7 +245,7 @@ const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbe
   //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring` · 解除 dormant】接线改用**新签名**外壳
   //   `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`：热路径短路仍走既有 `batchSessionIdOfWorker`；
   //   miss 时经 `laneBindingOf` 反查事件流并**回填同一 `dispatchIndex`**（兜底路 = 跨进程 / 历史批 / 漏登记 / 热更窗口）。
-  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:134` / `:307`）⇒ **零新增捕获**、不挂全局。
+  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:1063`（`createEngineStore` 解构）/ `:1075`（`new Map()`））⇒ **零新增捕获**、不挂全局。
   const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
     dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
     // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
@@ -1039,10 +1039,26 @@ const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSin
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
-  // ↑ 引擎状态根：**声明在 `:92`、消费在 `:93`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:92-93`，勿只引 `:92` 当调用点。
-  mkdirSync(root, { recursive: true });
+  // ↑ 引擎状态根：**声明在 `:1040`、消费在 `:1041`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:1040-1041`，勿只引 `:1040` 当调用点。
   // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
+  // 【A1-P0-01 · Q3 fail-closed】**日志前移到 IO 之前**：root 不可建时这一行**已经**产出（含解析后的绝对路径）
+  //   ⇒ 排障不必再从「插件树加载错误」倒推 `config.root` 的取值。文案逐字不变（`test/home-isolation.test.js` 正则解析本行）。
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
+  try {
+    mkdirSync(root, { recursive: true });
+  } catch (cause) {
+    // 【A1-P0-01 · Q3】**fail-closed：抛出，不吞、不 return、不降级继续**。理由：root 不可建时后续**全部**落盘
+    //   （store / mailbox sweep / assets / 产物根）都会在不存在或不可写的根下失败 ⇒ 继续装配只会把「一条配置键
+    //   写错」放大成「全套工具面静默失效 + 零自解释信息」（原缺陷形态：整块插件 pending、没有任何我们自己的日志）。
+    //   错误消息必须三段可诊断：① root **绝对路径** ② **配置键名**与缺省值 + 修复动作 ③ 原始 `e.code`
+    //   （ENOTDIR = 路径中段是普通文件；EACCES/EPERM = 权限）。
+    //   零新造拒码：用 `[dsh-punky-swarm]` 前缀的普通 `Error`（**不以拒码前缀开头**），并保留 `cause` 链。
+    const err = new Error('[dsh-punky-swarm] 引擎状态根不可创建：' + root
+      + '（配置键 config.root，缺省 ~/.dsh/punky-preset；请修正该键或修复目录权限后重启插件）｜cause: '
+      + String(cause?.code ?? '') + ' ' + String(cause?.message ?? cause));
+    err.cause = cause;
+    throw err;
+  }
   mountStartupPrelude({ ctx, config, root });
   const { store, topicSink } = createEngineStore({ ctx, config, root });
 

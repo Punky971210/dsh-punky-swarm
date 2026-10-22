@@ -62,7 +62,10 @@ import { buildTargets } from './gates/targets.js';
 import { buildComplete } from './gates/complete.js';
 import { buildStatus } from './gates/status.js';
 import { buildHandoff } from './gates/handoff.js';
-import { declaredKindOf, emptyReasonOf, substantiveContentOf, isInsideRoot } from './gates/presence.js';
+import { declaredKindOf, emptyReasonOf, substantiveContentOf } from './gates/presence.js';
+// 【A1-P1-03 · F2】根内判据改经「存在驱动」单点（词法必过 + 已落盘追加解权）；依赖方向
+//   `gates.ts → batch-paths.js → gates/presence.js`，无环（`gates/detect.ts` 早已同向导入）。
+import { isArtifactInRoot } from './batch-paths.js';
 import { detectReasonTokens } from './gates/reason-vocabulary.js';
 // 再导出（**外部导出面逐字不变**：这些符号原本直接定义于本文件，拆分后由本文件转发）——
 export { smokeOf, detectNeedHuman, detectPendingMarker, detectGate, TARGETS_CLAIMED_RE, GATE_LINE_RE, GATE_EMPTY_LINE_RE } from './gates/detect.js';
@@ -175,7 +178,7 @@ export function presenceJudge(input = {}) {
             code = code ?? (kind === 'dir' ? 'GATE_ARTIFACT_NOT_A_FILE' : 'GATE_ARTIFACT_MISSING');
             continue;
         }
-        if (typeof input.artifactsRoot === 'string' && !isInsideRoot(abs, input.artifactsRoot)) {
+        if (typeof input.artifactsRoot === 'string' && !isArtifactInRoot(input.artifactsRoot, abs)) {
             problems.push(decl + ' outside batch artifacts root');
             code = code ?? 'GATE_ARTIFACT_OUTSIDE_ROOT';
             continue;
