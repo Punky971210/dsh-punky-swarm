@@ -14,6 +14,7 @@ export declare const MEMBER_TRANSITIONS: {
     readonly skipped: readonly [];
     readonly conflict: readonly [];
 };
+export declare const RECOVERY_IDLE_FROM: readonly MemberState[];
 export declare const BATCH_TRANSITIONS: {
     readonly planning: readonly ["running", "aborted"];
     readonly running: readonly ["paused", "complete", "aborted"];
@@ -150,6 +151,7 @@ export declare const VERIFY_DEFAULTS: Readonly<{
     readonly mode: "advisory";
 }>;
 export declare function resolveVerifyConfig(config: ConfigInput | null | undefined): ResolvedVerifyConfig;
+export declare function autoSettleEnabledOf(enabled: unknown): boolean;
 export declare const DISCOVERY_DEFAULTS: Readonly<{
     enabled: true;
     nodes: {};

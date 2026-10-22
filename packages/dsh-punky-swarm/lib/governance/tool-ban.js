@@ -16,9 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 // 合法行为面枚举（用于「未实现」退路的提示文案；config.ts 不 import 本模块 ⇒ 无循环依赖）
 import { TOOL_BAN_BEHAVIORS } from './config.js';
-// 命令**分段**单点（(lib-root) 中立件）：护栏不自抄分隔正则（DEBT-3 真单点化）；
-//   arch 授权对 `governance -> (lib-root)` 已在 .punky/arch.yml 登记（理由：共享既有 shell 文本预处理单点）。
-import { segmentCommands } from '../shell-text.js';
+// 命令**分段**与**流合并清理**双单点（(lib-root) 中立件）：护栏既不自抄分隔正则（DEBT-3 真单点化），
+//   也不自抄 `2>&1` / `2>$null` 清理（A1-P2-09）——两份逐字同体的清理体即「护栏认为不是写、只读链
+//   认为是写」的判定分叉（安全面镜像）。arch 授权对 `governance -> (lib-root)` 已在 .punky/arch.yml
+//   登记（理由：共享既有 shell 文本预处理单点）。
+import { segmentCommands, stripStreamMerges } from '../shell-text.js';
 // 引号字面量掩码（替代符刻意选无语义 token：不会被写指示符命中，也不会被当命令名）
 const QUOTE_MASK = '__Q__';
 // 段内赋值的环境前缀（PowerShell `$x = ` / POSIX `x=`）：只剥前缀，右侧照原判定
@@ -117,10 +119,10 @@ function maskQuoted(text) {
         return { ok: false, masked: '' };
     return { ok: true, masked: out };
 }
-// ② 流合并不算写：`2>&1` / `2>$null` 只合并或丢弃流，不落盘
-function stripStreamMerges(text) {
-    return text.replace(/2>&1/g, ' ').replace(/2>\$null/gi, ' ');
-}
+// ② 流合并不算写：`2>&1` / `2>$null` 只合并或丢弃流，不落盘。
+//   实现**单点** = `lib/shell-text.js::stripStreamMerges`（与只读判定链 `lib/tools/readonly.js`、
+//   命令 gate `lib/state/command-exec.js` 共用同一份正则清理）；本文件原私有副本已删（A1-P2-09），
+//   引用走本文件顶部的 `../shell-text.js` import。
 // ④ 段首 token（跳过 `(` `&` `.` 包裹；引号字面量已掩码）
 function headToken(seg) {
     const m = seg.match(/^[&.(]*\s*["']?([^\s"']+)/);

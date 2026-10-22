@@ -24,7 +24,7 @@ import {
   REASON_REVIEW_AWAITING_SETTLE,
   REASON_IDLE_AWAITING_RESUME,
   REASON_PENDING_UNDISPATCHED,
-} from './primitives.js';
+} from './reasons.js'; // A1-P2-01 补丁①：**必须**直连零依赖叶子（经 `primitives.js` 会在本文件顶层读环内 `const` ⇒ TDZ）
 
 // 提示档留痕（零静默的**单次纪律**）：同一 (lane, reason, stateAnchorTs) 只落一条，跨重启幂等。
 //   为什么单次：提示档（BR-3 / T3 paused / T4 review·idle·pending）本就会在**每拍**重算为真，

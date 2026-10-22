@@ -20,7 +20,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { flowOf, entryRequiresOf, globMatchesPath, ENGINE_BASELINE_CRITERIA_SECTION } from '../../assembly/flows.js';
 import { taskOf, smokeOf, contractMissingPayload } from './detect.js';
 import { reasonVocabularyNote } from './reason-vocabulary.js';
-import { handoffGateEnabledOf } from '../../wave-plan.js';
+// A1-P2-01 补丁③：直连零依赖叶子（原经 `../../wave-plan.js`，与 `state/gates.js` 构成 4 模块 SCC）
+import { handoffGateEnabledOf } from '../handoff-gate.js';
 import fs from 'node:fs';
 // 产物声明路径解析单点（WD-3b）：判据源直读改走 fail-closed 解析（逃逸 ⇒ 既有 catch 记 unreadable）
 import { resolveArtifactIn } from '../batch-paths.js';

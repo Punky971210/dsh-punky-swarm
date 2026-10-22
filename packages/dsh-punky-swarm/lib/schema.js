@@ -30,6 +30,11 @@ export const MEMBER_TRANSITIONS = {
     skipped: [],
     conflict: [],
 };
+// 恢复/回收专用「入 idle」边 `RECOVERY_IDLE_FROM`（**刻意不入 MEMBER_TRANSITIONS**）：
+//   棘轮地板不得放宽（machine-rules 的 allowRelax 逃生门只管「收紧」，默认表一放就不可回收）；
+//   且 test/outcome-typing.test.js 显式断言 canTransitionMember('running','idle') === false。
+// 唯一消费点 = lib/state/store/lifecycle.js::laneIdleOnRecovery（单点写入口）。
+export const RECOVERY_IDLE_FROM = Object.freeze(['running', 'review']);
 export const BATCH_TRANSITIONS = {
     planning: ['running', 'aborted'],
     running: ['paused', 'complete', 'aborted'],
@@ -117,7 +122,8 @@ export function resolveWatchConfig(config) {
 }
 // ── capabilities.verify：验收证据（lib/verify/evidence.js + lib/verify/gate.js）──
 // enabled=true（默认）捕获 hook 挂载；
-//   mode=advisory（默认）只记录不拦截；mode=enforce 显式启用则审计裁决拦截（createCompletionGate 读本键）
+//   mode=advisory（默认）只记录不拦截；**mode=enforce 的裁决侧未接线**（createCompletionGate 无生产消费点）
+//   ⇒ 实际按 advisory 生效，装配面只输出一条 warn 说明未接线（A1-P2-11）；接线 or 退役属待裁决 followup。
 // as const：mode 字面量派生返回类型（'advisory'|'enforce'），纯类型层、运行期等价。
 export const VERIFY_DEFAULTS = Object.freeze({
     enabled: true,
@@ -130,6 +136,16 @@ export function resolveVerifyConfig(config) {
         enabled: c.enabled !== false,
         mode: c.mode === 'enforce' ? 'enforce' : VERIFY_DEFAULTS.mode,
     };
+}
+// ── autoSettle.enabled：自动结算总开关的**判定式单点**（A1-P2-07）──
+// 本函数**只收判定式，不收读源**：装配期读静态 `config`、兼底路读 `readLiveConfig(deps)` 的热更快照
+//   （两路读源不同 ⇒ 取原始 `enabled` 值由各消费方自己负责，判定只此一处）。
+// 语义冻结：**只有显式 `false` 才停用**；`undefined`（键缺省）/ 键缺失 / 任何非布尔值 ⇒ 启用。
+//   ⚠ **禁真值判断**：`!enabled` 会把 `0` / `''` / `null` 一并当停用 ⇒ **越权关停**。
+// 消费方（3 处，均只调本单点，禁再内联判定式）：`lib/engine/auto-settle.js`（装配期 `enabled`）、
+//   `lib/index.js`（热更生效比对 + boot 对账，读静态 config）、`lib/tools/swarm-tools.js`（兼底路短路，读热更快照）。
+export function autoSettleEnabledOf(enabled) {
+    return enabled !== false;
 }
 // ── capabilities.discovery：发现服务（lib/discovery/service.js）──
 // ADP（Agent Discovery Protocol）统一 POST /discover + /.well-known/aip 预置；

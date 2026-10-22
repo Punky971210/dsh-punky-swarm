@@ -19,24 +19,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   原 `lib/watch/lane-heartbeat.js` 顶层的私有常量与私有纯函数集中本文件，`lane-heartbeat.js` 主体与
 //   `heartbeat/*` 各探针档**共用同一份**（禁第二份）。本文件**不持有任何实例状态**（无闭包、无模块级单例）
 //   ⇒ 不构成新真源；常量字面值/判据**逐字搬移**（行为零变更）。
-//   环依赖说明：`laneStateOf` / `stintRunningSinceOf` 取自 `../lane-heartbeat.js` 的**函数声明**
-//   （ESM 实例化期即初始化；本文件顶层不调用它们）⇒ 无 TDZ、运行期安全。
+// 环依赖说明（A1-P2-01 补丁② 改写，**旧口径已作废**）：
+//   本文件位于 `watch/heartbeat/` 的**残余 8 模块 SCC1**（见下「残余环登记」）；它对聚合器的依赖已收窄到
+//   **只剩 `stintRunningSinceOf` 一个函数声明**（ESM 实例化期即初始化，本文件顶层不调用它 ⇒ 无 TDZ）。
+//   两个状态谓词（`laneStateOf` / `isScannedLaneState`）**直连真源** `../../state/lane-state.js`
+//   （`lane-heartbeat.js` 只是它们的再导出点 ⇒ 原来那条「经聚合器取谓词」的边是多余的中转，
+//   `watch -> state` 已在 arch 白名单）。
 import { findTask } from '../../state/task-utils.js'; // 单点（原本地定义删除）
 import * as EVT from '../../state/event-types.js';
-// `isScannedLaneState` 经 `lane-heartbeat.js` 的保形再导出取（W4：不新引 state 域、导出面不变）
-import { laneStateOf, isScannedLaneState, stintRunningSinceOf } from '../lane-heartbeat.js';
-
-const REASON_DANGLING_MEMBER = 'dangling-member';
-const REASON_NOT_SCANNED_PLANNING = 'not-scanned-planning';
-const REASON_PAUSED_DWELL = 'paused-awaiting-decision';
-const REASON_PENDING_UNDISPATCHED = 'pending-undispatched';
-const REASON_REVIEW_AWAITING_SETTLE = 'review-awaiting-settle';
-const REASON_IDLE_AWAITING_RESUME = 'idle-awaiting-resume';
-const REASON_BLIND_RUN_NO_DEPS = 'blind-run-no-deps';
-const REASON_BLIND_RUN_UPSTREAM_MISSING = 'blind-run-upstream-missing';
-const REASON_BLIND_RUN_UPSTREAM_NEVER_READY = 'blind-run-upstream-never-ready';
-// 状态 → 专属阈值键（§2 判据分派表单点；查询面复算与探针判定共用同一映射，禁两套表）
-const STATE_WINDOW_KEY = { pending: 'pendingWindowMs', review: 'reviewWindowMs', idle: 'idleWindowMs', paused: 'pausedWindowMs' };
+import { laneStateOf, isScannedLaneState } from '../../state/lane-state.js'; // 谓词真源（不走聚合器中转）
+import { stintRunningSinceOf } from '../lane-heartbeat.js'; // 函数声明：实例化期即初始化 ⇒ 无 TDZ
+// A1-P2-01 补丁①：`reason` 常量与 `STATE_WINDOW_KEY` 已下沉到**零依赖叶子** `./reasons.js`
+//   （TDZ 根因：`heartbeat/notice.js` 在模块顶层读这些 `const`，而本文件位于 9 模块环内）。
+//   此处**保形再导出**（导出面冻结：`lane-heartbeat.js` / `state-surface.js` 等既有消费点逐字不动）。
+import {
+  REASON_DANGLING_MEMBER, REASON_NOT_SCANNED_PLANNING, REASON_PAUSED_DWELL,
+  REASON_PENDING_UNDISPATCHED, REASON_REVIEW_AWAITING_SETTLE, REASON_IDLE_AWAITING_RESUME,
+  REASON_BLIND_RUN_NO_DEPS, REASON_BLIND_RUN_UPSTREAM_MISSING, REASON_BLIND_RUN_UPSTREAM_NEVER_READY,
+  STATE_WINDOW_KEY,
+} from './reasons.js';
 
 // 纯事件流读取（零依赖批次对象）：runningSince（stint 起点）＝最近 member.dispatch 或 member.settled{to:'running'}
 function parseEvTs(e) {

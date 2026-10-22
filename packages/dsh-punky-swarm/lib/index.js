@@ -46,7 +46,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
@@ -93,10 +93,21 @@ import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './s
 import { mountAuditLog } from './auditlog/sink.js';
 
 export const name = 'dsh-punky-swarm';
-// `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.start`，one-shot；2026-09-22 起）**必须**
-//   声明该依赖——cordis 对未声明的服务在取属性时直接抛 `cannot get property "subagents" without inject`，
-//   而不是返回 undefined（该缺陷由本批次首派抓出）。宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，
-//   故声明安全；取用侧仍留 try/catch 兜底（见 lib/engine/dispatch.js `subagentRuntimeOf`）。
+// 三键（`tools` / `webServer` / `subagents`）**全部为硬依赖**，不是可选依赖（A1-P2-02 事实化）：
+//   宿主 `@deepseek-ai/cordis` 4.0.5 的 `inject` **归一化为 name→config 映射、逐名 required，没有 optional 位**
+//   （契约在 `Inject.resolve()` 把数组/对象统一成同名映射 + `Fiber` 构造时对每个键调 `_checkImpl(name)`）。
+//   ⇒ 任一服务缺失时的**真实失败形态 = 本插件整块 fiber 置 pending**（`apply` 根本不执行）：
+//      治理工具面（21 个工具）全部不出现、`/api/dsh-punky-swarm/*` 全部 404 —— **不是局部降级**。
+//   ⇒ 下方两处「服务缺失守卫」在当前宿主契约下**不可达**（保留作防御纵深，**不要**据其推断可降级）：
+//      ① `installWebSurface` 的 `if (ctx.webServer)`；② `engine/dispatch.js` 的「`ctx.subagents` 不可取」档
+//      （F1 已把该档改为**能力位前置 fail-closed 拒派**，拒码见 `lib/engine/dispatch.js` 的实现，
+//        此处不写码面字面量 —— 装配段的 `GATE_*` 词表被既有测试逐字冻结为「零新增」）。
+//   若将来真要降级：必须把对应键**移出** `inject` 并改用 `ctx.get(name)`（宿主唯一「不声明也能读」的通道：
+//      `ReflectService.get(name, strict=true)` 未提供时返回 `undefined`；裸取属性则直接抛 `cannot get property
+//      "<name>" without inject`）。那属**插件加载面变更**，须先在最小 host profile 夹具下取得红→绿读数再动
+//      —— 本批无宿主重启验收 ⇒ 该事实的证据级别 = 宿主源码契约 + 静态推理（`verified=false`，followup F-2）。
+//   `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.start`，one-shot；2026-09-22 起）
+//     必须声明；宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，故声明安全。
 export const inject = ['tools', 'webServer', 'subagents'];
 
 // 恢复语义：每个进程只执行一次（无论插件按进程级还是会话级挂载）
@@ -311,6 +322,8 @@ const installWatchdog = ({ ctx, watchCfg, heartbeatRef, heartbeat }) => {
 const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
   let apiDispose = null;
   let panelStream = null;
+  // ⚠ 本守卫在当前宿主契约下**不可达**（`webServer` 是 `inject` 硬依赖：缺服务 ⇒ 本插件整块 pending，
+  //   `apply` 不执行，走不到这里）——保留作防御纵深；理由与真降级路径见文件顶部 `inject` 上方注释（A1-P2-02）。
   if (ctx.webServer) {
     // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
@@ -609,9 +622,10 @@ const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) 
   return autoSettle;
 };
   // 热更「生效变化」基线（约束 11：以**严格布尔解析后的值**比对 ⇒ `undefined` 与 `true` 同值，
-  //   不触发无意义重挂）。判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**——
-  //   该函数刻意**不导出**（判据源 L-AC-14 要求导出符号净增 0）⇒ 此处为同形镜像；两处任一漂移即成第二套开关口径。
-  const autoSettleEnabledOf = (cfg) => cfg?.autoSettle?.enabled !== false;
+  //   不触发无意义重挂）。【A1-P2-07】判定式已收成**单点** `schema.js#autoSettleEnabledOf`（本批显式覆盖
+  //   原「刻意不导出 ⇒ 本地同形镜像」的 L-AC-14 局部约束：三处镜像即第二套开关口径，属双真源）。
+  //   此处**只保留读源差异**（装配期读静态 `config`），判定式一律委托单点 ⇒ 本文件不再持有判定式副本。
+  const autoSettleEnabledOfConfig = (cfg) => autoSettleEnabledOf(cfg?.autoSettle?.enabled);
 const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) => {
   // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
   //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
@@ -936,7 +950,7 @@ const mountRemounters = ({ ctx, config, store, root, mailbox, refusalEventBridge
 //   幂等：**无生效变化零操作**（防 fs 抖动重挂，RK-8）。停用**不改相位、不落 `auto.settle.paused`**（R-3）。
 //   写集 = {autoSettle, laneWake, autoSettleEnabled}（各 1 次，顺序固定 943 → 950 → 957）。
 const createAutoSettleRemounter = ({ ctx, store, dispatchIndex, root, rt, installLaneWake }) => (nextConfig, logTag) => {
-  const nextEnabled = autoSettleEnabledOf(nextConfig);
+  const nextEnabled = autoSettleEnabledOfConfig(nextConfig);
   if (nextEnabled === rt.autoSettleEnabled) return false;
   rt.autoSettle?.dispose?.();
   rt.autoSettle = installAutoSettle(ctx, {
@@ -1089,7 +1103,7 @@ export const apply = (ctx, config = {}) => {
   rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
   rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
   rt.autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });
-  rt.autoSettleEnabled = autoSettleEnabledOf(config);
+  rt.autoSettleEnabled = autoSettleEnabledOfConfig(config);
   const { laneWake: laneWakeInstalled, installLaneWake } = installLaneWakePath({ ctx, store, dispatchIndex, autoSettleEnabled: rt.autoSettleEnabled });
   rt.laneWake = laneWakeInstalled;
 

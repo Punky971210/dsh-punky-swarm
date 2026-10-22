@@ -87,7 +87,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     （未发明资产键、未落未实现分支——见 `DEFAULT_ON_FAIL`）。
 //   · 监听器全程 `try/catch` 且**不抛**（契约卡约束 6）：宿主对每 listener 独立 containment，
 //     但插件侧异常会污染自身状态面。
-import { isMemberTerminal } from '../schema.js';
+import { isMemberTerminal, autoSettleEnabledOf } from '../schema.js';
 import { laneBindingOf, ownerSessionIdOf, dispatchIndexEntryOf } from './dispatch.js';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
@@ -132,14 +132,11 @@ export const AUDIT_SETTLE_DEFERRAL_REASON = 'audit-explicit-settle-required';
  *  写入；两处注释互指，`isAutoSettleDisabledSkip` 是本模块侧的接收单点（幂等链排除面）。 */
 const AUTO_SETTLE_DISABLED_REASON = 'auto-settle-disabled';
 
-/** 开关**生效值**解析（R-1 向后兼容的判据本身）：**只有显式 `false` 才停用**。
- *  `undefined`（键缺省）/ 键缺失 / 任何非布尔值 ⇒ `true`（既有批行为**逐字不变**）。
- *  ⚠ **禁真值判断**：`!enabled` 会把 `0` / `''` / `null` 一并当停用 ⇒ **越权关停**（判据源 RK-3）。
- *  热更「生效变化」比对（`lib/index.js#remountAutoSettle`）与兼底路短路（`lib/tools/swarm-tools.js`）
- *  按**同形**判定镜像（`!== false`）——三处同形是本开关的硬要求，任一处漂移即成第二套口径。 */
-function autoSettleEnabledOf(enabled) {
-  return enabled !== false;
-}
+// 开关**生效值**判定 = **单点** `lib/schema.js#autoSettleEnabledOf`（A1-P2-07；本模块原先的私有同形函数已删）：
+//   语义冻结：**只有显式 `false` 才停用**；`undefined`（键缺省）/ 键缺失 / 任何非布尔值 ⇒ `true`
+//   （既有批行为**逐字不变**）。⚠ **禁真值判断**：`!enabled` 会把 `0` / `''` / `null` 一并当停用 ⇒ **越权关停**。
+//   读源**不**在单点内：装配期读 `deps.enabled`（`lib/index.js` 传静态 `config.autoSettle.enabled`），
+//   兼底路读 `readLiveConfig(deps)` 热更快照 —— 两路取原始值后调同一判定式（三处消费见单点注释）。
 
 /** audit 层 lane 判定（单点）：lane 的层取 `batch.wavePlan[].tasks` 中 `id === lane` 的 `layer` 字段
  *  （经 `findTask` 单点（定义见 `lib/state/task-utils.js#findTask`），**不新造第二套遍历**）。

@@ -17,6 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // verify/gate.js —— 完成闸门三态裁决（借鉴 dsh-verification CompletionGate）
 // 三态：done / failed / blocked；模式 advisory（默认只记录不拦截）/ enforce（显式装配启用则拦截）。
+// **本闸未接线（A1-P2-11）**：本文件**无生产消费点** —— 全仓 `lib/**` 的唯一引用是注释，
+//   运行时唯一调用方是测试的显式 DI（`{acList, ledger, readBlob}`）。装配侧真正挂载的是
+//   `verify/mount.js` 的 `mountVerify`，它只订阅证据捕获 hook，**从不读 `mode`**。
+//   ⇒ `capabilities.verify.mode:'enforce'` 在本文件的**纯函数语义**里成立（`evaluateGate` 的
+//   `intercepted` 分支不变），但**在装配面不生效**：配 enforce 得到的仍是 advisory 裁决。
+//   `mountVerify` 会在该配置下输出一条明确 warn（不再静默）。接线 or 退役 = 未决取向，
+//   见 `docs/governance-technical.md`（本批只做「不再静默」，**不改任何判定语义**）。
 // 审计消费桥接：audit lane 消费 exec 产物 + evidence → evaluateGate 产出裁决 → 裁决报告落盘为 audit
 // produce（audit/verify-verdict.md）→ Tier3 门禁照常校验该产物存在（既有 gates.js 零改动，verify 是内容层增强）。
 import { createSelectorRegistry } from './selector.js';

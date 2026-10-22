@@ -101,20 +101,14 @@ export declare function assembleCmd(role: string | null, skills: string[] | null
  *  ⇒ 该段保留（宁可留一段历史前缀，也不误剥用户同形原文）；装配表在批内稳定是既有前提。
  *  非行首的同形文本（如 `见 [role=x]`）不受影响。 */
 export declare function stripCmdPrefix(cmd: unknown, role?: string | null | undefined, skills?: string[] | null | undefined): string;
-export declare const HANDOFF_GATE_ENV = "PSWARM_HANDOFF_GATE";
+import { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV } from './state/handoff-gate.js';
+export { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV };
 export type HandoffGateStage = 'entry' | 'settle';
 export interface HandoffGateState {
     entry: boolean;
     settle: boolean;
     source: 'runtime' | 'env' | 'default';
 }
-/** 解析门态（**唯一真源**）。优先级（**逐段独立**）：段级 runtime 键 > 段内 `enabled` > env 兜底 > 缺省关。
- *  「逐段独立」的理由：`{ handoff: { settle: true } }` 这类**只写一段**的配置若整体回落 env，会出现
- *  「写了 settle 却把 entry 交给环境变量」的静默半开面（实测踩点：ambient env 可让本意只开一段的配置
- *  连带开另一段）⇒ 未显式声明的段一律走 `enabled`/env/缺省，不连坐。 */
-export declare function handoffGateStateOf(liveConfig: unknown, env?: Record<string, string | undefined>): HandoffGateState;
-/** 单段判定（薄封装；三处消费点用这个）。 */
-export declare function handoffGateEnabledOf(liveConfig: unknown, stage?: HandoffGateStage, env?: Record<string, string | undefined>): boolean;
 /**
  * 结构约束（两条，缺一不可）：
  *   ① **已声明在先**：`deps` 只许指向 tasks 数组中**位于自身之前**的任务（声明顺序 = 拓扑序依据）。
@@ -167,4 +161,3 @@ export declare function buildWavePlan({ batchId, tasks, concurrency, team, assem
 export declare function validateWavePlan(plan: WavePlanDoc, opts?: {
     smoke?: boolean;
 }): boolean;
-export {};

@@ -215,7 +215,7 @@ test('T-4/AC-9(3) 本批触碰文件内的锚点可核：不得新增死锚点�
 //   （`git show HEAD:./lib/tools/tier-gate.js` 内 0 命中）⇒ 该项**不能**用 HEAD 作 RED 基线，
 //   RED 证据 = `exec/change-desc.md` §一.4 的改前原文（人工核对，不在本件伪造断言）。
 test('T-4 RED 基线：六条死锚点在 HEAD 版本中存在（同一 grep 在修前为红）', () => {
-  const head = (file) => execFileSync('git', ['show', 'HEAD:./' + file], { cwd: PKG_ROOT, encoding: 'utf8' });
+  const head = (file) => execFileSync('git', ['show', '294b4f9:./' + file], { cwd: PKG_ROOT, encoding: 'utf8' });
   const headAutoSettle = head('lib/engine/auto-settle.js');
   const headContracts = head('lib/types/contracts.ts');
   const headTierGate = head('lib/tools/tier-gate.js');
@@ -263,7 +263,7 @@ test('T-4/AC-9(3) 存量死锚点在 HEAD 版本中已存在（证明非本批�
     ['lib/engine/dispatch.js', 'lib/tools/core.js#reportTargetOf'],
   ];
   for (const [file, anchor] of probes) {
-    const headSource = execFileSync('git', ['show', 'HEAD:./' + file], { cwd: PKG_ROOT, encoding: 'utf8' });
+    const headSource = execFileSync('git', ['show', '294b4f9:./' + file], { cwd: PKG_ROOT, encoding: 'utf8' });
     assert.ok(headSource.includes(anchor), '存量死锚点 `' + anchor + '` 必须已存在于 HEAD 的 ' + file + '（否则它就是本批引入的）');
   }
 });

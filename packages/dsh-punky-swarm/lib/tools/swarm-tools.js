@@ -26,6 +26,9 @@ import { REPORT_CHANNEL } from '../engine/dispatch.js';
 //   2026-10-09 批 `auto-settle-disable-switch-20261009`：本路增 `settleIdOf`（**既有导出**，非新增）
 //   仅为停用跳过留痕带回幂等键第三元（`(lane, settleId)` 可核；不引入新口径）。
 import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL, settleIdOf } from '../engine/auto-settle.js';
+// 开关**判定式单点**（A1-P2-07）：`lib/schema.js#autoSettleEnabledOf` —— 本文件不再内联 `!== false`，
+//   只负责**读源**（`readLiveConfig(deps)` 热更快照）；判定语义（只有显式 `false` 才停用）只在单点内。
+import { autoSettleEnabledOf } from '../schema.js';
 import { readLiveConfig } from './tier-gate.js';
 import { reportTargetOf, deliverSwarmMessage, appendSwarmEventOf, budgetSummaryForReport, WAKE_TYPES, wakeLeaderForReport, UNBOUND_BATCH_KEY } from './swarm-comms.js';
 
@@ -73,16 +76,15 @@ export function buildSwarmTools(cx) {
         //   语义来源 = 用户裁决 E-1=甲「成员只能使用 `swarm_report` **回报**」⇒ **回报面全留、结算面全停**：
         //   上面的 `deliverSwarmMessage`（Leader broadcast）+ `appendSwarmEventOf`（批事件 `swarm.report`）
         //   **一字不少**（位置与顺序均不变），仅把本段 `autoSettleLane` 的调用短路掉。
-        //   判定式与 `lib/engine/auto-settle.js#autoSettleEnabledOf` **同形**（`!== false`：只有**显式**
-        //   `false` 才停用；缺省/非布尔 ⇒ 启用）。该模块的判定函数与 reason 常量**刻意不导出**
-        //   （判据源 L-AC-14 要求导出符号净增 0）⇒ 此处按同形判定镜像；两处任一漂移即成第二套开关口径。
+        //   判定式**单点** = `lib/schema.js#autoSettleEnabledOf`（A1-P2-07；本文件原先的内联同形镜像已删）：
+        //   只有**显式** `false` 才停用；缺省/非布尔 ⇒ 启用。判定式不再在本文件成第二套口径。
         //   读端 = `readLiveConfig(deps)`（热更快照；与 `lib/tools/wave-plan-tools.js:69` 的
         //   `handoffGateEnabledOf(readLiveConfig(deps), 'entry')` 同一读法）⇒ runtime.json 改写即生效。
         // 【D-5 甲 · 用户 2026-10-09 裁定】**唤醒与结算解耦**：本判定式**只认** `settle-request`——
         //   新增的完成类 `type='completed'` **不**进入本分支（只唤醒、不结算），故本行**逐字不变**即已满足裁定；
         //   连带效果：`autoSettle.enabled=false` 只停结算面，`completed` 的唤醒面不受牵连（`WAKE_TYPES` 与开关无关）。
         const settleRequested = args.type === 'settle-request' && !!tgt.batchId;
-        const autoSettleEnabled = readLiveConfig(deps)?.autoSettle?.enabled !== false;
+        const autoSettleEnabled = autoSettleEnabledOf(readLiveConfig(deps)?.autoSettle?.enabled);
         const settle = (settleRequested && autoSettleEnabled)
           ? await autoSettleLane({ ctx, store, root, liveConfig: readLiveConfig(deps) }, {
             sessionId: tgt.sessionId, batchId: tgt.batchId, lane: tgt.lane,

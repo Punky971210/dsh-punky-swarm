@@ -157,7 +157,7 @@ test('T-2/AC-8③ 静态单点：`startsWith(base)` 在全 lib/ 0 命中（含�
 // ── RED 基线（修前形态的可复现证据；不改仓库，只读 HEAD 与自己的临时根）────────────────
 test('T-2 RED 基线：HEAD 仍是纯词法判据，且该判据真的把 junction 判「根内」并写到根外', () => {
   // ① 静态 RED：HEAD 版本 `claimAsset` 的判据 = 纯词法前缀比较
-  const headSrc = execFileSync('git', ['show', 'HEAD:./lib/state/store/batch.js'], { cwd: PKG_ROOT, encoding: 'utf8' });
+  const headSrc = execFileSync('git', ['show', '294b4f9:./lib/state/store/batch.js'], { cwd: PKG_ROOT, encoding: 'utf8' });
   assert.ok(headSrc.includes('startsWith(base)'),
     'RED 基线：HEAD 必须在场（若不成立 ⇒ 本组判据的「修前红」不成立，须重定基线）');
 

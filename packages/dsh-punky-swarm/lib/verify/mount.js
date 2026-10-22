@@ -37,6 +37,17 @@ export { VERIFY_DEFAULTS, resolveVerifyConfig };
 export function mountVerify(ctx, { root, config, logger } = {}) {
   const cfg = resolveVerifyConfig(config);
   const log = logger ?? ctx?.logger ?? null;
+  // 诚实面（A1-P2-11）：`mode:'enforce'` **未接线** —— `verify/gate.js` 的 `createCompletionGate`
+  //   无生产消费点（唯一 import 方是测试的显式 DI），装配侧只挂证据捕获 hook、**从不读 mode**
+  //   ⇒ 配 enforce 实际按 advisory 生效。本处**必须早于任何 inert 提前返回**，否则 `ctx.on` 缺失时
+  //   该真相永不可见。语义边界：只多一条日志，**判定路径零改动**（接线/退役取向见 docs/governance-technical.md）。
+  if (cfg.enabled === true && cfg.mode === 'enforce') {
+    log?.warn?.('[dsh-punky-swarm] capabilities.verify.mode="enforce" is NOT wired（未接线）: '
+      + 'createCompletionGate has no production consumer — only evidence capture is mounted, '
+      + 'and it never reads `mode` ⇒ enforce is inert, the verdict runs as advisory. '
+      + 'Set mode="advisory" to silence this warning; see docs/governance-technical.md '
+      + '(wiring vs retirement is an open decision).');
+  }
   const inert = (reason) => ({ installed: false, reason, mode: cfg.mode, count: () => 0, dispose() {} });
   if (cfg.enabled !== true) return inert('disabled');
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');

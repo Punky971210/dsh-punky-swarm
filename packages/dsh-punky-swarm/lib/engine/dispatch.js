@@ -799,6 +799,9 @@ export function workerSessionIdOf(start, warn) {
  *
  *  【2026-10-22 · A1-P1-01】探测面**从「有没有 `start`」升级为「是哪一形态」**（判定序**只在下面一处**）：
  *    ① `ctx?.subagents` 取值抛错 / 为假 ⇒ `{ rt:null, form:null, reason:'runtime-unavailable' }`
+ *       ⚠ **生产不可达（A1-P2-02 事实化）**：`lib/index.js` 的 `inject` 把 `subagents` 声明为**硬依赖**
+ *       （宿主 inject 归一化**无 optional 位**）⇒ 宿主缺该服务时插件**整块 pending**、本函数根本不会被调用。
+ *       本档只服务「测试直建 ctx / 未来注入形态变更」；**不要**据它推断「生产会静默降级」。
  *    ② `typeof rt.startActivation === 'function'` ⇒ `form:'activation'`（新形态：不承载 `toolFilter`/`persona`）
  *    ③ 否则 `typeof rt.start === 'function'` ⇒ `form:'start'`（旧形态：按次收窄生效 = 唯一调用形态）
  *    ④ 否则 ⇒ `{ rt:null, form:null, reason:'no-start-entry' }`
@@ -1159,10 +1162,15 @@ export function laneBindingOf(store, sessionId) {
   return null;
 }
 
-/** 批次邮箱根（与 lane-heartbeat 同口径）：<engineRoot>/sessions/<sessionId>/mailbox/<batchId>。 */
-export function mailboxRootOf(engineRoot, sessionId, batchId) {
-  return String(engineRoot ?? '').replace(/[\\/]+$/, '') + '/sessions/' + sessionId + '/mailbox/' + batchId;
-}
+/**
+ * 批次邮箱根（与 lane-heartbeat 同口径）：<engineRoot>/sessions/<sessionId>/mailbox/<batchId>。
+ * **实现单点** = `lib/mailbox-paths.js::mailboxRootOf`（A1-P2-10：本文件原有一份手写派生，与
+ *   `comms/mailbox-paths` / `bridge/trajectory` / `watch/heartbeat/context` 三份同形 ⇒ 已收成一份）。
+ * 本处**保形再导出**（导出名 / 参数个数 / 语义逐字不变，消费方 `tools/swarm-comms.js` 零改动）。
+ * 唯一行为边界：root 为 `null`/`undefined` 由「产出 `/sessions/…` 无根路径」改为 **throw**（fail-closed，
+ *   见单点文件顶部声明）。
+ */
+export { mailboxRootOf } from '../mailbox-paths.js';
 
 /** 成员回报的通路（0f/Manager 通道口径）：Leader 读 broadcast；Manager 读 supervisor/inbox。 */
 export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inbox' });

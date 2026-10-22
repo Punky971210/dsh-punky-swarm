@@ -39,7 +39,7 @@ export const CAPABILITY_REGISTRY = [
   { key: 'acps', path: ['acps'], default: ACPS_DEFAULTS, consumers: ['index.js acps endpoint 装配 + lib/acps/server.js'] },
   { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
   { key: 'discovery', path: ['capabilities', 'discovery'], default: DISCOVERY_DEFAULTS, consumers: ['index.js discovery 服务装配 + api.js /discover + /.well-known/aip 端点'] },
-  { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook', 'verify/gate.js createCompletionGate(DI)'] },
+  { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook（只做证据捕获）', 'verify/gate.js createCompletionGate（仅测试 DI；生产未接线 ⇒ mode=enforce 不拦截）'] },
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
   { key: 'budget', path: ['capabilities', 'budget'], default: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 }, consumers: ['comms/budget.js + mailbox-tools.js 发送检查'] },

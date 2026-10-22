@@ -24,6 +24,9 @@ export const QUERY_TYPES = ['explicit', 'exploratory', 'trending', 'filtered'];
 export const QUERY_TYPE_EXPLICIT = 'explicit';
 
 // ── 转发限制（FORWARD_*，与 acps_sdk/adp/constants.py 一致）──
+// **外部规范对齐表**：四枚 `_DEFAULT` 是「与参考实现一致」的**声明面**，仓内**零消费**
+//   （请求校验只用下方私有 `_MIN` / `_MAX`）⇒ **勿据以推断行为**：仓内不读这些缺省值，
+//   它们不对应任何运行期回落。保留而非删除的理由见 `docs/frozen-register-2026-09-21.md` §2 裁定①。
 export const FORWARD_DEPTH_LIMIT_DEFAULT = 3;   // 服务器默认
 const FORWARD_DEPTH_LIMIT_MIN = 1;
 const FORWARD_DEPTH_LIMIT_MAX = 5;       // 绝对上限

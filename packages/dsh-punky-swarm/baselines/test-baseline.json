@@ -360,6 +360,14 @@
       "tests": 41,
       "todos": 0
     },
+    "test/esm-first-eval.test.js": {
+      "asserts": 12,
+      "blankLines": 18,
+      "lines": 222,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/f1-apply-root-guard.test.js": {
       "asserts": 18,
       "blankLines": 9,
@@ -1024,12 +1032,52 @@
       "tests": 20,
       "todos": 0
     },
+    "test/p2-dead-verify.test.js": {
+      "asserts": 28,
+      "blankLines": 20,
+      "lines": 174,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/p2-deps-compat.test.js": {
+      "asserts": 26,
+      "blankLines": 26,
+      "lines": 242,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
+    "test/p2-gate-codes.test.js": {
+      "asserts": 36,
+      "blankLines": 27,
+      "lines": 221,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
     "test/p2-settle-handoff.test.js": {
       "asserts": 36,
       "blankLines": 23,
       "lines": 274,
       "tautologies": 0,
       "tests": 7,
+      "todos": 0
+    },
+    "test/p2-single-point.test.js": {
+      "asserts": 34,
+      "blankLines": 23,
+      "lines": 275,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
+    "test/p2-state-single.test.js": {
+      "asserts": 38,
+      "blankLines": 25,
+      "lines": 230,
+      "tautologies": 0,
+      "tests": 13,
       "todos": 0
     },
     "test/panel-render.test.js": {
@@ -1473,7 +1521,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-22T16:31:41Z",
+  "generatedAt": "2026-10-22T17:47:00Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1484,15 +1532,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "A 收尾：archive 写面归一经 commitBatch（含测试判据更新：由「钉住残余」改为「正向判据 + 结构面反向断言」）",
+  "reason": "punky-fix-p2-20261023 tester 新增 6 文件 52 test / +174 asserts",
   "schema": 1,
   "totals": {
-    "asserts": 9613,
-    "blankLines": 4897,
-    "files": 184,
-    "lines": 52485,
+    "asserts": 9787,
+    "blankLines": 5036,
+    "files": 190,
+    "lines": 53849,
     "tautologies": 2,
-    "tests": 1932,
+    "tests": 1984,
     "todos": 4
   }
 }

@@ -788,52 +788,22 @@ export function stripCmdPrefix(
 //   `null` = 无团队标签，由工具面就地归一化（**纯归类字段**，不参与任何解析）。
 //   本函数**不代造默认值**（落 `team: team`，可为 `null`）；读端（store/gates）按「非字符串 = 无团队」处理。
 // ── P1/P2 交接门开关（`task-27` 2026-09-17 设计修正）：**唯一解析点** ────────────────────────────
-// 背景（用户裁决）：「门禁应该**只与插件有关**，和父进程无关，也和 dsh 底座无关」——原实现读
-//   `process.env.PSWARM_HANDOFF_GATE` ⇒ 插件行为被**启动父进程的环境块**绑架（本机 web 宿主由常驻
-//   Desktop 应用派生，其环境块早于变量设置 ⇒ 重启多少次都带不进来）。现改为**插件自己的热配置**：
-//     真源 = `<root>/config/runtime.json` 顶层 `gates.handoff.{entry,settle}`
-//       （`lib/hot/config-watch.js`：fs.watch + 防抖 → 快照 → `config.changed`；`gates` 已入允许键白名单）；
-//     **env 降为兜底**（`PSWARM_HANDOFF_GATE`，兼容既有行为与夹具），**缺省仍关**。
-// 单一解析点纪律（硬）：三处消费点（① 建批期 `checkHandoffDeclarations` ② entry 门 ③ 出口门）**全部**经本组
-//   函数取值；`process.env.PSWARM_HANDOFF_GATE` **只允许出现在本文件内**（grep 判据）。**禁两套读取**。
-export const HANDOFF_GATE_ENV = 'PSWARM_HANDOFF_GATE';
+// 【A1-P2-01 补丁③】整块（含设计注释与判据）已**下沉到零依赖叶子** `lib/state/handoff-gate.js`：
+//   原实装住在本文件时，`state/gates/entry.js` 与 `state/gates/handoff.js` 只为取本组函数而 import
+//   本文件，而本文件 import `state/gates.js` ⇒ 4 模块 SCC（`state/gates.js` / `entry.js` / `handoff.js` /
+//   `wave-plan.js`）。下沉后两道门直连叶子，SCC 消失。
+//   本文件**保形再导出**下列三符号（导出名 / 参数个数 / 语义逐字不变；`test/handoff-gate-hotconfig.test.js`
+//   与 `lib/tools/query-tools.js` 的 import 面逐字不动即通过）。**禁**在此重新实现判据（禁两套读取）。
+//   grep 判据口径同步变更：**env 兜底的读取点已唯一化到 `lib/state/handoff-gate.js`**
+//   （该文件是唯一消费 `HANDOFF_GATE_ENV` 做 env 取值的地方；本文件只做保形再导出）。
+import { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV } from './state/handoff-gate.js';
+export { handoffGateEnabledOf, handoffGateStateOf, HANDOFF_GATE_ENV };
+// 类型声明留在此处（.d.ts 导出面冻结）：运行期实现已在下沉叶子内，本处只承载形状描述，无第二实现。
 export type HandoffGateStage = 'entry' | 'settle';
 export interface HandoffGateState {
   entry: boolean;
   settle: boolean;
   source: 'runtime' | 'env' | 'default';   // 取值来源（渲染面可见：`src:runtime|env|default`）
-}
-const asBool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
-/** 解析门态（**唯一真源**）。优先级（**逐段独立**）：段级 runtime 键 > 段内 `enabled` > env 兜底 > 缺省关。
- *  「逐段独立」的理由：`{ handoff: { settle: true } }` 这类**只写一段**的配置若整体回落 env，会出现
- *  「写了 settle 却把 entry 交给环境变量」的静默半开面（实测踩点：ambient env 可让本意只开一段的配置
- *  连带开另一段）⇒ 未显式声明的段一律走 `enabled`/env/缺省，不连坐。 */
-export function handoffGateStateOf(liveConfig: unknown, env: Record<string, string | undefined> = process.env): HandoffGateState {
-  const raw = String(env?.[HANDOFF_GATE_ENV] ?? '').toLowerCase();
-  const envOn = raw === '1' || raw === 'true' || raw === 'on';
-  const gates = (liveConfig && typeof liveConfig === 'object' && !Array.isArray(liveConfig))
-    ? (liveConfig as Record<string, unknown>).gates : null;
-  const handoff = (gates && typeof gates === 'object' && !Array.isArray(gates))
-    ? (gates as Record<string, unknown>).handoff : null;
-  if (handoff && typeof handoff === 'object' && !Array.isArray(handoff)) {
-    const h = handoff as Record<string, unknown>;
-    const enabled = asBool(h.enabled);
-    const eRaw = asBool(h.entry);
-    const sRaw = asBool(h.settle);
-    const entry = eRaw ?? enabled ?? envOn;
-    const settle = sRaw ?? enabled ?? envOn;
-    // 只要该段有**本段/段级**显式布尔来源，就记 source='runtime'（env 仅作未声明段的缺省）
-    const explicit = eRaw !== null || sRaw !== null || enabled !== null;
-    if (explicit) return { entry, settle, source: 'runtime' };
-  }
-  if (envOn) return { entry: true, settle: true, source: 'env' };
-  return { entry: false, settle: false, source: 'default' };
-}
-/** 单段判定（薄封装；三处消费点用这个）。 */
-export function handoffGateEnabledOf(
-  liveConfig: unknown, stage: HandoffGateStage = 'entry', env: Record<string, string | undefined> = process.env,
-): boolean {
-  return handoffGateStateOf(liveConfig, env)[stage];
 }
 
 // ── P1 交接门：建批期校验 ─────────────────────────────────────────────

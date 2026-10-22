@@ -29,6 +29,24 @@ import { SESSION_RE } from '../constants.js';
 import { resolveArtifactIn } from '../batch-paths.js';
 import * as EVT from '../event-types.js';
 
+// 恢复/回收的**唯一** idle 写入口（A1-P2-08 · 单点，私有、不导出）：
+//   为什么这处**不走** `canTransitionMember` / `MEMBER_TRANSITIONS`：
+//     ① 迁移表**刻意**没有 `* → idle` 入边 —— 加进去等于把全部署的棘轮地板永久放宽一档
+//        （`state/machine-rules.js` 的 `allowRelax` 逃生门只管「收紧」，默认表一放就不可回收），
+//        且 `test/outcome-typing.test.js` 显式断言 `canTransitionMember('running','idle') === false`；
+//     ② 但「恢复（进程崩溃后 in-flight lane 落位 idle）」与「回收（停滞 lane 显式落位 idle）」
+//        是**引擎侧处置**语义，不是成员自报迁移 ⇒ 需要一个显式豁免点，而不是两份直写。
+//   本函数即该豁免点：合法性判据 = `schema.RECOVERY_IDLE_FROM`（唯一声明），非法 from 直接 throw
+//   （**比两份直写更严**：原直写对非法 from 无任何判定）。事件与审计留痕仍归各调用点自己负责。
+function laneIdleOnRecovery(batch, lane) {
+  const from = batch?.lanes?.[lane];
+  if (!schema.RECOVERY_IDLE_FROM.includes(from)) {
+    throw new Error('recovery idle edge not declared: ' + from + ' -> idle (lane ' + lane + ')');
+  }
+  batch.lanes[lane] = 'idle';
+  return from;
+}
+
 export function buildLifecycle(cx) {
   const { sessionsDir, batchesDirOf, readBatch, isCorrupt, newEvent, commitBatch, artifactsDirOf, log } = cx;
 
@@ -92,12 +110,13 @@ export function buildLifecycle(cx) {
         const detail = [];
         for (const [lane, state] of Object.entries(batch.lanes)) {
           if (state === 'running' || state === 'review') {
-            batch.lanes[lane] = 'idle';
+            // 单点写入口（A1-P2-08）：`from` 由 `laneIdleOnRecovery` 的返回值提供，审计字段逐字不变
+            const from = laneIdleOnRecovery(batch, lane);
             recoveredLanes.push(lane);
             // 审计详情：from 原态 / lastActiveAt 反查 / produced 复用 gate 语义（置 idle 前采集，只读不改产物）；
             // outcome='crashed'：进程崩溃重启后 in-flight lane 被强制落 idle 的结局记账值
             // （只记不改：非成员态、不拦截、不新增迁移；随既有 system.recovered.detail 供重派前经事件流查询）
-            detail.push({ lane, from: state, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane), outcome: 'crashed' });
+            detail.push({ lane, from, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane), outcome: 'crashed' });
           }
         }
         if (recoveredLanes.length > 0) {
@@ -124,9 +143,11 @@ export function buildLifecycle(cx) {
   }
 
   // 孤儿 worker 显式回收：lane.stalled 处置扩展——只标记 → 可显式回收。
-  // 语义：管理命令（显式触发，仿 recoverBatches 直写先例，不经棘轮表/不放宽 MEMBER_TRANSITIONS）；
+  // 语义：管理命令（显式触发）；入 idle 走**单点豁免入口** `laneIdleOnRecovery`（本文件模块级，
+  //       与 recoverBatches 共用同一处判定 + 写），不经棘轮表/不放宽 MEMBER_TRANSITIONS；
   //       默认不自动处置（人审保留）；lane.stalled 仍非成员状态（不新增成员态，语义保持）。
-  // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收：终态 lane 永不回收）。
+  // 前置校验：批次不存在/损坏 → throw；lane 非 running → throw（防双回收/误回收：终态 lane 永不回收）；
+  //   `'running'` 前置校验是**回收专用**语义（不是通用迁移判定），与单点的 `RECOVERY_IDLE_FROM` 并集一致。
   // 事件：lane.recycled { lane, from:'running', reason:'stalled', outcome:'interrupted', note } 留痕；
   //   outcome='interrupted'：运行中被显式回收（停滞证据 → 脱离在飞态）的结局记账值
   //   （只记不改：非成员态、不拦截、不新增迁移；watch stalled/longrun 信号零变，仅处置落 idle 时记账）；
@@ -139,7 +160,7 @@ export function buildLifecycle(cx) {
     // 校验该 lane 存在 lane.stalled 事件（batch.events 反查；stalled 只标记，回收须有停滞证据）
     const hasStalled = (batch.events ?? []).some((e) => e.type === EVT.EVT_LANE_STALLED && e.lane === lane);
     if (!hasStalled) throw new Error('no lane.stalled event for lane: ' + lane + ' (recycle requires stalled evidence)');
-    batch.lanes[lane] = 'idle';
+    laneIdleOnRecovery(batch, lane);
     batch.events.push(newEvent(EVT.EVT_LANE_RECYCLED, { lane, from: 'running', reason: 'stalled', outcome: 'interrupted', note: null }));
     batch.updatedAt = new Date().toISOString();
     commitBatch(sessionId, batchId, batch);

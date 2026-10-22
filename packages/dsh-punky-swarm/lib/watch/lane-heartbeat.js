@@ -210,9 +210,7 @@ const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
 // =====================================================================================
 // 【2026-10-02 · 内务批 波 2】探针 `reason` 常量与状态阈值映射 `STATE_WINDOW_KEY` 已下沉
 //   `./heartbeat/primitives.js`（**单点**；顶部 import 取用），本文件不再持有私有副本。
-// 豁免清退显式提示（D7 次选方案的探针侧可见面）：
-//   读端事件名走**字面量**——`lib/state/event-types.js` 本批无写者，不得越域新增常量（design §9）。
-export const REASON_EXEMPT_CLEARED = 'exempt-cleared';
+// 读端事件名走**字面量**——`lib/state/event-types.js` 本批无写者，不得越域新增常量（design §9）。
 const EVT_LANE_EXEMPT_CLEARED_LITERAL = 'lane.exempt.cleared';
 
 export function resolveLongrunConfig(config) {

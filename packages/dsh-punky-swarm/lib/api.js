@@ -41,6 +41,9 @@ function q(url) {
 export function createApi(ctx, deps) {
   const { store, root, catalog, agentCatalog, aipFormat, discovery } = deps;
   const disposers = [];
+  // 裸取 `ctx.webServer`：`webServer` 是插件 `inject` 的**硬依赖**（宿主 cordis 4.0.5 的 inject 无 optional 位）
+  //   ⇒ 该服务必然在场，本行不会拿到 `undefined`；缺服务的真实形态是插件整块 pending（本文件不被加载）。
+  //   事实化理由与真降级路径见 `lib/index.js` 顶部 `inject` 上方注释（A1-P2-02）——此处**不复制**全文，防第二真源。
   const register = (route) => disposers.push(ctx.webServer.register(route));
 
   // SSE hub：随 webServer 挂载（无独立配置键；降级回轮询即运行时自适配开关）。

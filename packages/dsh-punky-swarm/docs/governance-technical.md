@@ -179,7 +179,7 @@
 | mailbox 环防护 | `capabilities.budget` | 开（hops=4 / roundTrips=2） | outbox/broadcast 发送前 checkBudget；inbox（Leader 下行派发）永不受限 |
 | 心跳/过期检测 | `capabilities.watch` | 开 | watchdog 定时器 + lane_heartbeat；退避档位追问 + 连续 N 拍无活动 → lane.stalled 标记（只标记不自动处置）；热更/重启对账生效面 5 键 = {`enabled`, `longrun.enabled`, `scanIntervalMinutes`, `longrun.maxDurationMs`, `longrun.noProgressWindowMs`}——长跑阈值可经治理配置页表单（分钟换算 ms）或 runtime.json 写入并生效 |
 | worktree 物理隔离 | `capabilities.worktree` | 开 | lane_worktree_create/merge/checkpoint；与 lane_claim 逻辑锁互补 |
-| 验收证据 | `capabilities.verify` | 开（mode=advisory） | post-execute 证据捕获（内容寻址 blob + ledger）；三态裁决（done/failed/blocked）；mode=enforce 时拦截 |
+| 验收证据 | `capabilities.verify` | 开（mode=advisory） | post-execute 证据捕获（内容寻址 blob + ledger）；三态裁决（done/failed/blocked）**仅在显式 DI 调用 `verify/gate.js` 时成立**——`createCompletionGate` **无生产消费点** ⇒ `mode=enforce` **当前未接线**（装配侧只做证据捕获，启动日志输出 warn，裁决按 advisory 生效；接线/退役取向未决，见 A1-P2-11） |
 | 日志导出 | `capabilities.logs` | 关 | log_export 工具注册（patch 显式开启） |
 | topic 订阅 | `capabilities.topic` | 关 | subscribeTopic/emitTopic：进程内分发 + mailbox broadcast 落盘 |
 | 冲突化解 agent | `capabilities.worktree.mergeAgent` | 关 | 需宿主注入 spawner；未注入时冲突保持 conflict 态 |

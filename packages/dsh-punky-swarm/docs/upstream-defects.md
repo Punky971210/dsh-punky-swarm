@@ -195,6 +195,39 @@
 
 ---
 
+## 兼容口径：`@deepseek-ai/dsh-tools@0.2.1-rc.2`（**不是缺陷，是能力面差异**）
+
+> 本节性质与 UD-1／UD-2 不同：它不是上游 bug，而是**宿主在本区间换了 `subagents` 服务的实现形态**。
+> 登记在此是因为它与「本包 `peerDependencies` 声明能覆盖哪些宿主版本」直接绑定 ——
+> **peer range 覆盖 ≠ 能力齐备**，两者必须在同一处读，否则读者会把「range 命中」误读成「引擎自派可用」。
+
+### 事实
+
+- `package.json` 的 `peerDependencies["@deepseek-ai/dsh-tools"]` 与 `devDependencies` 同名条目
+  （两处同形）末段追加 `|| ^0.2.1-rc.2`，覆盖 `0.2.1-rc.2` / `0.2.1-rc.3` / `0.2.1` / `0.2.2`；
+  更早六段逐字保留（任何原先满足的组合仍满足）；上界不外溢（`0.3.0-rc.1` 仍不满足）。
+  改动动机：宿主实装即 `0.2.1-rc.2`，旧 range 在该版本上 `semver.satisfies` 为 `false` ⇒ 声明面失真。
+- 该区间的宿主 `subagents` 服务实装为 **`startActivation(spec)`** 形态，**不承载** `request.toolFilter`
+  / `request.persona`（旧 `start(provider, request)` 形态才承载）。
+
+### 本仓口径（F1 事实，**不外推**）
+
+- 引擎**自派**（工具面 `lane_dispatch` 的引擎代派路径）在该区间上为**前置 fail-closed 拒派**：
+  抛 `GATE_DISPATCH_CAPABILITY_MISSING`，且**打在状态变更之前** —— lane 保持待派发、不发放一次性句柄、
+  不写 `member.dispatch` 事件、批相位不变。⇒ **不会**「以弱换强」降级为不带 toolFilter/persona 的自派。
+- **人工直派**（`member_status` / 手写首行的直派形态）**不受影响**：它不经宿主 subagent 服务的
+  `toolFilter`/`persona` 通道。
+- ⇒ 本包在 `0.2.1-rc.2` 上的真实能力口径是：「插件加载 + 治理工具面 + 人工直派可用；
+  **引擎自派不可用（显式拒派）**」。**不得**把 range 覆盖读成「自派已恢复」。
+
+### 为什么不改上游 / 不在本批修
+
+改上游 = 破本仓红线（不改 `@deepseek-ai/*`）。真修方向 = **迁移到 Agent Preset 承载 toolFilter/persona**
+（F4，未启动）：届时引擎自派在新宿主形态上重新可用，本节的「拒派」口径随之作废。
+在此之前，本节即该组合的**唯一事实陈述**；任何「已兼容自派」的推断都缺证据。
+
+---
+
 ## 取证记录
 
 | 项 | 内容 |

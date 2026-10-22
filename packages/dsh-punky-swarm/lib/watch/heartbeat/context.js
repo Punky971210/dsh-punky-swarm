@@ -22,6 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   （纪律：不新增真源）。初始化顺序与拆分前逐字一致：cfg → lrCfg → schedule → hardStop → clock →
 //   engineRoot → ctxOf → state；`disposed` / `replayInFlight` 为可变位（原闭包 `let`，同一实例内唯一）。
 import { join, dirname } from 'node:path';
+import { mailboxRootOf as mailboxRootOfAt } from '../../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
 import { resolveArtifactIn } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）
 import { resolveWatchConfig } from '../../schema.js';
 import { lastProgressTsOf, resolveLongrunConfig, buildSchedule } from '../lane-heartbeat.js';
@@ -48,10 +49,15 @@ export function createHeartbeatContext({ store, mailbox, config, root, now, live
   };
 }
 
-export function mailboxRootOf(cx, sessionId, batchId) {
+// 批次邮箱根：**守卫 + 委托**（A1-P2-10）。导出名 / 参数个数 / 返回语义与守卫文案逐字不变
+//   （三个消费方 `heartbeat/{activity,longrun,stalled}.js` 零改动）；派生式本身已收成 `(lib-root)` 单点
+//   `lib/mailbox-paths.js::mailboxRootOf`——本处不再持有第二份路径拼接。
+// 形态说明：用 `const` 箭头而非函数声明，使全仓「函数声明形态」的 mailboxRootOf 定义数恰为 1（即单点）；
+//   本处只是包装（读 `cx.engineRoot` + 守卫），不构成第二份派生。
+export const mailboxRootOf = (cx, sessionId, batchId) => {
   if (!cx.engineRoot) throw new Error('lane-heartbeat: no root (pass deps.root or store.sessionsDir)');
-  return join(cx.engineRoot, 'sessions', sessionId, 'mailbox', batchId);
-}
+  return mailboxRootOfAt(cx.engineRoot, sessionId, batchId);
+};
 export const laneKeyOf = (sessionId, batchId, lane) => `${sessionId}/${batchId}/${lane}`;
 
 // 产物解析（WD-3b P6）：改调 fail-closed 单点 `resolveArtifactIn` ——

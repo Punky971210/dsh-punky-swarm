@@ -21,9 +21,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { findTask } from '../task-utils.js';
 import { taskOf, smokeOf } from './detect.js';
-// P1/P2 交接门开关：**唯一解析点**在 `lib/wave-plan.ts#handoffGateEnabledOf`（读 runtime.json `gates.handoff.*`，
-//   env 仅兜底）；本文件只**调用**它，不自行读 env/config 判据（禁两套读取）。
-import { handoffGateEnabledOf } from '../../wave-plan.js';
+// P1/P2 交接门开关：**唯一解析点**在 `lib/state/handoff-gate.js#handoffGateEnabledOf`（读 runtime.json
+//   `gates.handoff.*`，env 仅兜底）；本文件只**调用**它，不自行读 env/config 判据（禁两套读取）。
+//   【A1-P2-01 补丁③】改为直连零依赖叶子（原经 `../../wave-plan.js`，与 `state/gates.js` 构成 4 模块 SCC）；
+//   `wave-plan.ts` 保留同名保形再导出，故该判据在包内的公开取用位置不变。
+import { handoffGateEnabledOf } from '../handoff-gate.js';
 import type { Batch } from '../../types/contracts.js';
 // 人工裁决证据解析单点（WD-1）：禁在本文件内复制证据正则
 import { humanEvidenceOf } from '../constants.js';

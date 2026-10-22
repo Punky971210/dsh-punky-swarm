@@ -103,15 +103,16 @@ const WHY = {
   flowsDeclarationOf: '自述「gateStrength / 诊断面板的取数入口」',
   renderVerdictReport: '自述「落盘格式（**预留**：audit/verify-verdict.md）」',
   workerResumeChapter: '自述「**骨架**，增强恢复落地后填充」+ `enabled:false` 声明面',
-  REASON_EXEMPT_CLEARED: '读端契约名（读端走字面量，本批无写者）',
-  FORWARD_DEPTH_LIMIT_DEFAULT: '节标题「与 `acps_sdk/adp/constants.py` 一致」⇒ 外部规范对齐表',
-  FORWARD_FANOUT_LIMIT_DEFAULT: '同上（外部规范对齐表）',
-  FORWARD_EACH_TIMEOUT_MS_DEFAULT: '同上（外部规范对齐表）',
-  FORWARD_TOTAL_TIMEOUT_MS_DEFAULT: '同上（外部规范对齐表）',
+  FORWARD_DEPTH_LIMIT_DEFAULT: '外部规范对齐表（节标题「与 `acps_sdk/adp/constants.py` 一致」）：**仓内零消费**，**勿据以推断行为**',
+  FORWARD_FANOUT_LIMIT_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
+  FORWARD_EACH_TIMEOUT_MS_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
+  FORWARD_TOTAL_TIMEOUT_MS_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
 };
 for (const x of b1kept) lines.push(`| \`${x.base}.js\` | \`${x.name}\` | ${WHY[x.name] || '（见源码注释）'} |`);
 lines.push('');
 lines.push('**裁定 ①（2026-09-21）**：**先留着，等新引擎落地再议** —— 这些符号的存废取决于新形态是否还需要该声明面，属设计决策而非清理决策。');
+lines.push('');
+lines.push('**批注（`punky-fix-p2-20261023` / `A1-P2-12`，2026-10-23）**：本批**不覆盖**裁定①，只按裁决做两件事 —— ①4 枚 `FORWARD_*_DEFAULT` **保留**，理由列改写为诚实表述（外部规范对齐表 / 仓内零消费 / 勿据以推断行为）；②「豁免清退」reason 常量（值 `exempt-cleared`）**删除**：仓内零读零写，且该字面值与实写 reason `explicit-revoke` 不一致 ⇒ 留着会诱导未来读端按错误字面量比对而恒 false（探针读端实际走事件名 + `laneExemptCleared` 字段，不读 reason）。');
 lines.push('');
 lines.push('---');
 lines.push('');

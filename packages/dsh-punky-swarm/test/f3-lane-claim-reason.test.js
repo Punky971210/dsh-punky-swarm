@@ -105,7 +105,7 @@ test('T-3/AC-7 force 档三档必须拿到具体 reason，且三档互不相同�
 });
 
 test('T-3 RED 基线：HEAD 的工具面把三档成因硬折叠为同一文案（透传表达式在 HEAD 不存在）', () => {
-  const headSrc = execFileSync('git', ['show', 'HEAD:./lib/tools/member-tools.js'], { cwd: PKG_ROOT, encoding: 'utf8' });
+  const headSrc = execFileSync('git', ['show', '294b4f9:./lib/tools/member-tools.js'], { cwd: PKG_ROOT, encoding: 'utf8' });
   assert.ok(headSrc.includes("reason: 'lane locked'"), 'RED 基线：HEAD 的折叠实现必须在场');
   assert.equal(headSrc.includes("typeof r.reason === 'string'"), false,
     'RED 基线：HEAD 无透传表达式（⇒ 修前三档必然同一文案，本组 force 用例在 HEAD 上会红）');
