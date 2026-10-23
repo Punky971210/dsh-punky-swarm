@@ -269,15 +269,31 @@ export function resolveVerifyConfig(config: ConfigInput | null | undefined): Res
   };
 }
 
-// ── autoSettle.enabled：自动结算总开关的**判定式单点**（A1-P2-07）──
+// ── autoSettle：**判定式**（本函数）+ **投影**（`autoSettleSwitchOf` 紧随其后）两个单点 ──
 // 本函数**只收判定式，不收读源**：装配期读静态 `config`、兼底路读 `readLiveConfig(deps)` 的热更快照
-//   （两路读源不同 ⇒ 取原始 `enabled` 值由各消费方自己负责，判定只此一处）。
+//   （两路读源不同 ⇒ 原始 `enabled` 值由投影单点 `autoSettleSwitchOf` 取，判定只此一处）。
 // 语义冻结：**只有显式 `false` 才停用**；`undefined`（键缺省）/ 键缺失 / 任何非布尔值 ⇒ 启用。
 //   ⚠ **禁真值判断**：`!enabled` 会把 `0` / `''` / `null` 一并当停用 ⇒ **越权关停**。
 // 消费方（3 处，均只调本单点，禁再内联判定式）：`lib/engine/auto-settle.js`（装配期 `enabled`）、
 //   `lib/index.js`（热更生效比对 + boot 对账，读静态 config）、`lib/tools/swarm-tools.js`（兼底路短路，读热更快照）。
 export function autoSettleEnabledOf(enabled: unknown): boolean {
   return enabled !== false;
+}
+
+/**
+ * `autoSettle.enabled` 的**投影单点**（A2-G12）：只做 `config → 原始值` 的取面，**不判定**
+ *   （判定归 `autoSettleEnabledOf`）。
+ *
+ * 读源**两路是显式二阶，不是缺陷、也不能硬合并**：
+ *   ① 装配期 = `apply(ctx, config)` 的**静态 config** —— 此时 `<root>/config/runtime.json` 尚未并入快照；
+ *   ② 热更后 = **热更快照**（工具面 `readLiveConfig(deps)` / 装配面 `readConfig()`）。
+ * 两路最终都交给判定式单点。**合并两路 = 改行为**（装配期快照未就绪）；故只收「投影」与「判定」，
+ *   读源二阶在此登记，供审计核「为什么允许两个入口」。
+ * 等价性：逐字搬移原四处内联的 `cfg?.autoSettle?.enabled`（`lib/index.js` ×3、`lib/tools/swarm-tools.js` ×1）
+ *   ⇒ 返回值形态零变化（`installAutoSettle` 的 `enabled` 契约 = 按原始值透传，只有显式 `false` 才停用）。
+ */
+export function autoSettleSwitchOf(config: unknown): unknown {
+  return (config as any)?.autoSettle?.enabled;
 }
 
 // ── capabilities.discovery：发现服务（lib/discovery/service.js）──

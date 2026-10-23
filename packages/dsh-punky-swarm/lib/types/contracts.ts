@@ -350,7 +350,7 @@ export interface Batch {
   handoffs?: LaneHandoffMap;      // P1 交接门：v3 纯增量可选字段。**缺省 undefined = 存量批** ⇒ 未交接门放行 + 落 `lane.handoff.gap`（裁决 ①=B）；新建批恒写（空对象 = 无 deps 的批，字段存在即「本批受新门约束」）
   laneExempt?: LaneExemptMap;     // v3 纯增量可选字段（缺省 undefined = 无豁免；空表整键删除，不写键；探针层只读消费）
   /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
-   *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js#recordSigDuplicate` 产出），值恒 `true`。
+   *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js::sigDuplicateKeyOf` 产出），值恒 `true`。
    *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
    *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
   sigDuplicateLogged?: Record<string, boolean>;

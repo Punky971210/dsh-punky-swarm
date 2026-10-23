@@ -480,7 +480,9 @@ test('H1: 插件入口真加载冒烟——createTools 可装配且新增模块�
 
 // ── I：定案「audit 层 lane 不自动 merged」（分叉修复；本组**新增**，既有断言体逐字未改）────────────
 //   分叉：审计产物写 `verdict: fail` 而本路把 lane 自动推到 `merged`，完成门的 `outcomeOf`
-//   （`lib/state/gates.js:1220`）**纯由终态推导** ⇒ 完成门把 fail 读成 pass。
+//   （`lib/state/gates/complete.js` 完成门内局部 `outcomeOf`；【2026-10-23 · 批 punky-closeout-20261023 C5 同步】
+//   原注释引 `lib/state/gates.js:1220` —— 该文件不存在、`gates.ts` 实为 303 行且无此符号 ⇒ 属死锚点，
+//   与 lib 侧同批改指符号）**纯由终态推导** ⇒ 完成门把 fail 读成 pass。
 //   定案：保持「lane 终态 = 唯一真源」——audit 层 lane 的结算职责归 Leader（失败必须显式落 `failed`）；
 //   本路只留一条 `auto.settle.skipped{reason:'audit-explicit-settle-required'}`，**不落 paused、不读产物正文**。
 //   非 audit 层**零行为变化**（早退分支只命中 `layer === 'audit'`）。

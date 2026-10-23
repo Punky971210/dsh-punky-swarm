@@ -960,8 +960,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //      **排查顺序**：先看 `runtime.json` 有没有写 `dispatch.provider`，再怀疑热更链路。
   //   · **调用点唯 1 处**：`lib/tools/member-tools.js:110`（`lane_dispatch` → `dispatchLaneCore`）。
   //     原引 `lib/tools/core.js` 的 `:1369` 为**陈旧锚点**（该文件现 209 行、无 `lane_dispatch`），勿回写。
-  //     历史「多调用点」表述随链推进全退役（2026-09-18 Q-A=C，`lib/engine/chain-runner.js:51`
-  //     已改为「派发只剩工具面单通道」）**作废**，勿回加。
+  //     历史「多调用点」表述随链推进全退役（2026-09-18 Q-A=C；chain-runner 模块已删除，
+  //     不引文件锚点）**作废**，勿回加。
   const provider = liveConfig?.dispatch?.provider ?? null; // 热更快照（见上三事实；原读静态 config ⇒ 假热更）
   if (!provider) {
     // B4 能力位/配置前置：不猜 provider、不「以弱换强」。
@@ -1130,7 +1130,7 @@ export function readGateMode(config) {
 //   官方 Team 成员（宿主 `spawn_teammate` 拉起）**天然无 lane 绑定** ⇒ 未绑定是**常态**，硬拒即误拦
 //   （实测命中 `replay-lock` / `asset-chain`）。现口径 = best-effort：消息照发、事件按「批次可否解析」
 //   如实落/不落、回显 `unbound`/`eventWritten`/`notice`（唯一实现见 `lib/tools/swarm-comms.js:63` 的 `reportTargetOf`；
-//   原引 `lib/tools/core.js#reportTargetOf` 为**陈旧锚点**——该文件现 209 行、无此函数）。
+//   历史上曾误引 `lib/tools/core.js` 的一个不存在符号（该文件现 209 行），**勿回写**）。
 //   本段只留史迹，**不再提供常量导出**（防读端回生旧语义）。
 
 /** 从批次事件流反查该会话绑定的 lane（worksWith 引擎自派与直派两种登记形态）。

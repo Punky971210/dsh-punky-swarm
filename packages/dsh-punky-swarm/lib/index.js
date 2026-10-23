@@ -46,7 +46,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
@@ -613,7 +613,7 @@ const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) 
     //   `undefined`（键缺省）/ 非布尔 ⇒ 启用 ⇒ 未声明开关的既有批**行为逐字不变**（R-1 最硬一条）。
     //   ⚠ 装配期读的是**静态 config**；`<root>/config/runtime.json` 覆盖在 watcher.start() 后才并入快照
     //   ⇒ 必须由下方 boot 对账补一次，否则「runtime.json 写了 false、重启后开关失效」= 最危险的静默形态。
-    enabled: config?.autoSettle?.enabled,
+    enabled: autoSettleSwitchOf(config),
     logger: ctx.logger,
   });
   if (autoSettle.installed) {
@@ -625,7 +625,7 @@ const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) 
   //   不触发无意义重挂）。【A1-P2-07】判定式已收成**单点** `schema.js#autoSettleEnabledOf`（本批显式覆盖
   //   原「刻意不导出 ⇒ 本地同形镜像」的 L-AC-14 局部约束：三处镜像即第二套开关口径，属双真源）。
   //   此处**只保留读源差异**（装配期读静态 `config`），判定式一律委托单点 ⇒ 本文件不再持有判定式副本。
-  const autoSettleEnabledOfConfig = (cfg) => autoSettleEnabledOf(cfg?.autoSettle?.enabled);
+  const autoSettleEnabledOfConfig = (cfg) => autoSettleEnabledOf(autoSettleSwitchOf(cfg));
 const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) => {
   // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
   //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
@@ -955,7 +955,7 @@ const createAutoSettleRemounter = ({ ctx, store, dispatchIndex, root, rt, instal
   rt.autoSettle?.dispose?.();
   rt.autoSettle = installAutoSettle(ctx, {
     store, dispatchIndex, root, liveConfig: nextConfig, logger: ctx.logger,
-    enabled: nextConfig?.autoSettle?.enabled,
+    enabled: autoSettleSwitchOf(nextConfig),
   });
   // 【D-2 甲】主路唤醒路与结算路**同生共死**（同属引擎主路面）：同一开关生效变化 ⇒ 同步退订 / 重挂；
   //   幂等由上方 `nextEnabled === rt.autoSettleEnabled` 早退保证（无生效变化 ⇒ 本段零操作，零日志抖动）。

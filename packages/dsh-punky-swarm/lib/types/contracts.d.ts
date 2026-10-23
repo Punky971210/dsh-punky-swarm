@@ -269,7 +269,7 @@ export interface Batch {
     handoffs?: LaneHandoffMap;
     laneExempt?: LaneExemptMap;
     /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
-     *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js#recordSigDuplicate` 产出），值恒 `true`。
+     *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js::sigDuplicateKeyOf` 产出），值恒 `true`。
      *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
      *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
     sigDuplicateLogged?: Record<string, boolean>;

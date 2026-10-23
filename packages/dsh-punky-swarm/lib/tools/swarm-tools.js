@@ -28,7 +28,8 @@ import { REPORT_CHANNEL } from '../engine/dispatch.js';
 import { autoSettleLane, AUTO_SETTLE_TRIGGERS, AUTO_SETTLE_ON_FAIL, settleIdOf } from '../engine/auto-settle.js';
 // 开关**判定式单点**（A1-P2-07）：`lib/schema.js#autoSettleEnabledOf` —— 本文件不再内联 `!== false`，
 //   只负责**读源**（`readLiveConfig(deps)` 热更快照）；判定语义（只有显式 `false` 才停用）只在单点内。
-import { autoSettleEnabledOf } from '../schema.js';
+// 取面亦单点（A2-G12）：`enabled` 原始值经 `lib/schema.js#autoSettleSwitchOf` 投影，本文件不再内联取面表达式
+import { autoSettleEnabledOf, autoSettleSwitchOf } from '../schema.js';
 import { readLiveConfig } from './tier-gate.js';
 import { reportTargetOf, deliverSwarmMessage, appendSwarmEventOf, budgetSummaryForReport, WAKE_TYPES, wakeLeaderForReport, UNBOUND_BATCH_KEY } from './swarm-comms.js';
 
@@ -84,7 +85,7 @@ export function buildSwarmTools(cx) {
         //   新增的完成类 `type='completed'` **不**进入本分支（只唤醒、不结算），故本行**逐字不变**即已满足裁定；
         //   连带效果：`autoSettle.enabled=false` 只停结算面，`completed` 的唤醒面不受牵连（`WAKE_TYPES` 与开关无关）。
         const settleRequested = args.type === 'settle-request' && !!tgt.batchId;
-        const autoSettleEnabled = autoSettleEnabledOf(readLiveConfig(deps)?.autoSettle?.enabled);
+        const autoSettleEnabled = autoSettleEnabledOf(autoSettleSwitchOf(readLiveConfig(deps)));
         const settle = (settleRequested && autoSettleEnabled)
           ? await autoSettleLane({ ctx, store, root, liveConfig: readLiveConfig(deps) }, {
             sessionId: tgt.sessionId, batchId: tgt.batchId, lane: tgt.lane,

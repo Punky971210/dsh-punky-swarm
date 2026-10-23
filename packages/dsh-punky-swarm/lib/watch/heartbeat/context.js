@@ -21,9 +21,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   从**同一 `cx`** 取值。`cx` **每引擎实例一份**（`createHeartbeatContext` 内建），**不得提升为模块级单例**
 //   （纪律：不新增真源）。初始化顺序与拆分前逐字一致：cfg → lrCfg → schedule → hardStop → clock →
 //   engineRoot → ctxOf → state；`disposed` / `replayInFlight` 为可变位（原闭包 `let`，同一实例内唯一）。
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { mailboxRootOf as mailboxRootOfAt } from '../../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
-import { resolveArtifactIn } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）
+import { resolveArtifactIn, engineRootOf } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）＋引擎根推导单点（A2-G08）
 import { resolveWatchConfig } from '../../schema.js';
 import { lastProgressTsOf, resolveLongrunConfig, buildSchedule } from '../lane-heartbeat.js';
 
@@ -33,7 +33,7 @@ export function createHeartbeatContext({ store, mailbox, config, root, now, live
   const schedule = buildSchedule(cfg.intervalsMinutes);
   const hardStop = cfg.maxMissed; // 硬停拍数：连续 N 拍无活动 → stalled
   const clock = typeof now === 'function' ? now : () => Date.now();
-  const engineRoot = root ?? (store?.sessionsDir ? dirname(store.sessionsDir) : null);
+  const engineRoot = root ?? engineRootOf(store?.sessionsDir); // 引擎根推导单点（A2-G08；本处不再自推导）
   // 重放档的 ctx：`logger` 透传给 `replayBatch`（其失败隔离路径用它 warn；缺省 = 静默降级，不 throw）。
   const ctxOf = () => ({ logger });
   // 状态表 Map<laneKey, { lastActivityAt, lastSeenTs, lastProbeAt, missedCount, stalled, pendingProbeId }>

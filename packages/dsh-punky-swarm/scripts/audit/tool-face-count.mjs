@@ -22,12 +22,21 @@
 //       **间接消费** = ② 有、③ 无「直接」形态，但 execute **把 `args` 整包传给 helper**
 //         （如 `sessionOf(args, exec, …)`）⇒ 键在 helper 内被消费，静态不可见 ⇒ 记间接
 //
-// 【退出码】`0` = 与基线全一致且无「读未声明 / 零读」；`1` = 有差异（**逐项列出，不调数**）；`2` = 参数错误。
+// 【退出码】`0` = 与基线全一致且无「读未声明 / 零读」；`1` = 有差异（**逐项列出，不调数**）；
+//   `2` = 参数错误，或**环境不适用**（非 git 仓库：本脚本取不到 `HEAD:<path>` 真源，见 `main()`）。
 
 import { execFileSync } from 'node:child_process';
+import { dirname, resolve, relative, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO = 'D:/dsh/Punky-plugin-onto';
-const PKG = 'packages/dsh-punky-swarm';
+// ── 路径推导（**禁写死本机绝对路径**）────────────────────────────────────────────
+//   `PKG_ROOT` = 本文件所在 `scripts/audit/` 上溯两级 = `packages/dsh-punky-swarm`；
+//   `REPO`     = 仓库根（git 根），可由 `PUNKY_REPO_ROOT` 显式覆盖（monorepo 根 / 只读副本）。
+//   ⚠ 本项**不是**「无 `.git` 也能跑」：本脚本的冻结口径是 `HEAD:<path>` 锚定 + **零工作树 grep**，
+//     没有 `.git` 就取不到真源 ⇒ 下方 `main()` 前置自证「不适用」并 exit 2（见「非 git 态」小节）。
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO = resolve(process.env.PUNKY_REPO_ROOT || join(PKG_ROOT, '..', '..'));
+const PKG = relative(REPO, PKG_ROOT).split('\\').join('/');
 const TOOLS_DIR = 'lib/tools';
 const LIB_DIR = 'lib';
 
@@ -54,7 +63,7 @@ const USAGE = [
   '  --verbose      逐件清单全展开（缺省只列差集与汇总）',
   '  --tools-only   扫描面收窄为 lib/tools/*.js（缺省 = 并入「会注册工具的文件」）',
   '  --help,-h      打印本用法（零副作用）',
-  '  退出码：0 = 与基线全一致；1 = 有差异；2 = 参数错误',
+  '  退出码：0 = 与基线全一致；1 = 有差异；2 = 参数错误 / 非 git 仓库（安装态不适用）',
 ].join('\n');
 
 function parseArgs(argv) {
@@ -70,6 +79,11 @@ function parseArgs(argv) {
 }
 
 const git = (argv) => execFileSync('git', ['-C', REPO, ...argv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+/** git 可用性探针（从 REPO 向上发现仓库）：非 git 副本 ⇒ false ⇒ `main()` 自证不适用并 exit 2。 */
+function gitAvailable() {
+  try { execFileSync('git', ['-C', REPO, 'rev-parse', '--git-dir'], { stdio: 'ignore' }); return true; }
+  catch { return false; }
+}
 const show = (rel) => git(['show', `HEAD:${PKG}/${rel}`]).replace(/\r\n/g, '\n');
 const lsTree = (dir) => git(['ls-tree', '-r', '--name-only', 'HEAD', '--', `${PKG}/${dir}`])
   .split('\n').map((s) => s.trim()).filter(Boolean).map((p) => p.replace(`${PKG}/`, ''));
@@ -252,6 +266,20 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { process.stdout.write(USAGE + '\n'); process.exit(0); }
   if (args.error) { process.stderr.write('[tool-face-count] 参数错误：' + args.error + '\n' + USAGE + '\n'); process.exit(2); }
+
+  // ── 非 git 态：**自证不适用并退出**（不是退回弱真源继续跑）──────────────────────
+  //   先例：`scripts/arch-check.mjs` 的 `EXIT_CONFIG_NOT_APPLICABLE` —— 缺真源是「**不适用**」
+  //   而非「错」，且**不得**改用更弱的真源凑读数。
+  //   ⇒ 「无 `.git` 时退回工作树扫描」被**明确不做**：本脚本冻结口径是锚定 `HEAD:<path>`、零工作树
+  //     grep，而工作树会**冒充现状**（这正是该口径存在的理由）—— 退回扫描 = 破口径，不是加固。
+  //   退出码沿用本脚本既有表：0 一致 / 1 有差异 / **2 参数或环境错误**（非 git 态属环境不适用）。
+  //   探针用 `git rev-parse --git-dir`（从 REPO 向上发现仓库），**不**用 `existsSync(REPO/.git)`：
+  //   后者在「REPO 被显式指向仓库内某子目录 / worktree」时判假 ⇒ 校验会被 fail-open 静默跳过。
+  if (!gitAvailable()) {
+    console.error('[tool-face-count] 本脚本按 git HEAD 锚定（零工作树 grep），当前 REPO 非 git 仓库 ⇒ 安装态不适用。'
+      + '如需只读审计请在有 .git 的克隆内跑，或用 PUNKY_REPO_ROOT 指向克隆。REPO=' + REPO);
+    process.exit(2);
+  }
 
   const toolsFiles = lsTree(TOOLS_DIR).filter((f) => f.endsWith('.js')).sort();
   const libJs = lsTree(LIB_DIR).filter((f) => f.endsWith('.js'));

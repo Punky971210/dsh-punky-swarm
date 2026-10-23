@@ -32,12 +32,3 @@ export function resolveAssembly(team, configAssembly = null, _opts = {}) {
   void team;
   return configAssembly ?? null;
 }
-
-/**
- * 从团队资产构造装配。
- * 【2026-09-27 · team-asset 全量退役】**资产面已不存在** ⇒ 恒 `null`（不再读盘、不再解析 yml）。
- *   导出**保形保留**（既有调用方/用例的形状零变化）；本身零副作用、零 I/O。
- */
-export function assemblyFromTeamAsset(_team, _root) {
-  return null;
-}

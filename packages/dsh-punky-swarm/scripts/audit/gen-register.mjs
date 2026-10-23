@@ -8,8 +8,12 @@ const OUT = join(process.cwd(), 'scripts', 'audit', 'out');
 // 输出路径可覆盖（`REGISTER_OUT=scripts/audit/out/frozen-register.preview.md`）⇒ 使「生成物 vs 版本控制内文件」
 //   的**漂移可校验**（生成到 `out/` 后 diff），而不必覆盖正档。
 //   **限定词（C-9）**：本脚本**无** `--check` / `--dry-run`，**不读** `process.argv`（传 `--check` 被静默忽略）；
-//   执行即写盘 ⇒ **缺省 = 覆写正档** `docs/frozen-register-2026-09-21.md`（含其人工注记），**无告警**。
+//   执行即写盘 ⇒ **缺省 = 就地覆写正档** `docs/frozen-register-2026-09-21.md`（含其人工注记），**无告警**。
 //   要「只读校验」须显式设 `REGISTER_OUT`（落到 `scripts/audit/out/`）后再 diff；`--check` 档位属 `gates.mjs`。
+//   ⚠ **「就地覆写」是字面意思**（2026-10-23 起补护栏，但覆写本身没变）：整档 `writeFileSync` 替换目标文件，
+//     不做行级合并 —— 生成段（§1~§6）里**任何手写增补都会消失**。这条已两次踩到（本批侦察期内正档被一次
+//     全审计链跑动整档重生成，§2 由 10 项写成 7 项且 `## 后期订正` 节被整节删除，事后由未知方还原）⇒
+//     现只对「`## 后期订正`（含）到 EOF」这一段做**原样搬运**（见文件尾 `tailOf`），其余仍属生成面。
 const OUT_MD = process.env.REGISTER_OUT || join('docs', 'frozen-register-2026-09-21.md');
 const unwired = JSON.parse(fs.readFileSync(join(OUT, 'unwired-summary.json'), 'utf8'));
 const ledger = JSON.parse(fs.readFileSync(join(OUT, 'gate-ledger.json'), 'utf8'));
@@ -70,9 +74,16 @@ lines.push('- 复现：`node scripts/audit/dead-code2.mjs && node scripts/audit/
 lines.push('');
 lines.push('---');
 lines.push('');
-lines.push('## 1. C1 · 生产未接线（' + c1.length + ' 项，W2 冻结）');
+lines.push('## 1. C1 · 生产未接线（' + c1.length + ' 项，W2 冻结 → **✅ 已判读（N2 第一批，2026-09-22）**）');
+lines.push('');
+// 人工注记收进生成器（2026-10-23 · 批 `punky-closeout-20261023`）：本条原为正档里的手写增补，
+//   一旦重生成就会**整条消失**（正是本批修的就地覆写缺陷的另一种表现）⇒ 搬进生成器，令其可复现。
+//   计数口径：正文里的「26 项」是 2026-09-22 判读当刻的集合，**不是**本节标题的现扫数（标题随扫描变）。
+lines.push('> **裁定已落**：逐项三选一终裁见 `docs/c1-wiring-audit-2026-09-22.md`（真接线 0 / 降级登记 22 / 缓·设计题 2 / 删 1 缓至第二批）。蓝图「6 守卫接线」意向经代码证据全部修正（双判定源/探针信号面/sig 自愈缓存）。本节清单保留作历史存档。');
 lines.push('');
 lines.push('判据：**生产路径零调用，仅测试引用**（且本文件内部也不使用）⇒ 声明面先行、运行面欠账。');
+lines.push('');
+lines.push('> **⚠ 标题数与下方表格数是「现扫读数」**（随 `dead-code2` 每次跑动而变）：2026-09-22 判读当刻为 **26 项**，其后因团队资产退役（`lib/assembly/chain.js` 整文件删除等）与 C1 判读落地而减少 ⇒ **两者不是同一集合**，勿按标题数推定表格内容。');
 lines.push('');
 lines.push('| 文件 | 符号 | 测试引用 | ts 源 |');
 lines.push('|---|---|---:|---|');
@@ -89,30 +100,42 @@ lines.push('1. **接线**：有安全价值者（`assertMemberTransition` / `ass
 lines.push('2. **降级**：测试专用面显式登记为测试钩子（去 `export` 则断测试，故只能保留）。');
 lines.push('3. **删**：无价值者（`validateAssembly` / `assertAssemblyCompleteness` 撤函数**保常量表**——`BLIND_REVIEW_ROLES` 被 `wave-plan.ts` 消费、`PRODUCE_LAYERS` / `FLOW_SECTIONS` 被 `team-asset.js` 消费）。');
 lines.push('');
+// 同上：原正档手写「2026-10-08 订正」块，收进生成器防丢失；并把原 `:56` / `:57` 行号锚点改成**项序**
+//   （行号锚点会随本节行数漂移，正是本批 C5 要消灭的形态）。
+lines.push('**【2026-10-08 订正】**（批 `engine-techdebt-cleanup-20261008` · `R-3@techdebt2`）：上述「三选一」的**第 3 项（删）未执行**，且与**第 2 项（降级保留）**构成**自相冲突** —— 第 2 项主张「测试专用面显式登记为测试钩子（**去 `export` 则断测试，故只能保留**）」，第 3 项主张「删」。`assertAssemblyCompleteness` 的处置**以 `docs/rebuild-blueprint-2026-09-21.md:91` 为准**（「`validateAssembly` / `assertAssemblyCompleteness` | 删函数保常量表 | **冻结**（W2 明示"再考虑重新引入或清理"）。常量表已列入保留」）⇒ **判「留」**。两处原文**均保留可读**（史实不删）。');
+lines.push('');
 lines.push('---');
 lines.push('');
-lines.push('## 2. B1 残留 · 真死但自带声明语义（' + b1kept.length + ' 项，冻结不删）');
-lines.push('');
-lines.push('判据：**内外皆零引用，但注释自带显式声明语义**（预留格式 / 骨架契约 / 白名单 / 外部规范对齐 / 版本口径 / 读端契约名）⇒ 删除等于替用户裁定「这声明还要不要」。');
-lines.push('');
-lines.push('| 文件 | 符号 | 声明语义 |');
-lines.push('|---|---|---|');
+// 声明语义映射（B1 表的「为什么不能按死代码删」一列）：**只登记仍有符号面的条目**。
+//   2026-10-23（批 `punky-closeout-20261023` · `Q-9@closeout`）：原表 9 条键中 6 条对应的符号已删除
+//   （`renderVerdictReport` / `workerResumeChapter` / 4 枚 `FORWARD_*_DEFAULT`）⇒ **陈旧键已清**
+//   （留着就是「照它能解释已不存在的行为」的诱导面）。余 3 条对应的符号也已不在 B1（`CHAIN_*` 随
+//   `lib/assembly/chain.js` 整文件退役；`flowsDeclarationOf` 因 `selfUse` 被判 B2）⇒ 当前**不可达**，
+//   保留作历史对账：同名符号若再入册，本节自动命中。B1 为空时整表不参与输出。
 const WHY = {
   CHAIN_VERSION: '版本口径（`CHAIN_VERSIONS[0]` = 缺省语义版本）',
   CHAIN_GUIDANCE_INJECTS: '`flows.<layer>.guidance.inject` 白名单（禁自由文本）',
   flowsDeclarationOf: '自述「gateStrength / 诊断面板的取数入口」',
-  renderVerdictReport: '自述「落盘格式（**预留**：audit/verify-verdict.md）」',
-  workerResumeChapter: '自述「**骨架**，增强恢复落地后填充」+ `enabled:false` 声明面',
-  FORWARD_DEPTH_LIMIT_DEFAULT: '外部规范对齐表（节标题「与 `acps_sdk/adp/constants.py` 一致」）：**仓内零消费**，**勿据以推断行为**',
-  FORWARD_FANOUT_LIMIT_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
-  FORWARD_EACH_TIMEOUT_MS_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
-  FORWARD_TOTAL_TIMEOUT_MS_DEFAULT: '同上：外部规范对齐表，仓内零消费，勿据以推断行为',
 };
-for (const x of b1kept) lines.push(`| \`${x.base}.js\` | \`${x.name}\` | ${WHY[x.name] || '（见源码注释）'} |`);
+lines.push('## 2. B1 残留 · 真死但自带声明语义（' + b1kept.length + ' 项'
+  + (b1kept.length ? '，冻结不删' : '：B1 已按 Q-9@closeout 清零') + '）');
 lines.push('');
+lines.push('判据：**内外皆零引用，但注释自带显式声明语义**（预留格式 / 骨架契约 / 白名单 / 外部规范对齐 / 版本口径 / 读端契约名）⇒ 删除等于替用户裁定「这声明还要不要」。');
+lines.push('');
+if (b1kept.length === 0) {
+  lines.push('**0 项 —— B1 已按裁决 `Q-9@closeout`（2026-10-23，用户选「7 条全删」）清零**：原 7 项由批 `punky-closeout-20261023` 删除（**显式覆盖** 2026-09-21 冻结裁定①，非静默推翻）。本节标题与下方两段原文**保留作历史对账**；「撤销冻结必须回本表改判」的入口不变（新入册符号照常补行）。');
+  lines.push('');
+} else {
+  lines.push('| 文件 | 符号 | 声明语义 |');
+  lines.push('|---|---|---|');
+  for (const x of b1kept) lines.push(`| \`${x.base}.js\` | \`${x.name}\` | ${WHY[x.name] || '（见源码注释）'} |`);
+  lines.push('');
+}
 lines.push('**裁定 ①（2026-09-21）**：**先留着，等新引擎落地再议** —— 这些符号的存废取决于新形态是否还需要该声明面，属设计决策而非清理决策。');
 lines.push('');
 lines.push('**批注（`punky-fix-p2-20261023` / `A1-P2-12`，2026-10-23）**：本批**不覆盖**裁定①，只按裁决做两件事 —— ①4 枚 `FORWARD_*_DEFAULT` **保留**，理由列改写为诚实表述（外部规范对齐表 / 仓内零消费 / 勿据以推断行为）；②「豁免清退」reason 常量（值 `exempt-cleared`）**删除**：仓内零读零写，且该字面值与实写 reason `explicit-revoke` 不一致 ⇒ 留着会诱导未来读端按错误字面量比对而恒 false（探针读端实际走事件名 + `laneExemptCleared` 字段，不读 reason）。');
+lines.push('');
+lines.push('**【2026-10-23 · 批 `punky-closeout-20261023` 覆盖】**：上述裁定①与 p2 批注里的「保留」口径**已被 `Q-9@closeout` 覆盖** —— 7 项（`assemblyFromTeamAsset` / 4 枚 `FORWARD_*_DEFAULT` / `workerResumeChapter` / `renderVerdictReport`）已删除，本表清空。两段原文一律保留（史实不删），但**勿据以判现状**。');
 lines.push('');
 lines.push('---');
 lines.push('');
@@ -205,6 +228,24 @@ lines.push('3. **改判留痕**：撤销冻结时，在本文件对应行加「�
 lines.push('4. **单一强制点**：接线时不得新写一套，必须接既有实现（`tools/core.js:349` 逐字「禁各写一套」）。');
 lines.push('5. **不得以「无断言」为删除理由**：`testHits = 0` 只证明**测试没覆盖**，不证明**代码是死的**。缺断言 ⇒ 先补测（生产路径 E2E），补完再判要不要删。');
 
-fs.writeFileSync(resolve(process.cwd(), OUT_MD), lines.join('\n') + '\n');
-console.log('-> ' + OUT_MD + '  (' + lines.length + ' 行)');
+// ── 写盘（**就地覆写**）＋ 人工节搬运 ────────────────────────────────────────────────────
+//   `writeFileSync` 整档替换目标文件（不合并行）⇒ 生成段里任何手写增补都会被冲掉，这是本脚本的既有行为。
+//   唯一例外 = 人工节：写前读旧档，把 `## 后期订正`（含）到 EOF **原样搬到新内容之后**（幂等：搬运段自身
+//   不含生成逻辑，重复跑不会叠加）。插一行自动保留标记，让读者一眼分清「生成段」与「搬运段」。
+//   无旧档 / 旧档无该节（首次生成、或 REGISTER_OUT 指向 preview）⇒ 跳过搬运，行为与改造前一致。
+const TAIL_HEADING = '## 后期订正';
+const TAIL_MARK = '> 【自动保留】本节为人工注记，由 gen-register 原样搬运，不参与重生成。';
+const outAbs = resolve(process.cwd(), OUT_MD);
+const tailOf = (file) => {
+  let prev;
+  try { prev = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  const at = prev.indexOf(TAIL_HEADING);
+  return at < 0 ? null : prev.slice(at).replace(/\s+$/, '') + '\n';
+};
+const tail = tailOf(outAbs);
+let body = lines.join('\n') + '\n';
+if (tail) body += '\n' + TAIL_MARK + '\n\n' + tail;
+fs.writeFileSync(outAbs, body);
+console.log('-> ' + OUT_MD + '  (' + body.replace(/\n$/, '').split('\n').length + ' 行'
+  + (tail ? '；人工节 `' + TAIL_HEADING + '` 已原样搬运' : '；无旧人工节可搬运') + ')');
 console.log('C1=' + c1.length + ' B1残留=' + b1kept.length + ' 无断言门禁=' + libOnly.length + ' 前缀伪影(剔除)=' + ghosts.length);

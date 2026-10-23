@@ -20,7 +20,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 职责（断点续跑：执行模型改变——与增强恢复的"执行模型不变"互补）：
 //   状态重建接口 —— 恢复 running/review（而非一律 idle）+ config.resume.enabled 开关（默认关）
 //   断点指针语义 —— laneProgress 步骤进度（schema-v3.js 可选字段；本文件提供读写/清退接口骨架）
-//   worker 任务包契约断点续跑 —— resume 章节占位（增强恢复落地后装配层实际注入）
+//   worker 任务包契约断点续跑 —— 【已删】原「resume 章节占位骨架」（连同其待回填清单常量）
+//     随批 `punky-closeout-20261023`（裁决 Q-9@closeout）删除：B1 实测内外皆零引用；
+//     续跑面实际由 `lane_checkpoint`（progress）+ `lane_checkpoint_status` 承担，本文件不再提供占位章节。
+//     ⚠ 本注释刻意**不裸写被删符号名**：机检判据是「全仓零命中」，裸写会让判据恒假红
+//     （同仓 `p2-dead-verify` 的 `.join('_')` 与 `f3-anchors` 的 `anchorParts()` 是同一纪律）。
 //
 // 纪律：
 //   - 默认关：config.resume.enabled !== true → recoverBatches() 原样委托 store.recoverBatches()（零行为变化）
@@ -49,16 +53,6 @@ export function resolveResumeConfig(config) {
   // 缺省关语义即严格判等（RESUME_DEFAULTS.enabled=false），无需 readCapability（无 entry 返回 undefined）
   return { enabled: c.enabled === true };
 }
-
-// 待回填清单：
-const RESUME_FILL_POINTS = [
-  // ✓ 已接线：恢复接口实现 + config.resume 接线（index.js 启动恢复改调 resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })）
-  // ✓ 已接线：laneProgress 字段写/清（lane_checkpoint 携带 progress 时经 laneProgressWrite 写入；
-  //    lane 结算终态经 laneProgressClear 清退）
-  // ✗ 待回填：batch_status 面板 progress 视图（操作面板批次）
-  '任务包 resume 章节从"文档占位"升为"装配层实际注入"（worker 角色手册加 resume 条款）',
-  '崩溃恢复用例测试（模拟 running 中 crash → 重启 restore → 新 worker 从 N+1 续跑 → 产物合并验证）',
-];
 
 // ── 状态重建接口 ──
 // 单一入口扩展：签名与 store.recoverBatches 同构，加可选 restoreRunning。
@@ -180,22 +174,4 @@ export function overBudgetOf(batch, lane, progress) {
 //   同 lane 超限事件只发一次，重复 progress 调用不重复发）
 export function hasOverBudgetEvent(batch, lane) {
   return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_OVER_BUDGET && e.lane === lane);
-}
-
-// ── worker 任务包契约断点续跑（骨架，增强恢复落地后填充）──
-// 返回任务包 resume 章节占位：B 完成后由装配层（worker 角色手册）按
-//   config.resume.enabled && capabilities.worktree.enabled 置 enabled=true 并注入派发提示词。
-// 四步契约语义：N = laneProgress.step（最近一次 checkpoint 的 progress.step），resumeFrom = N+1。
-export function workerResumeChapter() {
-  return {
-    title: 'resume（断点续跑）',
-    enabled: false, // 增强恢复落地后装配层按开关置 true 并实际注入
-    steps: [
-      '查询 laneProgress（laneProgressRead）/ lane_checkpoint_status → 得 { resumeFrom: N+1, total, produced }',
-      '从第 N+1 步开始执行；已完成步骤（step ≤ N）的产物视为已交付，禁止重做',
-      '每步完成即 lane_checkpoint(progress={ step, total })（经 laneProgressWrite 写 laneProgress）',
-      '完成态（done）后正常 running→review→merged（exit gate 校验 outputs 齐备）',
-    ],
-    fillPoints: RESUME_FILL_POINTS,
-  };
 }

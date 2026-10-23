@@ -209,11 +209,22 @@ test('A1-P2-07 · 三处消费点一致：全仓只有 schema.js 一处定义，
   assert.equal(defsIn('lib/engine/auto-settle.js'), 0, 'auto-settle.js 的私有同形函数必须删净');
   assert.equal(defsIn('lib/index.js'), 0, 'index.js 的本地镜像必须删净');
   assert.equal(defsIn('lib/tools/swarm-tools.js'), 0, 'swarm-tools.js 的内联镜像必须删净');
-  // 读源保留（规格明确「只收判定式、不收读源」）：index.js 的包装仍在，swarm-tools 仍读 readLiveConfig
-  assert.ok(/const autoSettleEnabledOfConfig = \(cfg\) => autoSettleEnabledOf\(cfg\?\.autoSettle\?\.enabled\)/
-    .test(read('lib/index.js')), 'index.js 必须保留读源包装（只收判定式）');
-  assert.ok(/autoSettleEnabledOf\(readLiveConfig\(deps\)\?\.autoSettle\?\.enabled\)/
-    .test(read('lib/tools/swarm-tools.js')), 'swarm-tools.js 必须保留热更快照读源');
+  // 读源保留（规格明确「只收判定式、不收读源」）：index.js 的包装仍在，swarm-tools 仍读 readLiveConfig。
+  // 【判据更新 · 留痕】原断言逐字钉住改前的**内联取面字面量**
+  //   `autoSettleEnabledOf(cfg?.autoSettle?.enabled)` / `autoSettleEnabledOf(readLiveConfig(deps)?.autoSettle?.enabled)`，
+  //   它编码的形状是「取面仍在消费方内联」；该形状已被**本批 C3（A2-G12：投影单点 `autoSettleSwitchOf`）覆盖**
+  //   ⇒ 任何符合 C3 的实现都必然把这两条断言打红（红因 = 实现前进，不是退化）。新判据**双面**：
+  //     ① 正向：两处读源都经投影单点取面（`autoSettleSwitchOf(...)` 包住原表达式）；
+  //     ② 反向：三消费点**不再出现** `?.autoSettle?.enabled` 内联取面（取面只许在 `lib/schema.*` 单点本体）。
+  const indexSrc = read('lib/index.js');
+  assert.ok(/const autoSettleEnabledOfConfig = \(cfg\) => autoSettleEnabledOf\(autoSettleSwitchOf\(cfg\)\)/
+    .test(indexSrc), 'index.js 必须保留读源包装，且取面经投影单点 `autoSettleSwitchOf(cfg)`（C3）');
+  assert.ok(/autoSettleEnabledOf\(autoSettleSwitchOf\(readLiveConfig\(deps\)\)\)/
+    .test(read('lib/tools/swarm-tools.js')), 'swarm-tools.js 必须保留热更快照读源，且取面经 `autoSettleSwitchOf(readLiveConfig(deps))`（C3）');
+  for (const rel of consumers) {
+    assert.equal(/\?\.autoSettle\?\.enabled/.test(read(rel)), false,
+      rel + ' 不得残留内联取面 `?.autoSettle?.enabled`（C3：取面归 `autoSettleSwitchOf` 单点）');
+  }
 });
 
 test('A1-P2-07 · 行为面接线：装配期 enabled=false ⇒ 停用分支；undefined ⇒ 走既有启用路', () => {

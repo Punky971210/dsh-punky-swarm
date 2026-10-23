@@ -23,18 +23,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 export const QUERY_TYPES = ['explicit', 'exploratory', 'trending', 'filtered'];
 export const QUERY_TYPE_EXPLICIT = 'explicit';
 
-// ── 转发限制（FORWARD_*，与 acps_sdk/adp/constants.py 一致）──
-// **外部规范对齐表**：四枚 `_DEFAULT` 是「与参考实现一致」的**声明面**，仓内**零消费**
-//   （请求校验只用下方私有 `_MIN` / `_MAX`）⇒ **勿据以推断行为**：仓内不读这些缺省值，
-//   它们不对应任何运行期回落。保留而非删除的理由见 `docs/frozen-register-2026-09-21.md` §2 裁定①。
-export const FORWARD_DEPTH_LIMIT_DEFAULT = 3;   // 服务器默认
+// ── 转发限制（FORWARD_*_MIN / _MAX，区间口径与 acps_sdk/adp/constants.py 一致）──
+// **只保留校验区间**：请求校验 `validateDiscoveryRequest` 实际消费这两对 `_MIN` / `_MAX`。
+//   原四枚「与参考实现一致」的 `_DEFAULT` **已按裁决 Q-9@closeout 删除**（显式覆盖 2026-09-21
+//   冻结裁定①，非静默推翻）：理由是仓内零消费，而「外部规范对齐表」的对齐价值不足以抵一份
+//   「看着像缺省值、实为不存在的运行期回落」的诱导面。
 const FORWARD_DEPTH_LIMIT_MIN = 1;
 const FORWARD_DEPTH_LIMIT_MAX = 5;       // 绝对上限
-export const FORWARD_FANOUT_LIMIT_DEFAULT = 1;  // 未提供时默认不允许并发转发
 const FORWARD_FANOUT_LIMIT_MIN = 1;
 const FORWARD_FANOUT_LIMIT_MAX = 5;
-export const FORWARD_EACH_TIMEOUT_MS_DEFAULT = 10_000;
-export const FORWARD_TOTAL_TIMEOUT_MS_DEFAULT = 60_000;
 
 // ── 查询结果限制（服务器默认 5，上限 50，同 discovery-server/schema.py）──
 const DISCOVERY_LIMIT_DEFAULT = 5;

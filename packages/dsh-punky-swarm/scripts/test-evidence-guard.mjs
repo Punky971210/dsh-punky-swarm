@@ -335,6 +335,11 @@ export function decideVerdict(input) {
       pass: r.pass,
       fail: r.fail,
       skipped: r.skipped,
+      // `todo` 进 `files[]`（与 `totals` **对称**）：此前只有汇总有 `todo`，逐文件没有 ⇒
+      //   恒等式只能从 `totals` 内部自证，无法用「逐文件求和」复核。`?? 0` 与 `:508` 的归一
+      //   （`parsed.summary.todo ?? 0`）同口径，保证 `sum(files[].tests) === totals.tests - totals.cancelled`
+      //   这条**可判**恒等式在逐文件面也成立（`cancelled` 仍刻意不进 `files[]`，理由见 `:505-507`）。
+      todo: r.todo ?? 0,
       fileRootSubtest: r.fileRootSubtest,
     })),
   };

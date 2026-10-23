@@ -152,6 +152,19 @@ export declare const VERIFY_DEFAULTS: Readonly<{
 }>;
 export declare function resolveVerifyConfig(config: ConfigInput | null | undefined): ResolvedVerifyConfig;
 export declare function autoSettleEnabledOf(enabled: unknown): boolean;
+/**
+ * `autoSettle.enabled` 的**投影单点**（A2-G12）：只做 `config → 原始值` 的取面，**不判定**
+ *   （判定归 `autoSettleEnabledOf`）。
+ *
+ * 读源**两路是显式二阶，不是缺陷、也不能硬合并**：
+ *   ① 装配期 = `apply(ctx, config)` 的**静态 config** —— 此时 `<root>/config/runtime.json` 尚未并入快照；
+ *   ② 热更后 = **热更快照**（工具面 `readLiveConfig(deps)` / 装配面 `readConfig()`）。
+ * 两路最终都交给判定式单点。**合并两路 = 改行为**（装配期快照未就绪）；故只收「投影」与「判定」，
+ *   读源二阶在此登记，供审计核「为什么允许两个入口」。
+ * 等价性：逐字搬移原四处内联的 `cfg?.autoSettle?.enabled`（`lib/index.js` ×3、`lib/tools/swarm-tools.js` ×1）
+ *   ⇒ 返回值形态零变化（`installAutoSettle` 的 `enabled` 契约 = 按原始值透传，只有显式 `false` 才停用）。
+ */
+export declare function autoSettleSwitchOf(config: unknown): unknown;
 export declare const DISCOVERY_DEFAULTS: Readonly<{
     enabled: true;
     nodes: {};

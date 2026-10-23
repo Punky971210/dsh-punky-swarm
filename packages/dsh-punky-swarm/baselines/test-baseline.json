@@ -179,7 +179,7 @@
     "test/auto-settle.test.js": {
       "asserts": 193,
       "blankLines": 46,
-      "lines": 902,
+      "lines": 904,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -443,7 +443,7 @@
     "test/f3-anchors.test.js": {
       "asserts": 28,
       "blankLines": 21,
-      "lines": 270,
+      "lines": 273,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -873,9 +873,9 @@
       "todos": 0
     },
     "test/integration-comfyui-glue.test.js": {
-      "asserts": 6,
+      "asserts": 7,
       "blankLines": 14,
-      "lines": 112,
+      "lines": 121,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1033,9 +1033,9 @@
       "todos": 0
     },
     "test/p2-dead-verify.test.js": {
-      "asserts": 28,
+      "asserts": 30,
       "blankLines": 20,
-      "lines": 174,
+      "lines": 183,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1065,17 +1065,17 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 34,
+      "asserts": 35,
       "blankLines": 23,
-      "lines": 275,
+      "lines": 283,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/p2-state-single.test.js": {
-      "asserts": 38,
+      "asserts": 39,
       "blankLines": 25,
-      "lines": 230,
+      "lines": 241,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -1521,7 +1521,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-22T18:53:29Z",
+  "generatedAt": "2026-10-23T05:48:59Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1532,13 +1532,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-fix-house-20261023 h5-tester 测试文件结构改为纯追加（helper 还原 + 新增 buildGraphWithDynamic）",
+  "reason": "punky-closeout-20261023 g5：4 条判据更新 + 3 项清扫（L-1/L-5/L-7）",
   "schema": 1,
   "totals": {
-    "asserts": 9796,
+    "asserts": 9801,
     "blankLines": 5048,
     "files": 190,
-    "lines": 54008,
+    "lines": 54050,
     "tautologies": 2,
     "tests": 1987,
     "todos": 4

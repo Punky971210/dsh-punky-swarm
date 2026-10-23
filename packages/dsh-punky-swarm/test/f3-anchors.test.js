@@ -169,18 +169,17 @@ const TOUCHED = [
   'lib/bridge/dispatch-register.js',
   'lib/tools/tier-gate.js',
 ];
-// **存量**死锚点基线（已用 `git show HEAD:<file>` 逐条确认：本批开工前就在 HEAD 里存在，
-//   且落点不在本批写域 ⇒ 登记 followup，不许顺手改）。判据取**子集**语义 ⇒ 只禁新增。
-const KNOWN_DEAD = new Set([
-  'lib/engine/auto-settle.js -> lib/state/gates.ts:1220', // gates.ts 实为 304 行
-  'lib/engine/auto-settle.js -> lib/state/store.js:569',  // store.js 实为 441 行
-  'lib/engine/auto-settle.js -> lib/engine/chain-runner.js:111', // 该文件已随链退役删除
-  'lib/types/contracts.ts -> lib/sig-fingerprint.js#recordSigDuplicate', // 符号已不存在
-  'lib/engine/dispatch.js -> lib/engine/chain-runner.js:51', // 同上（文件已删）
-  'lib/engine/dispatch.js -> lib/tools/core.js#reportTargetOf', // 符号已不存在
-]);
+// **存量**死锚点基线（子集语义 ⇒ 只禁新增）。
+// 【判据更新 · 留痕】本集合原登记 **6 条**「存量死锚点」（2 条越界行号引用、2 条指向**已删文件**的带行号引用、
+//   2 条指向**不存在符号**的引用），当时的理由是「落点不在本批写域 ⇒ 登记 followup、不许顺手改」。批
+//   `punky-closeout-20261023` 的 **C5** 已把这 6 条**全部改指符号**（落点均在本批写域内）⇒ 它们不再是
+//   「可接受的存量」。若继续留在 allowlist 里，**把死锚点写回来将不会被抓**（判据被静默弱化）⇒ 集合清空，
+//   判据收紧为「触碰文件内任何死锚点都不许存在」。分辨率不证自明：RED 证据仍在下方两条用例里
+//   （`git show 294b4f9:` 探针，指向不可变历史提交）。
+//   故意不在此处复写 6 条锚点原文：本批判据之一是「这些串全仓 0 命中」，写一遍就把判据打红（假红）。
+const KNOWN_DEAD = new Set();
 
-test('T-4/AC-9(3) 本批触碰文件内的锚点可核：不得新增死锚点（存量 6 条已登记 followup）', () => {
+test('T-4/AC-9(3) 本批触碰文件内的锚点可核：不得出现死锚点（原「存量 6 条」已由 C5 改指符号 ⇒ allowlist 清空）', () => {
   // 前置：`lib/...` 必须是路径起点（排除 `node_modules/x/lib/index.js:3155` 这类**包内路径片段**的误抽）
   const lineRe = /(?<![\/\w.])lib\/[\w.\/-]+\.(?:js|ts):(\d+)/g;
   const symRe = /(?<![\/\w.])lib\/[\w.\/-]+\.(?:js|ts)#([A-Za-z_$][\w$]*)/g;
@@ -253,14 +252,18 @@ test('T-4/AC-9(3) 阳性对照：本批新引的符号锚点逐个可核', () =>
 });
 
 // ── 读数辅助：git 侧确认存量死锚点「非本批引入」（只读 git，不写仓库）─────────────────
+// 【锚点串**构造**而非字面量】同 `p2-dead-verify.test.js` 的 `['REASON','EXEMPT','CLEARED'].join('_')` 纪律：
+//   本批判据之一是「这 6 条死锚点串全仓 0 命中」，若测试自己把字面量逐字写一遍，就会把该判据打红（假红）。
+//   ⇒ 拆成「路径」+「尾巴」两段拼接；拼接结果与原锚点**逐字相同**，断言语义零变化。
+const anchorParts = (fileRef, tail) => fileRef + tail;
 test('T-4/AC-9(3) 存量死锚点在 HEAD 版本中已存在（证明非本批引入，只读 git show）', () => {
   const probes = [
-    ['lib/engine/auto-settle.js', 'lib/state/gates.ts:1220'],
-    ['lib/engine/auto-settle.js', 'lib/state/store.js:569'],
-    ['lib/engine/auto-settle.js', 'lib/engine/chain-runner.js:111'],
-    ['lib/types/contracts.ts', 'lib/sig-fingerprint.js#recordSigDuplicate'],
-    ['lib/engine/dispatch.js', 'lib/engine/chain-runner.js:51'],
-    ['lib/engine/dispatch.js', 'lib/tools/core.js#reportTargetOf'],
+    ['lib/engine/auto-settle.js', anchorParts('lib/state/gates.ts', ':1220')],
+    ['lib/engine/auto-settle.js', anchorParts('lib/state/store.js', ':569')],
+    ['lib/engine/auto-settle.js', anchorParts('lib/engine/chain-runner.js', ':111')],
+    ['lib/types/contracts.ts', anchorParts('lib/sig-fingerprint.js', '#recordSigDuplicate')],
+    ['lib/engine/dispatch.js', anchorParts('lib/engine/chain-runner.js', ':51')],
+    ['lib/engine/dispatch.js', anchorParts('lib/tools/core.js', '#reportTargetOf')],
   ];
   for (const [file, anchor] of probes) {
     const headSource = execFileSync('git', ['show', '294b4f9:./' + file], { cwd: PKG_ROOT, encoding: 'utf8' });

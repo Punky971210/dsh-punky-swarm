@@ -4,6 +4,8 @@
 //     node scripts/audit/gates.mjs --check    # 与留档基线比对漂移（**默认不阻断**，退出码恒 0）
 //                                             #   **唯一只读形态**：--check 之下不写盘
 //     node scripts/audit/gates.mjs --check --write   # 比对**并**落盘（显式要求写盘时用）
+//     node scripts/audit/gates.mjs --strict-drift    # 同上，但 KNOWN_DRIFT 短码校验失败 ⇒ exit 1
+//                                             #   （默认 / --check 只打印读数、退出码不变；失败档不写盘）
 //
 // ── 口径演进（2026-09-21，两次勘误，均由「乐观污染」触发）────────────────────────
 // v1（原始）：在**源码原文**上数 `\bGATE_[A-Z0-9_]+\b`，把一切 `GATE_*` 标识符当门禁码。
@@ -21,6 +23,7 @@
 //     · `ghost`        —— 严格前缀于同集合内另一码者（正则从模板拼接处截出的残片）
 //     · `mention`      —— 只在字符串/日志文本里被提及，既无抛点也不在 union（多为**已退役码**的留痕说明）
 //   「无断言门禁」判定面 = `kind ∈ {typed, thrown}` 且有生产引用但测试零命中。
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { classifyHits, strengthSelfTest } from './strength.mjs';
@@ -44,6 +47,12 @@ const WRITE = !CHECK || process.argv.includes('--write');
 //     消失 7 项：同法取末次变更提交（后 4 项为**注释留痕**态：已不在 union、无抛点，
 //               以注释自陈的退役批 + 末次码面变更为据，可复算复核）。
 //   ⚠ 本表**只允许追加**，且每条必须带 commit 短码（否则漂移会被"合法化"成不可归因）。
+//   · `gone` 口径（A3-G04）= **不在 `lib/types/contracts.ts` 的 `GateErrorCode` union，且 `lib/**` 无
+//     `throw new Error('<码>…` 抛点**；**不**表示「字面零提及」——该码仍可能以 `mention`（注释 / 日志 /
+//     事件名）或 `ghost`（前缀残片）形态留在仓内。本表 7 条中 4 条即属此态（逐条读数见其 commit 短码行）。
+//   · 短码取法**两类不同**（A3-G10）：`added` 用「引入提交」（`git log --reverse --format='%h' -S <码> -- lib`
+//     的首条）；`gone` 后 4 项用「码面末次变更 / 退役提交」（该码可能从未有过独立引入提交）。
+//     两类首 token **一律**参与 `assertDriftCommits()` 的机器校验 —— 口径混用不等于免检。
 const KNOWN_DRIFT = {
   added: {
     GATE_CHANNEL_INVALID: '7e33f90 channel 通道归属',
@@ -73,6 +82,63 @@ if (SELFTEST) {
   console.log(`[strength] 判别力自证通过：${n} 个用例（标题/整码/多行/弱/夹具/跨界边界）`);
   console.log('（探测器必须自证有分辨率；否则它本身可能空转 —— R3-4 教训。）');
   process.exit(0);
+}
+
+// ── KNOWN_DRIFT 短码**机器校验**（A3-G09/G10）────────────────────────────────────
+//   判据 = 每条 value 的**首个 token** 必须是能在 git 中解析到的 commit
+//   ⇒ 消灭「往表里塞个码/编个短码就把漂移合法化」这条路径（此前只靠人守，无机器校验）。
+//   两档（默认不咬人、显式才阻断，避免破坏既有契约）：
+//     · 默认 / `--check` —— 跑校验、打印读数，**退出码不变**（`--check` 既有契约：漂移≠错误、恒 0）；
+//     · `--strict-drift` —— 校验失败 ⇒ **exit 1**，且**在写盘前**退出（失败档不留产物）。
+//   无 `.git`（安装态 / npm 整包副本）⇒ **fail-open**：打印 skipped、不改退出码。理由同
+//   `arch-check.mjs` 的「缺真源 = **不适用**而非错」：该形态下短码**无法核**，不是漂移。
+//   ⚠ 判据用 `git rev-parse --git-dir` 而**不是** `existsSync(join(ROOT,'.git'))`：本仓是 monorepo，
+//     `.git` 在**仓库根**、而本脚本的 `ROOT` = `process.cwd()` = **包目录**（用法行即 `cd packages/dsh-punky-swarm`）
+//     ⇒ 探 `.git` 目录会恒为假，整条校验变成**永不开火的死代码**（静默失效的度量，正是本批要消灭的形态）。
+//     `rev-parse` 从 cwd 向上发现仓库，两种布局（单包 / monorepo）都给正确读数。
+const STRICT_DRIFT = process.argv.includes('--strict-drift');
+
+/** git 可用性探针（向上发现仓库；非 git 副本 ⇒ false）。 */
+function gitAvailable() {
+  try {
+    execFileSync('git', ['-C', ROOT, 'rev-parse', '--git-dir'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertDriftCommits() {
+  if (!gitAvailable()) {
+    console.log('[KNOWN_DRIFT] skipped：非 git 环境（安装态不适用，短码无法核）');
+    return { ok: true, skipped: true, bad: [] };
+  }
+  const bad = [];
+  let checked = 0;
+  for (const bucket of ['added', 'gone']) {
+    for (const [code, note] of Object.entries(KNOWN_DRIFT[bucket])) {
+      const sha = String(note).trim().split(/\s+/)[0];
+      checked += 1;
+      try {
+        execFileSync('git', ['-C', ROOT, 'cat-file', '-e', sha + '^{commit}'], { stdio: 'ignore' });
+      } catch {
+        bad.push(code + ' -> ' + sha);
+      }
+    }
+  }
+  if (bad.length) {
+    console.log('[KNOWN_DRIFT] **短码不可解析** (' + bad.length + '/' + checked + ')：' + bad.join(' | '));
+  } else {
+    console.log('[KNOWN_DRIFT] 短码可解析：added ' + Object.keys(KNOWN_DRIFT.added).length
+      + ' / gone ' + Object.keys(KNOWN_DRIFT.gone).length + ' 全部在场');
+  }
+  return { ok: bad.length === 0, skipped: false, bad };
+}
+
+const driftCheck = assertDriftCommits();
+if (STRICT_DRIFT && !driftCheck.ok) {
+  console.error('[KNOWN_DRIFT] --strict-drift：短码校验失败 ⇒ exit 1（本次未写盘）');
+  process.exit(1);
 }
 
 function walk(dir, out = []) {

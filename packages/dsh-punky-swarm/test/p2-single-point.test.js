@@ -230,17 +230,25 @@ test('A1-P2-10 · 四路同路径：①②④ 直调 + ③ 端到端落盘，`pa
   assert.ok(readdirSync(broadcastDir).length >= 1, 'broadcast 目录内必须有消息文件');
 });
 
-test('A1-P2-10 / R-4 · ③ 必须传 `dirname(store.sessionsDir)`：直接把 sessionsDir 喂单点会多一层 `sessions/sessions`', () => {
+test('A1-P2-10 / R-4 · ③ 必须传引擎根（`engineRootOf(store.sessionsDir)`）：直接把 sessionsDir 喂单点会多一层 `sessions/sessions`', () => {
   const sessionsDir = path.join(MB_ROOT, 'sessions');
   const correct = path.resolve(singlePointMailboxRootOf(MB_ROOT, MB_SID, MB_BID));
   const literalSpec = path.resolve(singlePointMailboxRootOf(sessionsDir, MB_SID, MB_BID));
   assert.notEqual(literalSpec, correct, '规格字面（直接传 sessionsDir）必然产出多一层 —— 这条不等是 ③ 的构造纪律依据');
   assert.ok(literalSpec.includes(path.join('sessions', 'sessions')),
     '错误构造的形态 = `<root>/sessions/sessions/…`（静默落错目录，正是 gap-1 记录的陷阱）');
-  // 并证明 trajectory.js 的实装取的确实是 `dirname(store.sessionsDir)`
+  // 并证明 trajectory.js 的实装取的确实是**引擎根**，且该推导已单点（批 `punky-closeout-20261023` C4 / A2-G08）。
+  // 【判据更新 · 留痕】原断言逐字钉住改前的**内联字面量** `mailboxRootOf(dirname(store.sessionsDir), …)`，
+  //   它编码的实现形状是「trajectory.js 自持 `dirname(store.sessionsDir)` 推导」；该形状已被**本批 C4 覆盖**
+  //   （引擎根推导单点 = `lib/state/batch-paths.js::engineRootOf`）⇒ 任何符合 C4 的实现都必然打红本断言
+  //   （红因 = 实现前进，不是退化）。新判据**双面**：
+  //     ① 正向：仍委托单点，且传的是 `engineRootOf(store.sessionsDir)`（引擎根语义不变）；
+  //     ② 反向：本文件不再自持 `dirname(store…)` 推导（自持即第二份同知识实现）。
   const src = read('lib/bridge/trajectory.js');
-  assert.ok(/mailboxRootOf\(dirname\(store\.sessionsDir\), sessionId, batchId\)/.test(src),
-    '③ 必须以 `dirname(store.sessionsDir)` 委托单点（回退成 sessionsDir 即静默落错目录）');
+  assert.ok(/mailboxRootOf\(engineRootOf\(store\.sessionsDir\), sessionId, batchId\)/.test(src),
+    '③ 必须以 `engineRootOf(store.sessionsDir)` 委托单点（回退成 sessionsDir 即静默落错目录）');
+  assert.equal(/dirname\(\s*store/.test(src), false,
+    'trajectory.js 不得再自持 `dirname(store…)` 推导（C4：收成 `engineRootOf` 单点）');
 });
 
 test('A1-P2-10 · 边界收严：root 为 null/undefined/空串 ⇒ throw（fail-closed），正例返回字符串', () => {

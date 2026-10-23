@@ -24,8 +24,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `intercepted` 分支不变），但**在装配面不生效**：配 enforce 得到的仍是 advisory 裁决。
 //   `mountVerify` 会在该配置下输出一条明确 warn（不再静默）。接线 or 退役 = 未决取向，
 //   见 `docs/governance-technical.md`（本批只做「不再静默」，**不改任何判定语义**）。
-// 审计消费桥接：audit lane 消费 exec 产物 + evidence → evaluateGate 产出裁决 → 裁决报告落盘为 audit
-// produce（audit/verify-verdict.md）→ Tier3 门禁照常校验该产物存在（既有 gates.js 零改动，verify 是内容层增强）。
+// 审计消费桥接（**报告渲染器已删**）：audit lane 消费 exec 产物 + evidence → `evaluateAcEvidence` 产出裁决对象；
+//   原「裁决报告渲染器」随批 `punky-closeout-20261023`（裁决 Q-9@closeout）
+//   删除（B1 实测零引用）⇒ **报告文本格式不再是本文件契约**：将来接线时由 audit lane 自定格式，本文件只保
+//   「裁决对象」这一内容层增强（既有 gates.js 零改动）。
+//   ⚠ 本注释刻意**不裸写被删符号名**：机检判据是「全仓零命中」，裸写会让判据恒假红。
 import { createSelectorRegistry } from './selector.js';
 import { createEvidenceRegistry } from './evidence.js';
 import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
@@ -120,34 +123,6 @@ export function evaluateAcEvidence({ acList = [], ledger = [], readBlob, mode = 
     mode,
   });
   return { acBindings, bindings: registry, result };
-}
-
-// 裁决报告落盘格式（预留：audit/verify-verdict.md）——audit lane 写为 produce，Tier3 校验其存在
-export function renderVerdictReport({ batchId, sessionId, acList = [], result, evaluatedAt = new Date().toISOString() }) {
-  const lines = [
-    '# verify 裁决报告（audit/verify-verdict.md）',
-    '',
-    '- 批次：' + batchId + ' ｜ 会话：' + sessionId,
-    '- 评估时间：' + evaluatedAt,
-    '- 模式：' + (result?.mode ?? 'advisory') + ' ｜ 裁决：' + (result?.status ?? 'done') + (result?.intercepted ? '（已拦截）' : ''),
-    '',
-    '## 验收标准 × 证据裁决',
-    '',
-    '| AC | 工具 | 裁决 | 缺陷 |',
-    '|---|---|---|---|',
-    ...acList.map((ac) => {
-      const d = (result?.defects ?? []).find((x) => x.acId === ac.id);
-      return '| ' + ac.id + ' | ' + (ac.tool ?? '') + ' | ' + (d ? d.code : 'done') + ' | ' + (d ? d.detail.replace(/\|/g, '\\|') : '') + ' |';
-    }),
-    '',
-    '## 缺陷清单',
-    '',
-    ...((result?.defects ?? []).length
-      ? result.defects.map((d) => '- `' + d.acId + '` [' + d.code + '] ' + d.detail)
-      : ['- 无']),
-    '',
-  ];
-  return lines.join('\n');
 }
 
 // 完成闸门工厂：config.capabilities.verify.{enabled, mode}——缺省默认开（readCapability 合并

@@ -67,16 +67,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // ── audit 层 lane 的**结算职责转移**（(b) 定案 · 债清 3 · 2026-09-19）────────────────
 //   分叉（债清 2 实测命中）：审计产物写 `verdict: fail`，而本模块**不分层**地把 lane 自动推到 `merged`；
-//   完成门的结局函数 `outcomeOf`（`lib/state/gates.ts:1220`）**纯由终态推导**（`merged ⇒ 'pass'`）
+//   完成门的结局函数 `outcomeOf`（`lib/state/gates/complete.js` 完成门内局部 `outcomeOf`）**纯由终态推导**（`merged ⇒ 'pass'`）
 //   ⇒ 完成门把「审计判失败」读成 pass（`acceptance-report.md` 与蓝图 L1138/L1211 各记一次）。
 //   定案 = **保持「lane 终态 = 唯一真源」**（禁第二真源）：
 //     · 本模块**不对 audit 层 lane 结算**——早退分支只读 `wavePlan` 的静态 `layer` 字段，
 //       **不读任何产物正文**（与蓝图 L768/L1138「complete 门读成员态、不解析报告正文」逐字一致）；
 //     · 失败必须由 Leader 显式 `member_settle(lane,'failed', note)` 落 —— 「review→failed 必须带非空 note」
-//       由既有写路径（`lib/state/store.js:569-577`）强制，本模块零改动即已满足；
+//       由既有写路径（`lib/state/store/member.js::setMember` 的「review→failed 非空 note」闸）强制，本模块零改动即已满足；
 //     · 早退**不落 `paused`**（不是失败，是**职责转移**）⇒ 不推批次相位，批保持 `running`，Leader 可继续结算；
 //     · 该留痕**不进幂等链**（见 `isAuditSettleDeferral`）⇒ 每次触发各留一次痕、**绝不**判 `already-settled`。
-//   **不改**：`DEFAULT_ON_FAIL`、`SETTLEABLE_STOP_REASONS`、两路触发、幂等键、`gates.ts` 的 `outcomeOf`。
+//   **不改**：`DEFAULT_ON_FAIL`、`SETTLEABLE_STOP_REASONS`、两路触发、幂等键、`lib/state/gates/complete.js` 的 `outcomeOf`。
 //
 // ── 边界（登记，不静默）─────────────────────────────────────────────────────────
 //   · `subagent/end` 是**进程级广播**：会夹带一切非本套件派发的子会话 ⇒ 必须经
@@ -287,7 +287,7 @@ export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
       out.action = 'skipped'; out.reason = 'lane-terminal'; out.status = from;
       return out;
     }
-    // ── GAP-S10：**批次相位闸**（与链推进侧同构；`lib/engine/chain-runner.js:111-118` 仅 `running` 相位推进）──
+    // ── GAP-S10：**批次相位闸**（与链推进侧同构；链推进侧仅 `running` 相位推进——该模块已随链退役，2026-09-18 Q-A=C，不引文件锚点）──
     //   规格 §4/§6：停轮（`paused`）＝人工介入 ⇒ **停止自动推进**，A恢复的唯一入口是 `batch_control(resume)`
     //   （`paused → running`）。缺此闸时，`pause` 会被本路（宿主 `subagent/end` 或兼底 `settle-request`）的
     //   下一次触发**静默推翻**——`store.setMember` 照跑、lane 被结算掉，停轮形同虚设。

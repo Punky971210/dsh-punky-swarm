@@ -313,7 +313,7 @@ export const EVT_PLAN_MUTATED = 'plan.mutated';
 //   {running, review, merged} 的**其他** lane（同层 ⇒ 计 `blocking` 记账项；跨层 ⇒ 只作 `notice`）。
 //   载荷 `{ lane, sig, matches:[{lane,state}…], notice[] }`（`type` 键承载事件名，载荷不得占用）。
 //   **非拒态**：**不新增 `GateErrorCode`**、不改任何判定、不改任何 exit code、不阻断动作、不新增治理状态
-//   ——本常量是**事件码**，不是 GATE 码。写端 = `lib/sig-fingerprint.js#recordSigDuplicate`
+//   ——本常量是**事件码**，不是 GATE 码。写端 = `lib/sig-fingerprint.js::sigDuplicateEventFields`（载荷）
 //   （唯一写路径，由 `lib/state/store.js` 的 `setMember` 消费点调用；去重键记 `sigDuplicateLogged`）。
 export const EVT_SIG_DUPLICATE_DETECTED = 'sig.duplicate_detected';
 

@@ -26,6 +26,17 @@ import { SESSION_RE } from './constants.js';
 // 根内判据**复用**（D 轨 WD-3a）：`presence.ts` 的根内判定是唯一实现，禁止在此复制第二份
 import { isInsideRoot, isInsideRootResolved } from './gates/presence.js';
 
+/**
+ * 引擎根推导**单点**（A2-G08）：`sessionsDir` → 引擎根（= 其父目录）。
+ * 原两处各自对 `store.sessionsDir` 取父目录（`watch/heartbeat/context.js` 推导 `engineRoot`、
+ *   `bridge/trajectory.js` 取 mailbox 落盘根）⇒ 收成一份；逆向（引擎根 → `<root>/sessions`）仍由
+ *   各消费方既有 `path.join(root,'sessions')` 承担，**不在本函数内**。
+ * 未提供 `sessionsDir`（如裸 store 桩）⇒ `null`（由消费方沿用既有 null 语义）。
+ */
+export function engineRootOf(sessionsDir) {
+  return sessionsDir ? path.dirname(sessionsDir) : null;
+}
+
 export function sessionDirOf(sessionsDir, sessionId) {
   if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
   return path.join(sessionsDir, sessionId);

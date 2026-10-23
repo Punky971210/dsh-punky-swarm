@@ -19,9 +19,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 订阅 trajectory 异常（anomaly）→ sessionId→lane 映射 → notify（默认 notify-only，auto-fail 默认关）
 // 原则：只读消费告警载荷、不 mutate 载荷、不碰内核、不调插件任何控制面动作
 // 事件契约：'member.dispatch' 记录派发映射（既有事件通道，零新字段）；'lane.anomaly' 记录异常证据；broadcast 提示 Manager
-import { dirname } from 'node:path';
 import { TRAJECTORY_DEFAULTS } from '../schema.js';
 import { mailboxRootOf } from '../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
+import { engineRootOf } from '../state/batch-paths.js'; // 引擎根推导单点（A2-G08；本处不再自推导）
 import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js'; // 派发事件常量收敛（与 event-types.js 同值）
 
@@ -56,8 +56,8 @@ export function createTrajectoryBridge(ctx, deps) {
   // mailbox 落盘根走**单点**（A1-P2-10）：本处原有一份局部闭包 `mailboxRootOf(sessionId, batchId)`
   //   （体 = `join(store.sessionsDir, …)` —— 注意它的第一参数是 **sessionsDir**（已含 `sessions` 段），
   //   而单点收的是 **引擎根**）⇒ 闭包已删，改调 `lib/mailbox-paths.js::mailboxRootOf`
-  //   并传 `dirname(store.sessionsDir)`（= 引擎根；与 `watch/heartbeat/context.js` 推导 engineRoot 的
-  //   既有取法同源）。该闭包无外部可见面。
+  //   并传 `engineRootOf(store.sessionsDir)`（= 引擎根；与 `watch/heartbeat/context.js` 推导 engineRoot
+  //   共用 `lib/state/batch-paths.js::engineRootOf` 单点，A2-G08）。该闭包无外部可见面。
 
   // 重启重建：扫全部批次事件，幂等（重复调用只覆盖不膨胀）
   function rebuildFromEvents() {
@@ -99,7 +99,7 @@ export function createTrajectoryBridge(ctx, deps) {
     const { sessionId, batchId, lane } = hit;
     const { anomalyId, type, confidence, severity, message } = alert;
     store.appendEvent(sessionId, batchId, ANOMALY_RECORD, { lane, alert: { anomalyId, type, confidence, severity, message } });
-    mailbox.send(mailboxRootOf(dirname(store.sessionsDir), sessionId, batchId), { type: 'broadcast' }, {
+    mailbox.send(mailboxRootOf(engineRootOf(store.sessionsDir), sessionId, batchId), { type: 'broadcast' }, {
       kind: MAILBOX_KIND,
       anomalyId, type, confidence, severity, message,
       sessionId, batchId, lane,
