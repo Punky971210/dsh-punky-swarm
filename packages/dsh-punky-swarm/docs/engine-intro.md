@@ -8,7 +8,7 @@
 
 - 这是**工程/技术型引擎**：与主打"简单任务提效"的 Harness 叙事有根本差异——它的全部机制都服务于**有验收标准的专业交付**；
 - 它是**专业技术团队 Agent 化的地基**，不是岗位提效或替代；
-- 可拔插的粒度是**团队指引 + 成员槽位**：团队指引以 skill 形式提供（`skills/<team>/SKILL.md`），团队内层 / 角色 / 技能可以完全不同，但**门禁与状态机是同一套**。**引擎不持有团队名单**——不存在「内置」清单，`wave_plan` 的 `team` 仅是可选的**自由标签**（不解析、不校验、不拒建批）。仓库内现有团队指引 6 套（`software-team` 软件工程、`engine-team` 引擎自身改造、`design-team` ComfyUI 媒体与平面、`research-team` 调研、`writing-team` 写作、`video-team` 视频制作），其中 5 套已登记 `presets/punky-preset/asset-manifest.json` 随装同步（`video-team` 未登记 ⇒ 不随装分发，属**仓库侧登记缺口**，不构成引擎能力）。
+- 可拔插的粒度是**团队指引 + 成员槽位**：团队指引以 skill 形式提供（`skills/<team>/SKILL.md`），团队内层 / 角色 / 技能可以完全不同，但**门禁与状态机是同一套**。**引擎不持有团队名单**——不存在「内置」清单，`wave_plan` 的 `team` 仅是可选的**自由标签**（不解析、不校验、不拒建批）。仓库内现有团队指引 6 套（`software-team` 软件工程、`engine-team` 引擎自身改造、`design-team` ComfyUI 媒体与平面、`research-team` 调研、`writing-team` 写作、`video-team` 视频制作），6 套均已登记 `presets/punky-preset/asset-manifest.json` 随装同步（`lib/assets.js` 的 `DEFAULT_ASSETS` 与 manifest 同形同序，两表须同步维护）。
 
 ## 二、设计理念与落点
 

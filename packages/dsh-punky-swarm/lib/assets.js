@@ -53,6 +53,9 @@ const DEFAULT_ASSETS = [
   { rel: 'skills/retro-and-memory', target: { root: 'skill', subpath: 'retro-and-memory' } },
   { rel: 'skills/research-team', target: { root: 'skill', subpath: 'research-team' } },
   { rel: 'skills/writing-team', target: { root: 'skill', subpath: 'writing-team' } },
+  // 【2026-10-23 · 批 punky-logfix-20261023/Q-24】`skills/video-team` 源树在仓却漏登记 ⇒ 用户机整支技能不可用（双表同形漏项）。
+  //   与 `asset-manifest.json` **同形同序补 1 条**（条目 9 → 10，两处必须一致；位置 = 末尾，既有 9 条顺序零变更）。
+  { rel: 'skills/video-team', target: { root: 'skill', subpath: 'video-team' } },
 ]
 
 /** 包根目录（lib/assets.js -> 包根）。 */

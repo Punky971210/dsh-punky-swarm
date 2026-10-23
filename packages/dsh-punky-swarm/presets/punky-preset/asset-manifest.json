@@ -46,6 +46,11 @@
       "rel": "skills/writing-team",
       "note": "写作团队技能（三层 writing-planner/drafter·polisher·publisher/writing-auditor；含论证型审核分线四角色 theory-mapper/logic-auditor/structure-auditor/evidence-auditor，定义见 references/roles/；装配面已退役）",
       "target": { "root": "skill", "subpath": "writing-team" }
+    },
+    {
+      "rel": "skills/video-team",
+      "note": "视频制作团队技能（三层 7 角色 coordinator·designer / producer·captioner·motion-designer·audio-engineer / supervisor 的职责与产物契约；装配面已退役，本技能只写用途、职责与纪律）",
+      "target": { "root": "skill", "subpath": "video-team" }
     }
   ]
 }

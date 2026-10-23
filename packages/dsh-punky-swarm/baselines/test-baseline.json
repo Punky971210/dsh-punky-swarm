@@ -139,7 +139,7 @@
     "test/assets.test.js": {
       "asserts": 43,
       "blankLines": 27,
-      "lines": 295,
+      "lines": 299,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -182,6 +182,14 @@
       "lines": 783,
       "tautologies": 0,
       "tests": 20,
+      "todos": 0
+    },
+    "test/auditlog-sink-stderr.test.js": {
+      "asserts": 61,
+      "blankLines": 36,
+      "lines": 338,
+      "tautologies": 0,
+      "tests": 6,
       "todos": 0
     },
     "test/auditlog.test.js": {
@@ -369,9 +377,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 201,
+      "asserts": 202,
       "blankLines": 55,
-      "lines": 793,
+      "lines": 801,
       "tautologies": 0,
       "tests": 41,
       "todos": 0
@@ -867,7 +875,7 @@
     "test/inject-budget.test.js": {
       "asserts": 104,
       "blankLines": 75,
-      "lines": 689,
+      "lines": 695,
       "tautologies": 1,
       "tests": 31,
       "todos": 0
@@ -1139,7 +1147,7 @@
     "test/prune-verify.test.js": {
       "asserts": 1,
       "blankLines": 8,
-      "lines": 74,
+      "lines": 78,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1537,7 +1545,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-23T10:59:27Z",
+  "generatedAt": "2026-10-23T12:40:44Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1548,15 +1556,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-acps-closeout-20261023 c1/c2/c4 新增 ACPS 测试（inbound-bound 14 / cert-failclosed 11）+ p2-bridge 改造",
+  "reason": "punky-logfix-20261023：c1 新增 sink-stderr 用例(6 tests/61 asserts)/prune-verify 注释、c2 夹具 9→10、c3 文案变更引发两处判据更新(AC-14 黄金值重采 + P2c 键集)",
   "schema": 1,
   "totals": {
-    "asserts": 9955,
-    "blankLines": 5119,
-    "files": 192,
-    "lines": 54821,
+    "asserts": 10017,
+    "blankLines": 5155,
+    "files": 193,
+    "lines": 55181,
     "tautologies": 2,
-    "tests": 2014,
+    "tests": 2020,
     "todos": 4
   }
 }

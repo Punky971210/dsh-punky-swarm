@@ -187,12 +187,12 @@
 | **输入** | plan 层验收标准载体（`## 验收标准`）+ 各 exec lane 的产物/证据（`outputs` / produce）。缺任一 → 拒（机制面 = P1） |
 | **输出** | `acceptance-report.md`（逐条结论 + 总 verdict）+ `gap-list.json`（**唯一**未决项载体）；verdict ∈ `{pass, fail, skip}` |
 | **收敛判据（满足即必须收口）** | a. 验收标准条目 **100% 逐条有结论**（不留「待定」）；b. 未决怀疑须落成 gap-list 条目并标 `blocking` / `followup`，**过程形式的追加不算载体**；c. `blocking` = 「不满足即无法判定某条验收标准」，其余一律 `followup` |
-| **长跑防治** | 每轮落 `<lane>/progress/NN-<slug>.md`；「证据不足以判定」→ 记 gap-list **并给出结论**（fail 或 pass-with-gap），**不得以「继续调查」为默认终点**（`GATE_EXIT_PENDING_AUDIT` 卡整批 complete） |
+| **长跑防治** | 每轮落 `<lane>/progress/NN-<slug>.md`（**progress 落盘要求受引擎注入规则约束**：当引擎注入 `singleArtifactWrite` 抑制时，**以引擎注入的规则行为准**）；「证据不足以判定」→ 记 gap-list **并给出结论**（fail 或 pass-with-gap），**不得以「继续调查」为默认终点**（`GATE_EXIT_PENDING_AUDIT` 卡整批 complete） |
 | **与机制面的关系** | 本节是**语义口径**；P1（**判据来源锚定**）**仍落地**（见后段 + 附录 A.4）；**P2（`audit_contract` 声明化）已随团队资产面退役删净**（声明驱动门 `GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_CONTRACT_EXEMPT` 已无发射点） |
 
 **P1 机制面（全局严格）**
 
-- **建批期**：三层批中只要有 audit lane 声明 `consume`，则**至少一条** audit lane 必须消费到 **plan 层产物**（判定：路径以 `plan/` 开头，或由某条 `layer:'plan'` lane 在 `produce`/`outputs` 声明）；否则**拒建批** `GATE_AUDIT_INPUT_MISSING`。判据落**批级**而非逐 lane——多 audit lane 设计不必每条直接消费 spec；未声明 `consume` 的 audit lane 由 `entry_requires: ['consume']` 在派发面拦。
+- **建批期**：三层批中只要有 audit lane 声明 `consume`，则**至少一条** audit lane 必须消费到 **plan 层产物**（判定：路径以 `plan/` 开头，或由某条 `layer:'plan'` lane 在 `produce`/`outputs` 声明）；否则**拒建批** `GATE_AUDIT_INPUT_MISSING`。判据落**批级**而非逐 lane——多 audit lane 设计不必每条直接消费 spec；未声明 `consume` 的 audit lane 在派发面被**引擎基线 B1 零依赖拒派**拦下（`lib/state/gates/entry.js`：`consume` 空 / 未声明 / 非数组 ⇒ 拒，原文明示**不依赖**团队是否声明 `entry_requires`）。团队 `flows.entry_requires` 声明面已随团队资产整体退役 ⇒ 恒「未声明」；其读端 `entryRequiresOf()` 的 `.enforced` 布尔在 `lib/` **零行为消费**（只有 `.source` 被用于 `requiredBy` 留痕标注，且该标注**不参与判定**）。
 - **entry 期**：audit lane 派发前，其 `consume` 里的 plan 产物至少一份**正文含裸标题行 `## 验收标准`**（与 `GATE_PLAN_CONTRACT` 同判据）；否则**拒派** `GATE_AUDIT_CRITERIA_MISSING`（载荷 `problems`）——路径锚上而内容是空壳/跑题 ⇒ 仍无标准可依。
 - **语义依据**：audit 层对的是**总体任务验收**，判据只能来自 plan 的验收标准；exec 层的 `reviewer`（消费 tester 结果）是**初步 audit，不外延到总体验收**，**不构成替代**。
 

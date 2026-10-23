@@ -45,7 +45,7 @@ triggers:
 2. **怀疑项归位**：任何未决怀疑必须落成 `gap-list.json` 条目并标 `blocking` / `followup`；**过程形式的追加（中间笔记、口头待办）不算载体**。
 3. **阻塞判据收紧**：仅「不满足即无法判定某条验收标准」算 `blocking`，其余一律 `followup`。
 
-**长跑防治**：每轮落 `<lane>/progress/NN-<slug>.md`；「证据不足以判定」→ 记 gap-list **并给出结论**（`fail` 或 `pass-with-gap`），**不得以「继续调查」为默认终点**——引擎侧 audit 不收口会让整批卡在 `complete` 之前（`GATE_EXIT_PENDING_AUDIT`），**长跑的代价是阻塞终态**。
+**长跑防治**：每轮落 `<lane>/progress/NN-<slug>.md`（**progress 落盘要求受引擎注入规则约束**：当引擎注入 `singleArtifactWrite` 抑制时，**以引擎注入的规则行为准**）；「证据不足以判定」→ 记 gap-list **并给出结论**（`fail` 或 `pass-with-gap`），**不得以「继续调查」为默认终点**——引擎侧 audit 不收口会让整批卡在 `complete` 之前（`GATE_EXIT_PENDING_AUDIT`），**长跑的代价是阻塞终态**。
 
 ## 3 产出契约
 

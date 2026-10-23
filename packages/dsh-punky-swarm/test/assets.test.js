@@ -54,11 +54,14 @@ const ASSET_ACCEPTANCE = { rel: 'skills/acceptance-gate', target: { root: 'skill
 const ASSET_RETRO = { rel: 'skills/retro-and-memory', target: { root: 'skill', subpath: 'retro-and-memory' } };
 const ASSET_RESEARCH = { rel: 'skills/research-team', target: { root: 'skill', subpath: 'research-team' } };
 const ASSET_WRITING = { rel: 'skills/writing-team', target: { root: 'skill', subpath: 'writing-team' } };
+// 【2026-10-23 · 批 punky-logfix-20261023/Q-24】`skills/video-team` 源树在仓却漏登记 ⇒ 用户机整支技能不可用；
+//   随 C 项与 `asset-manifest.json` / `lib/assets.js` 的 DEFAULT_ASSETS **同形同序补 1 条**（条目 9 → 10）。
+const ASSET_VIDEO = { rel: 'skills/video-team', target: { root: 'skill', subpath: 'video-team' } };
 
-/** 清单条目集（与包内 `asset-manifest.json` **同序、同长**；现 **9 条** —— 2026-09-30 双侧同删 1 条后）。 */
-const ALL_ASSETS = [ASSET_PRESET, ASSET_SOFTWARE, ASSET_SKILL_ENGINE, ASSET_DESIGN, ASSET_REVIEW, ASSET_ACCEPTANCE, ASSET_RETRO, ASSET_RESEARCH, ASSET_WRITING];
+/** 清单条目集（与包内 `asset-manifest.json` **同序、同长**；现 **10 条** —— 2026-09-30 双侧同删 1 条（10→9）后，2026-10-23 补 `skills/video-team`（9→10））。 */
+const ALL_ASSETS = [ASSET_PRESET, ASSET_SOFTWARE, ASSET_SKILL_ENGINE, ASSET_DESIGN, ASSET_REVIEW, ASSET_ACCEPTANCE, ASSET_RETRO, ASSET_RESEARCH, ASSET_WRITING, ASSET_VIDEO];
 
-/** 落点冻结表（Q-2 枚举 + v3 自建手册三件（review-execution / acceptance-gate / retro-and-memory，原四件之一已退役）+ research-team/writing-team）：根枚举 → home 下相对段 → 该资产源树内的代表性文件。 */
+/** 落点冻结表（Q-2 枚举 + v3 自建手册三件（review-execution / acceptance-gate / retro-and-memory，原四件之一已退役）+ research-team/writing-team/video-team）：根枚举 → home 下相对段 → 该资产源树内的代表性文件。 */
 const ALL_TARGETS = [
   { asset: ASSET_PRESET, rel: ['.dsh', '.agent-presets', 'punky-preset'], file: 'preset.yml' },
   { asset: ASSET_SOFTWARE, rel: ['.agents', 'skills', 'software-team'], file: 'SKILL.md' },
@@ -69,9 +72,10 @@ const ALL_TARGETS = [
   { asset: ASSET_RETRO, rel: ['.agents', 'skills', 'retro-and-memory'], file: 'SKILL.md' },
   { asset: ASSET_RESEARCH, rel: ['.agents', 'skills', 'research-team'], file: 'SKILL.md' },
   { asset: ASSET_WRITING, rel: ['.agents', 'skills', 'writing-team'], file: 'SKILL.md' },
+  { asset: ASSET_VIDEO, rel: ['.agents', 'skills', 'video-team'], file: 'SKILL.md' },
 ];
 
-/** 全部清单条落点存在性断言（落点冻结 Q-2 + v3 自建手册三件 + research-team + writing-team）。 */
+/** 全部清单条落点存在性断言（落点冻结 Q-2 + v3 自建手册三件 + research-team + writing-team + video-team）。 */
 function assertAllTargets(home) {
   for (const { rel, file } of ALL_TARGETS) {
     assert.equal(existsSync(join(home, ...rel, file)), true, `落点缺失：${rel.join('/')}/${file}`);
@@ -131,7 +135,7 @@ test('syncDir: 目标不一致 -> synced 并覆盖（含多余文件清除）', 
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('syncAssets: 九资产同步到模拟 home + 二次幂等', () => {
+test('syncAssets: 十资产同步到模拟 home + 二次幂等', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'punky-assets-'));
   try {
     const root = join(tmp, 'pkg');
@@ -139,7 +143,7 @@ test('syncAssets: 九资产同步到模拟 home + 二次幂等', () => {
     const home = join(tmp, 'home');
     const { results: r1 } = syncAssets({ home, packageRoot: root });
     assert.deepEqual(r1.map((x) => x.status), Array(ALL_ASSETS.length).fill('synced'));
-    assert.equal(ALL_ASSETS.length, 9, '【清单条目 10 → 9（2026-09-30）】空壳团队目录条目双侧同删；原「团队装配资产说明」技能条目亦已退役');
+    assert.equal(ALL_ASSETS.length, 10, '【清单条目 9 → 10（2026-10-23）】补 skills/video-team；前次 10 → 9 为空壳团队目录条目双侧同删。原断言 9 条，已随 Q-24（video-team 补两张装包表）更新为 10');
     assertAllTargets(home);
     const { results: r2 } = syncAssets({ home, packageRoot: root });
     assert.deepEqual(r2.map((x) => x.status), Array(ALL_ASSETS.length).fill('current'));
@@ -158,7 +162,7 @@ test('syncAssets: 源缺失 -> missing-source 不报错', () => {
 
 // ——新增：清单驱动（T-1 … T-7）——
 
-test('T-1 syncAssets: 清单存在且合法 -> manifest=ok 且全部落点齐备（本批起 9 条）', () => {
+test('T-1 syncAssets: 清单存在且合法 -> manifest=ok 且全部落点齐备（本批起 10 条）', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'punky-assets-'));
   try {
     const root = join(tmp, 'pkg');
@@ -187,7 +191,7 @@ test('T-2 syncAssets: 清单驱动生效 -> 未声明条目不同步', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('T-3 syncAssets: 清单缺失 -> 内置默认 9 条 + manifest=missing（P1 同步含 +skills/engine-team；2026-09-30 双侧同删 1 条后 10 → 9）', () => {
+test('T-3 syncAssets: 清单缺失 -> 内置默认 10 条 + manifest=missing（P1 同步含 +skills/engine-team；2026-09-30 双侧同删 1 条后 10 → 9；2026-10-23 补 skills/video-team 后 9 → 10）', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'punky-assets-'));
   try {
     const root = join(tmp, 'pkg');

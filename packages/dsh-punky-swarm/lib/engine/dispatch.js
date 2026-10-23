@@ -688,10 +688,10 @@ export function composeWorkerPrompt({
   }
   // ── 【2026-09-27 · GR-12】回报编号口径消歧（收「exec 验收项被写成 spec 自检项编号」的停轮教训）──
   //   背景：任务包曾把「exec 报告的验收项」称作自检项的编号；而判据源 `## 验收标准` 章内的自检项编号
-  //   与 **exec 验收项**（在判据源 **§6**，形如 `L-AC-1..L-AC-N`）是**两套编号** ⇒ worker 按错位编号回报。
-  rule('**【回报编号口径】**本 lane 的**验收项**编号以**判据源 §6** 为准（形如 `L-AC-1..L-AC-N`）；');
+  //   与 **exec 验收项**（落在判据源的**验收项专章**，章号与编号族随规格自定，如 `§6` + `L-AC-1..N`，或 `V-1..V-28`）是**两套编号** ⇒ worker 按错位编号回报。
+  rule('**【回报编号口径】**本 lane 的**验收项**编号以**判据源中承载 exec 验收项的那一章**为准（**章号与编号形态随判据源自定**：如 `§6` + `L-AC-1..N`，或 `V-1..V-28`）；');
   L.push('   判据源 `## 验收标准` 章内的自检项编号属于**规格自检**，**不是**本 lane 的验收项。');
-  L.push('   回报引用验收项时：**照抄 §6 的编号 + 原文**（禁自行重排、禁把自检项编号当作验收项回填）。');
+  L.push('   回报引用验收项时：**照抄该章的编号 + 原文**（禁自行重排、禁把自检项编号当作验收项回填）。');
   // ── 【2026-09-27 · GR-13】「单件写盘 lane」与纪律 progress 快照的冲突处置 ──
   //   背景：audit 聚合 lane 的硬约束「只写一件」（判据源明列）与「每完成一子步骤即落 progress 快照」
   //   直接冲突，worker 只能靠自行判断 ⇒ 引擎侧按 lane 的**写盘约束**自动抑制 progress 行。
@@ -988,9 +988,10 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   注入批归属会话 id（= 本函数落点会话 = 批文件所在会话 = `member.dispatch.sessionId`），
     //   使命中面覆盖 `dispatchIndex` 的重启重建窗口（详见 `composeWorkerPrompt` 参数注释）。
     batchSessionId: sessionId,
-    // 【2026-09-27 · GR-13】lane 声明位的**直读**（`buildWavePlan` 归一化面**未持久化**该字段 ⇒ 今日恒 `false`；
-    //   真实生效路径 = `composeWorkerPrompt` 内「audit 层 + 声明写盘面恰一件」的**自动判定**）。
-    //   保留本行 = 为「直调派发 / 未来持久化该字段」留显式逃生位，不构成当前行为的唯一依赖。
+    // 【2026-09-27 · GR-13；2026-10-23 批 punky-logfix-20261023 更正】lane 声明位现已**持久化**：
+    //   `lib/wave-plan.js:1078`（`singleArtifactWrite: t.singleArtifactWrite === true,`，批 cleanup-settle-20260929 G-4 甲）
+    //   ⇒ 派发路径的直读**会生效**，不再是恒 `false` 的逃生位。`composeWorkerPrompt` 内
+    //   「audit 层 + 声明写盘面恰一件」的**自动判定同时保留**（两者取「或」，见该函数 `singleArtifactWriteLane`）。
     singleArtifactWrite: laneTask?.singleArtifactWrite === true,
     // 【L2 注入预算】面 A 阈值：从**热更快照**读（与上方 `liveConfig?.dispatch?.provider` 同一快照口径
     //   ⇒ runtime.json 改 `capabilities.injectBudget` 即生效，无需重启宿主）。

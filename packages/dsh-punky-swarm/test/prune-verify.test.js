@@ -26,8 +26,12 @@ const PRUNED = [
   ['lib/engine/dispatch.js', 'parseLabel'],
   ['lib/bridge/lane-handle.js', 'sweepExpiredHandles'],
   ['lib/governance/state-store.js', 'clearSessionState'],
-  // 【判读更正（2026-09-22）】DEFAULT_ESCALATION_WINDOW_MS（escalation.js 同文件默认参数消费，生产在役）
-  //   与 auditlogStats/sinkFilePath（sink 测试观测钩，probe 依赖）已从删除清单移出并恢复。
+  // 【判读更正（2026-09-22；2026-10-23 批 punky-logfix-20261023 二次更正）】
+  //   DEFAULT_ESCALATION_WINDOW_MS（escalation.js 同文件默认参数消费，生产在役）与
+  //   auditlogStats（**探针真依赖**：test/auditlog-mount.test.js 解构导入并在多场景断言）已从删除清单移出并恢复。
+  //   ⚠ 原句把「只算当日主卷路径」的那个 sink 导出与 auditlogStats 并列称「probe 依赖」= 失实：
+  //     探针从未导入它（全仓零调用）；该导出已按 L-13（Q-21b）删除，**不属于「恢复」面**。
+  //   此处**刻意不复写**该被删符号名 —— 批级判据要求它在 `lib/` 与 `test/` 零命中，复写即自相矛盾。
   ['lib/acps/registry-client.js', 'decryptEabCredential'],
   ['lib/acps/registry-client.js', 'API_BASE_PATH'],
   ['lib/acps/registry-client.js', 'ATR_BASE_PATH'],

@@ -58,6 +58,10 @@ const BREAKER_PROBE_INTERVAL = 1000;
 const MAX_SINK_ERROR_RECORDS = 3;
 /** 诊断面 lastError 截断长度 */
 const MAX_ERROR_CHARS = 500;
+/** 【2026-10-23 · 批 punky-logfix-20261023/Q-19b】进程生命周期内 stderr 告警**硬上限**（首失败 1 + 断路器跳闸 1） */
+const MAX_STDERR_NOTICES = 2;
+/** 同上：stderr 告警行内 error 截断长度（不引 MAX_ERROR_CHARS=500，避免单行过长刷屏） */
+const MAX_STDERR_ERROR_CHARS = 200;
 
 /** 聚合窗口默认长度（滑动；模块内常量，非配置键——README 只声明语义与开关，不暴露可配性） */
 export const AGGREGATE_WINDOW_MS = 60000;
@@ -116,6 +120,8 @@ const state = {
   skippedByBreaker: 0,
   sinkErrorRecords: 0,
   sinkErrorRecordsFailed: 0,
+  stderrNotices: 0,            // 【Q-19b】已**发起**的 stderr 告警条数（含 write 自身失败；硬上限 MAX_STDERR_NOTICES）
+  stderrNoticedKeys: [],       // 【Q-19b】已发起的告警键（幂等去重，防同一站点重复）
   truncatedLines: 0,
   stdoutWrites: 0,
   messagesSeen: 0,
@@ -568,6 +574,33 @@ function stdoutWrite(rec) {
   }
 }
 
+/**
+ * stderr 告警单点（【2026-10-23 · 批 punky-logfix-20261023/Q-19b】用户裁决：降级路径最后一跳必须可见）。
+ *
+ * 契约：
+ * - **硬上限**：进程生命周期最多 MAX_STDERR_NOTICES 条（首失败 1 + 断路器跳闸 1）；
+ * - **幂等**：同一 key 只发一次（上限 + 键去重双保险）；
+ * - **不自噬**：stderr 自身写失败一律吞掉 —— 不产生新记录、不改任何计数、不向上冒泡；
+ * - **不越界**：只写 `process.stderr`（宿主协议面走 stdout，此处绝不触碰）、不落 sink（sink 已不可写）、
+ *   不进聚合窗口、不新增事件码。
+ *
+ * 行格式契约（audit 可据此 grep，不依赖中文）：`[punky-auditlog] ` + **单行**正文 + `\n`。
+ * 单行由本函数**兜底**：正文内的换行与其后缩进一律折叠为一个空格 —— `lastError` 带栈时
+ * （`recordError` 存的是 `error.stack`）若不折叠，一条告警会被行计数读成多行（实测：8 次失败读成 3 行）。
+ */
+function noticeStderr(key, body) {
+  if (state.stderrNotices >= MAX_STDERR_NOTICES) return;
+  if (state.stderrNoticedKeys.includes(key)) return;
+  state.stderrNoticedKeys.push(key);
+  state.stderrNotices += 1;          // 先记账（含随后 write 失败的情形），保证「上限」在异常下仍收敛
+  try {
+    if (process.stderr && typeof process.stderr.write === 'function') {
+      const oneLine = String(body).replace(/[\r\n]+\s*/g, ' ');   // 单行契约：无换行、无栈缩进
+      process.stderr.write('[punky-auditlog] ' + oneLine + '\n');
+    }
+  } catch { /* 不自噬：stderr 自身失败不再记，也不外抛 */ }
+}
+
 function writeSinkError(textValue) {
   // 降级记账有界——前 MAX_SINK_ERROR_RECORDS 条 + 此后每 BREAKER_PROBE_INTERVAL 次尝试最多 1 条
   if (state.sinkErrorRecords >= MAX_SINK_ERROR_RECORDS
@@ -578,8 +611,14 @@ function writeSinkError(textValue) {
     const { line } = capRecord(rec);
     fs.appendFileSync(currentSegmentPath(), line + '\n', { encoding: 'utf8' });
     state.sinkErrorRecords += 1;
-  } catch {
+  } catch (error) {
     state.sinkErrorRecordsFailed += 1;            // 失败面不自噬：只计数
+    // 【Q-19b】降级路径的最后一跳必须可见：首条 append 失败写一次 stderr（另一条见 annotateFailure 的跳闸行）
+    noticeStderr('sink-append-failed',
+      'sink append failed: path=' + currentSegmentPath()
+      + ' attempts=' + state.attempts
+      + ' failures=' + state.failures
+      + ' error=' + truncateText(String(error?.message ?? error), MAX_STDERR_ERROR_CHARS));
   }
 }
 
@@ -589,6 +628,15 @@ function annotateFailure(error, phase) {
   recordError(error);
   writeSinkError(phase + ': ' + state.lastError);
   noteFirstFailure();
+  // 【Q-19b】断路器跳闸（首次达到阈值）同样必须可见；`===` 与「首次达到」逐字等价（consecutiveFailures 成功即归零）。
+  // 放在 writeSinkError 之后 ⇒ stderr 顺序恒为「首失败行 → 跳闸行」；键幂等保证只出一次（1000 次探活点不再刷屏）。
+  if (state.consecutiveFailures === BREAKER_THRESHOLD) {
+    noticeStderr('sink-breaker-tripped',
+      'sink breaker tripped: consecutiveFailures=' + state.consecutiveFailures + '/' + BREAKER_THRESHOLD
+      + ' ⇒ 后续写盘仅计数，每 ' + BREAKER_PROBE_INTERVAL + ' 次尝试探活一次'
+      + ' sinkPath=' + currentSegmentPath()
+      + ' lastError=' + truncateText(String(state.lastError ?? ''), MAX_STDERR_ERROR_CHARS));
+  }
 }
 
 /** 断路判定：连续失败 ≥ 3 后，只累计 skippedByBreaker；每 1000 次尝试放行一次探活 */
@@ -836,11 +884,6 @@ export function flushDiagnostics(note) {
   flushAggregateWindows();
 }
 
-export function sinkFilePath(sinkDir, dateKey = localDateKey(new Date())) {
-  return path.join(sinkDir, 'audit-' + dateKey + '.jsonl');
-}
-
-
 /**
  * 供测试与排障读取的运行期计数快照（只读投影，不改变状态）。
  */
@@ -858,6 +901,7 @@ export function auditlogStats() {
     skippedByBreaker: state.skippedByBreaker,
     sinkErrorRecords: state.sinkErrorRecords,
     sinkErrorRecordsFailed: state.sinkErrorRecordsFailed,
+    stderrNotices: state.stderrNotices,          // 【Q-19b】stderr 告警已发起条数（新增键，既有键语义/顺序零改）
     truncatedLines: state.truncatedLines,
     stdoutWrites: state.stdoutWrites,
     messagesSeen: state.messagesSeen,

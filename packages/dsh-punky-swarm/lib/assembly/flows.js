@@ -41,7 +41,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //                produceFieldOf(flow, layer) 降为**信息性**（声明字段名，仅用于降级留痕）
 //   consume    → consumeFieldOf(flow, layer)（声明优先，缺省 `'consume'`；白名单外回落 + 问题可读）
 //   零读端声明  → declarationSummaryOf(flows) 汇总 `unwired`（state_machine / progress_contract /
-//                rework 的**未接线标注**，来源 team-asset.js 的台账；`consume_field` 已于 S19① 接线 ⇒ 不在台账）
+//                rework 的**未接线标注**（**该台账读端已随 team-asset 全量退役 2026-09-27**；现役实现恒返回 `unwired: []`，本行属历史说明、勿据以取数）；`consume_field` 已于 S19① 接线 ⇒ 不在台账）
 
 // 【2026-09-27 · team-asset 全量退役】原 import 面（资产装载器 / 资产签名 / 码族常量表 /
 //   严重级常量表 / blocking 判据 / 未接线台账读函数 —— 字面量见上游 team-asset.js）

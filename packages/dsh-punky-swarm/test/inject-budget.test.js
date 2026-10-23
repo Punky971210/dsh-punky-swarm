@@ -253,10 +253,16 @@ function stripComments(src) {
   return out;
 }
 
-/** 黄金基线（**改动前**直采；见文件末采集说明）。 */
+/**
+ * 黄金基线（**改动前**直采；见文件末采集说明）。
+ * 2026-10-23 重采：`dispatch.js` 的 GR-12 规则由「以判据源 §6 为准 / 形如 L-AC-1..N」改为
+ * **形态无关**表述（「承载 exec 验收项的那一章，章号与编号形态随判据源自定」）⇒ 任务包文本 +96B。
+ * 原断言编码的是 c3 前的 §6 写死文案，已由 Q-22（指引 6 处文案）覆盖；
+ * 本值由 `composeWorkerPrompt` 实跑两次逐字相同（HAS_OMIT_MARK=false）。
+ */
 const GOLDEN_COMPOSE = Object.freeze({
-  bytes: 2056,
-  sha256: '8baaaa4e9db9bb19878e25401ac13e54cef0f57f1965013ebed079da66d07a7c',
+  bytes: 2152,
+  sha256: '0f22d976530cc0b738faf01a9bcddb8bb3a87e77aa51db421b148e5adfe9e96d',
   lines: 37,
 });
 
