@@ -73,6 +73,16 @@ function renderChanges(changes) {
     .join('\n');
 }
 
+/**
+ * H-3（`punky-housekeeping-20261023`）：从 `filesChanged` 里剔出 `added`。
+ * 判据面 = 补集（changed ∪ removed）必须为空 —— 合法新增用例文件放行，
+ * 既有用例的指标变化与文件消失照旧必红（牙齿不因放行新增而削弱）。
+ * 为什么不改内核：严格性只来自本文件 e2-1，内核 `compareBaseline` 本来就允许 added/removed。
+ */
+function notAddedChanges(cmp) {
+  return cmp.filesChanged.filter((f) => f.kind !== 'added');
+}
+
 // ── 1. 基线自洽：与真实测试树逐文件一致 ─────────────────────────────────
 test('e2-1 基线自洽：baselines/test-baseline.json 与当前 test/ 树逐文件一致（0 漂移 / 0 告警）', () => {
   assert.ok(fs.existsSync(BASELINE_ABS), `${BASELINE_REL_PATH} 必须入库存在`);
@@ -88,15 +98,103 @@ test('e2-1 基线自洽：baselines/test-baseline.json 与当前 test/ 树逐文
 
   const scan = scanTree(ROOT);
   const cmp = compareBaseline(baseline, scan);
-  assert.deepEqual(cmp.filesChanged, [], `逐文件无漂移；实际差异：\n${renderChanges(cmp.filesChanged)}`);
+  // 判据（H-3）：**仅 added 放行**（lane 合法新增用例文件），changed / removed 仍必红 ——
+  //   「既有用例的指标不得静默变化」的可见性不因放行新增而削弱。
+  const notAdded = notAddedChanges(cmp);
+  assert.deepEqual(notAdded, [], `既有用例的指标不得变化（仅新增文件放行）；实际差异：\n${renderChanges(notAdded)}`);
   assert.deepEqual(cmp.warnings, [], '无用例数 / test.todo 数下降告警');
   assert.equal(cmp.ok, true);
-  assert.equal(cmp.asserts.current, baseline.totals.asserts, '断言总数与基线一致');
+  assert.ok(
+    cmp.asserts.current >= baseline.totals.asserts,
+    `断言总数不得低于基线（允许新增用例抬高）：current=${cmp.asserts.current} baseline=${baseline.totals.asserts}`,
+  );
   assert.equal(typeof baseline.totals.tautologies, 'number', '基线含恒真形态指标（B5 新增口径，缺则旧基线未重生成）');
-  assert.equal(cmp.tautologies.current, baseline.totals.tautologies, '恒真形态命中数与基线一致');
-  assert.equal(baseline.totals.files, listTestFiles(ROOT).length, '文件计数与扫描结果一致');
+  assert.ok(
+    cmp.tautologies.current <= baseline.totals.tautologies,
+    `恒真形态命中数不得高于基线（与内核 ok 同口径）：current=${cmp.tautologies.current} baseline=${baseline.totals.tautologies}`,
+  );
+  const scannedFileCount = listTestFiles(ROOT).length;
+  assert.ok(
+    baseline.totals.files <= scannedFileCount,
+    `基线文件数不得多于当前扫描文件数（允许新增用例文件）：baseline=${baseline.totals.files} current=${scannedFileCount}`,
+  );
   const sum = Object.values(scan.files).reduce((a, f) => a + f.asserts, 0);
-  assert.equal(baseline.totals.asserts, sum, '逐文件断言数之和 == 总量');
+  assert.equal(scan.totals.asserts, sum, '逐文件断言数之和 == 扫描总量（自洽性，不跨基线）');
+});
+
+// ── 1b. H-3 判据放宽：仅 added 放行（changed / removed 仍是牙） ────────────
+// 背景：放宽前「逐文件零漂移」逼得每批由 Leader 重冻基线，任何 lane 合法新增一个用例文件都红。
+// 但放宽只能发生在 **added** 这一档：既有用例的指标变化（删断言/加断言/行数变）与文件消失
+// 都必须照旧红，否则「静默删断言」这条被守住的退化面就会被新判据放跑。
+test('e2-11 放行新增：纯新增用例文件不判红，且 filesChanged 如实含 1 条 added（是「剔出来」不是「看不见」）', () => {
+  const baseline = syntheticBaseline(
+    { files: 1, tests: 1, todos: 0, asserts: 9, tautologies: 0, lines: 20, blankLines: 0 },
+    { 'test/old.test.js': { tests: 1, todos: 0, asserts: 9, tautologies: 0, lines: 20, blankLines: 0 } },
+  );
+  const current = {
+    files: {
+      'test/old.test.js': baseline.files['test/old.test.js'],
+      'test/new.test.js': { tests: 1, todos: 0, asserts: 4, tautologies: 0, lines: 10, blankLines: 0 },
+    },
+    totals: { files: 2, tests: 2, todos: 0, asserts: 13, tautologies: 0, lines: 30, blankLines: 0 },
+  };
+  const cmp = compareBaseline(baseline, current);
+  assert.equal(cmp.ok, true, '纯新增 ⇒ 内核判绿（断言总数抬高，下界仍成立）');
+  assert.deepEqual(notAddedChanges(cmp), [], 'e2-1 的新判据：剔出 added 后为空 ⇒ 绿');
+  assert.equal(cmp.filesChanged.length, 1, '差分里仍看得见它（放行 ≠ 看不见）');
+  assert.equal(cmp.filesChanged[0].kind, 'added', '放行的只是 added 这一档');
+  assert.equal(cmp.filesChanged[0].file, 'test/new.test.js', '点名到新增文件');
+  assert.equal(cmp.asserts.delta, 4, '新增用例的断言数如实计入总量增量');
+});
+
+test('e2-12 判红不变：既有用例文件的断言数增减与文件消失都不放行（changed / removed 是 H-3 的牙）', () => {
+  const baseline = syntheticBaseline(
+    { files: 2, tests: 2, todos: 0, asserts: 8, tautologies: 0, lines: 30, blankLines: 0 },
+    {
+      'test/a.test.js': { tests: 1, todos: 0, asserts: 4, tautologies: 0, lines: 15, blankLines: 0 },
+      'test/b.test.js': { tests: 1, todos: 0, asserts: 4, tautologies: 0, lines: 15, blankLines: 0 },
+    },
+  );
+  const a = baseline.files['test/a.test.js'];
+
+  // ① 既有文件断言数下降（删断言）⇒ changed，必红
+  const shrunk = {
+    files: {
+      'test/a.test.js': { ...a, asserts: 2, lines: 13 },
+      'test/b.test.js': baseline.files['test/b.test.js'],
+    },
+    totals: { files: 2, tests: 2, todos: 0, asserts: 6, tautologies: 0, lines: 28, blankLines: 0 },
+  };
+  const cmpShrunk = compareBaseline(baseline, shrunk);
+  assert.equal(cmpShrunk.filesChanged.length, 1, '只点名真正变化的文件');
+  assert.equal(cmpShrunk.filesChanged[0].kind, 'changed', '既有文件被改 ⇒ changed');
+  assert.equal(cmpShrunk.filesChanged[0].delta.asserts, -2, '缺口数量如实给出');
+  assert.equal(notAddedChanges(cmpShrunk).length, 1, 'changed（减）不得被放行 ⇒ e2-1 仍红');
+
+  // ② 既有文件断言数上升（加断言）⇒ 同样 changed、同样必红：放行的是「新增文件」，不是「既有文件多写」
+  const grown = {
+    files: {
+      'test/a.test.js': { ...a, asserts: 6, lines: 17 },
+      'test/b.test.js': baseline.files['test/b.test.js'],
+    },
+    totals: { files: 2, tests: 2, todos: 0, asserts: 10, tautologies: 0, lines: 32, blankLines: 0 },
+  };
+  const cmpGrown = compareBaseline(baseline, grown);
+  assert.equal(cmpGrown.filesChanged.length, 1);
+  assert.equal(cmpGrown.filesChanged[0].kind, 'changed');
+  assert.equal(cmpGrown.filesChanged[0].delta.asserts, 2, '增量也如实点名（两方向都可见）');
+  assert.equal(notAddedChanges(cmpGrown).length, 1, 'changed（增）不得被放行 ⇒ e2-1 仍红');
+
+  // ③ 文件消失 ⇒ removed，必红
+  const dropped = {
+    files: { 'test/a.test.js': a },
+    totals: { files: 1, tests: 1, todos: 0, asserts: 4, tautologies: 0, lines: 15, blankLines: 0 },
+  };
+  const cmpDropped = compareBaseline(baseline, dropped);
+  assert.equal(cmpDropped.filesChanged.length, 1);
+  assert.equal(cmpDropped.filesChanged[0].kind, 'removed', '文件消失 ⇒ removed');
+  assert.equal(cmpDropped.filesChanged[0].file, 'test/b.test.js', '点名到被删文件');
+  assert.equal(notAddedChanges(cmpDropped).length, 1, 'removed 不得被放行 ⇒ e2-1 仍红（AC-H3-3）');
 });
 
 // ── 2. 判红：断言调用数下降 ⇒ 逐文件 diff 点名 ──────────────────────────

@@ -26,7 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `scripts/` 随包发出而 `test/` 不在 ⇒ 引用测试 helper 会在发布形态下断链。隔离 preload 与 ctx 夹具
 //   因此在 `scripts/smoke/` 内**按同一契约自建**（差异由 audit 抽查，不是复制粘贴的巧合）。
 //
-// 退出码（D-1.4，与仓内 `check-guidance-sync.mjs` / `pkg-hashes.mjs` / `test-evidence-guard.mjs` 的 `2` 同约定）：
+// 退出码（D-1.4，与仓内 `check-guidance-sync.mjs` / `pkg-hashes.mjs` / `evidence-guard.mjs` 的 `2` 同约定）：
 //   0 = 全部 PASS、skip=0、certify 前置成立（干净树）——唯一可写「已生效」的读数
 //   1 = 任一 FAIL（门禁红）
 //   2 = 用法错误 / 隔离前置失败（隔离根不可建、与真实 home 同路径、隔离根未按契约清理）

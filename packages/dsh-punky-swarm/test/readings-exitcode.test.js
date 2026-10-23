@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 退出码纪律的用例面（D-3 · 验收 B-5 / B-6）。
 //
-// 存在理由：`scripts/test-evidence-guard.mjs` 的**真实 CLI 退出码**此前**无任何测试** ——
+// 存在理由：`scripts/evidence-guard.mjs` 的**真实 CLI 退出码**此前**无任何测试** ——
 //   既有用例（`test/test-evidence-guard.test.js`）只用进程内的 `exitCodeOf(verdict)`，
 //   即「按裁定函数算出应该是几」，而不是「子进程真的退了几」。
 //   两者之间的差距恰好是本缺陷的形态：**取码方式**会让 `exit 1` 被读成 `0`。
@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
-const GUARD_REL = 'scripts/test-evidence-guard.mjs';
+const GUARD_REL = 'scripts/evidence-guard.mjs';
 const READINGS_REL = 'scripts/readings-consistency.mjs';
 
 const FIXTURE_PASS = 'const { test } = require("node:test");\ntest("ok", () => {});\n';

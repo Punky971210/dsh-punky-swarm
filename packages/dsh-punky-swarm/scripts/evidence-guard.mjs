@@ -53,7 +53,7 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const GUARD_TAG = '[test-evidence-guard]';
+const GUARD_TAG = '[evidence-guard]';
 const PRELOAD_REL = 'test/helpers/isolated-home.preload.mjs';
 const DEFAULT_TARGET_DIR = 'test';
 const DEFAULT_CONCURRENCY = 8;

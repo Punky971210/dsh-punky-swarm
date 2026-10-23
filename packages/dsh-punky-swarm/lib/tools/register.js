@@ -57,7 +57,11 @@ export function createTools(ctx, deps) {
     ...createCoreTools(ctx, deps),
     ...createMailboxTools(ctx, deps),
     ...createLaneTools(ctx, deps),
-    ...createLogTools(ctx, deps), // log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。实测工具总数：裸配置 20 / patch 全开 21 / 显式关（worktree+watch 关）14
+    ...createLogTools(ctx, deps), // log_export：readCapability(config,'logs') 合并注册表 default（logs 默认关 → 缺省不注册；patch 显式 logs.enabled:true 注册）。
+    // ⚠ 工具总数**不在此处写死**：工具数随「工具面 + 配置」而变，勿在此写死数字——本行历史即一例
+    //   （曾在此写死裸配置 / patch 全开 / 显式关三档计数，早已与实测读数不符，且每加一个工具必再漂）。
+    //   真源读数 = 冒烟 H-03 的 `EXPECTED_TOOLS_BARE` / `EXPECTED_TOOLS_FULL`（`scripts/smoke/lib/checks-k.mjs`）；
+    //   本处只保留**语义判据**：两次装载的工具名差集恒 = `['log_export']`，且裸配置里它必须缺席（证明该开关是真开关）。
   ];
 
   // 装配 enabled 开关（缺省默认开——AIP 为主线 + 治理能力全开，

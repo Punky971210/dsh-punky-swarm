@@ -892,7 +892,7 @@
 - **不变式 ⑤（spawn 前拒绝选集/分片开关）**：`--test-only` / `--test-name-pattern` / `--test-skip-pattern` / `--test-shard` **任一出现** ⇒ **拒绝且不 spawn**（语义是「不启动」，不是「运行时报错」）。
 - **不变式 ⑥（负向与正向同口径）**：注入**预期失败**夹具 ⇒ 与正向路径**经同一判定函数 / 同一事件通道**得出结论（防「进程早退」冒充「预期失败」）。
 - **反伪造铁律（硬）**：签名**只匹配事件通道**，**绝不匹配 stdout**。实现手段 = 把 reporter 输出重定向到**独立目的地**（`--test-reporter=tap --test-reporter-destination=<独立目的地>`），**判定只读该独立通道**；测试自身 `console.log` 的内容**可伪造**，一律不参与判定。
-- **落点**：`scripts/test-evidence-guard.mjs`（判定主体）＋ `package.json` 的 `test` 脚本**经 guard 入口**；**`build` / `check` 脚本不动**；改动后对同一提交的通过/失败结论须与改动前**一致**。
+- **落点**：`scripts/evidence-guard.mjs`（判定主体）＋ `package.json` 的 `test` 脚本**经 guard 入口**；**`build` / `check` 脚本不动**；改动后对同一提交的通过/失败结论须与改动前**一致**。
 
 ### 15.17 规则变更的传播：版本化 ＋ 受影响集打标（2026-10-13 沉淀）
 

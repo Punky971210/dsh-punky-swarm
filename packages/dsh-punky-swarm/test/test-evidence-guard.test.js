@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// `scripts/test-evidence-guard.mjs` 的用例面。
+// `scripts/evidence-guard.mjs` 的用例面。
 //
 // 口径说明（三条）：
 //   ① **夹具全部运行期生成**（系统临时目录），不入库任何夹具文件 —— 写域只含本件与 guard 两件；
@@ -43,11 +43,11 @@ import {
   parseTapChannel,
   runGuard,
   stripPairedDoubleQuotes,
-} from '../scripts/test-evidence-guard.mjs';
+} from '../scripts/evidence-guard.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
-const GUARD_REL = 'scripts/test-evidence-guard.mjs';
+const GUARD_REL = 'scripts/evidence-guard.mjs';
 const GUARD_SOURCE = fs.readFileSync(path.join(ROOT, GUARD_REL), 'utf8');
 
 // ── 夹具（运行期写入系统临时目录） ───────────────────────────────────────

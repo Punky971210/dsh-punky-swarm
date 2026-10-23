@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 读数一致性（readings consistency）：把「默认运行器口径」与「guard 口径」的差额
 // 从「噪声」改写成**可复算的机检恒等式**。
 //
-// 存在理由（缺陷 D-3③）：`node --test`（默认 runner）的用例总数与 `test-evidence-guard` 的
+// 存在理由（缺陷 D-3③）：`node --test`（默认 runner）的用例总数与 `evidence-guard` 的
 //   用例总数长期差一个常数，台账把它当噪声解释。实测证明它**精确可归因**：差额 = 被默认 runner
 //   发现、但不在 guard 目标集里的文件，各自被 runner 计了 1 点。写成恒等式后，**任一侧漂移都转红**：
 //     · 新增一个带真用例的非 `*.test.js` 文件 ⇒ guard 漏收 ⇒ 差额变大 ⇒ C1 红（本件最有价值的一侧）
@@ -56,7 +56,7 @@ import {
   listTargetFiles,
   parseTapChannel,
   runGuard,
-} from './test-evidence-guard.mjs';
+} from './evidence-guard.mjs';
 
 const RC_TAG = '[readings-consistency]';
 const PRELOAD_REL = 'test/helpers/isolated-home.preload.mjs';

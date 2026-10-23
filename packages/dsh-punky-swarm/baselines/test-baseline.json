@@ -856,6 +856,22 @@
       "tests": 10,
       "todos": 0
     },
+    "test/housekeeping-h2.test.js": {
+      "asserts": 17,
+      "blankLines": 14,
+      "lines": 98,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/housekeeping-h4.test.js": {
+      "asserts": 20,
+      "blankLines": 27,
+      "lines": 188,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/hygiene-comment-literals.test.js": {
       "asserts": 5,
       "blankLines": 12,
@@ -1296,6 +1312,14 @@
       "tests": 1,
       "todos": 0
     },
+    "test/skills-sync.test.js": {
+      "asserts": 66,
+      "blankLines": 31,
+      "lines": 369,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
     "test/store-corrupt.test.js": {
       "asserts": 53,
       "blankLines": 27,
@@ -1353,11 +1377,11 @@
       "todos": 0
     },
     "test/test-baseline.test.js": {
-      "asserts": 78,
-      "blankLines": 33,
-      "lines": 424,
+      "asserts": 96,
+      "blankLines": 39,
+      "lines": 522,
       "tautologies": 0,
-      "tests": 18,
+      "tests": 20,
       "todos": 0
     },
     "test/test-evidence-guard.test.js": {
@@ -1569,7 +1593,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-23T16:45:20Z",
+  "generatedAt": "2026-10-23T18:08:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1580,15 +1604,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-viability-20261023：三 lane 新增用例（c1 无测试文件；c2 readings-exitcode/readings-consistency；c3 auditlog-sink-stderr 精确判据 + sinkfid）",
+  "reason": "punky-housekeeping-20261023 收口：H-1 新增 skills-sync 用例 / H-3 判据放宽 / H-4 新增 housekeeping-h4 用例（含旧 guard 710 行删除）",
   "schema": 1,
   "totals": {
-    "asserts": 10187,
-    "blankLines": 5280,
-    "files": 196,
-    "lines": 56261,
+    "asserts": 10308,
+    "blankLines": 5358,
+    "files": 199,
+    "lines": 57014,
     "tautologies": 2,
-    "tests": 2056,
+    "tests": 2082,
     "todos": 4
   }
 }
