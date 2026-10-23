@@ -50,12 +50,15 @@ export const EVT_BATCH_ABORT_DANGLING = 'batch.abort_dangling';
 // 批次级 `manager` 字段，使「Manager 是否真被拉起」成为治理层**可核事实**（事件流可查），
 // 而非仅靠 manager-notes 一类自述旁证。载荷 { agentId, note? }。
 export const EVT_BATCH_MANAGER_RAISED = 'batch.manager.raised';
-// 【2026-09-28 · 批 `cleanup-tail-20260927` E-4 删净】原「团队资产解析快照落盘」事件常量
-//   （常量 `EVT_BATCH_TEAM_ASSET_RESOLVED`，批次 `a3-snapshot-b1-20260915` · §8③）
-//   已**整体删除**：发射点随批 3 删除（写端 = `lib/state/store.js` 的 `createBatch` 接线；构建单点 =
-//   `lib/assembly/snapshot.js`），读端同批删净（面板分类器 / 面板 locale 的 phase 族 team 键 / 事件类型联合）
-//   ⇒ 属「**定义在、零发射点**」的死常量，本批按 Q-2「要么接线、要么标废」红线**删净**。
-//   该事件码已并入**退役码登记锁**（`test/retired-codes-lock.test.js` 的 `RETIRED_CODES`）⇒ 防回生。
+// 【2026-09-28 · 批 `cleanup-tail-20260927` E-4 删净】原「团队资产解析快照落盘」事件
+//   （首立于批 `a3-snapshot-b1-20260915` · §8③）**已整体删除**：发射点随批 3 删除（写端 =
+//   `lib/state/store.js` 的 `createBatch` 接线；构建单点 = `lib/assembly/snapshot.js`），
+//   读端同批删净（面板分类器 / 面板 locale 的 phase 族 team 键 / 事件类型联合）
+//   ⇒ 属「**定义在、零发射点**」的死常量，按 Q-2「要么接线、要么标废」红线**删净**。
+//   该事件已并入**退役码登记锁**（`test/retired-codes-lock.test.js` 的 `RETIRED_CODES` **表尾条**）
+//   ⇒ 防回生。**锁口径**：锁的是事件**码值**，判据为 `lib/**`（含注释）零命中 ⇒ 本注释**不复写
+//   码值**；同理**不复写原常量标识符**（避免 grep 型「已退役零引用」核查出现假命中）。
+//   **本条为退役墓碑，非活码**：勿据此恢复常量或新增同族事件。
 // **冒烟/探针批豁免**建批留痕（显式豁免键 `smoke: true`）。
 //   语义：`wave_plan({ smoke: true })` ⇒ 本批声明为冒烟/探针批 ⇒ **跳过产物契约类门**
 //   （建批 `GATE_PLAN_PRESENCE_MISSING` / `GATE_ORPHAN_PRODUCT`；运行期 entry `consume`、exit
