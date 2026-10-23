@@ -8,12 +8,28 @@
       "tests": 6,
       "todos": 0
     },
+    "test/acps-cert-failclosed.test.js": {
+      "asserts": 49,
+      "blankLines": 31,
+      "lines": 325,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
     "test/acps-discovery-client.test.js": {
       "asserts": 69,
       "blankLines": 31,
       "lines": 288,
       "tautologies": 0,
       "tests": 23,
+      "todos": 0
+    },
+    "test/acps-inbound-bound.test.js": {
+      "asserts": 82,
+      "blankLines": 37,
+      "lines": 339,
+      "tautologies": 0,
+      "tests": 14,
       "todos": 0
     },
     "test/acps-registry.test.js": {
@@ -1025,11 +1041,11 @@
       "todos": 0
     },
     "test/p2-bridge.test.js": {
-      "asserts": 90,
-      "blankLines": 33,
-      "lines": 359,
+      "asserts": 113,
+      "blankLines": 36,
+      "lines": 466,
       "tautologies": 0,
-      "tests": 20,
+      "tests": 22,
       "todos": 0
     },
     "test/p2-dead-verify.test.js": {
@@ -1521,7 +1537,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-23T05:48:59Z",
+  "generatedAt": "2026-10-23T10:59:27Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1532,15 +1548,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-closeout-20261023 g5：4 条判据更新 + 3 项清扫（L-1/L-5/L-7）",
+  "reason": "punky-acps-closeout-20261023 c1/c2/c4 新增 ACPS 测试（inbound-bound 14 / cert-failclosed 11）+ p2-bridge 改造",
   "schema": 1,
   "totals": {
-    "asserts": 9801,
-    "blankLines": 5048,
-    "files": 190,
-    "lines": 54050,
+    "asserts": 9955,
+    "blankLines": 5119,
+    "files": 192,
+    "lines": 54821,
     "tautologies": 2,
-    "tests": 1987,
+    "tests": 2014,
     "todos": 4
   }
 }

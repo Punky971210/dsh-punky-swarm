@@ -154,6 +154,9 @@ interface ConfigBridgeInput {
   enabled?: unknown;
   mode?: unknown;
   inbound?: unknown;
+  // 【ACPS-05 · 批 punky-acps-closeout-20261023】inbound 投递目标（装配期钉死唯一目标）
+  inboundSessionId?: unknown;
+  inboundBatchId?: unknown;
 }
 interface ConfigAcpsEndpointInput {
   enabled?: unknown;
@@ -210,6 +213,8 @@ interface ResolvedBridgeConfig {
   enabled: boolean;
   mode: 'inprocess' | 'http';
   inbound: boolean;
+  inboundSessionId: string | null; // 装配期钉死的投递目标会话（主 Agent 会话）
+  inboundBatchId: string | null;   // 同上，该会话下的目标批次
 }
 interface ResolvedAcpsEndpointConfig {
   enabled: boolean;
@@ -348,14 +353,20 @@ export function resolveAcpsDiscoveryConfig(config: ConfigInput | null | undefine
   };
 }
 
-// ── config.acps.bridge：内部 ACPs 桥接（lib/comms/acps-bridge.js，进程内双向）──
+// ── config.acps.bridge：内部 ACPs 桥接（lib/comms/acps-bridge.js，单向：外部 → supervisor/inbox）──
 // 桥只经 mailbox.js 公共接口投递/投影，绝不绕过；enabled=false 时不加载不实例化（零路径）。
 // inbound 默认关：外部 ACPs 消息写 mailbox 需显式开启。
+// 【ACPS-05 · 批 punky-acps-closeout-20261023】inbound 投递目标**只**由装配期配置声明：
+//   报文自带的 sessionId / commandParams.batchId 一律丢弃（见 lib/comms/acps-bridge.js）；
+//   inbound=true 时两键必填，缺失或非法 ⇒ fail-closed 拒收（INBOUND_UNAVAILABLE），不落盘、不静默。
 // as const：mode 字面量派生返回类型（'inprocess'|'http'），纯类型层、运行期等价。
 export const BRIDGE_DEFAULTS = Object.freeze({
   enabled: false,
   mode: 'inprocess', // 进程内双向（本机 HTTP 桥不实现）
   inbound: false,    // inbound 默认关：外部 ACPs 消息写 mailbox 需显式开启
+  // 【ACPS-05】投递目标只由装配期配置声明（报文自选 id 一律丢弃）；inbound=true 时两键必填
+  inboundSessionId: null, // 主 Agent 会话 id（须匹配 /^[a-zA-Z0-9._-]+$/ 且非 "." / ".."）
+  inboundBatchId: null,   // 该会话下的目标批次 id（同判据）
 } as const);
 
 export function resolveBridgeConfig(config: ConfigInput | null | undefined): ResolvedBridgeConfig {
@@ -364,6 +375,10 @@ export function resolveBridgeConfig(config: ConfigInput | null | undefined): Res
     enabled: c.enabled === true,
     mode: c.mode === 'http' ? 'http' : BRIDGE_DEFAULTS.mode,
     inbound: c.inbound === true,
+    // 只做类型收敛（与同文件 cert/key/ca 的收敛写法一致）；id 是否可作**路径段**由 ACPS 域唯一判定
+    // （lib/comms/acps-bridge.js#isSafePathSegment）——schema 不承担路径安全判定。
+    inboundSessionId: typeof c.inboundSessionId === 'string' && c.inboundSessionId.length > 0 ? c.inboundSessionId : null,
+    inboundBatchId: typeof c.inboundBatchId === 'string' && c.inboundBatchId.length > 0 ? c.inboundBatchId : null,
   };
 }
 

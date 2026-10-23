@@ -20,7 +20,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 职责与红线：
 // - inbound：外部 ACPs TaskCommand → mailbox 消息。**经 lib/comms/mailbox.js 公共接口原子写（ackId 由 mailbox
-//   生成），绝不绕过、无旁路写**；写入目标仅 inbox（按 mentions/groupId 推导 lane 进 meta），outbox 不可由外部直接写。
+//   生成），绝不绕过、无旁路写**；写入目标仅 inbox（lane 只落 meta.lane 元数据，**零消费方、不构成投递目标**
+//   ——不支持 lane 定向投递：mailbox 是批级单目录），outbox 不可由外部直接写。
+// - 【ACPS-01/05 · 批 punky-acps-closeout-20261023】投递目标**只**由装配期配置钉死
+//   （`acps.bridge.inboundSessionId` + `acps.bridge.inboundBatchId`）：报文自带的 `sessionId` /
+//   `commandParams.batchId` 一律**丢弃并留痕**（warn）；两键缺失/非法 ⇒ **fail-closed 拒收**
+//   （`INBOUND_UNAVAILABLE` / `INVALID_CONTEXT`），**绝不**静默投递到空目标 / 默认会话 / 第一条批。
+//   双层防预：① 装配期 `createBridge` 解析目标时先判合法性（不合法 ⇒ inboundTarget=null）；
+//   ② 落盘前 `deliverInbound` 对**最终** sessionId/batchId 再判一次（路径段闸口，ACPS-01 唯一落盘闸口）。
+//   ⚠ 该闸口**不下沉**到 `lib/mailbox-paths.js`（4 个消费方，收紧 = 全库行为变更）。
+//   三条已知限制（本批登记不修）见 createBridge 内注释块。
 // - outbound：mailbox 消息 → ACPs Message/TaskResult。复用 lib/comms/aip-format.js 三映射
 //   （toAipMessage/toAipTask/toAipSession，本模块 re-export 供端点单一入口）；只投影/投递视图，不反写 mailbox 存储。
 // - 零路径：enabled=false 时 mountBridge 返回 null（不实例化），模块顶层无任何副作用（无监听/定时器/订阅）；
@@ -41,6 +50,11 @@ import { resolveBridgeConfig } from '../schema.js';
 
 // lane 合法性（与 mailbox.js sanitizeLane 同正则，fail-soft：外部输入不合法 → null 而非 throw）
 const LANE_RE = /^[a-zA-Z0-9._-]+$/;
+// 【ACPS-01】路径段判定**单点**：`LANE_RE` 放行 "." 与 ".."（二者都是合法正则匹配）⇒ 显式排除。
+// 字符集与 `lib/state/constants.js:26` 的 `SAFE_ID` **逐字同体**（`/^[a-zA-Z0-9._-]+$/`）；此处**不 import
+// SAFE_ID**：`state` 域是跨域依赖，import 会新增 `comms → state` 边、突破 arch-check 棘轮
+// （allowedPairs=63），故复用本域既有常量（= 规格 C1-4「禁第二套正则」）。
+const isSafePathSegment = (v) => typeof v === 'string' && LANE_RE.test(v) && v !== '.' && v !== '..';
 
 // ── inbound：ACPs TaskCommand → mailbox 消息（纯转换，不写存储）──
 // lane 推导：mentions 单元素数组/非 'all' 字符串 → 该值；否则 groupId；均非法 → null（inbox 无 lane 概念，
@@ -77,9 +91,16 @@ export function taskCommandToInbound(taskCommand) {
 // inbound 投递：经 mailbox.send 公共接口原子写 inbox（ackId 由 mailbox 生成）。
 // inboundEnabled 缺省 false（默认关）：外部写 mailbox 需显式开启——调用方（endpoint /rpc）在
 // bridge.inboundEnabled 门控通过后才传 { inboundEnabled: true }。
+// 【ACPS-01】**唯一落盘闸口**：sessionId/batchId 直接进 path.join 作路径段 ⇒ 在此判定，不合法一律拒绝
+//   （不做静默归一化 / 不重写 / 不夹带 fallback 目标）。这是「双层防预」的第二层——第一层在 createBridge
+//   解析 inboundTarget 时（配置值非法 ⇒ 目标为 null ⇒ 根本走不到这里）。
 export function deliverInbound(root, sessionId, batchId, taskCommand, { inboundEnabled = false } = {}) {
   if (!inboundEnabled) {
     return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false: external writes to mailbox disabled' };
+  }
+  // 【ACPS-01】落盘前唯一闸口：id 即 path.join 的段 ⇒ 不合法一律拒绝（不做静默归一化/重写）
+  if (!isSafePathSegment(sessionId) || !isSafePathSegment(batchId)) {
+    return { ok: false, code: 'INVALID_CONTEXT', detail: 'sessionId/batchId must match /^[a-zA-Z0-9._-]+$/ and must not be "." or ".."' };
   }
   const { message, meta } = taskCommandToInbound(taskCommand);
   const res = mailbox.send(mailboxRootOf(root, sessionId, batchId), { type: 'inbox' }, message, meta);
@@ -113,28 +134,75 @@ export function toTaskResult(msg, { state = 'completed', stateChangedAt = null, 
   return out;
 }
 
-// ── 工厂（进程内双向；enabled 门控，inbound 子门控）──
+// ── 工厂（单向 inbound；enabled 门控，inbound 子门控，目标由装配期配置钉死）──
+// 注意：`mailbox: mb` 形参**保留原样**——ACPS-11（注入缝失效）属 S4「只登记不改」（规格 N4），勿顺手清死代码。
 export function createBridge({ root, config = {}, mailbox: mb = mailbox, logger = null } = {}) {
   const cfg = resolveBridgeConfig(config);
   const enabled = cfg.enabled;
   const inboundEnabled = cfg.enabled && cfg.inbound;
+  // 【ACPS-05】投递目标只认装配期声明；报文/调用方给的 sessionId/batchId 不再参与寻址（结构性保证：
+  //   handleInbound 的上下文参数已移除，调用方**没有**传目标的入口）。此处是「双层防预」的第一层。
+  const inboundTarget = (isSafePathSegment(cfg.inboundSessionId) && isSafePathSegment(cfg.inboundBatchId))
+    ? { sessionId: cfg.inboundSessionId, batchId: cfg.inboundBatchId }
+    : null;
+  // 【ACPS-04/05 · fail-closed】声明了 inbound 却无合法目标 ⇒ 装配期一次 warn（不留到请求期才发现），
+  //   文本点名**缺哪个键**与**怎么配**。inbound=false（默认档）时本分支整体不进入 ⇒ 零新日志零新 IO。
+  if (inboundEnabled && !inboundTarget) {
+    // 【ACPS-04 可观测性 · 批 punky-acps-closeout-20261023 / lane c4-acps04】本闸口有**三条**装配期拒收路径
+    //   （① 缺键 ② 只配一个 ③ 值非法），三者都落 inboundTarget=null ⇒ 只能在**文本**上区分。
+    //   旧文本把 ②③ 写成同一句「…未配置或不合法」（实测逐字相同）⇒ 无法定位成因；故按**每键状态**定性：
+    //   missing（未配置/空）vs invalid（配了但不是合法路径段）。
+    const keyState = [
+      ['acps.bridge.inboundSessionId', cfg.inboundSessionId],
+      ['acps.bridge.inboundBatchId', cfg.inboundBatchId],
+    ].map(([key, v]) => ({ key, value: v, state: v == null ? 'missing' : (isSafePathSegment(v) ? 'ok' : 'invalid') }));
+    const bad = keyState.filter((k) => k.state !== 'ok');
+    const detail = bad.map((k) => (k.state === 'missing'
+      ? k.key + ' 未配置'
+      : k.key + '=' + JSON.stringify(k.value) + ' 值非法')).join('；');
+    const kind = bad.every((k) => k.state === 'missing')
+      ? (bad.length === 2 ? '两键均未配置' : '只配置了一个')
+      : '配置值非法';
+    logger?.warn?.('[dsh-punky-swarm] acps.bridge.inbound=true 但投递目标不可用（' + kind
+      + '；fail-closed：inbound 一律拒收、零落盘）：' + detail
+      + '（id 须匹配 /^[a-zA-Z0-9._-]+$/ 且非 "." / ".."）。'
+      + '配置方式：config.acps.bridge.inboundSessionId=<主 Agent 会话 id>，'
+      + 'config.acps.bridge.inboundBatchId=<该会话下的目标批次 id>；改后须重启插件（acps.* 无 remounter，不会热生效）。');
+  }
+
+  // ── 三条已知限制（本批登记，不修；写在此处防后人误读为「已处理」）────────────────────────
+  // ① 目标是**静态配置**：inboundBatchId 指向的批次收口后，ACPS 仍会往该死批 inbox 写 ⇒ 无人读取（静默死信）。
+  //    mitigation（本批只文档化）：换批时同步改两键 + 重启插件（见 ②）。
+  //    「写前校验批相位、非活跃批 warn/拒收」= **未实现的 followup**：读相位须 import lib/state/** 治理面，
+  //    会新增 comms → state 跨域边（突破 arch-check 棘轮 allowedPairs=63）并与「ACPS 不 import 治理面」
+  //    边界冲突（规格 §3.6 L2 同口径登记）。
+  // ② `acps.*` 热更无 remounter（ACPS-08，S4 只登记不改）⇒ 换批/改目标**必须重启插件**；
+  //    不重启则仍投旧目标（旧批已收口 ⇒ 落进死信，见 ①）。
+  // ③ 「宿主自动注入会话身份」= **未实现的 followup**（本批没有、也没打算自动）：装配期 `ctx` 只提供
+  //    tools / webServer / subagents 服务句柄（index.js inject 面），**取不到会话身份**；会话 id 仅在
+  //    **工具执行期**可得（`exec.agent.session.id`，lib/tools/shared.js:50）。⇒ 目标**只能**经配置键在
+  //    装配期注入（mountBridge 是注入面）。**勿**误以为已自动绑定本实例会话。
   let mounted = false;
 
-  // endpoint /rpc 衔接点：收到 TaskCommand 后调用 handleInbound(taskCommand, { sessionId, batchId })。
-  // inbound 关（默认）→ 拒绝（视图只读）；缺 sessionId/batchId → 拒绝（mailbox 按会话/批次隔离，缺上下文不可投递）。
-  function handleInbound(taskCommand, { sessionId, batchId } = {}) {
+  // endpoint /rpc 衔接点：收到 TaskCommand 后调用 handleInbound(taskCommand)。
+  // 【ACPS-05】目标 = inboundTarget（装配期配置），**不接受**调用方/报文覆盖——第二参数已移除，
+  //   这是「调用方无法传入目标」的结构性保证（不是靠调用纪律）。
+  // inbound 关（默认）→ 拒绝（视图只读）；目标未配置/非法 → 拒绝（INBOUND_UNAVAILABLE，不落盘、不静默）。
+  function handleInbound(taskCommand) {
     if (!enabled) return { ok: false, code: 'BRIDGE_DISABLED', detail: 'acps.bridge.enabled is false' };
     if (!inboundEnabled) return { ok: false, code: 'INBOUND_DISABLED', detail: 'acps.bridge.inbound is false' };
-    if (!sessionId || !batchId) {
-      return { ok: false, code: 'MISSING_CONTEXT', detail: 'sessionId/batchId required for mailbox write' };
+    if (!inboundTarget) {
+      return { ok: false, code: 'INBOUND_UNAVAILABLE', detail: 'inbound target (acps.bridge.inboundSessionId/inboundBatchId) missing or invalid' };
     }
-    return deliverInbound(root, sessionId, batchId, taskCommand, { inboundEnabled: true });
+    return deliverInbound(root, inboundTarget.sessionId, inboundTarget.batchId, taskCommand, { inboundEnabled: true });
   }
 
   return {
     enabled,
     inboundEnabled,
     mode: cfg.mode,
+    // 目标只读回显（观测/测试用；ids 非机密）。null ⇒ inbound 必然 INBOUND_UNAVAILABLE。
+    inboundTarget,
     // inbound 衔接点（endpoint /rpc 调用）
     handleInbound,
     // outbound 衔接点（endpoint/视图调用；Message 投影复用 aip-format，单一入口）
@@ -155,30 +223,59 @@ export function mountBridge(config, deps) {
 }
 
 // ── endpoint /rpc → bridge inbound 接线 ──
-// createEndpointRpcHandler(bridge) 生成适配 createAcpsServer 的 rpcHandler（server.js:269 注入点）：
-//   (command, ctx) → TaskResult。行为：
-//   - bridge 未装配（null）→ fallback（缺省独立回执 accepted，不落 mailbox）；
-//   - sessionId/batchId 上下文注入：sessionId ← command.sessionId（ACPs Message 基类字段,
-//     aip_base_model.py:151）?? command.commandParams.sessionId；batchId ← command.commandParams.batchId；
+// createEndpointRpcHandler(bridge, { logger, inboundRequested }) 生成适配 createAcpsServer 的 rpcHandler
+// （server.js:264 `rpcHandler ?? defaultRpcHandler` 注入点）：(command, ctx) → TaskResult。行为：
+//   - bridge 未装配（null）+ **未**声明 inbound → 独立回执 accepted（向后兼容，不落 mailbox）；
+//   - bridge 未装配（null）+ **声明了** inbound → 【ACPS-04】rejected INBOUND_UNAVAILABLE + warn
+//     （不再静默 accepted——外部不会误以为投递成功）；
+//   - bridge 在位：报文自带的 sessionId / commandParams.batchId **一律丢弃**（仅 warn 一次留痕，
+//     【ACPS-05】目标由 acps.bridge.inboundSessionId/inboundBatchId 钉死）；
 //   - bridge.handleInbound 成功 → TaskResult accepted（任务已入 inbox 待派发）；
-//   - bridge 拒绝（BRIDGE_DISABLED/INBOUND_DISABLED/MISSING_CONTEXT）→ TaskResult rejected
+//   - bridge 拒绝（BRIDGE_DISABLED/INBOUND_DISABLED/INBOUND_UNAVAILABLE/INVALID_CONTEXT）→ TaskResult rejected
 //     （协议级拒绝，AIP TaskState.rejected，aip_base_model.py:33；status.dataItems 附 code/detail），
 //     HTTP 200 返回——传输成功、协议层拒绝（对端可消费，不触发 AipRpcClient 传输错误路径）。
-export function createEndpointRpcHandler(bridge, { logger = null } = {}) {
+export function createEndpointRpcHandler(bridge, { logger = null, inboundRequested = false } = {}) {
   return function endpointRpcHandler(command, ctx = {}) {
     if (!bridge) {
-      // bridge 未装配：独立行为（回 accepted 但不落 mailbox，向后兼容）
+      // 【ACPS-04】声明了 inbound 却无桥 ⇒ 协议级拒绝（不再静默 accepted）；
+      //   未声明 inbound ⇒ 逐字保留既有「独立回执 accepted」向后兼容行为。
+      if (inboundRequested) {
+        const res = { code: 'INBOUND_UNAVAILABLE', detail: 'acps.bridge.inbound=true but acps.bridge.enabled=false: nothing will be persisted' };
+        logger?.warn?.('[dsh-punky-swarm] acps /rpc inbound rejected: ' + res.code + ' ' + res.detail);
+        return rejectedInboundResult(command, ctx, res);
+      }
       return acceptedInboundResult(command, ctx);
     }
-    const sessionId = command?.sessionId ?? command?.commandParams?.sessionId ?? null;
-    const batchId = command?.commandParams?.batchId ?? null;
-    const res = bridge.handleInbound(command, { sessionId, batchId });
+    // 【ACPS-05】报文自选的 sessionId/batchId 一律丢弃（仅一次 warn 留痕，不改变投递结果）。
+    //   ⚠ 丢弃此刻**仍**是「无对象的静默」：只告警、不报错——对端可继续带，但不再影响落点。
+    //   warn 被 `bridge.inboundEnabled` 前置：inbound=false（默认档）时零噪声。
+    const requestedSessionId = command?.sessionId ?? command?.commandParams?.sessionId ?? null;
+    const requestedBatchId = command?.commandParams?.batchId ?? null;
+    if (bridge.inboundEnabled && (requestedSessionId !== null || requestedBatchId !== null)) {
+      logger?.warn?.('[dsh-punky-swarm] acps /rpc: report-supplied sessionId/batchId ignored'
+        + '（目标由 acps.bridge.inboundSessionId/inboundBatchId 钉死）');
+    }
+    const res = bridge.handleInbound(command);
     if (!res.ok) {
       logger?.warn?.('[dsh-punky-swarm] acps /rpc inbound rejected: ' + res.code + ' ' + (res.detail ?? ''));
       return rejectedInboundResult(command, ctx, res);
     }
     return acceptedInboundResult(command, ctx);
   };
+}
+
+// 【ACPS-04】rpcHandler 选择**单点**（装配面唯一决策点，可单测；index.js:463 只调本函数，禁第二套分支）：
+//   - bridge 在位 → 桥适配器（既有行为逐字不变）；
+//   - bridge 不在位 + 声明了 inbound → 显式拒绝适配器 + 一次启动 warn；
+//   - bridge 不在位 + 未声明 inbound → undefined（回落 server.js:264 defaultRpcHandler，行为逐字不变）。
+export function selectRpcHandler({ bridge, inboundRequested = false, logger = null } = {}) {
+  if (bridge) return createEndpointRpcHandler(bridge, { logger });
+  if (inboundRequested) {
+    logger?.warn?.('[dsh-punky-swarm] acps.bridge.inbound=true 但 acps.bridge.enabled=false：'
+      + '/acps/rpc 将一律回 rejected INBOUND_UNAVAILABLE（不会落盘）——请开启 acps.bridge.enabled 或关闭 inbound');
+    return createEndpointRpcHandler(null, { logger, inboundRequested: true });
+  }
+  return undefined;
 }
 
 // inbound 回执 TaskResult 构造：

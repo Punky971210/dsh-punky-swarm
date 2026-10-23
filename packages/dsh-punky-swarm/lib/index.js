@@ -46,7 +46,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf, resolveBridgeConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
@@ -73,7 +73,8 @@ import { createRuntimeConfigService } from './webui/runtime-config.js';
 // 双层桥接事件流：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
 //   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移）
 import { appendRefusalEvent } from './governance/receipt-store.js';
-import { mountBridge, createEndpointRpcHandler } from './comms/acps-bridge.js';
+// 【ACPS-04】createEndpointRpcHandler 不再由本文件直调（选择逻辑已收口到 selectRpcHandler 单点）
+import { mountBridge, selectRpcHandler } from './comms/acps-bridge.js';
 import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
 import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
@@ -459,8 +460,15 @@ const installAcpsEndpoint = ({ ctx, config, root, bridge }) => {
       };
       // /acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
       // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
-      //  /rpc 回 TaskResult rejected 不落 mailbox）。bridge 未装配（enabled=false）时回独立 accepted（向后兼容）。
-      const rpcHandler = bridge ? createEndpointRpcHandler(bridge, { logger: ctx.logger }) : undefined;
+      //  /rpc 回 TaskResult rejected 不落 mailbox）。
+      // 【ACPS-04】bridge 未装配时不再无条件回 accepted：声明了 acps.bridge.inbound=true ⇒ 显式
+      //   rejected INBOUND_UNAVAILABLE + 一次 warn；未声明 ⇒ 保持既有「独立 accepted」向后兼容（逐字不变）。
+      // 选择逻辑单一实现 = acps-bridge.js#selectRpcHandler（本处只做调用，禁第二套分支）。
+      const rpcHandler = selectRpcHandler({
+        bridge,
+        inboundRequested: resolveBridgeConfig(config).inbound,
+        logger: ctx.logger,
+      });
       acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
       if (acpsEndpoint.error) {
         ctx.logger?.warn?.('[dsh-punky-swarm] ' + acpsEndpoint.error + '（acps endpoint 保持禁用）');

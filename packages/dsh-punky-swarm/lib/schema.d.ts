@@ -72,6 +72,8 @@ interface ConfigBridgeInput {
     enabled?: unknown;
     mode?: unknown;
     inbound?: unknown;
+    inboundSessionId?: unknown;
+    inboundBatchId?: unknown;
 }
 interface ConfigAcpsEndpointInput {
     enabled?: unknown;
@@ -127,6 +129,8 @@ interface ResolvedBridgeConfig {
     enabled: boolean;
     mode: 'inprocess' | 'http';
     inbound: boolean;
+    inboundSessionId: string | null;
+    inboundBatchId: string | null;
 }
 interface ResolvedAcpsEndpointConfig {
     enabled: boolean;
@@ -182,6 +186,8 @@ export declare const BRIDGE_DEFAULTS: Readonly<{
     readonly enabled: false;
     readonly mode: "inprocess";
     readonly inbound: false;
+    readonly inboundSessionId: null;
+    readonly inboundBatchId: null;
 }>;
 export declare function resolveBridgeConfig(config: ConfigInput | null | undefined): ResolvedBridgeConfig;
 export declare const ACPS_DEFAULTS: Readonly<{
