@@ -35,6 +35,7 @@ import {
   TAP_CHANNEL,
   buildRunnerSpawnOptions,
   classifyOutcome,
+  decideSelfCheck,
   decideVerdict,
   exitCodeOf,
   findForbiddenSwitches,
@@ -585,5 +586,108 @@ test('L3-FIX-D01quote-(d) 既有 ③ 两条护栏经**端到端 guard 实跑**�
     assert.ok(record, name + ' 必须在读数内（A ≡ 枚举，不得漏项）');
     assert.equal(record.outcome, 'incomplete', name + '：A3 掏空 / F-3 顶层早退 ⇒ incomplete');
     assert.equal(record.fileRootSubtest, true, name + '：必须以**文件路径名 subtest** 现身');
+  }
+});
+
+// ── D-3（读数口径）：`files[]` 增 `cancelled` + `selfCheck` 机读字段 ─────────
+//
+// 缺陷事实（D-3②）：`files[]` 缺 `cancelled` 字段 ⇒ 恒等式只能写成
+//   `Σfiles.tests === totals.tests − totals.cancelled`，而**没有一处断言在验它**；
+//   汇总数与明细数因此可以互相矛盾而无人发现。
+// 修复口径：`files[]` 与 `totals` **对称**（双向可复算）；`selfCheck` 只出字段、
+//   **不参与 `ok`**（承既有裁决：做成硬门 = 新增判据，须单独裁决）。
+
+const FIXTURE_SKIP = 'const { test } = require("node:test");\ntest("x", { skip: true }, () => {});\n';
+
+test('D3-1 S1 双向可复算：Σfiles[].tests === totals.tests（真实运行器读数）', async (t) => {
+  const box = makeSandbox({ 'alpha.test.js': FIXTURE_PASS, 'beta.test.js': FIXTURE_SKIP });
+  t.after(() => dropSandbox(box));
+
+  const verdict = await runGuard({ root: ROOT, dir: box.targetDir, destDir: box.destDir, argv: [] });
+  const sumFiles = verdict.files.reduce((acc, item) => acc + item.tests, 0);
+
+  assert.equal(sumFiles, verdict.totals.tests, '由**明细**求和算得的汇总 === 实测汇总');
+  assert.equal(
+    verdict.files.reduce((acc, item) => acc + item.skipped, 0),
+    verdict.totals.skipped,
+    '逐文件 skipped 亦与汇总等高（明细 ⇔ 汇总双向）',
+  );
+  assert.equal('cancelled' in verdict.files[0], true, 'files[] 含 cancelled 字段（与 totals 对称）');
+  assert.equal(verdict.totals.skipped, 1, '夹具含 1 条 skip ⇒ 该列真的非零（不是恒零假绿）');
+  assert.equal(verdict.selfCheck.ok, true, 'selfCheck.ok === true（S1/S2 全成立）');
+});
+
+test('D3-2 S2：汇总内五分量之和 === tests（机读字段，与打印面同一实现）', async (t) => {
+  const box = makeSandbox({ 'alpha.test.js': FIXTURE_PASS, 'beta.test.js': FIXTURE_SKIP });
+  t.after(() => dropSandbox(box));
+
+  const verdict = await runGuard({ root: ROOT, dir: box.targetDir, destDir: box.destDir, argv: [] });
+  const sumParts =
+    verdict.totals.pass + verdict.totals.fail + verdict.totals.skipped
+    + verdict.totals.cancelled + verdict.totals.todo;
+
+  assert.equal(sumParts, verdict.totals.tests);
+  assert.equal(verdict.selfCheck.s2.sum, sumParts, 'selfCheck.s2.sum 与人工重算同值（不另算一套口径）');
+  assert.equal(verdict.selfCheck.s2.ok, true);
+});
+
+test('D3-2b `cancelled` 通路：per-file record 的 cancelled 进 files[] 与 totals（同一归一）', () => {
+  const verdict = decideVerdict({
+    targetFiles: ['/x/a.test.js', '/x/b.test.js'],
+    records: [
+      { file: '/x/a.test.js', outcome: 'passed', tests: 3, pass: 3, cancelled: 0 },
+      // 一条被取消的用例：pass/fail/skipped/todo 都不计它，只有 cancelled 计。
+      { file: '/x/b.test.js', outcome: 'passed', tests: 2, pass: 1, cancelled: 1 },
+    ],
+  });
+
+  assert.equal(verdict.files[1].cancelled, 1, '逐文件 cancelled 如实透出');
+  assert.equal(verdict.totals.cancelled, 1);
+  assert.equal(verdict.files.reduce((acc, item) => acc + item.tests, 0), verdict.totals.tests, 'S1 成立');
+  assert.equal(verdict.selfCheck.ok, true, 'S2：5 === 4 + 0 + 0 + 1 + 0');
+  assert.equal(verdict.ok, true, 'selfCheck 与 ok 是两条轨：本处 ok 仍由集合/失败面决定');
+});
+
+test('D3-2c 反控（可达构造）：汇总被做坏 ⇒ selfCheck 红；且 `ok` 语义不因此改变', () => {
+  const verdict = decideVerdict({
+    targetFiles: ['/x/a.test.js'],
+    records: [{ file: '/x/a.test.js', outcome: 'passed', tests: 2, pass: 2 }],
+  });
+  assert.equal(verdict.selfCheck.ok, true, '先确认正控成立');
+
+  // S1 反控：明细求和与汇总对不上。
+  const s1Broken = decideSelfCheck(verdict.files, { ...verdict.totals, tests: verdict.totals.tests + 1 });
+  assert.equal(s1Broken.ok, false, 'Σfiles.tests ≠ totals.tests ⇒ 必须红');
+  assert.equal(s1Broken.s1.ok, false);
+  assert.match(s1Broken.detail, /S1 不成立/);
+
+  // S2 反控：五分量之和与 tests 对不上。
+  const s2Broken = decideSelfCheck(verdict.files, { ...verdict.totals, pass: verdict.totals.pass - 1 });
+  assert.equal(s2Broken.ok, false);
+  assert.equal(s2Broken.s2.ok, false);
+  assert.match(s2Broken.detail, /S2 不成立/);
+
+  assert.equal(verdict.ok, true, '原 verdict 的 ok 未被 selfCheck 牵连（两轨独立）');
+});
+
+test('D3-2d 回归锁：`selfCheck` 不得不参与 `ok`（源码级，防静默升门）', () => {
+  const okAssign = /const ok =\s*([\s\S]*?);/.exec(GUARD_SOURCE);
+  assert.ok(okAssign, '必须能找到 `const ok = …;` 赋值');
+  assert.equal(
+    /selfCheck/.test(okAssign[1]),
+    false,
+    '`ok` 的构成不得引用 selfCheck（升为门禁须单独裁决；本条防静默升级）',
+  );
+});
+
+test('D3-2e 键集对称：`files[]` 与 `totals` 的计数键互相对应（无「只在一边」的计数）', () => {
+  const verdict = decideVerdict({
+    targetFiles: ['/x/a.test.js'],
+    records: [{ file: '/x/a.test.js', outcome: 'passed', tests: 1, pass: 1 }],
+  });
+  const counterKeys = ['tests', 'pass', 'fail', 'skipped', 'cancelled', 'todo'];
+  for (const key of counterKeys) {
+    assert.equal(key in verdict.totals, true, `totals 缺 ${key}`);
+    assert.equal(key in verdict.files[0], true, `files[] 缺 ${key}（残缺即不可复算）`);
   }
 });

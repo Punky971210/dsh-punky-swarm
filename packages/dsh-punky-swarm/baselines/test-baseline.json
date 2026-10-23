@@ -185,11 +185,19 @@
       "todos": 0
     },
     "test/auditlog-sink-stderr.test.js": {
-      "asserts": 61,
-      "blankLines": 36,
-      "lines": 338,
+      "asserts": 65,
+      "blankLines": 38,
+      "lines": 379,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/auditlog-sinkfid.test.js": {
+      "asserts": 70,
+      "blankLines": 40,
+      "lines": 484,
+      "tautologies": 0,
+      "tests": 7,
       "todos": 0
     },
     "test/auditlog.test.js": {
@@ -1160,6 +1168,22 @@
       "tests": 7,
       "todos": 0
     },
+    "test/readings-consistency.test.js": {
+      "asserts": 43,
+      "blankLines": 26,
+      "lines": 208,
+      "tautologies": 0,
+      "tests": 13,
+      "todos": 0
+    },
+    "test/readings-exitcode.test.js": {
+      "asserts": 28,
+      "blankLines": 41,
+      "lines": 243,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
     "test/readonly-shape.test.js": {
       "asserts": 18,
       "blankLines": 8,
@@ -1337,11 +1361,11 @@
       "todos": 0
     },
     "test/test-evidence-guard.test.js": {
-      "asserts": 130,
-      "blankLines": 76,
-      "lines": 590,
+      "asserts": 155,
+      "blankLines": 92,
+      "lines": 694,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 27,
       "todos": 0
     },
     "test/tool-descriptor.test.js": {
@@ -1545,7 +1569,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-23T12:40:44Z",
+  "generatedAt": "2026-10-23T16:45:20Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1556,15 +1580,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-logfix-20261023：c1 新增 sink-stderr 用例(6 tests/61 asserts)/prune-verify 注释、c2 夹具 9→10、c3 文案变更引发两处判据更新(AC-14 黄金值重采 + P2c 键集)",
+  "reason": "punky-viability-20261023：三 lane 新增用例（c1 无测试文件；c2 readings-exitcode/readings-consistency；c3 auditlog-sink-stderr 精确判据 + sinkfid）",
   "schema": 1,
   "totals": {
-    "asserts": 10017,
-    "blankLines": 5155,
-    "files": 193,
-    "lines": 55181,
+    "asserts": 10187,
+    "blankLines": 5280,
+    "files": 196,
+    "lines": 56261,
     "tautologies": 2,
-    "tests": 2020,
+    "tests": 2056,
     "todos": 4
   }
 }

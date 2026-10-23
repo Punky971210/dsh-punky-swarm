@@ -56,6 +56,9 @@ export const CAPABILITY_REGISTRY = [
   // topic 键：comms/topic.js 预留模块开关——默认关；接线（trajectory 桥广播改经本模块等）预留。
   { key: 'topic', path: ['capabilities', 'topic'], default: { enabled: false }, consumers: ['comms/topic.js（预留）'] },
   // auditlog 键：审计日志 sink（默认开）；env PUNKY_AUDITLOG 逐键覆盖；消费 lib/index.js mountAuditLog + lib/auditlog/**
+  //   默认值 **单点** = AUDITLOG_DEFAULTS（lib/auditlog/config.js）——本表只引用、不复制数值。
+  //   【D-16-②】新增键 pruneStray（默认 false）：stray（分卷名不认的常规文件，如 `.bak`）计入总量上限、
+  //   挂载期一条 warn + 诊断面 strays 字段；删除须显式 opt-in（env PUNKY_AUDITLOG_PRUNE_STRAY 亦可覆盖）。
   { key: 'auditlog', path: ['capabilities', 'auditlog'], default: AUDITLOG_DEFAULTS, consumers: ['lib/index.js apply() mountAuditLog', 'lib/auditlog/sink.js', 'docs 根 README（落点/开关）'] },
 ];
 

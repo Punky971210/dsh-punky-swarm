@@ -32,7 +32,8 @@
   "scripts": {
     "check": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
-    "test": "npm run build && node scripts/test-evidence-guard.mjs"
+    "test": "npm run build && node scripts/test-evidence-guard.mjs",
+    "smoke:host": "node scripts/smoke/host-smoke.mjs"
   },
   "keywords": [
     "dsh",

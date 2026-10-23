@@ -24,6 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · stdout 开关（PUNKY_LOGGER_STDOUT，默认关）
 //   · sink 侧审计阈值 levelsDefault（默认 3；内核侧 exporter.levels 固定 {default:3} 不随之变化）
 //   · 同键重复行聚合计数开关 aggregate（默认开；关闭即逐行落盘，等价旧行为）
+//   · stray 文件删除 opt-in 开关 pruneStray（默认关：stray 一律**只计数不删**——绝不自动删用户备份）
 //
 // 硬约束（X13）：**不 import `@deepseek-ai/dsh-home-paths`**（该包不在真实 profile 的 node_modules 树内），
 //   此处以同义本地解析与内核 resolveDshHome 的优先级逐条对齐（configured ?? $DSH_HOME ?? ~/.dsh）。
@@ -43,6 +44,7 @@ export const AUDITLOG_DEFAULTS = Object.freeze({
   stdout: false,                 // stdout 默认关
   levelsDefault: 3,              // sink 侧审计阈值（0=error 1=warn 2=info 3=debug）
   aggregate: true,               // 同键重复行聚合计数默认开（关闭即等价旧行为）
+  pruneStray: false,             // stray 文件删除 opt-in（默认关：只计入总量、不删——不自动删用户备份）
 });
 
 // ── env 解析原语 ──
@@ -122,7 +124,7 @@ export function resolveSinkDir(opts = {}) {
  * @param {((msg: string) => void)} [opts.warn] 非法值告警通道（缺省 no-op —— 保证缺省态零输出）
  * @returns {{enabled: boolean, sinkDir: string, keepDays: number, maxFileBytes: number,
  *            maxTotalBytes: number, stdout: boolean, levelsDefault: number, aggregate: boolean,
- *            diagnosticsDir: string}}
+ *            pruneStray: boolean, diagnosticsDir: string}}
  */
 export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
   const warn = typeof opts.warn === 'function' ? opts.warn : () => {};
@@ -168,9 +170,22 @@ export function resolveAuditLogConfig(config, env = process.env, opts = {}) {
     aggregate = AUDITLOG_DEFAULTS.aggregate;
   }
 
+  // pruneStray：stray 文件删除的 opt-in 开关，默认关；env 三态覆盖 config（与 enabled/aggregate 同形）。
+  // 默认关 = 「不自动删用户备份」这条历史裁决的机读形态：stray 只计入总量 + 挂载期一条 warn。
+  const envPruneStray = parseFlag(e.PUNKY_AUDITLOG_PRUNE_STRAY);
+  let pruneStray;
+  if (envPruneStray !== null) pruneStray = envPruneStray;
+  else if (child.pruneStray === undefined || child.pruneStray === null) pruneStray = AUDITLOG_DEFAULTS.pruneStray;
+  else if (typeof child.pruneStray === 'boolean') pruneStray = child.pruneStray;
+  else {
+    warn('capabilities.auditlog.pruneStray: 值非法（' + JSON.stringify(child.pruneStray) + '），回落默认 ' + AUDITLOG_DEFAULTS.pruneStray);
+    pruneStray = AUDITLOG_DEFAULTS.pruneStray;
+  }
+
   return {
     enabled,
     aggregate,
+    pruneStray,
     sinkDir,
     keepDays: resolveNumber(e.PUNKY_AUDITLOG_KEEP_DAYS, child.keepDays, AUDITLOG_DEFAULTS.keepDays,
       'PUNKY_AUDITLOG_KEEP_DAYS/capabilities.auditlog.keepDays', warn),

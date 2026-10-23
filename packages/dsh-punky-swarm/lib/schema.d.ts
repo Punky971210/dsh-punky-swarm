@@ -92,6 +92,19 @@ interface ConfigCapabilitiesInput {
     watch?: ConfigWatchInput;
     verify?: ConfigVerifyInput;
     discovery?: ConfigDiscoveryInput;
+    auditlog?: ConfigAuditlogInput;
+}
+interface ConfigAuditlogInput {
+    enabled?: unknown;
+    keepDays?: unknown;
+    maxFileBytes?: unknown;
+    maxTotalBytes?: unknown;
+    sinkDir?: unknown;
+    stdout?: unknown;
+    levelsDefault?: unknown;
+    aggregate?: unknown;
+    /** 【D-16-②】stray 文件删除 opt-in（默认 false；env PUNKY_AUDITLOG_PRUNE_STRAY） */
+    pruneStray?: unknown;
 }
 interface ConfigAcpsInput {
     enabled?: unknown;
@@ -207,4 +220,6 @@ export declare const ACPS_DEFAULTS: Readonly<{
     };
 }>;
 export declare function resolveAcpsConfig(config: ConfigInput | null | undefined): ResolvedAcpsConfig;
+export declare const AUDITLOG_CONFIG_KEYS: readonly ["enabled", "keepDays", "maxFileBytes", "maxTotalBytes", "stdout", "levelsDefault", "aggregate", "pruneStray"];
+export type AuditlogConfigKey = typeof AUDITLOG_CONFIG_KEYS[number];
 export {};

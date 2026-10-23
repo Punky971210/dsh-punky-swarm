@@ -72,6 +72,13 @@ const AGGREGATE_ROW_HEADROOM = 64;
 /** 诊断面 aggregate.keys 条数上限（按 count 降序取前 N） */
 const MAX_DIAGNOSTIC_KEYS = 50;
 
+/** 【D-16-①】首失败不可变快照文件名（与主快照**同目录、不同文件**：主快照被后续 flush 覆盖，首失败永不覆盖） */
+const FIRST_FAILURE_SNAPSHOT_NAME = 'sink-diagnostics.first-failure.json';
+/** 【D-16-②】诊断面 `strays.names` 条数上限（诊断面自身有界，count/bytes 仍为全量口径） */
+const MAX_STRAY_NAMES = 10;
+/** 【D-16-②】opt-in 删除 stray 时**唯一**认的前缀（其余文件永不自动删 —— 不删用户备份） */
+const STRAY_PRUNE_PREFIX = 'audit-';
+
 /** 清理（readdirSync + statSync）频率：每 N 行写成功一次（清理时机③） */
 const PRUNE_EVERY_WRITES = 1000;
 /** 总量超限时删到低于上限的比例（清理总账口径） */
@@ -131,6 +138,9 @@ const state = {
   aggregateRows: 0,            // 产出的 log-aggregate 闭环行数（含写失败的那次，见 closeAggregateWindow）
   lastError: null,
   diagnosticsWritten: false,
+  // 【D-16-②】最近一次目录扫描的 stray 读数（不含分卷名的常规文件）：挂载期实测，
+  //   计入总量上限、进诊断面、并支撑「默认识别但不删」的裁决面。零 IO，只是读数快照。
+  strays: { count: 0, bytes: 0, names: [], pruneOptIn: false },
 };
 
 /**
@@ -488,71 +498,160 @@ export function pruneByAge(sinkDir, keepDays, today = localDateKey(new Date())) 
 }
 
 /**
- * 总量上限清理：超 maxTotalBytes 时按 **mtime 从旧到新** 删到低于上限的 90%。
- * @returns {number} 删除的文件数
+ * 目录扫描（清理/诊断面共用的唯一读入口，零写）：把该目录下的**常规文件**分成
+ * 「分卷名（`parseSegmentName` 认得）」与「stray（认不得，如 `.bak`）」两桶，并给出全量字节和。
+ *
+ * 【D-16-② 口径】stray **计入 total**（否则「总量上限」形同虚设：用户备份可以无界堆积），
+ * 但**默认不进可删集**（删除须 env opt-in 且限 `audit-` 前缀，见 pruneByTotal）。
+ * 目录/链接不算常规文件，不计入 total（避免把诊断子目录也算成日志体积）。
+ *
+ * @returns {{segments: Array<{p: string, name: string, size: number, mtimeMs: number}>,
+ *            strays: Array<{p: string, name: string, size: number, mtimeMs: number}>,
+ *            total: number} | null} 读不到目录 ⇒ null（清理不阻断写路径）
  */
-export function pruneByTotal(sinkDir, maxTotalBytes) {
+function scanSinkDir(sinkDir) {
   let names;
-  try { names = fs.readdirSync(sinkDir); } catch { return 0; }
-  const files = [];
+  try { names = fs.readdirSync(sinkDir); } catch { return null; }
+  const segments = [];
+  const strays = [];
   let total = 0;
   for (const name of names.slice(0, MAX_PRUNE_SCAN)) {
-    if (!parseSegmentName(name)) continue;
     const p = path.join(sinkDir, name);
-    try {
-      const st = fs.statSync(p);
-      files.push({ p, size: st.size, mtimeMs: st.mtimeMs });
-      total += st.size;
-    } catch { /* 读不到就不计入 */ }
+    let st;
+    try { st = fs.statSync(p); } catch { continue; }   // 读不到就不计入
+    if (!st.isFile()) continue;                        // 只认常规文件
+    const entry = { p, name, size: st.size, mtimeMs: st.mtimeMs };
+    total += st.size;
+    if (parseSegmentName(name)) segments.push(entry);
+    else strays.push(entry);
   }
-  if (total <= maxTotalBytes) return 0;
-  files.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  return { segments, strays, total };
+}
+
+/** stray 读数视图（诊断面字段；names 有界，count/bytes 为全量口径） */
+function strayView(strays, pruneOptIn) {
+  return {
+    count: strays.length,
+    bytes: strays.reduce((sum, f) => sum + f.size, 0),
+    names: strays.slice(0, MAX_STRAY_NAMES).map((f) => f.name),
+    pruneOptIn: pruneOptIn === true,
+  };
+}
+
+/**
+ * 总量上限清理：`total` = 该目录**全部常规文件**字节和（分卷 + stray 一视同仁），
+ * 超 `maxTotalBytes` 时按 **mtime 从旧到新** 删到低于上限的 90%。
+ *
+ * 可删集（**默认只删分卷名**）：
+ * - 默认：仅 `parseSegmentName` 认得的已收盘分卷 ⇒ stray（`.bak` 等用户备份）只计数不删；
+ * - `opts.pruneStray === true`（来自 config `capabilities.auditlog.pruneStray` / env
+ *   `PUNKY_AUDITLOG_PRUNE_STRAY`，缺省关）：把**名字以 `audit-` 开头且分卷名不认**的 stray 一并纳入；
+ * - 其余任何文件**永不删**（防误删用户自己放在该目录的东西）。
+ *
+ * @param {string} sinkDir
+ * @param {number} maxTotalBytes
+ * @param {{pruneStray?: boolean}} [opts]
+ * @returns {{total: number, remaining: number, removed: number,
+ *            strays: {count: number, bytes: number, names: string[], pruneOptIn: boolean}}}
+ *   `total` = **判定所依据的计入口径**（清理前全部常规文件字节和，分卷 + stray）；
+ *   `remaining` = 清理后剩余字节和；`removed` = 实际删除文件数
+ */
+export function pruneByTotal(sinkDir, maxTotalBytes, opts = {}) {
+  const scan = scanSinkDir(sinkDir);
+  if (!scan) return { total: 0, remaining: 0, removed: 0, strays: strayView([], opts.pruneStray) };
+  const pruneOptIn = opts.pruneStray === true;
+  const view = strayView(scan.strays, pruneOptIn);
+  const total = scan.total;                 // 计入口径（含 stray）——先读、后删，读数不受删除影响
+  if (total <= maxTotalBytes) return { total, remaining: total, removed: 0, strays: view };
+
+  const deletable = scan.segments.slice();
+  if (pruneOptIn) {
+    for (const f of scan.strays) {
+      if (f.name.startsWith(STRAY_PRUNE_PREFIX)) deletable.push(f);
+    }
+  }
+  deletable.sort((a, b) => a.mtimeMs - b.mtimeMs);
   const target = Math.floor(maxTotalBytes * TOTAL_TARGET_RATIO);
+  let remaining = total;
   let removed = 0;
-  for (const f of files) {
-    if (total <= target) break;
-    try { fs.unlinkSync(f.p); total -= f.size; removed++; } catch { /* 单个失败继续 */ }
+  for (const f of deletable) {
+    if (remaining <= target) break;
+    try { fs.unlinkSync(f.p); remaining -= f.size; removed++; } catch { /* 单个失败继续 */ }
   }
-  return removed;
+  return { total, remaining, removed, strays: view };
 }
 
 // ── 诊断面 ──
 
+/**
+ * 诊断快照**纯构造**（零 IO）：主快照与首失败快照共用同一形态（两文件内容仅 ts/note 可能不同）。
+ * @param {string} note 快照事由（`first-failure` / `manual` / `process-exit` / …）
+ */
+function buildDiagnosticsSnapshot(note) {
+  return {
+    v: V,
+    ts: new Date().toISOString(),
+    note,
+    pid: process.pid,
+    engine: ENGINE_NAME,
+    sinkDir: state.sinkDir,
+    sinkPath: currentSegmentPath(),
+    attempts: state.attempts,
+    writes: state.writes,
+    failures: state.failures,
+    consecutiveFailures: state.consecutiveFailures,
+    skippedByBreaker: state.skippedByBreaker,
+    sinkErrorRecords: state.sinkErrorRecords,
+    sinkErrorRecordsFailed: state.sinkErrorRecordsFailed,
+    filteredByLevel: state.filteredByLevel,
+    // 聚合面：windowOpen = 此刻仍未闭环的窗口数（>0 即表示这些窗口的 count 只在内存里，见 README B5）；
+    // keys 按 count 降序取前 MAX_DIAGNOSTIC_KEYS 条（诊断面自身有界，不随窗口数膨胀）。
+    aggregate: {
+      windowOpen: aggregateWindows.size,
+      collapsedTotal: state.collapsedMessages,
+      keys: Array.from(aggregateWindows.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, MAX_DIAGNOSTIC_KEYS)
+        .map((w) => ({ aggKey: w.aggKey, count: w.count, windowEnd: new Date(w.windowEnd).toISOString() })),
+    },
+    // 【D-16-②】stray（分卷名不认的常规文件）读数：已计入总量上限，默认识别但不删。
+    strays: {
+      count: state.strays.count,
+      bytes: state.strays.bytes,
+      names: state.strays.names.slice(0, MAX_STRAY_NAMES),
+      pruneOptIn: state.strays.pruneOptIn === true,
+    },
+    lastError: state.lastError ? state.lastError.slice(0, MAX_ERROR_CHARS) : null,
+  };
+}
+
+/**
+ * 首失败**不可变**快照（【D-16-①】）：主快照 `sink-diagnostics.json` 每次 flush 都改写成最新事由，
+ * 进程退出钩子（`note='process-exit'`）会覆盖掉首失败现场 ⇒ 首失败必须独立留档。
+ *
+ * 语义（与「first」逐字对齐）：
+ * - 以 `wx`（O_EXCL）打开 ⇒ 只有**第一次**写入能成功；
+ * - 已存在（EEXIST）⇒ **静默保留旧文件**（跨进程也取最早那次），不覆盖、不报错；
+ * - 其他错误一并吞掉（诊断面自身失败不放大，与主快照同纪律）。
+ */
+function writeFirstFailureSnapshot(snapshot) {
+  try {
+    fs.mkdirSync(state.diagnosticsDir, { recursive: true });
+    fs.writeFileSync(path.join(state.diagnosticsDir, FIRST_FAILURE_SNAPSHOT_NAME),
+      JSON.stringify(snapshot, null, 2), { encoding: 'utf8', flag: 'wx' });
+  } catch { /* EEXIST = 已有更早的首失败现场 ⇒ 保留最早；其他错误同吞 */ }
+}
+
 function writeDiagnostics(note) {
   if (!state.diagnosticsPath) return;
   if (state.failures === 0 && state.sinkErrorRecordsFailed === 0) return;
+  const snapshot = buildDiagnosticsSnapshot(note || 'unknown');   // 纯构造，零 IO
   try {
-    const snapshot = {
-      v: V,
-      ts: new Date().toISOString(),
-      note: note || 'unknown',
-      pid: process.pid,
-      engine: ENGINE_NAME,
-      sinkDir: state.sinkDir,
-      sinkPath: currentSegmentPath(),
-      attempts: state.attempts,
-      writes: state.writes,
-      failures: state.failures,
-      consecutiveFailures: state.consecutiveFailures,
-      skippedByBreaker: state.skippedByBreaker,
-      sinkErrorRecords: state.sinkErrorRecords,
-      sinkErrorRecordsFailed: state.sinkErrorRecordsFailed,
-      filteredByLevel: state.filteredByLevel,
-      // 聚合面：windowOpen = 此刻仍未闭环的窗口数（>0 即表示这些窗口的 count 只在内存里，见 README B5）；
-      // keys 按 count 降序取前 MAX_DIAGNOSTIC_KEYS 条（诊断面自身有界，不随窗口数膨胀）。
-      aggregate: {
-        windowOpen: aggregateWindows.size,
-        collapsedTotal: state.collapsedMessages,
-        keys: Array.from(aggregateWindows.values())
-          .sort((a, b) => b.count - a.count)
-          .slice(0, MAX_DIAGNOSTIC_KEYS)
-          .map((w) => ({ aggKey: w.aggKey, count: w.count, windowEnd: new Date(w.windowEnd).toISOString() })),
-      },
-      lastError: state.lastError ? state.lastError.slice(0, MAX_ERROR_CHARS) : null,
-    };
     fs.mkdirSync(state.diagnosticsDir, { recursive: true });
     fs.writeFileSync(state.diagnosticsPath, JSON.stringify(snapshot, null, 2), { encoding: 'utf8' });
   } catch { /* 诊断面自身失败静默——降级路径不放大 */ }
+  // 【D-16-①】首失败现场独立留档：与主快照的「最新事由」语义**互补**（主快照语义一字未改）
+  if (snapshot.note === 'first-failure') writeFirstFailureSnapshot(snapshot);
 }
 
 function noteFirstFailure() {
@@ -727,7 +826,8 @@ function writeLine(line) {
 
   if (state.writes % PRUNE_EVERY_WRITES === 0) {                    // 清理时机③
     pruneByAge(state.sinkDir, state.cfg.keepDays);
-    pruneByTotal(state.sinkDir, state.cfg.maxTotalBytes);
+    const pruned = pruneByTotal(state.sinkDir, state.cfg.maxTotalBytes, { pruneStray: state.cfg.pruneStray });
+    state.strays = pruned.strays;                                   // 诊断面读数随清理刷新
   }
 }
 
@@ -859,7 +959,16 @@ export function mountAuditLog(ctx, opts = {}) {
   // 清理时机①：挂载时一次
   try {
     pruneByAge(state.sinkDir, c.keepDays);
-    pruneByTotal(state.sinkDir, c.maxTotalBytes);
+    const pruned = pruneByTotal(state.sinkDir, c.maxTotalBytes, { pruneStray: c.pruneStray });
+    state.strays = pruned.strays;                 // 【D-16-②】诊断面读数（挂载期实测；含是否 opt-in）
+    // 【D-16-②】stray 外显面：**挂载期一条 warn**（`warn` 通道，不走 stderr —— MAX_STDERR_NOTICES=2
+    // 是硬契约，`test/auditlog-sink-stderr.test.js` AC-3 断言「恰 2 行」）。无 stray ⇒ 零新增输出。
+    if (pruned.strays.count > 0) {
+      warn('capabilities.auditlog: sink 目录含 ' + pruned.strays.count + ' 个非分卷名文件（stray，'
+        + pruned.strays.bytes + ' 字节，已计入总量上限）：' + pruned.strays.names.join(', ')
+        + (pruned.strays.count > pruned.strays.names.length ? ' …' : '')
+        + (c.pruneStray ? '；pruneStray=on ⇒ audit- 前缀的 stray 可被清理' : '；默认不删除（opt-in: capabilities.auditlog.pruneStray 或 PUNKY_AUDITLOG_PRUNE_STRAY=1）'));
+    }
     // 挂载后重新核对当前卷（清理可能删掉了正在接管的分卷）
     const mainBytes = fileBytesOrNull(segmentPath(localDateKey(new Date()), state.segment));
     state.segmentBytes = mainBytes === null ? 0 : mainBytes;
@@ -909,6 +1018,13 @@ export function auditlogStats() {
     filteredByLevel: state.filteredByLevel,
     collapsedMessages: state.collapsedMessages,
     aggregateRows: state.aggregateRows,
+    // 【D-16-②】stray 读数（新增键，既有键语义/顺序零改）：已计入总量上限、默认识别但不删
+    strays: {
+      count: state.strays.count,
+      bytes: state.strays.bytes,
+      names: state.strays.names.slice(0, MAX_STRAY_NAMES),
+      pruneOptIn: state.strays.pruneOptIn === true,
+    },
     lastError: state.lastError ? state.lastError.slice(0, MAX_ERROR_CHARS) : null,
   };
 }

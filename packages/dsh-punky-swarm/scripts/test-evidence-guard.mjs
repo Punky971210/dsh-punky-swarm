@@ -240,6 +240,64 @@ export function classifyOutcome(parsed) {
   return (parsed.summary.fail ?? 0) > 0 ? 'failed' : parsed.plan === 0 ? 'incomplete' : 'passed';
 }
 
+// ── 求和自检（S1 / S2：机读字段，**不参与 ok**）──────────────────────────────
+
+/**
+ * 求和自检：把「汇总数 ⇔ 明细数」互相可复算这件事从**打印出来的一句话**升级为**机读字段**。
+ *
+ * 两条恒等式：
+ *   S1 `Σ files[].tests === totals.tests`                     —— 明细 ⇔ 汇总（双向可复算）
+ *   S2 `tests === pass + fail + skipped + cancelled + todo`   —— 汇总内部算术自洽
+ *
+ * ⚠ **不参与 `ok`、不改退出码**：承既有裁决（把算术自洽做成硬门 = 新增判据，须单独裁决）。
+ *   本函数只负责「让它可被机读断言」，不负责「用它判红绿」。
+ * @param {object[]} files   `files[]` 投影
+ * @param {object} totals    汇总列
+ */
+export function decideSelfCheck(files, totals) {
+  const sumFilesTests = (files ?? []).reduce((acc, item) => acc + (item.tests ?? 0), 0);
+  const sumParts =
+    (totals?.pass ?? 0) +
+    (totals?.fail ?? 0) +
+    (totals?.skipped ?? 0) +
+    (totals?.cancelled ?? 0) +
+    (totals?.todo ?? 0);
+  const totalsTests = totals?.tests ?? 0;
+
+  const s1 = {
+    ok: sumFilesTests === totalsTests,
+    formula: 'Σ files[].tests === totals.tests',
+    sumFilesTests,
+    totalsTests,
+  };
+  const s2 = {
+    ok: totalsTests === sumParts,
+    formula: 'tests === pass + fail + skipped + cancelled + todo',
+    sum: sumParts,
+    totalsTests,
+  };
+
+  const reasons = [];
+  if (!s1.ok) {
+    reasons.push(
+      'S1 不成立：Σ files[].tests=' + sumFilesTests + ' ≠ totals.tests=' + totalsTests + '（明细与汇总互相矛盾）',
+    );
+  }
+  if (!s2.ok) {
+    reasons.push('S2 不成立：tests=' + totalsTests + ' ≠ 五分量之和=' + sumParts + '（汇总内部算术不自洽）');
+  }
+
+  return {
+    ok: s1.ok && s2.ok,
+    detail: reasons.length > 0
+      ? reasons.join('；')
+      : 'S1/S2 均成立（Σfiles.tests=' + sumFilesTests + '，tests=' + totalsTests + '，五分量之和=' + sumParts + '）',
+    s1,
+    s2,
+    reasons,
+  };
+}
+
 // ── 唯一 verdict 函数 ───────────────────────────────────────────────────
 
 /**
@@ -311,6 +369,30 @@ export function decideVerdict(input) {
     { tests: 0, pass: 0, fail: 0, skipped: 0, cancelled: 0, todo: 0 },
   );
 
+  // 逐文件投影：`todo` 与 `cancelled` 都进 `files[]`（与 `totals` **对称**）。
+  //   此前只有汇总有 `todo`、`cancelled` 更只在汇总侧 ⇒ 恒等式只能从 `totals` 内部自证，
+  //   **无法用「逐文件求和」复核**。`?? 0` 与 per-file record 的归一
+  //   （`parsed.summary.<key> ?? 0`）同口径 ⇒ `Σ files[].tests === totals.tests`（S1）成立，
+  //   且**双向可复算**：由明细求和算得汇总，与实测汇总相等。
+  const files = records.map((r) => ({
+    file: r.file,
+    outcome: r.outcome,
+    exitCode: r.exitCode,
+    tapPath: r.tapPath,
+    plan: r.plan,
+    tests: r.tests,
+    pass: r.pass,
+    fail: r.fail,
+    skipped: r.skipped,
+    cancelled: r.cancelled ?? 0,
+    todo: r.todo ?? 0,
+    fileRootSubtest: r.fileRootSubtest,
+  }));
+
+  // S1/S2 机读自检：**只出字段与打印面，不参与 ok、不改退出码**
+  //   （承既有裁决：做成硬门 = 新增判据，须单独裁决 —— 见规格 §待裁决 Q-2）。
+  const selfCheck = decideSelfCheck(files, totals);
+
   return {
     ok,
     rejected,
@@ -324,24 +406,9 @@ export function decideVerdict(input) {
     failedFiles,
     incompleteFiles,
     totals,
+    selfCheck,
     reasons,
-    files: records.map((r) => ({
-      file: r.file,
-      outcome: r.outcome,
-      exitCode: r.exitCode,
-      tapPath: r.tapPath,
-      plan: r.plan,
-      tests: r.tests,
-      pass: r.pass,
-      fail: r.fail,
-      skipped: r.skipped,
-      // `todo` 进 `files[]`（与 `totals` **对称**）：此前只有汇总有 `todo`，逐文件没有 ⇒
-      //   恒等式只能从 `totals` 内部自证，无法用「逐文件求和」复核。`?? 0` 与 `:508` 的归一
-      //   （`parsed.summary.todo ?? 0`）同口径，保证 `sum(files[].tests) === totals.tests - totals.cancelled`
-      //   这条**可判**恒等式在逐文件面也成立（`cancelled` 仍刻意不进 `files[]`，理由见 `:505-507`）。
-      todo: r.todo ?? 0,
-      fileRootSubtest: r.fileRootSubtest,
-    })),
+    files,
   };
 }
 
@@ -507,9 +574,13 @@ export async function runGuard(options = {}) {
       tests: parsed.summary.tests ?? 0,
       pass: parsed.summary.pass ?? 0,
       fail: parsed.summary.fail ?? 0,
-      // `skipped` 进 per-file record（有消费方：汇总列 + 人工排查单文件）；
-      // `cancelled` **刻意不进** record —— 它只为让 totals 的算术恒等式可判，避免无消费字段扩散。
+      // `skipped` / `cancelled` 都进 per-file record：两者都有同一个消费方 ——
+      //   `decideVerdict` 的 `selfCheck`（S1 双向可复算）需要**逐文件**能重算出汇总，
+      //   而此前 `cancelled` 只存在于汇总侧 ⇒ `Σfiles.tests ≠ totals.tests`，恒等式只能
+      //   写成 `Σfiles.tests === totals.tests - totals.cancelled`（**没有一处断言在验它**）。
+      //   口径与汇总侧逐字一致（同一 `parsed.summary.<key> ?? 0` 归一）。
       skipped: parsed.summary.skipped ?? 0,
+      cancelled: parsed.summary.cancelled ?? 0,
       todo: parsed.summary.todo ?? 0,
       fileRootSubtest: parsed.fileRootSubtests.length > 0,
       topSubtests: parsed.topSubtests.length,
@@ -567,19 +638,31 @@ function renderVerdict(verdict, options) {
       verdict.totals.todo,
   );
   // 算术自洽读数：**只展示、不参与 ok、不改退出码**（把它做成硬门 = 新增判据，须单独裁决）。
-  const sumParts = verdict.totals.pass + verdict.totals.fail + verdict.totals.skipped
-    + verdict.totals.cancelled + verdict.totals.todo;
+  //   数值来源 = `verdict.selfCheck` 的机读字段（**单一实现**：不再在此处另算一遍）。
+  const selfCheck = verdict.selfCheck;
   lines.push(
     GUARD_TAG +
       ' sum-check tests=' +
       verdict.totals.tests +
       ' pass+fail+skipped+cancelled+todo=' +
-      sumParts +
+      selfCheck.s2.sum +
       '（cancelled=' +
       verdict.totals.cancelled +
       '）⇒ ' +
-      (verdict.totals.tests === sumParts ? '齐' : '不齐'),
+      (selfCheck.s2.ok ? '齐' : '不齐'),
   );
+  lines.push(
+    GUARD_TAG +
+      ' self-check（机读字段，不参与 ok）S1 Σfiles.tests=' +
+      selfCheck.s1.sumFilesTests +
+      ' vs totals.tests=' +
+      selfCheck.s1.totalsTests +
+      ' ⇒ ' +
+      (selfCheck.s1.ok ? '可复算' : '⚠ 不可复算') +
+      '；S2 ⇒ ' +
+      (selfCheck.s2.ok ? '自洽' : '⚠ 不自洽'),
+  );
+  for (const reason of selfCheck.reasons) lines.push(GUARD_TAG + '   ⚠ ' + reason);
   for (const record of verdict.files) {
     if (record.outcome === 'passed') continue;
     lines.push(

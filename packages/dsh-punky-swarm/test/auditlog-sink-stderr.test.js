@@ -195,6 +195,40 @@ function runProbe({ mode, sinkDir, count = 8, tag }) {
 const stderrLines = (r) => r.stderr.split('\n').filter((l) => l.trim() !== '');
 const countOf = (haystack, needle) => haystack.split(needle).length - 1;
 
+// ── D-16-③ 主判据：**精确四数 + 守恒式**（规格 §D-16-③ / §C-6、C-7、C-8）──
+//
+// 为什么不能停在 `failures >= 4` 这类**下界式**：把 `lib/auditlog/sink.js` 的探活放行行
+// （`if (state.attempts % BREAKER_PROBE_INTERVAL === 0) return false;`）注释掉后，
+// 读数为 `failures=3 / skippedByBreaker=1097` —— 旧断言 `failures >= 4` 本会红，但**更早**的
+// `>= 3` 式（以及任何「只需要非零/不低于阈值」的写法）会照样通过：下界式判的是「至少发生了一次」，
+// 而我们要判的是「**探活点被走到且只被放行一次**」。精确四数同时成立才是这条分支的可执行证据；
+// 守恒式 `attempts === failures + skippedByBreaker + writes` 让「任一计数被悄悄改语义」也立刻红。
+//
+// 读数口径：`PUNKY_AUDITLOG_AGGREGATE=off` ⇒ 1 条消息 = 1 次 writeLine；持续失败 + 断路后
+// 每 1000 次尝试放行一次探活，故 failures = 3（首三次）+ 探活点 1 次，其余全进 skippedByBreaker。
+const BREAKER_EXPECT = {
+  8: { attempts: 8, failures: 3, skippedByBreaker: 5, writes: 0 },
+  40: { attempts: 40, failures: 3, skippedByBreaker: 37, writes: 0 },
+  1100: { attempts: 1100, failures: 4, skippedByBreaker: 1096, writes: 0 },
+};
+
+/** 精确四数 + 守恒式（任一不成立即红；count 为注入的消息数 = attempts 的期望） */
+function assertBreakerExact(stat, count) {
+  const e = BREAKER_EXPECT[count];
+  const detail = '(实际 stat: ' + JSON.stringify({
+    attempts: stat.attempts, failures: stat.failures,
+    skippedByBreaker: stat.skippedByBreaker, writes: stat.writes,
+  }) + ')';
+  assert.equal(stat.attempts, e.attempts, 'count=' + count + ' ⇒ attempts === ' + e.attempts + ' ' + detail);
+  assert.equal(stat.failures, e.failures, 'count=' + count + ' ⇒ failures === ' + e.failures
+    + '（3 次首失败 + 探活点放行）' + detail);
+  assert.equal(stat.skippedByBreaker, e.skippedByBreaker, 'count=' + count
+    + ' ⇒ skippedByBreaker === ' + e.skippedByBreaker + '（精确值，非 > 0 下界式）' + detail);
+  assert.equal(stat.writes, e.writes, 'count=' + count + ' ⇒ writes === ' + e.writes + ' ' + detail);
+  assert.equal(stat.attempts, stat.failures + stat.skippedByBreaker + stat.writes,
+    'count=' + count + ' ⇒ 守恒式 S3：attempts === failures + skippedByBreaker + writes' + detail);
+}
+
 /** 「sink 根落在普通文件下」的不可写构造：返回 <root>/not-a-dir/logs */
 function unappendableSinkDir(root) {
   fs.writeFileSync(path.join(root, 'not-a-dir'), 'regular file, not a directory', 'utf8');
@@ -240,7 +274,8 @@ test('AC-2 持续失败至阈值 ⇒ 第 2 行「sink breaker tripped」，计�
   assert.equal(r.result.ok, true, '探测体未报错（error: ' + JSON.stringify(r.result.error) + '）');
   const stat = r.result.stat;
   assert.equal(stat.consecutiveFailures, 3, 'consecutiveFailures === 3（实际: ' + stat.consecutiveFailures + '）');
-  assert.ok(stat.skippedByBreaker > 0, '断路后 skippedByBreaker > 0（实际: ' + stat.skippedByBreaker + '）');
+  // 【D-16-③ / C-8】skippedByBreaker 不再以 `> 0` 作为判据：精确 5 + 守恒式（count=8）
+  assertBreakerExact(stat, 8);
   // EQ-6 反向：既有计数器语义一字未改（旁路观测不参与记账）
   assert.equal(stat.failures, 3, 'failures === 3（实际: ' + stat.failures + '）');
   assert.equal(stat.sinkErrorRecords, 0, 'sinkErrorRecords === 0（实际: ' + stat.sinkErrorRecords + '）');
@@ -278,10 +313,16 @@ test('AC-3 上限硬读数：8 / 40 / 1100 次（跨 1000 探活点）stderr 恒
     assert.equal(countOf(r.stderr, 'append failed'), 1, 'count=' + count + ' ⇒ append failed 出现 1 次');
     assert.equal(countOf(r.stderr, 'breaker tripped'), 1, 'count=' + count + ' ⇒ breaker tripped 出现 1 次');
     // 反向 ③：1000 探活点不刷屏 —— count=1100 时 attempts 已跨过 1000（放行一次探活），仍恒 2 行
+    // 【D-16-③】主判据（三段读数一律**精确四数 + 守恒式**，替换原来的
+    //   `attempts >= 1100` / `failures >= 4` 下界式）：
+    //   注掉 sink.js 的探活放行行 ⇒ failures=3 / skippedByBreaker=1097 ⇒ 这里**转红**；
+    //   恢复后绿。反向构造与读数见 `exec/change-sink-fidelity.md` §反向验证。
+    assertBreakerExact(r.result.stat, count);
     if (count === 1100) {
-      assert.ok(r.result.stat.attempts >= 1100, 'attempts 已跨过 1000 探活点（实际: ' + r.result.stat.attempts + '）');
-      assert.ok(r.result.stat.failures >= 4, '探活放行确有一次真尝试并被记账（实际 failures: '
+      assert.equal(r.result.stat.failures, 4, '探活放行确有一次真尝试并被记账（failures 精确 4，实际: '
         + r.result.stat.failures + '）');
+      assert.equal(r.result.stat.skippedByBreaker, 1096, '断路跳过精确 1096（实际: '
+        + r.result.stat.skippedByBreaker + '）');
     }
   }
 });

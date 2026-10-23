@@ -175,6 +175,20 @@ interface ConfigCapabilitiesInput {
   watch?: ConfigWatchInput;
   verify?: ConfigVerifyInput;
   discovery?: ConfigDiscoveryInput;
+  // capabilities.auditlog：审计日志 sink 配置（宽松输入；归一化与默认值在 lib/auditlog/config.js）
+  auditlog?: ConfigAuditlogInput;
+}
+interface ConfigAuditlogInput {
+  enabled?: unknown;
+  keepDays?: unknown;
+  maxFileBytes?: unknown;
+  maxTotalBytes?: unknown;
+  sinkDir?: unknown;
+  stdout?: unknown;
+  levelsDefault?: unknown;
+  aggregate?: unknown;
+  /** 【D-16-②】stray 文件删除 opt-in（默认 false；env PUNKY_AUDITLOG_PRUNE_STRAY） */
+  pruneStray?: unknown;
 }
 interface ConfigAcpsInput {
   enabled?: unknown; // acps 能力总开关（resolveAcpsConfig 读）
@@ -429,6 +443,29 @@ export function resolveAcpsConfig(config: ConfigInput | null | undefined): Resol
     },
   };
 }
+
+// ── capabilities.auditlog：审计日志 sink（lib/auditlog/*）──
+// **默认值单点仍是 `AUDITLOG_DEFAULTS`**（lib/auditlog/config.js，本文件**不复制任何数值**）。
+// 此处只登记「哪些键可配」这一**结构事实**（schema 面的可配键清单），用途有两条：
+//   ① 一致性用例对齐 `Object.keys(AUDITLOG_DEFAULTS)`（`test/auditlog-sinkfid.test.js` 断言逐条相等）
+//      ⇒ 新增配置键漏登记即红，防 schema 面与 config.js 漂移；
+//   ② 类型面 `ConfigCapabilitiesInput.auditlog` 有据可依（宽松输入：字段 unknown，归一化在 config.js）。
+// env 覆盖通道（与仓内既有 auditlog 开关惯例一致，逐键 `PUNKY_AUDITLOG_*`）：
+//   enabled→PUNKY_AUDITLOG｜keepDays→…_KEEP_DAYS｜maxFileBytes→…_MAX_FILE_BYTES｜maxTotalBytes→…_MAX_TOTAL_BYTES
+//   stdout→PUNKY_LOGGER_STDOUT｜levelsDefault→…_LEVELS_DEFAULT｜aggregate→…_AGGREGATE｜pruneStray→…_PRUNE_STRAY
+// pruneStray【D-16-②】：stray（`parseSegmentName` 不认的常规文件，如 `.bak`）计入 512 MiB 总量上限、
+//   挂载期一条 warn + 诊断面 `strays` 字段；删除须显式 opt-in（默认 false ⇒ **绝不自动删用户备份**）。
+export const AUDITLOG_CONFIG_KEYS = [
+  'enabled',
+  'keepDays',
+  'maxFileBytes',
+  'maxTotalBytes',
+  'stdout',
+  'levelsDefault',
+  'aggregate',
+  'pruneStray',
+] as const;
+export type AuditlogConfigKey = typeof AUDITLOG_CONFIG_KEYS[number];
 
 // ── config.ratchet：棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
 // 消费方 lib/state/machine-rules.ts（loadRules）：
