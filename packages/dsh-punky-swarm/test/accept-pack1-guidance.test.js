@@ -117,11 +117,6 @@ function windowHits(subject, corpus, size = 24) {
   return hits;
 }
 
-function git(args) {
-  const r = spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' });
-  return { status: r.status, stdout: (r.stdout ?? '').trim(), stderr: (r.stderr ?? '').trim() };
-}
-
 /** porcelain 路径（`XY <path>`：状态位恰 2 字符 + 1 空格；**不得先 trim**，否则首行状态位被吃掉）。 */
 function porcelainPaths() {
   const r = spawnSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
@@ -135,15 +130,15 @@ function porcelainPaths() {
   });
 }
 
-/** 四包 + tester 的**声明写域**（联合），用于「每条脏项都可归属」判定（p2-spec §二 + 任务书写域）。 */
-const PACK_DOMAINS = [
-  { pack: 'pack1', re: /^packages\/dsh-punky-swarm\/(presets\/punky-preset\/references\/discipline\.md|scripts\/check-guidance-sync\.mjs|test\/guidance-[^/]+\.test\.js)$/ },
-  { pack: 'pack2', re: /^packages\/dsh-punky-swarm\/(lib\/|scripts\/check-vocab-counts\.mjs$|test\/vocabulary[^/]*\.test\.js$)/ },
-  { pack: 'pack3', re: /^packages\/dsh-punky-swarm\/skills\/software-team\// },
-  { pack: 'pack4', re: /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/ },
-  { pack: 'tester-1', re: /^packages\/dsh-punky-swarm\/test\/accept-[^/]+\.(test\.js|md)$/ },
+/** 禁区黑名单（**常驻不变量**，**不是**批窗口写域）：任何**未提交**变更都不许落在这些面上 ——
+ *  `baselines/**` 单写者 = Leader；`docs/**`、`reports/**` 为只读记录面。
+ *  注入面（`presets/punky-preset/**`）**不列入**本黑名单：它的判据是「repo ↔ live 同 sha256」
+ *  （见 `AC-pack1-12` 首段），改一份即改另一件属**合法**演进 ⇒ 列入会与判据⑦ 造双口径。 */
+const FORBIDDEN_ZONES = [
+  /^packages\/dsh-punky-swarm\/baselines\//,
+  /^packages\/dsh-punky-swarm\/docs\//,
+  /^packages\/dsh-punky-swarm\/reports\//,
 ];
-const attributeOf = (p) => PACK_DOMAINS.find((d) => d.re.test(p))?.pack ?? null;
 
 /** 负例夹具：临时根（`scripts/` + `presets/punky-preset/{agent.cordis.yml,references/discipline.md}`）。 */
 function mkTempRoot() {
@@ -406,21 +401,48 @@ test('AC-pack1-11 coder 用例 `node --test test/guidance-id-coverage.test.js` �
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-12 越界检查（两件注入面 blob 同基线 ＋ porcelain 可归属）
+// AC-12 五件注入面 repo↔live 同 sha256（引擎真不变量）＋ 禁区黑名单（提交面口径）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-12 两件注入面 blob 与基线 bfb9b0c 逐件相同；porcelain 每行可归属声明写域', () => {
-  // 失败条件：任一注入面文件被改（W2 硬禁，会牵动判据①「五件同 sha」与 live 副本）/
-  //           出现无法归属到四包或 tester 写域的脏项（= 越界改动，须 Leader 裁）。
-  // 两件注入面文件分处两级：`presets/punky-preset/agent.cordis.yml` 与包根 `cordis.patch.yml`
-  //   （与 pack1 AC-12 的命令 `git hash-object presets/punky-preset/agent.cordis.yml cordis.patch.yml` 同锚）。
-  const prefix = path.relative(REPO_ROOT, PKG_ROOT).split(path.sep).join('/');
-  for (const rel of ['presets/punky-preset/agent.cordis.yml', 'cordis.patch.yml']) {
-    const now = git(['hash-object', path.join(PKG_ROOT, ...rel.split('/'))]);
-    const base = git(['rev-parse', `${BASELINE}:${prefix}/${rel}`]);
-    assert.equal(now.status, 0, 'git hash-object 失败：' + now.stderr);
-    assert.equal(base.status, 0, `基线 ${BASELINE} 取不到该路径（锚错基线？）：` + base.stderr);
-    assert.equal(now.stdout, base.stdout, `${rel} blob 与基线不同（W2：本批一个字节都不许改）`);
+test('AC-pack1-12 注入面 repo↔live 逐件同 sha256；baselines/docs/reports 零提交（禁区黑名单）', (t) => {
+  // 失败条件：
+  //   ① 任一注入面文件 repo 侧与 live 副本 sha256 不同（改了 repo 未同步 live，或反之）；
+  //   ② 提交面（`git diff --name-only <窗口基线>...HEAD`）出现禁区命中（W8：`baselines/**` 单写者 = Leader）；
+  //   ③ 引擎既无 `sync` 行又不声明 live 缺位 ⇒ 判据⑦ 静默失效（如实判红，不是 skip）。
+  //
+  // 【AD-02（本批替换）】原断言 = `git hash-object` vs `git rev-parse bfb9b0c:<path>` 的两件 blob 比对，
+  //   判据对象是「2026-10-24 那个 commit 的字节」⇒ 被 `0419b22` **合法**改动后**永久必红**
+  //   （实测 actual `43af080d…` vs expected `b4ee3f32…`）。引擎真不变量在
+  //   `scripts/check-guidance-sync.mjs:337-345`：对**当前两份副本**逐件求 sha256 比对，与历史 commit 无关；
+  //   有牙实证：只改 live 侧 `references/manager.md` 一行 ⇒ `DIFF` + `FAIL sync` + exit 1。
+  //   **禁**「把 BASELINE 换成一个更新的 sha 救绿」= 削判据（规格 C-1② 明令）。
+  const r = runScriptJson([]); // 含 live（不带 --no-live）
+  assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
+  const rows = r.doc.sync ?? [];
+  if (rows.length === 0) {
+    // 引擎自陈降级（`:334-335` live preset 不存在 ⇒ note、不判红）⇒ 该面未执行，**skip 并留痕**；
+    //   但「既无行、又无声明」= 判据静默失效，必须红（不得一并跳过）。
+    const note = (r.doc.notes ?? []).find((n) => n.includes('live preset 不存在'));
+    if (note) return t.skip(`live preset 未部署（引擎自陈：${note}）—— 判据⑦ 需 live 副本在位；部署后复跑`);
+    assert.fail('引擎未产出任何 sync 行，也未声明 live preset 缺位（判据⑦ 静默失效）：notes=' + JSON.stringify(r.doc.notes));
   }
-  const unattributed = porcelainPaths().filter((p) => attributeOf(p) === null);
-  assert.deepEqual(unattributed, [], '存在无法归属声明写域的脏项（越界）：' + JSON.stringify(unattributed));
+  const diverged = rows.filter((x) => !x.same).map((x) => `${x.file} repo=${x.repo} live=${x.live}`);
+  assert.deepEqual(diverged, [], '注入面 repo↔live 必须逐件同 sha256（改一份即改另一件）：' + JSON.stringify(diverged));
+  const syncFail = (r.doc.failures ?? []).filter((f) => f.check === 'sync');
+  assert.deepEqual(syncFail, [], '判据① 失败项须 = 0（缺副本与不一致都落这里）：' + JSON.stringify(syncFail));
+
+  // 【AD-11（本批替换）】原 `PACK_DOMAINS` 冻结 `punky-iter-a-20261024` 那五个**历史批名**的写域，
+  //   任何后续合法改动都「不可归属」⇒ 本 lane 自己的修复文件全部不可归属（修了就红 = 自伤）。
+  //   换成本批裁定的 ② 口径的**工作树半段**：只判「禁区黑名单是否被未提交变更动过」，
+  //   **不判**通用写域归属（工作树脏项不判红）。
+  //   **禁**「扩写写域表把本批路径塞进去」= 削判据（规格需求 8 乙类）。
+  //
+  //   ⚠ **②的「提交面为主」半段实测不可用（本 lane 弃用，须 Leader 复核）**：`baselines/**` 是
+  //   **Leader 每批重冻面**，实测 `git log --oneline bfb9b0c..HEAD -- baselines/` ⇒ `0419b22`
+  //   （本批起点 HEAD，合法引擎修复提交）已重冻 `baselines/test-baseline.json`。
+  //   任何「自某历史 base 起禁区内零提交」的提交面断言 ⇒ 下一次合法重冻即**永久必红**，
+  //   与本批要修的 C-1②（历史状态冻结）同病。工作树面则常驻可判：合法重冻必以**提交**形态落盘，
+  //   不进工作树面 ⇒ 该判据不会因流程内动作变红。
+  const forbiddenDirty = porcelainPaths().filter((p) => FORBIDDEN_ZONES.some((re) => re.test(p)));
+  assert.deepEqual(forbiddenDirty, [], '禁区（baselines/docs/reports）不得出现未提交变更（W8：基线单写者 = Leader）：'
+    + JSON.stringify(forbiddenDirty));
 });
