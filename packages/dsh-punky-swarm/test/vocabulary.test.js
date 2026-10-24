@@ -110,16 +110,27 @@ test('A2 `loadVocabulary()`（缺省 root=包根）读到交付物且 schema 自
   assert.deepEqual(v, { ok: true, problems: [] });
 });
 
-test('A3 `entries` R1 冻结为**空数组**（存量不追溯 = 零条目即零校验面）', () => {
+test('A3 交付物 `entries` 已填**真值底料**（非空 ＋ 全表唯一 ＋ 口径 = kind:gate）', () => {
   const d = loadVocabulary();
   assert.ok(Array.isArray(d.entries));
-  assert.equal(d.entries.length, 0);
-  // 附带判据：meta.counts 以复算口径登记存量规模（不建条、只记数）。
-  // ⚠ 不断言具体数值：该数会随各 lane 新增 `GATE_*` / `reason` token 而单调上升
-  //   （本 lane 自身即新引入 `GATE_TOKEN_UNKNOWN`）⇒ 写死数值会让邻居 lane 合法新增误红。
-  //   数值口径的机检归**产物**（`exec/vocabulary-layer.md` 的复算读数 + audit 复跑）。
-  assert.ok(Number.isInteger(d.meta.counts.gateCodes) && d.meta.counts.gateCodes > 0, 'counts.gateCodes 须为正整数');
-  assert.ok(Number.isInteger(d.meta.counts.reasonTokens) && d.meta.counts.reasonTokens > 0, 'counts.reasonTokens 须为正整数');
+  // 【2026-10-24 · 批 punky-iter-a-20261024 / pack2 裁决 Q-D 改判】底料不再是空表：受控词表由
+  //   「R1 冻结空表」改为「按 `GateErrorCode` union 填真值」（底料源唯一 = union；禁按正则全仓灌）。
+  //   空表语义不变：空表 ⇒ 全部 token 未登记 ⇒ **全拒**（见 `lib/state/vocabulary.js` 头注三档），
+  //   故交付物**必须**非空 —— 空表是拒绝态，不是交付态。
+  //   ⚠ 仍**不断言具体条目数**：该数随合法规约新增单调上升，写死会让邻居 lane 合法新增误红。
+  //   规模真值口径归 `scripts/check-vocab-counts.mjs`（两侧运行期计算）与 `exec/e2-vocab.md` 读数表。
+  assert.ok(d.entries.length > 0, '交付物 entries 不得为空（空表 = 全拒态，不是交付态）');
+  const ids = new Set();
+  const codes = new Set();
+  for (const [i, e] of d.entries.entries()) {
+    const at = `entries[${i}]`;
+    assert.equal(e.kind, 'gate', at + ' 本批底料一律 kind:gate（底料源 = GateErrorCode union）');
+    assert.match(String(e.since), /^v?\d+\.\d+\.\d+$/, at + '.since 须版本号口径：' + e.since);
+    assert.equal(ids.has(e.id), false, at + '.id 全表唯一性冲突：' + e.id);
+    assert.equal(codes.has(e.code), false, at + '.code 全表唯一性冲突：' + e.code);
+    ids.add(e.id);
+    codes.add(e.code);
+  }
 });
 
 test('A4 顶层键序 = $schema→meta→sources→entries（避免清单抖动）', () => {
@@ -280,7 +291,7 @@ test('S-④② 两态可分：**未登记** token ⇒ known:false（新写点被
   assert.equal(r.restated, false);
 });
 
-test('S-④② 空表（R1 交付形态）⇒ 任何 token 都 unknown（零条目即零校验面）', () => {
+test('S-④② 空表（极端形态）⇒ 任何 token 都 unknown（空表 = 全拒，非放行）', () => {
   const { root } = seedVocab([]);
   assert.equal(reasonTokenKnown('no_such_token', { root }).known, false);
   assert.equal(gateCodeKnown('GATE_TOKEN_UNKNOWN', { root }).known, false);

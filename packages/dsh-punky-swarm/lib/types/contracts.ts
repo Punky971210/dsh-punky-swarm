@@ -513,7 +513,39 @@ export type GateErrorCode =
   //       并在 `wave_plan` 返回值回显 `consumeDepsAsymmetry`；
   //     · `T.layer === 'plan'` 且 `L.layer === 'audit'`（**静默豁免**：audit 消费 plan 判据源属**批级**不变量）。
   //   与 `GATE_HANDOFF_MISSING` / `GATE_ORPHAN_PRODUCT` 同族（产物契约类）⇒ `smoke: true` 批同键豁免。
-  | 'GATE_CONSUME_DEPS_ASYMMETRY';
+  | 'GATE_CONSUME_DEPS_ASYMMETRY'
+  // ── 真发射码**补登记**（2026-10-24 · 批 `punky-iter-a-20261024` / 裁决 Q-I = R-01／R-02「修 union 源头」）──
+  //   问题：以下码在 `lib/**` 有**真实发射位**，但此前只抛不枚举 ⇒ 本 union 不再穷尽。
+  //     危害面不在「少几行类型」而在**词表底料**：`lib/state/vocabulary.json` 的底料源唯一 = 本 union，
+  //     漏登记 ⇒ 这些码未入词表 ⇒ 判定面（`knownOf` 单点）一旦按词表收紧就会把**真发射码**误拒。
+  //   定位：本段是**补登记**，不是造码 —— 码值、发射位、拒/告警语义在本批之前即已存在，本段**零行为变更**
+  //     （仅类型面登记）。审计可核：本段每个码都有 `lib/**/*.ts` 的 `code:` 或 `throw new Error('<码>: …')` 发射位。
+  //   机检：`scripts/check-vocab-counts.mjs` 职责①「发射码 ⊆ 词表」以**本 union 为底料源**判缺口 ⇒ 补漏后缺口为 0。
+  //   **成员数以本 union 自身为唯一真源**：本段及全文注释一律不记数（写死数字即漂移源，
+  //   对齐 `lib/sig-fingerprint.js` 的既有教训）。
+  //   · complete 门（写端 `lib/state/gates/complete.ts#checkCompleteGate`）
+  | 'GATE_COMPLETE_NO_TIER'          // 批次既无 exec 也无 audit（或 wavePlan 全无 `layer`）⇒ 拒（Q-6① 定稿）
+  | 'GATE_ORPHAN_PRODUCT'           // plan 层**悬空产物** ⇒ 拒；exec／audit 悬空为**强告警**（同码不同档）：`gates/complete.ts` + `lib/wave-plan.ts#checkPlanPresenceContract`
+  //   · exit／层族门（写端 `lib/state/gates/exit.ts#checkExitGate`；`GATE_LANE_NOT_IN_PLAN` 三处同码）
+  | 'GATE_LANE_NOT_IN_PLAN'         // lane 不在 `wavePlan.tasks`（entry／exit／plan-contract 三门共用，语义独立于 `GATE_ENTRY_MISSING`）
+  | 'GATE_LANE_LAYER_MISSING'       // lane 无 `layer` 声明（generic 层级豁免已退役，Q-6①）
+  | 'GATE_EXIT_NO_DECLARATION'      // exec／audit 未声明 `produce`／`outputs`（**plan 层归** `GATE_PLAN_NO_DECLARATION`，两码分工）
+  //   · presence 判据族（写端 `lib/state/gates.ts#presenceJudge` = 唯一实现，declare／runtime 两模共用）
+  | 'GATE_NO_DECLARATION'           // 产物声明清单为空 ⇒ presence 判据无对象（不是「声明了但缺失」，后者归 `_MISSING` 族）
+  //   · plan 契约门（运行期写端 `lib/state/gates/plan-contract.ts#checkPlanContract`；建批期写端 `lib/wave-plan.ts#checkPlanPresenceContract`）
+  | 'GATE_PLAN_NO_DECLARATION'      // plan lane 未声明产物（**运行期** plan 契约门）
+  | 'GATE_PLAN_PRESENCE_MISSING'    // 同一事实的**建批期**形态：`lib/wave-plan.ts#checkPlanPresenceContract` 直抛（拒建批，零批次落盘）
+  //   · entry 门 · `standalone` 声明（写端 `lib/state/gates/entry.ts#checkEntryGate` / `lib/state/gates/helpers.ts`）
+  | 'GATE_STANDALONE_UNJUSTIFIED'   // `standalone` 声明不成立：须布尔 `true` ＋ 非空 `standaloneReason` ＋ 批次内确无可用上游
+  //   · 建批期**装配声明门**／角色面（写端 `lib/wave-plan.ts`：`#normalizeAssemblyDecl`、`#assemblyGate`、`#buildWavePlan`）
+  //     拒／告警分档是**语义要求**（不合并成同一码）：
+  | 'GATE_ASSEMBLY_INVALID'          // `assembly` 结构非法或引用悬空／层错配 ⇒ **throw**（fail-closed 拒建批）
+  | 'GATE_ROLE_ASSEMBLY_MISSING'     // 含 audit 层的三层批缺 `assembly` 声明 ⇒ 拒建批（GATE_ROLE_ASSEMBLY_MISSING）
+  | 'GATE_ROLE_INVALID'             // `roles` 词法非法 ⇒ **告警**（批次照建；与拒态分码，防「告警被读成拒」）
+  | 'GATE_ROLE_MANAGER_AS_LANE'     // Manager 被登记为普通 lane ⇒ **告警**（角色完整性，非拒态）
+  //   · 建批期**配对基数漂移**（写端 `lib/wave-plan.ts#validateLayerContract`）
+  | 'GATE_PAIRING_CARDINALITY_DRIFT';
+
 
 
 /** 门禁通过：ok: true + 各门禁可选载荷 */

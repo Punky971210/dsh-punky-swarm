@@ -2,11 +2,8 @@
   "$schema": "dsh-punky-swarm/vocabulary@1",
   "meta": {
     "version": 1,
-    "updated": "2026-09-19",
-    "counts": {
-      "gateCodes": 86,
-      "reasonTokens": 45
-    }
+    "updated": "2026-10-24",
+    "counts": { "gateCodes": 51, "reasonTokens": 0 }
   },
   "sources": [
     {
@@ -22,5 +19,57 @@
       "note": "reason 载体行族（EMPTY_REASON_RE / empty-reason: 独立行）"
     }
   ],
-  "entries": []
+  "entries": [
+    { "id": "gate-entry-missing", "code": "GATE_ENTRY_MISSING", "label": "entry 门：上游产物缺失", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate" },
+    { "id": "gate-handoff-missing", "code": "GATE_HANDOFF_MISSING", "label": "交接门：入边未提交", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate / gates/handoff.ts#checkHandoffGate" },
+    { "id": "gate-audit-input-missing", "code": "GATE_AUDIT_INPUT_MISSING", "label": "audit 门：判据来源缺失", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate" },
+    { "id": "gate-audit-criteria-missing", "code": "GATE_AUDIT_CRITERIA_MISSING", "label": "audit 门：验收标准缺失", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate" },
+    { "id": "gate-batch-requires-c", "code": "GATE_BATCH_REQUIRES_C", "label": "批次面：team 通道须 C 档", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-member-requires-c", "code": "GATE_MEMBER_REQUIRES_C", "label": "成员面：team 通道须 C 档", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-plan-contract", "code": "GATE_PLAN_CONTRACT", "label": "plan 契约门：结构/裸标题不合规", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/plan-contract.ts#checkPlanContract" },
+    { "id": "gate-token-unknown", "code": "GATE_TOKEN_UNKNOWN", "label": "词表门：token 未登记", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate / gates/command.ts#checkCommandGate" },
+    { "id": "gate-vocab-invalid", "code": "GATE_VOCAB_INVALID", "label": "词表门：词表不可用（告警级）", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates.ts#reasonVocabularyVerdict（告警级，不拒批）" },
+    { "id": "gate-exit-missing-exec", "code": "GATE_EXIT_MISSING_EXEC", "label": "exit 门：缺 exec 产物", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-exit-missing-audit", "code": "GATE_EXIT_MISSING_AUDIT", "label": "exit 门：缺 audit 产物", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-needhuman-pending", "code": "GATE_NEEDHUMAN_PENDING", "label": "人工闸：待裁决未清", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/exit.ts / gates/plan-contract.ts" },
+    { "id": "gate-exit-no-command", "code": "GATE_EXIT_NO_COMMAND", "label": "命令门：gate 行命令为空", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate" },
+    { "id": "gate-exit-forbidden", "code": "GATE_EXIT_FORBIDDEN", "label": "命令门：命中只读黑名单", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate" },
+    { "id": "gate-exit-timeout", "code": "GATE_EXIT_TIMEOUT", "label": "命令门：执行超时", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate" },
+    { "id": "gate-exit-spawn-fail", "code": "GATE_EXIT_SPAWN_FAIL", "label": "命令门：进程启动失败", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate" },
+    { "id": "gate-exit-nonzero", "code": "GATE_EXIT_NONZERO", "label": "命令门：非零退出", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate" },
+    { "id": "gate-script-changed", "code": "GATE_SCRIPT_CHANGED", "label": "命令门：脚本 sha 锚定不符", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/command.ts#checkCommandGate（执行前预扫）" },
+    { "id": "gate-target-missing", "code": "GATE_TARGET_MISSING", "label": "targets 门：目标缺失", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/targets.ts#checkTargetsGate" },
+    { "id": "gate-target-unchanged", "code": "GATE_TARGET_UNCHANGED", "label": "targets 门：目标未变更", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/targets.ts#checkTargetsGate" },
+    { "id": "gate-complete-no-audit", "code": "GATE_COMPLETE_NO_AUDIT", "label": "complete 门：无 audit 层", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/complete.ts#checkCompleteGate" },
+    { "id": "gate-exit-pending-audit", "code": "GATE_EXIT_PENDING_AUDIT", "label": "complete 门：audit 未结算", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/complete.ts#checkCompleteGate" },
+    { "id": "gate-complete-audit-failed", "code": "GATE_COMPLETE_AUDIT_FAILED", "label": "complete 门：audit 未通过", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-complete-exec-pending", "code": "GATE_COMPLETE_EXEC_PENDING", "label": "complete 门：exec 未结算", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/complete.ts#checkCompleteGate" },
+    { "id": "gate-complete-outcomes-empty", "code": "GATE_COMPLETE_OUTCOMES_EMPTY", "label": "complete 门：verdict 白名单为空", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-settle-note-missing", "code": "GATE_SETTLE_NOTE_MISSING", "label": "结算面：驳回缺 note", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-exempt-not-dispatch", "code": "GATE_EXEMPT_NOT_DISPATCH", "label": "派发面：豁免用于非派发", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-exempt-invalid", "code": "GATE_EXEMPT_INVALID", "label": "派发面：豁免载荷非法", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-exempt-type-unknown", "code": "GATE_EXEMPT_TYPE_UNKNOWN", "label": "派发面：豁免类型未知", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-exempt-revoke-required", "code": "GATE_EXEMPT_REVOKE_REQUIRED", "label": "派发面：撤销无既有豁免", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-handoff-unauthorized", "code": "GATE_HANDOFF_UNAUTHORIZED", "label": "交接门：调用方对该边无写权", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-handoff-identity-unknown", "code": "GATE_HANDOFF_IDENTITY_UNKNOWN", "label": "交接门：调用方身份不可解析", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-handoff-overwrite-undeclared", "code": "GATE_HANDOFF_OVERWRITE_UNDECLARED", "label": "交接门：重交未声明 overwrite", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "union 声明的现役码；无 code: 字面量发射位（经常量/拼接间接产生）" },
+    { "id": "gate-roster-invalid", "code": "GATE_ROSTER_INVALID", "label": "建批期：roster 词法非法", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（拒建批）" },
+    { "id": "gate-channel-invalid", "code": "GATE_CHANNEL_INVALID", "label": "建批期：channel 枚举非法", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#normalizeChannelDecl（拒建批）" },
+    { "id": "gate-channel-unresolved", "code": "GATE_CHANNEL_UNRESOLVED", "label": "建批期：channel 与 roster 矛盾", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#normalizeChannelDecl（拒建批）" },
+    { "id": "gate-consume-deps-asymmetry", "code": "GATE_CONSUME_DEPS_ASYMMETRY", "label": "建批期：consume 与 deps 不对称", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#validateLayerContract（拒建批）" },
+    { "id": "gate-complete-no-tier", "code": "GATE_COMPLETE_NO_TIER", "label": "complete 门：无层级声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/complete.ts#checkCompleteGate" },
+    { "id": "gate-orphan-product", "code": "GATE_ORPHAN_PRODUCT", "label": "complete 门：plan 层悬空产物", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/complete.ts#checkCompleteGate / lib/wave-plan.ts#checkPlanPresenceContract" },
+    { "id": "gate-lane-not-in-plan", "code": "GATE_LANE_NOT_IN_PLAN", "label": "层族门：lane 不在 wavePlan", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts / gates/exit.ts / gates/plan-contract.ts" },
+    { "id": "gate-lane-layer-missing", "code": "GATE_LANE_LAYER_MISSING", "label": "层族门：lane 无 layer 声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/exit.ts#checkExitGate" },
+    { "id": "gate-exit-no-declaration", "code": "GATE_EXIT_NO_DECLARATION", "label": "exit 门：未声明 produce/outputs", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/exit.ts#checkExitGate" },
+    { "id": "gate-no-declaration", "code": "GATE_NO_DECLARATION", "label": "presence 门：无产物声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates.ts#presenceJudge" },
+    { "id": "gate-plan-no-declaration", "code": "GATE_PLAN_NO_DECLARATION", "label": "plan 契约门：未声明产物", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/plan-contract.ts#checkPlanContract" },
+    { "id": "gate-plan-presence-missing", "code": "GATE_PLAN_PRESENCE_MISSING", "label": "建批期：plan 产物未声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#checkPlanPresenceContract（throw，拒建批）" },
+    { "id": "gate-standalone-unjustified", "code": "GATE_STANDALONE_UNJUSTIFIED", "label": "entry 门：standalone 声明不成立", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/state/gates/entry.ts#checkEntryGate / gates/helpers.ts" },
+    { "id": "gate-assembly-invalid", "code": "GATE_ASSEMBLY_INVALID", "label": "装配门：assembly 结构/引用非法", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#normalizeAssemblyDecl / #assemblyGate（throw，拒建批）" },
+    { "id": "gate-role-assembly-missing", "code": "GATE_ROLE_ASSEMBLY_MISSING", "label": "装配门：缺装配声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（装配门，拒建批）" },
+    { "id": "gate-role-invalid", "code": "GATE_ROLE_INVALID", "label": "装配门：角色词法非法（告警）", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（告警，不拒）" },
+    { "id": "gate-role-manager-as-lane", "code": "GATE_ROLE_MANAGER_AS_LANE", "label": "装配门：Manager 被当 lane", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（告警，不拒）" },
+    { "id": "gate-pairing-cardinality-drift", "code": "GATE_PAIRING_CARDINALITY_DRIFT", "label": "建批期：配对基数漂移", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#validateLayerContract" }
+  ]
 }

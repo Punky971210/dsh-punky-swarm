@@ -19,8 +19,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：`lib/state/vocabulary.json`（词表真源）的**唯一读端**（纯函数 + 单例缓存）。
 // 语义：登记义务——**新增**的 `GATE_*` 码 / `reason` token 必须先入表（`enabled:true`）再落代码；
-//   未登记的新 token 由门禁面拒 `GATE_TOKEN_UNKNOWN`。**存量不追溯**由词表内容承载
-//   （R1 `entries:[]` ⇒ 零条目即零校验面），**不**由批次年龄分支承载（不设 env 阀 / 不做按批龄分流）。
+//   未登记的新 token 由门禁面拒 `GATE_TOKEN_UNKNOWN`。「存量不追溯」由**词表内容**承载
+//   （现役码逐条登记在册），**不**由批次年龄分支承载（不设 env 阀 / 不做按批龄分流）。
+//   ⚠ 空表口径（2026-10-24 订正，取代此前含糊的旧表述）：**空表 ⇒ 全部 token 未登记 ⇒ 全拒**，
+//     即 `entries: []` 时任何声明都命中不了词条，判定面据此走**拒绝**分支（`gateCodeKnown` /
+//     `reasonTokenKnown` 恒 `known:false`）。**空表不是放行**。与「词表不可用」是相反两档，禁互读：
+//       ① 词表**不可用**（缺文件 / 坏 JSON / schema 不过）⇒ fail-open：放行 + `GATE_VOCAB_INVALID` 告警；
+//       ② 词表**可用但该 token 未登记**（含空表情形）⇒ 拒 `GATE_TOKEN_UNKNOWN`；
+//       ③ 词条在册但 `enabled:false` ⇒ 放行 + `restated:true` 告警（禁用≠删除）。
 //
 // 读取器冻结契约 4 条（blueprint §2.1(e)，逐条实现）：
 //   1. fail-closed：缺失 / JSON 坏 / schema 不过 ⇒ `loadVocabulary().ok === false`，**且不抛**
@@ -252,6 +258,11 @@ export function validateVocabulary(doc) {
       problems.push('meta.version 必填（≥1 整数）');
     }
     if (!isNonEmptyString(meta.updated) || !DATE_RE.test(meta.updated)) problems.push('meta.updated 必填（YYYY-MM-DD）');
+    // `meta.counts` 口径（2026-10-24 订正 · 声明值而非实测判据）：
+    //   两键 = **本表条目数**的声明值（口径 = 本文件 `entries` 按 `kind` 计数），用于人读与形状自检；
+    //   **不是运行时判据**：本读端只校验「≥0 整数」形状（见下），**任何代码/测试都不得把声明值与
+    //   实测规模做强比对**——该面设计上刻意不做真值比对（写死数值会让邻居 lane 合法新增误红，
+    //   即造出「必假红的第二真源」）；规模真值以 `scripts/check-vocab-counts.mjs` 的**运行期**两侧计算为准。
     if (!isPlainObject(meta.counts)) problems.push('meta.counts 必填（对象，只读统计）');
     else {
       for (const k of ['gateCodes', 'reasonTokens']) {
@@ -262,7 +273,7 @@ export function validateVocabulary(doc) {
   }
 
   if (!Array.isArray(doc.entries)) {
-    problems.push('entries 必填（数组；R1 冻结为空数组）');
+    problems.push('entries 必填（数组；空表合法，但语义 = 全部 token 未登记 ⇒ 全拒，不是放行）');
     return { ok: problems.length === 0, problems };
   }
 
