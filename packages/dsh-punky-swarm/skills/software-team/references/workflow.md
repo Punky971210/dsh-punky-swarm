@@ -1,6 +1,6 @@
 # software-team 工作流蓝图（蟛蜞模式）
 
-> 说明：**Manager 为引擎层角色（Leader 直属、团队无关，定义见 `presets/punky-preset/references/manager.md`），不属本团队角色集**；其为任务第一对接点——**exec 层 lane 数≥3 的三层批**（建批须传 `assembly`）running 后、**首个 exec lane 派发前**强制拉起并 `batch_phase` **登记**（未登记即拒派 `GATE_MANAGER_NOT_RAISED`）；`managerPlan` **缺省 `raise`**，**需 Leader 直驱时必须在建批 `assembly` 显式声明 `managerPlan:'leader-direct'`**（显式出口，缺省不是直驱；`leader-direct` 批回执走单通道 `report → Leader`、不写 `outbox`，Leader 代行 watch），普通 C 批 Leader 可代行（留痕「本批由 Leader 直驱」）；粗拆由 Leader 人工对接；Coordinator 按触发装配——exec 层 lane 数≥3 或需细拆产物时 plan 层建 role=coordinator lane；**`task-tree.json` 按需声明**（需要任务树的批次由**建批 `tasks` 面**声明，未声明即不产出，不得默认代产）；audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项。
+> 说明：**Manager 为引擎层角色（Leader 直属、团队无关），不属本团队角色集**；其为任务第一对接点——**exec 层 lane 数≥3 的三层批**（建批须传 `assembly`）running 后、**首个 exec lane 派发前**强制拉起并 `batch_phase` **登记**（未登记即拒派 `GATE_MANAGER_NOT_RAISED`）；`managerPlan` **缺省 `raise`**，**需 Leader 直驱时必须在建批 `assembly` 显式声明 `managerPlan:'leader-direct'`**（显式出口，缺省不是直驱；`leader-direct` 批回执走单通道 `report → Leader`、不写 `outbox`，Leader 代行 watch），普通 C 批 Leader 可代行（留痕「本批由 Leader 直驱」）；粗拆由 Leader 人工对接；Coordinator 按触发装配——exec 层 lane 数≥3 或需细拆产物时 plan 层建 role=coordinator lane；**`task-tree.json` 按需声明**（需要任务树的批次由**建批 `tasks` 面**声明，未声明即不产出，不得默认代产）；audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项。
 
 ## 一、角色 DAG（谁产出 → 谁消费 → 谁验证）
 
@@ -35,7 +35,7 @@ graph TD
     DM -->|retrospective-report → 记忆沉淀| CO
 ```
 
-> **节点归属（D-1 口径）**：DAG 中 `L`（Leader）与 `MA`（Manager）为**引擎/组织层节点**，不属本团队角色集——`MA` 由引擎包 `presets/punky-preset/references/manager.md` 定义（Leader 直属、团队无关、由 Leader 以 continuable subagent 拉起）；任务层/执行层/审计层三个 subgraph 内的 7 个节点才是本团队角色（2 + 3 + 2 = 7）。
+> **节点归属**：DAG 中 `L`（Leader）与 `MA`（Manager）为**引擎/组织层节点**，不属本团队角色集——`MA` 为引擎层角色（Leader 直属、团队无关、由 Leader 以 continuable subagent 拉起）；任务层/执行层/审计层三个 subgraph 内的 7 个节点才是本团队角色（2 + 3 + 2 = 7）。
 
 > 「池」（Coder 池 / Tester 池）：**仅 Agent-team 方案使用；subagent 方案不用**——「池」是声明面（可多实例并行），引擎无校验，不承载分配语义。
 
@@ -55,9 +55,9 @@ graph TD
 | ⑨ | 复盘沉淀 | Doc-Manager | retrospective-report.md（audit/）→ 记忆库 |
 | ⑩ | 回馈循环 | Doc-Manager → Coordinator | 复盘知识 → 下一子模块 |
 
-> 注（**exec 形态，D-1**）：⑤ 编码、⑥a 套件编写、⑥b 执行**同属 `exec-work` 步且同 wave 并行**——该步内 coder 与 tester 两条 lane 的 **deps 均为空 ⇒ 互不依赖**，tester 的 consume 指向 **plan 产物**；⑦ 落在**独立 `exec-review` 步**：reviewer **独立跑测试**（自带复跑，不依赖 tester 的测试结论）+ 对抗审查，产物向下游 **audit lane** 汇总。
-> **⑥d 派发套件（2026-09-16）**：C 档派发**唯一通道** = `lane_dispatch`（发一次性句柄 + 引擎自派 + **按次收窄成员工具面** + **唯一写路径**登记 `member.dispatch`）；把返回的 `firstLine` 写进子代理任务包首行。成员侧通信走 `swarm_report`（→Leader）/`swarm_cc`（→Manager），**不再散落用通用通信工具**。C 档裸派在 `config.dispatch.gate='enforce'` 时拒 `GATE_SUBAGENT_OUTSIDE_LANES`（缺省 `warn` 只留痕，防自锁）；**B 档单步子代理不受限**。
-> **⑥c 审计时点（2026-09-15 用户裁决 · 完成即审）**：任一 exec lane `merged` 后**立即**为其开 audit lane（可多条并行），**不等**同批其他 lane 收口、也不等其他并行批结束。单 lane 审计（产出 `audit/<lane>-acceptance.md`）与跨 lane 聚合（`gap-list` 对账 + 全量回归 + 消重标冲突）**分属两层职责**——后者是 Leader 终门禁，不得成为前者延期的理由。已完结批的补审可另开审计批（用 plan + exec 占位产物满足 audit 契约）。
+> 注（**exec 形态**）：⑤ 编码、⑥a 套件编写、⑥b 执行**同属 `exec-work` 步且同 wave 并行**——该步内 coder 与 tester 两条 lane 的 **deps 均为空 ⇒ 互不依赖**，tester 的 consume 指向 **plan 产物**；⑦ 落在**独立 `exec-review` 步**：reviewer **独立跑测试**（自带复跑，不依赖 tester 的测试结论）+ 对抗审查，产物向下游 **audit lane** 汇总。
+> **⑥d 派发套件**：C 档派发**唯一通道** = `lane_dispatch`（发一次性句柄 + 引擎自派 + **按次收窄成员工具面** + **唯一写路径**登记 `member.dispatch`）；把返回的 `firstLine` 写进子代理任务包首行。成员侧通信走 `swarm_report`（→Leader）/`swarm_cc`（→Manager），**不再散落用通用通信工具**。C 档裸派在 `config.dispatch.gate='enforce'` 时拒 `GATE_SUBAGENT_OUTSIDE_LANES`（缺省 `warn` 只留痕，防自锁）；**B 档单步子代理不受限**。
+> **⑥c 审计时点（完成即审）**：任一 exec lane `merged` 后**立即**为其开 audit lane（可多条并行），**不等**同批其他 lane 收口、也不等其他并行批结束。单 lane 审计（产出 `audit/<lane>-acceptance.md`）与跨 lane 聚合（`gap-list` 对账 + 全量回归 + 消重标冲突）**分属两层职责**——后者是 Leader 终门禁，不得成为前者延期的理由。已完结批的补审可另开审计批（用 plan + exec 占位产物满足 audit 契约）。
 
 **装配裁剪（普通 C 批）**：上表为**全装配蓝图**，适用于 **exec 层 lane 数≥3 的三层批**（建批须传 `assembly`；`managerPlan` **缺省 `raise`**——须 Manager 的批在派发首个 exec lane 前拉起并 `batch_phase` 登记，未登记即拒派；**需 Leader 直驱时显式声明 `managerPlan:'leader-direct'`**）/ 复杂批（完整启用 ② Coordinator、④ Manager 指挥——Manager 为**引擎层角色**，非本团队角色集成员）。普通 C 批（批内 exec 层 lane 数<3）可裁剪为 plan（细拆分**按需声明**——由建批 `tasks` 面声明任务树，未声明即不产出）→ exec（`exec-work` 并行段 → `exec-review` 审查段）→ audit（audit 承接 supervisor+reviewer 审核职能为默认语义，双角色为显式选项），Manager 职责由 Leader 代行并留痕「本批由 Leader 直驱」。角色 DAG 图为全装配形态示意（引擎/组织层节点 L/MA 与团队 7 角色分层标注），普通 C 批按本注记执行。
 
@@ -82,7 +82,7 @@ wave4: [audit-pair / accept：验收 + 对账]
 
 > 引擎只校验存在性 + Plan 契约结构底线（spec 必含 \`## 验收标准\`/\`## 约束\`；`task-tree.json` **声明了**则须合法 JSON——**按需声明**：需要任务树的批次由建批 `tasks` 面声明，未声明即不参与校验）；四件套内部结构见 references/templates/。
 
-### 模板 ↔ 产物映射表（P2-17 收敛：6 模板（5 md + 1 json 数据模板）指名引用）
+### 模板 ↔ 产物映射表（6 模板指名引用）
 
 > references/templates/ 6 模板逐一映射：模板 → 产出物 → 产物类型（artifact_types 注册表）→ layer/目录 → 产出角色 → consume 归属。call-chain-matrix / endpoint-behavior 为 **spec.md 内部章节模板**（非独立产物），由 Designer 四件套组装时填充；gap-list.json 为 **audit 对账数据模板**（非独立文件产物），由 Supervisor 对账时按 schema 落盘。
 
@@ -108,7 +108,7 @@ wave4: [audit-pair / accept：验收 + 对账]
 
 ## 五、职责分工要点
 
-- **Manager（引擎层角色，非本团队角色集）**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 mailbox_send；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；定义见引擎包 `presets/punky-preset/references/manager.md`；
+- **Manager（引擎层角色，非本团队角色集）**：第一对接点；收发消息（mailbox）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 mailbox_send；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；
 - **Leader**：人工粗拆（决策包 + 模块清单），不充当 worker；
 - **Coordinator**：细拆（API 粒度）+ 代码摸底（codebase-survey.md）；
 - **Designer**：四件套（执行层全部规范，模板见 references/templates/）；

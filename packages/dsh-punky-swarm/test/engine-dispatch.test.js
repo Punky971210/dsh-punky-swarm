@@ -614,7 +614,7 @@ test('RO-11 L-AC-3/L-AC-4：十件 role 交付要求段零路径（j1..j4）＋ 
   assert.deepEqual(agg, { j1: 0, j2: 0, j3: 0, j4: 0, j5: 0 }, 'R-2a/R-2b：段内路径噪声与空反引号合计须为 0');
 });
 
-test('RO-12 L-AC-5/L-AC-6：三要素齐备（形态 ≥18 ＋ must_contain 43/43 ＋ 规格指向 10/10）＋ skills 16/16', () => {
+test('RO-12 L-AC-5/L-AC-6：三要素齐备（形态 ≥18 ＋ must_contain 43/43 ＋ 规格指向 10/10）＋ skills 12/12', () => {
   let formLines = 0, specLines = 0, mustTotal = 0, mustHit = 0, skillTotal = 0, skillHit = 0;
   for (const id of ROLE_IDS) {
     const d = resolveRoleRef(id);
@@ -632,7 +632,7 @@ test('RO-12 L-AC-5/L-AC-6：三要素齐备（形态 ≥18 ＋ must_contain 43/4
   assert.equal(mustTotal, 43, 'R-3(b) 分母：10 件 must_contain 合计 43 条');
   assert.equal(mustHit, mustTotal, 'R-3(b)：必含结构逐条命中 ' + mustHit + '/' + mustTotal);
   assert.equal(specLines, 10, 'R-3(c)：规格指向行 10/10（每件恰 1 行）');
-  assert.equal(skillTotal, 16, 'R-4a 分母：10 件 skills 合计 16 条');
+  assert.equal(skillTotal, 12, 'R-4a 分母：10 件 skills 合计 12 条');
   assert.equal(skillHit, skillTotal, 'R-4a：skills 逐条命中 ' + skillHit + '/' + skillTotal);
 });
 

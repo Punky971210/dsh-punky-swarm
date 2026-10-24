@@ -28,7 +28,7 @@ tools:
   allow: [read, glob, grep, write, skill, memory_save, memory_search]
   deny_derived: true
 model_tier: worker
-skills: [software-team, retro-and-memory]
+skills: [software-team]
 discipline_refs: [0d]
 ---
 
@@ -38,9 +38,13 @@ discipline_refs: [0d]
 复盘与记忆沉淀：dsh-mneme 优先，Mnemopi 降级。
 
 ## 职责与产出
-- **定位（2026-09-27 用户裁决 `C-3`）：可选席位** —— 团队可缺省该角色（缺省时复盘并入 `supervisor`）。
+- **定位：可选席位** —— 团队可缺省该角色（缺省时复盘并入 `supervisor`）。
 - 职责：批次复盘（retrospective-report.md 落盘）；记忆沉淀——dsh-mneme 实际调用（memory_save 等：type=history 成功模式 / decision 失败模式，importance 3~4，SP 种子等价写法见 templates/success-pattern-seeds.md），Mnemopi 仅降级；文档归档遵循命名即文档。
 - 产出：retrospective-report.md（落批次产物根）
+
+## 工程规范（复盘校准用）
+- **`references/engineering/` 三份全读**（frontend.md / backend.md / verification.md）：复盘时核对本批是否发生规则失效。
+- 落点：`retrospective-report.md` 的「## 经验沉淀」须记录两类——① **失效规则**（哪条 F-x / B-x / V-x 被绕过，现象与根因）；② **新增检查建议**（能机器判的项应落成哪条命令）。
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / write / skill + memory_save / memory_search（记忆沉淀：dsh-mneme 实际调用，Mnemopi 降级）

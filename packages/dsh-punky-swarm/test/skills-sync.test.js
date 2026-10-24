@@ -246,7 +246,7 @@ test('skills-7 AC-H1-4 live 多出文件 ⇒ missing-in-repo + exit 1 + 点名�
 // ── 8. 整 skill 目录缺失（真缺口，与「环境未部署」区分） ──────────────────
 test('skills-8 整个 skill 目录在 live 侧缺失 ⇒ missing-in-live（live 根存在 ⇒ 判红）', () => {
   withShadow((s) => {
-    const skill = 'retro-and-memory';
+    const skill = 'design-team';
     fs.rmSync(path.join(s.shadow, skill), { recursive: true, force: true });
     const r = runShadow(s);
     assert.equal(r.status, 1, 'live 根存在而 skill 目录缺失是真缺口，必须红');

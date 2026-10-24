@@ -21,7 +21,7 @@
 |---|---|---|
 | ① **Plugin** (core) | `lib/**` + **two rows** in `cordis.patch.yml` | the **engine row** `dsh-punky-swarm` (governance tools + panel) and the **preset-registration row** `dsh-agent-preset-punky` (since 0.1.7 a preset **must** be registered by a plugin row; the preset directory is no longer scanned) |
 | ② **Mode & guidance** (core) | **`punky-preset`** registered through `@deepseek-ai/dsh-agent-preset` | `references/discipline.md` / `references/manager.md` are **idempotently synced** by `syncAssets()` at startup into `<home>/.dsh/.agent-presets/punky-preset/` |
-| ③ **Team skill pointers** (extra) | the **8 directories** under `skills/` | `acceptance-gate` / `design-team` / `engine-team` / `research-team` / `retro-and-memory` / `review-execution` / `software-team` / `writing-team` ⇒ synced to `<home>/.agents/skills/<name>/` |
+| ③ **Team skill pointers** (extra) | the **5 directories** under `skills/` | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ synced to `<home>/.agents/skills/<name>/` |
 
 ---
 

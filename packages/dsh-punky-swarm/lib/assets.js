@@ -43,14 +43,9 @@ const DEFAULT_ASSETS = [
   //   与 `asset-manifest.json` **双侧同删**（两表条目 10 → 9，两处必须一致）。
   //   ⇒ 该 rel **不再作为资产真源列出**（本段属**否定式退役登记**，不是现役指针）。
   { rel: 'skills/software-team', target: { root: 'skill', subpath: 'software-team' } },
-  // P1（2026-09-17）：engine-team 技能文档随包发布 + 同步登记（与 asset-manifest.json 同批同形，两处必须一致）。
-  { rel: 'skills/engine-team', target: { root: 'skill', subpath: 'engine-team' } },
   { rel: 'skills/design-team', target: { root: 'skill', subpath: 'design-team' } },
   // 退役（2026-09-17）：原「团队装配资产说明」技能条目随该技能目录**整体退役**删除（清单条目 11 → 10）——
   //   其内容已并入 `skills/software-team/SKILL.md` 的「装配资产（team-asset）说明与用途」章节。
-  { rel: 'skills/review-execution', target: { root: 'skill', subpath: 'review-execution' } },
-  { rel: 'skills/acceptance-gate', target: { root: 'skill', subpath: 'acceptance-gate' } },
-  { rel: 'skills/retro-and-memory', target: { root: 'skill', subpath: 'retro-and-memory' } },
   { rel: 'skills/research-team', target: { root: 'skill', subpath: 'research-team' } },
   { rel: 'skills/writing-team', target: { root: 'skill', subpath: 'writing-team' } },
   // 【2026-10-23 · 批 punky-logfix-20261023/Q-24】`skills/video-team` 源树在仓却漏登记 ⇒ 用户机整支技能不可用（双表同形漏项）。

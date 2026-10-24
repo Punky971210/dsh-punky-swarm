@@ -32,7 +32,7 @@ tools:
   allow: [read, glob, grep, write, web_search, skill]
   deny_derived: true
 model_tier: writing
-skills: [writing-team, acceptance-gate, event-authenticity-check]
+skills: [writing-team, event-authenticity-check]
 discipline_refs: [0k, 12]
 ---
 

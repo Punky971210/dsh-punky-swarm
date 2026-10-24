@@ -38,15 +38,14 @@ export const DEFAULT_ASSEMBLY = {
       skills: {
         coder: ['test-driven-development', 'codebase-design', 'receiving-code-review', 'requesting-code-review'],
         tester: ['verification-before-completion', 'systematic-debugging'],
-        reviewer: ['review-execution'],
+        reviewer: ['code-review'],
       },
     },
     audit: {
       roles: ['supervisor', 'doc-manager'],
       skills: {
-        supervisor: ['acceptance-gate', 'verification-before-completion'],
-        'doc-manager': ['doc-generator', 'retro-and-memory'],
-        reviewer: ['review-execution'],
+        supervisor: ['verification-before-completion'],
+        'doc-manager': ['doc-generator'],
       },
     },
   },

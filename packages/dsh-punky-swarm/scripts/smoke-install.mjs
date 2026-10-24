@@ -82,8 +82,7 @@ const REAL_HOME = os.userInfo().homedir;
 const REAL_DSH_HOME = path.join(REAL_HOME, '.dsh');
 
 const SKILL_NAMES = [
-  'acceptance-gate', 'design-team', 'engine-team', 'research-team',
-  'retro-and-memory', 'review-execution', 'software-team', 'writing-team',
+  'design-team', 'research-team', 'software-team', 'writing-team',
 ];
 const TEAM_PROFILE_PKG = '@deepseek-ai/dsh-experimental-agent-team-profile';
 

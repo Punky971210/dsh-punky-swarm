@@ -65,7 +65,7 @@ Leader ──batch_phase(complete)──▶ 批相位终态
 
 **适用信号**：做视频、场次制作、分镜、字幕、配音、动效、素材合成 —— **凡是"把一个片子做出来"的活**。
 
-**不适用**：改治理内核（走 engine-team）｜写软件（走 software-team）｜出设计稿/视觉（走 design-team）｜做调研（走 research-team）。
+**不适用**：改治理引擎内核（不在本团队职责内）｜写软件（走 software-team）｜出设计稿/视觉（走 design-team）｜做调研（走 research-team）。
 
 ### 能力层（按 `Q-V2` 全选 · 11 项）
 

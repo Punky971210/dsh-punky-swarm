@@ -32,7 +32,7 @@ tools:
   allow: [read, glob, grep, write, skill]
   deny_derived: true
 model_tier: writing
-skills: [writing-team, review-execution, acceptance-gate]
+skills: [writing-team]
 discipline_refs: [0k, 12]
 ---
 

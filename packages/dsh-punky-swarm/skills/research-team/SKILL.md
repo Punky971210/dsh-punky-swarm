@@ -9,7 +9,7 @@ description: |
   本技能只写用途、职责与纪律（不承载、也不指向装配数据）。
   能力层指向本机既有调研技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）：
   spec-writing / decision-mapping / tech-benchmark-planning / ara-compiler /
-  ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer / acceptance-gate。
+  ara-research-manager / citation-evaluator / arxiv-translator / ara-rigor-reviewer。
   当需要确定调研团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按调研链路产出可核查的调研产物时加载本技能。
 version: "1.0.0"

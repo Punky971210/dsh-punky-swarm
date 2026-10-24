@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   preset 面②：同 manifest 的 `dependencies` 与 `dsh.profile.bundles` **都含**上游聚合包
 //                `@deepseek-ai/dsh-experimental-agent-team-profile`；且指引正档
 //                `<home>/.dsh/.agent-presets/punky-preset/preset.yml` 存在。
-//   skills 面③：`<home>/.agents/skills/<8 名>/SKILL.md` **八件全在**，且
+//   skills 面③：`<home>/.agents/skills/<各名>/SKILL.md` **全部在场**，且
 //                `<home>/.dsh/.agent-presets/punky-preset/references/` **非空**。
 //
 // 只读纪律（D-4 污染红线 · I-6(a)）：
@@ -51,10 +51,9 @@ import { syncAssets } from '../lib/assets.js';
 
 const PKG_ROOT = fileURLToPath(new URL('../', import.meta.url));
 
-/** 八个团队技能指针目录（与判据源 §概述 三面映射 ③ 逐字一致）。 */
+/** 团队技能指针目录（与判据源 §概述 三面映射 ③ 逐字一致）。 */
 const SKILL_NAMES = [
-  'acceptance-gate', 'design-team', 'engine-team', 'research-team',
-  'retro-and-memory', 'review-execution', 'software-team', 'writing-team',
+  'design-team', 'research-team', 'software-team', 'writing-team',
 ];
 
 /** 上游聚合包名（面② 的载体；其 dependencies 自动带出另三件团队包，见取证④）。 */
@@ -121,7 +120,7 @@ function faceOfPresetFiles(home, label) {
   return { ok: gaps.length === 0, gaps, presetDir, presetYml };
 }
 
-/** 面③：八个技能指针 + `references/` 非空。 */
+/** 面③：技能指针 + `references/` 非空。 */
 function faceOfSkills(home) {
   const gaps = [];
   const skillsRoot = path.join(home, '.agents', 'skills');

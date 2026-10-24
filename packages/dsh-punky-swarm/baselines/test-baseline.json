@@ -131,7 +131,7 @@
     "test/assembly-schema.test.js": {
       "asserts": 69,
       "blankLines": 38,
-      "lines": 362,
+      "lines": 361,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -139,7 +139,7 @@
     "test/assets.test.js": {
       "asserts": 43,
       "blankLines": 27,
-      "lines": 299,
+      "lines": 288,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -907,7 +907,7 @@
     "test/install-selfcheck.test.js": {
       "asserts": 23,
       "blankLines": 19,
-      "lines": 186,
+      "lines": 185,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -1304,14 +1304,6 @@
       "tests": 1,
       "todos": 0
     },
-    "test/skill-recommend-semantics.test.js": {
-      "asserts": 3,
-      "blankLines": 17,
-      "lines": 119,
-      "tautologies": 0,
-      "tests": 1,
-      "todos": 0
-    },
     "test/skills-sync.test.js": {
       "asserts": 66,
       "blankLines": 31,
@@ -1593,7 +1585,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-23T18:08:33Z",
+  "generatedAt": "2026-10-24T03:31:29Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1604,15 +1596,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-housekeeping-20261023 收口：H-1 新增 skills-sync 用例 / H-3 判据放宽 / H-4 新增 housekeeping-h4 用例（含旧 guard 710 行删除）",
+  "reason": "RO-12 skills 分母随角色手册删除同步为 12；assets.test.js 与 assembly-schema.test.js 随资产面调整",
   "schema": 1,
   "totals": {
-    "asserts": 10308,
-    "blankLines": 5358,
-    "files": 199,
-    "lines": 57014,
+    "asserts": 10305,
+    "blankLines": 5341,
+    "files": 198,
+    "lines": 56882,
     "tautologies": 2,
-    "tests": 2082,
+    "tests": 2081,
     "todos": 4
   }
 }

@@ -46,10 +46,9 @@ const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SELFCHECK = path.join(PKG, 'scripts', 'selfcheck-install.mjs');
 const REAL_HOME = os.userInfo().homedir;
 
-/** 八个团队技能指针目录（与判据源 §概述 三面映射 ③ 逐字一致）。 */
+/** 团队技能指针目录（与判据源 §概述 三面映射 ③ 逐字一致）。 */
 const SKILL_NAMES = [
-  'acceptance-gate', 'design-team', 'engine-team', 'research-team',
-  'retro-and-memory', 'review-execution', 'software-team', 'writing-team',
+  'design-team', 'research-team', 'software-team', 'writing-team',
 ];
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');

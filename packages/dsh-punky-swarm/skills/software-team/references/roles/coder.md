@@ -23,6 +23,7 @@ deliverables:
 acceptance_hints:
   - 每处改动可追溯到 spec 条目
   - 最小自检读数落盘（命令原文 + 通过与失败计数）
+  - 涉及前端 / 后端能力时按工程规范条目的 F-x / B-x 逐条对照（代码图谱类 MCP 只读，工具名以当前会话注册为准）
 
 tools:
   allow: [read, write, edit, glob, grep, pwsh, skill]
@@ -44,6 +45,11 @@ spec 驱动实现与最小自检；按 spec 改码，验证面交 Tester。
   - **交接**：全量回归、端到端矩阵、验收级验证归 Tester；
   - **自写脚本的用途**：自检脚本用于取自己的读数；验证职责由 Tester 承担，不叠加到 Coder。
 - 产物：`coder-<lane>.md`（实现说明 + **最小自检记录**；落批次产物根）
+
+## 工程规范（必读）
+- **`references/engineering/frontend.md` F-1..F-6**：归属优先于行数 / 保存三态基线 / 并发与重复提交 / 后台刷新不覆盖未保存输入 / 弹窗六项约定 / 复用既有能力（点名复用对象，禁口号）。
+- **`references/engineering/backend.md` B-1..B-6**：入口可多能力必须单一 / 权限不因入口放宽 / 共享能力唯一归属 / 分层单向依赖 / 异常体系 / 迁移≠移文件。
+- 落点：`coder-<lane>.md` 的「## 实现说明」逐条对照上述条目（引用 F-x / B-x 编号），缺对照视为实现说明不完整。
 
 ## 授权与工具面（注入用）
 - 可执行：read / write / edit / glob / grep / pwsh / skill

@@ -90,7 +90,7 @@
 - **现语义 = 可选自由标签（`string | null`）**：`wave_plan` 的 `team` **不传 / `null` / 空白 / 非字符串 ⇒ 无标签（归一为 `null`）**，批次**照常落盘**（**漏传不再是错误，也没有任何宿主 schema 拒收**）。**标签可自取、不要求已注册、不要求存在**，**仅作批次归类**。
 - **不解析、不校验、不参与装配**：标签**不参与**资产解析 / 装配 / `[skills=…]` 前缀 / `flows` / `roles` / 资产指纹，**不构成任何建批门禁**。「尽力解析 + `warnings` 留痕」的中间形态**已随之取消**——相关读端（`normalizeTeamLabel` / `resolveTeamAssetFace` / `teamAssetCandidates` / `assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady`）**已删除**，`lib/**` 零字面量。
 - **团队资产面 = 已退役（进退役锁）**：装载器 `lib/assembly/team-asset.js`、5 件 `presets/*/team-asset.yml`、`TEAM_ASSET_*` 码族、`teamsRoot` 参数与 `TEAM_ASSET_*` / `GATE_TEAMS_ROOT_*` / `TEAMS_ROOT_IGNORED` 码**已删净**，**全部进退役锁**（`test/retired-codes-lock.test.js`：`lib/**` 零字面量命中、**含注释**，防回生）；**5 件资产不留空壳**。
-- **选型（仅建议，非约束）**：可按**任务领域就近**自取语义化标签（软件改造 → `software-team`；引擎自身改造 → `engine-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`）——**`team` 不是资产查找键，选错 / 不选均零后果**。
+- **选型（仅建议，非约束）**：可按**任务领域就近**自取语义化标签（软件改造 → `software-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`）——**`team` 不是资产查找键，选错 / 不选均零后果**。
 - **历史（保留可读）**：旧口径把 `punky-preset`（**预设模式**资产）与 `generic`（已废除）列为**「严格禁止的两个值」**，并把 `team` 设为**必填且必须解析到资产**（旧标题尾注 = 「2026-09-26 订正：**必填，勿漏**」）——**该口径已作废**：两者今日只作普通自由标签。命名空间消歧仍是事实：`presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/`），**不是团队资产**。
 
 ## §0c 职责分工
@@ -201,7 +201,7 @@
 - **声明位已不存在**：`audit_contract` 原声明于团队资产 `flows.audit.audit_contract`（与同层 `contract` 分属不同键）；**资产装载器与 5 件资产已删净** ⇒ 该声明位**无载体**。
 - **声明驱动门已删净**：`GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_CONTRACT_EXEMPT` 判据**全部取自团队声明** ⇒ 声明面不存在后**恒不触发**（空转面，删 = 零行为变更，与 §0j 一 同口径）。
 - **现役判据面（引擎基线，一字未减）**：① **entry 期** —— audit lane 的 `consume` 须命中**判据源锚点**（`plan/` 前缀产物任一）；命中产物**正文须含裸标题 `## 验收标准`** ⇒ 仍拒派 `GATE_AUDIT_INPUT_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`；② **complete 期** —— audit 结论取值域按**引擎基线** `['pass','skip']`（legacy `flows.complete.require_audit_outcomes` 回落早已**完全清退**）。⇒ **判据源只能由建批 tasks 的 `consume`（Leader 侧）表达**，本节硬要求不变。
-- **历史（保留可读）**：旧 P2 面含四字段消费点（`criteria_from` 由 entry 期 glob 指名 / `consumes_required` 建批期层前缀覆盖 / `verdict` complete 门唯一真源 / `exempt`·`reason` 豁免载荷）与「fail-closed 防幽灵通过」立意——**随资产面整体退役**；`checklist_anchor` 更早已移除（自由文本**不可机器判定** ⇒ 归**技能手册/文档面** `acceptance-gate/SKILL.md §2.5`，不占引擎声明面）。
+- **历史（保留可读）**：旧 P2 面含四字段消费点（`criteria_from` 由 entry 期 glob 指名 / `consumes_required` 建批期层前缀覆盖 / `verdict` complete 门唯一真源 / `exempt`·`reason` 豁免载荷）与「fail-closed 防幽灵通过」立意——**随资产面整体退役**；`checklist_anchor` 更早已移除（自由文本**不可机器判定** ⇒ 归**技能手册/文档面**，不占引擎声明面）。
 
 **自检问句（audit lane 开跑前）**：① 判据来自哪份 plan 产物的哪几条验收标准？② 本轮做的是「逐条核对」还是「重新设计」？③ 能否给结论？若否：缺哪条证据、进 gap-list 哪个字段？
 
@@ -327,10 +327,10 @@
 
 - **audit 层 lane 完成后【不会】自动结算**：`auto-settle` 的第四处 skip 分支 `isAuditLayerLane` 明写"**职责转移，不是失败**"——**批保持 `running` 供 Leader 显式结算**。⇒ **audit 层 lane 须 Leader 显式 `member_status(review)` → `member_settle(merged)`**；**且结算前先 `handoff_submit` 到其下游**（audit 层 lane **也有下游**，同 plan/exec 规矩）。
   - **⚠ 分工铁律（Q3=A，2026-10-01 补，A11）**：**官方工具管「人」（成员生命周期：拉起 / 唤醒 / 打断）｜引擎 `member_*` 管「lane」（lane 状态与相位）** —— 两账本**并列、不互替**。**本条保留引擎结算口径**（lane 状态与相位 = **引擎真源**），**team 通道不豁免**。**互指**：团队层 `skills/software-team/SKILL.md` 的 team 面两处铁律（`:176` / `:199`）与本条**同源**；其原「team 方案**不走** `member_*` 收口」与「`member_settle` 不用于 team 批」两条**已删**（改写归 `exec-skills-team-face`，B1/B2）。**全表见 §0p 十四**。
-  - **⚠ 跨副本互指（D-7(d)，2026-10-01 补，R 侧对应串）**：**本分工口径与团队层 `skills/software-team/SKILL.md`（§七）及 `skills/engine-team/SKILL.md`（对应节）的同源条目互指** —— **同源、互指，勿单侧改**：**任一侧单独改写 ⇒ 跨副本口径分叉**。
-    - **三要素**：① **同源**（口径出处 = 本 `§0p 九`）② **互指**（R 侧点名两个 skill；skill 侧点名 `§0p 九`）③ **勿单侧改**（改任一侧须同批改另一侧）。
+  - **⚠ 跨副本互指（R 侧对应串）**：**本分工口径与团队层 `skills/software-team/SKILL.md`（§七）的同源条目互指** —— **同源、互指，勿单侧改**：**任一侧单独改写 ⇒ 跨副本口径分叉**。
+    - **三要素**：① **同源**（口径出处 = 本 `§0p 九`）② **互指**（R 侧点名该 skill；skill 侧点名 `§0p 九`）③ **勿单侧改**（改任一侧须同批改另一侧）。
     - **反例**：只在 `SKILL.md` 写「源头 = `discipline.md` 的 §0p 九」、而**本侧不写对应串** ⇒ **单向引用** —— 读指引者**看不到该口径约束着两个 skill**，且**删改任一侧都无人察觉** ⇒ **跨副本口径仍会分叉**（本次 S 面已实测该风险：两 skill 侧已写，R 侧此前缺失）。
-    - **正解**：**两侧各写一条**（本条即 R 侧对应串），并**互报名**；判定 = 三处（本 `§0p 九` ＋ 两 skill）**均含「同源 / 互指 / 勿单侧改」三要素**（**肯定式**：逐处各命中 ≥1 ⇒ 互指成立）。
+    - **正解**：**两侧各写一条**（本条即 R 侧对应串），并**互报名**；判定 = 两处（本 `§0p 九` ＋ 该 skill）**均含「同源 / 互指 / 勿单侧改」三要素**（**肯定式**：逐处各命中 ≥1 ⇒ 互指成立）。
 - **进程恢复会把 in-flight lane 打回 `idle`**（事件 `system.recovered`）⇒ 走恢复路径 **`idle → running → review → merged`**（`idle` 是**空闲态**，不是崩溃态）。
 - **例行巡查用「四查」**（全部只读）：① `batch_status`（相位与 lanes）② `log_export`（**看 `auto.settle.*` 的 `reason`**——`already-settled` / `lane-terminal` / `phase-*` / `audit-explicit-settle-required` **语义不同**）③ 产物根 glob ④ **`lane_heartbeat` / `lane_longrun`（`beat:true` 可手动一拍）——看 `stalled` / `candidate` / `unconsumed`**。
 
@@ -391,7 +391,7 @@
 - **选型归 Leader 自判**（C2：agent-team 包启用时**优先** agent-team；两族工具当前**共存**，非互斥）。
 - **Q-1 落点**（见本节 §三）：事件流优先｜mailbox 搁置｜`send_message` 视为**已开放的汇报通道**。
 - **团队装配口径（2026-09-27 裁决 ＋ 本批清尾）**：**`team-asset` 装配方案已整体退役（进退役锁）** ⇒ **只按成员槽位 + 指引（团队层 skill ／ 本指引）装配**；**不存在「校验资产合规」这一步**（资产面已删净，无对象可校验、亦无 `warnings` 出口）。
-- **`team` 参数现为可选自由标签**（2026-09-27 裁决；详见 **§0b 四** 与 **§0o**）：**不传 / 空白 ⇒ 无标签，批次照常落盘**（旧文「仍必填」**已作废**）；**不解析、不校验、不拒建批，不参与** flows / `criteria_from` / snapshot / `roles` 任何解析。**选型（仅建议）**：按任务领域就近自取语义化标签（`software-team` / `engine-team` / `design-team` / `research-team` / `writing-team`）——**选错 / 不选均零后果**。
+- **`team` 参数现为可选自由标签**（2026-09-27 裁决；详见 **§0b 四** 与 **§0o**）：**不传 / 空白 ⇒ 无标签，批次照常落盘**（旧文「仍必填」**已作废**）；**不解析、不校验、不拒建批，不参与** flows / `criteria_from` / snapshot / `roles` 任何解析。**选型（仅建议）**：按任务领域就近自取语义化标签（`software-team` / `design-team` / `research-team` / `writing-team`）——**选错 / 不选均零后果**。
 
 ### 十四、**D 档（引擎指引档位：team 方案 · 与 C 档隔离）**（2026-10-01 用户 Q5=自定义 裁决）
 

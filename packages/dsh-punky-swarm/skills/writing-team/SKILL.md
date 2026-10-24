@@ -12,8 +12,7 @@ description: |
   本技能只写用途、职责与纪律（不承载、也不指向装配数据）。
   能力层指向本机既有写作技能池（加载名 = 宿主 SKILL.md frontmatter 的 name）：
   spec-writing / writing-trio / wechat-writing-style / humanizer / lieflat-less-ai-tone /
-  revision-patterns / baoyu-markdown-to-html / acceptance-gate / review-execution /
-  event-authenticity-check。
+  revision-patterns / baoyu-markdown-to-html / event-authenticity-check。
   当需要确定写作团队某角色"是谁/能做什么/不能做什么/成功标准/输出格式"，
   或需要按写作链路产出可交付稿件（成稿 / 改稿 / 排版交付）时加载本技能。
 version: "1.1.0"
@@ -139,7 +138,7 @@ triggers:
 |---|---|
 | plan 层产规格 | `writing-planner` 加载 `spec-writing` / `writing-trio` / `wechat-writing-style`（定规格与结构骨架） |
 | exec 层按规格写作 | `drafter` 加载 `writing-trio` / `wechat-writing-style`（成稿）；`polisher` 加载 `humanizer` / `lieflat-less-ai-tone` / `revision-patterns` / `writing-trio`（修订） |
-| audit 层按验收信号核对 | `writing-auditor` 加载 `acceptance-gate` / `review-execution` / `humanizer`（判据对照 + 对抗式审查 + AI 痕清单命中） |
+| audit 层按验收信号核对 | `writing-auditor` 加载 `humanizer`（判据对照 + AI 痕清单命中） |
 | 最后交付（**Leader 执行**） | `publisher` 能力层：`baoyu-markdown-to-html`（Markdown → 平台 HTML 排版）；**不占团队链步** |
 
 > 触发词见 frontmatter `triggers`：说「写作 / 成稿 / 改稿 / 去 AI 味 / 排版交付」等即命中本团队装配面。

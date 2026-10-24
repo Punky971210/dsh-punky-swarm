@@ -25,6 +25,7 @@ deliverables:
 acceptance_hints:
   - codebase-survey 声明消费的图谱探针结论（约束清单 / 依赖与风险 / 支持矩阵）
   - 每个任务带依赖边与验收入口
+  - 每项能力点名唯一归属与可复用面（代码图谱类 MCP 只读，或全仓检索；工具名以当前会话注册为准）
 
 tools:
   allow: [read, glob, grep, pwsh, skill, write]
@@ -45,10 +46,16 @@ API 粒度细拆与代码摸底；产出细拆供编排，不参与实现。
 - 职责：对粗拆模块做 API 粒度细拆（`task-tree.json`，**按需声明才产出**）；代码摸底（读源码/配置，标注依赖与风险）；为每任务标注依赖 DAG 与验收入口。
 
 ## 代码图谱履职（强制，exec 层 lane≥3 的三层批装配声明语义）
-- 细拆前先经 `codegraph`（codegraph_explore）或 `code-review-graph` 的索引 建立/更新代码索引（索引状态核对），以图谱为据取代裸读；
-- 代码摸底以 代码图谱/检索为据（get_architecture/search_code 等），产出 codebase-survey.md 须声明消费 图谱探针结论（约束清单/依赖与风险/支持矩阵）；
-- 可执行追加：代码图谱 MCP（`codegraph_explore` / `codegraph_search` / `trace_path` 等只读）（index_repository/index_status/get_architecture/search_code/query_graph/trace_path）
+- 细拆前先经**代码图谱类 MCP（只读）**建立/更新代码索引（先核索引状态），以图谱为据取代裸读；
+- 代码摸底以**代码图谱类 MCP（只读）**检索为据，产出 codebase-survey.md 须声明消费的图谱探针结论（约束清单/依赖与风险/支持矩阵）；
+- **工具名一律不在此固化**：MCP 工具名随宿主 / 插件版本漂移，写死即失效 ⇒ 用前以**当前会话实际注册的工具**为准。本团队对 MCP 只约定两条——**类别（代码图谱类）+ 只读**。
+- ⚠ **不要往 `tools.allow` 里写 MCP 工具名或 `mcp` 这类类别名**：引擎按「词汇表 \ allow」**反推 deny**（`lib/engine/dispatch.js#deriveDenyTools`），写进去反而会把该工具从**其他**角色的工具面里禁掉；MCP 面**默认不被收窄**，不写即正确。
 - 产出：codebase-survey.md + task-tree.json（均落批次产物根；**按需声明**：需要任务树的批次由建批 `tasks` 面声明，未声明即不产出）
+
+## 工程规范（必读）
+- **`references/engineering/backend.md` B-1 / B-3 / B-4**：入口可多但能力唯一 / 共享能力唯一归属 / 分层与依赖方向。
+- **`references/engineering/frontend.md` F-1 / F-6**：状态-动作-展示归属 / 复用既有能力。
+- 落点：`codebase-survey.md` 的「## 约束清单」须点名**每项能力的现有归属**与**可复用面**（指到具体模块/方法），作为 designer 出包的约束依据。
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill / write

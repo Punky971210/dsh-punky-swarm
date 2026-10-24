@@ -23,21 +23,19 @@ triggers:
 # software-team · 软件工程团队模版
 
 > **定位**：本文件是**模版**（引擎的**下游指引**），**不作为引擎组件**使用。
-> **依据**：2026-09-26 用户裁决 —— 团队内容只是模版，相当于引擎的下游指引，不再作为组件使用，相关测试不再检验。
-> **角色职责依据**：**2026-09-27 用户裁决**（`C-1` reviewer 合并职责 / `C-2` designer 四件套+任务包并列 / `C-3` docManager 可选 / `E-1` 弃用旧代码图谱工具、改用 `codegraph` 等 MCP）—— 角色职责**以用户版为准**。
-> **⚠ `team-asset.yml` 已全面弃用**（2026-09-27 用户裁决）：本 skill **不再依赖**该资产；同目录若仍存在该文件，**属待清理面**。
+> **不依赖 `team-asset.yml`**：同目录若仍存在该文件，属待清理面。
 
 ---
 
-## 〇、主 Agent 拉起清单（照做 · 2026-10-01 新增）
+## 〇、主 Agent 拉起清单（照做）
 
 > 本清单 = **主 Agent（Leader）拉起本团队时按序执行**的动作序列；与 §四「每层的动作序」互补 —— **本节讲发起与收口，§四讲各层内的活**。
 
-1. **查 team-skill**：加载本 skill（`software-team`），据其**角色 / 层 / 产物契约**（§二）定分工。
+1. **加载本 skill**（`software-team`），据其**角色 / 层 / 产物契约**（§二）定分工。
 2. **定 roster**：按层定名册 —— plan（`coordinator-*` / `designer-*`）· exec（`coder-*` / `tester-*` / `reviewer-*`）· audit（`supervisor-*` / 可选 `docManager-*`）；**不限席**；席位不足时**合规复用**（复用须登记 + lane 记录注明实际执行者，见 §二 池化条目）。
 3. **逐个拉起席位（先取件 → 再拼装）**：**先调 `role_guide({ role })` 取件**，把返回的 `guide` 三段（`## 你的职责` / `## 你被授权决定` / `## 交付要求`）**原样拼进 `prompt`**（即 `spawn_teammate` 的 `prompt`）—— 引擎侧**同源单点**，**禁手抄**；随后 `spawn_teammate({ name, description, prompt })` —— **逐个**建 **durable 席位**（**不是**一次性 subagent）。
-4. **人工直派同样先取件**：不经 `spawn_teammate`、由 Leader **自写任务包**时（`lane_dispatch` 取回 `firstLine` 后自写首行），**同样先调 `role_guide({ role })` 取件**，把三段**落进任务包**正文，**禁手抄** —— 两条派发路径共用同一取件口，产出与 C-1（引擎自派）**逐字同源**。
-5. **写黑板 `wave_plan`**：复用既有 `batch` / `wave_plan`（**不新黑板**）；`tasks[].roster` 写成员名作**声明**；难度档在**引擎层写 `D`**（team 通道档；引擎枚举 `A|B|C|D`——D 与 C **同属建批档、同受建批门禁**，历史以 `C` 声明者仍兼容）。
+4. **人工直派同样先取件**：不经 `spawn_teammate`、由 Leader **自写任务包**时（`lane_dispatch` 取回 `firstLine` 后自写首行），**同样先调 `role_guide({ role })` 取件**，把三段**落进任务包**正文，**禁手抄** —— 两条派发路径共用同一取件口，产出与引擎自派任务包**逐字同源**。
+5. **写黑板 `wave_plan`**：复用既有 `batch` / `wave_plan`（**不新黑板**）；`tasks[].roster` 写成员名作**声明**；难度档在**引擎层写 `D`**（team 通道档；引擎枚举 `A|B|C|D`——D 与 C **同属建批档、同受建批门禁**，既有以 `C` 声明的批次仍兼容）。
 6. **派活**：`send_message(target=<成员名>, message=…)` —— **派活与唤醒的唯一正式通道**。
 7. **入边交接**：上游出件后 `handoff_submit(from, to, artifacts, assertions)`（**成员自交**，Leader 可代交）⇒ 下游 `handoff_view` 报 `READY` 才开工。
 8. **lane 进度与终态**：`member_status`（进度）→ `member_status(review)` → **`member_settle(merged|failed|conflict|skipped)`**；**audit 席位必须显式 settle**（不 settle ⇒ 批永久挂 `running`）。
@@ -65,7 +63,7 @@ Leader ──batch_phase(complete)──▶ 批相位终态
 
 **适用信号**：新增/改造业务功能、修缺陷、重构、接第三方 SDK、写测试与工程化改造 —— **凡是"改变产品行为"的活**。
 
-**不适用**：改治理内核（走 engine-team）｜写文章/文档交付（走 writing-team）｜出设计稿/视觉（走 design-team）｜做调研（走 research-team）。
+**不适用**：改治理引擎内核（不在本团队职责内）｜写文章/文档交付（走 writing-team）｜出设计稿/视觉（走 design-team）｜做调研（走 research-team）。
 
 ---
 
@@ -104,7 +102,7 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 - **同类型可拉起多个成员**（如 `coder-1` / `coder-2` / `tester-1`）；
 - **Leader 按吞吐情况分配**：把不同任务包派给不同的同类型成员（**并行吞吐**）；
-- **`roster` 是声明，不是席位名**：`tasks[].roster` 写**成员名作声明**（引擎据此判定写权归属）；**不要求**与 `spawn_teammate` 的 `name` **逐字一致**（2026-10-01 用户裁决 Q4=C，原「逐字一致」铁律**已删**）；
+- **`roster` 是声明，不是席位名**：`tasks[].roster` 写**成员名作声明**（引擎据此判定写权归属）；**不要求**与 `spawn_teammate` 的 `name` **逐字一致**；
 - **席位不限**：同类型成员**按需拉起**（`coder-1…N` / `tester-1…N` / …），无固定席位数；
 - **席位不足时的合规复用**：复用须**登记**（落批次产物根，如 `exec/roster-deviation.md`）**并在 lane 记录中注明实际执行者**；**无登记不得复用**；
 - 管理面见 §七（**官方工具**）。
@@ -132,6 +130,41 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 ---
 
+## 三之二、工程规范面（**按角色与规则分配**）
+
+> **分工**：本文件 + `references/workflow.md` = **治理面**（谁在什么阶段交什么产物、过什么门禁）；`references/engineering/` = **工程面**（代码与验证要满足什么）。
+
+**真源分层（避免双源）**：
+
+| 层 | 承载 | 内容 |
+|---|---|---|
+| 宿主全局 | 环境 `AGENTS.md` | 机器/用户级规则（编码铁律、语言、风格） |
+| 项目级 | `references/constitution.md` **实例化后** | 技术栈、目录、命名、自定义约定、错误码表 |
+| 团队通用 | `references/engineering/` | 前端治理 / 后端治理 / 检查与验证细则 |
+
+⇒ **不新建独立 AGENTS 文件**：全局 AGENTS + 项目 constitution 已占真源位，再加一套 = 双源冲突。项目约定由 constitution 承载，团队通用细则由 engineering/ 承载。
+
+**角色 → 必读 → 落点**：
+
+| 角色 | 必读 | 产物落点 |
+|---|---|---|
+| `coordinator` | `backend.md` B-1/B-3/B-4 + `frontend.md` F-1/F-6 | `codebase-survey.md` 约束清单：点名能力**唯一归属**与**可复用面** |
+| `designer` | `frontend.md` 全部 + `backend.md` B-1..B-6 | spec 的「前端行为」「后端能力归属」「异常边界」章节 |
+| `coder` | `frontend.md` F-1..F-6 + `backend.md` 全部 | 实现说明：逐条对照 + 最小自检读数 |
+| `tester` | `verification.md` 全部 | 测试报告：**四态计数** + 代码状态锚定 |
+| `reviewer` | `frontend.md` + `backend.md` + `verification.md` | 审查清单 MUST/SHOULD/FYI，逐条给条目号（F-x / B-x / V-x） |
+| `supervisor` | `verification.md` V-5/V-6/V-7 | 验收报告：证据锚定与四态核对 |
+| `docManager` | 全部 | 复盘：规则失效点 + 新增检查建议 |
+
+**本团队不含**：独立 AGENTS 文件 · task-brief / finish-review · planning-with-files 三件套 · 强制 TDD（测试面走 spec 驱动 + `tester ∥ coder` 并行建套件）。
+
+**MCP 面纪律**：
+
+- **只列 MCP 类别，不写具体工具名**：工具名随宿主 / 插件版本漂移，写死即失效 ⇒ 指引里统一写「代码图谱类 MCP（只读）」，用前**以当前会话实际注册的工具为准**。
+- **不把 MCP 工具名写进 `tools.allow`**（也不写 `mcp` 这类类别名）：引擎按「词汇表 \ 该角色 allow」**反推 deny**（`lib/engine/dispatch.js#deriveDenyTools`，词汇表 = 全角色 allow 并集）⇒ 写进 allow 会让该名字进词汇表，反而把它从**其他**角色的工具面里禁掉。MCP 面**默认不被收窄**，**不写即正确**。
+
+---
+
 ## 四、每层的动作序（照做）
 
 ### plan · coordinator（摸底 + 拆线）
@@ -154,11 +187,11 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 1. **读批**：`batch_status({ batchId, session: '<批次归属 session 键>' })` —— **不带 `session` 会 `batch not found`**；
 2. **各自照包开工，互不等待**：coder 做实现，tester 写测试套件；
 3. **每完成一子步骤**即落 `exec/progress/NN-<slug>.md`（**禁止攒批**）；
-4. ⚠ **落盘只用 `write`/`edit`** —— 本机 `pwsh` 写盘会被 L3 护栏拒（`L3-W01`）；
+4. ⚠ **落盘只用 `write`/`edit`** —— 本机 `pwsh` 写盘会被护栏拒（报 L3 拒绝）；
 5. **自证**：每条结论配**原始回显**（不转述、不美化、**未验证就写「未验证」**）；
 6. `handoff_submit` ⇒ **双写回报**（见 §五）。
 
-### exec · reviewer（**跑测试 + 对抗审查**，2026-09-27 `C-1`）
+### exec · reviewer（**跑测试 + 对抗审查**）
 
 1. **等 coder 与 tester 都出件**（单个任务包的 code、test 完成产出后）；
 2. **① 跑测试**：**执行 `tester` 的测试套件**（真实环境），产出**测试报告**（命令原文 + 原始输出 + 通过/失败清单）；
@@ -195,7 +228,7 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 | # | 坑 | 真相 |
 |---|---|---|
 | 1 | **`batch not found`** | 成员是新会话 ⇒ 读批**必须传 `session: 'session-<uuid>'`**（裸 UUID、命名黑板形态**都不命中**） |
-| 2 | **越权探针「没反应」** | `handoff_submit` 的拒态**有固定门序**：**产物在场性 → R-2 覆盖保护 → 权限判定**。指向一条**已 `submitted`** 的入边会被 `GATE_HANDOFF_OVERWRITE_UNDECLARED` **遮蔽** ⇒ 测权限须避开前两步 |
+| 2 | **越权探针「没反应」** | `handoff_submit` 的拒态**有固定门序**：**产物在场性 → 覆盖保护 → 权限判定**。指向一条**已 `submitted`** 的入边会被 `GATE_HANDOFF_OVERWRITE_UNDECLARED` **遮蔽** ⇒ 测权限须避开前两步 |
 | 3 | **`log_export` 计数对不上** | **裸计数在并发席位下会被污染** ⇒ 零写入判据须取「**事件类型 + 记录在场性**」，**裸计数不构成证据** |
 | 4 | **`swarm_report` 显示 `unbound`** | **预期**（team 席位无 `member.dispatch` 绑定）⇒ 只要**带 `batchId`** 就照样落事件流 |
 | 5 | **`pwsh` 报 L3 拒绝** | 本机护栏禁 shell 写盘 ⇒ 一律走 `write`/`edit` |
@@ -205,11 +238,10 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 ## 七、team 成员的管理面（**官方工具**）
 
-> ⚠ **分工铁律（2026-10-01 用户裁决 Q3=A）：官方工具管「人」｜引擎 `member_*` 管「lane」。两本账并列，不互替。**
+> ⚠ **分工铁律：官方工具管「人」｜引擎 `member_*` 管「lane」。两本账并列，不互替。**
 > · **人（成员生命周期）** ⇒ **官方工具**：`spawn_teammate` 拉起 · `send_message` 派活/唤醒 · `list_agents` 查状态 · `wait_agent` 等动静 · `interrupt_agent` 打断当前轮。
 > · **lane（引擎真源）** ⇒ **`member_status` / `member_settle`**：登记 lane **进度**与**终态**（使 `batch_status` 的 lane 跃迁可见、使下游交接与 audit 结算的入边前提成立）；**批相位**由 `batch_phase` 推进。
 > **为什么必须两本账**：`member_*` 改的是**批次里 lane 的状态**（状态文件），**不触达成员的会话**；反之官方工具**只管人、不改 lane 状态**。⇒ 少一本账就会出现两种坏账：「成员在做、lane 无痕」或「lane 已结、成员还在跑」。
-> **口径源头**：本分工与 `discipline.md` 的 **§0p 九** 同源（**两侧互指**，勿单侧改）。
 
 **正确的成员管理面**：
 
@@ -230,23 +262,22 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 **⇒ 关于 `roster` 与 lane**：`wave_plan` 建批时 `tasks[].roster` 只作**声明**（引擎只做词法校验 + 写权归属判定）。
 
-**两条通道并列（勿混为一谈 · 2026-10-01 消歧 Q3=A）**：
+**两条通道并列（勿混为一谈）**：
 
 | 动作 | 用什么 | 要害 |
 |---|---|---|
 | **派活 / 唤醒 / 通知收工 / 追问** | **`send_message(target=<成员名>)`** | **真正把活交到成员手上**的是它；成员的**唯一真推送**通道（inactive 成员会被唤醒） |
 | **交接**（上游→下游，DAG 硬前提） | **`handoff_submit(from, to, artifacts, assertions)`** | **成员自交**（Leader 可代交）；下游 `handoff_view` 报 `READY` 才开工 |
 
-**⇒ 关于 lane 状态（2026-10-01 用户裁决 Q3=A 订正）**：**team 批两条 `member_*` 都用** ——
+**⇒ 关于 lane 状态**：**team 批两条 `member_*` 都用** ——
 
 - **`member_status`** 登记 lane **进度**（`pending` / `running` / `review` / `idle` 的跃迁在 `batch_status` 可见）；
 - **`member_settle`** 登记 lane **终态**（`merged` / `failed` / `conflict` / `skipped`）。
 
-**旧口径「`member_settle` 不用于 team 批」已废止**（内容冲突，不可两立）：聚合 audit lane 的成员完成后**不会自动结算**（引擎 `auto.settle.skipped` 的 `audit-explicit-settle-required`）⇒ **必须由 Leader 显式 `member_status(review)` → `member_settle(merged|conflict)`**，否则**批会永久挂在 `running`**。⇒ 省掉这一步 = **批收不了口**。
+**旧口径「`member_settle` 不用于 team 批」已废止**：聚合 audit lane 的成员完成后**不会自动结算**（引擎 `auto.settle.skipped` 的 `audit-explicit-settle-required`）⇒ **必须由 Leader 显式 `member_status(review)` → `member_settle(merged|conflict)`**，否则**批会永久挂在 `running`**。⇒ 省掉这一步 = **批收不了口**。
 
 **批相位**仍由 **`batch_phase`** 推进（`complete` 须先经 `running`）；**lane 终态与批相位是两本账，各管各的**（见 §七 开头的分工铁律）。
 
-> 口径源头：`discipline.md` 的 **§0p 九**（与本节**同源、互指**，勿单侧改）。
 
 ---
 

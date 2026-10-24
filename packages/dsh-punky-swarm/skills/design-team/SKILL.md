@@ -150,7 +150,7 @@ triggers:
 
 ## 边界
 
-- 本技能**不含**操作流程手册本体（用 spec-writing / interaction-design-principles / acceptance-gate / review-execution 等能力层）与运行时调度（用 dsh-punky-swarm 工具）。
+- 本技能**不含**操作流程手册本体（用 spec-writing / interaction-design-principles 等能力层）与运行时调度（用 dsh-punky-swarm 工具）。
 - 本技能**不承载**装配数据：装配面**已整体退役**（**进退役锁**）⇒ **无资产文件**；**现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 本指引**。
 - 本技能**不承载** Manager 通用定义（落点 `presets/punky-preset/references/manager.md`）。
 - 本技能**不复制** Layer B（`expert/`）任何文件，只写引用指针。

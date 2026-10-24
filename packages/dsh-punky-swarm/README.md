@@ -21,7 +21,7 @@
 |---|---|---|
 | ① **插件**（核心） | `lib/**` + `cordis.patch.yml` **两行** | **引擎行** `dsh-punky-swarm`（治理工具 + 面板）+ **preset 注册行** `dsh-agent-preset-punky`（0.1.7 起 preset **必须**由插件行注册，不再扫描预设目录） |
 | ② **模式与指引**（核心） | `@deepseek-ai/dsh-agent-preset` 注册的 **`punky-preset`（蟛蜞模式）** | `references/discipline.md` / `references/manager.md` 由启动期 `syncAssets()` **幂等同步**到 `<home>/.dsh/.agent-presets/punky-preset/` |
-| ③ **团队技能指针**（附加） | `skills/` **8 个目录** | `acceptance-gate` / `design-team` / `engine-team` / `research-team` / `retro-and-memory` / `review-execution` / `software-team` / `writing-team` ⇒ 同步落点 `<home>/.agents/skills/<name>/` |
+| ③ **团队技能指针**（附加） | `skills/` **5 个目录** | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ 同步落点 `<home>/.agents/skills/<name>/` |
 
 ---
 

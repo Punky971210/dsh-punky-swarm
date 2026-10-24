@@ -45,9 +45,8 @@ const SKILL_NAMES = new Set([
   'brainstorming', 'writing-plans', 'spec-writing',
   'test-driven-development', 'codebase-design', 'receiving-code-review', 'requesting-code-review',
   'verification-before-completion', 'systematic-debugging',
-  'review-execution',
-  'acceptance-gate',
-  'doc-generator', 'retro-and-memory',
+  'doc-generator',
+  'code-review',
   'report-blind-audit',
 ]);
 const catalog = { has: (name) => SKILL_NAMES.has(name) };
@@ -310,7 +309,7 @@ test('completeness view 3 (extension): blindReview on → roles + 6 templates OK
         roles: [...DEFAULT_ASSEMBLY.layers.audit.roles, ...BLIND_REVIEW_ROLES],
         skills: {
           ...DEFAULT_ASSEMBLY.layers.audit.skills,
-          'audit-panelist': ['report-blind-audit', 'review-execution'],
+          'audit-panelist': ['report-blind-audit', 'code-review'],
           'audit-aggregate': ['report-blind-audit'],
           'audit-critic': ['report-blind-audit'],
         },
