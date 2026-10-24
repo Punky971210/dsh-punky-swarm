@@ -58,6 +58,38 @@ function childEnv() {
   return env;
 }
 
+function runScriptJson(args) {
+  const r = spawnSync(process.execPath, [SCRIPT_REL, ...args, '--json'], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
+  let doc = null;
+  try { doc = JSON.parse(r.stdout); } catch { /* 交给调用方 assert 报 */ }
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', doc };
+}
+
+/** 基线（`bfb9b0c`）时 `skills/software-team` 的 **19 件定稿名单**
+ *  （`git ls-tree -r --name-only bfb9b0c -- ./skills/software-team` 原样摘录）。
+ *  它是**常量名单**（独立侧），与「磁盘在场性」比对 —— 而非「枚举 == 枚举」自证。 */
+const BASELINE_SKILLS_19 = [
+  'SKILL.md',
+  'references/constitution.md',
+  'references/engineering/backend.md',
+  'references/engineering/frontend.md',
+  'references/engineering/verification.md',
+  'references/roles/coder.md',
+  'references/roles/coordinator.md',
+  'references/roles/designer.md',
+  'references/roles/doc-manager.md',
+  'references/roles/reviewer.md',
+  'references/roles/supervisor.md',
+  'references/roles/tester.md',
+  'references/templates/call-chain-matrix-template.md',
+  'references/templates/endpoint-behavior-template.md',
+  'references/templates/gap-list.json',
+  'references/templates/leader-decision-pack.md',
+  'references/templates/plan-template.md',
+  'references/templates/success-pattern-seeds.md',
+  'references/workflow.md',
+];
+
 function gitPorcelain() {
   const r = spawnSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
   assert.equal(r.status, 0, 'git status 必须可用');
@@ -116,12 +148,23 @@ function speclangSources() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-1 能力层文件数 = 20（基线 19 ＋ 1）
+// AC-1 能力层集合在场：既有 19 件逐件在场 ＋ 新件在场 ＋ 下界棘轮
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-1 `skills/software-team` 常规文件数 = 20', () => {
-  // 失败条件：新细则未落（19）/ 落了别的多余件（>20 ⇒ 越界新增，须 Leader 裁）。
+test('AC-pack3-1 `skills/software-team` 集合在场：既有 19 件逐件在场 + `spec-contract.md` 在场 + 计数 ≥20', () => {
+  // 失败条件：既有 19 件任一件被删/改名（集合缺口）/ 新细则 `spec-contract.md` 不在场 /
+  //           文件总数 < 20（下界棘轮，防「删件换绿」）。
+  // 【本批替换（AD-01，e3 裁「改测试」）】原断言 `assert.equal(n, 20)`（20 = 基线 19 ＋ 新件 1）是
+  //   **批窗口算术**：向 `references/roles/` **两侧同加 1 件** ⇒ 引擎 `files=21`、`diff=0`、GREEN/exit 0
+  //   （e3 P-14 实测），而旧断言必红 ⇒ **合法演进即永久必红**。改为「集合在场 + 单调下界」。
+  //   **禁** `assert.equal(engineFiles, walkFiles(...).length)`：引擎与测试都用 `readdirSync` 枚举
+  //   同一目录 ⇒ 两侧永等，对「集合是否漂」零保护力（同源同日测两面）。
+  const missing = BASELINE_SKILLS_19.filter((rel) => !existsRel(SKILLS_REL + '/' + rel));
+  assert.deepEqual(missing, [],
+    `既有 ${BASELINE_SKILLS_19.length} 件须逐件在场（名单锚 = git ls-tree bfb9b0c），缺：` + JSON.stringify(missing));
+  assert.ok(existsRel(NEW_REL), '新细则须在场：' + NEW_REL);
   const n = walkFiles(absOf(SKILLS_REL)).length;
-  assert.equal(n, 20, `文件数须 = 20（基线 19 + 新文件 1），实测 ${n}`);
+  assert.ok(n >= BASELINE_SKILLS_19.length + 1,
+    `文件数须 ≥ ${BASELINE_SKILLS_19.length + 1}（既有 19 ＋ spec-contract.md；下界棘轮只增不减），实测 ${n}`);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -331,20 +374,36 @@ test('AC-pack3-9b `git status --porcelain lib/` = 0 行（同批他包 build 期
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-10 live 同步达成（R-07 收口判据，**不带 --no-live**）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-10 `check-guidance-sync`（含 live）GREEN：exit 0、`[skills] diff=0`、software-team files=20', () => {
-  // 失败条件：live 镜像未同步（新增文件 ⇒ missing-in-live，判据④ 恒 RED，且不会自愈）/
-  //           改判据代替同步（禁）/ live 根不存在（CI ⇒ 该面记 note，此时本件判红是**如实**的：AC-10 要求实测）。
-  const r = spawnSync(process.execPath, [SCRIPT_REL], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
-  const out = (r.stdout ?? '') + (r.stderr ?? '');
-  assert.equal(r.status, 0, '含 live 的收口读数须 exit 0；尾部输出：\n' + out.slice(-1500));
-  const skillsLine = out.split(/\r?\n/).find((l) => /^\[skills\] repo=/.test(l)) ?? '';
-  assert.ok(skillsLine, '缺 `[skills] repo=…` 汇总行（live 面未执行）');
-  assert.match(skillsLine, /diff=0/, 'skills 面 diff 须 = 0：' + skillsLine);
-  // 口径订正（见缺陷 D-4）：AC-10 写的「file total= 20」实为**全部 skill 的合计**（现 55）；
-  //   software-team 的 20 在逐 skill 行上 ⇒ 以该行为准。
-  assert.match(out, /^\[skills\]\s+OK\s+software-team files=20$/m,
-    '须有 `[skills]   OK   software-team files=20` 行：' + out.split(/\r?\n/).filter((l) => l.includes('software-team')).join(' | '));
-  assert.match(out, /\[guidance\] GREEN/, '指引双层与副本一致性须 GREEN');
+test('AC-pack3-10 `check-guidance-sync`（含 live）GREEN：ok=true、skills.fileTotals.diff=0、software-team status=same', (t) => {
+  // 失败条件：live skills 根**在位但内容不一致**（fileTotals.diff>0 / 逐 skill status≠same）⇒ 真缺口，**必红**；
+  //           引擎自陈 `skills: null`（live 面未执行）⇒ **skip 并留痕**（缺什么 + 如何开），**不判红**。
+  //
+  // 【本批替换（AD-05；e3 裁「引擎对、测试错」）】原判据读**人类可读文案**并写死字面数
+  //   （`^\[skills\]\s+OK\s+software-team files=20$`），且把「live 根不存在」这一引擎**有意降级**
+  //   （`check-guidance-sync.mjs:358-360`：note、不判红）**升级成红** ⇒ 同一环境同一时刻
+  //   引擎 GREEN、测试 RED（e1/e2 单变量实验：仅加 preload 即翻红）。
+  //   改为读 `--json` 结构化面（真源 L3 文案 → L2 机读），三分支：
+  //     ① `skills === null` ⇒ `t.skip`：**决定权在引擎的自陈信号**，不是测试自行 `existsSync` 拍板；
+  //     ② `skills !== null && fileTotals.diff > 0` ⇒ **红**（在位但不一致 = 真缺口，**该分支必须保留**）；
+  //     ③ `diff === 0` ⇒ 绿 ＋ 逐 skill 断 `software-team status === 'same'`。
+  const r = runScriptJson([]); // 含 live（不带 --no-live）
+  assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
+  const skills = r.doc.skills;
+  if (skills === null) {
+    const notes = (r.doc.notes ?? []).filter((n) => n.includes('skills'));
+    return t.skip('live skills 面未执行（引擎 `--json` 自陈 `skills: null`）：'
+      + (notes.length ? notes.join('；') : '(引擎未给 note)')
+      + '｜缺 live skills 根（缺省 = `$USERPROFILE/.agents/skills`，可用 `--skills-live <dir>` 指定）——部署后复跑本件');
+  }
+  assert.equal(skills.fileTotals.diff, 0, 'skills 文件面 diff 须 = 0：' + JSON.stringify(skills.fileTotals));
+  assert.deepEqual(skills.failures ?? [], [], 'skills 判据族失败项须 = 0：' + JSON.stringify(skills.failures));
+  const st = (skills.skills ?? []).find((s) => s.skill === 'software-team');
+  assert.ok(st, 'live 面须含 software-team 逐 skill 行：' + JSON.stringify((skills.skills ?? []).map((s) => s.skill)));
+  assert.equal(st.status, 'same', 'software-team 须 status = same（逐文件 sha256 全同）：' + JSON.stringify({ status: st.status, liveDirMissing: st.liveDirMissing }));
+  assert.ok(st.files.length >= BASELINE_SKILLS_19.length + 1,
+    `software-team 文件数须 ≥ ${BASELINE_SKILLS_19.length + 1}（下界棘轮；20 的算术口径已由 AC-1 换为集合语义），实测 ${st.files.length}`);
+  assert.equal(r.doc.ok, true, 'ok 须为 true；failures=' + JSON.stringify(r.doc.failures));
+  assert.equal(r.status, 0, '含 live 的收口读数须 exit 0；尾部输出：\n' + ((r.stdout ?? '') + r.stderr).slice(-1200));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
