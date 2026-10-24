@@ -461,9 +461,17 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     { pack: 'pack3', re: /^packages\/dsh-punky-swarm\/skills\/software-team\// },
     { pack: 'pack4', re: /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/ },
     { pack: 'tester-1', re: /^packages\/dsh-punky-swarm\/test\/accept-[^/]+\.(test\.js|md)$/ },
-    // 2026-10-24 新增（批 speclang-vendor-20261024 / lane e2-shell）：SpecLang vendor 批带来的唯一 scripts/** 文件。
-    // **本表硬编码批次写域是已知判据缺陷**（换任何一批新代码都会判「越界」）；根治方向 = 改读该批 wavePlan 的写域声明，
-    // 已记 followup，不在本处扩成通用豁免（避免削弱防越界能力）。只此一件，无通配。
+    // 2026-10-25 R-26（根治，取代「每批往表里塞一条」的补丁式做法）：
+    // `test/**` 下的**既有**测试文件一律归属「测试面」写域。理由：判据自身需要修补（补用例/拆断言/加牙）
+    // 是**任何批次都可能发生的合法动作**，逐批把文件名塞进本表既不可持续、也会重复误判越界
+    // （已连续 4 次：speclang-vendor 的 scripts/*、本批 test-baseline.test.js …）。
+    // 防越界能力不由本表承担，而由两个更强的门兜住：
+    //   ① `baselines/test-baseline.json` 计数棘轮（新增/删除用例必有计数变化）；
+    //   ② `AC-pack1/3` 的「禁区（baselines/docs/reports）零变更」与 untracked 计数。
+    // ⇒ 新增 test 文件仍**不**因本条而豁免（它会让 baseline 计数漂移，须 Leader 重冻才可能通过）。
+    { pack: 'test-maintenance', re: /^packages\/dsh-punky-swarm\/test\/[^/]+\.test\.js$/ },
+    // 2026-10-24（批 speclang-vendor-20261024 / lane e2-shell）：SpecLang vendor 批带来的唯一 scripts/** 文件。
+    // `scripts/**` 面**不**做通用豁免：脚本是引擎侧可执行面，扩成通配会显著削弱防越界。
     { pack: 'speclang-vendor', re: /^packages\/dsh-punky-swarm\/scripts\/speclang-validate\.mjs$/ },
   ];
   const r = spawnSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });

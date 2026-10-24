@@ -515,7 +515,18 @@ test('AC-pack3-15 挂载 role **恰为** coder/coordinator/designer/reviewer/sup
   assert.deepEqual(dead, [], '死指针（路径不可解析，成员点不开）：' + JSON.stringify(dead));
   const EXPECTED = ['coder.md', 'coordinator.md', 'designer.md', 'reviewer.md', 'supervisor.md', 'tester.md'];
   assert.deepEqual([...holders].sort(), [...EXPECTED].sort(), `含 vendor 指针的 role 须恰为 ${EXPECTED.length} 个（少一个 = 成员碰不到原件；多一个 = 越界挂载），实测 ${JSON.stringify([...holders].sort())}`);
-  const docManagerPath = path.join(dir, 'doc-manager.md');
-  const docManagerText = fs.existsSync(docManagerPath) ? fs.readFileSync(docManagerPath, 'utf8') : '';
-  assert.ok(!docManagerText.includes(VENDOR_MARK), '`doc-manager` 按 K-3 不挂规格面：不得出现 vendor 指针（双向判据的反向半边）');
+  // `doc-manager` 不挂的**反向半边已拆为独立用例 AC-pack3-15b**（-02）：原断言在本 test 内被上面的集合断言遮蔽
+  //   （前移只反转遮蔽方向、仍共享一条 pass/fail 坐标）⇒ 拆成独立坐标。**勿把该断言加回本 test。**
+});
+
+// 反向半边独立用例（-02：原在同 test 内被 holders 集合断言遮蔽 ⇒ 拆出，独立坐标）
+// 兜底语义：即便 EXPECTED 漂移成 7 项（误把 doc-manager 纳入「应挂」名单），本条仍会红。
+test('AC-pack3-15b `doc-manager` 按 K-3 不挂规格面：文件内不得出现 vendor 指针', () => {
+  const dir = absOf(ROLES_DIR_REL);
+  const p = path.join(dir, 'doc-manager.md');
+  assert.ok(fs.existsSync(p), 'doc-manager.md 必须存在（缺失 = 角色集缺口，应由 AC-pack3-1 先红）');
+  assert.ok(
+    !fs.readFileSync(p, 'utf8').includes(VENDOR_MARK),
+    '`doc-manager` 按 K-3 不挂规格面：不得出现 vendor 指针（双向判据的反向半边）',
+  );
 });

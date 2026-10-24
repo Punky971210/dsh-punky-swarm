@@ -19,17 +19,17 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 46,
       "blankLines": 37,
-      "lines": 483,
+      "lines": 491,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 59,
-      "blankLines": 38,
-      "lines": 522,
+      "asserts": 60,
+      "blankLines": 39,
+      "lines": 533,
       "tautologies": 0,
-      "tests": 18,
+      "tests": 19,
       "todos": 0
     },
     "test/acps-cert-failclosed.test.js": {
@@ -1417,11 +1417,11 @@
       "todos": 0
     },
     "test/test-baseline.test.js": {
-      "asserts": 96,
-      "blankLines": 39,
-      "lines": 522,
+      "asserts": 100,
+      "blankLines": 45,
+      "lines": 583,
       "tautologies": 0,
-      "tests": 20,
+      "tests": 23,
       "todos": 0
     },
     "test/test-evidence-guard.test.js": {
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T16:10:52Z",
+  "generatedAt": "2026-10-24T16:46:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1647,12 +1647,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 10555,
-    "blankLines": 5559,
+    "asserts": 10560,
+    "blankLines": 5566,
     "files": 204,
-    "lines": 59127,
+    "lines": 59207,
     "tautologies": 0,
-    "tests": 2143,
+    "tests": 2147,
     "todos": 4
   }
 }

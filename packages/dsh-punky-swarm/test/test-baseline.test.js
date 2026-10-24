@@ -519,3 +519,64 @@ if (UPDATE_ARMED && process.env.NODE_TEST_CONTEXT === undefined) {
     process.stdout.write(`[test-baseline]   ${f.kind} ${f.file} ${JSON.stringify(f.delta)}\n`);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// -06 基线新鲜度门（防御性加固）：把 `scripts/baseline-snapshot.mjs --check` 的等价能力
+//   搬进 `npm test` 链 ＋ 补「基线内部自洽」。**定性：加固，不是修一条已证实的漏**
+//   （p1 实测：`--check` EXIT=0、`diffBaseline` 已含 lines/blankLines ⇒ 上批 audit 的
+//   「静默滞后」叙述未复现）。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 基线新鲜度漂移（-06）：把「基线 files」与「实测 scan files」**逐文件逐字段**比对，
+ * 覆盖全部 6 个 metrics（含 `lines`/`blankLines` —— e2-1 只把它当 changed 的副作用，没有独立诊断）。
+ * 纯函数：只吃两个对象 ⇒ 负例可完全不碰磁盘与 `baselines/**`。
+ */
+function freshnessDrift(baseline, scan) {
+  const METRICS = ['tests', 'todos', 'asserts', 'tautologies', 'lines', 'blankLines'];
+  const drift = [];
+  for (const rel of Object.keys(baseline.files ?? {}).sort()) {
+    const b = baseline.files[rel];
+    const a = scan.files?.[rel];
+    if (!a) { drift.push(`${rel}: 基线条目在场但实测缺失`); continue; }
+    for (const m of METRICS) {
+      if ((b?.[m] ?? 0) !== (a?.[m] ?? 0)) drift.push(`${rel}: ${m} baseline=${b?.[m] ?? 0} scan=${a?.[m] ?? 0}`);
+    }
+  }
+  return drift;
+}
+
+/** 基线**内部**自洽：totals 必须等于 files 逐文件求和（与当前树无关，查的是基线自己）。 */
+function baselineTotalsDrift(baseline) {
+  const METRICS = ['tests', 'todos', 'asserts', 'tautologies', 'lines', 'blankLines'];
+  const drift = [];
+  const files = baseline.files ?? {};
+  if ((baseline.totals?.files ?? 0) !== Object.keys(files).length) {
+    drift.push(`totals.files=${baseline.totals?.files ?? 0} ≠ files 条目数 ${Object.keys(files).length}`);
+  }
+  for (const m of METRICS) {
+    const sum = Object.values(files).reduce((acc, f) => acc + (f?.[m] ?? 0), 0);
+    if ((baseline.totals?.[m] ?? 0) !== sum) drift.push(`totals.${m}=${baseline.totals?.[m] ?? 0} ≠ 逐文件求和 ${sum}`);
+  }
+  return drift;
+}
+
+test('e2-13 基线新鲜度：baseline.files 与实测 scan 逐文件逐字段全等（6 metrics 含 lines/blankLines）', () => {
+  const drift = freshnessDrift(readBaseline(ROOT), scanTree(ROOT));
+  assert.deepEqual(drift, [], `基线已滞后于实测 test/ 树（须由 Leader 重跑 scripts/baseline-snapshot.mjs 重冻）：\n${drift.join('\n')}`);
+});
+
+test('e2-14 基线内部自洽：totals 等于 files 逐文件求和（与当前树无关）', () => {
+  const drift = baselineTotalsDrift(readBaseline(ROOT));
+  assert.deepEqual(drift, [], `基线自身算错（不依赖当前树）：\n${drift.join('\n')}`);
+});
+
+test('e2-15 有牙：给基线某文件 lines +4 ⇒ freshnessDrift 必须报 1 条（e2-13 的负例对照）', () => {
+  const baseline = JSON.parse(JSON.stringify(readBaseline(ROOT)));
+  const anyRel = Object.keys(baseline.files).sort()[0];
+  baseline.files[anyRel].lines += 4;                        // 模拟 audit 描述的「滞后 lines +4」
+  const drift = freshnessDrift(baseline, scanTree(ROOT));
+  process.stdout.write('[e2-15] 内存副本注入 lines+4 ⇒ 新门检出漂移：' + JSON.stringify(drift) + '\n');
+  assert.ok(drift.some((d) => d.includes(anyRel) && d.includes('lines')), `未捕捉 lines 滞后：${JSON.stringify(drift)}`);
+  assert.equal(drift.filter((d) => d.startsWith(anyRel)).length, 1, '同文件只报 1 条（噪声受控）');
+});
