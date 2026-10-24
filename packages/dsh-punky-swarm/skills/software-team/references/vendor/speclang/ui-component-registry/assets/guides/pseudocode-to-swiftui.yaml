@@ -1,0 +1,412 @@
+# Pseudocode to SwiftUI Translation Guide
+# Translates ui_logic_native_pseudocode operations to SwiftUI code
+
+target_platform: ios
+target_framework: SwiftUI
+language: swift
+
+platform_context:
+  frameworks:
+    - "SwiftUI is a declarative Swift UI framework for Apple platforms."
+    - "UIKit interoperability is possible through UIViewRepresentable or UIViewControllerRepresentable when needed."
+  layout:
+    - "Use VStack, HStack, ZStack, Grid, List, ScrollView, Spacer, frame, padding, and safeAreaInset."
+  state_management:
+    - "Use @State for local view-owned state, @Binding for parent-owned state, and @StateObject/@ObservedObject for model objects."
+    - "Use @Environment and @EnvironmentObject for shared environment values."
+  navigation:
+    - "Use NavigationStack and NavigationPath for stack navigation; use sheet and fullScreenCover for modal presentation."
+  accessibility:
+    - "Use accessibilityLabel, accessibilityHint, accessibilityValue, accessibilityElement, and accessibilityAction modifiers."
+  performance:
+    - "Keep expensive work out of body, keep state as low as practical, and use lazy containers for long lists."
+
+# State Management Patterns
+state_patterns:
+  local_state: "@State private var value: Type = initialValue"
+  binding: "@Binding var value: Type"
+  observed_object: "@ObservedObject var viewModel: ViewModel"
+  state_object: "@StateObject var viewModel = ViewModel()"
+  environment_object: "@EnvironmentObject var viewModel: ViewModel"
+  environment: "@Environment(\\.colorScheme) var colorScheme"
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation: |
+        Button(action: {
+            viewModel.func()
+        }) {
+            Text("Button")
+        }
+      notes:
+        - "Action closure is triggered on tap"
+        - "Button style can be customized with .buttonStyle()"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation: |
+        @State private var query: String = ""
+
+        TextField("Search", text: $query)
+            .onSubmit {
+                viewModel.search(query: query)
+            }
+      notes:
+        - "onSubmit triggers when user presses return"
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation: |
+        @State private var text: String = ""
+
+        TextField("Input", text: $text)
+            .onChange(of: text) { _, newValue in
+                viewModel.validate(text: newValue)
+            }
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation: |
+        @State private var isEnabled: Bool = false
+
+        Toggle("Enable", isOn: $isEnabled)
+            .onChange(of: isEnabled) { _, newValue in
+                viewModel.setEnabled(enabled: newValue)
+            }
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation: |
+        @State private var progress: Double = 0.0
+
+        Slider(value: $progress, in: 0...1)
+            .onChange(of: progress) { _, newValue in
+                viewModel.updateProgress(value: newValue)
+            }
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem → module.selectItem(itemId)"
+      implementation: |
+        List(items) { item in
+            Text(item.name)
+                .onTapGesture {
+                    viewModel.selectItem(itemId: item.id)
+                }
+        }
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        @State private var labelText: String = "Initial"
+
+        // Update state to change text
+        Text(labelText)
+
+        // In reaction:
+        labelText = "value"
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation: |
+        @State private var showError: Bool = false
+
+        if showError {
+            Text("Error message")
+        }
+
+        // In reaction:
+        showError = true
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation: |
+        showError = false
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        @State private var isButtonEnabled: Bool = true
+
+        Button("Submit") {
+            // action
+        }
+        .disabled(!isButtonEnabled)
+
+        // In reaction:
+        isButtonEnabled = true
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        @State private var isLoading: Bool = false
+
+        Button {
+            isLoading = true
+            Task {
+                await viewModel.submit()
+                isLoading = false
+            }
+        } label: {
+            if isLoading {
+                ProgressView()
+            } else {
+                Text("Submit")
+            }
+        }
+        .disabled(isLoading)
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-IMG).load(url)"
+      implementation: |
+        AsyncImage(url: URL(string: url)) { phase in
+            switch phase {
+            case .success(let image):
+                image.resizable().aspectRatio(contentMode: .fit)
+            case .failure:
+                Image(systemName: "photo")
+            case .empty:
+                ProgressView()
+            @unknown default:
+                EmptyView()
+            }
+        }
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation: |
+        @State private var showAlert: Bool = false
+        @State private var alertMessage: String = ""
+
+        Button("Trigger") {
+            alertMessage = "Operation successful"
+            showAlert = true
+        }
+        .alert("Alert", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
+
+    Dialog.dismiss:
+      pseudocode: "Dialog.dismiss()"
+      implementation: |
+        // Set isPresented to false
+        showAlert = false
+
+    Toast.show:
+      pseudocode: "OnSuccess → Toast.show(\"message\")"
+      implementation: |
+        // SwiftUI doesn't have built-in toast
+        // Option 1: Use overlay
+        @State private var showToast: Bool = false
+        @State private var toastMessage: String = ""
+
+        ZStack {
+            ContentView()
+            if showToast {
+                VStack {
+                    Spacer()
+                    Text(toastMessage)
+                        .padding()
+                        .background(Color.black.opacity(0.8))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .padding()
+                }
+                .transition(.move(edge: .bottom))
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        showToast = false
+                    }
+                }
+            }
+        }
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        @State private var showSheet: Bool = false
+
+        Button("Show Sheet") {
+            showSheet = true
+        }
+        .sheet(isPresented: $showSheet) {
+            BottomSheetView()
+                .presentationDetents([.medium, .large])
+        }
+
+    BottomSheet.dismiss:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).dismiss()"
+      implementation: |
+        @Environment(\.dismiss) var dismiss
+
+        // In the sheet:
+        dismiss()
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation: |
+        @State private var items: [Item] = []
+
+        // In reaction:
+        items.append(newItem)
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation: |
+        items.remove(at: index)
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation: |
+        // In SwiftUI, updating @State array automatically reloads
+        items = newItems
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        @State private var progress: Double = 0.0
+
+        ProgressView(value: progress) {
+            Text("Loading")
+        }
+
+        // In reaction:
+        progress = 0.75
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        @State private var isEnabled: Bool = false
+
+        Toggle("Enable", isOn: $isEnabled)
+
+        // In reaction:
+        isEnabled = true
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        // Using NavigationStack (iOS 16+)
+        @State private var path = NavigationPath()
+
+        NavigationStack(path: $path) {
+            ContentView()
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .nextPage:
+                        NextPageView()
+                    }
+                }
+        }
+
+        // Navigate:
+        path.append(Route.nextPage)
+
+        // Or using NavigationLink:
+        NavigationLink("Next", destination: NextPageView())
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        @Environment(\.dismiss) var dismiss
+
+        dismiss()
+
+        // Or with NavigationPath:
+        path.removeLast()
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        @State private var showFullScreen: Bool = false
+
+        Button("Show Modal") {
+            showFullScreen = true
+        }
+        .fullScreenCover(isPresented: $showFullScreen) {
+            ModalView()
+        }
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation: |
+        @Environment(\.dismiss) var dismiss
+
+        dismiss()
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation: |
+        Form {
+            TextField("Email", text: $email)
+            SecureField("Password", text: $password)
+            Button("Submit") {
+                if viewModel.validate(email: email, password: password) {
+                    viewModel.submit(email: email, password: password)
+                }
+            }
+            .disabled(viewModel.isSubmitting)
+        }
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        Text(errorMessage)
+            .foregroundStyle(.red)
+            .accessibilityLabel(errorMessage)
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        switch viewModel.state {
+        case .loading:
+            ProgressView()
+        case .content(let data):
+            ContentView(data: data)
+        case .empty:
+            ContentUnavailableView("No data", systemImage: "tray")
+        case .error(let message):
+            ErrorView(message: message, retry: viewModel.retry)
+        }
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation: |
+        content
+            .onTapGesture {
+                viewModel.activate()
+            }
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        if isExpanded {
+            ExpandedPanel()
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+
+# Animation Modifiers
+animation:
+  default_transition: |
+        .animation(.easeInOut, value: isVisible)
+
+  conditional_rendering: |
+        if isVisible {
+            view.transition(.opacity)
+        }
+
+  explicit_animation: |
+        withAnimation(.spring()) {
+            // State changes
+            expanded = true
+        }

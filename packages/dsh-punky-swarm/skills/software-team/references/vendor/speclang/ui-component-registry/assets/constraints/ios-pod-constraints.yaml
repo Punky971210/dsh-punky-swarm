@@ -1,0 +1,204 @@
+# iOS Pod Compilation Scope Constraints
+# These constraints apply when developing Pod libraries (not the host app)
+# Pod libraries have limited access to host-app-only APIs
+
+constraint_type: pod_compilation_scope
+applies_to: ios
+load_condition: "When implementing code for a Pod library (not the host app)"
+
+# Pod Scope Annotations
+pod_scope_values:
+  both:
+    description: "API is available in both Pod and host app - SAFE to use"
+    usage: "Use freely in Pod code"
+  host_only:
+    description: "API only exists in the host app - MUST find alternative"
+    usage: "DO NOT use in Pod code; find Pod-safe alternative"
+  pod_only:
+    description: "API is internal to the Pod - SAFE for Pod code only"
+    usage: "Use in Pod code, not available to host app"
+
+# Common Host-Only APIs and Their Alternatives
+host_only_apis:
+  - api: "MBProgressHUD+Utility.h Category Methods"
+    methods:
+      - "makeToast:withText:"
+      - "makeShortToast:withText:"
+      - "showToast:withText:duration:"
+    mistake: "Calling Category convenience methods from Pod"
+    alternative:
+      header: "<MBProgressHUD/MBProgressHUD.h>"
+      implementation: |
+        // Show HUD
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:view animated:YES];
+        hud.label.text = @"Loading...";
+        // Hide HUD
+        [hud hide:YES afterDelay:2.0];
+    note: "Use raw MBProgressHUD API, not host app Category extensions"
+
+  - api: "ColorUtils.h — UIColor+colorWithString:"
+    methods:
+      - "colorWithString:"
+      - "colorWithHexString:"
+    mistake: "Calling host app color utility"
+    alternative:
+      implementation: |
+        // Direct RGB construction
+        + (UIColor *)colorWithHex:(NSString *)hex {
+            unsigned int rgb = 0;
+            NSScanner *scanner = [NSScanner scannerWithString:hex];
+            [scanner scanHexInt:&rgb];
+            return [UIColor colorWithRed:((rgb & 0xFF0000) >> 16) / 255.0
+                                   green:((rgb & 0x00FF00) >> 8) / 255.0
+                                    blue:(rgb & 0x0000FF) / 255.0
+                                   alpha:1.0];
+        }
+    note: "Create your own hex color helper or use direct RGB values"
+
+  - api: "UIColor+Theme.h Category"
+    methods:
+      - "themeColorPrimary"
+      - "themeColorSecondary"
+      - "themeBackgroundColor"
+    mistake: "Calling theme color Category methods"
+    alternative:
+      implementation: |
+        // Option 1: Pass colors from host via delegate/block
+        @property (nonatomic, copy) UIColor * (^colorProvider)(NSString *colorName);
+        // Option 2: Use direct color values
+        [UIColor colorWithRed:0.5 green:0.5 blue:0.5 alpha:1.0];
+    note: "Pass theme colors from host app via configuration block or delegate"
+
+  - api: "UIView+RoundCorner.h Category"
+    methods:
+      - "setRoundCorner:"
+      - "setRoundCornerWithRadius:"
+    mistake: "Calling corner radius Category"
+    alternative:
+      implementation: |
+        // Direct CALayer manipulation
+        view.layer.cornerRadius = radius;
+        view.layer.masksToBounds = YES;
+        // For rounded avatars
+        avatarView.layer.cornerRadius = avatarView.bounds.size.width / 2.0;
+        avatarView.clipsToBounds = YES;
+    note: "Use CALayer properties directly"
+
+  - api: "UIView+Frame.h Category"
+    methods:
+      - "left, top, right, bottom properties"
+      - "width, height, originX, originY properties"
+    mistake: "Using frame shortcut properties"
+    alternative:
+      implementation: |
+        // Use standard CGRect manipulation
+        CGRect frame = view.frame;
+        frame.origin.x = newX;
+        frame.size.width = newWidth;
+        view.frame = frame;
+    note: "Use standard UIView frame/bounds/center properties"
+
+  - api: "Host App AppDelegate Methods"
+    methods:
+      - "[AppDelegate sharedInstance]"
+      - "[AppDelegate currentViewController]"
+    mistake: "Accessing host app singleton"
+    alternative:
+      implementation: |
+        // Pass dependencies via delegate or init
+        @interface MyPodComponent : UIView
+        @property (nonatomic, weak) id<MyPodDelegate> delegate;
+        @end
+    note: "Design with dependency injection, not singleton access"
+
+  - api: "Host App Network Manager"
+    methods:
+      - "[NetworkManager sharedInstance]"
+      - "[APIClient sharedClient]"
+    mistake: "Using host networking stack"
+    alternative:
+      implementation: |
+        // Use Pod's own networking or accept URL session from host
+        NSURLSession *session = [NSURLSession sharedSession];
+        // Or pass from host:
+        @property (nonatomic, strong) NSURLSession *urlSession;
+    note: "Pod should have its own networking or receive session from host"
+
+# ObjC Property Synthesize Rules (Pod-Safe)
+property_rules:
+  - scenario: "Class extension property ivar access"
+    wrong: "Directly using _propertyName without synthesize"
+    correct: "Add @synthesize propertyName = _propertyName; in @implementation"
+    example: |
+      // In .m file
+      @interface MyClass ()
+      @property (nonatomic, strong) NSString *internalString;
+      @end
+
+      @implementation MyClass
+      @synthesize internalString = _internalString; // Required for direct ivar access
+
+      - (void)method {
+          _internalString = @"value"; // Now this works
+      }
+      @end
+
+  - scenario: "Superclass readonly property ivar"
+    wrong: "_readonlyProperty in subclass"
+    correct: "self.readonlyProperty or declare a private readwrite property"
+    example: |
+      // Subclass trying to access superclass's readonly property
+      // WRONG:
+      // _title = @"new"; // Compilation error
+
+      // CORRECT:
+      self.title = @"new"; // If setter exists
+
+      // Or redeclare as readwrite in class extension
+      @interface MySubclass ()
+      @property (nonatomic, readwrite, copy) NSString *title;
+      @end
+
+  - scenario: "Category adding property"
+    wrong: "@property in Category without associated objects"
+    correct: "Use objc_setAssociatedObject / objc_getAssociatedObject"
+    example: |
+      // Category header
+      @interface UIView (MyExtension)
+      @property (nonatomic, strong) id customObject;
+      @end
+
+      // Category implementation
+      @implementation UIView (MyExtension)
+      static const void *kCustomObjectKey = &kCustomObjectKey;
+
+      - (id)customObject {
+          return objc_getAssociatedObject(self, kCustomObjectKey);
+      }
+
+      - (void)setCustomObject:(id)customObject {
+          objc_setAssociatedObject(self, kCustomObjectKey, customObject, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      }
+      @end
+
+# Import Rules for Pod Development
+import_rules:
+  - rule: "Only import public headers from dependencies"
+    wrong: "#import \"PrivateHeader.h\""
+    correct: "#import <PublicFramework/PublicHeader.h>"
+
+  - rule: "Use umbrella header imports for Pod dependencies"
+    wrong: "#import <SpecificHeader.h>"
+    correct: "#import <Framework/Framework.h>"
+
+  - rule: "Check Podfile for available dependencies"
+    note: "Only use APIs from dependencies declared in .podspec"
+
+# Validation Checklist
+checklist:
+  - "Are all imported headers available in Pod dependencies?"
+  - "Are all method calls from Pod-safe APIs?"
+  - "Are Category methods from the Pod's own Categories, not host app?"
+  - "Are colors created using direct RGB or Pod-safe helpers?"
+  - "Are views configured using standard UIKit APIs?"
+  - "Is dependency injection used instead of host app singletons?"

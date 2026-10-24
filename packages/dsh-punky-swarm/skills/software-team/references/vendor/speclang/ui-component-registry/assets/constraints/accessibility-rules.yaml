@@ -1,0 +1,359 @@
+# Accessibility Rules Configuration
+# Cross-platform accessibility requirements and best practices
+# Load when: Accessibility audit, a11y compliance review, implementing accessible UI
+
+constraint_type: accessibility
+applies_to: all_platforms
+load_condition: "When implementing accessible UI components or conducting accessibility review"
+
+# WCAG Core Principles
+wcag_principles:
+  perceivable:
+    description: "Information and UI components must be presentable to users in ways they can perceive"
+    requirements:
+      - "Provide text alternatives for non-text content"
+      - "Provide captions and alternatives for multimedia"
+      - "Create content that can be presented in different ways"
+      - "Make it easier for users to see and hear content"
+  operable:
+    description: "UI components and navigation must be operable"
+    requirements:
+      - "Make all functionality available from a keyboard"
+      - "Give users enough time to read and use content"
+      - "Do not use content that causes seizures"
+      - "Help users navigate and find content"
+  understandable:
+    description: "Information and UI operation must be understandable"
+    requirements:
+      - "Make text readable and understandable"
+      - "Make pages appear and operate in predictable ways"
+      - "Help users avoid and correct mistakes"
+  robust:
+    description: "Content must be robust enough for diverse user agents"
+    requirements:
+      - "Maximize compatibility with current and future tools"
+
+# Platform-Specific Accessibility Implementation
+platforms:
+  ios_uikit:
+    properties:
+      accessibilityLabel:
+        description: "Short, localized string describing the element"
+        usage: "Set on all interactive elements and meaningful images"
+      accessibilityHint:
+        description: "Describes the outcome of performing an action"
+        usage: "Optional, for complex interactions"
+      accessibilityTraits:
+        description: "Combines traits to describe element type"
+        values:
+          - UIAccessibilityTraitNone
+          - UIAccessibilityTraitButton
+          - UIAccessibilityTraitLink
+          - UIAccessibilityTraitImage
+          - UIAccessibilityTraitSelected
+          - UIAccessibilityTraitPlaysSound
+          - UIAccessibilityTraitKeyboardKey
+          - UIAccessibilityTraitHeader
+          - UIAccessibilityTraitSearchField
+          - UIAccessibilityTraitStartsMediaSession
+          - UIAccessibilityTraitAdjustable
+          - UIAccessibilityTraitAllowsDirectInteraction
+          - UIAccessibilityTraitCausesPageTurn
+      accessibilityValue:
+        description: "Current value of the element"
+        usage: "For sliders, text fields, etc."
+      accessibilityElementsHidden:
+        description: "Hide child elements from accessibility"
+        usage: "true for decorative containers"
+      accessibilityViewIsModal:
+        description: "Mark view as modal for accessibility"
+        usage: "true for modal presentations"
+    notifications:
+      - UIAccessibilityScreenChangedNotification
+      - UIAccessibilityAnnouncementNotification
+      - UIAccessibilityLayoutChangedNotification
+    best_practices:
+      - "Implement UIAccessibilityContainer for custom containers"
+      - "Use accessibilityPerformEscape for dismiss actions"
+      - "Support Dynamic Type for text scaling"
+      - "Ensure minimum tap target size (44x44 points)"
+
+  ios_swiftui:
+    modifiers:
+      accessibilityLabel:
+        description: "Set accessible name"
+        usage: ".accessibilityLabel(\"Submit order\")"
+      accessibilityHint:
+        description: "Set action hint"
+        usage: ".accessibilityHint(\"Submits your order\")"
+      accessibilityValue:
+        description: "Set current value"
+        usage: ".accessibilityValue(\"3 items\")"
+      accessibilityAddTraits:
+        description: "Add accessibility traits"
+        usage: ".accessibilityAddTraits(.isButton)"
+      accessibilityRemoveTraits:
+        description: "Remove accessibility traits"
+        usage: ".accessibilityRemoveTraits(.isImage)"
+      accessibilityElement:
+        description: "Make element accessible or combine children"
+        usage: ".accessibilityElement(children: .combine)"
+      accessibilityAction:
+        description: "Add custom accessibility actions"
+        usage: ".accessibilityAction(named: \"Edit\") { ... }"
+    best_practices:
+      - "Use semantic SwiftUI views (Button, Toggle, etc.)"
+      - "Combine accessibility elements for grouped content"
+      - "Support Dynamic Type with scalable fonts"
+
+  android_view_system:
+    properties:
+      contentDescription:
+        description: "Accessible description for View"
+        usage: "Set on ImageViews, ImageButtons, and custom views"
+      importantForAccessibility:
+        values:
+          - auto
+          - yes
+          - no
+          - noHideDescendants
+      accessibilityLiveRegion:
+        values:
+          - none
+          - polite
+          - assertive
+    xml_attributes:
+      - "android:contentDescription"
+      - "android:importantForAccessibility"
+      - "android:accessibilityLiveRegion"
+    best_practices:
+      - "Set contentDescription on all images"
+      - "Use minimum touch target of 48dp"
+      - "Implement AccessibilityDelegate for custom views"
+      - "Support TalkBack with descriptive announcements"
+
+  android_compose:
+    modifiers:
+      semantics:
+        description: "Attach semantic information"
+        usage: "Modifier.semantics { contentDescription = \"Submit\" }"
+      clearAndSetSemantics:
+        description: "Replace existing semantics"
+        usage: "Modifier.clearAndSetSemantics { contentDescription = \"...\" }"
+      semanticsElement:
+        description: "Mark as accessibility element"
+        usage: "Modifier.semantics { testTag = \"submit_button\" }"
+    properties:
+      - contentDescription
+      - stateDescription
+      - role: Button, Checkbox, etc.
+      - traversal keys: traversalBefore, traversalAfter
+    best_practices:
+      - "Use Material components with built-in a11y"
+      - "Handle focus correctly with focusable modifiers"
+      - "Test with TalkBack enabled"
+
+  flutter:
+    widgets:
+      Semantics:
+        description: "Core widget for accessibility info"
+        properties:
+          - label: Accessible name
+          - hint: Action hint
+          - value: Current value
+          - enabled: Is interactive
+          - toggled: Toggle state
+          - button: Is a button
+          - link: Is a link
+          - image: Is an image
+      MergeSemantics:
+        description: "Combine child semantics"
+      ExcludeSemantics:
+        description: "Hide from accessibility tree"
+      BlockSemantics:
+        description: "Block semantics from passing through"
+    best_practices:
+      - "Set semanticLabel on Image and IconButton"
+      - "Use Semantics widget for custom interactive widgets"
+      - "Exclude decorative elements with ExcludeSemantics"
+      - "Test with screen readers on both platforms"
+
+  web:
+    aria_attributes:
+      role:
+        values:
+          - button
+          - link
+          - checkbox
+          - dialog
+          - alert
+          - navigation
+          - main
+          - article
+          - banner
+          - complementary
+          - contentinfo
+          - form
+          - heading
+          - img
+          - list
+          - listitem
+          - menu
+          - menuitem
+          - tab
+          - tablist
+          - tabpanel
+          - textbox
+          - search
+      aria-label:
+        description: "Define accessible name"
+      aria-labelledby:
+        description: "Reference labeling element"
+      aria-describedby:
+        description: "Reference description element"
+      aria-live:
+        values: [off, polite, assertive]
+        description: "Announce dynamic content"
+      aria-hidden:
+        description: "Hide from assistive technology"
+      aria-expanded:
+        description: "Expansion state"
+      aria-selected:
+        description: "Selection state"
+      aria-checked:
+        description: "Checkbox state"
+      aria-disabled:
+        description: "Disabled state (still focusable)"
+      aria-invalid:
+        description: "Validation error state"
+    best_practices:
+      - "Use semantic HTML elements"
+      - "Maintain heading hierarchy (h1-h6)"
+      - "Ensure minimum contrast ratio (4.5:1 for text)"
+      - "Support keyboard navigation"
+      - "Provide visible focus indicators"
+      - "Use skip links for main content"
+
+  react_native:
+    properties:
+      accessible:
+        description: "Mark as accessible element"
+        type: boolean
+      accessibilityLabel:
+        description: "Accessible name"
+        type: string
+      accessibilityHint:
+        description: "Action hint"
+        type: string
+      accessibilityRole:
+        values:
+          - none
+          - button
+          - link
+          - search
+          - image
+          - keyboardkey
+          - text
+          - adjustable
+          - imagebutton
+          - header
+          - summary
+          - alert
+          - checkbox
+          - combobox
+          - menu
+          - menubar
+          - menuitem
+          - progressbar
+          - radio
+          - radiogroup
+          - scrollbar
+          - spinbutton
+          - switch
+          - tab
+          - tablist
+          - toolbar
+      accessibilityState:
+        properties: [selected, checked, expanded, disabled, busy]
+      accessibilityValue:
+        properties: [min, max, now, text]
+      accessibilityActions:
+        description: "Custom actions"
+      onAccessibilityAction:
+        description: "Handle custom actions"
+    best_practices:
+      - "Set accessible={true} on touchable elements"
+      - "Use accessibilityRole instead of relying on component type"
+      - "Test with VoiceOver (iOS) and TalkBack (Android)"
+
+# Common Accessibility Patterns
+patterns:
+  button:
+    requirements:
+      - "Accessible name (label)"
+      - "Role: button"
+      - "Action: activate on click/tap"
+      - "State: disabled when not interactive"
+    example:
+      ios: "button.accessibilityLabel = @\"Submit\"; button.accessibilityTraits = UIAccessibilityTraitButton;"
+      web: "<button aria-label=\"Submit\">Submit</button>"
+
+  form_field:
+    requirements:
+      - "Label associated with input"
+      - "Error messages linked via aria-describedby"
+      - "Required fields marked"
+      - "Clear instructions provided"
+    example:
+      web: |
+        <label for="email">Email (required)</label>
+        <input id="email" type="email" required aria-describedby="email-error">
+        <span id="email-error" role="alert">Please enter a valid email</span>
+
+  modal_dialog:
+    requirements:
+      - "Role: dialog or alertdialog"
+      - "Accessible name (aria-labelledby)"
+      - "Focus trapped within dialog"
+      - "Escape key closes dialog"
+      - "Focus returns to trigger on close"
+    example:
+      web: |
+        <div role="dialog" aria-labelledby="dialog-title" aria-modal="true">
+          <h2 id="dialog-title">Confirm Action</h2>
+          <button>Confirm</button>
+          <button>Cancel</button>
+        </div>
+
+  image:
+    requirements:
+      - "Alt text for meaningful images"
+      - "Empty alt for decorative images"
+      - "Long description for complex images"
+    example:
+      ios: "imageView.accessibilityLabel = @\"Company logo\";"
+      web: "<img src=\"logo.png\" alt=\"Company logo\">"
+
+  list:
+    requirements:
+      - "Proper list semantics"
+      - "List items marked appropriately"
+    example:
+      web: |
+        <ul role="list">
+          <li role="listitem">Item 1</li>
+          <li role="listitem">Item 2</li>
+        </ul>
+
+# Accessibility Testing Checklist
+testing_checklist:
+  - "Can all interactive elements be accessed via keyboard/touch exploration?"
+  - "Do all images have appropriate alt text or are marked decorative?"
+  - "Is the reading order logical when using screen reader?"
+  - "Are form fields properly labeled?"
+  - "Are error messages accessible and linked to fields?"
+  - "Can modals be opened and closed with assistive tech?"
+  - "Is color contrast sufficient (4.5:1 minimum)?"
+  - "Are touch targets at least 44x44pt (iOS) / 48dp (Android)?"
+  - "Does the UI support system font scaling?"
+  - "Are dynamic changes announced appropriately?"

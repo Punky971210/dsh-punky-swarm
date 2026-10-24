@@ -1,0 +1,501 @@
+# Pseudocode to Flutter Translation Guide
+# Translates ui_logic_native_pseudocode operations to Flutter code
+
+target_platform: flutter
+target_framework: flutter
+language: dart
+
+platform_context:
+  frameworks:
+    - "Flutter uses Dart widgets and a declarative build method."
+    - "Material and Cupertino widgets provide platform-styled controls."
+  layout:
+    - "Use Row, Column, Flex, Expanded, Flexible, Stack, Positioned, ListView, GridView, and CustomScrollView."
+    - "Use SafeArea to avoid system UI and MediaQuery/LayoutBuilder for adaptive layout decisions."
+  state_management:
+    - "Use StatefulWidget/setState for local mutable UI state."
+    - "Provider, Riverpod, Bloc/Cubit, and similar libraries are common for shared or complex state."
+  widget_patterns:
+    - "Use StatelessWidget for immutable UI and StatefulWidget when the widget owns mutable state."
+    - "Compose complex UI by nesting smaller widgets in the build method."
+  platform_channels:
+    - "Use MethodChannel for native method calls and EventChannel for native event streams."
+    - "Use platform checks sparingly when behavior must differ by host OS."
+  accessibility:
+    - "Use Semantics, MergeSemantics, ExcludeSemantics, and semanticLabel for custom or non-text UI."
+  performance:
+    - "Use const constructors, ListView.builder for large lists, RepaintBoundary for expensive repaints, and Flutter DevTools for profiling."
+
+# State Management Patterns
+state_patterns:
+  local_state: |
+        // StatefulWidget with setState
+        class _MyWidgetState extends State<MyWidget> {
+          String value = 'initial';
+
+          void updateValue(String newValue) {
+            setState(() {
+              value = newValue;
+            });
+          }
+        }
+
+  provider: |
+        // Using Provider
+        class MyModel extends ChangeNotifier {
+          String _value = 'initial';
+          String get value => _value;
+
+          void updateValue(String newValue) {
+            _value = newValue;
+            notifyListeners();
+          }
+        }
+
+        // In widget:
+        final model = Provider.of<MyModel>(context, listen: false);
+        // Or with Consumer
+
+  riverpod: |
+        // Using Riverpod
+        final valueProvider = StateProvider<String>((ref) => 'initial');
+
+        // In widget:
+        final value = ref.watch(valueProvider);
+        ref.read(valueProvider.notifier).state = 'new';
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation: |
+        ElevatedButton(
+          onPressed: () => viewModel.func(),
+          child: Text('Button'),
+        )
+      notes:
+        - "onPressed callback triggers the action"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation: |
+        final controller = TextEditingController();
+
+        TextField(
+          controller: controller,
+          onSubmitted: (query) {
+            viewModel.search(query);
+          },
+          textInputAction: TextInputAction.search,
+        )
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation: |
+        final controller = TextEditingController();
+
+        TextField(
+          controller: controller,
+          onChanged: (text) {
+            viewModel.validate(text);
+          },
+        )
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation: |
+        bool isEnabled = false;
+
+        Switch(
+          value: isEnabled,
+          onChanged: (newValue) {
+            setState(() {
+              isEnabled = newValue;
+            });
+            viewModel.setEnabled(newValue);
+          },
+        )
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation: |
+        double progress = 0.0;
+
+        Slider(
+          value: progress,
+          onChanged: (newValue) {
+            setState(() {
+              progress = newValue;
+            });
+            viewModel.updateProgress(newValue);
+          },
+          min: 0.0,
+          max: 1.0,
+        )
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem → module.selectItem(itemId)"
+      implementation: |
+        ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return ListTile(
+              title: Text(item.name),
+              onTap: () => viewModel.selectItem(item.id),
+            );
+          },
+        )
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        String labelText = 'Initial';
+
+        Text(labelText)
+
+        // In reaction (within setState):
+        setState(() {
+          labelText = 'value';
+        });
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation: |
+        bool showError = false;
+
+        if (showError)
+          Text('Error message'),
+
+        // In reaction:
+        setState(() {
+          showError = true;
+        });
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation: |
+        setState(() {
+          showError = false;
+        });
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        bool isEnabled = true;
+
+        ElevatedButton(
+          onPressed: isEnabled ? () => action() : null,
+          child: Text('Submit'),
+        )
+
+        // In reaction:
+        setState(() {
+          isEnabled = true;
+        });
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        bool isLoading = false;
+
+        ElevatedButton(
+          onPressed: isLoading ? null : () async {
+            setState(() => isLoading = true);
+            await viewModel.submit();
+            setState(() => isLoading = false);
+          },
+          child: isLoading
+              ? SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text('Submit'),
+        )
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-IMG).load(url)"
+      implementation: |
+        // Using cached_network_image
+        CachedNetworkImage(
+          imageUrl: url,
+          placeholder: (context, url) => CircularProgressIndicator(),
+          errorWidget: (context, url, error) => Icon(Icons.error),
+        )
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation: |
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Alert'),
+            content: Text('Operation successful'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK'),
+              ),
+            ],
+          ),
+        );
+
+    Dialog.dismiss:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).dismiss()"
+      implementation: |
+        Navigator.pop(context);
+
+    Snackbar.show:
+      pseudocode: "OnSuccess → Snackbar.show(\"message\")"
+      implementation: |
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('message'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+    Toast.show:
+      pseudocode: "OnSuccess → Toast.show(\"message\")"
+      implementation: |
+        // Flutter doesn't have built-in toast
+        // Use fluttertoast package:
+        Fluttertoast.showToast(
+          msg: "message",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+        );
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        showModalBottomSheet(
+          context: context,
+          builder: (context) => Container(
+            height: 300,
+            child: Center(child: Text('Bottom Sheet')),
+          ),
+        );
+
+    BottomSheet.dismiss:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).dismiss()"
+      implementation: |
+        Navigator.pop(context);
+
+    Card.show:
+      pseudocode: "OnSuccess → Card(id=UI-CARD).show()"
+      implementation: |
+        bool showCard = false;
+
+        if (showCard)
+          Card(child: Text('Card content')),
+
+        // In reaction:
+        setState(() {
+          showCard = true;
+        });
+
+    Card.hide:
+      pseudocode: "OnSuccess → Card(id=UI-CARD).hide()"
+      implementation: |
+        setState(() {
+          showCard = false;
+        });
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation: |
+        List<Item> items = [];
+
+        // In reaction:
+        setState(() {
+          items.add(newItem);
+        });
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation: |
+        setState(() {
+          items.removeAt(index);
+        });
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation: |
+        setState(() {
+          items = newItems;
+        });
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        double progress = 0.0;
+
+        LinearProgressIndicator(value: progress)
+
+        // In reaction:
+        setState(() {
+          progress = 0.75;
+        });
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        bool isEnabled = false;
+
+        Switch(value: isEnabled, onChanged: (v) {})
+
+        // In reaction:
+        setState(() {
+          isEnabled = true;
+        });
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => NextPage()),
+        );
+
+        // Named route:
+        Navigator.pushNamed(context, '/next');
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        Navigator.pop(context);
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation: |
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => NextPage()),
+        );
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        // Using showModal with isScrollControlled
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => DraggableScrollableSheet(
+            initialChildSize: 1.0,
+            minChildSize: 1.0,
+            maxChildSize: 1.0,
+            builder: (context, scrollController) => Container(),
+          ),
+        );
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation: |
+        final formKey = GlobalKey<FormState>();
+
+        Form(
+          key: formKey,
+          child: Column(children: [
+            TextFormField(validator: validateEmail),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  viewModel.submit();
+                }
+              },
+              child: Text('Submit'),
+            ),
+          ]),
+        )
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        Text(
+          errorMessage,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        )
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        FutureBuilder<Data>(
+          future: future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const CircularProgressIndicator();
+            }
+            if (snapshot.hasError) return ErrorView(error: snapshot.error);
+            if (!snapshot.hasData) return EmptyView();
+            return ContentView(data: snapshot.data!);
+          },
+        )
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation: |
+        GestureDetector(
+          onTap: () => viewModel.activate(),
+          child: child,
+        )
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: isExpanded ? ExpandedPanel() : CollapsedPanel(),
+        )
+
+# Async Patterns
+async_patterns:
+  future_builder: |
+        FutureBuilder<Data>(
+          future: fetchData(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return CircularProgressIndicator();
+            }
+            if (snapshot.hasError) {
+              return Text('Error: ${snapshot.error}');
+            }
+            return Text('Data: ${snapshot.data}');
+          },
+        )
+
+  stream_builder: |
+        StreamBuilder<Data>(
+          stream: dataStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return CircularProgressIndicator();
+            }
+            return Text('Data: ${snapshot.data}');
+          },
+        )
+
+  async_action: |
+        Future<void> loadData() async {
+          setState(() => isLoading = true);
+          try {
+            final data = await api.fetchData();
+            setState(() {
+              items = data;
+              isLoading = false;
+            });
+          } catch (e) {
+            setState(() => isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: $e')),
+            );
+          }
+        }

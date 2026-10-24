@@ -141,7 +141,7 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 | 宿主全局 | 环境 `AGENTS.md` | 机器/用户级规则（编码铁律、语言、风格） |
 | 项目级 | `references/constitution.md` **实例化后** | 技术栈、目录、命名、自定义约定、错误码表 |
 | 团队通用 | `references/engineering/` | 前端治理 / 后端治理 / 检查与验证细则 |
-| 外部能力层（SpecLang 提炼） | `references/engineering/spec-contract.md` | 规格结构与证据语法细则（机械规则 / 六态证据 / 报告机读行 / 需求编号纪律）；**只提炼引用，非原文拷贝**，挂载见下表与本节末「推荐技能」 |
+| 外部能力层（SpecLang **vendor**） | `references/vendor/speclang/`（上游原文副本，**29 件** = 27 件资产 ＋ `LICENSE` ＋ `NOTICE.md`）；适配层 `references/engineering/spec-contract.md` | 规格结构与证据语法 —— **原件为准**：规则原文是仓内 vendor 全文（逐件 sha256 见 `NOTICE.md`）；蟛蜞只写适配面（六态→引擎映射 / 机读行落地 / 缺口留档）。挂载见下表与本节末「推荐技能」 |
 
 ⇒ **不新建独立 AGENTS 文件**：全局 AGENTS + 项目 constitution 已占真源位，再加一套 = 双源冲突。项目约定由 constitution 承载，团队通用细则由 engineering/ 承载。
 
@@ -172,11 +172,21 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 |---|---|
 | 技能源 | 外部资产 **SpecLang**，版本钉 `SpecLang@b3ee6ee`（**不锚 `HEAD`**）｜来源 `https://gitcode.com/xuanjz/SpecLang` |
 | 四个技能 | `speclang-waterfall`（规格编写 ＋ 机械校验）｜`speclang-hoare-check`（霍尔逻辑推理验证）｜`prd-guide`（需求编号纪律）｜`ui-component-registry`（UI 组件种类目录） |
-| 与本团队的关系 | **recommend**：**按需启用、非装配、不进入引擎装配面**；不在册**不构成失败**，也不影响任何门禁。提炼面已由 `references/engineering/spec-contract.md` 承载，本仓**不引入**其资产 |
-| 许可与署面 | 源仓 `LICENSE:2` 署 **The Cangjie Project**（Apache-2.0 ＋ 运行时库例外条款），**权利人待确认** ⇒ 引用须保留署名与许可声明，**禁全文拷贝** |
+| 与本团队的关系 | **recommend**：**按需启用、非装配、不进入引擎装配面**；不在册**不构成失败**，也不影响任何门禁。资产**已 vendor 进仓**（`references/vendor/speclang/`，**29 件** = 27 件资产 ＋ `LICENSE` ＋ `NOTICE.md` ＋ 逐件 sha256 变更清单）⇒ **读法 = 直接读仓内 vendor 原件**，不依赖宿主是否装了同名技能；**vendor 不改变 recommend 语义**（仍不进装配面） |
+| 许可与署面 | 源仓 `LICENSE` 署 **The Cangjie Project**（Apache-2.0 with Runtime Library Exception），**权利人待确认**（不得改写成已确认）⇒ 已按用户裁决**解除**上批「禁全文拷贝」自保红线，改为**允许 vendor ＋ 四条替代约束**：① `LICENSE` 原件随目录 ② `NOTICE.md`（含逐件 sha256 变更清单）③ 署面保留 ④ 权利人待确认 ｜ 条件缺任一即视为红线违反 |
 
 - **三条可核边界（`recommend` ≠ 装配面）**：① **禁**写入任何 role 文件 frontmatter 的 `skills:` 字段；② **禁**把本条写成装配式措辞（强制安装 / 硬依赖 / 未就绪即拒批一类表述）；③ 技能名解析不到 ⇒ **不构成拒态**：`GATE_SKILL_MISSING` 已于 `b8380a8` 移除（`discipline.md` §0o 记载 `skills` 名可解析性 = 纯 recommend）。
 - **按需加载**：用到哪面读哪面（写规格 → `speclang-waterfall`；量证据强度 → `speclang-hoare-check`；需求编号 → `prd-guide`）；**常规任务不加载亦无影响**。
+
+**何时读哪一面**（按任务取件；读的都是**仓内 vendor 原件**，不联网、不依赖宿主安装）：
+
+| 任务 | 读这里 |
+|---|---|
+| 写 / 改 PRD（需求点 · 场景 · 验收检查点） | `references/vendor/speclang/prd-guide/` |
+| 规格结构与机械校验（`MC-*` 规则与校验器） | `references/vendor/speclang/speclang-waterfall/` |
+| 证据强度、Hoare 推理报告模板 | `references/vendor/speclang/speclang-hoare-check/` |
+| UI kind / operation 目录 | `references/vendor/speclang/ui-component-registry/` |
+| 蟛蜞侧怎么落（六态→引擎映射 · 机读行落地 · 缺口留档） | `references/engineering/spec-contract.md` |
 
 ---
 

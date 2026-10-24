@@ -1,0 +1,411 @@
+# Pseudocode to Jetpack Compose Translation Guide
+# Translates ui_logic_native_pseudocode operations to Android Jetpack Compose code
+
+target_platform: android
+target_framework: jetpack_compose
+language: kotlin
+
+platform_context:
+  frameworks:
+    - "Jetpack Compose is Android's declarative Kotlin UI toolkit."
+    - "The Android View system uses Activity/Fragment lifecycle and XML or programmatic Views; use this guide for Compose implementations."
+  layout:
+    - "Use Column, Row, Box, LazyColumn, LazyRow, LazyVerticalGrid, and FlowRow/FlowColumn."
+    - "Use WindowSizeClass and adaptive layout guidance for tablets, foldables, and resizable windows."
+  state_management:
+    - "Use remember for local composition state and rememberSaveable for state that survives configuration changes."
+    - "Use ViewModel with StateFlow or LiveData for screen-level state."
+  lifecycle:
+    - "Use LaunchedEffect, DisposableEffect, and SideEffect for side effects bound to composition lifecycle."
+    - "For View-system interoperability or migration, use Activity/Fragment lifecycle-aware components and ViewModel."
+  view_system:
+    - "Use ViewBinding or DataBinding when implementing legacy View-system screens."
+    - "Use BindingAdapter for custom XML binding attributes."
+  resources:
+    - "Use stringResource, dimensionResource, colorResource, and Android resource qualifiers for localization and device variants."
+  accessibility:
+    - "Use Modifier.semantics and Material components' built-in accessibility behavior."
+
+# State Management Patterns
+state_patterns:
+  local_state: "var value: Type by remember { mutableStateOf(initialValue) }"
+  saved_state: "var value: Type by rememberSaveable { mutableStateOf(initialValue) }"
+  view_model: "val viewModel: MyViewModel = viewModel()"
+  state_flow: "val state by viewModel.state.collectAsState()"
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation: |
+        Button(onClick = { viewModel.func() }) {
+            Text("Button")
+        }
+      notes:
+        - "onClick lambda triggers the action"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation: |
+        var query by remember { mutableStateOf("") }
+
+        TextField(
+            value = query,
+            onValueChange = { query = it },
+            keyboardActions = KeyboardActions(
+                onSearch = { viewModel.search(query) }
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Search
+            )
+        )
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation: |
+        var text by remember { mutableStateOf("") }
+
+        TextField(
+            value = text,
+            onValueChange = { newText ->
+                text = newText
+                viewModel.validate(newText)
+            }
+        )
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation: |
+        var isEnabled by remember { mutableStateOf(false) }
+
+        Switch(
+            checked = isEnabled,
+            onCheckedChange = { newValue ->
+                isEnabled = newValue
+                viewModel.setEnabled(newValue)
+            }
+        )
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation: |
+        var progress by remember { mutableStateOf(0f) }
+
+        Slider(
+            value = progress,
+            onValueChange = { newValue ->
+                progress = newValue
+                viewModel.updateProgress(newValue)
+            },
+            valueRange = 0f..1f
+        )
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem → module.selectItem(itemId)"
+      implementation: |
+        LazyColumn {
+            items(items, key = { it.id }) { item ->
+                Text(item.name)
+                    .clickable { viewModel.selectItem(item.id) }
+            }
+        }
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        var labelText by remember { mutableStateOf("Initial") }
+
+        Text(labelText)
+
+        // In reaction:
+        labelText = "value"
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation: |
+        var showError by remember { mutableStateOf(false) }
+
+        if (showError) {
+            Text("Error message")
+        }
+
+        // In reaction:
+        showError = true
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation: |
+        showError = false
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        var isEnabled by remember { mutableStateOf(true) }
+
+        Button(
+            onClick = { },
+            enabled = isEnabled
+        ) {
+            Text("Submit")
+        }
+
+        // In reaction:
+        isEnabled = true
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        var isLoading by remember { mutableStateOf(false) }
+
+        Button(
+            onClick = {
+                isLoading = true
+                coroutineScope.launch {
+                    viewModel.submit()
+                    isLoading = false
+                }
+            },
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text("Submit")
+            }
+        }
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-IMG).load(url)"
+      implementation: |
+        // Using Coil
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            placeholder = painterResource(R.drawable.placeholder),
+            error = painterResource(R.drawable.error)
+        )
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation: |
+        var showDialog by remember { mutableStateOf(false) }
+        var dialogMessage by remember { mutableStateOf("") }
+
+        Button(onClick = {
+            dialogMessage = "Operation successful"
+            showDialog = true
+        }) {
+            Text("Trigger")
+        }
+
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                title = { Text("Alert") },
+                text = { Text(dialogMessage) },
+                confirmButton = {
+                    Button(onClick = { showDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+
+    Snackbar.show:
+      pseudocode: "OnSuccess → Snackbar.show(\"message\")"
+      implementation: |
+        val snackbarHostState = remember { SnackbarHostState() }
+        val scope = rememberCoroutineScope()
+
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) {
+            // Content
+        }
+
+        // In reaction:
+        scope.launch {
+            snackbarHostState.showSnackbar("message")
+        }
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        var showSheet by remember { mutableStateOf(false) }
+
+        Button(onClick = { showSheet = true }) {
+            Text("Show Sheet")
+        }
+
+        if (showSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showSheet = false }
+            ) {
+                // Sheet content
+            }
+        }
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation: |
+        var items by remember { mutableStateOf(listOf<Item>()) }
+
+        // In reaction:
+        items = items + newItem
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation: |
+        items = items.toMutableList().apply { removeAt(index) }
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation: |
+        items = newItems
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75f)"
+      implementation: |
+        var progress by remember { mutableStateOf(0f) }
+
+        LinearProgressIndicator(
+            progress = { progress }
+        )
+
+        // In reaction:
+        progress = 0.75f
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        var isEnabled by remember { mutableStateOf(false) }
+
+        Switch(checked = isEnabled, onCheckedChange = { })
+
+        // In reaction:
+        isEnabled = true
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        // Using NavController
+        val navController = rememberNavController()
+
+        NavHost(navController, startDestination = "home") {
+            composable("home") { HomeScreen(navController) }
+            composable("next") { NextScreen(navController) }
+        }
+
+        // Navigate:
+        navController.navigate("next")
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        navController.popBackStack()
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        var showModal by remember { mutableStateOf(false) }
+
+        if (showModal) {
+            Dialog(
+                onDismissRequest = { showModal = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                ModalContent()
+            }
+        }
+
+        // In reaction:
+        showModal = true
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation: |
+        Column {
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                isError = emailError != null,
+                supportingText = { emailError?.let { Text(it) } }
+            )
+            Button(
+                enabled = !isSubmitting,
+                onClick = {
+                    if (viewModel.validate(email)) viewModel.submit(email)
+                }
+            ) {
+                Text("Submit")
+            }
+        }
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        Text(
+            text = errorMessage,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive }
+        )
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        when (val state = uiState) {
+            is UiState.Loading -> CircularProgressIndicator()
+            is UiState.Content -> Content(state.data)
+            is UiState.Empty -> EmptyState()
+            is UiState.Error -> ErrorView(state.message, onRetry = viewModel::retry)
+        }
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation: |
+        Box(
+            modifier = Modifier.clickable { viewModel.activate() }
+        ) {
+            content()
+        }
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        AnimatedVisibility(visible = isExpanded) {
+            ExpandedPanel()
+        }
+
+# Side Effects
+side_effects:
+  LaunchedEffect: |
+        // Trigger side effect when key changes
+        LaunchedEffect(key1) {
+            viewModel.loadData()
+        }
+
+  DisposableEffect: |
+        // Side effect with cleanup
+        DisposableEffect(key1) {
+            // Setup
+            onDispose {
+                // Cleanup
+            }
+        }
+
+  SideEffect: |
+        // After successful composition
+        SideEffect {
+            // Update non-Compose state
+        }

@@ -1,0 +1,2326 @@
+version: 2.1
+
+# Changelog from v1.0:
+# - Added `uikit` framework_mapping to every kind (ObjC class name)
+# - Added `pod_scope` annotations to kinds with Pod-scope implications
+# - Added `business_components` section for host-app-only business UI components
+# - Added `host_app_apis` section for commonly-used host-app-only APIs that cause compilation errors in Pods
+# - Added `semantic_state_containers` for form semantics, async UI states, gestures, and animation primitives
+# - Added HarmonyOS ArkUI mappings for ArkTS and Cangjie targets
+
+full_surface_containers:
+  - kind: Page
+    description: "A full navigable screen that occupies the entire viewport. The default root kind for standard screens."
+    operations:
+      - name: render
+        description: "Initialize and render the page content, completing the first build and mount of the UI tree."
+      - name: show
+        description: "Bring the page to the foreground and make it visible to the user without modifying the navigation stack."
+      - name: hide
+        description: "Hide the page from view while preserving its state and lifecycle without destroying it."
+      - name: push
+        description: "Push the page onto the navigation stack, navigating to a new page while keeping the current one in the stack."
+      - name: pop
+        description: "Pop the current page off the navigation stack and return to the previous page."
+      - name: replace
+        description: "Replace the current page at the top of the navigation stack with a new page; the current page is destroyed and cannot be returned to."
+      - name: attach
+        description: "Mount the page as a child view inside a specified parent container, typically used for nested container pages."
+      - name: detach
+        description: "Unmount the page from its parent container without necessarily destroying the page instance."
+    framework_mapping:
+      flutter: Scaffold
+      swiftui: "View (root)"
+      uikit: "UIViewController"
+      jetpack_compose: Scaffold
+      react_native: "View (root)"
+      html_css: "<body> / <main>"
+      arkui_arkts: "@Entry @Component struct / Navigation"
+      arkui_cangjie: "ArkUI/Cangjie @Entry @Component struct / Navigation"
+
+  - kind: Screen
+    description: "A full-surface screen used within a multi-screen navigation container (e.g. TabBar, ViewPager). Prefer Screen over Page when the surface is one of several peer screens that the user switches between; use Page for a standalone navigable screen."
+    operations:
+      - name: render
+        description: "Initialize and render the screen content, completing the first build and mount of the UI tree."
+      - name: show
+        description: "Bring the screen to the foreground and make it visible to the user without modifying the navigation stack."
+      - name: hide
+        description: "Hide the screen from view while preserving its state and lifecycle without destroying it."
+      - name: push
+        description: "Push the screen onto the navigation stack, navigating to a new screen while keeping the current one in the stack."
+      - name: pop
+        description: "Pop the current screen off the navigation stack and return to the previous screen."
+      - name: replace
+        description: "Replace the current screen at the top of the navigation stack with a new screen; the current screen is destroyed and cannot be returned to."
+      - name: attach
+        description: "Mount the screen as a child view inside a specified parent container, typically used for nested container screens."
+      - name: detach
+        description: "Unmount the screen from its parent container without necessarily destroying the screen instance."
+    framework_mapping:
+      flutter: Scaffold
+      swiftui: "View (root)"
+      uikit: "UIViewController"
+      jetpack_compose: Scaffold
+      react_native: "View (root)"
+      html_css: "<body> / <main>"
+      arkui_arkts: "@Component struct / NavDestination"
+      arkui_cangjie: "ArkUI/Cangjie @Component struct / NavDestination"
+
+  - kind: Modal
+    description: "A full-surface modal overlay that covers the current screen. Dismissible by user action or programmatically."
+    operations:
+      - name: present
+        description: "Animate the modal into view, blocking interaction with the content beneath."
+      - name: dismiss
+        description: "Animate the modal out of view and restore interaction with the underlying screen."
+      - name: show
+        description: "Make the modal visible without an entrance animation (e.g. restore from hidden state)."
+      - name: hide
+        description: "Hide the modal without destroying it, preserving its state for later reuse."
+      - name: confirm
+        description: "Trigger the primary affirmative action and close the modal."
+      - name: cancel
+        description: "Trigger the dismissal action without committing any changes."
+    framework_mapping:
+      flutter: "showDialog / showModalBottomSheet"
+      swiftui: ".sheet() / .fullScreenCover()"
+      uikit: "UIViewController (presentViewController:animated:completion:)"
+      jetpack_compose: "Dialog / ModalBottomSheetLayout"
+      react_native: Modal
+      html_css: "<dialog> / .modal"
+      arkui_arkts: "CustomDialogController / Dialog"
+      arkui_cangjie: "ArkUI/Cangjie CustomDialogController / Dialog"
+
+  - kind: Drawer
+    description: "A slide-in panel from the left or right edge of the screen. Used for navigation menus or contextual panels."
+    operations:
+      - name: open
+        description: "Slide the drawer into view from the screen edge."
+      - name: close
+        description: "Slide the drawer back off-screen."
+      - name: toggle
+        description: "Open the drawer if closed, or close it if open."
+      - name: show
+        description: "Make the drawer visible without a slide animation."
+      - name: hide
+        description: "Hide the drawer without a slide animation, preserving its state."
+    framework_mapping:
+      flutter: "Drawer / EndDrawer"
+      swiftui: custom
+      uikit: "UIViewController (custom transition) / MMDrawerController"
+      jetpack_compose: "ModalDrawerSheet / ModalNavigationDrawer"
+      react_native: DrawerLayoutAndroid
+      html_css: "<aside> + CSS transform"
+      arkui_arkts: "SideBarContainer / custom drawer"
+      arkui_cangjie: "ArkUI/Cangjie SideBarContainer / custom drawer"
+
+  - kind: Sheet
+    description: "A bottom sheet that slides up from the bottom edge. Can be modal or non-modal."
+    operations:
+      - name: present
+        description: "Slide the sheet up from the bottom edge into its initial detent position."
+      - name: dismiss
+        description: "Slide the sheet back down and remove it from the view hierarchy."
+      - name: expand
+        description: "Stretch the sheet to a larger detent or full-screen height."
+      - name: collapse
+        description: "Shrink the sheet back to a smaller detent or minimum height."
+      - name: show
+        description: "Make the sheet visible without an entrance animation."
+      - name: hide
+        description: "Hide the sheet without an exit animation, preserving its content state."
+    framework_mapping:
+      flutter: "showBottomSheet / DraggableScrollableSheet"
+      swiftui: ".sheet() (detent-based)"
+      uikit: "UIViewController (custom presentation) / UISheetPresentationController (iOS 15+)"
+      jetpack_compose: ModalBottomSheet
+      react_native: ActionSheetIOS
+      html_css: custom
+      arkui_arkts: "bindSheet / custom bottom sheet"
+      arkui_cangjie: "ArkUI/Cangjie bindSheet / custom bottom sheet"
+
+  - kind: FullscreenOverlay
+    description: "A full-screen overlay that sits above all other content. Used for loading states, image viewers, or immersive content."
+    operations:
+      - name: present
+        description: "Mount and animate the overlay into the topmost layer of the window."
+      - name: dismiss
+        description: "Animate the overlay out and remove it from the window layer."
+      - name: show
+        description: "Make the overlay visible without an entrance animation."
+      - name: hide
+        description: "Hide the overlay without removing it, allowing quick re-show."
+    framework_mapping:
+      flutter: "Overlay / OverlayEntry"
+      swiftui: ".overlay() / ZStack"
+      uikit: "UIView (window-level) / UIViewController (modal, fullScreen)"
+      jetpack_compose: "Popup / Box + zIndex"
+      react_native: "Modal (transparent)"
+      html_css: "position: fixed + z-index"
+      arkui_arkts: "Stack overlay / Dialog"
+      arkui_cangjie: "ArkUI/Cangjie Stack overlay / Dialog"
+
+layout_containers:
+  - kind: VerticalStack
+    description: "Linear layout that arranges children vertically, top to bottom."
+    operations:
+      - name: addChild
+        description: "Append a new child view to the end of the vertical stack."
+      - name: removeChild
+        description: "Remove a specific child view from the stack."
+      - name: reorder
+        description: "Change the display order of children within the stack."
+      - name: measure
+        description: "Calculate the intrinsic size required by the stack and its children."
+      - name: layout
+        description: "Apply final position and size to each child according to the vertical axis."
+    framework_mapping:
+      flutter: Column
+      swiftui: VStack
+      uikit: "UIStackView (axis: .vertical)"
+      jetpack_compose: Column
+      react_native: "View (flexDirection: column)"
+      html_css: "display: flex; flex-direction: column"
+      arkui_arkts: "Column"
+      arkui_cangjie: "ArkUI/Cangjie Column"
+
+  - kind: HorizontalStack
+    description: "Linear layout that arranges children horizontally, left to right."
+    operations:
+      - name: addChild
+        description: "Append a new child view to the end of the horizontal stack."
+      - name: removeChild
+        description: "Remove a specific child view from the stack."
+      - name: reorder
+        description: "Change the display order of children within the stack."
+      - name: measure
+        description: "Calculate the intrinsic size required by the stack and its children."
+      - name: layout
+        description: "Apply final position and size to each child according to the horizontal axis."
+    framework_mapping:
+      flutter: Row
+      swiftui: HStack
+      uikit: "UIStackView (axis: .horizontal)"
+      jetpack_compose: Row
+      react_native: "View (flexDirection: row)"
+      html_css: "display: flex; flex-direction: row"
+      arkui_arkts: "Row"
+      arkui_cangjie: "ArkUI/Cangjie Row"
+
+  - kind: HorizontalPair
+    description: "Exactly two elements side by side. A constrained form of HorizontalStack."
+    operations:
+      - name: addChild
+        description: "Set one of the two child slots (leading or trailing)."
+      - name: removeChild
+        description: "Clear a child slot, leaving it empty."
+      - name: measure
+        description: "Calculate the combined width and the height of the taller child."
+      - name: layout
+        description: "Position the two children side by side with equal or proportional widths."
+    framework_mapping:
+      flutter: Row
+      swiftui: HStack
+      uikit: "UIStackView (axis: .horizontal, 2 arrangedSubviews)"
+      jetpack_compose: Row
+      react_native: "View (flexDirection: row)"
+      html_css: "display: flex; flex-direction: row"
+      arkui_arkts: "Row"
+      arkui_cangjie: "ArkUI/Cangjie Row"
+
+  - kind: Grid
+    description: "Two-dimensional grid layout with rows and columns."
+    operations:
+      - name: addCell
+        description: "Insert a new cell into the grid at the next available position."
+      - name: removeCell
+        description: "Remove a specific cell from the grid."
+      - name: reorder
+        description: "Rearrange cells within the grid."
+      - name: selectItem
+        description: "Select or activate a grid cell by index or identity, typically in response to tapping or clicking the cell."
+      - name: span
+        description: "Make a cell occupy multiple columns or rows."
+      - name: measure
+        description: "Calculate the total size required by the grid given its column and row definitions."
+      - name: layout
+        description: "Place each cell into its assigned grid area."
+    framework_mapping:
+      flutter: GridView
+      swiftui: "LazyVGrid / LazyHGrid"
+      uikit: "UICollectionView + UICollectionViewCompositionalLayout"
+      jetpack_compose: "LazyVerticalGrid / LazyHorizontalGrid"
+      react_native: "FlatList (numColumns)"
+      html_css: "display: grid"
+      arkui_arkts: "Grid"
+      arkui_cangjie: "ArkUI/Cangjie Grid"
+
+  - kind: Overlay
+    description: "Stacking layout where children are layered on top of each other. Used for floating elements, badges, or absolute-positioned content."
+    operations:
+      - name: addChild
+        description: "Add a new layer on top of the existing stack."
+      - name: removeChild
+        description: "Remove a specific layer from the stack."
+      - name: reorderZ
+        description: "Change the z-order of a child to bring it forward or push it back."
+      - name: align
+        description: "Set the alignment anchor of a child within the overlay bounds."
+      - name: show
+        description: "Make the overlay container visible."
+      - name: hide
+        description: "Hide the overlay container without destroying its children."
+    framework_mapping:
+      flutter: Stack
+      swiftui: ZStack
+      uikit: "UIView (addSubview with constraints / frame overlap)"
+      jetpack_compose: Box
+      react_native: "View (position: absolute)"
+      html_css: "position: relative/absolute"
+      arkui_arkts: "Stack"
+      arkui_cangjie: "ArkUI/Cangjie Stack"
+
+  - kind: Frame
+    description: "Generic container with optional background, border, padding, and size constraints. The most basic grouping element."
+    operations:
+      - name: addChild
+        description: "Add a child view inside the frame."
+      - name: removeChild
+        description: "Remove a child view from the frame."
+      - name: measure
+        description: "Calculate the frame's size including padding and child content."
+      - name: layout
+        description: "Apply the frame's position, size, background, and border."
+      - name: show
+        description: "Make the frame and its children visible."
+      - name: hide
+        description: "Hide the frame and its children without removing them from the hierarchy."
+    framework_mapping:
+      flutter: "Container / SizedBox"
+      swiftui: "View + .frame() + .background()"
+      uikit: "UIView (with layout constraints or frame)"
+      jetpack_compose: "Box / Surface"
+      react_native: View
+      html_css: "<div>"
+      arkui_arkts: "Column / Stack with modifiers"
+      arkui_cangjie: "ArkUI/Cangjie Column / Stack with modifiers"
+
+  - kind: ScrollContainer
+    description: "A scrollable container that allows content to exceed the viewport bounds."
+    operations:
+      - name: scrollTo
+        description: "Scroll to an absolute offset position (x, y)."
+      - name: scrollBy
+        description: "Scroll by a relative delta from the current scroll position."
+      - name: scrollToTop
+        description: "Instantly or smoothly scroll to the very beginning of the content."
+      - name: scrollToBottom
+        description: "Instantly or smoothly scroll to the very end of the content."
+      - name: measure
+        description: "Calculate the viewport size and total scrollable content size."
+      - name: layout
+        description: "Position child content within the scrollable area."
+    framework_mapping:
+      flutter: "SingleChildScrollView / ListView"
+      swiftui: "ScrollView / List"
+      uikit: "UIScrollView"
+      jetpack_compose: "Modifier.verticalScroll() / LazyColumn"
+      react_native: ScrollView
+      html_css: "overflow: scroll/auto"
+      arkui_arkts: "Scroll / Scrollable"
+      arkui_cangjie: "ArkUI/Cangjie Scroll / Scrollable"
+
+  - kind: List
+    description: "A scrollable list of repeating items. Supports lazy rendering for large datasets."
+    operations:
+      - name: addItem
+        description: "Append or insert a new item into the list data source."
+      - name: removeItem
+        description: "Delete an item from the list data source by index or identity."
+      - name: selectItem
+        description: "Select or activate a list item by index or identity, typically in response to tapping or clicking an item row."
+      - name: scrollTo
+        description: "Scroll the list to an absolute pixel offset."
+      - name: scrollToIndex
+        description: "Scroll the list so that the item at a given index is visible."
+      - name: reorder
+        description: "Drag and drop to rearrange items within the list."
+      - name: reload
+        description: "Replace or refresh the list data source and re-render visible items."
+      - name: measure
+        description: "Calculate the total height of all rendered items."
+      - name: layout
+        description: "Position each visible item cell within the list viewport."
+    framework_mapping:
+      flutter: "ListView / ListView.builder"
+      swiftui: List
+      uikit: "UITableView"
+      jetpack_compose: "LazyColumn / LazyRow"
+      react_native: "FlatList / SectionList"
+      html_css: "<ul> / <ol>"
+      arkui_arkts: "List"
+      arkui_cangjie: "ArkUI/Cangjie List"
+
+  - kind: FlexContainer
+    description: "Flexible layout that distributes space among children with grow/shrink ratios."
+    operations:
+      - name: addChild
+        description: "Add a new flex item to the container."
+      - name: removeChild
+        description: "Remove a flex item from the container."
+      - name: expand
+        description: "Increase a child's flex-grow factor so it takes more available space."
+      - name: shrink
+        description: "Increase a child's flex-shrink factor so it yields space under constraint."
+      - name: distribute
+        description: "Apply justify-content / align-items rules to spread children across the main and cross axes."
+      - name: measure
+        description: "Run the flex algorithm to determine each child's resolved size."
+      - name: layout
+        description: "Commit the computed positions and sizes to each child."
+    framework_mapping:
+      flutter: "Flex / Expanded / Flexible"
+      swiftui: "Spacer() / .layoutPriority()"
+      uikit: "UIStackView (distribution: .fillProportionally / custom constraints)"
+      jetpack_compose: "BoxWithConstraints / FlowRow"
+      react_native: "flex property"
+      html_css: "flex-grow / flex-shrink / flex-basis"
+      arkui_arkts: "Flex"
+      arkui_cangjie: "ArkUI/Cangjie Flex"
+
+  - kind: WrapContainer
+    description: "Layout that wraps children to the next line when horizontal space is exhausted."
+    operations:
+      - name: addChild
+        description: "Add a new child view; it will be placed on the current or next line as space allows."
+      - name: removeChild
+        description: "Remove a child view and re-flow remaining children."
+      - name: wrap
+        description: "Force a line break before a specific child, pushing it to the next row."
+      - name: measure
+        description: "Calculate the total height after wrapping children across available width."
+      - name: layout
+        description: "Position children row-by-row, wrapping when a row is full."
+    framework_mapping:
+      flutter: Wrap
+      swiftui: custom
+      uikit: "Custom layout (compute size per line) / UICollectionViewFlowLayout"
+      jetpack_compose: "FlowRow / FlowColumn"
+      react_native: "View (flexWrap: wrap)"
+      html_css: "flex-wrap: wrap"
+      arkui_arkts: "Flex(wrap)"
+      arkui_cangjie: "ArkUI/Cangjie Flex(wrap)"
+
+  - kind: Table
+    description: "Tabular data display with rows and columns, supporting sorting and column resizing."
+    operations:
+      - name: addRow
+        description: "Append or insert a new data row into the table."
+      - name: removeRow
+        description: "Delete a row from the table by index or identity."
+      - name: sort
+        description: "Sort all rows by a specified column in ascending or descending order."
+      - name: resizeColumn
+        description: "Adjust the width of a column by dragging its header boundary."
+      - name: measure
+        description: "Calculate the minimum width for each column based on cell content."
+      - name: layout
+        description: "Position all cells within their assigned column and row bounds."
+    framework_mapping:
+      flutter: Table
+      swiftui: Table
+      uikit: "UITableView (sectioned) / custom grid"
+      jetpack_compose: custom
+      react_native: custom
+      html_css: "<table>"
+      arkui_arkts: "Grid / custom table"
+      arkui_cangjie: "ArkUI/Cangjie Grid / custom table"
+
+  - kind: SafeArea
+    description: "Container that insets its children to avoid system UI (notch, status bar, home indicator)."
+    operations:
+      - name: inset
+        description: "Apply safe-area insets to the container's padding so children stay clear of system UI."
+      - name: adapt
+        description: "Re-compute and update insets when the device orientation or safe-area changes."
+      - name: measure
+        description: "Calculate the available content area after subtracting safe-area insets."
+      - name: layout
+        description: "Position children within the inset content bounds."
+    framework_mapping:
+      flutter: SafeArea
+      swiftui: ".safeAreaInset()"
+      uikit: "UIView (respect safeAreaInsets / additionalSafeAreaInsets)"
+      jetpack_compose: "Modifier.safeContentPadding()"
+      react_native: SafeAreaView
+      html_css: "env(safe-area-inset-*)"
+      arkui_arkts: "safe-area padding / expandSafeArea"
+      arkui_cangjie: "ArkUI/Cangjie safe-area padding / expandSafeArea"
+
+  - kind: Spacer
+    description: "Flexible empty space that pushes adjacent elements apart."
+    operations:
+      - name: expand
+        description: "Grow the spacer to fill all remaining available space along the main axis."
+      - name: shrink
+        description: "Allow the spacer to compress when siblings need more space."
+      - name: measure
+        description: "Report the spacer's resolved size after flex or constraint calculation."
+    framework_mapping:
+      flutter: "Spacer / Expanded"
+      swiftui: Spacer
+      uikit: "UIView (flexible width/height constraint) / space in UIStackView"
+      jetpack_compose: "Spacer / Modifier.weight()"
+      react_native: "View (flex: 1)"
+      html_css: "flex-grow: 1"
+      arkui_arkts: "Blank"
+      arkui_cangjie: "ArkUI/Cangjie Blank"
+
+semantic_state_containers:
+  - kind: Form
+    description: "A semantic container for input fields that are validated, submitted, reset, and tracked as a single unit."
+    operations:
+      - name: submit
+        description: "Attempt to submit the current form values, usually after running validation and blocking duplicate submissions."
+      - name: validate
+        description: "Run all field-level and form-level validation rules and update the visible validation state."
+      - name: reset
+        description: "Restore all fields to their initial values and clear dirty, touched, submitting, and validation state."
+      - name: setSubmitting
+        description: "Mark the form as actively submitting so controls can disable duplicate actions and show progress."
+      - name: setDirty
+        description: "Mark the form as changed from its initial values, enabling unsaved-change prompts or submit controls."
+      - name: setPristine
+        description: "Mark the form as unchanged from its initial values after reset or successful persistence."
+      - name: setTouched
+        description: "Mark one or more fields as visited by the user so validation messages can be shown at the right time."
+      - name: setValid
+        description: "Mark the current form values as valid and clear any form-level invalid state."
+      - name: setInvalid
+        description: "Mark the form as invalid and attach one or more validation errors to fields or to the form itself."
+      - name: setError
+        description: "Attach a submit-level or form-level error that is not owned by a single field."
+      - name: clearErrors
+        description: "Remove field-level and form-level errors without changing the current field values."
+      - name: enable
+        description: "Allow the user to interact with all enabled fields and submit controls in the form."
+      - name: disable
+        description: "Prevent user interaction with the form while preserving its current values and validation state."
+    framework_mapping:
+      flutter: "Form / FormState"
+      swiftui: "Form + @State validation model"
+      uikit: "UIView / UITableView form + validation coordinator"
+      jetpack_compose: "Column + rememberSaveable form state"
+      react_native: "View + form state library or local state"
+      html_css: "<form>"
+      arkui_arkts: "Column + @State validation model"
+      arkui_cangjie: "ArkUI/Cangjie Column + @State validation model"
+
+  - kind: ValidationMessage
+    description: "A message associated with a field or form that explains validation errors, warnings, or success state."
+    operations:
+      - name: setMessage
+        description: "Replace the visible validation text with a new localized message."
+      - name: setError
+        description: "Show the message as an error that blocks successful validation or submission."
+      - name: setWarning
+        description: "Show the message as a warning that should be noticed but may not block submission."
+      - name: setSuccess
+        description: "Show the message as positive validation feedback, such as an available username."
+      - name: clear
+        description: "Remove the validation message and return the associated field or form to a neutral state."
+      - name: show
+        description: "Make the validation message visible to users and assistive technologies."
+      - name: hide
+        description: "Hide the validation message while preserving its current text and severity."
+      - name: announce
+        description: "Request an accessibility announcement for the current message after validation changes."
+    framework_mapping:
+      flutter: "Text / FormField.errorText"
+      swiftui: "Text + accessibility announcement"
+      uikit: "UILabel + UIAccessibility announcement"
+      jetpack_compose: "Text + supportingText/error state"
+      react_native: "Text + accessibilityLiveRegion"
+      html_css: "<p role='alert'> / aria-describedby"
+      arkui_arkts: "Text + accessibility announcement"
+      arkui_cangjie: "ArkUI/Cangjie Text + accessibility announcement"
+
+  - kind: AsyncContent
+    description: "A stateful content region that switches between loading, content, empty, error, partial, and refreshing UI states."
+    operations:
+      - name: setLoading
+        description: "Show the initial or blocking loading state and suppress normal content interaction until data is available."
+      - name: setContent
+        description: "Show successfully loaded content and hide loading, empty, and error presentations."
+      - name: setEmpty
+        description: "Show the empty state when loading succeeded but returned no displayable data."
+      - name: setError
+        description: "Show a recoverable failure state with an optional message, diagnostic code, and retry action."
+      - name: setPartial
+        description: "Show available content while indicating that some requested data failed or is still unavailable."
+      - name: setRefreshing
+        description: "Keep existing content visible while showing that a background refresh is in progress."
+      - name: retry
+        description: "Trigger the configured retry action from an error, partial, or stale state."
+      - name: cancel
+        description: "Cancel the in-flight load or refresh operation when the user leaves or explicitly aborts."
+      - name: setStale
+        description: "Mark displayed content as out of date while it remains visible and usable."
+      - name: clearState
+        description: "Return the region to its neutral state before a new lifecycle starts."
+    states:
+      - loading
+      - content
+      - empty
+      - error
+      - partial
+      - refreshing
+      - stale
+    framework_mapping:
+      flutter: "FutureBuilder / StreamBuilder / state-driven Widget switch"
+      swiftui: "View enum state + switch"
+      uikit: "Container UIView / UIViewController with state renderer"
+      jetpack_compose: "UiState sealed class + when"
+      react_native: "Conditional render from async state"
+      html_css: "state container + conditional DOM"
+      arkui_arkts: "@State union + conditional rendering"
+      arkui_cangjie: "ArkUI/Cangjie @State union + conditional rendering"
+
+  - kind: GestureRegion
+    description: "A semantic wrapper that binds pointer, touch, mouse, keyboard, or accessibility gestures to child content."
+    operations:
+      - name: tap
+        description: "Trigger the primary activation gesture from a quick pointer, touch, keyboard, or accessibility action."
+      - name: doubleTap
+        description: "Trigger a secondary activation after two quick taps or clicks on the same region."
+      - name: longPress
+        description: "Trigger a press-and-hold action after the pointer or touch remains down for a configured duration."
+      - name: swipe
+        description: "Recognize a directional fling or drag gesture and report its direction."
+      - name: panStart
+        description: "Begin continuous pointer or touch tracking and capture the initial position."
+      - name: pan
+        description: "Report continuous movement deltas while the pointer or touch remains active."
+      - name: panEnd
+        description: "End continuous movement tracking and report final velocity or displacement."
+      - name: pinch
+        description: "Recognize a two-pointer scale gesture and report the scale factor."
+      - name: rotate
+        description: "Recognize a two-pointer rotation gesture and report the angle delta."
+      - name: hover
+        description: "React when a mouse, stylus, or compatible pointer enters or moves over the region."
+      - name: focus
+        description: "Move keyboard or accessibility focus to the gesture region."
+      - name: blur
+        description: "Remove keyboard or accessibility focus from the gesture region."
+      - name: enable
+        description: "Allow the region to recognize configured gestures."
+      - name: disable
+        description: "Prevent the region from recognizing gestures while keeping its content visible."
+    framework_mapping:
+      flutter: "GestureDetector / InkWell"
+      swiftui: ".gesture() / .onTapGesture()"
+      uikit: "UIGestureRecognizer"
+      jetpack_compose: "Modifier.pointerInput / clickable"
+      react_native: "Pressable / Gesture Responder / gesture-handler"
+      html_css: "Pointer Events / Mouse Events / Touch Events"
+      arkui_arkts: "component event modifiers"
+      arkui_cangjie: "ArkUI/Cangjie component event modifiers"
+
+  - kind: AnimatedVisibility
+    description: "A container that animates child content entering, exiting, appearing, disappearing, or changing visibility state."
+    operations:
+      - name: enter
+        description: "Run the configured entrance animation and make the child content visible."
+      - name: exit
+        description: "Run the configured exit animation and hide or remove the child content when the animation completes."
+      - name: show
+        description: "Make the child content visible, using the configured entrance animation when animation is enabled."
+      - name: hide
+        description: "Hide the child content, using the configured exit animation when animation is enabled."
+      - name: transition
+        description: "Animate from one named visual state to another, such as collapsed to expanded or idle to selected."
+      - name: setDuration
+        description: "Set the animation duration in milliseconds or platform-native time units."
+      - name: setEasing
+        description: "Set the timing curve used for interpolation, such as linear, ease-in, ease-out, or spring."
+      - name: pause
+        description: "Temporarily stop the current animation while preserving its progress."
+      - name: resume
+        description: "Continue a paused animation from its stored progress."
+      - name: cancel
+        description: "Stop the current animation and settle the content into the configured fallback state."
+      - name: setReducedMotion
+        description: "Switch to reduced-motion behavior for users or environments that request minimal animation."
+    framework_mapping:
+      flutter: "AnimatedSwitcher / AnimatedOpacity / Visibility"
+      swiftui: ".transition() / .animation()"
+      uikit: "UIViewPropertyAnimator / UIView animateWithDuration"
+      jetpack_compose: "AnimatedVisibility / animate*AsState"
+      react_native: "Animated / LayoutAnimation / Reanimated"
+      html_css: "CSS transition / CSS animation / Web Animations API"
+      arkui_arkts: "if rendering + animation / animateTo"
+      arkui_cangjie: "ArkUI/Cangjie if rendering + animation / animateTo"
+
+interactive_components:
+  - kind: Button
+    description: "A tappable element that triggers an action. The most common interactive component."
+    operations:
+      - name: tap
+        description: "Execute a quick touch-up action, triggering the button's primary callback."
+      - name: press
+        description: "Begin the press-down state, visually depressing the button."
+      - name: longPress
+        description: "Trigger a secondary action after the button is held for a defined duration."
+      - name: release
+        description: "End the press state, returning the button to its normal appearance."
+      - name: enable
+        description: "Make the button interactive so it responds to user input."
+      - name: disable
+        description: "Grey out the button and prevent it from responding to any interaction."
+      - name: setEnabled
+        description: "Programmatically set whether the button is enabled, using a boolean value."
+      - name: show
+        description: "Make the button visible in the UI."
+      - name: hide
+        description: "Hide the button from view without removing it from the layout."
+      - name: focus
+        description: "Move keyboard/accessibility focus to the button."
+      - name: blur
+        description: "Remove keyboard/accessibility focus from the button."
+      - name: setLoading
+        description: "Replace the button label with a loading spinner and disable interaction."
+      - name: setText
+        description: "Update the button's visible label text."
+    framework_mapping:
+      flutter: "ElevatedButton / TextButton / OutlinedButton / IconButton / FloatingActionButton"
+      swiftui: Button
+      uikit: "UIButton"
+      jetpack_compose: "Button / FilledTonalButton / OutlinedButton / TextButton / IconButton / FloatingActionButton"
+      react_native: "Button / Pressable / TouchableOpacity / TouchableHighlight"
+      html_css: "<button> / <input type='button|submit|reset'>"
+      arkui_arkts: "Button"
+      arkui_cangjie: "ArkUI/Cangjie Button"
+
+  - kind: TextField
+    description: "Single-line or multi-line text input field for user typing."
+    operations:
+      - name: focus
+        description: "Move input focus to the field and show the software keyboard."
+      - name: blur
+        description: "Remove focus from the field and hide the software keyboard."
+      - name: type
+        description: "Insert one or more characters at the current cursor position."
+      - name: paste
+        description: "Insert clipboard content at the current cursor position."
+      - name: cut
+        description: "Remove the selected text and place it on the clipboard."
+      - name: copy
+        description: "Copy the selected text to the clipboard without removing it."
+      - name: select
+        description: "Highlight a range of text defined by start and end offsets."
+      - name: selectAll
+        description: "Select the entire text content of the field."
+      - name: clear
+        description: "Delete all text content from the field."
+      - name: setText
+        description: "Programmatically replace the field's current value with new text."
+      - name: setPlaceholder
+        description: "Update the hint text shown when the field is empty."
+      - name: setCursorPosition
+        description: "Move the insertion cursor to a specific character offset."
+      - name: onTextChange
+        description: "Trigger a callback whenever the field value changes due to typing, paste, clear, or programmatic text replacement."
+      - name: onSubmit
+        description: "Trigger a callback when the user commits the field, typically by pressing the return, done, search, or submit key."
+      - name: enable
+        description: "Allow the user to interact with and type into the field."
+      - name: disable
+        description: "Prevent user interaction with the field while keeping it visible."
+      - name: show
+        description: "Make the field visible in the UI."
+      - name: hide
+        description: "Hide the field from view without removing it from the layout."
+      - name: showKeyboard
+        description: "Programmatically request the software keyboard to appear."
+      - name: hideKeyboard
+        description: "Programmatically dismiss the software keyboard."
+      - name: validate
+        description: "Run validation rules against the current value and surface any error messages."
+    framework_mapping:
+      flutter: "TextField / TextFormField"
+      swiftui: "TextField / TextEditor"
+      uikit: "UITextField / UITextView"
+      jetpack_compose: "TextField / OutlinedTextField / BasicTextField"
+      react_native: TextInput
+      html_css: "<input type='text'> / <textarea>"
+      arkui_arkts: "TextInput"
+      arkui_cangjie: "ArkUI/Cangjie TextInput"
+
+  - kind: SecureField
+    description: "Password or sensitive text input with visibility toggle."
+    operations:
+      - name: focus
+        description: "Move input focus to the secure field and show the software keyboard."
+      - name: blur
+        description: "Remove focus and dismiss the software keyboard."
+      - name: type
+        description: "Insert a character, which is immediately masked in the display."
+      - name: paste
+        description: "Insert clipboard text at the cursor; characters are masked on paste."
+      - name: clear
+        description: "Delete all text from the secure field."
+      - name: setText
+        description: "Programmatically set the field value (e.g. auto-fill from a password manager)."
+      - name: setPlaceholder
+        description: "Update the hint text shown when the field is empty."
+      - name: toggleVisibility
+        description: "Switch between masked (••••) and plain-text display of the entered value."
+      - name: enable
+        description: "Allow the user to interact with the field."
+      - name: disable
+        description: "Prevent user interaction with the field."
+      - name: show
+        description: "Make the field visible in the UI."
+      - name: hide
+        description: "Hide the field from view without removing it from the layout."
+      - name: validate
+        description: "Run validation (e.g. minimum length, complexity) and surface error messages."
+    framework_mapping:
+      flutter: "TextField(obscureText: true)"
+      swiftui: SecureField
+      uikit: "UITextField (secureTextEntry: YES)"
+      jetpack_compose: "TextField + PasswordVisualTransformation"
+      react_native: "TextInput(secureTextEntry)"
+      html_css: "<input type='password'>"
+      arkui_arkts: "TextInput(InputType.Password)"
+      arkui_cangjie: "ArkUI/Cangjie TextInput(InputType.Password)"
+
+  - kind: SearchField
+    description: "Text input specialized for search with built-in clear and submit actions."
+    operations:
+      - name: search
+        description: "Initiate a search query using the current text value."
+      - name: clear
+        description: "Empty the search field and reset any active search results."
+      - name: focus
+        description: "Activate the search field and show the software keyboard."
+      - name: blur
+        description: "Deactivate the search field and hide the keyboard."
+      - name: submit
+        description: "Commit the current query, equivalent to pressing the Search key on the keyboard."
+      - name: suggest
+        description: "Display a list of autocomplete suggestions below the field based on current input."
+      - name: setText
+        description: "Programmatically populate the field with a search query string."
+      - name: setPlaceholder
+        description: "Update the hint text shown when the field is empty."
+      - name: enable
+        description: "Allow the user to interact with and type into the search field."
+      - name: disable
+        description: "Prevent user interaction while keeping the field visible."
+      - name: show
+        description: "Make the search field visible."
+      - name: hide
+        description: "Hide the search field without removing it from the layout."
+    framework_mapping:
+      flutter: "SearchBar / SearchAnchor"
+      swiftui: ".searchable()"
+      uikit: "UISearchBar"
+      jetpack_compose: SearchBar
+      react_native: "TextInput + icon"
+      html_css: "<input type='search'>"
+      arkui_arkts: "Search"
+      arkui_cangjie: "ArkUI/Cangjie Search"
+
+  - kind: Switch
+    description: "A binary toggle control for on/off states."
+    operations:
+      - name: toggle
+        description: "Flip the switch from its current state to the opposite state."
+      - name: setOn
+        description: "Programmatically turn the switch on."
+      - name: setOff
+        description: "Programmatically turn the switch off."
+      - name: setValue
+        description: "Programmatically set the switch to a boolean on/off value."
+      - name: enable
+        description: "Allow the user to interact with the switch."
+      - name: disable
+        description: "Prevent user interaction with the switch while keeping it visible."
+      - name: show
+        description: "Make the switch visible."
+      - name: hide
+        description: "Hide the switch without removing it from the layout."
+    framework_mapping:
+      flutter: Switch
+      swiftui: Toggle
+      uikit: "UISwitch"
+      jetpack_compose: Switch
+      react_native: Switch
+      html_css: "<input type='checkbox'> (toggle style)"
+      arkui_arkts: "Toggle(type: Switch)"
+      arkui_cangjie: "ArkUI/Cangjie Toggle(type: Switch)"
+
+  - kind: Checkbox
+    description: "A selectable box for binary or indeterminate states."
+    operations:
+      - name: check
+        description: "Set the checkbox to the checked (true) state."
+      - name: uncheck
+        description: "Set the checkbox to the unchecked (false) state."
+      - name: toggle
+        description: "Flip between checked and unchecked states."
+      - name: setIndeterminate
+        description: "Set the checkbox to an indeterminate (mixed) state, typically used in parent-child selection."
+      - name: enable
+        description: "Allow the user to interact with the checkbox."
+      - name: disable
+        description: "Prevent user interaction while keeping the checkbox visible."
+      - name: show
+        description: "Make the checkbox visible."
+      - name: hide
+        description: "Hide the checkbox without removing it from the layout."
+    framework_mapping:
+      flutter: Checkbox
+      swiftui: "Toggle(.toggleStyle(.checkbox))"
+      uikit: "UIButton (custom checkbox style)"
+      jetpack_compose: "Checkbox / TriStateCheckbox"
+      react_native: community
+      html_css: "<input type='checkbox'>"
+      arkui_arkts: "Checkbox"
+      arkui_cangjie: "ArkUI/Cangjie Checkbox"
+
+  - kind: RadioButton
+    description: "A mutually exclusive selection control within a group."
+    operations:
+      - name: select
+        description: "Mark this radio button as selected and deselect others in the same group."
+      - name: deselect
+        description: "Clear the selection from this radio button."
+      - name: enable
+        description: "Allow the user to select this radio button."
+      - name: disable
+        description: "Prevent user interaction while keeping the radio button visible."
+      - name: show
+        description: "Make the radio button visible."
+      - name: hide
+        description: "Hide the radio button without removing it from the layout."
+    framework_mapping:
+      flutter: Radio
+      swiftui: "Picker (single-select style)"
+      uikit: "UIButton (custom radio style) / UISegmentedControl"
+      jetpack_compose: RadioButton
+      react_native: community
+      html_css: "<input type='radio'>"
+      arkui_arkts: "Radio"
+      arkui_cangjie: "ArkUI/Cangjie Radio"
+
+  - kind: Slider
+    description: "A draggable thumb on a track for selecting a value within a range."
+    operations:
+      - name: slide
+        description: "Drag the thumb to a new position, updating the current value continuously."
+      - name: setValue
+        description: "Programmatically set the slider to a specific value within its range."
+      - name: onValueChange
+        description: "Trigger a callback while the slider value changes due to user interaction."
+      - name: setRange
+        description: "Update the minimum and maximum bounds of the slider."
+      - name: enable
+        description: "Allow the user to drag the slider thumb."
+      - name: disable
+        description: "Prevent user interaction with the slider."
+      - name: show
+        description: "Make the slider visible."
+      - name: hide
+        description: "Hide the slider without removing it from the layout."
+    framework_mapping:
+      flutter: Slider
+      swiftui: Slider
+      uikit: "UISlider"
+      jetpack_compose: Slider
+      react_native: community
+      html_css: "<input type='range'>"
+      arkui_arkts: "Slider"
+      arkui_cangjie: "ArkUI/Cangjie Slider"
+
+  - kind: Dropdown
+    description: "A select control that expands to show a list of options."
+    operations:
+      - name: open
+        description: "Expand the dropdown to reveal the list of selectable options."
+      - name: close
+        description: "Collapse the dropdown back to its compact form."
+      - name: select
+        description: "Choose an option from the list, updating the displayed value."
+      - name: filter
+        description: "Narrow the visible options by typing a search string."
+      - name: enable
+        description: "Allow the user to open and interact with the dropdown."
+      - name: disable
+        description: "Prevent user interaction with the dropdown."
+      - name: show
+        description: "Make the dropdown visible."
+      - name: hide
+        description: "Hide the dropdown without removing it from the layout."
+    framework_mapping:
+      flutter: DropdownButton
+      swiftui: "Picker / Menu"
+      uikit: "UIPickerView / UIPickerView (in UITextField inputView)"
+      jetpack_compose: "DropdownMenu / ExposedDropdownMenuBox"
+      react_native: Picker
+      html_css: "<select> + <option>"
+      arkui_arkts: "Select"
+      arkui_cangjie: "ArkUI/Cangjie Select"
+
+  - kind: DatePicker
+    description: "A control for selecting a date from a calendar view."
+    operations:
+      - name: open
+        description: "Display the calendar picker sheet or inline calendar."
+      - name: close
+        description: "Hide the calendar picker without committing a selection."
+      - name: selectDate
+        description: "Choose a specific date from the calendar grid."
+      - name: setRange
+        description: "Define the selectable date range with a minimum and/or maximum date."
+      - name: confirm
+        description: "Commit the currently highlighted date as the selected value."
+      - name: cancel
+        description: "Dismiss the picker without changing the current date value."
+      - name: enable
+        description: "Allow the user to open and interact with the date picker."
+      - name: disable
+        description: "Prevent user interaction with the date picker."
+      - name: show
+        description: "Make the date picker control visible."
+      - name: hide
+        description: "Hide the date picker control without removing it from the layout."
+    framework_mapping:
+      flutter: "showDatePicker / DatePicker"
+      swiftui: DatePicker
+      uikit: "UIDatePicker"
+      jetpack_compose: "DatePickerDialog / DatePicker"
+      react_native: community
+      html_css: "<input type='date'>"
+      arkui_arkts: "DatePicker"
+      arkui_cangjie: "ArkUI/Cangjie DatePicker"
+
+  - kind: TimePicker
+    description: "A control for selecting a time of day."
+    operations:
+      - name: open
+        description: "Display the time picker sheet or inline dial/scroll."
+      - name: close
+        description: "Hide the time picker without committing a selection."
+      - name: selectTime
+        description: "Choose a specific hour and minute value."
+      - name: confirm
+        description: "Commit the currently selected time as the active value."
+      - name: cancel
+        description: "Dismiss the picker without changing the current time value."
+      - name: enable
+        description: "Allow the user to open and interact with the time picker."
+      - name: disable
+        description: "Prevent user interaction with the time picker."
+      - name: show
+        description: "Make the time picker control visible."
+      - name: hide
+        description: "Hide the time picker control without removing it from the layout."
+    framework_mapping:
+      flutter: showTimePicker
+      swiftui: "DatePicker(.displayedComponents = .hourAndMinute)"
+      uikit: "UIDatePicker (mode: .time)"
+      jetpack_compose: TimePicker
+      react_native: community
+      html_css: "<input type='time'>"
+      arkui_arkts: "TimePicker"
+      arkui_cangjie: "ArkUI/Cangjie TimePicker"
+
+  - kind: Stepper
+    description: "A control with increment and decrement buttons for numeric values."
+    operations:
+      - name: increment
+        description: "Increase the current value by one step amount."
+      - name: decrement
+        description: "Decrease the current value by one step amount."
+      - name: setValue
+        description: "Programmatically set the stepper to a specific value."
+      - name: setStep
+        description: "Change the amount added or subtracted on each increment/decrement."
+      - name: setRange
+        description: "Define the minimum and maximum allowed values."
+      - name: enable
+        description: "Allow the user to press the increment and decrement buttons."
+      - name: disable
+        description: "Prevent user interaction with the stepper."
+      - name: show
+        description: "Make the stepper visible."
+      - name: hide
+        description: "Hide the stepper without removing it from the layout."
+    framework_mapping:
+      flutter: custom
+      swiftui: Stepper
+      uikit: "UIStepper"
+      jetpack_compose: custom
+      react_native: custom
+      html_css: "<input type='number'> + buttons"
+      arkui_arkts: "Counter / custom stepper"
+      arkui_cangjie: "ArkUI/Cangjie Counter / custom stepper"
+
+  - kind: SegmentedControl
+    description: "A horizontal set of mutually exclusive segments for switching between views or options."
+    operations:
+      - name: select
+        description: "Activate a segment by index or value, deactivating all others."
+      - name: deselect
+        description: "Remove the active selection from the currently selected segment."
+      - name: enable
+        description: "Allow the user to tap segments to switch between options."
+      - name: disable
+        description: "Prevent user interaction with all segments."
+      - name: show
+        description: "Make the segmented control visible."
+      - name: hide
+        description: "Hide the segmented control without removing it from the layout."
+    framework_mapping:
+      flutter: SegmentedButton
+      swiftui: "Picker(.pickerStyle(.segmented))"
+      uikit: "UISegmentedControl"
+      jetpack_compose: "SingleChoiceSegmentedButtonRow / MultiChoiceSegmentedButtonRow"
+      react_native: SegmentedControlIOS
+      html_css: "<fieldset> + radio"
+      arkui_arkts: "Tabs / custom segmented buttons"
+      arkui_cangjie: "ArkUI/Cangjie Tabs / custom segmented buttons"
+
+  - kind: Chip
+    description: "A compact element representing an input, attribute, or action. Can be selectable, removable, or tappable."
+    operations:
+      - name: tap
+        description: "Trigger the chip's primary action (e.g. apply a filter or fire a command)."
+      - name: select
+        description: "Mark the chip as selected, indicating an active filter or attribute."
+      - name: deselect
+        description: "Remove the selected state from the chip."
+      - name: remove
+        description: "Delete the chip from its parent container (for input chips with a close button)."
+      - name: enable
+        description: "Allow the user to tap or select the chip."
+      - name: disable
+        description: "Prevent user interaction with the chip."
+      - name: show
+        description: "Make the chip visible."
+      - name: hide
+        description: "Hide the chip without removing it from the layout."
+    framework_mapping:
+      flutter: "Chip / FilterChip / InputChip / ActionChip"
+      swiftui: custom
+      uikit: "UIButton (custom pill/chip style)"
+      jetpack_compose: "FilterChip / InputChip / AssistChip / SuggestionChip"
+      react_native: community
+      html_css: "<span> + CSS"
+      arkui_arkts: "Button/Text tag"
+      arkui_cangjie: "ArkUI/Cangjie Button/Text tag"
+
+  - kind: RatingBar
+    description: "A star-based or icon-based rating input control."
+    operations:
+      - name: rate
+        description: "Set the rating by tapping or dragging to the desired icon."
+      - name: setValue
+        description: "Programmatically assign a numeric rating value."
+      - name: hover
+        description: "Preview a rating value on hover/touch without committing it."
+      - name: clear
+        description: "Reset the rating to zero or an unrated state."
+      - name: enable
+        description: "Allow the user to interact with the rating bar."
+      - name: disable
+        description: "Prevent user interaction, rendering the bar in a read-only state."
+      - name: show
+        description: "Make the rating bar visible."
+      - name: hide
+        description: "Hide the rating bar without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: custom
+      uikit: "Custom UIView (UIControl + star images)"
+      jetpack_compose: community
+      react_native: community
+      html_css: custom
+      arkui_arkts: "Rating"
+      arkui_cangjie: "ArkUI/Cangjie Rating"
+
+  - kind: FilePicker
+    description: "A control that opens the system file browser for selecting files."
+    operations:
+      - name: open
+        description: "Launch the system file browser dialog."
+      - name: selectFile
+        description: "Choose a single file and return its reference to the caller."
+      - name: selectMultiple
+        description: "Choose multiple files and return their references to the caller."
+      - name: cancel
+        description: "Close the file browser without selecting any file."
+      - name: preview
+        description: "Show a preview of the currently highlighted file before confirming selection."
+      - name: show
+        description: "Make the file picker trigger element visible."
+      - name: hide
+        description: "Hide the file picker trigger element without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: ".fileImporter()"
+      uikit: "UIDocumentPickerViewController"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<input type='file'>"
+      arkui_arkts: "DocumentViewPicker"
+      arkui_cangjie: "ArkUI/Cangjie DocumentViewPicker"
+
+  - kind: ImagePicker
+    description: "A control for selecting images from the device gallery or camera."
+    operations:
+      - name: pick
+        description: "Open the device gallery or camera to choose one or more images."
+      - name: crop
+        description: "Present a cropping interface to trim the selected image."
+      - name: preview
+        description: "Display a full-size preview of the selected image before confirming."
+      - name: confirm
+        description: "Accept the selected (and optionally cropped) image."
+      - name: cancel
+        description: "Dismiss the picker without selecting any image."
+      - name: show
+        description: "Make the image picker trigger element visible."
+      - name: hide
+        description: "Hide the image picker trigger element without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: PhotosPicker
+      uikit: "UIImagePickerController / PHPickerViewController (iOS 14+)"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<input type='file' accept='image/*'>"
+      arkui_arkts: "PhotoViewPicker"
+      arkui_cangjie: "ArkUI/Cangjie PhotoViewPicker"
+
+  - kind: ExpandablePanel
+    description: "A panel with a header that expands to reveal hidden content."
+    operations:
+      - name: expand
+        description: "Animate the panel open to reveal its hidden body content."
+      - name: collapse
+        description: "Animate the panel closed to hide its body content."
+      - name: toggle
+        description: "Expand the panel if collapsed, or collapse it if expanded."
+      - name: show
+        description: "Make the panel (header + body) visible in the UI."
+      - name: hide
+        description: "Hide the entire panel without removing it from the layout."
+    framework_mapping:
+      flutter: "ExpansionTile / ExpansionPanel"
+      swiftui: DisclosureGroup
+      uikit: "UITableView (section header tap) / custom UIView with animation"
+      jetpack_compose: custom
+      react_native: community
+      html_css: "<details> + <summary>"
+      arkui_arkts: "expandable Column/ListItem"
+      arkui_cangjie: "ArkUI/Cangjie expandable Column/ListItem"
+
+  - kind: Card
+    description: "A surface container with elevation/shadow, used to group related content and actions."
+    operations:
+      - name: tap
+        description: "Trigger the card's primary navigation or detail action."
+      - name: swipe
+        description: "Slide the card horizontally to reveal swipe actions (e.g. delete, archive)."
+      - name: expand
+        description: "Grow the card to show additional content that was initially collapsed."
+      - name: dismiss
+        description: "Remove the card from its list or container with a swipe-to-dismiss gesture."
+      - name: transition
+        description: "Animate the card between named visual states such as normal, expanded, selected, or hidden."
+      - name: show
+        description: "Make the card visible."
+      - name: hide
+        description: "Hide the card without removing it from its parent layout."
+    framework_mapping:
+      flutter: Card
+      swiftui: custom
+      uikit: "UIView (with shadow + cornerRadius) / UITableViewCell"
+      jetpack_compose: "Card / ElevatedCard / OutlinedCard"
+      react_native: community
+      html_css: "<article> / <div> + CSS"
+      arkui_arkts: "Column/Stack with border/background"
+      arkui_cangjie: "ArkUI/Cangjie Column/Stack with border/background"
+
+  - kind: Draggable
+    description: "An element that can be dragged by the user and dropped onto a drop target."
+    operations:
+      - name: dragStart
+        description: "Begin a drag session, lifting the element and creating a drag image."
+      - name: drag
+        description: "Move the element continuously as the pointer or touch moves."
+      - name: dragEnd
+        description: "End the drag session regardless of whether it landed on a valid drop target."
+      - name: drop
+        description: "Release the element onto a valid drop target, triggering the drop handler."
+      - name: dragEnter
+        description: "Fire when the dragged element enters a potential drop target's bounds."
+      - name: dragLeave
+        description: "Fire when the dragged element leaves a potential drop target's bounds."
+      - name: dragOver
+        description: "Fire continuously while the dragged element is hovering over a drop target."
+      - name: enable
+        description: "Allow the element to be picked up and dragged."
+      - name: disable
+        description: "Prevent the element from being dragged."
+    framework_mapping:
+      flutter: "Draggable / LongPressDraggable"
+      swiftui: ".draggable()"
+      uikit: "UIDragInteraction (iOS 11+)"
+      jetpack_compose: "Modifier.dragAndDropSource()"
+      react_native: PanResponder
+      html_css: HTML5 Drag and Drop API
+      arkui_arkts: "drag event modifiers"
+      arkui_cangjie: "ArkUI/Cangjie drag event modifiers"
+
+  - kind: DropTarget
+    description: "A zone that accepts dragged elements."
+    operations:
+      - name: accept
+        description: "Receive the dropped element and process the transferred data."
+      - name: reject
+        description: "Decline the drop, returning the dragged element to its origin."
+      - name: highlight
+        description: "Apply a visual indicator showing that the zone is ready to accept a drop."
+      - name: show
+        description: "Make the drop target zone visible."
+      - name: hide
+        description: "Hide the drop target zone without removing it from the layout."
+    framework_mapping:
+      flutter: DragTarget
+      swiftui: ".dropDestination()"
+      uikit: "UIDropInteraction (iOS 11+)"
+      jetpack_compose: "Modifier.dragAndDropTarget()"
+      react_native: PanResponder
+      html_css: "ondrop / ondragover"
+      arkui_arkts: "drop event handlers"
+      arkui_cangjie: "ArkUI/Cangjie drop event handlers"
+
+  - kind: VideoPlayer
+    description: "An embedded video player with playback controls."
+    operations:
+      - name: play
+        description: "Start or resume video playback from the current position."
+      - name: pause
+        description: "Pause playback, keeping the current position for later resumption."
+      - name: stop
+        description: "Stop playback and reset the playhead to the beginning."
+      - name: seek
+        description: "Jump playback to a specific timestamp."
+      - name: setVolume
+        description: "Adjust the audio output level to a value between 0 and 1."
+      - name: mute
+        description: "Silence the audio output without changing the volume setting."
+      - name: unmute
+        description: "Restore audio output to the last non-zero volume level."
+      - name: fullscreen
+        description: "Toggle between embedded and full-screen presentation modes."
+      - name: setPlaybackRate
+        description: "Change the playback speed (e.g. 0.5×, 1×, 1.5×, 2×)."
+      - name: show
+        description: "Make the video player visible."
+      - name: hide
+        description: "Hide the video player without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: community
+      uikit: "AVPlayerViewController / AVPlayerLayer"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<video>"
+      arkui_arkts: "Video"
+      arkui_cangjie: "ArkUI/Cangjie Video"
+
+  - kind: AudioPlayer
+    description: "An embedded audio player with playback controls."
+    operations:
+      - name: play
+        description: "Start or resume audio playback from the current position."
+      - name: pause
+        description: "Pause playback, keeping the current position for later resumption."
+      - name: stop
+        description: "Stop playback and reset the playhead to the beginning."
+      - name: seek
+        description: "Jump playback to a specific timestamp."
+      - name: setVolume
+        description: "Adjust the audio output level to a value between 0 and 1."
+      - name: mute
+        description: "Silence the audio output without changing the volume setting."
+      - name: unmute
+        description: "Restore audio output to the last non-zero volume level."
+      - name: show
+        description: "Make the audio player visible."
+      - name: hide
+        description: "Hide the audio player without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: custom
+      uikit: "AVAudioPlayer / AVPlayer"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<audio>"
+      arkui_arkts: "media player controller + custom controls"
+      arkui_cangjie: "ArkUI/Cangjie media player controller + custom controls"
+
+  - kind: Map
+    description: "An interactive map view supporting pan, zoom, and markers."
+    operations:
+      - name: pan
+        description: "Drag the map to move the visible region in any direction."
+      - name: zoom
+        description: "Change the map scale by pinching, scrolling, or programmatic level adjustment."
+      - name: addMarker
+        description: "Place a pin or custom annotation at a given coordinate."
+      - name: removeMarker
+        description: "Remove a previously added marker from the map."
+      - name: fitBounds
+        description: "Adjust the zoom and center so that a given set of coordinates fits within the viewport."
+      - name: setCenter
+        description: "Move the map so the given coordinate is at the center of the viewport."
+      - name: show
+        description: "Make the map view visible."
+      - name: hide
+        description: "Hide the map view without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: Map
+      uikit: "MAMapView (AMap SDK) / MKMapView (MapKit)"
+      jetpack_compose: community
+      react_native: MapView
+      html_css: "<iframe> + API"
+      arkui_arkts: "Map component / map kit"
+      arkui_cangjie: "ArkUI/Cangjie Map component / map kit"
+
+  - kind: SignaturePad
+    description: "A drawing surface for capturing handwritten signatures."
+    operations:
+      - name: draw
+        description: "Capture pointer or touch movement as ink strokes on the canvas."
+      - name: clear
+        description: "Erase all strokes from the canvas, resetting it to blank."
+      - name: undo
+        description: "Remove the last drawn stroke."
+      - name: redo
+        description: "Re-apply the last undone stroke."
+      - name: export
+        description: "Serialize the signature as an image (PNG/JPEG) or vector data."
+      - name: setColor
+        description: "Change the ink color used for new strokes."
+      - name: setStrokeWidth
+        description: "Change the pen thickness used for new strokes."
+      - name: show
+        description: "Make the signature pad visible."
+      - name: hide
+        description: "Hide the signature pad without clearing its content."
+    framework_mapping:
+      flutter: community
+      swiftui: "Canvas + PencilKit"
+      uikit: "PKCanvasView (PencilKit, iOS 13+)"
+      jetpack_compose: Canvas
+      react_native: community
+      html_css: "<canvas>"
+      arkui_arkts: "Canvas"
+      arkui_cangjie: "ArkUI/Cangjie Canvas"
+
+  - kind: RichTextEditor
+    description: "A text editor with formatting controls (bold, italic, lists, links)."
+    operations:
+      - name: bold
+        description: "Toggle bold formatting on the selected text."
+      - name: italic
+        description: "Toggle italic formatting on the selected text."
+      - name: underline
+        description: "Toggle underline formatting on the selected text."
+      - name: setFont
+        description: "Apply a specific font family or size to the selected text."
+      - name: setColor
+        description: "Apply a foreground or background color to the selected text."
+      - name: insertImage
+        description: "Embed an image at the current cursor position."
+      - name: insertLink
+        description: "Wrap the selected text in a hyperlink with a given URL."
+      - name: undo
+        description: "Revert the most recent editing action."
+      - name: redo
+        description: "Re-apply the most recently undone editing action."
+      - name: getHTML
+        description: "Return the full editor content as an HTML string."
+      - name: getText
+        description: "Return the full editor content as a plain-text string."
+      - name: focus
+        description: "Move input focus to the editor and show the software keyboard."
+      - name: blur
+        description: "Remove focus from the editor and hide the keyboard."
+      - name: show
+        description: "Make the rich text editor visible."
+      - name: hide
+        description: "Hide the editor without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: TextEditor
+      uikit: "UITextView + NSAttributedString / WKWebView (contenteditable)"
+      jetpack_compose: community
+      react_native: community
+      html_css: "contenteditable + JS"
+      arkui_arkts: "RichEditor"
+      arkui_cangjie: "ArkUI/Cangjie RichEditor"
+
+  - kind: QRScanner
+    description: "A camera-based QR/barcode scanner view."
+    operations:
+      - name: startScan
+        description: "Activate the camera and begin scanning for QR codes or barcodes."
+      - name: stopScan
+        description: "Deactivate the camera and stop the scanning session."
+      - name: onDetect
+        description: "Callback fired when a valid QR/barcode is detected, passing the decoded value."
+      - name: toggleTorch
+        description: "Switch the device flashlight on or off to aid scanning in low-light conditions."
+      - name: show
+        description: "Make the scanner view visible."
+      - name: hide
+        description: "Hide the scanner view without stopping the camera session."
+    framework_mapping:
+      flutter: community
+      swiftui: community
+      uikit: "AVCaptureSession + AVCaptureMetadataOutput"
+      jetpack_compose: community
+      react_native: community
+      html_css: "getUserMedia + JS"
+      arkui_arkts: "camera/scan kit surface"
+      arkui_cangjie: "ArkUI/Cangjie camera/scan kit surface"
+
+static_elements:
+  - kind: Text
+    description: "A read-only text label for displaying information."
+    operations:
+      - name: setText
+        description: "Update the displayed string content."
+      - name: setStyle
+        description: "Apply typography styles such as font, size, weight, and color."
+      - name: show
+        description: "Make the text label visible."
+      - name: hide
+        description: "Hide the text label without removing it from the layout."
+      - name: measure
+        description: "Calculate the bounding size needed to render the current text without clipping."
+      - name: truncate
+        description: "Clip the text with an ellipsis when it exceeds the available width or line limit."
+      - name: copy
+        description: "Copy the text content to the system clipboard."
+    framework_mapping:
+      flutter: Text
+      swiftui: "Text / Label"
+      uikit: "UILabel"
+      jetpack_compose: Text
+      react_native: Text
+      html_css: "<p> / <span> / <h1>-<h6> / <label>"
+      arkui_arkts: "Text"
+      arkui_cangjie: "ArkUI/Cangjie Text"
+
+  - kind: RichText
+    description: "Text with inline formatting (bold, italic, colored spans, links)."
+    operations:
+      - name: setAttributedText
+        description: "Replace the content with a new attributed (styled) string."
+      - name: setStyle
+        description: "Apply a base typography style to the entire text view."
+      - name: show
+        description: "Make the rich text view visible."
+      - name: hide
+        description: "Hide the rich text view without removing it from the layout."
+      - name: copy
+        description: "Copy the plain-text representation to the system clipboard."
+    framework_mapping:
+      flutter: "RichText / Text.rich()"
+      swiftui: "Text + AttributedString"
+      uikit: "UILabel (attributedText: NSAttributedString)"
+      jetpack_compose: "AnnotatedString / ClickableText"
+      react_native: "<Text> nesting"
+      html_css: "<strong> / <em> / <mark> / <code>"
+      arkui_arkts: "RichText / Span"
+      arkui_cangjie: "ArkUI/Cangjie RichText / Span"
+
+  - kind: Icon
+    description: "A small symbolic graphic, typically from an icon font or vector set."
+    operations:
+      - name: setIcon
+        description: "Change the icon to a different symbol from the icon set."
+      - name: setColor
+        description: "Apply a tint color to the icon."
+      - name: setSize
+        description: "Resize the icon to a specific point or pixel dimension."
+      - name: show
+        description: "Make the icon visible."
+      - name: hide
+        description: "Hide the icon without removing it from the layout."
+    framework_mapping:
+      flutter: Icon
+      swiftui: "Image(systemName:) / Label"
+      uikit: "UIImageView (asset/icon font) / UIButton (type: .custom, icon only)"
+      jetpack_compose: Icon
+      react_native: community
+      html_css: "<i> / <svg> / icon font"
+      arkui_arkts: "SymbolGlyph / Image"
+      arkui_cangjie: "ArkUI/Cangjie SymbolGlyph / Image"
+
+  - kind: Image
+    description: "A bitmap or vector image for display. Supports loading states and error fallbacks."
+    operations:
+      - name: load
+        description: "Trigger loading of the image from a local asset or remote URL."
+      - name: show
+        description: "Make the image view visible."
+      - name: hide
+        description: "Hide the image view without removing it from the layout."
+      - name: setSource
+        description: "Change the image source to a new URL or asset reference."
+      - name: resize
+        description: "Apply a specific width and height or a scale mode (fit, fill, cover)."
+      - name: crop
+        description: "Clip the displayed image to a given rect or aspect ratio."
+      - name: cache
+        description: "Store the loaded image in the disk/memory cache for faster subsequent loads."
+      - name: prefetch
+        description: "Download and cache the image in the background before it is displayed."
+      - name: onLoad
+        description: "Callback invoked when the image has finished loading and is ready to render."
+      - name: onError
+        description: "Callback invoked when the image fails to load, used to show a fallback."
+    framework_mapping:
+      flutter: Image
+      swiftui: "Image / AsyncImage"
+      uikit: "UIImageView (+ SDWebImage sd_setImageWithURL: for async loading)"
+      jetpack_compose: "Image / AsyncImage"
+      react_native: Image
+      html_css: "<img> / <picture>"
+      arkui_arkts: "Image"
+      arkui_cangjie: "ArkUI/Cangjie Image"
+
+  - kind: Avatar
+    description: "A circular image or initials representing a user or entity."
+    operations:
+      - name: setSource
+        description: "Change the avatar image to a new URL or local asset."
+      - name: setInitials
+        description: "Display a text monogram (e.g. 'AB') as a fallback when no image is available."
+      - name: setSize
+        description: "Change the diameter of the circular avatar."
+      - name: show
+        description: "Make the avatar visible."
+      - name: hide
+        description: "Hide the avatar without removing it from the layout."
+    framework_mapping:
+      flutter: CircleAvatar
+      swiftui: "Image + .clipShape(Circle())"
+      uikit: "UIImageView (layer.cornerRadius = width/2, masksToBounds = YES) + SDWebImage"
+      jetpack_compose: "AsyncImage + CircleShape"
+      react_native: community
+      html_css: "<img> + border-radius: 50%"
+      arkui_arkts: "Image clipped to circle"
+      arkui_cangjie: "ArkUI/Cangjie Image clipped to circle"
+
+  - kind: Divider
+    description: "A thin horizontal or vertical line separating content."
+    operations:
+      - name: show
+        description: "Make the divider line visible."
+      - name: hide
+        description: "Hide the divider line without removing it from the layout."
+      - name: setThickness
+        description: "Change the stroke width of the divider line."
+      - name: setColor
+        description: "Change the color of the divider line."
+    framework_mapping:
+      flutter: Divider
+      swiftui: Divider
+      uikit: "UIView (height: 0.5-1pt, backgroundColor: separator color)"
+      jetpack_compose: "HorizontalDivider / VerticalDivider"
+      react_native: "View + style"
+      html_css: "<hr>"
+      arkui_arkts: "Divider"
+      arkui_cangjie: "ArkUI/Cangjie Divider"
+
+  - kind: Badge
+    description: "A small numeric or text indicator overlaying an icon or element, showing count or status."
+    operations:
+      - name: setCount
+        description: "Update the numeric value displayed inside the badge."
+      - name: setText
+        description: "Set an arbitrary string label on the badge (e.g. 'New', '99+')."
+      - name: setColor
+        description: "Change the background color of the badge."
+      - name: show
+        description: "Make the badge visible."
+      - name: hide
+        description: "Hide the badge without removing it from its anchor element."
+      - name: clear
+        description: "Reset the badge to zero or remove its label entirely."
+    framework_mapping:
+      flutter: Badge
+      swiftui: ".badge()"
+      uikit: "Custom UIView (overlaid) / UILabel (styled as badge)"
+      jetpack_compose: BadgedBox
+      react_native: community
+      html_css: "<span> + CSS"
+      arkui_arkts: "Badge / custom overlay"
+      arkui_cangjie: "ArkUI/Cangjie Badge / custom overlay"
+
+  - kind: ProgressBar
+    description: "A determinate or indeterminate progress indicator."
+    operations:
+      - name: setProgress
+        description: "Update the filled proportion of the bar to a value between 0 and 1."
+      - name: start
+        description: "Begin the indeterminate animation loop."
+      - name: stop
+        description: "Stop the animation and reset the bar to empty."
+      - name: show
+        description: "Make the progress bar visible."
+      - name: hide
+        description: "Hide the progress bar without removing it from the layout."
+      - name: setIndeterminate
+        description: "Switch to indeterminate mode, showing a looping animation instead of a fill level."
+    framework_mapping:
+      flutter: "LinearProgressIndicator / CircularProgressIndicator"
+      swiftui: ProgressView
+      uikit: "UIProgressView (determinate) / UIActivityIndicatorView (indeterminate)"
+      jetpack_compose: "LinearProgressIndicator / CircularProgressIndicator"
+      react_native: "ProgressBarAndroid / ActivityIndicator"
+      html_css: "<progress> / <meter>"
+      arkui_arkts: "Progress"
+      arkui_cangjie: "ArkUI/Cangjie Progress"
+
+  - kind: SkeletonLoader
+    description: "A placeholder shimmer animation shown while content loads."
+    operations:
+      - name: show
+        description: "Display the skeleton placeholder and start the shimmer animation."
+      - name: hide
+        description: "Hide the skeleton and reveal the actual content."
+      - name: animate
+        description: "Restart or continue the shimmer sweep animation."
+    framework_mapping:
+      flutter: community
+      swiftui: ".redacted(reason: .placeholder)"
+      uikit: "Custom UIView (shimmer animation with CAGradientLayer)"
+      jetpack_compose: community
+      react_native: community
+      html_css: CSS animation
+      arkui_arkts: "LoadingProgress / custom skeleton"
+      arkui_cangjie: "ArkUI/Cangjie LoadingProgress / custom skeleton"
+
+  - kind: EmptyState
+    description: "A placeholder view shown when a list or content area has no data."
+    operations:
+      - name: show
+        description: "Display the empty-state illustration, title, and optional action."
+      - name: hide
+        description: "Hide the empty state (e.g. when data has been loaded)."
+      - name: setMessage
+        description: "Update the descriptive text explaining why there is no content."
+      - name: setAction
+        description: "Configure the label and callback of the primary call-to-action button."
+    framework_mapping:
+      flutter: community
+      swiftui: ContentUnavailableView
+      uikit: "Custom UIView (icon + label + button)"
+      jetpack_compose: custom
+      react_native: community
+      html_css: custom
+      arkui_arkts: "custom empty-state component"
+      arkui_cangjie: "ArkUI/Cangjie custom empty-state component"
+
+  - kind: Link
+    description: "A tappable text element that navigates to a URL or performs an action."
+    operations:
+      - name: tap
+        description: "Trigger the link's action or navigation."
+      - name: open
+        description: "Navigate to the configured URL in the default browser or in-app web view."
+      - name: setURL
+        description: "Change the target URL of the link."
+      - name: setText
+        description: "Update the visible anchor text of the link."
+      - name: show
+        description: "Make the link visible."
+      - name: hide
+        description: "Hide the link without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: Link
+      uikit: "UIButton (type: .system) / UITapGestureRecognizer on UILabel"
+      jetpack_compose: ClickableText
+      react_native: Linking.openURL()
+      html_css: "<a>"
+      arkui_arkts: "Text with onClick / Hyperlink"
+      arkui_cangjie: "ArkUI/Cangjie Text with onClick / Hyperlink"
+
+  - kind: CodeBlock
+    description: "A formatted code display with syntax highlighting."
+    operations:
+      - name: setCode
+        description: "Replace the displayed code snippet with new source text."
+      - name: highlight
+        description: "Apply or re-run syntax highlighting over the current code content."
+      - name: copy
+        description: "Copy the raw code text to the system clipboard."
+      - name: setLanguage
+        description: "Change the programming language used for syntax highlighting."
+      - name: show
+        description: "Make the code block visible."
+      - name: hide
+        description: "Hide the code block without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: "Text + monospace"
+      uikit: "UITextView (font: monospace) / Highlightr / custom"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<pre> + <code>"
+      arkui_arkts: "Text / custom monospace container"
+      arkui_cangjie: "ArkUI/Cangjie Text / custom monospace container"
+
+  - kind: Chart
+    description: "A data visualization element (bar, line, pie, etc.)."
+    operations:
+      - name: render
+        description: "Draw the chart using the current dataset and configuration."
+      - name: updateData
+        description: "Replace or merge the chart dataset and trigger a re-render."
+      - name: zoom
+        description: "Change the visible range of the chart axes by pinching or scrolling."
+      - name: pan
+        description: "Drag to shift the visible axis range without changing zoom level."
+      - name: export
+        description: "Export the chart as an image (PNG/SVG) or structured data (CSV/JSON)."
+      - name: setType
+        description: "Switch the chart type (e.g. from bar to line) and re-render."
+      - name: show
+        description: "Make the chart visible."
+      - name: hide
+        description: "Hide the chart without destroying its data or config."
+    framework_mapping:
+      flutter: community
+      swiftui: Chart
+      uikit: "Charts framework (iOS 16+) / AAChartKit / Charts (dgmlnt)"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<canvas> / SVG / ECharts"
+      arkui_arkts: "Canvas / chart component"
+      arkui_cangjie: "ArkUI/Cangjie Canvas / chart component"
+
+  - kind: Markdown
+    description: "A markdown content renderer."
+    operations:
+      - name: render
+        description: "Parse the markdown source and render it as styled HTML or native views."
+      - name: setSource
+        description: "Update the raw markdown string to be rendered."
+      - name: setTheme
+        description: "Apply a color/typography theme to the rendered markdown output."
+      - name: show
+        description: "Make the markdown renderer visible."
+      - name: hide
+        description: "Hide the markdown renderer without clearing its content."
+    framework_mapping:
+      flutter: community
+      swiftui: "Text + AttributedString"
+      uikit: "NSAttributedString + HTML / Marklight / custom parser"
+      jetpack_compose: community
+      react_native: community
+      html_css: JS parser + HTML
+      arkui_arkts: "RichText / custom markdown renderer"
+      arkui_cangjie: "ArkUI/Cangjie RichText / custom markdown renderer"
+
+  - kind: KeyValuePair
+    description: "A label-value pair display, typically in a form or detail view."
+    operations:
+      - name: setKey
+        description: "Update the label (key) portion of the pair."
+      - name: setValue
+        description: "Update the data (value) portion of the pair."
+      - name: show
+        description: "Make the key-value pair visible."
+      - name: hide
+        description: "Hide the key-value pair without removing it from the layout."
+    framework_mapping:
+      flutter: ListTile
+      swiftui: LabeledContent
+      uikit: "UIStackView (horizontal: UILabel + UILabel)"
+      jetpack_compose: ListItem
+      react_native: "View + Text"
+      html_css: "<dl> + <dt> + <dd>"
+      arkui_arkts: "Row"
+      arkui_cangjie: "ArkUI/Cangjie Row"
+
+navigation_elements:
+  - kind: TabBar
+    description: "A horizontal bar of tabs for switching between top-level views."
+    operations:
+      - name: selectTab
+        description: "Activate a tab by index or identifier, switching the content view."
+      - name: scrollToTab
+        description: "Scroll the tab bar so the target tab is fully visible (for scrollable tab bars)."
+      - name: addTab
+        description: "Dynamically insert a new tab into the bar."
+      - name: removeTab
+        description: "Remove a tab from the bar by index or identifier."
+      - name: setBadge
+        description: "Attach a badge count or dot indicator to a specific tab."
+      - name: show
+        description: "Make the tab bar visible."
+      - name: hide
+        description: "Hide the tab bar without affecting the active content view."
+    framework_mapping:
+      flutter: TabBar
+      swiftui: custom
+      uikit: "UITabBar"
+      jetpack_compose: "TabRow / ScrollableTabRow"
+      react_native: TabNavigator
+      html_css: "<nav> + CSS"
+      arkui_arkts: "Tabs"
+      arkui_cangjie: "ArkUI/Cangjie Tabs"
+
+  - kind: BottomNavigationBar
+    description: "A bottom bar with icons and labels for switching between primary destinations."
+    operations:
+      - name: selectTab
+        description: "Activate a destination by index, updating the icon state and content area."
+      - name: switchTab
+        description: "Navigate to a destination programmatically, with optional animation."
+      - name: setBadge
+        description: "Show or update a badge count on a specific destination icon."
+      - name: show
+        description: "Make the bottom navigation bar visible."
+      - name: hide
+        description: "Hide the bottom navigation bar (e.g. during full-screen content)."
+    framework_mapping:
+      flutter: "BottomNavigationBar / NavigationBar"
+      swiftui: "TabView(.tabViewStyle(.page))"
+      uikit: "UITabBarController"
+      jetpack_compose: "NavigationBar / BottomNavigation"
+      react_native: BottomTabNavigator
+      html_css: "<nav> + CSS"
+      arkui_arkts: "Tabs bar at bottom"
+      arkui_cangjie: "ArkUI/Cangjie Tabs bar at bottom"
+
+  - kind: NavigationBar
+    description: "A top app bar with title, back button, and action buttons."
+    operations:
+      - name: setTitle
+        description: "Update the heading text displayed in the center or leading area of the bar."
+      - name: addAction
+        description: "Add a button or menu item to the trailing action area of the bar."
+      - name: removeAction
+        description: "Remove a specific action button from the bar."
+      - name: show
+        description: "Make the navigation bar visible."
+      - name: hide
+        description: "Hide the navigation bar (e.g. for immersive or full-screen modes)."
+      - name: setBackButton
+        description: "Customize the back button icon, title, or visibility."
+      - name: collapse
+        description: "Collapse the bar to a smaller height as the user scrolls down (for large-title bars)."
+      - name: expand
+        description: "Expand the bar back to its full height when the user scrolls to the top."
+    framework_mapping:
+      flutter: "AppBar / SliverAppBar"
+      swiftui: "NavigationStack + .toolbar()"
+      uikit: "UINavigationBar / UINavigationItem"
+      jetpack_compose: "TopAppBar / CenterAlignedTopAppBar"
+      react_native: community
+      html_css: "<nav> / <header>"
+      arkui_arkts: "Navigation / NavDestination title bar"
+      arkui_cangjie: "ArkUI/Cangjie Navigation / NavDestination title bar"
+
+  - kind: NavigationDrawer
+    description: "A slide-in navigation panel from the left edge with menu items."
+    operations:
+      - name: open
+        description: "Slide the navigation drawer in from the left edge."
+      - name: close
+        description: "Slide the navigation drawer back off-screen."
+      - name: selectItem
+        description: "Highlight a menu item and navigate to its associated destination."
+      - name: expandGroup
+        description: "Expand a collapsible group of sub-items within the drawer."
+      - name: collapseGroup
+        description: "Collapse a currently expanded group of sub-items."
+      - name: show
+        description: "Make the drawer visible without a slide animation."
+      - name: hide
+        description: "Hide the drawer without a slide animation."
+    framework_mapping:
+      flutter: NavigationDrawer
+      swiftui: custom
+      uikit: "MMDrawerController / custom UIViewController transition"
+      jetpack_compose: "ModalNavigationDrawer / PermanentNavigationDrawer"
+      react_native: DrawerNavigator
+      html_css: "<aside> + CSS"
+      arkui_arkts: "SideBarContainer / Navigation menu"
+      arkui_cangjie: "ArkUI/Cangjie SideBarContainer / Navigation menu"
+
+  - kind: Sidebar
+    description: "A persistent side panel for navigation, typically on tablet or desktop layouts."
+    operations:
+      - name: selectItem
+        description: "Highlight a navigation item and display its associated content in the detail area."
+      - name: expand
+        description: "Widen the sidebar to show full labels alongside icons."
+      - name: collapse
+        description: "Narrow the sidebar to an icon-only rail to save horizontal space."
+      - name: show
+        description: "Make the sidebar panel visible."
+      - name: hide
+        description: "Hide the sidebar panel (e.g. on small screens or in compact mode)."
+    framework_mapping:
+      flutter: NavigationRail
+      swiftui: "NavigationSplitView sidebar"
+      uikit: "UISplitViewController (primary view)"
+      jetpack_compose: NavigationRail
+      react_native: custom
+      html_css: "<aside>"
+      arkui_arkts: "SideBarContainer"
+      arkui_cangjie: "ArkUI/Cangjie SideBarContainer"
+
+  - kind: Breadcrumb
+    description: "A horizontal path indicator showing the current location in a hierarchy."
+    operations:
+      - name: tapCrumb
+        description: "Navigate back to the tapped ancestor level in the hierarchy."
+      - name: setPath
+        description: "Update the breadcrumb trail with a new array of path segments."
+      - name: show
+        description: "Make the breadcrumb trail visible."
+      - name: hide
+        description: "Hide the breadcrumb trail without removing it from the layout."
+    framework_mapping:
+      flutter: community
+      swiftui: custom
+      uikit: "UIStackView (horizontal: UIButton separators)"
+      jetpack_compose: custom
+      react_native: community
+      html_css: "<nav aria-label='breadcrumb'> + <ol>"
+      arkui_arkts: "Row of Text/Button links"
+      arkui_cangjie: "ArkUI/Cangjie Row of Text/Button links"
+
+  - kind: Paginator
+    description: "A horizontal swipeable page container with dot indicators."
+    operations:
+      - name: swipe
+        description: "Drag horizontally to transition to the adjacent page."
+      - name: goToPage
+        description: "Jump to a specific page index, with or without animation."
+      - name: next
+        description: "Advance to the immediately following page."
+      - name: previous
+        description: "Go back to the immediately preceding page."
+      - name: show
+        description: "Make the paginator and its dot indicators visible."
+      - name: hide
+        description: "Hide the paginator without removing it from the layout."
+    framework_mapping:
+      flutter: PageView
+      swiftui: "TabView(.tabViewStyle(.page))"
+      uikit: "UIPageViewController"
+      jetpack_compose: "HorizontalPager / VerticalPager"
+      react_native: community
+      html_css: CSS scroll-snap
+      arkui_arkts: "custom Row controls"
+      arkui_cangjie: "ArkUI/Cangjie custom Row controls"
+
+  - kind: StepIndicator
+    description: "A visual progress indicator for multi-step processes."
+    operations:
+      - name: goToStep
+        description: "Jump directly to a specific step by index."
+      - name: next
+        description: "Advance to the next step and mark the current step as complete."
+      - name: previous
+        description: "Go back to the previous step."
+      - name: complete
+        description: "Mark all steps as completed and show a final success state."
+      - name: reset
+        description: "Return the indicator to the first step with all steps in a pending state."
+      - name: setStepStatus
+        description: "Explicitly set the status of a specific step (e.g. pending, active, completed, error)."
+      - name: show
+        description: "Make the step indicator visible."
+      - name: hide
+        description: "Hide the step indicator without removing it from the layout."
+    framework_mapping:
+      flutter: Stepper
+      swiftui: custom
+      uikit: "Custom UIView (dots/lines + labels)"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<ol> + CSS"
+      arkui_arkts: "Steps / custom progress row"
+      arkui_cangjie: "ArkUI/Cangjie Steps / custom progress row"
+
+  - kind: BackButton
+    description: "A navigation button that returns to the previous screen."
+    operations:
+      - name: tap
+        description: "Pop the current screen from the navigation stack and return to the previous one."
+      - name: show
+        description: "Make the back button visible in the navigation bar."
+      - name: hide
+        description: "Hide the back button (e.g. when the user is at the root screen)."
+    framework_mapping:
+      flutter: "BackButton (in AppBar)"
+      swiftui: ".navigationBarBackButtonHidden()"
+      uikit: "UIBarButtonItem (style: .done/plain, action: popViewController)"
+      jetpack_compose: "Modifier.navigationBarsPadding()"
+      react_native: HeaderBackButton
+      html_css: "history.back()"
+      arkui_arkts: "Button + router.back"
+      arkui_cangjie: "ArkUI/Cangjie Button + router.back"
+
+feedback_elements:
+  - kind: Dialog
+    description: "A modal overlay for alerts, confirmations, or simple forms. Blocks interaction with the background."
+    operations:
+      - name: show
+        description: "Present the dialog, blocking interaction with the content behind it."
+      - name: dismiss
+        description: "Close the dialog without performing any action."
+      - name: confirm
+        description: "Execute the primary affirmative action and close the dialog."
+      - name: cancel
+        description: "Execute the secondary cancel action and close the dialog without changes."
+    framework_mapping:
+      flutter: "showDialog / AlertDialog"
+      swiftui: ".alert() / .confirmationDialog()"
+      uikit: "UIAlertController"
+      jetpack_compose: AlertDialog
+      react_native: Alert
+      html_css: "<dialog> / window.alert()"
+      arkui_arkts: "AlertDialog / CustomDialogController"
+      arkui_cangjie: "ArkUI/Cangjie AlertDialog / CustomDialogController"
+
+  - kind: Snackbar
+    description: "A brief message that appears at the bottom of the screen and auto-dismisses."
+    operations:
+      - name: show
+        description: "Display the snackbar at the bottom of the screen and start the auto-dismiss timer."
+      - name: dismiss
+        description: "Immediately hide the snackbar before the auto-dismiss timer expires."
+      - name: setMessage
+        description: "Update the text content of the snackbar message."
+      - name: setAction
+        description: "Configure an optional action button label and callback shown alongside the message."
+      - name: setDuration
+        description: "Set how long the snackbar stays visible before auto-dismissing (in milliseconds)."
+    framework_mapping:
+      flutter: "SnackBar / SnackBarAction"
+      swiftui: community
+      uikit: "Custom UIView (bottom toast animation) / Toast-Swift library"
+      jetpack_compose: Snackbar
+      react_native: community
+      html_css: "<div> + CSS animation"
+      arkui_arkts: "promptAction.showToast / custom snackbar"
+      arkui_cangjie: "ArkUI/Cangjie promptAction.showToast / custom snackbar"
+
+  - kind: Toast
+    description: "A lightweight, non-blocking notification that appears briefly and fades out."
+    operations:
+      - name: show
+        description: "Display the toast notification and begin the fade-out countdown."
+      - name: dismiss
+        description: "Immediately hide the toast before it fades out on its own."
+      - name: setMessage
+        description: "Update the text content displayed inside the toast."
+      - name: setDuration
+        description: "Control how long the toast remains visible before fading out (short or long)."
+    pod_scope:
+      uikit_pod_safe_api: "MBProgressHUD (+showHUDAddedTo:animated: / -hide:afterDelay:)"
+      uikit_host_only_api: "MBProgressHUD+Utility Category (makeToast:withText:, makeShortToast:withText:, etc.)"
+      uikit_pod_recommendation: "In Pod code, use <MBProgressHUD/MBProgressHUD.h> raw API only. NEVER call host-app Category methods."
+    framework_mapping:
+      flutter: community
+      swiftui: community
+      uikit: "MBProgressHUD (+showHUDAddedTo:animated: / -hide:afterDelay:) [POD-SAFE] | MBProgressHUD+Utility Category [HOST-ONLY, ❌ in Pod]"
+      jetpack_compose: Toast
+      react_native: ToastAndroid
+      html_css: "<div> + CSS animation"
+      arkui_arkts: "promptAction.showToast"
+      arkui_cangjie: "ArkUI/Cangjie promptAction.showToast"
+
+  - kind: BottomSheet
+    description: "A panel that slides up from the bottom with a list of actions or content."
+    operations:
+      - name: present
+        description: "Slide the bottom sheet up from the screen edge into view."
+      - name: dismiss
+        description: "Slide the bottom sheet back down and remove it from the view hierarchy."
+      - name: selectAction
+        description: "Choose one of the listed actions, triggering its callback and dismissing the sheet."
+      - name: cancel
+        description: "Dismiss the sheet without selecting any action."
+      - name: show
+        description: "Make the sheet visible without an entrance animation."
+      - name: hide
+        description: "Hide the sheet without an exit animation, preserving its content."
+    framework_mapping:
+      flutter: showBottomSheet
+      swiftui: ".confirmationDialog()"
+      uikit: "UISheetPresentationController (iOS 15+) / custom UIViewController transition"
+      jetpack_compose: ModalBottomSheet
+      react_native: ActionSheetIOS
+      html_css: custom
+      arkui_arkts: "bindSheet / custom bottom sheet"
+      arkui_cangjie: "ArkUI/Cangjie bindSheet / custom bottom sheet"
+
+  - kind: Tooltip
+    description: "A small popup that appears on hover or long-press to show additional information."
+    operations:
+      - name: show
+        description: "Display the tooltip popover near its anchor element."
+      - name: hide
+        description: "Hide the tooltip popover."
+      - name: attachTo
+        description: "Bind the tooltip to a specific UI element, defining its anchor point and arrow direction."
+    framework_mapping:
+      flutter: Tooltip
+      swiftui: ".help()"
+      uikit: "Custom popover UIView"
+      jetpack_compose: "TooltipBox / RichTooltipBox"
+      react_native: community
+      html_css: "title attribute / CSS tooltip"
+      arkui_arkts: "Popup / custom tooltip"
+      arkui_cangjie: "ArkUI/Cangjie Popup / custom tooltip"
+
+  - kind: PopupMenu
+    description: "A contextual menu that appears near the trigger element."
+    operations:
+      - name: open
+        description: "Display the contextual menu near the trigger element."
+      - name: close
+        description: "Hide the menu without selecting any item."
+      - name: select
+        description: "Choose a menu item, triggering its action and closing the menu."
+      - name: dismiss
+        description: "Dismiss the menu by tapping outside it or via the back gesture."
+      - name: show
+        description: "Make the menu visible without an entrance animation."
+      - name: hide
+        description: "Hide the menu without an exit animation."
+    framework_mapping:
+      flutter: "PopupMenuButton / MenuAnchor"
+      swiftui: "Menu / .contextMenu()"
+      uikit: "UIMenu / UIAlertController (actionSheet style)"
+      jetpack_compose: "DropdownMenu / ContextMenu"
+      react_native: "ActionSheetIOS / UIManager"
+      html_css: "<menu> / custom"
+      arkui_arkts: "Menu"
+      arkui_cangjie: "ArkUI/Cangjie Menu"
+
+  - kind: LoadingOverlay
+    description: "A full-screen or contained loading indicator that blocks interaction."
+    operations:
+      - name: show
+        description: "Display the loading overlay, blocking all user interaction beneath it."
+      - name: hide
+        description: "Remove the loading overlay and restore interaction."
+      - name: setMessage
+        description: "Update the descriptive text shown below or beside the spinner."
+    framework_mapping:
+      flutter: "Overlay + CircularProgressIndicator"
+      swiftui: "ZStack + ProgressView"
+      uikit: "MBProgressHUD (+showHUDAddedTo:animated: / -hide:afterDelay:) [POD-SAFE] | UIActivityIndicatorView + overlay UIView"
+      jetpack_compose: "Box + CircularProgressIndicator"
+      react_native: "Modal + ActivityIndicator"
+      html_css: "fixed overlay + spinner"
+      arkui_arkts: "Stack overlay + LoadingProgress"
+      arkui_cangjie: "ArkUI/Cangjie Stack overlay + LoadingProgress"
+
+  - kind: NotificationBanner
+    description: "A banner that drops down from the top of the screen with a message and optional action."
+    operations:
+      - name: show
+        description: "Animate the banner dropping down from the top of the screen."
+      - name: dismiss
+        description: "Slide the banner back up and hide it before the auto-dismiss timer expires."
+      - name: setMessage
+        description: "Update the title and/or body text displayed in the banner."
+      - name: setAction
+        description: "Configure an action button label and callback shown within the banner."
+      - name: setDuration
+        description: "Set how long the banner stays visible before auto-dismissing (in milliseconds)."
+    framework_mapping:
+      flutter: community
+      swiftui: community
+      uikit: "Custom UIView (top slide-down animation) / CWStatusBarNotification / LNNotification"
+      jetpack_compose: community
+      react_native: community
+      html_css: "<div> + CSS animation"
+      arkui_arkts: "custom banner component"
+      arkui_cangjie: "ArkUI/Cangjie custom banner component"
+
+# ============================================================
+# Business Components — host-app-only UI components commonly
+# used in the project but NOT available in Pod compilation.
+# These are documented here to prevent Pod compilation errors.
+# ============================================================
+business_components:
+  - kind: ColorUtils
+    category: utility
+    description: "Host app UIColor Category providing colorWithString: (hex string to UIColor)."
+    pod_scope: host_only
+    pod_safe_alternative: "[UIColor colorWithRed:R/255.0 green:G/255.0 blue:B/255.0 alpha:1.0]"
+    framework_mapping:
+      uikit: "UIColor+ColorUtils.h (Category) [HOST-ONLY]"
+    notes: "If writing Pod code, parse the hex string manually or use inline RGB. Do NOT import ColorUtils.h."
+
+  - kind: ThemeColors
+    category: utility
+    description: "Host app UIColor Category providing semantic theme colors (e.g., themeColorPrimary)."
+    pod_scope: host_only
+    pod_safe_alternative: "Use direct RGB values or accept UIColor via delegate/block from host"
+    framework_mapping:
+      uikit: "UIColor+Theme.h (Category) [HOST-ONLY]"
+    notes: "Pod code should not depend on host theme system. Pass colors from host via init parameters."
+
+  - kind: MBProgressHUDUtility
+    category: utility
+    description: "Host app MBProgressHUD Category providing convenience toast methods (makeToast:withText:, makeShortToast:withText:, etc.)."
+    pod_scope: host_only
+    pod_safe_alternative: "[MBProgressHUD showHUDAddedTo:view animated:YES] + [hud hide:YES afterDelay:delay]"
+    framework_mapping:
+      uikit: "MBProgressHUD+Utility.h (Category) [HOST-ONLY]"
+    notes: "NEVER call makeToast: or makeShortToast: in Pod code. Use raw MBProgressHUD API from <MBProgressHUD/MBProgressHUD.h>."
+
+  - kind: UIViewRoundCorner
+    category: utility
+    description: "Host app UIView Category providing roundCorner convenience methods."
+    pod_scope: host_only
+    pod_safe_alternative: "view.layer.cornerRadius = X; view.layer.masksToBounds = YES;"
+    framework_mapping:
+      uikit: "UIView+RoundCorner.h (Category) [HOST-ONLY]"
+    notes: "Use Core Animation layer properties directly in Pod code."
+
+  - kind: FontUtils
+    category: utility
+    description: "Host app UIFont Category providing font creation from JSON config or naming conventions."
+    pod_scope: host_only
+    pod_safe_alternative: "[UIFont systemFontOfSize:size] / [UIFont fontWithName:size]"
+    framework_mapping:
+      uikit: "UIFont+Utils.h (Category) [HOST-ONLY]"
+    notes: "Use system font APIs directly in Pod code."

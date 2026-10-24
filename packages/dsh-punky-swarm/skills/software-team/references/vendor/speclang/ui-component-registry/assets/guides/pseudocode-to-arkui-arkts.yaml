@@ -1,0 +1,669 @@
+# Pseudocode to HarmonyOS ArkUI ArkTS Translation Guide
+# Translates ui_logic_native_pseudocode operations to HarmonyOS ArkUI code written in ArkTS.
+
+target_platform: harmonyos
+target_framework: arkui
+language: arkts
+
+platform_context:
+  frameworks:
+    - "ArkUI is HarmonyOS' declarative UI framework; ArkTS implementations usually define @Entry/@Component structs with a build() method."
+    - "Use built-in ArkUI components such as Column, Row, Stack, List, Grid, Text, Button, TextInput, Toggle, Slider, Image, Video, Progress, Tabs, Navigation, Dialog, and Sheet-related APIs when available in the project SDK."
+    - "Use @State, @Prop, @Link, @Observed, @ObjectLink, or the project's state-management layer to drive reactive UI updates."
+  layout:
+    - "Use Column and Row for linear layout, Stack for overlays, Scroll for scrollable regions, List for lazy repeating rows, Grid for two-dimensional grids, Flex for flexible/wrapping layout, and Blank for spacer-like flexible empty space."
+    - "Use adaptive modifiers, breakpoints, grid/flex layout, and safe-area handling for phones, tablets, foldables, cars, wearables, and resizable windows."
+  state_management:
+    - "Represent ui_logic reactions as state mutations; ArkUI re-renders the affected component tree when observed state changes."
+    - "Keep async UI states explicit, usually as a discriminated state object such as loading/content/empty/error/refreshing."
+  lifecycle:
+    - "Use component lifecycle hooks and page lifecycle hooks for load, refresh, cleanup, and subscription behavior."
+  navigation:
+    - "Use Navigation/NavDestination patterns for new navigation code where adopted; use router APIs only when the project is already router-based."
+  accessibility:
+    - "Use text labels, semantic descriptions, focus order, live announcements, and accessible touch sizes according to HarmonyOS accessibility guidance."
+
+state_patterns:
+  local_state: "@State value: Type = initialValue"
+  property_input: "@Prop value: Type"
+  two_way_binding: "@Link value: Type"
+  observed_model: "@Observed class Model { ... }"
+  async_union: "type UiState = LoadingState | ContentState | EmptyState | ErrorState"
+
+coverage_policy:
+  scope:
+    - "This guide covers every legal kind in kinds-catalog.yaml through kind_coverage."
+    - "The translation section gives concrete code for high-frequency operations; for operations not shown there, follow the same state/event/rendering pattern listed in kind_coverage."
+    - "If the project SDK exposes a more specific HarmonyOS component than the generic mapping below, prefer the project SDK component while preserving the catalog operation semantics."
+  operation_rules:
+    - "show/hide/present/dismiss/open/close map to @State visibility flags, controller open/close calls, or Navigation/Dialog/Sheet APIs."
+    - "enable/disable/setEnabled map to .enabled(...) or equivalent project wrappers."
+    - "setText/setMessage/setSource/setValue/setProgress/reload/updateData map to @State or view-model state changes that drive re-rendering."
+    - "tap/click/select/onTextChange/onSubmit/onValueChange map to ArkUI event callbacks such as .onClick, .onChange, .onSubmit, selection handlers, or project wrappers."
+    - "measure/layout/addChild/removeChild/reorder are structural implementation concerns; represent them through the declared component tree, conditional rendering, ForEach order, layout modifiers, and state-driven data changes."
+
+kind_coverage:
+  full_surface_containers:
+    Page:
+      arkui: "@Entry @Component struct with Navigation/NavDestination or router-backed page"
+      common_use_cases: ["app page root", "push/pop/replace navigation", "mounting nested page content", "first render"]
+      notes: "Use Navigation path stack for new navigation code when available; router APIs are acceptable in router-based projects."
+    Screen:
+      arkui: "@Component struct used as a peer surface inside Tabs, Navigation, or another multi-screen container"
+      common_use_cases: ["tab page", "pager destination", "embedded screen", "show/hide within a container"]
+      notes: "Do not treat Screen as a standalone app route unless the spec uses it as a peer surface."
+    Modal:
+      arkui: "CustomDialogController, Dialog, or full-screen Stack/Dialog wrapper"
+      common_use_cases: ["blocking confirmation", "full-screen modal flow", "confirm/cancel", "programmatic present/dismiss"]
+      notes: "Preserve confirm/cancel callbacks separately from dismiss-on-backdrop behavior."
+    Drawer:
+      arkui: "SideBarContainer or custom Stack/Row drawer"
+      common_use_cases: ["navigation drawer", "context panel", "open/close/toggle", "edge menu"]
+      notes: "Keep drawer state explicit so branch UI obligations can prove open/close outcomes."
+    Sheet:
+      arkui: "bindSheet or project bottom-sheet component"
+      common_use_cases: ["bottom actions", "detent-like expand/collapse", "modal sheet", "non-modal bottom panel"]
+      notes: "If the SDK lacks detents, model expand/collapse through height/state variants."
+    FullscreenOverlay:
+      arkui: "Stack overlay, Dialog, or full-window presentation wrapper"
+      common_use_cases: ["blocking loading", "image preview", "immersive overlay", "show/hide/present/dismiss"]
+      notes: "Place overlay above content with explicit z-order and back handling."
+
+  layout_containers:
+    VerticalStack:
+      arkui: "Column"
+      common_use_cases: ["vertical forms", "settings sections", "feed columns", "add/remove/reorder child content"]
+      notes: "Use ForEach for dynamic child order and spacing/alignment modifiers for layout."
+    HorizontalStack:
+      arkui: "Row"
+      common_use_cases: ["toolbar rows", "inline controls", "button groups", "horizontal item layout"]
+      notes: "Use alignment, spacing, and weight-like layout modifiers where supported."
+    HorizontalPair:
+      arkui: "Row with exactly two child slots"
+      common_use_cases: ["label/value row", "two-button action row", "leading/trailing content"]
+      notes: "Keep the two slots stable; use conditional child content rather than changing the semantic kind."
+    Grid:
+      arkui: "Grid"
+      common_use_cases: ["photo grid", "dashboard tiles", "selectable cells", "cell span/reorder"]
+      notes: "Use stable item keys and selection state for selectItem obligations."
+    Overlay:
+      arkui: "Stack"
+      common_use_cases: ["badge overlay", "floating action", "scrim", "layered empty/loading content"]
+      notes: "Map reorderZ/align to stack order and alignment/position modifiers."
+    Frame:
+      arkui: "Column, Row, Stack, or component with background/border/padding modifiers"
+      common_use_cases: ["visual grouping", "card shell", "sized container", "show/hide region"]
+      notes: "Use Frame only as a generic container; prefer Card when the element is an interactive card."
+    ScrollContainer:
+      arkui: "Scroll"
+      common_use_cases: ["scrollable detail page", "scrollToTop", "scrollToBottom", "programmatic offset"]
+      notes: "Use a scroller/controller object when proving scrollTo/scrollBy effects."
+    List:
+      arkui: "List with ListItem and ForEach"
+      common_use_cases: ["lazy rows", "select item", "append/remove/reload data", "scrollToIndex", "reorder"]
+      notes: "Represent add/remove/reload as state-list mutations that drive List re-rendering."
+    FlexContainer:
+      arkui: "Flex"
+      common_use_cases: ["responsive distribution", "grow/shrink", "toolbar wrapping", "adaptive cards"]
+      notes: "Map expand/shrink/distribute to flex direction, grow, align, justify, and basis-like modifiers."
+    WrapContainer:
+      arkui: "Flex with wrap behavior"
+      common_use_cases: ["chips", "tag clouds", "responsive button rows", "line wrapping"]
+      notes: "Use wrap when horizontal space is constrained; avoid manual absolute positioning."
+    Table:
+      arkui: "Grid, List of Rows, or project table component"
+      common_use_cases: ["tabular rows", "sort", "resize column", "add/remove row"]
+      notes: "If column resizing is unsupported, implement via explicit column-width state."
+    SafeArea:
+      arkui: "safe-area padding / expandSafeArea / system inset-aware wrapper"
+      common_use_cases: ["avoid notches", "status/navigation bar insets", "orientation adaptation"]
+      notes: "Use SDK safe-area APIs or project helpers; do not hard-code system inset values."
+    Spacer:
+      arkui: "Blank or flexible empty component"
+      common_use_cases: ["push siblings apart", "fill remaining space", "compress under constraints"]
+      notes: "Map expand/shrink to layout weight/flex behavior if available."
+
+  semantic_state_containers:
+    Form:
+      arkui: "Column/List + @State validation/submission model"
+      common_use_cases: ["submit lifecycle", "dirty/touched state", "form-level errors", "disable while submitting"]
+      notes: "Keep values, errors, touched, dirty, valid, and submitting as explicit state."
+    ValidationMessage:
+      arkui: "Text with severity style and accessibility announcement"
+      common_use_cases: ["field error", "form warning", "success feedback", "live announcement"]
+      notes: "Use visible text plus semantic/live region behavior where supported."
+    AsyncContent:
+      arkui: "@State union + conditional rendering"
+      common_use_cases: ["loading", "content", "empty", "error", "partial", "refreshing", "stale"]
+      notes: "Do not collapse async states into a single Boolean; model the state machine."
+    GestureRegion:
+      arkui: "Stack/Column/Row plus gesture/event modifiers"
+      common_use_cases: ["tap", "long press", "swipe", "pan", "pinch", "hover", "focus/blur"]
+      notes: "Disable gestures by guarding callbacks or disabling the wrapper."
+    AnimatedVisibility:
+      arkui: "conditional rendering plus animation/transition modifiers"
+      common_use_cases: ["enter/exit", "show/hide", "duration/easing", "reduced motion"]
+      notes: "Honor reduced motion by bypassing or shortening animations."
+
+  interactive_components:
+    Button:
+      arkui: "Button"
+      common_use_cases: ["tap", "press/release", "long press", "loading state", "enable/disable", "set label"]
+      notes: "Use .onClick for activation and state-driven content for loading/text changes."
+    TextField:
+      arkui: "TextInput"
+      common_use_cases: ["text input", "onTextChange", "onSubmit", "focus/blur", "clipboard", "validation", "keyboard"]
+      notes: "Bind text to state; validate from onChange/onSubmit according to spec timing."
+    SecureField:
+      arkui: "TextInput configured for password input"
+      common_use_cases: ["password entry", "toggle visibility", "validate", "clear", "enable/disable"]
+      notes: "Keep visibility state separate from the secret value."
+    SearchField:
+      arkui: "Search"
+      common_use_cases: ["search submit", "suggestions", "clear", "focus/blur", "set query"]
+      notes: "Debounce suggestions in the view model if needed; submit remains explicit."
+    Switch:
+      arkui: "Toggle(type: Switch)"
+      common_use_cases: ["toggle", "setOn/setOff/setValue", "enable/disable", "preference binding"]
+      notes: "Persist value through state/model update, not only local visual state."
+    Checkbox:
+      arkui: "Checkbox"
+      common_use_cases: ["check", "uncheck", "toggle", "indeterminate", "multi-select"]
+      notes: "Use explicit tri-state state for setIndeterminate."
+    RadioButton:
+      arkui: "Radio"
+      common_use_cases: ["single selection", "deselect", "enable/disable", "option groups"]
+      notes: "Model group selection in parent state."
+    Slider:
+      arkui: "Slider"
+      common_use_cases: ["slide", "setValue", "setRange", "onValueChange", "volume/progress controls"]
+      notes: "Normalize catalog values to SDK min/max scale."
+    Dropdown:
+      arkui: "Select or Menu-backed selector"
+      common_use_cases: ["open/close", "select option", "filter", "enable/disable"]
+      notes: "Use Select where sufficient; use PopupMenu/custom overlay for filtering."
+    DatePicker:
+      arkui: "DatePicker"
+      common_use_cases: ["open/close", "selectDate", "setRange", "confirm/cancel"]
+      notes: "Keep temporary picker value separate until confirm when the contract requires confirmation."
+    TimePicker:
+      arkui: "TimePicker"
+      common_use_cases: ["open/close", "selectTime", "confirm/cancel"]
+      notes: "Use locale and 12/24-hour settings from platform/project configuration."
+    Stepper:
+      arkui: "Counter or custom Row of decrement/value/increment controls"
+      common_use_cases: ["increment", "decrement", "set step/range", "quantity controls"]
+      notes: "Clamp values to range before invoking business actions."
+    SegmentedControl:
+      arkui: "Tabs or custom segmented Button row"
+      common_use_cases: ["select segment", "deselect", "filter mode switch"]
+      notes: "Use Tabs only when semantics are navigational; otherwise use grouped buttons."
+    Chip:
+      arkui: "Button/Text tag with removable/selectable state"
+      common_use_cases: ["select tag", "remove tag", "tap action", "filter chip"]
+      notes: "Represent selected/removed state in parent collection."
+    RatingBar:
+      arkui: "Rating"
+      common_use_cases: ["rate", "setValue", "hover preview", "clear"]
+      notes: "If hover is unavailable for touch devices, treat hover as pointer-only optional behavior."
+    FilePicker:
+      arkui: "DocumentViewPicker or project file picker"
+      common_use_cases: ["open picker", "select one/multiple", "cancel", "preview"]
+      notes: "Handle permissions and URI/result lifetimes explicitly."
+    ImagePicker:
+      arkui: "PhotoViewPicker or media picker"
+      common_use_cases: ["pick image", "crop", "preview", "confirm/cancel"]
+      notes: "Use project image-crop flow if platform picker does not crop."
+    ExpandablePanel:
+      arkui: "Column/ListItem with expanded state"
+      common_use_cases: ["expand", "collapse", "toggle", "accordion rows"]
+      notes: "Animate height/content only if the spec requires transition."
+    Card:
+      arkui: "Column/Stack with border/background and optional onClick/swipe"
+      common_use_cases: ["tap card", "swipe action", "expand", "dismiss", "transition"]
+      notes: "Use Button/ListItem semantics when the whole card is interactive."
+    Draggable:
+      arkui: "drag gesture/event modifiers"
+      common_use_cases: ["dragStart", "drag", "dragEnd", "drop", "drag enter/leave/over"]
+      notes: "Persist drag state separately from final drop mutation."
+    DropTarget:
+      arkui: "drop handler region or project DnD wrapper"
+      common_use_cases: ["accept/reject", "highlight", "show/hide drop zone"]
+      notes: "Validate payload type before accept."
+    VideoPlayer:
+      arkui: "Video"
+      common_use_cases: ["play/pause/stop", "seek", "volume", "mute", "fullscreen", "playback rate"]
+      notes: "Keep media controller lifecycle aligned with page lifecycle."
+    AudioPlayer:
+      arkui: "media player controller plus custom controls"
+      common_use_cases: ["play/pause/stop", "seek", "volume", "mute"]
+      notes: "Use platform media APIs; render controls with Button/Slider/Text."
+    Map:
+      arkui: "Map component or map kit integration"
+      common_use_cases: ["pan", "zoom", "markers", "fit bounds", "set center"]
+      notes: "Requires project map SDK availability and permissions."
+    SignaturePad:
+      arkui: "Canvas"
+      common_use_cases: ["draw", "clear", "undo/redo", "export", "stroke color/width"]
+      notes: "Store strokes as data so undo/redo/export are deterministic."
+    RichTextEditor:
+      arkui: "RichEditor or custom editable rich text component"
+      common_use_cases: ["formatting", "insert image/link", "undo/redo", "getHTML/getText"]
+      notes: "If RichEditor is unavailable, use project editor component and document the substitution."
+    QRScanner:
+      arkui: "camera/scan kit surface"
+      common_use_cases: ["start/stop scan", "onDetect", "torch", "show/hide scanner"]
+      notes: "Requires camera permission and lifecycle cleanup."
+
+  static_elements:
+    Text:
+      arkui: "Text"
+      common_use_cases: ["setText", "style", "truncate", "copy", "show/hide"]
+      notes: "Use bound state for dynamic text."
+    RichText:
+      arkui: "RichText / Span"
+      common_use_cases: ["attributed text", "inline styles", "copy", "show/hide"]
+      notes: "Use spans or rich text model for mixed formatting."
+    Icon:
+      arkui: "SymbolGlyph or Image"
+      common_use_cases: ["set icon", "color", "size", "show/hide"]
+      notes: "Use SymbolGlyph when available; Image for asset icons."
+    Image:
+      arkui: "Image"
+      common_use_cases: ["load", "source", "resize/crop", "cache/prefetch", "onLoad/onError"]
+      notes: "Model load/error state when reactions depend on image availability."
+    Avatar:
+      arkui: "Image clipped to circle or initials Text"
+      common_use_cases: ["set source", "initials fallback", "size", "show/hide"]
+      notes: "Fallback initials should be deterministic and accessible."
+    Divider:
+      arkui: "Divider"
+      common_use_cases: ["show/hide", "thickness", "color"]
+      notes: "Use semantic section boundaries where relevant."
+    Badge:
+      arkui: "Badge or Stack overlay"
+      common_use_cases: ["count", "text", "color", "clear", "show/hide"]
+      notes: "Clamp or abbreviate large counts according to product rules."
+    ProgressBar:
+      arkui: "Progress"
+      common_use_cases: ["determinate progress", "indeterminate", "start/stop", "show/hide"]
+      notes: "Normalize progress values to SDK total/value parameters."
+    SkeletonLoader:
+      arkui: "LoadingProgress or custom skeleton placeholders"
+      common_use_cases: ["show/hide", "animate loading placeholders"]
+      notes: "Use with AsyncContent loading state."
+    EmptyState:
+      arkui: "custom empty-state component"
+      common_use_cases: ["message", "action", "show/hide"]
+      notes: "Action should map to a Button or Link child."
+    Link:
+      arkui: "Text with onClick or Hyperlink where available"
+      common_use_cases: ["tap/open URL", "setURL", "setText", "show/hide"]
+      notes: "Use safe URL handling and accessibility role/description."
+    CodeBlock:
+      arkui: "Text in monospace styled container"
+      common_use_cases: ["set code", "highlight", "copy", "language", "show/hide"]
+      notes: "Use a project syntax highlighter if available."
+    Chart:
+      arkui: "Canvas or project chart component"
+      common_use_cases: ["render", "updateData", "zoom/pan", "export", "set chart type"]
+      notes: "Prefer a chart library only if already approved by project constraints."
+    Markdown:
+      arkui: "RichText or project markdown renderer"
+      common_use_cases: ["render", "set source", "set theme", "show/hide"]
+      notes: "Sanitize untrusted markdown before rendering."
+    KeyValuePair:
+      arkui: "Row of Text label/value"
+      common_use_cases: ["setKey", "setValue", "show/hide"]
+      notes: "Use truncation and wrapping rules for long values."
+
+  navigation_elements:
+    TabBar:
+      arkui: "Tabs"
+      common_use_cases: ["select tab", "scroll to tab", "add/remove tab", "badge"]
+      notes: "Use stable tab ids for dynamic tabs."
+    BottomNavigationBar:
+      arkui: "Tabs positioned at bottom or project bottom navigation"
+      common_use_cases: ["switch tab", "select tab", "set badge", "show/hide"]
+      notes: "Keep selected tab state owned by the navigation container."
+    NavigationBar:
+      arkui: "Navigation/NavDestination title bar or custom Row"
+      common_use_cases: ["title", "actions", "back button", "collapse/expand"]
+      notes: "Use platform Navigation title/action APIs where available."
+    NavigationDrawer:
+      arkui: "SideBarContainer with navigation list"
+      common_use_cases: ["open/close", "select item", "expand/collapse group"]
+      notes: "Selection should update both drawer item state and destination."
+    Sidebar:
+      arkui: "SideBarContainer"
+      common_use_cases: ["select item", "expand/collapse", "show/hide"]
+      notes: "Use for persistent side navigation or master-detail layouts."
+    Breadcrumb:
+      arkui: "Row of Text/Button links"
+      common_use_cases: ["tap crumb", "set path", "show/hide"]
+      notes: "Each crumb action should map to a navigation destination."
+    Paginator:
+      arkui: "custom Row controls or swiper/page controller"
+      common_use_cases: ["next/previous", "goToPage", "swipe", "show/hide"]
+      notes: "Keep page index state explicit and bounds-checked."
+    StepIndicator:
+      arkui: "Steps or custom progress row"
+      common_use_cases: ["goToStep", "next/previous", "complete", "reset", "status"]
+      notes: "Use status state for current/completed/error steps."
+    BackButton:
+      arkui: "Button wired to Navigation/router back"
+      common_use_cases: ["tap", "show/hide"]
+      notes: "Respect disabled/back-blocking states if the flow has unsaved changes."
+
+  feedback_elements:
+    Dialog:
+      arkui: "AlertDialog or CustomDialogController"
+      common_use_cases: ["show/dismiss", "confirm/cancel"]
+      notes: "Keep dialog result callbacks tied to the triggering contract branch."
+    Snackbar:
+      arkui: "promptAction.showToast or custom snackbar component"
+      common_use_cases: ["show/dismiss", "message", "action", "duration"]
+      notes: "Use custom component when an action button is required."
+    Toast:
+      arkui: "promptAction.showToast"
+      common_use_cases: ["show/dismiss", "message", "duration"]
+      notes: "Use for transient non-blocking feedback only."
+    BottomSheet:
+      arkui: "bindSheet or custom bottom sheet"
+      common_use_cases: ["present/dismiss", "select action", "cancel", "show/hide"]
+      notes: "Action selection must call the declared function or branch handler."
+    Tooltip:
+      arkui: "Popup or custom tooltip"
+      common_use_cases: ["show/hide", "attachTo"]
+      notes: "Tie tooltip anchor to a concrete UI element id."
+    PopupMenu:
+      arkui: "Menu"
+      common_use_cases: ["open/close", "select", "dismiss", "show/hide"]
+      notes: "Selection should close the menu unless the spec states otherwise."
+    LoadingOverlay:
+      arkui: "Stack overlay + LoadingProgress"
+      common_use_cases: ["show/hide", "set message"]
+      notes: "Block underlying actions when the overlay is modal."
+    NotificationBanner:
+      arkui: "custom banner component"
+      common_use_cases: ["show/dismiss", "message", "action", "duration"]
+      notes: "Use explicit visibility and timer state for auto-dismiss."
+
+  business_components:
+    ColorUtils:
+      arkui: "not applicable; use HarmonyOS resource colors, theme tokens, or project color helpers"
+      common_use_cases: ["theme color lookup", "semantic colors"]
+      notes: "This is an iOS host-app utility in the catalog, not a portable ArkUI component."
+    ThemeColors:
+      arkui: "not applicable; use ArkUI theme/resource color tokens or project theme model"
+      common_use_cases: ["brand colors", "semantic color roles", "dark mode"]
+      notes: "Model theme values as resources or injected design tokens."
+    MBProgressHUDUtility:
+      arkui: "not applicable; use LoadingOverlay, Progress, promptAction.showToast, Dialog, or project loading helper"
+      common_use_cases: ["blocking progress", "temporary status message"]
+      notes: "This is an iOS/UIKit HUD utility; do not reference it from HarmonyOS code."
+    UIViewRoundCorner:
+      arkui: "not applicable; use ArkUI borderRadius/clip modifiers or project shape tokens"
+      common_use_cases: ["rounded corners", "pill buttons", "avatar clipping"]
+      notes: "Use native shape/border modifiers instead of UIKit utilities."
+    FontUtils:
+      arkui: "not applicable; use Text font modifiers, resource fonts, or project typography tokens"
+      common_use_cases: ["font size", "weight", "family", "line height"]
+      notes: "This is an iOS utility; map typography to ArkUI Text modifiers/resources."
+
+translation:
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap -> module.func()"
+      implementation: |
+        Button('Submit')
+          .enabled(!this.isSubmitting)
+          .onClick(() => {
+            this.viewModel.func()
+          })
+      notes:
+        - "Use .onClick for tap/click activation."
+        - "Bind .enabled to validation/submitting state when the SpecLang contract implies guarded submission."
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit -> module.search(query)"
+      implementation: |
+        TextInput({ text: this.query, placeholder: 'Search' })
+          .onChange((value: string) => {
+            this.query = value
+          })
+          .onSubmit(() => {
+            this.viewModel.search(this.query)
+          })
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange -> module.validate(text)"
+      implementation: |
+        TextInput({ text: this.text })
+          .onChange((value: string) => {
+            this.text = value
+            this.viewModel.validate(value)
+          })
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle -> module.setEnabled(enabled)"
+      implementation: |
+        Toggle({ type: ToggleType.Switch, isOn: this.enabled })
+          .onChange((checked: boolean) => {
+            this.enabled = checked
+            this.viewModel.setEnabled(checked)
+          })
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange -> module.updateProgress(value)"
+      implementation: |
+        Slider({ value: this.progress, min: 0, max: 100 })
+          .onChange((value: number) => {
+            this.progress = value
+            this.viewModel.updateProgress(value)
+          })
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem -> module.selectItem(itemId)"
+      implementation: |
+        List() {
+          ForEach(this.items, (item: Item) => {
+            ListItem() {
+              Text(item.name)
+            }
+            .onClick(() => this.viewModel.selectItem(item.id))
+          }, (item: Item) => item.id)
+        }
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap -> module.activate()"
+      implementation: |
+        Stack() {
+          this.content()
+        }
+        .onClick(() => this.viewModel.activate())
+
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess -> Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        @State labelText: string = 'Initial'
+
+        Text(this.labelText)
+
+        // In reaction:
+        this.labelText = 'value'
+
+    Text.show:
+      pseudocode: "OnSuccess -> Text(id=UI-ERROR).show()"
+      implementation: |
+        if (this.showError) {
+          Text(this.errorMessage)
+        }
+
+        // In reaction:
+        this.showError = true
+
+    Text.hide:
+      pseudocode: "OnSuccess -> Text(id=UI-ERROR).hide()"
+      implementation: |
+        this.showError = false
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess -> Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        Button('Submit')
+          .enabled(this.canSubmit)
+          .onClick(() => this.viewModel.submit())
+
+        // In reaction:
+        this.canSubmit = true
+
+    Button.setLoading:
+      pseudocode: "OnStart -> Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        Button() {
+          if (this.isSubmitting) {
+            LoadingProgress()
+          } else {
+            Text('Submit')
+          }
+        }
+        .enabled(!this.isSubmitting)
+
+        // In reaction:
+        this.isSubmitting = true
+
+    Dialog.show:
+      pseudocode: "OnFailure -> Dialog(id=UI-DIALOG).show()"
+      implementation: |
+        this.dialogController.open()
+
+    Toast.show:
+      pseudocode: "OnSuccess -> Toast(id=UI-TOAST).show(\"Saved\")"
+      implementation: |
+        promptAction.showToast({ message: 'Saved' })
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess -> BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        this.showSheet = true
+        // Bind the content region with bindSheet or the project's bottom-sheet wrapper.
+
+    List.reload:
+      pseudocode: "OnSuccess -> List(id=UI-LIST).reload()"
+      implementation: |
+        this.items = newItems
+
+    Switch.setValue:
+      pseudocode: "OnSuccess -> Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        this.enabled = true
+
+    ProgressBar.setProgress:
+      pseudocode: "OnProgress -> ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        Progress({ value: this.progress, total: 100 })
+
+        // In reaction:
+        this.progress = 75
+
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        // Prefer Navigation/NavDestination in new code.
+        this.pathStack.pushPath({ name: 'NextPage' })
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        this.pathStack.pop()
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation: |
+        this.pathStack.replacePath({ name: 'NextPage' })
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        this.modalController.open()
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation: |
+        this.modalController.close()
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit -> module.submit(values)"
+      implementation: |
+        Column() {
+          TextInput({ text: this.email })
+            .onChange((value: string) => {
+              this.email = value
+              this.emailTouched = true
+            })
+          if (this.emailError) {
+            Text(this.emailError)
+          }
+          Button('Submit')
+            .enabled(!this.isSubmitting && this.isValid)
+            .onClick(() => {
+              if (this.validate()) {
+                this.viewModel.submit({ email: this.email })
+              }
+            })
+        }
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure -> ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        this.errorMessage = message
+        this.showError = true
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart -> AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        if (this.uiState.kind === 'loading') {
+          LoadingProgress()
+        } else if (this.uiState.kind === 'content') {
+          ContentView({ data: this.uiState.data })
+        } else if (this.uiState.kind === 'empty') {
+          EmptyStateView()
+        } else {
+          ErrorView({ message: this.uiState.message })
+        }
+
+    AsyncContent.setError:
+      pseudocode: "OnFailure -> AsyncContent(id=UI-REGION).setError(message)"
+      implementation: |
+        this.uiState = { kind: 'error', message }
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess -> AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        if (this.expanded) {
+          Panel()
+            .animation({ duration: 200, curve: Curve.EaseInOut })
+        }
+
+side_effects:
+  async_calls: |
+    this.isLoading = true
+    this.viewModel.load()
+      .then((result) => {
+        this.uiState = { kind: 'content', data: result }
+      })
+      .catch((err) => {
+        this.uiState = { kind: 'error', message: err.message }
+      })
+      .finally(() => {
+        this.isLoading = false
+      })
+
+  controller_objects: |
+    // Dialogs, sheets, and overlays are commonly controlled by @State flags,
+    // CustomDialogController-like objects, or project-local presentation helpers.
+    // Use the pattern already established in the HarmonyOS project.

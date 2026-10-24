@@ -1,0 +1,604 @@
+# Pseudocode to HarmonyOS ArkUI Cangjie Translation Guide
+# Translates ui_logic_native_pseudocode operations to HarmonyOS ArkUI code when the target UI is authored in Cangjie.
+
+target_platform: harmonyos
+target_framework: arkui
+language: cangjie
+
+platform_context:
+  frameworks:
+    - "Use this guide when the HarmonyOS UI target is ArkUI authored through Cangjie or a project-local Cangjie ArkUI binding."
+    - "The catalog's legal kind and operation names are framework-neutral. This guide maps them to ArkUI concepts; exact Cangjie syntax must follow the SDK/binding version used by the project."
+    - "Do not copy ArkTS examples mechanically into Cangjie. Preserve the ArkUI component, state, event, and navigation semantics, then express them with the project's Cangjie UI APIs."
+  layout:
+    - "Map linear layout to Column/Row concepts, overlays to Stack, scrolling to Scroll/List, grids to Grid, and flexible spacing to Blank or project-local spacer helpers."
+    - "For multi-device HarmonyOS UI, keep safe area, window size, foldable posture, and input modality as explicit layout inputs."
+  state_management:
+    - "Use the project's Cangjie reactive state or observable model abstraction to drive UI updates."
+    - "Keep form, async, gesture, and animation state explicit; avoid hidden global state."
+  interop:
+    - "If a project mixes Cangjie business logic with ArkTS UI, keep this guide for the Cangjie-owned UI layer only and use pseudocode-to-arkui-arkts.yaml for ArkTS pages/components."
+  verification:
+    - "Generated Cangjie UI code must be checked against the local HarmonyOS SDK because public Cangjie ArkUI APIs may differ by SDK version."
+
+state_patterns:
+  local_state: "Use the project-local Cangjie reactive state wrapper for a mutable UI value."
+  view_model: "Keep domain state in a Cangjie model/service and expose UI-ready state to ArkUI."
+  async_union: "Use an enum or sealed model for Loading / Content / Empty / Error / Refreshing."
+
+coverage_policy:
+  scope:
+    - "This guide covers every legal kind in kinds-catalog.yaml through kind_coverage."
+    - "Code snippets are intentionally conceptual because Cangjie ArkUI bindings can vary by HarmonyOS SDK and project wrapper."
+    - "For exact component constructors, event callback names, imports, and controller APIs, inspect the local project SDK and wrappers before generating final code."
+  operation_rules:
+    - "show/hide/present/dismiss/open/close map to reactive visibility state, presentation controllers, Navigation wrappers, Dialog wrappers, or Sheet wrappers."
+    - "enable/disable/setEnabled map to the Cangjie ArkUI binding's enabled/disabled modifier or guarded event callback."
+    - "setText/setMessage/setSource/setValue/setProgress/reload/updateData map to reactive Cangjie state or view-model state updates."
+    - "tap/click/select/onTextChange/onSubmit/onValueChange map to event callbacks on the Cangjie ArkUI component or project wrapper."
+    - "measure/layout/addChild/removeChild/reorder map to component-tree structure, conditional rendering, list ordering, layout modifiers, and data mutations."
+
+kind_coverage:
+  full_surface_containers:
+    Page:
+      arkui_cangjie: "Cangjie-owned ArkUI page component wrapping Navigation/NavDestination or router page"
+      common_use_cases: ["app page root", "push/pop/replace navigation", "nested page attach/detach", "first render"]
+      notes: "Use the project's Cangjie navigation wrapper; preserve Navigation path-stack semantics when present."
+    Screen:
+      arkui_cangjie: "Cangjie ArkUI component embedded in Tabs, pager, or multi-screen container"
+      common_use_cases: ["tab screen", "pager page", "show/hide peer screen", "embedded surface"]
+      notes: "Use Screen for peer surfaces, not standalone route pages."
+    Modal:
+      arkui_cangjie: "Cangjie wrapper for Dialog, CustomDialogController, or full-screen overlay"
+      common_use_cases: ["confirmation", "blocking modal", "confirm/cancel", "present/dismiss"]
+      notes: "Keep confirm/cancel callback semantics distinct from dismiss."
+    Drawer:
+      arkui_cangjie: "SideBarContainer wrapper or custom drawer component"
+      common_use_cases: ["navigation drawer", "context panel", "open/close/toggle"]
+      notes: "Represent drawer open state as reactive state."
+    Sheet:
+      arkui_cangjie: "Sheet/bottom-sheet wrapper or state-bound custom panel"
+      common_use_cases: ["bottom actions", "expand/collapse", "present/dismiss", "show/hide"]
+      notes: "If detents are unavailable, model expand/collapse as explicit height/variant state."
+    FullscreenOverlay:
+      arkui_cangjie: "Stack/Dialog/window-level overlay wrapper"
+      common_use_cases: ["loading overlay", "image viewer", "immersive layer", "present/dismiss"]
+      notes: "Use explicit z-order and back handling."
+
+  layout_containers:
+    VerticalStack:
+      arkui_cangjie: "Column concept"
+      common_use_cases: ["forms", "settings", "feeds", "ordered vertical children"]
+      notes: "Dynamic add/remove/reorder maps to data-driven child rendering."
+    HorizontalStack:
+      arkui_cangjie: "Row concept"
+      common_use_cases: ["toolbars", "inline controls", "button rows", "label/value pairs"]
+      notes: "Use alignment and spacing modifiers from the binding."
+    HorizontalPair:
+      arkui_cangjie: "Row with two stable child slots"
+      common_use_cases: ["two actions", "label/value", "leading/trailing"]
+      notes: "Keep exactly two semantic slots."
+    Grid:
+      arkui_cangjie: "Grid concept"
+      common_use_cases: ["tile grid", "photo grid", "selectable cells", "reorder/span"]
+      notes: "Use stable item identity for selection and reordering."
+    Overlay:
+      arkui_cangjie: "Stack concept"
+      common_use_cases: ["badges", "scrims", "floating controls", "layered states"]
+      notes: "Map z-order to child order or explicit z modifier."
+    Frame:
+      arkui_cangjie: "Generic styled container"
+      common_use_cases: ["padding/background/border", "sized wrapper", "show/hide region"]
+      notes: "Prefer specific semantic kinds when behavior is more precise."
+    ScrollContainer:
+      arkui_cangjie: "Scroll concept plus scroller/controller"
+      common_use_cases: ["scrollTo", "scrollBy", "scrollToTop", "scrollToBottom"]
+      notes: "Programmatic scroll requires a controller exposed by the binding."
+    List:
+      arkui_cangjie: "List/ListItem concept"
+      common_use_cases: ["lazy rows", "select item", "add/remove/reload", "scrollToIndex", "reorder"]
+      notes: "State-list mutations drive visible row updates."
+    FlexContainer:
+      arkui_cangjie: "Flex concept"
+      common_use_cases: ["responsive distribution", "grow/shrink", "adaptive spacing"]
+      notes: "Map distribute to justify/align rules."
+    WrapContainer:
+      arkui_cangjie: "Flex with wrapping"
+      common_use_cases: ["chips", "tags", "wrapped controls", "responsive rows"]
+      notes: "Use wrap behavior rather than absolute positioning."
+    Table:
+      arkui_cangjie: "Grid/List rows or project table wrapper"
+      common_use_cases: ["rows/columns", "sort", "resize column", "add/remove row"]
+      notes: "If no table widget exists, implement with Grid/List plus column-width state."
+    SafeArea:
+      arkui_cangjie: "safe-area/inset-aware wrapper"
+      common_use_cases: ["notch avoidance", "system bars", "orientation adaptation"]
+      notes: "Use SDK safe-area APIs or project helper wrappers."
+    Spacer:
+      arkui_cangjie: "Blank/flexible empty component"
+      common_use_cases: ["fill space", "push siblings", "compress"]
+      notes: "Map expand/shrink to the binding's flex/weight behavior."
+
+  semantic_state_containers:
+    Form:
+      arkui_cangjie: "Container plus Cangjie form-state model"
+      common_use_cases: ["validate", "submit", "reset", "dirty/touched", "submitting", "errors"]
+      notes: "Keep values/errors/touched/dirty/valid/submitting explicit."
+    ValidationMessage:
+      arkui_cangjie: "Text plus severity/accessibility behavior"
+      common_use_cases: ["error", "warning", "success", "clear", "announce"]
+      notes: "Expose messages to assistive technology when the binding supports it."
+    AsyncContent:
+      arkui_cangjie: "Cangjie enum/sealed state plus conditional ArkUI rendering"
+      common_use_cases: ["loading", "content", "empty", "error", "partial", "refreshing", "stale", "retry"]
+      notes: "Use a state machine rather than loosely related booleans."
+    GestureRegion:
+      arkui_cangjie: "Wrapper component with gesture/event callbacks"
+      common_use_cases: ["tap", "doubleTap", "longPress", "swipe", "pan", "pinch", "hover", "focus"]
+      notes: "Guard callbacks when disabled."
+    AnimatedVisibility:
+      arkui_cangjie: "conditional rendering plus animation wrapper"
+      common_use_cases: ["enter", "exit", "show/hide", "transition", "duration/easing", "reduced motion"]
+      notes: "Honor reduced-motion preferences if available."
+
+  interactive_components:
+    Button:
+      arkui_cangjie: "Button concept"
+      common_use_cases: ["tap", "press/release", "longPress", "loading", "setText", "enable/disable"]
+      notes: "Use state-driven child content for loading and text changes."
+    TextField:
+      arkui_cangjie: "TextInput concept"
+      common_use_cases: ["type", "paste/cut/copy/select", "onTextChange", "onSubmit", "keyboard", "validate"]
+      notes: "Bind text to reactive state."
+    SecureField:
+      arkui_cangjie: "TextInput password variant"
+      common_use_cases: ["password entry", "toggleVisibility", "validate", "clear"]
+      notes: "Keep visibility state separate from password value."
+    SearchField:
+      arkui_cangjie: "Search component or TextInput + search affordance"
+      common_use_cases: ["search", "suggest", "clear", "submit", "focus/blur"]
+      notes: "Suggestion timing belongs in view-model logic."
+    Switch:
+      arkui_cangjie: "Toggle switch concept"
+      common_use_cases: ["toggle", "setOn/setOff/setValue", "enable/disable"]
+      notes: "Update backing model after user change."
+    Checkbox:
+      arkui_cangjie: "Checkbox concept"
+      common_use_cases: ["check", "uncheck", "toggle", "indeterminate"]
+      notes: "Use tri-state model for indeterminate."
+    RadioButton:
+      arkui_cangjie: "Radio concept"
+      common_use_cases: ["select", "deselect", "group selection"]
+      notes: "Selection is owned by parent group state."
+    Slider:
+      arkui_cangjie: "Slider concept"
+      common_use_cases: ["slide", "setValue", "onValueChange", "setRange"]
+      notes: "Normalize numeric range to binding API."
+    Dropdown:
+      arkui_cangjie: "Select/Menu wrapper"
+      common_use_cases: ["open/close", "select", "filter"]
+      notes: "Filtering may require a custom popup component."
+    DatePicker:
+      arkui_cangjie: "DatePicker wrapper"
+      common_use_cases: ["selectDate", "setRange", "confirm/cancel"]
+      notes: "Use temporary selection state before confirm when required."
+    TimePicker:
+      arkui_cangjie: "TimePicker wrapper"
+      common_use_cases: ["selectTime", "confirm/cancel"]
+      notes: "Respect locale/time-format settings."
+    Stepper:
+      arkui_cangjie: "Counter or custom Row controls"
+      common_use_cases: ["increment", "decrement", "setValue", "range/step"]
+      notes: "Clamp before emitting change."
+    SegmentedControl:
+      arkui_cangjie: "Tabs or custom segmented buttons"
+      common_use_cases: ["select/deselect", "mode switch"]
+      notes: "Use Tabs only for navigational semantics."
+    Chip:
+      arkui_cangjie: "Tag-like Button/Text wrapper"
+      common_use_cases: ["tap", "select/deselect", "remove"]
+      notes: "Parent collection owns removal."
+    RatingBar:
+      arkui_cangjie: "Rating wrapper"
+      common_use_cases: ["rate", "setValue", "hover", "clear"]
+      notes: "Hover is optional on touch-only devices."
+    FilePicker:
+      arkui_cangjie: "Document picker wrapper"
+      common_use_cases: ["open", "selectFile", "selectMultiple", "cancel", "preview"]
+      notes: "Handle permissions and file URI lifetime."
+    ImagePicker:
+      arkui_cangjie: "Photo/media picker wrapper"
+      common_use_cases: ["pick", "crop", "preview", "confirm/cancel"]
+      notes: "Crop may be project-provided."
+    ExpandablePanel:
+      arkui_cangjie: "stateful expandable container"
+      common_use_cases: ["expand", "collapse", "toggle"]
+      notes: "Expanded content should remain derivable from state."
+    Card:
+      arkui_cangjie: "styled container with optional gestures"
+      common_use_cases: ["tap", "swipe", "expand", "dismiss", "transition"]
+      notes: "Use accessible button semantics if the card is clickable."
+    Draggable:
+      arkui_cangjie: "drag gesture wrapper"
+      common_use_cases: ["dragStart", "drag", "dragEnd", "drop", "enter/leave/over"]
+      notes: "Separate transient drag state from committed drop result."
+    DropTarget:
+      arkui_cangjie: "drop region wrapper"
+      common_use_cases: ["accept/reject", "highlight", "show/hide"]
+      notes: "Validate payload before accept."
+    VideoPlayer:
+      arkui_cangjie: "Video/media player wrapper"
+      common_use_cases: ["play/pause/stop", "seek", "volume", "fullscreen", "rate"]
+      notes: "Dispose controller on lifecycle exit."
+    AudioPlayer:
+      arkui_cangjie: "audio controller plus custom controls"
+      common_use_cases: ["play/pause/stop", "seek", "volume", "mute"]
+      notes: "Render controls through standard Button/Slider."
+    Map:
+      arkui_cangjie: "map kit wrapper"
+      common_use_cases: ["pan", "zoom", "markers", "fitBounds", "center"]
+      notes: "Requires SDK availability and permissions."
+    SignaturePad:
+      arkui_cangjie: "Canvas wrapper"
+      common_use_cases: ["draw", "clear", "undo/redo", "export", "stroke style"]
+      notes: "Store strokes as model data."
+    RichTextEditor:
+      arkui_cangjie: "Rich editor wrapper or project component"
+      common_use_cases: ["bold/italic/underline", "font/color", "image/link", "undo/redo", "getHTML/getText"]
+      notes: "Use project component when SDK rich editor is unavailable."
+    QRScanner:
+      arkui_cangjie: "camera/scan-kit wrapper"
+      common_use_cases: ["startScan", "stopScan", "onDetect", "torch", "show/hide"]
+      notes: "Requires camera permission and lifecycle cleanup."
+
+  static_elements:
+    Text:
+      arkui_cangjie: "Text concept"
+      common_use_cases: ["setText", "style", "truncate", "copy", "show/hide"]
+      notes: "Dynamic text should be state-driven."
+    RichText:
+      arkui_cangjie: "RichText/span wrapper"
+      common_use_cases: ["setAttributedText", "style", "copy"]
+      notes: "Use span model for mixed formatting."
+    Icon:
+      arkui_cangjie: "Symbol/Image icon wrapper"
+      common_use_cases: ["setIcon", "color", "size", "show/hide"]
+      notes: "Use asset icons when symbol API is unavailable."
+    Image:
+      arkui_cangjie: "Image concept"
+      common_use_cases: ["load", "source", "resize/crop", "cache/prefetch", "onLoad/onError"]
+      notes: "Represent load/error state explicitly."
+    Avatar:
+      arkui_cangjie: "circular Image or initials fallback"
+      common_use_cases: ["source", "initials", "size", "show/hide"]
+      notes: "Initials fallback must be accessible."
+    Divider:
+      arkui_cangjie: "Divider concept"
+      common_use_cases: ["show/hide", "thickness", "color"]
+      notes: "Use for visual separation only."
+    Badge:
+      arkui_cangjie: "Badge/overlay wrapper"
+      common_use_cases: ["count", "text", "color", "clear", "show/hide"]
+      notes: "Clamp large counts according to product rules."
+    ProgressBar:
+      arkui_cangjie: "Progress concept"
+      common_use_cases: ["setProgress", "start/stop", "indeterminate", "show/hide"]
+      notes: "Normalize value/total scale."
+    SkeletonLoader:
+      arkui_cangjie: "custom skeleton or loading placeholder"
+      common_use_cases: ["show/hide", "animate"]
+      notes: "Use with AsyncContent loading."
+    EmptyState:
+      arkui_cangjie: "custom empty-state component"
+      common_use_cases: ["message", "action", "show/hide"]
+      notes: "Action maps to a child Button/Link."
+    Link:
+      arkui_cangjie: "Text with click handler or hyperlink wrapper"
+      common_use_cases: ["tap/open", "setURL", "setText"]
+      notes: "Use safe URL handling."
+    CodeBlock:
+      arkui_cangjie: "monospace Text container"
+      common_use_cases: ["setCode", "highlight", "copy", "language"]
+      notes: "Syntax highlighting may be project-provided."
+    Chart:
+      arkui_cangjie: "Canvas/chart wrapper"
+      common_use_cases: ["render", "updateData", "zoom/pan", "export", "setType"]
+      notes: "Use approved chart library only if available."
+    Markdown:
+      arkui_cangjie: "RichText/markdown renderer wrapper"
+      common_use_cases: ["render", "setSource", "setTheme"]
+      notes: "Sanitize untrusted markdown."
+    KeyValuePair:
+      arkui_cangjie: "Row of label/value Text"
+      common_use_cases: ["setKey", "setValue", "show/hide"]
+      notes: "Handle long values with wrapping/truncation."
+
+  navigation_elements:
+    TabBar:
+      arkui_cangjie: "Tabs wrapper"
+      common_use_cases: ["selectTab", "scrollToTab", "add/removeTab", "badge"]
+      notes: "Stable ids matter for dynamic tabs."
+    BottomNavigationBar:
+      arkui_cangjie: "bottom Tabs/navigation wrapper"
+      common_use_cases: ["select/switch tab", "badge", "show/hide"]
+      notes: "Container owns selected tab state."
+    NavigationBar:
+      arkui_cangjie: "Navigation title/action wrapper"
+      common_use_cases: ["title", "actions", "back button", "collapse/expand"]
+      notes: "Use platform title/action APIs where exposed."
+    NavigationDrawer:
+      arkui_cangjie: "SideBarContainer navigation wrapper"
+      common_use_cases: ["open/close", "select item", "group expand/collapse"]
+      notes: "Selection updates destination state."
+    Sidebar:
+      arkui_cangjie: "SideBarContainer wrapper"
+      common_use_cases: ["select", "expand/collapse", "show/hide"]
+      notes: "Good for master-detail/persistent navigation."
+    Breadcrumb:
+      arkui_cangjie: "Row of clickable crumbs"
+      common_use_cases: ["tapCrumb", "setPath", "show/hide"]
+      notes: "Each crumb maps to a route/path."
+    Paginator:
+      arkui_cangjie: "custom paging controls or swiper wrapper"
+      common_use_cases: ["next/previous", "goToPage", "swipe"]
+      notes: "Bounds-check page index."
+    StepIndicator:
+      arkui_cangjie: "Steps/progress wrapper"
+      common_use_cases: ["goToStep", "next/previous", "complete", "reset", "status"]
+      notes: "Use explicit status per step."
+    BackButton:
+      arkui_cangjie: "Button wired to navigation back"
+      common_use_cases: ["tap", "show/hide"]
+      notes: "Respect unsaved-change guards."
+
+  feedback_elements:
+    Dialog:
+      arkui_cangjie: "dialog wrapper"
+      common_use_cases: ["show/dismiss", "confirm/cancel"]
+      notes: "Result callbacks must map to contract branches."
+    Snackbar:
+      arkui_cangjie: "toast/snackbar project wrapper"
+      common_use_cases: ["message", "action", "duration", "dismiss"]
+      notes: "Use custom snackbar if action is required."
+    Toast:
+      arkui_cangjie: "prompt/toast wrapper"
+      common_use_cases: ["show/dismiss", "message", "duration"]
+      notes: "Use for transient feedback."
+    BottomSheet:
+      arkui_cangjie: "bottom-sheet wrapper"
+      common_use_cases: ["present/dismiss", "selectAction", "cancel", "show/hide"]
+      notes: "Action selection must call declared handler."
+    Tooltip:
+      arkui_cangjie: "popup/tooltip wrapper"
+      common_use_cases: ["show/hide", "attachTo"]
+      notes: "Anchor to a concrete element."
+    PopupMenu:
+      arkui_cangjie: "Menu wrapper"
+      common_use_cases: ["open/close", "select", "dismiss"]
+      notes: "Usually close after selection."
+    LoadingOverlay:
+      arkui_cangjie: "Stack overlay + loading indicator"
+      common_use_cases: ["show/hide", "setMessage"]
+      notes: "Block underlying actions if modal."
+    NotificationBanner:
+      arkui_cangjie: "custom banner wrapper"
+      common_use_cases: ["show/dismiss", "message", "action", "duration"]
+      notes: "Use timer/visibility state for auto-dismiss."
+
+  business_components:
+    ColorUtils:
+      arkui_cangjie: "not applicable; use HarmonyOS resource colors, Cangjie theme tokens, or project color helpers"
+      common_use_cases: ["theme color lookup", "semantic colors"]
+      notes: "This is an iOS host-app utility in the catalog, not a portable ArkUI component."
+    ThemeColors:
+      arkui_cangjie: "not applicable; use ArkUI/Cangjie theme resources or project theme model"
+      common_use_cases: ["brand colors", "semantic color roles", "dark mode"]
+      notes: "Represent theme values as resources or injected design tokens."
+    MBProgressHUDUtility:
+      arkui_cangjie: "not applicable; use LoadingOverlay, Progress, toast/dialog wrappers, or project loading helper"
+      common_use_cases: ["blocking progress", "temporary status message"]
+      notes: "This is an iOS/UIKit HUD utility; do not reference it from HarmonyOS Cangjie code."
+    UIViewRoundCorner:
+      arkui_cangjie: "not applicable; use Cangjie ArkUI shape/border radius modifiers or project shape tokens"
+      common_use_cases: ["rounded corners", "pill buttons", "avatar clipping"]
+      notes: "Use native shape/border modifiers instead of UIKit utilities."
+    FontUtils:
+      arkui_cangjie: "not applicable; use Text font modifiers, resource fonts, or project typography tokens"
+      common_use_cases: ["font size", "weight", "family", "line height"]
+      notes: "This is an iOS utility; map typography to ArkUI/Cangjie text modifiers/resources."
+
+translation:
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap -> module.func()"
+      implementation: |
+        // ArkUI/Cangjie concept:
+        // Button(text: "Submit")
+        //   .enabled(!state.isSubmitting)
+        //   .onClick { viewModel.func() }
+      notes:
+        - "Use the Cangjie binding's click/tap event callback for Button activation."
+        - "Keep enabled/disabled state bound to validation and submit lifecycle state."
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit -> module.search(query)"
+      implementation: |
+        // TextInput(text: state.query, placeholder: "Search")
+        //   .onChange { value => state.query = value }
+        //   .onSubmit { viewModel.search(state.query) }
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange -> module.validate(text)"
+      implementation: |
+        // TextInput(text: state.text)
+        //   .onChange { value =>
+        //       state.text = value
+        //       viewModel.validate(value)
+        //   }
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle -> module.setEnabled(enabled)"
+      implementation: |
+        // Toggle(type: Switch, isOn: state.enabled)
+        //   .onChange { checked =>
+        //       state.enabled = checked
+        //       viewModel.setEnabled(checked)
+        //   }
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange -> module.updateProgress(value)"
+      implementation: |
+        // Slider(value: state.progress, min: 0, max: 100)
+        //   .onChange { value =>
+        //       state.progress = value
+        //       viewModel.updateProgress(value)
+        //   }
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem -> module.selectItem(itemId)"
+      implementation: |
+        // List(state.items) { item =>
+        //   ListItem { Text(item.name) }
+        //     .onClick { viewModel.selectItem(item.id) }
+        // }
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap -> module.activate()"
+      implementation: |
+        // Stack { content() }
+        //   .onClick { viewModel.activate() }
+
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess -> Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        // state.labelText = "value"
+        // Text(state.labelText)
+
+    Text.show:
+      pseudocode: "OnSuccess -> Text(id=UI-ERROR).show()"
+      implementation: |
+        // state.showError = true
+        // if (state.showError) { Text(state.errorMessage) }
+
+    Text.hide:
+      pseudocode: "OnSuccess -> Text(id=UI-ERROR).hide()"
+      implementation: |
+        // state.showError = false
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess -> Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        // state.canSubmit = true
+        // Button("Submit").enabled(state.canSubmit)
+
+    Button.setLoading:
+      pseudocode: "OnStart -> Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        // state.isSubmitting = true
+        // Button {
+        //   if (state.isSubmitting) { LoadingProgress() } else { Text("Submit") }
+        // }.enabled(!state.isSubmitting)
+
+    Dialog.show:
+      pseudocode: "OnFailure -> Dialog(id=UI-DIALOG).show()"
+      implementation: |
+        // state.showDialog = true
+        // or dialogController.open(), according to the project's Cangjie binding.
+
+    Toast.show:
+      pseudocode: "OnSuccess -> Toast(id=UI-TOAST).show(\"Saved\")"
+      implementation: |
+        // Use the HarmonyOS prompt/toast API exposed to Cangjie by the project SDK.
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess -> BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        // state.showSheet = true
+        // Bind a sheet/bottom-sheet component to state.showSheet.
+
+    List.reload:
+      pseudocode: "OnSuccess -> List(id=UI-LIST).reload()"
+      implementation: |
+        // state.items = newItems
+
+    Switch.setValue:
+      pseudocode: "OnSuccess -> Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        // state.enabled = true
+
+    ProgressBar.setProgress:
+      pseudocode: "OnProgress -> ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        // state.progress = 75
+        // Progress(value: state.progress, total: 100)
+
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        // Use the project's Cangjie wrapper for Navigation path stack or router push.
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        // Use the project's Cangjie wrapper for Navigation path stack pop or router back.
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation: |
+        // Replace the current route/path using the project's Cangjie navigation API.
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        // modalController.open() or state.showModal = true.
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation: |
+        // modalController.close() or state.showModal = false.
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit -> module.submit(values)"
+      implementation: |
+        // Validate first, set submitting state, then call the Cangjie ViewModel/service.
+        // if (form.validate()) {
+        //   state.isSubmitting = true
+        //   viewModel.submit(form.values)
+        // }
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure -> ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        // state.errorMessage = message
+        // state.showError = true
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart -> AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        // state.uiState = UiState.Loading
+        // render LoadingProgress / content / empty / error by matching state.uiState.
+
+    AsyncContent.setError:
+      pseudocode: "OnFailure -> AsyncContent(id=UI-REGION).setError(message)"
+      implementation: |
+        // state.uiState = UiState.Error(message)
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess -> AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        // Bind visibility to state.expanded and use the Cangjie ArkUI animation API exposed by the SDK.
+
+side_effects:
+  async_calls: |
+    // Conceptual flow:
+    // state.uiState = UiState.Loading
+    // viewModel.load()
+    //   success => state.uiState = UiState.Content(data)
+    //   failure => state.uiState = UiState.Error(message)
+
+  sdk_calibration: |
+    // Before finalizing Cangjie UI code, verify component names, event callback names,
+    // imports, and navigation/dialog APIs against the exact HarmonyOS SDK in the project.

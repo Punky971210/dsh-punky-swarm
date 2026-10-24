@@ -1,0 +1,492 @@
+# Pseudocode to Web (HTML/CSS/React) Translation Guide
+# Translates ui_logic_native_pseudocode operations to Web code
+# Covers: vanilla HTML/CSS/JS and React
+
+target_platform: web
+target_framework: html_css_react
+language: typescript
+
+platform_context:
+  frameworks:
+    - "HTML/CSS/JavaScript for native web UI"
+    - "React for component-based rendering"
+    - "Vue and Angular use equivalent reactive/component patterns"
+  layout:
+    - "Use semantic HTML landmarks for document structure where possible."
+    - "Use CSS Flexbox for one-dimensional stacks and CSS Grid for two-dimensional layouts."
+    - "Use media queries, container queries, and flexible units for responsive behavior."
+  state_management:
+    - "Vanilla JS uses variables plus DOM updates."
+    - "React uses useState/useReducer for local state and Context or external stores for shared state."
+    - "Server state is commonly handled by fetch, React Query, SWR, or framework loaders."
+  routing_and_rendering:
+    - "Use History API or framework routers for client-side navigation."
+    - "SSR, SSG, and islands architectures are common in frameworks such as Next.js, Nuxt, and Astro."
+  accessibility:
+    - "Prefer semantic elements before adding ARIA roles."
+    - "Use labels, aria-describedby, aria-live, and focus management for forms, dialogs, and dynamic regions."
+  performance:
+    - "Use code splitting, lazy loading, image optimization, and list virtualization for large views."
+    - "Avoid layout thrashing by batching DOM reads and writes."
+
+# State Management Patterns
+state_patterns:
+  react_local_state: "const [value, setValue] = useState<Type>(initialValue)"
+  react_reducer: "const [state, dispatch] = useReducer(reducer, initialState)"
+  react_context: "const value = useContext(MyContext)"
+  react_ref: "const ref = useRef<Type>(null)"
+  vanilla_js: "let state = initialValue; function setState(newValue) { state = newValue; render(); }"
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation_react: |
+        <button onClick={() => viewModel.func()}>
+          Button
+        </button>
+      implementation_html: |
+        <button id="ui-btn" onclick="module.func()">Button</button>
+      notes:
+        - "React: onClick handler"
+        - "HTML: onclick attribute or addEventListener"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation_react: |
+        const [query, setQuery] = useState('');
+
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          viewModel.search(query);
+        }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+          />
+        </form>
+      implementation_html: |
+        <form onsubmit="event.preventDefault(); module.search(this.query.value);">
+          <input name="query" type="search" />
+        </form>
+      notes:
+        - "Wrap in <form> to handle Enter key submission"
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation_react: |
+        const [text, setText] = useState('');
+
+        <input
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            viewModel.validate(e.target.value);
+          }}
+        />
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation_react: |
+        const [isEnabled, setIsEnabled] = useState(false);
+
+        <label>
+          <input
+            type="checkbox"
+            checked={isEnabled}
+            onChange={(e) => {
+              setIsEnabled(e.target.checked);
+              viewModel.setEnabled(e.target.checked);
+            }}
+          />
+          Enable
+        </label>
+      implementation_html: |
+        <label>
+          <input type="checkbox" id="ui-toggle"
+            onchange="module.setEnabled(this.checked)">
+          Enable
+        </label>
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation_react: |
+        const [progress, setProgress] = useState(0);
+
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={progress}
+          onChange={(e) => {
+            const newValue = parseFloat(e.target.value);
+            setProgress(newValue);
+            viewModel.updateProgress(newValue);
+          }}
+        />
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation_react: |
+        const [labelText, setLabelText] = useState('Initial');
+
+        <span>{labelText}</span>
+
+        // In reaction:
+        setLabelText('value');
+      implementation_html: |
+        // In reaction:
+        document.getElementById('ui-label').textContent = 'value';
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation_react: |
+        const [showError, setShowError] = useState(false);
+
+        {showError && <span className="error">Error message</span>}
+
+        // In reaction:
+        setShowError(true);
+      implementation_html: |
+        // In reaction:
+        document.getElementById('ui-error').style.display = 'block';
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation_react: |
+        setShowError(false);
+      implementation_html: |
+        document.getElementById('ui-error').style.display = 'none';
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation_react: |
+        const [isEnabled, setIsEnabled] = useState(true);
+
+        <button disabled={!isEnabled} onClick={() => { /* action */ }}>
+          Submit
+        </button>
+
+        // In reaction:
+        setIsEnabled(true);
+      implementation_html: |
+        // In reaction:
+        document.getElementById('ui-btn').disabled = false;
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation_react: |
+        const [isLoading, setIsLoading] = useState(false);
+
+        <button
+          disabled={isLoading}
+          onClick={async () => {
+            setIsLoading(true);
+            await viewModel.submit();
+            setIsLoading(false);
+          }}
+        >
+          {isLoading ? <span className="spinner" /> : 'Submit'}
+        </button>
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-IMG).load(url)"
+      implementation_react: |
+        <img
+          src={url}
+          alt="Description"
+          loading="lazy"
+        />
+      implementation_html: |
+        <img id="ui-img" src="" alt="Description" loading="lazy" />
+
+        // In reaction:
+        document.getElementById('ui-img').src = url;
+      notes:
+        - "Use loading='lazy' for below-fold images"
+        - "Always set alt text for accessibility"
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation_react: |
+        const [showDialog, setShowDialog] = useState(false);
+
+        <dialog open={showDialog} onClose={() => setShowDialog(false)}>
+          <h2>Alert</h2>
+          <p>Message</p>
+          <button onClick={() => setShowDialog(false)}>OK</button>
+        </dialog>
+
+        // In reaction:
+        setShowDialog(true);
+      implementation_html: |
+        <dialog id="ui-alert">
+          <h2>Alert</h2>
+          <p>Message</p>
+          <button onclick="document.getElementById('ui-alert').close()">OK</button>
+        </dialog>
+
+        // In reaction:
+        document.getElementById('ui-alert').showModal();
+
+    Dialog.dismiss:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).dismiss()"
+      implementation_react: |
+        setShowDialog(false);
+      implementation_html: |
+        document.getElementById('ui-alert').close();
+
+    Toast.show:
+      pseudocode: "OnSuccess → Toast.show(\"message\")"
+      implementation_react: |
+        // Using a simple state-based toast
+        const [toast, setToast] = useState<string | null>(null);
+
+        {toast && (
+          <div className="toast" role="alert">
+            {toast}
+          </div>
+        )}
+
+        // In reaction:
+        setToast('message');
+        setTimeout(() => setToast(null), 3000);
+      implementation_html: |
+        // In reaction:
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.setAttribute('role', 'alert');
+        toast.textContent = 'message';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      notes:
+        - "For production, consider using a toast library (react-hot-toast, sonner, etc.)"
+        - "Use role='alert' for accessibility"
+
+    Snackbar.show:
+      pseudocode: "OnSuccess → Snackbar(id=UI-SNACK).show()"
+      implementation_react: |
+        const [showSnackbar, setShowSnackbar] = useState(false);
+
+        {showSnackbar && (
+          <div className="snackbar" role="status">
+            Message
+          </div>
+        )}
+
+        // In reaction:
+        setShowSnackbar(true);
+        setTimeout(() => setShowSnackbar(false), 3000);
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation_react: |
+        const [showSheet, setShowSheet] = useState(false);
+
+        {showSheet && (
+          <div className="bottom-sheet-overlay" onClick={() => setShowSheet(false)}>
+            <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
+              {/* Sheet content */}
+            </div>
+          </div>
+        )}
+
+        // In reaction:
+        setShowSheet(true);
+
+    BottomSheet.dismiss:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).dismiss()"
+      implementation_react: |
+        setShowSheet(false);
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation_react: |
+        const [items, setItems] = useState<Item[]>([]);
+
+        // In reaction:
+        setItems([...items, newItem]);
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation_react: |
+        setItems(items.filter((_, i) => i !== index));
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation_react: |
+        setItems(newItems);
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation_react: |
+        const [progress, setProgress] = useState(0);
+
+        <progress value={progress} max="1" />
+
+        // In reaction:
+        setProgress(0.75);
+      implementation_html: |
+        <progress id="ui-progress" value="0" max="1"></progress>
+
+        // In reaction:
+        document.getElementById('ui-progress').value = 0.75;
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation_react: |
+        const [isEnabled, setIsEnabled] = useState(false);
+
+        <input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} />
+
+        // In reaction:
+        setIsEnabled(true);
+
+    TextField.setText:
+      pseudocode: "OnSuccess → TextField(id=UI-INPUT).setText(\"value\")"
+      implementation_react: |
+        const [text, setText] = useState('');
+
+        <input value={text} onChange={(e) => setText(e.target.value)} />
+
+        // In reaction:
+        setText('value');
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation_react: |
+        // Using React Router
+        const navigate = useNavigate();
+
+        navigate('/next-page', { state: { /* params */ } });
+
+        // Or with Link:
+        <Link to="/next-page">Go to Next Page</Link>
+      implementation_html: |
+        // Using History API
+        history.pushState({}, '', '/next-page');
+
+        // Or simple navigation:
+        location.href = '/next-page';
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation_react: |
+        navigate(-1);
+      implementation_html: |
+        history.back();
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation_react: |
+        navigate('/next-page', { replace: true });
+      implementation_html: |
+        history.replaceState({}, '', '/next-page');
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation_react: |
+        // Using React Router modal route
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/modal" element={<ModalView />} />
+        </Routes>
+
+        navigate('/modal');
+
+        // Or state-based modal:
+        setIsModalVisible(true);
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation_react: |
+        navigate(-1);
+
+        // Or for state-based:
+        setIsModalVisible(false);
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation_react: |
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          viewModel.submit(new FormData(event.currentTarget));
+        }}>
+          {/* fields */}
+        </form>
+      implementation_html: |
+        <form id="ui-form">
+          <!-- fields -->
+        </form>
+
+    Form.setSubmitting:
+      pseudocode: "OnStart → Form(id=UI-FORM).setSubmitting(true)"
+      implementation_react: |
+        const [isSubmitting, setSubmitting] = useState(false);
+        setSubmitting(true);
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation_react: |
+        <p id="ui-error" role="alert">{errorMessage}</p>
+      implementation_html: |
+        <p id="ui-error" role="alert" aria-live="assertive"></p>
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation_react: |
+        if (state.status === 'loading') return <Spinner />;
+
+    AsyncContent.setContent:
+      pseudocode: "OnSuccess → AsyncContent(id=UI-REGION).setContent()"
+      implementation_react: |
+        if (state.status === 'content') return <Content data={state.data} />;
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation_react: |
+        <div role="button" tabIndex={0} onClick={() => viewModel.activate()}>
+          {children}
+        </div>
+      implementation_html: |
+        <div role="button" tabindex="0" onclick="module.activate()"></div>
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation_react: |
+        <div className={isExpanded ? 'panel panel-expanded' : 'panel'}>
+          {children}
+        </div>
+      implementation_css: |
+        .panel { transition: opacity 200ms ease, transform 200ms ease; }
+
+# Side Effects
+side_effects:
+  useEffect_mount: |
+    // Run once on mount
+    useEffect(() => {
+      viewModel.loadData();
+    }, []);
+
+  useEffect_cleanup: |
+    // Side effect with cleanup
+    useEffect(() => {
+      const controller = new AbortController();
+      viewModel.loadData({ signal: controller.signal });
+      return () => controller.abort();
+    }, []);
+
+  useEffect_dependency: |
+    // Run when dependencies change
+    useEffect(() => {
+      viewModel.refresh(id);
+    }, [id]);

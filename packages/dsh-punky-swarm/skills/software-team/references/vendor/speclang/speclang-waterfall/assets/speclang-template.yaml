@@ -1,0 +1,313 @@
+version: 0.5
+feature_context:
+  feature_id: FEATURE-001
+  source_event_ids: [IE-0001]
+  feature_goal: "Describe desired feature outcome"
+  success_signals:
+    - "When active accepted-order count is below the limit, tapping accept succeeds and removes the task card from the visible list."
+    - "When active accepted-order count has already reached the limit, the UI pops '您当时的接单量已达上限' and the task stays unaccepted."
+  out_of_scope:
+    - "Changing the configured simultaneous accepted-order limit value"
+    - "Auto-retrying task acceptance after a limit-reached failure"
+
+# Include system_architecture only for large-scale design tasks:
+# multi-subsystem features, architectural refactors, or net-new apps.
+# Omit this section for smaller single-slice feature work.
+system_architecture:
+  subsystems:
+    - subsystem_id: SUBSYS-TASK-UI
+      responsibility: "Own interactive task page UI modules and user-triggered state transitions"
+      owned_modules: [accept_widget_panel]
+      exported: [accept_widget_panel]
+      dependencies: [SUBSYS-TASK-FLOW]
+      owned_code_artifacts:
+        - "src/ui/**"
+    - subsystem_id: SUBSYS-TASK-FLOW
+      responsibility: "Own task acceptance orchestration and downstream service coordination"
+      owned_modules: [accept_flow_coordinator]
+      exported: [accept_flow_coordinator]
+      dependencies: []
+      owned_code_artifacts:
+        - "src/flow/**"
+  composition_roots:
+    - root_id: ROOT-TASK-PAGE
+      entry_files:
+        - "src/app/task_page.cj"
+      bootstrapped_modules:
+        - accept_widget_panel
+        - accept_flow_coordinator
+      responsibility: "Compose task page UI and acceptance flow modules for the task screen."
+
+modularity_design:
+  modules:
+    - module_id: accept_widget_panel
+      responsibility: "Render inline accept controls and local interaction state on task cards"
+      dependencies: [accept_flow_coordinator]
+      main_api_signatures:
+        - "submitAccept(taskId: String): Result<AcceptResult, Error>"
+        - "refreshVisibleTasks(): Void"
+      internal_states:
+        - "selectedTaskId: Option<String>"
+        - "isSubmitting: Bool"
+        - "inlineError: Option<String>"
+        - "acceptLimitDialogMessage: Option<String>"
+      is_new: true # true = new module, false = extending existing module
+      implementation_file: "src/ui/accept_widget_panel.cj"
+    - module_id: accept_flow_coordinator
+      responsibility: "Coordinate accept flow side effects, enforce simultaneous accepted-order limit, and normalize service outcomes for UI"
+      dependencies: []
+      main_api_signatures:
+        - "orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      internal_states:
+        - "inFlightTaskIds: Set<String>"
+        - "activeAcceptedOrderCount: Int"
+        - "acceptOrderLimit: Int"
+      is_new: false
+      extension_note: "Extended existing coordinator with task acceptance orchestration, in-flight deduplication, and simultaneous accepted-order limit enforcement for card-level actions."
+      implementation_file: "src/flow/accept_flow_coordinator.cj"
+  shared_data_types:
+    - type_name: AcceptResult
+      fields:
+        - "taskId: String"
+        - "status: TaskStatus"
+        - "activeAcceptedOrderCount: Int"
+      ownership: "task_domain"
+      compatibility_constraints:
+        - "status enum remains backward-compatible with existing task list rendering"
+        - "activeAcceptedOrderCount reflects the accepted-order count after a successful accept mutation"
+
+behavioral_contracts:
+  api_specs:
+    - contract_id: API-WIDGET-SUBMIT-ACCEPT
+      module_belonging: accept_widget_panel
+      signature: "submitAccept(taskId: String): Result<AcceptResult, Error>"
+      source_event_ids: [IE-0001]
+      scope: api
+      status: active
+      natural_language_summary: "Handle user tap on accept, delegate side effects to coordinator, and surface a limit-reached dialog when simultaneous accepted-order capacity is full."
+      hoare_contract:
+        pre_condition:
+          - "accept_widget_panel.selectedTaskId.isSome()"
+          - "accept_widget_panel.isSubmitting == false"
+          - "let active_count_before = accept_flow_coordinator.activeAcceptedOrderCount"
+        post_condition:
+          - "accept_widget_panel.isSubmitting == false"
+          - "result.isSuccess implies accept_flow_coordinator.activeAcceptedOrderCount == active_count_before + 1"
+          - "result.isFailure && error.code == ACCEPT_LIMIT_REACHED implies accept_flow_coordinator.activeAcceptedOrderCount == active_count_before"
+          - "result.isFailure && error.code == ACCEPT_LIMIT_REACHED implies accept_widget_panel.acceptLimitDialogMessage == \"您当时的接单量已达上限\""
+          - "result.isFailure && error.code != ACCEPT_LIMIT_REACHED implies accept_widget_panel.inlineError.isSome()"
+        side_effects:
+          - "accept_widget_panel invokes accept_flow_coordinator.orchestrateAccept(taskId)"
+      concurrency_invariants:
+        - "single submit path per selectedTaskId while isSubmitting == true"
+      ui_logic_native_pseudocode:
+        - "Button(id=UI-ACCEPT-BUTTON).tap -> accept_widget_panel.submitAccept(taskId)"
+        - "OnFailure(error.code == ACCEPT_LIMIT_REACHED) -> Dialog(id=UI-ORDER-LIMIT-DIALOG).show()"
+        - "OnFailure(error.code == ACCEPT_LIMIT_REACHED) -> Text(id=UI-ORDER-LIMIT-MESSAGE).setText(\"您当时的接单量已达上限\")"
+        - "OnFailure(otherwise) -> Text(id=UI-ACCEPT-ERROR).setText(errorMessage)"
+        - "OnFailure(otherwise) -> Text(id=UI-ACCEPT-ERROR).show()"
+    - contract_id: API-COORDINATOR-ORCHESTRATE-ACCEPT
+      module_belonging: accept_flow_coordinator
+      signature: "orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      source_event_ids: [IE-0001]
+      scope: api
+      status: active
+      natural_language_summary: "Coordinate acceptance call, reject requests that would exceed simultaneous accepted-order limit, map dependency responses, and enforce in-flight deduplication."
+      hoare_contract:
+        pre_condition:
+          - "accept_flow_coordinator.inFlightTaskIds doesNotContain taskId"
+          - "let active_count_before = accept_flow_coordinator.activeAcceptedOrderCount"
+        post_condition:
+          - "accept_flow_coordinator.inFlightTaskIds doesNotContain taskId"
+          - "result.isSuccess implies accept_flow_coordinator.activeAcceptedOrderCount == active_count_before + 1"
+          - "result.isFailure && error.code == ACCEPT_LIMIT_REACHED implies accept_flow_coordinator.activeAcceptedOrderCount == active_count_before"
+          - "result.isFailure && error.code == ACCEPT_LIMIT_REACHED implies active_count_before == accept_flow_coordinator.acceptOrderLimit"
+        side_effects:
+          - "accept_flow_coordinator writes taskId into inFlightTaskIds during execution"
+          - "active_count_before < accept_flow_coordinator.acceptOrderLimit implies accept_flow_coordinator delegates to dependency APIs listed in reuse_and_boundary.api_dependency"
+          - "active_count_before == accept_flow_coordinator.acceptOrderLimit implies accept_flow_coordinator returns ACCEPT_LIMIT_REACHED without downstream accept mutation"
+      concurrency_invariants:
+        - "accept_flow_coordinator.activeAcceptedOrderCount <= accept_flow_coordinator.acceptOrderLimit"
+    - contract_id: API-WIDGET-REFRESH-VISIBLE-TASKS
+      module_belonging: accept_widget_panel
+      signature: "refreshVisibleTasks(): Void"
+      source_event_ids: [IE-0001]
+      scope: api
+      status: active
+      natural_language_summary: "Refresh visible task card view models after accept flow settles, whether the accept succeeds or is rejected because the simultaneous accepted-order limit has been reached."
+      hoare_contract:
+        pre_condition:
+          - "accept_widget_panel.isSubmitting == false"
+        post_condition:
+          - "accept_widget_panel.selectedTaskId.isNone()"
+        side_effects:
+          - "accept_widget_panel rebuilds visible task card view models"
+  use_case_specs:
+    - contract_id: UC-ACCEPT-VIA-WIDGET
+      involved_modules: [accept_widget_panel, accept_flow_coordinator]
+      source_event_ids: [IE-0001]
+      scope: use_case
+      status: active
+      natural_language_summary: "Courier accepts a task from the inline widget when simultaneous accepted-order capacity is still available, and otherwise receives a limit-reached prompt."
+      hoare_contract:
+        pre_condition:
+          - "accept_widget_panel.selectedTaskId.isSome()"
+          - "accept_widget_panel.isSubmitting == false"
+          - "let active_count_before = accept_flow_coordinator.activeAcceptedOrderCount"
+          - "active_count_before < accept_flow_coordinator.acceptOrderLimit"
+        post_condition:
+          - "accept_widget_panel.isSubmitting == false"
+          - "accept_widget_panel.selectedTaskId.isNone()"
+          - "accept_flow_coordinator.inFlightTaskIds isEmpty"
+          - "accept_flow_coordinator.activeAcceptedOrderCount == active_count_before + 1"
+        side_effects:
+          - "accept_flow_coordinator performs one dependency accept call for selectedTaskId"
+      concurrency_invariants:
+        - "at most one in-flight accept per taskId across the use case"
+      ui_logic_native_pseudocode:
+        - "Button(id=UI-ACCEPT-BUTTON).tap -> accept_widget_panel.submitAccept(taskId)"
+        - "OnSuccess -> Card(id=UI-TASK-CARD).hide()"
+      ordered_implementation_chain:
+        - "API-WIDGET-SUBMIT-ACCEPT"
+        - "API-COORDINATOR-ORCHESTRATE-ACCEPT"
+        - "API-WIDGET-REFRESH-VISIBLE-TASKS"
+      branch_scenarios:
+        - branch_id: BRANCH-ACCEPT-LIMIT-REACHED
+          branch_from_step: "UC-ACCEPT-VIA-WIDGET#MAIN[1]"
+          hoare_contract:
+            pre_condition:
+              - "accept_widget_panel.selectedTaskId.isSome()"
+              - "accept_widget_panel.isSubmitting == true"
+              - "let active_count_before = accept_flow_coordinator.activeAcceptedOrderCount"
+              - "active_count_before == accept_flow_coordinator.acceptOrderLimit"
+            post_condition:
+              - "accept_widget_panel.isSubmitting == false"
+              - "accept_widget_panel.selectedTaskId.isNone()"
+              - "accept_widget_panel.acceptLimitDialogMessage == \"您当时的接单量已达上限\""
+              - "accept_flow_coordinator.inFlightTaskIds isEmpty"
+              - "accept_flow_coordinator.activeAcceptedOrderCount == active_count_before"
+            side_effects:
+              - "accept_flow_coordinator performs zero downstream accept mutations for selectedTaskId"
+          ui_logic_native_pseudocode:
+            - "OnFailure(error.code == ACCEPT_LIMIT_REACHED) -> Dialog(id=UI-ORDER-LIMIT-DIALOG).show()"
+            - "OnFailure(error.code == ACCEPT_LIMIT_REACHED) -> Text(id=UI-ORDER-LIMIT-MESSAGE).setText(\"您当时的接单量已达上限\")"
+            - "OnFailure(error.code == ACCEPT_LIMIT_REACHED) -> Card(id=UI-TASK-CARD).show()"
+          ordered_implementation_chain:
+            - "API-WIDGET-REFRESH-VISIBLE-TASKS"
+          acceptance_check:
+            - "when activeAcceptedOrderCount == acceptOrderLimit, show '您当时的接单量已达上限' and keep the task card visible"
+      acceptance_check:
+        - "when activeAcceptedOrderCount < acceptOrderLimit, accept succeeds, increments activeAcceptedOrderCount, and hides the task card"
+
+ui_layout:
+  screens:
+    - screen_id: SCREEN-TASK-PAGE
+      ownership_module: accept_widget_panel
+      # Local source: "design/task_page_accept_widget.html"
+      # Web source: "https://example.com/prototype/task-page"
+      design_source: "design/task_page_accept_widget.html"
+      root:
+        kind: Page
+        children:
+          - kind: List
+            ui_element_id: UI-TASK-LIST
+            repeating_type: one
+            children:
+              - kind: Card
+                ui_element_id: UI-TASK-CARD
+                repeating_type: any
+                children:
+                  - kind: HorizontalPair
+                    children:
+                      - kind: Button
+                        ui_element_id: UI-ACCEPT-BUTTON
+                        repeating_type: one
+                      - kind: Text
+                        ui_element_id: UI-ACCEPT-ERROR
+                        repeating_type: optional
+          - kind: Overlay
+            children:
+              - kind: Dialog
+                ui_element_id: UI-ORDER-LIMIT-DIALOG
+                repeating_type: optional
+                children:
+                  - kind: Text
+                    ui_element_id: UI-ORDER-LIMIT-MESSAGE
+                    repeating_type: one
+                  - kind: Button
+                    ui_element_id: UI-ORDER-LIMIT-CONFIRM
+                    repeating_type: one
+      responsive_overrides:
+        - condition: "screen_width < 600dp"
+          adjustments:
+            - "Change inner HorizontalPair to VerticalPair"
+            - "Keep children order sequence unchanged"
+
+reuse_and_boundary:
+  related_code_artifacts:
+    - "src/flow/accept_flow_coordinator.*"
+    - "src/service/task_service.*"
+    - "src/network/network_client.*"
+    - "src/telemetry/telemetry_client.*"
+  api_dependency:
+    - used as: "use case step"
+      required by: "UC-ACCEPT-VIA-WIDGET#MAIN[0]"
+      signature: "accept_widget_panel.submitAccept(taskId: String): Result<AcceptResult, Error>"
+      updated: true
+      rationale: "The use case begins with the widget-owned submit API for the inline action."
+    - used as: "use case step"
+      required by: "UC-ACCEPT-VIA-WIDGET#MAIN[1]"
+      signature: "accept_flow_coordinator.orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      updated: false
+      rationale: "The use case delegates side-effect coordination to the coordinator module."
+    - used as: "use case step"
+      required by: "UC-ACCEPT-VIA-WIDGET#MAIN[2]"
+      signature: "accept_widget_panel.refreshVisibleTasks(): Void"
+      updated: true
+      rationale: "The use case ends by rebuilding visible task view state after the accept flow settles."
+    - used as: "use case step"
+      required by: "UC-ACCEPT-VIA-WIDGET#BRANCH-ACCEPT-LIMIT-REACHED[0]"
+      signature: "accept_widget_panel.refreshVisibleTasks(): Void"
+      updated: true
+      rationale: "The limit-reached branch reuses the same refresh API to settle local widget state after presenting the capacity dialog."
+    - used as: "library"
+      required by: "accept_flow_coordinator.orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      signature: "task_service.acceptTask(taskId: String): Result<AcceptResult, Error>"
+      updated: true
+      rationale: "Existing task_service API is updated to return coordinator-normalized payloads and is called only when simultaneous accepted-order capacity remains."
+    - used as: "library"
+      required by: "accept_flow_coordinator.orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      signature: "network_client.post(path: String, body: AcceptTaskBody): Result<Response, Error>"
+      updated: false
+      rationale: "Existing HTTP transport remains unchanged and is reused as-is."
+    - used as: "library"
+      required by: "accept_flow_coordinator.orchestrateAccept(taskId: String): Result<AcceptResult, Error>"
+      signature: "telemetry_client.track(eventName: String, payload: Map<String, String>): Void"
+      updated: false
+      rationale: "Existing telemetry API is reused to track accept success and failure signals."
+  extended_modules_summary:
+    - module_id: accept_flow_coordinator
+      note: "Extended with in-flight deduplication, dependency orchestration, and simultaneous accepted-order limit enforcement for acceptance."
+  impacted_files:
+    modified:
+      - "src/flow/accept_flow_coordinator.cj"
+      - "src/service/task_service.cj"
+    created:
+      - "src/ui/accept_widget_panel.cj"
+      - "tests/e2e/accept_widget_flow.spec.cj"
+
+traceability_and_validation:
+  pm_to_spec_trace:
+    - "IE-0001 -> FEATURE-001"
+  architecture_to_code_trace:
+    - "SUBSYS-TASK-UI -> src/ui/accept_widget_panel.*"
+    - "SUBSYS-TASK-FLOW -> src/flow/accept_flow_coordinator.*"
+    - "ROOT-TASK-PAGE -> src/app/task_page.*"
+  spec_to_code_trace:
+    - "API-WIDGET-SUBMIT-ACCEPT -> src/ui/accept_widget_panel.*"
+    - "API-COORDINATOR-ORCHESTRATE-ACCEPT -> src/flow/accept_flow_coordinator.*"
+    - "API-WIDGET-REFRESH-VISIBLE-TASKS -> src/ui/accept_widget_panel.*"
+  spec_to_test_trace:
+    - "UC-ACCEPT-VIA-WIDGET -> tests/e2e/accept_widget_flow.*"
+  nl_to_intent_trace:
+    - "PM text mapped to semantic_update in IE-0001"

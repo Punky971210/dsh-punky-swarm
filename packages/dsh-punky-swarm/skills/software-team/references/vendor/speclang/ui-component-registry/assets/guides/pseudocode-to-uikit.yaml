@@ -1,0 +1,394 @@
+# Pseudocode to UIKit (ObjC) Translation Guide
+# Translates ui_logic_native_pseudocode operations to iOS UIKit code
+
+target_platform: ios
+target_framework: UIKit
+language: objective_c
+
+platform_context:
+  frameworks:
+    - "UIKit is an imperative iOS UI framework built around UIView, UIViewController, and event callbacks."
+    - "Objective-C and Swift UIKit implementations use the same UIKit concepts; this guide shows Objective-C."
+  lifecycle:
+    - "UIViewController lifecycle includes viewDidLoad, viewWillAppear, viewDidAppear, viewWillDisappear, viewDidDisappear, and dealloc."
+  layout:
+    - "Use Auto Layout constraints, layout anchors, UIStackView, UITableView, UICollectionView, and UIScrollView."
+  state_management:
+    - "Store view state in properties and update UIKit views on the main thread."
+    - "Avoid retain cycles in blocks with weak references."
+  interaction:
+    - "Use target-action, delegate/data source protocols, gesture recognizers, and closure callbacks."
+  accessibility:
+    - "Set accessibilityLabel, accessibilityHint, accessibilityTraits, and accessibilityValue on interactive or meaningful views."
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation: |
+        [button addTarget:self
+                   action:@selector(onButtonTap:)
+         forControlEvents:UIControlEventTouchUpInside];
+
+        - (void)onButtonTap:(UIButton *)sender {
+            [module func];
+        }
+      notes:
+        - "Add target-action pattern"
+        - "Use UIControlEventTouchUpInside for tap events"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation: |
+        textField.delegate = self;
+
+        #pragma mark - UITextFieldDelegate
+        - (BOOL)textFieldShouldReturn:(UITextField *)textField {
+            NSString *query = textField.text;
+            [module searchWithQuery:query];
+            [textField resignFirstResponder];
+            return YES;
+        }
+      notes:
+        - "Implement UITextFieldDelegate"
+        - "Call resignFirstResponder to dismiss keyboard"
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation: |
+        [textField addTarget:self
+                      action:@selector(textFieldDidChange:)
+            forControlEvents:UIControlEventEditingChanged];
+
+        - (void)textFieldDidChange:(UITextField *)textField {
+            [module validateText:textField.text];
+        }
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation: |
+        [switchControl addTarget:self
+                         action:@selector(switchValueChanged:)
+               forControlEvents:UIControlEventValueChanged];
+
+        - (void)switchValueChanged:(UISwitch *)switchControl {
+            [module setEnabled:switchControl.on];
+        }
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation: |
+        [slider addTarget:self
+                  action:@selector(sliderValueChanged:)
+        forControlEvents:UIControlEventValueChanged];
+
+        - (void)sliderValueChanged:(UISlider *)slider {
+            [module updateProgress:slider.value];
+        }
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem → module.selectItem(itemId)"
+      implementation: |
+        tableView.delegate = self;
+
+        #pragma mark - UITableViewDelegate
+        - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+            NSString *itemId = self.items[indexPath.row][@"id"];
+            [module selectItemWithItemId:itemId];
+            [tableView deselectRowAtIndexPath:indexPath animated:YES];
+        }
+
+    Grid.selectItem:
+      pseudocode: "Grid(id=UI-GRID).selectItem → module.selectItem(itemId)"
+      implementation: |
+        collectionView.delegate = self;
+
+        #pragma mark - UICollectionViewDelegate
+        - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+            NSString *itemId = self.items[indexPath.item][@"id"];
+            [module selectItemWithItemId:itemId];
+            [collectionView deselectItemAtIndexPath:indexPath animated:YES];
+        }
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        label.text = @"value";
+      notes:
+        - "Must be on main thread if called from background"
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation: |
+        errorLabel.hidden = NO;
+      notes:
+        - "Prefer hidden over removeFromSuperview for toggle visibility"
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation: |
+        errorLabel.hidden = YES;
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        button.enabled = YES;
+        button.alpha = 1.0;
+      alternative_false: |
+        button.enabled = NO;
+        button.alpha = 0.5;
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        // Option 1: Show activity indicator
+        button.enabled = NO;
+        [button setTitle:@"" forState:UIControlStateNormal];
+        UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+        spinner.center = button.center;
+        [button addSubview:spinner];
+        [spinner startAnimating];
+
+        // To stop loading:
+        button.enabled = YES;
+        [button setTitle:@"Submit" forState:UIControlStateNormal];
+        [spinner stopAnimating];
+        [spinner removeFromSuperview];
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-AVATAR).load(url)"
+      implementation: |
+        // Using SDWebImage
+        [imageView sd_setImageWithURL:[NSURL URLWithString:url]
+                     placeholderImage:[UIImage imageNamed:@"placeholder"]];
+      notes:
+        - "Add SDWebImage to Podfile"
+        - "Check if available in Pod scope"
+      pod_warning: "SDWebImage must be declared as a dependency in .podspec for Pod code. Verify availability before using sd_setImageWithURL: in Pod libraries."
+
+    Avatar.setSource:
+      pseudocode: "OnSuccess → Avatar(id=UI-AVATAR).setSource(url)"
+      implementation: |
+        [imageView sd_setImageWithURL:[NSURL URLWithString:url]];
+        imageView.layer.cornerRadius = imageView.bounds.size.width / 2.0;
+        imageView.clipsToBounds = YES;
+      pod_warning: "Do NOT use UIView+RoundCorner.h Category (setRoundCorner:) in Pod code. Use layer.cornerRadius/masksToBounds directly as shown above. Do NOT use UIColor+Theme.h for avatar border colors."
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation: |
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Title"
+                                                                       message:@"Message"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+
+    Dialog.dismiss:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).dismiss()"
+      implementation: |
+        [self dismissViewControllerAnimated:YES completion:nil];
+
+    Toast.show:
+      pseudocode: "OnSuccess → Toast.show(\"message\")"
+      implementation: |
+        // ⚠️ Pod-safe: Do NOT use makeToast:withText:
+        // Use raw MBProgressHUD API:
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        hud.mode = MBProgressHUDModeText;
+        hud.label.text = @"message";
+        [hud hideAnimated:YES afterDelay:2.0];
+      pod_warning: "NEVER use MBProgressHUD+Utility category methods in Pod code"
+
+    Snackbar.show:
+      pseudocode: "OnSuccess → Snackbar(id=UI-SNACK).show()"
+      implementation: |
+        // Use custom snackbar view or third-party library
+        // Or use a simple UIView with animation
+        UIView *snackbar = [[UIView alloc] initWithFrame:CGRectMake(0, self.view.bounds.size.height - 60, self.view.bounds.size.width, 60)];
+        snackbar.backgroundColor = [UIColor darkGrayColor];
+        UILabel *label = [[UILabel alloc] initWithFrame:snackbar.bounds];
+        label.text = @"Message";
+        label.textColor = [UIColor whiteColor];
+        label.textAlignment = NSTextAlignmentCenter;
+        [snackbar addSubview:label];
+        [self.view addSubview:snackbar];
+
+        // Animate in
+        snackbar.transform = CGAffineTransformMakeTranslation(0, 60);
+        [UIView animateWithDuration:0.3 animations:^{
+            snackbar.transform = CGAffineTransformIdentity;
+        }];
+
+        // Auto dismiss
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.3 animations:^{
+                snackbar.transform = CGAffineTransformMakeTranslation(0, 60);
+            } completion:^(BOOL finished) {
+                [snackbar removeFromSuperview];
+            }];
+        });
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        UIViewController *sheetVC = [[MyBottomSheetViewController alloc] init];
+        sheetVC.modalPresentationStyle = UIModalPresentationPageSheet;
+        if (@available(iOS 15.0, *)) {
+            UISheetPresentationController *sheet = sheetVC.sheetPresentationController;
+            sheet.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                              UISheetPresentationControllerDetent.largeDetent];
+        }
+        [self presentViewController:sheetVC animated:YES completion:nil];
+
+    BottomSheet.dismiss:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).dismiss()"
+      implementation: |
+        [self dismissViewControllerAnimated:YES completion:nil];
+
+    Card.show:
+      pseudocode: "OnSuccess → Card(id=UI-CARD).show()"
+      implementation: |
+        cardView.hidden = NO;
+
+    Card.hide:
+      pseudocode: "OnSuccess → Card(id=UI-CARD).hide()"
+      implementation: |
+        cardView.hidden = YES;
+
+    Card.transition:
+      pseudocode: "OnSuccess → Card(id=UI-CARD).transition(expanded)"
+      implementation: |
+        [UIView animateWithDuration:0.3 animations:^{
+            cardView.frame = expandedFrame;
+        }];
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation: |
+        [self.items addObject:newItem];
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:self.items.count - 1 inSection:0];
+        [self.tableView insertRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation: |
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
+        [self.items removeObjectAtIndex:index];
+        [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation: |
+        [self.tableView reloadData];
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        progressView.progress = 0.75;
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        switchControl.on = YES;
+
+    TextField.setText:
+      pseudocode: "OnSuccess → TextField(id=UI-INPUT).setText(\"value\")"
+      implementation: |
+        textField.text = @"value";
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        NextViewController *nextVC = [[NextViewController alloc] init];
+        [self.navigationController pushViewController:nextVC animated:YES];
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        [self.navigationController popViewControllerAnimated:YES];
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation: |
+        NSMutableArray *viewControllers = [self.navigationController.viewControllers mutableCopy];
+        [viewControllers removeLastObject];
+        NextViewController *nextVC = [[NextViewController alloc] init];
+        [viewControllers addObject:nextVC];
+        self.navigationController.viewControllers = viewControllers;
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        ModalViewController *modalVC = [[ModalViewController alloc] init];
+        modalVC.modalPresentationStyle = UIModalPresentationFullScreen;
+        [self presentViewController:modalVC animated:YES completion:nil];
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation: |
+        [self dismissViewControllerAnimated:YES completion:nil];
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation: |
+        - (void)didTapSubmitButton {
+            if ([self validateForm]) {
+                self.submitButton.enabled = NO;
+                [self.viewModel submitWithEmail:self.emailTextField.text
+                                       password:self.passwordTextField.text];
+            }
+        }
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        self.errorLabel.text = message;
+        self.errorLabel.hidden = NO;
+        UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, message);
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        self.loadingView.hidden = NO;
+        self.contentView.hidden = YES;
+        self.emptyView.hidden = YES;
+        self.errorView.hidden = YES;
+
+    AsyncContent.setContent:
+      pseudocode: "OnSuccess → AsyncContent(id=UI-REGION).setContent()"
+      implementation: |
+        self.loadingView.hidden = YES;
+        self.contentView.hidden = NO;
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation: |
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self
+                                                                               action:@selector(didTapRegion:)];
+        [self.regionView addGestureRecognizer:tap];
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        [UIView animateWithDuration:0.25 animations:^{
+            self.panelView.alpha = expanded ? 1.0 : 0.0;
+            self.panelView.transform = expanded ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.95, 0.95);
+        }];
+
+# Main Thread Reminder
+main_thread_reminder:
+  description: "All UI updates must be performed on the main thread"
+  pattern: |
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // UI updates here
+        label.text = @"Updated";
+    });

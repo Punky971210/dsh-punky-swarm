@@ -461,6 +461,10 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     { pack: 'pack3', re: /^packages\/dsh-punky-swarm\/skills\/software-team\// },
     { pack: 'pack4', re: /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/ },
     { pack: 'tester-1', re: /^packages\/dsh-punky-swarm\/test\/accept-[^/]+\.(test\.js|md)$/ },
+    // 2026-10-24 新增（批 speclang-vendor-20261024 / lane e2-shell）：SpecLang vendor 批带来的唯一 scripts/** 文件。
+    // **本表硬编码批次写域是已知判据缺陷**（换任何一批新代码都会判「越界」）；根治方向 = 改读该批 wavePlan 的写域声明，
+    // 已记 followup，不在本处扩成通用豁免（避免削弱防越界能力）。只此一件，无通配。
+    { pack: 'speclang-vendor', re: /^packages\/dsh-punky-swarm\/scripts\/speclang-validate\.mjs$/ },
   ];
   const r = spawnSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
   assert.equal(r.status, 0, 'git status 必须可用');

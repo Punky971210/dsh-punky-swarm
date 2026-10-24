@@ -1,0 +1,416 @@
+# Pseudocode to React Native Translation Guide
+# Translates ui_logic_native_pseudocode operations to React Native code
+
+target_platform: react-native
+target_framework: react_native
+language: typescript
+
+platform_context:
+  frameworks:
+    - "React Native uses React components rendered to native iOS and Android views."
+    - "Most apps use TypeScript plus functional components and hooks."
+  layout:
+    - "Use View, Text, ScrollView, FlatList, SectionList, SafeAreaView, and Modal."
+    - "Styling uses StyleSheet objects and Flexbox-like properties with logical pixel numbers."
+  state_management:
+    - "Use useState/useReducer for local state and Context, Redux Toolkit, Zustand, or MobX for shared state."
+    - "React Query/TanStack Query or SWR are common for server state."
+  navigation:
+    - "React Navigation provides stack, tab, drawer, and native-stack navigators."
+  platform_specifics:
+    - "Use Platform.OS, Platform.select, and .ios/.android file extensions for platform-specific behavior."
+    - "Use Native Modules and NativeEventEmitter when JavaScript must call host platform APIs."
+  accessibility:
+    - "Use accessible, accessibilityLabel, accessibilityHint, accessibilityRole, accessibilityState, and accessibilityActions."
+  ecosystem:
+    - "react-native-gesture-handler and react-native-reanimated are common for advanced gestures and animations."
+    - "React Native Paper, NativeBase, and Tamagui are common UI library options."
+
+# State Management Patterns
+state_patterns:
+  local_state: "const [value, setValue] = useState<Type>(initialValue)"
+  reducer: "const [state, dispatch] = useReducer(reducer, initialState)"
+  context: "const value = useContext(MyContext)"
+  ref: "const ref = useRef<Type>(initialValue)"
+
+# Translation Table
+translation:
+  # User interaction triggers
+  triggers:
+    Button.tap:
+      pseudocode: "Button(id=UI-BTN).tap → module.func()"
+      implementation: |
+        <Pressable onPress={() => viewModel.func()}>
+          <Text>Button</Text>
+        </Pressable>
+      notes:
+        - "Use Pressable over TouchableOpacity (modern API)"
+        - "onPress is the primary tap handler"
+
+    TextField.onSubmit:
+      pseudocode: "TextField(id=UI-INPUT).onSubmit → module.search(query)"
+      implementation: |
+        const [query, setQuery] = useState('');
+
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={() => viewModel.search(query)}
+          returnKeyType="search"
+        />
+      notes:
+        - "onSubmitEditing fires when user presses return key"
+        - "Set returnKeyType to hint the keyboard action"
+
+    TextField.onTextChange:
+      pseudocode: "TextField(id=UI-INPUT).onTextChange → module.validate(text)"
+      implementation: |
+        const [text, setText] = useState('');
+
+        <TextInput
+          value={text}
+          onChangeText={(newText) => {
+            setText(newText);
+            viewModel.validate(newText);
+          }}
+        />
+
+    Switch.toggle:
+      pseudocode: "Switch(id=UI-TOGGLE).toggle → module.setEnabled(enabled)"
+      implementation: |
+        const [isEnabled, setIsEnabled] = useState(false);
+
+        <Switch
+          value={isEnabled}
+          onValueChange={(newValue) => {
+            setIsEnabled(newValue);
+            viewModel.setEnabled(newValue);
+          }}
+        />
+
+    Slider.onValueChange:
+      pseudocode: "Slider(id=UI-SLIDER).onValueChange → module.updateProgress(value)"
+      implementation: |
+        const [progress, setProgress] = useState(0);
+
+        // Using @react-native-community/slider
+        <Slider
+          value={progress}
+          onValueChange={(newValue) => {
+            setProgress(newValue);
+            viewModel.updateProgress(newValue);
+          }}
+          minimumValue={0}
+          maximumValue={1}
+        />
+
+    List.selectItem:
+      pseudocode: "List(id=UI-LIST).selectItem → module.selectItem(itemId)"
+      implementation: |
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <Pressable onPress={() => viewModel.selectItem(item.id)}>
+              <Text>{item.name}</Text>
+            </Pressable>
+          )}
+        />
+
+  # UI state changes (reactions)
+  reactions:
+    Text.setText:
+      pseudocode: "OnSuccess → Text(id=UI-LABEL).setText(\"value\")"
+      implementation: |
+        const [labelText, setLabelText] = useState('Initial');
+
+        <Text>{labelText}</Text>
+
+        // In reaction:
+        setLabelText('value');
+
+    Text.show:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).show()"
+      implementation: |
+        const [showError, setShowError] = useState(false);
+
+        {showError && <Text>Error message</Text>}
+
+        // In reaction:
+        setShowError(true);
+
+    Text.hide:
+      pseudocode: "OnSuccess → Text(id=UI-ERROR).hide()"
+      implementation: |
+        setShowError(false);
+
+    Button.setEnabled:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setEnabled(true)"
+      implementation: |
+        const [isEnabled, setIsEnabled] = useState(true);
+
+        <Pressable
+          onPress={() => { /* action */ }}
+          disabled={!isEnabled}
+          style={{ opacity: isEnabled ? 1 : 0.5 }}
+        >
+          <Text>Submit</Text>
+        </Pressable>
+
+        // In reaction:
+        setIsEnabled(true);
+
+    Button.setLoading:
+      pseudocode: "OnSuccess → Button(id=UI-BTN).setLoading(true)"
+      implementation: |
+        const [isLoading, setIsLoading] = useState(false);
+
+        <Pressable
+          onPress={async () => {
+            setIsLoading(true);
+            await viewModel.submit();
+            setIsLoading(false);
+          }}
+          disabled={isLoading}
+        >
+          {isLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text>Submit</Text>}
+        </Pressable>
+
+    Image.load:
+      pseudocode: "OnSuccess → Image(id=UI-IMG).load(url)"
+      implementation: |
+        // Using built-in Image with uri
+        <Image
+          source={{ uri: url }}
+          style={{ width: 200, height: 200 }}
+          defaultSource={require('./placeholder.png')}
+        />
+      notes:
+        - "For caching and advanced features, consider using react-native-fast-image"
+
+    Dialog.show:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).show()"
+      implementation: |
+        // Using React Native Alert
+        Alert.alert('Title', 'Message', [
+          { text: 'OK', onPress: () => {} }
+        ]);
+
+    Dialog.dismiss:
+      pseudocode: "OnSuccess → Dialog(id=UI-ALERT).dismiss()"
+      implementation: |
+        // React Native Alert dismisses automatically on button press
+        // For custom dialogs, use state:
+        setIsDialogVisible(false);
+
+    Toast.show:
+      pseudocode: "OnSuccess → Toast.show(\"message\")"
+      implementation: |
+        // Using react-native-toast-message
+        Toast.show({
+          type: 'success',
+          text1: 'message',
+          position: 'bottom',
+          visibilityTime: 2000,
+        });
+      notes:
+        - "React Native has no built-in Toast; use a community library"
+
+    Snackbar.show:
+      pseudocode: "OnSuccess → Snackbar(id=UI-SNACK).show()"
+      implementation: |
+        // Using react-native-paper Snackbar
+        const [visible, setVisible] = useState(false);
+
+        <Snackbar
+          visible={visible}
+          onDismiss={() => setVisible(false)}
+          duration={Snackbar.DURATION_SHORT}
+        >
+          Message
+        </Snackbar>
+
+        // In reaction:
+        setVisible(true);
+
+    BottomSheet.show:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).show()"
+      implementation: |
+        // Using @gorhom/bottom-sheet
+        const bottomSheetRef = useRef<BottomSheet>(null);
+
+        <BottomSheet ref={bottomSheetRef} snapPoints={['50%']}>
+          {/* Sheet content */}
+        </BottomSheet>
+
+        // In reaction:
+        bottomSheetRef.current?.expand();
+
+    BottomSheet.dismiss:
+      pseudocode: "OnSuccess → BottomSheet(id=UI-SHEET).dismiss()"
+      implementation: |
+        bottomSheetRef.current?.close();
+
+    List.addItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).addItem()"
+      implementation: |
+        const [items, setItems] = useState<Item[]>([]);
+
+        // In reaction:
+        setItems([...items, newItem]);
+
+    List.removeItem:
+      pseudocode: "OnSuccess → List(id=UI-LIST).removeItem(index)"
+      implementation: |
+        setItems(items.filter((_, i) => i !== index));
+
+    List.reload:
+      pseudocode: "OnSuccess → List(id=UI-LIST).reload()"
+      implementation: |
+        setItems(newItems);
+
+    ProgressBar.setProgress:
+      pseudocode: "OnSuccess → ProgressBar(id=UI-PROGRESS).setProgress(0.75)"
+      implementation: |
+        const [progress, setProgress] = useState(0);
+
+        // Using react-native-paper ProgressBar
+        <ProgressBar progress={progress} />
+
+        // In reaction:
+        setProgress(0.75);
+
+    Switch.setValue:
+      pseudocode: "OnSuccess → Switch(id=UI-TOGGLE).setValue(true)"
+      implementation: |
+        const [isEnabled, setIsEnabled] = useState(false);
+
+        <Switch value={isEnabled} onValueChange={setIsEnabled} />
+
+        // In reaction:
+        setIsEnabled(true);
+
+    TextField.setText:
+      pseudocode: "OnSuccess → TextField(id=UI-INPUT).setText(\"value\")"
+      implementation: |
+        const [text, setText] = useState('');
+
+        <TextInput value={text} onChangeText={setText} />
+
+        // In reaction:
+        setText('value');
+
+  # Navigation operations
+  navigation:
+    Page.push:
+      pseudocode: "Page(id=UI-PAGE).push(NextPage)"
+      implementation: |
+        // Using @react-navigation/native
+        const navigation = useNavigation();
+
+        navigation.navigate('NextPage', { /* params */ });
+        // or: navigation.push('NextPage');
+
+    Page.pop:
+      pseudocode: "Page(id=UI-PAGE).pop()"
+      implementation: |
+        navigation.goBack();
+
+    Page.replace:
+      pseudocode: "Page(id=UI-PAGE).replace(NextPage)"
+      implementation: |
+        navigation.replace('NextPage');
+
+    Modal.present:
+      pseudocode: "Modal(id=UI-MODAL).present()"
+      implementation: |
+        // Option 1: Using React Native Modal component
+        const [isModalVisible, setIsModalVisible] = useState(false);
+
+        <Modal visible={isModalVisible} animationType="slide">
+          {/* Modal content */}
+        </Modal>
+
+        // In reaction:
+        setIsModalVisible(true);
+
+        // Option 2: Using navigation modal
+        navigation.navigate('ModalScreen');
+
+    Modal.dismiss:
+      pseudocode: "Modal(id=UI-MODAL).dismiss()"
+      implementation: |
+        // Option 1: State-based Modal
+        setIsModalVisible(false);
+
+        // Option 2: Navigation-based
+        navigation.goBack();
+
+  semantic_state_containers:
+    Form.submit:
+      pseudocode: "Form(id=UI-FORM).submit → module.submit(values)"
+      implementation: |
+        const [email, setEmail] = useState('');
+        const [isSubmitting, setSubmitting] = useState(false);
+
+        <View>
+          <TextInput value={email} onChangeText={setEmail} />
+          <Pressable
+            disabled={isSubmitting}
+            onPress={() => viewModel.submit({ email })}
+          >
+            <Text>Submit</Text>
+          </Pressable>
+        </View>
+
+    ValidationMessage.setError:
+      pseudocode: "OnFailure → ValidationMessage(id=UI-ERROR).setError(message)"
+      implementation: |
+        <Text accessibilityLiveRegion="assertive">
+          {errorMessage}
+        </Text>
+
+    AsyncContent.setLoading:
+      pseudocode: "OnStart → AsyncContent(id=UI-REGION).setLoading()"
+      implementation: |
+        if (state.status === 'loading') return <ActivityIndicator />;
+        if (state.status === 'error') return <ErrorView onRetry={viewModel.retry} />;
+        if (state.status === 'empty') return <EmptyView />;
+        return <Content data={state.data} />;
+
+    GestureRegion.tap:
+      pseudocode: "GestureRegion(id=UI-REGION).tap → module.activate()"
+      implementation: |
+        <Pressable onPress={() => viewModel.activate()}>
+          {children}
+        </Pressable>
+
+    AnimatedVisibility.transition:
+      pseudocode: "OnSuccess → AnimatedVisibility(id=UI-PANEL).transition(expanded)"
+      implementation: |
+        <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+          {children}
+        </Animated.View>
+
+# Side Effects
+side_effects:
+  useEffect_mount: |
+    // Run once on mount
+    useEffect(() => {
+      viewModel.loadData();
+    }, []);
+
+  useEffect_cleanup: |
+    // Side effect with cleanup
+    useEffect(() => {
+      const subscription = viewModel.subscribe();
+      return () => subscription.unsubscribe();
+    }, []);
+
+  useFocusEffect: |
+    // Run when screen gains focus (React Navigation)
+    useFocusEffect(
+      useCallback(() => {
+        viewModel.refresh();
+      }, [])
+    );

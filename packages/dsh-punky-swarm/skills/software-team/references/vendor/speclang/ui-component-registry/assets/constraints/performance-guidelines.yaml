@@ -1,0 +1,242 @@
+# Performance Guidelines Configuration
+# Cross-platform performance best practices and optimization guidelines
+# Load when: Performance optimization, profiling, addressing performance issues
+
+constraint_type: performance
+applies_to: all_platforms
+load_condition: "When optimizing UI performance or addressing performance issues"
+
+# General Performance Principles
+principles:
+  - "Minimize unnecessary re-renders / re-composition"
+  - "Lazy load content that's not immediately visible"
+  - "Optimize images and media assets"
+  - "Avoid blocking the main/UI thread"
+  - "Use efficient data structures and algorithms"
+  - "Profile before optimizing"
+
+# Platform-Specific Performance Guidelines
+platforms:
+  ios_uikit:
+    rendering:
+      - "Avoid opaque views when possible (opaque = YES is faster)"
+      - "Use shouldRasterize for complex static views"
+      - "Minimize blend operations (overlapping transparent views)"
+      - "Use drawsAsynchronously for complex drawing"
+    layout:
+      - "Minimize constraint complexity"
+      - "Use frame-based layout for simple cases"
+      - "Cache layout calculations"
+      - "Avoid layout passes in scroll"
+    table_collection:
+      - "Reuse cells (dequeueReusableCell)"
+      - "Prefetch data when possible"
+      - "Estimate row heights for smoother scrolling"
+      - "Avoid dynamic cell sizing in fast scrolls"
+    images:
+      - "Downsample images to display size"
+      - "Use async image loading (SDWebImage, Kingfisher)"
+      - "Decode images off main thread"
+      - "Cache decoded images"
+    memory:
+      - "Use @autoreleasepool in loops"
+      - "Release views in didReceiveMemoryWarning"
+      - "Use weak references to avoid retain cycles"
+    common_issues:
+      - "Main thread blocked by synchronous I/O or network"
+      - "Excessive view hierarchy depth"
+      - "Unnecessary layout passes (setNeedsLayout loops)"
+      - "Large images not downsampled"
+
+  ios_swiftui:
+    rendering:
+      - "Use @State, @Binding, @ObservedObject appropriately"
+      - "Break large views into smaller ones"
+      - "Use Equatable for complex view inputs"
+      - "Minimize view body complexity"
+    state:
+      - "Place @State as low as possible in hierarchy"
+      - "Use @StateObject for view-owned objects"
+      - "Use @EnvironmentObject sparingly"
+      - "Avoid unnecessary @Published updates"
+    list:
+      - "Use LazyVStack/LazyHStack for long lists"
+      - "Use List with identifiable items"
+      - "Implement Equatable for list items"
+      - "Use .id() modifier correctly"
+    performance_modifiers:
+      - ".drawingGroup() for complex graphics"
+      - ".transaction { $0.animation = nil } to disable animation"
+    common_issues:
+      - "Entire view tree re-rendering on small state change"
+      - "Heavy computations in view body"
+      - "Unnecessary animations on initial load"
+
+  android_view_system:
+    rendering:
+      - "Reduce overdraw (remove unneeded backgrounds)"
+      - "Use hardware acceleration"
+      - "Flatten view hierarchy"
+      - "Use merge tag in layouts"
+    layout:
+      - "Use ConstraintLayout for complex layouts"
+      - "Avoid nested LinearLayouts"
+      - "Use ViewStub for rarely shown views"
+      - "Use include for reusable layouts"
+    list:
+      - "Use RecyclerView with ViewHolder pattern"
+      - "Implement DiffUtil for efficient updates"
+      - "Use stable IDs"
+      - "Prefetch in RecyclerView"
+    images:
+      - "Use Glide or Coil for async loading"
+      - "Downsample images"
+      - "Use WebP format"
+    memory:
+      - "Avoid memory leaks (unregister listeners)"
+      - "Use weak references in handlers"
+      - "Clear references in onDestroy"
+    common_issues:
+      - "Layout hierarchy too deep"
+      - "Overdraw from overlapping backgrounds"
+      - "Main thread blocked"
+      - "Memory leaks from static references"
+
+  android_compose:
+    rendering:
+      - "Use remember to cache computations"
+      - "Use derivedStateOf for derived state"
+      - "Use key() in LazyColumn items"
+      - "Avoid recomposition with stable types"
+    state:
+      - "Use mutableStateOf over State<T>"
+      - "Implement Stable or Immutable for custom types"
+      - "Use @Stable annotation appropriately"
+    list:
+      - "Use LazyColumn/LazyRow"
+      - "Use key for item identity"
+      - "Use contentType for recycling"
+      - "Implement item animations correctly"
+    effects:
+      - "Use LaunchedEffect for one-time effects"
+      - "Use DisposableEffect for cleanup"
+      - "Avoid unnecessary side effects"
+    common_issues:
+      - "Unstable types causing unnecessary recomposition"
+      - "Heavy computations in composable body"
+      - "Large lists without virtualization"
+
+  flutter:
+    rendering:
+      - "Use const constructors whenever possible"
+      - "Avoid rebuilding expensive widgets"
+      - "Use RepaintBoundary for complex animations"
+      - "Minimize opacity usage"
+    list:
+      - "Use ListView.builder for long lists"
+      - "Use const items when possible"
+      - "Implement AutomaticKeepAliveClientMixin"
+    state:
+      - "Use const widgets with stateless logic"
+      - "Split widgets by state change frequency"
+      - "Use ValueKey for widget identity"
+    images:
+      - "Use cached_network_image for remote images"
+      - "Precache images when possible"
+      - "Use appropriate image resolutions"
+    animations:
+      - "Use AnimatedBuilder for complex animations"
+      - "Use TweenAnimationBuilder for simple animations"
+      - "Avoid unnecessary rebuilds during animation"
+    common_issues:
+      - "Missing const constructors"
+      - "Large widget trees without repaint boundaries"
+      - "Heavy operations in build()"
+
+  react_native:
+    rendering:
+      - "Use React.memo for expensive components"
+      - "Use useCallback for handlers passed to children"
+      - "Use useMemo for expensive computations"
+      - "Minimize state updates"
+    list:
+      - "Use FlatList instead of ScrollView + map"
+      - "Implement keyExtractor correctly"
+      - "Use getItemLayout for fixed-height items"
+      - "Implement onEndReached for pagination"
+    navigation:
+      - "Lazy load screens when possible"
+      - "Use navigation.reset for deep linking"
+    images:
+      - "Use FastImage for better performance"
+      - "Resize images appropriately"
+      - "Cache remote images"
+    native_bridge:
+      - "Batch native module calls"
+      - "Use native driver for animations"
+      - "Avoid frequent bridge calls"
+    common_issues:
+      - "Re-rendering entire list on item change"
+      - "Heavy JS computation blocking thread"
+      - "Too many native bridge calls"
+      - "Missing keys in list items"
+
+  web:
+    rendering:
+      - "Use React.memo / useMemo / useCallback"
+      - "Virtualize long lists (react-window, react-virtualized)"
+      - "Code split with lazy loading"
+      - "Use Web Workers for heavy computation"
+    layout:
+      - "Avoid layout thrashing"
+      - "Use transform for animations (GPU accelerated)"
+      - "Use will-change sparingly"
+      - "Use content-visibility for off-screen content"
+    loading:
+      - "Lazy load images (loading=\"lazy\")"
+      - "Preload critical resources"
+      - "Use HTTP/2 for multiplexing"
+      - "Minimize bundle size"
+    css:
+      - "Use efficient selectors"
+      - "Avoid expensive properties (box-shadow, filter)"
+      - "Use contain for isolated components"
+    common_issues:
+      - "Large bundle size"
+      - "Layout thrashing from reading/writing DOM"
+      - "Too many re-renders"
+      - "Blocking main thread with JS"
+
+# Performance Profiling Tools
+profiling_tools:
+  ios:
+    - "Instruments (Time Profiler, Allocations, Leaks)"
+    - "Xcode Debug Navigator"
+    - "os_signposts for custom intervals"
+  android:
+    - "Android Profiler"
+    - "Systrace / Perfetto"
+    - "LeakCanary for memory leaks"
+  flutter:
+    - "Flutter DevTools"
+    - "Dart Observatory"
+    - "Performance Overlay"
+  react_native:
+    - "React DevTools Profiler"
+    - "Flipper"
+    - "React Native Debugger"
+  web:
+    - "Chrome DevTools Performance tab"
+    - "Lighthouse"
+    - "React DevTools Profiler"
+
+# Performance Testing Checklist
+testing_checklist:
+  - "Does the UI maintain 60fps during scrolling?"
+  - "Are images loaded asynchronously?"
+  - "Is the UI responsive during data loading?"
+  - "Are lists virtualized for long content?"
+  - "Is memory usage stable (no leaks)?"
+  - "Is the initial load time acceptable?"
+  - "Are animations smooth (no jank)?"
+  - "Is the main/UI thread free of blocking operations?"
