@@ -8,6 +8,30 @@
       "tests": 6,
       "todos": 0
     },
+    "test/accept-pack1-guidance.test.js": {
+      "asserts": 59,
+      "blankLines": 38,
+      "lines": 427,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
+    "test/accept-pack2-vocabulary.test.js": {
+      "asserts": 46,
+      "blankLines": 37,
+      "lines": 477,
+      "tautologies": 0,
+      "tests": 12,
+      "todos": 0
+    },
+    "test/accept-pack3-spec-contract.test.js": {
+      "asserts": 44,
+      "blankLines": 32,
+      "lines": 385,
+      "tautologies": 0,
+      "tests": 15,
+      "todos": 0
+    },
     "test/acps-cert-failclosed.test.js": {
       "asserts": 49,
       "blankLines": 31,
@@ -816,6 +840,14 @@
       "tests": 33,
       "todos": 0
     },
+    "test/guidance-id-coverage.test.js": {
+      "asserts": 16,
+      "blankLines": 16,
+      "lines": 130,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
     "test/handoff-authz.test.js": {
       "asserts": 54,
       "blankLines": 42,
@@ -926,6 +958,22 @@
       "lines": 121,
       "tautologies": 0,
       "tests": 3,
+      "todos": 0
+    },
+    "test/judging-guidance.test.js": {
+      "asserts": 50,
+      "blankLines": 62,
+      "lines": 359,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
+    "test/judging-toolcount.test.js": {
+      "asserts": 17,
+      "blankLines": 23,
+      "lines": 242,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/l5-wait-ban.test.js": {
@@ -1449,9 +1497,9 @@
       "todos": 0
     },
     "test/vocabulary.test.js": {
-      "asserts": 91,
+      "asserts": 93,
       "blankLines": 49,
-      "lines": 394,
+      "lines": 405,
       "tautologies": 0,
       "tests": 32,
       "todos": 0
@@ -1585,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T03:31:29Z",
+  "generatedAt": "2026-10-24T10:35:53Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1596,15 +1644,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "RO-12 skills 分母随角色手册删除同步为 12；assets.test.js 与 assembly-schema.test.js 随资产面调整",
+  "reason": "punky-judging-face-20261024 收口：新增 judging-toolcount/judging-guidance 用例；补 58c5533 遗留的 vocabulary.test.js 漂移",
   "schema": 1,
   "totals": {
-    "asserts": 10305,
-    "blankLines": 5341,
-    "files": 198,
-    "lines": 56882,
+    "asserts": 10539,
+    "blankLines": 5549,
+    "files": 204,
+    "lines": 58913,
     "tautologies": 2,
-    "tests": 2081,
+    "tests": 2140,
     "todos": 4
   }
 }

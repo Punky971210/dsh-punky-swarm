@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // log_export 单测：
-// T3.1 默认关：logs 未配置/disabled → log_export 不注册，工具总数 14（T0 断言保持）
+// T3.1 默认关：logs 未配置/disabled → log_export 不注册（差集恰 = +1，不写死总数）
 // T3.2 全量导出：eventCount=exported=events.length，items 与 store.readBatch 逐条一致（ts/type 保序）
 // T3.3 过滤：lane / type（前缀匹配）/ since 各自生效且可叠加；空结果 → items=[]、exported=0
 // T3.4 markdown 报告：批次头+时间线表+尾部汇总；writeTo 落盘引擎产物根（防逃逸）

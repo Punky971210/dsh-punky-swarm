@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // T2 checkpoint：提交出现（git log 可查）/ 无变更 no-op（不产生空提交）
 // T3 合并：成功 → 产物入 orch + worktree/分支清理；冲突 → 保留现场 + 冲突文件清单（不自动解决）
 // T4 串行化：merge 队列锁等待（同批次 merge 串行）+ 与 lane_claim 并存（worktree 场景 lane_claim 仍锁批次状态写）
-// T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起；enabled=false → 不注册（工具总数 14 不变）
+// T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起；enabled=false → 该组四件不注册（总数面权威 = test/tools.test.js 冻结名单派生）
 // T6 progress checkpoint：事件含 step/total + commit message 内嵌 "step N/total"（git log 可查）；向后兼容
 // T7 lane_checkpoint_status：只读查询 checkpoint 历史 + latest；不依赖 git（git 不可用也可查）
 // T8 L5 可判定：reason 枚举穷尽三分支（created/reused/recreated-after-residual）+ isolated/baseFiles 单一判定位

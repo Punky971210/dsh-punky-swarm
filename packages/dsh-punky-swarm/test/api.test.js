@@ -134,7 +134,7 @@ test('prefix fallback returns 404 json', () => {
 
 // ── 国标 AIP P0-1 /tools 端点（与 aip.enabled 联动）：catalog 非空（缺省默认开启）时注册，null 时不注册 ──
 
-test('/tools 端点：catalog 非空时注册并返回 14 工具 6 属性', () => {
+test('/tools 端点：catalog 非空时注册并返回「全量工具 × 6 属性」', () => {
   const routesT = [];
   const ctxT = { webServer: { register: (r) => { routesT.push(r); return () => {}; } } };
   const catalog = buildToolCatalog(

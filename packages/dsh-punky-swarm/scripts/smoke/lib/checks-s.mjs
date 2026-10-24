@@ -44,7 +44,7 @@ async function h05(sm) {
   const mount = sm.mount({}, { subagents: { start: async () => ({ result: Promise.resolve({}) }) } });
   try {
     const wavePlan = mount.tools.get('wave_plan');
-    expect(wavePlan, '阳性对照失败：wave_plan 未注册（裸配置应含 20 工具）');
+    expect(wavePlan, '阳性对照失败：wave_plan 未注册（裸配置应注册 wave_plan；两档工具数真值见 scripts/smoke/lib/checks-k.mjs 的 EXPECTED_TOOLS_*）');
     const tasks = threeTierTasks();
 
     // ── 阴性面：缺 assembly ──

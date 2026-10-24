@@ -268,7 +268,7 @@ const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbe
 const installWatchRuntime = ({ ctx, config, store, root }) => {
   // config 贯通：apply 的 config（cordis.patch.yml -> 插件 config）传入 createTools，
   // tools.js guard 经 config?.escalation.execTools 覆盖执行型工具名单（可选，缺省 EXEC_TOOLS）
-  // enabled=true 时 register() 生成 catalog（14 工具 6 属性快照），传给 createApi 挂 /tools 端点
+  // enabled=true 时 register() 生成 catalog（注册面全量 × 6 属性快照），传给 createApi 挂 /tools 端点
   // watch 心跳引擎（lane 过期检测 + longrun 档）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——
   // 仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）。
   // 引擎引用 holder（heartbeatRef）：热重建（applyConfigChange 生效变化

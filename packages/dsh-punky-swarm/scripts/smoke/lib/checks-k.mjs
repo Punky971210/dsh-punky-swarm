@@ -98,7 +98,7 @@ async function h02(sm) {
     + before.total + '→' + after.total;
 }
 
-/** H-03 工具注册面：裸配置 20 / patch 全开 21，差集恰 = log_export；member_status 枚举不含 idle。 */
+/** H-03 工具注册面：两档真值 = 本文件 :36-37 的 EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL，差集恰 = log_export；member_status 枚举不含 idle。 */
 function h03(sm) {
   const bare = sm.mount({}, { subagents: { start: async () => ({ result: Promise.resolve({}) }) } });
   const namesBare = bare.registered.map((t) => t?.name).filter(Boolean);
@@ -171,7 +171,7 @@ export function buildK(sm) {
   return [
     { id: 'H-01', title: '部署面载入（realpath ≡ 仓根 / 两侧 version / 入口 sha）· SKIP-able', run: () => h01(sm) },
     { id: 'H-02', title: 'apply() 真实装载 + 卸载幂等（零装载期 warn / handle 回基线）', run: () => h02(sm) },
-    { id: 'H-03', title: '工具注册面 31/32（钉 HEAD 基线）+ 差集 = log_export + member_status 枚举', run: () => h03(sm) },
+    { id: 'H-03', title: '工具注册面（钉 HEAD 基线 · 两档真值 = EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL）+ 差集 = log_export + member_status 枚举', run: () => h03(sm) },
     { id: 'H-04', title: '真实 home 守卫面零漂移 + 台账全在隔离根 + 生产面零 runTag', run: () => h04(sm) },
   ];
 }

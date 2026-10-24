@@ -29,8 +29,8 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-// 缺省默认开：14（core 12 + mailbox 3）+ lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit + handoff_view = 26；【2026-09-21 N1-R4-1a】+`task_pool` ⇒ 27。
-// logs 缺省关（log_export 不在缺省清单，patch 全开 +1 = 27）。断言按新契约更新（旧「14 工具」为旧行为）。
+// 缺省默认开：总数一律取 `TOOL_NAMES.length`（**派生，勿写字面量**）——名单 = core + mailbox + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit / handoff_view / handoff_accept + task_pool + batch_tasks_add + task_update + role_guide。
+// logs 缺省关（log_export 不在缺省清单，全开面 = 缺省面 + 1）。断言按新契约更新。
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口，发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
 // 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
 // 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**；工具是机制、门是策略）⇒ 25 → 26。
