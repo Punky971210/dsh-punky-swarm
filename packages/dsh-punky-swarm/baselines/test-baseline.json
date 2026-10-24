@@ -19,17 +19,17 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 46,
       "blankLines": 37,
-      "lines": 479,
+      "lines": 483,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 51,
-      "blankLines": 35,
-      "lines": 461,
+      "asserts": 59,
+      "blankLines": 38,
+      "lines": 522,
       "tautologies": 0,
-      "tests": 16,
+      "tests": 18,
       "todos": 0
     },
     "test/acps-cert-failclosed.test.js": {
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T13:10:41Z",
+  "generatedAt": "2026-10-24T16:10:52Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1644,15 +1644,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "并发 lane 3ec2bbb 新增 AC-pack3-13（引用可解析判据）+ punky-test-integrity-20261024 收口",
+  "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 10547,
-    "blankLines": 5556,
+    "asserts": 10555,
+    "blankLines": 5559,
     "files": 204,
-    "lines": 59062,
+    "lines": 59127,
     "tautologies": 0,
-    "tests": 2141,
+    "tests": 2143,
     "todos": 4
   }
 }
