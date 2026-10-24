@@ -40,6 +40,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** 包根（**基于本文件位置**派生，不依赖 cwd —— e1 A4 实测：cwd=仓库根时
+ *  `lib/engine/dispatch.js` 解析成 `D:\dsh\Punky-plugin-onto\lib\...` ⇒ ENOENT 假红）。 */
+const PKG_ROOT = path.join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
@@ -487,6 +492,6 @@ test('T14b【退役锁 · Q-B】让位纯函数面已随闸删除（无 `pass-th
   assert.equal(dispatchMod.CONCURRENCY_CANDIDATE_CAP, undefined, '[退役锁] 候选截断常量已删除');
   // 既有拒码面仍由各自路径承担（本用例以纯函数面自证「无第二套批终态判据」：
   //   `dispatch.js` 已不再 import `isBatchTerminal`）
-  const src = fs.readFileSync(path.join(process.cwd(), 'lib', 'engine', 'dispatch.js'), 'utf8');
+  const src = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'engine', 'dispatch.js'), 'utf8');
   assert.equal(/import\s*\{[^}]*isBatchTerminal/.test(src), false, '[退役锁] dispatch.js 不再 import isBatchTerminal（闸让位面已消失）');
 });

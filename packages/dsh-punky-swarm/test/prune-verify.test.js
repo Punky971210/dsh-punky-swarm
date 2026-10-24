@@ -17,10 +17,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 批 3 · 未接线导出删除辅助（N2/C1 激进档，docs/c1-wiring-audit-2026-09-22.md）：
 //   枚举 lib 内指定符号的**残留引用**（供删除后核对清零；机器底稿，非行为测试）。
+//
+// ⚠ **名实锚（AD-03，本批加锚）**：本件 **≠ 清理逻辑校验**。「prune」在此处 = 「从代码里剪掉未接线导出」，
+//   与 `lib/auditlog/sink.js` 的「按天龄/按总量删旧审计分卷」是**同形异义**：
+//     · `pruneByTotal` 的行为覆盖在 `test/auditlog-sinkfid.test.js:164`（直调）＋ `:326-360`（断言）；
+//     · `pruneByAge`（`sink.js:484`，生产调用 `:815`/`:828`/`:961`）**全仓零行为覆盖**（e2 K4 实测：
+//       阉成 `return 0` 后相关 4 件 37/37 全绿）⇒ 真覆盖缺口，登记下一批 `punky-auditlog-prune-coverage`。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** 包根（**基于本文件位置**派生，不依赖 cwd —— e1 A1 实测：cwd=仓库根时 `lib` 解析成
+ *  `D:\dsh\Punky-plugin-onto\lib` ⇒ ENOENT 假红）。 */
+const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const PRUNED = [
   ['lib/engine/dispatch.js', 'parseLabel'],
@@ -63,7 +74,7 @@ function libSources(dir, out = []) {
 }
 
 test('批 3 删除核对：被删符号在 lib/** 零引用（导出与残留一并清除）', () => {
-  const sources = libSources(join(process.cwd(), 'lib'));
+  const sources = libSources(join(PKG_ROOT, 'lib'));
   const residue = [];
   for (const [file, sym] of PRUNED) {
     for (const f of sources) {

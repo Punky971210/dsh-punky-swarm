@@ -26,6 +26,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** 包根（**基于本文件位置**派生，不依赖 cwd —— e1 A3 实测：cwd=仓库根时 `lib` 解析成
+ *  `D:\dsh\Punky-plugin-onto\lib` ⇒ ENOENT 假红）。 */
+const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const RETIRED_CODES = [
   'GATE_SWARM_UNBOUND_REPORT', // gate-lite 第一批 · E②（Q-G2：身份门整条移除，成员回报 best-effort）
@@ -95,7 +100,7 @@ function libSources(dir, out = []) {
 }
 
 test('退役码登记锁：C 类 ' + RETIRED_CODES.length + ' 码在 lib/** 零字面量命中（防回生；散布锁已合并至此）', () => {
-  const sources = libSources(join(process.cwd(), 'lib'));
+  const sources = libSources(join(PKG_ROOT, 'lib'));
   assert.ok(sources.length > 100, 'lib 源文件扫描面异常（应 >100 件）：' + sources.length);
   for (const code of RETIRED_CODES) {
     for (const f of sources) {

@@ -35,6 +35,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** 包根（**基于本文件位置**派生，不依赖 cwd —— e1 A2 实测：cwd=仓库根时 `lib` / 锁文件均 ENOENT 假红）。 */
+const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const LOCK_REL = join('test', 'retired-codes-lock.test.js');
 
@@ -74,9 +78,9 @@ function unescapeSeparators(text) {
 }
 
 test('归一化退役码守卫：lib/** 内退役码（含转义变体）命中数 = 0', () => {
-  const codes = retiredCodesOf(join(process.cwd(), LOCK_REL));
+  const codes = retiredCodesOf(join(PKG_ROOT, LOCK_REL));
   assert.ok(codes.length >= 30, '码表解析异常（应 ≥30 条）：' + codes.length);
-  const sources = libSources(join(process.cwd(), 'lib'));
+  const sources = libSources(join(PKG_ROOT, 'lib'));
   assert.ok(sources.length > 100, 'lib 源文件扫描面异常（应 >100 件）：' + sources.length);
 
   const normalized = sources.map((f) => ({ f, t: unescapeSeparators(readFileSync(f, 'utf8')) }));

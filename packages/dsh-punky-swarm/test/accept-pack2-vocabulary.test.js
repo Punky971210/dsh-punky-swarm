@@ -47,7 +47,9 @@ import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
-const BASELINE = 'bfb9b0c';
+// 【本批删除】原 `const BASELINE = 'bfb9b0c';` —— 全文件**零引用**（`grep -c BASELINE` = 1，即定义行本身），
+//   属死常量；且它误导读者以为本件「锚历史基线字节」（本件的窗口判据在 `AC-pack2-12`，与 bfb9b0c 无关）。
+//   删除性检验：零引用 ⇒ 不承载任何判据；删后本件 12/12 仍绿（见 progress/02）。
 const VOCAB_JSON_REL = 'lib/state/vocabulary.json';
 const VOCAB_JS_REL = 'lib/state/vocabulary.js';
 const CONTRACTS_TS_REL = 'lib/types/contracts.ts';
