@@ -9,9 +9,9 @@
       "todos": 0
     },
     "test/accept-pack1-guidance.test.js": {
-      "asserts": 59,
+      "asserts": 60,
       "blankLines": 38,
-      "lines": 427,
+      "lines": 449,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -19,15 +19,15 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 46,
       "blankLines": 37,
-      "lines": 477,
+      "lines": 479,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 44,
-      "blankLines": 32,
-      "lines": 385,
+      "asserts": 49,
+      "blankLines": 34,
+      "lines": 444,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -330,8 +330,8 @@
     },
     "test/concurrency-gate.test.js": {
       "asserts": 68,
-      "blankLines": 39,
-      "lines": 493,
+      "blankLines": 40,
+      "lines": 498,
       "tautologies": 0,
       "tests": 16,
       "todos": 0
@@ -906,8 +906,8 @@
     },
     "test/hygiene-comment-literals.test.js": {
       "asserts": 5,
-      "blankLines": 12,
-      "lines": 94,
+      "blankLines": 13,
+      "lines": 98,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -929,10 +929,10 @@
       "todos": 0
     },
     "test/inject-budget.test.js": {
-      "asserts": 104,
+      "asserts": 103,
       "blankLines": 75,
-      "lines": 695,
-      "tautologies": 1,
+      "lines": 702,
+      "tautologies": 0,
       "tests": 31,
       "todos": 0
     },
@@ -1218,8 +1218,8 @@
     },
     "test/prune-verify.test.js": {
       "asserts": 1,
-      "blankLines": 8,
-      "lines": 78,
+      "blankLines": 9,
+      "lines": 89,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1290,8 +1290,8 @@
     },
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
-      "blankLines": 8,
-      "lines": 107,
+      "blankLines": 9,
+      "lines": 112,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1305,10 +1305,10 @@
       "todos": 0
     },
     "test/rule-propagation.test.js": {
-      "asserts": 55,
+      "asserts": 56,
       "blankLines": 27,
-      "lines": 197,
-      "tautologies": 1,
+      "lines": 214,
+      "tautologies": 0,
       "tests": 13,
       "todos": 0
     },
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T10:35:53Z",
+  "generatedAt": "2026-10-24T12:48:16Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1644,14 +1644,14 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-judging-face-20261024 收口：新增 judging-toolcount/judging-guidance 用例；补 58c5533 遗留的 vocabulary.test.js 漂移",
+  "reason": "punky-test-integrity-20261024 e4-repair 后重冻：9 件用例改动（含恒真 2 条删除 ⇒ tautologies 2→0）",
   "schema": 1,
   "totals": {
-    "asserts": 10539,
-    "blankLines": 5549,
+    "asserts": 10545,
+    "blankLines": 5555,
     "files": 204,
-    "lines": 58913,
-    "tautologies": 2,
+    "lines": 59045,
+    "tautologies": 0,
     "tests": 2140,
     "todos": 4
   }
