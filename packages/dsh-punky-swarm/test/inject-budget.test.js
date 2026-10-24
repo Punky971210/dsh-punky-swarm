@@ -309,8 +309,15 @@ test('[ENV] 环境就绪读数（诊断；不判红）：依赖面可加载性 +
     + (sinkLoadError ? '｜原因 = ' + String(sinkLoadError.code) : ''));
   t.diagnostic('[ENV] ' + IMPL_REL + ' 可加载 = ' + String(!implLoadError)
     + (implLoadError ? '｜原因 = ' + String(implLoadError.code) : ''));
-  // 本条为**纯诊断**：环境/实现异常由依赖它的具体判据 RED 承载（一处问题不污染多条判据读数）。
-  assert.ok(true);
+  // 【本批删除 `assert.ok(true)`（原 F-13，`ok-const-true` 恒真式，零保护力）】
+  //   为什么**删除**而不是「替强断言」（规格 C-2② 的默认处置在此不适用，理由须留痕）：
+  //     · 本块自陈面 = **纯诊断**（见上方 :312）：环境/实现异常由依赖它的具体判据 RED 承载，
+  //       「一处问题不污染多条判据读数」是本件明文设计 ⇒ 在此加依赖守卫式 import 的断言会**违反**该设计；
+  //     · 本件其余两条静态 import（`readCapability` / `composeWorkerPrompt`）在模块级绑死 ⇒
+  //       对它们作断言在结构上不可能失败（不是判据）；
+  //     · e3/AD-07 建议的 `assert.match(tail, /原因 = [A-Z_]+/)` 是**环境相关**形态：依赖在外位时诊断串
+  //       不含「原因 = 」⇒ 健康环境即假红（本 lane 复核后不采）。
+  //   删除性检验：删后本件仍 31/31 pass（e2 K6 已实测，本 lane 复跑见 progress/02）；`tautologies` 2→1（改善）。
 });
 
 test('[FIX-1] 真实重载样本夹具自证：102 条断言 / 27478 B 块 / 单条不超 perItemBytes', () => {

@@ -56,7 +56,24 @@ test('L4-AC6-2 配置来源：version 随内容变化，且确定性稳定', () 
 
   const b = loadRules({ ratchet: { memberRules: { pending: ['running'] } } });
   assert.equal(b.version, a.version, '同一内容 ⇒ 同一指纹（确定性、跨调用稳定）');
-  assert.equal(a.version, a.version);
+  // 【本批替换】原 `assert.equal(a.version, a.version)` 是**自比恒真**（同一 const 绑定、字符串字段、无 getter
+  //   副作用 ⇒ 对任何实现恒真，零保护力；e2 K3 实测：把 `version` 改成随机值，红的是 `:55`，本行仍绿）。
+  //   替换为**指纹覆盖面扫描**：**逐面**收紧一个 `from` 键 ⇒ 生效表必变 ⇒ 指纹必变。
+  //   可达构造：让 `rulesFingerprint` 只哈希部分面/部分键（如仅 `memberRules.pending`）⇒ 未被哈希的键
+  //   在此遍历中给出「指纹未变」⇒ 本行红。
+  const faces = [];
+  for (const [kind, table] of [['memberRules', DEFAULT_MEMBER_RULES], ['batchRules', DEFAULT_BATCH_RULES]]) {
+    for (const [from, tos] of Object.entries(table)) {
+      if (!Array.isArray(tos) || tos.length === 0) continue; // 该 from 无迁移可收紧 ⇒ 无构造
+      faces.push({ kind, from, tighter: tos.length > 1 ? tos.slice(0, 1) : [] }); // 严格子集（棘轮允许）
+    }
+  }
+  assert.ok(faces.length > 0, '遍历面为空（默认规则表无任何可收紧迁移）⇒ 本判据无对象');
+  const uncovered = faces
+    .filter(({ kind, from, tighter }) => loadRules({ ratchet: { [kind]: { [from]: tighter } } }).version
+      === DEFAULT_RULES_VERSION)
+    .map(({ kind, from }) => kind + '.' + from);
+  assert.deepEqual(uncovered, [], '以下面被收紧后指纹未变 ⇒ rulesFingerprint 未覆盖该面：' + JSON.stringify(uncovered));
 
   const c = loadRules({ ratchet: { batchRules: { running: ['paused'] } } });
   assert.notEqual(c.version, a.version, '不同变更 ⇒ 不同指纹');
