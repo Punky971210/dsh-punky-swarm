@@ -60,8 +60,8 @@ discipline_refs: [0c, 0e, 9, 14]
 ## 工程规范（必读）
 - **`references/engineering/frontend.md` F-1..F-7 全部**：归属优先于行数 / 保存三态基线 / 并发与重复提交 / 后台刷新 / 弹窗六项约定 / 复用既有能力 / 两本记录分工。
 - **`references/engineering/backend.md` B-1..B-6 全部**：入口-能力分离 / 权限一致 / 唯一归属 / 分层方向 / 异常体系 / 迁移核对。
-- **`references/engineering/spec-contract.md` S-1 / S-2 / S-3 / S-4 / S-9**：机械规则清单与判定对象 / 结构失败先于语义评审 / 编号唯一与引用可解析 / 追溯记账与依赖 DAG / 需求与验收编号族纪律。
-- 落点：spec 与任务包必须各有「**前端行为**」（涉及 UI 时：状态归属 + 保存竞态 + 交互约定）、「**后端能力归属**」（复用哪个 service、权限在哪层）、「**异常边界**」（错误码与 HTTP 映射）三段；缺段视为 spec 不完整，exec 可拒开工。另须过一遍结构自检：必备段落齐、`AC-` / `RULE-` 编号在同包内唯一、spec 点名的模板与角色文件均能解析到实存路径（S-2 / S-3）。
+- **`references/engineering/spec-contract.md` 附 A（不复述清单）**：结构自检、编号唯一与引用可解析、追溯记账与依赖 DAG、需求编号族 —— **均指向业主真源**（`scripts/check-guidance-sync.mjs`、`lanes[].deps`、`discipline.md §0s`）；该文件只保留 `S-6` 六态证据语法 / `S-7` 记分口径 / `S-8` 机读行 / `S-10` 缺口留档。
+- 落点：spec 与任务包必须各有「**前端行为**」（涉及 UI 时：状态归属 + 保存竞态 + 交互约定）、「**后端能力归属**」（复用哪个 service、权限在哪层）、「**异常边界**」（错误码与 HTTP 映射）三段；缺段视为 spec 不完整，exec 可拒开工。另须过一遍结构自检：必备段落齐、`AC-` / `RULE-` 编号在同包内唯一、spec 点名的模板与角色文件均能解析到实存路径（见 `spec-contract.md` 附 A 的结构自检与编号面；真源 `scripts/check-guidance-sync.mjs`）。
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / skill / write / edit + memory_search（跨会话记忆查询）+ **代码图谱类 MCP（只读，工具名以当前会话实际注册为准、不在此固化）**

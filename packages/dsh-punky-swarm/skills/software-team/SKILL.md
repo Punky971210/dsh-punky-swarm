@@ -149,11 +149,11 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 | 角色 | 必读 | 产物落点 |
 |---|---|---|
-| `coordinator` | `backend.md` B-1/B-3/B-4 + `frontend.md` F-1/F-6 + `spec-contract.md` S-9/S-10 | `codebase-survey.md` 约束清单：点名能力**唯一归属**与**可复用面**；把上游需求编号带进清单，并标出「需求→契约」未被覆盖的项 |
-| `designer` | `frontend.md` 全部 + `backend.md` B-1..B-6 + `spec-contract.md` S-1/S-2/S-3/S-4/S-9 | spec 的「前端行为」「后端能力归属」「异常边界」章节 + 结构自检（段落齐 / 编号唯一 / 引用可解析）+ `AC-` `RULE-` 编号族 |
-| `coder` | `frontend.md` F-1..F-6 + `backend.md` 全部 + `spec-contract.md` S-3/S-7/S-9 | 实现说明：逐条对照 + 最小自检读数 + 每处改动带**真实存在**的条目号；未验证项不得计通过 |
+| `coordinator` | `backend.md` B-1/B-3/B-4 + `frontend.md` F-1/F-6 + `spec-contract.md` S-10 ＋ 附 A（需求编号族） | `codebase-survey.md` 约束清单：点名能力**唯一归属**与**可复用面**；把上游需求编号带进清单，并标出「需求→契约」未被覆盖的项 |
+| `designer` | `frontend.md` 全部 + `backend.md` B-1..B-6 + `spec-contract.md` 附 A（结构自检 / 编号与引用 / DAG / 编号族） | spec 的「前端行为」「后端能力归属」「异常边界」章节 + 结构自检（段落齐 / 编号唯一 / 引用可解析）+ `AC-` `RULE-` 编号族 |
+| `coder` | `frontend.md` F-1..F-6 + `backend.md` 全部 + `spec-contract.md` S-7 ＋ 附 A（编号与引用） | 实现说明：逐条对照 + 最小自检读数 + 每处改动带**真实存在**的条目号；未验证项不得计通过 |
 | `tester` | `verification.md` 全部 + `spec-contract.md` S-6/S-7/S-8 | 测试报告：**四态计数** + 代码状态锚定 + 六态结论与 `SUMMARY:` 机读行 |
-| `reviewer` | `frontend.md` + `backend.md` + `verification.md` + `spec-contract.md` S-1/S-2/S-6/S-8 | 审查清单 MUST/SHOULD/FYI，逐条给条目号（F-x / B-x / V-x / S-x）；结构缺项判 MUST |
+| `reviewer` | `frontend.md` + `backend.md` + `verification.md` + `spec-contract.md` S-6/S-8 ＋ 附 A（结构失败先于语义） | 审查清单 MUST/SHOULD/FYI，逐条给条目号（F-x / B-x / V-x / S-x）；结构缺项判 MUST |
 | `supervisor` | `verification.md` V-5/V-6/V-7 + `spec-contract.md` S-7/S-8 | 验收报告：证据锚定与四态核对；`UNKNOWN` 不计通过，结论带单一门控词 |
 | `docManager` | `frontend.md` + `backend.md` + `verification.md` 全部 | 复盘：规则失效点 + 新增检查建议 |
 

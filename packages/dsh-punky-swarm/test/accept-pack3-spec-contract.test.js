@@ -441,3 +441,20 @@ test('AC-pack3-12 `--no-live` 仍 GREEN：exit 0、注入面 27、正文 §小�
   assert.equal(doc.inlineEntries, 27, '注入面条目须 = 27');
   assert.equal(doc.bodySections, 32, `正文 §小节须 = 32（基线 29 + pack1 的 3），实测 ${doc.bodySections}`);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AC-13 编号引用可解析（2026-10-24 瘦身后新增：防「删节留悬空引用」这一类缺陷）
+// ═══════════════════════════════════════════════════════════════════════════════
+test('AC-pack3-13 SKILL.md 与 role 文件里的 `S-n` 引用全部解析到 spec-contract.md 现役小节', () => {
+  // 失败条件：spec-contract 删节/改号后未同步改引用（按编号找不到定义 = 断链）；
+  //           或引用了未在册的编号（拼写错 / 发明新号）。
+  const live = new Set((readRel(NEW_REL).match(/^## S-(\d+) /gm) ?? []).map((s) => s.replace(/^## S-(\d+) .*$/, '$1')));
+  assert.ok(live.size >= 4, 'spec-contract.md 现役 S-n 节须 ≥ 4，实测 ' + JSON.stringify([...live]));
+  const carriers = [SKILL_MD_REL, ...walkFiles(absOf(ROLES_DIR_REL)).map((p) => path.relative(PKG_ROOT, p).split(path.sep).join('/'))];
+  const dangling = [];
+  for (const rel of carriers) {
+    for (const m of readRel(rel).matchAll(/\bS-(\d+)\b/g)) if (!live.has(m[1])) dangling.push(`${rel}: S-${m[1]}`);
+  }
+  const uniq = [...new Set(dangling)];
+  assert.deepEqual(uniq, [], '悬空 `S-n` 引用（定义已删或改号，须改指现役节或改成文字指针）：' + JSON.stringify(uniq));
+});
