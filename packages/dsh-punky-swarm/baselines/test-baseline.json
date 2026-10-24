@@ -19,7 +19,7 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 46,
       "blankLines": 37,
-      "lines": 491,
+      "lines": 519,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T16:46:40Z",
+  "generatedAt": "2026-10-24T19:09:34Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1650,7 +1650,7 @@
     "asserts": 10560,
     "blankLines": 5566,
     "files": 204,
-    "lines": 59207,
+    "lines": 59235,
     "tautologies": 0,
     "tests": 2147,
     "todos": 4

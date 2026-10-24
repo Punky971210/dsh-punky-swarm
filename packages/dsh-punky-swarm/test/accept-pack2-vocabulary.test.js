@@ -455,26 +455,50 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
   //           出现无法归属声明写域的脏项（越界，须 Leader 裁）。
   //   注：`presets/**` `skills/**` `package.json` 等**同批他包**会合法变更 ⇒ 本件不用它们判 pack2 越界，
   //   改用「联合写域可归属」＋「四包都不碰的绝对禁区」，以免并行窗口假红。
-  const PACK_DOMAINS = [
-    { pack: 'pack1', re: /^packages\/dsh-punky-swarm\/(presets\/punky-preset\/references\/discipline\.md|scripts\/check-guidance-sync\.mjs|test\/guidance-[^/]+\.test\.js)$/ },
-    { pack: 'pack2', re: /^packages\/dsh-punky-swarm\/(lib\/|scripts\/check-vocab-counts\.mjs$|test\/vocabulary[^/]*\.test\.js$)/ },
-    { pack: 'pack3', re: /^packages\/dsh-punky-swarm\/skills\/software-team\// },
-    { pack: 'pack4', re: /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/ },
-    { pack: 'tester-1', re: /^packages\/dsh-punky-swarm\/test\/accept-[^/]+\.(test\.js|md)$/ },
-    // 2026-10-25 R-26（根治，取代「每批往表里塞一条」的补丁式做法）：
-    // `test/**` 下的**既有**测试文件一律归属「测试面」写域。理由：判据自身需要修补（补用例/拆断言/加牙）
-    // 是**任何批次都可能发生的合法动作**，逐批把文件名塞进本表既不可持续、也会重复误判越界
-    // （已连续 4 次：speclang-vendor 的 scripts/*、本批 test-baseline.test.js …）。
-    // 防越界能力不由本表承担，而由两个更强的门兜住：
-    //   ① `baselines/test-baseline.json` 计数棘轮（新增/删除用例必有计数变化）；
-    //   ② `AC-pack1/3` 的「禁区（baselines/docs/reports）零变更」与 untracked 计数。
-    // ⇒ 新增 test 文件仍**不**因本条而豁免（它会让 baseline 计数漂移，须 Leader 重冻才可能通过）。
-    { pack: 'test-maintenance', re: /^packages\/dsh-punky-swarm\/test\/[^/]+\.test\.js$/ },
-    // 2026-10-24（批 speclang-vendor-20261024 / lane e2-shell）：SpecLang vendor 批带来的唯一 scripts/** 文件。
-    // `scripts/**` 面**不**做通用豁免：脚本是引擎侧可执行面，扩成通配会显著削弱防越界。
-    { pack: 'speclang-vendor', re: /^packages\/dsh-punky-swarm\/scripts\/speclang-validate\.mjs$/ },
+  // 目录约定分类器（R-27 根治，取代原 `PACK_DOMAINS` 批次清单）
+  // 判据面 = 「脏项是否落在某个**已知面**内」。**不判**「归属哪一批 / 哪一 lane」——
+  //   跨批归属由 audit / handoff 承载（本判据不承担，也不应承担：它没有批次账本可读）。
+  // 为什么换掉清单：那张表已连续 4 次把新出现的合法路径误判成「无法归属 = 越界」，
+  //   每次补救都是「再塞一条」⇒ 判据本身成了维护负担，且判据面与真实写域永远追不上。
+  //
+  // ⚠ **有意放宽，逐条登记**（2026-10-25 r1 实测：旧表 × 新分类器对 22 条路径 ≈ 旧红→新放行 6 类、
+  //   收紧 0 类。这不是回归，是换机制的必然结果——那 6 类在老表下红的唯一原因是「还没人改过、
+  //   所以没被塞进清单」，属**待发假红**）。各类的兜底在右：
+  //   ① `presets/**`（含**注入面** `agent.cordis.yml`）→ 指引面放行。兜底：改动必然进 porcelain 并
+  //      暴露在 audit 面；注入面另有 repo↔live 一致性门（`AC-pack1-12` / `AC-pack3-10`）。
+  //   ② `scripts/**` 任意新脚本 → 引擎脚本面放行（旧表只放行 2 个精确文件）。兜底：脚本是引擎可执行面，
+  //      任何脚本改动都会进 review/audit 证据面；**本判据不再承担「脚本白名单」职责**。
+  //   ③ `skills/<其他 team>/**` → 能力层放行。兜底：`check-guidance-sync` 校 repo↔live 逐字节。
+  //   ④ `test/helpers/**`、`test/nested/**` → 测试面放行（旧 `test-maintenance` 只放行单层 `test/<x>.test.js`）。
+  //      兜底：新增/删除 test 文件仍撞 `baselines/test-baseline.json` 计数棘轮。
+  //   ⑤ `baselines/**` → 分类器判「基线面」放行，**唯一拦住它的是下方 `forbidden`**（r1 反向构造已证该行承重：
+  //      停用它 ⇒ 脏基线变绿）。⇒ **`forbidden` 是独立第二防线，勿当死代码删**。
+  // ⑥ 已知盲区：包内 `docs/**` 被 `.gitignore:50` 整体忽略 ⇒ 变更**不进** `git status` ⇒ 本判据与
+  //   `forbidden` 都**结构上收不到**该路径（非本批引入，改 `--ignored` 会拖入 49 件既有 docs 致恒红）。
+  const FACE_RULES = [
+    { face: '能力层',     prefix: 'packages/dsh-punky-swarm/skills/' },
+    { face: '测试面',     prefix: 'packages/dsh-punky-swarm/test/' },
+    { face: '引擎脚本面', prefix: 'packages/dsh-punky-swarm/scripts/' },
+    { face: '引擎面',     prefix: 'packages/dsh-punky-swarm/lib/' },
+    { face: '基线面',     prefix: 'packages/dsh-punky-swarm/baselines/' },
+    // 2026-10-25 Lead 裁决（选项 B）：`presets/**` 是**指引面**，属常规已知面。
+    //   依据：改 `presets/…/references/discipline.md` 在 `punky-iter-a-20261024` 是**合法批次动作**；
+    //   若按越界处理，新判据会对合法动作**恒红**，而补救方式是「Leader 显式裁 ＋ 加一行规则」——
+    //   那正是本判据要根治的「每批塞一条」。⇒ 视为常规面，不再需要每次开闸。
+    //   `docs/` `reports/` **仍维持越界**（这两处确实从不该改，且由下方 `forbidden` 禁区额外兜底）。
+    { face: '指引面',     prefix: 'packages/dsh-punky-swarm/presets/' },
   ];
-  const r = spawnSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
+  const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
+  // 长前缀优先：**显式按字面前缀长度降序排序**，不依赖书写顺序（防后人插队改变语义）。
+  const FACE_ORDER = [...FACE_RULES].sort((a, b) => b.prefix.length - a.prefix.length);
+  const KNOWN_FACES = [...FACE_RULES.map((r) => r.face), '发行面'];
+  /** @returns {string|null} 命中的面名；null = 不在任何已知面内（越界） */
+  const classifyFace = (p) => {
+    if (RELEASE_RE.test(p)) return '发行面';
+    for (const r of FACE_ORDER) if (p.startsWith(r.prefix)) return r.face;
+    return null;
+  };
+  const r = spawnSync('git', ['status', '--porcelain', '-uall'], { cwd: REPO_ROOT, encoding: 'utf8' });
   assert.equal(r.status, 0, 'git status 必须可用');
   const paths = (r.stdout ?? '').split(/\r?\n/).filter(Boolean).map((line) => {
     const m = /^(..)\s(.*)$/.exec(line);
@@ -485,6 +509,10 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
   });
   const forbidden = paths.filter((p) => /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
   assert.deepEqual(forbidden, [], '禁区内出现变更（baselines/docs/reports 本批只读）：' + JSON.stringify(forbidden));
-  const unattributed = paths.filter((p) => !PACK_DOMAINS.some((d) => d.re.test(p)));
-  assert.deepEqual(unattributed, [], '存在无法归属声明写域的脏项（越界）：' + JSON.stringify(unattributed));
+  const unrouted = paths.filter((p) => classifyFace(p) === null);
+  assert.deepEqual(
+    unrouted,
+    [],
+    `越界：以下路径不落在任何已知面内。\n  已知面：${KNOWN_FACES.join(' / ')}\n  越界项：${JSON.stringify(unrouted)}`,
+  );
 });
