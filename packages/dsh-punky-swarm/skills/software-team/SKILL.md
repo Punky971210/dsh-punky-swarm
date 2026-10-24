@@ -188,6 +188,8 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 | UI kind / operation 目录 | `references/vendor/speclang/ui-component-registry/` |
 | 蟛蜞侧怎么落（六态→引擎映射 · 机读行落地 · 缺口留档） | `references/engineering/spec-contract.md` |
 
+> **必读 = 适配层映射；选读 = vendor 原件**：角色必读表里点名的 `spec-contract.md` 是**适配层映射**（讲「蟛蜞怎么用」），其规则**定义**来自 vendor 原件（`references/vendor/speclang/`，**选读**、按需加载）；**两者冲突以原件为准**。选读面**永不**构成必读义务：不在册、未加载、未读均**不构成失败，也不影响任何门禁**。
+
 ---
 
 ## 四、每层的动作序（照做）

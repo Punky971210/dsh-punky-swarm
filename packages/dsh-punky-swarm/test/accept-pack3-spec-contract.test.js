@@ -458,3 +458,64 @@ test('AC-pack3-13 SKILL.md 与 role 文件里的 `S-n` 引用全部解析到 spe
   const uniq = [...new Set(dangling)];
   assert.deepEqual(uniq, [], '悬空 `S-n` 引用（定义已删或改号，须改指现役节或改成文字指针）：' + JSON.stringify(uniq));
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AC-14 / AC-15 引用链接驳不破（2026-10-24 `speclang-wiring-20261024` 批新增）
+//   判据源 = `plan/p1-wiring-spec.md` §三.2（RQ-2）/ §三.4（机检骨架）
+//   两条都钉「链又断了这件事当场可见」：一条管适配层**声明在表之前**，一条管 role **同行带 recommend 语义**。
+// ═══════════════════════════════════════════════════════════════════════════════
+test('AC-pack3-14 适配层含「映射摘要」与「原件为准」硬声明，且声明位于六态表之前', () => {
+  // 失败条件：声明缺失（两处定义并存无免责）／声明位置在表之后（等于没声明）／表首行锚找不到（判据失去定位）
+  const text = readRel(NEW_REL);
+  assert.ok(text.includes('映射摘要'), '适配层缺「映射摘要」声明');
+  assert.ok(text.includes('原件为准'), '适配层缺「原件为准」声明');
+  const iDecl = text.indexOf('映射摘要');
+  const iTable = text.indexOf('| `PROVED` |');
+  assert.ok(iTable > 0, '找不到六态表首行 `| `PROVED` |`，位置断言不可判');
+  assert.ok(iDecl < iTable, `「映射摘要」声明须在六态表之前：声明@${iDecl} 表@${iTable}`);
+});
+
+const VENDOR_MARK = 'vendor/speclang/';
+const RECOMMEND_TOKENS = /recommend|选读|不在册|不构成失败/;
+const ASSEMBLY_BAN = /必装|强依赖|缺则拒|未就绪即拒/;
+
+test('AC-pack3-15 挂载 role **恰为** coder/coordinator/designer/reviewer/supervisor/tester 六个含 `vendor/speclang/`，且同行含 recommend 语义词、无装配式措辞；`doc-manager` 必须为 0', () => {
+  // 失败条件：指针缺失（成员碰不到原件）／同行只说路径不说 recommend（会被读成必读）／写了装配式措辞（recommend ≠ 装配）
+  // 2026-10-24 R-23 订正（t1 反向构造 C4/C6 暴露的两处盲区）：
+  //   ① 原断言 `holders.size >= 5` 少一个也过 ⇒ 改为**集合精确相等**（C4：删 1 指针 holders=5 原来仍绿）；
+  //   ② 原断言完全没管 `doc-manager` ⇒ 给它注入指针照样绿 ⇒ 补「不该挂的必须没挂」（C6）。
+  //   p1 的 AC-11② 声称是双向判据，原实现只做了单向——这条正是它要双向的地方。
+  const dir = absOf(ROLES_DIR_REL);
+  const holders = new Set();
+  const bad = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/)) {
+      if (!line.includes(VENDOR_MARK)) continue;
+      if (!RECOMMEND_TOKENS.test(line)) { bad.push(`${name}: 含 vendor 路径但同行无 recommend 语义词`); continue; }
+      if (ASSEMBLY_BAN.test(line)) bad.push(`${name}: 同行含装配式措辞`);
+      holders.add(name);
+    }
+  }
+  assert.deepEqual([...new Set(bad)], [], '同行语义不合格：' + JSON.stringify([...new Set(bad)]));
+  // 2026-10-24 R-24（r1 MUST-1 的 C3 构造暴露的假绿）：原断言只校字符串标记 `vendor/speclang/`，
+  // 不校**路径是否真的存在** ⇒ 把指针改成不存在的 `speclang-waterfallX/` 仍 PASS。
+  // p1 的 AC-5① 本就要求「提取路径逐条 test -d，不存在 = 死指针 ⇒ 红」，此处补上该维。
+  const dead = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/)) {
+      for (const m of line.matchAll(/`(references\/vendor\/speclang\/[^`]+)`/g)) {
+        const rel = m[1].replace(/\/+$/, '');
+        const abs = path.join(PKG_ROOT, 'skills/software-team', rel);
+        if (!fs.existsSync(abs)) dead.push(`${name}: ${rel} ⇒ 不存在`);
+      }
+    }
+  }
+  assert.deepEqual(dead, [], '死指针（路径不可解析，成员点不开）：' + JSON.stringify(dead));
+  const EXPECTED = ['coder.md', 'coordinator.md', 'designer.md', 'reviewer.md', 'supervisor.md', 'tester.md'];
+  assert.deepEqual([...holders].sort(), [...EXPECTED].sort(), `含 vendor 指针的 role 须恰为 ${EXPECTED.length} 个（少一个 = 成员碰不到原件；多一个 = 越界挂载），实测 ${JSON.stringify([...holders].sort())}`);
+  const docManagerPath = path.join(dir, 'doc-manager.md');
+  const docManagerText = fs.existsSync(docManagerPath) ? fs.readFileSync(docManagerPath, 'utf8') : '';
+  assert.ok(!docManagerText.includes(VENDOR_MARK), '`doc-manager` 按 K-3 不挂规格面：不得出现 vendor 指针（双向判据的反向半边）');
+});

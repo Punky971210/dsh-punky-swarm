@@ -50,6 +50,7 @@ spec 驱动实现与最小自检；按 spec 改码，验证面交 Tester。
 - **`references/engineering/frontend.md` F-1..F-6**：归属优先于行数 / 保存三态基线 / 并发与重复提交 / 后台刷新不覆盖未保存输入 / 弹窗六项约定 / 复用既有能力（点名复用对象，禁口号）。
 - **`references/engineering/backend.md` B-1..B-6**：入口可多能力必须单一 / 权限不因入口放宽 / 共享能力唯一归属 / 分层单向依赖 / 异常体系 / 迁移≠移文件。
 - **`references/engineering/spec-contract.md` S-7 ＋ 附 A（编号与引用）**：证据档位里不计通过的态不得计通过 / 编号必须解析到实存条目、需求与验收编号族纪律（不复述，真源 `scripts/check-guidance-sync.mjs` 与 `discipline.md §0s`）。
+- **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-waterfall/` —— 机械规则原文（`assets/MECHANICAL_RULES.md`）与校验器实现以该目录为准，本行不改必读面；**不在册不构成失败、不影响任何门禁**，未读亦不阻断开工。
 - 落点：`coder-<lane>.md` 的「## 实现说明」逐条对照上述条目（引用 F-x / B-x 编号），缺对照视为实现说明不完整；每处改动的条目号须是任务包里**真实存在**的 `AC-` 编号，「## 最小自检记录」里未验证项按 `spec-contract.md` S-7 标未验证、**不得**计入通过。
 
 ## 授权与工具面（注入用）

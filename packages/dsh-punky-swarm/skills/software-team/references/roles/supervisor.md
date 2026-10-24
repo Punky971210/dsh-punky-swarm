@@ -51,6 +51,7 @@ discipline_refs: [0k, 12]
 ## 工程规范（必读）
 - **`references/engineering/verification.md` V-5 / V-6 / V-7**：四态交付 / 结论锚定代码状态 / 证据形态。
 - **`references/engineering/spec-contract.md` S-7 / S-8**：记分口径（不计通过的态与修复清单位置）/ 报告机读行与退出码。
+- **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-hoare-check/`（证据强度原文；涉 UI 验收时追加 `references/vendor/speclang/ui-component-registry/`）—— **不在册不构成失败、不影响任何门禁**。
 - 落点：`acceptance-report.md` 逐条验收时核对 **四态计数** 与 **代码状态锚定**；上游若以「历史通过」「总体没问题」代替本次证据，该条判 **blocking** 并进 `gap-list.json`。证据强度按 S-7 计分（`UNKNOWN` **不计通过**，`SEMI_PROVED` 须见补证计划），验收结论尾部给 S-8 的单一门控词汇总行。
 
 ## 授权与工具面（注入用）

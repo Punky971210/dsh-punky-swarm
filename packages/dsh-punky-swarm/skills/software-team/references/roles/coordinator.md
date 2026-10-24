@@ -56,6 +56,7 @@ API 粒度细拆与代码摸底；产出细拆供编排，不参与实现。
 - **`references/engineering/backend.md` B-1 / B-3 / B-4**：入口可多但能力唯一 / 共享能力唯一归属 / 分层与依赖方向。
 - **`references/engineering/frontend.md` F-1 / F-6**：状态-动作-展示归属 / 复用既有能力。
 - **`references/engineering/spec-contract.md` S-10 ＋ 附 A（需求编号族）**：「需求点→契约」这一跳当前无人机械核 / 需求编号族的引用纪律（不复述，真源 `discipline.md §0s`）。
+- **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/prd-guide/`（需求编号族原文）＋ `references/vendor/speclang/speclang-waterfall/`（机械规则原文）—— 摸底写约束清单时按需取件；**不在册不构成失败、不影响任何门禁**。
 - 落点：`codebase-survey.md` 的「## 约束清单」须点名**每项能力的现有归属**与**可复用面**（指到具体模块/方法），作为 designer 出包的约束依据；同时把上游需求编号（`REQ-` 族）**带进清单**，并显式标出「需求→契约」尚未被覆盖的项（该跳无机检门，属人工核对，标 `SEMI_PROVED`）。
 
 ## 授权与工具面（注入用）

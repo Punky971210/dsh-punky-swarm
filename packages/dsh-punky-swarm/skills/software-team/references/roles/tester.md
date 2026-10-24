@@ -47,6 +47,7 @@ spec 驱动测试与全量验证；只读执行，缺陷登记成条目。
 ## 工程规范（必读）
 - **`references/engineering/verification.md` V-1..V-7 全部**：规则落成检查 / 检查范围逐项说明 / 入口一致性 / 检查类型不可互替 / 四态交付 / 代码状态锚定 / 证据形态。
 - **`references/engineering/spec-contract.md` S-6 / S-7 / S-8**：六态证据语法 / 记分口径（不计通过的态与修复清单位置）/ 报告机读行与退出码。
+- **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-hoare-check/` —— 六态与计分口径的原文定义（本团队加严口径仍以本节为准）；**不在册不构成失败、不影响任何门禁**。
 - 落点：`test-report.md` 必须给 **`通过 N / 失败 N / 跳过 N / 未验证 N`** + **对应代码状态（commit sha 或工作树标识）**；禁「全绿」类无计数表述；跳过与未验证须给原因。凡给出证据强度结论的项，按 S-6 落到六态之一（`UNKNOWN` 不计通过、`SEMI_PROVED` 须给原因 / 风险范围 / 补证计划），报告尾部给 S-8 的单一门控词汇总行。
 
 ## 授权与工具面（注入用）
