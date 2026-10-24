@@ -23,6 +23,9 @@
 | ② **Mode & guidance** (core) | **`punky-preset`** registered through `@deepseek-ai/dsh-agent-preset` | `references/discipline.md` / `references/manager.md` are **idempotently synced** by `syncAssets()` at startup into `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **Team skill pointers** (extra) | the **5 directories** under `skills/` | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ synced to `<home>/.agents/skills/<name>/` |
 
+> **Capability layer (software-team)**: `skills/software-team/references/engineering/spec-contract.md` is new — the **spec-contract rules** (mechanical rule list `MC-1..MC-8` / six-state evidence syntax / the `SUMMARY:` machine-readable report line / requirement ID discipline `REQ-`·`SCN-`·`RULE-`·`IDX-`·`AC-`), mounted per role by the role-to-reading table in `SKILL.md`.
+> **External capability layer (recommend semantics, not assembly)**: the same section of `SKILL.md` lists four external **SpecLang** skills (`speclang-waterfall` / `speclang-hoare-check` / `prd-guide` / `ui-component-registry`) — **loaded on demand, never entering the engine assembly surface, and their absence is not a failure**; they affect no gate. Version pin `SpecLang@b3ee6ee`; the source license is under **The Cangjie Project** (Apache-2.0 plus the runtime-library exception), **rights holder to be confirmed**; **no verbatim copying** — this repo only distils rules and cites anchors.
+
 ---
 
 ## 3. Install (the **single command**)
@@ -175,6 +178,7 @@ Alternatively drop the package from the profile's `dsh.profile.bundles` and rest
 | `references/discipline.md` | Governance rule details (code tables / semantics / boundaries / operation sequences) |
 | `references/manager.md` | Generic Manager definition (behaviour layer) |
 | `docs/engine-intro.md` | Engine internals |
+| `skills/software-team/references/engineering/spec-contract.md` | software-team capability layer: the **spec-contract rules** (mechanical rules / six-state evidence / machine-readable report line / requirement IDs; distilled reference from SpecLang `b3ee6ee`, recommend semantics, not assembly) |
 
 ---
 

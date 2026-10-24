@@ -1,3 +1,17 @@
+## 0.5.3（2026-10-24）
+
+### 治理纪律补三节 ＋ 判据②b 上岗（**行为变更**）、词表由空表转真拦截、software-team 能力层落 SpecLang 细则
+
+批 `punky-iter-a-20261024`（6 wave / 9 lane）。本次有一条**行为变更**须先看：判据②b 让「注入面有规范句、正文无定义面」的单向悬空**从不可见变为必判红**，同时**废除自足条目放宽机制**（详见下第 2 条）。
+
+- **纪律正文补三节（pack1）**：`references/discipline.md` 新增 **`## §0i 执行形态`(:132)** / **`## §0s 编号规范`(:248)** / **`## §0t 完成发现与结算`(:560)** —— 按「操作归 preset、注意事项归 discipline」口径只写注意事项面（不复制注入面操作原文）；`§0k`(:226 起) 追加 **`SUMMARY:` 机读结论行** ＋ **4 档证据强度**（`PROVED` / `SEMI_PROVED` / `VIOLATED` / `UNKNOWN`；`UNKNOWN` 不计通过、`SEMI_PROVED` 须补证计划）＋「**禁把证据强度写进 verdict 值**」（verdict 白名单仍只收 `pass`/`skip`）；`R-11` 十处悬空引用改指存档件。
+- **★ 行为变更 — 判据②b 上岗 ＋ 废除自足条目机制（pack1）**：`scripts/check-guidance-sync.mjs` 新增**判据②b（按 id 正向）** —— 注入面**每一条目**都必须在正文有对应小节 `## §X`，**零白名单、零豁免集合**；同时**删除 `:300-301` 的自足条目放宽面**（原口径「注入面里有自足条目，强制会造出假失败」已废止）。**影响**：此后「注入面有规范句、正文无定义面」不再有静默通道，**新增自足条目会直接判红**（宁可判红，也不留可豁免口子）。配套新增 `test/guidance-id-coverage.test.js`（N1 必失败 / N2 同输入对照 / N3 真仓态）；文件头注「四条判据」→「五条」，`R-06` 注释实测值 26 → 27 订正。
+- **受控词表由空表转真拦截（pack2）**：`lib/types/contracts.ts` 的 `GateErrorCode` union 补登记 **14 个真实发射码**（`Q-I` 的 12 个 ＋ 2 个 throw-only：`GATE_ASSEMBLY_INVALID`、`GATE_PLAN_PRESENCE_MISSING`）；`lib/state/vocabulary.json` 的 `entries: []` → **51 条真值**，`meta.counts` 订正为 `{gateCodes: 51, reasonTokens: 0}`（**counts 是声明值、不作判据**）；`lib/state/vocabulary.js` 仅动注释与一条报错文案（**空表 ⇒ 全拒**、fail-closed 口径不变）⇒ **实质变化 = 把 `entries:[]` 填成真值，让既有判定机制生效**，不是新写一套判定。新增 `scripts/check-vocab-counts.mjs`（两项检查职责，`exit 0/1/2`）；`test/vocabulary.test.js` 的 A3 由「`entries` 必须为空」改为「**必须非空 + 唯一 + `kind=gate`**」。`lib/types/contracts.d.ts` 为 `npm run build` 产物（非手改项）。
+- **software-team 能力层落 SpecLang 细则（pack3）**：新增 **`skills/software-team/references/engineering/spec-contract.md`**（161 行 / 13,658 B，`S-1..S-10`）—— 四面提炼：**机械规则清单 `MC-1..MC-8`**（含源文档未列、校验器实发的 **`MC-0`** 解析级失败差集）、**六态证据语法**（4 档 ＋ `CHAIN_BREAK` / `MAPPING_BLOCKED` 两旁路）、**报告机读行**（`SUMMARY:` 独立行 ＋ 单一门控词 ＋ 退出码口径）、**需求编号纪律**（`REQ-` / `SCN-` / `RULE-` / `IDX-` / `AC-` 族）＋ **登记一处缺口**：「需求点 → 契约」这一跳当前无人机械核。`skills/software-team/SKILL.md` **+22 / −7（净 +15）**（真源分层表新增 1 行「外部能力层（SpecLang 提炼）」＋ **角色必读表 7 行整行改写** ＋ 新增「**推荐技能（recommend 语义，非装配）**」段 `:169-178`）；6 个 role 文件（`coder` / `coordinator` / `designer` / `reviewer` / `supervisor` / `tester`）各 **+2 / −1（净 +1）**（新增 1 行 `S-x` 点名 ＋ 落点行改写；`doc-manager` 按 K-3 **不挂**：复盘角色不产出规格面）。
+  - **SpecLang 定位（务必按此读）**：**recommend 语义、非装配、不进入引擎装配面** —— 按需加载、**不在册不构成失败**、不影响任何门禁（`GATE_SKILL_MISSING` 已于 `b8380a8` 移除）；版本钉 **`SpecLang@b3ee6ee`**（不锚 `HEAD`）；源仓许可署 **The Cangjie Project**（Apache-2.0 ＋ 运行时库例外），**权利人待确认**；**禁全文拷贝**，本仓只作规则提炼与锚点引用（字面重合度去引用面后 ≤20 字符公共子串零命中、12-gram 1.005%）。
+- **版本与文档（pack4）**：`package.json` patch bump `0.5.2` → `0.5.3`；`README.md` / `README.en.md` **双语同侧落地**本次能力面（能力层 `spec-contract.md` ＋ SpecLang 推荐技能定位），两侧 `##` 章节数保持 **9/9**（未单侧增删）；`README.md:4` 的「**版本基线 `0.5.0`**」为**结构性基线标记**（团队资产/`chain` 退役那一版），**不是当前版本号**，本次**未改**。
+- **读数**：本批 `git status --porcelain` = **24 条目**（无重命名 ⇒ 文件数同为 **24**：**18 已跟踪修改 ＋ 6 未跟踪新建**；`git diff --name-only bfb9b0c` = **18**，**仅已跟踪修改**、不含未跟踪新文件 —— 两个口径不得混写）。**行数口径**：一律取 `git diff --numstat`（插入 / 删除两列），**不取 `--stat` 的合计列**（合计 = 插入 ＋ 删除，易被误读成插入数）。`check-guidance-sync` **GREEN**（`EXIT=0`；`注入面条目=27`、`正文 §小节=29→32`、repo↔live 五件同 sha、`[skills] file total=55 same=55 diff=0`、`software-team files=19→20`）。
+
 ## 0.5.2（2026-10-21）
 
 ### 结构优化：`apply` 873 → 51 行 + 八项单点化收敛（41 笔提交 / 83 文件 / `+3925 −487`）

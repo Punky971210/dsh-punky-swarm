@@ -23,6 +23,9 @@
 | ② **模式与指引**（核心） | `@deepseek-ai/dsh-agent-preset` 注册的 **`punky-preset`（蟛蜞模式）** | `references/discipline.md` / `references/manager.md` 由启动期 `syncAssets()` **幂等同步**到 `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **团队技能指针**（附加） | `skills/` **5 个目录** | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ 同步落点 `<home>/.agents/skills/<name>/` |
 
+> **能力层（software-team）**：新增 `skills/software-team/references/engineering/spec-contract.md`（**规格契约细则**：机械规则清单 `MC-1..MC-8` / 六态证据语法 / 报告机读行 `SUMMARY:` / 需求编号纪律 `REQ-`·`SCN-`·`RULE-`·`IDX-`·`AC-`），由 `SKILL.md` 的角色必读表按角色挂载。
+> **外部能力层定位（recommend 语义，非装配）**：`SKILL.md` 同节收录外部 **SpecLang** 四技能（`speclang-waterfall` / `speclang-hoare-check` / `prd-guide` / `ui-component-registry`）——**按需加载、不进入引擎装配面、不在册不构成失败**，不影响任何门禁；版本钉 `SpecLang@b3ee6ee`，源仓许可署 **The Cangjie Project**（Apache-2.0 ＋ 运行时库例外），**权利人待确认**；**禁全文拷贝**，本仓只作规则提炼与锚点引用。
+
 ---
 
 ## 三、安装（**唯一命令**）
@@ -175,6 +178,7 @@ dsh plugin --profile web remove dsh-punky-swarm
 | `references/discipline.md` | 治理纪律细则（码表 / 语义 / 边界 / 操作序列） |
 | `references/manager.md` | Manager 通用定义（行为层） |
 | `docs/engine-intro.md` | 引擎内部说明 |
+| `skills/software-team/references/engineering/spec-contract.md` | software-team 能力层：**规格契约细则**（机械规则 / 六态证据 / 机读行 / 需求编号；SpecLang `b3ee6ee` 提炼引用，recommend 语义非装配） |
 
 ---
 
