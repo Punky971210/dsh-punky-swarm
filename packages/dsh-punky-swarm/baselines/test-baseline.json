@@ -25,11 +25,11 @@
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 49,
-      "blankLines": 34,
-      "lines": 444,
+      "asserts": 51,
+      "blankLines": 35,
+      "lines": 461,
       "tautologies": 0,
-      "tests": 15,
+      "tests": 16,
       "todos": 0
     },
     "test/acps-cert-failclosed.test.js": {
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T12:48:16Z",
+  "generatedAt": "2026-10-24T13:10:41Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1644,15 +1644,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-test-integrity-20261024 e4-repair 后重冻：9 件用例改动（含恒真 2 条删除 ⇒ tautologies 2→0）",
+  "reason": "并发 lane 3ec2bbb 新增 AC-pack3-13（引用可解析判据）+ punky-test-integrity-20261024 收口",
   "schema": 1,
   "totals": {
-    "asserts": 10545,
-    "blankLines": 5555,
+    "asserts": 10547,
+    "blankLines": 5556,
     "files": 204,
-    "lines": 59045,
+    "lines": 59062,
     "tautologies": 0,
-    "tests": 2140,
+    "tests": 2141,
     "todos": 4
   }
 }
