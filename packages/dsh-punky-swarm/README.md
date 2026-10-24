@@ -23,8 +23,8 @@
 | ② **模式与指引**（核心） | `@deepseek-ai/dsh-agent-preset` 注册的 **`punky-preset`（蟛蜞模式）** | `references/discipline.md` / `references/manager.md` 由启动期 `syncAssets()` **幂等同步**到 `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **团队技能指针**（附加） | `skills/` **5 个目录** | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ 同步落点 `<home>/.agents/skills/<name>/` |
 
-> **能力层（software-team）**：新增 `skills/software-team/references/engineering/spec-contract.md`（**规格契约细则**：机械规则清单 `MC-1..MC-8` / 六态证据语法 / 报告机读行 `SUMMARY:` / 需求编号纪律 `REQ-`·`SCN-`·`RULE-`·`IDX-`·`AC-`），由 `SKILL.md` 的角色必读表按角色挂载。
-> **外部能力层定位（recommend 语义，非装配）**：`SKILL.md` 同节收录外部 **SpecLang** 四技能（`speclang-waterfall` / `speclang-hoare-check` / `prd-guide` / `ui-component-registry`）——**按需加载、不进入引擎装配面、不在册不构成失败**，不影响任何门禁；版本钉 `SpecLang@b3ee6ee`，源仓许可署 **The Cangjie Project**（Apache-2.0 ＋ 运行时库例外），**权利人待确认**；**禁全文拷贝**，本仓只作规则提炼与锚点引用。
+> **能力层（software-team）**：`skills/software-team/references/engineering/spec-contract.md` 现为**蟛蜞适配层**（六态证据 → `gate_status`/`verdict` 映射 / `SUMMARY:` 机读行落地 / S-10 缺口留档）；**规格结构与机械规则原文以仓内 vendor 原件为准**（见下条），由 `SKILL.md` 的角色必读表按角色挂载。
+> **外部能力层（已 vendor 进仓，recommend 语义不变）**：`SKILL.md` 同节收录外部 **SpecLang**（SpecArtisans）四技能 —— `speclang-waterfall` / `speclang-hoare-check` / `prd-guide` / `ui-component-registry`。**资产已 vendor 进仓**：`skills/software-team/references/vendor/speclang/`（**29 件** = **27 件上游资产** ＋ `LICENSE` ＋ `NOTICE.md`，合计 **532,898 B**；版本钉 `SpecLang@b3ee6ee`，逐件 sha256 见 `NOTICE.md`），读者**直接读仓内原件**、不依赖宿主是否装了同名技能。**vendor 不改变 recommend 语义**：仍按需加载、不进引擎装配面、不在册不构成失败、不影响任何门禁。源仓许可 **Apache-2.0 ＋ 运行时库例外**、署 **The Cangjie Project**、**权利人待确认**；配套 node 薄壳 `scripts/speclang-validate.mjs`（`ruby` 不可用时 `exit 2` ＝ 明示未取证，绝不伪造通过）。
 
 ---
 

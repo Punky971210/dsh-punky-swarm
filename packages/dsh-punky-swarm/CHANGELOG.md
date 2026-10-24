@@ -1,3 +1,16 @@
+## 0.5.4（2026-10-24）
+
+### software-team vendor 引入 SpecLang（SpecArtisans）四技能原文与 ruby 校验器；新增 node 薄壳；适配层降级
+
+批 `speclang-vendor-20261024`（5 wave / 7 lane）。本次是**能力层引入**，**不改引擎判定面**（门禁族、状态机、黑板真源均未动）。
+
+- **vendor 落点（e1-vendor）**：新增 `skills/software-team/references/vendor/speclang/`，共 **29 件** = **27 件上游资产** ＋ `LICENSE` 副本 ＋ `NOTICE.md`，合计 **532,898 B**（资产 512,871 ＋ LICENSE 12,396 ＋ NOTICE 7,631）。上游 `D:/Project/SpecLang` @ **`b3ee6ee`**（**不锚 `HEAD`**）；27 件逐件 `sha256` 与上游**全等**（差异清单空），`NOTICE.md` 的 **28 行 sha 表逐行机检相符**。**刻意排除** `speclang-waterfall/assets/dist/speclang-convert-standalone.py`（153,701 B 构建产物，本仓不使用其转换功能、可由源重建）——`NOTICE.md` §三 单列登记，不计入变更清单。
+- **node 薄壳（e2-shell）**：新增 `scripts/speclang-validate.mjs`（166 行）。四态：`ruby` 可用 ⇒ **原样透传退出码与 argv**；**`ruby` 不可用 ⇒ `exit 2` ＋ 明写 UNKNOWN（绝不伪造 `exit 0`）**；rb 原件缺失 ⇒ `exit 2` ＋ 给缺失绝对路径（与上态 stderr 可区分）；`-h/--help` ⇒ `exit 0`。路径由 `import.meta.url` 推导（无硬编盘符）。**本机无 `ruby` 属既成事实**，该能力在本机为 `UNKNOWN`（不计通过）。
+- **去重与挂载（e3-mount）**：`SKILL.md` 三处订正 —— 真源改指**本仓 vendor**（`references/vendor/speclang/`，29 件）／「资产**已 vendor 进仓**、直接读仓内原件」取代原「本仓不引入其资产」／「**禁全文拷贝**」按用户裁决解除，改为「**允许 vendor ＋ 四条替代约束**（`LICENSE` 原件随目录 ／ `NOTICE.md` 含逐件 sha 变更清单 ／ 署面保留 ／ 权利人待确认）」；并新增「何时读哪一面」路由（prd-guide / waterfall / hoare-check / ui-registry）。`references/engineering/spec-contract.md` **降为蟛蜞适配层**（六态 → `gate_status`/`verdict` 映射、`SUMMARY:` 落地、S-10 缺口留档），`S-6`/`S-7`/`S-8`/`S-10` 四个 id **全留只降正文**（`AC-pack3-13` 要求引用可解析）⇒ **vendor 原件为单一真源**，无第二套六态定义。6 个 role 文件**零改动**。
+- **许可与署面**：上游许可 **Apache-2.0 ＋ Runtime Library Exception**，署名 **The Cangjie Project**，**权利人待确认**（不得改写为已确认）。
+- **读数**：`check-guidance-sync` **`EXIT=0`**（含 live：`file total=84 same=84 diff=0`、`software-team files=49` status=same）；`check-vocab-counts` **`EXIT=0`**；三件验收套件 **42 / 42 pass / 0 fail / 0 skip**；`AC-pack3-3` 仍 **7**（vendor 内 `spec-contract` 字面量 0 ⇒ 不增计数）。
+- **判据面两处已知缺陷**（**不改本批实现**，订正归新批）：`AC-E1` 的 `pass ≥ 41` 在被点名文件上**结构性不可达**（该件仅 16 个 `test()`，41/42 为三件套件合计）；`AC-E5` 的 `grep -c 'test/'` 是**坏代理**（把"修改既有测试文件"也算进"新增"）。
+
 ## 0.5.3（2026-10-24）
 
 ### 治理纪律补三节 ＋ 判据②b 上岗（**行为变更**）、词表由空表转真拦截、software-team 能力层落 SpecLang 细则
