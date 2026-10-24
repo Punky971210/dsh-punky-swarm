@@ -1,3 +1,20 @@
+## 0.5.5（2026-10-25）
+
+### software-team 接上「角色 → 适配层 → vendor 原件」引用链；适配层优先序落成硬声明；两条机检补反向牙
+
+批 `speclang-wiring-20261024`（6 wave / 6 lane）。**能力层接线**，不改引擎判定面。
+
+- **role 层入口（e1-roles）**：`coder` / `coordinator` / `designer` / `reviewer` / `supervisor` / `tester` **各新增 1 行**「规格面原文（选读 · recommend 语义）」指针，指向仓内 vendor 具体子目录（`speclang-waterfall/` `speclang-hoare-check/` `prd-guide/` `ui-component-registry/`，按角色分工）。**`doc-manager` 按 K-3 不挂**。零删除、无重排；同行必须含 recommend 语义词，**禁止**写成必读或装配；指针不带行号（避 `AC-pack3-6③` 锚点面）。frontmatter `skills:` 零改动。
+  修的是此前**引用链断点**：适配层写着「原件为准」，但 7 个 role 里指向 vendor 的曾为 **0** —— 成员按角色必读表只读到 109 行适配层，**碰不到 27 件原件**。
+- **适配层优先序（e2-adapter-check）**：`spec-contract.md` 的 `S-6` 六态表**之前**新增硬声明——本表为**映射摘要**，六态定义以 `references/vendor/speclang/speclang-hoare-check/` 原件为准，**不一致一律以原件为准**，不构成第二套口径；`SKILL.md` 新增「**必读 = 适配层映射；选读 = vendor 原件**」分层句。`S-6/S-7/S-8/S-10` 四节 id 全留、只降正文。
+- **机检（`test/accept-pack3-spec-contract.test.js`，未新建文件）**：
+  - `AC-pack3-14`：适配层含「映射摘要」「原件为准」，且**位置断言** `声明行 < 六态表行`；
+  - `AC-pack3-15`：含 vendor 指针的 role **集合精确相等、恰为 6 个**，**`doc-manager` 必须为 0**，同行含 recommend 语义词、无装配式措辞，且**每条指针路径 `existsSync` 为真（死指针即红）**。
+  该判据经两轮反向构造补牙：原实现只要求 `≥5`（删 1 个仍绿）且只校字符串不校路径（改 `speclang-waterfallX/` 仍绿）——两处**假绿通道**均已封堵。
+- **基线重冻（`533e330`）**：`test/accept-pack3-spec-contract.test.js` 实测 **`tests 18 / asserts 59 / lines 522`**（另补记 `accept-pack2-vocabulary.test.js` 的既有 `lines +4` 滞后）；`--check` `EXIT=0`、`test-baseline` `20/20`。
+- **读数**：三件验收套件 **44 / 44 pass / 0 fail / 0 skip**；`check-guidance-sync`（含 live）与 `check-vocab-counts` 均 `EXIT=0`；`live diff=0`；**8 组反向构造全部按期望**（对照绿、删指针 / 注入 `doc-manager` / 死指针 / 缺声明 / 声明错位 / `S-7` 降级皆红）。
+- **已知 followup 三项（会静默复发，非本批缺陷）**：① 成员侧 preset 根 `~/.dsh/puny-preset`（少一个 `k`）与引擎根 `~/.dsh/punky-preset` 并存，致产物跨根（本批已归位并归档残留，**根因未除**）；② `doc-manager` 专用断言仍被集合相等断言**遮蔽**（红了但那条 assert 不执行）；③ 基线**新鲜度无门**（本次重冻自承补记上一批滞后）。
+
 ## 0.5.4（2026-10-24）
 
 ### software-team vendor 引入 SpecLang（SpecArtisans）四技能原文与 ruby 校验器；新增 node 薄壳；适配层降级
