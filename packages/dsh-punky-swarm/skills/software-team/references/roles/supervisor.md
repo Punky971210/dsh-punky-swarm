@@ -50,7 +50,8 @@ discipline_refs: [0k, 12]
 
 ## 工程规范（必读）
 - **`references/engineering/verification.md` V-5 / V-6 / V-7**：四态交付 / 结论锚定代码状态 / 证据形态。
-- 落点：`acceptance-report.md` 逐条验收时核对 **四态计数** 与 **代码状态锚定**；上游若以「历史通过」「总体没问题」代替本次证据，该条判 **blocking** 并进 `gap-list.json`。
+- **`references/engineering/spec-contract.md` S-7 / S-8**：记分口径（不计通过的态与修复清单位置）/ 报告机读行与退出码。
+- 落点：`acceptance-report.md` 逐条验收时核对 **四态计数** 与 **代码状态锚定**；上游若以「历史通过」「总体没问题」代替本次证据，该条判 **blocking** 并进 `gap-list.json`。证据强度按 S-7 计分（`UNKNOWN` **不计通过**，`SEMI_PROVED` 须见补证计划），验收结论尾部给 S-8 的单一门控词汇总行。
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill + **write（本角色自产的验收报告与 gap-list）**

@@ -141,6 +141,7 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 | 宿主全局 | 环境 `AGENTS.md` | 机器/用户级规则（编码铁律、语言、风格） |
 | 项目级 | `references/constitution.md` **实例化后** | 技术栈、目录、命名、自定义约定、错误码表 |
 | 团队通用 | `references/engineering/` | 前端治理 / 后端治理 / 检查与验证细则 |
+| 外部能力层（SpecLang 提炼） | `references/engineering/spec-contract.md` | 规格结构与证据语法细则（机械规则 / 六态证据 / 报告机读行 / 需求编号纪律）；**只提炼引用，非原文拷贝**，挂载见下表与本节末「推荐技能」 |
 
 ⇒ **不新建独立 AGENTS 文件**：全局 AGENTS + 项目 constitution 已占真源位，再加一套 = 双源冲突。项目约定由 constitution 承载，团队通用细则由 engineering/ 承载。
 
@@ -148,13 +149,15 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 | 角色 | 必读 | 产物落点 |
 |---|---|---|
-| `coordinator` | `backend.md` B-1/B-3/B-4 + `frontend.md` F-1/F-6 | `codebase-survey.md` 约束清单：点名能力**唯一归属**与**可复用面** |
-| `designer` | `frontend.md` 全部 + `backend.md` B-1..B-6 | spec 的「前端行为」「后端能力归属」「异常边界」章节 |
-| `coder` | `frontend.md` F-1..F-6 + `backend.md` 全部 | 实现说明：逐条对照 + 最小自检读数 |
-| `tester` | `verification.md` 全部 | 测试报告：**四态计数** + 代码状态锚定 |
-| `reviewer` | `frontend.md` + `backend.md` + `verification.md` | 审查清单 MUST/SHOULD/FYI，逐条给条目号（F-x / B-x / V-x） |
-| `supervisor` | `verification.md` V-5/V-6/V-7 | 验收报告：证据锚定与四态核对 |
-| `docManager` | 全部 | 复盘：规则失效点 + 新增检查建议 |
+| `coordinator` | `backend.md` B-1/B-3/B-4 + `frontend.md` F-1/F-6 + `spec-contract.md` S-9/S-10 | `codebase-survey.md` 约束清单：点名能力**唯一归属**与**可复用面**；把上游需求编号带进清单，并标出「需求→契约」未被覆盖的项 |
+| `designer` | `frontend.md` 全部 + `backend.md` B-1..B-6 + `spec-contract.md` S-1/S-2/S-3/S-4/S-9 | spec 的「前端行为」「后端能力归属」「异常边界」章节 + 结构自检（段落齐 / 编号唯一 / 引用可解析）+ `AC-` `RULE-` 编号族 |
+| `coder` | `frontend.md` F-1..F-6 + `backend.md` 全部 + `spec-contract.md` S-3/S-7/S-9 | 实现说明：逐条对照 + 最小自检读数 + 每处改动带**真实存在**的条目号；未验证项不得计通过 |
+| `tester` | `verification.md` 全部 + `spec-contract.md` S-6/S-7/S-8 | 测试报告：**四态计数** + 代码状态锚定 + 六态结论与 `SUMMARY:` 机读行 |
+| `reviewer` | `frontend.md` + `backend.md` + `verification.md` + `spec-contract.md` S-1/S-2/S-6/S-8 | 审查清单 MUST/SHOULD/FYI，逐条给条目号（F-x / B-x / V-x / S-x）；结构缺项判 MUST |
+| `supervisor` | `verification.md` V-5/V-6/V-7 + `spec-contract.md` S-7/S-8 | 验收报告：证据锚定与四态核对；`UNKNOWN` 不计通过，结论带单一门控词 |
+| `docManager` | `frontend.md` + `backend.md` + `verification.md` 全部 | 复盘：规则失效点 + 新增检查建议 |
+
+> **`docManager` 不挂 `spec-contract.md`（显式理由）**：复盘角色不产出规格面（无规格产物可比对）；且其「工程规范」节标题为「复盘校准用」，不属必读节，要挂须先把标题统一为裸标题范式 —— 那属**扩大改动面**，本批不做。其「必读」列已收敛为 `engineering/` 同节三份，避免「全部」被读成含规格细则。
 
 **本团队不含**：独立 AGENTS 文件 · task-brief / finish-review · planning-with-files 三件套 · 强制 TDD（测试面走 spec 驱动 + `tester ∥ coder` 并行建套件）。
 
@@ -162,6 +165,18 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 - **只列 MCP 类别，不写具体工具名**：工具名随宿主 / 插件版本漂移，写死即失效 ⇒ 指引里统一写「代码图谱类 MCP（只读）」，用前**以当前会话实际注册的工具为准**。
 - **不把 MCP 工具名写进 `tools.allow`**（也不写 `mcp` 这类类别名）：引擎按「词汇表 \ 该角色 allow」**反推 deny**（`lib/engine/dispatch.js#deriveDenyTools`，词汇表 = 全角色 allow 并集）⇒ 写进 allow 会让该名字进词汇表，反而把它从**其他**角色的工具面里禁掉。MCP 面**默认不被收窄**，**不写即正确**。
+
+**推荐技能（recommend 语义，非装配）**：
+
+| 项 | 内容 |
+|---|---|
+| 技能源 | 外部资产 **SpecLang**，版本钉 `SpecLang@b3ee6ee`（**不锚 `HEAD`**）｜来源 `https://gitcode.com/xuanjz/SpecLang` |
+| 四个技能 | `speclang-waterfall`（规格编写 ＋ 机械校验）｜`speclang-hoare-check`（霍尔逻辑推理验证）｜`prd-guide`（需求编号纪律）｜`ui-component-registry`（UI 组件种类目录） |
+| 与本团队的关系 | **recommend**：**按需启用、非装配、不进入引擎装配面**；不在册**不构成失败**，也不影响任何门禁。提炼面已由 `references/engineering/spec-contract.md` 承载，本仓**不引入**其资产 |
+| 许可与署面 | 源仓 `LICENSE:2` 署 **The Cangjie Project**（Apache-2.0 ＋ 运行时库例外条款），**权利人待确认** ⇒ 引用须保留署名与许可声明，**禁全文拷贝** |
+
+- **三条可核边界（`recommend` ≠ 装配面）**：① **禁**写入任何 role 文件 frontmatter 的 `skills:` 字段；② **禁**把本条写成装配式措辞（强制安装 / 硬依赖 / 未就绪即拒批一类表述）；③ 技能名解析不到 ⇒ **不构成拒态**：`GATE_SKILL_MISSING` 已于 `b8380a8` 移除（`discipline.md` §0o 记载 `skills` 名可解析性 = 纯 recommend）。
+- **按需加载**：用到哪面读哪面（写规格 → `speclang-waterfall`；量证据强度 → `speclang-hoare-check`；需求编号 → `prd-guide`）；**常规任务不加载亦无影响**。
 
 ---
 

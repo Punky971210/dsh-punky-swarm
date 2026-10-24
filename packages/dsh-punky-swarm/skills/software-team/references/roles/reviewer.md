@@ -56,7 +56,8 @@ discipline_refs: [0k, 12]
 - **`references/engineering/frontend.md` F-1..F-7**：归属 / 保存三态 / 并发重复提交 / 后台刷新 / 弹窗六项 / 复用点名 / 两本记录分工。
 - **`references/engineering/backend.md` B-1..B-6**：入口-能力分离 / 权限一致 / 唯一归属 / 分层方向 / 异常体系 / 迁移核对。
 - **`references/engineering/verification.md` V-1..V-7**：检查范围与阻断真实性 / 入口一致性 / 检查不可互替 / 四态 / 代码状态锚定 / 证据形态。
-- 落点：review-<lane>.md 的 MUST / SHOULD / FYI 每条**引用条目号（F-x / B-x / V-x）**；发现「命令名同而范围不同」「历史通过当本次证据」一律记 MUST。
+- **`references/engineering/spec-contract.md` S-1 / S-2 / S-6 / S-8**：机械规则清单 / 结构失败先于语义评审 / 六态证据语法 / 报告机读行与退出码。
+- 落点：review-<lane>.md 的 MUST / SHOULD / FYI 每条**引用条目号（F-x / B-x / V-x / S-x）**；发现「命令名同而范围不同」「历史通过当本次证据」一律记 MUST。结构缺项（段落缺、编号重复、引用解析不到）按 S-2 直接判 MUST 退回、不进语义评审；结论行按 S-8 给单一门控词。
 
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill（**含跑测试套件** —— 这是本角色 ① 步的履职手段）+ **write（本角色自产的评审报告）**
