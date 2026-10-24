@@ -58,7 +58,7 @@
 - **终态冻结**：批次一旦进入 `complete` / `aborted`（终态），**任何成员迁移一律拒**（`GATE_BATCH_TERMINAL`）——不得再出现「成员又被改写成 running」这类自相矛盾状态。**返工边已去除（K3，2026-09-21）**：`lib/schema.js` 的 `MEMBER_TRANSITIONS` 现为 `review: ['merged','conflict','failed']`（**无 `running`**）⇒ 失败 / 冲突 lane 即**终态**，返工 = **gap-list + 新任务批次**，不是原地改状态。
 - **Manager 在册缺口的现役留痕面（M-02 订正，2026-09-24）**：旧「批次收口告警」事件 `gate.manager_missing` **已删**（`lib/**` 内**零命中**；退役码锁 `test/retired-codes-lock.test.js` 登记 `GATE_MANAGER_MISSING`，事由「收口告警删（2026-09-22 用户裁定）」）。现役口径 = **建批期官方 roster 承抽**：声明（或缺省归一为）`managerPlan:'raise'` 的批，在 `wave_plan` 建批时读官方 roster（`ctx.get('agentTeams')` → `listMembers`）——roster 可读而**无约定名 `manager` 成员** ⇒ 落**观察事件** `gate.manager_roster_gap`（**非拒态**、不改相位），并把「声明值 × roster 事实」**双面回显**（`wave_plan.managerRoster` / `batch_status.managerRoster`，含 `ok` / `inRoster` / `source:'roster'` / `reason`）。声明 `leader-direct` 的批**不触发**该留痕。读端据此判「**默认拉起是否落实**」。
 
-- **拉起时序（M-01 订正，2026-09-24：引擎硬门已删）**：原「建批即拉起」硬门禁——声明 `raise` 的批首个 exec 层 lane 派发前未登记 Manager 即**拒派** `GATE_MANAGER_NOT_RAISED`——**已整体删除**：该码名在整个 package 的 `lib/**` 内**字面零命中**（2026-09-21 可达性审计「码名已字面删除，避免 grep 误当活码」；`lib/state/gates.js` 保留史迹注释块 + `void bAsm` 锚点，注释明写「**派发面不再因未登记 Manager 而拒**」）。现行三条：① **`managerPlan` 缺省仍为 `raise`**（建批参数默认值，随 `batch.assembly` 持久化、`gate_status` 可读 ⇒「默认 raise」仍是**引擎可核事实**）；② **无派发面硬门** —— 未登记 Manager 不拦派发，在册缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised` 事件，任意相位可登记、幂等；**不构成在册判据**，在册以官方 roster 为准）。⇒ 「必须先拉起再派 exec」的约束力**自引擎门降为纪律**（Leader 不自证通过即无门可拦，故按 §0f / §0g 自持）。
+- **拉起时序（M-01 订正，2026-09-24：引擎硬门已删）**：原「建批即拉起」硬门禁——声明 `raise` 的批首个 exec 层 lane 派发前未登记 Manager 即**拒派** `GATE_MANAGER_NOT_RAISED`——**已整体删除**：该码名在整个 package 的 `lib/**` 内**字面零命中**（2026-09-21 可达性审计「码名已字面删除，避免 grep 误当活码」；`lib/state/gates.js` 保留史迹注释块 + `void bAsm` 锚点，注释明写「**派发面不再因未登记 Manager 而拒**」）。现行三条：① **`managerPlan` 缺省仍为 `raise`**（建批参数默认值，随 `batch.assembly` 持久化、`gate_status` 可读 ⇒「默认 raise」仍是**引擎可核事实**）；② **无派发面硬门** —— 未登记 Manager 不拦派发，在册缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised` 事件，任意相位可登记、幂等；**不构成在册判据**，在册以官方 roster 为准）。⇒ 「必须先拉起再派 exec」的约束力**自引擎门降为纪律**（Leader 不自证通过即无门可拦，故按**存档件**自持——0f / 0g 两节原文已整体移出正文，逐字存档于工作区 `reports/onto-suspended-items-snapshot-20260926.md` §三）。
 - 委派前用 `assign_check({ difficulty, rationale, scope: "full" })` **主动写入**难度 A/B/C（档位定义与判据契约见 §0）；**C 类必须 `wave_plan` 建批**。
 - 三层批次按 **plan → exec → audit** 分层，门禁在三个时点把关：
 
@@ -95,7 +95,7 @@
 
 ## §0c 职责分工
 
-- **Manager = 引擎层功能角色**（不属任一层、**不占 lane**，归属见 §0g 三）：只**代劳指挥**——收发消息（`mailbox` 元数据）、读任务状态（`batch_status` / `gate_status`）、**建议**指派（空闲节点发现）；**不产 plan 产物、不得充当 plan 层牵头**（牵头集见 §0g 三）。
+- **Manager = 引擎层功能角色**（不属任一层、**不占 lane**，归属见存档件 §三 的 0g 三）：只**代劳指挥**——收发消息（`mailbox` 元数据）、读任务状态（`batch_status` / `gate_status`）、**建议**指派（空闲节点发现）；**不产 plan 产物、不得充当 plan 层牵头**（牵头集见存档件 §三 的 0g 三）。
 - **派发与结算写入默认方 = Leader**：worker 由 Leader 以 depth-1 subagent 派发；`member_status` / `member_settle` 默认 Leader 写入——Manager 负**判读 + 建议**，仅在 Leader 明确授权时代为写入。
 - **DAG 状态全员只读**；**指派写权**归 Manager / Leader。
 - **粗拆**由 Leader 对接用户后产出模块清单（决策包）；**Coordinator 不再粗拆**，只按**团队层 skill 声明的粒度口径**细拆（粒度口径由团队 skill 声明；**资产面已退役**，不再有资产侧声明位）。
@@ -129,6 +129,15 @@
 
 - **任务包强制项（D-9，2026-09-18 实测）：`gate:` 行必须 cwd 无关**——产物若声明命令 gate，任务包**必须写明**「**命令在 lane 产物根（非包根）执行**，故 `gate:` 行内**必须自带 `cd /d <包根>` 或全部使用绝对路径**」（真源与范式见附录 A.4）。**依据（实测根因）**：批 `panel-redesign-20260918` 首轮因裸相对路径（`node --import ./test/helpers/…`）在产物根下 exit 1，被自动结算判 `GATE_EXIT_NONZERO` 并 `pause` —— 属**任务包缺该条**的行为面根因，非功能缺陷（修正 gate 行后 exit 0）。
 
+## §0i 执行形态
+
+> **编号定义面**：本节是 **`D-1`** 的唯一权威定义面——正文里出现的「§0i D-1」一律指本节的 D-1 条；别处只作引用，不另立定义。
+
+- **D-1（执行单元 = lane）**：凡进入批次治理面的执行动作，其唯一合法载体是 `wavePlan` 里的 lane；**禁止**用裸 `subagent` 把活绕开批次去跑。**依据**：产物声明面（`produce` / `outputs`）、交接边（`handoffs`）、结算记录三者**全部挂在 lane 上**——绕开 lane 的执行没有可声明的对象，于是产物无归属、交接无入边、结算无主体；这不是「流程不规范」而是**证据缺失**，事后**无法复原**。
+- **坑一：把「Leader 能自己做」读成「Leader 该自己做」**。后果：落实者与判定者合为一体，验收面失去独立性；该动作又不进 lane ⇒ 不占预算、不过门禁、不留中间锚，长跑时静默失控。**判定口径**：分界**不看难度感受、不看工作量大小**，唯一来源是 §0 的难度轴（档位定义与偏离三要素在那里，本节不复述）；一经判为建批档，执行主体就是 lane，Leader 只保留拆解 / 派发 / 裁决三件事。
+- **坑二：拿「活太小」当临时开子代理的理由**。后果：任务包六要素、写域互斥、单写者锁**同时落空**——两个子代理并行改同一文件时没有仲裁面，冲突只能等人工事后发现。**判定口径**：确需临时拆活时走**细拆补 lane**（图变更入口），让新任务与既有任务共用同一套依赖、锁与结算语义；**拆不动说明拆解粒度不够**，不是执行形态可以放宽。
+- **坑三：进度快照攒到最后一次性补写**。后果：监管面只看得见「还没结算」、看不见长到哪一步；进程崩溃后恢复面**没有中间锚**——已完成的子步骤无法自证做过，重做成本全额再付一次。**判定口径**：一子步骤一快照；快照的判据是**可独立读取**（含步骤序号与产物落点），不是「有文件就算」——攒批后补写的快照在时间上不可信，与没写等价（复核时按「无快照」处理）。
+
 ## §0j 临时组队与 Leader 编排纪律
 
 ### 一、临时组队（无预置团队时）
@@ -158,7 +167,7 @@
 ### 五、自定义团队的角色声明（实证口径，2026-09-14 订正）
 
 - **角色词法集 = 引擎基础集（2026-09-27 本批订正：资产声明面已整体退役）**：`task.role` 与 `assembly.roles` 按「引擎基础集（8）∪ 装配扩展（盲审三角色）」判定——**资产各层声明角色（`layers[*].roles`）与 `roles.extra` 两路读端已删净**（`resolveTeamRoles` / `unionRoleVocabulary` 随本批删除 ⇒ 建批 `extraRoles` **恒空**）；自定义角色名 ⇒ 只落 `GATE_ROLE_INVALID` **告警**（**非拒态**）。
-- **牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——**资产侧扩展牵头角色声明位早已不存在**（`roles.plan_leads` / `roles.audit_leads` 随 2026-09-26 裁决 Q-8=C 全链删除）；**牵头角色 ≠ Manager**（见 §0g）。
+- **牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——**资产侧扩展牵头角色声明位早已不存在**（`roles.plan_leads` / `roles.audit_leads` 随 2026-09-26 裁决 Q-8=C 全链删除）；**牵头角色 ≠ Manager**（见存档件 §三 的 0g 三）。
   - 2026-09-14 前的旧口径（**已作废**）：`extra` 只读 `roles.extra`，且「角色写进 layers 却没抄进 `roles.extra`」的团队每个自定义角色被判 `GATE_ROLE_INVALID`（实测 5 条非法告警 + 2 条缺牵头告警）。
 - **历史（保留可读）**：旧口径含 ①「`layers[<层>].roles` 里的角色名**即为**该团队的合法角色」②「读端缓存以**资产路径 + mtime + size** 签名判新旧（`lib/assembly/team-asset.js#teamAssetSignature`），同进程补声明后重建批即读到新值」③「`assembly` 须由调用方按**同一 root** 解析后传入（`resolveAssembly(team, null, {root: teamsRoot})`）」——**三条均已作废**：资产面、缓存签名与 `teamsRoot` 一并删净，「资产改动即时生效」问题**无对象**。
 
@@ -214,6 +223,34 @@
 
 **诊断字段的「未触发」也是信息**：有界轮询的超时诊断（`label/timeoutMs/elapsedMs/lastObserved/expected`）若在失败时**一次未触发**，即为「**不是超时**」的硬证据——此时不得去调大超时窗口，而应转查失败断言本身与环境（实证：某 flake 失败发生在 491ms ≪ 4000ms，真因是共享 HOME 竞态而非等待不足）。
 
+**报告级机读结论行（ABS-01，2026-10-24 用户裁决 Q-C；形态参考 SpecLang `reporting_requirements.md:16`，只借形态不借全文）**
+
+- **形态**：验收报告**必须**含一行**独立成行、行首锚定**的机读结论行——`SUMMARY:` 之后给**报告级计数**（failures 与 warnings 两个数）＋ **单一门控词**：`BLOCK`（存在 fail / blocking 项，不得进入实施）或 `PROCEED`（可推进，warning 数随行登记）。示例形态：`SUMMARY: 2 failures, 3 warnings. [BLOCK: …]` / `SUMMARY: 0 failures, 5 warnings. [PROCEED: …]`。
+- **为什么要有它**：给人读的散文结论在机读面等于零信息——自动化收口无法从「基本通过，建议关注几点」里判出该不该放行，于是要么整批人工复核（长跑），要么按「有产出就算过」放行（假绿）。机读行把这两个判断压成**一个可 grep 的位**。
+- **坑**：把计数写成「只数自己想报的项」。后果：读者据此以为未被计数的项不存在。**判定口径** = 计数口径在报告内**显式声明**（数的是什么、排除了哪类），且该行与正文逐条结论**必须对得上**——对不上时以逐条结论为准，并把该行判为缺陷。
+
+**证据强度（第二轴，与结论轴分离）**
+
+| 档 | 语义 | 是否计通过 |
+|---|---|---|
+| `PROVED` | 判据可复跑、原始读数在场、构造可达 | 计通过 |
+| `SEMI_PROVED` | 方向已证但缺一次实证（如代码路径读通、未实际制造该状态） | 计通过，**须附补证计划** |
+| `VIOLATED` | 已证不成立（否证） | 不计通过 |
+| `UNKNOWN` | 未取证 / 环境不可达 | **不计通过**（不得按「大概是好的」折算） |
+
+- **`UNKNOWN` 的处理口径（硬）**：它不是「暂无结论」，而是一个**必须处置**的档位——要么补证升档，要么落 `gap-list` 并标 `blocking` / `followup`，**不得**在报告里挂着不动。
+- **`SEMI_PROVED` 的处理口径（硬）**：可以计通过，但**补证计划是它成立的前提**（补什么、谁补、何时补）；没有补证计划的那一档**等价于未取证**（否则它会退化成「免责标签」，见一个用一次）。
+- **禁区（Q-C 硬，防误塞）**：上述四档强度**不是** `verdict`——`verdict` 的取值域仍为 `{pass, fail, skip}`（上表口径一字未改），`complete` 门白名单仍只收 `{pass, skip}`。
+- **两个具体禁写**：① 不得把强度档名写进 `verdict` 字段（`complete` 门会收到白名单外的值 ⇒ 直接拒收口）；② 不得为容纳强度档而**新增取值**（三值闭集是既有契约，扩值即破门禁）。
+- **为什么要写成硬禁区**：下游极易把「这档算不算过」直接塞进结论字段，而收口门的判据面只认三值白名单 —— 一旦混用，报告会**先显得更完整、再整批卡死**，且定位成本极高。
+
+
+## §0s 编号规范
+
+- **坑一：把编号当作「自己报告里的内部记号」**。后果：同一事项在计划、执行、验收三份产物里被各自重新定义一遍，读者无法判断两处同名是否同指；更糟的是**先被引用的那一份常常就是另立的那份**，于是第二本账反而成了事实上的权威。**判定口径**：`AG-xx` 这类缺项编号的权威定义面**只有一处** = 批 A 的 `audit/gap-list.md`；exec 与 audit 的报告**只能引用**该处的编号与结论，**不得**另给定义、也不得借编号顺手扩充语义——要补内容就回写 gap-list，不要就地重定义。
+- **坑二：裸引用跨批复用同一编号**。后果：多批并发时同一个号在甲批指「判据无牙」、在乙批指「文档缺页」，裸写在报告里**归属不可判**，复核者只能凭上下文猜；猜错一边就把已修的当未修（或反过来），返工成本全落在下一轮。**判定口径**：同号跨批复用时必须带批次短码，写成 `<批次id>@<短码>` 形态让编号**自证归属**；批内可省，但一旦该编号会流出本批（交接、gap-list、复盘），省略即缺陷。
+- **坑三：作废就删号、或回收已废弃的号**。后果：**追溯链断裂**——早先引用过该号的地方全部指向虚无，而新占该号的事项会被历史读者误读成旧事项，两处错误互相掩盖。**判定口径**：编号**一经引用不许改号、不许回收**；作废走「**保留号位 + 标 deprecated + 写明作废理由与替代号**」，让「这个号已经不成立」本身可被检索到。
+- **别把另一条轴塞进编号**：编号是**跨产物**的追溯约定，与验收结论（`verdict`）、证据强度**不是同一条轴**——别把强度档写进编号（会造出「编号即结论」的误读），也别用编号代替 `gap-list` 的 `blocking` / `followup` 标注。
 
 ## §0l 能力发现前置（本部署的实机检索口径）
 
@@ -271,7 +308,7 @@
 | 方案 | 内容 | 状态 |
 |---|---|---|
 | **A** | roster 4 件用官方；**任务与交接一律走蟛蜞自建** | **已认可**；本批落指引（本节） |
-| **B** | onto 的 dispatch 增 **`provider:'agent-team'`** 分支：用 `spawn_teammate` 替代宿主 `rt.start` seam 承载 lane worker；**任务 / 交接 / 黑板仍全走 onto** | **作废**（历史记录）——依据用户 C1「**不做 provider 分离方案**」；现役唯一实现 = 宿主 subagent seam（`config.dispatch.provider`，本机取值 `subagent`；`lib/engine/dispatch.js` 走 `rt.start`）。引擎内**今日**与官方 Agent Teams 的关系只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`，§0g 一）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）——**没有** `provider:'agent-team'` 派发分支（设计稿：`docs/agent-team-bridge-design-draft-v0-2026-09-21.md`） |
+| **B** | onto 的 dispatch 增 **`provider:'agent-team'`** 分支：用 `spawn_teammate` 替代宿主 `rt.start` seam 承载 lane worker；**任务 / 交接 / 黑板仍全走 onto** | **作废**（历史记录）——依据用户 C1「**不做 provider 分离方案**」；现役唯一实现 = 宿主 subagent seam（`config.dispatch.provider`，本机取值 `subagent`；`lib/engine/dispatch.js` 走 `rt.start`）。引擎内**今日**与官方 Agent Teams 的关系只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`，存档件 §三 的 0g 一）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）——**没有** `provider:'agent-team'` 派发分支（设计稿：`docs/agent-team-bridge-design-draft-v0-2026-09-21.md`） |
 | **C** | 在 `member_settle` 路径**镜像双写官方板**（真填 `officialTaskId`） | **不做（正式确认）**——会把上表 8 项缺陷引入治理链；官方板为实验性、契约不稳定 |
 
 - **口径纪律**：`officialTaskId` 一类「双写」字段在本引擎**未接线**——无消费点、无校验、无判定；任何回显**不得**读作「已双写」。
@@ -370,10 +407,10 @@
 | 项 | 口径 |
 |---|---|
 | **事件流优先** | agent-team 方向的**交接真源 = 批事件流**：`handoff_submit` **一次原子写**（= 单次文件写的原子性；⚠ **并发写者之间无排队/重试语义** —— 见 §3）同时落 `batch.handoffs` 与 `lane.handoff` 事件；可审计导出走 `log_export`。下游开工**硬前提** = 该入边 `handoff_view` 报 `submitted`；缺失即 `GATE_HANDOFF_MISSING`（**引擎 entry 门，非纪律**） |
-| **mailbox 搁置** | **搁置范围仅限**「把官方 mailbox（`wait_agent` 等）或蟛蜞 `mailbox_*` 用作 agent-team 方向的**交接 / 唤醒通道**」。`mailbox_*` 工具面**维持现状不动**——§0f（longrun 候选）与 §0i（消费留痕，**未 ack 即未消费**）的既有纪律**不因本裁决改变** |
+| **mailbox 搁置** | **搁置范围仅限**「把官方 mailbox（`wait_agent` 等）或蟛蜞 `mailbox_*` 用作 agent-team 方向的**交接 / 唤醒通道**」。`mailbox_*` 工具面**维持现状不动**——存档件 §三 的 0f（longrun 候选）与 0i（消费留痕，**未 ack 即未消费**）的既有纪律**不因本裁决改变** |
 | **`send_message` 已落规格（2026-10-01 Q3=A 定案）** | **`send_message` = D 档派活 / 唤醒的唯一正式通道** —— **Leader→席位**（派活 / 唤醒 / 通知收工）与**席位→Lead**（回报）**双向**；席位**不得互唤**（指引约束）。**Leader 面在册 / 席位面 deny** 的工具：`interrupt_agent` / `list_agents` / `wait_agent`（**成员侧可用/不可用清单见本节 §七**）。已知事实：S-3 已对成员放开 `send_message`（可推 Lead） |
 
-- **边界**：本节只改 agent-team 方向的**交接 / 唤醒通道选型**，不触碰 §0f / §0i 的消费留痕纪律，也不改引擎工具面。
+- **边界**：本节只改 agent-team 方向的**交接 / 唤醒通道选型**，不触碰存档件 §三 的 0f / 0i 消费留痕纪律，也不改引擎工具面。
 
 ### 十三、两方向规格（2026-09-25 用户 C1/C2 裁决；注入面条目 `0p` 的详情面）
 
@@ -512,13 +549,22 @@
   - **已退役面（勿再按旧文理解）**：`member.settled` **不再**触发「算下一环 + 自派」；`chain.step` **不再新增**（写点已删）；`onFail` / `join.anyFailure` / `pair_with` / `rework` / `template` **无运行期消费者**，声明位**一并删净**。
   - **失败面改由什么承载**：失败 / 冲突 lane 即**终态**（K3 去返工边），失败面用 **gap-list（`blocking` / `followup`）** 表达，重做 = **开新任务批次**；`pair_with` 的 1:1 配对语义改由 **audit lane 的 `deps`** 表达。
 - **`chain` / 拓扑的现行口径**：**运行期 + 建批期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**（逐边取件用 `handoff_view`，判定单点 = `lib/state/gates.js` 的 `handoffRecordVerdictOf`）；**不存在**任何链声明或链静态校验面。两条现行硬口径——
-  - **链推进对全部批恒 no-op（原分支已整体删除）**：原判据 = 批次 JSON 的 `assembly.managerPlan`（`chain-runner.js` 前置分支，先于相位闸、不看 roster）。链面删净后该分支**不存在** ⇒ `leader-direct` 与 `raise` 在链推进面上**不再有差异**，其**现行**差别只在调度与 watch（§0f / §0g）。
+  - **链推进对全部批恒 no-op（原分支已整体删除）**：原判据 = 批次 JSON 的 `assembly.managerPlan`（`chain-runner.js` 前置分支，先于相位闸、不看 roster）。链面删净后该分支**不存在** ⇒ `leader-direct` 与 `raise` 在链推进面上**不再有差异**，其**现行**差别只在调度与 watch（存档件 §三 的 0f / 0g）。
   - **`batch.phase` 事件带 `reason`**（暂停类必须带 source 前缀，禁裸文案）：词表 = `auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`，存量两源 `failed-escalate` / `governance-escalate` 不动；**空/空白 ⇒ 不写该键**（既有 `{from,to}` 形态零污染）；读端渲染 `<from> -> <to> | <reason>`（`log_export` markdown = 「为何不推进」的唯一解释入口）。**注**：原词表首项 `chain:<分支>` **随链面删净而无发射源**。
   - **步级条件边 `on` 声明面已下线（M1）**：原为「声明即留痕 `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.steps.<id>.on`」——**该码与声明位已随链面删净**；**立意不变**（**不静默失能**：原「声明即拒」只删校验会让声明被静默忽略，比留痕更糟 ⇒ 现口径 = 声明位不存在，无处可写）。正路路由用 **`deps` 边**，失败面用批次级策略 + **gap-list**。**读侧历史兼容**：历史 `chain.step` 事件的 `via` 仍在**磁盘事件流**（`log_export` 可读），**面板 / `batch_status` 回显面已删**。
 - **两段式拒态（G-2，排查建批失败必先分段）**：`wave_plan` 的拒态由**两段不同来源**产生，读拒态文案时必须先判段，勿把两段混作一谈——
   - **段一 · 框架参数面**：宿主在进入 `execute` **之前**按工具参数 schema 拒（`required` 缺失 / 类型或枚举非法 / `additionalProperties:false` 命中）。特征：文案由**宿主**生成（形如 `missing required property "batchId"` / `invalid arguments`），**不带** `GATE_*` 引擎码；本插件对该段**无构造序控制权**。**今日可触发键只剩 `batchId` / `tasks`**（旧示例 `missing required property "team"` **早已不可达**——`team` 从未进本次 `required`；另 `teamsRoot` 参数已删净）。
   - **段二 · 业务构造期面**：进入 `wave_plan.execute` 后的判定序**今日只剩拒态**——⑤ 装配声明门 → ⑥ **引擎默认判据源锚点面**（`GATE_AUDIT_INPUT_MISSING`：判据取自 `plan/` 前缀 / 他 lane `produce ∪ outputs` 的**引擎基线**，**非团队声明**）。全部位于 `store.createBatch` **之前**。特征：**拒态**文案**首行原样透出引擎码**（`GATE_*`），可照码分流与自救。**原条目 ①〜④**（`team` 标签归一化 → `teamsRoot` 面 → 资产加载 + 加载期不变量 → `chain` 八条静态校验）**随声明面删净：既无拒态、亦无 `warnings` 出口**。
   - **共同判据（不变）**：段一与段二之后均为「**零批次 JSON 落盘** + `pendingBatch` 保留（补声明可重试）」；故「批没建起来」的正确诊断入口 = 先看文案属于哪一段，再决定是补参数形态（段一）还是改声明（段二）。**注意**：①〜④ 已不存在 ⇒ 「批建起来了」**不再**受任何资产 / `chain` 声明面影响（无从可脏）。
+
+## §0t 完成发现与结算
+
+> **编号定义面**：本节是 **`M-1`** 的唯一权威定义面——§0p 与 §11 出现的「§0t M-1」引用的就是本节的 M-1 条。
+
+- **M-1（漏结算 = 悬挂成员）**：lane 进入 `review` 后**不会自己走向终态**——验收侧的 lane 尤其如此（它把「审完了」交上来，在引擎眼里只是**提交评审**，不是结论）。后果：批次已经收口，成员却停在半途，对外表现为**悬挂成员**（名单里多出那一行）。**判定口径** = 「**批次已了结、成员未了结**」：这是**单一信号、双向可读**——名单非空即说明有成员没走完收口；名单为空**也不等于**收口质量过关（结算了但结论空是另一种缺陷）。
+- **坑一：把「批已收口」当成「成员都已结算」**。后果：漏掉的往往是闸门之后的那一条，而它恰好是**结论载体**——批看起来完成了，验收结论其实从未落盘。**判定口径**：收口前逐个核成员态到终态（`merged` / `conflict` / `failed` / `skipped`），**不能**用批相位代替成员态。
+- **坑二：只从一个入口判「完成了没」**。后果：只看批次账本会漏掉「产物已落盘、结算没跟上」的那一类（磁盘上有东西、账本上没记录）；只看产物又会漏掉「结算了、产物其实是空壳」的那一类。**判定口径**：完成发现是**并集而非串联**——批次状态、事件流导出、产物根枚举**三面各查一次**，任一面命中即算发现；「上一步不通过就不查下一步」会把并集的覆盖面自动收窄成最窄的一路。
+- **坑三：把 `abort` 批的悬挂名单当缺陷上报**。后果：`abort` 的语义本就是中途收口，在途成员不会被、也不该被逐个清算 ⇒ 据此判红是**假红**，还会把真正的漏结算淹没在噪声里。**判定口径**：先读批相位再读名单——`aborted` 下的悬挂属**预期残留**，只登记不判缺陷；`complete` 下仍悬挂才是缺陷。
 
 ## §5 事件回写与终门禁综合
 
@@ -637,7 +683,7 @@
 
 - **派发前任务包必须带预算行**：`预算：W≈<X>M（C≈<…>K × T≈<…>轮）；切法：<四切法之一>；若超窗：理由 ＋ 豁免 ＋ 分段`。**无预算行的任务包不得派发**（纪律自查项，非引擎门）。
 - **粗判据（超任一即改拆法）**：单 lane 改动文件 > **8**｜跨模块（层/子系统）> **2**｜需全量套件轮次 > **3**｜预估轮次 > **45**。
-- **在途监管**：成员 `W` 逼近 10M（或时长 > 20 min 且轮次 > 60）⇒ 按 **§0f 三分支**处置；**优先「按已完成进度拆分 ＋ 另开新批」**（重派会丢在制改动，见 §11 R-5；本批 wavePlan 建批后不重算 ⇒ 批内无法加 lane）。
+- **在途监管**：成员 `W` 逼近 10M（或时长 > 20 min 且轮次 > 60）⇒ 按 **存档件 §三 的 0f 三分支**处置；**优先「按已完成进度拆分 ＋ 另开新批」**（重派会丢在制改动，见 §11 R-5；本批 wavePlan 建批后不重算 ⇒ 批内无法加 lane）。
 - **下界不滥用**：< 4M 的活不要硬拆；碎片化的固定成本（派发 ＋ 上下文重建 ＋ 锚点重算 ≈ **0.3–1M/条**）会吃掉拆分收益。
 
 ### 14.4 plan 层义务
@@ -648,7 +694,7 @@
 
 ### 14.5 超窗例外（原子任务）
 
-允许超 10M，但**三件套缺一不可**：① plan 产物写明**超窗理由 ＋ 预估 W**；② 派发时**附 longrun 豁免**（§0h）；③ 强制**分段 checkpoint**（每子步骤落 `<lane>/progress/NN-<slug>.md`）。
+允许超 10M，但**三件套缺一不可**：① plan 产物写明**超窗理由 ＋ 预估 W**；② 派发时**附 longrun 豁免**（存档件 §三 的 0h）；③ 强制**分段 checkpoint**（每子步骤落 `<lane>/progress/NN-<slug>.md`）。
 
 ### 14.6 与 longrun 工具的衔接（口径预告；实现另批）
 
@@ -1014,7 +1060,7 @@
 | `GATE_AUDIT_CRITERIA_MISSING` | audit lane 派发前，其消费的 plan 产物**正文缺裸标题行 `## 验收标准`**（载荷 `problems`） | **拒派**（P1-b） |
 | ~~`GATE_AUDIT_CONTRACT_MISSING`~~ | **已删净（2026-09-27 批 `retire-team-chain-20260927`）**——原触发 = 「批次含 audit lane 且**解析到团队资产**，而该资产 `flows.audit.audit_contract` 缺失」⇒ 资产面删净后**无载体、恒不触发**（`lib/**` 零字面量含注释；**不在退役锁登记范围**内） | —（现役 audit 判据面改走**引擎基线**：`GATE_AUDIT_INPUT_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`，见 §12） |
 | ~~`GATE_AUDIT_CONTRACT_EXEMPT`~~ | **已删净（2026-09-27 批 `retire-team-chain-20260927`）**——原触发 = 资产**显式**声明 `audit_contract: {}` 或 `{exempt:true}` ⇒ 声明面无载体后**恒不触发**（`lib/**` 零字面量含注释；**不在退役锁登记范围**内） | — |
-| ~~`GATE_MANAGER_NOT_RAISED`~~ | **已退役 / 幽灵码（M-11 订正，2026-09-24）：勿再引用**——`lib/**` 内**零命中**（含注释；2026-09-21 可达性审计按「**码名已字面删除**」处理，防 grep 误当活码）。Manager 在册判定改由**建批期官方 roster 承抽**（`gate.manager_roster_gap` 观察事件 + `managerRoster` 回显，见 §0b 一 / §0g 一）；**派发面已无此拒态** | — |
+| ~~`GATE_MANAGER_NOT_RAISED`~~ | **已退役 / 幽灵码（M-11 订正，2026-09-24）：勿再引用**——`lib/**` 内**零命中**（含注释；2026-09-21 可达性审计按「**码名已字面删除**」处理，防 grep 误当活码）。Manager 在册判定改由**建批期官方 roster 承抽**（`gate.manager_roster_gap` 观察事件 + `managerRoster` 回显，见 §0b 一 / 存档件 §三 的 0g 一）；**派发面已无此拒态** | — |
 | `GATE_EXIT_*` | exec 产物声明 `gate: <命令>`，merged 前确定性执行**非 0** 退出 | **拒 merged**（lane 留 review；配 `needHuman: true` → 转人工闸） |
 | `GATE_EXIT_NO_COMMAND` | **已声明 `gate:` 行但命令解析为空**（空行/仅空白/尾随空格）（载荷 `path` 指向该产物）；完全未声明 `gate:` 行仍**零感知**；`gate: false` 走「显式关闭」留痕面（`command-declared-off`），**不拒** | **拒 merged**（lane 留 review + `gate.exit_blocked`）；**F-7 起真正可达**——此前被 `declared` 早退遮蔽而长期不可达，属修正而非新增语义 |
 
