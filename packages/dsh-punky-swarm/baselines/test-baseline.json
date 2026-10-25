@@ -577,9 +577,9 @@
       "todos": 0
     },
     "test/gate-artifact-containment.test.js": {
-      "asserts": 42,
+      "asserts": 44,
       "blankLines": 25,
-      "lines": 280,
+      "lines": 302,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-24T19:09:34Z",
+  "generatedAt": "2026-10-25T04:59:05Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1647,10 +1647,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 10560,
+    "asserts": 10562,
     "blankLines": 5566,
     "files": 204,
-    "lines": 59235,
+    "lines": 59257,
     "tautologies": 0,
     "tests": 2147,
     "todos": 4

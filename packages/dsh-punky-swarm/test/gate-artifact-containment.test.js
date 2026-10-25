@@ -86,15 +86,28 @@ function makeFixture() {
 const FIX = makeFixture();
 const { root, dir } = FIX;
 
-// 逃逸矩阵：7 形态。前 5 条的真实落点都**有非空哨兵文件**（证明「读不到」不是因为没有文件）。
+// 逃逸矩阵。前若干条的真实落点都**有非空哨兵文件**（证明「读不到」不是因为没有文件）。
+// ⚠ 平台分档（2026-10-25；CI Linux `fail=2` 的根因，已在容器内实测三种形态的真实语义）：
+//   · `..\outside.md`：**两平台都逃逸**（`isInsideRoot` 走 `path.relative`，posix 上 rel =
+//     `..\outside.md` 仍以 `..` 开头 ⇒ 拒）。它不是 Windows 专属形态。
+//   · `D:outside.md` / `\\server\share\x.md`：**只在 win32 上逃逸**（盘符 / UNC 语义）。
+//     posix 上 `D:` 无盘符含义、`\` 是普通字符 ⇒ `path.resolve` 落在**根内**，
+//     按 OS 语义就是「文件不存在」而不是「越界读到根外」。
+//   ⇒ 不为迁就 CI 把期望改成「posix 也 throw」（那会把实现改成与 OS 语义不符）；
+//      正确做法：两条盘符/UNC 形态按平台进矩阵，posix 侧另用**显式钉住**断言它们落根内，
+//      两侧都不降级：win32 → 3 条 Windows 形态全红；posix → 2 条全红且断言为非逃逸。
+const IS_WIN = process.platform === 'win32';
+const ESCAPES_WIN_ONLY = [
+  ['盘符相对（跨盘）', 'D:outside.md'],
+  ['UNC', '\\\\server\\share\\x.md'],
+];
 const ESCAPES = [
   ['单层 `..`', '../outside.md'],
   ['多层 `../../`', '../../outside2.md'],
   ['子目录回退', 'plan/../../outside.md'],
   ['反斜杠 `..\\`', '..\\outside.md'],
   ['根外绝对', path.join(root, 'evil-abs.md')],
-  ['盘符相对（跨盘）', 'D:outside.md'],
-  ['UNC', '\\\\server\\share\\x.md'],
+  ...(IS_WIN ? ESCAPES_WIN_ONLY : []),
 ];
 const POSITIVES = [
   ['根内相对', 'ok.md'],
@@ -133,6 +146,15 @@ test('T2-1 单点 `resolveArtifactIn`：3 阳性可解析 ⟶ 之后 7 逃逸全
   // ③ 口径边界钉住：**同盘**盘符相对不逃逸（Windows `path.resolve` 语义），解析结果落在根内
   const sameDrive = resolveArtifactIn(dir, 'C:outside.md');
   assert.equal(sameDrive.startsWith(dir), true, '同盘盘符相对解析进根内（不是逃逸）: ' + sameDrive);
+  // ④ posix 侧显式钉住：无盘符/反斜杠语义 ⇒ 三种 Windows 形态只是普通文件名，落在根内且不真实存在
+  //   （不 throw 是**正确**的 OS 语义，不是漏判；见 ESCAPES 上方平台分档说明）
+  if (!IS_WIN) {
+    for (const [name, rel] of ESCAPES_WIN_ONLY) {
+      const abs = resolveArtifactIn(dir, rel);
+      assert.equal(abs.startsWith(dir), true, '[' + name + '] posix 下应作为普通文件名落在根内: ' + abs);
+      assert.equal(fs.existsSync(abs), false, '[' + name + '] 该普通文件名不应真实存在: ' + abs);
+    }
+  }
 });
 
 test('T2-2 P1 `detectGate`：阳性产物有 2 条命令 ⟶ 7 逃逸一律 `commands: []`', () => {
