@@ -1,3 +1,20 @@
+## 0.5.6（2026-10-25）
+
+### 判据面根治「每批塞一条」与「注释计入」两族缺陷；指引落两条纪律；CI 从连续 4 次红修至双矩阵绿
+
+四个批次 + 一组 CI 修复。**不改引擎判定面**（门禁族、状态机、黑板真源均未动），改的是**判据写法**、**指引纪律**与**测试的环境假设**。
+
+- **写域判据根治（`GAP-A1-09`，批 `speclang-gatehardening-20261025`）**：`test/accept-pack2-vocabulary.test.js` 原 `PACK_DOMAINS` 是**批次清单**（7 条按批次名枚举），已连续 4 次把新出现的合法路径误判「无法归属 = 越界」（`scripts/speclang-validate.mjs` → `test-baseline.test.js` → `accept-pack2` → `accept-pack3`），每次补救都是「再塞一条」。改为**目录约定分类器**：`FACE_RULES` 六面（能力层 / 测试面 / 引擎脚本面 / 引擎面 / 基线面 / 指引面）＋ `RELEASE_RE` 发行面 ＋ `classifyFace`；按 prefix 长度**显式降序**排序（不靠书写顺序）；`--porcelain` 改 `-uall`（untracked 亦纳入）；越界文案点名路径 ＋ 已知面清单。**分类器 ≠ 禁区**：`baselines/` 在分类器里是已知面（放行），基线越权仍由原 `forbidden` 断言拦（反向构造已证该行承重）。
+  台账副作用**如实登记**：旧表 × 新分类器实测「旧红→新放行 6 类、收紧 0 类」——属**换机制的预期结果**（那 6 类在老表下变红的唯一原因是「还没人改过所以没被塞进清单」，属待发假红），已逐条写入代码注释含各自兜底。
+- **断言遮蔽拆牙（`GAP-A1-02`）**：`doc-manager` 不挂规格面这条断言原**寄生**在集合相等断言之后（红了也不算它红）⇒ 拆出独立 `AC-pack3-15b`；注入 `doc-manager` 指针后 15 与 15b **双红且理由不同**（真独立坐标）。
+- **基线新鲜度门（`GAP-A1-06`）**：`test/test-baseline.test.js` 内新增两条纯函数（`freshnessDrift` / `baselineTotalsDrift`）＋三用例；负例走**内存副本**（不写 `baselines/**`）。经 7 组变异实证真红，含**变异 scan 侧**（证「非文件自比」）。
+- **指引两条纪律（`SKILL.md`）**：① **基线纪律**——改 `test/**` ⇒ 基线重冻**必须同一提交完成**（`baselines/**` 单写者 = Leader），反例取实测 `2584663`（只落基线、树仍 18/20 ⇒ 单独检出必红、`bisect` 被误导）；② **产物根推导**——用 `ls -d ~/.dsh/*preset*/…` 通配推导、禁手抄拼写（历史事故：`puny-preset` 少一个 `k`）。
+- **判据自检表（新增机制）**：`SKILL.md` 增「出包前判据自检」——**五类**（阈值 / 禁令 / 时点 / 计数 / **注释面**）× **十对** ＋ 5 个历史反例 ＋ **四条铁律**（末条：裸子串计数必须限定代码面）。
+  **注释面按文件类型分档**（r1 判 reject、经独立复现后重写）：JS/TS 用 `codeOnly`（注释与字符串一并掩）；**YAML/shell 不数子串**——`presets/punky-preset/agent.cordis.yml:32` 是块标量 `prefix: >-`，注入面 27 条目正文在内、`#§` 指针 25 处是**内容不是注释** ⇒ 该档**没有安全的中点**（裸 25 / `codeOnly` 25 零效果 / 按 `#` 剥 **0** 反向错），故 `codeOnly` 与「按 `#` 剥注释」在该档**点名禁用**，改结构化取件或整行精确匹配（fail-closed）。
+- **CI 修复（连续 4 次红 → 双矩阵绿）**：① `docs/` 整目录被删时连带删掉了 `.gitignore` 明文要求保留的两件集成声明文档（`docs/integrations/comfyui-glue{,.en}.md`，`.gitignore` 注释本身写着「移出会让 CI 直接红」）⇒ 恢复这两件，其余 docs 仍不入库；② 5 条用例去除开发机依赖（仓外 SpecLang 副本、会话态批次产物报告、`D:` 盘符形态、已删 docs）——缺位时**留痕跳过**（不计通过、不判红）而非判红，两侧均不降级；③ CI `checkout` 改 `fetch-depth: 0`（多处「RED 基线」判据用 `git show <固定 sha>:` 取证）；④ 两处测试临时根由硬编码 `D:\dsh\_tmp` 改跨平台 `os.tmpdir()`（该字符串在 posix 上是**相对路径** ⇒ 临时目录造进仓库 ⇒ 写域判据判越界）。
+- **读数**：本地全量 `npm test` **2182 tests / 2175 pass / 0 fail / 3 skip**；CI（node 22.23.2 与 24.18.0 双矩阵）**均 success**；`baseline --check` `0`、`check-guidance-sync`（含 live）`0`、`check-vocab-counts` `0`；`porcelain 0`。
+- **已知 followup（不阻塞）**：`cordis.patch.yml` 至今在任何同步判据之外（不在 `SYNC_FILES`，连 repo↔live 一致性都不校）；`test/helpers/*.mjs` 与 `scripts/**` 无机械兜底（已如实登记为接受风险，未粉饰）；`docs/**` 因 `.gitignore` 不入库 ⇒ 依赖 docs 内容的两条断言在干净检出上只能留痕。
+
 ## 0.5.5（2026-10-25）
 
 ### software-team 接上「角色 → 适配层 → vendor 原件」引用链；适配层优先序落成硬声明；两条机检补反向牙
