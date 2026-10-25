@@ -74,11 +74,25 @@ function batchFileOf(root, sessionId, batchId) {
 
 // ── roles 语义补强（spec §7 roles 项 / T8 语义延伸）──
 
-test('roles 语义：合法角色全集（VALID_ROLES 8 + 盲审扩展 3 = 白名单 11）→ 零告警且全保留', () => {
+test('roles 语义：合法角色全集（VALID_ROLES + 盲审扩展）→ 零告警且全保留', () => {
   const all = [...VALID_ROLES, ...ROLE_EXTENSIONS];
-  assert.equal(all.length, 11, 'VALID_ROLES(8) + ROLE_EXTENSIONS(3, 盲审三角色) = 11');
+  // 组合算术两条（规格 §方案 3；缺一即假绿）——
+  //   ② 显式不相交：VALID_ROLES ∩ ROLE_EXTENSIONS = ∅
+  //      （若两侧重叠，并集元素数变少，仅凭「并集集合相等」仍可能蒙过）
+  const overlap = VALID_ROLES.filter((r) => ROLE_EXTENSIONS.includes(r));
+  assert.deepEqual(overlap, [],
+    'VALID_ROLES 与 ROLE_EXTENSIONS 须不相交（A∩B=∅）：实际重叠 [' + overlap.join(', ') + ']');
+
   const { decl, warnings } = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: all });
   assert.equal(warnings.length, 0, '合法全集零误报');
+  //   ① 并集集合身份相等：输入并集 == 透传回显并集（带双向差集诊断；替代 all.length === 11）
+  //      放在 deepEqual 之前：deepEqual 的失败消息是整数组 diff，而本断言**直接点名缺/多哪一条**。
+  const inSet = new Set(all);
+  const outSet = new Set(decl.roles);
+  const missing = [...inSet].filter((r) => !outSet.has(r));
+  const extra = [...outSet].filter((r) => !inSet.has(r));
+  assert.deepEqual([missing, extra], [[], []],
+    '合法角色并集须身份相等：缺 [' + missing.join(', ') + '] 多 [' + extra.join(', ') + ']');
   assert.deepEqual(decl.roles, all, '合法词条原样透传保留');
 });
 

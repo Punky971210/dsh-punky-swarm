@@ -449,15 +449,29 @@ test('AC-pack3-11b `package.json` / `CHANGELOG.md` / `README*` 变更 = 0 件（
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-12 既有判据①②③ 不回归
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-12 `--no-live` 仍 GREEN：exit 0、注入面 27、正文 §小节 32（pack1 已合并时的值）', () => {
-  // 失败条件：注入面/正文任一侧回归（判据①②③ 红）/ 正文小节数 ≠ 32（pack1 未合并或被他包改动）。
+test('AC-pack3-12 `--no-live` 仍 GREEN：exit 0、两侧身份集合一一对应（不写死规模）', () => {
+  // 失败条件：注入面/正文任一侧回归（判据①②③ 红）/ 注入面条目与正文小节**身份集合**不再一一对应。
+  //   原写法把 27 / 32 写死（"基线 29 + pack1 的 3"），合法增长即假红 ⇒ 改为身份集合相等。
   const r = spawnSync(process.execPath, [SCRIPT_REL, '--no-live', '--json'], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
   let doc = null;
   try { doc = JSON.parse(r.stdout); } catch { /* 下面 assert 报 */ }
   assert.ok(doc, 'no JSON 输出：' + (r.stderr ?? '').slice(0, 400));
   assert.equal(r.status, 0, 'exit 须 = 0；failures=' + JSON.stringify(doc.failures));
-  assert.equal(doc.inlineEntries, 27, '注入面条目须 = 27');
-  assert.equal(doc.bodySections, 32, `正文 §小节须 = 32（基线 29 + pack1 的 3），实测 ${doc.bodySections}`);
+  // 结构自洽：脚本回显规模 == 本件独立解析规模（不依赖任何常数）
+  const guidRel = 'presets/punky-preset/agent.cordis.yml';
+  const discRel = 'presets/punky-preset/references/discipline.md';
+  const faceIds = [...readRel(guidRel).matchAll(/^\s{6,}([0-9]{1,2}[a-z]?)\.\s+\S.*$/gm)].map((m) => m[1]);
+  const bodyIds = [...readRel(discRel).matchAll(/^## §([0-9]+[a-z]?)\s/gm)].map((m) => m[1]);
+  assert.equal(doc.inlineEntries, faceIds.length, `脚本条目数须与本件独立解析一致（本地 ${faceIds.length}）`);
+  assert.equal(doc.bodySections, bodyIds.length, `脚本小节数须与本件独立解析一致（本地 ${bodyIds.length}）`);
+  // 承重判据 = 身份集合一一对应（详情面白名单取脚本回显 `detailOnly`，不硬编码）
+  const detailOnly = new Set(doc.detailOnly ?? []);
+  const faceSet = new Set(faceIds);
+  const bodySet = new Set(bodyIds);
+  const dangling = [...faceSet].filter((id) => !bodySet.has(id)).sort();
+  const uncovered = [...bodySet].filter((id) => !faceSet.has(id) && !detailOnly.has(id)).sort();
+  assert.deepEqual(dangling, [], '注入面条目缺正文小节（②b），缺 = ' + JSON.stringify(dangling));
+  assert.deepEqual(uncovered, [], '正文小节未进注入面且非详情面白名单（③），多 = ' + JSON.stringify(uncovered));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

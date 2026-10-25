@@ -33,7 +33,16 @@ test('AIC：Base36 编解码往返', () => {
   assert.equal(base36Encode(0, 4), '0000');
   assert.equal(base36Encode(10, 4), '000A');
   assert.equal(base36Encode(35, 4), '000Z');
-  assert.equal(BASE36_ALPHABET.length, 36);
+  // ── 字母表不变量（取代 `BASE36_ALPHABET.length === 36`）────────────────────
+  // `length === 36` 挡不住「36 个字符里有一个重复、另一个缺失」⇒ 改成字符集**互不重复**
+  // 且**恰好覆盖 0-9A-Z**（与 base36 的位值语义两侧同源）。重复一个字符在此必红。
+  {
+    const chars = [...BASE36_ALPHABET];
+    const dup = chars.filter((c, i) => chars.indexOf(c) !== i);
+    assert.deepEqual(dup, [], '字母表不得有重复字符（重复项点名）：' + JSON.stringify(dup));
+    assert.deepEqual([...chars].sort(), [...'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].sort(),
+      '字母表须恰好覆盖 0-9A-Z（缺一或多一都在此红）');
+  }
   assert.throws(() => base36Encode(-1));
   assert.throws(() => base36Decode('@'));
 });

@@ -47,7 +47,7 @@ const SID = 'sess-needhuman';
 
 // ── 存量 21 条（兼容式裁决样本集）：人/时间分隔符 `@` 与 `:` 两形态、多裁决人、多结论 ────────────
 // 契约：`human:<裁决人>:<时间>:<结论>`，其中「裁决人 + 时间」之间的分隔符兼容 `@` / `:`。
-const STOCK_PASS_21 = [
+const STOCK_PASS_SAMPLES = [
   'human:user:2026-08-21:accept',
   'human:user@2026-08-21:accept',
   'human:alice:2026-09-01:approve',
@@ -79,9 +79,15 @@ const WEAK_3 = [
   ['两位年份（`human:user:26-8-21:ok`）', 'human:user:26-8-21:ok'],
 ];
 
-test('WD1-1 单点证据契约：21 条存量兼容式**全放行**（参数化）', () => {
-  assert.equal(STOCK_PASS_21.length, 21, '样本集须恰 21 条（判据源口径）');
-  for (const note of STOCK_PASS_21) {
+test('WD1-1 单点证据契约：存量兼容式样本集**全放行**（参数化）', () => {
+  // 单调棘轮（规格 §方案 2 形态 3）：样本集只许**增**不许**减**（新增样本 = 覆盖率提升，合法演进）。
+  // 替代 `STOCK_PASS_SAMPLES.length === 21` —— 原形态对「合法新增一条样本」假红。
+  // 标识符同步去数字化（`STOCK_PASS_21` → `STOCK_PASS_SAMPLES`）：名字里带数字会催生「为对齐名字而改样本集」的误改。
+  const STOCK_MIN_SAMPLES = 21;
+  assert.ok(STOCK_PASS_SAMPLES.length >= STOCK_MIN_SAMPLES,
+    '样本集不得缩减：下限 ' + STOCK_MIN_SAMPLES + '，实测 ' + STOCK_PASS_SAMPLES.length
+    + '；现存样本：' + JSON.stringify(STOCK_PASS_SAMPLES));
+  for (const note of STOCK_PASS_SAMPLES) {
     const ev = humanEvidenceOf(note);
     assert.ok(typeof ev === 'string' && ev.startsWith('human:'), '存量证据须放行: ' + JSON.stringify(note) + ' ← ' + String(ev));
     assert.equal(HUMAN_EVIDENCE_RE.test(note), true, '正则同源须命中: ' + JSON.stringify(note));

@@ -29,6 +29,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { createStore } from '../lib/state/store.js';
@@ -191,16 +192,20 @@ function readAndCount(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8')).events.length;
 }
 
+// 批量写规模的**单点真源**：写出端（子进程）与读回端（断言）共用同一常量
+// （原写法把 20000 在两侧各写死一次 ⇒ 任一侧改动即两侧不同步）
+const N_EVENTS = 20000;
+
 // ── RED-1 高层形态｜跨进程真并发打到同一目标 ⇒ 都成功、目标完整、无 tmp 残留 ──
 test('RED-1b 跨进程真并发写同一目标 ⇒ 两进程均成功、目标完整、无 tmp 残留', () => {
   const { dir, target } = tempTarget('red1b');
-  const child = 'const fs=require("node:fs");const t=process.argv[1];const m=process.argv[2];'
+  const child = 'const fs=require("node:fs");const t=process.argv[1];const m=process.argv[2];const N=Number(process.argv[3]);'
     + 'const big={schema:"v3",batchId:"b1",phase:"running",lanes:{},'
-    + 'events:new Array(20000).fill(null).map((_,i)=>({ts:"T",type:"member.settled",i,marker:m}))};'
+    + 'events:new Array(N).fill(null).map((_,i)=>({ts:"T",type:"member.settled",i,marker:m}))};'
     + 'for(let k=0;k<5;k++){const tmp=t+"."+process.pid+"."+k+".tmp";'
     + 'fs.writeFileSync(tmp,JSON.stringify(big,null,2));fs.renameSync(tmp,t);}process.stdout.write("OK"+m);';
 
-  const [a, b] = ['p1', 'p2'].map((m) => spawnSync(process.execPath, ['-e', child, target, m], { encoding: 'utf8' }));
+  const [a, b] = ['p1', 'p2'].map((m) => spawnSync(process.execPath, ['-e', child, target, m, String(N_EVENTS)], { encoding: 'utf8' }));
   assert.equal(a.status, 0, '进程 A 退出码：' + a.status + ' stderr=' + a.stderr);
   assert.equal(b.status, 0, '进程 B 退出码：' + b.status + ' stderr=' + b.stderr);
   assert.equal(a.stdout, 'OKp1');
@@ -208,7 +213,26 @@ test('RED-1b 跨进程真并发写同一目标 ⇒ 两进程均成功、目标�
 
   const final = JSON.parse(fs.readFileSync(target, 'utf8'));
   assert.ok(['p1', 'p2'].includes(final.events[0].marker), '目标是某一个进程的完整写出');
-  assert.equal(final.events.length, 20000);
+
+  // ── 连通性自比（取代「恰好 20000 条」的魔数）────────────────────────────────
+  // 真源 = N_EVENTS：断的是「写出 N 条 ⇒ 读回 N 条、序号 0..N-1 逐项连通、同一进程写出」。
+  // ⇒ 合法演进（改 N / 加事件类型）不红；真丢一条 / 重复 / 乱序 / 两进程混写必红，且点名缺哪条。
+  const seq = final.events.map((e) => e.i);
+  const seenIdx = new Set(seq);
+  const missing = [];
+  for (let i = 0; i < N_EVENTS; i++) if (!seenIdx.has(i)) missing.push(i);
+
+  assert.deepEqual(missing, [],
+    '丢事件：读回缺少序号 ' + JSON.stringify(missing.slice(0, 5))
+    + (missing.length > 5 ? ' … 共 ' + missing.length + ' 条' : ''));
+  assert.equal(seq.length, N_EVENTS,
+    '批量写不丢事件：写 ' + N_EVENTS + ' 条 ⇒ 读回 ' + N_EVENTS + ' 条（实测 ' + seq.length + '；重复写入亦在此红）');
+  assert.equal(seenIdx.size, N_EVENTS,
+    '事件序号须互不重复（实测唯一 ' + seenIdx.size + ' / ' + N_EVENTS + '）');
+  assert.equal(new Set(final.events.map((e) => e.marker)).size, 1,
+    '整份目标文件须来自同一次进程写出（marker 须单一，实测 '
+    + JSON.stringify([...new Set(final.events.map((e) => e.marker))]) + '；否则两进程混写会假绿）');
+
   assert.deepEqual(fs.readdirSync(dir), [path.basename(target)], '无 tmp 残留（多方并发后仍干净）');
 });
 
@@ -221,7 +245,12 @@ test('AC-4 身份快照含 {size, mtimeMs, sha256}；比对可判「被换过」
   assert.equal(typeof before.size, 'number');
   assert.equal(typeof before.mtimeMs, 'number');
   assert.equal(typeof before.sha256, 'string');
-  assert.equal(before.sha256.length, 64);
+  // 单一真源比对（取代靠 `length === 64` 单独兜底）：快照的 sha256 须与 node:crypto
+  // 对**同一字节**的实算逐字相等 —— 只断长度 64 挡不住「恰好 64 个字符的任意串」。
+  const expectSha = createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+  assert.equal(before.sha256, expectSha,
+    '身份快照 sha256 须等于 node:crypto 对同一字节的实算值（实测 ' + before.sha256 + ' / 期望 ' + expectSha + '）');
+  assert.equal(before.sha256.length, 64, 'sha256 十六进制摘要的**形状契约**（64 字符；非规模快照）');
   assert.equal(before.path, target);
 
   const same = fileIdentityOf(target);

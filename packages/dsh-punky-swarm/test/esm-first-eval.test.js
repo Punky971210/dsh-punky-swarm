@@ -61,6 +61,26 @@ const FIRST_EVAL_MODULES = Object.freeze([
   'lib/wave-plan.js',
 ]);
 
+/** 首求值矩阵的**棘轮基线**（只锁「不得缩减」，不锁「恰好多少」）。
+ *  语义见文件头「长期防线」：少一个入口就少一条可触发 TDZ 的护栏 ⇒ 只许保持、不许删。
+ *  合法演进（新增首求值入口）请只加在上面的 `FIRST_EVAL_MODULES`，**不要**动本基线。
+ */
+const FIRST_EVAL_BASELINE = Object.freeze([
+  'lib/index.js',
+  'lib/watch/lane-heartbeat.js',
+  'lib/watch/heartbeat/primitives.js',
+  'lib/watch/heartbeat/notice.js',
+  'lib/watch/heartbeat/context.js',
+  'lib/watch/heartbeat/activity.js',
+  'lib/watch/heartbeat/evidence.js',
+  'lib/watch/heartbeat/longrun.js',
+  'lib/watch/heartbeat/stalled.js',
+  'lib/watch/heartbeat/state-surface.js',
+  'lib/watch/heartbeat/scan.js',
+  'lib/watch/heartbeat/replay.js',
+  'lib/state/gates.js',
+  'lib/wave-plan.js',
+]);
 /** 残余环的冻结成员集（8 模块，排序后比较；与 `sccCount/memberCount` 断言互补）。 */
 const RESIDUAL_SCC = Object.freeze([
   'watch/heartbeat/activity.js',
@@ -236,8 +256,17 @@ function buildGraphWithDynamic() {
 }
 
 test('A1-P2-01 / AC-8 · 首求值矩阵：14 个入口逐个独立进程 import 全 OK（RED 基线 = primitives 抛 TDZ）', () => {
-  // 清单不得缩减：长度与非空断言先于遍历（缩清单会让本 guard 静默变弱）
-  assert.equal(FIRST_EVAL_MODULES.length, 14, '首求值清单必须保持 14 个入口（不得缩减）');
+  // ── 单调棘轮（取代 `FIRST_EVAL_MODULES.length === 14`）────────────────────
+  // 本断言的语义是「清单**不得缩减**」（注释自陈 + `:362` 反向构造注释「长度仍 14 ⇒ 长度断言仍绿」），
+  // 不是「恰好 14」。改断：棘轮基线 14 集 ⊆ 清单 ⇒ 删任一入口在此红且**点名**；清单可多于基线（态①不红）。
+  {
+    const listed = new Set(FIRST_EVAL_MODULES);
+    const shrunk = FIRST_EVAL_BASELINE.filter((m) => !listed.has(m));
+    assert.deepEqual(shrunk, [], '首求值清单不得缩减（点名缺失入口）：' + JSON.stringify(shrunk));
+    assert.ok(FIRST_EVAL_MODULES.length >= FIRST_EVAL_BASELINE.length,
+      '首求值清单规模不得低于棘轮基线 ' + FIRST_EVAL_BASELINE.length
+      + '（实测 ' + FIRST_EVAL_MODULES.length + '；新增入口不触红，缩减才红）');
+  }
   assert.ok(FIRST_EVAL_MODULES.includes('lib/watch/heartbeat/primitives.js'), 'TDZ 根因入口必须在清单内');
   assert.ok(FIRST_EVAL_MODULES.includes('lib/watch/lane-heartbeat.js'), '聚合器入口必须在清单内');
 
@@ -261,7 +290,9 @@ test('A1-P2-01 / AC-8 · 静态 ESM 环：SCC 数 = 1、成员 = 8、成员集�
   const sccs = tarjanScc(graph);
   assert.equal(sccs.length, 1, 'BEFORE 有 2 个 SCC（SCC2 已由 handoffGate* 下沉切断）；AFTER 必须恰 1 个');
   const members = sccs[0].map((i) => names[i]).sort();
-  assert.equal(members.length, 8, '残余环成员数必须为 8（BEFORE = 13）');
+  // 【删计数】原 `members.length === 8` 与下一行 `deepEqual(members, RESIDUAL_SCC.sort())` **完全冗余**
+  //   （同集合必同规模）。更强断言 = 下一行：集合身份相等且能点名差集。
+  //   ⇒ 删计数不削弱鉴别力：成员增/减仍由下一行红（态② 已实跑取证）。
   assert.deepEqual(members, [...RESIDUAL_SCC].sort(),
     '残余环成员集冻结：新增/消失任何成员都必须由本 guard 显式升级（触发条件见文件头三条）');
 });

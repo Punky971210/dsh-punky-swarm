@@ -110,16 +110,20 @@ test('A1-P2-09 / R-3 · 旧实现（294b4f9 原文）与单点实现 24 组样�
   }
   assert.deepEqual(mismatches, [],
     '搬家必须零语义变化（样本数 ' + SAMPLES.length + '，来源 ' + provenance + '）');
-  assert.equal(SAMPLES.length, 24, '样本集冻结为 24 组（不得为凑绿而缩样本）');
+  // 棘轮下界（只许增不许减）：24 = 本样本集当前规模（最后改动 b46327f）。
+  // 归型说明：本集**不满足** D 夹具自证的第 ③ 条（缩减会削弱下游对拍判据）⇒ 归 A → 单调棘轮，非 D。
+  // 合法新增样本时抬高此下界；**勿改回 `=== 24`**：那会把「合法加样本」变成假红。
+  assert.ok(SAMPLES.length >= 24, '样本集不得少于 24 组（棘轮：不得为凑绿而缩样本）');
 });
 
-test('A1-P2-09 / REVERSE · 样本集判别力：把单点实现换成恒等函数必红 ⇒ 24 组对拍不是恒真', () => {
+test('A1-P2-09 / REVERSE · 样本集判别力：把单点实现换成恒等函数必红 ⇒ 全部样本对拍不是恒真', () => {
   const identity = (text) => text;
   const surviving = SAMPLES.filter((s) => identity(s) === stripStreamMerges(s));
-  // 只有不含合并标记的 3 组能过恒等函数；其余 21 组必红 ⇒ 对拍确有判别力
+  // 只保留下面这条**精确数组相等**：它同时锁住「哪 3 组能过恒等函数」与「其余全部必须被判别」。
+  // 原 `SAMPLES.length - surviving.length === 21` 是该数组的纯派生量（3 = surviving.length，21 = 其余），
+  // 属零断言冗余 ⇒ 删（更强断言即本行）。
   assert.deepEqual(surviving, ['', ' ', 'cmd 2> $null'],
     '恒等函数下应仅剩 3 组「无标记」样本；多出即说明有命中样本被漏掉，少一个即说明样本集变了');
-  assert.equal(SAMPLES.length - surviving.length, 21, '21 组命中样本必须能被判别');
 });
 
 test('A1-P2-09 · 静态单点：`function stripStreamMerges` 全仓恰 1 处，护栏侧只有 import + 2 调用', () => {
@@ -174,8 +178,9 @@ const JUDGE_GOLDEN = Object.freeze([
 /** BEFORE 基线的 reason 全串摘要（30 条 × 两个判定面，以 `||` 与 `\n` 串联后 sha256）。 */
 const BEFORE_REASON_DIGEST = '5d0e4c4494583344a3565b58e504d789b68bb467c5e028cd20686a8625fcff2b';
 
-test('A1-P2-09 / R-3 判据面 · 30 条命令的 hit 与 reason 相对改前基线 decisionDiff = 0', () => {
-  assert.equal(JUDGE_GOLDEN.length, 30, '判据面样本集冻结为 30 条');
+test('A1-P2-09 / R-3 判据面 · 命令的 hit 与 reason 相对改前基线 decisionDiff = 0', () => {
+  // 零断言删除：原 `JUDGE_GOLDEN.length === 30` 已被下方 `:digest === BEFORE_REASON_DIGEST`
+  // 完全覆盖（摘要对 30 条 reason 全串取 sha256 ⇒ 少一条/多一条/改一字都会变），留着只会在合法扩充样本时单独假红。
   const diffs = [];
   const reasons = [];
   for (const [cmd, fwHit, wsHit] of JUDGE_GOLDEN) {

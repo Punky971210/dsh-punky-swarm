@@ -9,25 +9,25 @@
       "todos": 0
     },
     "test/accept-pack1-guidance.test.js": {
-      "asserts": 60,
+      "asserts": 61,
       "blankLines": 38,
-      "lines": 449,
+      "lines": 467,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
-      "asserts": 45,
-      "blankLines": 37,
-      "lines": 532,
+      "asserts": 48,
+      "blankLines": 38,
+      "lines": 553,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 59,
+      "asserts": 61,
       "blankLines": 39,
-      "lines": 551,
+      "lines": 565,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -129,17 +129,17 @@
       "todos": 0
     },
     "test/artifact-types.test.js": {
-      "asserts": 29,
+      "asserts": 33,
       "blankLines": 22,
-      "lines": 158,
+      "lines": 185,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
     },
     "test/assembly-gate-extra.test.js": {
-      "asserts": 8,
-      "blankLines": 12,
-      "lines": 106,
+      "asserts": 9,
+      "blankLines": 13,
+      "lines": 120,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -177,9 +177,9 @@
       "todos": 0
     },
     "test/atomic-write-ordering.test.js": {
-      "asserts": 63,
-      "blankLines": 40,
-      "lines": 273,
+      "asserts": 67,
+      "blankLines": 44,
+      "lines": 302,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -201,9 +201,9 @@
       "todos": 0
     },
     "test/auditlog-mount.test.js": {
-      "asserts": 197,
-      "blankLines": 69,
-      "lines": 783,
+      "asserts": 203,
+      "blankLines": 70,
+      "lines": 826,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -225,7 +225,7 @@
       "todos": 0
     },
     "test/auditlog.test.js": {
-      "asserts": 141,
+      "asserts": 140,
       "blankLines": 56,
       "lines": 500,
       "tautologies": 0,
@@ -305,9 +305,9 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 91,
+      "asserts": 94,
       "blankLines": 44,
-      "lines": 417,
+      "lines": 432,
       "tautologies": 0,
       "tests": 30,
       "todos": 0
@@ -377,9 +377,9 @@
       "todos": 0
     },
     "test/discovery.test.js": {
-      "asserts": 109,
-      "blankLines": 35,
-      "lines": 333,
+      "asserts": 111,
+      "blankLines": 36,
+      "lines": 359,
       "tautologies": 0,
       "tests": 26,
       "todos": 0
@@ -427,7 +427,7 @@
     "test/esm-first-eval.test.js": {
       "asserts": 21,
       "blankLines": 30,
-      "lines": 381,
+      "lines": 412,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -634,8 +634,8 @@
     },
     "test/gate-lane-snapshot.test.js": {
       "asserts": 33,
-      "blankLines": 41,
-      "lines": 307,
+      "blankLines": 42,
+      "lines": 329,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -683,7 +683,7 @@
     "test/gates-needhuman-evidence.test.js": {
       "asserts": 47,
       "blankLines": 28,
-      "lines": 339,
+      "lines": 345,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -801,9 +801,9 @@
       "todos": 0
     },
     "test/governance-preset-loader.test.js": {
-      "asserts": 78,
-      "blankLines": 25,
-      "lines": 271,
+      "asserts": 71,
+      "blankLines": 26,
+      "lines": 308,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -817,9 +817,9 @@
       "todos": 0
     },
     "test/governance-receipt-anchor.test.js": {
-      "asserts": 47,
+      "asserts": 49,
       "blankLines": 14,
-      "lines": 190,
+      "lines": 203,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -843,7 +843,7 @@
     "test/governance-wiring.test.js": {
       "asserts": 77,
       "blankLines": 22,
-      "lines": 352,
+      "lines": 373,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -929,9 +929,9 @@
       "todos": 0
     },
     "test/identity.test.js": {
-      "asserts": 81,
+      "asserts": 82,
       "blankLines": 36,
-      "lines": 257,
+      "lines": 266,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1177,9 +1177,9 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 35,
+      "asserts": 33,
       "blankLines": 23,
-      "lines": 283,
+      "lines": 288,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1193,9 +1193,9 @@
       "todos": 0
     },
     "test/panel-render.test.js": {
-      "asserts": 104,
+      "asserts": 105,
       "blankLines": 50,
-      "lines": 462,
+      "lines": 478,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -1227,7 +1227,7 @@
     "test/preflight-packet.test.js": {
       "asserts": 73,
       "blankLines": 32,
-      "lines": 364,
+      "lines": 368,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1241,9 +1241,9 @@
       "todos": 0
     },
     "test/preset-rules.test.js": {
-      "asserts": 67,
+      "asserts": 70,
       "blankLines": 40,
-      "lines": 405,
+      "lines": 426,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -1545,9 +1545,9 @@
       "todos": 0
     },
     "test/w7f-rt-write-surface.test.js": {
-      "asserts": 74,
+      "asserts": 76,
       "blankLines": 44,
-      "lines": 506,
+      "lines": 524,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T17:36:40Z",
+  "generatedAt": "2026-10-25T18:58:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-guidance-teams-20261025：P1-1 七角色默认能力面 + P1-2 §15.21 条目形态 + P2-1 门事件 lane 快照 + G-1 cutoff 参数化（含 Q-2 注入面卫生）+ E-2 调研",
+  "reason": "punky-test-quantity-20261025：数量断言治理（A 类规模等值 + E-坏量快照 + D 假绿 + 零断言；八型分类法 + 三档判据）",
   "schema": 1,
   "totals": {
-    "asserts": 10812,
-    "blankLines": 5707,
+    "asserts": 10837,
+    "blankLines": 5717,
     "files": 208,
-    "lines": 60709,
+    "lines": 61119,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

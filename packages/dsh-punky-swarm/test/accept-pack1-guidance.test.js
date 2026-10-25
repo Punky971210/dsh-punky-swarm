@@ -196,13 +196,26 @@ test('AC-pack1-3 正文 `## §` 小节总数 = 32', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-4 判据全绿（含 ②b）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-4 `check-guidance-sync --no-live` 全绿：exit 0 / 条目 27 / 小节 32 / forward-id 失败 0', () => {
+test('AC-pack1-4 `check-guidance-sync --no-live` 全绿：exit 0 / 两侧身份集合一一对应 / forward-id 失败 0', () => {
   // 失败条件：三节任一缺失（②b 报 forward-id）、正文小节数与注入面不对称（③ 报 reverse）、
   //           或脚本自身回归（退出码非 0）。这是 pack1 的**唯一收口读数**（AC-1 的 GREEN 侧）。
   const r = runScriptJson(['--no-live']);
   assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
-  assert.equal(r.doc.inlineEntries, 27, '注入面条目须 = 27');
-  assert.equal(r.doc.bodySections, 32, '正文 §小节须 = 32');
+  // 结构自洽：脚本回显的规模 == 本件**独立解析**的规模（单一真源 vs 独立解析，防解析口径漂移）。
+  //   此处**不写死常数**：合法增长（加一节 `## §X` 且加对应注入面条目）不该打红。
+  const faceIds = inlineEntriesOf(readRel(GUIDANCE_REL)).map((e) => e.id);
+  const bodyIds = [...readRel(DISCIPLINE_REL).matchAll(/^## §([0-9]+[a-z]?)\s/gm)].map((m) => m[1]);
+  assert.equal(r.doc.inlineEntries, faceIds.length, `脚本条目数须与本件独立解析一致（本地 ${faceIds.length}）`);
+  assert.equal(r.doc.bodySections, bodyIds.length, `脚本小节数须与本件独立解析一致（本地 ${bodyIds.length}）`);
+  // 承重判据 = **身份集合一一对应**（不是规模相等）：双向差集各自为空。
+  //   白名单取脚本回显的 `detailOnly`（不硬编码）⇒ 详情面增减也不假红。
+  const detailOnly = new Set(r.doc.detailOnly ?? []);
+  const faceSet = new Set(faceIds);
+  const bodySet = new Set(bodyIds);
+  const dangling = [...faceSet].filter((id) => !bodySet.has(id)).sort();
+  const uncovered = [...bodySet].filter((id) => !faceSet.has(id) && !detailOnly.has(id)).sort();
+  assert.deepEqual(dangling, [], '注入面条目缺正文小节（②b），缺 = ' + JSON.stringify(dangling));
+  assert.deepEqual(uncovered, [], '正文小节未进注入面且非详情面白名单（③），多 = ' + JSON.stringify(uncovered));
   const byCheck = (name) => (r.doc.failures ?? []).filter((f) => f.check === name);
   assert.deepEqual(byCheck('forward-id'), [], 'forward-id（②b）失败数须 = 0');
   assert.equal(r.doc.ok, true, 'ok 须为 true；failures=' + JSON.stringify(r.doc.failures));
@@ -274,10 +287,12 @@ test('AC-pack1-5c 负例 N3：向注入面注入一条无正文小节的条目 �
   lines.splice(idx + 1, 0, `${indent}0z. 验收套件负例注入条目：该条仅有注入面、无正文小节 §0z。`);
   fs.writeFileSync(gRel, lines.join('\n'), 'utf8');
 
+  const baseN = inlineEntriesOf(readRel(GUIDANCE_REL)).length;   // 基线由本地解析**原仓**注入面得出（零常数）
   const r = runScriptJson(['--no-live'], root);
   assert.ok(r.doc, 'no JSON：' + r.stderr.slice(0, 400));
   const fwd = (r.doc.failures ?? []).filter((f) => f.check === 'forward-id');
-  assert.equal(r.doc.inlineEntries, 28, '注入面条目数须随注入变为 28（证明构造生效）');
+  // 同源构造差值（形态四）：注入 1 条 ⇒ 恰「基线 + 1」。不写死任何绝对值。
+  assert.equal(r.doc.inlineEntries, baseN + 1, `注入后面目数须 = 基线 ${baseN} + 1（证明构造生效）`);
   assert.equal(fwd.length, 1, 'forward-id 须恰 1 条，实测 ' + fwd.length + '：' + JSON.stringify(fwd));
   assert.match(fwd[0].detail, /0z/, 'detail 须点名注入的条目 0z：' + fwd[0].detail);
   assert.equal(r.status, 1, 'exit 须 = 1');
@@ -347,14 +362,17 @@ test('AC-pack1-8 脚本头注 = 「五条判据」、旧「四条判据」清零
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-9 R-06 数值订正（26 → 27）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-9 R-06：注释「放宽得 27 条」在场、「26 条」清零，且实测 inlineEntries = 27', () => {
-  // 失败条件：注释仍写 26（陈述值与实测不符）/ 无 27 表述 / 实测条目数与 27 不符。
+test('AC-pack1-9 R-06：脚本注释**陈述的条目数**须与实测一致（陈述值可解析，不写死常数）', () => {
+  // 失败条件：脚本注释里没有「放宽得 N 条」形式的陈述 / 陈述的 N 与实测条目数不符
+  //   （= 陈述值与现实脱节，后续读者被误导）。
+  //   原写法把 27 写死两处（注释文本「27 条」+ 实测 `=== 27`）⇒ 合法增长时两侧要一起改，是假红源；
+  //   「26 条清零」那条也被本判据完全覆盖（陈述≠实测时会红），故一并删除（零断言）。
   const src = readRel(SCRIPT_REL);
-  assert.ok((src.match(/放宽得 27 条/g) ?? []).length >= 1, '须出现「放宽得 27 条」≥1');
-  assert.equal((src.match(/放宽得 26 条/g) ?? []).length, 0, '旧「放宽得 26 条」须 = 0');
+  const stated = src.match(/放宽得 (\d+) 条/);
+  assert.ok(stated, '脚本注释须含「放宽得 N 条」形式的条目数陈述（R-06）');
   const r = runScriptJson(['--no-live']);
   assert.ok(r.doc, 'no JSON：' + r.stderr.slice(0, 300));
-  assert.equal(r.doc.inlineEntries, 27, '实测 inlineEntries 须 = 27');
+  assert.equal(r.doc.inlineEntries, Number(stated[1]), `注释陈述的条目数（${stated[1]}）须与实测一致`);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

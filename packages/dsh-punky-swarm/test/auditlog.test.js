@@ -271,8 +271,8 @@ test('T-C10 聚合键：sha256(level ⊕ name ⊕ msg) 前 16 位 hex（与独�
     .update(level + '\u0000' + name + '\u0000' + msg, 'utf8').digest('hex').slice(0, 16);
   const got = aggregateKey('warn', 'dsh-punky-swarm', 'boom');
   assert.equal(got, expect('warn', 'dsh-punky-swarm', 'boom'), '与独立复算逐字相同（实际: ' + got + ' vs ' + expect('warn', 'dsh-punky-swarm', 'boom') + '）');
-  assert.equal(got.length, 16, '取 16 位 hex（实际: ' + got.length + '）');
-  assert.match(got, /^[0-9a-f]{16}$/, '全小写 hex');
+  // 长度契约（16）不单独断：下行正则 `/^[0-9a-f]{16}$/` 蕴含 length === 16 且额外锁 charset ⇒ 原 `assert.equal(got.length, 16, …)` 属零断言，已删。
+  assert.match(got, /^[0-9a-f]{16}$/, '全小写 hex 且**恰 16 位**（长度契约由本正则表达；原独立 length 断言已删＝零断言；契约源 lib/auditlog/sink.js:371 `.slice(0, 16)`）');
   // 稳定性：同三元组 → 同键（与 ts/sn/pid 无关——函数签名即只吃这三项）
   assert.equal(aggregateKey('warn', 'n', 'm'), aggregateKey('warn', 'n', 'm'), '确定函数：同输入同输出');
   // 敏感性：三字段各自变化都换键

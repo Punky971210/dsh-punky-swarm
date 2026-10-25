@@ -229,7 +229,7 @@ const WORD_KEYS_NEW7_10 = [
 ];
 const WORD_KEYS_KEEP = ['lanes', 'events'];
 
-test('T-W1 换词表 19 键：17 个改动/新增键 zh/en 各恰 1 次（hits === 2）；2 个保持键按值命中', () => {
+test('T-W1 换词表：改动/新增键 zh/en 各恰 1 次（hits === 2）；保持键按值命中；两段不相交', () => {
   const seg = segmentOf(client, 'locales');
   for (const k of WORD_KEYS_NEW7_10) {
     const hits = seg.split('"' + k + '"').length - 1;
@@ -240,7 +240,16 @@ test('T-W1 换词表 19 键：17 个改动/新增键 zh/en 各恰 1 次（hits =
   for (const k of WORD_KEYS_KEEP) {
     assert.ok(LOC.zh[k] && LOC.en[k], k + ' zh/en 值缺失');
   }
-  assert.equal(WORD_KEYS_NEW7_10.length + WORD_KEYS_KEEP.length, 19);
+  // 组合算术两条（规格 §方案 3；缺一即假绿）——替代 `A.length + B.length === 19`：
+  //   ② 显式不相交：同一键不得既算「改动/新增」又算「保持」
+  const wordOverlap = WORD_KEYS_NEW7_10.filter((k) => WORD_KEYS_KEEP.includes(k));
+  assert.deepEqual(wordOverlap, [],
+    '换词表两段须不相交（A∩B=∅）：实际重叠 [' + wordOverlap.join(', ') + ']');
+  //   ① 并集集合相等：声明并集 ≡ locales 实际落位并集（差集点名未落位的键）
+  const declaredWordKeys = new Set([...WORD_KEYS_NEW7_10, ...WORD_KEYS_KEEP]);
+  const notLanded = [...declaredWordKeys].filter((k) => !(LOC.zh[k] && LOC.en[k]));
+  assert.deepEqual(notLanded, [],
+    '换词表并集须与 locales 落位身份相等：未落位 [' + notLanded.join(', ') + ']');
   // 关键换词逐条到位（协议值原样 + 中文业务语）
   assert.equal(LOC.zh['stream.fallback'], '实时通道中断，已切 3 秒轮询');
   assert.equal(LOC.zh['batch.release'], '可自动收口');
@@ -376,7 +385,14 @@ test('T-R1 关键数字 ≥18px（Stat 18 / 主行动卡 20 两处字面量在�
 
 test('T-R2 8 态 chip 前/背景对比度 ≥4.5:1（light/dark 各一套，共 16 组）', () => {
   const states = Object.keys(TH.STATE);
-  assert.equal(states.length, 8, '8 态 chip 齐备');
+  // 集合身份相等（规格 §方案 2 形态 1）——替代 `states.length === 8`：
+  // 只断个数时，失败消息只能报「期望 8 实得 7」，**证不出少了哪一态**；断集合则差集直接点名。
+  // 冻结名集 = 面板状态协议值（与引擎 lane 态同源），增删皆属协议变更 ⇒ 应显式改此处而不是让计数静默滑过。
+  const EXPECTED_STATE_KEYS = ['conflict', 'failed', 'idle', 'merged', 'pending', 'review', 'running', 'skipped'];
+  const stateMissing = EXPECTED_STATE_KEYS.filter((k) => !states.includes(k));
+  const stateExtra = states.filter((k) => !EXPECTED_STATE_KEYS.includes(k));
+  assert.deepEqual([stateMissing, stateExtra], [[], []],
+    '8 态 chip 须集合身份相等：缺 [' + stateMissing.join(', ') + '] 多 [' + stateExtra.join(', ') + ']');
   let min = 99;
   let minLabel = '';
   for (const theme of ['light', 'dark']) {

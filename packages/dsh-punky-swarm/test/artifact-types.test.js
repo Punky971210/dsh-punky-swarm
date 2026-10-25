@@ -65,8 +65,19 @@ const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
 // ① / ② 既有 10 条：键集不变 + 四字段逐字不变
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('① 既有 10 条键集**恒为** {type,dir,layer,desc}（禁形状漂移）', () => {
-  assert.equal(ARTIFACT_TYPES.length, 10);
+test('① 既有条目键集**恒为** {type,dir,layer,desc}（禁形状漂移；类型集用集合自比，不锁条数）', () => {
+  // ── 集合自比（取代 `ARTIFACT_TYPES.length === 10` 的规模快照）────────────────
+  // 注册表类型集 == 回显类型集，且类型名唯一。
+  // ⇒ 合法新增一个产物类型不红（态①）；回显漏一类 / 重名必红，且点名缺的那一类（态②）。
+  {
+    const types = ARTIFACT_TYPES.map((t) => t.type);
+    const echoed = artifactTypesView(ARTIFACT_TYPES).map((v) => v.type);
+    const missing = types.filter((t) => !echoed.includes(t));
+    const extra = echoed.filter((t) => !types.includes(t));
+    assert.deepEqual(missing, [], '回显缺类型（点名）：' + JSON.stringify(missing));
+    assert.deepEqual(extra, [], '回显多出类型：' + JSON.stringify(extra));
+    assert.deepEqual(types.filter((t, i) => types.indexOf(t) !== i), [], '类型名须唯一（重复项在此点名）');
+  }
   for (const t of ARTIFACT_TYPES) {
     assert.deepEqual(Object.keys(t), ['type', 'dir', 'layer', 'desc'], t.type + ' 键集漂移');
     assert.equal('elements' in t, false, t.type + ' 不得凭空多 elements');
@@ -114,7 +125,15 @@ test('③ elements 回显是**副本**（读端不得回写注册表）', () => 
 
 test('④ 缺省不声明 ⇒ 回显**不含**两键（既有 10 条键集零漂移）', () => {
   const view = artifactTypesView(ARTIFACT_TYPES);
-  assert.equal(view.length, 10);
+  // 两侧集合相等（取代 `view.length === 10`）：回显类型序列须与注册表**逐项同源**
+  // ⇒ 合法新增类型两侧同变（态①）；回显漏一类 / 顺序错位在此红并点名缺哪类（态②）。
+  {
+    const echoed = view.map((v) => v.type);
+    const registered = ARTIFACT_TYPES.map((t) => t.type);
+    const missing = registered.filter((t) => !echoed.includes(t));
+    assert.deepEqual(missing, [], '回显缺类型（点名）：' + JSON.stringify(missing));
+    assert.deepEqual(echoed, registered, '回显类型序列须与注册表逐项同源');
+  }
   for (const v of view) assert.deepEqual(Object.keys(v), ['type', 'dir', 'layer', 'desc'], v.type + ' 键集漂移');
 });
 
@@ -134,7 +153,15 @@ test('④ 非数组 elements / subsections:null ⇒ 一律按「未声明」处�
 test('⑤ `artifact_types` 工具回显：缺省形态键集不变，且 execute 在场', async () => {
   assert.ok(byName.artifact_types, 'artifact_types 须注册');
   const r = await byName.artifact_types.execute({});
-  assert.equal(r.types.length, 10);
+  // 单一真源比对（取代 `r.types.length === 10`）：工具回显 vs 唯一读端 `artifactTypesView`
+  // ⇒ 合法新增类型两侧同变（态①）；工具面漏一类 / 多一类在此红并点名（态②）。
+  {
+    const viaTool = r.types.map((t) => t.type);
+    const viaView = artifactTypesView(ARTIFACT_TYPES).map((v) => v.type);
+    const missing = viaView.filter((t) => !viaTool.includes(t));
+    assert.deepEqual(missing, [], '工具回显缺类型（点名）：' + JSON.stringify(missing));
+    assert.deepEqual(viaTool, viaView, '工具回显类型序列须与唯一读端同源');
+  }
   for (const t of r.types) assert.deepEqual(Object.keys(t), ['type', 'dir', 'layer', 'desc'], t.type + ' 工具回显键集漂移');
   const retro = r.types.find((t) => t.type === 'retrospective');
   assert.equal(retro.dir, 'audit/');

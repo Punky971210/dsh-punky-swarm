@@ -204,8 +204,11 @@ test('I1-6 收据落盘：temp root → refusals/<sessionId>/<receiptId>.json �
   // 单收据 json
   const dir = path.join(root, 'governance', 'refusals', 'sess-wire');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 1);
   const receipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+  // 数量 → 集合相等且仅该 id：文件名 = `<receiptId>.json`（receiptId 取 randomUUID，不可硬编码）⇒ 期望从收据自身取。
+  // 同时锁「恰一个文件」「无多余收据」「文件名 ↔ 收据内 receiptId 命名契约一致」。
+  assert.deepEqual(files, [receipt.receiptId + '.json'],
+    '收据目录须恰含以该收据自身 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   // 内容四要素：attemptedParams / 裁决（primitive+priority+reason）/ 理由 / ts
   assert.ok(receipt.receiptId, 'receiptId present');
   assert.ok(receipt.ts, 'ts present');
@@ -218,13 +221,13 @@ test('I1-6 收据落盘：temp root → refusals/<sessionId>/<receiptId>.json �
   assert.deepEqual(receipt.ruleRefs, ['R001']);
   // ledger 追加一行
   const ledger = fs.readFileSync(path.join(root, 'governance', 'refusals', 'ledger-sess-wire.jsonl'), 'utf8');
-  const lines = ledger.trim().split('\n');
-  assert.equal(lines.length, 1);
-  assert.equal(JSON.parse(lines[0]).receiptId, receipt.receiptId);
+  const ledgerLines = ledger.trim().split('\n');
+  // 数量 → 集合身份：ledger 各行的 receiptId 集须恰为 [本收据 id]（`length===1` 既证不出是哪一条、也不防多写一行）
+  assert.deepEqual(ledgerLines.map((l) => JSON.parse(l).receiptId), [receipt.receiptId],
+    'ledger 须恰含该收据的一行（漏写/多写均拒绝）');
   // readRefusals 读回字段一致
   const back = readRefusals(root, 'sess-wire');
-  assert.equal(back.length, 1);
-  assert.equal(back[0].receiptId, receipt.receiptId);
+  assert.deepEqual(back.map((r) => r.receiptId), [receipt.receiptId], 'readRefusals 读回的收据集须恰为该收据');
   assert.equal(back[0].decision.primitive, 'DENY');
   hook.dispose();
 });
@@ -304,33 +307,46 @@ test('W-N1 NARROW pre chain: deny + reason guidance + receipt narrowedParams rou
   // 收据落盘 + narrowedParams 字段 + 读回一致
   const dir = path.join(root, 'governance', 'refusals', 'sess-wire');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 1);
   const receipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+  // 数量 → 集合相等且仅该 id（同 W-N 首处：文件名由 randomUUID 决定，期望从收据自身取）
+  assert.deepEqual(files, [receipt.receiptId + '.json'],
+    '收据目录须恰含以该收据自身 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   assert.equal(receipt.decision.primitive, 'NARROW');
   assert.ok(receipt.narrowedParams, 'receipt carries narrowedParams');
   assert.equal(receipt.narrowedParams.narrowed.timeout, 100, 'clamped value persisted');
   assert.deepEqual(receipt.narrowedParams.clamped, [{ path: '/timeout', from: 150, to: 100 }]);
   const back = readRefusals(root, 'sess-wire');
-  assert.equal(back.length, 1);
+  assert.deepEqual(back.map((r) => r.receiptId), [receipt.receiptId], 'readRefusals 读回的收据集须恰为该收据');
   assert.deepEqual(back[0].narrowedParams, receipt.narrowedParams, 'read-back narrowedParams identical');
   hook.dispose();
 });
 
-// W-N2 收据扩展后字段断言：narrowedParams 收据 = 9 键（8 基础 + 1 扩展）；旧 8 键收据（无 narrowedParams）读回不炸（向后兼容）
-test('W-N2 extended receipt: 9 keys with narrowedParams; legacy 8-key receipt reads back fine', async () => {
+// W-N2 收据扩展后字段断言：narrowedParams 收据 = 10 键（8 基础 + narrowedParams + anchor）；旧 8 键收据（无 narrowedParams）读回不炸（向后兼容）
+test('W-N2 extended receipt: 10 keys (8 base + narrowedParams + anchor); legacy 8-key receipt reads back fine', async () => {
   const ctx = fakeCtx();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gov-narrow2-'));
-  // NARROW 收据 → 9 键（含 narrowedParams）
+  // NARROW 收据 → 10 键（含 narrowedParams + anchor）
   const hook = installGovernanceHook(ctx, { store: null, root, config: NARROW_CFG });
   const pre = ctx.listeners.get('tools/pre-execute');
   await pre(execOf('bash', { timeout: 150 }), async () => ({ kind: 'allow' }));
   const dir = path.join(root, 'governance', 'refusals', 'sess-wire');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 1);
   const extended = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+  // 数量 → 集合相等且仅该 id：`files.length === 1` 只证「没多」，证不出「是哪一条」。
+  // 文件名 = `<receiptId>.json`，而 receiptId 取 `crypto.randomUUID()`（不可硬编码）⇒ 期望值**从收据自身取**。
+  // 于是本行同时锁三件事：① 目录恰一个文件 ② 无多余收据 ③ **文件名 ↔ 收据内 receiptId 命名契约一致**。
+  assert.deepEqual(files, [extended.receiptId + '.json'],
+    '收据目录须恰含「以该收据自身 receiptId 命名」的唯一文件（实际: [' + files.join(', ') + ']）');
   assert.ok(Object.prototype.hasOwnProperty.call(extended, 'narrowedParams'), 'narrowedParams key present');
   assert.ok(Object.prototype.hasOwnProperty.call(extended, 'anchor'), 'P2: anchor key present (writeRefusal 锚定)');
-  assert.equal(Object.keys(extended).length, 10, '8 base keys + narrowedParams + anchor');
+  // 组合算术（8 base + narrowedParams + anchor = 10）正解两条，缺一即假绿：
+  //   ① 并集集合相等  ② 显式 A ∩ B = ∅（若扩展键本就属于基础 8 键，并集不会增长而集合照样相等）
+  const BASE_KEYS = ['receiptId', 'ts', 'tool', 'callId', 'sessionId', 'decision', 'attemptedParams', 'ruleRefs'];
+  const EXT_KEYS = ['narrowedParams', 'anchor'];
+  assert.deepEqual(Object.keys(extended).sort(), [...BASE_KEYS, ...EXT_KEYS].sort(),
+    '收据键集须恰为 8 基础键 + narrowedParams + anchor（缺键/多键均拒绝）');
+  assert.deepEqual(BASE_KEYS.filter((k) => EXT_KEYS.includes(k)), [],
+    '扩展键不得与基础 8 键重叠（A∩B=∅；重叠时「并集集合相等」在总数变少时仍假绿）');
   // 模拟旧收据（无 narrowedParams，8 键）手动落盘 → readRefusals 不炸（旧收据兼容）
   const legacy = {
     receiptId: 'legacy-0001',
@@ -344,7 +360,12 @@ test('W-N2 extended receipt: 9 keys with narrowedParams; legacy 8-key receipt re
   };
   fs.writeFileSync(path.join(dir, 'legacy-0001.json'), JSON.stringify(legacy, null, 2), 'utf8');
   const back = readRefusals(root, 'sess-wire');
-  assert.equal(back.length, 2, 'legacy + extended both readable');
+  // 组合算术（1 legacy + 1 extended = 2）正解两条，缺一即假绿：
+  //   ① 并集集合相等  ② 显式不相交（同一 id 被读两次时总数变少而集合照样相等）
+  const backIds = back.map((r) => r.receiptId);
+  assert.deepEqual([...backIds].sort(), [extended.receiptId, 'legacy-0001'].sort(),
+    'legacy + extended 两件都须可读，且无多余收据（实际: [' + backIds.join(', ') + ']）');
+  assert.deepEqual(backIds.filter((id, i, a) => a.indexOf(id) !== i), [], '两收据 id 不得重复（A∩B=∅）');
   const legacyBack = back.find((r) => r.receiptId === 'legacy-0001');
   assert.equal(legacyBack.narrowedParams, undefined, 'legacy receipt has no narrowedParams field (compat)');
   hook.dispose();

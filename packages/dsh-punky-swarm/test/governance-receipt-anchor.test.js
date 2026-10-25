@@ -101,7 +101,9 @@ test('H3 canonical determinism: same object twice same; key order independent; h
   const shuffled = { a: obj.a, b: obj.b };
   assert.equal(canonicalize(reordered), canonicalize(shuffled), '键插入序不影响 canonical');
   assert.equal(canonicalize({ x: 1, y: undefined }), canonicalize({ x: 1 }), 'undefined 键跳过（对齐 JSON.stringify）');
-  assert.equal(sha256Hex('abc').length, 64);
+  // 保留（不改数量形态）：`sha256Hex` 的输出长度是**算法契约常量**（hex 摘要定长 64 字符），
+  // 与「对象规模快照」不同——它不随语料增长而变、无假红风险，改成存在性断言反而更弱（丢掉「定长」这条契约）。
+  assert.equal(sha256Hex('abc').length, 64, 'sha256 hex 摘要定长 64 字符（算法契约，非规模快照）');
   // hash 覆盖除 anchor 外全部字段（含 prevHash）：改 prevHash → hash 变；anchor 自身字段不参与
   const base = receiptOf('h3-r1', '2026-08-31T00:00:00.000Z');
   const hNull = hashContent(base, null);
@@ -159,12 +161,23 @@ test('H5 legacy receipt without anchor: readRefusals fine, verify skips legacy (
   writeRefusal(root, receiptOf('h5-r2', '2026-08-31T00:00:01.000Z'));
   // readRefusals 全读回（含旧收据，不炸）
   const all = readRefusals(root, 'sess-h');
-  assert.equal(all.length, 3);
+  // 数量 → 集合身份：读回 id 集须恰为「1 旧 + 2 新」（三件都按 id 点名，不漏不多）
+  assert.deepEqual(all.map((r) => r.receiptId).sort(), ['h5-legacy', 'h5-r1', 'h5-r2'].sort(),
+    'readRefusals 须读回 legacy + r1 + r2 三件（实际: [' + all.map((r) => r.receiptId).join(', ') + ']）');
   assert.ok(all.some((r) => r.receiptId === 'h5-legacy' && r.anchor === undefined), 'legacy 读回无 anchor');
   // verify：legacy 不参与链（anchored=false），链从首个锚定收据起（h5-r1 prevHash=null），整体 ok
   const vr = verifyRefusals(root, 'sess-h');
   assert.equal(vr.ok, true, '旧收据混入不破坏链校验');
-  assert.equal(vr.count, 2, '仅锚定收据计入链');
+  // 数量 → 集合身份（替代 `vr.count === 2`）：`vr.receipts` 含全部收据（旧收据以 anchored:false 在场），
+  // `vr.count` 只数 anchored。故按 **anchored 子集** 断言「谁在链内」、按 **非 anchored 子集** 断言「谁被排除」——
+  // 这比 `count===2` 更强：既锁链内身份，也锁旧收据仍被列出且明确不入链。
+  const anchoredIds = vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).sort();
+  const unanchoredIds = vr.receipts.filter((x) => !x.anchored).map((x) => x.receiptId);
+  assert.deepEqual(anchoredIds, ['h5-r1', 'h5-r2'].sort(),
+    '链内（anchored=true）须恰为两个锚定收据（实际: [' + anchoredIds.join(', ') + ']）');
+  assert.deepEqual(unanchoredIds, ['h5-legacy'],
+    '旧收据须在场但标 anchored=false（实际: [' + unanchoredIds.join(', ') + ']）');
+  assert.equal(vr.count, anchoredIds.length, 'count 须等于 anchored 条目数（不得把旧收据计入链）');
   const legacyEntry = vr.receipts.find((x) => x.receiptId === 'h5-legacy');
   assert.equal(legacyEntry.anchored, false);
   assert.equal(legacyEntry.ok, true);

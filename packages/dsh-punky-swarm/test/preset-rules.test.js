@@ -59,8 +59,14 @@ test('P-1 结构：wrapper{_meta,rules} + 条数 12/6（l1/l2 各自契约）', 
     assert.ok(p._meta.notes && typeof p._meta.notes === 'object');
     assert.equal(typeof p._meta.boundary, 'string');
   }
-  assert.equal(L1.rules.length, 12);
-  assert.equal(L2.rules.length, 6);
+  // 棘轮下界（只许增不许减）：12 / 6 = `eee056a feat(governance): preset rule packs` 确立的初始条数，
+  // 与各自 `_meta.ruleCount` 声明一致。preset **合法新增**规则时本下界随之上抬；
+  // 勿改回 `=== 12`：那会把「合法增长」变成假红（本批正是来消这个假红源）。
+  assert.ok(L1.rules.length >= 12, 'l1-sensitive 规则数不得低于 12（棘轮：preset 只许增不许减）');
+  assert.ok(L2.rules.length >= 6, 'l2-resource 规则数不得低于 6（棘轮：preset 只许增不许减）');
+  // 唯一性（棘轮证不出这一条）：文件内 id 不得重复——重复会让「按 id 消费」的引擎静默只取其一
+  assert.deepEqual(L1.rules.map((r) => r.id).filter((id, i, a) => a.indexOf(id) !== i), [], 'l1-sensitive 内 id 不得重复');
+  assert.deepEqual(L2.rules.map((r) => r.id).filter((id, i, a) => a.indexOf(id) !== i), [], 'l2-resource 内 id 不得重复');
   assert.equal(L1._meta.presetId, 'l1-sensitive');
   assert.equal(L2._meta.presetId, 'l2-resource');
 });
@@ -73,7 +79,8 @@ test('P-1b 结构：l3-tool-ban wrapper{_meta,toolBan} 1 条目（条目零扩�
   assert.equal(L3._meta.kind, 'tool-ban');
   assert.equal(typeof L3._meta.source, 'string', '来源编号红线：preset 登记来源');
   assert.ok(Array.isArray(L3.toolBan), 'toolBan 数组存在');
-  assert.equal(L3.toolBan.length, 1);
+  // 数量 → 集合相等且仅该 id：`length===1` 只证「没多」、证不出「是哪一条」（唯一那条被换成别的错的仍绿）。
+  assert.deepEqual(L3.toolBan.map((x) => x.id), ['L3-W01'], 'L3 黑名单条目集须恰为 [L3-W01]（身份 + 无多余）');
   assert.equal(L3.rules, undefined, 'L3 文件不产生参数规则（rules 面缺省）');
   const e = L3.toolBan[0];
   assert.equal(e.id, 'L3-W01');
@@ -138,15 +145,24 @@ test('P-2 形状：18 条逐条对齐 Rule/Violation/match/narrow 契约', () =>
       assert.deepEqual(errs, [], `形状校验失败: ${errs.join(' | ')}`);
     }
   }
-  assert.equal(all.length, 18);
+  // 跨文件唯一性（组合算术的第二半）：l1 与 l2 的 id 不得撞车——撞车时合计条数虚低，而「按 id 去重」仍相等。
+  assert.deepEqual(all.map((r) => r.id).filter((id, i, a) => a.indexOf(id) !== i), [],
+    'l1 ∪ l2 的 id 不得重复（跨文件撞车会让合计条数虚低）');
+  // 棘轮下界（只许增不许减）：18 = l1(12) + l2(6)，与两文件 `_meta.ruleCount` 之和一致；合法新增时抬高此下界。
+  assert.ok(all.length >= 18, 'l1+l2 规则数不得低于 18（棘轮：preset 只许增不许减）');
 });
 
 test('P-2b 正则可编译 + hard/manual/narrowable 档分布符合设计', () => {
   const l1D = L1.rules.filter((r) => r.violations.some((v) => v.category === 'hard'));
   const l1A = L1.rules.filter((r) => r.violations.some((v) => v.category === 'manual_review'));
-  assert.equal(l1D.length, 5); // L1-D01~D04/D09
-  assert.equal(l1A.length, 7); // L1-A05~A08/A10~A12
-  assert.equal(L2.rules.filter((r) => r.violations.every((v) => v.category === 'narrowable')).length, 6);
+  assert.equal(l1D.length, 5); // L1-D01~D04/D09（E-可留：LHS 含 filter 具名谓词，断的是档分布）
+  assert.equal(l1A.length, 7); // L1-A05~A08/A10~A12（同上）
+  // 数量 → 「无例外」断言：原 `filter(...).length === 6` 的 6 恒等于 L2 规则总数（换个措辞的数长度），
+  // 且只报「少了」不点名是谁 ⇒ 改为「非 narrowable 的规则集为空」，失败时直接列出犯规 id。
+  assert.deepEqual(
+    L2.rules.filter((r) => !r.violations.every((v) => v.category === 'narrowable')).map((r) => r.id), [],
+    'L2 全部规则的 violations 必须都是 narrowable（列出犯规 id）'
+  );
   // L2 全部规则必须带 narrow max 指引
   for (const r of L2.rules) {
     assert.ok(Array.isArray(r.narrow) && r.narrow.length >= 1 && typeof r.narrow[0].max === 'number');
@@ -390,7 +406,12 @@ test('V9 README 逐条审阅清单：表条目标识集 == l1-sensitive 12 ∪ l
     if (m) tableIds.push(m[1]);
   }
   const expected = [...L1.rules, ...L2.rules, ...L3.toolBan, ...L5.toolBan].map((r) => r.id).sort();
-  assert.equal(tableIds.length, 22, '逐条表恰 22 行（L1 12 + L2 6 + L3 1 + L5 3，四类判定面全覆盖）');
+  // 数量 → 两条并存（不可只留一条）：
+  //   ① 无重复行：原 `tableIds.length === 22` 的真正职能是「防重复行」，而下一行用 `new Set` 去重后**看不见重复**
+  //      ⇒ 去重集合相等在「多写了重复行」时仍绿（规格 §3 那类假绿）。故显式断「无重复 id」。
+  //   ② 集合身份相等（下一行）：README 表 id 集 == 四文件 id 集，漏行/超集/改 id 均拒绝。
+  //   ⇒ ①+② 合起来把「恰好这么多行」锁住，**且不再需要魔数 22**（合法新增一条规则时两断言随源文件同步变绿）。
+  assert.deepEqual(tableIds.filter((id, i, a) => a.indexOf(id) !== i), [], 'README 逐条表不得出现重复 id 行（重复行/漏行都拒绝）');
   assert.deepEqual([...new Set(tableIds)].sort(), expected,
     'README 逐条表条目标识集须与 l1/l2/l3 JSON 完全一致（漏行/超集/改 id 均拒绝）');
   // 表头字段契约（rule id / preset 归属 / … / violation message）在档（用户可逐条审阅的载体存在）

@@ -69,9 +69,13 @@ test('runCommand：空命令 → GATE_EXIT_NO_COMMAND', () => {
 });
 
 test('runCommand：输出截断（maxOutputBytes 生效，truncated 标记）', () => {
-  const r = runCommand({ command: 'node -e "process.stdout.write(\'x\'.repeat(100))"', timeoutMs: 5000, retries: 0, maxOutputBytes: 10 });
+  const MAX_OUT = 10;
+  const r = runCommand({ command: 'node -e "process.stdout.write(\'x\'.repeat(100))"', timeoutMs: 5000, retries: 0, maxOutputBytes: MAX_OUT });
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(r.output.length, 10);
+  // 单一真源：截断长度 == 入参 maxOutputBytes（不再与字面量 10 双写；入参改了断言自动跟随）
+  assert.equal(r.output.length, MAX_OUT, '截断长度须等于入参 maxOutputBytes=' + MAX_OUT);
+  // 内容身份相等：不只知道「长度对」，还知道「是哪几个字节」（长度对而内容错仍能抓）
+  assert.equal(r.output, 'x'.repeat(MAX_OUT), '截断内容须为前 ' + MAX_OUT + ' 字节');
   assert.equal(r.truncated, true);
 });
 
@@ -109,20 +113,31 @@ test('matchesForbidden：默认黑名单覆盖破坏性/部署类命令', () => 
 
 test('truncateOutput：短输出不截断，长输出截断', () => {
   assert.deepEqual(truncateOutput('abc', 10), { output: 'abc', truncated: false });
-  const r = truncateOutput('x'.repeat(100), 8);
-  assert.equal(r.output.length, 8);
+  const LIMIT = 8;
+  const r = truncateOutput('x'.repeat(100), LIMIT);
+  // 单一真源：长度 == 入参 limit（不再与字面量 8 双写）
+  assert.equal(r.output.length, LIMIT, '截断长度须等于入参 limit=' + LIMIT);
+  // 内容身份相等（长度对而内容错仍能抓）
+  assert.equal(r.output, 'x'.repeat(LIMIT), '截断内容须为前 ' + LIMIT + ' 字节');
   assert.equal(r.truncated, true);
 });
 
 // ---- Tester 全量补充：V10 默认 8192B 截断 / V11 cwd 自控 / 黑名单覆盖度评估 ----
 
 test('runCommand：默认输出截断 8192B 生效（GATE_MAX_OUTPUT_BYTES 未设时）', () => {
+  // 字节数**本身即契约**（规格 §方案 4 ③）：lib/state/command-exec.js:212 的缺省值
+  // `envNumber('GATE_MAX_OUTPUT_BYTES', 8192)` **未导出常量**，且本批禁改 lib/** ⇒ 无法派生。
+  // 处置 = 保留该契约值 + 登记理由 + 加强为内容身份相等（长度对而内容错仍能抓）。
+  const LIB_DEFAULT_MAX_OUTPUT_BYTES = 8192;
   const prev = process.env.GATE_MAX_OUTPUT_BYTES;
   delete process.env.GATE_MAX_OUTPUT_BYTES;
   try {
     const r = runCommand({ command: 'node -e "process.stdout.write(\'x\'.repeat(9000))"', timeoutMs: 5000, retries: 0 });
     assert.equal(r.ok, true, JSON.stringify(r));
-    assert.equal(r.output.length, 8192, 'expect default 8192 bytes');
+    assert.equal(r.output.length, LIB_DEFAULT_MAX_OUTPUT_BYTES,
+      '缺省上限须生效=' + LIB_DEFAULT_MAX_OUTPUT_BYTES + ' bytes');
+    assert.equal(r.output, 'x'.repeat(LIB_DEFAULT_MAX_OUTPUT_BYTES),
+      '截断内容须为前 ' + LIB_DEFAULT_MAX_OUTPUT_BYTES + ' 字节');
     assert.equal(r.truncated, true);
   } finally {
     if (prev !== undefined) process.env.GATE_MAX_OUTPUT_BYTES = prev;

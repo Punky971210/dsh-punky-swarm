@@ -55,9 +55,21 @@ function makeService(config = {}, extra = {}) {
 }
 
 // ── schema 校验 ──
-test('QUERY_TYPES / FILTER_OPERATORS 与参考实现对齐（4 类型 / 34 运算符）', () => {
+test('QUERY_TYPES / FILTER_OPERATORS 与参考实现对齐（4 类型 / 运算符集只增不缩）', () => {
   assert.deepEqual(QUERY_TYPES, ['explicit', 'exploratory', 'trending', 'filtered']);
-  assert.equal(FILTER_OPERATORS.length, 34);
+  // ── 单调棘轮 + 唯一性（取代 `FILTER_OPERATORS.length === 34`）──────────────
+  // 运算符集是「参考实现并集」：**新增运算符是合法演进**（态① 不红）；删任一个必红并点名（态②）。
+  {
+    const baseline = ('eq ne exists gt gte lt lte between in nin contains notContains startsWith endsWith '
+      + 'eqCs neCs inCs ninCs containsCs notContainsCs startsWithCs endsWithCs '
+      + 'anyOf allOf noneOf size sizeGt sizeGte sizeLt sizeLte '
+      + 'hasKey hasNoKey hasAnyKey hasAllKeys').split(' ');
+    const ops = new Set(FILTER_OPERATORS);
+    const shrunk = baseline.filter((op) => !ops.has(op));
+    assert.deepEqual(shrunk, [], '运算符集不得缩减（点名缺失）：' + JSON.stringify(shrunk));
+    assert.deepEqual(FILTER_OPERATORS.filter((op, i) => FILTER_OPERATORS.indexOf(op) !== i), [],
+      '运算符名须唯一（重复项在此点名）');
+  }
   for (const op of ['eq', 'ne', 'exists', 'contains', 'in', 'anyOf', 'hasKey', 'size', 'startsWithCs']) {
     assert.ok(FILTER_OPERATORS.includes(op), '缺运算符 ' + op);
   }
@@ -265,7 +277,10 @@ test('well-known：声明发现服务地址/协议版本/能力概要', () => {
   assert.equal(w.service, 'dsh-punky-swarm');
   assert.equal(w.discovery.endpoint, '/api/dsh-punky-swarm/discover');
   assert.deepEqual(w.capabilities.queryTypes, QUERY_TYPES);
-  assert.equal(w.capabilities.filterOperators.length, 34);
+  // 单一真源比对（取代 `w.capabilities.filterOperators.length === 34`）：
+  //   能力面回显须与 `FILTER_OPERATORS` 导出**逐项同源**（合法新增两侧同变；漏回显在此红）
+  assert.deepEqual(w.capabilities.filterOperators, FILTER_OPERATORS,
+    '能力面 filterOperators 须与 FILTER_OPERATORS 逐项同源（实测 ' + JSON.stringify(w.capabilities.filterOperators) + '）');
   assert.ok(typeof w.updatedAt === 'string');
 });
 
@@ -286,15 +301,26 @@ function invoke(route, url, body) {
   return { status, body: body2 };
 }
 
-test('端点：discovery 注入时注册 /discover + /.well-known/aip（既有 6 路由不破坏）', () => {
+test('端点：discovery 注入时注册 /discover + /.well-known/aip（既有路由只增不损）', () => {
   const svc = makeService();
   const { routes } = apiWithDiscovery(svc);
   assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/discover'), '/discover 已注册');
   assert.ok(routes.some((r) => r.path === '/.well-known/aip'), '/.well-known/aip 已注册');
-  assert.equal(routes.length, 9, '7 既有（R3 exec-panel-b：+1 /stream）+ 2 新增');
-  // 未注入 discovery → 不注册（既有契约保持）
-  const { routes: r2 } = apiWithDiscovery(null);
-  assert.equal(r2.length, 7);
+
+  // ── 同源构造差值（取代 `routes.length === 9` 与 `r2.length === 7` 两条同型魔数）────
+  // 真判据 = 「注入 discovery 只**多出**这两条、既有路由一条不少」，不是「恰好 9 条」。
+  // ⇒ 合法新增路由不红（态①）；挤掉既有路由 / 漏注册新增在此红并点名（态②）。
+  const { routes: r2 } = apiWithDiscovery(null); // 未注入 discovery ⇒ 既有契约保持
+  const withD = routes.map((r) => r.path).sort();
+  const withoutD = r2.map((r) => r.path).sort();
+  const ADDED = ['/api/dsh-punky-swarm/discover', '/.well-known/aip'];
+  const onlyWith = withD.filter((p) => !withoutD.includes(p)).sort();
+  const onlyWithout = withoutD.filter((p) => !withD.includes(p)).sort();
+  assert.deepEqual(onlyWith, [...ADDED].sort(),
+    '注入 discovery 后**多出**的路由须恰为新增两条（多点/少点均红；实测 ' + JSON.stringify(onlyWith) + '）');
+  assert.deepEqual(onlyWithout, [],
+    '注入 discovery 不得挤掉既有路由（点名丢失）：' + JSON.stringify(onlyWithout));
+  assert.deepEqual(withoutD.filter((p, i) => withoutD.indexOf(p) !== i), [], '未注入时路由路径须唯一（重复项点名）');
 });
 
 test('端点：POST /discover 成功返回 DiscoveryResponse（200）', async () => {

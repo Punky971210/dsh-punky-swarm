@@ -249,7 +249,11 @@ test('AC-P7 `preflight` **不进 `sig`**（同时守住既有 sig 基线零漂�
   };
   const plain = await mk('pf-sig-a', {});
   const withPf = await mk('pf-sig-b', { preflight: FULL });
-  assert.ok(plain.sig && plain.sig.length === 16, '前置：sig 须落盘（16 hex）');
+  // 前置断言（为下一条「preflight 不得参与 sig」服务）：sig 须**真落盘且形态正确**。
+  // 规格 §方案 4 ③：16 位 hex 是**格式契约**（computeTaskSig 固定宽度）⇒ 保留；
+  // 但由 `length === 16` 升级为形态身份 `/^[0-9a-f]{16}$/` —— 旧写法对「16 个非 hex 字符」假绿。
+  assert.match(String(plain.sig), /^[0-9a-f]{16}$/,
+    '前置：sig 须落盘且为 16 位小写 hex（实测 ' + String(plain.sig) + '）');
   assert.equal(withPf.sig, plain.sig, 'preflight 不得参与 sig（喂进 computeTaskSig ⇒ 两值不等 ⇒ 红）');
   // 不进 cmd：两批 e1 的 cmd 逐字相同
   assert.equal(withPf.cmd, plain.cmd, 'preflight 不得进 cmd');

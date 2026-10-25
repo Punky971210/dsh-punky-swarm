@@ -262,15 +262,36 @@ test('AC-pack2-3 双向：词表 gate ⊇ union 且 union ⊇ 词表 gate；K-1 
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-4 底料不含标识符（R-02）：与 p1 §2.4「仅标识符」30 项交集 = 0
+// AC-4 底料不含标识符（R-02）：与「仅标识符」清单交集 = 0（清单自检改为三条不依赖总数的不变量）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-4 词表 code 集 ∩ p1 §2.4「仅标识符」30 项 = ∅', () => {
+test('AC-pack2-4 词表 code 集 ∩「仅标识符」清单 = ∅（清单自检：无重复 / 形态合法 / 判别力 / 下界棘轮 ≥ 30）', () => {
   // 失败条件：任一把标识符/正则名/前缀灌进词表（= 给非码开白，R-02）。
   //   注：本断言在「空词表」时**天然为真**（惰性通过）——空表的非空性由 AC-pack2-3 承担，二者必须同绿。
   const codes = vocabCodes();
-  const hit = IDENTIFIER_ONLY.filter((id) => codes.has(id)).sort();
+  // 交集判定抽成**可喂入任意集合**的函数：既用于真词表，也用于下面的鉴别力自证。
+  const intersect = (set) => IDENTIFIER_ONLY.filter((id) => set.has(id)).sort();
+  const hit = intersect(codes);
   assert.deepEqual(hit, [], `词表含「仅标识符」项（禁）：${JSON.stringify(hit)}`);
-  assert.equal(IDENTIFIER_ONLY.length, 30, 'p1 §2.4 的标识符名单须 30 项（本件抄录完整性自检）');
+
+  // ── 清单自检：原写法是 `IDENTIFIER_ONLY.length === 30`（规模精确等值 —— 它同时咬「少抄」与「合法补项」两件事）。 ──
+  //    现改为「三条不变量 ＋ 一条下界棘轮」并存：不变量兜住重复/形态/判别力，棘轮**只**兜「不得静默少抄」。
+  // ① 无重复：重复项会让交集检查重复计，掩盖真实覆盖
+  const dup = [...new Set(IDENTIFIER_ONLY.filter((id, i, arr) => arr.indexOf(id) !== i))].sort();
+  assert.deepEqual(dup, [], `清单不得有重复项：${JSON.stringify(dup)}`);
+  // ② 形态合法：拼写噪声会让「不在词表」恒真 ⇒ 假绿
+  const malformed = IDENTIFIER_ONLY.filter((id) => !/^GATE_[A-Z0-9_]*$/.test(id));
+  assert.deepEqual(malformed, [], `清单每项须为 \`GATE_[A-Z0-9_]*\` 形态：${JSON.stringify(malformed)}`);
+  // ③ 判别力自证：把清单首项喂进「伪词表」必须被点名。
+  //    ⇒ 若 `intersect` 被改成恒空（判据失效），本条立刻红；也顺带保证清单**非空**。
+  assert.deepEqual(intersect(new Set([IDENTIFIER_ONLY[0]])), [IDENTIFIER_ONLY[0]],
+    '交集检查须能点名被塞入词表的项（否则 AC-pack2-4 恒绿 = 无鉴别力）');
+  // ④ 下界棘轮（单调棘轮）：只锁「不得静默少抄」，允许将来补项。
+  //    **下界来源**：本清单在仓内的唯一载体就是本文件（无第二真源可对齐），其建立时的规模为 **30 项**
+  //    （逐字转录自 recon §2.4 该行，见本件顶部 `IDENTIFIER_ONLY` 的注释）⇒ 以该规模作下界。
+  //    语义：`29 >= 30` 为假 ⇒ **删项必红**；`31 >= 30` 为真 ⇒ 合法补项不红（这正是本件要的「只拆咬合法改动的那一半」）。
+  assert.ok(IDENTIFIER_ONLY.length >= 30,
+    `清单不得少于下界 30 项（现 ${IDENTIFIER_ONLY.length} 项）：本清单是仓内唯一载体，少抄一项会让交集检查静默变弱`);
+  process.stdout.write(`[AC-pack2-4] 清单=${IDENTIFIER_ONLY.length}（下界 30）｜词表命中=${JSON.stringify(hit)}\n`);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

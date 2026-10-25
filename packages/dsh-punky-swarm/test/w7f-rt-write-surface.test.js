@@ -135,7 +135,9 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   const baseObj = baseSeg.slice(baseSeg.indexOf('const base = {'), baseSeg.indexOf('};', baseSeg.indexOf('const base = {')));
   const keys = [...baseObj.matchAll(/([A-Za-z_$][\w$]*)\s*:\s*null/g)].map((m) => m[1]);
   assert.ok(keys.length > 0, '阳性前置：base 字面量须能扫出键（否则「集合相等」空转）');
-  assert.equal(keys.length, 20, 'rt 字段数须恰 20（实测 ' + keys.length + '）');
+  // 【删计数】原 `keys.length === 20` 与下一行**集合相等完全冗余**（同集合必同规模）。
+  //   更强断言 = 下一行 `deepEqual(keys.sort(), RT_FIELDS_20.sort())`：集合身份相等且能点名差集。
+  //   ⇒ 删计数不削弱鉴别力：漏一字段仍由下一行红（态② 已实跑取证）。
   assert.deepEqual([...keys].sort(), [...RT_FIELDS_20].sort(), 'rt 字段集须与冻结 20 项集合相等');
 
   // ② seam 四要素（d1 §5 接口约定硬要求）
@@ -265,8 +267,17 @@ test('T-2b P-8 实例隔离：两次 apply 各自独立 rt，互不影响（一�
   const dB = apply(b.ctx, { root: rootB });
   try {
     // 阳性：两笔装配都写满了 20 字段（各自 sink 独立、互不污染）
-    assert.equal(a.ctx.rtWriteLog.length, 20, 'P-8 阳性：A 实例装配写 20 次（实测 ' + a.ctx.rtWriteLog.length + '）');
-    assert.equal(b.ctx.rtWriteLog.length, 20, 'P-8 阳性：B 实例装配写 20 次（实测 ' + b.ctx.rtWriteLog.length + '）');
+    // ── 假绿修复（超出假红范围但同源）────────────────────────────────────────
+    // 原断「rtWriteLog 恰 20 次」只数条数、不看内容 ⇒「重复写某字段 + 漏写另一字段」时**仍绿**。
+    // 改断「实际写到的字段集 == 冻结 20 项」：漏写字段必红并点名，重复写由 `Set` 归并后仍能判出缺失。
+    const writtenA = [...new Set(a.ctx.rtWriteLog)].sort();
+    const writtenB = [...new Set(b.ctx.rtWriteLog)].sort();
+    const missingA = [...RT_FIELDS_20].filter((f) => !writtenA.includes(f)).sort();
+    const missingB = [...RT_FIELDS_20].filter((f) => !writtenB.includes(f)).sort();
+    assert.deepEqual(missingA, [], 'P-8 阳性：A 实例装配期**未写**的 rt 字段（点名）：' + JSON.stringify(missingA));
+    assert.deepEqual(missingB, [], 'P-8 阳性：B 实例装配期**未写**的 rt 字段（点名）：' + JSON.stringify(missingB));
+    assert.deepEqual(writtenA, [...RT_FIELDS_20].sort(), 'P-8 阳性：A 实例装配写的字段集须 == 冻结 20 项（写「条数」不作判据）');
+    assert.deepEqual(writtenB, [...RT_FIELDS_20].sort(), 'P-8 阳性：B 实例装配写的字段集须 == 冻结 20 项（写「条数」不作判据）');
     takeSeq(a.ctx); takeSeq(b.ctx);
     // 变更 A ⇒ 只有 A 的 sink 增长
     writeRuntimeJson(rootA, { capabilities: { watch: { scanIntervalMinutes: 4 } } });
@@ -442,8 +453,11 @@ test('T-3b boot 对账零写（阳性 = overlay 有差异时必多写）', async
   same.ctx.rtWriteLog = [];
   const dSame = apply(same.ctx, { root: rootSame });
   try {
-    assert.equal(same.ctx.rtWriteLog.length, 20,
-      'boot 对账零写：一致 overlay 下装配写数须恰 20（实测 ' + same.ctx.rtWriteLog.length + '，多于 20 = 对账多写了）');
+    // 同源构造差值（取代字面 20）：真源 = 字段清单规模 ⇒「写数 == 字段数」≡ 每字段恰 1 次 + 对账零额外写
+    // （`:447` 的重复写检查与本行合用即等价于「恰一次/字段」，但不再把 20 写死）
+    assert.equal(same.ctx.rtWriteLog.length, RT_FIELDS_20.length,
+      'boot 对账零写：一致 overlay 下装配写数须 == 字段数 ' + RT_FIELDS_20.length
+      + '（实测 ' + same.ctx.rtWriteLog.length + '；多于字段数 = 对账多写了）');
     const dup = same.ctx.rtWriteLog.filter((k, i, arr) => arr.indexOf(k) !== i);
     assert.deepEqual(dup, [], '装配期每个字段须只写 1 次（实测重复 ' + JSON.stringify(dup) + '）');
   } finally {
@@ -498,7 +512,11 @@ test('T-4b D-1 回归：cordis 式「未声明属性即抛」的 ctx ⇒ 取值�
   writeRuntime(root2, {});
   const d2 = apply(sinkCtx, { root: root2 });
   try {
-    assert.equal(sinkCtx.rtWriteLog.length, 20, '阳性对照：注入 sink 后装配须记录 20 次写（实测 ' + sinkCtx.rtWriteLog.length + '）');
+    // 同源构造差值 + 写集自比（取代字面 20）：注入 sink 后装配须把**每个字段各写 1 次**
+    assert.equal(sinkCtx.rtWriteLog.length, RT_FIELDS_20.length,
+      '阳性对照：注入 sink 后装配写数须 == 字段数 ' + RT_FIELDS_20.length + '（实测 ' + sinkCtx.rtWriteLog.length + '）');
+    assert.deepEqual([...new Set(sinkCtx.rtWriteLog)].sort(), [...RT_FIELDS_20].sort(),
+      '阳性对照：写到的字段集须 == 冻结 20 项（实测 ' + JSON.stringify([...new Set(sinkCtx.rtWriteLog)].sort()) + '）');
   } finally {
     d2();
   }

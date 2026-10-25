@@ -52,6 +52,29 @@ function freshTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-preset-loader-'));
 }
 
+// ── 判据辅助（数量 → 身份/连通性）──
+// 纪律：数量不作为判据本体（规模数字一变就打红，且 length===N 证不出「是哪一条」）。
+// 这里一律锚「id 集合相等」，并在失败时给**双向差集诊断**（缺 [..] / 多 [..]）——失败消息必须点名缺的那一条。
+function idSetDiff(actual, expected) {
+  const a = new Set(actual);
+  const e = new Set(expected);
+  return { missing: [...e].filter((x) => !a.has(x)), extra: [...a].filter((x) => !e.has(x)) };
+}
+function assertSameIdSet(actualIds, expectedIds, label) {
+  const { missing, extra } = idSetDiff(actualIds, expectedIds);
+  assert.deepEqual(
+    { missing, extra },
+    { missing: [], extra: [] },
+    `${label}：两侧 id 集须相等（缺 [${missing.join(', ')}] / 多 [${extra.join(', ')}]）`
+  );
+}
+// 源侧独立取件：直读 preset JSON（裸 JSON.parse，**不经 loader**）⇒ 与 loader 输出构成「两条不同代码路径」的连通性对照。
+// 这样断言不再是「数字对不对」，而是「loader 有没有把源文件里的条目原样搬出来（含分派到正确的表）」。
+function sourcePresetIds(file, field) {
+  const obj = JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, file), 'utf8'));
+  return (obj[field] ?? []).map((x) => x.id);
+}
+
 test('L-1 注册枚举：PRESET_IDS = 4 注册 id（l1/l2 + 第三类 l3-tool-ban + l5-wait-ban；compose 组合项已废除）；PRESETS_DIR 指向随包 presets/hook-rules', () => {
   assert.deepEqual([...PRESET_IDS], ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban']);
   assert.equal(path.basename(PRESETS_DIR), 'hook-rules');
@@ -67,11 +90,14 @@ test('L-2 loadPresetTable()：双表分派（rules 面 2 id + toolBan 面 l3/l5 
   // toolBan 面（第三类判定面）：l3-tool-ban（写通道路由）+ l5-wait-ban（等待能力禁用，2026-09-26 新增）
   assert.deepEqual(Object.keys(REAL.banTable), ['l3-tool-ban', 'l5-wait-ban']);
   assert.deepEqual(REAL.errors, []);
-  assert.equal(REAL.table['l1-sensitive'].length, 12);
-  assert.equal(REAL.table['l2-resource'].length, 6);
-  assert.equal(REAL.banTable['l3-tool-ban'].length, 1);
+  // 数量 → 连通性：loader 输出的 id 集须与源文件（裸 JSON.parse）的 id 集**相等**。
+  // 两侧走不同代码路径 ⇒ 少解析一条 / 漏 id / 把 l3 分派错表都会让差集非空而红（旧 `length===12` 只报「数字不对」，点不出哪条）。
+  assertSameIdSet(REAL.table['l1-sensitive'].map((r) => r.id), sourcePresetIds('l1-sensitive.json', 'rules'), 'L1 规则面装载连通性');
+  assertSameIdSet(REAL.table['l2-resource'].map((r) => r.id), sourcePresetIds('l2-resource.json', 'rules'), 'L2 规则面装载连通性');
+  // L3：`length===1` 只证「没多」，证不出「是哪一条」⇒ 升格为集合相等且仅该 id（id 由源文件派生，零硬编码）。
+  assertSameIdSet(REAL.banTable['l3-tool-ban'].map((e) => e.id), sourcePresetIds('l3-tool-ban.json', 'toolBan'), 'L3 工具黑名单面装载连通性（恰为源文件声明的那一条）');
   // 2026-09-26 扩面：L5 等待能力禁用（wait_agent + sleep）
-  assert.equal(REAL.banTable['l5-wait-ban'].length, 3);
+  assertSameIdSet(REAL.banTable['l5-wait-ban'].map((e) => e.id), sourcePresetIds('l5-wait-ban.json', 'toolBan'), 'L5 等待能力禁用面装载连通性');
   assert.deepEqual(REAL.banTable['l5-wait-ban'].map((e) => e.id), ['L5-W01', 'L5-W02', 'L5-W03']);
   for (const id of Object.keys(REAL.table)) {
     for (const r of REAL.table[id]) {
@@ -88,7 +114,8 @@ test('L-2 loadPresetTable()：双表分派（rules 面 2 id + toolBan 面 l3/l5 
 test('L-3 loadPresetFile：注册 id 单文件装载成功；未知 id 拒绝（ok:false + 注册枚举提示）', () => {
   const ok = loadPresetFile('l1-sensitive');
   assert.equal(ok.ok, true);
-  assert.equal(ok.rules.length, 12);
+  // 数量 → 连通性：单文件装载结果的 id 集须与源文件 id 集相等（失败时点名缺/多的 id）
+  assertSameIdSet(ok.rules.map((r) => r.id), sourcePresetIds('l1-sensitive.json', 'rules'), 'L-3 单文件装载连通性');
   const bad = loadPresetFile('no-such');
   assert.equal(bad.ok, false);
   assert.match(bad.errors[0], /未知 preset id 'no-such'/);
@@ -105,7 +132,7 @@ test('L-4 坏目录容错：单文件失败 → 该 id 不入表 + errors 收集
   const rAll = loadPresetTable(dirAll);
   assert.deepEqual(Object.keys(rAll.table), [], '全坏目录 → 零 id 入 rules 表');
   assert.deepEqual(Object.keys(rAll.banTable), [], '全坏目录 → 零 id 入 toolBan 表');
-  assert.equal(rAll.errors.length, 4, '每文件一条错误（实际: ' + rAll.errors.join(' | ') + '）');
+  assert.equal(rAll.errors.length, PRESET_IDS.length, '每文件一条错误（坏文件数 = 注册 id 数，同源构造差值；实际: ' + rAll.errors.join(' | ') + '）');
   assert.ok(rAll.errors.some((e) => e.includes('JSON.parse 失败')));
   assert.ok(rAll.errors.some((e) => e.includes('顶层结构非法')));
   assert.ok(rAll.errors.some((e) => e.includes('behavior 非法')), '黑名单形状错误定位到 behavior（实际: ' + rAll.errors.join(' | ') + '）');
@@ -171,12 +198,14 @@ test('T3-1 无 preset 键零行为差：resolve({}) / resolve({rules}) 与 EXPEC
   // 传 presetTable 也不改变无引用形态（表注入零副作用）
   assert.deepEqual(resolveGovernanceConfig({}, { presetTable: TABLE }), EXPECT_DEFAULTS);
   const c = resolveGovernanceConfig({ rules: [rule('R1')] }, { presetTable: TABLE });
-  assert.equal(c.rules.length, 1);
+  // 数量 → 身份：inline 单条展开后 id 集须恰为 ['R1']（`length===1` 证不出是哪一条）
+  assertSameIdSet(c.rules.map((r) => r.id), ['R1'], 'T3-1 inline 规则展开身份');
   assert.equal(c.enabled, true);
   // enabled:false + preset 展开不抛错（rules 仍解析；hook 不挂由 wiring 语义负责）
   const off = resolveGovernanceConfig({ enabled: false, preset: ['l1-sensitive'] }, { presetTable: TABLE });
   assert.equal(off.enabled, false);
-  assert.equal(off.rules.length, 12);
+  // 数量 → 集合相等：enabled:false 不改变展开结果，id 集须等于该 preset 的 id 集
+  assertSameIdSet(off.rules.map((r) => r.id), TABLE['l1-sensitive'].map((r) => r.id), 'T3-1 enabled:false 下 preset 展开集合');
 });
 
 test('T3-2 单值字符串形态已废除（单选遗产）：preset:"l1-sensitive" → 形态非法回退空表 + warn；数组形态照常展开', () => {
@@ -186,26 +215,34 @@ test('T3-2 单值字符串形态已废除（单选遗产）：preset:"l1-sensiti
   assert.ok(warns.some((m) => /单值字符串形态已废除/.test(m)), 'warn 说明形态废除与数组写法（实际: ' + warns.join(' | ') + '）');
   // 数组形态（多选）= 唯一合法形态：逐条等价展开
   const c = resolveGovernanceConfig({ preset: ['l1-sensitive'] }, { presetTable: TABLE });
-  assert.equal(c.rules.length, 12);
+  // 零断言删除：`length===12` 已被下方精确 deepEqual + id 集比较完全覆盖，留着只会在合法新增时单独打红。
   assert.deepEqual(c.rules, [...TABLE['l1-sensitive']]);
   assert.deepEqual(c.rules.map((r) => r.id), TABLE['l1-sensitive'].map((r) => r.id));
 });
 
-test('T3-3 preset string[] 展开保序：["l1-sensitive","l2-resource"] → 18 条（L1 前 12 / L2 后 6，文件序）', () => {
+test('T3-3 preset string[] 展开保序：["l1-sensitive","l2-resource"] → 并集集合相等 + 两表 id 不相交（先 l1 文件序、后 l2 文件序）', () => {
   const c = resolveGovernanceConfig({ preset: ['l1-sensitive', 'l2-resource'] }, { presetTable: TABLE });
-  assert.equal(c.rules.length, 18, '12 + 6 保序拼接（compose 组合项已废除，组合由数组引用表达）');
-  // 保序断言：前 12 为 l1 文件序、后 6 为 l2 文件序
-  assert.deepEqual(c.rules.slice(0, 12).map((r) => r.id), TABLE['l1-sensitive'].map((r) => r.id));
-  assert.deepEqual(c.rules.slice(12, 18).map((r) => r.id), TABLE['l2-resource'].map((r) => r.id));
+  const l1Ids = TABLE['l1-sensitive'].map((r) => r.id);
+  const l2Ids = TABLE['l2-resource'].map((r) => r.id);
+  // 组合算术（a + b = N）正解 = 两条并存，缺一即假绿：
+  //   ① 并集集合相等  ② 显式 A ∩ B = ∅（否则两表共享 id 时「元素总数变少」而集合照样相等 ⇒ 仍绿）
+  assertSameIdSet(c.rules.map((r) => r.id), [...l1Ids, ...l2Ids], 'T3-3 双 preset 并集集合');
+  assert.deepEqual(l1Ids.filter((id) => l2Ids.includes(id)), [], 'l1 与 l2 的 id 集必须不相交（A∩B=∅）');
+  // 保序断言：先 l1 文件序、后 l2 文件序（切片边界由长度派生，不再写死 12 / 18）
+  assert.deepEqual(c.rules.slice(0, l1Ids.length).map((r) => r.id), l1Ids);
+  assert.deepEqual(c.rules.slice(l1Ids.length).map((r) => r.id), l2Ids);
 });
 
-test('T3-4 preset + inline 共存：preset:l2-resource + inline 1 条 → 6+1 保序拼接（preset 展开前、inline 后）', () => {
+test('T3-4 preset + inline 共存：preset:l2-resource + inline 1 条 → 并集集合相等 + inline id 不与 preset 相撞（preset 展开前、inline 后）', () => {
   const inline = rule('MY-INLINE');
   const c = resolveGovernanceConfig({ preset: ['l2-resource'], rules: [inline] }, { presetTable: TABLE });
-  assert.equal(c.rules.length, 7);
+  const l2Ids = TABLE['l2-resource'].map((r) => r.id);
+  // 组合算术两条：并集集合相等 + 显式不相交（inline id 若与 preset 内 id 撞车，总数会少而集合仍相等）
+  assertSameIdSet(c.rules.map((r) => r.id), [...l2Ids, 'MY-INLINE'], 'T3-4 preset + inline 并集集合');
+  assert.deepEqual(l2Ids.filter((id) => id === 'MY-INLINE'), [], 'inline id 不得与 preset 内 id 相撞（A∩B=∅）');
   assert.equal(c.rules[0].id, 'L2-R01');
-  assert.equal(c.rules[5].id, 'L2-R06');
-  assert.equal(c.rules[6].id, 'MY-INLINE', 'inline 规则拼在 preset 展开之后');
+  assert.equal(c.rules[l2Ids.length - 1].id, 'L2-R06');
+  assert.equal(c.rules[l2Ids.length].id, 'MY-INLINE', 'inline 规则拼在 preset 展开之后');
 });
 
 test('T3-5 未知 id：preset:no-such → 装载失败回退 rules:[] + warn 含未知 preset id（opts.warn 捕获断言）', () => {

@@ -50,6 +50,21 @@ const DAY = (() => {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 })();
 
+// ── fixture 规模单点（本文件唯一产地：probe 生成与断言都从这里派生，禁第二套数字）──
+// 扩容/收缩 fixture 只改这里的常量，断言随之自洽（无需再手改断言里的裸数字）。
+const ROW_PROBE_COUNT = 16;   // PUNKY_PROBE_MULTIROW 造出的 row-* 条数
+const FIXED_ROWS = 2;         // 挂载面恒有的 2 行（probe 内 warn/info 两处 logger 派发）
+// 硬上限窗口参数：同键消息每 CAP_STEP_MS 一条，窗口右界被逐条刷新顶到 startAt+CAP_WINDOW_MS
+// （CAP_WINDOW_MS = lib/auditlog/sink.js 的窗口硬上限契约，此处只作复述、不另立真源）
+const CAP_BASE_MS = Date.parse('2026-09-12T20:00:00.000Z');   // cap 场景时间轴原点（probe 与断言同源）
+const CAP_STEP_MS = 59999;                                    // 同键消息间隔（须 < 滑动窗口 60000，见 sink 窗口机制）
+const CAP_WINDOW_MS = 600000;                                 // 窗口硬上限
+const CAP_OUTSIDE_MARGIN_MS = 10000;                          // 被顶出者超出硬上限的余量
+const CAP_IN_WINDOW_COUNT = Math.floor(CAP_WINDOW_MS / CAP_STEP_MS) + 1;              // 窗口容得下的同键条数（= 11）
+const FIXTURE_SAME_KEY_COUNT = CAP_IN_WINDOW_COUNT + 1;                               // 同键 fixture 总数（含被顶出那条 = 12）
+const CAP_LAST_IN_WINDOW_TS = CAP_BASE_MS + (CAP_IN_WINDOW_COUNT - 1) * CAP_STEP_MS;  // 末条同窗消息 ts（= +599990）
+const CAP_PUSHED_OUT_TS = CAP_BASE_MS + CAP_WINDOW_MS + CAP_OUTSIDE_MARGIN_MS;        // 被顶出者 ts（= +610000）
+
 // ── 隔离根清理 ──
 const pendingRoots = [];
 process.on('exit', () => {
@@ -160,11 +175,12 @@ try {
       inj(3, BASE + 2000, [SAME]);
       out.rowsBeforeExit = readJsonl(path.join(SINK_DIR, 'audit-' + DAY + '.jsonl')).length;
     } else if (SC === 'cap') {
-      // 每 59999 ms 一条同键消息（逐条刷新右界），第 11 条把这个窗口顶到硬上限 600000 ms
-      const CAP = Date.parse('2026-09-12T20:00:00.000Z');
+      // 同键消息每 CAP_STEP_MS 一条（逐条刷新右界）：前 CAP_IN_WINDOW_COUNT 条把窗口顶到硬上限 CAP_WINDOW_MS，
+      // 最后一条（sn = FIXTURE_SAME_KEY_COUNT）落在窗口之外 ⇒ 另起新窗口
+      const CAP = ${CAP_BASE_MS};
       inj(1, CAP, [SAME]);
-      for (let i = 1; i <= 10; i++) inj(i + 1, CAP + i * 59999, [SAME]);
-      inj(12, CAP + 610000, [SAME]);
+      for (let i = 1; i <= ${CAP_IN_WINDOW_COUNT - 1}; i++) inj(i + 1, CAP + i * ${CAP_STEP_MS}, [SAME]);
+      inj(${FIXTURE_SAME_KEY_COUNT}, CAP + ${CAP_WINDOW_MS + CAP_OUTSIDE_MARGIN_MS}, [SAME]);
     } else if (SC === 'diag') {
       inj(1, BASE, [SAME]);
       inj(2, BASE + 1000, [SAME]);
@@ -243,7 +259,7 @@ try {
       exportMessage({ sn: 9003, ts: Date.now(), type: 'warn', level: 1, name: 'x', args: [Array(9000).fill('mmmmm').join('\\n')] });
     }
     if (process.env.PUNKY_PROBE_MULTIROW === '1') {
-      for (let i = 1; i <= 16; i++) {
+      for (let i = 1; i <= ${ROW_PROBE_COUNT}; i++) {
         exportMessage({ sn: 20000 + i, ts: Date.now(), type: 'info', level: 2, name: 'x',
           args: ['row-' + String(i).padStart(3, '0') + ': ' + 'z'.repeat(280)] });
       }
@@ -492,11 +508,29 @@ test('T-A5/A8 挂载面分卷：小 maxFileBytes → 主卷/.1/.2 单调、每�
   for (const f of r.files) {
     assert.ok(r.segmentBytes[f] <= 2048, f + ' 体积 ≤ maxFileBytes（实际: ' + r.segmentBytes[f] + '）');
   }
-  // 16 行 + 2 行（warn/info 派发）全部守恒
-  assert.equal(r.totalRows, 18, '行不丢：总行数守恒（实际: ' + r.totalRows + '）');
+  // ── 组合算术（ROW_PROBE_COUNT + FIXED_ROWS）按 spec §3 必须两条：①并集集合相等 ②显式 A ∩ B = ∅ ──
+  const expectedRowMsgs = Array.from({ length: ROW_PROBE_COUNT },
+    (_, i) => 'row-' + String(i + 1).padStart(3, '0') + ': ' + 'z'.repeat(280));
   const msgs = Object.values(r.segmentRows).flat();
   assert.equal(new Set(msgs).size, msgs.length, '无重复行（实际去重前 ' + msgs.length + ' / 去重后 ' + new Set(msgs).size + '）');
-  assert.ok(msgs.filter((m) => m.startsWith('row-')).length === 16, '16 条 multirow 全落盘（实际: ' + msgs.filter((m) => m.startsWith('row-')).length + '）');
+  const rowMsgs = msgs.filter((m) => m.startsWith('row-'));
+  const fixedMsgs = msgs.filter((m) => !m.startsWith('row-'));
+  // ② 显式不相交（缺此条时，A ∩ B ≠ ∅ 的组合算术仍会假绿）
+  assert.deepEqual(rowMsgs.filter((m) => fixedMsgs.includes(m)), [],
+    'row-* 与派发行两集合不相交（显式 A ∩ B = ∅）');
+  // ① 并集集合相等：multirow 侧按消息身份集合相等，缺失/多余逐条点名
+  const missingRowMsgs = expectedRowMsgs.filter((m) => !rowMsgs.includes(m));
+  const extraRowMsgs = [...new Set(rowMsgs)].filter((m) => !expectedRowMsgs.includes(m));
+  assert.deepEqual(missingRowMsgs, [], 'multirow 集合相等（缺: ' + JSON.stringify(missingRowMsgs) + '）');
+  assert.deepEqual(extraRowMsgs, [], 'multirow 集合相等（多: ' + JSON.stringify(extraRowMsgs) + '）');
+  // ① 派发侧身份集合相等（按种类而非条数：多出 unknown 会被点名）
+  const fixedKinds = fixedMsgs.map((m) => (/probe warn: GATE_ENABLED=false/.test(m) ? 'warn'
+    : /probe info row/.test(m) ? 'info' : 'unknown:' + m));
+  assert.deepEqual(fixedKinds.slice().sort(), ['info', 'warn'],
+    '派发行身份集合 == 1 条 warn + 1 条 info（实际: ' + JSON.stringify(fixedKinds) + '）');
+  // 组合总量（两个单点常量相加；上面两条集合判据已覆盖同一事实）
+  assert.equal(r.totalRows, ROW_PROBE_COUNT + FIXED_ROWS,
+    '行不丢：总行数守恒 = ' + ROW_PROBE_COUNT + ' 条 multirow + ' + FIXED_ROWS + ' 条 warn/info 派发（实际: ' + r.totalRows + '）');
   assert.equal(r.stat.writes, r.totalRows, 'writes 计数 == 总行数');
 });
 
@@ -722,12 +756,21 @@ test('T-C6 硬上限 600000 ms：逐条刷新右界的窗口被顶到 startAt+60
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
   assert.equal(r.rows.length, 3, '首行 + 闭环行 + 新首行（实际: ' + r.rows.length + '）');
   assert.equal(r.rows[1].kind, 'log-aggregate', '第 2 行 = 闭环行');
-  assert.equal(r.rows[1].count, 11,
-    '12 条中前 11 条同窗（滑动刷新把右界顶到硬上限 startAt+600000）⇒ count=11；'
-    + '若窗口无硬上限（右界会被刷到 659990），第 12 条会被继续折叠 ⇒ 不会出现闭环行（实际: ' + r.rows[1].count + '）');
-  assert.equal(r.rows[1].ts, ISO(Date.parse('2026-09-12T20:00:00.000Z') + 599990), '闭环行 ts = 末条被抑制消息时间');
-  assert.equal(r.stat.aggregateRows, 1, '恰 1 行闭环行');
-  assert.equal(r.stat.collapsedMessages, 10, 'collapsedMessages=10（实际: ' + r.stat.collapsedMessages + '）');
+  // 语义：硬上限窗口**只容得下** CAP_IN_WINDOW_COUNT 条同键消息；第 FIXTURE_SAME_KEY_COUNT 条被顶出窗口、另起新窗口。
+  // 断言不绑「11 这个数」本身，而是 ①窗口内条数（由窗口参数派生）②被顶出者的**身份**（sn / ts）。
+  // ⇒ fixture 合法扩容（同窗内加消息 / 窗外再加消息）时仍绿；只有「窗口硬上限真的失效（全 12 条被折叠）」才红。
+  assert.equal(FIXTURE_SAME_KEY_COUNT, CAP_IN_WINDOW_COUNT + 1, 'fixture 单点：同键消息 = 窗口容量 + 1 条被顶出者');
+  assert.equal(r.rows[1].count, CAP_IN_WINDOW_COUNT,
+    '窗口内恰 ' + CAP_IN_WINDOW_COUNT + ' 条同窗折叠（滑动刷新把右界顶到硬上限 startAt+' + CAP_WINDOW_MS + '）；'
+    + '若窗口无硬上限（右界会被刷到 ' + ((CAP_IN_WINDOW_COUNT - 1) * CAP_STEP_MS + 60000) + '），第 ' + FIXTURE_SAME_KEY_COUNT + ' 条会被继续折叠 ⇒ 不会出现闭环行（实际: ' + r.rows[1].count + '）');
+  assert.equal(r.rows[2].sn, FIXTURE_SAME_KEY_COUNT,
+    '被顶出的是**最后一条**（身份锁定：sn=' + FIXTURE_SAME_KEY_COUNT + ' 另起新窗口，实际: ' + (r.rows[2] && r.rows[2].sn) + '）');
+  assert.equal(r.rows[2].ts, ISO(CAP_PUSHED_OUT_TS),
+    '被顶出条目的 ts 落在硬上限窗口之外（CAP+' + (CAP_WINDOW_MS + CAP_OUTSIDE_MARGIN_MS) + '）');
+  assert.equal(r.rows[1].ts, ISO(CAP_LAST_IN_WINDOW_TS), '闭环行 ts = 末条被抑制消息时间（派生：CAP+(容量−1)×步长）');
+  assert.equal(r.stat.aggregateRows, 1, '恰 1 行闭环行（按类型计数：log-aggregate 行数）');
+  assert.equal(r.stat.collapsedMessages, CAP_IN_WINDOW_COUNT - 1,
+    'collapsedMessages = 窗口内条数 − 首行（= ' + (CAP_IN_WINDOW_COUNT - 1) + '，实际: ' + r.stat.collapsedMessages + '）');
   assertConservation(r.stat, 'T-C6');
 });
 

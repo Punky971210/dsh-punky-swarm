@@ -284,13 +284,35 @@ test('P2-1【源码面锚】戳记调用须落在 commitBatch 内、且在统一
 // AC-8：零新造 GATE_*（集合相等，不按计数）
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('P2-1 · 零新造 GATE_*：union 保持 51 成员，且本 lane 写域内无 union 外的码', () => {
+test('P2-1 · 零新造 GATE_*：union 集合身份不变，且本 lane 写域内无 union 外的码', () => {
   const contracts = fs.readFileSync(path.join(PKG_ROOT, 'lib/types/contracts.ts'), 'utf8');
   const unionStart = contracts.indexOf('export type GateErrorCode');
   assert.notEqual(unionStart, -1, 'GateErrorCode union 须仍在 lib/types/contracts.ts');
   const unionBlock = contracts.slice(unionStart, contracts.indexOf(';', unionStart));
   const union = new Set((unionBlock.match(/'GATE_[A-Z0-9_]+'/g) ?? []).map((s) => s.slice(1, -1)));
-  assert.equal(union.size, 51, 'GateErrorCode union 成员数须保持 51（本批零新造；集合相等，不按计数）');
+
+  // 集合身份相等（规格 §方案 2 形态 1）——替代 `union.size === 51`：
+  // 只断个数时，失败消息只能报「期望 51 实得 52」，**证不出是哪个码**；断集合则双向差集直接点名。
+  // 冻结名集由 lib/types/contracts.ts 机械导出（生成命令见产物处置记录），非手抄。
+  const EXPECTED_GATE_CODES = new Set([
+    'GATE_ENTRY_MISSING', 'GATE_HANDOFF_MISSING', 'GATE_AUDIT_INPUT_MISSING', 'GATE_AUDIT_CRITERIA_MISSING',
+    'GATE_BATCH_REQUIRES_C', 'GATE_MEMBER_REQUIRES_C', 'GATE_PLAN_CONTRACT', 'GATE_TOKEN_UNKNOWN',
+    'GATE_VOCAB_INVALID', 'GATE_EXIT_MISSING_EXEC', 'GATE_EXIT_MISSING_AUDIT', 'GATE_NEEDHUMAN_PENDING',
+    'GATE_EXIT_NO_COMMAND', 'GATE_EXIT_FORBIDDEN', 'GATE_EXIT_TIMEOUT', 'GATE_EXIT_SPAWN_FAIL',
+    'GATE_EXIT_NONZERO', 'GATE_SCRIPT_CHANGED', 'GATE_TARGET_MISSING', 'GATE_TARGET_UNCHANGED',
+    'GATE_COMPLETE_NO_AUDIT', 'GATE_EXIT_PENDING_AUDIT', 'GATE_COMPLETE_AUDIT_FAILED', 'GATE_COMPLETE_EXEC_PENDING',
+    'GATE_COMPLETE_OUTCOMES_EMPTY', 'GATE_SETTLE_NOTE_MISSING', 'GATE_EXEMPT_NOT_DISPATCH', 'GATE_EXEMPT_INVALID',
+    'GATE_EXEMPT_TYPE_UNKNOWN', 'GATE_EXEMPT_REVOKE_REQUIRED', 'GATE_HANDOFF_UNAUTHORIZED', 'GATE_HANDOFF_IDENTITY_UNKNOWN',
+    'GATE_HANDOFF_OVERWRITE_UNDECLARED', 'GATE_ROSTER_INVALID', 'GATE_CHANNEL_INVALID', 'GATE_CHANNEL_UNRESOLVED',
+    'GATE_CONSUME_DEPS_ASYMMETRY', 'GATE_COMPLETE_NO_TIER', 'GATE_ORPHAN_PRODUCT', 'GATE_LANE_NOT_IN_PLAN',
+    'GATE_LANE_LAYER_MISSING', 'GATE_EXIT_NO_DECLARATION', 'GATE_NO_DECLARATION', 'GATE_PLAN_NO_DECLARATION',
+    'GATE_PLAN_PRESENCE_MISSING', 'GATE_STANDALONE_UNJUSTIFIED', 'GATE_ASSEMBLY_INVALID', 'GATE_ROLE_ASSEMBLY_MISSING',
+    'GATE_ROLE_INVALID', 'GATE_ROLE_MANAGER_AS_LANE', 'GATE_PAIRING_CARDINALITY_DRIFT',
+  ]);
+  const addedCodes = [...union].filter((c) => !EXPECTED_GATE_CODES.has(c));
+  const removedCodes = [...EXPECTED_GATE_CODES].filter((c) => !union.has(c));
+  assert.deepEqual([addedCodes, removedCodes], [[], []],
+    'GateErrorCode 集合漂移（本批零新造）：新增 [' + addedCodes.join(', ') + '] 消失 [' + removedCodes.join(', ') + ']');
 
   // 本 lane 写域内出现的 GATE_ 字面量：只允许 union 成员 + 冻结的既有例外。
   // `GATE_EVENT_CONST_MISSING` = fail-closed 守卫码，**在 10d6db1 之前即存在**（`git show 10d6db1:…/store.js` 实测 :68），
