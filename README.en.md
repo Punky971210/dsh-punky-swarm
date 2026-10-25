@@ -1,4 +1,4 @@
-# dsh-punky-swarm · the Punky engineering engine
+# dsh-punky-swarm · the Punky governance engine
 
 <p align="center">
   <a href="https://github.com/Punky971210/dsh-punky-swarm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Punky971210/dsh-punky-swarm?label=license" alt="license"></a>
@@ -7,102 +7,116 @@
   <a href="https://github.com/Punky971210/dsh-punky-swarm/blob/main/packages/dsh-punky-swarm/package.json"><img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="node"></a>
 </p>
 
-> **One agent is easy to manage. A team of agents is not.**
+> **One agent is a contractor on call. A governed team of agents is a department.**
 >
-> The Punky engine moves "who should do this, and what counts as delivered" out of your attention span and into the engine. Tasks are graded by difficulty, batches are sequenced by dependency, deliveries are gated, and every tool call can be adjudicated. You do two things: say what you want, accept what was made.
+> The Punky engine turns a company's rules into software and puts them inside the engine: scheduling, quality checks, approvals and recovery run as mechanisms, not as things a person has to remember or enforce. Once the rules live there, the human is left with judgement only — state what you want, accept what was made.
 
 中文: [README.md](README.md)
 
 ---
 
-## It starts with the human being the bottleneck
+## One person, a team, and an invisible line
 
-Run a whole pipeline through a single agent and you end up with human-assisted automation: design, code, test and review all handed to one agent. It does a piece, you glance at it, you nod, it does the next. The human sits between the steps of an automation that was supposed to remove the human.
+Treating AI as an employee has been the fashionable framing. Employees need salaries, management, patience and notice periods. A single agent has none of that: on call, billed per job, gone when done. It is closer to a contractor than to staff — assign work, watch work, accept work, one person can handle one.
 
-So you reach for an orchestration graph. The moment the graph is drawn, nodes and edges are hard-coded. Change a requirement and you redraw the graph. An agent wants a cheaper route? There is no such edge. Agent freedom is squeezed flat, and the cost of change is high enough that you open a second pipeline instead.
+And that is where the value of a single agent ends.
 
-Neither extreme works. The Punky engine takes the middle road: **the pipeline is not hard-coded, but delivery never rests on good faith.** The engine does not dictate how an agent works. It asks, at a few decisive points — was the upstream artifact handed over, was the acceptance done, did this call cross a line. If the answer is no, work stops there.
+So people stack quantity. Ten agents working together are far harder to manage than one: who runs first, who waits, who writes which file, where to resume after a crash. Without rules underneath, it is an incident site. What you stacked is not help — it is more contractors to babysit.
 
-## Three parts: the engine gives capability, the mode sets behaviour, the guidance teaches usage
+The turning point is not quantity. It is governance. **Contractors rely on supervision; departments rely on rules.** One person cannot watch everything; a rule set can. Once the rules live inside the engine the maths works too: headcount is paid whether or not there is work, while rules inside an engine are rented by the token — paid only when used. One person, one automated rule set, and a pool of agents on call: that is the whole composition of a one-person company.
 
-| Part | What it is | What happens without it |
+There is no shortage of multi-agent products; very few actually run as one-person companies. Most stall at the same invisible line. That line is not drawn in the vision statement — you have to open up an agent to see where it lies.
+
+## Open up an agent first
+
+Just as the internet has a general five-layer structure, an agent splits into four layers: **substrate, tools, capability, application**. The substrate is the agent's operating system; above it sits what it can call, what it can become, and what it finally delivers.
+
+For a harness, the question is not who dug the substrate deeper — it is which layer is opened to you. **The more layers open, the more you can define.**
+
+Openness falls roughly into four bands:
+
+| Band | What is open | Outcome |
 |---|---|---|
-| **Engine** | A dsh plugin providing governance: task grading, batch sequencing, gates, single-writer locks, checkpoints, per-call guardrails, a read-only panel | Mode and guidance become talk |
-| **Mode** | A preset: role definitions, governance discipline, boot guidance, behavioural norms — how an agent should behave inside this swarm | The engine degrades into a pile of unused tools |
-| **Guidance** | Team skills: layered role manuals, artifact formats, templates — which skills each role loads, what it must produce | Every agent works from its own interpretation |
+| L0 capability | models, external tools and skills are swappable | you can *use* the engine |
+| L1 process | task flow defined inside the engine, or multi-instance orchestration outside at the protocol layer | you can add orchestration around it |
+| **L2 host** | agent loop, session log, sandbox and UI are all replaceable and self-hostable | you can *grow* things inside the engine |
+| Discipline band | gates, approvals, checkpoints, locks, audit | **the only place rules can take a seat** |
 
-All three ship with the package. Install it and you have a runnable team, with no second system to assemble.
+DSH is a local plugin tree with every layer replaceable: the agent loop itself is a plugin, and session events are appended in full — what the model can see is already recorded, searchable and replayable. **This engine runs on DSH not as a matter of taste, but because rules need somewhere to sit.**
 
-## Four gates: from "humans watch the flow" to "the engine watches the flow"
+## Discipline lives in the spinal cord, not the brain
 
-- **Before dispatch** — if the upstream artifacts a downstream step consumes are not in place, the step does not start.
-- **Before merge** — plan-layer artifacts pass a structural contract check; a missing section sends them back.
-- **Before settle** — declared outputs that never reached disk block settlement.
-- **Before close** — a batch with unfinished acceptance, failures or conflicts cannot be closed.
+An agent going off track cannot be cured by more capability. It is cured by discipline.
 
-All four do one thing: **block what is non-compliant, release what is compliant.** Half-finished work does not reach you by accident.
+Consider walking: the skill is wired into instinct, so ordinary that nobody notices it. What matters is how deeply the body opens the machinery of walking — the answer is the spinal cord. Without it, movement stops. Typing, by contrast, is learned and depends on the brain, eyes and fingers, all of which are far younger in evolutionary terms than the spinal cord.
 
-## Difficulty gate: decide who does the job before anyone starts
+**Capability ranks behind discipline.** Whether a task completes does not depend on how smart the agent is right now, but on whether a process is holding it up. A classic agent loop self-confirms at every step — provided it believes it knows what correct means. But that judgement is generated on the spot, and confidence in this moment does not carry to the next. The engine takes the judgement away: contracts are fixed before work starts (what this step delivers, what counts as complete); each step is accepted before the next opens; and the check lives on the tool-call path rather than in the agent's conscience.
 
-- **A** — small and verifiable: the lead does it directly.
-- **B** — needs an isolated context or tool surface: one subagent.
-- **C** — multi-step, parallel, gated, recoverable: the full batch pipeline.
+Making a task *instinctive* means removing the constant looking-back from the process. That does not happen on the model side. **If the host does not open the execution loop deep enough, there is nowhere for discipline to sit.**
 
-**When in doubt, grade C.** Grading C and then acting without a batch is refused by the engine. Gradings expire, so nobody drifts into a long stretch of unplanned work. Exploration you already did can be claimed into the batch instead of being thrown away.
+## Three failures, one key
 
-The point is blunt: **the engine forces planning; good faith is not a mechanism.** Small tasks do not pay team-scale overhead, and large tasks do not blow up one agent's context.
+Delivery fails in three places, and none of them is model capability.
 
-## Once a batch is created, its shape is fixed
+| Failure | Symptom | Engine answer |
+|---|---|---|
+| **Lost state** | context compresses or the session closes and the work evaporates; one interruption means starting over | **Freeze the state**: move it out of the model's head into files that are the single source of truth; checkpoint every completed sub-step and resume from the latest one, without redoing finished steps |
+| **Target drift** | requirements quietly change mid-conversation; every step is confident yet no human anchor exists on the path | **Put judgement into gates**: fix the target before work starts; a created batch is never recomputed. Changing the target means a new batch — an explicit, visible decision |
+| **Vague asks** | nobody knows what to ask for, so the request becomes "write me a plan" | **Make decomposition routine**: grade first, layer by dependency, and have every track declare what it delivers |
 
-Tasks are layered into waves by dependency. Waves can depend on each other; who waits for whom and who runs in parallel is settled at creation time and never recomputed midway.
+In one line: **going off track is not the frightening part — people drift too. Nobody stopping it is.**
 
-Fixed beats dynamic in three ways: **traceable** — the original shape of the batch is always recoverable; **auditable** — which wave, which owner, which state, at a glance; **reproducible** — same input, same plan, same execution path.
+## It lives inside the engine, not beside the protocol
 
-A task can declare its layer (plan / exec / audit), what it consumes, what it produces and who owns it. Same layer runs in parallel; across layers, gates apply.
+Platforms connect agents through interop protocols such as MCP and ACP. They solve *reachability*: find each other, call each other's tools, hand over tasks.
 
-## Everything is accounted for
+The trouble is that reachability at best produces a chat room or a meeting room. **A real pipeline does not grow out of interop — it grows out of acceptance.** The rear foot may not move until the front foot is planted; nothing is released while deliverables are incomplete. Such a check has exactly one place to grow: inside the host's execution loop. Only the loop knows what was missing before a call, what the call produced, and who is waiting on it. A protocol carries a message between endpoints; it does not carry "is this step complete".
 
-- **The state file is the single source of truth** — batch and member state come from it, never from a report.
-- **Events are recorded end to end** — dispatch, handoff, settlement, gate decisions; all replayable.
-- **Single-writer lock** — one writer per lane at a time; conflicts keep the scene for a human to rule on instead of silently overwriting.
-- **Checkpoints** — every sub-step is preserved, so an interruption stops at a checkpoint rather than starting over.
-- **Read-only panel** — batch list, statistics, lane cards, event timeline and inbox counts in the Web UI. The engine only adjudicates, never edits; humans only look.
+Governance exists elsewhere too, but where it sits differs: some sit outside the process at the egress, as a request-level interception chain; some sit in a service matrix and session layer, managing scheduling and messages; some sit in the application and coordination layer with a large model acting as leader. Each has its use, but **"the agent remembers to do it" and "the engine must verify it" are two different kinds of governance.**
 
-## Even a single tool call can be adjudicated
-
-Beyond batch gates, call-level guardrails judge each tool invocation with six verdict primitives covering allow, deny, escalate to human approval, narrow the arguments, defer and pause. A denial produces a **tamper-evident receipt** anchored in a hash chain — change one byte and the chain breaks. The agent learns which rule stopped it, not a generic refusal.
-
-Guardrails ship with an empty rule set: installing changes nothing, rules are enabled deliberately and reviewed before use.
+The Punky engine puts the rules inside the execution loop, so what it governs is whether something was handed over, verified and allowed to close — not whether an agent remembers what to hand over.
 
 ## What you get
 
-- **Governance**: three-layer gates, batch and member state machines, single-writer locks, isolated worktrees with checkpoints, difficulty gate, artifact claiming.
-- **Coordination**: explicit message channels (three mailboxes, metadata only, consumption requires acknowledgement), heartbeats and long-run probes, batch outcome typing.
-- **Calls**: six-primitive guardrails, denial receipts with hash chains, rule presets (sensitive data / resource bounds / both).
-- **Observability**: read-only panel, process-level local audit log (on by default, never shipped anywhere).
-- **Team skills (5)**: `software-team`, `design-team`, `research-team`, `video-team`, `writing-team`. The software one also ships the specification-language originals plus an adapter layer, so writing a spec, checking its structure and verifying consistency all have a reference.
+- **Grading before work**: small jobs are done directly without governance overhead; multi-step, collaborative, acceptance-bound work takes the full pipeline. **When in doubt, grade heavy** — grading heavy and then acting without a batch is refused; gradings expire so nobody drifts into unplanned work.
+- **Tracks by dependency**: independent tracks run in parallel, dependent ones sequence; nothing is reordered after start. Each track splits into plan, execution and review — no execution before the plan is fixed, no review before output lands, no delivery before review passes.
+- **Four gates**: upstream artifacts before dispatch, plan structure before merge, artifacts on disk before settlement, finished acceptance before close. Any missing piece is refused.
+- **A checkpoint per sub-step**: an interruption resumes rather than restarts; a new owner reads the checkpoint and skips completed steps. Nothing auto-resumes — you look before you continue.
+- **One writer per lane at a time**: parallel work uses isolated worktrees; conflicts are neither auto-merged nor silently overwritten — the scene is preserved for a human ruling.
+- **Everything on the record**: batch and member state, handoffs, settlements and gate decisions all land in an event stream that can be replayed and exported for audit. A read-only panel sits in the Web UI; the engine adjudicates, it never rewrites.
+- **Every tool call can be adjudicated**: call-level guardrails judge each invocation with six verdict primitives covering allow, deny, human approval, narrowing, deferral and pause; denials produce tamper-evident receipts so the agent knows which rule stopped it. Guardrails ship empty and change nothing until configured.
+- **Five team skills bundled**: software engineering, design, research, video, writing. The software one also carries specification-language originals plus an adapter layer, so writing a spec, checking structure and verifying consistency all have a reference.
 
-## Why hierarchy
+## Judgement written down before work starts
 
-| Shape | Upside | Cost |
-|---|---|---|
-| Star (centralised) | Simple | The centre is a single point of failure; a limited context cannot govern a large swarm |
-| Decentralised (peer negotiation) | No single point of failure | Coordination cost grows exponentially; state becomes untraceable |
-| **Hierarchical (this engine)** | Parallel within a layer, gates across layers; layered by cognitive load | Needs discipline — which is exactly what can live in the engine |
+Taking judgement away from the agent and into a procedure it cannot overturn is a path others have taken too. The difference is **what gets judged**:
 
-In one line: **stability, not restriction.** The tool layer stays fully open, the mode only advises, and the team assembly is pluggable — swap in whichever role system you prefer.
+- One approach has a reviewer from another vendor judge *whether it is done* — an endpoint verdict with wide discretion, betting on uncorrelated judgement.
+- The Punky engine's audit judges **each acceptance criterion written into the plan**, item by item — a criteria comparison, not an endpoint verdict. The criteria are fixed before work starts and live in the plan-layer artifact; the audit's intake must anchor to it, or dispatch is refused. To rule, you first pass the criteria gate.
+
+The later criteria are written, the more room drift has. So the decision power goes to code: how member state migrates and when a batch may close are decided by the engine's state machine and phase machine, with every transition in the event stream — **an agent can submit, but cannot write its own settlement.**
+
+One more thing usually skipped: **knowing when to stop.** If completion is judged per *round*, and a round has no bound on files or changes, then "is this round done" is already fuzzy at submission time. The Punky engine's unit is a **step**: every finished step writes a checkpoint with its progress, so judging whether the whole thing is done reduces to judging whether the last step landed. Long-run probes are also judged per state — elapsed time with a no-progress window while running, time awaiting settlement in review, time awaiting recovery when idle, time awaiting dispatch when pending. One ruler cannot measure every state. Stopping is an explicit action, not a timeout.
 
 ## What it does not do
 
 This section matters more than the capability list.
 
-The engine does not judge intent: guardrails work at the tool-call layer, so generation and reasoning stay outside the line of defence. It is not a sandbox, not an egress gateway, and does not detect side channels that bypass the explicit message channel. It provides no write-once storage: the hash chain defends against silent tampering, not deletion, and carries no third-party signature. It cannot authenticate a caller; trails provide record and visibility, not access control. Governance is in-process on one machine; cross-machine orchestration is out of scope. Guardrails ship empty, so verdicts are allow-all until rules are configured.
+The engine does not judge intent: guardrails work at the tool-call layer, so generation and reasoning stay outside the line of defence. It is not a sandbox, not an egress gateway, and does not detect side channels that bypass the explicit message channel. It provides no write-once storage: the hash chain defends against silent tampering, not deletion, and carries no third-party signature. It cannot authenticate a caller; trails give record and visibility, not access control. Governance is in-process on one machine; cross-machine orchestration is out of scope. Guardrails ship empty, so verdicts are allow-all until rules are configured.
 
-So it will never claim to have "prevented misalignment". What it offers is a choice of position: **stop determinable overreach and missing delivery during execution, instead of learning about them from a report afterwards.**
+So it will never claim to have "prevented an agent from going off track". It offers a choice of position: **stop determinable overreach and missing delivery during execution, instead of learning about them from a report afterwards.**
 
 ## Who it is for
 
-One person or a small team doing **delivery with acceptance criteria** — code, research, design, writing all count. You want an auditable artifact chain, traceable failures, interceptable overreach, and data that stays local.
+One person, or a small technical team, doing **delivery with acceptance criteria** — code, research, design, writing all count.
+
+Worth it only when all three hold:
+
+1. you are advancing several things at once, not editing one function;
+2. you need the artifact chain traceable, failures searchable, overreach interceptable;
+3. you are unwilling to act as reviewer again after the agent says it is done.
+
+Few people satisfy all three. But if you do, you will find there is no second option on the market — that is not a research conclusion, it is why the plugin was written.
 
 It is not for "let the AI do the job in one sentence". Every mechanism here spends its cost on acceptance criteria; work without acceptance criteria does not need it.
 
@@ -111,6 +125,7 @@ It is not for "let the AI do the job in one sentence". Every mechanism here spen
 Requires DeepSeek Harness (dsh) and Node.js ≥ 22.
 
 ```sh
+# install and register into dsh (replace <profile> with the one you use)
 dsh plugin add dsh-punky-swarm
 dsh web restart
 ```
