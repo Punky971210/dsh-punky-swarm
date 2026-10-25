@@ -17,9 +17,10 @@
 
 - **Four gates, nothing half-done passes** — upstream artifacts before dispatch, plan structure before merge, artifacts on disk before settlement, finished acceptance before close.
 - **Criteria fixed before work starts** — acceptance criteria live in the plan layer and the audit checks them item by item; an agent can submit, but **cannot write its own settlement**.
-- **Grade heavy when in doubt; grading heavy without a batch is refused** — small jobs are done directly, multi-step work takes the pipeline.
+- **Run mode assigned by task profile** — small jobs are done directly, without governance overhead; multi-step work takes the pipeline, and nothing starts without a batch.
 - **A checkpoint per step** — an interruption resumes from the last checkpoint instead of restarting.
 - **One writer per lane at a time** — isolated worktrees; conflicts are neither auto-merged nor silently overwritten.
+- **Complex long tasks must open a batch** — acting without one is refused by the engine, and gradings expire so nobody drifts into unplanned work.
 - **Denials are legible** — a rejected call says which rule stopped it and comes with a tamper-evident receipt.
 - **Everything on the record** — state, handoffs, settlements and gate decisions land in an event stream that can be replayed and exported.
 
@@ -37,7 +38,7 @@ Most multi-agent products stall on one invisible line: **they give you capabilit
 | Target drift | requirements quietly change mid-conversation and nobody notices | target fixed before work starts; a created batch is never recomputed |
 | Vague asks | all you can say is "write me a plan" | grade first, layer by dependency, every track declares its deliverable |
 
-## How it works
+## Rails set at the tool-call level
 
 An agent going off track cannot be cured by more capability. It is cured by discipline — the way walking is wired into the spinal cord rather than occupying the brain. **Whether a task completes depends not on how smart the agent is right now, but on whether a process is holding it up.**
 
@@ -47,18 +48,13 @@ This can only live at **the layer where the host opens its execution loop**. If 
 
 Three parts make it up: **engine** for capability (grading, sequencing, gates, locks, checkpoints, guardrails, read-only panel), **mode** for behaviour (roles, discipline, boot guidance), **guidance** for usage (role manuals, artifact formats, templates). All three ship together — install it and you have a runnable team.
 
-## It lives inside the engine, not beside the protocol
+## Discipline lives inside the engine, not beside the protocol
 
 Interop protocols (MCP / ACP) solve reachability: find each other, hand over tasks — at best a chat room. **A real pipeline does not grow out of interop; it grows out of acceptance.** The rear foot may not move until the front foot is planted.
 
 Such a check has one place to grow: inside the host's execution loop, because only the loop knows what was missing before a call, what it produced, and who is waiting on it. **"The agent remembers to do it" and "the engine must verify it" are two kinds of governance** — this engine picks the second.
 
 The market splits roughly three ways: **single-agent coding products** (get one agent to finish a job; multi-track work and artifact contracts are not in their design), **multi-agent orchestration frameworks** (get several agents talking in a topology; the criteria stay with the caller), and **judgement-engineering approaches** (gates and reviewers, but a single line). The first lacks orchestration, the second lacks gates, the third has only one line — this engine puts all three in one place.
-
-## Two quiet but load-bearing designs
-
-- **A created batch is never recomputed.** Target drift happens quietly; changing the target means creating a new batch — an explicit, visible decision. The running batch does not shift a single character.
-- **Completion is judged per step, not per round.** Whether one step is finished is decidable; whether the whole thing is finished then reduces to whether the last step landed. Long-run probes are judged per state — one ruler cannot measure every state — and stopping is an explicit action, not a timeout.
 
 ## What you get
 
