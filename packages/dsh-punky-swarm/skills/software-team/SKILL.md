@@ -238,6 +238,16 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 | 规格结构与机械校验（`MC-*` 规则与校验器） | `references/vendor/speclang/speclang-waterfall/` |
 | 证据强度、Hoare 推理报告模板 | `references/vendor/speclang/speclang-hoare-check/` |
 | UI kind / operation 目录 | `references/vendor/speclang/ui-component-registry/` |
+
+**跑得起来的三条**（不然原始件也白读）：
+
+1. **机械校验**：`node scripts/speclang-validate.mjs <spec>`；ruby 不在当前进程 PATH 时显式给路径
+   `--ruby="D:/Program Files/Ruby40-x64/bin/ruby.exe"`（找 ruby：`where ruby` / `command -v ruby`，**别猜路径**）。
+   四态里只有 `0` 算通过，`2` 是 `UNKNOWN`（ruby 不可用 / rb 缺件）——**UNKNOWN 不计通过**。
+2. **骨架与负控**：`references/engineering/spec-templates/` 有 `speclang.yaml.tpl`（规格骨架）与
+   `mc-negative-controls.tpl.mjs`（负控跑法）。**绿行不是充分证据**：依赖哪条 `MC-*`，就用变异体证明它真会红。
+3. **规格对账门**：审计产物写一行 `gate:` —— `node scripts/check-spec-accounting.mjs --plan <plan.md> --acceptance <audit.md>`。
+   plan 提到的 `CC-*` / `hoare-check` 在验收里必须**要么有读数、要么显式「未执行 + 原因」**；只写"未执行"判红。
 | 蟛蜞侧怎么落（六态→引擎映射 · 机读行落地 · 缺口留档） | `references/engineering/spec-contract.md` |
 
 > **必读 = 适配层映射；选读 = vendor 原件**：角色必读表里点名的 `spec-contract.md` 是**适配层映射**（讲「蟛蜞怎么用」），其规则**定义**来自 vendor 原件（`references/vendor/speclang/`，**选读**、按需加载）；**两者冲突以原件为准**。选读面**永不**构成必读义务：不在册、未加载、未读均**不构成失败，也不影响任何门禁**。

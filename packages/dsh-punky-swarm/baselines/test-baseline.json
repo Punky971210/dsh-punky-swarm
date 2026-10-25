@@ -288,6 +288,14 @@
       "tests": 12,
       "todos": 0
     },
+    "test/check-spec-accounting.test.js": {
+      "asserts": 31,
+      "blankLines": 18,
+      "lines": 177,
+      "tautologies": 0,
+      "tests": 11,
+      "todos": 0
+    },
     "test/client-sync.test.js": {
       "asserts": 8,
       "blankLines": 10,
@@ -1633,7 +1641,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T05:17:50Z",
+  "generatedAt": "2026-10-25T11:25:52Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1647,12 +1655,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 10560,
-    "blankLines": 5566,
-    "files": 204,
-    "lines": 59320,
+    "asserts": 10591,
+    "blankLines": 5584,
+    "files": 205,
+    "lines": 59497,
     "tautologies": 0,
-    "tests": 2147,
+    "tests": 2158,
     "todos": 4
   }
 }

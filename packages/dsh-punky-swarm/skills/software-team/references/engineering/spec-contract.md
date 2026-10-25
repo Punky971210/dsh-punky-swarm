@@ -81,20 +81,49 @@
 - 该行可直接作产物 `gate: <命令>` 的阻断判据 —— 引擎按退出码判，不解析文案。
 - 退出码三档，与 `scripts/speclang-validate.mjs` 薄壳**同构**：失败数 > 0 ⇒ `1`；失败数 = 0 ⇒ `0`；**无法判定 ⇒ `2`**，且文案必须标 `UNKNOWN`（不许用 `0` / `1` 冒充「没判」）。
 
-## S-10 需求点 → 契约 这一跳：当前无人机械核
+**薄壳用法与 ruby 定位**（适配层新增）
 
-> **规则真源**：`references/vendor/speclang/speclang-waterfall/assets/MECHANICAL_RULES.md`（记账规则的**范围边界**）＋ `reporting_requirements.md`（覆盖清单属**工作流输出**，非校验器）。本节是蟛蜞**缺口留档**。
+- 首选 `node scripts/speclang-validate.mjs <spec>`；ruby 不在**当前进程** PATH 时显式给绝对路径：
+  `node scripts/speclang-validate.mjs --ruby="D:/Program Files/Ruby40-x64/bin/ruby.exe" <spec>`。
+- 找 ruby：Windows `where ruby`；bash / macOS / Linux `command -v ruby`。**禁靠猜路径** —— 实测本机「机器 PATH 有 ruby、
+  进程 PATH 无」，直接调只会得到 `exit 2 UNKNOWN`，被误当成"校验器坏了"。
+- 四态：① ruby 可用 ⇒ 原样透传 rb 的退出码与输出；② ruby 不可用 ⇒ `exit 2` ＋ stderr 标 `UNKNOWN`；
+  ③ rb 原件缺失 ⇒ `exit 2` ＋ 给缺失绝对路径；④ `-h` / `--help` ⇒ `0`。**②③ 都是 UNKNOWN，不计通过。**
+- 骨架与负控模板：`references/engineering/spec-templates/`（`speclang.yaml.tpl` 规格骨架、
+  `mc-negative-controls.tpl.mjs` 负控跑法）。**绿行不是充分证据**，依赖哪条规则就给哪条构造变异体。
 
-**事实（不掩饰）**：记账规则只核「每个**契约**至少有去处」，**不核**「每条**需求点**是否被某条契约承接」。源侧把这一跳放在人工 / AI 判断的工作流输出里（需求覆盖清单），**明确不属于机械面**。
+## S-10 plan 派下的规格类检查：已有机械门（`check-spec-accounting`）
 
-本团队现状与缺口：
+> **规则真源**：`references/vendor/speclang/speclang-waterfall/assets/MECHANICAL_RULES.md`（记账规则的**范围边界**）
+> ＋ `reporting_requirements.md`（覆盖清单属**工作流输出**，非校验器）。本节写蟛蜞侧的**落地门**。
 
-1. 任务包的 `AC-nnn` 与（若有）`REQ-nnn` 之间**没有机检门**：既无脚本比对「spec 出现的需求集 ⊆ 验收段覆盖集」，也无反向。
-2. ⇒ 需求漏接（写了需求、没写验收）与幽灵验收（验收追不到需求）**都能静默通过**。
-3. 处置（本文件**只登记缺口，不新造门禁**）：
-   - **眼下**：由 `reviewer` 人工核对，结论标 `SEMI_PROVED` 并写明「人工核，非机器已证」；
-   - **将来机器化**：最小可行判据 =「spec 内需求编号集 ⊆ 验收段覆盖集」，且**先给可达负例**（构造一条漏接需求应判红）—— 改前就已绿的判据即假绿，不得采用。
-4. **缺口状态**：**仍 open** —— 本批只做「资产进仓 ＋ 真源归位」，**不闭合**该缺口。
+**两类缺口，分开说**：
+
+1. **需求点 → 契约** 这一跳，源侧放在人工/AI 判断的工作流输出里，**仍不属机械面**。眼下由 `reviewer` 人工核对，
+   结论标 `SEMI_PROVED` 并写明「人工核，非机器已证」。要机器化，最小可行判据 =「spec 内需求编号集 ⊆ 验收段覆盖集」，
+   且**先给可达负例**（构造一条漏接需求应判红）——改前就已绿的判据即假绿，不得采用。
+2. **plan 派下的 `CC-*` / `hoare-check` 有没有被交代** —— 这一跳**已装牙**（见下），因为它可机械判。
+
+### 已装牙：`scripts/check-spec-accounting.mjs`
+
+**事故驱动**（可核）：批次 `edu-backend-m0-r6` 的 `plan/r6-scope.md` 把 `CC-*` 与 `hoare-check` 派给 `r6-audit`，
+并写明「若不可用须显式记未执行 + 原因」；而 `audit/r6-acceptance.md` 与 `audit/r6-gap-list.json` 对二者的命中**均为 0**，
+批次照样 `complete`。⇒ 计划里的要求可以静默蒸发。本门就是堵这个。
+
+```sh
+node scripts/check-spec-accounting.mjs --plan <plan.md> --acceptance <audit.md>
+```
+
+- **要求集**：plan 内 `spec-accounting:` 声明块（`- <id>` 逐条）；无块时退化为「plan 正文提及的 `CC-*` / `hoare-check`」——
+  因为上述事故正是「只在正文提过、没进块」这一形态。族形态 `CC-*` 按前缀匹配（验收给任意 `CC-xxx` 读数即算交代）。
+- **交代两种合法形态**：① 读数（该行含 id 且有 `读数/PASS/FAIL/exit/SUMMARY:` 或数字）；
+  ② **显式未执行 + 原因**（含 `未执行` 且同行给原因 ≥8 字符）。**只写"未执行"不给原因判红**（否则它就是万能豁免）。
+- **退出码**：`0` 全部有交代 / `1` 有要求未交代（逐条点名）/ `2` 用法或文件错误（fail-closed）。
+- **机读行**：`SUMMARY: spec-accounting <declared> declared, <covered> covered, <missing> missing. [PROCEED|BLOCK]`
+- **不判**：读数真假属评审面，本门只判「有没有交代」——别把它当成"读数正确性校验"。
+
+用法建议：写进审计产物的 `gate:` 行，引擎在 merged 前真跑，按退出码判定。
+
 - 锚点：`speclang-waterfall/assets/MECHANICAL_RULES.md:85`；`speclang-waterfall/assets/reporting_requirements.md:23-29`
 
 ---
