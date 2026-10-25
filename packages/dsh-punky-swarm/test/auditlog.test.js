@@ -290,3 +290,124 @@ test('T-C10 聚合键：sha256(level ⊕ name ⊕ msg) 前 16 位 hex（与独�
   assert.equal(AGGREGATE_WINDOW_MS, 60000, '默认窗口 60000 ms');
   assert.equal(AGGREGATE_MAX_WINDOW_MS, 600000, '窗口硬上限 600000 ms');
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// 保留天数清理 pruneByAge（批次 `punky-prune-coverage-20261025` · lane c1-tests）
+//   判据源：plan/prune-coverage-spec.md 的 R-1..R-5 —— 四类行为判据 + 一个 off-by-one 边界。
+//   夹具纪律（规格 P3 的三个「写绿了但没测到」陷阱，逐条免疫）：
+//     T-1 `todayCutoffDay` 不读第 3 参（sink.js:475-477）⇒ cutoff 恒用真实时钟：删除侧只用
+//         静态字面日期（2000-01-01 等），第 3 参只用于构造「当日」判等；T-C12 的 cutoff 由
+//         测试内 replica 复算。
+//     T-2 分卷名必须匹配 `parseSegmentName` 真形态 `audit-YYYY-MM-DD[.N].jsonl`（sink.js:469-473）。
+//         简报式 `audit-YYYYMMDD.01.log` 属「不认的文件」桶，用它会让「当日卷不删」因解析失败假绿。
+//     T-3 只传 2 参对「当日卷不删」无鉴别力（今日 day 永不满足 `今日 < 今日-keepDays`）⇒ T-C13
+//         注入第 3 参且 A/B 成对。
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+/** 分卷绝对路径（名字由调用方按真形态拼好） */
+const segmentAt = (dir, name) => path.join(dir, name);
+
+/** 落一个分卷（pruneByAge 只读目录项名、不读内容，故内容任意） */
+const seedSegment = (dir, name) => { const p = segmentAt(dir, name); fs.writeFileSync(p, 'x\n'); return p; };
+
+// ── T-C11 ① 早于 cutoff 的已收盘卷被删（返回数与「文件真消失」是两件事，必须都断）──
+
+test('T-C11 ① 早于 cutoff 的已收盘卷被删：removed=1 且文件真消失', () => {
+  const dir = freshDir('c11');
+  const ancient = seedSegment(dir, 'audit-2000-01-01.jsonl'); // 静态字面日：与真实时钟无关
+  assert.equal(fs.existsSync(ancient), true, '前置：远古分卷已落盘（实际 exists=' + fs.existsSync(ancient) + '）');
+  const removed = pruneByAge(dir, 1, '2000-01-02');           // 第 3 参只用于「当日」判等
+  assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(ancient), false, '远古分卷真的消失（实际 exists=' + fs.existsSync(ancient) + '）');
+  assert.equal(fs.readdirSync(dir).length, 0, '目录已清空（实际剩余: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+});
+
+// ── T-C12 ①b off-by-one 边界：`<` 与 `<=` 可分辨（误删一天留痕 = 数据丢失）──
+
+test('T-C12 ①b off-by-one 边界：恰在 cutoff 当天仍在、cutoff 前一天已删（`<`→`<=` 可分辨）', () => {
+  const dir = freshDir('c12');
+  const keepDays = 1;
+  // replica 复算 cutoff：与 todayCutoffDay 同一算式（sink.js:475-477），故不引入第二套口径
+  const cutoffBefore = dayKeyAgo(keepDays);
+  const dayBefore = dayKeyAgo(keepDays + 1);                  // cutoff 前一天
+  const onCutoff = seedSegment(dir, 'audit-' + cutoffBefore + '.jsonl');
+  const beforeCutoff = seedSegment(dir, 'audit-' + dayBefore + '.jsonl');
+  // today 取远离两者的字面值：只影响「当日卷」判等，确保本用例不进该分支
+  const removed = pruneByAge(dir, keepDays, '2099-12-31');
+  const cutoffAfter = dayKeyAgo(keepDays);
+  // 跨本地零点守卫：前后双读不一致 ⇒ 显式失败（禁静默 skip；这是环境抖动，非产品缺陷）
+  assert.equal(cutoffAfter, cutoffBefore,
+    '跨零点守卫：cutoff 在断言期间未跃变（前: ' + cutoffBefore + ' / 后: ' + cutoffAfter + '）');
+  assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(onCutoff), true, '恰在 cutoff 当天的卷仍在（实际 exists=' + fs.existsSync(onCutoff) + '）');
+  assert.equal(fs.existsSync(beforeCutoff), false, 'cutoff 前一天的卷已删（实际 exists=' + fs.existsSync(beforeCutoff) + '）');
+});
+
+// ── T-C13 ② 当日卷（含当日分卷）恒不删 —— 必须注入第 3 参，A/B 成对 ──
+
+test('T-C13 ② 当日卷（含当日分卷）恒不删：注入第 3 参 A/B 成对（当日 0 删 / 隔日 2 删）', () => {
+  // A 段：today = 文件日 ⇒ 「当日」分支生效，主卷与 .01 分卷双双受保护
+  const dirA = freshDir('c13a');
+  const aMain = seedSegment(dirA, 'audit-2000-01-01.jsonl');
+  const aSeg = seedSegment(dirA, 'audit-2000-01-01.01.jsonl'); // 真形态：点分段号 + .jsonl
+  const removedA = pruneByAge(dirA, 1, '2000-01-01');
+  assert.equal(removedA, 0, 'A 段（today=文件日）删除数 = 0（实际: ' + removedA + '）');
+  assert.equal(fs.existsSync(aMain), true, 'A 段主卷仍在（实际 exists=' + fs.existsSync(aMain) + '）');
+  assert.equal(fs.existsSync(aSeg), true, 'A 段 .01 分卷仍在（实际 exists=' + fs.existsSync(aSeg) + '）');
+  // B 段：同一批文件、只把 today 换成文件日 + 1 天 ⇒ 不再是「当日」⇒ 两卷应俱删。
+  // B 段是 T-2 陷阱的免疫器：文件名若不是真形态，A 段会因「解析失败」假绿，而 B 段必红。
+  const dirB = freshDir('c13b');
+  const bMain = seedSegment(dirB, 'audit-2000-01-01.jsonl');
+  const bSeg = seedSegment(dirB, 'audit-2000-01-01.01.jsonl');
+  const removedB = pruneByAge(dirB, 1, '2000-01-02');
+  assert.equal(removedB, 2, 'B 段（today=文件日+1）删除数 = 2（实际: ' + removedB + '）');
+  assert.equal(fs.existsSync(bMain), false, 'B 段主卷已删（实际 exists=' + fs.existsSync(bMain) + '）');
+  assert.equal(fs.existsSync(bSeg), false, 'B 段 .01 分卷已删（实际 exists=' + fs.existsSync(bSeg) + '）');
+});
+
+// ── T-C14 ③ parseSegmentName 不认的文件跳过不动（逐个点名，不等价于「目录里还有文件」）──
+
+test('T-C14 ③ parseSegmentName 不认的文件跳过不动（.bak / 乱名 / 错日期形态）', () => {
+  const dir = freshDir('c14');
+  const real = seedSegment(dir, 'audit-2000-01-01.jsonl');           // 可删：唯一被认出的分卷
+  const bak = seedSegment(dir, 'audit-2000-01-01.jsonl.bak');        // 后缀混杂
+  const weird = seedSegment(dir, 'weird-name.txt');                  // 完全乱名
+  const wrongForm = seedSegment(dir, 'audit-20000101.01.log');       // 格式错但不乱（真陷阱）
+  assert.equal(fs.readdirSync(dir).length, 4, '前置：1 真分卷 + 3 stray（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  const removed = pruneByAge(dir, 1, '2000-01-05');
+  assert.equal(removed, 1, '只有真分卷计入删除数（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(real), false, '真分卷已删（实际 exists=' + fs.existsSync(real) + '）');
+  assert.equal(fs.existsSync(bak), true, 'stray 仍在：' + 'audit-2000-01-01.jsonl.bak（实际 exists=' + fs.existsSync(bak) + '）');
+  assert.equal(fs.existsSync(weird), true, 'stray 仍在：weird-name.txt（实际 exists=' + fs.existsSync(weird) + '）');
+  assert.equal(fs.existsSync(wrongForm), true, 'stray 仍在：audit-20000101.01.log（实际 exists=' + fs.existsSync(wrongForm) + '）');
+  assert.equal(fs.readdirSync(dir).length, 3, '目录剩余条目数 = 3（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+});
+
+// ── T-C15 ④ unlinkSync 失败：不抛、不计入 removed、不阻断后续（失败面用同名目录造）──
+
+test('T-C15 ④ unlinkSync 失败：不抛、不计入 removed、不阻断后续', () => {
+  const dir = freshDir('c15');
+  // 失败面 = 同名目录：unlinkSync 对目录必抛（Windows EPERM / POSIX EISDIR），跨平台成立、零权限依赖、不 mock fs
+  const badA = segmentAt(dir, 'audit-1999-01-01.jsonl');
+  const badB = segmentAt(dir, 'audit-1999-01-03.jsonl');
+  fs.mkdirSync(badA);
+  fs.mkdirSync(badB);
+  const d1 = seedSegment(dir, 'audit-2000-01-01.jsonl'); // 3 个真可删的远古卷
+  const d2 = seedSegment(dir, 'audit-2000-01-02.jsonl');
+  const d3 = seedSegment(dir, 'audit-2000-01-03.jsonl');
+  let removed;
+  try {
+    removed = pruneByAge(dir, 1, '2000-01-05');           // today 与两组日期都不同
+  } catch (e) {
+    assert.fail('pruneByAge 不得因 unlink 失败而抛出（实际抛出: ' + ((e && e.code) || e) + '）');
+  }
+  assert.equal(removed, 3, '只有真删的 3 个计入、失败的两个不计入（实际: ' + removed + '）');
+  // 「不阻断后续」由「三个可删文件全消失」合取断言，不能只写注释
+  assert.equal(fs.existsSync(d1), false, '可删卷①已删（实际 exists=' + fs.existsSync(d1) + '）');
+  assert.equal(fs.existsSync(d2), false, '可删卷②已删（实际 exists=' + fs.existsSync(d2) + '）');
+  assert.equal(fs.existsSync(d3), false, '可删卷③已删（实际 exists=' + fs.existsSync(d3) + '）');
+  assert.equal(fs.existsSync(badA), true, '失败目录①仍在（实际 exists=' + fs.existsSync(badA) + '）');
+  assert.equal(fs.statSync(badA).isDirectory(), true, '失败目录①仍是目录（实际 isDirectory=' + fs.statSync(badA).isDirectory() + '）');
+  assert.equal(fs.existsSync(badB), true, '失败目录②仍在（实际 exists=' + fs.existsSync(badB) + '）');
+  assert.equal(fs.statSync(badB).isDirectory(), true, '失败目录②仍是目录（实际 isDirectory=' + fs.statSync(badB).isDirectory() + '）');
+});
