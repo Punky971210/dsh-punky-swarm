@@ -334,3 +334,20 @@ export const EVT_SIG_DUPLICATE_DETECTED = 'sig.duplicate_detected';
 // 写端 = `lib/tools/wave-plan-tools.js`（建批成功后；`smoke: true` 批**不落**，与产物契约类门同键豁免）；
 //   读端 = `log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效）。
 export const EVT_GATE_CONSUME_DEPS_ASYMMETRY = 'gate.consume_deps_asymmetry';
+
+// ── P0-2 回报三字段 · **全软**观察面（2026-10-25 · 批 `punky-guidance-preflight-20261025`）──────────
+// 语义：lane 结算 `merged` 时，读其产物（扫描面 = `produce ∪ outputs` 去重保序）核三行回报字段
+//   `knowledge_hits` / `skills_used` / `mcp_used`；任一非 `ok`（missing / empty / none-no-reason）
+//   ⇒ 落**恰一条**本事件 + 一条 `log.warn`，**merged 照旧成立**（绝不拒、不改成员态、不改迁移表）。
+// **命名纪律（硬）**：常量名/事件名均**不得**含 `GATE_` 子串 —— 该子串会被「零新造 `GATE_*`」判据的
+//   扫码 `GATE_[A-Z0-9_]+` 命中（AC-X1），令「码集合净增 = 0」**恒假**。本常量是**事件码**，不是门禁码：
+//   `GateErrorCode` union 与本常量的出现**零交集**，`gateStrengthOf` 只统计 escape/degrade ⇒ 不进强度。
+// 载荷（键纪律：`type` 槽位承载事件名，载荷不得占用）：
+//   `{ lane, reason: 'fields-missing' | 'no-declared-artifacts', missing: [字段名…保序],
+//      states: { knowledge_hits|skills_used|mcp_used: 'ok'|'missing'|'empty'|'none-no-reason' },
+//      artifacts: [相对路径…实际扫到的在场件], soft: true }`
+// 写端 = `lib/state/store/member-gates.js#runMergedGateChain`（**唯一写路径** `setMember` 的 merged 门链末尾
+//   ⇒ 工具 `member_settle` 与 auto-settle 主路**同一处**触发，不存在「只挂工具层」的死码）。
+// 读端 = `log_export` 的 `e.type.startsWith('gate.')` 过滤 + `batch_status` 事件清单（自动生效、零新读端）；
+//   验收侧硬核归 `a1-audit`（规格 §B.5 补偿条款：逐 lane 核三字段，缺任一记 blocking followup）。
+export const EVT_PREFLIGHT_REPORT_MISSING = 'gate.preflight.report.missing';

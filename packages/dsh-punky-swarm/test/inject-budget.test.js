@@ -259,11 +259,17 @@ function stripComments(src) {
  * **形态无关**表述（「承载 exec 验收项的那一章，章号与编号形态随判据源自定」）⇒ 任务包文本 +96B。
  * 原断言编码的是 c3 前的 §6 写死文案，已由 Q-22（指引 6 处文案）覆盖；
  * 本值由 `composeWorkerPrompt` 实跑两次逐字相同（HAS_OMIT_MARK=false）。
+ *
+ * 2026-10-25 重采：任务包新增「## 开工前必做」四段（`preflight` 声明位：kb / skills / mcp / checklist）。
+ * 本夹具**未声明** `preflight` ⇒ 渲染段头 1 行 + ⚠ 警示 1 行（点名回报三字段），故
+ * `bytes 2152 → 2428`（+276）、`lines 37 → 40`（+3）、sha256 随之变化。
+ * **这是预期变更**：未声明时警示必须可见（不得为讨好黄金值而让未声明零字节）；
+ * 采集方式＝临时副本注入探针直接打印实测三值，采集后删除副本（不动本文件的测量逻辑）。
  */
 const GOLDEN_COMPOSE = Object.freeze({
-  bytes: 2152,
-  sha256: '0f22d976530cc0b738faf01a9bcddb8bb3a87e77aa51db421b148e5adfe9e96d',
-  lines: 37,
+  bytes: 2428,
+  sha256: 'cc2c3cc6e37356fb190a0de6cf63d74c0811140206ebaf211484588d663a10d6',
+  lines: 40,
 });
 
 function goldenComposeArgs() {

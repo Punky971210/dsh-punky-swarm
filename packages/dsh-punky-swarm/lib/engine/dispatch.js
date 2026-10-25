@@ -502,6 +502,107 @@ export function personaOfRole(roleData) {
 
 function listOf(v) { return Array.isArray(v) ? v : []; }
 
+// ── 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1「开工前必做」四段内联 ────────
+// 任务包本段 = 把「本任务该查哪个库 / 用哪个技能 / 用哪个 MCP / 照哪几条检查表」**逐字**写进任务包，
+// 不再留给成员推断（根因：技能与工具的选择发生在「打开任务之前」，任务包不点名，成员没有信息去选）。
+//
+// **单点渲染**（落点 = 丙）：本组函数是**唯一**渲染实现，两处共同调用 ——
+//   ① 引擎自派路径：`composeWorkerPrompt`（本文件）；
+//   ② Leader 直派取件口：`lib/tools/query-tools.js` 的 `role_guide`（薄壳，零模板）。
+// 两处输出**逐字一致**由结构保证（同一函数、同一阈值来源），禁各自拼模板、禁在工具面复制一份。
+// ⚠ 本段文案不得掺元信息（批次号/版本号/来源追溯）：只写当下可执行的事实。
+const PREFLIGHT_SECTION_TITLE = '## 开工前必做';
+// 四段头**恒出**（保证锚点稳定：某段空也照样出段头，只把子项位置成占位行）。
+const PREFLIGHT_HEADERS = Object.freeze([
+  '1. 查知识库（`weknora_search`）——命中即按「正向做法」执行并登记来源；无命中写一行「无命中」照常推进：',
+  '2. 调用技能（`skill`）——开工前先读该技能正文，按其契约做事：',
+  '3. 使用 MCP——行尾写用途，否则不知道该拿它干什么：',
+  '4. 本任务检查表——逐条照做，不用翻文档：',
+]);
+const PREFLIGHT_SUBITEM_ABSENT = '   - （本任务未声明此项）';
+const PREFLIGHT_MCP_WHY_ABSENT = '（用途未声明）';
+const PREFLIGHT_KB_SOLE_HINT = '   - （提示：知识库关键词建议 2-3 个，当前仅 1 个）';
+// 分支②：**完全未声明**时的唯一输出（段头恰 1 行 + 警示恰 1 行）。它是「不静默」的落点，不是错误码。
+const PREFLIGHT_UNDECLARED_LINE = '> ⚠ 本任务未声明开工前必做项（`preflight` 的 kb / skills / mcp / checklist 四段全缺）：'
+  + '请自行判断是否需要查知识库、调用技能、使用 MCP，并把结论写进回报的 `knowledge_hits` / `skills_used` / `mcp_used`。';
+
+/** 声明判定（纯函数、零 IO、零抛错）：`task.preflight` 是 plain object ⇒ 已声明；其余（缺省/null/数组/标量）⇒ 未声明。
+ *  **区分「未声明」与「声明了但四段全空」是本函数唯一的判断**（二者渲染形态不同：警示行 vs 四段+占位）。
+ *  读值异常（getter 抛错等）⇒ 按**未声明**降级（fail-safe：本字段的用途是提示，绝不能阻断派发）。 */
+export function preflightOf(task) {
+  try {
+    const raw = task?.preflight;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { declared: false, decl: null };
+    return { declared: true, decl: raw };
+  } catch {
+    return { declared: false, decl: null };
+  }
+}
+
+/** 分支 ③④⑤ 的组装单点（纯函数）：给定**已判定**的声明对象（`null` = 未声明）返回段文本行。
+ *  逐条口径：
+ *   · 四段头**恒出**（声明了就是声明了：空段渲染占位行，与「未声明」的警示行**形态可辨**）；
+ *   · `kb` 恰 1 个 ⇒ 子项后追加软提示行（少于建议的 2-3 个；**不拒建批、不抛错**）；
+ *   · `mcp` 项缺 `why`（`''`）⇒ 行尾渲染显式占位「（用途未声明）」（不静默丢项）。 */
+export function renderPreflightLines(decl) {
+  if (!decl || typeof decl !== 'object' || Array.isArray(decl)) {
+    return [PREFLIGHT_SECTION_TITLE, PREFLIGHT_UNDECLARED_LINE];
+  }
+  const stringsOf = (v) => listOf(v).filter((x) => typeof x === 'string' && x.trim() !== '');
+  const kb = stringsOf(decl.kb);
+  const skills = stringsOf(decl.skills);
+  const mcp = listOf(decl.mcp).filter((m) => m && typeof m === 'object' && typeof m.tool === 'string' && m.tool.trim() !== '');
+  const checklist = stringsOf(decl.checklist);
+  const L = [PREFLIGHT_SECTION_TITLE];
+  L.push(PREFLIGHT_HEADERS[0]);
+  if (kb.length) {
+    for (const k of kb) L.push('   - `weknora_search("' + k + '")`');
+    if (kb.length === 1) L.push(PREFLIGHT_KB_SOLE_HINT);
+  } else L.push(PREFLIGHT_SUBITEM_ABSENT);
+  L.push(PREFLIGHT_HEADERS[1]);
+  if (skills.length) for (const s of skills) L.push('   - `skill("' + s + '")`');
+  else L.push(PREFLIGHT_SUBITEM_ABSENT);
+  L.push(PREFLIGHT_HEADERS[2]);
+  if (mcp.length) {
+    for (const m of mcp) {
+      const why = (typeof m.why === 'string' ? m.why.trim() : '') || PREFLIGHT_MCP_WHY_ABSENT;
+      L.push('   - `' + m.tool.trim() + '` —— ' + why);
+    }
+  } else L.push(PREFLIGHT_SUBITEM_ABSENT);
+  L.push(PREFLIGHT_HEADERS[3]);
+  if (checklist.length) for (const c of checklist) L.push('   - ' + c.trim());
+  else L.push(PREFLIGHT_SUBITEM_ABSENT);
+  return L;
+}
+
+/** 开工前必做段**整块**渲染（唯一导出面；两处调用点共用）。
+ *  **fail-safe（硬）**：整段包 try/catch —— 任何异常（畸形声明 / getter 抛错 / undefined 访问）⇒ 降级为
+ *  **分支② 警示行**，**绝不向上抛**。理由：`composeWorkerPrompt` 在 `setMember(running)` 之后、`rt.start` 之前
+ *  执行，它抛错会落进 `dispatchLaneCore` 的 catch ⇒ lane 置 `failed` + 句柄作废 + **不可原地重派**（代价 = 整批作废）。
+ *  **注入预算**：面名 `taskpack.preflight`、层② `perBlock`（整块一层）；未超限 ⇒ **原值本身**，
+ *  超限 ⇒ 既有省略标记 `…[omitted <N>B @ taskpack.preflight]`（消费方当场可辨）。
+ *  `injectBudget` 缺省 `null` ⇒ `applyInjectionBudget` 零动作（`thresholds.enabled !== true` 即原值返回）。
+ * @param {object|null|undefined} preflight `WavePlanTask.preflight`（已声明对象 / `null` = 未声明）
+ * @param {{injectBudget?: object|null}} [opts]
+ * @returns {string} 段文本（**不含**前导空行；前导空行归调用方，与 `renderRoleGuide` 同款边界约定）
+ */
+export function renderPreflightBlock(preflight, { injectBudget = null } = {}) {
+  let text;
+  try {
+    text = renderPreflightLines(
+      (preflight && typeof preflight === 'object' && !Array.isArray(preflight)) ? preflight : null,
+    ).join('\n');
+  } catch {
+    text = [PREFLIGHT_SECTION_TITLE, PREFLIGHT_UNDECLARED_LINE].join('\n');
+  }
+  try {
+    const budgeted = applyInjectionBudget(text, { surface: 'taskpack.preflight', thresholds: injectBudget, kind: 'perBlock' });
+    return typeof budgeted?.text === 'string' ? budgeted.text : text;
+  } catch {
+    return text;
+  }
+}
+
 /** 任务级三段渲染**单点**（D-0 / R-1）——**role 独占**：职责（含 mission）/ 授权 / 交付要求
  *  （形态 `form` + `must_contain` + 规格指向 `skills` + `acceptance_hints`）。
  *
@@ -611,6 +712,13 @@ export function composeWorkerPrompt({
   // 【P2 · arch-context】架构约束段（调用方已裁剪好的文本，来自 `.punky/arch.yml`）。
   //   缺省 `null` ⇒ **不 push 任何行** ⇒ 任务包与改动前**逐字节相同**（零回归口径，与 `injectBudget` 同款）。
   archContext = null,
+  // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1「开工前必做」四段声明的**取值位**
+  //   （调用方传 `WavePlanTask.preflight`）。缺省 `null` ⇒ **走警示行**（不是「零变化」：用户裁的「不静默」
+  //   是硬要求，本批唯一被接受的任务包字节变化）。
+  preflight = null,
+  // 【同批】降级告警落点（缺省 `null` ⇒ 零输出；`dispatchLaneCore` 传 `ctx.logger`）。
+  //   只用于「段渲染异常 ⇒ 降级为警示行」这一条路径的一次 warn —— 本函数其余部分保持纯。
+  logger = null,
 }) {
   // role 解析（**单点真源**）：对象直用 / id 串查语料库（查不到 ⇒ 抛 `GATE_ROLE_UNRESOLVED`）/ 未声明 ⇒ null。
   const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
@@ -664,6 +772,23 @@ export function composeWorkerPrompt({
     L.push('');
     L.push(archContextBudget);
   }
+  // ── 【P0-1】`## 开工前必做` 段：位置 = **archContext 段之后、`## 纪律` 之前** ──────────────────
+  //   位置理由：开工动作清单紧贴纪律段 = 成员「动手前最后读到的内容」（同时满足「角色/目标之后、纪律之前」）。
+  //   本段自带前导空行（与 archContext 段同款）。既有段落相对顺序**零改动**。
+  //   fail-safe：`renderPreflightBlock` 内部已包 try/catch（永不抛）；此处再兜一层 —— 万一将来有人改坏它，
+  //   代价也必须是「降级为警示行」而不是「lane failed」（见该函数注释的代价说明）。
+  let preflightBlock;
+  try {
+    preflightBlock = renderPreflightBlock(preflight, { injectBudget });
+  } catch (e) {
+    try {
+      logger?.warn?.('[dsh-punky-swarm] composeWorkerPrompt: 开工前必做段渲染失败 ⇒ 降级为警示行（不阻断派发）：'
+        + String(e?.message ?? e));
+    } catch { /* 告警本身失败也不得外溢 */ }
+    preflightBlock = renderPreflightBlock(null, { injectBudget });
+  }
+  L.push('');
+  L.push(...String(preflightBlock).split('\n'));
   L.push('');
   L.push('## 纪律');
   // 【2026-09-27 · 规则编号动态化】原为**字面 1..6**（第 6 条按层裁剪）⇒ 新增规则会撞号。
@@ -1001,6 +1126,12 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   `types/contracts.ts`）裁剪 `.punky/arch.yml`，让 worker 开工即知「涉域 + 允许依赖 + 禁区」。
     //   取不到 targets（缺省 null）/ 取不到 arch.yml / 域集合为空 ⇒ 返回 `null` ⇒ 任务包零变化（零回归）。
     archContext: renderArchContext({ targets: laneTask?.targets ?? null }),
+    // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1 开工前必做四段：
+    //   取值 = 该 lane 的 `WavePlanTask.preflight`（建批归一化恒写：未声明落 `null`）⇒ 未声明即走警示行。
+    //   接线约束：`preflight` **不进** `cmd` / **不进** `sig` / **不回写** `skills`（D3 三通道并存）。
+    preflight: laneTask?.preflight ?? null,
+    // 段渲染异常时的降级告警落点（唯一消费点，见该函数 logger 参数注释）。
+    logger: ctx?.logger ?? null,
   });
   // 【2026-09-22 · one-shot 化】`startContinuable(spec)` → **`rt.start(provider, request)`**：
   //   one-shot 请求**平铺**（label/prompt/parent/signal/toolFilter/persona/maxDepth 同层）；

@@ -31,7 +31,12 @@ import * as EVT from '../state/event-types.js';
 //   **不自带任何三段模板/标题字面量**（R-5 渲染色同源的**结构性**保证，见 L-AC-6 ②④）。
 //   依赖方向单向：`lib/tools/*` → `lib/engine/*`；`dispatch.js` 只引 node 内置 + `../bridge` + `../state`
 //   + `./suite.js` ⇒ **无环**。
-import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE } from '../engine/dispatch.js';
+import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock } from '../engine/dispatch.js';
+// 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】开工前必做段的**阈值同源**：
+//   `role_guide` 与引擎自派路径必须过**同一份** `capabilities.injectBudget`（同一取值单点
+//   `readCapability` + 同一热更快照读端 `readLiveConfig`）⇒ 两处输出**逐字一致**由结构保证，
+//   不靠「块从来没超限所以看不出来」。依赖方向仍单向（`lib/tools/*` → `lib/assembly/*`，无环）。
+import { readCapability } from '../assembly/schema.js';
 
 export function buildBatchStatusTools(cx) {
   const { ctx, deps, store } = cx;
@@ -167,14 +172,24 @@ export function buildGateTools(cx) {
  *  `type:"string"` 的字段收到 `null` 会判 `must be a string` —— 正是本仓 task-25「已落盘却报
  *  假失败」的同一形态。`oneOf:[{type:"string"},{type:"null"}]` 经**真实宿主校验函数**实测为零违例
  *  （见 `exec/e01-impl/provenance/schema-check.mjs` 读数）。 */
-export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars -- 签名与同文件其余 builder 齐一（cx 由 register 侧统一注入）
+export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars -- 本批起 `cx.deps` 用于 injectBudget 阈值同源（见 execute）；其余字段仍由 register 侧统一注入
+  const { deps } = cx ?? {};
   return [
     defineTool({
       name: "role_guide",
-      description: "取某个 role 的**已渲染三段**（职责 / 授权 / 交付要求；标题字面量只活在单点 `ROLE_SECTION_TITLES`，本描述刻意不复写标题原文），供 Leader 在**自写任务包**时取件拼装——C-2 人工直派（`lane_dispatch` 取 `firstLine` 后自写首行）与 D-1 team 席位（`spawn_teammate` 的 `prompt`）**都走本件**，不得手抄。**渲染色同源**：`guide` 与引擎自派（C-1）任务包内的同一 role 三段**逐字一致**（同一单点 `renderRoleGuide`，本工具是薄壳、不自带模板）。**未解析到 role 一律明确报错**（`GATE_ROLE_UNRESOLVED`，含 `role` 缺失/非字符串/空串/纯空白与零命中两路），**不静默返回空串**。只读、零副作用。",
+      description: "取某个 role 的**已渲染三段**（职责 / 授权 / 交付要求；标题字面量只活在单点 `ROLE_SECTION_TITLES`，本描述刻意不复写标题原文），供 Leader 在**自写任务包**时取件拼装——C-2 人工直派（`lane_dispatch` 取 `firstLine` 后自写首行）与 D-1 team 席位（`spawn_teammate` 的 `prompt`）**都走本件**，不得手抄。**渲染色同源**：`guide` 与引擎自派（C-1）任务包内的同一 role 三段**逐字一致**（同一单点 `renderRoleGuide`，本工具是薄壳、不自带模板）。**未解析到 role 一律明确报错**（`GATE_ROLE_UNRESOLVED`，含 `role` 缺失/非字符串/空串/纯空白与零命中两路），**不静默返回空串**。**另可传出 `preflight`（开工前必做四段：知识库关键词 / 技能名 / MCP 工具+用途 / 检查表条目）⇒ 返回值多出 `preflight` 字段** = 引擎同一渲染单点产出的整段文本（与引擎自派任务包内该段**逐字一致**，可直接粘进自写任务包）；不传 ⇒ 返回键集不变。只读、零副作用。",
       parameters: {
         "role": {"type":"string","required":true,"description":"role id（如 `coordinator` / `coder`）；**不得**传对象——本工具只走解析路径"},
-        "team": {"type":"string","description":"限定团队目录；缺省 = 既有团队序（`software-team` 优先，余按字典序）"}
+        "team": {"type":"string","description":"限定团队目录；缺省 = 既有团队序（`software-team` 优先，余按字典序）"},
+        // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1 开工前必做四段声明**透传位**：
+        //   传了就按引擎自派路径的**同一个**渲染单点产出 `preflight` 字段（逐字一致）；不传 ⇒ 返回键集逐字不变。
+        //   形态与 `wave_plan` 的 task `preflight` 完全同构 ⇒ Leader 自写任务包时可直接把同一份声明粘过来。
+        "preflight": {"type":"object","additionalProperties":false,"description":"开工前必做 · 四段声明（可选）。传 ⇒ 本工具按引擎同一渲染单点产出 `preflight` 字段（与引擎自派任务包内该段**逐字一致**）；不传 ⇒ 不产该字段。四段：`kb` 知识库关键词 / `skills` 技能确切名 / `mcp` MCP 工具+用途 / `checklist` 检查表条目。","properties":{
+          "kb":{"type":"array","items":{"type":"string"},"description":"知识库关键词（建议 2-3 个，具体到能直接粘进 weknora_search）"},
+          "skills":{"type":"array","items":{"type":"string"},"description":"技能确切名（不是「相关技能」）"},
+          "mcp":{"type":"array","description":"MCP 工具 + 用途","items":{"type":"object","additionalProperties":false,"properties":{"tool":{"type":"string","required":true},"why":{"type":"string","description":"拿它干什么（缺 ⇒ 行尾渲染「（用途未声明）」）"}}}},
+          "checklist":{"type":"array","items":{"type":"string"},"description":"本任务相关检查表条目（内联，不让成员翻文档）"}
+        }}
       },
       output: {
         // ⚠ 本字段是**宿主的 value schema DSL**（`@deepseek-ai/dsh-tools` 的 `valueSchemaSpecToJsonSchema`），
@@ -188,6 +203,8 @@ export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars 
           "team":{"oneOf":[{"type":"string"},{"type":"null"}],"required":true},
           "source":{"type":"string","required":true},
           "guide":{"type":"string","required":true},
+          // 【本批】**仅在入参带 `preflight` 时出现**（可选键）：守「不传 ⇒ 返回键集逐字不变」（既有读端零回归）。
+          "preflight":{"type":"string"},
         }},
         render: (_args, value) => TEXT_OUTPUT('role_guide ' + value.role + ' <- ' + value.source),
       },
@@ -203,7 +220,18 @@ export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars 
         const roleData = resolveRoleRef(role, { team });
         // ③ 单点渲染（薄壳）：不做拼装/裁剪/改写 ⇒ 与 C-1 任务包内三段逐字一致。
         const guide = renderRoleGuide(roleData);
-        return { role, team: args?.team ?? null, source: String(roleData?.source ?? ''), guide };
+        const out = { role, team: args?.team ?? null, source: String(roleData?.source ?? ''), guide };
+        // ④ 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】开工前必做四段（P0-1）：
+        //   **取件口不是自动注入口**——同 role 三段口径：引擎给件、Leader 取件拼装。
+        //   渲染**单点** = `dispatch.js#renderPreflightBlock`（引擎自派路径的同一函数）⇒ `preflight` 字段与
+        //   任务包内该段**逐字一致**（本文件零模板、零拼装）。阈值也取同源 `capabilities.injectBudget`。
+        //   未传 `preflight` ⇒ **不产该键**（返回键集逐字不变，既有读端 RO-18 的精确集断言零回归）。
+        if (args?.preflight !== undefined && args?.preflight !== null) {
+          out.preflight = renderPreflightBlock(args.preflight, {
+            injectBudget: readCapability(readLiveConfig(deps), 'injectBudget'),
+          });
+        }
+        return out;
       },
     }),
   ];

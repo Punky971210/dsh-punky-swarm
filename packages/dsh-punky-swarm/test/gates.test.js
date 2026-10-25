@@ -555,7 +555,11 @@ test('命令 gate G12：未声明 `gate:` 行 ⇒ merged 零感知（命令门�
   //   ② `gate.contract_missing`——B2 契约缺声明首触留痕（本套件 team=punky-preset 未声明 `flows.exec.gate_command`
   //      ⇒ 引擎基线启用留痕，属**契约面观察**，不改判定；**这是规格「/^gate\./ 全族零事件」在代码上不成立的
   //      唯一原因**（另因 ① 本就存在），故此处以显式白名单等价收紧）。
-  const offFamily = g.filter((e) => e.type !== 'gate.passed' && e.type !== 'gate.contract_missing');
+  //   ③ `gate.preflight.report.missing`——回报三字段（knowledge_hits / skills_used / mcp_used）缺失的**软观察**留痕。
+  //      **不属命令门族**（上方 `cmdFamily` 判据独立成立、仍为零事件）；只因 `log_export` 按 `startsWith('gate.')`
+  //      自动收录读端，该事件才落在 `gate.` 命名空间。白名单是**排除式**：具名放行这一项，其余未具名 `gate.*` 仍判红。
+  const offFamily = g.filter((e) => e.type !== 'gate.passed' && e.type !== 'gate.contract_missing'
+    && e.type !== 'gate.preflight.report.missing');
   assert.equal(offFamily.length, 0, 'F-7/A2：未声明路径不得出现任何其它 gate.* 事件；实测=' + JSON.stringify(g.map((e) => e.type)));
   // C-8（techdebt-close-20260915 / lane e1）**正向基线断言**（净增，不改上文任何既有语义）：
   //   上面这条白名单是「排除式」断言——它只说明「除（gate.passed|gate.contract_missing）外无其它事件」。

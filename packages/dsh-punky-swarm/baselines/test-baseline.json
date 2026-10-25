@@ -691,7 +691,7 @@
     "test/gates.test.js": {
       "asserts": 201,
       "blankLines": 66,
-      "lines": 1024,
+      "lines": 1028,
       "tautologies": 0,
       "tests": 49,
       "todos": 0
@@ -939,7 +939,7 @@
     "test/inject-budget.test.js": {
       "asserts": 103,
       "blankLines": 75,
-      "lines": 702,
+      "lines": 708,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -1214,6 +1214,22 @@
       "lines": 68,
       "tautologies": 0,
       "tests": 1,
+      "todos": 0
+    },
+    "test/preflight-packet.test.js": {
+      "asserts": 73,
+      "blankLines": 32,
+      "lines": 364,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
+    },
+    "test/preflight-report.test.js": {
+      "asserts": 61,
+      "blankLines": 30,
+      "lines": 324,
+      "tautologies": 0,
+      "tests": 16,
       "todos": 0
     },
     "test/preset-rules.test.js": {
@@ -1641,7 +1657,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T15:24:12Z",
+  "generatedAt": "2026-10-25T16:30:21Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1652,15 +1668,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-prune-coverage-20261025 c1-tests：补 pruneByAge 四类覆盖（T-C11..T-C15，+5 tests / +30 asserts）",
+  "reason": "punky-guidance-preflight-20261025：P0-1 任务包四段 preflight + P0-2 回报三字段；新增 2 个测试文件",
   "schema": 1,
   "totals": {
-    "asserts": 10621,
-    "blankLines": 5597,
-    "files": 205,
-    "lines": 59618,
+    "asserts": 10755,
+    "blankLines": 5659,
+    "files": 207,
+    "lines": 60316,
     "tautologies": 0,
-    "tests": 2163,
+    "tests": 2193,
     "todos": 4
   }
 }

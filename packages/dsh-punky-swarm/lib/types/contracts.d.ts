@@ -17,6 +17,24 @@ export interface ConditionClause {
 }
 /** 建批输入条件：对象数组（主形态）或字符串简写数组；null/缺省 = 恒满足 */
 export type ConditionInput = ConditionClause[] | string[] | null | undefined;
+/** 开工前必做 · MCP 项（`why` 必读：成员不知道拿它干什么就不会用）。
+ *  渲染面：`why` 缺失/非字符串 ⇒ 归一化为 `''`，行尾渲染显式占位「（用途未声明）」（不静默丢项）。 */
+export interface PreflightMcp {
+    tool: string;
+    why?: string;
+}
+/** 开工前必做 · 四段声明（全部可选；缺段渲染占位、全缺渲染警示行）。
+ *  语义（D3 双轨）：本声明是**第三条渲染通道**（`## 开工前必做`），与 `task.skills`（装配前缀）
+ *  / `role.skills`（role 三段内规格指向）**并存、不合并、不去重、不排序**；
+ *  故 `preflight.skills` **不回写** `task.skills`、**不进** `cmd`、**不进** `sig`。
+ *  ⚠ 归一化**恒写**（`WavePlanTask.preflight`）：缺省/非法形态 ⇒ `null`（= 未声明 ⇒ 渲染警示行），
+ *  声明了但四段全空 ⇒ 仍是对象（= 声明了 ⇒ 渲染四段 + 每段占位）。归零 throw（全软，不拒建批）。 */
+export interface PreflightDecl {
+    kb?: string[];
+    skills?: string[];
+    mcp?: PreflightMcp[];
+    checklist?: string[];
+}
 /** 输入形态：wave_plan 建批工具 tasks 入参（id 必填，其余可选） */
 export interface WavePlanTaskInput {
     id: string;
@@ -48,6 +66,8 @@ export interface WavePlanTaskInput {
      *  非法形态（trim 后非空且不匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`）⇒ 建批期拒 `GATE_ROSTER_INVALID`（fail-closed）。
      *  ⚠ **不参与 `sig` 指纹**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）。 */
     roster?: string | null;
+    /** 开工前必做 · 四段声明（可选；归一化恒写、零 throw、不进 `sig`/`cmd`、不回写 `skills`）。 */
+    preflight?: PreflightDecl;
     sig?: string | null;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */
@@ -91,6 +111,11 @@ export interface WavePlanTask {
      *  （`owner` 仍是公共池归属声明面、不参与门禁；`roster` 是 team 通道写权判据的输入）。
      *  ⚠ **不参与 `sig`**（`computeTaskSig` 输入面逐字不变）。 */
     roster: string | null;
+    /** 开工前必做 · 四段声明（**归一化恒写**：缺省/非法形态 ⇒ `null`，与 `targetsMarker` 同风格不落 `undefined`；
+     *  声明了但四段全空 ⇒ 对象本身（渲染四段 + 每段占位））。
+     *  ⚠ **不进 `sig`**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
+     *  **不回写 `skills`**（D3：第三条渲染通道，与装配声明并存不合并）。 */
+    preflight: PreflightDecl | null;
     /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
      *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
      *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化

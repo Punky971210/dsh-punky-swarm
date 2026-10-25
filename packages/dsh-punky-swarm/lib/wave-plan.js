@@ -478,6 +478,52 @@ export function normalizeTargetsContract(t) {
     }
     return { targets, targetsMarker, targetsNoChange };
 }
+// 开工前必做 · 四段声明归一化（P0-1；与 `targetsContract` / `roster` 同族「可选字段 + 归一化恒写」惯用法）。
+//   口径（判据源 §A.2 六条，逐条对码）：
+//     ① 缺省 / `null` / 非 plain object / 数组 ⇒ `null`（= **未声明** ⇒ 渲染面走警示行，不静默）；
+//     ② `kb` / `skills` / `checklist` 非数组 ⇒ `[]`；
+//     ③ 数组元素非字符串或 `trim()` 后为空 ⇒ **丢弃该项**（不报错、不拒建批）；
+//     ④ `mcp` 元素非对象 / `tool` 非非空字符串 ⇒ 丢弃该项；
+//     ⑤ `mcp` 元素缺 `why` / `why` 非字符串 ⇒ **保留该项**、`why` 归一为 `''`
+//        （渲染成显式「（用途未声明）」占位，**不静默丢**——丢项会让成员以为没声明过）；
+//     ⑥ 四段归一后全空 ⇒ **仍写对象**（声明了就是声明了：渲染出四段 + 每段「本任务未声明此项」占位，
+//        与「完全未声明」的警示行**形态可辨**）。
+//   **零 throw**（全软）：任何非法形态一律降级，不拒建批、不打任何门禁码；读值异常（如 getter 抛错）
+//   同样降级为 `null`——建批期抛错会让整批不可建，而本字段的**唯一**设计目的是提示。
+export function normalizePreflight(raw) {
+    try {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+            return null;
+        const src = raw;
+        const stringsOf = (v) => {
+            const arr = Array.isArray(v) ? v : [];
+            const out = [];
+            for (const item of arr) {
+                if (typeof item !== 'string')
+                    continue;
+                const s = item.trim();
+                if (s)
+                    out.push(s);
+            }
+            return out;
+        };
+        const mcpRaw = src.mcp;
+        const mcp = [];
+        for (const item of (Array.isArray(mcpRaw) ? mcpRaw : [])) {
+            if (!item || typeof item !== 'object' || Array.isArray(item))
+                continue;
+            const tool = item.tool;
+            if (typeof tool !== 'string' || !tool.trim())
+                continue;
+            const whyRaw = item.why;
+            mcp.push({ tool: tool.trim(), why: typeof whyRaw === 'string' ? whyRaw.trim() : '' });
+        }
+        return { kb: stringsOf(src.kb), skills: stringsOf(src.skills), mcp, checklist: stringsOf(src.checklist) };
+    }
+    catch {
+        return null;
+    }
+}
 // 任务包 resume 契约固定条款：resume: true 时注入 worker 派发提示词——
 //   新 worker 先查 checkpoint 历史（lane_checkpoint_status），从最后已 checkpoint 步骤之后继续，禁止重做；
 //   每完成一个子步骤立即 lane_checkpoint（携带 progress），禁止攒批。
@@ -1076,6 +1122,12 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移；与 `roster` 同款处置）。
                 //   ⚠ **不改变抑制语义本身**（`composeWorkerPrompt` 内「audit 层 + 写盘面恰一件」的**自动判定**保留）。
                 singleArtifactWrite: t.singleArtifactWrite === true,
+                // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1 开工前必做 · 四段声明
+                //   **归一化恒写**（缺省/非法形态 ⇒ `null`，与 `targetsMarker` 同风格：不落 `undefined`）。
+                //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
+                //   **不回写 `skills`**（D3：第三条渲染通道，与装配声明 `[skills=…]` / role 三段并存不合并）。
+                //   ⚠ 归一化**零 throw**（全软）：形态不合法只降级，不拒建批、不打任何门禁码。
+                preflight: normalizePreflight(t.preflight),
                 // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
                 //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
                 //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）
