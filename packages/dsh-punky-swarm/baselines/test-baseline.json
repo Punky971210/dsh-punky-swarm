@@ -129,9 +129,9 @@
       "todos": 0
     },
     "test/artifact-types.test.js": {
-      "asserts": 33,
+      "asserts": 34,
       "blankLines": 22,
-      "lines": 185,
+      "lines": 192,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T18:58:06Z",
+  "generatedAt": "2026-10-25T19:12:20Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-test-quantity-20261025：数量断言治理（A 类规模等值 + E-坏量快照 + D 假绿 + 零断言；八型分类法 + 三档判据）",
+  "reason": "B-1 修复：artifact-types:88 整表冻结改为存在式冻结（锁内容不锁规模）",
   "schema": 1,
   "totals": {
-    "asserts": 10837,
+    "asserts": 10838,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61119,
+    "lines": 61126,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

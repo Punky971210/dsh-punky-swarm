@@ -85,9 +85,16 @@ test('① 既有条目键集**恒为** {type,dir,layer,desc}（禁形状漂移�
   }
 });
 
-test('② 既有 10 条四字段**逐字不变**（冻结基线对照）', () => {
+test('② 既有 10 类四字段**逐字仍在**（存在式冻结：锁内容不锁规模）', () => {
   const view = ARTIFACT_TYPES.map((t) => ({ type: t.type, dir: t.dir, layer: t.layer, desc: t.desc }));
-  assert.deepEqual(view, BASELINE);
+  // ── 存在式冻结（取代 `deepEqual(view, BASELINE)` 的整表冻结）────────────────
+  // `deepEqual(actual, FROZEN_ARRAY)` 在 actual 可**合法增长**时等价于 `length === N` 的假红：
+  // 新版第 11 类会让本行必红。改断「既有每条在现行表中逐字仍在」 ⇒ 锁内容、不锁规模。
+  //   态①：合法新增第 11 类 ⇒ 绿；态②：既有某类某字段被改一个字 ⇒ 红并**点名**该条。
+  const missing = BASELINE.filter((b) => !view.some((v) => JSON.stringify(v) === JSON.stringify(b)));
+  assert.deepEqual(missing, [], '既有 10 类须逐字仍在（点名缺失/被改）：' + JSON.stringify(missing));
+  assert.ok(view.length >= BASELINE.length,
+    '既有类数不得减少（实测 ' + view.length + ' / 基线 ' + BASELINE.length + '；新增不触红，缩减才红）');
 });
 
 ;
