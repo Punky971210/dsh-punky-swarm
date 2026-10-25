@@ -17,17 +17,17 @@
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
-      "asserts": 46,
+      "asserts": 45,
       "blankLines": 37,
-      "lines": 519,
+      "lines": 532,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 60,
+      "asserts": 59,
       "blankLines": 39,
-      "lines": 533,
+      "lines": 551,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -459,7 +459,7 @@
     "test/f2-artifact-containment-link.test.js": {
       "asserts": 36,
       "blankLines": 29,
-      "lines": 184,
+      "lines": 188,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -467,7 +467,7 @@
     "test/f2-dispatch-desc-and-docs.test.js": {
       "asserts": 48,
       "blankLines": 30,
-      "lines": 279,
+      "lines": 290,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1139,7 +1139,7 @@
     "test/p2-deps-compat.test.js": {
       "asserts": 26,
       "blankLines": 26,
-      "lines": 242,
+      "lines": 251,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T04:59:05Z",
+  "generatedAt": "2026-10-25T05:11:42Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1647,10 +1647,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 10562,
+    "asserts": 10560,
     "blankLines": 5566,
     "files": 204,
-    "lines": 59257,
+    "lines": 59312,
     "tautologies": 0,
     "tests": 2147,
     "todos": 4

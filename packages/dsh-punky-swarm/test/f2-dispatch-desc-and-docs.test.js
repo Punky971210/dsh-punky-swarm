@@ -197,10 +197,18 @@ test('D3 lane_claim 接线 warn：force 接管成功 ⇒ 宿主日志恰 1 行�
 });
 
 // ── D4 · AC-10 注释/文档锚点四处 + 第三处同类断言（tier-gate）────────────────────────────
-test('D4 注释/文档锚点：dispatch.js/dispatch-register.js/docs 四处校正落盘且旧锚点 0 命中', () => {
+test('D4 注释/文档锚点：dispatch.js/dispatch-register.js/docs 四处校正落盘且旧锚点 0 命中', (t) => {
   const dispatch = read('lib/engine/dispatch.js');
   const register = read('lib/bridge/dispatch-register.js');
-  const docs = read('docs/engine-load-smoke-recipe.md');
+  // 【2026-10-25 CI 修复】`docs/**` 按 `.gitignore` **不入库**（仅 `docs/integrations/` 下两件集成声明文档为例外）；
+  //   干净检出 / CI runner 上本文件不在场，原 `read()` 直接抛错 ⇒ CI 必红（Linux CI 实测红）。
+  //   处置：文档类断言在文档不在场时**留痕为环境不可核**（不计通过、也不判红），lib 侧断言照常执行。
+  const DOC_REL = 'docs/engine-load-smoke-recipe.md';
+  const docOnDisk = fs.existsSync(path.join(PKG_DIR, DOC_REL));
+  if (!docOnDisk) {
+    t.diagnostic(DOC_REL + ' 不在场（docs 按 .gitignore 不入库）⇒ 「文档锚点」两条断言本环境不可核；lib 侧断言仍执行。');
+  }
+  const docs = docOnDisk ? read(DOC_REL) : '';
 
   // C10：旧锚点 `lib/tools/core.js` + `:1369` 0 命中；真实调用点 ≥1（阳性对照：不是整段被删）
   assert.equal(countHits(dispatch, /core\.js:1369/), 0, 'dispatch.js 不得再出现陈旧锚点（core.js + :1369 形态）');
@@ -222,8 +230,11 @@ test('D4 注释/文档锚点：dispatch.js/dispatch-register.js/docs 四处校�
     'dispatch-register.js 的强度须精确为「顶层成立、preset 层不成立」');
 
   // C13：文档旧锚点 L93 → 0；新锚点在场
-  assert.equal(countHits(docs, /\bL93\b/), 0, 'docs 不得再留 L93 旧锚点');
-  assert.ok(docs.includes('lib/index.js:1040-1041'), 'docs 须改用 lib/index.js:1040-1041 锚点');
+  //   （文档不在场时这两条跳过并已在用例开头留痕：docs 按 .gitignore 不入库）
+  if (docOnDisk) {
+    assert.equal(countHits(docs, /\bL93\b/), 0, 'docs 不得再留 L93 旧锚点');
+    assert.ok(docs.includes('lib/index.js:1040-1041'), 'docs 须改用 lib/index.js:1040-1041 锚点');
+  }
 
   // 全仓（lib/docs/test/scripts 面）陈旧锚点（core.js + :1369 形态）0 命中
   const scan = [];

@@ -83,7 +83,11 @@ test('C1 词法逃逸未被放宽（`..` / 根外绝对）+ 解权档 fail-close
   assert.equal(isInsideRootResolved(path.join(R, 'plan', 'ok.md'), R), true, '阳性：解权档对根内普通文件 ⇒ true');
 
   // 阴性：词法逃逸逐条仍拒（文案逐字保留）
-  for (const rel of ['../outside.md', '../../outside2.md', 'plan/../../outside.md', path.join(BASE, 'evil.md'), 'D:outside.md']) {
+  // ⚠ 平台分档（2026-10-25 CI 修复）：`D:outside.md` 只在 win32 上是词法逃逸——posix 无盘符语义，
+  //   `path.resolve` 落在根内（按 OS 语义是「文件不存在」而非「越界读到根外」）⇒ 该形态仅在 win32 进否定集。
+  const lexicalEscapes = ['../outside.md', '../../outside2.md', 'plan/../../outside.md', path.join(BASE, 'evil.md')];
+  if (process.platform === 'win32') lexicalEscapes.push('D:outside.md');
+  for (const rel of lexicalEscapes) {
     assert.throws(() => resolveArtifactIn(R, rel),
       (e) => e instanceof Error && /artifact path escapes batch root: /.test(e.message),
       '词法逃逸须 throw 且文案逐字保留: ' + rel);
