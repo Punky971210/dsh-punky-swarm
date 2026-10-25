@@ -60,6 +60,19 @@ discipline_refs: [0k, 12]
 - **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-hoare-check/` —— 六态定义、`MAPPING_BLOCKED` 口径与 Hoare 报告模板原文；**不在册不构成失败、不影响任何门禁**，未读不阻断评审。
 - 落点：review-<lane>.md 的 MUST / SHOULD / FYI 每条**引用条目号（F-x / B-x / V-x / S-x）**；发现「命令名同而范围不同」「历史通过当本次证据」一律记 MUST。结构缺项（段落缺、编号重复、引用解析不到）按 `spec-contract.md` 附 A 的「结构失败先于语义」口径直接判 MUST 退回、不进语义评审；结论行按 S-8 给单一门控词。
 
+## 默认能力面（本角色开工必用）
+
+本角色主轴：**对抗审查 + 证据核** —— 先把证据取到手（源码与调用链、历史经验、规格原文），再谈 MUST/SHOULD/FYI 分级与结论。
+
+- **写 / 校验规格**：`skill("speclang")` —— 规格结构化写作与机械校验
+- **查历史经验**：`weknora_search("<具体关键词>")` → 库 `punky-edu` —— 开工前先查，命中按正向做法执行
+- **取源码与调用链**：`codegraph_explore` —— 按符号取源码与调用链，替代 `grep`+`read` 循环
+- **写知识库**：`skill("weknora-kb")` —— MCP 只读，写入必须走 REST
+
+**与其他能力声明的关系**：本节与 `role.skills:`、`task.skills`、`preflight.skills` **并存**——不互相替代、不合并、不去重；内容重合是允许的。
+
+> 以上工具名指**当前会话已注册**的同名工具；若本会话未注册，按能力描述用等价手段完成（如 `grep`+`read` 替代取源码与调用链）。
+
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill（**含跑测试套件** —— 这是本角色 ① 步的履职手段）+ **write（本角色自产的评审报告）**
 - 授权面：评审深度；缺陷分级（MUST/SHOULD/FYI）；verdict 裁定（approve / reject）；needHuman 人工闸声明

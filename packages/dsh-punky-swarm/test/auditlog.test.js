@@ -49,11 +49,6 @@ process.on('exit', () => {
 
 const pad = (n) => String(n).padStart(2, '0');
 const DAY = (() => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); })();
-const dayKeyAgo = (days) => {
-  const d = new Date(Date.now() - days * 86400000);
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-};
-
 /** 纯内存 env 对象（显式注入 —— 不读也不写 process.env） */
 const env = (extra = {}) => ({ ...extra });
 
@@ -295,9 +290,14 @@ test('T-C10 聚合键：sha256(level ⊕ name ⊕ msg) 前 16 位 hex（与独�
 // 保留天数清理 pruneByAge（批次 `punky-prune-coverage-20261025` · lane c1-tests）
 //   判据源：plan/prune-coverage-spec.md 的 R-1..R-5 —— 四类行为判据 + 一个 off-by-one 边界。
 //   夹具纪律（规格 P3 的三个「写绿了但没测到」陷阱，逐条免疫）：
-//     T-1 `todayCutoffDay` 不读第 3 参（sink.js:475-477）⇒ cutoff 恒用真实时钟：删除侧只用
-//         静态字面日期（2000-01-01 等），第 3 参只用于构造「当日」判等；T-C12 的 cutoff 由
-//         测试内 replica 复算。
+//     T-1 ~~`todayCutoffDay` 不读第 3 参（sink.js:475-477）⇒ cutoff 恒用真实时钟~~
+//         【已修 · 批次 `punky-guidance-teams-20261025` · lane c7-cutoff-param】
+//         `todayCutoffDay(keepDays, baseToday)` 改由 `pruneByAge` 把第 3 参传下去 ⇒ **cutoff = baseToday - keepDays**，
+//         可挪到任意历史日期。故：
+//           · 删除侧夹具的**相对位置必须按注入基准日重算**（旧写法靠「真实今天 ≫ 2000 年」白捡删/留结论）；
+//           · 每处 `pruneByAge` 调用的第 3 参**同时是当日判等基准与 cutoff 基准**，两者不再可分离取值；
+//           · T-C12 的主判据已去掉真实时钟依赖（原「跨零点双读守卫」仅因 cutoff 不可注入才存在）；
+//           · 可达性由 T-C16（任意历史 cutoff 精确生效）与 T-C12b（cutoff 只由入参决定）证明。
 //     T-2 分卷名必须匹配 `parseSegmentName` 真形态 `audit-YYYY-MM-DD[.N].jsonl`（sink.js:469-473）。
 //         简报式 `audit-YYYYMMDD.01.log` 属「不认的文件」桶，用它会让「当日卷不删」因解析失败假绿。
 //     T-3 只传 2 参对「当日卷不删」无鉴别力（今日 day 永不满足 `今日 < 今日-keepDays`）⇒ T-C13
@@ -316,31 +316,55 @@ test('T-C11 ① 早于 cutoff 的已收盘卷被删：removed=1 且文件真消�
   const dir = freshDir('c11');
   const ancient = seedSegment(dir, 'audit-2000-01-01.jsonl'); // 静态字面日：与真实时钟无关
   assert.equal(fs.existsSync(ancient), true, '前置：远古分卷已落盘（实际 exists=' + fs.existsSync(ancient) + '）');
-  const removed = pruneByAge(dir, 1, '2000-01-02');           // 第 3 参只用于「当日」判等
+  // 【c7-cutoff-param】第 3 参**同时是当日判等基准与 cutoff 基准**：today=2000-01-05 + keepDays=1
+  // ⇒ cutoff=2000-01-04 ⇒ 2000-01-01 严格早于 cutoff。
+  // （原值 '2000-01-02' 会让 cutoff == 文件日 ⇒ 本用例失去「早于 cutoff」语义，故必须随修复重算）
+  const removed = pruneByAge(dir, 1, '2000-01-05');
   assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
   assert.equal(fs.existsSync(ancient), false, '远古分卷真的消失（实际 exists=' + fs.existsSync(ancient) + '）');
   assert.equal(fs.readdirSync(dir).length, 0, '目录已清空（实际剩余: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
 });
 
 // ── T-C12 ①b off-by-one 边界：`<` 与 `<=` 可分辨（误删一天留痕 = 数据丢失）──
+//   【c7-cutoff-param】基准日由第 3 参注入 ⇒ 本用例**零真实时钟依赖**：cutoff = today - keepDays 全字面。
+//   原「跨本地零点双读 + 显式失败」守卫的**唯一存在理由**是兜「cutoff 不可注入」；该理由已消失，
+//   守卫由 T-C12b 的「cutoff 只由入参决定」不变量取代。**判据意图（cutoff 当天留、前一天删）原样保留**。
 
 test('T-C12 ①b off-by-one 边界：恰在 cutoff 当天仍在、cutoff 前一天已删（`<`→`<=` 可分辨）', () => {
   const dir = freshDir('c12');
   const keepDays = 1;
-  // replica 复算 cutoff：与 todayCutoffDay 同一算式（sink.js:475-477），故不引入第二套口径
-  const cutoffBefore = dayKeyAgo(keepDays);
-  const dayBefore = dayKeyAgo(keepDays + 1);                  // cutoff 前一天
-  const onCutoff = seedSegment(dir, 'audit-' + cutoffBefore + '.jsonl');
-  const beforeCutoff = seedSegment(dir, 'audit-' + dayBefore + '.jsonl');
-  // today 取远离两者的字面值：只影响「当日卷」判等，确保本用例不进该分支
-  const removed = pruneByAge(dir, keepDays, '2099-12-31');
-  const cutoffAfter = dayKeyAgo(keepDays);
-  // 跨本地零点守卫：前后双读不一致 ⇒ 显式失败（禁静默 skip；这是环境抖动，非产品缺陷）
-  assert.equal(cutoffAfter, cutoffBefore,
-    '跨零点守卫：cutoff 在断言期间未跃变（前: ' + cutoffBefore + ' / 后: ' + cutoffAfter + '）');
+  const today = '2000-01-02';                                       // 注入基准日 ⇒ cutoff = 2000-01-01
+  const onCutoff = seedSegment(dir, 'audit-2000-01-01.jsonl');      // == cutoff ⇒ 必须留
+  const beforeCutoff = seedSegment(dir, 'audit-1999-12-31.jsonl');  // == cutoff 前一天 ⇒ 必须删
+  assert.equal(fs.readdirSync(dir).length, 2, '前置：两卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  const removed = pruneByAge(dir, keepDays, today);
   assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
   assert.equal(fs.existsSync(onCutoff), true, '恰在 cutoff 当天的卷仍在（实际 exists=' + fs.existsSync(onCutoff) + '）');
   assert.equal(fs.existsSync(beforeCutoff), false, 'cutoff 前一天的卷已删（实际 exists=' + fs.existsSync(beforeCutoff) + '）');
+});
+
+// ── T-C12b ①b′ cutoff 只由入参决定（幂等 · 零时钟漂移）—— 取代原跨零点双读守卫 ──
+
+test('T-C12b ①b′ cutoff 只由入参决定：同 today 重复调用同结论 + 基准日挪一天边界翻转', () => {
+  const keepDays = 10;
+  // A/B 两段：**同 today、同夹具、两个独立目录** ⇒ 必须同结论（幂等：cutoff 不随调用时刻漂移）
+  const dirA = freshDir('c12b-a');
+  const dirB = freshDir('c12b-b');
+  const aEdge = seedSegment(dirA, 'audit-2000-01-05.jsonl');  // == cutoff(today=2000-01-15) ⇒ 留
+  const bEdge = seedSegment(dirB, 'audit-2000-01-05.jsonl');
+  const removedA = pruneByAge(dirA, keepDays, '2000-01-15');
+  const removedB = pruneByAge(dirB, keepDays, '2000-01-15');
+  assert.equal(removedA, 0, 'A 段（today=2000-01-15 ⇒ cutoff=2000-01-05）删除数 = 0（实际: ' + removedA + '）');
+  assert.equal(removedB, 0, 'B 段（同入参重复调用）删除数 = 0（幂等；实际: ' + removedB + '）');
+  assert.equal(fs.existsSync(aEdge), true, 'A 段边界卷仍在（实际 exists=' + fs.existsSync(aEdge) + '）');
+  assert.equal(fs.existsSync(bEdge), true, 'B 段边界卷仍在（实际 exists=' + fs.existsSync(bEdge) + '）');
+  // C 段：**只**把 today 挪一天（2000-01-16 ⇒ cutoff=2000-01-06）⇒ 同一夹具的边界卷变「早于 cutoff」⇒ 删。
+  // 这一段是「cutoff 真的跟随入参」的鉴别力来源：若 cutoff 仍读真实时钟，A/B 段就已翻红，C 段亦然。
+  const dirC = freshDir('c12b-c');
+  const cEdge = seedSegment(dirC, 'audit-2000-01-05.jsonl');
+  const removedC = pruneByAge(dirC, keepDays, '2000-01-16');
+  assert.equal(removedC, 1, 'C 段（today=2000-01-16 ⇒ cutoff=2000-01-06）删除数 = 1（实际: ' + removedC + '）');
+  assert.equal(fs.existsSync(cEdge), false, 'C 段边界卷已删（实际 exists=' + fs.existsSync(cEdge) + '）');
 });
 
 // ── T-C13 ② 当日卷（含当日分卷）恒不删 —— 必须注入第 3 参，A/B 成对 ──
@@ -359,8 +383,10 @@ test('T-C13 ② 当日卷（含当日分卷）恒不删：注入第 3 参 A/B �
   const dirB = freshDir('c13b');
   const bMain = seedSegment(dirB, 'audit-2000-01-01.jsonl');
   const bSeg = seedSegment(dirB, 'audit-2000-01-01.01.jsonl');
-  const removedB = pruneByAge(dirB, 1, '2000-01-02');
-  assert.equal(removedB, 2, 'B 段（today=文件日+1）删除数 = 2（实际: ' + removedB + '）');
+  // 【c7-cutoff-param】B 段 today 必须退到「文件日 + 2」：today=文件日+1 会让 cutoff 恰等于文件日
+  // （today - keepDays = 2000-01-01），`<` 判据不成立 ⇒ 两卷都不删、本段失去「不再是当日」语义。
+  const removedB = pruneByAge(dirB, 1, '2000-01-03');
+  assert.equal(removedB, 2, 'B 段（today=文件日+2 ⇒ cutoff=文件日+1）删除数 = 2（实际: ' + removedB + '）');
   assert.equal(fs.existsSync(bMain), false, 'B 段主卷已删（实际 exists=' + fs.existsSync(bMain) + '）');
   assert.equal(fs.existsSync(bSeg), false, 'B 段 .01 分卷已删（实际 exists=' + fs.existsSync(bSeg) + '）');
 });
@@ -410,4 +436,64 @@ test('T-C15 ④ unlinkSync 失败：不抛、不计入 removed、不阻断后续
   assert.equal(fs.statSync(badA).isDirectory(), true, '失败目录①仍是目录（实际 isDirectory=' + fs.statSync(badA).isDirectory() + '）');
   assert.equal(fs.existsSync(badB), true, '失败目录②仍在（实际 exists=' + fs.existsSync(badB) + '）');
   assert.equal(fs.statSync(badB).isDirectory(), true, '失败目录②仍是目录（实际 isDirectory=' + fs.statSync(badB).isDirectory() + '）');
+});
+
+// ── T-C16 ①c 可达构造：注入历史 base ⇒ cutoff 落在任意历史日期（本缺陷的修复目的）──
+//   反向构造（鉴别力证明）：修复前 `todayCutoffDay` 不读 base ⇒ cutoff 恒 ≈ 「真实今天 - 10」⇒
+//   三个 2000 年的历史卷**全部**被判定早于 cutoff 而删除（removed=3，且 cutoff 当天卷被误删）；
+//   修复后 cutoff=2000-01-05 ⇒ removed=2 且 2000-01-05 存活。实跑两态见 exec/change-cutoff-param.md。
+
+test('T-C16 ①c 可达构造：注入 today=2000-01-15 + keepDays=10 ⇒ cutoff=2000-01-05 精确生效', () => {
+  const dir = freshDir('c16');
+  const farPast = seedSegment(dir, 'audit-1999-12-31.jsonl');    // 早于 cutoff ⇒ 删
+  const onCutoff = seedSegment(dir, 'audit-2000-01-05.jsonl');   // == cutoff ⇒ 留
+  const dayBefore = seedSegment(dir, 'audit-2000-01-04.jsonl');  // cutoff 前一天 ⇒ 删
+  assert.equal(fs.readdirSync(dir).length, 3, '前置：三卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  const removed = pruneByAge(dir, 10, '2000-01-15');
+  assert.equal(removed, 2, '删除计数 = 2（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(farPast), false, '1999-12-31 已删（实际 exists=' + fs.existsSync(farPast) + '）');
+  assert.equal(fs.existsSync(dayBefore), false, '2000-01-04（cutoff 前一天）已删（实际 exists=' + fs.existsSync(dayBefore) + '）');
+  assert.equal(fs.existsSync(onCutoff), true, '2000-01-05（cutoff 当天）存活（实际 exists=' + fs.existsSync(onCutoff) + '）');
+  assert.deepEqual(fs.readdirSync(dir), ['audit-2000-01-05.jsonl'], '目录只剩 cutoff 当天那一卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+});
+
+// ── T-C17 ①d 向后兼容：**不传**第 3 参（两参形态）＝改造前行为 ──
+//   生产三个调用点（sink.js:826/839/972）全是两参形态，故这条是「不传基准日＝现状」的行为底线。
+//   夹具刻意取「真实时钟两侧的极值」：2000-01-01 恒早于任意真实 cutoff（必删）、2099-12-31 恒晚于（必留），
+//   因此**不依赖运行时刻**（无零点窗口、无 flake），等价性论证见 exec/change-cutoff-param.md §向后兼容。
+
+test('T-C17 ①d 向后兼容：两参形态（缺省 today=真实今天）行为与改造前一致', () => {
+  const dir = freshDir('c17');
+  const ancient = seedSegment(dir, 'audit-2000-01-01.jsonl');   // 恒早于 cutoff ⇒ 删
+  const farFuture = seedSegment(dir, 'audit-2099-12-31.jsonl'); // 恒晚于 cutoff ⇒ 留
+  const removed = pruneByAge(dir, 1);                           // ← 两参：生产形态
+  assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(ancient), false, '2000-01-01 已删（实际 exists=' + fs.existsSync(ancient) + '）');
+  assert.equal(fs.existsSync(farFuture), true, '2099-12-31 存活（实际 exists=' + fs.existsSync(farFuture) + '）');
+  assert.equal(fs.readdirSync(dir).length, 1, '目录只剩远期卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+});
+
+// ── T-C18 ①e 注入面卫生：非 `YYYY-MM-DD` 基准日 ⇒ 回落真实今天（不抛、零删除、恰 1 条 warn）──
+//   这条守的是**改造引入的新攻击面**：修 G-1 之前不存在「畸形 today」这个输入；修好后 `today` 成了 cutoff 基准，
+//   而 `Date.parse('garbageT00:00:00')` → NaN ⇒ cutoff = 'NaN-NaN-NaN'，分卷名内 '2…' < 'N…' **恒真** ⇒ 整目录被清空。
+//   夹具 = **三个远期卷**（2099-12-29/30/31）：修复前 NaN cutoff 把它们全删（removed=3、目录空）；
+//   守卫后回落真实今天（cutoff = 今天 - keepDays）⇒ 三卷全在（removed=0）。两态数字即 3 → 0。
+//   warn 通道 = 注入的 `opts.warn`（与 mountAuditLog 的 stray 告警同通道）；**不走 stderr**
+//   （stderr 面有「恰 2 行」硬契约，见 test/auditlog-sink-stderr.test.js AC-3）。
+
+test('T-C18 ①e 注入面卫生：today 非 YYYY-MM-DD ⇒ 回落真实今天、零删除、恰 1 条 warn', () => {
+  const dir = freshDir('c18');
+  const f1 = seedSegment(dir, 'audit-2099-12-31.jsonl');   // 远期：任何真实 cutoff 都早于它 ⇒ 必留
+  const f2 = seedSegment(dir, 'audit-2099-12-30.jsonl');
+  const f3 = seedSegment(dir, 'audit-2099-12-29.jsonl');
+  assert.equal(fs.readdirSync(dir).length, 3, '前置：三卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  const warns = [];
+  const removed = pruneByAge(dir, 7, 'garbage', { warn: (m) => warns.push(m) });
+  assert.equal(removed, 0, '畸形基准日不得删除任何卷（实际: ' + removed + '）');
+  assert.equal(fs.existsSync(f1), true, '2099-12-31 存活（实际 exists=' + fs.existsSync(f1) + '）');
+  assert.equal(fs.existsSync(f2), true, '2099-12-30 存活（实际 exists=' + fs.existsSync(f2) + '）');
+  assert.equal(fs.existsSync(f3), true, '2099-12-29 存活（实际 exists=' + fs.existsSync(f3) + '）');
+  assert.equal(warns.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns) + '）');
+  assert.ok(warns[0].includes('基准日'), 'warn 文案点名「基准日」（实际: ' + warns[0] + '）');
+  assert.ok(warns[0].includes('garbage'), 'warn 文案回显非法值（实际: ' + warns[0] + '）');
 });

@@ -54,6 +54,19 @@ discipline_refs: [0k, 12]
 - **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-hoare-check/`（证据强度原文；涉 UI 验收时追加 `references/vendor/speclang/ui-component-registry/`）—— **不在册不构成失败、不影响任何门禁**。
 - 落点：`acceptance-report.md` 逐条验收时核对 **四态计数** 与 **代码状态锚定**；上游若以「历史通过」「总体没问题」代替本次证据，该条判 **blocking** 并进 `gap-list.json`。证据强度按 S-7 计分（`UNKNOWN` **不计通过**，`SEMI_PROVED` 须见补证计划），验收结论尾部给 S-8 的单一门控词汇总行。
 
+## 默认能力面（本角色开工必用）
+
+本角色主轴：**验收 / 去重 / 证据核 / gap-list** —— 查历史经验用于与历史验收结论去重（禁以历史通过充本次证据），取源码与调用链用于证据核的独立复现。
+
+- **写 / 校验规格**：`skill("speclang")` —— 规格结构化写作与机械校验
+- **查历史经验**：`weknora_search("<具体关键词>")` → 库 `punky-edu` —— 开工前先查，命中按正向做法执行
+- **取源码与调用链**：`codegraph_explore` —— 按符号取源码与调用链，替代 `grep`+`read` 循环
+- **写知识库**：`skill("weknora-kb")` —— MCP 只读，写入必须走 REST
+
+**与其他能力声明的关系**：本节与 `role.skills:`、`task.skills`、`preflight.skills` **并存**——不互相替代、不合并、不去重；内容重合是允许的。
+
+> 以上工具名指**当前会话已注册**的同名工具；若本会话未注册，按能力描述用等价手段完成（如 `grep`+`read` 替代取源码与调用链）。
+
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill + **write（本角色自产的验收报告与 gap-list）**
 - 授权面：verdict 裁定（approve / reject）；未闭合项分级（blocking / followup）；验收证据取样方式

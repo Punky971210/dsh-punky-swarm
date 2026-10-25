@@ -46,6 +46,19 @@ discipline_refs: [0d]
 - **`references/engineering/` 三份全读**（frontend.md / backend.md / verification.md）：复盘时核对本批是否发生规则失效。
 - 落点：`retrospective-report.md` 的「## 经验沉淀」须记录两类——① **失效规则**（哪条 F-x / B-x / V-x 被绕过，现象与根因）；② **新增检查建议**（能机器判的项应落成哪条命令）。
 
+## 默认能力面（本角色开工必用）
+
+本角色主轴：**复盘校准 + 文档同步** —— 查历史经验用于防重复沉淀（同一经验不二次入库），写知识库用于把复盘结论归档。
+
+- **写 / 校验规格**：`skill("speclang")` —— 规格结构化写作与机械校验
+- **查历史经验**：`weknora_search("<具体关键词>")` → 库 `punky-edu` —— 开工前先查，命中按正向做法执行
+- **取源码与调用链**：`codegraph_explore` —— 按符号取源码与调用链，替代 `grep`+`read` 循环
+- **写知识库**：`skill("weknora-kb")` —— MCP 只读，写入必须走 REST
+
+**与其他能力声明的关系**：本节与 `role.skills:`、`task.skills`、`preflight.skills` **并存**——不互相替代、不合并、不去重；内容重合是允许的。
+
+> 以上工具名指**当前会话已注册**的同名工具；若本会话未注册，按能力描述用等价手段完成（如 `grep`+`read` 替代取源码与调用链）。
+
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / write / skill + memory_save / memory_search（记忆沉淀：dsh-mneme 实际调用，Mnemopi 降级）
 - 授权面：复盘粒度与结构；沉淀条目的类型与重要性取值（3~4）

@@ -64,6 +64,19 @@ discipline_refs: [0c, 0e, 9, 14]
 - **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/speclang-waterfall/`（规格编写与结构规则原文）＋ `references/vendor/speclang/prd-guide/`（需求/验收编号族原文）—— 出包时按需取件；**不在册不构成失败、不影响任何门禁**。
 - 落点：spec 与任务包必须各有「**前端行为**」（涉及 UI 时：状态归属 + 保存竞态 + 交互约定）、「**后端能力归属**」（复用哪个 service、权限在哪层）、「**异常边界**」（错误码与 HTTP 映射）三段；缺段视为 spec 不完整，exec 可拒开工。另须过一遍结构自检：必备段落齐、`AC-` / `RULE-` 编号在同包内唯一、spec 点名的模板与角色文件均能解析到实存路径（见 `spec-contract.md` 附 A 的结构自检与编号面；真源 `scripts/check-guidance-sync.mjs`）。
 
+## 默认能力面（本角色开工必用）
+
+- **写 / 校验规格**：`skill("speclang")` —— 规格结构化写作与机械校验
+- **查历史经验**：`weknora_search("<具体关键词>")` → 库 `punky-edu` —— 开工前先查，命中按正向做法执行
+- **取源码与调用链**：`codegraph_explore` —— 按符号取源码与调用链，替代 `grep`+`read` 循环
+- **写知识库**：`skill("weknora-kb")` —— MCP 只读，写入必须走 REST
+
+> 以上工具名指**当前会话已注册**的同名工具；若本会话未注册，按能力描述用等价手段完成（如 `grep`+`read` 替代取源码与调用链）。
+
+**与其他能力声明的关系**：本节与 `role.skills:`、`task.skills`、`preflight.skills` **并存**——不互相替代、不合并、不去重；内容重合是允许的。
+
+**本角色主轴**：规格编写与校验 + 架构复核。
+
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / skill / write / edit + memory_search（跨会话记忆查询）+ **代码图谱类 MCP（只读，工具名以当前会话实际注册为准、不在此固化）**
 - 产出契约（四件套）：`plan.md`、`coder-tasks.md`、`tester-tasks.md`、`spec.md`（落批次产物根的设计目录）

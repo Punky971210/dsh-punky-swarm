@@ -59,6 +59,19 @@ API 粒度细拆与代码摸底；产出细拆供编排，不参与实现。
 - **选读原件（recommend 语义，非必读）**：`references/vendor/speclang/prd-guide/`（需求编号族原文）＋ `references/vendor/speclang/speclang-waterfall/`（机械规则原文）—— 摸底写约束清单时按需取件；**不在册不构成失败、不影响任何门禁**。
 - 落点：`codebase-survey.md` 的「## 约束清单」须点名**每项能力的现有归属**与**可复用面**（指到具体模块/方法），作为 designer 出包的约束依据；同时把上游需求编号（`REQ-` 族）**带进清单**，并显式标出「需求→契约」尚未被覆盖的项（该跳无机检门，属人工核对，标 `SEMI_PROVED`）。
 
+## 默认能力面（本角色开工必用）
+
+- **写 / 校验规格**：`skill("speclang")` —— 规格结构化写作与机械校验
+- **查历史经验**：`weknora_search("<具体关键词>")` → 库 `punky-edu` —— 开工前先查，命中按正向做法执行
+- **取源码与调用链**：`codegraph_explore` —— 按符号取源码与调用链，替代 `grep`+`read` 循环
+- **写知识库**：`skill("weknora-kb")` —— MCP 只读，写入必须走 REST
+
+> 以上工具名指**当前会话已注册**的同名工具；若本会话未注册，按能力描述用等价手段完成（如 `grep`+`read` 替代取源码与调用链）。
+
+**与其他能力声明的关系**：本节与 `role.skills:`、`task.skills`、`preflight.skills` **并存**——不互相替代、不合并、不去重；内容重合是允许的。
+
+**本角色主轴**：任务摸底 + 可并行内容拆解（标写域互斥与依赖）。
+
 ## 授权与工具面（注入用）
 - 可执行：read / glob / grep / pwsh / skill / write
 - 授权面：细拆粒度（API 级）；依赖 DAG 与验收入口的标注；图谱索引的建立与更新时机

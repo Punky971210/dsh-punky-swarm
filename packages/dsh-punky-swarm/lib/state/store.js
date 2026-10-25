@@ -29,6 +29,10 @@ import { createHash, randomUUID } from 'node:crypto'; // L7：身份快照 sha25
 // 事件 type 常量单点：newEvent 调用 type 一律引用本模块常量（禁止裸字面量）
 import * as EVT from './event-types.js';
 import { createGates } from './gates.js';
+// P2-1（本批 `c6-gate-snapshot`）：lane 态读端**单点复用** —— 与 `batch_status.lanesState`
+//   （`lib/tools/query-tools.js:76-77`）取的是同一个 `laneStateOf`，**禁**在本文件另写第二套口径
+//   （种纪律同 `lib/state/dangling.js` / `lib/watch/lane-heartbeat.js` 的既有复用先例）。
+import { laneStateOf } from './lane-state.js';
 import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单
@@ -374,6 +378,57 @@ function composeStore(cx) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-1（批 `punky-guidance-teams-20261025` · lane `c6-gate-snapshot`）：`gate.*` 事件载荷附 lane 态快照
+//
+// 要解决的问题：纪律「门读数有效 ⟺ 无 lane 处 `running` ∧ 已采样」此前**只存在于人脑**——事件落盘后
+//   无法事后判别「该门读数是不是在写者未静止时采的」。修法 = 让**事件自带采样时刻的 lane 向量**。
+//
+// **落点选在 `commitBatch`（唯一写盘点）而非逐写点**，理由三条：
+//   ① 逐写点散在 `store/member-gates.js`（9 处）＋ `store/member.js`（1 处）＋ 本文件（`appendGatePayloadEvents`）
+//      ⇒ 改它们要动**两个不在本 lane 写域的文件**；而 `commitBatch` **定义就在本文件内**（写域内唯一落点）。
+//   ② 覆盖性：凡经 `atomicWrite` 落盘的批次 JSON 一律经此函数 ⇒ 无「漏改某个写点」的可能（结构性完备）。
+//   ③ **「同刻一致」由构造成立**（这是判据 AC-7 的要害）：此处 `batch` 即**本次要序列化的快照**，
+//      而 `batch_status` 读的是同一份 JSON 的 `batch.lanes` ⇒ 快照与 `lanesState` **恒等**，不是抽样比对。
+//
+// 纯增量边界（红线）：只**追加** `lanes` 键（追加在事件对象键序末尾），**不改/不删任何既有键**；
+//   不新增事件类型、不新增 `GATE_*` 码、不改任何门判据与拒态分支（`lib/state/event-types.js` 零改动）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 采样时刻的 lane 态快照。
+ * 键集与取值**同源** `batch_status.lanesState`（`lib/tools/query-tools.js:76-77`：
+ * `Object.keys(b.lanes ?? {})` → `laneStateOf(b, l)`）⇒ 两者形状逐字一致，本函数不引入第二套口径。
+ */
+function laneSnapshotOf(batch) {
+  const lanes = {};
+  for (const laneId of Object.keys(batch?.lanes ?? {})) lanes[laneId] = laneStateOf(batch, laneId);
+  return lanes;
+}
+
+/**
+ * 纯增量戳记：给**尚无** `lanes` 键的 `gate.*` 事件补上当前 lane 态快照。
+ *
+ * ⚠ **幂等守卫是正确性条件，不是优化**：`commitBatch` 会被**同一个 `batch` 对象反复调用**
+ *   （每次 lane 迁移 / 相位迁移各一次，`batch.events` 是累积数组）。若无守卫，第 1 波落的
+ *   `gate.passed` 会在第 5 次提交时被**改写成第 5 波的 lane 态** ⇒ 快照失真且不可复原。
+ *   守卫语义 = 「**首次成为持久事实时**的 lane 态」，此后冻结（该事件对应的那次读数不再变）。
+ *
+ * 判据面（为什么是 `startsWith('gate.')`）：与 `log_export` 收录口径同源（按 `startsWith('gate.')`），
+ *   覆盖 `gate.passed` / `gate.exit` / `gate.entry.missing` / `gate.escape` / `gate.degrade` /
+ *   `gate.contract_missing` / `gate.target.*` / `gate.complete_blocked` / … 全族，无需枚举维护。
+ */
+function stampGateLaneSnapshot(batch) {
+  if (!batch || !Array.isArray(batch.events)) return;
+  let snapshot = null; // 惰性一次：同一批快照内 lane 向量相同，命中多条时只算一次
+  for (const e of batch.events) {
+    if (!e || typeof e.type !== 'string' || !e.type.startsWith('gate.')) continue;
+    if (Object.prototype.hasOwnProperty.call(e, 'lanes')) continue; // 首落盘冻结（见上「幂等守卫」）
+    if (snapshot === null) snapshot = laneSnapshotOf(batch);
+    e.lanes = { ...snapshot };
+  }
+}
+
 export function createStore(root, { rules, logger, onStateChange, readConfig, revRaceHook } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
@@ -431,6 +486,11 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     const actual = diskRevOf(file, batchId);
     // 失配 ⇒ 抛（本次**零落盘**：尚未写 tmp、尚未 rename）⇒ 由上层重读后重试。
     if (actual !== expected) throw batchVersionConflictOf(batchId, expected, actual);
+    // P2-1（lane `c6-gate-snapshot`）：落盘前给 `gate.*` 事件补 lane 态快照（纯增量，只补**尚无** `lanes` 的）。
+    //   位置纪律：**在 CAS 判定之后**（冲突时零副作用，不改调用方事件对象）、**在 `atomicWrite` 之前**
+    //   （快照与同一份落盘字节同批固化）。本行**不触碰**下方 `atomicWrite(batchFile(sessionId, batchId), batch)`
+    //   字面量 —— `test/gate-assertion-r32.test.js:286` 的 R3-2④ 源码面锚点保持有效。
+    stampGateLaneSnapshot(batch);
     // 回写**先于**落盘（契约 ③）：即便 `atomicWrite` 抛（重试耗尽 / 不可重试码），调用方对象已带新 rev
     //   ⇒ 调用方若错误地重试**同一对象**，会拿到**清晰的冲突**而不是二次覆盖（有意为之）。
     batch[BATCH_REV_KEY] = actual + 1;

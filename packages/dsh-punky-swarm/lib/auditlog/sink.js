@@ -108,6 +108,9 @@ const LEVEL_BY_TYPE = { error: 0, warn: 1, info: 2, debug: 3 };
 
 const DAY_MS = 86400000;
 
+/** 本地日键形态（`YYYY-MM-DD`）：`pruneByAge` 注入基准日的**唯一**可接受形态（见 sanitizeBaseDay） */
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 // ── 模块级单实例状态（F9 幂等守卫 + 运行期计数面）──
 
 const state = {
@@ -141,6 +144,9 @@ const state = {
   // 【D-16-②】最近一次目录扫描的 stray 读数（不含分卷名的常规文件）：挂载期实测，
   //   计入总量上限、进诊断面、并支撑「默认识别但不删」的裁决面。零 IO，只是读数快照。
   strays: { count: 0, bytes: 0, names: [], pruneOptIn: false },
+  // 【c7-cutoff-param】挂载期注入的 warn 通道（mountAuditLog 的 opts.warn）：供 `pruneByAge`
+  //   在畸形基准日时外显一条告警。未挂载时保持 no-op ⇒ 清理的旁路告警不制造噪声。
+  warn: () => {},
 };
 
 /**
@@ -472,24 +478,61 @@ function parseSegmentName(name) {
   return { day: m[1], segment: m[2] ? Number(m[2]) : 0 };
 }
 
-function todayCutoffDay(keepDays) {
-  return localDateKey(new Date(Date.now() - keepDays * DAY_MS));
+/**
+ * 保留天数清理的 cutoff 日期：以 `baseToday`（本地日历日 `YYYY-MM-DD`）为基准回退 `keepDays` 天。
+ *
+ * 【批次 `punky-guidance-teams-20261025` · lane c7-cutoff-param】基准日**必须由入参给定**，
+ * 不再读真实时钟：否则 `pruneByAge` 的第 3 参 `today` 只能构造「当日」判等，cutoff 恒锚定真实
+ * 今天的相对位置 ⇒ **无法把 cutoff 挪到任意历史日期**（零点前后成不可判定窗口，测试只能靠
+ * 「真实时钟 ≫ 字面日」白捡结论）。
+ * 未导出：外部注入点 = `pruneByAge` 第 3 参；导出即新增公开面。
+ */
+function todayCutoffDay(keepDays, baseToday) {
+  return localDateKey(new Date(Date.parse(baseToday + 'T00:00:00') - keepDays * DAY_MS));
 }
 
 /**
- * 保留天数清理：按**分卷名内日期**判定，早于「今天 - keepDays」的已收盘卷删除。
+ * 基准日**入参卫生**（注入面 = `pruneByAge` 第 3 参，本模块唯一的可污染输入）。
+ *
+ * 为什么必须有：`Date.parse('garbageT00:00:00')` → `NaN` ⇒ cutoff = `'NaN-NaN-NaN'`，
+ * 而分卷名内的日期 `'2…' < 'N…'` **恒真** ⇒ **整个目录被判为「早于 cutoff」而清空**
+ * （实测：三卷 `removed=3`、目录空）。这是「cutoff 参数化」引入的**新攻击面**。
+ *
+ * 处置：非 `YYYY-MM-DD` ⇒ 回落真实本地今天 + 一条 warn，**不抛**（清理是写路径的旁路，
+ * 不得因旁路入参而中断或抛错）。warn 走**注入的 `opts.warn`**（与 mountAuditLog 的 stray
+ * 告警同通道）；**不走 `noticeStderr`** —— stderr 面有「恰 2 行」硬契约
+ * （`test/auditlog-sink-stderr.test.js` AC-3），不得新增第三处外显。
+ *
+ * @param {*} baseToday 候选基准日
+ * @param {(msg: string) => void} warn 告警通道（无则静默回落）
+ * @returns {string} 合法基准日
+ */
+function sanitizeBaseDay(baseToday, warn) {
+  if (typeof baseToday === 'string' && DATE_KEY_PATTERN.test(baseToday)) return baseToday;
+  warn('capabilities.auditlog: pruneByAge 基准日非法（' + String(baseToday) + '）⇒ 回落真实本地今天');
+  return localDateKey(new Date());
+}
+
+/**
+ * 保留天数清理：按**分卷名内日期**判定，早于「基准日 - keepDays」的已收盘卷删除。
  * 当日的分卷（当日任意卷）恒不删。
+ * @param {string} [today] 基准日 `YYYY-MM-DD`，**同时**用于「当日」判等与 cutoff 推算
+ *   （缺省 = 真实本地今天 ⇒ 与改造前行为一致；两参默认路径由 T-C17 覆盖）
+ * @param {{warn?: (msg: string) => void}} [opts] 告警通道（仅畸形基准日会用到；由 T-C18 覆盖）
  * @returns {number} 删除的文件数
  */
-export function pruneByAge(sinkDir, keepDays, today = localDateKey(new Date())) {
-  const cutoff = todayCutoffDay(keepDays);
+export function pruneByAge(sinkDir, keepDays, today = localDateKey(new Date()), opts = {}) {
+  // 告警通道优先级：显式注入（测试/调用方）> 挂载期登记的 state.warn > no-op
+  const warn = typeof opts.warn === 'function' ? opts.warn : state.warn;
+  const baseDay = sanitizeBaseDay(today, warn);      // 注入面卫生：畸形基准日回落真实今天
+  const cutoff = todayCutoffDay(keepDays, baseDay);
   let removed = 0;
   let names;
   try { names = fs.readdirSync(sinkDir); } catch { return 0; }
   for (const name of names) {
     const meta = parseSegmentName(name);
     if (!meta) continue;
-    if (meta.day === today) continue;        // 当日卷（含当日分卷）不按天龄清理
+    if (meta.day === baseDay) continue;        // 当日卷（含当日分卷）不按天龄清理
     if (meta.day < cutoff) {
       try { fs.unlinkSync(path.join(sinkDir, name)); removed++; } catch { /* 删除失败不阻断写路径 */ }
     }
@@ -924,6 +967,7 @@ export function mountAuditLog(ctx, opts = {}) {
   if (!logger || typeof logger.exporter !== 'function') return { mounted: false, reason: 'no-logger' };
 
   state.cfg = c;
+  state.warn = warn;                  // 【c7-cutoff-param】清理旁路（pruneByAge）的告警通道
   state.sinkDir = c.sinkDir;
   state.diagnosticsDir = c.diagnosticsDir;
   state.diagnosticsPath = path.join(c.diagnosticsDir, 'sink-diagnostics.json');

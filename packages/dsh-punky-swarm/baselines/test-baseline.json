@@ -225,11 +225,11 @@
       "todos": 0
     },
     "test/auditlog.test.js": {
-      "asserts": 117,
-      "blankLines": 49,
-      "lines": 414,
+      "asserts": 141,
+      "blankLines": 56,
+      "lines": 500,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 18,
       "todos": 0
     },
     "test/auto-settle.test.js": {
@@ -630,6 +630,14 @@
       "lines": 1204,
       "tautologies": 0,
       "tests": 37,
+      "todos": 0
+    },
+    "test/gate-lane-snapshot.test.js": {
+      "asserts": 33,
+      "blankLines": 41,
+      "lines": 307,
+      "tautologies": 0,
+      "tests": 9,
       "todos": 0
     },
     "test/gate-lite-batch2.test.js": {
@@ -1657,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T16:30:21Z",
+  "generatedAt": "2026-10-25T17:36:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1668,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-guidance-preflight-20261025：P0-1 任务包四段 preflight + P0-2 回报三字段；新增 2 个测试文件",
+  "reason": "punky-guidance-teams-20261025：P1-1 七角色默认能力面 + P1-2 §15.21 条目形态 + P2-1 门事件 lane 快照 + G-1 cutoff 参数化（含 Q-2 注入面卫生）+ E-2 调研",
   "schema": 1,
   "totals": {
-    "asserts": 10755,
-    "blankLines": 5659,
-    "files": 207,
-    "lines": 60316,
+    "asserts": 10812,
+    "blankLines": 5707,
+    "files": 208,
+    "lines": 60709,
     "tautologies": 0,
-    "tests": 2193,
+    "tests": 2206,
     "todos": 4
   }
 }
