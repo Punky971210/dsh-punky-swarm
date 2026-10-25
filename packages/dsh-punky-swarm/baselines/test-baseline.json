@@ -99,7 +99,7 @@
     "test/api-config.test.js": {
       "asserts": 84,
       "blankLines": 30,
-      "lines": 367,
+      "lines": 372,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -1611,7 +1611,7 @@
     "test/webui-runtime-config.test.js": {
       "asserts": 225,
       "blankLines": 47,
-      "lines": 676,
+      "lines": 679,
       "tautologies": 0,
       "tests": 36,
       "todos": 0
@@ -1633,7 +1633,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T05:11:42Z",
+  "generatedAt": "2026-10-25T05:17:50Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1650,7 +1650,7 @@
     "asserts": 10560,
     "blankLines": 5566,
     "files": 204,
-    "lines": 59312,
+    "lines": 59320,
     "tautologies": 0,
     "tests": 2147,
     "todos": 4

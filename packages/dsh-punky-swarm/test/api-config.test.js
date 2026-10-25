@@ -23,11 +23,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 import { createRuntimeConfigService } from '../lib/webui/runtime-config.js';
 
-const TMP_BASE = 'D:\\dsh\\_tmp\\dsh-tmp';
+// 【2026-10-25 CI 修复】原为硬编码 `D:\dsh\_tmp\dsh-tmp`：在 posix 上它是**相对路径**
+//   （冒号与反斜杠都是普通字符）⇒ 临时目录落进**仓库内**（`packages/dsh-punky-swarm/D:\dsh\...`），
+//   留下未跟踪产物 ⇒ 被 AC-pack2-12「porcelain 每行可归属声明写域」判为**越界**（Linux CI 实测红）。
+//   改为跨平台 tmpdir；需要指定盘/卷时用 `PUNKY_TEST_TMP` 显式给绝对路径。
+const TMP_BASE = process.env.PUNKY_TEST_TMP ?? path.join(os.tmpdir(), 'dsh-tmp');
 fs.mkdirSync(TMP_BASE, { recursive: true });
 const freshRoot = () => fs.mkdtempSync(path.join(TMP_BASE, 'api-cfg-'));
 

@@ -22,11 +22,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 
-const TMP_BASE = 'D:\\dsh\\_tmp\\dsh-tmp';
+// 【2026-10-25 CI 修复】同 api-config.test.js：硬编码 `D:\dsh\_tmp\dsh-tmp` 在 posix 上是相对路径，
+//   会把临时目录造进仓库内并触发 AC-pack2-12 越界判红。改跨平台 tmpdir（可用 `PUNKY_TEST_TMP` 覆盖）。
+const TMP_BASE = process.env.PUNKY_TEST_TMP ?? path.join(os.tmpdir(), 'dsh-tmp');
 fs.mkdirSync(TMP_BASE, { recursive: true });
 const freshRoot = () => fs.mkdtempSync(path.join(TMP_BASE, 'rtcfg-'));
 
