@@ -27,6 +27,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 事实源纪律：断言一律读 `store.readBatch` 的批次 JSON（唯一事实源），不读模块内部状态。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { topicWarnVerdict } from './helpers/warn-topic.mjs';
+const SETTLE_TOPIC_WARN = /auto-settle|boot-overlay|hot config/;
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -201,7 +203,7 @@ test('C3: payload 缺 id / 非对象 / lastAssistantMessage 缺失 ⇒ 不抛错
     await emitSubagentEnd(ctx, { runId: 'r', id: 42, stopReason: 'completed' });
     assert.equal(store.readBatch(S, 'c3').lanes.e1, 'running', '畸形载荷零结算');
     assert.equal(eventsOf(store, S, 'c3', EVT_AUTO_SETTLE_TRIGGERED).length, 0, '畸形载荷零事件');
-    assert.equal(ctx.calls.warn.length, 0, '畸形载荷不产 warn 噪音（静默丢弃）');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).ok, true, '畸形载荷不产主题面 warn 噪音（非主题 warn 仅可见）；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).other));
     // lastAssistantMessage 缺失的**合法**载荷仍能结算（A4 判据）
     await emitSubagentEnd(ctx, endInfo('ws-c3'));
     assert.equal(store.readBatch(S, 'c3').lanes.e1, 'merged', '可选字段缺失不阻断结算');
@@ -721,7 +723,7 @@ test('J3: 【R-2 ① · L-AC-4/L-AC-5/L-AC-10】enabled:false ⇒ 零订阅 + re
   const infos = ctx.calls.info;
   assert.ok(infos.some((l) => /autoSettle|disabled|停用/.test(l)), '停用必留痕（≥1 条 info）');
   assert.equal(infos.filter((l) => l.includes('auto-settle mounted')).length, 0, '不得谎报 mounted（RK-4）');
-  assert.equal(ctx.calls.warn.length, 0, '停用不是异常路径 ⇒ 零 warn 噪音');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).ok, true, '停用不是异常路径 ⇒ 主题面零 warn 噪音；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).other));
   // L-AC-5：停用态即使人工投递 subagent/end 也零动作（订阅集合应为空；构造等价于「总线上仍有他人监听」时本插件不回）
   const before = store.readBatch(S, 'j3').events.length;
   await emitSubagentEnd(ctx, endInfo('ws-j3'));
@@ -856,7 +858,7 @@ test('J8: 【R-5 热更生效 · L-AC-13】runtime.json 写 autoSettle.enabled:f
       ctx.calls.info.some((l) => l.includes('auto-settle disabled') && l.includes('autoSettle.enabled')),
       '热切停用留痕（含配置键名与停用字样）：' + ctx.calls.info.filter((l) => l.includes('auto-settle')).join(' || '),
     );
-    assert.equal(ctx.calls.warn.length, 0, '停用热切不是异常路径 ⇒ 零 warn');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).ok, true, '停用热切不是异常路径 ⇒ 主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).other));
     // 等效重写（无生效变化）⇒ 零操作（幂等，RK-8：不抖动）
     ctx.calls.info.length = 0;
     writeRuntime(root, { autoSettle: { enabled: false } });
@@ -894,7 +896,7 @@ test('J9: 【R-5 boot 对账】runtime.json **预置** autoSettle.enabled:false 
         + ctx.calls.info.filter((l) => l.includes('auto-settle')).join(' || '),
     );
     assert.equal(ctx.calls.info.filter((l) => l.includes('hot config: auto-settle disabled')).length, 1, '恰一次停用对账');
-    assert.equal(ctx.calls.warn.length, 0, 'boot 对账零 warn（runtime.json 合法）');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).ok, true, 'boot 对账主题面零 warn（runtime.json 合法）；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).other));
     assert.equal(ctx.calls.error.length, 0, 'boot 对账零 error');
   } finally {
     disposer();

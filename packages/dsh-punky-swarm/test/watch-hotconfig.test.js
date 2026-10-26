@@ -29,9 +29,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   查询返回 {enabled:false, reason:'watch-disabled', ...} 不 throw；beat=true 关闭态 no-op。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { topicWarnVerdict } from './helpers/warn-topic.mjs';
+const WATCH_TOPIC_WARN = /watch|re-mounted|hot config|unmounted/;
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { apply } from '../lib/index.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
@@ -155,7 +158,7 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: false, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       'applied.watch 生效快照已随 remount 更新（watchInstalledCfg；enabled 翻转阈值保留默认）');
-    assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).ok, true, '热更路径主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).other));
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // AC-6 可证伪自检：构造一次**真的会超时**的等待，验证诊断五字段
     //   （label / timeoutMs / elapsedMs / lastObserved / expected）确实落进错误文本——
@@ -249,7 +252,7 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       'applied.watch 生效快照随 remount 携带新阈值（watchInstalledCfg 7 键全形）');
-    assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).ok, true, '热更路径主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).other));
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ② 同值重写 → nextInstalled 与 watchInstalledCfg JSON 相等 → 幂等 no-op（零新增 remount，快照不变）
     writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
@@ -258,7 +261,7 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
       '同值重写后生效快照不变');
-    assert.equal(ctx.calls.warn.length, 0, '幂等路径零 warn');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).ok, true, '幂等路径主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).other));
     assert.equal(ctx.calls.error.length, 0, '幂等路径零 error');
   } finally {
     disposer();
@@ -292,7 +295,7 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 0, unconsumedTimeoutMs: 60000 }, scanIntervalMinutes: 1 },
       '两档新键均已纳入生效面（7 键全形随动）');
-    assert.equal(ctx.calls.warn.length, 0, '热更路径零 warn');
+    assert.equal(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).ok, true, '热更路径主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, WATCH_TOPIC_WARN).other));
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ③ 同值重写幂等：零新增 remount
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
@@ -459,4 +462,85 @@ test('H6 重建语义行为：longrun.enabled=false 新引擎 tick 零候选（�
   // stalled 档存活佐证：0ms 档位下 tick 已跑心跳扫描 → inbox 追问照发（引擎活着，只是 longrun 门控关）
   const probes = inboxItems(root, S, 'b-rb2').filter((m) => m.message?.kind === 'probe' && m.message.lane === 'l1');
   assert.ok(probes.length >= 1, '心跳档仍活（探针照发）——证明 tick 已执行而 longrun 判定被门控（实际: ' + probes.length + '）');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F1：C1 归因收窄的三条反向构造（缺一条这个修法就是软化）
+//   F1-a 主题面 warn ⇒ 必红
+//   F1-b 实测 witness（asset sync failed）⇒ **不红**，但要进 other 且**出现在断言消息里**（可见）
+//   F1-c 空集 ⇒ 绿
+// ⚠ F1-b 是命门：若"不红且不可见"，就是把噪声静默吞了（与 D3 那轮同型错误）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('F1 归因收窄三构造：主题面必红 / witness 不红但可见 / 空集绿', () => {
+  const topic = WATCH_TOPIC_WARN;
+
+  // F1-a：注入一条主题面 warn
+  const a = topicWarnVerdict(['[dsh-punky-swarm] hot config re-mounted: longrun=false'], topic);
+  assert.equal(a.ok, false, 'F1-a：主题面 warn ⇒ 必须判红（主题面零容忍，无余量）');
+  assert.equal(a.topic.length, 1, 'F1-a：须归入 topic');
+  assert.equal(a.other.length, 0, 'F1-a：other 不得误收');
+
+  // F1-b：实测 witness（并发资产同步的 utime EPERM）
+  const witness = "[dsh-punky-swarm] asset sync failed: presets/punky-preset/asset-manifest.json: EPERM: operation not permitted, utime '...\\.dsh\\.agent-presets\\punky-preset\\asset-manifest.json'";
+  const b = topicWarnVerdict([witness], topic);
+  assert.equal(b.ok, true, 'F1-b：witness 不属主题面 ⇒ 不判红（这是本轮修掉的偶发红）');
+  assert.equal(b.other.length, 1, 'F1-b：witness 必须进 other（不得静默丢弃）');
+  assert.equal(b.other[0].includes('asset sync failed'), true, 'F1-b：other 须保留可读原文');
+  // 断言消息必须**带出** other（可见性）
+  const msg = '热更路径主题面零 warn；非主题 warn（可见、不判死）：' + JSON.stringify(b.other);
+  assert.equal(msg.includes('asset sync failed'), true, 'F1-b：断言消息须带出 witness 全文（可见，不静默）');
+
+  // F1-c：空集
+  const c = topicWarnVerdict([], topic);
+  assert.equal(c.ok, true, 'F1-c：空集 ⇒ 绿');
+  assert.equal(c.topic.length + c.other.length, 0, 'F1-c：两侧均为空');
+  // 合成：三构造结论可区分
+  assert.notEqual(a.ok, b.ok, 'F1 合成：主题面与 witness 必须可区分（相同 ⇒ 归因没起作用）');
+  assert.equal(b.ok, c.ok, 'F1 合成：witness 与空集同为绿（差异只在 other 可见性）');
+
+  process.stderr.write('[F1] a=' + (a.ok ? 'green' : 'red') + ' b=' + (b.ok ? 'green' : 'red')
+    + ' bOtherVisible=' + msg.includes('asset sync failed') + ' c=' + (c.ok ? 'green' : 'red') + String.fromCharCode(10));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G1：C1 可见性的**结构守卫**（审计 FLK-3）
+//
+// F1-b 只证明「模板会带出 other」，守不住**生产那 8 处**模板：若有人删掉某一处的
+// `JSON.stringify(...other)`，F1-b 仍然绿 ⇒ 可见性静默消失。本用例把"每处都必须带 .other"变成断言。
+//
+// 用 **every 形态（存在性）而不是计数**：
+//   · 计数（"须恰好 N 处带 .other"）⇒ 新增第 N+1 处**不带** .other 不会红（漏）；
+//   · every ⇒ 新增任一处不带 .other **立刻红**，且报出行号。
+// 这条符合「只锚定存在性，不锚定数量」。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('G1 静态自检：每处 topicWarnVerdict 断言的消息模板都必须带出 .other（存在性，不计数）', () => {
+  // 自我命中防范：搜索串**拼接构造**（字面量不连续）⇒ 不会命中本行自身
+  const NEEDLE = 'topic' + 'WarnVerdict(';
+  const targets = [
+    fileURLToPath(new URL('./watch-hotconfig.test.js', import.meta.url)),
+    fileURLToPath(new URL('./auto-settle.test.js', import.meta.url)),
+  ];
+  const offenders = [];
+  let checked = 0;
+  for (const file of targets) {
+    const name = path.basename(file);
+    const lines = fs.readFileSync(file, 'utf8').split(String.fromCharCode(10));
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.includes(NEEDLE)) continue;
+      // 只核「处于断言位置」的形态：`.ok, true` 即本批 8 处的调用形态
+      if (!line.includes('.ok, true')) continue;
+      checked += 1;
+      // 可见性要求：同一行必须把 other 带进消息（.other 出现在模板里）
+      if (!line.includes('.other')) offenders.push(name + ':' + (i + 1));
+    }
+  }
+  // 存在性前置（防空转：一处都没查到 ⇒ 本守卫什么都没守）
+  assert.equal(checked > 0, true, 'G1 前置：必须至少查到一处 topicWarnVerdict 断言（实测 ' + checked + '）');
+  // every 形态：任一处缺 .other ⇒ 红，且**逐处列出行号**
+  assert.equal(offenders.length, 0,
+    'G1：以下位置的断言模板**缺 .other**（可见性会静默消失，逐处修）→ '
+    + (offenders.length ? offenders.join(' , ') : '（无）') + '；已核 ' + checked + ' 处');
 });

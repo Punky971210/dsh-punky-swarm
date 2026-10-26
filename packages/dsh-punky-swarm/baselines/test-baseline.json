@@ -235,7 +235,7 @@
     "test/auto-settle.test.js": {
       "asserts": 193,
       "blankLines": 46,
-      "lines": 904,
+      "lines": 906,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -1569,11 +1569,11 @@
       "todos": 0
     },
     "test/watch-hotconfig.test.js": {
-      "asserts": 81,
-      "blankLines": 27,
-      "lines": 463,
+      "asserts": 94,
+      "blankLines": 35,
+      "lines": 547,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 12,
       "todos": 0
     },
     "test/watch-longrun-exempt.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T21:45:18Z",
+  "generatedAt": "2026-10-26T23:33:01Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "D3H-1 计数式改集合式（5 条显式断言替单条聚合）+ D3H-2 注释补可审性≠检测力",
+  "reason": "热更 warn 归因收窄（topicWarnVerdict + 8 处）+ FLK-3 结构守卫 G1",
   "schema": 1,
   "totals": {
-    "asserts": 11004,
-    "blankLines": 5827,
+    "asserts": 11017,
+    "blankLines": 5835,
     "files": 208,
-    "lines": 62757,
+    "lines": 62843,
     "tautologies": 0,
-    "tests": 2220,
+    "tests": 2222,
     "todos": 4
   }
 }
