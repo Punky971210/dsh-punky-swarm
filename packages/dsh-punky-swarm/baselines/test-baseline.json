@@ -1553,49 +1553,49 @@
       "todos": 0
     },
     "test/watch-bootoverlay.test.js": {
-      "asserts": 23,
+      "asserts": 24,
       "blankLines": 18,
-      "lines": 189,
+      "lines": 195,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
     },
     "test/watch-heartbeat.test.js": {
-      "asserts": 95,
+      "asserts": 101,
       "blankLines": 39,
-      "lines": 357,
+      "lines": 396,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
     },
     "test/watch-hotconfig.test.js": {
-      "asserts": 79,
+      "asserts": 81,
       "blankLines": 27,
-      "lines": 446,
+      "lines": 463,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
     },
     "test/watch-longrun-exempt.test.js": {
-      "asserts": 122,
+      "asserts": 127,
       "blankLines": 31,
-      "lines": 627,
+      "lines": 637,
       "tautologies": 0,
       "tests": 21,
       "todos": 0
     },
     "test/watch-longrun-integration.test.js": {
-      "asserts": 66,
+      "asserts": 68,
       "blankLines": 14,
-      "lines": 272,
+      "lines": 275,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
     },
     "test/watch-longrun.test.js": {
-      "asserts": 111,
+      "asserts": 112,
       "blankLines": 34,
-      "lines": 485,
+      "lines": 486,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T08:11:24Z",
+  "generatedAt": "2026-10-26T10:50:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "试点治理域 61 条数量断言→身份集合升格(punky-quantity-pilot-20261027)；显式接受 asserts −1：governance-bridge:78 把 length===1 与 id 相等两条合并为一条更强的集合相等（等强，净 −1）",
+  "reason": "watch 域 63 条数量断言→身份集合/长度相等升格(punky-quantity-watch-20261027)；asserts +17 来自数组相等+互异/上界补充，非新增测试",
   "schema": 1,
   "totals": {
-    "asserts": 10837,
+    "asserts": 10854,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61234,
+    "lines": 61310,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

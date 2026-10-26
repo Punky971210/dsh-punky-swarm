@@ -69,7 +69,11 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
   assert.equal(st.missed, 1);
   assert.equal(st.stalled, false);
   let items = inboxItems(root, S, batchId);
-  assert.equal(items.length, 1, 'W1: inbox 出现 1 条追问');
+  // G1 身份集合（期望值来自输入侧：setup() 只播种 lane 'l1'）+「同 lane 至多 1 条」双条件
+  assert.deepEqual(items.map((i) => i.message.lane), [lane],
+    'W1: inbox 追问的 lane 身份集合（实测 ' + JSON.stringify(items.map((i) => i.message.lane)) + '）');
+  assert.ok(items.filter((i) => i.message.lane === lane).length <= 1,
+    'W1: 同 lane 至多 1 条 pending（实测 ' + items.length + '）');
   assert.equal(items[0].message.kind, 'probe');
   assert.equal(items[0].message.lane, lane, '追问含 lane 标识');
   assert.ok(items[0].message.text.includes(lane), '追问模板含 lane');
@@ -80,7 +84,13 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
   engine.tick();
   st = engine.status(LANE_KEY);
   assert.equal(st.missed, 2);
-  assert.equal(inboxItems(root, S, batchId).length, 1, 'W1: 同 lane 至多 1 条 pending（重复 tick 不叠加）');
+  {
+    const inbox2 = inboxItems(root, S, batchId);
+    assert.deepEqual(inbox2.map((i) => i.message.lane), [lane],
+      'W1: pending 追问 lane 身份集合（实测 ' + JSON.stringify(inbox2.map((i) => i.message.lane)) + '）');
+    assert.ok(inbox2.filter((i) => i.message.lane === lane).length <= 1,
+      'W1: 重复 tick 不叠加（同 lane ≤1 条；实测 ' + inbox2.length + '）');
+  }
 
   // 第 3 拍：硬停 → lane.stalled（W2）
   engine.tick();
@@ -96,7 +106,13 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
   // 此后停止追问（W2）：已 stalled 不追加、不再发新消息
   engine.tick();
   engine.tick();
-  assert.equal(inboxItems(root, S, batchId).length, 1);
+  {
+    const inboxAfter = inboxItems(root, S, batchId);
+    assert.deepEqual(inboxAfter.map((i) => i.message.lane), [lane],
+      'W2: 停止追问后 inbox lane 身份集合不变（实测 ' + JSON.stringify(inboxAfter.map((i) => i.message.lane)) + '）');
+    assert.ok(inboxAfter.filter((i) => i.message.lane === lane).length <= 1,
+      'W2: 不叠加（同 lane ≤1 条；实测 ' + inboxAfter.length + '）');
+  }
   assert.equal(store.readBatch(S, batchId).events.filter((e) => e.type === 'lane.stalled').length, 1);
 });
 
@@ -121,7 +137,13 @@ test('W3：产物 mtime 更新 → missedCount 归零、档位回 tier0，活动
   assert.equal(st.missed, 0, 'W3: missedCount 归零');
   assert.equal(st.tier, 0, 'W3: 档位回 tier0');
   assert.equal(st.stalled, false);
-  assert.equal(inboxItems(root, S, batchId).length, 1, 'W3: 活动拍不触发追问');
+  {
+    const inboxW3 = inboxItems(root, S, batchId);
+    assert.deepEqual(inboxW3.map((i) => i.message.lane), [lane],
+      'W3: 活动拍后 inbox lane 身份集合（实测 ' + JSON.stringify(inboxW3.map((i) => i.message.lane)) + '）');
+    assert.ok(inboxW3.filter((i) => i.message.lane === lane).length <= 1,
+      'W3: 活动拍不追加（同 lane ≤1 条；实测 ' + inboxW3.length + '）');
+  }
 });
 
 test('W3b：outbox 出现未 ack 消息 → 重置（活动信号 ②）', () => {
@@ -164,7 +186,13 @@ test('W4：退避档位（fake clock）——追问节奏 10min → 30min → 60
 
   fake = 10 * MIN; engine.tick(); // 第 1 拍（base=10min）
   assert.equal(engine.status(LANE_KEY).missed, 1);
-  assert.equal(inboxItems(root, S, batchId).length, 1);
+  {
+    const inboxW4 = inboxItems(root, S, batchId);
+    assert.deepEqual(inboxW4.map((i) => i.message.lane), [lane],
+      'W4: 多拍合并后 inbox lane 身份集合（实测 ' + JSON.stringify(inboxW4.map((i) => i.message.lane)) + '）');
+    assert.ok(inboxW4.filter((i) => i.message.lane === lane).length <= 1,
+      'W4: 同 lane ≤1 条（实测 ' + inboxW4.length + '）');
+  }
 
   fake = 19 * MIN; engine.tick(); // 9min 后：未到第 2 档（20min）→ 不推进
   assert.equal(engine.status(LANE_KEY).missed, 1);
@@ -180,7 +208,13 @@ test('W4：退避档位（fake clock）——追问节奏 10min → 30min → 60
   assert.equal(st.missed, 3);
   assert.equal(st.stalled, true);
   assert.equal(store.readBatch(S, batchId).events.find((e) => e.type === 'lane.stalled').missed, 3);
-  assert.equal(inboxItems(root, S, batchId).length, 1, 'W4: 全程仅 1 条 pending 追问（多拍合并）');
+  {
+    const inboxMulti = inboxItems(root, S, batchId);
+    assert.deepEqual(inboxMulti.map((i) => i.message.lane), [lane],
+      'W4: 全程 inbox lane 身份集合（实测 ' + JSON.stringify(inboxMulti.map((i) => i.message.lane)) + '）');
+    assert.ok(inboxMulti.filter((i) => i.message.lane === lane).length <= 1,
+      'W4: 多拍合并为同 lane ≤1 条（实测 ' + inboxMulti.length + '）');
+  }
   assert.equal(st.tier, 2, '档位随 missed 单调（min(missed, len-1)）');
 });
 
@@ -223,11 +257,13 @@ test('W6：lane_heartbeat 工具注册门控（P1-01 缺省默认开；显式 en
   const ctx = { tools: { register: () => {} } };
   // 行为变更：缺省 watch 默认开 → 缺省注册（旧「缺省关」为旧行为断言）
   const def = createHeartbeatTools(ctx, { store, root, config: {} });
-  assert.equal(def.length, 1, 'W6: enabled 缺省=true 注册（readCapability 合并 WATCH_DEFAULTS）');
+  assert.deepEqual(def.map((d) => d.name), ['lane_heartbeat'],
+    'W6: enabled 缺省=true 注册（工具名集合相等；实测 ' + JSON.stringify(def.map((d) => d.name)) + '）');
   assert.equal(def[0].name, 'lane_heartbeat');
   assert.deepEqual(createHeartbeatTools(ctx, { store, root, config: { capabilities: { watch: { enabled: false } } } }), [], 'W6: enabled=false 不注册');
   const tools = createHeartbeatTools(ctx, { store, root, config: { capabilities: { watch: { enabled: true } } } });
-  assert.equal(tools.length, 1);
+  assert.deepEqual(tools.map((d) => d.name), ['lane_heartbeat'],
+    'W6: enabled=true 注册（工具名集合相等；实测 ' + JSON.stringify(tools.map((d) => d.name)) + '）');
   assert.equal(tools[0].name, 'lane_heartbeat');
 });
 
@@ -243,7 +279,8 @@ test('W6b：lane_heartbeat 查询返回心跳状态；beat=true 手动触发一�
 
   const q = await tool.execute({ batchId }, exec);
   assert.equal(q.sessionId, S);
-  assert.equal(q.lanes.length, 1);
+  assert.deepEqual(q.lanes.map((r) => r.lane), [lane],
+    'W6b: 查询面 lane 身份集合（期望来自输入侧 setup 的 lane；实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
   assert.equal(q.lanes[0].lane, lane);
   assert.equal(q.lanes[0].missed, 1);
   assert.equal(q.lanes[0].tracked, true);
@@ -299,12 +336,14 @@ test('W6c：lane_heartbeat 缺省 lane → 全批非终态 lane（idle/review/pe
   }
   // 显式 lane 单行过滤回归
   const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
-  assert.equal(q2.lanes.length, 1, '显式 lane → 单行');
+  assert.deepEqual(q2.lanes.map((r) => r.lane), ['l2'],
+    '显式 lane → 单行（身份集合，期望=入参 lane；实测 ' + JSON.stringify(q2.lanes.map((r) => r.lane)) + '）');
   assert.equal(q2.lanes[0].lane, 'l2');
   // 非 running lane 显式查询仍安全返回（只读不 throw）。tracked 值由 e1 的扫描面策略决定
   // （C-2 已删 :675 `state.delete` 静默丢态路径）⇒ 此处**不**再断言 tracked，只核只读安全与单行过滤。
   const q3 = await tool.execute({ batchId, lane: 'l3' }, exec);
-  assert.equal(q3.lanes.length, 1);
+  assert.deepEqual(q3.lanes.map((r) => r.lane), ['l3'],
+    '非 running lane 显式查询单行（身份集合；实测 ' + JSON.stringify(q3.lanes.map((r) => r.lane)) + '）');
   assert.equal(q3.lanes[0].lane, 'l3');
 });
 

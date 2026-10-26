@@ -99,7 +99,7 @@ test('IT-A Manager 读面：候选经 mailbox_read broadcast 可达且载荷齐�
   laneHeartbeat(store, root, config, { now: () => base }).tick(); // 首拍建心跳 entry
   laneHeartbeat(store, root, config, { now: () => base + 26 * MIN }).tick(); // 26min：超阈值且无 checkpoint/活动 → 产候选
   const evs = candEvents(store, S, batchId, lane);
-  assert.equal(evs.length, 1, '事件流恰 1 条候选');
+  assert.equal(((evs ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane)).length, 1, '事件流恰 1 条候选');
   const ev = evs[0];
   const { read, ack } = managerTools(root, store);
   const r1 = await read.execute({ batchId, box: 'broadcast', session: S }, EXEC);
@@ -122,7 +122,7 @@ test('IT-A Manager 读面：候选经 mailbox_read broadcast 可达且载荷齐�
   assert.equal(a.ok, true);
   const r2 = await read.execute({ batchId, box: 'broadcast', session: S }, EXEC);
   assert.equal(candOf(r2.items).filter((m) => m.message.lane === lane).length, 0, 'ack 后不再返回');
-  assert.equal(candEvents(store, S, batchId, lane).length, 1, '事件留痕不受 ack 影响（Leader/审计面仍在）');
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '事件留痕不受 ack 影响（Leader/审计面仍在）');
 });
 
 // ---- IT-B 方向（D-3 双通道后修订）：候选入 broadcast + supervisor/inbox 双通道；outbox 无候选 ----
@@ -135,11 +135,11 @@ test('IT-B 方向（D-3 修订）：候选双通道 = broadcast + supervisor/inb
   const { base, engine, at } = timedEngine(store, root, { capabilities: { watch: { enabled: true } } });
   at(0).tick();
   at(26 * MIN).tick(); // 产候选 + 心跳首拍无活动 → probe 下行追问（tier0 ≥10min）
-  assert.equal(candEvents(store, S, batchId, lane).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1);
   // inbox：既有 probe（下行追问）+ D-3 新增的候选副本（channel:'inbox'）
   const inb = inboxItems(root, S, batchId);
   const inbCand = candOf(inb);
-  assert.equal(inbCand.length, 1, 'inbox 恰 1 条候选（D-3 双通道）');
+  assert.equal((inbCand.map((m) => m.message?.lane)).length, 1, 'inbox 恰 1 条候选（D-3 双通道）');
   assert.equal(inbCand[0].message.channel, 'inbox', 'inbox 那条带 channel 标记（可辨通道）');
   assert.ok(inbCand[0].ackId, 'inbox 候选带自身 ackId（记录级；与 broadcast 独立）');
   assert.ok(inb.some((m) => m.message?.kind === 'probe' && m.message.lane === lane), 'inbox 仍含既有 probe 追问（方向对照）');
@@ -149,7 +149,7 @@ test('IT-B 方向（D-3 修订）：候选双通道 = broadcast + supervisor/inb
   assert.equal(candOf(outb).length, 0, 'outbox 无候选');
   // broadcast：恰 1 条候选（D-3 不改变既有单通道计数）
   const bc = candOf(bcastItems(root, S, batchId));
-  assert.equal(bc.length, 1, 'broadcast 恰 1 条候选');
+  assert.equal((bc.map((m) => m.message?.lane)).length, 1, 'broadcast 恰 1 条候选');
   assert.notEqual(bc[0].ackId, inbCand[0].message.ackId, '两通道 ackId 独立');
   assert.equal(base > 0, true);
 });
@@ -213,20 +213,23 @@ test('IT-F stint 重派重置：新 dispatch → 计时归零；再超时按新 
   const { base, engine, at } = timedEngine(store, root, { capabilities: { watch: { enabled: true } } });
   at(0).tick();
   at(21 * MIN).tick(); // stint1：21min 超阈值 → 候选 #1
-  assert.equal(candEvents(store, S, batchId, lane).length, 1);
-  assert.equal(candOf(bcastItems(root, S, batchId)).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1);
+  assert.equal((candOf(bcastItems(root, S, batchId)).map((m) => m.message?.lane)).length, 1);
   // 重派：Leader 中断旧 worker 后新 dispatch（dispatch-register 同款事件；伪造 ts 对齐注入时钟）
   appendEventAt(store, S, batchId, EVT_MEMBER_DISPATCH, lane, base + 22 * MIN, { workerSessionId: 'w2' });
   at(24 * MIN).tick(); // 新 stint 仅 2min → 计时归零，不产新候选
-  assert.equal(candEvents(store, S, batchId, lane).length, 1, '重派后 2min 不接续旧 stint 时长');
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '重派后 2min 不接续旧 stint 时长');
   const st1 = engine.longrunStatus(S, batchId, lane, base + 24 * MIN);
   assert.equal(st1.candidate, false);
   assert.ok(st1.durationMs < 3 * MIN, '重派后 duration 归零量级（' + st1.durationMs + 'ms）');
   assert.ok(st1.runningSinceTs >= base + 22 * MIN, 'runningSince 更新为新 dispatch');
   at(43 * MIN).tick(); // 新 stint 21min（43-22）再超阈值 → 候选 #2（新 stint 去重键）
   const evs2 = candEvents(store, S, batchId, lane);
-  assert.equal(evs2.length, 2, '新 stint 再超时可再次候选');
-  assert.equal(candOf(bcastItems(root, S, batchId)).length, 2, 'broadcast 两期各 1 条');
+  // 期望值来自输入侧：两期 stint（base+0 与 appendEventAt 的 base+22min 重派）⇒ runningSince 身份集须两期互异
+  assert.equal((evs2.map((e) => Date.parse(e.runningSince))).length, 2, '新 stint 再超时可再次候选（按 stint 身份去重；实测 ' + (evs2.map((e) => Date.parse(e.runningSince))).length + '）');
+  assert.equal(new Set(evs2.map((e) => Date.parse(e.runningSince))).size, 2, '两期候选须互异（同一 stint 重复产两期即红）');
+  assert.equal((candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince)).length, 2, 'broadcast 两期各 1 条（按 stint 身份去重）');
+  assert.equal(new Set(candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince)).size, 2, 'broadcast 两期身份须互异');
   const sinceSet = new Set(evs2.map((e2) => Date.parse(e2.runningSince)));
   assert.equal(sinceSet.size, 2, '两期候选 runningSince 互异（按 stint 去重）');
 });
@@ -250,12 +253,12 @@ test('IT-G 出厂默认开：resolveLongrunConfig({}) enabled=true；空配置�
   fs.writeFileSync(bf, JSON.stringify(b0, null, 2));
   const engine = laneHeartbeat(store, root, {}); // 空配置：出厂默认开路径（无 capabilities.watch.longrun 键）
   engine.tick();
-  assert.equal(candEvents(store, S, batchId, lane).length, 1, '空配置 tick 即产候选（默认开）');
-  assert.equal(candOf(bcastItems(root, S, batchId)).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '空配置 tick 即产候选（默认开）');
+  assert.equal((candOf(bcastItems(root, S, batchId)).map((m) => m.message?.lane)).length, 1);
   // lane_longrun 注册可用 + 查询回显 emitted
   const ctx = { tools: { register: () => {} } };
   const tools = createLongrunTools(ctx, { store, root, config: {}, heartbeat: engine });
-  assert.equal(tools.length, 1, '空配置 → lane_longrun 注册（默认开）');
+  assert.equal((tools.map((t) => t.name)).length, 1, '空配置 → lane_longrun 注册（默认开）');
   assert.equal(tools[0].name, 'lane_longrun');
   const q = await tools[0].execute({ batchId, session: S }, EXEC);
   assert.equal(q.sessionId, S);
@@ -267,5 +270,5 @@ test('IT-G 出厂默认开：resolveLongrunConfig({}) enabled=true；空配置�
   assert.equal(row.emitted, true, '事件流已产候选 → emitted=true');
   // 注：tick 产候选后心跳扫描已建 fresh entry（重启宽限，lastActivityAt≈now）→ 查询即时判定 candidate 可为 false
   //（activity-fresh 属既有宽限语义，非回归）；候选事实由事件流 + emitted 回显保证。
-  assert.equal(candEvents(store, S, batchId, lane).length, 1, '事件流恰 1 条候选（最终事实源）');
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '事件流恰 1 条候选（最终事实源）');
 });

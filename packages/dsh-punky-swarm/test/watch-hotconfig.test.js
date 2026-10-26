@@ -327,7 +327,8 @@ test('H5a lane_heartbeat 引擎缺失 → disabled 状态对象（enabled:false 
   const eventsBefore = store.readBatch('sess-whc-d1', 'b-whc-d1').events.length;
   const q = await tool.execute({ batchId: 'b-whc-d1', lane: 'l1', session: 'sess-whc-d1' }, EXEC);
   assert.equal(q.sessionId, 'sess-whc-d1');
-  assert.equal(q.lanes.length, 1);
+  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
+    '查询面 lane 身份集合（期望来自入参 lane；实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
   const row = q.lanes[0];
   assert.equal(row.laneKey, 'sess-whc-d1/b-whc-d1/l1');
   assert.equal(row.enabled, false);
@@ -356,7 +357,8 @@ test('H5b lane_heartbeat 引擎缺失 + 缺省 lane → 每 running lane 一 dis
     getHeartbeat: () => null,
   });
   const q = await tool.execute({ batchId: 'b-whc-d2', session: S }, EXEC);
-  assert.equal(q.lanes.length, 1, 'running lane 每行 disabled');
+  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
+    'running lane 每行 disabled：lane 身份集合（实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
   assert.equal(q.lanes[0].lane, 'l1');
   assert.equal(q.lanes[0].enabled, false);
   assert.equal(q.lanes[0].reason, 'watch-disabled');
@@ -372,7 +374,8 @@ test('H5c lane_longrun 引擎缺失 → disabled 状态对象（含 longrun 域�
     config: { capabilities: { watch: { enabled: true, longrun: { enabled: true } } } },
     getHeartbeat: () => null,
   });
-  assert.equal(tools.length, 1, 'longrun enabled 静态 → lane_longrun 注册');
+  assert.deepEqual(tools.map((t) => t.name), ['lane_longrun'],
+    'longrun enabled 静态 → 注册工具名集合相等（实测 ' + JSON.stringify(tools.map((t) => t.name)) + '）');
   const [tool] = tools;
   const q = await tool.execute({ batchId: 'b-whc-d3', lane: 'l1', session: S, beat: true }, EXEC);
   const row = q.lanes[0];
@@ -386,7 +389,8 @@ test('H5c lane_longrun 引擎缺失 → disabled 状态对象（含 longrun 域�
   assert.equal(row.runningSince, null);
   assert.equal(row.checkpointFresh, false);
   assert.equal(row.activityFresh, false);
-  assert.equal(q.lanes.length, 1);
+  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
+    '查询面 lane 身份集合（实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
 });
 
 test('H5d getHeartbeat 执行时解引用：返回活引擎 → 查询走真实引擎（非 disabled）；修复旧实例闭包路径回归', async () => {
@@ -427,7 +431,14 @@ test('H6 重建语义行为：longrun.enabled=false 新引擎 tick 零候选（�
   const st1 = seedOverdueStint(root, S, 'b-rb1', 'l1');
   const e1 = createLaneHeartbeat({ store: st1, mailbox, config: {}, root });
   e1.tick();
-  assert.equal(candCount(st1, S, 'b-rb1', 'l1'), 1, '重建前（longrun 默认开）tick 产候选');
+  // G1 身份集合（期望值来自输入侧：播种 lane 就是 'l1'）
+  {
+    const candLanes1 = (st1.readBatch(S, 'b-rb1')?.events ?? [])
+      .filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane);
+    assert.deepEqual(candLanes1.sort(), ['l1'],
+      '重建前 tick 产候选的 lane 身份集合（实测 ' + JSON.stringify(candLanes1) + '）');
+    assert.ok(candLanes1.length >= 1, '至少 1 条候选（实测 ' + candLanes1.length + '）');
+  }
   e1.dispose(); // remountWatchEngine 语义：dispose 旧引擎
   // 引擎 e2（longrun.enabled=false 重建，镜像热更合并快照）：新批次旧 stint → tick 零候选
   const st2 = createStore(root);
@@ -438,7 +449,13 @@ test('H6 重建语义行为：longrun.enabled=false 新引擎 tick 零候选（�
   });
   e2.tick();
   assert.equal(candCount(st2Seed, S, 'b-rb2', 'l1'), 0, 'longrun.enabled=false → tick 不产候选（长跑探针停扫）');
-  assert.equal(candCount(st1, S, 'b-rb1', 'l1'), 1, '既有候选不被新引擎追加/清除');
+  {
+    const candLanesKept = (st1.readBatch(S, 'b-rb1')?.events ?? [])
+      .filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane);
+    assert.deepEqual(candLanesKept.sort(), ['l1'],
+      '既有候选不被新引擎清除：lane 身份集合仍为 l1（实测 ' + JSON.stringify(candLanesKept) + '）');
+    assert.ok(candLanesKept.length >= 1, '既有候选条数不得归零（实测 ' + candLanesKept.length + '）');
+  }
   // stalled 档存活佐证：0ms 档位下 tick 已跑心跳扫描 → inbox 追问照发（引擎活着，只是 longrun 门控关）
   const probes = inboxItems(root, S, 'b-rb2').filter((m) => m.message?.kind === 'probe' && m.message.lane === 'l1');
   assert.ok(probes.length >= 1, '心跳档仍活（探针照发）——证明 tick 已执行而 longrun 判定被门控（实际: ' + probes.length + '）');

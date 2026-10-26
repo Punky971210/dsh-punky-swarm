@@ -235,7 +235,7 @@ test('T9 tick 命中 → 恰 1 事件 + 1 broadcast（载荷齐全）；不改 l
   const e2 = engineAt({ root, store, config, base, offsetMs: 26 * 60_000 });
   e2.tick();
   const evs = candEvents(store, S, batchId, lane);
-  assert.equal(evs.length, 1, '恰 1 条 lane.longrun.candidate');
+  assert.equal(((evs ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane)).length, 1, '恰 1 条 lane.longrun.candidate');
   const ev = evs[0];
   assert.equal(ev.lane, lane);
   assert.equal(ev.reason, 'duration-exceeded-no-progress');
@@ -248,7 +248,7 @@ test('T9 tick 命中 → 恰 1 事件 + 1 broadcast（载荷齐全）；不改 l
   // broadcast 双通道：恰 1 条候选消息（kind=longrun.candidate，载荷齐全）
   const bc = bcastItems(root, S, batchId);
   const cand = bc.filter((m) => m.message?.kind === 'longrun.candidate' && m.message.lane === lane);
-  assert.equal(cand.length, 1, 'broadcast 恰 1 条候选');
+  assert.equal((cand.map((m) => m.message?.lane)).length, 1, 'broadcast 恰 1 条候选');
   assert.equal(cand[0].message.batchId, batchId);
   assert.equal(cand[0].message.durationMs, ev.durationMs);
   assert.equal(cand[0].message.reason, 'duration-exceeded-no-progress');
@@ -266,7 +266,7 @@ test('T10 去重：同 stint 后续 tick 不再产事件/消息', () => {
   const e = engineAt({ root, store, config, base, offsetMs: 27 * 60_000 });
   e.tick(); // 产候选
   e.tick(); // 同 stint 再扫（+0 秒）
-  assert.equal(candEvents(store, S, batchId, lane).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1);
   assert.equal(bcastItems(root, S, batchId).filter((m) => m.message?.kind === 'longrun.candidate').length, 1);
 });
 
@@ -276,13 +276,13 @@ test('T11 跨重启幂等：状态表清空后重扫同 stint → 事件流去�
   const config = { capabilities: { watch: { enabled: true } } };
   engineAt({ root, store, config, base, offsetMs: 0 }).tick();
   engineAt({ root, store, config, base, offsetMs: 28 * 60_000 }).tick(); // 产候选（引擎 A）
-  assert.equal(candEvents(store, S, batchId, lane).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1);
   // 引擎 B（新状态表 = 模拟重启）：先 tick 建 entry，再推进——事件流已有同 runningSince 候选 → skip
   const b1 = engineAt({ root, store, config, base, offsetMs: 0 });
   b1.tick();
   const b2 = engineAt({ root, store, config, base, offsetMs: 40 * 60_000 });
   b2.tick();
-  assert.equal(candEvents(store, S, batchId, lane).length, 1, '跨重启不重复产候选');
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '跨重启不重复产候选');
   assert.equal(bcastItems(root, S, batchId).filter((m) => m.message?.kind === 'longrun.candidate').length, 1);
 });
 
@@ -293,7 +293,7 @@ test('T12 引擎层 stint 重置：结算后重派（新 dispatch）再超时 �
   engineAt({ root, store, config, base, offsetMs: 0 }).tick();
   const e1 = engineAt({ root, store, config, base, offsetMs: 26 * 60_000 });
   e1.tick(); // stint1 候选
-  assert.equal(candEvents(store, S, batchId, lane).length, 1);
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1);
   // 模拟恢复 + 重派：running→idle（system.recovered）→ idle→running（新 settled-running 事件 = 新 stint 起点）
   store.recoverBatches();
   store.setMember(S, batchId, lane, 'running');
@@ -301,7 +301,8 @@ test('T12 引擎层 stint 重置：结算后重派（新 dispatch）再超时 �
   engineAt({ root, store, config, base: base2, offsetMs: 0 }).tick();
   const e2 = engineAt({ root, store, config, base: base2, offsetMs: 26 * 60_000 });
   e2.tick();
-  assert.equal(candEvents(store, S, batchId, lane).length, 2, '新 stint 再超时可再次产候选');
+  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 2, '新 stint 再超时可再次产候选');
+  assert.equal(new Set(candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).size, 2, '两期候选须互异（同一 stint 重复产两期即红）');
 });
 
 test('验收 5b：lane 状态与 schema 零改动（无新增成员态；stalled 档行为不受影响）', () => {
@@ -326,13 +327,13 @@ test('T14 lane_longrun 注册门控：缺省默认开注册（并列 1 件）；
   const { root, store } = setup();
   const ctx = { tools: { register: () => {} } };
   const def = createLongrunTools(ctx, { store, root, config: {} });
-  assert.equal(def.length, 1, '出厂默认开 → lane_longrun 注册');
+  assert.equal((def.map((t) => t.name)).length, 1, '出厂默认开 → lane_longrun 注册');
   assert.equal(def[0].name, 'lane_longrun');
   assert.deepEqual(createLongrunTools(ctx, { store, root, config: { capabilities: { watch: { longrun: { enabled: false } } } } }), [], 'longrun.enabled=false 不注册');
   assert.deepEqual(createLongrunTools(ctx, { store, root, config: { capabilities: { watch: { enabled: false } } } }), [], 'watch 关 → 不注册');
   // lane_heartbeat 输出零变化（对照基线：仍恰 1 件 lane_heartbeat）
   const hbTools = createHeartbeatTools(ctx, { store, root, config: {} });
-  assert.equal(hbTools.length, 1);
+  assert.equal((hbTools.map((t) => t.name)).length, 1);
   assert.equal(hbTools[0].name, 'lane_heartbeat');
 });
 
@@ -346,12 +347,12 @@ test('lane_longrun 查询：返回探针状态；beat=true 手动触发一拍（
   const exec = { agent: { session: { id: S } } };
   const q = await tool.execute({ batchId }, exec);
   assert.equal(q.sessionId, S);
-  assert.equal(q.lanes.length, 1);
+  assert.equal((q.lanes.map((r) => r.lane)).length, 1);
   assert.equal(q.lanes[0].lane, lane);
   assert.equal(typeof q.lanes[0].candidate, 'boolean');
   // beat 手动一拍后仍可查询（无异常、零状态破坏）
   const qb = await tool.execute({ batchId, beat: true }, exec);
-  assert.equal(qb.lanes.length, 1);
+  assert.equal((qb.lanes.map((r) => r.lane)).length, 1);
 });
 
 // ---- L1 复核缺口（补用例）：引擎在、多 lane 混合态、缺省 lane
@@ -394,7 +395,7 @@ test('lane_longrun 缺省 lane → 全批非终态 lane（多 running；idle 纳
   }
   // 显式 lane 单行过滤回归
   const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
-  assert.equal(q2.lanes.length, 1, '显式 lane → 单行');
+  assert.equal((q2.lanes.map((r) => r.lane)).length, 1, '显式 lane → 单行');
   assert.equal(q2.lanes[0].lane, 'l2');
 });
 
@@ -432,7 +433,7 @@ test('T16a 窗口生效正例：自定义阈值 60s/30s（注入时钟）——9
   const eA = laneHeartbeat(storeA, rootA, LR_1MIN, { now: () => base });
   eA.tick();
   const evsA = candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1');
-  assert.equal(evsA.length, 1, '90s stint 超 1min 自定义阈值 → 首拍产候选');
+  assert.equal(((evsA ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane)).length, 1, '90s stint 超 1min 自定义阈值 → 首拍产候选');
   const evA = evsA[0];
   assert.equal(evA.maxDurationMs, 60_000, '载荷阈值 = 新阈值（remount 值传播后引擎 lrCfg）');
   assert.equal(evA.noProgressWindowMs, 30_000);
@@ -441,11 +442,11 @@ test('T16a 窗口生效正例：自定义阈值 60s/30s（注入时钟）——9
   // broadcast 双通道载荷同阈值
   const bcA = bcastItems(rootA, 'sess-lr-t16a', 'b-lr-t16a');
   const candA = bcA.filter((m) => m.message?.kind === 'longrun.candidate' && m.message.lane === 'l1');
-  assert.equal(candA.length, 1, 'broadcast 恰 1 条候选');
+  assert.equal((candA.map((m) => m.message?.lane)).length, 1, 'broadcast 恰 1 条候选');
   assert.equal(candA[0].message.maxDurationMs, 60_000);
   // 同 stint 再扫不重复（去重语义在自定义阈值下保持）
   eA.tick();
-  assert.equal(candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1').length, 1, '同 stint 去重（新阈值下不重复产）');
+  assert.equal((candEvents(storeA, 'sess-lr-t16a', 'b-lr-t16a', 'l1').map((e) => Date.parse(e.runningSince))).length, 1, '同 stint 去重（新阈值下不重复产）');
   eA.dispose();
   // ② 对照：默认阈值（20min）引擎对同 90s stint → 零候选——90s 远未超 20min，判定差异 = 自定义阈值生效证据
   const rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-t16b-'));
@@ -474,7 +475,7 @@ test('T16b 自定义阈值边界判定时机（严格 >）：duration 恰达 60s
   const e2 = laneHeartbeat(store, root, LR_1MIN, { now: () => base + 31_000 });
   e2.tick();
   const evs = candEvents(store, S, batchId, lane);
-  assert.equal(evs.length, 1, 'duration 超阈值 1s → 产候选');
+  assert.equal(((evs ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane)).length, 1, 'duration 超阈值 1s → 产候选');
   assert.equal(evs[0].durationMs, 61_000);
   assert.equal(evs[0].maxDurationMs, 60_000);
   assert.equal(bcastItems(root, S, batchId).filter((m) => m.message?.kind === 'longrun.candidate').length, 1);

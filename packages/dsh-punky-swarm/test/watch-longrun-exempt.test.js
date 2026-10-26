@@ -198,7 +198,7 @@ test('E21 豁免 lane 仍写 checkpoint：lane_checkpoint 写面零特判（work
   for (let i = 0; i < 4; i++) e.tick();
   // 探针路径零改动 checkpoint 写面：直接 appendEvent（lane_checkpoint 工具的同一落点）照常可写
   store.appendEvent(S, batchId, EVT_WORKTREE_CHECKPOINT, { lane: 'l1', message: 'step 1/3' });
-  assert.equal(evsOf(store, S, batchId, EVT_WORKTREE_CHECKPOINT, 'l1').length, 1, '豁免 lane 的 checkpoint 事件照常落盘');
+  assert.equal((evsOf(store, S, batchId, EVT_WORKTREE_CHECKPOINT, 'l1').map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, '豁免 lane 的 checkpoint 事件照常落盘');
   assert.equal(store.readBatch(S, batchId).events.filter((x) => x.type === EVT_LANE_STALLED).length, 0, '仍无 lane.stalled');
   e.dispose();
 });
@@ -216,7 +216,7 @@ test('E22 回归锚：非豁免 lane 同设置下仍追问（≥maxMissed 拍）
   const e = laneHeartbeat(store, root, FAST, { now: () => base + 5 * MIN });
   for (let i = 0; i < 4; i++) e.tick();
   const stalled = evsOf(store, S, batchId, EVT_LANE_STALLED);
-  assert.equal(stalled.length, 1, '仅非豁免 lane l2 落 stalled');
+  assert.equal((stalled.map((e) => e.lane)).length, 1, '仅非豁免 lane l2 落 stalled');
   assert.equal(stalled[0].lane, 'l2');
   const probes = inboxItems(root, S, batchId).filter((m) => m.message?.kind === 'probe');
   assert.ok(probes.length >= 1, '非豁免 lane 追问照发');
@@ -241,10 +241,14 @@ test('F24/F29 D-2 产 unconsumed 事件（isAcked 判据）+ 事件载荷含 run
   const e1 = laneHeartbeat(store, root, D2CFG(), { now: () => base });
   e1.tick(); // duration 90s > 60s → 产候选（broadcast + inbox 双投递）
   const cand = evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, 'l1');
-  assert.equal(cand.length, 1, 'D-3/G29：候选事件恰 1 条且带 ackId');
+  // 裁③ 读码：cand = evsOf(...) ⇒ **事件对象**（L243），故按事件字段断言
+  assert.equal(cand.length, 1, 'D-3/G29：候选事件恰 1 条且带 ackId（条数，抓重复/多余/缺失）');
+  assert.deepEqual(cand.map((e) => e.lane), ['l1'], '候选事件的 lane = 输入侧播种 lane（实测 ' + JSON.stringify(cand.map((e) => e.lane)) + '）');
   assert.ok(cand[0].ackId, '候选事件载荷含 ackId（D-2 的句柄）');
   const bc = candOf(bcastItems(root, S, batchId));
-  assert.equal(bc.length, 1);
+  // 裁③ 读码：bc = candOf(bcastItems(...)) ⇒ **消息对象**（L246）
+  assert.equal(bc.length, 1, 'broadcast 候选恰 1 条（条数）');
+  assert.deepEqual(bc.map((m) => m.message?.lane), ['l1'], 'broadcast 候选的 lane 身份（实测 ' + JSON.stringify(bc.map((m) => m.message?.lane)) + '）');
   assert.equal(cand[0].ackId, bc[0].ackId, '事件载荷的 ackId = broadcast 那条（spec §3.7.2 锚定口径）');
   assert.equal(hasLongrunUnconsumed(store.readBatch(S, batchId), 'l1', Date.parse(cand[0].runningSince)), false, '未超时前无 unconsumed');
   // 推进时钟 61s > unconsumedTimeoutMs（不 ack）→ 独立趟产 unconsumed
@@ -253,7 +257,9 @@ test('F24/F29 D-2 产 unconsumed 事件（isAcked 判据）+ 事件载荷含 run
   const e2 = laneHeartbeat(store, root, D2CFG(), { now: () => base + 61_000 });
   e2.tick();
   const un = evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED, 'l1');
-  assert.equal(un.length, 1, '超时未 ack → 恰 1 条 lane.longrun.unconsumed');
+  // 裁③ 读码：un = evsOf(..., EVT_LANE_LONGRUN_UNCONSUMED, 'l1') ⇒ **事件对象**（L255）
+  assert.equal(un.length, 1, '超时未 ack → 恰 1 条 lane.longrun.unconsumed（条数）');
+  assert.deepEqual(un.map((e) => e.lane), ['l1'], 'unconsumed 事件的 lane 身份（实测 ' + JSON.stringify(un.map((e) => e.lane)) + '）');
   assert.equal(un[0].runningSince, cand[0].runningSince);
   assert.equal(un[0].emittedAt, cand[0].ts, 'emittedAt = 候选事件 ts');
   assert.ok(un[0].elapsedMs >= 60_000, 'elapsedMs ≥ unconsumedTimeoutMs（触发阈值的硬下界）');
@@ -301,7 +307,7 @@ test('F26 单次纪律：同 (lane,runningSince) 连续多拍仍只 1 条 uncons
   e.tick();
   e.tick();
   laneHeartbeat(store, root, D2CFG(), { now: () => base + 120_000 }).tick(); // 新引擎实例（模拟重建）
-  assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED, 'l1').length, 1, '同 stint 只产一次');
+  assert.equal((evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED, 'l1').map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, '同 stint 只产一次');
   e.dispose();
 });
 
@@ -315,7 +321,7 @@ test('F27 逃生阀：unconsumedTimeoutMs=0 → D-2 关闭（永不产 unconsume
     events: [mkEv(base - 90_000, EVT_MEMBER_DISPATCH, { lane: 'l1' })],
   });
   laneHeartbeat(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base }).tick();
-  assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE).length, 1, '候选照产（D-2 关闭不影响候选档）');
+  assert.equal((evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE).map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, '候选照产（D-2 关闭不影响候选档）');
   laneHeartbeat(store, root, D2CFG({ unconsumedTimeoutMs: 0 }), { now: () => base + 10 * MIN }).tick();
   assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_UNCONSUMED).length, 0, 'unconsumedTimeoutMs=0 → D-2 关闭');
 });
@@ -334,8 +340,12 @@ test('G28/G30 候选双通道：broadcast 恰 1 条 + supervisor/inbox 恰 1 条
   e.tick();
   const bc = candOf(bcastItems(root, S, batchId));
   const inb = candOf(inboxItems(root, S, batchId));
-  assert.equal(bc.length, 1, 'broadcast 恰 1 条候选（D-3 不使既有计数变 2）');
-  assert.equal(inb.length, 1, 'supervisor/inbox 恰 1 条候选（D-3 新增通道）');
+  // 裁③ 读码：bc = candOf(bcastItems(...)) ⇒ **消息对象**（L335）
+  assert.equal(bc.length, 1, 'broadcast 恰 1 条候选（D-3 不使既有计数变 2；条数）');
+  assert.deepEqual(bc.map((m) => m.message?.lane), ['l1'], 'broadcast 候选 lane 身份（实测 ' + JSON.stringify(bc.map((m) => m.message?.lane)) + '）');
+  // 裁③ 读码：inb = candOf(inboxItems(...)) ⇒ **消息对象**（L336）
+  assert.equal(inb.length, 1, 'supervisor/inbox 恰 1 条候选（D-3 新增通道；条数）');
+  assert.deepEqual(inb.map((m) => m.message?.lane), ['l1'], 'inbox 候选 lane 身份（实测 ' + JSON.stringify(inb.map((m) => m.message?.lane)) + '）');
   assert.equal(inb[0].message.channel, 'inbox', 'inbox 那条带通道标记');
   assert.notEqual(bc[0].ackId, inb[0].ackId, '两条投递各自 ackId 独立');
   assert.equal(bc[0].message.lane, inb[0].message.lane);
@@ -360,7 +370,7 @@ test('H31 僵尸批过滤：末事件 25h 前（A）与缺 events 但 updatedAt 
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000 } } } };
   laneHeartbeat(store, root, cfg, { now: () => now }).tick();
   assert.equal(evsOf(store, S, 'b-h31-a', EVT_LANE_LONGRUN_CANDIDATE).length, 0, 'A 僵尸批整批跳过（零候选）');
-  assert.equal(evsOf(store, S, 'b-h31-b', EVT_LANE_LONGRUN_CANDIDATE).length, 1, 'B 活跃批照常产候选');
+  assert.equal((evsOf(store, S, 'b-h31-b', EVT_LANE_LONGRUN_CANDIDATE).map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, 'B 活跃批照常产候选');
   assert.equal(evsOf(store, S, 'b-h31-c', EVT_LANE_LONGRUN_CANDIDATE).length, 0, 'C 缺 events → 回退 updatedAt 判僵尸');
 });
 
@@ -374,7 +384,7 @@ test('H32 逃生阀：staleBatchMs=0 → 关闭过滤，僵尸批照常参与（
   });
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000, staleBatchMs: 0 } } } };
   laneHeartbeat(store, root, cfg, { now: () => now }).tick();
-  assert.equal(evsOf(store, S, 'b-h32', EVT_LANE_LONGRUN_CANDIDATE, 'l1').length, 1, 'staleBatchMs=0 → 过滤关闭（逃生阀有效）');
+  assert.equal((evsOf(store, S, 'b-h32', EVT_LANE_LONGRUN_CANDIDATE, 'l1').map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, 'staleBatchMs=0 → 过滤关闭（逃生阀有效）');
 });
 
 test('H33 回归：phase !== running 的批次与未超时的活跃批行为不变（不因 D-4 误跳）', () => {
@@ -389,7 +399,7 @@ test('H33 回归：phase !== running 的批次与未超时的活跃批行为不�
   assert.equal(isStaleBatch(st.readBatch(S, 'b-h33-idle'), now, LONGRUN_DEFAULTS.staleBatchMs), false);
   const cfg = { capabilities: { watch: { enabled: true, longrun: { maxDurationMs: 60_000, noProgressWindowMs: 30_000 } } } };
   laneHeartbeat(st, root, cfg, { now: () => now }).tick();
-  assert.equal(evsOf(st, S, 'b-h33-run', EVT_LANE_LONGRUN_CANDIDATE, lane).length, 1);
+  assert.equal((evsOf(st, S, 'b-h33-run', EVT_LANE_LONGRUN_CANDIDATE, lane).map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1);
   assert.equal(evsOf(st, S, 'b-h33-idle', EVT_LANE_LONGRUN_CANDIDATE, lane).length, 0, '非 running lane 不扫');
   // 纯函数层：lastEventTsOf 回退 updatedAt
   assert.equal(lastEventTsOf({ events: [], updatedAt: new Date(12345).toISOString() }), 12345);
@@ -505,7 +515,7 @@ test('AN3-c 引擎级实证：worker 只写磁盘 progress 快照（零 checkpoi
   // ① 对照（RED）：无快照 → 判候选（复现假阳性条件）
   const e1 = laneHeartbeat(store, root, cfg, { now: engineNow });
   e1.tick();
-  assert.equal(evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, lane).length, 1, '对照：无快照 → 判候选（复现假阳性）');
+  assert.equal((evsOf(store, S, batchId, EVT_LANE_LONGRUN_CANDIDATE, lane).map((e) => Date.parse(e.runningSince ?? e.ts))).length, 1, '对照：无快照 → 判候选（复现假阳性）');
   e1.dispose();
   // ② 实证（GREEN）：同构批次（stint 起点同为 10min 前 → duration 10min ≫ 1min 阈值），但 worker 只在
   //    <artifacts>/<batchId>/<lane>/progress/ 下逐子步骤写快照（不调 lane_checkpoint）
@@ -568,7 +578,7 @@ test('AN3-d 受控对照：RED 无快照 → 判 stalled/追问；GREEN 有 prog
   const bRed = 'b-an3d-red';
   const stRed = mkBatch(rootRed, SRed, bRed);
   const red = run(rootRed, SRed, bRed, stRed);
-  assert.equal(red.stalled.length, 1, 'RED：无快照 → 落 lane.stalled（探针会响，对照成立）');
+  assert.equal((red.stalled.map((e) => e.lane)).length, 1, 'RED：无快照 → 落 lane.stalled（探针会响，对照成立）');
   assert.equal(red.stalled[0].lane, lane);
   assert.equal(red.probes.length >= 1, true, 'RED：无快照 → 发 inbox 追问');
   assert.equal(red.st.stalled, true, 'RED：状态面 stalled=true');
@@ -599,7 +609,7 @@ test('AN3-d 受控对照：RED 无快照 → 判 stalled/追问；GREEN 有 prog
   fs.writeFileSync(sp, 'snapshot');
   fs.utimesSync(sp, new Date(base - 30 * MIN), new Date(base - 30 * MIN)); // 30min 前 ≫ 5min 窗 → 非新鲜
   const stale = run(rootStale, SStale, bStale, stStale);
-  assert.equal(stale.stalled.length, 1, '对照：快照超窗 → 仍判 stalled（快照信号不稀释探针）');
+  assert.equal((stale.stalled.map((e) => e.lane)).length, 1, '对照：快照超窗 → 仍判 stalled（快照信号不稀释探针）');
   assert.equal(stale.probes.length >= 1, true, '对照：超窗仍追问');
 });
 

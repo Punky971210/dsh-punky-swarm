@@ -157,7 +157,13 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
       const S = 'sess-wbo-b';
       const seed = seedOverdueStint(rootB, S, 'b-wbo-b', 'l1');
       await sleep(7_500); // watchdog 档期 6000ms + 事件/fs 余量
-      assert.equal(candCount(seed, S, 'b-wbo-b', 'l1'), 1, '幂等 no-op 未误杀引擎：静默 tick 照常产长跑候选');
+      // G1 身份集合（期望值来自**输入侧**：seedOverdueStint 播种的 lane 就是 'l1'）——
+      // 取代 `candCount(...) === 1`：候选条数不作判据，判「产给了哪条 lane」。
+      const candLanes = (seed.readBatch(S, 'b-wbo-b')?.events ?? [])
+        .filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane);
+      assert.deepEqual(candLanes.sort(), ['l1'],
+        '静默 tick 须为播种 lane 产候选（身份集合；实测 ' + JSON.stringify(candLanes) + '）');
+      assert.ok(candLanes.length >= 1, '静默 no-op 未误杀引擎：至少产 1 条候选（实测 ' + candLanes.length + '）');
     } finally {
       disposerB();
     }
