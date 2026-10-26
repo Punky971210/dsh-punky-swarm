@@ -485,6 +485,9 @@ export function buildAttribution({ isoFiles = [], faceRootRel, faceDelta }) {
   const root = toPosix(faceRootRel);
   const entries = [];
   for (const f of isoFiles) {
+    // ⚠ A1 = **全量存在性枚举**：不区分 added / changed / **removed**（判据对三种差异同形生效）。
+    //   ⇒ 「真实面丢 X ∧ 隔离根有 X ⇒ red」与 A1 的定义**逐字同义**，无需额外分支（判据已存在，D14 钉住它）。
+    //   重构警告：若把此处收窄成「只处理 added/changed」，red 分支会静默消失 —— D14-a 就是为此设的红线。
     const m = isoRelToFace(f.rel);
     if (m && toPosix(m.faceRootRel) === root && m.rel) entries.push({ kind: 'faceRel', rel: m.rel, source: 'A1' });
   }
@@ -1547,4 +1550,109 @@ test('D13-4 汇总通道齐平：unresolved / hits 既要进 g2Summary 聚合，
     + ' hits=' + sum.hits
     + ' unresolvedInText=' + text.includes('unresolved=1')
     + ' hitsInText=' + text.includes('hits=1') + String.fromCharCode(10));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D14：**removed 的归因红线**（AC-10：不新增生产分支 —— 判据已在 A1 里）
+//
+// 为什么必须有这条：全仓此前**没有一条用例**走过「真实面丢 X ∧ 隔离根有 X ⇒ red」。
+//   · D6 / D9-a 只断 `delta.removed` 的**形状**；
+//   · D11 构造的是 **added**，不是 removed。
+// ⇒ 若将来有人把 A1 重构成「只处理 added/changed」（看着像"对齐 A3"的合理重构），
+//   **零断言会红，red 分支静默消失**。D14-a 就是钉这条的。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 受控面：把生产产物按面相对 rel 复制进 ctlFace（源与 D11 同口径：隔离根真实产物优先，子进程用包内源 + sha 校验）。 */
+function materializeProbeInto(ctlFace, probeRel, isoFile) {
+  const posixRel = String(probeRel).split(path.sep).join('/');
+  const isoRoot = (ISOLATED && state.applied) ? ISOLATED : null;
+  let copySrc;
+  if (isoRoot) {
+    copySrc = path.join(isoRoot, String(isoFile.rel));
+  } else {
+    const asset = assetMap().find((x) => x.subpath && posixRel.startsWith(x.subpath + '/'));
+    const pkgRel = asset ? asset.rel + posixRel.slice(asset.subpath.length) : posixRel;
+    copySrc = path.join(PACKAGE_ROOT, pkgRel);
+  }
+  fs.mkdirSync(path.dirname(path.join(ctlFace, posixRel)), { recursive: true });
+  fs.copyFileSync(copySrc, path.join(ctlFace, posixRel));
+  const copiedSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ctlFace, posixRel))).digest('hex');
+  assert.equal(copiedSha, isoFile.sha256, '构造须与生产产物逐字相同（sha256 相等）：' + posixRel);
+}
+
+test('D14-a 该红必红：真实面**丢** X 且隔离根有 X ⇒ red，且 source 必须是 A1（A3 对 removed 不适用）', () => {
+  const probeRel = 'punky-preset/agent.cordis.yml';
+  const isoRel = '.dsh/.agent-presets/' + probeRel;
+
+  // ── fail-closed 两分法：**取不到** isoFiles ⇒ 判红并点名；**取到空集**才是合法 ──
+  let isoFiles;
+  try {
+    isoFiles = productionIsoFiles();
+  } catch (e) {
+    assert.fail('AC-10 fail-closed：isoFiles 不可用（' + (e && e.message ? e.message : String(e))
+      + '）⇒ 判红并点名；**不得**把"取不到"当成"隔离根也没有"（那会把泄漏判成外部删除，方向正好反）');
+  }
+  const isoFile = isoFiles.find((f) => String(f.rel).split(path.sep).join('/') === isoRel);
+  assert.ok(isoFile, 'D14 前置：生产 isoFiles 须含 ' + isoRel + '（空集本身合法，但本构造需要真实产物）');
+
+  const dir = tmpRoot('d14a');
+  const ctlFace = path.join(dir, '.dsh', '.agent-presets');
+  try {
+    materializeProbeInto(ctlFace, probeRel, isoFile);
+    const before = fingerprint(ctlFace);                    // 有该文件
+    fs.rmSync(path.join(ctlFace, probeRel));                // **删除** ⇒ removed 方向
+    const after = fingerprint(ctlFace);
+    const faceDelta = faceDiff(before, after);
+
+    const removedPosix = (faceDelta.removed ?? []).map((r) => String(r).split(path.sep).join('/'));
+    assert.ok(removedPosix.includes(probeRel),
+      'D14-a 前置：差异必须在 **removed** 侧（先写后删）；实测 removed=' + JSON.stringify(removedPosix));
+
+    const attr = buildAttribution({ isoFiles, faceRootRel: '.dsh/.agent-presets', faceDelta });
+    const result = evalFace({ face: ctlFace, before, after, attributed: attr });
+
+    assert.equal(result.status, 'red',
+      'D14-a：真实面丢 X ∧ 隔离根有 X ⇒ 必须 red（A1 全量枚举已覆盖 removed）；实测 ' + result.status + '/' + (result.subclass ?? '-'));
+    assert.equal(result.attribution.hits.length >= 1, true, 'D14-a：须有命中');
+    assert.equal(result.attribution.hits.every((h) => h.source === 'A1'), true,
+      'D14-a：命中来源必须**全部是 A1**（A3 对 removed 不适用，出现 A3 说明构造或判据错了）；实测 '
+      + JSON.stringify(result.attribution.hits.map((h) => h.source)));
+    assert.deepEqual(result.attributedHits, [probeRel], 'D14-a：命中键须精确为 ' + probeRel + '（已 posix，不再包 toPosix）');
+
+    // ── D14-b 反向对照：同一 isoFiles，换一个**资产前缀下但隔离根没有**的 rel ──
+    const absentRel = 'punky-preset/__absent__.yml';
+    const dir2 = tmpRoot('d14b');
+    const ctlFace2 = path.join(dir2, '.dsh', '.agent-presets');
+    try {
+      fs.mkdirSync(path.join(ctlFace2, 'punky-preset'), { recursive: true });
+      fs.writeFileSync(path.join(ctlFace2, absentRel), 'external-delete', 'utf8');
+      const before2 = fingerprint(ctlFace2);
+      fs.rmSync(path.join(ctlFace2, absentRel));
+      const after2 = fingerprint(ctlFace2);
+      const delta2 = faceDiff(before2, after2);
+      const removed2 = (delta2.removed ?? []).map((r) => String(r).split(path.sep).join('/'));
+      assert.ok(removed2.includes(absentRel), 'D14-b 前置：差异须在 removed 侧；实测 ' + JSON.stringify(removed2));
+
+      const attr2 = buildAttribution({ isoFiles, faceRootRel: '.dsh/.agent-presets', faceDelta: delta2 });
+      const result2 = evalFace({ face: ctlFace2, before: before2, after: after2, attributed: attr2 });
+      assert.equal(result2.status, 'inconclusive',
+        'D14-b：隔离根**也没有**该 rel ⇒ 不得 red（否则"凡删除都算泄漏"）；实测 ' + result2.status);
+      assert.equal(result2.subclass, 'unattributable', 'D14-b：须落 unattributable');
+      assert.equal(result2.attribution.hits.length, 0, 'D14-b：hits 必须为 0');
+
+      // ── 合成断言：两者结论必须不同，否则本用例不区分"被移过去的泄漏"与"外部删除" ──
+      assert.notEqual(result2.status, result.status,
+        'D14 合成：D14-a 与 D14-b 结论必须不同（相同 ⇒ 用例无鉴别力）');
+
+      process.stderr.write('[D14] a=' + result.status + '/' + result.attribution.hits.map((h) => h.source).join(',')
+        + ' b=' + result2.status + '/' + (result2.subclass ?? '-') + '/hits=' + result2.attribution.hits.length
+        + ' removedHasRel=' + removedPosix.includes(probeRel)
+        + ' sourceAllA1=' + result.attribution.hits.every((h) => h.source === 'A1')
+        + ' syntheticDiffer=' + (result2.status !== result.status) + String.fromCharCode(10));
+    } finally {
+      fs.rmSync(dir2, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

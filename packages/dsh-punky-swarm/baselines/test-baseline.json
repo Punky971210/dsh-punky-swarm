@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 165,
-      "blankLines": 134,
-      "lines": 1551,
+      "asserts": 178,
+      "blankLines": 146,
+      "lines": 1659,
       "tautologies": 0,
-      "tests": 19,
+      "tests": 20,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T19:47:04Z",
+  "generatedAt": "2026-10-26T20:26:09Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "RES-1：g2Summary 补 unresolved/hits 聚合 + formatG2Summary 头行渲染 + D13-4 五条断言（同时断聚合与渲染）",
+  "reason": "D14 removed 归因红线（AC-10 零生产分支：仅 A1 处 3 行注释）+ 契约候选表 42 条",
   "schema": 1,
   "totals": {
-    "asserts": 10972,
-    "blankLines": 5804,
+    "asserts": 10985,
+    "blankLines": 5816,
     "files": 208,
-    "lines": 62477,
+    "lines": 62585,
     "tautologies": 0,
-    "tests": 2218,
+    "tests": 2219,
     "todos": 4
   }
 }
