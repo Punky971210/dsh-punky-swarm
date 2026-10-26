@@ -284,7 +284,10 @@ export function faceDiff(before, after) {
  */
 export function g2Verdict({ face, before, after, after2, attributed = [], faceMap = null }) {
   const delta = faceDiff(before, after);
-  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed];
+  // 键空间统一 posix：walkFiles 的 rel 在 Windows 下是反斜杠，而归因键（A1/A3）统一 posix。
+  // 不归一化 ⇒ diffSet.has(rel) 恒假 ⇒ red 又变得不可达（D11 正是抓到这一点）。
+  const toPosixRel = (p) => String(p).split(path.sep).join('/');
+  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed].map(toPosixRel);
   if (sameFace(before, after)) {
     return { face, status: 'green', delta, diffPaths: [], attribution: { hits: [], unresolved: [], bySource: { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 }, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' }, evidence: { before, after, after2: after2 ?? null } };
   }
@@ -462,7 +465,8 @@ export function buildAttribution({ isoFiles = [], faceRootRel, faceDelta }) {
     if (!isoRel) continue;
     const isoFile = isoByRel.get(toPosix(isoRel));
     if (!isoFile || !isoFile.sha256) continue;
-    entries.push({ kind: 'faceRel', rel, source: 'A3', sha256: isoFile.sha256 });
+    // 键空间统一到 posix：faceDelta 的 rel 来自 walkFiles（Windows 下是反斜杠），不归一化会比不中
+    entries.push({ kind: 'faceRel', rel: toPosix(rel), source: 'A3', sha256: isoFile.sha256 });
   }
   const uniq = [];
   const seen = new Set();
@@ -1182,4 +1186,190 @@ test('D10 键空间回归：isoRel 直塞不得命中（a1Hits===0），faceRel 
   // ③ 扁平字符串（faceRel）向后兼容，仍直接命中（D5 用法不破）
   const legacy = g2Verdict({ face: 'F', before, after, after2: after, attributed: ['f10'] });
   assert.equal(legacy.status, 'red', '扁平字符串=faceRel，须保持向后兼容');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D11：**生产链**（A1∪A3 → faceRel 键）在「真实面确实变了」的受控场景下必须得 red
+// 规格 plan/prod-red-spec.md（K-2 面根换位 · A-1..A-6 · R-1..R-3 · AC-11）
+//
+// 为什么需要换场景：生产两侧都已接 buildAttribution，但 before/after 取的是**真实面**；
+// 隔离生效 ⇒ 真实面零变化 ⇒ diffPaths=[] ⇒ g2Verdict 直接 green ⇒ hits 分支**从未执行**。
+// ⇒ red 不可达不是接线缺失，是「隔离成功时真实面必然无差异」的必然结果 ⇒ 只能换场景。
+//
+// 构造：ctlFace = <mkdtemp>/.dsh/.agent-presets 充当**假真实面**；isoFiles 取**生产真实产物**；
+//       唯一构造 = 向 ctlFace 逐字复制 punky-preset/agent.cordis.yml（**必须 subpath 嵌套**：
+//       写在面根时新旧映射结果相同 ⇒ 反向对照不红 ⇒ 用例失去鉴别力）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 生产的隔离根（与 productionIsoFiles 同源）：进程内 = ISOLATED；子进程 = 机制探针 sentinel。 */
+function productionIsoRoot() {
+  if (ISOLATED && state.applied) return ISOLATED;
+  return mechanismRun().report.sentinel;
+}
+
+/** 生产 isoFiles：进程内取 state.isolatedAfter.files（含 sha256）；子进程取 report.fileMeta。 */
+function productionIsoFiles() {
+  if (ISOLATED && state.applied) {
+    return (state.isolatedAfter?.files ?? []).map((f) => ({ rel: f.rel, sha256: f.sha256 }));
+  }
+  const m = mechanismRun();
+  return (m.report?.fileMeta ?? []).map((f) => ({
+    rel: path.relative(m.report.sentinel, f.p),
+    sha256: f.sha256,
+  }));
+}
+
+/** 取出本文件里 D11 用例体的源码文本（供 A-6 / R-3 静态自检）。 */
+function d11BlockSrc() {
+  const src = fs.readFileSync(fileURLToPath(GUARD_URL), 'utf8'); // GUARD_URL 是 file:// URL，Windows 下须转路径
+  // ⚠ 不能用裸 "test('D11" 定位：本函数自身那句字面量会被先搜到（自我命中 ⇒ 只取到碎片）。
+  //    改为「行首 + 真实声明（D11 后有空格）」双条件。
+  const NL = String.fromCharCode(10);
+  const anchor = NL + "test('D11 ";
+  const start = src.indexOf(anchor);
+  if (start < 0) return '';
+  const next = src.indexOf(NL + "test('", start + anchor.length);
+  return src.slice(start + 1, next < 0 ? src.length : next);
+}
+
+/** 修复前形态的映射（**吃掉 subpath**），仅作反向对照用；生产代码不引入该参数。 */
+function oldIsoRelToFaceBuggy(isoRel) {
+  const norm = String(isoRel).split(path.sep).join('/');
+  for (const a of assetMap()) {
+    if (!a.targetPrefixRel) continue;
+    if (norm.startsWith(a.targetPrefixRel + '/')) {
+      return { faceRootRel: a.faceRootRel, rel: norm.slice(a.targetPrefixRel.length + 1) };
+    }
+  }
+  return null;
+}
+
+test('D11 生产链 red 可达性：真实产物 isoFiles + 面根换位 ⇒ status=red（键空间对齐才成立）', () => {
+  const realBeforeSnap = snapshotReal();                       // R-1 前置快照
+  const dir = tmpRoot('d11');
+  const ctlFace = path.join(dir, '.dsh', '.agent-presets');     // K-2：充当假真实面
+  const probeRel = 'punky-preset/agent.cordis.yml';             // ① 必须 subpath 嵌套
+  try {
+    fs.mkdirSync(ctlFace, { recursive: true });
+
+    // ── 生产 isoFiles + AC-11 前置 fail-closed ──
+    const isoFiles = productionIsoFiles();
+    const hasProbe = isoFiles.some((f) => String(f.rel).split(path.sep).join('/') === '.dsh/.agent-presets/' + probeRel);
+    assert.equal(hasProbe, true,
+      'AC-11：生产 isoFiles 里必须存在 .dsh/.agent-presets/' + probeRel + '（缺失即判红，不得静默降级成「无差异 ⇒ green」）');
+    const probeIso = isoFiles.find((f) => String(f.rel).split(path.sep).join('/') === '.dsh/.agent-presets/' + probeRel);
+    assert.ok(probeIso && probeIso.sha256, 'AC-11：该文件必须带 sha256（A3 内容对照的前提）');
+
+    // ── 唯一构造：向 ctlFace 逐字复制（内容取自隔离根真实产物 → 与 isoFile 内容逐字相同）──
+    const before = fingerprint(ctlFace);                         // 空面
+    fs.mkdirSync(path.join(ctlFace, 'punky-preset'), { recursive: true });
+    // 副本源必须与 isoFiles **同源**：进程内 = ISOLATED；子进程 = 机制探针的 sentinel（其 assets 已同步）
+    // 复制源：
+    //   · 进程内路径 ⇒ 隔离根内的**真实产物**（probeIso.rel 为隔离根相对）；
+    //   · 子进程路径 ⇒ 其隔离根在子进程退出时**已被 preload 清理**（契约：本进程创建的根退出即清），
+    //     故取包内源文件，并用 sha256 与 report 里的产物指纹**逐字比对**（相等才允许复制）。
+    const isoRoot = (ISOLATED && state.applied) ? ISOLATED : null;
+    // 包内源路径由 manifest 推出：asset.rel（包内相对）+ 面内路径去掉 subpath 前缀后的尾段
+    const probeAsset = assetMap().find((x) => x.subpath && probeRel.startsWith(x.subpath + '/'));
+    const pkgRel = probeAsset ? probeAsset.rel + probeRel.slice(probeAsset.subpath.length) : probeRel;
+    const copySrc = isoRoot ? path.join(isoRoot, probeIso.rel) : path.join(PACKAGE_ROOT, pkgRel);
+    assert.equal(fs.existsSync(copySrc), true, 'AC-11：复制源必须可读：' + copySrc);
+    fs.copyFileSync(copySrc, path.join(ctlFace, probeRel));
+    const copiedSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ctlFace, probeRel))).digest('hex');
+    assert.equal(copiedSha, probeIso.sha256,
+      '构造必须与**生产产物**逐字相同（sha256 相等）：copied=' + copiedSha + ' produced=' + probeIso.sha256);
+    const after = fingerprint(ctlFace);
+    const faceDelta = faceDiff(before, after);
+    const addedPosix = faceDelta.added.map((r) => r.split(path.sep).join('/'));
+    assert.deepEqual(addedPosix, [probeRel], 'R-3 前置：构造只新增 punky-preset/agent.cordis.yml（subpath 嵌套）；实测 ' + JSON.stringify(addedPosix));
+
+    // ── 生产链：buildAttribution（A1∪A3，面相对键 + 来源）→ evalFace → g2Verdict ──
+    const attribution = buildAttribution({ isoFiles, faceRootRel: '.dsh/.agent-presets', faceDelta });
+    const result = evalFace({ face: ctlFace, before, after, attributed: attribution });
+
+    // A-1 该红必红
+    assert.equal(result.status, 'red', 'A-1：键空间对齐后必须判 red；实测 status=' + result.status + ' subclass=' + (result.subclass ?? '-'));
+    // A-2 键空间无未解析项
+    assert.ok(result.attribution.bySource.faceRel >= 1, 'A-2：须有 faceRel 条目（实测 bySource=' + JSON.stringify(result.attribution.bySource) + '）');
+    assert.deepEqual(result.attribution.unresolved, [], 'A-2：unresolved 必须为空');
+    // A-3 命中项必须来自生产谓词（不是手工字面量）
+    assert.equal(result.attribution.hits.every((h) => h.kind === 'faceRel' && ['A1', 'A3'].includes(h.source)), true,
+      'A-3：hits 必须全部 kind=faceRel 且 source ∈ {A1,A3}；实测 ' + JSON.stringify(result.attribution.hits));
+    // A-4 A3 真在跑（用 source 集合，**不用** bySource.a3 —— 该键从不递增，语义是尝试数）
+    const sources = new Set(attribution.map((e) => e.source));
+    assert.equal(sources.has('A1'), true, 'A-4：source 集合须含 A1；实测 ' + JSON.stringify([...sources]));
+    assert.equal(sources.has('A3'), true, 'A-4：source 集合须含 A3（A3 未真跑即红）；实测 ' + JSON.stringify([...sources]));
+    // A-5 精确身份（丢 subpath 会变短）
+    // A-5：命中值必须**精确**等于面相对键（丢 subpath 会变短 ⇒ 红）；A1 与 A3 各可能命中一次，故按值判定而非去重后计数
+    assert.ok(result.attributedHits.length >= 1, 'A-5：attributedHits 不得为空');
+    assert.equal(result.attributedHits.every((h) => h === probeRel), true,
+      'A-5：attributedHits 必须精确含 ' + probeRel + '；实测 ' + JSON.stringify(result.attributedHits));
+
+    // ── K-3 反向对照：同一输入，把映射换成「吃掉 subpath」（本地反事实函数，不给生产加 mapper 参数）──
+    const oldEntries = [];
+    for (const f of isoFiles) {
+      const m = oldIsoRelToFaceBuggy(f.rel);
+      if (m && String(m.faceRootRel).split(path.sep).join('/') === '.dsh/.agent-presets' && m.rel) {
+        oldEntries.push({ kind: 'faceRel', rel: m.rel, source: 'A1' });
+      }
+    }
+    const oldAttribution = oldEntries;
+    const legacy = g2Verdict({ face: ctlFace, before, after, after2: after, attributed: oldAttribution });
+    assert.equal(legacy.status, 'inconclusive', 'K-3：旧映射（吃掉 subpath）下必须只能 unattributable；实测 ' + legacy.status);
+    assert.equal(legacy.subclass, 'unattributable', 'K-3：旧映射必须落到 unattributable');
+    assert.equal(legacy.attribution.hits.length, 0, 'K-3：旧映射命中数必须为 0');
+    assert.notEqual(legacy.status, result.status,
+      'K-3：新旧结论**必须不同**（相同 ⇒ 本用例不依赖键空间 ⇒ 失去鉴别力 ⇒ 判红）');
+
+    // ── A-6 立身之本：D11 必须真走生产链（静态检查自身源码）──
+    const body = d11BlockSrc();
+    assert.ok(body.includes('buildAttribution('), 'A-6：D11 用例体必须调用 buildAttribution(（真走生产链）');
+    const forbidden = 'attributed' + ': [';
+    assert.equal(body.includes(forbidden), false, 'A-6：D11 用例体不得出现手工归因数组字面量（' + forbidden + '）');
+
+    // ── R-1 真实面零变化（构造/判定全程）──
+    const realAfterSnap = snapshotReal();
+    for (let i = 0; i < REAL_FACES.length; i++) {
+      const b = realBeforeSnap[i];
+      const a = realAfterSnap[i];
+      assert.equal(a.exists, b.exists, 'R-1：真实面存在性逐字全等：' + REAL_FACES[i]);
+      assert.equal(a.count, b.count, 'R-1：真实面文件数逐字全等：' + REAL_FACES[i]);
+      assert.equal(a.sumBytes, b.sumBytes, 'R-1：真实面字节和逐字全等：' + REAL_FACES[i]);
+      assert.equal(a.digest, b.digest, 'R-1：真实面指纹逐字全等：' + REAL_FACES[i]);
+    }
+    // ── R-2 构造根归属：自身归属自洽 + **不在任何真实面（REAL_FACES）内** ──
+    // ⚠ 平台事实（实测）：本机 `os.tmpdir()` 位于真实 home 之下
+    //    （`C:\Users\ADMINI~1\AppData\Local\Temp` 经 realpath 展开为 `C:\Users\Administrator\AppData\Local\Temp`），
+    //    故「ctlFace ∉ REAL_HOME」在本平台**不可满足**，也不是安全判据；真正的安全不变量是
+    //    「ctlFace ∉ 任一 REAL_FACE」。这里按后者断言，并显式记录前者为平台事实（不静默改口径）。
+    assert.equal(attributionVerdict([ctlFace], ctlFace).ok, true, 'R-2a：ctlFace 是其自身合法根（归属自洽）');
+    const ctlNorm = normPath(ctlFace);
+    for (const realFace of REAL_FACES) {
+      const faceNorm = normPath(realFace);
+      const inside = ctlNorm === faceNorm || ctlNorm.startsWith(faceNorm + (process.platform === 'win32' ? '\\' : '/'));
+      assert.equal(inside, false, 'R-2b：ctlFace **不得**落在任何真实面内：' + realFace);
+    }
+    process.stderr.write('[D11] R-2 平台事实：ctlFace 在 homedir 之下 = '
+      + attributionVerdict([ctlFace], REAL_HOME).ok + '；在 REAL_FACES 之下 = false\n');
+    // ── R-3 静态可核：本用例内所有写调用目标均以 ctlFace 为前缀，且不与 REAL_HOME 同行 ──
+    let writeLines = 0;
+    for (const line of body.split('\n')) {
+      if (!/\b(fs\.(writeFileSync|mkdirSync|copyFileSync|renameSync|rmSync|appendFileSync)\()/.test(line)) continue;
+      assert.equal(/REAL_HOME/.test(line), false, 'R-3：写调用行不得出现 REAL_HOME：' + line.trim());
+      // teardown 例外：`fs.rmSync(dir, ...)` 清的是 mkdtemp 根（ctlFace 在其内），本身不是构造写点
+      const isTeardown = /fs\.rmSync\(dir\b/.test(line);
+      assert.equal(isTeardown || /ctlFace/.test(line), true,
+        'R-3：除 teardown 外，写调用必须以 ctlFace 为前缀：' + line.trim());
+      if (!isTeardown) writeLines += 1;
+    }
+    assert.ok(writeLines >= 2, 'R-3：构造写点须 ≥2（mkdir + copyFile）且均指向 ctlFace；实测 ' + writeLines);
+
+    process.stderr.write('[D11] status=' + result.status
+      + ' hits=' + JSON.stringify(result.attributedHits)
+      + ' sources=' + JSON.stringify([...sources])
+      + ' legacy=' + legacy.status + '/' + (legacy.subclass ?? '-')
+      + ' a6=ok\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

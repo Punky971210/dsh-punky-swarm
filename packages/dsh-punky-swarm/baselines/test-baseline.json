@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 114,
-      "blankLines": 101,
-      "lines": 1186,
+      "asserts": 142,
+      "blankLines": 115,
+      "lines": 1376,
       "tautologies": 0,
-      "tests": 15,
+      "tests": 16,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T15:34:23Z",
+  "generatedAt": "2026-10-26T16:09:57Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "A2 弃接批：键空间对齐(P0) + A3 manifest 驱动接线 + D9-a/D9-b/D10 三条自证 + neighbor-scan 脚本入口",
+  "reason": "D11 生产链 red 可达性用例（面根换位 + 生产真实 isoFiles + 六断言 + K-3 反向对照 + 三重不碰真实面证明）",
   "schema": 1,
   "totals": {
-    "asserts": 10921,
-    "blankLines": 5771,
+    "asserts": 10949,
+    "blankLines": 5785,
     "files": 208,
-    "lines": 62112,
+    "lines": 62302,
     "tautologies": 0,
-    "tests": 2214,
+    "tests": 2215,
     "todos": 4
   }
 }
