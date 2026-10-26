@@ -27,7 +27,7 @@
     "test/accept-pack3-spec-contract.test.js": {
       "asserts": 61,
       "blankLines": 39,
-      "lines": 565,
+      "lines": 569,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -363,7 +363,7 @@
     "test/contract-missing-first-touch.test.js": {
       "asserts": 47,
       "blankLines": 33,
-      "lines": 418,
+      "lines": 422,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1481,9 +1481,9 @@
       "todos": 0
     },
     "test/tools.test.js": {
-      "asserts": 132,
+      "asserts": 135,
       "blankLines": 52,
-      "lines": 650,
+      "lines": 653,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -1531,7 +1531,7 @@
     "test/vocabulary.test.js": {
       "asserts": 93,
       "blankLines": 49,
-      "lines": 405,
+      "lines": 406,
       "tautologies": 0,
       "tests": 32,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T12:06:11Z",
+  "generatedAt": "2026-10-26T12:28:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "波2 第五批八域(topic/f1/batch/stream/worker/f3/preflight/audit)数量断言→身份集合升格；stream:100 经 Leader 放行补做单一真源",
+  "reason": "波2 第六批十四域数量断言→身份集合升格；vocabulary D型夹具自证改断行为、fixture 域实测为夹具探测器本身",
   "schema": 1,
   "totals": {
-    "asserts": 10864,
+    "asserts": 10867,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61442,
+    "lines": 61454,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

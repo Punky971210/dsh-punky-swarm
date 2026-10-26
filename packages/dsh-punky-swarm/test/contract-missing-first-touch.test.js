@@ -305,10 +305,14 @@ test('B2-W4：contractMissingEvents 纯函数——同键去重（含同调用�
   assert.equal(typeof STORE.contractMissingEvents, 'function',
     'store.js 须导出 contractMissingEvents（纯函数，可单测；W-4）');
   const res = { ok: true, contractMissing: { cause: 'undeclared', gateKind: 'targets', layer: 'exec', declared: false, source: 'engine:enabledByFlag(targets,true)', degrade: { kind: 'targets-engine-default-enabled', note: 'n' }, problems: [] } };
-  assert.equal(STORE.contractMissingEvents({ events: [] }, res, 'e1').length, 1, '首次 ⇒ 1 条');
+  // 数量 → 数组相等（哪些）：纯函数返回事件数组，元素含 gateKind/layer ⇒ 逐项断言身份，
+  // 既证「恰 1 条」，也证**是哪一条**（gateKind/layer 都被换掉时仍能抓）。
+  assert.deepEqual(STORE.contractMissingEvents({ events: [] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer]), [['targets', 'exec']],
+    '首次 ⇒ 恰 1 条且必为 (targets, exec)（实际=' + JSON.stringify(STORE.contractMissingEvents({ events: [] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer])) + '）');
   assert.equal(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'exec' }] }, res, 'e1').length, 0,
     '同键已在 batch.events ⇒ 不再发（跨重启幂等判据）');
-  assert.equal(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'audit' }] }, res, 'e1').length, 1,
+  // 数量 → 数组相等（哪些）：不同 layer ⇒ 加一个去重键 ⇒ 仍须恰 1 条且身份为 (targets, exec)
+  assert.deepEqual(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'audit' }] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer]), [['targets', 'exec']],
     '层不同 ⇒ 键不同 ⇒ 照发');
   assert.equal(STORE.contractMissingEvents({ events: [] }, { ok: true }, 'e1').length, 0, '无载荷 ⇒ 零产出');
   assert.equal(STORE.contractMissingEvents(undefined, undefined, 'e1').length, 0, '空入参 ⇒ 零产出（不抛）');

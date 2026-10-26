@@ -331,7 +331,11 @@ test('AC-pack3-7 版本钉 `b3ee6ee` 出现在 2 件；`The Cangjie Project` / `
   // 失败条件：版本锚写成 `HEAD`（不可复现）/ 署面缺失（许可合规面断链）/ 未声明权利人待确认（冒充已确认）。
   const files = [NEW_REL, SKILL_MD_REL];
   const pinned = files.filter((rel) => readRel(rel).includes(SPECLANG_PIN));
-  assert.equal(pinned.length, 2, `\`${SPECLANG_PIN}\` 须同时出现在 spec-contract.md 与 SKILL.md（命中文件数 = 2），实测 ${pinned.length}：` + JSON.stringify(pinned));
+  // 数量 → 数组相等（哪些）：两个载体文件名在用例内已知（NEW_REL / SKILL_MD_REL）
+  // ⇒ 既证"命中了几个"，也证**命中的是哪两件**（漏一件/换成别的件都会红）。
+  // 这是 `numSource=input-param` 的形态：期望值由 files 常量派生，不写第二遍字面量 2。
+  assert.deepEqual(pinned.slice().sort(), [NEW_REL, SKILL_MD_REL].sort(),
+    `\`${SPECLANG_PIN}\` 须同时出现在两件载体（spec-contract.md 与 SKILL.md），实测 ${JSON.stringify(pinned)}`);
   const text = readRel(NEW_REL);
   for (const needle of ['The Cangjie Project', '权利人待确认', 'Apache-2.0']) {
     assert.ok(text.includes(needle), `spec-contract.md 缺署面/许可要素：${needle}`);

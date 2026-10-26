@@ -216,13 +216,14 @@ test('C1 命中缓存：同根两次加载返回**同一实例**（单例，省 
 
 test('C2 改文件即时生效（无需重启）：size 变 ⇒ 缓存失效、读到新内容', () => {
   const { root, abs } = seedVocab([ENTRY_ACTIVE]);
-  assert.equal(loadVocabulary({ root }).entries.length, 1);
+  // D 型夹具自证 → 改断被测行为：读到的词条就是写入的那条（期望来自输入侧 ENTRY_ACTIVE）
+  assert.deepEqual(loadVocabulary({ root }).entries, [ENTRY_ACTIVE], '读到的词条须逐字 = 写入的 ENTRY_ACTIVE');
   const doc = JSON.parse(fs.readFileSync(abs, 'utf8'));
   doc.entries.push(ENTRY_RETIRED);
   fs.writeFileSync(abs, JSON.stringify(doc, null, 2), 'utf8');
   const after = loadVocabulary({ root });
   assert.notEqual(after, undefined);
-  assert.equal(after.entries.length, 2, 'size/mtime 变 ⇒ 必须重读');
+  assert.deepEqual(after.entries, [ENTRY_ACTIVE, ENTRY_RETIRED], 'size/mtime 变 ⇒ 必须重读到新内容（两条逐字 = 写入侧）');
   assert.equal(after.ok, true);
 });
 
@@ -249,7 +250,7 @@ test('C4 `force` 清缓存：同一文件强制重读得到新实例', () => {
 test('C5 缓存按 root 隔离：两个临时根互不串味（key 含绝对路径）', () => {
   const x = seedVocab([ENTRY_ACTIVE]);
   const y = seedVocab([]);
-  assert.equal(loadVocabulary({ root: x.root }).entries.length, 1);
+  assert.deepEqual(loadVocabulary({ root: x.root }).entries, [ENTRY_ACTIVE], 'x 根读到的须是它的 ENTRY_ACTIVE（按 root 隔离）');
   assert.equal(loadVocabulary({ root: y.root }).entries.length, 0);
 });
 

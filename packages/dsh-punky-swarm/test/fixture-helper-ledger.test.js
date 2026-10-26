@@ -97,7 +97,7 @@ test('F4-3 `assemblyCtxWeb`：返回 `{ ctx, routes }`，`webServer.register` �
   out.ctx.on('tools/pre-execute', () => {});
   assert.equal(out.routes.length, 0, '未注册路由 ⇒ routes 空');
   const off = out.ctx.webServer.register({ path: '/x' });
-  assert.equal(out.routes.length, 1, 'register 的路由被收集');
+  assert.deepEqual(out.routes.map((r) => r.path), ['/x'], 'register 的路由被收集（路由身份数组，期望=入参 path；实测 ' + JSON.stringify(out.routes.map((r) => r.path)) + '）');
   assert.equal(typeof off, 'function', 'register 须返回 disposer');
 });
 

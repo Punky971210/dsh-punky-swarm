@@ -306,7 +306,7 @@ test('T-3 watch.enabled 翻转：lane_heartbeat 工具 tracked → disabled → 
     //   故先用 `beat:true` 打一拍（工具自带的有界单次 tick，非等待循环）建立 entry，再断言。
     await q({ beat: true });
     const r1 = await q();
-    assert.equal(r1.lanes.length, 1, '① 查询须返回 1 行');
+    assert.deepEqual(r1.lanes.map((r) => r.lane), ['l1'], '① 查询返回的 lane 身份数组（期望=输入侧 lane l1；实测 ' + JSON.stringify(r1.lanes.map((r) => r.lane)) + '）');
     assert.equal(r1.lanes[0].tracked, true, '① tick 后须 tracked:true（实测行: ' + JSON.stringify(r1.lanes[0]) + '）');
     assert.notEqual(r1.lanes[0].reason, 'watch-disabled', '① 初始不得为 disabled');
     assert.equal(watchRemountLines(ctx.calls).length, 0, '① 初始零 remount');

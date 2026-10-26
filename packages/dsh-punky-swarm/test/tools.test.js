@@ -136,7 +136,7 @@ test('full flow binds to exec session; args.session overrides', async () => {
     assembly: { auditLane: 't2' },
     concurrency: 3,
   }, EXEC_SESS);
-  assert.equal(w.wavePlan.length, 3); // r2 同步：p1 → t1 → t2 三层依赖链 = 3 波
+  assert.deepEqual(w.wavePlan.map((x) => x.wave), [1, 2, 3], 'wave 序号数组 = 输入声明的 1/2/3（实测 ' + JSON.stringify(w.wavePlan.map((x) => x.wave)) + '）'); // r2 同步：p1 → t1 → t2 三层依赖链 = 3 波
   assert.equal(w.sessionId, 'sess-leader');
   assert.deepEqual(w.lanes, { p1: 'pending', t1: 'pending', t2: 'pending' }); // r2 同步：合规三层批
 
@@ -243,9 +243,12 @@ test('gate_status：三层批次缺失清单 + 团队资产门禁读数（P1 同
   assert.ok(w.lanes.p1 === 'pending');
   const g = await byName.gate_status.execute({ batchId: 'b-gate' }, EXEC_SESS);
   const byId = Object.fromEntries(g.lanes.map((x) => [x.lane, x]));
-  assert.equal(byId.e1.consumeMissing.length, 1); // plan/spec.md 缺失
-  assert.equal(byId.e1.outputsMissing.length, 1);
-  assert.equal(byId.a1.produceMissing.length, 1);
+  assert.equal(byId.e1.consumeMissing.length, 1, 'consumeMissing 恰 1 项');
+  assert.equal(new Set(byId.e1.consumeMissing).size, byId.e1.consumeMissing.length, '缺项不得重复计入（实测 ' + JSON.stringify(byId.e1.consumeMissing) + '）'); // plan/spec.md 缺失
+  assert.equal(byId.e1.outputsMissing.length, 1, 'outputsMissing 恰 1 项');
+  assert.equal(new Set(byId.e1.outputsMissing).size, byId.e1.outputsMissing.length, '缺项不得重复计入（实测 ' + JSON.stringify(byId.e1.outputsMissing) + '）');
+  assert.equal(byId.a1.produceMissing.length, 1, 'produceMissing 恰 1 项');
+  assert.equal(new Set(byId.a1.produceMissing).size, byId.a1.produceMissing.length, '缺项不得重复计入（实测 ' + JSON.stringify(byId.a1.produceMissing) + '）');
   assert.equal(byId.p1.layer, 'plan');
 });
 
