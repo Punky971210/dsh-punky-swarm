@@ -137,7 +137,9 @@ test('A1-P2-08 · canTransitionMember 判据不变：(`running`,`idle`) false（
 test('A1-P2-08 · 静态单点：lifecycle.js 内 `= \'idle\'` 恰 1 处且落在 laneIdleOnRecovery 函数体内', () => {
   const src = read('lib/state/store/lifecycle.js');
   const hits = src.split('\n').map((line, i) => ({ line, i })).filter((x) => x.line.includes("= 'idle'"));
-  assert.equal(hits.length, 1, '两处直写必须收敛为一处（否则仍是双写点）');
+  // hits 是「命中行」数组：长度 1 已含出现处数；再核行号互异（重复行被计两次即红）
+  assert.equal(hits.length, 1, '两处直写必须收敛为一处（否则仍是双写点；实测 ' + JSON.stringify(hits.map((h) => h.i + 1)) + '）');
+  assert.equal(new Set(hits.map((h) => h.i)).size, hits.length, '命中行号须互异');
   const { start, end } = extractLaneIdleOnRecovery();
   const offset = src.split('\n').slice(0, hits[0].i).join('\n').length;
   assert.ok(offset > start && offset < end, '唯一写点必须落在单点写入口函数体内');
@@ -147,7 +149,12 @@ test('A1-P2-08 · 静态单点：单点写入口被两处调用点复用（recov
   const src = read('lib/state/store/lifecycle.js');
   const calls = src.match(/laneIdleOnRecovery\(/g) ?? [];
   // 1 次定义签名 + 2 次调用
-  assert.equal(calls.length, 3, '恰 1 处定义 + 2 处调用（调用点数变化必须显式复核）');
+  // 改位置数组：1 定义 + 2 调用 = 3 处，位置可列、重复可抓
+  {
+    const callSites = [...src.matchAll(/laneIdleOnRecovery\(/g)].map((m) => m.index);
+    assert.equal(callSites.length, 3, '恰 1 处定义 + 2 处调用（实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+    assert.equal(new Set(callSites).size, callSites.length, '三处位置须互异');
+  }
 });
 
 // ── T-1c · autoSettle 开关判定式单点 ───────────────────────────────────────────────────

@@ -141,7 +141,7 @@ test('e2-11 放行新增：纯新增用例文件不判红，且 filesChanged 如
   const cmp = compareBaseline(baseline, current);
   assert.equal(cmp.ok, true, '纯新增 ⇒ 内核判绿（断言总数抬高，下界仍成立）');
   assert.deepEqual(notAddedChanges(cmp), [], 'e2-1 的新判据：剔出 added 后为空 ⇒ 绿');
-  assert.equal(cmp.filesChanged.length, 1, '差分里仍看得见它（放行 ≠ 看不见）');
+  assert.deepEqual(cmp.filesChanged.map((f) => f.file), ['test/new.test.js'], '差分里仍看得见它（放行 ≠ 看不见）');
   assert.equal(cmp.filesChanged[0].kind, 'added', '放行的只是 added 这一档');
   assert.equal(cmp.filesChanged[0].file, 'test/new.test.js', '点名到新增文件');
   assert.equal(cmp.asserts.delta, 4, '新增用例的断言数如实计入总量增量');
@@ -166,10 +166,10 @@ test('e2-12 判红不变：既有用例文件的断言数增减与文件消失�
     totals: { files: 2, tests: 2, todos: 0, asserts: 6, tautologies: 0, lines: 28, blankLines: 0 },
   };
   const cmpShrunk = compareBaseline(baseline, shrunk);
-  assert.equal(cmpShrunk.filesChanged.length, 1, '只点名真正变化的文件');
+  assert.deepEqual(cmpShrunk.filesChanged.map((f) => f.file), ['test/a.test.js'], '只点名真正变化的文件');
   assert.equal(cmpShrunk.filesChanged[0].kind, 'changed', '既有文件被改 ⇒ changed');
   assert.equal(cmpShrunk.filesChanged[0].delta.asserts, -2, '缺口数量如实给出');
-  assert.equal(notAddedChanges(cmpShrunk).length, 1, 'changed（减）不得被放行 ⇒ e2-1 仍红');
+  assert.deepEqual(notAddedChanges(cmpShrunk).map((c) => c.file), ['test/a.test.js'], 'changed（减）不得被放行 ⇒ e2-1 仍红');
 
   // ② 既有文件断言数上升（加断言）⇒ 同样 changed、同样必红：放行的是「新增文件」，不是「既有文件多写」
   const grown = {
@@ -180,10 +180,10 @@ test('e2-12 判红不变：既有用例文件的断言数增减与文件消失�
     totals: { files: 2, tests: 2, todos: 0, asserts: 10, tautologies: 0, lines: 32, blankLines: 0 },
   };
   const cmpGrown = compareBaseline(baseline, grown);
-  assert.equal(cmpGrown.filesChanged.length, 1);
+  assert.deepEqual(cmpGrown.filesChanged.map((f) => f.file), ['test/a.test.js']);
   assert.equal(cmpGrown.filesChanged[0].kind, 'changed');
   assert.equal(cmpGrown.filesChanged[0].delta.asserts, 2, '增量也如实点名（两方向都可见）');
-  assert.equal(notAddedChanges(cmpGrown).length, 1, 'changed（增）不得被放行 ⇒ e2-1 仍红');
+  assert.deepEqual(notAddedChanges(cmpGrown).map((c) => c.file), ['test/a.test.js'], 'changed（增）不得被放行 ⇒ e2-1 仍红');
 
   // ③ 文件消失 ⇒ removed，必红
   const dropped = {
@@ -191,10 +191,10 @@ test('e2-12 判红不变：既有用例文件的断言数增减与文件消失�
     totals: { files: 1, tests: 1, todos: 0, asserts: 4, tautologies: 0, lines: 15, blankLines: 0 },
   };
   const cmpDropped = compareBaseline(baseline, dropped);
-  assert.equal(cmpDropped.filesChanged.length, 1);
+  assert.deepEqual(cmpDropped.filesChanged.map((f) => f.file), ['test/b.test.js']);
   assert.equal(cmpDropped.filesChanged[0].kind, 'removed', '文件消失 ⇒ removed');
   assert.equal(cmpDropped.filesChanged[0].file, 'test/b.test.js', '点名到被删文件');
-  assert.equal(notAddedChanges(cmpDropped).length, 1, 'removed 不得被放行 ⇒ e2-1 仍红（AC-H3-3）');
+  assert.deepEqual(notAddedChanges(cmpDropped).map((c) => c.file), ['test/b.test.js'], 'removed 不得被放行 ⇒ e2-1 仍红（AC-H3-3）');
 });
 
 // ── 2. 判红：断言调用数下降 ⇒ 逐文件 diff 点名 ──────────────────────────
@@ -239,7 +239,12 @@ test('e2-3 误报边界：用例合并（tests/test.todo 减少、断言总数�
   });
   const cmp = compareBaseline(baseline, current);
   assert.equal(cmp.ok, true, '用例数 / test.todo 下降而断言总数不变 ⇒ 不判红（合并用例是合法重构）');
-  assert.equal(cmp.warnings.length, 2, '仍如实列 2 条告警（可见但不阻断）');
+  const warningKind = (w) => (w.includes('用例数') ? 'tests' : w.includes('test.todo') ? 'todos' : 'other');
+  assert.deepEqual(
+    cmp.warnings.map(warningKind).sort(),
+    ['tests', 'todos'],
+    '仍如实列告警（可见但不阻断）：恰「用例数」与「test.todo」各一条，不混入第三类、不重复',
+  );
   assert.ok(cmp.warnings.some((w) => w.includes('用例数')));
   assert.ok(cmp.warnings.some((w) => w.includes('test.todo')));
 });
@@ -343,8 +348,10 @@ test('e2-9 内核口径：模板串插值体内外分别处理（回归：整段
 });
 
 test('e2-10 内核：sortKeysDeep 递归排序（基线可 diff 的实现前提）', () => {
-  assert.deepEqual(Object.keys(sortKeysDeep({ z: 1, a: { y: 2, b: 3 } })), ['a', 'z']);
-  assert.deepEqual(Object.keys(sortKeysDeep({ z: 1, a: { y: 2, b: 3 } }).a), ['b', 'y']);
+  const obj = { z: 1, a: { y: 2, b: 3 } };
+  // 期望由**源对象自己的键**派生（升序），不写死键名清单：换排序契约才可能红，加键不会假红。
+  assert.deepEqual(Object.keys(sortKeysDeep(obj)), [...Object.keys(obj)].sort(), '顶层键名顺序 == 源键名升序');
+  assert.deepEqual(Object.keys(sortKeysDeep(obj).a), [...Object.keys(obj.a)].sort(), '嵌套层同样按源键名升序');
   const text = serializeBaseline({ b: 1, a: 2 });
   assert.ok(text.indexOf('"a"') < text.indexOf('"b"'), '序列化后键名升序');
   assert.deepEqual(sortKeysDeep([{ b: 1, a: 2 }]), [{ a: 2, b: 1 }], '数组内对象同样排序');
@@ -361,43 +368,56 @@ function sample(lines) {
 }
 
 test('e6-1 恒真形态命中：assert.ok(恒真常量) ⇒ 计入 tautologies（调用数不变也被看见）', () => {
-  const stat = countSource(
-    sample(["test('t', () => {", '  assert.ok(true);', '  assert.ok(1);', '  assert.ok(!false);', '});']),
-  );
-  assert.equal(stat.asserts, 3, '调用数照旧 3 条——这正是原护栏看不见的绕过机理');
-  assert.equal(stat.tautologies, 3, '三条恒真常量全部命中');
+  const FIXTURE = ["test('t', () => {", '  assert.ok(true);', '  assert.ok(1);', '  assert.ok(!false);', '});'];
+  const stat = countSource(sample(FIXTURE));
+  // 期望值**由夹具派生**：夹具里每条 `assert.ok(` 在本口径下都是恒真常量 ⇒ 命中应与之逐条对应。
+  //   这样加/删夹具断言行时期望自动跟随，不会因为「数字是快照」而假红。
+  const expectedLines = FIXTURE.map((line, i) => [i + 1, line])
+    .filter(([, line]) => /assert\.ok\(/.test(line))
+    .map(([n]) => n);
+  // 总数同样**由夹具派生**（清册漏列，Leader 放行）：夹具里有几条断言、几条恒真，就从夹具算出几。
+  const fixtureAsserts = FIXTURE.filter((line) => /assert\./.test(line)).length;
+  assert.equal(stat.asserts, fixtureAsserts, '调用数 == 夹具里的断言调用数（这正是原护栏看不见的绕过机理：数没变、内容恒真）');
+  assert.equal(stat.tautologies, expectedLines.length, '恒真命中数 == 夹具里的恒真断言条数（派生，非快照）');
   assert.deepEqual(
     stat.tautologyHits.map((h) => h.kind),
-    ['ok-const-true', 'ok-const-true', 'ok-const-true'],
-    '形态名可读，供 --check 打印',
+    expectedLines.map(() => 'ok-const-true'),
+    '形态名可读，供 --check 打印（条数由夹具派生）',
   );
   assert.deepEqual(
     stat.tautologyHits.map((h) => h.line),
-    [2, 3, 4],
-    '命中点名到行（退化可定位，不必人工翻文件）',
+    expectedLines,
+    '命中行 === 夹具里恒真断言所在行（全覆盖且不多报）',
   );
 });
 
 test('e6-2 恒真形态命中：同参自比 assert.equal(a, a) / strictEqual / 成员链', () => {
-  const stat = countSource(
-    sample([
-      "test('t', () => {",
-      '  assert.equal(v, v);',
-      '  assert.strictEqual(v, v);',
-      '  assert.deepEqual(o.a, o.a);',
-      '});',
-    ]),
-  );
-  assert.equal(stat.asserts, 3);
-  assert.equal(stat.tautologies, 3, '无副作用可复现表达式两侧自比 ⇒ 求值必然相同');
-  assert.deepEqual(stat.tautologyHits.map((h) => h.kind), ['eq-same-ident', 'eq-same-ident', 'eq-same-ident']);
+  const FIXTURE = [
+    "test('t', () => {",
+    '  assert.equal(v, v);',
+    '  assert.strictEqual(v, v);',
+    '  assert.deepEqual(o.a, o.a);',
+    '});',
+  ];
+  const stat = countSource(sample(FIXTURE));
+  // 期望条数由夹具派生的断言行数决定（不写死数组字面量；重复项保留 ⇒ 禁 Set 去重）。
+  const assertLines = FIXTURE.filter((line) => /assert\.(equal|strictEqual|deepEqual)\(/.test(line));
+  // 总数同样**由夹具派生**（清册漏列，Leader 放行）
+  assert.equal(stat.asserts, assertLines.length, '调用数 == 夹具里的断言调用数（派生，非快照）');
+  assert.equal(stat.tautologies, assertLines.length, '无副作用可复现表达式两侧自比 ⇒ 求值必然相同（条数由夹具派生）');
+  assert.deepEqual(stat.tautologyHits.map((h) => h.kind), assertLines.map(() => 'eq-same-ident'), '每一条 `eq-same-ident` 对应夹具里一条同参自比断言');
 });
 
 test('e6-3 恒真形态命中：同字面量自比（strictEqual(1, 1) / 同字符串）', () => {
-  const stat = countSource(sample(["test('t', () => {", '  assert.strictEqual(1, 1);', "  assert.equal('x', 'x');", '});']));
-  assert.equal(stat.tautologies, 2, '两侧同一字面量 ⇒ 恒真');
-  assert.deepEqual(stat.tautologyHits.map((h) => h.kind), ['eq-same-literal', 'eq-same-literal']);
-  assert.equal(stat.tautologyHits[1].text, "assert.equal('x', 'x')", '命中原文可读（--check 点名用）');
+  const FIXTURE = ["test('t', () => {", '  assert.strictEqual(1, 1);', "  assert.equal('x', 'x');", '});'];
+  const stat = countSource(sample(FIXTURE));
+  // 命中原文的**口径**：内核回报的是断言调用原文，行尾分号被剥掉 ⇒ 期望值按同口径从夹具派生。
+  const assertLines = FIXTURE.filter((line) => /assert\./.test(line)).map((line) => line.trim().replace(/;$/, ''));
+  assert.equal(stat.tautologies, assertLines.length, '两侧同一字面量 ⇒ 恒真（条数由夹具派生，非快照）');
+  assert.deepEqual(stat.tautologyHits.map((h) => h.kind), assertLines.map(() => 'eq-same-literal'), '形态名逐条对应夹具断言（条数由夹具派生）');
+  // 原写法 `hits[1].text === "assert.equal('x','x')"`：位置下标 + 期望原文双魔数，且只核第 2 条。
+  //   改为**逐条原文身份**：命中原文数组 === 夹具里断言行的原文（trim 后）。
+  assert.deepEqual(stat.tautologyHits.map((h) => h.text), assertLines, '命中原文逐条 === 夹具断言原文（--check 点名可读，不止第 2 条）');
 });
 
 test('e6-4 放行：正常断言（不同标识符 / 动态条件 / 带副作用调用）不误报', () => {
@@ -414,7 +434,8 @@ test('e6-4 放行：正常断言（不同标识符 / 动态条件 / 带副作用
   );
   assert.equal(stat.asserts, 5, '正常断言照常计数');
   assert.equal(stat.tautologies, 0, 'GREEN：零误报（含 assert.ok(x > 0) 这类动态条件）');
-  assert.deepEqual(stat.tautologyHits, [], '无命中明细');
+  // 原 `assert.deepEqual(stat.tautologyHits, [], '无命中明细')` 已删：内核单点 `tautologies = tautologyHits.length`
+  //   ⇒ 上一行的 `tautologies === 0` 已完全覆盖「零命中」，该行只是同一事实的规模快照副本。
 });
 
 test('e6-5 口径一致：注释 / 字符串 / 模板串文本里的恒真形态不计（与 asserts 同款屏蔽）', () => {

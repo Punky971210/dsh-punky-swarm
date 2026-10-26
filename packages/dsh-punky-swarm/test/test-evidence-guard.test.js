@@ -144,8 +144,9 @@ test('L3-AC-3b 行为级：换一批规模不同的目标集，结论仍由运�
   const v2 = await runGuard({ root: ROOT, dir: two.targetDir, destDir: two.destDir, argv: [] });
   const v3 = await runGuard({ root: ROOT, dir: three.targetDir, destDir: three.destDir, argv: [] });
 
-  assert.equal(v2.aSize, 2);
-  assert.equal(v3.aSize, 3);
+  // A 由运行期枚举决定 ⇒ 期望取自 `runtimeTargetCount`（与 L3-AC-1 同形态），不写死 2 / 3。
+  assert.equal(v2.aSize, runtimeTargetCount(two.targetDir), 'A = 该沙箱运行期枚举的文件数（非固定期望）');
+  assert.equal(v3.aSize, runtimeTargetCount(three.targetDir), 'A 随沙箱规模变化而跟随 ⇒ 证「无固定期望值」');
   const brief = (v) => JSON.stringify({ ok: v.ok, aSize: v.aSize, bSize: v.bSize, missing: v.missingInB.length, reasons: v.reasons, files: v.files });
   assert.equal(v2.ok && v3.ok, true, `两个规模都 GREEN ⇒ 无固定期望值；v2=${brief(v2)} v3=${brief(v3)}`);
 });
@@ -178,8 +179,9 @@ test('L3-AC-4b 变⑤ 不误拒：reporter / 目录 / 并发等合法参数照�
     [],
     '前缀相近的合法参数不得被误拒',
   );
-  assert.equal(findForbiddenSwitches(['--test-name-pattern=foo']).length, 1, '等号形态必须命中');
-  assert.equal(findForbiddenSwitches(['--test-only']).length, 1);
+  // 身份：点出命中的**是哪个开关**（比「命中 1 条」更强——错配到别的开关也会被抓）
+  assert.deepEqual(findForbiddenSwitches(['--test-name-pattern=foo']).map((h) => h.switch), ['--test-name-pattern'], '等号形态必须命中且点名该开关');
+  assert.deepEqual(findForbiddenSwitches(['--test-only']).map((h) => h.switch), ['--test-only'], '独立 token 形态点名该开关');
 });
 
 // ── ⑥ 负向与正向同口径 + 早退可辨 ───────────────────────────────────────
@@ -418,12 +420,13 @@ test('L3-FIX-D01-②(e) 词边界：只拒禁区整词，不误拒前缀相近�
     [],
     'reporter 类合法项不得被误拒',
   );
-  assert.equal(findForbiddenSwitchesInNodeOptions('--test-shard=2/2').length, 1);
-  assert.equal(findForbiddenSwitchesInNodeOptions('--test-only').length, 1);
-  assert.equal(
-    findForbiddenSwitchesInNodeOptions('  --test-name-pattern=foo   --max-old-space-size=512 ').length,
-    1,
-    '混排时只点名禁区项',
+  const switchesOf = (hits) => hits.map((h) => h.switch);
+  assert.deepEqual(switchesOf(findForbiddenSwitchesInNodeOptions('--test-shard=2/2')), ['--test-shard']);
+  assert.deepEqual(switchesOf(findForbiddenSwitchesInNodeOptions('--test-only')), ['--test-only']);
+  assert.deepEqual(
+    switchesOf(findForbiddenSwitchesInNodeOptions('  --test-name-pattern=foo   --max-old-space-size=512 ')),
+    ['--test-name-pattern'],
+    '混排时只点名禁区项（合法项不得混入命中集）',
   );
 });
 
@@ -555,7 +558,7 @@ test('L3-FIX-D01quote-②(c) 单引号形态：Node 不剥、不缩集 ⇒ ⑤ �
 
   // 既有（无引号）四开关判别不回归
   for (const sw of FORBIDDEN_SWITCHES) {
-    assert.equal(findForbiddenSwitchesInNodeOptions(sw + '=x').length, 1, sw + ' 的既有判别不回归');
+    assert.deepEqual(findForbiddenSwitchesInNodeOptions(sw + '=x').map((h) => h.switch), [sw], sw + ' 的既有判别不回归（点名该开关本身）');
   }
   // 前缀相近的合法项仍不被误拒
   assert.deepEqual(

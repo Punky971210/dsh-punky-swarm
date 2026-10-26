@@ -87,7 +87,8 @@ test('A1-P2-13 / production-path · GATE_ROLE_MANAGER_AS_LANE：C 类批 + role=
   const codes = plan.warnings.map((w) => w.code);
   assert.ok(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), 'C 类批 + manager 角色必须产出该告警码；实得 ' + JSON.stringify(codes));
   // 「照建」= 非阻断：产物齐全（含 wavePlan 拓扑）
-  assert.ok(Array.isArray(plan.wavePlan) && plan.wavePlan.length === 3, '批次必须照建（warnings 不阻断）：三 wave');
+  // 期望值来自**输入侧**（THREE_TIER 声明三层 ⇒ wave 序号 1/2/3），非按 plan 自身推导
+  assert.deepEqual(plan.wavePlan.map((w) => w.wave), [1, 2, 3], '批次必须照建（warnings 不阻断）：wave 序号集合 = 输入声明的 1/2/3（实测 ' + JSON.stringify(plan.wavePlan.map((w) => w.wave)) + '）');
   assert.equal(plan.batchId, 'b-role-manager');
   // 告警载荷可核（供审计定位）
   const hit = plan.warnings.find((w) => w.code === 'GATE_ROLE_MANAGER_AS_LANE');
@@ -100,7 +101,7 @@ test('A1-P2-13 / production-path · 同输入阳性对照：role=coder ⇒ 不�
   const plan = buildWavePlan({ batchId: 'b-role-coder', tasks: THREE_TIER('coder') });
   const codes = plan.warnings.map((w) => w.code);
   assert.equal(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), false, '换成 coder 后不得命中；实得 ' + JSON.stringify(codes));
-  assert.equal(plan.wavePlan.length, 3, '对照批同样照建（排除「批压根没建成」这种假阴性解释）');
+  assert.deepEqual(plan.wavePlan.map((w) => w.wave), [1, 2, 3], '对照批同样照建：wave 序号集合 = 1/2/3（实测 ' + JSON.stringify(plan.wavePlan.map((w) => w.wave)) + '）');
 });
 
 test('A1-P2-13 / production-path · C 类前置真的在起作用：单 lane 批 + role=manager ⇒ 不产该码', () => {

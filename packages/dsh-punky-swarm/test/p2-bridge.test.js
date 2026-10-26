@@ -163,7 +163,8 @@ test('fail-closed: inbound=true 但未配置投递目标 ⇒ INBOUND_UNAVAILABLE
   assert.equal(ok.ok, true);
   // 用 readUnacked（而非裸 readdir——inbox 内另有 .acks 标记子目录）核落点
   const landed = readUnacked(path.join(root2, 'sessions', 's-main', 'mailbox', 'b-main'), { type: 'inbox' });
-  assert.equal(landed.length, 1, '配置完整 ⇒ 落到唯一目标');
+  assert.equal(landed.length, 1, '配置完整 ⇒ 落到唯一目标（条数）');
+  assert.equal(new Set(landed.map((i) => i.ackId)).size, landed.length, '落点条目 ackId 须互异（同一条被计两次即红）');
   assert.equal(landed[0].ackId, ok.ackId);
   b2.dispose();
 });
@@ -190,7 +191,8 @@ test('inbound=true：TaskCommand START → mailbox.inbox 原子写（ackId 有�
 
   // 落盘消息：ackId 有效、负载=command/commandParams/taskId、元数据=sessionId/taskId/lane
   const boxItems = readUnacked(mbRoot('s2', 'b2'), { type: 'inbox' });
-  assert.equal(boxItems.length, 1);
+  assert.equal(boxItems.length, 1, 'inbox 恰 1 条（条数）');
+  assert.equal(new Set(boxItems.map((i) => i.ackId)).size, boxItems.length, 'inbox 条目 ackId 须互异');
   const m = boxItems[0];
   assert.equal(m.ackId, r.ackId);
   assert.deepEqual(m.message, { command: 'start', commandParams: { timeout: 60 }, taskId: 't-ext-1' });
@@ -281,12 +283,20 @@ test('红线：inbound 只写 inbox，outbox/broadcast 不受外部影响（三 
   b.handleInbound({ command: 'start', taskId: 't-iso' });
   const r4 = mbRoot('s4', 'b4');
   // inbox 有 1 条（来自桥）；outbox/broadcast 无新增——桥绝不写 inbox 之外
-  assert.equal(readUnacked(r4, { type: 'inbox' }).length, 1);
+  {
+    const inboxItems4 = readUnacked(r4, { type: 'inbox' });
+    assert.equal(inboxItems4.length, 1, '桥只写 1 条 inbox（条数）');
+    assert.equal(new Set(inboxItems4.map((i) => i.ackId)).size, inboxItems4.length, 'inbox 条目 ackId 须互异');
+  }
   assert.equal(readUnacked(r4, { type: 'broadcast' }).length, 0);
   assert.equal(readUnacked(r4, { type: 'outbox', lane: 'lane-x' }).length, 0);
   // 既有 mailbox 行为（send/read/ack 往返 + outbox lane 隔离）仍完好
   const s = send(r4, { type: 'outbox', lane: 'lane-x' }, { done: true });
-  assert.equal(readUnacked(r4, { type: 'outbox', lane: 'lane-x' }).length, 1);
+  {
+    const outItems4 = readUnacked(r4, { type: 'outbox', lane: 'lane-x' });
+    assert.equal(outItems4.length, 1, 'outbox lane-x 恰 1 条（条数）');
+    assert.equal(new Set(outItems4.map((i) => i.ackId)).size, outItems4.length, 'outbox 条目 ackId 须互异');
+  }
   assert.equal(readUnacked(r4, { type: 'outbox', lane: 'lane-y' }).length, 0);
   ack(r4, { type: 'outbox', lane: 'lane-x' }, s.ackId);
   assert.equal(readUnacked(r4, { type: 'outbox', lane: 'lane-x' }).length, 0);
@@ -375,7 +385,8 @@ test('/rpc START（bridge enabled+inbound=true）→ 200 accepted + mailbox.inbo
     assert.equal(r.body.result.senderId, CLIENT_AIC);
     // 核心断言：/rpc START → mailbox.inbox unacked=1（inbound 实测缺口修复）
     const items = readUnacked(v6Root('sess-v6', 'b-v6'), { type: 'inbox' });
-    assert.equal(items.length, 1);
+    assert.equal(items.length, 1, 'inbox unacked 恰 1 条（条数）');
+    assert.equal(new Set(items.map((i) => i.ackId)).size, items.length, 'inbox 条目 ackId 须互异（重复计一条即红）');
     assert.equal(items[0].message.command, 'start');
     assert.equal(items[0].message.taskId, 't-v6');
     assert.equal(items[0].meta.sessionId, 'sess-v6');

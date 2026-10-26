@@ -203,7 +203,7 @@
     "test/auditlog-mount.test.js": {
       "asserts": 203,
       "blankLines": 70,
-      "lines": 826,
+      "lines": 842,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -227,7 +227,7 @@
     "test/auditlog.test.js": {
       "asserts": 140,
       "blankLines": 56,
-      "lines": 500,
+      "lines": 518,
       "tautologies": 0,
       "tests": 18,
       "todos": 0
@@ -1137,9 +1137,9 @@
       "todos": 0
     },
     "test/p2-bridge.test.js": {
-      "asserts": 113,
+      "asserts": 118,
       "blankLines": 36,
-      "lines": 466,
+      "lines": 477,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -1163,7 +1163,7 @@
     "test/p2-gate-codes.test.js": {
       "asserts": 36,
       "blankLines": 27,
-      "lines": 221,
+      "lines": 222,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1177,17 +1177,17 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 33,
+      "asserts": 34,
       "blankLines": 23,
-      "lines": 288,
+      "lines": 293,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/p2-state-single.test.js": {
-      "asserts": 39,
+      "asserts": 41,
       "blankLines": 25,
-      "lines": 241,
+      "lines": 248,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -1449,9 +1449,9 @@
       "todos": 0
     },
     "test/test-baseline.test.js": {
-      "asserts": 100,
+      "asserts": 99,
       "blankLines": 45,
-      "lines": 583,
+      "lines": 604,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -1459,7 +1459,7 @@
     "test/test-evidence-guard.test.js": {
       "asserts": 155,
       "blankLines": 92,
-      "lines": 694,
+      "lines": 697,
       "tautologies": 0,
       "tests": 27,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T10:50:06Z",
+  "generatedAt": "2026-10-26T11:19:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "watch 域 63 条数量断言→身份集合/长度相等升格(punky-quantity-watch-20261027)；asserts +17 来自数组相等+互异/上界补充，非新增测试",
+  "reason": "波2 第三批三域(auditlog/p2/test)数量断言→身份集合升格；test 域含清册漏列 5 处经 Leader 放行一并改派生（C-1 closed-by-leader-authorization）",
   "schema": 1,
   "totals": {
-    "asserts": 10854,
+    "asserts": 10861,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61310,
+    "lines": 61392,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

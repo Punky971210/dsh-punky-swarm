@@ -388,7 +388,10 @@ test('T-B1 默认开：apply() 后 sink 挂载、目录存在、warn/info 落盘
   assert.equal(r.sinkDirExists, true, 'sink 目录已创建');
   assert.equal(r.diagnosticsDirExists, true, '诊断面目录已创建');
   assert.deepEqual(ourExporters(r), [{ default: 3 }], 'L1：exporter.levels 固定 {default:3}（实际: ' + JSON.stringify(r.exporterLevels) + '）');
-  assert.equal(r.exportersSize, 2, 'exporter 数 = 内置 buffer + 本模块（实际: ' + r.exportersSize + '）');
+  // 数量 → G6 同源构造差值：导出面总数 = 本模块注册数 + 1（内置 buffer，领域常量，注释标明）
+  // ⇒ 不再写死 2：本模块 exporter 数变化时该式自动跟随，只有「内置 buffer 缺失」或「本模块漏注册」才红。
+  assert.equal(r.exportersSize, ourExporters(r).length + 1 /* 内置 buffer */,
+    'exporter 数 = 本模块注册数 + 内置 buffer 1（实际: ' + r.exportersSize + '）');
   assert.deepEqual(r.engineWarnCalls, [], '缺省 config → apply() 零 warn（门禁反向约束；实际: ' + JSON.stringify(r.engineWarnCalls) + '）');
   const warn = r.rows.find((x) => x.level === 'warn' && x.msg.includes('GATE_ENABLED=false'));
   assert.ok(warn, 'sink 落盘含 level:"warn" 且 msg 含 GATE_ENABLED=false（实际: ' + JSON.stringify(r.rows) + '）');
@@ -639,7 +642,10 @@ function assertConservation(stat, label) {
 test('T-C1 聚合重复态：首行 10 字段不变；闭环行 count=1+折叠数、ts=末条被抑制、sn/args=首行；aggKey 跨窗口稳定', () => {
   const r = runProbe('tc1', { PUNKY_PROBE_AGG_SCENARIO: 'repeat' }, 'aggregate');
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
-  assert.equal(r.rows.length, 5, '2 个窗口 × （首行 + 闭环行）+ 最后一条首行 = 5 行（实际: ' + r.rows.length + ' 行）');
+  // 数量 → 数组相等（哪些）：按行序断言 kind 序列 ⇒ 既证行数，也证每行角色（闭环行位置错也红）
+  // 禁 new Set：Set 会把 ['log','log-aggregate'] 的去重结果当种类，丢掉「第几行是什么」。
+  assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log-aggregate', 'log', 'log-aggregate', 'log'],
+    '2 窗口 ×（首行+闭环行）+ 末条首行：kind 序列须逐位相符（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
 
   // ① 首行：10 字段逐字不变、kind:"log"、无 count
   assert.deepEqual(Object.keys(r.rows[0]), TEN_FIELDS, '首行恰 10 字段且顺序不变（实际: ' + JSON.stringify(Object.keys(r.rows[0])) + '）');
@@ -690,7 +696,9 @@ test('T-C1 聚合重复态：首行 10 字段不变；闭环行 count=1+折叠�
 test('T-C2 聚合 off 态（PUNKY_AUDITLOG_AGGREGATE=off）：5 条同键消息逐行落盘、零 log-aggregate、collapsedMessages 恒 0', () => {
   const r = runProbe('tc2', { PUNKY_PROBE_AGG_SCENARIO: 'off', PUNKY_AUDITLOG_AGGREGATE: 'off' }, 'aggregate');
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
-  assert.equal(r.rows.length, 5, '5 条消息逐行落盘（实际: ' + r.rows.length + '）');
+  // 数量 → 数组相等（哪些）：off 态 5 条同键消息逐行落盘 ⇒ 5 行全为 log
+  assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log', 'log', 'log', 'log'],
+    '5 条消息逐行落盘且全为 log（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.equal(r.rows.filter((x) => x.kind === 'log-aggregate').length, 0, '关闭态零 log-aggregate 行');
   assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '全部为 kind="log"（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.ok(r.rows.every((x) => !('count' in x)), '关闭态每行仍恰 10 字段（无 count）');
@@ -727,7 +735,9 @@ test('T-C4 闭环落点③ flushDiagnostics()：未越窗的同键消息在手�
   assert.equal(r.rowsBeforeFlush, 1, 'flush 前只有首行（窗口内不为被抑制消息写任何行；实际: ' + r.rowsBeforeFlush + '）');
   assert.equal(r.statBeforeFlush.collapsedMessages, 2, 'flush 前已折叠 2 条');
   assert.equal(r.statBeforeFlush.aggregateRows, 0, 'flush 前零闭环行');
-  assert.equal(r.rows.length, 2, 'flush 后补写 1 行闭环行（实际: ' + r.rows.length + '）');
+  // 数量 → 数组相等（哪些）：flush 后 = 首行 + 补写的闭环行（顺序固定）
+  assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log-aggregate'],
+    'flush 后须为首行 + 闭环行（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.equal(r.rows[1].kind, 'log-aggregate', 'flush 补写的是 log-aggregate 行');
   assert.equal(r.rows[1].count, 3, 'count=3（实际: ' + r.rows[1].count + '）');
   assert.equal(r.rows[1].ts, ISO(BASE + 2000), '闭环行 ts = 末条被抑制消息时间（实际: ' + r.rows[1].ts + '）');
@@ -743,7 +753,9 @@ test('T-C5 闭环落点② exit 钩子：子进程退出即全键 flush，父进
   assert.equal(r.rowsBeforeExit, 1, '进程内读到的仍是 1 行（窗口未闭环；实际: ' + r.rowsBeforeExit + '）');
   const after = fs.readFileSync(path.join(r.__sinkDir, 'audit-' + DAY + '.jsonl'), 'utf8')
     .split('\n').filter((l) => l).map((l) => JSON.parse(l));
-  assert.equal(after.length, 2, '子进程退出后（父进程重新读盘）共 2 行（实际: ' + after.length + '）');
+  // 数量 → 数组相等（哪些）：exit 钩子写出闭环行 ⇒ 盘上恰为首行 + 闭环行
+  assert.deepEqual(after.map((x) => x.kind), ['log', 'log-aggregate'],
+    'exit 后盘上须为首行 + 闭环行（实际: ' + JSON.stringify(after.map((x) => x.kind)) + '）');
   assert.equal(after[1].kind, 'log-aggregate', '第 2 行由 exit 钩子写出');
   assert.equal(after[1].count, 3, 'count=3（实际: ' + after[1].count + '）');
   assert.equal(after[1].ts, ISO(BASE + 2000), '闭环行 ts = 末条被抑制消息时间');
@@ -754,7 +766,9 @@ test('T-C5 闭环落点② exit 钩子：子进程退出即全键 flush，父进
 test('T-C6 硬上限 600000 ms：逐条刷新右界的窗口被顶到 startAt+600000 后闭环（否则该条会被继续折叠）', () => {
   const r = runProbe('tc6', { PUNKY_PROBE_AGG_SCENARIO: 'cap' }, 'aggregate');
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
-  assert.equal(r.rows.length, 3, '首行 + 闭环行 + 新首行（实际: ' + r.rows.length + '）');
+  // 数量 → 数组相等（哪些）：硬上限触发 = 首行 + 闭环行 + 新首行（顺序即语义）
+  assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log-aggregate', 'log'],
+    '硬上限闭环：须为首行 + 闭环行 + 新首行（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.equal(r.rows[1].kind, 'log-aggregate', '第 2 行 = 闭环行');
   // 语义：硬上限窗口**只容得下** CAP_IN_WINDOW_COUNT 条同键消息；第 FIXTURE_SAME_KEY_COUNT 条被顶出窗口、另起新窗口。
   // 断言不绑「11 这个数」本身，而是 ①窗口内条数（由窗口参数派生）②被顶出者的**身份**（sn / ts）。
@@ -811,7 +825,9 @@ test('T-C8 近行长上限（余量 < 闭环行附加字段）的行不聚合：
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
   assert.ok(r.sealedLineBytes <= 32768 && r.sealedLineBytes + 64 > 32768,
     '构造出的行长处于「未截断但余量 < 64 字节」区间（实际: ' + r.sealedLineBytes + '）');
-  assert.equal(r.rows.length, 4, '4 条同键消息逐行落盘（不聚合；实际: ' + r.rows.length + '）');
+  // 数量 → 数组相等（哪些）：近行长上限不聚合 ⇒ 4 行全为 log
+  assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log', 'log', 'log'],
+    '4 条同键消息逐行落盘且全为 log（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '零 log-aggregate 行');
   assert.ok(r.rows.every((x) => x.truncated === false), '首行未被截断（msg 逐字保留）');
   assert.equal(r.rows[0].msg.length, r.sealedMsgChars, 'msg 未被截断改写（实际: ' + r.rows[0].msg.length + ' vs ' + r.sealedMsgChars + '）');

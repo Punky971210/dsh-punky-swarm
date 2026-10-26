@@ -135,7 +135,12 @@ test('A1-P2-09 · 静态单点：`function stripStreamMerges` 全仓恰 1 处，
   assert.deepEqual(defs, ['lib/shell-text.js:1'], '定义必须唯一落在 shell-text.js（护栏侧第二份已删净）');
   const toolBan = read('lib/governance/tool-ban.js');
   assert.equal(/function stripStreamMerges/.test(toolBan), false, 'tool-ban.js 不得再有函数体');
-  assert.equal((toolBan.match(/stripStreamMerges\(/g) ?? []).length, 2, '护栏侧恰 2 处调用（判定语义零改）');
+  // 改位置数组（可列位置、抓「多处」）：出现次数变化与位置漂移都会红
+  {
+    const callSites = [...toolBan.matchAll(/stripStreamMerges\(/g)].map((m) => m.index);
+    assert.equal(callSites.length, 2, '护栏侧恰 2 处调用（实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+    assert.equal(new Set(callSites).size, callSites.length, '两处调用位置须互异（同一处被计两次即红）');
+  }
   assert.ok(/import \{[^}]*segmentCommands, stripStreamMerges[^}]*\} from '\.\.\/shell-text\.js'/.test(toolBan),
     '护栏侧必须从既有中立件 import 单点（零新增跨域边）');
 });

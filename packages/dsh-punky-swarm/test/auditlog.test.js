@@ -336,7 +336,11 @@ test('T-C12 ①b off-by-one 边界：恰在 cutoff 当天仍在、cutoff 前一�
   const today = '2000-01-02';                                       // 注入基准日 ⇒ cutoff = 2000-01-01
   const onCutoff = seedSegment(dir, 'audit-2000-01-01.jsonl');      // == cutoff ⇒ 必须留
   const beforeCutoff = seedSegment(dir, 'audit-1999-12-31.jsonl');  // == cutoff 前一天 ⇒ 必须删
-  assert.equal(fs.readdirSync(dir).length, 2, '前置：两卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）：卷名在用例内已知 ⇒ 既证「已落盘 2 卷」，也证**是哪两卷**（换卷/漏卷都红）。
+  // 禁 new Set：Set 会吞掉重复项，且这里要的是身份而非去重后的种类。
+  assert.deepEqual(fs.readdirSync(dir).sort(),
+    [path.basename(onCutoff), path.basename(beforeCutoff)].sort(),
+    '前置：两卷均已落盘且恰为这两卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
   const removed = pruneByAge(dir, keepDays, today);
   assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
   assert.equal(fs.existsSync(onCutoff), true, '恰在 cutoff 当天的卷仍在（实际 exists=' + fs.existsSync(onCutoff) + '）');
@@ -399,14 +403,20 @@ test('T-C14 ③ parseSegmentName 不认的文件跳过不动（.bak / 乱名 / �
   const bak = seedSegment(dir, 'audit-2000-01-01.jsonl.bak');        // 后缀混杂
   const weird = seedSegment(dir, 'weird-name.txt');                  // 完全乱名
   const wrongForm = seedSegment(dir, 'audit-20000101.01.log');       // 格式错但不乱（真陷阱）
-  assert.equal(fs.readdirSync(dir).length, 4, '前置：1 真分卷 + 3 stray（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）：1 真分卷 + 3 stray 的名字均在用例内已知
+  assert.deepEqual(fs.readdirSync(dir).sort(),
+    [real, bak, weird, wrongForm].map((f) => path.basename(f)).sort(),
+    '前置：1 真分卷 + 3 stray 均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
   const removed = pruneByAge(dir, 1, '2000-01-05');
   assert.equal(removed, 1, '只有真分卷计入删除数（实际: ' + removed + '）');
   assert.equal(fs.existsSync(real), false, '真分卷已删（实际 exists=' + fs.existsSync(real) + '）');
   assert.equal(fs.existsSync(bak), true, 'stray 仍在：' + 'audit-2000-01-01.jsonl.bak（实际 exists=' + fs.existsSync(bak) + '）');
   assert.equal(fs.existsSync(weird), true, 'stray 仍在：weird-name.txt（实际 exists=' + fs.existsSync(weird) + '）');
   assert.equal(fs.existsSync(wrongForm), true, 'stray 仍在：audit-20000101.01.log（实际 exists=' + fs.existsSync(wrongForm) + '）');
-  assert.equal(fs.readdirSync(dir).length, 3, '目录剩余条目数 = 3（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）：删掉 real 后应恰剩三个 stray（若删错份则红并点名）
+  assert.deepEqual(fs.readdirSync(dir).sort(),
+    [bak, weird, wrongForm].map((f) => path.basename(f)).sort(),
+    '目录剩余恰为三个 stray（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
 });
 
 // ── T-C15 ④ unlinkSync 失败：不抛、不计入 removed、不阻断后续（失败面用同名目录造）──
@@ -448,7 +458,10 @@ test('T-C16 ①c 可达构造：注入 today=2000-01-15 + keepDays=10 ⇒ cutoff
   const farPast = seedSegment(dir, 'audit-1999-12-31.jsonl');    // 早于 cutoff ⇒ 删
   const onCutoff = seedSegment(dir, 'audit-2000-01-05.jsonl');   // == cutoff ⇒ 留
   const dayBefore = seedSegment(dir, 'audit-2000-01-04.jsonl');  // cutoff 前一天 ⇒ 删
-  assert.equal(fs.readdirSync(dir).length, 3, '前置：三卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）
+  assert.deepEqual(fs.readdirSync(dir).sort(),
+    [farPast, onCutoff, dayBefore].map((f) => path.basename(f)).sort(),
+    '前置：三卷均已落盘且恰为这三卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
   const removed = pruneByAge(dir, 10, '2000-01-15');
   assert.equal(removed, 2, '删除计数 = 2（实际: ' + removed + '）');
   assert.equal(fs.existsSync(farPast), false, '1999-12-31 已删（实际 exists=' + fs.existsSync(farPast) + '）');
@@ -470,7 +483,9 @@ test('T-C17 ①d 向后兼容：两参形态（缺省 today=真实今天）行�
   assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
   assert.equal(fs.existsSync(ancient), false, '2000-01-01 已删（实际 exists=' + fs.existsSync(ancient) + '）');
   assert.equal(fs.existsSync(farFuture), true, '2099-12-31 存活（实际 exists=' + fs.existsSync(farFuture) + '）');
-  assert.equal(fs.readdirSync(dir).length, 1, '目录只剩远期卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）：只剩远期卷，且必须是**那一卷**（不是随便剩一个）
+  assert.deepEqual(fs.readdirSync(dir), [path.basename(farFuture)],
+    '目录只剩远期卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
 });
 
 // ── T-C18 ①e 注入面卫生：非 `YYYY-MM-DD` 基准日 ⇒ 回落真实今天（不抛、零删除、恰 1 条 warn）──
@@ -486,7 +501,10 @@ test('T-C18 ①e 注入面卫生：today 非 YYYY-MM-DD ⇒ 回落真实今天�
   const f1 = seedSegment(dir, 'audit-2099-12-31.jsonl');   // 远期：任何真实 cutoff 都早于它 ⇒ 必留
   const f2 = seedSegment(dir, 'audit-2099-12-30.jsonl');
   const f3 = seedSegment(dir, 'audit-2099-12-29.jsonl');
-  assert.equal(fs.readdirSync(dir).length, 3, '前置：三卷均已落盘（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  // 数量 → 数组相等（哪些）
+  assert.deepEqual(fs.readdirSync(dir).sort(),
+    [f1, f2, f3].map((f) => path.basename(f)).sort(),
+    '前置：三卷均已落盘且恰为这三卷（实际: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
   const warns = [];
   const removed = pruneByAge(dir, 7, 'garbage', { warn: (m) => warns.push(m) });
   assert.equal(removed, 0, '畸形基准日不得删除任何卷（实际: ' + removed + '）');
