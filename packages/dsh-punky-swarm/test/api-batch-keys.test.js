@@ -61,7 +61,9 @@ function makeBatch(batchId, laneIds) {
 
 const FIVE = ['e1', 'e2', 'e3', 'e4', 'e5'];
 const batchFive = makeBatch('b-five', FIVE);
-const batchOne = makeBatch('b-one', ['e1']);
+// N=1 批的 lane 声明（单一真源：夹具构造与身份断言共用，避免 'e1' 写两处而漂移）
+const BATCH_ONE_LANES = ['e1'];
+const batchOne = makeBatch('b-one', BATCH_ONE_LANES);
 
 const routes = [];
 const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
@@ -188,7 +190,15 @@ test('P-3 lanesGate 投影段读批 = 1 次，且不随 lane 数增长', () => {
     const totalOne = stub.hits(fileOne);
     assert.equal(totalOne - baselineOne, 1, 'N=1 批的投影段读批数同样为 1');
     assert.equal(totalOne, totalFive, '总读数不得随 lane 数增长');
-    assert.equal(Object.keys(batchOne.lanes).length, 3);
+    // 身份数组（替代 `Object.keys(batchOne.lanes).length === 3`）：
+    // 3 = plan p1 + exec e1 + audit a1（见 `makeBatch` :46-56 的三段构造）。
+    // 计数形态只能报「期望 3 实得 2」，证不出**缺的是哪条 lane**；身份数组直接点名。
+    const laneKeys = Object.keys(batchOne.lanes).sort();
+    const expectLanes = ['p1', ...BATCH_ONE_LANES, 'a1'].sort();
+    const laneMissing = expectLanes.filter((k) => !laneKeys.includes(k));
+    const laneExtra = laneKeys.filter((k) => !expectLanes.includes(k));
+    assert.deepEqual([laneMissing, laneExtra], [[], []],
+      'b-one 的 lane 集合须与夹具声明身份相等：缺 [' + laneMissing.join(', ') + '] 多 [' + laneExtra.join(', ') + ']');
   } finally {
     stub.restore();
   }

@@ -138,7 +138,8 @@ test('S3b-1：abort 含非终态成员的批 ⇒ 落 batch.abort_dangling（载�
   const evs = danglingEventsOf(store, 'b-dangling');
   assert.equal(evs.length, before + 1, '须恰好新增一条 batch.abort_dangling 事件');
   assert.deepEqual(evs[0].danglingLanes, ['e1', 'a1'], '事件载荷 danglingLanes = 非终态成员名单（判据同 isMemberTerminal）');
-  assert.equal(evs[0].count, 2, '事件载荷 count = 名单长度');
+  // 同源自比：count 恒等于同一事件载荷 danglingLanes 的长度（不锁字面 2；名单本身上一行已逐一比对）
+  assert.equal(evs[0].count, evs[0].danglingLanes.length, '事件载荷 count === danglingLanes.length（实测 ' + evs[0].count + ' / ' + evs[0].danglingLanes.length + '）');
 
   // 绝对不得修改任何成员状态：batch.lanes 逐字不变 + 除本告警外零新增事件
   const b = store.readBatch(SESS_ID, 'b-dangling');

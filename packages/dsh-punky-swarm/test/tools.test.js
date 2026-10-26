@@ -170,7 +170,13 @@ test('full flow binds to exec session; args.session overrides', async () => {
 
   const sent = await byName.mailbox_send.execute({ batchId: 'b-demo', box: 'inbox', message: { task: 't2' } }, EXEC_SESS);
   const read = await byName.mailbox_read.execute({ batchId: 'b-demo', box: 'inbox' }, EXEC_SESS);
-  assert.equal(read.items.length, 1);
+  // 身份数组（替代 `read.items.length === 1`）：
+  // 形状以**写入点**为准 —— `send()`（`lib/comms/mailbox.js:53-64`）落盘记录为
+  // `{ ackId, ts, box, message, meta }`，**载荷嵌在 `message` 下**（`readUnacked` 直接 push 该记录）。
+  // ⇒ 身份字段路径 = `item.message.task`（不是 `item.task`；实测 `item.task` 为 undefined）。
+  const readTasks = read.items.map((i) => i.message?.task);
+  assert.deepEqual(readTasks, ['t2'],
+    '未确认读回须恰为刚发的那条（身份数组，路径 item.message.task）：实测 ' + JSON.stringify(readTasks));
   await byName.mailbox_ack.execute({ batchId: 'b-demo', box: 'inbox', ackId: sent.ackId }, EXEC_SESS);
   assert.equal((await byName.mailbox_read.execute({ batchId: 'b-demo', box: 'inbox' }, EXEC_SESS)).items.length, 0);
 

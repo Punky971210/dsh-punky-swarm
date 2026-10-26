@@ -86,9 +86,10 @@ test('B5 step ≤ total 校验不变：laneProgressWrite 非法 progress 仍 thr
   assert.throws(() => laneProgressWrite({}, 'l1', { step: 1, total: 3 }), /invalid laneProgress/);
   // 合法写仍工作：返回新 batch（不突变入参）+ 写 laneProgress[lane]
   const src = {};
-  const next = laneProgressWrite(src, 'l1', { step: 1, total: 3, status: 'running' });
+  const TOTAL = 3; // 单一真源：期望值由入参派生（D 型修法：锚点落在「我喂进去的是什么」）
+  const next = laneProgressWrite(src, 'l1', { step: 1, total: TOTAL, status: 'running' });
   assert.equal(next.laneProgress.l1.step, 1);
-  assert.equal(next.laneProgress.l1.total, 3);
+  assert.equal(next.laneProgress.l1.total, TOTAL, '写回须原样保留入参 total（实际=' + next.laneProgress.l1.total + '）');
   assert.equal(src.laneProgress, undefined, '不突变入参');
 });
 

@@ -169,8 +169,19 @@ test('scope=both: 本地+外部合并（acsMap 合并 / agents 拼接 / routes �
   const resp = await client.discover('美食');
   assert.equal(http.calls.length, 1);
   assert.deepEqual(resp.result.acsMap, { ...LOCAL_ACS, ...EXTERNAL_ACS });
-  assert.equal(resp.result.agents.length, 2);
-  assert.equal(resp.result.routes.length, 2);
+  // 身份数组（替代 `.agents.length === 2` / `.routes.length === 2`）：
+  // 期望侧全部取自**常量表**（`LOCAL_RESULT` / `EXTERNAL_RESPONSE`），不写第二处字面量；
+  // 计数形态证不出「合并的是哪两条」，身份数组直接点名缺/多的是哪条。
+  const LOCAL_AIC = Object.keys(LOCAL_ACS)[0];        // AIC-LOCAL-1
+  const EXTERNAL_AIC = Object.keys(EXTERNAL_ACS)[0];  // AIC-EXT-1
+  const agentAics = resp.result.agents.map((a) => a.agentSkills[0].aic);
+  assert.deepEqual(agentAics, [LOCAL_AIC, EXTERNAL_AIC],
+    'agents 须=本地+外部两条（身份数组，按常量表）：实测 ' + JSON.stringify(agentAics));
+  // routes 两侧 `forwardChain` 同值（均 `['AIC-DS-A']`）⇒ 结构上不可用它区分；
+  // 可区分身份取各组首个 agentSkill 的 aic（同样是常量表键）。
+  const routeAics = resp.result.routes.map((r) => r.agentGroups[0].agentSkills[0].aic);
+  assert.deepEqual(routeAics, [LOCAL_AIC, EXTERNAL_AIC],
+    'routes 须=本地+外部两条（身份数组，按常量表）：实测 ' + JSON.stringify(routeAics));
 });
 
 test('scope=both: 外部通道失败时如实降级返回本地结果', async () => {

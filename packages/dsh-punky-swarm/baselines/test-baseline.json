@@ -3,7 +3,7 @@
     "test/abort-dangling-and-warn-event.test.js": {
       "asserts": 27,
       "blankLines": 31,
-      "lines": 241,
+      "lines": 242,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -43,7 +43,7 @@
     "test/acps-discovery-client.test.js": {
       "asserts": 69,
       "blankLines": 31,
-      "lines": 288,
+      "lines": 299,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -91,7 +91,7 @@
     "test/api-batch-keys.test.js": {
       "asserts": 29,
       "blankLines": 19,
-      "lines": 196,
+      "lines": 206,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -169,9 +169,9 @@
       "todos": 0
     },
     "test/assign-tier-downgrade-guard.test.js": {
-      "asserts": 70,
+      "asserts": 71,
       "blankLines": 32,
-      "lines": 303,
+      "lines": 313,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -307,7 +307,7 @@
     "test/command-exec.test.js": {
       "asserts": 94,
       "blankLines": 44,
-      "lines": 432,
+      "lines": 437,
       "tautologies": 0,
       "tests": 30,
       "todos": 0
@@ -1315,7 +1315,7 @@
     "test/resume.test.js": {
       "asserts": 31,
       "blankLines": 19,
-      "lines": 157,
+      "lines": 158,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1363,7 +1363,7 @@
     "test/shell-text.test.js": {
       "asserts": 12,
       "blankLines": 10,
-      "lines": 72,
+      "lines": 73,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1483,7 +1483,7 @@
     "test/tools.test.js": {
       "asserts": 135,
       "blankLines": 52,
-      "lines": 653,
+      "lines": 659,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T12:28:31Z",
+  "generatedAt": "2026-10-26T12:45:16Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "波2 第六批十四域数量断言→身份集合升格；vocabulary D型夹具自证改断行为、fixture 域实测为夹具探测器本身",
+  "reason": "波2 第七批收口批：20域+e20 34域+carry 8条，共 4 条实改；实改率降至 0.8%-2.6%，判保留主因为相邻行已有身份断言与契约面",
   "schema": 1,
   "totals": {
-    "asserts": 10867,
+    "asserts": 10868,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61454,
+    "lines": 61499,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

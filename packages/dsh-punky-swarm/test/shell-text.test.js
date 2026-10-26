@@ -58,7 +58,8 @@ test('S2-4 空字符串与非空但无分隔符的分段形态（边界不吞段
   assert.deepEqual(segmentCommands(''), [''], '空串按 split 语义返回单段空串');
   assert.deepEqual(segmentCommands('single'), ['single'], '无分隔符返回单段');
   // 阳性对照：加了分隔符才变成多段
-  assert.equal(segmentCommands('single;two').length, 2, '有分隔符才是 2 段');
+  // 参数化回显：期望值来自**输入侧**（'single;two' 按分号切 ⇒ ['single','two']）
+  assert.deepEqual(segmentCommands('single;two'), ['single', 'two'], '有分隔符 ⇒ 段内容逐字 = 输入切分（实测 ' + JSON.stringify(segmentCommands('single;two')) + '）');
 });
 
 test('S2-5 单点未被内联复写：stripStreamMerges 仍在本模块导出且行为不变', () => {

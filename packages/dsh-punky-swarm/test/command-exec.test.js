@@ -87,12 +87,17 @@ test('runCommand：超时 → timedOut:true, ok:false（不挂起）', () => {
 });
 
 test('runCommand：重试语义——非 0 按 retries 重试（retries:2 → 执行 3 次）', () => {
+  // 计数来源已实测：被测命令每次执行 `appendFileSync(…, 'x')` 一次 ⇒
+  // `readFileSync(countFile).length` = **执行次数**（不涉行数/匹配数，见 §证据）。
+  // 执行次数 = 1（首次） + retries ⇒ 用同源自比，不写死 3（避免改 retries 后断言不跟随）。
+  const RETRIES = 2;
   const countFile = path.join(tmp, 'retry-count-' + Date.now() + '.txt');
   const cmd = 'node -e "require(\'fs\').appendFileSync(process.env.GATE_COUNT_FILE,\'x\');process.exit(1)"';
-  const r = runCommand({ command: cmd, timeoutMs: 5000, retries: 2, env: { ...process.env, GATE_COUNT_FILE: countFile } });
+  const r = runCommand({ command: cmd, timeoutMs: 5000, retries: RETRIES, env: { ...process.env, GATE_COUNT_FILE: countFile } });
   assert.equal(r.ok, false, JSON.stringify(r));
   assert.equal(r.exitCode, 1);
-  assert.equal(fs.readFileSync(countFile, 'utf8').length, 3, 'expect 3 executions (1 + 2 retries)');
+  const execCount = fs.readFileSync(countFile, 'utf8').length;
+  assert.equal(execCount, 1 + RETRIES, 'expect 1 + retries = ' + (1 + RETRIES) + ' executions，实测 ' + execCount);
 });
 
 test('runCommand：成功即停——exit 0 不触发重试（执行 1 次）', () => {

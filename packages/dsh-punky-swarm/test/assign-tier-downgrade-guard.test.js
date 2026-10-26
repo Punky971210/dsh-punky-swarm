@@ -203,6 +203,8 @@ test('L-AC-1 边界：活跃批 + 首评（无既有档位）不被保护；同�
   const h2 = harness('punky-tierdg-e2-');
   const S2 = 'sess-tierdg-e2';
   h2.mkBatch(S2, 'b-e2');
+  // 基线由夹具实取（同源自比 before+N 的 before；本批三次调用前为 0，但不写死）
+  const historyBefore = h2.store.readGovernance(S2)?.history?.length ?? 0;
   await h2.declareB(S2);
   await h2.declareC(S2);
   assert.equal(h2.store.readGovernance(S2).lastAssign.difficulty, 'C', '升档（B→C）照旧覆盖');
@@ -210,7 +212,15 @@ test('L-AC-1 边界：活跃批 + 首评（无既有档位）不被保护；同�
   const g2 = h2.store.readGovernance(S2);
   assert.equal(g2.lastAssign.difficulty, 'C', '同档照旧覆盖');
   assert.equal(g2.lastAssign.rationale, '测试：同档再评 C —— 同档非降档，照旧覆盖并刷新时间窗', '同档路径的判据面照旧覆盖');
-  assert.equal(g2.history.length, 3, '每次调用各 +1 条 history');
+  // 同源自比 + 身份序列（替代 `g2.history.length === 3`）：
+  // ① 同源自比：本文件 `:99` 已有成例 `=== before + 1`，此处沿用（`historyBefore` 由夹具实取，不写死）；
+  // ② 身份序列：条目字段名以**写入点**为准 —— `lib/tools/assign-tools.js:193` 构造
+  //    `entry = { turn, difficulty, … }`；`declaredDifficulty` **只在该次被判降档时**才补（`:194`），
+  //    本用例 B→C→C 未被保护 ⇒ 身份字段取 `difficulty`（非 `declaredDifficulty`）。
+  assert.equal(g2.history.length, historyBefore + 3, '每次调用各 +1 条 history（同源自比 before+N）');
+  const historySeq = g2.history.map((h) => h.difficulty);
+  assert.deepEqual(historySeq, ['B', 'C', 'C'],
+    'history 须按声明档位有序（身份序列）：实测 ' + JSON.stringify(historySeq));
   assert.equal(g2.history[2].downgradeBlocked, undefined, '非保护路径不得带留痕字段');
   assert.equal(h2.guardWrite(S2), undefined, 'guard 放行');
 });
