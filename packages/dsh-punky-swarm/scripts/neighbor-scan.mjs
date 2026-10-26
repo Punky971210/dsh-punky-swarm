@@ -18,6 +18,13 @@
  *   node scripts/neighbor-scan.mjs --table plan/census-table.v2.json --mode A \
  *        --out exec/census-table.v3.json --tsv exec/prefilter.tsv --summary-json exec/prefilter-summary.json
  *   node scripts/neighbor-scan.mjs --table ... --mode L --window 0   # 负控
+ *
+ * ⚠ **--domain 与 --window 必写**（两者都无默认语义，缺一即拒跑并以 2 退出）：
+ *   · `--domain <token>`：按域（文件名去 .test.js 后首个 `-` 前 token）限定读数面；
+ *   · `--window <n>`：邻位域半径（帧内 ±n 行）；`--window 0` = 负控。
+ * ⚠ **裸跑（不给 --domain）的「全量 362」与域内读数不可比、禁混引**：
+ *   · 引用任一读数时必须同时带**三件**：`table 版本` / `domain` / `window`；
+ *   · 缺任一件的引用一律视为无效读数（跨域混引会把「域内成熟」误读成「全库退步」）。
  */
 
 import fs from 'node:fs';
@@ -339,13 +346,18 @@ function usage() {
 
 必填：
   --table <path>         v2 普查表（{meta, records[]}）
+  --domain <a> [b ...]   域名过滤 —— **必写**（裸跑 = 全量 362，与域内读数不可比）
+  --window <n>           邻位窗口 —— **必写**（0 = 负控）
+
+⚠ **读数引用纪律**：引用任何读数必须同时带**三件**——「table 版本」/「domain」/「window」；
+   缺任一件即视为无效引用。裸跑（不给 --domain）的「全量 362」与域内读数**不可比、禁混引**。
 
 选项：
   --mode A|L             口径（缺省 A=权威；L=逐字复刻参考实现，用于回归复算）
-  --window <n>           邻位窗口（缺省 4；0 = 负控，须 hit=0）
+  --window <n>           邻位窗口（**必写**：缺省 4 仅为兼容旧调用；0 = 负控，须 hit=0）
   --repo <path>          被扫仓库根（缺省 ${REPO_DEFAULT}）
   --disposition <s>      只扫该处置（缺省『改』；传 "" 关闭过滤）
-  --domain <a> [b ...]   域名过滤（缺省不限）
+  --domain <a> [b ...]   域名过滤（**必写**：不写 = 全量读数，禁与域内读数混引）
   --out <path>           filtered census 输出（新文件，UTF-8；原表永不就地改）
                          ⚠ PF-4：--out 输出的是**全表 1522 条**（非「改」的 711 条原样保留、不带 prefilter）；
                            而 summary / TSV **只涉 disposition=改 的 811 条** —— 1522 与 811 之差是设计，不是 bug

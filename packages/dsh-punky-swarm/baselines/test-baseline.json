@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 98,
-      "blankLines": 87,
-      "lines": 944,
+      "asserts": 114,
+      "blankLines": 101,
+      "lines": 1186,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 15,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T14:54:32Z",
+  "generatedAt": "2026-10-26T15:34:23Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "第三阶段：home-isolation G2 由链式断言改为三态判定（green/red/inconclusive）+ 两路径共用 evalFace + 失败信息收全四字段与路径级 diff；新增 D5/D6/D6b/D7/D8 五条自证",
+  "reason": "A2 弃接批：键空间对齐(P0) + A3 manifest 驱动接线 + D9-a/D9-b/D10 三条自证 + neighbor-scan 脚本入口",
   "schema": 1,
   "totals": {
-    "asserts": 10905,
-    "blankLines": 5757,
+    "asserts": 10921,
+    "blankLines": 5771,
     "files": 208,
-    "lines": 61870,
+    "lines": 62112,
     "tautologies": 0,
-    "tests": 2211,
+    "tests": 2214,
     "todos": 4
   }
 }

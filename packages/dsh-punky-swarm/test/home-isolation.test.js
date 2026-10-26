@@ -87,6 +87,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { MANIFEST_REL } from '../lib/assets.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(HERE, '..');
@@ -281,21 +282,43 @@ export function faceDiff(before, after) {
  *   · 已存在路径被删除且无自报 ⇒ 收敛则 transient，否则 unattributable；
  *   · 仅 mtime 变化而字节相同 ⇒ unattributable（cpSync 跨卷可能不保留 mtime）。
  */
-export function g2Verdict({ face, before, after, after2, attributed = [] }) {
+export function g2Verdict({ face, before, after, after2, attributed = [], faceMap = null }) {
   const delta = faceDiff(before, after);
   const diffPaths = [...delta.added, ...delta.removed, ...delta.changed];
   if (sameFace(before, after)) {
-    return { face, status: 'green', delta, diffPaths: [], evidence: { before, after, after2: after2 ?? null } };
+    return { face, status: 'green', delta, diffPaths: [], attribution: { hits: [], unresolved: [], bySource: { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 }, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' }, evidence: { before, after, after2: after2 ?? null } };
   }
   if (after2 && sameFace(before, after2)) {
     return { face, status: 'inconclusive', subclass: 'transient', delta, diffPaths, reason: '差异在 settleMs 内收敛（并发 syncDir 的 rm+cp 中间态）', evidence: { before, after, after2 } };
   }
-  const claimed = new Set((attributed ?? []).map((p) => String(p)));
-  const hits = diffPaths.filter((p) => claimed.has(p));
-  if (hits.length > 0) {
-    return { face, status: 'red', delta, diffPaths, attributedHits: hits, reason: '差异持久且可归因于被测运行（差异项 ∩ 被测产物面 ≠ ∅）', evidence: { before, after, after2: after2 ?? null } };
+  // ── 键空间对齐（P0 真缺陷修复）────────────────────────────────────────────
+  // diffPaths 恒为**面相对**（相对该 REAL_FACE 根）。attributed 允许两种粒度：
+  //   · 扁平字符串 / {kind:'faceRel'} ⇒ 已是面相对，直接比（D5 的既有用法保持不变）；
+  //   · {kind:'isoRel'|'a2Rel'} ⇒ **必须先经 faceMap 映射为面相对**再比；映射不到 ⇒ 记 unresolved
+  //     （键空间不一致不得被静默当成"不归因"，否则 red 恒不可达且无从发现）。
+  const diffSet = new Set(diffPaths);
+  const hits = [];
+  const unresolved = [];
+  const bySource = { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 };
+  for (const item of attributed ?? []) {
+    const isStr = typeof item === 'string';
+    const kind = isStr ? 'faceRel' : (item.kind ?? 'faceRel');
+    const rel = String(isStr ? item : item.rel);
+    if (kind === 'faceRel') {
+      bySource.faceRel += 1;
+      if (diffSet.has(rel)) hits.push({ rel, kind, source: item?.source ?? 'faceRel' });
+      continue;
+    }
+    const mapped = typeof faceMap === 'function' ? faceMap(rel, kind) : null;
+    bySource[kind] = (bySource[kind] ?? 0) + 1;
+    if (!mapped) { unresolved.push({ rel, kind }); continue; }
+    if (diffSet.has(mapped)) hits.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind });
   }
-  return { face, status: 'inconclusive', subclass: 'unattributable', delta, diffPaths, reason: '差异持久且不可归因（外来写者的终态改动 / 写者不可区分）', evidence: { before, after, after2: after2 ?? null } };
+  const attribution = { hits, unresolved, bySource, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' };
+  if (hits.length > 0) {
+    return { face, status: 'red', delta, diffPaths, attributedHits: hits.map((h) => h.rel), attribution, reason: '差异持久且可归因于被测运行（差异项 ∩ 被测产物面 ≠ ∅）', evidence: { before, after, after2: after2 ?? null } };
+  }
+  return { face, status: 'inconclusive', subclass: 'unattributable', delta, diffPaths, attribution, reason: '差异持久且不可归因（外来写者的终态改动 / 写者不可区分）', evidence: { before, after, after2: after2 ?? null } };
 }
 
 /** 汇总：`passed` 唯一真源 = red===0 && inconclusive===0（规格 §方案 四.3）。 */
@@ -345,9 +368,9 @@ const refingerprint = (face) => { sleepSync(G2_SETTLE_MS); return fingerprint(fa
  * 并把归因集合一并传入 ⇒ transient / red 在**两条路径上都可达**。
  * （修复前子进程路径写死 `after2 = after`、`attributed = []` ⇒ transient 与 red 在该路径恒不可达。）
  */
-export function evalFace({ face, before, after, attributed = [] }) {
+export function evalFace({ face, before, after, attributed = [], faceMap = null }) {
   const after2 = sameFace(before, after) ? after : refingerprint(face);
-  return g2Verdict({ face, before, after, after2, attributed });
+  return g2Verdict({ face, before, after, after2, attributed, faceMap });
 }
 
 /** 子进程回报的隔离根文件清单 → 相对路径集合（A1）；父进程据此给出带 face 归属的相对路径。 */
@@ -367,9 +390,89 @@ function writeRelFile(root, rel, text) {
   fs.writeFileSync(p, text, 'utf8');
 }
 
-/** 可归因集合（A1∪A3 简化）：隔离根内出现过的**同相对路径**即视为被测产物面落点候选。 */
-function attributedRels(st) {
-  return [...new Set((st.isolatedAfter?.files ?? []).map((f) => f.rel))];
+/**
+ * 资产落点映射（**manifest 驱动，粒度 = 目录级前缀**；不使用 startsWith('skills') 这类猜法）。
+ * 真源：`lib/assets.js` 的清单条目 `{ rel, target: { root, subpath } }`（只读该 JSON，不改被测代码）。
+ * 形如 `presets/punky-preset → preset/punky-preset` 被正确映为 `.dsh/.agent-presets/punky-preset/...`，
+ * 而不再被错映成 `.agent-presets/presets/punky-preset`。
+ */
+export const FACE_ROOT_REL = { preset: '.dsh/.agent-presets', skill: '.agents/skills' };
+let _assetMap = null;
+export function assetMap() {
+  if (_assetMap) return _assetMap;
+  const raw = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, MANIFEST_REL), 'utf8'));
+  _assetMap = (raw.assets ?? []).map((a) => ({
+    rel: a.rel,
+    root: a.target?.root,
+    subpath: a.target?.subpath,
+    faceRootRel: FACE_ROOT_REL[a.target?.root] ?? null,
+    targetPrefixRel: [FACE_ROOT_REL[a.target?.root], a.target?.subpath].filter(Boolean).join('/'),
+  }));
+  return _assetMap;
+}
+
+const toPosix = (p) => String(p).split(path.sep).join('/');
+/** 隔离根相对 → 面相对（A1/A3 的键空间转换）；映射不到返回 null。 */
+export function isoRelToFace(isoRel) {
+  const norm = toPosix(isoRel);
+  // 语义修正（D9-b 抓到）：**面内路径要保留 subpath**。
+  // `.dsh/.agent-presets/punky-preset/agent.cordis.yml` 的面相对键是 `punky-preset/agent.cordis.yml`
+  // （面根 = `.dsh/.agent-presets`），不是 `agent.cordis.yml`。
+  // manifest 在此只决定「这条 iso 路径落在哪个面 + 是否属已知资产」，不参与面内路径切分。
+  // 取**最长 targetPrefix** 判归属（防「面根级」条目抢先匹配）。
+  let best = null;
+  for (const a of assetMap()) {
+    if (!a.targetPrefixRel) continue;
+    if (!(norm === a.targetPrefixRel || norm.startsWith(a.targetPrefixRel + '/'))) continue;
+    if (!best || a.targetPrefixRel.length > best.targetPrefixRel.length) best = a;
+  }
+  if (!best) return null;
+  const faceRoot = toPosix(best.faceRootRel);
+  if (norm === faceRoot) return { faceRootRel: best.faceRootRel, rel: '' };
+  if (!norm.startsWith(faceRoot + '/')) return null;
+  return { faceRootRel: best.faceRootRel, rel: norm.slice(faceRoot.length + 1) };
+}
+/** 面相对 → 隔离根相对（A3 内容对照用）：隔离 home 与真实 home 同形 ⇒ 仅前置面根。
+ *  仍要求该 rel 落在**已知资产**的 subpath 下（否则不是被测同步产物，不参与归因）。 */
+export function faceRelToIso(faceRootRel, faceRel) {
+  const root = toPosix(faceRootRel);
+  const rel = toPosix(faceRel);
+  const known = assetMap().some((a) => toPosix(a.faceRootRel) === root && a.subpath && rel.startsWith(a.subpath + '/'));
+  if (!known) return null;
+  return root + '/' + rel;
+}
+
+/**
+ * 归因集合构建（A1 ∪ A3）。**两者都输出面相对键 + 来源标注**。
+ *  A1 = 隔离根内出现过的文件（经 manifest 映射到面相对）；
+ *  A3 = 差异项的内容与隔离根**同路径逐字相同**（sha256 相等）—— 第二个真实来源。
+ * 注：A2 按裁决**不接**（生产路径 A2 ⊆ A1，无独立增益；见 D9-b）。
+ */
+export function buildAttribution({ isoFiles = [], faceRootRel, faceDelta }) {
+  const root = toPosix(faceRootRel);
+  const entries = [];
+  for (const f of isoFiles) {
+    const m = isoRelToFace(f.rel);
+    if (m && toPosix(m.faceRootRel) === root && m.rel) entries.push({ kind: 'faceRel', rel: m.rel, source: 'A1' });
+  }
+  // A3：内容同路径逐字相同（只有 added/changed 可做内容对照；removed 无内容）
+  const isoByRel = new Map(isoFiles.map((f) => [toPosix(f.rel), f]));
+  for (const rel of [...(faceDelta?.added ?? []), ...(faceDelta?.changed ?? [])]) {
+    const isoRel = faceRelToIso(faceRootRel, rel);
+    if (!isoRel) continue;
+    const isoFile = isoByRel.get(toPosix(isoRel));
+    if (!isoFile || !isoFile.sha256) continue;
+    entries.push({ kind: 'faceRel', rel, source: 'A3', sha256: isoFile.sha256 });
+  }
+  const uniq = [];
+  const seen = new Set();
+  for (const e of entries) {
+    const k = e.rel + '|' + e.source;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(e);
+  }
+  return uniq;
 }
 
 /** 汇总行（机器可解析，规格 §方案 二.4）。 */
@@ -513,13 +616,20 @@ test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐
     const m = mechanismRun();
     // 子进程路径同样由**父进程**自行 settle 重取 after2 + 接 A1 归因
     // （真实面在父进程可读；修复前 after2/attributed 写死 ⇒ transient/red 恒不可达 = 实际 flake 路径上的漏洞）
-    const childRels = relSet(m.report?.writtenFiles, m.report?.sentinel);
-    const g2Results = REAL_FACES.map((face, i) => evalFace({
-      face,
-      before: m.realBefore[i],
-      after: m.realAfter[i],
-      attributed: [...childRels],
+    const isoFiles = (m.report?.fileMeta ?? []).map((f) => ({
+      rel: path.relative(m.report.sentinel, f.p),
+      sha256: f.sha256,
     }));
+    const g2Results = REAL_FACES.map((face, i) => {
+      const before = m.realBefore[i];
+      const after = m.realAfter[i];
+      const attributed = buildAttribution({
+        isoFiles,
+        faceRootRel: path.relative(REAL_HOME, face),
+        faceDelta: faceDiff(before, after),
+      });
+      return evalFace({ face, before, after, attributed });
+    });
     emitAndGate(g2Results);
     // 活宿主面不参与上面的「零变化」断言（宿主持续追写该面）；改用归属对照 + 断言面自检
     // （D4 已就同一谓词/同一自检给出判别力演示）。
@@ -531,13 +641,17 @@ test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐
   }
   assert.ok(state.applied, '被测路径已执行（G1 不成立时本用例由前置闸阻断）');
   // 三态判定（规格 §方案 二）：差异时**恰 1 次** settleMs 重取；不 bail，一次收全四字段证据
-  const attributed = attributedRels(state);
-  const g2Results = REAL_FACES.map((face, i) => evalFace({
-    face,
-    before: state.realBefore[i],
-    after: state.realAfter[i],
-    attributed,
-  }));
+  const g2Results = REAL_FACES.map((face, i) => {
+    const before = state.realBefore[i];
+    const after = state.realAfter[i];
+    // A1∪A3（面相对键 + 来源标注）：A1 = 隔离根枚举经 manifest 映射；A3 = 内容同路径逐字相同
+    const attributed = buildAttribution({
+      isoFiles: state.isolatedAfter?.files ?? [],
+      faceRootRel: path.relative(ISOLATED, face),
+      faceDelta: faceDiff(before, after),
+    });
+    return evalFace({ face, before, after, attributed });
+  });
   emitAndGate(g2Results);
   // 活宿主面（REAL_HOME/.dsh/logs）**不在**上面的指纹面内：常驻宿主逐 tick 追写该面，
   // 把它的存在性/内容读成泄漏是结构性错误（2026-09-13 修正）。该面的判据改为两条确定性对照：
@@ -718,7 +832,7 @@ process.env.PUNKY_TEST_ISOLATED_DSH_HOME = path.join(claimed, '.dsh');
 // 机制探针：以正确 preload 运行，报告机制是否真的把写点转移到了隔离根
 function mechanismProbeSrc(indexUrl) {
   return `
-import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import crypto from 'node:crypto';
 const sentinel = (process.env.PUNKY_TEST_ISOLATED_HOME ?? '').trim();
 const real = os.userInfo().homedir;
 const calls = { info: [], warn: [], error: [] };
@@ -739,6 +853,10 @@ const report = {
   sinkCreated: fs.existsSync(sink),
   assetsSynced: fs.existsSync(skill) && fs.existsSync(preset),
   writtenFiles: walk(sentinel),
+  fileMeta: walk(sentinel).map((p) => ({
+    p,
+    sha256: crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'),
+  })),
   logs: calls.info,
 };
 console.log('@@REPORT@@' + JSON.stringify(report) + '@@END@@');
@@ -940,4 +1058,128 @@ test('D8 子进程路径可达性：transient 可吸收、red 可判出、两路
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D9-a / D9-b / D10：A2 弃接的正面证据 + 键空间回归（新增，**并列**于 D1–D8）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A2 归因源（仅**取证用**，生产路径不接 —— 裁决见 exec/a2-wiring.md）：
+ * 从 `apply()` 的自报日志解析三类落点，并按 **manifest** 映射回面相对。
+ *   · `engine root: <p>` ⇒ 面不在 REAL_FACES（结构性惰性）
+ *   · `audit log sink mounted: <p>` ⇒ 落在 .dsh/logs（LIVE 面，已排除）
+ *   · `asset synced: <rel>` ⇒ 用 manifest 的 rel→subpath 映射（**不猜前缀**）
+ */
+export function a2RelsFromLogs(lines, faceRootRel) {
+  const root = String(faceRootRel).split(path.sep).join('/');
+  const out = { assetRels: [], inert: [], live: [], unknown: [] };
+  for (const line of lines ?? []) {
+    const engine = String(line).match(/engine root:\s*(.+?)；/);
+    if (engine) { out.inert.push(engine[1].trim()); continue; }
+    const sink = String(line).match(/audit log sink mounted:\s*(.+)$/);
+    if (sink) { out.live.push(sink[1].trim()); continue; }
+    const synced = String(line).match(/asset synced:\s*(.+)$/);
+    if (synced) {
+      const rel = synced[1].trim().split('/').join('/');
+      const hit = assetMap().find((a) => rel === a.rel || rel.startsWith(a.rel + '/'));
+      if (!hit || hit.faceRootRel !== root) continue;
+      out.assetRels.push(hit.subpath + rel.slice(hit.rel.length));
+      continue;
+    }
+    out.unknown.push(String(line).trim());
+  }
+  return out;
+}
+
+const mkFaceFiles = (rels) => rels.map((r) => ({ rel: r, size: 10, mtimeMs: 1, sha256: 'h-' + r }));
+const mkFaceOf = (rels) => ({
+  exists: true, count: rels.length, sumBytes: rels.length * 10,
+  digest: 'd-' + rels.join(','), files: mkFaceFiles(rels),
+});
+
+test('D9-a 谓词级：隔离**部分**失效下 A1∪A3 ⇒ unattributable；+A2 ⇒ red（增益真实但生产不可达）', () => {
+  const before = mkFaceOf(['f0', 'f1', 'f10']);
+  const after = mkFaceOf(['f0', 'f1']);          // f10 被删（持久）
+  const diff = faceDiff(before, after);
+  assert.deepEqual(diff.removed, ['f10'], '差异项应是面相对的 f10');
+
+  // A1∪A3：隔离根里出现的都是**其它**路径（部分失效场景：越界写没有走一次完整同步）
+  const a1a3 = [
+    { kind: 'faceRel', rel: 'software-team/SKILL.md', source: 'A1' },
+    { kind: 'faceRel', rel: 'punky-preset/agent.cordis.yml', source: 'A3' },
+  ];
+  const noA2 = g2Verdict({ face: 'F', before, after, after2: after, attributed: a1a3 });
+  assert.equal(noA2.status, 'inconclusive', 'A1∪A3 覆盖不到 ⇒ 只能 unattributable');
+  assert.equal(noA2.subclass, 'unattributable');
+  assert.equal(noA2.attribution.hits.length, 0, 'A1∪A3 命中数应为 0');
+
+  // +A2（日志自称的落点）⇒ 映射到面相对后命中 ⇒ red
+  const withA2 = [
+    ...a1a3,
+    { kind: 'a2Rel', rel: 'engine-root-shadow', source: 'A2' },
+  ];
+  const faceMapA2 = (rel, kind) => (kind === 'a2Rel' && rel === 'engine-root-shadow' ? 'f10' : null);
+  const withA2Result = g2Verdict({ face: 'F', before, after, after2: after, attributed: withA2, faceMap: faceMapA2 });
+  assert.equal(withA2Result.status, 'red', 'A2 在该场景有独立增益（能命中 A1∪A3 覆盖不到的差异项）');
+  assert.deepEqual(withA2Result.attributedHits, ['f10']);
+  assert.equal(withA2Result.attribution.hits[0].kind, 'a2Rel', '命中须带来源标注');
+});
+
+test('D9-b 生产路径 A2 ⊆ A1（弃接 A2 的正面证据；出现新写点形态即判红）', () => {
+  const m = mechanismRun();
+  assert.ok(m.report && Array.isArray(m.report.fileMeta), '子进程应回报文件元数据（sha256）');
+  const isoFiles = (m.report.fileMeta ?? []).map((f) => ({ rel: path.relative(m.report.sentinel, f.p), sha256: f.sha256 }));
+
+  // A1：隔离根枚举 → 面相对
+  const a1 = new Set();
+  for (const f of isoFiles) {
+    const mapped = isoRelToFace(f.rel);
+    if (mapped && mapped.rel) a1.add(mapped.faceRootRel + '|' + mapped.rel);
+  }
+
+  // A2：日志自报 → 面相对（manifest 驱动）
+  const faceRootRel = path.relative(REAL_HOME, REAL_FACES.find((p) => p.endsWith('.agent-presets')) ?? REAL_FACES[0]);
+  const a2 = a2RelsFromLogs(m.report.logs ?? [], faceRootRel);
+  const a2Keys = new Set(a2.assetRels.map((r) => String(faceRootRel).split(path.sep).join('/') + '|' + r));
+
+  // ⚠ 粒度对齐（p1 口径）：A2 报的是**资产目录**（\`asset synced: presets/punky-preset\`），
+  // A1 报的是**文件**（\`punky-preset/agent.cordis.yml\`）⇒ 子集判定必须按**目录级前缀**比较，
+  // 否则恒假红。注意这不是放宽：若某个 A2 目录在 A1 下**一个文件都没有**，仍会进 a2Only ⇒ 判红。
+  const a1Keys = [...a1];
+  const coveredByA1 = (k) => a1Keys.some((x) => x === k || x.startsWith(k + '/'));
+  const a2Only = [...a2Keys].filter((k) => !coveredByA1(k));
+  process.stderr.write('[D9-b] a1=' + a1.size + ' a2=' + a2Keys.size + ' a2Only=' + JSON.stringify(a2Only)
+    + ' inert=' + a2.inert.length + ' live=' + a2.live.length
+    + ' sampleA1=' + JSON.stringify(a1Keys.filter((x) => x.includes('agent-presets')).slice(0, 3))
+    + ' isoPreset=' + JSON.stringify(isoFiles.map((f) => f.rel).filter((r) => r.includes('agent-presets')).slice(0, 3))
+    + String.fromCharCode(10));
+  assert.deepEqual(a2Only, [],
+    'A2 ∖ A1 非空 ⇒ 出现「新写点形态」：弃接 A2 的裁决须重评（差异项：' + JSON.stringify(a2Only) + '）');
+
+  // fail-closed 规格：**合法空集不判红** —— 幂等时 syncDir 返回 'current' ⇒ 不打 'asset synced'
+  // （`idempotent-no-synced`）。此时 A2 为空是**合法**的，subset 平凡成立；不是"结论空转"。
+  if (a2Keys.size === 0) {
+    assert.equal((m.report.logs ?? []).some((l) => /asset synced:/.test(String(l))), false,
+      'A2 为空时须确认原因是幂等（日志里确实没有 asset synced 行），否则是解析失联');
+    process.stderr.write('[D9-b] a2=0 合法空集（idempotent-no-synced：syncDir 已 current ⇒ 不打 asset synced）\n');
+  } else {
+    assert.ok(a2Keys.size > 0, 'A2 非空时 subset 判定才有对象（本例已保障）');
+  }
+});
+
+test('D10 键空间回归：isoRel 直塞不得命中（a1Hits===0），faceRel 才命中', () => {
+  const before = mkFaceOf(['f0', 'f10']);
+  const after = mkFaceOf(['f0']);
+  // ① 键空间错：把 isoRel 当 faceRel 直塞（即"改回去"的形态）⇒ 不得命中
+  const wrong = g2Verdict({ face: 'F', before, after, after2: after, attributed: [{ kind: 'isoRel', rel: 'f10' }] });
+  assert.equal(wrong.status, 'inconclusive', 'isoRel 直塞不得判 red（键空间未对齐）');
+  assert.equal(wrong.attribution.hits.length, 0, 'a1Hits 必须为 0');
+  assert.deepEqual(wrong.attribution.unresolved, [{ rel: 'f10', kind: 'isoRel' }], '映射不到须显式暴露 unresolved');
+  // ② 同一 isoRel 经 faceMap 映射 ⇒ 命中
+  const mapped = g2Verdict({ face: 'F', before, after, after2: after, attributed: [{ kind: 'isoRel', rel: 'f10' }], faceMap: (rel) => (rel === 'f10' ? 'f10' : null) });
+  assert.equal(mapped.status, 'red', '经 faceMap 映射到面相对后才可命中');
+  // ③ 扁平字符串（faceRel）向后兼容，仍直接命中（D5 用法不破）
+  const legacy = g2Verdict({ face: 'F', before, after, after2: after, attributed: ['f10'] });
+  assert.equal(legacy.status, 'red', '扁平字符串=faceRel，须保持向后兼容');
 });
