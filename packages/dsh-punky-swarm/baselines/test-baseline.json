@@ -889,9 +889,9 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 196,
+      "asserts": 197,
       "blankLines": 157,
-      "lines": 1821,
+      "lines": 1831,
       "tautologies": 0,
       "tests": 21,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T21:27:53Z",
+  "generatedAt": "2026-10-26T21:45:18Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "D3 安全闸改判据（d3RealFaceVerdict 四档）+ D15 四构造 + D3S-1 硬化（三条件同 assert + A-6 范式静态自检）",
+  "reason": "D3H-1 计数式改集合式（5 条显式断言替单条聚合）+ D3H-2 注释补可审性≠检测力",
   "schema": 1,
   "totals": {
-    "asserts": 11003,
+    "asserts": 11004,
     "blankLines": 5827,
     "files": 208,
-    "lines": 62747,
+    "lines": 62757,
     "tautologies": 0,
     "tests": 2220,
     "todos": 4

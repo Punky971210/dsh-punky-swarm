@@ -893,18 +893,25 @@ test('D3 判别力（写入级）：写错隔离时真实写点不在声明隔�
       assert.notEqual(at, -1, '静态自检：必须能定位 D3 用例体锚点');
       const next = srcSelf.indexOf(NL + "test('", at + bodyAnchor.length);
       const d3Body = srcSelf.slice(at + 1, next < 0 ? srcSelf.length : next);
-      const NEEDLE_AV = 'attribution' + 'Verdict(';
-      const NEEDLE_D3 = 'd3RealFace' + 'Verdict(';
-      const avCount = d3Body.split(NEEDLE_AV).length - 1;
-      const d3Count = d3Body.split(NEEDLE_D3).length - 1;
-      // 构成（4 处，逐处可核）：① 对照组 REAL_SINK_PROBE ② 合并判据里的 .every(actual) ③ 逐条 actual 循环 ④ claimed 零写
-      assert.equal(avCount, 4,
-        '静态自检：D3 体须含 4 处归属谓词调用（①对照组 ②合并判据 .every ③逐条 actual 循环 ④claimed 零写）；实测 ' + avCount);
-      assert.equal(d3Count, 1, '静态自检：D3 体须含 1 处面级 backstop 调用（唯一调用点）；实测 ' + d3Count);
-      assert.equal(d3Body.includes('attribution' + 'Verdict([p], report.claimedRoot)'), true,
-        '静态自检：逐条 actual 的归属核对必须在（防渐进削弱）');
-      assert.equal(d3Body.includes('attribution' + 'Verdict(report.writtenUnderClaimed'), true,
-        '静态自检：claimed 零写的归属核对必须在');
+      // **集合式**（不是计数式）：每个可删点各一个 needle，缺哪个报哪个。
+      // 为什么不数总数：合法新增第 5 处调用时会**假红**（数量断言的老毛病，本轮正治这个）。
+      // needle 全部**拼接构造**（字面量不连续）⇒ 自检自身不被匹配。
+      const needles = [
+        ['① 对照组 REAL_SINK_PROBE', 'attribution' + 'Verdict([REAL_SINK_PROBE], report.claimedRoot)'],
+        ['② 合并判据 .every', 'attribution' + 'Verdict([p], report.claimedRoot).ok === false'],
+        ['③ 逐条 actual 循环', 'attribution' + 'Verdict([p], report.claimedRoot).ok, false'],
+        ['④ claimed 零写', 'attribution' + 'Verdict(report.writtenUnderClaimed'],
+        ['⑤ 面级 backstop 调用点', 'd3RealFace' + 'Verdict('],
+      ];
+      // 每个可删点**各自一条断言**（显式 5 条，不用 for 包起来）：
+      //   · 红点天然点名"缺哪一处"；
+      //   · 断言调用点数不下降（基线对账有"断言零下降"判据：聚合/循环都会让它掉数）。
+      const missMsg = (label, nd) => '静态自检：D3 体缺可删点 → ' + label + '（needle=' + nd + '）｜逐处点名、不报总数（合法新增不判红）';
+      assert.equal(d3Body.includes(needles[0][1]), true, missMsg(needles[0][0], needles[0][1]));
+      assert.equal(d3Body.includes(needles[1][1]), true, missMsg(needles[1][0], needles[1][1]));
+      assert.equal(d3Body.includes(needles[2][1]), true, missMsg(needles[2][0], needles[2][1]));
+      assert.equal(d3Body.includes(needles[3][1]), true, missMsg(needles[3][0], needles[3][1]));
+      assert.equal(d3Body.includes(needles[4][1]), true, missMsg(needles[4][0], needles[4][1]));
     }
 
     for (const p of report.writtenUnderActual) {
@@ -915,6 +922,9 @@ test('D3 判别力（写入级）：写错隔离时真实写点不在声明隔�
     // ── D3 主判据（**三条件并进同一条 assert**）：面级 backstop + 归属必要条件 ──
     //    合并理由：让"渐进削弱"（删掉三条件中一条、另两条还在）**必须改这一行**，
     //    而不能靠删一条相邻断言悄悄减条件 —— 审计据此判 B 的正是这一点。
+    //    ⚠ 澄清（a18 收紧表述）：合并保证的只是「削弱必落在**同一行 diff**」= **可审性**；
+    //      「削弱即变红」由**下方静态自检**承担，**不是合并带来的**。
+    //      构造①实证：删掉 `&& claimedEmpty` 后 D3 **仍绿** ⇒ 不得读成「合并即防削弱」。
     {
       const actualAllOutside = report.writtenUnderActual.every((p) => attributionVerdict([p], report.claimedRoot).ok === false);
       const claimedEmpty = report.writtenUnderClaimed.length === 0;
