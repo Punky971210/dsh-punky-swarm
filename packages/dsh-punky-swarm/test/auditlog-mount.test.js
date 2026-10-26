@@ -439,7 +439,9 @@ test('T-B3 幂等：连续两次 mountAuditLog → 第二次 {mounted:false, rea
   assert.equal(r.ok, true, '探测体未报错（error: ' + JSON.stringify(r.error) + '）');
   assert.equal(r.remount.mounted, false, '第二次挂载被拒（实际: ' + JSON.stringify(r.remount) + '）');
   assert.equal(r.remount.reason, 'duplicate', '拒绝理由 = duplicate');
-  assert.equal(ourExporters(r).length, 1, '本模块 exporter 注册数仍为 1（实际: ' + JSON.stringify(r.exporterLevels) + '）');
+  // 数量 → 身份数组（哪些）：幂等重挂后 exporter 仍是**同一份**，重复注册或内容漂移都会红
+  assert.deepEqual(ourExporters(r), [{ default: 3 }],
+    '重复 mount 不得新增/改动 exporter：身份须仍为 [{default:3}]（实际: ' + JSON.stringify(r.exporterLevels) + '）');
 });
 
 // ── T-B4 自持开关：不调用 exporter disposer ──

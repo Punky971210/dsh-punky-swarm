@@ -183,7 +183,12 @@ test('A1-P2-07 / REVERSE · 变异体 `(e) => !!e` 必红 ⇒ 上述三态断言
     const actual = label === '不传参（键缺失）' ? mutant() : mutant(argOf(label));
     if (actual !== expected) deviations.push(label + '：期望 ' + expected + ' 实得 ' + actual);
   }
-  assert.equal(deviations.length, 5, '真值判断会把 undefined（×2）/ 0 / 空串 / null 判成停用 ⇒ 偏离 5 条');
+  // 数量 → 身份数组（哪些）：偏离集须恰为**全部非布尔输入**（7 例中除「显式 false/true」外的 5 例）。
+  // 少一个（变异体漏判某态）/ 多一个（把布尔输入也算偏离）都会红，且失败时点名是哪个 label。
+  const expectDeviate = AUTO_SETTLE_STATES.map(([l]) => l).filter((l) => !l.startsWith('显式'));
+  assert.deepEqual(deviations.map((d) => d.slice(0, d.indexOf('：'))), expectDeviate,
+    '真值判断会把 undefined（×2）/ 0 / 空串 / null 判成停用 ⇒ 偏离集须恰为非布尔输入的 5 例'
+    + '（实际偏离: ' + JSON.stringify(deviations.map((d) => d.slice(0, d.indexOf('：')))) + '）');
   assert.ok(deviations.length > 0, '断言集必须能抓住真值判断实现（否则只是恒真套话）');
 });
 
