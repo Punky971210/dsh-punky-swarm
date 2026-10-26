@@ -333,7 +333,13 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
     const mapped = typeof faceMap === 'function' ? faceMap(rel, kind) : null;
     bySource[kind] = (bySource[kind] ?? 0) + 1;
     if (!mapped) { unresolved.push({ rel, kind }); continue; }
-    if (diffSet.has(mapped)) hits.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind });
+    if (diffSet.has(mapped)) {
+      hits.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind });
+    } else {
+      // 第四通道（p2 读码发现）：**映射成功但未命中**。修复前这里**没有 else**
+      // ⇒ hits / unresolved / unmatched 三处全不记（连桶都没有）。现归入 unmatched（与"候选枚举未命中"同桶）。
+      unmatched.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind, reason: 'mapped-but-unmatched' });
+    }
   }
   const attribution = { hits, unresolved, unmatched, bySource, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' };
   if (hits.length > 0) {
@@ -351,9 +357,16 @@ export function g2Summary(faceResults) {
   const inconclusive = rs.filter((r) => r.status === 'inconclusive').length;
   const transient = rs.filter((r) => r.subclass === 'transient').length;
   const unattributable = rs.filter((r) => r.subclass === 'unattributable').length;
+  // unmatched **真聚合**：逐面取 attribution.unmatched.length 求和。
+  // （反面教材：`sum.__unmatched ?? 0` —— 该字段根本不存在 ⇒ 恒 0 ⇒ 让人误以为"永远没有未命中"。）
+  const unmatched = rs.reduce((n, r) => n + (r?.attribution?.unmatched?.length ?? 0), 0);
+  // 四通道齐平（RES-1）：`unresolved` 恰是这条链最初要"不许静默"的通道，此前**没有汇总位**；
+  // `hits` 同样只在 detail 里可见。两者都按上面 same-source reduce 聚合（**不得**写 `sum.__xxx ?? 0` 式假字段）。
+  const unresolved = rs.reduce((n, r) => n + (r?.attribution?.unresolved?.length ?? 0), 0);
+  const hits = rs.reduce((n, r) => n + (r?.attribution?.hits?.length ?? 0), 0);
   const passed = red === 0 && inconclusive === 0;
   const verdict = red > 0 ? 'red' : inconclusive > 0 ? 'inconclusive' : 'green';
-  return { faces, green, red, inconclusive, transient, unattributable, passed, verdict, detail: rs };
+  return { faces, green, red, inconclusive, transient, unattributable, unmatched, unresolved, hits, passed, verdict, detail: rs };
 }
 
 /**
@@ -498,7 +511,7 @@ export function buildAttribution({ isoFiles = [], faceRootRel, faceDelta }) {
 
 /** 汇总行（机器可解析，规格 §方案 二.4）。 */
 export function formatG2Summary(sum) {
-  const head = `[G2] faces=${sum.faces} green=${sum.green} red=${sum.red} inconclusive=${sum.inconclusive} transient=${sum.transient} unattributable=${sum.unattributable}`;
+  const head = `[G2] faces=${sum.faces} green=${sum.green} red=${sum.red} inconclusive=${sum.inconclusive} transient=${sum.transient} unattributable=${sum.unattributable} unmatched=${sum.unmatched ?? 0} unresolved=${sum.unresolved ?? 0} hits=${sum.hits ?? 0}`;
   const detail = sum.detail.map((r) => {
     const st = r.status === 'inconclusive' ? `inconclusive(${r.subclass})` : r.status;
     const d = r.diffPaths?.length ? ` diff=${JSON.stringify(r.diffPaths)}` : '';
@@ -1433,4 +1446,105 @@ test('D12 faceRel 自防御：含分隔符的扁平键必须命中，且未命�
     + ' hits=' + JSON.stringify(v.attributedHits)
     + ' unresolvedOnHit=' + JSON.stringify(v.attribution.unresolved)
     + ' unresolvedOnMiss=' + missing.attribution.unresolved.length + String.fromCharCode(10));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D13：第四通道（映射成功但未命中）+ RED 证据的可复跑半 + 读数接通
+//
+// ⚠ **RED 证据分两半（不可互相替代）**：
+//   · 可复跑半（本用例 D13-2）：`oldLookup` 对含分隔符裸键必 miss —— 纯函数、零副作用、零腐化，**这是可复现证据**。
+//   · **不可复跑半**：「旧版 miss 时**静默**（三处全不记）」本质是**缺一段代码**，无法执行 ⇒ 只能引用档案：
+//       exec/faceRel-normalize.md:74-78（修前 RED 原始回显：`inconclusive / hits=undefined / unresolved=[]`）
+//       与 gap-faceRel.json 的 `red_before_fix` 字段。
+//     **此半不可复跑，勿引作可复现证据。**
+//   · 反向 patch / harness 本批**明确不做**（脏树风险 + 等价后门 + 必腐化）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('D13 第四通道 + 读数接通：映射成功未命中要可见，summary/文本要对得上（含可复跑的旧查找反事实）', () => {
+  const posixKey = 'punky-preset/agent.cordis.yml';
+  const before = mkFaceOf([]);
+  const after = mkFaceOf([posixKey]);
+  const mapToMiss = (rel) => (rel === 'iso-unmatched' ? 'not-in-diff.txt' : null);
+
+  // ── D13-1a 分流正确：hits=1 / unmatched=1 / unresolved=0 ──
+  const v = g2Verdict({
+    face: 'F', before, after, after2: after,
+    attributed: [posixKey, { kind: 'isoRel', rel: 'iso-unmatched', source: 'A1' }],
+    faceMap: mapToMiss,
+  });
+  assert.equal(v.status, 'red', 'D13-1a：命中存在 ⇒ status=red（实测 ' + v.status + '）');
+  assert.equal(v.attribution.hits.length, 1, 'D13-1a：hits 必须恰 1（实测 ' + v.attribution.hits.length + '）');
+  assert.equal(v.attribution.unmatched.length, 1,
+    'D13-1a：映射成功但未命中必须进 unmatched（修复前这里三处全不记）；实测 ' + JSON.stringify(v.attribution.unmatched));
+  assert.equal(v.attribution.unresolved.length, 0,
+    'D13-1a：映射成功的条目不得污染 unresolved；实测 ' + JSON.stringify(v.attribution.unresolved));
+
+  // ── D13-1b 读数接通：summary.unmatched 与汇总文本一致 ──
+  const sum = g2Summary([v]);
+  assert.equal(sum.unmatched, 1, 'D13-1b：g2Summary().unmatched 必须真聚合（实测 ' + sum.unmatched + '）');
+  const text = formatG2Summary(sum);
+  assert.equal(text.includes('unmatched=1'), true, 'D13-1b：汇总行必须渲染 unmatched=1；实测：' + text.split(String.fromCharCode(10))[0]);
+
+  // ── D13-1c 未命中不改变命中数 ──
+  const onlyHit = g2Verdict({ face: 'F', before, after, after2: after, attributed: [posixKey] });
+  assert.deepEqual(v.attributedHits, onlyHit.attributedHits,
+    'D13-1c：多一个未命中条目不得改变命中集合');
+
+  // ── D13-2 可复跑的旧查找反事实（照 oldIsoRelToFaceBuggy 的范式）──
+  const diffSet = new Set([posixKey]);
+  const backendKey = path.join('punky-preset', 'agent.cordis.yml');   // 反斜杠用 path.join 造，不手写字面量
+  const oldLookup = (set, rel) => set.has(rel);                        // 修复前的查找
+  const newLookup = (set, rel) => set.has(rel) || set.has(toPosix(rel)); // 修复后的自防御
+  assert.equal(backendKey === posixKey, false, 'D13-2 前置：构造键必须真的含分隔符（实测 ' + JSON.stringify(backendKey) + '）');
+  assert.equal(oldLookup(diffSet, backendKey), false, 'D13-2a：旧查找对含分隔符裸键**必 miss**（可复跑证据）');
+  assert.equal(newLookup(diffSet, backendKey), true, 'D13-2b：新查找**必命中**（可复跑证据）');
+
+  // ── 真实量级读数：生产归因下的 unmatched 条数（诊断字段，不设语义契约）──
+  const realIdx = REAL_FACES.findIndex((p) => p.endsWith('.agent-presets'));
+  const realDelta = ISOLATED && state.applied
+    ? faceDiff(state.realBefore[realIdx], state.realAfter[realIdx])
+    : faceDiff(mechanismRun().realBefore[realIdx], mechanismRun().realAfter[realIdx]);
+  const realAttr = buildAttribution({ isoFiles: productionIsoFiles(), faceRootRel: '.dsh/.agent-presets', faceDelta: realDelta });
+  const realDiff = new Set([...(realDelta.added ?? []), ...(realDelta.changed ?? [])].map((r) => toPosix(r)));
+  const unmatchedOnReal = realAttr.filter((e) => !realDiff.has(toPosix(e.rel))).length;
+
+  process.stderr.write('[D13] unmatchedOnRealAttribution=' + unmatchedOnReal
+    + ' (realAttr=' + realAttr.length + ' realDiff=' + realDiff.size + ')'
+    + ' hits=' + v.attribution.hits.length
+    + ' unmatched=' + v.attribution.unmatched.length
+    + ' unresolved=' + v.attribution.unresolved.length
+    + ' summaryUnmatched=' + sum.unmatched
+    + ' oldLookupMiss=' + (oldLookup(diffSet, backendKey) === false)
+    + ' newLookupHit=' + (newLookup(diffSet, backendKey) === true) + String.fromCharCode(10));
+});
+
+// D13-4：四通道汇总齐平 —— **聚合**与**渲染**两条都要断。
+// 反面教材：a14 的 `sum.__unmatched ?? 0` 是"渲染接了但聚合没接"（字段不存在 ⇒ 恒 0）。
+test('D13-4 汇总通道齐平：unresolved / hits 既要进 g2Summary 聚合，也要出现在汇总行文本', () => {
+  const before = mkFaceOf([]);
+  const after = mkFaceOf(['f10']);
+  // 一条命中（扁平 faceRel）+ 一条未映射（isoRel 无 faceMap ⇒ unresolved）
+  const v = g2Verdict({
+    face: 'F', before, after, after2: after,
+    attributed: ['f10', { kind: 'isoRel', rel: 'unmapped-key', source: 'A1' }],
+  });
+  assert.equal(v.attribution.hits.length, 1, 'D13-4 前置：hits 须为 1（实测 ' + v.attribution.hits.length + '）');
+  assert.equal(v.attribution.unresolved.length, 1, 'D13-4 前置：unresolved 须为 1（实测 ' + v.attribution.unresolved.length + '）');
+
+  const sum = g2Summary([v]);
+  const text = formatG2Summary(sum).split(String.fromCharCode(10))[0];
+
+  // 聚合接上了
+  assert.equal(sum.unresolved, 1, 'D13-4a：g2Summary().unresolved 必须真聚合（实测 ' + sum.unresolved + '）');
+  assert.equal(sum.hits, 1, 'D13-4b：g2Summary().hits 必须真聚合（实测 ' + sum.hits + '）');
+  // 渲染接上了
+  assert.equal(text.includes('unresolved=1'), true, 'D13-4c：头行必须渲染 unresolved=1；实测：' + text);
+  assert.equal(text.includes('hits=1'), true, 'D13-4d：头行必须渲染 hits=1；实测：' + text);
+  // 不得退化成假字段（两个都有值才说明聚合真的读了 detail）
+  assert.equal(Number.isFinite(sum.unresolved) && Number.isFinite(sum.hits), true, 'D13-4e：聚合值必须是有限数');
+
+  process.stderr.write('[D13-4] unresolved=' + sum.unresolved
+    + ' hits=' + sum.hits
+    + ' unresolvedInText=' + text.includes('unresolved=1')
+    + ' hitsInText=' + text.includes('hits=1') + String.fromCharCode(10));
 });

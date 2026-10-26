@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 148,
-      "blankLines": 122,
-      "lines": 1437,
+      "asserts": 165,
+      "blankLines": 134,
+      "lines": 1551,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 19,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T16:29:52Z",
+  "generatedAt": "2026-10-26T19:47:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "PR-1 补修：faceRel 自防御（has(rel)||has(toPosix(rel))）+ 三通道分流（扁平键 miss→unresolved / 候选枚举 miss→unmatched）+ toPosix 合并为模块级单点 + D12",
+  "reason": "RES-1：g2Summary 补 unresolved/hits 聚合 + formatG2Summary 头行渲染 + D13-4 五条断言（同时断聚合与渲染）",
   "schema": 1,
   "totals": {
-    "asserts": 10955,
-    "blankLines": 5792,
+    "asserts": 10972,
+    "blankLines": 5804,
     "files": 208,
-    "lines": 62363,
+    "lines": 62477,
     "tautologies": 0,
-    "tests": 2216,
+    "tests": 2218,
     "todos": 4
   }
 }
