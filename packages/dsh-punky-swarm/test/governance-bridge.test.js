@@ -75,8 +75,10 @@ test('B1 onRefusal sync callback receives recorded receipt', async () => {
   assert.ok(seen[0].anchor?.hash, 'P2: 回调收据已含 anchor（writeRefusal 落盘后回调）');
   // 与盘上一致
   const back = readRefusals(root, 'sess-b');
-  assert.equal(back.length, 1);
-  assert.equal(back[0].receiptId, seen[0].receiptId, '回调收据 = 落盘收据');
+  // 数量 → 身份集合（G1，外部锚 = 回调侧收到的 receiptId）：盘上读回集须恰为该 id。
+  // 两侧来源独立（回调对象 vs 落盘读回）⇒ 非同源自比，可抓「多份/漏份/换 id」。
+  assert.deepEqual(back.map((r) => r.receiptId), [seen[0].receiptId],
+    '落盘收据集须恰为回调收到的那一份（实际: [' + back.map((r) => r.receiptId).join(', ') + ']）');
   hook.dispose();
 });
 
@@ -93,8 +95,11 @@ test('B2 onRefusal throw is isolated: decision still deny, further refusals stil
   assert.equal(d1.kind, 'deny', '回调抛错不阻断裁决');
   const d2 = await pre(execOf('bash', { cmd: 'rm -rf /tmp' }), async () => ({ kind: 'allow' }));
   assert.equal(d2.kind, 'deny', '后续调用照常裁决');
-  assert.equal(readRefusals(root, 'sess-b').length, 2, '收据照常落盘');
-  assert.equal(hook.refusals.count(), 2);
+  // 数量 → 身份集合（G1，外部锚 = 两次调用的 cmd）：回调抛错不影响落盘，且落的是哪两条可核
+  assert.deepEqual(readRefusals(root, 'sess-b').map((r) => r.attemptedParams.cmd).sort(), ['rm -rf /', 'rm -rf /tmp'].sort(),
+    '收据照常落盘：集须恰为两条 cmd（实际: [' + readRefusals(root, 'sess-b').map((r) => r.attemptedParams.cmd).join(' | ') + ']）');
+  // 数量 → G4 自比连通性（partial-discrimination）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-b').length, 'count() 须与读回条数一致（G4）');
   assert.ok((global.__govWarn || []).some((m) => m.includes('bridge callback failed')), 'warn 留痕');
   hook.dispose();
 });

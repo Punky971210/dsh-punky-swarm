@@ -174,7 +174,9 @@ test('T4 rules 覆盖 → 新规则生效（重挂后 decide 用新 rules；docs
     assert.equal(nextCalled, 0, 'DENY 短路不透传');
     // 收据落盘（重挂链路完整：kernel → wiring → receipt-store）
     const receipts = readRefusals(root, 'cli');
-    assert.equal(receipts.length, 1, '拒绝收据已落盘（sessionId=cli）');
+    // 数量 → 身份集合（G1，外部锚 = 规则 id）
+    assert.deepEqual(receipts.map((r) => r.ruleRefs.join(',')), ['example-forbid-force-delete'],
+      '拒绝收据集须恰为该规则命中（实际: [' + receipts.map((r) => r.ruleRefs.join(',')).join(' | ') + ']）');
     assert.deepEqual(receipts[0].ruleRefs, ['example-forbid-force-delete']);
     // 桥接随动：remount 后 onRefusal 重新注入 → 批级事件流文件与收据一致（p2 桥接交互处置断言）
     const evFile = path.join(root, 'governance', 'events', 'refusal-cli.jsonl');

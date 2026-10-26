@@ -44,19 +44,20 @@ test('readGovernance returns defaults when no file / corrupted file', () => {
 });
 
 test('writeGovernance merges patch atomically; bumpExecCount counts calls + lastAssign window', () => {
-  const g = store.writeGovernance(S, { execToolCount: 3, lastAssign: { form: 'A', scope: 'full', at: new Date().toISOString(), reasons: [], execCallsSince: 0 } });
+  const INIT_EXEC_COUNT = 3; // 单一真源：写入值与断言共用这一个常量，避免两处各写一遍字面量
+  const g = store.writeGovernance(S, { execToolCount: INIT_EXEC_COUNT, lastAssign: { form: 'A', scope: 'full', at: new Date().toISOString(), reasons: [], execCallsSince: 0 } });
   assert.equal(g.schema, 2);
-  assert.equal(g.execToolCount, 3);
+  assert.equal(g.execToolCount, INIT_EXEC_COUNT, 'execToolCount 须等于写入值（单一真源）');
   // bump：execToolCount 累计 + lastAssign.execCallsSince 递增
   const g2 = store.bumpExecCount(S);
-  assert.equal(g2.execToolCount, 4);
+  assert.equal(g2.execToolCount, g.execToolCount + 1, 'bump 一次 ⇒ 相对前值 +1（G6 同源构造差值）');
   assert.equal(g2.lastAssign.execCallsSince, 1);
   const g3 = store.bumpExecCount(S);
-  assert.equal(g3.execToolCount, 5);
+  assert.equal(g3.execToolCount, g2.execToolCount + 1, '再 bump ⇒ 再 +1（G6）');
   assert.equal(g3.lastAssign.execCallsSince, 2);
   // 无 lastAssign 时 bump 只计 execToolCount
   const g4 = store.bumpExecCount('sess-nolast');
-  assert.equal(g4.execToolCount, 1);
+  assert.equal(g4.execToolCount, 0 + 1, '全新 session 首次 bump ⇒ 从 0 起 +1（G6；0 = 无历史）');
   assert.equal(g4.lastAssign, null);
   // 原子写：磁盘 JSON 可解析
   assert.doesNotThrow(() => JSON.parse(fs.readFileSync(path.join(store.sessionsDir, S, 'governance.json'), 'utf8')));
@@ -281,15 +282,16 @@ test('guard: 未评估 → 执行型被拒（门禁 1），非执行型放行，
   const { guardFn } = makeGuarded({ store: st, root });
   assert.equal(typeof guardFn(), 'function');
   const call = (name, sess) => guardFn()({ name, agent: { session: { id: sess ?? 'sess-g1' } } });
+  const execBefore = st.readGovernance('sess-g1').execToolCount ?? 0; // 前值快照（G6 差值基线）
   const r1 = call('pwsh');
   assert.ok(r1 && r1.includes('[task-difficulty-gate]') && r1.includes('尚未进行任务难度评估'));
   assert.ok(r1.includes('才能执行 pwsh'));
-  assert.equal(st.readGovernance('sess-g1').execToolCount, 1); // 被拒也计数
+  assert.equal(st.readGovernance('sess-g1').execToolCount, execBefore + 1, '被拒也计数（相对前值 +1，G6）');
   // 非执行型放行且不计数（治理/查询，防死锁）
   assert.equal(call('read'), undefined);
   assert.equal(call('wave_plan'), undefined);
   assert.equal(call('batch_status'), undefined);
-  assert.equal(st.readGovernance('sess-g1').execToolCount, 1);
+  assert.equal(st.readGovernance('sess-g1').execToolCount, execBefore + 1, '非执行型放行不计数（须仍为前值 +1，G6）');
 });
 
 test('guard: C 类未建批 → 执行型被拒（门禁 2）；wave_plan 建批 → pendingBatch=false 放行', async () => {
@@ -507,11 +509,12 @@ test('guard: 未评估态只读 shell 放行且不计数；写命令仍拦（只
   assert.equal(call('bash', { command: 'git status --porcelain' }), undefined);
   assert.equal(call('pwsh', { command: 'Get-ChildItem | Select-String -Pattern guard' }), undefined);
   assert.equal(call('pwsh', { command: 'Get-Content -Encoding UTF8 docs\\engine-open-items.md' }), undefined);
-  assert.equal(st.readGovernance('sess-ro').execToolCount, 0); // 读命令不计数：不占 stale 评估窗口
+  const execRoBefore = st.readGovernance('sess-ro').execToolCount ?? 0; // 前值快照（G6 基线）
+  assert.equal(execRoBefore, 0, '读命令不计数：不占 stale 评估窗口');
   // 写命令：仍被门禁 1 拦（只读面不是免检通道）
   const w = call('pwsh', { command: 'Set-Content out.txt -Value x' });
   assert.ok(w && w.includes('[task-difficulty-gate]') && w.includes('才能执行 pwsh'));
-  assert.equal(st.readGovernance('sess-ro').execToolCount, 1); // 执行型被拒也计数
+  assert.equal(st.readGovernance('sess-ro').execToolCount, execRoBefore + 1, '执行型被拒也计数（相对前值 +1，G6）');
   // shell 工具但缺 command / 含写入重定向 → fail-closed（按执行型处理）
   assert.ok(call('pwsh', {}));
   assert.ok(call('pwsh', { command: 'Get-Content a.md > b.txt' }));

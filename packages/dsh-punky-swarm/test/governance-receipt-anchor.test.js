@@ -65,7 +65,9 @@ test('H1 single receipt anchor: version=1 alg=sha256 prevHash=null hash non-empt
   const vr = verifyRefusals(root, 'sess-h');
   assert.equal(vr.ok, true);
   assert.equal(vr.brokenAt, null);
-  assert.equal(vr.count, 1);
+  // 数量 → 身份集合（G1，外部锚 = 用例内已知 receiptId h1-r1）
+  assert.deepEqual(vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId), ['h1-r1'],
+    '锚定收据集须恰为 [h1-r1]（实际: [' + vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).join(', ') + ']）');
   assert.equal(vr.receipts[0].ok, true);
   assert.equal(vr.receipts[0].anchored, true);
 });
@@ -87,7 +89,9 @@ test('H2 multi-receipt chain: prevHash links to previous hash in ts order', () =
   assert.deepEqual(all.map((r) => r.receiptId), ['h2-r1', 'h2-r2', 'h2-r3']);
   const vr = verifyRefusals(root, 'sess-h');
   assert.equal(vr.ok, true);
-  assert.equal(vr.count, 3);
+  // 数量 → 身份集合（G1，外部锚 = h2-r1..h2-r3）
+  assert.deepEqual(vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).sort(), ['h2-r1', 'h2-r2', 'h2-r3'].sort(),
+    '锚定收据集须恰为三份（实际: [' + vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).join(', ') + ']）');
   assert.ok(vr.receipts.every((x) => x.ok === true));
 });
 
@@ -198,5 +202,7 @@ test('H6 deleted middle receipt: verify detects missing link at successor', () =
   assert.equal(vr.ok, false, '缺链检测触发');
   assert.equal(vr.brokenAt, 'h6-r3', 'r3 prevHash 指向已删 r2 hash → 首个失败 = r3');
   assert.equal(vr.receipts.find((x) => x.receiptId === 'h6-r3').issue, 'link-break');
-  assert.equal(vr.count, 2, '现存锚定收据 2 条');
+  // 数量 → 身份集合（G1）：删掉 h6-r2 后须恰剩 h6-r1/h6-r3（删错份也红）
+  assert.deepEqual(vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).sort(), ['h6-r1', 'h6-r3'].sort(),
+    '现存锚定收据集须恰为 h6-r1/h6-r3（实际: [' + vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).join(', ') + ']）');
 });

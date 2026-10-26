@@ -104,7 +104,8 @@ test('V1 rejected 泛化文本补正：短路 accept+content（护栏标注/命�
   // pre：REQUIRE_APPROVAL → ask（收据落盘 + pendingAsks 登记 decision 快照）
   const gate = await pre(exec, async () => ({ kind: 'allow' }));
   assert.equal(gate.kind, 'ask', 'pre REQUIRE_APPROVAL → ask');
-  assert.equal(hook.refusals.count(), 1);
+  // 数量 → G4 自比连通性（partial-discrimination）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-dv').length, 'count() 须与读回条数一致（G4）');
   // post：宿主 rejected 泛化 Error result → 受控补正
   const result = hostDenialResult(GENERIC_CASES[0].text('pwsh'));
   let nextCalled = 0;
@@ -122,7 +123,9 @@ test('V1 rejected 泛化文本补正：短路 accept+content（护栏标注/命�
   assert.match(text, /refusals\/sess-dv\//, '收据查阅路径可见（<root>/governance/refusals/<sessionId>/）');
   // 审计面不破：收据 ask.outcome 补记 + 哈希链完整 + 补正文本引用收据 id（可追溯链）
   const back = readRefusals(root, 'sess-dv');
-  assert.equal(back.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 本次调用 callId）
+  assert.deepEqual(back.map((r) => r.callId), [exec.callId],
+    '收据集须恰为该次调用（实际: [' + back.map((r) => r.callId).join(', ') + ']）');
   assert.equal(back[0].ask.outcome, 'denied-rejected', '收据 ask.outcome=denied-rejected');
   assert.ok(text.includes(back[0].receiptId), '补正文本引用收据 id（可见文本 → 审计明细可追溯）');
   assert.equal(verifyRefusals(root, 'sess-dv').ok, true, 'outcome 补记级联重锚后哈希链仍完整');
@@ -147,7 +150,9 @@ test('V2 四泛化分支参数化：rejected/cancelled/unavailable/no-agent 均�
     assert.match(decision.content[0].text, /\[governance:REQUIRE_APPROVAL/, `${c.outcome} 补正含护栏标注`);
     assert.match(decision.content[0].text, /L1-A10/, `${c.outcome} 补正含命中规则 id`);
     const back = readRefusals(root, 'sess-dv');
-    assert.equal(back.length, 1);
+    // 数量 → 身份集合（G1，外部锚 = 本循环 exec 的 callId）
+    assert.deepEqual(back.map((r) => r.callId), [exec.callId],
+      '收据集须恰为该次调用（实际: [' + back.map((r) => r.callId).join(', ') + ']）');
     assert.equal(back[0].ask.outcome, c.outcome, `${c.outcome} outcome 分类与 inferAskOutcome 一致`);
     hook.dispose();
   }
@@ -205,7 +210,10 @@ test('V5 补记失败降级：收据缺失 → patchRefusalAsk 抛错 → warn �
   // 构造补记异常：删除收据 json → patchRefusalAsk 读收据抛错（尽力补记失败路径）
   const dir = path.join(root, 'governance', 'refusals', 'sess-dv');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 1);
+  // 数量 → 集合相等且仅该 id：先读收据再断言文件名 == 其 receiptId（锁无多余 + 命名契约）
+  const onlyReceipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+  assert.deepEqual(files, [onlyReceipt.receiptId + '.json'],
+    '收据文件集须恰为以该收据 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   fs.unlinkSync(path.join(dir, files[0]));
   let nextCalled = 0;
   const decision = await post(exec, hostDenialResult('the user rejected tool "pwsh"'), async () => { nextCalled++; return { kind: 'accept' }; });

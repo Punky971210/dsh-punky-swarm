@@ -109,7 +109,9 @@ test('F-4 matchToolBan：工具名 / 行为面 fail-closed / 缺 code 退路 / �
   const entries = [banEntry('L3-W01')];
   const hit = matchToolBan(entries, { name: 'pwsh', arguments: { command: 'Set-Content -Path a -Value x' } });
   assert.deepEqual(hit.ruleRefs, ['L3-W01']);
-  assert.equal(hit.violations.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 条目 id L3-W01）：既证「命中 1 条」，也证命中的是哪条 code
+  assert.deepEqual(hit.violations.map((v) => v.code), ['L3-W01'],
+    '命中 violation 集须恰为 L3-W01（实际: [' + hit.violations.map((v) => v.code).join(', ') + ']）');
   assert.equal(hit.violations[0].category, 'hard');
   assert.match(hit.violations[0].message, /改用 edit \/ write/);
   // 工具名不匹配（bash 未登记）→ 不命中（行为面非法也不外延到别的工具）
@@ -131,7 +133,9 @@ test('F-5 未知 / 缺失 behavior ⇒ fail-closed 命中（对齐 readonly 面�
   const unknown = matchToolBan([banEntry('L3-W09', { behavior: 'interpreter-write' })],
     { name: 'pwsh', arguments: { command: 'rm -rf a' } });
   assert.deepEqual(unknown.ruleRefs, ['L3-W09'], '未知 behavior 不再静默放行（工具名已匹配即保守拒绝）');
-  assert.equal(unknown.violations.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 条目 id 退路 L3-W09）
+  assert.deepEqual(unknown.violations.map((v) => v.code), ['L3-W09'],
+    '命中 violation 集须恰为 L3-W09（实际: [' + unknown.violations.map((v) => v.code).join(', ') + ']）');
   assert.match(unknown.violations[0].message, new RegExp(UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX), '拒绝文案写明行为面未实现（可溯源）');
   assert.match(unknown.violations[0].message, /interpreter-write/, '拒绝文案指名被告知的行为面值');
   assert.match(unknown.violations[0].message, /改用 edit \/ write/, '纠正文本照常携带');
@@ -148,11 +152,15 @@ test('F-5 未知 / 缺失 behavior ⇒ fail-closed 命中（对齐 readonly 面�
 test('F-6 缺 code 条目命中：code 退路 = 条目 id，无 id 才落 unknown（拒绝文案绝不留空）', () => {
   const noCode = matchToolBan([banEntry('L3-W07', { code: undefined })],
     { name: 'pwsh', arguments: { command: 'rm -rf a' } });
-  assert.equal(noCode.violations.length, 1, '缺 code 不影响命中判定');
+  // 数量 → 身份集合（G1，外部锚 = 条目 id 退路 L3-W07）
+  assert.deepEqual(noCode.violations.map((v) => v.code), ['L3-W07'],
+    '缺 code 不影响命中判定：violation 集须恰为 L3-W07（实际: [' + noCode.violations.map((v) => v.code).join(', ') + ']）');
   assert.equal(noCode.violations[0].code, 'L3-W07', '缺 code → 退路为条目 id（与 ruleRefs 同源可回查）');
   const noCodeNoId = matchToolBan([{ tool: 'pwsh', behavior: 'file-write', message: 'm' }],
     { name: 'pwsh', arguments: { command: 'rm -rf a' } });
-  assert.equal(noCodeNoId.violations.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 引擎常量 UNKNOWN_VIOLATION_CODE）
+  assert.deepEqual(noCodeNoId.violations.map((v) => v.code), [UNKNOWN_VIOLATION_CODE],
+    '无 id 无 code ⇒ violation 集须恰为显式 unknown（实际: [' + noCodeNoId.violations.map((v) => v.code).join(', ') + ']）');
   assert.equal(noCodeNoId.violations[0].code, UNKNOWN_VIOLATION_CODE, '无 id 无 code → 显式 unknown（不传 undefined）');
   assert.notEqual(noCodeNoId.violations[0].code, undefined, '拒绝文案 code 不再为 undefined');
   const emptyCode = matchToolBan([banEntry('L3-W06', { code: '' })],
@@ -227,7 +235,9 @@ test('R-1 inline 通道（热加载主干）：toolBan 进 resolved 快照 → �
   const empty = resolveGovernanceConfig({});
   const withBan = resolveGovernanceConfig({ toolBan: [banEntry('L3-W01')] });
   assert.deepEqual(empty.toolBan, []);
-  assert.equal(withBan.toolBan.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 条目 id L3-W01）
+  assert.deepEqual(withBan.toolBan.map((e) => e.id), ['L3-W01'],
+    'inline toolBan 集须恰为 L3-W01（实际: [' + withBan.toolBan.map((e) => e.id).join(', ') + ']）');
   assert.notEqual(JSON.stringify(empty), JSON.stringify(withBan),
     '快照差异 = index.js remountGovernanceHook 的比较判据（免重启热更由此成立）');
 });
@@ -245,7 +255,9 @@ test('R-3 preset + inline 保序拼接：preset 条目在前、inline 在后（�
     { preset: ['l2-resource', 'l3-tool-ban'], toolBan: [banEntry('MY-BAN-1', { behavior: 'file-write' })] },
     { presetTable: REAL.table, presetBanTable: REAL.banTable },
   );
-  assert.equal(c.rules.length, 6, 'l2 规则面照常展开（rules 面不受 toolBan 面影响）');
+  // 数量 → 身份集合（G1，外部锚 = preset 源的 id 序列）：证明「rules 面不受 toolBan 面影响」是逐条一致，不只是条数相同
+  assert.deepEqual(c.rules.map((r) => r.id), REAL.table['l2-resource'].map((r) => r.id),
+    'l2 规则面须照常逐条展开（rules 面不受 toolBan 面影响）');
   assert.deepEqual(c.toolBan.map((e) => e.id), ['L3-W01', 'MY-BAN-1'], 'preset 展开在前、inline 在后');
 });
 
@@ -281,7 +293,9 @@ test('R-6 inline 坏条目：warn 指名 toolBan[i] 与原因，回退空表（�
   assert.ok(warns.some((m) => /toolBan\[0\]\(BAD-1\)\.behavior 非法: interpreter-write/.test(m)), 'warn 指名未知 behavior 值');
   assert.ok(warns.some((m) => /toolBan\[1\]\.id 缺失/.test(m)), '缺 id 条目同样被点名（索引 1）');
   const clean = resolveGovernanceConfig({ toolBan: [banEntry('L3-W01')] }, { warn: (m) => warns.push('UNEXPECTED:' + m) });
-  assert.equal(clean.toolBan.length, 1, '合法条目零形状差（仅坏条目回退）');
+  // 数量 → 身份集合（G1，外部锚 = 条目 id L3-W01）
+  assert.deepEqual(clean.toolBan.map((e) => e.id), ['L3-W01'],
+    '合法条目零形状差：toolBan 集须恰为 L3-W01（实际: [' + clean.toolBan.map((e) => e.id).join(', ') + ']）');
   assert.equal(warns.filter((m) => m.startsWith('UNEXPECTED')).length, 0, '合法 inline 表不产生任何告警');
 });
 
@@ -327,7 +341,9 @@ test('A-1 装配级静态引用：apply preset:l3-tool-ban → pwsh 写文件 DE
     assert.match(out.reason, /改用 edit \/ write/, '拒绝正文含纠正文本');
     assert.match(out.reason, /L3-W01（preset l3-tool-ban）/, '规则引用含 preset 归属（wiring 前缀映射）');
     const receipts = readRefusals(root, 'cli');
-    assert.equal(receipts.length, 1, '收据落盘');
+    // 数量 → 身份集合（G1，外部锚 = ruleRefs 命中的规则 L3-W01）
+    assert.deepEqual(receipts.map((r) => r.ruleRefs.join(',')), ['L3-W01'],
+      '收据集须恰为该次 deny（ruleRefs=L3-W01）（实际: [' + receipts.map((r) => r.ruleRefs.join(',')).join(' | ') + ']）');
     assert.deepEqual(receipts[0].ruleRefs, ['L3-W01']);
     // Q2：pwsh 只读命令放行（只拦「修改或写文件」）
     let next = 0;
@@ -337,7 +353,9 @@ test('A-1 装配级静态引用：apply preset:l3-tool-ban → pwsh 写文件 DE
     // Q6：构建命令放行（tsc 落盘属构建自身行为）
     await pre(execOf('pwsh', { command: 'npm run build' }), () => { next++; });
     assert.equal(next, 3, '构建命令 ALLOW 透传');
-    assert.equal(readRefusals(root, 'cli').length, 1, '放行调用不产收据');
+    // 数量 → 身份集合（G1）：放行调用后收据集**仍是**那一条 deny（ruleRefs=L3-W01）⇒ 证不产新收据且点名是哪条
+    assert.deepEqual(readRefusals(root, 'cli').map((r) => r.ruleRefs.join(',')), ['L3-W01'],
+      '放行调用不产收据：收据集须仍恰为那条 L3-W01（实际: [' + readRefusals(root, 'cli').map((r) => r.ruleRefs.join(',')).join(' | ') + ']）');
   } finally {
     disposer();
   }

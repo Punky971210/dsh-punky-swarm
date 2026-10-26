@@ -164,8 +164,11 @@ test('S1 REQUIRE_APPROVAL → ask + receipt ask.initiated (channel/initiated/req
   assert.match(decision.reason, /^\[governance:REQUIRE_APPROVAL\] /);
   // 收据 ask.initiated 已同步落盘（pre 内完成，不依赖 post）
   const files = listReceiptFiles(root, 'sess-wire');
-  assert.equal(files.length, 1);
   const receipt = readReceipt(root, 'sess-wire', files[0].replace('.json', ''));
+  // 数量 → 集合相等且仅该 id：文件名 = `<receiptId>.json`（receiptId 由引擎产出，不可硬编码）
+  // ⇒ 期望从收据自身取：同时锁「恰一份」「无多余文件」「文件名 ↔ receiptId 契约一致」。
+  assert.deepEqual(files, [receipt.receiptId + '.json'],
+    '收据文件集须恰为以该收据 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   assert.equal(receipt.decision.primitive, 'REQUIRE_APPROVAL');
   assert.ok(receipt.ask, 'receipt carries ask meta');
   assert.equal(receipt.ask.channel, 'host-serviceAsk');
@@ -174,7 +177,9 @@ test('S1 REQUIRE_APPROVAL → ask + receipt ask.initiated (channel/initiated/req
   assert.equal(receipt.ask.requestId, 'call-edit', 'requestId = callId (host approval correlation)');
   assert.equal(receipt.ask.outcome, undefined, 'outcome not yet patched at pre');
   assert.equal(receipt.ts, receipt.ask.initiated, 'initiated === receipt.ts (同一时刻)');
-  assert.equal(hook.refusals.count(), 1);
+  // 数量 → 身份集合（G1，外部锚 callId='call-edit' 已由上面 requestId 断言证实）
+  assert.deepEqual(readRefusals(root, 'sess-wire').map((r) => r.callId), ['call-edit'],
+    '收据集须恰为该次 ask 调用（实际: [' + readRefusals(root, 'sess-wire').map((r) => r.callId).join(', ') + ']）');
   hook.dispose();
 });
 
@@ -203,13 +208,17 @@ test('S2 no approval service → host degrade deny reproduced + post patches ask
   assert.equal(nextCalled, 1);
   // outcome 尽力补记：默认（无审批服务，宿主保留 ask.reason 无特征文本）→ denied-no-approval
   const files = listReceiptFiles(root, 'sess-wire');
-  assert.equal(files.length, 1);
   const receipt = readReceipt(root, 'sess-wire', files[0].replace('.json', ''));
+  // 数量 → 集合相等且仅该 id（同上形态：文件名 ↔ receiptId 契约）
+  assert.deepEqual(files, [receipt.receiptId + '.json'],
+    '收据文件集须恰为以该收据 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   assert.equal(receipt.ask.channel, 'host-serviceAsk');
   assert.equal(receipt.ask.outcome, 'denied-no-approval', 'degrade patched outcome');
   // readRefusals 读回一致（收据读回契约）
   const back = readRefusals(root, 'sess-wire');
-  assert.equal(back.length, 1);
+  // 数量 → 身份集合（G1，外部锚 callId）
+  assert.deepEqual(back.map((r) => r.callId), ['call-edit'],
+    '读回收据集须恰为该次 ask 调用（实际: [' + back.map((r) => r.callId).join(', ') + ']）');
   assert.equal(back[0].ask.outcome, 'denied-no-approval');
   hook.dispose();
 });
@@ -254,8 +263,10 @@ test('S4 DEFER: trigger writes state+deferMeta; in-window retry denied with retr
   const st = JSON.parse(fs.readFileSync(statePath(root, 'sess-wire'), 'utf8'));
   assert.equal(st.status, 'deferred');
   let files = listReceiptFiles(root, 'sess-wire');
-  assert.equal(files.length, 1);
   const r1 = readReceipt(root, 'sess-wire', files[0].replace('.json', ''));
+  // 数量 → 集合相等且仅该 id（文件名 ↔ receiptId 契约）
+  assert.deepEqual(files, [r1.receiptId + '.json'],
+    'DEFER 触发收据文件集须恰为其唯一文件（实际: [' + files.join(', ') + ']）');
   assert.equal(r1.decision.primitive, 'DEFER');
   assert.deepEqual(r1.ruleRefs, ['RD01'], 'trigger receipt has ruleRefs');
   assert.ok(r1.deferMeta, 'trigger receipt carries deferMeta');
@@ -269,9 +280,11 @@ test('S4 DEFER: trigger writes state+deferMeta; in-window retry denied with retr
   assert.match(d2.reason, /retry-after/);
   assert.match(d2.reason, new RegExp(st.deferId), 'gate deny 携带原 deferId');
   files = listReceiptFiles(root, 'sess-wire');
-  assert.equal(files.length, 2);
   const r2 = readReceipt(root, 'sess-wire', files[0].replace('.json', ''));
   const r2b = readReceipt(root, 'sess-wire', files[1].replace('.json', ''));
+  // 数量 → 集合相等且仅该 id：两次落盘 ⇒ 文件集须恰为两份收据的 id（多的/少的都红）
+  assert.deepEqual(files.map((f) => f.replace('.json', '')).sort(), [r2.receiptId, r2b.receiptId].sort(),
+    '收据文件集须恰为两份收据（实际: [' + files.join(', ') + ']）');
   const gateReceipt = [r2, r2b].find((x) => x.ruleRefs.length === 0);
   assert.ok(gateReceipt, 'gate receipt present');
   assert.equal(gateReceipt.decision.primitive, 'DEFER');
@@ -318,7 +331,10 @@ test('S5 PAUSE: trigger pauses session; any same-session call denied; expiry aut
   assert.match(d2.reason, new RegExp(st.pauseToken));
   assert.match(d2.reason, /until=/);
   files = listReceiptFiles(root, 'sess-wire');
-  assert.equal(files.length, 2, 'gate 亦落收据');
+  // 数量 → G4 自比连通性：落盘文件数须与 readRefusals 读回条数一致（两条独立路径）。
+  // partial-discrimination：两侧若同步错仍绿；本处无外部锚（callId 未在用例内固定）⇒ 按 Lead 规则 A 标弱形态。
+  assert.equal(files.length, readRefusals(root, 'sess-wire').length,
+    'gate 亦落收据：文件数须与读回条数一致（G4 · partial-discrimination）');
   // 3) 跨 session 隔离：其他会话不受本会话 paused 影响
   const dOther = await pre(execOf('bash', { cmd: 'ls' }, { agent: { session: { id: 'sess-other' } } }), async () => ({ kind: 'allow' }));
   assert.equal(dOther.kind, 'allow', 'per-session 状态，其他会话不 gate');
@@ -379,8 +395,9 @@ test('S8 dual-version ask contract: both host versions get ask.initiated receipt
     const gate = await pre(exec, async () => ({ kind: 'allow' }));
     assert.equal(gate.kind, 'ask', ver);
     const files = listReceiptFiles(root, 'sess-wire');
-    assert.equal(files.length, 1, ver);
     const r = readReceipt(root, 'sess-wire', files[0].replace('.json', ''));
+    // 数量 → 集合相等且仅该 id（文件名 ↔ receiptId 契约）
+    assert.deepEqual(files, [r.receiptId + '.json'], ver + '：收据文件集须恰为其唯一文件（实际: [' + files.join(', ') + ']）');
     assert.equal(r.ask.channel, 'host-serviceAsk', ver);
     assert.ok(r.ask.initiated, ver);
     assert.equal(r.ask.outcome, undefined, ver + ' pre 阶段未补记');

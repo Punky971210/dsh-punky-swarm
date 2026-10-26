@@ -34,7 +34,8 @@ test('U1-1 GOVERNANCE_PRIMITIVES enumerates exactly the six primitives', () => {
     [...set].sort(),
     ['ALLOW', 'DEFER', 'DENY', 'NARROW', 'PAUSE', 'REQUIRE_APPROVAL'].sort(),
   );
-  assert.equal(set.size, 6, 'no duplicates');
+  // 数量 → G4 自比连通性（去重后大小须与枚举声明数一致）
+  assert.equal(set.size, GOVERNANCE_PRIMITIVES.length, 'no duplicates（去重后须与枚举声明数一致）');
 });
 
 // U1-2 isGovernancePrimitive 边界：大小写敏感；非法/undefined → false

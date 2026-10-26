@@ -713,9 +713,9 @@
       "todos": 0
     },
     "test/governance-bridge.test.js": {
-      "asserts": 23,
+      "asserts": 22,
       "blankLines": 12,
-      "lines": 153,
+      "lines": 158,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -731,7 +731,7 @@
     "test/governance-config.test.js": {
       "asserts": 16,
       "blankLines": 12,
-      "lines": 89,
+      "lines": 91,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -739,7 +739,7 @@
     "test/governance-decisions.test.js": {
       "asserts": 17,
       "blankLines": 10,
-      "lines": 83,
+      "lines": 84,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -747,7 +747,7 @@
     "test/governance-denial-visibility.test.js": {
       "asserts": 44,
       "blankLines": 17,
-      "lines": 255,
+      "lines": 263,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -763,7 +763,7 @@
     "test/governance-harden-proto.test.js": {
       "asserts": 91,
       "blankLines": 40,
-      "lines": 421,
+      "lines": 447,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -771,7 +771,7 @@
     "test/governance-hotconfig.test.js": {
       "asserts": 58,
       "blankLines": 23,
-      "lines": 267,
+      "lines": 269,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -795,7 +795,7 @@
     "test/governance-preset-config.test.js": {
       "asserts": 36,
       "blankLines": 19,
-      "lines": 266,
+      "lines": 270,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -811,7 +811,7 @@
     "test/governance-proto.test.js": {
       "asserts": 43,
       "blankLines": 16,
-      "lines": 207,
+      "lines": 221,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -819,7 +819,7 @@
     "test/governance-receipt-anchor.test.js": {
       "asserts": 49,
       "blankLines": 14,
-      "lines": 203,
+      "lines": 209,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -827,7 +827,7 @@
     "test/governance-state.test.js": {
       "asserts": 84,
       "blankLines": 27,
-      "lines": 396,
+      "lines": 413,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -835,7 +835,7 @@
     "test/governance-toolban.test.js": {
       "asserts": 114,
       "blankLines": 49,
-      "lines": 528,
+      "lines": 546,
       "tautologies": 0,
       "tests": 25,
       "todos": 0
@@ -843,7 +843,7 @@
     "test/governance-wiring.test.js": {
       "asserts": 77,
       "blankLines": 22,
-      "lines": 373,
+      "lines": 375,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -851,7 +851,7 @@
     "test/governance.test.js": {
       "asserts": 246,
       "blankLines": 54,
-      "lines": 797,
+      "lines": 800,
       "tautologies": 0,
       "tests": 33,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-25T19:12:20Z",
+  "generatedAt": "2026-10-26T08:11:24Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B-1 修复：artifact-types:88 整表冻结改为存在式冻结（锁内容不锁规模）",
+  "reason": "试点治理域 61 条数量断言→身份集合升格(punky-quantity-pilot-20261027)；显式接受 asserts −1：governance-bridge:78 把 length===1 与 id 相等两条合并为一条更强的集合相等（等强，净 −1）",
   "schema": 1,
   "totals": {
-    "asserts": 10838,
+    "asserts": 10837,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61126,
+    "lines": 61234,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

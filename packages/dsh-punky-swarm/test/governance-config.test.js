@@ -56,7 +56,9 @@ test('I2-2 部分覆盖保留默认：传 {rules:[...]} → enabled 仍 true、f
   assert.equal(c.enabled, true);
   assert.deepEqual(c.flags, { pause: false, narrow: false, defer: false });
   assert.equal(c.defaults.deny, 'DENY');
-  assert.equal(c.rules.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 用例内传入的规则 id 'R1'）
+  assert.deepEqual(c.rules.map((r) => r.id), ['R1'],
+    'inline rules 须逐条装出且 id 可核（实际: [' + c.rules.map((r) => r.id).join(', ') + ']）');
 });
 
 test('I2-3 显式关闭：传 {enabled:false} → enabled===false（rules 空表时 decide 恒 ALLOW 行为不变）', () => {

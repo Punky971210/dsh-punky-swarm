@@ -131,7 +131,11 @@ test('A NARROW 实际钳制：narrowable+flag.narrow → pre deny + 收据 narro
 
   // 收据 narrowedParams 真实落盘（含钳制明细）
   const back1 = readRefusals(root, 'sess-harden');
-  assert.equal(back1.length, 1, '恰 1 份收据');
+  // 数量 → 身份集合（G1，外部锚 callId）：收据集须恰为该次调用的一份。
+  // 为什么不再锚数量：`length===1` 只证「没多」，证不出「是哪一次调用的收据」；换成 callId 集相等后，
+  // 少写 / 多写 / 写错调用都会红，且失败时点名 callId。
+  assert.deepEqual(back1.map((r) => r.callId), [exec1.callId],
+    '收据集须恰为该次调用的一份（实际: [' + back1.map((r) => r.callId).join(', ') + ']）');
   assert.equal(back1[0].decision.primitive, 'NARROW');
   assert.deepEqual(back1[0].ruleRefs, ['example-timeout-narrow']);
   assert.ok(back1[0].narrowedParams, '收据含 narrowedParams（P0 接线落盘）');
@@ -140,7 +144,9 @@ test('A NARROW 实际钳制：narrowable+flag.narrow → pre deny + 收据 narro
   assert.ok(clamped && clamped.from === 7200 && clamped.to === 3600, 'clamped 明细 7200 → 3600（审计）');
   assert.equal(back1[0].narrowedParams.changed, true, 'changed=true（实际发生钳制）');
   assert.ok(back1[0].anchor && /^[0-9a-f]{64}$/.test(back1[0].anchor.hash), '收据已锚定（sha256）');
-  assert.equal(hook.refusals.count(), 1);
+  // 数量 → G4 自比连通性：count() 与 readRefusals 读回条数须一致（两条独立代码路径）。
+  // 为什么不再锚数量：写死 1 会在「合法多写一份收据」时假红，也会在 count() 与落盘脱节时假绿；自比能抓脱节。
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-harden').length, 'count() 须与落盘读回条数一致（G4）');
 
   // 调用 2：模型按指引修正重发合规参数（timeout 600 ≤ 3600）→ ALLOW 透传（钳制指引可落地）
   const exec2 = execOf('bash', { cmd: 'sleep', timeout: 600 });
@@ -148,7 +154,9 @@ test('A NARROW 实际钳制：narrowable+flag.narrow → pre deny + 收据 narro
   const d2 = await pre(exec2, async () => { next2++; }); // next 只计数不返回值（wiring ALLOW 时 return next()）
   assert.equal(d2, undefined, '合规调用走 next() 透传（ALLOW）');
   assert.equal(next2, 1, 'next 被调用（放行）');
-  assert.equal(hook.refusals.count(), 1, '合规调用不产生新收据（count 仍 1）——双调用对比：越界拒 + 修正放行');
+  // 数量 → 身份集合（G1）：放行后收据集**仍是**该次越界调用的一份 ⇒ 既证「不产生新收据」，也点名是哪一份。
+  assert.deepEqual(readRefusals(root, 'sess-harden').map((r) => r.callId), [exec1.callId],
+    '合规调用不得产生新收据：收据集须仍恰为越界那次（实际: [' + readRefusals(root, 'sess-harden').map((r) => r.callId).join(', ') + ']）');
 
   // 证据输出（演示记录）：decision reason 全文 + 收据钳制明细
   console.log('[proto-A] deny reason: ' + d1.reason);
@@ -184,7 +192,9 @@ test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；�
   assert.equal(a1.dispatched, true, 'allowed-once → 宿主放行 dispatch（工具体执行）');
   await post(execA, a1.finalResult, async () => ({})); // post 尽力补记（pass-through）
   const backA = readRefusals(root, 'sess-harden');
-  assert.equal(backA.length, 1, 'ask 收据 pre 已落盘（initiated）');
+  // 数量 → 身份集合（G1，外部锚 callId playback）
+  assert.deepEqual(backA.map((r) => r.callId), [execA.callId],
+    '路径① 收据集须恰为该次 ask 调用的一份（实际: [' + backA.map((r) => r.callId).join(', ') + ']）');
   assert.equal(backA[0].ask.channel, 'host-serviceAsk', 'ask.channel=host-serviceAsk');
   assert.equal(backA[0].ask.requestId, execA.callId, 'ask.requestId=callId（宿主审批关联）');
   assert.equal(backA[0].ask.outcome, 'allowed-once', '路径① post 补记 outcome=allowed-once');
@@ -197,7 +207,9 @@ test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；�
   assert.equal(b2.dispatched, false, '无审批服务 → 宿主降级 deny，不 dispatch（HOST:3305-3311）');
   await post(execB, b2.finalResult, async () => ({})); // 降级 Error result → infer denied-no-approval
   const backB = readRefusals(root, 'sess-harden');
-  assert.equal(backB.length, 2, '两份收据（每路径 1 份）');
+  // 数量 → 身份集合（G1）：两路径各 1 份 ⇒ callId 集须恰为两条调用（外部锚，两条 callId 均在用例内已知）
+  assert.deepEqual(backB.map((r) => r.callId).sort(), [execA.callId, execB.callId].sort(),
+    '收据集须恰为两条路径各一份（实际: [' + backB.map((r) => r.callId).join(', ') + ']）');
   const rB = backB.find((r) => r.callId === execB.callId);
   assert.ok(rB, '路径②收据存在');
   assert.equal(rB.ask.outcome, 'denied-no-approval', '路径② post 补记 outcome=denied-no-approval（无审批服务降级）');
@@ -209,7 +221,8 @@ test('B ask 双路径：REQUIRE_APPROVAL → pre ask + 收据 ask.initiated；�
   // verifyRefusals 仍 ok（post 补记走级联重锚，链不破——p2 移交① 处置验证）
   const v = verifyRefusals(root, 'sess-harden');
   assert.equal(v.ok, true, '级联重锚后链完整（patchRefusalAsk × anchor 交互处置）');
-  assert.equal(v.count, 2);
+  // 数量 → G4 自比连通性：count 须等于 receipts 中 anchored 条目数（两字段各自计算，脱节即红）
+  assert.equal(v.count, v.receipts.filter((x) => x.anchored).length, 'count 须与 anchored 明细条数一致（G4）');
 
   // 证据输出：两路径收据 ask 字段
   console.log('[proto-B] 路径① allowed-once 收据 ask: ' + JSON.stringify(rA.ask));
@@ -241,7 +254,10 @@ test('C 签名篡改检测：写 3 份锚定收据 verify ok；篡改中链 1 �
   // ① 未篡改 → verify ok（链完整，3/3 锚定）
   const v0 = verifyRefusals(root, sessionId);
   assert.equal(v0.ok, true, '未篡改链完整');
-  assert.equal(v0.count, 3, '3 份收据参与链校验');
+  // 数量 → 身份集合（G1，外部锚 receiptId：三份手写收据 id 在用例内已知）：
+  // 既证「全部 3 份参与链校验」，也点名参与的是哪三份；漏一份/多一份都会红。
+  assert.deepEqual(v0.receipts.filter((x) => x.anchored).map((x) => x.receiptId).sort(), ['C-r1', 'C-r2', 'C-r3'].sort(),
+    '参与链校验的锚定收据集须恰为 C-r1/C-r2/C-r3（实际: [' + v0.receipts.filter((x) => x.anchored).map((x) => x.receiptId).join(', ') + ']）');
 
   // ② 篡改中链收据（C-r2）attemptedParams 尾字符 +1（'rm -rf /data/2' → 'rm -rf /data/2X'，1 字节）→ verify 失败
   const dir = refusalDirOf(root, sessionId);
@@ -325,7 +341,9 @@ test('D 热更新实测：runtime.json 写 governance.hook.enabled=false → pre
     assert.match(out1.reason, /^\[governance:DENY\]/);
     assert.equal(next1, 0);
     let r1 = readRefusals(root, 'cli');
-    assert.equal(r1.length, 1);
+    // 数量 → 身份集合（G1，外部锚 callId 'D-1' 已在 :352 固定）
+    assert.deepEqual(r1.map((r) => r.callId), ['D-1'],
+      '热更后收据集须恰为那次 DENY 调用（实际: [' + r1.map((r) => r.callId).join(', ') + ']）');
     assert.deepEqual(r1[0].ruleRefs, ['example-forbid-force-delete']);
 
     // ③ 规则再热更（示例 2 超时收窄 + flags.narrow=true）→ 即时生效（NARROW 收据钳制）
@@ -339,7 +357,9 @@ test('D 热更新实测：runtime.json 写 governance.hook.enabled=false → pre
     assert.match(out2.reason, /钳制明细：\/timeout: 7200 → 3600/, '钳制明细热更后即时生效');
     assert.equal(next2, 0);
     r1 = readRefusals(root, 'cli');
-    assert.equal(r1.length, 2, '两次拦截共 2 份收据');
+    // 数量 → 身份集合（G1）：两次拦截 ⇒ callId 集须恰为 D-1/D-2（外部锚，两个 callId 均在用例内已知）
+    assert.deepEqual(r1.map((r) => r.callId).sort(), ['D-1', 'D-2'].sort(),
+      '两次拦截的收据集须恰为 D-1/D-2（实际: [' + r1.map((r) => r.callId).join(', ') + ']）');
     const rNarrow = r1.find((r) => r.decision.primitive === 'NARROW');
     assert.ok(rNarrow && rNarrow.narrowedParams.narrowed.timeout === 3600, 'NARROW 收据钳制落盘（热更链路完整：重挂 → kernel 新 cfg → wiring → receipt）');
     // 桥接事件流随动（重挂后 refusalEventBridge 重新注入）：与收据一致（2 行）
@@ -396,10 +416,13 @@ test('E 回归：原 P1 六步原型链保持绿（挂载/拦截/裁决/收据�
 
   // E4 收据落盘 + 读回——P1-4/P1-5 快照
   const back = readRefusals(root, 'sess-harden');
-  assert.equal(back.length, 1, 'E4 收据落盘 1 份');
+  // 数量 → 身份集合（G1，外部锚 callId）
+  assert.deepEqual(back.map((r) => r.callId), [exec1.callId],
+    'E4 收据集须恰为该次 DENY 调用（实际: [' + back.map((r) => r.callId).join(', ') + ']）');
   assert.equal(back[0].decision.primitive, 'DENY');
   assert.ok(back[0].anchor, '收据锚定（P2 扩展兼容）');
-  assert.equal(hook.refusals.count(), 1, 'E5 count()=1');
+  // 数量 → G4 自比连通性（count() 与落盘读回条数，两条独立路径）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-harden').length, 'E5 count() 须与落盘读回条数一致（G4）');
 
   // E6 ask 降级（REQUIRE_APPROVAL → pre ask → 无审批 → 降级 deny）——P1-6 快照
   //   注意：hostChain 内部已调一次 pre（gate）；此处不重复直调 pre，避免重复落收据（同一 callId 一次调用）
@@ -408,9 +431,12 @@ test('E 回归：原 P1 六步原型链保持绿（挂载/拦截/裁决/收据�
   assert.equal(hostOut.decision.kind, 'ask', 'E6 pre 层 ask');
   assert.equal(hostOut.dispatched, false, 'E6 无审批服务 → 降级 deny');
   await post(exec2, hostOut.finalResult, async () => ({}));
-  assert.equal(hook.refusals.count(), 2, 'E6 收据 count=2（deny 1 + ask 1）');
+  // 数量 → G4 自比连通性：两通道（deny + ask）落盘后，count() 须与读回条数一致
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-harden').length, 'E6 count() 须与落盘读回条数一致（G4）');
   const latest = readRefusals(root, 'sess-harden', { limit: 1 });
-  assert.equal(latest.length, 1, 'limit=1 最近一条');
+  // 数量 → 身份集合（G1，外部锚 callId）：limit=1 取到的必须是**最近那次**调用（exec2），而非任意一条
+  assert.deepEqual(latest.map((r) => r.callId), [exec2.callId],
+    'limit=1 须取到最近一次调用（实际: [' + latest.map((r) => r.callId).join(', ') + ']）');
   assert.equal(latest[0].decision.primitive, 'REQUIRE_APPROVAL');
   assert.equal(latest[0].ask.outcome, 'denied-no-approval', '降级补记 outcome（S2 同款语义）');
 

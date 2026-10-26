@@ -67,7 +67,9 @@ test('装配-1 preset 键生效：apply 静态 preset:l1-sensitive → pre 命�
     assert.equal(out.kind, 'deny');
     assert.match(out.reason, /^\[governance:DENY\]/);
     const receipts = readRefusals(root, 'cli');
-    assert.equal(receipts.length, 1, '收据落盘');
+    // 数量 → 身份集合（G1，外部锚 = preset 规则 id L1-D09）
+    assert.deepEqual(receipts.map((r) => r.ruleRefs.join(',')), ['L1-D09'],
+      '收据落盘：集须恰为 L1-D09 那条（实际: [' + receipts.map((r) => r.ruleRefs.join(',')).join(' | ') + ']）');
     assert.deepEqual(receipts[0].ruleRefs, ['L1-D09'], 'ruleRefs 溯源到 preset 规则 id');
     // 干净参数 → ALLOW 透传（preset 规则按工具/内容精确命中）
     let next = 0;
@@ -227,7 +229,9 @@ test('C3-1 escalation 开启：preset 规则命中 DENY（L1-D01）3 次达阈�
     const esc = b.events.filter((e) => e.type === EVT_BATCH_GOVERNANCE_ESCALATE);
     assert.equal(esc.length, 1, 'batch.governance-escalate 恰 1 条');
     assert.deepEqual({ count: esc[0].count, lane: esc[0].lane }, { count: 3, lane: 'l1' });
-    assert.deepEqual(esc[0].receiptIds.length, 3, '摘要含 3 收据');
+    // 数量 → G4 自比连通性：升级摘要 receiptIds 数须与事件流 refusal 数一致（两条独立来源）
+    assert.equal(esc[0].receiptIds.length, b.events.filter((e) => e.type === EVT_GOVERNANCE_REFUSAL).length,
+      '摘要收据数须与 refusal 事件数一致（G4）');
     assert.equal(b.events.filter((e) => e.type === EVT_GOVERNANCE_REFUSAL).length, 3, 'refusal 记录 3 条');
     const paused = b.events.filter((e) => e.type === EVT_BATCH_PHASE && e.to === 'paused');
     assert.equal(paused.length, 1);

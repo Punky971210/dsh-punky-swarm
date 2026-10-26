@@ -141,7 +141,8 @@ test('I1-3 DENY 短路：返回 {kind:deny, reason 含 [governance:DENY] 前缀 
   // DENY 短路径 reason 携带命中规则引用（前缀断言不破、规则 id 可见）
   assert.match(decision.reason, /规则引用：R001/, 'DENY reason 含命中规则引用（规则 id 可见，用户/Agent 可审阅）');
   assert.equal(nextCalled, 0);
-  assert.equal(hook.refusals.count(), 1);
+  // 数量 → G4 自比连通性（partial-discrimination：两侧同步错仍绿）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-wire').length, 'count() 须与读回条数一致（G4）');
   hook.dispose();
 });
 
@@ -155,7 +156,8 @@ test('I1-4 REQUIRE_APPROVAL → ask：返回 {kind:ask, reason（前缀 + 命中
   assert.match(decision.reason, /^\[governance:REQUIRE_APPROVAL\] /);
   // ask 侧：ask.reason 亦携带命中规则引用（审批 UI reason / 无审批服务降级文本可见）
   assert.match(decision.reason, /规则引用：R002/, 'ask reason 含命中规则引用（规则 id 可见）');
-  assert.equal(hook.refusals.count(), 1);
+  // 数量 → G4 自比连通性（partial-discrimination）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-wire').length, 'count() 须与读回条数一致（G4）');
   hook.dispose();
 });
 

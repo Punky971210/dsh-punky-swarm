@@ -133,8 +133,11 @@ test('P1-4 收据落盘：<root>/governance/refusals/<sessionId>/<receiptId>.jso
   const dir = refusalDirOf(root, 'sess-proto');
   assert.equal(fs.existsSync(dir), true, '收据目录存在');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-  assert.equal(files.length, 1, '恰 1 份收据');
   const receipt = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+  // 数量 → 集合相等且仅该 id：文件名 = `<receiptId>.json`（引擎产出，不可硬编码）⇒ 期望从收据自身取；
+  // 同时锁「恰一份」「无多余文件」「文件名 ↔ receiptId 契约一致」。
+  assert.deepEqual(files, [receipt.receiptId + '.json'],
+    '收据文件集须恰为以该收据 receiptId 命名的唯一文件（实际: [' + files.join(', ') + ']）');
   // 锚定：writeRefusal 锚定 → 9 键（8 基础 + anchor）；anchor 字段断言（sha256 链首 prevHash=null）
   const keys = Object.keys(receipt).sort();
   assert.deepEqual(keys, ['anchor', 'attemptedParams', 'callId', 'decision', 'receiptId', 'ruleRefs', 'sessionId', 'tool', 'ts']);
@@ -163,10 +166,14 @@ test('P1-5 读回验证：readRefusals(root, sessionId, {limit}) 读回与落盘
   const hook = installGovernanceHook(ctx, { store: null, root, config: PROTO_CFG });
   const pre = ctx.listeners.get('tools/pre-execute');
   await pre(execOf('bash', { cmd: 'rm -rf /' }), async () => ({ kind: 'allow' }));
-  assert.equal(hook.refusals.count(), 1, 'count()=1');
+  // 数量 → G4 自比连通性（count() 与 readRefusals 条数，两条独立路径）。
+  // partial-discrimination：两侧同步出错仍绿；本处由紧随的 cmd 身份集合兜住「是哪一条」。
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-proto').length, 'count() 须与读回条数一致（G4）');
   // 读回（无 limit → 全部）
   const back = readRefusals(root, 'sess-proto');
-  assert.equal(back.length, 1);
+  // 数量 → 身份集合（G1，外部锚 = 用例内调用参数）
+  assert.deepEqual(back.map((r) => r.attemptedParams.cmd), ['rm -rf /'],
+    '读回收据集须恰为该次调用（cmd 落盘可核）（实际: [' + back.map((r) => r.attemptedParams.cmd).join(' | ') + ']）');
   // 与落盘文件逐字段一致
   const dir = refusalDirOf(root, 'sess-proto');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
@@ -176,9 +183,13 @@ test('P1-5 读回验证：readRefusals(root, sessionId, {limit}) 读回与落盘
   assert.deepEqual(back[0].attemptedParams, { cmd: 'rm -rf /' });
   // limit 语义：写 2 份 → limit=1 返回最近 1 条
   await pre(execOf('bash', { cmd: 'rm -rf /tmp/x' }), async () => ({ kind: 'allow' }));
-  assert.equal(hook.refusals.count(), 2);
+  // 数量 → 身份集合（G1，外部锚 = 两次调用的 cmd）
+  assert.deepEqual(readRefusals(root, 'sess-proto').map((r) => r.attemptedParams.cmd).sort(), ['rm -rf /', 'rm -rf /tmp/x'].sort(),
+    '两次调用的收据集须恰为两条 cmd（实际: [' + readRefusals(root, 'sess-proto').map((r) => r.attemptedParams.cmd).join(' | ') + ']）');
   const latest = readRefusals(root, 'sess-proto', { limit: 1 });
-  assert.equal(latest.length, 1);
+  // 数量 → 身份集合（G1）：limit=1 取到的必须是最近那次（cmd 为第二次调用）
+  assert.deepEqual(latest.map((r) => r.attemptedParams.cmd), ['rm -rf /tmp/x'],
+    'limit=1 须取到最近一次调用（实际: [' + latest.map((r) => r.attemptedParams.cmd).join(' | ') + ']）');
   assert.notEqual(latest[0].receiptId, onDisk.receiptId, 'limit=1 返回最近一条（第二次写，id 与首条不同）');
   assert.deepEqual(latest[0].attemptedParams, { cmd: 'rm -rf /tmp/x' }, '最近一条为第二次调用');
   hook.dispose();
@@ -198,9 +209,12 @@ test('P1-6 ask 降级：REQUIRE_APPROVAL 规则 → pre 返回 {kind:ask} → �
   assert.equal(out.dispatched, false, '无审批服务 → 降级拒绝，不 dispatch');
   assert.match(out.reason, /^\[governance:REQUIRE_APPROVAL\] /, '降级拒绝保留原 reason');
   // 收据照常落盘（ask 决策同样留痕，count=1——同一调用仅触发一次 pre，此处演示独立调用）
-  assert.equal(hook.refusals.count(), 2, '两次 ask 调用各落 1 份收据');
+  // 数量 → G4 自比连通性（partial-discrimination：两侧同步错仍绿；紧随的 primitive 身份集合兜住「是哪两条」）
+  assert.equal(hook.refusals.count(), readRefusals(root, 'sess-proto').length, 'count() 须与读回条数一致（G4）');
   const back = readRefusals(root, 'sess-proto');
-  assert.equal(back.length, 2);
+  // 数量 → 身份集合（G1，外部锚 = 裁决原语 REQUIRE_APPROVAL）
+  assert.deepEqual(back.map((r) => r.decision.primitive), ['REQUIRE_APPROVAL', 'REQUIRE_APPROVAL'],
+    '两份 ask 收据须 primitive 均为 REQUIRE_APPROVAL（实际: [' + back.map((r) => r.decision.primitive).join(', ') + ']）');
   assert.ok(back.every((r) => r.decision.primitive === 'REQUIRE_APPROVAL'), '收据 primitive=REQUIRE_APPROVAL');
   hook.dispose();
 });
