@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 142,
-      "blankLines": 115,
-      "lines": 1376,
+      "asserts": 148,
+      "blankLines": 122,
+      "lines": 1437,
       "tautologies": 0,
-      "tests": 16,
+      "tests": 17,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T16:09:57Z",
+  "generatedAt": "2026-10-26T16:29:52Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "D11 生产链 red 可达性用例（面根换位 + 生产真实 isoFiles + 六断言 + K-3 反向对照 + 三重不碰真实面证明）",
+  "reason": "PR-1 补修：faceRel 自防御（has(rel)||has(toPosix(rel))）+ 三通道分流（扁平键 miss→unresolved / 候选枚举 miss→unmatched）+ toPosix 合并为模块级单点 + D12",
   "schema": 1,
   "totals": {
-    "asserts": 10949,
-    "blankLines": 5785,
+    "asserts": 10955,
+    "blankLines": 5792,
     "files": 208,
-    "lines": 62302,
+    "lines": 62363,
     "tautologies": 0,
-    "tests": 2215,
+    "tests": 2216,
     "todos": 4
   }
 }

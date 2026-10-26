@@ -264,6 +264,10 @@ export function g2NoiseMode(env = process.env) {
 
 const sameFace = (x, y) => !!x && !!y && x.exists === y.exists && x.count === y.count && x.sumBytes === y.sumBytes && x.digest === y.digest;
 
+/** 路径键归一化**单点**：Windows 的 path.sep 是反斜杠，而面相对键统一用 posix（`/`）。
+ *  历史教训：曾在两处各写一份同体函数（`toPosixRel` / `toPosix`），每次遇到漏点就地补一个 ⇒ 本轮收为单点。 */
+const toPosix = (p) => String(p).split(path.sep).join('/');
+
 /** 路径级 diff（added / removed / changed），供证据结构与归因使用。 */
 export function faceDiff(before, after) {
   const b = new Map((before?.files ?? []).map((f) => [f.rel, f]));
@@ -286,10 +290,10 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
   const delta = faceDiff(before, after);
   // 键空间统一 posix：walkFiles 的 rel 在 Windows 下是反斜杠，而归因键（A1/A3）统一 posix。
   // 不归一化 ⇒ diffSet.has(rel) 恒假 ⇒ red 又变得不可达（D11 正是抓到这一点）。
-  const toPosixRel = (p) => String(p).split(path.sep).join('/');
-  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed].map(toPosixRel);
+  // 归一化统一走模块级 toPosix（单点；本函数内的 diffPaths 与归因键都经它）
+  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed].map(toPosix);
   if (sameFace(before, after)) {
-    return { face, status: 'green', delta, diffPaths: [], attribution: { hits: [], unresolved: [], bySource: { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 }, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' }, evidence: { before, after, after2: after2 ?? null } };
+    return { face, status: 'green', delta, diffPaths: [], attribution: { hits: [], unresolved: [], unmatched: [], bySource: { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 }, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' }, evidence: { before, after, after2: after2 ?? null } };
   }
   if (after2 && sameFace(before, after2)) {
     return { face, status: 'inconclusive', subclass: 'transient', delta, diffPaths, reason: '差异在 settleMs 内收敛（并发 syncDir 的 rm+cp 中间态）', evidence: { before, after, after2 } };
@@ -301,7 +305,8 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
   //     （键空间不一致不得被静默当成"不归因"，否则 red 恒不可达且无从发现）。
   const diffSet = new Set(diffPaths);
   const hits = [];
-  const unresolved = [];
+  const unresolved = [];      // 键空间**解析不了** / 调用方声明的**期望键**未命中
+  const unmatched = [];       // 候选枚举（对象条目）未命中：允许，但必须可见（不静默）
   const bySource = { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 };
   for (const item of attributed ?? []) {
     const isStr = typeof item === 'string';
@@ -309,7 +314,20 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
     const rel = String(isStr ? item : item.rel);
     if (kind === 'faceRel') {
       bySource.faceRel += 1;
-      if (diffSet.has(rel)) hits.push({ rel, kind, source: item?.source ?? 'faceRel' });
+      // 自防御：扁平 faceRel 可能是 `path.join(...)` 拼出的**反斜杠**键（面相对键本就含子目录，
+      // 这不是假想情形）。命中后统一以**归一化后的 posix 键**入 hits；归一化后仍不命中 ⇒ 显式进 unresolved
+      // （与 isoRel/a2Rel 通道对齐，**不得静默跳过**——faceRel 曾是唯一没有 unresolved 通道的 kind）。
+      const normalized = toPosix(rel);
+      if (diffSet.has(rel) || diffSet.has(normalized)) {
+        hits.push({ rel: normalized, kind, source: item?.source ?? 'faceRel' });
+      } else if (isStr) {
+        // 扁平字符串 = 调用方声明的**期望键** ⇒ 未命中就是问题（键空间/期望写错），进 unresolved
+        unresolved.push({ rel, kind, reason: 'raw-faceRel-unmatched' });
+      } else {
+        // 对象条目 = **候选枚举**（如 A1 把隔离根文件全列出来）⇒ 大多数本就不该命中，
+        // 允许未命中，但记入 unmatched 保持可见（不得静默跳过）。
+        unmatched.push({ rel: normalized, kind, source: item?.source ?? 'faceRel' });
+      }
       continue;
     }
     const mapped = typeof faceMap === 'function' ? faceMap(rel, kind) : null;
@@ -317,7 +335,7 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
     if (!mapped) { unresolved.push({ rel, kind }); continue; }
     if (diffSet.has(mapped)) hits.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind });
   }
-  const attribution = { hits, unresolved, bySource, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' };
+  const attribution = { hits, unresolved, unmatched, bySource, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' };
   if (hits.length > 0) {
     return { face, status: 'red', delta, diffPaths, attributedHits: hits.map((h) => h.rel), attribution, reason: '差异持久且可归因于被测运行（差异项 ∩ 被测产物面 ≠ ∅）', evidence: { before, after, after2: after2 ?? null } };
   }
@@ -414,7 +432,6 @@ export function assetMap() {
   return _assetMap;
 }
 
-const toPosix = (p) => String(p).split(path.sep).join('/');
 /** 隔离根相对 → 面相对（A1/A3 的键空间转换）；映射不到返回 null。 */
 export function isoRelToFace(isoRel) {
   const norm = toPosix(isoRel);
@@ -1372,4 +1389,48 @@ test('D11 生产链 red 可达性：真实产物 isoFiles + 面根换位 ⇒ sta
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D12：扁平 `faceRel` 字符串**含分隔符**时也必须命中（钉住 PR-1：faceRel 是唯一没有
+//      `unresolved` 通道的 kind —— 不命中就静默跳过）
+//
+// 构造纪律：反斜杠一律**不手写字面量**（bash/JS 转义会把 \\b 之类吃掉）。
+//   这里用 `path.join` 拼（Windows 下天然是反斜杠），并断言它真的含分隔符。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('D12 faceRel 自防御：含分隔符的扁平键必须命中，且未命中项要进 unresolved（不静默）', () => {
+  const posixRel = 'punky-preset/agent.cordis.yml';
+  const backslashRel = path.join('punky-preset', 'agent.cordis.yml');   // ← 用 path.join 构造，不手写反斜杠
+  const before = mkFaceOf([]);
+  const after = mkFaceOf([posixRel]);
+
+  // ① 含分隔符的扁平 faceRel（旧行为：恒不命中且**静默**）
+  const v = g2Verdict({ face: 'F', before, after, after2: after, attributed: [backslashRel] });
+  assert.equal(v.status, 'red',
+    'D12-1：含分隔符的 faceRel 必须命中（旧实现下此处恒为 inconclusive 且**无 unresolved 记录**）；实测 '
+    + v.status + ' / hits=' + JSON.stringify(v.attributedHits) + ' / unresolved=' + JSON.stringify(v.attribution.unresolved));
+  assert.equal(v.attributedHits.every((h) => h === posixRel), true,
+    'D12-2：命中项必须是**归一化后的面相对键**；实测 ' + JSON.stringify(v.attributedHits));
+  assert.deepEqual(v.attribution.unresolved, [],
+    'D12-3：已命中条目不得污染 unresolved；实测 ' + JSON.stringify(v.attribution.unresolved));
+
+  // ② 向后兼容：无分隔符的扁平键（D5 用法）必须照旧命中
+  const plain = g2Verdict({ face: 'F', before, after, after2: after, attributed: ['agent.cordis.yml'] });
+  assert.equal(plain.status, 'inconclusive', 'D12-4：不存在的面相对键不得命中（无分隔符语义不变）');
+  const plainHit = g2Verdict({ face: 'F', before, after, after2: after, attributed: ['agent.cordis.yml'] });
+  assert.equal(plainHit.attribution.unresolved.length, 1,
+    'D12-5：**未命中的 faceRel 也必须进 unresolved**（与 isoRel/a2Rel 通道对齐，不得静默跳过）');
+
+  // ③ 真的不存在的带分隔符键：同样要进 unresolved
+  const missing = g2Verdict({ face: 'F', before, after, after2: after, attributed: [path.join('nope', 'x.txt')] });
+  assert.equal(missing.attribution.unresolved.length, 1,
+    'D12-6：不存在的带分隔符 faceRel 必须进 unresolved；实测 ' + JSON.stringify(missing.attribution.unresolved));
+
+  process.stderr.write('[D12] backslashKey=' + JSON.stringify(backslashRel)
+    + ' hasSep=' + (backslashRel.includes(String.fromCharCode(92)) || backslashRel.includes('/'))
+    + ' status=' + v.status
+    + ' hits=' + JSON.stringify(v.attributedHits)
+    + ' unresolvedOnHit=' + JSON.stringify(v.attribution.unresolved)
+    + ' unresolvedOnMiss=' + missing.attribution.unresolved.length + String.fromCharCode(10));
 });
