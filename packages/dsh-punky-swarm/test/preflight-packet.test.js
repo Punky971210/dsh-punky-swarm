@@ -192,8 +192,8 @@ test('AC-P5 `kb` 只 1 个 ⇒ **不阻断建批**、落盘长度 1、渲染含�
   assert.equal(r.batchId, 'pf-kb1', '建批须成功（返回批次 JSON）');
   const b = store.readBatch(SESSION, 'pf-kb1');
   const t = b.wavePlan.flatMap((w) => w.tasks).find((x) => x.id === 'e1');
-  assert.equal(t.preflight.kb.length, 1, '落盘 kb 长度须为 1（未拒绝、未截断）');
-  assert.deepEqual(t.preflight.kb, ['only-one']);
+  // 【删计数】原 `kb.length === 1` 与下一行 `deepEqual(kb, ['only-one'])` 完全冗余（同数组必同长、且逐个值更强）
+  assert.deepEqual(t.preflight.kb, ['only-one'], '落盘 kb 逐值相等（未拒绝、未截断、无多余项）');
   // 渲染含软提示
   const p = composeWorkerPrompt(baseArgs({ preflight: t.preflight }));
   assert.ok(p.includes('（提示：知识库关键词建议 2-3 个，当前仅 1 个）'), '渲染面须给软提示');

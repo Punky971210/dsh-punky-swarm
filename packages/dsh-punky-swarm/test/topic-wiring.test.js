@@ -197,7 +197,8 @@ test('T6 store 集成：onStateChange 接线 publishStateChange → setMember/se
   store.setMember(S, bid, 'x', 'running');
   store.setMember(S, bid, 'x', 'review');
   store.setMember(S, bid, 'x', 'merged');
-  assert.equal(settled.length, 3, '三次迁移发布三次');
+  assert.deepEqual(settled.map((p) => p.to), ['running', 'review', 'merged'],
+    '三次迁移须发布三次且 to 序列逐位相符（既证条数也证每次迁移到哪；实际=' + JSON.stringify(settled.map((p) => p.to)) + '）');
   assert.equal(settled[0].to, 'running');
   assert.equal(settled[2].to, 'merged');
   assert.equal(settled[2].lane, 'x');

@@ -142,7 +142,12 @@ test('T-4/AC-8② 两处 TOCTOU 锤点各恰 1 处，且四要素在场（F2-G10
 test('T-4/AC-8① log-tools 的写面判据恰 2 次（首判 + mkdir 后复判）；旧文案已拔净、单点文案在场', () => {
   const logTools = fs.readFileSync(path.join(LIB_ROOT, 'tools', 'log-tools.js'), 'utf8');
   const callCount = logTools.split('resolveWriteTargetIn(').length - 1;
-  assert.equal(callCount, 2, '写面判据调用点必须恰 2 次（首判 + 复判；import 行不算调用点）');
+  // 位置数组：出现处数 + 位置互异（多一处即红，并列出位置）
+  {
+    const callSites = [...logTools.matchAll(/resolveWriteTargetIn\(/g)].map((m) => m.index);
+    assert.equal(callSites.length, 2, '写面判据调用点必须恰 2 次（首判 + 复判；实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+    assert.equal(new Set(callSites).size, callSites.length, '两处调用位置须互异（同一处被计两次即红）');
+  }
   // 复判必须在 `mkdirSync` 之后（顺序不可调：复判的意义就是看 mkdir 新建的中间段）
   const mkdirAt = logTools.indexOf('fs.mkdirSync(path.dirname(dest)');
   const secondCallAt = logTools.indexOf('resolveWriteTargetIn(', logTools.indexOf('resolveWriteTargetIn(') + 1);

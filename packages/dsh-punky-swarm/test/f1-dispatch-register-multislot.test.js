@@ -134,7 +134,8 @@ test('T-3.2 A1-P1-05 阳性对照：不同 caller（各有 agent 会话）意图
   try {
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-C', lane: 'l1', status: 'running' }, 'mgr-1'), { isError: false, value: {} });
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-D', lane: 'l1', status: 'running' }, 'mgr-2'), { isError: false, value: {} });
-    assert.equal(reg.pendingIntents().length, 2, '两 caller 各一条');
+    assert.deepEqual(reg.pendingIntents().map((p) => p.batchId).sort(), ['b-C', 'b-D'],
+      '两 caller 各一条且批次身份可核（实际=' + JSON.stringify(reg.pendingIntents().map((p) => p.batchId)) + '）');
 
     await postOnce(ctx, execOf('subagent', {}, 'mgr-2'), subagentResult('ws-D'));
     assert.equal(aux.readBatch('sess-q', 'b-D').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'mgr-2 消费自己的 b-D');

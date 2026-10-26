@@ -95,7 +95,8 @@ test('T-3/AC-7 force 档三档必须拿到具体 reason，且三档互不相同�
 
   // 反折叠反证：三档必须互不相同，且都不是通用文案
   const reasons = [rUnparse.reason, rLegacy.reason, rContended.reason];
-  assert.equal(new Set(reasons).size, 3, '三档 reason 互不相同（折叠实现会在此变红）');
+  assert.equal(reasons.length, 3, '三档 reason 条数（实测 ' + JSON.stringify(reasons) + '）');
+  assert.equal(new Set(reasons).size, 3, '三档 reason 互不相同（折叠实现会在此变红；长度+互异两条齐）');
   assert.equal(reasons.includes('lane locked'), false, '具体成因不得被折叠为通用文案 `lane locked`');
 
   // 三档返回都必须在 output.schema 契约内（`reason` 字段本就存在 ⇒ schema 零变更）

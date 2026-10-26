@@ -187,7 +187,7 @@
     "test/audit-blind-review.test.js": {
       "asserts": 55,
       "blankLines": 14,
-      "lines": 159,
+      "lines": 160,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -459,7 +459,7 @@
     "test/f1-dispatch-register-multislot.test.js": {
       "asserts": 47,
       "blankLines": 25,
-      "lines": 251,
+      "lines": 252,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -505,9 +505,9 @@
       "todos": 0
     },
     "test/f3-anchors.test.js": {
-      "asserts": 28,
+      "asserts": 29,
       "blankLines": 21,
-      "lines": 273,
+      "lines": 278,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -521,9 +521,9 @@
       "todos": 0
     },
     "test/f3-lane-claim-reason.test.js": {
-      "asserts": 24,
+      "asserts": 25,
       "blankLines": 17,
-      "lines": 145,
+      "lines": 146,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1225,7 +1225,7 @@
       "todos": 0
     },
     "test/preflight-packet.test.js": {
-      "asserts": 73,
+      "asserts": 72,
       "blankLines": 32,
       "lines": 368,
       "tautologies": 0,
@@ -1403,7 +1403,7 @@
     "test/stream.test.js": {
       "asserts": 71,
       "blankLines": 29,
-      "lines": 371,
+      "lines": 378,
       "tautologies": 0,
       "tests": 18,
       "todos": 0
@@ -1499,7 +1499,7 @@
     "test/topic-wiring.test.js": {
       "asserts": 45,
       "blankLines": 17,
-      "lines": 248,
+      "lines": 249,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T11:41:33Z",
+  "generatedAt": "2026-10-26T12:06:11Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "波2 第四批四域(gate/engine/auto/inject)数量断言→身份集合升格；auto 0 改、engine 2 改，均按分桶守恒判定",
+  "reason": "波2 第五批八域(topic/f1/batch/stream/worker/f3/preflight/audit)数量断言→身份集合升格；stream:100 经 Leader 放行补做单一真源",
   "schema": 1,
   "totals": {
-    "asserts": 10863,
+    "asserts": 10864,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61426,
+    "lines": 61442,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4

@@ -243,7 +243,7 @@ test('E1：abort 有悬挂成员 ⇒ 复用 batch.abort_dangling（事件 + 回�
   const dg = eventsOf(store, 'b-dg', DANGLING_EVT);
   assert.equal(dg.length, 1, '恰一条 batch.abort_dangling（与 batch_phase(aborted) 同一实现）');
   assert.deepEqual(dg[0].danglingLanes, ['e1', 'a1']);
-  assert.equal(dg[0].count, 2);
+  assert.equal(dg[0].count, dg[0].danglingLanes.length, 'count 须等于 danglingLanes 条数（G6 自比，零魔数）');
   const newEvs = store.readBatch(SESS_ID, 'b-dg').events.slice(evLen);
   // 【L9 记忆溯源（批 `punky-spec-adopt-p2-20261013` 的 `e4-l9-memorysrc`）】**必要同步**：
   //   `aborted` 是**终态收口** ⇒ `setPhase` 的终态分支新增落一条 `memory.stale.recommended`

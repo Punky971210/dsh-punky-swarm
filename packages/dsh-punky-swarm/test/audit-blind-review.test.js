@@ -102,7 +102,8 @@ test('A3.3 applyAssemblyExtensions：关 → 原样返回（零变化）；开 �
 test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、critic deps=全部 panelist+aggregate，与 consume 边一致）经 buildWavePlan 通过', () => {
   const deps = ['exec/artifact.md', 'audit/verify-verdict.md'];
   const spec = buildAuditLaneSpec({ panelistCount: 2, deps });
-  assert.equal(spec.tasks.length, 4, 'panelist×2 + aggregate + critic');
+  // 身份数组（期望来自输入侧 panelistCount=2 + aggregate + critic）：重复/缺失/换角色都红
+  assert.deepEqual(spec.tasks.map((t) => t.role).sort(), ['audit-aggregate', 'audit-critic', 'audit-panelist', 'audit-panelist'], 'panelist×2 + aggregate + critic（role 身份数组，实测 ' + JSON.stringify(spec.tasks.map((t) => t.role)) + '）');
   assert.equal(spec.config.panelistCount, 2);
   assert.deepEqual(spec.config.threshold, BLIND_REVIEW_TEMPLATES.config.threshold);
   assert.equal(spec.config.criticRequired, true);
@@ -122,7 +123,7 @@ test('A3.4 buildAuditLaneSpec：DAG 契约（aggregate deps=全部 panelist、cr
     team: 'punky-preset',
     assembly: applyAssemblyExtensions(BASE_ASSEMBLY, { blindReview: { enabled: true } }),
   });
-  assert.equal(plan.wavePlan.length, 3, 'panelists wave1 → aggregate wave2 → critic wave3');
+  assert.deepEqual(plan.wavePlan.map((w) => w.wave), [1, 2, 3], 'panelists wave1 → aggregate wave2 → critic wave3（wave 序号数组，实测 ' + JSON.stringify(plan.wavePlan.map((w) => w.wave)) + '）');
   const wave1 = new Set(plan.wavePlan[0].tasks.map((t) => t.id));
   assert.deepEqual(wave1, new Set(['audit-panelist-1', 'audit-panelist-2']));
   assert.equal(plan.wavePlan[1].tasks[0].id, 'audit-aggregate');
@@ -153,6 +154,6 @@ test('A3.6 默认不启用：base 装配一字不变 + 装配扩展默认关', (
 test('A3.7 buildAuditLaneSpec 参数容错：panelistCount 非法回退默认 2', () => {
   assert.equal(buildAuditLaneSpec({ panelistCount: 0 }).config.panelistCount, 2);
   assert.equal(buildAuditLaneSpec({ panelistCount: 3 }).config.panelistCount, 3);
-  assert.equal(buildAuditLaneSpec({ panelistCount: 3 }).tasks.length, 5);
+  assert.equal(buildAuditLaneSpec({ panelistCount: 3 }).tasks.length, 3 + 2, '任务数 = panelistCount + 2（aggregate + critic）：同源差值，实测 ' + buildAuditLaneSpec({ panelistCount: 3 }).tasks.length + '）');
   assert.equal(buildAuditLaneSpec().config.panelistCount, 2, '缺省参数回退');
 });

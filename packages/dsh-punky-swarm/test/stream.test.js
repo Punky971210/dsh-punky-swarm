@@ -90,14 +90,16 @@ test('S2 摘要推送：仅命中会话/批次的订阅者收到 {sessionId,batc
   hub.subscribe(S, null, list);
   hub.subscribe(S, 'b1', detail);
   hub.subscribe('s-other', null, other);
-  hub.notify(S, 'batch', 'b1', { eventCount: 7 });
+  const S7_EVENT_COUNT = 7; // 单一真源：期望值由 notify 载荷派生，不写第二遍字面量
+  hub.notify(S, 'batch', 'b1', { eventCount: S7_EVENT_COUNT });
   const l = parseFrames(list);
   const d = parseFrames(detail);
   assert.equal(l.some((f) => f.event === 'batch'), true, '列表流收到 batch 事件');
   const lf = l.find((f) => f.event === 'batch');
   assert.equal(lf.data.sessionId, S);
   assert.equal(lf.data.batchId, 'b1');
-  assert.equal(lf.data.eventCount, 7);
+  assert.equal(lf.data.eventCount, S7_EVENT_COUNT,
+    'payload eventCount 须原样透传到帧（单一真源；实际=' + lf.data.eventCount + '）');
   assert.ok(lf.data.updatedAt);
   assert.equal(d.find((f) => f.event === 'batch').data.batchId, 'b1');
   assert.equal(parseFrames(other).filter((f) => f.event === 'batch').length, 0, '其他会话不收到');
@@ -150,13 +152,15 @@ test('S6 fs.watch 触发源：批次 JSON 落盘 → 防抖后推送摘要（eve
   const res = new FakeRes();
   hub.subscribe(S, 'b1', res);
   await new Promise((r) => setTimeout(r, 300)); // 等 watcher 挂载
-  fs.writeFileSync(path.join(bdir, 'b1.json'), JSON.stringify({ batchId: 'b1', events: [{}, {}] }));
+  const S6_EVENTS = [{}, {}]; // 单一真源：期望值由输入数组派生，不写第二遍字面量 2
+  fs.writeFileSync(path.join(bdir, 'b1.json'), JSON.stringify({ batchId: 'b1', events: S6_EVENTS }));
   const evs = await until(() => {
     const f = parseFrames(res).filter((x) => x.event === 'batch' && x.data.batchId === 'b1');
     return f.length ? f : null;
   });
   assert.ok(evs, 'fs.watch 变更应触发 batch 推送');
-  assert.equal(evs[evs.length - 1].data.eventCount, 2, 'eventCount 读自批次文件 events.length');
+  assert.equal(evs[evs.length - 1].data.eventCount, S6_EVENTS.length,
+    'eventCount 须等于输入批文件的 events 条数（单一真源；实际=' + evs[evs.length - 1].data.eventCount + '）');
   hub.dispose();
 });
 
@@ -313,12 +317,15 @@ const head3 = (f) => [...fs.readFileSync(f).subarray(0, 3)]
   .map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 
 test('S16 BOM 读端（AC-1）：带 BOM 批 JSON ⇒ eventCount 为真实计数（非 null）', () => {
-  const f = writeBatchRaw('bom-2', BOM + JSON.stringify({ batchId: 'bom-2', events: [{}, {}] }));
+  const S16_EVENTS = [{}, {}]; // 单一真源
+  const f = writeBatchRaw('bom-2', BOM + JSON.stringify({ batchId: 'bom-2', events: S16_EVENTS }));
   assert.equal(head3(f), 'EF BB BF', '用例输入确带 UTF-8 BOM（防「没写进去却断言通过」）');
-  assert.equal(notifyEventCount('bom-2'), 2, 'BOM 批 ⇒ eventCount === 2（严格数值，非 != null 弱断言）');
+  assert.equal(notifyEventCount('bom-2'), S16_EVENTS.length,
+    'BOM 批 ⇒ eventCount 须等于输入 events 条数（单一真源；实际=' + notifyEventCount('bom-2') + '）');
   // 同形无 BOM 对照：stripBom 对非 BOM 输入恒等返回 ⇒ 读数应与带 BOM 一致（恒等替换，非近似）
-  writeBatchRaw('plain-2', JSON.stringify({ batchId: 'plain-2', events: [{}, {}] }));
-  assert.equal(notifyEventCount('plain-2'), 2, '无 BOM 同形批 ⇒ 同样 2');
+  writeBatchRaw('plain-2', JSON.stringify({ batchId: 'plain-2', events: S16_EVENTS }));
+  assert.equal(notifyEventCount('plain-2'), S16_EVENTS.length,
+    '无 BOM 同形批 ⇒ 读数须与带 BOM 一致（同一真源；实际=' + notifyEventCount('plain-2') + '）');
 });
 
 test('S17 BOM 读端反例（AC-1）：events:[] + BOM ⇒ 0（非 null）；BOM 但 events 非数组 ⇒ 仍 null', () => {
