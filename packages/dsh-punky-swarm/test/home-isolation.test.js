@@ -512,6 +512,69 @@ export function buildAttribution({ isoFiles = [], faceRootRel, faceDelta }) {
   return uniq;
 }
 
+/**
+ * D3 面级 backstop 的三档判定（**纯谓词**）。
+ *
+ * 判定顺序唯一（不许重排）：
+ *   ① `ourRelSet` 不可用 ⇒ `unknown-red`（fail-closed：不得当成"真实面没变化"）
+ *   ② 逐面 `faceDiff` ⇒ changed = added ∪ removed ∪ changed（已 posix，键 = 面根 + '|' + rel）
+ *   ③ 全面无变化 ⇒ `green`（**归属判据仍是必要条件**，由调用方同时核：claimed 零写 + 每条 actual 越界）
+ *   ④ 有变化：hit = changed ∩ ourRelSet
+ *        hit ≠ ∅ ⇒ `leak-red`（我方产物出现在真实面 = 强证据）
+ *        hit = ∅ ⇒ `foreign-red`（变化项全在我方产物之外 = 第三方；消息点名"不可归因于本演示"）
+ *
+ * ⚠ **签名刻意只有 { before, after, ourRelSet }** —— 不含任何时间/重试/阈值参数，
+ *   ⇒ "再取一次就放过""变化幅度小于阈值就容忍"这两类吸收**结构上不可能**实现。
+ *   这是结构性约束，不靠实现者自觉（审计可 grep 签名核验）。
+ */
+export function d3RealFaceVerdict({ before, after, ourRelSet }) {
+  if (!(ourRelSet instanceof Set)) {
+    return { status: 'unknown-red', faces: [], changed: [], hits: [], message: 'ourRelSet 不可用（fail-closed）：不得当成「真实面没变化」' };
+  }
+  const n = Math.max(before?.length ?? 0, after?.length ?? 0);
+  const faces = [];
+  const changed = [];
+  for (let i = 0; i < n; i++) {
+    const root = before?.[i]?.root ?? after?.[i]?.root ?? REAL_FACES[i];
+    const faceRoot = toPosix(path.relative(REAL_HOME, String(root)));
+    const d = faceDiff(before?.[i], after?.[i]);
+    const rels = [...d.added, ...d.removed, ...d.changed].map((r) => toPosix(String(r)));
+    faces.push({ faceRoot, root: String(root), changedCount: rels.length });
+    for (const rel of rels) changed.push({ faceRoot, rel, key: faceRoot + '|' + rel });
+  }
+  if (changed.length === 0) {
+    return { status: 'green', faces, changed: [], hits: [], message: '真实面逐面零变化（面级 backstop 生效；归属判据为必要条件，由调用方同时核）' };
+  }
+  const hits = changed.filter((c) => ourRelSet.has(c.key));
+  if (hits.length > 0) {
+    return {
+      status: 'leak-red', faces, changed, hits,
+      message: '我方产物出现在真实面（强证据，不可放过）：' + hits.map((c) => c.faceRoot + '/' + c.rel).join(', '),
+    };
+  }
+  return {
+    status: 'foreign-red', faces, changed, hits: [],
+    message: 'foreign：真实面变化项**全在我方产物之外**，不可归因于本演示（第三方写）；差异项：'
+      + changed.map((c) => c.faceRoot + '/' + c.rel).join(', '),
+  };
+}
+
+/** 我方产物面相对键集合：`writtenUnderActual` → 隔离根相对 → `isoRelToFace`（manifest 驱动、最长前缀）→ 面相对键。 */
+function d3OurRelSet(report, actualRoot) {
+  try {
+    const keys = new Set();
+    for (const p of report?.writtenUnderActual ?? []) {
+      const isoRel = path.relative(actualRoot, String(p));
+      if (!isoRel || isoRel.startsWith('..')) continue;
+      const m = isoRelToFace(isoRel);
+      if (m && m.rel) keys.add(toPosix(m.faceRootRel) + '|' + toPosix(m.rel));
+    }
+    return keys;
+  } catch {
+    return null;   // 不可用 ⇒ 谓词走 unknown-red（fail-closed）
+  }
+}
+
 /** 汇总行（机器可解析，规格 §方案 二.4）。 */
 export function formatG2Summary(sum) {
   const head = `[G2] faces=${sum.faces} green=${sum.green} red=${sum.red} inconclusive=${sum.inconclusive} transient=${sum.transient} unattributable=${sum.unattributable} unmatched=${sum.unmatched ?? 0} unresolved=${sum.unresolved ?? 0} hits=${sum.hits ?? 0}`;
@@ -820,12 +883,46 @@ test('D3 判别力（写入级）：写错隔离时真实写点不在声明隔�
     // 活宿主面改用确定性归属对照（原先的「真实 <home>/.dsh/logs 不得出现」无判别力：常驻宿主本就写它）
     assert.equal(attributionVerdict([REAL_SINK_PROBE], report.claimedRoot).ok, false,
       '对照组：真实 <home>/.dsh/logs 落点必须被判越界（活宿主面归属判据仍生效）');
+    // ── 静态自检（照 A-6 范式）：① 防渐进削弱、② 防整段删除 —— 各管一种破坏方式 ──
+    //    自我命中防范：搜索串**拼接构造**（字面量不连续）+ 锚点用「行首 + 尾随空格」。
+    {
+      const srcSelf = fs.readFileSync(fileURLToPath(GUARD_URL), 'utf8');
+      const NL = String.fromCharCode(10);
+      const bodyAnchor = NL + "test('D3 ";
+      const at = srcSelf.indexOf(bodyAnchor);
+      assert.notEqual(at, -1, '静态自检：必须能定位 D3 用例体锚点');
+      const next = srcSelf.indexOf(NL + "test('", at + bodyAnchor.length);
+      const d3Body = srcSelf.slice(at + 1, next < 0 ? srcSelf.length : next);
+      const NEEDLE_AV = 'attribution' + 'Verdict(';
+      const NEEDLE_D3 = 'd3RealFace' + 'Verdict(';
+      const avCount = d3Body.split(NEEDLE_AV).length - 1;
+      const d3Count = d3Body.split(NEEDLE_D3).length - 1;
+      // 构成（4 处，逐处可核）：① 对照组 REAL_SINK_PROBE ② 合并判据里的 .every(actual) ③ 逐条 actual 循环 ④ claimed 零写
+      assert.equal(avCount, 4,
+        '静态自检：D3 体须含 4 处归属谓词调用（①对照组 ②合并判据 .every ③逐条 actual 循环 ④claimed 零写）；实测 ' + avCount);
+      assert.equal(d3Count, 1, '静态自检：D3 体须含 1 处面级 backstop 调用（唯一调用点）；实测 ' + d3Count);
+      assert.equal(d3Body.includes('attribution' + 'Verdict([p], report.claimedRoot)'), true,
+        '静态自检：逐条 actual 的归属核对必须在（防渐进削弱）');
+      assert.equal(d3Body.includes('attribution' + 'Verdict(report.writtenUnderClaimed'), true,
+        '静态自检：claimed 零写的归属核对必须在');
+    }
+
     for (const p of report.writtenUnderActual) {
       // 逐条证据：这些**真实文件**若交给 G3 谓词核对归属，必须判越界
       assert.equal(attributionVerdict([p], report.claimedRoot).ok, false, '越界落点必须判红：' + p);
     }
     assert.equal(attributionVerdict(report.writtenUnderClaimed, report.claimedRoot).ok, true, '对照组判绿');
-    assert.deepEqual(snapshotReal().map((x) => x.digest), realBefore.map((x) => x.digest), 'D3 演示不得改变真实面');
+    // ── D3 主判据（**三条件并进同一条 assert**）：面级 backstop + 归属必要条件 ──
+    //    合并理由：让"渐进削弱"（删掉三条件中一条、另两条还在）**必须改这一行**，
+    //    而不能靠删一条相邻断言悄悄减条件 —— 审计据此判 B 的正是这一点。
+    {
+      const actualAllOutside = report.writtenUnderActual.every((p) => attributionVerdict([p], report.claimedRoot).ok === false);
+      const claimedEmpty = report.writtenUnderClaimed.length === 0;
+      const v = d3RealFaceVerdict({ before: realBefore, after: snapshotReal(), ourRelSet: d3OurRelSet(report, actual) });
+      assert.ok(v.status === 'green' && actualAllOutside && claimedEmpty,
+        'D3 面级 backstop + 归属必要条件（同一判据）：' + v.message
+        + ' / actualAllOutside=' + actualAllOutside + ' / claimedEmpty=' + claimedEmpty);
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1652,6 +1749,71 @@ test('D14-a 该红必红：真实面**丢** X 且隔离根有 X ⇒ red，且 so
     } finally {
       fs.rmSync(dir2, { recursive: true, force: true });
     }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D15：三档必须可区分（受控面 `ctlReal`，不碰真实面）
+//
+// 为什么用受控面：真等宿主写真实面不可控（可能整轮都不写）⇒ 用受控面把三档变成确定性构造，
+// 同时满足「不写真实面」与「不改 lib」。
+//
+// D15-b 定档 = **判红但带归因**（不是判绿）：宿主 syncAssets 与我们写的是同一份资产，
+// 同 rel 同内容的掩盖是**结构性**不可区分（要 OS 级写审计/fs 拦截，都不可用）⇒ 判绿等于把失败模式设为放过。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('D15 面级 backstop 三档可区分：leak-red / foreign-red / green（受控面构造）', () => {
+  const dir = tmpRoot('d15');
+  const ctlReal = path.join(dir, '.dsh', '.agent-presets');
+  try {
+    fs.mkdirSync(ctlReal, { recursive: true });
+    const faceRoot = toPosix(path.relative(REAL_HOME, ctlReal));
+
+    // ── D15-a：写我方产物（∈ ourRelSet）⇒ leak-red ──
+    const oursRel = 'punky-preset/agent.cordis.yml';
+    const beforeA = fingerprint(ctlReal);
+    fs.mkdirSync(path.join(ctlReal, 'punky-preset'), { recursive: true });
+    fs.writeFileSync(path.join(ctlReal, oursRel), 'ours', 'utf8');
+    const afterA = fingerprint(ctlReal);
+    const ourRelSet = new Set([faceRoot + '|' + oursRel]);
+    const a = d3RealFaceVerdict({ before: [beforeA], after: [afterA], ourRelSet });
+    assert.equal(a.status, 'leak-red', 'D15-a：我方产物出现在真实面 ⇒ leak-red；实测 ' + a.status);
+    assert.equal(a.message.includes(oursRel), true, 'D15-a：消息须点名该 rel；实测 ' + a.message);
+    assert.equal(a.hits.length, 1, 'D15-a：hits 须指出 1 条越界产物');
+
+    // ── D15-b：写第三方产物（∉ ourRelSet）⇒ foreign-red，且消息带归因话术 ──
+    const foreignRel = 'liangshen/README.md';
+    const beforeB = fingerprint(ctlReal);
+    fs.mkdirSync(path.join(ctlReal, 'liangshen'), { recursive: true });
+    fs.writeFileSync(path.join(ctlReal, foreignRel), 'theirs', 'utf8');
+    const afterB = fingerprint(ctlReal);
+    const b = d3RealFaceVerdict({ before: [beforeB], after: [afterB], ourRelSet });
+    assert.equal(b.status, 'foreign-red', 'D15-b：第三方写真实面 ⇒ foreign-red（**判红**，不是判绿）；实测 ' + b.status);
+    assert.equal(b.message.includes('foreign'), true, 'D15-b：消息须标 foreign；实测 ' + b.message);
+    assert.equal(b.message.includes('不可归因于本演示'), true, 'D15-b：消息须写明不可归因于本演示；实测 ' + b.message);
+    assert.equal(b.hits.length, 0, 'D15-b：不得栽赃我方（hits=0）');
+
+    // ── D15-c：面不变 + 归属全越界 ⇒ green ──
+    const beforeC = fingerprint(ctlReal);
+    const c = d3RealFaceVerdict({ before: [beforeC], after: [beforeC], ourRelSet });
+    assert.equal(c.status, 'green', 'D15-c：逐面零变化 ⇒ green；实测 ' + c.status);
+    // 归属必要条件（claimed 零写 + 每条 actual 落点越界）在此同时成立：
+    assert.equal(attributionVerdict([], ctlReal).ok, true, 'D15-c：claimed 零写 ⇒ 归属自洽（必要条件）');
+
+    // ── 合成断言：三档必须可区分 ──
+    assert.notEqual(a.status, b.status, 'D15 合成：leak-red 与 foreign-red 必须不同（相同 ⇒ 归因没起作用 ⇒ 无鉴别力）');
+    assert.notEqual(a.status, c.status, 'D15 合成：有变化与无变化必须不同');
+    assert.notEqual(b.status, c.status, 'D15 合成：foreign 与 green 必须不同');
+
+    // ── fail-closed：ourRelSet 不可用 ⇒ unknown-red（不得当成"没变化"）──
+    const unknown = d3RealFaceVerdict({ before: [beforeC], after: [beforeC], ourRelSet: null });
+    assert.equal(unknown.status, 'unknown-red', 'D15 附加：ourRelSet 不可用 ⇒ unknown-red（fail-closed）');
+
+    process.stderr.write('[D15] a=' + a.status + ' b=' + b.status + ' c=' + c.status
+      + ' distinguishable=' + (a.status !== b.status && a.status !== c.status && b.status !== c.status)
+      + ' unknown=' + unknown.status + String.fromCharCode(10));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
