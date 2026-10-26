@@ -62,9 +62,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ① D1–D3 用「重定向到另一个受控临时目录」代表「隔离失效」，证明的是**守卫谓词与守卫进程在偏移场景下
 //      确实判红**；它**不等价于**「真实 home 泄漏必被捕获」——后者只有把被测路径真的指向真实 home 才能观测，
 //      而那是本批次明令禁止的动作。故本文件的证据强度是「捕获能力已证、真实泄漏场景未做（也不做）」。
-//   ② G2 对比的是真实面**本次运行窗口内**的指纹；若测试机上有并发进程恰好在同一窗口写这几个真实目录
-//      （资产同步幂等、正常不会改字节），G2 可能被外部活动扰动——这是 G2 作为「结果断言」的固有边界，
-//      机制侧的判据是 G3。
+//   ② **并发前提已不成立（2026-10-27 实测改写）**：本机常驻使用 Agent Teams 并行 ⇒ 「同一窗口内没有并发写」
+//      这一隐含前提结构性失效。实测一次真红的形态是 `~/.dsh/.agent-presets 文件数 10 !== 11`
+//      （方向 = **减少**）—— `lib/assets.js` 的 `syncDir` 更新路径是**整目录 rmSync + cpSync**，
+//      窗口内会瞬时看不到文件 ⇒ 「取 after 时 cp 未完成」与「终态真少一个文件」两种情形**必须区分**。
+//      ⇒ G2 改为**三态判定**（`g2Verdict`）：
+//        · `green`：after 与 before 四字段逐字全等；
+//        · `inconclusive{transient}`：after ≠ before 但 `settleMs`（默认 500ms，**恰 1 次**重取）后 after2 == before
+//          —— 并发同步 rm+cp 的中间态；
+//        · `inconclusive{unattributable}`：差异持久且**不可归因**于被测运行；
+//        · `red`：差异持久**且**可归因（差异项 ∩ 被测产物面 ≠ ∅）。
+//      **`inconclusive` 永不计入通过**（`g2Summary().passed === (red===0 && inconclusive===0)`）；
+//      默认 `strict`：inconclusive ⇒ 本用例红（无消费者时 fail-closed）。残量上界如实登记（见 `g2Verdict` 注释表）。
 //   ③ 未加载 preload 的常规跑法下，本文件只能替子进程证实机制生效，无法回溯本进程已发生的写入。
 //   ④ 活宿主面（`<home>/.dsh/logs`）**不再有任何状态级断言**（存在性/内容/指纹都不判）：该面由常驻宿主
 //      持续写，状态级断言结构性不可靠（这正是 2026-09-13 修正的原因）。该面的能力边界如实收窄为
@@ -106,8 +115,16 @@ const LIVE_FACES = [
   {
     path: path.join(REAL_HOME, '.dsh', 'logs'),
     reason: '审计 sink 根：常驻宿主逐 tick 追写 audit-<date>.jsonl（合法写入，非本测试可观测面）',
+    // D7 要求：每个 LIVE 面必须携带三要素，且 collateralGate 是本文件内**实际执行并判红过**的判据名
+    writer: 'resident-host-audit-sink',
+    noiseClass: 'append-only（宿主逐 tick 追加，与被测路径无关）',
+    collateralGate: 'D4 活宿主面归属对照',
   },
 ];
+// D7：已真实执行并判红过的**归属兜底判据**登记表（名字 → 何处执行）
+const LIVE_FACE_GATES = {
+  'D4 活宿主面归属对照': 'D4 用例内 attributionVerdict([REAL_SINK_PROBE], ISOLATED).ok === false',
+};
 // 真实面 sink 落点样本：喂给归属谓词做「真实面必须判越界」的确定性对照（不触碰该文件）。
 const REAL_SINK_PROBE = path.join(LIVE_FACES[0].path, 'punky-swarm', 'audit-probe.jsonl');
 
@@ -198,7 +215,7 @@ function walkFiles(root) {
 
 /** 文件级指纹：相对路径 + 字节数 + mtimeMs 的 sha256 摘要。 */
 function fingerprint(root) {
-  if (!fs.existsSync(root)) return { root, exists: false, count: 0, sumBytes: 0, digest: 'absent' };
+  if (!fs.existsSync(root)) return { root, exists: false, count: 0, sumBytes: 0, digest: 'absent', files: [] };
   const files = walkFiles(root);
   const h = crypto.createHash('sha256');
   let sum = 0;
@@ -206,13 +223,188 @@ function fingerprint(root) {
     h.update(f.rel + '\u0000' + f.size + '\u0000' + f.mtimeMs + '\n');
     sum += f.size;
   }
-  return { root, exists: true, count: files.length, sumBytes: sum, digest: h.digest('hex') };
+  // files 仅用于**路径级 diff 与内容对照**（A3）；digest 口径保持 rel+size+mtimeMs 不变（AC-14）
+  const withHash = files.map((f) => ({
+    rel: f.rel, size: f.size, mtimeMs: f.mtimeMs,
+    sha256: crypto.createHash('sha256').update(readIfExists(path.join(root, f.rel))).digest('hex'),
+  }));
+  return { root, exists: true, count: files.length, sumBytes: sum, digest: h.digest('hex'), files: withHash };
 }
 
 const snapshotReal = () => REAL_FACES.map((p) => fingerprint(p));
 const listFiles = (root) => (fs.existsSync(root) ? walkFiles(root).map((f) => path.join(root, f.rel)) : []);
 const tmpRoot = (tag) => fs.mkdtempSync(path.join(os.tmpdir(), 'punky-guard-' + tag + '-'));
 const readIfExists = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return ''; } };
+
+// ── G2 三态判定（噪声治理：green / red / inconclusive{transient|unattributable}）──
+// 规格 §方案 二；`settleMs` 默认 500ms、**恰 1 次**重取（禁循环重试到绿）。
+const G2_SETTLE_MS = (() => {
+  const raw = process.env.PUNKY_G2_SETTLE_MS;
+  const n = Number(raw);
+  if (!raw || !Number.isFinite(n)) return 500;
+  return Math.min(5000, Math.max(100, Math.floor(n)));
+})();
+
+/** 双模式：默认 strict（无消费者 ⇒ fail-closed）。report 必须显式给路径 + 消费者名，否则视为无效。 */
+export function g2NoiseMode(env = process.env) {
+  const raw = String(env.PUNKY_G2_NOISE ?? '').trim();
+  const mode = raw === '' ? 'strict' : raw;
+  if (mode !== 'strict' && mode !== 'report') return { mode: 'strict', invalid: true, raw };
+  if (mode === 'report') {
+    const reportPath = String(env.PUNKY_G2_NOISE_REPORT ?? '').trim();
+    const consumer = String(env.PUNKY_G2_NOISE_CONSUMER ?? '').trim();
+    if (!reportPath || !consumer) {
+      return { mode, invalid: true, raw, missing: [!reportPath && 'PUNKY_G2_NOISE_REPORT', !consumer && 'PUNKY_G2_NOISE_CONSUMER'].filter(Boolean) };
+    }
+    return { mode, invalid: false, raw, reportPath, consumer };
+  }
+  return { mode, invalid: false, raw };
+}
+
+const sameFace = (x, y) => !!x && !!y && x.exists === y.exists && x.count === y.count && x.sumBytes === y.sumBytes && x.digest === y.digest;
+
+/** 路径级 diff（added / removed / changed），供证据结构与归因使用。 */
+export function faceDiff(before, after) {
+  const b = new Map((before?.files ?? []).map((f) => [f.rel, f]));
+  const a = new Map((after?.files ?? []).map((f) => [f.rel, f]));
+  const added = [...a.keys()].filter((k) => !b.has(k)).sort();
+  const removed = [...b.keys()].filter((k) => !a.has(k)).sort();
+  const changed = [...a.keys()].filter((k) => b.has(k) && (b.get(k).sha256 !== a.get(k).sha256 || b.get(k).size !== a.get(k).size)).sort();
+  return { added, removed, changed };
+}
+
+/**
+ * 三态判定（纯函数）。
+ * 判定顺序：green（四字段全等）→ transient（after2 == before）→ red（差异项 ∩ attributed ≠ ∅）→ unattributable。
+ * 残量上界（规格 §三.3，如实写死，不得读作"已覆盖"）：
+ *   · 已存在路径的字节覆盖且内容与同步产物相同 ⇒ 无法区分写者 ⇒ unattributable；
+ *   · 已存在路径被删除且无自报 ⇒ 收敛则 transient，否则 unattributable；
+ *   · 仅 mtime 变化而字节相同 ⇒ unattributable（cpSync 跨卷可能不保留 mtime）。
+ */
+export function g2Verdict({ face, before, after, after2, attributed = [] }) {
+  const delta = faceDiff(before, after);
+  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed];
+  if (sameFace(before, after)) {
+    return { face, status: 'green', delta, diffPaths: [], evidence: { before, after, after2: after2 ?? null } };
+  }
+  if (after2 && sameFace(before, after2)) {
+    return { face, status: 'inconclusive', subclass: 'transient', delta, diffPaths, reason: '差异在 settleMs 内收敛（并发 syncDir 的 rm+cp 中间态）', evidence: { before, after, after2 } };
+  }
+  const claimed = new Set((attributed ?? []).map((p) => String(p)));
+  const hits = diffPaths.filter((p) => claimed.has(p));
+  if (hits.length > 0) {
+    return { face, status: 'red', delta, diffPaths, attributedHits: hits, reason: '差异持久且可归因于被测运行（差异项 ∩ 被测产物面 ≠ ∅）', evidence: { before, after, after2: after2 ?? null } };
+  }
+  return { face, status: 'inconclusive', subclass: 'unattributable', delta, diffPaths, reason: '差异持久且不可归因（外来写者的终态改动 / 写者不可区分）', evidence: { before, after, after2: after2 ?? null } };
+}
+
+/** 汇总：`passed` 唯一真源 = red===0 && inconclusive===0（规格 §方案 四.3）。 */
+export function g2Summary(faceResults) {
+  const rs = Array.isArray(faceResults) ? faceResults : [];
+  const faces = rs.length;
+  const green = rs.filter((r) => r.status === 'green').length;
+  const red = rs.filter((r) => r.status === 'red').length;
+  const inconclusive = rs.filter((r) => r.status === 'inconclusive').length;
+  const transient = rs.filter((r) => r.subclass === 'transient').length;
+  const unattributable = rs.filter((r) => r.subclass === 'unattributable').length;
+  const passed = red === 0 && inconclusive === 0;
+  const verdict = red > 0 ? 'red' : inconclusive > 0 ? 'inconclusive' : 'green';
+  return { faces, green, red, inconclusive, transient, unattributable, passed, verdict, detail: rs };
+}
+
+/**
+ * D7 谓词：每个 LIVE_FACE 必须三要素齐备，且 collateralGate 必须是**本文件内实际执行并判红过**的判据名；
+ * 资产面移入 LIVE 面时还必须给 attributionFallback（否则沉默写失去兜底 ⇒ 等于删断言）。
+ */
+export function liveFaceJustified(faces, liveFaces, gates = LIVE_FACE_GATES) {
+  const offenders = [];
+  const realPaths = new Set((faces ?? []).map((p) => normPath(p)));
+  for (const lf of liveFaces ?? []) {
+    const p = lf?.path;
+    if (!p) { offenders.push({ path: p, why: '缺 path' }); continue; }
+    if (realPaths.has(normPath(p))) { offenders.push({ path: p, why: '同一面同时出现在 REAL_FACES（双向声明）' }); continue; }
+    if (!lf.writer) offenders.push({ path: p, why: '缺 writer（写者未声明）' });
+    if (!lf.noiseClass) offenders.push({ path: p, why: '缺 noiseClass（噪声类型未声明）' });
+    if (!lf.collateralGate) offenders.push({ path: p, why: '缺 collateralGate（无归属兜底 = 删断言）' });
+    else if (!(lf.collateralGate in (gates ?? {}))) offenders.push({ path: p, why: 'collateralGate 未实际执行过：' + lf.collateralGate });
+    const isAssetFace = /[\\/]\.agents[\\/]skills$|[\\/]\.agent-presets$/.test(String(p));
+    if (isAssetFace && !lf.attributionFallback) {
+      offenders.push({ path: p, why: '资产面移入 LIVE 面但未给 attributionFallback（沉默写失去唯一结果面兜底）' });
+    }
+  }
+  return { ok: offenders.length === 0, offenders };
+}
+
+const sleepSync = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* ignore */ } };
+/** 终态稳定化：等 settleMs 后**重取一次**（禁循环）。 */
+const refingerprint = (face) => { sleepSync(G2_SETTLE_MS); return fingerprint(face); };
+
+/**
+ * **两条路径共用的单点判定**（AC-15 的实现基础）：
+ * 差异未收敛时由**当前进程**自行 sleep+重取一次 after2（真实面父进程可读，不必依赖子进程回报），
+ * 并把归因集合一并传入 ⇒ transient / red 在**两条路径上都可达**。
+ * （修复前子进程路径写死 `after2 = after`、`attributed = []` ⇒ transient 与 red 在该路径恒不可达。）
+ */
+export function evalFace({ face, before, after, attributed = [] }) {
+  const after2 = sameFace(before, after) ? after : refingerprint(face);
+  return g2Verdict({ face, before, after, after2, attributed });
+}
+
+/** 子进程回报的隔离根文件清单 → 相对路径集合（A1）；父进程据此给出带 face 归属的相对路径。 */
+function relSet(files, root) {
+  const out = new Set();
+  for (const f of files ?? []) {
+    const rel = path.relative(root, String(f));
+    if (rel && !rel.startsWith('..')) out.add(rel);
+  }
+  return out;
+}
+
+/** 写入**指定相对路径**的文件（供“窗口内先消失后恢复”的受控构造使用）。 */
+function writeRelFile(root, rel, text) {
+  const p = path.join(root, rel);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, text, 'utf8');
+}
+
+/** 可归因集合（A1∪A3 简化）：隔离根内出现过的**同相对路径**即视为被测产物面落点候选。 */
+function attributedRels(st) {
+  return [...new Set((st.isolatedAfter?.files ?? []).map((f) => f.rel))];
+}
+
+/** 汇总行（机器可解析，规格 §方案 二.4）。 */
+export function formatG2Summary(sum) {
+  const head = `[G2] faces=${sum.faces} green=${sum.green} red=${sum.red} inconclusive=${sum.inconclusive} transient=${sum.transient} unattributable=${sum.unattributable}`;
+  const detail = sum.detail.map((r) => {
+    const st = r.status === 'inconclusive' ? `inconclusive(${r.subclass})` : r.status;
+    const d = r.diffPaths?.length ? ` diff=${JSON.stringify(r.diffPaths)}` : '';
+    return `  detail: ${r.face} = ${st}${d}`;
+  });
+  return [head, ...detail].join('\n');
+}
+
+/** 汇总 → 出口：strict 下 inconclusive/red ⇒ 判红；report 下写报告 + diagnostic，但 passed 不得改真。 */
+function emitAndGate(results, ctx = {}) {
+  const sum = g2Summary(results);
+  process.stderr.write(formatG2Summary(sum) + '\n');
+  const noise = g2NoiseMode();
+  if (noise.mode === 'report') {
+    if (noise.invalid) {
+      assert.fail('[G2] report 模式缺消费者（' + (noise.missing ?? ['非法取值']).join(' / ') + '）⇒ 退化为静默绿，拒绝');
+    }
+    try {
+      fs.appendFileSync(noise.reportPath, JSON.stringify({ ts: new Date().toISOString(), consumer: noise.consumer, ...sum, detail: undefined }) + '\n', 'utf8');
+    } catch (e) {
+      assert.fail('[G2] report 模式报告写入失败 ⇒ 拒绝静默（' + e.message + '）');
+    }
+    return sum;
+  }
+  if (sum.red > 0) assert.fail('[G2] red（真实面发生了可归因于被测运行的持久变化）\n' + formatG2Summary(sum));
+  if (sum.inconclusive > 0) {
+    assert.fail('[G2] inconclusive(strict)：差异既非可归因的持久变化、也非可收敛的中间态；无消费者时 fail-closed\n' + formatG2Summary(sum));
+  }
+  return sum;
+}
 
 /** 用文件承接子进程 stdio（不依赖管道），返回 {status, out}。 */
 function spawnToFiles(bin, args, env, dir) {
@@ -319,14 +511,16 @@ test('G1 隔离前置：os.homedir() 落在声明隔离根内且非真实 home',
 test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐字全等', () => {
   if (!ISOLATED) {
     const m = mechanismRun();
-    for (let i = 0; i < REAL_FACES.length; i++) {
-      const b = m.realBefore[i];
-      const a = m.realAfter[i];
-      assert.equal(a.exists, b.exists, `子进程跑 apply() 前后真实面存在性不变：${REAL_FACES[i]}`);
-      assert.equal(a.count, b.count, `子进程跑 apply() 前后真实面文件数不变：${REAL_FACES[i]}`);
-      assert.equal(a.sumBytes, b.sumBytes, `子进程跑 apply() 前后真实面字节和不变：${REAL_FACES[i]}`);
-      assert.equal(a.digest, b.digest, `子进程跑 apply() 前后真实面文件级指纹不变：${REAL_FACES[i]}`);
-    }
+    // 子进程路径同样由**父进程**自行 settle 重取 after2 + 接 A1 归因
+    // （真实面在父进程可读；修复前 after2/attributed 写死 ⇒ transient/red 恒不可达 = 实际 flake 路径上的漏洞）
+    const childRels = relSet(m.report?.writtenFiles, m.report?.sentinel);
+    const g2Results = REAL_FACES.map((face, i) => evalFace({
+      face,
+      before: m.realBefore[i],
+      after: m.realAfter[i],
+      attributed: [...childRels],
+    }));
+    emitAndGate(g2Results);
     // 活宿主面不参与上面的「零变化」断言（宿主持续追写该面）；改用归属对照 + 断言面自检
     // （D4 已就同一谓词/同一自检给出判别力演示）。
     assert.equal(attributionVerdict([REAL_SINK_PROBE], m.report.sentinel).ok, false,
@@ -336,14 +530,15 @@ test('G2 真实面零变化：apply() 全流程前后真实面文件级指纹逐
     return;
   }
   assert.ok(state.applied, '被测路径已执行（G1 不成立时本用例由前置闸阻断）');
-  for (let i = 0; i < REAL_FACES.length; i++) {
-    const b = state.realBefore[i];
-    const a = state.realAfter[i];
-    assert.equal(a.exists, b.exists, `真实面存在性不变：${REAL_FACES[i]}`);
-    assert.equal(a.count, b.count, `真实面文件数不变：${REAL_FACES[i]}`);
-    assert.equal(a.sumBytes, b.sumBytes, `真实面字节和不变：${REAL_FACES[i]}`);
-    assert.equal(a.digest, b.digest, `真实面文件级指纹不变：${REAL_FACES[i]}`);
-  }
+  // 三态判定（规格 §方案 二）：差异时**恰 1 次** settleMs 重取；不 bail，一次收全四字段证据
+  const attributed = attributedRels(state);
+  const g2Results = REAL_FACES.map((face, i) => evalFace({
+    face,
+    before: state.realBefore[i],
+    after: state.realAfter[i],
+    attributed,
+  }));
+  emitAndGate(g2Results);
   // 活宿主面（REAL_HOME/.dsh/logs）**不在**上面的指纹面内：常驻宿主逐 tick 追写该面，
   // 把它的存在性/内容读成泄漏是结构性错误（2026-09-13 修正）。该面的判据改为两条确定性对照：
   assert.equal(liveFaceExcluded(REAL_FACES).ok, true,
@@ -570,3 +765,179 @@ const report = {
 console.log('@@REPORT@@' + JSON.stringify(report) + '@@END@@');
 `;
 }
+
+// ── D5 反向自检：可归因的持久越界写必须判 red（不得降级为 inconclusive）──
+// 规格 §方案 五.2 D5 / AC-2。构造沿用 D3 口径（受控临时目录，不触真实面）。
+
+test('D5 判别力（该红必红）：可归因 + 持久的真实面变化必须判 red', () => {
+  const dir = tmpRoot('d5');
+  try {
+    const face = path.join(dir, 'face');
+    fs.mkdirSync(face, { recursive: true });
+    const before = fingerprint(face);                       // 空面
+    fs.writeFileSync(path.join(face, 'leaked.txt'), 'x');   // 模拟被测越界写
+    const after = fingerprint(face);
+
+    const attributed = g2Verdict({ face, before, after, after2: after, attributed: ['leaked.txt'] });
+    assert.equal(attributed.status, 'red',
+      '差异持久且可归因 ⇒ 必须 red（若返回 inconclusive 即为「把该红判成 inconclusive」）实测=' + attributed.status);
+    assert.deepEqual(attributed.delta.added, ['leaked.txt'], '证据须点名新增的相对路径');
+    assert.deepEqual(attributed.attributedHits, ['leaked.txt'], '须点名归因命中项');
+
+    // 对照组：同一证据、不给归因 ⇒ 只能是 inconclusive（证明归因是 red 的必要条件）
+    const unverifiable = g2Verdict({ face, before, after, after2: after, attributed: [] });
+    assert.equal(unverifiable.status, 'inconclusive', '不可归因时不得判 red');
+    assert.equal(unverifiable.subclass, 'unattributable');
+
+    // 对照组：差异收敛 ⇒ transient（不得 red）
+    const converged = g2Verdict({ face, before, after, after2: before, attributed: ['leaked.txt'] });
+    assert.equal(converged.status, 'inconclusive', '收敛的差异不得判 red（即使可归因）');
+    assert.equal(converged.subclass, 'transient');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── D6 反向自检：inconclusive 不得变绿、不得计入通过 ──
+// 规格 §方案 五.2 D6 / AC-3、AC-5、AC-6、AC-7。
+
+const mkFace = (count) => ({
+  exists: true, count, sumBytes: count * 10, digest: 'digest-' + count,
+  files: Array.from({ length: count }, (_, i) => ({ rel: 'f' + i, size: 10, mtimeMs: 1, sha256: 'h' + i })),
+});
+
+test('D6 判别力（不得变绿）：不可归因的持久差异 ⇒ inconclusive{unattributable} 且 passed=false', () => {
+  const before = mkFace(11);
+  const after = mkFace(10);
+  const after2 = mkFace(10);
+  const v = g2Verdict({ face: 'face-x', before, after, after2, attributed: [] });
+  assert.equal(v.status, 'inconclusive', '不得 green、不得 red');
+  assert.equal(v.subclass, 'unattributable', '持久且不可归因 ⇒ unattributable');
+  assert.deepEqual(v.delta.removed, ['f10'], '证据须点名消失的相对路径（= 那次 10 !== 11 的形态）');
+
+  const sum = g2Summary([v]);
+  assert.equal(sum.passed, false, 'inconclusive ⇒ passed 必须 false（唯一真源 red===0 && inconclusive===0）');
+  assert.equal(sum.conclusive ?? sum.verdict, 'inconclusive');
+
+  // 错误实现自检：把 passed 写成 true 的实现必须与真源不一致（⇒ 该实现会被判违法）
+  const wrongSummary = (rs) => ({ ...g2Summary(rs), passed: true });
+  assert.equal(wrongSummary([v]).passed, true);
+  assert.notDeepEqual(wrongSummary([v]), g2Summary([v]), '把 inconclusive 计入通过的实现必须判红');
+
+  // 守恒式（AC-5）：faces = green + red + inconclusive；inconclusive = transient + unattributable
+  const mixed = g2Summary([
+    { status: 'green' },
+    { status: 'red' },
+    { status: 'inconclusive', subclass: 'transient' },
+    { status: 'inconclusive', subclass: 'unattributable' },
+  ]);
+  assert.equal(mixed.faces, mixed.green + mixed.red + mixed.inconclusive, 'faces 守恒');
+  assert.equal(mixed.inconclusive, mixed.transient + mixed.unattributable, '子类守恒');
+  assert.equal(mixed.passed, false);
+});
+
+test('D6b 双模 fail-closed：默认 strict；report 缺消费者 ⇒ 无效（不得静默绿）', () => {
+  assert.equal(g2NoiseMode({}).mode, 'strict', '不设环境变量时必须是 strict');
+  assert.equal(g2NoiseMode({ PUNKY_G2_NOISE: 'strict' }).mode, 'strict');
+  const noReport = g2NoiseMode({ PUNKY_G2_NOISE: 'report' });
+  assert.equal(noReport.invalid, true, 'report 缺路径/消费者 ⇒ 无效');
+  assert.equal(g2NoiseMode({ PUNKY_G2_NOISE: 'report', PUNKY_G2_NOISE_REPORT: '/tmp/x.jsonl' }).invalid, true, '缺消费者名 ⇒ 无效');
+  const ok = g2NoiseMode({ PUNKY_G2_NOISE: 'report', PUNKY_G2_NOISE_REPORT: '/tmp/x.jsonl', PUNKY_G2_NOISE_CONSUMER: 'test-evidence-guard' });
+  assert.equal(ok.invalid, false, '路径 + 消费者名齐备 ⇒ 有效');
+  assert.equal(g2NoiseMode({ PUNKY_G2_NOISE: 'bogus' }).invalid, true, '非法取值 ⇒ 回落 strict 并标无效');
+});
+
+// ── D7 反向自检：不该排除的面被排除必须被抓 ──
+// 规格 §方案 五.2 D7 / AC-4。
+
+test('D7 判别力（不该排除的面被抓）：LIVE 面三要素 + 已执行兜底判据 + 资产面无兜底必红', () => {
+  // 形如资产面但**不在** REAL_FACES（避免与「双向声明」分支混淆）；真实资产面另作一条构造
+  const assetLike = path.join(os.tmpdir(), 'punky-d7-asset', '.agent-presets');
+  const realAsset = REAL_FACES.find((p) => p.endsWith('.agent-presets')) ?? REAL_FACES[0];
+  const gates = { 'D4 活宿主面归属对照': 'x' };
+
+  assert.equal(liveFaceJustified(REAL_FACES, LIVE_FACES).ok, true,
+    '现行 LIVE_FACES 应三要素齐备且 collateralGate 已实际执行过：'
+    + JSON.stringify(liveFaceJustified(REAL_FACES, LIVE_FACES).offenders));
+
+  // ② 无 justification（= 三要素全缺）
+  const missing = liveFaceJustified(REAL_FACES, [{ path: assetLike }], gates);
+  assert.equal(missing.ok, false, '无 justification 的 LIVE 面必须判红');
+  assert.ok(missing.offenders.some((o) => /缺 writer/.test(o.why)));
+
+  // ③ 假 collateralGate（未实际执行过的判据名）
+  const fakeGate = liveFaceJustified(REAL_FACES, [{ path: path.join(REAL_HOME, '.dsh', 'logs2'), writer: 'w', noiseClass: 'n', collateralGate: '不存在的判据名' }], gates);
+  assert.equal(fakeGate.ok, false, 'collateralGate 未实际执行过 ⇒ 必须判红');
+
+  // ④ 资产面塞进 LIVE 面但无归属兜底（直接约束路线 A 的降级动作）
+  const noFallback = liveFaceJustified(REAL_FACES, [{ path: assetLike, writer: 'w', noiseClass: 'n', collateralGate: 'D4 活宿主面归属对照' }], gates);
+  assert.equal(noFallback.ok, false, '资产面无 attributionFallback ⇒ 必须判红（沉默写失去唯一结果面兜底）');
+
+  // ⑤ 对照组：资产面带 attributionFallback 才允许（且仍需三要素齐备）
+  const withFallback = liveFaceJustified(REAL_FACES, [{
+    path: assetLike, writer: 'w', noiseClass: 'n',
+    collateralGate: 'D4 活宿主面归属对照', attributionFallback: 'D4 形态：真实面落点喂 attributionVerdict 必判红',
+  }], gates);
+  assert.equal(withFallback.ok, true, '三要素 + 归属兜底齐备时才允许排除');
+
+  // ⑥ 真实资产面直接塞进 LIVE_FACES（与 REAL_FACES 双向声明）⇒ 必须判红
+  const doubled = liveFaceJustified(REAL_FACES, [{ path: realAsset, writer: 'w', noiseClass: 'n', collateralGate: 'D4 活宿主面归属对照', attributionFallback: 'x' }], gates);
+  assert.equal(doubled.ok, false, '同一面同时出现在 REAL 与 LIVE ⇒ 必须判红（双向声明）');
+  assert.ok(doubled.offenders.some((o) => /双向声明/.test(o.why)), '须给出双向声明的原因');
+});
+
+// ── D8 反向自检（回修）：子进程路径上 transient / red 必须**可达**，两条路径同一输入给同一结论 ──
+// 背景：修复前子进程路径写死 `after2 = after` 与 `attributed = []`，而该路径正是并行跑时实际 flaky 的那条
+// （无 preload ⇒ ISOLATED 假 ⇒ 走 mechanismRun 分支）⇒ 两条判据在该路径上恒不可达。现两路径共用 `evalFace`。
+
+test('D8 子进程路径可达性：transient 可吸收、red 可判出、两路径同输入同结论', () => {
+  const dir = tmpRoot('d8');
+  try {
+    // ① transient：受控面「窗口内先消失后恢复」
+    const faceA = path.join(dir, 'face-transient');
+    writeRelFile(faceA, 'keep.txt', 'v1');
+    const beforeA = fingerprint(faceA);
+    // 用 rename 移走/移回：mtime + 字节逐字不变 —— 等价于 syncDir 的 cpSync({preserveTimestamps:true}) 完成态。
+    // （注意：不能"删除后重写版本"来恢复：指纹含 mtimeMs（AC-14），重写会改 mtime ⇒ after2 恒不等于 before。）
+    fs.renameSync(path.join(faceA, 'keep.txt'), path.join(faceA, 'keep.txt.away')); // 模拟 rmSync 阶段（文件瞬时不见）
+    const afterA = fingerprint(faceA);
+    fs.renameSync(path.join(faceA, 'keep.txt.away'), path.join(faceA, 'keep.txt')); // 模拟 cpSync 完成（mtime 保留）
+    const vA = evalFace({ face: faceA, before: beforeA, after: afterA, attributed: ['keep.txt'] });
+    assert.equal(vA.status, 'inconclusive', '子进程路径口径：先消失后恢复 ⇒ 不得 red；实测 ' + vA.status);
+    assert.equal(vA.subclass, 'transient', '必须判为 transient（settleMs 后收敛）；实测 ' + vA.subclass);
+    assert.equal(g2Summary([vA]).passed, false, 'transient 不计入通过');
+
+    // ② red：受控面「持久越界写 + 可归因」
+    const faceB = path.join(dir, 'face-red');
+    fs.mkdirSync(faceB, { recursive: true });
+    const beforeB = fingerprint(faceB);
+    writeRelFile(faceB, 'leaked.txt', 'x');
+    const afterB = fingerprint(faceB);
+    const vB = evalFace({ face: faceB, before: beforeB, after: afterB, attributed: ['leaked.txt'] });
+    assert.equal(vB.status, 'red', '子进程路径口径：持久 + 可归因 ⇒ 必须 red（修复前此处恒为 inconclusive）；实测 ' + vB.status);
+    assert.deepEqual(vB.attributedHits, ['leaked.txt']);
+
+    // ③ 两路径一致性：同一输入喂两次（现在两路径共用 evalFace）⇒ 结论逐字相同
+    const vB2 = evalFace({ face: faceB, before: beforeB, after: afterB, attributed: ['leaked.txt'] });
+    assert.deepEqual(
+      { status: vB2.status, subclass: vB2.subclass ?? null, diffPaths: vB2.diffPaths },
+      { status: vB.status, subclass: vB.subclass ?? null, diffPaths: vB.diffPaths },
+      '同一输入 ⇒ status/subclass/diffPaths 逐字一致',
+    );
+
+    // ④ 缺陷可见性：**修复前形态**（after2 = after、attributed = []）对同一输入给不同结论
+    const legacySubprocessShape = g2Verdict({ face: faceB, before: beforeB, after: afterB, after2: afterB, attributed: [] });
+    assert.equal(legacySubprocessShape.status, 'inconclusive',
+      '修复前子进程路径对「持久可归因」也只能 inconclusive ⇒ 证明 red 原不可达');
+    assert.notEqual(legacySubprocessShape.status, vB.status, '新旧形态结论必须不同（缺陷可见）');
+
+    // 修复前的子进程形态 = after2 取 after **且** attributed 恒为 []（两个缺陷一并还原）
+    const legacyTransientShape = g2Verdict({ face: faceA, before: beforeA, after: afterA, after2: afterA, attributed: [] });
+    process.stderr.write('[D8] transient=' + vA.status + '/' + vA.subclass + ' red=' + vB.status + ' sameInputSameVerdict=' + (vB2.status === vB.status && (vB2.subclass ?? null) === (vB.subclass ?? null)) + ' legacy=' + legacySubprocessShape.status + '/' + (legacySubprocessShape.subclass ?? null) + String.fromCharCode(10));
+    assert.equal(legacyTransientShape.status, 'inconclusive');
+    assert.notEqual(legacyTransientShape.subclass, 'transient',
+      '修复前子进程路径把「可收敛的中间态」也判成 unattributable ⇒ 证明 transient 原不可达');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

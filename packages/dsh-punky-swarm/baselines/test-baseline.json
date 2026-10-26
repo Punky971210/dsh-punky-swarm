@@ -889,11 +889,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 61,
-      "blankLines": 47,
-      "lines": 573,
+      "asserts": 98,
+      "blankLines": 87,
+      "lines": 944,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 12,
       "todos": 0
     },
     "test/hot-config.test.js": {
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T12:45:16Z",
+  "generatedAt": "2026-10-26T14:54:32Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "波2 第七批收口批：20域+e20 34域+carry 8条，共 4 条实改；实改率降至 0.8%-2.6%，判保留主因为相邻行已有身份断言与契约面",
+  "reason": "第三阶段：home-isolation G2 由链式断言改为三态判定（green/red/inconclusive）+ 两路径共用 evalFace + 失败信息收全四字段与路径级 diff；新增 D5/D6/D6b/D7/D8 五条自证",
   "schema": 1,
   "totals": {
-    "asserts": 10868,
-    "blankLines": 5717,
+    "asserts": 10905,
+    "blankLines": 5757,
     "files": 208,
-    "lines": 61499,
+    "lines": 61870,
     "tautologies": 0,
-    "tests": 2206,
+    "tests": 2211,
     "todos": 4
   }
 }
