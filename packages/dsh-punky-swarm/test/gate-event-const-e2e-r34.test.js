@@ -140,8 +140,9 @@ test('R3-4 E2E：event-types.js 缺 EVT_GATE_ESCAPE ⇒ 抛 GATE_EVENT_CONST_MIS
     //   （并已并入退役锁 `test/retired-codes-lock.test.js`）⇒ 下方 `disk.some(...)` 的反向断言**逐字保留**：
     //   它比对的是**磁盘事件 `type` 字面量**，不依赖已删常量或面板分类器 ⇒ 仍具防回生价值，**不属删断言换绿**。
     //   断言强度不减：由「条数 = 2」→「条数 = 1 **且** 逐字点名唯一在册事件 type」（点名校验比原断言更严）。
-    assert.equal(disk.length, 1, '磁盘事件仍只有建批期一条（batch.created；原 `batch.team-asset.resolved` 写点已随 T-7 删除）：'
-      + JSON.stringify(disk.map((e) => e.type)));
+    assert.deepEqual(disk.map((e) => e.type), ['batch.created'],
+    '磁盘事件须恰为建批期一条 batch.created（原 `batch.team-asset.resolved` 写点已随 T-7 删除）；实际='
+    + JSON.stringify(disk.map((e) => e.type)));
     assert.equal(disk[0].type, 'batch.created', '逐字点名唯一在册建批期事件 type');
     assert.equal(disk.some((e) => e.type === 'batch.team-asset.resolved'), false,
       '资产正档事件已随 T-7 删净（不得回生）');

@@ -128,7 +128,8 @@ test('P2-1 · gate.passed 落盘后自带快照，且与重新读盘的 batch.la
 
   const batch = store.readBatch(session, batchId); // 从**盘上**读，不是内存对象
   const passed = batch.events.filter((e) => e.type === 'gate.passed');
-  assert.equal(passed.length, 2, 'plan / exec 各一条 gate.passed');
+  assert.deepEqual(passed.map((e) => e.lane).sort(), ['p1', 'e1'].sort(),
+    'plan / exec 各一条 gate.passed（实际 lane: ' + JSON.stringify(passed.map((e) => e.lane)) + '）');
   const latesState = lanesStateOf(batch);
   // 末条 gate.passed 是 e1 结算时落的 ⇒ 其快照须等于末态（此后无 lane 迁移）
   assertSnapshotMatches(passed[passed.length - 1], latesState);

@@ -100,7 +100,8 @@ test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.ma
   assert.equal(out.managerRoster.inRoster, false, '无约定名 manager');
   assert.equal(out.managerRoster.member, null);
   const evs = store.readBatch(SID, 'b2-gap').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP);
-  assert.equal(evs.length, 1, '声明 raise 而 roster 无 Manager ⇒ 留痕 1 条');
+  assert.deepEqual(evs.map((e) => e.type), [EVT.EVT_GATE_MANAGER_ROSTER_GAP],
+    '声明 raise 而 roster 无 Manager ⇒ 留痕须恰为该事件一条（实际: ' + JSON.stringify(evs.map((e) => e.type)) + '）');
   assert.equal(evs[0].rosterName, 'manager');
   assert.equal(evs[0].managerPlan, 'raise');
   assert.equal(EVT.EVT_GATE_MANAGER_ROSTER_GAP, 'gate.manager_roster_gap', '事件字面量（单点常量）');

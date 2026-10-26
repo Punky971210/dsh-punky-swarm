@@ -537,7 +537,9 @@ test('[AC-8] 分层不合并：单条目层与单块层**各自**独立产一条
   // 交付契约：一次调用只施一层、恰一条记录 ⇒ 「分层不合并」= 两次调用共两条**面名可分辨**的记录。
   const itemOver = asciiOfBytes(FROZEN_THRESHOLDS.perItemBytes + 256);
   const r1 = applyBudget(itemOver, { surface: SURFACE.assertion, kind: KIND.perItem });
-  assert.equal(r1.omissions.length, 1, '单条目层须**恰产一条**记录，实得 ' + JSON.stringify(r1.omissions));
+  // 身份而非条数：**恰一条，且面名就是被截断的那个面**（多一条/错面名都红）。
+  assert.deepEqual(r1.omissions.map(surfaceOf), [SURFACE.assertion],
+    '单条目层须恰产一条、且面名为 assertion，实得 ' + JSON.stringify(r1.omissions));
   assert.equal(surfaceOf(r1.omissions[0]), SURFACE.assertion);
 
   const blockItems = buildHeavyAssertions({ count: 64, blockBytes: FROZEN_THRESHOLDS.perBlockBytes + 512 })
@@ -545,11 +547,14 @@ test('[AC-8] 分层不合并：单条目层与单块层**各自**独立产一条
   const block = blockItems.join(ASSERTION_SEP);
   assert.ok(Buffer.byteLength(block, 'utf8') > FROZEN_THRESHOLDS.perBlockBytes, '夹具须确使块层超标');
   const r2 = applyBudget(block, { surface: SURFACE.assertions, kind: KIND.perBlock });
-  assert.equal(r2.omissions.length, 1, '单块层须**恰产一条**记录，实得 ' + JSON.stringify(r2.omissions));
+  assert.deepEqual(r2.omissions.map(surfaceOf), [SURFACE.assertions],
+    '单块层须恰产一条、且面名为 assertions，实得 ' + JSON.stringify(r2.omissions));
   assert.equal(surfaceOf(r2.omissions[0]), SURFACE.assertions);
 
   const merged = [...r1.omissions, ...r2.omissions];
-  assert.equal(merged.length, 2, '两层各自一条 ⇒ 合计 2 条（**不合并**）');
+  // 身份而非合计条数：**两条、且面名按调用序恰为两个不同面**（不合并 = 两条都在，各自指向自己的面）。
+  assert.deepEqual(merged.map(surfaceOf), [SURFACE.assertion, SURFACE.assertions],
+    '两层各自一条、面名依调用序可分辨（**不合并**），实得 ' + JSON.stringify(merged));
   assert.ok(surfaceOf(merged[0]) !== surfaceOf(merged[1]),
     '两条记录的面名须可分辨（audit 据此判「哪个面省略了多少」）');
 });
@@ -562,7 +567,9 @@ test('[AC-9] 标记可见且含字节数：`…[omitted <N>B @ <surface>]` 的 <
   const text = asciiOfBytes(FROZEN_THRESHOLDS.totalBytes + 1);
   const result = applyBudget(text, { surface: SURFACE.taskpackTotal, kind: KIND.total });
   const marks = [...result.text.matchAll(OMIT_MARK_RE)];
-  assert.ok(marks.length >= 1, '超限文本须自带省略标记，实得文本尾部：' + JSON.stringify(result.text.slice(-120)));
+  // 身份而非 `>= 1`：**恰一条标记，且它指向被截断的那个面**（缺失/重复/指向错面都红）。
+  assert.deepEqual(marks.map((m) => m[2]), [SURFACE.taskpackTotal],
+    '超限文本须恰带一条省略标记并指向被截断面，实得尾部：' + JSON.stringify(result.text.slice(-120)));
   for (const m of marks) {
     const n = m[1];
     const surface = m[2];

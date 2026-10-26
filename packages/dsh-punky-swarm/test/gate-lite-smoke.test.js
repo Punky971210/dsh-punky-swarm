@@ -105,7 +105,8 @@ test('T3 留痕：建批落恰好 1 条 batch.smoke 事件；无该事件的批�
   await byName.wave_plan.execute({ batchId: 'smk-evt', team: PLAIN_TEAM, tasks: bareProbeTasks(), smoke: true }, SESS);
   const b = store.readBatch(SID, 'smk-evt');
   const hits = b.events.filter((e) => e.type === EVT.EVT_BATCH_SMOKE);
-  assert.equal(hits.length, 1, 'batch.smoke 事件恰好 1 条');
+  assert.deepEqual(hits.map((e) => e.type), [EVT.EVT_BATCH_SMOKE],
+    'batch.smoke 事件须恰 1 条（实际: ' + JSON.stringify(hits.map((e) => e.type)) + '）');
   assert.equal(EVT.EVT_BATCH_SMOKE, 'batch.smoke', '事件字面量（单点常量）');
   assert.equal(smokeOf(b), true, '门禁读端与留痕同源（smokeOf 命中）');
   // 零差异对照：未声明 smoke 的批次记录 ⇒ 判 false（既有批行为不受影响）

@@ -761,7 +761,9 @@ test('R-26【复活·T-9】GATE_ENABLED=false ⇒ 命令门/目标门均放行 �
     obs(null, 'setMember(e1, merged)（env 阀关闭）', r instanceof Error ? r.message : { lane: r.lanes.e1 });
     expectAccepted('S15：env 阀关闭 ⇒ 命令门/目标门均放行、merged 成立', r);
     const esc = withType(bid, E_ESCAPE).filter((e) => e.kind === 'env-gate-disabled');
-    assert.equal(esc.length, 2,
+    // 数量 → 数组相等（哪些）：两门各一条 ⇒ kind 序列逐位两条。
+    // 禁 new Set：Set 会把两条压成一条，正好掩盖「只命中一门」这个真缺陷方向。
+    assert.deepEqual(esc.map((e) => e.kind), ['env-gate-disabled', 'env-gate-disabled'],
       'S15/R-S15：两门命中须各落一条 escape{kind:"env-gate-disabled"}；实测=' + JSON.stringify(withType(bid, E_ESCAPE)));
   } finally {
     if (prev === undefined) delete process.env.GATE_ENABLED; else process.env.GATE_ENABLED = prev;
@@ -813,7 +815,8 @@ test('R-27【复活·T-10】(a) 显式禁用命令行 ⇒ 放行 ＋ escape{kind
   obs(null, '(a) 显式禁用行 ⇒ 放行 + 留痕', { result: rA instanceof Error ? rA.message : rA.lanes.e1, escape: escA });
   obs(null, '(b) 空命令 ⇒ 拒 GATE_EXIT_NO_COMMAND（F-7）', rB instanceof Error ? rB.message : rB.lanes.e1);
   expectAccepted('S17：显式禁用须放行', rA);
-  assert.equal(escA.length, 1,
+  // 数量 → 数组相等（哪些）：留痕须恰为 command-declared-off 这一条
+  assert.deepEqual(escA.map((e) => e.kind), ['command-declared-off'],
     'S17/R-S17：显式禁用必须留痕 escape{kind:"command-declared-off"}；实测=' + JSON.stringify(withType(bidA, E_ESCAPE)));
   // 【X-1 已关账 · F-7 批次 `f7-empty-gate-20260915`，用户裁决「严控勿松」】
   //   不可达根因（复活时实测）：`GATE_LINE_RE = /^gate:\s*(.+)$/gm` 的 `(.+)` 要求命令段**非空** ⇒ 空声明行
@@ -828,7 +831,9 @@ test('R-27【复活·T-10】(a) 显式禁用命令行 ⇒ 放行 ＋ escape{kind
     'S17/F-7：空命令段必须拒 GATE_EXIT_NO_COMMAND（防一码遮百丑）；实测=' + String(rB && rB.message));
   assert.equal(store.readBatch(SID, bidB).lanes.e1, 'review', 'F-7：空命令拒 merged，lane 留 review（失败 lane 非终态）');
   const blkB = withType(bidB, 'gate.exit_blocked');
-  assert.equal(blkB.length, 1, 'F-7：空命令须落**恰 1 条** gate.exit_blocked；实测=' + JSON.stringify(blkB));
+  // 数量 → 数组相等（哪些）：拒码下一行单独点名，此处数组相等同时锁「恰 1 条」+「那条的 code」
+  assert.deepEqual(blkB.map((e) => e.code), ['GATE_EXIT_NO_COMMAND'],
+    'F-7：空命令须落恰 1 条 gate.exit_blocked（code=GATE_EXIT_NO_COMMAND）；实测=' + JSON.stringify(blkB));
   assert.equal(blkB[0].code, 'GATE_EXIT_NO_COMMAND', 'F-7：拒码须为 GATE_EXIT_NO_COMMAND；实测=' + JSON.stringify(blkB[0]));
 });
 ARCHIVED_CASES['R-27 显式禁用命令行 ⇒ 放行 ＋ escape{kind:"command-declared-off"}；空命令 ⇒ 仍拒 GATE_EXIT_NO_COMMAND（S17）'] = [

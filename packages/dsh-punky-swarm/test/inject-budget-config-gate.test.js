@@ -62,7 +62,8 @@ const overlayWith = (injectBudget) => ({ capabilities: { injectBudget } });
 
 test('[T-1/AC-21] 单字段坏值 totalBytes:-1 ⇒ 加载期报错（文案含 DEP-6 与字段名）', () => {
   const { errors } = validateCapabilities(capsWith({ enabled: true, totalBytes: -1 }));
-  assert.equal(errors.length, 1, '应恰报一条，实得 ' + JSON.stringify(errors));
+  const namedFields = errors.map((e) => INJECT_BUDGET_LIMIT_FIELDS.find((f) => e.includes(f))).filter(Boolean);
+  assert.deepEqual(namedFields, ['totalBytes'], '应恰报一条且**点名 totalBytes**（身份，非条数）：' + JSON.stringify(errors));
   assert.match(errors[0], /^DEP-6: /, '文案须以 DEP-6 标识开头（与 DEP-1..DEP-5 同形）');
   assert.ok(errors[0].includes('totalBytes'), '文案须含**字段名**：' + errors[0]);
   assert.ok(errors[0].includes('-1'), '文案须含**实得值**：' + errors[0]);
@@ -73,8 +74,9 @@ test('[T-2/AC-21] 五字段 × 五种坏值矩阵 ⇒ 逐格被拒（25 格全�
   for (const field of INJECT_BUDGET_LIMIT_FIELDS) {
     for (const [kind, bad] of BAD_VALUES) {
       const { errors } = validateCapabilities(capsWith({ enabled: true, [field]: bad }));
-      assert.equal(errors.length, 1,
-        '字段 ' + field + ' / 坏值类 ' + kind + ' 应恰报一条，实得 ' + JSON.stringify(errors));
+      const namedFields = errors.map((e) => INJECT_BUDGET_LIMIT_FIELDS.find((f) => e.includes(f))).filter(Boolean);
+      assert.deepEqual(namedFields, [field],
+        '字段 ' + field + ' / 坏值类 ' + kind + ' 应恰报一条且点名该字段（身份，非条数），实得 ' + JSON.stringify(errors));
       assert.match(errors[0], /^DEP-6: /, field + '/' + kind + ' 标识不符：' + errors[0]);
       assert.ok(errors[0].includes(field),
         '字段 ' + field + ' / 坏值类 ' + kind + ' 的文案未点名该字段：' + errors[0]);
@@ -100,9 +102,11 @@ test('[T-3/AC-22] **热更通道同判**：同一坏值经 validateOverlay ⇒ �
   const bad = { enabled: true, totalBytes: -1 };
   const staticVerdict = validateCapabilities(capsWith(bad));
   const hotVerdict = validateOverlay(overlayWith(bad));
-  assert.equal(staticVerdict.errors.length, 1, '静态通道应报一条');
+  assert.deepEqual(staticVerdict.errors.map((e) => INJECT_BUDGET_LIMIT_FIELDS.find((f) => e.includes(f))).filter(Boolean),
+    ['totalBytes'], '静态通道须恰报一条且点名 totalBytes（身份，非条数）');
   assert.equal(hotVerdict.ok, false, '热更通道须**拒**（ok:false），实得 ' + JSON.stringify(hotVerdict));
-  assert.equal(hotVerdict.errors.length, 1, '热更通道应报一条，实得 ' + JSON.stringify(hotVerdict.errors));
+  assert.deepEqual(hotVerdict.errors.map((e) => INJECT_BUDGET_LIMIT_FIELDS.find((f) => e.includes(f))).filter(Boolean),
+    ['totalBytes'], '热更通道须恰报一条且点名 totalBytes（身份，非条数），实得 ' + JSON.stringify(hotVerdict.errors));
   assert.deepEqual(hotVerdict.errors, staticVerdict.errors,
     '两通道文案须**同源**（共用单一判定点）');
 });
@@ -136,7 +140,11 @@ test('[扩展·登记] 非对象 injectBudget（5 / "on" / true）⇒ 拒（超�
   // 实测全仓零处传非对象（仅注册表默认 / readCapability / 形参缺省）⇒ 无误伤面。
   for (const bad of [5, 'on', true]) {
     const { errors } = validateCapabilities(capsWith(bad));
-    assert.equal(errors.length, 1, JSON.stringify(bad) + ' 应被拒，实得 ' + JSON.stringify(errors));
+    // 身份而非条数：**恰一条，且那一条必须是「非对象」形态**（其它形态混入即红）。
+    assert.deepEqual(
+      errors.map((e) => (/^DEP-6: capabilities\.injectBudget must be an object/.test(e) ? 'object-form' : 'other:' + e)),
+      ['object-form'],
+      JSON.stringify(bad) + ' 只能报「非对象」这一条，实得 ' + JSON.stringify(errors));
     assert.match(errors[0], /^DEP-6: capabilities\.injectBudget must be an object/);
     assert.equal(validateOverlay(overlayWith(bad)).ok, false,
       '热更通道亦须拒非对象：' + JSON.stringify(bad));

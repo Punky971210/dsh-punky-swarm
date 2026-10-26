@@ -417,9 +417,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 202,
+      "asserts": 204,
       "blankLines": 55,
-      "lines": 801,
+      "lines": 804,
       "tautologies": 0,
       "tests": 41,
       "todos": 0
@@ -611,7 +611,7 @@
     "test/gate-event-const-e2e-r34.test.js": {
       "asserts": 40,
       "blankLines": 19,
-      "lines": 194,
+      "lines": 195,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -635,7 +635,7 @@
     "test/gate-lane-snapshot.test.js": {
       "asserts": 33,
       "blankLines": 42,
-      "lines": 329,
+      "lines": 330,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -643,7 +643,7 @@
     "test/gate-lite-batch2.test.js": {
       "asserts": 32,
       "blankLines": 21,
-      "lines": 171,
+      "lines": 172,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -651,7 +651,7 @@
     "test/gate-lite-smoke.test.js": {
       "asserts": 19,
       "blankLines": 19,
-      "lines": 153,
+      "lines": 154,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -675,7 +675,7 @@
     "test/gate-techdebt-red.test.js": {
       "asserts": 99,
       "blankLines": 76,
-      "lines": 1062,
+      "lines": 1067,
       "tautologies": 0,
       "tests": 35,
       "todos": 4
@@ -939,7 +939,7 @@
     "test/inject-budget-config-gate.test.js": {
       "asserts": 47,
       "blankLines": 26,
-      "lines": 221,
+      "lines": 229,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -947,7 +947,7 @@
     "test/inject-budget.test.js": {
       "asserts": 103,
       "blankLines": 75,
-      "lines": 708,
+      "lines": 715,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T11:29:21Z",
+  "generatedAt": "2026-10-26T11:41:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "batch3 遗留 B3-5 两条清册漏列：auditlog-mount exporter 幂等改身份数组、p2-state-single 偏离集改 label 身份数组（Leader 自决）",
+  "reason": "波2 第四批四域(gate/engine/auto/inject)数量断言→身份集合升格；auto 0 改、engine 2 改，均按分桶守恒判定",
   "schema": 1,
   "totals": {
-    "asserts": 10861,
+    "asserts": 10863,
     "blankLines": 5717,
     "files": 208,
-    "lines": 61399,
+    "lines": 61426,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4
