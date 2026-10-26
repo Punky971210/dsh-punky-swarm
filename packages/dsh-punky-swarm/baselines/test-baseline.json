@@ -73,9 +73,9 @@
       "todos": 0
     },
     "test/agent-descriptor.test.js": {
-      "asserts": 19,
+      "asserts": 31,
       "blankLines": 19,
-      "lines": 127,
+      "lines": 139,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1465,9 +1465,9 @@
       "todos": 0
     },
     "test/tool-descriptor.test.js": {
-      "asserts": 60,
+      "asserts": 72,
       "blankLines": 19,
-      "lines": 224,
+      "lines": 236,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T23:33:01Z",
+  "generatedAt": "2026-10-26T23:50:24Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "热更 warn 归因收窄（topicWarnVerdict + 8 处）+ FLK-3 结构守卫 G1",
+  "reason": "路由数量判据→28 条存在性（定向替换，用户裁定只锚定存在性）+ 25 条契约豁免清单落盘",
   "schema": 1,
   "totals": {
-    "asserts": 11017,
+    "asserts": 11041,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62843,
+    "lines": 62867,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4

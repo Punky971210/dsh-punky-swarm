@@ -201,10 +201,22 @@ test('端点：?name= 过滤返回单工具；未知 name 返回空', () => {
 test('端点：enabled=false（catalog null）时不注册 /tools（路由数不变）', () => {
   const { routes } = apiWithCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/tools'), 'catalog null 时不得注册 /tools');
-  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 = /stream SSE 路由）');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm'), '缺路由 /api/dsh-punky-swarm');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batches'), '缺路由 /api/dsh-punky-swarm/batches');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/sessions'), '缺路由 /api/dsh-punky-swarm/sessions');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batch'), '缺路由 /api/dsh-punky-swarm/batch');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/mailbox'), '缺路由 /api/dsh-punky-swarm/mailbox');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/locks'), '缺路由 /api/dsh-punky-swarm/locks');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/stream'), '缺路由 /api/dsh-punky-swarm/stream');
   // 无 catalog 参数（createApi 缺省调用形态）同样不注册
   const { routes: r2 } = apiWithCatalog(undefined);
-  assert.equal(r2.length, 7);
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm'), '缺路由 /api/dsh-punky-swarm');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/batches'), '缺路由 /api/dsh-punky-swarm/batches');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/sessions'), '缺路由 /api/dsh-punky-swarm/sessions');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/batch'), '缺路由 /api/dsh-punky-swarm/batch');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/mailbox'), '缺路由 /api/dsh-punky-swarm/mailbox');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/locks'), '缺路由 /api/dsh-punky-swarm/locks');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/stream'), '缺路由 /api/dsh-punky-swarm/stream');
 });
 
 test('目录快照：buildToolCatalog 只读（list 拷贝 / descriptors 冻结 / get 精确命中）', () => {

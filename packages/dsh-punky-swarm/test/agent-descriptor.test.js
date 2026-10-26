@@ -120,7 +120,19 @@ function invoke(route, url) {
 test('端点：enabled=false（agentCatalog null/缺省）时不注册 /agents（既有 7 路由契约保持）', () => {
   const { routes } = apiWithAgentCatalog(null);
   assert.ok(!routes.some((r) => r.path === '/api/dsh-punky-swarm/agents'), 'agentCatalog null 时不得注册 /agents');
-  assert.equal(routes.length, 7, '既有 7 路由契约保持（R3 exec-panel-b：+1 /stream）');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm'), '缺路由 /api/dsh-punky-swarm');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batches'), '缺路由 /api/dsh-punky-swarm/batches');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/sessions'), '缺路由 /api/dsh-punky-swarm/sessions');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batch'), '缺路由 /api/dsh-punky-swarm/batch');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/mailbox'), '缺路由 /api/dsh-punky-swarm/mailbox');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/locks'), '缺路由 /api/dsh-punky-swarm/locks');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/stream'), '缺路由 /api/dsh-punky-swarm/stream');
   const { routes: r2 } = apiWithAgentCatalog(undefined);
-  assert.equal(r2.length, 7);
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm'), '缺路由 /api/dsh-punky-swarm');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/batches'), '缺路由 /api/dsh-punky-swarm/batches');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/sessions'), '缺路由 /api/dsh-punky-swarm/sessions');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/batch'), '缺路由 /api/dsh-punky-swarm/batch');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/mailbox'), '缺路由 /api/dsh-punky-swarm/mailbox');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/locks'), '缺路由 /api/dsh-punky-swarm/locks');
+  assert.ok(r2.some((r) => r.path === '/api/dsh-punky-swarm/stream'), '缺路由 /api/dsh-punky-swarm/stream');
 });
