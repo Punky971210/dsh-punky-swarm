@@ -228,6 +228,8 @@ test('T12: 全排除——状态门收据（ruleRefs=[]）/ REQUIRE_APPROVAL / D
   assert.deepEqual(escEvs('b-t12'), [], '空集契约');
   // 正例对照（可计入 DENY 记录 1 条——证明排除是类别过滤而非全拒）
   assert.ok(record('b-t12', 9));
+  // P4 不可改造（Leader 裁定）：refEvs 元素除 type 外在本文件无可证身份字段；
+  // type 已被 filter 锁死（恒等）⇒ 造身份只能是伪装（type 恒真 / 猜 reason 得 [undefined] 假绿）。保留计数。
   assert.equal(refEvs('b-t12').length, 1);
   // 配置侧：REQUIRE_APPROVAL/状态门不可配入（resolveEscalationConfig 剔除非法、剔空回退默认、warn 留痕）
   const warns = [];
@@ -247,6 +249,8 @@ test('T13: phase 非 running（planning / manual paused）→ refusal 记录照�
   gStore.createBatch(S2, { batchId: 'b-t13a', wavePlan: buildWavePlan({ batchId: 'b-t13a', tasks: [{ id: 'l1' }] }) });
   for (let i = 1; i <= 3; i++) record('b-t13a', i);
   assert.equal(gStore.readBatch(S2, 'b-t13a').phase, 'planning');
+  // P4 不可改造（Leader 裁定）：refEvs 元素除 type 外在本文件无可证身份字段；
+  // type 已被 filter 锁死（恒等）⇒ 造身份只能是伪装（type 恒真 / 猜 reason 得 [undefined] 假绿）。保留计数。
   assert.equal(refEvs('b-t13a').length, 3, '记录照写（C4 不受 phase 闸挡）');
   assert.deepEqual(escEvs('b-t13a'), [], '不升级（C5 评估仅 running）（空集契约：整数组逐项）');
   // manual paused（running → setPhase paused，非升级路径）：记录照写、无 governance 升级事件
@@ -255,6 +259,8 @@ test('T13: phase 非 running（planning / manual paused）→ refusal 记录照�
   for (let i = 1; i <= 3; i++) record('b-t13b', i);
   const bb = gStore.readBatch(S2, 'b-t13b');
   assert.equal(bb.phase, 'paused');
+  // P4 不可改造（Leader 裁定）：refEvs 元素除 type 外在本文件无可证身份字段；
+  // type 已被 filter 锁死（恒等）⇒ 造身份只能是伪装（type 恒真 / 猜 reason 得 [undefined] 假绿）。保留计数。
   assert.equal(refEvs('b-t13b').length, 3, 'paused 期间记录照写');
   assert.deepEqual(escEvs('b-t13b'), [], '不升级（空集契约：整数组逐项）');
   assert.equal(phaseEvs('b-t13b').filter((e) => e.reason === 'governance-escalate').length, 0, '手动 paused 无 governance reason 事件');
@@ -269,7 +275,11 @@ test('T14: paused 后继续 refusal → 记录照写、升级事件仍 1 条（p
   record('b-t14', 4); // paused 后继续可计入 refusal（phase 非 running → 只记不评）
   const b = gStore.readBatch(S2, 'b-t14');
   assert.equal(b.phase, 'paused', 'phase 保持 paused');
+  // P4 不可改造（Leader 裁定）：refEvs 元素除 type 外在本文件无可证身份字段；
+  // type 已被 filter 锁死（恒等）⇒ 造身份只能是伪装（type 恒真 / 猜 reason 得 [undefined] 假绿）。保留计数。
   assert.equal(refEvs('b-t14').length, 4, '记录照写（第 4 条已追加）');
+  // P4 缺采样点（Leader 裁定）：本应改 P2 增量（追加前后差 0），但「第 4 条 refusal 写入之前」
+  // 的时点在本 block 未定位 ⇒ M-2 允许加采样行 ≠ 可乱选采样点；硬插基线会变假绿。保留计数。
   assert.equal(escEvs('b-t14').length, 1, '升级事件仍 1 条（不重复）');
 });
 
@@ -301,6 +311,8 @@ test('T16: 归属失败（无 member.dispatch 登记，D-1 当前出厂语义）
     const evFile = eventStreamFileOf(root, sid);
     assert.equal(fs.existsSync(evFile), true, 'governance jsonl 有行');
     const lines = fs.readFileSync(evFile, 'utf8').trim().split('\n').filter(Boolean);
+    // P4 写入方未现（Leader 裁定）：evFile 的写入方不在本 block ⇒ 「期望 3 行内容」无来源可核，
+    // 造身份须先知道写入内容（= 第二真源）。保留计数。
     assert.equal(lines.length, 3, 'jsonl 3 行');
     // 批事件流零新增（零 governance.refusal / 零升级事件）、phase 仍 running（不误暂停）
     const aux = createStore(root);
@@ -324,10 +336,12 @@ test('T17: 与 failed-escalate 双源并存——先到者 paused、后到者被
   assert.equal(gStore.readBatch(S2, 'b-t17a').phase, 'paused', 'failed-escalate 先触发');
   for (let i = 1; i <= 3; i++) record('b-t17a', i); // escalation 开启下 refusal 记录照写
   const ba = gStore.readBatch(S2, 'b-t17a');
+  // P4 不可改造（Leader 裁定）：refEvs 元素除 type 外在本文件无可证身份字段；
+  // type 已被 filter 锁死（恒等）⇒ 造身份只能是伪装（type 恒真 / 猜 reason 得 [undefined] 假绿）。保留计数。
   assert.equal(refEvs('b-t17a').length, 3, 'refusal 记录照写（C4 不受另一源 paused 挡）');
   assert.deepEqual(escEvs('b-t17a'), [], 'governance 升级被 phase 闸挡（C9 不叠加）（空集契约：整数组逐项）');
   const pausedA = phaseEvs('b-t17a').filter((e) => e.to === 'paused');
-  assert.equal(pausedA.length, 1, '仅 1 条 paused 事件');
+  assert.deepEqual(pausedA.map((e) => e.reason), ['failed-escalate'], '仅 1 条 paused 事件（身份 = reason 集合；换一条即红）');
   assert.equal(pausedA[0].reason, 'failed-escalate', 'reason 与先到者一致');
   // (b) governance-escalate 先到 → failed 结算后到被挡（结算照写不升级）
   makeRunningBatch('b-t17b', ['f1', 'f2', 'f3']);
@@ -338,9 +352,11 @@ test('T17: 与 failed-escalate 双源并存——先到者 paused、后到者被
   gStore.setMember(S2, 'b-t17b', 'f3', 'failed'); // 结算照写（lanes failed）但不升级（phase 非 running）
   const bb = gStore.readBatch(S2, 'b-t17b');
   assert.equal(bb.lanes.f3, 'failed', 'failed 结算照常写入（paused 期间不阻断结算）');
+  // P4 缺采样点（Leader 裁定）：本应改 P2 增量（追加前后差 0），但「第 4 条 refusal 写入之前」
+  // 的时点在本 block 未定位 ⇒ M-2 允许加采样行 ≠ 可乱选采样点；硬插基线会变假绿。保留计数。
   assert.equal(escEvs('b-t17b').length, 1, 'governance 升级事件仍 1 条');
   const pausedB = phaseEvs('b-t17b').filter((e) => e.to === 'paused');
-  assert.equal(pausedB.length, 1, '仅 1 条 paused 事件');
+  assert.deepEqual(pausedB.map((e) => e.reason), ['governance-escalate'], '仅 1 条 paused 事件（身份 = reason 集合；换一条即红）');
   assert.equal(pausedB[0].reason, 'governance-escalate', 'reason 与先到者一致');
   assert.equal(bb.events.filter((e) => e.type === EVT_BATCH_FAILED_ESCALATE).length, 0, 'failed-escalate 零事件（phase 闸挡第二源）');
 });
@@ -367,7 +383,7 @@ test('T19: R2 事件发布——governance-escalate 的 batch.phase 一并 emitS
   const b = store19.readBatch(S19, bid);
   assert.equal(b.phase, 'paused', '升级触发');
   const paused = phases.filter((p) => p.to === 'paused');
-  assert.equal(paused.length, 1, 'batch.phase running→paused 发布恰 1 条');
+  assert.deepEqual(paused.map((e) => e.reason + ':' + e.type), ['governance-escalate:batch.phase'], 'running→paused 发布恰 1 条（身份 = reason:type；换一条即红）');
   assert.equal(paused[0].reason, 'governance-escalate', '发布载荷 reason 区分双源');
   assert.equal(paused[0].type, 'batch.phase');
   up();
