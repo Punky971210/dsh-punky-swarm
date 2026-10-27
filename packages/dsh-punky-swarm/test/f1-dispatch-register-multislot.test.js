@@ -110,7 +110,7 @@ test('T-3.1 A1-P1-05 同一 caller（两调用方皆无 agent.session.id）两�
     assert.equal(first.nextCalls, 1);
     assert.equal(aux.readBatch('sess-q', 'b-A').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'b-A 已登记（先声明先消费）');
     assert.equal(aux.readBatch('sess-q', 'b-A').events.find((e) => e.type === EVT_MEMBER_DISPATCH).workerSessionId, 'ws-A');
-    assert.equal(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, 'b-B 不得被抢消费（改前正是串批面）');
+    assert.deepEqual(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH), [], 'b-B（空集契约：整数组逐项）');
     assert.deepEqual(reg.pendingIntents().map((p) => p.batchId), ['b-B'], '队列递减一条（FIFO shift），不整键清空');
     assert.ok(ctx.calls.warn.some((w) => w.includes('pending=2') && w.includes('FIFO')), 'D-3.5 歧义留痕（含 pending=N 与 FIFO）');
 
@@ -139,7 +139,7 @@ test('T-3.2 A1-P1-05 阳性对照：不同 caller（各有 agent 会话）意图
 
     await postOnce(ctx, execOf('subagent', {}, 'mgr-2'), subagentResult('ws-D'));
     assert.equal(aux.readBatch('sess-q', 'b-D').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'mgr-2 消费自己的 b-D');
-    assert.equal(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, 'mgr-1 的意图不得被 mgr-2 的派发吃掉');
+    assert.deepEqual(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH), [], 'b-C（空集契约：整数组逐项）');
     assert.deepEqual(reg.pendingIntents().map((p) => p.caller), ['mgr-1'], '仅 mgr-2 的槽被消费');
 
     await postOnce(ctx, execOf('subagent', {}, 'mgr-1'), subagentResult('ws-C'));
@@ -163,7 +163,9 @@ test('T-3.3 A1-P1-05 未命中档①：无 resolver、无意图 ⇒ warn「该�
     assert.ok(unbound[0].includes('该调用方无待消费派发意图'), '档①关键词；实际=' + unbound[0]);
     assert.ok(unbound[0].includes('tool=subagent') && unbound[0].includes('caller=cli'), '留痕须带 tool/caller');
     assert.equal(store.counters.appendEvent, 0, '未命中 ⇒ 零事件（不得伪造归属）');
-    assert.equal(index.size, 0, '未命中 ⇒ 索引零映射');
+    assert.deepEqual([...index.keys()], [], '未命中 ⇒ 索引零映射（空集契约：索引键集合为空）');
+    // P4 不可改造（Leader 裁定）：reg.count() 是**回调调用计数**，元素为次数、无可证身份字段；
+    // 造身份只能是伪装（如抽恒等 token）。保留计数。
     assert.equal(reg.count(), 0);
     assert.equal(ctx.calls.warn.filter((w) => w.includes('dispatch registration failed')).length, 0, '不得走异常隔离面（正常未命中，不是错误）');
   } finally {
@@ -218,7 +220,7 @@ test('T-3.6 A1-P1-05 阳性对照：同输入 + 有效意图 ⇒ 正常登记 1 
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-H', lane: 'l1', status: 'running' }), { isError: false, value: {} });
     const r = await postOnce(ctx, execOf('subagent', {}), subagentResult('ws-bound'));
     assert.equal(r.nextCalls, 1);
-    assert.equal(unboundWarns(ctx).length, 0, '命中路不得产 unbound 留痕（否证「warn 恒有」）');
+    assert.deepEqual(unboundWarns(ctx), [], '命中路不得产 unbound 留痕（否证「warn 恒有」）（空集契约：整数组逐项）');
     assert.equal(store.counters.appendEvent, 1, '恰 1 条 member.dispatch');
     assert.equal(aux.readBatch('sess-q', 'b-H').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1);
     assert.deepEqual(reg.pendingIntents(), [], '意图已消费');
