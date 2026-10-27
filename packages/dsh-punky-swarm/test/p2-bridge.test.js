@@ -147,6 +147,8 @@ test('fail-closed: inbound=true 但未配置投递目标 ⇒ INBOUND_UNAVAILABLE
     assert.equal(r.code, 'INBOUND_UNAVAILABLE');
   }
   assert.ok(!fs.existsSync(path.join(root, 'sessions')), '目标未配置时不得落盘（fail-closed，绝不投默认目标）');
+  // P4-b 不可改造（Leader 裁定）：warns 元素是**自由文案**（字符串），`map` 出身份即原文 ⇒ 只能数条数；P4-b。
+  // map 出身份即原文 = 第二真源。保留计数。
   assert.equal(warns.length, 1, '装配期恰好一条 warn');
   assert.match(warns[0], /inboundSessionId/);
   assert.match(warns[0], /inboundBatchId/);
@@ -191,7 +193,7 @@ test('inbound=true：TaskCommand START → mailbox.inbox 原子写（ackId 有�
 
   // 落盘消息：ackId 有效、负载=command/commandParams/taskId、元数据=sessionId/taskId/lane
   const boxItems = readUnacked(mbRoot('s2', 'b2'), { type: 'inbox' });
-  assert.equal(boxItems.length, 1, 'inbox 恰 1 条（条数）');
+  assert.deepEqual(boxItems.map((i) => i.meta.lane), ['lane-a'], 'inbox 恰 1 条（身份 = meta.lane 集合；期望取自测试自造 lane-a）');
   assert.equal(new Set(boxItems.map((i) => i.ackId)).size, boxItems.length, 'inbox 条目 ackId 须互异');
   const m = boxItems[0];
   assert.equal(m.ackId, r.ackId);
@@ -385,7 +387,7 @@ test('/rpc START（bridge enabled+inbound=true）→ 200 accepted + mailbox.inbo
     assert.equal(r.body.result.senderId, CLIENT_AIC);
     // 核心断言：/rpc START → mailbox.inbox unacked=1（inbound 实测缺口修复）
     const items = readUnacked(v6Root('sess-v6', 'b-v6'), { type: 'inbox' });
-    assert.equal(items.length, 1, 'inbox unacked 恰 1 条（条数）');
+    assert.deepEqual(items.map((i) => i.meta.lane), ['lane-a'], 'inbox unacked 恰 1 条（身份 = meta.lane 集合；期望取自测试自造 lane-a）');
     assert.equal(new Set(items.map((i) => i.ackId)).size, items.length, 'inbox 条目 ackId 须互异（重复计一条即红）');
     assert.equal(items[0].message.command, 'start');
     assert.equal(items[0].message.taskId, 't-v6');

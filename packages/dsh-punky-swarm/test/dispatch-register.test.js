@@ -105,7 +105,7 @@ test('R2: installDispatchRegistration——member_status(running) 意图 → sub
     await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r2a'));
     const b = aux.readBatch('mgr-s', 'b-r2');
     const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
-    assert.equal(dis.length, 1, 'member.dispatch 恰 1 条');
+    assert.deepEqual(dis.map((e) => e.workerSessionId), ['ws-r2a'], 'member.dispatch 恰 1 条（身份 = workerSessionId 集合；期望取自本用例 subagentResult(ws-r2a) 入参）');
     assert.equal(dis[0].workerSessionId, 'ws-r2a');
     assert.equal(dis[0].lane, 'l1');
     // dispatchIndex 可查（与读侧骨架同一 Map，登记后立即命中）
@@ -318,7 +318,7 @@ test('R10: 任务包含句柄 ⇒ 依句柄 (batchId, lane) 精确登记；并�
     await dispatchPostAll(ctx, execOf('subagent', { description: h2.firstLine }, 'mgr-s'), subagentResult('ws-l2'));
     const b = aux.readBatch('mgr-s', 'b-r10');
     const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
-    assert.equal(dis.length, 2, '两条 lane 均登记（旧单槽意图只会登记最后一条）');
+    assert.deepEqual(dis.map((e) => e.workerSessionId).sort(), ['ws-l1', 'ws-l2'], '两条 lane 均登记（身份 = 两个 workerSessionId；期望取自两次派发各自的 subagentResult 入参）');
     assert.deepEqual(index.get('ws-l1'), { sessionId: 'mgr-s', batchId: 'b-r10', lane: 'l1' });
     assert.deepEqual(index.get('ws-l2'), { sessionId: 'mgr-s', batchId: 'b-r10', lane: 'l2' });
     // 句柄一次性 ⇒ 重放同一句柄不新增登记（且不回退意图路径）
