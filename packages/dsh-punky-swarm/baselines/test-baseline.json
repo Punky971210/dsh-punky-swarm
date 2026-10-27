@@ -1593,9 +1593,9 @@
       "todos": 0
     },
     "test/watch-longrun.test.js": {
-      "asserts": 112,
+      "asserts": 115,
       "blankLines": 34,
-      "lines": 486,
+      "lines": 498,
       "tautologies": 0,
       "tests": 22,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T13:55:30Z",
+  "generatedAt": "2026-10-27T13:59:10Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点11：A-03 governance-escalate 收口（9改 + 8处P4注释登记，asserts不变）",
+  "reason": "检查点12：A-04 watch-longrun 12 site（提升10/等价2，P4=0，Δ+2）",
   "schema": 1,
   "totals": {
-    "asserts": 11036,
+    "asserts": 11039,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62949,
+    "lines": 62961,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
