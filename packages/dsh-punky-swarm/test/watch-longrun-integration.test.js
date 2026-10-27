@@ -235,7 +235,7 @@ test('IT-F stint 重派重置：新 dispatch → 计时归零；再超时按新 
   assert.notEqual(stints[0], stints[1], '两期候选 runningSince 必须互异（同一 stint 重复产两期 ⇒ 两值相同 ⇒ 红；不数个数）');
   const bcStints = candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince);
   assert.deepEqual([...new Set(bcStints)].sort(), [...new Set(stints.map((t) => new Date(t).toISOString()))].sort(), 'broadcast 两期身份集合 === 事件流两期集合（跨面一致；换一条即红）');
-  assert.equal(new Set(candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince)).size, 2, 'broadcast 两期身份须互异');
+  // 已删：new Set(bcast runningSince).size === 2 —— 邻近 :237 的跨面集合断言（broadcast 集合 === 事件流集合）已覆盖同一职能（本条只是它的单侧计数形式）
   assert.deepEqual([...new Set(evs2.map((e2) => Date.parse(e2.runningSince)))].sort(), [...new Set(stints)].sort(), '两期 runningSince 去重后的身份集合 === 原始两值（同值去重会变 1 ⇒ 红）');
   assert.equal(stints.every((t) => Number.isFinite(t)), true, '两期 runningSince 均可解析为有限时间戳（Date.parse 非 NaN）');
 });

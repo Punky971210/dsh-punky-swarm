@@ -1585,7 +1585,7 @@
       "todos": 0
     },
     "test/watch-longrun-integration.test.js": {
-      "asserts": 70,
+      "asserts": 69,
       "blankLines": 14,
       "lines": 281,
       "tautologies": 0,
@@ -1609,7 +1609,7 @@
       "todos": 0
     },
     "test/wave-plan-pairing.test.js": {
-      "asserts": 37,
+      "asserts": 36,
       "blankLines": 21,
       "lines": 204,
       "tautologies": 0,
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T15:22:48Z",
+  "generatedAt": "2026-10-27T15:42:47Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,10 +1676,10 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点20：S-2+S-3 两批全P4-b登记（25条注释，asserts不变）",
+  "reason": "净减批 2 条冗余断言（watch-longrun-integration Δ-1、wave-plan-pairing Δ-1）；两条接替者均已逐字核对：前者被 :237 跨面集合完整相等严格蕴含，后者被 :126 集合相等蕴含且多锁「只有一条」；删后 test() 仍余 12 / 5 条断言，test() 删除 0",
   "schema": 1,
   "totals": {
-    "asserts": 11039,
+    "asserts": 11037,
     "blankLines": 5835,
     "files": 208,
     "lines": 63075,

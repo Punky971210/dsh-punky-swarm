@@ -125,7 +125,7 @@ test('U7-4【可达·替代判据】P1 命中：审计认领 exec lane 却未消
   const w = pairingOf(plan);
   assert.deepEqual(w.map((x) => x.task), ['a1'], '恰好 1 条配对告警（身份 = 告警归属 task 集合；期望取自本 block 的 A(a1,…) 构造）');
   assert.equal(w[0].code, CODE, '告警码逐字');
-  assert.equal(w[0].task, 'a1', '告警归属 = 认领方 audit lane');
+  // 已删：w[0].task === 'a1' —— 邻近 :126 的 deepEqual(w.map(x => x.task), ['a1']) 已覆盖同一职能（集合形式 ⊃ 单元素形式）
   assert.match(w[0].message, /未覆盖/, '文案须点明判据（未覆盖交付产物）');
   assert.match(w[0].message, /exec\/e1\.md/, '文案须列出未覆盖的交付产物');
   assert.equal(/真包含/.test(w[0].message), false, '文案不得再含退役判据的措辞');
