@@ -9,11 +9,11 @@
       "todos": 0
     },
     "test/accept-pack1-guidance.test.js": {
-      "asserts": 61,
-      "blankLines": 38,
-      "lines": 471,
+      "asserts": 56,
+      "blankLines": 37,
+      "lines": 455,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 13,
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
@@ -857,9 +857,9 @@
       "todos": 0
     },
     "test/guidance-id-coverage.test.js": {
-      "asserts": 16,
-      "blankLines": 16,
-      "lines": 130,
+      "asserts": 13,
+      "blankLines": 15,
+      "lines": 128,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1387,7 +1387,7 @@
     "test/skills-sync.test.js": {
       "asserts": 66,
       "blankLines": 31,
-      "lines": 369,
+      "lines": 375,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T15:42:47Z",
+  "generatedAt": "2026-10-27T16:20:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "净减批 2 条冗余断言（watch-longrun-integration Δ-1、wave-plan-pairing Δ-1）；两条接替者均已逐字核对：前者被 :237 跨面集合完整相等严格蕴含，后者被 :126 集合相等蕴含且多锁「只有一条」；删后 test() 仍余 12 / 5 条断言，test() 删除 0",
+  "reason": "指引测试去绑数量/绑内容假测试：删规模快照 3 条(guidance-id-coverage inlineEntries/bodySections/副本同形) + 被逐节包含覆盖的总数 1 条(AC-pack1-3 整条删) + 历史文案清零 2 条(AC-pack1-8「四条判据」/AC-pack1-9 陈述值==实测)；改 length===1→集合相等 1 条、精确文案→结构键 1 条、每节恰1处→守恒式、sync 条数→身份集合；Δ asserts=-8 tests=-1（断言行减少均为删除假测试，非判据真空：更强断言见各文件邻近 deepEqual/正则）",
   "schema": 1,
   "totals": {
-    "asserts": 11037,
-    "blankLines": 5835,
+    "asserts": 11029,
+    "blankLines": 5833,
     "files": 208,
-    "lines": 63075,
+    "lines": 63063,
     "tautologies": 0,
-    "tests": 2222,
+    "tests": 2221,
     "todos": 4
   }
 }

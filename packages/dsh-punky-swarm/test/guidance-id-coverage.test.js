@@ -45,9 +45,6 @@ const PRESET = join(PKG_ROOT, 'presets', 'punky-preset');
 const GUIDANCE = join(PRESET, 'agent.cordis.yml');
 const BODY = join(PRESET, 'references', 'discipline.md');
 
-const INLINE_ENTRIES = 24;
-const BODY_SECTIONS = 32;
-
 /** 跑一次判据脚本（`--no-live`：不依赖 live 部署，CI/新机同结论）。返回 `{status, stdout, stderr, json}`。 */
 function judgeRepo(scriptPath, cwd) {
   const r = spawnSync(process.execPath, [scriptPath, '--no-live', '--json'], {
@@ -89,8 +86,6 @@ test('N3 真仓态：注入面每条目都有正文小节（forward-id 失败 = 
   assert.ok(r.json, `判据脚本输出不可解析为 JSON：${r.stdout}\n${r.stderr}`);
   const forwardId = forwardIdFailuresOf(r.json);
   assert.deepEqual(forwardId, [], `真仓态 forward-id 应为 0 条，实得 ${forwardId.length} 条：${JSON.stringify(forwardId)}`);
-  assert.equal(r.json.inlineEntries, INLINE_ENTRIES, '注入面条目数应 = 27（R-06 订正后的实测值）');
-  assert.equal(r.json.bodySections, BODY_SECTIONS, '正文 `## §` 小节数应 = 32（基线 29 + 新增 3）');
   assert.equal(r.status, 0, `真仓态判据应 exit 0，实得 ${r.status}；stderr=${r.stderr}`);
 });
 
@@ -101,7 +96,6 @@ test('N2 正例对照：临时副本不删任何节 ⇒ exit 0', () => {
   try {
     const r = judgeRepo(tree.script, tree.root);
     assert.ok(r.json, `判据脚本输出不可解析为 JSON：${r.stdout}\n${r.stderr}`);
-    assert.equal(r.json.bodySections, BODY_SECTIONS, '副本应与真仓同形（32 节）');
     assert.equal(r.status, 0, `未删节的副本应 exit 0，实得 ${r.status}；stderr=${r.stderr}`);
     assert.deepEqual(forwardIdFailuresOf(r.json), [], '未删节的副本不应有 forward-id 失败');
   } finally {
@@ -112,6 +106,8 @@ test('N2 正例对照：临时副本不删任何节 ⇒ exit 0', () => {
 // ── N1 必失败（判据的牙）──────────────────────────────────────────────────────
 
 test('N1 必失败：删掉 `## §0t` 标题前缀 ⇒ exit 1 且 forward-id 恰 1 条命中 0t', () => {
+  // 参照基线取**运行时实测**（不是常量）：合法新增小节后本用例不得假红。
+  const { bodySections: realBefore } = judgeRepo(SCRIPT, PKG_ROOT).json;
   const tree = makeTempJudgedTree((text) => text.replace(/^## §0t /m, '§0t '));
   try {
     assert.notEqual(tree.nextBody, tree.bodyText, '构造失效：副本内没找到 `## §0t ` 标题行（判据对象已改名？）');
@@ -119,10 +115,12 @@ test('N1 必失败：删掉 `## §0t` 标题前缀 ⇒ exit 1 且 forward-id 恰
     assert.ok(r.json, `判据脚本输出不可解析为 JSON：${r.stdout}\n${r.stderr}`);
     assert.equal(r.status, 1, `删节后应 exit 1，实得 ${r.status}`);
     const forwardId = forwardIdFailuresOf(r.json);
-    assert.equal(forwardId.length, 1, `应恰 1 条 forward-id 失败，实得 ${forwardId.length} 条：${JSON.stringify(forwardId)}`);
+    assert.deepEqual(forwardId.map((f) => f.check), ['forward-id'],
+      `应恰 1 条 forward-id 失败（集合相等 ⇒ 不多不少），实得：${JSON.stringify(forwardId)}`);
     assert.match(forwardId[0].detail, /0t/, `失败文案应点名 0t，实得：${forwardId[0].detail}`);
-    assert.equal(forwardId[0].detail, '注入面 0t 无正文小节 §0t', '失败载荷形制应与其他判据同款 `{check, detail}`');
-    assert.equal(r.json.bodySections, BODY_SECTIONS - 1, '删掉一节后正文小节数应 −1');
+    assert.deepEqual(Object.keys(forwardId[0]).sort(), ['check', 'detail'],
+      '失败载荷形制应与其他判据同款 `{check, detail}`');
+    assert.equal(r.json.bodySections, realBefore - 1, '删掉一节后正文小节数应比真仓（运行时实测）少 1');
   } finally {
     rmSync(tree.root, { recursive: true, force: true });
   }

@@ -314,7 +314,13 @@ test('skills-12 AC-H1-8 --json 既有键集合不变，仅新增 skills 段', ()
       '既有键与顺序一字不变',
     );
     assert.equal(j.ok, true);
-    assert.equal(j.sync.length, 5, '既有 sync 段仍是五件');
+    // 身份集合比对：sync 段承载的是「哪五件」这份契约，不是「恰好 5 个」这个数。
+    //   缺/多件时 deepEqual 的差集即点名缺项（旧写法 `length === 5` 证不出缺哪一件）。
+    assert.deepEqual(
+      j.sync.map((s) => s.file.replace(/\\/g, '/')).sort(),
+      ['agent.cordis.yml', 'asset-manifest.json', 'preset.yml', 'references/discipline.md', 'references/manager.md'],
+      '既有 sync 段仍是这五件（身份集合相等）',
+    );
     assert.deepEqual(j.failures, [], '既有 failures 段不受 skills 面污染（skills 失败只落 skills.failures）');
     assert.equal(j.skills.same, repoSkillNames().length, 'skills.same = skill 数');
     assert.equal(j.skills.diff, 0);
