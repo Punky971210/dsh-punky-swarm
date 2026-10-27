@@ -45,7 +45,7 @@ const PRESET = join(PKG_ROOT, 'presets', 'punky-preset');
 const GUIDANCE = join(PRESET, 'agent.cordis.yml');
 const BODY = join(PRESET, 'references', 'discipline.md');
 
-const INLINE_ENTRIES = 27;
+const INLINE_ENTRIES = 24;
 const BODY_SECTIONS = 32;
 
 /** 跑一次判据脚本（`--no-live`：不依赖 live 部署，CI/新机同结论）。返回 `{status, stdout, stderr, json}`。 */
