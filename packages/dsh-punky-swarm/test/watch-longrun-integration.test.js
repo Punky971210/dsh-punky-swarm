@@ -232,11 +232,12 @@ test('IT-F stint 重派重置：新 dispatch → 计时归零；再超时按新 
   // 第一期 runningSince 的**精确值由引擎时钟决定**（实测比 base 晚 2ms）⇒ 不写死；只锁「存在且早于重派时点」
   assert.deepEqual(stints.length > 1 ? [stints[1]] : [], [base + 22 * MIN], '第二期 runningSince = 重派注入的 base+22min（输入侧精确值）');
   assert.equal(stints.length === 2 && stints[0] < base + 22 * MIN, true, '第一期 runningSince 存在且早于重派时点（两期互异；精确值不写死）');
-  assert.equal(new Set(evs2.map((e) => Date.parse(e.runningSince))).size, 2, '两期候选须互异（同一 stint 重复产两期即红）');
-  assert.equal((candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince)).length, 2, 'broadcast 两期各 1 条（按 stint 身份去重）');
+  assert.notEqual(stints[0], stints[1], '两期候选 runningSince 必须互异（同一 stint 重复产两期 ⇒ 两值相同 ⇒ 红；不数个数）');
+  const bcStints = candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince);
+  assert.deepEqual([...new Set(bcStints)].sort(), [...new Set(stints.map((t) => new Date(t).toISOString()))].sort(), 'broadcast 两期身份集合 === 事件流两期集合（跨面一致；换一条即红）');
   assert.equal(new Set(candOf(bcastItems(root, S, batchId)).map((m) => m.message?.runningSince)).size, 2, 'broadcast 两期身份须互异');
-  const sinceSet = new Set(evs2.map((e2) => Date.parse(e2.runningSince)));
-  assert.equal(sinceSet.size, 2, '两期候选 runningSince 互异（按 stint 去重）');
+  assert.deepEqual([...new Set(evs2.map((e2) => Date.parse(e2.runningSince)))].sort(), [...new Set(stints)].sort(), '两期 runningSince 去重后的身份集合 === 原始两值（同值去重会变 1 ⇒ 红）');
+  assert.equal(stints.every((t) => Number.isFinite(t)), true, '两期 runningSince 均可解析为有限时间戳（Date.parse 非 NaN）');
 });
 
 // ---- IT-G 出厂默认开：空配置（无 capabilities.watch.longrun）tick 即探针可用 ----
