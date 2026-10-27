@@ -201,7 +201,7 @@ test('T11: 未达阈值不触发（2 条 < 默认阈值 3 → 仍 running、无�
   record('b-t11a', 2);
   const b = gStore.readBatch(S2, 'b-t11a');
   assert.equal(b.phase, 'running', '2 条未达阈值 3 → 不触发');
-  assert.equal(escEvs('b-t11a').length, 0, '无 batch.governance-escalate');
+  assert.deepEqual(escEvs('b-t11a'), [], '无 batch.governance-escalate（空集契约：整数组逐项）');
   assert.equal(phaseEvs('b-t11a').filter((e) => e.reason === 'governance-escalate').length, 0);
   // threshold 键可配（防阈值硬编码回归）：threshold=2 → 2 条即达阈值
   makeRunningBatch('b-t11b', ['l1']);
@@ -223,9 +223,9 @@ test('T12: 全排除——状态门收据（ruleRefs=[]）/ REQUIRE_APPROVAL / D
   assert.equal(gStore.recordGovernanceRefusal(S2, 'b-t12', arg({ primitive: 'DEFER' })), null, 'DEFER 默认不计（primitives 不含）');
   assert.equal(gStore.recordGovernanceRefusal(S2, 'b-t12', arg({ primitive: 'PAUSE' })), null, 'PAUSE 默认不计（primitives 不含）');
   const b = gStore.readBatch(S2, 'b-t12');
-  assert.equal(refEvs('b-t12').length, 0, '排除类全部零记录');
+  assert.deepEqual(refEvs('b-t12'), [], '排除类全部零记录（空集契约：整数组逐项）');
   assert.equal(b.phase, 'running', '无升级');
-  assert.equal(escEvs('b-t12').length, 0);
+  assert.deepEqual(escEvs('b-t12'), [], '空集契约');
   // 正例对照（可计入 DENY 记录 1 条——证明排除是类别过滤而非全拒）
   assert.ok(record('b-t12', 9));
   assert.equal(refEvs('b-t12').length, 1);
@@ -248,7 +248,7 @@ test('T13: phase 非 running（planning / manual paused）→ refusal 记录照�
   for (let i = 1; i <= 3; i++) record('b-t13a', i);
   assert.equal(gStore.readBatch(S2, 'b-t13a').phase, 'planning');
   assert.equal(refEvs('b-t13a').length, 3, '记录照写（C4 不受 phase 闸挡）');
-  assert.equal(escEvs('b-t13a').length, 0, '不升级（C5 评估仅 running）');
+  assert.deepEqual(escEvs('b-t13a'), [], '不升级（C5 评估仅 running）（空集契约：整数组逐项）');
   // manual paused（running → setPhase paused，非升级路径）：记录照写、无 governance 升级事件
   makeRunningBatch('b-t13b', ['l1']);
   gStore.setPhase(S2, 'b-t13b', 'paused');
@@ -256,7 +256,7 @@ test('T13: phase 非 running（planning / manual paused）→ refusal 记录照�
   const bb = gStore.readBatch(S2, 'b-t13b');
   assert.equal(bb.phase, 'paused');
   assert.equal(refEvs('b-t13b').length, 3, 'paused 期间记录照写');
-  assert.equal(escEvs('b-t13b').length, 0, '不升级');
+  assert.deepEqual(escEvs('b-t13b'), [], '不升级（空集契约：整数组逐项）');
   assert.equal(phaseEvs('b-t13b').filter((e) => e.reason === 'governance-escalate').length, 0, '手动 paused 无 governance reason 事件');
 });
 
@@ -325,7 +325,7 @@ test('T17: 与 failed-escalate 双源并存——先到者 paused、后到者被
   for (let i = 1; i <= 3; i++) record('b-t17a', i); // escalation 开启下 refusal 记录照写
   const ba = gStore.readBatch(S2, 'b-t17a');
   assert.equal(refEvs('b-t17a').length, 3, 'refusal 记录照写（C4 不受另一源 paused 挡）');
-  assert.equal(escEvs('b-t17a').length, 0, 'governance 升级被 phase 闸挡（C9 不叠加）');
+  assert.deepEqual(escEvs('b-t17a'), [], 'governance 升级被 phase 闸挡（C9 不叠加）（空集契约：整数组逐项）');
   const pausedA = phaseEvs('b-t17a').filter((e) => e.to === 'paused');
   assert.equal(pausedA.length, 1, '仅 1 条 paused 事件');
   assert.equal(pausedA[0].reason, 'failed-escalate', 'reason 与先到者一致');

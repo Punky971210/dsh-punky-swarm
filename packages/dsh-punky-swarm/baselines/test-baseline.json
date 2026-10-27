@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T13:47:23Z",
+  "generatedAt": "2026-10-27T13:51:52Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,7 +1676,7 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点9：A-02 watch-longrun-exempt 17 site（Δ+5，5条ts块各拆存在性+全同两步）",
+  "reason": "检查点10：A-03 空集6条（Δ0，全等价）",
   "schema": 1,
   "totals": {
     "asserts": 11036,
