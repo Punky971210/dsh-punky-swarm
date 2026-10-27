@@ -162,7 +162,7 @@ test('AC-pack1-1 判据 ②b（forward-id，按 id 强制）在场且未引入�
   const src = readRel(SCRIPT_REL);
   assert.ok(src.includes("check: 'forward-id'"),
     '②b 判据必须在场：脚本内缺 `check: \'forward-id\'` ⇒ 注入面条目无正文小节时不会判红');
-  assert.equal((src.match(/SELF_SUFFICIENT/g) ?? []).length, 0,
+  assert.deepEqual((src.match(/SELF_SUFFICIENT/g) ?? []), [],
     'Q-H：禁引入 `SELF_SUFFICIENT_ENTRIES` 之类白名单占位（宁可将来真自足条目时判红）');
   // ②b 必须复用既有集合、零新解析器（K-4）：`sectionIds.has(e.id)` 形态
   assert.ok(/sectionIds\s*\.\s*has\(\s*e\.id\s*\)/.test(src),
@@ -239,7 +239,7 @@ test('AC-pack1-5a 负例 N1：副本里降级 `## §0t` 标题 ⇒ forward-id �
   assert.ok(r.doc, 'no JSON：' + r.stderr.slice(0, 400));
   const fwd = (r.doc.failures ?? []).filter((f) => f.check === 'forward-id');
   assert.equal(r.status, 1, '降级后 exit 须 = 1');
-  assert.equal(fwd.length, 1, 'forward-id 须恰 1 条，实测 ' + fwd.length + '：' + JSON.stringify(fwd));
+assert.deepEqual(fwd.map((f) => f.check), ['forward-id'], '失败项的 check 身份集合须恰为 forward-id（空=漏报，含其它=误报，重复两条亦红）；实测=' + JSON.stringify(fwd.map((f) => f.check)));
   assert.match(fwd[0].detail, /0t/, 'detail 须点名 0t：' + fwd[0].detail);
 });
 
@@ -266,7 +266,7 @@ test('AC-pack1-5b 正例 N2：同夹具不删节 ⇒ 失败集 = N1 失败集 �
   const removed = [...cleanSet].filter((k) => !dirtySet.has(k));
 
   assert.deepEqual(removed, [], '同输入对照：不删节不得**减少**失败项（夹具不干净）');
-  assert.equal(added.length, 1, '删一节须**恰**新增 1 条失败，实测 ' + added.length + '：' + JSON.stringify(added));
+assert.deepEqual(added.map((k) => k.split('|')[0]), ['forward-id'], '新增失败的 check 身份集合须恰为 forward-id（空=没抓到，含其它=误报）；实测=' + JSON.stringify(added));
   assert.match(added[0], /forward-id\|.*0t/, '新增的失败须是 §0t 的 forward-id：' + added[0]);
   // 夹具自洽：退出码与失败集一致（防「有失败却 exit 0」的静默）
   assert.equal(cleanRun.status, (cleanRun.doc.failures ?? []).length === 0 ? 0 : 1,
@@ -293,7 +293,7 @@ test('AC-pack1-5c 负例 N3：向注入面注入一条无正文小节的条目 �
   const fwd = (r.doc.failures ?? []).filter((f) => f.check === 'forward-id');
   // 同源构造差值（形态四）：注入 1 条 ⇒ 恰「基线 + 1」。不写死任何绝对值。
   assert.equal(r.doc.inlineEntries, baseN + 1, `注入后面目数须 = 基线 ${baseN} + 1（证明构造生效）`);
-  assert.equal(fwd.length, 1, 'forward-id 须恰 1 条，实测 ' + fwd.length + '：' + JSON.stringify(fwd));
+assert.deepEqual(fwd.map((f) => f.check), ['forward-id'], '失败项的 check 身份集合须恰为 forward-id（空=漏报，含其它=误报）；实测=' + JSON.stringify(fwd.map((f) => f.check)));
   assert.match(fwd[0].detail, /0z/, 'detail 须点名注入的条目 0z：' + fwd[0].detail);
   assert.equal(r.status, 1, 'exit 须 = 1');
 });
@@ -315,7 +315,7 @@ test('AC-pack1-6 三新节与对应注入面条目：24 字窗命中 = 0，且�
     const hits = windowHits(sec.body, entryText, 24);
     const len = [...normWs(sec.body)].length;
     report.push(`§${id}: 正文长度=${len}｜24 字窗命中=${hits.length}${hits.length ? ' → ' + JSON.stringify(hits.slice(0, 3)) : ''}`);
-    assert.equal(hits.length, 0, `§${id} 与注入面条目存在 ≥24 字连续公共串（Q-B 阈值被破）：${JSON.stringify(hits.slice(0, 3))}`);
+    assert.deepEqual(hits, [], `§${id} 与注入面条目存在 ≥24 字连续公共串（Q-B 阈值被破）：${JSON.stringify(hits.slice(0, 3))}`);
     assert.ok(len >= 120, `§${id} 正文须 ≥ 120 字，实测 ${len}`);
   }
   process.stdout.write('[AC-pack1-6] ' + report.join(' ； ') + '\n');
@@ -355,8 +355,8 @@ test('AC-pack1-8 脚本头注 = 「五条判据」、旧「四条判据」清零
   // 失败条件：头注仍写四条（判据数与实现脱节，审计面失真）/ 旧表述残留 / 出现白名单占位。
   const src = readRel(SCRIPT_REL);
   assert.ok((src.match(/五条判据/g) ?? []).length >= 1, '须出现「五条判据」≥1');
-  assert.equal((src.match(/四条判据/g) ?? []).length, 0, '旧「四条判据」须 = 0');
-  assert.equal((src.match(/SELF_SUFFICIENT/g) ?? []).length, 0, '`SELF_SUFFICIENT` 须 = 0（Q-H）');
+  assert.deepEqual((src.match(/四条判据/g) ?? []), [], '旧「四条判据」须 = 0');
+  assert.deepEqual((src.match(/SELF_SUFFICIENT/g) ?? []), [], '`SELF_SUFFICIENT` 须 = 0（Q-H）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -44,7 +44,7 @@ const SID = 'sess-dr';
 test('DR-1 workerSessionIdOf：实现面 id 优先、类型面 childId 同认，兼容回落须告警，取不到返回 null（不静默）', () => {
   const warns = [];
   assert.equal(workerSessionIdOf({ id: 'w-1' }, (m) => warns.push(m)), 'w-1');
-  assert.equal(warns.length, 0, '实现面字段命中不得告警');
+  assert.deepEqual(warns, [], '实现面字段命中不得告警');
   assert.equal(workerSessionIdOf({ subagentId: 'w-2' }, (m) => warns.push(m)), 'w-2');
   assert.equal(warns.length, 1, '回落必须显式告警');
   assert.match(warns[0], /未返回实现面字段/, 'N4：告警须说明「实现面 id / 类型面 childId 并存」，不得错指宿主形态已变更');

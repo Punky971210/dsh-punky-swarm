@@ -88,7 +88,7 @@ test('A1: installAutoSettle 以 ctx.on("subagent/end", h, { global: true }) 注�
     assert.deepEqual(hooks[0].opts, { global: true }, '必须带 {global:true}（缺省监听在被 scope 化的插件 ctx 上漏收）');
   } finally {
     reg.dispose();
-    assert.equal((ctx.listeners.get('subagent/end') ?? []).size, 0, 'dispose 退订（幂等）');
+    assert.deepEqual([...(ctx.listeners.get('subagent/end') ?? [])], [], 'dispose 退订（幂等）');
   }
 });
 
@@ -109,6 +109,7 @@ test('B1: 主路——running lane + completed 事件 ⇒ 自动 running→revie
   const index = new Map([['ws-b1', { sessionId: S, batchId: 'b1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
+    const trigBefore = eventsOf(store, S, 'b1', EVT_AUTO_SETTLE_TRIGGERED).length; // 时点基线（新增采样行，M-2）
     await emitSubagentEnd(ctx, endInfo('ws-b1'));
     const b = store.readBatch(S, 'b1');
     assert.equal(b.lanes.e1, 'merged', 'lane 自动结算到 merged');
@@ -117,7 +118,7 @@ test('B1: 主路——running lane + completed 事件 ⇒ 自动 running→revie
     assert.deepEqual(settled.map((e) => e.from + '->' + e.to), ['running->review', 'review->merged']);
     // 自动路径事件留痕（可 log_export 复原）
     const trig = eventsOf(store, S, 'b1', EVT_AUTO_SETTLE_TRIGGERED);
-    assert.equal(trig.length, 1, '恰一条 auto.settle.triggered');
+    assert.equal(trig.length - trigBefore, 1, '相对基线 **+1** 条 auto.settle.triggered（增量式，不写死总数）');
     assert.equal(trig[0].lane, 'e1');
     assert.equal(trig[0].trigger, AUTO_SETTLE_TRIGGERS.subagentEnd);
     assert.equal(trig[0].workerSessionId, 'ws-b1');
@@ -141,7 +142,7 @@ test('B2: 未命中 dispatchIndex（进程级广播夹带非本套件子会话�
     const b = store.readBatch(S, 'b2');
     assert.equal(b.lanes.e1, 'running', 'lane 状态不变');
     assert.equal(b.phase, 'running', '批次相位不变');
-    assert.equal(settleEventsOf(store, S, 'b2').length, 0, '零自动结算事件');
+    assert.deepEqual(settleEventsOf(store, S, 'b2'), [], '零自动结算事件');
     assert.equal(
       b.events.filter((e) => e.type !== EVT_AUTO_SETTLE_TRIGGERED && e.type !== EVT_AUTO_SETTLE_SKIPPED).length,
       beforeLen,
@@ -161,12 +162,13 @@ test('C1: stopReason=aborted/error/max-tokens/refusal ⇒ 不走成功结算（l
   const index = new Map([['ws-c1', { sessionId: S, batchId: 'c1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
+    const trigBefore = eventsOf(store, S, 'c1', EVT_AUTO_SETTLE_TRIGGERED).length; // 时点基线（M-2）
     await emitSubagentEnd(ctx, { runId: 'r1', provider: 'spawn', id: 'ws-c1', local: false, stopReason: 'aborted' });
     const b = store.readBatch(S, 'c1');
     assert.equal(b.lanes.e1, 'running', '非 completed 不结算（禁一律判成功）');
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.from !== 'pending').length, 0, '零结算迁移（seed 的 pending->running 不计）');
     const trig = eventsOf(store, S, 'c1', EVT_AUTO_SETTLE_TRIGGERED);
-    assert.equal(trig.length, 1);
+    assert.equal(trig.length - trigBefore, 1, '相对基线 +1（增量式：本次 emit 恰产一条触发留痕）');
     assert.equal(trig[0].settleable, false, '显式标记不可结算（不静默丢）');
     assert.equal(trig[0].stopReason, 'aborted');
   } finally {
@@ -223,6 +225,7 @@ test('D1: 同 id 重复 subagent/end（多 epoch / 重启重放）⇒ 第二次�
   try {
     await emitSubagentEnd(ctx, endInfo('ws-d1'));
     const after1 = store.readBatch(S, 'd1');
+    const trigBefore2 = after1.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length; // 时点基线（M-2）
     // 第二次：同 id、新 runId（契约卡 #11：每 epoch 新 runId，幂等键不得取 runId）
     await emitSubagentEnd(ctx, { runId: 'run-2', provider: 'spawn', id: 'ws-d1', local: false, stopReason: 'completed' });
     const after2 = store.readBatch(S, 'd1');
@@ -233,10 +236,10 @@ test('D1: 同 id 重复 subagent/end（多 epoch / 重启重放）⇒ 第二次�
       'member.settled 条数不变（第二路落终态即 no-op）',
     );
     const trig = after2.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED);
-    assert.equal(trig.length, 1, 'auto.settle.triggered 不重复写');
+    assert.equal(trig.length - trigBefore2, 0, 'auto.settle.triggered **增量为 0**（第二次 emit 不重复写；差值式）');
     const skipped = after2.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
     // 【2026-09-24 用户裁决：关闭幂等闸 skipped】第二路仍 no-op，但**不再落** skipped 留痕（纯噪音）
-    assert.equal(skipped.length, 0, '第二路 no-op：幂等闸不落 skipped 留痕（噪音已关闭）');
+    assert.deepEqual(skipped, [], '第二路 no-op：幂等闸不落 skipped 留痕（噪音已关闭）');
   } finally {
     reg.dispose();
   }
@@ -337,6 +340,7 @@ test('F1: 兼底路——requestAutoSettle 身份反查 laneBindingOf（member.d
   const S = 'sess-f1';
   const store = seedBatch(root, S, 'f1');
   store.appendEvent(S, 'f1', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-f1' });
+  const trigBefore = store.readBatch(S, 'f1').events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length; // 时点基线（M-2）
   const r = await requestAutoSettle({ ctx: assemblyCtxOpts(), store, root }, { workerSessionId: 'ws-f1', reason: 'worker settle-request' });
   try {
     assert.equal(r.ok, true);
@@ -344,7 +348,7 @@ test('F1: 兼底路——requestAutoSettle 身份反查 laneBindingOf（member.d
     const b = store.readBatch(S, 'f1');
     assert.equal(b.lanes.e1, 'merged');
     const trig = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED);
-    assert.equal(trig.length, 1);
+    assert.equal(trig.length - trigBefore, 1, '兼底路一次请求 ⇒ 相对基线 +1（增量式）');
     assert.equal(trig[0].trigger, AUTO_SETTLE_TRIGGERS.settleRequest, '触发来源可辨（主路/兼底路分开留痕）');
   } finally { /* 无挂载面需清理（无 ctx.on） */ }
 });
@@ -357,7 +361,7 @@ test('F2: 兼底路未绑定（身份反查 miss）⇒ 明确拒（不猜、不�
   assert.equal(r.ok, false);
   assert.equal(r.action, 'unbound');
   assert.equal(store.readBatch(S, 'f2').lanes.e1, 'running', '未绑定零状态变化');
-  assert.equal(settleEventsOf(store, S, 'f2').length, 0, '未绑定零事件');
+  assert.deepEqual(settleEventsOf(store, S, 'f2'), [], '未绑定零事件');
 });
 
 test('F3: 双路同时到达同一 lane ⇒ 单次结算（第二条经幂等键 no-op，无冲突事件、无非法迁移）', async () => {
@@ -410,13 +414,14 @@ test('G1: 主路监听实际被调（非死代码）——回调计数 = 监听�
   const index = new Map([['ws-g1', { sessionId: S, batchId: 'g1', lane: 'e1' }]]);
   const reg = installAutoSettle(ctx, { store, dispatchIndex: index, root, logger: ctx.logger });
   try {
-    assert.equal(reg.count(), 0);
+    const countBefore = reg.count();                    // 差值基线（每用例全新 reg）
+    assert.equal(countBefore, 0, '初始计数为 0（后续两条均取相对 countBefore 的差值）');
     const before = store.readBatch(S, 'g1').events.length;
     await emitSubagentEnd(ctx, endInfo('ws-alien'));
-    assert.equal(reg.count(), 1, '每次事件都进监听（计数 = 调用次数，非命中次数）');
+    assert.equal(reg.count() - countBefore, 1, '每次事件都进监听：相对基线 **+1**（计数 = 调用次数，非命中次数）');
     assert.equal(store.readBatch(S, 'g1').events.length, before, '未命中零写入（静默丢弃）');
     await emitSubagentEnd(ctx, endInfo('ws-g1'));
-    assert.equal(reg.count(), 2);
+    assert.equal(reg.count() - countBefore, 2, '再进一次监听：相对基线累计 **+2**（差值式，不写死总数）');
     assert.equal(store.readBatch(S, 'g1').lanes.e1, 'merged', '命中触达判定器（监听非死代码）');
   } finally {
     reg.dispose();
@@ -553,7 +558,7 @@ test('I2: 非 audit 层零行为变化——同夹具的 exec 层 lane ⇒ actio
   assert.equal(r.action, 'merged', '早退分支只命中 audit 层 ⇒ exec 层逐字不变');
   const b = store.readBatch(S, 'i2');
   assert.equal(b.lanes.e1, 'merged');
-  assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED).length, 0, 'exec 层零职责转移留痕');
+  assert.deepEqual(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED), [], 'exec 层零职责转移留痕');
   const settled = b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.lane === 'e1' && e.from !== 'pending');
   assert.deepEqual(settled.map((e) => e.from + '->' + e.to), ['running->review', 'review->merged'], '经 review 中转（状态机强制，未跳门禁）');
 });
@@ -573,7 +578,8 @@ test('I3: 职责转移留痕**不进幂等链**——连触 3 次 ⇒ skipped �
   assert.deepEqual(outer.map((r) => r.reason), [AUDIT_SETTLE_DEFERRAL_REASON, AUDIT_SETTLE_DEFERRAL_REASON, AUDIT_SETTLE_DEFERRAL_REASON]);
   const b = store.readBatch(S, 'i3');
   const skipped = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
-  assert.equal(skipped.length, 3, '每次触发各留一次痕（不进幂等链 ⇒ 恰 3 条，且不为 0）');
+  // 期望侧取自**三次调用的实际返回**（测试自造）⇒ 身份集合，且能区分「少一条」与「换一条」
+  assert.deepEqual(skipped.map((e) => e.reason), outer.map((r) => r.reason), '每次触发各留一次痕：留痕 reason 集合 === 三次返回的 reason 序列（身份，不写死 3）');
   assert.equal(
     skipped.filter((e) => e.reason === 'already-settled').length, 0,
     '**永不**判 already-settled（否则 Leader 结算前的可见性被幂等键吞掉）',
@@ -661,7 +667,7 @@ test('J1: 【R-1 缺省兼容 · L-AC-1】未声明开关键 ⇒ 主路照装（
     assert.equal(reg.count(), 0, 'count() 初始为 0');
   } finally {
     reg.dispose();
-    assert.equal((ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? []).size, 0, 'dispose 退订（幂等）');
+    assert.deepEqual([...(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? [])], [], 'dispose 退订（幂等）');
   }
 });
 
@@ -730,7 +736,7 @@ test('J3: 【R-2 ① · L-AC-4/L-AC-5/L-AC-10】enabled:false ⇒ 零订阅 + re
   const b = store.readBatch(S, 'j3');
   assert.equal(b.lanes.e1, 'running', 'L-AC-5：lane 零状态变化');
   assert.equal(b.phase, 'running', 'L-AC-5：批次相位保持 running（R-3：不得静默改相位）');
-  assert.equal(settleEventsOf(store, S, 'j3').length, 0, 'L-AC-5：auto.settle.* 事件计数 0');
+  assert.deepEqual(settleEventsOf(store, S, 'j3'), [], 'L-AC-5：auto.settle.* 事件计数 0');
   assert.equal(b.events.length, before, 'L-AC-5：事件流零新增');
 });
 
@@ -897,7 +903,7 @@ test('J9: 【R-5 boot 对账】runtime.json **预置** autoSettle.enabled:false 
     );
     assert.equal(ctx.calls.info.filter((l) => l.includes('hot config: auto-settle disabled')).length, 1, '恰一次停用对账');
     assert.equal(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).ok, true, 'boot 对账主题面零 warn（runtime.json 合法）；非主题 warn（可见、不判死）：' + JSON.stringify(topicWarnVerdict(ctx.calls.warn, SETTLE_TOPIC_WARN).other));
-    assert.equal(ctx.calls.error.length, 0, 'boot 对账零 error');
+    assert.deepEqual(ctx.calls.error, [], 'boot 对账零 error');
   } finally {
     disposer();
   }

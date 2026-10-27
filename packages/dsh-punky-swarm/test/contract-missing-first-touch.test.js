@@ -154,7 +154,7 @@ test('B2-A1：事件常量单点登记于 event-types.js，调用点（gates.ts/
 // ═══════════════════════════════════════════════════════════════════════════════
 test('B2-A2/A7：六个 gateKind 首触各落一条，且同键不会再发（只报一次/批）', () => {
   const bid = mkFullBatch('b2-full');
-  assert.equal(cmEvents(bid).length, 0, '前置：夹具建成时零 contract_missing 事件');
+  assert.deepEqual(cmEvents(bid), [], '前置：夹具建成时零 contract_missing 事件');
 
   // P-2 plan 契约（layer=plan 的 merged 前置）
   settle(bid, 'p1', 'running');
@@ -259,7 +259,7 @@ test('B2-A4：只读视图（gateStatus / 真实 gate_status 工具面）绝不�
     gates.gateStatus(SID, bid, 'a1');
   }
   assert.equal(evsOf(bid).length, before, '只读视图零事件（三次读数不变）');
-  assert.equal(cmEvents(bid).length, 0, '只读视图不得产 gate.contract_missing（R-5）');
+  assert.deepEqual(cmEvents(bid), [], '只读视图不得产 gate.contract_missing（R-5）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -309,13 +309,13 @@ test('B2-W4：contractMissingEvents 纯函数——同键去重（含同调用�
   // 既证「恰 1 条」，也证**是哪一条**（gateKind/layer 都被换掉时仍能抓）。
   assert.deepEqual(STORE.contractMissingEvents({ events: [] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer]), [['targets', 'exec']],
     '首次 ⇒ 恰 1 条且必为 (targets, exec)（实际=' + JSON.stringify(STORE.contractMissingEvents({ events: [] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer])) + '）');
-  assert.equal(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'exec' }] }, res, 'e1').length, 0,
+  assert.deepEqual(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'exec' }] }, res, 'e1'), [],
     '同键已在 batch.events ⇒ 不再发（跨重启幂等判据）');
   // 数量 → 数组相等（哪些）：不同 layer ⇒ 加一个去重键 ⇒ 仍须恰 1 条且身份为 (targets, exec)
   assert.deepEqual(STORE.contractMissingEvents({ events: [{ type: E_CONTRACT_MISSING, gateKind: 'targets', layer: 'audit' }] }, res, 'e1').map((e) => [e.payload.gateKind, e.payload.layer]), [['targets', 'exec']],
     '层不同 ⇒ 键不同 ⇒ 照发');
-  assert.equal(STORE.contractMissingEvents({ events: [] }, { ok: true }, 'e1').length, 0, '无载荷 ⇒ 零产出');
-  assert.equal(STORE.contractMissingEvents(undefined, undefined, 'e1').length, 0, '空入参 ⇒ 零产出（不抛）');
+  assert.deepEqual(STORE.contractMissingEvents({ events: [] }, { ok: true }, 'e1'), [], '无载荷 ⇒ 零产出');
+  assert.deepEqual(STORE.contractMissingEvents(undefined, undefined, 'e1'), [], '空入参 ⇒ 零产出（不抛）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

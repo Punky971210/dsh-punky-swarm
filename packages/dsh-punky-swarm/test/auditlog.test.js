@@ -139,7 +139,7 @@ test('T-A12 配置解析：开关真值词 / env 逐键覆盖 / 缺省开 / 非�
   resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns3.push(m) });
   resolveAuditLogConfig({ capabilities: { auditlog: {} } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns3.push(m) });
   resolveAuditLogConfig(undefined, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns3.push(m) });
-  assert.equal(warns3.length, 0, '缺省/空子键/undefined config → 零 warn（实际: ' + JSON.stringify(warns3) + '）');
+  assert.deepEqual(warns3, [], '缺省/空子键/undefined config → 零 warn（实际: ' + JSON.stringify(warns3) + '）');
   // ⑧ 数值口径与冻结
   assert.equal(AUDITLOG_DEFAULTS.maxFileBytes, 67108864, '单卷 64 MiB');
   assert.equal(AUDITLOG_DEFAULTS.maxTotalBytes, 536870912, '总量 512 MiB');
@@ -254,7 +254,7 @@ test('T-C9 聚合开关：缺省开 / env 三态（真值词开、假值词关�
   const warns2 = [];
   resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns2.push(m) });
   resolveAuditLogConfig({ capabilities: { auditlog: {} } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns2.push(m) });
-  assert.equal(warns2.length, 0, '缺省/空子键 → 零 warn（实际: ' + JSON.stringify(warns2) + '）');
+  assert.deepEqual(warns2, [], '缺省/空子键 → 零 warn（实际: ' + JSON.stringify(warns2) + '）');
   // ⑦ 冻结常量未被破坏，且既有 6 键数值不变
   assert.equal(Object.isFrozen(AUDITLOG_DEFAULTS), true, '缺省值常量仍冻结');
   assert.deepEqual(
@@ -322,7 +322,7 @@ test('T-C11 ① 早于 cutoff 的已收盘卷被删：removed=1 且文件真消�
   const removed = pruneByAge(dir, 1, '2000-01-05');
   assert.equal(removed, 1, '删除计数 = 1（实际: ' + removed + '）');
   assert.equal(fs.existsSync(ancient), false, '远古分卷真的消失（实际 exists=' + fs.existsSync(ancient) + '）');
-  assert.equal(fs.readdirSync(dir).length, 0, '目录已清空（实际剩余: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
+  assert.deepEqual(fs.readdirSync(dir), [], '目录已清空（实际剩余: ' + JSON.stringify(fs.readdirSync(dir)) + '）');
 });
 
 // ── T-C12 ①b off-by-one 边界：`<` 与 `<=` 可分辨（误删一天留痕 = 数据丢失）──

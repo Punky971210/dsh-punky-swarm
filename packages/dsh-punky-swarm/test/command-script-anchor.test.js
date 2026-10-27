@@ -285,7 +285,7 @@ test('A8 直调原始返回：锚定相符 ⇒ 执行+mock 计数 1；改脚本 
   assert.equal(bad.expected, anchor, '回显声明值');
   assert.notEqual(bad.actual, anchor, '回显实得值（内容比对）');
   assert.equal(bad.declared, true);
-  assert.equal(calls.length, 0, '**执行前拒 ⇒ 零命令被执行**（预扫先于执行循环）');
+  assert.deepEqual(calls, [], '**执行前拒 ⇒ 零命令被执行**（预扫先于执行循环）');
   // ③ 修回锚定内容 ⇒ 同一 lane 可放行（**非终态**：拒不烧 lane）
   putScript(B, 'scripts/check.js', 'process.exit(1);\n');
   const ok2 = gates.checkCommandGate(SID, B, store.readBatch(SID, B), 'e1', { runCommand: mockRun });

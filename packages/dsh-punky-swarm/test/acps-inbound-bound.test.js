@@ -118,7 +118,7 @@ test('ACPS-05: 报文指定 victim-* ⇒ 只落 main-* 目标，victim-* 目录�
   assert.equal(res.status.state, 'accepted');
 
   const files = walkFiles(root);
-  assert.equal(files.length, 1, '恰好一个文件：' + JSON.stringify(files));
+assert.deepEqual(files.filter((p) => !/^sessions\/main-session\/mailbox\/main-batch\/supervisor\/inbox\/.+\.json$/.test(p)), [], '除目标 inbox 文件外不得有其它落盘（补集空集身份）；实测=' + JSON.stringify(files));
   assert.match(files[0], /^sessions\/main-session\/mailbox\/main-batch\/supervisor\/inbox\/.+\.json$/);
   assert.equal(fs.existsSync(path.join(root, 'sessions', 'victim-s')), false, 'victim 会话目录必须不存在');
   assert.equal(fs.existsSync(path.join(root, 'sessions', 'main-session', 'mailbox', 'victim-b')), false);
@@ -263,7 +263,7 @@ test('ACPS-04 可观测性: 三条目标侧拒收路径（缺键 / 只配一个 
   assert.ok(!/未配置/.test(w3), '值非法不得被写成「未配置」：' + w3);
 
   // 两两不同（可区分性的硬断言；旧文本 ②③ 相同）
-  assert.equal(new Set([w1, w2, w3]).size, 3, '三条路径的 warn 必须互不相同');
+  assert.deepEqual([...new Set([w1, w2, w3])].sort(), [w1, w2, w3].sort(), '三条路径的 warn 必须互不相同（成员身份集合相等）');
 });
 
 test('ACPS-04 第 4 条路径（bridge 未启用）: 声明 inbound 却无桥 ⇒ rejected INBOUND_UNAVAILABLE + 可区分 warn', () => {
@@ -309,7 +309,7 @@ test('ACPS-04 三态断言: 未声明 inbound / 声明且可用 / 声明但不�
   const r2 = h2({ type: 'task-command', command: 'start', taskId: 't-ok' }, {});
   assert.equal(r2.status.state, 'accepted');
   const files = walkFiles(root);
-  assert.equal(files.length, 1, '声明且可用必须真落盘：' + JSON.stringify(files));
+assert.deepEqual(files.filter((p) => !/^sessions\/(main-session|s-main)\/mailbox\/(main-batch|b-main)\/supervisor\/inbox\/.+\.json$/.test(p)), [], '除目标 inbox 文件外不得有其它落盘（补集空集身份）；实测=' + JSON.stringify(files));
   assert.match(files[0], /^sessions\/s-main\/mailbox\/b-main\/supervisor\/inbox\//);
 
   // 态 3a：声明但不可用（无桥）⇒ rejected

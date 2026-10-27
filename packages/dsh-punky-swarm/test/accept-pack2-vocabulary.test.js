@@ -416,7 +416,7 @@ test('AC-pack2-7 退役锁 GREEN；词表∩退役锁可算且逐码有理由；
 test('AC-pack2-8 `vocabulary.js` 删除「零条目即零校验面」旧表述，且明写「空表」语义', () => {
   // 失败条件：旧表述仍在（会把「空表 = 放行」的反向误读固化进注释）/ 无「空表」订正说明。
   const src = readRel(VOCAB_JS_REL);
-  assert.equal((src.match(/零条目即零校验面/g) ?? []).length, 0,
+  assert.deepEqual((src.match(/零条目即零校验面/g) ?? []), [],
     '旧表述「零条目即零校验面」须 = 0（R-03：该字面与实测行为冲突）');
   assert.ok((src.match(/空表/g) ?? []).length >= 1, '须明写「空表」口径（≥1 处）');
 });

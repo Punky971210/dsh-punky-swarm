@@ -149,8 +149,8 @@ test('V2R-1【退役锁 · Q-A=C】去屏障（核心）已无对象：exec_1 me
   await settleLane(h, B, 'exec_1');
   // 【退役锁 · Q-A=C 2026-09-18（批 engine-retire-chain-20260918）】链运行期推进（v2 分支配对 `perLane`）已退役
   //  ⇒ 自证「零 chain.step / 零新增派发」后返回；旧断言保留在下方作历史口径留档（不再执行）。
-  assert.equal(chainStepsOf(h, B).length, 0, '[退役锁] 零 chain.step（推进留痕写点已删）');
-  assert.equal(dispatchedLanes(h, B).length, 0, '[退役锁] 零新增派发（链不再派发）');
+  assert.deepEqual(chainStepsOf(h, B), [], '[退役锁] 零 chain.step（推进留痕写点已删）');
+  assert.deepEqual(dispatchedLanes(h, B), [], '[退役锁] 零新增派发（链不再派发）');
   assert.ok(lanesOf(h, B).audit_1 !== 'running', '[退役锁] 配对下游 lane 不再被引擎自动置 running');
   return;
 
@@ -206,8 +206,8 @@ test('V2R-3【退役锁 · Q-A=C】聚合等待已无对象：perLane 各实例�
   seed(h, B, 'audit/audit_2.md');
   await settleLane(h, B, 'audit_2');
   // 【退役锁 · Q-A=C 2026-09-18】聚合步推进（`join` 汇合）已随链退役消失 ⇒ 自证「零 chain.step」后返回（旧断言留档）。
-  assert.equal(chainStepsOf(h, B).length, 0, '[退役锁] 零 chain.step（聚合推进写点已删）');
-  assert.equal(dispatchedLanes(h, B).length, 0, '[退役锁] 零新增派发');
+  assert.deepEqual(chainStepsOf(h, B), [], '[退役锁] 零 chain.step（聚合推进写点已删）');
+  assert.deepEqual(dispatchedLanes(h, B), [], '[退役锁] 零新增派发');
   return;
   const fromAudit = chainStepsOf(h, B).filter((e) => e.from === 'audit');
   assert.equal(fromAudit.length, 1, 'audit 两实例全 merged ⇒ 恰一次推进');

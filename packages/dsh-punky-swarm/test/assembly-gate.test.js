@@ -125,7 +125,7 @@ test('normalizeAssemblyDecl：缺省/undefined → { decl: null, warnings: [] }�
 test('managerPlan 缺省 = raise（2026-09-14 用户裁决「Manager 见批即默认」）；非法值仍拒', () => {
   const { decl, warnings } = normalizeAssemblyDecl({ auditLane: 'a1' });
   assert.equal(decl.managerPlan, 'raise', '省略 managerPlan ⇒ 引擎归一化为 raise（可核事实）');
-  assert.equal(warnings.length, 0);
+  assert.deepEqual(warnings, []);
   assert.equal(normalizeAssemblyDecl({ managerPlan: 'leader-direct', auditLane: 'a1' }).decl.managerPlan, 'leader-direct', '显式 leader-direct 保留');
   assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'bogus', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct \(got: bogus\)/);
   assert.throws(() => normalizeAssemblyDecl({ managerPlan: '', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct/);
@@ -187,22 +187,22 @@ test('T12 纯函数：层错配拒建批（auditLane 非 audit 层 / coordinator
 
 test('T8 纯函数：roles 词法非法 → GATE_ROLE_INVALID 告警（不 throw），批次仍可建', () => {
   const r1 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: ['designer', 'bogus-role'] });
-  assert.equal(r1.warnings.length, 1);
+assert.deepEqual(r1.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], '非法 roles 的告警码身份集合须恰为 GATE_ROLE_INVALID');
   assert.equal(r1.warnings[0].code, 'GATE_ROLE_INVALID');
   assert.match(r1.warnings[0].message, /assembly\.roles entry "bogus-role" is not a valid role/);
   assert.deepEqual(r1.decl.roles, ['designer']); // 非法词条剔除，合法保留
   assert.equal(assemblyGate(cplusTasks(3), r1.decl), 'ok');
   // 非字符串词条 / roles 非数组 → 告警
   const r2 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: ['coder', 42] });
-  assert.equal(r2.warnings.length, 1);
+assert.deepEqual(r2.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], '非法词条的告警码身份集合须恰为 GATE_ROLE_INVALID');
   const r3 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: 'coder' });
-  assert.equal(r3.warnings.length, 1);
+assert.deepEqual(r3.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], 'roles 非数组的告警码身份集合须恰为 GATE_ROLE_INVALID');
   assert.match(r3.warnings[0].message, /assembly\.roles must be an array of role strings/);
   // 合法角色集合包含装配扩展（盲审三角色），不误报
   const ext = [...ROLE_WHITELIST].find((r) => !['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'].includes(r));
   assert.ok(ext, 'ROLE_WHITELIST 含扩展角色');
   const r4 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: [ext] });
-  assert.equal(r4.warnings.length, 0);
+  assert.deepEqual(r4.warnings, []);
 });
 
 test('countExecLanes/isCPlusBatch：边界口径（仅按 task.layer 计）', () => {

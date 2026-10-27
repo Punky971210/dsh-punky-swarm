@@ -156,7 +156,7 @@ test('A-1 零批次落盘（工具面可达路径）：拒建批后无批次 JSO
   assert.equal(r.threw, true, '工具面必失败构造须被拒');
   assert.ok(r.msg.includes(NEW_GATE), '错误消息须含新拒码：' + r.msg);
   assert.ok(!store.readBatch(SID, 'b-cdg-a1-tool'), '批次 JSON 未落盘（读端回 undefined/null）');
-  assert.equal(filesUnder(artifactsDirOf(root, SID, 'b-cdg-a1-tool')).length, 0, '产物根下文件数 = 0');
+  assert.deepEqual(filesUnder(artifactsDirOf(root, SID, 'b-cdg-a1-tool')), [], '产物根下文件数 = 0');
 });
 
 // ── A-3 对照放行（必通过构造：同形只补边）──────────────────────────────────────

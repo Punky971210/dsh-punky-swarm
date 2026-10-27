@@ -84,7 +84,7 @@ test('roles 语义：合法角色全集（VALID_ROLES + 盲审扩展）→ 零�
     'VALID_ROLES 与 ROLE_EXTENSIONS 须不相交（A∩B=∅）：实际重叠 [' + overlap.join(', ') + ']');
 
   const { decl, warnings } = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: all });
-  assert.equal(warnings.length, 0, '合法全集零误报');
+  assert.deepEqual(warnings, [], '合法全集零误报');
   //   ① 并集集合身份相等：输入并集 == 透传回显并集（带双向差集诊断；替代 all.length === 11）
   //      放在 deepEqual 之前：deepEqual 的失败消息是整数组 diff，而本断言**直接点名缺/多哪一条**。
   const inSet = new Set(all);
@@ -99,7 +99,7 @@ test('roles 语义：合法角色全集（VALID_ROLES + 盲审扩展）→ 零�
 test('roles 语义：全表大写变体 → 零告警（词法判定大小写不敏感）且大小写原样透传', () => {
   const upper = [...VALID_ROLES, ...ROLE_EXTENSIONS].map((r) => r.toUpperCase());
   const { decl, warnings } = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: upper });
-  assert.equal(warnings.length, 0, '全表大写变体零误报（词法判定大小写不敏感）');
+  assert.deepEqual(warnings, [], '全表大写变体零误报（词法判定大小写不敏感）');
   assert.deepEqual(decl.roles, upper, '词条大小写原样透传（归一化不改写）');
 });
 

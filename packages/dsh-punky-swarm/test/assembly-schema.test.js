@@ -159,14 +159,14 @@ test('validateCapabilities: enabled-all legitimate combo yields zero errors', ()
 test('validateCapabilities DEP-1: verify.mode must be advisory|enforce', () => {
   const bad = { capabilities: { verify: { enabled: true, mode: 'bogus' } } };
   const { errors } = validateCapabilities(bad);
-  assert.equal(errors.length, 1);
+assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-1'], '错误码身份集合须恰为 DEP-1（非法 mode 的唯一违例）');
   assert.match(errors[0], /DEP-1/);
 });
 
 test('validateCapabilities DEP-2: trajectory.autoFail=true requires enabled=true', () => {
   const bad = { capabilities: { trajectory: { autoFail: true } } };
   const { errors } = validateCapabilities(bad);
-  assert.equal(errors.length, 1);
+assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-2'], '错误码身份集合须恰为 DEP-2（非法 autoFail 的唯一违例）');
   assert.match(errors[0], /DEP-2/);
 });
 

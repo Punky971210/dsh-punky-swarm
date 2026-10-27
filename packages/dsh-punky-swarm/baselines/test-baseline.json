@@ -35,7 +35,7 @@
     "test/acps-cert-failclosed.test.js": {
       "asserts": 49,
       "blankLines": 31,
-      "lines": 325,
+      "lines": 329,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -99,7 +99,7 @@
     "test/api-config.test.js": {
       "asserts": 84,
       "blankLines": 30,
-      "lines": 372,
+      "lines": 373,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -235,7 +235,7 @@
     "test/auto-settle.test.js": {
       "asserts": 193,
       "blankLines": 46,
-      "lines": 906,
+      "lines": 912,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-26T23:50:24Z",
+  "generatedAt": "2026-10-27T12:08:18Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "路由数量判据→28 条存在性（定向替换，用户裁定只锚定存在性）+ 25 条契约豁免清单落盘",
+  "reason": "数量断言→身份/存在形态 批量改造检查点：wave1 37 + B1 4 + e49 3 + e50 19 + e51 3 + e52 6 = 72 条；另 enum 修与 E-坏 判据文档",
   "schema": 1,
   "totals": {
     "asserts": 11041,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62867,
+    "lines": 62878,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4

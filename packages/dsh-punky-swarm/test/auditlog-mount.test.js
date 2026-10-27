@@ -419,7 +419,7 @@ test('T-B2 关闭态（env PUNKY_AUDITLOG=off）：sink 目录不存在、export
   assert.deepEqual(ourExporters(r), [], '关闭态不注册本模块 exporter（实际: ' + JSON.stringify(r.exporterLevels) + '）');
   assert.equal(r.sinkDirExists, false, '关闭态零目录（实际 exists: ' + r.sinkDirExists + '）');
   assert.deepEqual(r.rows, [], '关闭态零字节落盘');
-  assert.equal(r.files.length, 0, '关闭态零文件');
+  assert.deepEqual(r.files, [], '关闭态零文件');
   assert.equal(r.stat.mounted, false, '关闭态 state.mounted=false');
   assert.equal(r.stat.writes, 0, '关闭态 writes=0');
 });
@@ -701,7 +701,7 @@ test('T-C2 聚合 off 态（PUNKY_AUDITLOG_AGGREGATE=off）：5 条同键消息�
   // 数量 → 数组相等（哪些）：off 态 5 条同键消息逐行落盘 ⇒ 5 行全为 log
   assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log', 'log', 'log', 'log'],
     '5 条消息逐行落盘且全为 log（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
-  assert.equal(r.rows.filter((x) => x.kind === 'log-aggregate').length, 0, '关闭态零 log-aggregate 行');
+  assert.deepEqual(r.rows.filter((x) => x.kind === 'log-aggregate'), [], '关闭态零 log-aggregate 行');
   assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '全部为 kind="log"（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.ok(r.rows.every((x) => !('count' in x)), '关闭态每行仍恰 10 字段（无 count）');
   assert.equal(r.stat.collapsedMessages, 0, 'collapsedMessages 恒 0（实际: ' + r.stat.collapsedMessages + '）');

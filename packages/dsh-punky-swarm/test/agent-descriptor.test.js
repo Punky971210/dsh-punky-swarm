@@ -83,7 +83,7 @@ test('接线：装配可注入（config.assembly 覆盖默认装配；aip.team �
   const custom = { team: 'custom', layers: { exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } } } };
   const { made } = makeCtx(true, { team: 'custom' }, custom);
   const list = made.agentCatalog.list();
-  assert.equal(list.length, 1, '自定义装配仅 1 角色');
+  assert.deepEqual(list.map((a) => a.aic), ['custom.exec.coder'], '自定义装配的角色身份集合（期望=测试自造的 custom.layers.exec.roles=[\'coder\'] 派生）');
   assert.equal(list[0].aic, 'custom.exec.coder');
   assert.equal(list[0].name, 'coder');
   // 未注入 assembly 时回退 DEFAULT_ASSEMBLY（team 键仅影响 resolveAssembly 分支）

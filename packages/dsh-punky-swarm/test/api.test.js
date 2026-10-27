@@ -74,13 +74,13 @@ test('GET /batches requires session', () => {
 test('GET /batches?session= lists only that session', () => {
   const r = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batches'), '/api/dsh-punky-swarm/batches?session=' + S);
   assert.equal(r.status, 200);
-  assert.equal(r.body.batches.length, 1);
+assert.deepEqual(r.body.batches.map((b) => b.batchId), ['b-api'], 'batches 身份集合 = 测试自己 seed 的那批（b-api）');
   assert.equal(r.body.batches[0].phase, 'running');
   // 另一 session 看不到
   const r2 = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batches'), '/api/dsh-punky-swarm/batches?session=sess-other');
   assert.equal(r2.body.batches[0].phase, 'running');
   const r3 = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/batches'), '/api/dsh-punky-swarm/batches?session=sess-empty');
-  assert.equal(r3.body.batches.length, 0);
+  assert.deepEqual(r3.body.batches, []);
 });
 
 test('GET /sessions lists sessions with counts', () => {
@@ -113,9 +113,9 @@ test('GET /batch?batchId= returns detail (session-scoped)', () => {
 test('GET /mailbox returns unacked (session-scoped)', () => {
   const r = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/mailbox'), '/api/dsh-punky-swarm/mailbox?batchId=b-api&box=inbox&session=' + S);
   assert.equal(r.status, 200);
-  assert.equal(r.body.items.length, 1);
+assert.deepEqual(r.body.items.map((i) => i.message.task), ['t1'], 'items 身份集合 = 测试自己 send 的那条（task:t1）');
   const r2 = invoke(routes.find((x) => x.path === '/api/dsh-punky-swarm/mailbox'), '/api/dsh-punky-swarm/mailbox?batchId=b-api&box=inbox&session=sess-other');
-  assert.equal(r2.body.items.length, 0);
+  assert.deepEqual(r2.body.items, []);
 });
 
 test('GET /locks requires session and returns lock list', () => {
@@ -146,7 +146,7 @@ test('/tools 端点：catalog 非空时注册并返回「全量工具 × 6 属�
   assert.ok(toolsRoute, '/tools 路由必须注册（catalog 非空）');
   const r = invoke(toolsRoute, '/api/dsh-punky-swarm/tools');
   assert.equal(r.status, 200);
-  assert.equal(r.body.count, 1);
+assert.deepEqual(r.body.tools.map((t) => t.name), catalog.list().map((c) => c.name), 'tools 身份集合 = 测试注入的 catalog（同源对照：catalog.list()）');
   assert.equal(r.body.tools[0].toolId, 'dsh.punky-swarm.wave_plan');
   assert.equal(r.body.tools[0].name, 'wave_plan');
   assert.ok(r.body.generatedAt);

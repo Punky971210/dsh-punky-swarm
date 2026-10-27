@@ -141,7 +141,7 @@ test('scope=local: 走本地查询服务，不发起外部请求', async () => {
   const client = createAcpsDiscoveryClient({ baseUrl: 'http://ds:9020', scope: 'local', localService: local, request: http.impl });
   const resp = await client.discover('北京美食');
   assert.deepEqual(resp.result.acsMap, LOCAL_ACS);
-  assert.equal(http.calls.length, 0); // 未触碰外部
+  assert.deepEqual(http.calls.map((c) => c.method + ' ' + c.path), [], '未触碰外部（调用集合须为空）');
 });
 
 test('scope=external: POST {baseUrl}/discover（对齐 discovery_client.py:86-93）', async () => {
@@ -149,7 +149,7 @@ test('scope=external: POST {baseUrl}/discover（对齐 discovery_client.py:86-93
   http.stub(okJson(EXTERNAL_RESPONSE));
   const client = createAcpsDiscoveryClient({ baseUrl: 'http://ds:9020/', scope: 'external', request: http.impl });
   const resp = await client.discover('北京美食推荐', { limit: 3 });
-  assert.equal(http.calls.length, 1);
+  assert.deepEqual(http.calls.map((c) => c.url), ['http://ds:9020/discover'], '恰好一次外部请求（身份集合=stub 收到的 url；期望由测试自造 baseUrl 派生）');
   assert.equal(http.calls[0].url, 'http://ds:9020/discover'); // 尾斜杠去除 + /discover
   assert.equal(http.calls[0].options.method, 'POST');
   assert.equal(http.calls[0].options.headers['content-type'], 'application/json');
@@ -167,7 +167,7 @@ test('scope=both: 本地+外部合并（acsMap 合并 / agents 拼接 / routes �
   http.stub(okJson(EXTERNAL_RESPONSE));
   const client = createAcpsDiscoveryClient({ baseUrl: 'http://ds:9020', scope: 'both', localService: local, request: http.impl });
   const resp = await client.discover('美食');
-  assert.equal(http.calls.length, 1);
+  assert.deepEqual(http.calls.map((c) => c.url), ['http://ds:9020/discover'], '恰好一次外部请求（身份集合=stub 收到的 url；期望由测试自造 baseUrl 派生）');
   assert.deepEqual(resp.result.acsMap, { ...LOCAL_ACS, ...EXTERNAL_ACS });
   // 身份数组（替代 `.agents.length === 2` / `.routes.length === 2`）：
   // 期望侧全部取自**常量表**（`LOCAL_RESULT` / `EXTERNAL_RESPONSE`），不写第二处字面量；
@@ -244,7 +244,7 @@ test('请求参数校验失败: explicit 空 query → 提前报错且不发起�
     client.discover('   '),
     (e) => e instanceof DiscoveryClientError && /请求参数校验失败/.test(e.message) && e.adpError && e.adpError.code === 40001,
   );
-  assert.equal(http.calls.length, 0);
+  assert.deepEqual(http.calls.map((c) => c.method + ' ' + c.path), [], '参数校验失败 ⇒ 不得发起外部调用（调用集合须为空）');
 });
 
 test('filtered 缺 filter → 校验失败', async () => {

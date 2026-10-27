@@ -155,7 +155,7 @@ test('toAipSession maps batch state to ACPs Session', () => {
   // ACPs Session 字段集（id/taskResults/taskCommands/createdAt/updatedAt）
   assert.equal(out.id, 's1');
   assert.deepEqual(out.taskResults, []); // 引擎无 TaskResult 数据 → 空数组（如实）
-  assert.equal(out.taskCommands.length, 2);
+assert.deepEqual(out.taskCommands.map((c) => c.id), plan.wavePlan.flatMap((w) => w.tasks).map((t) => t.id));
   assert.equal(out.taskCommands[0].type, 'task-command');
   assert.equal(out.taskCommands[0].id, 't1');
   assert.equal(out.taskCommands[0].taskId, 't1');
@@ -197,7 +197,7 @@ test('api wiring: aipFormat injected → /mailbox items carry aip projection; ab
   const wired = mk({ aipFormat });
   const m1 = wired.invoke(wired.mailboxRoute, '/api/dsh-punky-swarm/mailbox?batchId=b-w&box=inbox&session=' + S);
   assert.equal(m1.status, 200);
-  assert.equal(m1.body.items.length, 1);
+assert.deepEqual(m1.body.items.map((i) => i.message.task), ['t1'], 'items 身份集合 = 测试自己 send 的那条（task:t1）');
   assert.ok(m1.body.items[0].aip, '注入 aipFormat 时 items 应附 aip 投影');
   assert.equal(m1.body.items[0].aip.type, 'message');
   assert.equal(m1.body.items[0].aip.senderRole, 'leader');
@@ -210,7 +210,7 @@ test('api wiring: aipFormat injected → /mailbox items carry aip projection; ab
   // 不注入（既有行为）：响应结构不变，无投影字段
   const plain = mk({});
   const m2 = plain.invoke(plain.mailboxRoute, '/api/dsh-punky-swarm/mailbox?batchId=b-w&box=inbox&session=' + S);
-  assert.equal(m2.body.items.length, 1);
+assert.deepEqual(m2.body.items.map((i) => i.message.task), ['t1'], 'items 身份集合 = 测试自己 send 的那条（task:t1）');
   assert.ok(!('aip' in m2.body.items[0]), '未注入 aipFormat 时 items 不得附 aip 投影（红线：既有响应不变）');
   const b2 = plain.invoke(plain.batchRoute, '/api/dsh-punky-swarm/batch?batchId=b-w&session=' + S);
   assert.ok(!('aipSession' in b2.body), '未注入 aipFormat 时 /batch 不得附 aipSession（红线）');

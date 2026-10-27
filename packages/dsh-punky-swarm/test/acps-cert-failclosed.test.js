@@ -130,7 +130,7 @@ test('ACPS-03 反向断言：有效证书照旧起服并可访问（防「一律
     const client = issueCert({ caCertPem: caPem, caKeyPem, cn: CLIENT_AIC, aic: CLIENT_AIC, usages: ['clientAuth'] });
     const r = await request({ port: addr.port, ca: caPem, cert: client.certPem, key: client.keyPem });
     assert.equal(r.status, 200);
-    assert.equal(warns.length, 0, '默认档（devInsecure=false）不得新增起服 warn');
+    assert.deepEqual(warns, [], '默认档（devInsecure=false）不得新增起服 warn（告警集合须为空）');
   } finally { await acps.close(); }
 });
 
@@ -219,7 +219,11 @@ test('devInsecure 降级 warn：每次起服一条，明确「放宽了什么 / 
   const acps = createAcpsServer({ config: { endpoint: endpointOf(files, true) }, logger });
   assert.equal(acps.error, undefined);
   const dev = warns.filter((w) => w.includes('devInsecure=true'));
-  assert.equal(dev.length, 1, '起服须恰好一条降级 warn');
+  // ⚠ **a26/B1-2 回退登记（禁伪装）**：本处源数据是**纯字符串数组**，且 `dev` 已按 `includes('devInsecure=true')` 过滤
+  //   ⇒ 每个元素必然含该 token，抽 token 得到的「身份集合」**恒为** ['devInsecure=true']，与 `dev.length === 1` 等价（身份信息量 = 0）。
+  //   现有数据除「整条文案」外无可区分字段；锁死整条文案会把文案演进变成假红（紧随其后的 assert.match 已逐项核要点）。
+  //   ⇒ 按 a26 裁定**回退为诚实计数**并登记理由 —— 宁可留一条明说的计数，也不要一条伪装成身份集合的计数。
+  assert.equal(dev.length, 1, '起服须恰好一条 devInsecure 降级 warn（**回退计数**：数据无可区分身份字段，理由见上方登记）');
   assert.match(dev[0], /降级范围/);
   assert.match(dev[0], /TLS 层验签关闭/);
   assert.match(dev[0], /仍强制信任锚/);

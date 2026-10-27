@@ -75,14 +75,15 @@ test('端点：runtimeConfig 注入时注册 /config；未注入不注册（既�
   const root = freshRoot();
   const { routes } = apiWithConfigEndpoints(makeConfigEndpoints(root));
   assert.ok(routes.some((r) => r.path === CONFIG_PATH), '/config 已注册');
-  assert.equal(routes.length, 8, '7 既有（R3 exec-panel-b：+1 /stream）+ 1 新增 /config');
-  // 未注入 configEndpoints（既有 createApi 缺省形态）→ 不注册，7 路由契约零回归
+  // 对照基线（时点采样，M-2）：未注入 configEndpoints 的形态
   const { routes: r0 } = apiWithConfigEndpoints(undefined);
+  assert.deepEqual(routes.filter((r) => !r0.some((x) => x.path === r.path)).map((r) => r.path), [CONFIG_PATH], '注入 − 未注入 的**差集**须恰为 /config（差分式：不写死 8，新增第 9 条路由时仍绿且差集仍只含 /config）');
+  // 未注入 configEndpoints（既有 createApi 缺省形态）→ 不注册，7 路由契约零回归
   assert.equal(r0.some((r) => r.path === CONFIG_PATH), false);
-  assert.equal(r0.length, 7);
+assert.deepEqual(r0.map((r) => r.path), routes.filter((r) => r.path !== CONFIG_PATH).map((r) => r.path), '未注入形态的路由表须 = 注入形态去掉 /config（同源对照，不写死 7）');
   // 空 configEndpoints（无 runtimeConfig）→ 同样不注册
   const { routes: rE } = apiWithConfigEndpoints({});
-  assert.equal(rE.length, 7);
+assert.deepEqual(rE.map((r) => r.path), r0.map((r) => r.path), '空 configEndpoints 与 undefined 等价（同源对照）');
 });
 
 test('端点：GET /config 页载取数 → 200 overlay（磁盘 governance 原样，无 = null）+ applied + presets', () => {

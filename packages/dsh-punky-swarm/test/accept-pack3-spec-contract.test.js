@@ -227,7 +227,7 @@ test('AC-pack3-3 挂载命中文件数 = 1（SKILL.md）＋ N（挂载 role 文�
   const roleHits = roleFilesHoldingSpecContract();
   const skillMdHit = hitFiles.some((p) => p.endsWith('SKILL.md'));
   assert.ok(skillMdHit, 'SKILL.md 必须点名 spec-contract（真源表在 SKILL.md）');
-  assert.equal(hitFiles.length, 1 + roleHits.size,
+assert.deepEqual(hitFiles.filter((p) => !p.endsWith('SKILL.md')).map((p) => path.basename(p)).sort(), [...roleHits.values()].sort(),
     `命中文件数须 = 1（SKILL.md）+ ${roleHits.size}（挂载 role）= ${1 + roleHits.size}，实测 ${hitFiles.length}：`
     + JSON.stringify(hitFiles.map((p) => path.relative(PKG_ROOT, p).split(path.sep).join('/'))));
   assert.ok(hitFiles.length >= 7,
