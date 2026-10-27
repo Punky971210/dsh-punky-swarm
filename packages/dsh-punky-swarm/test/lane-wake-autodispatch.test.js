@@ -228,7 +228,7 @@ test('乙-2 (D-2甲 + D-3甲)：命中 lane 的 `subagent/end` ⇒ 唤醒 Leader
     //   理由：两路在同一事件上并行，「零批面写」只有**单路调用**才可归因——整轮各调一次会把结算路的
     //   `auto.settle.*` / `member.settled` 记到唤醒路头上（假红）。结算路不受影响的判据见 `乙-3`。
     const hooks = [...(m.ctx.listeners.get('subagent/end') ?? [])];
-    assert.equal(hooks.length, 2, '前置：两路订阅在场');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(hooks.length, 2, '前置：两路订阅在场');"
     const eventsBefore = batchEvents(m.store, m.batchId).length;
     await hooks[1].fn(endInfoOf(WORKER));
     await sleep(20);

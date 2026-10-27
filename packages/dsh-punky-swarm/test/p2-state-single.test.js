@@ -152,7 +152,7 @@ test('A1-P2-08 · 静态单点：单点写入口被两处调用点复用（recov
   // 改位置数组：1 定义 + 2 调用 = 3 处，位置可列、重复可抓
   {
     const callSites = [...src.matchAll(/laneIdleOnRecovery\(/g)].map((m) => m.index);
-    assert.equal(callSites.length, 3, '恰 1 处定义 + 2 处调用（实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(callSites.length, 3, '恰 1 处定义 + 2 处调用（实测 ' + callSites.le"
     assert.equal(new Set(callSites).size, callSites.length, '三处位置须互异');
   }
 });

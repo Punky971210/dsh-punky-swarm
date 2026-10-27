@@ -25,7 +25,7 @@
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 61,
+      "asserts": 59,
       "blankLines": 39,
       "lines": 569,
       "tautologies": 0,
@@ -177,7 +177,7 @@
       "todos": 0
     },
     "test/atomic-write-ordering.test.js": {
-      "asserts": 69,
+      "asserts": 68,
       "blankLines": 44,
       "lines": 304,
       "tautologies": 0,
@@ -337,7 +337,7 @@
       "todos": 0
     },
     "test/concurrency-gate.test.js": {
-      "asserts": 68,
+      "asserts": 63,
       "blankLines": 40,
       "lines": 498,
       "tautologies": 0,
@@ -417,7 +417,7 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 204,
+      "asserts": 203,
       "blankLines": 55,
       "lines": 804,
       "tautologies": 0,
@@ -505,7 +505,7 @@
       "todos": 0
     },
     "test/f3-anchors.test.js": {
-      "asserts": 29,
+      "asserts": 28,
       "blankLines": 21,
       "lines": 278,
       "tautologies": 0,
@@ -521,7 +521,7 @@
       "todos": 0
     },
     "test/f3-lane-claim-reason.test.js": {
-      "asserts": 25,
+      "asserts": 24,
       "blankLines": 17,
       "lines": 146,
       "tautologies": 0,
@@ -945,7 +945,7 @@
       "todos": 0
     },
     "test/inject-budget.test.js": {
-      "asserts": 103,
+      "asserts": 102,
       "blankLines": 75,
       "lines": 715,
       "tautologies": 0,
@@ -953,7 +953,7 @@
       "todos": 0
     },
     "test/install-selfcheck.test.js": {
-      "asserts": 23,
+      "asserts": 22,
       "blankLines": 19,
       "lines": 185,
       "tautologies": 0,
@@ -977,7 +977,7 @@
       "todos": 0
     },
     "test/judging-guidance.test.js": {
-      "asserts": 50,
+      "asserts": 49,
       "blankLines": 62,
       "lines": 359,
       "tautologies": 0,
@@ -1009,7 +1009,7 @@
       "todos": 0
     },
     "test/lane-wake-autodispatch.test.js": {
-      "asserts": 56,
+      "asserts": 55,
       "blankLines": 42,
       "lines": 425,
       "tautologies": 0,
@@ -1113,7 +1113,7 @@
       "todos": 0
     },
     "test/mode-gate.test.js": {
-      "asserts": 52,
+      "asserts": 51,
       "blankLines": 22,
       "lines": 214,
       "tautologies": 0,
@@ -1177,7 +1177,7 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 34,
+      "asserts": 33,
       "blankLines": 23,
       "lines": 293,
       "tautologies": 0,
@@ -1185,7 +1185,7 @@
       "todos": 0
     },
     "test/p2-state-single.test.js": {
-      "asserts": 41,
+      "asserts": 40,
       "blankLines": 25,
       "lines": 253,
       "tautologies": 0,
@@ -1193,7 +1193,7 @@
       "todos": 0
     },
     "test/panel-render.test.js": {
-      "asserts": 105,
+      "asserts": 104,
       "blankLines": 50,
       "lines": 478,
       "tautologies": 0,
@@ -1241,7 +1241,7 @@
       "todos": 0
     },
     "test/preset-rules.test.js": {
-      "asserts": 70,
+      "asserts": 69,
       "blankLines": 40,
       "lines": 426,
       "tautologies": 0,
@@ -1545,7 +1545,7 @@
       "todos": 0
     },
     "test/w7f-rt-write-surface.test.js": {
-      "asserts": 76,
+      "asserts": 75,
       "blankLines": 44,
       "lines": 524,
       "tautologies": 0,
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T12:48:19Z",
+  "generatedAt": "2026-10-27T13:22:55Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,10 +1676,10 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点4：P2-c 6改；P2 类别完成（22/22）",
+  "reason": "阶段二删除旧假测试 21 条（D 夹具自证，用户授权 D-1=乙 显式重冻），Δ asserts=-21",
   "schema": 1,
   "totals": {
-    "asserts": 11050,
+    "asserts": 11029,
     "blankLines": 5835,
     "files": 208,
     "lines": 62907,

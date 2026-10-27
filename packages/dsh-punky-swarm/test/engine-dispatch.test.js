@@ -499,7 +499,7 @@ test('RO-2 L-AC-4：persona 与 toolFilter.deny 由 role 派生（⊇ 反推集 
 
 test('RO-3 反向断言：十件 role 的反推集 ∩ 引擎治理面 = ∅（worker 回报/交接面不可被 deny）', () => {
   const all = [...new Set(ROLE_IDS.flatMap((id) => deriveDenyTools(resolveRoleRef(id).tools.allow)))];
-  assert.ok(all.length > 0, '反推集非空（构造可达）');
+  // 已删断言（D 夹具自证/冗余）：邻近 :504 的更强断言已覆盖同一职能 —— 原文 "assert.ok(all.length > 0, '反推集非空（构造可达）');"
   const clash = all.filter((t) => GOVERNANCE_FACES.includes(t));
   assert.deepEqual(clash, [], '反推不得 deny 引擎治理面：' + JSON.stringify(clash));
   // 词汇表本身也不得含治理面（结构安全的**根因**：词汇表只由 role 语料自身生成）

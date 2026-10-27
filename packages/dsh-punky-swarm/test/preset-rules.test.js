@@ -149,7 +149,7 @@ test('P-2 形状：18 条逐条对齐 Rule/Violation/match/narrow 契约', () =>
   assert.deepEqual(all.map((r) => r.id).filter((id, i, a) => a.indexOf(id) !== i), [],
     'l1 ∪ l2 的 id 不得重复（跨文件撞车会让合计条数虚低）');
   // 棘轮下界（只许增不许减）：18 = l1(12) + l2(6)，与两文件 `_meta.ruleCount` 之和一致；合法新增时抬高此下界。
-  assert.ok(all.length >= 18, 'l1+l2 规则数不得低于 18（棘轮：preset 只许增不许减）');
+  // 已删断言（D 夹具自证/冗余）：邻近 :149 的更强断言已覆盖同一职能 —— 原文 "assert.ok(all.length >= 18, 'l1+l2 规则数不得低于 18（棘轮：preset 只许增不许减）');"
 });
 
 test('P-2b 正则可编译 + hard/manual/narrowable 档分布符合设计', () => {

@@ -134,7 +134,7 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   const baseSeg = INDEX_SRC.slice(baseStart, baseStart + 1200);
   const baseObj = baseSeg.slice(baseSeg.indexOf('const base = {'), baseSeg.indexOf('};', baseSeg.indexOf('const base = {')));
   const keys = [...baseObj.matchAll(/([A-Za-z_$][\w$]*)\s*:\s*null/g)].map((m) => m[1]);
-  assert.ok(keys.length > 0, '阳性前置：base 字面量须能扫出键（否则「集合相等」空转）');
+  // 已删断言（D 夹具自证/冗余）：邻近 :141 的更强断言已覆盖同一职能 —— 原文 "assert.ok(keys.length > 0, '阳性前置：base 字面量须能扫出键（否则「集合相等」空转）');"
   // 【删计数】原 `keys.length === 20` 与下一行**集合相等完全冗余**（同集合必同规模）。
   //   更强断言 = 下一行 `deepEqual(keys.sort(), RT_FIELDS_20.sort())`：集合身份相等且能点名差集。
   //   ⇒ 删计数不削弱鉴别力：漏一字段仍由下一行红（态② 已实跑取证）。

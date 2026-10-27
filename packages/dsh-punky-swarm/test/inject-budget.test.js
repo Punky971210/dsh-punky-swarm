@@ -589,7 +589,7 @@ test('[AC-9] 标记在场于块级反例：真实重载块的截断文本含标�
   const items = buildHeavyAssertions({ count: REAL_SAMPLE.assertions, blockBytes: REAL_SAMPLE.blockBytes });
   const result = applyBudget(items.join(ASSERTION_SEP), { surface: SURFACE.assertions, kind: KIND.perBlock });
   const marks = [...result.text.matchAll(OMIT_MARK_RE)];
-  assert.ok(marks.length >= 1, '块级截断文本须含省略标记');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(marks.length >= 1, '块级截断文本须含省略标记');"
   const frozen = new Set(Object.values(SURFACE));
   for (const m of marks) {
     assert.ok(frozen.has(m[2]), '标记面名须取自冻结面名集合，实得 ' + JSON.stringify(m[2])

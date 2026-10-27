@@ -145,7 +145,7 @@ test('T-4/AC-8① log-tools 的写面判据恰 2 次（首判 + mkdir 后复判�
   // 位置数组：出现处数 + 位置互异（多一处即红，并列出位置）
   {
     const callSites = [...logTools.matchAll(/resolveWriteTargetIn\(/g)].map((m) => m.index);
-    assert.equal(callSites.length, 2, '写面判据调用点必须恰 2 次（首判 + 复判；实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(callSites.length, 2, '写面判据调用点必须恰 2 次（首判 + 复判；实测 ' + callS"
     assert.equal(new Set(callSites).size, callSites.length, '两处调用位置须互异（同一处被计两次即红）');
   }
   // 复判必须在 `mkdirSync` 之后（顺序不可调：复判的意义就是看 mkdir 新建的中间段）

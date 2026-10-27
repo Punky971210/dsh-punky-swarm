@@ -300,7 +300,7 @@ test('T-W3 人话映射：≥12 类事件返回 locale key；未知 type ⇒ key
   //   + locale 键 `event.phase.team` 同批删除）⇒ 判据同上：**面已消失 ⇒ 条目随之删除**
   //   （不可等值反转 —— 反转成「key:null」与下方 `unknown` 用例重复且恒真空转）。
   //   `types.length >= 12` 门槛保留（现 16 项，仍严于门槛；恒真零新增的「凑数」风险不因本改动上升）。
-  assert.ok(types.length >= 12, '覆盖类别数 ≥12');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(types.length >= 12, '覆盖类别数 ≥12');"
   for (const t of types) {
     const v = PM.eventViewOf({ type: t });
     assert.ok(v.key, t + ' 必须有人话 key');

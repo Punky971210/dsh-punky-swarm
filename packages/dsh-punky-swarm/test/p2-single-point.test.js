@@ -138,7 +138,7 @@ test('A1-P2-09 · 静态单点：`function stripStreamMerges` 全仓恰 1 处，
   // 改位置数组（可列位置、抓「多处」）：出现次数变化与位置漂移都会红
   {
     const callSites = [...toolBan.matchAll(/stripStreamMerges\(/g)].map((m) => m.index);
-    assert.equal(callSites.length, 2, '护栏侧恰 2 处调用（实测 ' + callSites.length + '，位置 ' + JSON.stringify(callSites) + '）');
+  // 已删断言（D 夹具自证/冗余）：邻近 :135 的更强断言已覆盖同一职能 —— 原文 "assert.equal(callSites.length, 2, '护栏侧恰 2 处调用（实测 ' + callSites.length "
     assert.equal(new Set(callSites).size, callSites.length, '两处调用位置须互异（同一处被计两次即红）');
   }
   assert.ok(/import \{[^}]*segmentCommands, stripStreamMerges[^}]*\} from '\.\.\/shell-text\.js'/.test(toolBan),

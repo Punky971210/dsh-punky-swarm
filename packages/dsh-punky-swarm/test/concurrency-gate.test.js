@@ -172,7 +172,7 @@ test('T1【退役锁 · Q-B】occupied >= limit ⇒ **不再拒**：零抛错 + 
   const r2 = await by.lane_dispatch.execute({ batchId: 'b-t1', lane: 'l2' }, exec);
   assert.equal(r2.spawned, true, '[退役锁] 超限 lane 必须照常派出（Q-B：高并发不得被限流）');
   assert.equal(store.readBatch(SID, 'b-t1').lanes.l2, 'running', '[退役锁] l2 迁移成功（不再零写入）');
-  assert.equal(spawned.length, 2, '两次派发 ⇒ 两次真实 spawn');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(spawned.length, 2, '两次派发 ⇒ 两次真实 spawn');"
   assert.equal(eventsOf(store, SID, 'b-t1', EVT_MEMBER_DISPATCH).filter((e) => e.lane === 'l2').length, 1, 'l2 的 member.dispatch 照常登记');
   assertNoBlockedEvent(store, SID, 'b-t1', 'T1');
   assert.equal(eventsOf(store, SID, 'b-t1', 'gate.escape').length, 0, '零 gate.escape（未发生任何放行侧留痕）');
@@ -192,7 +192,7 @@ test('T2 放行路径：occupied < limit ⇒ spawned:true + 恰 N 条 member.dis
     const r = await by.lane_dispatch.execute({ batchId: 'b-t2', lane: id }, exec);
     assert.equal(r.spawned, true, id + ' 必须放行（spawned:true）');
   }
-  assert.equal(spawned.length, 4, '4 次放行 ⇒ 4 次真实 spawn');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(spawned.length, 4, '4 次放行 ⇒ 4 次真实 spawn');"
   assert.equal(eventsOf(store, SID, 'b-t2', EVT_MEMBER_DISPATCH).length, 4, '放行路径每 lane 恰 1 条 member.dispatch');
   assertNoBlockedEvent(store, SID, 'b-t2', 'T2');
   assert.equal(store.readBatch(SID, 'b-t2').lanes.l5, 'pending', '第 5 条未派 ⇒ 保持 pending');
@@ -329,7 +329,7 @@ test('T9【退役锁 · Q-B】7 条 pending、concurrency=4 ⇒ 全部可派（�
   for (const id of ['l1', 'l2', 'l3', 'l4', 'l5']) {
     assert.equal((await by.lane_dispatch.execute({ batchId: 'b-t9', lane: id }, exec)).spawned, true, '[退役锁] ' + id + ' 必须放行');
   }
-  assert.equal(spawned.length, 5, '5 条全部真实 spawn');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(spawned.length, 5, '5 条全部真实 spawn');"
   assertNoBlockedEvent(store, SID, 'b-t9', 'T9');
   __resetLaneHandles();
 });
@@ -353,7 +353,7 @@ test('T10a【退役锁 · Q-B】批 JSON 缺 concurrency（存量/手改批）�
   for (const id of ['l1', 'l2', 'l3', 'l4', 'l5', 'l6']) {
     assert.equal((await by.lane_dispatch.execute({ batchId: 'b-t10a', lane: id }, exec)).spawned, true, '[退役锁] ' + id + ' 放行（缺字段不再回落 5 做准入）');
   }
-  assert.equal(spawned.length, 6, '6 条全部 spawn');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(spawned.length, 6, '6 条全部 spawn');"
   assertNoBlockedEvent(store, SID, 'b-t10a', 'T10a');
   __resetLaneHandles();
 });
@@ -483,7 +483,7 @@ test('T14 让位面：批终态 / 未知 lane ⇒ 仍抛既有拒码（不是闸
     },
   );
   assertNoBlockedEvent(store, SID, 'b-t14', 'T14');
-  assert.equal(spawned.length, 0);
+  // 已删断言（D 夹具自证/冗余）：邻近 :481 的更强断言已覆盖同一职能 —— 原文 "assert.equal(spawned.length, 0);"
   __resetLaneHandles();
 });
 

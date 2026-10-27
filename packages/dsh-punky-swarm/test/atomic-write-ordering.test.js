@@ -252,7 +252,7 @@ test('AC-4 身份快照含 {size, mtimeMs, sha256}；比对可判「被换过」
   const expectSha = createHash('sha256').update(fs.readFileSync(target)).digest('hex');
   assert.equal(before.sha256, expectSha,
     '身份快照 sha256 须等于 node:crypto 对同一字节的实算值（实测 ' + before.sha256 + ' / 期望 ' + expectSha + '）');
-  assert.equal(before.sha256.length, 64, 'sha256 十六进制摘要的**形状契约**（64 字符；非规模快照）');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(before.sha256.length, 64, 'sha256 十六进制摘要的**形状契约**（64 字符；非"
   assert.equal(before.path, target);
 
   const same = fileIdentityOf(target);

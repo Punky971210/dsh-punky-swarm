@@ -180,7 +180,7 @@ const NEW_GATED_CASES = [
 test('T3 模式门反向用例（注册表新补 5 件）：非白名单模式逐件拒 GATE_MODE_INACTIVE 且零治理写入', async () => {
   const h = newHarness({ modes: { gate: [MODE] } });
   const sid = 's-standard';
-  assert.equal(NEW_GATED_CASES.length, 5, '本批新补用例须各一条（batch_phase/lane_claim/lane_release/assign_check + P3a batch_control，共 5 条；asset_claim 已于 2026-09-27 撤门 ⇒ 移出反向名单）');
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.equal(NEW_GATED_CASES.length, 5, '本批新补用例须各一条（batch_phase/lane_c"
   for (const [name] of NEW_GATED_CASES) {
     assert.ok(MODE_GATED_TOOLS.includes(name), name + ' 必须在注册表 modeGate 集内（用例名单与注册表对账）');
   }

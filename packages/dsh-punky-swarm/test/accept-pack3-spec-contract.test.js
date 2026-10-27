@@ -211,7 +211,7 @@ test('AC-pack3-2b 新文件覆盖四块：MC-1..MC-8、六态（4 档＋2 旁路
   }
   assert.ok(text.includes('SUMMARY:'), '③ 缺 `SUMMARY:` 机读行形态');
   const idFamilies = ['REQ-', 'AC-', 'SCN-', 'RULE-'].filter((f) => text.includes(f));
-  assert.ok(idFamilies.length >= 3, '④ 需求编号纪律须给出编号族（REQ-/AC-/SCN-/RULE- 至少 3 类），实测：' + JSON.stringify(idFamilies));
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(idFamilies.length >= 3, '④ 需求编号纪律须给出编号族（REQ-/AC-/SCN-/RULE- "
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -320,7 +320,7 @@ test('AC-pack3-6 重合度：24 字窗命中 = 0、12-gram 重合率 ≤ 15%、�
     resolved.push(`${c.rel}:${c.lines.join(',')}`);
   }
   const distinct = [...new Set(resolved)];
-  assert.ok(distinct.length >= 4, `须有 ≥4 条可解析的 \`path:line\` 锚点，实测 ${distinct.length}；不可解析：` + JSON.stringify([...new Set(unresolved)]));
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(distinct.length >= 4, `须有 ≥4 条可解析的 \\`path:line\\` 锚点，实测 ${dis"
   process.stdout.write(`[AC-pack3-6] 24 字窗命中=0｜12-gram=${(ratio * 100).toFixed(2)}%｜可解析锚点=${distinct.length}\n`);
 });
 

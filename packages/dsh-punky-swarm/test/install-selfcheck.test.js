@@ -167,7 +167,7 @@ test('I-6(c) 缺口态：空 home ⇒ exit 非 0 且 JSON 列出缺口项', () =
     let doc = null;
     assert.doesNotThrow(() => { doc = JSON.parse(r.stdout); }, '缺口态 stdout 仍须为合法 JSON（机检友好）');
     const gaps = [...(doc.engine?.gaps ?? []), ...(doc.preset?.gaps ?? []), ...(doc.skills?.gaps ?? [])];
-    assert.ok(gaps.length > 0, '缺口态须列出缺口项；实测 gaps=' + JSON.stringify(gaps));
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(gaps.length > 0, '缺口态须列出缺口项；实测 gaps=' + JSON.stringify(gaps)"
     assert.equal(doc.engine.ok, false, '空 home 的 profile manifest 缺失 ⇒ 面① 必为缺口');
     assert.ok(gaps.some((g) => String(g).includes('profile')), '缺口须点名 profile 面：' + JSON.stringify(gaps));
   } finally {

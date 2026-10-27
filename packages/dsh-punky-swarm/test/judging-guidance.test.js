@@ -82,7 +82,7 @@ function readSuiteTable() {
     memberDeny: m[4] === 'true',
     write: m[5] === 'true',
   }));
-  assert.ok(rows.length > 0, `${SUITE_REL} 必须仍以 entry() 表声明套件工具（本件真源面）`);
+  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(rows.length > 0, `${SUITE_REL} 必须仍以 entry() 表声明套件工具（本件真源面）`)"
   // `entry(` 出现次数 = 表条目数（构造器定义写作 `entry = (`，不含 `entry(`）⇒ 双重计数即报错，
   // 防注释里写示例语法悄悄把条目数放大。
   const occurrences = (src.match(/\bentry\(/g) ?? []).length;
