@@ -123,7 +123,7 @@ test('U7-4【可达·替代判据】P1 命中：审计认领 exec lane 却未消
   ];
   const plan = build('p1-hit', tasks);
   const w = pairingOf(plan);
-  assert.equal(w.length, 1, '恰好 1 条配对告警（可达性：真命中）');
+  assert.deepEqual(w.map((x) => x.task), ['a1'], '恰好 1 条配对告警（身份 = 告警归属 task 集合；期望取自本 block 的 A(a1,…) 构造）');
   assert.equal(w[0].code, CODE, '告警码逐字');
   assert.equal(w[0].task, 'a1', '告警归属 = 认领方 audit lane');
   assert.match(w[0].message, /未覆盖/, '文案须点明判据（未覆盖交付产物）');
@@ -152,7 +152,7 @@ test('U7-6【可达·替代判据】P2 命中：单条聚合 audit 认领 2 条 
   assert.deepEqual(topoWaves(tasks).waves.map((w) => w.join('+')), ['p1', 'e1+e2', 'a1'], 'P2 拓扑分层读数');
   const plan = build('p2-hit', tasks);
   const w = pairingOf(plan);
-  assert.equal(w.length, 1, '恰 1 条（e1 已覆盖 ⇒ 不告警；e2 未覆盖 ⇒ 告警）');
+  assert.deepEqual(w.map((x) => x.task), ['a1'], '恰 1 条（身份 = task 集合；e1 已覆盖不告警、e2 未覆盖告警，归属仍是 a1）');
   assert.equal(w[0].task, 'a1');
   assert.match(w[0].message, /未覆盖 e2 的任何交付产物/, '告警须指向未覆盖的 e2');
   assert.match(w[0].message, /e2 交付：exec\/e2\.md/, '须列出 e2 的交付产物（取证可核）');
@@ -171,7 +171,7 @@ test('U7-8【口径差留痕】规格 §2.1(c) ND-1 逐字原文：真实门链�
   assert.throws(() => build('verbatim-nd1-real', tasks, false), /GATE_ORPHAN_PRODUCT/,
     '真实门链下 plan/p2.md 无消费方 ⇒ 建批先拒（规格表格的「建批 ok」只在 smoke 口径成立）');
   const w = pairingOf(build('verbatim-nd1-smoke', tasks, true));
-  assert.equal(w.length, 1, '口径差的另一半：冒烟建批下替代判据命中 1 条');
+  assert.deepEqual(w.map((x) => x.task), ['a1'], '口径差的另一半：冒烟建批下替代判据命中 1 条（身份 = task 集合）');
   assert.equal(w[0].task, 'a1');
 });
 
