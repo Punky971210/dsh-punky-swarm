@@ -241,7 +241,7 @@ test('E1：abort 有悬挂成员 ⇒ 复用 batch.abort_dangling（事件 + 回�
   const out = await controlOf(byName).execute({ batchId: 'b-dg', action: 'abort' }, SESS);
   assert.deepEqual(out.danglingLanes, ['e1', 'a1'], '回显悬挂 lane 名单（p1 终态不入列）');
   const dg = eventsOf(store, 'b-dg', DANGLING_EVT);
-  assert.equal(dg.length, 1, '恰一条 batch.abort_dangling（与 batch_phase(aborted) 同一实现）');
+assert.deepEqual(dg.map((e) => e.danglingLanes), [['e1', 'a1']], 'abort_dangling 事件身份须恰一条且点名两悬挂 lane');
   assert.deepEqual(dg[0].danglingLanes, ['e1', 'a1']);
   assert.equal(dg[0].count, dg[0].danglingLanes.length, 'count 须等于 danglingLanes 条数（G6 自比，零魔数）');
   const newEvs = store.readBatch(SESS_ID, 'b-dg').events.slice(evLen);
@@ -290,7 +290,7 @@ test('F1：paused 批 + subagent/end ⇒ 无 member.settled、lane 不变、留�
   assert.deepEqual(lanesOf(store, 'b-g1'), lanesBefore, 'lane 状态逐字不变');
   assert.equal(phaseOf(store, 'b-g1'), 'paused', '相位不被自动推进静默推翻');
   const skipped = eventsOf(store, 'b-g1', EVT_AUTO_SETTLE_SKIPPED);
-  assert.equal(skipped.length, 1, '恰一条留痕（phase 闸）');
+assert.deepEqual(skipped.map((e) => e.reason), ['phase-paused'], 'phase 闸留痕的 reason 身份须恰为 phase-paused');
   assert.equal(skipped[0].reason, 'phase-paused', 'reason 自证（非笼统 skipped）');
   assert.equal(skipped[0].lane, 'e1');
   assert.equal(skipped[0].trigger, AUTO_SETTLE_TRIGGERS.subagentEnd);

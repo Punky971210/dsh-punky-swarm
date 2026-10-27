@@ -258,5 +258,5 @@ test('B5: enabled=false（显式关）→ 现有 mailbox 调用零感知（重�
   // meta 原样透传（不注入 chain）
   const unacked = readUnacked(path.join(root, 'sessions', 'sess-budget', 'mailbox', 'b-off'), { type: 'outbox', lane: 'a' });
   assert.deepEqual(unacked[0].meta, { chain: { id: 'c1', hop: 0 } });
-  assert.equal(unacked.length, 3);
+assert.deepEqual(unacked.map((m) => m.message?.text), ['hello', 'hello', 'hello'], '三次同 base 发送 ⇒ 消息文本身份集合须恰为三条 hello');
 });

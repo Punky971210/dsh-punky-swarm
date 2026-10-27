@@ -188,7 +188,7 @@ test('B2-A2/A7：六个 gateKind 首触各落一条，且同键不会再发（�
     'complete@audit', 'contract@plan', 'entry_requires@audit', 'entry_requires@exec',
     'gate_command@exec', 'needhuman@audit', 'targets@exec',
   ].sort(), '实测键集合');
-  assert.equal(evs.length, 7, '本夹具实测条数（去重键 × 有效层）');
+assert.deepEqual(evs.map((e) => cmKey(e)).sort(), keys.slice().sort(), '事件的身份集合须与实测键集合恒等（同源对照，不写死 7）');
   // 载荷契约（E-2）：cause / declared / source / degrade 齐备；且 lane 可归因（complete 面为 null）
   for (const e of evs) {
     assert.equal(e.cause, 'undeclared', '成因默认 undeclared（本批不产 declared-off）');
@@ -226,7 +226,7 @@ test('B2-A3：跨重启幂等——重建 store 后同键再触达不产生第�
   // 进程 A：首次触达（exec 层 entry_requires）
   settle(bid, 'e1', 'running');
   const afterFirst = cmEvents(bid);
-  assert.equal(afterFirst.length, 1, '首触须落一条');
+assert.deepEqual(afterFirst.map(cmKey), ['entry_requires@exec'], '首触事件身份须恰为 entry_requires@exec 一条');
   assert.equal(cmKey(afterFirst[0]), 'entry_requires@exec');
 
   // 「重启」：进程 B —— 全新 store 实例，只从**磁盘批次 JSON** 取事实源
@@ -293,8 +293,8 @@ test('B2：告警与事件同源——logger.warn 计数 = 事件条数（不得
   store5.setMember(SID, 'b2-warn', 'e1', 'running');
   const evs = store5.readBatch(SID, 'b2-warn').events.filter((e) => e && e.type === E_CONTRACT_MISSING);
   const warnLines = warns.filter((w) => w.includes('contract_missing'));
-  assert.equal(evs.length, 1, '一次触达 ⇒ 一条事件');
-  assert.equal(warnLines.length, 1, '一次触达 ⇒ 一条告警（同源一次）;实测=' + JSON.stringify(warns));
+assert.deepEqual(evs.map(cmKey), ['entry_requires@exec'], '一次触达的事件身份须恰为 entry_requires@exec 一条（member_status 派发 ⇒ entry 门）');
+assert.deepEqual(warnLines.map((w) => String(w).includes('contract_missing')), [true], '一次触达的告警集合须恰为 1 条且点名 contract_missing;实测=' + JSON.stringify(warns));
   assert.ok(warnLines[0].includes('entry_requires'), '告警须携带 gateKind（可定位）');
 });
 
@@ -406,7 +406,7 @@ test('B2-DoD：真实工具面触发落盘 + 只读 gate_status 工具面负控�
   assert.equal(eventsOf().length, 0, '派发前零事件');
   await byName.member_status.execute({ batchId: 'b2-probe', lane: 'e1', status: 'running' }, SESS);
   const landed = eventsOf();
-  assert.equal(landed.length, 1, '真实工具面一次触达 ⇒ 事件真落盘');
+assert.deepEqual(landed.map(cmKey), ['entry_requires@exec'], '真实工具面一次触达 ⇒ 落盘事件身份须恰为 entry_requires@exec 一条');
   assert.equal(cmKey(landed[0]), 'entry_requires@exec', '落盘事件可归因');
 
   // ② 负控（R-5）：只读工具面 two-shot 调用零发射

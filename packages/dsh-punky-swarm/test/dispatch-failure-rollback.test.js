@@ -46,7 +46,7 @@ test('DR-1 workerSessionIdOf：实现面 id 优先、类型面 childId 同认，
   assert.equal(workerSessionIdOf({ id: 'w-1' }, (m) => warns.push(m)), 'w-1');
   assert.deepEqual(warns, [], '实现面字段命中不得告警');
   assert.equal(workerSessionIdOf({ subagentId: 'w-2' }, (m) => warns.push(m)), 'w-2');
-  assert.equal(warns.length, 1, '回落必须显式告警');
+assert.deepEqual(warns.map((w) => String(w).includes('subagentId')), [true], '回落告警集合须恰 1 条且点名 subagentId 兼容字段;实测=' + JSON.stringify(warns));
   assert.match(warns[0], /未返回实现面字段/, 'N4：告警须说明「实现面 id / 类型面 childId 并存」，不得错指宿主形态已变更');
   assert.equal(workerSessionIdOf({ childId: 'w-3' }, () => {}), 'w-3', '类型面 childId 直接命中（不告警路径见断言数）');
   assert.equal(workerSessionIdOf({}, () => {}), null);

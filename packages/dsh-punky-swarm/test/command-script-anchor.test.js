@@ -122,7 +122,7 @@ test('A0 解析面：锚定行族（行首独立行）∥ 命令 token 切分 �
   assert.equal(detectScriptAnchors(path.dirname(path.dirname(dir)), []).path, null, '空 paths 零感知');
   // 正则单独复核（独立行 + 行首锚定）
   GATE_SCRIPT_SHA_RE.lastIndex = 0;
-  assert.equal(('gate-script-sha256: a.js=' + '1'.repeat(64)).match(GATE_SCRIPT_SHA_RE)?.length, 1);
+assert.deepEqual([...('gate-script-sha256: a.js=' + '1'.repeat(64)).matchAll(GATE_SCRIPT_SHA_RE)].map((m) => m[0]), ['gate-script-sha256: a.js=' + '1'.repeat(64)], '匹配结果身份须恰为整串一次（不写计数）');
   GATE_SCRIPT_SHA_RE.lastIndex = 0;
   assert.equal(('x gate-script-sha256: a.js=' + '1'.repeat(64)).match(GATE_SCRIPT_SHA_RE), null);
   // token 切分：去引号 / 跳选项 / 空 token 跳过
@@ -207,7 +207,7 @@ test('A4 S-4 位置缺口：脚本落在 lane worktree 根内 ⇒ 告警（escap
   assert.ok(!(r instanceof Error), '位置缺口**不拒**：' + String(r && r.message));
   assert.equal(r.lanes.e1, 'merged');
   const esc = r.events.filter((e) => e.type === 'gate.escape');
-  assert.equal(esc.length, 1, '恰一条告警（锚定相符 ⇒ 无 unanchored）：' + JSON.stringify(esc));
+assert.deepEqual(esc.map((e) => e.kind), ['gate-script-lane-local'], '告警 kind 身份须恰为 script-lane-loc 一条（锚定相符 ⇒ 无 unanchored）；实测=' + JSON.stringify(esc.map((e) => e.kind)));
   assert.equal(esc[0].kind, 'gate-script-lane-local', 'escape.kind 原值');
   assert.ok(String(esc[0].reason || '').includes('位置缺口'), String(esc[0].reason));
 });

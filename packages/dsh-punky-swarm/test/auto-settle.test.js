@@ -84,7 +84,7 @@ test('A1: installAutoSettle 以 ctx.on("subagent/end", h, { global: true }) 注�
     assert.equal(reg.installed, true);
     assert.equal(AUTO_SETTLE_SUBAGENT_END, 'subagent/end');
     const hooks = [...(ctx.listeners.get('subagent/end') ?? [])];
-    assert.equal(hooks.length, 1, '恰一条 subagent/end 订阅');
+assert.deepEqual(hooks.map((h) => h.opts?.global), [true], '订阅集合的身份须恰为 1 条且带 {global:true}（空=漏挂，多=重复挂，缺 global=被 scope 化 ctx 漏收）');
     assert.deepEqual(hooks[0].opts, { global: true }, '必须带 {global:true}（缺省监听在被 scope 化的插件 ctx 上漏收）');
   } finally {
     reg.dispose();
@@ -304,7 +304,7 @@ test('E1: 判据不满足（exec 产物缺失）⇒ 停轮：auto.settle.paused 
     assert.equal(b.phase, 'paused', '缺省 onFail=pause（停轮上报，不静默判死）');
     assert.equal(b.lanes.e1, 'review', '停轮不改成员状态（lane 停在 review 等人工处置）');
     const paused = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_PAUSED);
-    assert.equal(paused.length, 1, '恰一条 auto.settle.paused');
+assert.deepEqual(paused.map((e) => e.type), ['auto.settle.paused'], 'paused 事件的身份集合须恰为该 type 一条');
     assert.equal(paused[0].action, DEFAULT_ON_FAIL);
     assert.ok(String(paused[0].reason).includes('GATE_EXIT_MISSING'), 'reason 含门禁码（可定位）：' + paused[0].reason);
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.to === 'failed').length, 0, '不写 failed（停轮非判死）');
@@ -531,7 +531,7 @@ test('I1: audit 层 lane 的结算职责移出本路——action=skipped/reason=
     assert.equal(b.lanes.a1, 'running', 'audit lane 不被自动结算（终态由 Leader 显式写）');
     assert.equal(b.phase, 'running', '职责转移不是失败 ⇒ 不落 paused、不推相位');
     const skipped = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
-    assert.equal(skipped.length, 1, '恰一条 auto.settle.skipped 留痕（可审计，不是静默丢弃）');
+assert.deepEqual(skipped.map((e) => e.reason), [AUDIT_SETTLE_DEFERRAL_REASON], '留痕的 reason 身份须恰为职责转移码（不是笼统 skipped）');
     assert.equal(skipped[0].lane, 'a1');
     assert.equal(skipped[0].reason, AUDIT_SETTLE_DEFERRAL_REASON, 'reason 自证职责转移（不写笼统 skipped）');
     assert.equal(b.events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length, 0, '未进判定段（无 auto.settle.triggered）');
@@ -662,7 +662,7 @@ test('J1: 【R-1 缺省兼容 · L-AC-1】未声明开关键 ⇒ 主路照装（
   try {
     assert.equal(reg.installed, true, '缺省（undefined）⇒ 等价 true（R-1 向后兼容）');
     const hooks = [...(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? [])];
-    assert.equal(hooks.length, 1, '恰一条 subagent/end 订阅');
+assert.deepEqual(hooks.map((h) => h.opts?.global), [true], '缺省兼容路径的订阅身份须恰为 1 条且带 {global:true}');
     assert.deepEqual(hooks[0].opts, { global: true }, 'global 硬要求不变（C-4：缺则被 scope 化的 ctx 漏收）');
     assert.equal(reg.count(), 0, 'count() 初始为 0');
   } finally {
@@ -722,7 +722,7 @@ test('J3: 【R-2 ① · L-AC-4/L-AC-5/L-AC-10】enabled:false ⇒ 零订阅 + re
   assert.ok(reg.reason.length > 0, 'R-2 ①：reason 非空字符串');
   assert.equal(reg.reason, DISABLED_REASON, 'reason 自证为停用（约束 8：禁笼统 skipped）');
   assert.notEqual(reg.reason, 'ctx.on unavailable or store missing', 'C-6：与宿主能力缺失成因**可辨**');
-  assert.equal(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END)?.size ?? 0, 0, 'L-AC-4：主路零订阅');
+assert.deepEqual([...(ctx.listeners.get(AUTO_SETTLE_SUBAGENT_END) ?? [])], [], 'L-AC-4：主路订阅集合须为空（空集身份）');
   assert.equal(reg.count(), 0, 'L-AC-4：count() === 0');
   assert.doesNotThrow(() => reg.dispose(), 'L-AC-4：dispose() 不抛（返回形态同形，C-5）');
   // R-3 / L-AC-10 非静默：≥1 条 info 含配置键名或停用字样；**0** 条含旧谎报行
@@ -761,7 +761,7 @@ test('J4: 【R-2 ② 回报全留 · L-AC-6】停用时 swarm_report(settle-requ
   assert.equal(b.events.filter((e) => e.type === EVT_SWARM_REPORT).length, 1, 'L-AC-6：批事件 swarm.report 恰 1 条');
   // L-AC-6：Leader 通道（broadcast，`REPORT_CHANNEL.leader`）收到恰 1 条
   const inbox = readUnacked(mailboxRootOf(root, S, 'j4'), { type: REPORT_CHANNEL.leader });
-  assert.equal(inbox.length, 1, 'L-AC-6：Leader broadcast 恰 1 条');
+assert.deepEqual(inbox.map((m) => m.message?.kind), ['settle-request'], 'Leader broadcast 的消息类型身份须恰为 settle-request 一条；实测=' + JSON.stringify(inbox.map((m) => m.message?.type)));
   // `mailbox.send(root, box, message, meta)` ⇒ channel 在 `box`、载荷在 `message`（meta 为 null）
   assert.equal(inbox[0].box.type, REPORT_CHANNEL.leader, 'Leader 通道 = broadcast（取件箱可核）');
   assert.equal(inbox[0].message.kind, 'settle-request', '报文 kind 可核（回报类型不变）');

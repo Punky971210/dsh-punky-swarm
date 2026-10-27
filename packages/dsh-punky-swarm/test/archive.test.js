@@ -129,10 +129,11 @@ test('A2：单向——archived:true + archive.done + 无 unarchive 入口 + com
 test('A3：幂等——重复归档 no-op（不重复复制、不覆盖 manifest、无第二 archive.done）', () => {
   const m1 = store.archive.readManifest(SID, 'b-a1');
   const evCount = store.readBatch(SID, 'b-a1').events.length;
+  const doneBefore = store.readBatch(SID, 'b-a1').events.filter((e) => e.type === 'archive.done').length; // 时点基线（M-2 授权的采样行）
   const r = store.archive.archiveBatch(SID, 'b-a1');
   assert.deepEqual(r, m1); // no-op 返回既有记录
   const b2 = store.readBatch(SID, 'b-a1');
-  assert.equal(b2.events.filter((e) => e.type === 'archive.done').length, 1);
+  assert.equal(b2.events.filter((e) => e.type === 'archive.done').length - doneBefore, 0, '第二次 archive 为 no-op ⇒ archive.done **增量为 0**（不写死总数）');
   assert.equal(b2.events.length, evCount);
   assert.deepEqual(store.archive.readManifest(SID, 'b-a1'), m1); // manifest 未被覆盖
 });

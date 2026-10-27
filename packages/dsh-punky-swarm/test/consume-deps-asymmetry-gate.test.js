@@ -199,13 +199,13 @@ test('A-4 域 B 观察面：exec 消费 plan 产物而缺边 ⇒ 不拒 + 恰 1 
   assert.ok(b, '观察面须建批成功（非拒）');
   // ② 事件恰 1 条 + 载荷三键
   const evs = eventsOf(store, SID, 'b-cdg-obs', NEW_EVT);
-  assert.equal(evs.length, 1, '观察事件计数 = 1（不是 ≥1、不是 0）');
+assert.deepEqual(evs.map((e) => e.artifact), ['plan/yyy.md'], '观察事件的 artifact 身份须恰为本用例构造的那一条');
   assert.equal(evs[0].lane, 'eY', '载荷 lane');
   assert.equal(evs[0].from, 'pZ', '载荷 from');
   assert.equal(evs[0].artifact, 'plan/yyy.md', '载荷 artifact');
   // ③ 回显数组（闭集 schema 须登记 properties，否则被剥掉）
   assert.ok(Array.isArray(out.consumeDepsAsymmetry), '返回值须回显 consumeDepsAsymmetry');
-  assert.equal(out.consumeDepsAsymmetry.length, 1, '回显数组长度 = 1');
+assert.deepEqual(out.consumeDepsAsymmetry.map((x) => x.artifact), ['plan/yyy.md'], '回显数组的 artifact 身份须恰为该一条');
   assert.deepEqual(Object.keys(out.consumeDepsAsymmetry[0]).sort(), ['artifact', 'from', 'lane'], '回显元素 = {lane, from, artifact}');
   // ④ 缺口确实存在（证明观察面在**缺口态**下发射）+ 相位未被本门改写
   const eY = b.wavePlan.flatMap((w) => w.tasks).find((t) => t.id === 'eY');

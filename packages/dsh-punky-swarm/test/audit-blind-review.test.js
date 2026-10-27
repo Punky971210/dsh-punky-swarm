@@ -97,7 +97,12 @@ test('A3.3 applyAssemblyExtensions：关 → 原样返回（零变化）；开 �
     assert.ok(merged.layers.audit.roles.includes(role), role + ' 入 audit.roles');
     assert.deepEqual(merged.layers.audit.skills[role], BLIND_REVIEW_SKILLS[role], role + ' skills 映射');
   }
-  assert.equal(merged.layers.audit.roles.length, 2 + 3, 'audit roles = 原 2 + 新增 3');
+  // 身份集合（期望来自**测试自造**的 base 装配 + 常量 BLIND_REVIEW_ROLES）：能区分「少一条」与「换一条」
+  assert.deepEqual(
+    merged.layers.audit.roles,
+    [...BASE_ASSEMBLY.layers.audit.roles, ...BLIND_REVIEW_ROLES],
+    'audit roles = base 的 2 个身份 + 新增 3 个身份（顺序=追加语义，逐个身份可核）',
+  );
   assert.deepEqual(merged.layers.plan, BASE_ASSEMBLY.layers.plan, '非 audit 层不变');
 });
 
@@ -156,6 +161,10 @@ test('A3.6 默认不启用：base 装配一字不变 + 装配扩展默认关', (
 test('A3.7 buildAuditLaneSpec 参数容错：panelistCount 非法回退默认 2', () => {
   assert.equal(buildAuditLaneSpec({ panelistCount: 0 }).config.panelistCount, 2);
   assert.equal(buildAuditLaneSpec({ panelistCount: 3 }).config.panelistCount, 3);
-  assert.equal(buildAuditLaneSpec({ panelistCount: 3 }).tasks.length, 3 + 2, '任务数 = panelistCount + 2（aggregate + critic）：同源差值，实测 ' + buildAuditLaneSpec({ panelistCount: 3 }).tasks.length + '）');
+  assert.deepEqual(
+    buildAuditLaneSpec({ panelistCount: 3 }).tasks.map((t) => t.role).sort(),
+    ['audit-aggregate', 'audit-critic', 'audit-panelist', 'audit-panelist', 'audit-panelist'],
+    '任务身份集合 = panelistCount(3) 个 panelist + aggregate + critic（期望由入参派生；少/换一条即红）',
+  );
   assert.equal(buildAuditLaneSpec().config.panelistCount, 2, '缺省参数回退');
 });

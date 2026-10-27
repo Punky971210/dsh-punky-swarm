@@ -269,8 +269,12 @@ test('AC-pack1-5b 正例 N2：同夹具不删节 ⇒ 失败集 = N1 失败集 �
 assert.deepEqual(added.map((k) => k.split('|')[0]), ['forward-id'], '新增失败的 check 身份集合须恰为 forward-id（空=没抓到，含其它=误报）；实测=' + JSON.stringify(added));
   assert.match(added[0], /forward-id\|.*0t/, '新增的失败须是 §0t 的 forward-id：' + added[0]);
   // 夹具自洽：退出码与失败集一致（防「有失败却 exit 0」的静默）
-  assert.equal(cleanRun.status, (cleanRun.doc.failures ?? []).length === 0 ? 0 : 1,
-    '未删节副本的 exit 须与 failures.length 一致');
+  // 同源派生收进一条身份/状态对照（原三元派生属语义重写，此处把两半合成一处判据）
+  assert.deepEqual(
+    { status: cleanRun.status, failsEmpty: (cleanRun.doc.failures ?? []).length === 0 },
+    { status: 0, failsEmpty: true },
+    '未删节副本：status 与「failures 为空」必须同源一致（有失败却 exit 0 = 静默；无失败却 exit 1 = 假警报）',
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

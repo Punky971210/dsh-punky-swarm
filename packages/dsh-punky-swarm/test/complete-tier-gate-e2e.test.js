@@ -145,7 +145,7 @@ test('R3-1-A1：批内无 audit 层 ⇒ complete 拒 GATE_COMPLETE_NO_AUDIT（�
   );
   assert.equal(store.readBatch(SESS_ID, batchId).phase, 'running', '被拒 ⇒ 相位不得推进（拒即可见、不可静默前进）');
   const blocked = blockedEvents(store, batchId);
-  assert.equal(blocked.length, 1, 'gate.complete_blocked 落痕一次（可审计）');
+assert.deepEqual(blocked.map((e) => e.code), [CODE_NO_AUDIT], 'complete_blocked 的 code 身份须恰为该拒码一条（可审计）');
   assert.equal(blocked[0].code, CODE_NO_AUDIT, '落痕码与抛出码同源');
 });
 
@@ -190,7 +190,7 @@ test('R3-1-B1：exec 层未全终态 ⇒ complete 拒 GATE_COMPLETE_EXEC_PENDING
   assert.match(String(err.message), /: e1\b/, 'pending 回显待收 lane（写端 `store.js` 拼进 message）');
   assert.equal(store.readBatch(SESS_ID, batchId).phase, 'running', '被拒 ⇒ 相位不得推进');
   const blocked = blockedEvents(store, batchId);
-  assert.equal(blocked.length, 1, 'gate.complete_blocked 落痕一次');
+assert.deepEqual(blocked.map((e) => e.code), [CODE_EXEC_PENDING], 'complete_blocked 的 code 身份须恰为 exec-pending 码一条');
   assert.equal(blocked[0].code, CODE_EXEC_PENDING, '落痕码与抛出码同源');
   assert.deepEqual(blocked[0].pending, ['e1'], '落痕载荷逐字带 pending 名单（可定位到 lane）');
 });

@@ -66,7 +66,7 @@ test('setMember follows transitions and logs events', () => {
   const b = store.readBatch(S, 'b-test');
   assert.equal(b.lanes.t1, 'merged');
   const settled = b.events.filter((e) => e.type === 'member.settled');
-  assert.equal(settled.length, 3);
+assert.deepEqual(settled.map((e) => e.to), ['running', 'review', 'merged'], '三次迁移的 to 身份序列须逐位相符');
   assert.deepEqual(settled[0], { ts: settled[0].ts, type: 'member.settled', lane: 't1', from: 'pending', to: 'running', note: null });
   assert.throws(() => store.setMember(S, 'b-test', 't1', 'running')); // 终态不可回退
 });
@@ -231,7 +231,7 @@ test('recoverBatches detail: lastActiveAt/produced 审计详情（running→idle
   const ev = b.events.filter((e) => e.type === 'system.recovered').at(-1);
   assert.ok(ev, 'system.recovered event missing');
   assert.deepEqual([...ev.recoveredLanes].sort(), ['x', 'y', 'z']); // 只含本次恢复的 lane
-  assert.equal(ev.detail.length, 3);
+assert.deepEqual(ev.detail.map((d) => d.lane).sort(), [...ev.recoveredLanes].sort(), 'detail 的 lane 集合须与 recoveredLanes 恒等（同源对照）');
   const byLane = Object.fromEntries(ev.detail.map((d) => [d.lane, d]));
   assert.equal(byLane.x.from, 'running');
   assert.equal(byLane.y.from, 'review');
@@ -267,7 +267,7 @@ test('recoverBatches detail: 无产物 lane produced=[]；无 lane 事件 lastAc
   assert.ok(recovered.includes(S + '/b-rec-empty'));
   const b = store.readBatch(S, 'b-rec-empty');
   const ev = b.events.filter((e) => e.type === 'system.recovered').at(-1);
-  assert.equal(ev.detail.length, 1);
+assert.deepEqual(ev.detail.map((d) => d.lane), ['g'], 'detail 的 lane 身份须恰为本次恢复的那一条');
   assert.equal(ev.detail[0].lane, 'g');
   assert.equal(ev.detail[0].from, 'running');
   assert.deepEqual(ev.detail[0].produced, []); // 契约产物不存在 → 空清单
@@ -346,6 +346,6 @@ test('O2 C3 接线：未声明 targets 的 merged 行为与接线前一致（零
   assert.ok(!r.events.some((e) => e.type === 'gate.target.passed' || e.type === 'gate.target_blocked'), '零感知无事件');
   // 既有 gate.passed(exit) 事件顺序不破坏（exit 仍最先）
   const evs = r.events.filter((e) => e.type === 'gate.passed' && e.lane === 'e1');
-  assert.equal(evs.length, 1);
+assert.deepEqual(evs.map((e) => e.gate), ['exit'], 'gate.passed 的 gate 身份须恰为 exit 一条');
   assert.equal(evs[0].gate, 'exit');
 });

@@ -11,7 +11,7 @@
     "test/accept-pack1-guidance.test.js": {
       "asserts": 61,
       "blankLines": 38,
-      "lines": 467,
+      "lines": 471,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -123,7 +123,7 @@
     "test/archive.test.js": {
       "asserts": 53,
       "blankLines": 14,
-      "lines": 234,
+      "lines": 235,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -187,7 +187,7 @@
     "test/audit-blind-review.test.js": {
       "asserts": 55,
       "blankLines": 14,
-      "lines": 162,
+      "lines": 171,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T12:17:06Z",
+  "generatedAt": "2026-10-27T12:33:08Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点2：P1-b 19条 + P3b 2条(api 7条存在性/assign 标识符集合)，Δ=+9",
+  "reason": "检查点3：P1-c 25改0回退 + P2-b 4改；P1 全部完成（63改/3回退/3前序）",
   "schema": 1,
   "totals": {
     "asserts": 11050,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62891,
+    "lines": 62905,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
