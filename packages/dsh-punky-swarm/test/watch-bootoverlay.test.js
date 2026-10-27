@@ -103,10 +103,14 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
   try {
     // 启动对账 remount 恰一次（logTag='boot-overlay'；热更路径无此 tag）
     const bootA = bootRemountLines(ctxA.calls);
+    // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(bootA.length, 1, '启动对账 remount 日志恰 1 行（实际: ' + ctxA.calls.info.join(' || ') + '）');
     // unmounted 方向（overlay enabled:false 覆盖 → 引擎 dispose + timer 清）
     assert.ok(bootA[0].includes('unmounted (watch disabled)'), 'overlay enabled:false → unmounted 方向（实际: ' + bootA[0] + '）');
     // 佐证：静态 enabled 引擎曾挂载（remount 前有物可卸）→ 初始 mount 日志恰 1 行
+    // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(mountedLines(ctxA.calls).length, 1, '静态装配先挂载（watch capability enabled）→ 被对账卸载');
     // 行为断言：applied.watch（watchInstalledCfg）已随启动对账对齐 overlay——enabled=false（阈值未覆盖 → 默认）
     assert.deepEqual(getAppliedWatch(routesA),
@@ -123,6 +127,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     const disposerA2 = apply(ctxA2, STATIC_WATCH(rootA2));
     try {
       const bootA2 = bootRemountLines(ctxA2.calls);
+      // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+      // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
       assert.equal(bootA2.length, 1, '启动对账 remount 恰 1 行（实际: ' + ctxA2.calls.info.join(' || ') + '）');
       assert.ok(bootA2[0].includes('re-mounted') && bootA2[0].includes('longrun=false'),
         'overlay longrun.enabled:false → re-mounted（longrun=false）（实际: ' + bootA2[0] + '）');
@@ -147,6 +153,8 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     try {
       // remountWatchEngine 快照相等 → 返回 false no-op（不 dispose 不重挂不写 remount 日志）
       assert.equal(bootRemountLines(ctxB.calls).length, 0, '快照一致 → 零 [boot-overlay] remount 日志（幂等 no-op；实际: ' + ctxB.calls.info.join(' || ') + '）');
+      // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+      // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
       assert.equal(mountedLines(ctxB.calls).length, 1, '静态引擎挂载保持（对账未误卸载）');
       assert.deepEqual(getAppliedWatch(routesB),
         { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 0.1 },
@@ -178,9 +186,13 @@ test('BO1 watch boot-overlay 启动对账：overlay 生效覆盖 → apply 尾�
     const disposerC = apply(ctxC, STATIC_WATCH(rootC));
     try {
       const bootC = bootRemountLines(ctxC.calls);
+      // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+      // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
       assert.equal(bootC.length, 1, '阈值 overlay → 启动对账 remount 恰 1 行（实际: ' + ctxC.calls.info.join(' || ') + '）');
       assert.ok(bootC[0].includes('re-mounted') && bootC[0].includes('longrun=true'),
         'overlay 阈值变化 → re-mounted（enabled/longrun 保持默认开）（实际: ' + bootC[0] + '）');
+      // P4-b 不可改造（Leader 裁定）：`bootA` / `bootC` / `mountedLines(...)` 的元素都是 **info 文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+      // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
       assert.equal(mountedLines(ctxC.calls).length, 1, '静态引擎先挂载 → 被对账以新阈值重建');
       assert.deepEqual(getAppliedWatch(routesC),
         { enabled: true, longrun: { enabled: true, maxDurationMs: 60000, noProgressWindowMs: 30000, staleBatchMs: 86400000, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },

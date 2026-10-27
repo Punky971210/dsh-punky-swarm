@@ -162,6 +162,8 @@ const endHooksOf = (ctx) => [...(ctx.listeners.get('subagent/end') ?? [])];
 /** 唤醒路 = `hooks[1]`（`hooks[0]` = 结算主路；注册序 `lib/index.js:576` → `:662`，既有套件 `乙-1/乙-2` 同口径）。 */
 function wakeHookOf(ctx) {
   const hooks = endHooksOf(ctx);
+  // P4-b 不可改造（Leader 裁定）：`hooks` 元素是**订阅函数本体**，无身份字段可映射（P4-b 来源②）；
+  // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
   assert.equal(hooks.length, 2, '前置：`subagent/end` 面须为两路订阅（结算路 + 唤醒路）');
   return hooks[1];
 }
@@ -204,6 +206,8 @@ test('T-1 【L-AC-3/L-AC-7】命名黑板批 + worker 不回报 ⇒ 主路唤醒
     reading('T-1 窗键', [...LEADER_WAKE_WINDOWS.keys()]);
 
     // ★ 判别点：改前 HEAD 床 = 0（寻址取黑板名 ⇒ leader-not-live ⇒ 静默）
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489 类取值已证），但 id 与文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '命名黑板批 + worker 不回报 ⇒ 主路须唤醒**恰 1 次**（worker 忘了回报时本路是唯一通道）');
     assert.deepEqual(agentSvc.lookups, [LEADER], '寻址查询**恰 1 次**且落在**发起派发的 agent 会话**上（≠ 黑板名；禁「候选逐个试」的松弛实现）');
 
@@ -279,6 +283,8 @@ test('T-2 【L-AC-8】冷索引（结算路惰性重建）与热索引四项读�
     const coldReading = wakeReadingOf(coldLeader, coldSvc, key);
     reading('T-2 冷索引读数', coldReading);
 
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489 类取值已证），但 id 与文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(coldLeader.messages.length, 1, '冷索引路径下唤醒**不得**静默回退（W-4 漏改即在此暴露：重建丢掉字段 ⇒ 寻址回退黑板名）');
     assert.deepEqual(coldSvc.lookups, [LEADER], '冷索引路径的寻址值 = 发起派发的 agent 会话');
     assert.deepEqual(coldReading, hotReading, 'L-AC-8：冷/热索引四项读数（woke/followup/目标会话 id/窗键）逐字相同');
@@ -301,6 +307,8 @@ test('T-3 【L-AC-4】真会话批（批归属键 = 活会话）：既有形态�
       await wakeHookOf(m.ctx).fn(endInfoOf(WORKER));
       await sleep(20);
       reading('T-3 ' + tag, { followups: leader.messages.length, lookups: agentSvc.lookups });
+      // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489 类取值已证），但 id 与文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+      // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
       assert.equal(leader.messages.length, 1, tag + '：真会话批照常唤醒');
       assert.deepEqual(agentSvc.lookups, [LEADER], tag + '：目标会话 id **逐字** = 批归属会话（既有可用行为零漂移）');
     } finally { m.disposer(); }
@@ -385,6 +393,8 @@ test('T-6 【L-AC-5】治理落点逐字不动：批文件仍在黑板名下 + �
   try {
     await wakeHookOf(m.ctx).fn(endInfoOf(WORKER));
     await sleep(20);
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489 类取值已证），但 id 与文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '前置：命名黑板批的唤醒须先成立（本用例只核**落点**面）');
     assert.equal(fs.existsSync(batchFileOf(m.root, BOARD, 'b-t6')), true, '批文件路径仍 = `<root>/sessions/<批归属键=黑板名>/batches/<batchId>.json`');
     assert.equal(fs.existsSync(batchFileOf(m.root, LEADER, 'b-t6')), false, '**不得**因寻址改动而把批文件迁到 agent 会话名下');
@@ -435,6 +445,8 @@ test('T-7 【L-AC-10】两路订阅均 `{global:true}`；节流口径 = 既有�
     await wakeHookOf(m.ctx).fn(endInfoOf('ws-t7-b'));
     await sleep(20);
     reading('T-7 窗内两 worker', { followups: leader.messages.length, lookups: agentSvc.lookups, windows: [...LEADER_WAKE_WINDOWS.keys()] });
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489 类取值已证），但 id 与文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '窗内（30s）合并 ⇒ 唤醒恰 1 次（leading-edge 语义不变）');
     assert.equal(LEADER_WAKE_WINDOWS.has(LEADER + '\0b-t7'), true, '窗键 = 寻址值 + \\0 + batchId（同批同 Leader 共一窗）');
   } finally { m.disposer(); }

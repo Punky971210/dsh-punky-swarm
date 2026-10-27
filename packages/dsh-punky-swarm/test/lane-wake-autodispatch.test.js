@@ -172,6 +172,8 @@ test('甲-2 (D-5甲)：`swarm_report(completed)` ⇒ 唤醒 + 留痕双写，**�
   assert.equal(out.eventWritten, true, '留痕双写面不变：批事件');
   assert.equal(out.wake.woke, true, 'D-5甲：completed ⇒ 唤醒路径被触发');
   assert.equal(out.wake.reason, 'woke');
+  // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素 id/文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+  // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
   assert.equal(leader.messages.length, 1, '唤醒动作唯一 = followup 恰 1 次');
   assert.equal(out.settle, undefined, 'D-5甲：**不触发结算**（解耦；返回值无 settle 键）');
   assert.equal(store.readBatch(LEADER, batchId).lanes.e2, 'running', '不结算 ⇒ lane 状态不动（仍 running）');
@@ -234,6 +236,8 @@ test('乙-2 (D-2甲 + D-3甲)：命中 lane 的 `subagent/end` ⇒ 唤醒 Leader
     await sleep(20);
     reading('乙-2 唤醒消息', leader.messages[0]?.content?.[0]?.text ?? null);
 
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素 id/文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '命中 lane 的完成事实 ⇒ 唤醒恰 1 次（不依赖 worker 自觉回报）');
     const text = leader.messages[0].content[0].text;
     assert.ok(text.startsWith('[swarm] b-wake/e2 completed：'), '消息首行 = 元数据摘要（批/lane/终态）；实测=' + text);
@@ -319,6 +323,8 @@ test('乙-6 (复用既有节流)：同批同 Leader 窗内多 worker 完成 ⇒ 
     await emitSubagentEnd(m.ctx, endInfoOf('ws-e2b'));
     await sleep(20);
     reading('乙-6 窗内两 worker', { followupCalls: leader.messages.length, windows: [...LEADER_WAKE_WINDOWS.keys()] });
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素 id/文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '窗内（30s）合并 ⇒ 唤醒 ≤ ⌈跨度/W⌉+1 = 1（与完成条数解耦）');
     assert.equal(WAKE_MIN_INTERVAL_MS, 30_000, '节流口径 = 既有单点常量（未另写第二套）');
   } finally { m.disposer(); }
@@ -416,6 +422,8 @@ test('⑩ HOST：真宿主加载 —— 真 cordis Context 装载真插件入口
     const wakeText = leader.messages[0]?.content?.[0]?.text ?? null;
     reading('⑩ 真链路唤醒读数', { followupCalls: leader.messages.length, wakeText });
 
+    // P4-b 不可改造（Leader 裁定）：`leader.messages` 元素 id/文案**均由运行时生成**、期望值不可知（同源恒真，P4-b 来源③）；
+    // 换一条条数不变 ⇒ 计数形态仍绿；map 出身份即原文/运行时值。保留计数。
     assert.equal(leader.messages.length, 1, '真宿主链路上：完成类事件 ⇒ Leader 被唤醒（新增能力的可观测效果）');
     assert.ok(String(wakeText).startsWith('[swarm] b-host/e2 '), '唤醒消息 = 摘要元数据（批/lane）');
     assert.ok(String(wakeText).includes('可派发候选'), 'D-3甲：候选清单在真链路上同样附上');

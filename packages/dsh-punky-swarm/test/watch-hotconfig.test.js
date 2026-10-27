@@ -152,6 +152,8 @@ test('H1 longrun.enabled 翻转热更即时：re-mounted 日志（longrun=false�
     await waitFor('h1-remount', () => remountLines(ctx.calls).length >= 1,
       { expected: 're-mounted 日志恰 1（longrun=false 生效面）' });
     const lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 1, 'remount 恰 1 行（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=false\)/, '重建日志含生效面（longrun=false）');
     assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag（区分启动对账）');
@@ -192,6 +194,8 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
     writeRuntime(root, { capabilities: { watch: { enabled: false } } });
     await sleep(HOT_SLEEP);
     let lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 1);
     assert.match(lines[0], /unmounted \(watch disabled\)/, 'enabled=false → unmounted 方向（实际: ' + lines[0] + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
@@ -201,6 +205,8 @@ test('H2 watch.enabled 翻转语义回归：unmounted（dispose+清 timer）→ 
     writeRuntime(root, { capabilities: { watch: { enabled: true } } });
     await sleep(HOT_SLEEP);
     lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 2, '二次 remount 留痕');
     assert.match(lines[1], /re-mounted/, 'enabled=true → re-mounted');
     assert.equal(getConfig(routes).applied.watch.enabled, true, '恢复默认开');
@@ -221,6 +227,8 @@ test('H3 scanIntervalMinutes 变更 → remount（scan 档期重挂）；applied
     writeRuntime(root, { capabilities: { watch: { scanIntervalMinutes: 0.5 } } });
     await sleep(HOT_SLEEP);
     const lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 1, 'scan 变化触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 30000ms, longrun=true\)/, '重挂档期 0.5min → 30000ms');
     assert.equal(getConfig(routes).applied.watch.scanIntervalMinutes, 0.5, '生效快照 scanIntervalMinutes 随动');
@@ -246,6 +254,8 @@ test('H4 阈值-only 热更即时 remount（语义翻转，取代旧「阈值留
     writeRuntime(root, { capabilities: { watch: { longrun: { maxDurationMs: 60000, noProgressWindowMs: 30000 } } } });
     await sleep(HOT_SLEEP);
     const lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 1, '阈值-only 变化现触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.match(lines[0], /re-mounted \(scan 60000ms, longrun=true\)/, '重建日志 re-mounted（阈值变化不翻 enabled/longrun/scan）');
     assert.equal(lines[0].includes('[boot-overlay]'), false, '热更路径无 [boot-overlay] tag');
@@ -283,6 +293,8 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0 } } } });
     await sleep(HOT_SLEEP);
     let lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 1, 'staleBatchMs 变化触发 remount（实际: ' + ctx.calls.info.join(' || ') + '）');
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 0, unconsumedTimeoutMs: 1800000 }, scanIntervalMinutes: 1 },
@@ -291,6 +303,8 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
     await sleep(HOT_SLEEP);
     lines = remountLines(ctx.calls);
+    // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+    // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
     assert.equal(lines.length, 2, 'unconsumedTimeoutMs 变化再次 remount');
     assert.deepEqual(getConfig(routes).applied.watch,
       { enabled: true, longrun: { enabled: true, maxDurationMs: 1200000, noProgressWindowMs: 300000, staleBatchMs: 0, unconsumedTimeoutMs: 60000 }, scanIntervalMinutes: 1 },
@@ -478,6 +492,8 @@ test('F1 归因收窄三构造：主题面必红 / witness 不红但可见 / 空
   // F1-a：注入一条主题面 warn
   const a = topicWarnVerdict(['[dsh-punky-swarm] hot config re-mounted: longrun=false'], topic);
   assert.equal(a.ok, false, 'F1-a：主题面 warn ⇒ 必须判红（主题面零容忍，无余量）');
+  // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+  // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
   assert.equal(a.topic.length, 1, 'F1-a：须归入 topic');
   assert.equal(a.other.length, 0, 'F1-a：other 不得误收');
 
@@ -485,6 +501,8 @@ test('F1 归因收窄三构造：主题面必红 / witness 不红但可见 / 空
   const witness = "[dsh-punky-swarm] asset sync failed: presets/punky-preset/asset-manifest.json: EPERM: operation not permitted, utime '...\\.dsh\\.agent-presets\\punky-preset\\asset-manifest.json'";
   const b = topicWarnVerdict([witness], topic);
   assert.equal(b.ok, true, 'F1-b：witness 不属主题面 ⇒ 不判红（这是本轮修掉的偶发红）');
+  // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
+  // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
   assert.equal(b.other.length, 1, 'F1-b：witness 必须进 other（不得静默丢弃）');
   assert.equal(b.other[0].includes('asset sync failed'), true, 'F1-b：other 须保留可读原文');
   // 断言消息必须**带出** other（可见性）

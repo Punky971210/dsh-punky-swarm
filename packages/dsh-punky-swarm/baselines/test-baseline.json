@@ -1011,7 +1011,7 @@
     "test/lane-wake-autodispatch.test.js": {
       "asserts": 55,
       "blankLines": 42,
-      "lines": 425,
+      "lines": 433,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1419,7 +1419,7 @@
     "test/swarm-wake-addressing.test.js": {
       "asserts": 95,
       "blankLines": 49,
-      "lines": 663,
+      "lines": 675,
       "tautologies": 0,
       "tests": 16,
       "todos": 0
@@ -1555,7 +1555,7 @@
     "test/watch-bootoverlay.test.js": {
       "asserts": 24,
       "blankLines": 18,
-      "lines": 195,
+      "lines": 207,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1571,7 +1571,7 @@
     "test/watch-hotconfig.test.js": {
       "asserts": 94,
       "blankLines": 35,
-      "lines": 547,
+      "lines": 565,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T15:03:01Z",
+  "generatedAt": "2026-10-27T15:22:48Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点19：S-1 SpecLang 规格先行（改4全提升/P4-b 1/待读3，Δ0）",
+  "reason": "检查点20：S-2+S-3 两批全P4-b登记（25条注释，asserts不变）",
   "schema": 1,
   "totals": {
     "asserts": 11039,
     "blankLines": 5835,
     "files": 208,
-    "lines": 63025,
+    "lines": 63075,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
