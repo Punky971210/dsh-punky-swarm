@@ -141,8 +141,12 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   assert.deepEqual([...keys].sort(), [...RT_FIELDS_20].sort(), 'rt 字段集须与冻结 20 项集合相等');
 
   // ② seam 四要素（d1 §5 接口约定硬要求）
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((INDEX_SRC.match(/if \(typeof onWrite !== 'function'\) return base;/g) ?? []).length, 1,
     'seam 早退须恰 1 处（生产零路径的唯一证据）');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((INDEX_SRC.match(/new Proxy\(/g) ?? []).length, 1, 'new Proxy( 须恰 1 处');
   assert.equal(INDEX_SRC.includes('rtWriteLog'), true, 'seam 读取位须在场');
 

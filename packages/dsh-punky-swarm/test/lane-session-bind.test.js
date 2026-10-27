@@ -406,6 +406,14 @@ test('AC-4 零依赖红线：lib/tools/shared.js 无任何 import/require/动态
 
 test('AC-4b 回落顺序单点：`sessionOf` 定义恰 1 处，且顺序 = 显式 → resolver → 执行会话 → cli', () => {
   const src = readSrc('lib/tools/shared.js');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((src.match(/export function sessionOf\(/g) ?? []).length, 1, 'sessionOf 定义须恰 1 处（禁第二套回落顺序）');
   const body = src.slice(src.indexOf('export function sessionOf('));
   const idx = (needle) => body.indexOf(needle);

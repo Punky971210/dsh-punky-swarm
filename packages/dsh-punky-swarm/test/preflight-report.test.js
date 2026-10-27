@@ -299,6 +299,10 @@ test('REQ-10 事件常量值与常量名均不含 GATE_ 子串（否则「零新
   assert.doesNotMatch('EVT_PREFLIGHT_REPORT_MISSING', /GATE_[A-Z0-9_]+/);
   // 常量单点登记：event-types.js 内**只定义一次**（禁在调用点写裸字面量）
   const evtSrc = fs.readFileSync(new URL('../lib/state/event-types.js', import.meta.url), 'utf8');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((evtSrc.match(/export const EVT_PREFLIGHT_REPORT_MISSING\s*=/g) ?? []).length, 1, '常量单点定义');
   const gateSrc = fs.readFileSync(new URL('../lib/state/store/member-gates.js', import.meta.url), 'utf8');
   assert.ok(!gateSrc.includes("'gate.preflight.report.missing'"), '调用点引用常量、不写裸字面量');

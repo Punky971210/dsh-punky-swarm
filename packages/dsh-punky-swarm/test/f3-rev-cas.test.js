@@ -321,6 +321,14 @@ test('T-1 归档写面已归一：归档推进 rev 且经 commitBatch（原 D-2 
   //   该单点的**缺省回退**里（恰 1 处），且文件内必须引用注入的 `commitBatch`。
   const archiveSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'state', 'archive.js'), 'utf8');
   assert.ok(archiveSrc.includes('commitBatch'), '结构面：归档须接线 commitBatch（经注入）');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((archiveSrc.match(/atomicWrite\(batchFileOf\(/g) ?? []).length, 1,
     '结构面：atomicWrite 直写只允许 1 处（= writeBatchJson 的未注入回退），不得散落在两个写点');
   assert.ok((archiveSrc.match(/writeBatchJson\(/g) ?? []).length >= 2,

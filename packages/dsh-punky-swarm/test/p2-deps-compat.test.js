@@ -218,6 +218,8 @@ test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且改后 = 改前六段 +
   assert.equal(peer, dev, 'peerDependencies 与 devDependencies 的 range 必须逐字一致（两处须同步）');
   assert.equal(peer, RANGE_BEFORE + ' || ' + ADDED_SEGMENT, '改后 range 必须是「原六段 + 追加一段」的形态');
   const segments = peer.split('||').map((s) => s.trim());
+  // P4-b 不可改造（Leader 裁定）：期望值来自**版本范围字符串清单**（元素即原文）；
+  // map 出身份即原文 = 第二真源 ⇒ 归 P4-b。保留计数。
   assert.equal(segments.length, 7, '段数 6 → 7（只准加，不准改写既有段）');
   assert.equal(segments.slice(0, 6).join(' || '), RANGE_BEFORE, '原六段逐字保留且顺序不变');
   // 单调性：改前能过的版本改后仍然能过
@@ -228,7 +230,15 @@ test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且改后 = 改前六段 +
 
 test('A1-P2-03 / AC-10 · package.json 文本面：新增段恰出现 1 次、原末段出现 2 次（peer + dev）', () => {
   const text = read('package.json');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((text.match(/\^0\.2\.1-rc\.2/g) ?? []).length, 2, '新增段在文件内出现 2 次（peer + dev）');
+  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
+  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
+  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   assert.equal((text.match(/\^0\.2\.0-rc\.1/g) ?? []).length, 2, '原末段仍在两处（既有六段未被改写）');
 });
 

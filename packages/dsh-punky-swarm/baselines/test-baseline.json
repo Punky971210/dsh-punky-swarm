@@ -483,7 +483,7 @@
     "test/f2-lane-claim-warn.test.js": {
       "asserts": 9,
       "blankLines": 15,
-      "lines": 105,
+      "lines": 113,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -531,7 +531,7 @@
     "test/f3-rev-cas.test.js": {
       "asserts": 74,
       "blankLines": 33,
-      "lines": 392,
+      "lines": 400,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1003,7 +1003,7 @@
     "test/lane-session-bind.test.js": {
       "asserts": 115,
       "blankLines": 43,
-      "lines": 675,
+      "lines": 683,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1155,7 +1155,7 @@
     "test/p2-deps-compat.test.js": {
       "asserts": 26,
       "blankLines": 26,
-      "lines": 251,
+      "lines": 261,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1235,7 +1235,7 @@
     "test/preflight-report.test.js": {
       "asserts": 61,
       "blankLines": 30,
-      "lines": 324,
+      "lines": 328,
       "tautologies": 0,
       "tests": 16,
       "todos": 0
@@ -1547,7 +1547,7 @@
     "test/w7f-rt-write-surface.test.js": {
       "asserts": 75,
       "blankLines": 44,
-      "lines": 524,
+      "lines": 528,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T14:14:55Z",
+  "generatedAt": "2026-10-27T14:19:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点17：A-07b 补3卡点(全提升)+p2-deps-compat侦察停手(P4-b 3条)",
+  "reason": "检查点18：A-08 批量P4登记（6文件9条，纯注释，asserts 不变）",
   "schema": 1,
   "totals": {
     "asserts": 11039,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62981,
+    "lines": 63023,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
