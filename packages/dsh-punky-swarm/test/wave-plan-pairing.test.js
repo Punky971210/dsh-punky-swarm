@@ -79,12 +79,12 @@ test('U7-1【不可达·退役判据】ND-1 最强反例形态（audit 复述 ex
   ];
   assert.deepEqual(topoWaves(tasks).waves.map((w) => w.join('+')), ['p1+p2', 'e1', 'a1'], 'ND-1 拓扑分层读数');
   const trace = retiredPredicateTrace(tasks);
-  assert.equal(trace.length, 1, '恰好 1 条 audit←exec 入边（a1←e1）');
+  assert.deepEqual(trace.map((t) => t.edge), ['a1<-e1'], '恰好 1 条 audit←exec 入边（身份 = edge 串；格式由 :66 t.id+<-+d 证明，期望由测试自造 id a1/e1 派生）');
   assert.equal(trace[0].covers, false, '退役判据 covers 分项（内联复算）= false：own 含 e1 而 deps(e1) 不含 e1');
   assert.equal(trace[0].superset, false, '退役判据 superset 分项 = false ⇒ 该形态永不命中');
   const plan = build('nd1', tasks);
-  assert.equal(plan.warnings.length, 0, 'warning 总数 0（本格逐格断言，不只看总数）');
-  assert.equal(pairingOf(plan).length, 0, '配对告警 0');
+  assert.deepEqual(plan.warnings, [], 'warning 总数 0（本格逐格断言，不只看总数）（空集契约：整数组逐项）');
+  assert.deepEqual(pairingOf(plan), [], '配对告警 0（空集契约：整数组逐项）');
 });
 
 test('U7-2【不可达·退役判据】ND-2 共享祖先形态（a1←[p1,e1]，deps(e1)=[p1]）⇒ 建批 ok、配对告警 0', () => {
@@ -95,7 +95,7 @@ test('U7-2【不可达·退役判据】ND-2 共享祖先形态（a1←[p1,e1]，
   ];
   assert.deepEqual(topoWaves(tasks).waves.map((w) => w.join('+')), ['p1', 'e1', 'a1'], 'ND-2 拓扑分层读数');
   const trace = retiredPredicateTrace(tasks);
-  assert.equal(trace.length, 1);
+  assert.deepEqual(trace.map((t) => t.edge), ['a1<-e1'], 'ND-2 同形（身份 = edge 串，期望同上）');
   assert.equal(trace[0].lenGt, false, '退役判据 lenGt 分项 = false（|deps(e1)|=1 不大于 |deps(a1)|=2）');
   assert.equal(trace[0].superset, false);
   const plan = build('nd2', tasks);
@@ -199,5 +199,5 @@ test('U7-10【零假阳性】本批真实形态（audit 认领 3 条 exec lane �
     },
   ];
   const plan = build('real-batch-shape', tasks);
-  assert.equal(pairingOf(plan).length, 0, '真实合法声明不得产配对告警（认领即消费 ⇒ 逐条覆盖）');
+  assert.deepEqual(pairingOf(plan), [], '真实合法声明不得产配对告警（认领即消费 ⇒ 逐条覆盖）（空集契约：整数组逐项）');
 });

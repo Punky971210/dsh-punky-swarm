@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T14:08:30Z",
+  "generatedAt": "2026-10-27T14:11:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,7 +1676,7 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点15：A-06 worker-notify-wake 15site（6等价+7 P4，Δ0）",
+  "reason": "检查点16：A-07 wave-plan-pairing（8site，提升2/等价3/P4 0/卡点3）",
   "schema": 1,
   "totals": {
     "asserts": 11039,
