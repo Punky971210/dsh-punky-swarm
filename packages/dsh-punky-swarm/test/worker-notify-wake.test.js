@@ -155,12 +155,16 @@ test('① GREEN：swarm_report(blocked) ⇒ wake.woke=true 且 followup 被调�
   assert.equal(r.wake.woke, true, '① GREEN：handler 被调 ⇒ 唤醒路径被触发');
   assert.equal(r.wake.attempted, true, '① GREEN：attempted=true（进入唤醒路径）');
   assert.equal(r.wake.reason, 'woke', '① GREEN：reason=woke');
+  // P4 不可改造（Leader 裁定）：`leader.messages` 元素虽有 `.id`（:489/:491 已取值），但**id 与文案均由运行时生成**，无输入侧期望值 ⇒ 写死即硬编码运行时值；抽 id 做集合也只能数条数（`Set+length` = 伪装）。保留计数。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 1, '① GREEN：唯一唤醒动作 followup 被调用恰 1 次');
   assert.equal(r.delivered, true, '① GREEN：既有投递语义不变');
   assert.equal(r.eventWritten, true, '① GREEN：既有留痕语义不变');
 
   const msg = leader.messages[0];
   assert.equal(msg.role, 'user', '① GREEN：唤醒消息为 user 消息（dsh-llm createUserMessage 形状）');
+  // P4 不可改造（Leader 裁定）：复合 `assert.ok`（数组 + length + 类型）不是纯计数判据；拆开改变判据结构。保留原样。
+  // 保留计数（禁伪装）。
   assert.ok(Array.isArray(msg.content) && msg.content.length === 1 && msg.content[0].type === 'text',
     '① GREEN：消息体 = 单条 text 块（零工具/推理块）');
   assert.equal(typeof msg.id, 'string', '① GREEN：id 必填（inbox pending 去重）');
@@ -191,7 +195,7 @@ test('② RED①：不调 handler ⇒ 零 followup（阴性基线，证 GREEN �
   await new Promise((res) => setTimeout(res, 300)); // 观测窗
   reading('② RED① 观测窗内', { followupCalls: leader.messages.length, leaderStatus: leader.status, events: reportEventsOf(s.store, OWNER, s.batchId).length });
 
-  assert.equal(leader.messages.length, 0, '② RED①：不调 handler ⇒ 零唤醒（观测窗内 followup 未被调用）');
+  assert.deepEqual(leader.messages, [], '② RED①：不调 handler ⇒ 零唤醒（观测窗内 followup 未被调用）（空集契约：整数组逐项）');
   assert.equal(leader.status, 'idle', '② RED①：不调 handler ⇒ Leader 保持 idle');
   assert.equal(reportEventsOf(s.store, OWNER, s.batchId).length, 0, '② RED①：不调 handler ⇒ 零批事件（基线干净）');
 });
@@ -205,7 +209,7 @@ test('② RED①（G-2）：触发集外 type=progress ⇒ 不唤醒，但留痕
   assert.equal(r.wake.attempted, false, '② progress：未进入唤醒路径');
   assert.equal(r.wake.woke, false, '② progress：不唤醒');
   assert.equal(r.wake.reason, 'type-not-in-wake-set', '② progress：reason=type-not-in-wake-set（触发集 = {blocked,settle-request}）');
-  assert.equal(leader.messages.length, 0, '② progress：零 followup');
+  assert.deepEqual(leader.messages, [], '② progress：零 followup（空集契约：整数组逐项）');
   assert.equal(r.delivered, true, '② progress：留痕面不变（progress 高频，保持「留痕不打扰」）');
   assert.equal(r.eventWritten, true, '② progress：事件照落');
 });
@@ -295,6 +299,8 @@ test('④ 窗内连发 N=10 条 ⇒ 唤醒恰 1 次（上限 ⌈跨度/W⌉+1=1�
   reading('④ 汇总', { N, wokeCount, throttledCount: throttled.length, followupCalls: leader.messages.length, spanMs, upperBound: 1 });
 
   assert.equal(wokeCount, 1, '④：N=10 次连续 report ⇒ 唤醒次数恰 1');
+  // P4 不可改造（Leader 裁定）：同 :158（④ 总次数 = 1）：运行时 id/文案无可证期望值。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 1, '④：followup 总调用次数 = 1（≠ N）');
   assert.equal(throttled.length, N - 1, '④：其余 ' + (N - 1) + ' 条 = throttled');
   assert.deepEqual(throttled.map((w) => w.merged), Array.from({ length: N - 1 }, (_, i) => i + 1),
@@ -324,6 +330,8 @@ test('④ 跨窗（now 注入）：累计 2 次唤醒 + 第 2 次消息携带合
   assert.deepEqual(out.map((w) => w.reason), seq.map((s) => s.expect), '④ 跨窗：woke/throttled 序列与 now 序列一致（leading-edge）');
   assert.equal(wokeCount, 2, '④ 跨窗：累计唤醒 = 2（4 条报告 ⇒ 2 次，仍与条数解耦）');
   assert.ok(wokeCount <= Math.ceil(spanMs / WAKE_MIN_INTERVAL_MS) + 1, '④ 跨窗：≤ 上限 2');
+  // P4 不可改造（Leader 裁定）：同 :158（④ 跨窗总次数 = 2）。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 2, '④ 跨窗：followup 总次数 = 2');
   assert.equal(out.at(-1).merged, 2, '④ 跨窗：第 2 次唤醒回显「另合并 2 条」');
   assert.ok(leader.messages.at(-1).content[0].text.includes('（另合并 2 条同类回报）'),
@@ -392,7 +400,7 @@ test('⑤ 防自激-a（可达构造）：caller === leader（session.header 无
   assert.equal(r.wake.attempted, false, '⑤ self 闸在 attempted 之前生效（不进入唤醒路径）');
   assert.equal(r.wake.woke, false, '⑤ caller===leader ⇒ 不唤醒');
   assert.equal(r.wake.reason, 'self', '⑤ reason=self');
-  assert.equal(leader.messages.length, 0, '⑤ 零 followup（唤醒自己的路径被闸拦）');
+  assert.deepEqual(leader.messages, [], '⑤ 零 followup（唤醒自己的路径被闸拦）（空集契约：整数组逐项）');
   assert.equal(leader.status, 'idle', '⑤ Leader 保持 idle（无自激轮回）');
 });
 
@@ -410,6 +418,8 @@ test('⑤ 零回环：连发 N=5 次 report ⇒ 批事件恰 = N（唤醒路径�
   reading('⑤ 零回环读数', { N, before, after, delta: after - before, followupCalls: leader.messages.length });
 
   assert.equal(after - before, N, '⑤：N 次 report ⇒ EVT_SWARM_REPORT 恰 +N（≠ N+K，无自增/回环）');
+  // P4 不可改造（Leader 裁定）：同 :158（⑤ 同窗 ≤ 1）。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 1, '⑤：同一窗内 followup ≤ 1（唤醒本身不放大报告量）');
 });
 
@@ -428,6 +438,8 @@ test('⑤ 唤醒路径零批面写：直接调 wakeLeaderForReport ⇒ 批事件
 
   assert.equal(w.woke, true, '⑤ 前置：唤醒成功（确有 followup 发生）');
   assert.equal(after - before, 0, '⑤：唤醒路径零批面写（不调 appendEvent / 不调 swarm_report ⇒ 不构成新触发源）');
+  // P4 不可改造（Leader 裁定）：同 :158（⑤ 唤醒动作只一处）。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 1, '⑤：唤醒动作只有 followup 一处');
 });
 
@@ -487,6 +499,8 @@ test('⑥ 幂等：同一窗内第 2…N 条不产生第二条唤醒（followup 
     await s.report.execute({ type: 'blocked', summary: '幂等 #' + i, lane: LANE }, execOf(WORKER));
   }
   reading('⑥ 幂等读数', { followupCalls: leader.messages.length, ids: leader.messages.map((m) => m.id) });
+  // P4 不可改造（Leader 裁定）：同 :158（⑥ 幂等恰 1 条）；邻近 :491 已单独断言 "id 互不相同"，本条不重复其职能。
+  // 保留计数（禁伪装）。
   assert.equal(leader.messages.length, 1, '⑥：窗内 3 条 ⇒ 唤醒恰 1 条（幂等：同一事实不重复生效）');
   assert.equal(new Set(leader.messages.map((m) => m.id)).size, leader.messages.length, '⑥：唤醒消息 id 互不相同');
 });
@@ -609,7 +623,7 @@ test('⑦ 宿主分片端到端（真 Agent）', { skip: HOST_SKIP && HOST_SKIP_
   assert.equal(leader.status, 'idle', '⑦ RED①：不调 handler ⇒ Leader 仍 idle');
   assert.equal(baseTurn, 0, '⑦ RED①：零 turn/start');
   assert.equal(baseMsg, 0, '⑦ RED①：零 user/message');
-  assert.equal(held.length, 0, '⑦ RED①：零 LLM 轮');
+  assert.deepEqual(held, [], '⑦ RED①：零 LLM 轮（空集契约：整数组逐项）');
 
   // ── ② 触发集外 progress ⇒ 不唤醒（G-2） ─────────────────────────────────────
   const prog = await execReport({ type: 'progress', summary: '进度', lane: LANE }, callerHandle.agent, 'host-prog');
@@ -619,7 +633,7 @@ test('⑦ 宿主分片端到端（真 Agent）', { skip: HOST_SKIP && HOST_SKIP_
   assert.equal(prog.value.wake.reason, 'type-not-in-wake-set', '⑦ progress：触发集外');
   assert.equal(leader.status, 'idle', '⑦ progress：Leader 保持 idle');
   assert.equal(turnStarts(), 0, '⑦ progress：turn/start Δ=0');
-  assert.equal(held.length, 0, '⑦ progress：零 LLM 轮');
+  assert.deepEqual(held, [], '⑦ progress：零 LLM 轮（空集契约：整数组逐项）');
 
   // ── ③ 防自激（真 Agent 版）：caller === leader ⇒ 不唤醒 ──────────────────────
   LEADER_WAKE_WINDOWS.clear();
@@ -628,7 +642,7 @@ test('⑦ 宿主分片端到端（真 Agent）', { skip: HOST_SKIP && HOST_SKIP_
   reading('⑦ 防自激（真 Agent）', { wake: selfRes.value.wake, status: leader.status, turnStarts: turnStarts(), llmCalls: held.length });
   assert.equal(selfRes.value.wake.reason, 'self', '⑦ 防自激：caller===leader ⇒ reason=self（真 Agent 路径同判）');
   assert.equal(turnStarts(), 0, '⑦ 防自激：turn/start Δ=0');
-  assert.equal(held.length, 0, '⑦ 防自激：零 LLM 轮');
+  assert.deepEqual(held, [], '⑦ 防自激：零 LLM 轮（空集契约：整数组逐项）');
 
   // ── ④ GREEN：真 Agent idle→running（可观测信号） ─────────────────────────────
   LEADER_WAKE_WINDOWS.clear();
