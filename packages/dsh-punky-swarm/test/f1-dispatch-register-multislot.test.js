@@ -119,6 +119,8 @@ test('T-3.1 A1-P1-05 同一 caller（两调用方皆无 agent.session.id）两�
     assert.equal(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'b-B 随后登记（不丢）');
     assert.deepEqual(reg.pendingIntents(), [], '队列空 ⇒ 键被删除（既有 stale 清理语义）');
     assert.equal(reg.count(), 2);
+    // P4 不可改造（Leader 裁定）：index 是 Map 且本文件只读过 .size；键格式（lane:batchId? 还是别的）在文件内无可证取值 ⇒ 造身份须读被测产出键格式 = 第二真源。
+    // 保留计数（禁伪装）。
     assert.equal(index.size, 2, '两次派发各写一条索引');
   } finally {
     reg.dispose();
@@ -138,7 +140,7 @@ test('T-3.2 A1-P1-05 阳性对照：不同 caller（各有 agent 会话）意图
       '两 caller 各一条且批次身份可核（实际=' + JSON.stringify(reg.pendingIntents().map((p) => p.batchId)) + '）');
 
     await postOnce(ctx, execOf('subagent', {}, 'mgr-2'), subagentResult('ws-D'));
-    assert.equal(aux.readBatch('sess-q', 'b-D').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'mgr-2 消费自己的 b-D');
+    assert.deepEqual(aux.readBatch('sess-q', 'b-D').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).map((e) => e.workerSessionId), ['ws-D'], 'mgr-2 消费自己的 b-D（身份 = 该事件 workerSessionId；期望取自 subagentResult(ws-D) 入参）');
     assert.deepEqual(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH), [], 'b-C（空集契约：整数组逐项）');
     assert.deepEqual(reg.pendingIntents().map((p) => p.caller), ['mgr-1'], '仅 mgr-2 的槽被消费');
 
@@ -182,6 +184,8 @@ test('T-3.4 A1-P1-05 未命中档②：resolver 反查无果 ⇒ warn「resolveB
     const r = await postOnce(ctx, execOf('subagent', {}), subagentResult('ws-unbound-2'));
     assert.equal(r.nextCalls, 1);
     const unbound = unboundWarns(ctx);
+    // P4 不可改造（Leader 裁定）：unbound 元素是 logger.warn 的**自由文本**；本条邻近无任何字段断言（:162 那条的档位关键词已由 :161/:163 覆盖），故本处无可证身份，档位文案取自被测产出。
+    // 保留计数（禁伪装）。
     assert.equal(unbound.length, 1);
     assert.ok(unbound[0].includes('resolveBatchContext 反查无果'), '档②关键词；实际=' + unbound[0]);
     assert.equal(store.counters.appendEvent, 0);
@@ -222,7 +226,7 @@ test('T-3.6 A1-P1-05 阳性对照：同输入 + 有效意图 ⇒ 正常登记 1 
     assert.equal(r.nextCalls, 1);
     assert.deepEqual(unboundWarns(ctx), [], '命中路不得产 unbound 留痕（否证「warn 恒有」）（空集契约：整数组逐项）');
     assert.equal(store.counters.appendEvent, 1, '恰 1 条 member.dispatch');
-    assert.equal(aux.readBatch('sess-q', 'b-H').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1);
+    assert.deepEqual(aux.readBatch('sess-q', 'b-H').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).map((e) => e.workerSessionId), ['ws-bound'], 'b-H 登记 event 身份 = ws-bound（期望取自 subagentResult(ws-bound) 入参）');
     assert.deepEqual(reg.pendingIntents(), [], '意图已消费');
   } finally {
     reg.dispose();
@@ -238,7 +242,7 @@ test('T-3.7 A1-P1-05 非 running 的 member_status ⇒ 该 caller 队列清空�
   try {
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-J', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
-    assert.equal(reg.pendingIntents().length, 2, '前置：两条排队');
+    assert.deepEqual(reg.pendingIntents().map((p) => p.batchId).sort(), ['b-I', 'b-J'], '前置：两条排队（身份 = 两个 batchId；字段 .batchId 已在本文件 :114/:137 取值证明）');
 
     await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'merged' }, 'mgr-z'), { isError: false, value: {} });
     assert.deepEqual(reg.pendingIntents(), [], '非 running ⇒ 该 caller 队列清空（stale 意图不得留给后续无关 subagent）');

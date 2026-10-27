@@ -459,7 +459,7 @@
     "test/f1-dispatch-register-multislot.test.js": {
       "asserts": 47,
       "blankLines": 25,
-      "lines": 254,
+      "lines": 258,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T14:02:01Z",
+  "generatedAt": "2026-10-27T14:05:38Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点13：A-05 4等价改 + 1 P4登记（Δ0）",
+  "reason": "检查点14：A-05b 侦察后改3(P1提升)/P4登记2/待删1",
   "schema": 1,
   "totals": {
     "asserts": 11039,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62963,
+    "lines": 62967,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
