@@ -159,7 +159,7 @@ test('V2R-1【退役锁 · Q-A=C】去屏障（核心）已无对象：exec_1 me
   assert.ok(l.exec_2 === 'running' || l.exec_2 === 'pending', 'exec_2 尚未 merged（对照组存在）：' + l.exec_2);
 
   const fromExec = chainStepsOf(h, B).filter((e) => e.from === 'exec');
-  assert.equal(fromExec.length, 1, '恰一条 exec 触发的 chain.step（不等汇合 —— 这正是去屏障）');
+  assert.deepEqual(fromExec.map((e) => e.from + '>' + e.to + ':' + e.lane), ['exec>audit:exec_1'], 'chain.step 身份须恰为 exec>audit:exec_1 一条（不等汇合 —— 这正是去屏障）');
   assert.equal(fromExec[0].to, 'audit', '推进目标 = 配对步 audit');
   assert.equal(fromExec[0].lane, 'exec_1', 'lane = 触发分支（上游 lane）');
   assert.equal(fromExec[0].instance, 'audit_1', 'instance = 本次推进建立/推进的**目标实例**（配对的下游 lane）——'

@@ -270,7 +270,7 @@ test('A8 直调原始返回：锚定相符 ⇒ 执行+mock 计数 1；改脚本 
   const ok1 = gates.checkCommandGate(SID, B, store.readBatch(SID, B), 'e1', { runCommand: mockRun });
   assert.equal(ok1.ok, true, JSON.stringify(ok1));
   assert.deepEqual(ok1.commands, ['node scripts/check.js']);
-  assert.equal(calls.length, 1, '锚定相符 ⇒ 命令真被执行');
+  assert.deepEqual(calls.map((c) => (typeof c === 'string' ? c : c?.command)), ['node scripts/check.js'], '锚定相符 ⇒ mockRun 收到的命令身份须恰为该脚本一条（实测 ' + JSON.stringify(calls) + '）');
   assert.equal(ok1.escape.kind, 'gate-script-lane-local', '判定路径原值（单值通道）：' + JSON.stringify(ok1.escape));
   assert.equal(ok1.escapes, undefined, '单条告警**不**并用多值通道（防双事件）');
 
@@ -290,7 +290,7 @@ test('A8 直调原始返回：锚定相符 ⇒ 执行+mock 计数 1；改脚本 
   putScript(B, 'scripts/check.js', 'process.exit(1);\n');
   const ok2 = gates.checkCommandGate(SID, B, store.readBatch(SID, B), 'e1', { runCommand: mockRun });
   assert.equal(ok2.ok, true, JSON.stringify(ok2));
-  assert.equal(calls.length, 1, '修回后照常执行');
+  assert.deepEqual(calls.map((c) => (typeof c === 'string' ? c : c?.command)), ['node scripts/check.js'], '修回后 mockRun 收到的命令身份须恰为该脚本一条（实测 ' + JSON.stringify(calls) + '）');
 });
 
 // ── A7 告警通道互斥（单条 ⇒ escape；多条 ⇒ escapes[]）─────────────────────────────────────────

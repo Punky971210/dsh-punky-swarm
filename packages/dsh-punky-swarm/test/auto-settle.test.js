@@ -778,8 +778,10 @@ test('J5: 【R-2 ② 不结算 + R-3 留痕 · L-AC-7/L-AC-8/L-AC-9】停用 ⇒
   const tools = createCoreTools(ctx, { store, root, config: cfg, readConfig: () => cfg });
   const rep = tools.find((t) => t.name === 'swarm_report');
   const exec = { name: 'swarm_report', arguments: {}, agent: { session: { id: 'ws-j5' } } };
+  // M-2 采样：把每次调用的返回收集起来，作为"留痕条数"的同源期望（不写死 3）
+  const outs = [];
   for (let i = 1; i <= 3; i += 1) {
-    await rep.execute({ type: 'settle-request', summary: '第 ' + i + ' 次请求结算' }, exec);
+    outs.push(await rep.execute({ type: 'settle-request', summary: '第 ' + i + ' 次请求结算' }, exec));
   }
   const b = store.readBatch(S, 'j5');
   assert.equal(b.lanes.e1, 'running', '★L-AC-7：**不得** merged（半停用 = 判据源 RK-1 头号坑）');
@@ -789,7 +791,7 @@ test('J5: 【R-2 ② 不结算 + R-3 留痕 · L-AC-7/L-AC-8/L-AC-9】停用 ⇒
   assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_SETTLED && e.from !== 'pending').length, 0, 'L-AC-7：零结算迁移');
   // L-AC-8 / L-AC-9：跳过留痕每次各留一次（**不进幂等链**）
   const skips = b.events.filter((e) => e.type === EVT_AUTO_SETTLE_SKIPPED);
-  assert.equal(skips.length, 3, 'L-AC-9：连触 3 次 ⇒ 留痕计数 === 3（**不得**为 1；该族不进幂等链）');
+  assert.deepEqual(skips.map((s) => s.reason + '|' + s.trigger), outs.map(() => DISABLED_REASON + '|' + AUTO_SETTLE_TRIGGERS.settleRequest), 'L-AC-9：每次调用各留一条（身份集合 = 调用次数 × 本用例常量；少一条/多一条/换 reason 都红）');
   for (const s of skips) {
     assert.equal(s.reason, DISABLED_REASON, 'L-AC-8：reason === auto-settle-disabled（自证）');
     assert.equal(s.trigger, AUTO_SETTLE_TRIGGERS.settleRequest, 'L-AC-8：trigger === settle-request（自证为兼底路）');

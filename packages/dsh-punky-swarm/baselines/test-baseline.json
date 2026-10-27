@@ -235,7 +235,7 @@
     "test/auto-settle.test.js": {
       "asserts": 193,
       "blankLines": 46,
-      "lines": 912,
+      "lines": 914,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T12:33:08Z",
+  "generatedAt": "2026-10-27T12:48:19Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点3：P1-c 25改0回退 + P2-b 4改；P1 全部完成（63改/3回退/3前序）",
+  "reason": "检查点4：P2-c 6改；P2 类别完成（22/22）",
   "schema": 1,
   "totals": {
     "asserts": 11050,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62905,
+    "lines": 62907,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4

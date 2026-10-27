@@ -233,7 +233,7 @@ assert.deepEqual(afterFirst.map(cmKey), ['entry_requires@exec'], '首触事件�
   const store2 = createStore(ROOT);
   store2.setMember(SID, bid, 'e2', 'running'); // 同 (gateKind, layer) 键的第二次触达
   const afterRestart = store2.readBatch(SID, bid).events.filter((e) => e && e.type === E_CONTRACT_MISSING);
-  assert.equal(afterRestart.length, 1, '跨重启幂等：同键不产生第二条;实测=' + JSON.stringify(afterRestart.map(cmKey)));
+  assert.deepEqual(afterRestart.map(cmKey), afterFirst.map(cmKey), '跨重启幂等：重启后事件身份集合须与首触恒等（同键不产生第二条）;实测=' + JSON.stringify(afterRestart.map(cmKey)));
   assert.equal(afterRestart[0].lane, 'e1', '既有事件不被改写（首触 lane 保持）');
 });
 

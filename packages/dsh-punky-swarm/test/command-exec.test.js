@@ -105,7 +105,7 @@ test('runCommand：成功即停——exit 0 不触发重试（执行 1 次）', 
   const cmd = 'node -e "require(\'fs\').appendFileSync(process.env.GATE_COUNT_FILE,\'x\')"';
   const r = runCommand({ command: cmd, timeoutMs: 5000, retries: 2, env: { ...process.env, GATE_COUNT_FILE: countFile } });
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(fs.readFileSync(countFile, 'utf8').length, 1, 'expect 1 execution');
+  assert.deepEqual(fs.readFileSync(countFile, 'utf8'), 'x', '恰好执行 1 次（内容身份：重试会追加成 xx ⇒ 毒丸只会写一次）');
 });
 
 test('matchesForbidden：默认黑名单覆盖破坏性/部署类命令', () => {
