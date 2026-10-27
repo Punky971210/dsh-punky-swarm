@@ -1577,9 +1577,9 @@
       "todos": 0
     },
     "test/watch-longrun-exempt.test.js": {
-      "asserts": 127,
+      "asserts": 132,
       "blankLines": 31,
-      "lines": 637,
+      "lines": 657,
       "tautologies": 0,
       "tests": 21,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T13:37:13Z",
+  "generatedAt": "2026-10-27T13:47:23Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "检查点8：A-01c 3 site（Δ+1，含 Number.isFinite 防 NaN 假绿增益）",
+  "reason": "检查点9：A-02 watch-longrun-exempt 17 site（Δ+5，5条ts块各拆存在性+全同两步）",
   "schema": 1,
   "totals": {
-    "asserts": 11031,
+    "asserts": 11036,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62913,
+    "lines": 62933,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4
