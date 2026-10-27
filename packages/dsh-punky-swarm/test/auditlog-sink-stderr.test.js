@@ -247,7 +247,7 @@ test('AC-1 一次性写失败 ⇒ stderr 恰 1 行「sink append failed」，且
     + JSON.stringify(r.result.statAfterFailure) + '）');
 
   const lines = stderrLines(r);
-  assert.equal(lines.length, 1, 'stderr 行数 === 1（实际 ' + lines.length + ' 行: ' + JSON.stringify(r.stderr) + '）');
+assert.deepEqual(lines.map((l) => (/breaker tripped/.test(l) ? 'breaker' : /sink append failed/.test(l) ? 'append' : 'other')), ['append'], 'stderr 行身份集合须恰为首失败一行（实际 ' + JSON.stringify(lines) + '）');
   const line = lines[0];
   assert.ok(line.includes('[punky-auditlog]'), '行前缀 [punky-auditlog]（实际: ' + line + '）');
   assert.ok(line.includes('sink append failed'), '行含 sink append failed（实际: ' + line + '）');
@@ -282,7 +282,7 @@ test('AC-2 持续失败至阈值 ⇒ 第 2 行「sink breaker tripped」，计�
   assert.equal(stat.sinkErrorRecordsFailed, 3, 'sinkErrorRecordsFailed === 3（实际: ' + stat.sinkErrorRecordsFailed + '）');
 
   const lines = stderrLines(r);
-  assert.equal(lines.length, 2, 'stderr 行数 === 2（实际 ' + lines.length + ' 行: ' + JSON.stringify(r.stderr) + '）');
+assert.deepEqual(lines.map((l) => (/breaker tripped/.test(l) ? 'breaker' : /sink append failed/.test(l) ? 'append' : 'other')), ['append', 'breaker'], 'stderr 行身份集合须恰为首失败 + 跳闸两行（实际 ' + JSON.stringify(lines) + '）');
   assert.ok(lines[0].includes('sink append failed'), '第 1 行 = 首失败行（实际: ' + lines[0] + '）');
   const trip = lines[1];
   assert.ok(trip.includes('sink breaker tripped'), '第 2 行含 sink breaker tripped（实际: ' + trip + '）');
@@ -305,8 +305,7 @@ test('AC-3 上限硬读数：8 / 40 / 1100 次（跨 1000 探活点）stderr 恒
       + JSON.stringify(r.result.error) + '）');
     const lines = stderrLines(r);
     // 正向：**恰等于 2**（不是 ≤2、不是 ≥2）
-    assert.equal(lines.length, 2, 'count=' + count + ' ⇒ stderr 行数恰 2（实际 ' + lines.length
-      + ': ' + JSON.stringify(r.stderr) + '）');
+assert.deepEqual(lines.map((l) => (/breaker tripped/.test(l) ? 'breaker' : /sink append failed/.test(l) ? 'append' : 'other')), ['append', 'breaker'], 'count=' + count + ' ⇒ 行身份集合恒为「首失败 + 跳闸」（实际 ' + JSON.stringify(lines) + '）');
     assert.equal(r.result.stat.stderrNotices, 2, 'count=' + count + ' ⇒ stderrNotices === 2（实际: '
       + r.result.stat.stderrNotices + '）');
     // 反向 ②：两行内容不重复（各出现恰 1 次）

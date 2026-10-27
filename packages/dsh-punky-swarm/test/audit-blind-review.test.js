@@ -37,7 +37,9 @@ const BASE_ASSEMBLY = {
 };
 
 test('A3.1 三角色映射非空且 skill 名可解析', () => {
-  assert.equal(BLIND_REVIEW_ROLES.length, 3);
+for (const role of ['audit-panelist', 'audit-aggregate', 'audit-critic']) {
+    assert.ok(BLIND_REVIEW_ROLES.includes(role), '盲审角色集缺 ' + role + '（用户裁定 T-2：存在性，不拦新增）');
+  }
   for (const role of BLIND_REVIEW_ROLES) {
     const skills = BLIND_REVIEW_SKILLS[role];
     assert.ok(Array.isArray(skills) && skills.length > 0, role + ' skills 非空');

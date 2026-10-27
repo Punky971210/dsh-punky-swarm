@@ -113,9 +113,9 @@
       "todos": 0
     },
     "test/api.test.js": {
-      "asserts": 41,
+      "asserts": 47,
       "blankLines": 23,
-      "lines": 195,
+      "lines": 202,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -169,17 +169,17 @@
       "todos": 0
     },
     "test/assign-tier-downgrade-guard.test.js": {
-      "asserts": 71,
+      "asserts": 72,
       "blankLines": 32,
-      "lines": 313,
+      "lines": 317,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/atomic-write-ordering.test.js": {
-      "asserts": 67,
+      "asserts": 69,
       "blankLines": 44,
-      "lines": 302,
+      "lines": 304,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -187,7 +187,7 @@
     "test/audit-blind-review.test.js": {
       "asserts": 55,
       "blankLines": 14,
-      "lines": 160,
+      "lines": 162,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -211,7 +211,7 @@
     "test/auditlog-sink-stderr.test.js": {
       "asserts": 65,
       "blankLines": 38,
-      "lines": 379,
+      "lines": 378,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -219,7 +219,7 @@
     "test/auditlog-sinkfid.test.js": {
       "asserts": 70,
       "blankLines": 40,
-      "lines": 484,
+      "lines": 483,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-27T12:08:18Z",
+  "generatedAt": "2026-10-27T12:17:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "数量断言→身份/存在形态 批量改造检查点：wave1 37 + B1 4 + e49 3 + e50 19 + e51 3 + e52 6 = 72 条；另 enum 修与 E-坏 判据文档",
+  "reason": "检查点2：P1-b 19条 + P3b 2条(api 7条存在性/assign 标识符集合)，Δ=+9",
   "schema": 1,
   "totals": {
-    "asserts": 11041,
+    "asserts": 11050,
     "blankLines": 5835,
     "files": 208,
-    "lines": 62878,
+    "lines": 62891,
     "tautologies": 0,
     "tests": 2222,
     "todos": 4

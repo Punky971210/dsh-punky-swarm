@@ -61,9 +61,16 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('registers 7 routes (prefix + 6 exact)', () => {
-  // +1 = /stream SSE 路由（随 webServer 挂载）
-  assert.equal(routes.length, 7);
+test('registers the protocol route set (existence, not count)', () => {
+  // 期望来源：e35/p7 的**实跑取证**（探针四入口 allSameRouteSet=true、各 count=7），**不是从 routes 反推** ——
+  // 因此不构成同源恒真。形式用逐条存在性：新增第 8 条路由**不得红**（用户裁定：只锚定存在性，不锚定数量）。
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm'), '缺路由 /api/dsh-punky-swarm');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batches'), '缺路由 /api/dsh-punky-swarm/batches');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/sessions'), '缺路由 /api/dsh-punky-swarm/sessions');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/batch'), '缺路由 /api/dsh-punky-swarm/batch');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/mailbox'), '缺路由 /api/dsh-punky-swarm/mailbox');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/locks'), '缺路由 /api/dsh-punky-swarm/locks');
+  assert.ok(routes.some((r) => r.path === '/api/dsh-punky-swarm/stream'), '缺路由 /api/dsh-punky-swarm/stream');
 });
 
 test('GET /batches requires session', () => {

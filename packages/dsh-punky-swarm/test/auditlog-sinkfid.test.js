@@ -287,7 +287,7 @@ test('C-1 首失败后连续 3 次 flush ⇒ 两份快照共存、first-failure 
   assert.deepEqual(steps.map((s) => s.mainNote), ['manual', 'process-exit', 'manual'],
     '③ 主快照 note 逐次跟随 flush（实际: ' + JSON.stringify(steps.map((s) => s.mainNote)) + '）');
   const shas = new Set(steps.map((s) => s.firstSha));
-  assert.equal(shas.size, 1, '④ 首失败快照 sha256 三次 flush 后**逐字不变**（实际: ' + JSON.stringify([...shas]) + '）');
+assert.deepEqual(steps.map((s) => s.firstSha), [steps[0].firstSha, steps[0].firstSha, steps[0].firstSha], '④ 三次 flush 的 first-failure sha 须逐字等于首次（实际: ' + JSON.stringify([...shas]) + '）');
   assert.equal(steps[0].firstSha, r.result.firstAtFail.sha, '④ 与首失败时刻同一份');
   assert.equal(r.result.firstAfter.note, 'first-failure', '④ note 仍为 first-failure（实际: '
     + JSON.stringify(r.result.firstAfter) + '）');
@@ -345,8 +345,7 @@ test('C-3 默认档：total 含 stray（86016）、stray 一个不删、挂载�
   const sinkDir2 = path.join(freshRootTracked('c3m'), 'sink');
   const m = runProbe({ mode: 'stray-mount', sinkDir: sinkDir2, tag: 'c3m', maxTotal: Number(DEFAULT_MAX_TOTAL) });
   assert.equal(m.result.mounted, true, '挂载成功');
-  assert.equal(m.result.warns.length, 1, '② 挂载期 warn **恰 1 条**（实际 ' + m.result.warns.length + ' 条: '
-    + JSON.stringify(m.result.warns) + '）');
+assert.deepEqual(m.result.warns.map((w) => /stray/i.test(String(w))), [true], '② 挂载期 warn 身份：须恰为 stray 相关一条（实际: ' + JSON.stringify(m.result.warns) + '）');
   const w = m.result.warns[0];
   assert.ok(w.includes('2 个') && w.includes(String(STRAY_TOTAL)), '② warn 文案含 stray 数与字节（实际: ' + w + '）');
   assert.ok(w.includes('默认不删除'), '② warn 文案含「默认不删」+ opt-in 提示（实际: ' + w + '）');
@@ -388,7 +387,7 @@ test('C-4 opt-in(PUNKY_AUDITLOG_PRUNE_STRAY=1)：删 audit- 前缀 stray、留�
     '② 挂载后 sink 根只剩用户备份（实际: ' + JSON.stringify(m.result.files) + '）');
   assert.equal(m.result.stat.strays.pruneOptIn, true, '② 正常流里 pruneOptIn 已按 env 生效（实际: '
     + JSON.stringify(m.result.stat.strays) + '）');
-  assert.equal(m.result.warns.length, 1, '② 挂载期仍恰 1 条 warn（实际: ' + m.result.warns.length + '）');
+assert.deepEqual(m.result.warns.map((w) => /stray/i.test(String(w))), [true], '② opt-in 后警告身份集合仍为 stray 一条（实际: ' + JSON.stringify(m.result.warns) + '）');
   assert.ok(m.result.warns[0].includes('pruneStray=on'), '② warn 文案标注 opt-in 生效（实际: ' + m.result.warns[0] + '）');
   assert.equal(m.stderr, '', '② opt-in 面同样零 stderr（实际: ' + JSON.stringify(m.stderr) + '）');
 });
@@ -472,7 +471,7 @@ test('Q-1 新键 pruneStray：默认值单点在 AUDITLOG_DEFAULTS、config/env 
   const bad = resolveAuditLogConfig({ capabilities: { auditlog: { pruneStray: 'abc' } } }, {},
     { warn: (m) => warns.push(m) });
   assert.equal(bad.pruneStray, AUDITLOG_DEFAULTS.pruneStray, '非法值回落默认');
-  assert.equal(warns.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns) + '）');
+assert.deepEqual(warns.map((w) => String(w).includes('pruneStray')), [true], '非法 pruneStray ⇒ 警告身份集合须恰为 1 条且点名该键（实际: ' + JSON.stringify(warns) + '）');
   assert.ok(warns[0].includes('pruneStray'), 'warn 指向新键（实际: ' + warns[0] + '）');
 
   // ⑦ build 三件成对：`.ts` 源与 `.js`/`.d.ts` 产物都含新键（漏 build 即红）

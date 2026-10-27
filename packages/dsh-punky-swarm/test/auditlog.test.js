@@ -82,7 +82,7 @@ test('T-A1 行构造：10 字段齐备、ts 可解析、level 原样映射、nam
 test('T-A2 Error 实参保真：args[0]={name,message,stack}；msg 含 stack 首行；循环引用不抛', () => {
   const err = new Error('boom-a2');
   const rec = buildRow({ type: 'error', name: 'dsh-punky-swarm', args: [err], sn: 1 });
-  assert.equal(rec.args.length, 1);
+assert.deepEqual(rec.args.map((a) => a.message), ['boom-a2'], 'args 身份集合 = 测试自造的 Error 消息');
   assert.deepEqual(Object.keys(rec.args[0]).sort(), ['message', 'name', 'stack']);
   assert.equal(rec.args[0].name, 'Error');
   assert.equal(rec.args[0].message, 'boom-a2');
@@ -127,13 +127,13 @@ test('T-A12 配置解析：开关真值词 / env 逐键覆盖 / 缺省开 / 非�
   const c7 = resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_KEEP_DAYS: '-1', PUNKY_AUDITLOG_SINK_DIR: sink }),
     { warn: (m) => warns.push(m) });
   assert.equal(c7.keepDays, AUDITLOG_DEFAULTS.keepDays, '非法 keepDays(-1) → 回落 14');
-  assert.equal(warns.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns) + '）');
+assert.deepEqual(warns.map((w) => String(w).includes('PUNKY_AUDITLOG_KEEP_DAYS')), [true], 'env 非法 keepDays ⇒ 警告集合须恰 1 条且点名该键（实际: ' + JSON.stringify(warns) + '）');
   assert.ok(warns[0].includes('PUNKY_AUDITLOG_KEEP_DAYS'), 'warn 文案含键名');
   const warns2 = [];
   const c8 = resolveAuditLogConfig({ capabilities: { auditlog: { keepDays: 'abc' } } },
     env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns2.push(m) });
   assert.equal(c8.keepDays, AUDITLOG_DEFAULTS.keepDays, "非法 keepDays('abc') → 回落 14");
-  assert.equal(warns2.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns2) + '）');
+assert.deepEqual(warns2.map((w) => String(w).includes('keepDays')), [true], 'config 非法 keepDays ⇒ 警告集合须恰 1 条且点名该键（实际: ' + JSON.stringify(warns2) + '）');
   // ⑦ 缺省态零 warn（门禁反向约束：legacy-fix T4.3「缺省 config → 零 warn」的本模块面）
   const warns3 = [];
   resolveAuditLogConfig({}, env({ PUNKY_AUDITLOG_SINK_DIR: sink }), { warn: (m) => warns3.push(m) });
@@ -248,7 +248,7 @@ test('T-C9 聚合开关：缺省开 / env 三态（真值词开、假值词关�
   const c = resolveAuditLogConfig({ capabilities: { auditlog: { aggregate: 'abc' } } }, env({ PUNKY_AUDITLOG_SINK_DIR: sink }),
     { warn: (m) => warns.push(m) });
   assert.equal(c.aggregate, true, "非法 aggregate('abc') → 回落 true");
-  assert.equal(warns.length, 1, '恰 1 条 warn（实际: ' + JSON.stringify(warns) + '）');
+assert.deepEqual(warns.map((w) => String(w).includes('aggregate')), [true], '非法 aggregate ⇒ 警告集合须恰 1 条且点名该键（实际: ' + JSON.stringify(warns) + '）');
   assert.ok(warns[0].includes('capabilities.auditlog.aggregate'), 'warn 文案含键名');
   // ⑥ 缺省态零 warn（聚合键的加入不得引入启动噪声）
   const warns2 = [];

@@ -173,7 +173,7 @@ assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-2'], '�
 test('validateCapabilities DEP-3: trajectory.poll.enabled=true requires non-empty baseUrl', () => {
   for (const poll of [{ enabled: true }, { enabled: true, baseUrl: '' }]) {
     const { errors } = validateCapabilities({ capabilities: { trajectory: { poll } } });
-    assert.equal(errors.length, 1);
+assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-3'], '错误码身份集合须恰为 DEP-3（非法 poll 的唯一违例）');
     assert.match(errors[0], /DEP-3/);
   }
   const ok = validateCapabilities({ capabilities: { trajectory: { poll: { enabled: true, baseUrl: 'https://x' } } } });
@@ -186,7 +186,7 @@ test('validateCapabilities DEP-4: budget chain params must be positive integers'
     { enabled: true, maxChainRoundTrips: 1.5 },
   ]) {
     const { errors } = validateCapabilities({ capabilities: { budget } });
-    assert.equal(errors.length, 1);
+assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-4'], '错误码身份集合须恰为 DEP-4（非法 budget 的唯一违例）');
     assert.match(errors[0], /DEP-4/);
   }
 });
@@ -197,7 +197,7 @@ test('validateCapabilities DEP-5: watch params bounds', () => {
     { enabled: true, scanIntervalMinutes: 0.05 },
   ]) {
     const { errors } = validateCapabilities({ capabilities: { watch } });
-    assert.equal(errors.length, 1);
+assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-5'], '错误码身份集合须恰为 DEP-5（非法 watch 的唯一违例）');
     assert.match(errors[0], /DEP-5/);
   }
 });

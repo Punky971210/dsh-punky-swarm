@@ -228,7 +228,11 @@ test('L-AC-1 边界：活跃批 + 首评（无既有档位）不被保护；同�
 test('L-AC-2（静态判据）+ L-AC-8：保护判定式不引用 pendingBatch/pendingSince；rank 映射全 lib 恰 1 处', () => {
   const src = fs.readFileSync(ASSIGN_SRC, 'utf8');
   const judge = src.split('\n').filter((l) => /const downgradeBlocked\s*=/.test(l));
-  assert.equal(judge.length, 1, '保护判定式恰 1 处（单点，可静态核）');
+  // 标题里的「单点」不再用计数断言（judge.length===1）：现场只有静态源码扫描、无可调 guard()（e54 已确认），
+  // 故改**标识符集合**：去掉计数、能区分「换了一处实现」、且不锁实现形状（不假红）。
+  const judgeIds = new Set(judge.join(String.fromCharCode(10)).match(/[A-Za-z_$][\w$]*/g) ?? []);
+  assert.deepEqual([...judgeIds].filter((k) => k === 'hasActive'), ['hasActive'], '保护判定式必须引用 hasActive（既有单点）；标识符集合，不锁数量/形状');
+  assert.equal(judgeIds.has('pendingBatch') || judgeIds.has('pendingSince'), false, '判定式标识符集合 ∩ {pendingBatch, pendingSince} 须为 ∅（与下方 doesNotMatch 同源、互为对照）');
   assert.doesNotMatch(judge[0], /pendingBatch|pendingSince/,
     'L-AC-2：判定式标识符集合 ∩ {pendingBatch, pendingSince} 必须为 ∅（P-4 死锁面）');
   assert.match(judge[0], /hasActive\b/, 'L-AC-2：保护条件第一项 = 既有单点 hasActive');

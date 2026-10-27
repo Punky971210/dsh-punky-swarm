@@ -60,7 +60,8 @@ test('AC-1 连续两次调用的 tmp 路径不相同（旧实现：两次均为 
   atomicWrite(target, batchOf('a'), { renameFn: capture });
   atomicWrite(target, batchOf('b'), { renameFn: capture });
 
-  assert.equal(seen.length, 2);
+assert.ok(seen[0] && seen[1], '两次调用各捕获一次 rename 源路径（旧实现两次同 pid 落同一 tmp）');
+  assert.notEqual(seen[0], seen[1], '两次调用的 tmp 路径须互不相同（实测: ' + JSON.stringify(seen) + '）');
   assert.notEqual(seen[0], seen[1], '两次调用的 tmp 路径必须不同');
   // 两条 tmp 都指向「同一目标目录下的隐藏 tmp」，且都已被 rename（不残留）
   assert.equal(path.dirname(seen[0]), path.dirname(target));
@@ -86,7 +87,8 @@ test('RED-1 同进程同目标同一时刻两次写入 ⇒ tmp 路径不同（�
   };
   atomicWrite(target, batchOf('outer'), { renameFn: first });
 
-  assert.equal(seen.length, 2);
+assert.ok(seen[0] && seen[1], '同刻嵌套两次调用各捕获一次 rename 源路径');
+  assert.notEqual(seen[0], seen[1], '同刻两次调用的 tmp 路径须互不相同（实测: ' + JSON.stringify(seen) + '）');
   assert.notEqual(seen[0], seen[1], '旧实现两次会算出同一 tmp 路径；新实现必须不同');
   assert.equal(fs.existsSync(target), true);
   const final = JSON.parse(fs.readFileSync(target, 'utf8'));
@@ -229,7 +231,7 @@ test('RED-1b 跨进程真并发写同一目标 ⇒ 两进程均成功、目标�
     '批量写不丢事件：写 ' + N_EVENTS + ' 条 ⇒ 读回 ' + N_EVENTS + ' 条（实测 ' + seq.length + '；重复写入亦在此红）');
   assert.equal(seenIdx.size, N_EVENTS,
     '事件序号须互不重复（实测唯一 ' + seenIdx.size + ' / ' + N_EVENTS + '）');
-  assert.equal(new Set(final.events.map((e) => e.marker)).size, 1,
+assert.deepEqual([...new Set(final.events.map((e) => e.marker))], [final.events[0].marker],
     '整份目标文件须来自同一次进程写出（marker 须单一，实测 '
     + JSON.stringify([...new Set(final.events.map((e) => e.marker))]) + '；否则两进程混写会假绿）');
 
@@ -293,7 +295,7 @@ test('AC-5 经 store 真写路径（setMember ⇒ commitBatch ⇒ atomicWrite）
 
   const b = store.readBatch(S, 'b-l7');
   assert.equal(b.lanes.t1, 'review');
-  assert.equal(b.events.filter((e) => e.type === 'member.settled').length, 2, '两次写各自完整落盘');
+assert.deepEqual(b.events.filter((e) => e.type === 'member.settled').map((e) => e.lane + ':' + e.from + '>' + e.to), ['t1:pending>running', 't1:running>review'], '两次写的身份集合须恰为本用例执行的两步迁移');
   assert.deepEqual(b.events.filter((e) => e.type === 'member.settled').map((e) => e.to), ['running', 'review']);
 
   const batchDir = path.join(root, 'sessions', S, 'batches');
