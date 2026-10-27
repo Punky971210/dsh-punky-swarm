@@ -145,8 +145,8 @@ test('IT-B 方向（D-3 修订）：候选双通道 = broadcast + supervisor/inb
   assert.ok(inb.some((m) => m.message?.kind === 'probe' && m.message.lane === lane), 'inbox 仍含既有 probe 追问（方向对照）');
   // outbox：worker 未回执 → 空 → 无候选
   const outb = outboxItems(root, S, batchId, lane);
-  assert.equal(outb.length, 0, 'outbox 空（无 worker 回执）');
-  assert.equal(candOf(outb).length, 0, 'outbox 无候选');
+  assert.deepEqual(outb, [], 'outbox 空（空集契约：整数组逐项，不数个数）');
+  assert.deepEqual(candOf(outb), [], 'outbox 无候选（空集契约）');
   // broadcast：恰 1 条候选（D-3 不改变既有单通道计数）
   const bc = candOf(bcastItems(root, S, batchId));
   assert.deepEqual(bc.map((m) => m.message?.lane), [lane], 'broadcast 候选身份 = 本次 lane（D-3 不改变单通道语义）');
@@ -159,11 +159,12 @@ test('IT-C 默认开零误报：短任务（<maxDuration）不触发、无候选
   const { root, store, S, batchId, lane } = setup();
   const { engine, at } = timedEngine(store, root, { capabilities: { watch: { enabled: true } } });
   at(0).tick();
+  const candBefore = candEvents(store, S, batchId, lane).length; // 时点基线（P2 增量；M-2 授权）
   at(10 * MIN).tick(); // 10min < 20min
-  assert.equal(candEvents(store, S, batchId, lane).length, 0, '10min 不触发');
+  assert.equal(candEvents(store, S, batchId, lane).length - candBefore, 0, '相对基线**增量 0**（10min 未触发；两时点差，不写死总数）');
   at(19 * MIN).tick(); // 19min < 20min（仍低于阈值）
   assert.equal(candEvents(store, S, batchId, lane).length, 0, '19min 仍不触发（严格 >）');
-  assert.equal(candOf(bcastItems(root, S, batchId)).length, 0, 'broadcast 无候选消息');
+  assert.deepEqual(candOf(bcastItems(root, S, batchId)), [], 'broadcast 无候选消息（空集契约）');
   const b = store.readBatch(S, batchId);
   assert.equal(b.lanes[lane], 'running', 'lane 状态不变');
   assert.equal(b.events.filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).length, 0, '事件流零候选事件');
@@ -193,11 +194,12 @@ test('IT-E 严格 AND 边界：有活动无 checkpoint → 不触发（定案 AN
   at(0).tick();
   // worker 经 outbox 回执（未 ack = 活动信号；lane 无任何 checkpoint 事件）
   mailbox.send(path.join(root, 'sessions', S, 'mailbox', batchId), { type: 'outbox', lane }, { kind: 'worker.report', lane, text: 'working…' });
+  const candBefore2 = candEvents(store, S, batchId, lane).length; // 时点基线（P2 增量；M-2 授权）
   at(2 * MIN).tick(); // 心跳扫描检出 outbox → reset（lastActivityAt=+2min）
   at(4 * MIN).tick();
   at(18 * MIN).tick(); // 持续刷新活动（18min 仍 < 阈值，仅建活动记忆）
   at(21 * MIN).tick(); // 时长 21min > 20min，但近 3min 有活动 → AND 抑制
-  assert.equal(candEvents(store, S, batchId, lane).length, 0, '有活动无 checkpoint → 不候选（AND）');
+  assert.equal(candEvents(store, S, batchId, lane).length - candBefore2, 0, '相对基线**增量 0**（有活动无 checkpoint ⇒ AND 抑制；两时点差）');
   assert.equal(candOf(bcastItems(root, S, batchId)).length, 0, 'broadcast 无噪音');
   assert.ok(outboxItems(root, S, batchId, lane).length > 0, 'outbox 未 ack 回执仍在（活动信号来源）');
   const st = engine.longrunStatus(S, batchId, lane, null);
