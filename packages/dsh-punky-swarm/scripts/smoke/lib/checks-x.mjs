@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, listFiles, pwshJson, sha256File, skip } from './support.mjs';
 
-/** `check-guidance-sync.mjs` 的同一份五件清单（repo ↔ live 必须逐字同 sha）。 */
+/** 与 `sync-guidance.mjs` 同一份五件清单（repo ↔ live 内容应一致）。 */
 const SYNC_FILES = [
   'agent.cordis.yml',
   path.join('references', 'discipline.md'),

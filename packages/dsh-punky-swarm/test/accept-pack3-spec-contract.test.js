@@ -393,40 +393,6 @@ test('AC-pack3-9b `git status --porcelain lib/` = 0 行（同批他包 build 期
   assert.deepEqual(libDirty, [], 'lib/ 须零脏项');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-10 live 同步达成（R-07 收口判据，**不带 --no-live**）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-10 `check-guidance-sync`（含 live）GREEN：ok=true、skills.fileTotals.diff=0、software-team status=same', (t) => {
-  // 失败条件：live skills 根**在位但内容不一致**（fileTotals.diff>0 / 逐 skill status≠same）⇒ 真缺口，**必红**；
-  //           引擎自陈 `skills: null`（live 面未执行）⇒ **skip 并留痕**（缺什么 + 如何开），**不判红**。
-  //
-  // 【本批替换（AD-05；e3 裁「引擎对、测试错」）】原判据读**人类可读文案**并写死字面数
-  //   （`^\[skills\]\s+OK\s+software-team files=20$`），且把「live 根不存在」这一引擎**有意降级**
-  //   （`check-guidance-sync.mjs:358-360`：note、不判红）**升级成红** ⇒ 同一环境同一时刻
-  //   引擎 GREEN、测试 RED（e1/e2 单变量实验：仅加 preload 即翻红）。
-  //   改为读 `--json` 结构化面（真源 L3 文案 → L2 机读），三分支：
-  //     ① `skills === null` ⇒ `t.skip`：**决定权在引擎的自陈信号**，不是测试自行 `existsSync` 拍板；
-  //     ② `skills !== null && fileTotals.diff > 0` ⇒ **红**（在位但不一致 = 真缺口，**该分支必须保留**）；
-  //     ③ `diff === 0` ⇒ 绿 ＋ 逐 skill 断 `software-team status === 'same'`。
-  const r = runScriptJson([]); // 含 live（不带 --no-live）
-  assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
-  const skills = r.doc.skills;
-  if (skills === null) {
-    const notes = (r.doc.notes ?? []).filter((n) => n.includes('skills'));
-    return t.skip('live skills 面未执行（引擎 `--json` 自陈 `skills: null`）：'
-      + (notes.length ? notes.join('；') : '(引擎未给 note)')
-      + '｜缺 live skills 根（缺省 = `$USERPROFILE/.agents/skills`，可用 `--skills-live <dir>` 指定）——部署后复跑本件');
-  }
-  assert.equal(skills.fileTotals.diff, 0, 'skills 文件面 diff 须 = 0：' + JSON.stringify(skills.fileTotals));
-  assert.deepEqual(skills.failures ?? [], [], 'skills 判据族失败项须 = 0：' + JSON.stringify(skills.failures));
-  const st = (skills.skills ?? []).find((s) => s.skill === 'software-team');
-  assert.ok(st, 'live 面须含 software-team 逐 skill 行：' + JSON.stringify((skills.skills ?? []).map((s) => s.skill)));
-  assert.equal(st.status, 'same', 'software-team 须 status = same（逐文件 sha256 全同）：' + JSON.stringify({ status: st.status, liveDirMissing: st.liveDirMissing }));
-  assert.ok(st.files.length >= BASELINE_SKILLS_19.length + 1,
-    `software-team 文件数须 ≥ ${BASELINE_SKILLS_19.length + 1}（下界棘轮；20 的算术口径已由 AC-1 换为集合语义），实测 ${st.files.length}`);
-  assert.equal(r.doc.ok, true, 'ok 须为 true；failures=' + JSON.stringify(r.doc.failures));
-  assert.equal(r.status, 0, '含 live 的收口读数须 exit 0；尾部输出：\n' + ((r.stdout ?? '') + r.stderr).slice(-1200));
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-11 越界检查
@@ -450,33 +416,6 @@ test('AC-pack3-11b `package.json` / `CHANGELOG.md` / `README*` 变更 = 0 件（
   assert.deepEqual(release, [], '发行面须零变更');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-12 既有判据①②③ 不回归
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-12 `--no-live` 仍 GREEN：exit 0、两侧身份集合一一对应（不写死规模）', () => {
-  // 失败条件：注入面/正文任一侧回归（判据①②③ 红）/ 注入面条目与正文小节**身份集合**不再一一对应。
-  //   原写法把 27 / 32 写死（"基线 29 + pack1 的 3"），合法增长即假红 ⇒ 改为身份集合相等。
-  const r = spawnSync(process.execPath, [SCRIPT_REL, '--no-live', '--json'], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
-  let doc = null;
-  try { doc = JSON.parse(r.stdout); } catch { /* 下面 assert 报 */ }
-  assert.ok(doc, 'no JSON 输出：' + (r.stderr ?? '').slice(0, 400));
-  assert.equal(r.status, 0, 'exit 须 = 0；failures=' + JSON.stringify(doc.failures));
-  // 结构自洽：脚本回显规模 == 本件独立解析规模（不依赖任何常数）
-  const guidRel = 'presets/punky-preset/agent.cordis.yml';
-  const discRel = 'presets/punky-preset/references/discipline.md';
-  const faceIds = [...readRel(guidRel).matchAll(/^\s{6,}([0-9]{1,2}[a-z]?)\.\s+\S.*$/gm)].map((m) => m[1]);
-  const bodyIds = [...readRel(discRel).matchAll(/^## §([0-9]+[a-z]?)\s/gm)].map((m) => m[1]);
-  assert.equal(doc.inlineEntries, faceIds.length, `脚本条目数须与本件独立解析一致（本地 ${faceIds.length}）`);
-  assert.equal(doc.bodySections, bodyIds.length, `脚本小节数须与本件独立解析一致（本地 ${bodyIds.length}）`);
-  // 承重判据 = 身份集合一一对应（详情面白名单取脚本回显 `detailOnly`，不硬编码）
-  const detailOnly = new Set(doc.detailOnly ?? []);
-  const faceSet = new Set(faceIds);
-  const bodySet = new Set(bodyIds);
-  const dangling = [...faceSet].filter((id) => !bodySet.has(id)).sort();
-  const uncovered = [...bodySet].filter((id) => !faceSet.has(id) && !detailOnly.has(id)).sort();
-  assert.deepEqual(dangling, [], '注入面条目缺正文小节（②b），缺 = ' + JSON.stringify(dangling));
-  assert.deepEqual(uncovered, [], '正文小节未进注入面且非详情面白名单（③），多 = ' + JSON.stringify(uncovered));
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-13 编号引用可解析（2026-10-24 瘦身后新增：防「删节留悬空引用」这一类缺陷）

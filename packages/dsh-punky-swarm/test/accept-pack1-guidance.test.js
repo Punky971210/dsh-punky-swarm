@@ -154,22 +154,6 @@ function mkTempRoot() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-1 判据 ②b 在场（源码级）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-1 判据 ②b（forward-id，按 id 强制）在场且未引入白名单占位', () => {
-  // 失败条件：脚本内无 `check: 'forward-id'`（②b 未实现），或出现 `SELF_SUFFICIENT` 之类可豁免白名单
-  //           （Q-H 已裁「废除自足条目机制、不保留空白名单」）。
-  const src = readRel(SCRIPT_REL);
-  assert.ok(src.includes("check: 'forward-id'"),
-    '②b 判据必须在场：脚本内缺 `check: \'forward-id\'` ⇒ 注入面条目无正文小节时不会判红');
-  assert.deepEqual((src.match(/SELF_SUFFICIENT/g) ?? []), [],
-    'Q-H：禁引入 `SELF_SUFFICIENT_ENTRIES` 之类白名单占位（宁可将来真自足条目时判红）');
-  // ②b 必须复用既有集合、零新解析器（K-4）：`sectionIds.has(e.id)` 形态
-  assert.ok(/sectionIds\s*\.\s*has\(\s*e\.id\s*\)/.test(src),
-    '②b 须复用既有 `sectionIds` 集合（禁在判据里重建解析器 ⇒ 双口径）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // AC-2 三新节在场且标题以 `## §` 起（唯一性用守恒式，不断条数）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('AC-pack1-2 三新节 §0i/§0s/§0t 在场且小节标题 id 不重复', () => {
@@ -181,115 +165,6 @@ test('AC-pack1-2 三新节 §0i/§0s/§0t 在场且小节标题 id 不重复', (
   const missing = ['0i', '0s', '0t'].filter((id) => !ids.includes(id));
   assert.deepEqual(missing, [], '三新节须各以 `## §<id> ` 形态在场，缺：' + JSON.stringify(missing));
   assert.deepEqual(ids, [...new Set(ids)], '小节标题 id 不得重复（重复会让解析器只读第一个 ⇒ 静默失效）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-4 判据全绿（含 ②b）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-4 `check-guidance-sync --no-live` 全绿：exit 0 / 两侧身份集合一一对应 / forward-id 失败 0', () => {
-  // 失败条件：三节任一缺失（②b 报 forward-id）、正文小节数与注入面不对称（③ 报 reverse）、
-  //           或脚本自身回归（退出码非 0）。这是 pack1 的**唯一收口读数**（AC-1 的 GREEN 侧）。
-  const r = runScriptJson(['--no-live']);
-  assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
-  // 结构自洽：脚本回显的规模 == 本件**独立解析**的规模（单一真源 vs 独立解析，防解析口径漂移）。
-  //   此处**不写死常数**：合法增长（加一节 `## §X` 且加对应注入面条目）不该打红。
-  const faceIds = inlineEntriesOf(readRel(GUIDANCE_REL)).map((e) => e.id);
-  const bodyIds = [...readRel(DISCIPLINE_REL).matchAll(/^## §([0-9]+[a-z]?)\s/gm)].map((m) => m[1]);
-  assert.equal(r.doc.inlineEntries, faceIds.length, `脚本条目数须与本件独立解析一致（本地 ${faceIds.length}）`);
-  assert.equal(r.doc.bodySections, bodyIds.length, `脚本小节数须与本件独立解析一致（本地 ${bodyIds.length}）`);
-  // 承重判据 = **身份集合一一对应**（不是规模相等）：双向差集各自为空。
-  //   白名单取脚本回显的 `detailOnly`（不硬编码）⇒ 详情面增减也不假红。
-  const detailOnly = new Set(r.doc.detailOnly ?? []);
-  const faceSet = new Set(faceIds);
-  const bodySet = new Set(bodyIds);
-  const dangling = [...faceSet].filter((id) => !bodySet.has(id)).sort();
-  const uncovered = [...bodySet].filter((id) => !faceSet.has(id) && !detailOnly.has(id)).sort();
-  assert.deepEqual(dangling, [], '注入面条目缺正文小节（②b），缺 = ' + JSON.stringify(dangling));
-  assert.deepEqual(uncovered, [], '正文小节未进注入面且非详情面白名单（③），多 = ' + JSON.stringify(uncovered));
-  const byCheck = (name) => (r.doc.failures ?? []).filter((f) => f.check === name);
-  assert.deepEqual(byCheck('forward-id'), [], 'forward-id（②b）失败数须 = 0');
-  assert.equal(r.doc.ok, true, 'ok 须为 true；failures=' + JSON.stringify(r.doc.failures));
-  assert.equal(r.status, 0, 'exit 须 = 0；stderr=' + r.stderr.slice(0, 400));
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-5a 负例 N1：删掉/降级一个新节 ⇒ 判据必红（Q-A「判据必须有牙」）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-5a 负例 N1：副本里降级 `## §0t` 标题 ⇒ forward-id 恰 1 条且含 0t（必失败构造）', () => {
-  // 失败条件：删节后判据仍 GREEN（= 新判据没牙，Q-A 的核心要求落空），
-  //           或红得过多（>1 条 forward-id ⇒ 判据面污染、定位不到 0t）。
-  const root = mkTempRoot();
-  const rel = path.join(root, 'presets', 'punky-preset', 'references', 'discipline.md');
-  const original = fs.readFileSync(rel, 'utf8');
-  const demoted = original.replace(/^## (§0t\s)/m, '$1');
-  assert.notEqual(demoted, original, '构造失败：副本里找不到 `## §0t` 标题行（三节未落？）');
-  fs.writeFileSync(rel, demoted, 'utf8');
-
-  const r = runScriptJson(['--no-live'], root);
-  assert.ok(r.doc, 'no JSON：' + r.stderr.slice(0, 400));
-  const fwd = (r.doc.failures ?? []).filter((f) => f.check === 'forward-id');
-  assert.equal(r.status, 1, '降级后 exit 须 = 1');
-assert.deepEqual(fwd.map((f) => f.check), ['forward-id'], '失败项的 check 身份集合须恰为 forward-id（空=漏报，含其它=误报，重复两条亦红）；实测=' + JSON.stringify(fwd.map((f) => f.check)));
-  assert.match(fwd[0].detail, /0t/, 'detail 须点名 0t：' + fwd[0].detail);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-5b 正例 N2：同一夹具、同输入、不删任何节 ⇒ 红只来自删除（可证伪性）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-5b 正例 N2：同夹具不删节 ⇒ 失败集 = N1 失败集 ∖ {0t} 的对称差为空', () => {
-  // 失败条件：未删节的副本也报 0t（⇒ N1 的红不是删除导致，而是夹具/环境导致，N1 不可证伪）；
-  //           或未删节的副本报出 N1 之外的失败（⇒ 夹具不干净，两读数不可比）。
-  const clean = mkTempRoot();
-  const cleanRun = runScriptJson(['--no-live'], clean);
-  assert.ok(cleanRun.doc, 'no JSON：' + cleanRun.stderr.slice(0, 400));
-
-  const dirty = mkTempRoot();
-  const rel = path.join(dirty, 'presets', 'punky-preset', 'references', 'discipline.md');
-  fs.writeFileSync(rel, fs.readFileSync(rel, 'utf8').replace(/^## (§0t\s)/m, '$1'), 'utf8');
-  const dirtyRun = runScriptJson(['--no-live'], dirty);
-  assert.ok(dirtyRun.doc, 'no JSON：' + dirtyRun.stderr.slice(0, 400));
-
-  const keyOf = (f) => f.check + '|' + f.detail;
-  const cleanSet = new Set((cleanRun.doc.failures ?? []).map(keyOf));
-  const dirtySet = new Set((dirtyRun.doc.failures ?? []).map(keyOf));
-  const added = [...dirtySet].filter((k) => !cleanSet.has(k));
-  const removed = [...cleanSet].filter((k) => !dirtySet.has(k));
-
-  assert.deepEqual(removed, [], '同输入对照：不删节不得**减少**失败项（夹具不干净）');
-assert.deepEqual(added.map((k) => k.split('|')[0]), ['forward-id'], '新增失败的 check 身份集合须恰为 forward-id（空=没抓到，含其它=误报）；实测=' + JSON.stringify(added));
-  assert.match(added[0], /forward-id\|.*0t/, '新增的失败须是 §0t 的 forward-id：' + added[0]);
-  // 夹具自洽：退出码与失败集一致（防「有失败却 exit 0」的静默）
-  // 同源派生收进一条身份/状态对照（原三元派生属语义重写，此处把两半合成一处判据）
-  assert.deepEqual(
-    { status: cleanRun.status, failsEmpty: (cleanRun.doc.failures ?? []).length === 0 },
-    { status: 0, failsEmpty: true },
-    '未删节副本：status 与「failures 为空」必须同源一致（有失败却 exit 0 = 静默；无失败却 exit 1 = 假警报）',
-  );
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-5c 负例 N3：注入面有、正文无 ⇒ 判据必红（Q-H 废除自足条目后的核心语义）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-5c 负例 N3：向注入面注入一条无正文小节的条目 ⇒ forward-id 必红且点名该条目', () => {
-  // 失败条件：注入面新增条目后判据仍 GREEN（⇒ 「自足条目」豁免口子还在，R-05/Q-H 未真正落地）。
-  const root = mkTempRoot();
-  const gRel = path.join(root, 'presets', 'punky-preset', 'agent.cordis.yml');
-  const lines = fs.readFileSync(gRel, 'utf8').split('\n');
-  const idx = lines.findIndex((l) => /^\s{6,}0u\.\s+\S/.test(l));
-  assert.ok(idx >= 0, '构造失败：注入面找不到 0u 条目行');
-  const indent = /^\s*/.exec(lines[idx])[0];
-  lines.splice(idx + 1, 0, `${indent}0z. 验收套件负例注入条目：该条仅有注入面、无正文小节 §0z。`);
-  fs.writeFileSync(gRel, lines.join('\n'), 'utf8');
-
-  const baseN = inlineEntriesOf(readRel(GUIDANCE_REL)).length;   // 基线由本地解析**原仓**注入面得出（零常数）
-  const r = runScriptJson(['--no-live'], root);
-  assert.ok(r.doc, 'no JSON：' + r.stderr.slice(0, 400));
-  const fwd = (r.doc.failures ?? []).filter((f) => f.check === 'forward-id');
-  // 同源构造差值（形态四）：注入 1 条 ⇒ 恰「基线 + 1」。不写死任何绝对值。
-  assert.equal(r.doc.inlineEntries, baseN + 1, `注入后面目数须 = 基线 ${baseN} + 1（证明构造生效）`);
-assert.deepEqual(fwd.map((f) => f.check), ['forward-id'], '失败项的 check 身份集合须恰为 forward-id（空=漏报，含其它=误报）；实测=' + JSON.stringify(fwd.map((f) => f.check)));
-  assert.match(fwd[0].detail, /0z/, 'detail 须点名注入的条目 0z：' + fwd[0].detail);
-  assert.equal(r.status, 1, 'exit 须 = 1');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -343,27 +218,6 @@ test('AC-pack1-7 §0k 有 `SUMMARY:` 机读行 ＋ 4 档强度，且 `{pass, fai
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-8 无白名单占位（原「头注判据计数同步」已解绑：那是绑字面文案的断言）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-8 无 SELF_SUFFICIENT 白名单占位（头注文案版本不再锚定）', () => {
-  // 失败条件：出现 `SELF_SUFFICIENT_ENTRIES` 之类白名单占位（Q-H 已裁「废除自足条目机制」）。
-  // 已解绑：原「头注须出现『五条判据』/『四条判据』须清零」锚的是**脚本文案版本**，
-  //   头注改写不改变判据语义，旧表述亦已不存在 ⇒ 按判据源归为内容绑定假测试，删。
-  const src = readRel(SCRIPT_REL);
-  assert.deepEqual((src.match(/SELF_SUFFICIENT/g) ?? []), [], '`SELF_SUFFICIENT` 须 = 0（Q-H）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-9 R-06 注释陈述句在场（数值一致性已解绑：那是数量锚定假红源）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-9 R-06：脚本注释保留「放宽得 N 条」陈述句（不断言 N 等于实测）', () => {
-  // 已解绑：原断言「陈述值 == 实测条目数」使注释必须随每次合法增删同改 ⇒ 数量锚定，合法增长即假红。
-  // 保留弱形态（存在性）：陈述句在场、可检索、可读；数值一致性交维护者与 review 面。
-  const src = readRel(SCRIPT_REL);
-  assert.ok(/放宽得 \d+ 条/.test(src), '脚本注释须含「放宽得 N 条」形式的条目数陈述（R-06）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // AC-10 R-11 悬空引用清理（命中 = 0，或逐处登记）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('AC-pack1-10 R-11：`§0f/§0g/§0h` 悬空引用 = 0，或每处均在 exec/e1-disc.md 逐条登记', () => {
@@ -385,56 +239,12 @@ test('AC-pack1-10 R-11：`§0f/§0g/§0h` 悬空引用 = 0，或每处均在 exe
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-11 单文件测试（coder 侧用例：只读路径，不跑 npm test）
+// AC-12 禁区黑名单（W8：baselines/docs/reports 单写者 = Leader）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-11 coder 用例 `node --test test/guidance-id-coverage.test.js` 全绿且用例数 ≥ 3', () => {
-  // 失败条件：用例文件缺失（负例未交付）/ 有用例失败（判据侧回归）/ 用例数 < 3（覆盖不足）。
-  assert.ok(fs.existsSync(absOf(CODER_TEST_REL)), '缺 ' + CODER_TEST_REL);
-  const r = spawnSync(process.execPath, ['--test', CODER_TEST_REL], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
-  const out = (r.stdout ?? '') + (r.stderr ?? '');
-  const num = (label) => {
-    const m = new RegExp('(?:ℹ|#)\\s*' + label + '\\s+(\\d+)').exec(out);
-    return m ? Number(m[1]) : null;
-  };
-  const tests = num('tests');
-  const fails = num('fail');
-  assert.equal(r.status, 0, '单文件测试须 exit 0；尾部输出：' + out.slice(-1200));
-  assert.ok(tests !== null && tests >= 3, `用例数须 ≥ 3，实测 ${tests}`);
-  assert.equal(fails, 0, `fail 须 = 0，实测 ${fails}`);
-  // 用例文件须自带「必失败构造」（Q-A）——判据有牙的最小证据
-  assert.ok(readRel(CODER_TEST_REL).includes('forward-id'),
-    'coder 用例须至少断言 forward-id（否则负例未覆盖新判据）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-12 五件注入面 repo↔live 同 sha256（引擎真不变量）＋ 禁区黑名单（提交面口径）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-12 注入面 repo↔live 逐件同 sha256；baselines/docs/reports 零提交（禁区黑名单）', (t) => {
-  // 失败条件：
-  //   ① 任一注入面文件 repo 侧与 live 副本 sha256 不同（改了 repo 未同步 live，或反之）；
-  //   ② 提交面（`git diff --name-only <窗口基线>...HEAD`）出现禁区命中（W8：`baselines/**` 单写者 = Leader）；
-  //   ③ 引擎既无 `sync` 行又不声明 live 缺位 ⇒ 判据⑦ 静默失效（如实判红，不是 skip）。
-  //
-  // 【AD-02（本批替换）】原断言 = `git hash-object` vs `git rev-parse bfb9b0c:<path>` 的两件 blob 比对，
-  //   判据对象是「2026-10-24 那个 commit 的字节」⇒ 被 `0419b22` **合法**改动后**永久必红**
-  //   （实测 actual `43af080d…` vs expected `b4ee3f32…`）。引擎真不变量在
-  //   `scripts/check-guidance-sync.mjs:337-345`：对**当前两份副本**逐件求 sha256 比对，与历史 commit 无关；
-  //   有牙实证：只改 live 侧 `references/manager.md` 一行 ⇒ `DIFF` + `FAIL sync` + exit 1。
-  //   **禁**「把 BASELINE 换成一个更新的 sha 救绿」= 削判据（规格 C-1② 明令）。
-  const r = runScriptJson([]); // 含 live（不带 --no-live）
-  assert.ok(r.doc, 'no JSON 输出，脚本可能崩了：stderr=' + r.stderr.slice(0, 400));
-  const rows = r.doc.sync ?? [];
-  if (rows.length === 0) {
-    // 引擎自陈降级（`:334-335` live preset 不存在 ⇒ note、不判红）⇒ 该面未执行，**skip 并留痕**；
-    //   但「既无行、又无声明」= 判据静默失效，必须红（不得一并跳过）。
-    const note = (r.doc.notes ?? []).find((n) => n.includes('live preset 不存在'));
-    if (note) return t.skip(`live preset 未部署（引擎自陈：${note}）—— 判据⑦ 需 live 副本在位；部署后复跑`);
-    assert.fail('引擎未产出任何 sync 行，也未声明 live preset 缺位（判据⑦ 静默失效）：notes=' + JSON.stringify(r.doc.notes));
-  }
-  const diverged = rows.filter((x) => !x.same).map((x) => `${x.file} repo=${x.repo} live=${x.live}`);
-  assert.deepEqual(diverged, [], '注入面 repo↔live 必须逐件同 sha256（改一份即改另一件）：' + JSON.stringify(diverged));
-  const syncFail = (r.doc.failures ?? []).filter((f) => f.check === 'sync');
-  assert.deepEqual(syncFail, [], '判据① 失败项须 = 0（缺副本与不一致都落这里）：' + JSON.stringify(syncFail));
+test('AC-pack1-12 禁区（baselines/docs/reports）不得出现未提交变更', () => {
+  // 已解绑：原「五件 repo↔live 同 sha256」由校验器承载；该校验器于 2026-10-28 退役（用户裁决：
+  //   指引维护不常做、不需要绑测试锚定），该面改由 `scripts/sync-guidance.mjs` 的复制动作承担（无判定结论）。
+  //   保留的是**常驻不变量**：禁区目录不得出现在未提交变更里（W8：基线单写者 = Leader）。
 
   // 【AD-11（本批替换）】原 `PACK_DOMAINS` 冻结 `punky-iter-a-20261024` 那五个**历史批名**的写域，
   //   任何后续合法改动都「不可归属」⇒ 本 lane 自己的修复文件全部不可归属（修了就红 = 自伤）。

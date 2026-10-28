@@ -646,12 +646,12 @@
 
 ## §13 指引维护（Guidance maintenance）
 
-- **双层结构**：`agent.cordis.yml` = **注入面**（每会话必进系统提示，只放规范句 + `#§X` 指针）｜`references/discipline.md` = **正文**（按需读，放细则/码表/证据）。**正文小节必须同时在注入面有一条**（详情面白名单 **5 项**：§0m/§0n/§0o/§0j/§0l；真值见 `scripts/check-guidance-sync.mjs` 的 `DETAIL_ONLY`）。
+- **双层结构**：`agent.cordis.yml` = **注入面**（每会话必进系统提示，只放规范句 + `#§X` 指针）｜`references/discipline.md` = **正文**（按需读，放细则/码表/证据）。**正文小节可多于注入面**（详情面小节按需读，不强制在注入面出现）。
 - **双副本纪律**：preset 五件（`agent.cordis.yml` / `references/discipline.md` / `references/manager.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）与 **live**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**必须同 sha256**；改一份即改另一份。
-- **收口命令（硬）**：`node scripts/check-guidance-sync.mjs` —— **五条判据**（与脚本头部自述逐字对齐）：① repo↔live **preset 五件**的 sha256 必须逐字相同（改指引必须双副本同 sha）；② **正向（按指针）**：注入面内联清单里每个 `#§X` 指针，必须在正文里真实存在；②b **正向（按 id）**：注入面**每一条目**都必须在正文有对应小节 `## §X`（**无白名单**）；③ **反向**：正文里每个 `## §X` 小节，必须在注入面内联清单里有一行（**详情面白名单**除外）；④ repo↔live **`skills/<name>/**` 整树逐文件 sha256**（**独立判据族**，不复用 `SYNC_FILES`；**只让差异可见**、零写盘；任一 `status !== 'same'` 即 exit 1）。**GREEN（exit 0）才算收口**；未跑即视为未收口。
+- **同步命令（只复制，不判定）**：`node scripts/sync-guidance.mjs` —— 把 repo 侧 preset 五件与 `skills/**` 整树复制到 live（内容相同即跳过、幂等）；`--no-skills` 只同步五件、`--dry-run` 只列将复制什么、`--live=` / `--skills-live=` 覆盖落点。**本仓不再有「必须 exit 0 才算收口」的指引门**（2026-10-28 用户裁决：指引维护不常做，不需要绑测试脚本锚定）——改完跑一次复制即可，是否同步到位直接看两份文件。
 - **归属原则（2026-10-21 用户裁决；**人工自维护约定，不设机器门禁**）**：**工具能力归工具定义**（`lib/tools/*.js` 的 description：参数、取值域、拒码语义、状态机）；**引擎调度指引与主 Agent 操作规范归 preset**（persona 注入面：何时必须调、顺序、红线）。persona 里不复写工具能力细节，只留操作规范 ＋ `#§X` 指针。
 - **persona 有两份定义（**自维护**，靠人工保证同源）**：`cordis.patch.yml`（插件 patch，**boot 期由 loader 组合进 profile ⇒ 实际注入源**）与 `presets/punky-preset/agent.cordis.yml`（preset 分发面）是同一份 persona 的两份定义，**改一份即改另一份**。历史事实：两份曾长期分叉（patch 缺 `0i`、§0 为旧短版）而无人发现 ⇒ **改动时两份同时改是本条的落点**（不新增脚本判据）。
-- **反例（本规则的由来）**：2026-09-17 新增 §11/§12 时只写了正文、漏了注入面 ⇒ 新规则「写了但注入不到」，下一会话的 Leader 看不到。该漂移本可被 ③ 自动拦住。
+- **反例（本规则的由来）**：2026-09-17 新增 §11/§12 时只写了正文、漏了注入面 ⇒ 新规则「写了但注入不到」，下一会话的 Leader 看不到。**该校验器已于 2026-10-28 退役** ⇒ 同类漂移现在只能靠人读，改注入面时请自行对照正文小节。
 
 ---
 

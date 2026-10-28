@@ -5,7 +5,7 @@
 //   node scripts/check-vocab-counts.mjs            人读输出
 //   node scripts/check-vocab-counts.mjs --json     机读输出
 //
-// 退出码（与 `scripts/check-guidance-sync.mjs` 同档）：0 = 全绿；1 = 有缺口；2 = 参数错误。
+// 退出码（与 `scripts/sync-guidance.mjs` 同档）：0 = 全绿；1 = 有缺口；2 = 参数错误。
 //
 // 职责**恰好两条**（多一条即越界，见 `plan/p2-taskpack-2.md` K-4）：
 //   ① **发射码 ⊆ 词表**：解析 `lib/**/*.ts` 的 `code: 'GATE_…'` 字面量与

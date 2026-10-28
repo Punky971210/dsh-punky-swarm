@@ -49,7 +49,7 @@
                 10. 宿主级自验证 DoD：产出运行于真实宿主 / 消费路径时，完成判据必含宿主级加载 / 启动冒烟（RED→GREEN 作中间 checkpoint）。细则见 #§10。
                 11. 运行模式：星型直驱（`leader-direct`）——结算即派、复核并行、单点派发、真源 = `lanes[].deps` + `handoffs`、监管二源、模式可退出。细则见 #§11。
                 12. **audit 非盲审**：audit 必须 `consume` plan 层产物（锚点正文含裸标题 `## 验收标准`）；`consume` 与 `deps` 须逐条对齐，上游结算后缺边不可补。细则见 #§12。
-                13. **指引维护**：改注入面或正文后必须跑 `node scripts/check-guidance-sync.mjs`（五件同 sha ＋ 双向指针 ＋ skills 面）；**GREEN（exit 0）才算收口**。细则见 #§13。
+                13. **指引维护**：改注入面或正文后跑 `node scripts/sync-guidance.mjs` 同步 live（只复制、幂等）；细则见 #§13。
                 0d. 记忆语义：复盘 / 归档产物落盘即可，记忆沉淀优先 dsh-mneme。细则见 #§0d。
                 0i. 执行形态：C 类批一律走 wavePlan lane 派发；每完成一子步骤即落 `<lane>/progress/NN-<slug>.md` 进度快照，禁攒批。
                 0k. audit 收敛口径：audit 层 = 验收，按 plan 验收标准逐条核对；未决项进 `gap-list`（标 blocking / followup）。细则见 #§0k。

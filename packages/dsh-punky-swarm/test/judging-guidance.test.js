@@ -198,50 +198,6 @@ const STALE_DIFFICULTY_RE = /难度[ \t]*A\/B\/C(?!\/D)/;
 
 // ── j2-1 / j2-2：§13 判据条数（AC-07）────────────────────────────────────────────────
 
-test('j2-1 §13 自述的判据条数与编码集合 == 脚本头部实际声明的（运行期算，不写死 3 / 5）', () => {
-  const script = readText(SYNC_SCRIPT_REL);
-  const scriptItems = scriptCriterionItems(script);
-  assert.ok(scriptItems.length > 0, `${SYNC_SCRIPT_REL} 头部必须仍以「① …」逐条自述判据（本件真值来源）`);
-
-  // 脚本自洽：头部「N 条判据」的 N == 逐条条目的条数
-  const scriptDeclared = declaredCriterionCount(scriptHeaderLines(script).join('\n'));
-  assert.equal(scriptDeclared, scriptItems.length,
-    `${SYNC_SCRIPT_REL} 头部自述「${scriptDeclared} 条判据」与其逐条条目数 ${scriptItems.length} 不一致`);
-
-  const doc = readText(DISCIPLINE_REL);
-  const s13 = sectionText(doc, '13');
-  const line = s13.split('\n').find((l) => /条判据/.test(l));
-  assert.ok(line, '§13 必须仍有一条自述「N 条判据」的收口命令行（本件定位锚点）');
-
-  // 正文自述条数 == 脚本解析出的判据数（**这一条**是 M-04 的核心：改回三条必红）
-  const bodyDeclared = declaredCriterionCount(line);
-  assert.equal(bodyDeclared, scriptItems.length,
-    `§13 自述「${bodyDeclared} 条判据」，而 ${SYNC_SCRIPT_REL} 实际声明 ${scriptItems.length} 条`);
-
-  // 编码集合相等（正文枚举的编码集合 == 脚本头部的编码集合）
-  const bodyCodes = criterionCodes(line);
-  assert.deepEqual(bodyCodes, criterionCodes(scriptItems.join('')),
-    `§13 枚举的判据编码 [${bodyCodes}] 与脚本头部 [${criterionCodes(scriptItems.join(''))}] 不集合相等`);
-
-  // 正文自洽：自述条数 == 该行真正枚举出的编码条数（防「写五条却只列三条」）
-  assert.equal(bodyCodes.length, bodyDeclared,
-    `§13 自述 ${bodyDeclared} 条，但该行实际枚举了 ${bodyCodes.length} 个编码 [${bodyCodes}]`);
-});
-
-test('j2-2 反向夹具：修前 §13「三条判据：①②③」必须被同一解析器判红（判据不得恒真）', () => {
-  const scriptItems = scriptCriterionItems(readText(SYNC_SCRIPT_REL));
-  const legacyDeclared = declaredCriterionCount(LEGACY_S13_LINE);
-  const legacyCodes = criterionCodes(LEGACY_S13_LINE);
-
-  assert.equal(legacyDeclared, 3, '夹具读数：修前正文自述三条');
-  assert.deepEqual(legacyCodes, ['①', '②', '③'].sort(), '夹具读数：修前正文只枚举 ①②③');
-  // 三点必红（这正是 j2-1 的失败路径；三者任一成立即「三条 vs 五条」不可通过）
-  assert.notEqual(legacyDeclared, scriptItems.length, '修前条数必须与脚本条数不等（否则 j2-1 恒真）');
-  assert.notDeepEqual(legacyCodes, criterionCodes(scriptItems.join('')), '修前编码集合必须与脚本集合不等');
-  assert.ok(!legacyCodes.includes('②b'), '修前缺 ②b');
-  assert.ok(!legacyCodes.includes('④'), '修前缺 ④');
-});
-
 // ── j2-3：§0p 动因行已删（AC-05）────────────────────────────────────────────────────
 
 test('j2-3 动因读数已删且现役规范句仍在（§0p 不再留会漂的 22/22 / deny 19 件）', () => {
