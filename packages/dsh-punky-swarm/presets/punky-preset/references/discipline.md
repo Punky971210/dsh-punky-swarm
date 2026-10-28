@@ -527,34 +527,18 @@
 - **别名过渡**：`jiufeng` 为**旧 preset id**，留在名单里只为既有会话（header 已记 `agentPreset: jiufeng`）续跑不中断；**新会话一律 `punky-preset`**。
 - **红线（M-03 订正：降为历史注记，2026-09-24）**：`dispatch.gate` **保持缺省 `warn`**。原记载的「切 `enforce` 的前置 = 模式跟随先行，否则非白名单模式的 `subagent` 派发会被 `GATE_SUBAGENT_OUTSIDE_LANES` 卡死」**已失效**——该拒态码已退役（`lib/**` 内**零命中**，退役码锁登记），`enforce` 分支**无判据可产拒态**。
 
-## §0o 团队标签与团队资产口径（2026-09-27：`team` 降为可选自由标签；资产面与链声明面已整体退役、进退役锁）
+## §0o 团队标签、拓扑与建批拒态口径（`team` = 可选自由标签；团队资产面与 `chain` 声明面已整体退役）
 
-> **标题已按用户裁决改名（2026-09-27，G-1；本批二次订正）**——旧名 = 「团队资产必填与缺省链口径（P1 必填化 + P2 接线，2026-09-16）」，保留于此作**历史沿革**；**`§0o` 这个 id 逐字保留**（§13 反向校验按 `^## §([0-9]+[a-z]?)` 只认 id，且 `§0o` 在详情面白名单 `DETAIL_ONLY` 内——**改 id 会既不在注入面、也不在白名单 ⇒ 反向校验 RED**）。
+> **现役口径一句话**：`team` 只是批次归类标签；拓扑真源 = `lanes[].deps` + `handoffs`；团队资产面与 `chain` 声明面**已整条删净**并进退役锁（`test/retired-codes-lock.test.js`：`lib/**` 零字面量命中、含注释，防回生）。
+> **历史沿革不在本节现役读面**：被折叠的旧口径（资产必填 / 资产内 skills 可解析 / 缺省链 / 链八条静态校验 / `teamsRoot` / `pair_with` / `rework`）需要追溯时看 `CHANGELOG.md` 与 `git log`——**本节不再逐条复述其原文**。
 
-> **本节现役口径（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾）**：① **`team` = 可选自由标签**（`string | null`；**不解析、不校验、不拒建批、不参与装配**，仅作批次归类）；② **团队资产面**（装载器 `lib/assembly/team-asset.js`、5 件 `presets/*/team-asset.yml`、`TEAM_ASSET_*` 码族、`teamsRoot` 参数与 `TEAMS_ROOT_IGNORED`）**已删净**；③ **`chain` 声明面**（八条静态校验 / `lib/assembly/chain.js` 全部投影函数 / `chain.step` 回显读端 / `lib/engine/chain-runner.js` 推进器）**已删净**（D-4）。相关码**全部进退役锁** `test/retired-codes-lock.test.js`（`lib/**` 零字面量命中、**含注释**、防回生）。**本节余下各条为历史沿革 —— 只作沿革，勿按现役读。**
-
-- **`team` 现为可选自由标签（2026-09-27 裁决）**：`wave_plan` 的 `team` 不传 / `null` / 空白 / 非字符串 ⇒ **无标签**，批次**照常落盘**（**漏传不再是错误、无宿主 schema 拒收**）；**标签可自取、不要求已注册、不要求存在**，**仅作批次归类**。**零解析面**：不解析资产、不参与装配 / `[skills=…]` 前缀 / `flows` / `roles` / 资产指纹，**不构成任何建批门禁**。⇒ 上一轮（`7f481d3`）的「尽力解析 + `warnings` 留痕」中间形态**已取消**（`normalizeTeamLabel` / `resolveTeamAssetFace` / `TEAMS_ROOT_IGNORED` 一并删净）。
-  - **历史（保留可读）**：P1 旧口径 = 「`team` 必填，且必须解析到资产」——缺失 / 空串 ⇒ `TEAM_ASSET_MISSING_FIELD`；无资产 ⇒ `TEAM_ASSET_NOT_FOUND`；**拒后零批次 JSON 落盘**、`pendingBatch` 不释放；**判定序全 fail-closed**：① `team` 词法/必填 → ② 资产加载 + 加载期不变量 → ③ `skills` 可解析 → ④ 才进 `buildWavePlan` / `createBatch`。
-- **无资产的 `team` 名早已不拒（2026-09-27 订正）**：任何标签——含旧「无资产」示例 `generic`（已废除）、**已退役的 `jiufeng`**（`presets/jiufeng/team-asset.yml` 早已移除）、**模式名误用**如 `punky-preset`——都只作普通自由标签，批次照常落盘（**零拒态**）。**历史（保留可读）**：旧口径为「无资产的 `team` 名一律拒」；「legacy 兜底」只是直调 `buildWavePlan` 的**已登记差异面（W-2）**，**仍不得在工具面构成「有资产」**。
-- **命名空间消歧**：`presets/<team>/team-asset.{json,yml}` **已不存在**（5 件已删、**不留空壳**）；`presets/punky-preset/`（或旧 id `jiufeng/`）= **预设（模式）资产**（`agent.cordis.yml` / `references/` / `preset.yml`），**从来不是团队资产**——**该区分今日无判据面**（无资产解析 ⇒ 无歧义可消）。
-- **团队资产要求 → 已退役（进退役锁）**：加载期不变量（结构合法 / 层 / 角色）、`layers.*.skills` 合法性、`TEAM_ASSET_*` 13 枚复用码**随装载器一并删净**，**不再有任何「要求」或「留痕」出口**。**`skills` 名可解析性 = 纯 recommend**（2026-09-25/26 用户裁决，提交 `b8380a8` 移除 `GATE_SKILL_MISSING`）——该口径**继续有效**，只是其载体（资产 `layers.*.skills`）已不存在；**牵头角色悬空面**（`TEAM_ASSET_LEAD_*`）随 2026-09-26 裁决 Q-8=C 退役、亦已删净。
-  - **历史（保留可读）**：旧口径 = 「每个 role 的 `skills` 须**非空且可在宿主技能根 `~/.agents/skills` 解析**（可解析名 = 技能**目录名** ∪ `SKILL.md` frontmatter 的 `name`；技能根不存在/不可读**同码拒**、不静默跳过）——不可解析 ⇒ `TEAM_ASSET_SKILLS_MISMATCH` **整份拒载、拒建批**」。
-- **缺省链口径 → 已无对象（本批订正）**：原文「无 `chain` 声明 ⇒ 引擎缺省退化链 = **现行 3 层直线链 `plan → exec → audit`**」的整条只读核查（含 `resolveChainOf` / `chainProblemsOf` / `chainEchoOf` / `chainOfBatch` / `expandChainBranches` / `chainStepForLane` / `advanceChainAfterSettle` 的逐点 `file:line` 证据）**已随 `lib/assembly/chain.js` 与 `lib/engine/chain-runner.js` 删除而无对象**——**引擎今日既不合成、也不读取任何链声明**。
-- **引擎内仍是 `['plan','exec','audit']` 的地方 = 层集合**（`lib/assembly/flows.js` 的引擎基线常量、`lib/wave-plan.js`），**不是链**，勿混读。
-- **含 `tester`/`review` 的多段链**（`plan→exec→tester→review→audit`）旧由团队资产各自声明，属团队执行模式、**不属引擎缺省**——**该声明面已删净**；今日多段拓扑只能由**建批 tasks 的 `deps` + `handoffs`** 表达。
-- **`chain` 声明面已整体退役（2026-09-27 裁决 · 批 `retire-team-chain-20260927` 清尾）**：原「唯一规范位 = 顶层 `chain`」＋**八条静态校验**（层白名单 / 角色悬空 / 悬空 `next` / 到不了的环节 / 环须由 `rework` 承认 / 链尾唯一 / `join:any` 必带 `anyFailure` / 只收枚举 token）＝**已整条删净**（`lib/assembly/chain.js` 本体删除，判据与出口一并消失）——**不再有链声明位、不再有链校验、不再有 `plan.warnings.chainWarnings` 出口**。
-  - **同批删净物（D-4「删净」）**：`EVT_CHAIN_STEP`（`chain.step` 常量）/ `batch_status.chain`（`lib/api.js` 与工具面同源读端）/ 面板 `assembly.chain` 与链分类器 / `locales` 链键（zh+en）/ `lib/engine/chain-runner.js` 推进器壳。
-  - **码面归属**：链校验码与资产码族**同值**（`CHAIN_CODES` 值逐字等于 `TEAM_ASSET_{MISSING_FIELD,FIELD_NOT_ALLOWED,BAD_TYPE,SKILLS_MISMATCH,LAYER_UNKNOWN,REWORK_INVALID}`）**⇒ 随资产码族一并进退役锁**（`lib/**` 零字面量、**含注释**）。**`chain.step` 是事件常量、非门禁码 ⇒ 不入锁**（D-4 直接删净；历史事件仍在**磁盘事件流**，可经 `log_export` 读）。
-  - **已退役面（勿再按旧文理解）**：`member.settled` **不再**触发「算下一环 + 自派」；`chain.step` **不再新增**（写点已删）；`onFail` / `join.anyFailure` / `pair_with` / `rework` / `template` **无运行期消费者**，声明位**一并删净**。
-  - **失败面改由什么承载**：失败 / 冲突 lane 即**终态**（K3 去返工边），失败面用 **gap-list（`blocking` / `followup`）** 表达，重做 = **开新任务批次**；`pair_with` 的 1:1 配对语义改由 **audit lane 的 `deps`** 表达。
-- **`chain` / 拓扑的现行口径**：**运行期 + 建批期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**（逐边取件用 `handoff_view`，判定单点 = `lib/state/gates.js` 的 `handoffRecordVerdictOf`）；**不存在**任何链声明或链静态校验面。两条现行硬口径——
-  - **链推进对全部批恒 no-op（原分支已整体删除）**：原判据 = 批次 JSON 的 `assembly.managerPlan`（`chain-runner.js` 前置分支，先于相位闸、不看 roster）。链面删净后该分支**不存在** ⇒ `leader-direct` 与 `raise` 在链推进面上**不再有差异**，其**现行**差别只在调度与 watch（存档件 §三 的 0f / 0g）。
-  - **`batch.phase` 事件带 `reason`**（暂停类必须带 source 前缀，禁裸文案）：词表 = `auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`，存量两源 `failed-escalate` / `governance-escalate` 不动；**空/空白 ⇒ 不写该键**（既有 `{from,to}` 形态零污染）；读端渲染 `<from> -> <to> | <reason>`（`log_export` markdown = 「为何不推进」的唯一解释入口）。**注**：原词表首项 `chain:<分支>` **随链面删净而无发射源**。
-  - **步级条件边 `on` 声明面已下线（M1）**：原为「声明即留痕 `TEAM_ASSET_FIELD_NOT_ALLOWED` @ `chain.steps.<id>.on`」——**该码与声明位已随链面删净**；**立意不变**（**不静默失能**：原「声明即拒」只删校验会让声明被静默忽略，比留痕更糟 ⇒ 现口径 = 声明位不存在，无处可写）。正路路由用 **`deps` 边**，失败面用批次级策略 + **gap-list**。**读侧历史兼容**：历史 `chain.step` 事件的 `via` 仍在**磁盘事件流**（`log_export` 可读），**面板 / `batch_status` 回显面已删**。
-- **两段式拒态（G-2，排查建批失败必先分段）**：`wave_plan` 的拒态由**两段不同来源**产生，读拒态文案时必须先判段，勿把两段混作一谈——
-  - **段一 · 框架参数面**：宿主在进入 `execute` **之前**按工具参数 schema 拒（`required` 缺失 / 类型或枚举非法 / `additionalProperties:false` 命中）。特征：文案由**宿主**生成（形如 `missing required property "batchId"` / `invalid arguments`），**不带** `GATE_*` 引擎码；本插件对该段**无构造序控制权**。**今日可触发键只剩 `batchId` / `tasks`**（旧示例 `missing required property "team"` **早已不可达**——`team` 从未进本次 `required`；另 `teamsRoot` 参数已删净）。
-  - **段二 · 业务构造期面**：进入 `wave_plan.execute` 后的判定序**今日只剩拒态**——⑤ 装配声明门 → ⑥ **引擎默认判据源锚点面**（`GATE_AUDIT_INPUT_MISSING`：判据取自 `plan/` 前缀 / 他 lane `produce ∪ outputs` 的**引擎基线**，**非团队声明**）。全部位于 `store.createBatch` **之前**。特征：**拒态**文案**首行原样透出引擎码**（`GATE_*`），可照码分流与自救。**原条目 ①〜④**（`team` 标签归一化 → `teamsRoot` 面 → 资产加载 + 加载期不变量 → `chain` 八条静态校验）**随声明面删净：既无拒态、亦无 `warnings` 出口**。
-  - **共同判据（不变）**：段一与段二之后均为「**零批次 JSON 落盘** + `pendingBatch` 保留（补声明可重试）」；故「批没建起来」的正确诊断入口 = 先看文案属于哪一段，再决定是补参数形态（段一）还是改声明（段二）。**注意**：①〜④ 已不存在 ⇒ 「批建起来了」**不再**受任何资产 / `chain` 声明面影响（无从可脏）。
+- **`team` = 可选自由标签**（`string | null`）：不传 / `null` / 空白 / 非字符串 ⇒ 无标签，批次照常落盘；标签可自取、不要求已注册、**仅作批次归类**。**零解析面**：不参与装配 / `[skills=…]` 前缀 / `flows` / `roles` / 资产指纹，**不构成任何建批门禁**。
+- **团队资产面已删净**：装载器、`presets/*/team-asset.yml`、`TEAM_ASSET_*` 码族、`teamsRoot` 参数与 `TEAMS_ROOT_IGNORED` 全部移除 ⇒ **不存在**「无资产即拒」「资产内 skills 不可解析即拒载」这类判态。`skills` 名可解析性 = **纯 recommend**（口径继续有效，载体已不存在）。
+- **`chain` 声明面已删净**：八条静态校验、投影与推进器、`batch_status.chain` 回显、`chain.step` 常量（含面板与 locales 键）全部移除 ⇒ **引擎今日既不合成、也不读取任何链声明**；历史 `chain.step` 事件仍在磁盘事件流（`log_export` 可读）。
+- **拓扑与失败面**：运行期/建批期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`（逐边取件 `handoff_view`，入口门判定在 `lib/state/gates/`）。失败 / 冲突 lane 即**终态**，失败面用 **gap-list（`blocking` / `followup`）** 表达，重做 = **开新任务批次**；1:1 配对语义改由 **audit lane 的 `deps`** 表达。
+- **别把层集合当链**：引擎里的 `['plan','exec','audit']` 是**层集合**（`lib/wave-plan.js` 等），不是链。
+- **建批拒态两段式（排查必先分段）**：段一 = **宿主参数面**（进 `execute` 之前按 schema 拒；文案由宿主生成、**不带** `GATE_*`；今日可触发键只剩 `batchId` / `tasks`）；段二 = **业务构造期面**（`store.createBatch` 之前；**首行原样透出引擎码**，可照码自救：`GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID` / `GATE_AUDIT_INPUT_MISSING`）。两段之后都是「**零批次 JSON 落盘** + `pendingBatch` 保留」，补声明可重试。
+- **`batch.phase` 事件的 `reason`**：暂停类必须带 source 前缀（`auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`；存量 `failed-escalate` / `governance-escalate` 不动），空/空白不写该键；读端渲染 `<from> -> <to> | <reason>` —— 「为何不推进」的唯一解释入口是 `log_export` markdown。
 
 ## §0t 完成发现与结算
 
