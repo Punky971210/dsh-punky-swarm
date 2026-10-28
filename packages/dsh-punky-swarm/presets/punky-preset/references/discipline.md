@@ -303,26 +303,24 @@
 - **实践后果（必读）**：A 方案下**成员完成 ⇒ Leader 必须显式 `member_settle` 收口**（或走 `auto-settle` 事件的自动结算判定），**不得**等官方板自己变状态。
 - **「官方 task 五件」的界限**：`team_task_create` / `team_task_list` / `team_task_get` / `team_task_update` / `team_task_delete` 属**host 面工具**，成员可自行调用，但**其状态不构成治理真源**（`batch_status` / `gate_status` / `handoff_view` 才是）。
 
-### 三、派发面 `provider` 边界（B 为方向、C 标不做）
+### 三、派发面 `provider` 边界（只留现行口径）
 
-| 方案 | 内容 | 状态 |
-|---|---|---|
-| **A** | roster 4 件用官方；**任务与交接一律走蟛蜞自建** | **已认可**；本批落指引（本节） |
-| **B** | onto 的 dispatch 增 **`provider:'agent-team'`** 分支：用 `spawn_teammate` 替代宿主 `rt.start` seam 承载 lane worker；**任务 / 交接 / 黑板仍全走 onto** | **作废**（历史记录）——依据用户 C1「**不做 provider 分离方案**」；现役唯一实现 = 宿主 subagent seam（`config.dispatch.provider`，本机取值 `subagent`；`lib/engine/dispatch.js` 走 `rt.start`）。引擎内**今日**与官方 Agent Teams 的关系只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`，存档件 §三 的 0g 一）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）——**没有** `provider:'agent-team'` 派发分支（设计稿：`docs/agent-team-bridge-design-draft-v0-2026-09-21.md`） |
-| **C** | 在 `member_settle` 路径**镜像双写官方板**（真填 `officialTaskId`） | **不做（正式确认）**——会把上表 8 项缺陷引入治理链；官方板为实验性、契约不稳定 |
-
+- **现役唯一实现 = 宿主 subagent seam**（`config.dispatch.provider`；`lib/engine/dispatch.js` 走 `rt.start`）。
+- **B 方案（`provider:'agent-team'` 分支）作废**、**C 方案（`member_settle` 镜像双写官方板）不做**——前者会把官方板 8 项缺陷引入治理链，后者会把实验性契约拖进治理面。
+- 引擎与官方 Agent Teams 今日只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）。
 - **口径纪律**：`officialTaskId` 一类「双写」字段在本引擎**未接线**——无消费点、无校验、无判定；任何回显**不得**读作「已双写」。
 
-### 四、**三通道分治**（2026-09-24 用户口径）——三者**任务分配不共用**
+### 四、三通道分治（一任务一通道，不混用）
 
 | 通道 | 适用任务 | 派发方式 | 黑板「执行者」锚点 |
 |---|---|---|---|
-| **team** | **常用档（评估选档、非默认）**：**固定任务**（角色与流程可预见；software 口径 = **7 角色 + leader**） | Leader `spawn_teammate`（官方 roster） | **`roster` 成员名**（黑板**引用** roster） |
-| **dispatch**（**备选·侧边任务**） | **需灵活分配、较轻量**的侧边任务（与 team 不匹配者） | `lane_dispatch` → 引擎自派 subagent（`rt.start`） | `owner`（批的 owner 会话）+ **`member.dispatch{ workerSessionId, lane }`**（引擎**自动写**、唯一写路径） |
+| **team** | 固定任务（角色与流程可预见） | Leader `spawn_teammate`（官方 roster） | **`roster` 成员名** |
+| **dispatch** | 需灵活分配的侧边任务 | `lane_dispatch` → 引擎自派 subagent（`rt.start`） | `owner` + `member.dispatch{ workerSessionId, lane }`（引擎自动写、唯一写路径） |
 | **裸 subagent**（B 档） | 简单 / 单步，**不进批** | Leader `subagent` | **无**（不进批次黑板） |
 
-- **硬口径**：**一个任务只走一条通道**，**不存在**"同一 lane 既可由席位也可由 dispatch worker 执行"的混用形态；三通道**彼此不互通**（含与 B 档裸 subagent）。
-- ⚠ **主流方向（Q1=A，2026-10-01 用户裁决）**：**team 为主流方向；subagent 用于与 team 不匹配的侧边任务**；**保留「不作 provider 分离方案」口径**（§0p 十 / 十三）。旧稿案「最终改用 agent-team 模式」及其推论（「改用后 dispatch 面变多余」）**均已作废**；各通道**各有其面**（如 `dispatch` 通道的句柄面**仍然必需**）。**⚠「主流方向」≠「机械默认」** —— 选档口径见 §0p 十一 与 **§0p 十四（D 档）**；**团队面缺失时**须走**显式降级**（回退 subagent 通道并留痕，**禁静默降级**）。
+- **硬口径**：**一个任务只走一条通道**；三通道**彼此不互通**（含与 B 档裸 subagent），不存在「同一 lane 既可由席位也可由 dispatch worker 执行」的混用形态。
+- ⚠ **时效（2026-10-28 用户口径）**：**引擎自派当前不可用** ⇒ `dispatch` 通道**暂不可达**，侧边任务走 **team 或裸 subagent**；`member.dispatch` / 句柄面按历史读，恢复自派后再启用。
+- **主流方向**：**team 为主**；**团队面缺失时**须走**显式降级**（回退 subagent 并留痕，**禁静默降级**）；选档口径见 §0p 十一 与 §0p 十四。
 
 ### 五、**team 通道语义**（席位怎么派、怎么接活、怎么回报）
 
