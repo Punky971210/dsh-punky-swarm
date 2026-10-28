@@ -264,7 +264,7 @@
 | ② 实机检索 | `grep` / `glob` 扫宿主安装面与引擎包源码；只读 `pwsh` 枚举包目录 | 「`<面>` 内**零文件命中**（随条写明检索词）」 |
 | ③ 实调验证 | **按名直接调用**一次，读回执形态 | 回执 `unknown global tools "X"` = **不存在**；返回**领域错误**（如 `agent "…" is not a member of an active Agent Team`）= **调用到达工具本体 ⇒ 工具存在** |
 
-**降级披露（本部署，如实）**：旧版本节记载的「元工具检索」路径在本部署**无对象**——`tools_search` / `tools_schema` / `skill_search` 三件在宿主安装面（`D:\Program Files\npm-global\node_modules\@deepseek-ai\dsh`，扫描 17732 件 `*.js/*.json/*.mjs/*.cjs/*.ts`）内**零文件命中**；其前提符号 `tool-folder` / `skill-folder` / `META_TOOLS` / `missingMetaTools` 同样**零文件命中**，`~/.dsh/state/`（`tool-folder-state.json` 的父目录）**不存在**。⇒ 本节按上表 ② / ③ 执行；**若该三件日后在册**，即回到「检索到名字后按名调用、需参数细节先展开 schema」的路径（本节即该口径，无需再改）。
+**降级披露（本部署）**：旧版本节记载的「元工具检索」路径在本部署**无对象**——`tools_search` / `tools_schema` / `skill_search` 三件及其前提符号（`tool-folder` / `skill-folder` / `META_TOOLS`）在宿主安装面**零命中** ⇒ 本节按上表 ② / ③ 执行。若三件**日后再册**，即回到「检索到名字后按名调用、参数细节先展开 schema」的路径（本节结构不用改）。逐件的枚举与扫描面见 `CHANGELOG.md`。
 
 **技能面（现役）**：技能目录经 `skill` 工具自陈（会话技能清单）；任务明显需要某能力而清单无对应描述时，可用 `ask_user_question` 兜底确认，**不得**臆断「环境不支持」。**工具面（现役）**：`tools_schema` 不存在 ⇒ 参数细节以**实调回执**或源码为准（`lib/tools/*.js` 的 `parameters` 即 schema 真源）。
 
@@ -518,13 +518,13 @@
 - **`execToolCount` 仅提示**（同日裁决）：执行型调用计数与 `lastAssign.execCallsSince` **只作观察**，**不再是升档或评估过期依据**（档位依据 = 每回合主动写入的 `difficulty` + 判据）；过期只认「从未评估 / 距上次评估 ≥30min / 时间戳非法」。
 
 - **语义**：插件的治理面**跟随模式**——`config.modes.gate`（agent preset 白名单；**本机部署**在 `cordis.patch.yml` 写 `['punky-preset','jiufeng']`；**包缺省 = 未配置 = 全模式生效**）名单内的会话才启用难度门禁 / G1 档位门禁 / 套件工具；**名单外模式零介入**（门禁全放行、**不计数**、不写任何治理状态）。
-- **绑定口径（2026-09-16 裁决；N7 改字——原文误写「包缺省=白名单」）**：引擎与门禁**有且只有绑定蟛蜞模式**：①`agentPreset === 'punky-preset'` 启用；②`jiufeng` 是**同一模式的旧 id 别名**（过渡期保留，待旧会话自然消亡后从白名单与 `~/.dsh/.agent-presets/` 一并移除）；③**其它 preset（standard/minimal/ptc/cordis/liangshen…）不启用**；④**无 `agentPreset` 的会话不启用**（fail-open 为**明写红线**，不加日志噪音）；⑤子会话（`delegationDepth>0` / `parentSession`）**继承父会话模式**（实证：成员会话 header 沿用父 preset，16/16 采样）。
+- **绑定口径（2026-09-16 裁决）**：引擎与门禁**有且只有绑定蟛蜞模式**：①`agentPreset === 'punky-preset'` 启用；②`jiufeng` 是**同一模式的旧 id 别名**（过渡期保留，待旧会话自然消亡后从白名单与 `~/.dsh/.agent-presets/` 一并移除）；③**其它 preset（standard/minimal/ptc/cordis/liangshen…）不启用**；④**无 `agentPreset` 的会话不启用**（fail-open 为**明写红线**，不加日志噪音）；⑤子会话（`delegationDepth>0` / `parentSession`）**继承父会话模式**（实证：成员会话 header 沿用父 preset，16/16 采样）。
 - **热更**：`modes` 与 `dispatch` 已入 `ALLOWED_TOP_KEYS` ⇒ 写 `<engineRoot>/config/runtime.json` 的 `{ "modes": { "gate": [...] } }` **即热生效，无需重启**；`null` = 回到旧行为（全模式生效），`[]` = 显式停用。
 - **子会话继承**：Manager / worker 会话模式随父（`delegationDepth>0` 或 `parentSession`）⇒ **结算面不被非白名单误锁**。
 - **拒态码**：名单外模式调套件写面工具 → `GATE_MODE_INACTIVE`（先于 G1，报「本模式未启用蟛蜞治理」，不报蟛蜞内部档位语义）。
 - **零介入面 = 注册表 modeGate 集**（单点真源，不靠人肉同步）：受模式门约束的工具 = `lib/engine/suite.js` 的 `SUITE_TOOLS.filter(t => t.modeGate)`（再导出为 `MODE_GATED_TOOLS`，**现 11 件**：`assign_check` / `wave_plan` / `member_status` / `member_settle` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `lane_release` / `batch_tasks_add` / `task_update`——**G-07 订正：由 9 件改为 12 件**，补入 `batch_control` / `batch_tasks_add` / `task_update`；**2026-10-24 按代码实测重算：`asset_claim` 已改 `modeGate:false` 并移出 ⇒ 12 → 11**；**条目数以 `lib/engine/suite.js` 的 `entry()` 表 `modeGate:true` 为准**）——各件 `execute` **首行**落 `assertModeActive`（或经 `assertMemberActionTierC` 链式覆盖），故名单外模式**零治理写入**（不计数、不落锁、不写 `lastAssign`）；覆盖面与实现面的双向一致由 `test/suite-consistency-and-hot.test.js` SC-1/SC-4 + `test/mode-gate.test.js` T3 锁定。
 - **别名过渡**：`jiufeng` 为**旧 preset id**，留在名单里只为既有会话（header 已记 `agentPreset: jiufeng`）续跑不中断；**新会话一律 `punky-preset`**。
-- **红线（M-03 订正：降为历史注记，2026-09-24）**：`dispatch.gate` **保持缺省 `warn`**。原记载的「切 `enforce` 的前置 = 模式跟随先行，否则非白名单模式的 `subagent` 派发会被 `GATE_SUBAGENT_OUTSIDE_LANES（**已删，`lib/**` 零命中**）` 卡死」**已失效**——该拒态码已退役（`lib/**` 内**零命中**，退役码锁登记），`enforce` 分支**无判据可产拒态**。
+- **`dispatch.gate` 缺省 `warn`**（历史注记）：原「切 `enforce` 的前置」与拒态码均已退役（`lib/**` 零命中、退役码锁登记）⇒ 切 `enforce` 今日无判据对象。**B 档单步子代理不受限**；A 档由既有门禁 3 拒。
 
 ## §0o 团队标签、拓扑与建批拒态口径（`team` = 可选自由标签；团队资产面与 `chain` 声明面已整体退役）
 
