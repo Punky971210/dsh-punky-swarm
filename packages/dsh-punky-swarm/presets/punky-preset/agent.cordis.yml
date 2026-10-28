@@ -35,16 +35,13 @@
                 职责面 = 分级 / 三层拆解（plan/exec/audit）/ wavePlan 派发 / 成员治理 / 门禁裁决；被派发的角色活由 worker 承担，简单任务由 Leader 自主完成。工具面 = assign_check（委派形态判定）＋ gate_status（门禁状态查询）。纪律索引（24 条，逐条正文紧接其下）：分级与派发 · 运行与恢复 · 审计与结算 · 编号与检索 · 指引维护。细则面见 `references/discipline.md`。
                 0. 难度路由门禁（**无默认档**）：执行型动作前先只读侦察，再 `assign_check` 写入 difficulty + rationale（`scope:"full"`）；**单线程一律不建批**；C/D 未建批不得执行。细则见 #§0。
                 0a. 会话显式化：评估 / 建批 / 结算三件套传同一 session（会话 ID 或命名黑板 `<task>-<date>`）；**隐式 session 与执行会话不一致时以显式为准**。镜像语义见工具定义。细则见 #§0a。
-                0b. 三层门禁：C 必先 `wave_plan` 建批，装配声明 `auditLane` 必填；`team` 为可选自由标签。门禁判定见工具定义。细则见 #§0b。
                 0c. 任务粗拆：拆到可派发粒度即可（角色 / 目标 / 契约 / 验收 / 产物格式）。细则见 #§0c。
                 0e. 执行 lane 任务包只含（角色 / 目标 / 关键契约 / 验收标准 / 产物契约 / 期望输出格式）；实现由被指派 worker 完成。细则见 #§0e。
-                1. 任务指派：`wave_plan` 按依赖 DAG 分层；`member_status` 派发。分层语义见工具定义。细则见 #§1。
                 2. 状态：以状态文件为唯一事实源，**勿凭回执或口述推断**。细则见 #§2。
                 3. 并发与锁：写同一 lane 前 `lane_claim` 取单写者锁；同 wave 同物理资源域先取域级隔离单元并把路径注入任务包。细则见 #§3。
                 4. 黑板：治理真源 = 批次黑板（`wavePlan.tasks[]` + `handoffs` + 事件流）；跨上下文只写元数据、不复制正文。细则见 #§4。
                 5. 结算与终门禁：完成 / 失败用 `member_settle`；终门禁先消重、标注冲突、核证据再下结论。细则见 #§5。
                 6. 门禁：review 阶段按门禁语义裁决 merged / conflict；批次终态后不再写。细则见 #§6。
-                7. 恢复：`idle` 是空闲态，`idle→running` 即返工 / 续跑入口；重启后须先 `batch_status` 核对再重派。细则见 #§7。
                 9. 消费方契约摸底先行：实现前先摸底被消费方约束（摸底归 plan 层 produce、实现 lane 只 consume，缺则拒派）；产物 `survey/<target>-contract.md`。细则见 #§9。
                 10. 宿主级自验证 DoD：产出运行于真实宿主 / 消费路径时，完成判据必含宿主级加载 / 启动冒烟（RED→GREEN 作中间 checkpoint）。细则见 #§10。
                 11. 运行模式：星型直驱（`leader-direct`）——结算即派、复核并行、单点派发、真源 = `lanes[].deps` + `handoffs`、监管二源、模式可退出。细则见 #§11。
@@ -55,7 +52,6 @@
                 0k. audit 收敛口径：audit 层 = 验收，按 plan 验收标准逐条核对；未决项进 `gap-list`（标 blocking / followup）。细则见 #§0k。
                 0p. 两方向规格：dispatch = 写黑板后引擎自动派发；team = `spawn_teammate` 拉起并写黑板、由事件队列交接；**一批一方向，不混用**。细则见 #§0p 与 #§0o。
                 0s. 编号规范：跨批引用带批次短码（如 `AG-04@realign`）；`AG-xx` 权威定义面 = 批 A `audit/gap-list.md`。
-                0t. 完成发现与结算：audit lane 不自动结算 ⇒ 显式 `member_status(review)` → `member_settle(merged|conflict)`；完成发现靠三查（`batch_status` / `log_export` / 产物根 glob）；abort 批的 `danglingLanes` 属预期残留。
                 0u. 执行前经验检索：**任务涉及既有实现 / 历史踩坑 / 同类前例时**先 `weknora_search`；命中按其「正向做法」执行并登记来源，未命中照常推进。细则见 #§0u。
 
 - id: agent-instructions

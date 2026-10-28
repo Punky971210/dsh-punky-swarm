@@ -11,7 +11,7 @@
     "test/accept-pack1-guidance.test.js": {
       "asserts": 17,
       "blankLines": 24,
-      "lines": 265,
+      "lines": 267,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1649,7 +1649,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-28T11:31:25Z",
+  "generatedAt": "2026-10-28T11:36:57Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1660,13 +1660,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "Q-5 退役指引同步校验器（用户裁决：指引维护不常做、不需要绑测试脚本锚定）：删除 scripts/check-guidance-sync.mjs 与其两个专属测试文件（guidance-id-coverage / skills-sync），并以 scripts/sync-guidance.mjs（只复制、幂等）替代；连带删除 accept-pack1 的 AC-1/4/5a/5b/5c/8/9/11、accept-pack3 的 AC-10/12、judging-guidance 的 j2-1/j2-2（均为被删对象专属块）；AC-pack1-12 解绑为仅保留禁区黑名单不变量。B 类反向夹具（judging j2-3/j2-3b）与技能面内容判据全部保留。",
+  "reason": "Q-3 迁工具定义收尾：persona 删 #0b/#1/#7/#0t 四条（其「何时必须做」已在 wave_plan / member_status / member_settle 工具定义中；#0t 的三查补进 member_settle 描述）；连带 AC-pack1-6 解绑 §0t（注入面已无 0t 条目），仅核 §0i/§0s。断言数不变（10885），仅该测试文件行数变化。",
   "schema": 1,
   "totals": {
     "asserts": 10885,
     "blankLines": 5766,
     "files": 206,
-    "lines": 62265,
+    "lines": 62267,
     "tautologies": 0,
     "tests": 2192,
     "todos": 4

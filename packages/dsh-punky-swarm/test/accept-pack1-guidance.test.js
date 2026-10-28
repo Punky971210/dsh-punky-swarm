@@ -170,13 +170,15 @@ test('AC-pack1-2 三新节 §0i/§0s/§0t 在场且小节标题 id 不重复', (
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-6 注意事项面不复制操作原文（Q-B）：最长公共窗口 = 0 且每节 ≥ 120 字
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-6 三新节与对应注入面条目：24 字窗命中 = 0，且每节正文 ≥ 120 字', () => {
+test('AC-pack1-6 注入面条目与对应正文小节：24 字窗命中 = 0，且每节正文 ≥ 120 字', () => {
   // 失败条件：任一节出现 ≥24 字的连续公共串（= 把操作面整句抄进正文，Q-B 硬阈值被破），
   //           或任一节正文 < 120 字（= 用一行抄过去再改名绕过阈值）。
+  // 已解绑 §0t：其「何时必须做」于 2026-10-28 迁入 `member_settle` 工具定义（Q-3），
+  //   注入面不再有条目 ⇒ 只核仍留在注入面的两节（§0i / §0s）。
   const body = readRel(DISCIPLINE_REL);
   const entries = new Map(inlineEntriesOf(readRel(GUIDANCE_REL)).map((e) => [e.id, e.text]));
   const report = [];
-  for (const id of ['0i', '0s', '0t']) {
+  for (const id of ['0i', '0s']) {
     const sec = sectionOf(body, id);
     assert.ok(sec, `§${id} 小节缺失（无法核 AC-6）`);
     const entryText = entries.get(id);
