@@ -56,9 +56,9 @@
 ### 一、Tier3 分层与契约时点
 
 - **终态冻结**：批次一旦进入 `complete` / `aborted`（终态），**任何成员迁移一律拒**（`GATE_BATCH_TERMINAL`）——不得再出现「成员又被改写成 running」这类自相矛盾状态。**返工边已去除（K3，2026-09-21）**：`lib/schema.js` 的 `MEMBER_TRANSITIONS` 现为 `review: ['merged','conflict','failed']`（**无 `running`**）⇒ 失败 / 冲突 lane 即**终态**，返工 = **gap-list + 新任务批次**，不是原地改状态。
-- **Manager 在册缺口的现役留痕面（M-02 订正，2026-09-24）**：旧「批次收口告警」事件 `gate.manager_missing` **已删**（`lib/**` 内**零命中**；退役码锁 `test/retired-codes-lock.test.js` 登记 `GATE_MANAGER_MISSING`，事由「收口告警删（2026-09-22 用户裁定）」）。现役口径 = **建批期官方 roster 承抽**：声明（或缺省归一为）`managerPlan:'raise'` 的批，在 `wave_plan` 建批时读官方 roster（`ctx.get('agentTeams')` → `listMembers`）——roster 可读而**无约定名 `manager` 成员** ⇒ 落**观察事件** `gate.manager_roster_gap`（**非拒态**、不改相位），并把「声明值 × roster 事实」**双面回显**（`wave_plan.managerRoster` / `batch_status.managerRoster`，含 `ok` / `inRoster` / `source:'roster'` / `reason`）。声明 `leader-direct` 的批**不触发**该留痕。读端据此判「**默认拉起是否落实**」。
+- **Manager 在册缺口的留痕面**：现役口径 = **建批期官方 roster 承抽**——声明（或缺省归一为）`managerPlan:'raise'` 的批，`wave_plan` 建批时读官方 roster（`ctx.get('agentTeams')` → `listMembers`）；roster 可读而**无约定名 `manager` 成员** ⇒ 落**观察事件** `gate.manager_roster_gap`（**非拒态**、不改相位），并把「声明值 × roster 事实」**双面回显**（`wave_plan.managerRoster` / `batch_status.managerRoster`）。声明 `leader-direct` 的批**不触发**。读端据此判「**默认拉起是否落实**」。
 
-- **拉起时序（M-01 订正，2026-09-24：引擎硬门已删）**：原「建批即拉起」硬门禁——声明 `raise` 的批首个 exec 层 lane 派发前未登记 Manager 即**拒派** `GATE_MANAGER_NOT_RAISED`——**已整体删除**：该码名在整个 package 的 `lib/**` 内**字面零命中**（2026-09-21 可达性审计「码名已字面删除，避免 grep 误当活码」；`lib/state/gates.js` 保留史迹注释块 + `void bAsm` 锚点，注释明写「**派发面不再因未登记 Manager 而拒**」）。现行三条：① **`managerPlan` 缺省仍为 `raise`**（建批参数默认值，随 `batch.assembly` 持久化、`gate_status` 可读 ⇒「默认 raise」仍是**引擎可核事实**）；② **无派发面硬门** —— 未登记 Manager 不拦派发，在册缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised` 事件，任意相位可登记、幂等；**不构成在册判据**，在册以官方 roster 为准）。⇒ 「必须先拉起再派 exec」的约束力**自引擎门降为纪律**（Leader 不自证通过即无门可拦，故按**存档件**自持——0f / 0g 两节原文已整体移出正文，逐字存档于工作区 `reports/onto-suspended-items-snapshot-20260926.md` §三）。
+- **拉起时序**：引擎侧**无派发面硬门**（原「未登记 Manager 即拒派」的码已退役、`lib/**` 零命中）⇒ 现行三条：① **`managerPlan` 缺省仍为 `raise`**（随 `batch.assembly` 持久化、`gate_status` 可读 ⇒ 引擎可核事实）；② 未登记 Manager **不拦派发**，缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised`，幂等；**不构成在册判据**）。⇒ 「先拉起再派 exec」的约束力**自引擎门降为纪律**（0f / 0g 原文存档于工作区 `reports/onto-suspended-items-snapshot-20260926.md` §三）。
 - 委派前用 `assign_check({ difficulty, rationale, scope: "full" })` **主动写入**难度 A/B/C/D（档位定义与判据契约见 §0；**D 档的通道轴 `derivedChannel`**、偏离三要素与其正当形态亦见 §0）；**C / D 类必须 `wave_plan` 建批**。
 - 三层批次按 **plan → exec → audit** 分层，门禁在三个时点把关：
 
@@ -85,13 +85,10 @@
 
 ### 四、`team` 参数（2026-09-27：**可选自由标签**；团队资产面与链声明面已整体退役）
 
-> **2026-09-27 用户裁决「`team-asset` 装配方案全面弃用」「`team` 接口与对应门禁已无使用价值」「`teamsRoot` 家族一并删除」＋ 批 `retire-team-chain-20260927` 清尾**：`team` **现为可选自由标签**；团队资产面与 `chain` 声明面**已整体删除**。**层号「四」逐字保留**——正文多处按「§0b 四」逐字引用它；**退役面细节归档于 §0o**。
-
-- **现语义 = 可选自由标签（`string | null`）**：`wave_plan` 的 `team` **不传 / `null` / 空白 / 非字符串 ⇒ 无标签（归一为 `null`）**，批次**照常落盘**（**漏传不再是错误，也没有任何宿主 schema 拒收**）。**标签可自取、不要求已注册、不要求存在**，**仅作批次归类**。
-- **不解析、不校验、不参与装配**：标签**不参与**资产解析 / 装配 / `[skills=…]` 前缀 / `flows` / `roles` / 资产指纹，**不构成任何建批门禁**。「尽力解析 + `warnings` 留痕」的中间形态**已随之取消**——相关读端（`normalizeTeamLabel` / `resolveTeamAssetFace` / `teamAssetCandidates` / `assertTeamNameRequired` / `assertTeamAssetReady` / `assertChainReady`）**已删除**，`lib/**` 零字面量。
-- **团队资产面 = 已退役（进退役锁）**：装载器 `lib/assembly/team-asset.js`、5 件 `presets/*/team-asset.yml`、`TEAM_ASSET_*` 码族、`teamsRoot` 参数与 `TEAM_ASSET_*` / `GATE_TEAMS_ROOT_*` / `TEAMS_ROOT_IGNORED` 码**已删净**，**全部进退役锁**（`test/retired-codes-lock.test.js`：`lib/**` 零字面量命中、**含注释**，防回生）；**5 件资产不留空壳**。
-- **选型（仅建议，非约束）**：可按**任务领域就近**自取语义化标签（软件改造 → `software-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`）——**`team` 不是资产查找键，选错 / 不选均零后果**。
-- **历史（保留可读）**：旧口径把 `punky-preset`（**预设模式**资产）与 `generic`（已废除）列为**「严格禁止的两个值」**，并把 `team` 设为**必填且必须解析到资产**（旧标题尾注 = 「2026-09-26 订正：**必填，勿漏**」）——**该口径已作废**：两者今日只作普通自由标签。命名空间消歧仍是事实：`presets/punky-preset/` = **预设（模式）资产**（`agent.cordis.yml` / `references/`），**不是团队资产**。
+- **现语义 = 可选自由标签（`string | null`）**：`wave_plan` 的 `team` 不传 / `null` / 空白 / 非字符串 ⇒ 无标签，批次**照常落盘**（漏传不是错误、无宿主 schema 拒收）；标签可自取、不要求已注册、**仅作批次归类**。
+- **不解析、不校验、不参与装配**：不参与资产解析 / 装配 / `[skills=…]` 前缀 / `flows` / `roles` / 资产指纹，**不构成任何建批门禁**；原「尽力解析 + `warnings` 留痕」的中间形态已取消。
+- **选型（仅建议，非约束）**：可按任务领域就近自取语义化标签（软件改造 → `software-team`；方案/数据/UI 蓝图 → `design-team`；调研 → `research-team`；写作 → `writing-team`）——**选错 / 不选均零后果**。
+- **退役面（团队资产面 + `chain` 声明面）不在本节展开**：已整条删净并进退役锁（`test/retired-codes-lock.test.js`）；装载器、`presets/*/team-asset.yml`、`TEAM_ASSET_*` / `GATE_TEAMS_ROOT_*` / `TEAMS_ROOT_IGNORED` 码族与读端细节**见 §0o**，逐条沿革见 `CHANGELOG.md`。
 
 ## §0c 职责分工
 
@@ -146,7 +143,7 @@
 - **今日怎么组临时团队**：用 `team` **自由标签**（仅作批次归类，**零解析、零校验、零拒态**）＋ **按成员槽位与指引装配**（团队层 skill ／ 本指引）——**不需要、也没有**资产文件或资产根。
 - **`assembly` 入参仍是装配的唯一真源**：`config.assembly` 整份存在时即生效；资产面退役后**不存在**「资产 vs `config.assembly` 优先级」问题。
 - **仍可达的建批拒态（一字未减）**：装配声明门（`GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID`）、`GATE_CHANNEL_*`；**同族引擎默认面**（plan 判据源锚点、entry consume 强制）亦保留。**已随之删除的「声明驱动门」**：`GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_CONTRACT_EXEMPT` / `GATE_EXEC_INPUT_MISSING`——判据全部取自团队声明 ⇒ 声明面不存在后**恒不触发**（空转面，删 = 零行为变更）。
-- **历史（保留可读）**：旧口径含 `teamsRoot` 词法 / 防逃逸 / 资产查找判据、`TEAMS_ROOT_IGNORED` 留痕码、`TEAM_ASSET_*` 原码进 `warnings` 的中间形态——**整族已退役删净**（码面进退役锁、`lib/**` 零字面量含注释、防回生）。
+- **历史**：旧口径（资产声明面 / 链声明面 / 角色词法旧读端）已随退役面删净，本节只保留现役口径；逐条沿革与旧文见 `CHANGELOG.md` 与 `git log`。
 
 ### 二、红线（不可绕过）
 
@@ -169,7 +166,7 @@
 - **角色词法集 = 引擎基础集（2026-09-27 本批订正：资产声明面已整体退役）**：`task.role` 与 `assembly.roles` 按「引擎基础集（8）∪ 装配扩展（盲审三角色）」判定——**资产各层声明角色（`layers[*].roles`）与 `roles.extra` 两路读端已删净**（`resolveTeamRoles` / `unionRoleVocabulary` 随本批删除 ⇒ 建批 `extraRoles` **恒空**）；自定义角色名 ⇒ 只落 `GATE_ROLE_INVALID` **告警**（**非拒态**）。
 - **牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——**资产侧扩展牵头角色声明位早已不存在**（`roles.plan_leads` / `roles.audit_leads` 随 2026-09-26 裁决 Q-8=C 全链删除）；**牵头角色 ≠ Manager**（见存档件 §三 的 0g 三）。
   - 2026-09-14 前的旧口径（**已作废**）：`extra` 只读 `roles.extra`，且「角色写进 layers 却没抄进 `roles.extra`」的团队每个自定义角色被判 `GATE_ROLE_INVALID`（实测 5 条非法告警 + 2 条缺牵头告警）。
-- **历史（保留可读）**：旧口径含 ①「`layers[<层>].roles` 里的角色名**即为**该团队的合法角色」②「读端缓存以**资产路径 + mtime + size** 签名判新旧（`lib/assembly/team-asset.js#teamAssetSignature`），同进程补声明后重建批即读到新值」③「`assembly` 须由调用方按**同一 root** 解析后传入（`resolveAssembly(team, null, {root: teamsRoot})`）」——**三条均已作废**：资产面、缓存签名与 `teamsRoot` 一并删净，「资产改动即时生效」问题**无对象**。
+- **历史**：旧口径（资产声明面 / 链声明面 / 角色词法旧读端）已随退役面删净，本节只保留现役口径；逐条沿革与旧文见 `CHANGELOG.md` 与 `git log`。
 
 ### 六、已知踩坑与运行事实（如实记录）
 
@@ -210,7 +207,7 @@
 - **声明位已不存在**：`audit_contract` 原声明于团队资产 `flows.audit.audit_contract`（与同层 `contract` 分属不同键）；**资产装载器与 5 件资产已删净** ⇒ 该声明位**无载体**。
 - **声明驱动门已删净**：`GATE_AUDIT_CONTRACT_MISSING` / `GATE_AUDIT_CONTRACT_EXEMPT` 判据**全部取自团队声明** ⇒ 声明面不存在后**恒不触发**（空转面，删 = 零行为变更，与 §0j 一 同口径）。
 - **现役判据面（引擎基线，一字未减）**：① **entry 期** —— audit lane 的 `consume` 须命中**判据源锚点**（`plan/` 前缀产物任一）；命中产物**正文须含裸标题 `## 验收标准`** ⇒ 仍拒派 `GATE_AUDIT_INPUT_MISSING` / `GATE_AUDIT_CRITERIA_MISSING`；② **complete 期** —— audit 结论取值域按**引擎基线** `['pass','skip']`（legacy `flows.complete.require_audit_outcomes` 回落早已**完全清退**）。⇒ **判据源只能由建批 tasks 的 `consume`（Leader 侧）表达**，本节硬要求不变。
-- **历史（保留可读）**：旧 P2 面含四字段消费点（`criteria_from` 由 entry 期 glob 指名 / `consumes_required` 建批期层前缀覆盖 / `verdict` complete 门唯一真源 / `exempt`·`reason` 豁免载荷）与「fail-closed 防幽灵通过」立意——**随资产面整体退役**；`checklist_anchor` 更早已移除（自由文本**不可机器判定** ⇒ 归**技能手册/文档面**，不占引擎声明面）。
+- **历史**：旧口径（资产声明面 / 链声明面 / 角色词法旧读端）已随退役面删净，本节只保留现役口径；逐条沿革与旧文见 `CHANGELOG.md` 与 `git log`。
 
 **自检问句（audit lane 开跑前）**：① 判据来自哪份 plan 产物的哪几条验收标准？② 本轮做的是「逐条核对」还是「重新设计」？③ 能否给结论？若否：缺哪条证据、进 gap-list 哪个字段？
 
