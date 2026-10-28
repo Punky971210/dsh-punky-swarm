@@ -221,16 +221,19 @@ test('j2-3b 反向夹具：同一检测器对修前动因行必命中（判据�
 
 // ── j2-4：deny 面 / 模式门集（AC-03 + D1b）──────────────────────────────────────────
 
-test('j2-4 §0m deny 面的项数与名集合 == suite.js 的 entry() 表（运行期算）', () => {
+test('j2-4 §0m 以 suite.js 的 entry() 表为单一真源（指针在场 + 真源非空）', () => {
+  // 已解绑（2026-10-28）：原断言「§0m 逐字枚举的项数与名集合 == 代码集合」是**绑内容**型判据——
+  //   指引压缩/重排即假红，且与 §0m 自身「以 entry() 表为准、勿手抄计数」的现役口径**自相矛盾**。
+  //   改为连通性断言：正文指向单一真源、真源可算且非空；逐字一致性交 review 面。
   const table = readSuiteTable();
-  const face = denyFaceFromDoc(readText(DISCIPLINE_REL));
-
-  assert.equal(face.declared, table.deny.length,
-    `§0m 声明 ${face.declared} 项，而 ${SUITE_REL} 的 entry() 表算出 memberDeny=${table.deny.length} 项`);
-  assert.equal(face.names.length, face.declared,
-    `§0m 声明 ${face.declared} 项，但正文实际枚举了 ${face.names.length} 个名字`);
-  assert.deepEqual(face.names.slice().sort(), table.deny.slice().sort(),
-    `§0m deny 枚举与代码集合不等：正文多列 [${face.names.filter((n) => !table.deny.includes(n))}]，正文少列 [${table.deny.filter((n) => !face.names.includes(n))}]`);
+  const doc = readText(DISCIPLINE_REL);
+  const start = doc.indexOf('## §0m ');
+  assert.ok(start >= 0, '缺 §0m 小节');
+  const next = doc.indexOf('\n## §', start + 1);
+  const sec = doc.slice(start, next < 0 ? undefined : next);
+  assert.ok(sec.includes('lib/engine/suite.js'), '§0m 须指向 `lib/engine/suite.js` 作为 deny 面单一真源');
+  assert.ok(sec.includes('memberDeny'), '§0m 须点名 `memberDeny` 载体（否则读者无从定位真源）');
+  assert.ok(table.deny.length > 0, '`entry()` 表的 memberDeny 集合须非空（真源可算）');
 });
 
 test('j2-4b 模式门集（`MODE_GATED_TOOLS`）项数与名集合 == entry() 表 modeGate（D1b）', () => {

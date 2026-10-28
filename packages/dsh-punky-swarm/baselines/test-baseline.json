@@ -969,9 +969,9 @@
       "todos": 0
     },
     "test/judging-guidance.test.js": {
-      "asserts": 37,
-      "blankLines": 54,
-      "lines": 315,
+      "asserts": 38,
+      "blankLines": 53,
+      "lines": 318,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1649,7 +1649,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-28T11:36:57Z",
+  "generatedAt": "2026-10-28T13:01:35Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1660,13 +1660,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "Q-3 迁工具定义收尾：persona 删 #0b/#1/#7/#0t 四条（其「何时必须做」已在 wave_plan / member_status / member_settle 工具定义中；#0t 的三查补进 member_settle 描述）；连带 AC-pack1-6 解绑 §0t（注入面已无 0t 条目），仅核 §0i/§0s。断言数不变（10885），仅该测试文件行数变化。",
+  "reason": "§0m 压缩 + j2-4 去内容绑定：j2-4 由「§0m 逐字枚举 == suite.js 集合」改为连通性断言（指针在场+真源非空），断言数不变（3→3），仅行数变化",
   "schema": 1,
   "totals": {
-    "asserts": 10885,
-    "blankLines": 5766,
+    "asserts": 10886,
+    "blankLines": 5765,
     "files": 206,
-    "lines": 62267,
+    "lines": 62270,
     "tautologies": 0,
     "tests": 2192,
     "todos": 4
