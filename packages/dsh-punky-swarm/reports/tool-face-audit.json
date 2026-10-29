@@ -1,0 +1,148 @@
+{
+  "generatedAt": "2026-10-29T06:21:52.000Z",
+  "criteria": [
+    "H-1",
+    "H-2",
+    "H-3"
+  ],
+  "s1": [
+    "assign_check",
+    "wave_plan",
+    "member_status",
+    "member_settle",
+    "batch_phase",
+    "batch_control",
+    "lane_dispatch",
+    "lane_claim",
+    "lane_release",
+    "gate_status",
+    "artifact_types",
+    "asset_claim",
+    "subagent",
+    "subagent_fork",
+    "batch_status",
+    "log_export",
+    "lane_heartbeat",
+    "lane_longrun",
+    "lane_checkpoint_status",
+    "mailbox_read",
+    "mailbox_ack",
+    "swarm_report",
+    "swarm_cc",
+    "mailbox_send",
+    "lane_worktree_create",
+    "lane_worktree_merge",
+    "lane_checkpoint",
+    "handoff_submit",
+    "handoff_view",
+    "task_pool",
+    "batch_tasks_add",
+    "task_update",
+    "send_message",
+    "interrupt_agent",
+    "list_agents",
+    "wait_agent",
+    "spawn_teammate",
+    "role_guide",
+    "handoff_accept"
+  ],
+  "s2": [
+    "wave_plan",
+    "batch_phase",
+    "batch_control",
+    "batch_status",
+    "artifact_types",
+    "assign_check",
+    "asset_claim",
+    "gate_status",
+    "role_guide",
+    "lane_claim",
+    "lane_release",
+    "member_settle",
+    "handoff_submit",
+    "handoff_view",
+    "handoff_accept",
+    "lane_dispatch",
+    "swarm_report",
+    "swarm_cc",
+    "member_status",
+    "task_pool",
+    "batch_tasks_add",
+    "task_update",
+    "mailbox_send",
+    "mailbox_read",
+    "mailbox_ack",
+    "lane_heartbeat",
+    "lane_longrun",
+    "lane_worktree_create",
+    "lane_worktree_merge",
+    "lane_checkpoint",
+    "lane_checkpoint_status"
+  ],
+  "s3": [
+    "handoff_submit",
+    "handoff_accept",
+    "handoff_view",
+    "lane_checkpoint",
+    "asset_claim",
+    "artifact_types",
+    "lane_worktree_create",
+    "lane_worktree_merge",
+    "task_update",
+    "wave_plan",
+    "batch_control",
+    "batch_phase",
+    "batch_status",
+    "batch_tasks_add",
+    "lane_dispatch",
+    "lane_release",
+    "lane_claim",
+    "task_pool",
+    "log_export",
+    "assign_check",
+    "gate_status",
+    "member_settle",
+    "member_status",
+    "role_guide",
+    "swarm_cc",
+    "swarm_report"
+  ],
+  "s4both": [],
+  "faceDiff": {
+    "blueprintOnly": [
+      "log_export"
+    ],
+    "registryOnly": [
+      "lane_checkpoint_status"
+    ],
+    "baseline": {
+      "blueprintOnly": [
+        "log_export"
+      ],
+      "registryOnly": [
+        "lane_checkpoint_status"
+      ]
+    }
+  },
+  "口径展示位": {
+    "current": 39,
+    "afterDelete": 34,
+    "default": 31,
+    "defaultAfterDelete": 26
+  },
+  "checks": {
+    "D1": true,
+    "D2": true,
+    "D3": true
+  },
+  "hits": [],
+  "warn": [
+    {
+      "criterion": "H-3",
+      "names": [
+        "37 != 39"
+      ]
+    }
+  ],
+  "exit": 0
+}

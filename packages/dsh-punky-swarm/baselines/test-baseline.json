@@ -1456,6 +1456,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/tool-face-ledger.test.js": {
+      "asserts": 29,
+      "blankLines": 33,
+      "lines": 271,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
@@ -1665,7 +1673,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T05:43:54Z",
+  "generatedAt": "2026-10-29T06:21:45Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,15 +1684,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "merge b93e4b8 后重冻：并入源仓 L5-W04（ops_bash 归入禁用 sleep 栏）带来的 test/l5-wait-ban.test.js + test/governance-preset-loader.test.js 增量（asserts +2 / lines +2），叠加本副本 CAP-W2 两测试文件（tests +14 / asserts +63）；Δ 覆盖两者之和",
+  "reason": "punky-g0-clear-2026-10-29: 新增 test/tool-face-ledger.test.js（9 tests）与 scripts/tool-face-diff.mjs / tool-face-audit.mjs（非 test 面，不计入 totals）；Δ files +1, tests +9, asserts +N, lines +两脚本与测试行数；本批删除零、lib/** 零改动",
   "schema": 1,
   "totals": {
-    "asserts": 10951,
-    "blankLines": 5839,
-    "files": 208,
-    "lines": 62811,
+    "asserts": 10980,
+    "blankLines": 5872,
+    "files": 209,
+    "lines": 63082,
     "tautologies": 0,
-    "tests": 2206,
+    "tests": 2215,
     "todos": 4
   }
 }
