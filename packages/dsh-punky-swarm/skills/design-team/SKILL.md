@@ -252,6 +252,6 @@ triggers:
 - **lane id 纪律**：须逐字等于资产 `branches[].id`，否则链推进落 `no-lane-for-step`。
 - **交接顺序**：产出后**先 `handoff_submit`、再发 `settle-request`**（顺序反了 auto-settle 判 `GATE_HANDOFF_MISSING` 并使批暂停）。
 - **exec ↔ plan 依赖（**三道门**）**：**exec 分支之间无 `deps`**（可高并发并行、lane 数不限），但**每个 exec lane 必须消费 plan 产物**——由引擎在建批期强制：`flows.exec.consumes_required_per_lane: ["plan/"]`（**逐 lane**，任一 exec lane 缺该前缀 ⇒ 拒建批 `GATE_EXEC_INPUT_MISSING`）＋ `flows.exec.consumes_required: ["plan/"]`（**批级**覆盖）；另 `GATE_ORPHAN_PRODUCT` 保证 plan 产物不被孤儿化（plan 层硬拒），entry 门 `GATE_ENTRY_MISSING` 保证声明的 consume **逐个在场**后才派发。⇒ **exec 形态自由（无 deps），但与 plan 的依赖是硬门禁**；lane 间真实依赖由建批 `tasks[].deps` 声明。
-- **通信**：`mailbox_send`（inbox/outbox/broadcast）只写元数据；`swarm_report` 回 Leader、`swarm_cc` 抄送 Manager。
+- **通信**：`swarm_report` 回 Leader、`swarm_cc` 抄送 Manager（**只写元数据**，不复制正文；原 `mailbox_send` 传递通道已于 G3 B1 删除）。
 - **进度**：每完成一子步骤落 `<lane>/progress/NN-<slug>.md`（**lane 域**，勿落层域）。
 - **止轮与收口**：需止住自动推进用 `batch_control(pause)`（非终态、可逆）；**先了结成员态（`member_settle`）→ 再迁相位到终态**（写成员态属 C 档动作）。

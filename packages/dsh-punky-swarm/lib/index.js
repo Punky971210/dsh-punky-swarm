@@ -278,7 +278,7 @@ const installWatchRuntime = ({ ctx, config, store, root }) => {
   // watch 心跳引擎（lane 过期检测 + longrun 档）：出厂默认开（resolveWatchConfig 缺省 enabled=true）——
   // 仅显式 capabilities.watch.enabled:false 时引擎不创建、watchdog 定时器不挂（零运行时开销）。
   // 引擎引用 holder（heartbeatRef）：热重建（applyConfigChange 生效变化
-  // 通道 / boot 对账）后，watchdog timer 回调与 lane_heartbeat/lane_longrun 工具经 heartbeatRef.current
+  // 通道 / boot 对账）后，watchdog timer 回调与 lane_heartbeat/lane_longrun 工具（均已于 G3/B1 删除）经 heartbeatRef.current
   // 执行时解引用、自动跟随新实例（修复「工具闭包绑创建时旧引擎 → 热重建后静默失效」缺陷）。
   const watchCfg = resolveWatchConfig(config);
   const longrunCfg = resolveLongrunConfig(config); // longrun 档独立解析于 lane-heartbeat.js
@@ -837,7 +837,7 @@ const createWatchRemounter = ({ ctx, config, store, mailbox, root, heartbeatRef,
   //   heartbeatRef.current + watchInstalledCfg。幂等：无生效变化零操作。
   //   运行时状态重置契约：引擎内存状态表随 dispose 清空、重建后从事件流/产物 mtime 基线重算
   //   （lane-heartbeat baselineTs 兜底）——不会误 stalled；longrun 候选去重以事件流 runningSince 为准，
-  //   跨重建不重复产 candidate。工具注册面仍启动静态：运行期关闭只停扫描，lane_heartbeat/lane_longrun
+  //   跨重建不重复产 candidate。工具注册面仍启动静态：运行期关闭只停扫描，lane_heartbeat/lane_longrun（已于 G3/B1 删除）
   //   查询返回 disabled 状态（lane-heartbeat.js 工具侧 getHeartbeat 执行时解引用）。
   const remountWatchEngine = (nextConfig, logTag) => {
     const wc = resolveWatchConfig(nextConfig);

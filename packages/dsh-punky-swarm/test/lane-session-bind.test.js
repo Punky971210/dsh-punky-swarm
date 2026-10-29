@@ -491,7 +491,7 @@ test('覆盖面：任务包点名的治理工具均消费 resolver（注册表 +
     'lib/tools/lane-tools.js': [/lane_worktree_create/, /lane_checkpoint'/, /lane_checkpoint_status/, /lane_worktree_merge/],
     'lib/tools/member-tools.js': [/lane_claim/, /lane_release/, /member_settle/, /lane_dispatch/, /member_status/],
     'lib/tools/handoff-tools.js': [/handoff_submit/, /handoff_view/],
-    'lib/tools/mailbox-tools.js': [/mailbox_send/, /mailbox_read/, /mailbox_ack/],
+    // B1：lib/tools/mailbox-tools.js 已整件删除（三个 mailbox 工具随之）
     'lib/tools/asset-tools.js': [/asset_claim/],
     'lib/tools/log-tools.js': [/log_export/],
   };
@@ -667,8 +667,10 @@ test('Q-C 派生化：残留清单现算（旧硬编码清单已失配）+ 检�
   const mixed = wired.filter((f) => twoArgCallCount(inventory.find((x) => x.file === f).src) > 0);
   const pureWired = wired.filter((f) => !mixed.includes(f));
   assert.deepEqual(mixed, Object.keys(MIXED_LEGACY_TWO_ARG).sort(), '混合既有形态件须与在册登记逐字一致');
-  assert.equal(pureWired.length, 8, '已接线且零两参的文件数（现算）：' + pureWired.join(', '));
-  assert.equal(wired.length, 8 + Object.keys(MIXED_LEGACY_TWO_ARG).length, '已接线文件数 = 纯已接线 + 在册混合件');
+  // 【2026-10-30 G3 B1】原「pureWired.length === 8」是**派生集的计数硬编码**；B1 删掉 lib/tools/mailbox-tools.js 后
+  //   该派生集合法缩小一件 ⇒ 改为**集合式判据**（更强，且不再随文件增删而假红；C-7「主判为集合关系」）：
+  assert.deepEqual(pureWired.slice().sort(), ['asset-tools.js', 'handoff-tools.js', 'lane-tools.js', 'log-tools.js', 'member-tools.js', 'query-tools.js', 'shared.js'], '已接线且零两参的文件集（现算）');
+  assert.equal(wired.length, pureWired.length + Object.keys(MIXED_LEGACY_TWO_ARG).length, '已接线文件数 = 纯已接线 + 在册混合件');
   // ⑤ 未接线调用点**计数**留档（新增未接线调用点会让本行数字变 ⇒ 审计可见）
   assert.deepEqual(unwiredCallSitesOf(inventory), [
     'assign-tools.js x1', 'core.js x2', 'task-tools.js x2', 'wave-plan-tools.js x1',

@@ -49,8 +49,17 @@ const SUITE_ONLY_BASELINE = [
   'log_export', 'subagent', 'subagent_fork', 'send_message',
   'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate',
 ];
-// 本批开工时护栏资产的 sha256（AC-12：本批只读它 ⇒ 前后必须一致）
-const GUARD_ASSET_SHA_AT_START = '78125558daf53165c42cb2bb0e565e35336e8f364b1a068e36be56f476af1e80';
+// 护栏资产 sha256 —— **本批已按授权变更更新**（记录变更，不是抹掉变更）。
+//   旧值 `78125558daf53165c42cb2bb0e565e35336e8f364b1a068e36be56f476af1e80`（HEAD `4a793d6` 开工时）
+//   新值 `f79cc9c6305fb9703f326f882d9ddf6038ab02a8c505e1366b24b643dad30410`（B1 终态）
+//   【授权依据（逐条可核，勿删）】
+//     ① 批 `punky-g3-b1-delete5-2026-10-30` 的 `plan/p1-pack.md` **§2.2 把本文件划入 `e3-docs` 写域**
+//        （`presets/hook-rules/l5-wait-ban.json` = preset 5 件之一）⇒ 允许 e3 改；
+//     ② e3 的改动面经 `git diff` 逐行核：**只改 `not_in_scope` 文案**（把已删的 `lane_heartbeat`
+//        从「状态查询工具」枚举里去掉），`toolBan` 4 条与 `ruleCount` **无任何增删行**，JSON 仍合法；
+//     ③ 本文件原注释「AC-12：本批只读它」与 §2.2 的写域分配**是包内自相矛盾**（已由 Leader 裁定
+//        以 §2.2 为准，并记入包缺口）⇒ 冻结 sha 随之更新；若将来再变而**无授权依据**，本判据仍会红。
+const GUARD_ASSET_SHA_AT_START = 'f79cc9c6305fb9703f326f882d9ddf6038ab02a8c505e1366b24b643dad30410';
 const GUARD_ASSET = 'presets/hook-rules/l5-wait-ban.json';
 const LEDGER = 'docs/tool-face-ledger.md';
 const DIFF_SCRIPT = 'scripts/tool-face-diff.mjs';
@@ -188,7 +197,11 @@ test('AC-16② 口径一致性：S1 ∖ ledger = ∅；且 ledger 每名可溯�
   const untraceable = [...rows.keys()].filter((name) => {
     if (s1.has(name)) return false;
     const disposition = cellOf(rows.get(name), '处置');
-    return !(disposition && disposition.includes('非工具'));
+    // 【2026-10-30 G3 B1】终止态新增「删」：B1 删掉 5 件后，它们在 S1（源码全集）里自然消失，
+    //   而 ledger 处置 = 「删」（由 AC-16③ 逐名钉住）⇒ 这是**合法终止态**，不是「不可溯源」。
+    //   判据未放松：仍要求每个非 S1 行**必须**有显式处置（非工具 | 删），空处置依旧红。
+    if (!disposition) return true;
+    return !(disposition.includes('非工具') || disposition.includes('删'));
   });
   assert.deepEqual(
     untraceable, [],
@@ -236,7 +249,7 @@ test('AC-12/AC-16④-2 护栏②：sleep 三条的工具 = {pwsh,bash,ops_bash}�
   assert.equal(byId.get('L5-W04').tool, 'ops_bash', 'L5-W04 须逐条断言绑定 `ops_bash`');
 
   const s1 = sourceToolNames();
-  assert.deepEqual([...sleepTools].filter((t) => s1.has(t)), [], 'sleep 三条的工具不得属源码全集 S1（39 名）');
+  assert.deepEqual([...sleepTools].filter((t) => s1.has(t)), [], 'sleep 三条的工具不得属源码全集 S1（源码全集；B1 后不再是 39 名，故不再写死计数）');
 });
 
 test('AC-12/AC-16④-3 护栏③：护栏资产 sha256 与本批开工时一致（本批只读它，C-2）', () => {
@@ -252,11 +265,13 @@ test('AC-12/AC-16④-3 护栏③：护栏资产 sha256 与本批开工时一致�
 test('AC-17 CONTROL_PLANE_TOOLS ∩ DELETED_5 = 4 名（lane_longrun 不在其中）', () => {
   const controlPlane = controlPlaneTools();
   const hit = DELETED_5.filter((name) => controlPlane.has(name));
-  // 这是**事实钉**：删除落地批必须同步该名单；本批禁改 lib（C-11）⇒ 只登记，不改。
-  assert.deepEqual(
-    new Set(hit), new Set(['mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat']),
-    'lib/verify/evidence.js 的 CONTROL_PLANE_TOOLS 与 DELETED_5 的交集（逐名）',
-  );
+  // 这是**事实钉**：删除落地批必须同步该名单。B1 落地后 e1 已把五名从 CONTROL_PLANE_TOOLS 移除 ⇒
+  //   本钉的期望从「交集 = 4 名」改为「交集 = ∅ **且** 五名逐个缺席」（更强的正向判据：
+  //   任何人把已删工具重新写回该名单都会立刻红，而不是仅仅「数量不对」）。
+  assert.deepEqual(new Set(hit), new Set([]), 'CONTROL_PLANE_TOOLS ∩ DELETED_5 必须为空集（五名已随 B1 移出）');
+  for (const name of DELETED_5) {
+    assert.equal(controlPlane.has(name), false, 'CONTROL_PLANE_TOOLS 不得再含已删工具 ' + name);
+  }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

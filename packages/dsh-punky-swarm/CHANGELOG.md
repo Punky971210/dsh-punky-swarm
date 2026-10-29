@@ -147,7 +147,7 @@
 - **测试面**：新增 `test/panel-render.test.js`（**22 例 / 97 断言 / 430 行**：引力条 0 值收起、主行动卡优先级、三层分区不混层与 exec 并行计数、契约行逐字一致、徽章零噪音、19 键文案（zh/en 各恰 1 次）、对比度 16 组、降级原因句、段纯度、≥18px 字号）；`test/client-sync.test.js` 段清单同步（+1 行）。
 - **验收（audit lane 独立复证，非引用自证）**：十项 **pass 8 / fail 1 / skip 3**，**exec 侧 blocking = 0**，gap-list 7 条全 `followup`。唯一 fail = **部署面**（3080 宿主进程启动早于本批落盘 ⇒ 内存中仍是改前 `api.js`/bundle；HTTP 探针 15 键、新键全缺），实现面以旁路独立复证为真（直 import 真源函数 + 直读批次 JSON + 自实现 WCAG 公式复算 16 组最低 4.60 + 内存复算拼装 139524 bytes 逐字节一致）。**⇒ 收口前置：一次宿主重启**。
 - **Leader 收口读数**：全量套件 **tests 1613 / pass 1609 / fail 0 / todo 4**；`baselines/test-baseline.json` 重算（+22 tests / +97 asserts / +431 lines，`--check` 0 漂移）；`pkg-hashes.txt` 重算 **358 件**（+2：`panel-model.js`、`panel-render.test.js`）`--check` **GREEN**；`check-team-assets` 五队 `ok:true`；`check-guidance-sync` **GREEN**。 （已废：脚本已退役）
-- **显式延后（登记，不静默砍）**：① **N-13** `lanesGate` 批次级一次扫描（需改 `lib/state/gates.ts` + `npx tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs` = 等价 `npm run build`，触 TD-09「构建面须用户放行」红线；现状实测 **4 次批次读/请求**）② `handoffGate` 键（需 `lib/index.js` 注入 liveConfig + `core.js` `readLiveConfig` 单点化）③ 引力条「卡住 N」引擎级 `stalled`（真源为 `lane_heartbeat`/`lane_longrun` 探针，逐请求调用 = 整批扫描）⇒ 本轮以「**待恢复 N**」（idle 计数）代替，**不冒充 stalled** ④ watch 服务端增量 ⑤ `test/api-batch-keys.test.js`（P-2/P-3 用例依赖 N-13）。
+- **显式延后（登记，不静默砍）**：① **N-13** `lanesGate` 批次级一次扫描（需改 `lib/state/gates.ts` + `npx tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs` = 等价 `npm run build`，触 TD-09「构建面须用户放行」红线；现状实测 **4 次批次读/请求**）② `handoffGate` 键（需 `lib/index.js` 注入 liveConfig + `core.js` `readLiveConfig` 单点化）③ 引力条「卡住 N」引擎级 `stalled`（真源为 `lane_heartbeat`/`lane_longrun` 探针，逐请求调用 = 整批扫描）⇒ 本轮以「**待恢复 N**」（idle 计数）代替，**不冒充 stalled** ④ watch 服务端增量 ⑤ `test/api-batch-keys.test.js`（P-2/P-3 用例依赖 N-13）。（已废：文中 `lane_heartbeat` / `lane_longrun` 探针工具已于 G3 B1 删除）
 - **教训（R-3，写入门禁口径）**：**命令 gate 的 cwd 不是包根**——解析序 = lane worktree → env `GATE_REPO_ROOT` → **批次产物根**（`lib/state/gates.js:967-983`）⇒ `gate:` 行若用裸相对路径会**假红**（exit 1，`GATE_EXIT_NONZERO`）；正确形态 = 行内自带 `cd /d <包根>`。本批首轮即因此被判 paused，修正后从产物根 `cmd /d /s /c` 复现 exit 0。
 - **生效与收口（2026-09-18 宿主重载后实测）**：引擎代码（`lib/api.js`、`lib/panel/**`、`lib/client.js`）随宿主重启生效。**部署面已闭**（原 G-1）：新进程 `pid 15576` 起于 `14:33:34`（后于本批落盘 `14:14`）；`/api/dsh-punky-swarm/batch` 探针由 **15 键 → 20 键**，七新键全在场（`danglingLanes` / `handoffs`（逐 lane 边计数）/ `assembly` / `teamAsset`（`team=engine-team, ok=true`）/ `chain` / `lanesGate` / `aipSession`），条件键 `manager` / `smoke` 正确缺场；在盘 bundle `lib/client.js` = **8 段 / 2447 行 / 139,524 B**（含 `panel-model` 段标记恰 1 处）；`pkg-hashes --check` **GREEN**、`check-guidance-sync` **GREEN**；批次 `panel-redesign-20260918` ⇒ **`complete`**。**残留（用户面）— 已确认闭环（2026-09-18）**：用户实测**面板可见**且**深链生效**（`http://127.0.0.1:3080/#cluster=session-ea465acf-…%3Apanel-redesign-20260918&view=lanes` 直达该批 `lanes` 视图）⇒ **面板项完全收口**。 （已废：脚本已退役）
 - **顺带归档（TD-24 / R-3 口径写入指引）**：`presets/punky-preset/references/discipline.md` **§0e 新增 D-9**（任务包强制项：`gate:` 行必须 cwd 无关）+ **附录 A.4** 的命令 gate cwd 契约补「两种合规范式 + 实测假红反例 + 真源 `commandCwd()`」；`skills/engine-team/SKILL.md` §交接与门禁要点 同口径加一条。**live 副本同批同步**（`~/.dsh/.agent-presets/punky-preset/references/discipline.md`、`~/.agents/skills/engine-team/SKILL.md`）⇒ `check-guidance-sync` 复跑 **GREEN**。 （已废：脚本已退役）
@@ -631,7 +631,7 @@
 - runtime.json 热写通道：保存请求经 config-trust 校验（顶层白名单 / 值域 / preset 与内联规则冲突守卫）后落盘 runtime.json，400 校验拒绝不落盘；窗口秒输入后端毫秒归一化（windowSeconds → windowMs，线协议键不落盘）。
 - 随包双语主题文档：docs/webui-governance-config(.en).md。
 
-### lane_longrun 超时无进展探针
+### lane_longrun 超时无进展探针（已废：G3 B1 已删除 `lane_longrun` / `lane_heartbeat` 工具入口）
 
 - watch 长跑档（默认开启）：running lane 运行超时且长期无 checkpoint / 活动进展 → 产候选并广播给 Manager（探针只产候选，不改成员状态），重派裁决归 Manager / Leader。
 - 与心跳 stalled 档并列扫描；事件留痕可审计。
@@ -744,7 +744,7 @@
 ## 0.2.1（2026-08-19）
 
 ### Manager 代劳指挥协作架构 + role 残留清零
-- 新增 SKILL.md「Manager 角色派发模板」：Manager=代劳指挥（只指挥不执行、不派发子代理），指挥循环 5 步（batch_status 读黑板 → mailbox_send 建议派发 → mailbox_read 收通知 → member_status/settle 结算 → report 批次完成）；任务包模板补 worker 双通道回执约定（report→Leader 简短 + mailbox_send outbox→Manager 详细）
+- 新增 SKILL.md「Manager 角色派发模板」：Manager=代劳指挥（只指挥不执行、不派发子代理），指挥循环 5 步（batch_status 读黑板 → mailbox_send 建议派发 → mailbox_read 收通知 → member_status/settle 结算 → report 批次完成）；任务包模板补 worker 双通道回执约定（report→Leader 简短 + mailbox_send outbox→Manager 详细）（已废：文中 `mailbox_send` / `mailbox_read` 工具已于 G3 B1 删除）
 - 新增 persona 纪律 0g Leader 唤醒协议：worker 由 Leader 派发（depth-1 直系）、Manager mailbox 建议、report→send_message 一行唤醒、Leader 不做调度决策（调度循环在 Manager 上下文）
 - manager.md 协作方式 5 要素更新：不派发子代理 / mailbox 建议派发 / 收 worker 通知 / member_settle 结算裁决 / worker 双通道回执
 - references/ 残留术语改写：Swarm 集群运行时术语（HITL/HATL/Converge/任务包）统一为 dsh 治理语义（人审门禁/gap-list 对账/lane 任务）。
@@ -769,7 +769,7 @@
 ## 0.1.0（未发布）
 
 ### 2026-08-17 · 引擎初版
-- 10 治理工具：wave_plan / batch_phase / batch_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；
+- 10 治理工具：wave_plan / batch_phase / batch_status / lane_claim / lane_release / member_status / member_settle / mailbox_send / mailbox_read / mailbox_ack；（已废：后三件 `mailbox_*` 已于 G3 B1 删除）
 - 状态机（成员 pending→…→merged|failed|skipped|conflict；批次 planning→…→complete）+ 原子写 + 锁 + mailbox + 恢复语义；
 - 29 单测。
 

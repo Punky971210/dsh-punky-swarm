@@ -73,9 +73,9 @@ export function laneStatusOf(cx, laneKey, ctx = null) {
 
 // 状态面派生（只读、纯）：state = 批次档优先（终态/planning/paused 三档先判，与 judgeLongrun 同序），
 //   批次档不覆盖 lane 时取 lane 自身态；锚点取 stateAnchorOf / batchPausedAnchorOf（与 state 同源）；
-//   reason 用**同一套阶梯**（§2 分派表 + U-3 优先级）在查询面复算——lane_heartbeat 与 lane_longrun
+//   reason 用**同一套阶梯**（§2 分派表 + U-3 优先级）在查询面复算——两个已删工具（lane_heartbeat / lane_longrun）
 //   对同一 lane 必须给出同一 (state, reason)（U-5：同一 state 语义不能在多工具面分裂）。
-//   （盲跑档 BR-* 需解析回调与台账，只在 longrunStatus 侧产出；查询面命中即取之——见 createHeartbeatTools。）
+//   （盲跑档 BR-* 需解析回调与台账，只在 longrunStatus 侧产出；查询面命中即取之——见心跳探针视图面。）
 function deriveStateFields(cx, batch, lane, nowTsRef, reasonOverride = null) {
   const out = {
     state: null, stateAnchorTs: null, stateResidentMs: null, dangling: false,

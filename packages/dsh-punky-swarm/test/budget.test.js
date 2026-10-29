@@ -172,7 +172,12 @@ test('B6: 恢复后链计数保留（recoverBatches 不丢 chains）', () => {
   assert.deepEqual(store.readChains('s1', 'b2'), patch, 'recover 不应丢 chains');
 });
 
-// ---------- B4/B5：接线集成（mailbox-tools.js） ----------
+// 【2026-10-30 G3 B1】原「接线集成」四例（B4 / B3 集成 / B2 集成 / B5）已删，理由：
+//   环防护的**执行点**原在 `lib/tools/mailbox-tools.js`（`checkBudget` 的唯一调用方）——该文件随 B1 整件删除 ⇒
+//   `grep -rn checkBudget lib/` 现在只剩 `lib/comms/budget.js` 的**定义**（0 调用点）⇒ 这四例测试的是**已不存在的执行路径**。
+//   保留：B1/B2/B3 三条**纯函数**判据（`checkBudget` 语义本批未改）+ B5/B6 store 侧（chains 持久化 / recover 不丢）。
+//   ⚠ 本删除**不是**放宽判据：被删的是「工具接线」面，纯函数判据一条未动。预算面是否需要在其它入口重新接线 = 交 audit/a1 的 followup。
+// ---------- （已删）原 B4/B5 接线集成 ----------
 
 const EXEC_SESS = { agent: { session: { id: 'sess-budget' } } };
 
@@ -191,72 +196,3 @@ async function makeBatch(store, byName, batchId) {
   await byName.batch_phase.execute({ batchId, phase: 'running' }, EXEC_SESS);
 }
 
-test('B4: inbox 永不受限（enabled=true 时重发同文本也不拒）', async () => {
-  const { store, byName } = makeTools({ capabilities: { budget: { enabled: true } } });
-  await makeBatch(store, byName, 'b-inbox');
-  for (let i = 0; i < 5; i++) {
-    const r = await byName.mailbox_send.execute(
-      { batchId: 'b-inbox', box: 'inbox', message: { text: '同文本' }, meta: { chain: { id: 'c1', hop: i }, from: 'leader', to: 'worker-a' } },
-      EXEC_SESS,
-    );
-    assert.equal(r.ok, true, 'inbox 第 ' + (i + 1) + ' 次不应被 budget 拒');
-  }
-  const b = store.readBatch('sess-budget', 'b-inbox');
-  assert.ok(!b.events.some((e) => e.type === 'budget.rejected'), 'inbox 不应产生 budget.rejected');
-});
-
-test('B3 集成: outbox 同链同向同文本 → REPEATED_MESSAGE 拒 + budget.rejected 留痕；跨链放行', async () => {
-  const { root, store, byName } = makeTools({ capabilities: { budget: { enabled: true } } });
-  await makeBatch(store, byName, 'b-rpt');
-  const base = { batchId: 'b-rpt', box: 'outbox', lane: 'a', message: { text: 'hello' } };
-  const m1 = { ...base, meta: { chain: { id: 'c1', hop: 0 }, from: 'worker-a', to: 'supervisor' } };
-  const r1 = await byName.mailbox_send.execute(m1, EXEC_SESS);
-  assert.equal(r1.ok, true);
-  // meta.chain 透传：已读消息的 meta.chain.hop=1（hop+1 继承）
-  const unacked = readUnacked(path.join(root, 'sessions', 'sess-budget', 'mailbox', 'b-rpt'), { type: 'outbox', lane: 'a' });
-  assert.equal(unacked[0].meta.chain.id, 'c1');
-  assert.equal(unacked[0].meta.chain.hop, 1);
-  // 同链同向同文本 → 拒
-  const r2 = await byName.mailbox_send.execute(m1, EXEC_SESS);
-  assert.equal(r2.ok, false);
-  assert.equal(r2.code, 'REPEATED_MESSAGE');
-  const b = store.readBatch('sess-budget', 'b-rpt');
-  const ev = b.events.find((e) => e.type === 'budget.rejected');
-  assert.ok(ev, 'budget.rejected 事件缺失');
-  assert.equal(ev.code, 'REPEATED_MESSAGE');
-  assert.equal(ev.lane, 'a');
-  assert.equal(ev.chainId, 'c1');
-  // 跨链（新 chainId）同文本 → 放行
-  const r3 = await byName.mailbox_send.execute({ ...base, meta: { chain: { id: 'c2', hop: 0 }, from: 'worker-a', to: 'supervisor' } }, EXEC_SESS);
-  assert.equal(r3.ok, true);
-});
-
-test('B2 集成: outbox 同链同有序对往返超限 → PING_PONG', async () => {
-  const { store, byName } = makeTools({ capabilities: { budget: { enabled: true, maxChainRoundTrips: 2 } } });
-  await makeBatch(store, byName, 'b-pp');
-  const base = { batchId: 'b-pp', box: 'outbox', lane: 'a', meta: { chain: { id: 'c1', hop: 0 }, from: 'worker-a', to: 'supervisor' } };
-  for (let i = 0; i < 2; i++) {
-    const r = await byName.mailbox_send.execute({ ...base, message: { text: 'm' + i } }, EXEC_SESS);
-    assert.equal(r.ok, true, '第 ' + (i + 1) + ' 次往返应放行');
-  }
-  const r3 = await byName.mailbox_send.execute({ ...base, message: { text: 'm2' } }, EXEC_SESS);
-  assert.equal(r3.ok, false);
-  assert.equal(r3.code, 'PING_PONG');
-});
-
-test('B5: enabled=false（显式关）→ 现有 mailbox 调用零感知（重发不被拒、无预算事件、meta 原样透传）', async () => {
-  // 行为变更：budget 缺省默认开；零感知语义由显式 capabilities.budget.enabled=false 承担（旧「缺省关」为旧行为断言）
-  const { root, store, byName } = makeTools({ capabilities: { budget: { enabled: false } } });
-  await makeBatch(store, byName, 'b-off');
-  const base = { batchId: 'b-off', box: 'outbox', lane: 'a', message: { text: 'hello' }, meta: { chain: { id: 'c1', hop: 0 } } };
-  for (let i = 0; i < 3; i++) {
-    const r = await byName.mailbox_send.execute(base, EXEC_SESS);
-    assert.equal(r.ok, true, 'enabled=false 第 ' + (i + 1) + ' 次应放行（零感知）');
-  }
-  const b = store.readBatch('sess-budget', 'b-off');
-  assert.ok(!b.events.some((e) => e.type === 'budget.rejected'), 'enabled=false 不应产生 budget.rejected');
-  // meta 原样透传（不注入 chain）
-  const unacked = readUnacked(path.join(root, 'sessions', 'sess-budget', 'mailbox', 'b-off'), { type: 'outbox', lane: 'a' });
-  assert.deepEqual(unacked[0].meta, { chain: { id: 'c1', hop: 0 } });
-assert.deepEqual(unacked.map((m) => m.message?.text), ['hello', 'hello', 'hello'], '三次同 base 发送 ⇒ 消息文本身份集合须恰为三条 hello');
-});

@@ -83,14 +83,9 @@ export const SUITE_TOOLS = Object.freeze([
   // ── 以下不入 deny、不占模式门（元数据面） ──────────────────────────────────────
   entry('batch_status', 'read', false, false, false),
   entry('log_export', 'read', false, false, false),
-  entry('lane_heartbeat', 'read', false, false, false),
-  entry('lane_longrun', 'read', false, false, false),
   entry('lane_checkpoint_status', 'read', false, false, false), // 读事件流、不调 git ⇒ 只读
-  entry('mailbox_read', 'read', false, false, false),
-  entry('mailbox_ack', 'read', false, false, false),
   entry('swarm_report', 'comms', false, false, true),
   entry('swarm_cc', 'comms', false, false, true),
-  entry('mailbox_send', 'comms', false, false, true),
   entry('lane_worktree_create', 'dispatch', false, false, true),
   entry('lane_worktree_merge', 'dispatch', false, false, true),
   entry('lane_checkpoint', 'dispatch', false, false, true), // git add -A && commit ⇒ 写面

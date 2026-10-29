@@ -71,7 +71,7 @@ export function buildHandoffTools(cx) {
       },
       async execute(args, exec) {
         // 【task-22 裁决 ①】**不落模式门**：`handoff_submit` 归 `comms` 族（成员面）——交接是**生产者的动作**，
-        //   引擎侧需要的是**第一手**交接声明（而非 Leader 转写），故与 `swarm_report`/`mailbox_send` 同形：
+        //   引擎侧需要的是**第一手**交接声明（而非 Leader 转写），故与 `swarm_report` 同形（`mailbox_send` 已于 G3/B1 删除）：
         //   非生效模式下亦可调用（只受模式门约束的治理写面不在此列）。判定点唯一：entry 门（`gates.ts`）。
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         const b = store.readBatch(sessionId, args.batchId);

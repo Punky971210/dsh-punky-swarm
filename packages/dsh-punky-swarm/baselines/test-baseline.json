@@ -265,11 +265,11 @@
       "todos": 0
     },
     "test/budget.test.js": {
-      "asserts": 64,
-      "blankLines": 27,
-      "lines": 263,
+      "asserts": 45,
+      "blankLines": 24,
+      "lines": 199,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 10,
       "todos": 0
     },
     "test/chain-v2-pairing.test.js": {
@@ -427,7 +427,7 @@
     "test/esm-first-eval.test.js": {
       "asserts": 21,
       "blankLines": 30,
-      "lines": 412,
+      "lines": 411,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1027,7 +1027,7 @@
     "test/lane-session-bind.test.js": {
       "asserts": 115,
       "blankLines": 43,
-      "lines": 683,
+      "lines": 685,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1497,17 +1497,17 @@
       "todos": 0
     },
     "test/tool-descriptor.test.js": {
-      "asserts": 72,
+      "asserts": 71,
       "blankLines": 19,
-      "lines": 236,
+      "lines": 240,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
     },
     "test/tool-face-ledger.test.js": {
-      "asserts": 29,
+      "asserts": 30,
       "blankLines": 33,
-      "lines": 271,
+      "lines": 286,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1515,15 +1515,15 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
-      "lines": 402,
+      "lines": 384,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
     },
     "test/tools.test.js": {
-      "asserts": 135,
+      "asserts": 133,
       "blankLines": 52,
-      "lines": 659,
+      "lines": 656,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -1577,11 +1577,11 @@
       "todos": 0
     },
     "test/w7e-remount-surface.test.js": {
-      "asserts": 51,
-      "blankLines": 34,
-      "lines": 340,
+      "asserts": 37,
+      "blankLines": 29,
+      "lines": 287,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 5,
       "todos": 0
     },
     "test/w7f-rt-write-surface.test.js": {
@@ -1601,51 +1601,51 @@
       "todos": 0
     },
     "test/watch-heartbeat.test.js": {
-      "asserts": 101,
-      "blankLines": 39,
-      "lines": 396,
+      "asserts": 80,
+      "blankLines": 34,
+      "lines": 305,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 10,
       "todos": 0
     },
     "test/watch-hotconfig.test.js": {
-      "asserts": 94,
-      "blankLines": 35,
-      "lines": 565,
+      "asserts": 60,
+      "blankLines": 31,
+      "lines": 456,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 8,
       "todos": 0
     },
     "test/watch-longrun-exempt.test.js": {
-      "asserts": 132,
-      "blankLines": 31,
-      "lines": 657,
+      "asserts": 125,
+      "blankLines": 30,
+      "lines": 630,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 20,
       "todos": 0
     },
     "test/watch-longrun-integration.test.js": {
-      "asserts": 69,
-      "blankLines": 14,
-      "lines": 281,
+      "asserts": 40,
+      "blankLines": 13,
+      "lines": 211,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 5,
       "todos": 0
     },
     "test/watch-longrun.test.js": {
-      "asserts": 115,
-      "blankLines": 34,
-      "lines": 498,
+      "asserts": 93,
+      "blankLines": 30,
+      "lines": 424,
       "tautologies": 0,
-      "tests": 22,
+      "tests": 19,
       "todos": 0
     },
     "test/watch-state-surface-red.test.js": {
-      "asserts": 71,
-      "blankLines": 45,
-      "lines": 617,
+      "asserts": 56,
+      "blankLines": 39,
+      "lines": 519,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 10,
       "todos": 0
     },
     "test/wave-plan-immutability-derivation.test.js": {
@@ -1721,7 +1721,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T17:43:30Z",
+  "generatedAt": "2026-10-29T19:53:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1732,15 +1732,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-g2-tail-2026-10-30: G2 四条 followup 收口（T-1 harden 对外不可传 + env 闩 + 传了即抛 / T-2 失败集合隔离 / T-3 F-3 判据改出口形状 / T-4 计数三分）+ 修复 G1 遗留的两处既有回归（legacy-fix / ratchet-wiring 伪 ctx 补宿主键桩，断言零放宽）；新增 test/g2-harden-latch.test.js(5) 与 test/g2-t4-stop-reason-source.test.js(3)",
+  "reason": "G3-B1 删 5 件（mailbox_send/read/ack + lane_heartbeat/lane_longrun）：SUITE_TOOLS 39→34、TOOL_NAMES 31→26（两套账差仍 8/∅）；asserts 11197→11034（-163，逐文件归因：watch-hotconfig -34/-4、watch-longrun-integration -29/-2、watch-longrun -22/-3、watch-heartbeat -21/-3、watch-state-surface-red -15/-2、w7e -14/-1、watch-longrun-exempt -7/-1、budget -19/-4、tools.test -2、tool-descriptor -1、tool-face-ledger +1）；tests 2262→2242（-20）；删除面 49 文件全处置 + 双路派生补 2 处（checks-k 26/27、ledger 不写死计数）；修复既有回归 gate-fixture 补 subagents 宿主键桩",
   "schema": 1,
   "totals": {
-    "asserts": 11197,
-    "blankLines": 6045,
+    "asserts": 11034,
+    "blankLines": 6016,
     "files": 215,
-    "lines": 64574,
+    "lines": 63987,
     "tautologies": 0,
-    "tests": 2262,
+    "tests": 2242,
     "todos": 4
   }
 }

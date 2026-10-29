@@ -32,7 +32,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import {
-  createLongrunTools,
+  // B1：createLongrunTools 已随工具删除
   judgeLongrun, lastProgressTsOf, isStaleBatch, lastEventTsOf,
   hasLongrunUnconsumed, longrunCandidateOf,
   resolveLongrunConfig, LONGRUN_DEFAULTS,
@@ -127,33 +127,6 @@ test('D18 反例对照：豁免只放宽时长、不放宽 noProgressWindowMs（
   assert.equal(v.checkpointFresh, true);
   assert.equal(v.candidate, false);
   assert.equal(v.reason, 'checkpoint-fresh');
-});
-
-test('D19 lane_longrun 查询透出豁免态：豁免 lane 含 exempt/effectiveMaxDurationMs/thresholdMultiplier；未豁免为 null/基础/1', async () => {
-  const root = tmpRoot('d19');
-  const S = 's-d19';
-  const batchId = 'b-d19';
-  const now = Date.now();
-  const store = seedBatch(root, {
-    S, batchId, lanes: { l1: 'running', l2: 'running' },
-    events: [mkEv(now - MAX_D - MIN, EVT_MEMBER_DISPATCH, { lane: 'l1' }), mkEv(now - MAX_D - MIN, EVT_MEMBER_DISPATCH, { lane: 'l2' })],
-    laneExempt: { l1: { grantedAt: new Date(now).toISOString(), grantedFrom: 'pending', type: 'ai-render', multiplier: 8, tierMultiplier: 8, stalled: true } },
-  });
-  const engine = laneHeartbeat(store, root, {});
-  const ctx = { tools: { register: () => {} } };
-  const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
-  const exec = { agent: { session: { id: S } } };
-  const q = await tool.execute({ batchId }, exec);
-  const r1 = q.lanes.find((r) => r.lane === 'l1');
-  const r2 = q.lanes.find((r) => r.lane === 'l2');
-  assert.equal(r1.exempt.type, 'ai-render');
-  assert.equal(r1.exempt.multiplier, 8);
-  assert.equal(r1.thresholdMultiplier, 8);
-  assert.equal(r1.effectiveMaxDurationMs, MAX_D * 8);
-  assert.equal(r2.exempt, null, '未豁免 lane：exempt = null');
-  assert.equal(r2.thresholdMultiplier, 1);
-  assert.equal(r2.effectiveMaxDurationMs, MAX_D, '未豁免 lane：有效阈值 = 基础阈值');
-  engine.dispose();
 });
 
 // ── E 组：stalled 追问豁免（验收 E20-E23）──

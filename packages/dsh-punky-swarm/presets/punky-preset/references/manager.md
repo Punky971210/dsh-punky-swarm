@@ -43,14 +43,14 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 | 序 | 动作 | 工具 |
 |---|---|---|
 | 1 | 读黑板，发现可派 lane（deps 已满足且 pending） | `batch_status` |
-| 2 | 心跳检查（过期检测；`stalled` 以事件表达，**不改变成员状态**） | `lane_heartbeat` |
-| 3 | 建议 Leader 派发（lane id + 角色建议）——**从 `batch_status` 读取 sessionId/产物根注入任务包，禁止手写**；批内多 lane 作用于**同一物理资源域**时，先取**域级物理隔离单元**并将返回路径注入任务包作 cwd 契约（persona 纪律 3） | `mailbox_send`(inbox/broadcast) |
-| 4 | 收 worker 完成通知 | `mailbox_read`(outbox) |
+| 2 | 心跳检查（过期检测；`stalled` 以事件表达，**不改变成员状态**；原 `lane_heartbeat` 已随 G3 B1 删除 ⇒ 该面只读事件） | `batch_status` / `log_export` |
+| 3 | 建议 Leader 派发（lane id + 角色建议）——**从 `batch_status` 读取 sessionId/产物根注入任务包，禁止手写**；批内多 lane 作用于**同一物理资源域**时，先取**域级物理隔离单元**并将返回路径注入任务包作 cwd 契约（persona 纪律 3） | `swarm_cc`(inbox/broadcast) |
+| 4 | 收 worker 完成通知 | `swarm_report`（原 `mailbox_read`(outbox) 已随 G3 B1 删除） |
 | 5 | 置评审态 | `member_status` running→review |
 | 6 | 结算裁决（可用 `gate_status` 复核门禁拒绝项） | `member_settle` |
 | 7 | 循环至批次全终态 → `swarm_report`「批次完成」给 Leader | — |
-| 7a | **长程豁免消费（R-3 + D-2/D-3/D-4）**：与 §5.1 第 2 步同一拍读 `lane_longrun`（缺省全批），核对每 lane 的 `candidate` / `emitted` / `reason` 与 `exempt` / `effectiveMaxDurationMs` / `thresholdMultiplier`；命中候选 → 先看 `exempt`（豁免 lane 只是**阈值更晚**，不是不出候选）→ 再按 §6 处置，**候选不因「更晚」自动作废** | `lane_longrun` |
-| 7b | **候选须 ack 留痕**：候选同时投 broadcast 与 `supervisor/inbox`（**D-3 双投**），两处 `ackId` **互相独立**，Manager 须对两处**各 ack 一次**；未 ack 超 `unconsumedTimeoutMs` → 产 `lane.longrun.unconsumed`（**未 ack 即未消费，处置责任仍在消费方**） | `mailbox_ack` / `mailbox_read`(broadcast, inbox) |
+| 7a | **长程豁免消费（R-3 + D-2/D-3/D-4）**：与 §5.1 第 2 步同一拍读**长程探针事件面**（原 `lane_longrun` 已随 G3 B1 删除，改经 `batch_status` / `log_export`），核对每 lane 的 `candidate` / `emitted` / `reason` 与 `exempt` / `effectiveMaxDurationMs` / `thresholdMultiplier`；命中候选 → 先看 `exempt`（豁免 lane 只是**阈值更晚**，不是不出候选）→ 再按 §6 处置，**候选不因「更晚」自动作废** | `batch_status` / `log_export` |
+| 7b | **候选须 ack 留痕**：候选同时投 broadcast 与 `supervisor/inbox`（**D-3 双投**），两处 `ackId` **互相独立**，Manager 须对两处**各 ack 一次**；未 ack 超 `unconsumedTimeoutMs` → 产 `lane.longrun.unconsumed`（**未 ack 即未消费，处置责任仍在消费方**） | `swarm_cc` / `swarm_report`（原 `mailbox_ack` / `mailbox_read` 已随 G3 B1 删除） |
 | 7c | **逐 lane 豁免授予 / 撤销**：仅**派发面**（`pending→running` / `idle→running`）可携带豁免参数，**成员不可自改**，**撤销须显式 `revokeExempt`**；非派发面带豁免参数一律拒（`GATE_EXEMPT_NOT_DISPATCH`）——门禁拒绝项用 `gate_status` 复核时，须先排除这类**参数位置错误**再报异常 | `member_status` / `gate_status` |
 
 **合并冲突处置**：物理隔离单元合并失败 → **保留现场**（隔离单元/分支/在途合并状态全保留）待裁决，conflict 语义由 Manager/Leader 裁决。
@@ -67,7 +67,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 ### 5.4 回执与交互
 
-- **回执（双通道）**：worker `swarm_report` 回报 Leader（简短完成信号；**G-05 订正**：旧文写的 `report` 工具在本部署不存在，成员回执的现役通道 = 引擎套件 `swarm_report`）+ `mailbox_send`(outbox) 通知 Manager（详细）；Manager **不读** `swarm_report` 全文（不经 Leader 转发全文）。**例外（`leader-direct` 批 = 无 Manager 的批）**：outbox 无消费者 ⇒ worker 走**单通道** `swarm_report`→Leader，**不写 `outbox`**（避免「发了没人读」的形式不统一；同口径见 `references/discipline.md#§4`）。
+- **回执（双通道）**：worker `swarm_report` 回报 Leader（简短完成信号；**G-05 订正**：旧文写的 `report` 工具在本部署不存在，成员回执的现役通道 = 引擎套件 `swarm_report`）+ `swarm_cc`(outbox) 通知 Manager（详细；**原 `mailbox_send` 已随 G3 B1 删除**）；Manager **不读** `swarm_report` 全文（不经 Leader 转发全文）。**例外（`leader-direct` 批 = 无 Manager 的批）**：outbox 无消费者 ⇒ worker 走**单通道** `swarm_report`→Leader，**不写 `outbox`**（避免「发了没人读」的形式不统一；同口径见 `references/discipline.md#§4`）。
 - **建议派发边界（D-1 纪律版，与 `presets/punky-preset/agent.cordis.yml` 纪律 0i + `references/discipline.md#§0i` 口径一致）**：**不得建议裸 subagent 充当执行单元**——建议一律为 **wavePlan lane + 角色**（`batch_status` 黑板读取 sessionId/产物根注入任务包）；C 类批次的执行只能落在已建批 lane 上，临时拆活走**细拆补 lane**，不绕过 wavePlan 另起 subagent。
 - **豁免与长跑处置差异**：带豁免 lane 的候选**仍会产出**（只是阈值更晚，按倍率放大幅度判据），且其 **stalled 追问同时被豁免**（`stalled: true` 语义落在豁免授权内）——故此类 lane **不得**按常规 stalled 节奏追问；但**豁免 lane 仍须写 checkpoint / 心跳**（人工巡查与近窗判读依赖之），**近窗无 checkpoint 且无活动**仍属可处置候选；**僵尸批次活跃度过滤（D-4）**：批次整体超 `staleBatchMs` 无活动（默认 24h，`0` = 显式关闭过滤）时，longrun 档**整批跳过**、候选 `reason` 记 `stale-batch`——此类候选**不重派**，按 §5.2 ①异常上报并注明「僵尸批次过滤」。
 - **交互**：由 Leader `send_message` 事件唤醒；**不主动上报空闲**（无空闲上报协议）；跨轮信息走**产物 + mailbox**（只写元数据，不复制正文，persona 纪律 4 → `references/discipline.md#§4`）。
@@ -87,7 +87,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 ### 6.1 双投与 ack（D-2 + D-3）
 
-`lane_longrun` 命中候选时**同时**投两处：**broadcast**（广播直达 Leader）与 **`supervisor/inbox`**（Manager 通道，D-3）；两处 `ackId` **互相独立**。Manager 须对**两处各 ack 一次**（`mailbox_ack`）——**未 ack 即视为未消费**：超 `unconsumedTimeoutMs` 产 `lane.longrun.unconsumed` 事件，处置责任仍在消费方，不因广播送达而转移。**D-2 判据锚定 `isAcked`**（`ack` 默认删除原消息文件，用「读未 ack」判定会把**已消费**读成**不存在** → 永久误报），故不要按消息文件是否存在反推消费。
+长程探针事件面（原 `lane_longrun`，已随 G3 B1 删除）命中候选时**同时**投两处：**broadcast**（广播直达 Leader）与 **`supervisor/inbox`**（Manager 通道，D-3）；两处 `ackId` **互相独立**。Manager 须对**两处各 ack 一次**（原 `mailbox_ack` 工具已删 ⇒ ack 经 `swarm_cc` 回执留痕）——**未 ack 即视为未消费**：超 `unconsumedTimeoutMs` 产 `lane.longrun.unconsumed` 事件，处置责任仍在消费方，不因广播送达而转移。**D-2 判据锚定 `isAcked`**（`ack` 默认删除原消息文件，用「读未 ack」判定会把**已消费**读成**不存在** → 永久误报），故不要按消息文件是否存在反推消费。
 
 ### 6.2 候选处置（豁免 lane 的差异）
 

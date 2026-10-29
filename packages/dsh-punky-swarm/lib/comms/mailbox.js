@@ -90,6 +90,13 @@ export function readUnacked(root, box, { sinceTs = 0 } = {}) {
   return items;
 }
 
+/** ack 一条消息（写回 ackId 的 acks 集合）。
+ *
+ *  ⚠ **已无工具入口**（`mailbox_ack` 工具已于 G3/B1 删除；`mailbox_send` / `mailbox_read` 同批删除）。
+ *  本函数**保留导出与行为**——存储面不随工具删（6 个 lib import / 5 个非工具消费方仍在）。
+ *  **内部化接线见 followup**：当前**无内部调用点**（原有唯一调用方就是被删的 `mailbox_ack` 工具），
+ *  新增调用会改变重投递语义（ack 一被调用即意味「已投递」）⇒ 属行为变更，不在 B1 范围。
+ */
 export function ack(root, box, ackId, { pruneOnAck = true } = {}) {
   const dir = boxDir(root, box);
   if (!ackId || typeof ackId !== 'string' || ackId.includes('..')) throw new Error('invalid ackId');

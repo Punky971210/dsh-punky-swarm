@@ -243,32 +243,9 @@ const CASES = {
     success: async (h) => h.byName.member_status.execute({ batchId: C1, lane: 'a1', status: 'running' }, EXEC),
     reject: async (h) => h.byName.member_status.execute({ batchId: C1, lane: 'a1', status: 'bogus' }, EXEC),
   },
-  mailbox_send: {
-    success: async (h) => h.byName.mailbox_send.execute(
-      { batchId: C1, box: 'inbox', message: { kind: 'census', text: '普查消息' } }, EXEC),
-    reject: async (h) => h.byName.mailbox_send.execute({ batchId: C1, box: 'bogus', message: {} }, EXEC),
-  },
-  mailbox_read: {
-    success: async (h) => h.byName.mailbox_read.execute({ batchId: C1, box: 'inbox' }, EXEC),
-    reject: async (h) => h.byName.mailbox_read.execute({ batchId: C1, box: 'bogus' }, EXEC),
-  },
-  mailbox_ack: {
-    success: async (h) => {
-      const sent = await h.byName.mailbox_send.execute(
-        { batchId: C1, box: 'inbox', message: { kind: 'census' } }, EXEC);
-      return h.byName.mailbox_ack.execute({ batchId: C1, box: 'inbox', ackId: sent.ackId }, EXEC);
-    },
-    reject: async (h) => h.byName.mailbox_ack.execute(
-      { batchId: C1, box: 'inbox', ackId: 'ghost-ack' }, EXEC),
-  },
-  lane_heartbeat: {
-    success: async (h) => h.byName.lane_heartbeat.execute({ batchId: C1 }, EXEC),
-    reject: async (h) => h.byName.lane_heartbeat.execute({ batchId: 'ghost-batch' }, EXEC),
-  },
-  lane_longrun: {
-    success: async (h) => h.byName.lane_longrun.execute({ batchId: C1 }, EXEC),
-    reject: async (h) => h.byName.lane_longrun.execute({ batchId: 'ghost-batch' }, EXEC),
-  },
+  // 【2026-10-30 G3 B1】五个工具面 CASES 条目已删（`mailbox_send`/`mailbox_read`/`mailbox_ack`/
+  //   `lane_heartbeat`/`lane_longrun` —— 工具随 B1 删除）：本普查的键集必须与**注册名集双向相等**，
+  //   残留条目会让判据红（上面的双向 assert 即为此；删除前实测正是这 5 名触发红）。
   lane_worktree_create: {
     // 夹具无 git 仓 ⇒ 预期走**返回型失败** `{ok:false,error}`（merge-agent.test.js T2.5 同口径）；
     //   该返回值同样必须满足自身 schema（这正是本普查要抓的面）。
@@ -328,9 +305,14 @@ async function probe(fn, h, tool) {
 test('TSC-1 全工具 output.schema 一致性普查：逐工具三态（成功 / 拒态 / 显式 SKIPPED），件数由注册名集派生', async () => {
   const h = await makeHarness();
   const names = h.byName && Object.keys(h.byName);
-  const registered = Object.keys(CASES).filter((n) => h.byName[n]);
-  assert.deepEqual(registered.slice().sort(), names.slice().sort(),
-    'CASES 键集必须与已注册工具名集**双向相等**（禁漏测/禁多写）');
+  // 【2026-10-30 G3 B1 修复：**真双向**】
+  //   修前：`const registered = Object.keys(CASES).filter((n) => h.byName[n]);` 再把 registered 与 names 比
+  //     ⇒ 过滤掉了「CASES 有、注册集没有」的键 ⇒ 只做到 registered ⊆ names **单向**，
+  //     而断言名却写「双向相等」⇒ **CASES 里残留已删工具名会静默通过**（判据实现 ≠ 判据名字）。
+  //   修后：直接比 **CASES 键集（不过滤）** ≡ **注册名集**，两个方向任一多/少都红。
+  const caseKeys = Object.keys(CASES).slice().sort();
+  assert.deepEqual(caseKeys, names.slice().sort(),
+    'CASES 键集必须与已注册工具名集**双向相等**（禁漏测/禁多写）：任一侧多出或少掉都判红');
 
   const rows = [];
   const findings = [];

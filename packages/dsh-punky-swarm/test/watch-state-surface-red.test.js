@@ -39,8 +39,7 @@ import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import {
   createLaneHeartbeat,
-  createHeartbeatTools,
-  createLongrunTools,
+  // B1：createHeartbeatTools / createLongrunTools 已随两个工具删除
   LONGRUN_DEFAULTS,
   LONGRUN_REASON,
   LONGRUN_REASON_EXEMPT_ACTIVE,
@@ -127,72 +126,6 @@ function danglingFixture({ backdateMs = null } = {}) {
 // =====================================================================================
 // RS-1 · 状态面扩面（C-2 / D1 / R1 / R2）——非 running 态必须出现在探针输出
 // =====================================================================================
-test('RS-1 [C-2/D1/R1/R2] review/idle/pending 态须出现在探针输出（不得短路为 lane-not-running）', async () => {
-  // ⚠ idle 语义（**用户裁决 Q-H，2026-09-14，写死不得曲解**）：蟛蜞的 `idle` = **崩溃恢复落位态**
-  //   （宿主重启/异常退出后，in-flight 的 running/review lane 被 store.recoverBatches() 落 idle——
-  //   见 lib/state/store.js:698-743），**不是** JiuwenSwarm 的「静息常驻态」（READY/PAUSED，那边明文「不得催促」）。
-  //   dsh 对子 Agent 的设计是**单次即弃置**（可拉起 continuable 成员，但大多时候不使用已有成员续跑），
-  //   与 JiuwenSwarm「受管理的单 Agent、拉起即永续」**不属同一生态位**。
-  //   ⇒ 本条只核 idle 的 **state/reason 可见性与判据归属**；**不得**据此推导「idle 超时即催促成员」，
-  //   更**不得**把 idle 时长当作 running 长跑的主判据（该负例见 RS-2 (f)）。
-  const nowTs = Date.now();
-  const at = nowTs - 3 * HOUR;
-  const f = seedBatch({
-    S: 'sess-wsr-1',
-    batchId: 'b-wsr-1',
-    tasks: ['l-run', 'l-rev', 'l-idle', 'l-pend', 'l-merged'].map((id) => ({ id, cmd: 'work', outputs: ['exec/' + id + '/out.txt'] })),
-    decide: (b) => {
-      b.phase = 'running';
-      b.lanes = { 'l-run': 'running', 'l-rev': 'review', 'l-idle': 'idle', 'l-pend': 'pending', 'l-merged': 'merged' };
-      b.events = [
-        { ts: iso(at), type: 'batch.phase', from: 'planning', to: 'running' },
-        { ts: iso(at), type: 'member.dispatch', lane: 'l-run' },
-        { ts: iso(at), type: 'member.settled', lane: 'l-rev', from: 'running', to: 'review' },
-        { ts: iso(at), type: 'member.settled', lane: 'l-idle', from: 'running', to: 'idle' },
-        { ts: iso(at), type: 'member.settled', lane: 'l-merged', from: 'review', to: 'merged' },
-      ];
-    },
-  });
-  const engine = f.engine();
-  const expectRows = ['l-idle', 'l-pend', 'l-rev', 'l-run'];
-
-  // (a) judge 面：非 running 态必须给出自身 state，且**不得**短路成 lane-not-running
-  const rev = engine.longrunStatus(f.S, f.batchId, 'l-rev', nowTs);
-  assert.equal(rev.state, 'review', 'D2：review 态必须透出 state（当前 lib/watch/lane-heartbeat.js:254 直接 return reason=lane-not-running）');
-  assert.notEqual(rev.reason, 'lane-not-running', 'C-2：lane-not-running 短路必须删除（§1.2）');
-  const idle = engine.longrunStatus(f.S, f.batchId, 'l-idle', nowTs);
-  assert.equal(idle.state, 'idle', 'D2：idle 态必须透出 state');
-  assert.notEqual(idle.reason, 'lane-not-running', 'C-2：idle 不得短路为 lane-not-running');
-  const pend = engine.longrunStatus(f.S, f.batchId, 'l-pend', nowTs);
-  assert.equal(pend.state, 'pending', 'D2：pending 态必须透出 state');
-  assert.notEqual(pend.reason, 'lane-not-running', 'C-2：pending 不得短路为 lane-not-running');
-
-  // (b) 工具面（lane_longrun）：缺省 lane 过滤须按状态（§1.2 应删 :804/:870 的「仅 running」）
-  const [lrTool] = createLongrunTools(ctx, { store: f.store, root: f.root, config: { capabilities: { watch: { enabled: true } } }, heartbeat: engine });
-  const lq = await lrTool.execute({ batchId: f.batchId }, f.exec);
-  assert.deepEqual(
-    lq.lanes.map((r) => r.lane).sort(),
-    expectRows,
-    'C-2/§6.1：lane_longrun 缺省过滤须返回全部**非终态** lane（终态 merged 排除）。'
-      + '当前 lane-heartbeat.js:870 仅 filter(l => batch.lanes[l] === \'running\')。实际=' + JSON.stringify(lq.lanes.map((r) => r.lane)),
-  );
-  for (const row of lq.lanes) {
-    assert.equal(typeof row.state, 'string', 'D2/A 栏③：lane_longrun 输出须含 state 字段（lane=' + row.lane + '）');
-  }
-
-  // (c) 工具面（lane_heartbeat）：同上，缺省过滤 + state 字段透出（§6.1 A 栏②③）
-  const [hbTool] = createHeartbeatTools(ctx, { store: f.store, root: f.root, config: { capabilities: { watch: { enabled: true } } }, heartbeat: engine });
-  const hq = await hbTool.execute({ batchId: f.batchId }, f.exec);
-  assert.deepEqual(
-    hq.lanes.map((r) => r.lane).sort(),
-    expectRows,
-    'C-2/§6.1：lane_heartbeat 缺省过滤须返回全部非终态 lane（当前 lane-heartbeat.js:804 仅 running）',
-  );
-  for (const row of hq.lanes) {
-    assert.equal(typeof row.state, 'string', 'D2/A 栏③：lane_heartbeat 输出须含 state 字段（lane=' + row.lane + '）');
-  }
-});
-
 // =====================================================================================
 // RS-2 · 判据分派（D1 / B2）——review「待结算时长」≠ running「总时长 + 无进展窗」
 //   口径（用户裁决 Q-H，2026-09-14）：dsh 子 Agent 单次即弃置、单步任务 ⇒ **总时长即任务时长**；
@@ -504,37 +437,6 @@ test('RS-8 [D4/BR-3/R9] 上游从未就绪 ⇒ 提示档（非候选）；带豁
 // =====================================================================================
 // RS-9 · D6 悬挂成员可见（终态批 + 非终态 lane）+ 不受 24h 僵尸过滤（R12 / B7）
 // =====================================================================================
-test('RS-9 [D6/R12/B7] 终态批的非终态 lane 须可读，且不受僵尸批 24h 过滤', async () => {
-  const cases = [
-    { backdateMs: null, label: '真实样本原时间' },
-    { backdateMs: 30 * HOUR, label: '末事件前推 30h（超 24h 僵尸过滤窗）' },
-  ];
-  for (const c of cases) {
-    const f = danglingFixture({ backdateMs: c.backdateMs });
-    const engine = f.engine();
-    engine.tick(); // 终态批：当前实现走 dropBatchEntries + continue ⇒ 全视图不可见
-    const [hbTool] = createHeartbeatTools(ctx, { store: f.store, root: f.root, config: { capabilities: { watch: { enabled: true } } }, heartbeat: engine });
-    const q = await hbTool.execute({ batchId: f.batchId }, f.exec);
-    const row = q.lanes.find((r) => r.lane === 'a1-audit-verdict');
-    assert.ok(
-      row,
-      '[' + c.label + '] D6/R12：终态批中的非终态 lane 必须出现在只读查询面（样本 gate-regression-audit / a1-audit-verdict）。'
-        + '实际 lanes=' + JSON.stringify(q.lanes.map((r) => r.lane)),
-    );
-    assert.equal(row.dangling, true, '[' + c.label + '] §3 T6：悬挂项须显式标注 dangling:true');
-    assert.equal(row.reason, 'dangling-member', '[' + c.label + '] §2：悬挂成员 reason 码须为 dangling-member');
-    assert.equal(isNormalLongrunCandidate(row), false, '[' + c.label + '] §3：T6 悬挂视图不计入正常长跑统计');
-
-    // 不产候选（终态批「只出悬挂视图、不产任何候选」）
-    const b = f.store.readBatch(f.S, f.batchId);
-    assert.equal(
-      b.events.filter((e) => e.type === 'lane.longrun.candidate' && e.lane === 'a1-audit-verdict').length,
-      0,
-      '[' + c.label + '] D6：终态批不得产候选',
-    );
-  }
-});
-
 // =====================================================================================
 // RS-10 · D6 对外派生视图（batch_status.danglingLanes / lanesState，§6.1 ④·B 栏）
 //   注：§6.1 标注 B 栏「可否缓做 = 是」——若 Leader 裁定缓做，本条按 a1 gap-list 记为

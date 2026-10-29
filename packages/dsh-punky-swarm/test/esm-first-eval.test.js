@@ -130,12 +130,11 @@ const RESIDUAL_SCC_EDGES = Object.freeze([
 /** 环的冻结外部入边（非成员 → 成员；「叶子反向 import 聚合器」即在此面红）。 */
 const RESIDUAL_SCC_INBOUND = Object.freeze([
   'index.js -> watch/lane-heartbeat.js',
-  'tools/lane-tools.js -> watch/lane-heartbeat.js',
   'tools/query-tools.js -> watch/lane-heartbeat.js',
-]);
+]); // B1：去 tools/lane-tools.js -> watch/lane-heartbeat.js（守卫式加载随工具组装段删除）
 
 /** 已知动态 import 边（全 lib 唯一一处：`lib/tools/lane-tools.js` 的 `await import('../watch/lane-heartbeat.js')`）。 */
-const KNOWN_DYNAMIC_EDGES = Object.freeze(['tools/lane-tools.js -> watch/lane-heartbeat.js']);
+const KNOWN_DYNAMIC_EDGES = Object.freeze([]); // B1：全 lib 已无动态 import 边（唯一一处随工具组装段删除）
 
 /** 在**独立子进程**里首求值一个模块（同进程会命中 ESM 模块缓存 ⇒ 掩盖 TDZ）。 */
 function firstEvalInChild(rel) {

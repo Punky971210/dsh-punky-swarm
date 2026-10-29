@@ -61,5 +61,5 @@ export function emitNotice(cx, sessionId, batchId, batch, verdict) {
       stateAnchorTs: verdict.stateAnchorTs,
       stateResidentMs: verdict.stateResidentMs,
     });
-  } catch { /* 批次终态/不存在 → 静默（提示档无候选义务；视图面仍由 lane_heartbeat 实时给出） */ }
+  } catch { /* 批次终态/不存在 → 静默（提示档无候选义务；视图面仍由心跳探针实时给出） */ }
 }

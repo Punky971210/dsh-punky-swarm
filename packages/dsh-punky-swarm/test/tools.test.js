@@ -54,8 +54,12 @@ assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置�
 // 【2026-09-17 P1 修订】+`handoff_submit` / `handoff_view`（交接两件**常驻注册**）。
 // 【2026-10-13 G-10 修订 · 批 `g10-fix-20261012` · lane `e4-toolface`】+`handoff_accept`
 //   （受限反向声明，常驻注册；「缺省默认开面」的**必然增量** ⇒ 冻结名单须同步，否则本用例红）。
-// 名单来源：`lib/tools/register.js:40` 的合成结果**实测枚举**（core + mailbox + lane + log 四族），非手抄。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+// 名单来源：`lib/tools/register.js` 的合成结果**实测枚举**（core + lane + log 族），非手抄。
+// 【2026-10-30 G3 B1 删件】删 `mailbox_send`/`mailbox_read`/`mailbox_ack`/`lane_heartbeat`/`lane_longrun`
+//   五名（31 → 26，展示位）；冻结名单 ≡ 实测注册集（集合式判据 = 下方 deepEqual）。
+//   ⚠ 本文件有**两处**列出工具名：本行冻结名单 ＋ `:66` 的逐名存在性循环 —— 两处同步删，
+//     否则 `:66` 会继续断言「已删工具存在」（自相矛盾用例）。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length;
 
 test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，计数由派生常量核定）', () => {
@@ -63,7 +67,7 @@ test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，�
   //   现改为**精确集合断言 + 差集诊断**：失败时直接给出「多了哪个 / 少了哪个」。
   assert.deepEqual(tools.map((t) => t.name).slice().sort(), TOOL_NAMES.slice().sort(),
     '注册名集必须**精确等于**冻结名单 `TOOL_NAMES`（差集即多/少的具体工具名）');
-  for (const n of ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
+  for (const n of ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(byName[n], 'missing tool ' + n);
   }
 });
@@ -168,17 +172,10 @@ test('full flow binds to exec session; args.session overrides', async () => {
   assert.equal(s.settled, true);
   assert.ok(s.recentEvents.some((e) => e.type === 'member.settled'));
 
-  const sent = await byName.mailbox_send.execute({ batchId: 'b-demo', box: 'inbox', message: { task: 't2' } }, EXEC_SESS);
-  const read = await byName.mailbox_read.execute({ batchId: 'b-demo', box: 'inbox' }, EXEC_SESS);
-  // 身份数组（替代 `read.items.length === 1`）：
-  // 形状以**写入点**为准 —— `send()`（`lib/comms/mailbox.js:53-64`）落盘记录为
-  // `{ ackId, ts, box, message, meta }`，**载荷嵌在 `message` 下**（`readUnacked` 直接 push 该记录）。
-  // ⇒ 身份字段路径 = `item.message.task`（不是 `item.task`；实测 `item.task` 为 undefined）。
-  const readTasks = read.items.map((i) => i.message?.task);
-  assert.deepEqual(readTasks, ['t2'],
-    '未确认读回须恰为刚发的那条（身份数组，路径 item.message.task）：实测 ' + JSON.stringify(readTasks));
-  await byName.mailbox_ack.execute({ batchId: 'b-demo', box: 'inbox', ackId: sent.ackId }, EXEC_SESS);
-  assert.equal((await byName.mailbox_read.execute({ batchId: 'b-demo', box: 'inbox' }, EXEC_SESS)).items.length, 0);
+  // 【2026-10-30 G3 B1】原内联「mailbox_send → mailbox_read → mailbox_ack → 空集」三段已移除：
+  //   三个 mailbox 工具随 B1 删除（`lib/tools/mailbox-tools.js` 整件删）⇒ 此处 `byName.mailbox_*` 为 undefined
+  //   会 TypeError。**存储面**（send/readUnacked/ack）仍在 `lib/comms/mailbox.js` 且未变，
+  //   其覆盖由 `test/lane-session-bind` / `budget` 等存储侧用例承担；本用例其余断言（含下方跨 session 两条）**全保留**。
 
   // 跨 session 不可见：同 batchId 在别的 session 不存在（batch_status 抛错）
   await assert.rejects(() => byName.batch_status.execute({ batchId: 'b-demo', session: 'sess-worker' }, EXEC_SESS));

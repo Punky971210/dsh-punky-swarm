@@ -29,7 +29,11 @@ import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));
 const store = createStore(root);
 const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
-// 缺省默认开：总数一律取 `TOOL_NAMES.length`（**派生，勿写字面量**）——名单 = core + mailbox + lane_heartbeat + lane_longrun + worktree 四件 + lane_dispatch + swarm_report + swarm_cc + handoff_submit / handoff_view / handoff_accept + task_pool + batch_tasks_add + task_update + role_guide。
+// 缺省默认开：总数一律取 `TOOL_NAMES.length`（**派生，勿写字面量**）——名单 = core + lane + worktree 四件 +
+//   lane_dispatch + swarm_report + swarm_cc + handoff_submit / handoff_view / handoff_accept +
+//   task_pool + batch_tasks_add + task_update + role_guide。
+// 【2026-10-30 G3 B1 删件】`mailbox_send`/`mailbox_read`/`mailbox_ack`/`lane_heartbeat`/`lane_longrun`
+//   五名已删（31 → 26，展示位）；本名单与 `test/tools.test.js:58` 的折叠名单**必须逐名一致**。
 // logs 缺省关（log_export 不在缺省清单，全开面 = 缺省面 + 1）。断言按新契约更新。
 // 【2026-09-15 契约修订】+`lane_dispatch`（派发套件入口，发放一次性 lane 句柄；用户裁决「不写 token 即禁止派发」）。
 // 【2026-09-16 P3a control lane 修订】+`batch_control`（最小干预面 pause/resume/abort）⇒ 23 → 24。
@@ -39,7 +43,7 @@ const PKG_VERSION = engineVersion(); // 0.2.1（package.json）
 //   名单来源 = `lib/tools/register.js:40` 四族合成结果的**实测枚举**（非手抄）。
 // 【2026-10-13 G-10 修订 · 批 `g10-fix-20261012` · lane `e4-toolface`】名单补 `handoff_accept`
 //   （受限反向声明，常驻注册）⇒ `DEFAULT_TOOL_COUNT` 派生 30 → **31**。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status', 'task_pool', 'batch_tasks_add', 'task_update', 'role_guide'];
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status', 'task_pool', 'batch_tasks_add', 'task_update', 'role_guide'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length; // 派生（N1-R4-1a +task_pool；R4-1c +batch_tasks_add；R4-2 +task_update；R-1 +role_guide；G-10 +handoff_accept）
 
 // 注册上下文（enabled 开关两态）
@@ -52,7 +56,7 @@ function makeCtx(enabled) {
   return { ctx, made, registered };
 }
 
-test('生成：缺省 27 工具逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
+test('生成：缺省清单（TOOL_NAMES 26 名）逐一产出 6 属性 JSON（字段齐全/类型正确/toolId 唯一）', () => {
   const { made } = makeCtx(true);
   const catalog = made.catalog;
   assert.ok(catalog, 'enabled=true 时 register() 后 catalog 非空');
@@ -107,16 +111,16 @@ test('生成：4 项透传 2 项派生（inputParam 与 defineTool 归一化结�
     } else {
       assert.deepEqual(d.inputParam, { ...structuredClone(t.parameters), required: [] }, 'inputParam 不一致（缺 required 补空数组）@' + d.name);
     }
-    // 透传约束抽查：enum 保留（mailbox 三件套 box enum）
+    // 透传约束抽查：enum 保留 —— B1 后已无 `box` enum 工具（mailbox 三件套已删），
+    //   该分支保留为**通用形态守卫**（任何带 `box` 属性的工具出现时才生效），不针对已删工具硬编码。
     if (t.parameters?.properties?.box) {
       assert.deepEqual(d.inputParam.properties.box.enum, ['inbox', 'outbox', 'broadcast']);
     }
   }
   // 抽样：wave_plan required=['batchId','tasks']（【2026-09-27 反转】`team` 降为**可选标签** ⇒ 退出 required 数组；
   //       原断言 ['batchId','tasks','team'] 的「P1 起必填」口径已按用户裁决退役，判据面（required 逐字）未删）；
-  //       mailbox_read required=['batchId','box']（源码实标 req）
+  //       mailbox_read required=['batchId','box']（源码实标 req）—— 【2026-10-30 G3 B1】该工具已删 ⇒ 抽样随之移除
   assert.deepEqual(byName.wave_plan.inputParam.required, ['batchId', 'tasks']);
-  assert.deepEqual(byName.mailbox_read.inputParam.required, ['batchId', 'box']);
   assert.equal(byName.wave_plan.inputParam.type, 'object');
   // outputParam 与 output.schema 同构（深比较，键序无关）
   assert.deepEqual(byName.wave_plan.outputParam, srcByName.wave_plan.output.schema);
@@ -172,7 +176,7 @@ function invoke(route, url) {
   return { status, body };
 }
 
-test('端点：enabled=true 时 /tools 已注册并返回 {count:27, tools} HTTP 200', () => {
+test('端点：enabled=true 时 /tools 已注册并返回 {count:DEFAULT_TOOL_COUNT, tools} HTTP 200', () => {
   const { made } = makeCtx(true);
   const { routes } = apiWithCatalog(made.catalog);
   const route = routes.find((r) => r.path === '/api/dsh-punky-swarm/tools');

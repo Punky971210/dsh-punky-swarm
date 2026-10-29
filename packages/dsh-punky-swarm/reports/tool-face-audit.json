@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T06:21:52.000Z",
+  "generatedAt": "2026-10-29T19:15:42.416Z",
   "criteria": [
     "H-1",
     "H-2",
@@ -22,14 +22,9 @@
     "subagent_fork",
     "batch_status",
     "log_export",
-    "lane_heartbeat",
-    "lane_longrun",
     "lane_checkpoint_status",
-    "mailbox_read",
-    "mailbox_ack",
     "swarm_report",
     "swarm_cc",
-    "mailbox_send",
     "lane_worktree_create",
     "lane_worktree_merge",
     "lane_checkpoint",
@@ -69,11 +64,6 @@
     "task_pool",
     "batch_tasks_add",
     "task_update",
-    "mailbox_send",
-    "mailbox_read",
-    "mailbox_ack",
-    "lane_heartbeat",
-    "lane_longrun",
     "lane_worktree_create",
     "lane_worktree_merge",
     "lane_checkpoint",
@@ -125,22 +115,22 @@
     }
   },
   "口径展示位": {
-    "current": 39,
+    "current": 34,
     "afterDelete": 34,
-    "default": 31,
+    "default": 26,
     "defaultAfterDelete": 26
   },
   "checks": {
     "D1": true,
     "D2": true,
-    "D3": true
+    "D3": false
   },
   "hits": [],
   "warn": [
     {
       "criterion": "H-3",
       "names": [
-        "37 != 39"
+        "37 != 34"
       ]
     }
   ],

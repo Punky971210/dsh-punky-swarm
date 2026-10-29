@@ -279,10 +279,10 @@
 
 | 面 | 归属 | 在册工具 | 依据 |
 |---|---|---|---|
-| 成员生命周期（roster） | **官方** | `spawn_teammate` / `list_agents` / `send_message` / `interrupt_agent`（**4 件**） | durable 成员（跨轮存活、可再唤起、活性可查）是官方**唯一**且真实的优势；onto 侧只有引擎自派的 **one-shot worker**（无唤醒 / 续聊对象；`lane_heartbeat` 是 **lane 级**而非会话成员级） |
+| 成员生命周期（roster） | **官方** | `spawn_teammate` / `list_agents` / `send_message` / `interrupt_agent`（**4 件**） | durable 成员（跨轮存活、可再唤起、活性可查）是官方**唯一**且真实的优势；onto 侧只有引擎自派的 **one-shot worker**（无唤醒 / 续聊对象；原 `lane_heartbeat` 是 **lane 级**而非会话成员级 —— **该工具已于 G3 B1 删除**） |
 | 任务真源 | **蟛蜞自建** | `wave_plan` / `task_pool` / `batch_tasks_add` / `task_update` / `lane_dispatch` | 批次 JSON **单落盘点**（`commitBatch` 统一落盘）＋**单次文件写原子性**；⚠ **「单写者」是协议/纪律要求、非引擎强制**（`lane_claim` 是逻辑锁，**不被 store 写路径调用** —— 见 §3 与 §0j 六）；派发写 `owner`、结算写终态、`auto-settle` 消费事件（**推进者是引擎，不是 Leader 手动）** |
 | 交接 | **蟛蜞自建** | `handoff_submit`（**逐件校验在场** + `assertions`）/ `handoff_view`（含 `readable` 回显） | 入边 `submitted` 是下游开工**硬前提**（`GATE_HANDOFF_MISSING`，§5 / §11 R-3） |
-| 结算 / 留痕 | **蟛蜞自建** | `member_settle` / `mailbox_send`·`mailbox_read`·`mailbox_ack` / `log_export` / `swarm_report` | 事件流可导出（`log_export`），门禁与三契面在册 |
+| 结算 / 留痕 | **蟛蜞自建** | `member_settle` / `log_export` / `swarm_report`（**mailbox 三工具已于 G3 B1 删除**） | 事件流可导出（`log_export`），门禁与三契面在册 |
 
 ### 二、官方 `team_task_*` 五件**不进治理真源**（理由，逐条实测）
 
@@ -347,7 +347,7 @@
 - **⚠ 时序硬性步骤：先 `handoff_submit`，后 `swarm_report`** —— 反序会触发 `GATE_HANDOFF_MISSING` 并**停轮**（已**三次**独立踩坑实证）。
 - **回报可达性（2026-09-24 用户裁决 S-3）**：`send_message` **对成员已放开** ⇒ worker 可**直接推**给 Lead（`target='lead'`）；`interrupt_agent` / `list_agents` / `wait_agent` **维持 deny**。这是**判据边界修正**而非回退 S2——S2 原判据「one-shot **无唤醒对象**」对「**唤 Lead**」不成立（**Lead 是 durable 的，且正是要通知的对象**）。**成员不得互唤**（指引约束）。
   - **⚠ 范围口径（2026-10-01 补，A9）**：上文 `deny` **仅对席位面成立** —— **席位面 deny、Leader 面在册**（三者为 Leader 治理工具）。**成员侧清单**（与本节 §八 工具面对齐）：**可用** = `handoff_submit` / `handoff_view` / `task_pool` / `swarm_report` / `send_message` / `member_settle`；**不可用** = `spawn_teammate` / `interrupt_agent` / `list_agents` / `wait_agent` / `wave_plan` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `assign_check`。
-- **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner/Manager 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
+- **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner/Manager 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ 原 `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）—— **该工具已于 G3 B1 删除，此缺口随之消失**；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
 
 ### 八、**roster 席位工具面**（只留交接必需，不给 Leader 治理工具）
 
@@ -363,7 +363,7 @@
     - **反例**：只在 `SKILL.md` 写「源头 = `discipline.md` 的 §0p 九」、而**本侧不写对应串** ⇒ **单向引用** —— 读指引者**看不到该口径约束着两个 skill**，且**删改任一侧都无人察觉** ⇒ **跨副本口径仍会分叉**（本次 S 面已实测该风险：两 skill 侧已写，R 侧此前缺失）。
     - **正解**：**两侧各写一条**（本条即 R 侧对应串），并**互报名**；判定 = 两处（本 `§0p 九` ＋ 该 skill）**均含「同源 / 互指 / 勿单侧改」三要素**（**肯定式**：逐处各命中 ≥1 ⇒ 互指成立）。
 - **进程恢复会把 in-flight lane 打回 `idle`**（事件 `system.recovered`）⇒ 走恢复路径 **`idle → running → review → merged`**（`idle` 是**空闲态**，不是崩溃态）。
-- **例行巡查用「四查」**（全部只读）：① `batch_status`（相位与 lanes）② `log_export`（**看 `auto.settle.*` 的 `reason`**——`already-settled` / `lane-terminal` / `phase-*` / `audit-explicit-settle-required` **语义不同**）③ 产物根 glob ④ **`lane_heartbeat` / `lane_longrun`（`beat:true` 可手动一拍）——看 `stalled` / `candidate` / `unconsumed`**。
+- **例行巡查用「四查」**（全部只读）：① `batch_status`（相位与 lanes）② `log_export`（**看 `auto.settle.*` 的 `reason`**——`already-settled` / `lane-terminal` / `phase-*` / `audit-explicit-settle-required` **语义不同**）③ 产物根 glob ④ **`batch_status` / `log_export` 的事件面**（原 `lane_heartbeat` / `lane_longrun` 探针已于 G3 B1 删除）——看 `stalled` / `candidate` / `unconsumed`**。
 
 ### 十、两方向规格差异表（2026-09-25 用户 C1 裁决）
 
@@ -490,7 +490,7 @@
 
 ## §4 黑板通信
 
-- 跨上下文用 `mailbox`（在册工具 `mailbox_send` / `mailbox_read` / `mailbox_ack`）：`inbox` = 派发指令、`outbox` = 成员回执、`broadcast` = 广播。**成员→Leader 的回执入口 = `swarm_report`**（引擎套件、在册；`swarm_cc` 为成员→Manager 的抄送入口）——**G-05 订正**：旧文写的 `report` 在**本部署不存在**（宿主安装面无 `subagent-report` 包；成员回执的现役通道就是 `swarm_report`）。**`leader-direct` 批（无 Manager）：成员回执只走 `swarm_report`→Leader（单通道），`outbox` 不写**（写了无消费者）。
+- 跨上下文用成员**回报通道**（`swarm_report` 成员→Leader、`swarm_cc` 成员→Manager）：`inbox` = 派发指令、`outbox` = 成员回执、`broadcast` = 广播（三层语义保留，但 **`mailbox_send` / `mailbox_read` / `mailbox_ack` 三工具已于 G3 B1 删除**，无工具入口）。**成员→Leader 的回执入口 = `swarm_report`**（引擎套件、在册；`swarm_cc` 为成员→Manager 的抄送入口）——**G-05 订正**：旧文写的 `report` 在**本部署不存在**（宿主安装面无 `subagent-report` 包；成员回执的现役通道就是 `swarm_report`）。**`leader-direct` 批（无 Manager）：成员回执只走 `swarm_report`→Leader（单通道），`outbox` 不写**（写了无消费者）。
 - **只写元数据，不复制正文**。
 
 ## §0m 派发套件（2026-09-16 落地：**派发收进引擎**）
@@ -560,7 +560,7 @@
 
 - **`idle` 语义（用户澄清）：字面意义的「空闲态」**——成员当前无在跑动作，**不是崩溃态**；故 `idle → running` 是常规操作（**续跑 / 重派**的合法入口），不必先有「故障」。**注意（K3，2026-09-21）**：「返工」**不走状态机**（`review → running` 已去除）——返工 = gap-list + 新任务批次；`idle` 同时是进程重启的在途 lane 落位态（见下条）。
 - 进程重启后 in-flight 成员**自动落 `idle`**（`system.recovered`）；用 `batch_status` 核对后用 `member_status` 重派。
-- `lane_heartbeat` 过期检测：`stalled` 用**事件**表达、**不改成员状态**；`lane_longrun` 探针同 tick 产 `candidate` 事件 + broadcast，**只标记不改状态**。
+- 过期/长程探针（**原 `lane_heartbeat` / `lane_longrun`，两工具已于 G3 B1 删除**）：`stalled` 仍用**事件**表达、**不改成员状态**；`candidate` 事件 + broadcast 语义保留，**只标记不改状态**——改由 `batch_status` / `log_export` 读其事件面。
 - **步骤级断点保全**：worker 每完成一子步骤即落盘可独立读取的进度快照（含 `step N/total` 与产物落点），**禁止攒批**；崩溃后由新 worker 读取快照**跳过已完成步骤**；保全**只做物理留存**，**不触发自动续跑**。
   - **配套工具面（G-10 补名）**：`lane_checkpoint`（在 lane worktree 内 `git add -A && git commit`，无变更则 no-op；可带 `progress:{step,total}`——commit message 与 `worktree.checkpoint` 事件内嵌 `step N/total`）／`lane_checkpoint_status`（**只读**：从批次事件流读该 lane 的 checkpoint 历史与 latest 进度，**不依赖 git 调用**）——续跑前的唯一查询入口。
 - Leader 直做产物用 `asset_claim` 复制归位进批次资产根。

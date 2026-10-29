@@ -46,15 +46,16 @@
             enabled: true
             maxChainHops: 4
             maxChainRoundTrips: 2
-          # lane 过期检测（watch/heartbeat）：enabled=true 时挂 watchdog 定时器并注册 lane_heartbeat 工具——
+          # lane 过期检测（watch/heartbeat）：enabled=true 时挂 watchdog 定时器并注册心跳探针工具——
+          #   （该探针工具已于 G3 B1 删除，本组不再注册；`stalled` 事件面仍由 batch_status / log_export 可读）
           #   intervalsMinutes 退避档位（分钟，默认 [10,20,30]，冷场越久追问间隔越长）；maxMissed 硬停拍数
           #   （默认 3，连续 N 拍无活动 → appendEvent('lane.stalled') 停止追问，只标记不自动处置）；
           #   scanIntervalMinutes watchdog 扫描间隔（默认 1）；probeTemplate 可选覆写追问模板（{lane}/{batchId}/{missed} 占位）。
           #   longrun 子键（长跑档探针，出厂默认开）：running lane 持续超
           #   maxDurationMs（默认 1200000=20min）且近 noProgressWindowMs（默认 300000=5min）无新 checkpoint
           #   且无活动（严格 AND）→ 同 tick 产 lane.longrun.candidate 事件 + mailbox broadcast 候选通知
-          #   Manager 裁决（探针只标记不改 lane 状态；lane_longrun 工具并列注册，enabled=false 不注册、
-          #   tick 不判、零事件零消息零行为变化）。
+          #   Manager 裁决（探针只标记不改 lane 状态；长程探针工具并列注册，enabled=false 不注册、
+          #   **该探针工具已于 G3 B1 删除**；tick 不判、零事件零消息零行为变化）。
           watch:
             enabled: true
             longrun:
@@ -63,7 +64,8 @@
               noProgressWindowMs: 300000  # 无进展窗（默认 5min；正整数 ms，非法回退默认）
           # worktree 物理隔离（lane-tools）：enabled=true 时注册 lane_worktree_create / lane_worktree_merge / lane_checkpoint
           # （git worktree 隔离 + checkpoint 提交；与 lane_claim 逻辑锁互补——lane_claim 管状态层「写谁的」，
-          #  本组工具管工作区层「写到哪」；工具总数：裸配置 20 / patch 全开 21（含 lane_longrun 与 lane_checkpoint_status）/ 显式关（worktree+watch 关）14）。
+          #  本组工具管工作区层「写到哪」；**工具清单按集合式表述、不记绝对件数**（避免随删件漂移）：
+          #  本组 = 裸配置基准集 ∪ patch 增补集（`lane_checkpoint_status` 等）∖（worktree / watch 关闭时被摘除的件）。
           worktree:
             enabled: true
             # merge agent 装配键：enabled=true 且宿主注入 mergeAgentSpawner 时，

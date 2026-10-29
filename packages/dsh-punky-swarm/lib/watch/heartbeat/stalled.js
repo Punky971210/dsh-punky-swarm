@@ -130,7 +130,7 @@ export function stalledScan(cx, nowTs, rows) {
       if (hasActivity(cx, sessionId, batchId, batch, lane, entry.lastSeenTs, nowTs, st)) { resetEntry(entry, nowTs); continue; }
       // R-4 长程豁免：lane 声明 laneExempt[lane].stalled === true → 本拍不发 inbox probe、
       //   不累计 missedCount、不写 lane.stalled（与 longrun 档的倍率豁免并列的另一半）。
-      //   语义边界：仍留在心跳 state 表内（tracked: true，lane_heartbeat 查询照常可见）；
+      //   语义边界：仍留在心跳 state 表内（tracked: true，心跳查询照常可见）；
       //   **仍写 checkpoint/心跳**——lane_checkpoint 写面零特判（豁免只关「追问 + stalled 标记」，
       //   不许把 lane 变成不可观测）；豁免撤销后下一拍即回到原追问语义（无粘滞状态）。
       if (laneExemptOf(batch, lane)?.stalled === true) continue;

@@ -74,7 +74,7 @@
 | L5-W03 | l5-wait-ban | `wait-sleep` | hard | DENY（P2 硬性违规） | bash | 段首为等待/休眠命令：`sleep` / `wait` / `timeout`。其余**放行** | [preset L5] bash 命令含 sleep / 等待动作（sleep / wait / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环 |
 | L5-W04 | l5-wait-ban | `wait-sleep` | hard | DENY（P2 硬性违规） | ops_bash | 段首为等待/休眠命令：`sleep` / `wait` / `timeout`。其余**放行**（与 L5-W03 同一「禁用 sleep」栏，仅工具名不同） | [preset L5] ops_bash 命令含 sleep / 等待动作（sleep / wait / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环 |
 
-**判定链与边界（如实标注）**：与 L3 同构（引号掩码 → 剥流合并 → 分段取段首 token → 其余放行；未闭合引号 fail-closed）。**这是启发式、非沙箱**：别名、脚本文件（`pwsh -File x.ps1`）、**内联解释器**（`node -e "setTimeout(...)"` / `python -c "time.sleep(5)"`）**不在列**——本面只收敛「直调 `wait_agent`」与「shell 里直接 sleep / 等待」**两条主路径**，不承诺阻断所有等待形态。**不受影响的通道**：成员回报（`swarm_report` / `send_message`）与状态查询（`batch_status` / `log_export` / `lane_heartbeat` / `handoff_view`）。
+**判定链与边界（如实标注）**：与 L3 同构（引号掩码 → 剥流合并 → 分段取段首 token → 其余放行；未闭合引号 fail-closed）。**这是启发式、非沙箱**：别名、脚本文件（`pwsh -File x.ps1`）、**内联解释器**（`node -e "setTimeout(...)"` / `python -c "time.sleep(5)"`）**不在列**——本面只收敛「直调 `wait_agent`」与「shell 里直接 sleep / 等待」**两条主路径**，不承诺阻断所有等待形态。**不受影响的通道**：成员回报（`swarm_report` / `send_message`）与状态查询（`batch_status` / `log_export` / `handoff_view`）。
 
 **行为面枚举（2026-09-26 扩面）**：`file-write`（L3）｜`tool-disabled`（L5-W01）｜`wait-sleep`（L5-W02/W03/W04）。三个值同步登记于 `lib/governance/config.ts` 的 `TOOL_BAN_BEHAVIORS`，判定实现见 `lib/governance/tool-ban.ts` 的 `judgeBehavior`。
 

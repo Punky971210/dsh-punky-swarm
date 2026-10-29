@@ -29,7 +29,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import {
-  createHeartbeatTools, createLongrunTools,
+  // B1：createHeartbeatTools / createLongrunTools 已随两个工具删除
   judgeLongrun, stintRunningSinceOf, lastCheckpointTsOf, hasLongrunCandidate,
   resolveLongrunConfig, LONGRUN_DEFAULTS, LONGRUN_REASON,
 } from '../lib/watch/lane-heartbeat.js';
@@ -331,82 +331,8 @@ test('验收 5b：lane 状态与 schema 零改动（无新增成员态；stalled
 });
 
 // ---- 工具面（lane_longrun：对齐 lane_heartbeat 形态；出厂默认开；显式关不注册）----
-test('T14 lane_longrun 注册门控：缺省默认开注册（并列 1 件）；longrun 显式关不注册；watch 关亦不注册', () => {
-  const { root, store } = setup();
-  const ctx = { tools: { register: () => {} } };
-  const def = createLongrunTools(ctx, { store, root, config: {} });
-  assert.deepEqual(def.map((t) => t.name), ['lane_longrun'], '出厂默认开 → 注册工具身份集合 = {lane_longrun}');
-  assert.equal(def[0].name, 'lane_longrun');
-  assert.deepEqual(createLongrunTools(ctx, { store, root, config: { capabilities: { watch: { longrun: { enabled: false } } } } }), [], 'longrun.enabled=false 不注册');
-  assert.deepEqual(createLongrunTools(ctx, { store, root, config: { capabilities: { watch: { enabled: false } } } }), [], 'watch 关 → 不注册');
-  // lane_heartbeat 输出零变化（对照基线：仍恰 1 件 lane_heartbeat）
-  const hbTools = createHeartbeatTools(ctx, { store, root, config: {} });
-  assert.deepEqual(hbTools.map((t) => t.name), ['lane_heartbeat'], 'heartbeat 注入形态注册工具身份集合 = {lane_heartbeat}（期望取自该工具自身的名字，非照抄 330）');
-  assert.equal(hbTools[0].name, 'lane_heartbeat');
-});
-
-test('lane_longrun 查询：返回探针状态；beat=true 手动触发一拍（并列 stalled+longrun）', async () => {
-  const { root, store, S, batchId, lane } = setup();
-  const base = Date.now();
-  const config = { capabilities: { watch: { enabled: true } } };
-  const engine = engineAt({ root, store, config, base, offsetMs: 0 });
-  const ctx = { tools: { register: () => {} } };
-  const [tool] = createLongrunTools(ctx, { store, root, config, heartbeat: engine });
-  const exec = { agent: { session: { id: S } } };
-  const q = await tool.execute({ batchId }, exec);
-  assert.equal(q.sessionId, S);
-  assert.deepEqual(q.lanes.map((r) => r.lane), [lane], '查询返回 lane 身份 = 本次 lane（a 形态）');
-  assert.equal(q.lanes[0].lane, lane);
-  assert.equal(typeof q.lanes[0].candidate, 'boolean');
-  // beat 手动一拍后仍可查询（无异常、零状态破坏）
-  const qb = await tool.execute({ batchId, beat: true }, exec);
-  assert.deepEqual(qb.lanes.map((r) => r.lane), [lane], '查询返回 lane 身份 = 本次 lane（b 形态）');
-});
-
 // ---- L1 复核缺口（补用例）：引擎在、多 lane 混合态、缺省 lane
 //   → 全批**非终态** lane（终态排除）；显式 lane 单行过滤；逐行字段齐全 ----
-test('lane_longrun 缺省 lane → 全批非终态 lane（多 running；idle 纳入、failed/merged 排除；逐行字段齐全）；显式 lane 单行', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lr-wld-'));
-  const store = createStore(root);
-  const S = 'sess-lr-wld';
-  const batchId = 'b-lr-wld';
-  const plan = buildWavePlan({
-    batchId,
-    tasks: ['l1', 'l2', 'l3', 'l4', 'l5'].map((id) => ({ id, outputs: ['exec/' + id + '/out.txt'], cmd: 'work' })),
-  });
-  store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
-  // 混合 lane 态：l1/l2 running；l3 idle；l4 failed；l5 merged（终态）——直写镜像 seedOverdueStint 先例
-  const bf = store.batchFile(S, batchId);
-  const b = JSON.parse(fs.readFileSync(bf, 'utf8'));
-  b.lanes = { l1: 'running', l2: 'running', l3: 'idle', l4: 'failed', l5: 'merged' };
-  fs.writeFileSync(bf, JSON.stringify(b, null, 2));
-  const engine = laneHeartbeat(store, root); // 缺省 config：watch + longrun 默认开
-  engine.tick(); // 首拍建心跳 entry（running lane 无 dispatch 事件 → no-running-since，零候选零噪音）
-  const ctx = { tools: { register: () => {} } };
-  const [tool] = createLongrunTools(ctx, { store, root, heartbeat: engine });
-  const exec = { agent: { session: { id: S } } };
-
-  // 缺省 lane → 全批**非终态** lane（l1/l2 running + l3 idle；终态 l4 failed / l5 merged 排除）
-  // 【r2 同步 · watch 状态面】缺省过滤由「仅 running」改为「按状态过滤：{pending, running, review, idle}」
-  //   （`lane-heartbeat.js:1428` 非终态 lane 过滤）⇒ 期望集合为 ['l1','l2','l3']。
-  const q = await tool.execute({ batchId }, exec);
-  assert.equal(q.sessionId, S);
-  assert.deepEqual(q.lanes.map((r) => r.lane).sort(), ['l1', 'l2', 'l3'], '缺省返回全批非终态 lane；终态（failed/merged）排除');
-  for (const row of q.lanes) {
-    assert.ok(row.laneKey.startsWith(S + '/' + batchId + '/'), '逐行 laneKey 齐全（' + row.laneKey + '）');
-    assert.equal(row.enabled, true, '引擎在 → longrun enabled');
-    assert.equal(row.maxDurationMs, 1_200_000, '默认阈值 20min（引擎 lrCfg 携带）');
-    assert.equal(row.noProgressWindowMs, 300_000, '默认无进展窗 5min');
-    assert.equal(typeof row.candidate, 'boolean');
-    assert.equal(typeof row.emitted, 'boolean');
-    assert.equal(row.tracked, true, 'running lane 被引擎追踪');
-  }
-  // 显式 lane 单行过滤回归
-  const q2 = await tool.execute({ batchId, lane: 'l2' }, exec);
-  assert.deepEqual(q2.lanes.map((r) => r.lane), ['l2'], '显式 lane 过滤 ⇒ 身份 = {l2}（期望取自调用入参）');
-  assert.equal(q2.lanes[0].lane, 'l2');
-});
-
 // ---- 回归锚点：默认开不影响既有 heartbeat/watch 行为（T15 局部锚；全套回归见 watch-heartbeat.test.js）----
 test('T15 回归锚：longrun 默认开 + 活跃 lane（近窗活动）→ 不产候选、无 broadcast 噪音', () => {
   const { root, store, S, batchId, lane } = setup();

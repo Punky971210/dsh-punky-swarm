@@ -180,7 +180,7 @@ export function longrunScan(cx, nowTs, rows = null) {
     }
   }
 }
-// 只读：单 lane longrun 探针状态（lane_longrun 工具查询用；不依赖本 tick 是否已跑——实时判定）
+// 只读：单 lane longrun 探针状态（探针视图内部查询用；不依赖本 tick 是否已跑——实时判定）
 export function longrunStatusOf(cx, sessionId, batchId, lane, nowTs) {
   const batch = cx.store.readBatch(sessionId, batchId);
   if (!batch) {

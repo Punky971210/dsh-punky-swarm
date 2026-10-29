@@ -39,7 +39,7 @@ import { apply } from '../lib/index.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_LANE_LONGRUN_CANDIDATE, EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
-import { createLaneHeartbeat, createHeartbeatTools, createLongrunTools } from '../lib/watch/lane-heartbeat.js';
+import { createLaneHeartbeat } from '../lib/watch/lane-heartbeat.js'; // B1：两个工具工厂已随工具删除
 import * as mailbox from '../lib/comms/mailbox.js';
 import { writeRuntime, assemblyCtxWeb } from './helpers/gate-fixture.mjs';
 
@@ -329,115 +329,6 @@ function runningStore(root, S, batchId, lane) {
   return store;
 }
 const EXEC = { agent: { session: { id: 'cli' } } }; // args.session 优先
-
-test('H5a lane_heartbeat 引擎缺失 → disabled 状态对象（enabled:false reason:watch-disabled tracked:false）；beat=true no-op', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-d1-'));
-  const store = runningStore(root, 'sess-whc-d1', 'b-whc-d1', 'l1');
-  const ctx = { tools: { register: () => {} } };
-  // index 装配同形：getHeartbeat → heartbeatRef.current（热关后 = null）→ disabled 路径
-  const [tool] = createHeartbeatTools(ctx, {
-    store, root, mailbox,
-    config: { capabilities: { watch: { enabled: true } } },
-    getHeartbeat: () => null,
-  });
-  assert.ok(tool, 'watch enabled 静态 → lane_heartbeat 注册');
-  const eventsBefore = store.readBatch('sess-whc-d1', 'b-whc-d1').events.length;
-  const q = await tool.execute({ batchId: 'b-whc-d1', lane: 'l1', session: 'sess-whc-d1' }, EXEC);
-  assert.equal(q.sessionId, 'sess-whc-d1');
-  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
-    '查询面 lane 身份集合（期望来自入参 lane；实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
-  const row = q.lanes[0];
-  assert.equal(row.laneKey, 'sess-whc-d1/b-whc-d1/l1');
-  assert.equal(row.enabled, false);
-  assert.equal(row.reason, 'watch-disabled');
-  assert.equal(row.tracked, false);
-  assert.equal(row.missed, 0);
-  assert.equal(row.stalled, false);
-  assert.equal(row.pendingProbeId, null);
-  assert.equal(row.lastActivityAt, null);
-  // beat=true 关闭态 no-op（引擎 null → 不 tick），查询仍安全返回，零状态副作用
-  const qb = await tool.execute({ batchId: 'b-whc-d1', lane: 'l1', session: 'sess-whc-d1', beat: true }, EXEC);
-  assert.equal(qb.lanes[0].reason, 'watch-disabled');
-  assert.equal(qb.lanes[0].tracked, false);
-  const eventsAfter = store.readBatch('sess-whc-d1', 'b-whc-d1').events.length;
-  assert.equal(eventsAfter, eventsBefore, 'beat no-op：零事件副作用（tick 未跑）');
-});
-
-test('H5b lane_heartbeat 引擎缺失 + 缺省 lane → 每 running lane 一 disabled 行（与引擎开同形，reason 区分）', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-d2-'));
-  const S = 'sess-whc-d2';
-  const store = runningStore(root, S, 'b-whc-d2', 'l1');
-  const ctx = { tools: { register: () => {} } };
-  const [tool] = createHeartbeatTools(ctx, {
-    store, root, mailbox,
-    config: { capabilities: { watch: { enabled: true } } },
-    getHeartbeat: () => null,
-  });
-  const q = await tool.execute({ batchId: 'b-whc-d2', session: S }, EXEC);
-  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
-    'running lane 每行 disabled：lane 身份集合（实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
-  assert.equal(q.lanes[0].lane, 'l1');
-  assert.equal(q.lanes[0].enabled, false);
-  assert.equal(q.lanes[0].reason, 'watch-disabled');
-});
-
-test('H5c lane_longrun 引擎缺失 → disabled 状态对象（含 longrun 域字段候选/阈值 null）；beat=true no-op', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-d3-'));
-  const S = 'sess-whc-d3';
-  const store = runningStore(root, S, 'b-whc-d3', 'l1');
-  const ctx = { tools: { register: () => {} } };
-  const tools = createLongrunTools(ctx, {
-    store, root, mailbox,
-    config: { capabilities: { watch: { enabled: true, longrun: { enabled: true } } } },
-    getHeartbeat: () => null,
-  });
-  assert.deepEqual(tools.map((t) => t.name), ['lane_longrun'],
-    'longrun enabled 静态 → 注册工具名集合相等（实测 ' + JSON.stringify(tools.map((t) => t.name)) + '）');
-  const [tool] = tools;
-  const q = await tool.execute({ batchId: 'b-whc-d3', lane: 'l1', session: S, beat: true }, EXEC);
-  const row = q.lanes[0];
-  assert.equal(row.enabled, false);
-  assert.equal(row.reason, 'watch-disabled');
-  assert.equal(row.tracked, false);
-  assert.equal(row.candidate, false);
-  assert.equal(row.emitted, false);
-  assert.equal(row.maxDurationMs, null);
-  assert.equal(row.noProgressWindowMs, null);
-  assert.equal(row.runningSince, null);
-  assert.equal(row.checkpointFresh, false);
-  assert.equal(row.activityFresh, false);
-  assert.deepEqual(q.lanes.map((r) => r.lane), ['l1'],
-    '查询面 lane 身份集合（实测 ' + JSON.stringify(q.lanes.map((r) => r.lane)) + '）');
-});
-
-test('H5d getHeartbeat 执行时解引用：返回活引擎 → 查询走真实引擎（非 disabled）；修复旧实例闭包路径回归', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-whc-d4-'));
-  const S = 'sess-whc-d4';
-  const store = runningStore(root, S, 'b-whc-d4', 'l1');
-  const engine = createLaneHeartbeat({ store, mailbox, config: { capabilities: { watch: { enabled: true } } }, root });
-  engine.tick(); // 首拍建心跳 entry（missed 0；新派发宽限不追问）
-  const ref = { current: engine };
-  const ctx = { tools: { register: () => {} } };
-  const [tool] = createHeartbeatTools(ctx, {
-    store, root,
-    config: { capabilities: { watch: { enabled: true } } },
-    heartbeat: engine,
-    getHeartbeat: () => ref.current, // index 装配注入形态：heartbeatRef.current 执行时解引用
-  });
-  const q = await tool.execute({ batchId: 'b-whc-d4', lane: 'l1', session: S }, EXEC);
-  const row = q.lanes[0];
-  assert.equal(row.tracked, true, '活引擎路径返回真实心跳状态');
-  assert.equal(row.enabled, undefined, '真实 status 行无 enabled 键（disabled 以 reason 区分，非此路径）');
-  assert.notEqual(row.reason, 'watch-disabled');
-  // 热重建模拟：ref.current 指向新引擎实例 → 工具自动跟随（执行时解引用，不绑创建时旧实例）
-  const engine2 = createLaneHeartbeat({ store, mailbox, config: { capabilities: { watch: { enabled: true } } }, root });
-  engine2.tick();
-  ref.current = engine2;
-  const q2 = await tool.execute({ batchId: 'b-whc-d4', lane: 'l1', session: S }, EXEC);
-  assert.equal(q2.lanes[0].tracked, true, '热重建后工具跟随新实例（经 getHeartbeat 解引用）');
-  engine.dispose();
-  engine2.dispose();
-});
 
 // ── H6 热重建语义行为（引擎级，dispose+重建镜像 remountWatchEngine）：longrun.enabled=false 重建 → ──
 //    tick 不产候选（长跑探针停扫）但 stalled 档存活（watch 引擎仍在扫描）——「候选不再产」行为证据

@@ -159,7 +159,7 @@ export function installDifficultyGuard(ctx, deps) {
       // ① 非执行型：放行（治理/查询，防死锁）
       // ⚠ 治理工具豁免边界（明示）：
       //   - 豁免类别：治理/查询类工具（batch_status/gate_status/member_status/artifact_types/lane_checkpoint_status/
-      //     lane_heartbeat 等不在 EXEC_TOOLS 名单者）+ 非执行型写（如 mailbox_read 读回执、assign_check 评估本身）。
+      //     lane_heartbeat（已于 G3/B1 删除）等不在 EXEC_TOOLS 名单者）+ 非执行型写（如 assign_check 评估本身）。
       //   - 豁免理由：防死锁——难度门禁是「先评估后执行」的护栏，评估/查询动作若也被拦截将形成
       //     「评估→被拦→无法评估」死循环（worker 被派发后须先读状态再干活，读状态不能被门禁卡死）。
       //   - 豁免范围：仅限难度门禁（本 guard）；其余 guard 语义（EXEC_TOOLS 计数 bumpExecCount、

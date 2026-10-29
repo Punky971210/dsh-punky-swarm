@@ -214,9 +214,16 @@ export function writeRuntime(root, overlay) {
 // 消费约定（调用方须一致）：④ 的订阅项是 `{fn, opts}` ⇒ 取回调写 `for (const {fn} of …)`；
 //   ①②③ 的订阅项是**平坦 `fn`** ⇒ 写 `const h = [...listeners.get(ev)][0]`。
 
-/** 装配 ctx **基线**：`on` 项存平坦 `fn`；`calls`/`logger` 收集告警与日志。**无** `preCount`/`webServer`。 */
+/** 装配 ctx **基线**：`on` 项存平坦 `fn`；`calls`/`logger` 收集告警与日志。**无** `preCount`/`webServer`。
+ *
+ *  【2026-10-30 夹具补宿主键（G1 遗留回归，非 B1 引入）】`lib/index.js#apply` 起（G1 declare 批）在装配末尾
+ *   执行 `assertRequired(capabilityReport({...rt, ctx, config}))`，**必需宿主注入键缺失即 fail-closed 抛错**
+ *   （`tools` / `webServer` / `subagents` 三键）。本基线原先只给 `tools` ⇒ 装配级用例一律抛
+ *   `capability-missing: webServer,subagents`（实测：`watch-hotconfig` H1/H2/H3/H4/H7 与 `w7e-remount` T-1/T-2 系列）。
+ *   ⇒ 此处补 **最小 `subagents` 桩**（`tools` 已有；`webServer` 由 Web/Effect 变体各自提供）。
+ *   这是**补宿主契约面**，不是放宽任何判据（`assertRequired` 的 fail-closed 语义一字未动）。 */
 export function assemblyCtx() {
-  return baseAssemblyCtx();
+  return baseAssemblyCtx(); // `subagents` 桩已在基线单点补（见 baseAssemblyCtx 头注）
 }
 
 /** 基线 + `preCount()`：`tools/pre-execute` 已挂监听数（热挂/热卸断言用探针）。 */
@@ -248,7 +255,7 @@ export function assemblyCtxWeb() {
  *   · `effect(fn,label)`—— 记录注册（对齐宿主语义：`fn` 是**返回 cleanup 的工厂**）；
  *   · `effects[]`       —— `{ factory, label }` 清单，供断言注册数/注册序；
  *   · `runEffects()`    —— 逐个执行工厂并调用其 cleanup（模拟宿主卸载），返回 `[{label, ok, error?}]`；
- *   · `registered[]`    —— `ctx.tools.register` 收到的工具（供按名取 `lane_heartbeat` 等真实注册实例）；
+ *   · `registered[]`    —— `ctx.tools.register` 收到的工具（供按名取任一真实注册实例（B1 后 `lane_heartbeat` 已删，示例已失效））；
  *   · `routes[]`        —— `ctx.webServer.register` 收到的路由（供 GET /config 读 `applied` 快照）。
  *
  * ⚠ **返回 `{ ctx, routes }`**（与 `assemblyCtxWeb` 同形，因为两条断言都需要路由面）。
@@ -303,7 +310,14 @@ export function assemblyCtxOpts() {
   };
 }
 
-/** 基线实现（不导出）：三个变体共用，避免再抄一份。 */
+/** 基线实现（不导出）：三个变体共用，避免再抄一份。
+ *
+ *  【2026-10-30 补宿主必需注入键 `subagents`（G1 遗留回归，非 B1 引入）】`lib/index.js#apply` 装配末尾执行
+ *   `assertRequired(capabilityReport({...rt, ctx, config}))` ⇒ `tools`/`webServer`/`subagents` 任一缺失即
+ *   **fail-closed 抛 `capability-missing: …`**。本基线原先只给 `tools` ⇒ 依赖它的装配级用例（watch-hotconfig
+ *   H1/H2/H3/H4/H7、w7e-remount T-1/T-2 系列）在 `subagents` 上抛错。此处在**基线单点**补最小桩，
+ *   三个变体（`assemblyCtx` / `assemblyCtxPre` / `assemblyCtxWeb` / `assemblyCtxEffect`）同时受益。
+ *   这是**补宿主契约面**，不是放宽判据（`assertRequired` 的 fail-closed 语义一字未动）。 */
 function baseAssemblyCtx() {
   const listeners = new Map();
   const calls = { info: [], warn: [], error: [] };
@@ -315,6 +329,7 @@ function baseAssemblyCtx() {
   return {
     listeners, calls, logger,
     tools: { register() {} },
+    subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] },
     emit() {},
     on(event, fn) {
       if (!listeners.has(event)) listeners.set(event, new Set());

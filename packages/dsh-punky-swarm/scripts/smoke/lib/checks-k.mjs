@@ -33,8 +33,10 @@ const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toL
 //   ⇒ 本项**按 HEAD 实测基线钉死**（31/32）而不是抄规格里过时的 20/21：钉死的目的是「后续任何注册面漂移即红」，
 //     钉一个当前就不成立的数会让冒烟在干净 HEAD 上恒红（那就不是判据了）。
 //   订正已登记进 `exec/change-host-smoke.md`「规格输入前提订正」段，供 a1 复核。
-const EXPECTED_TOOLS_BARE = 31;
-const EXPECTED_TOOLS_FULL = 32;
+//   【G3 B1 删 5 件后重钉】**裸配置 26 / patch 全开 27**（差集仍恰 = `log_export`）；取数命令见
+//     `exec/e3-impl.md` §⑨（`createTools` 裸 `{}` vs `{capabilities:{logs:{enabled:true}}}` 两次实测）。
+const EXPECTED_TOOLS_BARE = 26;
+const EXPECTED_TOOLS_FULL = 27;
 
 /** H-01 部署面载入（§D-1.1-2：**读部署面，不读仓内路径**）。SKIP-able。 */
 function h01(sm) {

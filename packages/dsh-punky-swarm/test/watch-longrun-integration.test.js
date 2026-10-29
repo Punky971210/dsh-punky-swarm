@@ -31,9 +31,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import * as mailbox from '../lib/comms/mailbox.js';
-import { createMailboxTools } from '../lib/tools/mailbox-tools.js';
+// B1：lib/tools/mailbox-tools.js 已整件删除（createMailboxTools 随之消失）
 import {
-  createLongrunTools,
+  // B1：createLongrunTools 已随工具删除
   resolveLongrunConfig, LONGRUN_DEFAULTS, LONGRUN_REASON,
 } from '../lib/watch/lane-heartbeat.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
@@ -92,39 +92,6 @@ function managerTools(root, store) {
 const EXEC = { agent: { session: { id: 'cli' } } }; // args.session 优先生效，EXEC 仅兜底
 
 // ---- IT-A Manager 读面：mailbox_read(broadcast) 可达 + ack 后不再返回（T16 工具面）----
-test('IT-A Manager 读面：候选经 mailbox_read broadcast 可达且载荷齐全；ack 后不再返回', async () => {
-  const { root, store, S, batchId, lane } = setup();
-  const base = Date.now();
-  const config = { capabilities: { watch: { enabled: true } } };
-  laneHeartbeat(store, root, config, { now: () => base }).tick(); // 首拍建心跳 entry
-  laneHeartbeat(store, root, config, { now: () => base + 26 * MIN }).tick(); // 26min：超阈值且无 checkpoint/活动 → 产候选
-  const evs = candEvents(store, S, batchId, lane);
-  assert.equal(((evs ?? []).filter((e) => e.type === EVT_LANE_LONGRUN_CANDIDATE).map((e) => e.lane)).length, 1, '事件流恰 1 条候选');
-  const ev = evs[0];
-  const { read, ack } = managerTools(root, store);
-  const r1 = await read.execute({ batchId, box: 'broadcast', session: S }, EXEC);
-  const cand = candOf(r1.items).find((m) => m.message.lane === lane);
-  assert.ok(cand, 'mailbox_read broadcast 能读到候选（Manager 读面）');
-  const msg = cand.message;
-  assert.equal(msg.kind, 'longrun.candidate');
-  assert.equal(msg.sessionId, S);
-  assert.equal(msg.batchId, batchId);
-  assert.equal(msg.lane, lane);
-  assert.equal(msg.reason, LONGRUN_REASON);
-  assert.equal(msg.durationMs, ev.durationMs, 'broadcast 与事件载荷一致');
-  assert.equal(msg.maxDurationMs, MAX_D);
-  assert.equal(msg.noProgressWindowMs, WINDOW);
-  assert.equal(typeof msg.runningSince, 'string');
-  assert.equal(msg.checkpointFresh, false);
-  assert.equal(msg.activityFresh, false);
-  assert.ok(cand.ackId, '候选消息带 ackId');
-  const a = await ack.execute({ batchId, box: 'broadcast', ackId: cand.ackId, session: S }, EXEC);
-  assert.equal(a.ok, true);
-  const r2 = await read.execute({ batchId, box: 'broadcast', session: S }, EXEC);
-  assert.equal(candOf(r2.items).filter((m) => m.message.lane === lane).length, 0, 'ack 后不再返回');
-  assert.deepEqual(candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince)), [Date.parse(msg.runningSince)], '事件留痕不受 ack 影响（身份 = 同一期 runningSince；期望取自测试自己的 msg）');
-});
-
 // ---- IT-B 方向（D-3 双通道后修订）：候选入 broadcast + supervisor/inbox 双通道；outbox 无候选 ----
 // 契约变更注记（本批 D-3）：原断言为「候选只入 broadcast，inbox 绝无候选」（单通道设计）。
 //   用户裁决 D-3 = 候选除 broadcast 外**同时投 supervisor/inbox**（spec §3.7.2），本条断言随契约更新：
@@ -241,40 +208,3 @@ test('IT-F stint 重派重置：新 dispatch → 计时归零；再超时按新 
 });
 
 // ---- IT-G 出厂默认开：空配置（无 capabilities.watch.longrun）tick 即探针可用 ----
-test('IT-G 出厂默认开：resolveLongrunConfig({}) enabled=true；空配置引擎 tick 产候选 + lane_longrun 注册/查询可用', async () => {
-  const d = resolveLongrunConfig({});
-  assert.equal(d.enabled, true, '缺省 enabled=true（定案默认开）');
-  // 空配置 + 25min 前派发的 running stint：直写批次文件（不经 setMember——其真实 settled ts ≈ now 会覆盖伪造时间轴）
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-lrig-'));
-  const store = createStore(root);
-  const S = 'sess-lri-g';
-  const batchId = 'b-lri-g';
-  const lane = 'l1';
-  const plan = buildWavePlan({ batchId, tasks: [{ id: lane, outputs: ['exec/l1/out.txt'], cmd: 'work' }] });
-  store.createBatch(S, { batchId, wavePlan: plan, phase: 'running' });
-  const bf = store.batchFile(S, batchId);
-  const b0 = JSON.parse(fs.readFileSync(bf, 'utf8'));
-  b0.lanes[lane] = 'running'; // plan 初态 pending → running（直写）
-  b0.events.push({ ts: new Date(Date.now() - 25 * MIN).toISOString(), type: EVT_MEMBER_DISPATCH, lane, workerSessionId: 'w1' });
-  fs.writeFileSync(bf, JSON.stringify(b0, null, 2));
-  const engine = laneHeartbeat(store, root, {}); // 空配置：出厂默认开路径（无 capabilities.watch.longrun 键）
-  engine.tick();
-  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '空配置 tick 即产候选（默认开）');
-  assert.equal((candOf(bcastItems(root, S, batchId)).map((m) => m.message?.lane)).length, 1);
-  // lane_longrun 注册可用 + 查询回显 emitted
-  const ctx = { tools: { register: () => {} } };
-  const tools = createLongrunTools(ctx, { store, root, config: {}, heartbeat: engine });
-  assert.deepEqual(tools.map((t) => t.name), ['lane_longrun'], '空配置 → 注册工具身份集合 = {lane_longrun}（默认开）');
-  assert.equal(tools[0].name, 'lane_longrun');
-  const q = await tools[0].execute({ batchId, session: S }, EXEC);
-  assert.equal(q.sessionId, S);
-  const row = q.lanes.find((x) => x.lane === lane);
-  assert.ok(row, '查询返回探针状态行');
-  assert.equal(row.enabled, true, '空配置 → longrun 默认开');
-  assert.equal(row.maxDurationMs, MAX_D, '默认阈值 20min 生效');
-  assert.equal(row.noProgressWindowMs, WINDOW, '默认无进展窗 5min 生效');
-  assert.equal(row.emitted, true, '事件流已产候选 → emitted=true');
-  // 注：tick 产候选后心跳扫描已建 fresh entry（重启宽限，lastActivityAt≈now）→ 查询即时判定 candidate 可为 false
-  //（activity-fresh 属既有宽限语义，非回归）；候选事实由事件流 + emitted 回显保证。
-  assert.equal((candEvents(store, S, batchId, lane).map((e) => Date.parse(e.runningSince))).length, 1, '事件流恰 1 条候选（最终事实源）');
-});

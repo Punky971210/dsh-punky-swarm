@@ -32,9 +32,8 @@ export const CONTROL_PLANE_TOOLS = new Set([
   // 蟛蜞治理 core 11 + mailbox 3
   'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim',
   'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_status',
-  'mailbox_send', 'mailbox_read', 'mailbox_ack',
   // 后续挂载能力（watch/worktree/budget/trajectory 装配后同样控制面）
-  'lane_heartbeat', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint',
+  'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint',
   // 宿主控制/会话面
   'ask_user_question', 'describe_image', 'read_image', 'todo_write', 'list_agents',
   'send_message', 'interrupt_agent', 'job_list', 'job_output', 'job_kill',
