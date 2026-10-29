@@ -28,11 +28,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   逐项 `cpSync`，末尾只 `rmSync('.tsbuild')`）⇒ 本目录若写 `.ts`，emit 到 `.tsbuild/bus/*.js` 后**永不回拷**，
 //   `.tsbuild` 一删就是运行期 `ERR_MODULE_NOT_FOUND`。手写 `.js` 本身**不会**被 build 触碰。
 //
-// 四条可证伪面（F-1…F-4）在本文件各有**单点**加固，并留**反向校验开关** `harden.<fN> = false`
-//   （测试缝；生产不传 ⇒ 全开零行为）。开关的唯一用途 = 证明「使它不再发生的那一行」真的在起作用：
+// 四条可证伪面（F-1…F-4）在本文件各有**单点**加固。反向校验开关**不在对外签名里**：生产不可关断，
+//   测试缝只走环境闩 `PUNKY_TEST_HARDEN=1` ＋ `PUNKY_TEST_HARDEN_FLAGS`（**调用时读取**）。
+//   开关的唯一用途 = 证明「使它不再发生的那一行」真的在起作用：
 //     F-1 可选端口被当必需直用  → `of()` 单点取件（缺省已由 null 适配器补齐）
 //     F-2 降级不可见            → `record()` 是 `degrades` 的唯一写入点，`report().missing` 由它投影
-//     F-3 两路径形状不一致      → `toRosterView()` 是唯一出口形状
+//     F-3 出口形状退化          → `toRosterView()` 是唯一出口形状（判红 = 出口退化为裸 Row[]；按「路径间差异」判会假绿——关加固时两条都退化为数组）
 //     F-4 空证据被判 advanced   → `classifyProgress()` 要求 evidence 与 writes **都非空**
 import { BUILTIN_ROLES, reconcileRoster } from '../roster.js';
 import { CAPABILITY_KEYS, HOST_INJECTIONS, capabilityReport } from '../capabilities.js';
@@ -65,6 +66,25 @@ export function createNullAdapters() {
   };
 }
 
+// ── 环境闩（**唯一**测试缝）：生产零环境变量 ⇒ 零覆盖 ─────────────────────────────
+const HARDEN_ENV_LATCH = 'PUNKY_TEST_HARDEN'; // 必须恰为 '1'
+const HARDEN_ENV_FLAGS = 'PUNKY_TEST_HARDEN_FLAGS'; // 'f1' | 'f1,f2' | '' —— 要被关断的开关名
+
+/**
+ * 读环境闩。**必须在 `createBus` 调用时读取**（模块加载时读会让闩变成全局一次性，
+ * 那样 `selftest.mjs` 的逐探针隔离就废了）。
+ */
+const hardenFlagsFromEnv = () => {
+  if (process.env[HARDEN_ENV_LATCH] !== '1') return {}; // 生产：一切照旧（四条全开）
+  const raw = String(process.env[HARDEN_ENV_FLAGS] ?? '');
+  const out = {};
+  for (const token of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (!(token in HARDEN_ALL)) throw new Error('harden env rejected: unknown flag: ' + token);
+    out[token] = false;
+  }
+  return out;
+};
+
 /**
  * 建总线。
  *
@@ -72,10 +92,19 @@ export function createNullAdapters() {
  * @param {{report?: Function}|null} [opts.capabilities] 装配开关面（缺省用 `lib/capabilities.js` 的 `capabilityReport`）。
  * @param {object|null} [opts.roster] 职位面（缺省用 `lib/roster.js`）。
  * @param {Record<string, object>|null} [opts.ports] 外部端口注入（键须 ⊆ `PORT_SLOTS`）。
- * @param {Record<string, boolean>} [opts.harden] 反向校验开关（`{f1:false}` 等；测试缝）。
+ *
+ * ⚠ **不支持 `harden` 参数**：四条加固在生产**不可关断**。测试缝只走环境闩
+ *   （`PUNKY_TEST_HARDEN=1` ＋ `PUNKY_TEST_HARDEN_FLAGS`）。
+ *   若 `opts` 里出现 `harden` 键 ⇒ **抛普通 `Error`**（不是忽略、也不是静默生效）——
+ *   忽略等于把「静默降级」换个位置重开，且这次连报错都没有。
  */
-export function createBus({ capabilities = null, roster = null, ports = null, harden = {} } = {}) {
-  const flags = { ...HARDEN_ALL, ...(harden ?? {}) };
+export function createBus(opts = {}) {
+  if (opts && Object.prototype.hasOwnProperty.call(opts, 'harden')) {
+    throw new Error('createBus rejected: `harden` 不是对外参数（生产不可关断加固；测试缝走 '
+      + HARDEN_ENV_LATCH + '=1 + ' + HARDEN_ENV_FLAGS + '）');
+  }
+  const { capabilities = null, roster = null, ports = null } = opts ?? {};
+  const flags = { ...HARDEN_ALL, ...hardenFlagsFromEnv() };
   const nulls = createNullAdapters();
   const resolved = new Map();
   const degrades = [];
@@ -147,7 +176,7 @@ export function createBus({ capabilities = null, roster = null, ports = null, ha
     const source = of('roster');
     const rows = await source.read();
     if (!flags.f3) {
-      return rows; // 反向开关：端口路径直返 Row[] ⇒ 与内建路径形状不同（F-3 红）
+      return rows; // 反向开关：route 直返裸 Row[] ⇒ 出口形状退化（F-3 红）；注意两条路径此时**都**退化为数组，故判据必须落在「形状是否归一对象」上
     }
     const seatView = toRosterView(rows);
     const builtinView = toRosterView(roster?.builtinRoles ?? BUILTIN_ROLES);

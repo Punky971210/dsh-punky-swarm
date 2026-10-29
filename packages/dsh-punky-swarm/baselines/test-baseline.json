@@ -585,11 +585,19 @@
       "todos": 0
     },
     "test/g2-bus-falsify.test.js": {
-      "asserts": 52,
-      "blankLines": 33,
-      "lines": 236,
+      "asserts": 54,
+      "blankLines": 34,
+      "lines": 271,
       "tautologies": 0,
       "tests": 10,
+      "todos": 0
+    },
+    "test/g2-harden-latch.test.js": {
+      "asserts": 24,
+      "blankLines": 16,
+      "lines": 157,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/g2-ports-contract.test.js": {
@@ -598,6 +606,14 @@
       "lines": 195,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/g2-t4-stop-reason-source.test.js": {
+      "asserts": 7,
+      "blankLines": 14,
+      "lines": 114,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/gate-artifact-containment.test.js": {
@@ -1027,7 +1043,7 @@
     "test/legacy-fix.test.js": {
       "asserts": 20,
       "blankLines": 16,
-      "lines": 141,
+      "lines": 163,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1275,7 +1291,7 @@
     "test/ratchet-wiring.test.js": {
       "asserts": 35,
       "blankLines": 28,
-      "lines": 317,
+      "lines": 329,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1353,11 +1369,11 @@
       "todos": 0
     },
     "test/roster-self-held.test.js": {
-      "asserts": 40,
-      "blankLines": 35,
-      "lines": 270,
+      "asserts": 42,
+      "blankLines": 40,
+      "lines": 320,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 11,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -1705,7 +1721,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T16:55:55Z",
+  "generatedAt": "2026-10-29T17:43:30Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1716,15 +1732,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-g2-adapter-2026-10-30: G2 内部 adapter 抽象 + null 适配器（I-03 契约真实化 + lib/bus/** 四动作 + null 适配器 + 抽象泄漏枚举）；新增 test/g2-bus-falsify.test.js(10) 与 test/g2-ports-contract.test.js(6)；受控 build 重生成 schema/ports 四件产物",
+  "reason": "punky-g2-tail-2026-10-30: G2 四条 followup 收口（T-1 harden 对外不可传 + env 闩 + 传了即抛 / T-2 失败集合隔离 / T-3 F-3 判据改出口形状 / T-4 计数三分）+ 修复 G1 遗留的两处既有回归（legacy-fix / ratchet-wiring 伪 ctx 补宿主键桩，断言零放宽）；新增 test/g2-harden-latch.test.js(5) 与 test/g2-t4-stop-reason-source.test.js(3)",
   "schema": 1,
   "totals": {
-    "asserts": 11162,
-    "blankLines": 6009,
-    "files": 213,
-    "lines": 64184,
+    "asserts": 11197,
+    "blankLines": 6045,
+    "files": 215,
+    "lines": 64574,
     "tautologies": 0,
-    "tests": 2253,
+    "tests": 2262,
     "todos": 4
   }
 }

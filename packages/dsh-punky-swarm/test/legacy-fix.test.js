@@ -35,8 +35,20 @@ import { apply } from '../lib/index.js';
 import { resolveVerifyConfig as schemaResolve } from '../lib/schema.js';
 import * as mountMod from '../lib/verify/mount.js';
 
-// mock ctx（tools.register 空实现、webServer 缺席、logger 收集）——createTools 经
+// mock ctx（tools.register 空实现、logger 收集）——createTools 经
 // ctx.tools.register 注册；installDifficultyGuard 对 ctx.tools.guard 可选链，缺省安全跳过。
+//
+// 【夹具修正（批 `punky-g2-tail-2026-10-30` · lane `t1-test`）—— 补宿主键桩，**不动任何断言**】
+//   病根：G1 declare 批把 `apply()` 的 `assertRequired` 改成 **fail-closed**（必需宿主注入键缺失即抛）。
+//     本文件的伪 ctx 原先只给 `tools`，缺 `webServer` / `subagents` ⇒ `apply()` 抛
+//     `capability-missing: webServer,subagents` ⇒ T4.1/T4.2/T4.3 三例**根本没跑到被测面**就红了
+//     （HEAD 上同样红，属 G1 引入的测试侧回归，非本批改动造成）。
+//   修法：**只补宿主面桩**（形状够 `apply` 装配用即可），让被测面重新可达：
+//     ① 两个**必需注入键** `webServer` / `subagents`（`assertRequired` 必需面）；
+//     ② 宿主事件订阅面 `on()`（缺它会走 `installGovernanceHook` / `installLaneWake` 的 inert 分支，
+//        而 G1-gapfix 起 inert 会**发 warn** ⇒ T4.3「缺省 config 零 warn」会因装配噪声而非被测行为变红）。
+//   两者都是**补宿主契约面**，不是放宽判据。
+//   ⚠ **禁**改成「放宽 `assertRequired`」或「吞掉抛错」—— 那等于把 G1 之前那个「装上了但一半能力是空气」的洞重开。
 function makeCtx() {
   const calls = { info: [], warn: [], error: [] };
   const logger = {
@@ -44,7 +56,17 @@ function makeCtx() {
     warn: (...a) => calls.warn.push(a.join(' ')),
     error: (...a) => calls.error.push(a.join(' ')),
   };
-  return { logger, calls, tools: { register() {} } };
+  return {
+    logger, calls,
+    tools: { register() {} },
+    // 宿主必需注入键 #2：路由注册面（最小桩，不产生任何路由副作用）
+    webServer: { register: () => () => {} },
+    // 宿主必需注入键 #3：子代理服务面（最小桩；本文件所有用例都不会真的派发子代理）
+    subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] },
+    // 宿主事件订阅面（返回 disposer；不真正订阅 ⇒ 装配期零副作用、零 inert 噪声）
+    on: () => () => {},
+    emit: () => {},
+  };
 }
 
 function freshRoot() {

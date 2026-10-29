@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 // bus 自证入口（可执行）：`node lib/bus/selftest.mjs`
 //
-// 退出码：0 = 全部检查通过；1 = 有检查失败（**含反向开关模式下的「缺陷已复现」**）。
+// 退出码：0 = 全部检查通过；1 = 有检查失败（**含 `--break` 模式下的「缺陷已复现」**）。
 //
 // 模式：
-//   node lib/bus/selftest.mjs               　→ 正向：四条加固 + 否定对照 + 四动作探针，全绿才 0
-//   node lib/bus/selftest.mjs --break=f1    → 关掉 F-1 加固 ⇒ **必须红**（证明该行在起作用）
-//                                             --break=f2 / f3 / f4 同理
+//   node lib/bus/selftest.mjs                → 正向：四条加固 + 拒态/闩 + 否定对照 + 四动作 + 最小批次，全绿才 0
+//   node lib/bus/selftest.mjs --break=fN     → 只关掉 F-N 那条加固 ⇒ 该条**必须红**
+//                                              （N=1..4；「隔离是否成立」看 `ISOLATION:` 行，**不看退出码**）
 //
-// 设计要点：每条反例的「反向开关」是**同一个实现里的一个分支**（`harden.<fN>=false`），
-//   不是另写一份缺陷实现 —— 否则「复现」证明不了任何东西。
+// 设计要点（T-1 / T-2 之后）：
+//   1. 探针**不再接收 harden 参数**：开关只经环境闩（`PUNKY_TEST_HARDEN` ＋ `PUNKY_TEST_HARDEN_FLAGS`），
+//      由 `withBreak()` 在**逐探针作用域**内设置/还原 ⇒ 一条被关不会连累其它探针（原缺陷：一个 harden
+//      对象传给全部探针 ⇒ 交叉污染）。
+//   2. 隔离的可判形态 = **失败集合相等**（`{F-N}`），不是退出码：`--break` 两分支都 exit 1，
+//      用退出码判隔离等于用一个恒等值判差异。
+//   3. 「反向开关」仍是**同一实现里的一个分支**（env → `flags.fN = false`），不是另写一份缺陷实现。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,11 +24,32 @@ import { BUILTIN_ROLES } from '../roster.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 
+const ENV_LATCH = 'PUNKY_TEST_HARDEN';
+const ENV_FLAGS = 'PUNKY_TEST_HARDEN_FLAGS';
+
 const results = [];
 const record = (id, ok, readout) => {
   results.push({ id, ok, readout });
   console.log((ok ? 'PASS ' : 'FAIL ') + id + '  ' + readout);
 };
+/** 从结果 id 抽机器可判的标签（`F-1` / `C0` / `C9` …），用于算失败集合。 */
+const tagOf = (id) => (String(id).match(/^(F-\d|C\d+)/) ?? [''])[0];
+
+// ── env 作用域工具：设置 → 跑 → **还原**（逐探针隔离的物理基础）────────────────────
+function withEnv(vars, fn) {
+  const prev = {};
+  for (const [k, v] of Object.entries(vars)) {
+    prev[k] = process.env[k];
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+}
 
 // ── C0 形状对账：PORT_SLOTS（= null 适配器键集）⟷ lib/ports.ts#KernelPorts ──────────
 function checkShapeReconciliation() {
@@ -39,11 +65,11 @@ function checkShapeReconciliation() {
     + (ok ? '  (集合相等)' : '  多出=' + JSON.stringify(onlyBus) + ' 缺失=' + JSON.stringify(onlyPorts)));
 }
 
-// ── C1 · F-1 可选端口被当必需直用 ────────────────────────────────────────────────
-async function checkF1(harden) {
+// ── F-1 可选端口被当必需直用（**零参数**：开关由调用它的 withBreak 作用域提供）──────────
+async function checkF1() {
   // 构造：只给必需两项（runtime/audit）；roster 显式为 null ⇒ 可选缺失
   const ports = { runtime: createNullAdapters().runtime, audit: createNullAdapters().audit, roster: null };
-  const bus = createBus({ ports, harden });
+  const bus = createBus({ ports });
   try {
     const routed = await bus.route('coder');
     const degrades = bus.report().degrades.map((d) => d.slot);
@@ -56,10 +82,10 @@ async function checkF1(harden) {
   }
 }
 
-// ── C2 · F-2 降级不可见（三个可选同时缺、必需齐）──────────────────────────────────
-function checkF2(harden) {
+// ── F-2 降级不可见（三个可选同时缺、必需齐）────────────────────────────────────────
+function checkF2() {
   const nulls = createNullAdapters();
-  const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit }, harden });
+  const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
   const rep = bus.report();
   const capabilityRecords = rep.capabilityRecords ?? [];
   const optionalAllMissing = ['roster', 'tools', 'http'].every((slot) => rep.missing.includes(slot));
@@ -68,31 +94,34 @@ function checkF2(harden) {
     'missing=' + JSON.stringify(rep.missing) + '；capability-*记录=' + JSON.stringify(capabilityRecords));
 }
 
-// ── C3 · F-3 两路径形状不一致 ────────────────────────────────────────────────────
-async function checkF3(harden) {
+// ── F-3 出口形状退化 ────────────────────────────────────────────────────────────
+// 判据 = **出口是否为归一对象**（非 Array 且 `view.matched/builtinOnly/hostOnly` 三键在场）。
+// 不再比「两路径键名是否相同」——关加固时两条路径**都**退化为裸 Row[]，键名自然仍相等 ⇒ 那是假绿。
+const isNormalizedView = (x) => Boolean(x) && typeof x === 'object' && !Array.isArray(x)
+  && Boolean(x.view) && typeof x.view === 'object' && !Array.isArray(x.view)
+  && Array.isArray(x.view.matched) && Array.isArray(x.view.builtinOnly) && Array.isArray(x.view.hostOnly);
+
+async function checkF3() {
   const base = { runtime: createNullAdapters().runtime, audit: createNullAdapters().audit };
-  const viaNull = createBus({ ports: { ...base, roster: null }, harden });
-  const viaReal = createBus({
-    ports: { ...base, roster: { read: () => [{ name: 'coder' }, { name: 'lead' }] } },
-    harden,
-  });
+  const viaNull = createBus({ ports: { ...base, roster: null } });
+  const viaReal = createBus({ ports: { ...base, roster: { read: () => [{ name: 'coder' }, { name: 'lead' }] } } });
   const a = await viaNull.route('coder'); // 内建路径
   const b = await viaReal.route('coder'); // 端口路径（返回等价 Row）
-  const ka = JSON.stringify(Object.keys(a).sort());
-  const kb = JSON.stringify(Object.keys(b).sort());
-  const ok = ka === kb;
-  return record('F-3 形状一致', ok, 'null路径键=' + ka + ' 真实端口路径键=' + kb);
+  const ok = isNormalizedView(a) && isNormalizedView(b);
+  return record('F-3 出口形状', ok,
+    'null路径归一=' + isNormalizedView(a) + '（' + (Array.isArray(a) ? '裸数组' : typeof a) + '）'
+    + ' 真实端口路径归一=' + isNormalizedView(b) + '（' + (Array.isArray(b) ? '裸数组' : typeof b) + '）');
 }
 
-// ── C4 · F-4 空证据被判 advanced ────────────────────────────────────────────────
-function checkF4(harden) {
-  const bus = createBus({ harden });
+// ── F-4 空证据被判 advanced ──────────────────────────────────────────────────────
+function checkF4() {
+  const bus = createBus({ ports: { runtime: createNullAdapters().runtime, audit: createNullAdapters().audit } });
   const classification = bus.classifyProgress({ writes: [], evidence: [] });
   const ok = classification !== 'advanced';
   return record('F-4 空证据不谎报', ok, 'classification=' + classification + '（期望 ≠ advanced）');
 }
 
-// ── C5 · 否定对照（AC-14）：故意缺必需端口 ⇒ 必须抛，不得静默通过 ─────────────────
+// ── C5 否定对照：故意缺必需端口 ⇒ 必须抛，不得静默通过 ────────────────────────────
 function checkNegativeControl() {
   const bus = createBus({}); // 不给 runtime / audit
   try {
@@ -110,7 +139,7 @@ function checkNegativeControl() {
   }
 }
 
-// ── C6 · 四动作各一条探针 ───────────────────────────────────────────────────────
+// ── C6 四动作各一条探针 ─────────────────────────────────────────────────────────
 async function checkFourActions() {
   const nulls = createNullAdapters();
   const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
@@ -123,7 +152,7 @@ async function checkFourActions() {
   return record('C6 四动作', ok, out.join(' ｜ '));
 }
 
-// ── C7 · 最小批次跑完（runMinimalBatch）────────────────────────────────────────
+// ── C7 最小批次跑完（runMinimalBatch）──────────────────────────────────────────
 async function checkMinimalBatch() {
   const nulls = createNullAdapters();
   const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
@@ -137,16 +166,58 @@ async function checkMinimalBatch() {
     'steps=' + JSON.stringify(summary.steps) + ' classification=' + summary.classification);
 }
 
+// ── C8 T-1 态②：对外传 `harden` ⇒ **抛普通 Error**（不是忽略）────────────────────
+function checkHardenRejected() {
+  try {
+    createBus({ harden: {} });
+    return record('C8 拒 harden', false, '静默通过 ⇒ 不合格（harden 被忽略 = 换位置重开的静默降级）');
+  } catch (err) {
+    const msg = String(err?.message ?? '');
+    const ok = err instanceof Error
+      && err.code === undefined
+      && !/^GATE_/.test(msg)
+      && msg.includes('harden')
+      && msg.includes(ENV_LATCH);
+    return record('C8 拒 harden', ok,
+      'THREW ' + String(err?.constructor?.name) + ' code=' + String(err?.code) + ' msg=' + JSON.stringify(msg));
+  }
+}
+
+// ── C9 T-1 态③/④：环境闩双条件 ＋ 未知 flag ⇒ 抛 ─────────────────────────────────
+function checkEnvLatch() {
+  const nulls = createNullAdapters();
+  const make = () => createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
+  // ① 闩**关**（或非 '1'）⇒ FLAGS 被**完全忽略**（半生效即违规）
+  const latchOff = withEnv({ [ENV_LATCH]: undefined, [ENV_FLAGS]: 'f2' }, () => make().report().missing);
+  // ② 闩**开** ⇒ 只关断 FLAGS 列出的那条（f2 关 ⇒ 降级不再记录 ⇒ missing 为空）
+  const latchOn = withEnv({ [ENV_LATCH]: '1', [ENV_FLAGS]: 'f2' }, () => make().report().missing);
+  // ③ 未知 flag ⇒ 抛（不得静默忽略）
+  let unknown = null;
+  try { withEnv({ [ENV_LATCH]: '1', [ENV_FLAGS]: 'f9' }, () => make()); } catch (err) { unknown = err; }
+  const ok = latchOff.length > 0
+    && latchOn.length === 0
+    && unknown instanceof Error
+    && String(unknown.message).includes('unknown flag');
+  return record('C9 闩双条件', ok,
+    '闩关⇒missing=' + JSON.stringify(latchOff) + '（须非空）／闩开+FLAGS=f2⇒missing=' + JSON.stringify(latchOn)
+    + '（须为空）／未知 flag⇒' + (unknown ? 'THREW ' + String(unknown.message) : '未抛（不合格）'));
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 const breakArg = process.argv.slice(2).find((a) => a.startsWith('--break='));
 const breakTarget = breakArg ? breakArg.slice('--break='.length) : null;
-const harden = breakTarget ? { [breakTarget]: false } : {};
+const expectedTag = breakTarget ? 'F-' + breakTarget.slice(1) : null;
 
-console.log('== bus selftest ==' + (breakTarget ? '  [反向开关 harden.' + breakTarget + '=false]' : ''));
+console.log('== bus selftest ==' + (breakTarget ? '  [只关 F-' + breakTarget.slice(1) + ' 那条加固]' : ''));
 
-// 逐检查捕获：某条加固被关掉后，缺陷可能**溢出到别的探针**并抛错（例如 F-1 的裸解引用会让
-//   F-3 的取件路径先崩）。那也要记成该探针的 FAIL，而不是让整个脚本崩掉 —— 否则「缺陷已复现」
-//   的读数会被一个未捕获异常盖住，读的人只看到 stack。
+/** 逐探针作用域：**只给自己那条**设 flags，其余探针拿到空 flags（= 全开）。 */
+async function withBreak(id, fn) {
+  // 注意 `id` 可能是 null（非 break 探针）⇒ 必须用 `id && …`，否则 `null === null` 会把 FLAGS 设成 "null"。
+  const flags = id && breakTarget === id ? id : '';
+  return withEnv({ [ENV_LATCH]: '1', [ENV_FLAGS]: flags }, () => fn());
+}
+
+/** 逐检查捕获：某条加固被关掉后若真抛出，也要记成**触发它的那条**的 FAIL，而不是让脚本崩掉。 */
 async function runSafely(label, fn) {
   try {
     return await fn();
@@ -155,26 +226,31 @@ async function runSafely(label, fn) {
   }
 }
 
-await runSafely('C0', checkShapeReconciliation);
-await runSafely('F-1', () => checkF1(harden));
-await runSafely('F-2', () => checkF2(harden));
-await runSafely('F-3', () => checkF3(harden));
-await runSafely('F-4', () => checkF4(harden));
+await runSafely('C0', () => withBreak(null, checkShapeReconciliation));
+await runSafely('F-1', () => withBreak('f1', checkF1));
+await runSafely('F-2', () => withBreak('f2', checkF2));
+await runSafely('F-3', () => withBreak('f3', checkF3));
+await runSafely('F-4', () => withBreak('f4', checkF4));
 if (!breakTarget) {
   await runSafely('C5', checkNegativeControl);
-  await runSafely('C6', checkFourActions);
-  await runSafely('C7', checkMinimalBatch);
+  await runSafely('C6', () => withBreak(null, checkFourActions));
+  await runSafely('C7', () => withBreak(null, checkMinimalBatch));
+  await runSafely('C8', checkHardenRejected);
+  await runSafely('C9', checkEnvLatch);
 }
 
 const failed = results.filter((r) => !r.ok);
+const failSet = [...new Set(failed.map((r) => tagOf(r.id)).filter(Boolean))].sort();
+
 if (breakTarget) {
-  const hit = failed.find((r) => r.id.startsWith('F-' + breakTarget.slice(1)));
-  if (hit) {
-    console.log('== 缺陷已复现（harden.' + breakTarget + '=false ⇒ ' + hit.id + ' 红）⇒ exit 1 ==');
-    process.exit(1);
-  }
-  console.log('== 反向开关无效：关掉 ' + breakTarget + ' 后该检查仍绿 ⇒ 该行并非守卫 ==');
+  const actualF = failSet.filter((t) => t.startsWith('F-'));
+  const isolated = actualF.length === 1 && actualF[0] === expectedTag;
+  console.log('== BREAK ' + breakTarget + ' ⇒ 失败集合={' + failSet.join(',') + '} 期望={' + expectedTag + '} ==');
+  // 退出码：保持既有「复现即 exit 1」语义 —— **不作为隔离判据**（两分支同为 1）
+  console.log('ISOLATION: ' + (isolated ? 'ok' : 'VIOLATED（期望 {' + expectedTag + '}）'));
   process.exit(1);
 }
-console.log('== ' + (failed.length === 0 ? 'ALL PASS' : failed.length + ' FAILED') + ' ⇒ exit ' + (failed.length === 0 ? 0 : 1) + ' ==');
+
+console.log('== ' + (failed.length === 0 ? 'ALL PASS' : failed.length + ' FAILED 失败集合={' + failSet.join(',') + '}')
+  + ' ⇒ exit ' + (failed.length === 0 ? 0 : 1) + ' ==');
 process.exit(failed.length === 0 ? 0 : 1);

@@ -74,6 +74,13 @@ function freshRootTracked(tag) {
 }
 
 // ── 探测体（写入临时文件，不落仓库；被测模块经绝对 file:// URL 导入）──
+// 【夹具修正（批 `punky-g2-tail-2026-10-30` · lane `t1-test`）—— 补 `subagents` 宿主键桩，**不动任何断言**】
+//   G1 declare 批把 `apply()` 的 `assertRequired` 改成 fail-closed（必需宿主注入键 `tools`/`webServer`/`subagents`
+//   缺失即抛）：本探测体原先只给 `tools` + `webServer`，缺 `subagents` ⇒ `apply()` 抛
+//   `capability-missing: webServer,subagents` ⇒ E1-a/b/c 三例在**装配期**即红，根本没跑到棘轮判定面。
+//   该红在 HEAD 上同样存在（属 G1 引入的**测试侧回归**），本批按「只补宿主键桩」修，**禁**放宽断言、
+//   **禁**把 fail-closed 降级（降级就重开 G1 之前那个「装上了但一半能力是空气」的洞）。
+//   ⚠ 本注释在模板字符串**之外**；探测体内部只留一行不含反引号的等价说明（否则会截断 PROBE_SOURCE）。
 const PROBE_SOURCE = `import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -95,12 +102,17 @@ try {
 
   const captured = [];
   const routes = [];
+  // 夹具修正（批 punky-g2-tail-2026-10-30 / lane t1-test）：补宿主必需注入键 subagents 的最小桩。
+  //   原因：G1 declare 批把 apply() 的 assertRequired 改成 fail-closed，缺该键即在装配期抛
+  //   capability-missing: webServer,subagents，E1-a/b/c 根本跑到不到棘轮判定面（HEAD 上同样红）。
+  //   只补桩，禁放宽断言、禁把 fail-closed 降级。
   const ctx = {
     logger: { info() {}, warn() {}, error() {} },
     tools: { register(t) { captured.push(t); } },
     emit() {},
     on() { return () => {}; },
     webServer: { register(r) { routes.push(r); return () => {}; } },
+    subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] },
   };
   const config = { root: ROOT };
   if (RAW && RAW !== 'none') config.ratchet = JSON.parse(RAW);

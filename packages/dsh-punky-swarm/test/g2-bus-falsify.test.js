@@ -28,6 +28,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 写法纪律（C-14）：**禁数量断言** —— 判据主体 = 集合相等 / 集合为空 / 匹配存在性 / 捕获到的抛错形态。
 //   反向开关 `harden.<fN> = false` 是**被测对象自带的测试缝**（生产不传 ⇒ 零行为），本文件用它取得
+//   反向开关**迁移后**已不在对外签名里（批 `punky-g2-tail-2026-10-30` T-1 收口）：改由**环境闩**
+//   `PUNKY_TEST_HARDEN='1' + PUNKY_TEST_HARDEN_FLAGS='fN'` 驱动（见 `createBusWithHardenOff`）。
+//   本文件用它取得
 //   「判红读数」，证明「使它不再发生的那一行」真的在起作用（包 §2.6 三条共同要求）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,6 +52,30 @@ const requiredPortsFixture = () => ({
   runtime: { start: () => ({ ok: true, writes: [], evidence: [] }), stop: () => ({ ok: true }) },
   audit: { emit: () => null },
 });
+
+/**
+ * **反向开关迁移后的唯一入口**（批 `punky-g2-tail-2026-10-30` · T-1 收口后）：
+ * 加固关断已**不在对外签名里**（`createBus({ harden })` 会被拒），改由**环境闩**驱动 ——
+ *   ① `PUNKY_TEST_HARDEN` 必须恰为 `'1'` 才生效（否则 FLAGS 被完全忽略，不半生效）；
+ *   ② `PUNKY_TEST_HARDEN_FLAGS` 列出要被关断的开关名（本文件固定单条 `'fN'`）；
+ *   ③ 闩在 **`createBus` 调用时**读取（不是模块加载时）⇒ 本助手必须在**调用前后**设置/还原。
+ *
+ * 迁移纪律（包 §2.6）：**判红读数必须与迁移前等价** —— 关断后仍要拿到
+ *   F-1 的 `TypeError` / F-2 的 `missing=[]` / F-3 的裸数组 / F-4 的 `advanced`。
+ *   本助手只换「开关怎么开」，**不删任何判红断言**（删了就等于抽掉可证伪性本身）。
+ */
+function createBusWithHardenOff(flag, opts) {
+  const prevLatch = process.env.PUNKY_TEST_HARDEN;
+  const prevFlags = process.env.PUNKY_TEST_HARDEN_FLAGS;
+  process.env.PUNKY_TEST_HARDEN = '1';
+  process.env.PUNKY_TEST_HARDEN_FLAGS = flag;
+  try {
+    return createBus(opts);
+  } finally {
+    if (prevLatch === undefined) delete process.env.PUNKY_TEST_HARDEN; else process.env.PUNKY_TEST_HARDEN = prevLatch;
+    if (prevFlags === undefined) delete process.env.PUNKY_TEST_HARDEN_FLAGS; else process.env.PUNKY_TEST_HARDEN_FLAGS = prevFlags;
+  }
+}
 
 // ── ② AC-14（正向，被测对象）：`node lib/bus/selftest.mjs` 的真实 exit code ────────────────
 //   ⚠ 这是**被测对象**而不是判据来源：本文件只读它的 exit code 与摘要行，不从它的断言反推我的断言。
@@ -120,10 +147,10 @@ test('F1 可选端口不得被当必需直用：缺可选端口时 of() 返回�
   assert.equal(typeof tools.list, 'function', 'F-1：取到的应是**形状可调用**的 null 适配器，不是占位 undefined');
   assert.deepEqual(tools.list(), [], 'F-1：null 工具的 list() 返回空集合（内建路径语义）');
 
-  // 反向开关（被测对象自带测试缝）：关掉取件加固 ⇒ 裸解引用 ⇒ 判红读数
+  // 反向开关（**迁移后形态**：环境闩，不再是对外 `harden` 参数）：关掉取件加固 ⇒ 裸解引用 ⇒ 判红读数
   //   为此显式把 `tools` 槽位声明为 `null`（缺省形态之一），使裸取件拿到的正是 `null`
-  //   —— 与包 §2.6 F-1 的预期判红读数 `TypeError: Cannot read properties of null (reading …)` 同形。
-  const broken = createBus({ ports: { ...requiredPortsFixture(), tools: null }, harden: { f1: false } });
+  //   —— 判红读数与迁移前**等价**：`TypeError: Cannot read properties of null (reading 'list')`。
+  const broken = createBusWithHardenOff('f1', { ports: { ...requiredPortsFixture(), tools: null } });
   assert.equal(broken.of('tools'), null, '关加固后 of() 返回裸 null（这是 F-1 的缺陷形态）');
   assert.throws(
     () => broken.of('tools').list(),
@@ -155,26 +182,34 @@ test('F2 降级必须可见：三个可选同时缺 ⇒ missing/capability-* 逐
   bus.register('http', { listen: () => ({ url: null }), close: () => {} });
   assert.equal(bus.report().missing.includes('http'), false, 'F-2：槽位被真正提供后，其降级记录必须撤销（不得留旧账）');
 
-  // 反向开关：关 f2 ⇒ record 不写 ⇒ 降级不可见（判红读数）
-  const silent = createBus({ ports: requiredPortsFixture(), harden: { f2: false } });
+  // 反向开关（**迁移后形态**：环境闩）：关 f2 ⇒ record 不写 ⇒ 降级不可见（判红读数**等价**：missing=[]）
+  const silent = createBusWithHardenOff('f2', { ports: requiredPortsFixture() });
   assert.deepEqual(silent.report().missing, [], 'F-2 缺陷形态：关加固后 missing 为空 ⇒ 三个可选端口缺失**静默不可见**');
   assert.deepEqual(silent.report().capabilityRecords, [], 'F-2 缺陷形态：关加固后无任何 capability-* 记录');
 });
 
-// ── F-3 两路径形状不一致（AC-15）────────────────────────────────────────────────────────
-//   Δ vs selftest：selftest 比「null 端口路径 vs 真端口路径」的**键名**；
-//   本处在**同一次调用**内比 `view`（端口路径）与 `builtinView`（内建路径）的**键集合**，
-//   并进一步断言**语义**（宿主名册缺一席 ⇒ builtinOnly 含该席）—— 键名相同但语义不同也会被抓到。
-test('F-3 两路径形状必须一致：同一调用内 view 与 builtinView 键集合相等且语义对账成立；关加固 ⇒ 形状不同', async () => {
+// ── F-3 出口形状退化（AC-15；判红面 = **出口退化为裸 `Row[]`**）────────────────────────────
+//   【措辞订正（批 `punky-g2-tail-2026-10-30` · T-3 / AC-8）】原表述把判红面写成「**在两条路径之间比形状**」——
+//   与事实不符：加固关断时 `route()` **两条路径都**退化为裸 `Row[]`（两者互相**一致**）⇒ 那种判据在恰好该红时是**绿**
+//   （假绿、无判别力）。⇒ 真实判红面 = **出口形状是否退化**（`Array.isArray(out) === true` 即红）。
+//   ⚠ 本用例 `:190` 的断言本体**本来就是正确形态**（数组判定），**保留未改**；本批只订正措辞。
+//   Δ vs selftest：selftest 判「出口是否归一对象」；本处在**同一次调用**内比 `view`（端口路径）与
+//   `builtinView`（内建路径）的**键集合**，并进一步断言**语义**（宿主名册缺一席 ⇒ builtinOnly 含该席）。
+test('F-3 出口形状：正常态出口为归一对象（三键在场、非数组）；关加固 ⇒ 出口退化为裸数组（判红）', async () => {
   const seat = BUILTIN_ROLES[0];
   // 自建 roster 端口：名册**缺一席**（其余为名对象）⇒ 该席应落 builtinOnly
   const hostRoster = BUILTIN_ROLES.filter((r) => r !== seat).map((r) => ({ name: r }));
   const bus = createBus({ ports: { ...requiredPortsFixture(), roster: { read: () => hostRoster } } });
 
   const routed = await bus.route(seat);
+  // 出口形状（正向）：整体是对象、`view` 是对象、三集合键逐项在场
+  assert.equal(Array.isArray(routed), false, 'F-3：正常态 route() 出口须为归一对象，不得是裸数组');
+  for (const key of ['matched', 'builtinOnly', 'hostOnly']) {
+    assert.ok(Array.isArray(routed.view[key]), 'F-3：归一出口须含三集合键 ' + key + '（形状声明）');
+  }
   const portKeys = Object.keys(routed.view).sort();
   const builtinKeys = Object.keys(routed.builtinView).sort();
-  assert.deepEqual(portKeys, builtinKeys, 'F-3：端口路径与内建路径的视图**键集合必须相等**（形状不闭合 ⇒ 抽象漏）');
+  assert.deepEqual(portKeys, builtinKeys, 'F-3：端口路径与内建路径的视图**键集合必须相等**（同一出口形状）');
   assert.deepEqual(portKeys, ['builtinOnly', 'hostOnly', 'matched'], 'F-3：视图形状须恰为 reconcileRoster 的三集合');
 
   // 语义对账（不只是键名）：缺的那一席在 builtinOnly，matched 不含它
@@ -184,11 +219,11 @@ test('F-3 两路径形状必须一致：同一调用内 view 与 builtinView 键
   // 与内建路径对同一入参的结果同源
   assert.deepEqual(routed.builtinView, reconcileRoster(BUILTIN_ROLES), 'F-3：内建路径视图须等于对 BUILTIN_ROLES 直接对账的结果');
 
-  // 反向开关：关 f3 ⇒ 端口路径直返 Row[] ⇒ 两路径形状不同（判红读数）
-  const broken = createBus({ ports: { ...requiredPortsFixture(), roster: { read: () => hostRoster } }, harden: { f3: false } });
+  // 反向开关（**迁移后形态**：环境闩）：关 f3 ⇒ route 直返裸 Row[] ⇒ **出口形状退化**（判红读数**等价**：裸数组）
+  const broken = createBusWithHardenOff('f3', { ports: { ...requiredPortsFixture(), roster: { read: () => hostRoster } } });
   const raw = await broken.route(seat);
   assert.equal(Array.isArray(raw), true, 'F-3 缺陷形态：关加固后端口路径返回裸数组（不是三集合视图）');
-  assert.equal(raw.some((row) => row && typeof row === 'object' && 'matched' in row), false, 'F-3：裸数组行里不含视图三集合 ⇒ 与内建路径形状不同');
+  assert.equal(raw.some((row) => row && typeof row === 'object' && 'matched' in row), false, 'F-3：裸数组行里不含视图三集合 ⇒ 出口形状已退化（这正是判红面）');
 });
 
 // ── F-4 空证据被判「有进展」（AC-15）──────────────────────────────────────────────────────
@@ -204,8 +239,8 @@ test('F-4 空证据不得被判有进展：空/空 ⇒ empty_response；单边�
   assert.equal(bus.classifyProgress({ writes: [{ id: 'w' }], evidence: [] }), 'partial',
     'F-4（边界）：只有写入没有证据 ⇒ partial');
 
-  // 反向开关：关 f4 ⇒ 空证据也判 advanced（谎报进展）
-  const broken = createBus({ ports: requiredPortsFixture(), harden: { f4: false } });
+  // 反向开关（**迁移后形态**：环境闩）：关 f4 ⇒ 空证据也判 advanced（谎报进展；判红读数**等价**）
+  const broken = createBusWithHardenOff('f4', { ports: requiredPortsFixture() });
   assert.equal(broken.classifyProgress({ writes: [], evidence: [] }), 'advanced',
     'F-4 判红读数：关加固后空证据被判 advanced ＝ 谎报进展');
 });

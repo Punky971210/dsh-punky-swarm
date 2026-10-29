@@ -30,6 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -216,24 +217,73 @@ test('R5 AC-15 护栏正交：capabilities.js 与 roster.js 内 agentTeams / Age
 });
 
 // ── ⑥ AC-8：`ports.ts` 零运行期 import 且不被任何 `.js` 引用（类型面**不接线**的机械判据）──
-test('R6 AC-8 类型面不接线：ports.ts 顶格 import/require 零命中，且 lib/**/*.js 内无 ports.js 引用', () => {
+// ── AC-8 判据实现（R6 与 R6b 阳性对照**共用同一份**，防「改完变恒绿」）──────────────────────────
+//   判据对象 = **加载语句**，不是「文件名出现过」：
+//     `require('…/ports.js')` / `from '…/ports.js'` / 动态 `import('…/ports.js')`。
+//   ⚠ 为什么不能再用「裸文件名」写法（本用例 2026-10-30 修正的历史缺陷）：
+//     G1 时 `lib/ports.js` **不存在**；G2 的受控 build **首次生成**了它（未跟踪的 build 回拷产物，与
+//     `lib/schema.js` 同性质，**允许存在**）⇒ 旧写法扫 `lib/**/*.js` 里有没有出现 `ports.js` 字面时，
+//     **生成物自己命中自己** ⇒ 假红。意图是「禁被任何**运行时模块加载**」，实现必须落在加载语句上。
+const PORTS_LOAD_RES = [
+  /require\(\s*['"][^'"]*ports\.js['"]/,
+  /from\s+['"][^'"]*ports\.js['"]/,
+  /import\(\s*['"][^'"]*ports\.js['"]/,
+];
+
+/** 一段源码是否**加载** ports.js（含 `require` / 静态 `from` / 动态 `import` 三形态）。 */
+function runtimeLoadsPorts(body) {
+  return PORTS_LOAD_RES.some((re) => re.test(body));
+}
+
+/** 在给定目录树内收集「**加载** ports.js 的运行时模块」（相对 dir 的路径，POSIX 分隔）。 */
+function runtimeModulesLoadingPorts(dir) {
+  const refs = [];
+  const walk = (cur) => {
+    for (const ent of fs.readdirSync(cur, { withFileTypes: true })) {
+      const p = path.join(cur, ent.name);
+      if (ent.isDirectory()) { walk(p); continue; }
+      if (!ent.name.endsWith('.js') && !ent.name.endsWith('.mjs')) continue; // .mjs 同样是运行期模块
+      if (runtimeLoadsPorts(fs.readFileSync(p, 'utf8'))) refs.push(path.relative(dir, p).split(path.sep).join('/'));
+    }
+  };
+  walk(dir);
+  return refs;
+}
+
+// ── ⑥ AC-8：`ports.ts` 零运行期 import ＋ **无任何运行时模块加载** `ports.js` ─────────────────────
+//   ⚠ `lib/ports.js` 是受控 build 的**回拷产物**（与 `lib/schema.js` 同性质）⇒ 它**允许存在**；
+//     本判据只禁「被加载」，不禁「文件存在」。（旧写法禁的是文件名出现 ⇒ 生成物自身假红，见上方说明。）
+test('R6 AC-8 类型面不接线：ports.ts 顶格 import/require 零命中，且无运行时模块**加载** ports.js', () => {
   const src = sourceOf('lib/ports.ts');
   const importLines = src.split(/\r?\n/).filter((line) => /^(import|require)\b/.test(line));
   assert.deepEqual(importLines, [], 'ports.ts 必须零运行期 import（纯类型文件）\n实际：\n' + importLines.join('\n'));
 
-  // 递归收集 lib/**/*.js（不写盘、不用 shell），断言没有运行时模块引用 ports.js
-  const refs = [];
-  const walk = (dir) => {
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, ent.name);
-      if (ent.isDirectory()) { walk(p); continue; }
-      if (!ent.name.endsWith('.js')) continue;
-      const body = fs.readFileSync(p, 'utf8');
-      if (/ports\.js/.test(body)) refs.push(path.relative(PKG_ROOT, p));
-    }
-  };
-  walk(abs('lib'));
-  assert.deepEqual(refs, [], 'lib/**/*.js 内不得引用 ports.js（禁被任何运行时模块加载）\n实际引用：\n' + refs.join('\n'));
+  const refs = runtimeModulesLoadingPorts(abs('lib'));
+  assert.deepEqual(refs, [], 'lib/ 内不得有运行时模块**加载** ports.js（查加载语句，不是查文件名）\n实际：\n' + refs.join('\n'));
+});
+
+// ── ⑥-b AC-8 阳性对照：构造「加载 ports.js 的运行时模块」⇒ 同一判据**必须红** ─────────────────────
+//   存在理由：判据从「文件名」改成「加载语句」后，若写坏（例如正则永假）会变成**恒绿**。
+//   本用例在临时目录造四种样本：三种真实加载形态（必被抓）+ 一种「只提及不加载」（必不漏抓误报）。
+test('R6b AC-8 阳性对照：加载 ports.js 的三种形态必被同一判据抓出，仅字面提及者不得误判', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g2-ports-load-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'loads-require.js'), "const p = require('./ports.js');\n", 'utf8');
+    fs.writeFileSync(path.join(dir, 'loads-from.js'), "import { KernelPorts } from '../../lib/ports.js';\n", 'utf8');
+    fs.writeFileSync(path.join(dir, 'loads-dynamic.mjs'), "const m = await import('./ports.js');\n", 'utf8');
+    // 阴性对照：只**提及**文件名、不加载 —— 旧写法的镜像，必须**不**被抓（否则又是「查字面」）
+    fs.writeFileSync(path.join(dir, 'mentions-only.js'), "// 见 lib/ports.js（仅注释提及，不加载）\nconst name = 'ports.js';\n", 'utf8');
+
+    const hits = runtimeModulesLoadingPorts(dir).sort();
+    assert.deepEqual(
+      hits,
+      ['loads-dynamic.mjs', 'loads-from.js', 'loads-require.js'],
+      'AC-8 阳性对照：三种加载形态（require / 静态 from / 动态 import）必须全部被抓出；实际=' + JSON.stringify(hits),
+    );
+    assert.equal(hits.includes('mentions-only.js'), false, 'AC-8 阴性对照：仅字面提及不算加载 ⇒ 不得被误判（这正是旧写法的缺陷面）');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ── ⑦ AC-9 正向面（t1 侧交叉读数）：名实分界「写明了」—— 两键在位 + 「运行仍拒派」写明 ──────
