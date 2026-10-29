@@ -304,8 +304,12 @@ export const AUDITLOG_CONFIG_KEYS = [
     'aggregate',
     'pruneStray',
 ];
-// ── config.ratchet：棘轮规则表配置键（可选；缺省 = 默认规则 = 本文件 MEMBER_TRANSITIONS/BATCH_TRANSITIONS，零运行时开销）──
-// 消费方 lib/state/machine-rules.ts（loadRules）：
-//   { ratchet: { memberRules?: { from: [to...] }, batchRules?: { from: [to...] }, allowRelax?: false } }
-// 棘轮语义：配置覆盖只许删（收紧）不许增（放宽）——覆盖表出现本文件默认表不存在的迁移 → loadRules throw（fail-closed）；
-//   allowRelax: true 为显式逃生门（默认 false，仅在部署侧明确授权时可用，不推荐）。
+/**
+ * 可结算的 `stopReason` 白名单：**只放行 `completed`**；未知值 / 其它四值一律**保守不结算**
+ * （fail-safe：宁可漏结算，也不谎报成功）。
+ *
+ * ⚠ **单一真源**：`lib/engine/auto-settle.js` 原持有一份私有副本（`const` 非 export），本批已删除并改为
+ * 从这里 `import` ⇒ 全仓定义**仅此一处**（`grep -rn "SETTLEABLE_STOP_REASONS *=" lib/` = 1）。
+ * ⚠ 冻结：语义是白名单常量，禁止运行期增删（`Object.freeze` 兜运行期误改）。
+ */
+export const SETTLEABLE_STOP_REASONS = Object.freeze(['completed']);

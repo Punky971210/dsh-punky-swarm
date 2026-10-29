@@ -87,7 +87,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     （未发明资产键、未落未实现分支——见 `DEFAULT_ON_FAIL`）。
 //   · 监听器全程 `try/catch` 且**不抛**（契约卡约束 6）：宿主对每 listener 独立 containment，
 //     但插件侧异常会污染自身状态面。
-import { isMemberTerminal, autoSettleEnabledOf } from '../schema.js';
+import { isMemberTerminal, autoSettleEnabledOf, SETTLEABLE_STOP_REASONS } from '../schema.js';
 import { laneBindingOf, ownerSessionIdOf, dispatchIndexEntryOf } from './dispatch.js';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
@@ -102,9 +102,9 @@ export const AUTO_SETTLE_SUBAGENT_END = 'subagent/end';
 /** 触发来源（载荷 `trigger`，读端据此分辨主路 / 兼底路）。 */
 export const AUTO_SETTLE_TRIGGERS = Object.freeze({ subagentEnd: 'subagent/end', settleRequest: 'settle-request' });
 
-/** 可结算的 `stopReason` 白名单（契约卡 #5 取值域：completed / aborted / error / max-tokens / refusal）。
- *  只放行 `completed`；未知值一律**保守不结算**（fail-safe：宁可漏结算也不谎报成功）。 */
-const SETTLEABLE_STOP_REASONS = Object.freeze(['completed']);
+// 【块二 · 批 `punky-g2-adapter-2026-10-30`】可结算白名单的**本地副本已删除**（原为一个非 export 的冻结常量
+//   = `Object.freeze(['completed'])`）⇒ 改为从 `../schema.js` **单一真源** import（见文件头 import）。
+//   语义零变更：白名单仍只放行 `completed`，未知值保守不结算；`:320` 的 `settleable` 判定逻辑一字未动。
 
 /** 失败处置缺省值（规格 §3 末行：`onFail: pause｜review｜failed`，**缺省 `pause`** = 停轮上报）。
  *  本轮只实现缺省值；`review` / `failed` 为后续项（未落未实现分支）。 */

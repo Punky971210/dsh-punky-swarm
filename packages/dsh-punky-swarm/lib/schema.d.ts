@@ -222,4 +222,20 @@ export declare const ACPS_DEFAULTS: Readonly<{
 export declare function resolveAcpsConfig(config: ConfigInput | null | undefined): ResolvedAcpsConfig;
 export declare const AUDITLOG_CONFIG_KEYS: readonly ["enabled", "keepDays", "maxFileBytes", "maxTotalBytes", "stdout", "levelsDefault", "aggregate", "pruneStray"];
 export type AuditlogConfigKey = typeof AUDITLOG_CONFIG_KEYS[number];
+/**
+ * 一次执行的停止原因（契约卡 #5 取值域，**五值**）。
+ *
+ * ⚠ 这是**执行体可能上报**的取值域，不是「可结算」集合 —— 可结算只放行 {@link SETTLEABLE_STOP_REASONS}。
+ * ⚠ `lib/ports.ts` 的 `ExecResult` **刻意不含** `stopReason`：活性由内核从证据推导，不由执行体声明。
+ */
+export type StopReason = 'completed' | 'aborted' | 'error' | 'max-tokens' | 'refusal';
+/**
+ * 可结算的 `stopReason` 白名单：**只放行 `completed`**；未知值 / 其它四值一律**保守不结算**
+ * （fail-safe：宁可漏结算，也不谎报成功）。
+ *
+ * ⚠ **单一真源**：`lib/engine/auto-settle.js` 原持有一份私有副本（`const` 非 export），本批已删除并改为
+ * 从这里 `import` ⇒ 全仓定义**仅此一处**（`grep -rn "SETTLEABLE_STOP_REASONS *=" lib/` = 1）。
+ * ⚠ 冻结：语义是白名单常量，禁止运行期增删（`Object.freeze` 兜运行期误改）。
+ */
+export declare const SETTLEABLE_STOP_REASONS: readonly StopReason[];
 export {};

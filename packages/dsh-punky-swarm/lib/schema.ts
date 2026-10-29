@@ -472,3 +472,30 @@ export type AuditlogConfigKey = typeof AUDITLOG_CONFIG_KEYS[number];
 //   { ratchet: { memberRules?: { from: [to...] }, batchRules?: { from: [to...] }, allowRelax?: false } }
 // 棘轮语义：配置覆盖只许删（收紧）不许增（放宽）——覆盖表出现本文件默认表不存在的迁移 → loadRules throw（fail-closed）；
 //   allowRelax: true 为显式逃生门（默认 false，仅在部署侧明确授权时可用，不推荐）。
+
+// ── 执行停止原因（批 `punky-g2-adapter-2026-10-30` · lane `e1-ports` · 块二）─────────────────
+// 【为什么是「补齐缺位」而不是「搬家」】`stopReason` 原先**既不在** `lib/ports.ts`（该文件两处命中
+//   全是否定式注释：`ports.ts:19` 刻意不含、`:157` 不含，**无任何 interface 含该字段**）**也不在本文件**
+//   （改前零命中）——它真实散落在 `lib/engine/auto-settle.js` 的私有 `const` 白名单（原 `:107`）与多处
+//   形参 / 判定 / 事件载荷里。本批把**类型 + 白名单**收成本文件的单一真源，`auto-settle.js` 改为 import 引用。
+//
+// 分工不变（不越权）：本文件只声明**取值域**与**可结算白名单**；「怎么判活性」仍归内核/`auto-settle`，
+//   因此这里**不引入**任何判定函数，也不改变 `auto-settle.js:320` 的 `settleable` 语义。
+
+/**
+ * 一次执行的停止原因（契约卡 #5 取值域，**五值**）。
+ *
+ * ⚠ 这是**执行体可能上报**的取值域，不是「可结算」集合 —— 可结算只放行 {@link SETTLEABLE_STOP_REASONS}。
+ * ⚠ `lib/ports.ts` 的 `ExecResult` **刻意不含** `stopReason`：活性由内核从证据推导，不由执行体声明。
+ */
+export type StopReason = 'completed' | 'aborted' | 'error' | 'max-tokens' | 'refusal';
+
+/**
+ * 可结算的 `stopReason` 白名单：**只放行 `completed`**；未知值 / 其它四值一律**保守不结算**
+ * （fail-safe：宁可漏结算，也不谎报成功）。
+ *
+ * ⚠ **单一真源**：`lib/engine/auto-settle.js` 原持有一份私有副本（`const` 非 export），本批已删除并改为
+ * 从这里 `import` ⇒ 全仓定义**仅此一处**（`grep -rn "SETTLEABLE_STOP_REASONS *=" lib/` = 1）。
+ * ⚠ 冻结：语义是白名单常量，禁止运行期增删（`Object.freeze` 兜运行期误改）。
+ */
+export const SETTLEABLE_STOP_REASONS = Object.freeze(['completed'] as readonly StopReason[]);

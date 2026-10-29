@@ -584,6 +584,22 @@
       "tests": 3,
       "todos": 0
     },
+    "test/g2-bus-falsify.test.js": {
+      "asserts": 52,
+      "blankLines": 33,
+      "lines": 236,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
+    "test/g2-ports-contract.test.js": {
+      "asserts": 22,
+      "blankLines": 26,
+      "lines": 195,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/gate-artifact-containment.test.js": {
       "asserts": 44,
       "blankLines": 25,
@@ -1689,7 +1705,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T15:36:48Z",
+  "generatedAt": "2026-10-29T16:55:55Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1700,15 +1716,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-g1-tail-2026-10-29: 收尾批四项（T-1 inert 分级 / T-2 C4 拆三条 / T-3 指引句两处按两档尺子 / T-4 childEnv 死码删除）；test 面 Δ +2 tests（C4 拆 2→3 条含常驻阳性对照）；childEnv 删除贡献负 lines",
+  "reason": "punky-g2-adapter-2026-10-30: G2 内部 adapter 抽象 + null 适配器（I-03 契约真实化 + lib/bus/** 四动作 + null 适配器 + 抽象泄漏枚举）；新增 test/g2-bus-falsify.test.js(10) 与 test/g2-ports-contract.test.js(6)；受控 build 重生成 schema/ports 四件产物",
   "schema": 1,
   "totals": {
-    "asserts": 11088,
-    "blankLines": 5950,
-    "files": 211,
-    "lines": 63753,
+    "asserts": 11162,
+    "blankLines": 6009,
+    "files": 213,
+    "lines": 64184,
     "tautologies": 0,
-    "tests": 2237,
+    "tests": 2253,
     "todos": 4
   }
 }
