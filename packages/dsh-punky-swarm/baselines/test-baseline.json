@@ -985,9 +985,9 @@
       "todos": 0
     },
     "test/l5-wait-ban.test.js": {
-      "asserts": 36,
+      "asserts": 38,
       "blankLines": 20,
-      "lines": 165,
+      "lines": 167,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1665,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T05:38:28Z",
+  "generatedAt": "2026-10-29T05:43:54Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1676,13 +1676,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-mac-wave-immutability-2026-10-29: 新增 test/wave-plan-immutability.test.js(7 tests) 与 test/wave-plan-immutability-derivation.test.js(7 tests) 供 CAP-W2 波次固定语义验收；Δ files 206→208, tests 2192→2206, lines 62270→+537, asserts 随两文件内断言数上升（无删减）",
+  "reason": "merge b93e4b8 后重冻：并入源仓 L5-W04（ops_bash 归入禁用 sleep 栏）带来的 test/l5-wait-ban.test.js + test/governance-preset-loader.test.js 增量（asserts +2 / lines +2），叠加本副本 CAP-W2 两测试文件（tests +14 / asserts +63）；Δ 覆盖两者之和",
   "schema": 1,
   "totals": {
-    "asserts": 10949,
+    "asserts": 10951,
     "blankLines": 5839,
     "files": 208,
-    "lines": 62809,
+    "lines": 62811,
     "tautologies": 0,
     "tests": 2206,
     "todos": 4
