@@ -9,7 +9,7 @@
 | `l1-sensitive.json` | `l1-sensitive` | L1 | 12 | 敏感数据防护：私钥块/凭据签名进入子代理透传面（subagent/subagent_fork/send_message/workflow/ralph）、外网搜索出口（web_search）与命令执行面（pwsh/ssh_exec/ssh_cluster）时的值级内容检测 |
 | `l2-resource.json` | `l2-resource` | L2 | 6 | 资源边界：timeoutMs/maxWorkers/max_goal_rounds/maxRounds 数值上限，超限拒绝并回收窄指引 |
 | `l3-tool-ban.json` | `l3-tool-ban` | L3 | 1 | **第三类判定面（工具黑名单，工具 × 行为）**：首批禁用 `pwsh` 的 `file-write`（写通道路由——文件写走 `edit` / `write` 等在册工具，不经 shell 自建写路径落盘，避免编码头/BOM 被破坏）。条目走独立 `toolBan` 表 |
-| `l5-wait-ban.json` | `l5-wait-ban` | L5 | 3 | **第三类判定面（工具黑名单）·等待能力禁用**（2026-09-26 用户裁决）：① `wait_agent` **整体禁用**（`tool-disabled`）；② `pwsh` / `bash` 的段首等待命令（`Start-Sleep` / `sleep` / `Wait-Event` / `wait` / `timeout`）⇒ 等待应由**成员回报**驱动（`swarm_report` / `send_message` 到达即唤醒），不要轮询阻塞。条目走独立 `toolBan` 表 |
+| `l5-wait-ban.json` | `l5-wait-ban` | L5 | 4 | **第三类判定面（工具黑名单）·等待能力禁用**（2026-09-26 用户裁决）：① `wait_agent` **整体禁用**（`tool-disabled`）；② **禁用 sleep 栏**（`wait-sleep`）：`pwsh` / `bash` / `ops_bash` 的段首等待命令（`Start-Sleep` / `sleep` / `Wait-Event` / `wait` / `timeout`）⇒ 等待应由**成员回报**驱动（`swarm_report` / `send_message` 到达即唤醒），不要轮询阻塞。条目走独立 `toolBan` 表 |
 
 > **`compose` 组合项已废除、`preset` 单值写法亦已废除**（2026-09-14 用户裁决）：原 `compose.json`（L1+L2 全量合并 18 条）已从仓库与注册表删除；`preset` 的**单值字符串形态（单选遗产）一并清除**——`preset: "compose"` 与 `preset: "l1-sensitive"` 都**不再是合法引用**（写通道拒；引擎判形态 / 未知 id → 装载失败回退空表 + warn）。**唯一合法形态 = 数组（多选）**：`preset: ["l1-sensitive","l2-resource"]`（18 条参数规则），或再加 `"l3-tool-ban"`（含工具黑名单条目）。
 
@@ -19,7 +19,7 @@
 - **L1 凭据签名**（L1-A05~A08、A10~A12）：`manual_review` → **REQUIRE_APPROVAL** 人工复核。可能是正当透传（如向执行子代理交付部署凭证），也可能泄密；交互态走宿主人工闸，自动化无审批通道态 = fail-closed 拒绝。
 - **L2 资源上限**（L2-R01~R06）：`narrowable` + `narrow[{path, max}]`。`flags.narrow: true` 时原语为 **NARROW**，否则回退 **DENY**——两种情况均拒绝执行并下发 `narrowedParams` 收窄指引（clamped 明细），模型按指引重试即为合规调用（deny-with-guidance）。
 - **L3 工具黑名单**（L3-W01）：`hard` → **DENY** 拒绝执行。判定面 = 工具 × 行为（`toolBan` 表），命中理由与纠正文本入拒绝正文——**写通道路由**：Agent 写文件应走 `edit` / `write` / `str-replace-editor` 等在册工具（shell 写盘在 Windows 下可能写 GBK 或带 BOM，破坏文件编码头且不可逆）。**收窄口径**：只拦「修改或写文件」这一类动作，执行/构建/测试/包管理/只读命令一律放行（`npm run build`、`npm test`、`node x.mjs`、`git status`、`Get-ChildItem` 均不命中）。
-- **L5 等待能力禁用**（L5-W01~W03，2026-09-26 用户裁决）：`hard` → **DENY** 拒绝执行。判定面同样 = 工具 × 行为（`toolBan` 表），但用的是**两个新行为面**——`tool-disabled`（**工具整体禁用**，不看参数；用于 `wait_agent` 这类**没有 `command` 参数**的工具）与 `wait-sleep`（**按命令段首 token** 判等待类）。**口径**：**等待应由「成员回报」驱动**（`swarm_report` / `send_message` 到达即唤醒 Leader），轮询式等待只白占执行轮次与上下文；执行/构建/测试/包管理/只读命令一律放行，成员回报与状态查询通道完全不受影响。
+- **L5 等待能力禁用**（L5-W01~W04，2026-09-26 用户裁决；L5-W04 `ops_bash` 于 2026-10-29 补入同一「禁用 sleep」栏）：`hard` → **DENY** 拒绝执行。判定面同样 = 工具 × 行为（`toolBan` 表），但用的是**两个新行为面**——`tool-disabled`（**工具整体禁用**，不看参数；用于 `wait_agent` 这类**没有 `command` 参数**的工具）与 `wait-sleep`（**按命令段首 token** 判等待类；`pwsh` / `bash` / `ops_bash` 三个 shell 工具同栏逐条覆盖）。**口径**：**等待应由「成员回报」驱动**（`swarm_report` / `send_message` 到达即唤醒 Leader），轮询式等待只白占执行轮次与上下文；执行/构建/测试/包管理/只读命令一律放行，成员回报与状态查询通道完全不受影响。
 
 ## 逐条规则审阅清单（供用户与 Agent 审阅检查）
 
@@ -63,7 +63,7 @@
 
 **判定链与边界（如实标注）**：引号掩码（引号内的 `>` 与 cmdlet 名不参与判定，`Select-String -Pattern "Set-Content"` 不误拦）→ 剥离流合并（`2>&1` / `2>$null` 不算落盘）→ 全串写指示符 → 分段取段首写命令名 → 其余放行；未闭合引号 fail-closed（按写文件处理）。**这是启发式、非沙箱**：别名（`sc` / `ni` / `ri` / `mi`）、脚本文件（`pwsh -File x.ps1`）、转义参数、编码方式可绕过，「内联解释器写」（`node -e "fs.writeFileSync(...)"` / `python -c "open(...,'w')"`）首批不覆盖——本面只收敛「无意识地用 shell 写盘代替 edit/write」这一主路径，**不承诺**等价于 OS 级隔离或编码安全（真正的编码保证来自 edit/write 工具链本身）。
 
-### L5 等待能力禁用（l5-wait-ban，3 条 · 第三类判定面）
+### L5 等待能力禁用（l5-wait-ban，4 条 · 第三类判定面）
 
 下表把 l5-wait-ban 逐条展开为可审阅清单——字段与 `ToolBanEntry`/`Violation` 契约一一对应；**该面同样走独立 `toolBan` 表**，与 L1/L2 参数规则面、L3 写通道面**可任意叠加**（id 前缀互不重叠）。
 
@@ -72,10 +72,11 @@
 | L5-W01 | l5-wait-ban | `tool-disabled` | hard | DENY（P2 硬性违规） | `wait_agent` | **工具整体禁用**（不看参数）；用于**没有 `command` 参数**的工具——走 `file-write` 会因「命令为空」而放行，故需独立行为面 | [preset L5] `wait_agent` 已被护栏整体禁用（用户裁决 2026-09-26）：**等待应由「成员回报」驱动**——成员完成/失败后会主动回报（`swarm_report` / `send_message` 到达即唤醒 Leader），轮询式等待只白占执行轮次与上下文；需要推进时用 `send_message` 派活，用 `batch_status` / `log_export` / 产物根 glob 查状态 |
 | L5-W02 | l5-wait-ban | `wait-sleep` | hard | DENY（P2 硬性违规） | pwsh | 段首为等待/休眠命令：`start-sleep` / `sleep` / `wait-event` / `wait-process` / `wait-job` / `wait-service` / `timeout`。执行 / 构建 / 测试 / 包管理 / 只读命令**放行** | [preset L5] pwsh 命令含 sleep / 等待动作（Start-Sleep / sleep / Wait-Event / Wait-Process / Wait-Job / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环 |
 | L5-W03 | l5-wait-ban | `wait-sleep` | hard | DENY（P2 硬性违规） | bash | 段首为等待/休眠命令：`sleep` / `wait` / `timeout`。其余**放行** | [preset L5] bash 命令含 sleep / 等待动作（sleep / wait / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环 |
+| L5-W04 | l5-wait-ban | `wait-sleep` | hard | DENY（P2 硬性违规） | ops_bash | 段首为等待/休眠命令：`sleep` / `wait` / `timeout`。其余**放行**（与 L5-W03 同一「禁用 sleep」栏，仅工具名不同） | [preset L5] ops_bash 命令含 sleep / 等待动作（sleep / wait / timeout 等）：**不要用 sleep 或轮询阻塞执行**——需要等成员或事件时依赖回报通道（`swarm_report` / `send_message`），不要自造等待循环 |
 
 **判定链与边界（如实标注）**：与 L3 同构（引号掩码 → 剥流合并 → 分段取段首 token → 其余放行；未闭合引号 fail-closed）。**这是启发式、非沙箱**：别名、脚本文件（`pwsh -File x.ps1`）、**内联解释器**（`node -e "setTimeout(...)"` / `python -c "time.sleep(5)"`）**不在列**——本面只收敛「直调 `wait_agent`」与「shell 里直接 sleep / 等待」**两条主路径**，不承诺阻断所有等待形态。**不受影响的通道**：成员回报（`swarm_report` / `send_message`）与状态查询（`batch_status` / `log_export` / `lane_heartbeat` / `handoff_view`）。
 
-**行为面枚举（2026-09-26 扩面）**：`file-write`（L3）｜`tool-disabled`（L5-W01）｜`wait-sleep`（L5-W02/W03）。三个值同步登记于 `lib/governance/config.ts` 的 `TOOL_BAN_BEHAVIORS`，判定实现见 `lib/governance/tool-ban.ts` 的 `judgeBehavior`。
+**行为面枚举（2026-09-26 扩面）**：`file-write`（L3）｜`tool-disabled`（L5-W01）｜`wait-sleep`（L5-W02/W03/W04）。三个值同步登记于 `lib/governance/config.ts` 的 `TOOL_BAN_BEHAVIORS`，判定实现见 `lib/governance/tool-ban.ts` 的 `judgeBehavior`。
 
 ## 启用方式
 
@@ -126,7 +127,7 @@ L2 数值上限为声明式规则值：调整即改对应规则的 `match.value`
 
 ## 边界
 
-- 覆盖范围 = 参数级**内容值**（L1 敏感数据）与**资源数值上限**（L2）+ 第三类**工具 × 行为**判定（L3 写通道路由：shell 命令是否在改/写文件；L5 等待能力禁用：`wait_agent` 直调 + shell 里的 sleep/等待）。本地文件写读工具（`write` / `edit` / `read`）与路径面归宿主沙箱管理，本预设不设规则——**L3 恰恰是把写操作引导回这些在册工具**；**L5 恰恰是把「等」引导回成员回报通道**。
+- 覆盖范围 = 参数级**内容值**（L1 敏感数据）与**资源数值上限**（L2）+ 第三类**工具 × 行为**判定（L3 写通道路由：shell 命令是否在改/写文件；L5 等待能力禁用：`wait_agent` 直调 + shell（`pwsh` / `bash` / `ops_bash`）里的 sleep/等待）。本地文件写读工具（`write` / `edit` / `read`）与路径面归宿主沙箱管理，本预设不设规则——**L3 恰恰是把写操作引导回这些在册工具**；**L5 恰恰是把「等」引导回成员回报通道**。
 - **L3 / L5 与执行引擎无关**：其判定实现在护栏内（`lib/governance/tool-ban.ts`），**不 import / 不修改** `lib/tools/readonly.js`（后者是任务难度门禁「只读侦察面」在执行侧使用的共享判定，服务于「评估前能否跑侦察命令」这一另一个问题）；两处判定各自独立、互不影响。
 - 只拒绝不改写：宿主参数输入只读，命中即拒绝 + 收据 reason 给模型纠正文本，不做内容消毒替换。
 - escalation（违规计数升级）出厂关闭；开启后 DENY/NARROW 在默认计入子集内，阈值/窗口由部署方自定。

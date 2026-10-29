@@ -985,9 +985,9 @@
       "todos": 0
     },
     "test/l5-wait-ban.test.js": {
-      "asserts": 36,
+      "asserts": 38,
       "blankLines": 20,
-      "lines": 165,
+      "lines": 167,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1649,7 +1649,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-28T13:01:35Z",
+  "generatedAt": "2026-10-29T04:57:08Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1660,13 +1660,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "§0m 压缩 + j2-4 去内容绑定：j2-4 由「§0m 逐字枚举 == suite.js 集合」改为连通性断言（指针在场+真源非空），断言数不变（3→3），仅行数变化",
+  "reason": "L5-W04 ops_bash 补入「禁用 sleep」栏：presets/hook-rules/l5-wait-ban.json 增 L5-W04（ops_bash/wait-sleep）+ README 与 loader 断言同步；test/l5-wait-ban.test.js L5-K-10 增 ops_bash 命中/放行断言（+2 asserts / +2 lines）。依据 2026-10-29 用户指令：ops_bash、bash 的 sleep 同归禁用 sleep 栏",
   "schema": 1,
   "totals": {
-    "asserts": 10886,
+    "asserts": 10888,
     "blankLines": 5765,
     "files": 206,
-    "lines": 62270,
+    "lines": 62272,
     "tautologies": 0,
     "tests": 2192,
     "todos": 4

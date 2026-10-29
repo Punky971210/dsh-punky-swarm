@@ -114,11 +114,13 @@ test('L5-K-9 matchToolBan 分支 tool-disabled：**不看参数**（本会话活
 });
 
 test('L5-K-10 matchToolBan 分支 wait-sleep：看 command（等待命中 / 普通放行）', () => {
-  const entries = [ban('pwsh', 'wait-sleep'), ban('bash', 'wait-sleep')];
+  const entries = [ban('pwsh', 'wait-sleep'), ban('bash', 'wait-sleep'), ban('ops_bash', 'wait-sleep')];
   assert.equal(hit(entries, 'pwsh', 'Start-Sleep -Seconds 5'), true, '★pwsh + 等待命令 ⇒ 命中');
   assert.equal(hit(entries, 'bash', 'sleep 3'), true, '★bash + sleep ⇒ 命中');
+  assert.equal(hit(entries, 'ops_bash', 'sleep 1'), true, '★ops_bash + sleep ⇒ 命中（2026-10-29 补入同一「禁用 sleep」栏）');
   assert.equal(hit(entries, 'pwsh', 'Get-ChildItem .'), false, 'pwsh + 只读 ⇒ 放行（本会话实测放行）');
   assert.equal(hit(entries, 'bash', 'npm test'), false, 'bash + 构建 ⇒ 放行');
+  assert.equal(hit(entries, 'ops_bash', 'npm test'), false, 'ops_bash + 构建 ⇒ 放行（同栏不误伤执行/构建面）');
 });
 
 test('L5-K-11 matchToolBan 分支 file-write：看 command（写动词命中 / 只读放行）', () => {

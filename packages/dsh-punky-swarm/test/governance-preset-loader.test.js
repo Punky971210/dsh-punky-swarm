@@ -98,7 +98,7 @@ test('L-2 loadPresetTable()：双表分派（rules 面 2 id + toolBan 面 l3/l5 
   assertSameIdSet(REAL.banTable['l3-tool-ban'].map((e) => e.id), sourcePresetIds('l3-tool-ban.json', 'toolBan'), 'L3 工具黑名单面装载连通性（恰为源文件声明的那一条）');
   // 2026-09-26 扩面：L5 等待能力禁用（wait_agent + sleep）
   assertSameIdSet(REAL.banTable['l5-wait-ban'].map((e) => e.id), sourcePresetIds('l5-wait-ban.json', 'toolBan'), 'L5 等待能力禁用面装载连通性');
-  assert.deepEqual(REAL.banTable['l5-wait-ban'].map((e) => e.id), ['L5-W01', 'L5-W02', 'L5-W03']);
+  assert.deepEqual(REAL.banTable['l5-wait-ban'].map((e) => e.id), ['L5-W01', 'L5-W02', 'L5-W03', 'L5-W04']);
   for (const id of Object.keys(REAL.table)) {
     for (const r of REAL.table[id]) {
       assert.equal('_meta' in r, false, `${id} 规则 ${r.id} 不应含 _meta（剥离语义：loader 只剥 _meta 不洗规则）`);
