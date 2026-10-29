@@ -182,32 +182,96 @@ test('C3 可选能力缺失 ⇒ 不抛，且 missing 集合含该键（可选 �
   }
 });
 
-// ── ④ AC-6 P-1：`wiring.js` inert 定义点 —— warn 可捕获（非空 / 含 inert）+ 返回对象含回显键 `inert: true` ──
-test('C4 P-1 inert 可见：wiring.js 两条 inert 路径均产出含 inert 的 warn，且回显键 inert:true 在场', () => {
-  const mkLogger = () => { const warns = []; const logger = { warn: (m) => warns.push(String(m)), info: () => {}, error: () => {} }; return { warns, logger }; };
+// ── ④-T-2 P-1 inert **分级**（批 `punky-g1-tail-2026-10-29`：原单条 C4 拆成 C4-a / C4-b，**未删未合并**）──
+//
+// 【为什么拆】T-1 把 `inert(reason, level)` 显式分级：`cfg.enabled !== true`（**策略停用、生产可达**）走 `info`；
+//   `ctx.on unavailable`（**防御纵深、生产不可达**）仍走 `warn`。原单条 C4 用同一模板断言「两条路径都产 warn」，
+//   在分级后**必红**（disabled 一路不再进 warn 通道）⇒ 按新语义拆成两条各自独立的集合形态断言（C-4/C-5）。
+//
+//    ⚠ **阳性对照（常驻，C-5 要求）：旧口径「两路都必须产 warn」在本批实现下必红。**
+//      红点恰在旧 C4 的两条断言上：① `warns.length >= 1`（disabled 一路 warn 为空 ⇒ 破）
+//      ② `warns.some(w => w.includes('inert'))`（同一空集 ⇒ 破）。二者由下面 `C4-control` 逐条固化。
 
-  // 路径一：配置显式关闭（`cfg.enabled !== true` ⇒ inert('disabled')）
-  const a = mkLogger();
-  const disabled = installGovernanceHook({}, { logger: a.logger, config: { governance: { hook: { enabled: false } } } });
-  // 路径二：ctx.on 不可用（`!root || typeof ctx?.on !== 'function'` ⇒ inert('ctx.on unavailable')）
-  const b = mkLogger();
-  const unavailable = installGovernanceHook({}, { logger: b.logger, config: { governance: { hook: { enabled: true } } } });
+const mkLog = () => {
+  const warns = [];
+  const infos = [];
+  const logger = {
+    warn: (m) => warns.push(String(m)),
+    info: (m) => infos.push(String(m)),
+    error: () => {},
+  };
+  return { warns, infos, logger };
+};
 
-  for (const [label, hook, logger] of [['disabled', disabled, a], ['ctx.on-unavailable', unavailable, b]]) {
-    // ① warn 通道非空且含关键字（不是静默返回空实现）
-    assert.ok(logger.warns.length >= 1, label + '：inert 必须产出 warn（改前是静默返回，无法区分「装了但零拒绝」与「没装」）');
-    assert.ok(
-      logger.warns.some((w) => w.includes('inert')),
-      label + '：warn 须含关键字 `inert`；实际=' + JSON.stringify(logger.warns),
-    );
-    // ② 回显键在场，且既有字段一个不丢（不破坏既有调用方）
-    assert.equal(hook.inert, true, label + '：返回对象须含稳定回显键 inert:true');
-    assert.equal(hook.installed, false, label + '：installed:false 语义保留');
-    assert.equal(typeof hook.reason, 'string', label + '：reason 保留（且为字符串）');
-    assert.equal(typeof hook.refusals?.count, 'function', label + '：refusals.count() 保留');
-    assert.equal(typeof hook.dispose, 'function', label + '：dispose() 保留');
-  }
+// ── C4-a ｜ 策略停用（`cfg.enabled !== true`）⇒ **info** 通道；warn 不含 inert ─────────────
+test('C4-a P-1 inert 分级：cfg.enabled !== true（策略停用）⇒ info 产出 inert(info): disabled，且 warn 集合不含 inert', () => {
+  const a = mkLog();
+  const hook = installGovernanceHook({}, { logger: a.logger, config: { governance: { hook: { enabled: false } } } });
+
+  // ① info 通道存在一条匹配（分级后的主路；不计数，只判匹配存在性）
+  assert.ok(
+    a.infos.some((m) => /\[governance\] inert\(info\):.*disabled/.test(m)),
+    '策略停用须走 info 且消息匹配 /[governance] inert(info): .*disabled/；实际 info=' + JSON.stringify(a.infos),
+  );
+  // ② warn 集合里**不含** inert（集合为空，写成 deepEqual；禁条数比较）
+  assert.deepEqual(
+    a.warns.filter((w) => w.includes('inert')), [],
+    '策略停用**不得**再进 warn 通道（真缺失与策略停用必须分得开）；实际 warn=' + JSON.stringify(a.warns),
+  );
+  // ③ 回显：分级键在场 + 既有四字段一个不丢
+  assert.equal(hook.inert, true, '返回对象须含稳定回显键 inert:true');
+  assert.equal(hook.level, 'info', '策略停用一路的回显级别须为 info');
+  assert.equal(hook.installed, false, 'installed:false 语义保留');
+  assert.equal(typeof hook.reason, 'string', 'reason 保留（且为字符串）');
+  assert.equal(typeof hook.refusals?.count, 'function', 'refusals.count() 保留');
+  assert.equal(typeof hook.dispose, 'function', 'dispose() 保留');
 });
+
+// ── C4-b ｜ 防御纵深（`ctx.on` 缺失）⇒ **warn** 通道；info 不含 inert ──────────────────────
+test('C4-b P-1 inert 分级：ctx.on 缺失（防御纵深）⇒ warn 产出 inert(warn): ctx.on unavailable，且 info 集合不含 inert', () => {
+  const b = mkLog();
+  const hook = installGovernanceHook({}, { logger: b.logger, config: { governance: { hook: { enabled: true } } } });
+
+  // ① warn 通道存在一条匹配（真防御异常不得被降级静默）
+  assert.ok(
+    b.warns.some((m) => /\[governance\] inert\(warn\):.*ctx\.on unavailable/.test(m)),
+    'ctx.on 缺失须走 warn 且消息匹配 /[governance] inert(warn): .*ctx.on unavailable/；实际 warn=' + JSON.stringify(b.warns),
+  );
+  // ② info 集合里**不含** inert（两路互斥：不得同一条路径两处都打）
+  assert.deepEqual(
+    b.infos.filter((m) => m.includes('inert')), [],
+    '防御纵深一路**不得**同时进 info 通道；实际 info=' + JSON.stringify(b.infos),
+  );
+  assert.equal(hook.level, 'warn', '缺省调用走 warn ⇒ 返回对象的 level 回显须为 `warn`（包 §2.1 K-4：返回对象追加 level）');
+  assert.equal(hook.installed, false, 'installed:false 语义保留');
+  assert.equal(hook.inert, true, '返回对象须含稳定回显键 inert:true');
+});
+
+// ── C4-control ｜ 常驻阳性对照：旧口径（两路都必须产 warn）**必红** ────────────────────────
+//   存在理由（C-5 要求阳性对照常驻）：若有人把实现改回「两路都 warn」或把断言放松成恒绿，本用例会红。
+//   做法**不越权**：不临时改 `lib/`（那是 e1 写域），只把**旧口径的断言本体**放进 `assert.throws` 里 ——
+//   它对当前读数**预期失败**，失败点即旧 C4 的两条断言（① warn 非空 ② warn 含 inert）。
+test('C4-control 阳性对照：旧口径（两路都必须产 warn）在本批实现下必红（判据杀伤力实验）', () => {
+  const a = mkLog();
+  installGovernanceHook({}, { logger: a.logger, config: { governance: { hook: { enabled: false } } } });
+
+  // 旧口径断言本体（= T-2 前那条用例对 disabled 路径施加的两条断言），此处**预期失败**
+  assert.throws(
+    () => {
+      assert.ok(a.warns.length >= 1, '旧口径①：inert 必须产出 warn（策略停用一路已改走 info ⇒ 本条必破）');
+      assert.ok(a.warns.some((w) => w.includes('inert')), '旧口径②：warn 须含关键字 inert（同上，集合为空 ⇒ 必破）');
+    },
+    (err) => err instanceof assert.AssertionError,
+    '旧口径必须判红，否则说明 inert 分级未落地（或有人把两路都退化为 warn）；实际 warn='
+      + JSON.stringify(a.warns),
+  );
+  // 阴性对照：同一份读数下新口径成立（红来自分级迁移，不是读数缺失）
+  assert.deepEqual(a.warns.filter((w) => w.includes('inert')), [], '同一份读数下新口径须成立：warn 不含 inert');
+  assert.ok(
+    a.infos.some((m) => m.includes('inert(info)')), '同一份读数下 info 主路须在场（证明分级确实发生）',
+  );
+});
+
 
 // ── ⑤ AC-6 P-2（读回原文）：`index.js` 内 `installLaneWake` 的局部 inert 同形补 warn + `inert: true` ──
 test('C5 P-2 inert 可见（读回原文）：index.js installLaneWake 内局部 inert 同时具备 warn 与 inert:true 回显键', () => {

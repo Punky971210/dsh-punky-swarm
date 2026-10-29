@@ -167,12 +167,23 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
   //   ② 返回对象新增稳定回显键 `inert: true`。
   //   `installed` / `reason` / `refusals.count()` / `dispose()` **全部保留**（既有调用方零破坏：
   //   热更路径按 `installed` 判定、按 `refusals.count()` 读拒绝计数、`dispose` 断开回调）。
-  const inert = (reason) => {
-    try { log?.warn?.('[governance] inert: ' + reason); } catch { /* 回显失败不阻断装配 */ }
-    return { installed: false, inert: true, reason, refusals: { count: () => 0 }, dispose() {} };
+  // T-1（批 `punky-g1-tail-2026-10-29` · lane `e1-lib`）：`inert` 由「无条件 warn」改为**显式分级**。
+  //   为什么必须分级：两条 `inert` 路径语义相反，原先同一个 `warn` 把它们混为一谈——
+  //     · `cfg.enabled !== true` = **策略停用**（用户/配置显式关；生产**可达**）⇒ 这是**策略**不是故障 ⇒ `info`；
+  //     · `!root || typeof ctx?.on !== 'function'` = **防御纵深**（生产恒不成立；真出现即宿主契约被破坏）
+  //       ⇒ 必须保持 `warn`（**禁**把整个 `inert` 改成 info，否则真装配异常会被一起静默掉）。
+  //   回退边界（K-7）：`level === 'info'` 但宿主 logger **无 `info`** 时，退回 `warn` 并在消息尾缀
+  //     `[info-unavailable]`（降级可见，不静默丢行）——属已登记的已知边界。
+  const inert = (reason, level = 'warn') => {
+    try {
+      const line = '[governance] inert(' + level + '): ' + reason;
+      if (level === 'info') { if (typeof log?.info === 'function') log.info(line); else log?.warn?.(line + ' [info-unavailable]'); }
+      else log?.warn?.(line);
+    } catch { /* 回显失败不阻断装配 */ }
+    return { installed: false, inert: true, reason, level, refusals: { count: () => 0 }, dispose() {} };
   };
-  if (cfg.enabled !== true) return inert('disabled');
-  if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');
+  if (cfg.enabled !== true) return inert('disabled', 'info');                      // 策略停用（生产可达）
+  if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');  // 防御纵深 ⇒ 缺省 warn
   const kernel = createGovernanceKernel(cfg);
   let refusalCount = 0;
   // 双层桥接回调（可选；dispose 置空断开——回调随之失效，幂等）

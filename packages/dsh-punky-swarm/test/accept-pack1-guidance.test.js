@@ -55,13 +55,11 @@ const absOf = (rel) => path.join(PKG_ROOT, ...rel.split('/'));
 const readRel = (rel) => fs.readFileSync(absOf(rel), 'utf8');
 const normWs = (s) => s.replace(/\s+/g, ' ').trim();
 
-/** 子进程 env：剥掉「本进程作为 `--test` 子上下文」时注入的变量——
- *  否则被 spawn 的 `node --test` 会改走 TAP 通道，`ℹ tests/pass/fail` 摘要行读不到（实测踩过）。 */
-function childEnv() {
-  const env = { ...process.env };
-  for (const k of Object.keys(env)) if (k.startsWith('NODE_TEST_')) delete env[k];
-  return env;
-}
+// 【T-4 死码已删（批 `punky-g1-tail-2026-10-29` · lane `t1-test`）】
+//   原「子进程 env 剥离辅助函数」连同其上方 3 行说明注释整块删除（该函数用于剥掉 `NODE_TEST_*` 注入变量）。
+//   该死码**预先存在**（非本批造成）：上一批删掉本文件两个 spawn 包装函数后，它的唯一使用者即消失，
+//   此后无任何调用点（实测按该函数名 grep 仅命中定义行）⇒ 属既存死码清尾。
+//   ⚠ 本文件 `inlineEntriesOf` 同源副本与其**活断言**未动（它们是 T-3(a) 指引句的事实基，C-8 禁动）。
 
 // 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
 //   原「已退役脚本的路径常量」与两个为 spawn 它而写的包装函数（一为直接 spawn、一为 JSON 版）整链删除：

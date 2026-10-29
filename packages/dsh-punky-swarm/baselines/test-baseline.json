@@ -11,7 +11,7 @@
     "test/accept-pack1-guidance.test.js": {
       "asserts": 17,
       "blankLines": 23,
-      "lines": 249,
+      "lines": 247,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1113,11 +1113,11 @@
       "todos": 0
     },
     "test/no-agentTeams-batch.test.js": {
-      "asserts": 57,
-      "blankLines": 40,
-      "lines": 366,
+      "asserts": 68,
+      "blankLines": 46,
+      "lines": 430,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 12,
       "todos": 0
     },
     "test/orphan-recycle.test.js": {
@@ -1689,7 +1689,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T11:49:05Z",
+  "generatedAt": "2026-10-29T15:36:48Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1700,15 +1700,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-g1-gapfix-2026-10-29: G1 遗留修补（G01 inert 六件分级 / G02 告警分流 / G03 roster 命名统一与集合判据 / G04 旧脚本名清尾）；test 面 Δ = C6 拆三条 + R1b/R1c 新增 + accept-pack1/pack3 死链删除；Δ files 0, tests +5, asserts +23, lines +115（含死码删除的负贡献）",
+  "reason": "punky-g1-tail-2026-10-29: 收尾批四项（T-1 inert 分级 / T-2 C4 拆三条 / T-3 指引句两处按两档尺子 / T-4 childEnv 死码删除）；test 面 Δ +2 tests（C4 拆 2→3 条含常驻阳性对照）；childEnv 删除贡献负 lines",
   "schema": 1,
   "totals": {
-    "asserts": 11077,
-    "blankLines": 5944,
+    "asserts": 11088,
+    "blankLines": 5950,
     "files": 211,
-    "lines": 63691,
+    "lines": 63753,
     "tautologies": 0,
-    "tests": 2235,
+    "tests": 2237,
     "todos": 4
   }
 }
