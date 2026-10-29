@@ -89,12 +89,40 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     但插件侧异常会污染自身状态面。
 import { isMemberTerminal, autoSettleEnabledOf, SETTLEABLE_STOP_REASONS } from '../schema.js';
 import { laneBindingOf, ownerSessionIdOf, dispatchIndexEntryOf } from './dispatch.js';
+// 【X-3 接线 · 批 B2】I-07/I-08 双时钟与停止三阶段（阈值唯一真源在模块内，此处只消费）。
+import { createBoundedExec, BOUNDED_PHASES } from '../exec/bounded.js';
 import {
   EVT_AUTO_SETTLE_TRIGGERED, EVT_AUTO_SETTLE_PAUSED, EVT_AUTO_SETTLE_SKIPPED,
 } from '../state/event-types.js';
 // 层判定单点（**不新造第二套遍历**）：`findTask` 即「按 id 在 `batch.wavePlan[].tasks` 里定位任务」的
 // 唯一实现（`lib/state/task-utils.js`，零依赖）；本模块只读它的 `layer` 字段。
 import { findTask } from '../state/task-utils.js';
+
+/**
+ * 【B2 修 · bounded 真生命周期】进程内单例追踪器 —— **必须跨调用**，不能在同一调用栈里 begin 完立刻 classify
+ * （那种形态结构上恒 `thinking/false`，等于没接线：audit blocking② 的原判）。
+ * 生命周期（三段分落于**不同调用**）：
+ *   ① 首次见到某 run（任一触发）⇒ `begin(runKey)`：只记 startedAt，**不设 deadline**（思考期不计时）；
+ *   ② 该 run 走到「内核认为已停」⇒ `settle(runKey, stopReason)`：**此刻**才设 `deadlineAt = now() + hardMs`；
+ *   ③ 之后**每次**再触发 ⇒ `classify(runKey)`：按「距结算时刻」的 elapsed 落 `with_grace`／`grace_exceeded`／
+ *      `timed_out` ⇒ 这才是「结算后迟滞」的真实观测（`timedOut` **能真的变 true**）。
+ * 测试注入：`deps.bounded` 可传入自定义时钟/阈值的追踪器（`createBoundedExec({hardMs, graceMs, now})`），
+ *   生产不传 ⇒ 用本单例（真实 `Date.now()`）。
+ */
+const settleBounded = createBoundedExec();
+/** 进程内已 `begin` 的 runId 台账（bounded 不提供「是否已登记」查询面；有界 FIFO 防无界增长）。 */
+const boundedBegun = new Set();
+const BOUNDED_BEGUN_MAX = 512;
+/** 幂等 begin：同一 runId 只登记一次（重复 begin 会重置 startedAt 并可能抹掉已结算的 deadline）。 */
+function ensureBoundedBegin(tracker, runKey) {
+  if (!runKey || boundedBegun.has(runKey)) return;
+  tracker.begin(runKey);
+  boundedBegun.add(runKey);
+  if (boundedBegun.size > BOUNDED_BEGUN_MAX) {
+    const oldest = boundedBegun.values().next().value;
+    boundedBegun.delete(oldest);
+  }
+}
 
 /** 主路宿主事件名（契约卡 #2：`ctx.on('subagent/end', info)`；`{global:true}` 见 `installAutoSettle`）。 */
 export const AUTO_SETTLE_SUBAGENT_END = 'subagent/end';
@@ -195,6 +223,12 @@ export function hasAutoSettleRecord(batch, lane, settleId) {
     if (!e || (e.type !== EVT_AUTO_SETTLE_TRIGGERED && e.type !== EVT_AUTO_SETTLE_SKIPPED)) continue;
     if (e.lane !== lane) continue;
     if (isTransientSkip(e)) continue;
+    // 【F4 (C) · 批 B2】`settleable === false` 的触发（= `recorded`：**只留痕、未结算**）**不占幂等键**。
+    //   为什么：兼底路（`swarm_report(settle-request)`）实测**早于**宿主 `subagent/end` 约 60–63 s 到达，
+    //   而工具路拿不到内核可观测的 `stopReason`（宿主尚未上报）⇒ 只能 `recorded`。若它也占幂等键，
+    //   主路稍后上报的 `completed` 会被 `already-settled` 挡掉 ⇒ **lane 永停 running**（F4 根因）。
+    //   语义边界：只有**真正可结算**的触发才占键（幂等不退让：已 settled 的 lane 再触发仍 skipped）。
+    if (e.type === EVT_AUTO_SETTLE_TRIGGERED && e.settleable === false) continue;
     const key = settleIdOf(e.settleId ?? e.workerSessionId ?? null);
     if (settleId !== null && key === settleId) return true;
   }
@@ -249,7 +283,7 @@ function pauseForFail(store, sessionId, batchId, { lane, reason, code, trigger, 
  *   `audit-explicit-settle-required`（(b) 定案：audit 层 lane 的结算职责归 Leader）| `in-flight`。
  *   **不抛错**（观察者纪律；异常隔离为 `{ok:false, action:'error'}`）。
  */
-export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
+export async function autoSettleLane({ ctx, store, root, liveConfig, bounded } = {}, {
   onFail = AUTO_SETTLE_ON_FAIL.pause,
   sessionId, batchId, lane, workerSessionId = null, stopReason = null, trigger,
 } = {}) {
@@ -267,6 +301,20 @@ export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
     const batch = store.readBatch(sessionId, batchId);
     if (!batch) { out.ok = false; out.action = 'error'; out.reason = 'no-batch'; return out; }
     if (!(lane in (batch.lanes ?? {}))) { out.ok = false; out.action = 'error'; out.reason = 'no-lane'; return out; }
+    // 【B2 修 · bounded 观测面（只读，置于幂等闸**之前**）】任何一次触发都记录该 run 的计时相位 ——
+    //   这样「已结算 / 已跳过」的**重复触发**也能观测到结算后迟滞（`timedOut` 才真的可达，不是死字段）。
+    //   未知 run 未 begin ⇒ classify 恒 `thinking/false`（未知 ≠ 已停）。
+    const runKey = settleId ?? null;
+    const tracker = bounded ?? settleBounded; // 生产不传 ⇒ 进程内单例（真实 Date.now）
+    ensureBoundedBegin(tracker, runKey);
+    if (runKey) {
+      const cls = tracker.classify(runKey);
+      out.boundedPhase = cls.phase;
+      if (cls.timedOut === true) {
+        // 真读者之一：日志（结算后迟滞超阈值）。返回对象里的 `boundedPhase` 是另一个真读者（工具路回显给成员）。
+        try { ctx?.logger?.warn?.('[dsh-punky-swarm] auto-settle bounded ' + cls.phase + ' (runId=' + runKey + ')'); } catch { /* 日志失败不阻断 */ }
+      }
+    }
     // 幂等去重（跨重启）：同 (lane, id) 已有留痕 ⇒ 第二路 no-op。
     // 判据只读批次 JSON（唯一持久事实源）；**首见**同一 (lane, id) 的重复**落一条 skipped 留痕**
     // （「被跳过」可审计，不是静默丢弃）——但**只落一次**：重复超过两次时零新增（幂等自证）。
@@ -316,14 +364,31 @@ export async function autoSettleLane({ ctx, store, root, liveConfig } = {}, {
       out.action = 'skipped'; out.reason = AUDIT_SETTLE_DEFERRAL_REASON; out.status = from;
       return out;
     }
-    // 非可结算 `stopReason`（含未知枚举）：**留痕但不结算**（不静默丢、不谎报成功）
-    const settleable = stopReason === null || SETTLEABLE_STOP_REASONS.includes(stopReason);
+    // 非可结算 `stopReason`：**留痕但不结算**（不静默丢、不谎报成功）。
+    // 【X0-A · 批 B2】`null`（宿主**未上报**）与未知枚举**同样不可结算** —— 旧式以 `null` 短路
+    //   把「未知」当「可结算」，与 B 处（`index.js` 曾把未上报伪造为
+    //   `'completed'`）构成**串联短路** ⇒ 两处必须同批收紧（只修一处另一处仍放行）。
+    const settleable = SETTLEABLE_STOP_REASONS.includes(stopReason);
     store.appendEvent(sessionId, batchId, EVT_AUTO_SETTLE_TRIGGERED, {
       lane, trigger, settleId, workerSessionId, stopReason, settleable, from,
     });
     if (!settleable) {
+      // 未结算 ⇒ 上面 classify 必为 `thinking`（不得 `timedOut`）——「未知 ≠ 已停」的第二处联合判据。
       out.action = 'recorded'; out.reason = 'stop-reason-not-settleable'; out.status = from;
       return out;
+    }
+    // 【B2 修】第二段：内核认为已停 ⇒ **此刻** settle（双时钟唯一起点）；此后任何一次触发都能观测迟滞。
+    if (runKey) {
+      try { tracker.settle(runKey, stopReason); } catch { /* 未 begin（极端竞态）⇒ 跳过计时，不阻断结算 */ }
+    }
+    const settledCls = runKey ? tracker.classify(runKey) : { phase: 'thinking', timedOut: false };
+    out.boundedPhase = settledCls.phase;
+    if (settledCls.timedOut === true) {
+      // 【B2 修】真读者：结算后迟滞超阈值 ⇒ 一条 warn（`timedOut` 可达，不再是死防线）。
+      try {
+        ctx?.logger?.warn?.('[dsh-punky-swarm] auto-settle bounded ' + settledCls.phase
+          + ' (runId=' + runKey + ', settle 后超过 ' + BOUNDED_PHASES.length + ' 档阈值)' );
+      } catch { /* 日志失败不阻断 */ }
     }
     // ── 判定链（复用既有写路径；**零复制**）：running → review → merged ──
     // 判据不满足时 `store.setMember` 抛（GATE_* + 已把门禁留痕事件 atomicWrite），此处捕获 ⇒ 停轮。

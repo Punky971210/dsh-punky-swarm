@@ -331,26 +331,27 @@ test('T-4 【C-3】`ownerSessionId` 缺失/空串/非字符串 ⇒ 寻址恰等�
     //   ⇒ 逐字当地址用 ⇒ 不可解 ⇒ 零唤醒（L-AC-13 同口径；已在 T-11 锁甲路面，此处锁主路面）
     ['纯空白（逐字保留为地址）', { owner: '   ' }, '   ', 0],
   ];
-  LEADER_WAKE_WINDOWS.clear();
-  const leader = stubLeader();
-  const agentSvc = agentsStubOf({ [LEADER]: leader });
-  const m = await mountOf({
-    batchId: 'b-t4', batchKey: LEADER, agents: agentSvc, label: 't4',
-    dispatches: variants.map(([, v], i) => ({ workerSessionId: 'ws-t4-' + i, hasOwner: v.hasOwner !== false, owner: v.owner })),
-  });
-  try {
-    for (let i = 0; i < variants.length; i++) {
-      const [tag, , expected, expectedFollowups] = variants[i];
-      leader.messages.length = 0;
-      agentSvc.lookups.length = 0;
-      LEADER_WAKE_WINDOWS.clear();
+  // 【B2 · I-09 语义变化】同 lane **第 3 次及以后** `lane-worker-end` 因续跑上界 2 不再唤醒（intended）。
+  //   本例主体 = **寻址值**（ownerSessionId 回退族），不是「同一 lane 能给几次唤醒」⇒
+  //   每个形态**各自独立装配**（各自一条 wakeQueue），从而不把「6 个形态」误测成「同一 lane 连发 6 次」。
+  //   判据强度不变：仍断言唤醒次数 = `expectedFollowups`、`lookups` 逐字等于期望寻址值。
+  for (let i = 0; i < variants.length; i++) {
+    const [tag, , expected, expectedFollowups] = variants[i];
+    LEADER_WAKE_WINDOWS.clear();
+    const leader = stubLeader();
+    const agentSvc = agentsStubOf({ [LEADER]: leader });
+    const m = await mountOf({
+      batchId: 'b-t4', batchKey: LEADER, agents: agentSvc, label: 't4-' + i,
+      dispatches: [{ workerSessionId: 'ws-t4-' + i, hasOwner: variants[i][1].hasOwner !== false, owner: variants[i][1].owner }],
+    });
+    try {
       await wakeHookOf(m.ctx).fn(endInfoOf('ws-t4-' + i));
       await sleep(20);
       reading('T-4 ' + tag, { followups: leader.messages.length, lookups: agentSvc.lookups, expected });
       assert.equal(leader.messages.length, expectedFollowups, '形态「' + tag + '」的唤醒次数');
       assert.deepEqual(agentSvc.lookups, [expected], '形态「' + tag + '」的寻址值 = ' + JSON.stringify(expected));
-    }
-  } finally { m.disposer(); }
+    } finally { m.disposer(); }
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════
@@ -671,4 +672,86 @@ test('T-12 【L-AC-12】`auto-settle.js` 零唤醒符号；`lib/index.js` 不引
     assert.equal(settleSrc.includes(needle), false, '结算主路不得被改造成唤醒路（实测命中 ' + needle + '）');
   }
   assert.equal(read('lib/index.js').includes('dispatchLaneCore('), false, 'D-3 甲：引擎只建议不派发（禁真派）');
+});
+
+// ══ B2 追加（t1-test）：I-09 端到端上界 ＋ X0-B 未上报不伪造 ══════════════════════════════════
+
+test('T-E2E 【I-09 端到端·真实接线】同 lane 连发 3 次 lane-worker-end ⇒ 唤醒次数恰 [1,1,0]（第 3 次因续跑上界 2 不唤醒）；此后空转不再产新 run', async () => {
+  // 回线判据原文：「空转仍产新 run ⇒ 停 G4」。本用例走**真实接线**（apply → lane-worker-end → wakeQueue.enqueue/drain → followup），
+  //   不是模块级模拟：每轮先清节流窗（隔离 WAKE_MIN_INTERVAL_MS 与队列上界两种抑制），只让**队列上界**成为变量。
+  const leader = stubLeader();
+  const agentSvc = agentsStubOf({ [LEADER]: leader });
+  const m = await mountOf({ batchId: 'b-e2e-budget', agents: agentSvc, label: 'e2e-budget' });
+  try {
+    const counts = [];
+    for (let i = 0; i < 3; i += 1) {
+      leader.messages.length = 0;
+      LEADER_WAKE_WINDOWS.clear();
+      await wakeHookOf(m.ctx).fn(endInfoOf(WORKER));
+      await sleep(20);
+      counts.push(leader.messages.length);
+    }
+    assert.deepEqual(counts, [1, 1, 0], '端到端上界 2：第 3 次必须不唤醒（= 空转不产第 3 次 run）');
+    leader.messages.length = 0;
+    LEADER_WAKE_WINDOWS.clear();
+    await sleep(20);
+    assert.equal(leader.messages.length, 0, '空转静默窗口不得产新 run');
+  } finally { m.disposer(); }
+});
+
+test('T-X0B 【X0-B·端到端】未上报 stopReason ⇒ 唤醒载荷 type===null 且 summary 含 stopReason=null（不得伪造 completed）', async () => {
+  const leader = stubLeader();
+  const agentSvc = agentsStubOf({ [LEADER]: leader });
+  const m = await mountOf({ batchId: 'b-x0b', agents: agentSvc, label: 'x0b' });
+  try {
+    leader.messages.length = 0;
+    LEADER_WAKE_WINDOWS.clear();
+    await wakeHookOf(m.ctx).fn({ runId: 'run-x0b', provider: 'spawn', id: WORKER, local: false }); // ← 无 stopReason（模拟宿主未上报）
+    await sleep(20);
+    assert.equal(leader.messages.length, 1, '未上报也必须唤醒（未知 ≠ 不唤醒）');
+    const msg = leader.messages[0];
+    const flat = JSON.stringify(msg);
+    assert.equal(msg?.type ?? msg?.payload?.type ?? null, null, '载荷 type 必须为 null（旧实现会伪造 completed）');
+    assert.ok(flat.includes('stopReason=null'), 'summary 必须显式写出 stopReason=null；实际=' + flat);
+    assert.equal(flat.includes('stopReason=completed'), false, '不得伪造 completed');
+  } finally { m.disposer(); }
+});
+
+// ══ B2 复验补回（audit followup）：**多条目精确判别**维度 ═══════════════════════════════════
+
+test('T-MULTI 【补回判别维度】同一 dispatchIndex 内 ≥2 条目、只触发其一 ⇒ 只 followup 那一个（另一条目零唤醒）', async () => {
+  // 为什么补：T-4 从「6 条目一次装配」改成「每形态独立装配」后，**净损了『多条目精确判别』这一维**；
+  //   T-7 虽 2 条目但同时触发两者（测窗口合并，不测判别）⇒ 这里补回：**同时在场、只敲一个**。
+  const root1 = stubLeader();
+  const root2 = stubLeader();
+  const OTHER = 'sess-wake-leader-2';
+  const agentSvc = agentsStubOf({ [LEADER]: root1, [OTHER]: root2 });
+  const m = await mountOf({
+    batchId: 'b-multi', agents: agentSvc, label: 'multi',
+    dispatches: [{ workerSessionId: WORKER }, { workerSessionId: 'ws-wake-2', owner: OTHER }],
+  });
+  try {
+    // ① 只触发条目 1 ⇒ 仅 LEADER 收到；OTHER 零唤醒、零被查询
+    LEADER_WAKE_WINDOWS.clear();
+    agentSvc.lookups.length = 0;
+    root1.messages.length = 0;
+    root2.messages.length = 0;
+    await wakeHookOf(m.ctx).fn(endInfoOf(WORKER));
+    await sleep(20);
+    assert.equal(root1.messages.length, 1, '条目1 的 owner 必须收到恰 1 条唤醒');
+    assert.equal(root2.messages.length, 0, '条目2 的 owner 不得被误唤醒（判别失败会在这里变 1）');
+    assert.deepEqual(agentSvc.lookups, [LEADER], '寻址查询只应命中条目1 的 owner');
+    // ② 只触发条目 2 ⇒ 仅 OTHER 收到；LEADER 计数不再增长
+    LEADER_WAKE_WINDOWS.clear();
+    agentSvc.lookups.length = 0;
+    root1.messages.length = 0;
+    root2.messages.length = 0;
+    await wakeHookOf(m.ctx).fn(endInfoOf('ws-wake-2'));
+    await sleep(20);
+    assert.equal(root2.messages.length, 1, '条目2 的 owner 必须收到恰 1 条唤醒');
+    assert.equal(root1.messages.length, 0, '条目1 的 owner 不得被误唤醒（判别失败会在这里变 1）');
+    assert.deepEqual(agentSvc.lookups, [OTHER], '寻址查询只应命中条目2 的 owner');
+    // ③ 判别面：两次唤醒的载荷必须指向**不同** lane 语义（这里两条目同批同 lane，故以 owner 判别为准）
+    assert.notEqual(LEADER, OTHER, '两个条目必须是不同寻址目标');
+  } finally { m.disposer(); }
 });

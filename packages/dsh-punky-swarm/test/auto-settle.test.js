@@ -341,7 +341,9 @@ test('F1: 兼底路——requestAutoSettle 身份反查 laneBindingOf（member.d
   const store = seedBatch(root, S, 'f1');
   store.appendEvent(S, 'f1', EVT_MEMBER_DISPATCH, { lane: 'e1', workerSessionId: 'ws-f1' });
   const trigBefore = store.readBatch(S, 'f1').events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).length; // 时点基线（M-2）
-  const r = await requestAutoSettle({ ctx: assemblyCtxOpts(), store, root }, { workerSessionId: 'ws-f1', reason: 'worker settle-request' });
+  // 【B2 · X0-A 收紧后】本用例主体 = 身份反查 + 与主路同一判定函数 ⇒ 显式给出「已上报 completed」，
+  //   否则测到的是「未上报」分支（那属于 stop-reason-semantics 的判据，不在本例主体内）。
+  const r = await requestAutoSettle({ ctx: assemblyCtxOpts(), store, root }, { workerSessionId: 'ws-f1', stopReason: 'completed', reason: 'worker settle-request' });
   try {
     assert.equal(r.ok, true);
     assert.equal(r.action, 'merged');
@@ -402,7 +404,23 @@ test('F4: swarm_report(settle-request) 工具面接线自证——core 工具存
   const exec = { name: 'swarm_report', arguments: {}, agent: { session: { id: 'ws-f4' } } };
   const out = await rep.execute({ type: 'settle-request', summary: 'lane 交付完成，请求结算' }, exec);
   assert.equal(out.delivered, true, '回报仍投递（既有语义不变）');
-  assert.equal(store.readBatch(S, 'f4').lanes.e1, 'merged', 'settle-request ⇒ 兼底路判据生效（同一判定函数）');
+  // 【F4 裁定 (C) · 批 B2】settle-request **不声明完成语义**，只触发内核重新求值：
+  //   工具路早于宿主 `subagent/end` 约 60–63 s ⇒ 此刻内核**无可观测 stopReason** ⇒ 只能 `recorded`（lane 仍 running）。
+  //   ⇒ 旧断言「工具路单独 ⇒ merged」编码的是 **A 型退化语义**（执行体自报完成），已按 (C) 改写：
+  //   第一步断言 `recorded`，再由宿主上报 `completed` 证明「功能不死、只是延迟到宿主上报那一刻」。
+  assert.equal(store.readBatch(S, 'f4').lanes.e1, 'running', '(C)：工具路单独不得结算（lane 保持 running）');
+  const rec = store.readBatch(S, 'f4').events.filter((e) => e.type === EVT_AUTO_SETTLE_TRIGGERED).pop();
+  assert.equal(rec.action ?? rec.settleable, rec.settleable, '触发留痕必须存在');
+  assert.equal(rec.settleable, false, '(C)：工具路触发的 settleable 必须为 false（没有伪造已完成）');
+  assert.equal(rec.stopReason, null, 'stopReason 保持 null —— 内核无可观测源，不注入任何值');
+  // 反 A 型退化：第一步不得是「已结算」
+  assert.notEqual(rec.settleable, true, '若有人把 completed 硬塞进工具路 ⇒ 本行立即红');
+  // 第二步：宿主真上报 completed ⇒ 同一 (lane, settleId) 仍能 merged（幂等键未被 recorded 占住）
+  await autoSettleLane(
+    { ctx: assemblyCtxOpts(), store, root },
+    { sessionId: S, batchId: 'f4', lane: 'e1', workerSessionId: 'ws-f4', stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd },
+  );
+  assert.equal(store.readBatch(S, 'f4').lanes.e1, 'merged', '(C)：宿主上报后必须能结算（功能不死）');
 });
 
 // ── G：登记面/装配面自证 ──
@@ -435,7 +453,8 @@ test('G2: autoSettleLane 直调面 = 单点判定（两路共用）；onFail 缺
   assert.equal(DEFAULT_ON_FAIL, 'pause');
   const r = await autoSettleLane(
     { ctx: assemblyCtxOpts(), store, root },
-    { sessionId: S, batchId: 'g2', lane: 'e1', workerSessionId: 'ws-g2', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd },
+    // 【B2 · X0-A】显式 completed（本例主体 = 单点判定 + 缺省 onFail，不是 stopReason 语义）
+    { sessionId: S, batchId: 'g2', lane: 'e1', workerSessionId: 'ws-g2', stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.subagentEnd },
   );
   assert.equal(r.ok, true);
   assert.equal(r.action, 'merged');
@@ -449,13 +468,14 @@ test('G3: 终态 lane 再触发 ⇒ skipped（触发资格：命中 lane 须非�
   const batchId = 'g3';
   const r1 = await autoSettleLane(
     { ctx: assemblyCtxOpts(), store, root },
-    { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3a', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
+    // 【B2 · X0-A】显式 completed（本例主体 = 幂等键 (lane,id)，不是 stopReason 语义）
+    { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3a', stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
   );
   assert.equal(r1.action, 'merged');
   // 同 lane **不同** id（另一 stint/另一 worker）→ 触发资格不满足（lane 已终态）
   const r2 = await autoSettleLane(
     { ctx: assemblyCtxOpts(), store, root },
-    { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3b', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
+    { sessionId: S, batchId, lane: 'e1', workerSessionId: 'ws-g3b', stopReason: 'completed', trigger: AUTO_SETTLE_TRIGGERS.settleRequest },
   );
   assert.equal(r2.action, 'skipped');
   assert.equal(r2.reason, 'lane-terminal');

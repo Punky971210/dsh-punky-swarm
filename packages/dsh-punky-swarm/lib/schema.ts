@@ -480,7 +480,8 @@ export type AuditlogConfigKey = typeof AUDITLOG_CONFIG_KEYS[number];
 //   形参 / 判定 / 事件载荷里。本批把**类型 + 白名单**收成本文件的单一真源，`auto-settle.js` 改为 import 引用。
 //
 // 分工不变（不越权）：本文件只声明**取值域**与**可结算白名单**；「怎么判活性」仍归内核/`auto-settle`，
-//   因此这里**不引入**任何判定函数，也不改变 `auto-settle.js:320` 的 `settleable` 语义。
+//   因此这里**不引入**任何判定函数；**B2/X0 起** `auto-settle.js` 侧判据已收紧为「**仅 `completed` 可结算**」
+//   （`null` ＝宿主未上报、未知枚举一律不结算），本文件只提供取值域与白名单，不承载判定。
 
 /**
  * 一次执行的停止原因（契约卡 #5 取值域，**五值**）。

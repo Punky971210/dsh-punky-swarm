@@ -92,6 +92,8 @@ import { createStreamHub } from './panel/stream.js';
 // 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
+// 【X-3 接线 · 批 B2】I-09 唤醒队列：coalescing ＋ 续跑上界 2 ＋ 自 block 抑制。
+import { createWakeQueue } from './state/wake-queue.js';
 // 审计日志 sink（lib/auditlog/）：进程级 cordis logger exporter——默认开、可显式关闭、按日分卷 + 体积上限、
 //   零远程上报。挂载点见下方 apply() 内注释（必须在 validateCapabilities warn / GATE_ENABLED warn / syncAssets
 //   三条 warn 之前，否则这些启动期审计信号永久缺席）。
@@ -657,6 +659,10 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
   //     #onSubagentEnd`，注册序在前 ⇒ 同事件同步段先跑并写回同一 Map）⇒ 本路**不复制第二套重建**
   //     （禁第二套口径）；「索引冷 + 本路先跑」的窄窗内可能漏唤醒，下一事件即恢复。
   let laneWake = null;
+  // 【X-3 接线 · 批 B2】每装一次一条队列（coalescing ＋ 续跑上界 2 ＋ 自 block 抑制的唯一实例）。
+  //   纪律：**只消费 `drain()` 结果**，绝不把 drain 出来的 run 重新 `enqueue` ——
+  //   重新入队正是 M5 变异「空转仍产新 run」的形态（回线判据禁止，命中即停 G4）。
+  const wakeQueue = createWakeQueue();
   /** 唤醒路的**单次动作**：全程 try/catch 且不抛（观察者纪律，与结算主路同款）。 */
   const onLaneWorkerEnd = async (info) => {
     try {
@@ -665,6 +671,19 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
       if (typeof id !== 'string' || id.length === 0) return; // 无 durable 子会话 id ⇒ 静默丢弃
       const hit = dispatchIndex instanceof Map ? dispatchIndex.get(id) : null;
       if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return; // 非本套件派发 ⇒ 静默丢弃
+      // 【X-3 接线 · 批 B2 · I-09】唤醒前过队列：① 自产唤醒被抑制 ⇒ 不唤醒自己（`suppressSelf` 单向，
+      //   本处**只读** `isSuppressed`，不加 unsuppress 面）；② `enqueue`→`drain` 同步成对 ⇒
+      //   同一 lane 的续跑受**上界 2** 约束（第 3 次起 drain 为空 ⇒ 不再唤醒，即「空转不产第 3 次 run」）。
+      //   ⚠ **不把 drain 结果重新入队**（那会复现 M5）。
+      if (wakeQueue.isSuppressed(hit.lane)) {
+        ctx.logger?.debug?.('[dsh-punky-swarm] lane-wake suppressed (self-produced event): ' + hit.lane);
+        return;
+      }
+      wakeQueue.enqueue({ lane: hit.lane, reason: 'lane-worker-end', runId: id });
+      if (wakeQueue.drain().length === 0) {
+        ctx.logger?.debug?.('[dsh-punky-swarm] lane-wake skipped (wake budget exhausted): ' + hit.lane);
+        return;
+      }
       // ② 候选（**只读**，D-3 甲）：`poolViewOf` 单点判「deps 已结算 + owner===null + lane pending」。
       let candidates = null;
       try {
@@ -674,7 +693,9 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
       } catch { candidates = null; /* 批次不可读 ⇒ 无候选面（不影响唤醒本身） */ }
       // 终态语义（契约卡 §1.1）：宿主正常路带 `stopReason`；异常路固定 `'error'`（`dsh-subagent/lib/index.js:274-277`）
       //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
-      const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : 'completed';
+      // 【X0-B · 批 B2】未上报 ⇒ **`null`（未知就是未知）**，交内核推导；旧式缺省 `'completed'` 会**伪造完成**，
+      //   与 A 处的 `null` 分支串联成「未上报 ⇒ 当作已停 ⇒ 自动结算」的短路（两处须同批修）。
+      const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : null;
       // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
       //   【批 `lane-wake-mainpath-fix-20261010` · W-3】**唯一寻址点**：`leaderSessionId` 改取
       //   `wakeAddressOf(hit)` = 「派发期记录的发起方 agent 会话」∨ 回退 `hit.sessionId`。

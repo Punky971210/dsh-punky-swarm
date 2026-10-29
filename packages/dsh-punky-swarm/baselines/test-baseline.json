@@ -233,9 +233,9 @@
       "todos": 0
     },
     "test/auto-settle.test.js": {
-      "asserts": 193,
+      "asserts": 198,
       "blankLines": 46,
-      "lines": 914,
+      "lines": 934,
       "tautologies": 0,
       "tests": 35,
       "todos": 0
@@ -430,6 +430,14 @@
       "lines": 411,
       "tautologies": 0,
       "tests": 7,
+      "todos": 0
+    },
+    "test/exec-bounded.test.js": {
+      "asserts": 17,
+      "blankLines": 12,
+      "lines": 111,
+      "tautologies": 0,
+      "tests": 8,
       "todos": 0
     },
     "test/f1-apply-root-guard.test.js": {
@@ -1424,6 +1432,14 @@
       "tests": 1,
       "todos": 0
     },
+    "test/stop-reason-semantics.test.js": {
+      "asserts": 28,
+      "blankLines": 15,
+      "lines": 150,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/store-corrupt.test.js": {
       "asserts": 53,
       "blankLines": 27,
@@ -1449,11 +1465,11 @@
       "todos": 0
     },
     "test/swarm-wake-addressing.test.js": {
-      "asserts": 95,
-      "blankLines": 49,
-      "lines": 675,
+      "asserts": 101,
+      "blankLines": 52,
+      "lines": 719,
       "tautologies": 0,
-      "tests": 16,
+      "tests": 18,
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
@@ -1592,6 +1608,14 @@
       "tests": 11,
       "todos": 0
     },
+    "test/wake-queue.test.js": {
+      "asserts": 23,
+      "blankLines": 11,
+      "lines": 105,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
     "test/watch-bootoverlay.test.js": {
       "asserts": 24,
       "blankLines": 18,
@@ -1721,7 +1745,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T19:53:31Z",
+  "generatedAt": "2026-10-29T20:30:51Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1732,15 +1756,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B1 删 5 件（mailbox_send/read/ack + lane_heartbeat/lane_longrun）：SUITE_TOOLS 39→34、TOOL_NAMES 31→26（两套账差仍 8/∅）；asserts 11197→11034（-163，逐文件归因：watch-hotconfig -34/-4、watch-longrun-integration -29/-2、watch-longrun -22/-3、watch-heartbeat -21/-3、watch-state-surface-red -15/-2、w7e -14/-1、watch-longrun-exempt -7/-1、budget -19/-4、tools.test -2、tool-descriptor -1、tool-face-ledger +1）；tests 2262→2242（-20）；删除面 49 文件全处置 + 双路派生补 2 处（checks-k 26/27、ledger 不写死计数）；修复既有回归 gate-fixture 补 subagents 宿主键桩",
+  "reason": "G3-B2 停止语义 + 有界执行：X0-A auto-settle.js 去 null 短路（可结算≡{completed}）、X0-B index.js 未上报默认 null（不伪造完成）、schema.ts:483 仅注释（:491/:501 逐字未变）；F4 幂等键修正（recorded 不占键 ⇒ settleable===false 的触发记录跳过）；新增 lib/exec/bounded.js(125) + lib/state/wake-queue.js(149)；接线 auto-settle:93/:334 + index:96/:665/:678/:682/:683；测试：新增 exec-bounded(8)/wake-queue(8)/stop-reason-semantics(10)，改造 swarm-wake-addressing(18，6 形态改独立装配以适配续跑上界 2)、auto-settle(35)",
   "schema": 1,
   "totals": {
-    "asserts": 11034,
-    "blankLines": 6016,
-    "files": 215,
-    "lines": 63987,
+    "asserts": 11113,
+    "blankLines": 6057,
+    "files": 218,
+    "lines": 64417,
     "tautologies": 0,
-    "tests": 2242,
+    "tests": 2267,
     "todos": 4
   }
 }
