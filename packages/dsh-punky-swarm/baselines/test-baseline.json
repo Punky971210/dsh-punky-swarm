@@ -490,8 +490,8 @@
     },
     "test/f2-lane-claim-warn.test.js": {
       "asserts": 9,
-      "blankLines": 15,
-      "lines": 113,
+      "blankLines": 16,
+      "lines": 124,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1118,6 +1118,14 @@
       "lines": 133,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/mcp-data-plane.test.js": {
+      "asserts": 67,
+      "blankLines": 38,
+      "lines": 416,
+      "tautologies": 0,
+      "tests": 10,
       "todos": 0
     },
     "test/member-deny-boundary.test.js": {
@@ -1761,7 +1769,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T22:50:11Z",
+  "generatedAt": "2026-10-29T23:46:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1772,15 +1780,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B3 S3（写族溯源）：e1-schema 19 件写族 schema 增 sourceRunId（非必填，execute 体零改动）；e2-guard 新增 lib/tools/write-provenance-guard.js(102 行) 单点守卫（与难度门禁并列，register.js +2 行）；t1-test 新增 test/write-provenance.test.js(14 例) + A 类 15 例夹具改累积捕获（覆盖式→guards.push，断言未放宽）+ 两处参数面闭集各加一键 + tools.test captured.length 1→2；全仓旧族名/守卫序取证",
+  "reason": "G3-B3 S4（MCP 数据面）：新建 lib/mcp/data-plane-server.js（薄包装，复用 ctx.webServer POST /mcp，loopback 三值白名单，唯一派发点 ctx.tools.execute）；暴露面 = kind{blackboard,read} ∩ 实际注册面（惰性求交，因安装早于工具注册）+ HOST_PROVIDED_TOOLS 豁免；logs 关 19/开 20 为真开关；installed 三态（返回非函数 ⇒ false）；reuse 内已修双层包裹与业务错映射；新增 test/mcp-data-plane.test.js（10 例，含性质断言「∀ 宣告即可达」）；f2-lane-claim-warn 改按 lane-lock 主题过滤",
   "schema": 1,
   "totals": {
-    "asserts": 11191,
-    "blankLines": 6107,
-    "files": 220,
-    "lines": 64962,
+    "asserts": 11258,
+    "blankLines": 6146,
+    "files": 221,
+    "lines": 65389,
     "tautologies": 0,
-    "tests": 2289,
+    "tests": 2299,
     "todos": 4
   }
 }

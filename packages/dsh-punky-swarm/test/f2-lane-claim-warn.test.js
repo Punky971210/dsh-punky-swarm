@@ -52,6 +52,16 @@ function fakeLogger() {
   };
 }
 
+// ── 留痕统计面：**按主题收窄**（精确化，非放宽）────────────────────────────────────────────
+//   `logger.warn` 是**全局通道**：任何模块（如 `lib/mcp/data-plane-server.js` 的挂载告警）都可能写一条，
+//   用「任何 warn 的条数」当判据会被无关告警打穿（实测：MCP 未挂载时多发一条 ⇒ 首建被误计为留痕）。
+//   谓词 = **本插件前缀 + `lane lock` 主体**：lane 锁留痕由 lane-lock 单点产出，文案固定
+//   `[dsh-punky-swarm] lane lock 接管：<lock 路径> · fence N→M`；两者同时命中才算本主题
+//   （**不**用「包含某个单词」这类脆弱形态：`lane_claim`、`lock`、`fence` 单独出现都不够）。
+//   条数语义**保持不变**：首建 **0** 条、接管**恰 1** 条（精确值，非 `>=1`）。
+const LANE_LOCK_TOPIC = /^\[dsh-punky-swarm\] lane lock/;
+const laneLockWarnsOf = (warns) => warns.filter((w) => LANE_LOCK_TOPIC.test(w));
+
 /** 真实装配形状：`ctx` 顶层带 logger（与宿主一致）。 */
 function harnessReal(logger) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'f2warn-real-'));
@@ -80,13 +90,14 @@ test('lane_claim 接管留痕（真实 cx 形状）：首建 0 条，force 接�
 
   const first = await tool.execute({ ...CLAIM }, { agent: { session: { id: SESS_ID } } });
   assert.equal(first.ok, true, '首次认领应成功（阳性对照：同调用、只少一步接管）');
-  assert.equal(warns.length, 0, '首建锁不是接管 ⇒ 不得留痕');
+  assert.equal(laneLockWarnsOf(warns).length, 0, '首建锁不是接管 ⇒ 不得留痕（按 lane-lock 主题统计）');
 
   const second = await tool.execute({ ...CLAIM, force: true }, { agent: { session: { id: SESS_ID } } });
   assert.equal(second.ok, true, 'force 接管应成功');
-  assert.equal(warns.length, 1, '接管必须恰留 1 条（多了=重复告警，少了=静默接管）');
-  assert.match(warns[0], /lane lock 接管/, 'warn 文案须点明「接管」');
-  assert.match(warns[0], /fence 1→2/, 'warn 文案须含 fence 递进（可审计的代数证据）');
+  const lockWarns = laneLockWarnsOf(warns);
+  assert.equal(lockWarns.length, 1, '接管必须恰留 1 条（多了=重复告警，少了=静默接管；按主题统计）');
+  assert.match(lockWarns[0], /lane lock 接管/, 'warn 文案须点明「接管」');
+  assert.match(lockWarns[0], /fence 1→2/, 'warn 文案须含 fence 递进（可审计的代数证据）');
   // P4-b 不可改造（Leader 裁定）：期望值来自**运行期 warn 文案**（前缀出现次数），文案由被测产出、非测试自造输入；匹配结果只有次数、无身份面 ⇒ 归 P4-b。
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   // P4-b 不可改造（Leader 裁定）：期望值来自**运行期 warn 文案**（前缀出现次数），文案由被测产出、非测试自造输入；匹配结果只有次数、无身份面 ⇒ 归 P4-b。
@@ -95,7 +106,7 @@ test('lane_claim 接管留痕（真实 cx 形状）：首建 0 条，force 接�
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   // P4-b 不可改造（Leader 裁定）：期望值来自**运行期 warn 文案**（前缀出现次数），文案由被测产出、非测试自造输入；匹配结果只有次数、无身份面 ⇒ 归 P4-b。
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  assert.equal((warns[0].match(/\[dsh-punky-swarm\]/g) ?? []).length, 1,
+  assert.equal((lockWarns[0].match(/\[dsh-punky-swarm\]/g) ?? []).length, 1,
     '前缀恰 1 次（F2-G02：双前缀会让日志检索噪声化）');
 });
 
@@ -106,7 +117,7 @@ test('lane_claim 接管留痕（旧错误形状 · 阴性对照）：只把 ctx 
   await tool.execute({ ...CLAIM }, { agent: { session: { id: SESS_ID } } });
   const second = await tool.execute({ ...CLAIM, force: true }, { agent: { session: { id: SESS_ID } } });
   assert.equal(second.ok, true, '锁本身仍应成功（缺陷只在留痕面）');
-  assert.equal(warns.length, 0,
-    '旧形状下必然 0 条留痕 —— 本断言是「防判据退化」的锁：若有人把 buildLaneTools 改回读 deps.ctx.logger，'
+  assert.equal(laneLockWarnsOf(warns).length, 0,
+    '旧形状下必然 0 条**本主题**留痕 —— 本断言是「防判据退化」的锁：若有人把 buildLaneTools 改回读 deps.ctx.logger，'
     + '第一条阳性用例会红，而这条会继续绿；两条同时存在才能把判据钉在真实装配形状上');
 });
