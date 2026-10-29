@@ -55,8 +55,23 @@ async function loadRoster() {
 
 const asArray = (v) => (Array.isArray(v) ? v : []);
 
-// ── ① AC-11：导出面**恰好**两项（集合式）＋ 内建职位表形态自洽 ─────────────────────
-test('R1 AC-11 导出面恰好两项：BUILTIN_ROLES + reconcileRoster（集合相等，非计数断言）', async () => {
+/** 内建职位表的**期望名集合**（批 `punky-g1-gapfix-2026-10-29` §2.4(a)，9 名显式枚举；`docManager` 已统一为 `doc-manager`）。
+ *  纪律：这是**独立侧常量名单**（不是从 `BUILTIN_ROLES` 反推），否则等于「枚举 == 枚举」自证。 */
+const EXPECTED_BUILTIN_ROLES = [
+  'coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager', 'manager', 'lead',
+];
+
+/** 内建职位表的**集合相等**判据（抽成函数 ⇒ 可对「注入第 10 项」的输入复用，证明判据有杀伤力）。 */
+function assertBuiltinRoleSet(actual) {
+  assert.deepEqual(
+    [...asArray(actual)].sort(),
+    [...EXPECTED_BUILTIN_ROLES].sort(),
+    'BUILTIN_ROLES 必须**逐名等于** 9 席期望集合（集合相等；注入第 10 项 / 改名 / 缺席 均应判红）',
+  );
+}
+
+// ── ① AC-11 + AC-10：导出面**恰好**两项 ｜ 内建职位表**集合相等** ｜ 空名册行为断言 ──────────
+test('R1 AC-11 导出面恰好两项 + 内建职位表集合相等（9 席显式判定，非计数断言）', async () => {
   const mod = await loadRoster();
   assert.deepEqual(
     Object.keys(mod).sort(),
@@ -64,10 +79,63 @@ test('R1 AC-11 导出面恰好两项：BUILTIN_ROLES + reconcileRoster（集合�
     '导出面必须**恰好**为包 §2.5 钉死的两项（禁增删）',
   );
   assert.ok(Array.isArray(mod.BUILTIN_ROLES), 'BUILTIN_ROLES 必须是数组');
-  assert.ok(mod.BUILTIN_ROLES.every((r) => typeof r === 'string' && r.length > 0),
-    'BUILTIN_ROLES 元素必须是非空字符串职位名（包 §2.5：元素为字符串职位名）');
+
+  // 元素判据（原「非空字符串」已被本批替换为集合相等 —— 原判据下「第 10 项任意字符串」可静默通过）
+  assertBuiltinRoleSet(mod.BUILTIN_ROLES);
+
+  // 命名统一（D-2）：`doc-manager` 必须在场，且旧拼写 `docManager` 不得出现
+  assert.ok(mod.BUILTIN_ROLES.includes('doc-manager'),
+    '命名统一：内建表须含 `doc-manager`（与 VALID_ROLES / REQUIRED_ROLES 同名在场）');
+  assert.equal(mod.BUILTIN_ROLES.includes('docManager'), false,
+    '命名统一：不得残留 `docManager` 旧拼写（跨面比对会恒误判该席）');
+
   assert.equal(typeof mod.reconcileRoster, 'function', 'reconcileRoster 必须是函数');
-  assert.equal(mod.reconcileRoster.length >= 0, true, '纯函数、无 ctx 依赖：调用形态 = reconcileRoster(hostRoster)');
+
+  // 跨面同名（AC-10 交叉读数）：`doc-manager` 必须与 wave-plan 的 VALID_ROLES、assembly 的 REQUIRED_ROLES 同名在场
+  //   —— 否则 `reconcileRoster` 跨面对比时该席恒「两边各缺」（命名漂移的原始缺陷面）。
+  const { VALID_ROLES } = await import('../lib/wave-plan.js');
+  const { REQUIRED_ROLES } = await import('../lib/assembly/schema.js');
+  assert.ok(asArray(VALID_ROLES).includes('doc-manager'), '跨面同名：`VALID_ROLES` 须含 `doc-manager`');
+  assert.ok(asArray(REQUIRED_ROLES).includes('doc-manager'), '跨面同名：`REQUIRED_ROLES` 须含 `doc-manager`');
+  assert.equal(asArray(VALID_ROLES).includes('docManager'), false, '跨面同名：`VALID_ROLES` 不得残留 `docManager`');
+});
+
+// ── ①-b AC-12：消除恒真断言 —— 空名册 ⇒ matched=∅ ∧ hostOnly=∅ ∧ builtinOnly=全量 ──────────
+//   ⚠ 包 AC-12 原表述为「`reconcileRoster([])` 三键皆空」，与三集合语义**冲突**：
+//     空宿主名册下「内建有、宿主无」必然是全量 ⇒ `builtinOnly` 不可能为空（写「三键皆空」要么恒假，
+//     要么逼实现把语义改错）。经 Leader 裁决，按语义正确版落地，并由本用例给出可判别面。
+test('R1b AC-12 空宿主名册行为断言：matched=∅ ∧ hostOnly=∅ ∧ builtinOnly=BUILTIN_ROLES（替代原恒真断言）', async () => {
+  const { BUILTIN_ROLES, reconcileRoster } = await loadRoster();
+  const diff = reconcileRoster([]);
+
+  assert.ok(diff && typeof diff === 'object', 'reconcileRoster([]) 必须返回对象');
+  for (const key of ['matched', 'builtinOnly', 'hostOnly']) {
+    assert.ok(key in diff, '返回值缺集合 ' + key + '（包 §2.5 → {matched, builtinOnly, hostOnly}）');
+  }
+  // 三个断言各自独立、各有判别力：把任一集合写错（例如让 builtinOnly 也返回空）都会红
+  assert.deepEqual(asArray(diff.matched), [], '空宿主名册 ⇒ matched 必须为空集');
+  assert.deepEqual(asArray(diff.hostOnly), [], '空宿主名册 ⇒ hostOnly 必须为空集（无宿主侧额外席位）');
+  assert.deepEqual(
+    [...asArray(diff.builtinOnly)].sort(),
+    [...BUILTIN_ROLES].sort(),
+    '空宿主名册 ⇒ builtinOnly 必须等于**全量内建表**（「内建有、宿主无」）',
+  );
+});
+
+// ── ①-c AC-11 杀伤力实验：**注入第 10 项** ⇒ 同一条集合判据必红 ──────────────────────
+//   存在理由：R1 若恒绿则无判别力（本批之前它确实近乎恒绿 —— 元素判据只查「非空字符串」）。
+//   本用例把「注入第 10 项」的输入喂给**同一个** `assertBuiltinRoleSet`，断言它抛出。
+test('R1c AC-11 杀伤力实验：注入第 10 席 ⇒ 集合相等判据必红（证明判据非恒真）', async () => {
+  const { BUILTIN_ROLES } = await loadRoster();
+  const injected = [...BUILTIN_ROLES, 'tenth-seat-should-be-rejected'];
+
+  assert.throws(
+    () => assertBuiltinRoleSet(injected),
+    (err) => err instanceof assert.AssertionError,
+    '注入第 10 席后，集合相等判据**必须**判红（否则该判据恒绿、无杀伤力）',
+  );
+  // 阴性对照：未注入的原集合必须通过（证明红来自注入，不是判据本身永久失败）
+  assert.doesNotThrow(() => assertBuiltinRoleSet(BUILTIN_ROLES), '未注入的原集合必须通过（阴性对照）');
 });
 
 // ── ② AC-11(a)：**宿主名册缺一席** ⇒ `builtinOnly` 含该席、`hostOnly` = ∅ ─────────

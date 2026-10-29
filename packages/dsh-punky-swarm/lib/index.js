@@ -1142,17 +1142,27 @@ export const apply = (ctx, config = {}) => {
   const remountAutoSettle = createAutoSettleRemounter({ ctx, store, dispatchIndex, root, rt, installLaneWake });
   mountHotConfigRuntime({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle });
 
-  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面）────────────────────────────
+  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面；批 G1 gapfix · G02 分流）────────────
   //  顺序纪律：放在装配**结束前**（所有宿主面已装配完 ⇒ 探测到的是真实装态，不是计划态）。
   //  · 回显：`rt.capabilities`（host / internal / missing 三段）——「缺能力可见」的**主回显面**；
-  //  · 降级不静默：`missing` 非空即一条汇总 warn（**恰一条**，键名逐个；可选能力未启用也在此列出，
-  //    这是有意的：本批目标就是把「静默缺口」变成一条可读事实）；
+  //  · **日志分流**（三分级口径，唯一判据）：`missing` 仍是**并集**（回显/巡检要全集），但**打日志时分两路**：
+  //      路① `host` 必需键缺失 = **真缺失** ⇒ `warn` + `capability-missing:`（语义不变）；
+  //      路② `internal` 未启用（显式关或默认关）= **策略停用** ⇒ `info` + `capability-disabled:`
+  //          （把用户裁定的「可选能力默认关」降格为 warn 属误报，是上一批的告警疲劳源）；
   //  · 必需缺失 fail-closed：`assertRequired` 直接抛（**不吞**）——宿主缺 `tools`/`webServer`/`subagents`
   //    时插件本不该被挂载，真挂上了就必须立刻炸，禁「装上了但一半能力是空气」。
   rt.capabilities = capabilityReport({ ...rt, ctx, config });
-  if (rt.capabilities.missing.length > 0) {
-    ctx.logger?.warn?.('[dsh-punky-swarm] capability-missing: ' + rt.capabilities.missing.join(','));
+  // 路①：host 必需键缺失 ⇒ warn（真缺失；前缀不变 ⇒ 既有消费方与用例零破坏）
+  const hostMissing = rt.capabilities.host.filter((h) => !h.installed).map((h) => h.key);
+  if (hostMissing.length > 0) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] capability-missing: ' + hostMissing.join(','));
   }
+  // 路②：internal 未启用（含默认关的 4 键）⇒ info（策略停用，不是故障）
+  const disabledCapabilities = rt.capabilities.internal.filter((c) => !c.enabled).map((c) => c.key);
+  if (disabledCapabilities.length > 0) {
+    ctx.logger?.info?.('[dsh-punky-swarm] capability-disabled: ' + disabledCapabilities.join(','));
+  }
+  // 红线（C-2）：`assertRequired` 拒绝语义一字不动 —— 它只读 `report.host`，是 fail-closed 的全部意义。
   assertRequired(rt.capabilities);
 
   return () => releaseAll(rt);

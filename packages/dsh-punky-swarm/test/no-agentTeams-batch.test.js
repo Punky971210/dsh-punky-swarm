@@ -244,28 +244,102 @@ test('C5 P-2 inert 可见（读回原文）：index.js installLaneWake 内局部
   }
 });
 
-// ── ⑥ AC-6 P-3：装配汇总 `capability-missing` warn —— 用 `ctx.logger.warn` 收集器实跑捕获 ──
-test('C6 P-3 装配汇总 warn：apply() 装配期经 ctx.logger.warn 产出含 `capability-missing:` 的汇总行', () => {
-  const ctx = assemblyCtx(); // 已带 calls.warn 收集器 + on；无 webServer/subagents ⇒ 由本用例补齐
-  ctx.webServer = { register: () => () => {} };
-  ctx.subagents = { start: async () => ({}) };
+// ── ⑥ G02 分流后的装配期断言（批 `punky-g1-gapfix-2026-10-29`：C6 由「并集 warn」拆成**两条独立断言**）──
+//
+// 【为什么重写（不是让它变绿）】改前 C6 断言「默认关能力须出 `capability-missing` warn」—— 那是 **G02 之前的
+//   并集口径**（`lib/capabilities.js` 的 `missing` = host 未装 ∪ internal 未启用，装配期用并集打一条 warn）。
+//   G02 在打日志处分流后语义已变：**host 缺失 ⇒ `warn` + `capability-missing:`**；
+//   **internal 未启用 ⇒ `info` + `capability-disabled:`**（`missing` 仍保持并集，供回显/巡检）。
+//   ⇒ 旧断言在新语义下**应当红**（见下方 C6-control 阳性对照），新断言按语义分类各写一条。
+//
+// 【纪律】两条断言**独立成例、禁合并**；判据主体 = 消息内容 + 集合为空，**禁条数比较**（C-13）。
+
+/** 装配夹具：伪 ctx（带 `calls.info/warn` 收集器）+ 三宿主注入键齐备；`without` 可剥掉指定键。 */
+function applyAssembly({ root, without = [] } = {}) {
+  const ctx = assemblyCtx();
+  if (!without.includes('webServer')) ctx.webServer = { register: () => () => {} };
+  if (!without.includes('subagents')) ctx.subagents = { start: async () => ({}) };
+  if (!without.includes('on')) { /* 保留 ctx.on */ } else { delete ctx.on; }
   ctx.get = () => undefined;
-  const root = tempRoot('punky-t1-capwarn-');
-
   let disposer = null;
-  try {
-    assert.doesNotThrow(() => { disposer = apply(ctx, { root }); },
-      '三宿主键齐备时装配不得因能力面抛错（fail-closed 只针对必需缺失）');
-  } finally {
-    if (typeof disposer === 'function') { try { disposer(); } catch { /* 幂等清理 */ } }
-  }
+  let err = null;
+  try { disposer = apply(ctx, { root }); } catch (e) { err = e; }
+  return {
+    ctx, err,
+    warn: ctx.calls.warn,
+    info: ctx.calls.info,
+    dispose() { if (typeof disposer === 'function') { try { disposer(); } catch { /* 幂等清理 */ } } },
+  };
+}
 
-  const warns = ctx.calls.warn;
-  assert.ok(
-    warns.some((w) => w.includes('capability-missing')),
-    'P-3 装配汇总须产出 ≥1 条含 `capability-missing` 的 warn（内部可选能力缺省关闭即缺失）；实际 warns='
-      + JSON.stringify(warns.slice(0, 8)),
-  );
+// ── C6a · AC-8：**必需能力缺失** ⇒ fail-closed（装配期 `apply()` 必须抛）────────────────────
+test('C6a AC-8 必需能力缺失 ⇒ apply() 抛普通 Error：含 `capability-missing:`、err.code 未设、不以 GATE_ 开头', () => {
+  const run = applyAssembly({ root: tempRoot('punky-t1-g02a-'), without: ['webServer'] });
+  try {
+    assert.ok(run.err, '缺宿主必需键（webServer）⇒ 装配期必须 fail-closed 抛错（不得静默降级）');
+    assert.ok(run.err instanceof Error, '必须是 Error 实例');
+    assert.equal(run.err.code, undefined, '不得设置 err.code（禁进拒码集合的特殊读法）');
+    const msg = String(run.err.message ?? '');
+    assert.equal(msg.startsWith('GATE_'), false, '禁 GATE_ 前缀');
+    assert.ok(msg.includes('capability-missing:'), '消息须含固定前缀 `capability-missing:`；实际=' + msg);
+    assert.ok(msg.includes('webServer'), '消息须含缺失键名（可定位）；实际=' + msg);
+    assert.equal(/GATE_/.test(msg), false, '消息任意位置不得出现 GATE_');
+  } finally { run.dispose(); }
+});
+
+// ── C6b · AC-9：**internal 未启用** ⇒ 走 info `capability-disabled:`，且 warn 无 `capability-missing` 噪音 ──
+test('C6b AC-9 internal 未启用 ⇒ info 含 capability-disabled，且 warn 集合不含 capability-missing（空集，非计数）', () => {
+  const run = applyAssembly({ root: tempRoot('punky-t1-g02b-') });
+  try {
+    assert.equal(run.err, null, '三宿主键齐备 ⇒ 装配不得抛（internal 未启用不是 fail-closed 面）');
+
+    // ① internal 未启用 ⇒ info 通道可见（回显语义保留）
+    assert.ok(
+      run.info.some((w) => w.includes('capability-disabled:')),
+      'internal 未启用须产出 info 含 `capability-disabled:`；实际 info=' + JSON.stringify(run.info.slice(-6)),
+    );
+
+    // ② 噪音消除：warn 里**不得**再有 capability-missing（写成集合为空，禁条数比较）
+    const missingNoise = run.warn.filter((w) => w.includes('capability-missing'));
+    assert.deepEqual(missingNoise, [],
+      '装配期 warn 不得含 `capability-missing`（internal 未启用不属「真缺失」）；实际='
+        + JSON.stringify(missingNoise));
+  } finally { run.dispose(); }
+});
+
+// ── C6-control · 阳性对照：把**旧口径**作为断言 ⇒ 必红（证明新断言有杀伤力，不是恒绿）──────
+test('C6-control 阳性对照：旧口径「warn 须含 capability-missing」在新语义下必红（判据杀伤力实验）', () => {
+  const run = applyAssembly({ root: tempRoot('punky-t1-g02ctl-') });
+  try {
+    const legacyOk = run.warn.some((w) => w.includes('capability-missing'));
+    assert.throws(
+      () => assert.equal(legacyOk, true, '旧口径占位：默认关能力须出 capability-missing warn'),
+      (err) => err instanceof assert.AssertionError,
+      'G02 分流后旧口径必须判红（否则说明 warn 噪音仍在、或分流未落地）；实际 warn='
+        + JSON.stringify(run.warn.slice(0, 6)),
+    );
+    // 阴性对照：新口径在同一份读数上必须成立（红来自语义迁移，不是读数缺失）
+    assert.deepEqual(run.warn.filter((w) => w.includes('capability-missing')), [],
+      '同一份读数下新口径须成立：warn 无 capability-missing');
+  } finally { run.dispose(); }
+});
+
+// ── C6c · AC-5：**P-2 inert 可见性**（`index.js:704` 分支）—— 运行期 warn 捕获 ─────────────
+//   构造：`assemblyCtx()` 去掉 `on`（⇒ `typeof ctx?.on !== 'function'` 成立）+ 三宿主键齐备 ⇒ 走公开 `apply()`。
+//
+//   ⚠ **边界（C-14，必须读）**：本用例证的只是「**该分支若发生，会有回显**」（warn 通道能捕获 `lane-wake inert:`），
+//   **不证明**该分支在**生产**会发生 —— `lib/index.js:146` 的 `store` 恒非空、`ctx.on` 由宿主提供、
+//   `root` 由 `apply(ctx, { root })` 给出 ⇒ `!store || typeof ctx?.on !== 'function'` **生产恒不成立**。
+//   **禁止**据本用例推断「能力缺失可达」或修改任何可达性结论。
+test('C6c AC-5 P-2 inert 可见（运行期）：去掉 ctx.on 后 apply() 的 warn 含 `lane-wake inert:`（仅证有回显，不推生产可达）', () => {
+  const run = applyAssembly({ root: tempRoot('punky-t1-p2-'), without: ['on'] });
+  try {
+    assert.ok(
+      run.warn.some((w) => w.includes('lane-wake inert:')),
+      'P-2 定点（index.js 的局部 inert）须经 warn 通道回显 `lane-wake inert:`；实际 warn='
+        + JSON.stringify(run.warn.slice(0, 8)),
+    );
+  } finally { run.dispose(); }
 });
 
 // ── ⑦ AC-1（导出面**恰好**四项，集合式）/ AC-10（不造第二真源：键集派生而非手抄）──

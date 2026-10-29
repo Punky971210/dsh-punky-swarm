@@ -48,8 +48,18 @@ export function mountVerify(ctx, { root, config, logger } = {}) {
       + 'Set mode="advisory" to silence this warning; see docs/governance-technical.md '
       + '(wiring vs retirement is an open decision).');
   }
-  const inert = (reason) => ({ installed: false, reason, mode: cfg.mode, count: () => 0, dispose() {} });
-  if (cfg.enabled !== true) return inert('disabled');
+  // G01 #4/#5（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：定义点补稳定回显键（`inert` 布尔键，值 true）。
+  //   既有字段逐项保留：`installed` / `reason` / **`mode`** / `count()` / `dispose()`。
+  const inert = (reason) => ({ installed: false, inert: true, reason, mode: cfg.mode, count: () => 0, dispose() {} });
+  if (cfg.enabled !== true) {
+    // #4 策略停用（**生产可达**）：用户显式关 `capabilities.verify.enabled` ⇒ 这是**策略**不是故障，
+    //   ⇒ 一行 `info`（本处原先零日志，故这是**新增**的；与 `info` 分级口径一致，禁降格为 warn）。
+    log?.info?.('[dsh-punky-swarm] verify mount disabled (capabilities.verify.enabled === false)：'
+      + 'post-execute 证据捕获未装配；mode=' + cfg.mode);
+    return inert('disabled');
+  }
+  // #5 能力闸（**防御纵深 · 生产不可达**）：`root` 由 `apply(ctx, { root })` 给、`ctx.on` 由宿主提供
+  //   ⇒ **零日志新增**，只靠 `inert:true` 可辨。
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');
   const cap = installEvidenceCapture(ctx, { root, enabled: true });
   if (cap.installed) {

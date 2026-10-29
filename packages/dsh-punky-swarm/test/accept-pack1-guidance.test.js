@@ -34,7 +34,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +41,6 @@ import { fileURLToPath } from 'node:url';
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
 const BASELINE = 'bfb9b0c';
-const SCRIPT_REL = 'scripts/check-guidance-sync.mjs';
 const DISCIPLINE_REL = 'presets/punky-preset/references/discipline.md';
 const GUIDANCE_REL = 'presets/punky-preset/agent.cordis.yml';
 const CODER_TEST_REL = 'test/guidance-id-coverage.test.js';
@@ -65,19 +63,12 @@ function childEnv() {
   return env;
 }
 
-function runScript(args, cwd = PKG_ROOT) {
-  const r = spawnSync(process.execPath, [SCRIPT_REL, ...args], { cwd, encoding: 'utf8' });
-  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-}
+// 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
+//   原「已退役脚本的路径常量」与两个为 spawn 它而写的包装函数（一为直接 spawn、一为 JSON 版）整链删除：
+//   两个包装函数在本文件**均无调用点**（实测 grep 仅命中定义与彼此调用）⇒ 路径常量随之无活引用。
+//   删的是死链，**不动任何活断言**（C-6）。G04② 历史注释保留（见下方一行），标「已废」。
 
-function runScriptJson(args, cwd = PKG_ROOT) {
-  const r = runScript([...args, '--json'], cwd);
-  let doc = null;
-  try { doc = JSON.parse(r.stdout); } catch { /* 交给调用方 assert.fail */ }
-  return { ...r, doc };
-}
-
-/** 与实现同源的注入面条目解析（`scripts/check-guidance-sync.mjs#inlineEntriesOf`，缩进 ≥6）。 */
+/** 与实现同源的注入面条目解析（`scripts/check-guidance-sync.mjs#inlineEntriesOf`，缩进 ≥6）。（已废：该脚本已退役，本行仅存历史） */
 function inlineEntriesOf(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
@@ -140,18 +131,9 @@ const FORBIDDEN_ZONES = [
   /^packages\/dsh-punky-swarm\/reports\//,
 ];
 
-/** 负例夹具：临时根（`scripts/` + `presets/punky-preset/{agent.cordis.yml,references/discipline.md}`）。 */
-function mkTempRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'accept-p1-'));
-  TMP.push(root);
-  fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
-  fs.copyFileSync(absOf(SCRIPT_REL), path.join(root, 'scripts', 'check-guidance-sync.mjs'));
-  const dst = path.join(root, 'presets', 'punky-preset');
-  fs.mkdirSync(path.join(dst, 'references'), { recursive: true });
-  fs.copyFileSync(absOf(GUIDANCE_REL), path.join(dst, 'agent.cordis.yml'));
-  fs.copyFileSync(absOf(DISCIPLINE_REL), path.join(dst, 'references', 'discipline.md'));
-  return root;
-}
+// 【G04③ 死码已删】原「负例临时根夹具」整函数删除：
+//   该夹具在本文件**无任何调用点**（实测 grep 仅命中定义），其体内复制已退役脚本的一行是死引用 ⇒ 随链删除。
+//   `TMP` / `test.after` 保留（活钩子，不属本类）。
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-2 三新节在场且标题以 `## §` 起（唯一性用守恒式，不断条数）

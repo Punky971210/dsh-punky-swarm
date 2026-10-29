@@ -134,9 +134,9 @@ node scripts/check-spec-accounting.mjs --plan <plan.md> --acceptance <audit.md>
 
 | 原提炼面 | 蟛蜞既有真源 | 处置 |
 |---|---|---|
-| 机械规则清单（`MC-1` / `MC-2` / `MC-3` / `MC-4` / `MC-5` / `MC-6` / `MC-7` / `MC-8`） | `scripts/check-guidance-sync.mjs`（段落/编号/引用）、`scripts/arch-check.mjs`（分层与依赖方向）、`scripts/evidence-guard.mjs`（防假绿）、`lib/state/gates/*`（14 个门模块） | 不复述；按需读判据实现（规则原文另见 vendor 的 `speclang-waterfall/` 资产） |
+| 机械规则清单（`MC-1` / `MC-2` / `MC-3` / `MC-4` / `MC-5` / `MC-6` / `MC-7` / `MC-8`） | `scripts/arch-check.mjs`（分层与依赖方向）、`scripts/evidence-guard.mjs`（防假绿）、`lib/state/gates/*`（14 个门模块） | 不复述；按需读判据实现（规则原文另见 vendor 的 `speclang-waterfall/` 资产） |
 | 结构失败先于语义评审 | 引擎门序本身即结构门先于语义核对（`entry` / `exit` / `plan-contract` 先于 audit 逐条核） | 不复述 |
-| 编号唯一与引用可解析 | `check-guidance-sync.mjs` 判据②/②b/③、`scripts/id-anchor-count.mjs`、`test/retired-codes-lock.test.js` | 不复述 |
+| 编号唯一与引用可解析 | `scripts/id-anchor-count.mjs`、`test/retired-codes-lock.test.js` | 不复述 |
 | 追溯记账与依赖 DAG | 真源 = `wavePlan.tasks[]` + `lanes[].deps` + `handoffs` + `consume/produce/outputs` | 不复述（引擎即真源） |
 | UI 树结构有效性 | 蟛蜞无 UI 面（交互面由 `frontend.md` F-1..F-7 承载） | 不适用；**UI 组件目录原件已 vendor**（`references/vendor/speclang/ui-component-registry/`），不适用即不加载 |
 | 需求编号族（`REQ-` / `SCN-` / `RULE-` / `IDX-` / `AC-`） | `presets/punky-preset/references/discipline.md` §0s（跨批短码）+ 本仓 `AC-xx` / `AG-xx` 惯例 | 不复述；仅保留一条：**跨族不得互相顶替**（`AC-` 不当需求编号用，`REQ-` 不当验收 id 用） |

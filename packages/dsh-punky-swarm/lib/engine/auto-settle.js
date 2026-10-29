@@ -433,7 +433,12 @@ async function onSubagentEnd(info, { store, dispatchIndex, ctx, root, liveConfig
  *   缺省 / 非 `false` ⇒ 逐字走既有装配路（R-1 向后兼容）。 */
 export function installAutoSettle(ctx, deps = {}) {
   const { store, dispatchIndex, root, liveConfig, enabled, logger = ctx?.logger } = deps;
-  const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
+  // G01 #2/#3（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：定义点补稳定回显键（`inert` 布尔键，值 true）。
+  //   · `:449` 停用分支（**生产可达 · 策略停用**）：**复用 :446-448 既有 `info` 行**——停用语义已留痕，
+  //     **禁新增第二条日志**（重复日志 = 另一种噪音；停用日志行的出现次数必须仍为 1）。
+  //   · `:451` 能力闸（**防御纵深 · 生产不可达**）：**零日志新增**，只靠 `inert:true` 可辨。
+  //   既有字段逐项保留：`installed` / `reason` / `count()` / `dispose()`。
+  const inert = (reason) => ({ installed: false, inert: true, reason, count: () => 0, dispose() {} });
   // ── R-2 ① 停用分支（2026-10-09）───────────────────────────────────────────────────────────────
   //   位置**先于**宿主能力闸：停用是**策略**（用户裁决 E-1=甲），不是能力缺失 ⇒ `reason` 必须可与 C-6 的
   //   `'ctx.on unavailable or store missing'` 区分（判据源 R-2 ① / C-6「成因可辨」）。

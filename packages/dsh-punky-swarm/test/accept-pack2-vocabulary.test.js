@@ -502,7 +502,7 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
   //      暴露在 audit 面；注入面另有 repo↔live 一致性门（`AC-pack1-12` / `AC-pack3-10`）。
   //   ② `scripts/**` 任意新脚本 → 引擎脚本面放行（旧表只放行 2 个精确文件）。兜底：脚本是引擎可执行面，
   //      任何脚本改动都会进 review/audit 证据面；**本判据不再承担「脚本白名单」职责**。
-  //   ③ `skills/<其他 team>/**` → 能力层放行。兜底：`check-guidance-sync` 校 repo↔live 逐字节。
+  //   ③ `skills/<其他 team>/**` → 能力层放行。兜底：`check-guidance-sync` 校 repo↔live 逐字节。（已废：该脚本已退役，本行仅存历史）
   //   ④ `test/helpers/**`、`test/nested/**` → 测试面放行（旧 `test-maintenance` 只放行单层 `test/<x>.test.js`）。
   //      兜底：新增/删除 test 文件仍撞 `baselines/test-baseline.json` 计数棘轮。
   //   ⑤ `baselines/**` → 分类器判「基线面」放行，**唯一拦住它的是下方 `forbidden`**（r1 反向构造已证该行承重：

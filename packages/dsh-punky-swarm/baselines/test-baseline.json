@@ -10,8 +10,8 @@
     },
     "test/accept-pack1-guidance.test.js": {
       "asserts": 17,
-      "blankLines": 24,
-      "lines": 267,
+      "blankLines": 23,
+      "lines": 249,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -26,8 +26,8 @@
     },
     "test/accept-pack3-spec-contract.test.js": {
       "asserts": 45,
-      "blankLines": 39,
-      "lines": 508,
+      "blankLines": 37,
+      "lines": 498,
       "tautologies": 0,
       "tests": 17,
       "todos": 0
@@ -971,7 +971,7 @@
     "test/judging-guidance.test.js": {
       "asserts": 38,
       "blankLines": 53,
-      "lines": 318,
+      "lines": 319,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1113,11 +1113,11 @@
       "todos": 0
     },
     "test/no-agentTeams-batch.test.js": {
-      "asserts": 45,
-      "blankLines": 35,
-      "lines": 292,
+      "asserts": 57,
+      "blankLines": 40,
+      "lines": 366,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 10,
       "todos": 0
     },
     "test/orphan-recycle.test.js": {
@@ -1337,11 +1337,11 @@
       "todos": 0
     },
     "test/roster-self-held.test.js": {
-      "asserts": 29,
-      "blankLines": 25,
-      "lines": 202,
+      "asserts": 40,
+      "blankLines": 35,
+      "lines": 270,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 10,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -1689,7 +1689,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T10:52:23Z",
+  "generatedAt": "2026-10-29T11:49:05Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1700,15 +1700,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-g1-declare-2026-10-29: 新增 test/no-agentTeams-batch.test.js(7 tests) 与 test/roster-self-held.test.js(8 tests) 供 G1 依赖与能力声明验收；Δ files +2, tests +15, asserts +74, lines +494（无删除）；lib/** 为功能改动不改变 test 面计数",
+  "reason": "punky-g1-gapfix-2026-10-29: G1 遗留修补（G01 inert 六件分级 / G02 告警分流 / G03 roster 命名统一与集合判据 / G04 旧脚本名清尾）；test 面 Δ = C6 拆三条 + R1b/R1c 新增 + accept-pack1/pack3 死链删除；Δ files 0, tests +5, asserts +23, lines +115（含死码删除的负贡献）",
   "schema": 1,
   "totals": {
-    "asserts": 11054,
-    "blankLines": 5932,
+    "asserts": 11077,
+    "blankLines": 5944,
     "files": 211,
-    "lines": 63576,
+    "lines": 63691,
     "tautologies": 0,
-    "tests": 2230,
+    "tests": 2235,
     "todos": 4
   }
 }

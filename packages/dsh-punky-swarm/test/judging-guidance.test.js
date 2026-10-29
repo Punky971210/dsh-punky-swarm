@@ -20,11 +20,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 存在理由（M-04 的必答问题，实测答案）：**人把 §13 改回「三条」时，没有任何已存在判据会红**——
 //   `test/accept-pack1-guidance.test.js` / `test/guidance-id-coverage.test.js` /
-//   `test/skills-sync.test.js` 全部只锁 `scripts/check-guidance-sync.mjs` 的**行为**，
+//   `test/skills-sync.test.js` 全部只锁 `scripts/check-guidance-sync.mjs` 的**行为**，（已废：该脚本已退役，本行仅存历史）
 //   无一处解析正文里「N 条判据」这句话。而这条失配**已经在 `1daa964` 上实际发生**
 //   （正文三条 vs 脚本五条）⇒ 「靠人工同源」在 §13 自己的元规则上已失效，必须有机检。
 //
-// 边界（防误读为「新造脚本判据」）：**不是** `scripts/check-guidance-sync.mjs` 的新判据
+// 边界（防误读为「新造脚本判据」）：**不是** `scripts/check-guidance-sync.mjs` 的新判据（已废：该脚本已退役，本行仅存历史）
 //   —— 该脚本本批**零变更**、判据仍五条；本件读的是脚本**头部自述** + 正文措辞，两者分叉即红。
 //   §13 既有裁决「不新增脚本判据」约束的是 `scripts/` 判据面，不被本件触犯。
 //
@@ -51,7 +51,6 @@ const ROOT = path.resolve(HERE, '..');
 
 const DISCIPLINE_REL = 'presets/punky-preset/references/discipline.md';
 const SUITE_REL = 'lib/engine/suite.js';
-const SYNC_SCRIPT_REL = 'scripts/check-guidance-sync.mjs';
 const ASSIGN_TOOLS_REL = 'lib/tools/assign-tools.js';
 
 const readText = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -175,8 +174,10 @@ function scriptCriterionItems(src) {
 // 扫描面纪律（§15.8）：M-02/M-04 的零命中类判据**扫描面 = discipline.md**，
 // 本夹具**不在**任何「零命中」扫描面内；repo 全域 grep 该类字面量须自行排除 test/ 夹具面。
 
-/** 修前 §13 收口命令行（三条判据：①②③）——j2-2 的反向夹具。 */
-const LEGACY_S13_LINE = '- **收口命令（硬）**：`node scripts/check-guidance-sync.mjs` —— 三条判据：① repo↔live 五件同 sha ② 注入面指针 `#§X` 在正文真实存在 ③ **反向**：正文每个 `## §X` 都在注入面有条目（白名单除外）。**GREEN（exit 0）才算收口**；未跑即视为未收口。';
+// 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
+//   原「修前 §13 收口命令行」反向夹具常量整条删除：实测 grep **仅命中定义行**、无任何使用点
+//   （其对应的反向夹具 j2-2 已不复存在）⇒ 死常量 + 其文档注释一并删除，**不动任何活断言**（C-6）。
+//   同文件另两个 LEGACY 反向夹具常量**是活引用（:252 / :281 使用），保留**。
 
 /** 修前 §0m deny 面枚举（20 项，含 4 个已放开项、缺 `spawn_teammate`）——j2-4 的反向夹具。 */
 const LEGACY_DENY_ENUM = '治理套件 `assign_check` / `wave_plan` / `member_status` / `member_settle` / `batch_phase` / `batch_control` / `asset_claim` / `batch_tasks_add` / `task_update` ｜ 派发与锁 `lane_dispatch` / `lane_claim` / `lane_release` ｜ 只读治理面 `gate_status` / `artifact_types` ｜ 宿主子代理 `subagent` / `subagent_fork` ｜ 官方 roster 面 `send_message` / `interrupt_agent` / `list_agents` / `wait_agent`';

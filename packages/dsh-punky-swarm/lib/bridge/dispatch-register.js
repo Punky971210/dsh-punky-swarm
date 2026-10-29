@@ -85,7 +85,11 @@ export function extractWorkerSessionId(exec, result) {
 // 返回 { installed, dispose, count, mapping }；ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸）。
 export function installDispatchRegistration(ctx, deps = {}) {
   const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS } = deps;
-  const inert = (reason) => ({ installed: false, reason, count: () => 0, mapping: () => ({}), dispose() {} });
+  // G01 #1（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：`!store || !ctx?.on` 属**防御纵深·生产不可达**
+  //   （`lib/index.js` 的 `store` 恒非空、`ctx.on` 由宿主提供、`inject` 已在加载面兜住宿主三服务）
+  //   ⇒ 按三分级口径**只补稳定回显键（`inert` 布尔键，值 true），零日志新增**（加了只加噪）。
+  //   既有字段逐项保留：`installed` / `reason` / `count()` / `mapping()` / `dispose()`。
+  const inert = (reason) => ({ installed: false, inert: true, reason, count: () => 0, mapping: () => ({}), dispose() {} });
   if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
   const toolSet = new Set(tools);
   // 兜底意图表：callerSession -> **FIFO 队列** [{ sessionId, batchId, lane }, …]（member_status(status=running)

@@ -41,7 +41,11 @@ const SKILL_MD_REL = 'skills/software-team/SKILL.md';
 const NEW_REL = 'skills/software-team/references/engineering/spec-contract.md';
 const ENG_DIR_REL = 'skills/software-team/references/engineering';
 const ROLES_DIR_REL = 'skills/software-team/references/roles';
-const SCRIPT_REL = 'scripts/check-guidance-sync.mjs';
+// 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
+//   原「已退役脚本的路径常量」与「JSON 版 spawn 包装函数」整链删除：该包装在本文件**无任何调用点**
+//   （实测 grep 仅命中定义），其体内 spawn 该脚本的一行因此**不是活引用**；
+//   与之配套的「子进程 env 剥离」辅助函数随之孤儿化（唯一使用者是被删的包装）⇒ 一并删除。
+//   本文件另一处 `spawnSync('git', …)` 是**活引用**，`node:child_process` 导入保留；**未动任何活断言**（C-6）。
 // 比较对象 = **上游只读副本**（`b3ee6ee`），默认 `D:/AI_Workspace/DSH/DSH/.survey-tmp/SpecLang`，
 //   可由 env `PUNKY_SPECLANG_ROOT` 覆盖。
 // 【2026-10-25 CI 修复】原写法在副本缺失时直接 `assert` 判红 ⇒ 干净检出 / CI runner 上 AC-6/AC-7 必红
@@ -58,20 +62,6 @@ const absOf = (rel) => path.join(PKG_ROOT, ...rel.split('/'));
 const readRel = (rel) => fs.readFileSync(absOf(rel), 'utf8');
 const existsRel = (rel) => fs.existsSync(absOf(rel));
 const normWs = (s) => s.replace(/\s+/g, ' ').trim();
-
-/** 子进程 env：剥掉「本进程作为 `--test` 子上下文」注入的变量（否则子运行器改走 TAP 通道，摘要行读不到）。 */
-function childEnv() {
-  const env = { ...process.env };
-  for (const k of Object.keys(env)) if (k.startsWith('NODE_TEST_')) delete env[k];
-  return env;
-}
-
-function runScriptJson(args) {
-  const r = spawnSync(process.execPath, [SCRIPT_REL, ...args, '--json'], { cwd: PKG_ROOT, encoding: 'utf8', env: childEnv() });
-  let doc = null;
-  try { doc = JSON.parse(r.stdout); } catch { /* 交给调用方 assert 报 */ }
-  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', doc };
-}
 
 /** 基线（`bfb9b0c`）时 `skills/software-team` 的 **19 件定稿名单**
  *  （`git ls-tree -r --name-only bfb9b0c -- ./skills/software-team` 原样摘录）。

@@ -226,7 +226,11 @@ export function createEvidenceRegistry() {
 export function installEvidenceCapture(ctx, opts = {}) {
   const { root, enabled = false, onCaptured } = opts;
   if (enabled !== true || !root || typeof ctx?.on !== 'function') {
-    return { dispose: () => {}, count: () => 0, installed: false };
+    // G01 #6（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：本处是**同族裸字面量**早退（无 `inert` 函数）。
+    //   三条件合并后**生产恒不成立**（`mountVerify` 经 `resolveVerifyConfig` 缺省 enabled=true 并显式传
+    //   `root`；`ctx.on` 由宿主提供）⇒ 归**防御纵深 · 生产不可达**：**只补 `inert` 回显键（布尔 true）**，
+    //   禁引入 `inert` 函数、禁加日志。既有字段逐项保留：`dispose` / `count()` / `installed`。
+    return { dispose: () => {}, count: () => 0, installed: false, inert: true };
   }
   let captured = 0;
   const listener = (exec, result, next) => {
