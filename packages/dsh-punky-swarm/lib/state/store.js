@@ -466,6 +466,91 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
   for (const build of [buildEvents, buildBatch, buildPlanMutate, buildHandoff, buildHandoffAccept, buildLifecycle,
     buildMemberExempt, buildMemberGates, buildMember, buildGovernance]) Object.assign(cx, build(cx));
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // CAP-W2（批 `punky-mac-wave-immutability-2026-10-29` · lane `e1-coder`）：
+  //   **波次固定语义的写前 guard**。
+  //
+  // 语义（Leader 裁定 D-1，**不是**「一律只读」）：**已派发** lane（`owner` 非空）的 `wavePlan` 条目与既有
+  //   `deps` 只读；**未派发**任务的追加 / 加边**仍允许**，但图变更必须在**同一次落盘**内留 `plan.mutated`
+  //   ⇒ 即只能经 `store/plan-mutate.js` 的 `addPoolTasks` / `addTaskEdges` 进出（「结构不可达」退化为
+  //   「纪律约定」之后，这是唯一让该约定**可判**的点）。
+  //
+  // 位置纪律（三条缺一不可，见任务包 §3.2）：
+  //   ① `diskRevOf` CAS 判定**之后** ⇒ 版本冲突时零副作用（拒态优先级不变：冲突先抛）；
+  //   ② `stampGateLaneSnapshot` **之前** ⇒ 比对面不含它补写的事件快照（比的是调用方交来的那半段事实）；
+  //   ③ `atomicWrite` **之前** ⇒ 满足「**写前**拒绝」而非事后回滚（IMM-5「拒则零落盘」由构造成立）。
+  //
+  // 拒绝形态（形态即契约，任务包 §4.2）：**普通 `Error`、不设 `err.code`、消息不以 `GATE_` 开头**。
+  //   理由：否则会**二次扩大拒码集合**（复刻裁决 B1 向量）；同仓先例 = `store/plan-mutate.js:39-40`
+  //   （「不新建拒码 ⇒ 抛普通 Error，不进 66 码集合」）。消息前缀 `[wave-plan-immutable]` 固定，
+  //   并带 `batchId` 与出事的 lane / task id（可定位）。
+  //
+  // 判据来源 = IMM-1..IMM-5。两处**刻意不参与比较**的字段：
+  //   · `wave`：合法加边会把任务及其下游推到更晚波次（`topoWaves` 按 `1+max(deps wave)` 分层）⇒
+  //     把波序号当不变量会误杀合法加边；
+  //   · `sig`：已派发任务的 `sig` 刻意沿用旧值（`lib/wave-plan.js:1139`）⇒ **发现不了 deps 被篡改**，
+  //     判据必须落在字段本体（`deps`/`cmd`/`layer`/…）而不是摘要。
+  // 建批豁免（IMM-0）：盘上无该批（`createBatch` 首写）⇒ 直接放行，否则建批即被自己拒。
+  // ───────────────────────────────────────────────────────────────────────────
+  function assertWavePlanImmutable(sessionId, batchId, batch) {
+    const prev = cx.readBatch(sessionId, batchId); // 纯读：不写盘、不改调用方对象
+    if (!prev || typeof prev !== 'object') return; // IMM-0 建批豁免 / 损坏批（读路径已登记旁路清单）
+    const flatTasks = (b) => (Array.isArray(b?.wavePlan) ? b.wavePlan : [])
+      .flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
+    const asArr = (v) => (Array.isArray(v) ? v : []);
+    const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    const reject = (invariant, taskId, detail) => {
+      throw new Error('[wave-plan-immutable] batch=' + batchId + ' lane=' + String(taskId)
+        + ' ' + invariant + ': ' + detail);
+    };
+    // 只按 id 建索引：`id` 非字符串的畸形条目不入判据面（形态校验归 `buildWavePlan`，本 guard 不越权）
+    const byId = (b) => new Map(flatTasks(b).filter((t) => t && typeof t.id === 'string').map((t) => [t.id, t]));
+    const prevTasks = byId(prev);
+    const nextTasks = byId(batch);
+    const SKIP_FIELDS = new Set(['deps', 'owner', 'wave', 'sig']); // 见上「刻意不参与比较的字段」
+    // IMM-1：任务集合只增不删（删任务 = 已派发结构被抹掉，且会连带抹掉其交接声明）
+    for (const id of prevTasks.keys()) {
+      if (!nextTasks.has(id)) reject('IMM-1', id, '既有任务被删除（任务集合只增不删）');
+    }
+    for (const [id, p] of prevTasks) {
+      const n = nextTasks.get(id);
+      if (!n) continue; // 已由 IMM-1 拒，不重复报
+      const dispatched = typeof p.owner === 'string' && p.owner.length > 0; // 声明面 `owner` 为唯一真源（K1 同源）
+      for (const k of new Set([...Object.keys(p), ...Object.keys(n)])) {
+        if (SKIP_FIELDS.has(k)) continue;
+        if (!same(p[k], n[k])) reject(dispatched ? 'IMM-2' : 'IMM-3', id, '字段被改写: ' + k);
+      }
+      if (dispatched) {
+        // IMM-2：已派发条目逐字冻结（含 `deps` 逐位相等、含 `owner` 相等 ⇒ 换人须走作废 + 池内新增替代）
+        if (!same(asArr(p.deps), asArr(n.deps))) reject('IMM-2', id, '已派发任务 deps 被改写');
+        if (!same(p.owner, n.owner)) reject('IMM-2', id, '已派发任务 owner 被改写');
+      } else {
+        // IMM-3：未派发条目仅允许「既有边前缀 + 新尾」（禁删 / 禁插 / 禁重排）与 `owner` 首次写入
+        const pd = asArr(p.deps);
+        const nd = asArr(n.deps);
+        if (nd.length < pd.length || !pd.every((d, i) => nd[i] === d)) {
+          reject('IMM-3', id, '未派发任务 deps 非「旧边前缀 + 新尾」');
+        }
+        if (p.owner != null && p.owner !== n.owner) reject('IMM-3', id, '未派发任务 owner 非空后被改写');
+      }
+    }
+    // IMM-4：图变更（新增任务 / deps 变长）必须在**本次** commit 的**追加段**内留 `plan.mutated`
+    //   用 `slice(prev.events.length)` 判「本次新增」而非「全量里有没有」——历史批遗留的 `plan.mutated`
+    //   会让后者永远通过（假绿）；事件若被插在中间（而非追加），本判据会如实误判为缺失（已登记 W2-R-3）。
+    const added = [...nextTasks.keys()].filter((id) => !prevTasks.has(id));
+    const grownId = [...prevTasks.keys()].find((id) => {
+      const n = nextTasks.get(id);
+      return n !== undefined && asArr(prevTasks.get(id).deps).length !== asArr(n.deps).length;
+    });
+    if (added.length > 0 || grownId !== undefined) {
+      const before = asArr(prev.events).length;
+      const trailed = asArr(batch.events).slice(before);
+      if (!trailed.some((e) => e && e.type === EVT.EVT_PLAN_MUTATED)) {
+        reject('IMM-4', added[0] ?? grownId, '图变更无 plan.mutated 留痕（须经 plan-mutate 入口）');
+      }
+    }
+  }
+
   // 批次 JSON 的**统一落盘点**（单写者真源）：凡以 `batchFile(sessionId, batchId)` 定位的写路径
   //   一律经此函数落盘 ⇒ 写面单点不分散。
   //   ⚠ **订正（L7 / lane `e1-l7-atomic`，直读实测）**：本注释原称「与 `lane_claim` 的单写者锁构成
@@ -486,6 +571,10 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     const actual = diskRevOf(file, batchId);
     // 失配 ⇒ 抛（本次**零落盘**：尚未写 tmp、尚未 rename）⇒ 由上层重读后重试。
     if (actual !== expected) throw batchVersionConflictOf(batchId, expected, actual);
+    // CAP-W2（批 `punky-mac-wave-immutability-2026-10-29` · lane `e1-coder`）：波次固定语义**写前 guard**。
+    //   三条位置纪律由本行位置即成立：CAS 之后（冲突零副作用）／`stampGateLaneSnapshot` 之前／
+    //   `atomicWrite` 之前（写前拒绝 ⇒ IMM-5「拒则零落盘」）。判据与拒绝形态见本函数上方整段注释。
+    assertWavePlanImmutable(sessionId, batchId, batch);
     // P2-1（lane `c6-gate-snapshot`）：落盘前给 `gate.*` 事件补 lane 态快照（纯增量，只补**尚无** `lanes` 的）。
     //   位置纪律：**在 CAS 判定之后**（冲突时零副作用，不改调用方事件对象）、**在 `atomicWrite` 之前**
     //   （快照与同一份落盘字节同批固化）。本行**不触碰**下方 `atomicWrite(batchFile(sessionId, batchId), batch)`

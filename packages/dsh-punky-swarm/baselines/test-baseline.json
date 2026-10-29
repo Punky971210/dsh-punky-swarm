@@ -1592,6 +1592,22 @@
       "tests": 12,
       "todos": 0
     },
+    "test/wave-plan-immutability-derivation.test.js": {
+      "asserts": 42,
+      "blankLines": 48,
+      "lines": 330,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
+    "test/wave-plan-immutability.test.js": {
+      "asserts": 21,
+      "blankLines": 26,
+      "lines": 209,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/wave-plan-pairing.test.js": {
       "asserts": 36,
       "blankLines": 21,
@@ -1649,7 +1665,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-28T13:01:35Z",
+  "generatedAt": "2026-10-29T05:38:28Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1660,15 +1676,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "§0m 压缩 + j2-4 去内容绑定：j2-4 由「§0m 逐字枚举 == suite.js 集合」改为连通性断言（指针在场+真源非空），断言数不变（3→3），仅行数变化",
+  "reason": "punky-mac-wave-immutability-2026-10-29: 新增 test/wave-plan-immutability.test.js(7 tests) 与 test/wave-plan-immutability-derivation.test.js(7 tests) 供 CAP-W2 波次固定语义验收；Δ files 206→208, tests 2192→2206, lines 62270→+537, asserts 随两文件内断言数上升（无删减）",
   "schema": 1,
   "totals": {
-    "asserts": 10886,
-    "blankLines": 5765,
-    "files": 206,
-    "lines": 62270,
+    "asserts": 10949,
+    "blankLines": 5839,
+    "files": 208,
+    "lines": 62809,
     "tautologies": 0,
-    "tests": 2192,
+    "tests": 2206,
     "todos": 4
   }
 }
