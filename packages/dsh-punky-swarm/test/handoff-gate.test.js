@@ -343,7 +343,8 @@ test('P1-H6 存量批：无 batch.handoffs 字段 ⇒ 未交接门放行 + lane.
 });
 
 // ── H7（task-22）：交接面两件「成员面 + 常驻注册」──
-// 依据 `task-22` 裁决：① `handoff_submit` 归 `comms` 族（成员面，**不落模式门**）；② 两件**恒注册**。
+// 依据 `task-22` 裁决：① `handoff_submit` 的**成员面理由 = `modeGate:false` 位**（不是族标签；S1 迁族后
+//   该件已由 `comms` 迁为 `blackboard`，族名不再承载语义）；② 两件**恒注册**。
 // 本用例给出**行为面**证据（非仅注册表读数）：
 //   · 对照组 `member_status`（governance/modeGate:true）在非生效模式 + 成员上下文下**必被** `GATE_MODE_INACTIVE` 拒；
 //   · `handoff_submit` 同条件下**不得**抛模式门（走到业务判定）⇒ 证明成员可调、不被 deny 摘除。
@@ -373,7 +374,7 @@ test('P1-H7 成员面 + 常驻注册：handoff_submit 不落模式门（成员�
     // 注册表面（与行为面同源）：两件均不入 deny / 模式门集
     const { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } = await import('../lib/engine/dispatch.js');
     assert.equal(SUITE_DENY_TOOLS.includes('handoff_submit'), false, 'handoff_submit 成员面 ⇒ 不入 deny 集');
-    assert.equal(MODE_GATED_TOOLS.includes('handoff_submit'), false, 'handoff_submit comms 族 ⇒ 不入模式门集');
+    assert.equal(MODE_GATED_TOOLS.includes('handoff_submit'), false, 'handoff_submit 为 modeGate:false 位 ⇒ 不入模式门集');
     assert.equal(SUITE_DENY_TOOLS.includes('handoff_view'), false, 'handoff_view 只读面 ⇒ 不入 deny 集');
     assert.equal(MODE_GATED_TOOLS.includes('handoff_view'), false, 'handoff_view 只读面 ⇒ 不入模式门集');
   } finally {

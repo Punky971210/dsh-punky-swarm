@@ -32,7 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 字段语义（本批 `kind` / `write` 只作元数据、不派生行为）：
 //   · `name`      唯一键，逐字等于 `defineTool({ name })`，禁别名；
-//   · `kind`      门类：`governance` / `dispatch` / `comms` / `read`；
+//   · `kind`      门类（5 值）：`governance` / `dispatch` / `comms` / `read` / `blackboard`；
 //   · `modeGate`  是否受模式门 `config.modes.gate` 约束（true ⇒ 该工具 `execute` 首行落 `assertModeActive`）；
 //   · `memberDeny` 是否从成员调用面移除（true ⇒ 入 `SUITE_DENY_TOOLS`）；
 //     【2026-09-27 变更】三项放开（`gate_status` / `artifact_types` / `asset_claim`）⇒ deny 由 20 → **17**；
@@ -67,22 +67,22 @@ const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name,
  *  第 15 条起为其余条目，顺序不构成语义。 */
 export const SUITE_TOOLS = Object.freeze([
   entry('assign_check', 'governance', true, true, true), // 难度评估：成员不写难度（既裁）
-  entry('wave_plan', 'governance', true, true, true), // 建批：只认本会话 C 档（G1）
-  entry('member_status', 'governance', true, true, true), // 成员状态写
-  entry('member_settle', 'governance', true, true, true),
-  entry('batch_phase', 'governance', true, true, true),
-  entry('batch_control', 'governance', true, true, true), // P3a 最小干预面（pause/resume/abort）：人工介入面，成员不得干预批次相位
+  entry('wave_plan', 'blackboard', true, true, true), // 建批：只认本会话 C 档（G1）
+  entry('member_status', 'blackboard', true, true, true), // 成员状态写
+  entry('member_settle', 'blackboard', true, true, true),
+  entry('batch_phase', 'blackboard', true, true, true),
+  entry('batch_control', 'blackboard', true, true, true), // P3a 最小干预面（pause/resume/abort）：人工介入面，成员不得干预批次相位
   entry('lane_dispatch', 'dispatch', true, true, true),
   entry('lane_claim', 'dispatch', true, true, true), // lane 锁：归 Leader/Manager
   entry('lane_release', 'dispatch', true, true, true),
-  entry('gate_status', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查自己 lane 缺什么 ⇒ 放开成员面
+  entry('gate_status', 'blackboard', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查自己 lane 缺什么 ⇒ 放开成员面
   entry('artifact_types', 'read', false, false, false), // 【2026-09-27 用户裁 · 三项全放】只读查层/目录约定 ⇒ 放开成员面
-  entry('asset_claim', 'governance', false, false, true), // 【2026-09-27 已裁 · 三项全放】agent-team 成员认领任务**刚需**本件 ⇒ 放开成员面；同撤其模式门（modeGate:false）以守不变量「modeGate ⊆ memberDeny」（成员面不得存在会撞 GATE_MODE_INACTIVE 的工具）
+  entry('asset_claim', 'blackboard', false, false, true), // 【2026-09-27 已裁 · 三项全放】agent-team 成员认领任务**刚需**本件 ⇒ 放开成员面；同撤其模式门（modeGate:false）以守不变量「modeGate ⊆ memberDeny」（成员面不得存在会撞 GATE_MODE_INACTIVE 的工具）
   entry('subagent', 'dispatch', false, true, true), // 禁成员嵌套派发（2026-09-16 用户裁决补入）
   entry('subagent_fork', 'dispatch', false, true, true),
   // ── 以下不入 deny、不占模式门（元数据面） ──────────────────────────────────────
-  entry('batch_status', 'read', false, false, false),
-  entry('log_export', 'read', false, false, false),
+  entry('batch_status', 'blackboard', false, false, false),
+  entry('log_export', 'blackboard', false, false, false),
   entry('lane_checkpoint_status', 'read', false, false, false), // 读事件流、不调 git ⇒ 只读
   entry('swarm_report', 'comms', false, false, true),
   entry('swarm_cc', 'comms', false, false, true),
@@ -96,20 +96,20 @@ export const SUITE_TOOLS = Object.freeze([
   //   （`comms` / modeGate:false / memberDeny:false / write:true）。**单件不变**：不新增第二件面向成员的工具，
   //   Leader/Manager 仍调用同一件。
   //   与 `SC-1 ⑤` 不变量（`模式门覆盖集 ⊆ deny 集`）无冲突：本件既不落模式门、也不入 deny。
-  entry('handoff_submit', 'comms', false, false, true),
+  entry('handoff_submit', 'blackboard', false, false, true),
   // `handoff_view`：只读取件面（M-7 验收核心 = 下游成员要能稳定取件）⇒ **成员可用**（`memberDeny:false`）、
   //   不落模式门（只读，不写治理面）。
-  entry('handoff_view', 'read', false, false, false),
+  entry('handoff_view', 'blackboard', false, false, false),
   // ── N1-R4-1a（K1 公共池）────────────────────────────────────────────────────────
   // `task_pool`：**只读**视图（池 = `owner == null` 的筛选面，不是容器）⇒ 不入 deny（成员亦可只读核查）、
   //   不占模式门（零写入、不触治理面）。追加在**第 15 条之后的非 deny 区块** ⇒ 前 14 条 deny 冻结序列零变化。
-  entry('task_pool', 'read', false, false, false),
+  entry('task_pool', 'blackboard', false, false, false),
   // `batch_tasks_add`：**图变更写入口**（池内追加任务）⇒ 入 deny（成员不得改图）+ 入模式门（写治理面）。
-  entry('batch_tasks_add', 'governance', true, true, true),
+  entry('batch_tasks_add', 'blackboard', true, true, true),
   // ── N1-R4-2（K1 公共池）──────────────────────────────────────────────────────────
   // `task_update`：**池内任务加边**（图变更写入口 #2）⇒ 入 deny（成员不得改图）+ 入模式门（写治理面）。
   //   ⚠ 非 deny 区块的 `task_pool` 仍是只读；本件是它唯一的写侧对应物，二者不构成第二套语义。
-  entry('task_update', 'governance', true, true, true),
+  entry('task_update', 'blackboard', true, true, true),
   // ── S2（2026-09-22 · dispatch one-shot 化，用户裁定「彻底功能分离」）：宿主连续控制族 ─────────
   // durable 会话控制面（`dsh-tool-subagent-control` / agent-team）对成员**整体 deny**：one-shot worker
   // 无可唤醒/续聊/等待/打断的对象（dispatch 已改一次性执行器语义，见 `dispatch.js` 头部「one-shot 化」；
@@ -188,7 +188,7 @@ export const SUITE_TOOLS = Object.freeze([
   //     （`role_guide` 之后）＝与同类「非 deny 追加」先例（`:111 task_pool` / `:174 role_guide`）同插法。
   //     对照说明：`batch_control`（:74）插在 `batch_phase` 之后，是因它 `memberDeny:true` **落在冻结前缀内**
   //     ⇒ 与本次情形不可类比；本条的同类对照物是 `role_guide`（末位追加、非 deny）。
-  entry('handoff_accept', 'comms', false, false, true),
+  entry('handoff_accept', 'blackboard', false, false, true),
 ]);
 
 /** 成员 deny 集（派生）：名字数组，顺序 == 重构前字面量顺序。 */

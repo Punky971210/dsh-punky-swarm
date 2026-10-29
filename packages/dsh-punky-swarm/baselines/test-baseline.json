@@ -417,11 +417,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 203,
-      "blankLines": 55,
-      "lines": 804,
+      "asserts": 204,
+      "blankLines": 57,
+      "lines": 831,
       "tautologies": 0,
-      "tests": 41,
+      "tests": 42,
       "todos": 0
     },
     "test/esm-first-eval.test.js": {
@@ -915,7 +915,7 @@
     "test/handoff-gate.test.js": {
       "asserts": 89,
       "blankLines": 38,
-      "lines": 450,
+      "lines": 451,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1110,6 +1110,14 @@
       "lines": 60,
       "tautologies": 0,
       "tests": 3,
+      "todos": 0
+    },
+    "test/maketool-prevalidate.test.js": {
+      "asserts": 20,
+      "blankLines": 15,
+      "lines": 133,
+      "tautologies": 0,
+      "tests": 6,
       "todos": 0
     },
     "test/member-deny-boundary.test.js": {
@@ -1745,7 +1753,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T20:48:48Z",
+  "generatedAt": "2026-10-29T22:13:15Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1756,15 +1764,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B2 二次重冻（复验轮）：g2-t4-stop-reason-source 由行号冻结改内容锚定（判据抽到 test/helpers/stop-reason-source.mjs）、swarm-wake-addressing 补 T-MULTI 多条目精确判别用例 ⇒ 指标 +11 asserts / +1 test",
+  "reason": "G3-B3 S1+S2：S1 族标签迁 blackboard（15 件 kind→blackboard；五族终态 governance1/dispatch9/read5/comms4/blackboard15=34；权限面 SUITE_DENY_TOOLS 17/MODE_GATED_TOOLS 11 逐项未变）；GOVERNANCE_FACES 改派生+测试侧手写冻结基准(31)+集合相等断言+注入三态；清 B1 残留三名（mailbox_read/ack/send）；handoff-gate :346/:376 改按 modeGate:false；S2 新增 lib/tools/make-tool.js(128) 前置校验（零新依赖、handler 未调用即拒）+ test/maketool-prevalidate(6 例)",
   "schema": 1,
   "totals": {
-    "asserts": 11124,
-    "blankLines": 6061,
-    "files": 218,
-    "lines": 64481,
+    "asserts": 11145,
+    "blankLines": 6078,
+    "files": 219,
+    "lines": 64642,
     "tautologies": 0,
-    "tests": 2268,
+    "tests": 2275,
     "todos": 4
   }
 }

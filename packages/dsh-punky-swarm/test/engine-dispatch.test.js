@@ -454,9 +454,30 @@ const ROLE_FIXTURE = {
 const ROLE_IDS = ['coder', 'coordinator', 'designer', 'doc-manager', 'reviewer', 'supervisor', 'tester',
   'research-planner', 'researcher', 'research-auditor'];
 // 「引擎治理面」= worker 必备的回报 / 交接 / 检查点 / 状态读面（deny 掉任一件即功能自毁）。
-const GOVERNANCE_FACES = [...SUITE_DENY_TOOLS, 'handoff_submit', 'handoff_view', 'swarm_report', 'swarm_cc',
-  'lane_checkpoint', 'lane_checkpoint_status', 'batch_status', 'gate_status', 'artifact_types', 'asset_claim',
-  'task_pool', 'log_export', 'mailbox_read', 'mailbox_ack', 'mailbox_send', 'send_message'];
+// 【S1 · AC-18 件1】**派生**：定义体**零手写工具名**（三处 filter 谓词 ＋ 权限维 `SUITE_DENY_TOOLS`）。
+//   口径：`blackboard`/`comms`/`read` 三族中 `memberDeny === false` 者 = 成员面必须保留的面。
+const GOVERNANCE_FACES = [...new Set([
+  ...SUITE_DENY_TOOLS,                                                                    // 权限维（已派生）
+  ...SUITE_TOOLS.filter((t) => t.kind === 'blackboard' && t.memberDeny === false).map((t) => t.name),
+  ...SUITE_TOOLS.filter((t) => t.kind === 'comms' && t.memberDeny === false).map((t) => t.name),
+  ...SUITE_TOOLS.filter((t) => t.kind === 'read' && t.memberDeny === false).map((t) => t.name),
+])];
+
+/** 有意的第二份：`GOVERNANCE_FACES` 的**冻结期望集**（逐名手写，**不在生产代码里**）。
+ *  用途：与派生结果对撞，制造**可分歧面** —— 没有它「派生 ≡ 派生」恒等恒绿，永远红不了。
+ *  ⚠ **禁**把本基准改成派生式（那等于删掉判据）。
+ *  S1 迁族后一次实跑取值（34 族表：`blackboard 15 / comms 4 / dispatch 9 / governance 1 / read 5`）。
+ *  **B1 漏项已清**：本基准内 `mailbox_read` / `mailbox_ack` / `mailbox_send` 逐名**不在场**（B1 删件后的正确态）。 */
+const EXPECTED_GOVERNANCE_FACES = Object.freeze([
+  'artifact_types', 'asset_claim', 'assign_check', 'batch_control',
+  'batch_phase', 'batch_status', 'batch_tasks_add', 'gate_status',
+  'handoff_accept', 'handoff_submit', 'handoff_view', 'interrupt_agent',
+  'lane_checkpoint_status', 'lane_claim', 'lane_dispatch', 'lane_release',
+  'list_agents', 'log_export', 'member_settle', 'member_status',
+  'role_guide', 'send_message', 'spawn_teammate', 'subagent',
+  'subagent_fork', 'swarm_cc', 'swarm_report', 'task_pool',
+  'task_update', 'wait_agent', 'wave_plan',
+]);
 
 test('RO-1 L-AC-3：role 驱动任务级三段（裸标题行各 ≥1 ＋ 逐条命中 ＋ 结构隔离）', () => {
   const p = composeWorkerPrompt({
@@ -495,6 +516,12 @@ test('RO-2 L-AC-4：persona 与 toolFilter.deny 由 role 派生（⊇ 反推集 
   for (const t of derived) assert.ok(deny.has(t), 'deny ⊇ deriveDeny(allow)：' + t);
   for (const t of SUITE_DENY_TOOLS) assert.ok(deny.has(t), 'deny ⊇ SUITE_DENY_TOOLS（冻结集不缩水）：' + t);
   assert.equal(req.toolFilter.deny.length, deny.size, 'deny 去重后长度相等（无重复项）');
+});
+
+// 【S1 · AC-18 件3】集合**双向相等**（派生 vs 手写冻结基准）；禁过滤后再比（过滤会掩盖多出/缺失）。
+test('AC-18 件3：GOVERNANCE_FACES 派生结果 ≡ 冻结基准（集合相等，双向）', () => {
+  assert.deepEqual([...GOVERNANCE_FACES].sort(), [...EXPECTED_GOVERNANCE_FACES].sort(),
+    'GOVERNANCE_FACES 派生结果必须 ≡ 冻结基准（双向相等；禁过滤后再比）');
 });
 
 test('RO-3 反向断言：十件 role 的反推集 ∩ 引擎治理面 = ∅（worker 回报/交接面不可被 deny）', () => {
