@@ -161,7 +161,16 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
     presetBanTable,
     warn: (m) => log?.warn?.('[governance] ' + m),
   });
-  const inert = (reason) => ({ installed: false, reason, refusals: { count: () => 0 }, dispose() {} });
+  // inert 可见化（批 G1 · P-1 定点，定义点）：治理 hook 的「结构合法空实现」原先与「装了但零拒绝」
+  //   **不可区分**（调用方只能看 `installed:false`，拿不到原因，日志里也没有任何痕迹）。
+  //   本处补两件事：① 定义点内一条 warn（复用上面已有的 `log`，消息含 `inert` 关键字）；
+  //   ② 返回对象新增稳定回显键 `inert: true`。
+  //   `installed` / `reason` / `refusals.count()` / `dispose()` **全部保留**（既有调用方零破坏：
+  //   热更路径按 `installed` 判定、按 `refusals.count()` 读拒绝计数、`dispose` 断开回调）。
+  const inert = (reason) => {
+    try { log?.warn?.('[governance] inert: ' + reason); } catch { /* 回显失败不阻断装配 */ }
+    return { installed: false, inert: true, reason, refusals: { count: () => 0 }, dispose() {} };
+  };
   if (cfg.enabled !== true) return inert('disabled');
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');
   const kernel = createGovernanceKernel(cfg);

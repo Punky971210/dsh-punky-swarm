@@ -15,6 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { reconcileRoster } from '../roster.js';
+
 // 宿主面读端单点（自 `lib/tools/core.js` **原样搬移**，行为零变更）：宿主技能根 / 官方 roster（Manager 在册）/
 //   交接调用方身份采集 / legacy 标注常量。宿主技能根函数零引用已删（W3a）；其余导出面由消费者直接 import。
 
@@ -87,9 +89,14 @@ export function managerRosterOf(ctx, exec) {
     return { ok: false, source: 'roster', inRoster: false, reason: 'not-a-team-member: ' + String(e?.message ?? e), rosterName: MANAGER_ROSTER_NAME };
   }
   const list = Array.isArray(rows) ? rows : [];
+  // 判据来源改为**对账**（单点 = `lib/roster.js#reconcileRoster`，禁第二套实现）：
+  //   在册 ⟺ Manager 约定席落在对账的 `matched` 集合。上一行 `hit` 仅供回显 `member` 行（形态不变）。
+  //   **导出面逐字保留**：`ok` / `source` / `inRoster` / `rosterName` / `memberCount` / `member` 六键不变，
+  //   且 `service-unavailable` 与 `not-a-team-member: …` 两级降级（上方两处提前 return）的判定**顺序与文案不变**。
+  const reconcile = reconcileRoster(list);
   const hit = list.find((m) => m && m.name === MANAGER_ROSTER_NAME) ?? null;
   return {
-    ok: true, source: 'roster', inRoster: !!hit, rosterName: MANAGER_ROSTER_NAME, memberCount: list.length,
+    ok: true, source: 'roster', inRoster: reconcile.matched.includes(MANAGER_ROSTER_NAME), rosterName: MANAGER_ROSTER_NAME, memberCount: list.length,
     member: hit ? { id: hit.id ?? null, name: hit.name, role: hit.role ?? null, status: hit.status ?? null } : null,
   };
 }

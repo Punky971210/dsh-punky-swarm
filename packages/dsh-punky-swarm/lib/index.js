@@ -48,6 +48,10 @@ import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启�
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf, resolveBridgeConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
+// 能力声明面（批 `punky-g1-declare-2026-10-29` · lane `e1-capability`）：
+//   `inject` 改**声明驱动**（`HOST_INJECTIONS` 为定义点，本文件只引用，不再手写字面量）；
+//   装配结束前落 `rt.capabilities` 回显 + 缺失一条 warn + 必需缺失 fail-closed（`assertRequired`）。
+import { HOST_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
@@ -109,7 +113,9 @@ export const name = 'dsh-punky-swarm';
 //      —— 本批无宿主重启验收 ⇒ 该事实的证据级别 = 宿主源码契约 + 静态推理（`verified=false`，followup F-2）。
 //   `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.start`，one-shot；2026-09-22 起）
 //     必须声明；宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，故声明安全。
-export const inject = ['tools', 'webServer', 'subagents'];
+// 声明驱动（批 G1）：注入键集**唯一来源** = `lib/capabilities.js#HOST_INJECTIONS`（三键仍全部必需，
+//   本批不降级任何宿主键 ⇒ 加载面行为与本批前零差异；改这一处即改整条加载面契约）。
+export const inject = HOST_INJECTIONS;
 
 // 恢复语义：每个进程只执行一次（无论插件按进程级还是会话级挂载）
 let recoveredThisProcess = false;
@@ -687,7 +693,14 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
   };
   /** 装配置点（**独立**，条件③）：与 `installAutoSettle` 并列；返回形态同形（`{installed, reason?, count(), dispose()}`）。 */
   const installLaneWake = () => {
-    const inert = (reason) => ({ installed: false, reason, count: () => 0, dispose() {} });
+    // inert 可见化（批 G1 · P-2 定点）：空实现**不再静默**——定义点内先出一条 warn（该文件已有
+    //   `ctx.logger?.warn` 通道），并在返回对象上新增稳定回显键 `inert: true`。
+    //   `installed` / `reason` / `count()` / `dispose()` **全部保留**（不破既有调用方：热更路径按
+    //   `installed` 判定、按 `count()` 读抑制计数）。
+    const inert = (reason) => {
+      try { ctx?.logger?.warn?.('[dsh-punky-swarm] lane-wake inert: ' + reason); } catch { /* 回显失败不阻断装配 */ }
+      return { installed: false, inert: true, reason, count: () => 0, dispose() {} };
+    };
     if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
     let hits = 0;
     const handler = (info) => {
@@ -1031,6 +1044,12 @@ const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSin
       topicSink.emit = null;
       if (rt.topicAttachUn) { rt.topicAttachUn(); rt.topicAttachUn = null; }
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
+    } else {
+      // 末支兜底（批 G1 · §2.1）：本链**两个**条件都不成立 = 「期望态 == 现值」⇒ 无动作。
+      //   补末支只为**不静默**（原状是链条无声落空、事后无法判别「没变」与「漏改」）；
+      //   用 debug 不用 info/warn：热更路径高频，且「无变化」不是异常。
+      //   ⚠ 只为**本条链**补末支；本文件其余 4 处 `} else` 链语义一字未动（C-12 边界）。
+      ctx.logger?.debug?.('[dsh-punky-swarm] hot config: topic runtime 无变化（期望态 == 现值）');
     }
     // ④ verify 挂载（可选）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
     const vc = resolveVerifyConfig(next);
@@ -1122,6 +1141,19 @@ export const apply = (ctx, config = {}) => {
   const { remountGovernanceHook, remountWatchEngine } = mountRemounters({ ctx, config, store, root, mailbox, refusalEventBridge, presetTable, presetBanTable, governanceWarn, rt });
   const remountAutoSettle = createAutoSettleRemounter({ ctx, store, dispatchIndex, root, rt, installLaneWake });
   mountHotConfigRuntime({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle });
+
+  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面）────────────────────────────
+  //  顺序纪律：放在装配**结束前**（所有宿主面已装配完 ⇒ 探测到的是真实装态，不是计划态）。
+  //  · 回显：`rt.capabilities`（host / internal / missing 三段）——「缺能力可见」的**主回显面**；
+  //  · 降级不静默：`missing` 非空即一条汇总 warn（**恰一条**，键名逐个；可选能力未启用也在此列出，
+  //    这是有意的：本批目标就是把「静默缺口」变成一条可读事实）；
+  //  · 必需缺失 fail-closed：`assertRequired` 直接抛（**不吞**）——宿主缺 `tools`/`webServer`/`subagents`
+  //    时插件本不该被挂载，真挂上了就必须立刻炸，禁「装上了但一半能力是空气」。
+  rt.capabilities = capabilityReport({ ...rt, ctx, config });
+  if (rt.capabilities.missing.length > 0) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] capability-missing: ' + rt.capabilities.missing.join(','));
+  }
+  assertRequired(rt.capabilities);
 
   return () => releaseAll(rt);
 };

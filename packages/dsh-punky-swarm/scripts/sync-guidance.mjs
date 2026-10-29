@@ -6,12 +6,12 @@
 //   **不产出「校验通过/不通过」结论**——需要核对时直接看两份文件，或看本脚本的回显。
 //
 // 复制面（两个 live 根，互不相同，勿混）：
-//   ① 注入面五件 → `<profile>/.dsh/.agent-presets/punky-preset/`（可用 `--live=` 覆盖）
+//   ① 注入面六件 → `<profile>/.dsh/.agent-presets/punky-preset/`（可用 `--live=` 覆盖）
 //   ② skills 整树  → `<profile>/.agents/skills/`（可用 `--skills-live=` 覆盖；`--no-skills` 跳过）
 //
 // 用法：
-//   node scripts/sync-guidance.mjs                 # 五件 + skills 全同步
-//   node scripts/sync-guidance.mjs --no-skills     # 只同步五件
+//   node scripts/sync-guidance.mjs                 # 六件 + skills 全同步
+//   node scripts/sync-guidance.mjs --no-skills     # 只同步六件
 //   node scripts/sync-guidance.mjs --dry-run       # 只列将复制/跳过，不落盘
 //
 // 退出码（与仓内其他脚本同约定）：0 = 全成功（含全部跳过）；1 = 有复制失败；2 = 参数错误 / 源缺失。
@@ -28,14 +28,20 @@ const ROOT = path.resolve(HERE, '..');
 const PRESET_REL = path.join('presets', 'punky-preset');
 const SKILLS_REL = 'skills';
 
-/** 注入面五件（相对 preset 根）。 */
+/** 注入面六件（相对 preset 根）。 */
 const SYNC_FILES = [
   'agent.cordis.yml',
   path.join('references', 'discipline.md'),
   path.join('references', 'manager.md'),
   'preset.yml',
   'asset-manifest.json',
+  'cordis.patch.yml',
 ];
+
+// 源根例外：`cordis.patch.yml` 是 **bundle patch 片段**，位于**包根**而非 `presets/punky-preset/` 内；
+//   落点口径**不变**（仍落 live 根，见 USAGE「注入面 → <live>」）⇒ 只换源侧根，目标侧不动。
+//   反例（禁）：若把它当 preset 包内文件，`copyIfChanged` 会报「源缺失」⇒ 退出码 1（W-7 的实质风险）。
+const ROOT_SOURCED = new Set(['cordis.patch.yml']);
 
 const SKILL_IGNORE_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 
@@ -43,7 +49,7 @@ const USAGE = `用法：
   node scripts/sync-guidance.mjs [--no-skills] [--dry-run] [--live=<dir>] [--skills-live=<dir>]
 
 复制面：
-  注入面五件 → <live>（缺省 %USERPROFILE%/.dsh/.agent-presets/punky-preset）
+  注入面六件 → <live>（缺省 %USERPROFILE%/.dsh/.agent-presets/punky-preset）
   skills 整树 → <skills-live>（缺省 %USERPROFILE%/.agents/skills；--no-skills 跳过）
 
 退出码：0 全成功（含全跳过）/ 1 有复制失败 / 2 参数错误或源缺失`;
@@ -64,6 +70,22 @@ function parseArgs(argv) {
 }
 
 const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+// 纪律索引段内**规则行数**（只读回显用，非判定）：段 = 含「纪律索引（」的那一行之后、
+//   连续的 16 空格缩进规则行（`0.` / `0a.` / `10.` …）；遇到首个不匹配行即止。
+//   两侧条数由此**现算**得出（禁手写常量），故段漂移会立刻在回显里显形。
+function countDisciplineRules(file) {
+  if (!fs.existsSync(file)) return null;
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  const at = lines.findIndex((l) => l.includes('纪律索引（'));
+  if (at < 0) return null;
+  let n = 0;
+  for (let i = at + 1; i < lines.length; i += 1) {
+    if (/^\s{16}0?[0-9a-z]+\.\s/.test(lines[i])) { n += 1; continue; }
+    break;
+  }
+  return n;
+}
 
 function copyIfChanged(src, dst, result, dryRun) {
   if (!fs.existsSync(src)) {
@@ -111,7 +133,8 @@ function main() {
   }
 
   for (const rel of SYNC_FILES) {
-    copyIfChanged(path.join(presetRoot, rel), path.join(liveRoot, rel), result, args.dryRun);
+    const srcRoot = ROOT_SOURCED.has(rel) ? ROOT : presetRoot;
+    copyIfChanged(path.join(srcRoot, rel), path.join(liveRoot, rel), result, args.dryRun);
   }
 
   if (!args.noSkills) {
@@ -121,6 +144,13 @@ function main() {
       copyIfChanged(src, path.join(skillsLive, rel), result, args.dryRun);
     }
   }
+
+  // ── 只读回显：两侧纪律条数并列（**不判定、不改退出码**；`:49` 口径不变）────────────────
+  //   本脚本仍「只复制，不判定」；此段只把「两侧条数是否一致」**回显**出来，供人工/下游核对。
+  const patchCount = countDisciplineRules(path.join(ROOT, 'cordis.patch.yml'));
+  const presetCount = countDisciplineRules(path.join(presetRoot, 'agent.cordis.yml'));
+  const countsAgree = patchCount !== null && patchCount === presetCount;
+  console.log(`guidance: patch=${patchCount ?? '?'} preset=${presetCount ?? '?'}  (${countsAgree ? '一致' : '不一致'})`);
 
   const verb = args.dryRun ? '将复制' : '已复制';
   console.log(`[sync] live=${liveRoot}`);
