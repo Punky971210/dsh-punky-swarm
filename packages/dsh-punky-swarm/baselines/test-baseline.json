@@ -617,9 +617,9 @@
       "todos": 0
     },
     "test/g2-t4-stop-reason-source.test.js": {
-      "asserts": 7,
-      "blankLines": 14,
-      "lines": 114,
+      "asserts": 11,
+      "blankLines": 16,
+      "lines": 139,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1465,11 +1465,11 @@
       "todos": 0
     },
     "test/swarm-wake-addressing.test.js": {
-      "asserts": 101,
-      "blankLines": 52,
-      "lines": 719,
+      "asserts": 108,
+      "blankLines": 54,
+      "lines": 758,
       "tautologies": 0,
-      "tests": 18,
+      "tests": 19,
       "todos": 0
     },
     "test/task-pool-r41.test.js": {
@@ -1745,7 +1745,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T20:30:51Z",
+  "generatedAt": "2026-10-29T20:48:48Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1756,15 +1756,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B2 停止语义 + 有界执行：X0-A auto-settle.js 去 null 短路（可结算≡{completed}）、X0-B index.js 未上报默认 null（不伪造完成）、schema.ts:483 仅注释（:491/:501 逐字未变）；F4 幂等键修正（recorded 不占键 ⇒ settleable===false 的触发记录跳过）；新增 lib/exec/bounded.js(125) + lib/state/wake-queue.js(149)；接线 auto-settle:93/:334 + index:96/:665/:678/:682/:683；测试：新增 exec-bounded(8)/wake-queue(8)/stop-reason-semantics(10)，改造 swarm-wake-addressing(18，6 形态改独立装配以适配续跑上界 2)、auto-settle(35)",
+  "reason": "G3-B2 二次重冻（复验轮）：g2-t4-stop-reason-source 由行号冻结改内容锚定（判据抽到 test/helpers/stop-reason-source.mjs）、swarm-wake-addressing 补 T-MULTI 多条目精确判别用例 ⇒ 指标 +11 asserts / +1 test",
   "schema": 1,
   "totals": {
-    "asserts": 11113,
-    "blankLines": 6057,
+    "asserts": 11124,
+    "blankLines": 6061,
     "files": 218,
-    "lines": 64417,
+    "lines": 64481,
     "tautologies": 0,
-    "tests": 2267,
+    "tests": 2268,
     "todos": 4
   }
 }
