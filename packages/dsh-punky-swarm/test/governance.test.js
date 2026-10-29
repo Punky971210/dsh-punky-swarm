@@ -270,10 +270,23 @@ test('assign_check render: C 类强提示 + escalationHint 追加', () => {
 
 // ---------- 3. guard 三重门禁（tools.js createTools 内注册） ----------
 function makeGuarded(deps) {
-  let guardFn = null;
-  const ctx = { tools: { register: () => {}, guard: (fn) => { guardFn = fn; } }, logger: console };
+  // 【2026-10-31 S3 复修 · 夹具不真实（A 类）】原 `guard: (fn) => { guardFn = fn }` 是**覆盖式捕获** ⇒ 只留
+  //   **最后注册**的守卫。生产 `register.js` 先装难度门禁、后装溯源守卫 ⇒ 捕获到的是溯源守卫，它对
+  //   `{name:'pwsh'}`（非写族）返回 `undefined` ⇒ 难度断言「期望拒」得到 undefined ⇒ 红。
+  //   生产真实语义 = **跑全部 guard 取首个拒绝串**（宿主 dsh-tools `guardReason`：
+  //   `for (const guard of this.guards.values()) { const reason = guard(exec); if (reason !== undefined) return reason }`）
+  //   ⇒ 改为**累积捕获 + 与生产同构的合成调用**。**断言一字未改**（仍走原有 `guardFn()(…)` 调用面）。
+  const guards = [];
+  const ctx = { tools: { register: () => {}, guard: (fn) => { guards.push(fn); return () => {}; } }, logger: console };
   const t = createTools(ctx, deps);
-  return { guardFn: () => guardFn, tools: t.tools, store: deps.store };
+  const composed = (execution) => {
+    for (const g of guards) {
+      const reason = g(execution);
+      if (reason !== undefined) return reason;
+    }
+    return undefined;
+  };
+  return { guardFn: () => composed, tools: t.tools, store: deps.store, guardCount: guards.length };
 }
 
 test('guard: 未评估 → 执行型被拒（门禁 1），非执行型放行，计数与拦截分离', () => {

@@ -23,6 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   lane_checkpoint_status 等非执行型）豁免任务难度门禁——理由：防死锁（评估/查询若被拦
 //   则「先评估后执行」护栏自锁）；豁免仅限难度门禁，其余 guard 语义（执行计数等）不受影响。
 import { createCoreTools, installDifficultyGuard } from './core.js';
+import { installWriteProvenanceGuard } from './write-provenance-guard.js';
 import { createLaneTools } from './lane-tools.js';
 import { createLogTools } from './log-tools.js';
 import { buildToolCatalog, engineVersion } from '../aip/tool-descriptor.js';
@@ -35,6 +36,7 @@ import { readCapability } from '../assembly/schema.js';
 export function createTools(ctx, deps) {
   // guard 注册顺序保持现状：createTools 开头、工具数组构造之前（guard 回调闭包依赖 store/config）
   installDifficultyGuard(ctx, deps);
+  installWriteProvenanceGuard(ctx, deps);
   // 【批 `d-override-fix-20261011` · lane `e4-session-bind`】批归属会话 resolver **注入单点**（AC-3/AC-5）。
   //   消费面：`lib/tools/shared.js#sessionOf(args, exec, resolveBatchSession)` 的可选第三参数（四级回落）。
   //   构造面：`deps.resolveBatchSession`（缺省 `undefined` ⇒ 各工具 `sessionOf` 逐字回落原三级路径，

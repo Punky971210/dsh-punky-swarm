@@ -158,12 +158,23 @@ test('SC-2 dispatch.gate 热更：同一工具面下 warn → enforce 均不拦�
   const store = createStore(root);
   const warns = [];
   const ctx = {
-    tools: { register: () => {}, guard: (fn) => { ctx.__guard = fn; return () => {}; } },
+    // 【2026-10-31 S3 复修 · 夹具不真实（A 类）】原 `guard: (fn) => { ctx.__guard = fn }` 是覆盖式捕获 ⇒
+    //   只留最后注册的守卫（生产序：难度门禁 → 溯源守卫），本用例的 `subagent` 探针因此由**溯源守卫**应答。
+    //   改为**累积捕获**，并在 createTools 之后合成「跑全部 guard 取首个拒绝串」（宿主 dsh-tools `guardReason` 语义）。
+    //   断言一字未改（仍用 `ctx.__guard(exec(...))`）。
+    tools: { register: () => {}, guard: (fn) => { (ctx.__guards ??= []).push(fn); return () => {}; } },
     logger: { warn: (m) => warns.push(String(m)), info: () => {}, error: () => {} },
   };
   // 热更快照 = 可变对象引用（readConfig 每次调用读它的当前值）
   const live = { dispatch: { provider: 'spawn' } };
   const { tools } = createTools(ctx, { store, root, config: {}, readConfig: () => live });
+  ctx.__guard = (execution) => {
+    for (const g of ctx.__guards ?? []) {
+      const reason = g(execution);
+      if (reason !== undefined) return reason;
+    }
+    return undefined;
+  };
   const by = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t])));
   assessC(store, SID, { rationale: 'fixture：模式门/G1 前置评估（三层批 ⇒ C 档）' });
   const exec = (name) => ({ name, arguments: { prompt: 'no-handle' }, agent: { session: { id: SID } } });

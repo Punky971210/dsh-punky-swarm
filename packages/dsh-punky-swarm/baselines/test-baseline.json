@@ -171,7 +171,7 @@
     "test/assign-tier-downgrade-guard.test.js": {
       "asserts": 72,
       "blankLines": 32,
-      "lines": 317,
+      "lines": 326,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -251,7 +251,7 @@
     "test/batch-control.test.js": {
       "asserts": 68,
       "blankLines": 37,
-      "lines": 384,
+      "lines": 388,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -891,7 +891,7 @@
     "test/governance.test.js": {
       "asserts": 246,
       "blankLines": 54,
-      "lines": 800,
+      "lines": 813,
       "tautologies": 0,
       "tests": 33,
       "todos": 0
@@ -1083,7 +1083,7 @@
     "test/longrun-exempt.test.js": {
       "asserts": 95,
       "blankLines": 44,
-      "lines": 408,
+      "lines": 412,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -1467,7 +1467,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 44,
       "blankLines": 21,
-      "lines": 370,
+      "lines": 381,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1547,7 +1547,7 @@
     "test/tools.test.js": {
       "asserts": 133,
       "blankLines": 52,
-      "lines": 656,
+      "lines": 660,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -1751,9 +1751,17 @@
       "tautologies": 0,
       "tests": 10,
       "todos": 0
+    },
+    "test/write-provenance.test.js": {
+      "asserts": 46,
+      "blankLines": 29,
+      "lines": 275,
+      "tautologies": 0,
+      "tests": 14,
+      "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T22:13:15Z",
+  "generatedAt": "2026-10-29T22:50:11Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1764,15 +1772,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B3 S1+S2：S1 族标签迁 blackboard（15 件 kind→blackboard；五族终态 governance1/dispatch9/read5/comms4/blackboard15=34；权限面 SUITE_DENY_TOOLS 17/MODE_GATED_TOOLS 11 逐项未变）；GOVERNANCE_FACES 改派生+测试侧手写冻结基准(31)+集合相等断言+注入三态；清 B1 残留三名（mailbox_read/ack/send）；handoff-gate :346/:376 改按 modeGate:false；S2 新增 lib/tools/make-tool.js(128) 前置校验（零新依赖、handler 未调用即拒）+ test/maketool-prevalidate(6 例)",
+  "reason": "G3-B3 S3（写族溯源）：e1-schema 19 件写族 schema 增 sourceRunId（非必填，execute 体零改动）；e2-guard 新增 lib/tools/write-provenance-guard.js(102 行) 单点守卫（与难度门禁并列，register.js +2 行）；t1-test 新增 test/write-provenance.test.js(14 例) + A 类 15 例夹具改累积捕获（覆盖式→guards.push，断言未放宽）+ 两处参数面闭集各加一键 + tools.test captured.length 1→2；全仓旧族名/守卫序取证",
   "schema": 1,
   "totals": {
-    "asserts": 11145,
-    "blankLines": 6078,
-    "files": 219,
-    "lines": 64642,
+    "asserts": 11191,
+    "blankLines": 6107,
+    "files": 220,
+    "lines": 64962,
     "tautologies": 0,
-    "tests": 2275,
+    "tests": 2289,
     "todos": 4
   }
 }

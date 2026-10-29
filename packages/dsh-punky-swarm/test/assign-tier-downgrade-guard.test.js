@@ -54,8 +54,17 @@ const RATIONALE_D = '测试：本任务需 durable 席位与事件队列交接�
 function harness(prefix) {
   const root = tempRoot(prefix);
   const store = createStore(root);
-  let guardFn = null;
-  const ctx = { tools: { register: () => {}, guard: (fn) => { guardFn = fn; } }, logger: console };
+  // 【2026-10-31 S3 复修 · 夹具不真实（A 类）】覆盖式捕获 ⇒ 只留最后注册的守卫（= 溯源守卫，对非写族返回
+  //   `undefined`）⇒ 难度断言全红。改为**累积捕获 + 生产同构「取首个拒绝串」**（宿主 dsh-tools `guardReason`）。
+  const guards = [];
+  const ctx = { tools: { register: () => {}, guard: (fn) => { guards.push(fn); return () => {}; } }, logger: console };
+  const guardFn = (execution) => {
+    for (const g of guards) {
+      const reason = g(execution);
+      if (reason !== undefined) return reason;
+    }
+    return undefined;
+  };
   const { tools } = createTools(ctx, { store, root });
   const by = Object.fromEntries(tools.map((t) => [t.name, t]));
   const sess = (id) => ({ agent: { session: { id, header: {} } } });

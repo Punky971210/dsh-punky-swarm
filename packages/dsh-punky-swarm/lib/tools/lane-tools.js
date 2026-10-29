@@ -235,6 +235,7 @@ function worktreeToolCreate(ctx, deps) {
     name: 'lane_worktree_create',
     description: 'git worktree 物理隔离：为 lane 建独立工作树——集成分支 punky/orch 常驻（主工作树从不 checkout 它）+ lane 分支 punky/<laneId>（从 orch HEAD 基线）。幂等：已注册 worktree 复用；残留目录先 worktree remove --force + prune；git 身份缺失时本地兜底 punky/punky@localhost。worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>（引擎状态根内，不落工作区）。与 lane_claim 互补：lane_claim 管逻辑写（批次状态/产物并发），本工具管物理写（git 文件树/分支）；仅当 C 类批次多 lane 作用于同一 git 仓库时由 Manager 在 exec 派发前调用，返回路径注入 worker 任务包作 cwd 契约。',
     parameters: {
+      sourceRunId: { type: 'string', description: '来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard' },
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID（wave_plan task id）' },
       session: { type: 'string', description: '批次归属会话（缺省=当前执行会话，cli 兜底）' },
@@ -278,6 +279,7 @@ function worktreeToolCheckpoint(ctx, deps) {
     name: 'lane_checkpoint',
     description: 'lane checkpoint 提交：在 lane worktree 内 git add -A && git commit -m "<batchId>/<laneId>: <message>"；无变更（status --porcelain 空）no-op（不产生空提交）。这是续跑增强恢复的物理保全地基：崩溃后 checkpoint 提交保住产物、人工可抢救（git log 可查），不触发任何自动恢复（守「不做续跑」红线）。worker 纪律：每完成一个子步骤即 checkpoint，禁止攒批。可选 progress={step,total}（步骤进度 STATUS，step 1-based）——提供时 commit message 内嵌 "step N/total" 且 worktree.checkpoint 事件携带 step/total（git log 可直接审计进度）；不传 progress 保持现状（向后兼容）。',
     parameters: {
+      sourceRunId: { type: 'string', description: '来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard' },
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
       message: { type: 'string', required: true, description: 'checkpoint 提交说明' },
@@ -403,6 +405,7 @@ function worktreeToolMerge(ctx, deps) {
     name: 'lane_worktree_merge',
     description: 'merge lane 分支进 orch：串行执行（merge 队列锁，同批次 merge 串行化——git 锁即物理单写者，借鉴 taskswarm serializedMerge）。成功 → lane 产物并入 punky/orch，清理 lane worktree + 删除分支；失败（冲突）→ 保留现场（worktree/分支/在途 merge 状态全保留）并返回冲突文件清单，不自动处置（conflict 语义由 Manager/Leader 裁决，失败 lane 终态、重做=重开新批次）。与 lane_claim 互补并存：本工具管物理合并，lane_claim 仍管批次状态写。',
     parameters: {
+      sourceRunId: { type: 'string', description: '来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard' },
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
       session: { type: 'string', description: '批次归属会话（缺省=当前执行会话，cli 兜底）' },

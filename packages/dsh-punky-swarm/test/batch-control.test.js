@@ -362,7 +362,11 @@ test('G2：插件入口真加载——createTools 可装配，batch_control 已�
   //   本用例**被检面** = `batch_control` 注册与参数面闭集（下一行起），与总数无关（防双权威漂移）。
   const t = byName.batch_control;
   assert.ok(t, 'batch_control 须真实注册');
-  assert.deepEqual(Object.keys(t.parameters.properties), ['batchId', 'action', 'session'], '参数面 = 最小干预面三键');
+  // 【2026-10-31 S3 · 声明层增键】`sourceRunId` 由 S3 声明层统一加入（非必填；拒由执行层守卫负责）
+  //   ⇒ 闭集从「三键」扩为「四键 = 旧三键（顺序不变）＋ sourceRunId（归一化后位于首位）」。
+  //   **仍是精确闭集**（deepEqual 逐键逐序），未放宽为「包含 / ≥N」。
+  assert.deepEqual(Object.keys(t.parameters.properties), ['sourceRunId', 'batchId', 'action', 'session'],
+    '参数面 = 最小干预面三键 ＋ S3 的 sourceRunId（精确闭集，顺序即声明顺序）');
   assert.deepEqual(t.parameters.properties.action.enum, ['pause', 'resume', 'abort'], 'action 闭集');
   const rendered = t.output.render({}, { batchId: 'b-x', phase: 'paused', action: 'resume' });
   const text = Array.isArray(rendered) ? rendered.map((r) => r.text ?? '').join('') : String(rendered);

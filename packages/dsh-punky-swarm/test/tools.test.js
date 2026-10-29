@@ -284,7 +284,11 @@ test('guard：config.escalation.execTools 覆盖执行型名单（config 贯通�
   const rootG = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gov-'));
   const storeG = createStore(rootG);
   createTools(ctxG, { store: storeG, root: rootG, config: { escalation: { execTools: ['pwsh', 'edit', 'subagent'] } } });
-  assert.equal(captured.length, 1);
+  // 【2026-10-31 S3 · 声明层带来**第二个 guard**】`register.js` 现按生产序注册 **两个** guard：
+  //   ① `installDifficultyGuard`（难度门禁，本用例被检面）② `installWriteProvenanceGuard`（S3 写族溯源，与本用例无关）。
+  //   ⇒ 精确数从 1 改为 **2**（仍是精确值：多注册第三个 guard 会立刻红），并显式取 `captured[0]` = 难度门禁
+  //   （注册序：难度门禁在溯源守卫之前）。**未放宽**为 `>=` / 只判存在。
+  assert.equal(captured.length, 2, '生产注册序 = [难度门禁, 写族溯源守卫]');
   const g = captured[0];
   const exec = (name) => ({ name, agent: { session: { id: 'sess-g' } } });
   // 未评估 → 名单内执行型被拒（门禁 1）

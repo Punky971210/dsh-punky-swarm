@@ -333,7 +333,11 @@ test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与�
   //   `TOOL_NAMES` 精确集合断言；本用例**被检面** = `member_status` 参数表，与总数无关（防双权威漂移）。
   const ms = byName.member_status;
   // defineTool 归一化后：parameters = { type:'object', properties:{...}, required:[...] }（声明顺序即 Object.keys 顺序）
-  assert.deepEqual(Object.keys(ms.parameters.properties), ['batchId', 'lane', 'status', 'session', 'exempt', 'revokeExempt']);
+  // 【2026-10-31 S3 · 声明层增键】`sourceRunId` 由 S3 声明层统一加入（非必填）⇒ 冻结清单**加一键**，
+  //   既有 6 键与顺序**逐字不变**；仍是精确 deepEqual（未放宽为「包含 / ≥N」）。
+  assert.deepEqual(Object.keys(ms.parameters.properties),
+    ['sourceRunId', 'batchId', 'lane', 'status', 'session', 'exempt', 'revokeExempt'],
+    'member_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）');
   assert.equal(ms.parameters.properties.exempt.type, 'object');
   assert.equal(ms.parameters.properties.revokeExempt.type, 'boolean');
   assert.deepEqual(ms.parameters.properties.exempt.properties.type.enum, LANE_EXEMPT_TYPES);
