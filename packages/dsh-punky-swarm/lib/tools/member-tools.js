@@ -20,6 +20,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, assertMemberActionTierC, readLiveConfig, lockPath, ownerOfExec } from './tier-gate.js';
+// 【I-04】派发输入绑定校验：判定单点在 lib/verify/binding.js（纯函数），本文件只调用。
+import { dispatchBindingDecision } from '../verify/binding.js';
+import { settleDecoupled } from '../engine/settle.js'; // I-12：结算与状态推进解耦（失败不阻塞推进）
 import * as lock from '../lock.js';
 import {
   dispatchLaneCore, // P2：派发核心（**唯一实现**：工具面 `lane_dispatch` 与链引擎自动推进共用）
@@ -88,12 +91,32 @@ export function buildLaneTools(cx) {
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1（Q2=B 收窄）：写成员状态 = 调用方自己 C 档，或该批已登记的 Manager
-        const b = store.setMember(sessionId, args.batchId, args.lane, args.status, args.note ?? null);
+        // 【I-04】绑定校验**必须早于** `store.setMember`（写入不可逆：事后补不出"当时谁被派发"）。
+        //   只拦「本批某条 lane 的 worker 去结算另一条 lane」；Leader/owner/Manager 属治理面，放行。
+        const bindingOfSettle = dispatchBindingDecision({
+          batch: store.readBatch(sessionId, args.batchId),
+          lane: args.lane,
+          caller: exec?.agent?.session?.id ?? null,
+          where: 'member_settle(lane=' + args.lane + ')',
+        });
+        if (!bindingOfSettle.ok) throw new Error(bindingOfSettle.reason);
+        // 【I-12】结算与状态推进**解耦**：推进是独立动作、结算是旁挂动作。
+        //   结算抛错 ⇒ **状态照样推进**（`stateAdvanced:true`），失败只进 `settleError`、**不向上抛**。
+        //   若把两者耦合（结算失败则状态不变），一次记账故障就会让"该进终态"这个事实也丢掉。
+        const settleOutcome = settleDecoupled({
+          store,
+          sessionId,
+          batchId: args.batchId,
+          lane: args.lane,
+          status: args.status,
+          note: args.note ?? null, // 只留元数据
+          settle: (b) => store.batchSettled(b),
+        });
         // 【G-02 死调用清退 · 2026-09-18】原此处调 `advanceChainAfterSettle`（结算事实落盘后触发链推进）。
         //   链推进**已全退役**（2026-09-18 Q-A=C）：被调函数首行即 `return {reason:'retired'}`、全参未被读取
         //   ⇒ 该调用**零行为**，故连 import 一并删除（勿回加）。推进缺口（handoff 成功触发自动推进）
         //   与 `chain.step` 冻结语义见 `lib/engine/chain-runner.js` 头注释。
-        return { batchId: args.batchId, lane: args.lane, status: b.lanes[args.lane], settled: store.batchSettled(b) };
+        return { batchId: args.batchId, lane: args.lane, status: settleOutcome.batch.lanes[args.lane], settled: settleOutcome.settled };
       },
     }),
   ];

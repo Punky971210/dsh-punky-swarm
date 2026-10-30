@@ -25,6 +25,8 @@ import { resolveArtifactIn } from '../state/batch-paths.js';
 import * as lock from '../lock.js';
 import { lockPath } from './tier-gate.js';
 import { handoffCallerIdentityOf } from './host-surface.js';
+// 【I-04】派发输入绑定校验：判定单点在 lib/verify/binding.js（纯函数），本文件只调用、不复制判据。
+import { dispatchBindingDecision } from '../verify/binding.js';
 import { readCapability } from '../assembly/schema.js'; // 注入预算阈值唯一取值源（注册表 default 缺省合并）
 import { applyInjectionBudget } from '../comms/inject-budget.js';
 
@@ -93,6 +95,16 @@ export function buildHandoffTools(cx) {
         if (missingArtifacts.length === 0) {
           // R-1 调用方身份采集（§2.1 判据链的**输入面**；裁决在 store.recordHandoff = 唯一写路径）
           const callerIdentity = handoffCallerIdentityOf(ctx, exec, args);
+          // 【I-04】绑定校验**必须早于** `store.recordHandoff`（唯一写路径）：拒了就不写。
+          //   约束范围刻意窄：只拦「本批某条 lane 的 worker 去替另一条 lane 交接」；
+          //   Leader / owner / Manager 属治理面（不是"派发输入"），不受绑定约束。
+          const binding = dispatchBindingDecision({
+            batch: b,
+            lane: args.from,
+            caller: callerIdentity.sessionId,
+            where: 'handoff_submit(from=' + args.from + ')',
+          });
+          if (!binding.ok) throw new Error(binding.reason);
           const r = store.recordHandoff(sessionId, args.batchId, {
             from: args.from, to: args.to, artifacts, assertions,
             overwrite: args.overwrite === true, // R-2：缺省 false（真·可选，旧调用零破坏）

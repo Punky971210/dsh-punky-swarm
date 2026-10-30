@@ -24,6 +24,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   工具实现落 `lib/tools/*.js`（各导出 `buildXxxTools(cx)`）；共享辅助抽为三个单点文件
 //   （`tier-gate.js` / `host-surface.js` / `swarm-comms.js`）。本文件 = **组合器 + 对外导出面 + 相位两件**：
 //   外部导出符号集合与拆分前**逐字相同**（下方 re-export），调用方/测试零感知。
+//   【2026-10-31 · I-29 追加】下方另有一处 **additive** re-export（`CARD_FIELDS` / `buildConfirmCard`，
+//     见「I-29 变更卡」段）：**不删不改任何既有导出**，故上述「逐字相同」按**既有符号集合不变**理解。
 
 // 【2026-09-27 · team-asset 全量退役】原读端 import 组**整体删除**（本文件对资产面 A-5/A-6 归零）：
 //   ① `../assembly/flows.js`：`resolveTeamRoles` / `unionRoleVocabulary` / `resolveTeamFlows` / `flowOf` / `packageRoot`
@@ -66,6 +68,12 @@ import { buildTaskTools } from './task-tools.js';
 export { TEXT_OUTPUT, sessionOf } from './shared.js'; // re-export：既有消费方（lib/tools/core.js 的 import 者）不受影响
 export { EXEC_TOOLS, assertMemberActionTierC, assertModeActive, lockPath, installDifficultyGuard } from './tier-gate.js';
 export { WAKE_MIN_INTERVAL_MS, LEADER_WAKE_WINDOWS, wakeLeaderForReport } from './swarm-comms.js';
+
+// ── I-29 变更卡统一裁决载形（批 `punky-g4c2b-ledger-2026-10-31` · lane `e3-confirmcard`）─────────
+//   接线级别 = **纯 re-export（透出）**：不改任何既有工具的返回值、不改 `createCoreTools` 的组合顺序、
+//   不改既有导出符号 ⇒ 既有消费方零感知（判据：逐工具返回值 diff 为空）。
+//   语义：卡形单点在 `lib/engine/confirm-card.js`；此处只让工具面**同源取用**，不复制实现（防第二真源）。
+export { CARD_FIELDS, buildConfirmCard } from '../engine/confirm-card.js';
 
 // ── 相位两件（`batch_phase` / `batch_control`）：**留在 core.js**，不迁出 ────────────────────
 //   判据（源码锁，非偏好）：`test/phase-reason.test.js#PR-8` 硬编码文件面 = `lib/engine/auto-settle.js` +

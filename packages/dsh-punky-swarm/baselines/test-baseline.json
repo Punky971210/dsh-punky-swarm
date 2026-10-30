@@ -288,6 +288,14 @@
       "tests": 18,
       "todos": 0
     },
+    "test/binding-mismatch.test.js": {
+      "asserts": 20,
+      "blankLines": 11,
+      "lines": 108,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/budget.test.js": {
       "asserts": 45,
       "blankLines": 24,
@@ -374,6 +382,14 @@
       "lines": 97,
       "tautologies": 0,
       "tests": 3,
+      "todos": 0
+    },
+    "test/confirm-card-shape.test.js": {
+      "asserts": 18,
+      "blankLines": 9,
+      "lines": 90,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/consume-deps-asymmetry-gate.test.js": {
@@ -1520,6 +1536,14 @@
       "tests": 5,
       "todos": 0
     },
+    "test/settle-decoupled.test.js": {
+      "asserts": 20,
+      "blankLines": 9,
+      "lines": 103,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/shell-text.test.js": {
       "asserts": 12,
       "blankLines": 10,
@@ -1873,7 +1897,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T05:27:09Z",
+  "generatedAt": "2026-10-30T10:29:05Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1884,15 +1908,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G4-C2a 台账三条：I-11 新建 lib/engine/events.js（投递标记解耦重放，缺标记 fail-closed 留痕，core.js 零改动）+ I-13 lib/verify/evidence.js 族级路由 acto（按族不按码，未映射必抛）+ lib/tools/tier-gate.js 三拒点接入 + I-21 新建 lib/engine/radius.js（爆炸半径计数，log_only 只观测不阻/enforce 才阻成对，上限 20 导出常量）；新增 test/replay-no-rerun(5)+radius-log-only(6)+error-family-routing(4)",
+  "reason": "G4-C2b 台账末三条 + G4 台账面收官：I-04 甲方案（新建 lib/verify/binding.js 96 行承载边界校验，handoff-tools/member-tools 各接入，lane-tools.js 零行改动连 import 都未加）；I-12 结算独立管线（新建 lib/engine/settle.js 86 行，结算失败不阻塞状态推进、推进失败照旧抛防过度解耦、幂等取调用前状态不建旁账）；I-29 变更卡统一载形（新建 lib/engine/confirm-card.js 87 行，键集恒等 CARD_FIELDS 7 键、cardId 唯一防糊成一张）；新增三测试 6+5+5",
   "schema": 1,
   "totals": {
-    "asserts": 11541,
-    "blankLines": 6328,
-    "files": 234,
-    "lines": 66839,
+    "asserts": 11599,
+    "blankLines": 6357,
+    "files": 237,
+    "lines": 67140,
     "tautologies": 0,
-    "tests": 2371,
+    "tests": 2387,
     "todos": 4
   }
 }
