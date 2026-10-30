@@ -364,9 +364,12 @@ test('G2：插件入口真加载——createTools 可装配，batch_control 已�
   assert.ok(t, 'batch_control 须真实注册');
   // 【2026-10-31 S3 · 声明层增键】`sourceRunId` 由 S3 声明层统一加入（非必填；拒由执行层守卫负责）
   //   ⇒ 闭集从「三键」扩为「四键 = 旧三键（顺序不变）＋ sourceRunId（归一化后位于首位）」。
-  //   **仍是精确闭集**（deepEqual 逐键逐序），未放宽为「包含 / ≥N」。
-  assert.deepEqual(Object.keys(t.parameters.properties), ['sourceRunId', 'batchId', 'action', 'session'],
-    '参数面 = 最小干预面三键 ＋ S3 的 sourceRunId（精确闭集，顺序即声明顺序）');
+  //   【G4-A · I-20】`e1-preview` 再增可选 `preview`（预演 opt-in）⇒ 闭集扩为**五键**，
+  //     **旧四键顺序与内容一律不动**（`sourceRunId`/`batchId`/`action`/`session` 仍在原位，`preview` 追加）。
+  //   **仍是精确闭集**（deepEqual 逐键逐序）—— 未放宽为「包含 / ≥N」：否则以后谁都能往参数面里加键。
+  assert.deepEqual(Object.keys(t.parameters.properties), ['sourceRunId', 'batchId', 'action', 'preview', 'session'],
+    '参数面 = 最小干预面三键 ＋ sourceRunId ＋ I-20 的 preview（精确闭集，顺序即声明顺序）');
+  assert.equal(t.parameters.properties.preview.type, 'boolean', 'preview 必须是 boolean（opt-in 预演）');
   assert.deepEqual(t.parameters.properties.action.enum, ['pause', 'resume', 'abort'], 'action 闭集');
   const rendered = t.output.render({}, { batchId: 'b-x', phase: 'paused', action: 'resume' });
   const text = Array.isArray(rendered) ? rendered.map((r) => r.text ?? '').join('') : String(rendered);

@@ -107,7 +107,26 @@ test('G2 guard：白名单内模式且未评估 ⇒ 照旧拦（本模式治理�
   const reasons = fireGuard(h, sess(MODE));
   assert.equal(reasons.length, 1);
   assert.match(reasons[0], /\[task-difficulty-gate\]/);
-  assert.equal(h.store.readGovernance('s-' + MODE)?.execToolCount, 1, '生效模式照常计数');
+  // 【G4-A · I-26 语义变更】`bumpExecCount` 从「无论是否拦截都计」改为「**仅放行计**」。
+  //   依据 = 包 §2.3「guard 拒绝时不得有任何 store 写」：拒态零写是硬不变量，
+  //   而计数器与批次状态写在同一份 state 文件里 ⇒ 计数会破坏 sha256 逐位不变。
+  //   ⇒ 被拒路径断言**精确 0**（禁写成「0 或 1」/`>=0`：那等于取消判据）。
+  assert.equal(h.store.readGovernance('s-' + MODE)?.execToolCount ?? 0, 0, '被拒不计数（拒态零写）');
+});
+
+// 【G4-A · I-26 对照组】「被拒不计数」≠「不再计数」。
+//   必须有放行路径 == 精确 1，否则「一律不计数」也能让上一条绿（假绿）。
+test('G2b guard：生效模式且已评估 ⇒ 放行并照常计数（与 G2 的 0 成对）', () => {
+  const h = newHarness({ modes: { gate: [MODE] } });
+  const S = 's-' + MODE;
+  // 种一条「已评估」治理记录（A 档、无活跃批）⇒ 难度门禁放行
+  //   ⚠ `lastAssign.at` 必须是**合法 ISO 时间戳**：`stale()` 对「时间戳非法」按过期处理（宁严勿松），
+  //   漏掉 `at` 会让本用例拿到「尚未评估」的拒因（而不是真的验证放行路径）。
+  h.store.writeGovernance(S, {
+    lastAssign: { form: 'A', difficulty: 'A', rationale: 'G2b 放行路径对照', at: new Date().toISOString() },
+  });
+  assert.deepEqual(fireGuard(h, sess(MODE)), [], '已评估 ⇒ 门禁放行');
+  assert.equal(h.store.readGovernance(S)?.execToolCount, 1, '放行路径照常计数 == 1');
 });
 
 test('G3 guard：未配置 modes.gate ⇒ 保持旧行为（未评估即拦）', () => {

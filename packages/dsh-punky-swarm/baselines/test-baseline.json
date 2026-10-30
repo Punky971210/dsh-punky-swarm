@@ -249,11 +249,19 @@
       "todos": 0
     },
     "test/batch-control.test.js": {
-      "asserts": 68,
+      "asserts": 69,
       "blankLines": 37,
-      "lines": 388,
+      "lines": 391,
       "tautologies": 0,
       "tests": 13,
+      "todos": 0
+    },
+    "test/batch-preview-shape.test.js": {
+      "asserts": 16,
+      "blankLines": 9,
+      "lines": 100,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/batch-store.test.js": {
@@ -374,6 +382,14 @@
       "lines": 114,
       "tautologies": 0,
       "tests": 10,
+      "todos": 0
+    },
+    "test/deny-zero-write.test.js": {
+      "asserts": 12,
+      "blankLines": 11,
+      "lines": 106,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/discovery.test.js": {
@@ -1161,11 +1177,11 @@
       "todos": 0
     },
     "test/mode-gate.test.js": {
-      "asserts": 51,
-      "blankLines": 22,
-      "lines": 214,
+      "asserts": 53,
+      "blankLines": 23,
+      "lines": 233,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 12,
       "todos": 0
     },
     "test/no-agentTeams-batch.test.js": {
@@ -1278,6 +1294,14 @@
       "lines": 68,
       "tautologies": 0,
       "tests": 1,
+      "todos": 0
+    },
+    "test/policy-monotonic-tighten.test.js": {
+      "asserts": 17,
+      "blankLines": 9,
+      "lines": 90,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/preflight-packet.test.js": {
@@ -1785,7 +1809,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T00:14:35Z",
+  "generatedAt": "2026-10-30T00:47:50Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1796,15 +1820,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B4 run-scoped 凭据（lib/credentials/run-scoped.js 173 行：键=sourceRunId 禁宿主 runId、双路过期=subagent/end 钩子+惰性 expiresAt、resolve 不抛返回 null、不写盘不落事件、零新依赖）+ G3-B5 worktree 错误冒泡（lane-tools.js 就地改：worktreeOpError op 五值、err.worktreeOp 四字段、gitExit 不吞、成功路径零变化、residualDir 顺序保持）+ 新增 test/run-scoped-cred-expiry.test.js(7) 与 test/worktree-merge-fail-escapes.test.js(4)",
+  "reason": "G4-A 数据面三条：I-20 preview 前置（新建 lib/engine/tree-control.js，core.js 接线，opt-in 缺省形状不变，早退点先于全部写调用）+ I-23 单调收紧（新建 lib/governance/policy.js 三轴纯函数 + store.withBatchRowLock 单点行锁）+ I-26 零副作用拒写（assertBatchWriteAllowed 写前拒绝，校验早于 atomicWrite 12 行；mtimeMs 逐位不变证明未进落盘）；新增三测试按计划 T-cmd 原名；batch-control 参数面闭集 4→5 键（加 preview，未放宽）；mode-gate G2 改精确 0 + 新增 G2b 放行路径精确 1（tier-gate bumpExecCount 改仅放行计，保拒态零写硬不变量）",
   "schema": 1,
   "totals": {
-    "asserts": 11304,
-    "blankLines": 6177,
-    "files": 223,
-    "lines": 65670,
+    "asserts": 11352,
+    "blankLines": 6207,
+    "files": 226,
+    "lines": 65988,
     "tautologies": 0,
-    "tests": 2310,
+    "tests": 2323,
     "todos": 4
   }
 }

@@ -261,7 +261,17 @@ export function installDifficultyGuard(ctx, deps) {
         if (dec.denyReason) reason = dec.denyReason;
         else if (dec.warnNote) ctx.logger?.warn?.('[dsh-punky-swarm] ' + dec.warnNote);
       }
-      store.bumpExecCount(sessionId); // 计数与拦截分离：无论是否拦截，执行型调用都计（机制 A 观察）
+      // I-26（批 `punky-g4a-dataplane-2026-10-31` · lane `e3-deny`）：**guard 拒路径零 store 写入**。
+      //   位置纪律：本条 `return` 必须早于**任何** store 写（下方 `bumpExecCount` 就是 store 写 ⇒
+      //   拒时不得执行）⇒ 「拒 = 零预写」由**行序**即成立，不是靠事后回滚或调用方自觉。
+      //   ⚠ **行为变更登记**（SHOULD，供 a1 判）：原行为 = 「计数与拦截分离：无论是否拦截，执行型调用
+      //     都计（机制 A 观察）」。本批按 I-26「拒时不得有任何 store 写入」把「拒」与「计数」解耦：
+      //     **被拒的执行型调用不再计数**。代价 = 机制 A 的观察量少计被拒调用；收益 = 拒路径真正零写。
+      //     若 a1 判「计数优先」，回退口径 = 把本 `return` 移到 `store.bumpExecCount(...)` 之后（单行）。
+      //   边界：本 guard **不复制** store 的校验逻辑（I-26 的写前校验单点在 `state/store.js#
+      //     assertBatchWriteAllowed`）；本处只保证「拒时不写」。
+      if (reason) return reason;
+      store.bumpExecCount(sessionId); // 仅**放行**路径计数（I-26 后：拒路径零 store 写，见上）
       return reason;
     });
   }

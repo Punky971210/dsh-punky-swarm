@@ -36,6 +36,12 @@ import { laneStateOf } from './lane-state.js';
 import { loadRules } from './machine-rules.js';
 import { createArchive } from './archive.js'; // done→archive（complete 钩子）
 import { createCorruptRegistry } from './corrupt-registry.js'; // 损坏批次旁路清单
+// I-26（批 `punky-g4a-dataplane-2026-10-31` · lane `e3-deny`）：零副作用拒写的**两个判定单点**。
+//   · `isBatchTerminal` —— 终态相位判定归 `schema.js`（禁在本文件重写一份 `phase` 枚举判定）；
+//   · `isAtLeastAsTight` —— 策略单调判定归 `governance/policy.js`（I-23 / e2 建；该模块零 import ⇒ 无环）。
+//   本文件**只调用**这两个判定，不在 store 内再实现一遍（同一判据两份实现 ⇒ 必漂）。
+import { isBatchTerminal } from '../schema.js';
+import { isAtLeastAsTight } from '../governance/policy.js';
 
 // ── 波 3 拆分后的语义面 builder（子模块 ← 组合器，**单向依赖**；builder 不反向 import 本文件）──
 import { buildPaths } from './store/paths.js';
@@ -331,6 +337,7 @@ function composeStore(cx) {
   const {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
+    commitBatchLocked, // I-26：锁内校验 + 锁内落盘的唯一入口（只调用 withBatchRowLock，不自建锁）
     addPoolTasks, addTaskEdges,
     recordHandoff, recordHandoffAccept, markManagerRaised, revokeLaneExempt, recordGovernanceRefusal,
     declaredInboundEdgesOf, // 【G-10 · e3-toolface】门禁侧「已声明入边」单点（只读透出，见下方导出注释）
@@ -342,6 +349,8 @@ function composeStore(cx) {
   } = cx;
 
   return {
+    withBatchRowLock, // I-23 行锁单点（进程内 per-batch 串行；跨进程由 rev CAS 兜底）。I-26 只调用它，禁另建
+    commitBatchLocked, // I-26：串行 + 写前拒绝的唯一异步入口（内部 = withBatchRowLock → commitBatch）
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
     addPoolTasks, // N1-R4-1c：池内追加任务（图变更唯一写入口；单次 atomicWrite，只增不改）
@@ -429,6 +438,32 @@ function stampGateLaneSnapshot(batch) {
   }
 }
 
+// ── I-23 · 行锁设施（**全仓唯一定义**，`:withBatchRowLock`）───────────────────────────
+// 语义 = **进程内 per-batch 串行**：同 (sessionId, batchId) 的调用排队，先到先跑。
+// ⚠ 它是**新增的外层串行**，不是给写路径加锁：`atomicWrite` 体内仍**零 lock 调用**、
+//   `commitBatch` 仍**无锁物理直写**（见上方 :110-112 两条既有事实，逐字未改）。
+//   跨**进程**并发不靠它 —— 由既有 rev CAS（`revOf`/`diskRevOf`/`batchVersionConflictOf`）兜底。
+// ⇒ 归属单点：I-26 的「写前校验」**只调用本函数**，不得另建第二套锁（两套锁 = 两个真源）。
+const batchRowChains = new Map();
+
+/**
+ * 同 (sessionId, batchId) 串行执行 `fn`。
+ * @param {string} sessionId
+ * @param {string} batchId
+ * @param {() => any} fn 临界区（同步或异步均可）
+ * @returns {Promise<any>} `fn()` 的结果；**`fn` 抛错则原样抛给调用方**（不被链吞掉）
+ */
+function withBatchRowLock(sessionId, batchId, fn) {
+  const key = String(sessionId) + '::' + String(batchId);
+  const prior = batchRowChains.get(key) ?? Promise.resolve();
+  const result = prior.then(() => fn()); // 排队点：只在前一个 settle 之后进入临界区
+  // 链上只留「已 settle」的尾巴 ⇒ 某一次失败不会毒化同 key 的后续调用（后续照常排队执行）
+  const tail = result.then(() => {}, () => {});
+  batchRowChains.set(key, tail);
+  tail.then(() => { if (batchRowChains.get(key) === tail) batchRowChains.delete(key); }); // 队列排空即回收，防无界增长
+  return result;
+}
+
 export function createStore(root, { rules, logger, onStateChange, readConfig, revRaceHook } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
@@ -454,7 +489,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
 
   // ── 波 3：闭包上下文 `cx`（每 createStore 实例一份；禁提升为模块级单例）+ 写面单点 ──
   const cx = { root, sessionsDir, legacyDir, gates, corruptRegistry, log, ratchet, archive,
-    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch,
+    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch, commitBatchLocked,
     // F3 / K-1：rev CAS 的**确定性构造缝**（`fn({sessionId,batchId,file,expected})`）。
     //   **唯一扩面已登记**（规格 N-2）：生产调用点不传 ⇒ `undefined` ⇒ `commitBatch` 内 `typeof` 判否
     //   ⇒ **零行为**。唯一用途 = 单测确定性构造「对手在我读完之后、落盘之前提交了一次」。
@@ -559,6 +594,53 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
   //   `atomicWrite` 体内**零 `lock` 调用** ⇒ `lane_claim` 是**逻辑层**锁、本函数是**无锁物理直写**；
   //   **绕过工具面**直接调 store 写函数的路径**都不被锁挡**。详见上方 L7 段 `(a)`。
   //   F3 / K-1：本函数升级为 **rev CAS 写入**（契约见上方 `BATCH_REV_KEY` 段）——「可判」而非「互斥」。
+  // ───────────────────────────────────────────────────────────────────────────
+  // I-26（批 `punky-g4a-dataplane-2026-10-31` · lane `e3-deny`）：**零副作用拒写**的写前校验。
+  //
+  // 形态裁定（任务包 §2.3，**不是**「写完再回滚」）：校验在 `atomicWrite` **之前**抛出 ⇒ 拒则
+  //   零落盘**由构造成立**（同仓先例 = 上方 `assertWavePlanImmutable` 的 IMM-5「位置纪律 ③」）。
+  //   禁事后回滚：回滚会引入「半写 → 恢复」窗口与备份面。
+  //
+  // 位置纪律（三条，缺一不可；由**调用点行序**即成立 —— 本函数只判定、不写盘、不改入参）：
+  //   ① `diskRevOf` CAS 判定**之后** ⇒ 版本冲突时零副作用（拒态优先级不变：冲突先抛）；
+  //   ② `stampGateLaneSnapshot` **之前** ⇒ 比对面不含它补写的事件快照；
+  //   ③ `atomicWrite` **之前** ⇒ 写前拒绝，非事后回滚。
+  //
+  // 串行纪律（I-23 的行锁，**只调用不自建**）：本函数自身不加锁；「锁内校验 + 锁内落盘」由
+  //   `commitBatchLocked()` 提供 —— 它把 `commitBatch` 整段包进 `withBatchRowLock`，故校验与落盘
+  //   **在同一临界区内**。⚠ 禁自建第二套锁（e2 原话逐字）：「两套锁**互不阻塞**，A 锁内的读能看见
+  //   B 锁内未提交的中间态，而**两边都以为自己串行**」。
+  //
+  // 拒绝形态（形态即契约）：**普通 `Error`**，消息前缀 **`deny-zero-write:`** ＋ `batchId` ＋ 明细；
+  //   **不设 `err.code`**、**不以 `GATE_` 开头**（禁二次扩大拒码集合；同 `store/plan-mutate.js:39-40` 先例）。
+  //
+  // 判据（两条，均可构造）：
+  //   D-1 终态相位迁移：盘上批次已终态（`isBatchTerminal(prev.phase)`）而本次写入改 `phase` ⇒ 拒；
+  //   D-2 策略非单调：本次带 `policy` 且盘上有 `policy`，而 `isAtLeastAsTight(prev, next) === false` ⇒ 拒。
+  //     `policy` = **batch 级可选字段**（与 `batch.handoffs` 同风格），形状 `{allowed, denied, limits}`；
+  //     语义与判定**全部委托** `lib/governance/policy.js`（本文件只调用，不重实现单调判定）。
+  //
+  // 建批/首写豁免：盘上无该批（`readBatch` ⇒ null）⇒ 直接放行（同 IMM-0，否则建批即被自己拒）；
+  //   损坏批（读路径已登记旁路清单）同样放行 —— 本 guard 不越权做形态校验。
+  // ───────────────────────────────────────────────────────────────────────────
+  function assertBatchWriteAllowed(sessionId, batchId, batch, { action = 'commit' } = {}) {
+    const prev = cx.readBatch(sessionId, batchId); // 纯读：不写盘、不改调用方对象
+    if (!prev || typeof prev !== 'object') return; // 建批/首写豁免（IMM-0 同款）
+    const deny = (detail) => {
+      throw new Error('deny-zero-write: batch=' + String(batchId) + ' action=' + String(action) + ' ' + detail);
+    };
+    // D-1：终态是**单向门**（`schema.js#BATCH_TRANSITIONS` 的终态出边为空）⇒ 盘上已终态时任何相位改写一律拒
+    if (isBatchTerminal(prev.phase) && batch.phase !== prev.phase) {
+      deny('D-1 终态相位迁移被拒（盘上 phase=' + String(prev.phase) + '，本次 phase=' + String(batch.phase) + '）');
+    }
+    // D-2：策略只可收紧、永不放宽/擦除 —— 判定单点 = `policy.js#isAtLeastAsTight`（**不在此重写**）
+    if (batch.policy !== undefined && prev.policy !== undefined) {
+      if (!isAtLeastAsTight(prev.policy, batch.policy)) {
+        deny('D-2 策略非单调（放宽/擦除）被拒：allowed 只减、denied 只增、limits 只降');
+      }
+    }
+  }
+
   function commitBatch(sessionId, batchId, batch) {
     const file = batchFile(sessionId, batchId);
     const expected = revOf(batch); // 调用方声明值（旧文件/新对象缺 `__rev` ⇒ 0）
@@ -575,6 +657,9 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     //   三条位置纪律由本行位置即成立：CAS 之后（冲突零副作用）／`stampGateLaneSnapshot` 之前／
     //   `atomicWrite` 之前（写前拒绝 ⇒ IMM-5「拒则零落盘」）。判据与拒绝形态见本函数上方整段注释。
     assertWavePlanImmutable(sessionId, batchId, batch);
+    // I-26（`e3-deny`）：**零副作用拒写**的写前校验 —— 位置即在 `atomicWrite` 之前（CAS 之后、快照之前）。
+    //   抛出 ⇒ 本次零落盘（尚未写 tmp、尚未 rename）；判定与拒绝形态见本函数上方整段注释。
+    assertBatchWriteAllowed(sessionId, batchId, batch, { action: 'commit' });
     // P2-1（lane `c6-gate-snapshot`）：落盘前给 `gate.*` 事件补 lane 态快照（纯增量，只补**尚无** `lanes` 的）。
     //   位置纪律：**在 CAS 判定之后**（冲突时零副作用，不改调用方事件对象）、**在 `atomicWrite` 之前**
     //   （快照与同一份落盘字节同批固化）。本行**不触碰**下方 `atomicWrite(batchFile(sessionId, batchId), batch)`
@@ -587,6 +672,25 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     //   R3-2④ 的源码面围栏以 `'atomicWrite(batchFile(sessionId, batchId), batch)'` 为锚点，断言
     //   「常量解析早于统一原子写」。改成 `file` 变量会让该围栏失锚（R3-2 结构性证据失效）。
     atomicWrite(batchFile(sessionId, batchId), batch);
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+  // I-26（`e3-deny`）：**锁内校验 + 锁内落盘**的唯一入口 —— 全仓 `withBatchRowLock` 的**唯一调用点**
+  //   （其声明仍只有 1 处，就在本文件上方；禁另建第二把）。
+  //
+  // 语义链：`withBatchRowLock(sessionId,batchId, fn)` → `fn()` 内 `commitBatch(...)`
+  //   → CAS → `assertBatchWriteAllowed(...)`（**写前拒绝**）→ 快照 → `atomicWrite(...)`。
+  //   ⇒ 「串行」与「拒则零落盘」两条都被构造成立：临界区内一次只跑一个写者；判定在落盘之前。
+  //   `fn` 抛错由 `withBatchRowLock` 原样抛给调用方（其 finally 语义保证链尾只挂已 settle 版本 ⇒
+  //   一次失败不毒化同 key 后续），故**锁的释放不需要本函数操心**。
+  //
+  // ⚠ 与既有 `commitBatch` 的关系：本函数**不新增落盘路径**，只是给它套一层串行；
+  //   既有无锁调用点（28 处）行为**逐字不变**（本条只影响新调用方是否走锁）。
+  // ───────────────────────────────────────────────────────────────────────────
+  async function commitBatchLocked(sessionId, batchId, batch) {
+    return withBatchRowLock(sessionId, batchId, () => {
+      commitBatch(sessionId, batchId, batch);
+      return batch;
+    });
   }
   return composeStore(cx);
 }

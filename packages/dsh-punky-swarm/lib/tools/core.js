@@ -50,6 +50,8 @@ import { assertModeActive, clearPendingBatch } from './tier-gate.js';
 // 悬挂成员告警**单点**（GAP-S3b 抽取；P3a control lane）：`batch_phase(aborted)` 与 `batch_control(abort)`
 //   共用同一份实现（`lib/state/dangling.js`），禁第二份——判据与 `batch_status.danglingLanes` 同源。
 import { warnAbortDangling, danglingLanesOf } from '../state/dangling.js';
+// 【I-20】批次干预预演（纯读）：只算不写；两阶段由调用方两次调用表达。
+import { previewBatchControl } from '../engine/tree-control.js';
 
 import { buildWavePlanTools } from './wave-plan-tools.js';
 import { buildBatchStatusTools, buildGateTools, buildRoleGuideTools } from './query-tools.js';
@@ -135,12 +137,16 @@ function buildPhaseTools(cx) {
       //   · 非法迁移逐字沿用既有报错码 `invalid batch phase transition: <from> -> <to>`（不自造码）。
       name: "batch_control",
       description: "最小干预面（P3a 规格 §5）：对批次的**人工干预动作**——`pause`（running→paused，人工介入即停止自动推进）/ `resume`（paused→running，**停轮批的唯一恢复入口**，规格 §6 防竞态）/ `abort`（→aborted，收口；有悬挂成员时复用既有 `batch.abort_dangling` 告警 + `danglingLanes` 回显）。幂等：目标相位已达成 ⇒ no-op（不重复写相位事件）。**绝不改任何成员状态**（停轮/收口只动相位与留痕）；非法迁移走既有相位机报错码，不新增/自造码。既有 `batch_phase` 本阶段照常在册、行为不变（收内属 P3b）。批次按会话隔离，缺省取当前执行会话。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"action":{"type":"string","required":true,"enum":["pause","resume","abort"],"description":"干预动作：pause=停轮（人工介入即停止自动推进）/ resume=paused→running（唯一恢复入口）/ abort=收口（不可逆）"},"session":{"type":"string","description":"批次归属会话"}},
+      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"action":{"type":"string","required":true,"enum":["pause","resume","abort"],"description":"干预动作：pause=停轮（人工介入即停止自动推进）/ resume=paused→running（唯一恢复入口）/ abort=收口（不可逆）"},"preview":{"type":"boolean","description":"**预演（opt-in，缺省 false）**：`true` ⇒ **零写入**，只返回 {affected,skipped,warnings,totals} 预测面（不执行、不落事件、不清锁）。两阶段用法 = 先 `preview:true` 看结果，再不带 preview 真执行。**刻意不接受 dryRun 别名**（禁第二入口）。"},"session":{"type":"string","description":"批次归属会话"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"action":{"type":"string","required":true},"noop":{"type":"boolean"},"danglingLanes":{"type":"array","items":{"type":"string"}}}},
-        render: (_args, value) => TEXT_OUTPUT('batch ' + value.batchId + ' control ' + value.action + ' -> ' + value.phase
-          + (value.noop ? ' (no-op: already ' + value.phase + ')' : '')
-          + ((value.danglingLanes ?? []).length ? '; dangling lanes: ' + value.danglingLanes.length : '')),
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"action":{"type":"string","required":true},"noop":{"type":"boolean"},"danglingLanes":{"type":"array","items":{"type":"string"}},"preview":{"type":"object","additionalProperties":false,"description":"仅 preview:true 时出现（预演面：零写入）","properties":{"affected":{"type":"array","items":{"type":"string"}},"skipped":{"type":"array","items":{"type":"string"}},"warnings":{"type":"array","items":{"type":"string"}},"totals":{"type":"object","additionalProperties":false,"properties":{"affected":{"type":"integer"},"skipped":{"type":"integer"}}}}}}},
+        render: (_args, value) => TEXT_OUTPUT(value.preview
+          ? 'batch ' + value.batchId + ' control ' + value.action + ' PREVIEW -> ' + value.phase
+            + ' (affected ' + value.preview.affected.length + ', skipped ' + value.preview.skipped.length + ')'
+            + (value.preview.warnings.length ? '; warnings: ' + value.preview.warnings.join(' | ') : '')
+          : 'batch ' + value.batchId + ' control ' + value.action + ' -> ' + value.phase
+            + (value.noop ? ' (no-op: already ' + value.phase + ')' : '')
+            + ((value.danglingLanes ?? []).length ? '; dangling lanes: ' + value.danglingLanes.length : '')),
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '批次干预（batch_control）'); // 模式门（E 阶段）：非生效模式零治理写入，先于参数/状态校验
@@ -152,6 +158,11 @@ function buildPhaseTools(cx) {
         // 相位取值**直读批次 JSON**（判据唯一事实源；不由调用方传 phase ⇒ 无第二个相位入口）。
         const cur = store.readBatch(sessionId, args.batchId);
         if (!cur) throw new Error('batch not found: ' + args.batchId);
+        // 【I-20】preview = opt-in 纯读前置：在此早退 ⇒ 后面的 setPhase / clearPendingBatch /
+        //   悬挂告警**一行都不会跑**（零写盘、零事件）。缺省路径（args.preview 非 true）逐字不变。
+        if (args.preview === true) {
+          return previewBatchControl({ store, sessionId, batchId: args.batchId, action, deps });
+        }
         const idempotent = (phase) => {
           const out = { batchId: args.batchId, phase, action, noop: true };
           if (action === 'abort' && phase === 'aborted') { // 已终态的 abort：回显既有悬挂事实，**不重复落告警**
