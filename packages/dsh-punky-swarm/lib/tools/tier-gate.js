@@ -28,6 +28,14 @@ import {
   modeActiveFor, presetOfSession, MODE_INACTIVE_CODE,
 } from '../engine/dispatch.js'; // 引擎自派（B1–B5 + P2 派发核心）+ C 阶段派发面门禁（软启用）+ D 阶段成员套件通信 + E 阶段模式跟随
 import { parseLaneHandleFromText, verifyLaneHandle, textOfDispatchArgs } from '../bridge/lane-handle.js'; // 派发句柄（C 档派发唯一凭证）——本文件只用其**只读**面（档位门校验）；发放/消费随派发核心迁至 engine/dispatch.js（P2）
+// 【I-24】执行面白名单的**唯一判定**在 `lib/governance/allowlist.js`（纯函数）；本文件只调用、不重写。
+import { decide as decideAllowlist, canonicalDigest } from '../governance/allowlist.js';
+
+// 【I-19】工具网关三态的拒因前缀（**普通字符串**；不进 `GATE_` 拒码集合、无 `err.code`）。
+//   `ask-required-409:` = ask-first 的**终态拒绝**：409 语义 = **立即拒**，不是"待审批"、不挂起、不含可继续状态。
+//   `ask-approval-args-mismatch:` = 已带批准票据但**参数被改**（签名重放校验失败）⇒ 同样立即拒。
+export const ASK_REQUIRED_409 = 'approval-needed-409:';
+export const ASK_APPROVAL_ARGS_MISMATCH = 'approval-args-mismatch:';
 
 // N1-R4-1b：**派发面 owner 取值**（唯一来源 = 调用方 Agent 标识）。取不到 ⇒ `null` ⇒ `setMember` **零写入**
 //   （既有行为不变）；这是刻意的 fail-open 边界：owner 是声明面，缺失只影响池视图，不阻断任何门禁。
@@ -270,6 +278,40 @@ export function installDifficultyGuard(ctx, deps) {
       //     若 a1 判「计数优先」，回退口径 = 把本 `return` 移到 `store.bumpExecCount(...)` 之后（单行）。
       //   边界：本 guard **不复制** store 的校验逻辑（I-26 的写前校验单点在 `state/store.js#
       //     assertBatchWriteAllowed`）；本处只保证「拒时不写」。
+      // 【I-24】白名单判定（**只调用**纯函数，判定逻辑不在本文件）：
+      //   · 未配置（`tools.allowlist` 非数组）⇒ **不启用**，本 guard 行为与本批之前逐字相同；
+      //   · 显式配置 ⇒ 由 `decide()` 单点判，`deny`/`ask` 均按拒返回（拒因是普通字符串）。
+      //   ⚠ 空数组是**启用**语义（default deny），不是「未配置」——两者刻意区分开。
+      const allowlistConfig = config?.tools?.allowlist;
+      if (!reason && Array.isArray(allowlistConfig)) {
+        // 【I-19】三态：① default deny ② ask-first = **立即拒（终态）** ③ 批准后**签名参数重放**
+        //   `approval` 是**控制位**，不是业务参数 ⇒ 参与判定的参数里剔除它，摘要才对得上"同一组参数"。
+        const fullArgs = execution.arguments ?? {};
+        const approval = fullArgs.approval && typeof fullArgs.approval === 'object' ? fullArgs.approval : null;
+        const businessArgs = { ...fullArgs };
+        delete businessArgs.approval;
+        const argsDigest = canonicalDigest(businessArgs); // 摘要单点 = e1 的 canonicalDigest（本文件不自造）
+        // ③ 已带批准票据 ⇒ 摘要必须与**当前参数**逐字一致；改任一参数 ⇒ 立即拒（不回落成"再问一次"）
+        if (approval !== null && approval.digest !== argsDigest) {
+          reason = ASK_APPROVAL_ARGS_MISMATCH + ' ' + execution.name;
+        }
+        if (!reason) {
+          const allowDec = decideAllowlist({
+            toolName: execution.name,
+            args: businessArgs,
+            allowlist: allowlistConfig,
+            // 票据与参数同源（digest 相符）才算"已批准"⇒ 走 allow；否则交回 decide 判 ask
+            facts: { approval: approval !== null && approval.digest === argsDigest },
+          });
+          if (allowDec.decision === 'ask') {
+            // ② **同步 return 字符串** ⇒ 宿主观为拒绝终态（post-result + isError），非挂起、无 Promise、
+            //    不写任何"待审批"状态。这就是 409 的语义：现在就拒，不是等你批。
+            reason = ASK_REQUIRED_409 + ' ' + execution.name;
+          } else if (allowDec.decision !== 'allow') {
+            reason = allowDec.reason; // ① default deny（含参数越界）：原样透出 e1 的拒因，不自造放行分支
+          }
+        }
+      }
       if (reason) return reason;
       store.bumpExecCount(sessionId); // 仅**放行**路径计数（I-26 后：拒路径零 store 写，见上）
       return reason;

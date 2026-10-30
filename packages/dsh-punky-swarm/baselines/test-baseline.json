@@ -88,6 +88,14 @@
       "tests": 8,
       "todos": 0
     },
+    "test/allowlist-pure.test.js": {
+      "asserts": 28,
+      "blankLines": 16,
+      "lines": 123,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/api-batch-keys.test.js": {
       "asserts": 29,
       "blankLines": 19,
@@ -134,6 +142,14 @@
       "lines": 192,
       "tautologies": 0,
       "tests": 10,
+      "todos": 0
+    },
+    "test/ask-first-is-deny.test.js": {
+      "asserts": 24,
+      "blankLines": 18,
+      "lines": 120,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/assembly-gate-extra.test.js": {
@@ -838,6 +854,14 @@
       "lines": 249,
       "tautologies": 0,
       "tests": 12,
+      "todos": 0
+    },
+    "test/governance-layers.test.js": {
+      "asserts": 21,
+      "blankLines": 11,
+      "lines": 93,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/governance-narrow.test.js": {
@@ -1809,7 +1833,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T00:47:50Z",
+  "generatedAt": "2026-10-30T04:30:07Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1820,15 +1844,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G4-A 数据面三条：I-20 preview 前置（新建 lib/engine/tree-control.js，core.js 接线，opt-in 缺省形状不变，早退点先于全部写调用）+ I-23 单调收紧（新建 lib/governance/policy.js 三轴纯函数 + store.withBatchRowLock 单点行锁）+ I-26 零副作用拒写（assertBatchWriteAllowed 写前拒绝，校验早于 atomicWrite 12 行；mtimeMs 逐位不变证明未进落盘）；新增三测试按计划 T-cmd 原名；batch-control 参数面闭集 4→5 键（加 preview，未放宽）；mode-gate G2 改精确 0 + 新增 G2b 放行路径精确 1（tier-gate bumpExecCount 改仅放行计，保拒态零写硬不变量）",
+  "reason": "G4-B 执行面三条：I-24 新建 lib/governance/allowlist.js（decide/canonicalDigest 纯函数零 IO，单点判定）；I-19 tier-gate 三态（default deny/ask-first 同步立即拒非挂起/批准后签名参数重放，register.js 未改）；I-25 新建 lib/governance/layers.js 四层否决面（四独立函数非别名，五场景拒层集合）+ suite.js 极小再导出（+9 行，entry 仍 34、kind 不变）；新增三测试按计划 T-cmd 原名（17 例）；judging-guidance 4 红已由 owner 侧改注释措辞修复（未改判据、未改期望值）",
   "schema": 1,
   "totals": {
-    "asserts": 11352,
-    "blankLines": 6207,
-    "files": 226,
-    "lines": 65988,
+    "asserts": 11425,
+    "blankLines": 6252,
+    "files": 229,
+    "lines": 66324,
     "tautologies": 0,
-    "tests": 2323,
+    "tests": 2340,
     "todos": 4
   }
 }

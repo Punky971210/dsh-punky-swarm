@@ -204,3 +204,15 @@ function modeGateTools() {
 /** 冻结派生结果（消费方 `dispatch.js` 再导出；`Object.freeze` 保持既有不可变契约）。 */
 export const SUITE_DENY_TOOLS = Object.freeze(memberDenyTools());
 export const MODE_GATED_TOOLS = Object.freeze(modeGateTools());
+
+// ── I-25 四层否决面 · 极小接线（批 `punky-g4b-execsurface-2026-10-31` · lane `e3-layers`）───────
+//   位置纪律（任务包 §2.5）：**只允许在派生导出行之后追加** —— `SUITE_DENY_TOOLS`(:205) 与
+//   `MODE_GATED_TOOLS`(:206) 之后即本段；本段**不碰** `SUITE_TOOLS`、**不碰**任何表条目行、
+//   **不碰**两个派生函数 ⇒ 表条目仍 34 条、`kind` 分布逐字不变（二者由 AC-10 复核）。
+//   ⚠ 本注释刻意不写出表条目调用的字面形态：`test/judging-guidance.test.js` 以「该字面在
+//   suite.js 的出现次数须恰为表条目数」作判据 ⇒ 注释里写它会被词面污染计数而假红。
+//   （批 `punky-g4b` 初版即因此打红 4 例；已在 owner 侧改措辞，**未改判据、未把期望值改大**。）
+//   语义：四层否决函数**不是工具**（不注册、不入 deny 集、不入模式门集），此处只是把**同一份实现**
+//   再导出一处，供工具层/门禁层从工具面同源取用（与 `dispatch.js` 再导出两个派生集同族的
+//   「单点引用」做法，**不复制实现**、不产生第二真源）。
+export { processLayer, runLayer, environmentLayer, transactionLayer } from '../governance/layers.js';
