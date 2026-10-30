@@ -888,14 +888,6 @@
       "tests": 12,
       "todos": 0
     },
-    "test/governance-layers.test.js": {
-      "asserts": 21,
-      "blankLines": 11,
-      "lines": 93,
-      "tautologies": 0,
-      "tests": 5,
-      "todos": 0
-    },
     "test/governance-narrow.test.js": {
       "asserts": 26,
       "blankLines": 15,
@@ -1897,7 +1889,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T10:29:05Z",
+  "generatedAt": "2026-10-30T11:29:44Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1908,15 +1900,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G4-C2b 台账末三条 + G4 台账面收官：I-04 甲方案（新建 lib/verify/binding.js 96 行承载边界校验，handoff-tools/member-tools 各接入，lane-tools.js 零行改动连 import 都未加）；I-12 结算独立管线（新建 lib/engine/settle.js 86 行，结算失败不阻塞状态推进、推进失败照旧抛防过度解耦、幂等取调用前状态不建旁账）；I-29 变更卡统一载形（新建 lib/engine/confirm-card.js 87 行，键集恒等 CARD_FIELDS 7 键、cardId 唯一防糊成一张）；新增三测试 6+5+5",
+  "reason": "G5-O 孤儿清理（用户已裁丙方案）：删除 lib/governance/layers.js（114 行）及其唯一消费者链——suite.js 再导出段（11 行）与 test/governance-layers.test.js（5 例 21 断言）。依据：现真源 v5 全文无「四层否决面」条目（采纳蓝图 D5 未进 v5 的 25 条总表），且全仓无判定调用者（侦察实测+我复核：仅 suite.js 再导出 + liveness.js 一处注释）。同步改 liveness.js 注释去掉对已删文件的引用。不是放宽覆盖：删的测试与删的实现一一对应。cx.js 经复核有 TS 类型消费者（gates.ts:69 / gates.d.ts:313 / copy-ts-built.mjs:24）⇒ 不删，改记 followup",
   "schema": 1,
   "totals": {
-    "asserts": 11599,
-    "blankLines": 6357,
-    "files": 237,
-    "lines": 67140,
+    "asserts": 11578,
+    "blankLines": 6346,
+    "files": 236,
+    "lines": 67047,
     "tautologies": 0,
-    "tests": 2387,
+    "tests": 2382,
     "todos": 4
   }
 }
