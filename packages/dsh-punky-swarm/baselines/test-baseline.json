@@ -776,6 +776,14 @@
       "tests": 5,
       "todos": 0
     },
+    "test/gate-status-read-amp.test.js": {
+      "asserts": 16,
+      "blankLines": 15,
+      "lines": 147,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/gate-techdebt-red.test.js": {
       "asserts": 99,
       "blankLines": 76,
@@ -1889,7 +1897,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T11:29:44Z",
+  "generatedAt": "2026-10-30T12:11:15Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1900,15 +1908,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G5-O 孤儿清理（用户已裁丙方案）：删除 lib/governance/layers.js（114 行）及其唯一消费者链——suite.js 再导出段（11 行）与 test/governance-layers.test.js（5 例 21 断言）。依据：现真源 v5 全文无「四层否决面」条目（采纳蓝图 D5 未进 v5 的 25 条总表），且全仓无判定调用者（侦察实测+我复核：仅 suite.js 再导出 + liveness.js 一处注释）。同步改 liveness.js 注释去掉对已删文件的引用。不是放宽覆盖：删的测试与删的实现一一对应。cx.js 经复核有 TS 类型消费者（gates.ts:69 / gates.d.ts:313 / copy-ts-built.mjs:24）⇒ 不删，改记 followup",
+  "reason": "G5-P1 读放大收敛：gate_status 列举路径改用已存在的批级单点 store.gateStatusMapOfBatch（一次读批 -> {lane:gateView}），替代逐 lane store.gateStatus（1+N 次读盘，O(N) 放大）。单 lane 路径保持原实现不变（保护未知 id 的 orphan 视图语义）。同一夹具 14 lane 实测：p50 12.426ms -> 4.463ms（-64%，2.78x）。新增 test/gate-status-read-amp.test.js 5 例，核心判据为读盘次数不随 lane 数增长（确定性判据，非计时），并含桩有效性阳性对照与变异反证",
   "schema": 1,
   "totals": {
-    "asserts": 11578,
-    "blankLines": 6346,
-    "files": 236,
-    "lines": 67047,
+    "asserts": 11594,
+    "blankLines": 6361,
+    "files": 237,
+    "lines": 67194,
     "tautologies": 0,
-    "tests": 2382,
+    "tests": 2387,
     "todos": 4
   }
 }

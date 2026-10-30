@@ -133,15 +133,27 @@ export function buildGateTools(cx) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         const batch = store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);
-        const ids = args.lane ? [args.lane] : Object.keys(batch.lanes);
         // 批次级可核字段：C+ 装配声明（建批入参留下的声明）+ Manager 拉起登记（batch_phase(manager=…) 写入）
         // 【2026-09-27 批 3 · T-7】原 §8③ 团队资产快照回显（`teamAsset` 指纹引用 + `declaration` 正档正文 +
         //   `declarationMissing`）**已删除**：资产面退役 ⇒ 无档可写、无可读（`teamAssetViewOf` 恒回空）。
-        return {
-          batchId: args.batchId, sessionId, lanes: ids.map((l) => store.gateStatus(sessionId, args.batchId, l)),
+        const extras = {
           ...(batch.manager ? { manager: batch.manager } : {}),
           ...(batch.assembly ? { assembly: batch.assembly } : {}),
         };
+        // 【G5-P1 · 读放大收敛】改前：`ids.map((l) => store.gateStatus(...))` —— 每个 lane 各读一次批文件
+        //   ⇒ 总读盘 = 1(本处) + N(lane 数)，N 大时 O(N) 放大（实测 p50 9.606 ms vs `batch_status` 0.657 ms）。
+        //   改后：列举路径走**已存在的批级单点** `gateStatusMapOfBatch`（一次读批 → `{lane: gateView}`）——
+        //   它与 `gateStatus` 同源同实现（`lib/state/gates/status.js:95-104` 的 TD-21 读放大收敛注释），
+        //   差别只在读盘次数；`lib/api.js` 的 `lanesGate` 已是它的读端，且已有回归锁
+        //   `test/api-batch-keys.test.js` 的 P-2（逐 lane 深比较全等）/ P-3（一次读、不随 lane 数增长）。
+        //   单 lane 路径**保持原实现不变**：调用方可传一个不在 `batch.lanes` 里的任意 id，而 `gateStatus`
+        //   对这种 id 返回 orphan 风格视图（非 undefined），批级 map 没有该键 ⇒ 只在 `args.lane` 缺省时走批级。
+        if (args.lane) {
+          return { batchId: args.batchId, sessionId, lanes: [store.gateStatus(sessionId, args.batchId, args.lane)], ...extras };
+        }
+        const viewOfLane = store.gateStatusMapOfBatch(sessionId, args.batchId);
+        // 键序取 `batch.lanes`（与改前 `Object.keys(batch.lanes)` 逐字一致；不改用 map 自身键序）
+        return { batchId: args.batchId, sessionId, lanes: Object.keys(batch.lanes).map((l) => viewOfLane[l]), ...extras };
       },
     }),
   ];
