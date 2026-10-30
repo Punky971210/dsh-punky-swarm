@@ -250,3 +250,63 @@ export function installEvidenceCapture(ctx, opts = {}) {
   const dispose = ctx.on('tools/post-execute', listener);
   return { dispose, count: () => captured, installed: true };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// I-13 · 拒因分级（B7 拒因可诊断）：**族 ⇒ 修复动作**的唯一映射表
+//
+// 分级按**根因**（`errorFamily` 由产生点按成因直接给出），**不按 message 文本匹配** ——
+//   文案一改就失效，靠正则从消息里猜族是最脆的形态。
+// 同一族的不同码 ⇒ **同一动作**：动作取决于「哪一类原因」，不取决于「具体哪一个码」；
+//   若按码映射，同族两个码就可能给出两个动作，修复指引立刻分叉。
+// 未映射族 ⇒ **抛**（`error-family-unmapped:`），禁静默返回 null —— 静默的 null 会被上层当成"没有动作"，
+//   于是新加一个族时没人发现它没有修复指引。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 未映射族/码的拒因前缀（普通 `Error`；非 `GATE_`、无 `code`）。 */
+export const ERROR_FAMILY_UNMAPPED = 'error-family-unmapped:';
+
+/** 拒因族（固定小集合；新增族必须同时补 `REPAIR_ACTION_BY_FAMILY`，否则 `repairActionOf` 会抛）。 */
+export const DENIAL_FAMILIES = Object.freeze(['tier', 'mode', 'allowlist', 'approval']);
+
+/** 族 ⇒ 修复动作（**唯一映射表**；同族多码共用同一动作）。 */
+const REPAIR_ACTION_BY_FAMILY = Object.freeze({
+  tier: 'assess', // 先做只读侦察再 assign_check，写入难度与判据
+  mode: 'switch-mode', // 当前模式不生效 ⇒ 换到该模式允许的路径
+  allowlist: 'grant-allowlist', // 不在白名单 ⇒ 由调用方把工具/参数加进 tools.allowlist
+  approval: 'obtain-approval', // 需批准 ⇒ 取得批准票据（摘要须与当前参数一致）
+});
+
+/**
+ * 族 ⇒ 修复动作。**入参是族名本身**（查表即判定，不是拼进消息）。
+ *
+ * @param {string} errorFamily 族名（`DENIAL_FAMILIES` 之一）
+ * @returns {string} 修复动作名
+ * @throws {Error} 未映射族 ⇒ `error-family-unmapped:`（禁静默 null）
+ */
+export function repairActionOf(errorFamily) {
+  if (typeof errorFamily !== 'string' || errorFamily.length === 0) {
+    throw new Error(ERROR_FAMILY_UNMAPPED + ' <empty>（族名须为非空字符串）');
+  }
+  const action = REPAIR_ACTION_BY_FAMILY[errorFamily];
+  if (action === undefined) {
+    throw new Error(ERROR_FAMILY_UNMAPPED + ' ' + errorFamily + '（已映射族：' + DENIAL_FAMILIES.join('/') + '）');
+  }
+  return action;
+}
+
+/**
+ * 结构化拒因 ⇒ `{errorFamily, errorCode, action}`。
+ * `errorCode` 参与校验（每个拒码都必须落到一个动作）；`action` 由**族**决定。
+ *
+ * @param {{errorFamily: string, errorCode: string}} denial
+ * @returns {{errorFamily: string, errorCode: string, action: string}}
+ * @throws {Error} 族/码缺失或族未映射
+ */
+export function classifyDenial(denial) {
+  const errorFamily = denial?.errorFamily;
+  const errorCode = denial?.errorCode;
+  if (typeof errorCode !== 'string' || errorCode.length === 0) {
+    throw new Error(ERROR_FAMILY_UNMAPPED + ' ' + String(errorFamily) + ' <errorCode 缺失>（每个拒码都必须有动作）');
+  }
+  return { errorFamily, errorCode, action: repairActionOf(errorFamily) };
+}

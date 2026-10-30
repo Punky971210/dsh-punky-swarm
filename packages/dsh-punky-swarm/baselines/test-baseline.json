@@ -464,6 +464,14 @@
       "tests": 42,
       "todos": 0
     },
+    "test/error-family-routing.test.js": {
+      "asserts": 11,
+      "blankLines": 7,
+      "lines": 60,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/esm-first-eval.test.js": {
       "asserts": 21,
       "blankLines": 30,
@@ -1368,6 +1376,14 @@
       "tests": 1,
       "todos": 0
     },
+    "test/radius-log-only.test.js": {
+      "asserts": 27,
+      "blankLines": 11,
+      "lines": 108,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/ratchet-wiring.test.js": {
       "asserts": 35,
       "blankLines": 28,
@@ -1414,6 +1430,14 @@
       "lines": 92,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/replay-no-rerun.test.js": {
+      "asserts": 24,
+      "blankLines": 13,
+      "lines": 95,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/replay-recovery.test.js": {
@@ -1849,7 +1873,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T04:51:07Z",
+  "generatedAt": "2026-10-30T05:27:09Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1860,15 +1884,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G4-C1 台账面三条：I-05 新建 lib/state/contract.js（canonicalSha256 键序不敏感唯一实现/版本链 fail-closed 断链双处抛/完成归属可判）；I-06 新建 lib/state/receipt.js（幂等回执指纹纯函数零 IO，边界不 import 既有 governance/receipt-store）；I-10 新建 lib/state/liveness.js（MAX_LIVENESS_CONTINUATION=2 唯一定义，三态 1/2 允许 3 拒，否证态 completed 即使未到上界也拒）；新增 test/receipt-idempotent(6) 与 test/contract-liveness(10)",
+  "reason": "G4-C2a 台账三条：I-11 新建 lib/engine/events.js（投递标记解耦重放，缺标记 fail-closed 留痕，core.js 零改动）+ I-13 lib/verify/evidence.js 族级路由 acto（按族不按码，未映射必抛）+ lib/tools/tier-gate.js 三拒点接入 + I-21 新建 lib/engine/radius.js（爆炸半径计数，log_only 只观测不阻/enforce 才阻成对，上限 20 导出常量）；新增 test/replay-no-rerun(5)+radius-log-only(6)+error-family-routing(4)",
   "schema": 1,
   "totals": {
-    "asserts": 11479,
-    "blankLines": 6297,
-    "files": 231,
-    "lines": 66576,
+    "asserts": 11541,
+    "blankLines": 6328,
+    "files": 234,
+    "lines": 66839,
     "tautologies": 0,
-    "tests": 2356,
+    "tests": 2371,
     "todos": 4
   }
 }

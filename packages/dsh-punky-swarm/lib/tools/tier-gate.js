@@ -30,12 +30,21 @@ import {
 import { parseLaneHandleFromText, verifyLaneHandle, textOfDispatchArgs } from '../bridge/lane-handle.js'; // 派发句柄（C 档派发唯一凭证）——本文件只用其**只读**面（档位门校验）；发放/消费随派发核心迁至 engine/dispatch.js（P2）
 // 【I-24】执行面白名单的**唯一判定**在 `lib/governance/allowlist.js`（纯函数）；本文件只调用、不重写。
 import { decide as decideAllowlist, canonicalDigest } from '../governance/allowlist.js';
+import { classifyDenial } from '../verify/evidence.js'; // I-13：族⇒修复动作唯一映射（分级按根因，不按文案）
 
 // 【I-19】工具网关三态的拒因前缀（**普通字符串**；不进 `GATE_` 拒码集合、无 `err.code`）。
 //   `ask-required-409:` = ask-first 的**终态拒绝**：409 语义 = **立即拒**，不是"待审批"、不挂起、不含可继续状态。
 //   `ask-approval-args-mismatch:` = 已带批准票据但**参数被改**（签名重放校验失败）⇒ 同样立即拒。
 export const ASK_REQUIRED_409 = 'approval-needed-409:';
 export const ASK_APPROVAL_ARGS_MISMATCH = 'approval-args-mismatch:';
+
+// 【I-13】拒因结构化（B7 可诊断）：族/码由**产生点按根因**给出，修复动作由 `evidence.js` 的
+//   「族 ⇒ 动作」唯一映射表判定。⚠ **不按 message 文本匹配分族** —— 文案一改就失效。
+//   返回值仍是**字符串**（向后兼容 `if (reason) return reason`），但族/码/动作两段附在末尾可机读。
+const denialTextOf = (denial) => {
+  const { errorFamily, errorCode, action } = classifyDenial(denial); // 族查表 + 码校验：两者都真参与判定
+  return denial.message + ' [errorFamily=' + errorFamily + ' errorCode=' + errorCode + ' repair=' + action + ']';
+};
 
 // N1-R4-1b：**派发面 owner 取值**（唯一来源 = 调用方 Agent 标识）。取不到 ⇒ `null` ⇒ `setMember` **零写入**
 //   （既有行为不变）；这是刻意的 fail-open 边界：owner 是声明面，缺失只影响池视图，不阻断任何门禁。
@@ -293,7 +302,11 @@ export function installDifficultyGuard(ctx, deps) {
         const argsDigest = canonicalDigest(businessArgs); // 摘要单点 = e1 的 canonicalDigest（本文件不自造）
         // ③ 已带批准票据 ⇒ 摘要必须与**当前参数**逐字一致；改任一参数 ⇒ 立即拒（不回落成"再问一次"）
         if (approval !== null && approval.digest !== argsDigest) {
-          reason = ASK_APPROVAL_ARGS_MISMATCH + ' ' + execution.name;
+          reason = denialTextOf({
+            errorFamily: 'approval',
+            errorCode: 'approval-args-mismatch',
+            message: ASK_APPROVAL_ARGS_MISMATCH + ' ' + execution.name,
+          });
         }
         if (!reason) {
           const allowDec = decideAllowlist({
@@ -306,9 +319,17 @@ export function installDifficultyGuard(ctx, deps) {
           if (allowDec.decision === 'ask') {
             // ② **同步 return 字符串** ⇒ 宿主观为拒绝终态（post-result + isError），非挂起、无 Promise、
             //    不写任何"待审批"状态。这就是 409 的语义：现在就拒，不是等你批。
-            reason = ASK_REQUIRED_409 + ' ' + execution.name;
+            reason = denialTextOf({
+              errorFamily: 'approval',
+              errorCode: 'approval-needed',
+              message: ASK_REQUIRED_409 + ' ' + execution.name,
+            });
           } else if (allowDec.decision !== 'allow') {
-            reason = allowDec.reason; // ① default deny（含参数越界）：原样透出 e1 的拒因，不自造放行分支
+            reason = denialTextOf({
+              errorFamily: 'allowlist',
+              errorCode: 'allowlist-not-permitted',
+              message: allowDec.reason, // 原样保留 e1 的拒因文案，不自造放行分支
+            });
           }
         }
       }
