@@ -384,6 +384,14 @@
       "tests": 12,
       "todos": 0
     },
+    "test/contract-liveness.test.js": {
+      "asserts": 35,
+      "blankLines": 28,
+      "lines": 160,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
     "test/contract-missing-first-touch.test.js": {
       "asserts": 47,
       "blankLines": 33,
@@ -1400,6 +1408,14 @@
       "tests": 11,
       "todos": 0
     },
+    "test/receipt-idempotent.test.js": {
+      "asserts": 19,
+      "blankLines": 17,
+      "lines": 92,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/replay-recovery.test.js": {
       "asserts": 17,
       "blankLines": 14,
@@ -1833,7 +1849,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T04:30:07Z",
+  "generatedAt": "2026-10-30T04:51:07Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1844,15 +1860,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G4-B 执行面三条：I-24 新建 lib/governance/allowlist.js（decide/canonicalDigest 纯函数零 IO，单点判定）；I-19 tier-gate 三态（default deny/ask-first 同步立即拒非挂起/批准后签名参数重放，register.js 未改）；I-25 新建 lib/governance/layers.js 四层否决面（四独立函数非别名，五场景拒层集合）+ suite.js 极小再导出（+9 行，entry 仍 34、kind 不变）；新增三测试按计划 T-cmd 原名（17 例）；judging-guidance 4 红已由 owner 侧改注释措辞修复（未改判据、未改期望值）",
+  "reason": "G4-C1 台账面三条：I-05 新建 lib/state/contract.js（canonicalSha256 键序不敏感唯一实现/版本链 fail-closed 断链双处抛/完成归属可判）；I-06 新建 lib/state/receipt.js（幂等回执指纹纯函数零 IO，边界不 import 既有 governance/receipt-store）；I-10 新建 lib/state/liveness.js（MAX_LIVENESS_CONTINUATION=2 唯一定义，三态 1/2 允许 3 拒，否证态 completed 即使未到上界也拒）；新增 test/receipt-idempotent(6) 与 test/contract-liveness(10)",
   "schema": 1,
   "totals": {
-    "asserts": 11425,
-    "blankLines": 6252,
-    "files": 229,
-    "lines": 66324,
+    "asserts": 11479,
+    "blankLines": 6297,
+    "files": 231,
+    "lines": 66576,
     "tautologies": 0,
-    "tests": 2340,
+    "tests": 2356,
     "todos": 4
   }
 }
