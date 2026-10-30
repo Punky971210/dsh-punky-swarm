@@ -521,6 +521,23 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     //   那正是本判据要根治的「每批塞一条」。⇒ 视为常规面，不再需要每次开闸。
     //   `docs/` `reports/` **仍维持越界**（这两处确实从不该改，且由下方 `forbidden` 禁区额外兜底）。
     { face: '指引面',     prefix: 'packages/dsh-punky-swarm/presets/' },
+    // 2026-11-01 Lead 裁定（窄规则，必须**窄到文件**）：`cordis.patch.yml` 是**注入面副本之一**，
+    //   与 `presets/punky-preset/agent.cordis.yml` 同族（两者都由脚本同步进宿主 preset）。
+    //   ⇒ 分类学上它属「**注入面**」，不是「发行面」（发行面 = package.json / CHANGELOG / README 这类元数据）。
+    //
+    // 为什么以前漏登（**结构性原因，不是笔误**）：这张表是**前缀维**而非文件维，而两件注入面副本
+    //   **深度不同** —— 一件在 `presets/` 下（命中上面的『指引面』前缀，属"碰巧合规"），
+    //   一件在**包根**（不落任何前缀，也不匹配 RELEASE_RE）⇒ 判越界。
+    //   该文件历史上**从未被改过** ⇒ 从未进 porcelain ⇒ 本判据从未跑过它 ⇒ **潜伏假红**
+    //   （本文件 :495-500 已自述「待发假红」模式；`punky-g5l-deviation-2026-10-31` 的 `e2-guidance`
+    //   首次改它 —— AC 明列的合法批次动作 —— 红才浮出。**合法动作被判越界 = 判据错，不是动作错**）。
+    //   另：`assembly-schema` / `governance-config` / `hot-config` / `patch-preset-duplicate-consistency`
+    //   四个测试都已把该文件当一等产物引用。
+    //
+    // ⚠ 反「改判据换绿」约束：前缀写**整路径** ⇒ `startsWith` 语义下等同**精确文件**；
+    //   **禁**写成 `packages/dsh-punky-swarm/`（开目录）或 `cordis.patch.*`（开模式）。
+    //   判据 = 除该文件外任何未知路径仍必须判越界（已用「临时未知文件」反例验证过）。
+    { face: '注入面',     prefix: 'packages/dsh-punky-swarm/cordis.patch.yml' },
   ];
   const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
   // 长前缀优先：**显式按字面前缀长度降序排序**，不依赖书写顺序（防后人插队改变语义）。

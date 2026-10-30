@@ -138,7 +138,22 @@ test('L-AC-4（阴性）+ AC-9（门禁 5 硬消费）：活跃批期间声明 C
   //   硬消费 ⇒ 执行型 write 被拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`。原断言「D 档同样放行」写于门禁 5 之前，
   //   与本批 Q-2「guard 硬消费通道面（杜绝只落字段无消费端）」的裁决**直接冲突**（AC-9 明文要求该状态拒）
   //   ⇒ 按新判据改写；pendingBatch/pendingSince 两条断言原样保留，并**新增**「拒态有出路（不死锁）」证明。
-  await h.declareD(S);
+  // 【G5-L 乙改 · 规格波前】通道三要素已由**结构化 `deviation:{feature,counterpoint,direction}`** 承载，
+  //   `rationale` 不再是要素载体（禁止靠关键词正则过）⇒ D 通道变体**必须**带 deviation。
+  //   先把「缺 deviation ⇒ 拒」钉住（且拒因**逐子键**指出缺哪个，而不是「拒了就行」）。
+  const missingDeviation = await h.declareD(S).then(() => null).catch((e) => e);
+  assert.ok(missingDeviation, 'D 通道变体缺 deviation ⇒ 必须拒（旧口径「rationale 写全关键词即可」已废）');
+  assert.match(String(missingDeviation.message), /GATE_DIFFICULTY_MISMATCH/, '拒码');
+  assert.match(String(missingDeviation.message), /deviation\.feature/, '拒因须逐子键指出缺 deviation.feature；实际=' + String(missingDeviation.message).slice(0, 200));
+  assert.match(String(missingDeviation.message), /deviation\.counterpoint/, '须指出 deviation.counterpoint');
+  assert.match(String(missingDeviation.message), /deviation\.direction/, '须指出 deviation.direction');
+
+  const CHANNEL_DEVIATION = {
+    feature: '通道偏离：本任务需 durable 席位 + team 事件队列交接（通道轴 dispatch 是机械推导结果）',
+    counterpoint: '例外：一次性 subagent 无法承载跨轮席位与事件交接 ⇒ 机械推导不成立',
+    direction: '仅本批使用，不泛化为全批；team 面缺失时显式降级为 C（禁静默降级）',
+  };
+  await h.declareD(S, { deviation: CHANNEL_DEVIATION });
   const gD = h.store.readGovernance(S);
   assert.equal(gD.pendingBatch, false, 'L-AC-4：活跃批 + 声明 D ⇒ pendingBatch 恒 false');
   assert.equal(gD.pendingSince, null);

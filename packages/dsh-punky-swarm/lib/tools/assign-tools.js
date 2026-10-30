@@ -42,8 +42,8 @@ export function buildAssignTools(cx) {
   return [
     defineTool({
       name: "assign_check",
-      description: "委派形态判定：**主动写入**本次任务的难度值 difficulty（A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批 / D=集群团队方案）+ 判据 rationale（必填、≥12 字，落 governance.json 供审计）——**无默认档**，不填即拒（GATE_DIFFICULTY_INVALID / GATE_DIFFICULTY_RATIONALE_MISSING）。并行/多角色/门禁/可恢复/需独立上下文这五个布尔入参降为**交叉校验**输入：声明与特征矛盾即拒（GATE_DIFFICULTY_MISMATCH，如「声明 C 但四项 C 判据全 false」= 单线程不许建批、「声明 A 但 needIsolation」）。**只读侦察先行**：read/glob/grep 与只读 shell 命令在评估前即已开放（判据须引用侦察证据）。每次调用写入会话治理状态（governance.lastAssign{ difficulty, rationale, form, reasons, derived, override, derivedChannel, overrideKind } + history），guard 依据其做执行型工具门禁。显式 session 时输出回显 sessionId 并镜像到执行会话（guard 兼容不误拦）；缺省=当前执行会话，cli 兜底并提示。**双轴判据（2026-10-11 批 `d-override-fix-20261011`，Q-1 裁决）**：难度轴 `derived` = 五布尔机械推导的档位（任一 C 判据 → C；否则 needIsolation → B；否则 A；**D 不入难度轴**）+ 通道轴 `derivedChannel` = `durableSeats ? 'team' : 'dispatch'`（独立推导，与难度轴无耦合）。**D 的正当形态**：`difficulty='D'` 且 `derivedChannel='team'`（即 durableSeats:true）⇒ **回归常规路径（override:false、overrideKind:null）**，rationale **不需要**引用 A/B/C 特征词。**D 通道变体**（`difficulty='D'` 但通道轴为 `dispatch`）⇒ 唯一保留的偏离：`override:true` / `overrideKind:'channel'`，rationale 须给**通道三要素**（① 引用通道/特征面 ② 为何 durable 而非 subagent ③ 通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺则拒 `GATE_DIFFICULTY_MISMATCH`（文案说「通道偏离」）。其余偏离（`difficulty !== derived` 且非 D）⇒ `override:true` / `overrideKind:'tier'`，仍走**原三要素**（① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限）。`durableSeats` 缺省（false）时全部语义与本批前一致。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"difficulty":{"type":"string","required":true,"enum":["A","B","C","D"],"description":"**主动写入的难度值**（必填，无默认档）：A=Leader 直做（单线程/低风险/可自验）；B=单个 subagent（不占主上下文的调研，或已明确上下文的单步派发）；C=集群 wave_plan 建批（判据只有两条：多线并行 ≥2 条任务线，或多依赖需 DAG 分层）；D=集群团队方案（team 通道：durable 席位 + 事件队列交接；与 C 同属建批档、同受建批门禁，见 discipline.md ### 十四、）；D 的正当形态须同时声明 `durableSeats:true`（通道轴 = team ⇒ override:false），否则走通道三要素校验并须以 `channel:'team'|'mixed'` 建批。"},"rationale":{"type":"string","required":true,"description":"**判据**（必填，≥12 字，供审计）：写明定档依据 + 已完成的只读侦察证据（读到什么/探测到什么），不得写空话。声明 D 且无 `durableSeats:true` 时须含**通道三要素**（① 引用通道/特征面 ② 为何 durable 而非 subagent ③ 通道方向与上限：不泛化为全批、team 面缺失须显式降级）。"},"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）——入参降为**交叉校验**输入"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"fixedRole":{"type":"boolean","description":"**固定任务形态**：角色与流程可预见（如 plan/exec/audit 三层席位分工固定）⇒ 机械推导升 C，宜评 D（team 席位）。缺省（不传）= false，语义与现状逐字一致；判低档（A/B）时**仅留痕提示** `WARN_DTIER_FIXED_ROLE_AS_LOWER`，不硬拒。"},"durableSeats":{"type":"boolean","description":"**需 durable 席位 + 事件队列交接**（team 通道）：通道轴 `derivedChannel` 的唯一判据（true ⇒ `'team'`，缺省/false ⇒ `'dispatch'`），并同时把难度轴 `derived` 推为 C。声明 `difficulty:'D'` 且 `durableSeats:true` ⇒ **回归常规路径**（`override:false`）。缺省（不传）= false。"},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string","description":"显式指定评估落点会话（当前会话 ID 或命名黑板）；缺省=当前执行会话，cli 兜底；与执行会话不同时自动镜像到执行会话（guard 兼容）"}},
+      description: "委派形态判定：**主动写入**本次任务的难度值 difficulty（A=Leader 直做 / B=单个 subagent / C=集群 wave_plan 建批 / D=集群团队方案）+ 判据 rationale（必填、≥12 字，落 governance.json 供审计）——**无默认档**，不填即拒（GATE_DIFFICULTY_INVALID / GATE_DIFFICULTY_RATIONALE_MISSING）。并行/多角色/门禁/可恢复/需独立上下文这五个布尔入参降为**交叉校验**输入：声明与特征矛盾即拒（GATE_DIFFICULTY_MISMATCH，如「声明 C 但四项 C 判据全 false」= 单线程不许建批、「声明 A 但 needIsolation」）。**只读侦察先行**：read/glob/grep 与只读 shell 命令在评估前即已开放（判据须引用侦察证据）。每次调用写入会话治理状态（governance.lastAssign{ difficulty, rationale, form, reasons, derived, override, derivedChannel, overrideKind } + history），guard 依据其做执行型工具门禁。显式 session 时输出回显 sessionId 并镜像到执行会话（guard 兼容不误拦）；缺省=当前执行会话，cli 兜底并提示。**双轴判据（2026-10-11 批 `d-override-fix-20261011`，Q-1 裁决）**：难度轴 `derived` = 五布尔机械推导的档位（任一 C 判据 → C；否则 needIsolation → B；否则 A；**D 不入难度轴**）+ 通道轴 `derivedChannel` = `durableSeats ? 'team' : 'dispatch'`（独立推导，与难度轴无耦合）。**D 的正当形态**：`difficulty='D'` 且 `derivedChannel='team'`（即 durableSeats:true）⇒ **回归常规路径（override:false、overrideKind:null）**，rationale **不需要**引用 A/B/C 特征词。**D 通道变体**（`difficulty='D'` 但通道轴为 `dispatch`）⇒ 唯一保留的偏离：`override:true` / `overrideKind:'channel'`，rationale 须给**通道三要素**（① 引用通道/特征面 ② 为何 durable 而非 subagent ③ 通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺则拒 `GATE_DIFFICULTY_MISMATCH`（文案说「通道偏离」）。其余偏离（`difficulty !== derived` 且非 D）⇒ `override:true` / `overrideKind:'tier'`，仍走**原三要素**（① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限）。`durableSeats` 缺省（false）时全部语义与本批前一致。**乙改（G5-L）**：偏离三要素由**结构化字段 `deviation:{feature,counterpoint,direction}`** 承载（`tier`/`channel` 共用同一形状、唯一入口），rationale 仍是判据正文（必填 ≥12 字），**不再**从其自由文本正则提取要素。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"difficulty":{"type":"string","required":true,"enum":["A","B","C","D"],"description":"**主动写入的难度值**（必填，无默认档）：A=Leader 直做（单线程/低风险/可自验）；B=单个 subagent（不占主上下文的调研，或已明确上下文的单步派发）；C=集群 wave_plan 建批（判据只有两条：多线并行 ≥2 条任务线，或多依赖需 DAG 分层）；D=集群团队方案（team 通道：durable 席位 + 事件队列交接；与 C 同属建批档、同受建批门禁，见 discipline.md ### 十四、）；D 的正当形态须同时声明 `durableSeats:true`（通道轴 = team ⇒ override:false），否则走通道三要素校验并须以 `channel:'team'|'mixed'` 建批。"},"rationale":{"type":"string","required":true,"description":"**判据**（必填，≥12 字，供审计）：写明定档依据 + 已完成的只读侦察证据（读到什么/探测到什么），不得写空话。声明 D 且无 `durableSeats:true` 时，**通道三要素由 `deviation` 承载**（feature=① 引用通道/特征面；counterpoint=② 为何 durable 而非 subagent；direction=③ 通道方向与上限）；rationale 只写判据正文，不再承担要素载体。"},"parallel":{"type":"boolean","description":"需要并行或任务间依赖（DAG）——入参降为**交叉校验**输入"},"multiRole":{"type":"boolean","description":"需要多角色协作（编码+测试+审查分离）"},"gate":{"type":"boolean","description":"需要门禁/审计（人审、验收、gap-list）"},"recoverable":{"type":"boolean","description":"需要跨轮治理/可恢复/可审计"},"needIsolation":{"type":"boolean","description":"需要独立上下文/工具面（查代码、跑测试等）"},"fixedRole":{"type":"boolean","description":"**固定任务形态**：角色与流程可预见（如 plan/exec/audit 三层席位分工固定）⇒ 机械推导升 C，宜评 D（team 席位）。缺省（不传）= false，语义与现状逐字一致；判低档（A/B）时**仅留痕提示** `WARN_DTIER_FIXED_ROLE_AS_LOWER`，不硬拒。"},"durableSeats":{"type":"boolean","description":"**需 durable 席位 + 事件队列交接**（team 通道）：通道轴 `derivedChannel` 的唯一判据（true ⇒ `'team'`，缺省/false ⇒ `'dispatch'`），并同时把难度轴 `derived` 推为 C。声明 `difficulty:'D'` 且 `durableSeats:true` ⇒ **回归常规路径**（`override:false`）。缺省（不传）= false。"},"deviation":{"type":"object","additionalProperties":false,"description":"**偏离三要素（结构化，唯一入口）**：`override` 为真时必填；`tier` 与 `channel` 两种偏离**共用同一形状（唯一入口，禁按偏离种类另立字段）**；`override:false` 时缺省且不参与校验。三个子键 `trim()` 后各须 ≥4 字、禁纯空白；含未知子键即拒。","properties":{"feature":{"type":"string","description":"① 依据面：tier 偏离=引用具体特征面（parallel/multiRole/gate/recoverable/needIsolation）；channel 偏离=引用通道/特征面（通道/durable/席位/roster/team/事件队列）"},"counterpoint":{"type":"string","description":"② 反证面：tier 偏离=例外/反例（为何机械推导不成立）；channel 偏离=为何 durable 而非 subagent"},"direction":{"type":"string","description":"③ 方向与上限：tier 偏离=偏离方向与上限（升/降档、不低于、仍属）；channel 偏离=通道方向与上限（不泛化为全批、team 面缺失须显式降级）"}}},"scope":{"type":"string","enum":["current","full"],"description":"评估对象：current=当前动作，full=完整目标任务（纪律强制 full，防把小动作当整体难度）"},"session":{"type":"string","description":"显式指定评估落点会话（当前会话 ID 或命名黑板）；缺省=当前执行会话，cli 兜底；与执行会话不同时自动镜像到执行会话（guard 兼容）"}},
       output: {
         // 【阻断缺陷 C-1 修复 · 批 `d-override-fix-20261011` / lane `e5-c1-schema-fix`】`overrideKind` 的取值
         //   是**闭集** `null | 'channel' | 'tier'`（单点 = 下方三元式），而原声明 `{type:"string",required:true}`
@@ -121,25 +121,47 @@ export function buildAssignTools(cx) {
         const channelProper = difficulty === 'D' && derivedChannel === 'team';
         const override = channelProper ? false : (difficulty !== derived || difficulty === 'D');
         const overrideKind = !override ? null : (difficulty === 'D' ? 'channel' : 'tier');
+        // 【乙改】偏离三要素的**唯一判定入口**（tier / channel 共用同一形状，禁第二入口）：
+        //   · 缺省 / 非对象 ⇒ 三子键全列缺（形状非法时直接回显 JSON.stringify 原值，便于调用方自纠）；
+        //   · 含未知子键 ⇒ 拒（工具面 additionalProperties:false 的语义在代码侧同样成立）；
+        //   · 子键 trim() < 4 字或纯空白 ⇒ 拒。
+        //   三条文案**复用既有 GATE_DIFFICULTY_MISMATCH**（不新增 GATE_ 码）。
+        const DEVIATION_SUBKEYS = ['feature', 'counterpoint', 'direction'];
+        const DEVIATION_LABELS = {
+          channel: { feature: '① 引用通道/特征面', counterpoint: '② 为何 durable 而非 subagent', direction: '③ 通道方向与上限' },
+          tier: { feature: '① 引用具体特征面', counterpoint: '② 例外/反例', direction: '③ 偏离方向与上限' },
+        };
+        const deviationIssuesOf = (raw, kind) => {
+          const labels = DEVIATION_LABELS[kind];
+          if (raw === undefined || raw === null) {
+            return DEVIATION_SUBKEYS.map((k) => 'deviation.' + k + '（' + labels[k] + '）');
+          }
+          if (typeof raw !== 'object' || Array.isArray(raw)) {
+            return ['deviation 形状非法：须为对象（收到 ' + JSON.stringify(raw) + '）'];
+          }
+          const unknown = Object.keys(raw).filter((k) => !DEVIATION_SUBKEYS.includes(k));
+          if (unknown.length > 0) {
+            return ['deviation 含未知子键 ' + JSON.stringify(unknown) + '（只允许 ' + DEVIATION_SUBKEYS.join(' / ') + '）'];
+          }
+          const issues = [];
+          for (const k of DEVIATION_SUBKEYS) {
+            const v = raw[k];
+            if (typeof v !== 'string' || v.trim().length < 4) issues.push('deviation.' + k + '（' + labels[k] + '）');
+          }
+          return issues;
+        };
         if (override) {
           if (overrideKind === 'channel') {
             // 通道三要素（判据源 §一.1.2；**不**复用原三要素——原①强制 A/B/C 特征词，正是要绕开的误拒源）
             // featureNote 在通道支须为**通道向**描述（缺口 G1）：不得沿用「机械推导为 C」这种像错派的措辞。
             const channelNote = '"durableSeats" 未声明（= false）⇒ 通道轴=dispatch';
-            // 判据源 §一.1.2 建议形态的同义扩展（exec 可扩展但要保持可核）：要素① 补入中文同义词「团队」
-            //   （`discipline.md` 与工具 description 均以「团队方案」「team 席位」互指，中文写法不得被误拒）。
-            const hasChannelRef = /通道|channel|durable|席位|roster|team|事件队列|团队/i.test(rationale);
-            const hasDurableContrast = /而非|相比|不用 *(subagent|自派)|相对 *(subagent|自派)|较 *(subagent|自派)/i.test(rationale);
-            const hasChannelBound = /不泛化|上限|仅本批|本批内|降级|逃生阀/.test(rationale);
-            const miss = [
-              !hasChannelRef && '① 引用通道/特征面（通道 / channel / durable / 席位 / roster / team / 事件队列）',
-              !hasDurableContrast && '② 为何 durable 而非 subagent（而非 / 相比 / 不用 subagent / 相对 subagent）',
-              !hasChannelBound && '③ 通道方向与上限（不泛化 / 上限 / 仅本批 / 降级 / 逃生阀：team 面缺失须显式降级）',
-            ].filter(Boolean);
+            // 【乙改】通道三要素改由**结构化 deviation 子键**承载：不再从 rationale 自由文本正则提取
+            //   （本仓 I-13 明令「分级按根因、不按消息文本」；旧正则正是被绕开的误拒源）。
+            const miss = deviationIssuesOf(args.deviation, 'channel');
             if (miss.length > 0) {
               throw new Error('GATE_DIFFICULTY_MISMATCH: 声明 D，而通道轴推导为 dispatch（' + channelNote + '）——'
-                + '**通道偏离须解释**：rationale 需含通道三要素（① 引用通道/特征面 ② 为何 durable 而非 subagent '
-                + '③ 通道方向与上限：不泛化为全批、team 面缺失须显式降级），当前缺：' + miss.join('、')
+                + '**通道偏离须解释**：须提供结构化 deviation 三子键（feature=① 引用通道/特征面；'
+                + 'counterpoint=② 为何 durable 而非 subagent；direction=③ 通道方向与上限），各子键 trim 后 ≥4 字，当前缺/不合法：' + miss.join('、')
                 + '。**两条正范式**（任选其一）：'
                 + '① 确需 durable 席位 ⇒ 重评 assign_check({ difficulty:"D", durableSeats:true, rationale, scope:"full" })'
                 + ' 并以 channel:"team"|"mixed" 建批；'
@@ -149,13 +171,11 @@ export function buildAssignTools(cx) {
             const featureNote = reasons.length > 0
               ? reasons.join('；')
               : (args.needIsolation ? 'needIsolation=true' : '四项 C 判据全为 false 且 needIsolation=false');
-            const hasFeatureRef = /parallel|multiRole|gate|recoverable|needIsolation|并行|多角色|门禁|可恢复|独立上下文/i.test(rationale);
-            const hasException = /例外|反例|不适用|误判|粗判|过粗|过头|不足以|偏保守/.test(rationale);
-            const hasDirection = /升档|降档|升为|降为|上限|不低于|仍属|门槛|直做/.test(rationale);
-            const miss = [!hasFeatureRef && '① 引用具体特征面', !hasException && '② 例外/反例', !hasDirection && '③ 偏离方向与上限'].filter(Boolean);
+            const miss = deviationIssuesOf(args.deviation, 'tier');
             if (miss.length > 0) {
               throw new Error('GATE_DIFFICULTY_MISMATCH: 声明 ' + difficulty + '，而机械推导为 ' + derived + '（' + featureNote + '）——'
-                + '**偏离须解释**：rationale 需含三要素（① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限），当前缺：' + miss.join('、')
+                + '**偏离须解释**：须提供结构化 deviation 三子键（feature=① 引用具体特征面；counterpoint=② 例外/反例；'
+                + 'direction=③ 偏离方向与上限），各子键 trim 后 ≥4 字，当前缺/不合法：' + miss.join('、')
                 + '；无解释的偏离仍拒（宁严勿松），有解释则放行并记 override');
             }
           }

@@ -299,12 +299,23 @@ test('guard: 未评估 → 执行型被拒（门禁 1），非执行型放行，
   const r1 = call('pwsh');
   assert.ok(r1 && r1.includes('[task-difficulty-gate]') && r1.includes('尚未进行任务难度评估'));
   assert.ok(r1.includes('才能执行 pwsh'));
-  assert.equal(st.readGovernance('sess-g1').execToolCount, execBefore + 1, '被拒也计数（相对前值 +1，G6）');
+  // 【G4-A · I-26 语义变更对齐（与 mode-gate G2/G2b 同改法，2026-11-01）】
+  //   `bumpExecCount` 由「无论拦不拦都计」改为「**仅放行计**」—— 拒态零写是硬不变量
+  //   （计数器与批状态同写一份 state 文件，计数会破坏「拒态 sha256 逐位不变」）。
+  //   ⇒ 被拒路径断言**精确 0**（禁写成「0 或 1」/`>=0`：那等于取消判据）。
+  assert.equal(st.readGovernance('sess-g1').execToolCount ?? 0, execBefore, '被拒绝不计数（精确前值，拒态零写）');
   // 非执行型放行且不计数（治理/查询，防死锁）
   assert.equal(call('read'), undefined);
   assert.equal(call('wave_plan'), undefined);
   assert.equal(call('batch_status'), undefined);
-  assert.equal(st.readGovernance('sess-g1').execToolCount, execBefore + 1, '非执行型放行不计数（须仍为前值 +1，G6）');
+  assert.equal(st.readGovernance('sess-g1').execToolCount ?? 0, execBefore, '非执行型放行亦不计数（精确前值）');
+  // 【对照组·必写】「被拒不计数」≠「不再计数」：必须有**放行路径精确 +1**，
+  //   否则「一律不计数」也能让上面两条绿（假绿）。
+  st.writeGovernance('sess-g1', {
+    lastAssign: { form: 'A', difficulty: 'A', rationale: 'G6 放行路径对照', at: new Date().toISOString() },
+  });
+  assert.equal(call('pwsh'), undefined, '已评估 ⇒ 执行型放行');
+  assert.equal(st.readGovernance('sess-g1').execToolCount ?? 0, execBefore + 1, '放行路径照常计数（精确前值 +1，与上面的 0 成对）');
 });
 
 test('guard: C 类未建批 → 执行型被拒（门禁 2）；wave_plan 建批 → pendingBatch=false 放行', async () => {
@@ -527,10 +538,19 @@ test('guard: 未评估态只读 shell 放行且不计数；写命令仍拦（只
   // 写命令：仍被门禁 1 拦（只读面不是免检通道）
   const w = call('pwsh', { command: 'Set-Content out.txt -Value x' });
   assert.ok(w && w.includes('[task-difficulty-gate]') && w.includes('才能执行 pwsh'));
-  assert.equal(st.readGovernance('sess-ro').execToolCount, execRoBefore + 1, '执行型被拒也计数（相对前值 +1，G6）');
+  // 【G4-A · I-26 语义变更对齐】被拒**精确不计数**（拒态零写；与 mode-gate G2 同改法）
+  assert.equal(st.readGovernance('sess-ro').execToolCount ?? 0, execRoBefore, '执行型被拒亦不计数（精确前值，拒态零写）');
   // shell 工具但缺 command / 含写入重定向 → fail-closed（按执行型处理）
   assert.ok(call('pwsh', {}));
   assert.ok(call('pwsh', { command: 'Get-Content a.md > b.txt' }));
+  // 【对照组·必写，置于末位】「被拒不计数」≠「不再计数」：放行路径必须**精确 +1**。
+  //   ⚠ 必须放在上面几条「未评估 ⇒ 拒」之后：一旦种下 `lastAssign`（已评估），后续调用都会放行，
+  //   把它们排在这里之前会让那几条 fail-closed 断言失去拒因（本用例首版即踩此坑）。
+  st.writeGovernance('sess-ro', {
+    lastAssign: { form: 'A', difficulty: 'A', rationale: '只读侦察面放行对照', at: new Date().toISOString() },
+  });
+  assert.equal(call('pwsh', { command: 'Set-Content out2.txt -Value y' }), undefined, '已评估 ⇒ 写命令放行');
+  assert.equal(st.readGovernance('sess-ro').execToolCount ?? 0, execRoBefore + 1, '放行路径照常计数（精确前值 +1，与上面的 0 成对）');
 });
 
 test('guard: 旧记录（有 form 无 difficulty）按未评估处理（升级后一次性重评）', () => {
@@ -620,9 +640,16 @@ test('assign_check: 有解释的偏离 → 放行 + derived/override 落盘（Q-
   const st = createStore(root);
   const { tools: tls } = makeGuarded({ store: st, root });
   const by = withDefaultTeam(Object.fromEntries(tls.map((t) => [t.name, t])));
-  // ① 有解释：rationale 命中三要素（特征面引用 / 例外 / 方向与上限）→ 放行
+  // ① 有解释：**结构化 deviation** 承载三要素（特征面引用 / 例外 / 方向与上限）→ 放行
+  //   【G5-L 乙改 · 规格波前】三要素不再从 rationale 自由文本提取 ⇒ 必须补 deviation；
+  //   断言**未放宽**（仍要求 override:true / derived:'A' 落盘），只是把「解释」的载体换成结构化字段。
   const rationale = '偏离：四项 C 判据（parallel/multiRole/gate/recoverable）全为 false，本例的例外是三条修正线虽串行但耗时长，仍升档建批，上限不超过 C';
-  const r = await by.assign_check.execute({ difficulty: 'C', rationale }, { agent: { session: { id: 'sess-ovr' } } });
+  const deviation = {
+    feature: '依据面：parallel/multiRole/gate/recoverable 四项 C 判据全为 false（机械推导为 A）',
+    counterpoint: '例外：三条修正线虽可串行，但每条跨多文件且需独立验收 ⇒ 单线程直做风险过高',
+    direction: '偏离方向：升档至 C 建批；上限：不超过 C，不泛化为全批',
+  };
+  const r = await by.assign_check.execute({ difficulty: 'C', rationale, deviation }, { agent: { session: { id: 'sess-ovr' } } });
   assert.equal(r.difficulty, 'C');
   assert.equal(r.derived, 'A', 'derived 由引擎机械推导（不靠自述 ⇒ 可核事实）');
   assert.equal(r.override, true);
@@ -726,9 +753,15 @@ test('AC-7（关键格②）+AC-4：声明 D 而通道轴=dispatch ⇒ 拒（逐
   assert.equal(h.st.readGovernance('sess-d-chan').lastAssign, null, 'AC-7：拒态零治理写入（lastAssign 不落盘）');
 
   // ② 补齐通道三要素 ⇒ 放行，且为「唯一保留的偏离」：override=true / overrideKind='channel'
+  //   【G5-L 乙改 · 规格波前】三要素改由结构化 `deviation` 承载（rationale 只是判据正文）。
   const rationale = '测试：本任务引用 team 通道与 durable 席位面；为何 durable 而非 subagent（需事件队列交接，'
     + '而非一次性派发）；通道方向与上限：不泛化为全批，team 面缺失须显式降级为 C';
-  const r = await h.by.assign_check.execute({ difficulty: 'D', rationale, parallel: true }, h.ctx);
+  const channelDeviation = {
+    feature: '通道依据：需 team 事件队列交接与 durable 席位面（通道轴机械推导为 dispatch）',
+    counterpoint: '为何 durable 而非 subagent：一次性派发无法承载跨轮席位与事件交接',
+    direction: '通道方向与上限：不泛化为全批；team 面缺失须显式降级为 C（禁静默降级）',
+  };
+  const r = await h.by.assign_check.execute({ difficulty: 'D', rationale, parallel: true, deviation: channelDeviation }, h.ctx);
   assert.equal(r.derivedChannel, 'dispatch', 'durableSeats 缺省 ⇒ 通道轴 dispatch（偏离根因）');
   assert.equal(r.derived, 'C', 'parallel=true ⇒ 难度轴 C（与通道轴独立）');
   assert.equal(r.override, true, 'D 通道变体 = 唯一保留的偏离');
@@ -740,11 +773,17 @@ test('AC-7（关键格②）+AC-4：声明 D 而通道轴=dispatch ⇒ 拒（逐
 
 test('AC-8（Q-5 留痕提示）：fixedRole=true 而判 B ⇒ 不硬拒 + notice 含 WARN_DTIER_FIXED_ROLE_AS_LOWER + 档位照写', async () => {
   const h = makeDAxisHarness('punky-gov-dfixed-', 'sess-d-fixed');
-  // 偏离支（声明 B 而机械推导 C）仍按存量语义过**原三要素**：needIsolation（① 特征面）/「本例的例外」（②）/「上限」（③）
+  // 偏离支（声明 B 而机械推导 C）仍按存量语义过三要素，但**载体改为结构化 deviation**
+  //   【G5-L 乙改 · 规格波前】① needIsolation（特征面）② 本例的例外 ③ 上限 —— 三条搬进 deviation 子键。
   const rationale = '测试：本任务角色与流程固定（三层席位形态）但本次仅单步 needIsolation 调研，'
     + '本例的例外是固定形态尚未落到席位面；判据偏保守不升档，上限不超过 B';
+  const tierDeviation = {
+    feature: '依据面：needIsolation=true（机械推导为 C）',
+    counterpoint: '例外：固定形态尚未落到席位面，本次仅单步调研 ⇒ 机械升档不成立',
+    direction: '偏离方向：不升档，维持 B；上限：不超过 B',
+  };
   const r = await h.by.assign_check.execute(
-    { difficulty: 'B', fixedRole: true, needIsolation: true, rationale, scope: 'full' }, h.ctx);
+    { difficulty: 'B', fixedRole: true, needIsolation: true, rationale, scope: 'full', deviation: tierDeviation }, h.ctx);
 
   assert.match(String(r.notice ?? ''), /WARN_DTIER_FIXED_ROLE_AS_LOWER/, 'Q-5：固定形态判低档须留痕提示码');
   assert.match(String(r.notice ?? ''), /固定任务形态/, '提示须点明成因（固定任务形态）');

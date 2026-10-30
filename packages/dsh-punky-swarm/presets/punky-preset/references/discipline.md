@@ -22,7 +22,7 @@
 
 - **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）；**`managerPlan` 默认 `raise`**，确需 Leader 直驱才显式写 `leader-direct`。
 - **判据必填（供审计）**：`assign_check({ difficulty, rationale, scope: "full" })` —— `rationale` **≥12 字**且写明**定档依据 + 已完成的只读侦察证据**；落 `governance.json` 的 `lastAssign` 与 `history` **双留痕**。
-- **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 含三要素：**① 引用具体特征面 ② 例外/反例 ③ 偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。**D 档偏离口径（2026-10-11 批 `d-override-fix-20261011`）**：D 不参与难度轴（`derived` 仍只取 `A`/`B`/`C`），引擎另设**独立通道轴** `derivedChannel`（`durableSeats:true` ⇒ `team`；否则 `dispatch`）。**D 的正当形态** = `difficulty:'D'` **且** `durableSeats:true`（通道轴 = `team`）⇒ **回归常规路径**（`override:false` / `overrideKind:null`），其 `rationale` **不需要**引用 A/B/C 特征词；**声明 D 而通道未落实**（未声明 `durableSeats` ⇒ 通道轴 = `dispatch`）⇒ 改走**通道三要素**（**① 引用通道/特征面 ② 为何 durable 而非 subagent ③ 通道方向与上限：不泛化为全批、team 面缺失须显式降级**），缺任一即拒（仍用 `GATE_DIFFICULTY_MISMATCH`，文案说「**通道偏离**」并逐项列缺）；**即使解释通过**，**建批面仍须** `channel:'team'` 或 `'mixed'`（否则拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`）。
+- **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 须给 `deviation` 结构化字段（`feature`/`counterpoint`/`direction`）：**`feature`=引用具体特征面、`counterpoint`=例外/反例、`direction`=偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。**D 档偏离口径（2026-10-11 批 `d-override-fix-20261011`）**：D 不参与难度轴（`derived` 仍只取 `A`/`B`/`C`），引擎另设**独立通道轴** `derivedChannel`（`durableSeats:true` ⇒ `team`；否则 `dispatch`）。**D 的正当形态** = `difficulty:'D'` **且** `durableSeats:true`（通道轴 = `team`）⇒ **回归常规路径**（`override:false` / `overrideKind:null`），其 `rationale` **不需要**引用 A/B/C 特征词；**声明 D 而通道未落实**（未声明 `durableSeats` ⇒ 通道轴 = `dispatch`）⇒ 改走**同一 `deviation` 结构化字段**（`feature`=引用通道/特征面、`counterpoint`=为何 durable 而非 subagent、`direction`=通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺任一即拒（仍用 `GATE_DIFFICULTY_MISMATCH`，文案说「**通道偏离**」并逐项列缺）；**即使解释通过**，**建批面仍须** `channel:'team'` 或 `'mixed'`（否则拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`）。
 - **可照抄模板（D 正当形态；**不要求**出现 A/B/C 特征词）**：
 
   ```js
@@ -59,7 +59,7 @@
 - **Manager 在册缺口的留痕面**：现役口径 = **建批期官方 roster 承抽**——声明（或缺省归一为）`managerPlan:'raise'` 的批，`wave_plan` 建批时读官方 roster（`ctx.get('agentTeams')` → `listMembers`）；roster 可读而**无约定名 `manager` 成员** ⇒ 落**观察事件** `gate.manager_roster_gap`（**非拒态**、不改相位），并把「声明值 × roster 事实」**双面回显**（`wave_plan.managerRoster` / `batch_status.managerRoster`）。声明 `leader-direct` 的批**不触发**。读端据此判「**默认拉起是否落实**」。
 
 - **拉起时序**：引擎侧**无派发面硬门**（原「未登记 Manager 即拒派」的码已退役、`lib/**` 零命中）⇒ 现行三条：① **`managerPlan` 缺省仍为 `raise`**（随 `batch.assembly` 持久化、`gate_status` 可读 ⇒ 引擎可核事实）；② 未登记 Manager **不拦派发**，缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised`，幂等；**不构成在册判据**）。⇒ 「先拉起再派 exec」的约束力**自引擎门降为纪律**（0f / 0g 原文存档于工作区 `reports/onto-suspended-items-snapshot-20260926.md` §三）。
-- 委派前用 `assign_check({ difficulty, rationale, scope: "full" })` **主动写入**难度 A/B/C/D（档位定义与判据契约见 §0；**D 档的通道轴 `derivedChannel`**、偏离三要素与其正当形态亦见 §0）；**C / D 类必须 `wave_plan` 建批**。
+- 委派前用 `assign_check({ difficulty, rationale, scope: "full" })` **主动写入**难度 A/B/C/D（档位定义与判据契约见 §0；**D 档的通道轴 `derivedChannel`**、偏离字段 `deviation`（`feature`/`counterpoint`/`direction`）与其正当形态亦见 §0）；**C / D 类必须 `wave_plan` 建批**。
 - 三层批次按 **plan → exec → audit** 分层，门禁在三个时点把关：
 
 | 时点 | 判定 | 拒载码 / 后果 |
@@ -131,7 +131,7 @@
 > **编号定义面**：本节是 **`D-1`** 的唯一权威定义面——正文里出现的「§0i D-1」一律指本节的 D-1 条；别处只作引用，不另立定义。
 
 - **D-1（执行单元 = lane）**：凡进入批次治理面的执行动作，其唯一合法载体是 `wavePlan` 里的 lane；**禁止**用裸 `subagent` 把活绕开批次去跑。**依据**：产物声明面（`produce` / `outputs`）、交接边（`handoffs`）、结算记录三者**全部挂在 lane 上**——绕开 lane 的执行没有可声明的对象，于是产物无归属、交接无入边、结算无主体；这不是「流程不规范」而是**证据缺失**，事后**无法复原**。
-- **坑一：把「Leader 能自己做」读成「Leader 该自己做」**。后果：落实者与判定者合为一体，验收面失去独立性；该动作又不进 lane ⇒ 不占预算、不过门禁、不留中间锚，长跑时静默失控。**判定口径**：分界**不看难度感受、不看工作量大小**，唯一来源是 §0 的难度轴（档位定义与偏离三要素在那里，本节不复述）；一经判为建批档，执行主体就是 lane，Leader 只保留拆解 / 派发 / 裁决三件事。
+- **坑一：把「Leader 能自己做」读成「Leader 该自己做」**。后果：落实者与判定者合为一体，验收面失去独立性；该动作又不进 lane ⇒ 不占预算、不过门禁、不留中间锚，长跑时静默失控。**判定口径**：分界**不看难度感受、不看工作量大小**，唯一来源是 §0 的难度轴（档位定义与偏离字段 `deviation` 在那里，本节不复述）；一经判为建批档，执行主体就是 lane，Leader 只保留拆解 / 派发 / 裁决三件事。
 - **坑二：拿「活太小」当临时开子代理的理由**。后果：任务包六要素、写域互斥、单写者锁**同时落空**——两个子代理并行改同一文件时没有仲裁面，冲突只能等人工事后发现。**判定口径**：确需临时拆活时走**细拆补 lane**（图变更入口），让新任务与既有任务共用同一套依赖、锁与结算语义；**拆不动说明拆解粒度不够**，不是执行形态可以放宽。
 - **坑三：进度快照攒到最后一次性补写**。后果：监管面只看得见「还没结算」、看不见长到哪一步；进程崩溃后恢复面**没有中间锚**——已完成的子步骤无法自证做过，重做成本全额再付一次。**判定口径**：一子步骤一快照；快照的判据是**可独立读取**（含步骤序号与产物落点），不是「有文件就算」——攒批后补写的快照在时间上不可信，与没写等价（复核时按「无快照」处理）。
 

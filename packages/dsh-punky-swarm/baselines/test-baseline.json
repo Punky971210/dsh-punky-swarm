@@ -19,7 +19,7 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 48,
       "blankLines": 38,
-      "lines": 553,
+      "lines": 570,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -184,10 +184,18 @@
       "tests": 12,
       "todos": 0
     },
+    "test/assign-deviation-structured.test.js": {
+      "asserts": 29,
+      "blankLines": 13,
+      "lines": 166,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/assign-tier-downgrade-guard.test.js": {
-      "asserts": 72,
-      "blankLines": 32,
-      "lines": 326,
+      "asserts": 77,
+      "blankLines": 33,
+      "lines": 341,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -961,9 +969,9 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 246,
+      "asserts": 250,
       "blankLines": 54,
-      "lines": 813,
+      "lines": 852,
       "tautologies": 0,
       "tests": 33,
       "todos": 0
@@ -1897,7 +1905,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T12:11:15Z",
+  "generatedAt": "2026-10-30T12:40:52Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1908,15 +1916,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G5-P1 读放大收敛：gate_status 列举路径改用已存在的批级单点 store.gateStatusMapOfBatch（一次读批 -> {lane:gateView}），替代逐 lane store.gateStatus（1+N 次读盘，O(N) 放大）。单 lane 路径保持原实现不变（保护未知 id 的 orphan 视图语义）。同一夹具 14 lane 实测：p50 12.426ms -> 4.463ms（-64%，2.78x）。新增 test/gate-status-read-amp.test.js 5 例，核心判据为读盘次数不随 lane 数增长（确定性判据，非计时），并含桩有效性阳性对照与变异反证",
+  "reason": "G5-L 波前收尾：governance 组1/组2 构造对齐 + accept-pack2-vocabulary 注入面窄规则 + assign-deviation-structured 新增",
   "schema": 1,
   "totals": {
-    "asserts": 11594,
-    "blankLines": 6361,
-    "files": 237,
-    "lines": 67194,
+    "asserts": 11632,
+    "blankLines": 6375,
+    "files": 238,
+    "lines": 67431,
     "tautologies": 0,
-    "tests": 2387,
+    "tests": 2394,
     "todos": 4
   }
 }
