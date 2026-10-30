@@ -137,6 +137,17 @@ function removeWorktreeDir(repo, dir) {
   runGit(repo, ['worktree', 'prune']);
 }
 
+// worktree 操作失败冒泡：message 含 op + path + 原 message，挂 err.worktreeOp 四字段；五值穷尽（禁 other/unknown 兜底）
+const WORKTREE_OPS = Object.freeze(['list', 'remove', 'add-branch', 'add-existing-branch', 'show-ref']);
+const gitFailureOf = (r) => ({ message: String(r?.stderr ?? '').trim() || ('git exit ' + String(r?.code)), code: r?.code });
+function worktreeOpError(op, dir, e) {
+  if (!WORKTREE_OPS.includes(op)) throw new Error('unknown worktree op: ' + op + '（合法值：' + WORKTREE_OPS.join('/') + '）');
+  const base = String(e?.message ?? e);
+  const err = new Error(`${op} failed: ${dir} — ${base}` + (e && 'code' in e ? ` (exit ${e.code})` : ''));
+  err.worktreeOp = { op, path: dir, originalMessage: base, gitExit: e && 'code' in e ? e.code : undefined };
+  return err;
+}
+
 // 集成分支 worktree（幂等）：已注册 → 复用（保留已合并产物）；残留 → 清理重建
 // 分支已存在（崩溃残留）→ 挂载既有分支（保全已合并历史），不存在 → -B 新建
 function ensureOrch(root, sessionId, batchId) {
@@ -147,7 +158,7 @@ function ensureOrch(root, sessionId, batchId) {
   const hasBranch = runGit(repo, ['show-ref', '--verify', '--quiet', 'refs/heads/' + ORCH_BRANCH]).ok;
   const args = hasBranch ? ['worktree', 'add', orch, ORCH_BRANCH] : ['worktree', 'add', '-B', ORCH_BRANCH, orch];
   const add = runGit(repo, args);
-  if (!add.ok) throw new Error('worktree add (orch) failed: ' + add.stderr);
+  if (!add.ok) throw worktreeOpError(hasBranch ? 'add-existing-branch' : 'add-branch', orch, gitFailureOf(add));
   return { repo, orch };
 }
 
@@ -168,7 +179,7 @@ function createLaneWorktree(root, sessionId, batchId, laneId) {
     ? ['worktree', 'add', dir, branch]
     : ['worktree', 'add', '-b', branch, dir, ORCH_BRANCH];
   const add = runGit(repo, args);
-  if (!add.ok) throw new Error('worktree add (lane ' + laneId + ') failed: ' + add.stderr);
+  if (!add.ok) throw worktreeOpError(hasBranch ? 'add-existing-branch' : 'add-branch', dir, gitFailureOf(add));
   return { repo, dir, branch, reused: false, reason: (residualDir || hasBranch) ? 'recreated-after-residual' : 'created' };
 }
 

@@ -1408,6 +1408,14 @@
       "tests": 13,
       "todos": 0
     },
+    "test/run-scoped-cred-expiry.test.js": {
+      "asserts": 30,
+      "blankLines": 20,
+      "lines": 136,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/s2-prime-wake-probe.test.js": {
       "asserts": 27,
       "blankLines": 28,
@@ -1752,6 +1760,14 @@
       "tests": 20,
       "todos": 0
     },
+    "test/worktree-merge-fail-escapes.test.js": {
+      "asserts": 16,
+      "blankLines": 11,
+      "lines": 145,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/worktree-tools.test.js": {
       "asserts": 102,
       "blankLines": 26,
@@ -1769,7 +1785,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-29T23:46:13Z",
+  "generatedAt": "2026-10-30T00:14:35Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1780,15 +1796,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G3-B3 S4（MCP 数据面）：新建 lib/mcp/data-plane-server.js（薄包装，复用 ctx.webServer POST /mcp，loopback 三值白名单，唯一派发点 ctx.tools.execute）；暴露面 = kind{blackboard,read} ∩ 实际注册面（惰性求交，因安装早于工具注册）+ HOST_PROVIDED_TOOLS 豁免；logs 关 19/开 20 为真开关；installed 三态（返回非函数 ⇒ false）；reuse 内已修双层包裹与业务错映射；新增 test/mcp-data-plane.test.js（10 例，含性质断言「∀ 宣告即可达」）；f2-lane-claim-warn 改按 lane-lock 主题过滤",
+  "reason": "G3-B4 run-scoped 凭据（lib/credentials/run-scoped.js 173 行：键=sourceRunId 禁宿主 runId、双路过期=subagent/end 钩子+惰性 expiresAt、resolve 不抛返回 null、不写盘不落事件、零新依赖）+ G3-B5 worktree 错误冒泡（lane-tools.js 就地改：worktreeOpError op 五值、err.worktreeOp 四字段、gitExit 不吞、成功路径零变化、residualDir 顺序保持）+ 新增 test/run-scoped-cred-expiry.test.js(7) 与 test/worktree-merge-fail-escapes.test.js(4)",
   "schema": 1,
   "totals": {
-    "asserts": 11258,
-    "blankLines": 6146,
-    "files": 221,
-    "lines": 65389,
+    "asserts": 11304,
+    "blankLines": 6177,
+    "files": 223,
+    "lines": 65670,
     "tautologies": 0,
-    "tests": 2299,
+    "tests": 2310,
     "todos": 4
   }
 }
