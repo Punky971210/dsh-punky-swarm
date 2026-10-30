@@ -288,6 +288,14 @@
       "tests": 4,
       "todos": 0
     },
+    "test/batch-read-map.test.js": {
+      "asserts": 17,
+      "blankLines": 13,
+      "lines": 146,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/batch-store.test.js": {
       "asserts": 86,
       "blankLines": 28,
@@ -302,6 +310,14 @@
       "lines": 108,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/binding-zero-write-e2e.test.js": {
+      "asserts": 14,
+      "blankLines": 15,
+      "lines": 136,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/budget.test.js": {
@@ -1905,7 +1921,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T13:21:13Z",
+  "generatedAt": "2026-10-30T13:54:28Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1916,15 +1932,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G5-L-B 拒码语义拆分（用户裁定旧码不与新码共存）：handoff_submit 缺产物拆出 GATE_HANDOFF_ARTIFACT_MISSING，GATE_HANDOFF_MISSING 保留为缺边语义（entry/settle/建批期三处）；同步 discipline 拒码表；三个测试断言更新；contracts.ts union 收码待下次受控 build",
+  "reason": "G5 收口施工批：QT-2a 批级批量读面（store.readBatchMap + batch_status ids 参数，ids>=2 目录扫 0；单批路径保留退不退化）+ QT-2b P-2 纯测量（结论暂不立项：N=20 11.5ms 系一次映射-miss 重建、N 次批读为必要成本）+ QT-4 I-04 端到端零写入真跑（真实 buildWavePlan+createBatch 非裸 JSON，含 seedArtifacts 绕 entry 门；拒态 sha256+rev+mtimeMs 三指纹逐位相同、放行态 sha 变 rev+1、治理面不误伤）；新增 test/batch-read-map(7) + test/binding-zero-write-e2e(4)。带 preload 口径改动前后均 60 红（零新增）",
   "schema": 1,
   "totals": {
-    "asserts": 11633,
-    "blankLines": 6375,
-    "files": 238,
-    "lines": 67432,
+    "asserts": 11664,
+    "blankLines": 6403,
+    "files": 240,
+    "lines": 67714,
     "tautologies": 0,
-    "tests": 2394,
+    "tests": 2405,
     "todos": 4
   }
 }

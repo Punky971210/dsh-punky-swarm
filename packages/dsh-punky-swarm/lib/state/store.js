@@ -348,8 +348,37 @@ function composeStore(cx) {
     sessionsDir, gates, corruptRegistry, archive,
   } = cx;
 
+  // 【QT-2a】批级**批量读面**（纯读；一个入口三种调用形态，避免读端各自拼目录扫描）：
+  //   · `ids` 缺省（含 `[]`）⇒ `listBatches` **恰 1 次** + 逐批 `readBatch`（= 现有列表语义，逐字等价）；
+  //   · `ids.length === 1` ⇒ 直接透传单批 `readBatch`（**不**走批量）⇒ 单批路径零附加成本；
+  //   · `ids.length >= 2` ⇒ **不调 `listBatches`**（那是目录扫描），只读给定 id。
+  //   缺批 / 损坏批 ⇒ **不抛**，缺失 id 不入 Map（读端语义：查不到就是没有，与 `readBatch` 返回 null 同族）。
+  //   ⚠ 计数以 **store 层调用**为准；OS 层 syscall 未直接观测（无 strace 面）。
+  const readBatchMap = (sessionId, ids) => {
+    const out = new Map();
+    const wanted = Array.isArray(ids) && ids.length > 0 ? ids : null;
+    if (wanted === null) {
+      for (const id of listBatches(sessionId)) {
+        const b = readBatch(sessionId, id);
+        if (b) out.set(id, b);
+      }
+      return out;
+    }
+    if (wanted.length === 1) {
+      const b = readBatch(sessionId, wanted[0]);
+      if (b) out.set(wanted[0], b);
+      return out;
+    }
+    for (const id of wanted) {
+      const b = readBatch(sessionId, id);
+      if (b) out.set(id, b);
+    }
+    return out;
+  };
+
   return {
     withBatchRowLock, // I-23 行锁单点（进程内 per-batch 串行；跨进程由 rev CAS 兜底）。I-26 只调用它，禁另建
+    readBatchMap, // QT-2a：批级批量读面（纯读；ids 缺省=list 1 次 / =1 透传 / ≥2 不扫目录）
     commitBatchLocked, // I-26：串行 + 写前拒绝的唯一异步入口（内部 = withBatchRowLock → commitBatch）
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,

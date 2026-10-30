@@ -48,7 +48,7 @@ export function buildBatchStatusTools(cx) {
     defineTool({
       name: "batch_status",
       description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 状态面派生视图 lanesState（lane→成员态映射，原 lanes 保留）/ danglingLanes（**悬挂成员**：批次已终态而成员非终态的 lane 名单，恒显、不产候选、不受僵尸批过滤）。悬挂成员是「批次已了结、成员未了结」的信号，供 Manager/Leader 只读核查收口遗漏。不传 batchId 则列出当前会话全部批次。可用 session 指定会话。`chain` 回显 = 建批期声明投影 + 历史 `chain.step` 事件（**不是**运行期真源）；**`chain` = 建批期展开 + 静态校验；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**（逐边取件见 `handoff_view`）。",
-      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"session":{"type":"string","description":"批次归属会话"}},
+      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"**批量读面（QT-2a）**：给批次 ID 清单时只读这些批（≥2 件**不扫目录**）；恰 1 件透传单批读取；缺省/空数组 ⇒ 列全部（与不传 batchId 等价）。与 `batchId` 同给时 `batchId` 优先。"},"session":{"type":"string","description":"批次归属会话"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"managerRoster":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true}}},
         // 【task-27】渲染面**必须**显示门态与成员态来源（缺省关是策略、不得隐形；P2-B 两字段由此获得消费者）：
@@ -95,8 +95,15 @@ export function buildBatchStatusTools(cx) {
           settle: hgState.settle ? 'enforced' : 'observation',
           source: hgState.source,
         };
+        // 【QT-2a】批量读面（多批分支）：`ids` ≥2 时**不扫目录**（`store.readBatchMap` 内部按 id 读）；
+        //   输出键集/字段与下面的列表分支**逐字同形**（只改读取方式，不改投影形状）。
+        if (!args.batchId && Array.isArray(args.ids) && args.ids.length > 0) {
+          const map = store.readBatchMap(sessionId, args.ids);
+          return { sessionId, batches: [...map].map(([id, b]) => ({ batchId: id, sessionId, phase: b.phase, lanes: b.lanes, ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation })), ...stateAnnotation, handoffGate: handoffGateView };
+        }
         if (!args.batchId) {
-          return { sessionId, batches: store.listBatches(sessionId).map((id) => { const b = store.readBatch(sessionId, id); return { batchId: id, sessionId, phase: b.phase, lanes: b.lanes, ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation }; }), ...stateAnnotation, handoffGate: handoffGateView };
+          const map = store.readBatchMap(sessionId);
+          return { sessionId, batches: [...map].map(([id, b]) => ({ batchId: id, sessionId, phase: b.phase, lanes: b.lanes, ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation })), ...stateAnnotation, handoffGate: handoffGateView };
         }
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
