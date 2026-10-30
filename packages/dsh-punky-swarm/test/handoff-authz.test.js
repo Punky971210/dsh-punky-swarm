@@ -361,18 +361,18 @@ test('B-4 R2-c/R2-d 旧值留痕：history 追加式（长度随覆盖次数严�
 
 // ── 既有行为零回归（非 owner 面之外的结构性拒态保持不变）──────────────────────
 
-test('A-5 结构性拒态未漂移：缺产物仍以 GATE_HANDOFF_MISSING 拒（R-1 未抢占该码）', async () => {
+test('A-5 结构性拒态：缺产物以 GATE_HANDOFF_ARTIFACT_MISSING 拒（R-1 未抢占该码；G5-L-B 拆码后口径）', async () => {
   const h = makeHarness();
   try {
     await mkBatch(h, 'a5');
     const deny = await caughtCode(() => h.byName.handoff_submit.execute(
       { batchId: 'a5', from: 'p1', to: 'e1', artifacts: ['exec/ghost.md'], assertions: ['x'] }, SESS,
     ));
-    assert.equal(deny.code, 'GATE_HANDOFF_MISSING', '缺产物拒态沿用既有码：' + deny.message);
+    assert.equal(deny.code, 'GATE_HANDOFF_ARTIFACT_MISSING', '缺产物拒态用产物专用码：' + deny.message);
     assert.match(deny.message, /exec\/ghost\.md/, '仍须回显缺哪件产物');
     assert.equal(
-      eventsOf(h.store, 'a5').some((e) => e.type === EVT.EVT_LANE_HANDOFF_GAP && e.code === 'GATE_HANDOFF_MISSING'),
-      true, '结构性拒态仍照落 lane.handoff.gap（R-1 之前行为逐字不变）',
+      eventsOf(h.store, 'a5').some((e) => e.type === EVT.EVT_LANE_HANDOFF_GAP && e.code === 'GATE_HANDOFF_ARTIFACT_MISSING'),
+      true, '缺口事件码须与拒态一致（缺产物专用码）',
     );
   } finally { fs.rmSync(h.root, { recursive: true, force: true }); fs.rmSync(h.teamsRoot, { recursive: true, force: true }); }
 });

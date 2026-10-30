@@ -993,9 +993,9 @@
       "todos": 0
     },
     "test/handoff-gate.test.js": {
-      "asserts": 89,
+      "asserts": 90,
       "blankLines": 38,
-      "lines": 451,
+      "lines": 452,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1905,7 +1905,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T12:40:52Z",
+  "generatedAt": "2026-10-30T13:21:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1916,13 +1916,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G5-L 波前收尾：governance 组1/组2 构造对齐 + accept-pack2-vocabulary 注入面窄规则 + assign-deviation-structured 新增",
+  "reason": "G5-L-B 拒码语义拆分（用户裁定旧码不与新码共存）：handoff_submit 缺产物拆出 GATE_HANDOFF_ARTIFACT_MISSING，GATE_HANDOFF_MISSING 保留为缺边语义（entry/settle/建批期三处）；同步 discipline 拒码表；三个测试断言更新；contracts.ts union 收码待下次受控 build",
   "schema": 1,
   "totals": {
-    "asserts": 11632,
+    "asserts": 11633,
     "blankLines": 6375,
     "files": 238,
-    "lines": 67431,
+    "lines": 67432,
     "tautologies": 0,
     "tests": 2394,
     "todos": 4

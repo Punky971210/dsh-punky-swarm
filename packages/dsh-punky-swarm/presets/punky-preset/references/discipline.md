@@ -1015,7 +1015,8 @@
 |---|---|---|
 | `GATE_ENTRY_MISSING` | exec 派发前 lane 的 `consume` 产物缺失 | **拒派**（lane 留 pending） |
 | ~~`GATE_EXEC_INPUT_MISSING`~~ | **已删净（2026-09-27 批 `retire-team-chain-20260927`）**——原判据**全部取自团队资产声明**（`flows.exec.consumes_required` / `consumes_required_per_lane` 的层前缀覆盖）⇒ 随资产面删净（`lib/**` 零字面量含注释；**不在退役锁登记范围**内——锁只覆盖 `TEAM_ASSET_*` 全族 + `teamsRoot` 族） | **exec 输入面的一般纪律不变**：exec lane 的 `consume` 仍受 **entry 门 `GATE_ENTRY_MISSING`** 强制（引擎默认面） |
-| `GATE_HANDOFF_MISSING` | 下游 lane **入边交接未 `submitted`**（建批期 `deps` 已声明，但上游未 `handoff_submit`）或交接产物不在场 | **拒派**（缺口同时落 `lane.handoff.gap` 事件；存量无 `batch.handoffs` 的历史批走 `legacy` 放行 + 留痕） |
+| `GATE_HANDOFF_ARTIFACT_MISSING` | **缺产物**：`handoff_submit` 时声明的 `artifacts` 有不在场件（或逃逸产物根） | **拒提交**（缺口同时落 `lane.handoff.gap` 事件） |
+| `GATE_HANDOFF_MISSING` | **缺边**：下游 lane **入边交接未 `submitted`**（建批期 `deps` 已声明，但上游未 `handoff_submit`）｜结算时该交未交｜建批期 `deps` 无交接声明来源 | **拒派 / 拒结算 / 拒建批**（缺口同时落 `lane.handoff.gap` 事件；存量无 `batch.handoffs` 的历史批走 `legacy` 放行 + 留痕） |
 | `GATE_TARGET_MISSING` | lane 声明 `targets`，merged 前某 target **未落盘** | **拒 merged** |
 | `GATE_TARGET_UNCHANGED` | 声明的 target 已落盘但**未变更** | **拒 merged** |
 | `GATE_PLAN_CONTRACT` | plan 层 spec 缺必填裸标题（`## 验收标准` / `## 约束`，**逐字**匹配） | **拒 merged** |

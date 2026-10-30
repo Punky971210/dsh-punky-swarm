@@ -143,15 +143,16 @@ test('P1-H1b 产物不存在：交接已提交但 artifacts 的路径不在场 �
   } finally { fs.rmSync(h.root, { recursive: true, force: true }); fs.rmSync(h.teamsRoot, { recursive: true, force: true }); }
 });
 
-test('P1-H1c 产物不在场时提交被拒：handoff_submit 缺产物 ⇒ GATE_HANDOFF_MISSING + 缺口留痕', async () => {
+test('P1-H1c 产物不在场时提交被拒：handoff_submit 缺产物 ⇒ GATE_HANDOFF_ARTIFACT_MISSING（缺产物专用码；GATE_HANDOFF_MISSING 现专指缺边）+ 缺口留痕', async () => {
   const h = makeHarness();
   try {
     await mkBatch(h, 'h1c');
     await assert.rejects(
       () => h.byName.handoff_submit.execute({ batchId: 'h1c', from: 'p1', to: 'e1', artifacts: ['exec/ghost.md'], assertions: ['x'] }, SESS),
       (e) => {
-        assert.match(String(e.message), /^GATE_HANDOFF_MISSING/);
+        assert.match(String(e.message), /^GATE_HANDOFF_ARTIFACT_MISSING/, '缺产物须用产物专用码（G5-L-B 拆码，用户裁定旧码不与新码共存）');
         assert.match(String(e.message), /exec\/ghost\.md/, '须回显缺哪件产物：' + e.message);
+        assert.ok(!/^GATE_HANDOFF_MISSING/.test(String(e.message)), '不得再以「缺边」旧码表达「缺产物」');
         return true;
       },
     );
@@ -417,7 +418,7 @@ test('P1-H8b output.schema 一致性：handoff_submit **拒态**抛业务码（�
     try {
       await h.byName.handoff_submit.execute({ batchId: 'h8b', from: 'p1', to: 'e1', artifacts: ['exec/ghost.md'], assertions: ['x'] }, SESS);
     } catch (e) { msg = String(e.message); }
-    assert.match(msg, /^GATE_HANDOFF_MISSING/, '拒态须以业务码抛出：' + msg);
+    assert.match(msg, /^GATE_HANDOFF_ARTIFACT_MISSING/, '拒态须以业务码抛出（缺产物专用码）：' + msg);
     assert.ok(!/invalid output/.test(msg), '拒态**不得**表现为「返回值不满足 schema」的宿主校验错：' + msg);
     assert.ok(!/must be a string|must be a boolean|must be an integer|must be an array/.test(msg), '拒态不得夹带 schema 型校验错：' + msg);
   } finally { fs.rmSync(h.root, { recursive: true, force: true }); fs.rmSync(h.teamsRoot, { recursive: true, force: true }); }

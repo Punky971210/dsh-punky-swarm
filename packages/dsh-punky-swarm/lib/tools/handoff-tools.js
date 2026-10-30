@@ -115,14 +115,28 @@ export function buildHandoffTools(cx) {
           rOverwrite = r.overwrite === true;
           rPreviousAssertions = Array.isArray(r.previousAssertions) ? r.previousAssertions : [];
         } else {
-          // 缺口与拒态**同事件面留痕**（`lane.handoff.gap`）：与 store.recordHandoff 的拒态共用同一码/同一事件，
+          // 缺口与拒态**同事件面留痕**（`lane.handoff.gap`）：与 store.recordHandoff 的拒态共用同一事件，
           //   保证「谁在什么时候因缺哪件产物被拒」在事件流里可核（不静默）。
+          //
+          // 【G5-L-B · 拒码拆分（用户裁定：旧码不与新码共存，以新码为准，不兼容旧批次）】
+          //   `GATE_HANDOFF_MISSING` 此前承担**四种**语义，排查者看到它无法判断该补产物还是补边：
+          //     ① 上游提交时**产物不在场** ← 本处
+          //     ② 下游开工时**入边未交**（`lib/state/gates/entry.js:125`）
+          //     ③ 结算时**该交未交**（`lib/state/gates/handoff.js:119`）
+          //     ④ 建批期 **deps 无交接声明来源**（`lib/wave-plan.js:862`）
+          //   ②③④ 语义相同（都 = 「缺边」）⇒ 保持旧码；**只有 ① 拆出**为新码。
+          //   ⇒ `GATE_HANDOFF_ARTIFACT_MISSING` = **缺产物**；`GATE_HANDOFF_MISSING` = **缺边**。
+          //   ⚠ 未收进 `lib/types/contracts.ts` 的 `GateErrorCode` 联合类型：该文件是**手写源**、
+          //   `.d.ts` 是 build 产物 ⇒ 收码须一次受控 build，与「build 只由 e1-ports 跑一次」冲突。
+          //   ⇒ 已登记 followup（下次受控 build 时一并收码）；`handoff-tools.js` 是 `.js`，
+          //   `check` 对 `.js` 无类型约束 ⇒ 当前不影响门禁。
           store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_HANDOFF_GAP, {
-            lane: args.to, code: 'GATE_HANDOFF_MISSING', missing: missingArtifacts,
+            lane: args.to, code: 'GATE_HANDOFF_ARTIFACT_MISSING', missing: missingArtifacts,
             problems: missingArtifacts.map((p) => '交接产物不在场：' + p),
           });
-          throw new Error('GATE_HANDOFF_MISSING: 交接产物不在场（' + missingArtifacts.join(', ')
-            + '）——请先落盘产物（批次产物根：' + dir + '）再提交交接。');
+          throw new Error('GATE_HANDOFF_ARTIFACT_MISSING: 交接产物不在场（' + missingArtifacts.join(', ')
+            + '）——请先落盘产物（批次产物根：' + dir + '）再提交交接。'
+            + '（口径：本码 = **缺产物**；`GATE_HANDOFF_MISSING` 现专指**缺边**——入边未声明/未提交。）');
         }
         // 写权转移（§7 判据③）：`from` 释放 / `to` 获取——与既有 `lane_claim`/`lane_release` **配对耦合**（勿另造锁）。
         //   失败只**降级为 hint**（不抛、不阻塞交接）：锁是运行期并发面、是否持有取决于当前派发方；
