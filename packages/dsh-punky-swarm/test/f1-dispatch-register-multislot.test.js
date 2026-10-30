@@ -252,6 +252,15 @@ test('T-3.7 A1-P1-05 非 running 的 member_status ⇒ 该 caller 队列清空�
 });
 
 // ── T-3.8 观察名单未变（本批零新增观察工具；防顺带扩面） ──
-test('T-3.8 A1-P1-05 观察名单未被本批扩面：仍恰 subagent / subagent_fork', () => {
-  assert.deepEqual([...DEFAULT_DISPATCH_TOOLS].sort(), ['subagent', 'subagent_fork']);
+test('T-3.8 A1-P1-05 观察名单：含三件派发入口，且已退役的 send_message 不得回名单', () => {
+  // 【G5-L-D 语义订正】原断言写死 ['subagent','subagent_fork'] 快照。
+  //   host-ports 批合法扩入 spawn_teammate（D 档团队模式的派发入口）—— 这是
+  //   「D 档 member.dispatch=0」的第一层根因修复点，**删掉它 D 档就回到 0**。
+  //   ⇒ 改为语义断言：必需项在场 + 已退役项不得回名单；不写死全量快照，
+  //      下次合法新增观察对象不必改本用例（但必需项仍受保护）。
+  const names = new Set(DEFAULT_DISPATCH_TOOLS);
+  for (const required of ['subagent', 'subagent_fork', 'spawn_teammate']) {
+    assert.equal(names.has(required), true, '观察名单必须含 ' + required);
+  }
+  assert.equal(names.has('send_message'), false, 'send_message 已退役，不得回名单');
 });

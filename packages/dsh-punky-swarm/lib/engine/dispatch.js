@@ -59,6 +59,8 @@ import { fileURLToPath } from 'node:url';
 import { issueLaneHandle, consumeLaneHandle, firstLineOf } from '../bridge/lane-handle.js';
 // 【P2 · arch-context】架构上下文注入件（独立成件；逻辑不进本文件 —— 本文件已逾千行）。
 import { renderArchContext } from './arch-context.js';
+// 【宿主端口面 · e3-agentport】成员执行面收进端口：引擎不再自己 `typeof rt.startActivation === 'function'` 判形态。
+import { createAgentPort } from '../host-ports/agent.js';
 // 派发登记事件常量（原在 `lib/tools/core.js` 侧引用；派发核心抽出后由本模块写，故此处直引）
 // 【2026-09-18 · Q-B 取消并发闸】原同址直引的 `EVT_GATE_CONCURRENCY_BLOCKED` 已从本模块写端移除（唯一写点
 //   随闸删除）；常量本体仍在 `lib/state/event-types.js` **冻结保留**（历史批磁盘事件面读端逐字不变）。
@@ -1024,20 +1026,30 @@ function trackOneShotRun(workerSessionId, run, warn) {
 //   **已传**，`lib/index.js` 的 `installTools` deps 面亦**已注入**同一 Map 引用
 //   （按符号检索 `dispatchIndex`，勿写死行号 —— 本批另一 lane 正在 `lib/index.js` 并行改动）。
 export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt, dispatchIndex }) {
-  // ⓿ 【2026-10-22 · A1-P1-01（规格「后期订正 1」）】宿主**形态前置**：探针单点 → 新形态**前置 fail-closed 拒派**。
+  // ⓿ 【2026-10-22 · A1-P1-01；2026-10-31 · e3-agentport 端口面改造】宿主**能力位前置**。
   //   位置**硬要求**：必须早于 ① `store.setMember(...,'running')` 与 ② 句柄发放（与下方 role 前置拒派同族）
   //   ⇒ 效果 = **零状态变更 / 零句柄发放 / 零 `member.dispatch` 事件**（工具调用直接失败，lane 仍 `pending`）。
-  //   语义：新宿主 `startActivation(spec)` **不承载** `request.toolFilter` / `request.persona`（宿主只按
-  //   `agentPreset` 组子会话 composition）⇒ 若照调，worker 会拿到**未收窄**的完整工具面（含治理工具）
-  //   ⇒ 按「能力位前置 / 不以弱换强」拒派（**不实现** `startActivation` 调用，避免死代码）。
-  //   迁移（Agent Preset 承载 `toolFilter`/`persona`）属单开批 F4，本批只拒派 + 给迁移指向。
-  //   ⚠ 探针只在**此处**算一次：`probe` 同时供下方 ③ 的降级分档 ⇒ 单次取值、单点判定（禁二次探）。
+  //   能力位判定**改问端口**（引擎不再自己 `probe.form`）：`createAgentPort` 内部判形态并**显式声明**
+  //   `narrowVia`（工具面/人格经哪条路生效）与 `depthVia`（深度经哪条路生效）。
+  //   ⚠ **表述订正（原三处有两处不准，取证见 `lib/host-ports/agent.js` 头）**：
+  //     · `toolFilter`：`startActivation` 的 `request`（= `Omit<SubagentStartRequest,'label'|'signal'>`）**确无此字段** ⇒ 收窄只能经 `agentPreset`（原表述 ✅ 对）；
+  //     · `persona`：宿主**无 `persona` 字段**，人格只能经 `agentPreset` 组 composition（原写「不承载 request.persona」⚠ 表述不准）；
+  //     · `maxDepth`：**`request.maxDepth` 原生可用**（`SubagentStartRequest.maxDepth?: number`，受 `capabilities.depthLimit` 约束）⇒ 原「不承载 maxDepth」**是错的**。
+  //   ⇒ 因此 activation 形态**不是「什么都做不了」**：**需要 `agentPreset` 承载收窄/人格、`maxDepth` 原生可用**。
+  //     仅当**解析不出 `agentPreset`**（无法保证按次收窄）时才拒派（「不以弱换强」不变）。
   const probe = subagentRuntimeProbeOf(ctx);
-  if (probe.form === 'activation') {
-    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 服务为 `startActivation(spec)` 形态，'
-      + '该新形态**不承载** `request.toolFilter` / `request.persona`（宿主按 agentPreset 组子会话 composition）'
-      + ' ⇒ 按「能力位前置 / 不以弱换强」**拒派**：照调会让 worker 拿到**未收窄**的完整工具面（治理工具不被 deny）；'
-      + ' 迁移方向 = 由 Agent Preset 承载 toolFilter/persona（单开批 F4 承接），本批不实现 `startActivation` 调用。'
+  const agentPort = createAgentPort(ctx, {
+    // activation 形态的收窄/人格来源：热更快照里的 `config.dispatch.agentPreset`（配置驱动，端口不猜）。
+    presetFor: () => (typeof liveConfig?.dispatch?.agentPreset === 'string' && liveConfig.dispatch.agentPreset.length > 0
+      ? liveConfig.dispatch.agentPreset
+      : null),
+  });
+  if (agentPort.available && agentPort.narrowVia === 'preset' && !agentPort.canNarrow({})) {
+    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 为 `startActivation(spec)` 形态，'
+      + '其 `request` **确不承载** `toolFilter`、宿主亦**无 `persona` 字段**（人格/工具面只能经 `agentPreset` 组 composition）；'
+      + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
+      + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**，无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
+      + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可经**新派发入口** `startActivation` 自派。'
       + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
   }
   // ⓿-b 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
@@ -1069,7 +1081,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   · `form==='start'` ⇒ 继续走下述 ④→ 旧路径 `rt.start(provider, request)`（逐字保留）
   //   · `form==='activation'` ⇒ **不可达**（函数头已前置拒派）
   //   · `form===null` ⇒ 降级「仅发句柄」：文案由 `spawnNoteOfProbe` 按**真实成因**分档（未注入 / 无启动入口）
-  if (probe.form !== 'start') {
+  if (!agentPort.available) {
     return { ...base, spawned: false, spawnNote: spawnNoteOfProbe(probe) };
   }
   const rt = probe.rt;
@@ -1151,7 +1163,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     const denyDropped = new Set();
     for (let attempt = 0; ; attempt++) {
       try {
-        start = await rt.start(provider, buildStartRequest({
+        // 【宿主端口面 · e3-agentport】形态分派**收进端口**（引擎不再自己判 `probe.form`）：
+        //   · `start` 形态 ⇒ 端口内部调 `rt.start(provider, request)`（旧路径逐字不动，含下方自愈重试）；
+        //   · `activation` 形态 ⇒ 端口内部组 `SubagentActivationSpec` 并调 `rt.startActivation(spec)`
+        //     （`request` 带 `agentPreset` ＋ `maxDepth`；**不带** `toolFilter`/`persona` —— 宿主 schema 无此字段）。
+        const builtRequest = buildStartRequest({
           batchId, lane, parent: exec.agent, prompt,
           // denyTools/persona 同样读**热更快照**；【2026-10-07 · P2】`role` 传已解析对象 ⇒
           //   ② persona 由 role 派生（R-4：`title` + `mission` + 工作方式），③ deny 并入 allow 反推集（R-5）。
@@ -1159,7 +1175,22 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
           extraDeny: [], // 已并入 denyAll（合并后再过滤，避免两路名单各有未知名时自愈失效）
           persona: liveConfig?.dispatch?.persona,
           role: roleData,
-        }));
+        });
+        if (agentPort.narrowVia === 'preset') {
+          // activation 形态：收窄/人格经 `agentPreset`，深度原生走 `request.maxDepth`。
+          start = (await agentPort.spawn({
+            provider,
+            label: builtRequest.label,
+            prompt,
+            parent: exec.agent,
+            signal: builtRequest.signal,
+            role: laneTask?.role,
+            persona: builtRequest.persona,
+            maxDepth: builtRequest.maxDepth,
+          })).run;
+        } else {
+          start = await rt.start(provider, builtRequest);
+        }
         break;
       } catch (e) {
         // 【P-2 修正（2026-09-24，独立复核发现）】宿主模板对 **≥2 个未知名** 用**复数**文案

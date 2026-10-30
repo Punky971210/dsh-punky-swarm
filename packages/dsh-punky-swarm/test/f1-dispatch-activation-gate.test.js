@@ -120,7 +120,10 @@ test('T-1.1 A1-P1-01 新形态 {startActivation} ⇒ 拒派 GATE_DISPATCH_CAPABI
       assert.match(String(err?.message), /startActivation/, '① 点明新形态入口名');
       assert.match(String(err?.message), /toolFilter/, '① 点明不被承载的收窄面 toolFilter');
       assert.match(String(err?.message), /不以弱换强/, '② 点明拒派判据');
-      assert.match(String(err?.message), /Agent Preset/, '③ 点明迁移承载方（单开批 F4）');
+      // 【host-ports 批语义订正】新文案用字段名 `agentPreset`（camelCase），
+      //   且已订正 maxDepth 表述；断言钉「指向承载方字段名 + 前置未配置条件」。
+      assert.match(String(err?.message), /agentPreset/, '③ 点明迁移承载方字段名 agentPreset');
+      assert.match(String(err?.message), /未配置/, '③′ 点明当前拒派前置条件（未配置即拒，fail-closed）');
       return true;
     },
   );

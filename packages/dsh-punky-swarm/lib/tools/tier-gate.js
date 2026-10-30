@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   档位门 G1 / pendingBatch 清理 / lane 锁路径 / 执行型工具名单 / 派发面 owner 取值。
 //   导出面经 `lib/tools/core.js` re-export 逐字保持（既有消费方零感知）。
 import { join } from 'node:path';
+import { createToolsPort } from '../host-ports/index.js';
 import { isReadOnlyShellCall, SHELL_TOOLS } from './readonly.js';
 // 批次终态判定**单点**（`lib/schema.js#isBatchTerminal`）：本批门禁 5 的「活跃批」判据复用该单点
 //   （与 `lib/state/store/governance.js#hasActiveBatch` **同源**）——禁另造第二套活跃判定。
@@ -154,8 +155,8 @@ export function installDifficultyGuard(ctx, deps) {
   const { store, config = {} } = deps;
   // 任务难度值门禁（引擎强制不依赖自觉）：执行型工具前置 guard
   // 同步签名 (execution) => string | undefined；execution 含 name / agent.session.id；返回 string 即拒绝
-  if (typeof ctx.tools?.guard === 'function') {
-    ctx.tools.guard((execution) => {
+  {
+    createToolsPort(ctx).installGuard((execution) => {
       // ② subagent 降级豁免（guard 开头）：subagent/subagent_fork 派发的 worker 会话
       //   （delegationDepth>0 或带 parentSession）继承 Leader 侧已评估的任务形态，难度门禁不重复评估——
       //   会话隔离（worker 无 Leader 侧 lastAssign）+ 同块并行时序下重复评估必然误拦。豁免仅限难度门禁，

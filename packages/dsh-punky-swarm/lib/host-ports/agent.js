@@ -1,0 +1,173 @@
+/*
+Copyright (C) 2025-2026 Punky
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+*/
+
+// 宿主端口面 · **成员执行面（agentRuntime）**：把「我们怎么要一个成员」收成**具名语义**端口。
+//
+// 设计纲（用户裁定）：引擎只管问适配器要功能；宿主差异全部关在适配层内。
+//   ⇒ 本文件是 `ctx.subagents` 的**唯一**合法消费面（引擎侧不得再 `typeof rt.startActivation === 'function'` 自己判形态）。
+//
+// 契约取证（**禁凭文档猜**；以下为实测来源）：
+//   `D:/DSH/kernel/0.2.1-rc.2/node_modules/@deepseek-ai/dsh-subagent/lib/types/types.d.ts`
+//   · `:25-36`  `SubagentActivationSpec = { provider, label, childId?, request: Omit<SubagentStartRequest,'label'|'signal'>, signal, delivery }`
+//   · `:115-122` `SubagentCapabilities = { agentOptions, agentPreset, outputSchema, depthLimit }`
+//                ⇒ **没有 `toolFilter`、没有 `persona`**（persona 只能经 `agentPreset` 组 composition）
+//   · `:168-173` `SubagentStartRequest.maxDepth?: number` ⇒ **`maxDepth` 在 activation 形态里原生可用**
+//                （`request` 是 `Omit<SubagentStartRequest,'label'|'signal'>` ⇒ 含 `maxDepth`）
+//
+// ⇒ 两种形态的能力差异（本端口的**判定依据**，不是印象）：
+//   | 能力 | `start(provider, request)` | `startActivation(spec)` |
+//   |---|---|---|
+//   | 按次收窄工具面（`toolFilter`） | ✅ `request.toolFilter` | ❌ 无此字段 ⇒ **只能经 `agentPreset`** |
+//   | 人格（`persona`）                | ✅ `request.persona`   | ❌ 无此名 ⇒ **只能经 `agentPreset`** |
+//   | 委派深度（`maxDepth`）           | ✅ `request.maxDepth`  | ✅ `request.maxDepth`（原生可用，受 `capabilities.depthLimit` 约束） |
+
+export const HOST_PORT_UNSUPPORTED = 'host-port-unsupported:';
+
+/** 形态判别（**端口内部单点**；引擎侧不得重复判）。判序固定：新形态优先（宿主若两入口并存，产物面按新形态）。 */
+function formOf(rt) {
+  if (!rt || typeof rt !== 'object') return null;
+  if (typeof rt.startActivation === 'function') return 'activation';
+  if (typeof rt.start === 'function') return 'start';
+  return null;
+}
+
+/**
+ * 成员执行端口。
+ *
+ * @param {object} ctx      宿主上下文（只读 `ctx.subagents`）
+ * @param {object} [opts]
+ * @param {object} [opts.capabilities] 宿主能力位快照（缺省尝试 `ctx.subagents.capabilities`；取不到按「未知」处理）
+ * @param {(args: object) => string|null} [opts.presetFor]
+ *        **activation 形态的收窄解析器**：给定 `{ role, toolFace, persona }` 返回 `agentPreset` 名（或 null）。
+ *        这是「toolFace/persona 经 preset 生效」的**唯一来源**；解析不到 ⇒ 端口**拒**（`host-port-unsupported:`），
+ *        **禁静默当成已收窄**（那正是本批要消灭的「以弱换强」）。
+ * @param {'parent'|'caller'} [opts.delivery] activation 的交付策略（缺省 `'parent'`：结果回父会话）
+ */
+export function createAgentPort(ctx, opts = {}) {
+  let rt = null;
+  try { rt = ctx?.subagents ?? null; } catch { rt = null; } // 注入守卫抛错 ⇒ 视为不可取（降级，不崩）
+  const form = formOf(rt);
+  const available = form !== null;
+  const caps = opts.capabilities ?? (rt && typeof rt === 'object' ? rt.capabilities : undefined) ?? null;
+  const capsKnown = caps !== null && typeof caps === 'object' && Object.keys(caps).length > 0;
+  const presetFor = typeof opts.presetFor === 'function' ? opts.presetFor : () => null;
+  const delivery = opts.delivery === 'caller' ? 'caller' : 'parent';
+
+  // 收窄/人格经哪条路生效 —— **显式声明**（禁「默认已生效」）。
+  const narrowVia = available ? (form === 'start' ? 'request' : 'preset') : 'none';
+  // 深度经哪条路 —— 两形态都在 request 内；宿主 `depthLimit` 明确 false ⇒ 不传（`none`，非静默降级）。
+  const depthVia = available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
+
+  return {
+    available,
+    form,                     // 端口内部状态（引擎只读 `available`，**不再**自己 `probe.form`）
+    capsKnown,
+    narrowVia,                // 'request' | 'preset' | 'none'  —— 工具面/人格的**实际生效方式**
+    // 显式别名（契约面要求逐名可读；`toolFaceVia` / `personaVia` 与 `narrowVia` **同源同值**，
+    //   禁两处各判：三者取自同一 `form`，不是三次独立推导）。
+    toolFaceVia: narrowVia,   // 工具面收窄经哪条路：'request'（toolFilter）| 'preset'（agentPreset）| 'none'
+    personaVia: narrowVia,    // 人格经哪条路：'request'（persona）| 'preset'（agentPreset）| 'none'
+    depthVia,                 // 'request' | 'none'
+    /** `true` 表示按次收窄确实生效（`request` 形态恒真；`preset` 形态须解析器给得出 preset）。 */
+    canNarrow({ role, toolFace, persona } = {}) {
+      if (!available) return false;
+      if (form === 'start') return true;
+      return typeof presetFor({ role, toolFace, persona }) === 'string' && presetFor({ role, toolFace, persona }).length > 0;
+    },
+    /**
+     * 要一个成员（**两种形态各走自己的入口**；调用方不需要知道是哪一种）。
+     *
+     * @param {object} args
+     * @param {string} args.provider   后端 provider 名（由配置给出，端口不猜）
+     * @param {string} args.label      子会话标签（cataloged membership 可见）
+     * @param {string} args.prompt     任务包文本（内部包成 `[{type:'text',text}]`）
+     * @param {object} args.parent     父会话/agent（宿主决定挂载点）
+     * @param {AbortSignal} [args.signal] 缺省自持永不中止（与 `buildStartRequest` 同纪律：**不透传** `exec.signal`）
+     * @param {string} [args.role]     仅用于 `presetFor` 解析（不传给宿主）
+     * @param {object} [args.toolFace] 工具面（`start` 形态 → `toolFilter`；`activation` 形态 → preset）
+     * @param {string} [args.persona]  人格（同上）
+     * @param {number} [args.maxDepth] 委派深度（两形态都走 `request.maxDepth`）
+     * @param {string} [args.cwd]      `activation` 形态的显式工作目录（可选）
+     * @returns {Promise<{ run: object, form: string, narrowVia: string, depthVia: string, preset: string|null }>}
+     */
+    async spawn({ provider, label, prompt, parent, signal, role, toolFace, persona, maxDepth, cwd } = {}) {
+      if (!available) throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents 无可用启动入口（既无 startActivation 也无 start）');
+      if (typeof provider !== 'string' || provider.length === 0) {
+        throw new Error(HOST_PORT_UNSUPPORTED + ' spawn 需要 provider（端口不猜 provider）');
+      }
+      const effectiveSignal = signal ?? new AbortController().signal;
+      const promptBlocks = typeof prompt === 'string' ? [{ type: 'text', text: prompt }] : prompt;
+
+      if (form === 'start') {
+        const request = {
+          label,
+          signal: effectiveSignal,
+          parent,
+          prompt: promptBlocks,
+          ...(toolFace !== undefined ? { toolFilter: toolFace } : {}),
+          ...(persona !== undefined ? { persona } : {}),
+          ...(maxDepth !== undefined && depthVia === 'request' ? { maxDepth } : {}),
+        };
+        const run = await rt.start(provider, request);
+        return { run, form, narrowVia, depthVia, preset: null };
+      }
+
+      // ---- activation 形态：收窄/人格**只能**经 agentPreset ----
+      const preset = presetFor({ role, toolFace, persona });
+      if (typeof preset !== 'string' || preset.length === 0) {
+        throw new Error(HOST_PORT_UNSUPPORTED + ' startActivation 形态不承载 toolFilter/persona，'
+          + '且未能解析出 agentPreset（宿主会按父会话 composition 组子会话 ⇒ worker 拿到未收窄工具面）'
+          + ' ⇒ 拒派（不以弱换强）：role=' + String(role ?? '(未声明)'));
+      }
+      const request = {
+        parent,
+        prompt: promptBlocks,
+        agentPreset: preset,
+        ...(cwd !== undefined ? { cwd } : {}),
+        ...(maxDepth !== undefined && depthVia === 'request' ? { maxDepth } : {}),
+      };
+      // ⚠ `request` **不含** `toolFilter`/`persona`：宿主 schema 无此字段（见文件头契约取证）。
+      const spec = { provider, label, request, signal: effectiveSignal, delivery };
+      const run = await rt.startActivation(spec);
+      return { run, form, narrowVia, depthVia, preset };
+    },
+
+    // ---- 其余成员面对（薄转发；缺面即抛 `host-port-unsupported:`，禁静默成功） ----
+    async send(...args) {
+      if (typeof rt?.send !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.send 不可用');
+      return rt.send(...args);
+    },
+    async wait(...args) {
+      if (typeof rt?.await !== 'function' && typeof rt?.wait !== 'function') {
+        throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.await 不可用');
+      }
+      return (rt.await ?? rt.wait).apply(rt, args);
+    },
+    async cancel(...args) {
+      if (typeof rt?.cancel !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.cancel 不可用');
+      return rt.cancel(...args);
+    },
+    list(...args) {
+      if (typeof rt?.list !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.list 不可用');
+      return rt.list(...args);
+    },
+    interrupt(...args) {
+      if (typeof rt?.interrupt !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.interrupt 不可用');
+      return rt.interrupt(...args);
+    },
+  };
+}

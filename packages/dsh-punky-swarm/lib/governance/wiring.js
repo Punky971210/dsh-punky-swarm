@@ -25,7 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   但该 post-result 仍经 finalizeScheduledExecution → postExecute 触发 tools/post-execute
 //   waterfall——post 观察者在 ask 降级 deny 路径同样被调用（outcome 补记可行性依据）。
 //   收据已在 pre 同步落盘、不依赖 tools/result 事件。
-// 与 ctx.tools.guard（难度门禁）组合：kernel 判 ALLOW → next() 透传，难度门禁照常生效
+// 与 工具面 guard（经 `lib/host-ports/` 端口安装）（难度门禁）组合：kernel 判 ALLOW → next() 透传，难度门禁照常生效
 //   （两门禁串行叠加）；kernel 判 deny/ask → 返回决策对象短路，难度门禁不再参与。guard 无 allow 语义，
 //   难度门禁只可能收紧不可能被本 hook 放行绕过。
 // DEFER/PAUSE 从「标签/指引」升级为文件态简版状态机（state-store.js）——pre 链 kernel.decide 之前做

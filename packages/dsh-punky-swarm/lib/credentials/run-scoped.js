@@ -22,7 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     登记面只用会话 id；若这里再接第二身份源，同一件事就有两个键，越早对齐越省事。
 //
 // 本模块的边界（红线）：**零依赖、纯内存、不写盘、不落事件、不承载任何门禁策略**。
-//   「该不该放行 / 该不该结算」是门禁层的事（`lib/state/gates/**` 与 `ctx.tools.guard` 链）；
+//   「该不该放行 / 该不该结算」是门禁层的事（`lib/state/gates/**` 与 `工具面 guard（经 `lib/host-ports/` 端口安装）` 链）；
 //   此处若复制一份判定，两份必然漂移。
 import { randomUUID } from 'node:crypto';
 

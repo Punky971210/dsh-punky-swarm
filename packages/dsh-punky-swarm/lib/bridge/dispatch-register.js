@@ -40,7 +40,42 @@ import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from '
 //   （`suite.js` 表尾 4 件）——成员对 `send_message` 的调用面在 deny 面收口，登记面不再观察。
 //   兼容面（**只读，禁删**）：`extractWorkerSessionId` 的 `send_message` 分支**保留**（纯函数防御面，
 //   deps.tools 显式注入仍可观察；R1 纯函数回归继续锁死其键名解析正确性）。
-export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork'];
+// 【D 档补登记 · 批 `punky-host-ports-2026-10-31` lane `e4-dispatch-reg`】
+//   `spawn_teammate` 加入观察名单：D 档（官方 Team 席位）实测三批 `member.dispatch` 恒 0，
+//   第一层原因就是**观察器不看它**（`DEFAULT_DISPATCH_TOOLS` 只含 subagent/subagent_fork）。
+//   ⚠ 只加名单**不够**：`spawn_teammate` 的结果里没有 worker 会话 id（宿主 `modelMember()` 显式
+//   `const { id: _id, name, ...details } = member` ⇒ 只暴露 `target`=名字），故必须配
+//   `teammateWorkerSessionIdOf()` 按名字反查 roster 的 `id`（见下）。两步缺一不可。
+export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork', 'spawn_teammate'];
+
+// 【D 档】从 `spawn_teammate` 结果取队友**名字**（= 宿主返回值 `member.target`）。
+//   绝不用它充当 workerSessionId —— 名字不是会话 id，拿来拼就是伪造归属。
+export function teammateTargetNameOf(result) {
+  const v = (result && typeof result === 'object' && 'value' in result ? result.value : result) ?? {};
+  const member = v && typeof v === 'object' ? v.member : null;
+  const target = member && typeof member === 'object' ? member.target : null;
+  return typeof target === 'string' && target.length ? target : null;
+}
+
+// 【D 档】**唯一**取得 worker 会话 id 的路径：roster 反查（服务面保留 id）。
+//   证据：宿主 `dsh-experimental-agent-team/lib/index.js:1498` `listMembers(agent)` → roster 行含 `id: member.id`；
+//   而工具面 `.../dsh-experimental-tool-agent-team/lib/index.js:76` `modelMember()` 已把 `id` 丢弃。
+//   ⇒ 同步查表（服务是同步方法，无 IO），**不伪造、不改工具面**。
+//   行形状按「名字字段在 name/target、id 字段在 id/sessionId」双键容错（宿主字段名漂移时不静默漏登记）。
+export function teammateWorkerSessionIdOf(agentTeams, agent, name) {
+  if (!agentTeams || typeof agentTeams.listMembers !== 'function' || typeof name !== 'string' || !name) return null;
+  let rows;
+  try { rows = agentTeams.listMembers(agent); } catch { return null; }
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const rowName = typeof row.name === 'string' ? row.name : (typeof row.target === 'string' ? row.target : null);
+    if (rowName !== name) continue;
+    const id = typeof row.id === 'string' ? row.id : (typeof row.sessionId === 'string' ? row.sessionId : null);
+    if (id) return id;
+  }
+  return null;
+}
 
 // 从 post-execute (exec, result) 提取被派发 worker 会话 id（childId/agentId）。
 // 宿主结构化 result：subagent → ToolExecutionResult.value = {kind:'continuable', subagentId}（continuable 后台模式，
@@ -84,7 +119,10 @@ export function extractWorkerSessionId(exec, result) {
 //   观察者纪律：任一失败仅 warn，恒 return next()（不阻断、不抛错）。
 // 返回 { installed, dispose, count, mapping }；ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸）。
 export function installDispatchRegistration(ctx, deps = {}) {
-  const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS } = deps;
+  const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS,
+    // 【D 档】roster 反查依赖：优先装配注入（`deps.agentTeams`，便于夹具注入），缺省回落 `ctx.agentTeams`（真实宿主）。
+    //   都不可用 ⇒ `spawn_teammate` 登记降级为「留痕不登记」（不伪造 id）。
+    agentTeams = ctx?.agentTeams } = deps;
   // G01 #1（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：`!store || !ctx?.on` 属**防御纵深·生产不可达**
   //   （`lib/index.js` 的 `store` 恒非空、`ctx.on` 由宿主提供、`inject` 已在加载面兜住宿主三服务）
   //   ⇒ 按三分级口径**只补稳定回显键（`inert` 布尔键，值 true），零日志新增**（加了只加噪）。
@@ -162,7 +200,13 @@ export function installDispatchRegistration(ctx, deps = {}) {
       }
       // ② 非派发类工具 → 不登记（透传）
       if (!toolSet.has(exec.name)) return next();
-      const workerSessionId = extractWorkerSessionId(exec, result);
+      // 【D 档】`spawn_teammate` 的 worker id **不在结果里**（宿主 `modelMember()` 丢弃 `id`）：
+      //   先按既有路径提取（对 subagent/subagent_fork 有效），提取不到再走**roster 名字反查**。
+      //   两步都不成 ⇒ 走下方既有 `degraded` 留痕（本批口径 A：不新增事件类、不伪造 id）。
+      const workerSessionId = extractWorkerSessionId(exec, result)
+        ?? (exec.name === 'spawn_teammate'
+          ? teammateWorkerSessionIdOf(agentTeams, exec?.agent, teammateTargetNameOf(result))
+          : null);
       if (!workerSessionId) {
         // 【T-14/G-10#3 · 显式降级告警（不静默漏登记）】原此处**静默 `return next()`**：官方 profile 下
         //   `subagent*` 不在宿主工具面 ⇒ 其告警分支恒不进（见下方 ③′），而 `send_message` 提取失败
@@ -173,7 +217,15 @@ export function installDispatchRegistration(ctx, deps = {}) {
         //   **不引入拒绝**（观察者纪律：恒 `next()`）。
         logger?.warn?.('[dsh-punky-swarm] dispatch register degraded（提取不到持久 worker 会话 ⇒ 本次不登记 · tool='
           + exec.name + ' · caller=' + caller + '）：键缺失/键名漂移，或结果为失败/非会话 id'
-          + '（background jobId / foreground runId）——非静默降级，仅留痕不阻断');
+          + '（background jobId / foreground runId）——非静默降级，仅留痕不阻断'
+          // 【D 档留痕（本批口径 A：复用既有 warn 家族，不新增事件类）】
+          + (exec.name === 'spawn_teammate'
+            ? '；D 档成因：spawn_teammate 结果不含 worker 会话 id（宿主 modelMember 丢弃 id），'
+              + '且 roster 反查未命中（target=' + JSON.stringify(teammateTargetNameOf(result))
+              + (agentTeams && typeof agentTeams.listMembers === 'function'
+                ? '，listMembers 可用但无同名成员/成员 id 缺失'
+                : '，ctx.agentTeams 不可用') + '）⇒ 不登记（**不用名字充数、不写查不到的记录**）'
+            : ''));
         return next();
       }
       // ③′-a **句柄优先**（「不写 token 即禁止派发」）：任务包内含有效 lane 句柄 ⇒

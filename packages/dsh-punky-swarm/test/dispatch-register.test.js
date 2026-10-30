@@ -277,9 +277,19 @@ test('R7: ctx.on 缺失 → installDispatchRegistration inert（installed:false�
   assert.doesNotThrow(() => reg.dispose());
 });
 
-// R8：DEFAULT_DISPATCH_TOOLS 契约（登记点观察名单 = 派发类工具；send_message 已随 S2 退役，2026-09-22）
-test('R8: DEFAULT_DISPATCH_TOOLS = subagent/subagent_fork（send_message 已退役出名单）', () => {
-  assert.deepEqual([...DEFAULT_DISPATCH_TOOLS].sort(), ['subagent', 'subagent_fork'].sort());
+// R8：DEFAULT_DISPATCH_TOOLS 契约（登记点观察名单 = 派发类工具）
+//   【G5 收口 · R8 波前】名单 2 件 → **3 件**（+ `spawn_teammate`）：D 档（team 通道）经 `spawn_teammate`
+//   派发，若它不在观察名单 ⇒ D 档 `member.dispatch = 0`（**正是本批要修的病**，绝不可从断言/名单里剔除）。
+//   断言形态刻意**不写死名单快照**（否则下次加观察对象又要改）：改为「**必须包含**这三件」＋「不得含已退役的 send_message」
+//   —— 钉的是语义（谁必须在观察面内），不是一次快照。
+test('R8: DEFAULT_DISPATCH_TOOLS 必须观察 subagent / subagent_fork / **spawn_teammate**（D 档派发入口）', () => {
+  const names = new Set(DEFAULT_DISPATCH_TOOLS);
+  for (const required of ['subagent', 'subagent_fork', 'spawn_teammate']) {
+    assert.equal(names.has(required), true,
+      required + ' 必须在 DEFAULT_DISPATCH_TOOLS 内（缺 spawn_teammate ⇒ D 档 member.dispatch 恒 0）；实际='
+      + JSON.stringify([...DEFAULT_DISPATCH_TOOLS]));
+  }
+  assert.equal(names.has('send_message'), false, 'send_message 已随 S2 退役，不得回到观察名单');
 });
 
 // ── R9：派发句柄纯函数（发放 / 解析 / 校验 / 一次性消费 / TTL / 悬挂视图）──

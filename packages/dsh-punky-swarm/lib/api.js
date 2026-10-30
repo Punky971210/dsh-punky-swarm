@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks / stream（全部按 session 隔离）
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { createHttpPort } from './host-ports/index.js';
 import { join } from 'node:path';
 import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';
@@ -44,7 +45,7 @@ export function createApi(ctx, deps) {
   // 裸取 `ctx.webServer`：`webServer` 是插件 `inject` 的**硬依赖**（宿主 cordis 4.0.5 的 inject 无 optional 位）
   //   ⇒ 该服务必然在场，本行不会拿到 `undefined`；缺服务的真实形态是插件整块 pending（本文件不被加载）。
   //   事实化理由与真降级路径见 `lib/index.js` 顶部 `inject` 上方注释（A1-P2-02）——此处**不复制**全文，防第二真源。
-  const register = (route) => disposers.push(ctx.webServer.register(route));
+  const register = (route) => { const m = createHttpPort(ctx).mountRoute({ method: route.method, path: route.path, handler: route.handler }); if (m.mounted) disposers.push(m.dispose); };
 
   // SSE hub：随 webServer 挂载（无独立配置键；降级回轮询即运行时自适配开关）。
   // 装配点（index.js 层）预留时经 deps.panelStream 注入复用（含 topic 触发源 attachTopic 接线）；

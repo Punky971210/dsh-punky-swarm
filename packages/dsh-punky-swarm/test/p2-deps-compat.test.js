@@ -80,18 +80,20 @@ test('A1-P2-02 / AC-9 · 运行期 inject 面：三键内容与顺序逐字不�
 });
 
 test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）改前改后一致：index/api 的 ctx.webServer = 1、dispatch 的 ctx.subagents = 1', () => {
+  // 【host-ports 批语义订正】`lib/api.js` 已改走端口面 `mountRoute` ⇒ 裸访问应为 **0**
+  //   （这正是本批目标：引擎不再直接摸宿主面）。其余两处保持「恰 1」防偷加载面。
   const probes = [
-    ['lib/index.js', 'ctx.webServer'],
-    ['lib/api.js', 'ctx.webServer'],
-    ['lib/engine/dispatch.js', 'ctx.subagents'],
+    ['lib/index.js', 'ctx.webServer', 1],
+    ['lib/api.js', 'ctx.webServer', 0],
+    ['lib/engine/dispatch.js', 'ctx.subagents', 1],
   ];
-  for (const [rel, token] of probes) {
+  for (const [rel, token, expect] of probes) {
     const before = readAtBaseHead(rel);
     assert.ok(before, '基线文件必须可读：' + rel);
     const afterCount = bareAccessLineCount(read(rel), token);
     const beforeCount = bareAccessLineCount(before, token);
-    assert.equal(afterCount, 1, rel + ' 的 ' + token + ' 裸访问必须**恰 1 处**（多于 1 = 注释外又添了访问面）');
-    assert.equal(afterCount, beforeCount, rel + '：裸访问计数改前改后必须不变（1→1，未偷偷引入掉载面）');
+    assert.equal(afterCount, expect, rel + ' 的 ' + token + ' 裸访问应为 ' + expect + ' 处（本批目标：api.js 归零）');
+    assert.ok(afterCount <= beforeCount, rel + '：裸访问计数不得增加（' + beforeCount + '→' + afterCount + '，未偷偷引入访问面）');
   }
 });
 

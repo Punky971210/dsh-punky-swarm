@@ -30,6 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ⇒ 难度门禁与「写族来源守卫」**必然生效**；若在此直调某个工具对象，两条防线都会被绕开。
 //   故本文件只有**一处**工具派发调用（见下方 handler 内的唯一调用行），且它必须走宿主运行时。
 import { sendJson } from '../json-response.js';
+import { createToolsPort, createHttpPort } from '../host-ports/index.js';
 import { SUITE_TOOLS } from '../engine/suite.js';
 
 /** 协议版本（钉死；`2026-07-28` 起的「无握手」形态不在本实现范围）。 */
@@ -83,7 +84,7 @@ export function callableToolNamesOf(ctx, suite = SUITE_TOOLS) {
   return declared.filter((name) => {
     if (hostProvided.has(name)) return true; // 宿主提供：本仓未注册是正常
     try {
-      return typeof ctx?.tools?.get === 'function' && ctx.tools.get(name) != null;
+      return createToolsPort(ctx).hasTool(name);
     } catch { return false; }
   });
 }
@@ -136,7 +137,7 @@ export function installMcpDataPlane(ctx, deps = {}) {
   /** 注册表视图里的工具定义（取不到 ⇒ null，**不抛**）。 */
   const definitionOf = (name) => {
     try {
-      return typeof ctx?.tools?.get === 'function' ? ctx.tools.get(name) : null;
+      return createToolsPort(ctx).getTool(name);
     } catch { return null; }
   };
 
@@ -180,7 +181,12 @@ export function installMcpDataPlane(ctx, deps = {}) {
       //   本层**禁**兜底填来源、**禁**拿 `arguments.session` 冒充 run 身份）。
       const execInput = { callId: 'mcp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), name, arguments: args };
       try {
-        const raw = await ctx.tools.execute(execInput);
+        // 【signal 缺陷根治 · C-5】宿主必读 exec.signal（缺则 Node 原生 TypeError 且 execute 体不进）。
+      //   本层持有**真实 AbortSignal**。⚠ **显式登记的降级**：`handlers[tools/call]` 由外层 `:210 handler(frame.params)` 调用，`req` 不在本层作用域 ⇒ 无法接 req 的 close/aborted 事件面 ⇒
+      //   此处**每请求新建一个永不 abort 的 AbortController**（满足宿主对真实 AbortSignal 的要求，但**不会**随连接关闭而取消）。
+      //   升级路径 = 把外层 handler 的 req 透传进本层后接 close/aborted。**禁默认静默**：此降级已在 exec/e2-ports.md 登记。
+      const requestAbort = new AbortController();
+      const raw = await createToolsPort(ctx).invokeTool({ name, args, signal: requestAbort.signal, correlation: execInput.callId });
         return { result: callResultOf(raw) };
       } catch (e) {
         // 【P-5 分层】工具**业务错**（含参数坏 / 记录不存在 / 上游故障）= 成功的 JSON-RPC 结果 + isError，
@@ -252,13 +258,14 @@ export function installMcpDataPlane(ctx, deps = {}) {
   //   ⚠ 可观测性不靠日志：返回的 disposer 上带 `installed` 布尔（**fail-closed 判据在返回值**，
   //     与 `installWriteProvenanceGuard` 的 true/false 同族）。
   if (typeof ctx?.webServer?.register !== 'function') {
-    logger?.debug?.('[mcp] data plane not mounted：ctx.webServer.register 不可用（合法部署形态）');
+    logger?.debug?.('[mcp] data plane not mounted：webServer 端口 mountRoute（`lib/host-ports/`） 不可用（合法部署形态）');
     const notMounted = () => {};
     notMounted.installed = false;
     return notMounted;
   }
 
-  const dispose = ctx.webServer.register({ method: 'POST', kind: 'exact', path: MCP_PATH, handler });
+  const mounted = createHttpPort(ctx).mountRoute({ method: 'POST', path: MCP_PATH, handler });
+  const dispose = mounted.dispose;
   logger?.info?.('[mcp] data plane mounted at ' + MCP_PATH + '（protocol ' + MCP_PROTOCOL_VERSION
     + '，声明 ' + declaredCount + ' 件；实际宣告按可调面惰性求交）');
   const dispo = typeof dispose === 'function' ? dispose : () => {};

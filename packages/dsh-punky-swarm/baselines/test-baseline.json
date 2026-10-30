@@ -489,9 +489,9 @@
       "todos": 0
     },
     "test/dispatch-register.test.js": {
-      "asserts": 54,
+      "asserts": 55,
       "blankLines": 20,
-      "lines": 333,
+      "lines": 343,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -537,9 +537,9 @@
       "todos": 0
     },
     "test/f1-dispatch-activation-gate.test.js": {
-      "asserts": 62,
+      "asserts": 63,
       "blankLines": 23,
-      "lines": 276,
+      "lines": 279,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -553,9 +553,9 @@
       "todos": 0
     },
     "test/f1-dispatch-register-multislot.test.js": {
-      "asserts": 47,
+      "asserts": 48,
       "blankLines": 25,
-      "lines": 258,
+      "lines": 267,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1024,6 +1024,14 @@
       "tests": 21,
       "todos": 0
     },
+    "test/host-ports.test.js": {
+      "asserts": 54,
+      "blankLines": 17,
+      "lines": 236,
+      "tautologies": 0,
+      "tests": 10,
+      "todos": 0
+    },
     "test/hot-config.test.js": {
       "asserts": 42,
       "blankLines": 19,
@@ -1217,11 +1225,11 @@
       "todos": 0
     },
     "test/mcp-data-plane.test.js": {
-      "asserts": 67,
-      "blankLines": 38,
-      "lines": 416,
+      "asserts": 72,
+      "blankLines": 42,
+      "lines": 474,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 12,
       "todos": 0
     },
     "test/member-deny-boundary.test.js": {
@@ -1307,7 +1315,7 @@
     "test/p2-deps-compat.test.js": {
       "asserts": 26,
       "blankLines": 26,
-      "lines": 261,
+      "lines": 263,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1921,7 +1929,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T13:54:28Z",
+  "generatedAt": "2026-10-30T21:32:23Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1932,15 +1940,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "G5 收口施工批：QT-2a 批级批量读面（store.readBatchMap + batch_status ids 参数，ids>=2 目录扫 0；单批路径保留退不退化）+ QT-2b P-2 纯测量（结论暂不立项：N=20 11.5ms 系一次映射-miss 重建、N 次批读为必要成本）+ QT-4 I-04 端到端零写入真跑（真实 buildWavePlan+createBatch 非裸 JSON，含 seedArtifacts 绕 entry 门；拒态 sha256+rev+mtimeMs 三指纹逐位相同、放行态 sha 变 rev+1、治理面不误伤）；新增 test/batch-read-map(7) + test/binding-zero-write-e2e(4)。带 preload 口径改动前后均 60 红（零新增）",
+  "reason": "宿主端口面批：新建 lib/host-ports（tools/http/agent 三端口）+ 8 处接线 + 修 signal 缺陷 + 注册 startActivation 新入口 + member.dispatch 登记补全（观察名单 2→3）；波前订正 T-3.8/T-1.1/R-9 跟随新语义；替身去宽容（判据变种 #28）",
   "schema": 1,
   "totals": {
-    "asserts": 11664,
-    "blankLines": 6403,
-    "files": 240,
-    "lines": 67714,
+    "asserts": 11726,
+    "blankLines": 6424,
+    "files": 241,
+    "lines": 68032,
     "tautologies": 0,
-    "tests": 2405,
+    "tests": 2417,
     "todos": 4
   }
 }

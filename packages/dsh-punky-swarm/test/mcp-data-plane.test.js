@@ -115,7 +115,11 @@ async function makeBed(config = {}) {
   const ctx = {
     logger: { info() {}, warn() {}, error() {} },
     webServer: { register: (route) => { mounted = route; return () => { mounted = null; }; } },
-    tools: { get: (name) => byName.get(name) ?? null, execute: async (exec) => rt.execute({ ...exec, signal: new AbortController().signal }) },
+    // 【判据变种 #28 · 杀掉「替身比宿主宽容」的假绿】原替身 `rt.execute({ ...exec, signal: new AbortController().signal })`
+    //   **自己补 signal** ⇒ 掩盖了「调用方根本不传 signal」这类缺口（宿主真身会抛原生
+    //   `ERR_INVALID_ARG_TYPE: signals[0] is not of type AbortSignal.`，见 C-1 探针）。
+    //   现改为**原样透传**：缺就是缺、错就是错，替身不再替调用方兜底。
+    tools: { get: (name) => byName.get(name) ?? null, execute: async (exec) => rt.execute(exec) },
   };
   const dispose = installMcpDataPlane(ctx, {});
   assert.ok(mounted && typeof mounted.handler === 'function', '前置：MCP 面必须挂到 webServer.register 且给出 handler');
@@ -221,13 +225,20 @@ test('G2 薄包装机核：state/(store|gates) import = 0；判据/策略码 = 0
   const hits = policy.filter((token) => new RegExp('\\b' + token + '\\b').test(srcAll));
   assert.deepEqual(hits, [], 'lib/mcp/** 不得出现判据/策略码（本层不做决策，只转发）');
 
+  // 【G5 收口 · 适配面下沉后的判据订正】派发从「直调 ctx.tools.execute」下沉到**端口层**
+  //   `lib/host-ports/`（用户裁定的设计纲：宿主差异全部关在适配层内）⇒ 唯一派发点的**形态**变了，
+  //   但「只有一处派发、且走可核的端口方法」这条**判据不变**。禁令也同步收紧：本层**不得直触** `ctx.tools.*`。
   const executes = [...srcAll.matchAll(/\.execute\(/g)];
-  assert.equal(executes.length, 1, 'lib/mcp/** 的 .execute( 必须**恰 1 处**（唯一派发点）');
-  assert.ok(/ctx\.tools\.execute\(/.test(srcAll), '唯一派发点必须是 ctx.tools.execute(（走宿主链路，含 pre-execute + guard）');
+  assert.equal(executes.length, 0, 'lib/mcp/** 内不得再直调 .execute(（派发已下沉到端口层）');
+  assert.equal((srcAll.match(/createToolsPort\(ctx\)\.invokeTool\(/g) ?? []).length, 1,
+    '唯一派发点必须是 `createToolsPort(ctx).invokeTool(`（恰 1 处 ⇒ 单点、可核、走宿主链路 + guard）');
+  assert.equal(/ctx\.tools\./.test(srcAll), false,
+    'lib/mcp/** 不得直触 `ctx.tools.`（宿主面只允许经端口层；反向约束由 test/host-ports.test.js H4 全仓扫校）');
   const directObjExec = [...srcAll.matchAll(/\b(tool|definition|def|t)\.execute\(/g)].map((m) => m[0]);
   assert.deepEqual(directObjExec, [], '禁止直调工具对象 .execute(（会绕过守卫）');
   assert.equal((srcAll.match(/listen\(/g) ?? []).length, 0, '不得 listen(（不新起端口）');
   assert.equal((srcAll.match(/createServer\(/g) ?? []).length, 0, '不得 createServer(（复用 webServer）');
+  assert.equal(/ctx\.webServer\./.test(srcAll), false, 'lib/mcp/** 不得直触 `ctx.webServer.`（同上，经 createHttpPort）');
   assert.ok((srcAll.match(/remoteAddress/g) ?? []).length >= 1, '必须有 remoteAddress 判定（loopback 校验）');
 });
 
@@ -412,4 +423,51 @@ test('G8 可红形态：4 个变异（不校 loopback / 暴露全量 / session �
     assert.equal(r.json.error, undefined, '业务错不得走 error 帧');
   });
   assert.equal(redBiz, true, '变异 D ⇒ G5 业务错分层变红');
+});
+
+// ══ G9 【本批核心回归锁】signal 缺陷不复发 ═══════════════════════════════════════════════════
+//   背景（实测）：改前 `installMcpDataPlane` 派发时不带 `signal` ⇒ 宿主 `AbortSignal.any` 抛原生
+//   `TypeError / code=ERR_INVALID_ARG_TYPE / signals[0] is not of type AbortSignal.`；
+//   该 TypeError 又被 P-5 分层包成 `result.isError` ⇒ **看着像"工具报错"，其实全是接线缺陷**。
+//   ⇒ 本用例钉「这条错误路径不再出现」，并**自带变异**证明它有杀伤力（防回归锁退化成装饰）。
+//   ⚠ 三种复发形态都要认（**这是变异测试逼出来的**：首版只认 ERR_INVALID_ARG_TYPE，
+//     而本运行时的实际复发形态是 `Cannot read properties of undefined (reading 'aborted')`
+//     —— 与 G5 冒烟批在真实例上实测到的那一条**逐字相同**）。
+const SIGNAL_ERR_PATTERNS = [
+  /ERR_INVALID_ARG_TYPE/,
+  /signals\[0\] is not of type AbortSignal/i,
+  /Cannot read properties of undefined \(reading 'aborted'\)/, // ← 本仓实测复发签名
+];
+
+/** 断言响应文本**不含**宿主原生 signal 类型错（正向用例与变异用例共用同一判据）。 */
+function assertNoSignalTypeError(text, where) {
+  for (const re of SIGNAL_ERR_PATTERNS) {
+    assert.equal(re.test(text), false,
+      where + '：响应不得含 ' + re + '（signal 缺陷复发）；实际=' + String(text).slice(0, 220));
+  }
+}
+
+test('G9 【核心回归锁】真 tools/call 响应不含 ERR_INVALID_ARG_TYPE / signals[0] is not of type AbortSignal', async () => {
+  const bed = await makeBed();
+  try {
+    const r = await rpc(bed.handler, callFrame('batch_status', { batchId: 'b-mcp-t1', sourceRunId: 'run-x' }, 31));
+    const text = JSON.stringify(r.json ?? null);
+    assertNoSignalTypeError(text, '正向：带合法 signal 的 tools/call');
+    assert.equal(bed.executed.get('batch_status') ?? 0, 1,
+      '工具体必须真被执行（否则"没报错"也可能只是根本没跑到）');
+  } finally { bed.dispose(); }
+});
+
+test('G9b 变异必红：替身在 execute 侧**吞掉 signal**（模拟改前接线）⇒ 同一断言必红', async () => {
+  const bed = await makeBed();
+  try {
+    // 变异点必须在 execute 侧：端口层已校调用方传的 signal，所以复发形态是「signal 没送到宿主」
+    const realExecute = bed.ctx.tools.execute.bind(bed.ctx.tools);
+    bed.ctx.tools.execute = async (exec) => realExecute({ ...exec, signal: undefined });
+    const r = await rpc(bed.handler, callFrame('batch_status', { batchId: 'b-mcp-t1', sourceRunId: 'run-x' }, 32));
+    const text = JSON.stringify(r.json ?? null);
+    let red = false;
+    try { assertNoSignalTypeError(text, '变异：signal 被吞'); } catch { red = true; }
+    assert.equal(red, true, 'signal 被吞时该断言**必须红**（否则回归锁形同虚设）；实际响应=' + text.slice(0, 240));
+  } finally { bed.dispose(); }
 });
