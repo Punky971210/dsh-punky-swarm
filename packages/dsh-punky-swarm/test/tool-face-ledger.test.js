@@ -36,6 +36,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+// 【M1】宿主工具口径**单点**：本文件不再手写第二份名单。
+import { HOST_PROVIDED_TOOLS, CONDITIONAL_REGISTRATION } from '../lib/governance/host-tools.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,10 +47,10 @@ const sha256Of = (rel) => createHash('sha256').update(fs.readFileSync(path.join(
 
 // ── 集合常量（与任务包 §2.4 逐字同源；集合，非计数）────────────────────────────
 const DELETED_5 = ['mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun'];
-const SUITE_ONLY_BASELINE = [
-  'log_export', 'subagent', 'subagent_fork', 'send_message',
-  'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate',
-];
+// 【M1】取值来源改为**单点**（`lib/governance/host-tools.js`），顺序与原字面量一致：
+//   原顺序 = [log_export, subagent, subagent_fork, send_message, interrupt_agent, list_agents, wait_agent, spawn_teammate]
+//   ⚠ 断言意图逐字不变（仍是「suite 独有的这 8 件」），只是不再手写第二份名单。
+const SUITE_ONLY_BASELINE = [CONDITIONAL_REGISTRATION[0], ...HOST_PROVIDED_TOOLS];
 // 护栏资产 sha256 —— **本批已按授权变更更新**（记录变更，不是抹掉变更）。
 //   旧值 `78125558daf53165c42cb2bb0e565e35336e8f364b1a068e36be56f476af1e80`（HEAD `4a793d6` 开工时）
 //   新值 `f79cc9c6305fb9703f326f882d9ddf6038ab02a8c505e1366b24b643dad30410`（B1 终态）

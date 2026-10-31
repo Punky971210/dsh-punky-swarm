@@ -40,6 +40,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 /** 端口层拒态前缀（**普通 `Error`**；非 `GATE_`、无 `err.code`）。 */
 export const HOST_PORT_INVALID = 'host-port-invalid:';
 
+/** 查询失败拒态前缀（**普通 Error**；区别于「不存在」）。 */
+export const HOST_PORT_QUERY_FAILED = 'host-port-query-failed:';
+
 const isAbortSignalLike = (signal) => Boolean(signal)
   && typeof signal === 'object'
   && typeof signal.aborted === 'boolean';
@@ -64,8 +67,25 @@ export function createToolsPort(ctx) {
      * @returns {boolean}
      */
     hasTool(name) {
-      if (!available || typeof tools.get !== 'function') return false;
-      try { return tools.get(name) != null; } catch { return false; }
+      const probed = this.probeTool(name);
+      if (probed.state === 'errored') throw new Error(probed.reason);
+      return probed.state === 'present';
+    },
+
+    /**
+     * **三态查询**：存在 / 不存在 / **查询失败**（M2）。
+     * ⚠ 查询失败**不得**降级为「不存在」—— 二者在上层的观感必须不同，否则数据面坏了会伪装成工具缺失。
+     * @param {string} name
+     * @returns {{state:'present', definition:unknown}|{state:'absent', reason?:string}|{state:'errored', reason:string}}
+     */
+    probeTool(name) {
+      if (!available || typeof tools.get !== 'function') return { state: 'absent', reason: 'port-unavailable' };
+      try {
+        const definition = tools.get(name);
+        return definition == null ? { state: 'absent' } : { state: 'present', definition };
+      } catch (e) {
+        return { state: 'errored', reason: HOST_PORT_QUERY_FAILED + ' ' + String(e?.message ?? e) };
+      }
     },
 
     /**
@@ -73,8 +93,9 @@ export function createToolsPort(ctx) {
      * @param {string} name
      */
     getTool(name) {
-      if (!available || typeof tools.get !== 'function') return null;
-      try { return tools.get(name); } catch { return null; }
+      const probed = this.probeTool(name);
+      if (probed.state === 'errored') throw new Error(probed.reason); // 查询失败 ⇒ 抛，禁返 null
+      return probed.state === 'present' ? probed.definition : null;
     },
 
     /**

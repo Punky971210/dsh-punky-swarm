@@ -30,6 +30,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
+// 【M1】宿主工具口径**单点**：测试侧不再手写第二份名单（第二份 = 漂移源）。
+import { HOST_PROVIDED_TOOLS, CONDITIONAL_REGISTRATION, HOST_CONTINUATION_SUBSET } from '../lib/governance/host-tools.js';
 import { createStore } from '../lib/state/store.js';
 import { EXEC_TOOLS } from '../lib/tools/core.js';
 import { SHELL_TOOLS } from '../lib/tools/readonly.js';
@@ -77,14 +79,11 @@ const FROZEN_DENY = [
   // S2（2026-09-22 · one-shot 化）：宿主连续控制族 ⇒ 成员整体 deny（一次性执行器无可唤/续聊/等待/打断对象）
   // ⚠ 2026-09-24 用户裁决（S-3）：`send_message` **已从 deny 面移出** —— 放开「唤 Lead」（Lead 是 durable
   //   的，且正是 worker 要通知的对象；S2 原判据「无唤醒对象」对其**不成立**）；本条不再列入。
-  'interrupt_agent',
-  'list_agents',
-  // ⚠ 2026-09-24（独立复核后修订）：`wait_agent` **条目保留** —— 它由 agent-team 层注册（非内核移除），
-  //   保留可保证「启用该层的 profile」上 deny 面完整；未启用该层的 profile 由 dispatch 容错自愈兜底。
-  'wait_agent',
-  // AG-20（2026-09-25 用户裁决「③ 定向 deny」）：`spawn_teammate` 补入成员 deny 面 —— 成员不得自行拉起
-  //   teammate（席位归 Leader / 官方 roster；成员侧拉起绕过 lane 派发与三层门禁）。`workflow`/`ralph` 保持放行。
-  'spawn_teammate',
+  // 【M1】以下 4 件改为从**单点派生**（`HOST_CONTINUATION_SUBSET` = HOST_PROVIDED_TOOLS 的过滤子集，
+  //   顺序 = interrupt_agent / list_agents / wait_agent / spawn_teammate，与原字面量**逐字同序**）。
+  //   原有两条保留理由已随名单一起下沉到 `lib/governance/host-tools.js` 的注释（wait_agent 保留、
+  //   AG-20 席位拉起面），此处不再手写第二份名单。
+  ...HOST_CONTINUATION_SUBSET,
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
 const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
@@ -308,7 +307,14 @@ test('SC-4 实现面一致：静态声明面 = 行为面 = 注册表 modeGate �
   // 【AG-20】`spawn_teammate`（官方 Agent Team 席位拉起面）同属**宿主注册、非引擎注册**的未注册面
   //   —— 由 `dsh-experimental-tool-agent-team` 层注册；未启用该层的 profile 下不在引擎注册面，
   //   条目保留 + dispatch 容错自愈兜底（与 `wait_agent` 同一处置口径）。
-  const NOT_REGISTERED_BY_DEFAULT = ['subagent', 'subagent_fork', 'log_export', 'send_message', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate']; // 宿主派发工具 + 宿主连续控制族（S2；wait_agent 由 agent-team 层注册 ⇒ 未启用该层的 profile 下不在引擎注册面，条目保留 + dispatch 自愈兜底）+ AG-20 席位拉起面（同上）+ 可选能力组（logs）
+  // 【M1】取值来源改为**单点**（`lib/governance/host-tools.js`），**顺序逐字保持**原字面量顺序：
+  //   原顺序 = [subagent, subagent_fork, log_export, send_message, interrupt_agent, list_agents, wait_agent, spawn_teammate]
+  //   ⇒ 头 2 件 + 条件注册件 + 其余尾部（`assert.deepEqual` 比对的是数组，顺序必须一致）。
+  //   ⚠ 断言意图逐字不变（仍是「表内未注册的只允许这 8 件」），只是不再手写第二份名单。
+  const NOT_REGISTERED_BY_DEFAULT = [
+    HOST_PROVIDED_TOOLS[0], HOST_PROVIDED_TOOLS[1], CONDITIONAL_REGISTRATION[0],
+    ...HOST_PROVIDED_TOOLS.slice(2),
+  ]; // 宿主派发工具 + 宿主连续控制族（S2）+ AG-20 席位拉起面 + 可选能力组（logs）
   assert.deepEqual(SUITE_TOOLS.map((t) => t.name).filter((n) => !byName[n]), NOT_REGISTERED_BY_DEFAULT,
     '表内未注册的只允许非默认注册三件（其余必须真实注册）');
   assert.deepEqual(tools.map((t) => t.name).filter((n) => !SUITE_TOOLS.some((t) => t.name === n)), [],

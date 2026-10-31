@@ -32,6 +32,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { sendJson } from '../json-response.js';
 import { createToolsPort, createHttpPort } from '../host-ports/index.js';
 import { SUITE_TOOLS } from '../engine/suite.js';
+// M1（批 `punky-qa-fix-m1m2-2026-10-31`）：宿主工具口径**单点**下沉到 `lib/governance/host-tools.js`
+//   —— 本地不再手写名单（第二份名单 = 漂移源）。本文件只消费：
+//   · `HOST_INTERSECT_EXEMPT` = **求交豁免策略子集**（`:83` 处真正需要的语义，见该处注释）；
+//   · `HOST_PROVIDED_TOOLS` 仅作为**同名导出再抛**，保持既有外部导出面不破（语义已变：现在是 7 件事实集）。
+import { HOST_INTERSECT_EXEMPT } from '../governance/host-tools.js';
 
 /** 协议版本（钉死；`2026-07-28` 起的「无握手」形态不在本实现范围）。 */
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -48,12 +53,14 @@ export const LOOPBACK_ADDRESSES = Object.freeze(['127.0.0.1', '::1', '::ffff:127
 /** 暴露族（**声明面**）：批内状态读写面 = `blackboard`（S1 迁族后的数据面）∪ `read`（只读投影面）。 */
 export const EXPOSED_KINDS = Object.freeze(['blackboard', 'read']);
 
-/**
- * 宿主提供、本仓**不注册**的只读件（声明面里出现、但注册表里查不到属**正常**）：
- * `list_agents` / `wait_agent` 由宿主 Team 面提供（见 `member-tools` 的同伴工具清单）。
- * ⚠ 二者在真宿主的可见性取决于 scope；本仓无法自证 ⇒ **登记未验证项**，不在此层兜底实现。
- */
-export const HOST_PROVIDED_TOOLS = Object.freeze(['list_agents', 'wait_agent']);
+// 【M1 · `:56` 删除本地定义】原处手写 `Object.freeze(['list_agents','wait_agent'])`（2 件的
+//   **求交豁免子集**，却顶着「宿主提供」的名字）⇒ 已下沉到 `lib/governance/host-tools.js` 的
+//   `HOST_INTERSECT_EXEMPT`（策略语义），本处仅保留**同名再导出**以不破外部消费面。
+//   ⚠ 再导出**取值 = HOST_INTERSECT_EXEMPT（2 件）**，不是 7 件事实集：本符号的**既有消费方**
+//   （如 `test/mcp-data-plane.test.js:102` 按它建宿主桩）依赖的是「2 件豁免子集」这一行为；
+//   若换成 7 件全集，桩循环会静默从 2 次变 7 次（**行为变更藏在一个改名里**，正是本批要治的病）。
+/** @deprecated **名字骗人**：语义 = **求交豁免子集**（2 件），非「宿主提供全集（7 件）」。新代码请直接用 `HOST_INTERSECT_EXEMPT` / `HOST_PROVIDED_TOOLS`。 */
+export const HOST_PROVIDED_TOOLS = HOST_INTERSECT_EXEMPT;
 
 const MAX_BODY_BYTES = 1 << 20; // 1 MiB：单帧上限（超限按畸形帧处理，不无限缓冲）
 
@@ -76,13 +83,17 @@ export function exposedToolNamesOf(suite = SUITE_TOOLS) {
  * 为什么**必须惰性**（每次请求算，不能安装时算一次）：`installMcpDataPlane` 在 `createTools` 开头调用，
  * 早于工具数组构造 ⇒ 安装时注册表还空着，此刻求交会得到空集（把整个数据面宣告成空）。
  *
- * 宿主件（`HOST_PROVIDED_TOOLS`）豁免求交：本仓不注册它们属正常形态。
+ * **求交豁免**（`HOST_INTERSECT_EXEMPT`）：这 2 件不参与求交 —— 它们是宿主 Team 面只读件，
+ * 本仓不注册它们属正常形态，且本仓无法自证其在真宿主的可见性（登记未验证）。
+ * ⚠ **M1 语义更正**：本行原写 `HOST_PROVIDED_TOOLS`（那曾是个 2 件数组）；求交需要的从来是
+ * **豁免子集（策略）**，不是「宿主提供全集（事实 7 件）」——若误用全集，会把 `subagent` 等
+ * 未注册件一并豁免，等于放宽「能宣告必须真能调到」。故改为 `HOST_INTERSECT_EXEMPT`。
  */
 export function callableToolNamesOf(ctx, suite = SUITE_TOOLS) {
   const declared = exposedToolNamesOf(suite);
-  const hostProvided = new Set(HOST_PROVIDED_TOOLS);
+  const hostProvided = new Set(HOST_INTERSECT_EXEMPT);
   return declared.filter((name) => {
-    if (hostProvided.has(name)) return true; // 宿主提供：本仓未注册是正常
+    if (hostProvided.has(name)) return true; // 求交豁免（策略）：本仓不注册属正常
     try {
       return createToolsPort(ctx).hasTool(name);
     } catch { return false; }
@@ -171,6 +182,14 @@ export function installMcpDataPlane(ctx, deps = {}) {
     async 'tools/call'(params) {
       const name = params && typeof params.name === 'string' ? params.name : '';
       if (!name) return { protocolError: { code: -32602, message: 'invalid params: tools/call requires `name`' } };
+      // 【M2 三态 · 查询失败 ≠ 不存在】**必须在 -32601 分支之前**判定：注册表查询抛错时，
+      //   若落到 unknown tool 分支，模型会看到「工具不存在」而真相是「数据面坏了」。
+      //   ⇒ errored 一律映射 -32603 并带原文；absent 才走 -32601（维持不变）。
+      const probedForCall = createToolsPort(ctx).probeTool(name);
+      if (probedForCall.state === 'errored') {
+        logger?.warn?.('[mcp][degraded] tool registry query failed: ' + name + '：' + probedForCall.reason);
+        return { protocolError: { code: -32603, message: probedForCall.reason } };
+      }
       // 可调面之外 ⇒ 未知工具（**不落到工具层**：不该让未暴露的能力有机会执行）。
       //   含「条件注册未开」（如 `log_export`：logs 默认关）—— 它对客户端就是不存在，符合事实。
       if (!callableToolNamesOf(ctx).includes(name)) {

@@ -1032,6 +1032,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/host-tools-ledger.test.js": {
+      "asserts": 16,
+      "blankLines": 11,
+      "lines": 112,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/hot-config.test.js": {
       "asserts": 42,
       "blankLines": 19,
@@ -1230,6 +1238,14 @@
       "lines": 479,
       "tautologies": 0,
       "tests": 12,
+      "todos": 0
+    },
+    "test/mcp-tool-probe-tristate.test.js": {
+      "asserts": 18,
+      "blankLines": 14,
+      "lines": 151,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/member-deny-boundary.test.js": {
@@ -1627,7 +1643,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 44,
       "blankLines": 21,
-      "lines": 381,
+      "lines": 387,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1691,7 +1707,7 @@
     "test/tool-face-ledger.test.js": {
       "asserts": 30,
       "blankLines": 33,
-      "lines": 286,
+      "lines": 288,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1929,7 +1945,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T03:52:21Z",
+  "generatedAt": "2026-10-31T04:58:58Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1940,15 +1956,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "P3 TEST-REMOVE 出清：TR1 改断言钉行为（两态真调用，未删测试）、TR2 只删 len>=120 一行（hits 真判据一字未动）、TR3 只删 ctx.tools.=false 一条（①② 无同口径替代故保留）",
+  "reason": "M1 宿主工具名单单点化（新建 lib/governance/host-tools.js 三常量分语义；data-plane-server.js:83 语义更正为 HOST_INTERSECT_EXEMPT）+ M2 端口三态（present/absent/errored 单点 probeTool，查询失败不再降级为不存在）；新增 test/host-tools-ledger(4) + test/mcp-tool-probe-tristate(3)",
   "schema": 1,
   "totals": {
-    "asserts": 11726,
-    "blankLines": 6426,
-    "files": 241,
-    "lines": 68061,
+    "asserts": 11760,
+    "blankLines": 6451,
+    "files": 243,
+    "lines": 68332,
     "tautologies": 0,
-    "tests": 2417,
+    "tests": 2424,
     "todos": 4
   }
 }
