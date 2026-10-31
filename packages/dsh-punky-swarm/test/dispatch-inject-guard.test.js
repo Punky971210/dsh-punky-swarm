@@ -22,8 +22,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   走既定的「仅发句柄」降级分支）。本套件锁死②，防将来有人把 try/catch 删回去。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { subagentRuntimeOf, buildStartRequest } from '../lib/engine/dispatch.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+// 【P0-3 门禁解冻】原还 import `subagentRuntimeOf`（引擎侧形态探针，宿主形态值出口）。
+//   provider 拆分中探针簇删除 ⇒ 本文件改由**端口功能面读数**作答（`createAgentPort`）。
+import { buildStartRequest } from '../lib/engine/dispatch.js';
+import { createAgentPort } from '../lib/host-ports/agent.js';
 import * as plugin from '../lib/index.js';
+
+const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const readRel = (rel) => fs.readFileSync(path.join(PKG_ROOT, ...rel.split('/')), 'utf8');
 
 // ── 宿主 one-shot `start` 的 signal 契约（2026-09-16 首派抓出；2026-09-22 one-shot 化续用） ─────
 //   宿主 `SubagentRuntime.start` → provider driver 对 `request.signal` 直接调 `throwIfAborted()`
@@ -57,27 +66,54 @@ test('SP-6 buildStartRequest：缺省 signal 每次独立（不复用全局单�
   assert.notEqual(a.signal, b.signal);
 });
 
-test('SP-1 inject 声明：插件必须声明 subagents 依赖（引擎自派前提）', () => {
-  assert.ok(Array.isArray(plugin.inject));
-  assert.ok(plugin.inject.includes('subagents'), 'inject 必须含 subagents（否则 ctx.subagents 取属性即抛）');
-  assert.ok(plugin.inject.includes('tools'));
+// ── SP-1 【P0-3 解冻】inject 声明面：结构合法 + 单一来源驱动（原：inject 三键逐字含 tools/subagents） ──
+//   原断言要求引擎插件行的 inject **必须含 `subagents` / `tools`** —— 那是**宿主服务名**。
+//   provider 拆分后引擎行 inject 内宿主服务名必须为 0（J4'-a），两键迁到 **provider 行** ⇒ 原断言先红。
+//   语义等价改写（本用例真命题是「声明面合法且由单点驱动，不是手写枚举」）：
+//     ① 结构合法（数组 / 每键非空字符串 / 无重复）② inject 由**单一来源标识符**驱动。
+//   「subagents 是引擎自派前提」这一要求**不消失**，它随宿主差异一起迁入 provider 行的 inject
+//   （见 exec/gate-thaw.md §未改项与理由 · 承接面）。
+test('SP-1 inject 声明面：结构合法（数组 / 非空字符串 / 无重复）且由单一来源标识符驱动', () => {
+  assert.equal(Array.isArray(plugin.inject), true, 'inject 必须是数组（宿主归一化为 name→config 映射）');
+  assert.equal(plugin.inject.every((k) => typeof k === 'string' && k.length > 0), true,
+    'inject 每个键必须是非空字符串；实际=' + JSON.stringify(plugin.inject));
+  assert.equal(new Set(plugin.inject).size, plugin.inject.length, 'inject 不得含重复键；实际=' + JSON.stringify(plugin.inject));
+  const declLine = (readRel('lib/index.js').match(/^export const inject = .*$/m) ?? [''])[0];
+  assert.match(declLine, /^export const inject = [A-Za-z_$][\w$]*;$/,
+    'inject 必须由**单一来源标识符**驱动（禁手写数组字面量逐键枚举）；实际=' + JSON.stringify(declLine));
 });
 
-test('SP-2 未注入服务的**抛错式**取属性 ⇒ 返回 null（降级「仅发句柄」，不抛原始 cordis 错）', () => {
+// ── SP-2 【P0-3 解冻】注入守卫抛错的取值面：端口降级不崩（原：subagentRuntimeOf 返回 null） ──
+test('SP-2 未注入服务的**抛错式**取属性 ⇒ 端口降级为功能面不可用，且不抛原始 cordis 错', async () => {
   // 模拟 cordis 注入守卫：任何属性读取都抛
   const throwingCtx = new Proxy({}, {
     get(_t, k) { throw new Error('cannot get property "' + String(k) + '" without inject'); },
     has() { return false; },
   });
-  assert.equal(subagentRuntimeOf(throwingCtx), null, '抛错式上下文必须被兜住');
+  const port = createAgentPort(throwingCtx);
+  assert.equal(port.available, false, '抛错式上下文必须被兜住 ⇒ 功能面不可用（不崩）');
+  assert.equal(port.narrowVia, 'none', '不可用时收窄通道必须是 none');
+  // 不可用时派发入口必须**显式拒**（禁静默成功）
+  await assert.rejects(() => (port.execute ?? port.spawn).call(port, { provider: 'p', label: 'l', prompt: 'x' }),
+    (e) => {
+      assert.equal(/^GATE_/.test(String(e?.message)), false, '端口层拒因不得用 GATE_ 码族；实际=' + e?.message);
+      return true;
+    });
 });
 
-test('SP-3 常规形态：无服务 / 服务无 start / 服务可用（one-shot 化探测面）', () => {
-  assert.equal(subagentRuntimeOf({}), null);
-  assert.equal(subagentRuntimeOf(undefined), null);
-  assert.equal(subagentRuntimeOf({ subagents: {} }), null, '无 start ⇒ 视为不可用');
-  assert.equal(subagentRuntimeOf({ subagents: { startContinuable: async () => ({}) } }), null,
-    '仅存 continuable 通道 ⇒ 不可用（2026-09-22 one-shot 化：start 是唯一通道）');
-  const rt = { start: async () => ({}) };
-  assert.equal(subagentRuntimeOf({ subagents: rt }), rt, '可用服务原样返回');
+// ── SP-3 【P0-3 解冻】五种宿主面的功能面读数（原：subagentRuntimeOf 的 rt 真值判定） ──
+test('SP-3 端口对五种宿主面给出功能面读数（缺服务 / 无入口 / 历史桩 / 旧入口），且不抛', () => {
+  for (const [label, ctx] of [
+    ['缺键', {}],
+    ['undefined', undefined],
+    ['无入口', { subagents: {} }],
+    ['历史桩 continuable', { subagents: { startContinuable: async () => ({}) } }],
+  ]) {
+    const port = createAgentPort(ctx);
+    assert.equal(port.available, false, label + '：功能面不可用');
+    assert.equal(port.narrowVia, 'none', label + '：收窄通道 none');
+  }
+  const startPort = createAgentPort({ subagents: { start: async () => ({}) } });
+  assert.equal(startPort.available, true, '可用服务 ⇒ 功能面可用');
+  assert.equal(startPort.narrowVia, 'request', '旧入口形态 ⇒ 收窄经 request');
 });

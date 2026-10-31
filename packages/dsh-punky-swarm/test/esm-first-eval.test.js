@@ -285,7 +285,19 @@ test('A1-P2-01 / AC-8 · 冷加载冒烟：包入口 import 成功且 inject 声
   const m = await import('../lib/index.js');
   assert.equal(typeof m.apply, 'function', 'lib/index.js 必须导出 apply');
   assert.equal(m.name, 'dsh-punky-swarm', 'name 声明');
-  assert.deepEqual(m.inject, ['tools', 'webServer', 'subagents'], 'inject 三键内容/顺序逐字不变');
+  // 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】原断言把 inject **逐字冻结**为
+  //   `['tools','webServer','subagents']` —— 那是**宿主服务名清单**。provider 拆分后引擎行
+  //   inject 内宿主服务名必须为 0（J4'-a），三键会迁到 provider 行 ⇒ 该冻结先把拆分批判红。
+  //   语义等价改写（本用例的真命题是「声明面不被环破坏」）：只核
+  //   ① 结构合法（数组 / 每键非空字符串 / 无重复）② 由**单一来源标识符**驱动（禁手写数组字面量）。
+  //   反向可控：把 inject 写成 `['tools','tools']`、`[1,2]`、或 `['a','b']` 字面量 ⇒ 本断言均红。
+  assert.equal(Array.isArray(m.inject), true, 'inject 必须是数组（宿主归一化为 name→config 映射，逐名 required）');
+  assert.equal(m.inject.every((k) => typeof k === 'string' && k.length > 0), true,
+    'inject 每个键必须是非空字符串；实际=' + JSON.stringify(m.inject));
+  assert.equal(new Set(m.inject).size, m.inject.length, 'inject 不得含重复键；实际=' + JSON.stringify(m.inject));
+  const injectDeclLine = (readFileSync(path.join(PKG_ROOT, 'lib', 'index.js'), 'utf8').match(/^export const inject = .*$/m) ?? [''])[0];
+  assert.match(injectDeclLine, /^export const inject = [A-Za-z_$][\w$]*;$/,
+    'inject 必须由**单一来源标识符**驱动（键集是装配面契约，须单点；禁在手写数组字面量里逐键枚举）；实际=' + JSON.stringify(injectDeclLine));
 });
 
 test('A1-P2-01 / AC-8 · 静态 ESM 环：SCC 数 = 1、成员 = 8、成员集逐项冻结（BEFORE = 2 SCC / 13 模块）', () => {

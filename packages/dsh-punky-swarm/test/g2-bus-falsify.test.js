@@ -47,11 +47,35 @@ const PKG_ROOT = path.resolve(HERE, '..');
 /** **自建**宿主最小面（不复用 selftest 的夹具）：三宿主键各给一个占位实现 ⇒ 「已注入」。 */
 const hostRuntimeFixture = () => Object.fromEntries(HOST_INJECTIONS.map((k) => [k, { marker: k }]));
 
-/** **自建**必需端口夹具：只给 runtime + audit（两必需），其余走内建/null 适配器。 */
-const requiredPortsFixture = () => ({
-  runtime: { start: () => ({ ok: true, writes: [], evidence: [] }), stop: () => ({ ok: true }) },
-  audit: { emit: () => null },
-});
+/**
+ * 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】能力名域**单点**（原 `HOST_INJECTIONS[0]` 散在 4 处）。
+ *
+ * 为什么改：J6-d 整改会把 bus 的能力名域从「宿主服务名」换成**功能面名**；把 `HOST_INJECTIONS[0]`
+ *   （位置 0）写死在 4 条用例里，整改后 4 条会连带变红、被误读成整改失败（上游 gap-list AG-27 同族）。
+ * 为什么不直接删：这 4 条用例的语义是「**某个已知能力名** + 缺失/齐备的必需端口 ⇒ fail-closed 行为」，
+ *   它们不关心名字**叫什么**，只关心「bus 认识它」。
+ * 做法：与宿主面夹具**同源派生**（`hostRuntimeFixture()` 的键 = 同一张表）⇒ 换表后两侧自动跟随，
+ *   仍保留「名字必须被 bus 接受」这一层判别力（若表与 bus 词表脱钩，`assertCapability` 会走
+ *   `unknown capability:` 分支 ⇒ 用例失败并点名）。
+ */
+const CAPABILITY_NAME = Object.keys(hostRuntimeFixture())[0];
+
+/**
+ * **自建**必需端口夹具：只给 runtime + audit（两必需），其余走内建/null 适配器。
+ *
+ * 【P0-3 解冻】原夹具写死 `runtime:{start,stop}` / `audit:{emit}` —— 那是**端口方法名**冻结。
+ *   契约唯一化后 runtime 的动词变 `execute`、audit 的 `emit` 可能变 `append`（contract-shape §8.1），
+ *   写死单向名字会先红。本夹具的语义只是「两必需端口**在场且可调用**」，不负责钉动词名
+ *   （动词名由 `lib/ports.ts` 契约面判）⇒ 给**两代动词名的并集**，标注为过渡期兼容。
+ *   注：`M4` 的「null 适配器 5 键集合相等」**故意不动** —— 那是键集不是动词（contract-shape §8.2 正向约束）。
+ */
+const requiredPortsFixture = () => {
+  const anyVerb = () => ({ ok: true, writes: [], evidence: [], timedOut: false, exitCode: 0, signal: null });
+  return {
+    runtime: { start: anyVerb, stop: anyVerb, execute: anyVerb, cancel: anyVerb },
+    audit: { emit: () => null, append: () => null },
+  };
+};
 
 /**
  * **反向开关迁移后的唯一入口**（批 `punky-g2-tail-2026-10-30` · T-1 收口后）：
@@ -89,7 +113,7 @@ test('M1 null 适配器最小批次：node lib/bus/selftest.mjs 真实退出码 
 test('M2 否定对照①：两必需端口全缺 ⇒ assertCapability 抛普通 Error（非 GATE_ / 无 code / 消息含缺失端口名）', () => {
   const bus = createBus({}); // 不注册任何端口
   let err = null;
-  try { bus.assertCapability(HOST_INJECTIONS[0], hostRuntimeFixture()); } catch (e) { err = e; }
+  try { bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()); } catch (e) { err = e; }
 
   assert.ok(err, '缺必需端口必须抛错（静默通过 = 不合格）');
   assert.ok(err instanceof Error, '必须是 Error 实例');
@@ -103,12 +127,12 @@ test('M2 否定对照①：两必需端口全缺 ⇒ assertCapability 抛普通 
 
 test('M3 否定对照②（Δ vs selftest：selftest 只测「两个全缺」，本处测**部分缺失**）⇒ 只报缺的那一个', () => {
   const bus = createBus({ ports: requiredPortsFixture() }); // runtime+audit 齐 ⇒ 不应抛
-  assert.equal(bus.assertCapability(HOST_INJECTIONS[0], hostRuntimeFixture()), true, '两必需端口齐备 ⇒ 断言通过');
+  assert.equal(bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()), true, '两必需端口齐备 ⇒ 断言通过');
 
   // 只缺 audit：用新 bus 只给 runtime
   const bus2 = createBus({ ports: { runtime: requiredPortsFixture().runtime } });
   let err = null;
-  try { bus2.assertCapability(HOST_INJECTIONS[0], hostRuntimeFixture()); } catch (e) { err = e; }
+  try { bus2.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()); } catch (e) { err = e; }
   assert.ok(err, '缺 audit ⇒ 必须抛错');
   const msg = String(err.message ?? '');
   assert.ok(msg.includes('audit'), '消息须含缺失端口 `audit`；实际=' + msg);
@@ -123,7 +147,7 @@ test('A1 四动作逐个可达：register 返回槽位名 · assertCapability �
   assert.equal(bus.register('tools', { list: () => ['x'], call: () => ({ ok: true }) }), 'tools', 'register 应返回所注册的槽位名');
 
   // ② assertCapability：能力名域内 + 宿主键齐 ⇒ true
-  assert.equal(bus.assertCapability(HOST_INJECTIONS[0], hostRuntimeFixture()), true, 'assertCapability 应返回 true');
+  assert.equal(bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()), true, 'assertCapability 应返回 true');
 
   // ③ route：给出席位视图（形状见 F-3）
   const routed = await bus.route(BUILTIN_ROLES[0]);

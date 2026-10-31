@@ -176,7 +176,22 @@ test('B3 三域只引用不复制：bus 内引用两域模块 ≥1 处，且无�
 
   assert.ok(/from\s+['"][^'"]*capabilities\.js['"]/.test(src), 'AC-13：bus 须 import 能力域模块（禁自建能力表）');
   assert.ok(/from\s+['"][^'"]*roster\.js['"]/.test(src), 'AC-13：bus 须 import 职位域模块（禁自造职位名单）');
-  assert.ok(/CAPABILITY_KEYS|capabilityReport|HOST_INJECTIONS/.test(src), 'AC-13：须引用能力域的具体导出');
+  // 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】原断言用正则要求 bus **引用 `HOST_INJECTIONS`**
+  //   —— 那是「宿主服务名词表」。J6-d 整改会把 bus 的能力名域从宿主服务名换成**功能面名**，
+  //   该要求会先把整改判红（上游 `gap-list.md` AG-32 = 本行）。
+  //   语义等价改写：不冻结**具体导出名**，改为核「bus 从能力域模块 import 的每个名字**逐个真实存在**」
+  //   —— 既保住「只引用不复制」（必须真 import，不得自建表），又新增一层「不得引用幻符号」。
+  const capImportBlock = (src.match(/import\s*\{([^}]*)\}\s*from\s*['"][^'"]*capabilities\.js['"]/) ?? [])[1] ?? '';
+  const capImportedNames = capImportBlock.split(',')
+    .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
+    .filter(Boolean);
+  const capExportedNames = new Set(
+    [...readRel('lib/capabilities.js').matchAll(/^export\s+(?:const|function|class)\s+([A-Za-z0-9_$]+)/gm)].map((m) => m[1]),
+  );
+  assert.ok(capImportedNames.length >= 1,
+    'AC-13：bus 须从能力域模块 import ≥1 个导出（禁自建能力表）；实际=' + JSON.stringify(capImportedNames));
+  assert.deepEqual(capImportedNames.filter((n) => !capExportedNames.has(n)), [],
+    'AC-13：bus 引用的能力域导出必须逐个真实存在（禁引用幻符号）；能力域实际导出=' + JSON.stringify([...capExportedNames].sort()));
   assert.ok(/BUILTIN_ROLES|reconcileRoster/.test(src), 'AC-13：须引用职位域的具体导出');
 
   // 无复制：不得出现「连续 ≥5 个能力键名」或「9 项职位名单」的硬编码数组

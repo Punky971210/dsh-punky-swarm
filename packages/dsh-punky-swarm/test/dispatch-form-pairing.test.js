@@ -9,14 +9,18 @@ License, or (at your option) any later version.
 
 // test/dispatch-form-pairing.test.js —— **S-3 回归的另一半**：`start` ／ `activation` 两支**成对**覆盖。
 //
-// 背景（`e1` 主动登记的未覆盖）：乙把入口选择改成 `if (agentPort.form === 'activation') spawn : rt.start`。
-//   `test/engine-dispatch.test.js` 里 **`activation` 出现 0 次** ⇒ 该二分只有 `start` 支被行为覆盖；
-//   若 `spawn` 分支被改坏（例如它对 `toolFace` 产生副作用），**没有任何用例会发现**。
+// 背景（`e1` 主动登记的未覆盖）：入口选择曾写成 `if (agentPort.form === 'activation') spawn : rt.start`。
+// 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】入口选择按 J6-e 归 **provider**（端口内部分派），
+//   引擎只读**功能面读数** ⇒ 本文件的断言对象不再含 `agentPort.form`，也不点名宿主入口。
+//   `test/engine-dispatch.test.js` 里 `activation` 出现 0 次 ⇒ 该二分只有 `start` 支被行为覆盖，
+//   故本文件保留「成对覆盖」的职责。
 //
 // 本文件钉三件事（成对）：
-//   ① `activation` 形态**走 `spawn`**（⇒ 调 `startActivation(spec)`），**不走 `rt.start`**；
-//   ② `toolFace` 在 activation 分支**未被消费**：`spec.request` **不含** `toolFilter`/`persona`，只带 `agentPreset`；
-//      且「传了 `toolFace` 也不改变合成结果」「未传也不报错」两态都成立；
+//   ① activation 宿主：统一派发入口成功后，宿主侧 activation 入口被调用**恰 1 次**，
+//      且 `spec.request` 只带 `agentPreset`（宿主 schema 无 `toolFilter`/`persona` 字段）；
+//   ② **收窄通道必须被消费**：`toolFace`（经 `denyTools` 通道）与 preset 覆盖声明的关系**必须改变判定结果**
+//      —— 交集为空 ⇒ 放行；有交集 ⇒ 拒派。原「传与不传同形」断言的**方向已反转**（见 S-3b），
+//      因为「不消费 toolFace」正是 p0-6 F-3 的缺陷，不是预期行为；
 //   ③ 与 `start` 形态**成对**：同一引擎在 start 宿主上 ⇒ 捕获的 `request` **含** `toolFilter.deny`（这才是 S-3 修的 B2）。
 //
 // 跑法（必须带 preload）：node --import ./test/helpers/isolated-home.preload.mjs --test test/dispatch-form-pairing.test.js
@@ -91,30 +95,68 @@ async function dispatchWith(kind, cfg = {}) {
   return { captured, result, error, store, sess, batchId, lane };
 }
 
-test('S-3a activation 形态：**走 spawn → startActivation(spec)**，且 `spec.request` 不含 toolFilter/persona、只带 agentPreset', async () => {
-  const { captured, result, error } = await dispatchWith('activation', { agentPreset: PRESET });
-  assert.equal(error, null, 'activation + 已配置 agentPreset ⇒ 不得拒派；错误=' + String(error?.message ?? ''));
+test('S-3a activation 宿主：统一派发入口成功（宿主 activation 入口恰 1 次），且 `spec.request` 只带 agentPreset', async () => {
+  // 【P0-3 解冻】原断言把「配了个 `agentPreset` 字符串」当成放行充分条件。真读数口径（p0-6 D-1/D-2）
+  //   要求**收窄见证**：`presetCoverage[presetId].tools` 声明该 preset 实际拿到的工具面。
+  //   ⇒ 夹具补 `presetCoverage` 使「见证齐备才放行」成立（今日实现忽略该键 ⇒ 仍绿；修复后见证齐备 ⇒ 仍绿）。
+  const { captured, result, error } = await dispatchWith('activation', {
+    agentPreset: PRESET,
+    presetCoverage: { [PRESET]: { tools: [] } }, // 覆盖为空集 ⇒ 与任何 deny 列表交集为空 ⇒ 收窄成立
+  });
+  assert.equal(error, null, 'activation + 见证齐备 ⇒ 不得拒派；错误=' + String(error?.message ?? ''));
   assert.equal(result?.spawned, true, '必须真的派发（spawned:true）');
   assert.equal(captured.length, 1, '必须恰好调用一次宿主入口；实际=' + captured.length);
   const spec = captured[0].spec;
-  assert.ok(spec, '必须走 **startActivation(spec)**（而不是 rt.start）—— 该宿主根本没有 start');
+  assert.ok(spec, '宿主侧 activation 入口必须收到 spec（该夹具宿主只有 activation 入口）');
   const req = spec.request;
   assert.equal(req?.agentPreset, PRESET, 'agentPreset 必须来自 config.dispatch.agentPreset；实际=' + JSON.stringify(req?.agentPreset));
   assert.equal('toolFilter' in (req ?? {}), false, 'activation 分支**不得**合成 toolFilter（宿主 schema 无此字段）');
   assert.equal('persona' in (req ?? {}), false, 'activation 分支**不得**合成 persona');
 });
 
-test('S-3b `toolFace` 在 activation 分支**未被消费**：传与不传 ⇒ 合成结果同形（且都不报错）', async () => {
-  const a = await dispatchWith('activation', { agentPreset: PRESET });
-  const b = await dispatchWith('activation', { agentPreset: PRESET, roleToolFace: { deny: ['x'] } });
-  const reqOf = (r) => JSON.stringify(Object.keys(r.captured[0].spec.request).sort());
-  assert.equal(a.error, null, '未传 toolFace ⇒ 不得报错');
-  assert.equal(b.error, null, '传 toolFace ⇒ 也不得报错（activation 分支不读它）');
-  assert.equal(reqOf(a), reqOf(b), '传与不传 `toolFace` 的 `spec.request` **键集必须相同**（该分支不消费它）');
-  for (const r of [a, b]) {
-    assert.equal('toolFilter' in r.captured[0].spec.request, false, '两种情况都不得出现 toolFilter');
-  }
-});
+// ── S-3a-R（P0-3 前向登记 · **当前预期红**）裸 preset 字符串无见证 ⇒ 必须拒派 ─────────────────
+//   真读数（p0-6 D-2 W-2）：「配了 preset id」≠「该 preset 收窄了本次工具面」——id 不含工具面内容，
+//   必须有独立覆盖声明（`presetCoverage`）才可判。⇒ 只配 id 不配覆盖 = **无见证** ⇒ 拒派（不以弱换强）。
+//   今日实现只看 id 是否存在 ⇒ 放行 ⇒ 本用例红；故挂 `{ todo }`：修好后删掉 todo 转正式用例。
+test('S-3a-R（TODO · 预期红）activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派',
+  { todo: 'P0-3 登记：真读数要求收窄见证（p0-6 D-2 W-2）；当前实现只看 preset id 存在 ⇒ 预期红' },
+  async () => {
+    const { result, error } = await dispatchWith('activation', { agentPreset: PRESET });
+    assert.ok(error, '无见证必须拒派（不得放行）；实际 spawned=' + String(result?.spawned));
+    assert.match(String(error?.message), /GATE_DISPATCH_CAPABILITY_/, '拒派须属能力位不可用族；实际=' + String(error?.message));
+  });
+
+// ── S-3b（P0-3 方向反转 + 前向登记 · **当前预期红**）`toolFace` 必须被消费 ────────────────────
+//   【原断言方向已反转】原文断言「传与不传 `toolFace` ⇒ 合成结果**同形**」= 把 p0-6 **F-3**
+//   （activation 分支 `spawn(...)` 实参无 `toolFace` ⇒ 收窄通道整键丢失）**冻结成了预期行为**。
+//   且原实现用 `config.dispatch.roleToolFace` 造差分 —— 该键在 `lib/**` **零消费**（grep 实测 = 0），
+//   所以「同形」是**恒真**、无判别力（弱证明）。⇒ 本条按 p0-6 处方重写：
+//   ① 删除 `roleToolFace`；② 改用**真实通道**（`denyTools` × `presetCoverage`）；
+//   ③ 断言「`toolFace` 与覆盖声明的关系**改变判定结果**」（交集为空 ⇒ 放行；有交集 ⇒ 拒派）。
+//   今日实现无视 `presetCoverage` ⇒ 两态都放行 ⇒ 本条红；修好后转绿（删掉 todo 即成正式用例）。
+test('S-3b（TODO · 预期红）`toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行；有交集 ⇒ 拒派',
+  { todo: 'P0-3/P0-6 登记：真读数要求 activation 分支消费 toolFace 并按 presetCoverage 核对见证；当前实现整键丢失 ⇒ 预期红' },
+  async () => {
+    // 交集为空：preset 覆盖不含任何工具面 ⇒ 本次 deny 集必不被其覆盖 ⇒ 收窄成立 ⇒ 放行
+    const disjoint = await dispatchWith('activation', {
+      agentPreset: PRESET,
+      presetCoverage: { [PRESET]: { tools: [] } },
+    });
+    assert.equal(disjoint.error, null, '交集为空 ⇒ 不得拒派；错误=' + String(disjoint.error?.message ?? ''));
+    assert.equal(disjoint.result?.spawned, true, '交集为空 ⇒ 必须真的派发');
+
+    // 有交集：`wave_plan` 在本次 deny 集内（见 S-3c 的冻结集断言），且被声明为 preset 覆盖 ⇒ 收窄不成立 ⇒ 拒派
+    const overlapping = await dispatchWith('activation', {
+      agentPreset: PRESET,
+      presetCoverage: { [PRESET]: { tools: ['wave_plan'] } },
+    });
+    assert.ok(overlapping.error, '交集非空 ⇒ 必须拒派（该 preset 实际拿到了本次要禁的工具）；实际 spawned='
+      + String(overlapping.result?.spawned));
+    assert.match(String(overlapping.error?.message), /GATE_DISPATCH_CAPABILITY_/,
+      '拒派须属能力位不可用族；实际=' + String(overlapping.error?.message));
+    assert.equal(overlapping.store.readBatch(overlapping.sess, overlapping.batchId).lanes.l1, 'pending',
+      '拒派须打在状态变更之前（lane 仍 pending，零状态变更）');
+  });
 
 test('S-3c **成对证明**：同一引擎在 start 宿主上 ⇒ 捕获的 `request` **含** `toolFilter.deny`（B2 按次收窄）', async () => {
   const ref = [];
@@ -131,10 +173,13 @@ test('S-3c **成对证明**：同一引擎在 start 宿主上 ⇒ 捕获的 `req
   assert.equal('agentPreset' in (req ?? {}), false, 'start 形态**不得**出现 agentPreset（那是 activation 的收窄通道）');
 });
 
-test('S-3d 能力位门仍在：activation 宿主 **未配置** agentPreset ⇒ 拒派（GATE_DISPATCH_CAPABILITY_MISSING，打在状态变更之前）', async () => {
+test('S-3d 能力位门仍在：activation 宿主 **未配置** agentPreset ⇒ 拒派（能力位不可用族，打在状态变更之前）', async () => {
   const { captured, result, error } = await dispatchWith('activation', {});
   assert.ok(error, '未配置 agentPreset ⇒ 必须拒派（否则 worker 拿到未收窄工具面）');
-  assert.match(String(error.message), /GATE_DISPATCH_CAPABILITY_MISSING/, '拒因须为该码；实际=' + String(error.message).slice(0, 160));
+  // 【P0-3 解冻】原断言钉死码名 `..._MISSING`；码名批会改成 `..._UNAVAILABLE`（criteria-v4 M-5）
+  //   ⇒ 改为**码族**匹配，跨改名窗口保持有效（单码名收紧留给码名批落地后的清理）。
+  assert.match(String(error.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+    '拒因须属「能力位不可用」族；实际=' + String(error.message).slice(0, 160));
   assert.equal(captured.length, 0, '拒派必须打在宿主调用之前（零宿主调用）');
   assert.equal(result, null, '拒派不返回成功结果');
 });

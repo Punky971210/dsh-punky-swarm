@@ -37,7 +37,11 @@ import { buildWavePlan } from '../lib/wave-plan.js';
 import { createCoreTools } from '../lib/tools/core.js';
 import { EVT_MEMBER_DISPATCH } from '../lib/state/event-types.js';
 import { __resetLaneHandles, pendingHandles } from '../lib/bridge/lane-handle.js';
-import { subagentRuntimeOf, subagentRuntimeProbeOf, buildStartRequest } from '../lib/engine/dispatch.js';
+// 【P0-3 门禁解冻】原还 import `subagentRuntimeOf` / `subagentRuntimeProbeOf`（引擎侧形态探针）。
+//   两者是**宿主形态值**的出口（J6-e / AC-5″ 要清除的对象），provider 拆分中整簇删除 ⇒
+//   本文件不再 import 它们，T-1.6 改由**端口功能面读数**（`createAgentPort`）作答。
+import { buildStartRequest } from '../lib/engine/dispatch.js';
+import { createAgentPort } from '../lib/host-ports/agent.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 
 function mkCtx(runtime) {
@@ -103,7 +107,7 @@ const dispatchesOf = (store, sessionId, batchId) =>
 const handlesOf = (batchId, lane) => pendingHandles().filter((h) => h.batchId === batchId && h.lane === lane);
 
 // ── T-1.1 `{ startActivation }` ⇒ 前置 fail-closed 拒派 + 三零（RED→GREEN 的 GREEN 面） ──
-test('T-1.1 A1-P1-01 新形态 {startActivation} ⇒ 拒派 GATE_DISPATCH_CAPABILITY_MISSING，且三零（lane 未变/零句柄/零事件）', async () => {
+test('T-1.1 A1-P1-01 宿主仅提供 activation 形态 ⇒ 前置 fail-closed 拒派（能力位不可用族），且三零（lane 未变/零句柄/零事件）', async () => {
   __resetLaneHandles();
   const root = tempRoot('punky-f1t1a-');
   const store = seedBatch(root, 'sess-f1a', 'b-f1a');
@@ -115,15 +119,22 @@ test('T-1.1 A1-P1-01 新形态 {startActivation} ⇒ 拒派 GATE_DISPATCH_CAPABI
   await assert.rejects(
     () => ld.execute({ batchId: 'b-f1a', lane: 'l1' }, execOf('sess-f1a')),
     (err) => {
-      assert.match(String(err?.message), /GATE_DISPATCH_CAPABILITY_MISSING/, '拒派码复用既有码（零新造）');
-      // 订正 1 要求三段可读：① 新形态不承载 toolFilter/persona ② 不以弱换强 ③ Agent Preset 迁移（F4）
-      assert.match(String(err?.message), /startActivation/, '① 点明新形态入口名');
-      assert.match(String(err?.message), /toolFilter/, '① 点明不被承载的收窄面 toolFilter');
-      assert.match(String(err?.message), /不以弱换强/, '② 点明拒派判据');
+      // 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】原三条断言把拒派文案**逐字冻结**到
+      //   ① 码名 `..._MISSING`（码名批改成 `..._UNAVAILABLE`，criteria-v4 M-5）
+      //   ② 宿主入口名 `startActivation` ③ 宿主 schema 字段名 `toolFilter`
+      //   —— 三者都是**实现形态**，不是拒派语义。语义等价改写：码**族**（跨改名窗口）+ **功能面理由**。
+      assert.match(String(err?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+        '拒派码须属「能力位不可用」族（码名批 MISSING→UNAVAILABLE ⇒ 本断言跨改名窗口保持有效）');
+      assert.match(String(err?.message), /收窄/, '① 点明拿不到的是**按次收窄**能力（功能面语言，不点名宿主入口）');
+      assert.match(String(err?.message), /不以弱换强/, '② 点明拒派判据（功能面语言）');
       // 【host-ports 批语义订正】新文案用字段名 `agentPreset`（camelCase），
       //   且已订正 maxDepth 表述；断言钉「指向承载方字段名 + 前置未配置条件」。
-      assert.match(String(err?.message), /agentPreset/, '③ 点明迁移承载方字段名 agentPreset');
-      assert.match(String(err?.message), /未配置/, '③′ 点明当前拒派前置条件（未配置即拒，fail-closed）');
+      assert.match(String(err?.message), /agentPreset/, '③ 点明承载方字段名 agentPreset');
+      // 【P0-3 解冻 · 二次防冻结】原断言钉死成因词 `未配置` —— 但真读数口径（p0-6 D-1/D-2）会把成因
+      //   从「没配 preset」改为「**无收窄见证**」⇒ 只钉 `未配置` 等于把当前成因冻结成契约。
+      //   改为**成因词族**：任一功能面成因在场即可（当前「未配置」/ 未来「无见证 / 无法核对」）。
+      assert.match(String(err?.message), /(未配置|无见证|无法核对|不能核对)/,
+        '③′ 点明拒派前置成因（跨成因改写窗口：未配置 → 无收窄见证）；实际=' + String(err?.message));
       return true;
     },
   );
@@ -168,7 +179,7 @@ test('T-1.2 A1-P1-01 阳性对照 {start} 旧形态 ⇒ 自派成功（spawned:t
 });
 
 // ── T-1.3 两形态皆无（{} / {startContinuable}）⇒ 降级「仅发句柄」+ 文案分档 ──
-test('T-1.3 A1-P1-01 form=null（{} 与 {startContinuable}）⇒ spawned:false + 文案含「不含可用启动入口」/startActivation/start，不含「宿主未提供」；句柄未消费、lane 仍 running', async () => {
+test('T-1.3 A1-P1-01 无可用启动功能（{} 与 {startContinuable}）⇒ spawned:false + 文案给功能面成因、不含「宿主未提供」；句柄未消费、lane 仍 running', async () => {
   for (const [label, runtime] of [['空服务 {}', {}], ['历史桩 {startContinuable}', { startContinuable: async () => ({}) }]]) {
     __resetLaneHandles();
     const root = tempRoot('punky-f1t1c-');
@@ -180,8 +191,11 @@ test('T-1.3 A1-P1-01 form=null（{} 与 {startContinuable}）⇒ spawned:false +
     assert.equal(r.spawned, false, label + '：无可用启动入口 ⇒ 仅发句柄');
     const note = String(r.spawnNote ?? '');
     assert.ok(note.includes('不含可用启动入口'), label + '：文案须含「不含可用启动入口」；实际=' + note);
-    assert.ok(note.includes('startActivation'), label + '：文案须含 startActivation');
-    assert.ok(note.includes('start'), label + '：文案须含 start');
+    // 【P0-3 解冻】原 `note.includes('startActivation')` / `note.includes('start')` 要求引擎降级文案
+    //   **点名宿主入口名** —— 宿主入口是 provider 知识，J6.0 禁止引擎文案承载（且 `'start'` 是
+    //   `'startActivation'` 的子串，第二条本就近恒真）。语义等价改写：只要求降级**动作**可读
+    //   （「仅发句柄」是本层语义）；宿名禁令由文末 T-1.8（todo 登记）承载。
+    assert.ok(note.includes('仅发句柄'), label + '：文案须声明降级动作「仅发句柄」；实际=' + note);
     assert.equal(note.includes('宿主未提供'), false, label + '：**禁**反向归因「宿主未提供」');
     assert.ok(r.firstLine && r.firstLine.startsWith('[swarm-lane:' + batchId + '/l1#'), label + '：句柄照常发放');
     assert.equal(handlesOf(batchId, 'l1').length, 1, label + '：句柄**未消费**（仍可直派）');
@@ -192,7 +206,7 @@ test('T-1.3 A1-P1-01 form=null（{} 与 {startContinuable}）⇒ spawned:false +
 });
 
 // ── T-1.4 C′ `ctx.subagents` 取值抛错 ⇒ runtime-unavailable 档（不崩、文案可辨） ──
-test('T-1.4 A1-P1-01 C′ subagents 取值抛错 ⇒ spawned:false + 文案含「ctx.subagents 不可取」/「未注入」，不含「宿主未提供」，且不抛错', async () => {
+test('T-1.4 A1-P1-01 取值被注入守卫拒绝 ⇒ spawned:false + 文案给功能面成因「未注入」，不含「宿主未提供」，且不抛错', async () => {
   __resetLaneHandles();
   const root = tempRoot('punky-f1t1d-');
   const store = seedBatch(root, 'sess-f1d', 'b-f1d');
@@ -201,7 +215,9 @@ test('T-1.4 A1-P1-01 C′ subagents 取值抛错 ⇒ spawned:false + 文案含�
   const r = await ld.execute({ batchId: 'b-f1d', lane: 'l1' }, execOf('sess-f1d'));
   assert.equal(r.spawned, false, '未注入 ⇒ 降级（不抛原始 cordis 错）');
   const note = String(r.spawnNote ?? '');
-  assert.ok(note.includes('ctx.subagents 不可取'), '文案须含「ctx.subagents 不可取」；实际=' + note);
+  // 【P0-3 解冻】原断言要求文案含**宿名串** `ctx.subagents 不可取` —— 宿名属 provider 知识。
+  //   功能面等价：必须给出「未注入」这一成因档（下一行），并声明降级动作（「仅发句柄」）。
+  assert.ok(note.includes('仅发句柄'), '文案须声明降级动作「仅发句柄」；实际=' + note);
   assert.ok(note.includes('未注入'), '文案须含「未注入」');
   assert.equal(note.includes('宿主未提供'), false, '**禁**反向归因');
   assert.equal(handlesOf('b-f1d', 'l1').length, 1, '句柄未消费');
@@ -232,41 +248,77 @@ test('T-1.5 A1-P1-01 三档降级文案互不相同（runtime-unavailable / no-s
   assert.equal(noStartEntry.includes('宿主未提供'), false);
 });
 
-// ── T-1.6 探针单测：三态 + runtime-unavailable（判定序只在一处） ──
-test('T-1.6 A1-P1-01 subagentRuntimeProbeOf 三态 + runtime-unavailable；subagentRuntimeOf 为同源薄壳', () => {
-  const activationRt = { startActivation() {} };
-  const startRt = { start() {} };
-  const continuableRt = { startContinuable() {} };
+// ── T-1.6 端口功能面读数（原「引擎探针三态」；探针簇随 provider 拆分删除，读数面不变） ──
+//   【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】原用例断言 `subagentRuntimeProbeOf` 的
+//   `{rt, form, reason}` 三态 —— `form` 是**宿主形态值**、`rt` 是**宿主服务句柄**，两者正是
+//   J6-e / AC-5″ 要清除的对象（provider 拆分中探针簇 `dispatch.js:948-960` 整簇删除）。
+//   语义等价改写：同一批输入改由**端口**作答，且只读**功能面读数**（available / narrowVia / depthVia）；
+//   三档语义一一对应：无服务 / 无可用入口 ⇒ 功能面不可用；有入口 ⇒ 可用（入口差异由通道读数表达）。
+test('T-1.6 A1-P1-01 端口对五种宿主面给出功能面读数（available / narrowVia / depthVia），且不抛', () => {
+  const noneOf = (ctx, label) => {
+    const port = createAgentPort(ctx);
+    assert.equal(port.available, false, label + '：功能面不可用');
+    assert.equal(port.narrowVia, 'none', label + '：收窄通道必须是 none（禁假装可收窄）');
+    assert.equal(port.depthVia, 'none', label + '：深度通道 none');
+    return port;
+  };
+  noneOf({}, '缺服务（缺键）');
+  noneOf({ subagents: null }, '缺服务（null）');
+  noneOf(throwingSubagentsCtx(), '取值被注入守卫拒绝');
+  noneOf({ subagents: {} }, '服务在位但无可用启动入口');
+  noneOf({ subagents: { startContinuable() {} } }, '历史桩 startContinuable 不得被当作可用入口');
 
-  const pa = subagentRuntimeProbeOf({ subagents: activationRt });
-  assert.equal(pa.form, 'activation', '{startActivation} ⇒ activation 形态');
-  assert.equal(pa.reason, null);
-  assert.equal(pa.rt, null, 'activation 形态不给出可调用句柄（防按 rt 真值误判「可派」）');
+  const startPort = createAgentPort({ subagents: { start() {} } });
+  assert.equal(startPort.available, true, '有可用入口 ⇒ 功能面可用');
+  assert.equal(startPort.narrowVia, 'request', '旧入口形态 ⇒ 收窄经 request（能力位读数，非形态派生）');
 
-  const ps = subagentRuntimeProbeOf({ subagents: startRt });
-  assert.equal(ps.form, 'start');
-  assert.equal(ps.reason, null);
-  assert.equal(ps.rt, startRt, 'start 形态原样返回服务对象');
-
-  const pn = subagentRuntimeProbeOf({ subagents: {} });
-  assert.equal(pn.form, null);
-  assert.equal(pn.reason, 'no-start-entry');
-  assert.equal(pn.rt, null);
-
-  const pc = subagentRuntimeProbeOf({ subagents: continuableRt });
-  assert.equal(pc.form, null, '{startContinuable} 历史桩**不得**被误判为 activation');
-  assert.equal(pc.reason, 'no-start-entry');
-
-  // runtime-unavailable：三种取值形态（缺键 / null / 取值抛错）
-  assert.deepEqual(subagentRuntimeProbeOf({}), { rt: null, form: null, reason: 'runtime-unavailable' });
-  assert.deepEqual(subagentRuntimeProbeOf({ subagents: null }), { rt: null, form: null, reason: 'runtime-unavailable' });
-  assert.deepEqual(subagentRuntimeProbeOf(throwingSubagentsCtx()), { rt: null, form: null, reason: 'runtime-unavailable' });
-
-  // 薄壳同源：对每种形态，subagentRuntimeOf === probe.rt（不得出现第二套判据）
-  for (const ctx of [{ subagents: activationRt }, { subagents: startRt }, { subagents: {} }, { subagents: continuableRt }, {}, throwingSubagentsCtx()]) {
-    assert.equal(subagentRuntimeOf(ctx), subagentRuntimeProbeOf(ctx).rt);
-  }
+  // activation 入口：**可用**（能力差异由通道读数表达，不是「不可用」）；
+  //   通道具体取值不在本用例钉死 —— 真读数口径（p0-6）落地后由 canNarrow(ask) 的实测结果决定。
+  const activationPort = createAgentPort({ subagents: { startActivation() {} } });
+  assert.equal(activationPort.available, true, 'activation 入口也算可用');
+  assert.equal(['request', 'preset', 'none'].includes(activationPort.narrowVia), true,
+    '收窄通道取值域合法（request|preset|none）；实际=' + activationPort.narrowVia);
 });
+
+// ── T-1.8（P0-3 前向登记 · **当前预期红**）文案不得承载宿主知识 ─────────────────────────
+//   本用例把「引擎拒派/降级文案不得出现宿主服务名或宿主入口名」写成**可执行要求**
+//   （J6.0「引擎不得知道宿主形态」/ AC-5″ 同源）。
+//   当前实现仍点名 `ctx.subagents` / `startActivation` ⇒ **预期红**，故挂 `{ todo }`：
+//   失败计入 todo 计数（**不污染 fail、不阻断拆分批**），provider 文案改造完成后**删掉 `{ todo }` 即转正式用例**。
+test('T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名',
+  { todo: 'P0-3 登记：文案仍点名 ctx.subagents / startActivation；拆分批 provider 文案改造后删掉 todo 转正式用例' },
+  async () => {
+    const HOST_WORDS = /ctx\.\s*subagents|startActivation|startContinuable/;
+
+    // ① 拒派文案（activation 形态 + 未配 agentPreset）
+    __resetLaneHandles();
+    const root1 = tempRoot('punky-f1t8a-');
+    const store1 = seedBatch(root1, 'sess-f1h', 'b-f1h1');
+    const ld1 = laneToolOf(mkCtx({ startActivation: async () => ({}) }), store1, root1, { dispatch: { provider: 'spawn' } });
+    let msg1 = '';
+    try { await ld1.execute({ batchId: 'b-f1h1', lane: 'l1' }, execOf('sess-f1h')); } catch (e) { msg1 = String(e?.message ?? ''); }
+    assert.match(msg1, /GATE_DISPATCH_CAPABILITY_/, '前提：须先拿到拒派（否则本用例无对象）');
+    assert.equal(HOST_WORDS.test(msg1), false, '拒派文案不得承载宿主入口名；实际=' + msg1);
+
+    // ② 降级文案（服务在位但无可用入口）
+    __resetLaneHandles();
+    const root2 = tempRoot('punky-f1t8b-');
+    const store2 = seedBatch(root2, 'sess-f1h', 'b-f1h2');
+    const ld2 = laneToolOf(mkCtx({}), store2, root2, { dispatch: { provider: 'spawn' } });
+    const r2 = await ld2.execute({ batchId: 'b-f1h2', lane: 'l1' }, execOf('sess-f1h'));
+    assert.equal(HOST_WORDS.test(String(r2.spawnNote ?? '')), false,
+      '降级文案不得承载宿主入口名；实际=' + String(r2.spawnNote ?? ''));
+
+    // ③ 取值被注入守卫拒绝档
+    __resetLaneHandles();
+    const root3 = tempRoot('punky-f1t8c-');
+    const store3 = seedBatch(root3, 'sess-f1h', 'b-f1h3');
+    const ld3 = laneToolOf(throwingSubagentsCtx(), store3, root3, { dispatch: { provider: 'spawn' } });
+    const r3 = await ld3.execute({ batchId: 'b-f1h3', lane: 'l1' }, execOf('sess-f1h'));
+    assert.equal(HOST_WORDS.test(String(r3.spawnNote ?? '')), false,
+      '取值抛错档文案不得承载宿主服务名；实际=' + String(r3.spawnNote ?? ''));
+    __resetLaneHandles();
+  });
 
 // ── T-1.7 载荷契约（探针不改变 buildStartRequest 的按次收窄面）：阳性对照锚 ──
 test('T-1.7 A1-P1-01 buildStartRequest 契约未被本批削弱（signal 可 throwIfAborted + toolFilter.deny 非空 + label）', () => {

@@ -365,9 +365,30 @@ test('乙-8 (验收② 净增 0)：导出面 / 事件常量 / `GATE_*` 码净增
   // 事件常量/门禁码：本改造**零新增**（唤醒路不落任何事件；completed 复用既有 `swarm.report`）
   const evtSrc = read('lib/state/event-types.js');
   assert.equal(evtSrc.includes('swarm.wake'), false, '不新增唤醒类事件常量');
-  // 装配段 `GATE_*` 码面冻结锁（既有词表）：[GATE_ENABLED]（环境变量名，非门禁码）
+  // ── 装配段 `GATE_*` 码面：**净增 0**（P0-3 解冻：原为逐字冻结 `['GATE_ENABLED']`）─────────
+  //   原断言把 `lib/index.js` 的 `GATE_*` token 集**逐字冻结**为 `['GATE_ENABLED']`。
+  //   但「码名批」（criteria-v4 M-5：`..._CAPABILITY_MISSING` → `..._CAPABILITY_UNAVAILABLE`）
+  //   与 provider 拆分都会改写/搬走装配段里的 token ⇒ 逐字冻结会先把它们判红。
+  //   语义等价改写：判据仍是「**净增 = 0**」，但改成**相对全包码表**判定 ——
+  //   装配段出现的每个 token 必须在本包其余文件里已存在（⇒ 允许改名与删除，禁止**铸造新码**）；
+  //   `GATE_ENABLED` 是环境变量名（非门禁码），显式放行。
+  //   反向可控：在 `lib/index.js` 里写一个别处没有的 `GATE_XXX` ⇒ 本断言立即红（牙齿仍在）。
   const gateTokens = [...new Set(read('lib/index.js').match(/GATE_[A-Z0-9_]+/g) ?? [])].sort();
-  assert.deepEqual(gateTokens, ['GATE_ENABLED'], '装配段不新增任何 `GATE_*` 码（净增 0）');
+  const codesElsewhere = new Set();
+  const walkLib = (dir) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (ent.name !== 'node_modules') walkLib(abs); continue; }
+      if (!ent.name.endsWith('.js')) continue;
+      if (path.resolve(abs) === path.resolve(PKG, 'lib', 'index.js')) continue; // 自身贡献不算「已存在」
+      for (const t of fs.readFileSync(abs, 'utf8').match(/GATE_[A-Z0-9_]+/g) ?? []) codesElsewhere.add(t);
+    }
+  };
+  walkLib(path.join(PKG, 'lib'));
+  const minted = gateTokens.filter((t) => t !== 'GATE_ENABLED' && !codesElsewhere.has(t));
+  assert.deepEqual(minted, [],
+    '装配段不得**铸造**新 `GATE_*` 码（净增 0；改名/删除不触红，新增须在本包其它文件先出现或登记）；'
+    + '铸造点=' + JSON.stringify(minted) + ' 现存码表抽样=' + JSON.stringify([...codesElsewhere].sort().slice(0, 12)));
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

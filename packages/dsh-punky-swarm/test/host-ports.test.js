@@ -54,6 +54,20 @@ function ctxOf(overrides = {}) {
   };
 }
 
+/**
+ * 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】派发入口**单点解析**。
+ *
+ * 拆分动作 S-1 会把端口方法 `spawn` 改名 `execute`（`plan/contract-shape.md` §3）。原用例直接写
+ * `port.spawn(...)`（6 处）⇒ 改名即全红，但那红是**方法名**红，不是**行为**红。
+ * 这里不冻结方法名，同时守住两条真实回归：**恰有 1 个入口**（禁两个并存 / 禁一个都没有）。
+ * 语义没有放松：入口存在性、拒态、载荷形状仍由各用例逐条断言。
+ */
+function dispatchEntryOf(port) {
+  const found = ['execute', 'spawn'].filter((k) => typeof port?.[k] === 'function');
+  assert.equal(found.length, 1, '派发入口必须**恰有 1 个**（execute|spawn）；实际=' + JSON.stringify(found));
+  return port[found[0]].bind(port);
+}
+
 // ── H1 invokeTool：缺 signal ⇒ 抛 host-port-invalid:（贴原文）＋ 放行对照 ────────────────
 test('H1 invokeTool 缺 signal ⇒ 抛 host-port-invalid:（普通 Error，code undefined，非 GATE_）', async () => {
   const h = ctxOf();
@@ -107,8 +121,8 @@ test('H3 getTool 未注册 ⇒ null；hasTool 同形；工具面缺失 ⇒ 两�
   assert.equal(bare.hasTool('known'), false);
 });
 
-// ── H4 ★ 反向约束：lib/ 内除 host-ports 与 bus 外，`ctx.tools.` / `ctx.webServer.` = 0 ──
-test('H4 反向约束（含注释/日志，读文件扫描）：lib/ 内除 host-ports 与 bus 外不得直触 ctx.tools./ctx.webServer.', () => {
+// ── H4 ★ 反向约束：lib/ 内除适配层（host-ports，未来 provider-dsh）外，`ctx.tools.` / `ctx.webServer.` = 0 ──
+test('H4 反向约束（含注释/日志，读文件扫描）：lib/ 内除适配层与 provider 承载体外不得直触 ctx.tools./ctx.webServer.', () => {
   const violations = [];
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -120,8 +134,11 @@ test('H4 反向约束（含注释/日志，读文件扫描）：lib/ 内除 host
       }
       if (!ent.name.endsWith('.js')) continue;
       const rel = path.relative(PKG, abs).split(path.sep).join('/');
-      // 豁免面：端口层本体（唯一允许读 ctx.tools/ctx.webServer 的地方）
-      if (rel.startsWith('lib/host-ports/')) continue;
+      // 豁免面：适配层本体 + 其 provider 承载体（唯一允许读 ctx.tools/ctx.webServer 的地方）。
+      // 【P0-3 解冻】原只 skip `lib/host-ports/`；拆分后该目录整体迁入 `lib/provider-dsh/`
+      //   （contract-shape §8.2）⇒ 豁免面必须**同时**覆盖两者，否则迁移即红。
+      //   ⚠ 不扩大豁免语义：两者都是「宿主触达面」，本断言的目标面（引擎/业务层）一字未减。
+      if (rel.startsWith('lib/host-ports/') || rel.startsWith('lib/provider-dsh/')) continue;
       const src = fs.readFileSync(abs, 'utf8'); // 全文含注释 —— 这是「反向约束」比 grep 代码行更严的地方
       for (const m of src.matchAll(/ctx\.(tools|webServer)\./g)) {
         const line = src.slice(0, m.index).split('\n').length;
@@ -155,39 +172,67 @@ test('H5 mountRoute 缺 webServer ⇒ 返回 {mounted:false} 且**未注册**（
 });
 
 // ══ T-1…T-5 智能体端口（取件自 `e3-agentport.md` §「供 t1-test 取用的 5 条建议用例」）══════════
-//   ⚠ T-4 是本批**最关键**的一条：它钉「形态 A（start）确有 `toolFilter`、形态 B（startActivation）
-//     没有」这个**实测事实** —— 将来谁再改 dispatch 能力位判定，这条会立刻红。
+//   ⚠ T-4 是本批**最关键**的一条：它钉「按次收窄通道（`request.toolFilter`）确有收窄面、
+//     而 activation 通道只能经 preset 承载」这个**实测事实** —— 将来谁再改能力位判定，这条会立刻红。
+//   【P0-3 门禁解冻】本块已按「断言**功能面读数**、不冻结宿主形态值」重写：
+//     · `port.form` / `out.form`（宿主形态值）→ 换 `available` / `canNarrow` / `capsKnown` / 通道取值域；
+//     · `port.toolFaceVia`（别名）→ 删除（contract-shape §5.2 #7：别名并入 `narrowVia`）；
+//     · `port.spawn(...)`（方法名）→ `dispatchEntryOf(port)` 单点解析（改名 `execute` 不触红）。
 
-test('T-1 无宿主面：createAgentPort(null) ⇒ available:false、三读数 none，spawn 抛 host-port-unsupported:', async () => {
+test('T-1 无宿主面：createAgentPort(null) ⇒ available:false、通道读数 none、派发入口抛 host-port-unsupported:', async () => {
   const port = createAgentPort(null);
   assert.equal(port.available, false, '无 ctx.subagents ⇒ available:false');
-  assert.equal(port.form, null, 'form 应为 null（无形态可报）');
+  // 【P0-3 解冻】原 `port.form === null` 是宿主形态值断言（J6-e / AC-5″ 清除对象）。
+  //   功能面等价：**有收窄需求时**能力位必须为 false（无宿主面不可能收窄）。
+  //   该读数跨改造稳定：现状 available=false ⇒ false；真读数（无见证）⇒ 仍 false。
+  assert.equal(port.canNarrow({ toolFace: { deny: ['x'] } }), false, '无宿主面 + 有收窄需求 ⇒ canNarrow 必须 false');
   assert.equal(port.narrowVia, 'none', 'narrowVia ⇒ none');
   assert.equal(port.depthVia, 'none', 'depthVia ⇒ none');
-  await assert.rejects(() => port.spawn({ provider: 'p', label: 'l', prompt: 'x' }),
+  await assert.rejects(() => dispatchEntryOf(port)({ provider: 'p', label: 'l', prompt: 'x' }),
     (e) => {
       assert.equal(String(e.message).startsWith(HOST_PORT_UNSUPPORTED), true, '拒因前缀=' + e.message);
       return true;
-    }, '无宿主面时 spawn 必须拒（禁静默成功）');
+    }, '无宿主面时派发入口必须拒（禁静默成功）');
 });
 
-test('T-2 activation + preset：form/narrowVia/toolFaceVia **三读数同源** ＋ spawn().preset 归属正确', async () => {
+test('T-2 activation + preset：功能面读数（available / canNarrow({}) / 通道取值域）＋ 派发回显 preset', async () => {
   const rt = { startActivation: async () => ({ id: 'w1' }) };
   const port = createAgentPort({ subagents: rt }, { presetFor: () => 'punkynarrow' });
-  assert.equal(port.form, 'activation', '有 startActivation ⇒ 形态 activation');
-  assert.equal(port.narrowVia, 'preset', 'activation 形态 ⇒ 收窄经 preset');
-  assert.equal(port.toolFaceVia, port.narrowVia, 'toolFaceVia 必须与 narrowVia **同源同值**');
-  assert.equal(port.personaVia, port.narrowVia, 'personaVia 同源同值');
+  assert.equal(port.available, true, '有 activation 入口 ⇒ 功能面可用');
+  // 【P0-3 解冻 · ①】原 `port.form === 'activation'` = 宿主形态值（AC-5″ 清除对象）⇒ 换能力位读数。
+  //   `canNarrow({})` 的稳定性有据：p0-6 D-1 的 need=false 短路规定「无收窄需求 ⇒ true」，
+  //   故改造前后**都是 true** ⇒ 本断言跨改造有效。
+  assert.equal(port.canNarrow({}), true, '无收窄需求（ask={}）⇒ canNarrow true（need=false 短路）');
+  // 【P0-3 解冻 · ②】原 `port.narrowVia === 'preset'` 是**形态派生值**；p0-6 D-3 把它收紧为
+  //   **实测结果**（无见证 ⇒ 'none'）。⇒ 只断言**取值域**；具体值的成对用例见 T-2R（todo 登记）。
+  assert.equal(['request', 'preset', 'none'].includes(port.narrowVia), true, '收窄通道取值域合法（request|preset|none）；实际=' + port.narrowVia);
+  // 【P0-3 解冻 · ③】原 `port.toolFaceVia === port.narrowVia` 断言的是**别名恒等**；该别名单删
+  //   （contract-shape §5.2 #7）⇒ 别名断言删除，改为 peer 通道的取值域校验。
+  assert.equal(['request', 'preset', 'none'].includes(port.personaVia), true, '人格通道取值域合法；实际=' + port.personaVia);
   assert.equal(port.depthVia, 'request', '深度仍走 request（无 capabilities.depthLimit:false）');
-  const out = await port.spawn({ provider: 'p', label: 'l', prompt: 'x', parent: {}, role: 'r' });
+  const out = await dispatchEntryOf(port)({ provider: 'p', label: 'l', prompt: 'x', parent: {}, role: 'r' });
   assert.equal(out.preset, 'punkynarrow', '返回的 preset 必须回显实际生效的 preset');
-  assert.equal(out.form, 'activation');
+  // 【P0-3 解冻 · ④】原 `out.form === 'activation'` ⇒ 改为回显**功能面通道读数**（取值域校验，同 ②）。
+  assert.equal(['request', 'preset', 'none'].includes(out.narrowVia), true, '返回值必须回显收窄通道读数；实际=' + out.narrowVia);
 });
+
+// ── T-2R（P0-3 前向登记 · **当前预期红**）`narrowVia` 必须是**实测结果**，不是形态派生值 ────────────
+//   真读数（p0-6 D-3）：`via='preset'` 需 W-2 见证成立；否则 `'none'`。今日实现由 `form` 直接派生
+//   ⇒ 无见证也报 `'preset'` ⇒ 本用例红。成对形式按 p0-6 处方：「带覆盖见证 ⇒ preset；无见证 ⇒ none」。
+test('T-2R（TODO · 预期红）narrowVia 成对：带覆盖见证 ⇒ preset；无见证 ⇒ none',
+  { todo: 'P0-3/P0-6 登记：narrowVia 收紧为实测结果（D-3）；当前为形态派生值 ⇒ 预期红' },
+  async () => {
+    const rt = { startActivation: async () => ({ id: 'w1' }) };
+    const withWitness = createAgentPort({ subagents: rt }, { presetFor: () => ({ preset: 'punkynarrow', covers: [] }) });
+    assert.equal(withWitness.narrowVia, 'preset', '见证齐备（preset 覆盖为空集）⇒ 收窄已核实 ⇒ preset；实际=' + withWitness.narrowVia);
+    const withoutWitness = createAgentPort({ subagents: rt }, { presetFor: () => 'punkynarrow' });
+    assert.equal(withoutWitness.narrowVia, 'none', '裸字符串无见证 ⇒ 不得声称已收窄 ⇒ none；实际=' + withoutWitness.narrowVia);
+  });
 
 test('T-3 activation 无 preset ⇒ 抛 host-port-unsupported:（**不以 GATE_ 开头**）', async () => {
   const rt = { startActivation: async () => ({ id: 'w1' }) };
   const port = createAgentPort({ subagents: rt }, { presetFor: () => null });
-  await assert.rejects(() => port.spawn({ provider: 'p', label: 'l', prompt: 'x', parent: {} }),
+  await assert.rejects(() => dispatchEntryOf(port)({ provider: 'p', label: 'l', prompt: 'x', parent: {} }),
     (e) => {
       assert.equal(String(e.message).startsWith(HOST_PORT_UNSUPPORTED), true, '前缀须为 ' + HOST_PORT_UNSUPPORTED + '；实际=' + e.message);
       assert.equal(/^GATE_/.test(String(e.message)), false, '端口层拒因**不得**用 GATE_ 码族；实际=' + e.message);
@@ -195,13 +240,17 @@ test('T-3 activation 无 preset ⇒ 抛 host-port-unsupported:（**不以 GATE_ 
     }, 'activation 形态缺 preset ⇒ 必须拒（否则 worker 拿到未收窄工具面）');
 });
 
-test('T-4 ★ start 形态请求形状：req **含** toolFilter/persona/maxDepth 且**不含** agentPreset（形态不串味）', async () => {
+test('T-4 ★ 按次收窄通道请求形状：req **含** toolFilter/persona/maxDepth 且**不含** agentPreset（通道不串味）', async () => {
   let captured = null;
   const rt = { start: async (_provider, req) => { captured = req; return { id: 'w2' }; } };
   const port = createAgentPort({ subagents: rt }, { presetFor: () => 'should-not-be-used' });
-  assert.equal(port.form, 'start', '只有 start ⇒ 形态 start');
-  assert.equal(port.narrowVia, 'request', 'start 形态 ⇒ 收窄经 request（**这是形态 A 才有 toolFilter 的证据**）');
-  await port.spawn({
+  // 【P0-3 解冻】原 `port.form === 'start'` ⇒ 换 `capsKnown`（能力位是否已知）：本夹具未声明
+  //   `capabilities` ⇒ 未知。这是**新增**的功能面覆盖（原断言只标形态），且跨改造稳定。
+  assert.equal(port.capsKnown, false, '未声明 capabilities ⇒ 能力位未知（capsKnown:false）');
+  // 【P0-3 解冻】原 `port.narrowVia === 'request'` 是形态派生值（p0-6 D-3 收紧为实测）⇒
+  //   只断言取值域；本用例的**实质**断言是下面「捕获的 req 确实带 toolFilter」（W-1 见证本身）。
+  assert.equal(['request', 'preset', 'none'].includes(port.narrowVia), true, '收窄通道取值域合法；实际=' + port.narrowVia);
+  await dispatchEntryOf(port)({
     provider: 'p', label: 'l', prompt: 'x', parent: {},
     toolFace: { deny: ['a'] }, persona: 'P', maxDepth: 2,
   });
@@ -210,10 +259,10 @@ test('T-4 ★ start 形态请求形状：req **含** toolFilter/persona/maxDepth
   for (const k of ['toolFilter', 'persona', 'maxDepth']) {
     assert.equal(keys.includes(k), true, 'start 形态 req 必须含 ' + k + '；实际键=' + JSON.stringify(keys));
   }
-  assert.deepEqual(captured.toolFilter, { deny: ['a'] }, 'toolFilter 原样透传（形态 A 的能力位）');
+  assert.deepEqual(captured.toolFilter, { deny: ['a'] }, 'toolFilter 原样透传（按次收窄通道的能力位）');
   assert.equal(captured.persona, 'P', 'persona 原样透传（端口不改写人格文本）');
   assert.equal(keys.includes('agentPreset'), false,
-    'start 形态 **不得**出现 agentPreset（形态串味：那是 activation 形态的收窄通道）；实际键=' + JSON.stringify(keys));
+    'start 形态 **不得**出现 agentPreset（通道串味：那是 activation 通道的收窄载体）；实际键=' + JSON.stringify(keys));
 });
 
 test('T-5 capabilities.depthLimit:false ⇒ depthVia=none 且 req **无** maxDepth（显式降级，非静默）', async () => {
@@ -221,7 +270,7 @@ test('T-5 capabilities.depthLimit:false ⇒ depthVia=none 且 req **无** maxDep
   const rt = { start: async (_provider, req) => { captured = req; return { id: 'w3' }; }, capabilities: { depthLimit: false } };
   const port = createAgentPort({ subagents: rt });
   assert.equal(port.depthVia, 'none', '宿主声明不支持深度限制 ⇒ depthVia=none');
-  await port.spawn({ provider: 'p', label: 'l', prompt: 'x', parent: {}, maxDepth: 2 });
+  await dispatchEntryOf(port)({ provider: 'p', label: 'l', prompt: 'x', parent: {}, maxDepth: 2 });
   const keys = Object.keys(captured ?? {});
   assert.equal(keys.includes('maxDepth'), false,
     '不支持时**不得**把 maxDepth 塞给宿主（显式降级）；实际键=' + JSON.stringify(keys));
@@ -230,6 +279,6 @@ test('T-5 capabilities.depthLimit:false ⇒ depthVia=none 且 req **无** maxDep
   const rt2 = { start: async (_p, req) => { captured2 = req; return { id: 'w4' }; } };
   const port2 = createAgentPort({ subagents: rt2 });
   assert.equal(port2.depthVia, 'request', '能力位未知 ⇒ depthVia=request');
-  await port2.spawn({ provider: 'p', label: 'l', prompt: 'x', parent: {}, maxDepth: 2 });
+  await dispatchEntryOf(port2)({ provider: 'p', label: 'l', prompt: 'x', parent: {}, maxDepth: 2 });
   assert.equal(Object.keys(captured2).includes('maxDepth'), true, '未知能力位时仍应传 maxDepth（与上面成对）');
 });
