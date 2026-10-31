@@ -1044,7 +1044,10 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
       ? liveConfig.dispatch.agentPreset
       : null),
   });
-  if (agentPort.available && agentPort.narrowVia === 'preset' && !agentPort.canNarrow({})) {
+  // 【S-3（批 `punky-qa2-fix-2026-10-31`）】口径统一：本处**只问 canNarrow({})**，不再前置
+  //   字面判断「narrowVia 是否等于 preset」。原前置使「声称 activation 形态（narrowVia=preset）但 canNarrow 为真」
+  //   的宿主被错判为可收窄/不可收窄——`narrowVia` 现降为**诊断字段**，不作分支条件。
+  if (agentPort.available && !agentPort.canNarrow({})) {
     throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 为 `startActivation(spec)` 形态，'
       + '其 `request` **确不承载** `toolFilter`、宿主亦**无 `persona` 字段**（人格/工具面只能经 `agentPreset` 组 composition）；'
       + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
@@ -1176,7 +1179,12 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
           persona: liveConfig?.dispatch?.persona,
           role: roleData,
         });
-        if (agentPort.narrowVia === 'preset') {
+        // 【S-3·乙（批 `punky-qa2-fix-2026-10-31` 回补）】分支按**形态**选入口，不按「能否收窄」：
+        //   `canNarrow()` 回答「**能否**收窄」（能力位），分支要回答「**用哪个入口**」。把两件事合成
+        //   一个判据会让 `start` 形态（`canNarrow` 恒 true，见 `lib/host-ports/agent.js:88`）误入激活
+        //   分支，而该分支 `spawn(...)` **不传 `toolFace`** ⇒ 按次收窄被整键丢掉（B2 静默失效）。
+        //   ⇒ 入口由 `form` 决定；`canNarrow({})` 仅保留在 `:1050` 作能力位门；`narrowVia` 仍仅诊断字段。
+        if (agentPort.form === 'activation') {
           // activation 形态：收窄/人格经 `agentPreset`，深度原生走 `request.maxDepth`。
           start = (await agentPort.spawn({
             provider,
@@ -1302,13 +1310,30 @@ export function readGateMode(config) {
  *  附加上去（与 `dispatchIndexEntryOf` **同法**，不引入第二种附加机制）；取值统一经解析单点 `ownerSessionIdOf`。
  *  ⇒ `Object.keys` / `deepStrictEqual` / JSON 序列化**逐字仍是 3 键**（既有形状锁不变）；
  *     事件**不带** owner（R-7 事件侧口径：取不到即不写该键）⇒ **不附加**该属性（键**缺席**，不是 `null`）。 */
-export function laneBindingOf(store, sessionId) {
+//   【S-4a/S-4b（批 `punky-qa2-fix-2026-10-31`）】静默失败两处收口（**两态可辨**，见下方各 catch 注释）：
+//   · `listAllBatches` **抛错** ⇒ `warn('batch-enum-failed: …')` 后返 null（枚举坏了 ≠ 没有批绑定）；
+//     枚举成功但**空数组** ⇒ 无 warn、仍返 null（正常态）。
+//   · 单批 `readBatch` **抛错** ⇒ `warn('batch-read-failed: <session>/<batch> …')`；**返回 falsy（批不存在）**
+//     ⇒ 无 warn、照常 `continue`（不把「读坏了」与「没这批」混同）。
+export function laneBindingOf(store, sessionId, logger) {
   if (!sessionId || !store || typeof store.listAllBatches !== 'function') return null;
   let all = [];
-  try { all = store.listAllBatches() ?? []; } catch { return null; }
+  try {
+    all = store.listAllBatches() ?? [];
+  } catch (e) {
+    logger?.warn?.('[dsh-punky-swarm] batch-enum-failed: ' + String(e?.message ?? e)
+      + '（laneBindingOf · session=' + sessionId + '）⇒ 返 null；这是**枚举失败**，不是「无批绑定」');
+    return null;
+  }
   for (const { sessionId: ownerSession, batchId } of all) {
     let b = null;
-    try { b = store.readBatch(ownerSession, batchId); } catch { continue; }
+    try {
+      b = store.readBatch(ownerSession, batchId);
+    } catch (e) {
+      logger?.warn?.('[dsh-punky-swarm] batch-read-failed: ' + String(ownerSession) + '/' + String(batchId)
+        + '（' + String(e?.message ?? e) + '）⇒ 跳过该批继续；这是**读失败**，不是「批不存在」');
+      continue;
+    }
     for (const ev of b?.events ?? []) {
       if (ev?.type === 'member.dispatch' && ev.workerSessionId === sessionId && ev.lane) {
         const bind = { sessionId: ownerSession, batchId, lane: ev.lane };

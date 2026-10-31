@@ -57,7 +57,7 @@ export function buildSwarmTools(cx) {
           + ((v.omissions ?? []).length ? '\n省略：' + (v.omissions ?? []).map((o) => o.surface + ' ' + o.omittedBytes + 'B').join(', ') : '')),
       },
       async execute(args, exec) {
-        const tgt = reportTargetOf(store, exec, args);
+        const tgt = reportTargetOf(store, exec, args, ctx?.logger);
         // 面 C · 层①单条目（`wake.summary`）：摘要**在投递前**按单条目层收窄，且收窄结果**同源**用于
         //   ① mailbox 消息体（下方 `deliverSwarmMessage`）② 唤醒消息体（`wakeLeaderForReport` 的 `summary`）
         //   ⇒ 两处共用同一份收窄文本，禁两套口径。未超限 ⇒ 摘要原值、omissions 空（零回归）。
@@ -184,7 +184,7 @@ export function buildSwarmTools(cx) {
         render: (_args, v) => TEXT_OUTPUT('swarm.cc → Manager（' + v.batchId + '/' + v.lane + '，' + v.type + '）' + (v.unbound ? ' [unbound: best-effort]' : '')),
       },
       async execute(args, exec) {
-        const tgt = reportTargetOf(store, exec, args);
+        const tgt = reportTargetOf(store, exec, args, ctx?.logger);
         const delivered = deliverSwarmMessage(root, tgt, REPORT_CHANNEL.manager, args, args.type);
         const eventWritten = appendSwarmEventOf(store, tgt, EVT.EVT_SWARM_CC, args.type);
         return {

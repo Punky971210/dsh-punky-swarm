@@ -60,9 +60,11 @@ export function budgetSummaryForReport(config, summary) {
 export const UNBOUND_BATCH_KEY = '(unbound)';
 const UNBOUND_LANE_KEY = '(unbound)';
 
-export function reportTargetOf(store, exec, args) {
+export function reportTargetOf(store, exec, args, logger) {
   const caller = exec?.agent?.session?.id ?? null;
-  const bind = laneBindingOf(store, caller);
+  // 【M-1 接线（批 `punky-qa2-fix-2026-10-31`）】传 logger ⇒ `laneBindingOf` 的 `batch-enum-failed:` /
+  //   `batch-read-failed:` 两态在本入口也**真可辨**（否则同一条静默缺口在第二个入口原地复发）。
+  const bind = laneBindingOf(store, caller, logger);
   const declaredBatchId = typeof args?.batchId === 'string' && args.batchId.trim() ? args.batchId.trim() : null;
   const declaredLane = typeof args?.lane === 'string' && args.lane.trim() ? args.lane.trim() : null;
   if (bind) {

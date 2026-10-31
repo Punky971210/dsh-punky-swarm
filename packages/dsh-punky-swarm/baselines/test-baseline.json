@@ -128,6 +128,14 @@
       "tests": 11,
       "todos": 0
     },
+    "test/apply-dispatch-index-timing.test.js": {
+      "asserts": 6,
+      "blankLines": 12,
+      "lines": 120,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
     "test/archive.test.js": {
       "asserts": 53,
       "blankLines": 14,
@@ -448,6 +456,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/degrade-warns.test.js": {
+      "asserts": 15,
+      "blankLines": 10,
+      "lines": 100,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/deny-zero-write.test.js": {
       "asserts": 12,
       "blankLines": 11,
@@ -468,6 +484,14 @@
       "asserts": 20,
       "blankLines": 13,
       "lines": 103,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
+    "test/dispatch-form-pairing.test.js": {
+      "asserts": 22,
+      "blankLines": 12,
+      "lines": 141,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -514,8 +538,8 @@
     },
     "test/esm-first-eval.test.js": {
       "asserts": 21,
-      "blankLines": 30,
-      "lines": 411,
+      "blankLines": 31,
+      "lines": 415,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1078,6 +1102,14 @@
       "lines": 266,
       "tautologies": 0,
       "tests": 10,
+      "todos": 0
+    },
+    "test/import-only-ring.test.js": {
+      "asserts": 8,
+      "blankLines": 9,
+      "lines": 83,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/inject-budget-config-gate.test.js": {
@@ -1945,7 +1977,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T04:58:58Z",
+  "generatedAt": "2026-10-31T05:36:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1956,15 +1988,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "M1 宿主工具名单单点化（新建 lib/governance/host-tools.js 三常量分语义；data-plane-server.js:83 语义更正为 HOST_INTERSECT_EXEMPT）+ M2 端口三态（present/absent/errored 单点 probeTool，查询失败不再降级为不存在）；新增 test/host-tools-ledger(4) + test/mcp-tool-probe-tristate(3)",
+  "reason": "第二次审核修复批：M-1 roster 吞错可辨（真调用点 3 处接线）+ S-1 启动期 2N→N 去重（40→20，laneBySession.clear 补 U-2）+ S-2 转发入口解环（query-tools 直取 state/lane-state）+ S-3 分支改按 form（canNarrow 退回能力位门）+ S-4 dispatch 吞错可辨；新增 4 测试文件（dispatch-form-pairing 4 / import-only-ring 3 / apply-dispatch-index-timing 2 / degrade-warns 4）；esm-first-eval 冻结边集跟随 S-2 解环删一条（预期波前）",
   "schema": 1,
   "totals": {
-    "asserts": 11760,
-    "blankLines": 6451,
-    "files": 243,
-    "lines": 68332,
+    "asserts": 11811,
+    "blankLines": 6495,
+    "files": 247,
+    "lines": 68780,
     "tautologies": 0,
-    "tests": 2424,
+    "tests": 2437,
     "todos": 4
   }
 }

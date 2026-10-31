@@ -441,7 +441,10 @@ export async function autoSettleLane({ ctx, store, root, liveConfig, bounded } =
  *  `swarm_report`/`swarm_cc` 同一单点）⇒ 命中后走**同一个** `autoSettleLane`；未绑定 ⇒ 明确拒（不猜、不静默）。 */
 export async function requestAutoSettle(deps = {}, { workerSessionId, trigger = AUTO_SETTLE_TRIGGERS.settleRequest, stopReason = null } = {}) {
   const { store } = deps;
-  const bind = store ? laneBindingOf(store, workerSessionId) : null;
+  // 【M-1 接线（批 `punky-qa2-fix-2026-10-31` · Lead 裁定「必须接线」）】传入 logger ⇒
+  //   `laneBindingOf` 的两态（`batch-enum-failed:` / `batch-read-failed:`）在**生产路径**上真的可辨；
+  //   不传则能力空转 = 看起来修了实际没修。**只多传这一个参数**，本函数其它逻辑未动。
+  const bind = store ? laneBindingOf(store, workerSessionId, deps?.ctx?.logger ?? deps?.logger) : null;
   if (!bind) return { ok: false, action: 'unbound', reason: 'no-lane-binding', lane: null, status: null };
   return autoSettleLane(deps, {
     sessionId: bind.sessionId, batchId: bind.batchId, lane: bind.lane, workerSessionId, stopReason, trigger,

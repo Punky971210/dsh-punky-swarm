@@ -62,11 +62,20 @@ export function teammateTargetNameOf(result) {
 //   而工具面 `.../dsh-experimental-tool-agent-team/lib/index.js:76` `modelMember()` 已把 `id` 丢弃。
 //   ⇒ 同步查表（服务是同步方法，无 IO），**不伪造、不改工具面**。
 //   行形状按「名字字段在 name/target、id 字段在 id/sessionId」双键容错（宿主字段名漂移时不静默漏登记）。
-export function teammateWorkerSessionIdOf(agentTeams, agent, name) {
+//   【M-1（批 `punky-qa2-fix-2026-10-31`）】`listMembers` **抛错**与「名不在数组」原本被 `catch { return null }`
+//   吞成**同一形态** ⇒ 上游分不清「roster 坏了」（事故）与「真没这个人」（正常）。
+//   现两态可辨：**抛错 ⇒ 回调 `onRosterQueryFailed`（由调用方落 `roster-query-failed:` 前缀 warn）**；
+//   **名不在数组 ⇒ 返 null 且不回调**（正常态无 warn）。
+export function teammateWorkerSessionIdOf(agentTeams, agent, name, onRosterQueryFailed) {
   if (!agentTeams || typeof agentTeams.listMembers !== 'function' || typeof name !== 'string' || !name) return null;
   let rows;
-  try { rows = agentTeams.listMembers(agent); } catch { return null; }
-  if (!Array.isArray(rows)) return null;
+  try {
+    rows = agentTeams.listMembers(agent);
+  } catch (e) {
+    if (typeof onRosterQueryFailed === 'function') onRosterQueryFailed(e);
+    return null;
+  }
+  if (!Array.isArray(rows)) return null; // 非数组 = 服务形状不对（不属抛错态，按取不到处理）
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
     const rowName = typeof row.name === 'string' ? row.name : (typeof row.target === 'string' ? row.target : null);
@@ -74,7 +83,7 @@ export function teammateWorkerSessionIdOf(agentTeams, agent, name) {
     const id = typeof row.id === 'string' ? row.id : (typeof row.sessionId === 'string' ? row.sessionId : null);
     if (id) return id;
   }
-  return null;
+  return null; // 「名不在数组」= 正常态：**无 warn**
 }
 
 // 从 post-execute (exec, result) 提取被派发 worker 会话 id（childId/agentId）。
@@ -205,7 +214,11 @@ export function installDispatchRegistration(ctx, deps = {}) {
       //   两步都不成 ⇒ 走下方既有 `degraded` 留痕（本批口径 A：不新增事件类、不伪造 id）。
       const workerSessionId = extractWorkerSessionId(exec, result)
         ?? (exec.name === 'spawn_teammate'
-          ? teammateWorkerSessionIdOf(agentTeams, exec?.agent, teammateTargetNameOf(result))
+          // 【M-1】roster 抛错 ⇒ 落 `roster-query-failed:` 前缀 warn（与「名不在数组」的正常静默区分开）。
+          ? teammateWorkerSessionIdOf(agentTeams, exec?.agent, teammateTargetNameOf(result),
+            (e) => logger?.warn?.('[dsh-punky-swarm] roster-query-failed: ' + String(e?.message ?? e)
+              + '（tool=spawn_teammate · caller=' + caller + ' · target=' + JSON.stringify(teammateTargetNameOf(result))
+              + '）⇒ 本次不登记；这是 roster 查询**失败**，不是「没有该成员」'))
           : null);
       if (!workerSessionId) {
         // 【T-14/G-10#3 · 显式降级告警（不静默漏登记）】原此处**静默 `return next()`**：官方 profile 下

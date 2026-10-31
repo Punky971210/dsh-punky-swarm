@@ -23,7 +23,10 @@ import { handoffGateStateOf } from '../wave-plan.js';
 // D6 批次级派生视图（只读投影）取**同源单点**：`laneStateOf`（lane 原始态）/ `isDanglingLane`（悬挂判定）
 //   与 e1 探针（`lib/watch/lane-heartbeat.js`）**同一份实现、同一份语义**——不在本文件另写一套判定，
 //   否则「同一 lane 的 state」会在工具面与探针面分裂（U-5 边界；依赖方向单向：core → watch，无环）。
-import { laneStateOf, isDanglingLane } from '../watch/lane-heartbeat.js';
+// 【S-2 解环】真源直取 `state/lane-state.js`（**不再经 `watch/lane-heartbeat.js` 的转发**）：
+//   原写法依赖心跳模块的再导出 —— 任何人把 lane-heartbeat 当「心跳专用」清掉那几行转发，
+//   本文件两个名字就变 `undefined`（`checkJs:false` 下无编译期保护），运行时才炸。
+import { laneStateOf, isDanglingLane } from '../state/lane-state.js';
 import { managerViewOf, MERGE_STATE_SOURCE, MEMBER_STATES_LEGACY } from './host-surface.js';
 import * as EVT from '../state/event-types.js';
 // 【本批 `role-guide-extract-20261008` · D-1 / R-2】`role_guide` 取的正是**引擎侧同一份**渲染单点

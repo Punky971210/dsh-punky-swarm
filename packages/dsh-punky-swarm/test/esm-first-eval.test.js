@@ -130,7 +130,11 @@ const RESIDUAL_SCC_EDGES = Object.freeze([
 /** 环的冻结外部入边（非成员 → 成员；「叶子反向 import 聚合器」即在此面红）。 */
 const RESIDUAL_SCC_INBOUND = Object.freeze([
   'index.js -> watch/lane-heartbeat.js',
-  'tools/query-tools.js -> watch/lane-heartbeat.js',
+  // 【S-2 解环波前 · 2026-10-31】原冻结边 `tools/query-tools.js -> watch/lane-heartbeat.js`
+  //   已被 S-2 消除：`query-tools.js` 改为直取真源 `state/lane-state.js`，不再经转发单。
+  //   ★ 本冻结断言**恰好抓到了这条边的消失** —— 证明它作为「叶子反向 import 聚合器」的
+  //   对账面是有效的（不是空判据）。删边是预期波前，不是回归。
+
 ]); // B1：去 tools/lane-tools.js -> watch/lane-heartbeat.js（守卫式加载随工具组装段删除）
 
 /** 已知动态 import 边（全 lib 唯一一处：`lib/tools/lane-tools.js` 的 `await import('../watch/lane-heartbeat.js')`）。 */

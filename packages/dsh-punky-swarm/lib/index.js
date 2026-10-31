@@ -393,11 +393,13 @@ const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
   }
   return { apiDispose, panelStream };
 };
-const installTrajectoryBridge = ({ ctx, config, store }) => {
+const installTrajectoryBridge = ({ ctx, config, store, dispatchIndex = null }) => {
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
   // trajectory 出厂默认开（isTrajectoryEnabled 经 readCapability 合并注册表 default enabled:true）——仅显式 capabilities.trajectory.enabled:false 时桥接不创建不挂载（零运行时开销，行为与既有版本一致）
   // 生命周期：start() 挂订阅/轮询；stop() 退订/清定时器（经 apply 返回的 dispose 释放，进程重启后桥接随插件重建、映射从批次事件幂等恢复）
-  let trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox }) : null;
+  // 【S-1】把装配期已建好的 `dispatchIndex` 传下去 ⇒ 轨迹重建**不再自扫**（启动期 2N→N）。
+  //   传 null 时轨迹桥回落自扫（行为与改前一致，向后兼容）。
+  let trajectory = isTrajectoryEnabled(config) ? createTrajectoryBridge(ctx, { store, config, mailbox, dispatchIndex }) : null;
   if (trajectory) {
     const st = trajectory.start();
     if (st.subscribed) {
@@ -1140,15 +1142,17 @@ export const apply = (ctx, config = {}) => {
   rt.watchTimer = installWatchdog({ ctx, watchCfg: watchRuntime.watchCfg, heartbeatRef: rt.heartbeatRef, heartbeat: rt.heartbeat });
   const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => rt.watchInstalledCfg, getGovernanceInstalledCfg: () => rt.governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
   ({ apiDispose: rt.apiDispose, panelStream: rt.panelStream } = web);
-  rt.trajectory = installTrajectoryBridge({ ctx, config, store });
+  // 【S-1 时序】索引重建**必须先于**轨迹挂载：轨迹的 rebuildFromEvents 会直接取用该索引，
+  //   若索引还没建（空 Map），轨迹映射会变空 ⇒ 行为降级。故此处把重建对提升到挂载之前。
+  const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
+  rebuildDispatchIndex(); // 启动重建（幂等；装配期一次）
+  rt.trajectory = installTrajectoryBridge({ ctx, config, store, dispatchIndex });
   ({ topicRuntime: rt.topicRuntime, topicAttachUn: rt.topicAttachUn } = installTopicRuntime({ ctx, config, root, topicSink, panelStream: rt.panelStream, topicAttachUn: rt.topicAttachUn }));
   const bridge = mountAcpsBridge({ ctx, config, root });
   const registryClient = installRegistryClient({ ctx, config });
   rt.acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
   rt.verifyMount = installVerifyCapture({ ctx, config, root });
   const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => rt.governanceInstalledCfg });
-  const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
-  rebuildDispatchIndex(); // 启动重建（幂等；登记点落地后事件流新增，重启/热更后可再扫）
   rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
   rt.autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });
   rt.autoSettleEnabled = autoSettleEnabledOfConfig(config);

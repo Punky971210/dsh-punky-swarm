@@ -39,7 +39,7 @@ export function isTrajectoryEnabled(config) {
 }
 
 export function createTrajectoryBridge(ctx, deps) {
-  const { store, config = {}, mailbox } = deps;
+  const { store, config = {}, mailbox, dispatchIndex = null } = deps;
   const trajCfg = config?.capabilities?.trajectory ?? {};
   const failConfidence = typeof trajCfg.failConfidence === 'number'
     ? trajCfg.failConfidence
@@ -62,6 +62,14 @@ export function createTrajectoryBridge(ctx, deps) {
   // 重启重建：扫全部批次事件，幂等（重复调用只覆盖不膨胀）
   function rebuildFromEvents() {
     let n = 0;
+    // 【S-1 去重】若调用方已建好同形的 `dispatchIndex`（index.js 装配期已扫一遍），直接取用，
+    //   **不再自扫** —— 这就是启动期 2N→N 的落点（去重，不是缓存：无 TTL、无失效面）。
+    if (dispatchIndex instanceof Map) {
+      laneBySession.clear(); // 【U-2】重建前清空：原实现无 clear ⇒ 旧 workerSessionId 条目不清除、缓慢增长
+      for (const [key, value] of dispatchIndex) laneBySession.set(key, value);
+      return dispatchIndex.size;
+    }
+    laneBySession.clear(); // 【U-2】自扫路径同样先清空（幂等语义从「只覆盖」升为「先清后填」）
     for (const { sessionId, batchId } of store.listAllBatches()) {
       const batch = store.readBatch(sessionId, batchId);
       if (!batch?.events) continue;
