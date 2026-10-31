@@ -552,9 +552,19 @@ export function pruneByAge(sinkDir, keepDays, today = localDateKey(new Date()), 
  *            strays: Array<{p: string, name: string, size: number, mtimeMs: number}>,
  *            total: number} | null} 读不到目录 ⇒ null（清理不阻断写路径）
  */
-function scanSinkDir(sinkDir) {
+function scanSinkDir(sinkDir, logger) {
   let names;
-  try { names = fs.readdirSync(sinkDir); } catch { return null; }
+  // 【sink 三态（批 `punky-presmoke-2026-10-31`）】**不存在** = 正常（首启尚未建目录）⇒ `null` 且**无 warn**；
+  //   **不可读**（权限/句柄/IO 错）= 事故 ⇒ `warn` 后 `null`（清理会静默失效 ⇒ 日志无界增长）；
+  //   **正常** ⇒ 无 warn。⚠ 两者返回同为 `null`，**区分靠 warn**（返回形状是本函数既有契约，
+  //   改成结构化返回值会波及 `pruneByTotal` 的所有调用方 ⇒ 本批不做，登记为形状变更候选）。
+  if (!fs.existsSync(sinkDir)) return null; // 不存在：正常态，零 warn
+  try { names = fs.readdirSync(sinkDir); } catch (e) {
+    (typeof logger !== 'undefined' ? logger : undefined)?.warn?.('[dsh-punky-swarm] sink-dir-unreadable: '
+      + String(sinkDir) + '（' + String(e?.message ?? e) + '）⇒ 清理本轮失效（日志可能无界增长）；'
+      + '这是**读不了**，不是「目录不存在」');
+    return null;
+  }
   const segments = [];
   const strays = [];
   let total = 0;
@@ -600,7 +610,7 @@ function strayView(strays, pruneOptIn) {
  *   `remaining` = 清理后剩余字节和；`removed` = 实际删除文件数
  */
 export function pruneByTotal(sinkDir, maxTotalBytes, opts = {}) {
-  const scan = scanSinkDir(sinkDir);
+  const scan = scanSinkDir(sinkDir, opts.logger); // 直接调用点唯一（:603）：logger 走 opts
   if (!scan) return { total: 0, remaining: 0, removed: 0, strays: strayView([], opts.pruneStray) };
   const pruneOptIn = opts.pruneStray === true;
   const view = strayView(scan.strays, pruneOptIn);
@@ -869,6 +879,9 @@ function writeLine(line) {
 
   if (state.writes % PRUNE_EVERY_WRITES === 0) {                    // 清理时机③
     pruneByAge(state.sinkDir, state.cfg.keepDays);
+    // 【sink 三态 · 显式登记**未接**】本处作用域（写路径）**取不到 logger**（该函数只持 `state`，
+    //   logger 在挂载函数作用域内，:965），且包定 `pruneByTotal` 签名不改 ⇒ **本调用点不传 logger**，
+    //   故写路径触发的「不可读」本轮**仍静默**（挂载期可辨）。禁假装接了。
     const pruned = pruneByTotal(state.sinkDir, state.cfg.maxTotalBytes, { pruneStray: state.cfg.pruneStray });
     state.strays = pruned.strays;                                   // 诊断面读数随清理刷新
   }
@@ -1003,7 +1016,8 @@ export function mountAuditLog(ctx, opts = {}) {
   // 清理时机①：挂载时一次
   try {
     pruneByAge(state.sinkDir, c.keepDays);
-    const pruned = pruneByTotal(state.sinkDir, c.maxTotalBytes, { pruneStray: c.pruneStray });
+    // 【sink 三态】挂载期本次调用作用域内 logger 可得（`:965 const logger = ctx?.root?.logger ?? ctx?.logger`）⇒ 真传
+    const pruned = pruneByTotal(state.sinkDir, c.maxTotalBytes, { pruneStray: c.pruneStray, logger });
     state.strays = pruned.strays;                 // 【D-16-②】诊断面读数（挂载期实测；含是否 opt-in）
     // 【D-16-②】stray 外显面：**挂载期一条 warn**（`warn` 通道，不走 stderr —— MAX_STDERR_NOTICES=2
     // 是硬契约，`test/auditlog-sink-stderr.test.js` AC-3 断言「恰 2 行」）。无 stray ⇒ 零新增输出。

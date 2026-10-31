@@ -235,7 +235,7 @@
     "test/auditlog-mount.test.js": {
       "asserts": 203,
       "blankLines": 70,
-      "lines": 844,
+      "lines": 855,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -1361,9 +1361,9 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 26,
+      "asserts": 28,
       "blankLines": 26,
-      "lines": 263,
+      "lines": 271,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1414,6 +1414,14 @@
       "lines": 195,
       "tautologies": 0,
       "tests": 4,
+      "todos": 0
+    },
+    "test/persona-and-sink-notes.test.js": {
+      "asserts": 8,
+      "blankLines": 11,
+      "lines": 72,
+      "tautologies": 0,
+      "tests": 2,
       "todos": 0
     },
     "test/phase-reason.test.js": {
@@ -1784,6 +1792,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/trajectory-index-sentinel.test.js": {
+      "asserts": 10,
+      "blankLines": 16,
+      "lines": 106,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
     "test/trajectory.test.js": {
       "asserts": 44,
       "blankLines": 27,
@@ -1977,7 +1993,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T05:36:40Z",
+  "generatedAt": "2026-10-31T06:22:16Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1988,15 +2004,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "第二次审核修复批：M-1 roster 吞错可辨（真调用点 3 处接线）+ S-1 启动期 2N→N 去重（40→20，laneBySession.clear 补 U-2）+ S-2 转发入口解环（query-tools 直取 state/lane-state）+ S-3 分支改按 form（canNarrow 退回能力位门）+ S-4 dispatch 吞错可辨；新增 4 测试文件（dispatch-form-pairing 4 / import-only-ring 3 / apply-dispatch-index-timing 2 / degrade-warns 4）；esm-first-eval 冻结边集跟随 S-2 解环删一条（预期波前）",
+  "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11811,
-    "blankLines": 6495,
-    "files": 247,
-    "lines": 68780,
+    "asserts": 11831,
+    "blankLines": 6522,
+    "files": 249,
+    "lines": 68977,
     "tautologies": 0,
-    "tests": 2437,
+    "tests": 2442,
     "todos": 4
   }
 }

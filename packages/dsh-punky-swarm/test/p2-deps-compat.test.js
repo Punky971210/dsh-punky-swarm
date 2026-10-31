@@ -102,7 +102,15 @@ test('A1-P2-02 / AC-9 · 注释锚点在位且可核：引用宿主符号 Inject
   assert.match(indexSrc, /(没有|无)\s*optional\s*位/, '必须写明宿主 inject 无 optional 契约');
   assert.match(indexSrc, /Inject\.resolve/, '必须引用宿主符号 Inject.resolve（可核性）');
   assert.match(indexSrc, /_checkImpl/, '必须引用宿主符号 _checkImpl（可核性）');
-  assert.match(indexSrc, /pending/, '必须写明真实失败形态 = 插件整块 pending');
+  // 【TEST-FIX（2026-11-01）】原为词级 `/pending/` —— 该词在 `lib/index.js` 出现多处，**零鉴别力**
+  //   （把整句删掉、只留一个裸 `pending` 也能过）。改为钉**具体短语**（原文 `lib/index.js:106`）。
+  //   鉴别力自检用**变量样本**（避免被"恒真形态"计数器误计）：裸 `pending` / 词序打散都必须判否。
+  const PENDING_CONTEXT = /本插件整块 fiber 置 pending/;
+  const BARE_SAMPLE = ['这里只是一个裸', 'pending', '字样'].join(' ');
+  const SHUFFLED_SAMPLE = ['pending', '本插件整块'].join(' ');
+  assert.match(indexSrc, PENDING_CONTEXT, '必须写明真实失败形态 = **本插件整块 fiber 置 pending**（具体短语，非词级 /pending/）');
+  assert.equal(PENDING_CONTEXT.test(BARE_SAMPLE), false, '鉴别力自检：**裸 pending 必须判否**');
+  assert.equal(PENDING_CONTEXT.test(SHUFFLED_SAMPLE), false, '鉴别力自检：词序打散也必须判否（锚的是整句短语）');
   assert.match(indexSrc, /不可达/, '必须写明两处缺服务守卫在当前契约下不可达');
   // 防第二真源：api.js 只指路，不复制 index.js 的全文（用 index.js 的独有长句作哨兵）
   const apiSrc = read('lib/api.js');

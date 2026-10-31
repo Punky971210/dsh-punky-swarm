@@ -183,16 +183,21 @@ function dispatchIndexHitOf(dispatchIndex, workerSessionId) {
  * @param {{listAllBatches?: Function, readBatch?: Function}|null|undefined} store 事件流数据源（缺 ⇒ 不命中）
  * @param {Map|null|undefined} dispatchIndex 既有**唯一** worker→批 索引（缺 / 非 Map ⇒ 不命中）
  * @param {{agent?: {session?: {id?: string}}}|null|undefined} exec 调用方 Agent（取键口径同写侧单点）
+ * @param {object|undefined} logger 可选 cordis logger（**生产必传**，见 `lib/index.js` 调用方）：
+ *   仅用于把 `laneBindingOf` 的 `batch-enum-failed:` / `batch-read-failed:` 两态**真可辨**；
+ *   不传 = 静默（向后兼容），但生产路径不传 = M-1「能力在、接不到」的重演。
  * @returns {string|null} 批归属会话 id；未命中 / 数据源不可用 / 反查抛错 ⇒ `null`
  */
-export function batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) {
+export function batchSessionIdOfWorkerResolved(store, dispatchIndex, exec, logger) {
   try {
     const hot = batchSessionIdOfWorker(dispatchIndex, exec); // 热路径：命中即返回（①⑤ 短路）
     if (hot) return hot;
     const workerSessionId = ownerSessionIdOfExec(exec); // 取键单点（与索引建键同口径）
     if (!workerSessionId) return null;
     if (!(dispatchIndex instanceof Map)) return null; // fail-safe：非 Map ⇒ 不写不猜
-    const bind = laneBindingOf(store, workerSessionId); // 复用同文件既有反查（:918-932）
+    // 【U-b（批 `punky-presmoke-2026-10-31`）】下传 logger ⇒ 反查失败的**两态可辨**（枚举坏/读坏），
+    //   否则本函数的 `null` 与「真无绑定」同形（静默失败）。
+    const bind = laneBindingOf(store, workerSessionId, logger); // 复用同文件既有反查（:918-932）
     if (!bind) return null; // 无 store / 无事件 ⇒ 逐字原回落（R-2 / L-AC-2）
     // 【2026-10-22 · A1-P1-04】回填**取真值 owner**（改前此处硬传 `null`）：
     //   ① 改前的 `null` 让 `wakeAddressOf` 在该 worker 上**永久**退化为批归属键（冷索引批的唤醒投错会话）；
@@ -1193,6 +1198,10 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
             parent: exec.agent,
             signal: builtRequest.signal,
             role: laneTask?.role,
+            // 【死参数说明（批 `punky-presmoke-2026-10-31`）】**接收但不转发生效**：本分支把 `persona` 交给
+            //   `agentPort.spawn(...)`，但 activation 形态宿主**无 `persona` 字段**（人格只能经 `agentPreset`
+            //   组 composition 生效）⇒ 此路径下该值**不起作用**。**这不是缺陷**：保留传参是为让
+            //   `start` / `activation` **两形态签名一致**（调用点不必按形态分叉）。**禁删**：删了反而制造形态分叉。
             persona: builtRequest.persona,
             maxDepth: builtRequest.maxDepth,
           })).run;

@@ -269,7 +269,8 @@ const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbe
   const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
     dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
     // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
-    resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec) });
+    // 【U-b】真传 logger（只加这一个实参）：不传则 `laneBindingOf` 的两态在该路径仍静默。
+    resolveBatchSession: (exec) => batchSessionIdOfWorkerResolved(store, dispatchIndex, exec, ctx?.logger) });
   return tools;
 };
 

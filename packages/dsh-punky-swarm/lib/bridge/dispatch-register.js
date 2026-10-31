@@ -127,11 +127,36 @@ export function extractWorkerSessionId(exec, result) {
 //   幂等守卫：dispatchIndex.has(workerSessionId) 已映射 → 跳过（防 send_message 重复唤醒重复登记）。
 //   观察者纪律：任一失败仅 warn，恒 return next()（不阻断、不抛错）。
 // 返回 { installed, dispose, count, mapping }；ctx.on 缺失 → inert 静默降级（宿主能力缺失不炸）。
+// 【回归修复 · 2026-10-31（裁决 Q-1 甲 / Q-2 丙 / Q-3 甲）】`agentTeams` 的**唯一取用口**。
+//
+// 事实（实测留证 `reports/inject-probe-regression-background-20261031.md`）：
+//   · cordis 的 context 是 **Proxy**，`get` trap 对**未在 `inject` 声明面**内的属性直接
+//     `throw new Error('cannot get property "<prop>" without inject')`（`cordis/lib/index.js:676`）；
+//   · `agentTeams` **不在** `HOST_INJECTIONS`（= tools / webServer / subagents）—— 且**不该补进去**：
+//     补进 inject 会让「宿主无该服务」时插件**整块 fiber pending**，治理工具面 21 件全不出现，
+//     比「拿不到 roster」严重得多。`agentTeams` 只服务 D 档派发登记，属**可用则增强**。
+//   · ⇒ 裸取 `ctx?.agentTeams` 在真实宿主上**必抛**，且抛点（`mountDispatchRegistration`）位于 `apply`
+//     执行期、不在加载门内 ⇒ 插件生产不可用（`bf091db` 引入，宿主级冒烟未执行故长期未暴露）。
+//
+// 单点取用口 = `ctx.get(name)`：cordis 官方语义「Read a service from the store **without the inject
+//   requirement**」，服务未提供即返回 `undefined`、**不抛**。与仓内既有 4 处同源
+//   （`lib/tools/host-surface.js:126`、`lib/tools/host-surface.js:83`、`lib/tools/swarm-comms.js:140`、
+//   `lib/state/gates/entry.js:108`）—— 本文件不新造第二种写法。
+//
+// 引擎的双子代理形态（裁决说明）：C 档 = 短生命周期 subagent（`ctx.subagents`，**在** inject 内）；
+//   D 档 = 持续生命周期成员（`agentTeams` roster，**不在** inject 内）。两条调用路径分离、仅任务黑板
+//   共用 ⇒ roster 读取必须走「不声明也能读」的通道，否则 C 档宿主（无 agentTeams）会让 D 档的探测
+//   反过来炸掉 C 档装配。
+const AGENT_TEAMS_SERVICE = 'agentTeams';
+function agentTeamsServiceOf(ctx) {
+  return typeof ctx?.get === 'function' ? ctx.get(AGENT_TEAMS_SERVICE) : undefined;
+}
+
 export function installDispatchRegistration(ctx, deps = {}) {
-  const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS,
-    // 【D 档】roster 反查依赖：优先装配注入（`deps.agentTeams`，便于夹具注入），缺省回落 `ctx.agentTeams`（真实宿主）。
-    //   都不可用 ⇒ `spawn_teammate` 登记降级为「留痕不登记」（不伪造 id）。
-    agentTeams = ctx?.agentTeams } = deps;
+  const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS } = deps;
+  // 【D 档】roster 反查依赖（单点取用口见上方 `agentTeamsServiceOf`）：
+  //   不可用 ⇒ `spawn_teammate` 登记降级为「留痕不登记」（不伪造 id）。
+  const agentTeams = agentTeamsServiceOf(ctx);
   // G01 #1（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：`!store || !ctx?.on` 属**防御纵深·生产不可达**
   //   （`lib/index.js` 的 `store` 恒非空、`ctx.on` 由宿主提供、`inject` 已在加载面兜住宿主三服务）
   //   ⇒ 按三分级口径**只补稳定回显键（`inert` 布尔键，值 true），零日志新增**（加了只加噪）。

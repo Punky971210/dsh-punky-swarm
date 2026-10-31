@@ -43,7 +43,24 @@ export const CAPABILITY_KEYS = CAPABILITY_REGISTRY.map((entry) => entry.key);
 
 /** 宿主键缺失的判定：值在场且非 `null` / `undefined` / `false` 才算装上。 */
 function hostInstalled(hostCtx, key) {
-  const v = hostCtx?.[key];
+  // 【裁决 Q-2 乙 / Q-3 甲 · 2026-10-31】取口：**先裸取，抛了才回落 `ctx.get(name)`**。
+  //
+  // 为什么是这个顺序（第一版写反了，被能力面用例 C6b 当场拦下）：
+  //   若写成「有 `get` 方法就优先走 `get`」，则**任何带 mock `get` 的普通对象夹具**都会被误判 ——
+  //   那些夹具把 `tools`/`webServer`/`subagents` 挂在对象属性上、`get(其他名)` 返回 `undefined`，
+  //   于是三件全判「未装」⇒ `assertRequired` 抛 `capability-missing: tools,webServer,subagents`
+  //   （实测：C6b/C6-control 由绿转红）。裸取优先则普通对象行为与本改动前**逐字一致**。
+  //
+  // 为什么需要回落：cordis 的 context 是 Proxy，`get` trap 对**未在 `inject` 声明面**内的属性直接抛
+  //   `cannot get property "<k>" without inject`；`ctx.get(name)` 是官方明示的「不声明也能读」通道
+  //   （服务未提供返回 `undefined`、不抛）。`lib/index.js:112-114` 已自述该纪律，本处落到实现。
+  //   真实宿主行为零变化：三键都在 `HOST_INJECTIONS` 内 ⇒ fiber 就绪 ⇒ 裸取直接成功、不触发回落。
+  let v;
+  try {
+    v = hostCtx?.[key];
+  } catch {
+    v = typeof hostCtx?.get === 'function' ? hostCtx.get(key) : undefined;
+  }
   return v !== undefined && v !== null && v !== false;
 }
 

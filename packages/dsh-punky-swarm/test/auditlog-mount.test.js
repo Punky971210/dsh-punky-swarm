@@ -228,11 +228,22 @@ try {
     const config = process.env.PUNKY_PROBE_CONFIG_OFF === '1'
       ? { root: path.join(LOG_DIR, 'engine-root'), capabilities: { auditlog: { enabled: false } } }
       : { root: path.join(LOG_DIR, 'engine-root') };
+    // 【裁决 Q-2 甲 · 2026-10-31】探针必须与**真实插件同形**：① 插件对象声明 inject 面（对齐
+    //   lib/index.js:120 的 export const inject = HOST_INJECTIONS）；② provide 全部三件宿主服务。
+    //   此前该探针是无 inject 声明的匿名 apply-only 对象、且只 provide 2/3（缺 subagents）⇒ 引擎的加载面
+    //   假设「缺服务 ⇒ fiber pending ⇒ apply 不执行」在此不成立，apply 全链路跑起来后第一处裸取宿主
+    //   服务即抛（cannot get property "subagents" without inject）⇒ 本文件 11 条用例集体假红（HEAD 态
+    //   即红，非本轮引入）。修夹具而非改引擎断言：断言（sink 落盘 / warn 文本）一字不动。
+    //   注：provide 必须在 plugin() **之前**在 root 上完成 —— 若在 apply 回调内 provide，而该键又在
+    //   inject 内，则 fiber 会先因「服务未就绪」置 pending、apply 永不执行（死锁）。
+    const subagents = { start: async () => ({ sessionId: 'probe-subagent' }) };
+    rootCtx.provide('tools', { register() {} });
+    rootCtx.provide('webServer', webServer);
+    rootCtx.provide('subagents', subagents);
     // 真实插件 fiber：plugin() 返回 thenable fiber（await 后加载完成）
     const fiber = rootCtx.plugin({
+      inject: ['tools', 'webServer', 'subagents'],
       apply(c) {
-        c.provide('tools', { register() {} });
-        c.provide('webServer', webServer);
         return apply(c, config);
       },
     });
@@ -419,7 +430,7 @@ test('T-B2 关闭态（env PUNKY_AUDITLOG=off）：sink 目录不存在、export
   assert.deepEqual(ourExporters(r), [], '关闭态不注册本模块 exporter（实际: ' + JSON.stringify(r.exporterLevels) + '）');
   assert.equal(r.sinkDirExists, false, '关闭态零目录（实际 exists: ' + r.sinkDirExists + '）');
   assert.deepEqual(r.rows, [], '关闭态零字节落盘');
-  assert.deepEqual(r.files, [], '关闭态零文件');
+  assert.deepEqual(r.files, [], '关闭态零文件');
   assert.equal(r.stat.mounted, false, '关闭态 state.mounted=false');
   assert.equal(r.stat.writes, 0, '关闭态 writes=0');
 });
@@ -701,7 +712,7 @@ test('T-C2 聚合 off 态（PUNKY_AUDITLOG_AGGREGATE=off）：5 条同键消息�
   // 数量 → 数组相等（哪些）：off 态 5 条同键消息逐行落盘 ⇒ 5 行全为 log
   assert.deepEqual(r.rows.map((x) => x.kind), ['log', 'log', 'log', 'log', 'log'],
     '5 条消息逐行落盘且全为 log（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
-  assert.deepEqual(r.rows.filter((x) => x.kind === 'log-aggregate'), [], '关闭态零 log-aggregate 行');
+  assert.deepEqual(r.rows.filter((x) => x.kind === 'log-aggregate'), [], '关闭态零 log-aggregate 行');
   assert.deepEqual([...new Set(r.rows.map((x) => x.kind))], ['log'], '全部为 kind="log"（实际: ' + JSON.stringify(r.rows.map((x) => x.kind)) + '）');
   assert.ok(r.rows.every((x) => !('count' in x)), '关闭态每行仍恰 10 字段（无 count）');
   assert.equal(r.stat.collapsedMessages, 0, 'collapsedMessages 恒 0（实际: ' + r.stat.collapsedMessages + '）');
