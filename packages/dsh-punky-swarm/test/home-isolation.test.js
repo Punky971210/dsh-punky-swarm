@@ -993,7 +993,7 @@ const sentinel = (process.env.PUNKY_TEST_ISOLATED_HOME ?? '').trim();
 const real = os.userInfo().homedir;
 const calls = { info: [], warn: [], error: [] };
 const logger = { info: (...a) => calls.info.push(a.join(' ')), warn: (...a) => calls.warn.push(a.join(' ')), error: (...a) => calls.error.push(a.join(' ')), exporter: () => () => {} };
-const ctx = { logger, root: { logger }, tools: { register() {} } };
+const ctx = { logger, root: { logger }, tools: { register() {} }, subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] }, webServer: { register: () => () => {}, dispose() {} } }; // 2026-10-31 遗留收口：apply 装配需三件宿主键齐备（同 before() 的补桩；否则子进程直接抛 capability-missing，探针拿不到元数据）
 const mod = await import(${JSON.stringify(indexUrl)});
 mod.apply(ctx, {});
 const norm = (p) => { let o = String(p); try { o = fs.realpathSync.native(o); } catch {} return o.toLowerCase(); };
@@ -1027,7 +1027,7 @@ const actual = process.env.PUNKY_DEMO_ACTUAL;
 const claimed = process.env.PUNKY_DEMO_CLAIMED;
 const calls = { info: [], warn: [], error: [] };
 const logger = { info: (...a) => calls.info.push(a.join(' ')), warn: (...a) => calls.warn.push(a.join(' ')), error: (...a) => calls.error.push(a.join(' ')), exporter: () => () => {} };
-const ctx = { logger, root: { logger }, tools: { register() {} } };
+const ctx = { logger, root: { logger }, tools: { register() {} }, subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] }, webServer: { register: () => () => {}, dispose() {} } }; // 2026-10-31 遗留收口：apply 装配需三件宿主键齐备（同 before() 的补桩；否则子进程直接抛 capability-missing，探针拿不到元数据）
 const mod = await import(${JSON.stringify(indexUrl)});
 mod.apply(ctx, {});
 function walk(root) { const out = []; const st = [root]; while (st.length) { const d = st.pop(); let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) st.push(p); else if (e.isFile()) out.push(p); } } return out; }

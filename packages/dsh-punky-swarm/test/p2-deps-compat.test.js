@@ -61,16 +61,32 @@ function bareAccessLineCount(src, token) {
 }
 
 // ── A1-P2-02 · 声明面未被改动（R-9 第一半）────────────────────────────────────────────
-test('A1-P2-02 / AC-9 · inject 声明语句逐字不变（与基线 8d7815b 对拍）', () => {
+test('A1-P2-02 / AC-9 · inject 声明面：走声明驱动单点，且单点内容逐字为三键数组（与基线 8d7815b 对拍）', () => {
   const now = read('lib/index.js');
   const base = readAtBaseHead('lib/index.js');
   assert.ok(base, '基线 8d7815b 的 lib/index.js 必须可读（否则本对拍无法成立）');
   const stmtOf = (src) => (src.match(/^export const inject = .*$/m) ?? [])[0] ?? null;
   const nowStmt = stmtOf(now);
-  const baseStmt = stmtOf(base);
-  assert.equal(nowStmt, "export const inject = ['tools', 'webServer', 'subagents'];",
-    '声明行必须逐字为三键数组（无 optional 语法可用的宿主契约下，这是硬依赖声明）');
-  assert.equal(nowStmt, baseStmt, '声明行相对基线必须**逐字**不变（本批只加注释）');
+
+  // 【2026-10-31 判据形态修正 · G1 declare 批遗留】原版锁「声明行逐字 == 字面量三键数组」，
+  //   而 G1 批有意把声明改为**声明驱动**（键集唯一来源 = `lib/capabilities.js#HOST_INJECTIONS`，
+  //   见该批注释「注入键集唯一来源」与 AC-9 注释锚点用例）⇒ 两条断言结构性冲突，静态面永远红。
+  //   「内容与顺序不变」这一**语义**已由下一条用例（`m.inject` 运行期逐字三键）覆盖 ⇒ 静态面
+  //   改为断**形态 + 单点内容**，并把「与基线逐字对拍」落到单点常量上（等价性不丢）。
+  assert.equal(nowStmt, 'export const inject = HOST_INJECTIONS;',
+    '声明行必须走声明驱动单点（禁回退到手写字面量；键集唯一来源 = capabilities.js#HOST_INJECTIONS）');
+
+  const capSrc = read('lib/capabilities.js');
+  const hostInj = (capSrc.match(/^export const HOST_INJECTIONS = .*$/m) ?? [])[0] ?? null;
+  assert.equal(hostInj, "export const HOST_INJECTIONS = ['tools', 'webServer', 'subagents'];",
+    '单点内容必须逐字为三键数组（无 optional 语法可用的宿主契约下，这是硬依赖声明）');
+
+  // 与基线逐字对拍：基线声明行是字面量数组 ⇒ 抽出数组文本，与单点数组文本逐字比较（键名与顺序均不得变）
+  const baseArrayText = (base.match(/^export const inject = (\[[^\]]*\]);$/m) ?? [])[1] ?? null;
+  assert.ok(baseArrayText, '基线声明行须为字面量数组形态（对拍前提）');
+  const nowArrayText = (hostInj.match(/^export const HOST_INJECTIONS = (\[[^\]]*\]);$/m) ?? [])[1] ?? null;
+  assert.equal(nowArrayText, baseArrayText,
+    '单点内容必须与基线声明行**逐字**一致（键名与顺序均不变）');
 });
 
 test('A1-P2-02 / AC-9 · 运行期 inject 面：三键内容与顺序逐字不变', async () => {

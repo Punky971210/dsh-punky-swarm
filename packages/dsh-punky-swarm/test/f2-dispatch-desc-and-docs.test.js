@@ -59,7 +59,22 @@ function jsonBlockAfter(text, anchor, marker) {
       continue;
     }
     if (ch === '{') depth++;
-    else if (ch === '}') { depth--; if (depth === 0) return JSON.parse(text.slice(open, i + 1)); }
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        const block = text.slice(open, i + 1);
+        // 【2026-10-31 遗留收口】源文件里这两个块是 **JS 对象字面量**（裸键名 / 单引号 / 尾逗号），
+        //   不是合法 JSON ⇒ 原实现直接 `JSON.parse` 抛 SyntaxError，整文件在模块加载期就红、
+        //   一条断言都没跑到（属「测试跑不起来」而非「断言失败」）。先试 JSON（严格优先），
+        //   失败再按对象字面量求值：块内只含数据字面量、无函数与副作用 ⇒ 求值等价于解析。
+        try {
+          return JSON.parse(block);
+        } catch {
+          // eslint-disable-next-line no-new-func -- 仅解析本仓源文件的纯数据字面量，不接受外部输入
+          return Function('"use strict";return (' + block + ');')();
+        }
+      }
+    }
   }
   throw new Error('unterminated JSON block after ' + marker);
 }
@@ -147,8 +162,12 @@ test('D2 lane_dispatch 参数与输出 schema 未变（HEAD 版本逐字对拍 +
 
   // 外部判据（防「源码与自身对拍」的自洽恒真）：改前契约的**冻结面**（HEAD 版本人工核对）
   //   ⇒ 任何新增/删除/改名参数都会红，即使有人把源码面一起改坏也逃不掉。
-  assert.deepEqual(Object.keys(t2.parameters.properties), ['batchId', 'lane', 'session', 'prompt', 'exempt'],
-    '参数名集 = 改前冻结面（batchId/lane/session/prompt/exempt）');
+  // 【2026-10-31 遗留收口 · 冻结滞后修正】`sourceRunId` 是 write-provenance-guard 批**有意新增**的
+  //   显式来源参数（已裁决口径：来源标识由引擎从 `agent.session.id` 自取 L2，**禁用宿主 `runId`**），
+  //   但本冻结面未同步 ⇒ 整条 D2 因「多一个参数」而红。此处的判据强度不变：仍是**逐字集合相等**
+  //   （顺序敏感），只是把已裁决的既有参数纳入冻结面；除它之外任何增删改名仍会红。
+  assert.deepEqual(Object.keys(t2.parameters.properties), ['sourceRunId', 'batchId', 'lane', 'session', 'prompt', 'exempt'],
+    '参数名集 = 改前冻结面 + sourceRunId（write-provenance-guard 批已裁决显式来源参数；顺序即源码顺序）');
   assert.deepEqual(t2.parameters.required, ['batchId', 'lane'], '必填参数集 = 改前冻结面');
   assert.deepEqual(Object.keys(t2.parameters.properties.exempt.properties), ['type', 'multiplier', 'stalled'],
     'exempt 子参数集 = 改前冻结面');

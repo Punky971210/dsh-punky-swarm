@@ -595,7 +595,7 @@
     "test/f2-dispatch-desc-and-docs.test.js": {
       "asserts": 48,
       "blankLines": 30,
-      "lines": 290,
+      "lines": 309,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1361,9 +1361,9 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 28,
-      "blankLines": 26,
-      "lines": 271,
+      "asserts": 30,
+      "blankLines": 29,
+      "lines": 287,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -1834,8 +1834,8 @@
     },
     "test/w7f-rt-write-surface.test.js": {
       "asserts": 75,
-      "blankLines": 44,
-      "lines": 528,
+      "blankLines": 45,
+      "lines": 543,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1993,7 +1993,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T06:49:12Z",
+  "generatedAt": "2026-10-31T07:02:26Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2007,10 +2007,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11831,
-    "blankLines": 6522,
+    "asserts": 11833,
+    "blankLines": 6526,
     "files": 249,
-    "lines": 68989,
+    "lines": 69039,
     "tautologies": 0,
     "tests": 2442,
     "todos": 4
