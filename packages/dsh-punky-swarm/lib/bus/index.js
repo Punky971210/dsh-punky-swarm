@@ -15,11 +15,36 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 【冻结 · 2026-10-31 · 批 `punky-adapter-split-20261031` lane `w1-c0b-assert`】
+//
+//   **本文件当前「生产零调用」** —— 实测，不是推断：
+//     · `createBus` 在全仓 `lib/**`（**除 `lib/bus/` 自身**）**零调用点**；
+//     · `lib/ports.js`（契约的运行期回拷产物）只有 `export {}` ⇒ 端口契约**无运行期消费方**；
+//     · 真正在跑的适配实现是 `lib/host-ports/**`（由业务层直接 import）。
+//   ⇒ 本文件是**已死但未清的适配层雏形**。**处置取丙：保留待用 + 冻结误导面（不删除）。**
+//
+//   **接线前必须依次过这三关**（任一未过就接线 = 把已知违例接进生产路径）：
+//     · **e1-G01** 端口契约三面互不相符：`lib/ports.ts` 的接口成员 × 本文件的 null 适配器成员
+//       × `lib/host-ports/**` 的实现成员，三者交集极小。本文件的 null 适配器**仍是旧形状**
+//       （`start`/`stop`、`emit`、`list`/`call`、`listen`/`close`），与契约 v2 实测 **5/5 槽位不一致**
+//       ⇒ 判据在 `lib/bus/selftest.mjs` 的 **C0b 成员名**档（当前**必红**；转绿条件 = W2-3 按契约重写本文件的 null 适配器）。
+//     · **e1-G09** 门禁把 J6-d 违例**冻结成契约**：`test/g2-ports-contract.test.js` 的 B3 **要求**本文件
+//       引用 `HOST_INJECTIONS` ⇒ 「把宿主服务名移出适配层」的整改会**先撞红该门**。整改顺序必须先改门禁。
+//     · **e1-G10** 本文件内置两条越界语义：① 能力名域 = 宿主服务名词表（`assertCapability()` 内的 `known` 集合）；
+//       ② `route()` 以 roster 命中判席位（`seatView.matched.includes(role)`，J3'-a「在册真源读 roster」）
+//       ⇒ **接线即继承违例**，须与 J3'/AC-14 同批处置。
+//       （上列两处**按代码锚点定位，不写行号** —— 行号会随本文件改动漂移。）
+//
+//   **禁**：在本文件新增任何运行期消费方；**禁**：把本文件当作「适配层已成立」的证据引用。
+//   **禁**：为了让 C0b 转绿而放宽 `selftest.mjs` 的判据（那正是把 e3-G02 重新放回盲区）。
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
 // 端口总线（bus）：**端口槽位域的唯一归属点**，与「装配开关」「职位表」两域**只引用不复制**。
 //
 // 三域边界（写死，禁混）：
-//   · 端口槽位 → **本文件**（`KernelPorts` 5 键，形状由 `lib/ports.ts:76` 定义；本文件只声明槽位名，
-//     由 `selftest.mjs` 与 `ports.ts` 文本对账，防两处漂移）；
+//   · 端口槽位 → **本文件**（`KernelPorts` 5 键，形状由 `lib/ports.ts` 的 `interface KernelPorts` 定义；
+//     本文件只声明槽位名，由 `selftest.mjs` 与 `ports.ts` 文本对账，防两处漂移）；
 //   · 装配开关 → 引用 `lib/capabilities.js`（`CAPABILITY_KEYS` / `HOST_INJECTIONS` / `capabilityReport`），
 //     本文件**不自建能力表**；
 //   · 职位表 → 引用 `lib/roster.js`（`BUILTIN_ROLES` / `reconcileRoster`），本文件**不自造职位名单**。

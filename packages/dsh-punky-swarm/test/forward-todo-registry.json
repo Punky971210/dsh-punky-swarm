@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "kind": "forward-todo-registry",
+  "purpose": "P0-3 引入的「内联预期红」todo 的**唯一登记表**：机检见 test/forward-todo-lock.test.js（集合相等 / 棘轮 / 形态白名单 / AC-T5 退场硬门）。登记表存在的前提是「todo 会被清」——本仓已有实物反例（4 条模块级 test.todo 自 2026-09 至今未执行），故不设登记表就等于复制该命运。",
+  "writtenBy": {
+    "lane": "w0-todo-lock",
+    "role": "coder",
+    "batch": "punky-adapter-split-20261031",
+    "baselineCommit": "19d637a",
+    "basedOn": "punky-adapter-p0-20261031/audit/a1-pre-gate.md 核对点 2（4 道机检防呆）"
+  },
+  "mechanisms": {
+    "note": "⚠ 两个机制**必须分开数**：混用会让棘轮拿错基线（运行期 todo 数是两者之和，不可作棘轮基线）。",
+    "inlineExpectedRed": {
+      "form": "{ todo: '<id> …' }（第二参数对象，**有回调 ⇒ 会执行并留失败原文**）",
+      "count": 4,
+      "owner": "本 lane（P0-3 引入）",
+      "cleanWhen": "每条 ac 对应的判据转绿后删掉该 todo，并**同步删除本表条目**"
+    },
+    "moduleLevelTodo": {
+      "form": "test.todo('<name>')（**无回调 ⇒ 永不执行 ⇒ 无法自动转绿**）",
+      "count": 4,
+      "owner": "历史遗留（批 gate-techdebt，R-16…R-19 治理降级面）",
+      "cleanWhen": "**不由本 lane 处置**：四条属另一议题，白名单冻结在下方 ratchet.moduleLevelTodoWhitelist"
+    }
+  },
+  "ratchet": {
+    "openMax": 4,
+    "runtimeTodoTotal": 8,
+    "runtimeTodoTotalNote": "运行期 `todo 8` = inline 4 + moduleLevel 4。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
+    "moduleLevelTodoWhitelist": {
+      "test/gate-techdebt-red.test.js": 4
+    },
+    "moduleLevelTodoWhitelistNote": "① 路径按**实测调用点**登记（`grep -nE '^\\s*test\\.todo\\s*\\(' test/`）；② `test/gate-flows.test.js:77-93` 是**注释块**（记录该形态与两条已复活），该文件 `test.todo(` 实际命中 = 0 —— 上游 a1 文档把白名单路径写成 gate-flows 属笔误，本表按实测订正；③ 白名单只许减不许增。"
+  },
+  "acT5": {
+    "criterion": "OPEN_TODOS = ∅",
+    "armEnv": "PUNKY_AC_T5",
+    "armCommand": "PUNKY_AC_T5=1 node --import ./test/helpers/isolated-home.preload.mjs --test test/forward-todo-lock.test.js",
+    "ownerLane": "W3-2 fx-meter",
+    "ownerLaneNote": "a1 开工清单 W3-2 完成判据 ② 明写「OPEN_TODOS = ∅（W0-1 的 registry 清空）」。⚠ 其中 T-1.8 的**实现面**依赖 W4-1 fx-codename（文案去宿主名），⇒ 两 lane 须在同一 wave 内对齐，否则 W3-2 收口时 T-1.8 清不掉。",
+    "doNotDowngrade": "本项是**根治项**（a1 原话）：只防漂移不防残留的两道（集合相等 / 棘轮）不能替代它。"
+  },
+  "open": [
+    {
+      "id": "S-3a-R",
+      "file": "test/dispatch-form-pairing.test.js",
+      "title": "S-3a-R（TODO · 预期红）activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派",
+      "ac": ["AC-5‴", "AC-15"],
+      "dueLane": "W3-2 fx-meter",
+      "dueBatch": "punky-adapter-split-20261031",
+      "greenWhen": "收窄见证判定（p0-6 D-2 W-2）落地：裸 preset id 无 presetCoverage ⇒ 判「无见证」⇒ 拒派（现实现只看 id 存在 ⇒ 放行）"
+    },
+    {
+      "id": "S-3b",
+      "file": "test/dispatch-form-pairing.test.js",
+      "title": "S-3b（TODO · 预期红）`toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行；有交集 ⇒ 拒派",
+      "ac": ["AC-5‴"],
+      "dueLane": "W3-2 fx-meter",
+      "dueBatch": "punky-adapter-split-20261031",
+      "greenWhen": "activation 分支补传 toolFace（p0-6 F-3 / 受影响点 #8：dispatch.js:1194-1207）且按 presetCoverage 核对：覆盖∩deny = ∅ ⇒ 放行，非空 ⇒ 拒派"
+    },
+    {
+      "id": "T-1.8",
+      "file": "test/f1-dispatch-activation-gate.test.js",
+      "title": "T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名",
+      "ac": ["AC-9", "AC-15"],
+      "dueLane": "W3-2 fx-meter",
+      "dueBatch": "punky-adapter-split-20261031",
+      "greenWhen": "拒派/降级文案改功能面语言（去掉 ctx.subagents / startActivation / startContinuable）——实现面由 W4-1 fx-codename 提供；W3-2 收口时须已对齐"
+    },
+    {
+      "id": "T-2R",
+      "file": "test/host-ports.test.js",
+      "title": "T-2R（TODO · 预期红）narrowVia 成对：带覆盖见证 ⇒ preset；无见证 ⇒ none",
+      "ac": ["AC-5‴", "D-3"],
+      "dueLane": "W3-2 fx-meter",
+      "dueBatch": "punky-adapter-split-20261031",
+      "greenWhen": "narrowVia 由「形态派生」改为「实测结果」（p0-6 D-3）：带 covers 见证 ⇒ 'preset'；裸字符串无见证 ⇒ 'none'"
+    }
+  ],
+  "notCoveredByThisRegistry": [
+    "4 条模块级 test.todo（test/gate-techdebt-red.test.js）—— 另一议题，白名单冻结，不在 OPEN_TODOS 内",
+    "todo 以外的「永久待办」形态（如 skip 的用例）—— 本表只锁 todo 机制，skip 面另见 test-baseline 的 skipped 读数"
+  ]
+}

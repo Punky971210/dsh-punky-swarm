@@ -51,18 +51,149 @@ function withEnv(vars, fn) {
   }
 }
 
-// ── C0 形状对账：PORT_SLOTS（= null 适配器键集）⟷ lib/ports.ts#KernelPorts ──────────
-function checkShapeReconciliation() {
-  const src = fs.readFileSync(path.join(ROOT, 'lib', 'ports.ts'), 'utf8');
-  const block = src.match(/interface KernelPorts\s*\{([\s\S]*?)\n\}/);
-  if (!block) return record('C0 shape', false, 'lib/ports.ts 内未找到 interface KernelPorts');
-  const fromPorts = new Set([...block[1].matchAll(/^\s{2}([A-Za-z_]\w*)\??:/gm)].map((m) => m[1]));
-  const fromBus = new Set(Object.keys(createNullAdapters()));
-  const onlyPorts = [...fromPorts].filter((k) => !fromBus.has(k));
-  const onlyBus = [...fromBus].filter((k) => !fromPorts.has(k));
+// ── C0 形状对账（三档）：C0a 槽位键 / C0b 成员名 / C0c 判别力 ──────────────────────
+//
+// 演进（e3-G02@punky-adapter-audit-20261031 · e1-G01）：原 C0 只对**槽位键**
+//   ⇒ 槽位内「成员名错配」结构性不可见（当时实测 4/5 槽位不一致）。C0b 把这一层补上。
+//
+// ⚠ **C0b 当前必须红**：null 适配器仍是旧形状（`start`/`stop`、`emit`、`list`/`call`、`listen`/`close`），
+//   而契约已升到 v2（`AgentRuntime` 8 成员 / `ToolSurface` 7 / `HttpSurface` 2 / `RosterSource` 2）
+//   ⇒ 实测 5/5 不一致。**转绿条件 = W2-3 按契约重写 null 适配器**。
+//   **禁**为让它变绿而放宽判据 —— 那正是把 e3-G02 重新放回盲区。
+//
+// 解析式契约（w1 `plan/contract-v2.md` §6.1 公示的陷阱，本行**逐字对齐**该公示）：
+//   成员行**必须**容忍 `readonly` 修饰符。契约现有 10 个 readonly 成员；旧式
+//   `/^\s{2}([A-Za-z_]\w*)\??:/` 会把它们**全部静默漏检** ⇒ 对它们恒判「不存在」，形成假绿/假红双窗口。
+const MEMBER_LINE_RE = /^\s{2}(?:readonly\s+)?([A-Za-z_]\w*)\??\s*[(:<]/;
+
+/** 剥 TS 注释。**顺序不可反**：先剥行注释，再剥块注释
+ *  （反序会把行注释里的 `/*` 当成块注释开头，吞掉后续代码 ⇒ 判据静默）。 */
+const stripTsComments = (src) => src
+  .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p1) => p1 + ' '.repeat(m.length - p1.length))
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+
+/** 取 `interface <name> { … }` 的**体内文本**（花括号配平；入参须已剥注释）。找不到 ⇒ null。 */
+function interfaceBodyOf(src, name) {
+  const head = new RegExp('interface\\s+' + name + '\\s*\\{').exec(src);
+  if (!head) return null;
+  const from = head.index + head[0].length - 1; // 指向 `{`
+  let depth = 0;
+  for (let i = from; i < src.length; i++) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(from + 1, i);
+    }
+  }
+  return null;
+}
+
+/** 接口**顶层成员名**（2 空格缩进锚定 ⇒ 天然排除嵌套块内更深缩进的行）。 */
+const topLevelMembersOf = (body) => [...body.matchAll(new RegExp(MEMBER_LINE_RE.source, 'gm'))].map((m) => m[1]);
+
+/** 成员集合差（C0b 与 C0c **共用同一比较器** ⇒ 判别力自检覆盖的正是生产判据本体）。 */
+const memberDiffOf = (contractMembers, adapterMembers) => {
+  const c = new Set(contractMembers);
+  const a = new Set(adapterMembers);
+  return {
+    onlyContract: [...c].filter((m) => !a.has(m)),
+    onlyAdapter: [...a].filter((m) => !c.has(m)),
+  };
+};
+const diffIsEmpty = (d) => d.onlyContract.length === 0 && d.onlyAdapter.length === 0;
+
+/** `KernelPorts` 块 → `{ 槽位: 接口名 }`（**解析得出，不硬编码**）。找不到块 ⇒ null。 */
+function slotInterfaceMapOf(src) {
+  const kp = interfaceBodyOf(src, 'KernelPorts');
+  if (kp === null) return null;
+  const map = {};
+  for (const m of kp.matchAll(/^\s{2}([A-Za-z_]\w*)\??\s*:\s*([A-Za-z_]\w*)/gm)) map[m[1]] = m[2];
+  return map;
+}
+
+// ── C0c 判别力自检：先证「探针有牙」，再报盘点结果 ────────────────────────────────
+// 判据两条，缺一即红（防 C0b 因探针退化而变成**恒绿**）：
+//   ① 比较器：不等对必判不等、相等对必判相等；
+//   ② 解析器：四种成员形态（`readonly x:` / `f(` / `f<T>(` / `readonly x?:`）全部解析得出。
+function checkCODiscrimination() {
+  const comparatorOk = !diffIsEmpty(memberDiffOf(['execute', 'cancel'], ['start', 'stop']))
+    && diffIsEmpty(memberDiffOf(['read', 'sessionOf'], ['read', 'sessionOf']));
+  const sample = [
+    '  readonly available: boolean;',      // readonly + 字段
+    '  canNarrow(ask: NarrowAsk): boolean;', // 方法
+    '  registerTool<T>(definition: T): boolean;', // 泛型方法（`<` 结尾形态）
+    '  readonly id?: string;',              // readonly + `??` 可选标记
+  ].join('\n');
+  const parsed = topLevelMembersOf(sample);
+  const parserOk = ['available', 'canNarrow', 'registerTool', 'id'].every((m) => parsed.includes(m))
+    && parsed.length === 4;
+  const ok = comparatorOk && parserOk;
+  return record('C0c 判别力', ok,
+    '比较器(不等对判不等/相等对判相等)=' + comparatorOk + '｜解析器=' + JSON.stringify(parsed)
+    + (ok ? '  (有判别力)' : '  ⇒ **判据失效：C0a/C0b 读数不可信**'));
+}
+
+// ── C0a 槽位键对账 ─────────────────────────────────────────────────────────────
+function checkSlotKeys(slotMap, nulls) {
+  if (slotMap === null) {
+    return record('C0a 槽位键', false, 'lib/ports.ts 内未找到 interface KernelPorts');
+  }
+  const fromPorts = Object.keys(slotMap);
+  const fromBus = Object.keys(nulls);
+  const onlyPorts = fromPorts.filter((k) => !fromBus.includes(k));
+  const onlyBus = fromBus.filter((k) => !fromPorts.includes(k));
   const ok = onlyPorts.length === 0 && onlyBus.length === 0;
-  return record('C0 shape', ok, 'ports.ts=' + JSON.stringify([...fromPorts]) + ' bus=' + JSON.stringify([...fromBus])
+  return record('C0a 槽位键', ok, 'ports.ts=' + JSON.stringify(fromPorts) + ' bus=' + JSON.stringify(fromBus)
+    + ' 槽位↔接口=' + JSON.stringify(slotMap)
     + (ok ? '  (集合相等)' : '  多出=' + JSON.stringify(onlyBus) + ' 缺失=' + JSON.stringify(onlyPorts)));
+}
+
+// ── C0b 成员名对账（本档的真增量）─────────────────────────────────────────────────
+function checkMemberNames(src, nulls, slotMap) {
+  // 防假绿：槽位映射为空时**不得**判绿（空集与空集恒等 ⇒ 无判别力）
+  if (!slotMap || Object.keys(slotMap).length === 0) {
+    return record('C0b 成员名', false, '槽位映射为空 ⇒ 无从对成员名（不判绿）');
+  }
+  const slots = Object.keys(slotMap);
+  const lines = [];
+  let mismatched = 0;
+  for (const slot of slots) {
+    const iface = slotMap[slot];
+    const body = interfaceBodyOf(src, iface);
+    if (body === null) {
+      mismatched += 1;
+      lines.push(slot + '［' + iface + '］契约接口未找到');
+      continue;
+    }
+    const contractMembers = topLevelMembersOf(body);
+    const adapterMembers = nulls[slot] ? Object.keys(nulls[slot]) : [];
+    const d = memberDiffOf(contractMembers, adapterMembers);
+    if (!diffIsEmpty(d)) {
+      mismatched += 1;
+      lines.push(slot + '［' + iface + '］契约=' + contractMembers.length + ' 适配器=' + adapterMembers.length
+        + ' 缺失=' + JSON.stringify(d.onlyContract) + ' 多出=' + JSON.stringify(d.onlyAdapter));
+    }
+  }
+  const ok = mismatched === 0;
+  return record('C0b 成员名', ok,
+    (ok ? '全 ' + slots.length + ' 槽位成员名集合相等'
+      : '不一致 ' + mismatched + '/' + slots.length + ' 槽位（转绿条件 = W2-3 按契约重写 null 适配器）｜')
+    + lines.join('｜'));
+}
+
+/** C0 驱动：C0c（先自证有牙）→ C0a → C0b。三档各自 `record()` ⇒ 失败档可分辨。 */
+function checkShapeReconciliation() {
+  const nulls = createNullAdapters();
+  checkCODiscrimination();
+  let src;
+  try {
+    src = stripTsComments(fs.readFileSync(path.join(ROOT, 'lib', 'ports.ts'), 'utf8'));
+  } catch (err) {
+    return record('C0a 槽位键', false, '读 lib/ports.ts 失败：' + String(err?.message ?? err));
+  }
+  const slotMap = slotInterfaceMapOf(src);
+  checkSlotKeys(slotMap, nulls);
+  return checkMemberNames(src, nulls, slotMap);
 }
 
 // ── F-1 可选端口被当必需直用（**零参数**：开关由调用它的 withBreak 作用域提供）──────────

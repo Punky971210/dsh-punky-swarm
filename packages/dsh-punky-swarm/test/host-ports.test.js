@@ -220,7 +220,7 @@ test('T-2 activation + preset：功能面读数（available / canNarrow({}) / �
 //   真读数（p0-6 D-3）：`via='preset'` 需 W-2 见证成立；否则 `'none'`。今日实现由 `form` 直接派生
 //   ⇒ 无见证也报 `'preset'` ⇒ 本用例红。成对形式按 p0-6 处方：「带覆盖见证 ⇒ preset；无见证 ⇒ none」。
 test('T-2R（TODO · 预期红）narrowVia 成对：带覆盖见证 ⇒ preset；无见证 ⇒ none',
-  { todo: 'P0-3/P0-6 登记：narrowVia 收紧为实测结果（D-3）；当前为形态派生值 ⇒ 预期红' },
+  { todo: '[T-2R] P0-3/P0-6 登记：narrowVia 收紧为实测结果（D-3）；当前为形态派生值 ⇒ 预期红' },
   async () => {
     const rt = { startActivation: async () => ({ id: 'w1' }) };
     const withWitness = createAgentPort({ subagents: rt }, { presetFor: () => ({ preset: 'punkynarrow', covers: [] }) });

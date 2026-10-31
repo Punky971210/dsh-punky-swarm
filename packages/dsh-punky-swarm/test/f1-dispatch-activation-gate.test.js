@@ -286,7 +286,7 @@ test('T-1.6 A1-P1-01 端口对五种宿主面给出功能面读数（available /
 //   当前实现仍点名 `ctx.subagents` / `startActivation` ⇒ **预期红**，故挂 `{ todo }`：
 //   失败计入 todo 计数（**不污染 fail、不阻断拆分批**），provider 文案改造完成后**删掉 `{ todo }` 即转正式用例**。
 test('T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名',
-  { todo: 'P0-3 登记：文案仍点名 ctx.subagents / startActivation；拆分批 provider 文案改造后删掉 todo 转正式用例' },
+  { todo: '[T-1.8] P0-3 登记：文案仍点名 ctx.subagents / startActivation；拆分批 provider 文案改造后删掉 todo 转正式用例' },
   async () => {
     const HOST_WORDS = /ctx\.\s*subagents|startActivation|startContinuable/;
 

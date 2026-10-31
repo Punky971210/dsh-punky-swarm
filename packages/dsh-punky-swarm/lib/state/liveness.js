@@ -26,9 +26,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
  * 1. **原因门**：只有 `CONTINUABLE_REASONS` 内的原因可续跑 —— 目前**只有 `empty_response`**
  *    （空证据 + 空写入 = 空转，值得再试一次）。其余原因（`completed` / `partial` / 未知）**一律拒**，
  *    **即使次数还没到上界** —— 这条专治「只看次数不看原因」。
- *    ⚠ `empty_response` 的**分类单点不在本文件**：`lib/bus/index.js:208`
+ *    ⚠ `empty_response` 的**分类实现当前只有一处**：`lib/bus/index.js` 的 `classifyProgress()`
  *    （`if (n.evidence.length === 0 && n.writes.length === 0) return 'empty_response';`）。
- *    本文件只**消费该字符串字面**，不复制分类逻辑、不改分类口径（本批对 `bus/index.js` **零改动**）。
+ *    **但那处不在生产路径上**：`lib/bus/index.js` **生产零调用**（`createBus` 在 `lib/**` 除
+ *    `lib/bus/` 自身零调用点），且已按丙冻结待用（见该文件头的冻结块）⇒ 它是「**唯一实现**」，
+ *    **不是**「活单点 / 生产真源」。**禁**把本处引用读作「分类真源在 `lib/bus`」。
+ *    ⇒ 接线批（e1-G01 / e1-G09 / e1-G10 过关后）若把分类搬到别处，**本指针必须同步重定向**；
+ *    在那之前，本文件引用该实现只是**形态参考**（据此对齐字面取值），不承担真源声明。
+ *    本文件只**消费该字符串字面**，不复制分类逻辑、不改分类口径。
  * 2. **次数门**：已续跑次数 **超过** 上界 ⇒ 拒。上界只由本文件的**唯一策略常量**承载（见下方导出）。
  *    `continuationCount` 的语义 = **此前已经发生的续跑次数**（首次调用传 0）：
  *    已续 1 次 ⇒ 允许（第 2 次 run）／已续 2 次 ⇒ 允许（用满上界）／已续 3 次 ⇒ **拒**。
@@ -37,7 +42,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
  * ## 不管什么（边界，防越权）
  * - **不接管恢复流程**：`lib/state/resume.js`（177 行，`resolveResumeConfig`/`recoverBatches`）
  *   负责断点续跑骨架，本文件**不 import 它**、不改它、不替它做任何决定；
- * - **不判活性分类**：`advanced` / `empty_response` / `partial` 的分类归 `lib/bus/index.js`；
+ * - **不判活性分类**：`advanced` / `empty_response` / `partial` 的分类**当前唯一实现**在
+ *   `lib/bus/index.js#classifyProgress`（生产零调用、冻结待用 —— 见上），本文件不复制该分类；
  * - **不落盘、不落事件、不读时钟、不读环境**：零 import、零副作用 ⇒ 可直接单测。
  *
  * ## 为什么上界必须是常量（而不是函数里写死一个字面量）
@@ -89,7 +95,7 @@ export function continuationDecision(input = {}) {
     return {
       continueAllowed: false,
       reason: NOT_CONTINUABLE + ' stopReason=' + String(stopReason)
-        + '（只有 ' + CONTINUABLE_REASONS.join('/') + ' 可续跑；空转可由证据面复核：lib/bus/index.js:208）',
+        + '（只有 ' + CONTINUABLE_REASONS.join('/') + ' 可续跑；空转可由证据面复核：lib/bus/index.js 的 classifyProgress；该实现当前生产零调用、冻结待用）',
     };
   }
 
