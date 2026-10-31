@@ -228,12 +228,17 @@ test('G2 薄包装机核：state/(store|gates) import = 0；判据/策略码 = 0
   // 【G5 收口 · 适配面下沉后的判据订正】派发从「直调 ctx.tools.execute」下沉到**端口层**
   //   `lib/host-ports/`（用户裁定的设计纲：宿主差异全部关在适配层内）⇒ 唯一派发点的**形态**变了，
   //   但「只有一处派发、且走可核的端口方法」这条**判据不变**。禁令也同步收紧：本层**不得直触** `ctx.tools.*`。
+  // 【TR3 ③ 已出清】原第三条正则 `/ctx\.tools\./ = false` 已删 —— 其保护面（lib/ 内除端口层与 bus 外
+  //   不得直触宿主面）现由 `test/host-ports.test.js:110-123` 的 H4 反向约束承担：**读文件扫描、含注释/日志、
+  //   豁免 lib/host-ports/ 与 lib/bus/**，扫描面比本条只扫 lib/mcp 更宽**。
+  //   替代有效性的证明（实测）：向副本包的 `lib/api.js` 注入 `ctx.tools.execute` ⇒ H4 变红，
+  //   断言原文 `宿主面必须**只在端口层**被触达（适配面单点）；越界点=["lib/api.js:400 → ctx.tools."]`。
+  // 【①② 保留（无替代保护面）】下面两条正则**不得删**：`.execute(`=0 与「唯一派发点恰 1 处」在其余测试中
+  //   **没有同口径的替代扫描** ⇒ 删了就是不可逆的判据净损失（K-2）。
   const executes = [...srcAll.matchAll(/\.execute\(/g)];
   assert.equal(executes.length, 0, 'lib/mcp/** 内不得再直调 .execute(（派发已下沉到端口层）');
   assert.equal((srcAll.match(/createToolsPort\(ctx\)\.invokeTool\(/g) ?? []).length, 1,
     '唯一派发点必须是 `createToolsPort(ctx).invokeTool(`（恰 1 处 ⇒ 单点、可核、走宿主链路 + guard）');
-  assert.equal(/ctx\.tools\./.test(srcAll), false,
-    'lib/mcp/** 不得直触 `ctx.tools.`（宿主面只允许经端口层；反向约束由 test/host-ports.test.js H4 全仓扫校）');
   const directObjExec = [...srcAll.matchAll(/\b(tool|definition|def|t)\.execute\(/g)].map((m) => m[0]);
   assert.deepEqual(directObjExec, [], '禁止直调工具对象 .execute(（会绕过守卫）');
   assert.equal((srcAll.match(/listen\(/g) ?? []).length, 0, '不得 listen(（不新起端口）');

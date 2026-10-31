@@ -51,7 +51,8 @@ const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
 //   属死常量；且它误导读者以为本件「锚历史基线字节」（本件的窗口判据在 `AC-pack2-12`，与 bfb9b0c 无关）。
 //   删除性检验：零引用 ⇒ 不承载任何判据；删后本件 12/12 仍绿（见 progress/02）。
 const VOCAB_JSON_REL = 'lib/state/vocabulary.json';
-const VOCAB_JS_REL = 'lib/state/vocabulary.js';
+// 【TR1 出清后删除】原 `const VOCAB_JS_REL = 'lib/state/vocabulary.js';` —— AC-8 改为行为面后**零引用**
+//   （读源码文本的路径已不再需要）；留着会误导读者以为本件仍在数注释字面。删后本件 12/12 仍绿。
 const CONTRACTS_TS_REL = 'lib/types/contracts.ts';
 const CONTRACTS_DTS_REL = 'lib/types/contracts.d.ts';
 const CONTRACTS_JS_REL = 'lib/types/contracts.js';
@@ -413,12 +414,31 @@ test('AC-pack2-7 退役锁 GREEN；词表∩退役锁可算且逐码有理由；
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-8 `vocabulary.js` 注释订正（R-03：空表 ⇒ 全拒，非放行）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-8 `vocabulary.js` 删除「零条目即零校验面」旧表述，且明写「空表」语义', () => {
-  // 失败条件：旧表述仍在（会把「空表 = 放行」的反向误读固化进注释）/ 无「空表」订正说明。
-  const src = readRel(VOCAB_JS_REL);
-  assert.deepEqual((src.match(/零条目即零校验面/g) ?? []), [],
-    '旧表述「零条目即零校验面」须 = 0（R-03：该字面与实测行为冲突）');
-  assert.ok((src.match(/空表/g) ?? []).length >= 1, '须明写「空表」口径（≥1 处）');
+test('AC-pack2-8 空表语义（**行为面**）：真仓词表 known:true ／ 空表副本 known:false（空表不是放行）', () => {
+  // 【TR1 出清 · 2026-11-01】原断言读的是**注释文本**（`src.match(/空表/)` ≥1、旧表述 = 0）。
+  //   变异实测（副本 + 读路径重定向；真仓 lib 零改动）：
+  //     · 改实现「空表 ⇒ 全放行」而注释一字不动 ⇒ 旧断言**仍绿**（J-1：不保护行为）
+  //     · 只改注释措辞、实现不动 ⇒ 旧断言**变红**（J-2：实际在测文本）
+  //   ⇒ 改为钉**实际判定结果**（两态）：真仓词表 ⇒ known:true；同 schema/meta/sources 的空表副本 ⇒ known:false。
+  const realDoc = JSON.parse(readRel(VOCABULARY_REL));
+  const sample = realDoc.entries.find((e) => e.kind === 'gate' && typeof e.code === 'string');
+  assert.ok(sample, '前置：真仓词表须含至少一条 gate 词条（否则本判据无样例可取）');
+
+  // 态① 真仓词表：该码已登记 ⇒ known:true（放行档；防「恒拒」把本判据变恒真）
+  assert.equal(gateCodeKnown(sample.code).known, true,
+    '真仓词表下 ' + sample.code + ' 必须 known:true（对照态）');
+
+  // 态② 空表副本（**保留 schema/meta/sources，仅 entries: []**）⇒ known:false（全拒档）
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-tr1-empty-'));
+  const abs = path.join(root, VOCABULARY_REL);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, JSON.stringify({ ...realDoc, entries: [] }));
+  const load = loadVocabulary({ root, force: true });
+  assert.equal(load.ok, true,
+    '空表本身必须**合法**（否则测到的是「词表不可用 ⇒ fail-open」那档，两档会互读）；problems='
+    + JSON.stringify(load.problems ?? []));
+  assert.equal(gateCodeKnown(sample.code, { root, force: true }).known, false,
+    '**空表 ⇒ 全拒**：空表不是放行（若实现把空表当放行 ⇒ 本断言必红）');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

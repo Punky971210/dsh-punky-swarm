@@ -9,17 +9,17 @@
       "todos": 0
     },
     "test/accept-pack1-guidance.test.js": {
-      "asserts": 17,
+      "asserts": 16,
       "blankLines": 23,
-      "lines": 247,
+      "lines": 251,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
-      "asserts": 48,
-      "blankLines": 38,
-      "lines": 570,
+      "asserts": 50,
+      "blankLines": 40,
+      "lines": 590,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1225,9 +1225,9 @@
       "todos": 0
     },
     "test/mcp-data-plane.test.js": {
-      "asserts": 72,
+      "asserts": 71,
       "blankLines": 42,
-      "lines": 474,
+      "lines": 479,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1929,7 +1929,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-30T21:32:23Z",
+  "generatedAt": "2026-10-31T03:52:21Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -1940,13 +1940,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "宿主端口面批：新建 lib/host-ports（tools/http/agent 三端口）+ 8 处接线 + 修 signal 缺陷 + 注册 startActivation 新入口 + member.dispatch 登记补全（观察名单 2→3）；波前订正 T-3.8/T-1.1/R-9 跟随新语义；替身去宽容（判据变种 #28）",
+  "reason": "P3 TEST-REMOVE 出清：TR1 改断言钉行为（两态真调用，未删测试）、TR2 只删 len>=120 一行（hits 真判据一字未动）、TR3 只删 ctx.tools.=false 一条（①② 无同口径替代故保留）",
   "schema": 1,
   "totals": {
     "asserts": 11726,
-    "blankLines": 6424,
+    "blankLines": 6426,
     "files": 241,
-    "lines": 68032,
+    "lines": 68061,
     "tautologies": 0,
     "tests": 2417,
     "todos": 4

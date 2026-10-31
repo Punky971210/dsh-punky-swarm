@@ -167,7 +167,11 @@ test('AC-pack1-6 注入面条目与对应正文小节：24 字窗命中 = 0，�
     const len = [...normWs(sec.body)].length;
     report.push(`§${id}: 正文长度=${len}｜24 字窗命中=${hits.length}${hits.length ? ' → ' + JSON.stringify(hits.slice(0, 3)) : ''}`);
     assert.deepEqual(hits, [], `§${id} 与注入面条目存在 ≥24 字连续公共串（Q-B 阈值被破）：${JSON.stringify(hits.slice(0, 3))}`);
-    assert.ok(len >= 120, `§${id} 正文须 ≥ 120 字，实测 ${len}`);
+    // 【TR2 出清 · 2026-11-01】原第 171 行的 `assert.ok(len >= 120, …)` 已删：变异实测
+    //   「删掉 §0i 全部判定条件、换成 200+ 字无关散文」⇒ 长度 141 ⇒ 该断言**仍绿**（J-1：只数长度、不保护语义）；
+    //   而「压成 17 字但语义完整」⇒ **变红**（J-2：测的是篇幅）。
+    //   ⇒ 篇幅断言无鉴别力，删除；**`hits`（≥24 字公共串）那条保留**（K 不得删）——它才是本节真正的判据。
+    //   `len` 仅保留在 `report` 输出里作**观测值**，不再作为断言。
   }
   process.stdout.write('[AC-pack1-6] ' + report.join(' ； ') + '\n');
 });
