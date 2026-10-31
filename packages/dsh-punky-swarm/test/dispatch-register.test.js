@@ -35,9 +35,9 @@ import { apply } from '../lib/index.js';
 import { installDispatchRegistration, extractWorkerSessionId, DEFAULT_DISPATCH_TOOLS } from '../lib/bridge/dispatch-register.js';
 import { createCoreTools } from '../lib/tools/core.js';
 import { issueLaneHandle, parseLaneHandleFromText, verifyLaneHandle, consumeLaneHandle, pendingHandles, textOfDispatchArgs, LANE_HANDLE_TTL_MS, __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import { assemblyCtx, tempRoot } from './helpers/gate-fixture.mjs';
+import { assemblyCtxHostFull, tempRoot } from './helpers/gate-fixture.mjs';
 
-// ── 装配级 fake ctx：`assemblyCtx()` 装配 ctx **基线**（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
+// ── 装配级 fake ctx：`assemblyCtxHostFull()` 装配 ctx **基线**（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 function execOf(name, args, sessionId, extra = {}) {
   return {
     name,
@@ -92,7 +92,7 @@ test('R2: installDispatchRegistration——member_status(running) 意图 → sub
   // 拓扑对齐：Manager 会话 = 批会话（member_status 未显式 session 时 sessionOf 回退 exec.agent.session.id，
   // 与 member_status 工具自身 setMember 定位同源——批文件须在 Manager 会话下）
   const aux = seedRunning(root, 'mgr-s', 'b-r2');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   assert.equal(reg.installed, true);
@@ -121,7 +121,7 @@ test('R2: installDispatchRegistration——member_status(running) 意图 → sub
 test('R2b: member_status 显式 session 指向批会话 → 事件落对批、映射正确', async () => {
   const root = tempRoot('punky-dr2b-');
   const aux = seedRunning(root, 'sess-b', 'b-r2b');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
@@ -139,7 +139,7 @@ test('R2b: member_status 显式 session 指向批会话 → 事件落对批、�
 test('R3: 未取到批上下文（无 member_status 意图，非 Manager 派发）→ 不登记（T16 静默降级）', async () => {
   const root = tempRoot('punky-dr3-');
   const aux = seedRunning(root, 'sess-b', 'b-r3');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
@@ -164,7 +164,7 @@ test('R3: 未取到批上下文（无 member_status 意图，非 Manager 派发�
 test('R4: send_message 已退役出观察名单 → 零登记零告警（透传，与任意非派发工具同族）', async () => {
   const root = tempRoot('punky-dr4-');
   const aux = seedRunning(root, 'sess-b', 'b-r4');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
@@ -189,7 +189,7 @@ test('R4: send_message 已退役出观察名单 → 零登记零告警（透传�
 test('R4b: 派发工具提取失败（subagent 载荷无会话 id）⇒ 显式降级告警 + 零登记（不静默）', async () => {
   const root = tempRoot('punky-dr4b-');
   const aux = seedRunning(root, 'sess-b', 'b-r4b');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
@@ -212,7 +212,7 @@ test('R4b: 派发工具提取失败（subagent 载荷无会话 id）⇒ 显式�
 test('R5: apply 装配端到端——真实登记路径（member_status running + subagent post-execute）→ worker refusal 归属批计数 → escalation paused', async () => {
   const root = tempRoot('punky-dr5-');
   const aux = seedRunning(root, 'sess-b', 'b-r5'); // running 批
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const RULE_RM_RF = {
     id: 'R001',
     tools: ['bash'],
@@ -253,7 +253,7 @@ test('R5: apply 装配端到端——真实登记路径（member_status running 
 test('R6: 装配注入 resolveBatchContext(exec) 显式返回批上下文 → 无 member_status 也登记', async () => {
   const root = tempRoot('punky-dr6-');
   const aux = seedRunning(root, 'sess-b', 'b-r6');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   // 注入解析器：任何 subagent 派发显式归属 sess-b/b-r6/l1（模拟宿主/编排层提供归属——装配注入面）
   const injected = (exec, { workerSessionId }) => (exec.name === 'subagent' ? { sessionId: 'sess-b', batchId: 'b-r6', lane: 'l1', workerSessionId } : null);
@@ -300,7 +300,7 @@ test('R8: DEFAULT_DISPATCH_TOOLS 必须观察 subagent / subagent_fork / **spawn
 // 依据：2026-09-15 用户裁决「token 走新工具 lane_dispatch 取句柄」；本用例防「模块在、工具没接」的假绿。
 test('R11: createCoreTools 暴露 lane_dispatch（参数含 batchId/lane；与 member_status 同批门禁语义）', async () => {
   const root = tempRoot('punky-dr11-');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const tools = createCoreTools(ctx, { store: createStore(root), root, config: {} });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
   assert.ok(ld, 'lane_dispatch 已注册（否则 C 档派发无句柄可取）');
@@ -317,7 +317,7 @@ test('R10: 任务包含句柄 ⇒ 依句柄 (batchId, lane) 精确登记；并�
   __resetLaneHandles();
   const root = tempRoot('punky-dr10-');
   const aux = seedRunning(root, 'mgr-s', 'b-r10', ['l1', 'l2']);
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {

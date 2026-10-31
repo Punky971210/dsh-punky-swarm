@@ -32,7 +32,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
-import { assemblyCtx, tempRoot } from './helpers/gate-fixture.mjs';
+import { assemblyCtxHostFull, tempRoot } from './helpers/gate-fixture.mjs';
 
 // ENOTDIR 夹具：`<tmp>/file.txt/child`，`file.txt` 是普通文件 ⇒ mkdir 必失败
 function enotdirFixture(prefix) {
@@ -44,7 +44,7 @@ function enotdirFixture(prefix) {
 
 test('T-4.1 A1-P0-01 root 不可建（ENOTDIR）⇒ apply 抛错：消息含 root 绝对路径 / config.root / 原始 code，不以 GATE_ 开头，cause 链在场', () => {
   const { badRoot } = enotdirFixture('punky-f1t41-');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   let err = null;
   try {
     apply(ctx, { root: badRoot });
@@ -65,7 +65,7 @@ test('T-4.1 A1-P0-01 root 不可建（ENOTDIR）⇒ apply 抛错：消息含 roo
 
 test('T-4.2 A1-P0-01 启动日志先于 IO：同一 ENOTDIR 夹具抛错时，logger.info 已含 `engine root: <root>；` 且为第一条 info（改前为空）', () => {
   const { badRoot } = enotdirFixture('punky-f1t42-');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   assert.throws(() => apply(ctx, { root: badRoot }));
   const infos = ctx.calls.info;
   assert.ok(infos.length >= 1, '抛错前必须已产出启动日志（改前该数组为空：日志在 mkdirSync 之后，永不达）');
@@ -76,7 +76,7 @@ test('T-4.2 A1-P0-01 启动日志先于 IO：同一 ENOTDIR 夹具抛错时，lo
 
 test('T-4.3 A1-P0-01 阳性对照：可建 root ⇒ 不抛、启动日志照常（同文案同位置），且 disposer 可用', () => {
   const goodRoot = tempRoot('punky-f1t43-');
-  const ctx = assemblyCtx();
+  const ctx = assemblyCtxHostFull();
   let disposer = null;
   assert.doesNotThrow(() => { disposer = apply(ctx, { root: goodRoot }); }, '正常 root 不得抛（守卫不得误伤正路）');
   assert.ok(typeof disposer === 'function', 'apply 返回 disposer');

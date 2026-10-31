@@ -226,6 +226,28 @@ export function assemblyCtx() {
   return baseAssemblyCtx(); // `subagents` 桩已在基线单点补（见 baseAssemblyCtx 头注）
 }
 
+/**
+ * **三宿主键齐备**变体：基线 + `preCount()` + 最小 `webServer` 桩（**不收集 routes**）。
+ *
+ * 【2026-10-31 遗留收口 · 为什么单列一支而不是改既有变体】
+ *   `lib/index.js#apply` 自 G1 declare 批起执行 `assertRequired(...)`，`tools` / `webServer` /
+ *   `subagents` **三键缺一即 fail-closed 抛错**。而既有三个变体的形状被契约**冻结**：
+ *     · `assemblyCtx()` **不得**带 `webServer` —— 它是「缺宿主必需键 ⇒ 装配期必须 fail-closed」的
+ *       **试样**（能力面用例 C6b 用它；补上就测不到 fail-closed）；
+ *     · `assemblyCtxPre()` **不挂 `webServer`** —— 被 `test/fixture-helper-ledger.test.js` F4-2 明文冻结。
+ *   ⇒ 需要「装配真的跑起来」的用例（governance preset/toolban/hotconfig/escalate 四套）原先复用
+ *   `assemblyCtxPre()` 就一律抛 `capability-missing: webServer`（实测 19 条红）。
+ *
+ *   按本模块 §F4 纪律「按变体拆名、不选项化」：**不复用、不改既有变体形状，单列一支**。
+ *   需要**断言路由**的用例仍用 `assemblyCtxWeb()` / `assemblyCtxEffect()`（收集版）。
+ */
+export function assemblyCtxHostFull() {
+  const ctx = baseAssemblyCtx();
+  ctx.preCount = () => ctx.listeners.get('tools/pre-execute')?.size ?? 0;
+  ctx.webServer = { register: () => () => {}, dispose() {} };
+  return ctx;
+}
+
 /** 基线 + `preCount()`：`tools/pre-execute` 已挂监听数（热挂/热卸断言用探针）。 */
 export function assemblyCtxPre() {
   const ctx = baseAssemblyCtx();

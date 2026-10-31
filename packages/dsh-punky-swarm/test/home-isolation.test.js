@@ -655,7 +655,19 @@ before(async () => {
     error: (...a) => calls.error.push(a.join(' ')),
     exporter: () => () => {},               // 使审计 sink 的前置判定通过 ⇒ 真走到建目录 + 挂 exporter
   };
-  const ctx = { logger, root: { logger }, tools: { register() {} } };
+  // 【2026-10-31 遗留收口 · 补宿主契约桩】`apply` 自 G1 declare 批起在装配末尾执行
+  //   `assertRequired(capabilityReport(...))`，要求 `tools` / `webServer` / `subagents` **三键齐备**、
+  //   缺一即 fail-closed 抛错。此处原只给 `tools` ⇒ `before()` 直接抛
+  //   `capability-missing: webServer,subagents`，本文件 21 条用例集体红（与 gate-fixture.mjs 头注
+  //   同源，属同一笔夹具欠债）。补**最小桩**，不放宽任何判据：本文件断言的是「写点归属 / 真实面
+  //   零变化 / 面级 backstop 三档」，与服务桩形态无关；`assertRequired` 的语义一字未动。
+  const ctx = {
+    logger,
+    root: { logger },
+    tools: { register() {} },
+    subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] },
+    webServer: { register: () => () => {}, dispose() {} },
+  };
   const { apply } = await import(INDEX_URL);
   apply(ctx, {});
   state.applied = true;

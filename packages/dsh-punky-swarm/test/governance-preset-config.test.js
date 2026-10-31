@@ -30,7 +30,7 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCALATE, EVT_BATCH_PHASE } from '../lib/state/event-types.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
-import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxHostFull } from './helpers/gate-fixture.mjs';
 
 // G7 下沉（2026-09-22）：seedBatch 并入 helpers/governance-fixture.mjs；别名导入保持调用点零改动。
 import { seedGovernanceBatch as seedBatch } from './helpers/governance-fixture.mjs';
@@ -39,7 +39,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOT_SLEEP = 1000;
 const HOT_SETTLE = 200;
 
-// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
+// ── 装配级 fake ctx：`assemblyCtxHostFull()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-preset-cfg-'));
 }
@@ -56,7 +56,7 @@ function execOf(name, args, sessionId) {
 test('装配-1 preset 键生效：apply 静态 preset:l1-sensitive → pre 命中 L1-D09（web_search 带凭据 URL DENY）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -83,7 +83,7 @@ test('装配-1 preset 键生效：apply 静态 preset:l1-sensitive → pre 命�
 test('装配-2 preset 双引用 + 超限窄域：preset:[l1,l2] → pwsh timeoutMs 超限命中 L2-R01（flag-off DENY 回退）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive', 'l2-resource'] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -101,7 +101,7 @@ test('装配-2 preset 双引用 + 超限窄域：preset:[l1,l2] → pwsh timeout
 test('T4-1 启：overlay 下发 preset:[l1,l2] → remount 生效（pwsh 超限 DENY + l1 规则同命中）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true } } }); // 静态无规则空表
   try {
     await sleep(HOT_SETTLE);
@@ -127,7 +127,7 @@ test('T4-1 启：overlay 下发 preset:[l1,l2] → remount 生效（pwsh 超限 
 test('T4-2 换：overlay 换 preset:l2-resource → remount rules=6（l1 规则失效、l2 仍生效）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive', 'l2-resource'] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -150,7 +150,7 @@ test('T4-2 换：overlay 换 preset:l2-resource → remount rules=6（l1 规则�
 test('T4-3 错：overlay 含未知 id → 装载失败回退空表 + warn 留痕、不炸装配（hook 空表继续 ALLOW）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } });
   try {
     await sleep(HOT_SETTLE);
@@ -176,7 +176,7 @@ test('T4-3 错：overlay 含未知 id → 装载失败回退空表 + warn 留痕
 test('T4-4 撤：overlay 移除 preset 键 → 回出厂空表零拦截（deepMerge 叠加语义：静态无 preset，overlay 撤键即回静态）', async () => {
   const root = freshRoot();
   writeRuntime(root, {});
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true } } }); // 静态无 preset（出厂形态）
   try {
     await sleep(HOT_SETTLE);
@@ -212,7 +212,7 @@ test('C3-1 escalation 开启：preset 规则命中 DENY（L1-D01）3 次达阈�
   const S = 'sess-c3on';
   const aux = seedBatch(root, S, 'b-c3on');
   aux.appendEvent(S, 'b-c3on', 'member.dispatch', { lane: 'l1', workerSessionId: 'sess-ws-c3on' }); // 登记 → apply 启动索引命中
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, {
     root,
     governance: { hook: { preset: ['l1-sensitive'], escalation: { enabled: true, threshold: 3 } } },
@@ -247,7 +247,7 @@ test('C3-2 出厂关（escalation 缺省）：preset DENY 命中 → 仅 jsonl�
   const S = 'sess-c3off';
   const aux = seedBatch(root, S, 'b-c3off');
   aux.appendEvent(S, 'b-c3off', 'member.dispatch', { lane: 'l1', workerSessionId: 'sess-ws-c3off' });
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { preset: ['l1-sensitive'] } } }); // escalation 缺省关
   try {
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];

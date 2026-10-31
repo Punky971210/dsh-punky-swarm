@@ -40,7 +40,7 @@ import { installGovernanceHook } from '../lib/governance/wiring.js';
 import { writeRefusal, readRefusals, verifyRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { makeAnchor } from '../lib/governance/hash-utils.js';
 import { apply } from '../lib/index.js';
-import { writeRuntime, assemblyCtxPre, tempRoot } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxHostFull, tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
 // F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。
 const fakeCtx = () => makeFakeCtx({ error: true });
@@ -49,7 +49,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── fake ctx（捕获 ctx.on 注册的 listener；disposer 移除注册——cordis ctx.on 返回 dispose 语义）──
 
-// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
+// ── 装配级 fake ctx：`assemblyCtxHostFull()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
 
 
@@ -314,7 +314,7 @@ test('C 签名篡改检测：写 3 份锚定收据 verify ok；篡改中链 1 �
 test('D 热更新实测：runtime.json 写 governance.hook.enabled=false → pre 卸载（不再拦截）；写回 true + 规则热更 → 重挂新规则即时生效（示例 1 DENY → 示例 2 NARROW 收据钳制）；rules:[] → 零拦截恢复', async () => {
   const root = tempRoot('gov-harden-D-');
   writeRuntime(root, {}); // 预建 runtime.json（watcher 需文件存在；初始 overlay {} 零变化）
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [] } } });
   const HOT_SLEEP = 1000;
   const HOT_SETTLE = 200;

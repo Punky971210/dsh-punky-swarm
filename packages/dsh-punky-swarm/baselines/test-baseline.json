@@ -1043,7 +1043,7 @@
     "test/home-isolation.test.js": {
       "asserts": 197,
       "blankLines": 157,
-      "lines": 1831,
+      "lines": 1843,
       "tautologies": 0,
       "tests": 21,
       "todos": 0
@@ -1993,7 +1993,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T06:22:16Z",
+  "generatedAt": "2026-10-31T06:49:12Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2010,7 +2010,7 @@
     "asserts": 11831,
     "blankLines": 6522,
     "files": 249,
-    "lines": 68977,
+    "lines": 68989,
     "tautologies": 0,
     "tests": 2442,
     "todos": 4

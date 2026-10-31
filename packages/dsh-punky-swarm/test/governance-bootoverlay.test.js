@@ -31,9 +31,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
-import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxHostFull } from './helpers/gate-fixture.mjs';
 
-// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
+// ── 装配级 fake ctx：`assemblyCtxHostFull()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-bootgov-'));
@@ -47,7 +47,7 @@ test('BO1 boot-overlay 启动对账：overlay 生效覆盖 → apply 尾部一�
   // ── 正场景 A：启动前 runtime.json 已含 governance 生效覆盖（enabled:false ≠ 静态 enabled:true）──
   const rootA = freshRoot();
   writeRuntime(rootA, { governance: { hook: { enabled: false } } });
-  const ctxA = assemblyCtxPre();
+  const ctxA = assemblyCtxHostFull();
   const disposerA = apply(ctxA, { root: rootA, ...STATIC_GOV });
   try {
     // 启动对账 remount 恰一次（logTag='boot-overlay'；热更路径无此 tag）
@@ -66,7 +66,7 @@ test('BO1 boot-overlay 启动对账：overlay 生效覆盖 → apply 尾部一�
     // ── 幂等对照 B：启动前 runtime.json 无 governance 生效变化（空 overlay → 快照 = 静态 config 原样）──
     const rootB = freshRoot();
     writeRuntime(rootB, {});
-    const ctxB = assemblyCtxPre();
+    const ctxB = assemblyCtxHostFull();
     const disposerB = apply(ctxB, { root: rootB, ...STATIC_GOV });
     try {
       // remountGovernanceHook 快照相等 → 返回 false no-op（不 dispose 不重挂不写 remount 日志）

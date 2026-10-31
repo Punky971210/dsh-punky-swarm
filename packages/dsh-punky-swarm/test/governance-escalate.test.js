@@ -128,7 +128,7 @@ import { eventStreamFileOf } from '../lib/governance/receipt-store.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { createTopicRuntime } from '../lib/comms/topic-runtime.js';
 import { subscribeTopic } from '../lib/comms/topic.js';
-import { writeRuntime, assemblyCtxPre } from './helpers/gate-fixture.mjs';
+import { writeRuntime, assemblyCtxHostFull } from './helpers/gate-fixture.mjs';
 
 // G7 下沉（2026-09-22）：seedBatch 并入 helpers/governance-fixture.mjs（与 preset-config 同形单轴差）；别名导入保持调用点零改动。
 import { seedGovernanceBatch as seedBatch } from './helpers/governance-fixture.mjs';
@@ -170,7 +170,7 @@ function injectRefusal(batchId, { receiptId, ts }) {
   fs.writeFileSync(file, JSON.stringify(batch, null, 2));
 }
 
-// ── 装配级 fake ctx：`assemblyCtxPre()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
+// ── 装配级 fake ctx：`assemblyCtxHostFull()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）
 function freshRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'punky-gesc-assem-'));
 }
@@ -292,7 +292,7 @@ test('T16: 归属失败（无 member.dispatch 登记，D-1 当前出厂语义）
   writeRuntime(root, {});
   // 预置 running 批但无登记 → dispatchIndex miss（apply 启动重建全扫可见）
   seedBatch(root, 'sess-g16', 'b16');
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, {
     root,
     governance: { hook: { enabled: true, rules: [RULE_RM_RF], escalation: { enabled: true, threshold: 3 } } },
@@ -396,7 +396,7 @@ test('T20: escalation.enabled=false 零路径（映射命中仍零计数零记�
   writeRuntime(root, {});
   const aux = seedBatch(root, 'sess-g20', 'b20');
   aux.appendEvent('sess-g20', 'b20', 'member.dispatch', { lane: 'l1', workerSessionId: 'sess-ws20' }); // 登记落地形态（读侧索引命中）
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, { root, governance: { hook: { enabled: true, rules: [RULE_RM_RF] } } }); // escalation 缺省 → enabled:false
   try {
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
@@ -429,7 +429,7 @@ test('T21: 观察者纪律——记录抛错（批次缺失）→ 桥接 warn �
   writeRuntime(root, {});
   const aux = seedBatch(root, 'sess-g21', 'b21');
   aux.appendEvent('sess-g21', 'b21', 'member.dispatch', { lane: 'l1', workerSessionId: 'sess-ws21' }); // 登记 → 启动重建索引命中
-  const ctx = assemblyCtxPre();
+  const ctx = assemblyCtxHostFull();
   const disposer = apply(ctx, {
     root,
     governance: { hook: { enabled: true, rules: [RULE_RM_RF], escalation: { enabled: true, threshold: 3 } } },
