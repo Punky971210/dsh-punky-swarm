@@ -177,7 +177,15 @@ export interface RosterRow {
     readonly role?: string;
     readonly status?: string;
 }
-/** 名册来源。缺失 ⇒ 内核使用内建 roster（不是「不支持」）。 */
+/**
+ * 名册来源。缺失 ⇒ 内核使用内建 roster（不是「不支持」）。
+ *
+ * ⚠ **术语区分（必读，防两件事被当成一件）**：本处「内建 roster」= `lib/roster.js#BUILTIN_ROLES`
+ * 的**静态职位名表**（本仓认为**该有哪些**席位：`manager` / `lead` / …；常量、零写入），
+ * **不是**「谁**真的在座**」的**席位登记表**——后者由**引擎自建**、落批次字段
+ * `batch.managerSeat`（`source:'engine-registry'`），写入道仅 `batch_phase({manager})`。
+ * ⇒ 「缺失就用内建的」**只覆盖职位名表**（对账基准），**不构成**在册真源；在册判定读批次表。
+ */
 export interface RosterSource {
     /**
      * 读取宿主侧名册，仅用于与内建 roster **对账**，不得作为权威。
@@ -295,7 +303,10 @@ export interface KernelPorts {
     runtime: AgentRuntime;
     /** 必需位（内核默认唯一实现；注入面只服务测试缝）。 */
     audit: AuditSink;
-    /** 缺失 → 内建 roster。 */
+    /**
+     * 缺失 → 内建 roster（**静态职位名表**，仅供对账基准；**不是**席位登记表——在册真源 = 引擎自建的
+     * `batch.managerSeat`，见 `RosterSource` 的术语区分）。
+     */
     roster?: RosterSource;
     /** 缺失 → 内核自持注册表（默认不申请宿主）。 */
     tools?: ToolSurface;

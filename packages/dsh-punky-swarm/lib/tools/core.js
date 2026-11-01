@@ -85,8 +85,8 @@ function buildPhaseTools(cx) {
   return [
     defineTool({
       name: "batch_phase",
-      description: "批次阶段迁移：planning->running->paused->aborted|complete（终态后拒绝再写）。complete 前置：audit 层验收齐备（Tier3 门禁）。可选 manager={agentId,note?}：**legacy 登记面**（写批次字段 manager + batch.manager.raised 事件，只登记不改阶段，可单独调用）——【gate-lite 第二批 · A】Manager 在册判定的**新真源 = 官方 roster**（`ctx.get('agentTeams')` → `listMembers`；经 wave_plan/batch_status 的 `managerRoster` 回显，声明 raise 而无 Manager 落 `gate.manager_roster_gap`）；本登记**不再按 phase/agentId 拒绝**（空 agentId ⇒ 不写记录、不抛错）。批次按会话隔离，缺省取当前执行会话。迁移事由随事件落盘（`reason`），暂停类迁移缺省自动回填 `manual:batch_phase:<phase>`，不静默。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"phase":{"type":"string","enum":["running","paused","aborted","complete"]},"reason":{"type":"string","description":"相位迁移事由（写入 batch.phase 事件；缺省 manual:batch_phase:<phase>）"},"manager":{"type":"object","description":"Manager **legacy 登记**载荷：{agentId: 非空字符串, note?: 说明}；任意 phase 均可登记（含终态；幂等）；空/缺 agentId ⇒ 不写记录（返回 null，调用方按「既无 phase 又无 manager」如实报错）。**不构成在册判据**——在册以官方 roster 为准（managerRoster 回显）","additionalProperties":false,"properties":{"agentId":{"type":"string"},"note":{"type":"string"}}},"session":{"type":"string","description":"批次归属会话"}},
+      description: "批次阶段迁移：planning->running->paused->aborted|complete（终态后拒绝再写）。complete 前置：audit 层验收齐备（Tier3 门禁）。可选 manager={agentId,note?}：**引擎自建在册表的唯一写入口**（写批次字段 managerSeat（source:'engine-registry'）+ 兼容写 legacy 字段 manager + batch.manager.raised 事件，只登记不改阶段，可单独调用）——【R-1 · AQ-1 乙】**在册真源 = 引擎自建表**（batch.managerSeat）；宿主 roster（无论哪个宿主、以何形态取到）**仅用于对账、不得作为权威**；声明 managerPlan=raise 的批在建批期落 gate.manager_roster_gap 留痕（不拒绝）；本登记**不再按 phase/agentId 拒绝**（空 agentId ⇒ 不写记录、不抛错）。批次按会话隔离，缺省取当前执行会话。迁移事由随事件落盘（`reason`），暂停类迁移缺省自动回填 `manual:batch_phase:<phase>`，不静默。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"phase":{"type":"string","enum":["running","paused","aborted","complete"]},"reason":{"type":"string","description":"相位迁移事由（写入 batch.phase 事件；缺省 manual:batch_phase:<phase>）"},"manager":{"type":"object","description":"Manager **在册登记**载荷：{agentId: 非空字符串, note?: 说明}；任意 phase 均可登记（含终态；幂等）；空/缺 agentId ⇒ 不写记录（返回 null，调用方按「既无 phase 又无 manager」如实报错）。**即写入在册真源**（batch.managerSeat，source:'engine-registry'）；在册判定读该表，宿主 roster 仅对账","additionalProperties":false,"properties":{"agentId":{"type":"string"},"note":{"type":"string"}}},"session":{"type":"string","description":"批次归属会话"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"manager":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}}}},
         render: (_args, value) => TEXT_OUTPUT((value.manager ? ('batch ' + value.batchId + ' manager.raised -> ' + value.manager.agentId) : ('batch ' + value.batchId + ' phase -> ' + value.phase))
@@ -102,8 +102,9 @@ function buildPhaseTools(cx) {
         //   · 任意 phase 均可登记事实（幂等；不改阶段、不改成员状态）；
         //   · 空/缺 `agentId` ⇒ `markManagerRaised` 返回 null ⇒ 走下方「既无 phase 又无 manager」显式报错
         //     （不写垃圾记录、不静默）。
-        //   **在册判据不在此处**：以官方 roster 为准（读端 `managerRosterOf` / `managerViewOf`，见 wave_plan、
-        //   batch_status）；本登记降级为 legacy 观察字段。
+        //   **在册判据不在此处**：以引擎自建表（`batch.managerSeat`，`source:'engine-registry'`）为准；
+        //   宿主 roster 仅用于对账（不得作为权威）。本工具只负责**入表**（唯一显式通道），
+        //   在册判定与回显在读端（`wave_plan` / `batch_status`）。legacy `batch.manager` 与表**并列写**、不互相赋值。
         const manager = args.manager ? store.markManagerRaised(sessionId, args.batchId, args.manager) : undefined;
         if (!args.phase) {
           if (!manager) throw new Error('batch_phase requires "phase" or "manager"');

@@ -160,15 +160,33 @@ export function buildBatch(cx) {
     return corruptRegistry.isCorrupt(sessionId, batchId);
   }
 
-  // Manager 拉起登记（唯一写入口）：写批次级 `manager` 字段 + `batch.manager.raised` 事件。
+  // Manager 在册登记（**引擎自建在册表的唯一写入口**）：写批次级 `managerSeat`（在册真源）
+  //   + **兼容写** legacy `manager` 字段 + `batch.manager.raised` 事件。
+  // 【R-1 · AQ-1 乙（2026-10-31 用户裁决）】**在册真源 = 引擎自建表**；宿主 roster（无论哪个宿主、
+  //   以何形态取到）**只用于对账**，不得作为权威。表行形状（五键，键集冻结）：
+  //     `managerSeat = { seatId, role:'manager', source:'engine-registry', registeredAt, registeredBy }`
+  //   · `seatId`：在座席位的标识（= 登记入参 `agentId`，trim 后非空才成行）；
+  //   · `role`：恒 `'manager'`（集群治理 Manager **约定席**，与宿主 roster 的 `role` 枚举无关）；
+  //   · `source`：恒 `'engine-registry'` —— 在册**真源出处**的判别子。⚠ 与 `MERGE_STATE_SOURCE.roster`
+  //     （宿主 roster 的成员态真源、5 态）**不同义**，两处 `source` 不得互相赋值或混用；
+  //   · `registeredAt`：入表时刻（与 legacy `raisedAt` 取**同一** `at`，便于表 ↔ 旧字段对账）；
+  //   · `registeredBy`：**入表通道**（不是自然人）—— 恒 `'batch_phase'`，即本批认可的唯一显式登记道。
+  //     将来若出现第二个写通道，必须显式改本行（= 新增写点的审计信号；**禁静默扩道**）。
+  // 【字段命名（禁改）】**不得**叫 `builtinRoster` / `engineRoster`：仓内「内建 roster」已有所指
+  //   = `lib/roster.js#BUILTIN_ROLES` 那张**静态职位名表**（本仓认为该有哪些席位），
+  //   与本表的**席位登记**（谁真的在座）**不同源、不同写入者、不同生命周期**——
+  //   前者是常量、零写入；后者由本函数写、随批落盘。同名字段会让读端把两者当一件事。
+  // 【NQ-1 丙】**显式登记为主**：本函数 = `batch_phase({manager})` 的写入实现；
+  //   `spawn_teammate` 反向路径**只留痕、不写表**（`lib/bridge/dispatch-register.js` 的 warn 家族，本批不动，
+  //   也不得在此补反向写表）。⇒ **表空是常态**，读端不得把「表空」当缺口（分级归 R1-4）。
+  // 【史迹】以下「改造为官方 roster 承抽」**已被 R-1 反转**（AQ-1 乙：roster 只对账、真源自建）；
+  //   保留原文是为留存码名已删的审计锚点，**不是现行语义**（现行语义见本段上方）。
   // 【改造为官方 roster 承抽】**原 Manager 三码已删**
   //   （2026-09-21 可达性审计：**码名已字面删除**，避免 grep 误当活码；语义见本段，勿再引用码名）
   //   ⇒ 登记**不再按 phase 或 agentId 拒绝**：
   //     · 任意 phase（含终态）均可登记事实（幂等；不改批次阶段、不改成员状态）；
   //     · `agentId` 缺失/空白 ⇒ **不写垃圾记录**（返回 null，调用方按「既无 phase 又无 manager」如实报错），
   //       **不抛门禁错**（不静默：调用方拿到 null 后走既有显式报错分支）。
-  //   在册判定的**新真源 = 官方 roster**（读端 `lib/tools/core.js#managerRosterOf`；建批期落
-  //   `gate.manager_roster_gap`）。本函数降级为**legacy 登记面**（旧批/离线记录，读端并列回显）。
   function markManagerRaised(sessionId, batchId, payload = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
@@ -176,10 +194,18 @@ export function buildBatch(cx) {
     if (!agentId) return null; // 空 agentId：不拒、不写垃圾（空值门禁已删，A 批口径）
     // 幂等：同一 agentId 重复登记 → 直接返回既有记录，**不重复写事件**（防审计噪音：例如
     //   「先登记、后迁移」的调用序下，同一次阶段迁移被重试时会二次登记）。
-    if (batch.manager && batch.manager.agentId === agentId) return batch.manager;
+    //   【R-1】幂等键**两字段同判**（表 + legacy 都指向同一 seatId 才是「无写入」）：
+    //     · 仅 legacy 命中、表缺（R-1 之前的存量批）⇒ **只回填表**，legacy 值**逐字不变**（防 `raisedAt` 漂移）；
+    //     · 仅表命中、legacy 缺 ⇒ 补齐 legacy（两字段恒并列，禁只写其一）。
+    const sameSeat = Boolean(batch.managerSeat) && batch.managerSeat.seatId === agentId;
+    const sameLegacy = Boolean(batch.manager) && batch.manager.agentId === agentId;
+    if (sameSeat && sameLegacy) return batch.manager;
     const note = typeof payload.note === 'string' && payload.note.trim() ? payload.note.trim() : undefined;
     const at = new Date().toISOString();
-    batch.manager = note ? { agentId, raisedAt: at, note } : { agentId, raisedAt: at };
+    // 在册真源（R-1 新增）：本行 = 全仓**唯一**写点（`grep managerSeat` 的写入面恰此处）。
+    batch.managerSeat = { seatId: agentId, role: 'manager', source: 'engine-registry', registeredAt: at, registeredBy: 'batch_phase' };
+    // legacy 兼容面：旧字段名/键名/形态**逐字不变**（读端零破坏）；已命中同一 agentId 时**不重写**。
+    if (!sameLegacy) batch.manager = note ? { agentId, raisedAt: at, note } : { agentId, raisedAt: at };
     batch.events.push(newEvent(EVT.EVT_BATCH_MANAGER_RAISED, note ? { agentId, note } : { agentId }));
     batch.updatedAt = at;
     commitBatch(sessionId, batchId, batch);
