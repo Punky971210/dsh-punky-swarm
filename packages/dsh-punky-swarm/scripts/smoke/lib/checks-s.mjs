@@ -88,7 +88,7 @@ async function h06(sm) {
   } finally { mount.disposer(); }
 }
 
-/** H-07 `startActivation` 形态宿主 ⇒ 拒派 `GATE_DISPATCH_CAPABILITY_MISSING` + **三零**。 */
+/** H-07 `startActivation` 形态宿主 ⇒ 拒派 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` + **三零**。 */
 async function h07(sm) {
   // ── 阳性对照：探针单点必须能分辨两种宿主形态（否则「拒派」无从归因）──
   const probeStart = sm.dispatchProbe({ subagents: { start() {} } });
@@ -106,7 +106,7 @@ async function h07(sm) {
 
     const msg = await expectThrow(
       () => mount.tools.get('lane_dispatch').execute({ batchId: sm.h07BatchId, lane: 'e1', session: sm.session }),
-      /GATE_DISPATCH_CAPABILITY_MISSING/, 'H-07 startActivation 形态拒派');
+      /GATE_DISPATCH_CAPABILITY_UNAVAILABLE/, 'H-07 startActivation 形态拒派');
 
     const after = sm.batchOf(sm.h07BatchId);
     // 三零：① lane 仍 pending ② 零 member.dispatch 事件 ③ 批相位不变（并加严：零新增事件）
@@ -117,7 +117,7 @@ async function h07(sm) {
     expect((after.events ?? []).length === (before.events ?? []).length,
       '拒派后事件流新增 ' + ((after.events ?? []).length - (before.events ?? []).length) + ' 条（应零写入）');
     expect(/状态变更之前/.test(msg), 'H-07 拒态文案未声明「拒派打在状态变更之前」（可诊断性）：' + msg.slice(0, 200));
-    return '拒派生 GATE_DISPATCH_CAPABILITY_MISSING · 三零成立（lane=pending / 相位=' + after.phase + ' / 事件 +0 / member.dispatch 0）';
+    return '拒派生 GATE_DISPATCH_CAPABILITY_UNAVAILABLE · 三零成立（lane=pending / 相位=' + after.phase + ' / 事件 +0 / member.dispatch 0）';
   } finally { mount.disposer(); }
 }
 

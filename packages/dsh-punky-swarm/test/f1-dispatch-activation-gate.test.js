@@ -20,7 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 判据源：`plan/fix-spec.md`（含文末「后期订正 1」——订正优先）：
 //   ① 探针单点 `subagentRuntimeProbeOf(ctx)` → `{ rt, form, reason }`，三态 + `runtime-unavailable`；
 //   ② `{ startActivation }` 形态 ⇒ **不实现调用**，改为**前置 fail-closed 拒派**
-//      （复用既有 `GATE_DISPATCH_CAPABILITY_MISSING`，打在 `setMember(running)` 与句柄发放**之前**）
+//      （W4 `codename` 改名后的 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE`，打在 `setMember(running)` 与句柄发放**之前**）
 //      ⇒ 三零：lane 仍 pending / 零句柄 / 零 `member.dispatch` 事件；
 //   ③ `{ start }` 旧形态逐字保留（`rt.start(provider, request)` 两参）；
 //   ④ 两形态皆无 ⇒ 降级「仅发句柄」，文案按真实成因分档（**不得**再出现「宿主未提供」反向归因）。
@@ -297,7 +297,7 @@ test('T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名
     const ld1 = laneToolOf(mkCtx({ startActivation: async () => ({}) }), store1, root1, { dispatch: { provider: 'spawn' } });
     let msg1 = '';
     try { await ld1.execute({ batchId: 'b-f1h1', lane: 'l1' }, execOf('sess-f1h')); } catch (e) { msg1 = String(e?.message ?? ''); }
-    assert.match(msg1, /GATE_DISPATCH_CAPABILITY_/, '前提：须先拿到拒派（否则本用例无对象）');
+    assert.match(msg1, /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/, '前提：须先拿到拒派（否则本用例无对象）');
     assert.equal(HOST_WORDS.test(msg1), false, '拒派文案不得承载宿主入口名；实际=' + msg1);
 
     // ② 降级文案（服务在位但无可用入口）

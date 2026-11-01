@@ -135,7 +135,7 @@ test('S-3a activation 宿主：统一派发入口成功（宿主 activation 入�
 test('S-3a-R activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派', async () => {
     const { result, error } = await dispatchWith('activation', { agentPreset: PRESET });
     assert.ok(error, '无见证必须拒派（不得放行）；实际 spawned=' + String(result?.spawned));
-    assert.match(String(error?.message), /GATE_DISPATCH_CAPABILITY_/, '拒派须属能力位不可用族；实际=' + String(error?.message));
+    assert.match(String(error?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/, '拒派须属能力位不可用族；实际=' + String(error?.message));
   });
 
 // ── S-3b（P0-3 方向反转 + 前向登记 · **当前预期红**）`toolFace` 必须被消费 ────────────────────
@@ -167,7 +167,7 @@ test('S-3b `toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行�
     });
     assert.ok(overlapping.error, '交集非空 ⇒ 必须拒派（该 preset 实际拿到了本次要禁的工具）；实际 spawned='
       + String(overlapping.result?.spawned));
-    assert.match(String(overlapping.error?.message), /GATE_DISPATCH_CAPABILITY_/,
+    assert.match(String(overlapping.error?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
       '拒派须属能力位不可用族；实际=' + String(overlapping.error?.message));
     assert.equal(overlapping.store.readBatch(overlapping.sess, overlapping.batchId).lanes.l1, 'pending',
       '拒派须打在状态变更之前（lane 仍 pending，零状态变更）');

@@ -83,7 +83,7 @@ const K1_CODES = [
 const IDENTIFIER_ONLY = [
   'GATE_ASSEMBLY_', 'GATE_AUDIT_CONTRACT_', 'GATE_CLASS', 'GATE_COMPLETE_', 'GATE_COMPLETE_BLOCKED',
   'GATE_CONCURRENCY_BLOCKED', 'GATE_CONTRACT_MISSING', 'GATE_DEGRADE', 'GATE_DIFFICULTY_',
-  'GATE_DIFFICULTY_CHANNEL_UNRESOLVED', 'GATE_DISPATCH_', 'GATE_ESCAPE', 'GATE_EXIT_BLOCKED',
+  'GATE_DISPATCH_', 'GATE_ESCAPE', 'GATE_EXIT_BLOCKED',
   'GATE_MANAGER_', 'GATE_MANAGER_NOT_RAISED', 'GATE_MANAGER_ROSTER_GAP', 'GATE_NEEDHUMAN_BLOCKED',
   'GATE_R', 'GATE_RO', 'GATE_ROLE_', 'GATE_ROW_HEADROOM', 'GATE_SCRIPT_SHA_RE', 'GATE_SIG_',
   'GATE_SIG_DUPLICATE', 'GATE_TARGET_BLOCKED', 'GATE_TARGET_PASSED', 'GATE_TEAMS_ROOT_',
@@ -288,11 +288,11 @@ test('AC-pack2-4 词表 code 集 ∩「仅标识符」清单 = ∅（清单自�
     '交集检查须能点名被塞入词表的项（否则 AC-pack2-4 恒绿 = 无鉴别力）');
   // ④ 下界棘轮（单调棘轮）：只锁「不得静默少抄」，允许将来补项。
   //    **下界来源**：本清单在仓内的唯一载体就是本文件（无第二真源可对齐），其建立时的规模为 **30 项**
-  //    （逐字转录自 recon §2.4 该行，见本件顶部 `IDENTIFIER_ONLY` 的注释）⇒ 以该规模作下界。
-  //    语义：`29 >= 30` 为假 ⇒ **删项必红**；`31 >= 30` 为真 ⇒ 合法补项不红（这正是本件要的「只拆咬合法改动的那一半」）。
-  assert.ok(IDENTIFIER_ONLY.length >= 30,
-    `清单不得少于下界 30 项（现 ${IDENTIFIER_ONLY.length} 项）：本清单是仓内唯一载体，少抄一项会让交集检查静默变弱`);
-  process.stdout.write(`[AC-pack2-4] 清单=${IDENTIFIER_ONLY.length}（下界 30）｜词表命中=${JSON.stringify(hit)}\n`);
+  //    （逐字转录自 recon §2.4 该行）；**W4 `codename` 有 1 项转正**（`GATE_DIFFICULTY_CHANNEL_UNRESOLVED` 已登记词表 ⇒ 不再是「仅标识符」）⇒ 下界同步 30 → **29**。
+  //    语义：`28 >= 29` 为假 ⇒ **删项必红**；`30 >= 29` 为真 ⇒ 合法补项不红（这正是本件要的「只拆咬合法改动的那一半」）。
+  assert.ok(IDENTIFIER_ONLY.length >= 29,
+    `清单不得少于下界 29 项（现 ${IDENTIFIER_ONLY.length} 项）：本清单是仓内唯一载体，少抄一项会让交集检查静默变弱`);
+  process.stdout.write(`[AC-pack2-4] 清单=${IDENTIFIER_ONLY.length}（下界 29）｜词表命中=${JSON.stringify(hit)}\n`);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

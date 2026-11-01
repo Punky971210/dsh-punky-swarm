@@ -66,7 +66,7 @@ test('DR-2 派发失败 ⇒ 报 GATE_* 码 + 置 lane failed（终态） + 给�
   await assert.rejects(
     () => by.lane_dispatch.execute({ batchId: 'b-dr', lane: 'e1' }, exec),
     (e) => {
-      assert.match(e.message, /GATE_DISPATCH_CAPABILITY_MISSING/, '须归一为可读码面');
+      assert.match(e.message, /GATE_DISPATCH_CAPABILITY_UNAVAILABLE/, '须归一为可读码面');
       assert.match(e.message, /已将 lane=e1 置 failed/, '须置终态并写明');
       assert.match(e.message, /不可原地重派/, '须明确「不可原地重派」（去边后重派会被拒）');
       assert.match(e.message, /gap-list/, '须指向 gap-list 恢复路径');

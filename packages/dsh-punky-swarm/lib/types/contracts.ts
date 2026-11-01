@@ -568,7 +568,33 @@ export type GateErrorCode =
   | 'GATE_ROLE_INVALID'             // `roles` 词法非法 ⇒ **告警**（批次照建；与拒态分码，防「告警被读成拒」）
   | 'GATE_ROLE_MANAGER_AS_LANE'     // Manager 被登记为普通 lane ⇒ **告警**（角色完整性，非拒态）
   //   · 建批期**配对基数漂移**（写端 `lib/wave-plan.ts#validateLayerContract`）
-  | 'GATE_PAIRING_CARDINALITY_DRIFT';
+  | 'GATE_PAIRING_CARDINALITY_DRIFT'
+  // ── 手写 `.js` 发射码**补登记**（2026-11-01 · 批 `punky-adapter-split-20261031` / lane `w4-codename`）──
+  //   问题（`punky-adapter-p0-20261031/plan/ts-gate-spec.md` §S3.2 实测 12 码）：以下码在 `lib/**` 有**真实发射位**，
+  //     但**发射位全在手写 `.js`**（无 `.ts` 源）；而词表校验与 `accept-pack2` 的发射码扫描面 = `lib/**/*.ts`
+  //     ⇒ 这 12 码在扫描面上**结构性不可见**，「发射码 ⊆ 词表」对该族**恒真**（确定性假绿，`p1-G01`）。
+  //   本段只做**类型面 + 词表底料登记**，码值/发射位/拒态语义**零行为变更**（本批零新造码）。
+  //   ⚠ **与上一段（`lib/**/*.ts` 面）的差别**：本段的发射位**不在** `.ts` 面，故扫描面加宽（`.ts` ∪ 手写 `.js` ∪ `.mjs`，
+  //     排 `.d.ts`）由 **`w4-ts-gate`** 承接 —— 本段登记后 `scripts/check-vocab-counts.mjs` 仍 exit 0（验证口径见 lane 产物）。
+  //   ⚠ 其中 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` = **改名后**的新码（旧 `..._MISSING` 已入退役锁，永不回生）。
+  //   机检：`test/accept-pack2-vocabulary.test.js` 的 `AC-pack2-3`（词表 gate ↔ 本 union **双向相等**）＋ `AC-pack2-2`（缺口 0）。
+  //   “成员数以本 union 自身为唯一真源”——本段同样**不记数**（写死数字即漂移源）。
+  //   · 批次控制 / 批次终态（写端 `lib/engine/tree-control.js`、`lib/tools/core.js`、`lib/state/store/{handoff-accept,member,plan-mutate}.js`）
+  | 'GATE_BATCH_CONTROL_ACTION_INVALID'
+  | 'GATE_BATCH_TERMINAL'
+  //   · 难度门禁族（写端 `lib/tools/assign-tools.js`、`lib/tools/wave-plan-tools.js`）
+  | 'GATE_DIFFICULTY_CHANNEL_UNRESOLVED'
+  | 'GATE_DIFFICULTY_INVALID'
+  | 'GATE_DIFFICULTY_MISMATCH'
+  | 'GATE_DIFFICULTY_RATIONALE_MISSING'
+  //   · 派发族（写端 `lib/engine/dispatch.js`：`mapSpawnError` 三档归一 + 能力位前置拒派两分支）
+  | 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE'
+  | 'GATE_DISPATCH_FAILED'
+  | 'GATE_DISPATCH_PROVIDER_INVALID'
+  //   · 交接族（写端 `lib/tools/handoff-tools.js`、`lib/state/store/{member,member-gates}.js`）
+  | 'GATE_HANDOFF_ARTIFACT_MISSING'
+  | 'GATE_HANDOFF_LEGACY_PASSTHROUGH'
+  | 'GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH';
 
 
 

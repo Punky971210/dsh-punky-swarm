@@ -184,7 +184,7 @@ test('P3 startRequest（one-shot 平铺）：label + toolFilter.deny（套件自
 });
 
 test('P4 mapSpawnError：能力位/ provider / 其它 三类归一（B4 能力位前置的可读码面）', () => {
-  assert.equal(mapSpawnError(new Error('provider "x" cannot enforce toolFilter (no toolFilter capability)')).code, 'GATE_DISPATCH_CAPABILITY_MISSING');
+  assert.equal(mapSpawnError(new Error('provider "x" cannot enforce toolFilter (no toolFilter capability)')).code, 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE');
   assert.equal(mapSpawnError(new Error('unknown provider: y')).code, 'GATE_DISPATCH_PROVIDER_INVALID');
   assert.equal(mapSpawnError(new Error('boom')).code, 'GATE_DISPATCH_FAILED');
 });
@@ -375,7 +375,7 @@ test('T2 宿主无 ctx.subagents ⇒ 优雅降级「仅发句柄」（spawned:fa
   const ld = tools.find((t) => t.name === 'lane_dispatch');
   const r = await ld.execute({ batchId: 'b-ed2', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } });
   assert.equal(r.spawned, false);
-  assert.ok(r.spawnNote && r.spawnNote.includes('ctx.subagents'), '须给出可读原因');
+  assert.ok(r.spawnNote && /功能面|available=false|未注入/.test(r.spawnNote), '须给出可读原因（功能面语言；W4 `codename` 已去宿主名）');
   assert.ok(r.firstLine.startsWith('[swarm-lane:b-ed2/l1#'), '句柄照常发放');
   __resetLaneHandles();
 });
@@ -387,7 +387,7 @@ test('T3 未配置 provider ⇒ **降级为仅发句柄**（N1 清债：不再�
   const ctx = mkCtx({ start: async () => ({ id: 'ws-x', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) });
   const tools = createCoreTools(ctx, { store, root, config: {} });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
-  // 【2026-09-16 评审 N1】旧契约：抛 `GATE_DISPATCH_CAPABILITY_MISSING`——但那会**丢掉刚发的句柄**，
+  // 【2026-09-16 评审 N1】旧契约：抛 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE`——但那会**丢掉刚发的句柄**，
   //   留下「lane=running、无 worker、无句柄」僵尸态。新契约：与「宿主无 ctx.subagents」同族 ⇒ 降级为
   //   「仅发句柄」（lane 保持 running、句柄原样返回），Leader 可补配置重派或用 firstLine 直派。
   const r = await ld.execute({ batchId: 'b-ed3', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } });
@@ -399,14 +399,14 @@ test('T3 未配置 provider ⇒ **降级为仅发句柄**（N1 清债：不再�
   __resetLaneHandles();
 });
 
-test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISPATCH_CAPABILITY_MISSING（B6 失败显式）', async () => {
+test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISPATCH_CAPABILITY_UNAVAILABLE（B6 失败显式）', async () => {
   __resetLaneHandles();
   const root = tempRoot('punky-ed4-');
   const store = seedBatch(root, 'sess-c', 'b-ed4');
   const ctx = mkCtx({ start: async () => { throw new Error('tool-subagent: provider "p" cannot enforce toolFilter (no toolFilter capability)'); } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'p' } } });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
-  await assert.rejects(() => ld.execute({ batchId: 'b-ed4', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }), /GATE_DISPATCH_CAPABILITY_MISSING/);
+  await assert.rejects(() => ld.execute({ batchId: 'b-ed4', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }), /GATE_DISPATCH_CAPABILITY_UNAVAILABLE/);
   // 失败不得落登记（不留「幽灵绑定」）
   assert.equal(store.readBatch('sess-c', 'b-ed4').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0);
   __resetLaneHandles();

@@ -2,8 +2,8 @@
   "$schema": "dsh-punky-swarm/vocabulary@1",
   "meta": {
     "version": 1,
-    "updated": "2026-10-24",
-    "counts": { "gateCodes": 51, "reasonTokens": 0 }
+    "updated": "2026-11-01",
+    "counts": { "gateCodes": 63, "reasonTokens": 0 }
   },
   "sources": [
     {
@@ -70,6 +70,18 @@
     { "id": "gate-role-assembly-missing", "code": "GATE_ROLE_ASSEMBLY_MISSING", "label": "装配门：缺装配声明", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（装配门，拒建批）" },
     { "id": "gate-role-invalid", "code": "GATE_ROLE_INVALID", "label": "装配门：角色词法非法（告警）", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（告警，不拒）" },
     { "id": "gate-role-manager-as-lane", "code": "GATE_ROLE_MANAGER_AS_LANE", "label": "装配门：Manager 被当 lane", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#buildWavePlan（告警，不拒）" },
-    { "id": "gate-pairing-cardinality-drift", "code": "GATE_PAIRING_CARDINALITY_DRIFT", "label": "建批期：配对基数漂移", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#validateLayerContract" }
+    { "id": "gate-pairing-cardinality-drift", "code": "GATE_PAIRING_CARDINALITY_DRIFT", "label": "建批期：配对基数漂移", "kind": "gate", "enabled": true, "since": "0.5.3", "deprecatedIn": null, "replacedBy": null, "note": "发射位：lib/wave-plan.ts#validateLayerContract" },
+    { "id": "gate-batch-control-action-invalid", "code": "GATE_BATCH_CONTROL_ACTION_INVALID", "label": "批次控制：action 非法", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/engine/tree-control.js / lib/tools/core.js（throw）" },
+    { "id": "gate-batch-terminal", "code": "GATE_BATCH_TERMINAL", "label": "批次面：终态后拒绝再写", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/handoff-accept.js / store/member.js / store/plan-mutate.js（throw）" },
+    { "id": "gate-difficulty-channel-unresolved", "code": "GATE_DIFFICULTY_CHANNEL_UNRESOLVED", "label": "难度门禁：通道归属未落实", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/wave-plan-tools.js#buildWavePlan（throw）" },
+    { "id": "gate-difficulty-invalid", "code": "GATE_DIFFICULTY_INVALID", "label": "难度门禁：难度值非法", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/assign-tools.js#assign_check（throw）" },
+    { "id": "gate-difficulty-mismatch", "code": "GATE_DIFFICULTY_MISMATCH", "label": "难度门禁：声明与特征矛盾", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/assign-tools.js#assign_check（throw，两分支）" },
+    { "id": "gate-difficulty-rationale-missing", "code": "GATE_DIFFICULTY_RATIONALE_MISSING", "label": "难度门禁：缺判据理由", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/assign-tools.js#assign_check（throw）" },
+    { "id": "gate-dispatch-capability-unavailable", "code": "GATE_DISPATCH_CAPABILITY_UNAVAILABLE", "label": "派发：按次收窄功能不可用 ⇒ 拒派", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "W4 `codename` 改名落地（旧 `..._CAPABILITY_MISSING` 已入退役锁）。发射位（手写 .js，非 .ts 面）：lib/engine/dispatch.js#mapSpawnError（code:）/ #dispatchLaneCore ⓿（throw，两分支）" },
+    { "id": "gate-dispatch-failed", "code": "GATE_DISPATCH_FAILED", "label": "派发：引擎自派失败（其它成因）", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/engine/dispatch.js#mapSpawnError（code:）/ 硬失败 throw" },
+    { "id": "gate-dispatch-provider-invalid", "code": "GATE_DISPATCH_PROVIDER_INVALID", "label": "派发：provider 不可解析", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/engine/dispatch.js#mapSpawnError（code:）" },
+    { "id": "gate-handoff-artifact-missing", "code": "GATE_HANDOFF_ARTIFACT_MISSING", "label": "交接门：交付产物不在场", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/handoff-tools.js#handoff_submit（code: / throw）" },
+    { "id": "gate-handoff-legacy-passthrough", "code": "GATE_HANDOFF_LEGACY_PASSTHROUGH", "label": "交接门：legacy 直通档", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/member.js（code:）" },
+    { "id": "gate-handoff-settle-legacy-passthrough", "code": "GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH", "label": "交接门：结算面 legacy 直通档", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/member-gates.js（code:）" }
   ]
 }

@@ -112,7 +112,7 @@ function normalizedSchema(node) {
 }
 
 // ── D1 · AC-9：运行期取 `lane_dispatch` 描述，断言新归因在、旧句式亡 ─────────────────────
-test('D1 lane_dispatch 运行期描述：含 startActivation / GATE_DISPATCH_CAPABILITY_MISSING / 拒派 / 仅当+不可取；不含旧降级句', () => {
+test('D1 lane_dispatch 运行期描述：含 startActivation / GATE_DISPATCH_CAPABILITY_UNAVAILABLE / 拒派 / 仅当+不可取；不含旧降级句', () => {
   const tools = buildDispatchTools({ ctx: {}, deps: {}, store: {}, root: '' });
   const t = tools.find((x) => x.name === 'lane_dispatch');
   assert.ok(t, '必须能实例化到 lane_dispatch');
@@ -120,7 +120,7 @@ test('D1 lane_dispatch 运行期描述：含 startActivation / GATE_DISPATCH_CAP
 
   // 阳性面（新归因逐条在场）
   assert.ok(d.includes('startActivation'), '描述须提宿主 startActivation 形态');
-  assert.ok(d.includes('GATE_DISPATCH_CAPABILITY_MISSING'), '描述须提拒派抛出的现有拒码');
+  assert.ok(d.includes('GATE_DISPATCH_CAPABILITY_UNAVAILABLE'), '描述须提拒派抛出的现有拒码');
   assert.ok(d.includes('拒派'), '描述须含「拒派」语义');
   assert.ok(/打在状态变更之前/.test(d), '描述须写明拒派早于状态变更（F1 实装口径）');
   assert.ok(/仅当[^。]*?(不可取|皆不可调用)/.test(d), '「仅当」句须含降级条件（不可取 / 两入口皆不可调用）');

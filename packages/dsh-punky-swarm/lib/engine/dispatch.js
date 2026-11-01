@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //         ⇒ 本模块**唯一调用形态**（探针 `form==='start'`）；
 //       - `startActivation(spec)` = **新形态**：spec **不承载** `toolFilter`/`persona`（宿主只按 `agentPreset`
 //         组子会话 composition）⇒ 本模块**不接调用**，改**前置 fail-closed 拒派**
-//         （`GATE_DISPATCH_CAPABILITY_MISSING`，见 `dispatchLaneCore` ⓿）：照调 = worker 拿到**未收窄**的完整工具面
+//         （`GATE_DISPATCH_CAPABILITY_UNAVAILABLE`，见 `dispatchLaneCore` ⓿）：照调 = worker 拿到**未收窄**的完整工具面
 //         （含治理工具），与「能力位前置 / 不以弱换强」直接冲突；迁移（Agent Preset 承载）由单开批 F4 承接。
 //   · **能力位前置**（调研收敛点 K4，5 源共识）：provider 不支持 `toolFilter` 时**拒派**，不「以弱换强」。
 //   · **唯一写路径**（改善 W6）：自派成功后由引擎**直接写** `member.dispatch{lane, workerSessionId}`，
@@ -895,7 +895,7 @@ export function buildStartRequest({
 export function mapSpawnError(err) {
   const raw = String(err?.message ?? err ?? '');
   if (/capabilit|toolFilter|depthLimit/i.test(raw)) {
-    return { code: 'GATE_DISPATCH_CAPABILITY_MISSING', message: 'provider 能力位不足（toolFilter/depthLimit）⇒ 拒派，不以弱换强：' + raw };
+    return { code: 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE', message: 'provider 能力位不足（toolFilter/depthLimit）⇒ 拒派，不以弱换强：' + raw };
   }
   if (/provider|unknown provider|not resolvable/i.test(raw)) {
     return { code: 'GATE_DISPATCH_PROVIDER_INVALID', message: 'provider 不可解析（检查 config.dispatch.provider）：' + raw };
@@ -945,9 +945,9 @@ export function workerSessionIdOf(start, warn) {
 function spawnNoteOf(reason) {
   const tail = '⇒ 仅发句柄（请把 firstLine 交给直派形态；该形态门禁属 C 阶段）';
   if (reason === 'runtime-unavailable') {
-    return 'ctx.subagents 不可取（宿主 subagent 服务未注入，或取值被注入守卫拒绝）' + tail;
+    return '适配层 agent 功能面不可用（端口 `available=false`，成因 runtime-unavailable：服务未注入，或取值被 provider 侧守卫拒绝）' + tail;
   }
-  return '宿主 subagent 服务在位，但不含可用启动入口（startActivation / start 皆不可调用）' + tail;
+  return '适配层 agent 功能面**在位但不含可用启动入口**（成因 no-start-entry：两个入口皆不可调用；入口选择属 provider 内部）' + tail;
 }
 
 // ── 【2026-09-22 · one-shot 化】run 生命周期属主登记 ──────────────────────────────
@@ -1077,21 +1077,21 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   `role` 判该 lane 的角色工具面；`toolFace` = 本次实际要禁的工具集；`persona` = 本次要注入的人格。
   //   ⚠ 判据仍是「**能按次收窄吗**」（能力位），不是「哪个入口」——入口选择已完全归 provider。
   if (agentPort.available && !agentPort.canNarrow({ role: laneTask?.role, toolFace: askToolFace, persona: askPersona })) {
-    // 成因分档（**码名不动**：`GATE_DISPATCH_CAPABILITY_MISSING` 的改名属 W4 `codename`，不可逆 + 原子提交）。
+    // 成因分档（**码名已改**：W4 `codename` 把 `CAPABILITY_MISSING` → `CAPABILITY_UNAVAILABLE`，不可逆 + 原子提交，旧码永不回生）。
     //   ① 未配置 preset ⇒ **逐字保留**原文案（`test/f1-dispatch-activation-gate.test.js` 对该文案逐词冻结）；
     //   ② 已配置但**无法核实**覆盖（无 `presetCoverage` / 覆盖为空 / 覆盖与本次 deny 相交）
     //      ⇒ 用真读数文案（只讲「见证不可得」，不再宣称「未配置」）。
     const presetConfigured = typeof liveConfig?.dispatch?.agentPreset === 'string'
       && liveConfig.dispatch.agentPreset.length > 0;
     if (!presetConfigured) {
-      throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 为 `startActivation(spec)` 形态，'
-        + '其 `request` **确不承载** `toolFilter`、宿主亦**无 `persona` 字段**（人格/工具面只能经 `agentPreset` 组 composition）；'
+      throw new Error('GATE_DISPATCH_CAPABILITY_UNAVAILABLE: 按次收窄（toolFilter / persona）在**本次请求**上不可用 ⇒ 拒派，不以弱换强。'
+        + '功能面读数 = agent 端口 `available=true` 但 `canNarrow(本次 ask)` = false（收窄只能经 `agentPreset` 组 composition）；'
         + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
-        + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**，无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
-        + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可经**新派发入口** `startActivation` 自派。'
+        + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**（无收窄见证），无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
+        + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可正常自派。'
         + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
     }
-    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 已配置 `config.dispatch.agentPreset`，'
+    throw new Error('GATE_DISPATCH_CAPABILITY_UNAVAILABLE: 已配置 `config.dispatch.agentPreset`，'
       + '但适配层**无法核对**它对**本次**请求的收窄（真读数口径，P0-6 D-2）：需要 '
       + '`config.dispatch.presetCoverage[<preset 名>].tools` 声明该 preset **实际拿到**的工具面，'
       + '且该声明必须**非空**、并与本次要禁的工具集**不相交**（「声明为空集」不算收窄 —— 空集与任何集的交集恒为空，'

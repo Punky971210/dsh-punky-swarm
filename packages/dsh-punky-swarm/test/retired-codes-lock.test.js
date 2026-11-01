@@ -83,7 +83,7 @@ const RETIRED_CODES = [
   //     「团队资产解析」事件（常量 `EVT_BATCH_TEAM_ASSET_RESOLVED`）的**码值** —— 其发射点随批 3 删除后，
   //     该常量成为「定义在、零发射点」的死常量；本批按 Q-2 红线「要么接线、要么标废」**删净**
   //     其常量本体与全部读端（面板分类器 / locale 键 `event.phase.team` / 事件类型联合成员）⇒ 码面入锁防回生。
-  'batch.team-asset.resolved',
+  'batch.team-asset.resolved', 'GATE_DISPATCH_CAPABILITY_MISSING', // 后者 = W4 `codename` 改名退役（MISSING→UNAVAILABLE，不可逆；同批零字面量已实测；锁面排 *.d.ts ⇒ 锁外行靠 census 清单）
 ];
 
 function libSources(dir, out = []) {

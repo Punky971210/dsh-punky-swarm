@@ -95,13 +95,13 @@ test('A1-P2-02 / AC-9 · 运行期 inject 面：三键内容与顺序逐字不�
   assert.equal(Array.isArray(m.inject), true, '数组形态 = 逐名 required（对象形态同样无 optional 位）');
 });
 
-test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）改前改后一致：index/api 的 ctx.webServer = 1、dispatch 的 ctx.subagents = 1', () => {
+test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）：index 的 ctx.webServer = 1、api = 0、dispatch 的 ctx.subagents = 0（W4 文案去宿主名）', () => {
   // 【host-ports 批语义订正】`lib/api.js` 已改走端口面 `mountRoute` ⇒ 裸访问应为 **0**
-  //   （这正是本批目标：引擎不再直接摸宿主面）。其余两处保持「恰 1」防偷加载面。
+  //   （这正是本批目标：引擎不再直接摸宿主面）。【W4 `codename`】`dispatch.js` 降级文案去宿主名 ⇒ 由 **1 → 0**（不变量 = 不得增加）。
   const probes = [
     ['lib/index.js', 'ctx.webServer', 1],
     ['lib/api.js', 'ctx.webServer', 0],
-    ['lib/engine/dispatch.js', 'ctx.subagents', 1],
+    ['lib/engine/dispatch.js', 'ctx.subagents', 0],
   ];
   for (const [rel, token, expect] of probes) {
     const before = readAtBaseHead(rel);
@@ -279,7 +279,7 @@ test('A1-P2-03 · 同提交披露：docs/upstream-defects.md 含三要素（版�
     return;
   }
   const doc = read(DOC_REL);
-  for (const kw of ['0.2.1-rc.2', 'startActivation', 'GATE_DISPATCH_CAPABILITY_MISSING']) {
+  for (const kw of ['0.2.1-rc.2', 'startActivation', 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE']) {
     assert.ok(doc.includes(kw), '披露节必须含三要素之一：' + kw);
   }
   assert.match(doc, /不得|不得把|不要/, '必须显式写明「range 覆盖 ≠ 自派已恢复」的反向告诫（防半真话）');
