@@ -14,36 +14,48 @@
     "inlineExpectedRed": {
       "form": "{ todo: '<id> …' }（第二参数对象，**有回调 ⇒ 会执行并留失败原文**）",
       "count": 0,
-      "owner": "P0-3 引入 4 条 → W3-2 `w3-meter` 清 3 条（S-3a-R / S-3b / T-2R 转绿）→ **W4-1 `w4-codename` 的文案去宿主名让最后一条 T-1.8 转绿，由 Leader 在本轮清除（`todos` 指标 5→4，需重冻 `baselines/**`，属 Leader 单写区）**",
+      "owner": "P0-3 引入 4 条 → W3-2 `w3-meter` 清 3 条 → **W4-1 `w4-codename` 的文案去宿主名让最后一条 T-1.8 转绿，由 Leader 在本轮清除**",
       "cleanWhen": "每条 ac 对应的判据转绿后删掉该 todo，并**同步删除本表条目**（已于本轮清空）"
     },
     "moduleLevelTodo": {
       "form": "test.todo('<name>')（**无回调 ⇒ 永不执行 ⇒ 无法自动转绿**）",
       "count": 4,
       "owner": "历史遗留（批 gate-techdebt，R-16…R-19 治理降级面）",
-      "cleanWhen": "**不由本批处置**：四条属另一议题，白名单冻结在下方 ratchet.moduleLevelTodoWhitelist"
+      "cleanWhen": "**不由本批处置**：四条属另一议题，冻结在下方 ratchet.moduleLevelTodoWhitelist，且**必须带 dueBatch 记账**（A-1）"
     }
   },
   "ratchet": {
     "openMax": 0,
     "runtimeTodoTotal": 4,
-    "runtimeTodoTotalNote": "运行期 `todo 4` = inline 0 + moduleLevel 4（内联面已于本轮全部转正清除）。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
+    "runtimeTodoTotalNote": "运行期 `todo 4` = inline 0 + moduleLevel 4。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
     "moduleLevelTodoWhitelist": {
       "test/gate-techdebt-red.test.js": 4
     },
-    "moduleLevelTodoWhitelistNote": "① 路径按**实测调用点**登记（`grep -nE '^\\s*test\\.todo\\s*\\(' test/`）；② `test/gate-flows.test.js:77-93` 是**注释块**（记录该形态与两条已复活），该文件 `test.todo(` 实际命中 = 0 —— 上游 a1 文档把白名单路径写成 gate-flows 属笔误，本表按实测订正；③ 白名单只许减不许增。"
+    "moduleLevelTodoWhitelistNote": "① 路径按**实测调用点**登记（`grep -nE '^\\s*test\\.todo\\s*\\(' test/`）；② `test/gate-flows.test.js:77-93` 是**注释块**，该文件 `test.todo(` 实际命中 = 0 —— 上游 a1 文档把白名单路径写成 gate-flows 属笔误，本表按实测订正（a1 已在 `a1-split-gate-v2` 确认纠正正确）；③ 白名单只许减不许增。",
+    "moduleLevelTodoDueBatch": {
+      "test/gate-techdebt-red.test.js": {
+        "dueBatch": "punky-governance-degrade-2026Q4",
+        "owner": "治理降级面（R-16…R-19）",
+        "reason": "四条是 test.todo(name) 无回调形态 ⇒ 永不执行、无法自动转绿；须由专门批次改成可执行形态（{todo:} 或 skip+reason）后才能被 AC-T5 覆盖",
+        "precedent": "本仓已有反例：test/gate-flows.test.js 的两条靠专门「复活批」在 2 个月后才收口",
+        "mustNot": "在被清之前，**不得被任何覆盖率/绿读数引用为「已完成」**（A-3，冻结已实装 L3）"
+      }
+    },
+    "moduleLevelTodoDueBatchNote": "⚠ **A-1 记账要件**：只登记 `{路径:4}` 而不写 `dueBatch`，「后续批」就只是新的待办黑洞，下一轮 audit 无从核。故每条必须有具名批号 + 归属 + 不能自动转绿的原因。"
   },
   "acT5": {
-    "criterion": "OPEN_TODOS = ∅",
+    "criterion": "OPEN_TODOS(内联面) = ∅",
+    "criterionNote": "⚠ **A-2 判据文本限定面**：AC-T5 的权威表述是「**内联面** OPEN_TODOS = ∅」，**不含** moduleLevelTodo 的 4 条白名单。任何把这条写成「无永久待办」「todo 全清」的表述都是**夸大**，因为那 4 条永不执行。",
     "armEnv": "PUNKY_AC_T5",
     "armCommand": "PUNKY_AC_T5=1 node --import ./test/helpers/isolated-home.preload.mjs --test test/forward-todo-lock.test.js",
     "ownerLane": "Leader（内联面已清零）",
-    "ownerLaneNote": "内联面 OPEN_TODOS = **0** ⇒ AC-T5 对内联面**已达成**。⚠ 但 `moduleLevelTodo` 的 4 条（`test/gate-techdebt-red.test.js:552/580/600/620`）**仍在**，它们是 `test.todo(name)` 无回调形态 ⇒ **永不执行、无法自动转绿**，不属本表 OPEN_TODOS 面（见 notCoveredByThisRegistry）。这 4 条是否要在本批清或挂后续批，须显式记账 —— **不静默留着**。",
+    "ownerLaneNote": "内联面 OPEN_TODOS = **0** ⇒ AC-T5 对内联面**已达成**（武装态实测：`✔ L5 AC-T5 拆分批退场硬门：OPEN_TODOS = ∅`，5 pass / 0 fail）。⚠ 但 `moduleLevelTodo` 的 4 条仍在，见 `ratchet.moduleLevelTodoDueBatch` 的具名记账。",
+    "verdictWordingRule": "**A-2（binding）**：verdict / 收口语**禁写**「无永久待办 / todo 全清 / 10/10 全绿」；**必须写**「内联面 OPEN_TODOS = ∅；模块级 4 条白名单冻结、具名归属 punky-governance-degrade-2026Q4」。一句「全清」就把 4 条永不执行的东西静默否认了。",
     "doNotDowngrade": "本项是**根治项**（a1 原话）：只防漂移不防残留的两道（集合相等 / 棘轮）不能替代它。"
   },
   "open": [],
   "notCoveredByThisRegistry": [
-    "4 条模块级 test.todo（test/gate-techdebt-red.test.js:552/580/600/620，R-16…R-19）—— 另一议题，白名单冻结，不在 OPEN_TODOS 内；**但必须显式记账其去留**",
+    "4 条模块级 test.todo（test/gate-techdebt-red.test.js:552/580/600/620，R-16…R-19）—— 另一议题，白名单冻结，不在 OPEN_TODOS 内；**已按 A-1 具名记账（dueBatch = punky-governance-degrade-2026Q4）**",
     "todo 以外的「永久待办」形态（如 skip 的用例）—— 本表只锁 todo 机制，skip 面另见 test-baseline 的 skipped 读数"
   ]
 }
