@@ -1840,6 +1840,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/ts-gate-face.test.js": {
+      "asserts": 22,
+      "blankLines": 17,
+      "lines": 175,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/verify-mount.test.js": {
       "asserts": 55,
       "blankLines": 25,
@@ -2025,7 +2033,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-01T18:41:12Z",
+  "generatedAt": "2026-11-01T19:35:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2039,12 +2047,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11941,
-    "blankLines": 6620,
-    "files": 253,
-    "lines": 70099,
+    "asserts": 11963,
+    "blankLines": 6637,
+    "files": 254,
+    "lines": 70274,
     "tautologies": 0,
-    "tests": 2471,
+    "tests": 2478,
     "todos": 4
   }
 }

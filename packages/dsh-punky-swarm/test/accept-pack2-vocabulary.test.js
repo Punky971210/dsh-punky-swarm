@@ -44,6 +44,7 @@ import {
   VOCABULARY_REL, loadVocabulary, gateCodeKnown, reasonTokenKnown,
 } from '../lib/state/vocabulary.js';
 import { writeSyntheticTeam } from './helpers/team-fixture.mjs';
+import { collectSourceFiles } from '../scripts/lib/source-face.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
@@ -105,21 +106,20 @@ function unionMembers() {
   return new Set([...body.join('\n').matchAll(/['"](GATE_[A-Z0-9_]+)['"]/g)].map((m) => m[1]));
 }
 
-/** 发射码集（`code:` 字面量 ∪ throw 字面量），递归扫 `lib/` 下的 `.ts`（排 `.d.ts`）。 */
+/** 发射码集（`code:` 字面量 ∪ throw 字面量）。**面 = `scripts/lib/source-face.mjs` 单点**（不再就地写扩展名过滤）。
+ *  加宽前本函数只扫 `lib/` 下的 `.ts` ⇒ `lib/engine/dispatch.js`、`lib/tools/assign-tools.js`、
+ *  `lib/state/store` 下各 `.js` 等**手写 `.js`** 的 `GATE_*` 发射点**恒在面外**，「发射码 ⊆ 词表」对该族**恒真**
+ *  （假绿：实测 12 个真发射码全部只在本批加宽前的面外）。面内排除两条：`*.d.ts` 的 `code:` 命中是**类型位**
+ *  不是发射位（样本 `lib/wave-plan.d.ts:43`）；`.ts` 的镜像 `.js` 若再计一次会把同一码数两次。
+ *  **面共享 ≠ 自证自己**：断言比的是**词表**，码提取仍在本件独立实现（与 `check-vocab-counts.mjs` 各自一份）。
+ */
 function emittedCodes() {
   const set = new Set();
-  const walk = (dir) => {
-    for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (['node_modules', '.git', '.tsbuild', 'out'].includes(d.name)) continue;
-      const p = path.join(dir, d.name);
-      if (d.isDirectory()) { walk(p); continue; }
-      if (!d.name.endsWith('.ts') || d.name.endsWith('.d.ts')) continue;
-      const text = fs.readFileSync(p, 'utf8');
-      for (const m of text.matchAll(/code:\s*['"](GATE_[A-Z0-9_]+)['"]/g)) set.add(m[1]);
-      for (const m of text.matchAll(/throw new Error\(\s*['"](GATE_[A-Z0-9_]+)/g)) set.add(m[1]);
-    }
-  };
-  walk(path.join(PKG_ROOT, 'lib'));
+  for (const abs of collectSourceFiles(PKG_ROOT)) {
+    const text = fs.readFileSync(abs, 'utf8');
+    for (const m of text.matchAll(/code:\s*['"](GATE_[A-Z0-9_]+)['"]/g)) set.add(m[1]);
+    for (const m of text.matchAll(/throw new Error\(\s*['"](GATE_[A-Z0-9_]+)/g)) set.add(m[1]);
+  }
   return set;
 }
 

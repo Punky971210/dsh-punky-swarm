@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 只读机检：**词表底料**（`lib/state/vocabulary.json`）与**发射码**（`lib/**/*.ts`）的一致性。
+// 只读机检：**词表底料**（`lib/state/vocabulary.json`）与**发射码**（`lib/**` 的**源件面**）的一致性。
 //
 // 用法：
 //   node scripts/check-vocab-counts.mjs            人读输出
@@ -8,11 +8,11 @@
 // 退出码（与 `scripts/sync-guidance.mjs` 同档）：0 = 全绿；1 = 有缺口；2 = 参数错误。
 //
 // 职责**恰好两条**（多一条即越界，见 `plan/p2-taskpack-2.md` K-4）：
-//   ① **发射码 ⊆ 词表**：解析 `lib/**/*.ts` 的 `code: 'GATE_…'` 字面量与
+//   ① **发射码 ⊆ 词表**：解析源件面的 `code: 'GATE_…'` 字面量与
 //      `throw new Error('GATE_…: …')` 发射点，得发射码集；与 `vocabulary.json` 中 `kind:'gate'`
 //      的 `code` 集比对 ⇒ 缺口必须为 0（缺一个 = 真实发射的拒码没登记进词表）。
 //   ② **底料不含标识符**：底料 code 集 ∩「仅标识符」token 集必须为 ∅。
-//      「仅标识符」= 在 `lib/**/*.ts` 里**只以裸标识符形态**出现、从不以字符串字面量形态出现的
+//      「仅标识符」= 在源件面里**只以裸标识符形态**出现、从不以字符串字面量形态出现的
 //      `GATE_*` token（正则名 / 常量名 / 前缀 / 开关名）——按正则全量灌词表正是从这类 token 灌进来的。
 //
 // 计数纪律（对齐 `scripts/evidence-guard.mjs:44`「A/B 两侧一律运行期计算，禁写期望值」）：
@@ -24,23 +24,28 @@
 //   把声明值升成判据会造出「必假红的第二真源」。本件对该面**零判定性引用**（不以它作任何比较的操作数），
 //   即 AC-9 的机检口径。
 //
-// 扫描面：`lib/**` 下的 `.ts` 源，**排除** `*.d.ts`（生成物的注释里满是码名，纳入即污染集合）
-//   与 `node_modules` / `.git` / `.tsbuild` / `out`。`lib/**` 的 `.js` 是 `tsc` 产物（`.ts` 的镜像），
-//   唯一例外 `lib/state/vocabulary.js` 无 `.ts` 源但其内容不含 `GATE_*` 发射位 ⇒ 两侧口径一致。
+// 扫描面 = **源件面**，单点实现 = `scripts/lib/source-face.mjs`（`collectSourceFiles`）。
+//   · 收 `{.ts, .js, .mjs}`：手写 `.js` 是**源**不是 `tsc` 产物（重建后逐字节全不同），`.mjs` 同样手写。
+//   · 排 `*.d.ts`：其 `code:` 命中是**类型位**不是发射位（样本 `lib/wave-plan.d.ts:43`），纳入即假发射；
+//     且实测纳入增量 0。排目录 `node_modules` / `.git` / `.tsbuild` / `out` 由单点负责。
+//   · 排「有同名 `.ts` 孪生」的 `.js`：那 31 件是镜像，同 stem 再计一次会把同一码数两次。
+//
+// 【加宽史 · 批 `punky-adapter-split-20261031` / lane `w4-ts-gate`】加宽前本件只扫 `lib/**/*.ts`，
+//   而 `lib/engine/dispatch.js`、`lib/tools/assign-tools.js`、`lib/state/store/*.js` 等**手写 `.js`**
+//   的发射点恒在面外 ⇒ 职责① 对该族**恒真**（假绿：实测 12 个真发射码未登记，全部只在 `.js`）。
+//   加宽后发射码读数 37 → 51，缺口 0（词表 63 条已覆盖；12 码由 W4 `codename` 登记，其中 1 个走点名）。
 
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { collectSourceFiles, sourceFaceReport } from './lib/source-face.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
-const SCAN_ROOT = path.join(ROOT, 'lib');
 const VOCAB_ABS = path.join(ROOT, 'lib', 'state', 'vocabulary.json');
 const VOCAB_KIND = 'gate';
-
-// 目录剪枝：产物目录 / 依赖目录 / VCS 目录一律不进扫描面。
-const PRUNE_DIRS = new Set(['node_modules', '.git', '.tsbuild', 'out']);
 
 // ── 参数解析（fail-closed：未知参数 ⇒ 用法打 stderr、exit 2）────────────────────────────
 function parseArgs(argv) {
@@ -50,20 +55,6 @@ function parseArgs(argv) {
     return { error: `unknown argument: ${a}` };
   }
   return { args };
-}
-
-// ── 扫描面：`lib/**/*.ts`（排 `*.d.ts`）──────────────────────────────────────────────
-function collectTs(dir, out = []) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      if (PRUNE_DIRS.has(e.name)) continue;
-      collectTs(p, out);
-    } else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts')) {
-      out.push(p);
-    }
-  }
-  return out;
 }
 
 const rel = (abs) => path.relative(ROOT, abs).split(path.sep).join('/');
@@ -194,8 +185,8 @@ function main() {
   }
   const { json } = parsed.args;
 
-  if (!fs.existsSync(SCAN_ROOT)) {
-    process.stderr.write(`[vocab] scan root missing: ${SCAN_ROOT}\n`);
+  if (!fs.existsSync(path.join(ROOT, 'lib'))) {
+    process.stderr.write(`[vocab] scan root missing: ${path.join(ROOT, 'lib')}\n`);
     process.exit(2);
   }
 
@@ -208,7 +199,8 @@ function main() {
     process.exit(1);
   }
 
-  const files = collectTs(SCAN_ROOT);
+  const files = collectSourceFiles(ROOT);
+  const face = sourceFaceReport(ROOT);
   const { emitted, identifierOnly } = emissionsOf(files);
 
   // ① 发射码 ⊆ 词表
@@ -226,14 +218,24 @@ function main() {
   for (const c of identInVocab) {
     failures.push({
       check: 'no-identifier',
-      detail: `${c} 在 lib/**/*.ts 内只有裸标识符形态（无字符串形态）⇒ 不是码，不得进词表`,
+      detail: `${c} 在源件面（lib/** 的 .ts/.js/.mjs）内只有裸标识符形态（无字符串形态）⇒ 不是码，不得进词表`,
       code: c,
     });
   }
 
   const result = {
     ok: failures.length === 0,
-    scan: { root: rel(SCAN_ROOT), tsFiles: files.length, excludes: [...PRUNE_DIRS].sort().concat(['*.d.ts']) },
+    scan: {
+      root: 'lib',
+      sourceFiles: files.length,
+      breakdown: { ts: face.ts, handJs: face.handJs, mjs: face.mjs },
+      excluded: {
+        mirrorJs: face.mirrorJs,
+        declarationDts: face.declaration,
+        foreignExt: face.foreignExt,
+        dirs: ['node_modules', '.git', '.tsbuild', 'out'],
+      },
+    },
     emission: { total: emitted.size, codes: [...emitted.keys()].sort() },
     vocabulary: { path: rel(VOCAB_ABS), kind: VOCAB_KIND, total: vocab.codes.size },
     identifierOnly: { total: identifierOnly.length, codes: identifierOnly },
@@ -244,7 +246,10 @@ function main() {
   if (json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   } else {
-    process.stdout.write(`[vocab] 扫描面 lib/**/*.ts 文件数=${files.length}（排 *.d.ts / node_modules / .git / .tsbuild / out）\n`);
+    process.stdout.write(`[vocab] 扫描面 = 源件面（lib/** 的 .ts/.js/.mjs，单点 scripts/lib/source-face.mjs）文件数=${files.length}`
+      + `（.ts=${face.ts}｜手写 .js=${face.handJs}｜.mjs=${face.mjs}）\n`);
+    process.stdout.write(`[vocab] 排除：*.d.ts=${face.declaration}｜.ts 镜像 .js=${face.mirrorJs}｜非源扩展名=${face.foreignExt}`
+      + `｜目录 node_modules/.git/.tsbuild/out\n`);
     process.stdout.write(`[vocab] 发射码=${emitted.size}｜词表 kind:'gate' 条码=${vocab.codes.size}（entries=${vocab.entryCount}）\n`);
     process.stdout.write(`[vocab] 仅标识符 token=${identifierOnly.length}\n`);
     process.stdout.write(`[vocab] ① 发射码 ⊆ 词表：缺口=${gapCodes.length}\n`);
