@@ -13,21 +13,21 @@
     "note": "⚠ 两个机制**必须分开数**：混用会让棘轮拿错基线（运行期 todo 数是两者之和，不可作棘轮基线）。",
     "inlineExpectedRed": {
       "form": "{ todo: '<id> …' }（第二参数对象，**有回调 ⇒ 会执行并留失败原文**）",
-      "count": 1,
-      "owner": "P0-3 引入；W3-2 `w3-meter` 清 3 条（S-3a-R / S-3b / T-2R 已转绿）⇒ count 4→1，剩 T-1.8 归 W4-1",
-      "cleanWhen": "每条 ac 对应的判据转绿后删掉该 todo，并**同步删除本表条目**"
+      "count": 0,
+      "owner": "P0-3 引入 4 条 → W3-2 `w3-meter` 清 3 条（S-3a-R / S-3b / T-2R 转绿）→ **W4-1 `w4-codename` 的文案去宿主名让最后一条 T-1.8 转绿，由 Leader 在本轮清除（`todos` 指标 5→4，需重冻 `baselines/**`，属 Leader 单写区）**",
+      "cleanWhen": "每条 ac 对应的判据转绿后删掉该 todo，并**同步删除本表条目**（已于本轮清空）"
     },
     "moduleLevelTodo": {
       "form": "test.todo('<name>')（**无回调 ⇒ 永不执行 ⇒ 无法自动转绿**）",
       "count": 4,
       "owner": "历史遗留（批 gate-techdebt，R-16…R-19 治理降级面）",
-      "cleanWhen": "**不由本 lane 处置**：四条属另一议题，白名单冻结在下方 ratchet.moduleLevelTodoWhitelist"
+      "cleanWhen": "**不由本批处置**：四条属另一议题，白名单冻结在下方 ratchet.moduleLevelTodoWhitelist"
     }
   },
   "ratchet": {
-    "openMax": 1,
-    "runtimeTodoTotal": 5,
-    "runtimeTodoTotalNote": "运行期 `todo 5` = inline 1 + moduleLevel 4（W3-2 `w3-meter` 清掉 S-3a-R / S-3b / T-2R 三条后）。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
+    "openMax": 0,
+    "runtimeTodoTotal": 4,
+    "runtimeTodoTotalNote": "运行期 `todo 4` = inline 0 + moduleLevel 4（内联面已于本轮全部转正清除）。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
     "moduleLevelTodoWhitelist": {
       "test/gate-techdebt-red.test.js": 4
     },
@@ -37,23 +37,13 @@
     "criterion": "OPEN_TODOS = ∅",
     "armEnv": "PUNKY_AC_T5",
     "armCommand": "PUNKY_AC_T5=1 node --import ./test/helpers/isolated-home.preload.mjs --test test/forward-todo-lock.test.js",
-    "ownerLane": "W3-2 fx-meter",
-    "ownerLaneNote": "a1 开工清单 W3-2 完成判据 ② 明写「OPEN_TODOS = ∅（W0-1 的 registry 清空）」。⚠ 其中 T-1.8 的**实现面**依赖 W4-1 fx-codename（文案去宿主名），⇒ 两 lane 须在同一 wave 内对齐，否则 W3-2 收口时 T-1.8 清不掉。",
+    "ownerLane": "Leader（内联面已清零）",
+    "ownerLaneNote": "内联面 OPEN_TODOS = **0** ⇒ AC-T5 对内联面**已达成**。⚠ 但 `moduleLevelTodo` 的 4 条（`test/gate-techdebt-red.test.js:552/580/600/620`）**仍在**，它们是 `test.todo(name)` 无回调形态 ⇒ **永不执行、无法自动转绿**，不属本表 OPEN_TODOS 面（见 notCoveredByThisRegistry）。这 4 条是否要在本批清或挂后续批，须显式记账 —— **不静默留着**。",
     "doNotDowngrade": "本项是**根治项**（a1 原话）：只防漂移不防残留的两道（集合相等 / 棘轮）不能替代它。"
   },
-  "open": [
-    {
-      "id": "T-1.8",
-      "file": "test/f1-dispatch-activation-gate.test.js",
-      "title": "T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名",
-      "ac": ["AC-9", "AC-15"],
-      "dueLane": "W4-1 fx-codename",
-      "dueBatch": "punky-adapter-split-20261031",
-      "greenWhen": "拒派/降级文案改功能面语言（去掉 ctx.subagents / startActivation / startContinuable）——实现面由 W4-1 fx-codename 提供；原 dueLane 为 W3-2 fx-meter，a1 调度风险分析改派 W4（文案去宿主名与码名改动同批原子提交，不可拆）"
-    }
-  ],
+  "open": [],
   "notCoveredByThisRegistry": [
-    "4 条模块级 test.todo（test/gate-techdebt-red.test.js）—— 另一议题，白名单冻结，不在 OPEN_TODOS 内",
+    "4 条模块级 test.todo（test/gate-techdebt-red.test.js:552/580/600/620，R-16…R-19）—— 另一议题，白名单冻结，不在 OPEN_TODOS 内；**但必须显式记账其去留**",
     "todo 以外的「永久待办」形态（如 skip 的用例）—— 本表只锁 todo 机制，skip 面另见 test-baseline 的 skipped 读数"
   ]
 }

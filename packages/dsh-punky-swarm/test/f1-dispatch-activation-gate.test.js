@@ -283,10 +283,10 @@ test('T-1.6 A1-P1-01 端口对五种宿主面给出功能面读数（available /
 // ── T-1.8（P0-3 前向登记 · **当前预期红**）文案不得承载宿主知识 ─────────────────────────
 //   本用例把「引擎拒派/降级文案不得出现宿主服务名或宿主入口名」写成**可执行要求**
 //   （J6.0「引擎不得知道宿主形态」/ AC-5″ 同源）。
-//   当前实现仍点名 `ctx.subagents` / `startActivation` ⇒ **预期红**，故挂 `{ todo }`：
-//   失败计入 todo 计数（**不污染 fail、不阻断拆分批**），provider 文案改造完成后**删掉 `{ todo }` 即转正式用例**。
-test('T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名',
-  { todo: '[T-1.8] P0-3 登记：文案仍点名 ctx.subagents / startActivation；拆分批 provider 文案改造后删掉 todo 转正式用例' },
+//   实现面已由 W4-1 `w4-codename` 落地：`dispatch.js` 的拒派/降级文案已改功能面语言
+//   （非注释行内 `ctx.subagents` / `startActivation` / `startContinuable` 实测 = 0）⇒ 本用例已由
+//   「内联预期红（`{ todo }`）」**转正为正式用例**（2026-11-01，Leader 清 `forward-todo-registry` 的 T-1.8）。
+test('T-1.8 拒派/降级文案不得出现宿主服务名或宿主入口名',
   async () => {
     const HOST_WORDS = /ctx\.\s*subagents|startActivation|startContinuable/;
 

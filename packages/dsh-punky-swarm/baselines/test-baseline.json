@@ -1616,6 +1616,14 @@
       "tests": 4,
       "todos": 0
     },
+    "test/roster-port-hostname.test.js": {
+      "asserts": 27,
+      "blankLines": 22,
+      "lines": 215,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/roster-self-held.test.js": {
       "asserts": 42,
       "blankLines": 40,
@@ -2033,7 +2041,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-01T19:35:31Z",
+  "generatedAt": "2026-11-01T20:15:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2047,12 +2055,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11963,
-    "blankLines": 6637,
-    "files": 254,
-    "lines": 70274,
+    "asserts": 11990,
+    "blankLines": 6659,
+    "files": 255,
+    "lines": 70489,
     "tautologies": 0,
-    "tests": 2478,
+    "tests": 2485,
     "todos": 4
   }
 }
