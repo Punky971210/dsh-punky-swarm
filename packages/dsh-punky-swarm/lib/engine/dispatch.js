@@ -922,58 +922,29 @@ export function workerSessionIdOf(start, warn) {
   return null;
 }
 
-/** 宿主 subagent 服务的**形态探针**（能力探测**单点**；`subagentRuntimeOf` 是本函数的薄壳）。
- *
- *  ⚠ 活体实测（2026-09-16，本批 suite-live-20260916 首派抓出）：cordis 对**未在 inject 声明的服务**
- *  在取属性时**直接抛** `cannot get property "subagents" without inject`（不是返回 undefined）
- *  ⇒ 取用必须包 try/catch，否则引擎自派以原始 cordis 错崩掉，而不是走既定的「仅发句柄」降级分支（B1 语义）。
- *  正解是 `lib/index.js` 的 `inject` 补 `subagents`（声明依赖）；本 try/catch 是兜底不崩。
- *
- *  【2026-10-22 · A1-P1-01】探测面**从「有没有 `start`」升级为「是哪一形态」**（判定序**只在下面一处**）：
- *    ① `ctx?.subagents` 取值抛错 / 为假 ⇒ `{ rt:null, form:null, reason:'runtime-unavailable' }`
- *       ⚠ **生产不可达（A1-P2-02 事实化）**：`lib/index.js` 的 `inject` 把 `subagents` 声明为**硬依赖**
- *       （宿主 inject 归一化**无 optional 位**）⇒ 宿主缺该服务时插件**整块 pending**、本函数根本不会被调用。
- *       本档只服务「测试直建 ctx / 未来注入形态变更」；**不要**据它推断「生产会静默降级」。
- *    ② `typeof rt.startActivation === 'function'` ⇒ `form:'activation'`（新形态：不承载 `toolFilter`/`persona`）
- *    ③ 否则 `typeof rt.start === 'function'` ⇒ `form:'start'`（旧形态：按次收窄生效 = 唯一调用形态）
- *    ④ 否则 ⇒ `{ rt:null, form:null, reason:'no-start-entry' }`
- *       （`startContinuable` 一类历史桩**落此档**：它不是 activation 形态，也不可调用 —— 既有两个测试锁钉死这一点）
- *
- *  **`rt` 的口径 = 本模块可调用的运行时**（仅 `form==='start'` 时为服务对象，否则 `null`）：
- *    · `form==='activation'` ⇒ 本模块**拒派**（不调用）⇒ 不给出句柄，防任何按 `rt` 真值判「可派」的读端误判；
- *    · `form===null` ⇒ `rt===null`，与改前 `subagentRuntimeOf` 的「不可用」语义**逐字一致**（既有测试锁不变）。
- *  真实成因由 `form` / `reason` 承载，降级文案据此分档（见 `spawnNoteOfProbe`），**不靠 `rt` 表达**。
- * @returns {{rt: object|null, form: 'activation'|'start'|null, reason: 'runtime-unavailable'|'no-start-entry'|null}}
- */
-export function subagentRuntimeProbeOf(ctx) {
-  let rt = null;
-  try {
-    rt = ctx?.subagents ?? null;
-  } catch {
-    return { rt: null, form: null, reason: 'runtime-unavailable' }; // 未注入/注入守卫抛错 ⇒ 不可取（降级，不崩）
-  }
-  if (!rt) return { rt: null, form: null, reason: 'runtime-unavailable' };
-  // 判定序固定：新形态优先识别（宿主若同时具备两入口，产物面差异由 activation 分支决定 ⇒ 必须按新形态判）。
-  if (typeof rt.startActivation === 'function') return { rt: null, form: 'activation', reason: null };
-  if (typeof rt.start === 'function') return { rt, form: 'start', reason: null };
-  return { rt: null, form: null, reason: 'no-start-entry' };
-}
+// ── 形态探测**已迁出引擎**（W3-S2 · 批 `punky-adapter-split-20261031` · lane `w3-engine-entry`）──
+//
+// 原 `subagentRuntimeProbeOf(ctx)` / `subagentRuntimeOf(ctx)` 在本文件内做宿主形态自判
+// （`typeof rt.startActivation` / `typeof rt.start`）并给引擎一个可调用句柄 —— 属 **J6-e 禁止面**
+// （引擎不得因「宿主长什么样」改路径）与 **AC-5″ 禁止面**（引擎不得消费宿主形态值）。
+//
+// 现拆成两半，各归其位：
+//   · **成因判定** → 搬进修 provider（`lib/provider-dsh/agent.js` 的 `reason` 读数，功能面三态）；
+//   · **入口选择** → provider 内部（同文件的 `formOf` 单点 + `spawn` 内部分派）。
+// ⇒ 引擎侧保留的只有**功能面读数**（`agentPort.available` / `agentPort.reason` / `agentPort.canNarrow`），
+//   据此「因功能拿不到」而拒/降级 —— 这正是 J6-e 的**允许面**（`canNarrow` 拒派见下方 ⓿）。
+//
+// ⚠ 删除范围实测：`subagentRuntimeProbeOf` / `subagentRuntimeOf` 在 `lib/**` 内**零剩余消费者**；
+//   `test/engine-dispatch.test.js` 的 P5 用例随本删除同批移除（属同一次搬迁的测试面，见产物 §三删）。
 
-/** 兼容**薄壳**（导出面与返回形状**逐字不变**）：服务可调用 ⇒ 原服务对象；否则 `null`。
- *  判据唯一来源 = 上面的探针单点（本函数**不重复**判 `typeof start`）。
- *  `{ startContinuable }` 一类历史桩 ⇒ `null`（既有测试锁：2026-09-22 one-shot 化后 `start` 是唯一调用通道）。 */
-export function subagentRuntimeOf(ctx) {
-  return subagentRuntimeProbeOf(ctx).rt;
-}
-
-/** 降级文案**三档单点**（`form===null` 时）：每档互不相同、各含自身成因关键词。
+/** 降级文案**三档单点**（`available===false` 时）：每档互不相同、各含自身成因关键词。
+ *  入参 = provider 的**功能面** `reason`（不是宿主形态值）。
  *  ⚠ **禁反向归因**：本机真实态是「服务在、入口形态不匹配」，把它写成「宿主没给这个服务」
  *  会让后面每一次排障都从错误的一侧开始 —— 这正是 A1-P1-01 的第二个缺陷面。
- *  `form==='activation'` **不可达本函数**（函数头已前置拒派）；若将来有人删掉那个拒派，本函数会落到
- *  `no-start-entry` 档的文案 ⇒ 必须同步恢复拒派，而不是在此伪造成因。 */
-function spawnNoteOfProbe(probe) {
+ *  ⚠ 文案去宿主名属 **W4 `codename`** 的活（本 lane 只搬成因来源，**逐字保留**文案）。 */
+function spawnNoteOf(reason) {
   const tail = '⇒ 仅发句柄（请把 firstLine 交给直派形态；该形态门禁属 C 阶段）';
-  if (probe?.reason === 'runtime-unavailable') {
+  if (reason === 'runtime-unavailable') {
     return 'ctx.subagents 不可取（宿主 subagent 服务未注入，或取值被注入守卫拒绝）' + tail;
   }
   return '宿主 subagent 服务在位，但不含可用启动入口（startActivation / start 皆不可调用）' + tail;
@@ -1042,30 +1013,14 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //     · `maxDepth`：**`request.maxDepth` 原生可用**（`SubagentStartRequest.maxDepth?: number`，受 `capabilities.depthLimit` 约束）⇒ 原「不承载 maxDepth」**是错的**。
   //   ⇒ 因此 activation 形态**不是「什么都做不了」**：**需要 `agentPreset` 承载收窄/人格、`maxDepth` 原生可用**。
   //     仅当**解析不出 `agentPreset`**（无法保证按次收窄）时才拒派（「不以弱换强」不变）。
-  const probe = subagentRuntimeProbeOf(ctx);
-  const agentPort = createAgentPort(ctx, {
-    // activation 形态的收窄/人格来源：热更快照里的 `config.dispatch.agentPreset`（配置驱动，端口不猜）。
-    presetFor: () => (typeof liveConfig?.dispatch?.agentPreset === 'string' && liveConfig.dispatch.agentPreset.length > 0
-      ? liveConfig.dispatch.agentPreset
-      : null),
-  });
-  // 【S-3（批 `punky-qa2-fix-2026-10-31`）】口径统一：本处**只问 canNarrow({})**，不再前置
-  //   字面判断「narrowVia 是否等于 preset」。原前置使「声称 activation 形态（narrowVia=preset）但 canNarrow 为真」
-  //   的宿主被错判为可收窄/不可收窄——`narrowVia` 现降为**诊断字段**，不作分支条件。
-  if (agentPort.available && !agentPort.canNarrow({})) {
-    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 为 `startActivation(spec)` 形态，'
-      + '其 `request` **确不承载** `toolFilter`、宿主亦**无 `persona` 字段**（人格/工具面只能经 `agentPreset` 组 composition）；'
-      + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
-      + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**，无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
-      + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可经**新派发入口** `startActivation` 自派。'
-      + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
-  }
-  // ⓿-b 【2026-10-07 · P2（lane `e02-inject`）】role 数据面**前置解析** —— 拒派必须打在状态变更之前。
-  //   判据源 L-AC-5 ②「role 查不到 ⇒ 拒派」。若把解析留在 ④ 的任务包组装处，则 `setMember(running)` 已落、
-  //   句柄已发放 ⇒ 拒派会留下「lane=running、无 worker、句柄悬空」的僵尸态（正是本文件 B4 段登记过的坑）。
-  //   故此处先读 laneTask 并解析 role：解析失败 ⇒ 抛 `GATE_ROLE_UNRESOLVED`，**零状态变更、零句柄发放**。
-  //   ⚠ 任务包里的 `batch.wavePlan` 存的是 **wave 数组**（`[{wave, tasks:[…]}]`），旧写法读 `wavePlan.tasks`
-  //     恒取不到 ⇒ 任务包「目标」位退化成 `（未声明 cmd）`。此处拍平所有 wave 的 tasks（B1 活体教训）。
+  //
+  // ── 【S-0 · 顺序重构（批 `punky-adapter-split-20261031` · lane `w3-meter`）】──────────────
+  //   动机（P0-6 **F-4**）：拒派闸要问**真实 ask**（`{role, toolFace, persona}`），但三份输入原先
+  //   全在闸**之后**才产出 ⇒ 闸只能传 `{}`（**F-1**：假读数的第一层）。
+  //   ⇒ 把 `laneTask` / `roleData` / `askToolFace` 的解析**整体前移到闸之前**，
+  //     但仍**早于**状态变更（`store.setMember(...,'running')`）—— 拒派必须零状态变更这条纪律不变。
+  //   ⚠ 与既有 ⓿-b「role 前置解析」是同一纪律的**扩展**：原先只前移 role（为 GATE_ROLE_UNRESOLVED），
+  //     现在把 role 的**派生产物**（toolFace）也一并前移，否则闸拿不到工具面。
   let laneTask = null;
   try {
     const wp = store.readBatch(sessionId, batchId)?.wavePlan ?? [];
@@ -1073,6 +1028,81 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     laneTask = flat.find((t) => t && t.id === lane) ?? null;
   } catch { laneTask = null; }
   const roleData = resolveRoleRef(laneTask?.role, { warn: (m) => ctx?.logger?.warn?.(m) });
+  // 本次派发的**真实工具面**（= `buildStartRequest` 后续合成的同一份 deny 集）。
+  //   与下游 `buildStartRequest({ denyTools: denyAll, role: roleData })` **同源同算**：
+  //   同一 `denyAll` 常量 + 同一 `deriveDenyTools(roleData.tools.allow)` ⇒ 两次调用结果恒等，
+  //   不是「两处各判」（那会漂移）。`denyDropped`（宿主未知工具名的自愈）只影响**实际请求**，
+  //   故 ask 侧的 deny 是**超集** ⇒ 判定更严 ⇒ fail-closed，方向正确。
+  const denyAllForAsk = [...new Set([...SUITE_DENY_TOOLS, ...(liveConfig?.dispatch?.denyTools ?? [])])];
+  const askToolFace = {
+    deny: [...new Set([...denyAllForAsk, ...deriveDenyTools(roleData?.tools?.allow, { root: roleCorpusRoot() })])],
+  };
+  // 本次派发要求的**人格**（与 `buildStartRequest` 的 `effectivePersona` 同源）：
+  //   显式配置优先，缺省由 role 派生 —— 两者只要有一个非空，就是「本次有收窄需求」。
+  const askPersona = liveConfig?.dispatch?.persona !== undefined
+    ? liveConfig.dispatch.persona
+    : personaOfRole(roleData);
+  const agentPort = createAgentPort(ctx, {
+    // activation 形态的收窄/人格来源：热更快照里的 `config.dispatch.agentPreset`（配置驱动，端口不猜）。
+    //
+    // 【W3 · 真读数（P0-6 F-2 / D-2 W-2）】本解析器**必须消费 `ask` 并给出可核对见证**，不能只回一个 id。
+    //   三种返回形态（端口侧据此判「能否宣称已收窄」，判定单点在端口）：
+    //     · `null`                ⇒ 解析不出可用 preset（未配置，或**本 preset 覆盖了本次要禁的工具**）
+    //     · 裸字符串 `'<id>'`      ⇒ 有 id **无覆盖声明** ⇒ 无见证（「配了名字」≠「收窄了」）
+    //     · `{ preset, covers }`  ⇒ 有见证：`covers` = 该 preset **实际拿到**的工具面（来自
+    //                               `config.dispatch.presetCoverage[<id>].tools`）
+    //   ⚠ **真读 `ask`**：覆盖声明与本次 `ask.toolFace.deny` 相交 ⇒ 该 preset 拿到的工具里含有本次
+    //     必须禁掉的 ⇒ 它**无法**覆盖本次请求 ⇒ 返回 `null`（而不是给出一个「能收窄」的假事实）。
+    //     这条使不同 `ask` 得到不同解析结果（RL-2 区分力），解析器不再是「忽略入参的闭包」。
+    presetFor: (ask) => {
+      const presetId = typeof liveConfig?.dispatch?.agentPreset === 'string'
+        && liveConfig.dispatch.agentPreset.length > 0
+        ? liveConfig.dispatch.agentPreset
+        : null;
+      if (!presetId) return null;
+      const coverage = liveConfig?.dispatch?.presetCoverage;
+      const entry = coverage !== null && typeof coverage === 'object' ? coverage[presetId] : null;
+      const tools = entry !== null && typeof entry === 'object' && Array.isArray(entry.tools) ? entry.tools : null;
+      // 无覆盖声明 ⇒ 只有 id（无见证）。交由端口判「不可宣称」，不在此伪造事实。
+      if (tools === null) return presetId;
+      // 真读 ask：覆盖与本次 deny 相交 ⇒ 本 preset 覆盖不了本次请求 ⇒ 解析不出可用 preset。
+      const deny = Array.isArray(ask?.toolFace?.deny) ? ask.toolFace.deny : [];
+      if (deny.some((t) => tools.includes(t))) return null;
+      return { preset: presetId, covers: [...tools] };
+    },
+  });
+  // 【W3 · 真读数（P0-6 F-1）】闸必须问**真实 ask**。
+  //   原写法 `canNarrow({})` 传空对象 ⇒ 形参全 `undefined` ⇒ 端口只能回「配置里有没有 preset 字符串」
+  //   （e1-G06 的「名义收窄」）。现已具备真实 ask（S-0 把 `laneTask`/`roleData`/`askToolFace` 前移）：
+  //   `role` 判该 lane 的角色工具面；`toolFace` = 本次实际要禁的工具集；`persona` = 本次要注入的人格。
+  //   ⚠ 判据仍是「**能按次收窄吗**」（能力位），不是「哪个入口」——入口选择已完全归 provider。
+  if (agentPort.available && !agentPort.canNarrow({ role: laneTask?.role, toolFace: askToolFace, persona: askPersona })) {
+    // 成因分档（**码名不动**：`GATE_DISPATCH_CAPABILITY_MISSING` 的改名属 W4 `codename`，不可逆 + 原子提交）。
+    //   ① 未配置 preset ⇒ **逐字保留**原文案（`test/f1-dispatch-activation-gate.test.js` 对该文案逐词冻结）；
+    //   ② 已配置但**无法核实**覆盖（无 `presetCoverage` / 覆盖为空 / 覆盖与本次 deny 相交）
+    //      ⇒ 用真读数文案（只讲「见证不可得」，不再宣称「未配置」）。
+    const presetConfigured = typeof liveConfig?.dispatch?.agentPreset === 'string'
+      && liveConfig.dispatch.agentPreset.length > 0;
+    if (!presetConfigured) {
+      throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 宿主 subagent 为 `startActivation(spec)` 形态，'
+        + '其 `request` **确不承载** `toolFilter`、宿主亦**无 `persona` 字段**（人格/工具面只能经 `agentPreset` 组 composition）；'
+        + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
+        + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**，无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
+        + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可经**新派发入口** `startActivation` 自派。'
+        + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
+    }
+    throw new Error('GATE_DISPATCH_CAPABILITY_MISSING: 已配置 `config.dispatch.agentPreset`，'
+      + '但适配层**无法核对**它对**本次**请求的收窄（真读数口径，P0-6 D-2）：需要 '
+      + '`config.dispatch.presetCoverage[<preset 名>].tools` 声明该 preset **实际拿到**的工具面，'
+      + '且该声明必须**非空**、并与本次要禁的工具集**不相交**（「声明为空集」不算收窄 —— 空集与任何集的交集恒为空，'
+      + '那会让判据退化成恒真）。'
+      + ' ⇒ 见证不可得 ⇒ 按「不以弱换强」**拒派**（不宣称未核实的收窄）。'
+      + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
+  }
+  // ⓿-b role 数据面**前置解析** —— 已在 **S-0**（本 lane）上移到能力位闸**之前**，见上方「顺序重构」段。
+  //   纪律不变：解析失败 ⇒ 抛 `GATE_ROLE_UNRESOLVED`，**零状态变更、零句柄发放**。
+  //   ⚠ 任务包里的 `batch.wavePlan` 存的是 **wave 数组**（`[{wave, tasks:[…]}]`），旧写法读 `wavePlan.tasks`
+  //     恒取不到 ⇒ 任务包「目标」位退化成 `（未声明 cmd）`。上移后仍拍平所有 wave 的 tasks（B1 活体教训）。
   const artifactsRoot = root
     ? String(root).replace(/[\\/]+$/, '') + '/sessions/' + sessionId + '/artifacts/' + batchId
     : undefined;
@@ -1085,14 +1115,12 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   // ② 发放一次性句柄（任务包首行形态）
   const h = issueLaneHandle({ batchId, lane, sessionId });
   const base = { batchId, lane, status: b.lanes[lane], token: h.token, firstLine: h.firstLine, ttlMs: h.ttlMs };
-  // ③ 形态分派（探针已在函数头算过一次，此处**不重探**）：
-  //   · `form==='start'` ⇒ 继续走下述 ④→ 旧路径 `rt.start(provider, request)`（逐字保留）
-  //   · `form==='activation'` ⇒ **不可达**（函数头已前置拒派）
-  //   · `form===null` ⇒ 降级「仅发句柄」：文案由 `spawnNoteOfProbe` 按**真实成因**分档（未注入 / 无启动入口）
+  // ③ 降级「仅发句柄」（**入口选择已不在引擎**：两形态统一由 provider 的 `spawn` 内部分派）：
+  //   · `available===false` ⇒ 降级，文案按 provider 给的**功能面** `reason` 分档（未注入 / 无启动入口）
+  //   · `available===true`  ⇒ 继续走 ④，由端口内部分派到对应宿主入口（引擎不再知道自己拿的是哪种入口）
   if (!agentPort.available) {
-    return { ...base, spawned: false, spawnNote: spawnNoteOfProbe(probe) };
+    return { ...base, spawned: false, spawnNote: spawnNoteOf(agentPort.reason) };
   }
-  const rt = probe.rt;
   // N2/D6 三事实（2026-09-18 债清 3 · 逐条实测，勿再按印象改写）：
   //   ① **可热更**：`dispatch` 在 `lib/hot/config-watch.js:80` 的 `ALLOWED_TOP_KEYS` 白名单内
   //      ⇒ `<root>/config/runtime.json` 的 `dispatch.*` 改动经 watcher 生效，**无需重启宿主**。
@@ -1171,10 +1199,9 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     const denyDropped = new Set();
     for (let attempt = 0; ; attempt++) {
       try {
-        // 【宿主端口面 · e3-agentport】形态分派**收进端口**（引擎不再自己判 `probe.form`）：
-        //   · `start` 形态 ⇒ 端口内部调 `rt.start(provider, request)`（旧路径逐字不动，含下方自愈重试）；
-        //   · `activation` 形态 ⇒ 端口内部组 `SubagentActivationSpec` 并调 `rt.startActivation(spec)`
-        //     （`request` 带 `agentPreset` ＋ `maxDepth`；**不带** `toolFilter`/`persona` —— 宿主 schema 无此字段）。
+        // 【宿主端口面】分派**完全收进端口**（W3-S2 收口）：本文件既不自探形态、也不直调宿主入口，
+        //   只组装**请求载荷**并交 `agentPort.spawn(...)`；具体走 `start` 还是 `activation` 由 provider 决定
+        //   （`request` 由 provider 内部按能力落位：`agentPreset` / `maxDepth` / `toolFilter`）。
         const builtRequest = buildStartRequest({
           batchId, lane, parent: exec.agent, prompt,
           // denyTools/persona 同样读**热更快照**；【2026-10-07 · P2】`role` 传已解析对象 ⇒
@@ -1184,30 +1211,31 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
           persona: liveConfig?.dispatch?.persona,
           role: roleData,
         });
-        // 【S-3·乙（批 `punky-qa2-fix-2026-10-31` 回补）】分支按**形态**选入口，不按「能否收窄」：
-        //   `canNarrow()` 回答「**能否**收窄」（能力位），分支要回答「**用哪个入口**」。把两件事合成
-        //   一个判据会让 `start` 形态（`canNarrow` 恒 true，见 `lib/provider-dsh/agent.js:88`）误入激活
-        //   分支，而该分支 `spawn(...)` **不传 `toolFace`** ⇒ 按次收窄被整键丢掉（B2 静默失效）。
-        //   ⇒ 入口由 `form` 决定；`canNarrow({})` 仅保留在 `:1050` 作能力位门；`narrowVia` 仍仅诊断字段。
-        if (agentPort.form === 'activation') {
-          // activation 形态：收窄/人格经 `agentPreset`，深度原生走 `request.maxDepth`。
-          start = (await agentPort.spawn({
-            provider,
-            label: builtRequest.label,
-            prompt,
-            parent: exec.agent,
-            signal: builtRequest.signal,
-            role: laneTask?.role,
-            // 【死参数说明（批 `punky-presmoke-2026-10-31`）】**接收但不转发生效**：本分支把 `persona` 交给
-            //   `agentPort.spawn(...)`，但 activation 形态宿主**无 `persona` 字段**（人格只能经 `agentPreset`
-            //   组 composition 生效）⇒ 此路径下该值**不起作用**。**这不是缺陷**：保留传参是为让
-            //   `start` / `activation` **两形态签名一致**（调用点不必按形态分叉）。**禁删**：删了反而制造形态分叉。
-            persona: builtRequest.persona,
-            maxDepth: builtRequest.maxDepth,
-          })).run;
-        } else {
-          start = await rt.start(provider, builtRequest);
-        }
+        // 【W3-S2 · 批 `punky-adapter-split-20261031` · lane `w3-engine-entry`】
+        // **入口选择已从引擎删除**：原 `if (agentPort.form === 'activation') { spawn } else { rt.start }`
+        //   两分支合一为**唯一**一次 `agentPort.spawn(...)` ⇒ 分派由 provider 的 `formOf` 单点内部完成
+        //   （AC-5′ 目标态：形态定义点 engine = 0 / provider = 1；AC-5″：引擎不消费宿主形态值）。
+        // ⚠ **`toolFace` 必须真传**：原 activation 分支不传 ⇒ 收窄通道整键丢失（P0-6 **F-3**）；
+        //   统一后两形态拿到同一份载荷，按次收窄不再依赖「另一条独立路径」。
+        //   （⇒ F-3 的**症状**随本统一消失；见证核对与量具口径仍归 `w3-meter`，本 lane 不改量具。）
+        start = (await agentPort.spawn({
+          provider,
+          label: builtRequest.label,
+          prompt: builtRequest.prompt,
+          parent: exec.agent,
+          signal: builtRequest.signal,
+          role: laneTask?.role,
+          // 工具面：`builtRequest.toolFilter` 即 `buildStartRequest` 合成的按次 deny 集。
+          //   provider 按自身能力落到 `request.toolFilter`（start 入口）或经 `agentPreset` 承载（activation 入口）。
+          toolFace: builtRequest.toolFilter,
+          // 【死参数说明（批 `punky-presmoke-2026-10-31`；W3-S2 统一入口后仍成立）】**接收但不转发生效**：
+          //   本调用把 `persona` 交给 `agentPort.spawn(...)`，但 activation 入口的宿主**无 `persona` 字段**
+          //   （人格只能经 `agentPreset` 组 composition 生效）⇒ 此路径下该值**不起作用**。
+          //   **这不是缺陷**：保留传参是为让 `start` / `activation` **两形态签名一致**（调用点不必按形态分叉）。
+          //   **禁删**：删了反而制造形态分叉。
+          persona: builtRequest.persona,
+          maxDepth: builtRequest.maxDepth,
+        })).run;
         break;
       } catch (e) {
         // 【P-2 修正（2026-09-24，独立复核发现）】宿主模板对 **≥2 个未知名** 用**复数**文案

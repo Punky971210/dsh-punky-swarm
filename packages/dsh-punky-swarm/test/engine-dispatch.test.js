@@ -30,7 +30,7 @@ import {
   laneBindingOf, mailboxRootOf, REPORT_CHANNEL,
 } from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, subagentRuntimeOf, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
+import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
 // 【2026-10-07 · P2（批 role-injection-refactor-20261006 / lane e02-inject）】role 数据面注入面的读端。
 // 【2026-10-08 · 本批 role-deliverable-inject-fix-20261008 / lane e01-impl】补 `ROLE_MANDATORY_FIELDS`（R-1 判据面）
 //   与 `roleCorpusRoot`（L-AC-9 的仓库面扫描起点）。
@@ -189,12 +189,12 @@ test('P4 mapSpawnError：能力位/ provider / 其它 三类归一（B4 能力�
   assert.equal(mapSpawnError(new Error('boom')).code, 'GATE_DISPATCH_FAILED');
 });
 
-test('P5 subagentRuntimeOf：仅当 start（one-shot 通道）可调用才算可用（否则降级）', () => {
-  assert.equal(subagentRuntimeOf(mkCtx(null)), null);
-  assert.equal(subagentRuntimeOf(mkCtx({})), null);
-  assert.equal(subagentRuntimeOf(mkCtx({ start: () => {} })) !== null, true);
-  assert.equal(subagentRuntimeOf(mkCtx({ startContinuable: () => {} })), null,
-    '仅存 continuable 通道 ⇒ 不可用（2026-09-22 one-shot 化）');
+test('P5 createAgentPort：仅当可用入口可调用才算可用（成因走功能面 reason；W3-S2 由引擎探针迁来）', async () => {
+  const { createAgentPort } = await import('../lib/provider-dsh/agent.js');
+  assert.equal(createAgentPort(null).available, false, '无服务 ⇒ 不可用');
+  assert.equal(createAgentPort({}).reason, 'runtime-unavailable', '缺服务 ⇒ 成因 runtime-unavailable');
+  assert.equal(createAgentPort({ subagents: { start: () => ({}) } }).available, true, 'start 可调用 ⇒ 可用');
+  assert.equal(createAgentPort({ subagents: { startContinuable: () => ({}) } }).available, false, '仅存 continuable ⇒ 不可用');
 });
 
 // ── G：C 阶段派发面门禁（软启用；纯函数判定） ──

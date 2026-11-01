@@ -58,35 +58,107 @@ function formOf(rt) {
  * @param {'parent'|'caller'} [opts.delivery] activation 的交付策略（缺省 `'parent'`：结果回父会话）
  */
 export function createAgentPort(ctx, opts = {}) {
+  // 【W3-S2 · 批 `punky-adapter-split-20261031` · lane `w3-engine-entry`】不可用**成因**由本端口给出。
+  //
+  // 动机（J6-e 的**精确形态**）：引擎**可以**因「功能拿不到」而拒/降级，**不可以**因「宿主长什么样」而判。
+  //   ⇒ 成因判定从引擎（原 `subagentRuntimeProbeOf`）**搬进 provider**，引擎只读**功能面读数**。
+  //   这是**搬迁**：判定序与原探针逐条等价，语义零增删：
+  //     ① 取值抛错（cordis 注入守卫）/ 取不到服务 ⇒ `'runtime-unavailable'`
+  //     ② 服务在位但两种入口都不可调用           ⇒ `'no-start-entry'`
+  //   ⚠ `reason` 是**功能面**语义（"拿不到什么"），**不是**宿主形态值；
+  //     「是哪一形态」由内部 `form` 承载，仍**不外泄**（AC-5″）。
   let rt = null;
-  try { rt = ctx?.subagents ?? null; } catch { rt = null; } // 注入守卫抛错 ⇒ 视为不可取（降级，不崩）
+  let unavailableBy = null;
+  try { rt = ctx?.subagents ?? null; } catch { rt = null; unavailableBy = 'runtime-unavailable'; } // 注入守卫抛错 ⇒ 视为不可取（降级，不崩）
+  if (unavailableBy === null && !rt) unavailableBy = 'runtime-unavailable';
   const form = formOf(rt);
   const available = form !== null;
+  /** 不可用成因（功能面三态；`available===true` 时恒 `null`）。 */
+  const reason = available ? null : (unavailableBy ?? 'no-start-entry');
   const caps = opts.capabilities ?? (rt && typeof rt === 'object' ? rt.capabilities : undefined) ?? null;
   const capsKnown = caps !== null && typeof caps === 'object' && Object.keys(caps).length > 0;
   const presetFor = typeof opts.presetFor === 'function' ? opts.presetFor : () => null;
   const delivery = opts.delivery === 'caller' ? 'caller' : 'parent';
 
-  // 收窄/人格经哪条路生效 —— **显式声明**（禁「默认已生效」）。
-  const narrowVia = available ? (form === 'start' ? 'request' : 'preset') : 'none';
+  // ── 收窄见证（**单点**：`narrowVia` / `canNarrow` / `spawn` 三处共用，禁各自判）─────────────
+  //
+  // 【W3 · 真读数（p0-6 · D-1/D-2）】原实现把「能按次收窄」等价于「`presetFor` 回了非空字符串」
+  //   —— 但 preset **id 不含工具面内容**（宿主 `SubagentStartRequest.agentPreset?: string` 只收 id）
+  //   ⇒ 「配了名字」≠「收窄发生了」。本函数把解析器结果归一成**可判定的见证**：
+  //
+  //   解析器（`opts.presetFor`）允许三种返回：
+  //     · `null`               ⇒ 无可宣称的事实（未配置 / 该 preset 覆盖不了本次请求）
+  //     · `'<id>'`（裸字符串） ⇒ **有 id、无覆盖声明** ⇒ `hasWitness:false`（C-1 反例：看似能、实则不能）
+  //     · `{ preset, covers }` ⇒ 有见证：`covers` = 该 preset 实际拿到的工具面数组
+  //
+  //   ⇒ `hasWitness` 只表「**有没有覆盖事实**」；「该事实是否满足本次请求」由 `canNarrow` 判（D-2 的
+  //     `deny ∩ covers = ∅` + 非空）。两者分开，是为了让「能力位」（`narrowVia`）与「本次是否成立」
+  //     （`canNarrow(ask)`）不互相冒充。
+  const witnessOf = (ask) => {
+    let raw;
+    try { raw = presetFor(ask); } catch { raw = null; }
+    if (typeof raw === 'string' && raw.length > 0) {
+      return { preset: raw, covers: null, hasWitness: false };
+    }
+    if (raw !== null && typeof raw === 'object' && typeof raw.preset === 'string' && raw.preset.length > 0) {
+      const covers = Array.isArray(raw.covers) ? raw.covers : null;
+      return { preset: raw.preset, covers, hasWitness: covers !== null };
+    }
+    return null;
+  };
+
+  /** 本次是否**提出**了收窄需求（p0-6 · D-1）。无需求 ⇒ 不构成「以弱换强」。 */
+  const needNarrowOf = (ask) => {
+    const tf = ask?.toolFace;
+    const denyLen = Array.isArray(tf?.deny) ? tf.deny.length : 0;
+    const allowLen = Array.isArray(tf?.allow) ? tf.allow.length : 0;
+    const hasPersona = typeof ask?.persona === 'string' && ask.persona.length > 0;
+    return denyLen > 0 || allowLen > 0 || hasPersona;
+  };
+
+  // 收窄/人格经哪条路生效 —— **实测结果**，不是形态派生（p0-6 · D-3；T-2R 成对判据）。
+  //   · `'request'`：`start` 通道的 `request.toolFilter` 由宿主强制生效 ⇒ 自见证；
+  //   · `'preset'` ：`activation` 通道**且解析器给得出覆盖事实**（`hasWitness`）才敢这么报；
+  //   · `'none'`  ：其余（含「只有 preset id、没有覆盖声明」—— 裸 id 不得声称已收窄）。
+  //   ⚠ 本读数是**能力位**（该端口**能不能**给见证），不含 `ask`；「本次是否成立」归 `canNarrow(ask)`。
+  const narrowVia = !available ? 'none'
+    : form === 'start' ? 'request'
+      : (witnessOf(undefined)?.hasWitness ? 'preset' : 'none');
   // 深度经哪条路 —— 两形态都在 request 内；宿主 `depthLimit` 明确 false ⇒ 不传（`none`，非静默降级）。
   const depthVia = available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
 
   return {
     available,
-    form,                     // 端口内部状态（引擎只读 `available`，**不再**自己 `probe.form`）
+    reason,                   // 'runtime-unavailable' | 'no-start-entry' | null —— **功能面**成因（引擎据此分档降级文案）
+    form,                     // 端口内部状态（引擎只读 `available`/`reason`，**不得**读本键：AC-5″）
     capsKnown,
-    narrowVia,                // 'request' | 'preset' | 'none'  —— 工具面/人格的**实际生效方式**
+    narrowVia,                // 'request' | 'preset' | 'none'  —— 收窄通道的**实测**取值（非形态派生）
     // 显式别名（契约面要求逐名可读；`toolFaceVia` / `personaVia` 与 `narrowVia` **同源同值**，
-    //   禁两处各判：三者取自同一 `form`，不是三次独立推导）。
+    //   禁两处各判：三者取自同一 `narrowVia`，不是三次独立推导）。
     toolFaceVia: narrowVia,   // 工具面收窄经哪条路：'request'（toolFilter）| 'preset'（agentPreset）| 'none'
     personaVia: narrowVia,    // 人格经哪条路：'request'（persona）| 'preset'（agentPreset）| 'none'
     depthVia,                 // 'request' | 'none'
-    /** `true` 表示按次收窄确实生效（`request` 形态恒真；`preset` 形态须解析器给得出 preset）。 */
-    canNarrow({ role, toolFace, persona } = {}) {
+    /**
+     * 能否按**本次请求**收窄（p0-6 · D-1 两段式）。
+     *
+     * 判序（**每一段都不可省**）：
+     * ① `available===false` ⇒ `false`（拿不到功能）；
+     * ② **无收窄需求**（`toolFace` 两集皆空且无 `persona`）⇒ `true`（不构成「以弱换强」）；
+     *    ⚠ 这个 `true` **不得**被读作「该 lane 已被收窄」—— 它只表示「本次没要求收窄」；
+     * ③ `start` 通道 ⇒ `true`（`request.toolFilter` 自见证，W-1）；
+     * ④ `activation` 通道 ⇒ 必须有见证（裸 preset id 无见证 ⇒ `false`，反例 C-1）；
+     * ⑤ 见证的 `covers` **为空** ⇒ `false`（反例 C-5：`∅∩∅=∅` 恒成立，空集不是「全收窄」是「未声明」）；
+     * ⑥ `deny ∩ covers = ∅` ⇒ 收窄成立；有交集 ⇒ `false`（该 preset 实际拿到了本次要禁的工具）。
+     */
+    canNarrow(ask = {}) {
       if (!available) return false;
+      if (!needNarrowOf(ask)) return true;
       if (form === 'start') return true;
-      return typeof presetFor({ role, toolFace, persona }) === 'string' && presetFor({ role, toolFace, persona }).length > 0;
+      const w = witnessOf(ask);
+      if (!w || !w.hasWitness) return false;
+      if (!w.covers || w.covers.length === 0) return false;
+      const deny = Array.isArray(ask?.toolFace?.deny) ? ask.toolFace.deny : [];
+      return !deny.some((t) => w.covers.includes(t));
     },
     /**
      * 要一个成员（**两种形态各走自己的入口**；调用方不需要知道是哪一种）。
@@ -127,7 +199,11 @@ export function createAgentPort(ctx, opts = {}) {
       }
 
       // ---- activation 形态：收窄/人格**只能**经 agentPreset ----
-      const preset = presetFor({ role, toolFace, persona });
+      //   见证解析走**同一单点** `witnessOf`（与 `canNarrow` / `narrowVia` 同源，禁第二套判据）。
+      //   ⚠ 端口层**不替闸判**「covers 是否满足本次请求」—— 那是 `canNarrow(ask)` 的职责，引擎在派发前已问；
+      //     本处只保底「有 id 才能派发」，否则抛 `host-port-unsupported:`（既有的端口自足拒态，T-3 用例锁）。
+      const witness = witnessOf({ role, toolFace, persona });
+      const preset = witness?.preset ?? null;
       if (typeof preset !== 'string' || preset.length === 0) {
         throw new Error(HOST_PORT_UNSUPPORTED + ' startActivation 形态不承载 toolFilter/persona，'
           + '且未能解析出 agentPreset（宿主会按父会话 composition 组子会话 ⇒ worker 拿到未收窄工具面）'

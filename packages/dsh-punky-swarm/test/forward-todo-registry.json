@@ -13,8 +13,8 @@
     "note": "⚠ 两个机制**必须分开数**：混用会让棘轮拿错基线（运行期 todo 数是两者之和，不可作棘轮基线）。",
     "inlineExpectedRed": {
       "form": "{ todo: '<id> …' }（第二参数对象，**有回调 ⇒ 会执行并留失败原文**）",
-      "count": 4,
-      "owner": "本 lane（P0-3 引入）",
+      "count": 1,
+      "owner": "P0-3 引入；W3-2 `w3-meter` 清 3 条（S-3a-R / S-3b / T-2R 已转绿）⇒ count 4→1，剩 T-1.8 归 W4-1",
       "cleanWhen": "每条 ac 对应的判据转绿后删掉该 todo，并**同步删除本表条目**"
     },
     "moduleLevelTodo": {
@@ -25,9 +25,9 @@
     }
   },
   "ratchet": {
-    "openMax": 4,
-    "runtimeTodoTotal": 8,
-    "runtimeTodoTotalNote": "运行期 `todo 8` = inline 4 + moduleLevel 4。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
+    "openMax": 1,
+    "runtimeTodoTotal": 5,
+    "runtimeTodoTotalNote": "运行期 `todo 5` = inline 1 + moduleLevel 4（W3-2 `w3-meter` 清掉 S-3a-R / S-3b / T-2R 三条后）。该值只作**交叉核对**（两计数器的并集是否覆盖全量），**不是**棘轮基线；棘轮基线 = openMax。",
     "moduleLevelTodoWhitelist": {
       "test/gate-techdebt-red.test.js": 4
     },
@@ -43,40 +43,13 @@
   },
   "open": [
     {
-      "id": "S-3a-R",
-      "file": "test/dispatch-form-pairing.test.js",
-      "title": "S-3a-R（TODO · 预期红）activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派",
-      "ac": ["AC-5‴", "AC-15"],
-      "dueLane": "W3-2 fx-meter",
-      "dueBatch": "punky-adapter-split-20261031",
-      "greenWhen": "收窄见证判定（p0-6 D-2 W-2）落地：裸 preset id 无 presetCoverage ⇒ 判「无见证」⇒ 拒派（现实现只看 id 存在 ⇒ 放行）"
-    },
-    {
-      "id": "S-3b",
-      "file": "test/dispatch-form-pairing.test.js",
-      "title": "S-3b（TODO · 预期红）`toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行；有交集 ⇒ 拒派",
-      "ac": ["AC-5‴"],
-      "dueLane": "W3-2 fx-meter",
-      "dueBatch": "punky-adapter-split-20261031",
-      "greenWhen": "activation 分支补传 toolFace（p0-6 F-3 / 受影响点 #8：dispatch.js:1194-1207）且按 presetCoverage 核对：覆盖∩deny = ∅ ⇒ 放行，非空 ⇒ 拒派"
-    },
-    {
       "id": "T-1.8",
       "file": "test/f1-dispatch-activation-gate.test.js",
       "title": "T-1.8（TODO · 预期红）拒派/降级文案不得出现宿主服务名或宿主入口名",
       "ac": ["AC-9", "AC-15"],
-      "dueLane": "W3-2 fx-meter",
+      "dueLane": "W4-1 fx-codename",
       "dueBatch": "punky-adapter-split-20261031",
-      "greenWhen": "拒派/降级文案改功能面语言（去掉 ctx.subagents / startActivation / startContinuable）——实现面由 W4-1 fx-codename 提供；W3-2 收口时须已对齐"
-    },
-    {
-      "id": "T-2R",
-      "file": "test/host-ports.test.js",
-      "title": "T-2R（TODO · 预期红）narrowVia 成对：带覆盖见证 ⇒ preset；无见证 ⇒ none",
-      "ac": ["AC-5‴", "D-3"],
-      "dueLane": "W3-2 fx-meter",
-      "dueBatch": "punky-adapter-split-20261031",
-      "greenWhen": "narrowVia 由「形态派生」改为「实测结果」（p0-6 D-3）：带 covers 见证 ⇒ 'preset'；裸字符串无见证 ⇒ 'none'"
+      "greenWhen": "拒派/降级文案改功能面语言（去掉 ctx.subagents / startActivation / startContinuable）——实现面由 W4-1 fx-codename 提供；原 dueLane 为 W3-2 fx-meter，a1 调度风险分析改派 W4（文案去宿主名与码名改动同批原子提交，不可拆）"
     }
   ],
   "notCoveredByThisRegistry": [

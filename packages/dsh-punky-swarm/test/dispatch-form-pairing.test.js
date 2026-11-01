@@ -127,13 +127,12 @@ test('S-3a activation 宿主：统一派发入口成功（宿主 activation 入�
   assert.equal('persona' in (req ?? {}), false, 'activation 分支**不得**合成 persona');
 });
 
-// ── S-3a-R（P0-3 前向登记 · **当前预期红**）裸 preset 字符串无见证 ⇒ 必须拒派 ─────────────────
+// ── S-3a-R（P0-3 前向登记 · **W3 已转绿**）裸 preset 字符串无见证 ⇒ 必须拒派 ─────────────────
 //   真读数（p0-6 D-2 W-2）：「配了 preset id」≠「该 preset 收窄了本次工具面」——id 不含工具面内容，
 //   必须有独立覆盖声明（`presetCoverage`）才可判。⇒ 只配 id 不配覆盖 = **无见证** ⇒ 拒派（不以弱换强）。
-//   今日实现只看 id 是否存在 ⇒ 放行 ⇒ 本用例红；故挂 `{ todo }`：修好后删掉 todo 转正式用例。
-test('S-3a-R（TODO · 预期红）activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派',
-  { todo: '[S-3a-R] P0-3 登记：真读数要求收窄见证（p0-6 D-2 W-2）；当前实现只看 preset id 存在 ⇒ 预期红' },
-  async () => {
+//   【W3 落地】量具换真读数（`w3-meter`）：`presetFor` 给出见证、`canNarrow(ask)` 按
+//   `deny ∩ covers = ∅` + 非空判；裸 id ⇒ 无见证 ⇒ 闸拒派。todo 已摘除（registry 同步收紧）。
+test('S-3a-R activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派', async () => {
     const { result, error } = await dispatchWith('activation', { agentPreset: PRESET });
     assert.ok(error, '无见证必须拒派（不得放行）；实际 spawned=' + String(result?.spawned));
     assert.match(String(error?.message), /GATE_DISPATCH_CAPABILITY_/, '拒派须属能力位不可用族；实际=' + String(error?.message));
@@ -146,10 +145,11 @@ test('S-3a-R（TODO · 预期红）activation + 裸 agentPreset（无 presetCove
 //   所以「同形」是**恒真**、无判别力（弱证明）。⇒ 本条按 p0-6 处方重写：
 //   ① 删除 `roleToolFace`；② 改用**真实通道**（`denyTools` × `presetCoverage`）；
 //   ③ 断言「`toolFace` 与覆盖声明的关系**改变判定结果**」（交集为空 ⇒ 放行；有交集 ⇒ 拒派）。
-//   今日实现无视 `presetCoverage` ⇒ 两态都放行 ⇒ 本条红；修好后转绿（删掉 todo 即成正式用例）。
-test('S-3b（TODO · 预期红）`toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行；有交集 ⇒ 拒派',
-  { todo: '[S-3b] P0-3/P0-6 登记：真读数要求 activation 分支消费 toolFace 并按 presetCoverage 核对见证；当前实现整键丢失 ⇒ 预期红' },
-  async () => {
+//   【W3 落地 · 已转绿】量具换真读数（`w3-meter`）：`presetFor` 真读 `ask` 并按
+//   `presetCoverage[preset].tools` 给出见证；覆盖与本次 deny 相交 ⇒ 解析不出可用 preset ⇒ 闸拒派。
+//   两态（disjoint 放行 / overlapping 拒派）由**同一判据**产出，故本条同时是「有区分力」的证明。
+//   ⚠ 两态都走**同一次** `dispatchWith` 夹具形态（只差 `presetCoverage` 声明），不是「两套夹具两套判据」。
+test('S-3b `toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行；有交集 ⇒ 拒派', async () => {
     // 交集为空：preset 覆盖**非空**但只含基础工具（不含任何治理工具）⇒ 与本次 deny 集不相交 ⇒ 收窄成立 ⇒ 放行
     //   【BG-1 订正】原为 `tools: []`（空覆盖）—— 那是 C-5 明令必须拒的退化个案（`∅∩∅` 恒成立），
     //   见 S-3a 同处注释。此处改为 RL-4 的非空不相交形态，「交集为空」由集合运算得出。
