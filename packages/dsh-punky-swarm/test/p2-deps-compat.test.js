@@ -60,38 +60,37 @@ function bareAccessLineCount(src, token) {
     .length;
 }
 
-// ── A1-P2-02 · 声明面未被改动（R-9 第一半）────────────────────────────────────────────
-test('A1-P2-02 / AC-9 · inject 声明面：走声明驱动单点，且单点内容逐字为三键数组（与基线 8d7815b 对拍）', () => {
+// ── A1-P2-02 · 声明面（R-9 第一半）**W4 改写：从「逐字三键」改为「声明驱动 + 零宿主服务名」** ──────────
+test('A1-P2-02 / AC-9 · inject 声明面：走声明驱动单点，且单点内容为**空**（J4\u0027-a：宿主服务名 0）', () => {
   const now = read('lib/index.js');
   const base = readAtBaseHead('lib/index.js');
   assert.ok(base, '基线 8d7815b 的 lib/index.js 必须可读（否则本对拍无法成立）');
   const stmtOf = (src) => (src.match(/^export const inject = .*$/m) ?? [])[0] ?? null;
   const nowStmt = stmtOf(now);
 
-  // 【2026-10-31 判据形态修正 · G1 declare 批遗留】原版锁「声明行逐字 == 字面量三键数组」，
-  //   而 G1 批有意把声明改为**声明驱动**（键集唯一来源 = `lib/capabilities.js#HOST_INJECTIONS`，
-  //   见该批注释「注入键集唯一来源」与 AC-9 注释锚点用例）⇒ 两条断言结构性冲突，静态面永远红。
-  //   「内容与顺序不变」这一**语义**已由下一条用例（`m.inject` 运行期逐字三键）覆盖 ⇒ 静态面
-  //   改为断**形态 + 单点内容**，并把「与基线逐字对拍」落到单点常量上（等价性不丢）。
-  assert.equal(nowStmt, 'export const inject = HOST_INJECTIONS;',
-    '声明行必须走声明驱动单点（禁回退到手写字面量；键集唯一来源 = capabilities.js#HOST_INJECTIONS）');
+  // 【W4 批 `w4-inject-teardown` · 判据随架构反动】W4 前本用例锁「单点内容逐字 == 三键数组」；
+  //   W4 的**目标**恰恰是把三键移出 inject（改由 provider 行声明）⇒ 旧命题与目标互斥。
+  //   新命题保留**同样强度的两个约束**：① 声明行仍走**单一来源标识符**（禁手写数组字面量）② 该单点
+  //   内容**不含任何宿主服务名**。⇒ 若有人把硬依赖改回去（写回三键），本条必红。
+  assert.equal(nowStmt, 'export const inject = ENGINE_INJECTIONS;',
+    '声明行必须走声明驱动单点（W4：单点 = capabilities.js#ENGINE_INJECTIONS，禁回退到手写字面量）');
 
   const capSrc = read('lib/capabilities.js');
-  const hostInj = (capSrc.match(/^export const HOST_INJECTIONS = .*$/m) ?? [])[0] ?? null;
-  assert.equal(hostInj, "export const HOST_INJECTIONS = ['tools', 'webServer', 'subagents'];",
-    '单点内容必须逐字为三键数组（无 optional 语法可用的宿主契约下，这是硬依赖声明）');
+  const engineInj = (capSrc.match(/^export const ENGINE_INJECTIONS = .*$/m) ?? [])[0] ?? null;
+  assert.equal(engineInj, 'export const ENGINE_INJECTIONS = [];',
+    '引擎声明面必须为**空数组**（J4\u0027-a：引擎插件行 inject ∩ 宿主服务名 = ∅）');
 
-  // 与基线逐字对拍：基线声明行是字面量数组 ⇒ 抽出数组文本，与单点数组文本逐字比较（键名与顺序均不得变）
-  const baseArrayText = (base.match(/^export const inject = (\[[^\]]*\]);$/m) ?? [])[1] ?? null;
-  assert.ok(baseArrayText, '基线声明行须为字面量数组形态（对拍前提）');
-  const nowArrayText = (hostInj.match(/^export const HOST_INJECTIONS = (\[[^\]]*\]);$/m) ?? [])[1] ?? null;
-  assert.equal(nowArrayText, baseArrayText,
-    '单点内容必须与基线声明行**逐字**一致（键名与顺序均不变）');
+  // 判据「宿主服务名 0」的**判别力**：对同一段声明文本做逐名反查（阳性对照 = 旧值必命中）
+  const HOST_SERVICE_NAMES = ['tools', 'webServer', 'subagents'];
+  const hitsInNow = HOST_SERVICE_NAMES.filter((n) => new RegExp('[\'"]' + n + '[\'"]').test(engineInj));
+  assert.deepEqual(hitsInNow, [], '声明单点内不得出现任何宿主服务名（J4\u0027-a；实际命中=' + JSON.stringify(hitsInNow) + '）');
+  const hitsInOld = HOST_SERVICE_NAMES.filter((n) => new RegExp('[\'"]' + n + '[\'"]').test("['tools', 'webServer', 'subagents']"));
+  assert.equal(hitsInOld.length, 3, '阳性对照：同一判定式对**旧三键值**必须全命中（证明判别式有牙，不是恒空）');
 });
 
-test('A1-P2-02 / AC-9 · 运行期 inject 面：三键内容与顺序逐字不变', async () => {
+test('A1-P2-02 / AC-9 · 运行期 inject 面：**空声明**（J4\u0027-a），且形状仍为数组', async () => {
   const m = await import('../lib/index.js');
-  assert.deepEqual(m.inject, ['tools', 'webServer', 'subagents']);
+  assert.deepEqual(m.inject, [], 'W4 起引擎插件行 inject 必须为空（宿主面改由 provider 行声明）');
   assert.equal(Array.isArray(m.inject), true, '数组形态 = 逐名 required（对象形态同样无 optional 位）');
 });
 

@@ -39,26 +39,28 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createBus, createNullAdapters, runMinimalBatch } from '../lib/bus/index.js';
 import { BUILTIN_ROLES, reconcileRoster } from '../lib/roster.js';
-import { HOST_INJECTIONS } from '../lib/capabilities.js';
+import { HOST_FACE_KEYS, capabilityReport } from '../lib/capabilities.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(HERE, '..');
 
-/** **自建**宿主最小面（不复用 selftest 的夹具）：三宿主键各给一个占位实现 ⇒ 「已注入」。 */
-const hostRuntimeFixture = () => Object.fromEntries(HOST_INJECTIONS.map((k) => [k, { marker: k }]));
+/**
+ * **自建**功能面端口夹具（W4 起 `capabilityReport` 读**端口 `available`**，不再读宿主 ctx 属性）。
+ * 三面各给一个可判读的探针；`available:false` 即「该宿主拿不到此功能」。
+ */
+const facePortsFixture = (available = true) =>
+  Object.fromEntries(HOST_FACE_KEYS.map((k) => [k, { available }]));
 
 /**
- * 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】能力名域**单点**（原 `HOST_INJECTIONS[0]` 散在 4 处）。
+ * 【W4 批 `w4-inject-teardown`】能力名域**单点**。
  *
- * 为什么改：J6-d 整改会把 bus 的能力名域从「宿主服务名」换成**功能面名**；把 `HOST_INJECTIONS[0]`
- *   （位置 0）写死在 4 条用例里，整改后 4 条会连带变红、被误读成整改失败（上游 gap-list AG-27 同族）。
- * 为什么不直接删：这 4 条用例的语义是「**某个已知能力名** + 缺失/齐备的必需端口 ⇒ fail-closed 行为」，
- *   它们不关心名字**叫什么**，只关心「bus 认识它」。
- * 做法：与宿主面夹具**同源派生**（`hostRuntimeFixture()` 的键 = 同一张表）⇒ 换表后两侧自动跟随，
- *   仍保留「名字必须被 bus 接受」这一层判别力（若表与 bus 词表脱钩，`assertCapability` 会走
- *   `unknown capability:` 分支 ⇒ 用例失败并点名）。
+ * W4 前：`HOST_INJECTIONS[0]`（= `tools`，**宿主服务名**）。
+ * W4 后宿主三键已从引擎侧退场（`HOST_FACE_KEYS` 只含功能面名），故「某个已知能力名」改用
+ *   **内部能力键里**「缺省即启用」的首个 —— 与 `capabilityReport({})` **同源派生**，不写死名字。
+ * 本组用例的真命题不变：「**某个 bus 认识的能力名** + 必需端口齐/缺 ⇒ fail-closed 行为」。
+ * 若表与 bus 词表脱钩 ⇒ `assertCapability` 走 `unknown capability:` 分支 ⇒ 用例失败并点名。
  */
-const CAPABILITY_NAME = Object.keys(hostRuntimeFixture())[0];
+const CAPABILITY_NAME = capabilityReport({}).internal.filter((c) => c.enabled)[0].key;
 
 /**
  * **自建**必需端口夹具：只给 runtime + audit（两必需），其余走内建/null 适配器。
@@ -113,7 +115,7 @@ test('M1 null 适配器最小批次：node lib/bus/selftest.mjs 真实退出码 
 test('M2 否定对照①：两必需端口全缺 ⇒ assertCapability 抛普通 Error（非 GATE_ / 无 code / 消息含缺失端口名）', () => {
   const bus = createBus({}); // 不注册任何端口
   let err = null;
-  try { bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()); } catch (e) { err = e; }
+  try { bus.assertCapability(CAPABILITY_NAME, { config: {} }); } catch (e) { err = e; }
 
   assert.ok(err, '缺必需端口必须抛错（静默通过 = 不合格）');
   assert.ok(err instanceof Error, '必须是 Error 实例');
@@ -127,12 +129,12 @@ test('M2 否定对照①：两必需端口全缺 ⇒ assertCapability 抛普通 
 
 test('M3 否定对照②（Δ vs selftest：selftest 只测「两个全缺」，本处测**部分缺失**）⇒ 只报缺的那一个', () => {
   const bus = createBus({ ports: requiredPortsFixture() }); // runtime+audit 齐 ⇒ 不应抛
-  assert.equal(bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()), true, '两必需端口齐备 ⇒ 断言通过');
+  assert.equal(bus.assertCapability(CAPABILITY_NAME, { config: {} }), true, '两必需端口齐备 ⇒ 断言通过');
 
   // 只缺 audit：用新 bus 只给 runtime
   const bus2 = createBus({ ports: { runtime: requiredPortsFixture().runtime } });
   let err = null;
-  try { bus2.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()); } catch (e) { err = e; }
+  try { bus2.assertCapability(CAPABILITY_NAME, { config: {} }); } catch (e) { err = e; }
   assert.ok(err, '缺 audit ⇒ 必须抛错');
   const msg = String(err.message ?? '');
   assert.ok(msg.includes('audit'), '消息须含缺失端口 `audit`；实际=' + msg);
@@ -147,7 +149,7 @@ test('A1 四动作逐个可达：register 返回槽位名 · assertCapability �
   assert.equal(bus.register('tools', { list: () => ['x'], call: () => ({ ok: true }) }), 'tools', 'register 应返回所注册的槽位名');
 
   // ② assertCapability：能力名域内 + 宿主键齐 ⇒ true
-  assert.equal(bus.assertCapability(CAPABILITY_NAME, hostRuntimeFixture()), true, 'assertCapability 应返回 true');
+  assert.equal(bus.assertCapability(CAPABILITY_NAME, { config: {} }), true, 'assertCapability 应返回 true');
 
   // ③ route：给出席位视图（形状见 F-3）
   const routed = await bus.route(BUILTIN_ROLES[0]);
@@ -283,7 +285,11 @@ test('M4 最小批次（独立构造）：null 适配器 5 键齐 + 宿主最小
     'null 适配器须恰为 KernelPorts 的 5 键（集合相等）');
 
   const bus = createBus({ ports: nulls });
-  const out = await runMinimalBatch(bus, { rt: hostRuntimeFixture() });
+  // 【W4 批 `w4-inject-teardown`】缺省能力名现在派生自 `report.host[0]` = **功能面名**（`toolSurface`），
+  //   而 `nulls` 的 tools 槽位是 null 适配器（`available:false`）⇒ 若走缺省会**按设计**抛
+  //   `capability-missing: toolSurface`（这正是 M5 验的 fail-closed 面）。
+  //   本用例的真命题是「**跑完一轮最小批次**并分类」，与能力名无关 ⇒ 显式给一个缺省即启用的内部能力键。
+  const out = await runMinimalBatch(bus, { capability: CAPABILITY_NAME, rt: { config: {} } });
   assert.ok(Array.isArray(out.steps) && out.steps.length > 0, '最小批次须记录执行步骤');
   for (const step of ['assertCapability', 'route', 'runtime', 'normalize', 'classify']) {
     assert.ok(out.steps.includes(step), '最小批次步骤缺 ' + step + '；实际=' + JSON.stringify(out.steps));

@@ -35,6 +35,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   | 人格（`persona`）                | ✅ `request.persona`   | ❌ 无此名 ⇒ **只能经 `agentPreset`** |
 //   | 委派深度（`maxDepth`）           | ✅ `request.maxDepth`  | ✅ `request.maxDepth`（原生可用，受 `capabilities.depthLimit` 约束） |
 
+// 【W4 批 `w4-inject-teardown`】宿主服务取值一律走 `serviceOf`（裸读优先 + `ctx.get` 回落），
+//   不再在本文件裸读 `ctx.subagents` —— 引擎行清空 `inject` 后，未声明的 ctx 上裸读**会抛**
+//   （活体实证见 `exec/inject-teardown.md` 的宿主级 RED→GREEN）。
+import { serviceOf } from './tools-http.js';
+
 export const HOST_PORT_UNSUPPORTED = 'host-port-unsupported:';
 
 /** 形态判别（**端口内部单点**；引擎侧不得重复判）。判序固定：新形态优先（宿主若两入口并存，产物面按新形态）。 */
@@ -69,8 +74,8 @@ export function createAgentPort(ctx, opts = {}) {
   //     「是哪一形态」由内部 `form` 承载，仍**不外泄**（AC-5″）。
   let rt = null;
   let unavailableBy = null;
-  try { rt = ctx?.subagents ?? null; } catch { rt = null; unavailableBy = 'runtime-unavailable'; } // 注入守卫抛错 ⇒ 视为不可取（降级，不崩）
-  if (unavailableBy === null && !rt) unavailableBy = 'runtime-unavailable';
+  rt = serviceOf(ctx, 'subagents'); // 裸读优先 + `ctx.get` 回落（W4：不依赖 inject 声明）
+  if (!rt) { rt = null; unavailableBy = 'runtime-unavailable'; } // 取不到 ⇒ 视为不可取（降级，不崩）
   const form = formOf(rt);
   const available = form !== null;
   /** 不可用成因（功能面三态；`available===true` 时恒 `null`）。 */

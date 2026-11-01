@@ -51,22 +51,25 @@ const rel = (p) => path.join(PKG_ROOT, p);
 
 const SILENT = { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} };
 
-// ── 被断言面：公开导出（包 §2.1 钉死四项）──────────────────────────────────────
+// ── 被断言面：公开导出（**W4 批 `w4-inject-teardown` 重划：4 → 6 项**）──────────────────────
+//   旧四项 = `HOST_INJECTIONS` / `CAPABILITY_KEYS` / `capabilityReport` / `assertRequired`。
+//   W4 把「宿主注入表」拆成「功能面键（宿主中立）」+「引擎空声明」+「内核端口键」三件 ⇒ 共六项。
 async function loadCapabilities() {
   const mod = await import('../lib/capabilities.js').catch((err) => {
     throw new Error('lib/capabilities.js 不可加载（e1-capability 未交付？原始错：' + String(err?.message ?? err) + '）');
   });
-  for (const name of ['HOST_INJECTIONS', 'CAPABILITY_KEYS', 'capabilityReport', 'assertRequired']) {
-    assert.ok(name in mod, '导出面缺 ' + name + '（包 §2.1 钉死四项，禁增删）');
+  for (const name of ['HOST_FACE_KEYS', 'ENGINE_INJECTIONS', 'KERNEL_KEYS', 'CAPABILITY_KEYS', 'capabilityReport', 'assertRequired']) {
+    assert.ok(name in mod, '导出面缺 ' + name + '（W4 钉死六项，禁增删）');
   }
   return mod;
 }
 
-// 能力面读 `rt` 的**宿主注入位**：三键在 rt 上均在场 = 「已注入」。
-//   （包 §2.1：`HOST_INJECTIONS` 三键本批**全部必需**，不降级任何宿主键 ⇒ 「可选能力」只能落在内部能力键上。）
-const hostInstalledRuntime = (hostKeys) => Object.fromEntries(hostKeys.map((k) => [k, {}]));
-const hostRuntimeMissing = (hostKeys, dropped) =>
-  Object.fromEntries(hostKeys.filter((k) => k !== dropped).map((k) => [k, {}]));
+// 能力面读 `rt` 的**端口位**（W4 起 `capabilityReport` 判**端口 `available`**，不再读宿主 ctx 属性）。
+//   `ports: null` ⇒ **未探明**；`available:false` ⇒ 该宿主**拿不到该功能**（正常降级形态）。
+const facePorts = (available = true, only = null) =>
+  Object.fromEntries((only ?? ['toolSurface', 'httpSurface', 'agentRuntime']).map((k) => [k, { available }]));
+/** 内核端口在位事实（W4 起 fail-closed 面 = 这里）。 */
+const kernelFacts = (over = {}) => ({ runtime: true, audit: true, ...over });
 
 /** 读回源码（P-2 / AC-10 的源码型判据面；包内 AC-6 复核读数即「读回原文」）。 */
 function sourceOf(relPath) {
@@ -97,16 +100,18 @@ function balancedSlice(src, fromIndex) {
 
 // ── ① AC-12：**无 `agentTeams` 等外部能力** 仍可建批 + 派发，且能力面回显/报错面**在场**（不是静默通过）──
 test('C1 无 agentTeams 能力仍可建批派发：建批 + 派发成功，且能力缺失面在回显/报错通道可见', async () => {
-  const { HOST_INJECTIONS, capabilityReport, assertRequired } = await loadCapabilities();
+  const { HOST_FACE_KEYS, ENGINE_INJECTIONS, capabilityReport, assertRequired } = await loadCapabilities();
 
-  // 前置：本仓能力声明面**不含**任何外部框架键（用户口径：排除外部适配）
+  // 前置（**W4 新命题**）：引擎声明面**空**，且引擎侧词表是**功能面名**（不含任何宿主服务名）。
+  //   旧命题是「`HOST_INJECTIONS` 必须逐字等于宿主三键」—— 那是本批要取消的硬依赖，已作废。
+  assert.deepEqual([...ENGINE_INJECTIONS], [], '引擎插件行 inject 必须为空（J4\u0027-a）');
   assert.deepEqual(
-    [...HOST_INJECTIONS].sort(),
-    ['subagents', 'tools', 'webServer'],
-    'HOST_INJECTIONS 必须逐字等于宿主三键（包 §2.1 硬纪律 2：本批不降级任何宿主键）',
+    [...HOST_FACE_KEYS].sort(),
+    ['agentRuntime', 'httpSurface', 'toolSurface'],
+    '功能面键必须逐字为三面（宿主中立词表；AC-9b）',
   );
-  for (const foreign of ['agentTeams', 'AgentScope', 'dsh-agent']) {
-    assert.equal(HOST_INJECTIONS.includes(foreign), false, '宿主必需键不得含外部框架位 ' + foreign);
+  for (const foreign of ['agentTeams', 'AgentScope', 'dsh-agent', 'tools', 'webServer', 'subagents']) {
+    assert.equal(HOST_FACE_KEYS.includes(foreign), false, '功能面键不得含宿主服务名/外部框架位 ' + foreign);
   }
 
   // 真·无 agentTeams 运行：无该 capability 的 runtime 下，建批 + 派发照常（引擎不依赖外部能力）
@@ -126,59 +131,69 @@ test('C1 无 agentTeams 能力仍可建批派发：建批 + 派发成功，且�
   assert.ok(after.events.some((e) => e && e.type === 'task.owner.assigned'), '派发须留痕 task.owner.assigned');
 
   // 「不是静默通过」：能力面必须**能表达缺失**
-  const installedAll = capabilityReport(hostInstalledRuntime(HOST_INJECTIONS));
+  const installedAll = capabilityReport({ ports: facePorts(true), kernel: kernelFacts() });
   assert.ok(installedAll && typeof installedAll === 'object', 'capabilityReport 必须返回对象回显');
   for (const key of ['host', 'internal', 'missing']) {
-    assert.ok(key in installedAll, '回显结构缺键 ' + key + '（包 §2.1 → {host, internal, missing}）');
+    assert.ok(key in installedAll, '回显结构缺键 ' + key + '（W4 → {host, kernel, internal, missing, degraded}）');
   }
   assert.ok(Array.isArray(installedAll.missing), 'missing 必须是数组（缺失面可读）');
-  assert.equal(assertRequired(installedAll), true, '三键齐备 ⇒ assertRequired 返回 true（不因外部能力缺席而拒）');
+  assert.equal(assertRequired(installedAll), true, '内核端口齐备 ⇒ assertRequired 返回 true（不因宿主功能面差异而拒）');
 });
 
-// ── ② AC-2(a)：必需能力缺失 ⇒ fail-closed（普通 Error / `capability-missing:` / 含缺失键名 / 无 GATE_ 前缀）──
-test('C2 必需能力缺失 ⇒ assertRequired 抛普通 Error：含 `capability-missing:` 与缺失键名，不以 GATE_ 开头', async () => {
-  const { HOST_INJECTIONS, capabilityReport, assertRequired } = await loadCapabilities();
-  const dropped = 'webServer';
-  assert.ok(HOST_INJECTIONS.includes(dropped), '夹具前提：webServer 在必需键集合内');
+// ── ② AC-2(a)【W4 命题反动】功能面不可用 ⇒ **不抛**（降级可见）；内核端口缺 ⇒ **抛** ──────────────
+//   旧命题：「必需宿主键缺失 ⇒ assertRequired 抛」。W4 把 fail-closed 面从**宿主能力**改到**内核端口**
+//   ⇒ 旧命题与新架构互斥（宿主能力差异属正常形态，不是装配缺陷）。新命题保留**同强度**的两条判据：
+//   ① 功能面缺 ⇒ 不抛 且降级**可见**（installed:false + probed:true + reason 非空 + 进 degraded）；
+//   ② 内核端口缺 ⇒ 必抛，且消息形态逐字沿用（`capability-missing:` / 无 err.code / 禁 GATE_）。
+test('C2 功能面不可用 ⇒ assertRequired 不抛（降级可见）；内核端口缺 ⇒ 抛 `capability-missing:`（无 GATE_ 前缀）', async () => {
+  const { capabilityReport, assertRequired } = await loadCapabilities();
 
+  // ① 功能面不可用（httpSurface）而内核齐备 ⇒ **不抛**
+  const faceDown = capabilityReport({ ports: facePorts(false, ['httpSurface']), kernel: kernelFacts() });
+  assert.equal(assertRequired(faceDown), true,
+    '功能面不可用**不得**升级为 fail-closed（宿主差异不是装配缺陷 —— 这是 W4 的架构决定）');
+  const http = faceDown.host.find((h) => h.key === 'httpSurface');
+  assert.equal(http.installed, false, '缺服务的功能面必须报 installed:false（不得静默当可用）');
+  assert.equal(http.probed, true, '已探测（probed:true ≠ 未探明）');
+  assert.ok(typeof http.reason === 'string' && http.reason.length > 0, '必须给可读 reason（降级但不静默）；实际=' + http.reason);
+  assert.ok(faceDown.degraded.includes('httpSurface'), '降级事实须进 degraded 集合（回显通道）');
+
+  // ② 内核端口缺（audit）⇒ **必抛**，形态逐字沿用旧约定
   let err = null;
-  try {
-    assertRequired(capabilityReport(hostRuntimeMissing(HOST_INJECTIONS, dropped)));
-  } catch (e) { err = e; }
-
-  assert.ok(err, '必需键缺失必须 fail-closed 抛错（不得静默降级）');
+  try { assertRequired(capabilityReport({ ports: facePorts(true), kernel: kernelFacts({ audit: false }) })); } catch (e) { err = e; }
+  assert.ok(err, '内核端口缺必须 fail-closed 抛错（不得静默降级）');
   assert.ok(err instanceof Error, '必须是 Error 实例');
   assert.equal(err.code, undefined, '不得设置 err.code（禁进拒码集合的特殊读法）');
   const msg = String(err.message ?? '');
   assert.equal(msg.startsWith('GATE_'), false, '禁 GATE_ 前缀（包 §2.1 → 普通 Error + 固定前缀）');
   assert.ok(msg.includes('capability-missing:'), '消息须含固定前缀 `capability-missing:`；实际=' + msg);
-  assert.ok(msg.includes(dropped), '消息须含**缺失键名**（可定位）；实际=' + msg);
+  assert.ok(msg.includes('audit'), '消息须含**缺失键名**（可定位）；实际=' + msg);
   assert.equal(/GATE_/.test(msg), false, '消息任意位置不得出现 GATE_（拒码集合零新增）');
 });
 
 // ── ③ AC-2(b)：可选能力缺失 ⇒ **不抛**，且 `missing` 集合含该键（两态都要测，禁只验 happy path）──
 test('C3 可选能力缺失 ⇒ 不抛，且 missing 集合含该键（可选 ≠ 必需，不得升级为 fail-closed）', async () => {
-  const { HOST_INJECTIONS, capabilityReport, assertRequired } = await loadCapabilities();
+  const { HOST_FACE_KEYS, capabilityReport, assertRequired } = await loadCapabilities();
   const { CAPABILITY_REGISTRY } = await import('../lib/assembly/schema.js');
 
-  // 夹具从**单一真源**派生（不硬编码键名）：注册表里「非宿主键 且 缺省未启用」的那些 = 可选且缺省即缺失的能力
+  // 夹具从**单一真源**派生（不硬编码键名）：注册表里「缺省未启用」的那些 = 可选且缺省即缺失的能力
   const defaultOff = CAPABILITY_REGISTRY
-    .filter((r) => !HOST_INJECTIONS.includes(r.key) && r?.default?.enabled !== true)
+    .filter((r) => !HOST_FACE_KEYS.includes(r.key) && r?.default?.enabled !== true)
     .map((r) => r.key);
   assert.ok(defaultOff.length >= 1, '夹具前提：注册表内须存在「缺省未启用」的可选能力（否则本用例无可受试对象）');
 
-  const report = capabilityReport(hostInstalledRuntime(HOST_INJECTIONS));
-  assert.doesNotThrow(() => assertRequired(report), '可选能力缺失**不得**抛（fail-closed 只针对必需键）');
+  const report = capabilityReport({ ports: facePorts(true), kernel: kernelFacts() });
+  assert.doesNotThrow(() => assertRequired(report), '可选能力缺失**不得**抛（fail-closed 只针对内核端口）');
   assert.equal(assertRequired(report), true, '可选缺失 ⇒ assertRequired 返回 true');
 
-  // AC-2(b) 的集合式判据：至少一个「可选且缺省关」的键出现在 missing 内（存在性，不计数）
+  // 集合式判据：至少一个「可选且缺省关」的键出现在 missing 内（存在性，不计数）
   assert.ok(
     defaultOff.some((k) => report.missing.includes(k)),
     '可选能力缺失须在 `missing` 集合内可见（包 AC-2(b)）；候选=' + JSON.stringify(defaultOff)
       + '，实际 missing=' + JSON.stringify(report.missing),
   );
-  for (const hostKey of HOST_INJECTIONS) {
-    assert.equal(report.missing.includes(hostKey), false, '宿主键已注入 ⇒ 不得出现在 missing：' + hostKey);
+  for (const faceKey of HOST_FACE_KEYS) {
+    assert.equal(report.missing.includes(faceKey), false, '功能面已可用 ⇒ 不得出现在 missing：' + faceKey);
   }
 });
 
@@ -336,18 +351,21 @@ function applyAssembly({ root, without = [] } = {}) {
   };
 }
 
-// ── C6a · AC-8：**必需能力缺失** ⇒ fail-closed（装配期 `apply()` 必须抛）────────────────────
-test('C6a AC-8 必需能力缺失 ⇒ apply() 抛普通 Error：含 `capability-missing:`、err.code 未设、不以 GATE_ 开头', () => {
+// ── C6a · AC-8【W4 命题反动】：宿主功能面缺失 ⇒ apply() **不抛**，且降级**可见** ────────────────
+//   旧命题：「缺宿主必需键（webServer）⇒ 装配期必须 fail-closed 抛」。
+//   W4 的目标正是让引擎**不因宿主能力差异改变运行模式**（用户口述 / J6-e）⇒ 缺 webServer 只应**降级**，
+//   且必须**响亮**（`capability-degraded: httpSurface` + report 的 `installed:false`/`reason`）。
+//   ⇒ 若有人把硬依赖改回去（inject 三键 + 宿主缺即抛），本条 `assert.equal(run.err, null)` 必红。
+test('C6a AC-8 宿主功能面缺失 ⇒ apply() 不抛，且 `capability-degraded:` 降级信号可见（不静默）', () => {
   const run = applyAssembly({ root: tempRoot('punky-t1-g02a-'), without: ['webServer'] });
   try {
-    assert.ok(run.err, '缺宿主必需键（webServer）⇒ 装配期必须 fail-closed 抛错（不得静默降级）');
-    assert.ok(run.err instanceof Error, '必须是 Error 实例');
-    assert.equal(run.err.code, undefined, '不得设置 err.code（禁进拒码集合的特殊读法）');
-    const msg = String(run.err.message ?? '');
-    assert.equal(msg.startsWith('GATE_'), false, '禁 GATE_ 前缀');
-    assert.ok(msg.includes('capability-missing:'), '消息须含固定前缀 `capability-missing:`；实际=' + msg);
-    assert.ok(msg.includes('webServer'), '消息须含缺失键名（可定位）；实际=' + msg);
-    assert.equal(/GATE_/.test(msg), false, '消息任意位置不得出现 GATE_');
+    assert.equal(run.err, null,
+      '宿主功能面缺失**不得**让 apply() 抛错（W4：引擎不因宿主能力差异拒绝加载）；实际=' + String(run.err?.message ?? ''));
+    const degradedLines = run.warn.filter((l) => String(l).includes('capability-degraded:'));
+    assert.ok(degradedLines.length >= 1,
+      '降级必须**可见**：warn 须含 `capability-degraded:`；实际 warn=' + JSON.stringify(run.warn.map(String)));
+    assert.ok(degradedLines.some((l) => String(l).includes('httpSurface')),
+      '降级信号须点名缺的功能面 `httpSurface`；实际=' + JSON.stringify(degradedLines.map(String)));
   } finally { run.dispose(); }
 });
 
@@ -407,12 +425,12 @@ test('C6c AC-5 P-2 inert 可见（运行期）：去掉 ctx.on 后 apply() 的 w
 });
 
 // ── ⑦ AC-1（导出面**恰好**四项，集合式）/ AC-10（不造第二真源：键集派生而非手抄）──
-test('C7 AC-1 导出面恰好四项（集合相等）；AC-10 键集由 CAPABILITY_REGISTRY 派生、无手抄键名清单', async () => {
+test('C7 AC-1 导出面恰好六项（集合相等）；AC-10 键集由 CAPABILITY_REGISTRY 派生、无手抄键名清单', async () => {
   const mod = await loadCapabilities();
   assert.deepEqual(
     Object.keys(mod).sort(),
-    ['CAPABILITY_KEYS', 'HOST_INJECTIONS', 'assertRequired', 'capabilityReport'],
-    '导出面必须**恰好**为包 §2.1 钉死的四项（禁增删；集合式比较，不是计数断言）',
+    ['CAPABILITY_KEYS', 'ENGINE_INJECTIONS', 'HOST_FACE_KEYS', 'KERNEL_KEYS', 'assertRequired', 'capabilityReport'],
+    '导出面必须**恰好**为 W4 钉死的六项（禁增删；集合式比较，不是计数断言）',
   );
 
   const src = sourceOf('lib/capabilities.js');

@@ -19,7 +19,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBus, createNullAdapters, runMinimalBatch } from './index.js';
+import { capabilityReport } from '../capabilities.js';
 import { BUILTIN_ROLES } from '../roster.js';
+
+// 【W4 批 `w4-inject-teardown`】能力名**单点**：W4 起 `capabilityReport().host` 只含**功能面名**
+//   （`toolSurface`/`httpSurface`/`agentRuntime`），宿主服务名（`tools`/`webServer`/`subagents`）
+//   已从引擎侧词表退场 ⇒ 旧写法 `assertCapability('tools')` 会走 `unknown capability:` 分支。
+//   本脚本这几处探针的真命题是「某个 **bus 认识的能力名** 触发 fail-closed / 可达」，
+//   不关心名字具体是什么 ⇒ 从「缺省即启用的内部能力键」**派生**（与 capabilities 同源，换表自动跟随）。
+const PROBE_CAPABILITY = capabilityReport({}).internal.filter((c) => c.enabled)[0].key;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -256,7 +264,7 @@ function checkF4() {
 function checkNegativeControl() {
   const bus = createBus({}); // 不给 runtime / audit
   try {
-    bus.assertCapability('tools');
+    bus.assertCapability(PROBE_CAPABILITY);
     return record('C5 否定对照', false, '静默通过 ⇒ 不合格（缺必需端口却无异常）');
   } catch (err) {
     const msg = String(err?.message ?? '');
@@ -276,7 +284,7 @@ async function checkFourActions() {
   const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
   const out = [];
   out.push('register→' + bus.register('tools', { list: () => [], call: () => ({ ok: true }) }));
-  out.push('assertCapability→' + String(bus.assertCapability('tools', { ctx: { tools: {} } })));
+  out.push('assertCapability→' + String(bus.assertCapability(PROBE_CAPABILITY, { config: {} })));
   out.push('route→' + String((await bus.route('coder')).seat));
   out.push('normalize→' + JSON.stringify(Object.keys(bus.normalize({ writes: [], evidence: ['e'] })).sort()));
   const ok = out.every((line) => !line.includes('undefined'));
@@ -288,7 +296,7 @@ async function checkMinimalBatch() {
   const nulls = createNullAdapters();
   const bus = createBus({ ports: { runtime: nulls.runtime, audit: nulls.audit } });
   const summary = await runMinimalBatch(bus, {
-    capability: 'tools',
+    capability: PROBE_CAPABILITY,
     rt: { ctx: { tools: {} } }, // 最小宿主面：只声明本次断言用到的那一项（其余不放宽）
     task: { id: 'selftest-task', role: BUILTIN_ROLES[0] },
   });

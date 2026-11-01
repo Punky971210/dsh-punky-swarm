@@ -715,7 +715,7 @@
     "test/g2-bus-falsify.test.js": {
       "asserts": 54,
       "blankLines": 35,
-      "lines": 302,
+      "lines": 308,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1272,6 +1272,22 @@
       "tests": 6,
       "todos": 0
     },
+    "test/manager-seat-inroster.test.js": {
+      "asserts": 20,
+      "blankLines": 12,
+      "lines": 108,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
+    "test/manager-seat.test.js": {
+      "asserts": 34,
+      "blankLines": 27,
+      "lines": 192,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/mcp-data-plane.test.js": {
       "asserts": 71,
       "blankLines": 42,
@@ -1329,9 +1345,9 @@
       "todos": 0
     },
     "test/no-agentTeams-batch.test.js": {
-      "asserts": 68,
+      "asserts": 69,
       "blankLines": 46,
-      "lines": 430,
+      "lines": 448,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1371,7 +1387,7 @@
     "test/p2-deps-compat.test.js": {
       "asserts": 30,
       "blankLines": 29,
-      "lines": 287,
+      "lines": 286,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -2001,7 +2017,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-01T02:48:55Z",
+  "generatedAt": "2026-11-01T11:59:01Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2015,12 +2031,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11863,
-    "blankLines": 6562,
-    "files": 250,
-    "lines": 69621,
+    "asserts": 11918,
+    "blankLines": 6601,
+    "files": 252,
+    "lines": 69944,
     "tautologies": 0,
-    "tests": 2452,
+    "tests": 2465,
     "todos": 4
   }
 }

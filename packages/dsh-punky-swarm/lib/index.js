@@ -48,10 +48,17 @@ import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启�
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf, resolveBridgeConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
-// 能力声明面（批 `punky-g1-declare-2026-10-29` · lane `e1-capability`）：
-//   `inject` 改**声明驱动**（`HOST_INJECTIONS` 为定义点，本文件只引用，不再手写字面量）；
-//   装配结束前落 `rt.capabilities` 回显 + 缺失一条 warn + 必需缺失 fail-closed（`assertRequired`）。
-import { HOST_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
+// 能力声明面（批 `punky-g1-declare-2026-10-29` · lane `e1-capability`；**W4 批 `w4-inject-teardown` 重划**）：
+//   ① `inject` 仍走**声明驱动**（单一来源标识符，本文件只引用、不写字面量），但该标识符 = **`ENGINE_INJECTIONS`（空数组）**：
+//      宿主服务名的声明落点已迁到 provider 行（`cordis.patch.yml` 的 `dsh-punky-swarm-provider-dsh`）。
+//   ② 装配结束前落 `rt.capabilities` 回显（功能面 + 内核端口 + 内部能力三段）＋ 降级 warn；
+//   ③ fail-closed 面**从宿主能力改到内核端口**（`assertRequired` 只对 `runtime`/`audit` 拒），
+//      宿主功能面不可用 ⇒ **降级但不静默**（回显 `installed:false` + `reason`）——详见 `lib/capabilities.js`。
+import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
+// 【W4 · D-2/D-3】功能面探活所需的端口实例：由装配根在此**建一次**，供 `capabilityReport({ ports })` 读 `available`。
+//   方向 = 引擎 → provider 端口（J6：宿主差异只在 provider 内）；本文件不再读任何宿主服务名。
+import { createToolsPort } from './provider-dsh/tools-http.js';
+import { createAgentPort } from './provider-dsh/agent.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
@@ -107,25 +114,27 @@ import { mountAuditLog } from './auditlog/sink.js';
 import { createHttpPort } from './provider-dsh/tools-http.js';
 
 export const name = 'dsh-punky-swarm';
-// 三键（`tools` / `webServer` / `subagents`）**全部为硬依赖**，不是可选依赖（A1-P2-02 事实化）：
+// ── `inject` 声明面：**W4 起为空**（J4'-a：引擎插件行 `inject` ∩ 宿主服务名 = ∅）──────────────────
+//
+// 宿主契约（可核，勿凭记忆）：
 //   宿主 `@deepseek-ai/cordis` 4.0.5 的 `inject` **归一化为 name→config 映射、逐名 required，没有 optional 位**
 //   （契约在 `Inject.resolve()` 把数组/对象统一成同名映射 + `Fiber` 构造时对每个键调 `_checkImpl(name)`）。
-//   ⇒ 任一服务缺失时的**真实失败形态 = 本插件整块 fiber 置 pending**（`apply` 根本不执行）：
-//      治理工具面（21 个工具）全部不出现、`/api/dsh-punky-swarm/*` 全部 404 —— **不是局部降级**。
-//   ⇒ 下方两处「服务缺失守卫」在当前宿主契约下**不可达**（保留作防御纵深，**不要**据其推断可降级）：
-//      ① `installWebSurface` 的 `if (ctx.webServer)`；② `engine/dispatch.js` 的「`ctx.subagents` 不可取」档
-//      （F1 已把该档改为**能力位前置 fail-closed 拒派**，拒码见 `lib/engine/dispatch.js` 的实现，
-//        此处不写码面字面量 —— 装配段的 `GATE_*` 词表被既有测试逐字冻结为「零新增」）。
-//   若将来真要降级：必须把对应键**移出** `inject` 并改用 `ctx.get(name)`（宿主唯一「不声明也能读」的通道：
-//      `ReflectService.get(name, strict=true)` 未提供时返回 `undefined`；裸取属性则直接抛 `cannot get property
-//      "<name>" without inject`）。那属**插件加载面变更**，须先在最小 host profile 夹具下取得红→绿读数再动
-//      —— 本批无宿主重启验收 ⇒ 该事实的证据级别 = 宿主源码契约 + 静态推理（`verified=false`，followup F-2）。
-//   `subagents`（2026-09-16 活体补）：引擎自派（`lane_dispatch` → `ctx.subagents.start`，one-shot；2026-09-22 起）
-//     必须声明；宿主 `dsh-base` 默认挂载 `@deepseek-ai/dsh-subagent`，故声明安全。
-// 声明驱动（批 G1）：注入键集**唯一来源** = `lib/capabilities.js#HOST_INJECTIONS`（三键仍全部必需，
-//   本批不降级任何宿主键 ⇒ 加载面行为与本批前零差异；改这一处即改整条加载面契约）。
-export const inject = HOST_INJECTIONS;
-
+//   因此**只要 inject 里有一个宿主服务，该服务缺失时就没有「可选」写法可用**。
+//
+// W4 前的形态与本批处置：
+//   · 旧形态把 `tools` / `webServer` / `subagents` 三键全部声明为硬依赖 ⇒ 任一服务缺失时
+//     **本插件整块 fiber 置 pending**（`apply` 根本不执行；治理工具面全不出现、`/api/*` 全 404）。
+//   · W4 把三键**移出** inject：宿主名改由 provider 行声明（`cordis.patch.yml` 的
+//     `dsh-punky-swarm-provider-dsh` 行），引擎侧一律经**端口读数**取得功能。
+//   · ⇒ 旧注释里「两处服务缺失守卫**不可达**」的前提**已消失**：清空 inject 后 fiber 恒就绪，
+//     `apply` 一定会执行，那两处守卫（现已改为**功能面读数**）**变得可达且有意义**。
+//   · ⇒ 旧注释里「若将来真要降级必须把对应键移出 inject」的**条件已满足**（本批即该动作），
+//     其「须先在最小 host profile 夹具下取得红→绿读数再动」的要求**已按纪律执行**：见
+//     `exec/inject-teardown.md` 的宿主级 RED→GREEN 两段读数。
+//
+// 兼容形态（既有冻结面要求）：声明行必须是 `export const inject = <单一标识符>;`，
+//   禁手写数组字面量 ⇒ 这里引用 `ENGINE_INJECTIONS`（= `[]`，定义点见 `lib/capabilities.js`）。
+export const inject = ENGINE_INJECTIONS;
 // 恢复语义：每个进程只执行一次（无论插件按进程级还是会话级挂载）
 let recoveredThisProcess = false;
 
@@ -134,8 +143,9 @@ const mountStartupPrelude = ({ ctx, config, root }) => {
   // 必须在下方 validateCapabilities warn / GATE_ENABLED warn / syncAssets 三条 warn 之前，
   // 否则「配置非法 / 门禁逃生阀 / 资产清单不可用」这些启动期审计信号永久缺席；挂载失败不炸宿主。
   // 关闭态（PUNKY_AUDITLOG=off 或 capabilities.auditlog.enabled:false）→ 零目录零 exporter。
+  let auditMount = null;
   try {
-    const auditMount = mountAuditLog(ctx, { root, config });
+    auditMount = mountAuditLog(ctx, { root, config });
     if (auditMount.mounted) {
       ctx.logger?.info?.('[dsh-punky-swarm] audit log sink mounted: ' + auditMount.sinkDir + '\\' + auditMount.filename);
     }
@@ -148,6 +158,9 @@ const mountStartupPrelude = ({ ctx, config, root }) => {
   for (const err of validateCapabilities(config).errors) {
     ctx.logger?.warn?.('[dsh-punky-swarm] config: ' + err);
   }
+  // 【W4 · D-3/D-4】把审计挂载结果**交回装配根**：内核端口 `audit` 的在位事实由它派生
+  //   （`mounted:true` 或**策略性关闭** `reason:'disabled'` 都算「已交代」；只有 `no-logger` 等真装配缺陷才算缺）。
+  return auditMount;
 };
 const createEngineStore = ({ ctx, config, root }) => {
   // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
@@ -1134,7 +1147,7 @@ export const apply = (ctx, config = {}) => {
     err.cause = cause;
     throw err;
   }
-  mountStartupPrelude({ ctx, config, root });
+  const auditMount = mountStartupPrelude({ ctx, config, root });
   const { store, topicSink } = createEngineStore({ ctx, config, root });
 
   warnGateEscapeValve(ctx);
@@ -1178,27 +1191,51 @@ export const apply = (ctx, config = {}) => {
   const remountAutoSettle = createAutoSettleRemounter({ ctx, store, dispatchIndex, root, rt, installLaneWake });
   mountHotConfigRuntime({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle });
 
-  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面；批 G1 gapfix · G02 分流）────────────
-  //  顺序纪律：放在装配**结束前**（所有宿主面已装配完 ⇒ 探测到的是真实装态，不是计划态）。
-  //  · 回显：`rt.capabilities`（host / internal / missing 三段）——「缺能力可见」的**主回显面**；
-  //  · **日志分流**（三分级口径，唯一判据）：`missing` 仍是**并集**（回显/巡检要全集），但**打日志时分两路**：
-  //      路① `host` 必需键缺失 = **真缺失** ⇒ `warn` + `capability-missing:`（语义不变）；
-  //      路② `internal` 未启用（显式关或默认关）= **策略停用** ⇒ `info` + `capability-disabled:`
-  //          （把用户裁定的「可选能力默认关」降格为 warn 属误报，是上一批的告警疲劳源）；
-  //  · 必需缺失 fail-closed：`assertRequired` 直接抛（**不吞**）——宿主缺 `tools`/`webServer`/`subagents`
-  //    时插件本不该被挂载，真挂上了就必须立刻炸，禁「装上了但一半能力是空气」。
-  rt.capabilities = capabilityReport({ ...rt, ctx, config });
-  // 路①：host 必需键缺失 ⇒ warn（真缺失；前缀不变 ⇒ 既有消费方与用例零破坏）
-  const hostMissing = rt.capabilities.host.filter((h) => !h.installed).map((h) => h.key);
-  if (hostMissing.length > 0) {
-    ctx.logger?.warn?.('[dsh-punky-swarm] capability-missing: ' + hostMissing.join(','));
+  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面；**W4 批 `w4-inject-teardown` 重划语义**）──
+  //  顺序纪律：放在装配**结束前**（所有面已装配完 ⇒ 探测到的是真实装态，不是计划态）。
+  //  · 回显：`rt.capabilities` 四段 —— `host`（功能面，判端口 `available`）/ `kernel`（内核端口在位）/
+  //    `internal`（策略开关）/ `missing`+`degraded`（并集与降级事实）；
+  //  · **日志分流**（三分级口径，唯一判据）：
+  //      路① **功能面**不可用 = 宿主能力差异（**正常形态**）⇒ `warn` + `capability-degraded:`（**不抛**）；
+  //      路② `internal` 未启用（显式关或默认关）= **策略停用** ⇒ `info` + `capability-disabled:`；
+  //  · **fail-closed 面已改到内核端口**：`assertRequired` 只对 `runtime`/`audit` 缺位拒（装配缺陷），
+  //    宿主功能面不可用**不再**导致加载失败 —— 这正是「引擎不因宿主能力差异改变运行模式」的落点。
+  //    ⇒ 与旧注释的差别：旧「宿主缺三键就必须立刻炸」**已作废**（那正是 W4 要取消的硬依赖）。
+  // 功能面端口实例：**建一次**，供探活与内核在位判定共用（`createAgentPort` 恒返回对象 ⇒ 其 `available`
+  //   才承载「宿主有没有成员执行面」，对象在场与否只反映装配是否发生）。
+  const agentPortForCapability = createAgentPort(ctx);
+  // 内核端口在位事实（**不是**宿主能力）：
+  //   · `runtime` = 成员执行端口对象是否装上；
+  //   · `audit`   = **内核审计出口**是否存在 —— 语义锚点 = `KernelPorts.AuditSink`（批次事件日志），
+  //     由 `createEngineStore` 产出，**恒存在**。
+  //     ⚠ **不要**把 auditlog exporter 的挂载结果当 kernel.audit：那是**可选内部能力**
+  //     （`capabilities.auditlog`，已由 `internal` 段与 `capability-disabled:` 表达），
+  //     把它算作内核必需位会让「显式关闭审计日志 / 无真实 logger 的夹具」被误判成装配缺陷。
+  const kernelFacts = { runtime: agentPortForCapability != null, audit: store != null };
+  void auditMount; // 保留 `mountStartupPrelude` 的返回（诊断可用），但不参与内核判定（见上）
+  const probePorts = {
+    toolSurface: createToolsPort(ctx),
+    httpSurface: createHttpPort(ctx),
+    agentRuntime: agentPortForCapability,
+  };
+  rt.capabilities = capabilityReport({
+    ...rt,
+    ctx,
+    config,
+    ports: probePorts,
+    kernel: kernelFacts,
+  });
+  // 路①：功能面不可用 ⇒ warn（**降级但不静默**；前缀与旧 `capability-missing:` 分开，避免与内核缺位混读）
+  const faceDegraded = rt.capabilities.degraded ?? [];
+  if (faceDegraded.length > 0) {
+    ctx.logger?.warn?.('[dsh-punky-swarm] capability-degraded: ' + faceDegraded.join(','));
   }
   // 路②：internal 未启用（含默认关的 4 键）⇒ info（策略停用，不是故障）
   const disabledCapabilities = rt.capabilities.internal.filter((c) => !c.enabled).map((c) => c.key);
   if (disabledCapabilities.length > 0) {
     ctx.logger?.info?.('[dsh-punky-swarm] capability-disabled: ' + disabledCapabilities.join(','));
   }
-  // 红线（C-2）：`assertRequired` 拒绝语义一字不动 —— 它只读 `report.host`，是 fail-closed 的全部意义。
+  // 红线（C-2）：`assertRequired` 只读 `report.kernel`，是 fail-closed 的**全部**意义（不再读宿主能力）。
   assertRequired(rt.capabilities);
 
   return () => releaseAll(rt);

@@ -40,6 +40,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 /** 端口层拒态前缀（**普通 `Error`**；非 `GATE_`、无 `err.code`）。 */
 export const HOST_PORT_INVALID = 'host-port-invalid:';
 
+/**
+ * 取一个宿主服务（**W4 批 `w4-inject-teardown` 新增**：端口工厂不得裸读宿主服务名）。
+ *
+ * 为什么必须有它：`inject` 在 cordis 里是**取属性的前提**。W4 把引擎行的宿主依赖清空后，
+ *   引擎侧（以及**引擎直接构造的**端口实例）在**未声明 inject 的 ctx** 上裸读 `ctx.tools` 会
+ *   **直接抛** `cannot get property "tools" without inject`（活体实证见 `exec/inject-teardown.md`
+ *   的宿主级 RED→GREEN 读数：`apply()` 在 `tier-gate.js:159` 处炸掉整条装配）。
+ *
+ * 取法（顺序不可反，与 `lib/capabilities.js` 既有纪律同源）：
+ *   ① **先裸读**：普通对象夹具（测试/最小 host profile）把服务挂在属性上，裸读即得；
+ *   ② 抛错/取不到 ⇒ 回落 `ctx.get(name)`：cordis 官方「**不声明也能读**」通道（未提供返回 `undefined`、不抛）。
+ * ⇒ 真实宿主行为不变（服务在 ⇒ ① 命中），未声明 inject 时**不再炸**而是**降级**（`available:false`），
+ *   这正是 J4'-c「可选服务经 `ctx.get` 探测」的落点。
+ */
+export function serviceOf(ctx, name) {
+  try {
+    const direct = ctx?.[name];
+    if (direct !== undefined && direct !== null) return direct;
+  } catch { /* 未在 inject 声明 ⇒ cordis 取属性即抛：走 ② */ }
+  try {
+    const viaGet = typeof ctx?.get === 'function' ? ctx.get(name) : null;
+    return viaGet ?? null;
+  } catch { return null; }
+}
+
 /** 查询失败拒态前缀（**普通 Error**；区别于「不存在」）。 */
 export const HOST_PORT_QUERY_FAILED = 'host-port-query-failed:';
 
@@ -54,7 +79,7 @@ const isAbortSignalLike = (signal) => Boolean(signal)
  * @returns {{available:boolean, hasTool:Function, getTool:Function, registerTool:Function, installGuard:Function, invokeTool:Function}}
  */
 export function createToolsPort(ctx) {
-  const tools = ctx?.tools ?? null;
+  const tools = serviceOf(ctx, 'tools');
   const available = Boolean(tools);
 
   return {
@@ -164,7 +189,7 @@ export function createToolsPort(ctx) {
  * @returns {{available:boolean, mountRoute:Function}}
  */
 export function createHttpPort(ctx) {
-  const web = ctx?.webServer ?? null;
+  const web = serviceOf(ctx, 'webServer');
   const available = Boolean(web) && typeof web.register === 'function';
 
   return {
