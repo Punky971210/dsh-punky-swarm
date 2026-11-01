@@ -23,7 +23,7 @@ import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, n
 import { resolveAssembly } from '../assembly.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertMemberActionTierC, readLiveConfig, clearPendingBatch } from './tier-gate.js';
-import { managerRosterOf } from './host-surface.js';
+import { managerRosterOf, managerSeatFaceOf } from './host-surface.js';
 // 事件字面量改引 EVT 常量单点（gate.role_* 发端）
 import * as EVT from '../state/event-types.js';
 
@@ -165,6 +165,14 @@ export function buildWavePlanTools(cx) {
         //   基线态）或调用抛错（非 Team 成员）⇒ **只回显 + 异常态 warn**，不把环境事实写成本批事实。
         const managerRoster = managerRosterOf(ctx, exec);
         const managerPlan = asm.decl ? (asm.decl.managerPlan ?? null) : null;
+        // R-1 观察面（E-1 裁决）：`seatReason` / `mismatch` **只进回显，不进下面这个发射点判据**。
+        //   为什么（结构性，不是口味）：`store/batch.js:64` `if (fs.existsSync(file)) throw 'batch already exists'`
+        //   ⇒ 同一 `batchId` 不可重建 ⇒ 本函数每次 execute 都是**全新落盘** ⇒ 此刻 `managerSeat` **必不存在**。
+        //   ⇒ ①「表空」是建批期的**定义性状态**（实测 raise 批 14/14 表空），落成 `gate.*` 事件会让审计
+        //      无法区分常态与异常（与 `service-unavailable` 同理：只回显、不落事件）；
+        //     ② `mismatch` 要「表非空」才对得出差集 ⇒ 在此**结构性不可达**，接进判据即为死代码。
+        //   ⚠ 因此下面 `if` 的判据**保持原样**（roster 口径），本 lane 不改事件面。
+        const managerSeatFace = managerSeatFaceOf(batch, managerRoster);
         if (managerPlan === 'raise' && managerRoster.ok && !managerRoster.inRoster) {
           store.appendEvent(sessionId, plan.batchId, EVT.EVT_GATE_MANAGER_ROSTER_GAP, {
             managerPlan, rosterName: managerRoster.rosterName, memberCount: managerRoster.memberCount ?? 0,
@@ -179,7 +187,10 @@ export function buildWavePlanTools(cx) {
         // 回显键 `consumeDepsAsymmetry`（**闭集 output.schema 已登记 properties**，未登记键会被剥掉）：
         //   逐条 `{ lane, from, artifact }`（R-4 契约形态，不带内部分域字段）；仅非空时写键
         //   （与 `smoke` / `assembly` 既有条件键同风格：未命中的批零键、读端零感知）。
-        const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [], ...(smoke ? { smoke: true } : {}), ...(managerPlan ? { managerPlan, managerRoster } : {}), ...(observedAsymmetry.length ? { consumeDepsAsymmetry: observedAsymmetry.map((r) => ({ lane: r.lane, from: r.from, artifact: r.artifact })) } : {}) };
+        // R-1 回显（W-1 裁决）：`managerRoster` 在**本端**的 `source` **保持 `'roster'`**（= roster **读取面**标签，
+        //   承载 `service-unavailable` / `not-a-team-member:` 两档降级可辨性；本端无嵌套副本可退，覆盖即抹掉降级标签）。
+        //   两键 `seatReason` / `mismatch` 以**观察面**身份并入（`output.schema` 对 managerRoster 为 additionalProperties:true）。
+        const out = { batchId: plan.batchId, sessionId, wavePlan: plan.wavePlan, concurrency: plan.concurrency, lanes: batch.lanes, warnings: plan.warnings ?? [], ...(smoke ? { smoke: true } : {}), ...(managerPlan ? { managerPlan, managerRoster: { ...managerRoster, ...managerSeatFace } } : {}), ...(observedAsymmetry.length ? { consumeDepsAsymmetry: observedAsymmetry.map((r) => ({ lane: r.lane, from: r.from, artifact: r.artifact })) } : {}) };
         if (asm.decl) out.assembly = asm.decl; // 归一化装配声明视图（closed output.schema 已扩 properties；未声明不写键）
         return out;
       },

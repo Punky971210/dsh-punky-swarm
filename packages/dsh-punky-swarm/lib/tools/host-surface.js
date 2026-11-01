@@ -142,6 +142,38 @@ export function managerViewOf(ctx, exec, batch) {
   return { roster, legacy, managerPlan: batch?.assembly?.managerPlan ?? null };
 }
 
+// ── R-1 · 在册**观察面**（R1-4/R1-5 回显）：`seatReason` / `mismatch` ──────────────────────────
+// 落点为什么在本文件（**单点**，禁第二套判定）：差集需要「表读数」+「roster 读数」两侧，而只有本文件的读端
+//   同时握有（`seatOf` 的批次表 + 六键里的 `member` 命中行）⇒ 若在 `query-tools.js` / `wave-plan-tools.js`
+//   各写一份，就是**两套判定**（本仓红线），且那两个文件**拿不到算差集所需的输入**（六键不含 roster 名单）。
+//
+// 纪律（E-1 裁决 · 2026-10-31）——**这两键是观察级回显，不参与任何门禁判定、不落事件**：
+//   · **建批期表结构性恒空**：`store/batch.js:64` 的 `if (fs.existsSync(file)) throw 'batch already exists'`
+//     ⇒ 同一 `batchId` **不可重建** ⇒ `wave_plan` 每次 `execute` 都是全新落盘 ⇒ 此刻 `managerSeat` 必不存在。
+//     ⇒「表空」是建批期的**定义性状态**（实测 546 个真实批中 raise 批 14/14 表空 = 100%），
+//       把它落成 `gate.*` 事件会让审计**无法区分常态与异常**（与 `service-unavailable` 同理：只回显、不落事件）。
+//   · **`mismatch` 要求「表非空」**才对得出差集 ⇒ 在建批期**结构性不可达** ⇒ 它只出现在回显面，
+//     **禁止**接进 `wave-plan-tools.js` 的 `if (managerPlan === 'raise' …)` 发射点判据（否则即死代码）。
+//
+// `mismatch` 三态（口径与 `plan/r1-recon.md` §冲突标注一致）：
+//   · `null`               = roster **不可读**（`service-unavailable` / `not-a-team-member`）⇒ **无从对账**，
+//                            不伪造差集（禁把环境事实写成本批事实）；
+//   · `{tableOnly:[], rosterOnly:[]}` = 两侧一致（含「两侧都说没有」= 常态）；
+//   · 任一侧非空           = **真信号**（表与 roster 各执一词 = 真实的登记漂移）。
+/** `mismatch` / `seatReason` 的**唯一计算点**（纯函数：只读既有输出，不做任何判定/写入）。 */
+export function managerSeatFaceOf(batch, rosterView) {
+  const seat = seatOf(batch ?? null);
+  // 观察级诊断：表空 = 未显式登记（NQ-1 丙 的常态，**不是缺口**）；表在册 ⇒ 无 reason。
+  const seatReason = seat ? null : 'seat-not-registered';
+  // roster 不可读 ⇒ 对账面**无事实**：返回 null（不静默降级成「一致」，也不伪造差集）。
+  if (!rosterView || !rosterView.ok) return { seatReason, mismatch: null };
+  // ⚠ 这里读的是六键**既有输出**（`member` = 具名 `manager` 命中行），不是第二套成员匹配实现。
+  const rosterHasManager = Boolean(rosterView.member);
+  const tableOnly = seat && !rosterHasManager ? [MANAGER_ROSTER_NAME] : [];
+  const rosterOnly = !seat && rosterHasManager ? [MANAGER_ROSTER_NAME] : [];
+  return { seatReason, mismatch: { tableOnly, rosterOnly } };
+}
+
 // ── R-1（P4 授权修复批 `onto-p4-authz-r2-20260925`）：交接**调用方身份**采集端（只采集，不裁决） ──
 // 分工（禁双套判据）：**裁决**在唯一写路径 `lib/state/store.js#recordHandoff`（与写入同点的 fail-closed）；
 //   本函数只把可解析的身份面**如实采集**成描述子交下去——不猜、不静默、不自行放行。

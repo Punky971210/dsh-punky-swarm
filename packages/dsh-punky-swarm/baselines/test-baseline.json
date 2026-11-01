@@ -1272,6 +1272,14 @@
       "tests": 6,
       "todos": 0
     },
+    "test/manager-seat-face.test.js": {
+      "asserts": 23,
+      "blankLines": 19,
+      "lines": 155,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/manager-seat-inroster.test.js": {
       "asserts": 20,
       "blankLines": 12,
@@ -2017,7 +2025,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-01T11:59:01Z",
+  "generatedAt": "2026-11-01T18:41:12Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2031,12 +2039,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 11918,
-    "blankLines": 6601,
-    "files": 252,
-    "lines": 69944,
+    "asserts": 11941,
+    "blankLines": 6620,
+    "files": 253,
+    "lines": 70099,
     "tautologies": 0,
-    "tests": 2465,
+    "tests": 2471,
     "todos": 4
   }
 }

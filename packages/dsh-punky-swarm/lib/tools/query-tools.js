@@ -27,7 +27,7 @@ import { handoffGateStateOf } from '../wave-plan.js';
 //   原写法依赖心跳模块的再导出 —— 任何人把 lane-heartbeat 当「心跳专用」清掉那几行转发，
 //   本文件两个名字就变 `undefined`（`checkJs:false` 下无编译期保护），运行时才炸。
 import { laneStateOf, isDanglingLane } from '../state/lane-state.js';
-import { managerViewOf, MERGE_STATE_SOURCE, MEMBER_STATES_LEGACY } from './host-surface.js';
+import { managerViewOf, managerSeatFaceOf, MERGE_STATE_SOURCE, MEMBER_STATES_LEGACY } from './host-surface.js';
 import * as EVT from '../state/event-types.js';
 // 【本批 `role-guide-extract-20261008` · D-1 / R-2】`role_guide` 取的正是**引擎侧同一份**渲染单点
 //   （解析 `resolveRoleRef` ＋ 渲染 `renderRoleGuide`，二者均在 `lib/engine/dispatch.js`）——本文件
@@ -83,11 +83,16 @@ export function buildBatchStatusTools(cx) {
         // gate-lite Q-G1 读端：`smoke` 判定与门禁读端（`lib/state/gates.ts#smokeOf`）**同源** —— 同一事件、
         //   同一判据（`batch.smoke`）；此处只读投影，零写入（与 derivedOf 同为批次级派生视图）。
         const smokeOf = (b) => (b?.events ?? []).some((e) => e && e.type === EVT.EVT_BATCH_SMOKE);
-        // ── P2-B 回显标注（2026-09-17；**只标注不改行为**）─────────────────────────────────────
-        // ① 成员态来源标注：`source: engine|roster` 的**二值可辨**——引擎八态为 legacy 投影（`stateSource:'engine'`
-        //    + `memberStatesLegacy:true`），官方 roster 5 态为真源（`managerRoster.source:'roster'`）。
-        //    消费者 = 本工具的**渲染面**（`state=engine(legacy)`），不再「写了不生效」。
-        // ② P1/P2 交接门**策略态**（`task-27`）：经**唯一解析点** `handoffGateStateOf(readLiveConfig(deps))` 取值
+        // ── 回显标注（P2-B 2026-09-17 引入 · R-1 2026-10-31 改义；**只标注不改行为**）──────────────
+        // ① 成员态来源标注（NQ-2 甲：成员状态真源**不动**）：`stateSource:'engine'`（引擎八态 = legacy 投影）
+        //    + `memberStatesLegacy:true`（官方 roster 5 态仍为成员态真源）。消费者 = 渲染面 `stateTxt`。
+        //    ⚠ 该标注**不再**由 `managerRoster.source` 承载（见 ②）：R-1 前它被借用，键义已改，别按旧义读。
+        // ② **在册**真源标注（R-1 / AQ-1 乙）：`managerRoster.source`（**顶层**）恒 `'engine-registry'`
+        //    —— 在册真源 = 引擎自建表 `batch.managerSeat`（五键，`lib/state/store/batch.js`），宿主 roster 只对账。
+        //    ⚠ 与**嵌套**的 `managerRoster.roster.source` 是**两个不同的键**（C-5）：后者 = roster **读取面**标签，
+        //    恒 `'roster'`，与 `service-unavailable` / `not-a-team-member:` 两档降级配对 ⇒ **禁改**
+        //    （改了会把「服务不可用」与「非成员」压成同一形态，降级不可辨）。
+        // ③ P1/P2 交接门**策略态**（`task-27`）：经**唯一解析点** `handoffGateStateOf(readLiveConfig(deps))` 取值
         //    ⇒ 真源 = runtime.json `gates.handoff.{entry,settle}`（env 兜底、缺省关）；`source` 如实回显
         //    （`runtime|env|default`）；渲染面同样显示（缺省关是策略、**不得隐形**）。
         const stateAnnotation = { stateSource: MERGE_STATE_SOURCE.engine, memberStatesLegacy: MEMBER_STATES_LEGACY };
@@ -118,7 +123,12 @@ export function buildBatchStatusTools(cx) {
         //   资产面退役 ⇒ 无指纹可回显（`store.createBatch` 亦同批停止写 `teamAsset` / `teamsRoot` 两键）。
         //   ✅ **同源约束提示已闭合**（wave 4 `exec-delete-assets`）：`lib/api.js` 的 panel 读端同批删净，
         //   两读端口径一致；原缺口登记见 `exec/consumers.md` §6.1 R-2。
-        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: b.wavePlan, ...(b.manager ? { manager: b.manager } : {}), managerRoster: { ...managerViewOf(ctx, exec, b), source: MERGE_STATE_SOURCE.roster }, ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b) };
+        // R-1 观察面（`seatReason` / `mismatch`）：计算**单点** = `host-surface.js#managerSeatFaceOf`
+        //   （差集需要「表」+「roster」两侧读数；在两读端各算一遍 = 第二套判定，禁）。
+        //   两键为**观察级**：不参与任何门禁判定、不落事件（事件分级按 E-1 裁决留在原判据，见 wave-plan-tools 同注）。
+        const managerView = managerViewOf(ctx, exec, b);
+        const managerSeatFace = managerSeatFaceOf(b, managerView.roster);
+        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: b.wavePlan, ...(b.manager ? { manager: b.manager } : {}), managerRoster: { ...managerView, source: 'engine-registry', ...managerSeatFace }, ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b) };
       },
     }),
   ];
