@@ -715,7 +715,7 @@
     "test/g2-bus-falsify.test.js": {
       "asserts": 54,
       "blankLines": 35,
-      "lines": 295,
+      "lines": 302,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -2001,7 +2001,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-10-31T15:35:28Z",
+  "generatedAt": "2026-11-01T02:48:55Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2018,7 +2018,7 @@
     "asserts": 11863,
     "blankLines": 6562,
     "files": 250,
-    "lines": 69614,
+    "lines": 69621,
     "tautologies": 0,
     "tests": 2452,
     "todos": 4

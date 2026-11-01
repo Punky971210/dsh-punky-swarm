@@ -41,7 +41,7 @@ import { __resetLaneHandles, pendingHandles } from '../lib/bridge/lane-handle.js
 //   两者是**宿主形态值**的出口（J6-e / AC-5″ 要清除的对象），provider 拆分中整簇删除 ⇒
 //   本文件不再 import 它们，T-1.6 改由**端口功能面读数**（`createAgentPort`）作答。
 import { buildStartRequest } from '../lib/engine/dispatch.js';
-import { createAgentPort } from '../lib/host-ports/agent.js';
+import { createAgentPort } from '../lib/provider-dsh/agent.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 
 function mkCtx(runtime) {

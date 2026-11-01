@@ -133,6 +133,32 @@
     - id: dsh-punky-swarm-agentteams-decl
       name: 'dsh-punky-swarm/service-probe'
       inject: [agentTeams]
+    # ------------------------------------------------------------
+    # DSH provider 行（批 `punky-adapter-split-20261031` · lane `w2-provider-skeleton`）
+    #
+    # 为什么单独成行：用户裁决 R-2 定「宿主差异只许在 provider 包内」。宿主三件服务名
+    #   （`tools` / `webServer` / `subagents`）从此**只在本行**声明；引擎行与适配层内不得再出现。
+    #
+    # ⚠ `name` **必须是 exports 子路径**（`dsh-punky-swarm/provider-dsh`），**不是文件路径**：
+    #   loader 按 exports 解析；写成 `./lib/provider-dsh/index.js` 会卡在解析错误上
+    #   （`criteria-v4.md` 的 **M-8** 专门纠正过这一点）。解析目标 =
+    #   `package.json` 的 `exports['./provider-dsh']` → `./lib/provider-dsh/index.js`。
+    #
+    # ⚠ 依赖声明的**唯一落点在本行**：`lib/provider-dsh/index.js` 刻意**不导出**同名数组
+    #   （同一条声明写在两处 = 两个真源）。同形先例 = 上方 `service-probe` 行。
+    #
+    # ⚠ 与引擎行的依赖声明并存是**过渡态**（不是双挂载：该声明只是「要求服务在场」，
+    #   不注册任何服务）：引擎 `lib/index.js` 仍导出三键声明，因为它此刻仍在直接读这三个服务。
+    #   **清空引擎侧的声明属 W4**，且必须在 `lib/host-ports/**` 搬迁完成之后
+    #   （提前清空 ⇒ 引擎取值撞 cordis `cannot get property "x"` 的未声明错）。
+    #
+    # ⚠ 与上头「引擎主体行不得自身声明依赖」的纪律**不冲突**：那条是为避免**引擎**在缺面时
+    #   整体 pending（灾难性）。本行是 provider，**就该**在缺宿主服务时 pending —— 且引擎核心
+    #   功能不受影响（per-entry fail-soft）。这正是「功能不可用由 provider 在加载时报告」的落点。
+    # ------------------------------------------------------------
+    - id: dsh-punky-swarm-provider-dsh
+      name: 'dsh-punky-swarm/provider-dsh'
+      inject: [tools, webServer, subagents]
 # ============================================================
 # ============================================================
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）

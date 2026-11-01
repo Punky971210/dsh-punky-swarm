@@ -23,7 +23,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   lane_checkpoint_status 等非执行型）豁免任务难度门禁——理由：防死锁（评估/查询若被拦
 //   则「先评估后执行」护栏自锁）；豁免仅限难度门禁，其余 guard 语义（执行计数等）不受影响。
 import { createCoreTools, installDifficultyGuard } from './core.js';
-import { createToolsPort } from '../host-ports/index.js';
+import { createToolsPort } from '../provider-dsh/tools-http.js';
 import { installWriteProvenanceGuard } from './write-provenance-guard.js';
 import { installMcpDataPlane } from '../mcp/data-plane-server.js';
 import { createLaneTools } from './lane-tools.js';

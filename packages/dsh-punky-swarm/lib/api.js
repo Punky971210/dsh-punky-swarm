@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks / stream（全部按 session 隔离）
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { createHttpPort } from './host-ports/index.js';
+import { createHttpPort } from './provider-dsh/tools-http.js';
 import { join } from 'node:path';
 import * as mailbox from './comms/mailbox.js';
 import { createStreamHub } from './panel/stream.js';

@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   档位门 G1 / pendingBatch 清理 / lane 锁路径 / 执行型工具名单 / 派发面 owner 取值。
 //   导出面经 `lib/tools/core.js` re-export 逐字保持（既有消费方零感知）。
 import { join } from 'node:path';
-import { createToolsPort } from '../host-ports/index.js';
+import { createToolsPort } from '../provider-dsh/tools-http.js';
 import { isReadOnlyShellCall, SHELL_TOOLS } from './readonly.js';
 // 批次终态判定**单点**（`lib/schema.js#isBatchTerminal`）：本批门禁 5 的「活跃批」判据复用该单点
 //   （与 `lib/state/store/governance.js#hasActiveBatch` **同源**）——禁另造第二套活跃判定。

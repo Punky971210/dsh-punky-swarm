@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 // 【P0-3 门禁解冻】原还 import `subagentRuntimeOf`（引擎侧形态探针，宿主形态值出口）。
 //   provider 拆分中探针簇删除 ⇒ 本文件改由**端口功能面读数**作答（`createAgentPort`）。
 import { buildStartRequest } from '../lib/engine/dispatch.js';
-import { createAgentPort } from '../lib/host-ports/agent.js';
+import { createAgentPort } from '../lib/provider-dsh/agent.js';
 import * as plugin from '../lib/index.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

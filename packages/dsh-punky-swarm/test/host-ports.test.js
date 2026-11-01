@@ -27,8 +27,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createToolsPort, createHttpPort, HOST_PORT_INVALID,
-} from '../lib/host-ports/index.js';
-import { createAgentPort, HOST_PORT_UNSUPPORTED } from '../lib/host-ports/agent.js';
+} from '../lib/provider-dsh/tools-http.js';
+import { createAgentPort, HOST_PORT_UNSUPPORTED } from '../lib/provider-dsh/agent.js';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 

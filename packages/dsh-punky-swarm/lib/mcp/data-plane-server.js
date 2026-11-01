@@ -30,7 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   ⇒ 难度门禁与「写族来源守卫」**必然生效**；若在此直调某个工具对象，两条防线都会被绕开。
 //   故本文件只有**一处**工具派发调用（见下方 handler 内的唯一调用行），且它必须走宿主运行时。
 import { sendJson } from '../json-response.js';
-import { createToolsPort, createHttpPort } from '../host-ports/index.js';
+import { createToolsPort, createHttpPort } from '../provider-dsh/tools-http.js';
 import { SUITE_TOOLS } from '../engine/suite.js';
 // M1（批 `punky-qa-fix-m1m2-2026-10-31`）：宿主工具口径**单点**下沉到 `lib/governance/host-tools.js`
 //   —— 本地不再手写名单（第二份名单 = 漂移源）。本文件只消费：
@@ -277,7 +277,7 @@ export function installMcpDataPlane(ctx, deps = {}) {
   //   ⚠ 可观测性不靠日志：返回的 disposer 上带 `installed` 布尔（**fail-closed 判据在返回值**，
   //     与 `installWriteProvenanceGuard` 的 true/false 同族）。
   if (typeof ctx?.webServer?.register !== 'function') {
-    logger?.debug?.('[mcp] data plane not mounted：webServer 端口 mountRoute（`lib/host-ports/`） 不可用（合法部署形态）');
+    logger?.debug?.('[mcp] data plane not mounted：webServer 端口 mountRoute（`lib/provider-dsh/`） 不可用（合法部署形态）');
     const notMounted = () => {};
     notMounted.installed = false;
     return notMounted;

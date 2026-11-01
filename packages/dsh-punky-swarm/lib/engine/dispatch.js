@@ -60,7 +60,7 @@ import { issueLaneHandle, consumeLaneHandle, firstLineOf } from '../bridge/lane-
 // 【P2 · arch-context】架构上下文注入件（独立成件；逻辑不进本文件 —— 本文件已逾千行）。
 import { renderArchContext } from './arch-context.js';
 // 【宿主端口面 · e3-agentport】成员执行面收进端口：引擎不再自己 `typeof rt.startActivation === 'function'` 判形态。
-import { createAgentPort } from '../host-ports/agent.js';
+import { createAgentPort } from '../provider-dsh/agent.js';
 // 派发登记事件常量（原在 `lib/tools/core.js` 侧引用；派发核心抽出后由本模块写，故此处直引）
 // 【2026-09-18 · Q-B 取消并发闸】原同址直引的 `EVT_GATE_CONCURRENCY_BLOCKED` 已从本模块写端移除（唯一写点
 //   随闸删除）；常量本体仍在 `lib/state/event-types.js` **冻结保留**（历史批磁盘事件面读端逐字不变）。
@@ -1036,7 +1036,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   ⇒ 效果 = **零状态变更 / 零句柄发放 / 零 `member.dispatch` 事件**（工具调用直接失败，lane 仍 `pending`）。
   //   能力位判定**改问端口**（引擎不再自己 `probe.form`）：`createAgentPort` 内部判形态并**显式声明**
   //   `narrowVia`（工具面/人格经哪条路生效）与 `depthVia`（深度经哪条路生效）。
-  //   ⚠ **表述订正（原三处有两处不准，取证见 `lib/host-ports/agent.js` 头）**：
+  //   ⚠ **表述订正（原三处有两处不准，取证见 `lib/provider-dsh/agent.js` 头）**：
   //     · `toolFilter`：`startActivation` 的 `request`（= `Omit<SubagentStartRequest,'label'|'signal'>`）**确无此字段** ⇒ 收窄只能经 `agentPreset`（原表述 ✅ 对）；
   //     · `persona`：宿主**无 `persona` 字段**，人格只能经 `agentPreset` 组 composition（原写「不承载 request.persona」⚠ 表述不准）；
   //     · `maxDepth`：**`request.maxDepth` 原生可用**（`SubagentStartRequest.maxDepth?: number`，受 `capabilities.depthLimit` 约束）⇒ 原「不承载 maxDepth」**是错的**。
@@ -1186,7 +1186,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
         });
         // 【S-3·乙（批 `punky-qa2-fix-2026-10-31` 回补）】分支按**形态**选入口，不按「能否收窄」：
         //   `canNarrow()` 回答「**能否**收窄」（能力位），分支要回答「**用哪个入口**」。把两件事合成
-        //   一个判据会让 `start` 形态（`canNarrow` 恒 true，见 `lib/host-ports/agent.js:88`）误入激活
+        //   一个判据会让 `start` 形态（`canNarrow` 恒 true，见 `lib/provider-dsh/agent.js:88`）误入激活
         //   分支，而该分支 `spawn(...)` **不传 `toolFace`** ⇒ 按次收窄被整键丢掉（B2 静默失效）。
         //   ⇒ 入口由 `form` 决定；`canNarrow({})` 仅保留在 `:1050` 作能力位门；`narrowVia` 仍仅诊断字段。
         if (agentPort.form === 'activation') {

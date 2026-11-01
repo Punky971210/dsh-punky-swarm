@@ -168,18 +168,25 @@ test('F1 可选端口不得被当必需直用：缺可选端口时 of() 返回�
   const bus = createBus({ ports: requiredPortsFixture() }); // 只给两必需端口
   const tools = bus.of('tools'); // 直接取件（不经过 route）
   assert.ok(tools != null, 'F-1：可选端口缺失时 of() **不得**返回 null（否则后续裸解引用即 TypeError）');
-  assert.equal(typeof tools.list, 'function', 'F-1：取到的应是**形状可调用**的 null 适配器，不是占位 undefined');
-  assert.deepEqual(tools.list(), [], 'F-1：null 工具的 list() 返回空集合（内建路径语义）');
+  // 【W2 批 · `punky-adapter-split-20261031` lane `w2-null-adapters` 授权改动】
+  //   原断言钉 `tools.list` —— 但 `list` 是**旧 null 适配器的成员**，契约 v2 的 `ToolSurface` 无此名
+  //   （契约 7 成员：available/hasTool/probeTool/getTool/registerTool/installGuard/invokeTool）。
+  //   本用例的判别对象是「取到的是**形状可调用**的 null 适配器、不是占位 undefined」，
+  //   与具体动词名无关 ⇒ 换成契约成员 `probeTool`（查询类，语义最贴「空实现可调用」）。
+  //   **判别力未降**：仍是「函数存在 + 调用返回可判读数」两段断言，只是钉的名字从非契约改契约。
+  assert.equal(typeof tools.probeTool, 'function', 'F-1：取到的应是**形状可调用**的 null 适配器（契约成员 probeTool），不是占位 undefined');
+  assert.deepEqual(tools.probeTool('x'), { state: 'absent', reason: 'port-unavailable' },
+    'F-1：null 工具的查询返回「不存在」态（absent ≠ errored，内建路径语义）');
 
   // 反向开关（**迁移后形态**：环境闩，不再是对外 `harden` 参数）：关掉取件加固 ⇒ 裸解引用 ⇒ 判红读数
   //   为此显式把 `tools` 槽位声明为 `null`（缺省形态之一），使裸取件拿到的正是 `null`
-  //   —— 判红读数与迁移前**等价**：`TypeError: Cannot read properties of null (reading 'list')`。
+  //   —— 判红读数与迁移前**等价**：`TypeError: Cannot read properties of null (reading 'probeTool')`。
   const broken = createBusWithHardenOff('f1', { ports: { ...requiredPortsFixture(), tools: null } });
   assert.equal(broken.of('tools'), null, '关加固后 of() 返回裸 null（这是 F-1 的缺陷形态）');
   assert.throws(
-    () => broken.of('tools').list(),
-    (err) => err instanceof TypeError && /reading 'list'/.test(String(err.message)),
-    'F-1 判红读数 = TypeError: Cannot read properties of null (reading \'list\')',
+    () => broken.of('tools').probeTool('x'),
+    (err) => err instanceof TypeError && /reading 'probeTool'/.test(String(err.message)),
+    'F-1 判红读数 = TypeError: Cannot read properties of null (reading \'probeTool\')',
   );
 });
 

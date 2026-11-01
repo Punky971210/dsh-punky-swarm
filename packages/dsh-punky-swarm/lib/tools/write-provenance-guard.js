@@ -36,7 +36,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   本守卫只回答「这次写有没有来源证据」；难度/权限/模式门归 `tier-gate.js` 的 `installDifficultyGuard`。
 //   两者在 `register.js` **并列注册**；本文件**不碰** `tier-gate.js`（合并会让两个判据互相掩盖）。
 import { SUITE_TOOLS } from '../engine/suite.js';
-import { createToolsPort } from '../host-ports/index.js';
+import { createToolsPort } from '../provider-dsh/tools-http.js';
 
 /** 宿主面 5 件：**不在** 19 写族内 ⇒ 自然豁免（本仓无其 schema，无法要求溯源）。 */
 export const HOST_EXEMPT = Object.freeze([
@@ -89,7 +89,7 @@ export function writeProvenanceDecision(execution) {
 /**
  * 注册守卫。与 `installDifficultyGuard` **并列**（不改它、不并入它）。
  *
- * @param {object} ctx 插件上下文（需 `工具面 guard（经 `lib/host-ports/` 端口安装）` 可调用；不可用时**静默不注册**并返回 false）
+ * @param {object} ctx 插件上下文（需 `工具面 guard（经 `lib/provider-dsh/` 端口安装）` 可调用；不可用时**静默不注册**并返回 false）
  * @param {object} [deps] 预留（本守卫不需要 store/config；保持与同族签名一致）
  * @returns {boolean} 本次是否真的注册了（幂等 ⇒ 重复调用返回 false）
  */
