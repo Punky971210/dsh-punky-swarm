@@ -30,6 +30,10 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { ownerSessionIdOfExec, dispatchIndexEntryOf } from '../engine/dispatch.js'; // 【本批 W-2】写侧取值/索引值构造单点（禁在本文件自写取值式或值形状）
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
 import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from './lane-handle.js'; // 派发句柄（C 档唯一凭证）
+// 【W5-2 · 批 `punky-adapter-split-20261031` · lane `w5-roster-port`】roster 反查收进 provider：
+//   引擎**不再**持有宿主的 roster 服务句柄（原 `AGENT_TEAMS_SERVICE` + `agentTeamsServiceOf`），
+//   改向适配层要 `sessionOf(name)` 这一具名功能（契约 `RosterSource.sessionOf`，三档语义可辨）。
+import { createRosterPort } from '../provider-dsh/roster.js';
 
 // 派发类工具名单（装配注入可经 deps.tools 覆盖/扩列）。
 // 【2026-09-22 · S2 one-shot 化 · send_message 唤醒退役（用户裁定「彻底功能分离」，勿回退）】
@@ -62,28 +66,23 @@ export function teammateTargetNameOf(result) {
 //   而工具面 `.../dsh-experimental-tool-agent-team/lib/index.js:76` `modelMember()` 已把 `id` 丢弃。
 //   ⇒ 同步查表（服务是同步方法，无 IO），**不伪造、不改工具面**。
 //   行形状按「名字字段在 name/target、id 字段在 id/sessionId」双键容错（宿主字段名漂移时不静默漏登记）。
-//   【M-1（批 `punky-qa2-fix-2026-10-31`）】`listMembers` **抛错**与「名不在数组」原本被 `catch { return null }`
+// 【M-1（批 `punky-qa2-fix-2026-10-31`）】`listMembers` **抛错**与「名不在数组」原本被 `catch { return null }`
 //   吞成**同一形态** ⇒ 上游分不清「roster 坏了」（事故）与「真没这个人」（正常）。
 //   现两态可辨：**抛错 ⇒ 回调 `onRosterQueryFailed`（由调用方落 `roster-query-failed:` 前缀 warn）**；
 //   **名不在数组 ⇒ 返 null 且不回调**（正常态无 warn）。
-export function teammateWorkerSessionIdOf(agentTeams, agent, name, onRosterQueryFailed) {
-  if (!agentTeams || typeof agentTeams.listMembers !== 'function' || typeof name !== 'string' || !name) return null;
-  let rows;
+// 【W5-2】签名由「宿主服务句柄」改为「插件 ctx」：句柄不再越过 provider 边界；
+//   双键容错（name/target、id/sessionId）与三档语义**逐条搬进** `lib/provider-dsh/roster.js#sessionOf`
+//   ⇒ 本文件只保留「抛错 ⇒ 回调」这一层（引擎侧的留痕职责），不再自己解析宿主行形状。
+export function teammateWorkerSessionIdOf(ctx, agent, name, onRosterQueryFailed) {
+  if (typeof name !== 'string' || !name) return null;
+  const rosterPort = createRosterPort(ctx, agent);
+  if (!rosterPort.available) return null; // 服务不可用 = 基线态（非异常）：不回调、不 warn（与旧行为一致）
   try {
-    rows = agentTeams.listMembers(agent);
+    return rosterPort.sessionOf(name); // 三档：命中 ⇒ id；名不在名册 ⇒ null（正常态）；查询失败 ⇒ 抛
   } catch (e) {
     if (typeof onRosterQueryFailed === 'function') onRosterQueryFailed(e);
     return null;
   }
-  if (!Array.isArray(rows)) return null; // 非数组 = 服务形状不对（不属抛错态，按取不到处理）
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const rowName = typeof row.name === 'string' ? row.name : (typeof row.target === 'string' ? row.target : null);
-    if (rowName !== name) continue;
-    const id = typeof row.id === 'string' ? row.id : (typeof row.sessionId === 'string' ? row.sessionId : null);
-    if (id) return id;
-  }
-  return null; // 「名不在数组」= 正常态：**无 warn**
 }
 
 // 从 post-execute (exec, result) 提取被派发 worker 会话 id（childId/agentId）。
@@ -144,19 +143,17 @@ export function extractWorkerSessionId(exec, result) {
 //   `lib/state/gates/entry.js:108`）—— 本文件不新造第二种写法。
 //
 // 引擎的双子代理形态（裁决说明）：C 档 = 短生命周期 subagent（`ctx.subagents`，**在** inject 内）；
-//   D 档 = 持续生命周期成员（`agentTeams` roster，**不在** inject 内）。两条调用路径分离、仅任务黑板
-//   共用 ⇒ roster 读取必须走「不声明也能读」的通道，否则 C 档宿主（无 agentTeams）会让 D 档的探测
+//   D 档 = 持续生命周期成员（roster 面，**不在** inject 内）。两条调用路径分离、仅任务黑板
+//   共用 ⇒ roster 读取必须走「不声明也能读」的通道，否则 C 档宿主（无 roster 服务）会让 D 档的探测
 //   反过来炸掉 C 档装配。
-const AGENT_TEAMS_SERVICE = 'agentTeams';
-function agentTeamsServiceOf(ctx) {
-  return typeof ctx?.get === 'function' ? ctx.get(AGENT_TEAMS_SERVICE) : undefined;
-}
+// 【W5-2】`AGENT_TEAMS_SERVICE` / `agentTeamsServiceOf` **已删**：取服务与「不声明也能读」的回落
+//   全部收进 `lib/provider-dsh/roster.js`（复用 `tools-http.js#serviceOf`，与 S-3 同形态）。
 
 export function installDispatchRegistration(ctx, deps = {}) {
   const { store, dispatchIndex, logger, resolveBatchContext, tools = DEFAULT_DISPATCH_TOOLS } = deps;
-  // 【D 档】roster 反查依赖（单点取用口见上方 `agentTeamsServiceOf`）：
+  // 【D 档】roster 功能可用性（**功能面读数**，不再持宿主句柄）：
   //   不可用 ⇒ `spawn_teammate` 登记降级为「留痕不登记」（不伪造 id）。
-  const agentTeams = agentTeamsServiceOf(ctx);
+  const rosterAvailable = createRosterPort(ctx, null).available;
   // G01 #1（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：`!store || !ctx?.on` 属**防御纵深·生产不可达**
   //   （`lib/index.js` 的 `store` 恒非空、`ctx.on` 由宿主提供、`inject` 已在加载面兜住宿主三服务）
   //   ⇒ 按三分级口径**只补稳定回显键（`inert` 布尔键，值 true），零日志新增**（加了只加噪）。
@@ -240,7 +237,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
       const workerSessionId = extractWorkerSessionId(exec, result)
         ?? (exec.name === 'spawn_teammate'
           // 【M-1】roster 抛错 ⇒ 落 `roster-query-failed:` 前缀 warn（与「名不在数组」的正常静默区分开）。
-          ? teammateWorkerSessionIdOf(agentTeams, exec?.agent, teammateTargetNameOf(result),
+          ? teammateWorkerSessionIdOf(ctx, exec?.agent, teammateTargetNameOf(result),
             (e) => logger?.warn?.('[dsh-punky-swarm] roster-query-failed: ' + String(e?.message ?? e)
               + '（tool=spawn_teammate · caller=' + caller + ' · target=' + JSON.stringify(teammateTargetNameOf(result))
               + '）⇒ 本次不登记；这是 roster 查询**失败**，不是「没有该成员」'))
@@ -260,9 +257,9 @@ export function installDispatchRegistration(ctx, deps = {}) {
           + (exec.name === 'spawn_teammate'
             ? '；D 档成因：spawn_teammate 结果不含 worker 会话 id（宿主 modelMember 丢弃 id），'
               + '且 roster 反查未命中（target=' + JSON.stringify(teammateTargetNameOf(result))
-              + (agentTeams && typeof agentTeams.listMembers === 'function'
-                ? '，listMembers 可用但无同名成员/成员 id 缺失'
-                : '，ctx.agentTeams 不可用') + '）⇒ 不登记（**不用名字充数、不写查不到的记录**）'
+              + (rosterAvailable
+                ? '，roster 面可用但无同名成员/成员 id 缺失'
+                : '，roster 面不可用') + '）⇒ 不登记（**不用名字充数、不写查不到的记录**）'
             : ''));
         return next();
       }

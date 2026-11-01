@@ -16,6 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 import { reconcileRoster } from '../roster.js';
+// 【W5-2 · 批 `punky-adapter-split-20261031` · lane `w5-roster-port`】名册读取收进 provider：
+//   引擎**不再**裸取宿主服务（原 `ctx.get('agentTeams')` 两处），改向适配层要**名册功能**。
+import { createRosterPort } from '../provider-dsh/roster.js';
 
 // 宿主面读端单点（自 `lib/tools/core.js` **原样搬移**，行为零变更）：宿主技能根 / 官方 roster（Manager 在册）/
 //   交接调用方身份采集 / legacy 标注常量。宿主技能根函数零引用已删（W3a）；其余导出面由消费者直接 import。
@@ -112,16 +115,16 @@ export function managerRosterOf(ctx, exec, batch) {
   // ⚠ **两处提前 return 也必须带上表读数**：否则「表已登记 + roster 服务不可用」会退化为 `inRoster:false`
   //   （原实现三处都硬写 false ⇒ 只改主判定会让关键反转用例走进提前分支而自相矛盾）。
   const seatInRoster = inRosterOf(batch, false);
-  let svc = null;
-  try { svc = typeof ctx?.get === 'function' ? ctx.get('agentTeams') : null; } catch { svc = null; }
-  if (!svc || typeof svc.listMembers !== 'function') {
+  // 【W5-2】名册读取改走 provider 端口（**引擎不再知道宿主服务叫什么**）：
+  //   `available` = 功能面读数（不可用 ⇒ 可判定降级，不抛宿主原生错）；`read()` 查询失败 ⇒ 抛（可辨异常态）。
+  const rosterPort = createRosterPort(ctx, exec?.agent);
+  if (!rosterPort.available) {
     return { ok: false, source: 'roster', inRoster: seatInRoster, reason: 'service-unavailable', rosterName: MANAGER_ROSTER_NAME };
   }
-  let rows = null;
-  try { rows = svc.listMembers(exec?.agent); } catch (e) {
+  let list = null;
+  try { list = rosterPort.read(); } catch (e) {
     return { ok: false, source: 'roster', inRoster: seatInRoster, reason: 'not-a-team-member: ' + String(e?.message ?? e), rosterName: MANAGER_ROSTER_NAME };
   }
-  const list = Array.isArray(rows) ? rows : [];
   // 判据面（R1-3）：`inRoster` 不再取 roster 匹配，而是**读表**（无 batch 的建批期面沿用 roster，见上注）。
   //   roster 侧仍算 `reconcile`/`hit` —— 它们服务**对账回显**（`memberCount` / `member` 行 / 后续 `mismatch`），
   //   **不再参与在册判定**。
@@ -189,12 +192,11 @@ export function handoffCallerIdentityOf(ctx, exec, args) {
     ?? (typeof args?.session === 'string' && args.session.length ? args.session : null);
   const rosterNames = [];
   try {
-    const svc = typeof ctx?.get === 'function' ? ctx.get('agentTeams') : null;
-    const rows = svc && typeof svc.listMembers === 'function' ? svc.listMembers(exec?.agent) : null;
-    for (const m of Array.isArray(rows) ? rows : []) {
+    // 【W5-2】名册读取走 provider 端口（原裸取 `ctx.get('agentTeams')` 已删）；不可用 ⇒ `read()` 返回 `[]`（不抛）。
+    for (const m of createRosterPort(ctx, exec?.agent).read()) {
       if (m && typeof m.name === 'string' && m.name.trim()) rosterNames.push(m.name.trim());
     }
-  } catch { /* 非 Team 成员 / 服务异常 ⇒ 该身份面无事实（**空数组**，不静默降级为「已授权」） */ }
+  } catch { /* 非 Team 成员 / 查询失败 ⇒ 该身份面无事实（**空数组**，不静默降级为「已授权」） */ }
   return { source: 'handoff-caller-identity', sessionId, rosterNames };
 }
 

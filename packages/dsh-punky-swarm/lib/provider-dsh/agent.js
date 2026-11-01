@@ -250,5 +250,38 @@ export function createAgentPort(ctx, opts = {}) {
       if (typeof rt?.interrupt !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.interrupt 不可用');
       return rt.interrupt(...args);
     },
+
+    /**
+     * 唤醒会话所有者（**Leader 唤醒通路**；契约 `lib/ports.ts:147-154` `AgentRuntime.notifyLeader`）。
+     *
+     * 收窄自「先取宿主会话句柄、再调其推送原语」两步 ⇒ **调用方拿不到、也解引用不到**任何宿主句柄
+     * （AC-5″ 的同源纪律：引擎只许要功能，不许持有宿主对象）。
+     *
+     * 纪律（契约明令）：
+     *   · **不抛**：不可用 / 查不到 / 投递失败一律以 `{ delivered:false, reason }` 表达；
+     *   · `reason` 只用**功能面词汇**（禁宿主服务名/入口名）⇒ 归因不泄漏宿主实现。
+     *
+     * ⚠ **同步返回**（await 兼容）：宿主 `agents.get(id)` 与 `Agent.followup(msg)` 均同步调用，
+     *   而本仓**既有调用面是同步的**（`lib/tools/swarm-comms.js#wakeLeaderForReport` 及其
+     *   `test/worker-notify-wake.test.js`、`test/swarm-wake-addressing.test.js` 直接读返回值）
+     *   ⇒ 返回同步值，`await` 对非 thenable 直接取值，两种写法都成立。
+     *
+     * @param {{sessionId?: string, message?: object}} [request]
+     * @returns {{delivered: boolean, reason: string|null}}
+     */
+    notifyLeader({ sessionId, message } = {}) {
+      // 取「会话服务」：与本端口其余取法同源（`serviceOf`：裸读优先 + `ctx.get` 回落）。
+      const agents = serviceOf(ctx, 'agents');
+      if (!agents || typeof agents.get !== 'function') return { delivered: false, reason: 'agent-runtime-unavailable' };
+      if (typeof sessionId !== 'string' || sessionId.length === 0) return { delivered: false, reason: 'session-required' };
+      let target = null;
+      try { target = agents.get(sessionId) ?? null; } catch { return { delivered: false, reason: 'lookup-failed' }; }
+      // 查不到 / 句柄不可推送 ⇒ 同一功能面成因（引擎据此外化为 `leader-not-live`）。
+      if (!target || typeof target.followup !== 'function') return { delivered: false, reason: 'leader-not-live' };
+      try { target.followup(message); } catch (e) {
+        return { delivered: false, reason: 'deliver-failed: ' + String(e?.message ?? e) };
+      }
+      return { delivered: true, reason: null };
+    },
   };
 }

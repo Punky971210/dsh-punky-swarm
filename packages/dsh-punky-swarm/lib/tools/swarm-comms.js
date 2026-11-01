@@ -21,6 +21,10 @@ import { laneBindingOf, mailboxRootOf } from '../engine/dispatch.js';
 import * as swarmMailbox from '../comms/mailbox.js'; // 成员回报投递（文件 mailbox）
 import { readCapability } from '../assembly/schema.js'; // 注入预算阈值唯一取值源（注册表 default 缺省合并）
 import { applyInjectionBudget } from '../comms/inject-budget.js';
+// 【W5-2 · 批 `punky-adapter-split-20261031` · lane `w5-roster-port`】Leader 唤醒通路收进 provider：
+//   引擎**不再**取宿主会话句柄（原 `ctx.get('agents')` + `leader.followup()` 两步），
+//   改向适配层要 `notifyLeader({ sessionId, message })` 这一**具名功能**（契约 `AgentRuntime.notifyLeader`）。
+import { createAgentPort } from '../provider-dsh/agent.js';
 
 // ── 面 C · lane 回报：注入预算（阈值唯一取值源 = `capabilities.injectBudget`）──────────────
 // ⚠ **本模块导出面受 `test/swarm-wake-addressing.test.js#T-10`（L-AC-14「净增 0」）逐字钉住**
@@ -157,14 +161,9 @@ export const WAKE_MIN_INTERVAL_MS = 30_000;
 //   生产代码**不得**依赖本导出（工具面唯一消费者 = 本文件内的 `wakeLeaderForReport` / `swarm_report.execute`）。
 export const LEADER_WAKE_WINDOWS = new Map();
 
-/** 取 Leader 句柄（**非注入读 + fail-safe**）：永不抛；返回值区分「服务缺失」与「取不到该会话」。 */
-function leaderAgentOf(ctx, leaderSessionId) {
-  let svc = null;
-  try { svc = typeof ctx?.get === 'function' ? ctx.get('agents') : null; } catch { svc = null; }
-  // 服务缺失（宿主未挂 dsh-agent）：语义上是**基线态**而非异常，与 managerRosterOf 的 `service-unavailable` 同码面。
-  if (!svc || typeof svc.get !== 'function') return { service: false, agent: null };
-  try { return { service: true, agent: svc.get(leaderSessionId) ?? null }; } catch { return { service: true, agent: null }; }
-}
+/** 取 Leader 句柄（**非注入读 + fail-safe**）：永不抛；返回值区分「服务缺失」与「取不到该会话」。
+ *  【W5-2 已删】原实现裸取宿主服务再取会话句柄；现两层都收进 provider
+ *  （`lib/provider-dsh/agent.js#notifyLeader`）⇒ 引擎侧**不再持有、也不再解引用**宿主对象。 */
 
 /** 唤醒消息（**零依赖手工构造**，形状 = `dsh-llm` `createUserMessage`；UUID 先例 `lib/governance/kernel.js:196`）。
  *  纪律（J-9）：**只传摘要元数据，零复制正文**——载体是调用方显式给出的 `type` / `summary` / `artifactPath`
@@ -227,17 +226,29 @@ export function wakeLeaderForReport(ctx, input) {
       out.merged = win.merged;
       return out;
     }
-    // ③ 取 Leader 句柄（服务缺失 / 取不到 ⇒ 降级回显，**不抛、不影响既有留痕面**）。
-    const lookup = leaderAgentOf(ctx, leaderSessionId);
-    if (!lookup.service) { out.reason = 'service-unavailable'; return out; }
-    const leader = lookup.agent;
-    if (!leader || typeof leader.followup !== 'function') { out.reason = 'leader-not-live'; return out; }
-    // ④ 唤醒：上一次窗内被合并的条数随本次消息**可见**（合并不丢信息）并清零。
+    // ③ 唤醒：上一次窗内被合并的条数随本次消息**可见**（合并不丢信息）并清零。
     const merged = win ? win.merged : 0;
     // 面 C 层②（`wake.total`）：消息体在送出前已按总量预算收窄；省略事实回显于 `out.omissions`
     //   （**不发射事件**：本单点零批面写，见上方契约 —— 发射面唯一在 `swarm_report.execute`）。
     const assembled = leaderWakeMessageOf(input, merged);
-    leader.followup(assembled.message);
+    // 【W5-2】唤醒动作走 provider 功能面（**引擎不再取宿主句柄**）：
+    //   provider 以**返回值**表达投递结果（契约：不可用/失败**不抛**，成因用功能面词汇）；
+    //   本处把 provider 的成因**外化**为引擎既有的四档 `reason`（保持既有回显面逐字不变）：
+    //     `agent-runtime-unavailable` ⇒ `service-unavailable`（基线态）；其余未投递 ⇒ `leader-not-live`
+    //     （与旧「取不到句柄/句柄不可推送」两态合流，语义等价）。
+    const notified = createAgentPort(ctx).notifyLeader({ sessionId: leaderSessionId, message: assembled.message });
+    if (!notified.delivered) {
+      // 成因外化（**逐档保真，禁把异常压成「人不在」**）：
+      //   `agent-runtime-unavailable` ⇒ 基线态 `service-unavailable`；
+      //   `deliver-failed: …`        ⇒ 异常态 `error: …`（保持既有 `error:` 族，异常不得被误归因为「会话不在」）；
+      //   其余（`leader-not-live` / `lookup-failed` / `session-required`）⇒ `leader-not-live`
+      //   —— 与旧实现的「取不到句柄/句柄不可推送」两态合流（旧 `agent.get` 抛错亦落此档）。
+      const why = String(notified.reason ?? '');
+      out.reason = why === 'agent-runtime-unavailable'
+        ? 'service-unavailable'
+        : (why.startsWith('deliver-failed: ') ? 'error: ' + why : 'leader-not-live');
+      return out;
+    }
     LEADER_WAKE_WINDOWS.set(key, { at: now, merged: 0 });
     out.woke = true;
     out.reason = 'woke';
