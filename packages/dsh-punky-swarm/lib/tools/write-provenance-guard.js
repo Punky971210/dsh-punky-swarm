@@ -95,9 +95,15 @@ export function writeProvenanceDecision(execution) {
  */
 export function installWriteProvenanceGuard(ctx, deps = {}) {
   void deps; // 与同族签名对齐；本守卫不依赖 store / config
-  if (typeof ctx?.tools?.guard !== 'function') return false;
+  // 【W4 · S-2 站点③】原为 `if (typeof ctx?.tools?.guard !== 'function') return false;` ——
+  //   **裸读宿主服务名**（`inject` 清空后会直接抛 `cannot get property "tools" without inject`），
+  //   且与 `createToolsPort(ctx).installGuard(...)` 的**返回值**是同一条判据（端口内部即查
+  //   `available && typeof tools.guard === 'function'`）⇒ 原实现是**重复判定 + 建两次端口**。
+  //   现改为：**建一次端口、以 `installGuard` 的 boolean 为唯一判据**（`false` = 未装）。
+  //   ⚠ 不是「改成恒 false」：可用宿主上端口返回 `true`，守卫照常安装、`installed` 语义不变。
   if (installedOn.has(ctx)) return false; // 幂等：同一 ctx 只注册一次
-  createToolsPort(ctx).installGuard((execution) => writeProvenanceDecision(execution));
+  const installed = createToolsPort(ctx).installGuard((execution) => writeProvenanceDecision(execution));
+  if (!installed) return false; // 工具面不可用 / 宿主无 guard 面 ⇒ 静默不注册（原语义逐字保留）
   installedOn.add(ctx);
   return true;
 }

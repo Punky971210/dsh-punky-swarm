@@ -133,11 +133,11 @@ test('T3 A2 读端：batch_status 回显 managerRoster（roster 优先）与 leg
   assert.equal(v0.managerRoster.managerPlan, null, '无 assembly ⇒ managerPlan null');
   assert.equal(v0.managerRoster.legacy, null, '未登记 ⇒ legacy 为 null');
 
-  // legacy 登记路径（旧批/离线写入）仍可用 ⇒ 读端并列回显，新批判据以 roster 为准
+  // legacy 登记路径（旧批/离线写入）仍可用 ⇒ 读端并列回显；R1-3 起**在册判定读引擎自建表**（legacy 写入同样入表）
   store.markManagerRaised(SID, 'b2-view', { agentId: 'mgr-legacy' });
   const v1 = await byName.batch_status.execute({ batchId: 'b2-view' }, SESS);
   assert.equal(v1.managerRoster.legacy.agentId, 'mgr-legacy', 'legacy 字段可读（兼容面）');
-  assert.equal(v1.managerRoster.roster.inRoster, false, 'roster 仍为准（legacy 字段不改变在册判定）');
+  assert.equal(v1.managerRoster.roster.inRoster, true, 'R1-3 翻转：读引擎自建表（markManagerRaised 同时写 managerSeat）⇒ 表在册即算在册；roster 无 manager 分支不再参与判定');
   assert.equal(v1.manager.agentId, 'mgr-legacy', '既有 batch.manager 回显逐字不变');
 });
 

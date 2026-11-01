@@ -98,6 +98,13 @@ import { createWakeQueue } from './state/wake-queue.js';
 //   零远程上报。挂载点见下方 apply() 内注释（必须在 validateCapabilities warn / GATE_ENABLED warn / syncAssets
 //   三条 warn 之前，否则这些启动期审计信号永久缺席）。
 import { mountAuditLog } from './auditlog/sink.js';
+// 【W4 · S-2 站点①】HTTP 功能面读数：本文件不再直读 `ctx.webServer`（宿主服务名），
+//   改向 provider 的端口要「**HTTP 功能拿到没有**」（`available`）。
+//   为什么必须在这一步（R-2 顺序）：`ctx.webServer` 是**裸取属性**，在 `inject` 清空后会直接抛
+//   `cannot get property "webServer" without inject`；而端口的 `available` 走 `ctx?.webServer ?? null`
+//   + try 语义，且 provider 行自身持有 `inject: [tools, webServer, subagents]` ⇒ 不依赖引擎行。
+//   依赖方向：引擎 → provider 端口（J6：宿主差异只在 provider 内）。
+import { createHttpPort } from './provider-dsh/tools-http.js';
 
 export const name = 'dsh-punky-swarm';
 // 三键（`tools` / `webServer` / `subagents`）**全部为硬依赖**，不是可选依赖（A1-P2-02 事实化）：
@@ -332,9 +339,12 @@ const installWatchdog = ({ ctx, watchCfg, heartbeatRef, heartbeat }) => {
 const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
   let apiDispose = null;
   let panelStream = null;
-  // ⚠ 本守卫在当前宿主契约下**不可达**（`webServer` 是 `inject` 硬依赖：缺服务 ⇒ 本插件整块 pending，
-  //   `apply` 不执行，走不到这里）——保留作防御纵深；理由与真降级路径见文件顶部 `inject` 上方注释（A1-P2-02）。
-  if (ctx.webServer) {
+  // 【W4 · S-2 站点①】原为 `if (ctx.webServer)`（裸读宿主服务名；且注释自述「在本宿主契约下不可达」
+  //   因 `webServer` 曾是 inject 硬依赖）。W4 起引擎行 `inject` 将清空 ⇒ 该裸读会**直接抛**
+  //   `cannot get property "webServer" without inject`，故必须先改成**功能面读数**。
+  //   判据语义不变：仍是「**HTTP 功能拿不拿得到**」，由 provider 端口回答（host 差异关在 provider 内）。
+  //   ⚠ 这**不是**「改成恒 false」：可用的宿主上 `createHttpPort(ctx).available === true`，下方整段照常装配。
+  if (createHttpPort(ctx).available) {
     // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
     const discoveryCfg = resolveDiscoveryConfig(config);

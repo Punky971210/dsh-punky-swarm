@@ -95,11 +95,11 @@ test('A1-P2-02 / AC-9 · 运行期 inject 面：三键内容与顺序逐字不�
   assert.equal(Array.isArray(m.inject), true, '数组形态 = 逐名 required（对象形态同样无 optional 位）');
 });
 
-test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）：index 的 ctx.webServer = 1、api = 0、dispatch 的 ctx.subagents = 0（W4 文案去宿主名）', () => {
+test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）：index 的 ctx.webServer = 0、api = 0、dispatch 的 ctx.subagents = 0（W4 三处残余触达全部清零）', () => {
   // 【host-ports 批语义订正】`lib/api.js` 已改走端口面 `mountRoute` ⇒ 裸访问应为 **0**
   //   （这正是本批目标：引擎不再直接摸宿主面）。【W4 `codename`】`dispatch.js` 降级文案去宿主名 ⇒ 由 **1 → 0**（不变量 = 不得增加）。
   const probes = [
-    ['lib/index.js', 'ctx.webServer', 1],
+    ['lib/index.js', 'ctx.webServer', 0],
     ['lib/api.js', 'ctx.webServer', 0],
     ['lib/engine/dispatch.js', 'ctx.subagents', 0],
   ];

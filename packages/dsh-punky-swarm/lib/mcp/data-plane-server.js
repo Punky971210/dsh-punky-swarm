@@ -276,14 +276,20 @@ export function installMcpDataPlane(ctx, deps = {}) {
   //   也不抛（不可把「本面未挂载」升级成「整块工具面装配失败」）。
   //   ⚠ 可观测性不靠日志：返回的 disposer 上带 `installed` 布尔（**fail-closed 判据在返回值**，
   //     与 `installWriteProvenanceGuard` 的 true/false 同族）。
-  if (typeof ctx?.webServer?.register !== 'function') {
-    logger?.debug?.('[mcp] data plane not mounted：webServer 端口 mountRoute（`lib/provider-dsh/`） 不可用（合法部署形态）');
+  //
+  // 【W4 · S-2 站点②】原为 `typeof ctx?.webServer?.register !== 'function'` —— 与端口谓词
+  //   （`provider-dsh/tools-http.js` 的 `createHttpPort().available`）**逐字等价**的**重复判定**，
+  //   且在 `inject` 清空后会裸读宿主服务名。现**只建一次端口、只问一次**：
+  //   `httpPort.available` 即判据，`mountRoute` 复用同一实例（原实现建了两次端口）。
+  const httpPort = createHttpPort(ctx);
+  if (!httpPort.available) {
+    logger?.debug?.('[mcp] data plane not mounted：HTTP 功能面不可用（provider 端口 available=false，合法部署形态）');
     const notMounted = () => {};
     notMounted.installed = false;
     return notMounted;
   }
 
-  const mounted = createHttpPort(ctx).mountRoute({ method: 'POST', path: MCP_PATH, handler });
+  const mounted = httpPort.mountRoute({ method: 'POST', path: MCP_PATH, handler });
   const dispose = mounted.dispose;
   logger?.info?.('[mcp] data plane mounted at ' + MCP_PATH + '（protocol ' + MCP_PROTOCOL_VERSION
     + '，声明 ' + declaredCount + ' 件；实际宣告按可调面惰性求交）');

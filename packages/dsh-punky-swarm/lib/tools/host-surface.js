@@ -74,36 +74,70 @@ import { reconcileRoster } from '../roster.js';
 //      `inject` 里加硬依赖**（加硬 inject 会使本插件在**未挂官方 team 插件**的宿主上失去加载能力）。
 //   ④ 降级（禁静默，四级可辨）：service 不可用 ⇒ `reason:'service-unavailable'`（非官方宿主**基线态**，
 //      由回显承担可读性）；调用抛错（调用方非 Team 成员等）⇒ `reason:'not-a-team-member: …'`（异常态，
-//      上抛 `logger.warn` + 回显）；roster 可读但无该成员 ⇒ `inRoster:false`（本批事实 ⇒ **落
-//      `gate.manager_roster_gap` 事件**）；命中 ⇒ `inRoster:true` + `member` 行（id/name/role/status）。
+//      上抛 `logger.warn` + 回显）；服务在位但 roster 无该成员 ⇒ **不再是 `inRoster:false` 的依据**
+//      （R1-3 起 `inRoster` 读引擎自建表，见下方 `seatOf`/`inRosterOf`）；命中 roster ⇒ 仅供**对账回显**
+//      `member` 行（id/name/role/status），不参与在册判定。
+//      ⚠ **建批期例外**：`wave_plan` 的 `gate.manager_roster_gap` 发射点不传 batch ⇒ 该面仍按 roster 匹配
+//      （R1-4 的活）；两面的判别子 = `batch` 入参是否存在，详见 `inRosterOf` 上注。
 //   **本判定不拒任何调用**（Manager 四码按用户裁决整体删除后无拒态；读端只回显事实）。
 const MANAGER_ROSTER_NAME = 'manager';
-export function managerRosterOf(ctx, exec) {
+
+// ── R-1（R1-3）· **在册判定面：读引擎自建表**（`batch.managerSeat`），roster 仅供对账 ────────────
+//
+// 【R-1 · AQ-1 乙（用户裁决）】**在册真源 = 引擎自建表**：`batch.managerSeat = { seatId, role, source,
+//   registeredAt, registeredBy }`，唯一写点 = `lib/state/store/batch.js#markManagerRaised`（`batch_phase({manager})`）。
+//   宿主 roster（无论哪家宿主、以何形态取到）**只用于对账，不得作为权威**（与 `lib/ports.ts#RosterSource` 同源）。
+//
+// ⚠ **两个消费面必须分开读**（混读会撞 R1-4 的事件面）：
+//   · **读端面**（`batch_status` / 批列表，经 `managerViewOf(ctx, exec, batch)` 传入 batch）
+//     ⇒ `inRoster` = **表在册**。**这是本 lane 翻转的判定面。**
+//   · **建批期面**（`wave_plan` 的 `gate.manager_roster_gap` 发射点，`lib/tools/wave-plan-tools.js:168`，
+//     **不传 batch**）⇒ 仍按 **roster 匹配**（**R1-4 的活，本 lane 不动**）。
+//     理由：`wave_plan` 是**建批**，此刻表**必空**；若此处改用表 ⇒ **每条 `raise` 批都会落 gap 事件**
+//     （事件量激增 = R-1-1 风险，且属「给未实现的分级伪造读数」）。
+//   ⇒ **`batch` 入参是否存在**即这两面的判别子：`batch === undefined` 走 legacy roster 匹配。
+//   ⚠ 收敛归属：R1-4 改造发射点判据后，本函数的 legacy 分支即可删除（届时 `batch` 应收为必填）。
+const seatOf = (batch) => {
+  const seat = batch?.managerSeat ?? null;
+  if (!seat || typeof seat.seatId !== 'string' || seat.seatId.length === 0) return null;
+  // `source` 是在册**真源出处判别子**（表行五键冻结，`store/batch.js:167`）⇒ 非此值不算在册（防伪造/防混用）。
+  if (seat.source !== 'engine-registry') return null;
+  return seat;
+};
+
+/** 在册判定**唯一实现**：有 `batch` ⇒ 读表；无 `batch` ⇒ 建批期 legacy roster 匹配（R1-4 未改，见上注）。 */
+const inRosterOf = (batch, rosterMatched) => (batch ? Boolean(seatOf(batch)) : rosterMatched);
+
+export function managerRosterOf(ctx, exec, batch) {
+  // ⚠ **两处提前 return 也必须带上表读数**：否则「表已登记 + roster 服务不可用」会退化为 `inRoster:false`
+  //   （原实现三处都硬写 false ⇒ 只改主判定会让关键反转用例走进提前分支而自相矛盾）。
+  const seatInRoster = inRosterOf(batch, false);
   let svc = null;
   try { svc = typeof ctx?.get === 'function' ? ctx.get('agentTeams') : null; } catch { svc = null; }
   if (!svc || typeof svc.listMembers !== 'function') {
-    return { ok: false, source: 'roster', inRoster: false, reason: 'service-unavailable', rosterName: MANAGER_ROSTER_NAME };
+    return { ok: false, source: 'roster', inRoster: seatInRoster, reason: 'service-unavailable', rosterName: MANAGER_ROSTER_NAME };
   }
   let rows = null;
   try { rows = svc.listMembers(exec?.agent); } catch (e) {
-    return { ok: false, source: 'roster', inRoster: false, reason: 'not-a-team-member: ' + String(e?.message ?? e), rosterName: MANAGER_ROSTER_NAME };
+    return { ok: false, source: 'roster', inRoster: seatInRoster, reason: 'not-a-team-member: ' + String(e?.message ?? e), rosterName: MANAGER_ROSTER_NAME };
   }
   const list = Array.isArray(rows) ? rows : [];
-  // 判据来源改为**对账**（单点 = `lib/roster.js#reconcileRoster`，禁第二套实现）：
-  //   在册 ⟺ Manager 约定席落在对账的 `matched` 集合。上一行 `hit` 仅供回显 `member` 行（形态不变）。
+  // 判据面（R1-3）：`inRoster` 不再取 roster 匹配，而是**读表**（无 batch 的建批期面沿用 roster，见上注）。
+  //   roster 侧仍算 `reconcile`/`hit` —— 它们服务**对账回显**（`memberCount` / `member` 行 / 后续 `mismatch`），
+  //   **不再参与在册判定**。
   //   **导出面逐字保留**：`ok` / `source` / `inRoster` / `rosterName` / `memberCount` / `member` 六键不变，
   //   且 `service-unavailable` 与 `not-a-team-member: …` 两级降级（上方两处提前 return）的判定**顺序与文案不变**。
   const reconcile = reconcileRoster(list);
   const hit = list.find((m) => m && m.name === MANAGER_ROSTER_NAME) ?? null;
   return {
-    ok: true, source: 'roster', inRoster: reconcile.matched.includes(MANAGER_ROSTER_NAME), rosterName: MANAGER_ROSTER_NAME, memberCount: list.length,
+    ok: true, source: 'roster', inRoster: inRosterOf(batch, reconcile.matched.includes(MANAGER_ROSTER_NAME)), rosterName: MANAGER_ROSTER_NAME, memberCount: list.length,
     member: hit ? { id: hit.id ?? null, name: hit.name, role: hit.role ?? null, status: hit.status ?? null } : null,
   };
 }
 
-/** Manager 读端**统一形态**（roster 承抽）：官方 roster 优先，批次 legacy 字段（`batch.manager`）并列回显。 */
+/** Manager 读端**统一形态**：在册判定（表）与 roster 对账面（`roster`）/ legacy 字段（`batch.manager`）并列回显。 */
 export function managerViewOf(ctx, exec, batch) {
-  const roster = managerRosterOf(ctx, exec);
+  const roster = managerRosterOf(ctx, exec, batch);
   const legacy = batch && batch.manager ? { agentId: batch.manager.agentId ?? null, raisedAt: batch.manager.raisedAt ?? null } : null;
   return { roster, legacy, managerPlan: batch?.assembly?.managerPlan ?? null };
 }
