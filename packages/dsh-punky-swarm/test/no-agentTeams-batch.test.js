@@ -139,19 +139,19 @@ test('C1 无 agentTeams 能力仍可建批派发：建批 + 派发成功，且�
   // 「不是静默通过」：能力面必须**能表达缺失**
   const installedAll = capabilityReport({ ports: facePorts(true), kernel: kernelFacts() });
   assert.ok(installedAll && typeof installedAll === 'object', 'capabilityReport 必须返回对象回显');
-  for (const key of ['host', 'internal', 'missing']) {
-    assert.ok(key in installedAll, '回显结构缺键 ' + key + '（W4 → {host, kernel, internal, missing, degraded}）');
+  for (const key of ['host', 'internal', 'unavailable', 'disabled']) {
+    assert.ok(key in installedAll, '回显结构缺键 ' + key + '（Q-E=乙 → {host, kernel, internal, unavailable, disabled}）');
   }
-  assert.ok(Array.isArray(installedAll.missing), 'missing 必须是数组（缺失面可读）');
+  assert.ok(Array.isArray(installedAll.unavailable), 'unavailable 必须是数组（不可用面可读）');
   assert.equal(assertRequired(installedAll), true, '内核端口齐备 ⇒ assertRequired 返回 true（不因宿主功能面差异而拒）');
 });
 
-// ── ② AC-2(a)【W4 命题反动】功能面不可用 ⇒ **不抛**（降级可见）；内核端口缺 ⇒ **抛** ──────────────
+// ── ② AC-2(a)【W4 命题反动 + Q-E=乙 去降级】功能面不可用 ⇒ **不抛**（不可用可见）；内核端口缺 ⇒ **抛** ──
 //   旧命题：「必需宿主键缺失 ⇒ assertRequired 抛」。W4 把 fail-closed 面从**宿主能力**改到**内核端口**
 //   ⇒ 旧命题与新架构互斥（宿主能力差异属正常形态，不是装配缺陷）。新命题保留**同强度**的两条判据：
-//   ① 功能面缺 ⇒ 不抛 且降级**可见**（installed:false + probed:true + reason 非空 + 进 degraded）；
+//   ① 功能面没装 ⇒ 不抛 且**不可用可见**（available:false + reason 非空 + 进 unavailable；**无 degraded**）；
 //   ② 内核端口缺 ⇒ 必抛，且消息形态逐字沿用（`capability-missing:` / 无 err.code / 禁 GATE_）。
-test('C2 功能面不可用 ⇒ assertRequired 不抛（降级可见）；内核端口缺 ⇒ 抛 `capability-missing:`（无 GATE_ 前缀）', async () => {
+test('C2 功能面不可用 ⇒ assertRequired 不抛（不可用可见）；内核端口缺 ⇒ 抛 `capability-missing:`（无 GATE_ 前缀）', async () => {
   const { capabilityReport, assertRequired } = await loadCapabilities();
 
   // ① 功能面不可用（httpSurface）而内核齐备 ⇒ **不抛**
@@ -159,10 +159,10 @@ test('C2 功能面不可用 ⇒ assertRequired 不抛（降级可见）；内核
   assert.equal(assertRequired(faceDown), true,
     '功能面不可用**不得**升级为 fail-closed（宿主差异不是装配缺陷 —— 这是 W4 的架构决定）');
   const http = faceDown.host.find((h) => h.key === 'httpSurface');
-  assert.equal(http.installed, false, '缺服务的功能面必须报 installed:false（不得静默当可用）');
-  assert.equal(http.probed, true, '已探测（probed:true ≠ 未探明）');
-  assert.ok(typeof http.reason === 'string' && http.reason.length > 0, '必须给可读 reason（降级但不静默）；实际=' + http.reason);
-  assert.ok(faceDown.degraded.includes('httpSurface'), '降级事实须进 degraded 集合（回显通道）');
+  assert.equal(http.available, false, '面没装必须报 available:false（不得静默当可用）');
+  assert.ok(typeof http.reason === 'string' && http.reason.length > 0, '必须给可读 reason（没有可读成因 = 新的静默）；实际=' + http.reason);
+  assert.ok(faceDown.unavailable.includes('httpSurface'), '不可用事实须进 unavailable 集合（回显通道）');
+  assert.equal('degraded' in faceDown, false, '`degraded` 字段已废除（Q-E=乙）—— 不得复活');
 
   // ② 内核端口缺（audit）⇒ **必抛**，形态逐字沿用旧约定
   let err = null;
@@ -192,14 +192,16 @@ test('C3 可选能力缺失 ⇒ 不抛，且 missing 集合含该键（可选 �
   assert.doesNotThrow(() => assertRequired(report), '可选能力缺失**不得**抛（fail-closed 只针对内核端口）');
   assert.equal(assertRequired(report), true, '可选缺失 ⇒ assertRequired 返回 true');
 
-  // 集合式判据：至少一个「可选且缺省关」的键出现在 missing 内（存在性，不计数）
+  // 集合式判据：至少一个「可选且缺省关」的键出现在 **disabled** 内（存在性，不计数）
+  //   Q-E=乙：原 `missing` 并集已拆成 `unavailable`（我方面不可用）与 `disabled`（策略停用）——
+  //   可选能力缺省关属**策略停用**，故必须落在 `disabled`，**不得**混进 `unavailable`（那是把策略关读成坏了）。
   assert.ok(
-    defaultOff.some((k) => report.missing.includes(k)),
-    '可选能力缺失须在 `missing` 集合内可见（包 AC-2(b)）；候选=' + JSON.stringify(defaultOff)
-      + '，实际 missing=' + JSON.stringify(report.missing),
+    defaultOff.some((k) => report.disabled.includes(k)),
+    '策略停用须在 `disabled` 集合内可见（包 AC-2(b)）；候选=' + JSON.stringify(defaultOff)
+      + '，实际 disabled=' + JSON.stringify(report.disabled),
   );
   for (const faceKey of HOST_FACE_KEYS) {
-    assert.equal(report.missing.includes(faceKey), false, '功能面已可用 ⇒ 不得出现在 missing：' + faceKey);
+    assert.equal(report.unavailable.includes(faceKey), false, '功能面已可用 ⇒ 不得出现在 unavailable：' + faceKey);
   }
 });
 
@@ -357,21 +359,21 @@ function applyAssembly({ root, without = [] } = {}) {
   };
 }
 
-// ── C6a · AC-8【W4 命题反动】：宿主功能面缺失 ⇒ apply() **不抛**，且降级**可见** ────────────────
-//   旧命题：「缺宿主必需键（webServer）⇒ 装配期必须 fail-closed 抛」。
-//   W4 的目标正是让引擎**不因宿主能力差异改变运行模式**（用户口述 / J6-e）⇒ 缺 webServer 只应**降级**，
-//   且必须**响亮**（`capability-degraded: httpSurface` + report 的 `installed:false`/`reason`）。
-//   ⇒ 若有人把硬依赖改回去（inject 三键 + 宿主缺即抛），本条 `assert.equal(run.err, null)` 必红。
-test('C6a AC-8 宿主功能面缺失 ⇒ apply() 不抛，且 `capability-degraded:` 降级信号可见（不静默）', () => {
+// ── C6a · AC-8【Q-E=乙 去降级】：宿主功能面缺失 ⇒ apply() **不抛**，且**不产生启动告警** ─────────
+//   旧命题（W4）：「缺 webServer ⇒ 降级可见（`capability-degraded: httpSurface`）」。
+//   Q-E=乙 废除降级后语义**反转**：宿主能力差异属**宿主事实**、不是缺陷 ⇒ **不进启动 warn**，
+//     只由回显面 `available:false` + `reason` 承担；启动告警只报**我方装配**问题（`capability-unavailable:`）。
+//   ⇒ **反向锁**：若有人把「宿主差异」重新做成启动告警，本条两条 `false` 断言必红。
+test('C6a AC-8 宿主功能面缺失 ⇒ apply() 不抛，且不产生启动告警（宿主差异只进回显）', () => {
   const run = applyAssembly({ root: tempRoot('punky-t1-g02a-'), without: ['webServer'] });
   try {
     assert.equal(run.err, null,
       '宿主功能面缺失**不得**让 apply() 抛错（W4：引擎不因宿主能力差异拒绝加载）；实际=' + String(run.err?.message ?? ''));
-    const degradedLines = run.warn.filter((l) => String(l).includes('capability-degraded:'));
-    assert.ok(degradedLines.length >= 1,
-      '降级必须**可见**：warn 须含 `capability-degraded:`；实际 warn=' + JSON.stringify(run.warn.map(String)));
-    assert.ok(degradedLines.some((l) => String(l).includes('httpSurface')),
-      '降级信号须点名缺的功能面 `httpSurface`；实际=' + JSON.stringify(degradedLines.map(String)));
+    const warns = run.warn.map(String);
+    assert.equal(warns.some((l) => l.includes('capability-degraded:')), false,
+      '`capability-degraded:` 已废除（Q-E=乙）—— 整条字符串不得再出现；实际=' + JSON.stringify(warns));
+    assert.equal(warns.some((l) => l.includes('capability-unavailable:')), false,
+      '宿主能力差异**不得**升级为启动告警（那是宿主事实，不是装配缺陷）；实际=' + JSON.stringify(warns));
   } finally { run.dispose(); }
 });
 

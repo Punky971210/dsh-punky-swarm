@@ -50,6 +50,36 @@ const idOfRow = (row) => (row && typeof row === 'object')
   : null;
 
 /**
+ * **成员身份锚**（Q-E=乙 ·「在适配器端可以拿 Subagent ID 或其他锚定 Subagent 身份的信息」）。
+ *
+ * 为什么需要它：自建名册（`batch.managerSeat`）需要一个**不依赖宿主名册**的主键 —— 以前 `seatId`
+ *   只能来自宿主成员名，导致「宿主 roster 缺席 ⇒ 自建表也无从落笔」。有了本函数，C 档（一次性
+ *   subagent 派发）返回的 **Subagent ID** 也能当锚 ⇒ 自建表在非 Team 宿主上依然可写、可判在册。
+ *
+ * ⚠ **不进 `lib/ports.ts`**：这是 provider 的**额外导出**，不是 `RosterSource` 契约成员
+ *   （与 `agentChannelFactsOf` 同理，避免动 W1 冻结契约）。
+ * ⚠ **不伪造**：取不到任何可用锚时返回 `{ seatId: null, anchorKind: null }` —— 由调用方决定不写，
+ *   **不得**用宿主名/时间戳等凑一个假 id（那会让自建表长得像登记过）。
+ *
+ * 锚的取值域与优先级（**稳定优先**）：
+ *   ① `subagent-id`：C 档派发结果上的 `id`/`sessionId`/`subagentId`（一次性 subagent 的身份）；
+ *   ② `agent-team-name`：D 档的成员名（`name`/`target`，与 `sessionOf` 入参同域）。
+ *
+ * @param {object|null} spawnResult 一次派发的产物（不同宿主的字段名差异在此收敛）
+ * @returns {{seatId: string|null, anchorKind: 'subagent-id'|'agent-team-name'|null}}
+ */
+export function anchorOf(spawnResult) {
+  if (!spawnResult || typeof spawnResult !== 'object') return { seatId: null, anchorKind: null };
+  for (const key of ['subagentId', 'id', 'sessionId']) {
+    const v = spawnResult[key];
+    if (typeof v === 'string' && v.length > 0) return { seatId: v, anchorKind: 'subagent-id' };
+  }
+  const name = nameOfRow(spawnResult);
+  if (typeof name === 'string' && name.length > 0) return { seatId: name, anchorKind: 'agent-team-name' };
+  return { seatId: null, anchorKind: null };
+}
+
+/**
  * 名册端口。
  *
  * @param {object} ctx   插件上下文（**只在本文件被用来取宿主服务**）

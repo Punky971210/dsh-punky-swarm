@@ -1371,7 +1371,7 @@
     "test/no-agentTeams-batch.test.js": {
       "asserts": 70,
       "blankLines": 46,
-      "lines": 454,
+      "lines": 456,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1654,6 +1654,14 @@
       "lines": 320,
       "tautologies": 0,
       "tests": 11,
+      "todos": 0
+    },
+    "test/roster-source-face.test.js": {
+      "asserts": 14,
+      "blankLines": 14,
+      "lines": 94,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -2065,7 +2073,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T12:52:20Z",
+  "generatedAt": "2026-11-02T15:18:33Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2079,12 +2087,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12062,
-    "blankLines": 6723,
-    "files": 258,
-    "lines": 71004,
+    "asserts": 12076,
+    "blankLines": 6737,
+    "files": 259,
+    "lines": 71100,
     "tautologies": 0,
-    "tests": 2505,
+    "tests": 2509,
     "todos": 0
   }
 }

@@ -177,6 +177,46 @@ export function managerSeatFaceOf(batch, rosterView) {
   return { seatReason, mismatch: { tableOnly, rosterOnly } };
 }
 
+// ── Q-E=乙（批 `punky-arch-refine-20261101`）· **名册功能面就绪判据**（`rosterSource.available` 的唯一依据）──
+//
+// 用户裁决：「roster 名册在适配层和引擎内核中间是**自建**」⇒ 该面的可用性**只**看我方自建表机制是否就绪，
+//   **不再探测宿主 `agentTeams` 服务**（旧抽象把「宿主没有团队服务」读成「名册不可用」= 被废除的降级）。
+//
+// 三条件（**全部结构判据、零 IO**；任一缺 ⇒ `available:false`）：
+//   ① store 可读批：`readBatch` + `listBatches` 可调用；
+//   ② 在册解析点**判别子生效**：`seatOf` 对合法行返回行、对空批返回 `null`、对**伪造 source** 返回 `null`；
+//   ③ 唯一写点在位：`markManagerRaised` 可调用（`lib/state/store.js:396` 的既有暴露面）。
+//
+// ⚠ **禁止**用「表非空」当就绪判据：建批期表**结构性恒空**（`store/batch.js:64` 同 batchId 不可重建，
+//   实测 546 批中 raise 批 14/14 空）⇒ 那会让每个新批都判「名册不可用」= 用新机制复现旧的假告警。
+//
+// @param {object} store 引擎 store（`lib/state/store.js#createStore` 的产物）
+// @returns {{available: boolean, reason: string|null}}
+export function rosterTableReadyOf(store) {
+  const missing = [];
+  if (!store || typeof store !== 'object') {
+    missing.push('store');
+  } else {
+    if (typeof store.readBatch !== 'function') missing.push('store.readBatch');
+    if (typeof store.listBatches !== 'function') missing.push('store.listBatches');
+    if (typeof store.markManagerRaised !== 'function') missing.push('store.markManagerRaised');
+  }
+  // ② 判别子自检（纯函数三例）：合法行 / 空批 / 伪造 source —— 三例任一不符 ⇒ 判别子失效
+  let discriminates = false;
+  try {
+    const good = seatOf({ managerSeat: { seatId: 'probe', role: 'manager', source: 'engine-registry' } });
+    const empty = seatOf({});
+    const forged = seatOf({ managerSeat: { seatId: 'probe', role: 'manager', source: 'host-roster' } });
+    discriminates = Boolean(good) && empty === null && forged === null;
+  } catch {
+    discriminates = false;
+  }
+  if (!discriminates) missing.push('seatOf-discriminator');
+  return missing.length === 0
+    ? { available: true, reason: null }
+    : { available: false, reason: 'roster-table-unwired: ' + missing.join('+') };
+}
+
 // ── R-1（P4 授权修复批 `onto-p4-authz-r2-20260925`）：交接**调用方身份**采集端（只采集，不裁决） ──
 // 分工（禁双套判据）：**裁决**在唯一写路径 `lib/state/store.js#recordHandoff`（与写入同点的 fail-closed）；
 //   本函数只把可解析的身份面**如实采集**成描述子交下去——不猜、不静默、不自行放行。

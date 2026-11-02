@@ -90,37 +90,37 @@ test('AC-3 缺 C 档与缺 D 档必须可区分：两夹具的不可用通道不
   assert.notEqual(missingD.agentTeam.reason, missingC.subagent.reason,
     '两档成因词必须不同：`agent-runtime-unavailable`（D）≠ `runtime-unavailable`（C）');
 
-  // ③ 阳性对照（**本用例判别力的来源**）：只报**面级一个布尔**（`installed`）时，
+  // ③ 阳性对照（**本用例判别力的来源**）：只报**面级一个布尔**（`available`）时，
   //    两夹具读数**完全相同**（OR 下都是 true）⇒ 证明「合回一个布尔」确实分不出缺的是哪一档。
   //    ⇒ `channels` 的必要性由此成立，而不是靠「字段在场」这种形状修辞。
-  assert.equal(faceD.installed, faceC.installed,
-    '阳性对照：只取面级 installed 时两夹具读数相同 ⇒ 面级布尔分不出两档');
-  assert.equal(faceD.installed, true, '两夹具在 OR 下都判面可用 —— 正因如此，分歧只能靠 channels 表达');
+  assert.equal(faceD.available, faceC.available,
+    '阳性对照：只取面级 available 时两夹具读数相同 ⇒ 面级布尔分不出两档');
+  assert.equal(faceD.available, true, '两夹具在 OR 下都判面可用 —— 正因如此，分歧只能靠 channels 表达');
 });
 
 // ── AC-4：聚合规则 = **OR**（任一路径可用 ⇒ 面可用）────────────────────────────────────────────
-test('AC-4 面级 installed 按 OR 聚合：只有一条通道可用时该面仍判可用', () => {
+test('AC-4 面级 available 按 OR 聚合：只有一条通道可用时该面仍判可用', () => {
   const onlyC = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ subagents: SUBAGENTS }) }));
   const onlyD = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ agents: AGENTS }) }));
   const neither = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({}) }));
 
-  assert.equal(onlyC.installed, true, '只有 C 档可用 ⇒ 面可用（OR，不是 AND）');
-  assert.equal(onlyD.installed, true, '只有 D 档可用 ⇒ 面可用（OR，不是 AND）');
-  assert.equal(neither.installed, false, '两档都不可用 ⇒ 面不可用');
+  assert.equal(onlyC.available, true, '只有 C 档可用 ⇒ 面可用（OR，不是 AND）');
+  assert.equal(onlyD.available, true, '只有 D 档可用 ⇒ 面可用（OR，不是 AND）');
+  assert.equal(neither.available, false, '两档都不可用 ⇒ 面不可用');
   assert.equal(onlyC.reason, null, '面可用时 reason 必须为 null');
   assert.ok(typeof neither.reason === 'string' && neither.reason.length > 0, '面不可用时 reason 必须非空');
 });
 
 // ── AC-5：`channels: null`（未探明）与 `{}`（有对象无通道）**必须可区分**，且缺省不把面判死 ────────────
-test('AC-5 未探明 ≠ 不可用：缺省 channels 为 null、不影响 installed；`{}` 不得冒充 null', () => {
+test('AC-5 未探明 ≠ 不可用：缺省 channels 为 null、不影响 available；`{}` 不得冒充 null', () => {
   const absent = agentOf(capabilityReport({ ports: portsOf(true) })); // 未传 agentChannels
   assert.equal(absent.channels, null, '未传通道事实 ⇒ channels 必须是 null（不是 {}）');
-  assert.equal(absent.installed, true, '未探明通道事实**不得**把面判成不可用（同 probed:false 纪律）');
+  assert.equal(absent.available, true, '未探明通道事实**不得**把面判成不可用（同 probed:false 纪律）');
 
   const probedFalse = agentOf(capabilityReport({ ports: portsOf(true), agentChannels: { probed: false } }));
   assert.ok(probedFalse.channels, 'pass 了对象但 probed:false ⇒ channels 仍是对象（形状可读）');
   assert.equal(probedFalse.channels.probed, false, 'probed:false = 未探明');
-  assert.equal(probedFalse.installed, true, 'probed:false 时**不参与 OR 聚合**，面读数原样保留');
+  assert.equal(probedFalse.available, true, 'probed:false 时**不参与 OR 聚合**，面读数原样保留');
 
   // 其余面**恒** null（该面无通道维度）——用 null 而非 {}，否则「有空对象但无通道」
   for (const key of ['toolSurface', 'httpSurface']) {
