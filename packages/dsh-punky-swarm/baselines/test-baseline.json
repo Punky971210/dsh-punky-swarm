@@ -1200,6 +1200,14 @@
       "tests": 14,
       "todos": 0
     },
+    "test/lane-checkpoint-total-mismatch.test.js": {
+      "asserts": 16,
+      "blankLines": 9,
+      "lines": 91,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/lane-session-bind.test.js": {
       "asserts": 115,
       "blankLines": 43,
@@ -2073,7 +2081,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T18:34:56Z",
+  "generatedAt": "2026-11-02T22:31:58Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2087,12 +2095,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12121,
-    "blankLines": 6763,
-    "files": 259,
-    "lines": 71493,
+    "asserts": 12137,
+    "blankLines": 6772,
+    "files": 260,
+    "lines": 71584,
     "tautologies": 0,
-    "tests": 2520,
+    "tests": 2526,
     "todos": 0
   }
 }

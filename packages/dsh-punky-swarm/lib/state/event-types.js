@@ -129,6 +129,14 @@ export const EVT_LANE_EXEMPT_REVOKED = 'lane.exempt.revoked';
 export const EVT_LANE_EXEMPT_INHERITED = 'lane.exempt.inherited';
 export const EVT_LANE_EXEMPT_CLEARED = 'lane.exempt.cleared';
 export const EVT_LANE_OVER_BUDGET = 'lane.over-budget';
+// 【punky-checkpoint-align-20261102】**progress.total 与 checkpoint 清单未对齐**的留痕事件。
+//   与 `EVT_LANE_OVER_BUDGET` **语义正交、不得混用**（两者可同时成立）：
+//     · `lane.over-budget` = `total > checkpoint.steps`（**步数上界**，安全信号）；
+//     · 本枚 = `total ≠ checkpoints.items.length`（**计划清单对齐**，训练信号）。
+//   ⇒ 复用前者会污染「超预算」安全信号（同一事件被两种成因写入 ⇒ audit 无法区分）。
+//   判据口径：预期值**只取 `checkpoints.items.length`**；`checkpoint.steps` **不参与**「等于」判定
+//   （`steps:10` + `items:3` 是**合法组合**，拿 steps 当预期会误报 ⇒ 训练成员忽略警示）。
+export const EVT_LANE_CHECKPOINT_TOTAL_MISMATCH = 'lane.checkpoint.total.mismatch';
 export const EVT_BUDGET_REJECTED = 'budget.rejected';
 // inject.omitted 与上方两枚**语义正交、不得混用**：上方两枚分别属「步数预算」与「mailbox 链环防护」
 //   两个**既有**预算族（常量本身即在本文件上方，逐字不改）；本枚 = **注入面文本字节预算**的省略留痕。

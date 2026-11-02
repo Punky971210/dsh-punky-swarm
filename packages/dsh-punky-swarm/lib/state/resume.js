@@ -175,3 +175,50 @@ export function overBudgetOf(batch, lane, progress) {
 export function hasOverBudgetEvent(batch, lane) {
   return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_OVER_BUDGET && e.lane === lane);
 }
+
+// ── checkpoint 清单对齐（纯函数；接线在 lane-tools.js lane_checkpoint）─────────────────────────
+// 判据（**唯一口径**，批 `punky-checkpoint-align-20261102` 裁决）：
+//   预期值 = `task.checkpoints.items.length`；`progress.total ≠ 该值` ⇒ 未对齐。
+// ⚠ **`checkpoint.steps` 不参与**本判定 —— 它是**运行时上界**（`overBudgetOf` 已管 `total > steps`）。
+//   拿 steps 当预期会造**假警示**（`steps:10` + `items:3` 是合法组合，成员照任务包建议填 `total:3`
+//   ⇒ 若按 steps 判就是 3≠10 的误报）⇒ 误报会训练成员忽略警示，**比不报更有害**。
+// 收窄三档（防误报）：
+//   · `items.length > 0` ⇒ 判「等于」；
+//   · **仅 `steps` 无 `items`** ⇒ **不判**（超界归 `overBudgetOf`）；
+//   · 两者皆无 ⇒ 零感知。
+// 返回 `{ mismatch, declared, actual }`；`declared` = items.length（无清单时 null），`actual` = total（无则 null）。
+export function checkpointTotalMismatchOf(batch, lane, progress) {
+  const task = findTask(batch, lane);
+  const items = task?.checkpoints?.items;
+  const declared = Array.isArray(items) && items.length > 0 ? items.length : null;
+  if (declared === null) return { mismatch: false, declared: null, actual: null }; // 无清单 → 零感知（不判）
+  const total = progress?.total;
+  if (!Number.isInteger(total)) return { mismatch: false, declared, actual: null }; // 未带 total → 不判
+  return { mismatch: total !== declared, declared, actual: total };
+}
+
+// 幂等判据（照 `hasOverBudgetEvent` 同形）：事件流已有该 lane 的本类事件 ⇒ true，接线层据此不重复 appendEvent。
+export function hasCheckpointTotalMismatchEvent(batch, lane) {
+  return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_CHECKPOINT_TOTAL_MISMATCH && e.lane === lane);
+}
+
+// 接线薄壳（**让 lane-tools 只增 1 行**，守住其「逻辑行净增 ≤10」回归护栏）：
+//   判定 → 未记过则 appendEvent → 任何异常只 `logger.warn`（**绝不阻断 checkpoint**）。
+//   把 payload 组装与 fail-safe 收在这里，是因为 lane-tools.js 有行数护栏，而本模块没有。
+export function recordCheckpointTotalMismatch(store, sessionId, batchId, batch, lane, progress, logger = null) {
+  try {
+    const mm = checkpointTotalMismatchOf(batch, lane, progress);
+    if (!mm.mismatch || hasCheckpointTotalMismatchEvent(batch, lane)) return false;
+    store.appendEvent(sessionId, batchId, EVT.EVT_LANE_CHECKPOINT_TOTAL_MISMATCH, {
+      lane,
+      declared: mm.declared,        // = checkpoints.items.length（唯一口径）
+      actual: mm.actual,            // = progress.total
+      step: progress?.step ?? null,
+      source: 'checkpoints.items',  // 固定串：将来若加第二来源，audit 可区分
+    });
+    return true;
+  } catch (e) {
+    logger?.warn?.('[lane-checkpoint] total mismatch 留痕失败（不阻断）: ' + String(e?.message ?? e));
+    return false;
+  }
+}
