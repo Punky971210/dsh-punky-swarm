@@ -204,9 +204,12 @@ export function createHttpPort(ctx) {
      * @param {Function} route.handler 处理函数（宿主签名由本层适配）
      * @returns {{mounted:boolean, dispose:Function}}
      */
-    mountRoute({ method, path: routePath, handler } = {}) {
+    mountRoute({ method, path: routePath, match, handler } = {}) {
       if (!available) return { mounted: false, dispose: () => {} };
-      const dispose = web.register({ method, kind: 'exact', path: routePath, handler });
+      // 【IL-7 修复】契约词 `match`（缺省 `exact`）**原样转发**为宿主词 `kind`。
+      //   此前硬编码 'exact' ⇒ 全仓唯一 `match:'prefix'` 的 404 回退路由（`lib/api.js`）静默退化，
+      //   「读契约的人会以为已支持」（e1-G02 / AG-28，`bf091db` 引入）。
+      const dispose = web.register({ method, kind: match ?? 'exact', path: routePath, handler });
       return { mounted: true, dispose: typeof dispose === 'function' ? dispose : () => {} };
     },
   };

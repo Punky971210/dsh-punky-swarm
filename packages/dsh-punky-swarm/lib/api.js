@@ -45,7 +45,7 @@ export function createApi(ctx, deps) {
   // 裸取 `ctx.webServer`：`webServer` 是插件 `inject` 的**硬依赖**（宿主 cordis 4.0.5 的 inject 无 optional 位）
   //   ⇒ 该服务必然在场，本行不会拿到 `undefined`；缺服务的真实形态是插件整块 pending（本文件不被加载）。
   //   事实化理由与真降级路径见 `lib/index.js` 顶部 `inject` 上方注释（A1-P2-02）——此处**不复制**全文，防第二真源。
-  const register = (route) => { const m = createHttpPort(ctx).mountRoute({ method: route.method, path: route.path, handler: route.handler }); if (m.mounted) disposers.push(m.dispose); };
+  const register = (route) => { const m = createHttpPort(ctx).mountRoute({ method: route.method, path: route.path, match: route.match, handler: route.handler }); if (m.mounted) disposers.push(m.dispose); };
 
   // SSE hub：随 webServer 挂载（无独立配置键；降级回轮询即运行时自适配开关）。
   // 装配点（index.js 层）预留时经 deps.panelStream 注入复用（含 topic 触发源 attachTopic 接线）；
@@ -54,13 +54,13 @@ export function createApi(ctx, deps) {
   if (!deps.panelStream) disposers.push(() => { try { panelStream.dispose(); } catch {} });
 
   register({
-    kind: 'prefix',
+    match: 'prefix',
     path: '/api/dsh-punky-swarm',
     handler(req, res) { sendJson(res, 404, { error: 'not-found' }); },
   });
 
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/batches',
     handler(req, res) {
       try {
@@ -76,7 +76,7 @@ export function createApi(ctx, deps) {
   });
 
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/sessions',
     handler(req, res) {
       try {
@@ -88,7 +88,7 @@ export function createApi(ctx, deps) {
   });
 
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/batch',
     handler(req, res) {
       try {
@@ -166,7 +166,7 @@ export function createApi(ctx, deps) {
   });
 
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/mailbox',
     handler(req, res) {
       try {
@@ -189,7 +189,7 @@ export function createApi(ctx, deps) {
   });
 
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/locks',
     handler(req, res) {
       try {
@@ -210,7 +210,7 @@ export function createApi(ctx, deps) {
   // catalog 由 register.js 经 readCapability 默认合并口径提供——本条件与 enabled 联动，此处零逻辑改动。
   if (catalog) {
     register({
-      kind: 'exact',
+      match: 'exact',
       path: '/api/dsh-punky-swarm/tools',
       handler(req, res) {
         try {
@@ -227,7 +227,7 @@ export function createApi(ctx, deps) {
   // aip.enabled=false（显式关闭——aip 出厂默认开，readCapability 缺省合并 {enabled:true}）时 agentCatalog 为 null，不注册该路由（既有路由契约不变）。
   if (agentCatalog) {
     register({
-      kind: 'exact',
+      match: 'exact',
       path: '/api/dsh-punky-swarm/agents',
       handler(req, res) {
         try {
@@ -242,7 +242,7 @@ export function createApi(ctx, deps) {
   //   GET  /.well-known/aip          — 发现服务预置信息（地址/协议版本/能力概要）
   if (discovery) {
     register({
-      kind: 'exact',
+      match: 'exact',
       path: '/api/dsh-punky-swarm/discover',
       handler(req, res) {
         return readJsonBody(req).then((body) => {
@@ -256,7 +256,7 @@ export function createApi(ctx, deps) {
       },
     });
     register({
-      kind: 'exact',
+      match: 'exact',
       path: '/.well-known/aip',
       handler(req, res) {
         try {
@@ -278,7 +278,7 @@ export function createApi(ctx, deps) {
     const cfgEp = deps.configEndpoints;
     const trustedHosts = Array.isArray(cfgEp.trustedHosts) ? cfgEp.trustedHosts : [];
     register({
-      kind: 'exact',
+      match: 'exact',
       path: '/api/dsh-punky-swarm/config',
       handler(req, res) {
         // trusted 护栏前置（GET/POST 共用；护栏语义非鉴权层、防 DNS-rebinding/跨站）
@@ -353,7 +353,7 @@ export function createApi(ctx, deps) {
   //   SSE 帧协议：event: batch|mailbox|heartbeat + data:<JSON>；注释心跳帧每 10s（hub 内维护）。
   //   推送只发轻量摘要 {sessionId,batchId,eventCount,updatedAt}，客户端回拉既有只读 API 取全量。
   register({
-    kind: 'exact',
+    match: 'exact',
     path: '/api/dsh-punky-swarm/stream',
     handler(req, res) {
       try {

@@ -50,16 +50,16 @@ import { createAgentPort } from '../lib/provider-dsh/agent.js';
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROVIDER_DIR = 'lib/provider-dsh/';
 
-/**
- * 引擎侧**禁止出现**的宿主服务名形态（逐条对应终验点名的 4 处 + 其宿主方法名）。
- * ⚠ 每条都是「**取值/调用**」形态，不是裸词提及 —— 后者会与注释里的溯源说明误撞。
- */
-const FORMS = {
-  "ctx.get('agentTeams')": /ctx\s*\??\.\s*get\s*\(\s*['"]agentTeams['"]/,
-  "ctx.get('agents')": /ctx\s*\??\.\s*get\s*\(\s*['"]agents['"]/,
-  'AGENT_TEAMS_SERVICE': /\bAGENT_TEAMS_SERVICE\b/,
-  'listMembers(': /\.\s*listMembers\s*\(/,
-};
+/** 引擎侧**禁止**的宿主服务名形态：5 名（AC-2 全集）× 3 形态（dot / get / 常量）+ 宿主方法。
+ *  ⚠ 每条都是「取值/调用」形态，不是裸词提及 —— 后者会与注释溯源说明误撞（G3 兜底）。
+ *  ⚠ dot 锚 `(?:ctx|hostCtx)`：裸 `.tools` 会大面积误撞配置字段（FO-1/2 加固，实测 175 文件 0 误报）。 */
+const HOST_NAMES = ['tools', 'webServer', 'subagents', 'agentTeams', 'agents'];
+const FORMS = Object.fromEntries(HOST_NAMES.flatMap((n) => [
+  [`ctx.${n}`, new RegExp('\\b(?:ctx|hostCtx)\\s*\\??\\.\\s*' + n + '\\b')],
+  [`ctx.get('${n}')`, new RegExp('\\b(?:ctx|hostCtx)\\s*\\??\\.\\s*get\\s*\\(\\s*[\'"]' + n + '[\'"]')],
+  [`${n}.SERVICE`, new RegExp('\\b' + n.replace(/([A-Z])/g, '_$1').toUpperCase() + '_SERVICE\\b')],
+]));
+FORMS['listMembers('] = /\.\s*listMembers\s*\(/;
 
 /** 一段源码的违例命中（**注释/字符串内的同形文本不计**）。纯函数 ⇒ 可用合成样本做正/负对照。
  *

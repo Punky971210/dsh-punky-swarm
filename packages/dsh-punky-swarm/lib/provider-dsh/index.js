@@ -31,21 +31,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       ⇒ 同名会让 provider 实现被该门误判（实测红，见 `exec/move-host-ports.md` §踩坑）。
 //
 // ⚠ **`inject` 声明的唯一落点 = 装配面**（`cordis.patch.yml` 的
-//   `- id: dsh-punky-swarm-provider-dsh` 行上 `inject: [tools, webServer, subagents]`）。
+//   `- id: dsh-punky-swarm-provider-dsh` 行上 `inject: [tools, subagents]`）。
 //   **本模块刻意不导出 `inject`**：同一声明若在「模块导出」与「装配行」两处各写一份，
 //   就出现两个真源（一处改了另一处不说话）——这正是本批要消灭的形态。
 //   既有同形先例：`lib/service-probe.js` 亦为「无 inject 导出 + 装配行承载」。
 //
-// ⚠ **与引擎行的 inject 关系（W4 负责清空，本 lane 不动）**：
-//   引擎插件 `lib/index.js:120` 仍 `export const inject = HOST_INJECTIONS`
-//   （`['tools','webServer','subagents']`）。
-//   **进度（W2-S1 已完成）**：宿主触达实现已全部搬进本目录，`lib/host-ports/**` **已不存在**。
-//   但按 `exec/provider-skeleton.md` §5.2 的硬顺序，清空引擎侧 inject（**S-3**）仍须等
-//   **S-2（引擎侧清除残余宿主触达：`lib/index.js:337`、`lib/mcp/data-plane-server.js:279`、
-//   `lib/tools/write-provenance-guard.js:98` 等重复判据）** 完成 —— 引擎代码此刻仍在直读这三个宿主服务；
-//   提前清空会让引擎取值直接撞 cordis 的 `cannot get property "x" without inject`
-//   （活体教训见 `lib/engine/dispatch.js` 的 `subagentRuntimeProbeOf` 头注释与
-//   `test/dispatch-inject-guard.test.js:19`）。
+// ⚠ **IL-3 修复（批 `punky-adapter-split-20261031` · lane `provider-face-fix`）**：
+//   该行 inject **只放恒在服务**（`tools` / `subagents`，由 `@deepseek-ai/dsh-base` 提供）。
+//   **可选服务（`webServer`）不进 inject** —— cordis 4.0.5 的 inject **无 optional 位**
+//   （`Inject.resolve()` 归一化 + `Fiber` 逐键 `_checkImpl`）⇒ 写进去会在 headless 宿主上
+//   让本行**必 pending**（AC-9 RED）。可选服务的取用面 = `serviceOf(ctx, name)`
+//   （`./tools-http.js`）：裸读优先 → 抛出则回落 `ctx.get(name)` ⇒ 缺服务时**降级、不 pending**。
+//
+// ⚠ **与引擎行的 inject 关系（W4 已落地）**：引擎 `lib/index.js` 现为
+//   `export const inject = ENGINE_INJECTIONS;`（= `[]`）⇒ 引擎行零宿主依赖、任何宿主都不 pending。
+//   宿主服务名从此**只**出现在本目录与 provider 装配行内（J4'-c / AC-9）。
+//   （历史：清空引擎 inject 曾须先等 S-2 清完引擎侧残余裸读，否则撞
+//   `cannot get property "x" without inject`；S-2/S-3 均已落地，见 `exec/inject-teardown.md`。）
 
 /** 插件名（与装配行 `id` 同值，便于从 pending 审计反查归属；`id` 本身不参与解析）。 */
 export const name = 'dsh-punky-swarm-provider-dsh';

@@ -147,18 +147,27 @@
     # ⚠ 依赖声明的**唯一落点在本行**：`lib/provider-dsh/index.js` 刻意**不导出**同名数组
     #   （同一条声明写在两处 = 两个真源）。同形先例 = 上方 `service-probe` 行。
     #
-    # ⚠ 与引擎行的依赖声明并存是**过渡态**（不是双挂载：该声明只是「要求服务在场」，
-    #   不注册任何服务）：引擎 `lib/index.js` 仍导出三键声明，因为它此刻仍在直接读这三个服务。
-    #   **清空引擎侧的声明属 W4**，且必须在 `lib/host-ports/**` 搬迁完成之后
-    #   （提前清空 ⇒ 引擎取值撞 cordis `cannot get property "x"` 的未声明错）。
+    # ── 【IL-3 修复 · 批 `punky-adapter-split-20261031` · lane `provider-face-fix`】────────────────
+    #   **本行只声明「恒在服务」**：`tools` / `subagents` —— 两者由 `@deepseek-ai/dsh-base` 提供，
+    #     所有受支持 profile 都从 base 派生 ⇒ 恒在。
+    #   **可选服务不进 `inject`**：`webServer` 只有 web/desktop 系 profile 才有（headless 无）。
+    #     若写进 inject，在 headless 上本行**必 pending** —— cordis 4.0.5 的 inject **无 optional 位**
+    #     （`Inject.resolve()` 归一化为同一映射 + `Fiber` 构造时逐键 `_checkImpl`）。
+    #     可选服务的取用面 = `serviceOf(ctx, 'webServer')`（`lib/provider-dsh/tools-http.js`）：
+    #     **裸读优先 → 抛出则回落 `ctx.get(name)`**（cordis「不声明也能读」通道）⇒ 缺服务时**降级、不 pending**。
+    #   ⇒ 判据（`criteria-v4.md` AC-9 / M-1）：**provider 行 `inject` 内可选服务 = 0**。
+    #
+    # ⚠ 与引擎行的关系（**W4 已落地，不再是「并存过渡态」**）：引擎 `lib/index.js` 现为
+    #   `export const inject = ENGINE_INJECTIONS;`（= `[]`）⇒ 引擎行零宿主依赖、任何宿主都不 pending；
+    #   宿主服务名从此**只**出现在本行（provider 行）与 `lib/provider-dsh/**` 内。
     #
     # ⚠ 与上头「引擎主体行不得自身声明依赖」的纪律**不冲突**：那条是为避免**引擎**在缺面时
-    #   整体 pending（灾难性）。本行是 provider，**就该**在缺宿主服务时 pending —— 且引擎核心
-    #   功能不受影响（per-entry fail-soft）。这正是「功能不可用由 provider 在加载时报告」的落点。
+    #   整体 pending（灾难性）。本行是 provider，缺**恒在**服务时 pending 是正确的响亮信号 ——
+    #   且引擎核心功能不受影响（per-entry fail-soft）。这正是「功能不可用由 provider 在加载时报告」的落点。
     # ------------------------------------------------------------
     - id: dsh-punky-swarm-provider-dsh
       name: 'dsh-punky-swarm/provider-dsh'
-      inject: [tools, webServer, subagents]
+      inject: [tools, subagents]
 # ============================================================
 # ============================================================
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）
