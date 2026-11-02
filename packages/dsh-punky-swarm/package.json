@@ -11,7 +11,6 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
-    "./service-probe": "./lib/service-probe.js",
     "./provider-dsh": "./lib/provider-dsh/index.js",
     "./package.json": "./package.json"
   },

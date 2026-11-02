@@ -8,6 +8,14 @@
       "tests": 6,
       "todos": 0
     },
+    "test/ac16-push-unconfirmed.test.js": {
+      "asserts": 16,
+      "blankLines": 16,
+      "lines": 143,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/accept-pack1-guidance.test.js": {
       "asserts": 16,
       "blankLines": 23,
@@ -1361,9 +1369,9 @@
       "todos": 0
     },
     "test/merge-agent.test.js": {
-      "asserts": 46,
-      "blankLines": 24,
-      "lines": 256,
+      "asserts": 49,
+      "blankLines": 25,
+      "lines": 282,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2081,7 +2089,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T22:31:58Z",
+  "generatedAt": "2026-11-02T23:50:44Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2095,12 +2103,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12137,
-    "blankLines": 6772,
-    "files": 260,
-    "lines": 71584,
+    "asserts": 12156,
+    "blankLines": 6789,
+    "files": 261,
+    "lines": 71753,
     "tautologies": 0,
-    "tests": 2526,
+    "tests": 2532,
     "todos": 0
   }
 }

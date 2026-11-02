@@ -15,14 +15,16 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { serviceOf } from './tools-http.js';
+
 // ── DSH provider 包入口（批 `punky-adapter-split-20261031` · lane `w2-provider-skeleton`）──
 //
 // 定位：本目录 = **DSH 这一家宿主的适配实现包**。三层职责（用户裁决 R-2）里，宿主差异
 //   只允许出现在这里；引擎只向适配层要具名功能，适配层（`lib/ports.ts` 契约 + 分发）不含宿主名。
 //
 // 本文件当前是**骨架**：
-//   · 能加载、能导出（`name` + `apply`），**零运行期行为**——不注册工具、不写状态、不挂钩子、
-//     不读 config、不 provide 任何服务。
+//   · 能加载、能导出（`name` + `apply`）；**唯一运行期动作** = `apply` 内的一次性 `info` 探测
+//     （探测**可选**服务 `agentTeams` 的可用性；不注册工具、不写状态、不挂钩子、不读 config、不 provide 服务）。
 //   · 具体的宿主实现（工具面 / HTTP 面 / 成员执行面 / 名册 / 能力回显）已在 lane
 //     `w2-move-host-ports` 从原 `lib/host-ports/**` **搬迁**进来（搬迁，不是重写）：
 //     `tools-http.js`（原 `host-ports/index.js` → 工具面 + HTTP 面）与 `agent.js`（原 `agent.js` → 成员执行面，含 `formOf` 单点）。
@@ -34,7 +36,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `- id: dsh-punky-swarm-provider-dsh` 行上 `inject: [tools, subagents]`）。
 //   **本模块刻意不导出 `inject`**：同一声明若在「模块导出」与「装配行」两处各写一份，
 //   就出现两个真源（一处改了另一处不说话）——这正是本批要消灭的形态。
-//   既有同形先例：`lib/service-probe.js` 亦为「无 inject 导出 + 装配行承载」。
+//   反例已下线（批 `punky-align-residual-20261102`）：曾有一个「可选服务 `agentTeams` 进 inject」的
+//   独立装配行充当「启动响亮」载体，那正是 IL-3 要消灭的形态（非 team 宿主机必 pending）
+//   ⇒ 该行已删；可观测性改由本模块 `apply` 内的**一次性 `info`** 承担（级别有意降级，见下）。
 //
 // ⚠ **IL-3 修复（批 `punky-adapter-split-20261031` · lane `provider-face-fix`）**：
 //   该行 inject **只放恒在服务**（`tools` / `subagents`，由 `@deepseek-ai/dsh-base` 提供）。
@@ -55,8 +59,17 @@ export const name = 'dsh-punky-swarm-provider-dsh';
 /**
  * 加载入口。
  *
- * **刻意空实现**：骨架阶段不持有任何宿主服务、不注册任何能力。搬迁 lane 到位后，
- * 这里的职责是「把 `lib/ports.ts` 的五个槽位用 DSH 的实现装配起来」，
+ * **只做一件事**：对**可选**服务 `agentTeams` 做一次可用性探测并打**一行** `info`（启动期可观测性）。
+ * 不持有任何宿主服务、不注册任何能力；可选服务**不进 inject**（IL-3 / AC-9）。
+ * 搬迁 lane 到位后，这里的职责是「把 `lib/ports.ts` 的五个槽位用 DSH 的实现装配起来」，
  * 而不是在这里写宿主逻辑（具体实现落在同目录按能力拆分的模块里）。
  */
-export function apply() {}
+export function apply(ctx) {
+  // 可选服务 `agentTeams` **不进 inject**（IL-3 / AC-9）：此处只做**一次性**可用性探测，
+  //   用途是启动期可观测性 —— 缺该服务时**降级、不 pending**（非 team 宿主照常装载）。
+  //   ⚠ **有意降级**：响亮信号由 loader 级 `pending (waiting for service: …)` 降为应用级一行 `info`。
+  const roster = serviceOf(ctx, 'agentTeams');
+  const available = Boolean(roster) && typeof roster.listMembers === 'function';
+  ctx?.logger?.info?.('[dsh-punky-swarm] optional service agentTeams=' + (available ? 'available' : 'unavailable')
+    + '（可选服务，不进 inject；缺失时降级，不 pending）');
+}
