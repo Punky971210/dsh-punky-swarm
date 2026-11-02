@@ -104,11 +104,19 @@ const DEMO_CHILD = process.env.PUNKY_ISOLATION_DEMO_CHILD === '1';
 // 真实 home 真源：os.userInfo() 走系统账户 API，preload 改写的 USERPROFILE/HOME 影响不到它。
 const REAL_HOME = os.userInfo().homedir;
 
-// 真实面上的**被测算面**（REAL_FACES）：只保留「仅被测代码会写」的两个资产同步目标根。
-// 判据：该面在真实机上只由 punky-swarm 的 syncAssets() 写，且同步内容幂等（§头部断言面说明），
-// 故「本测试运行前后逐字全等」是可满足的真实不变量。活宿主面见 LIVE_FACES（结构性排除，不在此列）。
+// 真实面上的**被测算面**（REAL_FACES）：只保留「仅被测代码会写 + 内容幂等」的面。
+//
+// 【p3-migrate · 2026-11-01】面集变更（FU-2 迁移 + FU1-4 引擎根纳入）：
+//   · `~/.agents/skills` **迁出** → LIVE_FACES：实测 hot（rv-adversarial FU-2：max mtime 自行前进），
+//     把它留在「零变化」断言面里等于把**外部写者**的合法写入读成本方泄漏（结构性假红）。
+//   · `~/.dsh/punky-preset`（真实引擎根）**纳入** → LIVE_FACES（本插件最大最敏感的写面，此前零覆盖）。
+//   · `~/.dsh/.agent-presets` **保留**在 REAL_FACES —— 这不是遗漏，而是**防真空锚点**：
+//       ① 其**唯一写者**是本插件 `syncAssets()`（manifest 见 `lib/assets.js:34` 与 `:45-53` 的 `root: 'preset'` 项）；
+//       ② 同步内容**幂等**，且 `p0-digest` 已把 digest 改为 **sha256 内容口径**（去 mtime）⇒「零变化」是可满足的不变量；
+//       ③ 若把两面全迁出，REAL_FACES = [] ⇒ G2 的 `REAL_FACES.map(...)` 产出空数组 ⇒ **断言恒真、测试体面消失**。
+//          `P3-a` 用例把「非空」做成**可达红**判据（见文件末尾 p3 段），不靠注释自证。
+//   活宿主面一律见 LIVE_FACES（结构性排除，不在此列）；两向重复声明由 D7（`:265 liveFaceJustified`）判红。
 const REAL_FACES = [
-  path.join(REAL_HOME, '.agents', 'skills'),
   path.join(REAL_HOME, '.dsh', '.agent-presets'),
 ];
 
@@ -126,11 +134,33 @@ const LIVE_FACES = [
     noiseClass: 'append-only（宿主逐 tick 追加，与被测路径无关）',
     collateralGate: 'D4 活宿主面归属对照',
   },
+  // ── 【p3-migrate · FU-2】技能资产面迁入 LIVE（实测 hot：max mtime 自行前进）──
+  {
+    path: path.join(REAL_HOME, '.agents', 'skills'),
+    reason: '技能资产根：实测 hot（rv-adversarial FU-2：max mtime 自行前进）；留在「零变化」断言面会把外部写者的合法写入读成本方泄漏',
+    writer: 'resident-host-syncAssets + 外部安装器（rv-adversarial FU-2 实测 mtime 前进）',
+    noiseClass: 'mtime 前进 / 内容可能被同源重写（非本测试可观测面）',
+    collateralGate: 'D4 活宿主面归属对照',
+    // D7 硬要求：资产面进 LIVE 必须给归属兜底，否则「沉默写」失去唯一结果面兜底 = 删断言
+    attributionFallback: 'G3 自报落点归属 + I1/I2 写入拦截（目标 realpath ⊆ 隔离根，越界即记录；删除型亦可抓）',
+  },
+  // ── 【p3-migrate · FU1-4】真实引擎根纳入（本插件最大最敏感的写面，此前零覆盖）──
+  {
+    path: path.join(REAL_HOME, '.dsh', 'punky-preset'),
+    reason: '真实引擎根：store（batches/sessions/mailbox/locks）由常驻宿主与本插件共同持续写 ⇒ 无法做「零变化」断言，但**必须有归属兜底**（此前零覆盖）',
+    writer: 'punky-swarm engine (store/sessions/mailbox/locks) + resident host',
+    noiseClass: 'append+rewrite+delete（sessions 持续增长、batches 重写、locks 增删）',
+    collateralGate: 'P3-b 引擎根写入拦截探针',
+  },
 ];
 // D7：已真实执行并判红过的**归属兜底判据**登记表（名字 → 何处执行）
 const LIVE_FACE_GATES = {
   'D4 活宿主面归属对照': 'D4 用例内 attributionVerdict([REAL_SINK_PROBE], ISOLATED).ok === false',
+  'P3-b 引擎根写入拦截探针': 'P3-b 用例内：throw 模式子进程写真实引擎根 ⇒ intercept 报告 violations 含 resolvedPath 落在引擎根下，且真实文件不存在（拦截先于落盘）',
 };
+
+// 真实引擎根（p3 探针用；与 LIVE_FACES 项同源，避免第二处硬编码）
+const REAL_ENGINE_ROOT = path.join(REAL_HOME, '.dsh', 'punky-preset');
 // 真实面 sink 落点样本：喂给归属谓词做「真实面必须判越界」的确定性对照（不触碰该文件）。
 const REAL_SINK_PROBE = path.join(LIVE_FACES[0].path, 'punky-swarm', 'audit-probe.jsonl');
 
@@ -2055,4 +2085,121 @@ test('P2b 空转窗校准：W0 实测外部变化率 ＋ W1 ⊆ (W0 ∪ 我方�
     'W1 \ (W0 ∪ 我方写点) 必须为空 —— apply 窗里的每一处变化，要么空转窗里本来就有（外部写者），'
     + '要么落在我方声明的写入面内。未归置项：' + JSON.stringify(unaccounted.map(keyOf))
     + '｜W0 实测=' + JSON.stringify([...w0Keys]));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// 【p3-migrate · 2026-11-01】面集迁移的**三条验收**（纯新增段，不改上方任何用例）
+//
+//   ① `REAL_FACES` 非空证明（防「空面真空」——G2 的 map 产出空数组会变成恒真）；
+//   ② 真实引擎根**写入拦截**探针（`~/.dsh/punky-preset` 此前零覆盖；FU1-4）；
+//   ③ 判别力变异验证（抽 2 条既有断言：D4 活宿主面自检 / G2 零变化指纹）。
+//
+//   ⚠ p3-b 的安全性：子进程用 `PUNKY_INTERCEPT_THROW=1` ⇒ p1 拦截器**先记录再抛**，
+//     抛出发生在调用原始 `writeFileSync` **之前** ⇒ 真实引擎根**不会产生任何文件**。
+//     父进程仍以 try/finally 兜底清理同名探针（防拦截未生效时留残）。
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+test('P3-a REAL_FACES 非空证明：迁移后断言面不得为空（给实际清单）', () => {
+  assert.ok(Array.isArray(REAL_FACES) && REAL_FACES.length >= 1,
+    'REAL_FACES 不得为空——空面会让 G2 的 REAL_FACES.map(...) 产出 [] ⇒ 断言恒真、测试体面消失');
+  assert.deepEqual(REAL_FACES, [path.join(REAL_HOME, '.dsh', '.agent-presets')],
+    'REAL_FACES 实际清单（唯一保留面 = .agent-presets：唯一写者 syncAssets + 内容幂等 + p0 内容口径 digest）；实测='
+    + JSON.stringify(REAL_FACES));
+  // 与快照函数对齐（防「面集改了但 snapshotReal 没跟上」的静默错位）
+  const snap = snapshotReal();
+  assert.equal(snap.length, REAL_FACES.length, 'snapshotReal() 长度必须与 REAL_FACES 一致');
+  assert.ok(snap.every((s) => s && typeof s.digest === 'string'),
+    '每个真实面快照都必须带内容口径 digest（p0-digest）');
+  // 与 LIVE 面互斥（D7 同判据，这里再钉一次「迁移后不双声明」）
+  const live = new Set(LIVE_FACES.map((f) => normPath(f.path)));
+  assert.deepEqual(REAL_FACES.filter((p) => live.has(normPath(p))), [],
+    'REAL 与 LIVE 不得双声明：' + JSON.stringify(REAL_FACES));
+  assert.deepEqual(liveFaceJustified(REAL_FACES, LIVE_FACES).offenders, [],
+    'LIVE_FACES 三要素/兜底必须齐备（含新迁入的技能面 attributionFallback 与引擎根 collateralGate）');
+});
+
+/** 引擎根探针：子进程在 throw 模式下写真实引擎根，返回 {probe, intercept, target, out}。 */
+function engineRootProbeRun() {
+  const dir = tmpRoot('p3-engine');
+  const target = path.join(REAL_ENGINE_ROOT, '.p3-intercept-probe-' + process.pid + '-' + Date.now() + '.txt');
+  const probe = path.join(dir, 'engine-probe.mjs');
+  fs.writeFileSync(probe, [
+    "import fs from 'node:fs';",
+    "const report = { target: process.env.PUNKY_PROBE_ENGINE_TARGET, threw: false, err: null };",
+    "try { fs.writeFileSync(report.target, 'p3-leak'); } catch (e) { report.threw = true; report.err = String((e && e.message) || e); }",
+    "process.stdout.write('@@PROBE@@' + JSON.stringify(report) + '@@END@@');",
+  ].join('\n'), 'utf8');
+  const reportFile = path.join(dir, 'intercept-report.txt');
+  const env = {
+    PUNKY_PROBE_ENGINE_TARGET: target,
+    PUNKY_INTERCEPT_REPORT: reportFile,
+    PUNKY_INTERCEPT_THROW: '1',
+    ...(ISOLATED ? { PUNKY_INTERCEPT_ROOT: ISOLATED } : {}),
+  };
+  const r = spawnToFiles(process.execPath, [
+    '--import', pathToFileURL(PRELOAD).href,
+    '--import', pathToFileURL(INTERCEPT_PRELOAD).href,
+    probe,
+  ], env, dir);
+  const pick = (text) => {
+    const m = String(text ?? '').match(/@@(?:PROBE|REPORT)@@([\s\S]*?)@@END@@/);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch { return null; }
+  };
+  return { dir, target, out: r.out, probe: pick(r.out), intercept: pick(readIfExists(reportFile)) };
+}
+
+test('P3-b 引擎根写入拦截：写真实 ~/.dsh/punky-preset 必须被抓（此前零覆盖）+ 拦截先于落盘', () => {
+  const run = engineRootProbeRun();
+  try {
+    assert.ok(run.intercept, '拦截报告必须在场（缺报告 ⇒ 拦截没装上，判红）；子进程输出：' + run.out.slice(0, 600));
+    const hit = (run.intercept.violations ?? []).find((x) => x.verdict === 'outside-root'
+      && normPath(String(x.resolvedPath ?? '')).startsWith(normPath(REAL_ENGINE_ROOT)));
+    assert.ok(hit, '写真实引擎根必须被记录为 outside-root（resolvedPath 落在 ' + REAL_ENGINE_ROOT + ' 之下）；实际='
+      + JSON.stringify(run.intercept.violations));
+    assert.equal(run.probe.threw, true, 'throw 模式下探针必须收到拦截异常（证明拦截在调用栈上真的生效）；实际='
+      + JSON.stringify(run.probe));
+    assert.equal(fs.existsSync(run.target), false,
+      '拦截必须先于落盘：真实引擎根不得出现探针文件（否则本探针本身就污染了真实面）');
+    process.stderr.write('[P3-b] hit=' + JSON.stringify(hit) + String.fromCharCode(10));
+  } finally {
+    try { if (fs.existsSync(run.target)) fs.rmSync(run.target, { force: true }); } catch { /* 兜底清理 */ }
+    fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+});
+
+test('P3-c 判别力变异（2 条既有断言）：迁移若回退 / 指纹判据若失效 ⇒ 必红', () => {
+  // ── 变异 1（既有断言：D4 活宿主面自检 `liveFaceExcluded`）──
+  //   把已迁出的技能面**塞回**「零变化」断言面 ⇒ 该既有自检必须判红（这就是迁移的必要性证明）
+  const skillsFace = path.join(REAL_HOME, '.agents', 'skills');
+  const reverted = liveFaceExcluded([...REAL_FACES, skillsFace]);
+  assert.equal(reverted.ok, false, '变异 1：把已迁出的技能面塞回 REAL 断言面 ⇒ 活宿主面自检必须判红');
+  assert.deepEqual(reverted.offenders, [skillsFace], '变异 1：自检须**精确点名**被误纳的面');
+
+  // ── 变异 2（既有断言：G2 真实面零变化指纹）──
+  //   在受控临时面上造「同 rel、内容变化」⇒ g2Verdict 必须 red；对照组同内容不同 mtime 必须 green（p0 内容口径）
+  const dir = tmpRoot('p3-mut');
+  try {
+    const face = dir;
+    writeRelFile(face, path.join('.dsh', 'p3.json'), 'v1');
+    const before = fingerprint(face);
+    writeRelFile(face, path.join('.dsh', 'p3.json'), 'v2-changed');
+    const changed = fingerprint(face);
+    const settled = fingerprint(face);   // 收敛后的第二次读数（**不 sleep**：受控临时面无外部写者）
+    const relPosix = toPosix(path.join('.dsh', 'p3.json'));
+    const changedSha = crypto.createHash('sha256')
+      .update(fs.readFileSync(path.join(face, '.dsh', 'p3.json'))).digest('hex');
+    // 归因项形状照既有先例（F3：`{kind:'faceRel', rel, source:'A3', sha256}`）——
+    //   不传 attributed 会落到 inconclusive{unattributable}（D6 口径），那是「不可归因」而不是「判据失效」。
+    const attributed = [{ kind: 'faceRel', rel: relPosix, source: 'A3', sha256: changedSha }];
+    const red = g2Verdict({ face, before, after: changed, after2: settled, attributed });
+    assert.equal(red.status, 'red', '变异 2：内容真变 + 可归因 ⇒ G2 判据必须 red（否则「零变化」是恒真断言）；实测='
+      + red.status + ' subclass=' + (red.subclass ?? '-'));
+    assert.deepEqual(red.delta.changed.map(toPosix), [relPosix], '变异 2：red 须点名变化的相对路径（posix 归一后比较）');
+    // 反向对照：内容不变、仅 mtime 前进 ⇒ 必须 green（证明 p0 的内容口径没被回退成 mtime 口径）
+    const green = g2Verdict({ face, before: changed, after: settled, after2: settled, attributed });
+    assert.equal(green.status, 'green', '变异 2 对照：内容不变（仅时间前进）必须 green；实测=' + green.status);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

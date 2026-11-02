@@ -1057,11 +1057,11 @@
       "todos": 0
     },
     "test/home-isolation.test.js": {
-      "asserts": 197,
-      "blankLines": 157,
-      "lines": 1843,
+      "asserts": 241,
+      "blankLines": 183,
+      "lines": 2206,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 32,
       "todos": 0
     },
     "test/host-ports.test.js": {
@@ -2073,7 +2073,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T15:30:12Z",
+  "generatedAt": "2026-11-02T18:34:56Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2087,12 +2087,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12077,
-    "blankLines": 6737,
+    "asserts": 12121,
+    "blankLines": 6763,
     "files": 259,
-    "lines": 71130,
+    "lines": 71493,
     "tautologies": 0,
-    "tests": 2509,
+    "tests": 2520,
     "todos": 0
   }
 }
