@@ -51,6 +51,57 @@ function formOf(rt) {
 }
 
 /**
+ * **C 档通道读数**（一次性 Subagent / `lane_dispatch`）—— **单点**。
+ *
+ * 为什么抽出来（批 `punky-adapter-channels-20261101` · lane `ch-impl`）：
+ *   端口自身的 `available`/`reason` 与上报给引擎的 `channels.subagent` 必须是**同一个判定**。
+ *   若两处各判一次，就会出现「面说可用、通道说不可用」的读数分歧 —— 而那正是本批要消灭的东西。
+ *   判序与原实现逐条等价（零语义增删）：
+ *     ① 取不到宿主服务（含 cordis 注入守卫抛错，`serviceOf` 已吞）⇒ `runtime-unavailable`
+ *     ② 服务在位但两种启动入口都不可调用                                ⇒ `no-start-entry`
+ *
+ * @param {object|null} rt `serviceOf(ctx,'subagents')` 的读数
+ * @returns {{available: boolean, reason: string|null}}
+ */
+function subagentChannelOf(rt) {
+  const form = formOf(rt);
+  if (form !== null) return { available: true, reason: null };
+  return { available: false, reason: rt ? 'no-start-entry' : 'runtime-unavailable' };
+}
+
+/**
+ * **通道级可用性读数**（C 档 / D 档分开报）—— 批 `punky-adapter-channels-20261101` 的 H3 落点。
+ *
+ * 用户裁决：能力面是**一个**（`agentRuntime` 不拆），但引擎调用走**两条不同通道**，
+ *   适配器必须**分别**报「该通道能否用」。两通道的物理基础本就是两个不同宿主能力：
+ *   · **C 档** = 一次性 Subagent（`execute` / `lane_dispatch`）⇒ 依赖宿主 `subagents` 服务；
+ *   · **D 档** = agentTeams 唤醒（`notifyLeader` / `spawn_teammate`）⇒ 依赖宿主 `agents` 服务。
+ *   ⇒ 「缺 C 档」与「缺 D 档」是**两件不同的事**，用一个布尔概括会把另一档的缺失变不可见。
+ *
+ * `reason` **词表零新增**（复用既有成因读数）：
+ *   · C 档：`runtime-unavailable` / `no-start-entry`（与本端口 `available` 同源，见 `subagentChannelOf`）；
+ *   · D 档：`agent-runtime-unavailable`（与 `notifyLeader` 的守卫**逐字同词同判据**，见本文件 `notifyLeader`）。
+ *
+ * ⚠ **不放 `lib/capabilities.js`**：该文件的导出面被 `test/no-agentTeams-batch.test.js`（C7）逐字冻结为**恰好六项**
+ *   ⇒ 通道事实函数放 provider 侧是硬约束，不是偏好（设计 §3.2）。
+ *
+ * @param {object} ctx 宿主上下文
+ * @returns {{probed: boolean, subagent: {available: boolean, reason: string|null},
+ *            agentTeam: {available: boolean, reason: string|null}}}
+ *   `probed:true` = 本次已实际探过（本函数只在**能读**时被调用；未读到时上层给 `channels:null`）。
+ */
+export function agentChannelFactsOf(ctx) {
+  const subagent = subagentChannelOf(serviceOf(ctx, 'subagents'));
+  const agents = serviceOf(ctx, 'agents');
+  // D 档判据与 `notifyLeader` 的入参守卫**同式**：取到服务且其 `get` 可调用才算可用。
+  //   注意「取到之后能不能投递」不在此判（那是调用时的事实，属 `notifyLeader` 的 `reason` 域）。
+  const agentTeam = (agents && typeof agents.get === 'function')
+    ? { available: true, reason: null }
+    : { available: false, reason: 'agent-runtime-unavailable' };
+  return { probed: true, subagent, agentTeam };
+}
+
+/**
  * 成员执行端口。
  *
  * @param {object} ctx      宿主上下文（只读 `ctx.subagents`）
@@ -72,14 +123,14 @@ export function createAgentPort(ctx, opts = {}) {
   //     ② 服务在位但两种入口都不可调用           ⇒ `'no-start-entry'`
   //   ⚠ `reason` 是**功能面**语义（"拿不到什么"），**不是**宿主形态值；
   //     「是哪一形态」由内部 `form` 承载，仍**不外泄**（AC-5″）。
-  let rt = null;
-  let unavailableBy = null;
-  rt = serviceOf(ctx, 'subagents'); // 裸读优先 + `ctx.get` 回落（W4：不依赖 inject 声明）
-  if (!rt) { rt = null; unavailableBy = 'runtime-unavailable'; } // 取不到 ⇒ 视为不可取（降级，不崩）
+  const rt = serviceOf(ctx, 'subagents'); // 裸读优先 + `ctx.get` 回落（W4：不依赖 inject 声明）
+  // C 档读数走**单点**（`subagentChannelOf`）：端口 `available` 与 `channels.subagent.available`
+  //   若各判一次就会分歧 —— 那正是本批要消灭的读数不一致（见该函数注释）。
+  const subagentChannel = subagentChannelOf(rt);
   const form = formOf(rt);
-  const available = form !== null;
+  const available = subagentChannel.available;
   /** 不可用成因（功能面三态；`available===true` 时恒 `null`）。 */
-  const reason = available ? null : (unavailableBy ?? 'no-start-entry');
+  const reason = subagentChannel.reason;
   const caps = opts.capabilities ?? (rt && typeof rt === 'object' ? rt.capabilities : undefined) ?? null;
   const capsKnown = caps !== null && typeof caps === 'object' && Object.keys(caps).length > 0;
   const presetFor = typeof opts.presetFor === 'function' ? opts.presetFor : () => null;

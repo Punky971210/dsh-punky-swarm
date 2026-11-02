@@ -234,7 +234,7 @@ test('C3 改文件即时生效：**同 size** 仅内容变（mtime 变）⇒ 缓
   const next = raw.replace('新增用例码', '新增用例条'); // 同长度替换（CJK 5 字 ↔ 5 字 ⇒ 同字节数）
   assert.notEqual(next, raw, '夹具须真的改到内容');
   assert.equal(Buffer.byteLength(next, 'utf8'), Buffer.byteLength(raw, 'utf8'), '夹具须保持同 size（只验 mtime 维度）');
-  fs.writeFileSync(abs, next, 'utf8');
+  fs.writeFileSync(abs, next, 'utf8'); fs.utimesSync(abs, new Date(), new Date(Date.now() + 1000)); // 显式推进 mtime：同 size 紧邻两次写盘在本机卷上可能得到**相同** stat 指纹（生产缓存键 = abs|mtimeNs|size，已 ns 级）⇒ 不推进则偶发命中旧缓存
   const after = loadVocabulary({ root });
   assert.notEqual(after, before, 'mtime 变 ⇒ 缓存必须失效');
 });

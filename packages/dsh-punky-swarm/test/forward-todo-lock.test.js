@@ -53,9 +53,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly, countSource, listTestFiles } from '../scripts/baseline-snapshot-core.mjs';
+// 复活前提谓词（**单点**；与 `test/gate-techdebt-red.test.js` 的 R-16…R-19 同源复用）。
+import { governanceDegradeRevivalOf, GOVERNANCE_DEGRADE_DUE_BATCH } from './helpers/governance-degrade-revival.mjs';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REGISTRY_REL = 'test/forward-todo-registry.json';
@@ -158,16 +161,22 @@ test('L2 棘轮 + 每条挂 AC/dueLane：OPEN ≤ openMax、id 唯一、必填�
   }
 });
 
-test('L4 棘轮基线 = 内联面（**不是**运行期 todo 数）：openMax ≡ OPEN 数，且显式记录两者不等', () => {
+test('L4 棘轮基线 = 内联面（**不是**运行期 todo 数）：openMax ≡ OPEN 数，且 runtime 总数 ≡ 实测 A+B', () => {
   // 第 2 道「两机制分开数」的机检形态：棘轮上限必须**等于内联面条数**（冻结时点），
-  // 且必须**不等于**运行期 todo 总数 —— 后者是 A+B 之和，拿它当基线会让棘轮口径漂移。
-  assert.equal(registry.ratchet.openMax, registry.open.length,
-    'openMax 必须等于当前 OPEN 数（清零 todo 时须**同步收紧** openMax：棘轮只许收紧，不许上调）');
-  assert.notEqual(registry.ratchet.runtimeTodoTotal, registry.ratchet.openMax,
-    '运行期 todo 总数（A+B）不得等于棘轮基线（A）—— 若相等，说明两个机制被混成了一个计数');
-
+  // 且运行期总数必须**恰等于实测的 A+B** —— 两机制被混成一个计数时，这条恒等式必不成立。
+  // 【批 `punky-adapter-channels-20261101` · lane `mod-todo-exec` 订正】
+  //   ⚠ 原断言是 `notEqual(runtimeTodoTotal, openMax)`，理由「相等 ⇒ 两机制被混成一个计数」。
+  //   该**形式**只在「两数恰好不等」时成立 = **偶然属性**，不是不变量：本批把 4 条模块级 todo 迁成
+  //   内联形态后（B: 4→0、A: 0→4），两数**必然相等**（都 = 4）⇒ 原断言会把**正确的记账**判成红。
+  //   ⇒ 改为断言记账恒等式（更强：它在 A+B 任何配比下都成立，且混用计数时必红）。
   const inline = scanInlineTodos().length;
   const moduleLevel = Object.values(moduleLevelTodoCounts()).reduce((a, b) => a + b, 0);
+  assert.equal(registry.ratchet.openMax, registry.open.length,
+    'openMax 必须等于当前 OPEN 数（清零 todo 时须**同步收紧** openMax：棘轮只许收紧，不许上调）');
+  assert.equal(registry.ratchet.runtimeTodoTotal, inline + moduleLevel,
+    '运行期 todo 总数必须 ≡ 实测 A+B（两机制被混成一个计数时该式必不成立）'
+    + '：登记=' + registry.ratchet.runtimeTodoTotal + ' 实测 A+B=' + (inline + moduleLevel)
+    + '（A=' + inline + ' B=' + moduleLevel + '）');
   process.stdout.write('[forward-todo] 分列读数：inline(A)=' + inline
     + ' moduleLevel(B)=' + moduleLevel
     + ' runtime(A+B)=' + (inline + moduleLevel)
@@ -193,3 +202,60 @@ test('L5 AC-T5 拆分批退场硬门：OPEN_TODOS = ∅',
       'AC-T5（根治项）：拆分批退场时 OPEN_TODOS 必须为 ∅ —— 4 条全部转成正式断言并删除登记表条目，'
       + '否则拆分批**不得判绿**。当前未清零的条目=' + JSON.stringify(registry.open.map((x) => x.id)));
   });
+
+// ══ 第 5 道 · 升格门：让「该转正了」由门禁自己发现 ═══════════════════════════════════
+// 为什么需要这一道（本批 `mod-todo-exec` 的实质增量）：
+//   把 `test.todo(name)`（无回调 ⇒ 永不执行）改成 `{ todo }`（会执行）**只是让前提可被判**；
+//   若没有本门，「前提已成立」与「todo 仍挂着」两个事实仍可**长期静默共存** —— 那还是黑洞，
+//   只是从「永远不知道」变成「知道但无人被绊倒」。本门把后者变成**红**。
+//   判据与 R-16…R-19 的回调**同源**（`governance-degrade-revival.mjs` 单点），故不会出现
+//   「测试说前提成立了，门却认为没成立」的两套口径。
+test('L6 升格门：复活前提已成立而 todo 仍登记 ⇒ 红（该转正了）', () => {
+  const pending = registry.open.filter((x) => x.dueBatch === GOVERNANCE_DEGRADE_DUE_BATCH);
+  if (pending.length === 0) return; // 已清账 ⇒ 本门无事可判（不是 skip，是判据已满足）
+  const r = governanceDegradeRevivalOf(PKG);
+  assert.equal(r.revival, false,
+    '⚠ **该转正了**：`' + GOVERNANCE_DEGRADE_DUE_BATCH + '` 的复活前提已成立'
+    + '（事件常量已登记 ∧ 写端在场），但 registry.open 仍登记 ' + pending.length + ' 条：'
+    + JSON.stringify(pending.map((x) => x.id))
+    + // 转正三步（与 gate-techdebt-red 的回调提示同源）
+    '\n⇒ 转正三步：① 从 `ARCHIVED_CASES` 恢复原始断言（⚠ 归档文本有转录缺陷）'
+    + ' ② 删掉 `{ todo }` 转正式用例 ③ 清 `registry.open` 对应条目并收紧 `openMax`。'
+    + '\n本门存在的意义：不让「前提已成立」与「todo 仍挂着」两个事实静默共存。');
+});
+
+// ══ 第 5 道 · 判别力对照（防 L6「恒绿」：合成树三向）══════════════════════════════════
+// L6 在真实仓现为绿（前提未成立）。但「绿」有两种可能：① 前提确实未成立（正确）② 谓词恒 false（假绿）。
+// 本用例用**合成树**把它分开：两个条件**分别**不足以让 `revival` 为真，**齐备**才为真 ⇒ 谓词确有判别力。
+test('L6′ 谓词判别力：只登记常量 / 只在写端出现 / 两者齐备 三向对照（合成树，不碰真实 lib）', () => {
+  const mkTree = (eventTypesSrc, writerSrc) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-revival-probe-'));
+    fs.mkdirSync(path.join(root, 'lib', 'state'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'lib', 'state', 'event-types.js'), eventTypesSrc);
+    if (writerSrc !== null) {
+      fs.mkdirSync(path.join(root, 'lib', 'store'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'lib', 'store', 'writer.js'), writerSrc);
+    }
+    return root;
+  };
+  const CONST_DECL = "export const EVT_LANE_GOVERNANCE_DEGRADE = 'lane.governance-degrade';\n";
+  const WRITER = 'export const q = EVT_LANE_GOVERNANCE_DEGRADE;\n';
+
+  const onlyConst = governanceDegradeRevivalOf(mkTree(CONST_DECL, null));
+  assert.equal(onlyConst.detail.eventConstant, true, '常量面：已登记 ⇒ true');
+  assert.equal(onlyConst.detail.writer, false, '写端面：无写端 ⇒ false（**单靠常量不算复活**）');
+  assert.equal(onlyConst.revival, false, '两条件必须**同时**成立');
+
+  const onlyWriter = governanceDegradeRevivalOf(mkTree('// 无常量\n', WRITER));
+  assert.equal(onlyWriter.detail.eventConstant, false, '常量面：未登记 ⇒ false');
+  assert.equal(onlyWriter.detail.writer, true, '写端面：代码面出现该 token ⇒ true');
+  assert.equal(onlyWriter.revival, false, '**单靠写端也不算复活**');
+
+  const both = governanceDegradeRevivalOf(mkTree(CONST_DECL, WRITER));
+  assert.equal(both.revival, true, '两条件齐备 ⇒ revival:true（L6 此时必红 ⇒ 「该转正了」被自动发现）');
+
+  // 反假绿：**注释里**的名字不得被当成登记（`event-types.js:272` 那行注释正是「未登记」的说明）。
+  const commentOnly = governanceDegradeRevivalOf(mkTree('// 注释里提到 EVT_LANE_GOVERNANCE_DEGRADE 但没登记\n', WRITER));
+  assert.equal(commentOnly.detail.eventConstant, false, '注释不是登记（剥注释口径，与仓内计数内核同源）');
+});
+

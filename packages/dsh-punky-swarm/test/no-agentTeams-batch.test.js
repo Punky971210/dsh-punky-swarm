@@ -67,7 +67,7 @@ async function loadCapabilities() {
 // 能力面读 `rt` 的**端口位**（W4 起 `capabilityReport` 判**端口 `available`**，不再读宿主 ctx 属性）。
 //   `ports: null` ⇒ **未探明**；`available:false` ⇒ 该宿主**拿不到该功能**（正常降级形态）。
 const facePorts = (available = true, only = null) =>
-  Object.fromEntries((only ?? ['toolSurface', 'httpSurface', 'agentRuntime']).map((k) => [k, { available }]));
+  Object.fromEntries((only ?? ['toolSurface', 'httpSurface', 'agentRuntime', 'rosterSource']).map((k) => [k, { available }]));
 /** 内核端口在位事实（W4 起 fail-closed 面 = 这里）。 */
 const kernelFacts = (over = {}) => ({ runtime: true, audit: true, ...over });
 
@@ -102,14 +102,20 @@ function balancedSlice(src, fromIndex) {
 test('C1 无 agentTeams 能力仍可建批派发：建批 + 派发成功，且能力缺失面在回显/报错通道可见', async () => {
   const { HOST_FACE_KEYS, ENGINE_INJECTIONS, capabilityReport, assertRequired } = await loadCapabilities();
 
-  // 前置（**W4 新命题**）：引擎声明面**空**，且引擎侧词表是**功能面名**（不含任何宿主服务名）。
-  //   旧命题是「`HOST_INJECTIONS` 必须逐字等于宿主三键」—— 那是本批要取消的硬依赖，已作废。
+  // 前置（**W4 命题 + B 段扩面**）：引擎声明面**空**，且引擎侧词表是**功能面名**（不含任何宿主服务名）。
+  //   旧命题是「`HOST_INJECTIONS` 必须逐字等于宿主三键」—— 那是 W4 要取消的硬依赖，已作废。
+  //   B 段（批 `punky-adapter-channels-20261101`）再扩第 4 面 `rosterSource`：**名册读取**是与
+  //   「派一个成员」**不同的能力**（设计 §5.1）⇒ 独立成面，**不塞进 `agentRuntime.channels`**。
   assert.deepEqual([...ENGINE_INJECTIONS], [], '引擎插件行 inject 必须为空（J4\u0027-a）');
   assert.deepEqual(
     [...HOST_FACE_KEYS].sort(),
-    ['agentRuntime', 'httpSurface', 'toolSurface'],
-    '功能面键必须逐字为三面（宿主中立词表；AC-9b）',
+    ['agentRuntime', 'httpSurface', 'rosterSource', 'toolSurface'],
+    '功能面键必须逐字为四面（宿主中立词表；AC-9b + rosterSource 扩面）',
   );
+  // 扩面**不得**顺手把 `agentRuntime` 拆成两个面（H1：面仍是一个；C/D 两档只在 `.channels` 里表达）。
+  //   —— 这条是本命题的**反向锁**：只锁「四面」会漏掉「拆成五面（agentRuntimeC/agentRuntimeD）」的错解。
+  assert.equal(HOST_FACE_KEYS.filter((k) => k === 'agentRuntime').length, 1,
+    'H1：`agentRuntime` 仍是一个面（两档在 channels 里表达，不得拆面）');
   for (const foreign of ['agentTeams', 'AgentScope', 'dsh-agent', 'tools', 'webServer', 'subagents']) {
     assert.equal(HOST_FACE_KEYS.includes(foreign), false, '功能面键不得含宿主服务名/外部框架位 ' + foreign);
   }

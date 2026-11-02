@@ -58,7 +58,11 @@ import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilit
 // 【W4 · D-2/D-3】功能面探活所需的端口实例：由装配根在此**建一次**，供 `capabilityReport({ ports })` 读 `available`。
 //   方向 = 引擎 → provider 端口（J6：宿主差异只在 provider 内）；本文件不再读任何宿主服务名。
 import { createToolsPort } from './provider-dsh/tools-http.js';
-import { createAgentPort } from './provider-dsh/agent.js';
+import { createAgentPort, agentChannelFactsOf } from './provider-dsh/agent.js';
+// 【B 段 · 批 `punky-adapter-channels-20261101`】名册功能面端口：只用于**能力探活**（读 `available`）。
+//   `agent` 传 `null` 与 `lib/bridge/dispatch-register.js` 的既有「only-available 探活」同式
+//   （`available` 的判定只依赖宿主服务在位，与查询凭据无关）⇒ 不引入成员语义。
+import { createRosterPort } from './provider-dsh/roster.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
@@ -1217,16 +1221,58 @@ export const apply = (ctx, config = {}) => {
     toolSurface: createToolsPort(ctx),
     httpSurface: createHttpPort(ctx),
     agentRuntime: agentPortForCapability,
+    // B 段：第 4 面（名册读取）。roster **不属于** `agentRuntime.channels` —— 读名册与派成员是两个动作。
+    rosterSource: createRosterPort(ctx, null),
   };
+  // 【A 段 · 批 `punky-adapter-channels-20261101`】**通道级可用性**读数：C 档（一次性 Subagent）与
+  //   D 档（agentTeams 唤醒）依赖**不同宿主能力**，必须分别报 —— 一个布尔概括会让另一档的缺失不可见。
+  //   事实函数在 provider（`agentChannelFactsOf`），此处只做**注入**；`capabilityReport` 签名不变。
+  const agentChannels = agentChannelFactsOf(ctx);
   rt.capabilities = capabilityReport({
     ...rt,
     ctx,
     config,
     ports: probePorts,
+    agentChannels,
     kernel: kernelFacts,
   });
   // 路①：功能面不可用 ⇒ warn（**降级但不静默**；前缀与旧 `capability-missing:` 分开，避免与内核缺位混读）
-  const faceDegraded = rt.capabilities.degraded ?? [];
+  //
+  // ── 【B 段 · 告警分级：**这是裁过的策略，不是漏报**】批 `punky-adapter-channels-20261101` ─────────
+  //   总原则：**事实归事实，告警归告警**。
+  //     · `capabilityReport().degraded` = **事实全集**（回显/巡检读它），本改动**不删减其任何一项**；
+  //     · 本处只决定「哪些事实值得**每次启动都喊一声**」。
+  //
+  //   ⚠ `BASELINE_OPTIONAL_FACES` 是**本次新增的策略常量**，**不是**既有政策的自然延伸 ——
+  //     既有的 `degraded` 语义未定义过「哪些面可以不 warn」，本表是新立的判定。故在此逐项记账：
+  //
+  //   ▸ **表内有哪些面**：目前只有 1 项 —— `rosterSource`。
+  //
+  //   ▸ **依据（为什么它属「基线态」）**：
+  //     名册读取依赖宿主团队服务；**非官方宿主天生没有该服务**，这不是故障而是**常态**。
+  //     同一事实在别处早已这么定性：`lib/tools/host-surface.js:78` 原文 ——
+  //       「service 不可用 ⇒ `reason:'service-unavailable'`（非官方宿主**基线态**，由回显承担可读性）」。
+  //     ⇒ 名册的**可读性由回显承担**是该仓既定做法；把它再打成每启动一条 warn，就是**同一事实两套政策**。
+  //
+  //   ▸ **为什么必须过滤（实测代价，不是口味）**：未过滤时全量 **17 fail**，其中
+  //     `T-B1 缺省 config → apply() 零 warn` 直接点名 `capability-degraded: rosterSource,agentRuntime.agentTeam`。
+  //     ⇒ 即本仓已修过一次的**告警疲劳源（G02）**：把「可选能力默认关」降格为 warn 曾被判为误报。
+  //     同理 `agentRuntime` 的**单档**缺失（多数宿主只有 C 档、无 D 档）也是常态 —— 但通道缺失**不进本表**：
+  //     它根本不进 `degraded`（`degraded` 只由**面**派生），故无需在此排除；通道分歧由 `.channels` 回显承担。
+  //
+  //   ▸ **防误读（最重要的一句）**：**`rosterSource` 不在 warn 里 ≠ 它不被报。**
+  //     它的降级读数是完整可得的：`capabilityReport().host[]` 里 `installed:false` +
+  //     `probed:true` + `reason:'service-unavailable'`，并**照常出现在 `degraded[]` 全集**里
+  //     （headless 宿主实测 `degraded = ["httpSurface","rosterSource"]`）。
+  //     ⇒ 想看「名册到底能不能用」的人读回显，**永远读得到**；这里只是不把它做成每次启动的噪音。
+  //
+  //   ▸ **将来什么条件下可以把该项移出本表**（防止本表变成「永久豁免」）：
+  //     ① 名册能力变成**受支持宿主的必备面**（即「没有名册 = 装配缺陷」而非基线态）——那么它就该响亮；
+  //     ② 或有了**一次性启动 `info`** 之类的专用载体（IL-5 解除条件「甲」的路径）——
+  //        那时它由该载体承担，本表这一项可**一并删掉**，而不是留在两处各说一次。
+  //     ⚠ 任何"顺手把它删掉让它响"的改动，须先有上面任一条成立，否则复现 17 红 + 告警疲劳。
+  const BASELINE_OPTIONAL_FACES = ['rosterSource'];
+  const faceDegraded = (rt.capabilities.degraded ?? []).filter((k) => !BASELINE_OPTIONAL_FACES.includes(k));
   if (faceDegraded.length > 0) {
     ctx.logger?.warn?.('[dsh-punky-swarm] capability-degraded: ' + faceDegraded.join(','));
   }

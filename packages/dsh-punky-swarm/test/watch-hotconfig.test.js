@@ -287,11 +287,11 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
   const { ctx, routes } = assemblyCtxWeb();
   const disposer = apply(ctx, bareConfig(root));
   try {
-    await sleep(HOT_SETTLE);
+    await waitFor('h7-baseline', () => getConfig(routes).applied?.watch?.enabled === true, { expected: 'applied.watch 出厂快照已就位（boot 对账在 apply() 内同步完成，故首轮即成立）' });
     assert.equal(remountLines(ctx.calls).length, 0, '基线 boot 对账 no-op');
     // ① 热写 staleBatchMs=0（显式关闭僵尸批过滤）→ 生效面第 6 键变化 → remount 恰 1 次
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0 } } } });
-    await sleep(HOT_SLEEP);
+    await waitFor('h7-1-staleBatchMs-remount', () => remountLines(ctx.calls).length >= 1, { timeoutMs: 6000, expected: 'staleBatchMs 变化 → remount 留痕 ≥1（fs.watch 防抖 300ms → reload → onChange）' });
     let lines = remountLines(ctx.calls);
     // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
     // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
@@ -301,7 +301,7 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
       '快照携带 staleBatchMs=0（显式 0 被当合法值透传，而非回退默认 24h）');
     // ② 热写 unconsumedTimeoutMs=60000（D-2 阈值收紧）→ 第 7 键变化 → 再 remount 1 次
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
-    await sleep(HOT_SLEEP);
+    await waitFor('h7-2-unconsumedTimeoutMs-remount', () => remountLines(ctx.calls).length >= 2, { timeoutMs: 6000, expected: 'unconsumedTimeoutMs 变化 → remount 留痕 ≥2（第 7 键进生效面）' });
     lines = remountLines(ctx.calls);
     // P4-b 不可改造（Leader 裁定）：`lines` / `topic` / `other` 的元素都是 **logger.info / warn 的自由文案字符串**（运行期产出） ⇒ 换一条文案条数不变、计数形态仍绿；
     // map 出身份即原文 = 第二真源（来源①运行期文案）。保留计数。
@@ -313,7 +313,7 @@ test('H7 D-4/D-2 两档开关热更即时：staleBatchMs/unconsumedTimeoutMs 变
     assert.equal(ctx.calls.error.length, 0, '热更路径零 error');
     // ③ 同值重写幂等：零新增 remount
     writeRuntime(root, { capabilities: { watch: { longrun: { staleBatchMs: 0, unconsumedTimeoutMs: 60000 } } } });
-    await sleep(HOT_SLEEP);
+    await sleep(HOT_SLEEP); // ③ 是**负向判据**（不得有 remount）：`mergeAndNotify` 无变化时 `return { changed: [] }` 且**不打任何日志** ⇒ 无正向信号可轮询，只能以「≥ 防抖窗口的静止期」为判据；风险是过早断言=假绿，而非 flake（flaky 源在 ①②，已改有界轮询）
     assert.equal(remountLines(ctx.calls).length, 2, '同值重写幂等 no-op');
   } finally {
     disposer();

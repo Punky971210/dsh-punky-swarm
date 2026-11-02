@@ -48,6 +48,8 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan, assemblyGate } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { SPEC_OK, assessC } from './helpers/gate-fixture.mjs';
+// G-a 四条归档用例的复活前提谓词（**单点**；`forward-todo-lock` 的 L6 升格门同源复用）。
+import { governanceDegradeRevivalOf, GOVERNANCE_DEGRADE_DUE_BATCH } from './helpers/governance-degrade-revival.mjs';
 // 【2026-09-27 批 3 · T-15/D-6 归因】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 已删
 //   （真实骨架 5 件已删 T-4/A-9；该导出亦已随 helper 收口删除，`mkTeamRoot` 五处消费点全部去前置）。
 import { DEFAULT_ESCALATION_PRIMITIVES } from '../lib/governance/escalation.js';
@@ -89,6 +91,23 @@ const HISTORIC_EVENT_NAMES = [
 //   任何 `process.cwd()` 相关的夹具路径都会在产物根下 ENOENT ⇒ 一律以本文件位置解析。
 //   （驱动：A-② lane e2 的 gate 命令 GATE_EXIT_NONZERO 返工；仓库根运行行为逐字不变。）
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// ── G-a 四条归档用例的**复活前提断言**（批 `punky-adapter-channels-20261101` · lane `mod-todo-exec`）──
+//   背景：R-16…R-19 原为 `test.todo('<name>')`（**无回调 ⇒ 永不执行 ⇒ 无法自动转绿**）
+//     ⇒ 「什么时候该转正」无人可知。现改为**可执行 todo**（`{ todo: … }` + 回调）：
+//       回调断言**复活前提**（谓词单点 = `test/helpers/governance-degrade-revival.mjs`）。
+//     现状前提不成立 ⇒ 仍是 todo（失败原文可见）；**前提一成立 ⇒ 本断言转绿** ⇒ 「该转正了」被自动发现；
+//     同源谓词另由 `test/forward-todo-lock.test.js` 的 **L6 升格门**消费（前提成立而 registry 未清 ⇒ 直接红）。
+//   ⚠ 复活动作（前提成立后必须一次做完）：① 从 `ARCHIVED_CASES` 恢复原始断言
+//     （⚠ 该归档文本有 3 处**转录缺陷**，见 `exec/module-todo-exec.md`，照抄会撞语法错）
+//     ② 删掉 `{ todo }` 转正式用例 ③ 同步清 `test/forward-todo-registry.json` 的 `open[]` 并收紧 `openMax`。
+function assertRevivalOf(id, what) {
+  const r = governanceDegradeRevivalOf(PKG_ROOT);
+  assert.equal(r.revival, true,
+    '[' + id + '] 复活前提未成立 ⇒ 本条保持 todo。' + (what ? '本条检：' + what + '。' : '')
+    + '缺失条件：' + r.missing.join(' / ')
+    + '（归属批 `' + GOVERNANCE_DEGRADE_DUE_BATCH + '`；谓词见 `test/helpers/governance-degrade-revival.mjs`）');
+}
 
 // ── 基础工具 ──
 const fixturesWritten = new Set(); // 已成功落盘的夹具批（供前置自检）
@@ -549,7 +568,9 @@ test('R-29 unwired 项须标注 status:"unwired" 与 consumer 说明（S20b 无�
 //   原因：用户已裁 G-a **不实施、维持现状** ⇒ `lane.governance-degrade` / `batch.governanceDegrade` / 批次级阈值
 //     `max(t+1,2t)` / `governanceEscalatedAt` 去重键**全部无写者**（依据：本文件 :544-548、`event-types.js:132-133`）。
 //   复活前置条件：若将来实施 G-a ⇒ 先登记常量 `EVT_LANE_GOVERNANCE_DEGRADE`，再接线写端，再复活本用例。
-test.todo('R-16 单 lane ×3 可计入拒绝 ⇒ 批次**仍 running** ＋ lane.governance-degrade ＋ governanceDegrade[lane].count===3');
+test('R-16 单 lane ×3 可计入拒绝 ⇒ 批次**仍 running** ＋ lane.governance-degrade ＋ governanceDegrade[lane].count===3',
+  { todo: '[R-16] G-a 未实施（用户 2026-09-14 裁决 Q1=C 维持现状）⇒ 复活前提未成立；转正＝恢复 ARCHIVED_CASES 原始断言 + 删 { todo } + 清 registry' },
+  () => assertRevivalOf('R-16', '单 lane 达 threshold(3) 只做 lane 级留痕、不暂停整批'));
 ARCHIVED_CASES['R-16 单 lane ×3 可计入拒绝 ⇒ 批次**仍 running** ＋ lane.governance-degrade ＋ governanceDegrade[lane].count===3'] = [
   '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
   '  本条因「G-a 撤销（用户裁决维持现状）」转 todo。',
@@ -577,7 +598,9 @@ ARCHIVED_CASES['R-16 单 lane ×3 可计入拒绝 ⇒ 批次**仍 running** ＋ 
 // 【已裁不实施（G-a governance-escalate 粒度，用户裁决维持现状）】批次 core-debt-parallel-20260915 · lane e2 标注（T-5）。
 //   原因：G-a 不实施 ⇒ 批次级升级阈值 `max(t+1,2t)` 与 `batch.governance-escalate` 升级写端均不存在（无写者）。
 //   复活前置条件：若将来实施 G-a ⇒ 先登记常量 `EVT_LANE_GOVERNANCE_DEGRADE`，再接线写端，再复活本用例。
-test.todo('R-17 两 lane 各 ×3 ⇒ 合计 6 ≥ batchThreshold ⇒ 升级 paused（载荷含 count/windowMs/lane/receiptIds）');
+test('R-17 两 lane 各 ×3 ⇒ 合计 6 ≥ batchThreshold ⇒ 升级 paused（载荷含 count/windowMs/lane/receiptIds）',
+  { todo: '[R-17] G-a 未实施（用户 2026-09-14 裁决 Q1=C 维持现状）⇒ 复活前提未成立；转正＝恢复 ARCHIVED_CASES 原始断言 + 删 { todo } + 清 registry' },
+  () => assertRevivalOf('R-17', '不同 lane 累计达 batchThreshold 才升级 paused（载荷四键齐全）'));
 ARCHIVED_CASES['R-17 两 lane 各 ×3 ⇒ 合计 6 ≥ batchThreshold ⇒ 升级 paused（载荷含 count/windowMs/lane/receiptIds）'] = [
   '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
   '  本条因「G-a 撤销（用户裁决维持现状）」转 todo。',
@@ -597,7 +620,9 @@ ARCHIVED_CASES['R-17 两 lane 各 ×3 ⇒ 合计 6 ≥ batchThreshold ⇒ 升级
 // 【已裁不实施（G-a governance-escalate 粒度，用户裁决维持现状）】批次 core-debt-parallel-20260915 · lane e2 标注（T-6）。
 //   原因：G-a 不实施 ⇒ `governanceEscalatedAt` 去重键与 paused 恢复面（R-GA-4）无写者，本用例的「不僵局」前提不成立。
 //   复活前置条件：若将来实施 G-a ⇒ 先登记常量 `EVT_LANE_GOVERNANCE_DEGRADE`，再接线写端，再复活本用例。
-test.todo('R-18 已 paused ⇒ batch_phase({phase:"running"}) 成功；同窗口不二次打回（G-3 恢复不僵局）');
+test('R-18 已 paused ⇒ batch_phase({phase:"running"}) 成功；同窗口不二次打回（G-3 恢复不僵局）',
+  { todo: '[R-18] G-a 未实施（用户 2026-09-14 裁决 Q1=C 维持现状）⇒ 复活前提未成立；转正＝恢复 ARCHIVED_CASES 原始断言 + 删 { todo } + 清 registry' },
+  () => assertRevivalOf('R-18', 'paused 必须有恢复出路，且同窗口恢复后不被二次打回（governanceEscalatedAt 去重）'));
 ARCHIVED_CASES['R-18 已 paused ⇒ batch_phase({phase:"running"}) 成功；同窗口不二次打回（G-3 恢复不僵局）'] = [
   '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
   '  本条因「G-a 撤销（用户裁决维持现状）」转 todo。',
@@ -617,7 +642,9 @@ ARCHIVED_CASES['R-18 已 paused ⇒ batch_phase({phase:"running"}) 成功；同�
 // 【已裁不实施（G-a governance-escalate 粒度，用户裁决维持现状）】批次 core-debt-parallel-20260915 · lane e2 标注（T-7）。
 //   原因：G-a 不实施 ⇒ `lane.governance-degrade` 无写者，事件洪水这一被检语义**无观测面**（当前恒 0 条 ≠ 幂等成立）。
 //   复活前置条件：若将来实施 G-a ⇒ 先登记常量 `EVT_LANE_GOVERNANCE_DEGRADE`，再接线写端，再复活本用例。
-test.todo('R-19 幂等：同窗口同 lane 重复违规 ⇒ lane.governance-degrade 不产生事件洪水');
+test('R-19 幂等：同窗口同 lane 重复违规 ⇒ lane.governance-degrade 不产生事件洪水',
+  { todo: '[R-19] G-a 未实施（用户 2026-09-14 裁决 Q1=C 维持现状）⇒ 复活前提未成立；转正＝恢复 ARCHIVED_CASES 原始断言 + 删 { todo } + 清 registry' },
+  () => assertRevivalOf('R-19', '同窗口同 lane 重复违规不得产生事件洪水（去重键有效）'));
 ARCHIVED_CASES['R-19 幂等：同窗口同 lane 重复违规 ⇒ lane.governance-degrade 不产生事件洪水'] = [
   '用户 2026-09-14 裁决（grilling Q1=C）：失效红条不落成新契约，正确断言留待独立小批；',
   '  本条因「G-a 撤销（用户裁决维持现状）」转 todo。',
