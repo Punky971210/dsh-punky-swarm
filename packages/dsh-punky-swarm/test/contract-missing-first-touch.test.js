@@ -410,10 +410,17 @@ assert.deepEqual(landed.map(cmKey), ['entry_requires@exec'], '真实工具面一
   assert.equal(cmKey(landed[0]), 'entry_requires@exec', '落盘事件可归因');
 
   // ② 负控（R-5）：只读工具面 two-shot 调用零发射
+  //   【B-09 形态升级（批 `punky-test-count-audit-20261101` · lane `tc-fix`，按审核终判）】
+  //   原断言 `eventsOf().length === 1` 只能表达「总数为 1」：理论上「gate_status 发射 1 条 + 前一条被删掉」
+  //   也能通过（两者相消）⇒ **形态弱于语义**。改为**前后快照逐条比对**，与消息「绝不发射」逐字对齐：
+  //   任何新增、任何「删旧增新」都必红。⚠ 不可写成 `=== 0`（`:409` 已落 1 条 ⇒ 会恒红）。
+  const beforeReadOnly = eventsOf();
   await byName.gate_status.execute({ batchId: 'b2-probe', lane: 'p1' }, SESS);
   await byName.gate_status.execute({ batchId: 'b2-probe', lane: 'e1' }, SESS);
   await byName.gate_status.execute({ batchId: 'b2-probe' }, SESS);
-  assert.equal(eventsOf().length, 1, '只读 gate_status 工具面绝不发射（R-5 硬边界）');
+  assert.deepEqual(eventsOf(), beforeReadOnly,
+    '只读 gate_status 工具面绝不发射（R-5 硬边界）：3 次调用前后事件序列须逐条不变（零新增 / 无删旧增新）；'
+    + '实测 before=' + JSON.stringify(beforeReadOnly.map(cmKey)) + ' after=' + JSON.stringify(eventsOf().map(cmKey)));
 
   // ③ 既有只读投影面可读（不加键、不改 schema；事件经 batch_status 既有 events 面可见）
   const s = await byName.batch_status.execute({ batchId: 'b2-probe' }, SESS);

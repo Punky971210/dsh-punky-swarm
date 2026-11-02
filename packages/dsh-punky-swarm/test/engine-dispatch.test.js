@@ -722,10 +722,37 @@ test('RO-15 L-AC-9：负判据 —— 未新增 deliverables × produce 一致�
 
 test('RO-16 L-AC-1①②：`renderRoleGuide` 单点导出 ＋ `appendRoleSections` 内三段标题命中 0', () => {
   assert.equal(typeof renderRoleGuide, 'function', 'D-0：纯渲染单点须导出自 lib/engine/dispatch.js');
-  assert.equal(renderRoleGuide.length, 1, '签名恰 1 个入参（只吃**已解析**的 role 对象，不吃 id 字符串）');
   // 裸标题原文口径（与 L-AC-6 的可达构造一致）：注释里复写标题原文同样计入命中。
   const RAW = [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables];
   const src = fs.readFileSync(path.join(roleCorpusRoot(), 'lib', 'engine', 'dispatch.js'), 'utf8');
+  // 【B-08 · 按审核终判把「arity 快照」改为「**签名身份**」（本批 A 档唯一真·可改的一条）】
+  //   原 `renderRoleGuide.length === 1` 是 **arity 快照**：新增**可选**入参属正常演化，
+  //   而它又表达不出真正的契约「只吃**已解析**的 role 对象」（`(id)` 的 arity 同样是 1 ⇒ 原断言放过）。
+  //   ⇒ 改判**第一形参身份** + 必填性 + 禁「吃 id 字符串」：
+  //     ① `(id)` / `(roleId)` 改名 ⇒ 红（抓「改成吃 id 字符串」）；
+  //     ② `role` 退化为可选（`role = {...}`）⇒ 红（契约弱化）；
+  //     ③ 新增**必填**的 id 形态入参 ⇒ 红；
+  //     ④ 新增**可选**入参 ⇒ **不红**（正常演化 —— 这正是不该再用 arity 的理由）。
+  const declOf = src.match(/export\s+function\s+renderRoleGuide\s*\(([^)]*)\)/);
+  assert.ok(declOf, 'D-0：`renderRoleGuide` 须以具名函数声明导出（否则签名不可判）');
+  const paramsOf = declOf[1].split(',').map((x) => x.trim()).filter(Boolean);
+  // 先取**形参名**（剥掉默认值/类型标注），再判定 —— 否则 `roleId = undefined` 这类文本会因「末尾是 undefined」
+  //   绕过 id 形态判据（假绿）。
+  const firstParamNameOf = (paramsOf[0] ?? '').split(/[\s:=]/)[0];
+  // 判据 = 「**role 形态** ∧ **非 id 形态**」：
+  //   合法：`role` / `roleData`（现行签名）/ `roleSource` …（已解析的对象，名字可演化）；
+  //   非法：`id` / `roleId` / `role_id`（这些是**待再解析**的标识，不是已解析对象）。
+  //   ⇒ 只用前缀判会放过 `roleId`，只用后缀判会放过 `id` ⇒ 两侧都要。
+  assert.match(firstParamNameOf, /^role/i,
+    '第一形参须为**已解析**的 role 对象（禁改吃 id 字符串）；实际签名=(' + paramsOf.join(', ') + ')');
+  assert.equal(/id$/i.test(firstParamNameOf), false,
+    '第一形参**不得**是 id 形态（`id`/`roleId`/`role_id` = 待再解析的标识，不是已解析对象）；'
+    + '实际第一形参名=' + JSON.stringify(firstParamNameOf));
+  const requiredParamsOf = paramsOf.filter((x) => !x.includes('=')).map((x) => x.split(/[\s:]/)[0]);
+  assert.equal(requiredParamsOf.includes(paramsOf[0]), true,
+    '第一形参（role 对象）须为**必填**（契约不得退化为可选）；实际必填参数=' + JSON.stringify(requiredParamsOf));
+  assert.deepEqual(requiredParamsOf.filter((n) => /^(id|roleId|roleName|role_name)$/.test(n)), [],
+    '不得新增「吃 id 字符串」的必填入参；实际必填参数=' + JSON.stringify(requiredParamsOf));
   const bodyOf = (marker) => { const at = src.indexOf(marker); return at < 0 ? '' : src.slice(at, src.indexOf('\n}', at)); };
   const appendBody = bodyOf('function appendRoleSections');
   const renderBody = bodyOf('export function renderRoleGuide');
