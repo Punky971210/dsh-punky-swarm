@@ -593,6 +593,50 @@ export function renderPreflightLines(decl) {
  * @param {{injectBudget?: object|null}} [opts]
  * @returns {string} 段文本（**不含**前导空行；前导空行归调用方，与 `renderRoleGuide` 同款边界约定）
  */
+// ── 【pk-impl · 批 `punky-taskpkg-checkpoint-20261101`】`checkpoints` 读取 + 渲染（单点）──────────
+// 与 `preflight` 的两处**刻意差异**（防误抄）：
+//   · **缺省不警示**：`preflight` 未声明会出「未声明开工前必做项」警示行；`checkpoints` 缺省 ⇒ **完全不出段**。
+//     理由：存量批海量，给缺省加警示会污染**全部**派发。
+//   · **仅当「声明了但归一后为空」才给恰一行降级警示**（坏项被丢弃这件事本身要可见，不静默）。
+/** 声明判定（纯函数、零 IO、零抛错）：`task.checkpoints` 已声明 ⇒ `{ items }`；未声明/读值异常 ⇒ `null`。
+ *  **区分「未声明」与「声明了但归一后为空」是本函数唯一的判断**（二者渲染形态不同：不出段 vs 一行警示）。 */
+export function checkpointsOf(task) {
+  try {
+    const cp = task?.checkpoints;
+    if (cp == null) return null;
+    return { items: Array.isArray(cp?.items) ? cp.items : [] };
+  } catch {
+    return null; // 读值异常 ⇒ 按未声明降级（fail-safe：本字段只用于提示，绝不能阻断派发）
+  }
+}
+
+/** 单点渲染：`null` ⇒ 空串（不出段）；`items` 空 ⇒ 恰一行警示；否则清单 + **一行**建议行。 */
+export function renderCheckpointsBlock(checkpoints) {
+  if (checkpoints == null) return '';
+  const items = Array.isArray(checkpoints?.items) ? checkpoints.items : [];
+  if (items.length === 0) {
+    return '## checkpoint 计划\n'
+      + '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（缺 `id` / `id` 重复 / `target` 为绝对路径的项会被丢弃）'
+      + ' ⇒ 本 lane 无 checkpoint 计划；如需留痕请自行调用 `lane_checkpoint`。';
+  }
+  const lines = ['## checkpoint 计划'];
+  // 「建议」措辞 + **`total` 由成员自己填**：引擎**不比对**本行的 N（`lane-tools.js` 的校验块逐字不动）。
+  lines.push('本 lane 共 ' + items.length + ' 个 checkpoint；建议 `lane_checkpoint(progress:{step,total:' + items.length + '})`'
+    + '（`total` 由你自己填，引擎不与本行的 ' + items.length + ' 比对）。');
+  for (const it of items) {
+    const target = typeof it?.target === 'string' && it.target ? it.target : '（未声明目标）';
+    const rounds = Number.isInteger(it?.rounds) && it.rounds >= 1 ? it.rounds : 1;
+    const extra = [];
+    if (Array.isArray(it?.outputs) && it.outputs.length > 0) extra.push('产出=' + it.outputs.join(' / '));
+    if (typeof it?.acceptance === 'string' && it.acceptance) extra.push('验收=' + it.acceptance);
+    if (it?.ctxBudget != null) extra.push('ctxBudget=' + it.ctxBudget);
+    if (rounds > 1) extra.push('rounds=' + rounds);
+    lines.push('- `' + (typeof it?.id === 'string' ? it.id : '?') + '` → ' + target
+      + (extra.length > 0 ? '（' + extra.join('；') + '）' : ''));
+  }
+  return lines.join('\n');
+}
+
 export function renderPreflightBlock(preflight, { injectBudget = null } = {}) {
   let text;
   try {
@@ -711,6 +755,10 @@ export function composeWorkerPrompt({
   singleArtifactWrite = false,
   // 【2026-10-07 · P2】role 语料定位位（缺省 = 包根 `skills/`）；直调与隔离测试可显式指定。
   roleRoot, roleTeam,
+  // 【pk-impl · 批 `punky-taskpkg-checkpoint-20261101`】checkpoint 计划清单（`tasks[].checkpoints` 的归一产物）。
+  //   缺省 `null` ⇒ **不渲染任何内容、不加警示**（存量批海量，给缺省加警示会污染全部派发）；
+  //   仅当「声明了但归一后为空」才给**恰一行**降级警示（见 `renderCheckpointsBlock`）。
+  checkpoints = null,
   // 【L2 注入预算】面 A 的阈值入参（缺省 `null` ⇒ **零动作**：不改任何文本、不产省略）。
   //   生产路径由 `dispatchLaneCore` 从热更快照 `capabilities.injectBudget` 读出后传入；
   //   直调调用方（含既有单测）不传 ⇒ 本函数输出与改动前**逐字节相同**（零回归口径 C）。
@@ -793,6 +841,23 @@ export function composeWorkerPrompt({
         + String(e?.message ?? e));
     } catch { /* 告警本身失败也不得外溢 */ }
     preflightBlock = renderPreflightBlock(null, { injectBudget });
+  }
+  // ── 【pk-impl】`checkpoint 计划` 段：位置 = **`## 开工前必做` 之前**（设计要求）────────────────
+  //   fail-safe（双 try/catch，照 `renderPreflightBlock` 的代价说明）：**渲染抛错绝不阻断派发** ——
+  //   代价必须是「跳过该段」而不是「lane failed」。直派与 team 两路都经 `composeWorkerPrompt` ⇒ 同点覆盖。
+  let checkpointsBlock = '';
+  try {
+    checkpointsBlock = renderCheckpointsBlock(checkpoints);
+  } catch (e) {
+    try {
+      logger?.warn?.('[dsh-punky-swarm] composeWorkerPrompt: checkpoint 计划段渲染失败 ⇒ 跳过该段（不阻断派发）：'
+        + String(e?.message ?? e));
+    } catch { /* 告警本身失败也不得外溢 */ }
+    checkpointsBlock = '';
+  }
+  if (checkpointsBlock) {
+    L.push('');
+    L.push(...String(checkpointsBlock).split('\n'));
   }
   L.push('');
   L.push(...String(preflightBlock).split('\n'));
@@ -1178,6 +1243,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   取值 = 该 lane 的 `WavePlanTask.preflight`（建批归一化恒写：未声明落 `null`）⇒ 未声明即走警示行。
     //   接线约束：`preflight` **不进** `cmd` / **不进** `sig` / **不回写** `skills`（D3 三通道并存）。
     preflight: laneTask?.preflight ?? null,
+    // 【pk-impl】checkpoint 计划清单（缺省 `null` ⇒ 任务包零感知，不新增任何文本段）。
+    checkpoints: laneTask?.checkpoints ?? null,
     // 段渲染异常时的降级告警落点（唯一消费点，见该函数 logger 参数注释）。
     logger: ctx?.logger ?? null,
   });

@@ -490,6 +490,72 @@ export function normalizeTargetsContract(t) {
 //        与「完全未声明」的警示行**形态可辨**）。
 //   **零 throw**（全软）：任何非法形态一律降级，不拒建批、不打任何门禁码；读值异常（如 getter 抛错）
 //   同样降级为 `null`——建批期抛错会让整批不可建，而本字段的**唯一**设计目的是提示。
+// ── 【pk-impl · 批 `punky-taskpkg-checkpoint-20261101`】`tasks[].checkpoints` 归一化 ────────────
+// 身份：声明面（**checkpoint 计划清单**），与已占用的 `task.checkpoint = { steps }`（fail-closed
+//   运行时上界，`resume.js` 读走）**完全无关**、互不影响（**禁碰那个键**）。
+// 纪律（照 `normalizePreflight` 的「零 throw 全软」）：
+//   · **永不抛**（最外层 try/catch 兜底）：本字段是提示面，坏数据绝不能阻断建批；
+//   · **坏项丢弃**（非对象 / 无 `id` / `id` 重复 / 绝对路径 target）；
+//   · **缺 `target` 保留**（渲染成「（未声明目标）」）——**不静默丢**（让缺口可见）；
+//   · `rounds` 非法 ⇒ 归一为 `1`；
+//   · ⚠ 与 `targets` 语义**相反**：`targets` 要求绝对路径（fail-closed），`checkpoints.target`
+//     是**相对产物面**的说明性目标 ⇒ **绝对路径项丢弃**。
+// 返回值：
+//   · **未声明**（`raw == null`）⇒ `null`（调用方**不写键** ⇒ 存量批零感知）
+//   · 已声明 ⇒ `{ items: [...] }`（即使归一后为空也返回对象 ⇒ 渲染层据此给「恰一行降级警示」）
+export function normalizeCheckpoints(raw) {
+    try {
+        if (raw == null)
+            return null;
+        const arr = Array.isArray(raw) ? raw : [];
+        const out = [];
+        const seen = new Set();
+        const stringsOf = (v) => {
+            const a = Array.isArray(v) ? v : [];
+            const r = [];
+            for (const x of a) {
+                if (typeof x !== 'string')
+                    continue;
+                const s = x.trim();
+                if (s)
+                    r.push(s);
+            }
+            return r;
+        };
+        for (const item of arr) {
+            if (!item || typeof item !== 'object' || Array.isArray(item))
+                continue;
+            const id = typeof item.id === 'string' ? item.id.trim() : '';
+            if (!id || seen.has(id))
+                continue; // id 必填且唯一
+            const targetRaw = typeof item.target === 'string' ? item.target.trim() : '';
+            // 绝对路径项丢弃（与 targets 语义相反：本字段描述相对产物面，不收绝对路径）。
+            if (targetRaw && isAbsPath(targetRaw))
+                continue;
+            seen.add(id);
+            const roundsRaw = item.rounds;
+            const rounds = Number.isInteger(roundsRaw) && roundsRaw >= 1 ? roundsRaw : 1;
+            const ctxBudgetRaw = item.ctxBudget;
+            const ctxBudget = typeof ctxBudgetRaw === 'number' && Number.isFinite(ctxBudgetRaw) && ctxBudgetRaw > 0
+                ? ctxBudgetRaw
+                : null;
+            out.push({
+                id,
+                // 缺 target ⇒ 保留并标空串（**不静默丢**：渲染层会写成「（未声明目标）」）。
+                target: targetRaw,
+                outputs: stringsOf(item.outputs),
+                acceptance: typeof item.acceptance === 'string' ? item.acceptance.trim() : '',
+                rounds,
+                ctxBudget,
+            });
+        }
+        return { items: out };
+    }
+    catch {
+        return null; // 任何异常 ⇒ 视同未声明（不阻断建批）
+    }
+}
+
 export function normalizePreflight(raw) {
     try {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -1088,6 +1154,23 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
             //     role/skills 变 ⇒ 任务包内容变 ⇒ sig 变（与 D-sig-1「只含任务信息」不冲突：
             //     `skills` 是**已解析进任务内容**的字段，`assemblyRef` 那类装配表签名才被 D-sig-1 排除）。
             //   · `layer`/`role`：声明/归一化后的规范值（未声明 layer ⇒ null）；`deps/produce/outputs` 逐字保序。
+            // ── 【pk-impl】两处声明面归一（`checkpoints` 全软 / `contract` fail-closed）──────────
+            const checkpointsRef = normalizeCheckpoints(t.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
+            const contractRef = (() => {
+                if (t.contract == null)
+                    return null; // 缺省 ⇒ 不写键（读取方按 null 处理，兼容存量批）
+                const cid = t.contract.id;
+                if (typeof cid !== 'string' || !cid.trim()) {
+                    // 非法 ⇒ **抛**（fail-closed）：契约缺失/非法是安全问题，与 checkpoints 的「全软」不同。
+                    // ⚠ 用**普通 Error**，不新造 `GATE_*` 前缀（验收 5）。
+                    throw new Error('task ' + t.id + ' contract.id must be a non-empty string');
+                }
+                const sha = t.contract.sha256;
+                if (sha != null && (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))) {
+                    throw new Error('task ' + t.id + ' contract.sha256 must be a 64-char lowercase hex string or null');
+                }
+                return { id: cid, sha256: sha ?? null };
+            })();
             const cmdAssembled = assembleCmd(role, skills, t.cmd ?? '');
             return {
                 id: t.id,
@@ -1095,6 +1178,12 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 deps: Array.isArray(t.deps) ? [...t.deps] : [],
                 model: t.model ?? null,
                 tools: Array.isArray(t.tools) ? [...t.tools] : null,
+                // 【pk-impl】`checkpoints`：**缺省不写键**（存量批零感知，不照 `normalizeResumeContract`
+                //   的「恒写 null」）；已声明 ⇒ 写归一结果（`items` 可能为空 ⇒ 渲染层给一行降级警示）。
+                ...(checkpointsRef !== null ? { checkpoints: checkpointsRef } : {}),
+                // 【pk-impl · R-4】**`tasks[].contract` 真落盘**（上一 lane 声称做了但未进提交，本 lane 真改）：
+                //   缺省不写键；非法在上方 `contractRef` 处 fail-closed 抛（普通 Error）。
+                ...(contractRef !== null ? { contract: contractRef } : {}),
                 layer: t.layer ?? null,
                 role: role ?? null,
                 skills: skills ? [...skills] : null,
