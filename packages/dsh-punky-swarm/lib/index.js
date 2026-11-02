@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // v2：批次绑定 session（root/sessions/<sessionId>/...）；存量 root/batches 自动迁移到 legacy
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { mkdirSync, existsSync, readdirSync } from 'node:fs';
+import fs from 'node:fs';
 import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
@@ -237,11 +237,11 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
     const sweepAllMailboxes = () => {
       const agg = { scanned: 0, removed: 0, quarantined: 0, failed: 0 };
       const mbBase = join(root, 'sessions');
-      if (existsSync(mbBase)) {
-        for (const sid of readdirSync(mbBase)) {
+      if (fs.existsSync(mbBase)) {
+        for (const sid of fs.readdirSync(mbBase)) {
           const mbRoot = join(mbBase, sid, 'mailbox');
-          if (!existsSync(mbRoot)) continue;
-          for (const bid of readdirSync(mbRoot)) {
+          if (!fs.existsSync(mbRoot)) continue;
+          for (const bid of fs.readdirSync(mbRoot)) {
             try {
               const r = mailbox.sweep(join(mbRoot, bid));
               agg.scanned += r.scanned; agg.removed += r.removed; agg.quarantined += r.quarantined; agg.failed += r.failed;
@@ -1140,7 +1140,7 @@ export const apply = (ctx, config = {}) => {
   //   ⇒ 排障不必再从「插件树加载错误」倒推 `config.root` 的取值。文案逐字不变（`test/home-isolation.test.js` 正则解析本行）。
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
   try {
-    mkdirSync(root, { recursive: true });
+    fs.mkdirSync(root, { recursive: true });
   } catch (cause) {
     // 【A1-P0-01 · Q3】**fail-closed：抛出，不吞、不 return、不降级继续**。理由：root 不可建时后续**全部**落盘
     //   （store / mailbox sweep / assets / 产物根）都会在不存在或不可写的根下失败 ⇒ 继续装配只会把「一条配置键

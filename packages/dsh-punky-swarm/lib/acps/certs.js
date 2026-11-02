@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 私钥文件权限注意：写文件 mode 0o600；数据目录默认 <root>/acps/certs（引擎根内，不落工作区根）。
 
 import crypto from 'node:crypto';
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 
 // ── ASN.1 DER 最小编码器（X.509 证书构造用，纯内建）──
@@ -262,7 +262,7 @@ export function issueCert({ caCertPem, caKeyPem, cn, aic, altNames = [], days = 
 //   缺则生成落盘。返回 { certFile, keyFile, caFile, caCertPem, certPem }（TLS 上下文 + 联测用）。
 // 目录结构：<dir>/ca.pem + ca.key（自签 CA）、<dir>/server.pem + server.key（CA 签发服务端证书）。
 export function ensureAcpsCerts({ dir, aic = '1.2.156.3088.1.0001.00001.000000.000000.ROOT' } = {}) {
-  mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
   const caFile = join(dir, 'ca.pem');
   const caKeyFile = join(dir, 'ca.key');
   const certFile = join(dir, 'server.pem');
@@ -270,22 +270,22 @@ export function ensureAcpsCerts({ dir, aic = '1.2.156.3088.1.0001.00001.000000.0
 
   let caCertPem;
   let caKeyPem;
-  if (existsSync(caFile) && existsSync(caKeyFile)) {
-    caCertPem = readFileSync(caFile, 'utf8');
-    caKeyPem = readFileSync(caKeyFile, 'utf8');
+  if (fs.existsSync(caFile) && fs.existsSync(caKeyFile)) {
+    caCertPem = fs.readFileSync(caFile, 'utf8');
+    caKeyPem = fs.readFileSync(caKeyFile, 'utf8');
   } else {
     const ca = generateCaCert();
     caCertPem = ca.certPem;
     caKeyPem = ca.keyPem;
-    writeFileSync(caFile, caCertPem, { mode: 0o600 });
-    writeFileSync(caKeyFile, caKeyPem, { mode: 0o600 });
+    fs.writeFileSync(caFile, caCertPem, { mode: 0o600 });
+    fs.writeFileSync(caKeyFile, caKeyPem, { mode: 0o600 });
   }
 
   let certPem;
   let keyPem;
-  if (existsSync(certFile) && existsSync(keyFile)) {
-    certPem = readFileSync(certFile, 'utf8');
-    keyPem = readFileSync(keyFile, 'utf8');
+  if (fs.existsSync(certFile) && fs.existsSync(keyFile)) {
+    certPem = fs.readFileSync(certFile, 'utf8');
+    keyPem = fs.readFileSync(keyFile, 'utf8');
   } else {
     const leaf = issueCert({
       caCertPem,
@@ -298,8 +298,8 @@ export function ensureAcpsCerts({ dir, aic = '1.2.156.3088.1.0001.00001.000000.0
     });
     certPem = leaf.certPem;
     keyPem = leaf.keyPem;
-    writeFileSync(certFile, certPem, { mode: 0o600 });
-    writeFileSync(keyFile, keyPem, { mode: 0o600 });
+    fs.writeFileSync(certFile, certPem, { mode: 0o600 });
+    fs.writeFileSync(keyFile, keyPem, { mode: 0o600 });
   }
 
   return { certFile, keyFile, caFile, caCertPem, certPem };

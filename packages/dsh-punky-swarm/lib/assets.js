@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 幂等：目标目录字节一致则跳过（current），否则整体覆盖（synced）；只动插件自有目录，不碰用户其他预设/技能。
 // 清单驱动：job 表来源 = 包内 presets/punky-preset/asset-manifest.json（M 层）+ 内置自举条（B 层，文件粒度）。
 // 清单不可用（缺失/读取失败/JSON 破损/schema 不合规/落点越界）一律整体回退内置默认表，绝不静默不同步。
-import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs'
+import fs from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -61,9 +61,9 @@ export function packageRoot() {
 function filesUnder(root) {
   const out = []
   const walk = (dir) => {
-    for (const entry of readdirSync(dir)) {
+    for (const entry of fs.readdirSync(dir)) {
       const p = join(dir, entry)
-      if (statSync(p).isDirectory()) walk(p)
+      if (fs.statSync(p).isDirectory()) walk(p)
       else out.push(p)
     }
   }
@@ -73,27 +73,27 @@ function filesUnder(root) {
 
 /** 文件字节一致性（size + mtime 容差快速否定，等价字节比对兜底）。 */
 function sameFile(a, b) {
-  const sa = statSync(a)
-  const sb = statSync(b)
+  const sa = fs.statSync(a)
+  const sb = fs.statSync(b)
   if (sa.size !== sb.size) return false
   if (Math.abs(sa.mtimeMs - sb.mtimeMs) > MTIME_TOLERANCE_MS) return false
-  return readFileSync(a).equals(readFileSync(b))
+  return fs.readFileSync(a).equals(fs.readFileSync(b))
 }
 
 /** 目录幂等同步：'synced'（已写入/覆盖）| 'current'（已是最新）。 */
 export function syncDir(sourceDir, targetDir) {
-  if (existsSync(targetDir) && !statSync(targetDir).isDirectory()) {
-    rmSync(targetDir, { recursive: true, force: true })
+  if (fs.existsSync(targetDir) && !fs.statSync(targetDir).isDirectory()) {
+    fs.rmSync(targetDir, { recursive: true, force: true })
   }
-  if (!existsSync(targetDir)) {
-    cpSync(sourceDir, targetDir, { recursive: true, preserveTimestamps: true })
+  if (!fs.existsSync(targetDir)) {
+    fs.cpSync(sourceDir, targetDir, { recursive: true, preserveTimestamps: true })
     return 'synced'
   }
   for (const file of filesUnder(sourceDir)) {
     const dest = join(targetDir, relative(sourceDir, file))
-    if (!existsSync(dest) || !sameFile(file, dest)) {
-      rmSync(targetDir, { recursive: true, force: true })
-      cpSync(sourceDir, targetDir, { recursive: true, preserveTimestamps: true })
+    if (!fs.existsSync(dest) || !sameFile(file, dest)) {
+      fs.rmSync(targetDir, { recursive: true, force: true })
+      fs.cpSync(sourceDir, targetDir, { recursive: true, preserveTimestamps: true })
       return 'synced'
     }
   }
@@ -166,11 +166,11 @@ function bootstrapTarget(home) {
 function loadJobs(root, home) {
   const defaultJobs = DEFAULT_ASSETS.map((asset) => ({ rel: asset.rel, target: resolveTarget(home, asset.target).path }))
   const manifestPath = join(root, MANIFEST_REL)
-  if (!existsSync(manifestPath)) return { manifest: 'missing', jobs: defaultJobs }
+  if (!fs.existsSync(manifestPath)) return { manifest: 'missing', jobs: defaultJobs }
 
   let text
   try {
-    text = readFileSync(manifestPath, 'utf8')
+    text = fs.readFileSync(manifestPath, 'utf8')
   } catch {
     return { manifest: 'read-error', jobs: defaultJobs }
   }
@@ -212,10 +212,10 @@ export function syncAssets(opts = {}) {
   // B 层（自举条）：只复制清单文件本体，破「要同步清单必须先读清单」的环；成功态不进 results。
   // 失败必须可观测（禁静默）：沿用逐条 failed 语义入 results（仅失败时进，成功态 results 长度不受影响）。
   const bootstrapSrc = join(root, MANIFEST_REL)
-  if (existsSync(bootstrapSrc)) {
+  if (fs.existsSync(bootstrapSrc)) {
     try {
       const dest = bootstrapTarget(home)
-      mkdirSync(dirname(dest), { recursive: true })
+      fs.mkdirSync(dirname(dest), { recursive: true })
       syncDir(bootstrapSrc, dest)
     } catch (error) {
       results.push({ asset: MANIFEST_REL, status: 'failed', error: errText(error) })
@@ -225,12 +225,12 @@ export function syncAssets(opts = {}) {
   // M 层：清单驱动条目（降级态 = 内置默认表），逐条语义与既有实现一致。
   for (const job of jobs) {
     const src = join(root, job.rel)
-    if (!existsSync(src)) {
+    if (!fs.existsSync(src)) {
       results.push({ asset: job.rel, status: 'missing-source' })
       continue
     }
     try {
-      mkdirSync(dirname(job.target), { recursive: true })
+      fs.mkdirSync(dirname(job.target), { recursive: true })
       const status = syncDir(src, job.target)
       results.push({ asset: job.rel, status })
     } catch (error) {

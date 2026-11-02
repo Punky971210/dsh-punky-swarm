@@ -34,7 +34,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 生命周期：start()（幂等）/ stop()（幂等）/ dispose()；watcher/timer 均 unref（不阻塞进程退出）
 // 宿主事件广播由装配侧（index.js）承担：ctx.emit('dsh-punky-swarm/config.changed', payload)；
 //   本模块只负责文件 watch → 快照 → onChange 回调（可单测，无宿主依赖）
-import { watch, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { deepMerge, CAPABILITY_REGISTRY, injectBudgetValueErrors } from '../assembly/schema.js';
 import { loadRules } from '../state/machine-rules.js';
@@ -180,8 +180,8 @@ function sleep(ms) {
 async function readOverlayFile(file) {
   for (let i = 0; i < PARSE_RETRY_MAX; i++) {
     try {
-      if (!existsSync(file)) return {};
-      const parsed = parseJsonText(readFileSync(file, 'utf8'));
+      if (!fs.existsSync(file)) return {};
+      const parsed = parseJsonText(fs.readFileSync(file, 'utf8'));
       if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('runtime.json must be a JSON object');
       }
@@ -199,7 +199,7 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
   const runtimeFile = join(configDir, 'runtime.json');
   const log = logger ?? null;
   // watch 实现可注入（测试模拟 EBUSY/失败重试）；生产缺省 = node:fs watch
-  const watchImpl = typeof watchFn === 'function' ? watchFn : watch;
+  const watchImpl = typeof watchFn === 'function' ? watchFn : fs.watch;
   let snapshot = config;       // 缺省 = 静态 config 原样（零行为变化）
   let overlay = {};            // 当前生效覆盖层
   let fileWatcher = null;      // 文件级 watch（本环境目录级 watch 触发 libuv 断言崩溃，实施回注）
@@ -265,11 +265,11 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
       try { fileWatcher.close(); } catch {}
       fileWatcher = null;
     }
-    if (!existsSync(runtimeFile)) {
+    if (!fs.existsSync(runtimeFile)) {
       if (!existenceTimer) {
         existenceTimer = setInterval(() => {
           if (disposed || !started) { clearInterval(existenceTimer); existenceTimer = null; return; }
-          if (existsSync(runtimeFile)) {
+          if (fs.existsSync(runtimeFile)) {
             clearInterval(existenceTimer); existenceTimer = null;
             ensureWatching();
             handleFsChange().catch(() => {}); // 文件出现 → 重读一次（覆盖建 watch 前的首次写入）
@@ -312,11 +312,11 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
   function start() {
     if (started) return { started: true, snapshot };
     started = true;
-    mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(configDir, { recursive: true });
     // 初始 overlay 同步读取（启动不广播——启动时静态 config 即现状；缺省 {} → 快照 = 静态 config 原样）
-    if (existsSync(runtimeFile)) {
+    if (fs.existsSync(runtimeFile)) {
       try {
-        const init = parseJsonText(readFileSync(runtimeFile, 'utf8'));
+        const init = parseJsonText(fs.readFileSync(runtimeFile, 'utf8'));
         if (init !== null && typeof init === 'object' && !Array.isArray(init)) {
           const v = validateOverlay(init);
           if (v.ok) {

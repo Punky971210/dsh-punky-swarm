@@ -1950,3 +1950,168 @@ test('F3 【FU1-1】同 rel 同内容 ⇒ 判泄漏（内容判据仍咬得住�
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════
+// I1–I4 写入拦截（lane `p1-intercept`）
+//
+// 【本段是**纯新增**】只追加在文件末尾，不改动上方任何既有用例（并行 lane `p2-idle-window`
+//   / `p3-migrate` 会继续改本文件，故新增段一律独立命名空间 I*，不与既有 G*/D*/F* 交叉）。
+//
+// 与 G3 的差别（本段存在的理由）：G3 靠「日志自报落点 + 隔离根文件数增长」做事后归属 ⇒
+//   ① 日志没覆盖的写点抓不到；② `rm`/`unlink` 不增长计数 ⇒ 抓不到。本段改用**因果拦截**
+//   （`test/helpers/write-intercept.mjs`，由 preload 在**被测代码 import 之前**安装），
+//   按目标 realpath 判 ⊆ 隔离根 ⇒ 写与删同一条判据。
+//
+// 安全性：所有构造都在 `os.tmpdir()` 下的**独立空目录**里造（`tmpRoot('icpt-*')`），
+//   不写、不删任何真实用户资产面；拦截根由 isolated-home preload 现建（每个子进程一个）。
+// ══════════════════════════════════════════════════════════════════════════════════════
+
+const INTERCEPT_PRELOAD = path.join(HERE, 'helpers', 'write-intercept.preload.mjs');
+
+/** 受害探针源码：preload 已装好拦截**之后**才执行；`named` 模式走**命名导入**，用来证命名绑定也被包住。 */
+function interceptProbeSrc() {
+  return [
+    "import fs from 'node:fs';",
+    "import path from 'node:path';",
+    "function countUnder(root) {",
+    "  let n = 0;",
+    "  const walk = (d) => {",
+    "    let ents = [];",
+    "    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }",
+    "    for (const e of ents) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else n += 1; }",
+    "  };",
+    "  walk(root);",
+    "  return n;",
+    "}",
+    "const ROOT = process.env.PUNKY_TEST_ISOLATED_HOME;",
+    "const OUT = process.env.PUNKY_PROBE_OUT;",
+    "const MODE = process.env.PUNKY_PROBE_MODE;",
+    "const report = { mode: MODE, root: ROOT, beforeCount: countUnder(ROOT), threw: false, err: null };",
+    "try {",
+    "  if (MODE === 'write') { fs.writeFileSync(OUT, 'leak'); }",
+    "  else if (MODE === 'rm') { fs.rmSync(OUT); }",
+    "  else if (MODE === 'legit') { fs.writeFileSync(path.join(ROOT, 'legit.txt'), 'ok'); }",
+    "  else if (MODE === 'named') { const named = await import('node:fs'); named.writeFileSync(OUT, 'named-leak'); }",
+    "  else { throw new Error('unknown mode: ' + MODE); }",
+    "} catch (e) { report.threw = true; report.err = String((e && e.message) || e); }",
+    "report.afterCount = countUnder(ROOT);",
+    "process.stdout.write('@@PROBE@@' + JSON.stringify(report) + '@@END@@');",
+  ].join('\n');
+}
+
+/** 在「双 preload（隔离 + 写入拦截）」的子进程里跑一次探针，返回 {probe, intercept, out, outside}。 */
+function interceptRun(tag, mode) {
+  const dir = tmpRoot('icpt-' + tag);
+  const outside = path.join(dir, 'outside-target');       // **根外**目标：独立空目录里的临时文件（非真实资产面）
+  fs.writeFileSync(outside, 'seed', 'utf8');              // 预建 ⇒ rm 模式有东西可删
+  const probe = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(probe, interceptProbeSrc(), 'utf8');
+  const reportFile = path.join(dir, 'intercept-report.txt');
+  const env = {
+    PUNKY_PROBE_OUT: outside,
+    PUNKY_PROBE_MODE: mode,
+    PUNKY_INTERCEPT_REPORT: reportFile,
+    // 只有父进程自己已隔离时才显式给根；否则留给 preload 回落 PUNKY_TEST_ISOLATED_HOME（子进程现建）
+    ...(ISOLATED ? { PUNKY_INTERCEPT_ROOT: ISOLATED } : {}),
+  };
+  const r = spawnToFiles(process.execPath, [
+    '--import', pathToFileURL(PRELOAD).href,
+    '--import', pathToFileURL(INTERCEPT_PRELOAD).href,
+    probe,
+  ], env, dir);
+  const pick = (text) => {
+    const m = String(text ?? '').match(/@@(?:PROBE|REPORT)@@([\s\S]*?)@@END@@/);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch { return null; }
+  };
+  const probeReport = pick(r.out);
+  const interceptReport = pick(readIfExists(reportFile));
+  return { dir, outside, out: r.out, status: r.status, probe: probeReport, intercept: interceptReport };
+}
+
+test('I1【写入拦截】直接写**根外**路径 ⇒ 拦截命中且红（G3 的「文件数增长」判据抓不到）', () => {
+  const run = interceptRun('write', 'write');
+  try {
+    assert.ok(run.intercept, '拦截报告必须在场（缺报告 ⇒ 拦截没装上，判红）；子进程输出：' + run.out.slice(0, 600));
+    const v = (run.intercept.violations ?? []).find((x) => x.api === 'writeFileSync' && x.verdict === 'outside-root');
+    assert.ok(v, '越界写必须被拦截并记为 outside-root；实际 violations=' + JSON.stringify(run.intercept.violations));
+    assert.equal(fs.existsSync(run.outside), true, '拦截是「记录并放行」语义：文件确实被写出来了（不是靠不写来假装通过）');
+    // G3 盲区证据：这次写**没有**让隔离根文件数增长，也没有任何日志自报落点 ⇒ 增长型判据看不见它
+    assert.equal(run.probe.afterCount, run.probe.beforeCount,
+      'G3 盲区取证：根外写不改变隔离根计数 ⇒ 「文件数应增长」型判据对它无判别力');
+    process.stderr.write('[I1] violation=' + JSON.stringify(v) + String.fromCharCode(10));
+  } finally {
+    fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+});
+
+test('I2【写入拦截】rm **根外**路径 ⇒ 同样被抓到（旧 G3 的核心盲区：删除不增长计数）', () => {
+  const run = interceptRun('rm', 'rm');
+  try {
+    assert.ok(run.intercept, '拦截报告必须在场；子进程输出：' + run.out.slice(0, 600));
+    const v = (run.intercept.violations ?? []).find((x) => x.api === 'rmSync' && x.verdict === 'outside-root');
+    assert.ok(v, '越界删除必须被拦截并记为 outside-root；实际 violations=' + JSON.stringify(run.intercept.violations));
+    assert.equal(fs.existsSync(run.outside), false, '删除确实发生（拦截是取证面，不是阻断面）');
+    assert.equal(run.probe.afterCount, run.probe.beforeCount,
+      'G3 盲区取证：删除**只会减少**文件数、永不增长 ⇒ 「隔离根计数增长」判据对删除型写点结构性不可达');
+    process.stderr.write('[I2] violation=' + JSON.stringify(v) + String.fromCharCode(10));
+  } finally {
+    fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+});
+
+test('I3【写入拦截】正常路径零误报：根内写 ⇒ 0 violation 且记为 inside-root', () => {
+  const run = interceptRun('legit', 'legit');
+  try {
+    assert.ok(run.intercept, '拦截报告必须在场；子进程输出：' + run.out.slice(0, 600));
+    assert.deepEqual(run.intercept.violations, [], '根内写不得报越界（零误报）；实际=' + JSON.stringify(run.intercept.violations));
+    assert.equal((run.intercept.allowed ?? []).some((x) => x.verdict === 'inside-root'), true,
+      '根内写应被记为 inside-root（证明拦截确实经过、不是没装上）');
+    assert.equal(fs.existsSync(path.join(run.probe.root, 'legit.txt')), true, '根内写确实落地');
+  } finally {
+    fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+});
+
+test('I4【写入拦截】覆盖清单 + **生产面形态守卫**：lib/** 不得以命名导入取变更型 fs 入口', () => {
+  // 机制事实（I4 首版就是在这里红的，红得对）：
+  //   ES 命名导入在 import 时**绑定到原始函数引用** ⇒ 包裹 `fs.writeFileSync`（模块对象属性）
+  //   改不了已绑定的局部名 ⇒ 用命名导入的调用点**结构上不可被拦**。
+  //   故「可被拦」的真正前提 = 生产代码一律走**命名空间属性访问**（`fs.writeFileSync(...)`）。
+  //   ⇒ 本用例把该前提做成**静态守卫**（任一新文件用命名导入取变更型入口即红）；
+  //     运行时侧「命名空间调用确实被拦」由 I1/I2/I3 承担（同一份拦截报告）。
+  const run = interceptRun('static', 'legit');
+  try {
+    assert.ok(run.intercept, '拦截报告必须在场；子进程输出：' + run.out.slice(0, 600));
+    const covered = run.intercept.covered ?? [];
+    const MUST_COVER = ['fs.writeFileSync', 'fs.appendFileSync', 'fs.mkdirSync', 'fs.rmSync',
+      'fs.unlinkSync', 'fs.renameSync', 'fs.copyFileSync', 'fs.openSync'];
+    const missing = MUST_COVER.filter((k) => !covered.includes(k));
+    assert.deepEqual(missing, [], '变更型入口清单不得缺项（缺一即该形态的写点整类不被拦）；缺=' + JSON.stringify(missing));
+    assert.equal(covered.includes('fs.promises.writeFile'), true, 'promise 面亦须覆盖');
+  } finally {
+    fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+
+  // ── 静态守卫：生产面形态（本轮把 5 处命名导入改为命名空间后应转绿）──
+  const MUTATING_NAMES = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rm', 'unlinkSync',
+    'rmdirSync', 'renameSync', 'copyFileSync', 'cpSync', 'symlinkSync', 'linkSync', 'truncateSync', 'openSync'];
+  const offenders = [];
+  const walkLib = (dir) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (ent.name !== 'node_modules' && ent.name !== '.tsbuild') walkLib(p); continue; }
+      if (!/\.(js|ts)$/.test(ent.name) || /\.d\.ts$/.test(ent.name)) continue;
+      const src = fs.readFileSync(p, 'utf8');
+      for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]node:fs['"]/g)) {
+        const names = m[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+        const bad = names.filter((n) => MUTATING_NAMES.includes(n));
+        if (bad.length > 0) offenders.push(path.relative(PACKAGE_ROOT, p).split(path.sep).join('/') + ' → ' + bad.join(','));
+      }
+    }
+  };
+  walkLib(path.join(PACKAGE_ROOT, 'lib'));
+  assert.deepEqual(offenders, [],
+    'lib/** 不得以命名导入取变更型 fs 入口（命名导入结构性不可被写入拦截）——请改 `import fs from \'node:fs\'` + `fs.xxx(...)`；违规：'
+    + JSON.stringify(offenders));
+});

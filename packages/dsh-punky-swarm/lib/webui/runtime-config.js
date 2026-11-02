@@ -40,7 +40,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay + stripBom（均为既有导出面，
 //   BOM 剥除复用同一实现不新增副本）+ preset-loader 的
 //   PRESET_IDS（注册 id 枚举唯一权威，不接受任意路径引用）。
-import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { validateOverlay, stripBom } from '../hot/config-watch.js';
 import { PRESET_IDS } from '../governance/preset-loader.js';
@@ -342,8 +342,8 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   // 读现有 runtime.json（缺失 = {}）；坏 JSON/非对象 → throw（错误信息含路径）——
   // 写路径拒写不吞：其它顶层键无法保全时宁 500 不落盘（坏 base 属运维错误，「不应发生」）
   function readOverlay() {
-    if (!existsSync(runtimeFile)) return {};
-    const raw = readFileSync(runtimeFile, 'utf8');
+    if (!fs.existsSync(runtimeFile)) return {};
+    const raw = fs.readFileSync(runtimeFile, 'utf8');
     // BOM 容忍（2026-09-17 panel-hotfix）：外部工具（PowerShell `Set-Content -Encoding UTF8`）写盘会带
     //   U+FEFF，而 readFileSync 不剥 BOM → JSON.parse 直接抛 SyntaxError；本读端被读/写两通道共用 ⇒ 面板读存
     //   双死（活体 500）。复用 hot/config-watch.js 既有 stripBom（同读端单一实现，禁第三份副本）；
@@ -360,10 +360,10 @@ export function createRuntimeConfigService({ root, logger } = {}) {
     if (!gate.ok) {
       return { ok: false, status: 500, error: 'overlay-rejected: ' + gate.errors.join('; ') };
     }
-    mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(configDir, { recursive: true });
     const tmp = join(configDir, '.runtime.json.tmp');
-    writeFileSync(tmp, JSON.stringify(overlay, null, 2) + '\n', 'utf8');
-    renameSync(tmp, runtimeFile);
+    fs.writeFileSync(tmp, JSON.stringify(overlay, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmp, runtimeFile);
     return { ok: true };
   }
 
