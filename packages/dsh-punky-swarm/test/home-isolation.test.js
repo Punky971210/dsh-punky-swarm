@@ -214,21 +214,27 @@ function walkFiles(root) {
   return files;
 }
 
-/** 文件级指纹：相对路径 + 字节数 + mtimeMs 的 sha256 摘要。 */
-function fingerprint(root) {
+/**
+ * 文件级指纹。
+ *
+ * **digest 口径 = `rel + size + sha256`（内容口径，FU1-2 修复）** —— **不含 `mtimeMs`**。
+ *   为什么改：本文件的 `faceDiff`（下方）一直只比 `sha256` / `size`，而 digest 却含 mtime ⇒ **两套口径并存**。
+ *   后果是**幂等重同步**（内容逐字全同、只有 mtime 变）也让 `sameFace` 判假 ⇒ 落到归因分支 ⇒ 假泄漏/不确定。
+ *   `mtimeMs` 仍保留在 `files[]` 里供**证据展示**，但**不进 digest**（它是「何时写的」，不是「写了什么」）。
+ *
+ * ⚠ 旧注释所称「digest 口径保持 rel+size+mtimeMs 不变（AC-14）」**已作废**：AC-14 随之改为内容口径。
+ */
+export function fingerprint(root) {
   if (!fs.existsSync(root)) return { root, exists: false, count: 0, sumBytes: 0, digest: 'absent', files: [] };
   const files = walkFiles(root);
   const h = crypto.createHash('sha256');
   let sum = 0;
-  for (const f of files) {
-    h.update(f.rel + '\u0000' + f.size + '\u0000' + f.mtimeMs + '\n');
+  const withHash = files.map((f) => {
+    const sha256 = crypto.createHash('sha256').update(readIfExists(path.join(root, f.rel))).digest('hex');
+    h.update(f.rel + '\u0000' + f.size + '\u0000' + sha256 + '\n');
     sum += f.size;
-  }
-  // files 仅用于**路径级 diff 与内容对照**（A3）；digest 口径保持 rel+size+mtimeMs 不变（AC-14）
-  const withHash = files.map((f) => ({
-    rel: f.rel, size: f.size, mtimeMs: f.mtimeMs,
-    sha256: crypto.createHash('sha256').update(readIfExists(path.join(root, f.rel))).digest('hex'),
-  }));
+    return { rel: f.rel, size: f.size, mtimeMs: f.mtimeMs, sha256 };
+  });
   return { root, exists: true, count: files.length, sumBytes: sum, digest: h.digest('hex'), files: withHash };
 }
 
@@ -304,9 +310,13 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
   //   · {kind:'isoRel'|'a2Rel'} ⇒ **必须先经 faceMap 映射为面相对**再比；映射不到 ⇒ 记 unresolved
   //     （键空间不一致不得被静默当成"不归因"，否则 red 恒不可达且无从发现）。
   const diffSet = new Set(diffPaths);
+  // 【FU1-1 修复】A3 归因必须**真比内容**：真实面当前内容的 sha256（按 posix rel 索引）。
+  //   旧实现只比 rel ⇒ 常驻宿主写入**不同版本内容**到同一 rel（开发机常态）就被判成「我方产物」= 假泄漏。
+  //   现在：条目带 `sha256` 时，只有「我方内容 == 真实面当前内容」才算归因；不相等 ⇒ 进 unmatched（可见、不静默）。
+  const faceHashByRel = new Map((after?.files ?? []).map((f) => [toPosix(f.rel), f.sha256]));
   const hits = [];
   const unresolved = [];      // 键空间**解析不了** / 调用方声明的**期望键**未命中
-  const unmatched = [];       // 候选枚举（对象条目）未命中：允许，但必须可见（不静默）
+  const unmatched = [];       // 候选枚举（对象条目）未命中 / **内容不匹配**：允许，但必须可见（不静默）
   const bySource = { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 };
   for (const item of attributed ?? []) {
     const isStr = typeof item === 'string';
@@ -318,8 +328,17 @@ export function g2Verdict({ face, before, after, after2, attributed = [], faceMa
       // 这不是假想情形）。命中后统一以**归一化后的 posix 键**入 hits；归一化后仍不命中 ⇒ 显式进 unresolved
       // （与 isoRel/a2Rel 通道对齐，**不得静默跳过**——faceRel 曾是唯一没有 unresolved 通道的 kind）。
       const normalized = toPosix(rel);
-      if (diffSet.has(rel) || diffSet.has(normalized)) {
+      const matchedRel = diffSet.has(rel) ? rel : (diffSet.has(normalized) ? normalized : null);
+      // 内容口径：条目声明了 sha256（= A3）时，必须与真实面**当前内容**逐字相等
+      const declaredSha = (item && typeof item === 'object' && typeof item.sha256 === 'string' && item.sha256.length > 0)
+        ? item.sha256 : null;
+      const faceSha = faceHashByRel.get(normalized) ?? null;
+      const contentMatched = declaredSha === null ? true : (faceSha !== null && faceSha === declaredSha);
+      if (matchedRel !== null && contentMatched) {
         hits.push({ rel: normalized, kind, source: item?.source ?? 'faceRel' });
+      } else if (matchedRel !== null && !contentMatched) {
+        // 路径命中但**内容不同** ⇒ 不是我们的产物（常驻宿主写的另一版本）⇒ 不得计为泄漏，但必须可见
+        unmatched.push({ rel: normalized, kind, source: item?.source ?? 'faceRel', reason: 'content-mismatch' });
       } else if (isStr) {
         // 扁平字符串 = 调用方声明的**期望键** ⇒ 未命中就是问题（键空间/期望写错），进 unresolved
         unresolved.push({ rel, kind, reason: 'raw-faceRel-unmatched' });
@@ -1836,6 +1855,97 @@ test('D15 面级 backstop 三档可区分：leak-red / foreign-red / green（受
     process.stderr.write('[D15] a=' + a.status + ' b=' + b.status + ' c=' + c.status
       + ' distinguishable=' + (a.status !== b.status && a.status !== c.status && b.status !== c.status)
       + ' unknown=' + unknown.status + String.fromCharCode(10));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FU1-1 / FU1-2 根因修复的**可达构造**（批 `punky-isolation-rootfix-20261101` · lane `p0-digest`）
+//   两条根因：① A3「只比 rel，不比内容」② face 级 digest 含 `mtimeMs` 而 `faceDiff` 只比内容。
+//   下面三条只依赖纯函数 + 真实临时目录，**不触碰真实 home**、不依赖宿主状态。
+// ══════════════════════════════════════════════════════════════════════════════
+
+test('F1 【FU1-2】同内容不同 mtime ⇒ 判 same（旧实现 digest 含 mtimeMs ⇒ 判 different）', () => {
+  const dir = tmpRoot('f1');
+  try {
+    writeRelFile(dir, path.join('a', 'x.txt'), 'hello');
+    const before = fingerprint(dir);
+    // 只推 mtime，内容逐字不变 —— 这正是「常驻宿主幂等重同步」的形态
+    const t = new Date(Date.now() + 60000);
+    fs.utimesSync(path.join(dir, 'a', 'x.txt'), t, t);
+    const after = fingerprint(dir);
+
+    assert.notEqual(before.files[0].mtimeMs, after.files[0].mtimeMs, '构造前提：mtime 确实变了');
+    assert.equal(before.files[0].sha256, after.files[0].sha256, '构造前提：内容逐字未变');
+    assert.equal(after.digest, before.digest, '内容口径：mtime 变化**不得**改变 digest（旧实现在此不同）');
+    assert.deepEqual(faceDiff(before, after), { added: [], removed: [], changed: [] }, 'faceDiff 不得报告变化');
+    const v = g2Verdict({ face: dir, before, after, after2: null, attributed: [] });
+    assert.equal(v.status, 'green', '同内容不同 mtime ⇒ same（green）；实测=' + v.status);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('F2 【FU1-1】同 rel 不同内容 ⇒ **不**归因为我方（旧实现只比 rel ⇒ 假泄漏 red）', () => {
+  const dir = tmpRoot('f2');
+  try {
+    writeRelFile(dir, path.join('.dsh', 'x.json'), 'host-version-2'); // 真实面内容（宿主写的另一版本）
+    const after = fingerprint(dir);
+    const cur = after.files[0];
+    const before = {
+      root: dir, exists: true, count: 1, sumBytes: 4, digest: 'seed',
+      files: [{ rel: cur.rel, size: 4, mtimeMs: 1, sha256: 'deadbeef' }],
+    };
+    // 我方（隔离根）在**同一 rel** 上的内容与真实面**不同**
+    const v = g2Verdict({
+      face: dir, before, after, after2: null,
+      attributed: [{ kind: 'faceRel', rel: cur.rel, source: 'A3', sha256: 'cafebabe' }],
+    });
+    assert.notEqual(v.status, 'red', '内容不同 ⇒ **不得**判泄漏（旧实现命中 rel 即 red = 假泄漏）；实测=' + v.status);
+    assert.equal(v.attribution.hits.length, 0, '不得计入 hits');
+    assert.ok(v.attribution.unmatched.some((u) => u.reason === 'content-mismatch'),
+      '内容不匹配必须**可见**（进 unmatched.content-mismatch，不静默吞掉）；实测=' + JSON.stringify(v.attribution.unmatched));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('F3 【FU1-1】同 rel 同内容 ⇒ 判泄漏（内容判据仍咬得住）+ 变异：去掉 sha256 比较必红', () => {
+  const dir = tmpRoot('f3');
+  try {
+    writeRelFile(dir, path.join('.dsh', 'x.json'), 'same-bytes');
+    const after = fingerprint(dir);
+    const cur = after.files[0];
+    const before = {
+      root: dir, exists: true, count: 1, sumBytes: 4, digest: 'seed',
+      files: [{ rel: cur.rel, size: 4, mtimeMs: 1, sha256: 'deadbeef' }],
+    };
+
+    // ① 我方内容 == 真实面当前内容 ⇒ 真泄漏（判据是内容，不是路径）
+    const hit = g2Verdict({
+      face: dir, before, after, after2: null,
+      attributed: [{ kind: 'faceRel', rel: cur.rel, source: 'A3', sha256: cur.sha256 }],
+    });
+    assert.equal(hit.status, 'red', '内容逐字相同 ⇒ 判泄漏；实测=' + hit.status);
+    assert.equal(hit.attribution.hits.length >= 1, true, '同内容须计入 hits');
+
+    // ② 变异 1：内容不同（sha256 改掉）⇒ 不归因（等价于 F2 的反向对照）
+    const diff = g2Verdict({
+      face: dir, before, after, after2: null,
+      attributed: [{ kind: 'faceRel', rel: cur.rel, source: 'A3', sha256: 'f'.repeat(64) }],
+    });
+    assert.notEqual(diff.status, 'red', '内容不同 ⇒ 不归因；实测=' + diff.status);
+
+    // ③ 变异 2（= 旧实现形态）：条目不带 sha256 ⇒ 只比 rel ⇒ 路径命中即 red。
+    //    这条就是被修掉的**假泄漏**：把 sha256 比较去掉，F2 的 `notEqual(red)` 必红。
+    const legacy = g2Verdict({
+      face: dir, before, after, after2: null,
+      attributed: [{ kind: 'faceRel', rel: cur.rel, source: 'A1' }],
+    });
+    assert.equal(legacy.status, 'red', '变异验证：去掉 sha256 比较（只比 rel）⇒ 判泄漏（F2 会因此变红）');
+    process.stderr.write('[F3] hit=' + hit.status + ' diff=' + diff.status + ' legacy=' + legacy.status
+      + String.fromCharCode(10));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

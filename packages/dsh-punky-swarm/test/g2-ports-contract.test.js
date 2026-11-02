@@ -32,18 +32,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(HERE, '..');
 
-/** 批次产物根（引擎约定：`~/.dsh/punky-preset/sessions/<会话>/artifacts/<批次>/`）。
- *  可用 `PUNKY_G2_BATCH_ARTIFACTS` 覆盖（与 `test/accept-pack1-guidance.test.js` 的同类夹具同形）。 */
+/** 快照真源 = **仓内 fixture**（`test/fixtures/<批次>/exec/`）：原默认按 `os.homedir()` 派生，
+ *  而隔离 HOME 下家目录被重定向（`test/helpers/isolated-home.preload.mjs`）⇒ 原路径必不存在 ⇒ B1 恒红。
+ *  仍可用 `PUNKY_G2_BATCH_ARTIFACTS` 覆盖取原件（与 `test/accept-pack1-guidance.test.js` 的同类夹具同形）。 */
 const BATCH_ID = 'punky-g2-adapter-2026-10-30';
 const ARTIFACTS_DIR = process.env.PUNKY_G2_BATCH_ARTIFACTS
-  ?? path.join(os.homedir(), '.dsh', 'punky-preset', 'sessions', BATCH_ID, 'artifacts', BATCH_ID);
+  ?? path.join(PKG_ROOT, 'test', 'fixtures', BATCH_ID);
 
 const absOf = (rel) => path.join(PKG_ROOT, ...rel.split('/'));
 const readRel = (rel) => fs.readFileSync(absOf(rel), 'utf8');
