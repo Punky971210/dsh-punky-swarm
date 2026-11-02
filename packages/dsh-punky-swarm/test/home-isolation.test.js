@@ -1985,3 +1985,74 @@ test('I4【写入拦截】覆盖清单 + **生产面形态守卫**：lib/** 不�
     'lib/** 不得以命名导入取变更型 fs 入口（命名导入结构性不可被写入拦截）——请改 `import fs from \'node:fs\'` + `fs.xxx(...)`；违规：'
     + JSON.stringify(offenders));
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// 【p2b-idle-window · FU-1 三件套之③】**空转窗校准**：测量外部写者的自然变化率（**不是等待**）
+// ══════════════════════════════════════════════════════════════════════════════════════════
+//
+// ## 为什么需要它
+// 「W1 的变化全都能归因于我方」这句话，只有在**外部写者本来就不怎么写**时才有意义。
+//   不做校准就只能「假设」外部安静；做了校准才能**测量**它，并把它从 W1 里扣掉。
+//
+// ## 两个窗（**窗长都来自真实工作，零 sleep**）
+//   · **W0 窗（只读）**：`A = snapshotReal()` → 对每个 REAL_FACE 跑一次 `walkFiles`（与 apply 窗等量的
+//     全量遍历、**不写任何东西**）→ `B = snapshotReal()`；
+//   · **W1 窗（写）**：复用**既有 apply 驱动** `mechanismRun()`（本文件 `:572`）——它返回的
+//     `realBefore`/`realAfter` 正是其内部那次 apply 的前后快照。
+//   ⇒ 两窗时长分别由「一次全量遍历」与「一次真实 apply」决定，**不含任何固定等待**。
+//
+// ## 断言形态（集合差为空，不依赖时长）
+//   `⋃W1 \ (⋃W0 ∪ 我方写点) = ∅`
+//
+// ## ⚠ 诚实边界（不得读作「已覆盖」）
+//   · **我方写点 = manifest 声明的写入面前缀**（`assetMap()` 的 `targetPrefixRel`）= **允许面（上界）**，
+//     不是"本次实际写到的文件清单"。方向偏安全（不会因多认合法面而假红），但它**不能**独立证明
+//     「没有多写」——那由 G2 指纹全等 + G3 归属断言承担。
+//   · `p0-digest` 已把 digest 改成 **sha256 内容口径**（去 `mtimeMs`）⇒ W0 里出现项只能是**真实内容变化**。
+test('P2b 空转窗校准：W0 实测外部变化率 ＋ W1 ⊆ (W0 ∪ 我方写点)（无 sleep）', () => {
+  // ── 我方写点（**声明面上界**）：manifest 的 targetPrefixRel 按面根归并 ──
+  const oursByFaceRoot = new Map();
+  for (const a of assetMap()) {
+    if (!a.faceRootRel || !a.targetPrefixRel) continue;
+    if (!oursByFaceRoot.has(a.faceRootRel)) oursByFaceRoot.set(a.faceRootRel, new Set());
+    oursByFaceRoot.get(a.faceRootRel).add(a.targetPrefixRel);
+  }
+  const rootRelOfFace = (facePath) => toPosix(path.relative(REAL_HOME, facePath));
+  const isOurs = (facePath, rel) => {
+    const prefixes = oursByFaceRoot.get(rootRelOfFace(facePath));
+    if (!prefixes) return false;
+    const r = toPosix(rel);
+    for (const p of prefixes) if (r === p || r.startsWith(p + '/')) return true;
+    return false;
+  };
+
+  // ── W0 窗：只读全量遍历（等量工作，不写）──
+  const A = snapshotReal();
+  for (const f of REAL_FACES) walkFiles(f.path);   // 只读：与 apply 窗可比的真实耗时
+  const B = snapshotReal();
+  const w0 = REAL_FACES.map((f, i) => faceDiff(A[i], B[i]));
+  const w0Items = w0.flatMap((d, i) => [...d.added, ...d.removed, ...d.changed]
+    .map((rel) => ({ face: REAL_FACES[i], rel })));
+
+  // ── W1 窗：复用既有 apply 驱动（mechanismRun 内的 realBefore → realAfter）──
+  const mech = mechanismRun();
+  const w1 = REAL_FACES.map((f, i) => faceDiff(mech.realBefore[i], mech.realAfter[i]));
+  const w1Items = w1.flatMap((d, i) => [...d.added, ...d.removed, ...d.changed]
+    .map((rel) => ({ face: REAL_FACES[i], rel })));
+
+  // ── 实测数字（**验收 2**：W0 是可读数字，不是被断言的常量）──
+  const keyOf = (x) => rootRelOfFace(x.face) + '|' + toPosix(x.rel);
+  const w0Keys = new Set(w0Items.map(keyOf));
+  const oursItems = w1Items.filter((x) => isOurs(x.face, x.rel));
+  const unaccounted = w1Items.filter((x) => !w0Keys.has(keyOf(x)) && !isOurs(x.face, x.rel));
+  const w0Ours = w0Items.filter((x) => isOurs(x.face, x.rel));
+  console.log('[P2b] W0 实测：' + w0Items.length + ' 项变化（其中落在我方声明面内 ' + w0Ours.length
+    + ' 项）｜W1：' + w1Items.length + ' 项（我方面内 ' + oursItems.length + '）｜未归置：' + unaccounted.length
+    + '｜W0 明细=' + JSON.stringify(w0Items.map(keyOf)));
+
+  // ── 断言（**验收 3**：集合差为空，不依赖时长）──
+  assert.deepEqual(unaccounted.map(keyOf), [],
+    'W1 \ (W0 ∪ 我方写点) 必须为空 —— apply 窗里的每一处变化，要么空转窗里本来就有（外部写者），'
+    + '要么落在我方声明的写入面内。未归置项：' + JSON.stringify(unaccounted.map(keyOf))
+    + '｜W0 实测=' + JSON.stringify([...w0Keys]));
+});
