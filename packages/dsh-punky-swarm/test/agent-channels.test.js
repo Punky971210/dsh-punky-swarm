@@ -39,7 +39,12 @@ const portsOf = (available) => ({
   agentRuntime: { available },
 });
 const SUBAGENTS = { start: async () => ({}) };          // C 档物理基础：宿主 subagent 服务
-const AGENTS = { get: () => null };                    // D 档物理基础：宿主 agents 服务
+// 【ly-impl · 批 `punky-arch-refine-20261101`】D 档**判据源切换**（`dg-impl` 交接项）：
+//   D 档派发不经 `agents`（它只有 get+followup，无创建原语），而是「引擎经**工具面**调 `spawn_teammate`」
+//   ⇒ D 档可用性改由「工具面在 ∧ `spawn_teammate` 可调」决定，成因词 `port-absent:agentTeam`。
+//   ⚠ 夹具随之更新：`AGENTS` 不再能让 D 档变为可用（保留常量只为「有 agents 但无工具面 ⇒ D 仍不可用」的反例）。
+const TOOLS = { execute: async () => ({ isError: false }) }; // D 档物理基础：宿主工具面（可发起 spawn_teammate）
+const AGENTS = { get: () => null };                    // 旧 D 档物理基础（**已不是判据源**）
 const factsOf = (ctx) => agentChannelFactsOf(ctx);
 const agentOf = (report) => report.host.find((h) => h.key === 'agentRuntime');
 
@@ -54,15 +59,18 @@ test('AC-1 只缺 D 档：channels.subagent 可用、channels.agentTeam 不可�
   assert.equal(ch.probed, true, 'channels.probed 必须为 true');
   assert.equal(ch.subagent.available, true, 'C 档可用：宿主 subagents 在位且有 start 入口');
   assert.equal(ch.subagent.reason, null, 'C 档可用时 reason 必须为 null');
-  assert.equal(ch.agentTeam.available, false, 'D 档不可用：宿主无 agents 服务');
-  assert.equal(ch.agentTeam.reason, 'agent-runtime-unavailable', 'D 档成因须为既有词 `agent-runtime-unavailable`');
+  assert.equal(ch.agentTeam.available, false, 'D 档不可用：宿主无工具面（无法发起 spawn_teammate）');
+  // 【ly-impl】成因词随**判据源切换**更新（`dg-impl` 交接项）：`agent-runtime-unavailable` → `port-absent:agentTeam`。
+  //   后者与 `dg-impl` 的三态归一 / `WIRED_ISSUE_RE = /^(port-absent:|roster-table-unwired:)/` 合流
+  //   ⇒ 启动告警只报**我方装配**成因（这正是该前缀的语义）。
+  assert.equal(ch.agentTeam.reason, 'port-absent:agentTeam', 'D 档成因须为装配面词 `port-absent:agentTeam`');
 });
 
 // ── AC-2：**缺 C 档**（宿主有 agents、无 subagent）⇒ 报出「subagent 不可用」而 agentTeam 可用 ──────────
 test('AC-2 只缺 C 档：channels.agentTeam 可用、channels.subagent 不可用且带成因', () => {
   const report = capabilityReport({
     ports: portsOf(false),
-    agentChannels: factsOf({ agents: AGENTS }), // 有 D，无 C
+    agentChannels: factsOf({ tools: TOOLS }), // 有 D，无 C
   });
   const ch = agentOf(report).channels;
   assert.equal(ch.probed, true);
@@ -75,7 +83,7 @@ test('AC-2 只缺 C 档：channels.agentTeam 可用、channels.subagent 不可�
 // ── AC-3：**本项的全部意义** —— 两个夹具报出**不同的通道**（不是只核字段在场）──────────────────────
 test('AC-3 缺 C 档与缺 D 档必须可区分：两夹具的不可用通道不同，且成因不同', () => {
   const faceD = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ subagents: SUBAGENTS }) }));
-  const faceC = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ agents: AGENTS }) }));
+  const faceC = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ tools: TOOLS }) }));
   const missingD = faceD.channels;
   const missingC = faceC.channels;
 
@@ -101,7 +109,7 @@ test('AC-3 缺 C 档与缺 D 档必须可区分：两夹具的不可用通道不
 // ── AC-4：聚合规则 = **OR**（任一路径可用 ⇒ 面可用）────────────────────────────────────────────
 test('AC-4 面级 available 按 OR 聚合：只有一条通道可用时该面仍判可用', () => {
   const onlyC = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ subagents: SUBAGENTS }) }));
-  const onlyD = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ agents: AGENTS }) }));
+  const onlyD = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({ tools: TOOLS }) }));
   const neither = agentOf(capabilityReport({ ports: portsOf(false), agentChannels: factsOf({}) }));
 
   assert.equal(onlyC.available, true, '只有 C 档可用 ⇒ 面可用（OR，不是 AND）');
@@ -134,8 +142,8 @@ test('AC-5 未探明 ≠ 不可用：缺省 channels 为 null、不影响 availa
 test('AC-6 变异自证：把 OR 换成 AND 时，「只有一档可用」的两种宿主都会被判面不可用', () => {
   const and = (ch) => ch.subagent.available && ch.agentTeam.available;
   const onlyC = factsOf({ subagents: SUBAGENTS });
-  const onlyD = factsOf({ agents: AGENTS });
-  const both = factsOf({ subagents: SUBAGENTS, agents: AGENTS });
+  const onlyD = factsOf({ tools: TOOLS });
+  const both = factsOf({ subagents: SUBAGENTS, tools: TOOLS });
 
   const or = (ch) => ch.subagent.available || ch.agentTeam.available;
   assert.equal(or(onlyC), true, 'OR：只有 C 档 ⇒ 可用（这是 AC-4 采纳的规则）');

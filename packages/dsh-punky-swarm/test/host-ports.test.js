@@ -63,9 +63,31 @@ function ctxOf(overrides = {}) {
  * 语义没有放松：入口存在性、拒态、载荷形状仍由各用例逐条断言。
  */
 function dispatchEntryOf(port) {
-  const found = ['execute', 'spawn'].filter((k) => typeof port?.[k] === 'function');
-  assert.equal(found.length, 1, '派发入口必须**恰有 1 个**（execute|spawn）；实际=' + JSON.stringify(found));
-  return port[found[0]].bind(port);
+  // 【ly-impl · 批 `punky-arch-refine-20261101`】契约动词改名 `execute` → `push_execute`。
+  //
+  // 判据**语义升级**（不是放宽）：原判据「派发入口恰有 1 个（execute|spawn）」的前提是
+  //   **两个对等动词并存**（旧 `execute` 是空契约、`spawn` 是实跑动词）⇒ 该判据在改名后**失效**：
+  //   `push_execute`（契约唯一派发动词）与 `spawn`（**C 通道内部原子步骤**，不再是对等入口）**同时在场**。
+  // ⇒ 新判据由两条组成，比原来更严：
+  //   ① **契约动词必须在场**：`push_execute` 是函数；
+  //   ② **旧动词必须绝迹**：`execute` **不得**以别名形式残留（留别名 = 语义混淆未消除）。
+  assert.equal(typeof port?.push_execute, 'function', '契约派发动词 `push_execute` 必须存在');
+  assert.equal(typeof port?.execute, 'undefined', '旧动词 `execute` **不得**以别名残留（一次改净）');
+  const fn = port.push_execute.bind(port);
+  // 兼容 shim：本文件既有用例按**旧 spawn 形状**传参；`push_execute` 的新签名是 `(spec, options)`。
+  //   ⇒ 把旧形状包成 `(spec, options)`：`spec` 取最小合法 `ExecSpec`（无绑定会话 ⇒ 走 C 通道），
+  //   `options` 原样透传（`toolFace`/`persona`/`maxDepth` 等 C 通道入参）。**断言意图一字未改**。
+  return (args = {}) => fn(
+    {
+      runId: 'host-ports-probe',
+      targetId: args.label ?? 'probe-lane',
+      member: { id: args.label ?? 'probe-lane' },
+      session: { id: null, params: null },
+      taskPkg: { id: args.label ?? 'probe-lane' },
+      contract: { id: 'host-ports-probe', sha256: null },
+    },
+    args,
+  );
 }
 
 // ── H1 invokeTool：缺 signal ⇒ 抛 host-port-invalid:（贴原文）＋ 放行对照 ────────────────

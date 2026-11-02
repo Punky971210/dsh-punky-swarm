@@ -75,7 +75,7 @@
     "test/agent-channels.test.js": {
       "asserts": 35,
       "blankLines": 20,
-      "lines": 147,
+      "lines": 155,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1065,9 +1065,9 @@
       "todos": 0
     },
     "test/host-ports.test.js": {
-      "asserts": 57,
+      "asserts": 58,
       "blankLines": 19,
-      "lines": 285,
+      "lines": 307,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2073,7 +2073,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T15:18:33Z",
+  "generatedAt": "2026-11-02T15:30:12Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2087,10 +2087,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12076,
+    "asserts": 12077,
     "blankLines": 6737,
     "files": 259,
-    "lines": 71100,
+    "lines": 71130,
     "tautologies": 0,
     "tests": 2509,
     "todos": 0

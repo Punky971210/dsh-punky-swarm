@@ -145,7 +145,7 @@ export function createNullAdapters() {
       personaVia: 'none',
       depthVia: 'none',
       // 空执行结果：字段集对齐 `ExecResult`；保留 `writes`/`evidence`（归一/分类面据它们判空转）
-      execute: async () => ({ timedOut: false, exitCode: 0, signal: null, writes: [], evidence: [] }),
+      push_execute: async () => ({ timedOut: false, exitCode: 0, signal: null, writes: [], evidence: [] }),
       cancel: async () => {},
       // 失败以返回值表达、**不抛**（契约 NotifyLeaderResult 纪律）；成因用功能面词汇
       notifyLeader: async () => ({ delivered: false, reason: 'agent-runtime-unavailable' }),
@@ -374,7 +374,7 @@ const defaultCapabilityOf = (rt) => {
 };
 
 /**
- * 最小批次用的**最小 `ExecSpec`**：只为「按契约动词 `execute(spec)` 调用」而造。
+ * 最小批次用的**最小 `ExecSpec`**：只为「按契约动词 `push_execute(spec)` 调用」而造。
  * null 适配器不消费其内容；真适配器会消费 `member`/`session`/`taskPkg`/`contract`。
  */
 const minimalExecSpecOf = (task) => ({
@@ -403,7 +403,7 @@ export async function runMinimalBatch(bus, spec = {}) {
 
   const raw = typeof spec.execResult === 'object' && spec.execResult !== null
     ? spec.execResult
-    : await bus.of('runtime').execute(minimalExecSpecOf(task)); // 契约动词 = `execute(spec)`（原 `start(task)` 已废）
+    : await bus.of('runtime').push_execute(minimalExecSpecOf(task)); // 契约动词 = `push_execute(spec)`（原 `start(task)` 已废）
   steps.push('runtime');
 
   const normalized = bus.normalize(raw);

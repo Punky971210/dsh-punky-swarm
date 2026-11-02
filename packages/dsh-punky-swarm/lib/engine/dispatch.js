@@ -1218,24 +1218,57 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
         // ⚠ **`toolFace` 必须真传**：原 activation 分支不传 ⇒ 收窄通道整键丢失（P0-6 **F-3**）；
         //   统一后两形态拿到同一份载荷，按次收窄不再依赖「另一条独立路径」。
         //   （⇒ F-3 的**症状**随本统一消失；见证核对与量具口径仍归 `w3-meter`，本 lane 不改量具。）
-        start = (await agentPort.spawn({
-          provider,
-          label: builtRequest.label,
-          prompt: builtRequest.prompt,
-          parent: exec.agent,
-          signal: builtRequest.signal,
-          role: laneTask?.role,
-          // 工具面：`builtRequest.toolFilter` 即 `buildStartRequest` 合成的按次 deny 集。
-          //   provider 按自身能力落到 `request.toolFilter`（start 入口）或经 `agentPreset` 承载（activation 入口）。
-          toolFace: builtRequest.toolFilter,
-          // 【死参数说明（批 `punky-presmoke-2026-10-31`；W3-S2 统一入口后仍成立）】**接收但不转发生效**：
-          //   本调用把 `persona` 交给 `agentPort.spawn(...)`，但 activation 入口的宿主**无 `persona` 字段**
-          //   （人格只能经 `agentPreset` 组 composition 生效）⇒ 此路径下该值**不起作用**。
-          //   **这不是缺陷**：保留传参是为让 `start` / `activation` **两形态签名一致**（调用点不必按形态分叉）。
-          //   **禁删**：删了反而制造形态分叉。
-          persona: builtRequest.persona,
-          maxDepth: builtRequest.maxDepth,
-        })).run;
+        // 【ly-impl · 批 `punky-arch-refine-20261101`】派发动词改为契约 `push_execute(spec, options)`：
+        //   `spec` = `ExecSpec`（**从黑板读**：`wavePlan.tasks[]` 的 lane 任务 + 绑定会话 + 契约引用）；
+        //   `options` = **非契约第二参**（R-5）：承载 C 通道所需的 `provider/label/prompt/parent/signal/
+        //   role/toolFace/persona/maxDepth`（`toolFace` 必须原样到 provider，F-3 复发防线）。
+        //   ⚠ **通道选路在 provider 单点完成**（引擎不判形态、不选通道）。
+        const bindingMap = laneBindingOf(store, sessionId, ctx?.logger);
+        const boundOf = bindingMap instanceof Map ? bindingMap.get(lane) : null;
+        const boundSessionId = boundOf && typeof boundOf.sessionId === 'string' ? boundOf.sessionId : null;
+        const pushed = await agentPort.push_execute(
+          {
+            runId: h.token, // 一次性句柄 token（C 档派发的唯一凭证；与既有语义同源）
+            // AC-8：`targetId` **由 Leader 给定**（`lanes[].roster`）；缺省回落 lane id（与既有 label 同源），
+            //   适配器**不得自选成员、不得扩员**。
+            targetId: laneTask?.roster ?? lane,
+            member: { id: laneTask?.roster ?? lane, title: laneTask?.role ?? undefined },
+            session: { id: boundSessionId, params: null },
+            // ★ DAG 真源：`wave` / `deps` 直接取自黑板 lane 任务（蟛蜞模式拓扑）。
+            taskPkg: { id: lane, wave: laneTask?.wave, deps: laneTask?.deps ?? [] },
+            // R-4（已裁）：`contract` 由 Leader 建批时写入 `wavePlan.tasks[].contract`；缺失容忍（存量批兼容）。
+            contract: {
+              id: laneTask?.contract?.id ?? lane,
+              sha256: laneTask?.contract?.sha256 ?? null,
+            },
+          },
+          {
+            provider,
+            label: builtRequest.label,
+            prompt: builtRequest.prompt,
+            parent: exec.agent,
+            signal: builtRequest.signal,
+            role: laneTask?.role,
+            // 工具面：`builtRequest.toolFilter` 即 `buildStartRequest` 合成的按次 deny 集。
+            toolFace: builtRequest.toolFilter,
+            // 【死参数说明（批 `punky-presmoke-2026-10-31`；统一入口后仍成立）】**接收但不转发生效**：
+            //   activation 入口的宿主**无 `persona` 字段**（人格只能经 `agentPreset` 组合生效）⇒ 该路径下不起作用。
+            //   **这不是缺陷**：保留传参是为让 `start` / `activation` **两形态签名一致**。**禁删**。
+            persona: builtRequest.persona,
+            maxDepth: builtRequest.maxDepth,
+            // D 通道成功判据的凭据（`listMembers(agent)` 要求 live Team member 的 agent）。
+            agent: exec.agent,
+          },
+        );
+        // 【AC-16 · ly-impl】**不可确认 ⇒ 不写绑定、lane 保持 running**（既不置 failed、也不写 member.dispatch）：
+        //   判据 = `errorCode:'PUSH_UNCONFIRMED'`（工具 ok 但名册反查未命中 = 观测面缺失，不是执行失败）。
+        //   交既有兜底（`post-execute` 观察 + `laneBindingOf` 惰性重建）补登记，见设计 §②。
+        if (pushed && pushed.errorCode === 'PUSH_UNCONFIRMED') {
+          return { ...base, spawned: false, unconfirmed: true, reason: 'PUSH_UNCONFIRMED' };
+        }
+        // 成功：C 档有 `run`（子会话句柄）；D 档无 run，但有名册反查到的 `sessionId` ⇒ 统一成 `{ id }` 形态
+        //   交给既有 `workerSessionIdOf` 取值单点（不新造第二套取值逻辑）。
+        start = pushed?.run ?? { id: pushed?.sessionId ?? null };
         break;
       } catch (e) {
         // 【P-2 修正（2026-09-24，独立复核发现）】宿主模板对 **≥2 个未知名** 用**复数**文案

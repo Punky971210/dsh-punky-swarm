@@ -16,7 +16,7 @@
  *
  * ## 本轮的形状变更（批 `punky-adapter-split-20261031` · lane `w1-contract-ports`）
  * 一次补齐四件（**禁止分两次改本文件**——漏项就要二次改契约）：
- * ① `AgentRuntime.execute` 落地为唯一执行动词（此前契约有、三方皆无实现，是 G01 的核心洞）；
+ * ① `AgentRuntime.push_execute` 落地为唯一执行动词（此前契约有、三方皆无实现，是 G01 的核心洞）；
  * ② `canNarrow` / `narrowVia` / `personaVia` / `depthVia` 四个**功能面读数**入契约；
  * ③ 宿主形态值出契约（不导出、引擎不消费）；
  * ④ `AgentRuntime.notifyLeader` 新增（Leader 唤醒通路，此前全仓 0 命中）。
@@ -74,14 +74,14 @@ export interface ToolFace {
 // ---------------------------------------------------------------------------
 
 /**
- * 成员执行运行时。**唯一的执行动词是 `execute`**（收窄自「回读 / 注入 / 驱动」三动作：
+ * 成员执行运行时。**唯一的执行动词是 `push_execute`**（收窄自「回读 / 注入 / 驱动」三动作：
  * 名册与工具面归内核自持后，回读与注入不再是端口，而是初次装配的一次性动作）。
  *
  * 本接口分成**两类成员**，读法不同、纪律不同：
  * - **能力位读数**（`available` / `canNarrow` / `narrowVia` / `personaVia` / `depthVia`）：
  *   引擎**只许**读这些来判断「要得到 / 要不到功能」，并据此可判定地拒派（J6-e 允许面）。
  *   读数**必须**来自实测（`narrowVia` 不得由形态推导得出）。
- * - **动作**（`execute` / `cancel` / `notifyLeader`）：要功能、取消、唤醒 Leader。
+ * - **动作**（`push_execute` / `cancel` / `notifyLeader`）：要功能、取消、唤醒 Leader。
  *
  * ⚠ **禁止**让本接口携带任何「宿主长什么样」的字段（AC-5″）。引擎可因「功能拿不到」而拒，
  * 不可因「宿主形态」而拒。
@@ -135,7 +135,7 @@ export interface AgentRuntime {
    * `ExecSpec` 中 `dispatch` **之外**的字段是内核的持久化/恢复校验面，适配器**不消费**
    * （不得假装消费，也不得因它们在场而改行为）。
    */
-  execute(spec: ExecSpec): Promise<ExecResult>;
+  push_execute(spec: ExecSpec): Promise<ExecResult>;
 
   /**
    * 请求取消一次已发出的执行；语义为「停止等待」，不得把未知当已停。

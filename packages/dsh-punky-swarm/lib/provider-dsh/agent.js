@@ -38,7 +38,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 【W4 批 `w4-inject-teardown`】宿主服务取值一律走 `serviceOf`（裸读优先 + `ctx.get` 回落），
 //   不再在本文件裸读 `ctx.subagents` —— 引擎行清空 `inject` 后，未声明的 ctx 上裸读**会抛**
 //   （活体实证见 `exec/inject-teardown.md` 的宿主级 RED→GREEN）。
-import { serviceOf } from './tools-http.js';
+import { serviceOf, HOST_PORT_QUERY_FAILED } from './tools-http.js';
+// 【ly-impl】D 通道成功判据的第二腿 = 名册反查（复用 provider 自己的名册面，禁第二套探测）。
+import { createRosterPort } from './roster.js';
 
 export const HOST_PORT_UNSUPPORTED = 'host-port-unsupported:';
 
@@ -92,12 +94,23 @@ function subagentChannelOf(rt) {
  */
 export function agentChannelFactsOf(ctx) {
   const subagent = subagentChannelOf(serviceOf(ctx, 'subagents'));
-  const agents = serviceOf(ctx, 'agents');
-  // D 档判据与 `notifyLeader` 的入参守卫**同式**：取到服务且其 `get` 可调用才算可用。
-  //   注意「取到之后能不能投递」不在此判（那是调用时的事实，属 `notifyLeader` 的 `reason` 域）。
-  const agentTeam = (agents && typeof agents.get === 'function')
+  // 【ly-impl · 批 `punky-arch-refine-20261101`】D 档**判据源切换**（`dg-impl` 的交接项）：
+  //   原判据 = 「`agents` 服务在且 `get` 可调用」⇒ 但 D 档**派发**根本不经 `agents`（它只有 get+followup），
+  //   真正的派发路径是「引擎经**工具面**调 `spawn_teammate`」⇒ 可用性必须按**能不能发起派发**判。
+  //   新判据 = **工具面在 ∧ `spawn_teammate` 可调**（可内省时用 `probeTool` 排除明确 absent）。
+  //   成因词改为 `port-absent:agentTeam`（与 `dg-impl` 的三态归一 / `WIRED_ISSUE_RE` 合流）。
+  //   ⚠ 探测**抛错**不得当成「面没装」（那是探测坏，不是能力缺）；只有明确的 `absent` 才算不可用。
+  const toolFace = serviceOf(ctx, 'tools');
+  let dUsable = Boolean(toolFace) && typeof toolFace.execute === 'function';
+  if (dUsable && typeof toolFace.probeTool === 'function') {
+    try {
+      const p = toolFace.probeTool('spawn_teammate');
+      if (p && p.state === 'absent') dUsable = false;
+    } catch { /* 探测坏 ≠ 面没装：保持 dUsable 不变（禁把故障读成能力缺失） */ }
+  }
+  const agentTeam = dUsable
     ? { available: true, reason: null }
-    : { available: false, reason: 'agent-runtime-unavailable' };
+    : { available: false, reason: 'port-absent:agentTeam' };
   return { probed: true, subagent, agentTeam };
 }
 
@@ -183,7 +196,108 @@ export function createAgentPort(ctx, opts = {}) {
   // 深度经哪条路 —— 两形态都在 request 内；宿主 `depthLimit` 明确 false ⇒ 不传（`none`，非静默降级）。
   const depthVia = available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
 
-  return {
+  // ── 【ly-impl · 批 `punky-arch-refine-20261101`】`push_execute` 的两通道实现 ──────────────
+  //
+  // 语义（用户裁决）：`push_execute(spec, options?)` = **按 `ExecSpec` 把一个 lane 任务推给一个成员执行**。
+  //   `spec` = 契约面（W1 冻结，`ExecSpec` 七字段）；`options` = **非契约第二参**（R-5 已批），
+  //   承载 `provider/label/prompt/parent/signal/role/toolFace/persona/maxDepth/agent`
+  //   —— `options.toolFace` **必须原样到 C 通道**（F-3 复发防线，AC-9）。
+  //
+  // 选路（确定性，**单点**）：
+  //   ① `spec.session.id` 非空 ∧ D 可用 ⇒ `agentTeam`（续用黑板绑定会话；走 C 会新起 subagent 破坏绑定）
+  //   ② 否则 C 可用 ⇒ `subagent`
+  //   ③′ C 不可但 D 可用（无绑定）⇒ `agentTeam`（明明能发却抛 = 把可用通道当不可用）
+  //   ③ 两条都不可用 ⇒ **fail-closed 抛**（不返回空 ExecResult 冒充成功）
+  //   ⚠ **规则 ④**：本次「不可确认」（名册未命中）**不构成**切换通道的理由 —— 确认失败是观测面问题，
+  //     不是通道能力问题；回头改走 C 会丢弃持久绑定（比「不可确认」严重得多）。
+  const pickChannelOf = (spec) => {
+    const facts = agentChannelFactsOf(ctx);
+    const dUsable = facts.agentTeam.available === true;
+    const cUsable = facts.subagent.available === true;
+    const bound = typeof spec?.session?.id === 'string' && spec.session.id.length > 0;
+    if (bound && dUsable) return 'agentTeam';
+    if (cUsable) return 'subagent';
+    if (dUsable) return 'agentTeam';
+    throw new Error(HOST_PORT_UNSUPPORTED + ' push_execute: 无可用通道（subagent / agentTeam 皆不可用）');
+  };
+
+  /** `ExecResult` 的**空壳**（键集严格对齐契约；`via`/`sessionId`/`run` 是非契约诊断面）。 */
+  const emptyExecResultOf = () => ({ timedOut: false, exitCode: null, signal: null, writes: [], evidence: [] });
+
+  /** C 通道（**直接派发**）：经 `subagents` 服务（复用既有 `spawn` 原子步骤，不改其语义）。 */
+  const pushViaSubagent = async (spec, options) => {
+    const spawned = await port.spawn({
+      provider: options?.provider,
+      label: options?.label ?? spec?.taskPkg?.id,
+      prompt: options?.prompt,
+      parent: options?.parent,
+      signal: options?.signal,
+      role: options?.role ?? spec?.member?.title,
+      toolFace: options?.toolFace, // ★ R-5 / AC-9：不得丢键（丢 = 收窄通道静默失效）
+      persona: options?.persona,
+      maxDepth: options?.maxDepth,
+    });
+    return {
+      ...emptyExecResultOf(),
+      // ⚠ 保住 `spawn` 的**既有回显键**（`form` / `narrowVia` / `depthVia` / `preset` 等）：
+      //   这些是 `lane_dispatch` 的既有可观测面，`push_execute` 包装时**不得丢**（否则旧读端静默失明）。
+      ...spawned,
+      via: 'subagent',
+      run: spawned?.run ?? null,
+      sessionId: spawned?.run?.id ?? null,
+    };
+  };
+
+  /**
+   * D 通道（**间接派发**）：引擎 → 工具面 `spawn_teammate` → 宿主拉起成员。
+   *
+   * **成功判据（两层，缺一不可）**：
+   *   ① 工具调用返回 `isError !== true`；
+   *   ② `RosterSource.sessionOf(targetId)` **命中会话 id**（D 档拿 id 的唯一既有真源 = 名册反查：
+   *      宿主 `modelMember()` 会丢弃 `id`，取证见 `lib/bridge/dispatch-register.js` 注释）。
+   * ⚠ **不用 `post-execute` 事件**：自派会产生「自己调、自己观察」的归属混淆，且登记面同一监听器
+   *   会重复登记 ⇒ 成功语义必须落在**同步可判**的两层上。
+   * ⚠ 工具 ok 但名册未命中 ⇒ **不可确认**（`errorCode:'PUSH_UNCONFIRMED'`、`sessionId:null`）：
+   *   既不是失败（宿主可能真拉起了，只是观测缺失），也不是成功 ⇒ **上层不得据此写绑定**。
+   */
+  const pushViaAgentTeam = async (spec, options) => {
+    const toolFace = serviceOf(ctx, 'tools');
+    if (!toolFace || typeof toolFace.execute !== 'function') {
+      throw new Error(HOST_PORT_UNSUPPORTED + ' push_execute(D): 工具面不可调，无法发起 spawn_teammate');
+    }
+    const targetName = typeof spec?.targetId === 'string' && spec.targetId.length > 0 ? spec.targetId : null;
+    if (!targetName) {
+      // AC-8：`targetId` 由 Leader 给定，适配器**不得自选成员**、不得扩员。
+      throw new Error(HOST_PORT_UNSUPPORTED + ' push_execute(D): spec.targetId 缺失（适配器不得自选成员）');
+    }
+    const args = {
+      name: targetName,
+      ...(typeof options?.prompt === 'string' ? { prompt: options.prompt } : {}),
+      ...(typeof options?.callsign === 'string' ? { callsign: options.callsign } : {}),
+    };
+    let r = null;
+    try {
+      r = await toolFace.execute({ name: 'spawn_teammate', arguments: args });
+    } catch (e) {
+      // 调用面本身失败（工具面炸）⇒ 明确失败，**不与「不可确认」混同**。
+      throw new Error(HOST_PORT_QUERY_FAILED + ' push_execute(D) 调用面失败: ' + String(e?.message ?? e));
+    }
+    if (r && r.isError === true) {
+      return { ...emptyExecResultOf(), exitCode: 1, errorCode: 'PUSH_FAILED', errorFamily: 'dispatch',
+        via: 'agentTeam', sessionId: null, run: null };
+    }
+    let sid = null;
+    try {
+      sid = createRosterPort(ctx, options?.agent ?? null).sessionOf(targetName);
+    } catch { sid = null; } // 查询面坏 = 不可确认（与「名不在名册」同档下游处置）
+    if (!sid) {
+      return { ...emptyExecResultOf(), errorCode: 'PUSH_UNCONFIRMED', errorFamily: 'dispatch-unconfirmed',
+        via: 'agentTeam', sessionId: null, run: null };
+    }
+    return { ...emptyExecResultOf(), via: 'agentTeam', sessionId: sid, run: null };
+  };
+
+  const port = {
     available,
     reason,                   // 'runtime-unavailable' | 'no-start-entry' | null —— **功能面**成因（引擎据此分档降级文案）
     form,                     // 端口内部状态（引擎只读 `available`/`reason`，**不得**读本键：AC-5″）
@@ -334,5 +448,26 @@ export function createAgentPort(ctx, opts = {}) {
       }
       return { delivered: true, reason: null };
     },
+
+    /**
+     * 按 `ExecSpec` 把一个 lane 任务**推给一个成员执行**（契约 `AgentRuntime.push_execute`）。
+     *
+     * 与旧 `execute` 的关系：**同一动作换了名字**（用户裁决：避免与「成员自身的执行」混淆）。
+     * 与 `spawn` 的关系：`spawn` 降为**内部原子步骤**（C 通道的「下发」），本方法是**唯一派发动词**。
+     *
+     * @param {object} spec      `ExecSpec`（W1 冻结面；本方法只读，**不写状态** —— AC-5）
+     * @param {object} [options] **非契约第二参**（R-5）：`provider/label/prompt/parent/signal/role/
+     *                            toolFace/persona/maxDepth/agent`（`toolFace` 必须原样到 C 通道）
+     * @returns {Promise<object>} `ExecResult` + 非契约诊断键 `via` / `sessionId` / `run`
+     *   ⚠ `errorCode === 'PUSH_UNCONFIRMED'` 时 `sessionId` 为 `null` ⇒ **上层不得写绑定**（AC-16）
+     * @throws {Error} 两条通道都不可用（fail-closed）；工具调用面失败（`host-port-query-failed:`）
+     */
+    async push_execute(spec = {}, options = {}) {
+      const via = pickChannelOf(spec); // 选路单点（AC-3）
+      return via === 'agentTeam'
+        ? await pushViaAgentTeam(spec, options)
+        : await pushViaSubagent(spec, options);
+    },
   };
+  return port;
 }

@@ -16,7 +16,7 @@
  *
  * ## 本轮的形状变更（批 `punky-adapter-split-20261031` · lane `w1-contract-ports`）
  * 一次补齐四件（**禁止分两次改本文件**——漏项就要二次改契约）：
- * ① `AgentRuntime.execute` 落地为唯一执行动词（此前契约有、三方皆无实现，是 G01 的核心洞）；
+ * ① `AgentRuntime.push_execute` 落地为唯一执行动词（此前契约有、三方皆无实现，是 G01 的核心洞）；
  * ② `canNarrow` / `narrowVia` / `personaVia` / `depthVia` 四个**功能面读数**入契约；
  * ③ 宿主形态值出契约（不导出、引擎不消费）；
  * ④ `AgentRuntime.notifyLeader` 新增（Leader 唤醒通路，此前全仓 0 命中）。
