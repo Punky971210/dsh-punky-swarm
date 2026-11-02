@@ -88,6 +88,11 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MANIFEST_REL } from '../lib/assets.js';
+// ── 【p2-idle-window · 乙裁决】隔离判据谓词的**单点定义**在 `test/helpers/verdicts.mjs`（跨文件单点）──
+//   四谓词（`g1Verdict` / `attributionVerdict` / `faceDiff` / `g2Verdict`）＋三个依赖
+//   （`normPath` / `sameFace` / `toPosix`）全部从那里导入 ⇒ 本文件内**零定义**。
+//   ⚠ `liveFaceExcluded` 仍在本文件内，它用 `normPath` —— 靠本行导入即可工作。
+import { normPath, sameFace, toPosix, g1Verdict, attributionVerdict, faceDiff, g2Verdict } from './helpers/verdicts.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(HERE, '..');
@@ -131,51 +136,11 @@ const REAL_SINK_PROBE = path.join(LIVE_FACES[0].path, 'punky-swarm', 'audit-prob
 
 // ── 谓词（纯函数，供判别力自证直接调用）──
 
-function normPath(p) {
-  // 解析最近的存在祖先后拼回未解析的尾部（被测落点常常尚不存在，不能直接 realpath）。
-  // 两侧口径必须一致：Windows 临时目录会以 8.3 短名（ADMINI~1）出现，与长名混用会让同一条路径比不相等。
-  let cur = path.resolve(String(p ?? ''));
-  const tail = [];
-  for (;;) {
-    try { cur = fs.realpathSync.native(cur); break; } catch {
-      const parent = path.dirname(cur);
-      if (parent === cur) break;
-      tail.unshift(path.basename(cur));
-      cur = parent;
-    }
-  }
-  const out = tail.length ? path.join(cur, ...tail) : cur;
-  return process.platform === 'win32' ? out.toLowerCase() : out;
-}
+// ── 【p2-idle-window · 乙裁决】隔离判据谓词已**外移**到 `test/helpers/verdicts.mjs`（跨文件单点定义）──
+//   移出：`normPath` / `g1Verdict` / `attributionVerdict` / `sameFace` / `toPosix` / `faceDiff` / `g2Verdict`
+//   依赖一并搬出并由本文件**导入回来**（不做第二份副本，否则「单点」变成两份）。
+//   导出名与签名一字未改 ⇒ 本文件所有调用点零改动（含 `liveFaceExcluded`，它用 `normPath`）。
 
-/** G1 谓词：homedir 必须等于声明的隔离根，且不等于真实 home。 */
-export function g1Verdict(homedirValue, sentinelValue, realHomeValue) {
-  const sentinel = String(sentinelValue ?? '').trim();
-  const reasons = [];
-  if (!sentinel) reasons.push('未声明隔离根（进程未加载隔离 preload）');
-  if (sentinel && normPath(homedirValue) !== normPath(sentinel)) {
-    reasons.push(`os.homedir()=${homedirValue} 不等于声明的隔离根=${sentinel}`);
-  }
-  if (sentinel && realHomeValue && normPath(sentinel) === normPath(realHomeValue)) {
-    reasons.push('声明的隔离根就是真实 home');
-  }
-  if (realHomeValue && normPath(homedirValue) === normPath(realHomeValue)) {
-    reasons.push('os.homedir() 仍在真实 home');
-  }
-  return { ok: reasons.length === 0, reasons };
-}
-
-/** G3 谓词：每条写入落点都必须位于隔离根之下。 */
-export function attributionVerdict(writtenPaths, isolatedRoot) {
-  const root = normPath(isolatedRoot);
-  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
-  const outside = [];
-  for (const p of writtenPaths) {
-    const n = normPath(p);
-    if (n !== root && !n.startsWith(prefix)) outside.push(p);
-  }
-  return { ok: outside.length === 0, outside };
-}
 
 /**
  * 断言面自检：活宿主面不得出现在「零变化」指纹面内。
@@ -268,104 +233,9 @@ export function g2NoiseMode(env = process.env) {
   return { mode, invalid: false, raw };
 }
 
-const sameFace = (x, y) => !!x && !!y && x.exists === y.exists && x.count === y.count && x.sumBytes === y.sumBytes && x.digest === y.digest;
+// （`sameFace` / `toPosix` / `faceDiff` 已随四谓词外移到 `test/helpers/verdicts.mjs`，由本文件导入。）
 
-/** 路径键归一化**单点**：Windows 的 path.sep 是反斜杠，而面相对键统一用 posix（`/`）。
- *  历史教训：曾在两处各写一份同体函数（`toPosixRel` / `toPosix`），每次遇到漏点就地补一个 ⇒ 本轮收为单点。 */
-const toPosix = (p) => String(p).split(path.sep).join('/');
-
-/** 路径级 diff（added / removed / changed），供证据结构与归因使用。 */
-export function faceDiff(before, after) {
-  const b = new Map((before?.files ?? []).map((f) => [f.rel, f]));
-  const a = new Map((after?.files ?? []).map((f) => [f.rel, f]));
-  const added = [...a.keys()].filter((k) => !b.has(k)).sort();
-  const removed = [...b.keys()].filter((k) => !a.has(k)).sort();
-  const changed = [...a.keys()].filter((k) => b.has(k) && (b.get(k).sha256 !== a.get(k).sha256 || b.get(k).size !== a.get(k).size)).sort();
-  return { added, removed, changed };
-}
-
-/**
- * 三态判定（纯函数）。
- * 判定顺序：green（四字段全等）→ transient（after2 == before）→ red（差异项 ∩ attributed ≠ ∅）→ unattributable。
- * 残量上界（规格 §三.3，如实写死，不得读作"已覆盖"）：
- *   · 已存在路径的字节覆盖且内容与同步产物相同 ⇒ 无法区分写者 ⇒ unattributable；
- *   · 已存在路径被删除且无自报 ⇒ 收敛则 transient，否则 unattributable；
- *   · 仅 mtime 变化而字节相同 ⇒ unattributable（cpSync 跨卷可能不保留 mtime）。
- */
-export function g2Verdict({ face, before, after, after2, attributed = [], faceMap = null }) {
-  const delta = faceDiff(before, after);
-  // 键空间统一 posix：walkFiles 的 rel 在 Windows 下是反斜杠，而归因键（A1/A3）统一 posix。
-  // 不归一化 ⇒ diffSet.has(rel) 恒假 ⇒ red 又变得不可达（D11 正是抓到这一点）。
-  // 归一化统一走模块级 toPosix（单点；本函数内的 diffPaths 与归因键都经它）
-  const diffPaths = [...delta.added, ...delta.removed, ...delta.changed].map(toPosix);
-  if (sameFace(before, after)) {
-    return { face, status: 'green', delta, diffPaths: [], attribution: { hits: [], unresolved: [], unmatched: [], bySource: { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 }, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' }, evidence: { before, after, after2: after2 ?? null } };
-  }
-  if (after2 && sameFace(before, after2)) {
-    return { face, status: 'inconclusive', subclass: 'transient', delta, diffPaths, reason: '差异在 settleMs 内收敛（并发 syncDir 的 rm+cp 中间态）', evidence: { before, after, after2 } };
-  }
-  // ── 键空间对齐（P0 真缺陷修复）────────────────────────────────────────────
-  // diffPaths 恒为**面相对**（相对该 REAL_FACE 根）。attributed 允许两种粒度：
-  //   · 扁平字符串 / {kind:'faceRel'} ⇒ 已是面相对，直接比（D5 的既有用法保持不变）；
-  //   · {kind:'isoRel'|'a2Rel'} ⇒ **必须先经 faceMap 映射为面相对**再比；映射不到 ⇒ 记 unresolved
-  //     （键空间不一致不得被静默当成"不归因"，否则 red 恒不可达且无从发现）。
-  const diffSet = new Set(diffPaths);
-  // 【FU1-1 修复】A3 归因必须**真比内容**：真实面当前内容的 sha256（按 posix rel 索引）。
-  //   旧实现只比 rel ⇒ 常驻宿主写入**不同版本内容**到同一 rel（开发机常态）就被判成「我方产物」= 假泄漏。
-  //   现在：条目带 `sha256` 时，只有「我方内容 == 真实面当前内容」才算归因；不相等 ⇒ 进 unmatched（可见、不静默）。
-  const faceHashByRel = new Map((after?.files ?? []).map((f) => [toPosix(f.rel), f.sha256]));
-  const hits = [];
-  const unresolved = [];      // 键空间**解析不了** / 调用方声明的**期望键**未命中
-  const unmatched = [];       // 候选枚举（对象条目）未命中 / **内容不匹配**：允许，但必须可见（不静默）
-  const bySource = { faceRel: 0, isoRel: 0, a2Rel: 0, a3: 0 };
-  for (const item of attributed ?? []) {
-    const isStr = typeof item === 'string';
-    const kind = isStr ? 'faceRel' : (item.kind ?? 'faceRel');
-    const rel = String(isStr ? item : item.rel);
-    if (kind === 'faceRel') {
-      bySource.faceRel += 1;
-      // 自防御：扁平 faceRel 可能是 `path.join(...)` 拼出的**反斜杠**键（面相对键本就含子目录，
-      // 这不是假想情形）。命中后统一以**归一化后的 posix 键**入 hits；归一化后仍不命中 ⇒ 显式进 unresolved
-      // （与 isoRel/a2Rel 通道对齐，**不得静默跳过**——faceRel 曾是唯一没有 unresolved 通道的 kind）。
-      const normalized = toPosix(rel);
-      const matchedRel = diffSet.has(rel) ? rel : (diffSet.has(normalized) ? normalized : null);
-      // 内容口径：条目声明了 sha256（= A3）时，必须与真实面**当前内容**逐字相等
-      const declaredSha = (item && typeof item === 'object' && typeof item.sha256 === 'string' && item.sha256.length > 0)
-        ? item.sha256 : null;
-      const faceSha = faceHashByRel.get(normalized) ?? null;
-      const contentMatched = declaredSha === null ? true : (faceSha !== null && faceSha === declaredSha);
-      if (matchedRel !== null && contentMatched) {
-        hits.push({ rel: normalized, kind, source: item?.source ?? 'faceRel' });
-      } else if (matchedRel !== null && !contentMatched) {
-        // 路径命中但**内容不同** ⇒ 不是我们的产物（常驻宿主写的另一版本）⇒ 不得计为泄漏，但必须可见
-        unmatched.push({ rel: normalized, kind, source: item?.source ?? 'faceRel', reason: 'content-mismatch' });
-      } else if (isStr) {
-        // 扁平字符串 = 调用方声明的**期望键** ⇒ 未命中就是问题（键空间/期望写错），进 unresolved
-        unresolved.push({ rel, kind, reason: 'raw-faceRel-unmatched' });
-      } else {
-        // 对象条目 = **候选枚举**（如 A1 把隔离根文件全列出来）⇒ 大多数本就不该命中，
-        // 允许未命中，但记入 unmatched 保持可见（不得静默跳过）。
-        unmatched.push({ rel: normalized, kind, source: item?.source ?? 'faceRel' });
-      }
-      continue;
-    }
-    const mapped = typeof faceMap === 'function' ? faceMap(rel, kind) : null;
-    bySource[kind] = (bySource[kind] ?? 0) + 1;
-    if (!mapped) { unresolved.push({ rel, kind }); continue; }
-    if (diffSet.has(mapped)) {
-      hits.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind });
-    } else {
-      // 第四通道（p2 读码发现）：**映射成功但未命中**。修复前这里**没有 else**
-      // ⇒ hits / unresolved / unmatched 三处全不记（连桶都没有）。现归入 unmatched（与"候选枚举未命中"同桶）。
-      unmatched.push({ rel: mapped, kind, from: rel, source: item?.source ?? kind, reason: 'mapped-but-unmatched' });
-    }
-  }
-  const attribution = { hits, unresolved, unmatched, bySource, keySpace: 'faceRel', faceMapProvided: typeof faceMap === 'function' };
-  if (hits.length > 0) {
-    return { face, status: 'red', delta, diffPaths, attributedHits: hits.map((h) => h.rel), attribution, reason: '差异持久且可归因于被测运行（差异项 ∩ 被测产物面 ≠ ∅）', evidence: { before, after, after2: after2 ?? null } };
-  }
-  return { face, status: 'inconclusive', subclass: 'unattributable', delta, diffPaths, attribution, reason: '差异持久且不可归因（外来写者的终态改动 / 写者不可区分）', evidence: { before, after, after2: after2 ?? null } };
-}
+// （`g2Verdict` 三态判定的**唯一实现**已外移到 `test/helpers/verdicts.mjs`，由本文件导入。）
 
 /** 汇总：`passed` 唯一真源 = red===0 && inconclusive===0（规格 §方案 四.3）。 */
 export function g2Summary(faceResults) {
