@@ -78,6 +78,10 @@ export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
 // 【L2 注入预算】面 A · 任务包骨架：comms/inject-budget.js = 纯函数（阈值由调用方传入）；
 //   assembly/schema.js 只取 readCapability 作**阈值唯一取值源**的读端（无反向依赖：schema.js 零 import 本模块）。
 import { readCapability } from '../assembly/schema.js';
+// 【D 档可达性修复 · 批 `punky-dgate-reachable-20261102`】续用绑定会话的**单点**：
+//   `expectedWorkerSessionOf(batch, lane)` 纯读本批事件流、倒序取**最近一次** `member.dispatch` 的 worker 会话。
+//   与 verify 面 `bindingDecision` **同源**（同一「lane 的绑定会话」定义）⇒ 不建第二真源。
+import { expectedWorkerSessionOf } from '../verify/binding.js';
 import { applyInjectionBudget } from '../comms/inject-budget.js';
 
 /**
@@ -1290,9 +1294,14 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
         //   `options` = **非契约第二参**（R-5）：承载 C 通道所需的 `provider/label/prompt/parent/signal/
         //   role/toolFace/persona/maxDepth`（`toolFace` 必须原样到 provider，F-3 复发防线）。
         //   ⚠ **通道选路在 provider 单点完成**（引擎不判形态、不选通道）。
-        const bindingMap = laneBindingOf(store, sessionId, ctx?.logger);
-        const boundOf = bindingMap instanceof Map ? bindingMap.get(lane) : null;
-        const boundSessionId = boundOf && typeof boundOf.sessionId === 'string' ? boundOf.sessionId : null;
+        // 续用绑定：本 lane **最近一次** `member.dispatch` 登记的 worker 会话（纯读本批事件流）。
+        //   ⚠ **为何不用 `laneBindingOf(store, sessionId)`**：它的语义是「**本会话作为 worker 的归属**」
+        //   （见本文件 `laneBindingOf` 的注释），返回**单个**对象、其 `sessionId` 字段是**那个批的归属会话**；
+        //   而这里要的是「**本 lane 续用哪个子会话**」—— 两者不是一回事：
+        //     · Leader 通常不是 worker ⇒ 恒 `null`（D 档仍不可达，形同死码）；
+        //     · 若 Leader 自己也曾是 worker ⇒ 取到**上层批**的归属会话并当成续用会话 ⇒ **错派**（比不可达更危险）。
+        //   ⇒ 必须用**按 lane 查**的单点 `expectedWorkerSessionOf`（`lib/verify/binding.js:52`）。
+        const boundSessionId = expectedWorkerSessionOf(store.readBatch(sessionId, batchId), lane);
         const pushed = await agentPort.push_execute(
           {
             runId: h.token, // 一次性句柄 token（C 档派发的唯一凭证；与既有语义同源）

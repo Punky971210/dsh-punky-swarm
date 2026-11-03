@@ -488,6 +488,14 @@
       "tests": 3,
       "todos": 0
     },
+    "test/dgate-reachable.test.js": {
+      "asserts": 14,
+      "blankLines": 20,
+      "lines": 178,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
     "test/discovery.test.js": {
       "asserts": 111,
       "blankLines": 36,
@@ -2089,7 +2097,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-02T23:50:44Z",
+  "generatedAt": "2026-11-03T10:58:11Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2103,12 +2111,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12156,
-    "blankLines": 6789,
-    "files": 261,
-    "lines": 71753,
+    "asserts": 12170,
+    "blankLines": 6809,
+    "files": 262,
+    "lines": 71931,
     "tautologies": 0,
-    "tests": 2532,
+    "tests": 2535,
     "todos": 0
   }
 }
