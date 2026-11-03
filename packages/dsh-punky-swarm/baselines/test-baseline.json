@@ -1656,6 +1656,14 @@
       "tests": 4,
       "todos": 0
     },
+    "test/ring1-or-aggregate.test.js": {
+      "asserts": 21,
+      "blankLines": 11,
+      "lines": 89,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/rl2-narrow-ask-axis.test.js": {
       "asserts": 9,
       "blankLines": 18,
@@ -2097,7 +2105,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-03T10:58:11Z",
+  "generatedAt": "2026-11-03T12:57:53Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2111,12 +2119,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12170,
-    "blankLines": 6809,
-    "files": 262,
-    "lines": 71931,
+    "asserts": 12191,
+    "blankLines": 6820,
+    "files": 263,
+    "lines": 72020,
     "tautologies": 0,
-    "tests": 2535,
+    "tests": 2540,
     "todos": 0
   }
 }

@@ -92,14 +92,24 @@ function subagentChannelOf(rt) {
  *            agentTeam: {available: boolean, reason: string|null}}}
  *   `probed:true` = 本次已实际探过（本函数只在**能读**时被调用；未读到时上层给 `channels:null`）。
  */
-export function agentChannelFactsOf(ctx) {
-  const subagent = subagentChannelOf(serviceOf(ctx, 'subagents'));
-  // 【ly-impl · 批 `punky-arch-refine-20261101`】D 档**判据源切换**（`dg-impl` 的交接项）：
-  //   原判据 = 「`agents` 服务在且 `get` 可调用」⇒ 但 D 档**派发**根本不经 `agents`（它只有 get+followup），
-  //   真正的派发路径是「引擎经**工具面**调 `spawn_teammate`」⇒ 可用性必须按**能不能发起派发**判。
-  //   新判据 = **工具面在 ∧ `spawn_teammate` 可调**（可内省时用 `probeTool` 排除明确 absent）。
-  //   成因词改为 `port-absent:agentTeam`（与 `dg-impl` 的三态归一 / `WIRED_ISSUE_RE` 合流）。
-  //   ⚠ 探测**抛错**不得当成「面没装」（那是探测坏，不是能力缺）；只有明确的 `absent` 才算不可用。
+/**
+ * D 档（agentTeams）可用性**单点**（批 `punky-ring1-oraggregate-20261102` 抽出）。
+ *
+ * ## 为什么抽出来
+ * 报告面 `channels.agentTeam` 与端口门禁面 `available` 原先**各算一份 D 档**（两处同构代码）
+ * ⇒ 修一处不修另一处必然复发（环 1 就是「报告面 OR 聚合、门禁面只取 C 档」的口径分裂造成的）。
+ * 现在两处都调本函数 ⇒ 同一读数只实现一次。
+ *
+ * ## 判据（与 `ly-impl` 的 D 档判据源切换一致，语义零改）
+ * D 档派发不经 `agents`（它只有 get+followup），而是「引擎经**工具面**调 `spawn_teammate`」
+ * ⇒ 可用性按**能不能发起派发**判：**工具面在 ∧ `execute` 可调**；可内省时再用 `probeTool`
+ * 排除明确的 `absent`。
+ * ⚠ 探测**抛错**不得当成「面没装」（那是探测坏，不是能力缺）⇒ 保持 `dUsable` 不变。
+ * 成因词 `port-absent:agentTeam`（与 `dg-impl` 的三态归一 / `WIRED_ISSUE_RE` 合流）。
+ *
+ * @returns {{available: boolean, reason: string|null}} **二态 boolean**（端口契约要求，见 `ports.ts`）
+ */
+function agentTeamChannelOf(ctx) {
   const toolFace = serviceOf(ctx, 'tools');
   let dUsable = Boolean(toolFace) && typeof toolFace.execute === 'function';
   if (dUsable && typeof toolFace.probeTool === 'function') {
@@ -108,9 +118,15 @@ export function agentChannelFactsOf(ctx) {
       if (p && p.state === 'absent') dUsable = false;
     } catch { /* 探测坏 ≠ 面没装：保持 dUsable 不变（禁把故障读成能力缺失） */ }
   }
-  const agentTeam = dUsable
+  return dUsable
     ? { available: true, reason: null }
     : { available: false, reason: 'port-absent:agentTeam' };
+}
+
+export function agentChannelFactsOf(ctx) {
+  const subagent = subagentChannelOf(serviceOf(ctx, 'subagents'));
+  // D 档读数走**单点** `agentTeamChannelOf`（与 `createAgentPort` 的门禁面共用同一实现）。
+  const agentTeam = agentTeamChannelOf(ctx);
   return { probed: true, subagent, agentTeam };
 }
 
@@ -141,9 +157,19 @@ export function createAgentPort(ctx, opts = {}) {
   //   若各判一次就会分歧 —— 那正是本批要消灭的读数不一致（见该函数注释）。
   const subagentChannel = subagentChannelOf(rt);
   const form = formOf(rt);
-  const available = subagentChannel.available;
-  /** 不可用成因（功能面三态；`available===true` 时恒 `null`）。 */
-  const reason = subagentChannel.reason;
+  // 【环 1 · 批 `punky-ring1-oraggregate-20261102`】**OR 聚合**（任一通道可发起派发 ⇒ 面可用）。
+  //   与报告面 `capabilities.js` 同口径（「任一通道 true ⇒ 面在」）；D 档读数走单点 `agentTeamChannelOf`。
+  //   ⚠ `available` **保持 boolean 二态**（`ports.ts` 三处契约 + `subagentChannelOf` 的 @returns）；
+  //     「未探明」由**报告面** `channels: null` 表达，端口层 `false` = 不能派（fail-closed 正确）。
+  const agentTeamChannel = agentTeamChannelOf(ctx);
+  const available = subagentChannel.available === true || agentTeamChannel.available === true;
+  /** 不可用成因（功能面；`available===true` 时恒 `null`）。 */
+  //   口径（对齐 `capabilities.js` 的 `available===true ⇒ reason=null`）：
+  //   · C 不可但 D 可用 ⇒ `null`（面可用则无面级成因；**D 档成因不进面级 reason** —— 面级是单值字符串，
+  //     装不下两档；想知道缺哪档请读 `agentChannelFactsOf().channels`）；
+  //   · 两档都不可 ⇒ 报 **C 档成因**（主派发通道）；
+  //   · **禁造 `'c:…;d:…'` 复合串**（会破坏既有 reason 消费方）。
+  const reason = available === true ? null : subagentChannel.reason;
   const caps = opts.capabilities ?? (rt && typeof rt === 'object' ? rt.capabilities : undefined) ?? null;
   const capsKnown = caps !== null && typeof caps === 'object' && Object.keys(caps).length > 0;
   const presetFor = typeof opts.presetFor === 'function' ? opts.presetFor : () => null;
@@ -190,11 +216,17 @@ export function createAgentPort(ctx, opts = {}) {
   //   · `'preset'` ：`activation` 通道**且解析器给得出覆盖事实**（`hasWitness`）才敢这么报；
   //   · `'none'`  ：其余（含「只有 preset id、没有覆盖声明」—— 裸 id 不得声称已收窄）。
   //   ⚠ 本读数是**能力位**（该端口**能不能**给见证），不含 `ask`；「本次是否成立」归 `canNarrow(ask)`。
-  const narrowVia = !available ? 'none'
+  //   【环 1 连带面 · 1/2】锚点从面级 `available` 换成 **`subagentChannel.available`**：
+  //     `form`（`formOf(rt)`）是 **C 档形态**、`witnessOf` 依赖 C 档 `presetFor` ⇒ 只有 C 档可用时这些读数才有依据。
+  //     沿用面级会在「C 不可 + D 可用」时让 `form=null` 落到第三支 ⇒ 若 `presetFor` 有配置就报 `'preset'`
+  //     = **虚假收窄证据**（声称收窄了，实际 C 通道根本没在用）。
+  const narrowVia = !subagentChannel.available ? 'none'
     : form === 'start' ? 'request'
       : (witnessOf(undefined)?.hasWitness ? 'preset' : 'none');
   // 深度经哪条路 —— 两形态都在 request 内；宿主 `depthLimit` 明确 false ⇒ 不传（`none`，非静默降级）。
-  const depthVia = available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
+  //   【环 1 连带面 · 2/2】同样换锚：`caps` 来自 `rt.capabilities`（**C 档能力位**）⇒ C 不可时 `caps=null`，
+  //   沿用面级 `available` 会报 `'request'` = **无依据的声称**（D 档派发压根不传 depthLimit）。
+  const depthVia = subagentChannel.available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
 
   // ── 【ly-impl · 批 `punky-arch-refine-20261101`】`push_execute` 的两通道实现 ──────────────
   //
