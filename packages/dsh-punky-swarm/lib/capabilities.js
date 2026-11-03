@@ -255,7 +255,7 @@ export function capabilityReport(rt = {}) {
  * W4 语义变更（**这是本批最容易审歪的一条**）：
  *   · **内核端口**（`runtime` / `audit`）缺失 ⇒ 抛（装配缺陷必须当场暴露）；
  *   · **功能面**（`toolSurface` / `httpSurface` / `agentRuntime`）不可用 ⇒ **不抛**（宿主能力差异属正常形态，
- *     由 `capabilityReport().host` / `degraded` 回显 + 调用点 warn 保证**降级但不静默**）。
+ *     由 `capabilityReport().host` / `unavailable` 回显 + 调用点 warn 保证**降级但不静默**）。
  *   · `present === null`（未探明）⇒ **不抛**：不可对没有探测过的东西做 fail-closed。
  *
  * 形态不变（既有消费方与用例零破坏）：消息以固定前缀 `capability-missing:` 开头、后接**缺失键名逐个**；
