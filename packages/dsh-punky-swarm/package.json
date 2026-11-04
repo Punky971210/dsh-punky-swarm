@@ -32,7 +32,7 @@
   "scripts": {
     "check": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
-    "test": "npm run build && node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs && node scripts/docs-consistency.mjs && node scripts/build-sync-guard.mjs",
+    "test": "npm run build && git diff --exit-code -- lib/ && node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs && node scripts/docs-consistency.mjs && node scripts/build-sync-guard.mjs",
     "smoke:host": "node scripts/smoke/host-smoke.mjs",
     "quantity:scan": "node scripts/neighbor-scan.mjs"
   },
