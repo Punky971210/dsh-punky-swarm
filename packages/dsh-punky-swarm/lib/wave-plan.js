@@ -1242,8 +1242,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                     outputs: Array.isArray(t.outputs) ? t.outputs : null,
                     cmd: cmdAssembled,
                 }),
-            }; // 单点断言：`standaloneReason`（B4/R-01b）不在 `WavePlanTask` 类型面
-            //   （lib/types/contracts.ts 非本 lane 写域）⇒ 仅类型层断言，运行期对象形态即上述字面量本身。
+            };
         }),
     }));
     // 【2026-09-18 · Q-B 取消并发闸】`concurrency` **保留为纯声明 + 回显、零判定**（上游裁决
