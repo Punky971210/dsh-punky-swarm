@@ -30,6 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 不改仓库文件做对照。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// 【D-1】拒派四要素单点（批 `punky-d1d2-impl-20261103`）
+import { assertRejected } from './helpers/dispatch-result.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
@@ -116,28 +118,24 @@ test('T-1.1 A1-P1-01 宿主仅提供 activation 形态 ⇒ 前置 fail-closed �
     startActivation: async () => { activationCalls += 1; return { childId: 'child-A', result: Promise.resolve({}) }; },
   });
   const ld = laneToolOf(ctx, store, root, { dispatch: { provider: 'spawn' } });
-  await assert.rejects(
-    () => ld.execute({ batchId: 'b-f1a', lane: 'l1' }, execOf('sess-f1a')),
-    (err) => {
-      // 【P0-3 门禁解冻 · 批 `punky-adapter-p0-20261031`】原三条断言把拒派文案**逐字冻结**到
-      //   ① 码名 `..._MISSING`（码名批改成 `..._UNAVAILABLE`，criteria-v4 M-5）
-      //   ② 宿主入口名 `startActivation` ③ 宿主 schema 字段名 `toolFilter`
-      //   —— 三者都是**实现形态**，不是拒派语义。语义等价改写：码**族**（跨改名窗口）+ **功能面理由**。
-      assert.match(String(err?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
-        '拒派码须属「能力位不可用」族（码名批 MISSING→UNAVAILABLE ⇒ 本断言跨改名窗口保持有效）');
-      assert.match(String(err?.message), /收窄/, '① 点明拿不到的是**按次收窄**能力（功能面语言，不点名宿主入口）');
-      assert.match(String(err?.message), /不以弱换强/, '② 点明拒派判据（功能面语言）');
-      // 【host-ports 批语义订正】新文案用字段名 `agentPreset`（camelCase），
-      //   且已订正 maxDepth 表述；断言钉「指向承载方字段名 + 前置未配置条件」。
-      assert.match(String(err?.message), /agentPreset/, '③ 点明承载方字段名 agentPreset');
-      // 【P0-3 解冻 · 二次防冻结】原断言钉死成因词 `未配置` —— 但真读数口径（p0-6 D-1/D-2）会把成因
-      //   从「没配 preset」改为「**无收窄见证**」⇒ 只钉 `未配置` 等于把当前成因冻结成契约。
-      //   改为**成因词族**：任一功能面成因在场即可（当前「未配置」/ 未来「无见证 / 无法核对」）。
-      assert.match(String(err?.message), /(未配置|无见证|无法核对|不能核对)/,
-        '③′ 点明拒派前置成因（跨成因改写窗口：未配置 → 无收窄见证）；实际=' + String(err?.message));
-      return true;
-    },
-  );
+  // 【D-1 · lane `impl-d2` 迁移】本闸在 `lib/engine/dispatch.js:1148`（canNarrow）⇒ **返回** `mode:'rejected'`（不抛）。
+  //   ⚠ 纠一处易错点：**码族在字段 `code` 上**，`spawnNote` 文案（`:1171`/`:1177`）里**不含** `GATE_DISPATCH_…` 字面
+  //   ⇒ 若把码族写成 `assert.match(spawnNote, /GATE_DISPATCH_…/)` 会**假红**。四条语义钉（收窄/不以弱换强/agentPreset/成因）才读 `spawnNote`。
+  const r = await ld.execute({ batchId: 'b-f1a', lane: 'l1' }, execOf('sess-f1a'));
+  assertRejected(r, 'T-1.1 activation-only');
+  {
+    const note = String(r?.spawnNote ?? '');
+    // 【P0-3 门禁解冻】码**族**（跨改名窗口；码名批 MISSING→UNAVAILABLE 后本断言仍有效）—— 读 `r.code`
+    assert.match(String(r?.code), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+      '拒派码须属「能力位不可用」族（码名批 MISSING→UNAVAILABLE ⇒ 本断言跨改名窗口保持有效）');
+    assert.match(note, /收窄/, '① 点明拿不到的是**按次收窄**能力（功能面语言，不点名宿主入口）');
+    assert.match(note, /不以弱换强/, '② 点明拒派判据（功能面语言）');
+    // 【host-ports 批语义订正】新文案用字段名 `agentPreset`（camelCase），且已订正 maxDepth 表述。
+    assert.match(note, /agentPreset/, '③ 点明承载方字段名 agentPreset');
+    // 【P0-3 解冻 · 二次防冻结】成因词族（当前「未配置」/ 未来「无见证 / 无法核对」）—— 只钉 `未配置` 等于把当前成因冻结成契约。
+    assert.match(note, /(未配置|无见证|无法核对|不能核对)/,
+      '③′ 点明拒派前置成因（跨成因改写窗口：未配置 → 无收窄见证）；实际=' + note);
+  }
   assert.equal(activationCalls, 0, '订正 1：**不得实现** startActivation 调用（死代码防护）');
   // 三零（拒派必须打在状态变更之前）
   assert.equal(store.readBatch('sess-f1a', 'b-f1a').lanes.l1, 'pending', '① lane 状态未变（仍 pending）');
@@ -295,9 +293,12 @@ test('T-1.8 拒派/降级文案不得出现宿主服务名或宿主入口名',
     const root1 = tempRoot('punky-f1t8a-');
     const store1 = seedBatch(root1, 'sess-f1h', 'b-f1h1');
     const ld1 = laneToolOf(mkCtx({ startActivation: async () => ({}) }), store1, root1, { dispatch: { provider: 'spawn' } });
-    let msg1 = '';
-    try { await ld1.execute({ batchId: 'b-f1h1', lane: 'l1' }, execOf('sess-f1h')); } catch (e) { msg1 = String(e?.message ?? ''); }
-    assert.match(msg1, /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/, '前提：须先拿到拒派（否则本用例无对象）');
+    // 【D-1 · 批 `punky-d1d2-impl-20261103`】**只改前提**：拒派从 throw 改为返回值
+    //   ⇒ 文本来源从「捕获的 `err.message`」换成「返回体的 `spawnNote`」。
+    //   ⚠ **断言体（`HOST_WORDS` 检查）语义与强度一字未动** —— 它防「文案泄漏宿主入口名」，必须保留。
+    const r1 = await ld1.execute({ batchId: 'b-f1h1', lane: 'l1' }, execOf('sess-f1h'));
+    assertRejected(r1, 'T-1.8① 前提');
+    const msg1 = String(r1.spawnNote ?? '');
     assert.equal(HOST_WORDS.test(msg1), false, '拒派文案不得承载宿主入口名；实际=' + msg1);
 
     // ② 降级文案（服务在位但无可用入口）

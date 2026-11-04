@@ -40,6 +40,8 @@ import { createCoreTools } from '../lib/tools/core.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 // 单点「代码区」口径（注释/字符串掩码），与 test/forward-todo-lock.test.js 同源
 import { codeOnly } from '../scripts/baseline-snapshot-core.mjs';
+// 【D-1 · lane `impl-d2`】「拒派」从 throw 改为**返回**（`mode:'rejected'`）后的四要素单点。
+import { assertRejected } from './helpers/dispatch-result.mjs';
 
 const PRESET = 'punkynarrow';
 
@@ -133,9 +135,13 @@ test('S-3a activation 宿主：统一派发入口成功（宿主 activation 入�
 //   【W3 落地】量具换真读数（`w3-meter`）：`presetFor` 给出见证、`canNarrow(ask)` 按
 //   `deny ∩ covers = ∅` + 非空判；裸 id ⇒ 无见证 ⇒ 闸拒派。todo 已摘除（registry 同步收紧）。
 test('S-3a-R activation + 裸 agentPreset（无 presetCoverage 见证）⇒ 必须拒派', async () => {
-    const { result, error } = await dispatchWith('activation', { agentPreset: PRESET });
-    assert.ok(error, '无见证必须拒派（不得放行）；实际 spawned=' + String(result?.spawned));
-    assert.match(String(error?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/, '拒派须属能力位不可用族；实际=' + String(error?.message));
+    // 【D-1 · lane `impl-d2` 迁移】本闸在 `lib/engine/dispatch.js:1148`（canNarrow）⇒ **返回** `mode:'rejected'`，不抛。
+    //   ⚠ 纠一处易错点：拒码在**字段 `code`** 上，`spawnNote` 文案（`:1171`）里**不含** `GATE_DISPATCH_…` 字面
+    //   ⇒「码族」断言须读 `r.code`（把码族写成 match(spawnNote) 会假红）。
+    const { result } = await dispatchWith('activation', { agentPreset: PRESET });
+    assertRejected(result, 'S-3a-R 无见证');
+    assert.match(String(result?.code), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+      '拒派须属能力位不可用族（码名批 MISSING→UNAVAILABLE ⇒ 跨改名窗口保持有效）；实际=' + String(result?.spawnNote));
   });
 
 // ── S-3b（P0-3 方向反转 + 前向登记 · **当前预期红**）`toolFace` 必须被消费 ────────────────────
@@ -157,7 +163,8 @@ test('S-3b `toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行�
       agentPreset: PRESET,
       presetCoverage: { [PRESET]: { tools: ['bash', 'read', 'write', 'edit'] } },
     });
-    assert.equal(disjoint.error, null, '交集为空 ⇒ 不得拒派；错误=' + String(disjoint.error?.message ?? ''));
+    assert.equal(disjoint.result?.mode === 'rejected', false,
+      '交集为空 ⇒ 不得拒派；实际 mode=' + String(disjoint.result?.mode));
     assert.equal(disjoint.result?.spawned, true, '交集为空 ⇒ 必须真的派发');
 
     // 有交集：`wave_plan` 在本次 deny 集内（见 S-3c 的冻结集断言），且被声明为 preset 覆盖 ⇒ 收窄不成立 ⇒ 拒派
@@ -165,10 +172,10 @@ test('S-3b `toolFace` 必须被消费：覆盖与 deny 交集为空 ⇒ 放行�
       agentPreset: PRESET,
       presetCoverage: { [PRESET]: { tools: ['wave_plan'] } },
     });
-    assert.ok(overlapping.error, '交集非空 ⇒ 必须拒派（该 preset 实际拿到了本次要禁的工具）；实际 spawned='
-      + String(overlapping.result?.spawned));
-    assert.match(String(overlapping.error?.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
-      '拒派须属能力位不可用族；实际=' + String(overlapping.error?.message));
+    // 【D-1 · lane `impl-d2` 迁移】`:1148` 闸 ⇒ 返回；本用例原有语义钉（拒派族 + lane 仍 pending）逐条保留。
+    assertRejected(overlapping.result, 'S-3b 交集非空');
+    assert.match(String(overlapping.result?.code), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+      '拒派须属能力位不可用族；实际=' + String(overlapping.result?.spawnNote));
     assert.equal(overlapping.store.readBatch(overlapping.sess, overlapping.batchId).lanes.l1, 'pending',
       '拒派须打在状态变更之前（lane 仍 pending，零状态变更）');
   });
@@ -256,14 +263,17 @@ test('RL-5 空覆盖必须被拒（C-5）：量具落地后自动收紧；未落
     agentPreset: PRESET,
     presetCoverage: { [PRESET]: { tools: ['bash', 'read', 'write', 'edit'] } },
   });
-  const meterLive = Boolean(overlap.error) && !disjoint.error;
+  // 【D-1 · lane `impl-d2` 迁移】D-1 起拒派**返回**（`mode:'rejected'`）而不再抛 ⇒ 本文件的「吐错」读数
+  //   （`dispatchWith` 的 `error` 字段）**恒为 null**，故活性/硬锁判据改读**返回值**。判据语义不变。
+  const rejectedOf = (x) => x?.result?.mode === 'rejected';
+  const meterLive = rejectedOf(overlap) && !rejectedOf(disjoint);
 
   if (!meterLive) {
     // 量具未落地：此刻**无法观测** C-5 语义。
     // 刻意**不**断言 `canNarrow === true` / `spawned === true` —— 那会把 p0-6 F-3 的缺陷冻结成预期。
     t.diagnostic('meter-not-live：`presetCoverage` 尚未被实现消费（activation 分支整键丢失 / 量具未接），'
       + 'C-5「空覆盖必须被拒」此刻不可观测；W3-2 落地本用例自动收紧为硬锁。'
-      + ' 实测：overlap.rejected=' + Boolean(overlap.error) + ' disjoint.rejected=' + Boolean(disjoint.error));
+      + ' 实测：overlap.mode=' + String(overlap.result?.mode) + ' disjoint.mode=' + String(disjoint.result?.mode));
     return;
   }
 
@@ -272,13 +282,13 @@ test('RL-5 空覆盖必须被拒（C-5）：量具落地后自动收紧；未落
     agentPreset: PRESET,
     presetCoverage: { [PRESET]: { tools: [] } }, // ← 唯一合法的 `tools: []`：拒派侧（RL-6 按侧放行）
   });
-  assert.ok(empty.error,
+  assert.equal(empty.result?.mode, 'rejected',
     'C-5：空覆盖（`tools: []`）必须被拒 —— 空集不是「全收窄」而是「未声明」；'
-    + '否则 `∅∩∅=∅` 恒成立 ⇒ 量具退化为恒 true。实际 spawned=' + String(empty.result?.spawned));
-  assert.match(String(empty.error?.message), /GATE_DISPATCH_/,
-    '拒因须属派发能力位族；实际=' + String(empty.error?.message).slice(0, 160));
+    + '否则 `∅∩∅=∅` 恒成立 ⇒ 量具退化为恒 true。实际 mode=' + String(empty.result?.mode));
+  assert.match(String(empty.result?.code ?? ''), /GATE_DISPATCH_/,
+    '拒因须属派发能力位族；实际=' + String(empty.result?.code).slice(0, 160));
+  assert.equal(empty.result?.spawned, false, 'C-5 拒派须 spawned=false');
   assert.equal(empty.captured.length, 0, 'C-5 拒派须打在宿主调用之前（零宿主调用）');
-  assert.equal(empty.result, null, 'C-5 拒派不返回成功结果');
   assert.equal(empty.store.readBatch(empty.sess, empty.batchId).lanes.l1, 'pending',
     'C-5 拒派须打在状态变更之前（lane 仍 pending）');
 });
@@ -299,12 +309,15 @@ test('S-3c **成对证明**：同一引擎在 start 宿主上 ⇒ 捕获的 `req
 });
 
 test('S-3d 能力位门仍在：activation 宿主 **未配置** agentPreset ⇒ 拒派（能力位不可用族，打在状态变更之前）', async () => {
-  const { captured, result, error } = await dispatchWith('activation', {});
-  assert.ok(error, '未配置 agentPreset ⇒ 必须拒派（否则 worker 拿到未收窄工具面）');
-  // 【P0-3 解冻】原断言钉死码名 `..._MISSING`；码名批会改成 `..._UNAVAILABLE`（criteria-v4 M-5）
-  //   ⇒ 改为**码族**匹配，跨改名窗口保持有效（单码名收紧留给码名批落地后的清理）。
-  assert.match(String(error.message), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
-    '拒因须属「能力位不可用」族；实际=' + String(error.message).slice(0, 160));
+  const { captured, result } = await dispatchWith('activation', {});
+  // 【D-1 · lane `impl-d2` 迁移】原 `assert.ok(error)` + `error.message` 码族断言 ⇒ 改读**返回值**（`mode`/`code`）。
+  assert.equal(result?.mode, 'rejected',
+    '未配置 agentPreset ⇒ 必须拒派（否则 worker 拿到未收窄工具面）；实测 mode=' + String(result?.mode));
+  // 【P0-3 解冻】原断言钉死码名 `..._MISSING`；码名批已改成 `..._UNAVAILABLE`（criteria-v4 M-5）
+  //   ⇒ 保持**码族**匹配，跨改名窗口有效（单码名收紧留给码名批落地后的清理）。
+  assert.match(String(result?.code), /GATE_DISPATCH_CAPABILITY_(MISSING|UNAVAILABLE)/,
+    '拒因须属「能力位不可用」族；实际=' + String(result?.code).slice(0, 160));
   assert.equal(captured.length, 0, '拒派必须打在宿主调用之前（零宿主调用）');
-  assert.equal(result, null, '拒派不返回成功结果');
+  // 原 `assert.equal(result, null)`：D-1 起拒派**返回**结果对象（不再抛、也不再返回 null）⇒ 改为断 spawned。
+  assert.equal(result?.spawned, false, '拒派不返回成功结果（spawned=false）');
 });

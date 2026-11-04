@@ -63,6 +63,10 @@ assert.deepEqual(warns.map((w) => String(w).includes('subagentId')), [true], '�
 //   新语义：派发失败即终态 ⇒ 恢复按 K3 走「gap-list + 新任务批次」，**不可原地重派**。
 test('DR-2 派发失败 ⇒ 报 GATE_* 码 + 置 lane failed（终态） + 给出唯一恢复步骤（gap-list + 新批次）', async () => {
   const { by, exec, store } = await harness(async () => { throw new Error('provider "spawn" cannot enforce toolFilter'); });
+  // 【D-1 · lane `impl-d2` 订正】**失败路径仍 `throw`**（不是拒派）：`dispatch.js` 的 catch 段
+  //   （mapSpawnError → setMember('failed') → consumeLaneHandle → `throw new Error(...)`）是**异常语义**，
+  //   D-1 只把「主动拒派」（`mode:'rejected'`，收窄不可核那条）改成返回，**不改失败路径**。
+  //   ⇒ 本断言**原样恢复为 `assert.rejects`**，四条文案断言逐条保留（码面 / 置终态 / 不可原地重派 / gap-list）。
   await assert.rejects(
     () => by.lane_dispatch.execute({ batchId: 'b-dr', lane: 'e1' }, exec),
     (e) => {
@@ -80,6 +84,8 @@ test('DR-2 派发失败 ⇒ 报 GATE_* 码 + 置 lane failed（终态） + 给�
 
 test('DR-3 宿主返回载荷缺 id 且无兼容字段 ⇒ 显式报错（带原始载荷），不静默绑定', async () => {
   const { by, exec } = await harness(async () => ({ unexpected: true }));
+  // 【D-1 · lane `impl-d2` 订正】**失败路径仍 `throw`**（`GATE_DISPATCH_FAILED` 属异常语义，不是主动拒派）
+  //   ⇒ **原样恢复为 `assert.rejects` + 原复合谓词**（逐条语义钉不变：码面 / 未返回 id / 载荷= / 原始载荷逐字）。
   await assert.rejects(
     () => by.lane_dispatch.execute({ batchId: 'b-dr', lane: 'e1' }, exec),
     (e) => /GATE_DISPATCH_FAILED/.test(e.message)

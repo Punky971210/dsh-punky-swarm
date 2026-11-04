@@ -149,8 +149,43 @@ test('D2 lane_dispatch 参数与输出 schema 未变（HEAD 版本逐字对拍 +
   } else {
     assert.deepEqual(CUR_PARAMS, jsonBlockAfter(headSrc, 'name: "lane_dispatch"', 'parameters: '),
       'parameters 与 HEAD 版本逐字一致（改前改后未动参数面）');
-    assert.deepEqual(CUR_SCHEMA, jsonBlockAfter(headSrc, 'name: "lane_dispatch"', 'schema: '),
-      'output.schema 与 HEAD 版本逐字一致');
+    // 【D-1 · 批 `punky-d1d2-impl-20261103`】**甲：四键白名单**（不是删断言）。
+    //   原判据 = 「output.schema 与 HEAD 逐字一致」⇒ 与 D-1「schema 必改」结构性冲突（D-1 一落地它永远红）。
+    //   甲把「零容忍」改成「**白名单容忍**」：只允许多出 `mode`/`code`/`unconfirmed`/`reason` 四键，
+    //   **其余每个键仍逐字对拍** ⇒ 保住本条用例的真正价值（**防 schema 被无声改动**）。
+    //   ⚠ 棘轮纪律：白名单**只许减不许增**（与 `deps-direction` 的双向相等白名单同源）——
+    //    以后想再加键，必须改这里并说明理由，不能"顺手"扩。
+    //   ⚠ 棘轮纪律（**两条，都只许减不许增**）：本批允许的变更就此登记完毕；
+    //    以后想再加键或再放宽必填，必须改这里并说明理由，不能"顺手"扩。
+    //    —— 甲′ 补充（批 `punky-d1d2-impl-20261103` 二次裁决）：因 `:1148` 拒派路径**没有句柄**，
+    //      `token`/`firstLine`/`ttlMs` 的 `required:true` 必须降级 —— 否则 schema 说必填、实际却缺（**声明说谎**）。
+    const headSchema = jsonBlockAfter(headSrc, 'name: "lane_dispatch"', 'schema: ');
+    const NEW_KEYS = ['code', 'mode', 'reason', 'unconfirmed'];              // 棘轮一：允许新增
+    const RELAXED_REQUIRED = ['token', 'firstLine', 'ttlMs'];                // 棘轮二：允许 required 由 true→false
+    const headKeys = Object.keys(headSchema.properties);
+    const curKeys = Object.keys(CUR_SCHEMA.properties);
+    assert.deepEqual(curKeys.filter((k) => !headKeys.includes(k)).sort(), NEW_KEYS,
+      '棘轮一：相对 HEAD 只允许多出 ' + NEW_KEYS.join('/'));
+    assert.deepEqual(headKeys.filter((k) => !curKeys.includes(k)), [],
+      'HEAD 里的键一个都不能少（本批只加不删）');
+    for (const k of headKeys) {
+      if (RELAXED_REQUIRED.includes(k)) {
+        // 棘轮二：只允许 `required` 消失（true → false/absent），其余字段仍逐字
+        const h = { ...headSchema.properties[k] };
+        const c = { ...CUR_SCHEMA.properties[k] };
+        assert.equal(h.required, true, '前提：HEAD 里 `' + k + '` 原本是 required（否则棘轮二无对象）');
+        delete h.required;
+        delete c.required;
+        assert.deepEqual(c, h, '`' + k + '` 仅允许 required 降级，其余字段必须逐字一致');
+        assert.equal(CUR_SCHEMA.properties[k].required, undefined,
+          '棘轮二方向固定：`' + k + '` 不得回填 required（只许 true→false）');
+      } else {
+        assert.deepEqual(CUR_SCHEMA.properties[k], headSchema.properties[k],
+          'schema 属性 `' + k + '` 必须与 HEAD 逐字一致（白名单只开给新增四键与三键降级）');
+      }
+    }
+    assert.equal(CUR_SCHEMA.additionalProperties, headSchema.additionalProperties,
+      'additionalProperties 必须与 HEAD 一致（仍是封闭对象）');
   }
 
   // 运行期归一化对拍：`defineTool` 会把属性上的 `required:true` 收到顶层 required 数组
@@ -173,9 +208,16 @@ test('D2 lane_dispatch 参数与输出 schema 未变（HEAD 版本逐字对拍 +
     'exempt 子参数集 = 改前冻结面');
   assert.deepEqual(t2.parameters.properties.exempt.required, ['type'], 'exempt 必填子参数 = 改前冻结面');
   assert.equal(t2.parameters.properties.exempt.additionalProperties, false, 'exempt 仍是封闭对象');
+  // 【D-1 · 批 `punky-d1d2-impl-20261103`】9 → **13 键**：加 `mode` / `code` / `unconfirmed` / `reason`。
+  //   **为何改**：D-1 要求「两处都返回、不抛」⇒ 调用方必须能**程序判定**结局面（`mode`）与拒码（`code`）；
+  //   `unconfirmed` 是 AC-16 的核心信号（「不可确认 ≠ 失败」，不得因 schema 收紧而删）；
+  //   `reason` 是机器可判短码（如 `PUSH_UNCONFIRMED`），与 `spawnNote`（人读长文）**职责不同、并存**。
+  //   ⚠ `token` / `firstLine` / `ttlMs` 已移出 `required`：`canNarrow` 拒派发生在 `issueLaneHandle` **之前**
+  //   ⇒ **无句柄是事实，不是妥协**（该路径如实没有句柄可发）。
   assert.deepEqual(Object.keys(t2.output.schema.properties),
-    ['batchId', 'lane', 'status', 'token', 'firstLine', 'ttlMs', 'spawned', 'workerSessionId', 'spawnNote'],
-    '输出属性名集 = 改前冻结面（9 键，未增未减）');
+    ['batchId', 'lane', 'status', 'token', 'firstLine', 'ttlMs', 'spawned', 'workerSessionId', 'spawnNote',
+      'mode', 'code', 'unconfirmed', 'reason'],
+    '输出属性名集 = 9 键 + mode/code/unconfirmed/reason（13 键）');
   assert.equal(t2.output.schema.additionalProperties, false, '返回形状仍是封闭对象');
 });
 

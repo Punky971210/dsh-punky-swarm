@@ -406,6 +406,8 @@ test('T4 provider 缺 toolFilter 能力（宿主拒绝）⇒ 归一为 GATE_DISP
   const ctx = mkCtx({ start: async () => { throw new Error('tool-subagent: provider "p" cannot enforce toolFilter (no toolFilter capability)'); } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'p' } } });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
+  // 【D-1 · lane `impl-d2` 订正】本用例是**失败路径**（provider 在 spawn 时抛 ⇒ catch → mapSpawnError →
+  //   `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` 并**throw**），不是「主动拒派」⇒ **恢复 `assert.rejects`**。
   await assert.rejects(() => ld.execute({ batchId: 'b-ed4', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }), /GATE_DISPATCH_CAPABILITY_UNAVAILABLE/);
   // 失败不得落登记（不留「幽灵绑定」）
   assert.equal(store.readBatch('sess-c', 'b-ed4').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0);
@@ -591,6 +593,8 @@ test('RO-8 拒派先于状态变更：role 查不到 ⇒ 抛 GATE_ROLE_UNRESOLVE
   const ctx = mkCtx({ start: async () => { throw new Error('不该被调用：role 查不到必须先拒派'); } });
   const tools = createCoreTools(ctx, { store, root, config: { dispatch: { provider: 'spawn-in-process' } } });
   const ld = tools.find((t) => t.name === 'lane_dispatch');
+  // 【D-1 · lane `impl-d2` 订正】role 解析失败是**失败路径**（`GATE_ROLE_UNRESOLVED` 仍 `throw`）
+  //   ⇒ **恢复 `assert.rejects`**（本用例的语义钉 = 码面 + 下方「零状态变更/零登记」两条）。
   await assert.rejects(() => ld.execute({ batchId: 'b-ro8', lane: 'l1' }, { agent: { session: { id: 'sess-c' } } }),
     /GATE_ROLE_UNRESOLVED/);
   assert.equal(store.readBatch('sess-c', 'b-ro8').lanes.l1, 'pending', '拒派零状态变更（lane 仍 pending）');

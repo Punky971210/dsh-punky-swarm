@@ -234,7 +234,11 @@ test('A6 S-6 多脚本：两条锚定各一行、只改其一 ⇒ 恰被改脚�
   art(B, 'plan/spec.md', SPEC_OK);
   const a = putScript(B, 'scripts/a.js', 'process.exit(0);\n');
   const b = putScript(B, 'scripts/b.js', 'process.exit(0);\n');
-  art(B, 'exec/report.md', '# 报告\ngate: node scripts/a.js && node scripts/b.js\n'
+  // 【D-2（戊案）】原为 `gate: node scripts/a.js && node scripts/b.js` —— `&&` 在 shell 关闭后**被拒**
+  //   ⇒ 按「多行 `gate:` 顺序执行」改写（`lib/state/gates/detect.js` 已支持多行）：
+  //   语义等价（两条命令都跑、两条锚定都生效），且**不再依赖 shell 串接**。
+  //   `&&` 被拒的断言放在 `test/command-exec.test.js` 的 `D2-2`（端到端 `forbidden===true`）。
+  art(B, 'exec/report.md', '# 报告\ngate: node scripts/a.js\ngate: node scripts/b.js\n'
     + 'gate-script-sha256: scripts/a.js=' + sha256Of(a) + '\n'
     + 'gate-script-sha256: scripts/b.js=' + sha256Of(b) + '\n');
   // 只改 b.js（a.js 与锚定仍相符）

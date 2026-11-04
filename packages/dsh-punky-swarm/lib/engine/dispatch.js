@@ -1152,21 +1152,36 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //      ⇒ 用真读数文案（只讲「见证不可得」，不再宣称「未配置」）。
     const presetConfigured = typeof liveConfig?.dispatch?.agentPreset === 'string'
       && liveConfig.dispatch.agentPreset.length > 0;
+    // 【D-1 · 批 `punky-d1d2-impl-20261103`】**拒派从 throw 改为返回**（统一返回形状 · 方案乙）：
+    //   本闸位于 `store.setMember(…,'running')` 与 `issueLaneHandle(...)` **之前** ⇒ 此刻**没有 `base`、没有句柄**。
+    //   故本路径**手写字段**（不含 token/firstLine/ttlMs）——「无句柄」是**事实**而非妥协：
+    //   拒派本就打在状态变更之前（lane 保持待派发、无 `member.dispatch`、批相位不变）。
+    //   `status` 直接取字面量 `'pending'`（**不读 `batch.lanes[lane]`**：本作用域内没有 `batch` 变量，
+    //   且本闸位于 `store.setMember(…,'running')` 之前 ⇒ 不管存储怎么实现，此刻 lane 状态**必然**是待派发）。
+    const rejectedOf = (note) => ({
+      batchId,
+      lane,
+      status: 'pending',
+      spawned: false,
+      mode: 'rejected',
+      code: 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE',
+      spawnNote: note,
+    });
     if (!presetConfigured) {
-      throw new Error('GATE_DISPATCH_CAPABILITY_UNAVAILABLE: 按次收窄（toolFilter / persona）在**本次请求**上不可用 ⇒ 拒派，不以弱换强。'
+      return rejectedOf('通道在，但本次 ask 的收窄不可核：未配置 `config.dispatch.agentPreset`（无收窄见证）⇒ 拒派，不以弱换强。'
         + '功能面读数 = agent 端口 `available=true` 但 `canNarrow(本次 ask)` = false（收窄只能经 `agentPreset` 组 composition）；'
         + ' ⚠ 但 **`maxDepth` 原生可用**（`request.maxDepth`，受 `capabilities.depthLimit` 约束）——不是「什么都做不了」。'
-        + ' ⇒ 当前**未配置 `config.dispatch.agentPreset`**（无收窄见证），无法保证按次收窄 ⇒ 按「能力位前置 / 不以弱换强」**拒派**；'
         + ' 填 `config.dispatch.agentPreset`（指向已按 toolFace 收窄的 preset）后即可正常自派。'
         + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
     }
-    throw new Error('GATE_DISPATCH_CAPABILITY_UNAVAILABLE: 已配置 `config.dispatch.agentPreset`，'
+    return rejectedOf('通道在，但本次 ask 的收窄不可核：已配置 `config.dispatch.agentPreset`，'
       + '但适配层**无法核对**它对**本次**请求的收窄（真读数口径，P0-6 D-2）：需要 '
       + '`config.dispatch.presetCoverage[<preset 名>].tools` 声明该 preset **实际拿到**的工具面，'
       + '且该声明必须**非空**、并与本次要禁的工具集**不相交**（「声明为空集」不算收窄 —— 空集与任何集的交集恒为空，'
       + '那会让判据退化成恒真）。'
-      + ' ⇒ 见证不可得 ⇒ 按「不以弱换强」**拒派**（不宣称未核实的收窄）。'
-      + ' ｜ 拒派打在状态变更之前：lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
+      + ' ⚠ **这不是「配置问题」**：`a1-gate` 上批实测 —— 纯 D 宿主**已配** `agentPreset` + `presetCoverage` 仍被拒，'
+      + '成因是「**本次 ask** 的收窄不可核」，不是配置缺项、也不是通道不存在。'
+      + ' ⇒ 拒派（不宣称未核实的收窄）｜ lane=' + lane + ' 保持待派发（无句柄、无 `member.dispatch` 事件、批相位不变）。');
   }
   // ⓿-b role 数据面**前置解析** —— 已在 **S-0**（本 lane）上移到能力位闸**之前**，见上方「顺序重构」段。
   //   纪律不变：解析失败 ⇒ 抛 `GATE_ROLE_UNRESOLVED`，**零状态变更、零句柄发放**。
@@ -1188,7 +1203,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   · `available===false` ⇒ 降级，文案按 provider 给的**功能面** `reason` 分档（未注入 / 无启动入口）
   //   · `available===true`  ⇒ 继续走 ④，由端口内部分派到对应宿主入口（引擎不再知道自己拿的是哪种入口）
   if (!agentPort.available) {
-    return { ...base, spawned: false, spawnNote: spawnNoteOf(agentPort.reason) };
+    // 【D-1】`mode:'degraded'`：面不可用 ⇒ 仅发句柄（`code` 不给 ⇒ 与 `rejected` 两轨语义可分）。
+    return { ...base, spawned: false, mode: 'degraded', spawnNote: spawnNoteOf(agentPort.reason) };
   }
   // N2/D6 三事实（2026-09-18 债清 3 · 逐条实测，勿再按印象改写）：
   //   ① **可热更**：`dispatch` 在 `lib/hot/config-watch.js:80` 的 `ALLOWED_TOP_KEYS` 白名单内
@@ -1212,7 +1228,9 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   与「宿主无 ctx.subagents」同族 ⇒ 同走**降级为仅发句柄**：lane 保持 running、句柄原样返回
     //   （**不消费**，见本函数头 P0 口径），Leader 可补配置后重派，或用返回的 `firstLine` 走直派形态。
     ctx?.logger?.warn?.('[dsh-punky-swarm] lane_dispatch: 未配置 config.dispatch.provider ⇒ 仅发句柄（不猜 provider）· lane=' + lane);
-    return { ...base, spawned: false, spawnNote: '未配置 config.dispatch.provider ⇒ 仅发句柄（补配置后重派，或用 firstLine 直派）' };
+    // 【D-1】**第二条 degraded 路径**（未配置 `dispatch.provider`）：同为「仅发句柄」⇒ 必须带 `mode:'degraded'`
+    //   （`mode` 在 output schema 里是 **required** ⇒ 漏给会让实际返回与 schema 不一致）。
+    return { ...base, spawned: false, mode: 'degraded', spawnNote: '未配置 config.dispatch.provider ⇒ 仅发句柄（补配置后重派，或用 firstLine 直派）' };
   }
   // ④ 任务包骨架：lane 契约 + role 三段 + 纪律 + 句柄首行（B2/B3 由 buildStartRequest 注入 toolFilter/label）
   // 【2026-10-07 · P2】`laneTask` / `artifactsRoot` 的读取已**上移**到 ⓿（role 拒派须先于状态变更）；
@@ -1340,7 +1358,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
         //   判据 = `errorCode:'PUSH_UNCONFIRMED'`（工具 ok 但名册反查未命中 = 观测面缺失，不是执行失败）。
         //   交既有兜底（`post-execute` 观察 + `laneBindingOf` 惰性重建）补登记，见设计 §②。
         if (pushed && pushed.errorCode === 'PUSH_UNCONFIRMED') {
-          return { ...base, spawned: false, unconfirmed: true, reason: 'PUSH_UNCONFIRMED' };
+          // 【D-1】三分法裁（批 `punky-d1d2-impl-20261103`）：`rejected` = **我们主动拒绝派**；
+          //   `degraded` = **派了/该派但没法保证**。本条是「**已尝试派发，但确认不了**」⇒ 不是拒绝，是降级 + 待确认
+          //   ⇒ `mode:'degraded'`。`unconfirmed` 是 AC-16 的核心信号（「不可确认 ≠ 失败」），不得因 schema 收紧而删。
+          //   字段职责边界：`reason` = 机器可判短码（`'PUSH_UNCONFIRMED'`）；`spawnNote` = 人读长文 —— 两者并存、不互相冒充。
+          return { ...base, spawned: false, mode: 'degraded', unconfirmed: true, reason: 'PUSH_UNCONFIRMED' };
         }
         // 成功：C 档有 `run`（子会话句柄）；D 档无 run，但有名册反查到的 `sessionId` ⇒ 统一成 `{ id }` 形态
         //   交给既有 `workerSessionIdOf` 取值单点（不新造第二套取值逻辑）。

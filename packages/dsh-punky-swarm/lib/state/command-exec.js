@@ -18,8 +18,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // command-exec：命令 gate（V1）确定性执行器
 // 接口：runCommand({ command, cwd, timeoutMs, retries, env, forbiddenRe, maxOutputBytes }) → { ok, exitCode, output(截断), durationMs, timedOut, forbidden, error }
 // 语义：仅退出码判定（exit 0 = 通过；非 0 = 失败，不解析 stdout）；超时 kill；重试容忍瞬态失败；黑名单只读守卫（命中不执行；
-//       D1 起含「写盘路径」面——见下方 WRITE_* 常量；`gate:` 命令以 spawnSync(shell:true) 直跑子进程、
-//       不经宿主工具面 hook，故工具面写禁须在本执行器的黑名单内等价复现）；
+//       D1 起含「写盘路径」面——见下方 WRITE_* 常量；**D2 起 `gate:` 命令以 spawnSync(shell:false) 直跑**
+//       （argv 直执行，不经 shell；元字符在执行前拒绝，见 SHELL_META_RE）——故工具面写禁的等价面
+//       不再能被 `> / | / && / $() / 反引号` 一类 shell 语法绕过；
 //       凭据只走 env 注入（不入文件/日志/输出）；输出截断入审计。
 // 实现决策（同步执行器）：store.setMember 为同步 API（既有工具/测试全同步调用），merged 前置门禁须同步判定；
 //       runCommand 采用 spawnSync（child_process.spawn 家族同步形态），接口契约与 design 一致（参数/返回不变），
@@ -27,6 +28,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //       超时：spawnSync timeout + killSignal（Windows 上 SIGTERM/SIGKILL 均映射 TerminateProcess，两段式在同步执行器中等价；
 //       POSIX 两段式 kill 若需细化留后续评估——见 code-change-summary 披露）。
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 // shell 文本预处理单点（(lib-root) 中立件；与 lib/tools/readonly.js 同源）
 import { stripStreamMerges, segmentCommands } from '../shell-text.js';
 
@@ -81,6 +84,10 @@ function forbiddenReFromEnv() {
 // ==================== D1：写盘路径（工具面写禁的等价面） ====================
 // 缺口（盲审 D1）：本黑名单原只含破坏性/部署类模式，而 `gate:` 命令由 spawnSync(shell:true) 直跑子进程、
 //   **不经宿主工具面 hook** ⇒ lane 只要在产物写一行 `gate: <写盘命令>` 即可绕过 L3 写禁。
+// 【D-2 收口 · 批 `punky-d1d2-impl-20261103`】上面这条**shell 通道已关闭**：执行器改 `shell:false`
+//   （argv 直执行）+ 执行前拒绝 shell 元字符（`| & ; < > 反引号 $() ${` 换行；Windows 另拒 `^` / `%VAR%`）
+//   ⇒ 「`gate: echo x > file`」一类**写禁绕过已不可用**（不再需要靠本黑名单等价复现写盘面）；
+//   本面（WRITE_* / matchWritePath）保留为**第二道防线**（纵深，不删）。
 // 收窄口径（用户裁决，逐字）：只追加「**已有 Agent 工具替代、且已在工具配置里禁掉的那一类 pwsh 写盘路径**」，
 //   其它类型一律开放——故本面**不是** tool-ban 全量清单的复制，只取权威清单 `presets/hook-rules/l3-tool-ban.json`
 //   的 `scope` 逐项；该 preset 的 `not_in_scope`（执行/构建/测试/包管理/只读）与 `boundary`（别名 sc/ni/ri/mi、
@@ -164,6 +171,67 @@ export function matchesForbidden(command, patterns) {
   return false;
 }
 
+// ==================== D-2：关 shell（戊案 = 剥引号 → 判元字符 → argv 直执行） ====================
+// 为什么要关：D1 只堵了「写盘路径」的**命名形态**，而 `shell:true` 让 `gate:` 行具备**完整 shell 能力**
+//   ⇒ `echo x > f`（重定向写）、`a | b`、`a && b`、`` `cmd` ``、`$(cmd)` 都等价于「任意写 / 任意执行」。
+// 戊案：`shell:false` + argv 直执行 + **执行前**拒绝残留元字符。
+// ⚠ **必须先剥引号再判**（本批最容易写错的地方）：`node -e "setTimeout(()=>{}, 10)"` 的 `>` 与
+//   `node -e "console.log(process.env.A || 'x')"` 的 `|` 都在**引号字面量内**，不是 shell 语法
+//   ⇒ 复用既有 `maskQuoted()`（引号内整体掩码）后再判，否则会误拦合法纯命令（存量实测 2 例）。
+// ⚠ 只做「拒绝」，不做「解析」：**不实现 mini shell**（无管道/无变量展开/无转义解释/无 `&&` 串接）。
+//   多命令需求由 `gate:` **多行顺序执行**承担（`lib/state/gates/detect.js` 已支持），故 `&&` 被拒**不失能力**。
+const SHELL_META_RE = /[|&;<>`\r\n]|\$\(|\$\{/;
+// Windows 追加：`^` 是 cmd 转义符（`^>` 可拼出被禁字符）；`%VAR%` 是变量展开（可拼出路径/命令）。
+const SHELL_META_WIN_RE = /\^|%[^%\s]+%/;
+
+/** 元字符判定（**剥引号后**）：返回命中依据；无命中返回 null。 */
+function matchShellMeta(command) {
+  const masked = maskQuoted(command);
+  if (SHELL_META_RE.test(masked)) return '含 shell 元字符（| & ; < > 反引号 $() ${ 换行）';
+  if (process.platform === 'win32' && SHELL_META_WIN_RE.test(masked)) return '含 Windows 元字符（^ / %VAR%）';
+  return null;
+}
+
+/**
+ * 引号感知的**空白分词**（只剥引号 + 按空白切分）：给 `shell:false` 的 spawnSync 提供 argv。
+ * **不是** mini shell：不解释转义（`\"`）、不做变量/通配/管道/串接展开。
+ * @returns {{argv: string[], unclosed: boolean}} `unclosed` = 引号未闭合（调用方按 spawn 失败处置）
+ */
+function splitCommandArgs(command) {
+  const argv = [];
+  let cur = '';
+  let quote = null;
+  let seen = false;
+  for (const ch of command) {
+    if (quote) { if (ch === quote) quote = null; else cur += ch; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; seen = true; continue; }
+    if (/\s/.test(ch)) { if (seen || cur.length > 0) { argv.push(cur); cur = ''; seen = false; } continue; }
+    cur += ch;
+    seen = true;
+  }
+  const unclosed = quote !== null;
+  if (seen || cur.length > 0) argv.push(cur);
+  return { argv, unclosed };
+}
+
+/**
+ * Windows 专用：`shell:false` **无法**直接启动 `.cmd` / `.bat`（`npm` / `npx` 即此类）。
+ * 按 `PATHEXT` 解析首个 token：解析到 `.cmd/.bat` 返回其路径，否则返回 null（`spawn` 自行报 ENOENT）。
+ */
+function resolveBatchTarget(file) {
+  if (process.platform !== 'win32') return null;
+  if (/[\\/]/.test(file) || /\.[a-z0-9]+$/i.test(file)) return null;
+  const exts = String(process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';').filter(Boolean);
+  const dirs = String(process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+  for (const d of dirs) {
+    for (const ext of exts) {
+      const cand = path.join(d, file + ext);
+      try { if (fs.existsSync(cand)) return /\.(cmd|bat)$/i.test(cand) ? cand : null; } catch { /* 跳过不可读目录 */ }
+    }
+  }
+  return null;
+}
+
 // 输出截断（默认 8192B，截断部分入审计事件由调用方记录）
 export function truncateOutput(buf, maxBytes) {
   const s = typeof buf === 'string' ? buf : String(buf ?? '');
@@ -176,10 +244,29 @@ function execOnce(command, { cwd, timeoutMs, env, maxOutputBytes }) {
   // maxBuffer 宽松兜底（保证命令能跑完、退出码可取），审计截断由 truncateOutput 自行完成；
   // 输出超 maxBuffer（默认 1MB，随 maxOutputBytes 抬升）视为 spawn 级异常（GATE_EXIT_SPAWN_FAIL），诚实披露
   const maxBuffer = Math.max(1024 * 1024, maxOutputBytes + 4096);
-  const r = spawnSync(command, {
+  // 戊案：**不开 shell** —— 自己「剥引号 + 空白分词」得 argv（不解释转义/不展开变量）
+  const { argv, unclosed } = splitCommandArgs(command);
+  if (unclosed || argv.length === 0) {
+    return {
+      ok: false, exitCode: null, output: '', durationMs: Date.now() - start, timedOut: false,
+      forbidden: false, truncated: false,
+      error: 'GATE_EXIT_SPAWN_FAIL: ' + (unclosed ? '命令含未闭合引号（拒绝交给 shell 猜测）' : '命令为空 argv'),
+    };
+  }
+  let file = argv[0];
+  let args = argv.slice(1);
+  // Windows `.cmd/.bat`（npm/npx）不能以 shell:false 直接启动 ⇒ 回落 ComSpec。
+  //   安全性：上游 `runCommand` 已**拒绝**全部拼接/重定向/变量元字符（`| & ; < > ^ %VAR% $() ${` 换行），
+  //   故此回落**不重新引入注入面**；这是戊案在 Windows 上唯一的例外，已登记于 `exec/d2.md`。
+  const batch = resolveBatchTarget(file);
+  if (batch) {
+    file = process.env.ComSpec || 'cmd.exe';
+    args = ['/d', '/s', '/c', command];
+  }
+  const r = spawnSync(file, args, {
     cwd,
     env,
-    shell: true,
+    shell: false,
     windowsHide: true,
     timeout: timeoutMs,
     killSignal: 'SIGTERM',
@@ -218,6 +305,12 @@ export function runCommand(opts = {}) {
     return { ok: false, exitCode: null, output: '', durationMs: 0, timedOut: false, forbidden: false, truncated: false, error: 'GATE_EXIT_NO_COMMAND' };
   }
   if (matchesForbidden(command, forbiddenRe)) {
+    return { ok: false, exitCode: null, output: '', durationMs: 0, timedOut: false, forbidden: true, truncated: false, error: 'GATE_EXIT_FORBIDDEN' };
+  }
+  // D-2（戊案）：shell 已关 ⇒ 任何**引号外**的 shell 元字符都在执行前拒绝（不执行、不改返回形状）
+  //   命中依据（meta 文案）只进注释/产物，**不加返回键** ⇒ 既有 `forbidden` 返回形状逐字不变。
+  const meta = matchShellMeta(command);
+  if (meta !== null) {
     return { ok: false, exitCode: null, output: '', durationMs: 0, timedOut: false, forbidden: true, truncated: false, error: 'GATE_EXIT_FORBIDDEN' };
   }
   let last = null;

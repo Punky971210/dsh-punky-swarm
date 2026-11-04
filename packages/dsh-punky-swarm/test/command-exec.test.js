@@ -149,13 +149,13 @@ test('runCommand：默认输出截断 8192B 生效（GATE_MAX_OUTPUT_BYTES 未�
   }
 });
 
-test('runCommand：cwd 生效 + `cd /d <dir> && <cmd>` 自控（命令在正确目录执行）', () => {
+test('runCommand：cwd 生效（**D-2 起直传 cwd 参数**；不再用 `cd /d X &&` 前缀——shell 已关）', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-cwd-'));
-  // 平台分支：Windows cmd 跨盘须 `/d` 开关，POSIX sh 用裸 `cd`（引擎透传 shell 语义；本用例 os.tmpdir 同盘，裸 cd 语义等价）
-  const cdPrefix = process.platform === 'win32' ? 'cd /d ' : 'cd ';
-  const r = runCommand({ command: cdPrefix + JSON.stringify(dir) + ' && node -e "process.stdout.write(process.cwd())"', timeoutMs: 5000, retries: 0 });
+  // D-2（戊案）迁移说明：原用例用 `cd /d <dir> && <cmd>` 依赖 shell 串接；shell 关闭后 `&&` 被拒
+  //   ⇒ 改为**直传 `cwd` 参数**（引擎本就支持，见 `execOnce` 的 `cwd` 传递），语义等价且更强（不依赖 shell）。
+  const r = runCommand({ command: 'node -e "process.stdout.write(process.cwd())"', cwd: dir, timeoutMs: 5000, retries: 0 });
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(r.output.trim().replace(/\\/g, '/'), dir.replace(/\\/g, '/'), 'expect cwd = cd 目录');
+  assert.equal(r.output.trim().replace(/\\/g, '/'), dir.replace(/\\/g, '/'), 'expect cwd = 传入的 cwd 目录');
 });
 
 test('黑名单覆盖度评估：当前 DEFAULT_FORBIDDEN_PATTERNS 覆盖已列模式（回归）', () => {
@@ -432,5 +432,46 @@ test('T1-4 控制组 7 形态：`&&`/`;`/`|`/换行/引号内 `&`/`2>&1`/`2>$nul
   // ④ 流合并不等于落盘（与 D1-A4 同口径，此处复跑一次确保 `&` 分段改动未波及）
   assert.equal(matchesForbidden('Get-ChildItem 2' + GT + '&1 | Select-Object -First 1', DEFAULT_FORBIDDEN_PATTERNS), false, '`2>&1` 不算落盘');
   assert.equal(matchesForbidden('echo a 2' + GT + '$null', DEFAULT_FORBIDDEN_PATTERNS), false, '`2>$null` 不算落盘');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// D-2（戊案）探针：`shell:false` + **剥引号后**判元字符 —— 两组必测 + 一组不得误伤
+//   判据源：`plan/impl-spec.md` §3.2 / AC-D2-2/3/4/5
+//   ⚠ 与上面 T1-4 的分工：T1-4 测 **纯函数 `matchesForbidden`**（引号外 `&` 结构的分段判据，仍须放行只读组合）；
+//     本组测 **`runCommand` 端到端**（一律执行前拒绝 ⇒ `forbidden:true` 且**零副作用**）。
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+test('D2-1 写禁绕过已关：`echo x > <file>` ⇒ 拒绝且**文件未创建**（旧 shell:true 会真写）', () => {
+  const victim = path.join(tmp, 'd2-redirect-' + Date.now() + '.txt');
+  const r = runCommand({ command: 'echo x > ' + JSON.stringify(victim), timeoutMs: 5000, retries: 0 });
+  assert.equal(r.forbidden, true, JSON.stringify(r));
+  assert.equal(r.ok, false);
+  assert.equal(r.exitCode, null, '执行前拒 ⇒ 无退出码');
+  assert.equal(r.error, 'GATE_EXIT_FORBIDDEN');
+  assert.equal(fs.existsSync(victim), false, '被拒命令须**零副作用**：重定向目标文件不得被创建');
+});
+
+test('D2-2 `&&` 串命令被拒（改由多行 `gate:` 表达）；单 `&` / `;` / `|` 同样被拒', () => {
+  for (const c of ['echo a && echo b', 'echo a & echo b', 'echo a ; echo b', 'echo a | more']) {
+    const r = runCommand({ command: c, timeoutMs: 5000, retries: 0 });
+    assert.equal(r.forbidden, true, '元字符须执行前拒: ' + JSON.stringify(c) + ' / ' + JSON.stringify(r));
+    assert.equal(r.error, 'GATE_EXIT_FORBIDDEN');
+  }
+});
+
+test('D2-3 ⚠ 引号内元字符**不得误拦**（剥引号是关键）：`=>` / `||` / `()` / `%TEMP%`', () => {
+  // ① 箭头 `=>`（含 `>`）：必须跑到 ⇒ ok:true 且输出 1
+  const arrow = runCommand({ command: 'node -e "console.log([1].map((x)=>(x)))"', timeoutMs: 5000, retries: 0 });
+  assert.equal(arrow.forbidden, false, '引号内 `=>` 不得判元字符: ' + JSON.stringify(arrow));
+  assert.equal(arrow.ok, true, JSON.stringify(arrow));
+  // ② 引号内 `||`：JS 逻辑或，不是管道
+  const ors = runCommand({ command: 'node -e "console.log(process.env.D2_NOPE || \'fallback\')"', timeoutMs: 5000, retries: 0 });
+  assert.equal(ors.forbidden, false, '引号内 `||` 不得判管道: ' + JSON.stringify(ors));
+  assert.equal(ors.ok, true, JSON.stringify(ors));
+  assert.equal(ors.output.trim(), 'fallback');
+  // ③ 引号内 `()`：函数调用
+  const parens = runCommand({ command: 'node -e "process.exit(0)"', timeoutMs: 5000, retries: 0 });
+  assert.equal(parens.forbidden, false, '引号内 `()` 不得判元字符: ' + JSON.stringify(parens));
+  assert.equal(parens.ok, true, JSON.stringify(parens));
 });
 
