@@ -146,7 +146,9 @@ export function createNullAdapters() {
       depthVia: 'none',
       // 空执行结果：字段集对齐 `ExecResult`；保留 `writes`/`evidence`（归一/分类面据它们判空转）
       push_execute: async () => ({ timedOut: false, exitCode: 0, signal: null, writes: [], evidence: [] }),
-      cancel: async () => {},
+      // 【T-B · 批 `punky-three-tasks-20261103`】null 适配器的 `cancel` **必须显式三态**、**不得返 `undefined`**：
+      //   无真实运行时 ⇒ 没有可取消的对象，但**也不是**「已停」⇒ 报 `skipped` + 成因（by-value 面，不抛）。
+      cancel: async () => ({ outcome: 'skipped', reason: 'agent-runtime-unavailable' }),
       // 失败以返回值表达、**不抛**（契约 NotifyLeaderResult 纪律）；成因用功能面词汇
       notifyLeader: async () => ({ delivered: false, reason: 'agent-runtime-unavailable' }),
     },

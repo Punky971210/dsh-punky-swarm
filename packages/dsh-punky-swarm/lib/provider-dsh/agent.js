@@ -437,7 +437,23 @@ export function createAgentPort(ctx, opts = {}) {
     },
     async cancel(...args) {
       if (typeof rt?.cancel !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.cancel 不可用');
-      return rt.cancel(...args);
+      // 【T-B · 批 `punky-three-tasks-20261103`】**归一宿主返回为三态 `CancelResult`**（契约见 `ports.ts`）。
+      //   纪律来源：契约注释「语义为『停止等待』，**不得把未知当已停**」——
+      //   原实现 `return rt.cancel(...)` 把宿主形态**原样透出**，而契约原本零回报 ⇒ 调用方无从判断。
+      //   归一规则（**fail-closed 在最后一条**）：
+      //     · 对象且 `outcome` ∈ 三态 ⇒ 透出（`reason` 非空字符串才带）；
+      //     · 布尔 `true` ⇒ `cancelled`、`false` ⇒ `skipped`（宿主常见的布尔取消原语）；
+      //     · **其余（undefined / null / 不可识别）⇒ `rejected` + reason —— 不得当已停**。
+      const raw = await rt.cancel(...args);
+      const OUTCOMES = ['cancelled', 'skipped', 'rejected'];
+      if (raw && typeof raw === 'object' && OUTCOMES.includes(raw.outcome)) {
+        return typeof raw.reason === 'string' && raw.reason.length > 0
+          ? { outcome: raw.outcome, reason: raw.reason }
+          : { outcome: raw.outcome };
+      }
+      if (raw === true) return { outcome: 'cancelled' };
+      if (raw === false) return { outcome: 'skipped', reason: 'host-reported-not-cancelled' };
+      return { outcome: 'rejected', reason: 'host-return-unrecognized' };
     },
     list(...args) {
       if (typeof rt?.list !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.list 不可用');

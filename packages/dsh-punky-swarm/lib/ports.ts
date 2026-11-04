@@ -46,6 +46,24 @@ export type NarrowPath = 'request' | 'preset' | 'none';
 export type DepthPath = 'request' | 'none';
 
 /**
+ * 取消请求的**回报三态**（批 `punky-three-tasks-20261103` · lane `impl-cancel` · T-B）。
+ *
+ * 为什么需要它：`cancel` 原签名 `Promise<void>` **零回报**，而本契约里 `AgentRuntime.cancel`
+ * 的注释本就写着「语义为『停止等待』，**不得把未知当已停**」—— `void` 签名**结构性无法表达**该区分。
+ * 本类型是把那句已有文字**落实为类型**（不是新增需求）。
+ *
+ * - `cancelled`：宿主确认已停（**唯一**可当作「停了」的取值）；
+ * - `skipped`  ：没有可取消的对象（已完成 / 未开始 / 句柄失效）—— **不是**「已停」；
+ * - `rejected` ：宿主拒绝、或返回形态不可识别 ⇒ **无法确认**；调用方**必须**按「可能仍在跑」处理。
+ *
+ * ⚠ 纪律：`rejected` 不得被调用方降级成 `cancelled` —— 「不知道」就是 `rejected`（fail-closed）。
+ */
+export interface CancelResult {
+  outcome: 'cancelled' | 'skipped' | 'rejected';
+  reason?: string;
+}
+
+/**
  * 取消信号的最小结构形状。
  *
  * ⚠ **就地声明、不引外部类型**（本文件零 import 约束）：只要满足「有布尔 `aborted`」即可，
@@ -141,8 +159,12 @@ export interface AgentRuntime {
    * 请求取消一次已发出的执行；语义为「停止等待」，不得把未知当已停。
    *
    * 取消**按执行标识**进行，不得把宿主侧取消原语的参数表原样透出给调用方。
+   *
+   * 【T-B · 批 `punky-three-tasks-20261103`】返回**三态** `CancelResult`（`cancelled`/`skipped`/`rejected`）：
+   * 原 `Promise<void>` 零回报 ⇒ 调用方无法区分「已停」与「不知道」，正好违背上一行的「不得把未知当已停」。
+   * 适配器须把宿主返回**归一**到三态；不可识别的宿主返回一律判 `rejected`（**禁默认 `cancelled`**）。
    */
-  cancel(runId: string): Promise<void>;
+  cancel(runId: string): Promise<CancelResult>;
 
   /**
    * 唤醒一个会话的所有者（Leader 唤醒通路）。
