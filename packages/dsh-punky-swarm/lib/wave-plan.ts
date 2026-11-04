@@ -743,12 +743,12 @@ export function consumeDepsAsymmetryOf(tasks: WaveTask[]): ConsumeDepsAsymmetryR
   // 声明面索引：`artifact` → 声明它的 lane（`declaredArtifactsOf` 已去重 ⇒ 同一 lane 不会重复计一条缺口）
   const declared = tasks.map((t) => ({
     id: t.id,
-    layer: (t as WavePlanTask).layer ?? null,
+    layer: t.layer ?? null,
     artifacts: declaredArtifactsOf(t),
   }));
   const rows: ConsumeDepsAsymmetryRow[] = [];
   for (const l of tasks) {
-    const lLayer = (l as WavePlanTask).layer ?? null;
+    const lLayer = l.layer ?? null;
     const deps = new Set<string>(isStringArray(l.deps) ? l.deps : []);
     for (const c of l.consume ?? []) {
       if (typeof c !== 'string' || c.trim().length === 0) continue;
