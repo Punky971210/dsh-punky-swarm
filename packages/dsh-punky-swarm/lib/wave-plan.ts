@@ -201,7 +201,7 @@ export function normalizeAssemblyDecl(input: unknown, extraRoles: string[] | nul
   if (mpRaw !== 'raise' && mpRaw !== 'leader-direct') {
     throw new Error('GATE_ASSEMBLY_INVALID: assembly.managerPlan must be one of raise|leader-direct (got: ' + String(mpRaw) + ')');
   }
-  const managerPlan = mpRaw as WavePlanAssemblyDecl['managerPlan']; // 单点断言：上方双字面量守卫后仅剩合法枚举（断言纯类型层）
+  const managerPlan = mpRaw; // 上方双字面量守卫已把 mpRaw 收窄为合法枚举 ⇒ 无需断言
   const auditLane = raw.auditLane;
   if (typeof auditLane !== 'string' || !auditLane.trim()) {
     throw new Error('GATE_ASSEMBLY_INVALID: assembly.auditLane must be a non-empty string (audit lane id, got: ' + String(auditLane) + ')');
@@ -281,7 +281,7 @@ export function normalizeChannelDecl(channel: unknown, tasks: WaveTask[]): { cha
   if (channel !== 'dispatch' && channel !== 'team' && channel !== 'mixed') {
     throw new Error('GATE_CHANNEL_INVALID: channel must be one of dispatch|team|mixed (got: ' + String(channel) + ')');
   }
-  const declaredChannel = channel as ChannelDecl; // 单点断言：上方三字面量守卫后仅剩合法枚举（断言纯类型层）
+  const declaredChannel = channel; // 上方三字面量守卫已把 channel 收窄为合法枚举 ⇒ 无需断言
   const laneList = Array.isArray(tasks) ? tasks : [];
   const withRoster: string[] = [];
   const withoutRoster: string[] = [];
@@ -363,7 +363,12 @@ export function topoWaves(tasks: WaveTask[]): { waves: string[][]; order: string
   }
   const indegree = new Map<string, number>();
   for (const id of ids) {
-    const d = deps.get(id) as Set<string>; // 单点断言：ids 内每 id 均经上方 deps.set(t.id, ...) 建项，get 必命中（断言纯类型层）
+    // 【批 `punky-type-assert-purge-20261103`】原「Set 类型断言」由**显式判空**替代。
+    //   「`get` 必命中」是**逻辑不变量**（上方 `deps.set(t.id, …)` 已为每个 id 建项），
+    //   但 `Map.get` 的返回类型是 `Set<string> | undefined` ⇒ TS 看不到该不变量。
+    //   ⚠ 收窄方式：**显式 throw**（不变量破了要响亮），而非 `!`/新 `as`（红区禁）。
+    const d = deps.get(id);
+    if (!d) throw new Error('wave-plan: topoWaves: 拓扑不变量被破坏 —— deps 缺 id ' + String(id));
     indegree.set(id, d.size);
   }
   const waves: string[][] = [];
@@ -373,7 +378,9 @@ export function topoWaves(tasks: WaveTask[]): { waves: string[][]; order: string
   while (remaining.size > 0) {
     if (--guard < 0) throw new Error('cycle detected in task deps');
     const ready = [...remaining].filter((id: string) => {
-      const d = deps.get(id) as Set<string>; // 单点断言：remaining ⊆ ids，get 必命中（断言纯类型层）
+      // 【同上批】`remaining ⊆ ids` ⇒ `get` 必命中；同 :366 口径：显式判空替代断言（不变量破则响亮）。
+      const d = deps.get(id);
+      if (!d) throw new Error('wave-plan: topoWaves: 拓扑不变量被破坏 —— remaining 含不在 deps 的 id ' + String(id));
       for (const dep of d) if (remaining.has(dep)) return false;
       return true;
     });
@@ -551,7 +558,9 @@ export function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null
       if (targetRaw && isAbsPath(targetRaw)) continue;
       seen.add(id);
       const roundsRaw = it.rounds;
-      const rounds = Number.isInteger(roundsRaw) && (roundsRaw as number) >= 1 ? (roundsRaw as number) : 1;
+      // 【批 `punky-type-assert-purge-20261103`】原「roundsRaw 数值断言」由 **`typeof` 收窄**替代
+      //   （`Number.isInteger` 不是类型守卫，故补 `typeof === 'number'`；语义不变：`isInteger` 本就蕴含 number）。
+      const rounds = typeof roundsRaw === 'number' && Number.isInteger(roundsRaw) && roundsRaw >= 1 ? roundsRaw : 1;
       const ctxBudgetRaw = it.ctxBudget;
       const ctxBudget = typeof ctxBudgetRaw === 'number' && Number.isFinite(ctxBudgetRaw) && ctxBudgetRaw > 0
         ? ctxBudgetRaw
@@ -642,10 +651,14 @@ type TaskArrayField = 'consume' | 'produce' | 'outputs';
 //   本文件**不做**任何尾斜杠规范化 / strip（`buildWavePlan` 亦以 `[...t.produce]` 原样复制）——
 //   这是 e1 目录语义二分（`/` 结尾 = 目录语义）可用的前提。
 
+/** 声明面「文本数组」字段名（`produce` / `outputs`）：**类型化常量**，两处共用 ⇒
+ *  免去各自的 TaskArrayField 断言（批 `punky-type-assert-purge-20261103`）。 */
+const TASK_ARRAY_FIELDS: TaskArrayField[] = ['produce', 'outputs'];
+
 /** 任务声明面并集（`produce ∪ outputs`，**保留声明原文**，去重保序）。 */
 export function declaredArtifactsOf(t: WaveTask): string[] {
   const out: string[] = [];
-  for (const field of ['produce', 'outputs'] as TaskArrayField[]) {
+  for (const field of TASK_ARRAY_FIELDS) {
     for (const p of isStringArray(t[field]) ? t[field] : []) {
       if (typeof p === 'string' && p.trim().length > 0 && !out.includes(p)) out.push(p);
     }
@@ -800,7 +813,7 @@ function validateLayerContract(tasks: WaveTask[], opts: { smoke?: boolean } = {}
   if (audit.length > 0 && plan.length > 0) {
     const planProducts = new Set<string>();
     for (const p0 of plan) {
-      for (const f of ['produce', 'outputs'] as TaskArrayField[]) {
+      for (const f of TASK_ARRAY_FIELDS) {
         for (const p of p0[f] ?? []) planProducts.add(p);
       }
     }
@@ -1232,7 +1245,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
         if (sha != null && (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))) {
           throw new Error('task ' + t.id + ' contract.sha256 must be a 64-char lowercase hex string or null');
         }
-        return { id: cid, sha256: (sha ?? null) as string | null };
+        return { id: cid, sha256: typeof sha === 'string' ? sha : null }; // typeof 收窄替代 string|null 断言
       })();
       const cmdAssembled = assembleCmd(role, skills, t.cmd ?? '');
       return {
