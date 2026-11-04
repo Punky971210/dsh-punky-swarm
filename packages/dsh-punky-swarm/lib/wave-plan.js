@@ -1109,7 +1109,7 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
             let skills = t.skills;
             // 装配补全（可插拔）：未显式声明 skills 时，按 team 装配表的 role → skills 补全（assembly 可选）
             // layer 为 Layer|undefined：undefined 时索引装配表 miss（JS 属性键字符串化语义一致）
-            // 【批 `punky-type-assert-purge-20261103`】原 `layer as Layer` 断言由**守卫收窄**替代：
+            // 【批 `punky-type-assert-purge-20261103`】原「`layer` 断言成 `Layer`」由**守卫收窄**替代：
             //   下方条件加 `layer !== undefined` ⇒ TS 自行窄化，断言消失。
             //   ⚠ 行为等价：原实现 `layers[undefined]` 取到 undefined（属性访问键字符串化后 miss），
             //     与本守卫「直接不进分支」同结果。
