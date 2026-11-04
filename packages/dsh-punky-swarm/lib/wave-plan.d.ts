@@ -60,6 +60,27 @@ export declare function normalizeTargetsContract(t: WavePlanTaskInput): {
     targetsMarker: string | null;
     targetsNoChange: boolean;
 };
+/** `tasks[].checkpoints[]` 的单条归一化产物（声明面；与运行时上界 `task.checkpoint = { steps }` 无关）。 */
+export interface CheckpointItem {
+    id: string;
+    /** 缺 `target` ⇒ `''`（渲染层写成「（未声明目标）」，不静默丢）。 */
+    target: string;
+    outputs: string[];
+    acceptance: string;
+    /** 非法 ⇒ `1`。 */
+    rounds: number;
+    ctxBudget: number | null;
+}
+/** `normalizeCheckpoints` 的返回：未声明 ⇒ `null`；已声明 ⇒ `{ items }`（`items` 可能为空）。 */
+export interface NormalizedCheckpoints {
+    items: CheckpointItem[];
+}
+/** `tasks[].contract` 归一化产物（fail-closed：非法即抛，普通 `Error` 不带 `GATE_*` 前缀）。 */
+export interface ContractRef {
+    id: string;
+    sha256: string | null;
+}
+export declare function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null;
 export declare function normalizePreflight(raw: unknown): PreflightDecl | null;
 export declare const RESUME_CLAUSE = "\u82E5\u672C lane \u5B58\u5728 checkpoint\uFF08lane_checkpoint_status \u53EF\u67E5\uFF09\uFF0C\u987B\u5148\u67E5\u8BE2 checkpoint \u5386\u53F2\uFF0C\u4ECE\u6700\u540E\u5DF2 checkpoint \u7684\u6B65\u9AA4\u4E4B\u540E\u7EE7\u7EED\uFF0C\u7981\u6B62\u91CD\u505A\u5DF2\u5B8C\u6210\u6B65\u9AA4\uFF1B\u6BCF\u5B8C\u6210\u4E00\u4E2A\u5B50\u6B65\u9AA4\u7ACB\u5373 lane_checkpoint\uFF08\u643A\u5E26 progress\uFF09\uFF0C\u7981\u6B62\u6512\u6279\u3002";
 export declare function resumeClauseFor(task: WavePlanTask | null): string | null;

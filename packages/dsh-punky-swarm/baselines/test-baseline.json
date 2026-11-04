@@ -352,6 +352,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/cancel-result-three-state.test.js": {
+      "asserts": 15,
+      "blankLines": 11,
+      "lines": 80,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
     "test/chain-v2-pairing.test.js": {
       "asserts": 20,
       "blankLines": 19,
@@ -2024,6 +2032,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/wave-plan-checkpoints.test.js": {
+      "asserts": 27,
+      "blankLines": 15,
+      "lines": 121,
+      "tautologies": 0,
+      "tests": 6,
+      "todos": 0
+    },
     "test/wave-plan-immutability-derivation.test.js": {
       "asserts": 42,
       "blankLines": 48,
@@ -2113,7 +2129,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-03T13:46:18Z",
+  "generatedAt": "2026-11-04T10:47:13Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2127,12 +2143,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12209,
-    "blankLines": 6844,
-    "files": 264,
-    "lines": 72315,
+    "asserts": 12251,
+    "blankLines": 6870,
+    "files": 266,
+    "lines": 72516,
     "tautologies": 0,
-    "tests": 2545,
+    "tests": 2559,
     "todos": 0
   }
 }
