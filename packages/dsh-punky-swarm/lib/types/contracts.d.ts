@@ -68,6 +68,30 @@ export interface WavePlanTaskInput {
     roster?: string | null;
     /** 开工前必做 · 四段声明（可选；归一化恒写、零 throw、不进 `sig`/`cmd`、不回写 `skills`）。 */
     preflight?: PreflightDecl;
+    /** 【批 `punky-type-assert-purge-20261103`】任务包计划清单（**复数**）。
+     *  ⚠ 与上方 **`checkpoint`（单数）** 语义**完全不同**、互不影响：
+     *    · `checkpoint`（单数）= **resume 契约**：lane **总步数上界**（供 `overBudgetOf` 判超界），fail-closed；
+     *    · `checkpoints`（复数）= **任务包计划清单**（声明面，全软、永不抛、归一化后写盘）。
+     *  ⇒ 本批**不改名**（改名会破存量批格式，另批裁决），只在此加区分注释。
+     *  逐项为**原始输入**（归一化前的宽松形态）：`normalizeCheckpoints` 接收 `unknown` 并逐项校验，
+     *  故此处字段均为 `unknown`（**不用 `any`**：仍需显式窄化才能使用）。
+     *  ⚠ 归一化产物类型是 `wave-plan.ts` 的 `CheckpointItem`；此处**不 import** 它（`contracts.ts` 是
+     *  `wave-plan.ts` 的上游，导入会成环）。 */
+    checkpoints?: Array<{
+        id?: unknown;
+        target?: unknown;
+        outputs?: unknown;
+        acceptance?: unknown;
+        rounds?: unknown;
+        ctxBudget?: unknown;
+    }>;
+    /** 【同上批】`tasks[].contract` 契约引用：`{ id, sha256 }`。缺省不写键；非法 ⇒ **fail-closed 抛**（普通 `Error`）。 */
+    contract?: {
+        id: string;
+        sha256: string | null;
+    } | null;
+    /** 【同上批】单产物写声明（`true` = 该任务只写一个产物文件）。归一化恒写布尔：非 `true` ⇒ `false`。 */
+    singleArtifactWrite?: boolean;
     sig?: string | null;
 }
 /** 持久形态：buildWavePlan 规范化产物（gates.ts / validateWavePlan / findTask 消费面） */

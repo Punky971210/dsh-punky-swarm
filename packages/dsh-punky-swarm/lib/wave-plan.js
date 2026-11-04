@@ -955,11 +955,11 @@ export function validateDepsStructure(tasks) {
             }
             const up = byId.get(d);
             const upl = up && up.layer != null
-                ? LIDX[String(up.layer)]
+                ? LIDX[String(up?.layer)]
                 : null;
             if (cur != null && upl != null && upl > cur) {
                 throw new Error('deps 结构约束违反：任务 ' + t.id + '（层 ' + String(t.layer)
-                    + '）不得依赖下游层任务 ' + d + '（层 ' + String(up.layer)
+                    + '）不得依赖下游层任务 ' + d + '（层 ' + String(up?.layer)
                     + '）；deps 只许指向**同层或上游层**');
             }
         }
@@ -1087,8 +1087,16 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
     const wavePlan = waves.map((ids, idx) => ({
         wave: idx + 1,
         tasks: ids.map((id) => {
-            // 单点断言：ids 来自 topoWaves(tasks)（同一 tasks 的拓扑序），find 必命中（断言纯类型层）
-            const t = tasks.find((x) => x.id === id);
+            // ids 来自 topoWaves(tasks)（同一 tasks 的拓扑序），理论上必命中；
+            // 但**不得用断言掩盖落空**（R-2）：撤掉 `as WavePlanTaskInput` 后 `find` 返回
+            //   `WavePlanTaskInput | undefined` ⇒ 显式判空并抛**可读**错误。
+            //   仓内**无** `GATE_TASK_NOT_FOUND` 既有约定（实测 0 命中）⇒ 用**普通 Error**，
+            //   **不新造 `GATE_*` 码**（避免另造一套错误码体系）。
+            const tFound = tasks.find((x) => x.id === id);
+            if (!tFound) {
+                throw new Error('wave-plan: task id ' + String(id) + ' is referenced by topoWaves but absent from tasks');
+            }
+            const t = tFound;
             const layer = t.layer ?? undefined;
             // 默认值修正：task 未显式声明 role → 按 layer 取缺省（plan→designer / audit→supervisor / exec→coder；generic 无 layer → null 现状）
             const rawRole = t.role ?? defaultRoleForLayer(layer);
@@ -1142,20 +1150,20 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
             //     `skills` 是**已解析进任务内容**的字段，`assemblyRef` 那类装配表签名才被 D-sig-1 排除）。
             //   · `layer`/`role`：声明/归一化后的规范值（未声明 layer ⇒ null）；`deps/produce/outputs` 逐字保序。
             // ── 【pk-impl】两处声明面归一（`checkpoints` 全软 / `contract` fail-closed）────────────
-            // ⚠ 输入面扩面：`WavePlanTaskInput`（`types/contracts.js`）**未声明**这两个可选键，
-            //   而本批红区只允许改本文件 ⇒ 在此就地交叉扩面（**不是 `any`**：字段类型仍被约束）。
-            const tDecl = t;
-            const checkpointsRef = normalizeCheckpoints(tDecl.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
+            // 【批 `punky-type-assert-purge-20261103`】上批为绕「红区只许改 .ts」而造的 `tDecl`
+            //   **交叉扩面已删除**：`checkpoints` / `contract` 现已在 `WavePlanTaskInput` 正式声明
+            //   ⇒ 直接读 `t.*`，不再需要任何断言（断言只减不增）。
+            const checkpointsRef = normalizeCheckpoints(t.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
             const contractRef = (() => {
-                if (tDecl.contract == null)
+                if (t.contract == null)
                     return null; // 缺省 ⇒ 不写键（读取方按 null 处理，兼容存量批）
-                const cid = tDecl.contract.id;
+                const cid = t.contract.id;
                 if (typeof cid !== 'string' || !cid.trim()) {
                     // 非法 ⇒ **抛**（fail-closed）：契约缺失/非法是安全问题，与 checkpoints 的「全软」不同。
                     // ⚠ 用**普通 Error**，不新造 `GATE_*` 前缀（验收 5）。
                     throw new Error('task ' + t.id + ' contract.id must be a non-empty string');
                 }
-                const sha = tDecl.contract.sha256;
+                const sha = t.contract.sha256;
                 if (sha != null && (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))) {
                     throw new Error('task ' + t.id + ' contract.sha256 must be a 64-char lowercase hex string or null');
                 }

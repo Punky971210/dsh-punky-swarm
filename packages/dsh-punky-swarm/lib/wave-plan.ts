@@ -951,7 +951,7 @@ function checkHandoffDeclarations(tasks: WaveTask[], opts: { smoke?: boolean; ha
   const byId = new Map<string, WaveTask>();
   for (const t of tasks) if (t && typeof t.id === 'string' && t.id.length > 0) byId.set(t.id, t);
   const delivers = (t: WaveTask | undefined): boolean => {
-    const up = t as unknown as { produce?: unknown; outputs?: unknown } | undefined;
+    const up = t;
     const ok = (v: unknown) => Array.isArray(v) && v.some((p) => typeof p === 'string' && p.length > 0);
     return !!up && (ok(up.produce) || ok(up.outputs));
   };
@@ -1004,12 +1004,12 @@ export function validateDepsStructure(tasks: WaveTask[]): void {
           + '` 未在此前声明（只许指向**已声明在先**的任务；这是「不成环」的结构性保证，非断言检查）');
       }
       const up = byId.get(d);
-      const upl = up && (up as unknown as { layer?: unknown }).layer != null
-        ? LIDX[String((up as unknown as { layer?: unknown }).layer)]
+      const upl = up && up.layer != null
+        ? LIDX[String(up?.layer)]
         : null;
       if (cur != null && upl != null && upl > cur) {
         throw new Error('deps 结构约束违反：任务 ' + t.id + '（层 ' + String(t.layer)
-          + '）不得依赖下游层任务 ' + d + '（层 ' + String((up as unknown as { layer?: unknown }).layer)
+          + '）不得依赖下游层任务 ' + d + '（层 ' + String(up?.layer)
           + '）；deps 只许指向**同层或上游层**');
       }
     }
@@ -1146,8 +1146,16 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   const wavePlan: Wave[] = waves.map((ids, idx) => ({
     wave: idx + 1,
     tasks: ids.map((id) => {
-      // 单点断言：ids 来自 topoWaves(tasks)（同一 tasks 的拓扑序），find 必命中（断言纯类型层）
-      const t = tasks.find((x) => x.id === id) as WavePlanTaskInput;
+      // ids 来自 topoWaves(tasks)（同一 tasks 的拓扑序），理论上必命中；
+      // 但**不得用断言掩盖落空**（R-2）：撤掉 `as WavePlanTaskInput` 后 `find` 返回
+      //   `WavePlanTaskInput | undefined` ⇒ 显式判空并抛**可读**错误。
+      //   仓内**无** `GATE_TASK_NOT_FOUND` 既有约定（实测 0 命中）⇒ 用**普通 Error**，
+      //   **不新造 `GATE_*` 码**（避免另造一套错误码体系）。
+      const tFound = tasks.find((x) => x.id === id);
+      if (!tFound) {
+        throw new Error('wave-plan: task id ' + String(id) + ' is referenced by topoWaves but absent from tasks');
+      }
+      const t = tFound;
       const layer = t.layer ?? undefined;
       // 默认值修正：task 未显式声明 role → 按 layer 取缺省（plan→designer / audit→supervisor / exec→coder；generic 无 layer → null 现状）
       const rawRole = t.role ?? defaultRoleForLayer(layer);
@@ -1182,14 +1190,14 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       //   与 `gates.ts` `standaloneVerdict` 的同款断言一致。
       //   取值：非字符串（含缺省）⇒ `null`（与 `targetsMarker` 同风格：缺省落 null 不落 undefined）；
       //   「非空」义务不在建批期判（建批期只判布尔类型；非空 + 无可用上游的语义判据在 entry 门）。
-      const standaloneReason = typeof (t as unknown as { standaloneReason?: unknown }).standaloneReason === 'string'
-        ? ((t as unknown as { standaloneReason?: unknown }).standaloneReason as string)
+      const standaloneReason = typeof t.standaloneReason === 'string'
+        ? t.standaloneReason
         : null;
       // N1-R4-1（K1 公共池）：归属声明——非字符串（含缺省）⇒ `null`（= **在池内**，未派发）。
       //   ⚠ 只作声明面：池 = `owner == null` 的**视图**，不是容器；不引入认领语义，派发仍 Leader 单点。
       // sig 冻结判据（N3-②）与 owner 取值**同源**（单点读取，避免两处各自解释「已派发」）。
-      const ownerDecl = typeof (t as unknown as { owner?: unknown }).owner === 'string'
-        ? ((t as unknown as { owner?: unknown }).owner as string)
+      const ownerDecl = typeof t.owner === 'string'
+        ? t.owner
         : null;
       // 归一化产物（下面是 sig 的**哈希输入面**与持久面同一份值——顺序约束：先归一化、后取 sig 输入）：
       //   · `cmd` = `assembleCmd` 产物（`[role=…] [skills=…] <原文>`）——**持久形态里的 `cmd` 就是它**；
@@ -1200,22 +1208,19 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       //     `skills` 是**已解析进任务内容**的字段，`assemblyRef` 那类装配表签名才被 D-sig-1 排除）。
       //   · `layer`/`role`：声明/归一化后的规范值（未声明 layer ⇒ null）；`deps/produce/outputs` 逐字保序。
       // ── 【pk-impl】两处声明面归一（`checkpoints` 全软 / `contract` fail-closed）────────────
-      // ⚠ 输入面扩面：`WavePlanTaskInput`（`types/contracts.js`）**未声明**这两个可选键，
-      //   而本批红区只允许改本文件 ⇒ 在此就地交叉扩面（**不是 `any`**：字段类型仍被约束）。
-      const tDecl = t as WavePlanTaskInput & {
-        checkpoints?: unknown;
-        contract?: { id?: unknown; sha256?: unknown } | null;
-      };
-      const checkpointsRef = normalizeCheckpoints(tDecl.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
+      // 【批 `punky-type-assert-purge-20261103`】上批为绕「红区只许改 .ts」而造的 `tDecl`
+      //   **交叉扩面已删除**：`checkpoints` / `contract` 现已在 `WavePlanTaskInput` 正式声明
+      //   ⇒ 直接读 `t.*`，不再需要任何断言（断言只减不增）。
+      const checkpointsRef = normalizeCheckpoints(t.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
       const contractRef: ContractRef | null = ((): ContractRef | null => {
-        if (tDecl.contract == null) return null; // 缺省 ⇒ 不写键（读取方按 null 处理，兼容存量批）
-        const cid = tDecl.contract.id;
+        if (t.contract == null) return null; // 缺省 ⇒ 不写键（读取方按 null 处理，兼容存量批）
+        const cid = t.contract.id;
         if (typeof cid !== 'string' || !cid.trim()) {
           // 非法 ⇒ **抛**（fail-closed）：契约缺失/非法是安全问题，与 checkpoints 的「全软」不同。
           // ⚠ 用**普通 Error**，不新造 `GATE_*` 前缀（验收 5）。
           throw new Error('task ' + t.id + ' contract.id must be a non-empty string');
         }
-        const sha = tDecl.contract.sha256;
+        const sha = t.contract.sha256;
         if (sha != null && (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))) {
           throw new Error('task ' + t.id + ' contract.sha256 must be a 64-char lowercase hex string or null');
         }
@@ -1260,13 +1265,13 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
         //   本批把声明面**接通**：声明 `true` 的 lane 经建批后于批次 JSON 内**可见**，派发时即可走显式抑制支。
         //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移；与 `roster` 同款处置）。
         //   ⚠ **不改变抑制语义本身**（`composeWorkerPrompt` 内「audit 层 + 写盘面恰一件」的**自动判定**保留）。
-        singleArtifactWrite: (t as unknown as { singleArtifactWrite?: unknown }).singleArtifactWrite === true,
+        singleArtifactWrite: t.singleArtifactWrite === true,
         // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1 开工前必做 · 四段声明
         //   **归一化恒写**（缺省/非法形态 ⇒ `null`，与 `targetsMarker` 同风格：不落 `undefined`）。
         //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
         //   **不回写 `skills`**（D3：第三条渲染通道，与装配声明 `[skills=…]` / role 三段并存不合并）。
         //   ⚠ 归一化**零 throw**（全软）：形态不合法只降级，不拒建批、不打任何门禁码。
-        preflight: normalizePreflight((t as unknown as { preflight?: unknown }).preflight),
+        preflight: normalizePreflight(t.preflight),
         // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
         //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
         //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）
