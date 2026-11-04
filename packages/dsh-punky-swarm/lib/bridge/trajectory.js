@@ -201,9 +201,14 @@ export function createTrajectoryBridge(ctx, deps) {
     if (subscribed && detach) {
       try { detach(); } catch {}
     }
-    if (subscribed && typeof ctx?.off === 'function') {
-      // 兼容 ctx.on 未返回退订函数、仅提供 off 的宿主
-      try { ctx.off(ANOMALY_EVENT); } catch {}
+    if (subscribed) {
+      // 兼容 ctx.on 未返回退订函数、仅提供 off 的宿主。
+      // cordis 4.1 起 Context 经 Proxy 拦截属性读取：未 inject 的键取值即抛
+      // `cannot get property "off" without inject`，`typeof` 无法免疫 ——
+      // 故探测本身必须包在 try 内，否则 stop() 会抛穿宿主。
+      try {
+        if (typeof ctx?.off === 'function') ctx.off(ANOMALY_EVENT);
+      } catch {}
     }
     subscribed = false;
     detach = null;
