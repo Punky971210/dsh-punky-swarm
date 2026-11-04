@@ -36,6 +36,9 @@ const files = [
   'state/gates/handoff.js', 'state/gates/handoff.d.ts',
   'wave-plan.js', 'wave-plan.d.ts',
   'types/contracts.js', 'types/contracts.d.ts',
+  // 【批 `punky-type-assert-purge-20261103`】新增类型守卫模块：`wave-plan.ts` 在**运行期** import 它
+  //   ⇒ 必须进回拷清单，否则 build 只编 `.ts` 不产 `.js` ⇒ 运行期 ERR_MODULE_NOT_FOUND。
+  'types/guards.js', 'types/guards.d.ts',
   'governance/types.js', 'governance/types.d.ts',
   'governance/decisions.js', 'governance/decisions.d.ts',
   'governance/classify.js', 'governance/classify.d.ts',

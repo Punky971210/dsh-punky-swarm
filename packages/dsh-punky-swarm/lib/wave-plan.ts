@@ -44,6 +44,10 @@ import { BLIND_REVIEW_ROLES } from './assembly/schema.js';
 //   无环证明：`lib/**` 内导入 `wave-plan.js` 的只有 `lib/tools/core.js`（不在 gates.ts 的导入图内）。
 import { presenceJudge, declaredKindOf } from './state/gates.js';
 import { isAbsPath } from './state/constants.js'; // 单点（自有实现收敛改 import）
+// 【批 `punky-type-assert-purge-20261103`】类型守卫：替代 6 处 `Array.isArray(x) ? (x as …) : []`
+//   里「靠断言补元素类型」的写法 —— `Array.isArray` 只窄化到 `any[]`，元素类型仍由断言声明；
+//   谓词把「是数组**且**元素全是字符串」一次判掉 ⇒ 断言消失且元素类型由运行时真实保证。
+import { isStringArray } from './types/guards.js';
 // sig 任务内容指纹（N3-②）：唯一计算入口就在本函数（建批全量算；`addPoolTasks`/`addTaskEdges`
 //   经同一次重归一化分别做「新任务补算」「受影响任务重算」）；读端口径 `sigOf` 同为该模块单点。
 import { computeTaskSig, sigOf } from './sig-fingerprint.js';
@@ -642,7 +646,7 @@ type TaskArrayField = 'consume' | 'produce' | 'outputs';
 export function declaredArtifactsOf(t: WaveTask): string[] {
   const out: string[] = [];
   for (const field of ['produce', 'outputs'] as TaskArrayField[]) {
-    for (const p of (t[field] ?? []) as string[]) {
+    for (const p of isStringArray(t[field]) ? t[field] : []) {
       if (typeof p === 'string' && p.trim().length > 0 && !out.includes(p)) out.push(p);
     }
   }
@@ -657,7 +661,7 @@ export function declaredArtifactsOf(t: WaveTask): string[] {
 function orphanPlanProductsOf(tasks: WaveTask[]): string[] {
   const consumed = new Set<string>();
   for (const t of tasks) {
-    for (const c of (t.consume ?? []) as string[]) if (typeof c === 'string') consumed.add(c);
+    for (const c of t.consume ?? []) if (typeof c === 'string') consumed.add(c);
   }
   const orphans: string[] = [];
   for (const t of tasks) {
@@ -745,8 +749,8 @@ export function consumeDepsAsymmetryOf(tasks: WaveTask[]): ConsumeDepsAsymmetryR
   const rows: ConsumeDepsAsymmetryRow[] = [];
   for (const l of tasks) {
     const lLayer = (l as WavePlanTask).layer ?? null;
-    const deps = new Set<string>(Array.isArray(l.deps) ? (l.deps as string[]) : []);
-    for (const c of (l.consume ?? []) as string[]) {
+    const deps = new Set<string>(isStringArray(l.deps) ? l.deps : []);
+    for (const c of l.consume ?? []) {
       if (typeof c !== 'string' || c.trim().length === 0) continue;
       for (const d of declared) {
         if (d.id === l.id) continue;        // 自消费不构成边（不判，与「deps 不得自指」同族）
@@ -958,7 +962,7 @@ function checkHandoffDeclarations(tasks: WaveTask[], opts: { smoke?: boolean; ha
   const gaps: string[] = [];
   for (const t of tasks) {
     if (!t || typeof t.id !== 'string') continue;
-    const deps: string[] = Array.isArray(t.deps) ? (t.deps as string[]) : [];
+    const deps: string[] = isStringArray(t.deps) ? t.deps : [];
     for (const d of deps) {
       if (typeof d !== 'string' || d.length === 0) continue;
       if (d === t.id) continue;                 // 自指由 topoWaves 报（同一家族）
@@ -991,7 +995,7 @@ export function validateDepsStructure(tasks: WaveTask[]): void {
   for (const t of tasks) {
     if (!t || typeof t.id !== 'string' || !t.id) continue;
     const cur = t.layer == null ? null : LIDX[String(t.layer)];
-    for (const d of Array.isArray(t.deps) ? (t.deps as string[]) : []) {
+    for (const d of isStringArray(t.deps) ? t.deps : []) {
       if (typeof d !== 'string' || !d) continue;
       // 分工（**不抢答**既有判据，与 `checkHandoffDeclarations` 同纪律）：
       //   · 自指 ⇒ 由 `topoWaves` 报（cycle detected）
@@ -1163,9 +1167,13 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       const role = normalizeRole(rawRole, extraRoles) ?? rawRole;
       let skills = t.skills;
       // 装配补全（可插拔）：未显式声明 skills 时，按 team 装配表的 role → skills 补全（assembly 可选）
-      // layer 为 Layer|undefined：undefined 时索引装配表 miss（JS 属性键字符串化语义一致），断言仅类型层
-      if (assembly && role && skills === undefined) {
-        const entry = assembly?.layers?.[layer as Layer]?.skills?.[role];
+      // layer 为 Layer|undefined：undefined 时索引装配表 miss（JS 属性键字符串化语义一致）
+      // 【批 `punky-type-assert-purge-20261103`】原「`layer` 断言成 `Layer`」由**守卫收窄**替代：
+      //   下方条件加 `layer !== undefined` ⇒ TS 自行窄化，断言消失。
+      //   ⚠ 行为等价：原实现 `layers[undefined]` 取到 undefined（属性访问键字符串化后 miss），
+      //     与本守卫「直接不进分支」同结果。
+      if (assembly && role && skills === undefined && layer !== undefined) {
+        const entry = assembly?.layers?.[layer]?.skills?.[role];
         if (entry) skills = entry;
       }
       // condition 结构 + 路径校验（对所有任务，含 generic），fail-closed 拒建批
