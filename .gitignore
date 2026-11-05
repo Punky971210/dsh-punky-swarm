@@ -50,6 +50,12 @@ CONTRIBUTING.md
 packages/dsh-punky-swarm/docs/**
 !packages/dsh-punky-swarm/docs/integrations/
 #
+# ⚠ 用户文档例外（2026-11-05）：安装/交付类文档必须入库 —— 否则既不在 git（.gitignore:50）、
+#   也不在 npm 包（package.json 的 files 里无 docs）⇒ 两处都丢，用户拿不到安装指引。
+#   只放行这两个文件，其余 docs/ 仍按「包内 docs 不入库」的既有约定处理。
+!packages/dsh-punky-swarm/docs/install.md
+!packages/dsh-punky-swarm/docs/plugin-install-and-packages.md
+#
 # ⚠ 例外 —— 以下文档**必须保留在仓库内**（故显式反取回）：
 #   test/integration-comfyui-glue.test.js 直接读盘它们做「声明文档防漂移」断言，
 #   移出会让 CI 直接红（实测：A2-1 missing declaration doc: docs/integrations/comfyui-glue.md）。
