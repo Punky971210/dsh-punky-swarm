@@ -508,11 +508,6 @@ test('RS-11b [D7 守恒/§6.2] 终态结算仍清退豁免；显式撤销入口�
   store.setMember(S, batchId, 'l-a', 'running', null, { type: 'ai-render' });
   store.setMember(S, batchId, 'l-a', 'failed');
   assert.equal(store.readBatch(S, batchId).laneExempt?.['l-a'], undefined, '§6.2 守恒：结算终态仍清退豁免（免残留到后续批次读端）');
-  // (b) 显式撤销入口不变（store.revokeLaneExempt = 唯一显式撤销入口）
-  store.setMember(S, batchId, 'l-b', 'running', null, { type: 'large-download' });
-  assert.ok(store.readBatch(S, batchId).laneExempt?.['l-b'], '（前件）l-b 已获豁免');
-  store.revokeLaneExempt(S, batchId, 'l-b');
-  const b2 = store.readBatch(S, batchId);
-  assert.equal(b2.laneExempt?.['l-b'], undefined, '§6.2 守恒：显式撤销仍生效');
-  assert.equal(b2.events.filter((e) => e.type === 'lane.exempt.revoked' && e.lane === 'l-b').length, 1, '§6.2 守恒：显式撤销仍写 lane.exempt.revoked 留痕');
+  // 【P1 · 2026-11-05】**原 (b) 显式撤销入口子段已删** —— `store.revokeLaneExempt` 随撤销面整体移除
+  //   （用户裁决「删掉 revokeExempt」）。(a) 的「结算终态仍清退」是独立语义（design §6.2），保留。
 });

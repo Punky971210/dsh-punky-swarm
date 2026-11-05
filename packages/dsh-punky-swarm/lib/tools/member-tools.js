@@ -173,8 +173,8 @@ export function buildMemberStatusTools(cx) {
     //   （不得反向修：把 `idle` 做成可设 = 动迁移表语义，属另一批）。
     defineTool({
       name: "member_status",
-      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；`idle` 只能由恢复/回收进入（不许经 member_status 设置）——故 `status` 闭集不含 `idle`，`idle -> running` 的恢复重派仍照旧可用；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）；revokeExempt=true 为显式撤销（本条不得再带 status，撤销不改成员状态）。终态结算请用 member_settle。批次按会话隔离。',
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","enum":["pending","running","review"],"description":"目标成员态（**不含 `idle`**：该态只能由恢复/回收经单点入口进入，经本工具设置必被状态机拒）；revokeExempt=true 时不得携带（撤销是独立显式动作）"},"session":{"type":"string","description":"批次归属会话"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（仅 status=running 时允许出现；缺省 undefined = 无豁免意图）。type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4），未知 type 拒 GATE_EXEMPT_TYPE_UNKNOWN；multiplier 可选显式倍率 [1,100]，非法拒 GATE_EXEMPT_INVALID；stalled 可选（缺省 true）= 是否同时豁免 heartbeat stalled 追问","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}},"revokeExempt":{"type":"boolean","description":"显式撤销该 lane 的 longrun 豁免（不改成员状态）；与 status 不得并用（并用 → GATE_EXEMPT_NOT_DISPATCH）；lane 无既有豁免 → GATE_EXEMPT_REVOKE_REQUIRED"}},
+      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；`idle` 只能由恢复/回收进入（不许经 member_status 设置）——故 `status` 闭集不含 `idle`，`idle -> running` 的恢复重派仍照旧可用；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）。终态结算请用 member_settle。批次按会话隔离。',
+      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","enum":["pending","running","review"],"description":"目标成员态（**不含 `idle`**：该态只能由恢复/回收经单点入口进入，经本工具设置必被状态机拒）"},"session":{"type":"string","description":"批次归属会话"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（仅 status=running 时允许出现；缺省 undefined = 无豁免意图）。type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4），未知 type 拒 GATE_EXEMPT_TYPE_UNKNOWN；multiplier 可选显式倍率 [1,100]，非法拒 GATE_EXEMPT_INVALID；stalled 可选（缺省 true）= 是否同时豁免 heartbeat stalled 追问","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},  // 【已删 · 2026-11-05】原 `revokeExempt` 参数（撤销 longrun 豁免）随撤销面整体移除
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' status -> ' + value.status),
@@ -182,19 +182,13 @@ export function buildMemberStatusTools(cx) {
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1（Q2=B 收窄）：写成员状态 = 调用方自己 C 档，或该批已登记的 Manager
-        // 撤销与派发两条面互斥（R-5/R-6）：撤销是独立显式动作，携带 status 即拒（零写入）。
-        // 撤销走 store.revokeLaneExempt（唯一入口）：删 laneExempt 条目 + lane.exempt.revoked 事件，
-        // **不改成员状态**（不写 member.settled），故不进入任何迁移判定。
-        if (args.revokeExempt === true) {
-          if (args.status !== undefined) {
-            throw new Error('GATE_EXEMPT_NOT_DISPATCH: revokeExempt 与 status 不得并用（撤销是独立的显式动作，不接受状态迁移）');
-          }
-          const rb = store.revokeLaneExempt(sessionId, args.batchId, args.lane);
-          return { batchId: args.batchId, lane: args.lane, status: rb.lanes[args.lane], settled: store.batchSettled(rb) };
-        }
-        // status 在「撤销」路径之外仍为必填（参数表因撤销面放开 required，缺省在此补同族门禁）
+        // 【已删 · 2026-11-05 · 勿回加】原 `revokeExempt` 分支（撤销 longrun 豁免）整体移除。
+        //   用户裁决：「删掉 revokeExempt」（未裁决的需求漂移）。撤销面已从工具参数、store、事件、拒码全链清除。
+        //   ⇒ 本工具现在只剩「状态迁移」一条路径，`status` 因此可以干净必填（P2 落地时移入 schema required）。
+        //
+        // status 仍为必填：参数表暂未把 status 放进父层 required（P2 的活），缺省在此补同族门禁。
         if (args.status === undefined) {
-          throw new Error('GATE_EXEMPT_NOT_DISPATCH: 须给出 status（非终态迁移），或 revokeExempt=true（显式撤销豁免）');
+          throw new Error('GATE_EXEMPT_NOT_DISPATCH: 须给出 status（非终态迁移）');
         }
         // 【已删 · 勿回加】原「并发闸（批级容量准入）」段（段头注释 + `assertConcurrencyAdmit` 调用）随
         //   并发闸已取消：`member_status(status='running')` 直派面

@@ -339,7 +339,7 @@ function composeStore(cx) {
     setMember, setPhase, appendEvent, claimAsset,
     commitBatchLocked, // I-26：锁内校验 + 锁内落盘的唯一入口（只调用 withBatchRowLock，不自建锁）
     addPoolTasks, addTaskEdges,
-    recordHandoff, recordHandoffAccept, markManagerRaised, revokeLaneExempt, recordGovernanceRefusal,
+    recordHandoff, recordHandoffAccept, markManagerRaised, recordGovernanceRefusal,
     declaredInboundEdgesOf, // 【G-10 · e3-toolface】门禁侧「已声明入边」单点（只读透出，见下方导出注释）
     readChains, updateChains, updateLaneProgress,
     batchSettled, batchAutoReleaseable,
@@ -394,7 +394,7 @@ function composeStore(cx) {
     //   本键即 `lib/state/gates.ts` 透出的**同一函数实例**（红线 C-4 单点判定：视图与门禁同源，禁第二套）。
     declaredInboundEdgesOf: gates.declaredInboundEdgesOf,
     markManagerRaised, // Manager 拉起登记唯一入口（批 event + 批字段，不改成员状态）
-    revokeLaneExempt, // longrun 豁免撤销唯一入口（显式调用；不改成员状态）
+    // 【已删 · 2026-11-05】`revokeLaneExempt`（longrun 豁免撤销唯一入口）随撤销面整体移除（用户裁决「删掉 revokeExempt」）
     recordGovernanceRefusal, // 违规计数记录 + 窗口评估 + 升级（批事件流单一事实源）
     readChains, updateChains, updateLaneProgress, // laneProgress 断点指针持久化
     batchSettled, batchAutoReleaseable,

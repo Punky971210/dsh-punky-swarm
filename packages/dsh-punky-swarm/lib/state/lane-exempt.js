@@ -52,7 +52,8 @@ export const EXEMPT_GATE_CODES = {
   NOT_DISPATCH: 'GATE_EXEMPT_NOT_DISPATCH',       // exempt 出现在 to!=='running'；或 revoke 与 status 并用
   INVALID: 'GATE_EXEMPT_INVALID',                 // 载荷结构非法（非对象 / type 非非空字符串 / multiplier 越界或非有限数 / stalled 非布尔）
   TYPE_UNKNOWN: 'GATE_EXEMPT_TYPE_UNKNOWN',       // type 不在白名单
-  REVOKE_REQUIRED: 'GATE_EXEMPT_REVOKE_REQUIRED', // revokeExempt 但该 lane 无既有豁免（撤销只能对已授予豁免生效）
+  // 【已删 · 2026-11-05】原 `REVOKE_REQUIRED: 'GATE_EXEMPT_REVOKE_REQUIRED'`（撤销面专用拒码）
+  //   随撤销面整体移除（用户裁决「删掉 revokeExempt」；该码只在 revokeLaneExempt 内抛，函数已删 ⇒ 不可达）
 };
 
 // 豁免类型 → 档位默认倍率（未知类型返回 null，由调用方抛 GATE_EXEMPT_TYPE_UNKNOWN；不静默兜底）

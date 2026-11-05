@@ -30,42 +30,17 @@ const EVT_LANE_EXEMPT_INHERITED = EVT.EVT_LANE_EXEMPT_INHERITED;
 export function buildMemberExempt(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
 
-  // longrun 长程豁免：撤销唯一入口（显式调用，不改成员状态）。
-  // 与 setMember **互斥**（工具层已保证两者不得并用：revokeExempt 携带 status → GATE_EXEMPT_NOT_DISPATCH）；
-  // 契约：`laneExempt` 无该 lane → 拒 GATE_EXEMPT_REVOKE_REQUIRED（撤销只能由显式调用产生，不可隐式产生）；
-  // 成功 → 删条目（表空则整键删除，保持「无值不写键」）+ 同一次 atomicWrite 追加 lane.exempt.revoked。
-  function revokeLaneExempt(sessionId, batchId, lane) {
-    const batch = readBatch(sessionId, batchId);
-    if (!batch) throw new Error('batch not found: ' + batchId);
-    if (!(lane in batch.lanes)) throw new Error('unknown lane: ' + lane);
-    const grant = batch.laneExempt?.[lane];
-    if (!grant) {
-      throw new Error(EXEMPT_GATE_CODES.REVOKE_REQUIRED
-        + ': lane ' + lane + ' 无既有豁免（撤销须显式调用，且仅对已授予豁免的 lane 有效；无豁免可撤 → 不产生任何写入）');
-    }
-    const next = { ...batch.laneExempt };
-    delete next[lane];
-    // 表空 → 整键删除（不在批次 JSON 留下空对象噪音，旧批/非豁免批形态保持一致）
-    if (Object.keys(next).length === 0) delete batch.laneExempt;
-    else batch.laneExempt = next;
-    const revokedAt = new Date().toISOString();
-    batch.events.push(newEvent(EVT.EVT_LANE_EXEMPT_REVOKED, {
-      lane,
-      exemptType: grant.type,
-      multiplier: grant.multiplier,
-      at: revokedAt,
-      grantedAt: grant.grantedAt,
-    }));
-    // D7 次选留痕（与 revoked **同一事实、同一时刻、同一次写盘**）：显式撤销 = 「清退」的动作面，
-    //   revoked 记「谁做的动作」、cleared 记「清退这一状态变化」——读端 `exemptClearedAtOf`（e1 探针）
-    //   据此把清退时间透出为 `exemptClearedAt`，使「撤销后重新计时」可见。
-    //   两者**不合并**：revoked 是豁免撤销的专用事件（既有读端），cleared 是通用清退留痕（含 D7 次选语义）。
-    batch.events.push(newEvent(EVT_LANE_EXEMPT_CLEARED, { lane, clearedAt: revokedAt, reason: 'explicit-revoke' }));
-    batch.laneExemptCleared = { ...(batch.laneExemptCleared ?? {}), [lane]: revokedAt };
-    batch.updatedAt = new Date().toISOString();
-    commitBatch(sessionId, batchId, batch);
-    return batch;
-  }
+  // 【已删 · 2026-11-05 · 勿回加】`revokeLaneExempt`（longrun 豁免的显式撤销入口）整体移除。
+  //   用户裁决：「删掉 revokeExempt」（认定这是未裁决的需求漂移 —— 蓝图零记录，是实现者自行加的能力）。
+  //   连带移除：`lane.exempt.revoked` 事件常量与产生点、`GATE_EXEMPT_REVOKE_REQUIRED` 拒码、工具面参数。
+  //
+  //   ⚠ **`lane.exempt.cleared` 保留，不是它的残留**：`cleared` 有独立的非撤销产生路径
+  //     （下方 `laneExemptClear` 的「清退」），且有三处运行期读端：
+  //       · `lane-heartbeat.js` 的 `exemptClearedAtOf`（`p2-dead-verify.test.js:152` 断言「删它就是删功能」）
+  //       · `longrun.js` 的 `exemptClearedAtMs`（长跑候选计算）
+  //       · `state-surface.js` 的状态面透出
+  //     另有 `gate-techdebt-red.test.js:374` 断言历史事件名逐字仍在。
+  //   ⇒ 撤销面删掉后，「清退留痕」仍由 `laneExemptClear` 产生，语义不受影响。
 
   // longrun 豁免清退（纯函数，返回新 batch）：豁免是「本次派发」的属性，不是 lane 的长期属性。
   // 调用点：① 结算终态（批次归档前清理）② 显式撤销后的兜底清退。**默认仍静默**
@@ -150,5 +125,7 @@ export function buildMemberExempt(cx) {
     return batch;
   }
 
-  return { revokeLaneExempt, laneExemptClear, applyLaneExemptOnDispatch };
+  // 【P1 · 批 `punky-u3-rename-drop-20261105`】撤销面已删 ⇒ `revokeLaneExempt` 不再导出。
+  //   ⚠ `laneExemptClear`（清退）与 `applyLaneExemptOnDispatch`（派发面授予）**保留不动**。
+  return { laneExemptClear, applyLaneExemptOnDispatch };
 }

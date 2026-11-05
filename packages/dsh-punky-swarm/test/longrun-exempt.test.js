@@ -44,7 +44,9 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
 import { LANE_EXEMPT_TYPES, LANE_EXEMPT_TIERS, EXEMPT_GATE_CODES, tierMultiplierOf, validateExemptPayload, normalizeExemptPayload } from '../lib/state/lane-exempt.js';
-import { EVT_LANE_EXEMPT_GRANTED, EVT_LANE_EXEMPT_REVOKED, EVT_MEMBER_SETTLED } from '../lib/state/event-types.js';
+import { EVT_LANE_EXEMPT_GRANTED, EVT_MEMBER_SETTLED } from '../lib/state/event-types.js';
+// 【P1 · 2026-11-05】**去掉了 `EVT_LANE_EXEMPT_REVOKED` 的导入** —— 撤销面已整体移除（用户裁决「删掉 revokeExempt」）。
+//   `EVT_LANE_EXEMPT_CLEARED` 保留（有独立读端：exemptClearedAtOf → longrun → state-surface）。
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
 
 const S = 'sess-ex';
@@ -184,7 +186,7 @@ test('EX-A6: 无 exempt 的既有派发零变化（不含 laneExempt 键、无 l
   const raw = JSON.parse(fs.readFileSync(store.batchFile(S, 'b-a6'), 'utf8'));
   assert.equal(Object.prototype.hasOwnProperty.call(raw, 'laneExempt'), false);
   assert.equal(eventsOf(store, 'b-a6', EVT_LANE_EXEMPT_GRANTED).length, 0);
-  assert.equal(eventsOf(store, 'b-a6', EVT_LANE_EXEMPT_REVOKED).length, 0);
+  assert.equal(eventsOf(store, 'b-a6', 'lane.exempt.revoked').length, 0);  // 撤销面已删（用字面量，不再引常量）
   const settled = eventsOf(store, 'b-a6', EVT_MEMBER_SETTLED);
   assert.equal(settled.length, 1);
   assert.deepEqual(settled[0], { ts: settled[0].ts, type: 'member.settled', lane: 'l1', from: 'pending', to: 'running', note: null });
@@ -276,55 +278,6 @@ test('EX-B11: 未知 type → GATE_EXEMPT_TYPE_UNKNOWN，错误文本含合法�
 
 // ── C. 撤销（显式调用）──
 
-test('EX-C12: 显式撤销成功 → 条目消失（表空整键删除）+ 恰一条 lane.exempt.revoked', () => {
-  const { store } = setup();
-  mkBatch(store, 'b-c12');
-  store.setMember(S, 'b-c12', 'l1', 'running', null, { type: 'ai-render', multiplier: 3 });
-  const before = store.readBatch(S, 'b-c12');
-  const b = store.revokeLaneExempt(S, 'b-c12', 'l1');
-  assert.equal(Object.prototype.hasOwnProperty.call(b, 'laneExempt'), false, '最后一条撤销后 laneExempt 整键删除');
-  const rs = eventsOf(store, 'b-c12', EVT_LANE_EXEMPT_REVOKED);
-  assert.equal(rs.length, 1);
-  assert.equal(rs[0].lane, 'l1');
-  assert.equal(rs[0].exemptType, 'ai-render');
-  assert.equal(rs[0].multiplier, 3);
-  assert.equal(rs[0].grantedAt, before.laneExempt.l1.grantedAt); // 可回溯到授予时刻
-  assert.ok(!Number.isNaN(Date.parse(rs[0].at)), 'revoked.at 须为可解析时间戳：' + rs[0].at);
-});
-
-test('EX-C12b: 多 lane 场景下撤销其中一个 → 表保留另一条（不误删）', () => {
-  const { store } = setup();
-  mkBatch(store, 'b-c12b', ['l1', 'l2']);
-  store.setMember(S, 'b-c12b', 'l1', 'running', null, { type: 'ai-render' });
-  store.setMember(S, 'b-c12b', 'l2', 'running', null, { type: 'large-download' });
-  const b = store.revokeLaneExempt(S, 'b-c12b', 'l1');
-  assert.deepEqual(Object.keys(b.laneExempt), ['l2']);
-  assert.equal(b.laneExempt.l2.multiplier, 6);
-});
-
-test('EX-C13: lane 无既有豁免 → GATE_EXEMPT_REVOKE_REQUIRED（撤销只能对已授予生效）', () => {
-  const { store } = setup();
-  mkBatch(store, 'b-c13');
-  store.setMember(S, 'b-c13', 'l1', 'running'); // 无豁免
-  assert.throws(() => store.revokeLaneExempt(S, 'b-c13', 'l1'), /GATE_EXEMPT_REVOKE_REQUIRED/);
-  assert.equal(eventsOf(store, 'b-c13', EVT_LANE_EXEMPT_REVOKED).length, 0);
-  // 未知 lane 仍是既有的 unknown lane 语义（不误报为 REVOKE_REQUIRED）
-  assert.throws(() => store.revokeLaneExempt(S, 'b-c13', 'nope'), /unknown lane/);
-});
-
-test('EX-C15: 撤销不改成员状态（lanes 不变、无新增 member.settled、无 lane.exempt.granted）', () => {
-  const { store } = setup();
-  mkBatch(store, 'b-c15');
-  store.setMember(S, 'b-c15', 'l1', 'running', null, { type: 'ai-render' });
-  const settledBefore = eventsOf(store, 'b-c15', EVT_MEMBER_SETTLED).length;
-  const b = store.revokeLaneExempt(S, 'b-c15', 'l1');
-  assert.equal(b.lanes.l1, 'running');
-  assert.equal(eventsOf(store, 'b-c15', EVT_MEMBER_SETTLED).length, settledBefore, '撤销不得新增 member.settled');
-  assert.equal(eventsOf(store, 'b-c15', EVT_LANE_EXEMPT_GRANTED).length, 1, '撤销不得新增授予事件');
-});
-
-// ── 工具面（J38/J39 + C14）──
-
 test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与顺序不变（总数面权威见 test/tools.test.js 冻结名单）', () => {
   const { store, root } = setup();
   const { byName } = toolsFixture(root, store);
@@ -335,19 +288,22 @@ test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与�
   // defineTool 归一化后：parameters = { type:'object', properties:{...}, required:[...] }（声明顺序即 Object.keys 顺序）
   // 【2026-10-31 S3 · 声明层增键】`sourceRunId` 由 S3 声明层统一加入（非必填）⇒ 冻结清单**加一键**，
   //   既有 6 键与顺序**逐字不变**；仍是精确 deepEqual（未放宽为「包含 / ≥N」）。
+  // 【P1 · 2026-11-05】`revokeExempt` 参数随撤销面整体移除（用户裁决「删掉 revokeExempt」）
+  //   ⇒ 冻结清单从 7 键减为 6 键；`exempt`（授予面）原样保留。
   assert.deepEqual(Object.keys(ms.parameters.properties),
-    ['sourceRunId', 'batchId', 'lane', 'status', 'session', 'exempt', 'revokeExempt'],
-    'member_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）');
+    ['sourceRunId', 'batchId', 'lane', 'status', 'session', 'exempt'],
+    'member_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）；revokeExempt 已删');
   assert.equal(ms.parameters.properties.exempt.type, 'object');
-  assert.equal(ms.parameters.properties.revokeExempt.type, 'boolean');
   assert.deepEqual(ms.parameters.properties.exempt.properties.type.enum, LANE_EXEMPT_TYPES);
-  assert.ok(!ms.parameters.required.includes('status'), 'status 为撤销路径放开 required（无 status 亦可调用 revokeExempt）');
+  // ⚠ 下面这条断言归 **P2**（U-3 的 status 必填化）—— P1 只删撤销面，status 仍是可选，
+  //   所以「!includes('status')」当前仍成立（不红）；P2 落地时这条要改成 includes。
+  assert.ok(!ms.parameters.required.includes('status'), 'status 为撤销路径放开 required（P2 前保持；撤销面已删，P2 将改为必填）');
   assert.ok(!ms.parameters.required.includes('exempt'));
   // member_settle 调用点仍 5 参（`lib/tools/core.js` 未改）：参数面无 exempt 键
   assert.equal(Object.prototype.hasOwnProperty.call(byName.member_settle.parameters.properties, 'exempt'), false);
 });
 
-test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / revokeExempt 撤销 / 旧调用零变化', async () => {
+test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零变化 / 非派发面拒', async () => {
   const { store, root } = setup();
   mkBatch(store, 'b-j39', ['l1', 'l2', 'l3']);
   const { byName, EXEC_SESS } = toolsFixture(root, store, S);
@@ -357,15 +313,15 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / revokeExempt
   assert.equal(r1.status, 'running');
   assert.equal(store.readBatch(S, 'b-j39').laneExempt.l1.multiplier, 8);
 
-  // ② 撤销：revokeExempt=true（不带 status）
-  const r2 = await byName.member_status.execute({ batchId: 'b-j39', lane: 'l1', revokeExempt: true }, EXEC_SESS);
-  assert.equal(r2.status, 'running'); // 撤销不改变成员状态，仅回报当前态
-  assert.equal(Object.prototype.hasOwnProperty.call(store.readBatch(S, 'b-j39'), 'laneExempt'), false);
+  // 【P1 · 2026-11-05】**原 ② 撤销子段已删** —— `revokeExempt` 随撤销面整体移除（用户裁决「删掉 revokeExempt」）。
+  //   授予面（①）与旧调用面（③）保留，豁免的「授予 → 迁移」语义不受影响。
 
   // ③ 旧调用（不带 exempt）：与今日行为一致
   const r3 = await byName.member_status.execute({ batchId: 'b-j39', lane: 'l2', status: 'running' }, EXEC_SESS);
   assert.equal(r3.status, 'running');
-  assert.equal(Object.prototype.hasOwnProperty.call(store.readBatch(S, 'b-j39'), 'laneExempt'), false);
+  // 【P1 修正 · 2026-11-05】原断言「整个 laneExempt 不存在」依赖已被删的 ② 撤销子段（它把 l1 的豁免删了）。
+  //   撤销面移除后 l1 的豁免仍在 ⇒ 改为断言**本 lane（l2）未被写入豁免**，语义更准且不依赖撤销。
+  assert.equal(Object.prototype.hasOwnProperty.call(store.readBatch(S, 'b-j39').laneExempt ?? {}, 'l2'), false);
 
   // ④ 非派发面带 exempt（工具面）→ 拒
   await assert.rejects(
@@ -373,21 +329,12 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / revokeExempt
     /GATE_EXEMPT_NOT_DISPATCH/,
   );
 
-  // ⑤ revokeExempt 与 status 并用 → 拒（零写入）
-  const before = fs.readFileSync(store.batchFile(S, 'b-j39'), 'utf8');
-  await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l3', status: 'running', revokeExempt: true }, EXEC_SESS),
-    /GATE_EXEMPT_NOT_DISPATCH/,
-  );
-  assert.equal(fs.readFileSync(store.batchFile(S, 'b-j39'), 'utf8'), before);
-
-  // ⑥ 无既有豁免撤销（工具面）→ REVOKE_REQUIRED
-  await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l3', revokeExempt: true }, EXEC_SESS),
-    /GATE_EXEMPT_REVOKE_REQUIRED/,
-  );
+  // 【P1 · 2026-11-05】**原 ⑤（revokeExempt 与 status 并用 → 拒）与 ⑥（无既有豁免撤销 → REVOKE_REQUIRED）已删**
+  //   —— `revokeExempt` 参数本身不存在了，这两个分支在工具面不可达。
 
   // ⑦ 既无 status 也无 revokeExempt → 拒（参数表放开 required 后的补齐门禁）
+  //   【P2 提示】撤销面已删 ⇒ 这条现在只剩「缺 status」一个语义；P2 把 status 移入 schema required 后，
+  //   本断言应改为「schema 层拒」（而非运行时 throw）。当前保留运行时门禁断言，属 P2 前的过渡态。
   await assert.rejects(
     () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l3' }, EXEC_SESS),
     /GATE_EXEMPT_NOT_DISPATCH/,
@@ -400,12 +347,3 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / revokeExempt
   assert.equal(settled.length, 1);
 });
 
-test('EX-C14: 撤销的不存在性语义 —— 未授予 lane 撤销拒，授予后可撤（幂等再撤仍拒）', () => {
-  const { store } = setup();
-  mkBatch(store, 'b-c14');
-  store.setMember(S, 'b-c14', 'l1', 'running', null, { type: 'none' });
-  store.revokeLaneExempt(S, 'b-c14', 'l1');
-  assert.throws(() => store.revokeLaneExempt(S, 'b-c14', 'l1'), /GATE_EXEMPT_REVOKE_REQUIRED/);
-  assert.equal(eventsOf(store, 'b-c14', EVT_LANE_EXEMPT_REVOKED).length, 1, '重复撤销不得二次留痕');
-  assert.equal(EXEMPT_GATE_CODES.REVOKE_REQUIRED, 'GATE_EXEMPT_REVOKE_REQUIRED');
-});

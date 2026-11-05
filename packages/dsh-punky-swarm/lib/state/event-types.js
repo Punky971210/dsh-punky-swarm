@@ -119,7 +119,10 @@ export const EVT_GATE_MANAGER_ROSTER_GAP = 'gate.manager_roster_gap';
 //   batch_status 事件清单），占用会让该事件在过滤/呈现层失名；故豁免类型一律写 `exemptType`。
 // 与 lane.stalled/longrun 同纪律：只写事件流，不新增成员态（schema.js MEMBER_STATES/TRANSITIONS 零改动）。
 export const EVT_LANE_EXEMPT_GRANTED = 'lane.exempt.granted';
-export const EVT_LANE_EXEMPT_REVOKED = 'lane.exempt.revoked';
+// 【P1 · 批 `punky-u3-rename-drop-20261105`】`EVT_LANE_EXEMPT_REVOKED`（`lane.exempt.revoked`）**已随撤销面删除**：
+//   `revokeExempt` 需求漂移，撤销面整体移除 ⇒ 该事件不再产生；读端原仅撤销面自身（无第三方读端）。
+//   ⚠ 同段的 `EVT_LANE_EXEMPT_CLEARED`（`lane.exempt.cleared`）**保留不动**：它有独立读端
+//   （`exemptClearedAtOf` → `longrun` 长跑候选 → `state-surface`），且 `member-exempt` 的**清退**路径产生它。
 // longrun 豁免的**继承/清退**两种次生留痕（批次 `gate-techdebt` · D7）：**单点化迁入本文件**
 // （设计 §5.1「迁入」项；原文案寄居 `lib/state/store.js:46-51`，理由为「该文件在本批 writeForbidden 内」，
 //  该理由随 e1 写域含本文件而失效）。字面值**逐字不变**（`lib/watch/lane-heartbeat.js` 的

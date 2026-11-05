@@ -1297,11 +1297,11 @@
       "todos": 0
     },
     "test/longrun-exempt.test.js": {
-      "asserts": 95,
-      "blankLines": 44,
-      "lines": 412,
+      "asserts": 71,
+      "blankLines": 38,
+      "lines": 350,
       "tautologies": 0,
-      "tests": 20,
+      "tests": 15,
       "todos": 0
     },
     "test/machine.test.js": {
@@ -2041,9 +2041,9 @@
       "todos": 0
     },
     "test/watch-state-surface-red.test.js": {
-      "asserts": 56,
+      "asserts": 53,
       "blankLines": 39,
-      "lines": 519,
+      "lines": 514,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -2145,7 +2145,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-05T12:41:51Z",
+  "generatedAt": "2026-11-05T15:53:39Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2159,12 +2159,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12311,
-    "blankLines": 6891,
+    "asserts": 12284,
+    "blankLines": 6885,
     "files": 268,
-    "lines": 72829,
+    "lines": 72762,
     "tautologies": 0,
-    "tests": 2569,
+    "tests": 2564,
     "todos": 0
   }
 }
