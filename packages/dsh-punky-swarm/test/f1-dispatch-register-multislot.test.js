@@ -108,7 +108,11 @@ test('T-3.1 A1-P1-05 同一 caller（两调用方皆无 agent.session.id）两�
     // 第一次派发 ⇒ 消费最早一条（b-A）；并留歧义痕（pending=2）
     const first = await postOnce(ctx, execOf('subagent', {}), subagentResult('ws-A'));
     assert.equal(first.nextCalls, 1);
-    assert.equal(aux.readBatch('sess-q', 'b-A').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'b-A 已登记（先声明先消费）');
+    // 【U-7 · A 档】拆「存在性 + 上界」两条（与 b-C 那条对齐）
+  assert.ok(aux.readBatch('sess-q', 'b-A').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    'b-A 已登记（先声明先消费）—— 存在性');
+  assert.ok(aux.readBatch('sess-q', 'b-A').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'b-A 的 member.dispatch 不得重复（上界 1）');
     assert.equal(aux.readBatch('sess-q', 'b-A').events.find((e) => e.type === EVT_MEMBER_DISPATCH).workerSessionId, 'ws-A');
     assert.deepEqual(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH), [], 'b-B（空集契约：整数组逐项）');
     assert.deepEqual(reg.pendingIntents().map((p) => p.batchId), ['b-B'], '队列递减一条（FIFO shift），不整键清空');
@@ -116,7 +120,11 @@ test('T-3.1 A1-P1-05 同一 caller（两调用方皆无 agent.session.id）两�
 
     // 第二次派发 ⇒ 消费 b-B
     await postOnce(ctx, execOf('subagent', {}), subagentResult('ws-B'));
-    assert.equal(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, 'b-B 随后登记（不丢）');
+    // 【U-7 · A 档】拆「存在性 + 上界」两条（与 b-C 那条对齐）
+  assert.ok(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    'b-B 随后登记（不丢）—— 存在性');
+  assert.ok(aux.readBatch('sess-q', 'b-B').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'b-B 的 member.dispatch 不得重复（上界 1）');
     assert.deepEqual(reg.pendingIntents(), [], '队列空 ⇒ 键被删除（既有 stale 清理语义）');
     assert.equal(reg.count(), 2);
     // P4 不可改造（Leader 裁定）：index 是 Map 且本文件只读过 .size；键格式（lane:batchId? 还是别的）在文件内无可证取值 ⇒ 造身份须读被测产出键格式 = 第二真源。
@@ -145,7 +153,11 @@ test('T-3.2 A1-P1-05 阳性对照：不同 caller（各有 agent 会话）意图
     assert.deepEqual(reg.pendingIntents().map((p) => p.caller), ['mgr-1'], '仅 mgr-2 的槽被消费');
 
     await postOnce(ctx, execOf('subagent', {}, 'mgr-1'), subagentResult('ws-C'));
-    assert.equal(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1);
+    // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    'b-C 的 member.dispatch 至少 1 条（存在性）');
+  assert.ok(aux.readBatch('sess-q', 'b-C').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'b-C 的 member.dispatch 不得重复（上界 1）');
     assert.deepEqual(reg.pendingIntents(), []);
   } finally {
     reg.dispose();

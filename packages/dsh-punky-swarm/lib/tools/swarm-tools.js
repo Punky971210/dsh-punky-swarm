@@ -85,9 +85,12 @@ export function buildSwarmTools(cx) {
         //   新增的完成类 `type='completed'` **不**进入本分支（只唤醒、不结算），故本行**逐字不变**即已满足裁定；
         //   连带效果：`autoSettle.enabled=false` 只停结算面，`completed` 的唤醒面不受牵连（`WAKE_TYPES` 与开关无关）。
         const settleRequested = args.type === 'settle-request' && !!tgt.batchId;
-        const autoSettleEnabled = autoSettleEnabledOf(autoSettleSwitchOf(readLiveConfig(deps)));
+        // 【U-4】读一次快照复用（原 :88/:90 各读一次；`readLiveConfig` 同步且两读间无 await
+        //   ⇒ 两次必同一快照，「重读最新」不是有意行为 ⇒ 合并安全）。判据 6 → 5。
+        const live = readLiveConfig(deps);
+        const autoSettleEnabled = autoSettleEnabledOf(autoSettleSwitchOf(live));
         const settle = (settleRequested && autoSettleEnabled)
-          ? await autoSettleLane({ ctx, store, root, liveConfig: readLiveConfig(deps) }, {
+          ? await autoSettleLane({ ctx, store, root, liveConfig: live }, {
             sessionId: tgt.sessionId, batchId: tgt.batchId, lane: tgt.lane,
             workerSessionId: tgt.caller, trigger: AUTO_SETTLE_TRIGGERS.settleRequest,
             // 【2026-09-26 用户裁决：门禁拒派要"打回成员"而非"停轮"】

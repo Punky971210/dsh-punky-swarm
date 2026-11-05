@@ -128,7 +128,11 @@ test('R2b: member_status 显式 session 指向批会话 → 事件落对批、�
     await dispatchPostAll(ctx, execOf('member_status', { session: 'sess-b', batchId: 'b-r2b', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
     await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r2b'));
     const b = aux.readBatch('sess-b', 'b-r2b');
-    assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1);
+    // 【U-7】拆「存在性 + 上界」两条（用户裁决：不做 `===1` 形式断言）
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    'member.dispatch 至少 1 条（存在性）: ' + JSON.stringify(b.events.map((e) => e.type)));
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'member.dispatch 不得重复（上界 1）: ' + JSON.stringify(b.events.map((e) => e.type)));
     assert.deepEqual(index.get('ws-r2b'), { sessionId: 'sess-b', batchId: 'b-r2b', lane: 'l1' });
   } finally {
     reg.dispose();
@@ -175,7 +179,11 @@ test('R4: send_message 已退役出观察名单 → 零登记零告警（透传�
     await dispatchPostAll(ctx, execOf('send_message', { agent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm2' } });
     await dispatchPostAll(ctx, execOf('send_message', { subagent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm3' } });
     const b = aux.readBatch('sess-b', 'b-r4');
-    assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length, 1, '仅 spawn 那 1 条登记');
+    // 【U-7 · B 档】拆「存在性 + 上界」两条
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length >= 1,
+    '仅 spawn 那 1 条登记 —— 存在性');
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length <= 1,
+    'ws-r4 的登记不得重复（上界 1）');
     assert.equal(reg.count(), 1);
     assert.equal(ctx.calls.warn.filter((w) => w.includes('dispatch register degraded')).length, 0, '退役工具透传 ⇒ 零降级告警（非提取失败）');
   } finally {
@@ -229,7 +237,11 @@ test('R5: apply 装配端到端——真实登记路径（member_status running 
     // ② Manager ctx：subagent 派发 worker → 登记 ws-r5
     await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r5'));
     const b0 = aux.readBatch('sess-b', 'b-r5');
-    assert.equal(b0.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, '真实登记路径落批');
+    // 【U-7 · B 档】拆「存在性 + 上界」两条
+  assert.ok(b0.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    '真实登记路径落批 —— 存在性');
+  assert.ok(b0.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'member.dispatch 不得重复（上界 1）');
     // ③ worker 会话 3 次越界 → 归属命中（登记后立即命中同一 Map）→ 升级 paused
     const pre = [...(ctx.listeners.get('tools/pre-execute') ?? [])][0];
     for (let i = 0; i < 3; i++) {
@@ -238,7 +250,11 @@ test('R5: apply 装配端到端——真实登记路径（member_status running 
     }
     const b1 = aux.readBatch('sess-b', 'b-r5');
     assert.equal(b1.phase, 'paused', '归属命中 + 计数达阈值 → escalation paused（读侧骨架零改动生效）');
-    assert.equal(b1.events.filter((e) => e.type === EVT_BATCH_GOVERNANCE_ESCALATE).length, 1);
+    // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(b1.events.filter((e) => e.type === EVT_BATCH_GOVERNANCE_ESCALATE).length >= 1,
+    'governance.escalate 至少 1 条（存在性）');
+  assert.ok(b1.events.filter((e) => e.type === EVT_BATCH_GOVERNANCE_ESCALATE).length <= 1,
+    'governance.escalate 不得重复（上界 1）');
     assert.equal(b1.events.filter((e) => e.type === EVT_GOVERNANCE_REFUSAL).length, 3);
     // ④ 无登记的 worker（leader 直派研究 subagent）→ refusal 零归属（T16：批事件流零新增）
     await dispatchPostAll(ctx, execOf('subagent', {}, 'leader-s'), subagentResult('ws-r5-other'));
@@ -261,7 +277,11 @@ test('R6: 装配注入 resolveBatchContext(exec) 显式返回批上下文 → �
   try {
     await dispatchPostAll(ctx, execOf('subagent', {}, 'leader-s'), subagentResult('ws-r6'));
     const b = aux.readBatch('sess-b', 'b-r6');
-    assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 1, '显式注入归属 → 登记');
+    // 【U-7 · B 档】拆「存在性 + 上界」两条
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
+    '显式注入归属 → 登记 —— 存在性');
+  assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length <= 1,
+    'member.dispatch 不得重复（上界 1）');
     assert.deepEqual(index.get('ws-r6'), { sessionId: 'sess-b', batchId: 'b-r6', lane: 'l1' });
   } finally {
     reg.dispose();

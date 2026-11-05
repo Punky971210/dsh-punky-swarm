@@ -553,17 +553,17 @@
       "todos": 0
     },
     "test/dispatch-register.test.js": {
-      "asserts": 55,
+      "asserts": 60,
       "blankLines": 20,
-      "lines": 343,
+      "lines": 363,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 208,
+      "asserts": 211,
       "blankLines": 57,
-      "lines": 862,
+      "lines": 870,
       "tautologies": 0,
       "tests": 42,
       "todos": 0
@@ -617,9 +617,9 @@
       "todos": 0
     },
     "test/f1-dispatch-register-multislot.test.js": {
-      "asserts": 48,
+      "asserts": 51,
       "blankLines": 25,
-      "lines": 267,
+      "lines": 279,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -673,9 +673,9 @@
       "todos": 0
     },
     "test/f3-claim-writeface.test.js": {
-      "asserts": 36,
+      "asserts": 37,
       "blankLines": 27,
-      "lines": 260,
+      "lines": 264,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1057,9 +1057,9 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 250,
+      "asserts": 254,
       "blankLines": 54,
-      "lines": 852,
+      "lines": 868,
       "tautologies": 0,
       "tests": 33,
       "todos": 0
@@ -1238,6 +1238,14 @@
       "lines": 91,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/lane-dispatch-render.test.js": {
+      "asserts": 9,
+      "blankLines": 8,
+      "lines": 58,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/lane-session-bind.test.js": {
@@ -1481,9 +1489,9 @@
       "todos": 0
     },
     "test/p2-state-single.test.js": {
-      "asserts": 40,
+      "asserts": 41,
       "blankLines": 25,
-      "lines": 253,
+      "lines": 261,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -1993,9 +2001,9 @@
       "todos": 0
     },
     "test/watch-heartbeat.test.js": {
-      "asserts": 80,
+      "asserts": 81,
       "blankLines": 34,
-      "lines": 305,
+      "lines": 309,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -2137,7 +2145,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-05T11:13:22Z",
+  "generatedAt": "2026-11-05T12:34:24Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2151,12 +2159,12 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12284,
-    "blankLines": 6883,
-    "files": 267,
-    "lines": 72696,
+    "asserts": 12311,
+    "blankLines": 6891,
+    "files": 268,
+    "lines": 72826,
     "tautologies": 0,
-    "tests": 2565,
+    "tests": 2569,
     "todos": 0
   }
 }

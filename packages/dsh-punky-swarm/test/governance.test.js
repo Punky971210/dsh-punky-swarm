@@ -172,7 +172,11 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
   const b0 = toolsStore.readBatch('sess-ac', 'b-mgr');
   assert.equal(b0.phase, 'planning', 'C-1：登记不得顺带迁移批次阶段');
   assert.equal(b0.manager.agentId, 'mgr-1');
-  assert.equal(b0.events.filter((e) => e.type === 'batch.manager.raised').length, 1);
+  // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(b0.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
+    'manager.raised 至少 1 条（存在性）');
+  assert.ok(b0.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
+    'manager.raised 不得重复（上界 1）');
   await call({ batchId: 'b-mgr', phase: 'running' });
   // 门禁②：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转** —— 原断言
   //   `assert.rejects(/「Manager agentId 必填」码(已删)/)` 对应码已删 ⇒ 空/空白 agentId **不再报门禁错**：
@@ -183,7 +187,11 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
     '空白 agentId（trim 后为空）同判');
   const bEmpty = toolsStore.readBatch('sess-ac', 'b-mgr');
   assert.equal(bEmpty.manager.agentId, 'mgr-1', '结构断言保留：空登记**不覆盖**既有 manager 字段（不写垃圾）');
-  assert.equal(bEmpty.events.filter((e) => e.type === 'batch.manager.raised').length, 1, '空登记不新增 manager.raised 事件');
+  // 【U-7 · B 档】拆「存在性 + 上界」两条（空登记不新增 ⇒ 仍应 ≥1 且 ≤1）
+  assert.ok(bEmpty.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
+    '空登记场景下 manager.raised 至少 1 条（存在性）');
+  assert.ok(bEmpty.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
+    '空登记不新增 manager.raised 事件（上界 1）');
   // 正常登记：单独调用（不传 phase）→ 不改阶段，写批字段 + 事件
   const r = await call({ batchId: 'b-mgr', manager: { agentId: 'mgr-1', note: 'C+' } });
   assert.equal(r.phase, 'running');
@@ -192,13 +200,21 @@ test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）',
   assert.equal(b.phase, 'running');
   assert.equal(b.manager.agentId, 'mgr-1');
   assert.ok(b.manager.raisedAt);
-  assert.equal(b.events.filter((e) => e.type === 'batch.manager.raised').length, 1);
+  // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(b.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
+    'manager.raised 至少 1 条（存在性）');
+  assert.ok(b.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
+    'manager.raised 不得重复（上界 1）');
   assert.equal(b.events.find((e) => e.type === 'batch.manager.raised').agentId, 'mgr-1');
   // 阶段迁移与登记同一次调用；**同 agentId 幂等** ⇒ 不重复写事件（仍为 1 条）
   await call({ batchId: 'b-mgr', phase: 'paused', manager: { agentId: 'mgr-1' } });
   const b2 = toolsStore.readBatch('sess-ac', 'b-mgr');
   assert.equal(b2.phase, 'paused');
-  assert.equal(b2.events.filter((e) => e.type === 'batch.manager.raised').length, 1, '同 agentId 重复登记幂等：不产重复事件');
+  // 【U-7 · B 档】拆「存在性 + 上界」两条（幂等 ⇒ 仍应 ≥1 且 ≤1）
+  assert.ok(b2.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
+    '重复登记后 manager.raised 至少 1 条（存在性）');
+  assert.ok(b2.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
+    '同 agentId 重复登记幂等：不产重复事件（上界 1）');
   // 门禁③：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转为放行** —— 原断言
   //   `assert.rejects(… /「Manager 终态」码(已删)/ 且非 PHASE_INVALID…)` 两码已删 ⇒ 终态批**亦可登记事实**
   //   （在册判定的新真源 = 官方 roster；legacy 字段仅作观察面）。

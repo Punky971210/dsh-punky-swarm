@@ -219,7 +219,11 @@ test('T-2/AC-4 冲突后重试成功：asset.claimed 恰 1 条（冲突那次未
   assert.equal(r.claimedPath, 'explore/retry.md');
   // 冲突那次未落盘 ⇒ 事件不得重复（不得 2 条）
   assert.equal(claimEventCount(root, 'b-retry'), 1, 'asset.claimed 恰 1 条（冲突那次零落盘，否则会 2 条）');
-  assert.equal(readDisk(root, 'b-retry').events.filter((e) => e.type === 'probe.opponent').length, 1);
+  // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(readDisk(root, 'b-retry').events.filter((e) => e.type === 'probe.opponent').length >= 1,
+    'probe.opponent 至少 1 条（存在性）');
+  assert.ok(readDisk(root, 'b-retry').events.filter((e) => e.type === 'probe.opponent').length <= 1,
+    'probe.opponent 不得重复（上界 1）');
   // 内容逐字相等
   assert.equal(fs.readFileSync(path.join(artifacts, 'explore', 'retry.md'), 'utf8'), 'RETRY-BODY');
   // rev == 基线 + 2（对手 1 + 本次 1）

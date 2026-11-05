@@ -231,8 +231,16 @@ test('A1-P2-07 · 三处消费点一致：全仓只有 schema.js 一处定义，
   const indexSrc = read('lib/index.js');
   assert.ok(/const autoSettleEnabledOfConfig = \(cfg\) => autoSettleEnabledOf\(autoSettleSwitchOf\(cfg\)\)/
     .test(indexSrc), 'index.js 必须保留读源包装，且取面经投影单点 `autoSettleSwitchOf(cfg)`（C3）');
-  assert.ok(/autoSettleEnabledOf\(autoSettleSwitchOf\(readLiveConfig\(deps\)\)\)/
-    .test(read('lib/tools/swarm-tools.js')), 'swarm-tools.js 必须保留热更快照读源，且取面经 `autoSettleSwitchOf(readLiveConfig(deps))`（C3）');
+  // 【U-4 修复 · 2026-11-05】原断言钉字面 `autoSettleEnabledOf(autoSettleSwitchOf(readLiveConfig(deps)))`。
+  //   U-4 把同分支的两次 readLiveConfig 提成一次（消除「同一判定用两份热更快照」的分歧面）⇒ 实现变成
+  //   `const live = readLiveConfig(deps); … autoSettleEnabledOf(autoSettleSwitchOf(live))`。
+  //   本断言**原意是「取面必须经投影单点 autoSettleSwitchOf」**（见上方 :229-230 的正向说明），不是钉字面顺序
+  //   ⇒ 改为「文件里既有 readLiveConfig(deps) 的取值，又有 autoSettleSwitchOf 包住它派生的变量/表达式」。
+  const swarmSrc = read('lib/tools/swarm-tools.js');
+  assert.ok(/readLiveConfig\(deps\)/.test(swarmSrc),
+    'swarm-tools.js 必须保留热更快照读源 `readLiveConfig(deps)`（C3：禁读静态 config）');
+  assert.ok(/autoSettleEnabledOf\(autoSettleSwitchOf\([^)]*\)\)/.test(swarmSrc),
+    'swarm-tools.js 取面必须经投影单点 `autoSettleSwitchOf(...)`（C3）');
   for (const rel of consumers) {
     assert.equal(/\?\.autoSettle\?\.enabled/.test(read(rel)), false,
       rel + ' 不得残留内联取面 `?.autoSettle?.enabled`（C3：取面归 `autoSettleSwitchOf` 单点）');

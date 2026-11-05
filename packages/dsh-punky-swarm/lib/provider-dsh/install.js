@@ -24,7 +24,10 @@ Copyright (C) 2025-2026 Punky
 */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+// ⚠ 必须用默认导入 fs（不是 `import { mkdirSync, writeFileSync }`）：
+//   命名导入拿到的是函数引用 ⇒ write-intercept.mjs 拦不到（它拦的是 `fs.writeFileSync` 属性访问）
+//   ⇒ 结构性不可被写入拦截 ⇒ 违反引擎「lib/** 写入必须可拦截」纪律（测试 I4 会红）。
+import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,7 +52,7 @@ const PNPM_OPTS = { shell: process.platform === 'win32' };
 
 /** 引擎包名（从自己的 package.json 读，不硬编码）。 */
 export function enginePackageName(root = ENGINE_ROOT) {
-  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const pkg = JSON.parse(fs.readFileSync(join(root, 'package.json'), 'utf8'));
   return pkg.name;
 }
 
@@ -91,23 +94,23 @@ export function mergeBundles(current, required) {
 export function ensureProfile({ profileName, dshHome = dshHomeOf() }) {
   const profileDir = profileDirOf(profileName, dshHome);
   const packageJsonPath = join(profileDir, 'package.json');
-  const created = !existsSync(packageJsonPath);
+  const created = !fs.existsSync(packageJsonPath);
 
-  mkdirSync(profileDir, { recursive: true });
+  fs.mkdirSync(profileDir, { recursive: true });
 
-  if (!existsSync(packageJsonPath)) {
+  if (!fs.existsSync(packageJsonPath)) {
     const seed = {
       name: `dsh-profile-${profileName}`,
       private: true,
       dependencies: {},
       dsh: { profile: { bundles: [] } },
     };
-    writeFileSync(packageJsonPath, JSON.stringify(seed, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(packageJsonPath, JSON.stringify(seed, null, 2) + '\n', 'utf8');
   }
   // cordis.yml 必须是空数组（配置走 cordis.patch.yml；这个约定来自 DSH 的 profile 根注释）
   const cordisYml = join(profileDir, 'cordis.yml');
-  if (!existsSync(cordisYml)) {
-    writeFileSync(
+  if (!fs.existsSync(cordisYml)) {
+    fs.writeFileSync(
       cordisYml,
       [
         '# dsh profile root — an empty entry list. The tree is composed as patches:',
@@ -125,7 +128,7 @@ export function ensureProfile({ profileName, dshHome = dshHomeOf() }) {
 /** 把引擎写进 profile 的 dependencies + bundles（幂等；保留其它依赖）。 */
 export function declareSelf({ profileName, engineName = enginePackageName(), dependencySpec, dshHome = dshHomeOf() }) {
   const { profileDir, packageJsonPath } = ensureProfile({ profileName, dshHome });
-  const cfg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+  const cfg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
   cfg.dependencies = cfg.dependencies && typeof cfg.dependencies === 'object' ? cfg.dependencies : {};
   cfg.dependencies[engineName] = dependencySpec;
@@ -134,7 +137,7 @@ export function declareSelf({ profileName, engineName = enginePackageName(), dep
   cfg.dsh.profile = cfg.dsh.profile && typeof cfg.dsh.profile === 'object' ? cfg.dsh.profile : {};
   cfg.dsh.profile.bundles = mergeBundles(cfg.dsh.profile.bundles, requiredBundles(engineName));
 
-  writeFileSync(packageJsonPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(packageJsonPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
   return { profileDir, packageJsonPath, bundles: cfg.dsh.profile.bundles, dependencySpec };
 }
 

@@ -113,7 +113,11 @@ test('W1/W2：无活动 → 轻量追问（≤5 句含 lane）→ 3 拍 → lane
     assert.ok(inboxAfter.filter((i) => i.message.lane === lane).length <= 1,
       'W2: 不叠加（同 lane ≤1 条；实测 ' + inboxAfter.length + '）');
   }
-  assert.equal(store.readBatch(S, batchId).events.filter((e) => e.type === 'lane.stalled').length, 1);
+  // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(store.readBatch(S, batchId).events.filter((e) => e.type === 'lane.stalled').length >= 1,
+    'lane.stalled 至少 1 条（存在性）');
+  assert.ok(store.readBatch(S, batchId).events.filter((e) => e.type === 'lane.stalled').length <= 1,
+    'lane.stalled 不得重复（上界 1）');
 });
 
 // ---- W3：活动信号重置——产物 mtime / outbox / events 任一更新 → missed 归零、档位回 tier0 ----

@@ -267,7 +267,9 @@ test('R2 swarm_report：绑定成员 ⇒ 事件 swarm.report + Leader 通道（b
   assert.equal(r.batchId, 'b-r2');
   assert.equal(r.lane, 'l1');
   const evs = store.readBatch('sess-c', 'b-r2').events.filter((e) => e.type === EVT_SWARM_REPORT);
-  assert.equal(evs.length, 1, '恰 1 条 swarm.report 事件（条数；重复/多余即红）');
+  // 【U-7 · B 档】拆「存在性 + 上界」两条
+  assert.ok(evs.length >= 1, '至少 1 条 swarm.report 事件（存在性）');
+  assert.ok(evs.length <= 1, 'swarm.report 不得重复（上界 1，重复/多余即红）');
   // 身份数组（期望来自输入侧：派发目标 lane = l1）：count 对但身份错也红
   assert.deepEqual(evs.map((e) => e.lane), ['l1'], 'swarm.report 事件的 lane 身份 = 派发目标（实测 ' + JSON.stringify(evs.map((e) => e.lane)) + '）');
   const boxRoot = mailboxRootOf(root, 'sess-c', 'b-r2');
@@ -284,7 +286,11 @@ test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + Manager 通道（supervis
   const cc = tools.find((t) => t.name === 'swarm_cc');
   assert.ok(cc, 'swarm_cc 已注册');
   await cc.execute({ type: 'anomaly', summary: '上游产物缺失' }, { agent: { session: { id: 'ws-w2' } } });
-  assert.equal(store.readBatch('sess-c', 'b-r3').events.filter((e) => e.type === EVT_SWARM_CC).length, 1);
+  // 【U-7】拆「存在性 + 上界」两条
+  assert.ok(store.readBatch('sess-c', 'b-r3').events.filter((e) => e.type === EVT_SWARM_CC).length >= 1,
+    'swarm.cc 至少 1 条（存在性）');
+  assert.ok(store.readBatch('sess-c', 'b-r3').events.filter((e) => e.type === EVT_SWARM_CC).length <= 1,
+    'swarm.cc 不得重复（上界 1）');
   assert.equal(REPORT_CHANNEL.manager, 'inbox');
   assert.ok(fs.existsSync(path.join(mailboxRootOf(root, 'sess-c', 'b-r3'), 'supervisor', 'inbox')), 'Manager 通道（supervisor/inbox）有落盘');
 });
@@ -359,7 +365,9 @@ test('T1 引擎自派成功：写 member.dispatch（B5 唯一写路径）+ 返�
   // B5：引擎直接登记（不依赖 post-execute 观察）
   const b = store.readBatch('sess-c', 'b-ed1');
   const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
-  assert.equal(dis.length, 1, 'member.dispatch 恰 1 条（条数）');
+  // 【U-7 · B 档】拆「存在性 + 上界」两条
+  assert.ok(dis.length >= 1, 'member.dispatch 至少 1 条（存在性）');
+  assert.ok(dis.length <= 1, 'member.dispatch 不得重复（上界 1）');
   assert.deepEqual(dis.map((e) => e.workerSessionId), ['ws-eng-1'], 'dispatch 事件的 workerSessionId 身份 = 引擎自派值（实测 ' + JSON.stringify(dis.map((e) => e.workerSessionId)) + '）');
   assert.equal(dis[0].workerSessionId, 'ws-eng-1');
   assert.equal(dis[0].lane, 'l1');
