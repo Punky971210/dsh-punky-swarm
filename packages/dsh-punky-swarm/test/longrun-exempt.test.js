@@ -295,9 +295,9 @@ test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与�
     'member_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）；revokeExempt 已删');
   assert.equal(ms.parameters.properties.exempt.type, 'object');
   assert.deepEqual(ms.parameters.properties.exempt.properties.type.enum, LANE_EXEMPT_TYPES);
-  // ⚠ 下面这条断言归 **P2**（U-3 的 status 必填化）—— P1 只删撤销面，status 仍是可选，
-  //   所以「!includes('status')」当前仍成立（不红）；P2 落地时这条要改成 includes。
-  assert.ok(!ms.parameters.required.includes('status'), 'status 为撤销路径放开 required（P2 前保持；撤销面已删，P2 将改为必填）');
+  // 【P2 · 2026-11-05】用户裁决「status 进 required」已落地：`status` 现在是参数表必填。
+  //   撤销面已删 ⇒ 「status 可选」的依据消失 ⇒ 断言翻转为 includes。
+  assert.ok(ms.parameters.required.includes('status'), 'P2：status 已进必填（撤销面删除后唯一路径就是状态迁移）');
   assert.ok(!ms.parameters.required.includes('exempt'));
   // member_settle 调用点仍 5 参（`lib/tools/core.js` 未改）：参数面无 exempt 键
   assert.equal(Object.prototype.hasOwnProperty.call(byName.member_settle.parameters.properties, 'exempt'), false);
@@ -332,12 +332,12 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零
   // 【P1 · 2026-11-05】**原 ⑤（revokeExempt 与 status 并用 → 拒）与 ⑥（无既有豁免撤销 → REVOKE_REQUIRED）已删**
   //   —— `revokeExempt` 参数本身不存在了，这两个分支在工具面不可达。
 
-  // ⑦ 既无 status 也无 revokeExempt → 拒（参数表放开 required 后的补齐门禁）
-  //   【P2 提示】撤销面已删 ⇒ 这条现在只剩「缺 status」一个语义；P2 把 status 移入 schema required 后，
-  //   本断言应改为「schema 层拒」（而非运行时 throw）。当前保留运行时门禁断言，属 P2 前的过渡态。
+  // ⑦ 缺 status → 拒（P2 · 2026-11-05：`status` 已进必填 ⇒ 拦在**宿主 schema 校验**而非运行时门禁）
+  //   ⇒ 错误形态从 `GATE_EXEMPT_NOT_DISPATCH` 变为 `ToolArgsError: invalid arguments: missing required property "status"`。
+  //   这是判据**加强**（更早、更结构化），不是退化。
   await assert.rejects(
     () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l3' }, EXEC_SESS),
-    /GATE_EXEMPT_NOT_DISPATCH/,
+    /missing required property "status"/,
   );
 
   // ⑧ 授予后仍有 member.settled（派发语义未被豁免破坏）+ 撤销后成员态可继续正常迁移
