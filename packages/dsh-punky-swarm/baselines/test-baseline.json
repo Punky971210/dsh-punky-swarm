@@ -1491,7 +1491,7 @@
     "test/p2-state-single.test.js": {
       "asserts": 41,
       "blankLines": 25,
-      "lines": 261,
+      "lines": 264,
       "tautologies": 0,
       "tests": 13,
       "todos": 0
@@ -2145,7 +2145,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-05T12:34:24Z",
+  "generatedAt": "2026-11-05T12:41:51Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2162,7 +2162,7 @@
     "asserts": 12311,
     "blankLines": 6891,
     "files": 268,
-    "lines": 72826,
+    "lines": 72829,
     "tautologies": 0,
     "tests": 2569,
     "todos": 0
