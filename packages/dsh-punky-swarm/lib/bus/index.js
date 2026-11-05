@@ -145,7 +145,22 @@ export function createNullAdapters() {
       personaVia: 'none',
       depthVia: 'none',
       // 空执行结果：字段集对齐 `ExecResult`；保留 `writes`/`evidence`（归一/分类面据它们判空转）
-      push_execute: async () => ({ timedOut: false, exitCode: 0, signal: null, writes: [], evidence: [] }),
+      // 【U-5 修复 · 2026-11-05 · 用户裁决甲】**null 适配器的 `push_execute` 不得冒充成功**。
+    //   原实现 `exitCode: 0` ⇒ 拿到桩的消费方会把「**没派发**」读成 `exitCode: 0` = **成功**
+    //   ⇒ 与全仓「不得冒充成功」纪律冲突（同族范例见下方 `cancel`：它报 `skipped` + 成因，不冒充「已停」）。
+    //   现改为：① `dispatched: false` = 显式「未派发」标记 ② `exitCode: null` = 无结果（不是 0）
+    //   ③ `reason` 与 `cancel` 同族成因（agent-runtime-unavailable）。
+    //   ⚠ 消费方（`bus/index.js` 的 `normalize` / `classifyProgress`）不读 `exitCode` 做判定；
+    //     读 `exitCode` 的是 `command.js` 的命令执行结果，与本桩无关（两套 ExitResult）。
+    push_execute: async () => ({
+      dispatched: false,
+      reason: 'agent-runtime-unavailable',
+      timedOut: false,
+      exitCode: null,
+      signal: null,
+      writes: [],
+      evidence: [],
+    }),
       // 【T-B · 批 `punky-three-tasks-20261103`】null 适配器的 `cancel` **必须显式三态**、**不得返 `undefined`**：
       //   无真实运行时 ⇒ 没有可取消的对象，但**也不是**「已停」⇒ 报 `skipped` + 成因（by-value 面，不抛）。
       cancel: async () => ({ outcome: 'skipped', reason: 'agent-runtime-unavailable' }),
