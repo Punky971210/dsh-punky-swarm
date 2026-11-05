@@ -180,7 +180,7 @@ function scriptCriterionItems(src) {
 //   同文件另两个 LEGACY 反向夹具常量**是活引用（:252 / :281 使用），保留**。
 
 /** 修前 §0m deny 面枚举（20 项，含 4 个已放开项、缺 `spawn_teammate`）——j2-4 的反向夹具。 */
-const LEGACY_DENY_ENUM = '治理套件 `assign_check` / `wave_plan` / `member_status` / `member_settle` / `batch_phase` / `batch_control` / `asset_claim` / `batch_tasks_add` / `task_update` ｜ 派发与锁 `lane_dispatch` / `lane_claim` / `lane_release` ｜ 只读治理面 `gate_status` / `artifact_types` ｜ 宿主子代理 `subagent` / `subagent_fork` ｜ 官方 roster 面 `send_message` / `interrupt_agent` / `list_agents` / `wait_agent`';
+const LEGACY_DENY_ENUM = '治理套件 `assign_check` / `wave_plan` / `member_set_status` / `member_settle` / `batch_phase` / `batch_control` / `asset_claim` / `batch_tasks_add` / `task_update` ｜ 派发与锁 `lane_dispatch` / `lane_claim` / `lane_release` ｜ 只读治理面 `gate_status` / `artifact_types` ｜ 宿主子代理 `subagent` / `subagent_fork` ｜ 官方 roster 面 `send_message` / `interrupt_agent` / `list_agents` / `wait_agent`';
 
 /** 修前 §0m「未列入 deny 面的三件」行（含 `spawn_teammate`）——j2-5 的反向夹具。 */
 const LEGACY_UNLISTED_CLAIM = '**未列入 deny 面的三件（如实登记）**：`spawn_teammate` / `workflow` / `ralph`（均可产子代理 / 并行代理）**不在** `SUITE_DENY_TOOLS` 内';

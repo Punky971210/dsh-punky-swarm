@@ -489,7 +489,7 @@ test('AC-6 任务包双保险：composeWorkerPrompt 明写批归属会话 + sess
 test('覆盖面：任务包点名的治理工具均消费 resolver（注册表 + 调用点双读）', () => {
   const expected = {
     'lib/tools/lane-tools.js': [/lane_worktree_create/, /lane_checkpoint'/, /lane_checkpoint_status/, /lane_worktree_merge/],
-    'lib/tools/member-tools.js': [/lane_claim/, /lane_release/, /member_settle/, /lane_dispatch/, /member_status/],
+    'lib/tools/member-tools.js': [/lane_claim/, /lane_release/, /member_settle/, /lane_dispatch/, /member_set_status/],
     'lib/tools/handoff-tools.js': [/handoff_submit/, /handoff_view/],
     // B1：lib/tools/mailbox-tools.js 已整件删除（三个 mailbox 工具随之）
     'lib/tools/asset-tools.js': [/asset_claim/],

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // bridge/lane-handle.js —— 派发句柄（lane dispatch handle）：C 档集群派发的**唯一凭证**。
-// 用户裁决（2026-09-15）：「**不写 token 即禁止派发**」——token 取代原先「最后一个 member_status 意图」
+// 用户裁决（2026-09-15）：「**不写 token 即禁止派发**」——token 取代原先「最后一个 member_set_status 意图」
 //   的启发式推断，成为派发与登记的**唯一依据**。
 // 生命周期：
 //   ① **发放**：Leader 调 `lane_dispatch({ batchId, lane })` → 本模块发一次性句柄（16 hex），

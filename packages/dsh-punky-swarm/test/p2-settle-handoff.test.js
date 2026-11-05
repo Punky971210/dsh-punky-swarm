@@ -108,8 +108,8 @@ async function mkBatch(h, batchId, { smoke = false, tasks = tasksChain() } = {})
 
 /** 派发+评审（**门关态**，避免 P1 entry 门抢答）→ 仅 `merged` 一步在**门开态**下执行（精确检出口门）。 */
 async function toReview(h, batchId, lane) {
-  await h.byName.member_status.execute({ batchId, lane, status: 'running' }, SESS);
-  await h.byName.member_status.execute({ batchId, lane, status: 'review' }, SESS);
+  await h.byName.member_set_status.execute({ batchId, lane, status: 'running' }, SESS);
+  await h.byName.member_set_status.execute({ batchId, lane, status: 'review' }, SESS);
 }
 async function settleMerged(h, batchId, lane, note) {
   process.env.PSWARM_HANDOFF_GATE = '1';
@@ -166,7 +166,7 @@ test('P2-2 至少一条已成立交接 ⇒ 放行（merged 成功）', async () 
       '放行 ⇒ 不得落缺口事件');
     // 反证：交接产物被删 ⇒ 同一条 lane 复查会判「不在场」（判据单点复用 entry 门实现）
     fs.rmSync(path.join(h.root, 'sessions', SESSION, 'artifacts', 'p2-b', 'exec/e1.md'), { force: true });
-    await h.byName.member_status.execute({ batchId: 'p2-b', lane: 'e2', status: 'running' }, SESS).catch(() => {});
+    await h.byName.member_set_status.execute({ batchId: 'p2-b', lane: 'e2', status: 'running' }, SESS).catch(() => {});
     const v = await h.byName.handoff_view.execute({ batchId: 'p2-b', lane: 'e2' }, SESS);
     const e1edge = v.edges.find((x) => x.from === 'e1');
     assert.equal(e1edge.artifacts[0].readable, false, '产物删除后取件面须如实报不可读（不静默）');

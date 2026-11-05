@@ -96,8 +96,8 @@ test('T-3.1 A1-P1-05 同一 caller（两调用方皆无 agent.session.id）两�
   const { ctx, index, reg } = harness(root);
   try {
     // 两"不同调用方"都没有 agent.session.id ⇒ caller 同为 'cli'
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-A', lane: 'l1', status: 'running' }), { isError: false, value: {} });
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-B', lane: 'l1', status: 'running' }), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-A', lane: 'l1', status: 'running' }), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-B', lane: 'l1', status: 'running' }), { isError: false, value: {} });
 
     const pending = reg.pendingIntents();
     assert.equal(pending.length, 2, '改前单槽会让第二条**覆盖**第一条 ⇒ 这里必须是 2 条并存；实际=' + JSON.stringify(pending));
@@ -142,8 +142,8 @@ test('T-3.2 A1-P1-05 阳性对照：不同 caller（各有 agent 会话）意图
   seedRunning(root, 'sess-q', 'b-D');
   const { ctx, reg } = harness(root);
   try {
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-C', lane: 'l1', status: 'running' }, 'mgr-1'), { isError: false, value: {} });
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-D', lane: 'l1', status: 'running' }, 'mgr-2'), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-C', lane: 'l1', status: 'running' }, 'mgr-1'), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-D', lane: 'l1', status: 'running' }, 'mgr-2'), { isError: false, value: {} });
     assert.deepEqual(reg.pendingIntents().map((p) => p.batchId).sort(), ['b-C', 'b-D'],
       '两 caller 各一条且批次身份可核（实际=' + JSON.stringify(reg.pendingIntents().map((p) => p.batchId)) + '）');
 
@@ -233,7 +233,7 @@ test('T-3.6 A1-P1-05 阳性对照：同输入 + 有效意图 ⇒ 正常登记 1 
   const aux = seedRunning(root, 'sess-q', 'b-H');
   const { ctx, store, reg } = harness(root);
   try {
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-H', lane: 'l1', status: 'running' }), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-H', lane: 'l1', status: 'running' }), { isError: false, value: {} });
     const r = await postOnce(ctx, execOf('subagent', {}), subagentResult('ws-bound'));
     assert.equal(r.nextCalls, 1);
     assert.deepEqual(unboundWarns(ctx), [], '命中路不得产 unbound 留痕（否证「warn 恒有」）（空集契约：整数组逐项）');
@@ -245,18 +245,18 @@ test('T-3.6 A1-P1-05 阳性对照：同输入 + 有效意图 ⇒ 正常登记 1 
   }
 });
 
-// ── T-3.7 非 running 的 member_status ⇒ 该 caller 队列清空（既有 stale 清理语义逐字保留） ──
-test('T-3.7 A1-P1-05 非 running 的 member_status ⇒ 该 caller 队列清空（多槽不改变 stale 清理语义）', async () => {
+// ── T-3.7 非 running 的 member_set_status ⇒ 该 caller 队列清空（既有 stale 清理语义逐字保留） ──
+test('T-3.7 A1-P1-05 非 running 的 member_set_status ⇒ 该 caller 队列清空（多槽不改变 stale 清理语义）', async () => {
   const root = tempRoot('punky-f1t37-');
   seedRunning(root, 'sess-q', 'b-I');
   seedRunning(root, 'sess-q', 'b-J');
   const { ctx, reg } = harness(root);
   try {
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-J', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-J', lane: 'l1', status: 'running' }, 'mgr-z'), { isError: false, value: {} });
     assert.deepEqual(reg.pendingIntents().map((p) => p.batchId).sort(), ['b-I', 'b-J'], '前置：两条排队（身份 = 两个 batchId；字段 .batchId 已在本文件 :114/:137 取值证明）');
 
-    await postOnce(ctx, execOf('member_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'merged' }, 'mgr-z'), { isError: false, value: {} });
+    await postOnce(ctx, execOf('member_set_status', { session: 'sess-q', batchId: 'b-I', lane: 'l1', status: 'merged' }, 'mgr-z'), { isError: false, value: {} });
     assert.deepEqual(reg.pendingIntents(), [], '非 running ⇒ 该 caller 队列清空（stale 意图不得留给后续无关 subagent）');
   } finally {
     reg.dispose();

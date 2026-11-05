@@ -293,7 +293,7 @@ test('B2：告警与事件同源——logger.warn 计数 = 事件条数（不得
   store5.setMember(SID, 'b2-warn', 'e1', 'running');
   const evs = store5.readBatch(SID, 'b2-warn').events.filter((e) => e && e.type === E_CONTRACT_MISSING);
   const warnLines = warns.filter((w) => w.includes('contract_missing'));
-assert.deepEqual(evs.map(cmKey), ['entry_requires@exec'], '一次触达的事件身份须恰为 entry_requires@exec 一条（member_status 派发 ⇒ entry 门）');
+assert.deepEqual(evs.map(cmKey), ['entry_requires@exec'], '一次触达的事件身份须恰为 entry_requires@exec 一条（member_set_status 派发 ⇒ entry 门）');
 assert.deepEqual(warnLines.map((w) => String(w).includes('contract_missing')), [true], '一次触达的告警集合须恰为 1 条且点名 contract_missing;实测=' + JSON.stringify(warns));
   assert.ok(warnLines[0].includes('entry_requires'), '告警须携带 gateKind（可定位）');
 });
@@ -402,9 +402,9 @@ test('B2-DoD：真实工具面触发落盘 + 只读 gate_status 工具面负控�
     fs.writeFileSync(abs, rel === 'plan/spec.md' ? SPEC_OK : 'out', 'utf8');
   }
 
-  // ① 真实工具面驱动触发路径（member_status 派发 → entry 门 → 写路径落盘）
+  // ① 真实工具面驱动触发路径（member_set_status 派发 → entry 门 → 写路径落盘）
   assert.equal(eventsOf().length, 0, '派发前零事件');
-  await byName.member_status.execute({ batchId: 'b2-probe', lane: 'e1', status: 'running' }, SESS);
+  await byName.member_set_status.execute({ batchId: 'b2-probe', lane: 'e1', status: 'running' }, SESS);
   const landed = eventsOf();
 assert.deepEqual(landed.map(cmKey), ['entry_requires@exec'], '真实工具面一次触达 ⇒ 落盘事件身份须恰为 entry_requires@exec 一条');
   assert.equal(cmKey(landed[0]), 'entry_requires@exec', '落盘事件可归因');

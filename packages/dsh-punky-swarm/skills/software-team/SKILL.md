@@ -38,7 +38,7 @@ triggers:
 5. **写黑板 `wave_plan`**：复用既有 `batch` / `wave_plan`（**不新黑板**）；`tasks[].roster` 写成员名作**声明**；难度档在**引擎层写 `D`**（team 通道档；引擎枚举 `A|B|C|D`——D 与 C **同属建批档、同受建批门禁**，既有以 `C` 声明的批次仍兼容）。
 6. **派活**：`send_message(target=<成员名>, message=…)` —— **派活与唤醒的唯一正式通道**。
 7. **入边交接**：上游出件后 `handoff_submit(from, to, artifacts, assertions)`（**成员自交**，Leader 可代交）⇒ 下游 `handoff_view` 报 `READY` 才开工。
-8. **lane 进度与终态**：`member_status`（进度）→ `member_status(review)` → **`member_settle(merged|failed|conflict|skipped)`**；**audit 席位必须显式 settle**（不 settle ⇒ 批永久挂 `running`）。
+8. **lane 进度与终态**：`member_set_status`（进度）→ `member_set_status(review)` → **`member_settle(merged|failed|conflict|skipped)`**；**audit 席位必须显式 settle**（不 settle ⇒ 批永久挂 `running`）。
 9. **批相位收口**：`batch_phase(complete)`（**须先经 `running`**；`planning → complete` 非法）。
 
 ### 流转时序（谁唤醒谁）
@@ -49,7 +49,7 @@ Leader ──send_message────▶ 派活（成员在最近步骤边界收
 成员   ──handoff_submit──▶ 下游入边（submitted = 下游开工硬前提）
 成员   ──swarm_report + send_message──▶ Leader（回报双写：留痕 + 唤醒）
 Leader ──list_agents / wait_agent──▶ 观测成员状态（wait_agent 只观察、不唤醒）
-Leader ──member_status / member_settle──▶ lane 账本（引擎真源）
+Leader ──member_set_status / member_settle──▶ lane 账本（引擎真源）
 Leader ──batch_phase(complete)──▶ 批相位终态
 ```
 
@@ -351,7 +351,7 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 > ⚠ **分工铁律：官方工具管「人」｜引擎 `member_*` 管「lane」。两本账并列，不互替。**
 > · **人（成员生命周期）** ⇒ **官方工具**：`spawn_teammate` 拉起 · `send_message` 派活/唤醒 · `list_agents` 查状态 · `wait_agent` 等动静 · `interrupt_agent` 打断当前轮。
-> · **lane（引擎真源）** ⇒ **`member_status` / `member_settle`**：登记 lane **进度**与**终态**（使 `batch_status` 的 lane 跃迁可见、使下游交接与 audit 结算的入边前提成立）；**批相位**由 `batch_phase` 推进。
+> · **lane（引擎真源）** ⇒ **`member_set_status` / `member_settle`**：登记 lane **进度**与**终态**（使 `batch_status` 的 lane 跃迁可见、使下游交接与 audit 结算的入边前提成立）；**批相位**由 `batch_phase` 推进。
 > **为什么必须两本账**：`member_*` 改的是**批次里 lane 的状态**（状态文件），**不触达成员的会话**；反之官方工具**只管人、不改 lane 状态**。⇒ 少一本账就会出现两种坏账：「成员在做、lane 无痕」或「lane 已结、成员还在跑」。
 
 **正确的成员管理面**：
@@ -382,10 +382,10 @@ audit ┌ supervisor ──── 全量验收（逐条核对）+ 漂移评判 +
 
 **⇒ 关于 lane 状态**：**team 批两条 `member_*` 都用** ——
 
-- **`member_status`** 登记 lane **进度**（`pending` / `running` / `review` / `idle` 的跃迁在 `batch_status` 可见）；
+- **`member_set_status`** 登记 lane **进度**（`pending` / `running` / `review` / `idle` 的跃迁在 `batch_status` 可见）；
 - **`member_settle`** 登记 lane **终态**（`merged` / `failed` / `conflict` / `skipped`）。
 
-**旧口径「`member_settle` 不用于 team 批」已废止**：聚合 audit lane 的成员完成后**不会自动结算**（引擎 `auto.settle.skipped` 的 `audit-explicit-settle-required`）⇒ **必须由 Leader 显式 `member_status(review)` → `member_settle(merged|conflict)`**，否则**批会永久挂在 `running`**。⇒ 省掉这一步 = **批收不了口**。
+**旧口径「`member_settle` 不用于 team 批」已废止**：聚合 audit lane 的成员完成后**不会自动结算**（引擎 `auto.settle.skipped` 的 `audit-explicit-settle-required`）⇒ **必须由 Leader 显式 `member_set_status(review)` → `member_settle(merged|conflict)`**，否则**批会永久挂在 `running`**。⇒ 省掉这一步 = **批收不了口**。
 
 **批相位**仍由 **`batch_phase`** 推进（`complete` 须先经 `running`）；**lane 终态与批相位是两本账，各管各的**（见 §七 开头的分工铁律）。
 

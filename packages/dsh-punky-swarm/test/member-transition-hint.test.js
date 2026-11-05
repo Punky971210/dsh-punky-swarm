@@ -48,7 +48,7 @@ test('D4-1 running→merged 被拒（严格性不放松），但报错自带 rev
   let msg = '';
   try { store.setMember(S, 'b-d4', 'e1', 'merged'); } catch (e) { msg = e.message; }
   assert.match(msg, /invalid member transition: running -> merged/, '仍须是非法迁移拒态');
-  assert.match(msg, /下一步：先 `member_status/, '须给下一步调用样例');
+  assert.match(msg, /下一步：先 `member_set_status/, '须给下一步调用样例');
   assert.match(msg, /status: "review"/, '须点名 review 中转');
   assert.match(msg, /member_settle\(\{ batchId, lane, status: "merged" \}\)/, '须给结算样例');
   assert.equal(store.readBatch(S, 'b-d4').lanes.e1, 'running', '被拒后 lane 状态不得变化');

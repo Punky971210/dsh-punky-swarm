@@ -68,7 +68,7 @@ const entry = (name, kind, modeGate, memberDeny, write) => Object.freeze({ name,
 export const SUITE_TOOLS = Object.freeze([
   entry('assign_check', 'governance', true, true, true), // 难度评估：成员不写难度（既裁）
   entry('wave_plan', 'blackboard', true, true, true), // 建批：只认本会话 C 档（G1）
-  entry('member_status', 'blackboard', true, true, true), // 成员状态写
+  entry('member_set_status', 'blackboard', true, true, true), // 成员状态写
   entry('member_settle', 'blackboard', true, true, true),
   entry('batch_phase', 'blackboard', true, true, true),
   entry('batch_control', 'blackboard', true, true, true), // P3a 最小干预面（pause/resume/abort）：人工介入面，成员不得干预批次相位

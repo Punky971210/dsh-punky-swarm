@@ -188,7 +188,7 @@ test('P-3 文件内规则 id 全局唯一（3 文件各自）', () => {
 // 另有只读治理查询工具 compat_status 等——口径为「白名单结构性排除 + 参考名单」，非固定封闭总数）
 const GOVERNANCE_TOOLS = [
   'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim',
-  'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_status',
+  'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_set_status',
   'lane_worktree_create', 'lane_checkpoint', 'lane_checkpoint_status', 'lane_worktree_merge',
   'log_export', 'mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun',
   'compat_status',
@@ -308,7 +308,7 @@ test('R-1 治理信道：mailbox/wave_plan/batch/member/log/heartbeat/gate 调�
     { name: 'mailbox_send', arguments: { box: 'outbox', lane: 'x', message: `密钥 ${PEM_RSA} token ${GH_40}` } },
     { name: 'wave_plan', arguments: { batchId: 'b1', tasks: [{ id: 't1', cmd: `export TOKEN='${GH_40}'` }] } },
     { name: 'batch_phase', arguments: { batchId: 'b1', phase: 'running' } },
-    { name: 'member_status', arguments: { batchId: 'b1', lane: 'l1', status: 'pending' } },
+    { name: 'member_set_status', arguments: { batchId: 'b1', lane: 'l1', status: 'pending' } },
     { name: 'log_export', arguments: { batchId: 'b1', format: 'json' } },
     { name: 'lane_heartbeat', arguments: { batchId: 'b1' } },
     { name: 'gate_status', arguments: { batchId: 'b1' } },

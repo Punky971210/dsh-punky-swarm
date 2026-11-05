@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 缺省默认开——readCapability 合并注册表 default；显式 enabled:false 可逐键关闭）
 // 拆分自 lib/tools.js（createTools 签名保持，index.js 调用不变）
 // ⚠ 治理工具豁免边界（与 core.js installDifficultyGuard 口径一致）：
-//   治理/查询类工具（batch_status/gate_status/member_status/artifact_types/
+//   治理/查询类工具（batch_status/gate_status/member_set_status/artifact_types/
 //   lane_checkpoint_status 等非执行型）豁免任务难度门禁——理由：防死锁（评估/查询若被拦
 //   则「先评估后执行」护栏自锁）；豁免仅限难度门禁，其余 guard 语义（执行计数等）不受影响。
 import { createCoreTools, installDifficultyGuard } from './core.js';

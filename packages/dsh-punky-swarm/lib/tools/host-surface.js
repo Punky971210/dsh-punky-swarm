@@ -243,7 +243,7 @@ export function handoffCallerIdentityOf(ctx, exec, args) {
 // ── P2-B（2026-09-17）：**legacy 标注**（用户裁决 Q2 暂缓 ⇒ **只标注不改行为**）────────────────────
 // 事实（`member-governance-redesign-20260917`（原文档未随仓分发） §7.1 事实分工）：**成员身份/状态的真源 = 官方 roster（5 态）**；
 //   引擎的 `member.*` **八态**（`pending/running/review/merged/failed/skipped/conflict/idle`）是**引擎侧投影**，
-//   `member.settled` / `member_status` / `member_settle` 写的是这八态 ⇒ 一律**标 legacy**（不改判定、不删字段、
+//   `member.settled` / `member_set_status` / `member_settle` 写的是这八态 ⇒ 一律**标 legacy**（不改判定、不删字段、
 //   不新增事件；仅回显面标注，使读端能看出「这是引擎投影、非官方真源」）。
 // 回显纪律（禁静默）：`batch_status` 单批与列表两形态**都带**标注键，且 `source` 二值可辨（`engine` = 引擎投影 /
 //   `roster` = 官方真源）——`P2-B` 只做标注，真正的状态来源切换归后续批次（Q2 暂缓）。

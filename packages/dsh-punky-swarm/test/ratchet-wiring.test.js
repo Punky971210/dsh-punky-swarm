@@ -40,7 +40,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `<home>/.dsh/.agent-presets`，且会挂 hotConfig watcher ⇒ 探针必须在**子进程 + 隔离
 //   USERPROFILE/HOME/DSH_HOME** 下执行（先例：`test/auditlog-mount.test.js:320-350`）。**真实用户目录零写入**。
 //
-// G1 前置清障（纪律）：`member_status.execute` 内先走 `assertMemberActionTierC`（`lib/tools/core.js:599`）
+// G1 前置清障（纪律）：`member_set_status.execute` 内先走 `assertMemberActionTierC`（`lib/tools/core.js:599`）
 //   ⇒ 调用方会话必须已评估为 C（否则 `GATE_MEMBER_REQUIRES_C` 会吞掉被检面）。探针用共享种子
 //   `test/helpers/gate-fixture.mjs` 的 `assessC`（与 `assign_check({difficulty:'C'})` 同一落盘函数）。
 import test from 'node:test';
@@ -141,7 +141,7 @@ try {
 
     const exec = { agent: { session: { id: SID } } };
     const toolOf = (n) => captured.find((t) => t && t.name === n);
-    const ms = toolOf('member_status');
+    const ms = toolOf('member_set_status');
     const bp = toolOf('batch_phase');
     out.hasMemberTool = !!ms;
     out.hasBatchTool = !!bp;
@@ -230,7 +230,7 @@ test('E1-a 基线（不传 config.ratchet）：装配可跑通，拒因 = entry 
   assert.equal(out.ok, true, '探针自身必须成功（实际: ' + JSON.stringify(out.error ?? null) + '）');
   assert.equal(out.applyThrew, false, '缺省 config 下 apply() 不得抛错');
   assert.ok(out.toolCount > 0, '装配点必须注册工具（实际 ' + out.toolCount + '）');
-  assert.equal(out.hasMemberTool, true, 'member_status 必须经装配点注册');
+  assert.equal(out.hasMemberTool, true, 'member_set_status 必须经装配点注册');
   assert.equal(out.memberThrew, true, '基线路径必须被拒（该 lane 的 consume 刻意未落盘）');
   assert.match(out.memberMessage, /^GATE_ENTRY_MISSING: exec\/e1\/absent\.md$/, '基线拒因 = entry 门 consume 缺件（码字 + 缺件清单）');
   assert.equal(out.laneState, 'pending', '被拒 ⇒ lane 状态零变更');

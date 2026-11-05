@@ -99,7 +99,7 @@ test('INV-5d：批次损坏/不存在 → 拒绝 throw', () => {
   assert.throws(() => store.recycleStalledLane(S, 'b-bad', 'a'), /batch not found/);
 });
 
-test('INV-5e：回收后经 member_status idle→running 可重派（与 ① 路径联动）', () => {
+test('INV-5e：回收后经 member_set_status idle→running 可重派（与 ① 路径联动）', () => {
   const { store, S } = setup();
   const bid = makeStalledBatch(store, S, 'b-re');
   store.recycleStalledLane(S, bid, 'l1');

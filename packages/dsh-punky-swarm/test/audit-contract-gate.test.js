@@ -45,7 +45,7 @@ function makeHarness() {
   const ctx = { tools: { register: () => {}, guard: () => {} }, logger: console };
   const tools = createTools(ctx, { store, root });
   const byName = Object.fromEntries(tools.tools.map((t) => [t.name, t]));
-  // G1 前置（新门禁）：`wave_plan` / `member_status` 属 C 档动作 ⇒ 建批前先评估为 C（同 assign_check 落盘函数）
+  // G1 前置（新门禁）：`wave_plan` / `member_set_status` 属 C 档动作 ⇒ 建批前先评估为 C（同 assign_check 落盘函数）
   assessC(store, SESS.agent.session.id, { rationale: 'fixture：audit 契约门套件建批前置评估（多 lane 并行 ⇒ C 档）' });
   return { root, store, byName };
 }

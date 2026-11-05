@@ -129,4 +129,4 @@ wave3: [audit：supervisor 逐条对账 + 独立复现 + gap-list + 复盘归档
 
 ### 管理面分工铁律
 
-**官方工具管「人」｜引擎 `member_*` 管「lane」，两本账并列不互替**：管理面（`list_agents` / `send_message` / `interrupt_agent` / `wait_agent` / `spawn_teammate`）操作**席位**；`member_status` / `member_settle` 操作 **lane 账本**；批相位走 `batch_phase`（**须先经 `running`**）。三者不可互替。
+**官方工具管「人」｜引擎 `member_*` 管「lane」，两本账并列不互替**：管理面（`list_agents` / `send_message` / `interrupt_agent` / `wait_agent` / `spawn_teammate`）操作**席位**；`member_set_status` / `member_settle` 操作 **lane 账本**；批相位走 `batch_phase`（**须先经 `running`**）。三者不可互替。

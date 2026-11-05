@@ -834,7 +834,7 @@ test('J7: 【R-4 结算归位 · L-AC-11】停用后 Leader 两步经既有写�
   const root = tempRoot('punky-as-j7-');
   const S = 'sess-j7';
   const store = seedBatch(root, S, 'j7');
-  // 停用态下 lane 停在 running（J5 已证）；Leader 显式两步 = `member_status`/`member_settle` 的**同一写路径**
+  // 停用态下 lane 停在 running（J5 已证）；Leader 显式两步 = `member_set_status`/`member_settle` 的**同一写路径**
   //   （工具面 `lib/tools/member-tools.js` 亦经 `store.setMember`，无第二套判定）
   store.setMember(S, 'j7', 'e1', 'review');
   store.setMember(S, 'j7', 'e1', 'merged');

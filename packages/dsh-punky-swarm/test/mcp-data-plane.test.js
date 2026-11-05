@@ -46,7 +46,7 @@ const PKG = path.resolve(HERE, '..');
 const EXPECTED_EXPOSED_DECLARED = Object.freeze([
   'artifact_types', 'asset_claim', 'batch_control', 'batch_phase', 'batch_status',
   'batch_tasks_add', 'gate_status', 'handoff_accept', 'handoff_submit', 'handoff_view',
-  'lane_checkpoint_status', 'list_agents', 'log_export', 'member_settle', 'member_status',
+  'lane_checkpoint_status', 'list_agents', 'log_export', 'member_settle', 'member_set_status',
   'role_guide', 'task_pool', 'task_update', 'wait_agent', 'wave_plan',
 ]);
 const EXPECTED_EXPOSED_DEFAULT = Object.freeze(EXPECTED_EXPOSED_DECLARED.filter((n) => n !== 'log_export'));

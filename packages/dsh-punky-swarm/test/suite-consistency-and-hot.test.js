@@ -59,7 +59,7 @@ const SID = 'sess-sc';
 //   刚需**」放开，并**同时撤其模式门**（`modeGate:false`）以守住不变量「**modeGate ⊆ memberDeny**」
 //   （工具一旦受模式门就必须 deny 成员，否则未启模式时会写出脏数据）⇒ 本序列由 13 项 → **10 项**。
 const LEGACY_DENY = [
-  'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
+  'assign_check', 'wave_plan', 'member_set_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release',
   'subagent', 'subagent_fork',
 ];
@@ -88,7 +88,7 @@ const FROZEN_DENY = [
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
 const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
 const FROZEN_MODE_GATED = [
-  'assign_check', 'wave_plan', 'member_status', 'member_settle', 'batch_phase',
+  'assign_check', 'wave_plan', 'member_set_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release',
   // 【P3a control lane 追加】人工干预面同样受模式门（非生效模式零治理写入）
   'batch_control',

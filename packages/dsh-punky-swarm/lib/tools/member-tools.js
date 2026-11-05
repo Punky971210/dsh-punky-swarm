@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 成员 / lane 工具面（自 `lib/tools/core.js` **原样搬移**）：lane_claim / lane_release / member_settle /
-//   lane_dispatch / member_status。
+//   lane_dispatch / member_set_status。
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, assertMemberActionTierC, readLiveConfig, lockPath, ownerOfExec } from './tier-gate.js';
@@ -27,7 +27,7 @@ import * as lock from '../lock.js';
 import {
   dispatchLaneCore, // P2：派发核心（**唯一实现**：工具面 `lane_dispatch` 与链引擎自动推进共用）
   // 【已删 · 勿回加】`assertConcurrencyAdmit`（并发闸准入）：随 **Q-B 取消并发闸**（2026-09-18 用户裁决）删除——
-  //   `member_status(status='running')` 直派面**不再做容量准入**（高并发不得被限流），
+  //   `member_set_status(status='running')` 直派面**不再做容量准入**（高并发不得被限流），
   //   故本文件对该导出**零引用**；`lib/engine/dispatch.js` 侧同批删除该导出（另一 lane 写域），两侧删齐即为终态。
 } from '../engine/dispatch.js';
 
@@ -82,7 +82,7 @@ export function buildLaneTools(cx) {
     }),
     defineTool({
       name: "member_settle",
-      description: "成员结算：按状态机迁移（running->review->merged/failed/skipped/conflict），写入 member.settled 事件。**调用方限该批 owner 或该批已登记 Manager**。Tier3 门禁：plan merged 前 Plan 契约校验（spec 必填章节 + task-tree JSON）、exec merged 前 outputs 校验、audit merged 前 produce 校验；lane 声明 targets 时，merged 前逐一核对 targets 落盘（存在性，不读正文），缺则拒 merged 抛 GATE_TARGET_MISSING、未变更抛 GATE_TARGET_UNCHANGED。needHuman：audit lane 产物含独立行 `needHuman: true` 声明时，merged 须 note 携带人工裁决证据（契约 `human:<裁决人>:<时间>:<结论>`，如 human:user@2026-08-21:accept），缺则拒 GATE_NEEDHUMAN_PENDING；conflict 驳回不强制（评审驳回语义）。命令 gate（V1）：exec 层产物可含独立行 `gate: <命令>`（行首锚定，可多行顺序执行），merged 前置确定性执行并以退出码判定（exit 0 通过，事件 gate.exit）；失败拒 merged 抛 GATE_EXIT_*（lane 留 review）；失败且产物声明 `needHuman: true` → 转人工闸（merged 须 note 含 human: 证据，缺则 GATE_NEEDHUMAN_PENDING）。**完成发现**：audit lane 不会自动结算 ⇒ 由 Leader 显式 `member_status(status=review)` → `member_settle`；「这条 lane 到底跑完没有」靠三查（`batch_status` / `log_export` / 产物根 glob），**勿凭回执或口述推断**；abort 批的 `danglingLanes` 属预期残留。批次按会话隔离。",
+      description: "成员结算：按状态机迁移（running->review->merged/failed/skipped/conflict），写入 member.settled 事件。**调用方限该批 owner 或该批已登记 Manager**。Tier3 门禁：plan merged 前 Plan 契约校验（spec 必填章节 + task-tree JSON）、exec merged 前 outputs 校验、audit merged 前 produce 校验；lane 声明 targets 时，merged 前逐一核对 targets 落盘（存在性，不读正文），缺则拒 merged 抛 GATE_TARGET_MISSING、未变更抛 GATE_TARGET_UNCHANGED。needHuman：audit lane 产物含独立行 `needHuman: true` 声明时，merged 须 note 携带人工裁决证据（契约 `human:<裁决人>:<时间>:<结论>`，如 human:user@2026-08-21:accept），缺则拒 GATE_NEEDHUMAN_PENDING；conflict 驳回不强制（评审驳回语义）。命令 gate（V1）：exec 层产物可含独立行 `gate: <命令>`（行首锚定，可多行顺序执行），merged 前置确定性执行并以退出码判定（exit 0 通过，事件 gate.exit）；失败拒 merged 抛 GATE_EXIT_*（lane 留 review）；失败且产物声明 `needHuman: true` → 转人工闸（merged 须 note 含 human: 证据，缺则 GATE_NEEDHUMAN_PENDING）。**完成发现**：audit lane 不会自动结算 ⇒ 由 Leader 显式 `member_set_status(status=review)` → `member_settle`；「这条 lane 到底跑完没有」靠三查（`batch_status` / `log_export` / 产物根 glob），**勿凭回执或口述推断**；abort 批的 `danglingLanes` 属预期残留。批次按会话隔离。",
       parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":["merged","failed","skipped","conflict"]},"note":{"type":"string","description":"简短备注（只留元数据，不复制正文）"},"session":{"type":"string","description":"批次归属会话"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
@@ -128,8 +128,8 @@ export function buildDispatchTools(cx) {
   return [
     defineTool({
       name: "lane_dispatch",
-      description: '集群派发入口（C 档套件）：为指定 lane **发放一次性句柄 + 置 running + 由引擎自派 worker**。门禁语义同 `member_status(status=running)`（调用方限该批 owner 或该批已登记的 Manager；exec 层 lane 需 consume 齐备）。引擎自派时：① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具 ⇒ 在成员会话里这些工具**不出现**）；② 以 `label=punky-swarm:<batchId>:<lane>` 建立**第二绑定键**（可从子会话事件反解析归属）；③ 成功后由引擎**直接写** `member.dispatch`（唯一写路径，不再依赖事后观察）；④ **宿主形态 / 能力位前置（fail-closed）**：旧 `start(provider, request)` 形态（`request.toolFilter`/`persona` 按次生效）⇒ **正常自派**；provider 不支持 `toolFilter`/`depthLimit` ⇒ **拒派**（不「以弱换强」）；宿主 subagent 服务为 `startActivation(spec)` 形态（该形态**不承载** `toolFilter`/`persona`）⇒ **同样拒派**（**返回** `mode` 取值 `rejected`（`code` = `GATE_DISPATCH_CAPABILITY_UNAVAILABLE`；D-1 起拒派**不再抛错**，改由返回值表达）；迁移方向 = 由 **Agent Preset** 承载 toolFilter/persona，单开批承接；且**打在状态变更之前**：lane 保持待派发、无句柄、无 `member.dispatch` 事件、批相位不变）。⑤ **仅当** `ctx.subagents` 不可取、或服务在位但两入口（`startActivation`/`start`）皆不可调用 ⇒ **降级为「仅发句柄」**（返回 `spawned:false` 与**分档成因**文案，不静默）。句柄一次性、TTL 30 分钟；`firstLine` 供人工直派形态粘贴（该形态的硬门禁属 C 阶段）。',
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"session":{"type":"string","description":"批次归属会话"},"prompt":{"type":"string","description":"Leader 补充的任务要点（可选）：引擎给出「角色/契约/纪律」骨架后拼接在末尾"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（同 member_status 派发面）：type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4）；multiplier 可选显式倍率 [1,100]；stalled 可选（缺省 true）","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
+      description: '集群派发入口（C 档套件）：为指定 lane **发放一次性句柄 + 置 running + 由引擎自派 worker**。门禁语义同 `member_set_status(status=running)`（调用方限该批 owner 或该批已登记的 Manager；exec 层 lane 需 consume 齐备）。引擎自派时：① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具 ⇒ 在成员会话里这些工具**不出现**）；② 以 `label=punky-swarm:<batchId>:<lane>` 建立**第二绑定键**（可从子会话事件反解析归属）；③ 成功后由引擎**直接写** `member.dispatch`（唯一写路径，不再依赖事后观察）；④ **宿主形态 / 能力位前置（fail-closed）**：旧 `start(provider, request)` 形态（`request.toolFilter`/`persona` 按次生效）⇒ **正常自派**；provider 不支持 `toolFilter`/`depthLimit` ⇒ **拒派**（不「以弱换强」）；宿主 subagent 服务为 `startActivation(spec)` 形态（该形态**不承载** `toolFilter`/`persona`）⇒ **同样拒派**（**返回** `mode` 取值 `rejected`（`code` = `GATE_DISPATCH_CAPABILITY_UNAVAILABLE`；D-1 起拒派**不再抛错**，改由返回值表达）；迁移方向 = 由 **Agent Preset** 承载 toolFilter/persona，单开批承接；且**打在状态变更之前**：lane 保持待派发、无句柄、无 `member.dispatch` 事件、批相位不变）。⑤ **仅当** `ctx.subagents` 不可取、或服务在位但两入口（`startActivation`/`start`）皆不可调用 ⇒ **降级为「仅发句柄」**（返回 `spawned:false` 与**分档成因**文案，不静默）。句柄一次性、TTL 30 分钟；`firstLine` 供人工直派形态粘贴（该形态的硬门禁属 C 阶段）。',
+      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"session":{"type":"string","description":"批次归属会话"},"prompt":{"type":"string","description":"Leader 补充的任务要点（可选）：引擎给出「角色/契约/纪律」骨架后拼接在末尾"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（同 member_set_status 派发面）：type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4）；multiplier 可选显式倍率 [1,100]；stalled 可选（缺省 true）","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"token":{"type":"string"},"firstLine":{"type":"string"},"ttlMs":{"type":"number"},"spawned":{"type":"boolean","required":true},"workerSessionId":{"type":"string"},"spawnNote":{"type":"string"},"mode":{"type":"string","enum":["degraded","rejected"],"description":"结局面：degraded=派了/该派但没法保证（面不可用 · 未配置 provider · 已尝试但不可确认）/ rejected=我们主动拒绝派（收窄不可核）；**成功路径（spawned:true）不产生本字段**"},"code":{"type":"string","description":"拒码，仅 mode==='rejected' 时给（恒为 GATE_DISPATCH_CAPABILITY_UNAVAILABLE）"},"unconfirmed":{"type":"boolean","description":"AC-16 核心信号：派发已尝试但无法确认（不可确认 ≠ 失败）"},"reason":{"type":"string","description":"机器可判短码（如 PUSH_UNCONFIRMED）；与 spawnNote 职责不同：reason=短码供机判，spawnNote=长文供人读"}}},
         render: (_args, value) => TEXT_OUTPUT('lane ' + value.lane + ' dispatched'
@@ -143,7 +143,7 @@ export function buildDispatchTools(cx) {
       },
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
-        assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1：与 member_status 同源（内含模式门 E 阶段）
+        assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps); // G1：与 member_set_status 同源（内含模式门 E 阶段）
         // P2（2026-09-16，lane e-chain）：**派发核心已抽出**至 `lib/engine/dispatch.js` 的 `dispatchLaneCore`
         //   ——工具面与推进链的自动派发走**同一条**路径（同 Tier3 entry 门、同句柄、同任务包骨架、同
         //   `member.dispatch` 登记），禁第二套实现。本 execute 只留「工具面门禁 + 出参整形」。
@@ -172,8 +172,8 @@ export function buildMemberStatusTools(cx) {
     //   原 enum 声明「可设」= 声明面与运行期相矛盾 ⇒ 本次只让**声明面**回到现实，状态机语义**零改**
     //   （不得反向修：把 `idle` 做成可设 = 动迁移表语义，属另一批）。
     defineTool({
-      name: "member_status",
-      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；`idle` 只能由恢复/回收进入（不许经 member_status 设置）——故 `status` 闭集不含 `idle`，`idle -> running` 的恢复重派仍照旧可用；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）。终态结算请用 member_settle。批次按会话隔离。',
+      name: "member_set_status",
+      description: '成员状态操作（非终态）：pending->running（派发，Tier3 门禁：exec 需 consume 齐备）、running->review（提交评审）、idle->running（恢复重派）；`idle` 只能由恢复/回收进入（不许经 member_set_status 设置）——故 `status` 闭集不含 `idle`，`idle -> running` 的恢复重派仍照旧可用；**调用方限该批 owner 或该批已登记 Manager**。派发（status=running）可附带 exempt 授予 longrun 长程豁免（只在派发面生效，其它状态带 exempt 一律拒 GATE_EXEMPT_NOT_DISPATCH）。终态结算请用 member_settle。批次按会话隔离。',
       parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":["pending","running","review"],"description":"目标成员态（**不含 `idle`**：该态只能由恢复/回收经单点入口进入，经本工具设置必被状态机拒）"},"session":{"type":"string","description":"批次归属会话"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 长程豁免授予载荷（仅 status=running 时允许出现；缺省 undefined = 无豁免意图）。type 四值白名单 ai-render|large-download|dep-install|none（档位默认 8/6/4/4），未知 type 拒 GATE_EXEMPT_TYPE_UNKNOWN；multiplier 可选显式倍率 [1,100]，非法拒 GATE_EXEMPT_INVALID；stalled 可选（缺省 true）= 是否同时豁免 heartbeat stalled 追问","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},  // 【已删 · 2026-11-05】原 `revokeExempt` 参数（撤销 longrun 豁免）随撤销面整体移除
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
@@ -191,7 +191,7 @@ export function buildMemberStatusTools(cx) {
         //   宿主 schema 校验会先拦（`lib/aip/tool-descriptor.js:53-54`）⇒ 运行时重复门禁冗余。
         //   保留说明：schema 层拒的文案来自宿主校验器，不再是我们自己的 GATE_EXEMPT_NOT_DISPATCH。
         // 【已删 · 勿回加】原「并发闸（批级容量准入）」段（段头注释 + `assertConcurrencyAdmit` 调用）随
-        //   并发闸已取消：`member_status(status='running')` 直派面
+        //   并发闸已取消：`member_set_status(status='running')` 直派面
         //   **不再做容量准入**（高并发不得被限流），`running` 迁移一律照常放行；本文件对该符号**零引用**。
         // 第 6 参 exempt：undefined = 既有行为零变化；非空对象 = 派发面授予（参数面强校验在 store 内）
         // 第 7 参 owner：仅 `to==='running'`（派发面）写入 ⇒ 派发即出池（K1）；非派发面传值亦被忽略。

@@ -119,20 +119,20 @@ test('HC-1 热生效：写 runtime.json gates.handoff.entry=true ⇒ entry 门**
     seedArtifact(h, 'hc1', 'plan/spec.md');
     seedArtifact(h, 'hc1', 'exec/e1.md'); // e2 的 consume（否则热关后会被既有 consume 门拦，掩盖本门语义）
     // RED：门关 ⇒ e1 缺 p1 交接，仍**放行**（既有行为零变化）
-    const red = await h.byName.member_status.execute({ batchId: 'hc1', lane: 'e1', status: 'running' }, SESS);
+    const red = await h.byName.member_set_status.execute({ batchId: 'hc1', lane: 'e1', status: 'running' }, SESS);
     assert.equal(red.lanes?.e1 ?? h.store.readBatch(SESSION, 'hc1').lanes.e1, 'running', 'RED：门关 ⇒ 派发放行');
     // 热开 entry（**不重启、不重建 store/tools**）
     await applyRuntime(h, { gates: { handoff: { entry: true } } });
     assert.equal(handoffGateEnabledOf(h.watcher.readSnapshot(), 'entry'), true, '前置：快照已开 entry');
     // GREEN：同型派发（e2 缺 e1 交接）⇒ 被交接门拒
     await assert.rejects(
-      () => h.byName.member_status.execute({ batchId: 'hc1', lane: 'e2', status: 'running' }, SESS),
+      () => h.byName.member_set_status.execute({ batchId: 'hc1', lane: 'e2', status: 'running' }, SESS),
       /GATE_HANDOFF_MISSING/,
       'GREEN：热开 entry 后同型派发须被拒（无重启）',
     );
     // 再热关 ⇒ 恢复放行（可逆性：同一进程内两向翻转）
     await resetGate(h);
-    await h.byName.member_status.execute({ batchId: 'hc1', lane: 'e2', status: 'running' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc1', lane: 'e2', status: 'running' }, SESS);
     assert.equal(h.store.readBatch(SESSION, 'hc1').lanes.e2, 'running', '热关后恢复放行（双向可逆）');
   } finally { cleanup(h); }
 });
@@ -147,16 +147,16 @@ test('HC-2 热生效：写 runtime.json gates.handoff.settle=true ⇒ 出口门*
     seedArtifact(h, 'hc2', 'exec/e1.md');
     seedArtifact(h, 'hc2', 'exec/e2.md');
     // RED：门关 ⇒ e1（有下游 e2）无交接也可 merged
-    await h.byName.member_status.execute({ batchId: 'hc2', lane: 'e1', status: 'running' }, SESS);
-    await h.byName.member_status.execute({ batchId: 'hc2', lane: 'e1', status: 'review' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc2', lane: 'e1', status: 'running' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc2', lane: 'e1', status: 'review' }, SESS);
     const red = await h.byName.member_settle.execute({ batchId: 'hc2', lane: 'e1', status: 'merged' }, SESS);
     assert.equal(red.status, 'merged', 'RED：门关 ⇒ 出口门观察态（放行）');
     // 热开 settle
     await applyRuntime(h, { gates: { handoff: { settle: true } } });
     assert.equal(handoffGateEnabledOf(h.watcher.readSnapshot(), 'settle'), true, '前置：快照已开 settle');
     // GREEN：e2（有下游 a1）无交接 ⇒ merged 被拒
-    await h.byName.member_status.execute({ batchId: 'hc2', lane: 'e2', status: 'running' }, SESS);
-    await h.byName.member_status.execute({ batchId: 'hc2', lane: 'e2', status: 'review' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc2', lane: 'e2', status: 'running' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc2', lane: 'e2', status: 'review' }, SESS);
     await assert.rejects(
       () => h.byName.member_settle.execute({ batchId: 'hc2', lane: 'e2', status: 'merged' }, SESS),
       /GATE_HANDOFF_MISSING/,
@@ -173,7 +173,7 @@ test('HC-3 缺省仍关：无 gates 键 ⇒ source=default、两段 false、行�
     assert.deepEqual(st, { entry: false, settle: false, source: 'default' }, '缺省 ⇒ 两段关、来源 default');
     await mkBatch(h, 'hc3');
     seedArtifact(h, 'hc3', 'plan/spec.md');
-    await h.byName.member_status.execute({ batchId: 'hc3', lane: 'e1', status: 'running' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'hc3', lane: 'e1', status: 'running' }, SESS);
     assert.equal(h.store.readBatch(SESSION, 'hc3').lanes.e1, 'running', '缺省关 ⇒ 派发不受交接门约束（零行为变化）');
   } finally { cleanup(h); }
 });

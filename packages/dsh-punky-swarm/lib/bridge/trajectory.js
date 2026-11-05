@@ -83,7 +83,7 @@ export function createTrajectoryBridge(ctx, deps) {
     return n;
   }
 
-  // 派发记录（member_status → running 派发时的 worker 会话 id 落事件；零新字段，store.appendEvent 既有通道）
+  // 派发记录（member_set_status → running 派发时的 worker 会话 id 落事件；零新字段，store.appendEvent 既有通道）
   function recordDispatch({ sessionId, batchId, lane, workerSessionId }) {
     if (!sessionId || !batchId || !lane || !workerSessionId) {
       throw new Error('recordDispatch: sessionId/batchId/lane/workerSessionId 均必填');

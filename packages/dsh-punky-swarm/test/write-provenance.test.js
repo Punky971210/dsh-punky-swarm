@@ -42,7 +42,7 @@ import {
 const EXPECTED_WRITE_FAMILY = Object.freeze([
   'asset_claim', 'assign_check', 'batch_control', 'batch_phase', 'batch_tasks_add',
   'handoff_accept', 'handoff_submit', 'lane_checkpoint', 'lane_claim', 'lane_dispatch',
-  'lane_release', 'lane_worktree_create', 'lane_worktree_merge', 'member_settle', 'member_status',
+  'lane_release', 'lane_worktree_create', 'lane_worktree_merge', 'member_settle', 'member_set_status',
   'swarm_cc', 'swarm_report', 'task_update', 'wave_plan',
 ]);
 

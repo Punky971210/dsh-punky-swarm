@@ -426,13 +426,13 @@ test('T12【退役锁 · Q-B】连派不再「零写入」：lanes 正常推进 
   __resetLaneHandles();
 });
 
-// ── T13：`member_status(status=running)` 直派面 —— **语义反转（Leader 明列，属有意）** ──
+// ── T13：`member_set_status(status=running)` 直派面 —— **语义反转（Leader 明列，属有意）** ──
 // 【口径变更，显式登记（禁默认沉默）】原口径（批 `concurrency-gate-20260917` U3 扩面）：该面**接到同一闸**，
 //   超限抛 `GATE_CONCURRENCY_EXCEEDED`。**Q-B 取消并发闸（2026-09-18）**：闸已整体删除 ⇒ 本面回到「只走既有
 //   状态机与 entry 门」的语义 ⇒ 超限**照常迁移成功**，且**零** `gate.concurrency_blocked`。
 //   ⚠ 这是**有意反转**（非静默削弱）：旧断言「抛闸码」被替换为「迁移成功 + 零拒态事件」，两向读数都留痕于
 //   exec 产物 `exec/engine-retire.md`（§T13 语义反转）。
-test('T13【语义反转 · Q-B】直派面：member_status(status=running) 超限**照常迁移成功**（零 GATE_CONCURRENCY_EXCEEDED）', async () => {
+test('T13【语义反转 · Q-B】直派面：member_set_status(status=running) 超限**照常迁移成功**（零 GATE_CONCURRENCY_EXCEEDED）', async () => {
   __resetLaneHandles();
   const SID = 'sess-cg-t13';
   const root = tempRoot('punky-cg-t13-');
@@ -442,12 +442,12 @@ test('T13【语义反转 · Q-B】直派面：member_status(status=running) 超�
   const exec = { agent: { session: { id: SID } } };
   assert.equal((await by.lane_dispatch.execute({ batchId: 'b-t13', lane: 'l1' }, exec)).spawned, true);
 
-  const r2 = await by.member_status.execute({ batchId: 'b-t13', lane: 'l2', status: 'running' }, exec);
+  const r2 = await by.member_set_status.execute({ batchId: 'b-t13', lane: 'l2', status: 'running' }, exec);
   assert.equal(r2.status, 'running', '[语义反转] 超限 lane 的直派迁移**照常成功**（不再抛闸码）');
   assert.equal(store.readBatch(SID, 'b-t13').lanes.l2, 'running', '[语义反转] l2 = running（不再「拒后零写入」）');
   assertNoBlockedEvent(store, SID, 'b-t13', 'T13');
   // 反向边界（口径未变）：非派发面的成员迁移本就不受容量闸影响（旧口径如此，退役后亦如此）
-  const r = await by.member_status.execute({ batchId: 'b-t13', lane: 'l1', status: 'review' }, exec);
+  const r = await by.member_set_status.execute({ batchId: 'b-t13', lane: 'l1', status: 'review' }, exec);
   assert.equal(r.status, 'review', '`running→review` 照常（状态机语义逐字不变）');
   assertNoBlockedEvent(store, SID, 'b-t13', 'T13/反向边界');
   __resetLaneHandles();

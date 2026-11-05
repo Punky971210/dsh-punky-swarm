@@ -238,7 +238,7 @@ test('A1: 终态批次拒绝成员迁移（GATE_BATCH_TERMINAL）', async () => 
   await byName.batch_phase.execute({ batchId: 'b-term', phase: 'running' }, AC_SESS);
   await byName.batch_phase.execute({ batchId: 'b-term', phase: 'aborted' }, AC_SESS);
   await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'b-term', lane: 'a', status: 'running' }, AC_SESS),
+    () => byName.member_set_status.execute({ batchId: 'b-term', lane: 'a', status: 'running' }, AC_SESS),
     /GATE_BATCH_TERMINAL/,
   );
   assert.equal(toolsStore.readBatch('sess-ac', 'b-term').lanes.a, 'pending', '被拒迁移不得改动成员状态');
@@ -256,13 +256,13 @@ test('A1: 终态批次拒绝成员迁移（GATE_BATCH_TERMINAL）', async () => 
 test('A3（K3 改判）：重派路径已去除 ⇒ review→running 被拒，旧 longrun 豁免零写入不清退', async () => {
   await byName.wave_plan.execute({ batchId: 'b-ex', tasks: [{ id: 'x' }] }, AC_SESS);
   await byName.batch_phase.execute({ batchId: 'b-ex', phase: 'running' }, AC_SESS);
-  await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running', exempt: { type: 'ai-render' } }, AC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running', exempt: { type: 'ai-render' } }, AC_SESS);
   assert.ok(toolsStore.readBatch('sess-ac', 'b-ex').laneExempt.x, '派发面授予后应有豁免条目');
-  await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'review' }, AC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-ex', lane: 'x', status: 'review' }, AC_SESS);
   // 重派不带 exempt：K3 后被拒（非「放行但清退豁免」）
   let re = null;
   try {
-    re = await byName.member_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running' }, AC_SESS);
+    re = await byName.member_set_status.execute({ batchId: 'b-ex', lane: 'x', status: 'running' }, AC_SESS);
   } catch (e) {
     re = e;
   }

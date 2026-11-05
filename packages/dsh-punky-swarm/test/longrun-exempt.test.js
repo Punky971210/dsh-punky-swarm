@@ -30,7 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   C13   无既有豁免撤销 → GATE_EXEMPT_REVOKE_REQUIRED
 //   C14   revokeExempt 与 status 并用 → GATE_EXEMPT_NOT_DISPATCH（工具面）
 //   C15   撤销不改成员状态（lanes 不变、无新增 member.settled）
-//   J38/J39 工具面注册（总数面权威见 test/tools.test.js 冻结名单）；member_status 新参透传；member_settle 调用点仍 5 参
+//   J38/J39 工具面注册（总数面权威见 test/tools.test.js 冻结名单）；member_set_status 新参透传；member_settle 调用点仍 5 参
 //   反例  工具层旧调用（不带 exempt/不带 status）仍可用；空表不留空对象键
 //
 // 纪律：本文件走隔离 home 预载运行（package.json test 脚本 / gate 命令均带 --import preload），
@@ -75,7 +75,7 @@ function toolsFixture(root, store, sessionId = 'sess-tools') {
   const ctx = { tools: { register: (t) => registered.push(t) }, logger: console };
   const { tools } = createTools(ctx, { store, root });
   const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-  // G1 前置（新门禁）：`member_status` 属 C 档动作 ⇒ 工具面夹具先把本会话评估为 C（同 assign_check 落盘函数）
+  // G1 前置（新门禁）：`member_set_status` 属 C 档动作 ⇒ 工具面夹具先把本会话评估为 C（同 assign_check 落盘函数）
   assessC(store, sessionId, { rationale: 'fixture：longrun 豁免套件工具面前置评估（成员面治理 ⇒ C 档）' });
   return { tools, registered, byName, EXEC_SESS: { agent: { session: { id: sessionId } } } };
 }
@@ -278,13 +278,13 @@ test('EX-B11: 未知 type → GATE_EXEMPT_TYPE_UNKNOWN，错误文本含合法�
 
 // ── C. 撤销（显式调用）──
 
-test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与顺序不变（总数面权威见 test/tools.test.js 冻结名单）', () => {
+test('EX-J38: member_set_status 参数表按冻结清单扩两键，既有 4 键与顺序不变（总数面权威见 test/tools.test.js 冻结名单）', () => {
   const { store, root } = setup();
   const { byName } = toolsFixture(root, store);
   // 【R-1/T-10 · 2026-10-09 批 `engine-techdebt-cleanup-r2-20261008`】原「工具总数断言 + 旧计数叙事」
   //   原「工具总数断言（length 字面量）」已删：缺省注册集总数面的**唯一权威** = `test/tools.test.js` 的
-  //   `TOOL_NAMES` 精确集合断言；本用例**被检面** = `member_status` 参数表，与总数无关（防双权威漂移）。
-  const ms = byName.member_status;
+  //   `TOOL_NAMES` 精确集合断言；本用例**被检面** = `member_set_status` 参数表，与总数无关（防双权威漂移）。
+  const ms = byName.member_set_status;
   // defineTool 归一化后：parameters = { type:'object', properties:{...}, required:[...] }（声明顺序即 Object.keys 顺序）
   // 【2026-10-31 S3 · 声明层增键】`sourceRunId` 由 S3 声明层统一加入（非必填）⇒ 冻结清单**加一键**，
   //   既有 6 键与顺序**逐字不变**；仍是精确 deepEqual（未放宽为「包含 / ≥N」）。
@@ -292,7 +292,7 @@ test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与�
   //   ⇒ 冻结清单从 7 键减为 6 键；`exempt`（授予面）原样保留。
   assert.deepEqual(Object.keys(ms.parameters.properties),
     ['sourceRunId', 'batchId', 'lane', 'status', 'session', 'exempt'],
-    'member_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）；revokeExempt 已删');
+    'member_set_status 参数表 = 冻结 6 键（顺序不变）＋ S3 的 sourceRunId（归一化后居首）；revokeExempt 已删');
   assert.equal(ms.parameters.properties.exempt.type, 'object');
   assert.deepEqual(ms.parameters.properties.exempt.properties.type.enum, LANE_EXEMPT_TYPES);
   // 【P2 · 2026-11-05】用户裁决「status 进 required」已落地：`status` 现在是参数表必填。
@@ -303,13 +303,13 @@ test('EX-J38: member_status 参数表按冻结清单扩两键，既有 4 键与�
   assert.equal(Object.prototype.hasOwnProperty.call(byName.member_settle.parameters.properties, 'exempt'), false);
 });
 
-test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零变化 / 非派发面拒', async () => {
+test('EX-J39: 工具面透传 —— member_set_status(exempt) 授予 / 旧调用零变化 / 非派发面拒', async () => {
   const { store, root } = setup();
   mkBatch(store, 'b-j39', ['l1', 'l2', 'l3']);
   const { byName, EXEC_SESS } = toolsFixture(root, store, S);
 
   // ① 授予：status=running + exempt
-  const r1 = await byName.member_status.execute({ batchId: 'b-j39', lane: 'l1', status: 'running', exempt: { type: 'ai-render' } }, EXEC_SESS);
+  const r1 = await byName.member_set_status.execute({ batchId: 'b-j39', lane: 'l1', status: 'running', exempt: { type: 'ai-render' } }, EXEC_SESS);
   assert.equal(r1.status, 'running');
   assert.equal(store.readBatch(S, 'b-j39').laneExempt.l1.multiplier, 8);
 
@@ -317,7 +317,7 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零
   //   授予面（①）与旧调用面（③）保留，豁免的「授予 → 迁移」语义不受影响。
 
   // ③ 旧调用（不带 exempt）：与今日行为一致
-  const r3 = await byName.member_status.execute({ batchId: 'b-j39', lane: 'l2', status: 'running' }, EXEC_SESS);
+  const r3 = await byName.member_set_status.execute({ batchId: 'b-j39', lane: 'l2', status: 'running' }, EXEC_SESS);
   assert.equal(r3.status, 'running');
   // 【P1 修正 · 2026-11-05】原断言「整个 laneExempt 不存在」依赖已被删的 ② 撤销子段（它把 l1 的豁免删了）。
   //   撤销面移除后 l1 的豁免仍在 ⇒ 改为断言**本 lane（l2）未被写入豁免**，语义更准且不依赖撤销。
@@ -325,7 +325,7 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零
 
   // ④ 非派发面带 exempt（工具面）→ 拒
   await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l2', status: 'review', exempt: { type: 'none' } }, EXEC_SESS),
+    () => byName.member_set_status.execute({ batchId: 'b-j39', lane: 'l2', status: 'review', exempt: { type: 'none' } }, EXEC_SESS),
     /GATE_EXEMPT_NOT_DISPATCH/,
   );
 
@@ -336,12 +336,12 @@ test('EX-J39: 工具面透传 —— member_status(exempt) 授予 / 旧调用零
   //   ⇒ 错误形态从 `GATE_EXEMPT_NOT_DISPATCH` 变为 `ToolArgsError: invalid arguments: missing required property "status"`。
   //   这是判据**加强**（更早、更结构化），不是退化。
   await assert.rejects(
-    () => byName.member_status.execute({ batchId: 'b-j39', lane: 'l3' }, EXEC_SESS),
+    () => byName.member_set_status.execute({ batchId: 'b-j39', lane: 'l3' }, EXEC_SESS),
     /missing required property "status"/,
   );
 
   // ⑧ 授予后仍有 member.settled（派发语义未被豁免破坏）+ 撤销后成员态可继续正常迁移
-  await byName.member_status.execute({ batchId: 'b-j39', lane: 'l3', status: 'running', exempt: { type: 'dep-install' } }, EXEC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-j39', lane: 'l3', status: 'running', exempt: { type: 'dep-install' } }, EXEC_SESS);
   assert.equal(store.readBatch(S, 'b-j39').laneExempt.l3.multiplier, 4);
   const settled = eventsOf(store, 'b-j39', EVT_MEMBER_SETTLED).filter((e) => e.lane === 'l3');
   assert.equal(settled.length, 1);

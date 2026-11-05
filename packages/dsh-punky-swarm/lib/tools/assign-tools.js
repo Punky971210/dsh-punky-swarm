@@ -272,7 +272,7 @@ export function buildAssignTools(cx) {
           + String(existingDifficulty) + '（本次声明档位仅入 history 供审计）。'
           + '**降档比较按准入档**（A=1 < B=2 < {C,D}=3）：C↔D **同属建批档**，二者互转不算降档（如活跃 D 批期间改声明 C 属允许的显式降级），'
           + '本次为**跨准入档**降档（{C,D} → {A,B}）故拦。处置：批次运行期按既有档位继续'
-          + '（C/D 档可直接 wave_plan / member_status / member_settle）；确已收窄为单线程则先经 batch_phase 收口或中止在跑批次，再重评档位';
+          + '（C/D 档可直接 wave_plan / member_set_status / member_settle）；确已收窄为单线程则先经 batch_phase 收口或中止在跑批次，再重评档位';
         const notice = sessionId === 'cli'
           ? 'session 未显式指定且无 agent.session：评估落点 cli 共享黑板，跨调用互相覆盖，建议显式传 session'
           : (downgradeSkip

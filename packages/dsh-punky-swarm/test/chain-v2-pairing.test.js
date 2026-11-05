@@ -130,8 +130,8 @@ async function mkBatch(h, batchId) {
 const seed = (h, batchId, rel, body = 'out') => seedArtifactFile(h.root, SESSION, batchId, rel, body);
 async function settleLane(h, batchId, lane, status = 'merged') {
   const cur = () => h.store.readBatch(SESSION, batchId)?.lanes?.[lane];
-  if (cur() !== 'running') await h.byName.member_status.execute({ batchId, lane, status: 'running' }, SESS);
-  if (cur() === 'running') await h.byName.member_status.execute({ batchId, lane, status: 'review' }, SESS);
+  if (cur() !== 'running') await h.byName.member_set_status.execute({ batchId, lane, status: 'running' }, SESS);
+  if (cur() === 'running') await h.byName.member_set_status.execute({ batchId, lane, status: 'review' }, SESS);
   return h.byName.member_settle.execute({ batchId, lane, status }, SESS);
 }
 const eventsOf = (h, b) => h.store.readBatch(SESSION, b)?.events ?? [];

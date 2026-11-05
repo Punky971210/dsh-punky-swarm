@@ -207,8 +207,8 @@ test('R3-2 GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH：存量批 + 出口门开启 
     // e1 的 exit 门（本 lane 自证产出）与 audit 锚点先满足 ⇒ 结算的**唯一可拒面**只剩出口交接门
     seedArtifact(h.root, 'r32-sl', 'exec/e1.md');
     seedArtifact(h.root, 'r32-sl', 'plan/spec.md');
-    await h.byName.member_status.execute({ batchId: 'r32-sl', lane: 'e1', status: 'running' }, SESS);
-    await h.byName.member_status.execute({ batchId: 'r32-sl', lane: 'e1', status: 'review' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'r32-sl', lane: 'e1', status: 'running' }, SESS);
+    await h.byName.member_set_status.execute({ batchId: 'r32-sl', lane: 'e1', status: 'review' }, SESS);
 
     process.env.PSWARM_HANDOFF_GATE = '1'; // 结算当刻择入出口门（每例 try/finally 还原）
     let r;

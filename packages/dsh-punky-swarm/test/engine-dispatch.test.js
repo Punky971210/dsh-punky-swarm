@@ -483,7 +483,7 @@ const EXPECTED_GOVERNANCE_FACES = Object.freeze([
   'batch_phase', 'batch_status', 'batch_tasks_add', 'gate_status',
   'handoff_accept', 'handoff_submit', 'handoff_view', 'interrupt_agent',
   'lane_checkpoint_status', 'lane_claim', 'lane_dispatch', 'lane_release',
-  'list_agents', 'log_export', 'member_settle', 'member_status',
+  'list_agents', 'log_export', 'member_settle', 'member_set_status',
   'role_guide', 'send_message', 'spawn_teammate', 'subagent',
   'subagent_fork', 'swarm_cc', 'swarm_report', 'task_pool',
   'task_update', 'wait_agent', 'wave_plan',

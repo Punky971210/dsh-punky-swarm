@@ -554,7 +554,7 @@ const createRefusalEventBridge = ({ ctx, root, store, dispatchIndex, rebuildInde
   //   （member.dispatch 事件重建，读侧索引 dispatchIndex）命中后 → store.recordGovernanceRefusal（升级链
   //   在 store 方法内闭环：记录/评估/棘轮升级单次原子写）；映射缺失/'cli'/未命中 → 静默降级
   //   （仅 jsonl 可见、批事件流零新增、零升级——不误暂停）。
-  //   宿主派发流（member_status → subagent spawn）无 batchId/lane 结构化字段，归属登记点（写侧）
+  //   宿主派发流（member_set_status → subagent spawn）无 batchId/lane 结构化字段，归属登记点（写侧）
   //   由装配观察登记（见 bridge/dispatch-register.js）；读侧索引缺登记时恒空 → 出厂 enabled=false
   //   零路径 + 即使开启也静默降级（安全侧：漏计不误暂停）。读侧索引经 rebuildDispatchIndex 幂等重建，
   //   登记点落地（写 member.dispatch）后无需改动即可生效。
@@ -622,7 +622,7 @@ const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
 const mountDispatchRegistration = ({ ctx, config, store, dispatchIndex }) => {
   // 派发写侧登记点（dispatch-register.js）：
   //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
-  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_status(running) 派发意图兜底，
+  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_set_status(running) 派发意图兜底，
   //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
   //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，
   //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
@@ -632,7 +632,7 @@ const mountDispatchRegistration = ({ ctx, config, store, dispatchIndex }) => {
     dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
     config,
     // 装配注入面：config.dispatch.resolveBatchContext 显式提供归属（宿主/编排层可注入函数；
-    //   缺省 undefined → 模块内 member_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
+    //   缺省 undefined → 模块内 member_set_status(running) 意图兜底）。config 经 cordis 装配可携带函数（仅 JS 侧），
     //   yml 静态块不适用时走兜底意图——两路共存，静默降级语义保持。
     resolveBatchContext: config?.dispatch?.resolveBatchContext,
     logger: ctx.logger,
@@ -1045,7 +1045,7 @@ const createAutoSettleRemounter = ({ ctx, store, dispatchIndex, root, rt, instal
   rt.autoSettleEnabled = nextEnabled;
   ctx.logger?.info?.('[dsh-punky-swarm] hot config: auto-settle ' + (rt.autoSettle.installed
     ? 're-mounted (autoSettle.enabled 生效值 → true：宿主 subagent/end 重新订阅，自动结算恢复)'
-    : 'disabled (autoSettle.enabled 生效值 → false：主路已退订；结算责任归 Leader：member_status(review) → member_settle(...))')
+    : 'disabled (autoSettle.enabled 生效值 → false：主路已退订；结算责任归 Leader：member_set_status(review) → member_settle(...))')
     + (logTag ? ' [' + logTag + ']' : ''));
   return true;
 };

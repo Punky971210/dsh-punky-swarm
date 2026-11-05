@@ -63,7 +63,7 @@ function stateAnchorOf(batch, lane) {
     return null;
   }
   if (st === 'review' || st === 'idle') {
-    // 最近一次 →review / →idle 迁移事件 ts（member.settled{to} 为主；兼容 member_status 直写镜像的 to 字段）
+    // 最近一次 →review / →idle 迁移事件 ts（member.settled{to} 为主；兼容 member_set_status 直写镜像的 to 字段）
     for (let i = evs.length - 1; i >= 0; i--) {
       const e = evs[i];
       if (e?.lane !== lane) continue;

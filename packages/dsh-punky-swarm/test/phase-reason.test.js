@@ -115,8 +115,8 @@ async function mkBatch(h, batchId) {
 const seed = (h, batchId, rel, body = 'out') => seedArtifactFile(h.root, SESSION, batchId, rel, body);
 /** 走完一条 lane 的合法结算链（`running → review → failed`；非 merged 终态须带非空 note）。 */
 async function settleFailed(h, batchId, lane) {
-  await h.byName.member_status.execute({ batchId, lane, status: 'running' }, SESS);
-  await h.byName.member_status.execute({ batchId, lane, status: 'review' }, SESS);
+  await h.byName.member_set_status.execute({ batchId, lane, status: 'running' }, SESS);
+  await h.byName.member_set_status.execute({ batchId, lane, status: 'review' }, SESS);
   return h.byName.member_settle.execute({ batchId, lane, status: 'failed', note: 'PAUSE-REASON 夹具：' + lane + ' 失败留痕' }, SESS);
 }
 const phaseEventsOf = (h, batchId) => (h.store.readBatch(SESSION, batchId)?.events ?? []).filter((e) => e.type === EVT_BATCH_PHASE);

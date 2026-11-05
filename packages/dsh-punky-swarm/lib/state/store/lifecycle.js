@@ -151,7 +151,7 @@ export function buildLifecycle(cx) {
   // 事件：lane.recycled { lane, from:'running', reason:'stalled', outcome:'interrupted', note } 留痕；
   //   outcome='interrupted'：运行中被显式回收（停滞证据 → 脱离在飞态）的结局记账值
   //   （只记不改：非成员态、不拦截、不新增迁移；watch stalled/longrun 信号零变，仅处置落 idle 时记账）；
-  //   回收后走既有 member_status idle→running 重派。
+  //   回收后走既有 member_set_status idle→running 重派。
   function recycleStalledLane(sessionId, batchId, lane) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);

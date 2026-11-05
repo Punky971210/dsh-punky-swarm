@@ -62,11 +62,11 @@ export const EXEC_TOOLS = [
 ];
 
 // G1（**严格档**，后经 Q2=B 收窄）：**成员面动作只允许 C 档会话**——
-//   ① 建批（`wave_plan`）；② 写成员状态（`member_status` / `member_settle`）。
+//   ① 建批（`wave_plan`）；② 写成员状态（`member_set_status` / `member_settle`）。
 //   **D 档并入**（Q-3=B / P-1，2026-10-01 裁决）：D = team 方案、与 C 同属集群建批档 ⇒ 同受本门。
 //   （函数名保留 `assertMemberActionTierC` 不动：改名会牵动导入面与既有读端，属零收益改名。）
 //   动机（用户口径，2026-09-14）：成员协作只有一条轨道——**Leader 先评 C → `wave_plan` 建批 → 建批即拉起 Manager →
-//   由 Manager/Leader 调度、成员大规模并行**；**不是** Leader 以 A/B 档手工逐个 `subagent` 派单再手工 `member_status`
+//   由 Manager/Leader 调度、成员大规模并行**；**不是** Leader 以 A/B 档手工逐个 `subagent` 派单再手工 `member_set_status`
 //   管状态——那既与并行执行模式相悖，又会让批次落在 worker 会话名下（归属错位）。
 //   严格档：**未评估也拒**（必须先 `assign_check({ difficulty: 'C', rationale })`）；无默认档、无静默放行。
 //   **2026-09-15 收窄（用户裁决 Q2=B：「成员仅会话，不可写状态」）**——**取消父档继承**：
@@ -76,10 +76,10 @@ export const EXEC_TOOLS = [
 //       Manager 会话 id 同值）。**其余任何子会话（含 C 档父会话下的 exec worker）一律拒**。
 export function assertMemberActionTierC(store, sessionId, exec, action, opts = {}, deps = null) {
   // E 阶段（模式跟随）先于 G1：本模式未启用蟛蜞治理 ⇒ 明确报「模式未启用」，而不是抛蟛蜞内部档位语义。
-  if (deps) assertModeActive(deps, exec, action === 'batch' ? '建批（wave_plan）' : '写成员状态（member_status / member_settle）');
+  if (deps) assertModeActive(deps, exec, action === 'batch' ? '建批（wave_plan）' : '写成员状态（member_set_status / member_settle）');
   const tierOf = (sid) => (sid ? (store.readGovernance(sid)?.lastAssign?.difficulty ?? null) : null);
   const code = action === 'batch' ? 'GATE_BATCH_REQUIRES_C' : 'GATE_MEMBER_REQUIRES_C';
-  const what = action === 'batch' ? '建批（wave_plan）' : '写成员状态（member_status / member_settle）';
+  const what = action === 'batch' ? '建批（wave_plan）' : '写成员状态（member_set_status / member_settle）';
   const caller = exec?.agent?.session?.id ?? null;          // 调用方自己的会话（≠ 批归属会话）
   const own = tierOf(caller ?? sessionId);                  // 判据落在**调用方**，不落批归属会话（否则 worker 借 C 档批会话绕过）
   if (own === 'C' || own === 'D') return; // P-1：D 与 C 同属建批档
@@ -176,7 +176,7 @@ export function installDifficultyGuard(ctx, deps) {
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
       // ① 非执行型：放行（治理/查询，防死锁）
       // ⚠ 治理工具豁免边界（明示）：
-      //   - 豁免类别：治理/查询类工具（batch_status/gate_status/member_status/artifact_types/lane_checkpoint_status/
+      //   - 豁免类别：治理/查询类工具（batch_status/gate_status/member_set_status/artifact_types/lane_checkpoint_status/
       //     lane_heartbeat（已于 G3/B1 删除）等不在 EXEC_TOOLS 名单者）+ 非执行型写（如 assign_check 评估本身）。
       //   - 豁免理由：防死锁——难度门禁是「先评估后执行」的护栏，评估/查询动作若也被拦截将形成
       //     「评估→被拦→无法评估」死循环（worker 被派发后须先读状态再干活，读状态不能被门禁卡死）。
@@ -229,7 +229,7 @@ export function installDifficultyGuard(ctx, deps) {
       //     ① `wave_plan`：**放行**——建批面自带正式判定（`lib/tools/wave-plan-tools.js` 的 D×通道硬拒），
       //        本支若也拦它即形成「拒建批 ⇒ 无法消解 ⇒ 死锁」；D 的通道面正是**靠建批**落地的。
       //     ② 只读面（`isReadOnlyShellCall`）：**已在 `:186` 先行放行**（本支到不了）；
-      //     ③ 治理/查询类（`batch_status` / `gate_status` / `member_status` / `handoff_view` 等）：**本就不在
+      //     ③ 治理/查询类（`batch_status` / `gate_status` / `member_set_status` / `handoff_view` 等）：**本就不在
       //        `EXEC_TOOLS`**（`:165` 已先行放行）⇒ 本支对它们不可能生效。
       //   【已有 team 批则不拦】：该会话任一**活跃（非终态）**批的 `batch.channel ∈ {team,mixed}` ⇒ 通道事实已成立
       //     （真消费事实在场，避免与建批面口径冲突）。「活跃」判据复用 `schema.isBatchTerminal` 单点（与

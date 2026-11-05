@@ -189,8 +189,8 @@ const CASES = {
   },
   member_settle: {
     success: async (h) => {
-      await h.byName.member_status.execute({ batchId: C1, lane: 'e1', status: 'running' }, EXEC);
-      await h.byName.member_status.execute({ batchId: C1, lane: 'e1', status: 'review' }, EXEC);
+      await h.byName.member_set_status.execute({ batchId: C1, lane: 'e1', status: 'running' }, EXEC);
+      await h.byName.member_set_status.execute({ batchId: C1, lane: 'e1', status: 'review' }, EXEC);
       return h.byName.member_settle.execute({ batchId: C1, lane: 'e1', status: 'merged' }, EXEC);
     },
     reject: async (h) => h.byName.member_settle.execute({ batchId: C1, lane: 'a1', status: 'bogus' }, EXEC),
@@ -239,9 +239,9 @@ const CASES = {
       { type: 'anomaly', summary: '普查：抄送回报', batchId: C1, lane: 'p1' }, EXEC),
     reject: async (h) => h.byName.swarm_cc.execute({ type: 'progress', summary: 'x' }, EXEC),
   },
-  member_status: {
-    success: async (h) => h.byName.member_status.execute({ batchId: C1, lane: 'a1', status: 'running' }, EXEC),
-    reject: async (h) => h.byName.member_status.execute({ batchId: C1, lane: 'a1', status: 'bogus' }, EXEC),
+  member_set_status: {
+    success: async (h) => h.byName.member_set_status.execute({ batchId: C1, lane: 'a1', status: 'running' }, EXEC),
+    reject: async (h) => h.byName.member_set_status.execute({ batchId: C1, lane: 'a1', status: 'bogus' }, EXEC),
   },
   // 【2026-10-30 G3 B1】五个工具面 CASES 条目已删（`mailbox_send`/`mailbox_read`/`mailbox_ack`/
   //   `lane_heartbeat`/`lane_longrun` —— 工具随 B1 删除）：本普查的键集必须与**注册名集双向相等**，

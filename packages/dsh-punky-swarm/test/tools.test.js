@@ -36,7 +36,7 @@ const byName = withDefaultTeam(Object.fromEntries(tools.map((t) => [t.name, t]))
 
 const EXEC_SESS = { agent: { session: { id: 'sess-leader' } } };
 
-// G1 前置（新门禁）：`wave_plan` / `member_status` / `member_settle` 属 C 档动作 ⇒ 本套件建批前先把
+// G1 前置（新门禁）：`wave_plan` / `member_set_status` / `member_settle` 属 C 档动作 ⇒ 本套件建批前先把
 //   执行会话评估为 C（与 `assign_check({difficulty:'C'})` 同一落盘函数；旧 fixture 无此状态会被新门拦下）。
 assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置评估（三层批全流程 ⇒ C 档）' });
 
@@ -59,7 +59,7 @@ assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置�
 //   五名（31 → 26，展示位）；冻结名单 ≡ 实测注册集（集合式判据 = 下方 deepEqual）。
 //   ⚠ 本文件有**两处**列出工具名：本行冻结名单 ＋ `:66` 的逐名存在性循环 —— 两处同步删，
 //     否则 `:66` 会继续断言「已删工具存在」（自相矛盾用例）。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'task_pool', 'batch_tasks_add', 'task_update', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_set_status', 'task_pool', 'batch_tasks_add', 'task_update', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length;
 
 test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，计数由派生常量核定）', () => {
@@ -67,7 +67,7 @@ test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，�
   //   现改为**精确集合断言 + 差集诊断**：失败时直接给出「多了哪个 / 少了哪个」。
   assert.deepEqual(tools.map((t) => t.name).slice().sort(), TOOL_NAMES.slice().sort(),
     '注册名集必须**精确等于**冻结名单 `TOOL_NAMES`（差集即多/少的具体工具名）');
-  for (const n of ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_status', 'member_settle', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
+  for (const n of ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'assign_check', 'asset_claim', 'gate_status', 'artifact_types', 'lane_claim', 'lane_release', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_set_status', 'member_settle', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status']) {
     assert.ok(byName[n], 'missing tool ' + n);
   }
 });
@@ -158,12 +158,12 @@ test('full flow binds to exec session; args.session overrides', async () => {
 
   // r2 同步：声明的产物必须在场（entry/exit 门 presence 硬约束）
   seedArtifacts(root, 'sess-leader', 'b-demo', ['t1'], { auditId: 't2' });
-  await byName.member_status.execute({ batchId: 'b-demo', lane: 'p1', status: 'running' }, EXEC_SESS);
-  await byName.member_status.execute({ batchId: 'b-demo', lane: 'p1', status: 'review' }, EXEC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-demo', lane: 'p1', status: 'running' }, EXEC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-demo', lane: 'p1', status: 'review' }, EXEC_SESS);
   await byName.member_settle.execute({ batchId: 'b-demo', lane: 'p1', status: 'merged' }, EXEC_SESS);
 
-  await byName.member_status.execute({ batchId: 'b-demo', lane: 't1', status: 'running' }, EXEC_SESS);
-  await byName.member_status.execute({ batchId: 'b-demo', lane: 't1', status: 'review' }, EXEC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-demo', lane: 't1', status: 'running' }, EXEC_SESS);
+  await byName.member_set_status.execute({ batchId: 'b-demo', lane: 't1', status: 'review' }, EXEC_SESS);
   await byName.member_settle.execute({ batchId: 'b-demo', lane: 't1', status: 'merged', note: 'ok' }, EXEC_SESS);
   await byName.member_settle.execute({ batchId: 'b-demo', lane: 't2', status: 'skipped' }, EXEC_SESS);
 
@@ -400,7 +400,7 @@ test('guard：评估过期仍拒（stale 语义不因 subagent 豁免而放松�
 // ═══════════════════════════════════════════════════════════════════════════
 // G1（2026-09-14 用户裁决 B；**2026-09-15 用户裁决 Q2=B 收窄**）：成员面动作只允许出现在 **C 档**会话（严格档：未评估也拒）
 //   被检实现：`lib/tools/core.js` 的 `assertMemberActionTierC`（:59；调用点 :213 建批、:565/:580 成员面）
-//   · `wave_plan` → GATE_BATCH_REQUIRES_C；`member_status` / `member_settle` → GATE_MEMBER_REQUIRES_C；
+//   · `wave_plan` → GATE_BATCH_REQUIRES_C；`member_set_status` / `member_settle` → GATE_MEMBER_REQUIRES_C；
 //   · A / B / **未评估**一律拒（无默认档、无静默放行）；
 //   · **收窄口径**：**取消父档继承** —— 建批只认**本会话自己的 C 档**（worker/Manager 子会话一律建不了批）；
 //     成员状态仅 **调用方自己 C 档（Leader）** 或 **该批已登记的 Manager 会话**（`batch.manager.agentId`）可写，
@@ -452,7 +452,7 @@ test('G1 负向：A 档会话调 member_settle → 拒 GATE_MEMBER_REQUIRES_C（
   await by.assign_check.execute({ difficulty: 'A', rationale: '测试：单线程直做（无并行/无依赖链）' }, sess);
   await assert.rejects(
     () => by.member_settle.execute({ batchId: 'g1-member', lane: 'a', status: 'merged' }, sess),
-    /GATE_MEMBER_REQUIRES_C: 写成员状态（member_status \/ member_settle） 只允许出现在 \*\*C 档\*\*会话/,
+    /GATE_MEMBER_REQUIRES_C: 写成员状态（member_set_status \/ member_settle） 只允许出现在 \*\*C 档\*\*会话/,
   );
   assert.equal(st.readBatch(sessId, 'g1-member').lanes.a, 'running', '拒结算 ⇒ 成员态未被改写');
 });
@@ -476,13 +476,13 @@ test('G1 收窄（2026-09-15 Q2=B）：worker 子会话**不继承**父档 C —
   await by.batch_phase.execute({ batchId: 'g1-narrow', manager: { agentId: 'sess-g1-manager' } }, leader);
   // ③ 非 Manager 的子会话（即便父会话是 C 档）写成员状态 ⇒ 仍拒（判据落**调用方**，不落批归属会话）
   await assert.rejects(
-    () => by.member_status.execute({ batchId: 'g1-narrow', lane: 'a', status: 'running', session: 'sess-g1-leader' }, worker),
+    () => by.member_set_status.execute({ batchId: 'g1-narrow', lane: 'a', status: 'running', session: 'sess-g1-leader' }, worker),
     /GATE_MEMBER_REQUIRES_C/,
     '批归属会话是 C 档 ≠ 调用方有权：worker 借 C 档批会话绕过必须被拒',
   );
   // ④ 该批已登记的 Manager 会话 ⇒ 放行
   const mgr = { agent: { session: { id: 'sess-g1-manager' } } };
-  const r = await by.member_status.execute({ batchId: 'g1-narrow', lane: 'a', status: 'running', session: 'sess-g1-leader' }, mgr);
+  const r = await by.member_set_status.execute({ batchId: 'g1-narrow', lane: 'a', status: 'running', session: 'sess-g1-leader' }, mgr);
   assert.equal(r.status, 'running', '该批已登记 Manager 的会话可写成员状态');
 });
 
@@ -569,7 +569,7 @@ test('G2 语义变迁（A 项）：声明（缺省）managerPlan=raise 且未登
   h.seedPlan('sess-g2-miss', 'g2-miss');
   // 【翻转】原断言：`assert.rejects(..., /^Error: 「未拉起 Manager」码(已删): .*batch_phase.*登记再派 exec/)`。
   //   现语义：该门整体删除 ⇒ 未登记不再构成派发拒因（本用例保留为**新语义回归锁**）。
-  const r = await h.by.member_status.execute({ batchId: 'g2-miss', lane: 'e1', status: 'running' }, sess);
+  const r = await h.by.member_set_status.execute({ batchId: 'g2-miss', lane: 'e1', status: 'running' }, sess);
   assert.equal(r.status, 'running', '未登记 Manager 不再是派发拒因（A 项：Manager 承抽官方 roster）');
   const b = h.st.readBatch('sess-g2-miss', 'g2-miss');
   // 保留原结构断言：批字段不被隐式写入 / 拒留痕为零
@@ -589,7 +589,7 @@ test('G2 语义变迁（显式 raise 同一口径）：显式 assembly.managerPl
   const sess = await h.build('sess-g2-explicit', 'g2-explicit', G2_TASKS);
   h.seedPlan('sess-g2-explicit', 'g2-explicit');
   // 【翻转】原断言：`assert.rejects(..., /^Error: 「未拉起 Manager」码(已删)/)` ⇒ 现为放行 + 结构断言保留
-  const r = await h.by.member_status.execute({ batchId: 'g2-explicit', lane: 'e1', status: 'running' }, sess);
+  const r = await h.by.member_set_status.execute({ batchId: 'g2-explicit', lane: 'e1', status: 'running' }, sess);
   assert.equal(r.status, 'running');
   const b = h.st.readBatch('sess-g2-explicit', 'g2-explicit');
   assert.equal(b.manager, undefined, '结构断言保留：显式 raise 亦不隐式写 legacy 字段');
@@ -607,7 +607,7 @@ test('G2 正例：manager 已登记 ⇒ 同一 exec lane 可派（本门不再�
   assert.equal(h.st.readBatch('sess-g2-ok', 'g2-ok').manager.agentId, 'mgr-g2-ok', '批字段 manager 落盘');
   // 同构造在「已登记」下放行（A 项后**登记不再是放行前提**——放行来自该门整体删除；本用例保留为
   //   「legacy 登记面仍可写、且不产生误拒」的结构锁）
-  const ok = await h.by.member_status.execute({ batchId: 'g2-ok', lane: 'e1', status: 'running' }, sess);
+  const ok = await h.by.member_set_status.execute({ batchId: 'g2-ok', lane: 'e1', status: 'running' }, sess);
   assert.equal(ok.status, 'running', 'Manager 已登记 ⇒ exec 层可派');
   assert.equal(h.st.readBatch('sess-g2-ok', 'g2-ok').lanes.e1, 'running', '成员态进入 running');
   assert.equal(
@@ -622,13 +622,13 @@ test('G2 正例（leader-direct 退出默认）：未登记 Manager 亦不触发
   const sess = await h.build('sess-g2-ld', 'g2-ld', G2_TASKS);
   // 刻意**不**落盘 plan 产物：本门若不介入，拒因必为 entry 的 consume 缺件（可区分）
   await assert.rejects(
-    () => h.by.member_status.execute({ batchId: 'g2-ld', lane: 'e1', status: 'running' }, sess),
+    () => h.by.member_set_status.execute({ batchId: 'g2-ld', lane: 'e1', status: 'running' }, sess),
     /GATE_ENTRY_MISSING: plan\/spec\.md/,
     'leader-direct 批不适用 G2 ⇒ 拒因应为 entry 缺件',
   );
   // 单通道正例：补齐产物后放行（全程未登记 Manager）
   h.seedPlan('sess-g2-ld', 'g2-ld');
-  const ok = await h.by.member_status.execute({ batchId: 'g2-ld', lane: 'e1', status: 'running' }, sess);
+  const ok = await h.by.member_set_status.execute({ batchId: 'g2-ld', lane: 'e1', status: 'running' }, sess);
   assert.equal(ok.status, 'running', 'leader-direct 批不要求 Manager 登记');
 });
 
@@ -639,7 +639,7 @@ test('G2 恢复路径：lane 处于 idle → 本门降级为告警放行 + 留�
   h.setLane('sess-g2-idle', 'g2-idle', 'e1', 'idle'); // 模拟崩溃恢复：in-flight lane 归 idle 后重派
   assert.equal(h.st.readBatch('sess-g2-idle', 'g2-idle').lanes.e1, 'idle', '前置：lane 已归 idle');
   assert.equal(h.st.readBatch('sess-g2-idle', 'g2-idle').manager, undefined, '前置：Manager 未登记（本门若不降级必拒）');
-  const r = await h.by.member_status.execute({ batchId: 'g2-idle', lane: 'e1', status: 'running' }, sess);
+  const r = await h.by.member_set_status.execute({ batchId: 'g2-idle', lane: 'e1', status: 'running' }, sess);
   assert.equal(r.status, 'running', 'idle 恢复路径必须放行（不得因未登记 Manager 堵死崩溃恢复）');
   // 降级必须留痕：gate.escape 事件（idle-recovery-passthrough）
   const evs = h.st.readBatch('sess-g2-idle', 'g2-idle').events;
@@ -652,7 +652,7 @@ test('G2 恢复路径：lane 处于 idle → 本门降级为告警放行 + 留�
   const h2 = g2Harness('punky-g2-e2-');
   const sess2 = await h2.build('sess-g2-pending', 'g2-pending', G2_TASKS);
   await assert.rejects(
-    () => h2.by.member_status.execute({ batchId: 'g2-pending', lane: 'e1', status: 'running' }, sess2),
+    () => h2.by.member_set_status.execute({ batchId: 'g2-pending', lane: 'e1', status: 'running' }, sess2),
     /^Error: GATE_ENTRY_MISSING: plan\/spec\.md/,
     '首次派发（pending）仍严格：拒因为 entry 缺件（原 Manager 门已随 A 项删除）',
   );

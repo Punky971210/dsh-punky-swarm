@@ -98,8 +98,8 @@ function seedArtifact(h, batchId, rel, body = 'out') {
   return abs;
 }
 
-/** 派发（pending→running）：走真实 `member_status`，门禁拒态即抛。 */
-const dispatch = (h, batchId, lane) => h.byName.member_status.execute({ batchId, lane, status: 'running' }, SESS);
+/** 派发（pending→running）：走真实 `member_set_status`，门禁拒态即抛。 */
+const dispatch = (h, batchId, lane) => h.byName.member_set_status.execute({ batchId, lane, status: 'running' }, SESS);
 
 // ── H1：反例 ⇒ 拒 + 回显缺口（缺哪条边 / 缺哪件产物）────────────────────────────
 
@@ -347,7 +347,7 @@ test('P1-H6 存量批：无 batch.handoffs 字段 ⇒ 未交接门放行 + lane.
 // 依据 `task-22` 裁决：① `handoff_submit` 的**成员面理由 = `modeGate:false` 位**（不是族标签；S1 迁族后
 //   该件已由 `comms` 迁为 `blackboard`，族名不再承载语义）；② 两件**恒注册**。
 // 本用例给出**行为面**证据（非仅注册表读数）：
-//   · 对照组 `member_status`（governance/modeGate:true）在非生效模式 + 成员上下文下**必被** `GATE_MODE_INACTIVE` 拒；
+//   · 对照组 `member_set_status`（governance/modeGate:true）在非生效模式 + 成员上下文下**必被** `GATE_MODE_INACTIVE` 拒；
 //   · `handoff_submit` 同条件下**不得**抛模式门（走到业务判定）⇒ 证明成员可调、不被 deny 摘除。
 test('P1-H7 成员面 + 常驻注册：handoff_submit 不落模式门（成员可调），且两件不入 deny 集', async () => {
   // 非生效模式：白名单只含别的 preset，调用方 header 为 'standard'
@@ -359,9 +359,9 @@ test('P1-H7 成员面 + 常驻注册：handoff_submit 不落模式门（成员�
     assert.ok(h.byName.handoff_view, 'handoff_view 须常驻注册');
     // 对照组：治理写面在非生效模式下被模式门拒（证明本环境**门是活的**，不是空转）
     await assert.rejects(
-      () => h.byName.member_status.execute({ batchId: 'x', lane: 'l1', status: 'review' }, memberExec),
+      () => h.byName.member_set_status.execute({ batchId: 'x', lane: 'l1', status: 'review' }, memberExec),
       /GATE_MODE_INACTIVE/,
-      '对照组：member_status 必须在非生效模式被模式门拒（否则本用例无区分力）',
+      '对照组：member_set_status 必须在非生效模式被模式门拒（否则本用例无区分力）',
     );
     // 被检面：handoff_submit 不落模式门 ⇒ 走到业务判定（批不存在）
     await assert.rejects(

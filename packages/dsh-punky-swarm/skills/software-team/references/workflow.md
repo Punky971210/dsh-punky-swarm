@@ -108,7 +108,7 @@ wave4: [audit-pair / accept：验收 + 对账]
 
 ## 五、职责分工要点
 
-- **Manager（引擎层角色，非本团队角色集）**：第一对接点；收发消息（`swarm_cc` 抄送链，原 mailbox 三工具已于 G3 B1 删除）、读状态（batch_status/gate_status）、空闲发现（只读 member_status 查询）；**建议派发经 `swarm_cc`；member_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；
+- **Manager（引擎层角色，非本团队角色集）**：第一对接点；收发消息（`swarm_cc` 抄送链，原 mailbox 三工具已于 G3 B1 删除）、读状态（batch_status/gate_status）、空闲发现（只读 member_set_status 查询）；**建议派发经 `swarm_cc`；member_set_status 写按 Leader 裁决执行**；DAG 全员只读、指派写权归 Leader；
 - **Leader**：人工粗拆（决策包 + 模块清单），不充当 worker；
 - **Coordinator**：细拆（API 粒度）+ 代码摸底（codebase-survey.md）；
 - **Designer**：四件套（执行层全部规范，模板见 references/templates/）；

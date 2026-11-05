@@ -517,7 +517,7 @@ export function installAutoSettle(ctx, deps = {}) {
   if (!autoSettleEnabledOf(enabled)) {
     try {
       logger?.info?.('[dsh-punky-swarm] auto-settle disabled (autoSettle.enabled === false)：主路 subagent/end 未订阅；'
-        + '结算责任归 Leader（member_status(review) → member_settle(...)）；兼底路 swarm_report 回报面照常，不再触发结算');
+        + '结算责任归 Leader（member_set_status(review) → member_settle(...)）；兼底路 swarm_report 回报面照常，不再触发结算');
     } catch { /* 日志失败不炸装配（观察者隔离） */ }
     return inert(AUTO_SETTLE_DISABLED_REASON);
   }

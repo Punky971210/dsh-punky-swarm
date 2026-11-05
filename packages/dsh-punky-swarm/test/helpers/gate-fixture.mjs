@@ -152,7 +152,7 @@ export function runLane(store, session, batchId, lane) {
 // 背景：引擎新增两道门禁后，既有 fixture 的会话**缺「已评估为 C 档」的治理状态**、批次**缺 Manager 登记**，
 //   于是既有用例在真正的被判面（role/assembly/presence/entry…）之前就被新门拦下。本模块把两个前置
 //   抽成同一套种子函数，供各套件复用：
-//     · G1（`lib/tools/core.js` 的 `assertMemberActionTierC`）：`wave_plan` / `member_status` / `member_settle`
+//     · G1（`lib/tools/core.js` 的 `assertMemberActionTierC`）：`wave_plan` / `member_set_status` / `member_settle`
 //       只允许出现在 **C 档**会话 ⇒ 未评估一律拒 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`；
 //     · G2（`lib/state/gates.ts` entry 门）：声明 `assembly.managerPlan === 'raise'`（**引擎缺省**）的批，
 //       首个 **exec** 层派发前必须已登记 Manager ⇒ 否则拒 `「未拉起 Manager」码(已删)`（lane 处于 `idle`

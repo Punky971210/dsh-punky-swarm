@@ -93,10 +93,10 @@
 ## §0c 职责分工
 
 - **Manager = 引擎层功能角色**（不属任一层、**不占 lane**，归属见存档件 §三 的 0g 三）：只**代劳指挥**——收发消息（`mailbox` 元数据）、读任务状态（`batch_status` / `gate_status`）、**建议**指派（空闲节点发现）；**不产 plan 产物、不得充当 plan 层牵头**（牵头集见存档件 §三 的 0g 三）。
-- **派发与结算写入默认方 = Leader**：worker 由 Leader 以 depth-1 subagent 派发；`member_status` / `member_settle` 默认 Leader 写入——Manager 负**判读 + 建议**，仅在 Leader 明确授权时代为写入。
+- **派发与结算写入默认方 = Leader**：worker 由 Leader 以 depth-1 subagent 派发；`member_set_status` / `member_settle` 默认 Leader 写入——Manager 负**判读 + 建议**，仅在 Leader 明确授权时代为写入。
 - **DAG 状态全员只读**；**指派写权**归 Manager / Leader。
 - **粗拆**由 Leader 对接用户后产出模块清单（决策包）；**Coordinator 不再粗拆**，只按**团队层 skill 声明的粒度口径**细拆（粒度口径由团队 skill 声明；**资产面已退役**，不再有资产侧声明位）。
-- **D 档（team 方向）下的执行主体（2026-10-01 补）**：**worker = durable 席位**（Leader 按团队层 skill 角色槽位 `spawn_teammate` 逐个拉起）；**派活 / 唤醒 = `send_message`**（**不是** `subagent`、**不是** `lane_dispatch`）；**席位侧无治理写权**。lane 状态与相位**仍走引擎**（`member_status` / `member_settle` / `batch_phase`）——**两账本并列、不互替**（分工铁律见 **§0p 十四**）。
+- **D 档（team 方向）下的执行主体（2026-10-01 补）**：**worker = durable 席位**（Leader 按团队层 skill 角色槽位 `spawn_teammate` 逐个拉起）；**派活 / 唤醒 = `send_message`**（**不是** `subagent`、**不是** `lane_dispatch`）；**席位侧无治理写权**。lane 状态与相位**仍走引擎**（`member_set_status` / `member_settle` / `batch_phase`）——**两账本并列、不互替**（分工铁律见 **§0p 十四**）。
 
 ## §0d 记忆语义
 
@@ -356,7 +356,7 @@
 
 ### 九、**Leader 收口纪律**（audit 层 + 恢复面，2026-09-24 实测沉淀）
 
-- **audit 层 lane 完成后【不会】自动结算**：`auto-settle` 的第四处 skip 分支 `isAuditLayerLane` 明写"**职责转移，不是失败**"——**批保持 `running` 供 Leader 显式结算**。⇒ **audit 层 lane 须 Leader 显式 `member_status(review)` → `member_settle(merged)`**；**且结算前先 `handoff_submit` 到其下游**（audit 层 lane **也有下游**，同 plan/exec 规矩）。
+- **audit 层 lane 完成后【不会】自动结算**：`auto-settle` 的第四处 skip 分支 `isAuditLayerLane` 明写"**职责转移，不是失败**"——**批保持 `running` 供 Leader 显式结算**。⇒ **audit 层 lane 须 Leader 显式 `member_set_status(review)` → `member_settle(merged)`**；**且结算前先 `handoff_submit` 到其下游**（audit 层 lane **也有下游**，同 plan/exec 规矩）。
   - **⚠ 分工铁律（Q3=A，2026-10-01 补，A11）**：**官方工具管「人」（成员生命周期：拉起 / 唤醒 / 打断）｜引擎 `member_*` 管「lane」（lane 状态与相位）** —— 两账本**并列、不互替**。**本条保留引擎结算口径**（lane 状态与相位 = **引擎真源**），**team 通道不豁免**。**互指**：团队层 `skills/software-team/SKILL.md` 的 team 面两处铁律（`:176` / `:199`）与本条**同源**；其原「team 方案**不走** `member_*` 收口」与「`member_settle` 不用于 team 批」两条**已删**（改写归 `exec-skills-team-face`，B1/B2）。**全表见 §0p 十四**。
   - **⚠ 跨副本互指（R 侧对应串）**：**本分工口径与团队层 `skills/software-team/SKILL.md`（§七）的同源条目互指** —— **同源、互指，勿单侧改**：**任一侧单独改写 ⇒ 跨副本口径分叉**。
     - **三要素**：① **同源**（口径出处 = 本 `§0p 九`）② **互指**（R 侧点名该 skill；skill 侧点名 `§0p 九`）③ **勿单侧改**（改任一侧须同批改另一侧）。
@@ -439,7 +439,7 @@
 | **团队自流转** | 派活 = `send_message`；交接 = `handoff_submit`（**成员自交**；Leader 可代交）；结算见 ③ 分工铁律 |
 | **与 C 档隔离** | **C 档** = 引擎**自派 subagent worker**（`lane_dispatch` / `member.dispatch`）；**D 档** = Leader **`spawn_teammate` 拉起 durable 席位**（写 `roster`）⇒ **两档语义与写黑板字段均不同；一批一档，不混用** |
 | **复用 batch / wave_plan** | （**复用 `batch` 与 `wave_plan`**）**D 档不新黑板**：`wave_plan` / `batch_status` / `handoff_submit` / `batch_phase` **原样复用** |
-| **引擎层如实写入 `D`**（**D ≡ 建批档 + team 通道**） | `assign_check` 枚举 = A\|B\|C\|D（引擎实现，2026-10-01 起）；`wave_plan` / `member_status` / `member_settle` 三面均认 `C` **或** `D`（`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C` 对两档同判）；D 的正当形态由 `durableSeats:true` 给出（通道轴 `derivedChannel='team'`）⇒ `override:false`；通道未落实 ⇒ 拒（assign 面 `GATE_DIFFICULTY_MISMATCH` 通道支 / 建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`） |
+| **引擎层如实写入 `D`**（**D ≡ 建批档 + team 通道**） | `assign_check` 枚举 = A\|B\|C\|D（引擎实现，2026-10-01 起）；`wave_plan` / `member_set_status` / `member_settle` 三面均认 `C` **或** `D`（`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C` 对两档同判）；D 的正当形态由 `durableSeats:true` 给出（通道轴 `derivedChannel='team'`）⇒ `override:false`；通道未落实 ⇒ 拒（assign 面 `GATE_DIFFICULTY_MISMATCH` 通道支 / 建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`） |
 | **后续项** | 枚举已扩（2026-10-01 落地）；通道轴与 D 的机械判据已落（2026-10-11 批 `d-override-fix-20261011`：`derivedChannel` / `overrideKind` / guard 硬消费 / 建批面拒）。**仍留后续项**：装配-roster 自动化（现仍需 Leader 手工 `spawn_teammate` + `roster` 声明） |
 
 **② 工具面（两组）**
@@ -447,7 +447,7 @@
 | 组 | 工具（逐项） | 管什么 |
 |---|---|---|
 | **官方（管「人」）** | `spawn_teammate` ｜ `send_message` ｜ `list_agents` ｜ `wait_agent` ｜ `interrupt_agent` | 成员**生命周期**：拉起 / 派活 / 唤醒 / 名册核查 / 打断 |
-| **引擎（管「lane」）** | `assign_check`（**D 档如实写 `D`**，需 `durableSeats:true` 且建批 `channel:'team'` 或 `'mixed'`）｜ `wave_plan` ｜ `batch_status` ｜ `member_status` / `member_settle` ｜ `handoff_submit` ｜ `batch_phase` | lane **状态与相位**、建批黑板、入边交接、批相位推进 |
+| **引擎（管「lane」）** | `assign_check`（**D 档如实写 `D`**，需 `durableSeats:true` 且建批 `channel:'team'` 或 `'mixed'`）｜ `wave_plan` ｜ `batch_status` ｜ `member_set_status` / `member_settle` ｜ `handoff_submit` ｜ `batch_phase` | lane **状态与相位**、建批黑板、入边交接、批相位推进 |
 
 **③ 分工铁律（Q3=A）**：**官方工具管「人」｜引擎 `member_*` 管「lane」** —— 两账本**并列**、**不互替**（**禁**「以官方工具替代 `member_*`」，亦**禁**反向）。team 通道**不豁免**引擎结算（§0p 九 / §0t M-1）。
 
@@ -459,22 +459,22 @@
 
 - **反例 1（写 `D` 却不给通道面）**：声明 `difficulty:'D'`、却**不声明** `durableSeats` 且建批 `channel` 为 `dispatch` / 未声明 ⇒ **必拒**（建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`；执行型工具面 guard 亦拒同码）。**正解**：**两条出口** —— ① 保持 `D` 并 `durableSeats:true` + `channel:'team'` 或 `'mixed'`（每条 lane 写非空 roster）；② **显式降级为 `C`** 并在 `rationale` 写明降级原因（**禁静默降级**，同源本节 ⑤）。
 - **反例 2（两档混用）**：同一批既 `spawn_teammate` 拉起席位、又 `lane_dispatch` 派 subagent worker ⇒ **违反「一批一档」**（写黑板字段冲突：`roster` ↔ `member.dispatch`）。**正解**：**一批一档**；**换档 = 另开批**。
-- **反例 3（以官方工具替代引擎结算）**：席位完成后不调 `member_settle`、只 `send_message` 报捷 ⇒ **批永挂 `running`**（audit 层 lane **不自动结算**）。**正解**：成员**自发 `handoff_submit`**，Leader 显式 `member_status(review)` → `member_settle(merged)`。
+- **反例 3（以官方工具替代引擎结算）**：席位完成后不调 `member_settle`、只 `send_message` 报捷 ⇒ **批永挂 `running`**（audit 层 lane **不自动结算**）。**正解**：成员**自发 `handoff_submit`**，Leader 显式 `member_set_status(review)` → `member_settle(merged)`。
 - **反例 4（Q1 ↔ Q2 同页矛盾）**：一处写「team 为**主流方向**」、另一处又把它写成**默认值** ⇒ **自相矛盾**且撞 C-3 禁令。**正解**：**统一口径**「常用档 / 主流方向 / **由评估选档** / 非机械默认」，两通道**并列**。
 - **反例 5（席位超限硬拉 / 复用不登记）**：`maxMembers` 已满仍继续 `spawn_teammate` ⇒ **拒**；或复用而不登记 ⇒ **lane 记录与实际执行者不符**（审计无法对账）。**正解**：**合规复用 ＋ 登记**（登记件写明复用原因 / 被复用席位 / 原 lane）并**在 lane 记录注明实际执行者**。
-- **反例 6（结算时序倒置 / 漏结算）**：成员不 `handoff_submit` 就报捷，或 Leader 只 `swarm_report` 不 `member_settle` ⇒ **`GATE_HANDOFF_MISSING`**（入边未齐）/ **批永挂 `running`**。**正解**：**先 `handoff_submit`、后 `swarm_report`**，再 `member_status(review)` → `member_settle(merged)` → `batch_phase(complete)`。
+- **反例 6（结算时序倒置 / 漏结算）**：成员不 `handoff_submit` 就报捷，或 Leader 只 `swarm_report` 不 `member_settle` ⇒ **`GATE_HANDOFF_MISSING`**（入边未齐）/ **批永挂 `running`**。**正解**：**先 `handoff_submit`、后 `swarm_report`**，再 `member_set_status(review)` → `member_settle(merged)` → `batch_phase(complete)`。
 - **反例 7（把固定任务判成 B 档）**：「固定任务（角色 / 流程可预见）用 B 档裸 `subagent` 跑」⇒ 与「team 为主流方向」**冲突**，且**无席位生命周期、无 lane 账本**。**正解**：**固定任务 ⇒ D 档（team 席位）**；B 档**仅限**两类（不占主上下文的调研 / 已明确上下文的单步派发）。
 - **反例 8（把 Leader 治理工具当席位可用）**：给席位任务包写「自己 `interrupt_agent` / `list_agents` 自查」⇒ **席位面 deny、必失败**。**正解**：按**成员侧清单**派活（可用 = 交接 / 回报 / `member_settle`）；治理工具**留在 Leader 面**。
 
 ## §1 任务指派
 
 - 用 `wave_plan` 按依赖 DAG 分层为 **waves**——**固定语义**，启动后**绝不中途重算**。
-- 用 `member_status` 派发（`pending→running`）。
+- 用 `member_set_status` 派发（`pending→running`）。
 - **公共池面（G-10 补名）**：任务入池用 `batch_tasks_add`、池视图用 `task_pool`（**只读视图**：列未派发任务 + 可派发性判定，**不授权、不认领、不改状态**）、加边用 `task_update`（`blocked_by` 依赖边）——派发仍由 Leader 单点经 `lane_dispatch` 发起（**不引入 claim 自领**）。
 
 ## §2 状态操作
 
-- 状态以**状态文件为唯一事实源**（persona 纪律 2 同源，此处不重复展开）；迁移面：`batch_phase`（`planning→running→paused→aborted|complete`）、`member_status` / `member_settle`（`running→review→merged|failed|skipped|conflict`；`review` 的终态集**不含** `running`——K3 去返工边，见 §0b 一）。
+- 状态以**状态文件为唯一事实源**（persona 纪律 2 同源，此处不重复展开）；迁移面：`batch_phase`（`planning→running→paused→aborted|complete`）、`member_set_status` / `member_settle`（`running→review→merged|failed|skipped|conflict`；`review` 的终态集**不含** `running`——K3 去返工边，见 §0b 一）。
 - **批次相位工具面（G-10 补名）**：`batch_control`（相位/并发等控制面动作）与 `batch_phase` 并列；产物类型读面用 `artifact_types`。
 
 ## §3 并发与锁
@@ -508,7 +508,7 @@
 - **成员侧只禁派发与治理（G-06）**：禁面 = `lib/engine/suite.js` 的 `entry()` 表里 `memberDeny:true` 那批（2026-10-24 实测 **17 项**；**以表为准，勿手抄计数**），覆盖治理套件（`assign_check` / `wave_plan` / `member_*` / `batch_phase` / `batch_control`）、派发与锁（`lane_dispatch` / `lane_*`）、宿主子代理（`subagent*`）、图变更写入口（`batch_tasks_add` / `task_update`）、连续控制与席位拉起（`interrupt_agent` / `list_agents` / `wait_agent` / `spawn_teammate`）。已放开且**不在**本面：`asset_claim`（2026-09-27）、`gate_status` / `artifact_types`（同批）、`send_message`（2026-09-24）。**红线不变**：成员**不得再行派发**（含 `subagent`/`subagent_fork`；且**不得**以「某件未列入 deny」为由自起嵌套派发——§0i D-1）；**MCP 等普通工具对成员全量开放**，不得扩列。
   - **未列入 deny 面的两件（如实登记）**：`workflow` / `ralph`（均可产子代理 / 并行代理）——二者**不在** `lib/engine/suite.js` 的 `SUITE_TOOLS` 表内 ⇒ **结构性不可能入 deny**。`spawn_teammate` 已于 2026-10-24 实测**在** `SUITE_DENY_TOOLS` 内（席位拉起面）⇒ 原「三件」清单已变形。「登记为有意放行，还是补入 deny 面」= 批 `onto-engine-v2-realign-20260924` **待裁项 Q-3**（现余 `workflow` / `ralph`）；**裁决前按「未列入 ≠ 已授权」执行**——成员侧仍受 D-1 红线约束。
 - **派发失败恢复（D-3；K3 改判 2026-09-21）**：`lane_dispatch` 失败时引擎把 lane 回滚到 **`failed`**（`lib/engine/dispatch.js` 失败路径；`running→failed` 在迁移表内、**零新增边**），并作废已发放句柄；报错文案自带恢复指引：**「不可原地重派」**（返工边 `review→running` 已去除，重派会被 `invalid member transition` 拒）⇒ 恢复 = **记入 gap-list + 开新任务批次**；人工核查用 `gate_status({ batchId, lane })`。**旧文「回滚到 `review`、按样例重派即可」已作废**（那会把 lane 卡在非终态且无法重派）。
-- **结算路径（D-4，2026-09-16）**：`running → merged/skipped` **不在迁移表内**（`running→skipped` 仅在 dispatch condition 不满足时由引擎自动走）⇒ 结算须先 `member_status({ batchId, lane, status: "review" })` 再 `member_settle`；非法迁移的报错现已自带该下一步样例。
+- **结算路径（D-4，2026-09-16）**：`running → merged/skipped` **不在迁移表内**（`running→skipped` 仅在 dispatch condition 不满足时由引擎自动走）⇒ 结算须先 `member_set_status({ batchId, lane, status: "review" })` 再 `member_settle`；非法迁移的报错现已自带该下一步样例。
 
 ## §0n 模式跟随（2026-09-16 裁决：**全局装载、不全局生效**）
 
@@ -519,7 +519,7 @@
 - **热更**：`modes` 与 `dispatch` 已入 `ALLOWED_TOP_KEYS` ⇒ 写 `<engineRoot>/config/runtime.json` 的 `{ "modes": { "gate": [...] } }` **即热生效，无需重启**；`null` = 回到旧行为（全模式生效），`[]` = 显式停用。
 - **子会话继承**：Manager / worker 会话模式随父（`delegationDepth>0` 或 `parentSession`）⇒ **结算面不被非白名单误锁**。
 - **拒态码**：名单外模式调套件写面工具 → `GATE_MODE_INACTIVE`（先于 G1，报「本模式未启用蟛蜞治理」，不报蟛蜞内部档位语义）。
-- **零介入面 = 注册表 modeGate 集**（单点真源，不靠人肉同步）：受模式门约束的工具 = `lib/engine/suite.js` 的 `SUITE_TOOLS.filter(t => t.modeGate)`（再导出为 `MODE_GATED_TOOLS`，**现 11 件**：`assign_check` / `wave_plan` / `member_status` / `member_settle` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `lane_release` / `batch_tasks_add` / `task_update`——**G-07 订正：由 9 件改为 12 件**，补入 `batch_control` / `batch_tasks_add` / `task_update`；**2026-10-24 按代码实测重算：`asset_claim` 已改 `modeGate:false` 并移出 ⇒ 12 → 11**；**条目数以 `lib/engine/suite.js` 的 `entry()` 表 `modeGate:true` 为准**）——各件 `execute` **首行**落 `assertModeActive`（或经 `assertMemberActionTierC` 链式覆盖），故名单外模式**零治理写入**（不计数、不落锁、不写 `lastAssign`）；覆盖面与实现面的双向一致由 `test/suite-consistency-and-hot.test.js` SC-1/SC-4 + `test/mode-gate.test.js` T3 锁定。
+- **零介入面 = 注册表 modeGate 集**（单点真源，不靠人肉同步）：受模式门约束的工具 = `lib/engine/suite.js` 的 `SUITE_TOOLS.filter(t => t.modeGate)`（再导出为 `MODE_GATED_TOOLS`，**现 11 件**：`assign_check` / `wave_plan` / `member_set_status` / `member_settle` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `lane_release` / `batch_tasks_add` / `task_update`——**G-07 订正：由 9 件改为 12 件**，补入 `batch_control` / `batch_tasks_add` / `task_update`；**2026-10-24 按代码实测重算：`asset_claim` 已改 `modeGate:false` 并移出 ⇒ 12 → 11**；**条目数以 `lib/engine/suite.js` 的 `entry()` 表 `modeGate:true` 为准**）——各件 `execute` **首行**落 `assertModeActive`（或经 `assertMemberActionTierC` 链式覆盖），故名单外模式**零治理写入**（不计数、不落锁、不写 `lastAssign`）；覆盖面与实现面的双向一致由 `test/suite-consistency-and-hot.test.js` SC-1/SC-4 + `test/mode-gate.test.js` T3 锁定。
 - **别名过渡**：`jiufeng` 为**旧 preset id**，留在名单里只为既有会话（header 已记 `agentPreset: jiufeng`）续跑不中断；**新会话一律 `punky-preset`**。
 - **`dispatch.gate` 缺省 `warn`**（历史注记）：原「切 `enforce` 的前置」与拒态码均已退役（`lib/**` 零命中、退役码锁登记）⇒ 切 `enforce` 今日无判据对象。**B 档单步子代理不受限**；A 档由既有门禁 3 拒。
 
@@ -559,7 +559,7 @@
 ## §7 恢复
 
 - **`idle` 语义（用户澄清）：字面意义的「空闲态」**——成员当前无在跑动作，**不是崩溃态**；故 `idle → running` 是常规操作（**续跑 / 重派**的合法入口），不必先有「故障」。**注意（K3，2026-09-21）**：「返工」**不走状态机**（`review → running` 已去除）——返工 = gap-list + 新任务批次；`idle` 同时是进程重启的在途 lane 落位态（见下条）。
-- 进程重启后 in-flight 成员**自动落 `idle`**（`system.recovered`）；用 `batch_status` 核对后用 `member_status` 重派。
+- 进程重启后 in-flight 成员**自动落 `idle`**（`system.recovered`）；用 `batch_status` 核对后用 `member_set_status` 重派。
 - 过期/长程探针（**原 `lane_heartbeat` / `lane_longrun`，两工具已于 G3 B1 删除**）：`stalled` 仍用**事件**表达、**不改成员状态**；`candidate` 事件 + broadcast 语义保留，**只标记不改状态**——改由 `batch_status` / `log_export` 读其事件面。
 - **步骤级断点保全**：worker 每完成一子步骤即落盘可独立读取的进度快照（含 `step N/total` 与产物落点），**禁止攒批**；崩溃后由新 worker 读取快照**跳过已完成步骤**；保全**只做物理留存**，**不触发自动续跑**。
   - **配套工具面（G-10 补名）**：`lane_checkpoint`（在 lane worktree 内 `git add -A && git commit`，无变更则 no-op；可带 `progress:{step,total}`——commit message 与 `worktree.checkpoint` 事件内嵌 `step N/total`）／`lane_checkpoint_status`（**只读**：从批次事件流读该 lane 的 checkpoint 历史与 latest 进度，**不依赖 git 调用**）——续跑前的唯一查询入口。
@@ -609,7 +609,7 @@
   1. **席位复用**：同类型多实例池（`maxMembers` 实测 **8** 席；超限 ⇒ **合规复用 + 登记**，见 §0p 五）；
   2. **派活 / 唤醒 = `send_message`**（**唯一正式通道**；**不是** `lane_dispatch` / `subagent`）；
   3. **入边 `submitted` 仍是下游开工硬前提**（`handoff_submit` 由**成员自交**，Leader 可代交；缺口 = `GATE_HANDOFF_MISSING`）——R-3 原样适用；
-  4. **结算时序**：成员 `handoff_submit` → Leader `member_status(review)` → `member_settle(merged)`；**audit 层 lane 必须显式结算**（§0p 九 / §0t M-1）；全批终态后 `batch_phase(complete)`。
+  4. **结算时序**：成员 `handoff_submit` → Leader `member_set_status(review)` → `member_settle(merged)`；**audit 层 lane 必须显式结算**（§0p 九 / §0t M-1）；全批终态后 `batch_phase(complete)`。
 
 ## §12 audit 非盲审：判据源硬门与建批规范（2026-09-17 用户口径 + 实测）
 
@@ -1005,7 +1005,7 @@
 | `GATE_ASSEMBLY_INVALID` | 装配声明**结构非法**，或 `coordinatorLane` / `auditLane` **悬空**（lane id 不存在），或层错配（`auditLane` 非 audit 层） | **拒建批** |
 | `GATE_ROLE_INVALID` | `roles` 词条**词法非法** | **告警，不阻断** |
 | `GATE_BATCH_REQUIRES_C` | 当前会话**未评估**或档位 A / B 时调用 `wave_plan`（内核 `core.js#assertMemberActionTierC`） | **拒**（不落批） |
-| `GATE_MEMBER_REQUIRES_C` | 当前会话**未评估**或档位 A / B 时调用 `member_status` / `member_settle` | **拒**（状态不变） |
+| `GATE_MEMBER_REQUIRES_C` | 当前会话**未评估**或档位 A / B 时调用 `member_set_status` / `member_settle` | **拒**（状态不变） |
 
 - 详见 §0（G1）与 A.3.1（同一判据只留一处）。
 
@@ -1034,7 +1034,7 @@
   - **反例（实测假红，2026-09-18）**：裸相对路径 `gate: node --import ./test/helpers/… --test test/…` 在产物根下**必然 exit 1** ⇒ `GATE_EXIT_NONZERO` ⇒ `auto.settle` **`pause`**（批 `panel-redesign-20260918` 首轮实测；lane 留 `review`）。
   - **任务包义务**：见 **§0e D-9**（Leader 派发时必须写明该条）。
 
-### A.5 长程豁免面（R-3，`member_status` 派发面）
+### A.5 长程豁免面（R-3，`member_set_status` 派发面）
 
 | 码 | 触发条件 | 处置 |
 |---|---|---|

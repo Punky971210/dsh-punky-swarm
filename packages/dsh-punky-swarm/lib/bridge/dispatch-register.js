@@ -18,13 +18,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // bridge/dispatch-register.js —— 派发登记点（dispatch registration）：装配层观察派发工具，把
 //   「worker 会话 → { sessionId, batchId, lane }」写为 member.dispatch 批次事件。
 // 背景：归属读侧骨架（dispatchIndex，从批次事件 member.dispatch 幂等重建）依赖写侧登记；
-//   本模块经装配层 post-execute 观察 Manager 派发（member_status(status=running) 意图）
+//   本模块经装配层 post-execute 观察 Manager 派发（member_set_status(status=running) 意图）
 //   → resolveBatchContext 得当前批/lane → store.appendEvent 写 member.dispatch
 //   （与读侧骨架对接零改动生效：启动重建 + miss 惰性重建，幂等）；
 //   未取到批上下文（非 Manager 派发场景）→ 不登记（无登记静默降级语义）。
 // 零宿主改造：仅订阅宿主既有 tools/post-execute waterfall（pass-through 恒 next()）；
-//   swarm 自身工具（member_status 等）同样流经该 waterfall → 兜底解析 = 观察同会话
-//   member_status(status=running) 的派发意图（时序：先置 running 再派发 worker）。
+//   swarm 自身工具（member_set_status 等）同样流经该 waterfall → 兜底解析 = 观察同会话
+//   member_set_status(status=running) 的派发意图（时序：先置 running 再派发 worker）。
 // 语义红线：漏计不误暂停（安全侧）——解析不出批上下文宁可跳过；不引入任何批级状态迁移。
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { ownerSessionIdOfExec, dispatchIndexEntryOf } from '../engine/dispatch.js'; // 【本批 W-2】写侧取值/索引值构造单点（禁在本文件自写取值式或值形状）
@@ -121,7 +121,7 @@ export function extractWorkerSessionId(exec, result) {
 
 // 装配层登记点（对齐 mountVerify/installGovernanceHook 模式）：
 //   订阅 ctx.on('tools/post-execute')——识别派发类工具 → 提取 workerSessionId → resolveBatchContext(exec)
-//   （deps 显式注入优先；缺省 = 同会话 member_status(running) 派发意图兜底）→ 命中批上下文则 appendEvent
+//   （deps 显式注入优先；缺省 = 同会话 member_set_status(running) 派发意图兜底）→ 命中批上下文则 appendEvent
 //   member.dispatch {lane, workerSessionId}（读侧骨架零改动生效）；未命中 → 不登记。
 //   幂等守卫：dispatchIndex.has(workerSessionId) 已映射 → 跳过（防 send_message 重复唤醒重复登记）。
 //   观察者纪律：任一失败仅 warn，恒 return next()（不阻断、不抛错）。
@@ -161,7 +161,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
   const inert = (reason) => ({ installed: false, inert: true, reason, count: () => 0, mapping: () => ({}), dispose() {} });
   if (!store || typeof ctx?.on !== 'function') return inert('ctx.on unavailable or store missing');
   const toolSet = new Set(tools);
-  // 兜底意图表：callerSession -> **FIFO 队列** [{ sessionId, batchId, lane }, …]（member_status(status=running)
+  // 兜底意图表：callerSession -> **FIFO 队列** [{ sessionId, batchId, lane }, …]（member_set_status(status=running)
   //   观察落点，0g 时序「先置 running 再派发 worker」；注册成功后**消费最早一条**（shift）——一次 running
   //   对应一次 worker 派发，防 stale intent 误归属后续无关 subagent）。
   //   【A1-P1-05 · 2026-10-22】**值由单槽改为每 caller 一条队列**：`caller` 取 `exec.agent.session.id ?? 'cli'`
@@ -218,8 +218,8 @@ export function installDispatchRegistration(ctx, deps = {}) {
       // 【本批 W-2】写侧取值**单点**（与 W-1 同源）：**不**复用 `caller` —— `caller` 带 `'cli'` 兜底且
       //   不校验空串，而载荷要求「取不到 ⇒ 不写该键」（R-7）⇒ 两者取值式相同、**语义不同**，不得合并。
       const ownerSessionId = ownerSessionIdOfExec(exec);
-      // ① member_status(status=running) → 记录派发意图（swarm 工具同流经 post-execute；非 running 清意图防 stale）
-      if (exec.name === 'member_status') {
+      // ① member_set_status(status=running) → 记录派发意图（swarm 工具同流经 post-execute；非 running 清意图防 stale）
+      if (exec.name === 'member_set_status') {
         const a = exec.arguments ?? {};
         if (a.status === 'running' && a.batchId && a.lane) {
           // 【A1-P1-05】入队（不覆盖）：同 caller 再登一条 ⇒ 两条意图并存，消费侧按 FIFO 取最早一条。

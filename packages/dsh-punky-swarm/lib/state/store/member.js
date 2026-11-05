@@ -85,7 +85,7 @@ export function buildMember(cx) {
     //   把可用路径与下一步调用样例写在同一条错误里，省掉 Leader「猜一步再试」的往返。
     //   （合法迁移表 = MEMBER_TRANSITIONS；此处提示的是最常见的 review 中转，不改变判定。）
     const d4Hint = (from === 'running' && (to === 'merged' || to === 'skipped'))
-      ? ' ⇒ 下一步：先 `member_status({ batchId, lane, status: "review" })` 置 review，再 `member_settle({ batchId, lane, status: "' + to + '" })`'
+      ? ' ⇒ 下一步：先 `member_set_status({ batchId, lane, status: "review" })` 置 review，再 `member_settle({ batchId, lane, status: "' + to + '" })`'
         + '（`running -> ' + to + '` 不在迁移表内；review 为合并/跳过的唯一中转）'
       : '';
     if (!mv.ok) throw new Error('invalid member transition: ' + from + ' -> ' + to + d4Hint);

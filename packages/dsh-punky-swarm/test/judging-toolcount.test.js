@@ -123,7 +123,7 @@ function formatViolations(list) {
  */
 const LEGACY_FIXTURES = [
   { rule: 'COUNT', text: '实测工具总数：裸配置 20 / patch 全开 21 / 显式关（worktree+watch 关）14' },
-  { rule: 'COUNT', text: '/** H-03 工具注册面：裸配置 20 / patch 全开 21，差集恰 = log_export；member_status 枚举不含 idle。 */' },
+  { rule: 'COUNT', text: '/** H-03 工具注册面：裸配置 20 / patch 全开 21，差集恰 = log_export；member_set_status 枚举不含 idle。 */' },
   { rule: 'COUNT', text: "expect(wavePlan, '阳性对照失败：wave_plan 未注册（裸配置应含 20 工具）');" },
   { rule: 'COUNT', text: '// T3.1 默认关：logs 未配置/disabled → log_export 不注册，工具总数 14（T0 断言保持）' },
   { rule: 'COUNT', text: '// T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起；enabled=false → 不注册（工具总数 14 不变）' },

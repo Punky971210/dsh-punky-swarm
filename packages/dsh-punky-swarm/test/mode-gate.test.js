@@ -144,7 +144,7 @@ test('T1 套件工具：白名单外模式 ⇒ 拒 GATE_MODE_INACTIVE（先于 G
     (e) => /GATE_MODE_INACTIVE/.test(e.message) && /modes\.gate/.test(e.message),
   );
   await assert.rejects(
-    () => h.byName.member_status.execute({ batchId: 'b-x', lane: 'e1', status: 'running' }, sess('standard')),
+    () => h.byName.member_set_status.execute({ batchId: 'b-x', lane: 'e1', status: 'running' }, sess('standard')),
     (e) => /GATE_MODE_INACTIVE/.test(e.message),
   );
 });

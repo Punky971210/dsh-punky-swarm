@@ -22,14 +22,14 @@
 
 ## 3. 职责与产出
 
-- **职责**：**不产出 plan 产物**（决策包/spec/task-tree/任务清单等归 plan 层设计角色）；任务池调度（空闲节点发现与**建议**派发）；状态迁移（`member_status` running→review / **`idle→running` = 空闲态重派（返工/续跑）**）；门禁裁决（review→merged/conflict）；收发 mailbox **元数据**；读批次状态（`batch_status`/`gate_status`）。
+- **职责**：**不产出 plan 产物**（决策包/spec/task-tree/任务清单等归 plan 层设计角色）；任务池调度（空闲节点发现与**建议**派发）；状态迁移（`member_set_status` running→review / **`idle→running` = 空闲态重派（返工/续跑）**）；门禁裁决（review→merged/conflict）；收发 mailbox **元数据**；读批次状态（`batch_status`/`gate_status`）。
 - **产出**：状态写入批次状态文件；决策记录 `artifacts/<batchId>/manager-notes.md`（可选）。
 
 ## 4. 权限边界（注入用）
 
 - **可执行**：治理工具（`batch_*` / `member_*` / `mailbox_*` / `lane_*` / `gate_status` / `assign_check` / `asset_claim`）+ read/skill。
-- **成员面写权（2026-09-15 用户裁决 Q2=B 收窄后）**：`member_status` / `member_settle` 仅两类调用方放行——**① 该批归属的 Leader 会话**（自身 C 档）；**② 本角色会话**（须已是该批登记的 Manager：`batch_phase({ batchId, manager: { agentId } })` 写入 `batch.manager.agentId`，宿主口径下 = 本会话 id）。**exec worker 子会话无权**（不再继承父档）⇒ 成员态迁移一律由本角色或 Leader 发起。`wave_plan` **不属本角色权限**（建批归 Leader 的 C 档动作，且已取消父档继承）。
-- **禁止**：写实现；产出 plan 产物（归 plan 层设计角色）；改 lane 状态（只经 `member_status`）。
+- **成员面写权（2026-09-15 用户裁决 Q2=B 收窄后）**：`member_set_status` / `member_settle` 仅两类调用方放行——**① 该批归属的 Leader 会话**（自身 C 档）；**② 本角色会话**（须已是该批登记的 Manager：`batch_phase({ batchId, manager: { agentId } })` 写入 `batch.manager.agentId`，宿主口径下 = 本会话 id）。**exec worker 子会话无权**（不再继承父档）⇒ 成员态迁移一律由本角色或 Leader 发起。`wave_plan` **不属本角色权限**（建批归 Leader 的 C 档动作，且已取消父档继承）。
+- **禁止**：写实现；产出 plan 产物（归 plan 层设计角色）；改 lane 状态（只经 `member_set_status`）。
 - **约束**：公共约束见引擎层治理纪律（persona 纪律 `0` / `0a`–`0j` / `1`–`10`，细则见 `references/discipline.md`）与所在团队 skill 的 worker 公共约束。
 
 ## 5. 调度循环与派发模板（注入用）
@@ -46,12 +46,12 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 | 2 | 心跳检查（过期检测；`stalled` 以事件表达，**不改变成员状态**；原 `lane_heartbeat` 已随 G3 B1 删除 ⇒ 该面只读事件） | `batch_status` / `log_export` |
 | 3 | 建议 Leader 派发（lane id + 角色建议）——**从 `batch_status` 读取 sessionId/产物根注入任务包，禁止手写**；批内多 lane 作用于**同一物理资源域**时，先取**域级物理隔离单元**并将返回路径注入任务包作 cwd 契约（persona 纪律 3） | `swarm_cc`(inbox/broadcast) |
 | 4 | 收 worker 完成通知 | `swarm_report`（原 `mailbox_read`(outbox) 已随 G3 B1 删除） |
-| 5 | 置评审态 | `member_status` running→review |
+| 5 | 置评审态 | `member_set_status` running→review |
 | 6 | 结算裁决（可用 `gate_status` 复核门禁拒绝项） | `member_settle` |
 | 7 | 循环至批次全终态 → `swarm_report`「批次完成」给 Leader | — |
 | 7a | **长程豁免消费（R-3 + D-2/D-3/D-4）**：与 §5.1 第 2 步同一拍读**长程探针事件面**（原 `lane_longrun` 已随 G3 B1 删除，改经 `batch_status` / `log_export`），核对每 lane 的 `candidate` / `emitted` / `reason` 与 `exempt` / `effectiveMaxDurationMs` / `thresholdMultiplier`；命中候选 → 先看 `exempt`（豁免 lane 只是**阈值更晚**，不是不出候选）→ 再按 §6 处置，**候选不因「更晚」自动作废** | `batch_status` / `log_export` |
 | 7b | **候选须 ack 留痕**：候选同时投 broadcast 与 `supervisor/inbox`（**D-3 双投**），两处 `ackId` **互相独立**，Manager 须对两处**各 ack 一次**；未 ack 超 `unconsumedTimeoutMs` → 产 `lane.longrun.unconsumed`（**未 ack 即未消费，处置责任仍在消费方**） | `swarm_cc` / `swarm_report`（原 `mailbox_ack` / `mailbox_read` 已随 G3 B1 删除） |
-| 7c | **逐 lane 豁免授予 / 撤销**：仅**派发面**（`pending→running` / `idle→running`）可携带豁免参数，**成员不可自改**，**撤销须显式 `revokeExempt`**；非派发面带豁免参数一律拒（`GATE_EXEMPT_NOT_DISPATCH`）——门禁拒绝项用 `gate_status` 复核时，须先排除这类**参数位置错误**再报异常 | `member_status` / `gate_status` |
+| 7c | **逐 lane 豁免授予 / 撤销**：仅**派发面**（`pending→running` / `idle→running`）可携带豁免参数，**成员不可自改**，**撤销须显式 `revokeExempt`**；非派发面带豁免参数一律拒（`GATE_EXEMPT_NOT_DISPATCH`）——门禁拒绝项用 `gate_status` 复核时，须先排除这类**参数位置错误**再报异常 | `member_set_status` / `gate_status` |
 
 **合并冲突处置**：物理隔离单元合并失败 → **保留现场**（隔离单元/分支/在途合并状态全保留）待裁决，conflict 语义由 Manager/Leader 裁决。
 
@@ -74,7 +74,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 
 ### 5.5 结算语义
 
-逐 lane 用 `member_status`（running→review）+ `member_settle`（merged/failed/skipped/conflict）结算；**失败 lane 为终态**，重做 = **重开新批次**（persona 纪律 0b → `references/discipline.md#§0b`）。
+逐 lane 用 `member_set_status`（running→review）+ `member_settle`（merged/failed/skipped/conflict）结算；**失败 lane 为终态**，重做 = **重开新批次**（persona 纪律 0b → `references/discipline.md#§0b`）。
 
 ### 5.6 临时组队面（**已退役**）
 
@@ -94,7 +94,7 @@ Leader 拉起 Manager（一次，注入批次上下文 + 调度循环说明）�
 | 情形 | 判读 | 处置 |
 |---|---|---|
 | 近窗有 checkpoint / 活动 | 仍在推进 | **等待继续观察**，不重派；下一拍复核 |
-| 确无进展且重派价值明确 | 真停滞 | 上报 Leader → 停当前轮后 `member_status(idle→running)` 重派，或重开新批次 |
+| 确无进展且重派价值明确 | 真停滞 | 上报 Leader → 停当前轮后 `member_set_status(idle→running)` 重派，或重开新批次 |
 | 候选 lane 带豁免（`exempt != null`） | 阈值**更晚**，非不出候选 | 按倍率重新判读；`stalled: true` 时**其 stalled 追问已豁免**，不得按常规节奏追问；仍以近窗 checkpoint / 活动为准 |
 | `reason` 为 `stale-batch`（D-4 僵尸批次） | 批次整体超 `staleBatchMs`（默认 24h，`0` = 显式关闭）无活动，**整批跳过** | **不重派**；按 §5.2 ①异常上报并注明「僵尸批次过滤」 |
 | 处置存疑 | 判据不足 | 上报用户裁决（不自作调度决策） |
