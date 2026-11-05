@@ -473,5 +473,13 @@ test('D2-3 ⚠ 引号内元字符**不得误拦**（剥引号是关键）：`=>`
   const parens = runCommand({ command: 'node -e "process.exit(0)"', timeoutMs: 5000, retries: 0 });
   assert.equal(parens.forbidden, false, '引号内 `()` 不得判元字符: ' + JSON.stringify(parens));
   assert.equal(parens.ok, true, JSON.stringify(parens));
+  // ④ 变量展开 `%VAR%`（Windows）：`shell:false` 下不展开、原样传给子进程
+  //    ⇒ 必须**不被误拦**（若判元字符 = 把合法字面量当攻击）。
+  //    断言 `forbidden===false` 即可 —— 不依赖 `%TEMP%` 具体展开成什么（那属 shell 语义，已关闭）。
+  const envVar = runCommand({ command: 'node -e "console.log(\'%TEMP%\')"', timeoutMs: 5000, retries: 0 });
+  assert.equal(envVar.forbidden, false, '`%VAR%` 在 shell:false 下不得判元字符: ' + JSON.stringify(envVar));
+  assert.equal(envVar.ok, true, JSON.stringify(envVar));
+  // 且输出就是字面量 `%TEMP%`（证明没被展开、没被 shell 处理）
+  assert.equal(envVar.output.trim(), '%TEMP%', 'shell:false 下 `%VAR%` 必须原样透传: ' + JSON.stringify(envVar));
 });
 

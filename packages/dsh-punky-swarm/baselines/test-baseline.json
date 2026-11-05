@@ -393,9 +393,9 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 108,
+      "asserts": 111,
       "blankLines": 48,
-      "lines": 478,
+      "lines": 486,
       "tautologies": 0,
       "tests": 33,
       "todos": 0
@@ -2137,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-05T00:03:22Z",
+  "generatedAt": "2026-11-05T00:17:21Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2151,10 +2151,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12281,
+    "asserts": 12284,
     "blankLines": 6883,
     "files": 267,
-    "lines": 72688,
+    "lines": 72696,
     "tautologies": 0,
     "tests": 2565,
     "todos": 0
