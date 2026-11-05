@@ -133,7 +133,12 @@ export function buildDispatchTools(cx) {
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"token":{"type":"string"},"firstLine":{"type":"string"},"ttlMs":{"type":"number"},"spawned":{"type":"boolean","required":true},"workerSessionId":{"type":"string"},"spawnNote":{"type":"string"},"mode":{"type":"string","required":true,"enum":["degraded","rejected"],"description":"结局面：degraded=派了/该派但没法保证（面不可用 · 未配置 provider · 已尝试但不可确认）/ rejected=我们主动拒绝派（收窄不可核）"},"code":{"type":"string","description":"拒码，仅 mode==='rejected' 时给（恒为 GATE_DISPATCH_CAPABILITY_UNAVAILABLE）"},"unconfirmed":{"type":"boolean","description":"AC-16 核心信号：派发已尝试但无法确认（不可确认 ≠ 失败）"},"reason":{"type":"string","description":"机器可判短码（如 PUSH_UNCONFIRMED）；与 spawnNote 职责不同：reason=短码供机判，spawnNote=长文供人读"}}},
         render: (_args, value) => TEXT_OUTPUT('lane ' + value.lane + ' dispatched'
-          + (value.spawned ? '（引擎自派：worker=' + String(value.workerSessionId) + '）' : '（仅发句柄：' + String(value.spawnNote ?? '') + '）')
+          // 【D-1 补】按 mode 三分渲染（旧实现只看 spawned ⇒ rejected 被渲染成「仅发句柄」，措辞与语义相反）。
+          + (value.mode === 'rejected'
+            ? '（拒派：' + String(value.spawnNote ?? '') + '）'
+            : value.spawned
+              ? '（引擎自派：worker=' + String(value.workerSessionId) + '）'
+              : '（仅发句柄：' + String(value.spawnNote ?? '') + '）')
           + '\n' + value.firstLine),
       },
       async execute(args, exec) {
