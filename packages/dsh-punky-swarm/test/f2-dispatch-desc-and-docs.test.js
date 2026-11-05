@@ -30,7 +30,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+// 【D-1】原 D2 用例用 `git show HEAD:…` 取「改前版本」做对拍；该设计**提交后自我失效**
+//   ⇒ 改为读文件快照 `test/fixtures/lane-dispatch-output-schema.json`（历史基线不随 HEAD 移动）。
+//   故 `node:child_process` 已无消费点，导入一并移除（不留孤儿 import）。
 import { fileURLToPath } from 'node:url';
 
 import { buildDispatchTools } from '../lib/tools/member-tools.js';
@@ -134,46 +136,47 @@ test('D1 lane_dispatch 运行期描述：含 startActivation / GATE_DISPATCH_CAP
     'lane_claim 描述（S-6 冻结面）须逐字保留');
 });
 
-// ── D2 · AC-9：parameters / output.schema 与改前一致（HEAD 对拍 + 运行期归一化对拍）────────
-test('D2 lane_dispatch 参数与输出 schema 未变（HEAD 版本逐字对拍 + 运行期归一化形态一致）', (t) => {
-  let headSrc = null;
+// ── D2 · AC-9：parameters / output.schema 与改前一致（**快照基线**对拍 + 运行期归一化对拍）────────
+// 【D-1 · 批 `punky-d1d2-impl-20261103`】**对拍源从「git HEAD」改为「文件快照」**：
+//   原实现 `git show HEAD:lib/tools/member-tools.js` 取「改前版本」——该设计**一旦提交就自我失效**：
+//   提交后 HEAD == 改后版本 ⇒ ① `curKeys ∖ headKeys` 变空（≠ 新增四键）② `token` 在 HEAD 里已非
+//   `required`（棘轮二「原本是 required」前提失败）⇒ 恒红。
+//   ⇒ 基线落到 `test/fixtures/lane-dispatch-output-schema.json`（**只记录历史，不随 HEAD 移动**）。
+//   两条棘轮语义不变（仍只许减不许增），只是比对对象从 HEAD 换成快照。
+test('D2 lane_dispatch 参数与输出 schema 未变（**快照基线**逐字对拍 + 运行期归一化形态一致）', (t) => {
+  const SNAPSHOT_REL = 'test/fixtures/lane-dispatch-output-schema.json';
+  let headSchema = null;
   try {
-    const toplevel = execFileSync('git', ['-C', PKG_DIR, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
-    const rel = path.relative(toplevel, path.join(PKG_DIR, 'lib', 'tools', 'member-tools.js')).split(path.sep).join('/');
-    headSrc = execFileSync('git', ['-C', toplevel, 'show', 'HEAD:' + rel], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    headSchema = JSON.parse(read(SNAPSHOT_REL));
   } catch (e) {
-    headSrc = null;
+    headSchema = null;
   }
-  if (headSrc === null) {
-    t.diagnostic('git HEAD 版本不可取 ⇒ 仅做运行期归一化对拍（HEAD 对拍项 verified=false）');
+  if (headSchema === null) {
+    t.diagnostic('快照基线不可读（' + SNAPSHOT_REL + '）⇒ 仅做运行期归一化对拍（快照对拍项 verified=false）');
   } else {
-    assert.deepEqual(CUR_PARAMS, jsonBlockAfter(headSrc, 'name: "lane_dispatch"', 'parameters: '),
-      'parameters 与 HEAD 版本逐字一致（改前改后未动参数面）');
-    // 【D-1 · 批 `punky-d1d2-impl-20261103`】**甲：四键白名单**（不是删断言）。
-    //   原判据 = 「output.schema 与 HEAD 逐字一致」⇒ 与 D-1「schema 必改」结构性冲突（D-1 一落地它永远红）。
+    // 【D-1】原 `params 与 HEAD 逐字对拍` 项移除：参数面本批未变，且其**外部冻结面**由下方
+    //   `Object.keys(...properties)` / `required` / `exempt` 三组逐字断言独立承担（见本用例尾部），
+    //   故不因去掉 HEAD 取源而丢「参数被无声改动」的能力。
+    // 【D-1 · 甲：四键白名单】（不是删断言）
+    //   原判据 = 「output.schema 与改前逐字一致」⇒ 与 D-1「schema 必改」结构性冲突（D-1 一落地它永远红）。
     //   甲把「零容忍」改成「**白名单容忍**」：只允许多出 `mode`/`code`/`unconfirmed`/`reason` 四键，
     //   **其余每个键仍逐字对拍** ⇒ 保住本条用例的真正价值（**防 schema 被无声改动**）。
-    //   ⚠ 棘轮纪律：白名单**只许减不许增**（与 `deps-direction` 的双向相等白名单同源）——
-    //    以后想再加键，必须改这里并说明理由，不能"顺手"扩。
-    //   ⚠ 棘轮纪律（**两条，都只许减不许增**）：本批允许的变更就此登记完毕；
-    //    以后想再加键或再放宽必填，必须改这里并说明理由，不能"顺手"扩。
-    //    —— 甲′ 补充（批 `punky-d1d2-impl-20261103` 二次裁决）：因 `:1148` 拒派路径**没有句柄**，
+    //   —— 甲′ 补充（二次裁决）：因 `:1148` 拒派路径**没有句柄**，
     //      `token`/`firstLine`/`ttlMs` 的 `required:true` 必须降级 —— 否则 schema 说必填、实际却缺（**声明说谎**）。
-    const headSchema = jsonBlockAfter(headSrc, 'name: "lane_dispatch"', 'schema: ');
     const NEW_KEYS = ['code', 'mode', 'reason', 'unconfirmed'];              // 棘轮一：允许新增
     const RELAXED_REQUIRED = ['token', 'firstLine', 'ttlMs'];                // 棘轮二：允许 required 由 true→false
     const headKeys = Object.keys(headSchema.properties);
     const curKeys = Object.keys(CUR_SCHEMA.properties);
     assert.deepEqual(curKeys.filter((k) => !headKeys.includes(k)).sort(), NEW_KEYS,
-      '棘轮一：相对 HEAD 只允许多出 ' + NEW_KEYS.join('/'));
+      '棘轮一：相对快照基线只允许多出 ' + NEW_KEYS.join('/'));
     assert.deepEqual(headKeys.filter((k) => !curKeys.includes(k)), [],
-      'HEAD 里的键一个都不能少（本批只加不删）');
+      '快照基线里的键一个都不能少（本批只加不删）');
     for (const k of headKeys) {
       if (RELAXED_REQUIRED.includes(k)) {
         // 棘轮二：只允许 `required` 消失（true → false/absent），其余字段仍逐字
         const h = { ...headSchema.properties[k] };
         const c = { ...CUR_SCHEMA.properties[k] };
-        assert.equal(h.required, true, '前提：HEAD 里 `' + k + '` 原本是 required（否则棘轮二无对象）');
+        assert.equal(h.required, true, '前提：快照基线里 `' + k + '` 原本是 required（否则棘轮二无对象）');
         delete h.required;
         delete c.required;
         assert.deepEqual(c, h, '`' + k + '` 仅允许 required 降级，其余字段必须逐字一致');
@@ -181,11 +184,11 @@ test('D2 lane_dispatch 参数与输出 schema 未变（HEAD 版本逐字对拍 +
           '棘轮二方向固定：`' + k + '` 不得回填 required（只许 true→false）');
       } else {
         assert.deepEqual(CUR_SCHEMA.properties[k], headSchema.properties[k],
-          'schema 属性 `' + k + '` 必须与 HEAD 逐字一致（白名单只开给新增四键与三键降级）');
+          'schema 属性 `' + k + '` 必须与快照基线逐字一致（白名单只开给新增四键与三键降级）');
       }
     }
     assert.equal(CUR_SCHEMA.additionalProperties, headSchema.additionalProperties,
-      'additionalProperties 必须与 HEAD 一致（仍是封闭对象）');
+      'additionalProperties 必须与快照基线一致（仍是封闭对象）');
   }
 
   // 运行期归一化对拍：`defineTool` 会把属性上的 `required:true` 收到顶层 required 数组

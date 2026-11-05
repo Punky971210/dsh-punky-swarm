@@ -633,9 +633,9 @@
       "todos": 0
     },
     "test/f2-dispatch-desc-and-docs.test.js": {
-      "asserts": 54,
+      "asserts": 53,
       "blankLines": 30,
-      "lines": 351,
+      "lines": 354,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -2137,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-04T23:59:33Z",
+  "generatedAt": "2026-11-05T00:03:22Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2151,10 +2151,10 @@
   "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12282,
+    "asserts": 12281,
     "blankLines": 6883,
     "files": 267,
-    "lines": 72685,
+    "lines": 72688,
     "tautologies": 0,
     "tests": 2565,
     "todos": 0

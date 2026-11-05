@@ -1,0 +1,31 @@
+{
+  "_note": [
+    "lane_dispatch 的 output.schema —— **D-1 之前**（批 punky-d1d2-impl-20261103 改动前）的冻结形状。",
+    "",
+    "为什么是文件快照、不是「读 git HEAD」：",
+    "  原实现（test/f2-dispatch-desc-and-docs.test.js D2）用 `git show HEAD:lib/tools/member-tools.js` 取「改前版本」做对拍。",
+    "  该设计**一旦提交就自我失效** —— 提交后 HEAD == 改后版本 ⇒ ① `curKeys ∖ headKeys` 变空（≠ 新增四键）；",
+    "  ② `token` 在 HEAD 里已不是 `required`（棘轮二的「原本是 required」前提失败）⇒ 恒红。",
+    "  ⇒ 改用本快照：**只记录历史基线，不随 HEAD 移动**。",
+    "",
+    "棘轮（只许减不许增，改这里必须写理由）：",
+    "  · 允许新增四键 = code / mode / reason / unconfirmed（D-1：两处都返回、不抛，调用方要能程序判码）",
+    "  · 允许 required 由 true→false 的三键 = token / firstLine / ttlMs（:1148 拒派路径没有句柄 ⇒ 无句柄是事实）",
+    "  · 其余每个属性的字面量必须与本快照逐字一致（防 schema 被无声改动）",
+    "",
+    "本文件**不得**按当前源码回填 —— 回填即等于取消本条用例。"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "batchId": { "type": "string", "required": true },
+    "lane": { "type": "string", "required": true },
+    "status": { "type": "string", "required": true },
+    "token": { "type": "string", "required": true },
+    "firstLine": { "type": "string", "required": true },
+    "ttlMs": { "type": "number", "required": true },
+    "spawned": { "type": "boolean", "required": true },
+    "workerSessionId": { "type": "string" },
+    "spawnNote": { "type": "string" }
+  }
+}
