@@ -39,7 +39,7 @@ export function buildLaneTools(cx) {
   return [
     defineTool({
       name: "lane_claim",
-      description: "以 O_EXCL 单写者锁认领 lane（同批同 lane 仅一写者）。冲突先拒，可 wait 或 force 接管；锁按会话隔离。",
+      description: "以 O_EXCL 单写者锁认领 lane（同一批次同一 lane 同时只允许一个写者）。冲突先拒，可 wait 或 force 接管；锁按会话隔离。",
       parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true,"description":"任务 ID"},"waitMs":{"type":"integer","description":"等待毫秒（默认 0 = 直接冲突返回）"},"force":{"type":"boolean","description":"force 接管（默认 false）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"token":{"type":"string"},"conflict":{"type":"boolean"},"reason":{"type":"string"},"lockPath":{"type":"string"}}},
@@ -128,7 +128,7 @@ export function buildDispatchTools(cx) {
   return [
     defineTool({
       name: "lane_dispatch",
-      description: '集群派发：为 lane 发一次性句柄 + 置 running + 引擎自派 worker；门禁同 member_set_status(running)（限 owner/Manager，exec 需 consume 齐备）。自派按次收窄成员工具面并写 member.dispatch；能力位 fail-closed：provider 不支持 toolFilter/depthLimit 或为 startActivation 形态 ⇒ 拒派（mode=rejected、code=GATE_DISPATCH_CAPABILITY_UNAVAILABLE），打在状态变更之前。ctx.subagents 不可取 ⇒ 降级仅发句柄（spawned:false + 成因）。句柄含 firstLine（供人工直派形态粘贴），TTL 30 分钟。',
+      description: '集群派发：为 lane 发一次性句柄 + 置 running + 引擎自派 worker；门禁同 member_set_status(running)（限 owner/Manager，exec 需 consume 齐备）。自派按次收窄成员工具面并写 member.dispatch；能力位 fail-closed：provider 不支持 toolFilter/depthLimit 或为 startActivation 形态 ⇒ 拒派（mode=rejected、code=GATE_DISPATCH_CAPABILITY_UNAVAILABLE），打在状态变更之前。仅当 ctx.subagents 不可取、或服务在位但两入口皆不可调用 ⇒ 降级为「仅发句柄」（spawned:false + 成因）。句柄含 firstLine（供人工直派形态粘贴），TTL 30 分钟。',
       parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"prompt":{"type":"string","description":"Leader 补充的任务要点（可选）：接在引擎「角色/契约/纪律」骨架之后"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 豁免：type=ai-render|large-download|dep-install|none（档位 8/6/4/4）；multiplier [1,100]；stalled 缺省 true","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"token":{"type":"string"},"firstLine":{"type":"string"},"ttlMs":{"type":"number"},"spawned":{"type":"boolean","required":true},"workerSessionId":{"type":"string"},"spawnNote":{"type":"string"},"mode":{"type":"string","enum":["degraded","rejected"],"description":"结局面：degraded=派了但无法保证｜rejected=主动拒派（收窄不可核）；成功路径 spawned:true 不产本字段"},"code":{"type":"string","description":"拒码，仅 mode==='rejected' 时给（GATE_DISPATCH_CAPABILITY_UNAVAILABLE）"},"unconfirmed":{"type":"boolean","description":"派发已尝试但无法确认（不可确认 ≠ 失败）"},"reason":{"type":"string","description":"机器可判短码；spawnNote=长文供人读"}}},
