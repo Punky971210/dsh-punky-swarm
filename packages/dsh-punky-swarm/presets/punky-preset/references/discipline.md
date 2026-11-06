@@ -23,6 +23,7 @@
 - **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）；**`managerPlan` 默认 `raise`**，确需 Leader 直驱才显式写 `leader-direct`。
 - **判据必填（供审计）**：`assign_check({ difficulty, rationale, scope: "full" })` —— `rationale` **≥12 字**且写明**定档依据 + 已完成的只读侦察证据**；落 `governance.json` 的 `lastAssign` 与 `history` **双留痕**。
 - **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 须给 `deviation` 结构化字段（`feature`/`counterpoint`/`direction`）：**`feature`=引用具体特征面、`counterpoint`=例外/反例、`direction`=偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。**D 档偏离口径（2026-10-11 批 `d-override-fix-20261011`）**：D 不参与难度轴（`derived` 仍只取 `A`/`B`/`C`），引擎另设**独立通道轴** `derivedChannel`（`durableSeats:true` ⇒ `team`；否则 `dispatch`）。**D 的正当形态** = `difficulty:'D'` **且** `durableSeats:true`（通道轴 = `team`）⇒ **回归常规路径**（`override:false` / `overrideKind:null`），其 `rationale` **不需要**引用 A/B/C 特征词；**声明 D 而通道未落实**（未声明 `durableSeats` ⇒ 通道轴 = `dispatch`）⇒ 改走**同一 `deviation` 结构化字段**（`feature`=引用通道/特征面、`counterpoint`=为何 durable 而非 subagent、`direction`=通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺任一即拒（仍用 `GATE_DIFFICULTY_MISMATCH`，文案说「**通道偏离**」并逐项列缺）；**即使解释通过**，**建批面仍须** `channel:'team'` 或 `'mixed'`（否则拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`）。
+- **偏离三要素只有唯一入口 `deviation`（防回生）**：`tier`（难度轴）与 `channel`（通道轴）两种偏离**共用同一形状** `{ feature, counterpoint, direction }`——三个子键 `trim()` 后各须 ≥4 字、禁纯空白、含未知子键即拒；要素由**结构化字段**承载，**禁**按偏离种类另立字段（如 `tierDeviation` / `channelDeviation`），也**禁**回退到「从 `rationale` 自由文本正则提取要素」的旧形态。`rationale` 本身仍只写判据正文（≥12 字），不承担要素载体。
 - **可照抄模板（D 正当形态；**不要求**出现 A/B/C 特征词）**：
 
   ```js
@@ -97,6 +98,8 @@
 - **DAG 状态全员只读**；**指派写权**归 Manager / Leader。
 - **粗拆**由 Leader 对接用户后产出模块清单（决策包）；**Coordinator 不再粗拆**，只按**团队层 skill 声明的粒度口径**细拆（粒度口径由团队 skill 声明；**资产面已退役**，不再有资产侧声明位）。
 - **D 档（team 方向）下的执行主体（2026-10-01 补）**：**worker = durable 席位**（Leader 按团队层 skill 角色槽位 `spawn_teammate` 逐个拉起）；**派活 / 唤醒 = `send_message`**（**不是** `subagent`、**不是** `lane_dispatch`）；**席位侧无治理写权**。lane 状态与相位**仍走引擎**（`member_set_status` / `member_settle` / `batch_phase`）——**两账本并列、不互替**（分工铁律见 **§0p 十四**）。
+- **Manager 在册真源 = 引擎自建表（防回生）**：唯一在册真源 = `batch_phase` 的 `manager` 载荷写入的批次字段 `managerSeat`（`source:'engine-registry'`）；宿主 roster（**无论哪个宿主、以何形态取到**）**仅用于对账、不得作为权威** ⇒ roster 是否可读、名册里有没有叫 `manager` 的成员，**均不构成**在册判据。
+- **「拆父任务」语义不存在（防回生）**：plan 层的调查摸底 / 拆分**本身即独立任务**（其产物由下游 exec / audit 层 `consume`）⇒ **禁**引入父子任务树、**禁**把 plan lane 的产出记账成「某父任务的子节点」；`batch_tasks_add` 的追加语义 = **池内新增任务**，不是「拆父」。
 
 ## §0d 记忆语义
 
@@ -300,6 +303,8 @@
 - **实践后果（必读）**：A 方案下**成员完成 ⇒ Leader 必须显式 `member_settle` 收口**（或走 `auto-settle` 事件的自动结算判定），**不得**等官方板自己变状态。
 - **「官方 task 五件」的界限**：`team_task_create` / `team_task_list` / `team_task_get` / `team_task_update` / `team_task_delete` 属**host 面工具**，成员可自行调用，但**其状态不构成治理真源**（`batch_status` / `gate_status` / `handoff_view` 才是）。
 
+- **官方任务板双写未启用（`handoff_submit` / `handoff_view` 两处合并口径，防回生）**：本引擎**未接线**官方任务板——全仓**无** `team_task_create` 调用点；宿主工具面**有** `team_task_*` 五件（可实调），但引擎侧**无消费点、无校验、无判定** ⇒ **不构成治理真源**。`officialTaskId` 仅是按调用方自填的**原样回填位**（不填恒 `null`），引擎**不写、不校验、不据以判定**；`handoff_submit` 与 `handoff_view`（含逐边回显）的 `officialTaskId` **一律不得**读作「已双写」。
+
 ### 三、派发面 `provider` 边界（只留现行口径）
 
 - **现役唯一实现 = 宿主 subagent seam**（`config.dispatch.provider`；`lib/engine/dispatch.js` 走 `rt.start`）。
@@ -442,6 +447,8 @@
 | **引擎层如实写入 `D`**（**D ≡ 建批档 + team 通道**） | `assign_check` 枚举 = A\|B\|C\|D（引擎实现，2026-10-01 起）；`wave_plan` / `member_set_status` / `member_settle` 三面均认 `C` **或** `D`（`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C` 对两档同判）；D 的正当形态由 `durableSeats:true` 给出（通道轴 `derivedChannel='team'`）⇒ `override:false`；通道未落实 ⇒ 拒（assign 面 `GATE_DIFFICULTY_MISMATCH` 通道支 / 建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`） |
 | **后续项** | 枚举已扩（2026-10-01 落地）；通道轴与 D 的机械判据已落（2026-10-11 批 `d-override-fix-20261011`：`derivedChannel` / `overrideKind` / guard 硬消费 / 建批面拒）。**仍留后续项**：装配-roster 自动化（现仍需 Leader 手工 `spawn_teammate` + `roster` 声明） |
 
+- **难度轴推导 D 不入（防回生）**：难度轴的机械推导 `derived` 取值域 = `A` / `B` / `C` 三档，**永不为 D**；`durableSeats:true` 只把**通道轴** `derivedChannel` 推成 `team`，与难度轴**解耦** ⇒ D **只**由 Leader 主动声明并体现在声明值与通道轴 / `override` 位上，**禁**把 D 塞回难度轴推导、**禁**让 `derived` 产出 D。
+
 **② 工具面（两组）**
 
 | 组 | 工具（逐项） | 管什么 |
@@ -471,11 +478,13 @@
 - 用 `wave_plan` 按依赖 DAG 分层为 **waves**——**固定语义**，启动后**绝不中途重算**。
 - 用 `member_set_status` 派发（`pending→running`）。
 - **公共池面（G-10 补名）**：任务入池用 `batch_tasks_add`、池视图用 `task_pool`（**只读视图**：列未派发任务 + 可派发性判定，**不授权、不认领、不改状态**）、加边用 `task_update`（`blocked_by` 依赖边）——派发仍由 Leader 单点经 `lane_dispatch` 发起（**不引入 claim 自领**）。
+- **K1 三款（防回生，三处合并口径）**：① **不引入 claim 自领**——`task_pool` 只是**只读视图**（不授权、不认领、不改状态），派发仍由 Leader 单点经 `lane_dispatch` 发起、**派发即门禁**；② **已派发即冻结**——`batch_tasks_add` 只增不改（既有任务含未派发者一概不动，换人**不走改派**）；③ **换人走「作废 + 池内新增替代任务 + gap-list」**——`task_update` 只增边不删边、不重算层内。
 
 ## §2 状态操作
 
 - 状态以**状态文件为唯一事实源**（persona 纪律 2 同源，此处不重复展开）；迁移面：`batch_phase`（`planning→running→paused→aborted|complete`）、`member_set_status` / `member_settle`（`running→review→merged|failed|skipped|conflict`；`review` 的终态集**不含** `running`——K3 去返工边，见 §0b 一）。
 - **批次相位工具面（G-10 补名）**：`batch_control`（相位/并发等控制面动作）与 `batch_phase` 并列；产物类型读面用 `artifact_types`。
+- **`status` 闭集不含 `idle`（防回生）**：`member_set_status` 的可写 `status` 只有 `pending` / `running` / `review` 三值；`idle` **只能**由恢复 / 回收经**单点入口**进入，**不许**经 `member_set_status` 设置（经它设置必被状态机拒）⇒ **禁**把 `idle` 加回闭集、**禁**为「设 `idle`」另开旁路。
 
 ## §3 并发与锁
 
@@ -492,6 +501,7 @@
 
 - 跨上下文用成员**回报通道**（`swarm_report` 成员→Leader、`swarm_cc` 成员→Manager）：`inbox` = 派发指令、`outbox` = 成员回执、`broadcast` = 广播（三层语义保留，但 **`mailbox_send` / `mailbox_read` / `mailbox_ack` 三工具已于 G3 B1 删除**，无工具入口）。**成员→Leader 的回执入口 = `swarm_report`**（引擎套件、在册；`swarm_cc` 为成员→Manager 的抄送入口）——**G-05 订正**：旧文写的 `report` 在**本部署不存在**（宿主安装面无 `subagent-report` 包；成员回执的现役通道就是 `swarm_report`）。**`leader-direct` 批（无 Manager）：成员回执只走 `swarm_report`→Leader（单通道），`outbox` 不写**（写了无消费者）。
 - **只写元数据，不复制正文**。
+- **集群内部同步只有套件通道（防回生）**：成员→Leader 用 `swarm_report`、成员→Manager 用 `swarm_cc`，事件面落 `swarm.report` / `swarm.cc`；**禁**另起第二通道转述同一批集群内部同步（`mailbox_*` 三件已删、无工具入口；通用通信工具**不得**当第二通道用）。
 
 ## §0m 派发套件（2026-09-16 落地：**派发收进引擎**）
 
@@ -509,6 +519,7 @@
   - **未列入 deny 面的两件（如实登记）**：`workflow` / `ralph`（均可产子代理 / 并行代理）——二者**不在** `lib/engine/suite.js` 的 `SUITE_TOOLS` 表内 ⇒ **结构性不可能入 deny**。`spawn_teammate` 已于 2026-10-24 实测**在** `SUITE_DENY_TOOLS` 内（席位拉起面）⇒ 原「三件」清单已变形。「登记为有意放行，还是补入 deny 面」= 批 `onto-engine-v2-realign-20260924` **待裁项 Q-3**（现余 `workflow` / `ralph`）；**裁决前按「未列入 ≠ 已授权」执行**——成员侧仍受 D-1 红线约束。
 - **派发失败恢复（D-3；K3 改判 2026-09-21）**：`lane_dispatch` 失败时引擎把 lane 回滚到 **`failed`**（`lib/engine/dispatch.js` 失败路径；`running→failed` 在迁移表内、**零新增边**），并作废已发放句柄；报错文案自带恢复指引：**「不可原地重派」**（返工边 `review→running` 已去除，重派会被 `invalid member transition` 拒）⇒ 恢复 = **记入 gap-list + 开新任务批次**；人工核查用 `gate_status({ batchId, lane })`。**旧文「回滚到 `review`、按样例重派即可」已作废**（那会把 lane 卡在非终态且无法重派）。
 - **结算路径（D-4，2026-09-16）**：`running → merged/skipped` **不在迁移表内**（`running→skipped` 仅在 dispatch condition 不满足时由引擎自动走）⇒ 结算须先 `member_set_status({ batchId, lane, status: "review" })` 再 `member_settle`；非法迁移的报错现已自带该下一步样例。
+- **role 三段渲染色同源（防回生）**：`role_guide` 返回的三段（职责 / 授权 / 交付要求）与引擎自派（C-1）任务包内**同一 role 的三段逐字一致**——同一单点 `renderRoleGuide` 产出，`role_guide` 是**薄壳、不自带模板** ⇒ **禁**为它另建模板、**禁**容许两侧分叉（人工直派取件与 team 席位取件也走同一件）。
 
 ## §0n 模式跟随（2026-09-16 裁决：**全局装载、不全局生效**）
 
@@ -535,6 +546,10 @@
 - **别把层集合当链**：引擎里的 `['plan','exec','audit']` 是**层集合**（`lib/wave-plan.js` 等），不是链。
 - **建批拒态两段式（排查必先分段）**：段一 = **宿主参数面**（进 `execute` 之前按 schema 拒；文案由宿主生成、**不带** `GATE_*`；今日可触发键只剩 `batchId` / `tasks`）；段二 = **业务构造期面**（`store.createBatch` 之前；**首行原样透出引擎码**，可照码自救：`GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID` / `GATE_AUDIT_INPUT_MISSING`）。两段之后都是「**零批次 JSON 落盘** + `pendingBatch` 保留」，补声明可重试。
 - **`batch.phase` 事件的 `reason`**：暂停类必须带 source 前缀（`auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`；存量 `failed-escalate` / `governance-escalate` 不动），空/空白不写该键；读端渲染 `<from> -> <to> | <reason>` —— 「为何不推进」的唯一解释入口是 `log_export` markdown。
+- **产物类型注册表不绑定任何团队模板（防回生）**：`artifact_types` 是**引擎通用任务治理**的只读注册表（产物类型 → 层 / 目录前缀约定），**不绑定任何团队模板**、不读团队资产、不随某团队的层 / 角色定义变化 ⇒ 新增或改产物类型时**禁**把它挂回装配数据面。
+- **`handoff_accept` 只补入边声明，不改拓扑真源（防回生）**：它仅在下游**自己的入边表**（`batch.handoffs[to]`）补一条与建批期同形态的 `pending` 声明条，**不写 `deps`**、不动 `wavePlan` / `waves` / `orderOf`（拓扑真源**零变更**）；声明一旦存在，上游就**必须交**（缺交拒 `GATE_HANDOFF_MISSING` 并落 `lane.handoff.gap`）⇒ 该动作是**净收紧**，**不得**被读作「放宽校验」或「补边捷径」。
+- **技能名可解析性不参与建批判定（防回生）**：技能进任务包是 **recommend 式、非装配式**——技能名解析不到 ⇒ **建批照常落盘、无告警**；`skills` 面**不设门禁**，**禁**以「技能不可解析」拒建批 / 拒派，也**禁**为它新加告警级留痕。
+- **`chain` 声明面与回显面已全量退役（实现删除事实，防回生）**：`batch_status.chain`、建批期链静态校验、`chain.step` 常量与链推进器**已在实现中删净**（非仅文档标注）⇒ **禁**重新引入 `chain` 声明入参 / 回显字段 / 链校验码；运行期 DAG 真源**只有** `lanes[].deps` + `handoffs`。
 
 ## §0t 完成发现与结算
 
@@ -555,6 +570,7 @@
 ## §6 门禁
 
 - `review` 阶段按门禁语义裁决 `merged` / `conflict`；批次**终态**（`complete` / `aborted`）后**拒绝再写**（persona 纪律 6 同源）。
+- **`gate_status` 不定义批级聚合（防回生）**：它按 lane 逐条投影门禁态（不在 `wavePlan.tasks` 内的 lane 返回 `gates:'orphan'` 占位读数，标记损坏 / 悬空 lane）；**批级汇总请读 `batch_status`**——**禁**在 `gate_status` 上追加批级聚合语义、**禁**把它当批级读取的唯一入口。
 
 ## §7 恢复
 
@@ -563,6 +579,7 @@
 - 过期/长程探针（**原 `lane_heartbeat` / `lane_longrun`，两工具已于 G3 B1 删除**）：`stalled` 仍用**事件**表达、**不改成员状态**；`candidate` 事件 + broadcast 语义保留，**只标记不改状态**——改由 `batch_status` / `log_export` 读其事件面。
 - **步骤级断点保全**：worker 每完成一子步骤即落盘可独立读取的进度快照（含 `step N/total` 与产物落点），**禁止攒批**；崩溃后由新 worker 读取快照**跳过已完成步骤**；保全**只做物理留存**，**不触发自动续跑**。
   - **配套工具面（G-10 补名）**：`lane_checkpoint`（在 lane worktree 内 `git add -A && git commit`，无变更则 no-op；可带 `progress:{step,total}`——commit message 与 `worktree.checkpoint` 事件内嵌 `step N/total`）／`lane_checkpoint_status`（**只读**：从批次事件流读该 lane 的 checkpoint 历史与 latest 进度，**不依赖 git 调用**）——续跑前的唯一查询入口。
+  - **防回生锚点（两处合并口径）**：`lane_checkpoint` 只做**物理保全**（worktree 内提交 + 断点指针），**不触发任何自动恢复**（守「不做续跑」红线：崩溃后**不自动拉起重跑**）；续跑前查 checkpoint 的**唯一查询入口** = `lane_checkpoint_status`——**禁**另立第二查询入口，**禁**让 checkpoint 事件触发自动重派。
 - Leader 直做产物用 `asset_claim` 复制归位进批次资产根。
 - **abort 批的悬挂 lane 是【预期残留】，不是收口遗漏**（2026-09-26 用户裁决写明口径）：
   - `batch_control(abort)` 把批推至 `aborted`（**终态冻结**：`GATE_BATCH_TERMINAL` ⇒ 此后任何成员迁移一律拒），而**未完成 lane 停在非终态** ⇒ 引擎在 `batch_status` 里**恒显** `danglingLanes`（批次已终态、成员非终态），并落一条 `batch.abort_dangling` 告警（含 `danglingLanes` 名单与 `count`）。
@@ -983,6 +1000,7 @@
 | **③ 观察（observe-only）** | **非拒态、只上报** | 事件落盘 + 计数，不改判定 | `gate.contract_missing`（首触）、`gate.degrade{kind:'produce-field-widened'}`、`lane.over-budget`、`lane.stalled`、`lane.longrun.candidate`、`governance.refusal` |
 
 - **归口纪律**：新增任何码/事件**必须同批**把档位写进本表（否则视为「未登记门禁面」）；档位**只许收紧**（②→① / ③→① 可，反向须用户裁决）。
+- **拒码面红线（C-6，防回生）**：**不新造 `GATE_*` 拒码**——参数 / 前置 / 终态类拒绝一律抛**无前缀普通 `Error`**（`handoff_accept` 即此形态的样本）；**唯一例外** = 批终态复用既有 `GATE_BATCH_TERMINAL`。「新造一枚码」**不**因「先落码、下次再补表」而获豁免，仍按上一条同批入表。
 - **判定「有牙」的检验**：① 能答「读什么、怎么判、拒哪一步、留什么痕」；② 能答「放行时以什么载荷证明**有意**放行」；③ 能答「这是给谁看的信号、谁消费它」。答不出者**降级为纪律**。
 
 ### A.1 `teamsRoot` 参数面（2 枚）—— **已整体退役（进退役锁）**
