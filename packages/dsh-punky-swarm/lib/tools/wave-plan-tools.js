@@ -41,6 +41,16 @@ const WARN_EVENT_OF = {
   //   `GATE_ROLE_MANAGER_AS_LANE`）⇒ 该键**恒不命中**；映射行与其事件常量（`lib/state/event-types.js`）
   //   同批删除，全仓 `lib/**` 零残留（含注释）。下方在役映射**逐字保留**。
   GATE_COMPLETE_OUTCOMES_EMPTY: EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY,
+  // 已裁 B-2（F-8）：roster 席位名不在内建职位表 ⇒ 建批期**只告警不拒建批**，事件类型走专用名
+  //   （不落 catch-all 的 `gate.role_invalid` —— 后者会把「席位名未知」误标成「role 非法」，与 GAP-S9 同源）。
+  //   ⚠ 本行是**字面量、不引 `EVT` 常量**——**有意为之**：`lib/state/event-types.js` 在本批划给 `e2-fix-b3`
+  //   独占写域（它要删自己的常量），为了「一批内零文件碰撞、零跨 lane 符号依赖」，本事件名以字面量登记在
+  //   本表（本表本就是「码 → 事件名」的单点）。
+  //   **followup（登记，不在本批实施）**：下一批把它收敛成 `lib/state/event-types.js` 的 `EVT_*` 常量
+  //   （写域互斥解除后即可；届时本行改引常量、字面值不变）。
+  //   `appendEvent` 无事件名注册校验（`lib/state/store/batch.js:216-223` 实测：`requireEventType` 只服务
+  //   escape/degrade/contractMissing）⇒ 字面量发射安全，不会触发 `GATE_EVENT_CONST_MISSING`。
+  GATE_ROSTER_UNKNOWN: 'gate.roster_unknown',
 };
 
 export function buildWavePlanTools(cx) {
@@ -156,7 +166,12 @@ export function buildWavePlanTools(cx) {
         // GAP-S9：事件 type 改走 `WARN_EVENT_OF` 按码映射（`GATE_COMPLETE_OUTCOMES_EMPTY` 有自己的专用类型）；
         //   未命中映射的码**逐字保持现状** = `gate.role_invalid`；载荷字段形态**零增删**（`code` 仍在）。
         for (const w of plan.warnings ?? []) {
-          store.appendEvent(sessionId, plan.batchId, WARN_EVENT_OF[w.code] ?? EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null });
+          // 载荷 `roster` / `basis`（F-8）：现载荷原有 `{code,task,role,layer,missing}`，**没有**席位名字段
+          //   ⇒ 不加的话事件里看不到「是哪个席位名未知」，也没法区分「真未知席位」与「成员名形态」。
+          //   两键对既有告警码恒为 null（缺省 `?? null`，键恒在 ⇒ 读端形态稳定、存量语义零漂移）；
+          //   `output.schema` 的 `warnings.items` 为 `additionalProperties:true`（`:53` 实测开放）
+          //   ⇒ 无需扩 properties，回显不被剥离。
+          store.appendEvent(sessionId, plan.batchId, WARN_EVENT_OF[w.code] ?? EVT.EVT_GATE_ROLE_INVALID, { code: w.code, task: w.task ?? null, role: w.role ?? null, layer: w.layer ?? null, missing: w.missing ?? null, roster: w.roster ?? null, basis: w.basis ?? null });
         }
         clearPendingBatch(store, sessionId); // 建批解锁：判 C 后 pendingBatch=false
         // gate-lite 第二批 · A2（Manager 承抽）：`assembly.managerPlan` 的**消费点改读官方 roster** ——

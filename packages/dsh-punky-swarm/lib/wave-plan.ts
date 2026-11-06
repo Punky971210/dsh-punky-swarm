@@ -51,6 +51,11 @@ import { isStringArray } from './types/guards.js';
 // sig 任务内容指纹（N3-②）：唯一计算入口就在本函数（建批全量算；`addPoolTasks`/`addTaskEdges`
 //   经同一次重归一化分别做「新任务补算」「受影响任务重算」）；读端口径 `sigOf` 同为该模块单点。
 import { computeTaskSig, sigOf } from './sig-fingerprint.js';
+// 已裁 B-2（F-8）· 建批期「未知席位名 ⇒ 只告警不拒建批」的比对基准 = **内建职位表**（唯一来源）。
+//   为什么不取宿主 roster（用户裁决 Q-3=乙）：`buildWavePlan` 是**零 ctx 纯函数**（本文件全篇纪律），
+//   宿主名册是运行期读端（`lib/tools/host-surface.js`）⇒ 引进来即把纯函数变成环境依赖。
+//   `lib/roster.js` **零 import**（纯常量 + 纯函数，`:18` 头注自述）⇒ 本导入不引入环、不新增模块边风险。
+import { BUILTIN_ROLES } from './roster.js';
 import type { ChannelDecl, ConditionClause, ConditionInput, Layer, PreflightDecl, PreflightMcp, Wave, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 
 // 两形态并集：拓扑/契约校验函数同时服务建批输入（WavePlanTaskInput）与持久化校验（WavePlanTask）——
@@ -535,6 +540,18 @@ export interface ContractRef {
 export function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null {
   try {
     if (raw == null) return null;
+    // ── 【B-6 幂等修复 2026-11-06】已归一形态（`{ items: [...] }`）回灌时必须**原样返回** ──────────────
+    // 为什么必须：本函数是**重归一化单点**——`store.addPoolTasks`（追加任务）与 `store.addTaskEdges`
+    //   （加边）都会重跑 `buildWavePlan`，把**已落盘的归一产物**（`{ items }`，非数组）再喂进本函数。
+    //   若继续走下一行 `Array.isArray(raw) ? raw : []`，`items` 会被静默重置为 `[]`
+    //   ⇒ 持久化前后不等 ⇒ `wave-plan-immutable IMM-2「字段被改写: checkpoints」` 拒追加/拒加边
+    //   ⇒ **任何声明了 checkpoints 的批永久无法追加任务或补依赖边**（实测：`punky-engine-fix-20261106`
+    //   的 `batch_tasks_add` 与 `task_update` 双双被拒）。
+    // 判据（幂等性）：`normalizeCheckpoints(normalizeCheckpoints(x))` 必须逐字等于 `normalizeCheckpoints(x)`。
+    // ⚠ 只认「非数组对象且含数组型 `items`」这一种形态；其余非法输入仍走下方宽松归一（行为零变化）。
+    if (!Array.isArray(raw) && typeof raw === 'object' && 'items' in raw && Array.isArray(raw.items)) {
+      return raw as NormalizedCheckpoints;
+    }
     const arr: unknown[] = Array.isArray(raw) ? raw : [];
     const out: CheckpointItem[] = [];
     const seen = new Set<string>();
@@ -1153,6 +1170,31 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
         role: t.role,
         message: 'task ' + t.id + ' role "' + t.role + '" is not a valid role (' + [...VALID_ROLES, ...ROLE_EXTENSIONS].join('/') + ', or any role declared by the team asset); kept as-is for compatibility, layer default applies only when role is omitted',
       });
+    }
+  }
+  // ── 已裁 B-2（F-8）：roster 席位名不在内建职位表 ⇒ 建批期**只告警不拒建批** ──────────────
+  // 与上方 `GATE_ROSTER_INVALID`（`:1132` 词法 fail-closed **拒**）**是两个面，不得混一**：
+  //   · 词法非法（含空格/大写）⇒ 上方 throw（**先跑完**：非法形态连告警都不该进）；
+  //   · 词法合法但查无此席位 ⇒ **本段**：只落 `warnings[]`（调用方按 `WARN_EVENT_OF` 落事件），建批照常成功。
+  // 基准（用户裁决 Q-3=乙）：**只取** `BUILTIN_ROLES`（`lib/roster.js:44`），不碰宿主 roster。
+  // ⚠ 命名空间张力（已裁决接受，不是笔误）：`lanes[].roster` 的语义是 **roster 成员名**（正例 `coder-1`），
+  //   而 `BUILTIN_ROLES` 是**职位名**表 ⇒ 成员名形态（`coder-1`）也会命中本告警。三条缓冲：
+  //   ① 永不阻断：不 throw、不进 `GateErrorCode`（`lib/types/contracts.ts` 本批冻结）、不参与任何 gate 判定；
+  //   ② 载荷带 `basis:'BUILTIN_ROLES'` ⇒ 读端可辨「真未知席位」与「成员名形态」；
+  //   ③ 噪声面读数落在 `exec/e3-roster.md`（F8-S6），不用「实现正确」一句话带过。
+  // 类型：`WavePlanDoc['warnings']` 元素是**闭集**（`lib/types/contracts.ts:266-273`，写入域外+冻结）
+  //   ⇒ 用交叉类型承载 `roster` / `basis` 两键（**不加类型断言**，不碰 contracts）。
+  for (const t of tasks) {
+    const rosterSeat = normalizeRoster(t.roster);
+    if (rosterSeat !== null && !BUILTIN_ROLES.includes(rosterSeat)) {
+      const unknownSeatWarning: WavePlanDoc['warnings'][number] & { roster: string; basis: string } = {
+        code: 'GATE_ROSTER_UNKNOWN',
+        task: t.id,
+        roster: rosterSeat,
+        basis: 'BUILTIN_ROLES',
+        message: 'task ' + t.id + ' roster "' + rosterSeat + '" is not in the builtin seat table (BUILTIN_ROLES); warned only — batch is still created',
+      };
+      warnings.push(unknownSeatWarning);
     }
   }
   // C 类批次角色齐备门禁（GATE_ROLE_MISSING，warning 语义）——并入同一收集循环/同一返回结构；
