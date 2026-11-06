@@ -83,6 +83,13 @@ import { readCapability } from '../assembly/schema.js';
 //   与 verify 面 `bindingDecision` **同源**（同一「lane 的绑定会话」定义）⇒ 不建第二真源。
 import { expectedWorkerSessionOf } from '../verify/binding.js';
 import { applyInjectionBudget } from '../comms/inject-budget.js';
+// 【ckpt-wire · 批 `punky-checkpoint-wire-20261106` · lane `e1-resume`】A 通道（`resume` 条款）的**唯一取字源**：
+//   `resumeClauseFor(task)` 返回 `RESUME_CLAUSE` 或 `null`（`lib/wave-plan.js:645`；文本定义 `:643`）。
+//   硬口径 ★：**禁**在本文件复制 `RESUME_CLAUSE` 字符串（R-3 禁第二真源），只经该函数取。
+//   循环依赖已核：`lib/wave-plan.js` 的 import 面（`assembly/schema.js` / `state/gates.js` /
+//   `state/constants.js` / `types/guards.js` / `sig-fingerprint.js` / `roster.js` / `state/handoff-gate.js`）
+//   **不含**本模块 ⇒ 单向依赖，无环。
+import { resumeClauseFor } from '../wave-plan.js';
 
 /**
  * 第二绑定键（B3，学 agent-teams 的 label 做法）：可从**子会话事件/描述**反解析 (batchId, lane)，
@@ -812,6 +819,11 @@ export function composeWorkerPrompt({
   //   不是只写在字段里）。四段**不加注入预算**（E4-K10：本批不登记 checkpoint 段的新预算面 ⇒
   //   `renderCheckpointsBlock` 内不得出现任何 `applyInjectionBudget` 调用）。
   checkpoints = null,
+  // 【ckpt-wire · 批 `punky-checkpoint-wire-20261106` · lane `e1-resume`】A 通道：`resume` 契约条款开关
+  //   （取值面 = `WavePlanTask.resume`，建批恒写、缺省 `false`；见 `types/contracts.ts:142`、
+  //   `wave-plan.ts:1386`）。缺省 `false` ⇒ **不 push 任何行** ⇒ 任务包与改动前**逐字节相同**
+  //   （零回归，与 `injectBudget` / `archContext` 同款「可选位缺省 ⇒ 零字节变化」惯例）。
+  resume = false,
   // 【L2 注入预算】面 A 的阈值入参（缺省 `null` ⇒ **零动作**：不改任何文本、不产省略）。
   //   生产路径由 `dispatchLaneCore` 从热更快照 `capabilities.injectBudget` 读出后传入；
   //   直调调用方（含既有单测）不传 ⇒ 本函数输出与改动前**逐字节相同**（零回归口径 C）。
@@ -911,6 +923,24 @@ export function composeWorkerPrompt({
   if (checkpointsBlock) {
     L.push('');
     L.push(...String(checkpointsBlock).split('\n'));
+  }
+  // ── 【ckpt-wire · A 通道】`RESUME_CLAUSE` 条款段 ─────────────────────────────────────────────
+  //   位置 = **`## checkpoint 计划` 段之后、`## 开工前必做` 段之前**（批 `punky-checkpoint-wire-20261106`
+  //   · lane `e1-resume`；判据源 `plan/ckpt-spec.md` §方案 3.1(c)）。三条否证：
+  //   ① **不做成 `## 纪律` 的第 N 条**：纪律段用 `rule()` 计数器编号（见下方 `ruleNo`）⇒ 条件条款会让
+  //      同一批不同 lane 的规则序号漂移，且直接污染 E-CK6 零回归面；
+  //   ② **不落 `## 任务要点（Leader 补充）`**：该段是 Leader 独占区（结构隔离，无优先级判定器）；
+  //   ③ **不落头部契约区**：本条款是**开工/续跑时**的指令，语义上后置，紧贴纪律段（成员动手前最后读到），
+  //      且与同族的 `## checkpoint 计划` 相邻（A/B 两通道条款并读）。
+  //   空行口径（对齐 `:880` / `:912` / `:915` / `:961` 四处同款惯例）：块**前** `L.push('')` **恰一个**；
+  //   块**后不给** —— 紧随的 preflight 段自带前导空行，再给即产出**连续两个空行**（破坏逐字节形态）。
+  //   裸段（不新造 `## 标题`）：`RESUME_CLAUSE` 本身是完整条款句且不含 `\n` ⇒ 恒为**一行**；
+  //   加标题需在本文件新造标题字面量 ⇒ 第二个文案面（与 archContext 裸文本段惯例一致）。
+  //   缺省 `resume = false` ⇒ `resumeClauseFor` 返回 `null` ⇒ **零 push**（E-CK6 逐字节零回归）。
+  const resumeClause = resumeClauseFor({ resume });
+  if (resumeClause) {
+    L.push('');
+    L.push(resumeClause);
   }
   L.push('');
   L.push(...String(preflightBlock).split('\n'));
@@ -1316,6 +1346,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     preflight: laneTask?.preflight ?? null,
     // 【pk-impl】checkpoint 计划清单（缺省 `null` ⇒ 任务包零感知，不新增任何文本段）。
     checkpoints: laneTask?.checkpoints ?? null,
+    // 【ckpt-wire · A 通道】`WavePlanTask.resume`（建批恒写、缺省 `false`）⇒ 任务包注入 `RESUME_CLAUSE`。
+    //   `laneTask` 已在同处被读（`laneTask?.checkpoints` / `laneTask?.preflight`）⇒ 不新增取值路径、
+    //   不改 `dispatchLaneCore` 的任何前置逻辑（不触状态机、不触门禁）。
+    //   严格 `=== true`：非 `true`（`false` / `undefined` / `null`）一律不注入（fail-safe 向零回归）。
+    resume: laneTask?.resume === true,
     // 段渲染异常时的降级告警落点（唯一消费点，见该函数 logger 参数注释）。
     logger: ctx?.logger ?? null,
   });

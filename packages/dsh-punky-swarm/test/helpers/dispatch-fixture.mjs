@@ -16,9 +16,10 @@ import { withDefaultTeam } from './skill-paths.mjs';
  * @param {string} [o.batchId]  批次 id（同上）
  * @param {Function} [o.start]  `rt.start(provider, request)` 桩（缺省 = 自足成功桩）
  * @param {boolean} [o.markCmd] 给 tasks 打 CMD-MARK 标记（prompt-compose 断言用）
+ * @param {object|null} [o.taskExtra] 任务级附加字段（缺省 `null` ⇒ 既有套件任务对象**逐字不变**）
  * @returns {Promise<{by,exec,store,captured,root,SID,batchId}>}
  */
-export async function makeDispatchHarness({ SID = 'sess-dfx', batchId = 'b-dfx', start, markCmd = false } = {}) {
+export async function makeDispatchHarness({ SID = 'sess-dfx', batchId = 'b-dfx', start, markCmd = false, taskExtra = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-dfx-'));
   const store = createStore(root);
   const captured = [];
@@ -40,6 +41,10 @@ export async function makeDispatchHarness({ SID = 'sess-dfx', batchId = 'b-dfx',
   assessC(store, SID, { rationale: 'fixture：三层批建批前置评估（多线并行 ⇒ C 档）' });
   const tasks = threeTierTasks(['e1'], { auditId: 'a1' });
   if (markCmd) for (const t of tasks) t.cmd = 'CMD-MARK-' + t.id + ' 的任务说明';
+  // 【ckpt-wire · 批 `punky-checkpoint-wire-20261106` · lane `e1-resume`】任务级附加字段注入位
+  //   （用途：`{ resume: true }` 验派发路径 R-4「`laneTask.resume` ⇒ 任务包」）。
+  //   缺省 `null` ⇒ 不改任何任务对象 ⇒ 既有套件零影响。
+  if (taskExtra) for (const t of tasks) Object.assign(t, taskExtra);
   await by.wave_plan.execute({ batchId, tasks, assembly: { auditLane: 'a1' } }, exec);
   await by.batch_phase.execute({ batchId, phase: 'running' }, exec);
   registerManager(store, SID, batchId, 'mgr-1');

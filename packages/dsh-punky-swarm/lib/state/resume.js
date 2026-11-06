@@ -117,7 +117,10 @@ export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = 
 // 纯函数：操作 batch 对象，不落盘（写入/清退由 B 的 lane_checkpoint / 结算路径调用本接口后交 store 原子写）
 
 // 读：无进度记录 → null（缺省 undefined 语义，读兼容）
-function laneProgressRead(batch, lane) {
+//   【批 `punky-checkpoint-wire-20261106` · lane `e2-status`】加 `export`：`lane_checkpoint_status` 的
+//   fallback（事件面为空时回落指针）必须**复用本单点**读取，禁在工具层重写 `batch?.laneProgress?.[lane]` 访问式。
+//   函数体逐字不动。
+export function laneProgressRead(batch, lane) {
   return batch?.laneProgress?.[lane] ?? null;
 }
 

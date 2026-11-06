@@ -47,7 +47,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
 import * as lock from '../lock.js';
 import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
-import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, recordEarlyExitProgress } from '../state/resume.js'; // 步数预算超限判定 + **checkpoint 清单对齐留痕**（薄壳：判定/幂等/fail-safe 都在 resume.js，本文件只增 1 行以守行数护栏）；laneProgressWrite：断点指针写；recordEarlyExitProgress：无 worktree 早退时补写指针
+import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, laneProgressRead, recordEarlyExitProgress } from '../state/resume.js'; // 步数预算超限判定 + **checkpoint 清单对齐留痕**（薄壳：判定/幂等/fail-safe 都在 resume.js，本文件只增 1 行以守行数护栏）；laneProgressWrite：断点指针写；laneProgressRead：断点指针读（**单点**，禁在工具层重写 `batch?.laneProgress?.[lane]` 访问式）；recordEarlyExitProgress：无 worktree 早退时补写指针
 import { SAFE_ID } from '../state/constants.js'; // 单点（原定义迁出）
 import { readCapability } from '../assembly/schema.js'; // 装配开关缺省合并读取（注册表 default 同源口径）
 // 事件字面量（worktree.*/lane.over-budget 发端 + 读端）改引 EVT 常量单点
@@ -358,7 +358,7 @@ function worktreeToolCheckpointStatus(ctx, deps) {
   const { store, root, resolveBatchSession } = deps;
   return defineTool({
     name: 'lane_checkpoint_status',
-    description: '只读查询该 lane 的 worktree.checkpoint 事件序列（ts/step/total），返回 checkpoint 历史与 latest 进度，不依赖 git 调用、零副作用。新 worker 续跑前用它跳过已完成步骤。',
+    description: '只读查询该 lane 的 worktree.checkpoint 事件序列（ts/step/total），返回 checkpoint 历史与 latest 进度，不依赖 git 调用、零副作用。新 worker 续跑前用它跳过已完成步骤。优先序：有 worktree.checkpoint 事件时以事件为准（两者不一致时事件胜出，不做数值合并）；事件面为空时回落读取 laneProgress 断点指针（无 worktree 批的唯一来源），latestSource 标明来源。',
     parameters: {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
@@ -383,6 +383,7 @@ function worktreeToolCheckpointStatus(ctx, deps) {
             { type: 'null' },
           ],
         },
+        latestSource: { oneOf: [{ type: 'string' }, { type: 'null' }], description: "latest 的来源：'event'（worktree.checkpoint 事件，优先）｜'laneProgress'（断点指针，事件面为空时兜底）；无任何进度时字段缺席" },
       } },
       render: (_args, v) => TEXT_OUTPUT('lane ' + v.lane + ': ' + v.checkpoints.length + ' checkpoint(s), latest=' + (v.latest ? v.latest.step + '/' + v.latest.total : 'none')),
     },
@@ -392,18 +393,20 @@ function worktreeToolCheckpointStatus(ctx, deps) {
       const batch = store.readBatch(sessionId, args.batchId);
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
-      // 只读：事件流过滤（不调 git）；latest = 最近一次携带 progress 的 checkpoint（倒序取首个有 step/total 的）
+      // 只读：事件流过滤（不调 git）；latest = 倒序首个携带 step/total 的 checkpoint。优先序（E-CK4）：**事件优先、指针兜底**——事件是物理提交留痕、laneProgress 是可能被早退/重派覆写的断点指针 ⇒ 事件面非空时一律以事件为准，不一致时**禁**数值合并（不取更大 step）
       const events = (batch.events ?? []).filter((e) => e.type === EVT.EVT_WORKTREE_CHECKPOINT && e.lane === args.laneId);
       const checkpoints = events.map((e) => {
         const c = { commit: typeof e.commit === 'string' ? e.commit : '', ts: e.ts, message: e.message ?? '' };
         if (Number.isInteger(e.step) && Number.isInteger(e.total)) { c.step = e.step; c.total = e.total; }
         return c;
       });
-      let latest = null;
+      let latest = null; let latestSource = null;
       for (let i = checkpoints.length - 1; i >= 0; i--) {
-        if (checkpoints[i].step != null && checkpoints[i].total != null) { latest = { step: checkpoints[i].step, total: checkpoints[i].total }; break; }
+        if (checkpoints[i].step != null && checkpoints[i].total != null) { latest = { step: checkpoints[i].step, total: checkpoints[i].total }; latestSource = 'event'; break; }
       }
-      const out = { ok: true, lane: args.laneId, branch: laneBranch(args.laneId), checkpoints, latest };
+      const lp = latest ? null : laneProgressRead(batch, args.laneId); // 事件面为空才读指针（指针只兜底，不抢位）
+      if (lp && Number.isInteger(lp.step) && Number.isInteger(lp.total)) { latest = { step: lp.step, total: lp.total }; latestSource = 'laneProgress'; }
+      const out = { ok: true, lane: args.laneId, branch: laneBranch(args.laneId), checkpoints, latest, ...(latestSource ? { latestSource } : {}) };
       const dir = laneDirOf(root, sessionId, args.batchId, args.laneId);
       if (fs.existsSync(dir)) out.worktree = dir; // worktree 目录存在性探测（只读）
       return out;

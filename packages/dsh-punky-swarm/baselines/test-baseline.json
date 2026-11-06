@@ -400,6 +400,14 @@
       "tests": 10,
       "todos": 0
     },
+    "test/checkpoint-resume-wire.test.js": {
+      "asserts": 18,
+      "blankLines": 15,
+      "lines": 134,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/client-sync.test.js": {
       "asserts": 8,
       "blankLines": 10,
@@ -1246,6 +1254,14 @@
       "lines": 167,
       "tautologies": 0,
       "tests": 14,
+      "todos": 0
+    },
+    "test/lane-checkpoint-status-fallback.test.js": {
+      "asserts": 12,
+      "blankLines": 22,
+      "lines": 130,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/lane-checkpoint-total-mismatch.test.js": {
@@ -2177,7 +2193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-06T18:06:50Z",
+  "generatedAt": "2026-11-06T18:40:57Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,15 +2204,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "A 组治理可信度：A1 退化谓词单点化（ok 吃 !degraded + AC-4 新增断言）；A2 早退补写断点指针（resume.js 薄壳 + T9 新用例）；A3 CHANGELOG 未发布节；文档债 R-1 contracts.ts:466 / R-2 event-types.js:332-334；F-9 经核实为误判撤销（HEAD blob 本就 LF）。非静默减断言",
+  "reason": "批 punky-checkpoint-wire-20261106：lane e2-status 新增 test/lane-checkpoint-status-fallback.test.js（E-CK3/E-CK4 + 零回归 + 无 progress 边界共 4 用例，12 断言）；同次快照保留 lane e1-resume 已计入的 test/checkpoint-resume-wire.test.js（其原 reason 见上一版：E-CK1/E-CK2/E-CK5/E-CK6 + R-4 派发路径共 5 用例，及 dispatch-fixture 惰性导入解耦）。非静默减断言。",
   "schema": 1,
   "totals": {
-    "asserts": 12383,
-    "blankLines": 6985,
-    "files": 272,
-    "lines": 73641,
+    "asserts": 12413,
+    "blankLines": 7022,
+    "files": 274,
+    "lines": 73905,
     "tautologies": 0,
-    "tests": 2591,
+    "tests": 2600,
     "todos": 0
   }
 }
