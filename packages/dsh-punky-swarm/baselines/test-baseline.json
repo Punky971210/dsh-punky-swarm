@@ -11,7 +11,7 @@
     "test/ac16-push-unconfirmed.test.js": {
       "asserts": 16,
       "blankLines": 16,
-      "lines": 143,
+      "lines": 149,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -99,7 +99,7 @@
     "test/agent-team-probe.test.js": {
       "asserts": 7,
       "blankLines": 12,
-      "lines": 88,
+      "lines": 94,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -379,7 +379,7 @@
     "test/channel-roster.test.js": {
       "asserts": 54,
       "blankLines": 32,
-      "lines": 294,
+      "lines": 302,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -390,6 +390,14 @@
       "lines": 177,
       "tautologies": 0,
       "tests": 11,
+      "todos": 0
+    },
+    "test/checkpoint-aux.test.js": {
+      "asserts": 38,
+      "blankLines": 25,
+      "lines": 250,
+      "tautologies": 0,
+      "tests": 10,
       "todos": 0
     },
     "test/client-sync.test.js": {
@@ -507,7 +515,7 @@
     "test/deps-direction.test.js": {
       "asserts": 18,
       "blankLines": 24,
-      "lines": 295,
+      "lines": 301,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1729,11 +1737,11 @@
       "todos": 0
     },
     "test/roster-unknown.test.js": {
-      "asserts": 24,
-      "blankLines": 24,
-      "lines": 190,
+      "asserts": 43,
+      "blankLines": 31,
+      "lines": 319,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 7,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -2008,6 +2016,14 @@
       "tests": 8,
       "todos": 0
     },
+    "test/warn-silent-codes.test.js": {
+      "asserts": 19,
+      "blankLines": 30,
+      "lines": 190,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/watch-bootoverlay.test.js": {
       "asserts": 24,
       "blankLines": 18,
@@ -2161,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-06T12:41:31Z",
+  "generatedAt": "2026-11-06T14:33:22Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2172,15 +2188,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B-3 删 sig 判等面连带删除对应测试块（断言 80->59 属功能面删除，非静默减断言）；B-1 夹具迁移补 get 致 agent-channels/ring1-or-aggregate 行数增长",
+  "reason": "功能面变更连带：D-1 选项A 修正两处过时期望值（ac16 2-5' 夹具补 get、agent-team-probe 4档期望翻转）；F-8 返工 roster-unknown 5->7 且断言 24->43；checkpoint 四段新增 checkpoint-aux 10 例；D-2 新增 warn-silent-codes；B-1 白名单 A3 新增一条。非静默减断言",
   "schema": 1,
   "totals": {
-    "asserts": 12294,
-    "blankLines": 6918,
-    "files": 270,
-    "lines": 72996,
+    "asserts": 12370,
+    "blankLines": 6980,
+    "files": 272,
+    "lines": 73591,
     "tautologies": 0,
-    "tests": 2574,
+    "tests": 2590,
     "todos": 0
   }
 }

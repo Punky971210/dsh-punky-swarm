@@ -198,6 +198,12 @@ export const WHITELIST = [
   // ── A3（显式例外：需 per-call 参数 或 属注册动作现场）────────────────────
   { file: 'engine/dispatch.js', symbol: 'createAgentPort', class: 'A3', reason: 'agentPort 需 per-call presetFor（热更配置）⇒ 结构不可预装配' },
   { file: 'tools/host-surface.js', symbol: 'createRosterPort', class: 'A3', reason: 'rosterPort 需 per-call agent 凭据（exec.agent）⇒ 不可预装配' },
+  // 【2026-11-06 新增 · 批 punky-engine-fix2-20261106 · F-8 返工】用户口径：「roster 不是加载时读的，
+  //   是实时读的，provider 只是给入口」⇒ 本处与上面 `tools/host-surface.js` 那条**同 class 同理由**，
+  //   是 A3 模式在「建批路径」上的**首个消费者**（此前该路径不读 roster，故这条依赖第一次被触及）。
+  //   ⚠ 不属「新增依赖方向」：`createRosterPort` 在引擎侧原已有两处（`tools/host-surface.js` 在册判定、
+  //   `bridge/dispatch-register.js` 派发对账），棘轮防的是「无意新增」，本处是**同模式的有意复用**。
+  { file: 'tools/wave-plan-tools.js', symbol: 'createRosterPort', class: 'A3', reason: '建批期按 exec.agent 现取宿主名册（roster 实时读、不可预装配）；与 tools/host-surface.js 同理由' },
   { file: 'bridge/dispatch-register.js', symbol: 'createRosterPort', class: 'A3', reason: '同上：对账期按 exec.agent 现取凭据' },
   { file: 'tools/register.js', symbol: 'createToolsPort', class: 'A3', reason: '属**注册动作现场**（registerTool）；预装配只是把 create 挪位置，不减少依赖' },
   { file: 'tools/tier-gate.js', symbol: 'createToolsPort', class: 'A3', reason: '同上：installGuard 属装配动作现场（且该方法是**追加**式，见文件头 A4 警示）' },
@@ -219,7 +225,7 @@ test('D-2 白名单每条 4 字段、class ∈ {A1,A3}、reason 非空', () => {
   assert.deepEqual({
     A1: WHITELIST.filter((e) => e.class === 'A1').length,
     A3: WHITELIST.filter((e) => e.class === 'A3').length,
-  }, { A1: 3, A3: 7 }, '分类构成须为 A1=3 / A3=7（β 后 A1 应归零）');
+  }, { A1: 3, A3: 8 }, '分类构成须为 A1=3 / A3=8（β 后 A1 应归零；A3 于 2026-11-06 因建批期 roster 实读新增 1 条）');
 });
 
 // ── D-1 / D-3：**双向相等**（本判据的主体）──────────────────────────────────────────────
