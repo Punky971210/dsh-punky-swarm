@@ -84,6 +84,10 @@ export interface WavePlanTaskInput {
         acceptance?: unknown;
         rounds?: unknown;
         ctxBudget?: unknown;
+        skills?: unknown;
+        kb?: unknown;
+        mcp?: unknown;
+        checklist?: unknown;
     }>;
     /** 【同上批】`tasks[].contract` 契约引用：`{ id, sha256 }`。缺省不写键；非法 ⇒ **fail-closed 抛**（普通 `Error`）。 */
     contract?: {
@@ -317,11 +321,6 @@ export interface Batch {
     laneProgress?: LaneProgressMap;
     handoffs?: LaneHandoffMap;
     laneExempt?: LaneExemptMap;
-    /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
-     *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js::sigDuplicateKeyOf` 产出），值恒 `true`。
-     *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
-     *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
-    sigDuplicateLogged?: Record<string, boolean>;
     teamAsset?: TeamAssetRef;
     /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4.3）：批级**通道归属声明**真源。
      *  · **纯增量可选字段**（缺省 `undefined` = 存量批/未声明）⇒ 读端放行 + 可核留痕，与 `handoffs` 存量口径同形。
@@ -487,19 +486,6 @@ export type BatchEvent = BatchEventBase & ({
 } | {
     type: 'archive.failed';
     reason: string;
-} | {
-    type: 'sig.duplicate_detected';
-    lane: string;
-    sig: string;
-    matches: Array<{
-        lane: string;
-        state: string;
-    }>;
-    notice: Array<{
-        lane: string;
-        state: string;
-        layer: string | null;
-    }>;
 } | {
     type: 'system.recovered';
     batchId: string;

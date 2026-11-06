@@ -131,6 +131,13 @@ export interface WavePlanTaskInput {
   checkpoints?: Array<{
     id?: unknown; target?: unknown; outputs?: unknown; acceptance?: unknown;
     rounds?: unknown; ctxBudget?: unknown;
+    // 【fix2 · E4-K1】开工前必做四段（复用 `PreflightDecl` 形态：skills / kb / mcp / checklist）。
+    //   与 `task.preflight`（任务级四段）**同形不同位**：本组是**每个 checkpoint 各自的**开工动作清单，
+    //   渲染为该项下的缩进子行（`lib/engine/dispatch.js#renderCheckpointsBlock`）。
+    //   ⚠ **建议性面**：非法/全缺 ⇒ 不拒建批、不抛、不打任何 `GATE_*`（E4-K3）；
+    //   归一化在 `lib/wave-plan.ts#normalizeCheckpoints` 内逐项调用四段单点，**全空则不写四键**（= 未声明）。
+    //   仍为 `unknown`（同一节奏：归一化前是宽松输入，需显式窄化才可用）。
+    skills?: unknown; kb?: unknown; mcp?: unknown; checklist?: unknown;
   }>;
   /** 【同上批】`tasks[].contract` 契约引用：`{ id, sha256 }`。缺省不写键；非法 ⇒ **fail-closed 抛**（普通 `Error`）。 */
   contract?: { id: string; sha256: string | null } | null;
@@ -390,11 +397,6 @@ export interface Batch {
   laneProgress?: LaneProgressMap; // v3 可选字段；非法形态经 migrateV2toV3 归一为 undefined（不写字段）
   handoffs?: LaneHandoffMap;      // P1 交接门：v3 纯增量可选字段。**缺省 undefined = 存量批** ⇒ 未交接门放行 + 落 `lane.handoff.gap`（裁决 ①=B）；新建批恒写（空对象 = 无 deps 的批，字段存在即「本批受新门约束」）
   laneExempt?: LaneExemptMap;     // v3 纯增量可选字段（缺省 undefined = 无豁免；空表整键删除，不写键；探针层只读消费）
-  /** sig 任务内容指纹（N3-②）· **纯去重记账**（形态同 laneProgress 惯用法：缺省 undefined = 无记录）。
-   *  键 = `<lane>|<对端 lane:态, …>`（`lib/sig-fingerprint.js::sigDuplicateKeyOf` 产出），值恒 `true`。
-   *  **零判定读端**：只用于「同 (lane, 对端集合) 只落一条 `sig.duplicate_detected`」的去重记账，
-   *  不参与任何门禁判定、不进 `GateErrorCode`（D-sig-2：留痕不阻断）。 */
-  sigDuplicateLogged?: Record<string, boolean>;
   teamAsset?: TeamAssetRef;       // §8③ 团队资产解析快照的批次级指纹引用（建批事务内落盘；不参与门禁判定）
   /** R-5（P4 授权修复批，2026-09-25 · `plan/fix-spec.md` §2.4.3）：批级**通道归属声明**真源。
    *  · **纯增量可选字段**（缺省 `undefined` = 存量批/未声明）⇒ 读端放行 + 可核留痕，与 `handoffs` 存量口径同形。
@@ -462,7 +464,6 @@ export type BatchEvent = BatchEventBase & (
   //   其码已并入退役锁。历史批数据仍经下方 `{ type: string; [k: string]: unknown }` 兜底可读。
   | { type: 'archive.failed'; reason: string }                                        // EVT_ARCHIVE_FAILED
   // sig 任务内容指纹（N3-②）· 幂等判等留痕（D-sig-2 裁定：**只留痕不阻断**，不加新拒码、不进 GateErrorCode）
-  | { type: 'sig.duplicate_detected'; lane: string; sig: string; matches: Array<{ lane: string; state: string }>; notice: Array<{ lane: string; state: string; layer: string | null }> } // EVT_SIG_DUPLICATE_DETECTED
   | { type: 'system.recovered'; batchId: string; sessionId: string; recoveredLanes: string[]; detail: unknown[] } // EVT_SYSTEM_RECOVERED
   // 兜底：扩展事件（lane.stalled / lane.over-budget / budget.rejected /
   //   worktree.created|checkpoint|merged|merge.conflict|merge.resolved /

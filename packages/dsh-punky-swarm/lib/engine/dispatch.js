@@ -537,6 +537,18 @@ const PREFLIGHT_KB_SOLE_HINT = '   - （提示：知识库关键词建议 2-3 �
 const PREFLIGHT_UNDECLARED_LINE = '> ⚠ 本任务未声明开工前必做项（`preflight` 的 kb / skills / mcp / checklist 四段全缺）：'
   + '请自行判断是否需要查知识库、调用技能、使用 MCP，并把结论写进回报的 `knowledge_hits` / `skills_used` / `mcp_used`。';
 
+// ── 【批 `punky-engine-fix2-20261106` · lane `e4-ckpt-aux`】四段**单项文本**的共享格式化单点 ────────
+// 存在理由（判据源 S5-3「复用 `renderPreflightLines` 的文案与词汇，禁另造一套」）：
+//   `## 开工前必做`（任务级，`renderPreflightLines`）与 `## checkpoint 计划` 的逐项子行
+//   （`renderCheckpointsBlock`）是**同一套词汇的两个落点** ⇒ 三种单项文本只允许一份表达式。
+//   **不改口径**：下三式与抽取前 `renderPreflightLines` 内的内联表达式**逐字等价**（输出字节相同），
+//   仅把「拼字符串」抽到一处，防两处各写一遍后漂移（漂移症状 = 成员在两个段里看到不同指令形态）。
+const kbItemTextOf = (k) => '`weknora_search("' + k + '")`';
+const skillItemTextOf = (s) => '`skill("' + s + '")`';
+/** MCP 单项：`` `<tool>` —— <why> ``；缺 `why` ⇒ 逐字占位 `PREFLIGHT_MCP_WHY_ABSENT`（E4-K8）。 */
+const mcpItemTextOf = (m) => '`' + String(m.tool).trim() + '` —— '
+  + ((typeof m.why === 'string' ? m.why.trim() : '') || PREFLIGHT_MCP_WHY_ABSENT);
+
 /** 声明判定（纯函数、零 IO、零抛错）：`task.preflight` 是 plain object ⇒ 已声明；其余（缺省/null/数组/标量）⇒ 未声明。
  *  **区分「未声明」与「声明了但四段全空」是本函数唯一的判断**（二者渲染形态不同：警示行 vs 四段+占位）。
  *  读值异常（getter 抛错等）⇒ 按**未声明**降级（fail-safe：本字段的用途是提示，绝不能阻断派发）。 */
@@ -567,18 +579,15 @@ export function renderPreflightLines(decl) {
   const L = [PREFLIGHT_SECTION_TITLE];
   L.push(PREFLIGHT_HEADERS[0]);
   if (kb.length) {
-    for (const k of kb) L.push('   - `weknora_search("' + k + '")`');
+    for (const k of kb) L.push('   - ' + kbItemTextOf(k));
     if (kb.length === 1) L.push(PREFLIGHT_KB_SOLE_HINT);
   } else L.push(PREFLIGHT_SUBITEM_ABSENT);
   L.push(PREFLIGHT_HEADERS[1]);
-  if (skills.length) for (const s of skills) L.push('   - `skill("' + s + '")`');
+  if (skills.length) for (const s of skills) L.push('   - ' + skillItemTextOf(s));
   else L.push(PREFLIGHT_SUBITEM_ABSENT);
   L.push(PREFLIGHT_HEADERS[2]);
   if (mcp.length) {
-    for (const m of mcp) {
-      const why = (typeof m.why === 'string' ? m.why.trim() : '') || PREFLIGHT_MCP_WHY_ABSENT;
-      L.push('   - `' + m.tool.trim() + '` —— ' + why);
-    }
+    for (const m of mcp) L.push('   - ' + mcpItemTextOf(m));
   } else L.push(PREFLIGHT_SUBITEM_ABSENT);
   L.push(PREFLIGHT_HEADERS[3]);
   if (checklist.length) for (const c of checklist) L.push('   - ' + c.trim());
@@ -602,6 +611,10 @@ export function renderPreflightLines(decl) {
 //   · **缺省不警示**：`preflight` 未声明会出「未声明开工前必做项」警示行；`checkpoints` 缺省 ⇒ **完全不出段**。
 //     理由：存量批海量，给缺省加警示会污染**全部**派发。
 //   · **仅当「声明了但归一后为空」才给恰一行降级警示**（坏项被丢弃这件事本身要可见，不静默）。
+// 【e4-ckpt-aux · 2026-11-06】四段扩展（`skills` / `kb` / `mcp` / `checklist`）追加在**逐项**层级 ⇒ 第三处
+//   **刻意差异**：`preflight` 是任务级唯一区块（四段恒出、空段占位）；本段是**逐项子行**（**有才出**），
+//   某项四段全空 ⇒ **恰一行**建议性警示（不铺 4 行占位，E4-K5 判红「多行噪声」）。全空 ≠ 未声明：
+//   四键在归一阶段就不写（`lib/wave-plan.ts#normalizeCheckpoints`）⇒ 渲染层只认「子行 0 行」。
 /** 声明判定（纯函数、零 IO、零抛错）：`task.checkpoints` 已声明 ⇒ `{ items }`；未声明/读值异常 ⇒ `null`。
  *  **区分「未声明」与「声明了但归一后为空」是本函数唯一的判断**（二者渲染形态不同：不出段 vs 一行警示）。 */
 export function checkpointsOf(task) {
@@ -614,7 +627,35 @@ export function checkpointsOf(task) {
   }
 }
 
-/** 单点渲染：`null` ⇒ 空串（不出段）；`items` 空 ⇒ 恰一行警示；否则清单 + **一行**建议行。 */
+/** 单项四段**全空**时的**恰一行**建议性警示（判据源 S5-3；E4-K5 明令「四段全缺 ⇒ 恰一行、不许每段一行占位」）。
+ *  ⚠ 与 `PREFLIGHT_UNDECLARED_LINE` 不是同一件事：那条是**任务级** `preflight` 未声明（`>` 引用块形态）；
+ *  本条是**逐项** `checkpoints[]` 的四段全空（缩进列表项形态，与 item 行同层）。措辞保留「建议性 / 不阻断」。 */
+const CP_AUX_ABSENT_LINE = '  - ⚠ 本 checkpoint 未声明 skills / kb / mcp / checklist 四段（建议性：开工前自行判断；不阻断）';
+
+/** 单项四段的**缩进子行**（纯函数、零 IO）：**有才出**（控体积 —— item 数 × 4 行的常驻噪声不可接受）。
+ *  词序照判据源 S5-3 样例：skills → kb → mcp → checklist；词汇全部走共享单点（`skillItemTextOf` 等）。
+ *  @param {object} it 归一后的 `CheckpointItem`（四键可能**不在**：全空即未声明）
+ *  @returns {string[]} 0..4 行（0 行 ⇒ 调用方补 `CP_AUX_ABSENT_LINE`） */
+function checkpointAuxLinesOf(it) {
+  const strs = (v) => listOf(v).filter((x) => typeof x === 'string' && x.trim() !== '');
+  const skills = strs(it?.skills);
+  const kb = strs(it?.kb);
+  const mcp = listOf(it?.mcp).filter((m) => m && typeof m === 'object'
+    && typeof m.tool === 'string' && m.tool.trim() !== '');
+  const checklist = strs(it?.checklist);
+  const L = [];
+  if (skills.length) L.push('  - skills：' + skills.map(skillItemTextOf).join(' / '));
+  if (kb.length) L.push('  - kb：' + kb.map(kbItemTextOf).join(' / '));
+  if (mcp.length) L.push('  - mcp：' + mcp.map(mcpItemTextOf).join('；'));
+  if (checklist.length) L.push('  - checklist：' + checklist.map((c) => c.trim()).join(' / '));
+  return L;
+}
+
+/** 单点渲染：`null` ⇒ 空串（不出段）；`items` 空 ⇒ 恰一行警示；否则清单 + **一行**建议行。
+ *  【e4-ckpt-aux】每条 item 正文行之后追加四段缩进子行（**有才出**，至多 4 行；全空 ⇒ 恰 1 行
+ *  `CP_AUX_ABSENT_LINE`）。三态口径（E4-K5/K6）：
+ *   ① 未声明 `checkpoints` ⇒ `''`（存量批零感知）；② 声明了但该项四段全空 ⇒ 1 行建议性警示；
+ *   ③ 任一段非空 ⇒ 只出对应子行、**无**警示。既有正文行字节**不变**。 */
 export function renderCheckpointsBlock(checkpoints) {
   if (checkpoints == null) return '';
   const items = Array.isArray(checkpoints?.items) ? checkpoints.items : [];
@@ -637,6 +678,10 @@ export function renderCheckpointsBlock(checkpoints) {
     if (rounds > 1) extra.push('rounds=' + rounds);
     lines.push('- `' + (typeof it?.id === 'string' ? it.id : '?') + '` → ' + target
       + (extra.length > 0 ? '（' + extra.join('；') + '）' : ''));
+    // 【e4-ckpt-aux · E4-K4/K5/K8】四段子行：**有才出**；四段全空 ⇒ 恰一行建议性警示（不阻断）。
+    const aux = checkpointAuxLinesOf(it);
+    if (aux.length > 0) lines.push(...aux);
+    else lines.push(CP_AUX_ABSENT_LINE);
   }
   return lines.join('\n');
 }
@@ -762,6 +807,10 @@ export function composeWorkerPrompt({
   // 【pk-impl · 批 `punky-taskpkg-checkpoint-20261101`】checkpoint 计划清单（`tasks[].checkpoints` 的归一产物）。
   //   缺省 `null` ⇒ **不渲染任何内容、不加警示**（存量批海量，给缺省加警示会污染全部派发）；
   //   仅当「声明了但归一后为空」才给**恰一行**降级警示（见 `renderCheckpointsBlock`）。
+  //   【e4-ckpt-aux】每项的四段（`skills`/`kb`/`mcp`/`checklist`）由同一函数渲染成**缩进子行** ⇒
+  //   经下方 `L.push(...checkpointsBlock.split('\n'))` **进 prompt 正文**（用户硬要求：成员真能读到，
+  //   不是只写在字段里）。四段**不加注入预算**（E4-K10：本批不登记 checkpoint 段的新预算面 ⇒
+  //   `renderCheckpointsBlock` 内不得出现任何 `applyInjectionBudget` 调用）。
   checkpoints = null,
   // 【L2 注入预算】面 A 的阈值入参（缺省 `null` ⇒ **零动作**：不改任何文本、不产省略）。
   //   生产路径由 `dispatchLaneCore` 从热更快照 `capabilities.injectBudget` 读出后传入；
