@@ -13,13 +13,15 @@ License, or (at your option) any later version.
 //
 // 判据源：`plan/p1-pack.md` AC-6/AC-7/AC-8。
 // 纪律：**必败构造**用真 git（分支已被检出 ⇒ `worktree add` exit 128），构造与清理都在本例内闭环；
-//   ⚠ 不改 `lib/tools/lane-tools.js`（它当前 457 行、`merge-agent` T2.6 行数护栏余量 0）。
+//   ⚠ 不动 worktree 源文件（批 `punky-lane-tools-split-20261106b` 起该面已拆三文件：
+//   物理层 `lib/tools/lane-worktree-ops.js` 182 逻辑行 = T2.6 上限、余量 0；契约层 `lane-worktree-tools.js` 237；
+//   基座 `lane-tools.js` 51。本用例 `B3` 读的是**物理层**，见下）。
 //
 // 每条判据的**可红形态**（实现若写错 ⇒ 本文件哪条红）：
 //   B1 若冒泡改回「裸 throw e」/静默吞错 ⇒ message 缺 op/path、`err.worktreeOp` 缺失 ⇒ 红；
 //   B2 若吞掉 gitExit（不取 `e.code`）⇒ `worktreeOp.gitExit === 128` 红；
 //   B3 若把成功路径也抛错 ⇒ 「正常 laneId 返回 ok:true + 目录存在」红；
-//   B4 若把「残留证据」挪到清理之后（`:175` 不再早于 `:176`）⇒ 行序断言红。
+//   B4 若把「残留证据」挪到清理之后（物理层 `:132` 不再早于 `:133`）⇒ 行序断言红。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -52,7 +54,7 @@ function bedOf(tag) {
 const EXEC = { agent: { session: { id: 'sess-b5' } } };
 
 // ── 必败现场：**在工具自己用的 git repo 里**把 lane `a1` 的分支 `punky/a1` 检出到额外 worktree
-//   `ensureOrch` 用 `mainRepoDir(root, sessionId, batchId)` = `<batchWtRoot>/_repo`（见 lib/tools/lane-tools.js:75）
+//   `ensureOrch` 用 `mainRepoDir(root, sessionId, batchId)` = `<batchWtRoot>/_repo`（见 lib/tools/lane-worktree-ops.js:31）
 //   ⇒ 冲突必须造在那里面；探测候选覆盖「_repo 明确路径」与「找得到 toplevel 的祖先」
 const COLLIDE_LANE = 'a1';
 function findToolRepo(bedRoot, sessionId = 'sess-b5', batchId = 'b-b5') {
@@ -126,7 +128,7 @@ test('B2 正常路径零变化：ok:true、reason ∈ 三值、worktree 目录�
 });
 
 test('B3 残留证据顺序：residualDir 赋值行号 **严格早于** removeWorktreeDir 调用（读源码比对）', () => {
-  const src = fs.readFileSync(path.join(PKG, 'lib', 'tools', 'lane-tools.js'), 'utf8').split(/\r?\n/);
+  const src = fs.readFileSync(path.join(PKG, 'lib', 'tools', 'lane-worktree-ops.js'), 'utf8').split(/\r?\n/);
   const residualLine = src.findIndex((l) => /residualDir\s*=\s*fs\.existsSync/.test(l)) + 1;
   const removeLine = src.findIndex((l) => /^\s*removeWorktreeDir\(repo, dir\);/.test(l)) + 1;
   assert.ok(residualLine > 0, '必须找到 `residualDir = fs.existsSync` 行');

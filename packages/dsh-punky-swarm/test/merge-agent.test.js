@@ -23,7 +23,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //      不新增 lane 态、不自动 settle
 // T2.4 无注入降级：enabled=true 但 deps 无 spawner → 清晰提示 + 保持 conflict 现状（不挂起不 throw）
 // T2.5 create schema 修正：lane_worktree_create output.schema 含 error 字段；git 不可用路径返回 {ok:false,error} 与 schema 一致
-// T2.6 回归护栏：lane-tools.js 逻辑行数 ≤462（**绝对上限**，见用例内注释履历）；既有 worktree-tools.test.js 全绿由全量 node --test 承担
+// T2.6 回归护栏：lane 三文件（基座 `lane-tools.js` / 物理层 `lane-worktree-ops.js` / 契约层 `lane-worktree-tools.js`）
+//      逻辑行数各 ≤ 自身**绝对上限**（51 / 182 / 237，= 拆后实测值、余量 0；见用例内注释履历与留痕规则）；
+//      既有 worktree-tools.test.js 全绿由全量 node --test 承担
 // 环境：git 可用（worktree 硬依赖，同 worktree-tools.test.js）
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -246,36 +248,44 @@ test('T2.5 create schema 修正：output.schema 含 error 字段；git 不可用
   }
 });
 
-test('T2.6 回归护栏：lane-tools.js 逻辑行数 ≤462（绝对上限，AGPL 头行豁免）', () => {
-  const src = fs.readFileSync(fileURLToPath(new URL('../lib/tools/lane-tools.js', import.meta.url)), 'utf8');
-  // ── 口径 ────────────────────────────────────────────────────────────────────
+test('T2.6 回归护栏：lane 三文件逻辑行数各 ≤ 自身绝对上限（AGPL 头行豁免）', () => {
+  // ── 口径（**未改**）────────────────────────────────────────────────────────────
   // AGPL 头为发布合规强制（+17 行），护栏意图是防逻辑膨胀 ⇒ 剔除头部 /* */ 注释块后计逻辑行数。
-  // 计数实现已抽到 test/helpers/lane-logic-lines.mjs（**单点**：护栏与下方两个可达构造共用它）。
+  // 计数实现 = test/helpers/lane-logic-lines.mjs（**单点**：护栏与下方每组可达构造共用它）。
+  // **该 helper 是本批禁改面**（口径 = split('\n').length，含尾部空串）。
   //
-  // ── 为什么上限是「绝对 462」而不是「基线 + ≤10」 ─────────────────────────────
-  // 【理由一 · 余量用尽史】**457 不是设计容量，是历史 lane 逐次用尽余量的累积**：
+  // ── 为什么从「单文件绝对上限 462」改为「每文件上限 = 该文件实测值」────────────────
+  // 【理由一 · 余量用尽史，已于本批终结】**457/462 不是设计容量，是历史 lane 逐次用尽余量的累积**：
   //   447（初版基线）→（B 步数预算接线 +8）455 → 457（前批 `impl` 把 checkpoint 对齐调用
-  //   **挤进既有语句行**过关后的实测值）。每一步都在"刚好不超"的边缘，从未真正留出设计余量。
+  //   **挤进既有语句行**过关后的实测值）→ 462（再给 5 行，声明为绝对上限）。
+  //   该用尽史**已在 `punky-lane-tools-split-20261106b` 终结：改拆文件**（用户裁决 B-1 = 甲：
+  //   拆文件、不抬阈值）⇒ 原单文件 462 上限随被拆文件一并失效，改为逐文件表驱动。
   // 【理由二 · 前批 `impl` 挤行的可读性代价】该批为守 457，把 `recordCheckpointTotalMismatch(...)`
-  //   并入既有 `const b = overBudgetOf(...)` 同一物理行 ⇒ 单行过长、可读性下降。
-  //   若不抬阈值，下一条要动该文件的 lane 会被迫复现同样做法 ⇒ 拿可读性换假节俭。
-  // 【理由三 · 只给 5 行】该文件已 457 行，**再涨应当拆文件而不是抬阈值**：
-  //   因此本次只给 +5（457 → 462），且声明为**绝对上限**（不再用「基线 + ≤10」这种伪算术）。
-  // 【理由四 · 订正一处旧口径矛盾】原注释写「基线 447 → 455；按『基线 + ≤10』同步为 ≤457」——
-  //   455 + 10 = 465 ≠ 457 ⇒ **该"公式"从未成立**，457 实际等于 447 + 10。
-  //   本批起统一为单一数字（绝对上限），不再让两套口径并存（并存正是 §「修一处不修另一处必然复发」）。
+  //   并入既有 `const b = overBudgetOf(...)` 同一物理行 ⇒ 单行过长、可读性下降。拆文件后该代价消失。
+  // 【理由三 · B-3 = 甲：上限降到各新文件实测值，不留虚余量】不恢复「基线 + ≤10」这类伪算术；
+  //   拆分后**每文件上限 = 该文件拆后实测值**，余量 0（下文 `assert.equal` 即该条的机械自证）。
+  //   取值命令（唯一方法，包根执行）：
+  //     node --input-type=module -e "import fs from 'node:fs';import {logicLinesOf} from './test/helpers/lane-logic-lines.mjs';for(const f of ['lane-tools.js','lane-worktree-ops.js','lane-worktree-tools.js'])console.log(f, logicLinesOf(fs.readFileSync('lib/tools/'+f,'utf8')));"
+  //   ⇒ 输出三个整数即下表三个 LIMIT（本批实测：51 / 182 / 237）。
   //
   // ── 防漂移规则（此后每次抬升都必须照此留痕）─────────────────────────────────
   //   留痕格式：`批次/日期/理由/新上限/余量`；**单次抬升 > 5 行必须先给出拆文件方案**，
-  //   不得以"再给几条"的方式继续累积 —— 累积正是 447→455→457 的老路。
-  const LIMIT = 462;
-  assert.ok(logicLinesOf(src) <= LIMIT,
-    'lane-tools.js 逻辑行数=' + logicLinesOf(src) + '（绝对上限 ' + LIMIT + '，AGPL 头豁免）');
-
-  // ── 两个**可达**构造（真跑断言，不是只算数）：证明边界是 462 / 463，而不是"随手指的数" ──
-  assert.ok(logicLinesOf(build(462)) <= LIMIT, '构造：恰 462 行必须绿（边界内侧）');
-  assert.throws(
-    () => assert.ok(logicLinesOf(build(463)) <= LIMIT),
-    /AssertionError/,
-    '构造：463 行必须红（边界外侧）—— 若此处不抛，说明 LIMIT 或计数口径被改坏');
+  //   不得以"再给几条"的方式继续累积 —— 累积正是 447→455→457→462 的老路（本批已用拆文件终结）。
+  const LIMITS = Object.freeze({
+    'lane-tools.js': 51,
+    'lane-worktree-ops.js': 182,
+    'lane-worktree-tools.js': 237,
+  });
+  for (const [file, LIMIT] of Object.entries(LIMITS)) {
+    const src = fs.readFileSync(fileURLToPath(new URL('../lib/tools/' + file, import.meta.url)), 'utf8');
+    const n = logicLinesOf(src);
+    assert.ok(n <= LIMIT, file + ' 逻辑行数=' + n + '（绝对上限 ' + LIMIT + '，AGPL 头豁免）');
+    // 上限取值自证（B-3 = 甲「不留虚余量」）：上限必须**等于**实测。
+    // 本行红而上一行绿 ⇒ 文件比上限小 = 存在虚余量 ⇒ 把 LIMIT 降到实测值（**不是放宽本行**）。
+    assert.equal(n, LIMIT, file + '：上限须等于实测值（余量 0）；实测=' + n + '，上限=' + LIMIT);
+    // 每个上限一对**可达**构造（真跑断言，不是只算数）：证明边界是 LIMIT / LIMIT+1，而不是"随手指的数"
+    assert.ok(logicLinesOf(build(LIMIT)) <= LIMIT, file + ' 构造：恰 ' + LIMIT + ' 行必须绿（边界内侧）');
+    assert.throws(() => assert.ok(logicLinesOf(build(LIMIT + 1)) <= LIMIT), /AssertionError/,
+      file + ' 构造：' + (LIMIT + 1) + ' 行必须红（边界外侧）—— 若此处不抛，说明 LIMIT 或计数口径被改坏');
+  }
 });
