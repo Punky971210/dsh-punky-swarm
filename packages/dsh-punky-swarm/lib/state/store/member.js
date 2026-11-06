@@ -32,11 +32,10 @@ import { countConsecutiveFailedSettles } from './events.js';
 const EVT_LANE_EXEMPT_INHERITED = EVT.EVT_LANE_EXEMPT_INHERITED;
 
 export function buildMember(cx) {
-  const { gates, readBatch, newEvent, commitBatch, appendGatePayloadEvents, runMergedGateChain, laneExemptClear, applyLaneExemptOnDispatch, sigDupVerdictOf, makeContractMissingSink, conditionFileExists, emitStateChange, escalatePausedWrite, ratchet } = cx;
+  const { gates, readBatch, newEvent, commitBatch, appendGatePayloadEvents, runMergedGateChain, laneExemptClear, applyLaneExemptOnDispatch, makeContractMissingSink, conditionFileExists, emitStateChange, escalatePausedWrite, ratchet } = cx;
 
   function setMember(sessionId, batchId, lane, to, note = null, exempt = undefined, owner = undefined) {
     let batch = readBatch(sessionId, batchId); // 终态清退经 laneProgressClear 返回新 batch（不突变入参）
-    let sigDup = null; // sig 幂等留痕判定（见下方消费点；事件与去重键随本次迁移**同一次 atomicWrite** 落盘）
     if (!batch) throw new Error('batch not found: ' + batchId);
     // 终态批次冻结：complete / aborted 之后不再接受任何成员迁移（防「已收口批次仍被改写成 running」的治理自相矛盾）
     if (schema.isBatchTerminal(batch.phase)) {
@@ -89,15 +88,11 @@ export function buildMember(cx) {
         + '（`running -> ' + to + '` 不在迁移表内；review 为合并/跳过的唯一中转）'
       : '';
     if (!mv.ok) throw new Error('invalid member transition: ' + from + ' -> ' + to + d4Hint);
-    // ── sig 任务内容指纹（N3-②）· 消费点（D-sig-2 裁定：**只留痕不阻断**）────────────────────────
-    // 语义：本 lane 的 `sig` 与同批次内**其他** lane 相同、且该 lane 状态 ∈ {running, review, merged}
-    //   ⇒ 判定为「同内容任务被重复派发/重复结算」，落事件 `sig.duplicate_detected` **留痕**。
-    //   硬边界（逐条，防扩权）：**不阻断本次迁移**（不 throw、不加拒码、不动 `GateErrorCode` union、
-    //   不新增治理状态、不生 v2 字段）；判等用**迁移前**的 lanes 快照（此刻本 lane 尚未置 to）；
-    //   同层重复计 `blocking` 记账项、跨层只作 `notice`（层不同 ⇒ 任务语义不同域，避免假阳性）。
-    //   去重：同一 (lane, 对端集合) 只落一条（`sigDuplicateLogged`）；sig 平凡/零命中 ⇒ 零写入。
-    //   位置：置于入口门之前——留痕与门禁**互不影响**（门拒时本条已如实记账，不静默丢事实）。
-    sigDup = sigDupVerdictOf(batch, lane);
+    // 【2026-11-06 · 批 `punky-engine-fix-20261106` lane `e2-fix-b3` · 用户裁决 Q-C = 乙】B-3：
+    //   原此处的 sig 判等留痕消费点（判定包装的赋值、留痕事件 push、去重记账字段写入）
+    //   已**整面删除** —— 判等结构性不可达（哈希含 `id`，判等循环又跳过同 `id`
+    //   ⇒ 候选集恒空 ⇒ 事件永不触发）。`sig` 只留内容锚定，本函数**不再读 `sig`**。
+    //   注：本注释刻意不写出被删符号名与事件码字面量 —— 验收项要求该族名字在 `lib test` 内零命中。
     // Tier3 门禁：派发（condition + entry）与结算（exit/Plan 契约）+ needHuman（review 挂起检测 / merged 人工裁决闸）
     if (to === 'running') {
       // 派发前条件校验（lane.condition 静态声明，DI fileExists）——不满足 → 不派发、自动落 skipped（既有终态迁移）+ lane.skipped 事件；wavePlan 不动不重算
@@ -239,13 +234,6 @@ export function buildMember(cx) {
           escalated = true;
         }
       }
-    }
-    // sig 幂等留痕（N3-②）：**事件 + 去重记账键**在同一次 atomicWrite 内落盘（与迁移不可分叉；
-    //   分两次写会被本函数随后的整文件写覆盖 —— 见 `sigDupVerdictOf` 头注）。事件载荷由
-    //   `lib/sig-fingerprint.js#sigDuplicateVerdict` 单点构造（`type` 键承载事件名，载荷不占用）。
-    if (sigDup?.log) {
-      batch.events.push(newEvent(EVT.EVT_SIG_DUPLICATE_DETECTED, sigDup.fields));
-      batch.sigDuplicateLogged = { ...(batch.sigDuplicateLogged ?? {}), [sigDup.key]: true };
     }
     batch.updatedAt = new Date().toISOString();
     commitBatch(sessionId, batchId, batch);

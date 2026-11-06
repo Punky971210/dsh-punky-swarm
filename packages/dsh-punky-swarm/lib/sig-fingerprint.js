@@ -30,15 +30,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     `addPoolTasks` 追加任务经同一次 `buildWavePlan` 重归一化 ⇒ 新任务补算、既有任务输入不变 ⇒ sig 不变；
 //     `addTaskEdges` 加边经同一次重归一化 ⇒ 受影响任务（deps 变化）重算、**无关任务 sig 不变**；
 //     已派发（`owner` 非空）任务在 `buildWavePlan` 内**冻结**（读旧 sig 原样落盘，见 `lib/wave-plan.ts`）。
-//   · **消费点**（D-sig-2 裁定 = **不加新拒码**，仅事件留痕）：同批次内存在 sig 相同且状态 ∈
-//     {running, review, merged} 的**其他** lane ⇒ 只落事件 `sig.duplicate_detected`，**不阻断动作**、
-//     **不新增治理状态**、**不进 `GateErrorCode` union**（union 真源见 `lib/types/contracts.ts` 的 `GateErrorCode`；**本注释不写规模数字**——规模随授权批演进，写死即漂移源）。
+//   · **判等面已退役**（用户裁决 Q-C = 乙 · 批 `punky-engine-fix-20261106` lane `e2-fix-b3`）：
+//     原「同批次内存在 sig 相同且状态 ∈ {running, review, merged} 的其他 lane ⇒ 落一条留痕事件」
+//     这条判等路径**整面删除**（删净 = 引用与定义一起消失，不是「名字没了但判等逻辑还在」）。
+//     根因（已实核）：哈希输入**含 `id`**（`canonicalTaskForSig` 首键）而判等循环又**跳过同 `id`**
+//     ⇒ 候选集结构性恒空 ⇒ 留痕事件**永不触发** —— 属「声明了一个不生效的判据」
+//     （既有测试靠手工注入同 `sig` 才造出事件）。删净后 `sig` 只回答一个问题：
+//     **「这条 lane 的持久字段长什么样」**（内容锚定 + 可重算校验），**不回答**「是否重复」。
+//     `GateErrorCode` union 不因此新增/删除任何码。
+//     **判红**（防判等面以别的形式装回来）：出现以 `sig` 为键的判重（含 `Map`/`Set` 按 sig 去重）。
+//     注：本注释刻意**不写出**被删符号名与事件码字面量 —— 验收项要求 `lib test` 内该族名字**零命中**。
 //
 // 零依赖纪律：本模块**只 import node:crypto**——
 //   它被 `lib/wave-plan.ts`（TS 源码）与 `lib/state/store.js`（手写 JS）**共同** import，
 //   故必须保持零本包运行期依赖（避免循环：store ← wave-plan 已在既有导入图内）。
-// 事件常量不在此 import：事件**落盘点在消费点写路径**（`store.setMember`，与迁移同一 atomicWrite），
-//   由 `lib/state/store.js` 直引 `EVT_SIG_DUPLICATE_DETECTED`（本模块只产载荷，见 `sigDuplicateVerdict`）。
+// 事件常量不在此 import：本模块**只产/只读 sig**，不登记任何事件码、不构造任何事件载荷。
 
 import { createHash } from 'node:crypto';
 
@@ -111,82 +117,17 @@ export function sigOf(task) {
   return typeof raw === 'string' && SIG_PATTERN.test(raw) ? raw : null;
 }
 
-/** 消费点接受的**其他** lane 状态集（D-sig-2 裁定原文）：{running, review, merged}。 */
-export const SIG_DUPLICATE_STATES = ['running', 'review', 'merged'];
+// ── 判等面（原 N3-② 消费点）**已整面退役** ────────────────────────────────────────────────
+//
+// 删除清单（批 `punky-engine-fix-20261106` lane `e2-fix-b3`，用户裁决 Q-C = 乙）：
+//   原 5 个判等符号（1 个状态白名单常量 + 4 个函数：判等 / 去重键 / 事件载荷 / 判定）
+//   —— 连同其下游接线（`lib/state/store/events.js` 的判定包装、`lib/state/store/member.js`
+//   的 `sigDup` 消费块、`lib/state/event-types.js` 的事件码常量）一并删净。
+//   删净判据：**引用与定义一起消失**，不是「名字没了但判等逻辑还在」。
+//   本注释刻意**不写出**被删符号名与事件码字面量：验收项要求该族名字在 `lib test` 内**零命中**
+//   （`grep` 会把注释一并计入）⇒ 用「原 5 个判等符号」指代，具体名单见
+//   `exec/e2-b3.md` 的删除面清单（产物面，不在被 grep 的 `lib`/`test` 内）。
+//
+// 保留并**加强**的一面（这才是 `sig` 在真用的一面）：哈希计算 + 读口径单点，
+//   二者共同支撑「落盘 `sig` 可由持久字段**重算**并比对一致」（可重算校验由四个测试文件覆盖）。
 
-/**
- * 幂等判等（**只读**：零写入、零阻断）：同批次内找 sig 与本 lane 相同、且状态 ∈
- * `SIG_DUPLICATE_STATES` 的**其他** lane。
- * 口径（逐条，防误报）：
- *   · 候选 sig 取**落盘值** `sigOf`（非 16 hex ⇒ 视为无指纹，不参与判等）；
- *   · 本 lane **不计入**自身；状态取 `lanes[]` 的**迁移前**态（调用方须在写 `lanes[lane]=to` **之前**调用）；
- *   · 跨层同 sig **不做** `blocking`（层不同 ⇒ 任务语义不同域；仅作 `notice` 记账），
- *     使「同批 plan/exec 同名任务」不产假阳性。
- * @param {unknown} batch 批次对象（形状同 `store.readBatch` 返回值）
- * @param {string} lane 本 lane id
- * @returns {{sig: string|null, blocking: Array<{lane:string,state:string}>, notice: Array<{lane:string,state:string,layer:string|null}>}}
- */
-export function duplicateSigLanesOf(batch, lane) {
-  /** @type {{sig: string|null, blocking: Array<{lane:string,state:string}>, notice: Array<{lane:string,state:string,layer:string|null}>}} */
-  const out = { sig: null, blocking: [], notice: [] };
-  if (!batch || typeof batch !== 'object' || typeof lane !== 'string' || !lane) return out;
-  const flat = [];
-  for (const w of Array.isArray(batch.wavePlan) ? batch.wavePlan : []) {
-    for (const t of Array.isArray(w?.tasks) ? w.tasks : []) if (t && typeof t.id === 'string') flat.push(t);
-  }
-  const self = flat.find((t) => t.id === lane) ?? null;
-  const selfSig = sigOf(self);
-  out.sig = selfSig;
-  if (selfSig === null) return out;
-  const lanes = batch.lanes ?? {};
-  for (const t of flat) {
-    if (t.id === lane) continue;
-    if (sigOf(t) !== selfSig) continue;
-    const state = lanes[t.id] ?? null;
-    if (typeof state !== 'string' || !SIG_DUPLICATE_STATES.includes(state)) continue; // pending/idle/终态不入判等
-    if (t.layer === self?.layer) out.blocking.push({ lane: t.id, state });
-    else out.notice.push({ lane: t.id, state, layer: typeof t.layer === 'string' ? t.layer : null });
-  }
-  return out;
-}
-
-/** 取某条 detection 的**去重键**（`<lane>|<对端:态, …>`；无命中 ⇒ `null`）。对端按 lane 名排序（稳定）。
- *  键**带本 lane**：否则两条不同 lane 命中同一对端时会被误判成同一条已记账（漏留痕）。
- *  调用方据此把「本次已留痕」记进 `batch.sigDuplicateLogged`（与事件同一原子写）。 */
-export function sigDuplicateKeyOf(lane, det) {
-  if (!det || typeof det.sig !== 'string' || !SIG_PATTERN.test(det.sig)) return null;
-  const matches = Array.isArray(det.blocking) ? det.blocking : [];
-  if (matches.length === 0) return null;
-  return String(lane) + '|' + matches.map((m) => m.lane + ':' + m.state).sort().join(',');
-}
-
-/** 事件载荷单点构造（`newEvent(type, fields)` 的 fields 面；`type` 键承载事件名，故不出现）。
- *  纪律：**只产载荷、不落盘**——唯一写盘点是调用点（`store.setMember`）与其迁移**同一次 atomicWrite**
- *  （否则「先 appendEvent 再以陈旧快照 atomicWrite」会**静默丢掉**本条事件；本批实测踩过）。 */
-export function sigDuplicateEventFields(lane, det) {
-  return {
-    lane,
-    sig: det?.sig ?? null,
-    matches: (Array.isArray(det?.blocking) ? det.blocking : []).map((m) => ({ lane: m.lane, state: m.state })),
-    notice: Array.isArray(det?.notice) ? det.notice : [],
-  };
-}
-
-/**
- * 判定某 lane 在当前批次态下是否需要落 `sig.duplicate_detected`，并给出**一次性**（去重后）的载荷。
- * 语义与纪律（D-sig-2 裁定：**不加新拒码、不阻断动作、不新增治理状态**）：
- *   · sig 平凡（非 16 hex）或零同层命中 ⇒ `{ log:false, reason:'no-sig' | 'no-duplicate' }`（零写入）；
- *   · 同 `(lane, 对端集合)` 已记进 `batch.sigDuplicateLogged` ⇒ `{ log:false, reason:'already-logged' }`
- *     （防 `running→review→merged` 三次迁移各落一条同义事件，不防「事实」）；
- *   · 命中且未记过 ⇒ `{ log:true, key, fields, matches }`，调用方须**同时**落事件与记账键。
- * @param {unknown} batch 批次对象（迁移前快照）
- * @param {string} lane
- * @param {{sig: string|null, blocking: Array<{lane:string,state:string}>, notice?: unknown[]}} det `duplicateSigLanesOf` 产物
- * @returns {{log: boolean, reason?: string, key?: string|null, fields?: Record<string, unknown>, matches?: Array<{lane:string,state:string}>}}
- */
-export function sigDuplicateVerdict(batch, lane, det) {
-  const key = sigDuplicateKeyOf(lane, det);
-  if (key === null) return { log: false, reason: (det && SIG_PATTERN.test(String(det.sig))) ? 'no-duplicate' : 'no-sig' };
-  if (batch && typeof batch === 'object' && batch.sigDuplicateLogged?.[key]) return { log: false, reason: 'already-logged', key };
-  return { log: true, key, fields: sigDuplicateEventFields(lane, det), matches: det.blocking };
-}

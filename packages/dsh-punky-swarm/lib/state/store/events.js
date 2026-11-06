@@ -20,10 +20,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   依赖方向单向：`store.js`（组合器）→ 本文件，本文件不反向 import 组合器。
 
 import * as EVT from '../event-types.js';
-// sig 任务内容指纹（N3-②）· 消费点单点（幂等判等 + 留痕，**不加新拒码、不阻断**）：
-//   判据/写路径全在 `lib/sig-fingerprint.js`（与 `lib/wave-plan.ts` 的计算入口**同模块**，禁第二套口径）；
-//   本文件只做接线：`setMember` 的写路径在**迁移前态**上判等，命中即落 `sig.duplicate_detected`。
-import { duplicateSigLanesOf, sigDuplicateVerdict } from '../../sig-fingerprint.js';
+// 【2026-11-06 · 批 `punky-engine-fix-20261106` lane `e2-fix-b3` · 用户裁决 Q-C = 乙】B-3：
+//   本文件原有「sig 判等消费点接线」已**整面删除**——原具名导入的两个判等函数
+//   与判定包装 `sigDupVerdictOf` 一并移除（引用与定义一起消失）。
+//   根因：判等结构性不可达（哈希含 `id`，判等循环又跳过同 `id` ⇒ 候选集恒空 ⇒ 事件永不触发），
+//   `sig` 只留**内容锚定**（哈希计算 + 可重算校验）。
+//   **不得**在本文件重建任何以 `sig` 为判据的分支（含以 sig 为键的 Map/Set 去重）。
+//   注：本注释刻意不写出被删符号名与事件码字面量 —— 验收项要求该族名字在 `lib test` 内零命中。
 
 
 // ── 事件载荷纯函数（模块级，零副作用；【2026-10-02 · 波 3】自 `store.js` 机械搬移）──────────────
@@ -123,23 +126,7 @@ export function buildEvents(cx) {
     return { ts: new Date().toISOString(), type, ...fields };
   }
 
-  // ── sig 任务内容指纹（N3-②）· 消费点判定（`setMember` 写路径唯一调用；**不落盘**）──────────────
-  // 语义（用户 D-sig-2 裁定）：同批次内存在 `sig` 相同且状态 ∈ {running, review, merged} 的**其他** lane
-  //   ⇒ 本次迁移落事件 `sig.duplicate_detected` **留痕**；**不阻断、不加拒码、不新增治理状态**。
-  // 纪律要点：
-  //   · 判等只看**落盘 sig**（非 16 hex ⇒ 视为无指纹，读端单点 `sigOf`）——本函数**不重算**任何 sig
-  //     （计算点唯一 = `buildWavePlan`；此处重算即第二套计算入口）；
-  //   · 本 lane 计入自身排除；状态取**迁移前**快照（调用点位于 `batch.lanes[lane] = to` 之前）；
-  //   · **本函数零写入**：只回判定（`lib/sig-fingerprint.js#sigDuplicateVerdict`）——事件与去重记账键
-  //     由调用点在**同一次 atomicWrite** 内落盘。理由（实测踩过）：`appendEvent` 是**独立整文件写**，
-  //     若在此处即时写，随后调用点用它更早读到的 `batch` 快照再写一次 ⇒ **静默覆盖掉本条事件**
-  //     （去重键仍在、事件消失）。故唯一写盘点必须与迁移写同批。
-  // @returns {{log: boolean, reason?: string, key?: string|null, fields?: object, matches?: object[]}}
-  function sigDupVerdictOf(batch, lane) {
-    return sigDuplicateVerdict(batch, lane, duplicateSigLanesOf(batch, lane));
-  }
-
-  // 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
+  // ── 状态事件发布钩子（topic 接线）：setMember/setPhase 调用点埋点——
   // appendEvent 为闭包内部函数，外部 wrap 该导出属性无法拦截内部迁移（调用点埋点固化），
   // 故必须在调用点埋。onStateChange 缺省未装配（topic 默认关）→ 零行为变化；
   // 异常隔离（发布失败不阻断状态机）。载荷为纯数据摘要，topic 命名由装配侧（topic-runtime）负责。
@@ -180,5 +167,5 @@ export function buildEvents(cx) {
     batch.events.push(newEvent(eventType, fields));
   }
 
-  return { newEvent, sigDupVerdictOf, emitStateChange, makeContractMissingSink, escalatePausedWrite };
+  return { newEvent, emitStateChange, makeContractMissingSink, escalatePausedWrite };
 }

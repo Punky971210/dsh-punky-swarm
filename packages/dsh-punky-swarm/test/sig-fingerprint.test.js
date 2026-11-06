@@ -20,7 +20,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 判据来源（规格 = `docs/sig-fingerprint-design-2026-09-22.md` §1/§2 + 用户 D-sig-1..4 四项裁定）：
 //   ① 计算确定性（同输入同值 / 可复现）· ② 字段敏感性（id/layer/role/deps/produce/outputs/cmd 任一变化 ⇒ sig 变）
 //   ③ deps 顺序敏感（保序语义）· ④ 加边后**受影响任务重算、无关任务 sig 不变**
-//   ⑤ 已派发（owner 非空）任务 **sig 冻结** · ⑥ 重复 sig ⇒ **事件留痕且动作不被阻断**
+//   ⑤ 已派发（owner 非空）任务 **sig 冻结** · ⑥ **（2026-11-06 退役）** 原「重复 sig ⇒ 事件留痕且动作不被阻断」
+//      —— 该判等面已按用户裁决 Q-C = 乙 整面删除（根因：哈希含 `id` 而判等跳过同 `id` ⇒ 结构性不可达）。
+//      `sig` 只留**内容锚定**（哈希计算 + 可重算校验）；SIG-6 位改判「`id` 入指纹 ⇒ 同批内容相同的
+//      不同 lane 仍得不同 sig」，锁住退役后**不再有**判等面这一边界（防判等面以别的形式装回来）。
 //   ⑦ **不含 assemblyRef**（同任务换装配表/装配元数据仍同 sig）
 // 另锁两条口径（防后续改动静默扩权）：
 //   · 拒码 union **不因本能力新增**（`GATE_SIG_*` 在 lib 内零定义、`GateErrorCode` 仅 string 面）；
@@ -31,11 +34,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildWavePlan, assembleCmd, stripCmdPrefix } from '../lib/wave-plan.js';
-import { computeTaskSig, canonicalTaskForSig, sigOf, canonicalizeForSig, SIG_PATTERN, SIG_HEX_LEN, duplicateSigLanesOf, sigDuplicateVerdict } from '../lib/sig-fingerprint.js';
+import { computeTaskSig, canonicalTaskForSig, sigOf, canonicalizeForSig, SIG_PATTERN, SIG_HEX_LEN } from '../lib/sig-fingerprint.js';
+// 命名空间导入仅用于「导出面」断言（退役边界）：删面后模块只应导出**内容锚定**那一族。
+import * as sigModule from '../lib/sig-fingerprint.js';
 import { createStore } from '../lib/state/store.js';
-import { EVT_SIG_DUPLICATE_DETECTED } from '../lib/state/event-types.js';
-import { createTools } from '../lib/tools/register.js';
-import { assessC, seedArtifactFile, SPEC_OK } from './helpers/gate-fixture.mjs';
+import { seedArtifactFile, SPEC_OK } from './helpers/gate-fixture.mjs';
 
 const REPO_ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const flatOf = (plan) => plan.wavePlan.flatMap((w) => w.tasks);
@@ -194,23 +197,22 @@ test('SIG-5⑤ 已派发（owner 非空）⇒ sig 冻结：派发后与再归一
     '已派发任务不得加边（K1 冻结面先于 sig）');
 });
 
-// ── ⑥ 重复 sig ⇒ 事件留痕且不阻断（负向对照） ─────────────────────────────────
-test('SIG-6⑥ 同 sig 双 lane：派发**不被阻断**且落 sig.duplicate_detected（留痕只此一处，不加拒码）', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-sig-dup-'));
-  const store = createStore(root);
-  const ctx = {
-    tools: { register: () => {}, guard: () => () => {} },
-    logger: { warn: () => {}, info: () => {}, error: () => {} },
-    subagents: { start: async () => ({ id: 'w-stub', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) },
-  };
-  const { tools } = createTools(ctx, { store, root, config: { dispatch: { provider: 'spawn' } } });
-  const by = Object.fromEntries(tools.map((t) => [t.name, t]));
-  const session = 's-sig-dup';
-  const exec = { agent: { session: { id: session } } };
-  assessC(store, session, { rationale: 'sig 套件：同 sig 双 lane 派发（C 档前置，多线并行建批）' });
-
-  const built = buildWavePlan({
-    batchId: 'b-sig-dup',
+// ── ⑥（2026-11-06 退役改判）判等面已删除；此处只锁**内容锚定**的边界 ──────────────────────────
+// 原 SIG-6⑥ / SIG-6b 两用例断言「同 sig ⇒ 落留痕事件 + 去重记账」，该判等面已按用户裁决 **Q-C = 乙**
+//   整面删除（原 5 个判等符号 + 事件码常量 + 三处下游接线：引用与定义一起消失）。
+//   具体名单见产物 `exec/e2-b3.md`（本文件刻意不写出该族名字 —— 验收项要求它们在 `lib test` 内零命中）。
+// 删除根因必须锁死，否则后人会把判等面重新发明一遍：
+//   哈希输入**含 `id`**（`canonicalTaskForSig` 首键）而判等循环又**跳过同 `id`**
+//   ⇒ 候选集结构性恒空 ⇒ 留痕事件永不触发。故「id 入指纹」正是
+//   「同批同内容不同 lane 仍得不同 sig」的成因，也是本能力**不可能是判重工具**的根本理由。
+test('SIG-6⑥（退役改判）id 入指纹 ⇒ 同批内容相同的不同 lane 仍得不同 sig；模块导出面只剩内容锚定', () => {
+  // 1) 内容锚定的纯函数面：除 id 外字段逐字相同的两条任务，sig 必须不同
+  const shared = { layer: 'exec', role: 'coder', deps: ['p1'], produce: ['x.md'], outputs: ['o.md'], cmd: 'run' };
+  assert.notEqual(computeTaskSig({ id: 'e1', ...shared }), computeTaskSig({ id: 'e2', ...shared }),
+    '仅 id 不同 ⇒ sig 必须不同（id 入哈希：内容锚定含身份位，故 sig 不可能是判重键）');
+  // 2) 端到端（真实 buildWavePlan）：引擎自身建批**不会**产同 sig 的两条同内容 exec lane
+  const plan = buildWavePlan({
+    batchId: 'b-sig-id',
     team: 'engine-team',
     tasks: [
       { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
@@ -219,77 +221,20 @@ test('SIG-6⑥ 同 sig 双 lane：派发**不被阻断**且落 sig.duplicate_det
       { id: 'a1', layer: 'audit', role: 'supervisor', deps: ['e1', 'e2'], consume: ['plan/spec.md', 'exec/e1.md', 'exec/e2.md'], produce: ['audit/a1.md'], cmd: 'review' },
     ],
   });
-  const flash = flatOf(built);
-  const e1 = flash.find((t) => t.id === 'e1');
-  assert.notEqual(e1.sig, flash.find((t) => t.id === 'e2').sig,
-    '前置：id 入指纹 ⇒ 引擎自身建批**不会**产同 sig 的两条 lane（同 sig 是「同一内容被重复登记」的人工事实）');
-  // 唯一可达构造：把 e2 的**落盘 sig** 定成与 e1 相同（消费点判等的被检面，不经伪造哈希路径）
-  const crafted = built.wavePlan.map((w) => ({ ...w, tasks: w.tasks.map((t) => (t.id === 'e2' ? { ...t, sig: e1.sig } : t)) }));
-  store.createBatch(session, { batchId: 'b-sig-dup', wavePlan: { ...built, wavePlan: crafted }, concurrency: 5 });
-  store.setPhase(session, 'b-sig-dup', 'running');
-  seedArtifactFile(root, session, 'b-sig-dup', 'plan/spec.md', SPEC_OK);
-
-  const r1 = await by.lane_dispatch.execute({ batchId: 'b-sig-dup', lane: 'e1', session }, exec);
-  const r2 = await by.lane_dispatch.execute({ batchId: 'b-sig-dup', lane: 'e2', session }, exec);
-  assert.equal(r1.status, 'running', '首条 lane 正常派发');
-  assert.equal(r2.status, 'running', '**重复 sig 不阻断派发**（D-sig-2：留痕不拒、不加拒码）');
-  const batch = store.readBatch(session, 'b-sig-dup');
-  const evs = batch.events.filter((e) => e.type === EVT_SIG_DUPLICATE_DETECTED);
-  assert.equal(evs.length, 1, '同 (lane, 对端集合) 只落一条留痕事件（去重），且无其他留痕面');
-  assert.equal(evs[0].lane, 'e2', '留痕归属 = 后来者 lane');
-  assert.equal(evs[0].sig, e1.sig, '载荷带 sig（可回溯到具体指纹）');
-  assert.deepEqual(evs[0].matches, [{ lane: 'e1', state: 'running' }], '对端 lane 与其**迁移前**状态');
-  assert.equal(EVT_SIG_DUPLICATE_DETECTED, 'sig.duplicate_detected', '事件名为小写点分常量');
-  assert.deepEqual(Object.keys(batch.sigDuplicateLogged ?? {}), ['e2|e1:running'], '去重记账键 = <lane>|<对端:态>');
-  // 负向对照：仅一条 lane 时零留痕（sig 平凡/零命中 ⇒ 不落事件、不写记账键）
-  const solo = seedBatch({
-    withAudit: true,
-    tasks: [
-      { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
-      { id: 'e1', layer: 'exec', role: 'coder', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/e1.md'], cmd: 'run' },
-    ],
-  });
-  seedArtifactFile(solo.root, solo.session, solo.batchId, 'plan/spec.md', SPEC_OK);
-  solo.store.setMember(solo.session, solo.batchId, 'e1', 'running', null, undefined, 'owner-1');
-  const soloBatch = solo.store.readBatch(solo.session, solo.batchId);
-  assert.equal(soloBatch.events.filter((e) => e.type === EVT_SIG_DUPLICATE_DETECTED).length, 0, '无重复 ⇒ 零留痕');
-  assert.equal(soloBatch.sigDuplicateLogged, undefined, '无重复 ⇒ 不写记账键（零噪音）');
-});
-
-test('SIG-6b 判等粒度：同层命中计 blocking、跨层只作 notice；终态/pending 对端不入判等', () => {
-  const sig = 'a'.repeat(16);
-  const other = 'b'.repeat(16);
-  const batch = {
-    lanes: { e1: 'running', e2: 'pending', e3: 'failed', p1: 'merged' },
-    wavePlan: [{ wave: 1, tasks: [
-      { id: 'e1', layer: 'exec', sig },
-      { id: 'e2', layer: 'exec', sig },
-      { id: 'e3', layer: 'exec', sig },
-      { id: 'p1', layer: 'plan', sig },
-      { id: 'e9', layer: 'exec', sig: other },
-    ] }],
-  };
-  const sameLayer = duplicateSigLanesOf(batch, 'e1');
-  assert.equal(sameLayer.sig, sig, '本 lane 指纹读出');
-  assert.deepEqual(sameLayer.blocking, [], 'e2(pending)/e3(failed) 不在 {running,review,merged} ⇒ 不入判等');
-  assert.deepEqual(sameLayer.notice, [{ lane: 'p1', state: 'merged', layer: 'plan' }], '跨层同 sig ⇒ 只作 notice');
-  const cross = duplicateSigLanesOf(batch, 'p1');
-  assert.deepEqual(cross.blocking, [], 'cross lane 视角：无同层命中');
-  assert.deepEqual(cross.notice.map((n) => n.lane), ['e1'], '仅 running 的 e1 入 notice');
-  assert.deepEqual(duplicateSigLanesOf(batch, 'e9'), { sig: other, blocking: [], notice: [] }, '不同 sig ⇒ 零命中');
-  // verdict：命中且未记账 ⇒ log；已记账 / 无 sig / 零命中 ⇒ 不 log
-  assert.equal(sigDuplicateVerdict(batch, 'e1', sameLayer).log, false, '仅 notice（跨层）不得触发留痕');
-  const hit = { sig, blocking: [{ lane: 'e1', state: 'running' }], notice: [] };
-  const v = sigDuplicateVerdict({ lanes: {} }, 'e2', hit);
-  assert.equal(v.log, true, '同层命中且未记账 ⇒ 落留痕');
-  assert.equal(v.key, 'e2|e1:running', '去重键 = <lane>|<对端:态>（带本 lane，防两条 lane 命中同一对端时互相顶掉）');
-  assert.deepEqual(v.fields.matches, [{ lane: 'e1', state: 'running' }], '载荷带可核匹配对');
-  assert.equal(v.fields.type, undefined, '载荷键不得占用 `type`（事件名槽位）');
-  assert.equal(sigDuplicateVerdict({ sigDuplicateLogged: { 'e2|e1:running': true } }, 'e2', hit).reason, 'already-logged', '已记账 ⇒ 不重复');
-  assert.equal(sigDuplicateVerdict({ sigDuplicateLogged: { 'e2|e1:running': true } }, 'e3', hit).log, true,
-    '另一条 lane 命中同一对端 ⇒ 仍是新事实（键带本 lane）');
-  assert.equal(sigDuplicateVerdict(batch, 'e9', { sig: null, blocking: [{ lane: 'e1', state: 'running' }], notice: [] }).reason, 'no-sig',
-    'sig 平凡（非 16 hex）⇒ 不落留痕');
+  const flat = flatOf(plan);
+  for (const id of ['e1', 'e2']) {
+    const t = flat.find((x) => x.id === id);
+    assert.equal(SIG_PATTERN.test(t.sig), true, id + ' 落盘 sig 形态合法：' + t.sig);
+  }
+  assert.notEqual(flat.find((t) => t.id === 'e1').sig, flat.find((t) => t.id === 'e2').sig,
+    '同批同内容双 lane：id 入指纹 ⇒ 两 lane sig 不同（引擎自身建批不会产同 sig）');
+  // 3) 退役边界（防判等面以别的形式装回来）：模块**导出面**只剩内容锚定那一族。
+  //    用「身份集合」判（不判数量）—— 判等面任一符号回归都会让本断言红，且不必写出其名字。
+  assert.deepEqual(
+    Object.keys(sigModule).sort(),
+    ['SIG_HEX_LEN', 'SIG_PATTERN', 'canonicalTaskForSig', 'canonicalizeForSig', 'computeTaskSig', 'sigOf'],
+    'sig-fingerprint 的导出面 = 内容锚定 6 件（哈希 / 规范形态 / 读口径 / 形态契约），无判等面残留',
+  );
 });
 
 // ── ⑦ 不含 assemblyRef ──────────────────────────────────────────────────────

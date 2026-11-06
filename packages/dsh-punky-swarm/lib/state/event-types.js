@@ -322,14 +322,18 @@ export const EVT_TASK_OWNER_ASSIGNED = 'task.owner.assigned';
 //   写端 = `store.addPoolTasks`（单次 atomicWrite）；**不接回状态机**（不改成员态、不新增迁移）。
 export const EVT_PLAN_MUTATED = 'plan.mutated';
 
-// sig 任务内容指纹（N3-②）· **幂等判等留痕**（用户 D-sig-2 裁定 = **不加新拒码**，只事件留痕）。
-//   触发：消费点（`store.setMember` 的 dispatch/settle 写路径）检测到同批次内存在 `sig` 相同且状态 ∈
-//   {running, review, merged} 的**其他** lane（同层 ⇒ 计 `blocking` 记账项；跨层 ⇒ 只作 `notice`）。
-//   载荷 `{ lane, sig, matches:[{lane,state}…], notice[] }`（`type` 键承载事件名，载荷不得占用）。
-//   **非拒态**：**不新增 `GateErrorCode`**、不改任何判定、不改任何 exit code、不阻断动作、不新增治理状态
-//   ——本常量是**事件码**，不是 GATE 码。写端 = `lib/sig-fingerprint.js::sigDuplicateEventFields`（载荷）
-//   （唯一写路径，由 `lib/state/store.js` 的 `setMember` 消费点调用；去重键记 `sigDuplicateLogged`）。
-export const EVT_SIG_DUPLICATE_DETECTED = 'sig.duplicate_detected';
+// 【2026-11-06 · 批 `punky-engine-fix-20261106` lane `e2-fix-b3` · 用户裁决 Q-C = 乙】B-3 退役位：
+//   原「sig 判等留痕」事件码常量（此前定义于此，含其上方 8 行注释）已**删除**。
+//   退役判定（按「有谁在读它」判，不按名字判）：该常量的读端 = `lib/state/store/member.js`
+//   （唯一发射点）与 `test/sig-fingerprint.test.js`（具名导入 + 断言），二者均随本 lane 删净
+//   ⇒ **零存活读端** ⇒ 常量删、不留半活引用（不留「已退役但仍在册」的半活常量）。
+//   判等面为何整面退役：结构性不可达（哈希输入含 `id`，判等循环又跳过同 `id`
+//   ⇒ 候选集恒空、事件永不触发），`sig` 只留内容锚定（哈希计算 + 可重算校验）。
+//   **残余（本 lane 无权清理，已登记 followup 交授权批）**：`lib/types/contracts.ts` 的
+//   去重记账字段声明与事件 union 成员仍留着该名（约 `:394-397` 与 `:465`）—— 该文件属碰撞黑名单
+//   「union 冻结」，`lib/types/contracts.d.ts` 为其生成物 ⇒ 本 lane 不碰。
+//   本注释刻意**不写出**被删符号名与事件码字面量：验收项要求该族名字在 `lib test` 内**零命中**。
+//   纪律：**不得**在本文件重建该常量或其等价字面量（重建即等于把已退役判据装回来）。
 
 // ── 建批期 `consume` × `deps` 不对称 · **非拒观察面**（2026-10-04 · 批 `consume-deps-guard-20261004`）──────
 // 语义：某 lane 的 `consume` 引用了**本批他 lane** 声明的产物（`produce ∪ outputs`，**精确字符串相等**），
