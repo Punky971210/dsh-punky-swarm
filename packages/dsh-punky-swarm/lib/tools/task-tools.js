@@ -72,8 +72,8 @@ export function buildTaskTools(cx) {
     //   ⇒ 已出池（`owner` 非空）的任务**不在池内**——这是 K1「层内不重算 · 非改派」的读端表达。
     defineTool({
       name: "task_pool",
-      description: "查询**公共池**（只读视图）：列出批次内**未派发**任务（`owner == null`）+ 每条的「可派发性」判定（上游 deps 是否已结算、lane 是否已被派发）。⚠ 池 = 视图不是容器：本工具**不授权、不认领、不改任何状态**；派发仍由 Leader 单点经 lane_dispatch 发起（K1：不引入 claim 自领），派发即门禁；已派发/已启动任务不在池内（层内不重算 · 非改派）。",
-      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"session":{"type":"string","description":"批次归属会话"}},
+      description: "查询公共池（只读视图）：列出批次内未派发任务（owner == null）+ 每条的可派发性（上游 deps 是否已结算、lane 是否已派发）。池是视图不是容器：不授权、不认领、不改任何状态；派发仍由 Leader 经 lane_dispatch 单点发起。已派发/已启动任务不在池内。",
+      parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"sessionId":{"type":"string"},"pooled":{"type":"integer"},"dispatched":{"type":"integer"},"pool":{"type":"array","items":{"type":"object","additionalProperties":true}},"note":{"type":"string"}}},
         render: (_args, value) => TEXT_OUTPUT('pool ' + value.batchId + ': pooled=' + value.pooled
@@ -100,8 +100,8 @@ export function buildTaskTools(cx) {
     //   ⚠ 只增不改：既有任务（含未派发的）一概不动（已派发即冻结）。
     defineTool({
       name: "batch_tasks_add",
-      description: "向批次**池内追加任务**（图变更的唯一写入口）：单次原子写完成「归一化 + lanes 播种 + handoffs 播种 + `plan.mutated` 留痕」，并重跑建批期分层/环检测（判据与 `wave_plan` 同源）。⚠ **只增不改**：既有任务（含未派发的）一概不动（K1：已派发即冻结）；新任务 `owner` 缺省 `null` = **在池内**，须经 Leader 派发（`lane_dispatch`）才出池。plan 层的调查摸底/拆分本身即独立任务——其产物由下游 exec/audit 层 consume，**不存在「拆父任务」语义**。非法输入（id 重复/为空、deps 成环或悬空、批不存在）抛**普通错误**（不带 `GATE_` 前缀）；批次已终态抛 `GATE_BATCH_TERMINAL`。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"tasks":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"追加的任务数组；每项须含唯一非空 `id`，可选 `layer`/`role`/`cmd`/`deps`/`consume`/`produce`/`outputs`。`owner` 缺省 `null` = 在池内"},"reason":{"type":"string","description":"追加理由（落 `plan.mutated` 留痕，供审计复盘）"},"session":{"type":"string","description":"批次归属会话"}},
+      description: "向批次池内追加任务（图变更唯一写入口）：单次原子写完成归一化 + lanes/handoffs 播种 + plan.mutated 留痕，并重跑建批期分层与环检测（判据与 wave_plan 同源）。只增不改：既有任务一概不动；新任务 owner 缺省 null（在池内），须经 lane_dispatch 才出池。拆父任务语义不存在（plan 层摸底/拆分本身即独立任务）。非法输入抛普通错误（不带 GATE_ 前缀），批终态抛 GATE_BATCH_TERMINAL。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"tasks":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"追加的任务数组；每项须含唯一非空 id，可选 layer/role/cmd/deps/consume/produce/outputs；owner 缺省 null = 在池内"},"reason":{"type":"string","description":"追加理由（落 plan.mutated 留痕）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"added":{"type":"array","items":{"type":"string"}},"planRevision":{"type":"integer"},"lanesCount":{"type":"integer"},"note":{"type":"string"}}},
         render: (_args, value) => TEXT_OUTPUT('tasks added to ' + value.batchId + ': ' + (value.added ?? []).join(', ')
@@ -135,8 +135,8 @@ export function buildTaskTools(cx) {
     //     （= 当前 revision 的声明）⇒ 加边后自动感知；「换数据源」的真相 = 数据源本来就是它（本批补断言锁住）。
     defineTool({
       name: "task_update",
-      description: "给**池内任务加边**（新增依赖，只增不删）：仅限**未派发**任务（`owner == null` 且 lane 仍 `pending`）；已派发/已启动任务**冻结**（K1：层内不重算 · 非改派；换人走「作废 + 池内新增替代任务 + gap-list」）。新依赖须**已声明在先**且**同层或上游层**（不成环的**结构性保证**，非成环断言），且上游**未结算**（终态 lane 无交接可等 ⇒ 该边结构性无法满足）。单次原子写：wavePlan 重归一化（重跑建批期校验）+ handoffs 补 `pending` 交条件 + `plan.mutated` 留痕 + `planRevision+1`。⚠ **删边不提供**（属重算）。非法输入抛**普通错误**（不带 `GATE_` 前缀）；批次已终态抛 `GATE_BATCH_TERMINAL`。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"edges":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"加边数组；每项形如 `{ id, add: [上游任务 id, ...] }`——`id` = 池内目标任务（须未派发），`add` = 新增依赖（只增不删；须已存在、已声明在先、同层或上游、未结算）"},"reason":{"type":"string","description":"加边理由（落 `plan.mutated` 留痕，供审计复盘）"},"session":{"type":"string","description":"批次归属会话"}},
+      description: "给池内任务加边（新增依赖，只增不删）：仅限未派发任务（owner == null 且 lane 仍 pending）；已派发/已启动任务冻结（换人走作废 + 池内新增替代 + gap-list）。新依赖须已声明在先、同层或上游层、且上游未结算。单次原子写：wavePlan 重归一化 + handoffs 补 pending + plan.mutated 留痕 + planRevision+1。删边不提供（属重算）。非法输入抛普通错误（不带 GATE_ 前缀），批终态抛 GATE_BATCH_TERMINAL。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"edges":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true},"description":"加边数组，每项 { id, add: [上游任务 id, ...] }：id = 池内目标任务（须未派发），add = 新增依赖（须已存在、已声明在先、同层或上游、未结算）"},"reason":{"type":"string","description":"加边理由（落 plan.mutated 留痕）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"edges":{"type":"array","items":{"type":"object","additionalProperties":true}},"planRevision":{"type":"integer"},"handoffsCount":{"type":"integer"},"note":{"type":"string"}}},
         render: (_args, value) => TEXT_OUTPUT('edges added to ' + value.batchId + ': '

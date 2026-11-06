@@ -24,7 +24,7 @@ export function buildArtifactTools(cx) {
   return [
     defineTool({
       name: "artifact_types",
-      description: "产物类型注册表（只读，Tier3 通用任务治理）：列出产物类型 → 层/目录前缀约定，供 wave_plan 声明产物与模板对齐。不绑定任何团队模板。",
+      description: "产物类型注册表（只读）：列出产物类型 → 层/目录前缀约定，供 wave_plan 声明产物时对齐。",
       parameters: {},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"types":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}}}},
@@ -45,8 +45,8 @@ export function buildAssetClaimTools(cx) {
   return [
     defineTool({
       name: "asset_claim",
-      description: "归位：**Leader 或成员（worker）**产物注册为批次资产——复制 source 进 <artifacts>/<batchId>/<target>（保留内容，不移动），批次事件 asset.claimed 留痕，返回批次内路径供 wave_plan consume/produce 声明。路径防逃逸：target 必须是批次内相对路径，拒绝 .. 与绝对路径。引擎产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/；Leader 直做的探索/探测/排障产物、成员按工作区落盘的产物，结算前均应经本工具归位到该根下。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run 标识（L1 显式来源；缺省由引擎从 agent.session.id 取 L2）。缺失即拒——见 write-provenance-guard"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"source":{"type":"string","required":true,"description":"源文件绝对路径（已直做产物）"},"target":{"type":"string","required":true,"description":"批次内目标路径（相对 artifacts/<batchId>/，不得含 .. 或绝对路径）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话，cli 兜底）"}},
+      description: "归位：把产物注册为批次资产——复制 source 进 <artifacts>/<batchId>/<target>（保留内容，不移动），落 asset.claimed 事件，返回批次内路径供 wave_plan consume/produce 声明。target 必须是批次内相对路径（拒绝 .. 与绝对路径）。引擎产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/，Leader 直做与成员按工作区落盘的产物结算前都应经本工具归位到该根下。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true,"description":"批次 ID"},"source":{"type":"string","required":true,"description":"源文件绝对路径（已直做产物）"},"target":{"type":"string","required":true,"description":"批次内目标路径（相对 artifacts/<batchId>/，不得含 .. 或绝对路径）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"ok":{"type":"boolean","required":true},"claimedPath":{"type":"string"},"batchId":{"type":"string"}}},
         render: (_args, value) => TEXT_OUTPUT('asset claimed: ' + value.claimedPath),

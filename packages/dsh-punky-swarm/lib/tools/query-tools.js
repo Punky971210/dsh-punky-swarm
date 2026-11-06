@@ -50,8 +50,8 @@ export function buildBatchStatusTools(cx) {
   return [
     defineTool({
       name: "batch_status",
-      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 状态面派生视图 lanesState（lane→成员态映射，原 lanes 保留）/ danglingLanes（**悬挂成员**：批次已终态而成员非终态的 lane 名单，恒显、不产候选、不受僵尸批过滤）。悬挂成员是「批次已了结、成员未了结」的信号，供 Manager/Leader 只读核查收口遗漏。不传 batchId 则列出当前会话全部批次。可用 session 指定会话。`chain` 回显 = 建批期声明投影 + 历史 `chain.step` 事件（**不是**运行期真源）；**`chain` = 建批期展开 + 静态校验；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`**（逐边取件见 `handoff_view`）。",
-      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"**批量读面（QT-2a）**：给批次 ID 清单时只读这些批（≥2 件**不扫目录**）；恰 1 件透传单批读取；缺省/空数组 ⇒ 列全部（与不传 batchId 等价）。与 `batchId` 同给时 `batchId` 优先。"},"session":{"type":"string","description":"批次归属会话"}},
+      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。",
+      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"managerRoster":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true}}},
         // 【task-27】渲染面**必须**显示门态与成员态来源（缺省关是策略、不得隐形；P2-B 两字段由此获得消费者）：
@@ -143,8 +143,8 @@ export function buildGateTools(cx) {
   return [
     defineTool({
       name: "gate_status",
-      description: "查询批次/ lane 的门禁状态：layer、consume/produce/outputs 缺失清单、plan 契约问题，以及批次级 C+ 装配声明与 Manager 拉起登记（可核性）。**V-6 口径：本工具须传 `lane`**——不传 `lane` 时按批次内全部 lane 逐个投影（缺省列举面）；对**不在 wavePlan.tasks 内**的 lane id（或已删任务）返回 `gates:'orphan'` 占位读数（`layer:null`），该读数是**损坏/悬空 lane 的显式标记**，不是批级聚合语义——**本工具不定义批级聚合**（需批级汇总请读 `batch_status`）。",
-      parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","description":"lane ID；缺省列出全部"},"session":{"type":"string","description":"批次归属会话"}},
+      description: "查询批次/lane 的门禁状态：layer、consume/produce/outputs 缺失清单、plan 契约问题，以及批次级装配声明与 Manager 拉起登记。不传 lane 时按全部 lane 逐个投影；对不在 wavePlan.tasks 内的 lane id 返回 gates:'orphan'（layer:null），该读数是损坏/悬空 lane 的显式标记。本工具不定义批级聚合（批级汇总读 batch_status）。",
+      parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","description":"lane ID；缺省列出全部"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"lanes":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"assembly":{"type":"object","additionalProperties":true}}},
         render: (_args, value) => TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)' + (value.assembly ? ' · assembly' : '') + (value.manager ? ' · manager=' + value.manager.agentId : '')),
@@ -209,18 +209,18 @@ export function buildRoleGuideTools(cx) { // eslint-disable-line no-unused-vars 
   return [
     defineTool({
       name: "role_guide",
-      description: "取某个 role 的**已渲染三段**（职责 / 授权 / 交付要求；标题字面量只活在单点 `ROLE_SECTION_TITLES`，本描述刻意不复写标题原文），供 Leader 在**自写任务包**时取件拼装——C-2 人工直派（`lane_dispatch` 取 `firstLine` 后自写首行）与 D-1 team 席位（`spawn_teammate` 的 `prompt`）**都走本件**，不得手抄。**渲染色同源**：`guide` 与引擎自派（C-1）任务包内的同一 role 三段**逐字一致**（同一单点 `renderRoleGuide`，本工具是薄壳、不自带模板）。**未解析到 role 一律明确报错**（`GATE_ROLE_UNRESOLVED`，含 `role` 缺失/非字符串/空串/纯空白与零命中两路），**不静默返回空串**。**另可传出 `preflight`（开工前必做四段：知识库关键词 / 技能名 / MCP 工具+用途 / 检查表条目）⇒ 返回值多出 `preflight` 字段** = 引擎同一渲染单点产出的整段文本（与引擎自派任务包内该段**逐字一致**，可直接粘进自写任务包）；不传 ⇒ 返回键集不变。只读、零副作用。",
+      description: "取某个 role 的已渲染三段（职责 / 授权 / 交付要求），供 Leader 自写任务包时取件拼装，不得手抄；渲染色与引擎自派任务包内同一 role 三段逐字一致。role 缺失/非字符串/空串/纯空白或零命中一律报错，不静默返回空串。传 preflight ⇒ 返回值多出 preflight 字段（开工前必做四段，可直接粘进任务包）；不传则返回键集不变。只读、零副作用。",
       parameters: {
-        "role": {"type":"string","required":true,"description":"role id（如 `coordinator` / `coder`）；**不得**传对象——本工具只走解析路径"},
-        "team": {"type":"string","description":"限定团队目录；缺省 = 既有团队序（`software-team` 优先，余按字典序）"},
+        "role": {"type":"string","required":true,"description":"role id（如 coordinator / coder）；不得传对象"},
+        "team": {"type":"string","description":"限定团队目录；缺省按既有团队序（software-team 优先，余按字典序）"},
         // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】P0-1 开工前必做四段声明**透传位**：
         //   传了就按引擎自派路径的**同一个**渲染单点产出 `preflight` 字段（逐字一致）；不传 ⇒ 返回键集逐字不变。
         //   形态与 `wave_plan` 的 task `preflight` 完全同构 ⇒ Leader 自写任务包时可直接把同一份声明粘过来。
-        "preflight": {"type":"object","additionalProperties":false,"description":"开工前必做 · 四段声明（可选）。传 ⇒ 本工具按引擎同一渲染单点产出 `preflight` 字段（与引擎自派任务包内该段**逐字一致**）；不传 ⇒ 不产该字段。四段：`kb` 知识库关键词 / `skills` 技能确切名 / `mcp` MCP 工具+用途 / `checklist` 检查表条目。","properties":{
-          "kb":{"type":"array","items":{"type":"string"},"description":"知识库关键词（建议 2-3 个，具体到能直接粘进 weknora_search）"},
+        "preflight": {"type":"object","additionalProperties":false,"description":"开工前必做四段声明（可选）：传 ⇒ 返回值多 preflight 字段；四段 kb / skills / mcp / checklist","properties":{
+          "kb":{"type":"array","items":{"type":"string"},"description":"知识库关键词（2-3 个，可直接粘进 weknora_search）"},
           "skills":{"type":"array","items":{"type":"string"},"description":"技能确切名（不是「相关技能」）"},
-          "mcp":{"type":"array","description":"MCP 工具 + 用途","items":{"type":"object","additionalProperties":false,"properties":{"tool":{"type":"string","required":true},"why":{"type":"string","description":"拿它干什么（缺 ⇒ 行尾渲染「（用途未声明）」）"}}}},
-          "checklist":{"type":"array","items":{"type":"string"},"description":"本任务相关检查表条目（内联，不让成员翻文档）"}
+          "mcp":{"type":"array","description":"MCP 工具 + 用途","items":{"type":"object","additionalProperties":false,"properties":{"tool":{"type":"string","required":true},"why":{"type":"string","description":"拿它干什么（缺 ⇒ 渲染「（用途未声明）」）"}}}},
+          "checklist":{"type":"array","items":{"type":"string"},"description":"本任务相关检查表条目（内联）"}
         }}
       },
       output: {
