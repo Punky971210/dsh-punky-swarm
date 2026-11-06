@@ -29,7 +29,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 【单点复用】成员态合法值集合与终态判定**一律引** `lib/schema.js`（`MEMBER_STATES` /
 //   `isMemberTerminal` / `BATCH_TRANSITIONS`），本模块**不另立字面量表**（禁第二套真源）。
 // 【禁 throw（fail-safe）】`events` 缺失 / 非数组 / 空 ⇒ 不抛，返回 `eventsScanned:0` + 空差异
-//   + `degraded:'no-events'`（退化可判读，不静默、不拒态）。
+//   + `degraded:'no-events'`**且 `ok:false`**（退化可判读、不静默、不拒态；「没有证据」不得报成「证据一致」）。
+//   ⚠ `ok:false` 只翻**诊断产物语义**，不构成阻断面：本模块零门禁消费方、CLI 恒 `exit 0`。
 
 import { MEMBER_STATES, BATCH_TRANSITIONS } from '../schema.js';
 
@@ -98,6 +99,9 @@ export function phaseViewOf(events) {
  *   phaseDiff      = { stateFile, fromEvents } | null
  *   degraded       = 'no-events'（`events` 缺失 / 非数组 / 空时出现）
  * ```
+ * **`ok` 语义（fail-closed）**：`degraded` 出现时 `ok` **恒 `false`**——`ok` 同时吃「有无可比信息」与
+ * 「有无差异」两个谓词；退化谓词**单点定义**（下方 `degraded` 变量），`ok` 与 `degraded` 标注共用同一值，
+ * 禁在比较处另写一遍（禁第二套真源）。
  * 比对面 = **状态文件 lane 名单 ∪ 事件流推导 lane 名单**：仅事件流里出现的 lane（孤儿）也列入比对
  * （其 `stateFile` 取 `null`，即「事件流申报存在、状态文件无此 lane」的差异可判读）。
  * **禁 throw**：任何退化输入都返回可判读对象，不抛。
@@ -127,14 +131,17 @@ export function replayVerifyVerdict(batch) {
   // 相位比对：**仅当状态文件确实申报了相位**（字符串）才比对；未申报（畸形 / 退化输入）⇒ 无差异可报
   //   （禁把「缺申报」误报成「申报错」，否则退化路径不再满足「空差异」不变量）。
   const phaseDiff = statePhase !== null && statePhase !== phaseView ? { stateFile: statePhase, fromEvents: phaseView } : null;
+  // 退化谓词（**单点**）：events 缺失 / 非数组 / 空 ⇒ 无可折叠信息 ⇒ `ok` 恒 false。
+  //   `ok` 与下方 `degraded` 标注共用此变量（禁两处同判据漂移）；语义：不把「没有证据」报成「证据一致」。
+  const degraded = events === null || events.length === 0;
   const verdict = {
-    ok: laneDiffs.length === 0 && phaseDiff === null,
+    ok: !degraded && laneDiffs.length === 0 && phaseDiff === null,
     laneDiffs,
     phaseDiff,
     eventsScanned: scanned.length,
     lanesView,
     phaseView,
   };
-  if (events === null || events.length === 0) verdict.degraded = 'no-events';
+  if (degraded) verdict.degraded = 'no-events';
   return verdict;
 }

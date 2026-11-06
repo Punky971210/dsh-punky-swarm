@@ -47,7 +47,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
 import * as lock from '../lock.js';
 import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
-import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite } from '../state/resume.js'; // 步数预算超限判定 + **checkpoint 清单对齐留痕**（薄壳：判定/幂等/fail-safe 都在 resume.js，本文件只增 1 行以守行数护栏）；laneProgressWrite：断点指针写
+import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, recordEarlyExitProgress } from '../state/resume.js'; // 步数预算超限判定 + **checkpoint 清单对齐留痕**（薄壳：判定/幂等/fail-safe 都在 resume.js，本文件只增 1 行以守行数护栏）；laneProgressWrite：断点指针写；recordEarlyExitProgress：无 worktree 早退时补写指针
 import { SAFE_ID } from '../state/constants.js'; // 单点（原定义迁出）
 import { readCapability } from '../assembly/schema.js'; // 装配开关缺省合并读取（注册表 default 同源口径）
 // 事件字面量（worktree.*/lane.over-budget 发端 + 读端）改引 EVT 常量单点
@@ -333,7 +333,8 @@ function worktreeToolCheckpoint(ctx, deps) {
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       const r = doCheckpoint(root, sessionId, args.batchId, args.laneId, args.message.trim(), progress);
-      if (!r.ok) return r; // worktree 未建 → 提示先 create
+      // A2：worktree 未建 ⇒ 提交不成立，但**断点指针不得静默丢失**（只补指针；不落 total_mismatch / over_budget——两者语义前提是「确有 checkpoint」）
+      if (!r.ok) { recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); return r; }
       if (r.committed) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
         if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
@@ -343,7 +344,7 @@ function worktreeToolCheckpoint(ctx, deps) {
       if (progress) {
         try { store.updateLaneProgress(sessionId, args.batchId, args.laneId, { ...progress, status: 'running' }); }
         catch (e) { ctx.logger?.warn?.('[lane-checkpoint] laneProgress write failed: ' + String(e?.message ?? e)); }
-        const b = overBudgetOf(batch, args.laneId, progress); recordCheckpointTotalMismatch(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); // 同处：清单对齐留痕（判定/幂等/fail-safe 见 resume.js）；本文件行数有 T2.6 护栏（HEAD 已无余量）故不新增行
+        const b = overBudgetOf(batch, args.laneId, progress); recordCheckpointTotalMismatch(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); // 同处：清单对齐留痕（判定/幂等/fail-safe 见 resume.js）；本文件行数有 T2.6 护栏（上限 462，批 `punky-quality-a-20261106` 实测 457→458，余量 4）故不新增行
         if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
           store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }

@@ -30,6 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   node scripts/replay-verify.mjs --session <sessionId> --batch <batchId>
 //        [--root <engineRoot>] [--out <artifactsSubDir>] [--json] [--help|-h]
 //   退出码：恒 0（含批不存在 / 状态文件变更告警等一切非致命情形）。
+//   退化面（`events` 缺失 / 非数组 / 空）⇒ 诊断产物 `ok=false` + `degraded:'no-events'`，
+//     **仍 exit 0**、仍不改任何状态（`ok=false` 只表「无可比证据」，不是新增阻断面）。
 
 import fs from 'node:fs';
 import os from 'node:os';

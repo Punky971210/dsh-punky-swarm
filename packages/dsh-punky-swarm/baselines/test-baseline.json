@@ -1665,9 +1665,9 @@
       "todos": 0
     },
     "test/replay-verify.test.js": {
-      "asserts": 69,
+      "asserts": 70,
       "blankLines": 31,
-      "lines": 300,
+      "lines": 301,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -2161,11 +2161,11 @@
       "todos": 0
     },
     "test/worktree-tools.test.js": {
-      "asserts": 102,
-      "blankLines": 26,
-      "lines": 366,
+      "asserts": 114,
+      "blankLines": 31,
+      "lines": 415,
       "tautologies": 0,
-      "tests": 10,
+      "tests": 11,
       "todos": 0
     },
     "test/write-provenance.test.js": {
@@ -2177,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-06T14:33:22Z",
+  "generatedAt": "2026-11-06T18:06:50Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,15 +2188,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "功能面变更连带：D-1 选项A 修正两处过时期望值（ac16 2-5' 夹具补 get、agent-team-probe 4档期望翻转）；F-8 返工 roster-unknown 5->7 且断言 24->43；checkpoint 四段新增 checkpoint-aux 10 例；D-2 新增 warn-silent-codes；B-1 白名单 A3 新增一条。非静默减断言",
+  "reason": "A 组治理可信度：A1 退化谓词单点化（ok 吃 !degraded + AC-4 新增断言）；A2 早退补写断点指针（resume.js 薄壳 + T9 新用例）；A3 CHANGELOG 未发布节；文档债 R-1 contracts.ts:466 / R-2 event-types.js:332-334；F-9 经核实为误判撤销（HEAD blob 本就 LF）。非静默减断言",
   "schema": 1,
   "totals": {
-    "asserts": 12370,
-    "blankLines": 6980,
+    "asserts": 12383,
+    "blankLines": 6985,
     "files": 272,
-    "lines": 73591,
+    "lines": 73641,
     "tautologies": 0,
-    "tests": 2590,
+    "tests": 2591,
     "todos": 0
   }
 }

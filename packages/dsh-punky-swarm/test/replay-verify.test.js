@@ -130,7 +130,7 @@ test('AC-3 相位视图：仅 batch.created ⇒ planning；含 batch.phase{to:pa
 });
 
 // ── AC-4｜退化不抛（fail-safe）───────────────────────────────────────────────
-test('AC-4 退化不抛：events 缺失 / 非数组 / 空 ⇒ eventsScanned=0 + 空差异 + degraded=no-events', () => {
+test('AC-4 退化不抛：events 缺失 / 非数组 / 空 ⇒ eventsScanned=0 + 空差异 + degraded=no-events + ok=false', () => {
   const cases = [
     batchOf({ lanes: { l1: 'pending' }, phase: 'planning' }),                       // 缺失
     batchOf({ lanes: { l1: 'pending' }, phase: 'planning', events: 'nope' }),        // 非数组
@@ -145,13 +145,14 @@ test('AC-4 退化不抛：events 缺失 / 非数组 / 空 ⇒ eventsScanned=0 + 
     assert.deepEqual(v.laneDiffs, [], '空差异');
     assert.equal(v.phaseDiff, null, '相位零差异（起点即申报值）');
     assert.equal(v.degraded, 'no-events', '退化可判读（不静默）');
+    assert.equal(v.ok, false, '退化 ⇒ ok 恒 false（fail-closed：无证据不得报「一致」；退化分支由此被真正覆盖）');
   }
   // 连 batch 本体缺失 / 非对象也不抛
   assert.doesNotThrow(() => replayVerifyVerdict(undefined));
   assert.doesNotThrow(() => replayVerifyVerdict(null));
   assert.doesNotThrow(() => replayVerifyVerdict('not-a-batch'));
   const none = replayVerifyVerdict(undefined);
-  assert.equal(none.ok, true, '无输入 ⇒ 无差异可报（ok=true，非异常态）');
+  assert.equal(none.ok, false, '无输入 ⇒ 无可比证据 ⇒ ok=false（fail-closed，不把「没有证据」报成「证据一致」）');
   assert.equal(none.eventsScanned, 0);
 });
 

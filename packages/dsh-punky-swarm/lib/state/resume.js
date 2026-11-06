@@ -43,6 +43,8 @@ import * as schema from '../schema.js';
 import { findTask } from './task-utils.js';
 // 事件字面量改引 EVT 常量单点（system.recovered/system.restored 双写法 + over-budget 读端）
 import * as EVT from './event-types.js';
+// 成员终态单点（Node 端权威 = constants.js）：早退补写的「非终态守卫」取用面
+import { TERMINAL } from './constants.js';
 
 // ── config.resume 开关（默认关，零运行时开销，行为不变）──
 const RESUME_DEFAULTS = Object.freeze({ enabled: false });
@@ -219,6 +221,29 @@ export function recordCheckpointTotalMismatch(store, sessionId, batchId, batch, 
     return true;
   } catch (e) {
     logger?.warn?.('[lane-checkpoint] total mismatch 留痕失败（不阻断）: ' + String(e?.message ?? e));
+    return false;
+  }
+}
+
+// ── 早退补写薄壳（接线在 lane-tools.js `lane_checkpoint` 的 `if (!r.ok)` 分支）───────────────
+// 缺陷（批 `punky-quality-a-20261106` · A2）：`doCheckpoint` 在 lane worktree 缺失时返 `{ok:false}`，
+//   而原 `if (!r.ok) return r;` 早于 lane-tools 的 `laneProgress` 写入块 ⇒ 无 worktree 批
+//   （leader-direct 形态）里断点指针**永不落盘**，崩溃后新 worker 无法跳过已完成步骤
+//   （`lane_checkpoint_status` 恒 latest=none ⇒ 重复劳动）。
+// 收窄边界（**不放宽任何判据，只让指针可达**）：
+//   · **只**写断点指针 `{...progress, status:'running'}`（`updateLaneProgress` 只写字段、不触状态机）；
+//   · **不落** `total_mismatch` / `over_budget` —— 两条事件的语义前提是「确有 checkpoint」，无提交时落即
+//     假留痕，而误报会训练成员忽略警示（见本文件 :184）⇒ 它们仍绑定提交成功路径，本壳不接；
+//   · **终态守卫**：lane 已 merged/failed/skipped/conflict ⇒ 不写（防指针与成员态语义打架）；
+//   · 任何异常只 `logger.warn`，**绝不阻断** checkpoint 返回值（与 lane-tools 调用点同纪律）。
+export function recordEarlyExitProgress(store, sessionId, batchId, batch, lane, progress, logger = null) {
+  if (!progress) return false;
+  try {
+    if (TERMINAL.includes(batch?.lanes?.[lane])) return false;
+    store.updateLaneProgress(sessionId, batchId, lane, { ...progress, status: 'running' });
+    return true;
+  } catch (e) {
+    logger?.warn?.('[lane-checkpoint] early-exit laneProgress write failed（不阻断）: ' + String(e?.message ?? e));
     return false;
   }
 }
