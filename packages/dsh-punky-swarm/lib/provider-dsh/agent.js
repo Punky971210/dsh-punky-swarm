@@ -123,15 +123,21 @@ function subagentChannelOf(rt) {
  * 直调 `toolFace.get(...)` 会把 `errored` 与 `absent` 揉成一个 `null` ⇒ 等于在 `agent.js` 里
  * 再写一遍探测判定（本仓禁「第二套判据」）。
  *
- * 三态语义（**不得合并**）：
+ * 三/四态语义（**不得合并**）：
  *   · `present` ⇒ 可用（工具在位）；
- *   · `absent`  ⇒ 不可用（明确的「没有」，含「拿不到内省能力」= `port-unavailable`）；
+ *   · `absent` 且 `reason !== 'port-unavailable'` ⇒ **不可用**（**明确的**「没有」）；
+ *   · `absent` 且 `reason === 'port-unavailable'` ⇒ **保持可用**（**不可内省 ≠ 不存在**：
+ *     `tools-http.js:107` 用 `state:'absent'` 承载「宿主 `tools` 没有 `get`、拿不到内省能力」，
+ *     那是「**不能检查**」，不是「确认不存在」——判成不可用就是把读不到证据读成反面结论）；
  *   · `errored` ⇒ **保持可用**（探测坏 ≠ 面没装）。
  *
- * ⚠ **比改前更严的一档**：「宿主 `get` 不是函数」这类**不可内省**形态在改前报 `true`，
- * 改后报 **`false`**。理由 = 裁决原文「不可内省时**不得声称**已做 absent 排除」：
- * 没有证据就不宣称能派（与本文件 `:162-163` 既有的「端口层 `false` = 不能派，fail-closed 正确」同口径）。
- * 真实宿主的 `ToolRuntime` 恒有 `get` ⇒ 该档只在畸形夹具里可达，不会误伤生产读数。
+ * ⚠ 批 `punky-engine-fix2-20261106` · lane `e1-red` · D-1=甲 订正：本段原写「`absent` ⇒ 不可用
+ * （明确的「没有」，**含**「拿不到内省能力」= `port-unavailable`）」，与该文件 `tools-http.js:102`
+ * 的「⚠ 查询失败**不得**降级为「不存在」」直接相反（自述与实现相反，按 D-8 口径改自述/判据）。
+ * 改后本函数**不再声称**对 `port-unavailable` 做过 absent 排除 —— 没证据就不宣称，但也不据此判死。
+ *
+ * ⚠ 真实宿主的 `ToolRuntime` 恒有 `get`（公开面 `register/restrict/get/schemas/guard/execute`）
+ * ⇒ `port-unavailable` 该档只在畸形夹具里可达，生产读数不受影响。
  *
  * @returns {{available: boolean, reason: string|null}} **二态 boolean**（端口契约要求，见 `ports.ts`）
  */
@@ -141,7 +147,9 @@ function agentTeamChannelOf(ctx) {
   if (dUsable) {
     try {
       const p = createToolsPort(ctx).probeTool('spawn_teammate');
-      if (p && p.state === 'absent') dUsable = false;
+      // 只有**明确的**「不存在」才判不可用：`port-unavailable`（宿主 `tools` 无 `get` 可内省，
+      //   见 `tools-http.js:107`）是「**不能检查**」而不是「确认不存在」⇒ 保持可用（不声称已做排除）。
+      if (p && p.state === 'absent' && p.reason !== 'port-unavailable') dUsable = false;
     } catch { /* 探测坏 ≠ 面没装：保持 dUsable 不变（禁把故障读成能力缺失） */ }
   }
   return dUsable

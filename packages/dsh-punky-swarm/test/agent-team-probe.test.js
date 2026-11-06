@@ -15,8 +15,9 @@
 //     `absent`  ⇒ `{available:false, reason:'port-absent:agentTeam'}`
 //     `present` ⇒ `{available:true,  reason:null}`（阳性对照）
 //     `errored` ⇒ `{available:true,  reason:null}`（**探测坏 ≠ 能力缺**，保持可用）
-//   「拿不到内省能力」（宿主 `get` 不是函数 / 工具面整体缺失）⇒ **判 false**：
-//   **没有证据就不宣称能派**（比改前更严；改前这一档报 `true`）。
+//   「宿主 `get` 不是函数」（**不可内省**）⇒ **保持 `true`**：不能确认「不存在」就不宣称已排除，
+//     但也不据此判死 —— `port-unavailable`（**不能检查**）≠ `absent`（**确认不存在**）。
+//   「工具面整体缺失」（`ctx.tools` 不存在）⇒ **判 false**：面没装就是派不了，与改前同值。
 //
 // ## 判别力分布（为什么必须五档都写）
 //   只有 ①（absent）能发现「fail-open」这个原始缺陷；只有 ③（errored）能发现
@@ -59,11 +60,16 @@ test('③errored：宿主 get 抛错 ⇒ agentTeam.available === true（禁把�
     '档③：查询失败是三态里的 errored，**不是** absent ⇒ 不得改判不可用；实测=' + JSON.stringify(reading));
 });
 
-// ── ④ 不可内省：宿主 `get` 不是函数 ⇒ 拿不到证据 ⇒ **判不可用**（比改前更严）──────────────────
-test('④不可内省：宿主 get 不是函数 ⇒ agentTeam.available === false（无证据不宣称能派）', () => {
+// ── ④ 不可内省：宿主 `get` 不是函数 ⇒ 拿不到证据 ⇒ **保持可用**（不能确认就不宣称排除）────────────
+// 【2026-11-06 Leader 授权修订（批 punky-engine-fix2-20261106 · 选项 A）】本档期望值由 `D_ABSENT` 翻为 `D_PRESENT`。
+//   原因：用户裁决原文是「不可内省时**不得声称**已做 absent 排除」——只要求不宣称，**没要求判死**。
+//   「不能检查（port-unavailable）」≠「确认不存在（absent）」；把前者读成后者会让真实宿主上
+//   「工具面在、execute 可调、只是拿不到 get 内省」的形态被误判为 D 档不可用（正是上一批 A 类 6 红的总根）。
+//   ⇒ 保持 `true`（可用），但**不声称**已做 absent 排除，二者不矛盾。
+test('④不可内省：宿主 get 不是函数 ⇒ agentTeam.available === true（不能内省 ≠ 确认不存在）', () => {
   const reading = dOf({ tools: { execute: async () => ({ isError: false }) } });
-  assert.deepEqual(reading, D_ABSENT,
-    '档④：内省能力缺失 ⇒ 不得声称已完成 absent 排除 ⇒ 判 false（改前此档报 true，修后更严）；实测=' + JSON.stringify(reading));
+  assert.deepEqual(reading, D_PRESENT,
+    '档④：内省能力缺失 ⇒ 不得声称已完成 absent 排除，但也不据此判死（`port-unavailable` ≠ `absent`）；实测=' + JSON.stringify(reading));
 });
 
 // ── ⑤ 工具面整体缺失 ⇒ 不可用（与改前同值）─────────────────────────────────────────────────────

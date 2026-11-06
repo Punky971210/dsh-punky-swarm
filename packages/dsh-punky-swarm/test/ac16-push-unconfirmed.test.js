@@ -130,8 +130,14 @@ test('②-4′ 名册命中 ⇒ sessionId 为**真实会话 id**（不可确认�
 // ── 防回归：D 档判据前提是 **tools 面**，不是 agents ────────────────────────
 
 test('②-5′ D 档可用性判据 = `tools` 面（`probeTool(' + "'spawn_teammate'" + ') === absent` ⇒ 不可用）', async () => {
+  // 【2026-11-06 Leader 授权修订（批 punky-engine-fix2-20261106 · 选项 A）】夹具补 `get`：
+  //   本用例要表达的是「**明确的** absent」；而 `createToolsPort().probeTool` 只读 `tools.get`
+  //   （`lib/provider-dsh/tools-http.js:106-110`），无 `get` 时它返回 `{state:'absent', reason:'port-unavailable'}`
+  //   —— 那是「**不能内省**」而非「确认不存在」。原夹具缺 `get`，故它此前能绿完全是靠
+  //   「把 port-unavailable 读成 absent」的旧判据（已被用户裁决否掉）。
+  //   ⇒ 补 `get: () => null`（端口据此给出**无 reason 的** `{state:'absent'}`），断言与期望值**一字未改**。
   const ctxAbsent = hostCtxOf({
-    tools: { execute: async () => ({ isError: false }), probeTool: () => ({ state: 'absent' }) },
+    tools: { execute: async () => ({ isError: false }), get: () => null },
     agentTeams: { listMembers: () => [] },
   });
   await assert.rejects(
