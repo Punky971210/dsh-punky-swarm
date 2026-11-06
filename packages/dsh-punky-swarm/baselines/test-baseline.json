@@ -83,7 +83,7 @@
     "test/agent-channels.test.js": {
       "asserts": 35,
       "blankLines": 20,
-      "lines": 155,
+      "lines": 162,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -94,6 +94,14 @@
       "lines": 139,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/agent-team-probe.test.js": {
+      "asserts": 7,
+      "blankLines": 12,
+      "lines": 88,
+      "tautologies": 0,
+      "tests": 6,
       "todos": 0
     },
     "test/aip-format.test.js": {
@@ -1683,7 +1691,7 @@
     "test/ring1-or-aggregate.test.js": {
       "asserts": 21,
       "blankLines": 11,
-      "lines": 89,
+      "lines": 93,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1718,6 +1726,14 @@
       "lines": 94,
       "tautologies": 0,
       "tests": 4,
+      "todos": 0
+    },
+    "test/roster-unknown.test.js": {
+      "asserts": 24,
+      "blankLines": 24,
+      "lines": 190,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -1769,11 +1785,11 @@
       "todos": 0
     },
     "test/sig-fingerprint.test.js": {
-      "asserts": 80,
-      "blankLines": 26,
-      "lines": 418,
+      "asserts": 59,
+      "blankLines": 23,
+      "lines": 363,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 13,
       "todos": 0
     },
     "test/sig-host-smoke.test.js": {
@@ -2145,7 +2161,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-05T16:33:38Z",
+  "generatedAt": "2026-11-06T12:41:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2156,15 +2172,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": null,
+  "reason": "B-3 删 sig 判等面连带删除对应测试块（断言 80->59 属功能面删除，非静默减断言）；B-1 夹具迁移补 get 致 agent-channels/ring1-or-aggregate 行数增长",
   "schema": 1,
   "totals": {
-    "asserts": 12284,
-    "blankLines": 6885,
-    "files": 268,
-    "lines": 72762,
+    "asserts": 12294,
+    "blankLines": 6918,
+    "files": 270,
+    "lines": 72996,
     "tautologies": 0,
-    "tests": 2564,
+    "tests": 2574,
     "todos": 0
   }
 }
