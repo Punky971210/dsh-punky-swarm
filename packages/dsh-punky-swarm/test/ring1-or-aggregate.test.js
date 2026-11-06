@@ -26,7 +26,11 @@ import { createAgentPort, agentChannelFactsOf } from '../lib/provider-dsh/agent.
 // C 档夹具：宿主 subagent 服务（有 start 入口即算可用）
 const SUBAGENTS = { start: async () => ({}) };
 // D 档夹具：宿主工具面（有 execute 即可发起 spawn_teammate）
-const TOOLS = { execute: async () => ({ isError: false }) };
+// 【批 `punky-engine-fix-20261106` · lane `e1-fix-b1`】**夹具迁移（只改夹具，不改断言口径）**：
+//   B-1 修复后 D 档读数走**端口** `probeTool`（`tools-http.js:106`）做 absent 排除，
+//   其内省腿要求宿主 `get` 可调用；原夹具只有 `execute` ⇒ 落「不可内省」档 ⇒ D 档 `true → false`，
+//   V-1 / V-1b / V-4 三条会假红。补 `get` 返回定义对象 ＝ `spawn_teammate` 在位（真实宿主恒有 `get`）。
+const TOOLS = { execute: async () => ({ isError: false }), get: () => ({ name: 'spawn_teammate' }) };
 
 /** 只取四个读数的端口快照（避免把整个端口对象塞进断言消息）。 */
 const readingsOf = (ctx) => {

@@ -43,7 +43,14 @@ const SUBAGENTS = { start: async () => ({}) };          // C 档物理基础：�
 //   D 档派发不经 `agents`（它只有 get+followup，无创建原语），而是「引擎经**工具面**调 `spawn_teammate`」
 //   ⇒ D 档可用性改由「工具面在 ∧ `spawn_teammate` 可调」决定，成因词 `port-absent:agentTeam`。
 //   ⚠ 夹具随之更新：`AGENTS` 不再能让 D 档变为可用（保留常量只为「有 agents 但无工具面 ⇒ D 仍不可用」的反例）。
-const TOOLS = { execute: async () => ({ isError: false }) }; // D 档物理基础：宿主工具面（可发起 spawn_teammate）
+// 【批 `punky-engine-fix-20261106` · lane `e1-fix-b1`】**夹具迁移（只改夹具，不改断言口径）**：
+//   B-1 修复后 `agentTeamChannelOf` 自行构造工具端口并调 `probeTool` 做 absent 排除，
+//   而端口的内省腿要求宿主 `get` 可调用（`tools-http.js:107`：`get` 不是函数 ⇒ `{state:'absent',reason:'port-unavailable'}`）。
+//   原夹具**只有 `execute`、没有 `get`** ⇒ 落在「不可内省」档 ⇒ D 档读数 `true → false`，AC-2/3/4/6 会集体假红。
+//   ⇒ 补齐 `get`（**真实宿主 `ToolRuntime` 恒有 `get`**，本就是忠实面的一部分）：
+//     `get` 返回定义对象 = `spawn_teammate` **在位**，与「有 `execute` 即可发起派发」原语义一致。
+//   ⚠ 反例语义（「有工具面但工具被剔除」⇒ D 档不可用）不靠本夹具，见 `test/agent-team-probe.test.js` 档①。
+const TOOLS = { execute: async () => ({ isError: false }), get: () => ({ name: 'spawn_teammate' }) }; // D 档物理基础：宿主工具面（可发起 spawn_teammate）
 const AGENTS = { get: () => null };                    // 旧 D 档物理基础（**已不是判据源**）
 const factsOf = (ctx) => agentChannelFactsOf(ctx);
 const agentOf = (report) => report.host.find((h) => h.key === 'agentRuntime');

@@ -38,7 +38,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 【W4 批 `w4-inject-teardown`】宿主服务取值一律走 `serviceOf`（裸读优先 + `ctx.get` 回落），
 //   不再在本文件裸读 `ctx.subagents` —— 引擎行清空 `inject` 后，未声明的 ctx 上裸读**会抛**
 //   （活体实证见 `exec/inject-teardown.md` 的宿主级 RED→GREEN）。
-import { serviceOf, HOST_PORT_QUERY_FAILED } from './tools-http.js';
+// 【批 `punky-engine-fix-20261106` · lane `e1-fix-b1` · B1-S1】追加 `createToolsPort`：
+//   D 档内省必须走**端口** `probeTool`（宿主演具面没有该方法，见 `agentTeamChannelOf` 注释）。
+//   本行已从 `./tools-http.js` 导入两个符号 ⇒ **不新增模块依赖边**。
+import { serviceOf, HOST_PORT_QUERY_FAILED, createToolsPort } from './tools-http.js';
 // 【ly-impl】D 通道成功判据的第二腿 = 名册反查（复用 provider 自己的名册面，禁第二套探测）。
 import { createRosterPort } from './roster.js';
 
@@ -107,14 +110,37 @@ function subagentChannelOf(rt) {
  * ⚠ 探测**抛错**不得当成「面没装」（那是探测坏，不是能力缺）⇒ 保持 `dUsable` 不变。
  * 成因词 `port-absent:agentTeam`（与 `dg-impl` 的三态归一 / `WIRED_ISSUE_RE` 合流）。
  *
+ * ## 【批 `punky-engine-fix-20261106` · lane `e1-fix-b1` · B-1 = Q-F 甲】内省改读**端口**
+ *
+ * 修前的排除支是 `typeof serviceOf(ctx,'tools').probeTool === 'function'` —— **恒假**：
+ * `serviceOf(ctx,'tools')` 取到的是**宿主** `ToolRuntime`（公开面只有
+ * `register / restrict / get / schemas / guard / execute`），`probeTool` 是**我方端口**方法
+ * （`tools-http.js:106`，`createToolsPort(ctx)` 的产物）⇒ 排除支**结构性不可达**
+ * ⇒ `spawn_teammate` 被剔除时仍报 `{available:true, reason:null}` = **fail-open**。
+ *
+ * ⇒ 改从端口取（`createToolsPort(ctx).probeTool(...)`），**不自建第二套探测判据**：
+ * 端口是**三态**（`present` / `absent` / `errored`），且其 `:107` 已处理「宿主 `get` 不存在」这一路；
+ * 直调 `toolFace.get(...)` 会把 `errored` 与 `absent` 揉成一个 `null` ⇒ 等于在 `agent.js` 里
+ * 再写一遍探测判定（本仓禁「第二套判据」）。
+ *
+ * 三态语义（**不得合并**）：
+ *   · `present` ⇒ 可用（工具在位）；
+ *   · `absent`  ⇒ 不可用（明确的「没有」，含「拿不到内省能力」= `port-unavailable`）；
+ *   · `errored` ⇒ **保持可用**（探测坏 ≠ 面没装）。
+ *
+ * ⚠ **比改前更严的一档**：「宿主 `get` 不是函数」这类**不可内省**形态在改前报 `true`，
+ * 改后报 **`false`**。理由 = 裁决原文「不可内省时**不得声称**已做 absent 排除」：
+ * 没有证据就不宣称能派（与本文件 `:162-163` 既有的「端口层 `false` = 不能派，fail-closed 正确」同口径）。
+ * 真实宿主的 `ToolRuntime` 恒有 `get` ⇒ 该档只在畸形夹具里可达，不会误伤生产读数。
+ *
  * @returns {{available: boolean, reason: string|null}} **二态 boolean**（端口契约要求，见 `ports.ts`）
  */
 function agentTeamChannelOf(ctx) {
   const toolFace = serviceOf(ctx, 'tools');
   let dUsable = Boolean(toolFace) && typeof toolFace.execute === 'function';
-  if (dUsable && typeof toolFace.probeTool === 'function') {
+  if (dUsable) {
     try {
-      const p = toolFace.probeTool('spawn_teammate');
+      const p = createToolsPort(ctx).probeTool('spawn_teammate');
       if (p && p.state === 'absent') dUsable = false;
     } catch { /* 探测坏 ≠ 面没装：保持 dUsable 不变（禁把故障读成能力缺失） */ }
   }
