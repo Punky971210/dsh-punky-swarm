@@ -463,7 +463,6 @@ export type BatchEvent = BatchEventBase & (
   //   该事件常量零发射点（写端随批 3 删除）⇒ 本批连同其读端（面板分类器 / locale 键）一并删净，
   //   其码已并入退役锁。历史批数据仍经下方 `{ type: string; [k: string]: unknown }` 兜底可读。
   | { type: 'archive.failed'; reason: string }                                        // EVT_ARCHIVE_FAILED
-  // sig 任务内容指纹（N3-②）· 幂等判等留痕（D-sig-2 裁定：**只留痕不阻断**，不加新拒码、不进 GateErrorCode）
   | { type: 'system.recovered'; batchId: string; sessionId: string; recoveredLanes: string[]; detail: unknown[] } // EVT_SYSTEM_RECOVERED
   // 兜底：扩展事件（lane.stalled / lane.over-budget / budget.rejected /
   //   worktree.created|checkpoint|merged|merge.conflict|merge.resolved /
