@@ -111,13 +111,21 @@ test('C-2 R3-c roster 不进 sig：同一任务 roster 有无 ⇒ sig 逐字相�
 // ── R-3 §2.3.3 多形态合法（同类型多成员 / 一成员多 lane）─────────────────────
 
 test('C-3 R3-d 多形态：同 roster 名书两条 lane + 不同名各书一条 ⇒ 均放行且**零 roster 告警**', () => {
+  // 【批 `punky-engine-fix2-20261106` · lane `e2-f8` · F-8 返工】`lanes[].roster` 的语义是 **roster 成员名**
+  //   （`coder-1`），而 `BUILTIN_ROLES` 是**职位名** ⇒ 未知席位判定基准已改为
+  //   `BUILTIN_ROLES` ∪ 宿主 roster 成员名（用户裁决 2026-11-06）。本用例的成员名须由宿主 roster 侧覆盖，
+  //   否则并集右半为空 ⇒ 成员名会被判成未知席位。
+  //   ⚠ 本次**只补夹具** `hostRoster`：下方 `rosterWarn === []` 断言**一字未改**（禁放宽成「忽略 ROSTER 告警」）。
+  const hostRoster = ['coder-1', 'coder-2'];
   const sameName = buildWavePlan({
     batchId: 'c3a',
     tasks: tasks({ execIds: ['x1', 'x2'], rosterOf: { x1: 'coder-1', x2: 'coder-1' } }),
+    hostRoster,
   });
   const multiMember = buildWavePlan({
     batchId: 'c3b',
     tasks: tasks({ execIds: ['y1', 'y2'], rosterOf: { y1: 'coder-1', y2: 'coder-2' } }),
+    hostRoster,
   });
   const rosterWarn = (p) => p.warnings.filter((w) => /ROSTER/.test(String(w.code)));
   assert.deepEqual(rosterWarn(sameName), [],

@@ -513,6 +513,11 @@ export function normalizeTargetsContract(t: WavePlanTaskInput): { targets: strin
 // 返回值：
 //   · **未声明**（`raw == null`）⇒ `null`（调用方**不写键** ⇒ 存量批零感知）
 //   · 已声明 ⇒ `{ items: [...] }`（即使归一后为空也返回对象 ⇒ 渲染层据此给「恰一行降级警示」）
+// 逐项四段（【e4-ckpt-aux · E4-K1..K3】`skills` / `kb` / `mcp` / `checklist`）：
+//   · 归一 **复用** `normalizeFourSectionsOf`（与 `normalizePreflight` 同一单点 ⇒ E4-K2 不分裂）；
+//   · 四段**归一后全空 ⇒ 不写四键**（= 未声明 ⇒ 渲染层给恰一行建议性警示，不铺 4 行占位）；
+//   · 任一段非空 ⇒ 四键一起写（空段落为 `[]`，与 `PreflightDecl` 同形）；
+//   · 非法形态一律降级、**零 throw**（建议性面：永不拒建批、不打任何 `GATE_*`，E4-K3）。
 
 /** `tasks[].checkpoints[]` 的单条归一化产物（声明面；与运行时上界 `task.checkpoint = { steps }` 无关）。 */
 export interface CheckpointItem {
@@ -524,6 +529,16 @@ export interface CheckpointItem {
   /** 非法 ⇒ `1`。 */
   rounds: number;
   ctxBudget: number | null;
+  // ── 【批 `punky-engine-fix2-20261106` · lane `e4-ckpt-aux`】开工前必做四段（复用 `PreflightDecl` 形态）──
+  //   语义 = 「**这个 checkpoint** 该查哪个库 / 用哪个技能 / 用哪个 MCP / 照哪几条检查表」。
+  //   ⚠ **全空则不写四键**（= 未声明）：与 `WavePlanTask.preflight` 的「恒写对象」**刻意不同** ——
+  //     `preflight` 是任务级唯一区块（缺省须警示），`checkpoints[].*` 是逐项子行（四项全空的段落会变成
+  //     每项 4 行占位噪声，E4-K5 明令禁止），故此处**不写键**，渲染层据「键不在」给**恰一行**建议性警示。
+  //   取值口径与 `normalizePreflight` **同一单点**（`normalizeFourSectionsOf`）⇒ E4-K2 不可能分裂。
+  skills?: string[];
+  kb?: string[];
+  mcp?: PreflightMcp[];
+  checklist?: string[];
 }
 
 /** `normalizeCheckpoints` 的返回：未声明 ⇒ `null`；已声明 ⇒ `{ items }`（`items` 可能为空）。 */
@@ -582,7 +597,8 @@ export function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null
       const ctxBudget = typeof ctxBudgetRaw === 'number' && Number.isFinite(ctxBudgetRaw) && ctxBudgetRaw > 0
         ? ctxBudgetRaw
         : null;
-      out.push({
+      // ⚠ 变量名不用 `item`：外层 `for (const item of arr)` 已占用（同块遮蔽会触发 TDZ）。
+      const normalized: CheckpointItem = {
         id,
         // 缺 target ⇒ 保留并标空串（**不静默丢**：渲染层会写成「（未声明目标）」）。
         target: targetRaw,
@@ -590,7 +606,19 @@ export function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null
         acceptance: typeof it.acceptance === 'string' ? it.acceptance.trim() : '',
         rounds,
         ctxBudget,
-      });
+      };
+      // 【e4-ckpt-aux · E4-K1/K2/K3】四段：**逐项**喂四段归一单点（与 `normalizePreflight` 同一实现）。
+      //   · 全空 ⇒ **不写四键**（= 未声明；渲染层给恰一行建议性警示，E4-K5）；
+      //   · 任一段非空 ⇒ 四键一起写（空段也是 `[]`，与 `PreflightDecl` 同形态，便于渲染层统一判空）；
+      //   · 非法形态 ⇒ 归一单点内降级（零 throw，不拒建批，E4-K3）。
+      const four = normalizeFourSectionsOf(it);
+      if (four.kb.length > 0 || four.skills.length > 0 || four.mcp.length > 0 || four.checklist.length > 0) {
+        normalized.kb = four.kb;
+        normalized.skills = four.skills;
+        normalized.mcp = four.mcp;
+        normalized.checklist = four.checklist;
+      }
+      out.push(normalized);
     }
     return { items: out };
   } catch {
@@ -613,30 +641,46 @@ export function normalizeCheckpoints(raw: unknown): NormalizedCheckpoints | null
 export function normalizePreflight(raw: unknown): PreflightDecl | null {
   try {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const src = raw as Record<string, unknown>;
-    const stringsOf = (v: unknown): string[] => {
-      const arr = Array.isArray(v) ? v : [];
-      const out: string[] = [];
-      for (const item of arr) {
-        if (typeof item !== 'string') continue;
-        const s = item.trim();
-        if (s) out.push(s);
-      }
-      return out;
-    };
-    const mcpRaw = src.mcp;
-    const mcp: PreflightMcp[] = [];
-    for (const item of (Array.isArray(mcpRaw) ? mcpRaw : [])) {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-      const tool = (item as { tool?: unknown }).tool;
-      if (typeof tool !== 'string' || !tool.trim()) continue;
-      const whyRaw = (item as { why?: unknown }).why;
-      mcp.push({ tool: tool.trim(), why: typeof whyRaw === 'string' ? whyRaw.trim() : '' });
-    }
-    return { kb: stringsOf(src.kb), skills: stringsOf(src.skills), mcp, checklist: stringsOf(src.checklist) };
+    return normalizeFourSectionsOf(raw as Record<string, unknown>);
   } catch {
     return null;
   }
+}
+
+// ── 【批 `punky-engine-fix2-20261106` · lane `e4-ckpt-aux`】四段归一化**单点**（抽取，非重写）───────
+// 抽取理由（判据源 S5-2）：`tasks[].preflight`（任务级四段）与 `tasks[].checkpoints[].{skills,kb,mcp,checklist}`
+//   （逐项四段）必须**行为一致**（E4-K2：同一非法夹具分别喂两处，归一结果逐字相等）⇒ 只允许一份实现，
+//   禁在 `normalizeCheckpoints` 里再抄一遍 `stringsOf` / mcp 循环（抄一份就有一份漂移面）。
+// 口径（原 `normalizePreflight` 的六个 `stringsOf`/mcp 表达式**逐字搬移**，一字未改）：
+//   · `kb`/`skills`/`checklist` 非数组 ⇒ `[]`；元素非字符串或 `trim()` 空 ⇒ 丢弃；
+//   · `mcp` 元素非对象 / `tool` 非非空字符串 ⇒ 丢弃；缺 `why` ⇒ 保留 + `why: ''`（渲染占位，不静默丢项）；
+//   · **永不 null**（空段落 `[]`）：调用方各自决定「空」怎么表达（`normalizePreflight` 恒写对象；
+//     `normalizeCheckpoints` 全空则不写键）。
+//   ⚠ 入参必须是**已判定为 plain object** 的形态 —— 守卫（`null` / 非对象 / 数组 ⇒ `null`）留在
+//     `normalizePreflight` 薄壳内，本函数**不做形态守卫**（逐项 checkpoints 的 `it` 本身必是对象）。
+//   **零 throw**：读值异常（getter 抛错）由调用方的 try/catch 兜底降级。
+//   返回 `Required<PreflightDecl>`：四键**恒在**（空段 `[]`）—— 调用方无需再判 `undefined`。
+function normalizeFourSectionsOf(src: Record<string, unknown>): Required<PreflightDecl> {
+  const stringsOf = (v: unknown): string[] => {
+    const arr = Array.isArray(v) ? v : [];
+    const out: string[] = [];
+    for (const item of arr) {
+      if (typeof item !== 'string') continue;
+      const s = item.trim();
+      if (s) out.push(s);
+    }
+    return out;
+  };
+  const mcpRaw = src.mcp;
+  const mcp: PreflightMcp[] = [];
+  for (const item of (Array.isArray(mcpRaw) ? mcpRaw : [])) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const tool = (item as { tool?: unknown }).tool;
+    if (typeof tool !== 'string' || !tool.trim()) continue;
+    const whyRaw = (item as { why?: unknown }).why;
+    mcp.push({ tool: tool.trim(), why: typeof whyRaw === 'string' ? whyRaw.trim() : '' });
+  }
+  return { kb: stringsOf(src.kb), skills: stringsOf(src.skills), mcp, checklist: stringsOf(src.checklist) };
 }
 
 // 任务包 resume 契约固定条款：resume: true 时注入 worker 派发提示词——
@@ -1117,7 +1161,7 @@ export function collectAuditPairingWarnings(tasks: WaveTask[]): WavePlanDoc['war
 
 // ── 建批主函数 ──────────────────────────────────────────────────────────────
 
-export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly, smoke = false, handoffGate = undefined }: {
+export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly, smoke = false, handoffGate = undefined, hostRoster = [] }: {
   batchId: string;
   tasks: WavePlanTaskInput[];
   concurrency?: number;
@@ -1129,6 +1173,11 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
   /** P1 交接门策略（`task-27`）：由**调用方**（工具面持 liveConfig）经 `handoffGateEnabledOf` 解析后传入；
    *  缺省 undefined ⇒ 本函数内按**缺省配置**兜底解析（env → 缺省关），直调调用方行为不变。 */
   handoffGate?: boolean;
+  /** 宿主 roster 的**成员名**清单（**纯数据**，缺省 `[]`）：未知席位告警的比对基准 = `BUILTIN_ROLES` ∪ 本清单。
+   *  ⚠ 本函数**不读 ctx、不做 IO、不 import provider**：它至今是零 ctx 纯函数 ⇒ 宿主 roster 的读取由
+   *     **调用方**完成后再传入（唯一接线点 = `lib/tools/wave-plan-tools.js#planArgs`）。
+   *  ⚠ 调用方读失败时传 `[]`（基准退化）—— 本函数**不因此取消告警**（用户裁决 D-3：禁降级分支）。 */
+  hostRoster?: string[];
 }): WavePlanDoc {
   if (!batchId || typeof batchId !== 'string') throw new Error('batchId required');
   // P1 交接门建批期判据（裁决 ②=A）**先于** `topoWaves`：deps 悬空在本门是 `GATE_HANDOFF_MISSING`
@@ -1172,27 +1221,49 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
       });
     }
   }
-  // ── 已裁 B-2（F-8）：roster 席位名不在内建职位表 ⇒ 建批期**只告警不拒建批** ──────────────
-  // 与上方 `GATE_ROSTER_INVALID`（`:1132` 词法 fail-closed **拒**）**是两个面，不得混一**：
+  // ── 已裁 B-2 / D-3（F-8 返工）：roster 席位名不在「内建职位表 ∪ 宿主 roster」⇒ 只告警不拒建批 ──
+  // 与上方 `GATE_ROSTER_INVALID`（`:1152-1157` 词法 fail-closed **拒**）**是两个面，不得混一**：
   //   · 词法非法（含空格/大写）⇒ 上方 throw（**先跑完**：非法形态连告警都不该进）；
-  //   · 词法合法但查无此席位 ⇒ **本段**：只落 `warnings[]`（调用方按 `WARN_EVENT_OF` 落事件），建批照常成功。
-  // 基准（用户裁决 Q-3=乙）：**只取** `BUILTIN_ROLES`（`lib/roster.js:44`），不碰宿主 roster。
-  // ⚠ 命名空间张力（已裁决接受，不是笔误）：`lanes[].roster` 的语义是 **roster 成员名**（正例 `coder-1`），
-  //   而 `BUILTIN_ROLES` 是**职位名**表 ⇒ 成员名形态（`coder-1`）也会命中本告警。三条缓冲：
-  //   ① 永不阻断：不 throw、不进 `GateErrorCode`（`lib/types/contracts.ts` 本批冻结）、不参与任何 gate 判定；
-  //   ② 载荷带 `basis:'BUILTIN_ROLES'` ⇒ 读端可辨「真未知席位」与「成员名形态」；
-  //   ③ 噪声面读数落在 `exec/e3-roster.md`（F8-S6），不用「实现正确」一句话带过。
+  //   · 词法合法但查无此席位 ⇒ **本段**：只落 `warnings[]`（批 `punky-engine-fix2-20261106` · D-2=乙：
+  //     **不落任何事件** —— 发射侧由 `lib/tools/wave-plan-tools.js#WARN_SILENT_CODES` 显式跳过），建批照常成功。
+  // 基准（用户裁决 2026-11-06，**覆盖** Q-3=乙）：`BUILTIN_ROLES` **∪ 宿主 roster 成员名**（`hostRoster`）。
+  //   为什么必须取并集：`lanes[].roster` 的语义是 **roster 成员名**（正例 `coder-1`），而 `BUILTIN_ROLES`
+  //   是**职位名**表 ⇒ 只查内建表会把全部成员名形态判成未知席位 ⇒ 上一批实测 1484 条 roster 声明里
+  //   1419 条（95.6%）命中告警，告警彻底成噪声 ⇒ 用户裁「不可接受，基准改为并集」。
+  //   ⚠ `hostRoster` 是**纯数据形参**（`string[]`，缺省 `[]`）：本函数**至今是零 ctx 纯函数**
+  //     （不读 ctx、不做 IO、不 import provider）；宿主 roster 的读取由**调用方**完成后再传入
+  //     （唯一接线点 = `lib/tools/wave-plan-tools.js#planArgs` 的 `createRosterPort`）。
+  //   ⚠ **不写「宿主 roster 不可用 ⇒ 不告警」的降级分支**（用户裁决 D-3：Harness 几乎不存在 roster
+  //     不可用，再不济有 Subagent ID 兜底，该场景现实中不存在）⇒ 读失败的唯一正确行为 =
+  //     调用方传 `[]`（**基准退化**）+ **本段告警照旧** + 一行 `logger.warn`。
+  // 三条缓冲（不变）：① 永不阻断：不 throw、不进 `GateErrorCode`（`lib/types/contracts.ts` 本批冻结）、
+  //   不参与任何 gate 判定；码名用 **`WARN_` 前缀、不是 `GATE_`**（D-2=乙 落地形态）：`GATE_*` 在本仓
+  //   承载「拒建批 / 门禁」语义，而本码永不阻断；且不登记词表（用户已裁）⇒ 若仍以 `GATE_` 字面量出现在
+  //   `lib/**`，`scripts/check-vocab-counts.mjs`（发射码扫描面只认 `GATE_` 字面量）必报缺口 `AC-pack2-2` 红。
+  //   ② 载荷带 `basis` + `hostRosterCount` ⇒ 读端可辨「基准实际只用了内建表」（`hostRosterCount === 0`）；
+  //   ③ 噪声面读数落在 `exec/e2-f8.md`，不用「实现正确」一句话带过。
   // 类型：`WavePlanDoc['warnings']` 元素是**闭集**（`lib/types/contracts.ts:266-273`，写入域外+冻结）
-  //   ⇒ 用交叉类型承载 `roster` / `basis` 两键（**不加类型断言**，不碰 contracts）。
+  //   ⇒ 用交叉类型承载 `roster` / `basis` / `hostRosterCount` 三键（**不加类型断言**，不碰 contracts）。
+  const hostRosterEntries = Array.isArray(hostRoster) ? hostRoster : [];
+  // 基准单点（`S3-2`）：`Set` 拼并集 —— **不借用** `lib/roster.js#reconcileRoster`（它返回
+  //   `{matched,builtinOnly,hostOnly}` 的**对账**语义，拿它拼并集等于让读端二次解释三集合）。
+  const seatSet = new Set<string>(BUILTIN_ROLES);
+  for (const entry of hostRosterEntries) {
+    const name = typeof entry === 'string' ? entry.trim() : '';
+    if (name) seatSet.add(name);
+  }
+  const hostRosterCount = Array.isArray(hostRoster) ? hostRoster.length : 0;
   for (const t of tasks) {
     const rosterSeat = normalizeRoster(t.roster);
-    if (rosterSeat !== null && !BUILTIN_ROLES.includes(rosterSeat)) {
-      const unknownSeatWarning: WavePlanDoc['warnings'][number] & { roster: string; basis: string } = {
-        code: 'GATE_ROSTER_UNKNOWN',
+    if (rosterSeat !== null && !seatSet.has(rosterSeat)) {
+      const unknownSeatWarning: WavePlanDoc['warnings'][number] & { roster: string; basis: string; hostRosterCount: number } = {
+        code: 'WARN_ROSTER_UNKNOWN',
         task: t.id,
         roster: rosterSeat,
-        basis: 'BUILTIN_ROLES',
-        message: 'task ' + t.id + ' roster "' + rosterSeat + '" is not in the builtin seat table (BUILTIN_ROLES); warned only — batch is still created',
+        basis: 'BUILTIN_ROLES+hostRoster',
+        hostRosterCount,
+        message: 'task ' + t.id + ' roster "' + rosterSeat + '" is neither in the builtin seat table (BUILTIN_ROLES) nor in the host roster ('
+          + hostRosterCount + ' member name(s)); warned only — batch is still created',
       };
       warnings.push(unknownSeatWarning);
     }

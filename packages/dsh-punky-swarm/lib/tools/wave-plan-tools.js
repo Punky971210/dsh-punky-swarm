@@ -24,6 +24,11 @@ import { resolveAssembly } from '../assembly.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertMemberActionTierC, readLiveConfig, clearPendingBatch } from './tier-gate.js';
 import { managerRosterOf, managerSeatFaceOf } from './host-surface.js';
+// 【批 `punky-engine-fix2-20261106` · lane `e2-f8` · F-8 返工】宿主 roster 成员名读取**单点**：
+//   `buildWavePlan` 是**零 ctx 纯函数**（`lib/wave-plan.ts` 全篇纪律）⇒ 宿主读取**只能**在工具面做，
+//   以**纯数据**（`string[]`）传入建批函数；本 import 即该读取的唯一来源（provider 侧 `RosterSource`
+//   的 DSH 实现，归属声明见 `lib/provider-dsh/roster.js:18-37`）。
+import { createRosterPort } from '../provider-dsh/roster.js';
 // 事件字面量改引 EVT 常量单点（gate.role_* 发端）
 import * as EVT from '../state/event-types.js';
 
@@ -35,23 +40,29 @@ import * as EVT from '../state/event-types.js';
 // 未命中映射的码**保持现状 = `EVT_GATE_ROLE_INVALID`**（向后兼容：`GATE_AUDIT_CONTRACT_EXEMPT` /
 //   既有码的事件 type 不迁移，避免既有断言与外部消费者漂移）。GAP-S9 残留：未来
 //   把每个告警码都映射到专用类型（本任务不迁移）。
+// 【批 `punky-engine-fix2-20261106` · lane `e1-red` · D-2=乙】本表**只收**需要发射专用事件的码；
+//   **不发射事件**的告警码见下方 `WARN_SILENT_CODES`。两集合**相斥**（交集必须 = ∅，判据 `E1-R8`）。
 const WARN_EVENT_OF = {
   // 【2026-09-28 · 批 `cleanup-tail-20260927` E-5】原 `GATE_ROLE_MISSING` → 事件映射行**已删**：
   //   该码**零发射点**（`collectRoleCompletenessWarnings`，`lib/wave-plan.js:119-140`，现只 push
   //   `GATE_ROLE_MANAGER_AS_LANE`）⇒ 该键**恒不命中**；映射行与其事件常量（`lib/state/event-types.js`）
   //   同批删除，全仓 `lib/**` 零残留（含注释）。下方在役映射**逐字保留**。
   GATE_COMPLETE_OUTCOMES_EMPTY: EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY,
-  // 已裁 B-2（F-8）：roster 席位名不在内建职位表 ⇒ 建批期**只告警不拒建批**，事件类型走专用名
-  //   （不落 catch-all 的 `gate.role_invalid` —— 后者会把「席位名未知」误标成「role 非法」，与 GAP-S9 同源）。
-  //   ⚠ 本行是**字面量、不引 `EVT` 常量**——**有意为之**：`lib/state/event-types.js` 在本批划给 `e2-fix-b3`
-  //   独占写域（它要删自己的常量），为了「一批内零文件碰撞、零跨 lane 符号依赖」，本事件名以字面量登记在
-  //   本表（本表本就是「码 → 事件名」的单点）。
-  //   **followup（登记，不在本批实施）**：下一批把它收敛成 `lib/state/event-types.js` 的 `EVT_*` 常量
-  //   （写域互斥解除后即可；届时本行改引常量、字面值不变）。
-  //   `appendEvent` 无事件名注册校验（`lib/state/store/batch.js:216-223` 实测：`requireEventType` 只服务
-  //   escape/degrade/contractMissing）⇒ 字面量发射安全，不会触发 `GATE_EVENT_CONST_MISSING`。
-  GATE_ROSTER_UNKNOWN: 'gate.roster_unknown',
 };
+
+// 建批期**只留 `warnings[]`、不落任何事件**的告警码（批 `punky-engine-fix2-20261106` · D-2=乙 裁决）：
+//   · 与 `WARN_EVENT_OF` **相斥**（两集合交集必须 = ∅，判据 `E1-R8`）；
+//   · 这些码**不进** `GateErrorCode` union、**不进** `lib/state/vocabulary.json`（用户已裁：不登记词表）；
+//   · 建批返回值的 `warnings[]` 是 Leader 能看到该告警的**唯一可见面**（`E1-R7` 要求它必须仍在）；
+//   · 为什么必须显式跳过而不能只删映射：下方发射循环有兜底 `?? EVT.EVT_GATE_ROLE_INVALID`
+//     ⇒ 只删映射会把该告警**换个 type 继续发射**（`gate.role_invalid` + 载荷 `code` = 告警码 = 误标 2.0），
+//     与裁决「不发射事件」正好相反。
+//   · **过渡期双名已收口（2026-11-06）**：`e1-red` 当时因本批禁在该 lane 跑 `npm run build`
+//     （`e3-contracts` 并行，build 会回拷覆盖手改）而把两名字面量**同时登记** —— 那时生成物
+//     `lib/wave-plan.js` 仍是旧字面量 `GATE_ROSTER_UNKNOWN`，只登记新名会让「事件面零发射」不成立。
+//     现 `e2-f8` 的 `npm run build` 已生效 ⇒ 运行时码名恒为 `WARN_ROSTER_UNKNOWN`，**旧名成死项、已删**。
+//     ⚠ 若将来再改该码名，仍须「源码改名 + build + 同步本集合」三步同做，否则会重现「发射绕过静默集」。
+const WARN_SILENT_CODES = new Set(['WARN_ROSTER_UNKNOWN']);
 
 export function buildWavePlanTools(cx) {
   const { ctx, deps, store, config } = cx;
@@ -76,7 +87,27 @@ export function buildWavePlanTools(cx) {
         // P1 交接门策略（`task-27`）：由**工具面**用热更快照经**唯一解析点**解析后传入建批——单一真源 =
         //   `wave-plan.ts#handoffGateEnabledOf`（runtime.json `gates.handoff.entry` > env 兜底 > 缺省关）；
         //   `wave-plan` 自身不再读 env/config（禁两套读取）。
-        const planArgs = { batchId: args.batchId, tasks: args.tasks, concurrency: args.concurrency ?? 5, team: teamName, assembly, smoke, handoffGate: handoffGateEnabledOf(readLiveConfig(deps), 'entry') };
+        // 【批 `punky-engine-fix2-20261106` · lane `e2-f8` · F-8 返工】未知席位告警的比对基准 =
+        //   `BUILTIN_ROLES` ∪ 宿主 roster **成员名**。宿主读取**只能**在此处做（`buildWavePlan` 零 ctx）。
+        //   ⚠ **禁止**「宿主 roster 不可用 ⇒ 不告警」的降级分支（用户裁决 D-3：Harness 几乎不存在该场景，
+        //     再不济有 Subagent ID 兜底 ⇒ 该场景现实中不存在）⇒ 读失败/不可用的正确行为 =
+        //     **基准退化（传 `[]`）+ 告警照旧（`lib/wave-plan.ts` 的告警循环一字不减）+ 一行 `logger.warn`**。
+        //   读端契约（`lib/provider-dsh/roster.js:87-89`）：`{available, read(), sessionOf()}`；`read()` **同步、
+        //   可抛**、返回成员视图行数组（行名字段 `name`，`target` 双键容错见该文件 `nameOfRow`）。
+        let hostRosterNames = [];
+        try {
+          const rosterPort = createRosterPort(ctx, exec?.agent);
+          if (rosterPort.available) {
+            hostRosterNames = (rosterPort.read() ?? [])
+              .map((m) => (m && typeof m.name === 'string' ? m.name.trim() : ''))
+              .filter((name) => name.length > 0);
+          }
+        } catch (e) {
+          // 只降级「基准」，**不降级告警**：`hostRosterNames` 保持 `[]` ⇒ 并集退化为 `BUILTIN_ROLES`，
+          //   两侧都不含的席位名仍照常告警（判据 `E2-F4`：读失败后零告警 = 有人加了降级分支 = 判红）。
+          ctx.logger?.warn?.('[dsh-punky-swarm] wave_plan: 宿主 roster 读取失败 ⇒ 未知席位告警基准退化为 BUILTIN_ROLES（**告警照常发射**）：' + String(e?.message ?? e));
+        }
+        const planArgs = { batchId: args.batchId, tasks: args.tasks, concurrency: args.concurrency ?? 5, team: teamName, assembly, smoke, handoffGate: handoffGateEnabledOf(readLiveConfig(deps), 'entry'), hostRoster: hostRosterNames };
         // 【2026-09-27 · team-asset 全量退役】原 `teamsRoot` 透传（`planArgs.teamsRoot = teamsRoot`）**已删除**：
         //   形参与批次字段一并退役（D-3 裁决）⇒ 建批面不再有任何「临时团队资产根」声明位。
         const plan = buildWavePlan(planArgs);
@@ -166,6 +197,9 @@ export function buildWavePlanTools(cx) {
         // GAP-S9：事件 type 改走 `WARN_EVENT_OF` 按码映射（`GATE_COMPLETE_OUTCOMES_EMPTY` 有自己的专用类型）；
         //   未命中映射的码**逐字保持现状** = `gate.role_invalid`；载荷字段形态**零增删**（`code` 仍在）。
         for (const w of plan.warnings ?? []) {
+          // 【批 `punky-engine-fix2-20261106` · lane `e1-red` · D-2=乙】`WARN_SILENT_CODES` 里的码
+          //   **只留 `warnings[]`、不落任何事件**（不加本行则下方兜底会把它误标成 `gate.role_invalid`）。
+          if (WARN_SILENT_CODES.has(w.code)) continue;
           // 载荷 `roster` / `basis`（F-8）：现载荷原有 `{code,task,role,layer,missing}`，**没有**席位名字段
           //   ⇒ 不加的话事件里看不到「是哪个席位名未知」，也没法区分「真未知席位」与「成员名形态」。
           //   两键对既有告警码恒为 null（缺省 `?? null`，键恒在 ⇒ 读端形态稳定、存量语义零漂移）；

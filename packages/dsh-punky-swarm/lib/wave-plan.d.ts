@@ -1,4 +1,4 @@
-import type { ChannelDecl, ConditionClause, ConditionInput, Layer, PreflightDecl, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
+import type { ChannelDecl, ConditionClause, ConditionInput, Layer, PreflightDecl, PreflightMcp, WavePlanAssemblyDecl, WavePlanDoc, WavePlanTask, WavePlanTaskInput } from './types/contracts.js';
 type WaveTask = WavePlanTaskInput | WavePlanTask;
 export declare const LAYERS: readonly ["plan", "exec", "audit"];
 export declare const VALID_ROLES: readonly ["coordinator", "manager", "designer", "coder", "tester", "reviewer", "supervisor", "doc-manager"];
@@ -70,6 +70,10 @@ export interface CheckpointItem {
     /** 非法 ⇒ `1`。 */
     rounds: number;
     ctxBudget: number | null;
+    skills?: string[];
+    kb?: string[];
+    mcp?: PreflightMcp[];
+    checklist?: string[];
 }
 /** `normalizeCheckpoints` 的返回：未声明 ⇒ `null`；已声明 ⇒ `{ items }`（`items` 可能为空）。 */
 export interface NormalizedCheckpoints {
@@ -163,7 +167,7 @@ export declare function validateDepsStructure(tasks: WaveTask[]): void;
  * 且逐条消费其产物（认领即须消费）。
  */
 export declare function collectAuditPairingWarnings(tasks: WaveTask[]): WavePlanDoc['warnings'];
-export declare function buildWavePlan({ batchId, tasks, concurrency, team, assembly, smoke, handoffGate }: {
+export declare function buildWavePlan({ batchId, tasks, concurrency, team, assembly, smoke, handoffGate, hostRoster }: {
     batchId: string;
     tasks: WavePlanTaskInput[];
     concurrency?: number;
@@ -179,6 +183,11 @@ export declare function buildWavePlan({ batchId, tasks, concurrency, team, assem
     /** P1 交接门策略（`task-27`）：由**调用方**（工具面持 liveConfig）经 `handoffGateEnabledOf` 解析后传入；
      *  缺省 undefined ⇒ 本函数内按**缺省配置**兜底解析（env → 缺省关），直调调用方行为不变。 */
     handoffGate?: boolean;
+    /** 宿主 roster 的**成员名**清单（**纯数据**，缺省 `[]`）：未知席位告警的比对基准 = `BUILTIN_ROLES` ∪ 本清单。
+     *  ⚠ 本函数**不读 ctx、不做 IO、不 import provider**：它至今是零 ctx 纯函数 ⇒ 宿主 roster 的读取由
+     *     **调用方**完成后再传入（唯一接线点 = `lib/tools/wave-plan-tools.js#planArgs`）。
+     *  ⚠ 调用方读失败时传 `[]`（基准退化）—— 本函数**不因此取消告警**（用户裁决 D-3：禁降级分支）。 */
+    hostRoster?: string[];
 }): WavePlanDoc;
 export declare function validateWavePlan(plan: WavePlanDoc, opts?: {
     smoke?: boolean;
