@@ -739,7 +739,7 @@
     "test/fixture-team-ledger.test.js": {
       "asserts": 10,
       "blankLines": 23,
-      "lines": 218,
+      "lines": 223,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -2193,7 +2193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-06T18:40:57Z",
+  "generatedAt": "2026-11-06T19:04:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2204,13 +2204,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 punky-checkpoint-wire-20261106：lane e2-status 新增 test/lane-checkpoint-status-fallback.test.js（E-CK3/E-CK4 + 零回归 + 无 progress 边界共 4 用例，12 断言）；同次快照保留 lane e1-resume 已计入的 test/checkpoint-resume-wire.test.js（其原 reason 见上一版：E-CK1/E-CK2/E-CK5/E-CK6 + R-4 派发路径共 5 用例，及 dispatch-fixture 惰性导入解耦）。非静默减断言。",
+  "reason": "F2-6 台账登记：lane-checkpoint-status-fallback.test.js 使用 withDefaultTeam（建批为手段，被检面是 laneProgress 兜底与 latestSource 优先序）",
   "schema": 1,
   "totals": {
     "asserts": 12413,
     "blankLines": 7022,
     "files": 274,
-    "lines": 73905,
+    "lines": 73910,
     "tautologies": 0,
     "tests": 2600,
     "todos": 0

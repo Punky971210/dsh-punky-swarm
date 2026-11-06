@@ -82,6 +82,11 @@ const WITH_DEFAULT_TEAM_ALLOWLIST = [
   // P2 收口（2026-10-13 · L9 `e4-l9-memorysrc`）：新测试件同样以 `withDefaultTeam` 作**手段**，
   //   被检面是 L9 收口（清单落批次产物根 + `memory.stale.recommended` 留痕事件），**非** team 标签门禁
   //   ⇒ 按本名单机制**显式登记**（形态⑤：名单式白名单；登记是被审阅过的决定，不是沉默）。
+  // checkpoint-wire-20261106（2026-11-06）：新测试面——建批是**手段**，被检面是
+  //   `lane_checkpoint_status` 的 `laneProgress` 兜底与 `latestSource` 优先序（事件优先、指针兜底），
+  //   **非** team 标签门禁 ⇒ 按本名单机制显式登记（登记是被审阅过的决定，不是沉默）。
+  //   字典序：`lane-` < `memory-`（第 1 字符 `l` < `m`）⇒ 本项在 `memory-` **之前**。
+  'lane-checkpoint-status-fallback.test.js',
   //   ⚠ 位置须遵本名单的**字典序**：`memory-` < `merge-`（第 3 字符 `m` < `r`）⇒ 本项在 `merge-agent` **之前**。
   'memory-stale-recommended.test.js',
   'merge-agent.test.js',
