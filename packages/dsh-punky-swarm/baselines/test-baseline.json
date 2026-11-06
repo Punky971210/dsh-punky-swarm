@@ -1283,7 +1283,7 @@
     "test/lane-session-bind.test.js": {
       "asserts": 115,
       "blankLines": 43,
-      "lines": 685,
+      "lines": 691,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1433,9 +1433,9 @@
       "todos": 0
     },
     "test/merge-agent.test.js": {
-      "asserts": 49,
-      "blankLines": 25,
-      "lines": 282,
+      "asserts": 50,
+      "blankLines": 24,
+      "lines": 292,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2171,7 +2171,7 @@
     "test/worktree-merge-fail-escapes.test.js": {
       "asserts": 16,
       "blankLines": 11,
-      "lines": 145,
+      "lines": 147,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
@@ -2193,7 +2193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-06T19:04:31Z",
+  "generatedAt": "2026-11-06T20:13:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2204,13 +2204,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "F2-6 台账登记：lane-checkpoint-status-fallback.test.js 使用 withDefaultTeam（建批为手段，被检面是 laneProgress 兜底与 latestSource 优先序）",
+  "reason": null,
   "schema": 1,
   "totals": {
-    "asserts": 12413,
-    "blankLines": 7022,
+    "asserts": 12414,
+    "blankLines": 7021,
     "files": 274,
-    "lines": 73910,
+    "lines": 73928,
     "tautologies": 0,
     "tests": 2600,
     "todos": 0
