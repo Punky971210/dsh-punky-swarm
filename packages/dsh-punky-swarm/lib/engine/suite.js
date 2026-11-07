@@ -167,6 +167,10 @@ export const SUITE_TOOLS = Object.freeze([
   //     `MODE_GATED_TOOLS` 仍 **11** 项逐字不变（本件不入两集）。追加位置在**冻结前缀与既有 37 条之后**
   //     ⇒ 前 14 条冻结序列零变化，既有条目相对顺序逐字不变。
   entry('role_guide', 'read', false, false, false),
+  // 【G-2 · 批 `punky-engine-core-deepdive-20261107`】D 档任务包取件口：只读（读批 JSON + role 语料 +
+  //   纯函数渲染），零写面、零副作用。与 `role_guide` 同族（`read`, 成员可用）—— 成员取自己的任务包
+  //   属只读自检，不产生任何治理写入。
+  entry('taskpack_for', 'read', false, false, false),
   // ── 【G-10 修复 · 批 `g10-fix-20261012` · lane `e4-toolface`】受限反向声明工具面（成员可调用）───────
   // `handoff_accept`：**下游 lane 声明接受批运行中追加的后置上游**（`lib/tools/handoff-tools.js`，
   //   判定单点 = `lib/state/store/handoff-accept.js#recordHandoffAccept`）。三个布尔位**写死**（依据逐条对齐

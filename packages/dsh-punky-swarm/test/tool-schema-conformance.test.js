@@ -160,6 +160,19 @@ const CASES = {
     success: async (h) => h.byName.role_guide.execute({ role: 'coder' }, EXEC),
     reject: async (h) => h.byName.role_guide.execute({ role: '__no_such_role__' }, EXEC),
   },
+  taskpack_for: {
+    // 【2026-11-07 · G-2 补登（批 `punky-engine-core-deepdive-20261107`）】D 档任务包取件口（只读）。
+    //   成功 = 已建批的 lane `l1` 取件（内部调 `composeWorkerPrompt`，与引擎自派路径同一函数）；
+    //   拒态 = lane 不在该批 `wavePlan` 内 ⇒ 工具层显式抛（**不返回空串**，零静默）。
+    success: async (h) => {
+      await freshBatch(h, 'census-taskpack');
+      return h.byName.taskpack_for.execute({ batchId: 'census-taskpack', lane: 'l1' }, EXEC);
+    },
+    reject: async (h) => {
+      await freshBatch(h, 'census-taskpack-r');
+      return h.byName.taskpack_for.execute({ batchId: 'census-taskpack-r', lane: 'no_such_lane' }, EXEC);
+    },
+  },
   lane_claim: {
     // ⚠ 用**独立批 + 独立 lane**：`handoff_submit` 会做「写权转移」（提交成功即 from 释放 / to 获取锁）
     //   ⇒ 夹具批里的下游 lane 锁已被交接占着，直接 claim 会恒冲突（那是合法返回值，但不是"认领成功"路径）。

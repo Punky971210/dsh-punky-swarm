@@ -44,8 +44,8 @@ const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toL
 //   两个计数常量**保留**（既有交叉校验件 `judging-toolcount` / `housekeeping-h2` 引用它们做真源自洽）。
 //   两层并存：计数先失败快定位，集合再兜住「换名 / 增 / 删」三类漂移（后者计数抓不到）。
 const LOG_TOOLS_EXTRA = ['log_export']; // patch 全开相对裸配置的唯一增量（差集判据见下）
-const EXPECTED_TOOLS_BARE = 26;
-const EXPECTED_TOOLS_FULL = 27;
+const EXPECTED_TOOLS_BARE = 27;   // 【2026-11-07 · G-2】+1 = `taskpack_for`（D 档任务包取件口，只读）
+const EXPECTED_TOOLS_FULL = 28;
 
 /** 冻结名单（唯一权威 = `test/tools.test.js` 的 `TOOL_NAMES`）。派生而非手抄 ⇒ 双源不一致即红。 */
 function frozenToolNames(repoRoot) {

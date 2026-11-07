@@ -34,7 +34,10 @@ import * as EVT from '../state/event-types.js';
 //   **不自带任何三段模板/标题字面量**（R-5 渲染色同源的**结构性**保证，见 L-AC-6 ②④）。
 //   依赖方向单向：`lib/tools/*` → `lib/engine/*`；`dispatch.js` 只引 node 内置 + `../bridge` + `../state`
 //   + `./suite.js` ⇒ **无环**。
-import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock } from '../engine/dispatch.js';
+import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt } from '../engine/dispatch.js';
+// `renderArchContext` 的**真源**在 `lib/engine/arch-context.js`（`dispatch.js` 只是 import 它、
+//   **不 re-export**）⇒ 必须从真源取，从 `dispatch.js` 取会得 `undefined`（调用期 TypeError）。
+import { renderArchContext } from '../engine/arch-context.js';
 // 【批 `punky-guidance-preflight-20261025` · lane `c1-preflight`】开工前必做段的**阈值同源**：
 //   `role_guide` 与引擎自派路径必须过**同一份** `capabilities.injectBudget`（同一取值单点
 //   `readCapability` + 同一热更快照读端 `readLiveConfig`）⇒ 两处输出**逐字一致**由结构保证，
@@ -174,6 +177,114 @@ export function buildGateTools(cx) {
         const viewOfLane = store.gateStatusMapOfBatch(sessionId, args.batchId);
         // 键序取 `batch.lanes`（与改前 `Object.keys(batch.lanes)` 逐字一致；不改用 map 自身键序）
         return { batchId: args.batchId, sessionId, lanes: Object.keys(batch.lanes).map((l) => viewOfLane[l]), ...extras };
+      },
+    }),
+  ];
+}
+
+/** `taskpack_for`（G-2 · 批 `punky-engine-core-deepdive-20261107` 方案乙）：**D 档任务包取件口**。
+ *
+ * ## 为什么需要它
+ * `spawn_teammate` 的参数面无 role 位（见本文件 `role_guide` 段注释）⇒ D 档（官方 Team 席位）
+ * **结构上无法自动注入**，闭环只能是「引擎给件 → Leader 取件拼装」。而在此之前**没有「整份任务包」
+ * 的取件口**：`role_guide` 只给三段，Leader 要自己拼「角色 + 目标 + 契约 + 产物 + 检查点 + 纪律」——
+ * 这正是本会话里 Leader 反复手写、且可能与 role 语料漂移的部分。
+ *
+ * ## 与 C 档的关系（**关键：同源，不复制**）
+ * 本工具**不自己拼任务包**，而是调 `composeWorkerPrompt`（引擎自派路径的**同一函数**）——
+ * 两个通道因此**必然逐字一致**，不会出现「引擎派的与 Leader 写的不同」的第二套口径。
+ *
+ * ## 与 C 档的两处差异（D 档固有，不是缺陷）
+ * · **`firstLine` 缺省**：引擎自派有 `lane_dispatch` 发的句柄首行；D 档靠 `spawn_teammate` 拉起，
+ *   没有句柄 ⇒ 传 `undefined`（`composeWorkerPrompt` 对该入参缺省有既有处理）。
+ * · **`leaderPrompt` 由调用方给**：C 档是 Leader 在建批/派发时写的任务要点；D 档取件时 Leader 手上
+ *   可能还没写完，故本工具接受**可选** `leaderPrompt`，未给则渲染缺省。
+ *
+ * ## 只读、零副作用
+ * 读批 JSON + 解析 role 语料 + 纯函数渲染；**不写盘、不改状态、不发射事件**。
+ * `injectBudget` / `archContext` 与 C 档**同源取值**（同一 `readCapability` + 同一 `renderArchContext`）。
+ */
+export function buildTaskpackTools(cx) {
+  const { ctx, deps, store } = cx;
+  const { resolveBatchSession } = deps;
+  return [
+    defineTool({
+      name: "taskpack_for",
+      description: "取某 lane 的**完整任务包**（D 档派发专用取件口）。从批次黑板读该 lane 的 role/cmd/契约/产物/检查点，调引擎自派路径的**同一渲染函数** `composeWorkerPrompt` 生成 ⇒ 与 C 档任务包逐字同源。返回 text（可直接作 `spawn_teammate` 的 prompt）与 fields（结构化核对用）。只读、零副作用。⚠ 若该 lane 尚无 `owner`/未派发，仍可取件（用于预演）；lane 不存在则报错。",
+      parameters: {
+        "batchId": { "type": "string", "required": true, "description": "批次 ID" },
+        "lane": { "type": "string", "required": true, "description": "lane id（须存在于该批 wavePlan）" },
+        "leaderPrompt": { "type": "string", "description": "Leader 的任务要点（可选；D 档取件时若已想好可一并传入，未给则渲染缺省）" },
+        "session": { "type": "string", "description": "批次归属会话（缺省=当前执行会话）" },
+      },
+      output: {
+        schema: {
+          "type": "object", "additionalProperties": false, "properties": {
+            "batchId": { "type": "string", "required": true },
+            "lane": { "type": "string", "required": true },
+            "role": { "type": "string", "required": true },
+            "layer": { "type": "string" },
+            "text": { "type": "string", "required": true },
+            "fields": { "type": "object", "additionalProperties": true, "required": true },
+          },
+        },
+        render: (_args, value) => TEXT_OUTPUT('taskpack_for ' + value.batchId + '/' + value.lane
+          + ' role=' + value.role + ' (' + String(value.text ?? '').split('\n').length + ' 行)'),
+      },
+      async execute(args, exec) {
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
+        const batchId = args?.batchId;
+        const lane = args?.lane;
+        if (typeof batchId !== 'string' || batchId.trim() === '') throw new Error('taskpack_for: `batchId` 必填');
+        if (typeof lane !== 'string' || lane.trim() === '') throw new Error('taskpack_for: `lane` 必填');
+        const b = store.readBatch(sessionId, batchId);
+        if (!b) throw new Error('taskpack_for: batch not found: ' + batchId);
+        // lane 定位：`wavePlan` 存的是 **wave 数组**（`[{wave, tasks:[…]}]`）⇒ 必须 flatMap
+        //   （踩过：直接读 `wavePlan.tasks` 恒空，任务包「目标」位会退化成「（未声明 cmd）」）。
+        const flat = (Array.isArray(b.wavePlan) ? b.wavePlan : [])
+          .flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
+        const laneTask = flat.find((t) => t && t.id === lane) ?? null;
+        if (!laneTask) {
+          throw new Error('taskpack_for: lane "' + lane + '" 不在批 ' + batchId
+            + ' 的 wavePlan 内（现有：' + flat.map((t) => String(t?.id)).join(' / ') + '）');
+        }
+        // role 解析走**单点**（`resolveRoleRef`）：对象直用 / id 串查语料库 / 零命中抛 `GATE_ROLE_UNRESOLVED`。
+        const roleData = resolveRoleRef(laneTask.role, { team: b.team ?? undefined });
+        // 【核心】调引擎自派路径的**同一函数** ⇒ 两通道逐字同源（本工具零模板、零拼装）。
+        const text = composeWorkerPrompt({
+          batchId, lane, cmd: laneTask.cmd, layer: laneTask.layer, role: roleData,
+          consume: laneTask.consume ?? [], produce: laneTask.produce ?? [], outputs: laneTask.outputs ?? [],
+          firstLine: undefined, // D 档无句柄（见上方注释）
+          leaderPrompt: typeof args?.leaderPrompt === 'string' ? args.leaderPrompt : '',
+          artifactsRoot: store.artifactsDirOf(sessionId, batchId),
+          batchSessionId: sessionId,
+          singleArtifactWrite: laneTask.singleArtifactWrite === true,
+          injectBudget: readCapability(readLiveConfig(deps), 'injectBudget'),
+          archContext: renderArchContext({ targets: laneTask.targets ?? null }),
+          preflight: laneTask.preflight ?? null,
+          checkpoints: laneTask.checkpoints ?? null,
+          resume: laneTask.resume === true,
+          logger: ctx?.logger ?? null,
+        });
+        return {
+          batchId, lane,
+          role: String(laneTask.role ?? ''),
+          layer: laneTask.layer ?? null,
+          text,
+          // 结构化面供核对（**不是**第二套渲染源：全由 laneTask 原样透出）
+          fields: {
+            cmd: laneTask.cmd ?? null,
+            consume: laneTask.consume ?? [],
+            produce: laneTask.produce ?? [],
+            outputs: laneTask.outputs ?? [],
+            hasCheckpoints: laneTask.checkpoints != null,
+            checkpoints: laneTask.checkpoints ?? null,
+            preflight: laneTask.preflight ?? null,
+            resume: laneTask.resume === true,
+            targets: laneTask.targets ?? null,
+            singleArtifactWrite: laneTask.singleArtifactWrite === true,
+          },
+        };
       },
     }),
   ];

@@ -43,11 +43,12 @@ const PKG = path.resolve(HERE, '..');
 //   ⚠ 口径 = **可调面**（`callableToolNamesOf(ctx)` = 声明 ∩ 实际注册面，宿主件豁免），
 //     不是「静态声明面」。实测三口径：声明 20 ／ 缺省可调 **19**（`log_export` 条件注册、`logs` 默认关）／
 //     `capabilities.logs.enabled=true` 可调 **20**（含）。⇒ 两态都要测（缺省态单独测会掩盖开关）。
+//     【2026-11-07 · G-2】+1 = `taskpack_for`（只读，kind=read ⇒ 进暴露族）⇒ 缺省 20 / 全开 21。
 const EXPECTED_EXPOSED_DECLARED = Object.freeze([
   'artifact_types', 'asset_claim', 'batch_control', 'batch_phase', 'batch_status',
   'batch_tasks_add', 'gate_status', 'handoff_accept', 'handoff_submit', 'handoff_view',
   'lane_checkpoint_status', 'list_agents', 'log_export', 'member_settle', 'member_set_status',
-  'role_guide', 'task_pool', 'task_update', 'wait_agent', 'wave_plan',
+  'role_guide', 'task_pool', 'task_update', 'taskpack_for', 'wait_agent', 'wave_plan',
 ]);
 const EXPECTED_EXPOSED_DEFAULT = Object.freeze(EXPECTED_EXPOSED_DECLARED.filter((n) => n !== 'log_export'));
 const EXPECTED_EXPOSED_LOGS_ON = Object.freeze([...EXPECTED_EXPOSED_DECLARED]);

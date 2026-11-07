@@ -59,7 +59,9 @@ assessC(store, 'sess-leader', { rationale: 'fixture：tools 套件建批前置�
 //   五名（31 → 26，展示位）；冻结名单 ≡ 实测注册集（集合式判据 = 下方 deepEqual）。
 //   ⚠ 本文件有**两处**列出工具名：本行冻结名单 ＋ `:66` 的逐名存在性循环 —— 两处同步删，
 //     否则 `:66` 会继续断言「已删工具存在」（自相矛盾用例）。
-const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_set_status', 'task_pool', 'batch_tasks_add', 'task_update', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
+// 【2026-11-07 · 批 `punky-engine-core-deepdive-20261107` · G-2】新增 `taskpack_for`（26 → 27）：
+//   D 档任务包取件口（只读，调 `composeWorkerPrompt` 与引擎自派路径同源）。
+const TOOL_NAMES = ['wave_plan', 'batch_phase', 'batch_control', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim', 'gate_status', 'role_guide', 'taskpack_for', 'lane_claim', 'lane_release', 'member_settle', 'handoff_submit', 'handoff_accept', 'handoff_view', 'lane_dispatch', 'swarm_report', 'swarm_cc', 'member_set_status', 'task_pool', 'batch_tasks_add', 'task_update', 'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint', 'lane_checkpoint_status'];
 const DEFAULT_TOOL_COUNT = TOOL_NAMES.length;
 
 test('all tools registered（缺省默认开面 ≡ 冻结名单 TOOL_NAMES，计数由派生常量核定）', () => {

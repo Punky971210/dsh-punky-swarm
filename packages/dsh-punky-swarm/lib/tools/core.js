@@ -56,7 +56,7 @@ import { warnAbortDangling, danglingLanesOf } from '../state/dangling.js';
 import { previewBatchControl } from '../engine/tree-control.js';
 
 import { buildWavePlanTools } from './wave-plan-tools.js';
-import { buildBatchStatusTools, buildGateTools, buildRoleGuideTools } from './query-tools.js';
+import { buildBatchStatusTools, buildGateTools, buildRoleGuideTools, buildTaskpackTools } from './query-tools.js';
 import { buildArtifactTools, buildAssetClaimTools } from './asset-tools.js';
 import { buildAssignTools } from './assign-tools.js';
 import { buildLaneTools, buildDispatchTools, buildMemberStatusTools } from './member-tools.js';
@@ -220,6 +220,9 @@ export function createCoreTools(ctx, deps) {
     ...buildAssetClaimTools(cx),
     ...buildGateTools(cx),
     ...buildRoleGuideTools(cx),
+    // 【G-2 · 批 `punky-engine-core-deepdive-20261107`】D 档任务包取件口（只读，零新依赖）：
+    //   调 `composeWorkerPrompt`（引擎自派路径同一函数）⇒ 两通道任务包逐字同源。
+    ...buildTaskpackTools(cx),
     ...buildLaneTools(cx),
     ...buildHandoffTools(cx),
     ...buildDispatchTools(cx),

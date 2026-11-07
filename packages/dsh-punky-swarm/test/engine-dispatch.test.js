@@ -494,7 +494,7 @@ const EXPECTED_GOVERNANCE_FACES = Object.freeze([
   'list_agents', 'log_export', 'member_settle', 'member_set_status',
   'role_guide', 'send_message', 'spawn_teammate', 'subagent',
   'subagent_fork', 'swarm_cc', 'swarm_report', 'task_pool',
-  'task_update', 'wait_agent', 'wave_plan',
+  'task_update', 'taskpack_for', 'wait_agent', 'wave_plan',
 ]);
 
 test('RO-1 L-AC-3：role 驱动任务级三段（裸标题行各 ≥1 ＋ 逐条命中 ＋ 结构隔离）', () => {

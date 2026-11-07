@@ -1395,7 +1395,7 @@
     "test/mcp-data-plane.test.js": {
       "asserts": 71,
       "blankLines": 42,
-      "lines": 479,
+      "lines": 480,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1923,7 +1923,7 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
-      "lines": 384,
+      "lines": 397,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1931,7 +1931,7 @@
     "test/tools.test.js": {
       "asserts": 133,
       "blankLines": 52,
-      "lines": 660,
+      "lines": 662,
       "tautologies": 0,
       "tests": 28,
       "todos": 0
@@ -2193,7 +2193,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-07T10:15:23Z",
+  "generatedAt": "2026-11-07T12:50:03Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2210,7 +2210,7 @@
     "asserts": 12418,
     "blankLines": 7021,
     "files": 274,
-    "lines": 73936,
+    "lines": 73952,
     "tautologies": 0,
     "tests": 2600,
     "todos": 0
