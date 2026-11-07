@@ -17,9 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // P1 交接门工具面（自 `lib/tools/core.js` **原样搬移**）：handoff_submit / handoff_view。
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { existsSync, statSync } from 'node:fs';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import * as EVT from '../state/event-types.js';
+// 【D-3 修复 · 批 `punky-engine-core-deepdive-20261107`】产物在场判据**同源单点**。
+//   原 `handoff_submit` 用 `existsSync`（仅判存在）、`handoff_view` 用 `statSync().isFile() && size>0`
+//   （第三套口径），而 entry / plan / exit 三门用 `presenceJudge`（形态二分 + 0 字节 + 空内容通道）
+//   ⇒ 三套判据对同一产物给出不同结论，其中最危险的是 **submit 说成功而门禁判缺**
+//   （0 字节产物实测 `HANDOFF_OK`，同批 `handoff_view` 报 missing）。
+//   现两处均改调 `presenceJudge`（`gates.ts:161` 唯一实现，`wave-plan.js:43` 亦从此导入）。
+//   ⇒ 随之删除本文件对 `node:fs` 的 `existsSync` / `statSync` 导入（不再使用）。
+import { presenceJudge, declaredKindOf } from '../state/gates.js';
 // 产物声明路径解析单点（WD-3b P7）：逃逸声明按「缺件 / 不可读」处理，不再探到根外
 import { resolveArtifactIn } from '../state/batch-paths.js';
 import * as lock from '../lock.js';
@@ -80,11 +87,25 @@ export function buildHandoffTools(cx) {
         if (!b) throw new Error('batch not found: ' + args.batchId);
         const artifacts = Array.isArray(args.artifacts) ? args.artifacts.filter((p) => typeof p === 'string' && p.trim().length > 0) : [];
         const assertions = Array.isArray(args.assertions) ? args.assertions.filter((a) => typeof a === 'string' && a.trim().length > 0) : [];
-        // 产物在场判定（判据同源：相对路径按批次产物根解析）——缺则拒 + 回显**缺哪件产物**（与 entry 门同判据）
+        // 产物在场判定（**判据同源 = `presenceJudge`**）——缺则拒 + 回显**缺哪件产物**（与 entry 门同判据）
         const dir = store.artifactsDirOf(sessionId, args.batchId);
-        // 逃逸声明 ⇒ 判缺（`resolveArtifactIn` throw），不再 existsSync 到根外
+        // 【D-3 修复 · 批 `punky-engine-core-deepdive-20261107`】
+        //   原实现 `!existsSync(resolveArtifactIn(dir, p))` **只判存在** ⇒ 0 字节文件、目录都能"提交成功"，
+        //   而 entry 门用 `presenceJudge` 会判缺 ⇒ **submit 说成了、下游取不到**（e2 探针 P-C 实测：
+        //   0 字节产物 `submit` 返回 HANDOFF_OK，同批 `handoff_view` 报 `plan/spec.md (missing)`）。
+        //   现逐件调 `presenceJudge({mode:'runtime'})` —— 与 entry / plan / exit 三门**同一函数实例**，
+        //   天然覆盖：形态二分（`/` 结尾=目录语义）、0 字节一律判缺、`empty-reason:` 唯一空内容通道、逃逸。
         const missingArtifacts = artifacts.filter((p) => {
-          try { return !existsSync(resolveArtifactIn(dir, p)); } catch { return true; }
+          let abs = null;
+          try { abs = resolveArtifactIn(dir, p); } catch { return true; } // 逃逸声明 ⇒ 判缺（不探根外）
+          const v = presenceJudge({
+            mode: 'runtime',
+            declared: [p],
+            declaredKind: declaredKindOf(p),
+            abs,
+            artifactsRoot: dir,
+          });
+          return !v.ok;
         });
         // 官方任务板回填位（M-6）**未启用**（2026-09-18 如实降级）：此处只把**调用方自填**的值原样透传给 store
         //   （引擎不写、不校验、不据以判定）；保留透传 = 不破既有调用方与 `store.recordHandoff` 形参面。
@@ -226,14 +247,22 @@ export function buildHandoffTools(cx) {
           // 产物在场判定与 entry 门**同判据**（同一解析规则 + 同一「文件且非空」语义）——下游据此判断**能不能稳定取件**
           const arts = (rec && Array.isArray(rec.artifacts)) ? rec.artifacts : [];
           const artifactViews = arts.map((p) => {
-            // 逃逸声明 ⇒ abs:null / readable:false（不探根外；R-4 声明期口径）
+            // 【D-3 修复 · 批 `punky-engine-core-deepdive-20261107`】判据同源 `presenceJudge`
+            //   （与 `handoff_submit` / entry 门**同一函数实例**）。
+            //   原实现 `st.isFile() && st.size > 0` 是第三套口径，与门禁在两种形态上分歧：
+            //     · 目录声明（`/` 结尾且非空）⇒ 门禁放行、此处报 `readable:false`（**反向假红**）；
+            //     · 空文件 + 合法 `empty-reason:` 行 ⇒ 门禁放行、此处也判可读（一致，无需改）。
+            //   统一后 `readable === presenceJudge(...).ok`，与门禁逐字同判。
             let abs = null;
-            let readable = false;
-            try {
-              abs = resolveArtifactIn(dir, p);
-              const st = statSync(abs); readable = st.isFile() && st.size > 0;
-            } catch { abs = null; readable = false; }
-            return { path: p, abs, readable };
+            try { abs = resolveArtifactIn(dir, p); } catch { abs = null; } // 逃逸声明 ⇒ 不探根外
+            const v = presenceJudge({
+              mode: 'runtime',
+              declared: [p],
+              declaredKind: declaredKindOf(p),
+              abs,
+              artifactsRoot: dir,
+            });
+            return { path: p, abs, readable: v.ok };
           });
           const s = rec ? String(rec.status ?? 'pending') : 'undeclared';
           return {
