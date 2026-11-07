@@ -31,7 +31,6 @@ acceptance_hints:
 tools:
   allow: [read, write, edit, glob, grep, pwsh, skill]
   deny_derived: true
-model_tier: worker
 skills: [video-team]
 discipline_refs: [C-05, C-06, C-09, C-10, C-11, C-12]
 ---

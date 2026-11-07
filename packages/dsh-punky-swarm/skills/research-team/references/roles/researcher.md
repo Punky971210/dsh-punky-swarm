@@ -31,7 +31,6 @@ acceptance_hints:
 tools:
   allow: [read, grep, glob, web_search, write, edit, skill]
   deny_derived: true
-model_tier: research
 skills: [research-team]
 discipline_refs: [9, 15]
 ---

@@ -728,6 +728,17 @@ export function renderPreflightBlock(preflight, { injectBudget = null } = {}) {
 export function renderRoleGuide(roleData) {
   const L = [];
   L.push(ROLE_SECTION_TITLES.responsibilities);
+  // 【2026-11-07 · role 注入修正（批 `punky-engine-core-deepdive-20261107` 后续）】
+  //   背景：role 正文的 `## Persona（注入用）` 段此前**只**流向宿主的 `request.persona`
+  //     （`personaOfRole` → `buildStartRequest().persona`），而本宿主是 **`activation` 形态**
+  //     ⇒ `request` **不承载 persona**（`provider-dsh/agent.js:455` 逐字「`request` **不含**
+  //     `toolFilter`/`persona`」）⇒ **该段实际送不进 worker**（`persona_text` 解析了却没用）。
+  //   修法：在**唯一真到达的通道**（任务包文本）补一行。只取 `persona_text`，**不重复** `title`
+  //     （已在头行 `roleCellOf`）与 `mission`（已在下一行）。
+  //   位置 = 职责段**首行**：它是一句话角色定位，比「使命」更上位。
+  //   ⚠ 本行**改变 C 档任务包字节**（用户已认可「C 档任务包可跟着变」）；`persona_text` 为空 ⇒ 零变化。
+  const personaText = typeof roleData?.persona_text === 'string' ? roleData.persona_text.trim() : '';
+  if (personaText) L.push('- **角色定位**：' + personaText);
   const mission = typeof roleData?.mission === 'string' ? roleData.mission.trim() : '';
   if (mission) L.push('- **使命**：' + mission);
   for (const r of listOf(roleData?.responsibilities)) L.push('- ' + r);

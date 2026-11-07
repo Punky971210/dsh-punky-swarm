@@ -28,7 +28,6 @@ acceptance_hints:
 tools:
   allow: [read, write, edit, glob, grep, pwsh, skill]
   deny_derived: true
-model_tier: worker
 skills: [software-team]
 discipline_refs: [0e, 0i, 10]
 ---

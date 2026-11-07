@@ -29,7 +29,6 @@ acceptance_hints:
 tools:
   allow: [read, glob, grep, write, edit, skill]
   deny_derived: true
-model_tier: research
 skills: [research-team, spec-writing]
 discipline_refs: [0c, 9, 14]
 ---
