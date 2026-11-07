@@ -665,10 +665,37 @@ function checkpointAuxLinesOf(it) {
  *   ③ 任一段非空 ⇒ 只出对应子行、**无**警示。既有正文行字节**不变**。 */
 export function renderCheckpointsBlock(checkpoints) {
   if (checkpoints == null) return '';
-  const items = Array.isArray(checkpoints?.items) ? checkpoints.items : [];
+  // ── 【jia2 · lane `e2-ckpt-msg`】形态容错 + 成因二分（判据源 `plan/acceptance.md` §方案 B / J-AC-6）──────
+  //   缺陷：旧实现只取 `checkpoints?.items`；本函数入参既可能是归一口径的 `{items:[…]}`，也可能是
+  //     **原始声明形态**（`composeWorkerPrompt` 直传 `task.checkpoints`，历史批里存在裸数组）⇒ `items` 恒空
+  //     ⇒ 误报「缺 `id` / `id` 重复 / `target` 为绝对路径」三因（对合法裸数组**一条都不成立**，真实成因是形态未归一）。
+  //   修法（C2 单点复用）：`null` 之外的入参先过归一单点 `normalizeCheckpoints`（`lib/wave-plan.js`）——
+  //     `{items:[…]}` 幂等早退原样返回、裸数组逐项归一、内部零 throw ⇒ 裸数组与等价 `{items:[…]}` 输出**逐字节相同**。
+  //   ⚠ **禁**在本文件另写一份逐项归一（`seen.has` / `isAbsPath` / 自建 items 循环）：抄一份就有一份漂移面。
+  let declared = null;
+  try {
+    declared = normalizeCheckpoints(checkpoints);
+  } catch {
+    // 归一单点自身零 throw；此处兜底 ⇒ 按「无项可归一」降级。**绝不向上抛**：渲染抛错会传染 lane failed。
+    declared = null;
+  }
+  const items = Array.isArray(declared?.items) ? declared.items : [];
   if (items.length === 0) {
-    return '## checkpoint 计划\n'
-      + '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（缺 `id` / `id` 重复 / `target` 为绝对路径的项会被丢弃）'
+    // 成因二分（J-AC-6 子项 3/4）：
+    //   ① 原始**没有任何可归一项**（`[]` / 非数组非 `{items:[…]}` 形态）⇒ 文案**不得**列三因；
+    //   ② 声明了对象项但**全在归一中被丢弃**（缺 `id` / `id` 重复 / `target` 为绝对路径）⇒ 文案**必须**列三因。
+    //   判「是否声明过可归一的项」只**数候选、不归一**（归一仍归 `normalizeCheckpoints` 单点），且零 throw。
+    const discardedAll = (() => {
+      try {
+        return Array.isArray(checkpoints)
+          && checkpoints.some((it) => it != null && typeof it === 'object' && !Array.isArray(it));
+      } catch {
+        return false; // 读值异常 ⇒ 归成因①（不宣称「项被丢弃」= 不误报三因）
+      }
+    })();
+    return '## checkpoint 计划\n' + (discardedAll
+      ? '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（成因②：声明了项，但全部在归一化中被丢弃 —— 缺 `id` / `id` 重复 / `target` 为绝对路径的项会被丢弃）'
+      : '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（成因①：原始没有任何可归一的一项 —— 声明为空，或形态既非数组也非 `{items:[…]}`）')
       + ' ⇒ 本 lane 无 checkpoint 计划；如需留痕请自行调用 `lane_checkpoint`。';
   }
   const lines = ['## checkpoint 计划'];
@@ -692,6 +719,14 @@ export function renderCheckpointsBlock(checkpoints) {
   }
   return lines.join('\n');
 }
+
+// 【jia2 · lane `e2-ckpt-msg`】归一单点复用（C2 / J-AC-6 子项 7）：只 `import`，禁在本文件另写一份归一。
+//   ⚠ 位置刻意贴在本函数段之后（`renderPreflightBlock` 之前）：J-AC-8 子项 2 要求 `git diff -U0` 的每个 hunk
+//   新行号落在 `renderCheckpointsBlock` 段内（段 = 本函数起行 ~ 下一个 `^export ` 起行），与 J-AC-6 子项 7
+//   「必须 import `normalizeCheckpoints`」叠加后，只有这一处位置能同时满足两条判据。
+//   ESM `import` 声明在模块顶层任意位置均被提升 ⇒ 语义与置于文件头等价；与文件末尾
+//   `export { mailboxRootOf } from '../mailbox-paths.js'` 同属「非首位模块语句」的既有用法。
+import { normalizeCheckpoints } from '../wave-plan.js';
 
 export function renderPreflightBlock(preflight, { injectBudget = null } = {}) {
   let text;

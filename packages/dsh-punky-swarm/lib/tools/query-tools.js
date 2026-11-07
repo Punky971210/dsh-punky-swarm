@@ -53,10 +53,10 @@ export function buildBatchStatusTools(cx) {
   return [
     defineTool({
       name: "batch_status",
-      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。",
-      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
+      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。读面裁剪参数 view ∈ summary|active|full，**缺省 full**（不裁剪，返回体与不传该参数时逐字一致）：active 只裁 wavePlan（只保留 status 不属于 merged/failed/skipped 的 lane 对应任务；过滤后为空的波条目丢弃、wave 序号不重编号），lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/managerRoster/recentEvents 一律不动；summary 本批等价 full（不引入第三语义）；非法值（空串 / 大小写不符 / 非字符串等）回落 full 且不抛错。生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源；view 仅作用于单批投影（多批列表读面不含 wavePlan）。",
+      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"view":{"type":"json","description":"读面裁剪视图，三枚举 summary|active|full，**缺省 full**（不裁剪：返回体与不传该参数时逐字一致，零回归）。active 只裁 wavePlan —— 只保留 status 不属于 merged/failed/skipped 的 lane 对应任务（任务 id 不在 lanes 表内视为非终态、保留），过滤后为空的波条目丢弃、wave 序号不重编号；lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/managerRoster/recentEvents 一律不动。summary 本批等价 full（不引入第三语义）。**非法值回落 full 且不抛错**（空串 / 大小写不符 / null / 数字 / 对象等），生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源。view 仅作用于单批投影（多批列表读面不含 wavePlan，故其返回体不回显 viewApplied）。"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"managerRoster":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"managerRoster":{"type":"object","additionalProperties":true},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
         // 【task-27】渲染面**必须**显示门态与成员态来源（缺省关是策略、不得隐形；P2-B 两字段由此获得消费者）：
         //   `state=engine(legacy)`（引擎八态为 legacy 投影，真源 = 官方 roster 5 态）
         //   `handoffGate=entry:on/settle:on(src:runtime|env|default)`
@@ -131,7 +131,27 @@ export function buildBatchStatusTools(cx) {
         //   两键为**观察级**：不参与任何门禁判定、不落事件（事件分级按 E-1 裁决留在原判据，见 wave-plan-tools 同注）。
         const managerView = managerViewOf(ctx, exec, b);
         const managerSeatFace = managerSeatFaceOf(b, managerView.roster);
-        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: b.wavePlan, ...(b.manager ? { manager: b.manager } : {}), managerRoster: { ...managerView, source: 'engine-registry', ...managerSeatFace }, ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b) };
+        // ── 读面裁剪（`view`）：**唯一**裁剪分支，且只裁 `wavePlan`（J-AC-2/3/4/5）
+        //   ⚠ 参数面**故意**声明为 `type:'json'`（编译后 = 纯注解 schema，无 type / enum 约束）：若声明
+        //     `string` + `enum`，框架 `defineTool` 的 `validateArgs`（`@deepseek-ai/dsh-tools`）会在进入本函数
+        //     **之前**对非法值抛 `ToolArgsError(INVALID_ARGS)`（实测 `'actve'`/`''`/`'FULL'`/`null`/`42` 全部如此）
+        //     ⇒ 与「非法值回落 full、不抛错」的裁决直接冲突。故值域裁决权留在本函数，`viewApplied` 只回显**生效值**。
+        const VIEW_TERMINAL = new Set(['merged', 'failed', 'skipped']);
+        // 生效值域只有两档：`summary` 本批无第三语义 ⇒ 等价 full（不新增语义面）；其余任何非法值同样回落 full。
+        const viewAppliedOf = (requested) => (requested === 'active' ? 'active' : 'full');
+        // `wavePlan` 是**波数组** `[{wave,tasks:[…]}]`（不是平铺 task 数组 —— 误读 `wavePlan.tasks` 会恒空）：
+        //   · 终态判定只认「lane 表里的原态」；任务 id 不在 lanes 表内 ⇒ 视为非终态（fail-open，保留信息）
+        //   · 过滤后 `tasks` 为空的波条目**丢弃**（不留 `{wave,tasks:[]}` 空壳）；`wave` 序号**不重编号**
+        //   · 保留任务是原序列的**子序列**（顺序不变、字段值不被裁剪侧改写）
+        const wavePlanOf = (batch, applied) => {
+          if (applied !== 'active') return batch.wavePlan;   // full：原样返回（与改动前逐字相等，零回归）
+          const keepTask = (t) => !VIEW_TERMINAL.has(batch?.lanes?.[t?.id]);
+          return (Array.isArray(batch.wavePlan) ? batch.wavePlan : [])
+            .map((w) => ({ ...w, tasks: (Array.isArray(w?.tasks) ? w.tasks : []).filter(keepTask) }))
+            .filter((w) => w.tasks.length > 0);
+        };
+        const viewApplied = viewAppliedOf(args.view);
+        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(b.manager ? { manager: b.manager } : {}), managerRoster: { ...managerView, source: 'engine-registry', ...managerSeatFace }, ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied };
       },
     }),
   ];
