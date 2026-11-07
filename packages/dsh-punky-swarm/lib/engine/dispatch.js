@@ -1537,14 +1537,46 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
 //   · **B 档**：`subagent`/`subagent_fork` **一律放行**（单步调研/单步派发，无 lane 绑定）；
 //   · **A 档**：由既有门禁 3 拒（本函数不重复判）；
 //   · **C 档**：须携带**有效 lane 句柄**（`lane_dispatch` 发放；一次性 + TTL）。
-// 落地形态 = `config.dispatch.gate`：`'warn'`（缺省，**只留痕告警不拦**）。
+// 落地形态 = `config.dispatch.gate`：**已无「生效档」选择**——恒为「只留痕告警不拦」。
 // **`'enforce'` 拒态已删**（勿回加）—— 原码
 //   `subagent`/`subagent_fork`（`dsh-experimental-agent-team-profile/cordis.patch.yml:10-14`）
 //   ⇒ 闸门拦的工具在官方场景不存在。现语义 = **只留痕不拦**（`evaluateTierCDispatch` 恒 `ok:true`
-//   + `warnNote`）；`readGateMode` 保留（配置面仍在，供审计/热更观测，不再决定拦截）。
+//   + `warnNote`）。
+// 【B-7 修复 · 批 `punky-engine-core-deepdive-20261107` · 用户裁决 Q-3=甲】两档分离：
+//   · `readGateMode` = **生效档**，恒 `'warn'`（不再原样回显配置里的 `enforce` —— 那会让审计读成
+//     「enforce 已开且放行」，与「拒态已删」的事实相反）；
+//   · `configuredGateMode` = **配置面原值**，供审计/热更观测，**不参与任何判定**。
+//   原实现把这两件事压进一个返回值，是「配置面撒谎」的根因。
 export function readGateMode(config) {
+  // 【B-7 修复 · 批 `punky-engine-core-deepdive-20261107` · 用户裁决 Q-3=甲】**返回生效档，不再原样回显配置原值**。
+  //
+  // ## 原缺陷
+  // 原实现 `const m = config?.dispatch?.gate; return m === 'enforce' ? 'enforce' : 'warn';`
+  //   —— 把配置面写的 `enforce` **照抄**进返回值，随后 `evaluateTierCDispatch` 又把它回显进
+  //   `mode` 与 `warnNote`（“mode=enforce，留痕不拦”）⇒ **审计读成「enforce 已开且放行」**，
+  //   与事实相反：该档的拒态**已随码删除**（见下方 `:1541-1544` 历史段，逐字「勿回加」）。
+  //   这是典型的「配置面撒谎」：值存在、语义已废，读端无从分辨。
+  //
+  // ## 现口径
+  // 生效档恒为 `'warn'` —— 这是**实际在跑**的档，审计读到它不会误判「已拦截」。
+  //   需要「配置里写了什么」的读端，一律用 `configuredGateMode`（见下），**两者严格分开**，
+  //   防再次出现「把配置原值当生效档」。
+  //
+  // ## 为什么不再 `return m === 'enforce' ? … : …`
+  // 因为就**语义**而言已不存在两个档：`enforce` 的拦截动作被删，留 `enforce` 这个名字只会误导。
+  //   用户裁决原文：`'enforce'` 拒态已删（**勿回加**）。
+  return 'warn';
+}
+
+/** 配置面原值（**仅供观测 / 诊断 / 热更回显，不参与任何判定**）。
+ *
+ *  与 `readGateMode`（生效档）**严格分开**的两个函数 —— 原缺陷正是把「配置原值」当成了「生效档」。
+ *  `null` 表示配置未写该字段（此时生效档同样为 `'warn'`）。
+ *  ⚠ **禁止**用本函数的值做任何分支判定（那会把废弃档重新变成活路径）。
+ */
+export function configuredGateMode(config) {
   const m = config?.dispatch?.gate;
-  return m === 'enforce' ? 'enforce' : 'warn';
+  return typeof m === 'string' && m.length > 0 ? m : null;
 }
 
 // ── D 阶段：成员侧套件通信（`swarm_report` → Leader / `swarm_cc` → Manager） ─────────
@@ -1628,17 +1660,21 @@ export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inb
  */
 export function evaluateTierCDispatch({ tier, toolName, argsText, config, handleCheck }) {
   const mode = readGateMode(config);
+  // 【B-7 修复】`configuredMode` = 配置面原值（观测用，**不参与判定**）；`mode` = 生效档（恒 warn）。
+  //   两者并列返回，读端一眼能分辨「配了什么」与「实际怎么跑」，不再互相冒充。
+  const configuredMode = configuredGateMode(config);
   const isDispatchTool = toolName === 'subagent' || toolName === 'subagent_fork';
   if (!isDispatchTool || tier !== 'C') {
-    return { applies: false, ok: true, mode, handleReason: null, denyReason: null, warnNote: null };
+    return { applies: false, ok: true, mode, configuredMode, handleReason: null, denyReason: null, warnNote: null };
   }
   const r = typeof handleCheck === 'function' ? handleCheck(argsText) : { ok: false, reason: 'no-handle-check' };
-  if (r.ok) return { applies: true, ok: true, mode, handleReason: null, denyReason: null, warnNote: null };
+  if (r.ok) return { applies: true, ok: true, mode, configuredMode, handleReason: null, denyReason: null, warnNote: null };
   const handleReason = r.reason ?? 'invalid-handle';
   return {
-    applies: true, ok: true, mode, handleReason, denyReason: null,
-    warnNote: 'dispatch without valid lane handle under tier C（mode=' + mode
-      + '，留痕不拦；原 enforce 拒态已随码删除）'
+    applies: true, ok: true, mode, configuredMode, handleReason, denyReason: null,
+    warnNote: 'dispatch without valid lane handle under tier C（生效档=' + mode
+      + (configuredMode === null ? '' : '，配置写的是 ' + configuredMode)
+      + '；留痕不拦，`enforce` 拒态已随码删除且**勿回加**）'
       + ' · tool=' + toolName + ' · handle=' + handleReason
       + ' —— 仍建议：先 `lane_dispatch({ batchId, lane })` 取句柄并把 `firstLine` 写入子代理任务包首行。',
   };

@@ -615,6 +615,60 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     }
   }
 
+  /** 【U-3 修复 · 批 `punky-engine-core-deepdive-20261107`】`handoffs` 防篡改守卫（与 `assertWavePlanImmutable` 对等）。
+   *
+   * ## 为什么需要（缺口事实）
+   * `wavePlan` 有 IMM-0..5 全套护栏，而 `batch.handoffs` **一条没有**（全仓 `handoffs.*immutab` 零命中）。
+   * 手改批 JSON 把 `handoffs[to][i].status` 改成 `'submitted'`（并补 `artifacts` / `contract.assertions`）
+   * 即可让**两道门同时放行**：
+   *   · entry 门 —— 对入边并集逐条判（`gates/handoff.js` + `helpers.js`）；
+   *   · settle 出口门 —— `gates/handoff.js:82-90` 遍历 `Object.values(map)` 的**全部**记录找 `rec.from === lane`，
+   *     ⇒ **一条**伪造记录即同时满足「下游 ∀」与「上游 ∃」。两门共用判定单点 `handoffRecordVerdict`，
+   *     盲区也单点共享。
+   * 且 5 个旁路面都不会发现：`handoff_view` 走同一单点、`replay-verify` 只折 `member.settled`/`batch.phase`、
+   * 事件流全仓仅 2 条注释写明「读端真源 = `batch.handoffs`，不做事件流重建」、IMM 不覆盖、手改不改 `__rev` 故 CAS 不冲突。
+   *
+   * ## 判据（与 IMM-4 同构，fail-closed）
+   * `handoffs` 的 **status 或条目集合**发生变化 ⇒ **本次 commit 的追加段**必须出现
+   * `lane.handoff` 或 `plan.mutated` 事件。
+   * 正常写路径（`recordHandoff` / `recordHandoffAccept` / `plan-mutate`）**自身都落事件** ⇒ 天然满足，
+   * 故**不需要白名单**（白名单会把「合法路径」与「手改」混为一谈）。
+   *
+   * ## 为什么用 `slice(prev.events.length)`
+   * 判「**本次新增**」而非「全量里有没有」—— 历史批遗留的 `lane.handoff` 会让后者永远通过（假绿），
+   * 与 IMM-4 在 `:601-615` 的处理完全一致。
+   */
+  function assertHandoffsIntegrity(sessionId, batchId, batch) {
+    const prev = cx.readBatch(sessionId, batchId); // 纯读：不写盘、不改调用方对象
+    if (!prev || typeof prev !== 'object') return; // 建批豁免（盘上无该批）/ 损坏批
+    const sigOf = (b) => {
+      const map = b?.handoffs;
+      if (map === null || typeof map !== 'object') return null; // 存量批无 handoffs 字段 ⇒ 不判
+      const rows = [];
+      for (const to of Object.keys(map)) {
+        const list = Array.isArray(map[to]) ? map[to] : [];
+        for (const r of list) {
+          if (!r || typeof r.from !== 'string') continue; // 畸形条目不进判据面（形态校验归各写入口）
+          rows.push(to + '\u0000' + r.from + '\u0000' + String(r.status ?? ''));
+        }
+      }
+      rows.sort();
+      return rows.join('\u0001');
+    };
+    const prevSig = sigOf(prev);
+    const nextSig = sigOf(batch);
+    if (prevSig === nextSig) return; // 未变（含两侧同为 null 的存量批）
+    const before = Array.isArray(prev.events) ? prev.events.length : 0;
+    const trailed = (Array.isArray(batch.events) ? batch.events : []).slice(before);
+    const hasTrace = trailed.some((e) => e
+      && (e.type === EVT.EVT_LANE_HANDOFF || e.type === EVT.EVT_PLAN_MUTATED));
+    if (!hasTrace) {
+      throw new Error('[handoffs-integrity] batch=' + batchId
+        + ' handoffs 的 status 或条目集合发生变化，但本次 commit 追加段**无** `lane.handoff` / `plan.mutated` 留痕'
+        + ' ⇒ 疑似手改批 JSON 伪造交接状态（正常写路径自带事件；本守卫与 IMM 同属写前拒，拒则零落盘）');
+    }
+  }
+
   // 批次 JSON 的**统一落盘点**（单写者真源）：凡以 `batchFile(sessionId, batchId)` 定位的写路径
   //   一律经此函数落盘 ⇒ 写面单点不分散。
   //   ⚠ **订正（L7 / lane `e1-l7-atomic`，直读实测）**：本注释原称「与 `lane_claim` 的单写者锁构成
@@ -686,6 +740,10 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     //   三条位置纪律由本行位置即成立：CAS 之后（冲突零副作用）／`stampGateLaneSnapshot` 之前／
     //   `atomicWrite` 之前（写前拒绝 ⇒ IMM-5「拒则零落盘」）。判据与拒绝形态见本函数上方整段注释。
     assertWavePlanImmutable(sessionId, batchId, batch);
+    // 【U-3 修复 · 批 `punky-engine-core-deepdive-20261107`】`handoffs` 防篡改守卫，与上方 IMM 对等。
+    //   位置纪律同 IMM（三条缺一不可）：CAS 之后（冲突零副作用）／`stampGateLaneSnapshot` 之前／
+    //   `atomicWrite` 之前（写前拒绝 ⇒ 拒则零落盘）。判据与拒绝形态见上方 `assertHandoffsIntegrity` 注释段。
+    assertHandoffsIntegrity(sessionId, batchId, batch);
     // I-26（`e3-deny`）：**零副作用拒写**的写前校验 —— 位置即在 `atomicWrite` 之前（CAS 之后、快照之前）。
     //   抛出 ⇒ 本次零落盘（尚未写 tmp、尚未 rename）；判定与拒绝形态见本函数上方整段注释。
     assertBatchWriteAllowed(sessionId, batchId, batch, { action: 'commit' });

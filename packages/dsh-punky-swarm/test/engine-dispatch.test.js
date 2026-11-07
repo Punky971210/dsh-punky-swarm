@@ -30,7 +30,7 @@ import {
   laneBindingOf, mailboxRootOf, REPORT_CHANNEL,
 } from '../lib/engine/dispatch.js';
 import { __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, evaluateTierCDispatch, readGateMode } from '../lib/engine/dispatch.js';
+import { SUITE_DENY_TOOLS, labelOf, composeWorkerPrompt, buildStartRequest, mapSpawnError, evaluateTierCDispatch, readGateMode, configuredGateMode } from '../lib/engine/dispatch.js';
 // 【2026-10-07 · P2（批 role-injection-refactor-20261006 / lane e02-inject）】role 数据面注入面的读端。
 // 【2026-10-08 · 本批 role-deliverable-inject-fix-20261008 / lane e01-impl】补 `ROLE_MANDATORY_FIELDS`（R-1 判据面）
 //   与 `roleCorpusRoot`（L-AC-9 的仓库面扫描起点）。
@@ -199,14 +199,21 @@ test('P5 createAgentPort：仅当可用入口可调用才算可用（成因走�
 
 // ── G：C 阶段派发面门禁（软启用；纯函数判定） ──
 test('G1 缺省 warn：C 档无句柄 ⇒ 不拦、只留痕告警（防自锁）', () => {
+  // 【B-7 修复 · 批 `punky-engine-core-deepdive-20261107` · 用户裁决 Q-3=甲】
+  //   原断言钉死 `readGateMode({gate:'enforce'}) === 'enforce'`（「mode 仍回显配置面事实」）。
+  //   现口径：`readGateMode` 返回**生效档**（恒 warn，因为 enforce 拒态已随码删除），
+  //   配置面原值改由 `configuredGateMode` 单独提供 ⇒ 两者不再互相冒充。
   assert.equal(readGateMode({}), 'warn');
-  assert.equal(readGateMode({ dispatch: { gate: 'enforce' } }), 'enforce');
-  assert.equal(readGateMode({ dispatch: { gate: '别的东西' } }), 'warn', '非法值回落 warn（宁松不锁）');
+  assert.equal(readGateMode({ dispatch: { gate: 'enforce' } }), 'warn', '生效档恒 warn（enforce 拒态已删，勿回显成已生效）');
+  assert.equal(readGateMode({ dispatch: { gate: '别的东西' } }), 'warn', '非法值同样落 warn（宁松不锁）');
+  assert.equal(configuredGateMode({}), null, '配置未写 ⇒ null');
+  assert.equal(configuredGateMode({ dispatch: { gate: 'enforce' } }), 'enforce', '配置原值由本函数如实回报（观测用，不参与判定）');
+  assert.equal(configuredGateMode({ dispatch: { gate: '别的东西' } }), '别的东西', '配置原值不洗白（观测面要说真话）');
   const dec = evaluateTierCDispatch({ tier: 'C', toolName: 'subagent', argsText: '普通任务包（无句柄）', config: {}, handleCheck: () => ({ ok: false, reason: 'no-handle' }) });
   assert.equal(dec.applies, true);
   assert.equal(dec.ok, true);
   assert.equal(dec.denyReason, null);
-  assert.ok(dec.warnNote.includes('mode=warn') && dec.warnNote.includes('no-handle'));
+  assert.ok(dec.warnNote.includes('生效档=warn') && dec.warnNote.includes('no-handle'));
 });
 
 // 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**翻转**：原用例「G2 enforce ⇒ 拒
@@ -216,7 +223,8 @@ test('G2 语义变迁（B 项）：enforce 档下 C 档无句柄 ⇒ **不再拒
   const dec = evaluateTierCDispatch({ tier: 'C', toolName: 'subagent_fork', argsText: '', config: { dispatch: { gate: 'enforce' } }, handleCheck: () => ({ ok: false, reason: 'handle-expired' }) });
   assert.equal(dec.ok, true, '拒态已随码删除 ⇒ 恒放行');
   assert.equal(dec.denyReason, null, 'denyReason 恒 null（结构保留，读端零漂移）');
-  assert.equal(dec.mode, 'enforce', 'mode 仍回显配置面事实（审计/热更可观测）');
+  assert.equal(dec.mode, 'warn', '生效档恒 warn（B-7：不再把废弃的 enforce 回显成已生效）');
+  assert.equal(dec.configuredMode, 'enforce', '配置原值独立回显（观测/热更可观测，不冒充生效档）');
   assert.ok(dec.warnNote.includes('lane_dispatch({ batchId, lane })') && dec.warnNote.includes('firstLine'), '留痕文案须给可照抄范式');
   assert.ok(dec.warnNote.includes('handle-expired'), '须回显句柄判据');
 });

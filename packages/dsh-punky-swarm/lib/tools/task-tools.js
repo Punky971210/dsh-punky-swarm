@@ -18,7 +18,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 公共池任务面工具（自 `lib/tools/core.js` **原样搬移**）：task_pool / batch_tasks_add / task_update。
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
-import { assertModeActive, ownerOfExec } from './tier-gate.js';
+import { assertModeActive, ownerOfExec, readLiveConfig } from './tier-gate.js';
+// 【D-12 修复 · 批 punky-engine-core-deepdive-20261107】改图路径的交接门策略必须与 `wave_plan` 建批面
+//   **同源解析**：原实现在 `plan-mutate.js` 里调 `buildWavePlan` 只传 4 参 ⇒ 回落
+//   `handoffGateEnabledOf({}, 'entry')`（**空配置**）⇒ 改图路径的交接声明校验与真实 `runtime.json` 脱钩。
+import { handoffGateEnabledOf } from '../wave-plan.js';
 import { isMemberTerminal } from '../schema.js'; // N1-R4-1a：公共池「上游是否已结算」判据（终态单一真源，勿另写）
 
 // ── 池判据单点（K1 公共池）：`task_pool` 工具面与只读 HTTP 投影（`/batch.pool`）**共用本函数** ──
@@ -114,6 +118,8 @@ export function buildTaskTools(cx) {
         const b = store.addPoolTasks(sessionId, args.batchId, list, {
           reason: args.reason ?? null,
           author: ownerOfExec(exec),
+          // 【D-12】与 `wave_plan` 建批面同源：从热更快照解析（runtime.json `gates.handoff.entry` > env > 缺省关）
+          handoffGate: handoffGateEnabledOf(readLiveConfig(deps), 'entry'),
         });
         return {
           batchId: args.batchId,
@@ -150,6 +156,8 @@ export function buildTaskTools(cx) {
         const b = store.addTaskEdges(sessionId, args.batchId, list, {
           reason: args.reason ?? null,
           author: ownerOfExec(exec),
+          // 【D-12】同 `batch_tasks_add`：改图路径的交接门策略与建批面同源解析
+          handoffGate: handoffGateEnabledOf(readLiveConfig(deps), 'entry'),
         });
         return {
           batchId: args.batchId,

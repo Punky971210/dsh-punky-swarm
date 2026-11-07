@@ -20,6 +20,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   依赖方向单向：`store.js`（组合器）→ 本文件，本文件不反向 import 组合器。
 
 import * as EVT from '../event-types.js';
+// 【D-2 修复 · 批 `punky-engine-core-deepdive-20261107`】终态判据单点（与 `handoff-accept.js` 同源）：
+//   原 `recordHandoff` **无任何终态校验**，而 `commitBatch` 的终态门只拦「相位改写」（`store.js` 的
+//   `assertBatchWriteAllowed`），不拦「写 handoffs」⇒ `batch_phase(aborted)` 之后仍可 `handoff_submit`
+//   成功（实测返回 `HANDOFF_OK` 且 `status` 由 pending 变 submitted）。同一批里 `handoff_accept` 有
+//   S-e 终态拒而 submit 没有 —— 这是不对称的漏面，本条补齐。
+import * as schema from '../../schema.js';
 
 export function buildHandoff(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
@@ -93,6 +99,14 @@ export function buildHandoff(cx) {
   function recordHandoff(sessionId, batchId, { from, to, artifacts, assertions, officialTaskId = null, overwrite = false, caller = null } = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
+    // 【D-2 修复 · 批 `punky-engine-core-deepdive-20261107`】终态前置：批已终态 ⇒ 拒（**先于任何写入**，零副作用）。
+    //   与 `handoff-accept.js:96-99` 的 S-e **同码同纪律**（原 submit 侧漏了这道前置，造成不对称）。
+    //   ⚠ 此处**不走下方 `fail()`**：`fail()` 会 `commitBatch` 落 `lane.handoff.gap` 事件，而终态批的
+    //   commit 会被 `assertBatchWriteAllowed` 拒 ⇒ 必须用 `throw`（拒则零落盘，与 I-26 同纪律）。
+    if (schema.isBatchTerminal(batch.phase)) {
+      throw new Error('GATE_BATCH_TERMINAL: batch ' + batchId + ' is ' + batch.phase
+        + ' (terminal); handoff submit rejected（终态批不再接受交接提交）');
+    }
     // 拒态留痕统一入口：`write !== false` ⇒ 落既有缺口事件 `lane.handoff.gap`（R1-c 要求：拒态非静默）；
     //   `write === false` ⇒ **零写入**（R-1④「拒时零写入」：批 JSON 与事件流均无新增）。
     const fail = (problems, missing, { code = HANDOFF_MISSING, callerRole = null, write = true } = {}) => {

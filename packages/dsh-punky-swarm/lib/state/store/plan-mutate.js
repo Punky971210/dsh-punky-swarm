@@ -44,7 +44,7 @@ export function buildPlanMutate(cx) {
   //      （本批 `p1-spec -> e2-g10` 即因此被终验误判为手改注入；实为本次播种，见 `exec/g10-toolface/progress/01`）。
   //      `planRevision` 递增与拒态语义**一字未动**（只增一个只读载荷键）。
   //   ④ 判据与建批期**同源**：归一化走 `buildWavePlan`、分层/环检测走 `topoWaves`（不另写一份判据）。
-  function addPoolTasks(sessionId, batchId, incoming, { reason = null, author = null } = {}) {
+  function addPoolTasks(sessionId, batchId, incoming, { reason = null, author = null, handoffGate = undefined, hostRoster = [] } = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
     if (schema.isBatchTerminal(batch.phase)) {
@@ -90,8 +90,16 @@ export function buildPlanMutate(cx) {
     }
     const baseTasks = (batch.wavePlan ?? []).flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []));
     const merged = [...baseTasks, ...list.map((t) => ({ ...t, id: String(t.id).trim() }))];
+    // 【D-12 修复 · 批 punky-engine-core-deepdive-20261107】配置透传：与 `wave_plan` 建批面同源。
+    //   原实现只传 4 参（batchId/tasks/team/concurrency）⇒ `wave-plan.js` 的 `checkHandoffDeclarations`
+    //   回落 `opts.handoffGate ?? handoffGateEnabledOf({}, 'entry')` 即**空配置** ⇒ 改图路径的交接门
+    //   与真实 `runtime.json` 脱钩；`smoke` 未传会让 smoke 批的豁免失效；`hostRoster` 未传会让 F-8
+    //   的未知席位告警基准退化（这两项 `wave-plan-tools.js:110` 都是传的）。
     const plan = buildWavePlan({
       batchId, tasks: merged, team: batch.team, concurrency: batch.concurrency ?? 5,
+      smoke: batch.smoke === true,
+      ...(handoffGate === undefined ? {} : { handoffGate }),
+      hostRoster: Array.isArray(hostRoster) ? hostRoster : [],
     });
     const lanes = { ...batch.lanes };
     const handoffs = { ...(batch.handoffs ?? {}) };
@@ -140,7 +148,7 @@ export function buildPlanMutate(cx) {
   //   `validateLayerContract`，判据与建批期同源）+ handoffs 按新 `deps` 补 `pending` 交条件
   //   （**保留既有条目状态**——禁重建丢档）+ `plan.mutated` 留痕（带 `edges`）+ `planRevision+1`。
   // 只增不删：**不提供删边**——删边会毁掉既有交接声明与下游已消费的事实，属「重算」，撞 K1 红线。
-  function addTaskEdges(sessionId, batchId, edges, { reason = null, author = null } = {}) {
+  function addTaskEdges(sessionId, batchId, edges, { reason = null, author = null, handoffGate = undefined, hostRoster = [] } = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId + ' @' + sessionId);
     if (schema.isBatchTerminal(batch.phase)) {
@@ -222,8 +230,13 @@ export function buildPlanMutate(cx) {
       return { ...t, deps: [...old, ...hit.fresh] }; // 只增不删：旧边保持在先
     });
     // 重归一化 + 重跑建批期校验（判据同源；`checkHandoffDeclarations` 在 `buildWavePlan` 内部先于 `topoWaves`）。
+    // 【D-12 修复 · 批 punky-engine-core-deepdive-20261107】同 `addPoolTasks`：补 `smoke` / `handoffGate` / `hostRoster`
+    //   三项透传，否则改图路径的交接门读空配置、smoke 豁免失效、F-8 席位基准退化。
     const plan = buildWavePlan({
       batchId, tasks: merged, team: batch.team, concurrency: batch.concurrency ?? 5,
+      smoke: batch.smoke === true,
+      ...(handoffGate === undefined ? {} : { handoffGate }),
+      hostRoster: Array.isArray(hostRoster) ? hostRoster : [],
     });
     const handoffs = { ...batch.handoffs };
     const ts = new Date().toISOString();
@@ -233,14 +246,41 @@ export function buildPlanMutate(cx) {
       const after = merged.find((t) => t.id === p.id);
       const deps = (Array.isArray(after?.deps) ? after.deps : []).filter((d) => typeof d === 'string' && d);
       const prev = Array.isArray(handoffs[p.id]) ? handoffs[p.id] : [];
-      const byFrom = new Map();
-      for (const r of prev) if (r && typeof r.from === 'string') byFrom.set(r.from, r);
-      // 保留既有条目（**不重建丢状态**）；新入边补 `pending` 条（与建批期种子同形态）。
-      handoffs[p.id] = deps.map((from) => byFrom.get(from) ?? {
-        from, to: p.id, batch: batchId, step: null,
-        artifacts: [], contract: { consumedFrom: from, assertions: [] },
-        status: 'pending', ts, officialTaskId: null,
-      });
+      // 【D-1 修复 · 批 punky-engine-core-deepdive-20261107】既有条目**全量保留**，再按 deps 补新入边。
+      //
+      // 原实现 `handoffs[p.id] = deps.map((from) => byFrom.get(from) ?? {…种子…})` 的缺陷：
+      //   新数组**只由 `deps` 生成** ⇒ `from ∉ deps` 的既有条目整条消失。
+      //   而 `handoff_accept` 声明的净收紧边（`source:'accept'`，见 handoff-accept.js:85）
+      //   其 `from` **永不写入 deps** ⇒ 每次 `task_update` 加边都会静默丢弃它，导致：
+      //     ① 下游少等一条上游；② 上游出口门的 downstream 集合同步少一条 ⇒ 该门零感知
+      //     （gates/handoff.js:60-71）⇒ G-10 的「净收紧」被静默回退；
+      //     ③ 若该边已提交过交接，其 `status:'submitted'` 记录一并消失（读端真源就是 handoffs）。
+      // 旧行内注释「保留既有条目（不重建丢状态）」的作用域**只在 `from ∈ deps`**，极易误读为「不丢任何条目」。
+      const retain = [];
+      const seenFrom = new Set();
+      for (const r of prev) {
+        // 既有条目原样保留（status / artifacts / contract / source / acceptedBy 一律不动）
+        retain.push(r);
+        if (r && typeof r.from === 'string') seenFrom.add(r.from);
+      }
+      for (const from of deps) {
+        if (seenFrom.has(from)) continue; // 既有 deps 条目已在上一步保留
+        retain.push({
+          from, to: p.id, batch: batchId, step: null,
+          artifacts: [], contract: { consumedFrom: from, assertions: [] },
+          status: 'pending', ts, officialTaskId: null,
+        });
+      }
+      // 【不变量守护 · fail-closed】净收紧边（`source:'accept'`）必须全量保留。
+      //   可达构造：若实现退化成「只由 deps 生成」，accept 计数会从 N 掉到 0 ⇒ 本行抛错。
+      //   （不用「静默记录 dropped 字段」的形态：恒空的字段是假判据，违反「判据必须有可达构造」。）
+      const acceptBefore = prev.filter((r) => r && r.source === 'accept').length;
+      const acceptAfter = retain.filter((r) => r && r.source === 'accept').length;
+      if (acceptAfter !== acceptBefore) {
+        throw new Error('task edge rejected: 净收紧边（source=accept）被丢弃 '
+          + acceptBefore + '→' + acceptAfter + '（lane=' + p.id + '）；这是计划图不变量，不可静默回退');
+      }
+      handoffs[p.id] = retain;
       edgesLog.push({ id: p.id, add: p.fresh });
     }
     const revision = (batch.planRevision ?? 0) + 1;
