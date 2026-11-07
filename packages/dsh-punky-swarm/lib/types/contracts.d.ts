@@ -68,6 +68,22 @@ export interface WavePlanTaskInput {
     roster?: string | null;
     /** 开工前必做 · 四段声明（可选；归一化恒写、零 throw、不进 `sig`/`cmd`、不回写 `skills`）。 */
     preflight?: PreflightDecl;
+    /** 【批 `ctx-fidelity-bing-20261108`】**项目上下文**（本 lane 执行时必须知道的背景：本域既有约定 /
+     *  历史坑与已踩过的坑 / 当前进度与已完成面 / 边界禁令）。**渲染进任务包正文**（`## 项目上下文`），
+     *  让成员拿到的「任务特有信息」不再只有 `cmd` 一句话。
+     *  **与既有三个注入位的边界**（不重叠，禁合并）：
+     *   · `cmd` = **做什么**（任务目标本身，进 `sig`）；
+     *   · `leaderPrompt` = Leader 对**本次派发**的补充要点（落 `## 任务要点`，不进批次 JSON）；
+     *   · `preflight` = **开工前查什么库/技能/MCP/检查表**（动作清单）；
+     *   · 本字段 = **背景知识**（为什么要这样做 / 哪些坑已经踩过）。
+     *  归一化**恒写**（缺省 / 非字符串 / 空 / 纯空白 ⇒ `null`，与 `targetsMarker` / `roster` 同风格：
+     *  落 `null` 不落 `undefined`）；非空 ⇒ `trim()` 原样保留。
+     *  ⚠ **不进 `sig`**（`computeTaskSig` 哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移）；
+     *  ⚠ **不进 `cmd`**、**不回写 `skills`**（第五条渲染通道，与装配声明 / role 三段 / preflight 并存）；
+     *  ⚠ 归一化**零 throw**（全软：形态不合法只降级，不拒建批、不打任何门禁码）。
+     *  ⚠ IMM-2/3 兼容性：本字段**恒写 `null`** 使旧批（盘上无此键）重归一化后仍与旧值相等
+     *  （`JSON.stringify(undefined ?? null)` === `JSON.stringify(null)`）⇒ 不会触发「字段被改写」拒。 */
+    context?: string | null;
     /** 【批 `punky-type-assert-purge-20261103`】任务包计划清单（**复数**）。
      *  ⚠ 与上方 **`checkpoint`（单数）** 语义**完全不同**、互不影响：
      *    · `checkpoint`（单数）= **resume 契约**：lane **总步数上界**（供 `overBudgetOf` 判超界），fail-closed；
@@ -144,6 +160,12 @@ export interface WavePlanTask {
      *  ⚠ **不进 `sig`**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
      *  **不回写 `skills`**（D3：第三条渲染通道，与装配声明并存不合并）。 */
     preflight: PreflightDecl | null;
+    /** 项目上下文（**归一化恒写**：缺省/非字符串/空/纯空白 ⇒ `null`，与 `targetsMarker`/`roster` 同风格
+     *  不落 `undefined`；非空 ⇒ `trim()` 原样保留）。渲染进任务包正文 `## 项目上下文`。
+     *  ⚠ **不进 `sig`**（`computeTaskSig` 输入面逐字不变 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
+     *  **不回写 `skills`**（第五条渲染通道，与装配声明 / role 三段 / preflight 并存不合并）。
+     *  ⚠ IMM-2/3：恒写 `null` 使旧批重归一化后仍与旧值相等（`undefined ?? null` ≡ `null`）⇒ 不触发误拒。 */
+    context: string | null;
     /** sig 任务内容指纹（N3-②）：`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))` 前 **16 hex**
      *  （用户 D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息；D-sig-3 = 16 hex）。
      *  写端 `lib/wave-plan.ts`（`buildWavePlan` = **唯一计算入口**；`addPoolTasks`/`addTaskEdges` 经同一次重归一化

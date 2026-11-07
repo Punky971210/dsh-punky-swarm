@@ -281,6 +281,9 @@ export function buildTaskpackTools(cx) {
           singleArtifactWrite: laneTask.singleArtifactWrite === true,
           injectBudget: readCapability(readLiveConfig(deps), 'injectBudget'),
           archContext: renderArchContext({ targets: laneTask.targets ?? null }),
+          // 【批 `ctx-fidelity-bing-20261108`】项目上下文：D 档取件口与 C 档自派**同源**（同调
+          //   `composeWorkerPrompt`）⇒ 本参数必须一并透传，否则同一 lane 在两档的任务包会不一致。
+          context: laneTask.context ?? null,
           preflight: laneTask.preflight ?? null,
           checkpoints: laneTask.checkpoints ?? null,
           resume: laneTask.resume === true,
@@ -299,6 +302,8 @@ export function buildTaskpackTools(cx) {
             outputs: laneTask.outputs ?? [],
             hasCheckpoints: laneTask.checkpoints != null,
             checkpoints: laneTask.checkpoints ?? null,
+            // 项目上下文也进结构化核对面（与 `text` 同源透出，非第二套渲染）
+            context: laneTask.context ?? null,
             preflight: laneTask.preflight ?? null,
             resume: laneTask.resume === true,
             targets: laneTask.targets ?? null,

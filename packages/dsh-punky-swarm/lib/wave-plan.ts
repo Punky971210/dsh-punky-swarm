@@ -1406,6 +1406,21 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
         //   **不回写 `skills`**（D3：第三条渲染通道，与装配声明 `[skills=…]` / role 三段并存不合并）。
         //   ⚠ 归一化**零 throw**（全软）：形态不合法只降级，不拒建批、不打任何门禁码。
         preflight: normalizePreflight(t.preflight),
+        // 【批 `ctx-fidelity-bing-20261108`】**项目上下文**（本 lane 执行时须知的背景知识）。
+        //   归一化**恒写**（缺省/非字符串/空/纯空白 ⇒ `null`，与 `targetsMarker`/`roster` 同风格）。
+        //   ⚠ **不进 `sig`**（下方哈希输入面逐字不含本字段 ⇒ 既有 sig 基线零漂移）、**不进 `cmd`**、
+        //     **不回写 `skills`**（第五条渲染通道，与装配声明 / role 三段 / preflight 并存不合并）。
+        //   ⚠ IMM-2/3 兼容：**恒写 `null`** 是关键 —— 旧批盘上无此键（`p.context === undefined`），
+        //     重归一化后 `n.context === null`，而 guard 的 `same()` 是 `JSON.stringify(a ?? null)` 比较
+        //     ⇒ `"null" === "null"` 成立 ⇒ 不触发「字段被改写」拒。若改成「缺省不写键」同样安全，
+        //     但恒写能让读端少一个 `undefined` 分支（与 roster 同款取舍）。
+        //   ⚠ 归一化**零 throw**（全软）：形态不合法只降级，不拒建批、不打任何门禁码。
+        context: (() => {
+          const raw = t.context;
+          if (typeof raw !== 'string') return null;
+          const s = raw.trim();
+          return s.length > 0 ? s : null;
+        })(),
         // sig 任务内容指纹（N3-②）：**唯一计算入口**。两条分支（顺序即语义）：
         //   ① **已派发即冻结**（`owner` 非空，K1 内容冻结的结构推论）：读旧值原样落盘，**不重算**
         //      ——本分支只对「持久形态入参」（`addPoolTasks`/`addTaskEdges` 以落盘 wavePlan 重归一化）

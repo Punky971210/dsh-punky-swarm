@@ -865,6 +865,13 @@ export function composeWorkerPrompt({
   //   不是只写在字段里）。四段**不加注入预算**（E4-K10：本批不登记 checkpoint 段的新预算面 ⇒
   //   `renderCheckpointsBlock` 内不得出现任何 `applyInjectionBudget` 调用）。
   checkpoints = null,
+  // 【批 `ctx-fidelity-bing-20261108`】**项目上下文**（`WavePlanTask.context` 的渲染面）。
+  //   取值 = 该 lane 的 `WavePlanTask.context`（建批归一化恒写：未声明落 `null`）。
+  //   缺省 `null` / 空串 ⇒ **零 push**（既有任务包逐字节不变，存量批零感知）。
+  //   与既有注入位的边界：`cmd` = 做什么；`preflight` = 开工前查什么；本段 = **背景知识**
+  //   （本域既有约定 / 历史坑 / 当前进度面 / 边界禁令）——「成员该知道但没人告诉过它」的那部分。
+  //   位置 = `archContext` 之后、`## 开工前必做` 之前（两者同属「背景」类，排在动作清单之前）。
+  context = null,
   // 【ckpt-wire · 批 `punky-checkpoint-wire-20261106` · lane `e1-resume`】A 通道：`resume` 契约条款开关
   //   （取值面 = `WavePlanTask.resume`，建批恒写、缺省 `false`；见 `types/contracts.ts:142`、
   //   `wave-plan.ts:1386`）。缺省 `false` ⇒ **不 push 任何行** ⇒ 任务包与改动前**逐字节相同**
@@ -937,6 +944,20 @@ export function composeWorkerPrompt({
   if (typeof archContextBudget === 'string' && archContextBudget.length > 0) {
     L.push('');
     L.push(archContextBudget);
+  }
+  // ── 【批 `ctx-fidelity-bing-20261108`】`## 项目上下文` 段 ────────────────────────────────────
+  //   位置 = **archContext 段之后、`## 开工前必做` 段之前**：两者同属「背景知识」类（谁定的规矩 /
+  //   为什么这样做），而 preflight 是「开工动作」⇒ 背景在前、动作在后。
+  //   缺省 `null` ⇒ 不 push ⇒ 既有任务包**逐字节不变**（存量批海量，给缺省加空段会污染全部派发）。
+  //   受单条目注入预算（面名 `taskpack.context`，与 `cmd` / `leaderPrompt` / `archContext` 同构：
+  //   未超限 ⇒ 原值零省略）。
+  const contextBudget = budgeted && typeof context === 'string' && context.length > 0
+    ? applyInjectionBudget(context, { surface: 'taskpack.context', thresholds: injectBudget, kind: 'perItem' }).text
+    : context;
+  if (typeof contextBudget === 'string' && contextBudget.length > 0) {
+    L.push('');
+    L.push('## 项目上下文');
+    L.push(contextBudget);
   }
   // ── 【P0-1】`## 开工前必做` 段：位置 = **archContext 段之后、`## 纪律` 之前** ──────────────────
   //   位置理由：开工动作清单紧贴纪律段 = 成员「动手前最后读到的内容」（同时满足「角色/目标之后、纪律之前」）。
@@ -1390,6 +1411,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   取值 = 该 lane 的 `WavePlanTask.preflight`（建批归一化恒写：未声明落 `null`）⇒ 未声明即走警示行。
     //   接线约束：`preflight` **不进** `cmd` / **不进** `sig` / **不回写** `skills`（D3 三通道并存）。
     preflight: laneTask?.preflight ?? null,
+    // 【批 `ctx-fidelity-bing-20261108`】项目上下文：该 lane 的背景知识（本域既有约定 / 历史坑 /
+    //   当前进度面 / 边界禁令）。取值面 = `WavePlanTask.context`（建批归一化恒写：未声明落 `null`）
+    //   ⇒ 未声明即零 push、任务包逐字节不变。接线约束同 `preflight`：**不进 `cmd`**、**不进 `sig`**、
+    //   **不回写 `skills`**（第五条渲染通道，与装配声明 / role 三段 / preflight 并存不合并）。
+    context: laneTask?.context ?? null,
     // 【pk-impl】checkpoint 计划清单（缺省 `null` ⇒ 任务包零感知，不新增任何文本段）。
     checkpoints: laneTask?.checkpoints ?? null,
     // 【ckpt-wire · A 通道】`WavePlanTask.resume`（建批恒写、缺省 `false`）⇒ 任务包注入 `RESUME_CLAUSE`。
