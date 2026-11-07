@@ -228,7 +228,15 @@ async function runMain() {
   }
   const { createStore } = await import(pathToFileURL(path.join(entryBase, 'state', 'store.js')).href);
   const sink = await import(pathToFileURL(path.join(entryBase, 'auditlog', 'sink.js')).href);
-  const dispatch = await import(pathToFileURL(path.join(entryBase, 'engine', 'dispatch.js')).href);
+  // 【2026-11-07 修 · 假红】原取 `dispatch.subagentRuntimeProbeOf` —— 该符号已从 `lib/**` **删除**
+  //   （`lib/engine/dispatch.js:1075`/`:1085` 注释明示「零剩余消费者」；成因判定已搬进 provider，
+  //    见 `lib/provider-dsh/agent.js:183`）⇒ 冒烟引用已删符号，H-07 恒红（假红）。
+  //   改取 **provider 侧功能面读数** `createAgentPort(ctx).canNarrow(ask)`：
+  //     · 它按设计**不暴露宿主形态**（`agent.js:188`「是哪一形态仍不外泄」）⇒ 不能再断言 `form`；
+  //     · 但两种形态在「能否收窄」上是**真读数不同**（`start` 形态恒可收窄；`activation` 形态
+  //       无 preset 见证 ⇒ 不可收窄），而这正是 H-07 主判据（activation 形态 ⇒ 拒派）的**同一机制**
+  //       ⇒ 阳性对照与主判据同源，比原来的「形态字符串比对」更强（不依赖内部形态值）。
+  const agentMod = await import(pathToFileURL(path.join(entryBase, 'provider-dsh', 'agent.js')).href);
   const tierGate = await import(pathToFileURL(path.join(entryBase, 'tools', 'tier-gate.js')).href);
 
   const store = createStore(engineRoot);
@@ -253,7 +261,9 @@ async function runMain() {
   const sm = {
     repoRoot: REPO_ROOT, isoRoot, engineRoot, session, runTag, ledger,
     realHome, deployEntry, repoEntry, entryPath, mod, store, sink,
-    dispatchProbe: dispatch.subagentRuntimeProbeOf,
+    // H-07 的形态探针：返回**布尔**（能否收窄），不返回内部形态值（provider 不外泄 form）。
+    //   `{start}` 宿主 ⇒ true；`{startActivation}` 宿主（无 preset 见证）⇒ false。
+    dispatchProbe: (ctx) => agentMod.createAgentPort(ctx).canNarrow({ toolFace: { deny: ['__smoke_probe__'] } }),
     noLive: args.noLive, allowStaleBuild: args.allowStaleBuild, guardDeep: true,
     beforeGuard, productionBefore,
     deadPid: findDeadPid(),

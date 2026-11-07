@@ -35,8 +35,29 @@ const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toL
 //   订正已登记进 `exec/change-host-smoke.md`「规格输入前提订正」段，供 a1 复核。
 //   【G3 B1 删 5 件后重钉】**裸配置 26 / patch 全开 27**（差集仍恰 = `log_export`）；取数命令见
 //     `exec/e3-impl.md` §⑨（`createTools` 裸 `{}` vs `{capabilities:{logs:{enabled:true}}}` 两次实测）。
+//
+// 【2026-11-07 · 假绿实证 → 计数之上加「集合身份」层】
+//   实证：工具**换名**（`member_status` → `member_set_status`）后总数不变 ⇒ 只靠计数的判据对该类漂移
+//   **失明**；该漂移当时只被下面的枚举取值**偶然**抓到（取不到值 ⇒ 非数组才红）。
+//   ⇒ 在计数之外**加一层集合身份**：期望集从 `test/tools.test.js` 的冻结名单 `TOOL_NAMES` **派生**
+//   （全仓唯一权威；`tool-descriptor` / `tool-face-ledger` 同源），不手抄。
+//   两个计数常量**保留**（既有交叉校验件 `judging-toolcount` / `housekeeping-h2` 引用它们做真源自洽）。
+//   两层并存：计数先失败快定位，集合再兜住「换名 / 增 / 删」三类漂移（后者计数抓不到）。
+const LOG_TOOLS_EXTRA = ['log_export']; // patch 全开相对裸配置的唯一增量（差集判据见下）
 const EXPECTED_TOOLS_BARE = 26;
 const EXPECTED_TOOLS_FULL = 27;
+
+/** 冻结名单（唯一权威 = `test/tools.test.js` 的 `TOOL_NAMES`）。派生而非手抄 ⇒ 双源不一致即红。 */
+function frozenToolNames(repoRoot) {
+  const p = path.join(repoRoot, 'test', 'tools.test.js');
+  expect(fs.existsSync(p), '阳性对照失败：冻结名单定义点不存在（' + p + '）');
+  const src = fs.readFileSync(p, 'utf8');
+  const m = src.match(/const TOOL_NAMES\s*=\s*\[([\s\S]*?)\]/);
+  expect(Boolean(m), '阳性对照失败：test/tools.test.js 未找到 `const TOOL_NAMES = [...]`（冻结名单定义点）');
+  const names = [...m[1].matchAll(/'([a-z][a-z0-9_]*)'/g)].map((x) => x[1]);
+  expect(names.length > 0, '阳性对照失败：冻结名单解析为空（正则与写法不符）');
+  return names;
+}
 
 /** H-01 部署面载入（§D-1.1-2：**读部署面，不读仓内路径**）。SKIP-able。 */
 function h01(sm) {
@@ -100,7 +121,7 @@ async function h02(sm) {
     + before.total + '→' + after.total;
 }
 
-/** H-03 工具注册面：两档真值 = 本文件 :36-37 的 EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL，差集恰 = log_export；member_status 枚举不含 idle。 */
+/** H-03 工具注册面：两档真值 = 本文件 :36-37 的 EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL，差集恰 = log_export；member_set_status 枚举不含 idle。 */
 function h03(sm) {
   const bare = sm.mount({}, { subagents: { start: async () => ({ result: Promise.resolve({}) }) } });
   const namesBare = bare.registered.map((t) => t?.name).filter(Boolean);
@@ -115,24 +136,44 @@ function h03(sm) {
 
   expect(new Set(namesBare).size === namesBare.length, '裸配置工具名重复：' + namesBare.join(','));
   expect(new Set(namesFull).size === namesFull.length, 'patch 全开工具名重复：' + namesFull.join(','));
+  // ── 第一层：计数（快速失败，沿用两个真源常量；既有交叉校验件也引用它们）──────────────
   expect(namesBare.length === EXPECTED_TOOLS_BARE,
     '裸配置工具数 = ' + namesBare.length + '，期望 ' + EXPECTED_TOOLS_BARE + '（工具注册面漂移）：' + namesBare.slice().sort().join(','));
   expect(namesFull.length === EXPECTED_TOOLS_FULL,
     'patch 全开工具数 = ' + namesFull.length + '，期望 ' + EXPECTED_TOOLS_FULL + '：' + namesFull.slice().sort().join(','));
+  // ── 第二层：集合身份（**换名**这类「数量不变」的漂移只有这一层抓得住）──────────────
+  //   期望集从冻结名单派生（`frozenToolNames`）；差异双向点名（缺 / 多），便于定位。
+  const frozen = frozenToolNames(sm.repoRoot).sort();
+  const frozenFull = [...frozen, ...LOG_TOOLS_EXTRA].sort();
+  const missingOf = (got, want) => want.filter((n) => !got.includes(n));
+  const extraOf = (got, want) => got.filter((n) => !want.includes(n));
+  const bareSorted = namesBare.slice().sort();
+  const fullSorted = namesFull.slice().sort();
+  expect(JSON.stringify(bareSorted) === JSON.stringify(frozen),
+    '裸配置工具名集 ≠ 冻结名单 TOOL_NAMES（test/tools.test.js）'
+    + '｜缺=' + JSON.stringify(missingOf(bareSorted, frozen))
+    + '｜多=' + JSON.stringify(extraOf(bareSorted, frozen)));
+  expect(JSON.stringify(fullSorted) === JSON.stringify(frozenFull),
+    'patch 全开工具名集 ≠ 冻结名单 + [' + LOG_TOOLS_EXTRA.join(',') + ']'
+    + '｜缺=' + JSON.stringify(missingOf(fullSorted, frozenFull))
+    + '｜多=' + JSON.stringify(extraOf(fullSorted, frozenFull)));
   const onlyFull = namesFull.filter((n) => !namesBare.includes(n)).sort();
   const onlyBare = namesBare.filter((n) => !namesFull.includes(n)).sort();
   expect(onlyFull.length === 1 && onlyFull[0] === 'log_export',
     '两次装载的名字差集 ≠ [log_export]：仅全开=' + JSON.stringify(onlyFull) + ' 仅裸=' + JSON.stringify(onlyBare));
   // ── 阴性对照：log_export 在裸配置里**必须**缺席（证明该开关是真开关，不是恒在）──
   expect(!namesBare.includes('log_export'), '阴性对照失败：裸配置里也注册了 log_export（能力开关失效）');
-  const enumOf = toolsFull.get('member_status')?.parameters?.properties?.status?.enum;
-  expect(Array.isArray(enumOf), 'member_status.parameters.properties.status.enum 不是数组：' + JSON.stringify(enumOf));
+  // 【2026-11-07 修 · 假红】工具名早已从 `member_status` 改为 `member_set_status`（实测 `lib/**` 旧名
+  //   **0 命中**、新名 **35 命中**），本行仍用旧名 ⇒ 恒取 `undefined` ⇒ 本项恒红（假红）。
+  //   现对齐真实工具名；旧名残留只在本冒烟自身的真值表里，与引擎实现无关。
+  const enumOf = toolsFull.get('member_set_status')?.parameters?.properties?.status?.enum;
+  expect(Array.isArray(enumOf), 'member_set_status.parameters.properties.status.enum 不是数组：' + JSON.stringify(enumOf));
   expect(JSON.stringify(enumOf) === JSON.stringify(['pending', 'running', 'review']),
-    'member_status.status 闭集 = ' + JSON.stringify(enumOf) + '，期望 ["pending","running","review"]（idle 被放回枚举？）');
+    'member_set_status.status 闭集 = ' + JSON.stringify(enumOf) + '，期望 ["pending","running","review"]（idle 被放回枚举？）');
   // ── 阴性对照：`idle` 必须**不在**闭集里（它就是本项要防的漂移）──
-  expect(!enumOf.includes('idle'), '阴性对照失败：`idle` 出现在 member_status.status 闭集里');
+  expect(!enumOf.includes('idle'), '阴性对照失败：`idle` 出现在 member_set_status.status 闭集里');
   return '裸配置 ' + namesBare.length + ' / patch 全开 ' + namesFull.length + ' · 差集=' + JSON.stringify(onlyFull)
-    + ' · member_status.status=' + JSON.stringify(enumOf);
+    + ' · member_set_status.status=' + JSON.stringify(enumOf);
 }
 
 /** H-04 真实 home 守卫面指纹逐字相同 + 写盘台账全在隔离根之下 + 生产面零 runTag。 */
@@ -173,7 +214,7 @@ export function buildK(sm) {
   return [
     { id: 'H-01', title: '部署面载入（realpath ≡ 仓根 / 两侧 version / 入口 sha）· SKIP-able', run: () => h01(sm) },
     { id: 'H-02', title: 'apply() 真实装载 + 卸载幂等（零装载期 warn / handle 回基线）', run: () => h02(sm) },
-    { id: 'H-03', title: '工具注册面（钉 HEAD 基线 · 两档真值 = EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL）+ 差集 = log_export + member_status 枚举', run: () => h03(sm) },
+    { id: 'H-03', title: '工具注册面（钉 HEAD 基线 · 两档真值 = EXPECTED_TOOLS_BARE / EXPECTED_TOOLS_FULL）+ 差集 = log_export + member_set_status 枚举', run: () => h03(sm) },
     { id: 'H-04', title: '真实 home 守卫面零漂移 + 台账全在隔离根 + 生产面零 runTag', run: () => h04(sm) },
   ];
 }

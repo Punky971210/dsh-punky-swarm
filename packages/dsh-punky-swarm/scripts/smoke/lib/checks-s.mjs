@@ -90,11 +90,15 @@ async function h06(sm) {
 
 /** H-07 `startActivation` 形态宿主 ⇒ 拒派 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` + **三零**。 */
 async function h07(sm) {
-  // ── 阳性对照：探针单点必须能分辨两种宿主形态（否则「拒派」无从归因）──
+  // ── 阳性对照：探针必须能区分两种宿主形态的**收窄能力**（否则「拒派」无从归因）──
+  //   【2026-11-07 修】原断言比对内部形态字符串 `form==='start'|'activation'` —— 该读数已随
+  //   `subagentRuntimeProbeOf` 删除而不外泄（provider 有意不暴露宿主形态，见 agent.js:188）。
+  //   改为读**功能面**：两种形态在 `canNarrow` 上真读数不同，而这正是主判据「activation 形态拒派」
+  //   的同一机制 ⇒ 阳性对照与主判据同源（不再依赖内部实现细节，也不因形态值改名而假红）。
   const probeStart = sm.dispatchProbe({ subagents: { start() {} } });
   const probeActivation = sm.dispatchProbe({ subagents: { startActivation() {} } });
-  expect(probeStart.form === 'start', '阳性对照失败：`{start}` 形态未被探针识别（实得 form=' + probeStart.form + '）');
-  expect(probeActivation.form === 'activation', '阳性对照失败：`{startActivation}` 形态未被探针识别（实得 form=' + probeActivation.form + '）');
+  expect(probeStart === true, '阳性对照失败：`{start}` 形态应可收窄（canNarrow=true），实得 ' + String(probeStart));
+  expect(probeActivation === false, '阳性对照失败：`{startActivation}` 形态无 preset 见证应不可收窄（canNarrow=false），实得 ' + String(probeActivation));
 
   const mount = sm.mount({}, { subagents: { startActivation: () => ({}) } });
   try {
@@ -104,9 +108,18 @@ async function h07(sm) {
     await wavePlan.execute({ batchId: sm.h07BatchId, tasks, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' }, session: sm.session });    const before = sm.batchOf(sm.h07BatchId);
     expect(before && before.lanes.e1 === 'pending', '阳性对照失败：' + sm.h07BatchId + '.e1 初始态不是 pending');
 
-    const msg = await expectThrow(
-      () => mount.tools.get('lane_dispatch').execute({ batchId: sm.h07BatchId, lane: 'e1', session: sm.session }),
-      /GATE_DISPATCH_CAPABILITY_UNAVAILABLE/, 'H-07 startActivation 形态拒派');
+    // 【2026-11-07 修 · 假红②】拒派语义已从 **throw 改为返回**（D-1 批 `punky-d1d2-impl-20261103`
+    //   「统一返回形状 · 方案乙」；见 `lib/engine/dispatch.js:1234` 与 `rejectedOf()`（:1240）——
+    //   该路径手写字段、无 token/firstLine/ttlMs，因为「无句柄」是事实而拒派本就打在状态变更之前）。
+    //   原断言用 `expectThrow(...)` 期望**抛错** ⇒ 实现改为**返回**后本项**恒红**（假红）。
+    //   改断言**返回形状**：mode='rejected' + code + spawned=false + status='pending' + 文案含「状态变更之前」。
+    const r = await mount.tools.get('lane_dispatch').execute({ batchId: sm.h07BatchId, lane: 'e1', session: sm.session });
+    expect(r && r.mode === 'rejected',
+      'H-07 startActivation 形态应拒派（返回 mode=rejected），实得 ' + JSON.stringify(r).slice(0, 300));
+    expect(r.code === 'GATE_DISPATCH_CAPABILITY_UNAVAILABLE', 'H-07 拒派码不符：' + String(r?.code));
+    expect(r.spawned === false, 'H-07 拒派却宣称已派发（spawned=' + String(r?.spawned) + '）');
+    expect(r.status === 'pending', 'H-07 拒派回显 lane 态非 pending：' + String(r?.status));
+    const msg = String(r.spawnNote ?? '');
 
     const after = sm.batchOf(sm.h07BatchId);
     // 三零：① lane 仍 pending ② 零 member.dispatch 事件 ③ 批相位不变（并加严：零新增事件）
