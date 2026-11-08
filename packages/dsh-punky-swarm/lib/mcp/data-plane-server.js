@@ -15,30 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// MCP 数据面（JSON-RPC 2.0 over HTTP；**协议版本钉 `2025-06-18`**）。
-//
-// 定位：**薄包装**。本模块只做四件事 —— ① JSON-RPC 帧解/编；② `tools/list` 从注册表视图派生；
-//   ③ `tools/call` **原样透传** `arguments`；④ loopback 校验 + 结果/错误分层映射。
-//
-// **它不是判据层**（C1 硬边界，见包 §2.6）：
-//   · 对 `state/store`、`state/gates` **零 import**；
-//   · 零判据/策略码（门禁、工具黑名单、模式门、结算资格一律不在此判定）；
-//   · 不缓存批状态、不自建 guard、不重试含语义判定。
-//
-// 为什么「唯一派发点」必须是宿主工具运行时：
-//   宿主 `ToolRuntime` 的派发链固定经过 `tools/pre-execute` 水位与 `guardReason` 复核
-//   ⇒ 难度门禁与「写族来源守卫」**必然生效**；若在此直调某个工具对象，两条防线都会被绕开。
-//   故本文件只有**一处**工具派发调用（见下方 handler 内的唯一调用行），且它必须走宿主运行时。
 import { sendJson } from '../json-response.js';
 import { createToolsPort, createHttpPort } from '../provider-dsh/tools-http.js';
 import { SUITE_TOOLS } from '../engine/suite.js';
-// M1（批 `punky-qa-fix-m1m2-2026-10-31`）：宿主工具口径**单点**下沉到 `lib/governance/host-tools.js`
-//   —— 本地不再手写名单（第二份名单 = 漂移源）。本文件只消费：
-//   · `HOST_INTERSECT_EXEMPT` = **求交豁免策略子集**（`:83` 处真正需要的语义，见该处注释）；
-//   · `HOST_PROVIDED_TOOLS` 仅作为**同名导出再抛**，保持既有外部导出面不破（语义已变：现在是 7 件事实集）。
 import { HOST_INTERSECT_EXEMPT } from '../governance/host-tools.js';
 
-/** 协议版本（钉死；`2026-07-28` 起的「无握手」形态不在本实现范围）。 */
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
 
 /** 服务器自述（`initialize` 回包用）。 */
@@ -271,16 +252,6 @@ export function installMcpDataPlane(ctx, deps = {}) {
     return sendJson(res, 200, out);
   };
 
-  // 宿主无 webServer 服务 ⇒ **本面不装是正常形态**（CLI / stdio 部署没有 webServer 法定面），
-  //   不是异常：故此处**不发 warn**（`debug` 留痕即可，避免让下游用日志过滤去消化合法形态的噪声），
-  //   也不抛（不可把「本面未挂载」升级成「整块工具面装配失败」）。
-  //   ⚠ 可观测性不靠日志：返回的 disposer 上带 `installed` 布尔（**fail-closed 判据在返回值**，
-  //     与 `installWriteProvenanceGuard` 的 true/false 同族）。
-  //
-  // 【W4 · S-2 站点②】原为 `typeof ctx?.webServer?.register !== 'function'` —— 与端口谓词
-  //   （`provider-dsh/tools-http.js` 的 `createHttpPort().available`）**逐字等价**的**重复判定**，
-  //   且在 `inject` 清空后会裸读宿主服务名。现**只建一次端口、只问一次**：
-  //   `httpPort.available` 即判据，`mountRoute` 复用同一实例（原实现建了两次端口）。
   const httpPort = createHttpPort(ctx);
   if (!httpPort.available) {
     logger?.debug?.('[mcp] data plane not mounted：HTTP 功能面不可用（provider 端口 available=false，合法部署形态）');

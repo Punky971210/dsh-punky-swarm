@@ -462,8 +462,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
     function tt(k) { return zh[k] || en[k] || k; }
 
-    // 协议值 → 展示标签（B-8）：8 态 / 5 相的 i18n 查表单点（此前渲染原始协议串）。
-    //   查不到 ⇒ **回退原串**：既不冒充人话、也不把 locale key 泄进界面（协议值本身保持可见）。
     function protocolLabelOf(prefix, value) {
       const v = value === undefined || value === null ? '' : String(value);
       const k = prefix + '.' + v;

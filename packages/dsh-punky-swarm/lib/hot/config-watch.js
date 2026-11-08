@@ -53,11 +53,6 @@ const DEFAULT_POLL_MS = 1000;      // 存在性轮询间隔（文件缺失 boots
 const WATCH_RETRY_MAX = 5;
 const WATCH_RETRY_MS = 200;
 
-// 读端容忍 BOM（U+FEFF）。实测：PowerShell `Set-Content -Encoding UTF8` 写入会带 BOM，
-//   JSON.parse 直接拒（'Unexpected token'）→ 覆盖层被判「读取失败」而静默保持旧快照。
-//   加 export（2026-09-17 panel-hotfix）：webui 写通道服务（lib/webui/runtime-config.js#readOverlay）读的是
-//   **同一份** <root>/config/runtime.json，此前漏修该读端 ⇒ BOM 基线下 webui 读/写两通道同时 500（活体面板
-//   彻底不可用）。两读端复用本处单一实现，**禁第三份副本**（复刻即复刻本缺陷的成因模式）。
 export function stripBom(text) {
   return typeof text === 'string' && text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
 }
@@ -85,22 +80,9 @@ export const ALLOWED_TOP_KEYS = new Set([
   //   也可写段级 `"enabled": true` 作两段共同缺省）。**放入本白名单 = 允许热更**——漏加会被
   //   `validateOverlay` 判 `unknown top-level key` 而**静默保持旧快照**（本类改动的经典坑）。
   'gates',
-  // autoSettle（**引擎级结算面开关**，与 `gates` 同族）：`{ "autoSettle": { "enabled": false } }` ⇒
-  //   停用引擎自动结算的**两条触发路**（主路 `subagent/end` 不装、兼底路 `swarm_report(settle-request)`
-  //   只回报不结算），**成员经 `swarm_report` 的回报投递完整保留**；缺省/未声明 ⇒ 等价 `true`（既有批零行为变化）。
-  //   2026-10-09 用户裁决 E-1=甲（先停用 auto.settle，成员只能使用 `swarm_report` **回报**）⇒ 开关落
-  //   `<root>/config/runtime.json`（本白名单内 = 允许热更），**不依赖启动父进程 env**（与 `gates` 同理由）。
-  //   ⚠ **漏加本键 = 静默不生效**：`validateOverlay` 会把 `autoSettle` 判 `unknown top-level key`，
-  //   watcher 保持旧快照且**不抛错** ⇒ 用户看到「配置写了但不生效」（C-1/RK-2）。必须与开关同批落。
   'autoSettle',
 ]);
 
-// ── 模块级「最近一次生效快照」访问器（`task-27`）───────────────────────────────────────────────
-// 动机：门开关的**单一解析点**（`lib/wave-plan.ts#handoffGateEnabledOf`）需要「当前生效 liveConfig」。
-//   工具面有 `deps.readConfig` 注入（`lib/index.js`），但**门禁闭包**（`lib/state/gates.ts` ← `store.js`）
-//   在装配早期就构造，拿不到工具注入 ⇒ 提供本模块级只读投影（**由 watcher 在每次快照生效时写入**，
-//   仍是同一份快照、不是第二套读路径）。watcher 未创建/从未生效（如单测直建 store）⇒ 返回 `fallback`，
-//   解析点顺次回落 env → 缺省关（既有行为零变化）。
 let CURRENT_SNAPSHOT = null;
 /** 读「当前生效运行时快照」；未生效 ⇒ 返回 `fallback`（缺省 `{}`）。 */
 export function readRuntimeSnapshot(fallback = {}) {
@@ -110,13 +92,6 @@ function publishRuntimeSnapshot(v) {
   CURRENT_SNAPSHOT = v;
 }
 
-// ratchet（棘轮表）热更语义（G-3 收口，2026-09-15 用户裁决 Q-9=A）：**重启生效面**——
-//   棘轮表在**装配期**随 `createStore({ rules: loadRules(config) })` 注入状态机（lib/index.js），
-//   热更**不应用**（store 的规则表无热替换能力）。但「接受了变更却一声不吭」是假动作面 ⇒ 本守卫做两件事：
-//   ① 变化被接受时**显式告警**「需重启生效」；② 新表**非法**时当场校验失败并告警
-//      （否则用户要到下次重启装配失败时才知晓）。`ALLOWED_TOP_KEYS` 保留 `ratchet` —— 它是合法的
-//      **启动期**配置键（boot overlay 语义不变），本守卫只负责把「热更不应用」如实说出口。
-// 纯函数（可单测）：返回 { json, changed, valid, message }；调用方（lib/index.js）据 message 打日志。
 export function ratchetHotGuard({ next, lastJson, loadRulesFn = loadRules }) {
   const json = JSON.stringify(next?.ratchet ?? null);
   if (json === lastJson) return { json, changed: false, valid: true, message: null };
@@ -155,13 +130,6 @@ export function validateOverlay(overlay) {
           errors.push('unknown capabilities key: ' + ck + ' (allowed: ' + [...ALLOWED_CAPS_KEYS].join(', ') + ')');
           continue;
         }
-        // 【C-5 · lane `e5-c5-quietfix`】**热更通道的值校验**（本函数此前只校验键名白名单、零值校验 ⇒
-        //   `runtime.json` 写 `injectBudget:{enabled:true,totalBytes:-1}` 会**静默降级**、无人报错）。
-        //   与启动期 `validateCapabilities` 的 `DEP-6` **共用同一判定点** `injectBudgetValueErrors`
-        //   ⇒ 两通道同判、文案同源、零漂移（只改 `schema.js` 会**只堵一半**：热更这条通道仍旧静默）。
-        //   ⚠ 作用域**刻意收窄到 `injectBudget`**：不在此对全部 capabilities 键重跑 `validateCapabilities`
-        //   —— 本函数只拿到**覆盖层片段**（拿不到 base 配置），部分覆盖层（如只写 `trajectory.autoFail`
-        //   而未写 `enabled`）会被 DEP-2 误拒 ⇒ 那是**存量行为变化**，超出本 lane 范围。
         if (ck === 'injectBudget') {
           errors.push(...injectBudgetValueErrors(v[ck]));
         }

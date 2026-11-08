@@ -14,8 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
-// JSON Pointer 解析：'/a/b' → ['a','b']；'/' → []（根，不钳制）；支持 ~0(~) / ~1(/) 转义；
-// 非法（非字符串/不以 '/' 开头/空串）→ null（跳过该 bounds，不抛错）。
 function parseJsonPointer(pointer) {
     if (typeof pointer !== 'string' || pointer.length === 0)
         return null;
@@ -28,8 +26,6 @@ function parseJsonPointer(pointer) {
         .split('/')
         .map((t) => t.replace(/~1/g, '/').replace(/~0/g, '~'));
 }
-// 沿 token 链寻址（在 deep clone 后的 narrowed 上操作）；目标不存在/父级非对象 → null（跳过）。
-// 返回 { parent, key, value }：parent 为持有目标值的容器（写回点），key 为属性名（数组索引数字化为 number）。
 function locate(obj, tokens) {
     let cur = obj;
     for (let i = 0; i < tokens.length; i++) {
@@ -45,10 +41,9 @@ function locate(obj, tokens) {
             return { parent: container, key, value: container[key] };
         cur = container[key];
     }
-    return null; // tokens 为空（根指针 '/'）→ 不钳制根
+    return null;
 }
 function deepClone(v) {
-    // engines node>=22 → structuredClone 可用；参数为纯 JSON 数据（宿主 ToolExecutionInput.arguments）。
     return structuredClone(v);
 }
 export function computeNarrowedParams(params, bounds) {
@@ -67,22 +62,19 @@ export function computeNarrowedParams(params, bounds) {
             continue;
         const hit = locate(narrowed, tokens);
         if (hit === null)
-            continue; // 未知 path → 跳过该 bounds，不抛错不修改
+            continue;
         const raw = hit.value;
         let to = raw;
         let clampedByPattern = false;
-        // 数值钳制：超 max 钳到 max、低于 min 钳到 min（仅当值为 number 时）
         if (typeof raw === 'number') {
             if (typeof b.max === 'number' && raw > b.max)
                 to = b.max;
             else if (typeof b.min === 'number' && raw < b.min)
                 to = b.min;
         }
-        // enum 收敛：enum 不含当前值 → 取 enum 首值（取首并记 clamped）
         if (Array.isArray(b.enum) && b.enum.length > 0 && !b.enum.includes(raw)) {
             to = b.enum[0];
         }
-        // pattern：字符串正则收敛——不匹配 → 保留原值 + clamped 记录（不截断，避免语义破坏）
         if (typeof b.pattern === 'string' && b.pattern.length > 0) {
             let re = null;
             try {
@@ -90,22 +82,22 @@ export function computeNarrowedParams(params, bounds) {
             }
             catch {
                 re = null;
-            } // 非法正则 → 跳过 pattern
+            }
             if (re !== null) {
                 const s = typeof raw === 'string' ? raw : String(raw);
                 if (!re.test(s)) {
-                    to = raw; // 保留原值（不截断）
+                    to = raw;
                     clampedByPattern = true;
                 }
             }
         }
         if (to !== raw) {
-            hit.parent[hit.key] = to; // 仅叶值替换，形状/类型不变
+            hit.parent[hit.key] = to;
             clamped.push({ path: b.path, from: raw, to });
             changed = true;
         }
         else if (clampedByPattern) {
-            clamped.push({ path: b.path, from: raw, to: raw }); // pattern 不匹配审计记录（from===to）
+            clamped.push({ path: b.path, from: raw, to: raw });
         }
     }
     return { narrowed, clamped, changed };

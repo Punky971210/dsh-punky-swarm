@@ -15,10 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 心跳**活动判定与内存条目**档（stalled 档的判据来源）
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉，代码逐字搬移）：
-//   内存条目生命周期（freshEntry/resetEntry）、四信号活动判定、基线对齐、pending 追问探测、
-//   追问文案、stalled 标记、longrun 的 lastActivityAt 取数、批次条目推进。全部只读 `cx`（无新状态）。
 import { statSync } from 'node:fs';
 import * as EVT from '../../state/event-types.js';
 import { findTask } from '../../state/task-utils.js';
@@ -188,12 +184,6 @@ export function longrunLastActivityAt(cx, sessionId, batchId, batch, lane) {
   return baselineTs(cx, sessionId, batchId, batch, lane, 0); // 无内存条目 → 事件/产物/快照最新信号（无信号=0→非新鲜）
 }
 
-// 内存条目保留策略（design §1.2「必须删除的既有短路」）：
-//   原 `dropBatchEntries(batch)`（整批 `state.delete`）与逐 lane `state.delete(laneKey)` 会**主动清除内存条目**
-//   ⇒「非 running lane 不可见」+「终态批整批不可见」= 悬挂成员不可见的第二重成因。
-//   现语义：**非终态 lane 的条目一律保留**（只读查询面恒可见）；批次转终态/planning 时也不删，
-//   只把 lastSeenTs 推进到当前拍（解冻/恢复后不因陈旧基线瞬时判 stalled），**不追问、不产候选**。
-//   唯一的 `state.delete` 落在 dispose()（显式销毁语义），不再存在任何静默丢态路径。
 export function touchBatchEntries(cx, sessionId, batchId, batch, nowTs) {
   for (const lane of Object.keys(batch.lanes ?? {})) {
     const entry = cx.state.get(laneKeyOf(sessionId, batchId, lane));
@@ -201,16 +191,6 @@ export function touchBatchEntries(cx, sessionId, batchId, batch, nowTs) {
   }
 }
 
-// ── P1（phase 预筛）：预筛跳过批的**前缀式**条目推进 ────────────────────────────────────
-// 为什么需要：phase 预筛命中（planning/complete/aborted）的批**不 parse** ⇒ 拿不到 `batch.lanes`，
-//   故按 laneKey 前缀推进：entry key = `${sessionId}/${batchId}/${lane}`（`laneKeyOf` 单点），
-//   前缀 = 前两段（sessionId / batchId 均不含 `/`：`SESSION_RE` 在 store 路径面已保证；lane 可含 `/`）。
-// 等价性：原 `touchBatchEntries` 遍历 `batch.lanes` 逐个 `state.get(laneKeyOf(...))` 推进——
-//   · 前缀命中的 entry 必属该批；
-//   · 该批 lane 集合之外的陈旧 entry 原实现不碰，但**终态/planning 批的 entry 不参与任何判定**
-//     （longrun 档与 stalled 档都整批跳过；唯一读端是只读查询面，其按 batch.lanes 取值）
-//     ⇒ 推进与否无可观测差异。
-// 索引一次建好（**不在每个预筛批上全表扫描**）：Map<`${sessionId}/${batchId}`, entry[]>。
 export function batchEntryIndex(cx) {
   const index = new Map();
   for (const [key, entry] of cx.state) {

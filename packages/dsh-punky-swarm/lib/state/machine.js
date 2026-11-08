@@ -16,16 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // Machine：状态迁移判定 + 棘轮规则消费 + lane 派发条件校验
-// 本文件只含迁移判定 + 派发条件——
 // archive 逻辑归 archive.js、needHuman 逻辑归 gates.js/store.js，不得写入本文件。
-// 纯逻辑（无 IO）：fileExists 经 DI 注入（store.js 接线时绑定 artifactsDir），可独立单测。
 import { DEFAULT_MEMBER_RULES, DEFAULT_BATCH_RULES } from './machine-rules.js';
-// findTask 单点：收敛至 task-utils.js（原本地定义删除——原「避免 machine→gates 依赖」由零依赖单点承担）
 import { findTask } from './task-utils.js';
 
 
-// 成员迁移判定：查规则表（rules 可注入；缺省 = 默认强约束）
-// 返回 { ok: true } | { ok: false, code: 'INVALID_MEMBER_TRANSITION' }
 export function applyMemberTransition(from, to, { rules } = {}) {
   const table = rules?.memberRules ?? DEFAULT_MEMBER_RULES;
   if (!table || typeof table !== 'object' || !Array.isArray(table[from])) {
@@ -36,7 +31,6 @@ export function applyMemberTransition(from, to, { rules } = {}) {
     : { ok: false, code: 'INVALID_MEMBER_TRANSITION' };
 }
 
-// 批次阶段迁移判定：同上（batchRules 表）
 export function applyBatchTransition(from, to, { rules } = {}) {
   const table = rules?.batchRules ?? DEFAULT_BATCH_RULES;
   if (!table || typeof table !== 'object' || !Array.isArray(table[from])) {
@@ -47,9 +41,6 @@ export function applyBatchTransition(from, to, { rules } = {}) {
     : { ok: false, code: 'INVALID_BATCH_TRANSITION' };
 }
 
-// 派发条件校验：读任务 condition（对象数组 {path, exists}，建批时已规范化）→ 逐个 fileExists → AND 求值。
-// fileExists(path) 由 store.js 注入（相对路径解析在注入侧，本函数保持纯逻辑）。
-// 无 condition → 恒 { ok: true }。返回 { ok: true } | { ok: false, missing: [path...] }。
 export function checkDispatchCondition(sessionId, batchId, batch, lane, { fileExists }) {
   const task = findTask(batch, lane);
   const condition = task?.condition ?? null;
@@ -59,7 +50,7 @@ export function checkDispatchCondition(sessionId, batchId, batch, lane, { fileEx
   }
   const missing = [];
   for (const c of condition) {
-    if (!c || typeof c.path !== 'string' || !c.path) continue; // 防御：非法元素按恒满足跳过（建批时已静态校验）
+    if (!c || typeof c.path !== 'string' || !c.path) continue;
     if (!fileExists(c.path)) missing.push(c.path);
   }
   return missing.length ? { ok: false, missing } : { ok: true };

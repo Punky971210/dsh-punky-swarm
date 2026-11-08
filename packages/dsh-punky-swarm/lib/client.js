@@ -162,8 +162,6 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    // 事件 type → 人话 key / 类别 / 高亮级；未知 type ⇒ key:null（渲染层回退原始 type，禁伪人话）。
-    // 规则表按序首命中；`raw` 恒为原始 type（「原始 type」开关与工程师排查用）。
     const EVENT_VIEW_RULES = [
       { re: /^member\.settled$/, key: 'event.member.settled', category: 'member', severity: 'info' },
       { re: /^member\.dispatch$/, key: 'event.member.dispatched', category: 'member', severity: 'info' },
@@ -178,8 +176,6 @@ window.__ModuleLoader__.load({
       { re: /^lane\.binding_gap$/, key: 'event.member.binding', category: 'member', severity: 'warn' },
       { re: /^human\.decision$/, key: 'event.member.decision', category: 'member', severity: 'info' },
       { re: /^asset\.claimed$/, key: 'event.member.claimed', category: 'member', severity: 'none' },
-      // 【B-5】出池留痕（`member.js` 派发时写 `{lane, owner, from}`）此前无人话规则 ⇒ 回退裸 type。
-      //   归 member 面（语义 = 派发/归属），与上方 `member.dispatch` 同族但**不同源**（后者是引擎自派事件）。
       { re: /^task\.owner\.assigned$/, key: 'event.member.assigned', category: 'member', severity: 'info' },
       { re: /^lane\.handoff\.gap$/, key: 'event.handoff.gap', category: 'handoff', severity: 'error' },
       { re: /^lane\.handoff$/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
@@ -195,17 +191,10 @@ window.__ModuleLoader__.load({
       { re: /^gate\./, key: 'event.gate.blocked', category: 'gate', severity: 'error' },
       { re: /^governance\./, key: 'event.governance', category: 'gate', severity: 'warn' },
       { re: /^auto\.settle\./, key: 'event.chain.settle', category: 'chain', severity: 'info' },
-      // 【B-5】图变更留痕（`batch_tasks_add` / `task_update` 各写一条，`plan-mutate.js`）此前无规则
-      //   ⇒ 面板显示裸 type。归 phase 面：它是**批级计划状态**变更（非某 lane 的成员状态），且事件不带 lane。
       { re: /^plan\.mutated$/, key: 'event.plan.mutated', category: 'phase', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
       { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
-      // 【2026-09-28 · 批 `cleanup-tail-20260927` E-4｜2026-09-29 批 `cleanup-settle-20260929` G-1 改写】原
-      //   **已退役事件**（码值入退役锁）的 phase 分类器**已删**：该事件常量零发射点且已随批删净 ⇒ 分类器
-      //   为**死分类器**；其配套 locale 键（`lib/panel/locales.js` zh/en 各一条）同批删除。
-      //   ⚠ 本注释**禁**再写该码值的**正则源码形态**（分隔符前带反斜杠）—— 那是逐字匹配的盲区（转义变体
-      //   漏网，本会话已复发 2 次）；归一化守卫见 `test/hygiene-comment-literals.test.js`（判据 G-1）。
       { re: /^batch\.smoke$/, key: 'event.phase.smoke', category: 'phase', severity: 'none' },
       { re: /^batch\.abort_dangling$/, key: 'event.phase.dangling', category: 'phase', severity: 'warn' },
       { re: /^batch\.(failed-escalate|governance-escalate)$/, key: 'event.phase.escalate', category: 'phase', severity: 'error' },
@@ -832,8 +821,6 @@ window.__ModuleLoader__.load({
     // module-level translator: zh-first, en fallback (matches the original panel behavior)
     function tt(k) { return zh[k] || en[k] || k; }
 
-    // 协议值 → 展示标签（B-8）：8 态 / 5 相的 i18n 查表单点（此前渲染原始协议串）。
-    //   查不到 ⇒ **回退原串**：既不冒充人话、也不把 locale key 泄进界面（协议值本身保持可见）。
     function protocolLabelOf(prefix, value) {
       const v = value === undefined || value === null ? '' : String(value);
       const k = prefix + '.' + v;
@@ -1263,7 +1250,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // 事件人话文本（渲染层唯一拼装点；未知 type 由渲染层回退原始 type，绝不用 key 兜底冒充人话）
     function panelEventText(v) {
       const a = v.args || {};
       const head = a.lane ? a.lane + ' ' : '';
@@ -1284,7 +1270,6 @@ window.__ModuleLoader__.load({
       const color = v.severity === 'error' ? T.error
         : v.severity === 'warn' ? T.warn
           : v.severity === 'info' ? T.info : T.text3;
-      // raw 模式 = 原始 type + lane + 转移（工程师面）；人话模式 = 换词后动作句；未知 type 恒回退原始 type
       const label = (raw || !v.key)
         ? v.raw + (v.args.lane ? ':' + v.args.lane : '') + (v.args.from ? ' ' + v.args.from + '->' + v.args.to : '')
         : panelEventText(v);
@@ -1295,7 +1280,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // 事件流：类别 chips + lane 过滤 + 「原始 type」开关（Q-4：人话默认，工程面可切）
     function EventStream({ evs, eventCount, lanes }) {
       const [category, setCategory] = useState('all');
       const [lane, setLane] = useState('');
@@ -1388,18 +1372,10 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // 装配与门禁条：团队资产 / 装配声明 / Manager 登记 / 并发声明（**未启用限流**，Q-B 2026-09-18）/ 门禁总览（复用 lanesGate 的 gateStrength，
-    //   不新增第二份门禁判定）/ 冒烟批。
-    //   【2026-09-27 · 批 3 D-4 删净】原「装配声明静态回显」一项（建批期展开 + 静态校验）**已整条删除**：
-    //   链声明面与回显面全量退役 ⇒ 标签文案键同批删除（原键 = 本组件下方 push 的第一参）。
-    //   运行期 DAG 真源 = 批次的 `lanes[].deps` + `batch.handoffs`（逐边取件见 `handoff_view` 工具）。
     function AssemblyBar({ d }) {
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
       const gs = firstLane ? (lg[firstLane] || {}).gateStrength || null : null;
-      // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**，存量批 JSON 真值里仍可能带它
-      //   ⇒ 本读点**保留**（与 HTTP 侧同源读点成对，Q-1 裁决 = 双侧同保留）：删读端 = 主动丢历史可复盘面；
-      //   该键**零发射点** ⇒ 无「写了不生效」的静默面。**禁为求绿删本读点或其断言**。
       const ta = d.teamAsset || null;
       const asm = d.assembly || null;
       const items = [];
@@ -1503,7 +1479,6 @@ window.__ModuleLoader__.load({
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
             React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency),
-            // 【B-1 消费点】计划版本：>1 即「本批计划被追加/加边改过」，读数由服务端帧提供（此前帧内无该键）
             d.planRevision != null
               ? React.createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmtCount(tt('plan.revision'), d.planRevision))
               : null
@@ -1679,10 +1654,6 @@ window.__ModuleLoader__.load({
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
-      // 跟随 web UI 主题（body[data-ds-dark-theme]）切换兜底色板并重渲染
-      // 【波 A · A-2】原实现只在「属性变化 / matchMedia 变化」时调用 apply ⇒ 段求值早于 body 就绪时，
-      //   兜底色板会一直停在初始档。两处补齐：① mount 立即探测一次；② 观察点从 body 换成
-      //   documentElement（恒存在）+ subtree —— body 未就绪时旧写法根本不注册 observer，此后永不跟随。
       useEffect(() => {
         const apply = () => {
           const t = detectTheme();
@@ -1709,9 +1680,6 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      // SSE 列表流：EventSource 主通道 + 3s 轮询降级兜底（保留既有轮询路径不删）。
-      // 收到 batch 信号 → eventCount 去重（旧于当前忽略）→ 重跑既有聚合；onerror / 15s 无心跳 → 回退轮询；
-      // 重连成功（EventSource 自动重连 / 心跳恢复）→ 停轮询回 SSE。
       useEffect(() => {
         let alive = true;
         let es = null;
@@ -2008,10 +1976,6 @@ window.__ModuleLoader__.load({
     function pickBool(a, b, d) { return typeof a === 'boolean' ? a : typeof b === 'boolean' ? b : d; }
     function pickNum(a, b, d) { return typeof a === 'number' && isFinite(a) ? a : typeof b === 'number' && isFinite(b) ? b : d; }
     function clockOf(d) { try { return d.toTimeString().slice(0, 8); } catch { return ''; } }
-    // 可选装载复选集 = 全部注册规则集（四个平级多选项：L1 敏感 / L2 资源 / L3 工具黑名单 / L5 等待能力禁用）——
-    //   组合 = 勾选叠加本身（如「规则预设」全勾 = ['l1-sensitive','l2-resource','l3-tool-ban','l5-wait-ban']），
-    //   不再有 compose 这一「组合项」（该注册 id 已废除）；'compose' 仅在 formPresetOf 里作一次性旧值迁移。
-    //   2026-09-26 扩面：新增 l5-wait-ban（wait_agent + sleep 禁用，用户裁决）。
     function presetOptionIds() { return ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban']; }
     function escPrimitives() { return ['DENY', 'NARROW', 'DEFER', 'PAUSE']; } // REQUIRE_APPROVAL 红线不可经表单（引擎契约），不出现
     function presetMeaningKey(id) {
@@ -2023,10 +1987,6 @@ window.__ModuleLoader__.load({
         default: return null;
       }
     }
-    // GET overlay.hook.preset 回显 → 表单勾选集（**仅数组形态**；单选遗产清除 2026-09-14）：
-    //   空/省略 → null（全不勾）；数组且 id 全在可选集内 → 勾选集；
-    //   单值字符串（旧单选遗留）/ 含未注册 id / 其它非法形态 → { custom: <原文> }——无勾选位可表，
-    //   保存时原文透传，由后端形态校验拒绝并回显（面板给警示，用户按多选重新勾选即可）。
     function formPresetOf(pv) {
       if (pv === undefined || pv === null || pv === '') return null;
       if (!Array.isArray(pv)) return { custom: pv }; // 单值字符串等旧形态：不再自动迁移，交用户改勾选

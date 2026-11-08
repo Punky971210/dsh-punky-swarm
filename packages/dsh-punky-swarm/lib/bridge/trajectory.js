@@ -15,10 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// bridge/trajectory.js —— 诊断桥接（借鉴 LangGraph 观测层 / dsh-trajectory-governance 模式）
-// 订阅 trajectory 异常（anomaly）→ sessionId→lane 映射 → notify（默认 notify-only，auto-fail 默认关）
-// 原则：只读消费告警载荷、不 mutate 载荷、不碰内核、不调插件任何控制面动作
-// 事件契约：'member.dispatch' 记录派发映射（既有事件通道，零新字段）；'lane.anomaly' 记录异常证据；broadcast 提示 Manager
 import { TRAJECTORY_DEFAULTS } from '../schema.js';
 import { mailboxRootOf } from '../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
 import { engineRootOf } from '../state/batch-paths.js'; // 引擎根推导单点（A2-G08；本处不再自推导）
@@ -28,12 +24,8 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js'; // 派发事件�
 const ANOMALY_EVENT = 'trajectory/anomaly'; // 首选通道：同运行时实时订阅（Cordis 总线事件）
 const ANOMALY_RECORD = 'lane.anomaly';      // 异常留痕事件（batch.events，面板可见）
 const MAILBOX_KIND = 'anomaly';             // broadcast 消息 kind
-// 派发事件 type 收敛：原本地字面量 DISPATCH_EVENT='member.dispatch' 收敛为 event-types.js 常量
-// EVT_MEMBER_DISPATCH（同值，行为零变化）；读侧骨架保持自身字面量零改动。
 const DISPATCH_EVENT = EVT_MEMBER_DISPATCH;
 
-// 装配开关（缺省默认开——readCapability 合并注册表 default {enabled:true}；
-//   显式 capabilities.trajectory.enabled:false 可关，false 时桥接不挂载，零运行时开销）
 export function isTrajectoryEnabled(config) {
   return readCapability(config, 'trajectory')?.enabled === true;
 }
@@ -45,25 +37,15 @@ export function createTrajectoryBridge(ctx, deps) {
     ? trajCfg.failConfidence
     : TRAJECTORY_DEFAULTS.failConfidence;
 
-  // sessionId(worker 会话) → { sessionId, batchId, lane }；
-  // 派发时经 recordDispatch 记录；进程重启后从批次事件重建（幂等）
   const laneBySession = new Map();
   let pollTimer = null;
   let lastPollSince = 0;
   let subscribed = false;
   let detach = null; // ctx.on 返回的退订函数（若存在）
 
-  // mailbox 落盘根走**单点**（A1-P2-10）：本处原有一份局部闭包 `mailboxRootOf(sessionId, batchId)`
-  //   （体 = `join(store.sessionsDir, …)` —— 注意它的第一参数是 **sessionsDir**（已含 `sessions` 段），
-  //   而单点收的是 **引擎根**）⇒ 闭包已删，改调 `lib/mailbox-paths.js::mailboxRootOf`
-  //   并传 `engineRootOf(store.sessionsDir)`（= 引擎根；与 `watch/heartbeat/context.js` 推导 engineRoot
-  //   共用 `lib/state/batch-paths.js::engineRootOf` 单点，A2-G08）。该闭包无外部可见面。
 
-  // 重启重建：扫全部批次事件，幂等（重复调用只覆盖不膨胀）
   function rebuildFromEvents() {
     let n = 0;
-    // 【S-1 去重】若调用方已建好同形的 `dispatchIndex`（index.js 装配期已扫一遍），直接取用，
-    //   **不再自扫** —— 这就是启动期 2N→N 的落点（去重，不是缓存：无 TTL、无失效面）。
     if (dispatchIndex instanceof Map) {
       laneBySession.clear(); // 【U-2】重建前清空：原实现无 clear ⇒ 旧 workerSessionId 条目不清除、缓慢增长
       for (const [key, value] of dispatchIndex) laneBySession.set(key, value);
@@ -83,7 +65,6 @@ export function createTrajectoryBridge(ctx, deps) {
     return n;
   }
 
-  // 派发记录（member_set_status → running 派发时的 worker 会话 id 落事件；零新字段，store.appendEvent 既有通道）
   function recordDispatch({ sessionId, batchId, lane, workerSessionId }) {
     if (!sessionId || !batchId || !lane || !workerSessionId) {
       throw new Error('recordDispatch: sessionId/batchId/lane/workerSessionId 均必填');
@@ -93,16 +74,12 @@ export function createTrajectoryBridge(ctx, deps) {
     return { ok: true, workerSessionId, batchId, lane };
   }
 
-  // 只读快照：sessionId → { sessionId, batchId, lane }（gate_status 可选 advisory 展示用，不改门禁语义）
   function mapping() {
     const out = {};
     for (const [k, v] of laneBySession) out[k] = { ...v };
     return out;
   }
 
-  // notify（默认 notify-only）：lane.anomaly 事件 + broadcast 提示 Manager；不自动结算（Manager 按纪律裁决）
-  // 注：store.newEvent 展开为 { ts, type, ...fields }——载荷若含顶层 type 会覆盖事件类型，
-  //     故 AnomalyAlert 载荷嵌套于 alert 字段（载荷原样保留，事件 type 恒为 lane.anomaly）
   function notify(hit, alert) {
     const { sessionId, batchId, lane } = hit;
     const { anomalyId, type, confidence, severity, message } = alert;
@@ -115,8 +92,6 @@ export function createTrajectoryBridge(ctx, deps) {
     }, { from: 'trajectory-bridge' });
   }
 
-  // auto-fail 开关（默认关）：仅 loop_deadlock 且 confidence ≥ 阈值（可配）→ member_settle failed 终态结算
-  // 不自动重试、不自动开新批次、不调插件 fork/auto-stop；settle 判定权仍在 Manager/门禁
   function maybeAutoFail(hit, alert) {
     const { sessionId, batchId, lane } = hit;
     const { anomalyId, type, confidence, message } = alert;
@@ -128,13 +103,11 @@ export function createTrajectoryBridge(ctx, deps) {
         `anomalyId=${anomalyId}, 证据摘要(type=${type}, confidence=${confidence}${message ? ', ' + message : ''})`);
       return true;
     } catch (e) {
-      // 状态机不合法（lane 非 running/review）→ 跳过自动结算，notify 证据已留
       ctx.logger?.warn?.('[trajectory] auto-fail skipped: ' + String(e?.message ?? e));
       return false;
     }
   }
 
-  // 告警载荷归一化（AnomalyAlert 契约：anomalyId/sessionId/type/confidence/severity/message）
   function normalizeAlert(raw) {
     const confidence = Number(raw?.confidence);
     return {
@@ -147,7 +120,6 @@ export function createTrajectoryBridge(ctx, deps) {
     };
   }
 
-  // 异常入口：反查 lane → notify（+ 可选 auto-fail）；未映射/无 sessionId → 静默降级（不报错不轮询）
   function handleAnomaly(rawAlert) {
     const alert = normalizeAlert(rawAlert);
     if (!alert.sessionId) {
@@ -164,7 +136,6 @@ export function createTrajectoryBridge(ctx, deps) {
     return { routed: true, batchId: hit.batchId, lane: hit.lane, autoFailed };
   }
 
-  // fallback：HTTP 轮询 /api/alerts?since=（可配，默认关；插件未装/无事件时静默降级）
   async function pollAlerts() {
     const baseUrl = trajCfg.poll?.baseUrl;
     if (!baseUrl) return;
@@ -202,7 +173,6 @@ export function createTrajectoryBridge(ctx, deps) {
       try { detach(); } catch {}
     }
     if (subscribed) {
-      // 兼容 ctx.on 未返回退订函数、仅提供 off 的宿主。
       // cordis 4.1 起 Context 经 Proxy 拦截属性读取：未 inject 的键取值即抛
       // `cannot get property "off" without inject`，`typeof` 无法免疫 ——
       // 故探测本身必须包在 try 内，否则 stop() 会抛穿宿主。

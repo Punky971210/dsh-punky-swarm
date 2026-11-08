@@ -16,7 +16,6 @@ export type ContractMissingPayload = {
         problems: string[];
     };
 };
-/** 六判定位共用的载荷构造（gateKind 见 6 个调用点；source/degrade 逐点给出**引擎缺省来源**，可审计）。 */
 export declare function contractMissingPayload(gateKind: string, layer: string, source: string, degradeKind: string, degradeNote: string): ContractMissingPayload;
 export declare const TARGETS_CLAIMED_RE: RegExp;
 export declare function detectNeedHuman(artifactsDir: string, producePaths: string[]): {

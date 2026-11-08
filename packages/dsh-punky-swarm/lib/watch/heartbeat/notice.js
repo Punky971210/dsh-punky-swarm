@@ -15,8 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 提示档**留痕**单点（零静默纪律）
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉，代码逐字搬移）。
 import * as EVT from '../../state/event-types.js';
 import {
   REASON_BLIND_RUN_UPSTREAM_NEVER_READY,

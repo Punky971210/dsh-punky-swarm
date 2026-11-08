@@ -32,45 +32,25 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** 引擎包自身根目录（本文件在 lib/provider-dsh/ ⇒ 上溯两层）。 */
 export const ENGINE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/**
- * pnpm 的可执行名。
- * Windows 上 pnpm 是 .cmd：execFileSync 直接找 'pnpm' 会 ENOENT，找 'pnpm.cmd' 会 EINVAL
- * （Node 在 Windows 上不把 .cmd 当可执行文件）⇒ 必须经 shell 解析。
- *
- * ⚠ 这里的 shell:true **不违反**引擎「拒绝 shell 元字符」的纪律：
- *   那条纪律针对**产物里用户可写的 `gate:` 命令**（command-exec.js 的 runCommand）；
- *   本处参数是**代码内固定常量**（'install' / 'pack' / '--prefer-offline'），无任何用户输入。
- *   若将来要接受用户传参，必须改成「先分词、再校验元字符」而不是直接拼进 shell。
- */
 export const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
-/** 跑 pnpm 的选项（Windows 需 shell 才能解析 .cmd）。 */
 const PNPM_OPTS = { shell: process.platform === 'win32' };
 
-/** 引擎包名（从自己的 package.json 读，不硬编码）。 */
 export function enginePackageName(root = ENGINE_ROOT) {
   const pkg = JSON.parse(fs.readFileSync(join(root, 'package.json'), 'utf8'));
   return pkg.name;
 }
 
-/** DSH 家目录：优先环境变量，回落 ~/.dsh。 */
 export function dshHomeOf() {
   return process.env.DSH_HOME || join(homedir(), '.dsh');
 }
 
-/** profile 目录。 */
 export function profileDirOf(profileName, dshHome = dshHomeOf()) {
   return join(dshHome, 'profiles', profileName);
 }
 
-/**
- * 一键安装时必写的 bundles（顺序即加载顺序）。
- * 前两个是 DSH 官方上游；第三个是引擎自己。
- * 说明：dsh-base 是 DSH 任何 profile 的地基；缺它 profile 起不来。
- */
 export function requiredBundles(engineName) {
   return [
     '@deepseek-ai/dsh-base',
@@ -80,7 +60,6 @@ export function requiredBundles(engineName) {
   ];
 }
 
-/** 合并 bundles：保留已有顺序，补上缺的（幂等）。 */
 export function mergeBundles(current, required) {
   const out = Array.isArray(current) ? current.filter((x) => typeof x === 'string' && x) : [];
   for (const b of required) if (!out.includes(b)) out.push(b);
@@ -88,7 +67,6 @@ export function mergeBundles(current, required) {
 }
 
 /**
- * 准备 profile 目录与两个基础文件（幂等）。
  * @returns {{profileDir: string, packageJsonPath: string, created: boolean}}
  */
 export function ensureProfile({ profileName, dshHome = dshHomeOf() }) {
@@ -107,7 +85,6 @@ export function ensureProfile({ profileName, dshHome = dshHomeOf() }) {
     };
     fs.writeFileSync(packageJsonPath, JSON.stringify(seed, null, 2) + '\n', 'utf8');
   }
-  // cordis.yml 必须是空数组（配置走 cordis.patch.yml；这个约定来自 DSH 的 profile 根注释）
   const cordisYml = join(profileDir, 'cordis.yml');
   if (!fs.existsSync(cordisYml)) {
     fs.writeFileSync(
@@ -125,7 +102,6 @@ export function ensureProfile({ profileName, dshHome = dshHomeOf() }) {
   return { profileDir, packageJsonPath, created };
 }
 
-/** 把引擎写进 profile 的 dependencies + bundles（幂等；保留其它依赖）。 */
 export function declareSelf({ profileName, engineName = enginePackageName(), dependencySpec, dshHome = dshHomeOf() }) {
   const { profileDir, packageJsonPath } = ensureProfile({ profileName, dshHome });
   const cfg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -141,9 +117,7 @@ export function declareSelf({ profileName, engineName = enginePackageName(), dep
   return { profileDir, packageJsonPath, bundles: cfg.dsh.profile.bundles, dependencySpec };
 }
 
-/** 在 profile 目录里跑 pnpm install（link: 不下载，秒级）。 */
 export function runInstall({ profileDir }) {
-  // 说明：pnpm 的 link:/file: 语义与 npm 不同（npm 不支持 link: ⇒ EUNSUPPORTEDPROTOCOL）
   return execFileSync(PNPM, ['install', '--reporter=append-only', '--prefer-offline'], {
     ...PNPM_OPTS,
     cwd: profileDir,
@@ -152,7 +126,6 @@ export function runInstall({ profileDir }) {
   });
 }
 
-/** 用 dsh 的 bin.js 跑 --dump-config 并解析读数。 */
 export function verifyAssembly({ profileName, dshBin, nodeBin = process.execPath }) {
   const out = execFileSync(nodeBin, [dshBin, '--profile', profileName, '--dump-config'], {
     encoding: 'utf8',
@@ -160,12 +133,11 @@ export function verifyAssembly({ profileName, dshBin, nodeBin = process.execPath
   }).toString();
   const sectionHeaders = (out.match(/^# == /gm) || []).length;
   const pending = (out.match(/\bpending\b/g) || []).length;
-  const engineHits = 0; // 由调用方按 engineName 统计（这里只给通用读数）
+  const engineHits = 0;
   return { sectionHeaders, pending, engineHits, raw: out };
 }
 
 /**
- * 一键安装（组合：准备 profile → 声明 → 装依赖 → 可选验证）。
  * @param {object} opts
  * @param {string} opts.profileName  目标 profile 名
  * @param {'link'|'pack'} [opts.mode] 默认 link（开发）；pack 会先 pnpm pack
@@ -183,7 +155,6 @@ export function installProfile(opts) {
 
   let dependencySpec;
   if (mode === 'pack') {
-    // pack 模式：先打 tarball（与源码解耦，适合交付）
     const tgzOut = execFileSync(PNPM, ['pack', '--pack-destination', dshHome], { ...PNPM_OPTS, cwd: engineRoot, encoding: 'utf8' });
     const tgz = String(tgzOut).trim().split(/\r?\n/).filter((l) => l.endsWith('.tgz')).pop();
     if (!tgz) throw new Error('installProfile: pnpm pack 未产出 tarball');
@@ -210,8 +181,6 @@ export function installProfile(opts) {
   return { profileName, profileDir: declared.profileDir, mode, steps, verify: verifyResult };
 }
 
-// ── CLI 入口 ─────────────────────────────────────────────────────────────
-// 用法：node lib/provider-dsh/install.js --profile <name> [--mode link|pack] [--verify --dsh-bin <path>]
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   const argOf = (name) => {

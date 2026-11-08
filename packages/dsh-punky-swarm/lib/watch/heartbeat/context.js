@@ -15,12 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 心跳引擎**共享上下文 `cx`** 与路径/产物解析单点
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉）：
-//   原 `createLaneHeartbeat` 闭包内共享变量集中此处，各探针档（stalled / longrun / replay / 状态面）
-//   从**同一 `cx`** 取值。`cx` **每引擎实例一份**（`createHeartbeatContext` 内建），**不得提升为模块级单例**
-//   （纪律：不新增真源）。初始化顺序与拆分前逐字一致：cfg → lrCfg → schedule → hardStop → clock →
-//   engineRoot → ctxOf → state；`disposed` / `replayInFlight` 为可变位（原闭包 `let`，同一实例内唯一）。
 import { join } from 'node:path';
 import { mailboxRootOf as mailboxRootOfAt } from '../../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
 import { resolveArtifactIn, engineRootOf } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）＋引擎根推导单点（A2-G08）

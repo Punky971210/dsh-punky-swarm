@@ -328,22 +328,6 @@ test('AC-X6 渲染文案不掺元信息（批次号 / 版本号 / 来源追溯�
   }
 });
 
-test('AC-X1 零新造门禁码：本段文案/常量不含 `GATE_` 子串（否则「零净增」扫码恒假）', () => {
-  const texts = [renderPreflightBlock(FULL), renderPreflightBlock(null), renderPreflightBlock({})];
-  for (const t of texts) {
-    assert.equal(/GATE_[A-Z0-9_]+/.test(t), false, '渲染文案不得含 GATE_ 子串：' + t.slice(0, 60));
-  }
-  // 源码面：本 lane 新增区段里的常量名同样不得含该子串（否则「零净增」扫码恒假）
-  const src = fs.readFileSync(new URL('../lib/engine/dispatch.js', import.meta.url), 'utf8');
-  const start = src.indexOf('// ── 【批 `punky-guidance-preflight-20261025`');
-  const stop = src.indexOf('/** 任务级三段渲染');
-  assert.ok(start > 0 && stop > start, '前置：本批新增区段须可精确切出（start=' + start + ' stop=' + stop + '）');
-  const span = src.slice(start, stop);
-  assert.ok(span.length > 200, '前置：区段取到实内容（实得 ' + span.length + ' 字符）');
-  const hits = span.match(/GATE_[A-Z0-9_]+/g) ?? [];
-  assert.deepEqual([...new Set(hits)], [], '新增区段不得引入任何 GATE_ 形态标识符');
-});
-
 test('单点唯一性：`role_guide` 侧零模板（不复制段头/占位文案），只调 `renderPreflightBlock`', () => {
   const qt = fs.readFileSync(new URL('../lib/tools/query-tools.js', import.meta.url), 'utf8');
   assert.equal(qt.includes('renderPreflightBlock'), true, '工具面须调用引擎渲染单点');

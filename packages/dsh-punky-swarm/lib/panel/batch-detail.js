@@ -114,7 +114,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       );
     }
 
-    // 事件人话文本（渲染层唯一拼装点；未知 type 由渲染层回退原始 type，绝不用 key 兜底冒充人话）
     function panelEventText(v) {
       const a = v.args || {};
       const head = a.lane ? a.lane + ' ' : '';
@@ -135,7 +134,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const color = v.severity === 'error' ? T.error
         : v.severity === 'warn' ? T.warn
           : v.severity === 'info' ? T.info : T.text3;
-      // raw 模式 = 原始 type + lane + 转移（工程师面）；人话模式 = 换词后动作句；未知 type 恒回退原始 type
       const label = (raw || !v.key)
         ? v.raw + (v.args.lane ? ':' + v.args.lane : '') + (v.args.from ? ' ' + v.args.from + '->' + v.args.to : '')
         : panelEventText(v);
@@ -146,7 +144,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       );
     }
 
-    // 事件流：类别 chips + lane 过滤 + 「原始 type」开关（Q-4：人话默认，工程面可切）
     function EventStream({ evs, eventCount, lanes }) {
       const [category, setCategory] = useState('all');
       const [lane, setLane] = useState('');
@@ -239,18 +236,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       );
     }
 
-    // 装配与门禁条：团队资产 / 装配声明 / Manager 登记 / 并发声明（**未启用限流**，Q-B 2026-09-18）/ 门禁总览（复用 lanesGate 的 gateStrength，
-    //   不新增第二份门禁判定）/ 冒烟批。
-    //   【2026-09-27 · 批 3 D-4 删净】原「装配声明静态回显」一项（建批期展开 + 静态校验）**已整条删除**：
-    //   链声明面与回显面全量退役 ⇒ 标签文案键同批删除（原键 = 本组件下方 push 的第一参）。
-    //   运行期 DAG 真源 = 批次的 `lanes[].deps` + `batch.handoffs`（逐边取件见 `handoff_view` 工具）。
     function AssemblyBar({ d }) {
       const lg = d.lanesGate || {};
       const firstLane = Object.keys(lg)[0];
       const gs = firstLane ? (lg[firstLane] || {}).gateStrength || null : null;
-      // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**，存量批 JSON 真值里仍可能带它
-      //   ⇒ 本读点**保留**（与 HTTP 侧同源读点成对，Q-1 裁决 = 双侧同保留）：删读端 = 主动丢历史可复盘面；
-      //   该键**零发射点** ⇒ 无「写了不生效」的静默面。**禁为求绿删本读点或其断言**。
       const ta = d.teamAsset || null;
       const asm = d.assembly || null;
       const items = [];
@@ -354,7 +343,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             React.createElement('span', null, tt('lanes') + ' ' + lanes.length),
             React.createElement('span', null, tt('events') + ' ' + (d.eventCount != null ? d.eventCount : evs.length)),
             React.createElement('span', null, tt('concurrency') + ' ' + d.concurrency),
-            // 【B-1 消费点】计划版本：>1 即「本批计划被追加/加边改过」，读数由服务端帧提供（此前帧内无该键）
             d.planRevision != null
               ? React.createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmtCount(tt('plan.revision'), d.planRevision))
               : null

@@ -16,22 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // LLM merge agent 冲突化解辅助模块（借鉴 taskswarm merger 三态判定）
-// -----------------------------------------------------------------------------
-// 契约：
-//   - lane_worktree_merge 冲突时（doMerge 返回 {ok:false, conflict:true, files}）可选派 LLM merge agent
-//     语义化解；默认关（config.capabilities.worktree.mergeAgent.enabled !== true → 现状路径逐字一致，零感知零开销）。
-//   - spawner 由宿主注入（引擎不直接 spawn subagent）：deps.mergeAgentSpawner 或 deps.config.host?.spawnMergeAgent，
-//     签名 async (request) => ({ verdict, detail })；verdict ∈ CONFLICT_RESOLVED | SUCCESS | CONFLICT_UNRESOLVED。
-//   - 三态只映射既有 merged/conflict 路径；失败/超时/校验不过 → lane 保持 conflict 终态
-//     （merge agent 是冲突化解手段，非 lane 恢复；不新增成员态、不自动 settle）。
-//   - fail-closed：spawner 抛错/超时/返回未知 verdict/化解后 orch 仍有在途 merge（U 标记或 MERGE_HEAD 残留）
-//     → 一律视同 UNRESOLVED，保留现场走现状 conflict 路径（不挂起不 throw）。
 import fs from 'node:fs';
 import path from 'node:path';
-// R-06 runGit 下沉：git 调用单点迁至 git-utils.js——本文件改引 git-utils（原引 lane-tools.js
-// 导出版，与 lane-tools 相互 import 构成双向环）；runGit 调用点均在函数体内（运行时 live binding）。
 import { runGit } from './git-utils.js';
-// R-01 发端收敛：worktree.merge.* 事件字面量改引 EVT 常量单点
 import * as EVT from '../state/event-types.js';
 
 const VERDICT_RESOLVED = 'CONFLICT_RESOLVED';
@@ -40,9 +27,8 @@ const VERDICT_UNRESOLVED = 'CONFLICT_UNRESOLVED';
 const RESOLVED = new Set([VERDICT_RESOLVED, VERDICT_SUCCESS]);
 const NO_SPAWNER_HINT = 'mergeAgent configured but no spawner injected';
 const DEFAULT_TIMEOUT_MS = 600_000;
-const UNMERGED_RE = /^(UU|AA|DD|AU|UA|DU|UD)\s/; // git status --porcelain 的冲突 XY 标记全集
+const UNMERGED_RE = /^(UU|AA|DD|AU|UA|DU|UD)\s/;
 
-// HARD 规则（写入 request.instructions，约束 agent 防误合并）
 const HARD_INSTRUCTIONS = [
   'You are the merge agent for an in-flight git merge conflict in the orch worktree.',
   'HARD RULES:',
@@ -63,7 +49,6 @@ function normalizeVerdict(v) {
   return VERDICT_UNRESOLVED;
 }
 
-// 在途 merge 校验辅助：orch git status 无 U 冲突标记 且 无 MERGE_HEAD 残留（化解已 git commit 完成）；
 // git 不可查 → { ok:false, conflicted:true } fail-closed（无法证明化解 → 视同未化解）
 function checkInFlightMerge(orchDir) {
   const st = runGit(orchDir, ['status', '--porcelain']);
@@ -81,25 +66,20 @@ function withTimeout(p, ms) {
   return Promise.race([p, t]).finally(() => clearTimeout(timer));
 }
 
-// 现状 conflict 路径（默认关 / 无 spawner / UNRESOLVED）：保留现场 + files 清单 + conflict 事件；
-// hint 非空（无注入降级）时附加清晰提示 note，其余字段逐字保持 doMerge 冲突结果
 function statusQuo(opts, hint) {
   const { store, sessionId, batchId, laneId, conflict, conflictFiles } = opts;
   store.appendEvent(sessionId, batchId, EVT.EVT_WORKTREE_MERGE_CONFLICT, { lane: laneId, files: conflictFiles });
   return hint ? { ...conflict, note: hint } : conflict;
 }
 
-// 冲突化解主流程（lane-tools.js 接线点）：默认关 → 现状；启用 + spawner → 化解；
-// RESOLVED/SUCCESS 且 orch 在途 merge 校验通过 → 既有成功清理路径（worktree remove + branch -d）+ resolved 事件；
-// 其余（UNRESOLVED/抛错/超时/校验不过/无 spawner）→ 现状 conflict 路径（不挂起不 throw，保持终态）
 export async function resolveMergeConflict(deps, opts) {
   const config = deps?.config ?? {};
   const ma = config?.capabilities?.worktree?.mergeAgent;
-  if (ma?.enabled !== true) return statusQuo(opts, null); // 默认关：零感知，逐字现状
+  if (ma?.enabled !== true) return statusQuo(opts, null);
   const spawner = deps?.mergeAgentSpawner ?? config?.host?.spawnMergeAgent ?? null;
-  if (typeof spawner !== 'function') return statusQuo(opts, NO_SPAWNER_HINT); // 无注入降级（fail-safe）
+  if (typeof spawner !== 'function') return statusQuo(opts, NO_SPAWNER_HINT);
   const { store, sessionId, batchId, laneId, orchDir, branch, conflictFiles } = opts;
-  const base = path.dirname(orchDir); // <root>/sessions/<sid>/worktrees/<bid> 下平铺 _repo/orch/<laneId>
+  const base = path.dirname(orchDir);
   const repo = path.join(base, '_repo');
   const lane = path.join(base, laneId);
   const request = buildMergeAgentRequest({ batchId, laneId, orchDir, conflictFiles, branch });
@@ -108,13 +88,12 @@ export async function resolveMergeConflict(deps, opts) {
   try {
     resp = await withTimeout(Promise.resolve().then(() => spawner(request)), timeoutMs);
   } catch {
-    return statusQuo(opts, null); // 抛错/超时 → UNRESOLVED → 现状（保留现场）
+    return statusQuo(opts, null);
   }
   const verdict = normalizeVerdict(resp?.verdict);
   if (verdict === VERDICT_UNRESOLVED) return statusQuo(opts, null);
   const check = checkInFlightMerge(orchDir);
   if (!check.ok || check.conflicted) return statusQuo(opts, null); // 校验不过 → 视同 UNRESOLVED（fail-closed）
-  // 化解成功：既有成功清理路径（镜像 doMerge 成功分支：worktree remove + prune + branch -d）
   if (fs.existsSync(path.join(lane, '.git'))) runGit(repo, ['worktree', 'remove', '--force', lane]);
   runGit(repo, ['worktree', 'prune']);
   const del = runGit(orchDir, ['branch', '-d', branch]);

@@ -15,14 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// O_EXCL 单写者锁（fencing 版）：原子创建锁文件；冲突先拒绝（wait/force 可选）。
-// force = **受控接管**（不再 `unlink`）：读旧锁 → 票号 `O_EXCL` 选举出同代唯一胜者 →
-//   `fence = 旧值 + 1` → `renameSync` 原子替换（不出现「锁文件缺失」的中间态）。
-// 旧锁不可解析 / 旧格式（缺 `token` 或 缺 `fence`）⇒ 一律拒接管且**零删除**（fail-closed）。
-// 【fence 的真实失效面（勿拔高）】本模块只保证三件事：① 凭证失效（`release` 按 token 配平）
-//   ② 接管后旧 token 在盘上已不存在（其后续 `release` 必 `token-mismatch`）③ 锁文件 `fence` + `warn`
-//   留痕可核。**本仓没有「批 JSON 写前校验 fence」的落点**：`state/store.commitBatch` 为无锁物理直写 ⇒
-//   **不得**表述为「旧持有者的批 JSON 写入会被拒」（K-1 残余，写面 fencing 非本批范围）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -108,7 +100,6 @@ function reclaimStaleTicket(ticketPath, lockPath, expectedFence, ticketTtlMs) {
 export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false, warn = null, ticketTtlMs = 30000 } = {}) {
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + Math.max(0, waitMs);
-  // S-3：force 在**一个调用内最多一次接管尝试**（防 livelock 与「反复抢占」）；失败即返回，重试归调用方。
   let takeoverAttempted = false;
   for (;;) {
     const token = randomUUID();
@@ -168,8 +159,6 @@ export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false
           throw e4;
         }
       }
-      // 安装（含两处 fail-closed 自证）。票号在 `rename` 后即消失（S-4：不留持久文件），
-      // 故落后者可能拿着**过期的 fence 读数**重建同名票号 ⇒ 下面两处复核把这条窗口收窄到 syscall 级。
       let installed = false;
       try {
         // ① 安装前 CAS 复核：票号建好到安装之间，同代对手可能已安装成锁（fence 已前进）⇒

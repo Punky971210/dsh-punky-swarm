@@ -15,20 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lane-heartbeat：lane 过期检测引擎（watch 域）
-// 成熟模式：dsh-plugin-heartbeat 退避/硬停引擎（退避/硬停机制）
-// 语义：running lane 无活动 → 退避档位追问（默认 10→20→30 分钟，冷场越久间隔越长）→
-//       连续 N 拍（默认 3）无活动 → appendEvent('lane.stalled', {lane, missed})，停止追问。
-//       只标记不自动处置（Manager/Leader 人审），不新增成员状态（stalled 用事件表达，不碰
-//       schema.js MEMBER_STATES/MEMBER_TRANSITIONS——写事件零侵入，加状态要动 schema/测试/面板/complete gate）。
-// 依赖注入：deps.store（readBatch/appendEvent/listSessions/listBatches/artifactsDirOf）
-//                          deps.mailbox（comms/mailbox.js：send/readUnacked，追问投递与 pending 探测）
-//                          deps.config（capabilities.watch：enabled/intervalsMinutes/maxMissed/scanIntervalMinutes/probeTemplate）
-//                          deps.root（可选，mailbox 根；缺省由 store.sessionsDir 推导）
-//                          deps.now（可选，时钟注入，测试用；缺省 Date.now）
-// 本文件**只导出引擎与探针视图**（G3/B1 起 `lane_heartbeat` / `lane_longrun` 两工具已删除，
-// 不再有工具定义与组装面）；本模块只动
-// watch/ 新域 + index.js 挂载 + schema.js watch 配置键 + cordis.patch.yml 注释。
 import { join } from 'node:path'; // `dirname` 随 cx 组装下沉 `./heartbeat/context.js`（波 2；本文件不再直引）
 import { statSync, readdirSync, existsSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
@@ -46,15 +32,6 @@ import { pendingHandles } from '../bridge/lane-handle.js'; // D2：未消费派�
 // W1-① 重放/恢复（周期兜底）：与装配期扫描（lib/index.js）**同一单点**，不另写第二套判定
 // 【波 2】`replayBatch` 直引随重放档下沉 `./heartbeat/replay.js`（本文件不再直引）。
 
-// ── 【2026-10-02 · 内务批 波 2】`createLaneHeartbeat` 巨型函数（799 行 / 闭包工厂）按**探针档**拆分 ────────
-//   实现落 `lib/watch/heartbeat/*.js`：`primitives`（私有常量/纯函数单点）/ `context`（共享上下文 `cx` +
-//   路径与产物解析）/ `activity`（内存条目与四信号活动判定）/ `evidence`（U-4 证据通道）/ `notice`
-//   （提示档留痕）/ `longrun`（长跑候选·消费超时·扫描·查询）/ `stalled`（stalled 追问档 tick）/
-//   `replay`（W1-① 重放兜底）/ `state-surface`（状态面查询与生命周期）。
-//   本文件 = **≤40 行组合器** + 模块级判据（judgeLongrun / blindRunVerdict / 导出面）+ 工具定义两件。
-//   外部导出符号集合与拆分前**逐字相同**；`cx` 每引擎实例一份（**不**提升为模块级单例 ⇒ 不新增真源）。
-//   环依赖说明：`heartbeat/*` 反向 import 本文件的**函数声明**（供探针调用），ESM 实例化期即初始化，
-//   运行期调用安全（无 TDZ）。
 import { createHeartbeatContext } from './heartbeat/context.js';
 import {
   REASON_DANGLING_MEMBER, REASON_NOT_SCANNED_PLANNING, REASON_PAUSED_DWELL,
@@ -66,17 +43,6 @@ import { probeTick } from './heartbeat/stalled.js';
 import { longrunStatusOf } from './heartbeat/longrun.js';
 import { laneStatusOf, resetLane, disposeEngine, replayInFlightOf } from './heartbeat/state-surface.js';
 
-// ── D2（2026-09-16）：**绑定缺口探测**（派发收进引擎的观测面） ─────────────────────
-// 与既有 stalled / longrun **同档族**（同一 tick、同一内存表、同一「只标记不自动处置」纪律）：
-//   ① `running` 但**本 stint 内无 `member.dispatch`** ⇒ 该 lane 在跑却没有绑定 worker（归属缺失）；
-//   ② 该 (batchId, lane) 存在**超 TTL 且未消费**的派发句柄 ⇒ 派发意图已发放但从未被使用（悬挂意图）。
-// 判据（2026-09-16 e-watch 修正）：**只有「无任何绑定」才报** —— 绑定 = 本 stint 内存在 `member.dispatch`
-//   且其 `workerSessionId` 非空；已绑定 ⇒ 直接 `hit:false`。**句柄残留 ≠ 无绑定**：引擎自派是直接登记
-//   `member.dispatch`（不经 post-execute 消费句柄），旧路径遗留的未消费句柄在超 TTL 后仍留在内存表里，
-//   若照报就是**幽灵缺口**（真绑定被报成悬挂意图，实测假阳性）。
-//   三类结论（后两类既有语义逐字保留）：① 无任何 dispatch 事件 ⇒ `no-dispatch`；
-//   ② 有 dispatch 但未绑定（无 workerSessionId）+ 超 TTL 未消费句柄 ⇒ `token-ttl-expired`。
-// 命中由调用方落 `lane.binding_gap` 事件（**只落事件、不占 mailbox**；幂等：本 stint 内同 reason 只报一次）。
 export function bindingGapOf(batch, lane, nowTs = Date.now(), stintTs = null) {
   const evs = Array.isArray(batch?.events) ? batch.events : [];
   const stintMs = stintTs ? Date.parse(stintTs) : null;
@@ -108,44 +74,12 @@ export function buildSchedule(intervalsMinutes) {
   return list;
 }
 
-// ---- longrun 档（超时重派探针，与 stalled 档并列）----
-// 语义：running lane 持续超 maxDurationMs（默认 20min）且近 noProgressWindowMs（默认 5min）无新 checkpoint
-//       且无活动（严格 AND）→ 探针产候选：appendEvent('lane.longrun.candidate') + mailbox broadcast 通知
-//       Manager 裁决。动作即止：不改 lane 状态（同 stalled 纪律——写事件零侵入，不碰 schema.js）。
-//       去重以批次事件流为唯一事实源：同 stint（lane + runningSince 相同）只产一次，跨重启幂等。
-//       runningSince = 事件流最近 member.dispatch / member.settled{to:'running'}（取较新）；重派（新 running
-//       stint）即更新 → 计时重置。checkpoint 最新 ts = 事件流 worktree.checkpoint 事件 ∨ 磁盘进度快照
-//       mtime（<artifacts>/<batchId>/<lane>/*.md，见 lastProgressTsOf）——取两者较新；**只读事件流会漏掉
-//       「worker 直写磁盘快照、未调 lane_checkpoint」的通道**（实测假阳性根因）。
-// 长程豁免（批次级 batch.laneExempt[lane]，授予面见 lib/state/lane-exempt.js）：判定阈值按倍率放宽
-//       effectiveMaxDurationMs = maxDurationMs × multiplier（档位表 ai-render=8 / large-download=6 /
-//       dep-install=4 / none=4）。**只放宽时长阈值，不放宽 noProgressWindowMs**——无进展窗被稀释会让
-//       「有在写 checkpoint」不再能证明「活着」，探针失去意义。豁免 lane 同时跳过 stalled 追问
-//       （laneExempt[lane].stalled === true），但**仍照常写 checkpoint / 心跳 / 进度快照**供人工巡查。
-//       runningSinceTs 匹配的 lane.longrun.candidate 已存在且其 elapsed > unconsumedTimeoutMs 且
-//       该候选的 broadcast ackId 未被 ack（isAcked；ack 默认删原消息，故不可用 readUnacked 判「已消费」）
-//       → 追加 lane.longrun.unconsumed（单次纪律：同 (lane,runningSince) 只产一次）。
-//       候选除既有 broadcast 外同时投 supervisor/inbox（该通道为 Manager 通道，实测可达）。
-//       longrunTick 对「末事件早于 staleBatchMs（默认 24h）的僵尸 running 批次」整批跳过——
-//       这类批次的 running 是历史残留（宿主异常退出/批次未收尾），扫它们只产噪音且掩盖真实活跃批。
-//       只影响 longrun 档，不影响 stalled 档与批次状态本身；阈值可配、显式 0 关闭。
-// 重启冷窗（结构性不变量，勿读作探针失效）：宿主每次重启会把在途 lane 落 idle（store.recoverBatches），
-//       重派后 runningSince 重置 → 新 stint 从 0 起算，叠加豁免倍率后
-//       **重启后、且不晚于 effectiveMaxDurationMs = maxDurationMs × multiplier**（默认 20min × 4 = 80min；
-//       ai-render 档 20min × 8 = 160min）之内，结构上不可能产生 longrun 候选。
-//       该窗口内「零增量」是设计的不变量，不是故障信号。
-// 配置：capabilities.watch.longrun{enabled,maxDurationMs,noProgressWindowMs,staleBatchMs,unconsumedTimeoutMs}
-// resolve 独立实现于本模块（schema.js 不改；键根/非法回退风格对齐 resolveWatchConfig）。
 export const LONGRUN_DEFAULTS = Object.freeze({
   enabled: true, // 出厂默认开（半自动件默认开防漏检；显式 false 才关）
   maxDurationMs: 1_200_000, // 默认 20min（长跑超时阈值；正整数 ms，非法回退默认）
   noProgressWindowMs: 300_000, // 默认 5min（无进展窗；正整数 ms，非法回退默认）
   staleBatchMs: 86_400_000, // 默认 24h（僵尸批次活跃度阈值；**0 = 关闭过滤**，非非法值）
   unconsumedTimeoutMs: 1_800_000, // 默认 30min（候选消费超时阈值；**0 = 关闭该档**）
-  // ---- 状态面扩面（一态一判据）新增阈值：独立命名、独立回退；正整数 ms，非法回退默认 ----
-  //   与既有 maxDurationMs / noProgressWindowMs **默认值与语义一字不改**（共存，不替换）。
-  //   显式 0 的「关闭该档」逃生阀只保留在既有 zeroOffMs 两键上；本组新增键**不做 zero-off 语义**
-  //   （避免探针静默失能半自动件），如需关闭由 `watch.longrun.enabled:false` 整档关。
   pendingWindowMs: 1_200_000, // 默认 20min（pending 未派发时长：锚点 = 最近 batch.phase→running）
   reviewWindowMs: 4_800_000, // 默认 80min（review 待结算时长 = 4×基准；**明文禁用「无活动」判**）
   idleWindowMs: 1_200_000, // 默认 20min（idle 待恢复时长：锚点 = 最近 →idle 迁移 ts）
@@ -157,69 +91,11 @@ export const LONGRUN_REASON = 'duration-exceeded-no-progress';
 export const LONGRUN_REASON_EXEMPT_ACTIVE = 'exempt-active';
 const LONGRUN_REASON_STALE_BATCH = 'stale-batch';
 
-// =====================================================================================
-// 状态面扩面（一态一判据）—— 本段是探针的语义契约，实现与断言同源的唯一落点。
-//
-// ① 扫描准入（替代原「双 running 门」；原 :254 `lane-not-running` / :255 `batch-not-running` 两条短路已删）：
-//    | 批次 phase | lane 非终态 {pending,running,review,idle} | lane 终态 |
-//    | planning   | **不扫判据**（只出 state 与锚点，reason=not-scanned-planning）| 不扫 |
-//    | running    | 扫全部四态判据（主面）                                   | 不扫 |
-//    | paused     | 扫「paused 滞留档」（独立档，先于 lane 判据）             | 不扫 |
-//    | aborted/complete（终态）| **只出悬挂视图**（dangling:true，恒显，不产候选） | 不扫 |
-//    保留不动：僵尸批 staleBatchMs 过滤 —— **只作用候选档**；悬挂视图不受它过滤
-//    （终态批天然「末事件早于 24h」，沿用该过滤会让悬挂视图自我抹掉）。
-//
-// ② 一态一判据（禁「无活动」一把尺）：
-//    pending  → pending-undispatched          锚点 = 最近 batch.phase→running（**不是** member.dispatch）
-//    running  → duration-exceeded-no-progress 锚点 = stintRunningSinceOf（**总时长**口径，用户裁定 Q-H：
-//               dsh 子 Agent 单次即弃置、单步任务 ⇒ 总时长即任务时长；**不得**引入 idle 时长/无活动时长
-//               作 running 主判据——那是 JiuwenSwarm 生态位语义）＋ 5min 无进展窗（保留）
-//    review   → review-awaiting-settle       锚点 = 最近 →review 迁移；**禁用「无活动」判**（review 本就不活动）
-//    idle     → idle-awaiting-resume         锚点 = 最近 →idle 迁移（idle = **崩溃恢复落位态**，非静息常驻态；
-//               不得据此推导「idle 超时即催促成员」）
-//    paused   → paused-awaiting-decision     锚点 = 最近 batch.phase→paused（**独立提示档**，不并入长跑候选）
-//
-// ③ U-3 契约（**reason 优先级阶梯，写死；同一次观测只归属最高优先的一档**）：
-//    ① 终态批 → dangling-member（快照式，无阈值；不受僵尸过滤）
-//    ② planning 批 → not-scanned-planning
-//    ③ paused 批 → paused-awaiting-decision（批次档**先于** lane 判据）
-//    ④ lane 状态专属档：review/idle/pending（该态**不产**盲跑判据）
-//    ⑤ **BR 判据（盲跑，仅 running 态）**：BR-2 blind-run-upstream-missing > BR-1 blind-run-no-deps
-//       > BR-3 blind-run-upstream-never-ready；BR reason **直落 `reason`**（不另开字段），
-//       **优先于** duration-exceeded-no-progress —— 依据：同一张「在跑却拿不到上游」的诊断，
-//       BR 是更具体的解释；若被长跑码盖住就等价于没实现（e3 K-2 假设）。
-//       BR-2 > BR-1 理由：两者同时命中时「上游曾存在后消失」比「无依赖声明」更可信（前者有实证）。
-//    ⑥ stale-batch（僵尸批）
-//    ⑦ running 长跑候选 → duration-exceeded-no-progress / checkpoint-fresh / activity-fresh /
-//       exempt-active / no-longrun-candidate / duration-not-exceeded / no-running-since（既有码一字不改）
-//    注：BR-2 的判据**包含**「超宽限窗」，故 BR-2 命中时必然已越 time 阈值 ⇒ ⑤ 在 ⑦ 之前不会掩盖真长跑。
-//
-// ④ U-4 契约（BR-2 证据通道 = 「派发时刻可解析」的可判定来源）：
-//    来源 = **探针 tick 在 `member.dispatch` 之后的首个观测**：本引擎在内存 entry 内维护
-//    `consumeObs`（`resolvedAtTs` = 首个「派发之后」观测到该 consume 路径存在且非空的时刻；
-//    `neverResolvable` = 派发后该窗内从未可解析）。持久留痕走**既有** `lane.longrun.*` 事件通道
-//    （载荷带 reason），**不新增事件常量**（`lib/state/event-types.js` 本批无写者，禁越域）。
-//    两条证据来源都无（既无 tick 观测、事件流也无工件证据）⇒ **不产候选**（BR-2 最关键的反例）。
-//
-// ⑤ U-5 契约（`state` 落点范围，与 e2 的边界）：
-//    e1（本文件）：`state` 落在 **lane 级行**——`lane_heartbeat.lanes[].state` 与
-//    `lane_longrun.lanes[].state` **两支工具都落**（A 栏③「可否缓做 = 否」）；
-//    e2（`lib/tools/core.js`）：批次级 `batch_status.lanesState` / `danglingLanes` 为**零写入面派生视图**，
-//    从 `batch.lanes` 映射得出。两处**不重复**：e1 只出 lane 级行 + 逐行 `dangling:true`，
-//    e2 出批次级聚合；二者取值同源（同一 `batch.lanes`），不做交叉校验、不互为前置。
-// =====================================================================================
-// 【2026-10-02 · 内务批 波 2】探针 `reason` 常量与状态阈值映射 `STATE_WINDOW_KEY` 已下沉
-//   `./heartbeat/primitives.js`（**单点**；顶部 import 取用），本文件不再持有私有副本。
-// 读端事件名走**字面量**——`lib/state/event-types.js` 本批无写者，不得越域新增常量（design §9）。
 const EVT_LANE_EXEMPT_CLEARED_LITERAL = 'lane.exempt.cleared';
 
 export function resolveLongrunConfig(config) {
   const c = config?.capabilities?.watch?.longrun ?? {};
-  // posMs：正整数 ms（≥1 合法；0/负数/非数 = 非法 → 回退默认）
   const posMs = (v) => (Number.isFinite(Number(v)) && Number(v) >= 1 ? Math.floor(Number(v)) : null);
-  // zeroOffMs：非负整数 ms —— **显式 0 合法且语义为「关闭该档」**（关闭该档的逃生阀）。
-  //   实现纪律：必须走显式 `=== 0` 分支放行 0，**不得**沿用 posMs 的 `>= 1` 判据——否则 0 会被
-  //   当非法值回退成默认 24h/30min，逃生阀静默失效（关键设计取舍与反例已明文记录）。
   const zeroOffMs = (v, fallback) => (Number(v) === 0 ? 0 : (posMs(v) ?? fallback));
   return {
     enabled: c.enabled !== false, // 缺省 = LONGRUN_DEFAULTS.enabled(true)，显式 false 才关
@@ -227,7 +103,6 @@ export function resolveLongrunConfig(config) {
     noProgressWindowMs: posMs(c.noProgressWindowMs) ?? LONGRUN_DEFAULTS.noProgressWindowMs,
     staleBatchMs: zeroOffMs(c.staleBatchMs, LONGRUN_DEFAULTS.staleBatchMs),
     unconsumedTimeoutMs: zeroOffMs(c.unconsumedTimeoutMs, LONGRUN_DEFAULTS.unconsumedTimeoutMs),
-    // 状态面新增阈值：与既有键同风格（正整数 ms，非法回退默认；不做 zero-off——见 defaults 注释）
     pendingWindowMs: posMs(c.pendingWindowMs) ?? LONGRUN_DEFAULTS.pendingWindowMs,
     reviewWindowMs: posMs(c.reviewWindowMs) ?? LONGRUN_DEFAULTS.reviewWindowMs,
     idleWindowMs: posMs(c.idleWindowMs) ?? LONGRUN_DEFAULTS.idleWindowMs,
@@ -285,8 +160,6 @@ export function hasLongrunUnconsumed(batch, lane, runningSinceMs) {
     return Number.isFinite(ms) && ms === runningSinceMs;
   });
 }
-// 僵尸批次判据：末事件 ts（**缺 events 数组时回退 batch.updatedAt**——旧批/异常退出批可能无事件流）。
-// staleBatchMs <= 0 时恒 false（显式 0 = 关闭过滤，逃生阀；语义同 GATE_ENABLED=false 的「显式关」）。
 export function lastEventTsOf(batch) {
   const evs = batch?.events ?? [];
   for (let i = evs.length - 1; i >= 0; i--) {
@@ -307,13 +180,6 @@ export function isStaleBatch(batch, nowTs, staleBatchMs) {
 //   保形再导出：原路径/原名可继续导入（22 个导出名一个不少），本文件内部消费走顶部 import。
 export { laneStateOf, isScannedLaneState, isDanglingLane };
 
-// ---- 状态锚点（§2 实现要点 1）：纯事件流反向扫描，返回**与 state 匹配**的最近迁移 ts ----
-// 锚点与状态同源（state 现读 batch.lanes[lane]，不缓存）；缺锚点 → null（state 照常透出）。
-// 【2026-10-02 · 内务批 波 2】`stateAnchorOf` / `batchPausedAnchorOf` 已下沉
-//   `./heartbeat/primitives.js`（顶部 import 取用）；判据一字未改。
-// 豁免清退显式留痕读端（D7 次选方案的探针侧可见面）：逐通道取「有值即返」，全无 → null。
-//   `lib/state/event-types.js` 无写者 ⇒ 事件名走字面量；字段名候选覆盖 e2 两种落法
-//   （批量级 laneExemptCleared / 事件载荷 clearedAt / 条目内 clearedAt），归一为单一时间戳。
 export function exemptClearedAtOf(batch, lane) {
   const direct = batch?.laneExemptCleared?.[lane];
   const ms = typeof direct === 'string' ? Date.parse(direct) : (typeof direct === 'number' ? direct : NaN);
@@ -369,28 +235,6 @@ export function lastProgressTsOf(progressDir, { maxDepth = PROGRESS_DIR_MAX_DEPT
   return latest;
 }
 
-// =====================================================================================
-// 盲跑判据（C-3 / D4，BR-1/BR-2/BR-3）—— 纯函数，供 judgeLongrun 与 tick 共用（单点同源）。
-// 与另一批 B1（consume 强制）/ A1（悬空产物）的硬边界：那两条在**建批/派发期**「拒绝」，
-//   本组在**运行期**「产候选/提示」，不阻断、不改状态；**同一次观测只归属一侧**（拒绝在前、兜底在后）。
-// 路径解析口径与 gates.resolveArtifact 同源：`<artifactsDirOf(sessionId,batchId)>/<rel>`；
-//   **可解析 = 存在且非空**（空文件不算就绪）。
-// =====================================================================================
-// 【2026-10-02 · 内务批 波 2】`laneConsumePathsOf` 已下沉 `./heartbeat/primitives.js`（顶部 import 取用）。
-// 「空依赖」判定（BR-1 的**必要性收紧**，实测校准 —— 见产物「BR-1 精度」一节与 gap）：
-//   `consume` **显式声明为空数组** ∧ 该批 wavePlan 无任何依赖边 ∧ 批内只有该一条 lane。
-//   为什么必须收紧（三条实测依据，缺一条就会误报）：
-//   ① **`consume: null` 不得判盲跑**：本仓 `buildWavePlan` 把「未声明的 consume」规范化为 `null`，
-//      而**既有夹具全部走未声明路径**（`watch-longrun.test.js` / `watch-longrun-integration.test.js` /
-//      `watch-hotconfig` / `watch-bootoverlay` 等约 20 条 running 单 lane 用例）⇒ 若把 `null` 也判为
-//      「空依赖」，这些**回归锚用例会集体转红**（实测：IT-A/IT-D/IT-E 的 `reason` 断言由
-//      `duration-exceeded-no-progress` 变成 `blind-run-no-deps`），即用运行期兜底档**吃掉**既有守恒语义。
-//   ② **有依赖边的批不得判盲跑**：`deps` 非空即说明上游由 DAG 表达 ⇒ 不属「空依赖」。
-//   ③ **多 lane 批不得判盲跑**：多 lane 批的逐 lane「consume 缺省」同样是夹具常态（RS-2 的 5 lane 夹具），
-//      其「未声明上游」属**契约缺声明**（归另一批 B1 的 consume 强制面）——**拒绝在前、兜底在后**，
-//      运行期兜底档不替静态门禁发言。
-//   保留语义：**显式 `consume: []`** = 建批方明示「本 lane 无上游」⇒ 结构上确实无依赖却已在跑 ⇒ BR-1 成立
-//      （RS-6 的 l-blind 即此形态；`consume` 缺省/`null` 一律不判）。`deps` 缺省与 `[]` 视为等价（无上游）。
 function laneHasEmptyDeps(batch, lane) {
   const t = findTask(batch, lane);
   if (!t) return false; // 未登记 wavePlan ⇒ 不判（零静默：以 unverified 记账，不猜——BR-1 的关键反例）
@@ -628,9 +472,6 @@ export function judgeLongrun({
   const runningSinceTs = stintRunningSinceOf(batch, lane);
   const durationMs = runningSinceTs === null ? null : nowTs - runningSinceTs;
 
-  // ── ③ BR 盲跑判据（U-3 阶梯 ⑤：**先于**长跑码；仅 running 态；scan 侧与 status 侧同源）──────────
-  //   与另一批 B1（consume 强制，拒绝在建批/派发期）/ A1（悬空产物，拒绝在派发期）**互补不互代**：
-  //   拒绝在前、兜底在后，同一次观测只归属一侧（本函数只产候选/提示，不改状态、不阻断）。
   const blind = blindRunVerdict({
     batch, lane, nowTs, durationMs, blindRunGraceMs, exempt,
     progressTsMs, consumeObs,
@@ -706,12 +547,6 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now, liveCon
   return { tick, status, reset, dispose, longrunStatus, replayInFlight };
 }
 
-// lane_heartbeat / lane_longrun 共用的**缺省 lane 过滤**（C-2 / §6.1 A 栏②；F6 归因更正后落点 = 本文件）：
-//   从「仅 running」改为**按状态过滤**——返回全部**非终态** lane（{pending, running, review, idle}）；
-//   终态（merged/failed/skipped/conflict）排除。
-//   ⚠️ 例外（D6/RS-9）：批次已**终态**时，非终态 lane 是**悬挂成员**，必须恒显（且**不受僵尸批 24h 过滤**）
-//   ⇒ 该情形下**全量返回**（batch.lanes 全键），不因「批次已终态」而空返回——否则悬挂视图自我抹掉。
-//   显式传 lane 时恒单行（只读安全；终态 lane 也照常返回结果对象，不 throw）。
 function laneIdsFor(batch, only) {
   const all = Object.keys(batch.lanes ?? {});
   if (only) return [only];

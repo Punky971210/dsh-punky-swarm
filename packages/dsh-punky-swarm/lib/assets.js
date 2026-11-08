@@ -15,10 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 资产同步：把包内 presets/ 与 skills/ 同步到用户目录（参照 dsh-liangshen 语义）
-// 幂等：目标目录字节一致则跳过（current），否则整体覆盖（synced）；只动插件自有目录，不碰用户其他预设/技能。
-// 清单驱动：job 表来源 = 包内 presets/punky-preset/asset-manifest.json（M 层）+ 内置自举条（B 层，文件粒度）。
-// 清单不可用（缺失/读取失败/JSON 破损/schema 不合规/落点越界）一律整体回退内置默认表，绝不静默不同步。
 import fs from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, isAbsolute } from 'node:path'
@@ -38,18 +34,10 @@ const TARGET_ROOTS = {
 /** 内置默认资产表（清单不可用时的降级表；落点与冻结值逐字等价）。 */
 const DEFAULT_ASSETS = [
   { rel: 'presets/punky-preset', target: { root: 'preset', subpath: 'punky-preset' } },
-  // 退役（2026-09-30 · 批 debt-cleanup-20260930）：原 `presets/engine-team` 条目已随**团队资产装配面整体退役**
-  //   一并删除（装配面进了退役锁；该目录为空壳且不被版本控制跟踪 ⇒ 同步恒 missing-source）。
-  //   与 `asset-manifest.json` **双侧同删**（两表条目 10 → 9，两处必须一致）。
-  //   ⇒ 该 rel **不再作为资产真源列出**（本段属**否定式退役登记**，不是现役指针）。
   { rel: 'skills/software-team', target: { root: 'skill', subpath: 'software-team' } },
   { rel: 'skills/design-team', target: { root: 'skill', subpath: 'design-team' } },
-  // 退役（2026-09-17）：原「团队装配资产说明」技能条目随该技能目录**整体退役**删除（清单条目 11 → 10）——
-  //   其内容已并入 `skills/software-team/SKILL.md` 的「装配资产（team-asset）说明与用途」章节。
   { rel: 'skills/research-team', target: { root: 'skill', subpath: 'research-team' } },
   { rel: 'skills/writing-team', target: { root: 'skill', subpath: 'writing-team' } },
-  // 【2026-10-23 · 批 punky-logfix-20261023/Q-24】`skills/video-team` 源树在仓却漏登记 ⇒ 用户机整支技能不可用（双表同形漏项）。
-  //   与 `asset-manifest.json` **同形同序补 1 条**（条目 9 → 10，两处必须一致；位置 = 末尾，既有 9 条顺序零变更）。
   { rel: 'skills/video-team', target: { root: 'skill', subpath: 'video-team' } },
 ]
 

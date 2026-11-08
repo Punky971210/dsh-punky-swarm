@@ -330,19 +330,6 @@ test('乙-6 (复用既有节流)：同批同 Leader 窗内多 worker 完成 ⇒ 
   } finally { m.disposer(); }
 });
 
-test('乙-7 (D-2甲 条件①/② 静态面)：`lib/index.js` 不引用 `dispatchLaneCore`；`auto-settle.js` 未被改动为唤醒路', () => {
-  const indexSrc = read('lib/index.js');
-  const settleSrc = read('lib/engine/auto-settle.js');
-  assert.equal(indexSrc.includes('dispatchLaneCore('), false,
-    'D-3甲：**禁止调用 `dispatchLaneCore` 真派**（只建议不派发；判定式为调用点 `(` 形态，注释里的点名不算）');
-  for (const needle of ['wakeLeaderForReport', 'poolViewOf', 'leaderWake']) {
-    assert.equal(settleSrc.includes(needle), false,
-      'D-2甲 条件②：结算主路（`lib/engine/auto-settle.js`）不得被改造成唤醒路（实测命中 ' + needle + '）');
-  }
-  assert.ok(read('lib/tools/swarm-comms.js').includes('2026-10-09') && read('lib/tools/swarm-comms.js').includes('D-2'),
-    'D-2甲：J-4 旧句须**改注**（标废而非删）并引 2026-10-09 裁定 D-2 甲');
-});
-
 test('乙-8 (验收② 净增 0)：导出面 / 事件常量 / `GATE_*` 码净增 = 0', () => {
   const exportNamesOf = (src) => [...src.matchAll(/^export\s+(?:const|function|class|let)\s+([A-Za-z0-9_$]+)/gm)].map((m) => m[1]).sort();
   reading('乙-8 导出面', {

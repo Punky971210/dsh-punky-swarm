@@ -15,41 +15,27 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// verify/evidence.js —— post-execute 捕获 + 内容寻址 blob（借鉴 dsh-verification CapturedEvidence）
-// 订阅宿主 tools/post-execute（cordis waterfall，pass-through 不断链），从真实 ToolExecutionResult 派生证据；
-// 内容寻址存储（key=contentHash，tmp+rename 原子写，读校验损坏 fail closed，>256KB 截断标记），同内容去重；
-// 控制面工具不产证据。纯逻辑 + 文件 blob（root/verify/blobs + root/verify/ledger-<session>.jsonl，引擎状态根）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalizeArgs, stableHash } from './selector.js';
 import { SESSION_RE } from '../state/constants.js'; // 单点（原定义迁出）
 
-// 256KB 截断阈值（对齐 dsh-verification evidence-store 超限截断语义）
 const MAX_BLOB_BYTES = 256 * 1024;
 
-// 控制面工具名单：治理/协调/宿主控制面工具不产证据（结果非领域产出，含后续挂载的控制面工具）
 export const CONTROL_PLANE_TOOLS = new Set([
-  // 蟛蜞治理 core 11 + mailbox 3
   'wave_plan', 'batch_phase', 'batch_status', 'artifact_types', 'assign_check', 'asset_claim',
   'gate_status', 'lane_claim', 'lane_release', 'member_settle', 'member_set_status',
-  // 后续挂载能力（watch/worktree/budget/trajectory 装配后同样控制面）
   'lane_worktree_create', 'lane_worktree_merge', 'lane_checkpoint',
-  // 宿主控制/会话面
   'ask_user_question', 'describe_image', 'read_image', 'todo_write', 'list_agents',
   'send_message', 'interrupt_agent', 'job_list', 'job_output', 'job_kill',
   'memory_save', 'memory_search', 'memory_list', 'memory_update', 'memory_delete', 'memory_archive', 'memory_forget',
 ]);
 
-// 证据分类表：工具 → 证据类别（4 类；未映射工具不产证据，保守兜底）
 const KIND_BY_TOOL = {
-  // 命令输出：执行型工具的 stdout/结果文本
   pwsh: 'command_output', bash: 'command_output', run_code: 'command_output',
   ssh_exec: 'command_output', ssh_cluster: 'command_output',
-  // 文件存在：目录/文件探测结果
   glob: 'file_exists',
-  // 带定位引用：read/grep 行号定位文本
   read: 'quote_with_location', grep: 'quote_with_location',
-  // 文件差异：写/编辑产生的变更证据
   write: 'file_diff', edit: 'file_diff',
 };
 
@@ -59,7 +45,6 @@ function classifyEvidence(exec) {
   return KIND_BY_TOOL[exec.name] ?? null;
 }
 
-// 从 ToolExecutionResult 提取展示文本（content 块兼容 string/array/object；失败/空 → ''）
 function extractResultText(result) {
   if (!result) return '';
   const c = result.content;
@@ -76,7 +61,6 @@ function extractResultText(result) {
   try { return JSON.stringify(c); } catch { return String(c); }
 }
 
-// 派生证据（纯函数）：控制面/未知工具 → null；其余 → 结构化证据（含 selectorKey 供审计侧全等匹配）
 function deriveEvidence(exec, result) {
   const kind = classifyEvidence(exec);
   if (!kind) return null;
@@ -86,7 +70,6 @@ function deriveEvidence(exec, result) {
     kind,
     tool: exec.name,
     callId: exec.callId ?? null,
-    // 与 freezeSelector.argsHash 同源计算（stableHash({tool, canonicalArgs})），审计侧按此匹配 AC
     selectorKey: stableHash({ tool: exec.name, args: canonicalizeArgs(args) }),
     ts: new Date().toISOString(),
     ok: !failed,
@@ -95,11 +78,9 @@ function deriveEvidence(exec, result) {
   };
 }
 
-// ---- 内容寻址 blob 存储（引擎状态根 root/verify/blobs/） ----
 function blobDirOf(root) { return path.join(root, 'verify', 'blobs'); }
 function blobPathOf(root, key) { return path.join(blobDirOf(root), key + '.json'); }
 
-// 内容哈希：只对证据的规范字段求值（不含 blobKey 元数据），读校验与写校验共用同一函数
 function evidenceKey(evidence) {
   return stableHash({
     kind: evidence.kind,
@@ -110,7 +91,6 @@ function evidenceKey(evidence) {
   });
 }
 
-// 原子写 + 写后读校验（损坏 fail closed：删除损坏文件并抛错，不留半成品）
 function writeBlobAtomic(root, key, payload) {
   fs.mkdirSync(blobDirOf(root), { recursive: true });
   const file = blobPathOf(root, key);
@@ -118,8 +98,6 @@ function writeBlobAtomic(root, key, payload) {
   fs.writeFileSync(tmp, payload, 'utf8');
   try {
     const written = JSON.parse(fs.readFileSync(tmp, 'utf8'));
-    // truncated 记录只保留截断摘要，内容哈希必然不等于原始 key → 仅校验 key 字段；
-    // 完整记录才做内容哈希核对（写后读校验，fail closed）
     if (written.key !== key) throw new Error('write verify failed: key mismatch');
     if (written.truncated !== true && evidenceKey(written) !== key) throw new Error('write verify failed: content hash mismatch');
     fs.renameSync(tmp, file);
@@ -130,7 +108,6 @@ function writeBlobAtomic(root, key, payload) {
   return key;
 }
 
-// 内容寻址写入：key=contentHash；同内容去重（已存在直接返回既有 key，不重写）；>256KB 截断标记
 export function storeBlob(root, evidence) {
   if (!evidence || typeof evidence.kind !== 'string') throw new Error('storeBlob: invalid evidence');
   const key = evidenceKey(evidence);
@@ -151,7 +128,6 @@ export function storeBlob(root, evidence) {
   return key;
 }
 
-// 读校验：损坏 fail closed（key 不匹配 / 内容哈希不匹配 / 不可解析 → 抛错，绝不以损坏内容裁决）
 export function readBlob(root, key) {
   if (typeof key !== 'string' || !key.length) throw new Error('readBlob: key required');
   const file = blobPathOf(root, key);
@@ -166,7 +142,6 @@ export function readBlob(root, key) {
   return data;
 }
 
-// ---- 每会话捕获台账（jsonl 追加写；审计 lane 按会话/selectorKey 消费） ----
 function ledgerFileOf(root, sessionId) {
   if (!SESSION_RE.test(String(sessionId))) throw new Error('invalid sessionId: ' + sessionId);
   return path.join(root, 'verify', 'ledger-' + sessionId + '.jsonl');
@@ -178,7 +153,6 @@ export function appendLedger(root, sessionId, entry) {
   fs.appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
 }
 
-// 读取台账：可按 selectorKey / tool 过滤；损坏行跳过（台账尽力而为，blob 仍可单查）
 export function readLedger(root, sessionId, { selectorKey, tool } = {}) {
   const file = ledgerFileOf(root, sessionId);
   if (!fs.existsSync(file)) return [];
@@ -195,12 +169,10 @@ export function readLedger(root, sessionId, { selectorKey, tool } = {}) {
   return out;
 }
 
-// ---- 证据绑定注册表（audit lane 侧：按 AC 冻结 selector 匹配台账 → bindEvidence → 供裁决） ----
 export function createEvidenceRegistry() {
   const bindings = new Map(); // acId -> [{ selectorRef, blobKey }]
 
   return {
-    // 捕获 → 绑定：同一 AC 同 blobKey 幂等（去重）
     bindEvidence(acId, selectorRef, blobKey) {
       if (typeof acId !== 'string' || !acId.length) throw new Error('bindEvidence: acId required');
       if (typeof selectorRef !== 'string' || !selectorRef.length) throw new Error('bindEvidence: selectorRef required');
@@ -219,16 +191,9 @@ export function createEvidenceRegistry() {
   };
 }
 
-// ---- post-execute 捕获安装（函数默认参 enabled=false = 裸调保守默认零开销；verify 能力出厂默认开——mountVerify 经 resolveVerifyConfig 缺省 enabled=true 装配时显式传 enabled:true） ----
-// 订阅宿主 tools/post-execute waterfall：观察派生证据 → 落 blob + 台账；pass-through 不断链（return next()）。
-// 捕获失败只记录不抛（观察者不得破坏工具执行链）。
 export function installEvidenceCapture(ctx, opts = {}) {
   const { root, enabled = false, onCaptured } = opts;
   if (enabled !== true || !root || typeof ctx?.on !== 'function') {
-    // G01 #6（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：本处是**同族裸字面量**早退（无 `inert` 函数）。
-    //   三条件合并后**生产恒不成立**（`mountVerify` 经 `resolveVerifyConfig` 缺省 enabled=true 并显式传
-    //   `root`；`ctx.on` 由宿主提供）⇒ 归**防御纵深 · 生产不可达**：**只补 `inert` 回显键（布尔 true）**，
-    //   禁引入 `inert` 函数、禁加日志。既有字段逐项保留：`dispose` / `count()` / `installed`。
     return { dispose: () => {}, count: () => 0, installed: false, inert: true };
   }
   let captured = 0;
@@ -251,24 +216,14 @@ export function installEvidenceCapture(ctx, opts = {}) {
   return { dispose, count: () => captured, installed: true };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// I-13 · 拒因分级（B7 拒因可诊断）：**族 ⇒ 修复动作**的唯一映射表
-//
 // 分级按**根因**（`errorFamily` 由产生点按成因直接给出），**不按 message 文本匹配** ——
 //   文案一改就失效，靠正则从消息里猜族是最脆的形态。
 // 同一族的不同码 ⇒ **同一动作**：动作取决于「哪一类原因」，不取决于「具体哪一个码」；
-//   若按码映射，同族两个码就可能给出两个动作，修复指引立刻分叉。
-// 未映射族 ⇒ **抛**（`error-family-unmapped:`），禁静默返回 null —— 静默的 null 会被上层当成"没有动作"，
-//   于是新加一个族时没人发现它没有修复指引。
-// ─────────────────────────────────────────────────────────────────────────────
 
-/** 未映射族/码的拒因前缀（普通 `Error`；非 `GATE_`、无 `code`）。 */
 export const ERROR_FAMILY_UNMAPPED = 'error-family-unmapped:';
 
-/** 拒因族（固定小集合；新增族必须同时补 `REPAIR_ACTION_BY_FAMILY`，否则 `repairActionOf` 会抛）。 */
 export const DENIAL_FAMILIES = Object.freeze(['tier', 'mode', 'allowlist', 'approval']);
 
-/** 族 ⇒ 修复动作（**唯一映射表**；同族多码共用同一动作）。 */
 const REPAIR_ACTION_BY_FAMILY = Object.freeze({
   tier: 'assess', // 先做只读侦察再 assign_check，写入难度与判据
   mode: 'switch-mode', // 当前模式不生效 ⇒ 换到该模式允许的路径
@@ -276,13 +231,6 @@ const REPAIR_ACTION_BY_FAMILY = Object.freeze({
   approval: 'obtain-approval', // 需批准 ⇒ 取得批准票据（摘要须与当前参数一致）
 });
 
-/**
- * 族 ⇒ 修复动作。**入参是族名本身**（查表即判定，不是拼进消息）。
- *
- * @param {string} errorFamily 族名（`DENIAL_FAMILIES` 之一）
- * @returns {string} 修复动作名
- * @throws {Error} 未映射族 ⇒ `error-family-unmapped:`（禁静默 null）
- */
 export function repairActionOf(errorFamily) {
   if (typeof errorFamily !== 'string' || errorFamily.length === 0) {
     throw new Error(ERROR_FAMILY_UNMAPPED + ' <empty>（族名须为非空字符串）');
@@ -294,14 +242,6 @@ export function repairActionOf(errorFamily) {
   return action;
 }
 
-/**
- * 结构化拒因 ⇒ `{errorFamily, errorCode, action}`。
- * `errorCode` 参与校验（每个拒码都必须落到一个动作）；`action` 由**族**决定。
- *
- * @param {{errorFamily: string, errorCode: string}} denial
- * @returns {{errorFamily: string, errorCode: string, action: string}}
- * @throws {Error} 族/码缺失或族未映射
- */
 export function classifyDenial(denial) {
   const errorFamily = denial?.errorFamily;
   const errorCode = denial?.errorCode;

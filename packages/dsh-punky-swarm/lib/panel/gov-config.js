@@ -65,10 +65,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     function pickBool(a, b, d) { return typeof a === 'boolean' ? a : typeof b === 'boolean' ? b : d; }
     function pickNum(a, b, d) { return typeof a === 'number' && isFinite(a) ? a : typeof b === 'number' && isFinite(b) ? b : d; }
     function clockOf(d) { try { return d.toTimeString().slice(0, 8); } catch { return ''; } }
-    // 可选装载复选集 = 全部注册规则集（四个平级多选项：L1 敏感 / L2 资源 / L3 工具黑名单 / L5 等待能力禁用）——
-    //   组合 = 勾选叠加本身（如「规则预设」全勾 = ['l1-sensitive','l2-resource','l3-tool-ban','l5-wait-ban']），
-    //   不再有 compose 这一「组合项」（该注册 id 已废除）；'compose' 仅在 formPresetOf 里作一次性旧值迁移。
-    //   2026-09-26 扩面：新增 l5-wait-ban（wait_agent + sleep 禁用，用户裁决）。
     function presetOptionIds() { return ['l1-sensitive', 'l2-resource', 'l3-tool-ban', 'l5-wait-ban']; }
     function escPrimitives() { return ['DENY', 'NARROW', 'DEFER', 'PAUSE']; } // REQUIRE_APPROVAL 红线不可经表单（引擎契约），不出现
     function presetMeaningKey(id) {
@@ -80,10 +76,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         default: return null;
       }
     }
-    // GET overlay.hook.preset 回显 → 表单勾选集（**仅数组形态**；单选遗产清除 2026-09-14）：
-    //   空/省略 → null（全不勾）；数组且 id 全在可选集内 → 勾选集；
-    //   单值字符串（旧单选遗留）/ 含未注册 id / 其它非法形态 → { custom: <原文> }——无勾选位可表，
-    //   保存时原文透传，由后端形态校验拒绝并回显（面板给警示，用户按多选重新勾选即可）。
     function formPresetOf(pv) {
       if (pv === undefined || pv === null || pv === '') return null;
       if (!Array.isArray(pv)) return { custom: pv }; // 单值字符串等旧形态：不再自动迁移，交用户改勾选

@@ -15,31 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/webui/runtime-config.js —— WebUI 治理配置写通道服务
-// 端点 POST /api/dsh-punky-swarm/config 的写侧：受控白名单预检（拒绝而非回退）→ 读-改-写保留语义
-//   → validateOverlay 兜底 → tmp+rename 原子写 <root>/config/runtime.json。
-// 语义要点：
-//   - 读-改-写保留：读现有 runtime.json（缺失 = {}）→ 仅替换顶层 governance 段 → 写回全量。
-//     其它顶层键（aip/acps/capabilities/mailbox/resume/ratchet/escalation）与 governance.hook 内
-//     非表单键（rules/defaults/pause/defer）原样保留——写通道是「受控改键」，不做全量替换。
-//   - preset 省略（payload.hook 无 preset 键）= 删键回静态出厂空表（叠加语义）；
-//     escalation/flags/enabled 省略 = 该键不动（escalation 显式整段合并：{...cur, ...form}）。
-//   - 服务端自做值域预检（validateOverlay 不做 governance 深度校验的缺口）——
-//     拒绝（400 errors 逐字段 code）而非引擎式回退，给表单可操作回显。
-//   - 预检通过仍跑 validateOverlay(全量 overlay) 兜底：保证写入内容必被 watcher 接受、
-//     热更确定性生效；兜底失败 → 500 不落盘（不应发生）。
-//   - 原子写：同目录写临时文件（.runtime.json.tmp）→ renameSync——写入必须走 rename 而非
-//     直接 writeFile，watch 只看到完整文件（config-watch 文件级 watch）。
-//   - watch 写通道：writeWatch 处理 capabilities.watch 段——读-改-写保留
-//     （capabilities 只合并 watch 子对象：{...curWatch, enabled?, longrun:{...curLongrun, enabled?/阈值}}，
-//     其余顶层键与 capabilities 其余子键原样）。端点按 body 键分派：单保存合并 governance + capabilities.watch
-//     双段同 body → 含 capabilities 段走 writeWatch（内部同时处理可选 governance 段，
-//     复用 writeGovernance 校验/合并语义）；仅 governance（旧客户端/既有测试）→ writeGovernance 原路径。
-//     阈值写通道已就绪：longrun.maxDurationMs/
-//       noProgressWindowMs 值域允许正整数 ms≥1，可经面板表单（UI 分钟换算 ms）与手工 runtime.json 写入。
-// 零 ctx 依赖、fs 封装可单测；只 import config-watch 的 validateOverlay + stripBom（均为既有导出面，
-//   BOM 剥除复用同一实现不新增副本）+ preset-loader 的
-//   PRESET_IDS（注册 id 枚举唯一权威，不接受任意路径引用）。
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { validateOverlay, stripBom } from '../hot/config-watch.js';
@@ -66,7 +41,6 @@ const HOOK_FORM_KEYS = new Set(['enabled', 'preset', 'escalation', 'flags']);
 const WATCH_CAPS_KEYS = new Set(['watch']);
 const WATCH_KEYS = new Set(['enabled', 'longrun']);
 const WATCH_LONGRUN_KEYS = new Set(['enabled', 'maxDurationMs', 'noProgressWindowMs', 'staleBatchMs', 'unconsumedTimeoutMs']);
-// longrun 值域两档：① 正整数 ms≥1（0 = 非法回退默认）；② 非负整数 ms≥0（0 = 显式关闭该档，合法）
 const WATCH_LONGRUN_POS_KEYS = ['maxDurationMs', 'noProgressWindowMs'];
 const WATCH_LONGRUN_ZERO_OFF_KEYS = ['staleBatchMs', 'unconsumedTimeoutMs'];
 // windowSeconds（秒，新语义提交字段）= UI 输入单位；后端 ×1000 归一
@@ -83,12 +57,6 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
-// ── 服务端受控白名单预检（纯函数、零 IO）──
-// payload = POST 请求体 { governance: { hook: {...} } }；curHook = 当前文件 governance.hook（可选，
-//   提供时追加规则表冲突守卫——preset 相对现有引用有变化 + 现有 overlay rules 非空 → 拒绝）。
-// 返回 { ok, errors: [{ field, code, message }] }——400 拒绝而非回退（值域判据 = 引擎 resolve 合法域，
-//   不发明引擎外上封顶）。code 枚举（UI 双语映射键）：unknown-top-level / field-not-allowed /
-//   unknown-preset / preset-conflicts-inline-rules / invalid-value。
 export function validateGovernancePayload(payload, curHook) {
   const errors = [];
   const push = (field, code, message) => errors.push({ field, code, message });
@@ -129,7 +97,6 @@ export function validateGovernancePayload(payload, curHook) {
     const badPreset = (field, message) => push(field, 'invalid-value', message);
     const p = hook.preset;
     if (typeof p === 'string') {
-      // 单选遗产清除（2026-09-14）：单值字符串形态不再接受——护栏配置一律多选 / 数组
       badPreset('governance.hook.preset',
         `preset must be an array of registered ids（单值字符串形态已废除，请改 preset: ["${p}"]；多选可叠加多项）`);
     } else if (Array.isArray(p)) {
@@ -344,10 +311,6 @@ export function createRuntimeConfigService({ root, logger } = {}) {
   function readOverlay() {
     if (!fs.existsSync(runtimeFile)) return {};
     const raw = fs.readFileSync(runtimeFile, 'utf8');
-    // BOM 容忍（2026-09-17 panel-hotfix）：外部工具（PowerShell `Set-Content -Encoding UTF8`）写盘会带
-    //   U+FEFF，而 readFileSync 不剥 BOM → JSON.parse 直接抛 SyntaxError；本读端被读/写两通道共用 ⇒ 面板读存
-    //   双死（活体 500）。复用 hot/config-watch.js 既有 stripBom（同读端单一实现，禁第三份副本）；
-    //   仅放宽读端对 BOM 的容忍，不放宽任何校验。
     const parsed = JSON.parse(stripBom(raw)); // 坏 JSON → SyntaxError 上抛
     if (!isPlainObject(parsed)) throw new Error('runtime.json must be a JSON object: ' + runtimeFile);
     return parsed;

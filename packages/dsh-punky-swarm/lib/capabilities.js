@@ -15,38 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 能力声明面（批 `punky-g1-declare-2026-10-29` · lane `e1-capability`）：
-//   把「能力」从**散落的隐式假设**收成一份**可读、可断言、可回显**的声明。
-//
-// 两类能力（构造注入、**部署期固定**、运行期无提权路径）：
-//   · **host**（必需宿主注入）：插件靠 cordis `inject` 声明的宿主服务键。缺一个 ⇒ 插件根本不该被加载，
-//     故这里做 **fail-closed**：`assertRequired` 抛错（普通 Error，非拒码），不静默降级。
-//   · **internal**（引擎内部能力）：`assembly/schema.js#CAPABILITY_REGISTRY` 的 13 键（aip / acps / identity /
-//     discovery / verify / watch / worktree / budget / injectBudget / trajectory / auditlog / logs / topic）。
-//     缺（= 显式关闭或未启用）⇒ **不抛**，只进 `report.missing` 供回显与巡检。
-//
-// **不造第二真源**（本批硬约束）：键集**只从** `CAPABILITY_REGISTRY` **派生**（`CAPABILITY_KEYS`），
-//   本文件不复制任何键名字面量清单、不复制判定逻辑（启用判据复用单点读端 `readCapability`）。
-//   若将来新增/删除能力键，改注册表即可，本文件零改动。
 import { CAPABILITY_REGISTRY, readCapability } from './assembly/schema.js';
 
-/**
- * **功能面键**（宿主中立词表）—— J6-d / AC-9b 的落点。
- *
- * 值域与 provider 端口一一对应：`toolSurface`（工具面）/ `httpSurface`（HTTP 面）/ `agentRuntime`（成员执行面）/
- * `rosterSource`（名册读取面）。**后两者是不同能力，不是同一动作的两条路**：
- *   · `agentRuntime` = 「**要一个成员**」—— 其内部再分 C/D 两条通道（见 `channels`）；
- *   · `rosterSource` = 「**读一份名册**」—— 与派成员是两个动作 ⇒ **不进 `channels`**（设计 §5.1）。
- * ⚠ 本常量**不含任何宿主服务名**（四个面的**宿主实现名一律不写在本文件**）—— 宿主名只允许出现在
- *   `lib/provider-dsh/**` 与 provider 的装配行里。
- *   ⚠ 本注释**刻意不列举**那些宿主字面名：`test/roster-self-held.test.js` 的 AC-15 面（R5）对本文件做
- *   「外部框架专名零命中」扫描 —— **列举即假阳性**（本 lane 踩过一次，见 `exec/channels-impl.md` 的途中自查）。
- *
- * 历史：W4 前本处是「宿主三键」数组，同时充当
- *   ① 引擎插件行的 `inject` 声明源 ② 能力回显表的数据源。W4 把两者**拆开**：
- *   ① 归 `ENGINE_INJECTIONS`（已清空）② 归本常量（改判**端口可用性**，不再读宿主 ctx 属性）。
- *   批 `punky-adapter-channels-20261101` 再由三面扩到四面（追加 `rosterSource`）。
- */
 export const HOST_FACE_KEYS = ['toolSurface', 'httpSurface', 'agentRuntime', 'rosterSource'];
 
 /**

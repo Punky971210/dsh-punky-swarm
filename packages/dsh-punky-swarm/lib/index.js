@@ -24,12 +24,6 @@ import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
 import { createTools } from './tools/register.js';
-// 【2026-10-09 批 `swarm-report-wake-autodispatch-20261009` · D-2 甲 / D-3 甲】主路并行唤醒的**两个既有单点**：
-//   · `wakeLeaderForReport`（`lib/tools/swarm-comms.js`）= 唤醒**唯一动作**（节流窗 / Leader 句柄非注入读 /
-//     四类降级回显 / 永不抛）——乙路**复用**，**禁另写第二套节流口径**；
-//   · `poolViewOf`（`lib/tools/task-tools.js`）= 「可派发性」**唯一判据**（deps 已结算 + `owner===null` +
-//     lane `pending`）——D-3 甲候选**复用**，**禁重写**。
-//   ⚠ 本批**零新增导出**：两件均为既有导出，仅新增 import（验收②「导出面净增 0」）。
 import { wakeLeaderForReport } from './tools/swarm-comms.js';
 import { poolViewOf } from './tools/task-tools.js';
 import { createApi } from './api.js';
@@ -40,31 +34,16 @@ import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 
 //   任一判据不满足 ⇒ 停轮（缺省 onFail=pause）。**必须**以 `{ global: true }` 注册（契约卡
 //   `plan/host-completion-probe-spec.md` #8/#9：被 scope 化的插件 ctx 下默认监听漏收）。
 import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settle.js';
-// 【批 `lane-wake-mainpath-fix-20261010` · W-3】唤醒寻址的两个取值口 = `lib/engine/dispatch.js` 的**唯一解析单点**
-//   （§约束 2 / C-2：本文件**不得**自写 `ownerSessionId` 字段名；重建用 `ownerSessionIdOf`，唤醒本通用
-//   `wakeAddressOf`（含 C-3 回退，禁在调用点直连 `??`——空串会被 `??` 放行））。
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
 import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf, resolveBridgeConfig } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
-// 能力声明面（批 `punky-g1-declare-2026-10-29` · lane `e1-capability`；**W4 批 `w4-inject-teardown` 重划**）：
-//   ① `inject` 仍走**声明驱动**（单一来源标识符，本文件只引用、不写字面量），但该标识符 = **`ENGINE_INJECTIONS`（空数组）**：
-//      宿主服务名的声明落点已迁到 provider 行（`cordis.patch.yml` 的 `dsh-punky-swarm-provider-dsh`）。
-//   ② 装配结束前落 `rt.capabilities` 回显（功能面 + 内核端口 + 内部能力三段）＋ 降级 warn；
-//   ③ fail-closed 面**从宿主能力改到内核端口**（`assertRequired` 只对 `runtime`/`audit` 拒），
-//      宿主功能面不可用 ⇒ **降级但不静默**（回显 `installed:false` + `reason`）——详见 `lib/capabilities.js`。
 import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
 // 【W4 · D-2/D-3】功能面探活所需的端口实例：由装配根在此**建一次**，供 `capabilityReport({ ports })` 读 `available`。
 //   方向 = 引擎 → provider 端口（J6：宿主差异只在 provider 内）；本文件不再读任何宿主服务名。
 import { createToolsPort } from './provider-dsh/tools-http.js';
 import { createAgentPort, agentChannelFactsOf } from './provider-dsh/agent.js';
-// 【B 段 · 批 `punky-adapter-channels-20261101`】名册功能面端口：只用于**能力探活**（读 `available`）。
-//   `agent` 传 `null` 与 `lib/bridge/dispatch-register.js` 的既有「only-available 探活」同式
-//   （`available` 的判定只依赖宿主服务在位，与查询凭据无关）⇒ 不引入成员语义。
-// 【Q-E=乙 · 批 `punky-arch-refine-20261101`】名册功能面就绪判据（`rosterTableReadyOf`）。
-//   ⚠ **不再** `createRosterPort(ctx, null)` 探宿主 `agentTeams`：名册真源 = 我方自建表，宿主 roster 只对账。
-//   该面 `available` 只看「自建表机制是否就绪」（store 可读批 ∧ seatOf 判别子 ∧ markManagerRaised 在位）。
 import { rosterTableReadyOf } from './tools/host-surface.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
@@ -106,7 +85,6 @@ import { createStreamHub } from './panel/stream.js';
 // 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
-// 【X-3 接线 · 批 B2】I-09 唤醒队列：coalescing ＋ 续跑上界 2 ＋ 自 block 抑制。
 import { createWakeQueue } from './state/wake-queue.js';
 // 审计日志 sink（lib/auditlog/）：进程级 cordis logger exporter——默认开、可显式关闭、按日分卷 + 体积上限、
 //   零远程上报。挂载点见下方 apply() 内注释（必须在 validateCapabilities warn / GATE_ENABLED warn / syncAssets
@@ -173,11 +151,6 @@ const createEngineStore = ({ ctx, config, root }) => {
   // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
   const topicSink = { emit: null };
   const store = createStore(root, {
-    // 棘轮规则表注入（A-① 接线）：`config.ratchet` 经装配点透传到状态机读点（`state/store.js` 的
-    //   `rules ?? loadRules()`）——**必须传整份 config**（`loadRules` 内部自取 `config.ratchet`，
-    //   machine-rules.js:78；传子对象会静默退化为默认表 = 写了不生效）。
-    //   fail-closed：非法棘轮配置（越界键/放宽迁移且未开 allowRelax）在此 **throw** ⇒ 启动即失败，
-    //   不静默回落默认规则（棘轮不可绕过，machine-rules.ts:20-22）；回滚 = 删本行。
     rules: loadRules(config),
     // topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
     // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
@@ -202,7 +175,6 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
         if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);
         else if (r.status === 'failed') ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + r.asset + ': ' + r.error);
       }
-      // 清单不可用（缺失/读取失败/JSON 破损/schema 不合规）-> 已回退内置默认表；降级态必须可观测（禁静默）
       if (manifest !== 'ok') {
         ctx.logger?.warn?.('[dsh-punky-swarm] asset manifest 不可用（' + manifest + '），已回退内置默认资产表；用户机实装面可能与包内清单声明不一致')
       }
@@ -286,13 +258,6 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
   return sweepTimer;
 };
 const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex }) => {
-  // 工具表：deps 注入批归属 resolver（缺省不可用 ⇒ `sessionOf` 逐字回落原三级路径，零行为变化）。
-  //   resolver 本体 = `lib/engine/dispatch.js#batchSessionIdOfWorker`（唯一 worker→批 反查点，
-  //   **不建第二套索引**）；此处只做**接线**（构造闭包），不自造判定。
-  //   【批 `session-bind-index-fix-20261012` · lane `e4-wiring` · 解除 dormant】接线改用**新签名**外壳
-  //   `batchSessionIdOfWorkerResolved(store, dispatchIndex, exec)`：热路径短路仍走既有 `batchSessionIdOfWorker`；
-  //   miss 时经 `laneBindingOf` 反查事件流并**回填同一 `dispatchIndex`**（兜底路 = 跨进程 / 历史批 / 漏登记 / 热更窗口）。
-  //   `store` 与 `dispatchIndex` 均在同 `apply()` 作用域（`:1063`（`createEngineStore` 解构）/ `:1075`（`new Map()`））⇒ **零新增捕获**、不挂全局。
   const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
     dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
     // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
@@ -318,16 +283,6 @@ const installWatchRuntime = ({ ctx, config, store, root }) => {
     heartbeat = createLaneHeartbeat({ store, mailbox, config, root, liveConfig: config, logger: ctx.logger });
     heartbeatRef.current = heartbeat;
   }
-  // watch 生效面安装快照（热更比对基准 + GET /config applied.watch 源；镜像 governanceInstalledCfg 模式）。
-  // 生效变化 = 7 键 { enabled, longrun.enabled, scanIntervalMinutes, longrun.maxDurationMs,
-  //   longrun.noProgressWindowMs, longrun.staleBatchMs, longrun.unconsumedTimeoutMs } 任一（长跑阈值与
-  //   两档新开关纳入比较集与安装快照——applied.watch 自动携带供面板回显与确认轮询；
-  //   手工 runtime.json 热更/boot 对账随之生效）。
-  //   staleBatchMs（默认 24h，显式 0 = 关闭僵尸批过滤）与 unconsumedTimeoutMs
-  //   （默认 30min，显式 0 = 关闭消费超时档）均为「可配可关」的逃生阀，故 resolveLongrunConfig
-  //   对二者走显式 `=== 0` 分支放行 0（不可沿用 posMs 的 ≥1 判据，否则 0 被当非法回退默认）。
-  //   longrun.enabled 翻转热更即时；引擎重建语义见 remountWatchEngine——内存状态表清空、
-  //   从事件流/产物 mtime 基线重算（幂等：无变化零操作）。
   let watchInstalledCfg = {
     enabled: watchCfg.enabled,
     longrun: {
@@ -606,9 +561,6 @@ const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
       if (!batch?.events) continue;
       for (const ev of batch.events) {
         if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
-          // 【本批 W-3】复制唤醒寻址字段（经唯一解析单点；未记录 ⇒ 该字段缺失 ⇒ 读端回退 `sessionId`）。
-          //   ⚠ `sessionId`（批归属键）本身**逐字不动**（治理落点 = 批文件 / mailbox / 结算 / 候选面）；
-          //   索引值形状由 `dispatchIndexEntryOf` 单点统一构造（既有 3 键形状冻结，见该函数注释）。
           dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
           n++;
         }
@@ -620,13 +572,6 @@ const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
 };
 
 const mountDispatchRegistration = ({ ctx, config, store, dispatchIndex }) => {
-  // 派发写侧登记点（dispatch-register.js）：
-  //   装配层 post-execute 观察 Manager 派发 worker 的派发类工具（subagent/subagent_fork；send_message 唤醒已随 S2 one-shot 化退役出名单，2026-09-22）
-  //   → 提取 childId/agentId + resolveBatchContext(exec)（缺省=同会话 member_set_status(running) 派发意图兜底，
-  //   装配注入可显式覆盖）→ 写 member.dispatch 事件（本 closure 的 dispatchIndex 同步 set——与读侧骨架
-  //   同一 Map，登记后下一 refusal 即命中，无需等惰性重建）。未取到批上下文 → 不登记（静默，
-  //   漏计不误暂停安全侧）。零宿主改造：仅订阅宿主既有 tools/post-execute（pass-through 恒 next）。
-  //   读侧骨架零改动（写侧只追加事件 + 维护同一 Map）。
   let dispatchReg = installDispatchRegistration(ctx, {
     store,
     dispatchIndex, // 与读侧共享同一 Map（幂等守卫 + 即时生效）
@@ -643,25 +588,11 @@ const mountDispatchRegistration = ({ ctx, config, store, dispatchIndex }) => {
   return dispatchReg;
 };
 const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) => {
-  // 自动结算**主路**（P3a 规格 §2）：装配期一次注册宿主 `subagent/end`。
-  //   `{ global: true }` **硬性要求**（契约卡 #6/#8/#9）：`'subagent/end'` 在 `dsh-scope` 的 invariant 里
-  //   resolver 为 `null`（受 scope 过滤）⇒ 探针实测**被 scope 化的插件 ctx（preset standing mount）默认漏收**，
-  //   `global` 短路一切 scope 过滤（`cordis/lib/index.js:263`）。不得以「根 ctx 收得到」为由省略（#7 仅因未 tag）。
-  //   映射与幂等：`info.id`（durable 子会话 id，**非** runId）→ 本 closure 的 `dispatchIndex`
-  //   → `autoSettleLane` 单点判定（与兼底路 `swarm_report(settle-request)` **同一函数**）；
-  //   未命中（进程级广播夹带非本套件子会话）⇒ 静默丢弃（零事件零状态变化）。
-  //   回调内**不**解析子句柄（契约卡 #12：handle disposal 先于 emit），结算信息只来自 payload。
-  //   失败隔离：`installAutoSettle` 内部全程 try/catch 且不抛（观察者纪律）。
   let autoSettle = installAutoSettle(ctx, {
     store,
     dispatchIndex, // 与读侧骨架 / 登记点共享同一 Map（登记后无需重启即命中）
     root,
     liveConfig: config, // 与 `member_settle` 链推进同源（`apply` 的 config；热更经 readLiveConfig 在工具面）
-    // 【2026-10-09 批 `auto-settle-disable-switch-20261009` · R-1/R-2 ①】停用开关按**原始值**透传：
-    //   严格判定由 `installAutoSettle` 单点内的 `autoSettleEnabledOf` 承担——**只有显式 `false` 才停用**，
-    //   `undefined`（键缺省）/ 非布尔 ⇒ 启用 ⇒ 未声明开关的既有批**行为逐字不变**（R-1 最硬一条）。
-    //   ⚠ 装配期读的是**静态 config**；`<root>/config/runtime.json` 覆盖在 watcher.start() 后才并入快照
-    //   ⇒ 必须由下方 boot 对账补一次，否则「runtime.json 写了 false、重启后开关失效」= 最危险的静默形态。
     enabled: autoSettleSwitchOf(config),
     logger: ctx.logger,
   });
@@ -676,25 +607,7 @@ const installAutoSettleMainPath = ({ ctx, config, store, dispatchIndex, root }) 
   //   此处**只保留读源差异**（装配期读静态 `config`），判定式一律委托单点 ⇒ 本文件不再持有判定式副本。
   const autoSettleEnabledOfConfig = (cfg) => autoSettleEnabledOf(autoSettleSwitchOf(cfg));
 const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) => {
-  // ── 乙（D-2 甲）· 主路**并行第二路**订阅：lane 完成事实 ⇒ 唤醒 Leader（**只建议、不派发**）──────────
-  //   判据源 = `plan/survey-and-options.md` §待裁点回填 **D-2 = 甲（准）** + 三条件；用户 2026-10-09 裁定。
-  //   定位：本块 = **装配层 wiring**（本文件即装配层）；所有判定下沉到既有单点，本块自己只做三件事：
-  //     ① 过滤：经**同一** `dispatchIndex` 命中 lane（进程级广播会夹带非本套件子会话 ⇒ 未命中**静默丢弃**，
-  //        与结算主路同纪律、零事件零状态变化）；
-  //     ② 候选：`poolViewOf()` 单点算「可派发」lane id 清单 = **D-3 甲**的「只建议」面；
-  //     ③ 唤醒：`wakeLeaderForReport()` 单点（30s 合并窗 / Leader 句柄非注入读 / 四类降级回显 / 永不抛）。
-  //   ⚠ **禁止**在本块调用 `dispatchLaneCore` 真派（D-3 甲；派发 = Leader 单点 `lane_dispatch`，K1 不引入 claim 自领）。
-  //   ⚠ **不取子句柄**（条件① / J-4 保护目标）：`info.id` 只作映射键；唤醒用的是 `dispatchIndex` 记的
-  //     **批 owner 会话**（= Leader/父会话）句柄，与子 run 生命周期无关。
-  //   ⚠ **不改**结算路（条件②）：与 `installAutoSettle` **各自独立**注册、互不 await、互不共享状态；
-  //     两路共用既有节流窗（同批同 Leader 共一窗）⇒ 甲/乙 唤醒**不叠加**。
-  //   ⚠ 已知边界（如实登记、不静默）：映射 miss 的**惰性重建**由结算主路承担（`lib/engine/auto-settle.js
-  //     #onSubagentEnd`，注册序在前 ⇒ 同事件同步段先跑并写回同一 Map）⇒ 本路**不复制第二套重建**
-  //     （禁第二套口径）；「索引冷 + 本路先跑」的窄窗内可能漏唤醒，下一事件即恢复。
   let laneWake = null;
-  // 【X-3 接线 · 批 B2】每装一次一条队列（coalescing ＋ 续跑上界 2 ＋ 自 block 抑制的唯一实例）。
-  //   纪律：**只消费 `drain()` 结果**，绝不把 drain 出来的 run 重新 `enqueue` ——
-  //   重新入队正是 M5 变异「空转仍产新 run」的形态（回线判据禁止，命中即停 G4）。
   const wakeQueue = createWakeQueue();
   /** 唤醒路的**单次动作**：全程 try/catch 且不抛（观察者纪律，与结算主路同款）。 */
   const onLaneWorkerEnd = async (info) => {
@@ -704,10 +617,6 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
       if (typeof id !== 'string' || id.length === 0) return; // 无 durable 子会话 id ⇒ 静默丢弃
       const hit = dispatchIndex instanceof Map ? dispatchIndex.get(id) : null;
       if (!hit || !hit.sessionId || !hit.batchId || !hit.lane) return; // 非本套件派发 ⇒ 静默丢弃
-      // 【X-3 接线 · 批 B2 · I-09】唤醒前过队列：① 自产唤醒被抑制 ⇒ 不唤醒自己（`suppressSelf` 单向，
-      //   本处**只读** `isSuppressed`，不加 unsuppress 面）；② `enqueue`→`drain` 同步成对 ⇒
-      //   同一 lane 的续跑受**上界 2** 约束（第 3 次起 drain 为空 ⇒ 不再唤醒，即「空转不产第 3 次 run」）。
-      //   ⚠ **不把 drain 结果重新入队**（那会复现 M5）。
       if (wakeQueue.isSuppressed(hit.lane)) {
         ctx.logger?.debug?.('[dsh-punky-swarm] lane-wake suppressed (self-produced event): ' + hit.lane);
         return;
@@ -724,17 +633,7 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
         const ids = (view.pool ?? []).filter((t) => t.dispatchable).map((t) => t.id);
         if (ids.length > 0) candidates = ids;
       } catch { candidates = null; /* 批次不可读 ⇒ 无候选面（不影响唤醒本身） */ }
-      // 终态语义（契约卡 §1.1）：宿主正常路带 `stopReason`；异常路固定 `'error'`（`dsh-subagent/lib/index.js:274-277`）
-      //   ⇒ 原样进唤醒消息首行（两路可辨），不假装「完成」。
-      // 【X0-B · 批 B2】未上报 ⇒ **`null`（未知就是未知）**，交内核推导；旧式缺省 `'completed'` 会**伪造完成**，
-      //   与 A 处的 `null` 分支串联成「未上报 ⇒ 当作已停 ⇒ 自动结算」的短路（两处须同批修）。
       const stopReason = typeof info.stopReason === 'string' && info.stopReason.length > 0 ? info.stopReason : null;
-      // ③ 唤醒（唯一动作 = Leader.followup；失败/被节流**不损**任何既有事实——本路零批面写）。
-      //   【批 `lane-wake-mainpath-fix-20261010` · W-3】**唯一寻址点**：`leaderSessionId` 改取
-      //   `wakeAddressOf(hit)` = 「派发期记录的发起方 agent 会话」∨ 回退 `hit.sessionId`。
-      //   改前取 `hit.sessionId`：命名黑板批下该值是**黑板名**而非活 agent ⇒ `leader-not-live`、静默
-      //   （worker 忘了回报时本路是唯一通道 ⇒ 整路价值归零，P-1/P-3）。
-      //   治理落点（`:624` 的 `readBatch(hit.sessionId, …)`）与命中判据（`:620`）**逐字不动**（L-AC-5）。
       wakeLeaderForReport(ctx, {
         callerSessionId: id, leaderSessionId: wakeAddressOf(hit),
         batchId: hit.batchId, lane: hit.lane, type: stopReason,
@@ -747,10 +646,6 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
   };
   /** 装配置点（**独立**，条件③）：与 `installAutoSettle` 并列；返回形态同形（`{installed, reason?, count(), dispose()}`）。 */
   const installLaneWake = () => {
-    // inert 可见化（批 G1 · P-2 定点）：空实现**不再静默**——定义点内先出一条 warn（该文件已有
-    //   `ctx.logger?.warn` 通道），并在返回对象上新增稳定回显键 `inert: true`。
-    //   `installed` / `reason` / `count()` / `dispose()` **全部保留**（不破既有调用方：热更路径按
-    //   `installed` 判定、按 `count()` 读抑制计数）。
     const inert = (reason) => {
       try { ctx?.logger?.warn?.('[dsh-punky-swarm] lane-wake inert: ' + reason); } catch { /* 回显失败不阻断装配 */ }
       return { installed: false, inert: true, reason, count: () => 0, dispose() {} };
@@ -779,16 +674,6 @@ const installLaneWakePath = ({ ctx, store, dispatchIndex, autoSettleEnabled }) =
   return { laneWake, installLaneWake };
 };
 const replayStartupGaps = ({ ctx, config, store, root }) => {
-  // ── W1-① 重放/恢复（装配期**有界**扫描；蓝图 §W1-①）────────────────────────────────
-  //   缺口（实测）：链推进由 `member.settled` 驱动；若进程死在「**已结算**」与「**已推进**」之间
-  //   （或推进因门禁/挂载点失败而无人补），批次会永久停在「lane 已 merged、下一环从未被决策」。
-  //   本扫描启动后补一次决策。**纪律**（四条，缺一即为「写了不生效」或「静默危害」）：
-  //     ① 只处理 `running` 批 —— `paused` 是人工停轮（`resume` 是唯一恢复入口）、终态不追；
-  //     ② 一律**只决策不派发**（`replayBatch` 内固定 `noDispatch`）：装配期无工具流水线 ⇒ 无挂载点，
-  //        真派仍由 Leader/Manager 在工具面执行；
-  //     ③ 全程 try/catch 不抛，且**异步化**（不阻塞 `apply` 返回）；
-  //     ④ **零命中零日志**（守「缺省配置零 warn」契约 legacy-fix T4.3），有补决策才 info 一行摘要。
-  //   有界：会话数与批次数均设上限，防大批量启动时扫盘过久。
   try {
     const MAX_SESSIONS = 5;
     const MAX_BATCHES = 20;
@@ -823,12 +708,6 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
 // ── W7e E1：governance 装载面（preset 双表 + 注册目录元数据 + hook 安装）下沉为顶层工厂 ──
 //   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / installWebSurface 的惰性 getter）。
 const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge }) => {
-  // preset 装载（boot 一次）：loadPresetTable 读随包 presets/hook-rules/ 四 JSON → 双表注入 resolve
-  //   presetTable（参数级规则面：governance.hook.preset 引用展开源）与 presetBanTable
-  //   （第三类工具黑名单面：同一引用键，条目进 toolBan）。errors（文件缺失/损坏/形状坏）→ 逐条 warn
-  //   留痕，不 throw（boot 可继续；坏 preset 的引用在 resolve 判未知 id → 回退空表 + warn，宁空勿半）。
-  // resolve opts.warn 封装注入（logger.warn 前缀 '[governance] '）——preset 装载失败
-  //   回退空表必须显式可见可修，禁止静默裸奔（装配侧 = wiring.js 之外的第二个 resolve 注入点）。
   const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
   const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
   for (const e of presetErrors) governanceWarn('preset 装载失败：' + e);
@@ -952,9 +831,6 @@ const warnGateEscapeValve = (ctx) => {
   }
 };
 
-// readConfig（E 阶段模式跟随，2026-09-16 用户裁决）：guard 与套件工具必须读**当前生效快照**，
-//   故注入热更读取器——`modes.gate` / `dispatch.*` 改 runtime.json 即热生效（无需重启）。
-//   `rt.hotConfig` 在本函数体内下方才赋值 ⇒ 读取器内 try/catch 兜住 TDZ/异常，回落静态 config（G-7 契约）。
 const createReadConfig = ({ config, rt }) => () => {
   try {
     const hot = rt.hotConfig;
@@ -1099,10 +975,6 @@ const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSin
       if (rt.topicAttachUn) { rt.topicAttachUn(); rt.topicAttachUn = null; }
       ctx.logger?.info?.('[dsh-punky-swarm] hot config: topic runtime stopped');
     } else {
-      // 末支兜底（批 G1 · §2.1）：本链**两个**条件都不成立 = 「期望态 == 现值」⇒ 无动作。
-      //   补末支只为**不静默**（原状是链条无声落空、事后无法判别「没变」与「漏改」）；
-      //   用 debug 不用 info/warn：热更路径高频，且「无变化」不是异常。
-      //   ⚠ 只为**本条链**补末支；本文件其余 4 处 `} else` 链语义一字未动（C-12 边界）。
       ctx.logger?.debug?.('[dsh-punky-swarm] hot config: topic runtime 无变化（期望态 == 现值）');
     }
     // ④ verify 挂载（可选）：enabled 翻转 → dispose + 以新快照重挂（inert 与 installed 双态幂等）
@@ -1134,10 +1006,6 @@ const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSin
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
-  // ↑ 引擎状态根：**声明在 `:1040`、消费在 `:1041`（`homedir()` 派生真值）**——引用本处请写 `lib/index.js:1040-1041`，勿只引 `:1040` 当调用点。
-  // 启动日志：引擎产物根（诊断可见性——worker/Leader 产物落盘契约的权威路径）
-  // 【A1-P0-01 · Q3 fail-closed】**日志前移到 IO 之前**：root 不可建时这一行**已经**产出（含解析后的绝对路径）
-  //   ⇒ 排障不必再从「插件树加载错误」倒推 `config.root` 的取值。文案逐字不变（`test/home-isolation.test.js` 正则解析本行）。
   ctx.logger?.info?.('[dsh-punky-swarm] engine root: ' + root + '；产物根 = <root>/sessions/<sessionId>/artifacts/<batchId>/');
   try {
     fs.mkdirSync(root, { recursive: true });
@@ -1158,7 +1026,6 @@ export const apply = (ctx, config = {}) => {
   const { store, topicSink } = createEngineStore({ ctx, config, root });
 
   warnGateEscapeValve(ctx);
-  // 装配期唯一可变句柄容器（P-8：禁模块级；d1 seam：注入 ctx.rtWriteLog 才装 Proxy trap；cordis 对未声明属性取值即抛 ⇒ 取值 try/catch 守卫）
   const rtOnWrite = (() => { try { return typeof ctx?.rtWriteLog?.push === 'function' ? (k) => ctx.rtWriteLog.push(k) : null; } catch { return null; } })();
   const rt = createRuntimeState(rtOnWrite);
 
@@ -1198,18 +1065,6 @@ export const apply = (ctx, config = {}) => {
   const remountAutoSettle = createAutoSettleRemounter({ ctx, store, dispatchIndex, root, rt, installLaneWake });
   mountHotConfigRuntime({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle });
 
-  // ── 能力声明回显 + fail-closed（批 G1 · P-3 主回显面；**W4 批 `w4-inject-teardown` 重划语义**）──
-  //  顺序纪律：放在装配**结束前**（所有面已装配完 ⇒ 探测到的是真实装态，不是计划态）。
-  //  · 回显：`rt.capabilities` 四段 —— `host`（功能面，判端口 `available`）/ `kernel`（内核端口在位）/
-  //    `internal`（策略开关）/ `missing`+`degraded`（并集与降级事实）；
-  //  · **日志分流**（三分级口径，唯一判据）：
-  //      路① **我方功能面没装** = 装配缺陷 ⇒ `warn` + `capability-unavailable:`（**不抛**）；
-  //      路② `internal` 未启用（显式关或默认关）= **策略停用** ⇒ `info` + `capability-disabled:`；
-  //  · **fail-closed 面已改到内核端口**：`assertRequired` 只对 `runtime`/`audit` 缺位拒（装配缺陷），
-  //    宿主功能面不可用**不再**导致加载失败 —— 这正是「引擎不因宿主能力差异改变运行模式」的落点。
-  //    ⇒ 与旧注释的差别：旧「宿主缺三键就必须立刻炸」**已作废**（那正是 W4 要取消的硬依赖）。
-  // 功能面端口实例：**建一次**，供探活与内核在位判定共用（`createAgentPort` 恒返回对象 ⇒ 其 `available`
-  //   才承载「宿主有没有成员执行面」，对象在场与否只反映装配是否发生）。
   const agentPortForCapability = createAgentPort(ctx);
   // 内核端口在位事实（**不是**宿主能力）：
   //   · `runtime` = 成员执行端口对象是否装上；
@@ -1228,9 +1083,6 @@ export const apply = (ctx, config = {}) => {
     // Q-E=乙：可用性判**自建表机制就绪**（与宿主有没有团队服务**无关**）⇒ 正常装配下恒 `available:true`。
     rosterSource: rosterTableReadyOf(store),
   };
-  // 【A 段 · 批 `punky-adapter-channels-20261101`】**通道级可用性**读数：C 档（一次性 Subagent）与
-  //   D 档（agentTeams 唤醒）依赖**不同宿主能力**，必须分别报 —— 一个布尔概括会让另一档的缺失不可见。
-  //   事实函数在 provider（`agentChannelFactsOf`），此处只做**注入**；`capabilityReport` 签名不变。
   const agentChannels = agentChannelFactsOf(ctx);
   rt.capabilities = capabilityReport({
     ...rt,
@@ -1240,26 +1092,6 @@ export const apply = (ctx, config = {}) => {
     agentChannels,
     kernel: kernelFacts,
   });
-  // 路①：**我方面不可用** ⇒ warn（前缀 `capability-unavailable:`，与内核缺位的 `capability-missing:` 分开）
-  //
-  // ── 【Q-E=乙 · 批 `punky-arch-refine-20261101`】`degraded` 概念**整体废除** ────────────────────
-  //   用户裁决：「取消降级的生命和设置，功能有就是有，没有就是没有」。
-  //   ⇒ 不再有降级数组、不再有降级告警前缀、不再有「基线态豁免表」（那张表的存在理由只是
-  //     「让某些降级不告警」——前提消失，表必须一起消失，否则成为误导源）。
-  //
-  //   本处只报 `available === false`（**面没装**）的键：
-  //     · `available: true`  ⇒ 不报（功能在）
-  //     · `available: false` ⇒ **报**（我方面没装：`port-absent:` 或端口自报不可用）
-  //     · `available: null`  ⇒ **不报**（未探明 ≠ 没有；报它会把「没探到」伪装成「坏了」）
-  //   ⚠ 宿主能力差异（例如非 Team 宿主没有团队服务）**不再产生任何 available:false**
-  //     —— `rosterSource` 改判自建表就绪后，四面里没有一面按宿主能力判。
-  //     ⇒ 本告警的语义 = 「**我方某个面没接上**」，正是值得每次启动都说一次的那一类。
-  //   ⚠ 本告警**只报「我方没接上」**，宿主能力差异只进回显、不告警。判别 = 成因词前缀：
-  //     · `port-absent:<key>`        ⇒ 词表内有该面但**装配根没给端口** ⇒ **报**（我方装配缺陷）
-  //     · `roster-table-unwired:…`   ⇒ 自建名册机制没接好 ⇒ **报**（我方装配缺陷）
-  //     · `face-unavailable:<key>`   ⇒ 端口在位但**本宿主拿不到该功能**（如 headless 无 webServer）
-  //                                    ⇒ **不报**（这是宿主事实，不是缺陷；回显里 `available:false` 可读）
-  //   ⇒ 正常宿主（含 headless）启动 **零** `capability-unavailable:`；只有装配真坏时才响。
   const WIRED_ISSUE_RE = /^(port-absent:|roster-table-unwired:)/;
   const wiredFaceIssues = (rt.capabilities.host ?? [])
     .filter((h) => h.available === false && WIRED_ISSUE_RE.test(String(h.reason ?? '')))

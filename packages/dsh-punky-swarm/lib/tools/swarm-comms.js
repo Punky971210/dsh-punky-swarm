@@ -16,29 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 成员回报 / Leader 唤醒单点（自 `lib/tools/core.js` **原样搬移**，行为零变更）：目标解析 / 投递 / 事件留痕 / 唤醒节流。
-//   导出面经 `lib/tools/core.js` re-export 保持（WAKE_MIN_INTERVAL_MS / LEADER_WAKE_WINDOWS / wakeLeaderForReport）。
 import { laneBindingOf, mailboxRootOf } from '../engine/dispatch.js';
-import * as swarmMailbox from '../comms/mailbox.js'; // 成员回报投递（文件 mailbox）
-import { readCapability } from '../assembly/schema.js'; // 注入预算阈值唯一取值源（注册表 default 缺省合并）
+import * as swarmMailbox from '../comms/mailbox.js';
+import { readCapability } from '../assembly/schema.js';
 import { applyInjectionBudget } from '../comms/inject-budget.js';
-// 【W5-2 · 批 `punky-adapter-split-20261031` · lane `w5-roster-port`】Leader 唤醒通路收进 provider：
-//   引擎**不再**取宿主会话句柄（原 `ctx.get('agents')` + `leader.followup()` 两步），
-//   改向适配层要 `notifyLeader({ sessionId, message })` 这一**具名功能**（契约 `AgentRuntime.notifyLeader`）。
 import { createAgentPort } from '../provider-dsh/agent.js';
 
-// ── 面 C · lane 回报：注入预算（阈值唯一取值源 = `capabilities.injectBudget`）──────────────
-// ⚠ **本模块导出面受 `test/swarm-wake-addressing.test.js#T-10`（L-AC-14「净增 0」）逐字钉住**
-//   ⇒ 下列内部步骤一律**模块私有**；对外**只新增一个薄壳导出** `budgetSummaryForReport`
-//   （该导出名需同步更新 T-10 的期望清单 —— 本批正在做，理由与替代方案见 exec 产物偏差登记）。
-/** 读注入预算阈值（缺省合并注册表 default ⇒ 默认开）。**模块私有**，只由下方薄壳消费。 */
 function injectBudgetCfgOf(config) {
   return readCapability(config, 'injectBudget');
 }
 
-// 面 C · 层①单条目：回报摘要（`wake.summary`）在**投递前**按单条目层收窄，收窄结果**同源**用于
-//   ① mailbox 消息体 ② 唤醒消息体 ⇒ 两处共用同一份文本（禁两套口径）。
-//   本函数**模块私有**（不新增导出面：`test/swarm-wake-addressing.test.js#T-10` 对本模块导出面逐字钉住）。
-//   本模块内**唯一消费者** = `budgetSummaryForReport`（下方，唯一的薄壳导出）。
 function budgetWakeSummaryOf(summary, injectCfg) {
   if (injectCfg?.enabled !== true) return { summary, omissions: [] };
   const r = applyInjectionBudget(summary, { surface: 'wake.summary', thresholds: injectCfg, kind: 'perItem' });
@@ -51,42 +38,16 @@ export function budgetSummaryForReport(config, summary) {
   return { injectBudget: cfg, ...budgetWakeSummaryOf(summary, cfg) };
 }
 
-// ── 成员回报**目标解析**（身份门已删） ──────
-// 背景（普查 `gate-census-20260917`（原文档未随仓分发） + 本轮实测）：官方 Team 成员由宿主 `spawn_teammate` 拉起，
-//   **天然无 `member.dispatch` 绑定** ⇒ 「未绑定」是该场景的**常态**而非异常；原
-// 现口径 = **不再拒**，改 best-effort 解析（不猜批次、不静默）：
-//   ① 有 dispatch 绑定 ⇒ 既有路径逐字不变（owner 会话 + 绑定批次 + 绑定 lane）；
-//   ② 无绑定 ⇒ 目标批次由调用方**显式** `batchId` 给出（可选参数，缺省即无批次面），归属会话取宿主父会话
-//      （官方成员的 Leader 会话）→ 本会话兜底；`lane` 缺省 `(unbound)` 仅作展示占位。
-// 消息**照发**（Leader / Manager 通道 mailbox 落盘；未绑定时批次键 `(unbound)`，读端仍可见文件）；
-//   批次事件**仅在目标批次真实存在时**可写（无批次文件即无事件面）——失败不回滚、不抛、不静默：
-//   回显 `eventWritten:false` + `notice`，使「消息已投递 / 事件未落」这一真实状态对调用方与审计都可见。
 export const UNBOUND_BATCH_KEY = '(unbound)';
 const UNBOUND_LANE_KEY = '(unbound)';
 
 export function reportTargetOf(store, exec, args, logger) {
   const caller = exec?.agent?.session?.id ?? null;
-  // 【M-1 接线（批 `punky-qa2-fix-2026-10-31`）】传 logger ⇒ `laneBindingOf` 的 `batch-enum-failed:` /
   //   `batch-read-failed:` 两态在本入口也**真可辨**（否则同一条静默缺口在第二个入口原地复发）。
   const bind = laneBindingOf(store, caller, logger);
   const declaredBatchId = typeof args?.batchId === 'string' && args.batchId.trim() ? args.batchId.trim() : null;
   const declaredLane = typeof args?.lane === 'string' && args.lane.trim() ? args.lane.trim() : null;
   if (bind) {
-    // 【批 `lane-wake-addressing-fix-20261009`】**唤醒寻址与治理落点解耦**（U-08 修复；判据源 `plan/scope.md`）：
-    //   · `sessionId` = **治理落点**，语义**逐字不变**（mailbox / 批事件 / 结算；命名黑板批下 = 黑板名）。
-    //   · `wakeSessionId` = **唤醒寻址**，新增加的一路值：agent 亲缘 = 调用方会话头
-    //     `session.header.parentSession`，即**发起建批的那个 agent 会话**（源码链 `lib/engine/dispatch.js:701-702`
-    //     `parent: exec.agent` → 宿主 `SubagentRuntime.start` → `child-agent.ts:107,112`；运行期双样本见
-    //     `p01-scope/progress/02`）。根因：命名黑板批的 `bind.sessionId` 是**黑板名而非 agent 会话**，
-    //     旧实现把它当唤醒目标 ⇒ `agents.get(黑板名)` = undefined ⇒ `leader-not-live`（静默）。
-    //   · 回退（约束 C-3，**硬**）：`parentSession` 缺失 / 空串 / 非字符串 ⇒ `wakeSessionId` **恰等于**
-    //     `bind.sessionId` ⇒ 与改前行为逐字相同（既有夹具 `execOf(WORKER)` 不带 header ⇒ 零改动仍绿）。
-    //     注意：此处**不能**只用 `??`——空串会被 `??` 放行，进而在唤醒侧退化成 `no-leader-session`，
-    //     与「回退 = bind.sessionId」不符。
-    //   · **唯一映射点**（约束 C-2）：父会话只在本函数内解析；`lib/tools/swarm-tools.js` **只做取值**，
-    //     不得自行读 `exec.agent.session.header`（同处 `:112-113` 明文禁第二套映射）。
-    //   · 未绑定分支**零改动**（其 `sessionId` 本就取父会话，见下方 `:44-49`）⇒ 不新增本键，
-    //     由消费方 `wakeSessionId ?? sessionId` 自然回退。
     const parentSession = exec?.agent?.session?.header?.parentSession;
     const wakeSessionId = (typeof parentSession === 'string' && parentSession.length > 0) ? parentSession : bind.sessionId;
     return { caller, bound: true, sessionId: bind.sessionId, wakeSessionId, batchId: declaredBatchId ?? bind.batchId, lane: declaredLane ?? bind.lane };
@@ -99,7 +60,6 @@ export function reportTargetOf(store, exec, args, logger) {
   };
 }
 
-/** 投递成员消息（无 sessionId ⇒ 无处可投，回 false，绝不抛——Q-G2「不再因身份未绑定而拒」）。 */
 export function deliverSwarmMessage(root, tgt, box, args, kind) {
   if (!tgt.sessionId) return false;
   swarmMailbox.send(mailboxRootOf(root, tgt.sessionId, tgt.batchId ?? UNBOUND_BATCH_KEY), { type: box },
@@ -118,56 +78,16 @@ export function appendSwarmEventOf(store, tgt, evtType, kind) {
   }
 }
 
-// ── worker → Leader **唤醒**（`swarm_report` 兼底路直达；判据源 `plan/notify-spec.md`）──────
-// 命题：`swarm_report` 在既有「留痕双写（mailbox + 批事件）」之上，**真正把 Leader 唤起来**——
-//   用宿主自用原语 `Agent.followup(msg)`（`dsh-agent-loop/lib/index.js:800-814`，语义 =
-//   `send(msg, 'next-turn', wake=true)`：idle ⇒ **同步**开新 turn；running ⇒ latch 进 next-turn 队列）。
-//   口径澄清（承 S-2 裁认）：只有 `followup` 是「推送」；`inject()` wake=false **不唤醒**（J-7）。
-// 硬边界（J-4）——【2026-10-09 用户裁定 **D-2 甲**：适用范围**扩展**；原句按本仓「标废而非删」教义**改注、不删**】：
-//   ▸ 原文（**标废**，保留以存因果，勿据以拒改）：「本能力**只落 `swarm_report` 兼底路**；
-//     `subagent/end` 主路（`lib/engine/auto-settle.js`）全文零变更——主路回调内 handle disposal 先于 emit，
-//     **不得**取子句柄（该文件 `:31-32` 的原口径）。」
-//   ▸ **仍有效（未被废）的那半**：`subagent/end` emit 时子 run 已收尾（handle disposal 先于 emit，
-//     宿主 `dsh-subagent/lib/index.js:267-272` / `:317-323` 实测）⇒ **不得取子句柄**（`info.id` 对应的子代理
-//     handle）。J-4 的**保护目标**在扩展后完整保留。
-//   ▸ **被扩展的那半**：主路**不再**「全文零变更」——用户 2026-10-09 裁定 **D-2 = 甲（准）**：允许在
-//     `subagent/end` 面**并行新增一路订阅**（唤醒 Leader），附**三条件**：① 仅取 **Leader 句柄**
-//     （`ctx.get('agents')`，Leader 是**父会话**，其生命周期与子 run 无关），**不取子句柄**；
-//     ② **不改**既有 `onSubagentEnd` 的结算逻辑（`lib/engine/auto-settle.js` 既有判定链一字不动）；
-//     ③ 新增订阅**独立**且 `dispose` 可热切（先例 `lib/index.js` 的 `installAutoSettle` 装配段）。
-//     落点 = `lib/index.js` 装配段的独立订阅（与 `installAutoSettle` 并列、互不依赖、互不 await）；
-//     判据源 = `plan/survey-and-options.md` §待裁点回填 D-2。
-// 通道取舍（J-8）：**不用** `send_message` / `ctx.subagents.sendMessage`——one-shot lane worker 必抛
-//   `UNAUTHORIZED`（`dsh-subagent/lib/index.js:1762-1775`）。
-// 注入面取舍（J-6）：**不把 `agents` 加进插件 `inject`**（`lib/index.js:86`）——加硬 inject 会使本插件在
-//   未挂官方 agent 服务的宿主上**失去加载能力**；故走 `ctx.get('agents')` **非注入读**（先例同文件
-//   `:572` 的 `ctx.get('agentTeams')`：cordis「无 inject 要求，服务未提供即 undefined」）。
-// 幂等 / 防自激 / 节流：见 `wakeLeaderForReport` 内注释（`self` 闸 + leading-edge 合并窗 + `merged` 计数）。
-// 触发集：`blocked`（阻塞）/ `settle-request`（请求结算）/ `completed`（**完成类**，D-5 甲新增）。
-//   `progress` **保持**「留痕不打扰」（Q-2 明文；逐字不变）。
-//   ⚠ `completed` 与 `settle-request` **语义解耦**（D-5 甲裁定）：前者**只唤醒、不结算**——
-//     结算仅由 `args.type === 'settle-request'` 触发（见 `lib/tools/swarm-tools.js` 的 `settleRequested`），
-//     故 `autoSettle.enabled=false` 的连带影响**不波及** `completed` 的唤醒面。
 export const WAKE_TYPES = new Set(['blocked', 'settle-request', 'completed']);
-// 合并窗 = **30s**（leading-edge：窗内首报立即唤醒，其后只累加合并计数）。
-//   依据（`plan/notify-spec.md` §3.2）：① 一次唤醒 = Leader 一整轮 LLM，波次密集收口下 N 报 N 轮不可接受；
-//   ② 一个波次收口跨度为秒级 ⇒ 30s 覆盖「一波多报 ⇒ 1 次唤醒」；③ 唤醒次数 ≤ ⌈跨度/W⌉+1，**与报告条数解耦**（可判）。
-// 不复用既有常量：`DEFAULT_DEBOUNCE_MS = 300`（hot/config-watch.js:45）与 `DEBOUNCE_MS = 300`（panel/stream.js:51）
-//   是 **fs 事件防抖**，量级与语义均不同 ⇒ 本常量在此**唯一**定义一次（禁别处另写第二套节流口径）。
 export const WAKE_MIN_INTERVAL_MS = 30_000;
-// 窗状态：key = leaderSessionId + '\0' + batchId（同批同 Leader 共一窗，不同批互不影响）。
-//   **进程内存态、不落盘**：进程重启 ⇒ 允许一次额外唤醒（可接受的松弛，已由规格显式登记）。
-//   导出 = **测试专属注入缝**（与 `__resetLaneHandles` 同类）：exec-tests 的 G-4/G-5 需清窗/读窗，
 //   生产代码**不得**依赖本导出（工具面唯一消费者 = 本文件内的 `wakeLeaderForReport` / `swarm_report.execute`）。
 export const LEADER_WAKE_WINDOWS = new Map();
 
 /** 取 Leader 句柄（**非注入读 + fail-safe**）：永不抛；返回值区分「服务缺失」与「取不到该会话」。
- *  【W5-2 已删】原实现裸取宿主服务再取会话句柄；现两层都收进 provider
  *  （`lib/provider-dsh/agent.js#notifyLeader`）⇒ 引擎侧**不再持有、也不再解引用**宿主对象。 */
 
-/** 唤醒消息（**零依赖手工构造**，形状 = `dsh-llm` `createUserMessage`；UUID 先例 `lib/governance/kernel.js:196`）。
+/**
  *  纪律（J-9）：**只传摘要元数据，零复制正文**——载体是调用方显式给出的 `type` / `summary` / `artifactPath`
- *  与 `candidates`（后者 = lane **id 清单**，D-3 甲「只建议不派发」的候选面，仍是元数据、非正文）。
  *  候选清单的显示上限（本模块内单点，不导出）= `WAKE_CANDIDATES_MAX`：超出只报总数，防超大批次撑爆消息。 */
 const WAKE_CANDIDATES_MAX = 12;
 
@@ -176,21 +96,14 @@ function leaderWakeMessageOf(input, merged) {
   const line = '[swarm] ' + (input.batchId ?? UNBOUND_BATCH_KEY) + '/' + (input.lane ?? UNBOUND_LANE_KEY)
     + ' ' + input.type + '：' + input.summary
     + (input.artifactPath ? '\n产物：' + input.artifactPath : '')
-    // D-3 甲（用户 2026-10-09 裁定）：引擎**只建议不派发** —— 候选 = `poolViewOf()` 判为可派发的 lane id；
-    //   派发仍由 Leader 单点经 `lane_dispatch` 发起（K1：池是只读视图、不引入 claim 自领）。
     + (candidates.length > 0
       ? '\n可派发候选（引擎只建议，派发仍由 Leader 决定）：' + candidates.slice(0, WAKE_CANDIDATES_MAX).join(', ')
         + (candidates.length > WAKE_CANDIDATES_MAX ? ' 等 ' + candidates.length + ' 条' : '')
       : '')
     + (merged > 0 ? '\n（另合并 ' + merged + ' 条同类回报）' : '');
-  // 面 C · 层②总量：唤醒消息体（`wake.total`）是**真正注入 Leader 上下文**的面 ⇒ 在组装完成后、
-  //   送出**之前**施加总量层。固定顺序 = 摘要（层①，已在 `budgetWakeSummaryOf` 施加）→ 消息体（层②）。
-  //   未超限 ⇒ 文本**原值**、omissions 空 ⇒ 既有唤醒行为逐字不变（零回归）。送达失败/被节流
-  //   都**不影响**本处预算语义（预算只改文本，不改是否会送）。
   const budgeted = applyInjectionBudget(line, { surface: 'wake.total', thresholds: input.injectBudget, kind: 'total' });
   return {
     // id 不可省、不可复用：inbox 投影对 pending 消息做 id 去重，重复即抛
-    //   `message "<id>" is already pending`（`dsh-agent-loop/lib/index.js:190-193`）——该抛会被本函数 catch 吞掉 ⇒ 静默丢唤醒。
     message: {
       id: globalThis.crypto.randomUUID(),
       role: 'user',
@@ -203,20 +116,14 @@ function leaderWakeMessageOf(input, merged) {
 
 /**
  * 唤醒 Leader（**唯一唤醒动作 = `leader.followup(msg)`**）。
- * 契约：**永不抛**；返回值恒为 `{ attempted, woke, reason, merged }`；
- *   零批面写（不调 `store.appendEvent` / 不调 `swarm_report` / 不调 `deliverSwarmMessage`）⇒ 不构成新的唤醒触发源（零回环）。
- * `now` 仅作**测试注入**（默认 `Date.now()`）——生产路径不传。
  */
 export function wakeLeaderForReport(ctx, input) {
   const out = { attempted: false, woke: false, reason: null, merged: 0 };
   try {
-    // ① 防自激闸（可达构造见规格 §4.1）：`reportTargetOf` 的未绑定分支在 `session.header` 缺 `parentSession`
-    //    时 `sessionId` **恰等于 caller 自身** ⇒ 无此闸即「worker 唤醒自己 ⇒ 自己再回报 ⇒ 自激」。
     const leaderSessionId = input?.leaderSessionId ?? null;
     if (!leaderSessionId) { out.reason = 'no-leader-session'; return out; }
     if (input?.callerSessionId && input.callerSessionId === leaderSessionId) { out.reason = 'self'; return out; }
     out.attempted = true;
-    // ② 合并窗（leading-edge）：窗内 ⇒ 只累加计数、不唤醒（`woke=false`）。
     const key = leaderSessionId + '\0' + (input.batchId ?? '');
     const win = LEADER_WAKE_WINDOWS.get(key) ?? null;
     const now = typeof input.now === 'number' ? input.now : Date.now();
@@ -226,23 +133,13 @@ export function wakeLeaderForReport(ctx, input) {
       out.merged = win.merged;
       return out;
     }
-    // ③ 唤醒：上一次窗内被合并的条数随本次消息**可见**（合并不丢信息）并清零。
     const merged = win ? win.merged : 0;
-    // 面 C 层②（`wake.total`）：消息体在送出前已按总量预算收窄；省略事实回显于 `out.omissions`
-    //   （**不发射事件**：本单点零批面写，见上方契约 —— 发射面唯一在 `swarm_report.execute`）。
     const assembled = leaderWakeMessageOf(input, merged);
-    // 【W5-2】唤醒动作走 provider 功能面（**引擎不再取宿主句柄**）：
     //   provider 以**返回值**表达投递结果（契约：不可用/失败**不抛**，成因用功能面词汇）；
-    //   本处把 provider 的成因**外化**为引擎既有的四档 `reason`（保持既有回显面逐字不变）：
-    //     `agent-runtime-unavailable` ⇒ `service-unavailable`（基线态）；其余未投递 ⇒ `leader-not-live`
     //     （与旧「取不到句柄/句柄不可推送」两态合流，语义等价）。
     const notified = createAgentPort(ctx).notifyLeader({ sessionId: leaderSessionId, message: assembled.message });
     if (!notified.delivered) {
-      // 成因外化（**逐档保真，禁把异常压成「人不在」**）：
-      //   `agent-runtime-unavailable` ⇒ 基线态 `service-unavailable`；
       //   `deliver-failed: …`        ⇒ 异常态 `error: …`（保持既有 `error:` 族，异常不得被误归因为「会话不在」）；
-      //   其余（`leader-not-live` / `lookup-failed` / `session-required`）⇒ `leader-not-live`
-      //   —— 与旧实现的「取不到句柄/句柄不可推送」两态合流（旧 `agent.get` 抛错亦落此档）。
       const why = String(notified.reason ?? '');
       out.reason = why === 'agent-runtime-unavailable'
         ? 'service-unavailable'

@@ -15,12 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// ---- lane 工具契约层：defineTool 四工厂 + gitProbe（消费 ops 物理层）----
 import fs from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
-import { resolveMergeConflict } from './merge-agent.js'; // merge 冲突可选 LLM 化解（默认关）
-import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, laneProgressRead, recordEarlyExitProgress } from '../state/resume.js'; // 步数预算超限判定 + **checkpoint 清单对齐留痕**（薄壳：判定/幂等/fail-safe 都在 resume.js，本文件只增 1 行以守行数护栏）；laneProgressWrite：断点指针写；laneProgressRead：断点指针读（**单点**，禁在工具层重写 `batch?.laneProgress?.[lane]` 访问式）；recordEarlyExitProgress：无 worktree 早退时补写指针
+import { resolveMergeConflict } from './merge-agent.js';
+import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, laneProgressRead, recordEarlyExitProgress } from '../state/resume.js';
 import * as EVT from '../state/event-types.js';
 import { runGit } from './git-utils.js';
 import { ORCH_BRANCH, orchDirOf, laneDirOf, laneBranch, normPath, validateIds, ensureRepo, listWorktrees, countBaseFiles, ensureOrch, createLaneWorktree, doCheckpoint, doMerge } from './lane-worktree-ops.js';
@@ -31,7 +30,6 @@ function gitProbe() {
   return r.ok ? { ok: true, version: r.stdout } : { ok: false, error: r.stderr };
 }
 
-// ---- 工具定义 ----
 export function worktreeToolCreate(ctx, deps) {
   const { store, root, resolveBatchSession } = deps;
   return defineTool({
@@ -65,7 +63,6 @@ export function worktreeToolCreate(ctx, deps) {
       const { repo, orch } = ensureOrch(root, sessionId, args.batchId);
       const { dir, branch, reused, reason } = createLaneWorktree(root, sessionId, args.batchId, args.laneId);
       const base = runGit(orch, ['rev-parse', 'HEAD']);
-      // 单一判定位：isolated = 基线受控文件数 > 0 且 worktree 注册命中；「创建成功」不蕴含本式（空 seed 形态恒 false）
       const baseFiles = countBaseFiles(dir);
       const isolated = baseFiles > 0 && listWorktrees(repo).includes(normPath(dir));
       store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CREATED, {
@@ -125,18 +122,16 @@ export function worktreeToolCheckpoint(ctx, deps) {
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
       const r = doCheckpoint(root, sessionId, args.batchId, args.laneId, args.message.trim(), progress);
-      // A2：worktree 未建 ⇒ 提交不成立，但**断点指针不得静默丢失**（只补指针；不落 total_mismatch / over_budget——两者语义前提是「确有 checkpoint」）
       if (!r.ok) { recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); return r; }
       if (r.committed) {
         const evt = { lane: args.laneId, commit: r.commit, message: r.message };
-        if (progress) { evt.step = progress.step; evt.total = progress.total; } // 事件携带 step/total（不传则无，向后兼容）
+        if (progress) { evt.step = progress.step; evt.total = progress.total; }
         store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
       }
-      // 断点指针：checkpoint 携带 progress 经 laneProgressWrite 写 laneProgress（每子步骤完成即写，失败不阻断）+ 步数预算超限判定
       if (progress) {
         try { store.updateLaneProgress(sessionId, args.batchId, args.laneId, { ...progress, status: 'running' }); }
         catch (e) { ctx.logger?.warn?.('[lane-checkpoint] laneProgress write failed: ' + String(e?.message ?? e)); }
-        const b = overBudgetOf(batch, args.laneId, progress); recordCheckpointTotalMismatch(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); // 同处：清单对齐留痕（判定/幂等/fail-safe 见 resume.js）；本文件行数有 T2.6 护栏（上限 462，批 `punky-quality-a-20261106` 实测 457→458，余量 4）故不新增行
+        const b = overBudgetOf(batch, args.laneId, progress); recordCheckpointTotalMismatch(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger);
         if (b.over && !hasOverBudgetEvent(batch, args.laneId)) {
           store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }
@@ -185,7 +180,6 @@ export function worktreeToolCheckpointStatus(ctx, deps) {
       const batch = store.readBatch(sessionId, args.batchId);
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
-      // 只读：事件流过滤（不调 git）；latest = 倒序首个携带 step/total 的 checkpoint。优先序（E-CK4）：**事件优先、指针兜底**——事件是物理提交留痕、laneProgress 是可能被早退/重派覆写的断点指针 ⇒ 事件面非空时一律以事件为准，不一致时**禁**数值合并（不取更大 step）
       const events = (batch.events ?? []).filter((e) => e.type === EVT.EVT_WORKTREE_CHECKPOINT && e.lane === args.laneId);
       const checkpoints = events.map((e) => {
         const c = { commit: typeof e.commit === 'string' ? e.commit : '', ts: e.ts, message: e.message ?? '' };
@@ -196,11 +190,11 @@ export function worktreeToolCheckpointStatus(ctx, deps) {
       for (let i = checkpoints.length - 1; i >= 0; i--) {
         if (checkpoints[i].step != null && checkpoints[i].total != null) { latest = { step: checkpoints[i].step, total: checkpoints[i].total }; latestSource = 'event'; break; }
       }
-      const lp = latest ? null : laneProgressRead(batch, args.laneId); // 事件面为空才读指针（指针只兜底，不抢位）
+      const lp = latest ? null : laneProgressRead(batch, args.laneId);
       if (lp && Number.isInteger(lp.step) && Number.isInteger(lp.total)) { latest = { step: lp.step, total: lp.total }; latestSource = 'laneProgress'; }
       const out = { ok: true, lane: args.laneId, branch: laneBranch(args.laneId), checkpoints, latest, ...(latestSource ? { latestSource } : {}) };
       const dir = laneDirOf(root, sessionId, args.batchId, args.laneId);
-      if (fs.existsSync(dir)) out.worktree = dir; // worktree 目录存在性探测（只读）
+      if (fs.existsSync(dir)) out.worktree = dir;
       return out;
     },
   });
@@ -239,7 +233,6 @@ export function worktreeToolMerge(ctx, deps) {
       if (r.ok) {
         store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_MERGED, { lane: args.laneId, branch: laneBranch(args.laneId), branchDeleted: r.branchDeleted });
       } else if (r.conflict) {
-        // 冲突可选 LLM merge agent 化解（默认关 → 现状逐字一致；全量逻辑在 merge-agent.js）
         return await resolveMergeConflict(deps, {
           root, store, sessionId, batchId: args.batchId, laneId: args.laneId,
           orchDir: orchDirOf(root, sessionId, args.batchId), branch: laneBranch(args.laneId),

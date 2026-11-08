@@ -15,87 +15,21 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// flows 解析器：把「层语义」从门禁硬编码搬到团队声明。
-// ─────────────────────────────────────────────────────────────────────────────
-// 语义契约（**r2 拒绝免检版**，后续切片不得违背）：
-//   ① **声明面只能收紧（tighten-only，原则①）**：读端的「缺声明」路径**一律按最严侧处置**，
-//      不再回落成「免检」；
-//   ② 声明存在但字段缺省 → 按该字段的 tighten-only 缺省（见各读端函数头注释），**不回落成放宽**；
-//   ③ 声明的**新增强制**（如 entry_requires: ['consume']）只在声明显式写出时生效 —— 显式翻牌；
-//      但「缺声明」不再是免检，而是**拒**（B1 零依赖拒派：consume 强制不依赖团队声明）。
-//     legacy-retire-20260915（完全清退）：LEGACY_* 常量已删除——引擎基线常量 / 读端缺省是**唯一真源**
-//     （`produceFieldOf` 缺声明返回 `null` = 信息性真空，与 `gateStrength.produceFieldDeclared` 同源）。
-//
-// 加载语义（【2026-09-27 · team-asset 全量退役】改写）：**本模块已无加载面**——
-//   资产装载器读端（`loadTeamAsset`）与资产签名缓存（`teamAssetSignature` + `CACHE` / `ROLE_CACHE`）
-//   随 `lib/assembly/team-asset.js` 退役**整体删除** ⇒ 本模块**恒不读盘、无缓存、零 I/O**：
-//   `resolveTeamFlows` / `resolveTeamRoles` 恒返回「**无声明**」事实，读端一律按引擎基线缺省处置。
-//   历史（保留可读）：K1 订正（2026-09-14）曾把缓存键设为「资产路径 + mtime + size」签名以支持热生效。
-//
-// 读端（见 lib/state/gates.js；**引擎基线口径**）：
-//   entry      → entryRequiresOf(flow)（**缺声明 ⇒ enforced:true = 拒派**（tighten-only）；显式条目才按声明）
-//                留痕读端 entryRequiresOf(flow)（区分「团队声明显式强制」与「引擎 tighten-only 缺省」）
-//   plan 契约  → contractOf(flow)（缺声明 ⇒ null，调用方**必须**走引擎基线裸标题判据，禁空契约免检）
-//                规范化展开读端 presenceGlobsOf(contract)（显式路径集合，**禁依赖末段回退**）
-//   exit       → produceFieldsOf(flow, layer)（**恒为 produce ∪ outputs**，声明只能收窄不得放宽）
-//                produceFieldOf(flow, layer) 降为**信息性**（声明字段名，仅用于降级留痕）
-//   consume    → consumeFieldOf(flow, layer)（声明优先，缺省 `'consume'`；白名单外回落 + 问题可读）
-//   零读端声明  → declarationSummaryOf(flows) 汇总 `unwired`（state_machine / progress_contract /
-//                rework 的**未接线标注**（**该台账读端已随 team-asset 全量退役 2026-09-27**；现役实现恒返回 `unwired: []`，本行属历史说明、勿据以取数）；`consume_field` 已于 S19① 接线 ⇒ 不在台账）
 
-// 【2026-09-27 · team-asset 全量退役】原 import 面（资产装载器 / 资产签名 / 码族常量表 /
-//   严重级常量表 / blocking 判据 / 未接线台账读函数 —— 字面量见上游 team-asset.js）
-//   随资产读端**整体删除**（A-5 / A-6 判据：本文件对 `team-asset` 的 import 面与码面归零）。
 
 /** 包根目录：**单点** = `lib/assets.js`（W1a/A-4 收敛；本文件不再自算 `import.meta.url` 深度）。 */
 export { packageRoot } from '../assets.js';
 
-/**
- * 引擎基线：**验收标准（criteria）章节名** —— 判据「全中文」的**单一真源**（2026-09-21 用户裁定）。
- *
- * 消费者（两处 plan 判据门，**不许再写字面量**）：
- *   · `gates.ts` 锚点门 `GATE_AUDIT_CRITERIA_MISSING`（audit 派发前：consume 中的 plan 产物须带本章）；
- *   · `gates.ts` 契约门 `GATE_PLAN_CONTRACT` 的**缺声明分支**（见下 `ENGINE_BASELINE_PLAN_SECTIONS`）。
- *
- * **配置化通道**（声明面优先，缺声明回落本常量）：
- *   · plan 层内容契约：`flows.plan.contract.required_sections`（既有键）；
- *   · audit 层职责声明：`flows.audit.audit_contract.criteria_section`（本轮新增键）。
- *   ⇒ 规格与判据解耦：团队若用英文章节名，只需在资产里声明，代码零改动。
- */
 export const ENGINE_BASELINE_CRITERIA_SECTION = '## 验收标准';
 
-/**
- * 引擎基线：**必要结构章节名**（除 criteria 外的 skill 骨架章节）—— 2026-09-27 用户裁决新增。
- *
- * 裁决原话：「把技能内容改为中文，**引擎需要校验技能中的所有提到的必要裸标题**」。
- * 来源：`~/.agents/skills/spec-writing/SKILL.md` 的**必要标题**（骨架里标 ★ 者）；
- *   可选标题（API 设计 / 关键依赖 / API 契约引用 / 测试策略 / 成功指标 / 时间线 / 待决问题）
- *   **不入本表** —— 它们**项目特定**（有的规格无 API、无时间线）⇒ 不校验。
- *
- * **判据面**：只校验**裸标题行是否存在**（`gates.ts` `sectionLineHit`）；**章节内容允许为空**。
- * **同步纪律**：本表与 `spec-writing` skill 的 ★ 标题**必须一致**；改任一侧须同步另一侧。
- */
 export const ENGINE_BASELINE_REQUIRED_SECTIONS = Object.freeze(['## 概述', '## 问题', '## 方案', '## 需求']);
 
-/**
- * 引擎基线 plan 契约判据章节（E-2 正名，legacy-retire-20260915）：缺声明（无 contract）时的**唯一真源**。
- * 原 `LEGACY_PLAN_CONTRACT` 死常量已删除（lib/test 零 import，从未被读端消费）；本常量承接
- * `gates.ts` plan 契约门的缺声明判据。**从 `ENGINE_BASELINE_CRITERIA_SECTION` 派生**（首项恒为 criteria 章）
- * ⇒ 「验收标准」章节名全仓只有一个字面量。
- *
- * 【2026-09-27 扩面】按用户裁决，判定集由「criteria + 约束」两项**扩为必要标题全六项**：
- *   `## 概述` / `## 问题` / `## 方案` / `## 需求`（来自 `ENGINE_BASELINE_REQUIRED_SECTIONS`）
- *   + `## 验收标准`（`ENGINE_BASELINE_CRITERIA_SECTION`）+ `## 约束`。
- *   ⇒ **章节内容允许为空**（只判标题在场）；**可选标题不入表**。
- */
 export const ENGINE_BASELINE_PLAN_SECTIONS = Object.freeze([
   ...ENGINE_BASELINE_REQUIRED_SECTIONS,
   ENGINE_BASELINE_CRITERIA_SECTION,
   '## 约束',
 ]);
 
-/** 缓存已退役（【2026-09-27】资产面删除 ⇒ 无缓存对象）。
- *  函数**保形保留**：既有调用方（测试隔离钩，67+ 处）逐字不改即可继续调用；现在是纯 no-op。 */
 export function clearFlowCache() {
   // no-op：本模块已无缓存（`CACHE` 随资产面退役删除）。
 }
@@ -255,13 +189,6 @@ function consumeFieldProblemOf(flow, layer) {
     + ' 不在白名单 ' + JSON.stringify([...CONSUME_FIELDS]) + ' ⇒ 回落 "consume"（声明面只能收紧）';
 }
 
-// ── 团队角色集（【2026-09-27 · team-asset 全量退役】已无资产读端）──
-// 现语义：**角色词法集 = 引擎基础集**（D-1 裁决：per-team roles 随资产退役一并消失）。
-//   `resolveTeamRoles` 恒返回空集 ⇒ `unionRoleVocabulary(空)` = `[]` ⇒ 建批 `extraRoles = []`，
-//   白名单 = 引擎基础角色集（团队特有角色名不再可用，触发 `GATE_ROLE_INVALID` **告警**，非拒态）。
-// 历史（保留可读）：曾按 `layers[layer].roles` ∪ `roles.extra` 组成该团队的角色词法集，
-//   使「按资产把自有角色写进 layers」即可用于建批；`plan_leads` / `audit_leads` 已于 2026-09-26 全链删除。
-/** 清角色缓存（资产面删除 ⇒ 无缓存对象）。函数**保形保留**：既有调用方（测试隔离钩，85+ 处）逐字不改。 */
 export function clearRoleCache() {
   // no-op：本模块已无角色缓存（`ROLE_CACHE` 随资产面退役删除）。
 }
@@ -283,14 +210,6 @@ export function unionRoleVocabulary(teamRoles) {
   }
   return out;
 }
-/**
- * 解析某团队的 roles 声明。
- *
- * 【2026-09-27 · team-asset 全量退役】**资产读端已整体删除** ⇒ 恒返回**空集**：
- *   ① 无 `layers[*].roles`、② 无 `roles.extra`、③ `path` 恒 `null`、④ `ok` 恒 `false`。
- *   调用方据此**回落引擎基础角色集**（`unionRoleVocabulary(空)` = `[]` ⇒ `extraRoles = []`）。
- *   导出**保形保留**（调用方形状零变化）；本身零副作用、零 I/O、无缓存。
- */
 export function resolveTeamRoles(team, _opts = {}) {
   return {
     ok: false,
@@ -323,19 +242,8 @@ export function resolveTeamRoles(team, _opts = {}) {
   }
 }
 
-/**
- * glob 与产物路径匹配（含**末段回退**）：`plan/*spec.md` 这类带目录前缀的 glob，
- * 对**绝对路径产物**（`D:\\...\\plan\\spec.md`）不应失配——否则内容契约会被静默跳过，
- * 比 legacy 的「以 spec.md 结尾即校验」口径更松（复核发现的回归点）。
- * 回退规则：glob 的末段（最后一个 `/` 之后）与路径末段做 glob 匹配。
- */
 export function globMatchesPath(pattern, relPath) {
   if (matchGlob(pattern, relPath)) return true;
-  // 末段回退**仅对绝对路径**生效（动机同述：绝对路径产物带目录前缀不该失配），且需满足两条防「静默放宽」：
-  //   ① 末段不得是纯通配 `**`（`**` 作末段会退化成「匹配任意路径」⇒ `plan/**` 命中 `exec/e1/o.md`）；
-  //   ② **目录段也须对齐**：pattern 的目录段须按序出现在路径末段之前的对应位置
-  //      （否则 `plan/*spec.md` 会命中 `D:/…/exec/design-spec.md` —— 只比文件名不跨不了目录）。
-  // 2026-09-14 修复（两条均在实测中复现）。
   const raw = String(relPath).replace(/\\/g, '/');
   const isAbs = /^([A-Za-z]:)?\//.test(raw);
   if (!isAbs) return false;
@@ -389,11 +297,6 @@ function presenceGlobsOf(contract) {
   return { globs: kept, explicit, anchored, unexpandable };
 }
 
-/**
- * 契约命中判定（**单点**）：显式路径集合优先，其余走结构匹配。
- * 结构匹配复用 `globMatchesPath`（其内建两条防静默放宽守卫：末段 `**` 不参与回退、目录段须对齐）⇒
- * 与 `test/audit-contract-gate.test.js:141-148` 的回归口径**同源**，本函数不引入第二套匹配逻辑。
- */
 function presenceGlobMatches(expanded, relPath) {
   const ex = expanded && typeof expanded === 'object' ? expanded : { globs: [], explicit: [] };
   const raw = String(relPath ?? '').replace(/\\/g, '/');
@@ -402,13 +305,6 @@ function presenceGlobMatches(expanded, relPath) {
   return globs.some((g) => globMatchesPath(g, raw));
 }
 
-/**
- * 内容契约校验（声明驱动）：返回问题串数组（空 = 通过）。
- * 未命中 glob 的产物不做章节校验（JSON 可解析性由 gates 既有分支负责，与声明无关）。
- * r2 改动（spec §验收标准 I）：命中判定改由 `presenceGlobsOf` 的**规范化展开视图**驱动
- *   （`presenceGlobMatches`）——「放宽口径必须显式展开、不得依赖末段回退」由此**接线为唯一入口**。
- *   语义与改动前**逐字等价**（`plan/**` 对 exec 路径本就 false、`plan/*spec.md` 的跨目录回退本就被禁）。
- */
 export function sectionProblemsOf(relPath, content, contract) {
   if (!contract) return [];
   const expanded = presenceGlobsOf(contract);
@@ -460,13 +356,7 @@ export function declarationSummaryOf(flows, asset = null) {
     flags,                                     // 显式声明的布尔开关（缺声明不出现 ⇒ 门禁生效侧）
     contract: contractOf(flowOf(flows, 'plan')),
     presenceGlobs: presenceGlobsOf(contractOf(flowOf(flows, 'plan'))), // plan 契约 glob 的规范化展开
-    // 【2026-09-28 · 批 `cleanup-tail-20260927` E-3】原三元（`ac ? { … } : null`，其 `source` 值指向
-    //   **团队资产**来源）已删：资产面退役 ⇒ `flows` 恒 `null` ⇒ `flowOf(flows,'audit')` 恒 `undefined`
-    //   ⇒ `ac` 恒 `null` ⇒ 该三元**恒走 `null` 支**（恒不可达分支），其「团队资产」来源标注**恒不产生**。
-    //   ⇒ 键**保形保留**（读端形状零变化）、值恒 `null`；不留恒不可达死分支，也不留假来源标注。
     auditContract: null,
-    // 【2026-09-27 · team-asset 退役】声明台账（`UNWIRED_DECLARATIONS`）随资产面删除 ⇒ 「未接线声明」恒空。
-    //   引擎级条目（`config.ratchet`）由 gates.ts 的 `unwiredEntriesOf` 自行补齐，不在本汇总内。
     unwired: [],
   };
 }

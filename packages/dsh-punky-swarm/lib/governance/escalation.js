@@ -15,22 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 违规计数内核：纯函数滚动时间窗评估 + 类别（primitive）过滤。
-// 计数事实源 = 批事件流（batch.events，读取幂等、可重放）；本模块只做「读 + 统计」，
-// 零 IO / 零副作用 / 不 mutate 入参；threshold 比较在调用点，本函数只返回窗口计数。
-// 窗口语义（非「连续」语义）：统计 ts ∈ [now-windowMs, now] 的目标事件数——穿插非目标事件
-// （member.settled / worktree.checkpoint / batch.phase 等）不打断、不参与（镜像 countConsecutiveFailedSettles
-// 的「非目标事件 continue」模式）。
-// 仅可 import lib/state/event-types.js 常量（零依赖纯模块，无循环依赖）。
 
 import * as EVT from '../state/event-types.js';
 
 export const DEFAULT_ESCALATION_PRIMITIVES = ['DENY', 'NARROW'];
 
 /**
- * 违规计数纯函数：
- * 从批事件流统计滚动时间窗内可计入的 governance.refusal 事件数。
- *
  * @param {Array<object>|null|undefined} events 批事件流（batch.events）——仅统计
  *   e.type === EVT_GOVERNANCE_REFUSAL 且 e.primitive ∈ primitives 且 ts 落在 [now-windowMs, now] 的事件；
  *   非目标事件 continue（不打断）；undefined/null → 0。
@@ -48,15 +38,10 @@ export function countGovernanceRefusals(events, { windowMs = DEFAULT_ESCALATION_
   const primitiveSet = new Set(primitives);
   let count = 0;
   for (const e of evs) {
-    // 非目标事件：不打断、不参与（窗口语义关键——穿插任意事件不影响计数）
     if (!e || e.type !== EVT.EVT_GOVERNANCE_REFUSAL) continue;
-    // 类别过滤（纯函数侧）：仅 primitive ∈ primitives 计入
     if (!primitiveSet.has(e.primitive)) continue;
-    // ts 归一化：批事件流 ts 由 newEvent 基座携带（ISO 串）；兼容 epoch 数值
     const tsMs = typeof e.ts === 'number' ? e.ts : Date.parse(String(e.ts ?? ''));
-    // ts 缺失/非法 → 无法判定窗口 → 不计（防御，不 throw——纯函数容错）
     if (Number.isNaN(tsMs)) continue;
-    // 窗口边界：ts < now-windowMs 不计；ts === now-windowMs 计（边界精确）
     if (tsMs < windowStart) continue;
     count++;
   }

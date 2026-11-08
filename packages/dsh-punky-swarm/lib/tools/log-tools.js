@@ -16,31 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 蟛蜞模式日志导出工具（1 个）：log_export
-// -----------------------------------------------------------------------------
-// 模型可调用、只读、可审计的事件日志导出。
-// 现状事件流已完备（store.appendEvent 全量落 batch.events，含 member.settled / gate.* /
-// worktree.* / budget.* / system.* / asset.* 等），但缺模型可调用的导出工具——本工具为
-// store.readBatch 的纯读投影，零副作用（不 appendEvent、不改状态文件、不碰 mailbox、
-// 不写工作区；唯一写路径是显式 writeTo 落盘到引擎产物根，属可审计产物）。
-// 装配开关：经 readCapability(config,'logs') 合并注册表 default（logs 键注册表默认关：
-//   缺省不注册 → 工具总数不含 log_export；显式 capabilities.logs.enabled:true（如 cordis.patch.yml）
-//   或 enabled:false 控制注册）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
-import { SAFE_ID, TERMINAL } from '../state/constants.js'; // 单点（原定义迁出）
-import { readCapability } from '../assembly/schema.js'; // 装配开关经注册表 default 缺省合并
-// 产物路径单点（W2/A-3 第四份收敛）：本文件只留单行委托；收敛后非法 sessionId 由静默拼路径变 throw（W2-FU-2）
+import { SAFE_ID, TERMINAL } from '../state/constants.js';
+import { readCapability } from '../assembly/schema.js';
 import { artifactsDirOf as artifactsDirOfAt, resolveWriteTargetIn } from '../state/batch-paths.js';
-// 读端收敛：summaryOf 完整字面量比较改引 EVT 常量单点（member.settled/lane.skipped/lane.needhuman/batch.phase/budget.rejected）
 import * as EVT from '../state/event-types.js';
 
 function artifactsDirOf(root, sessionId, batchId) {
   return artifactsDirOfAt(path.join(root, 'sessions'), sessionId, batchId);
 }
 
-// 路径防逃逸（同 store.claimAsset 语义）：批次内相对路径，拒绝绝对路径/盘符前缀/../空段
 function assertSafeRelative(p) {
   if (typeof p !== 'string' || !p.length) throw new Error('invalid writeTo path: ' + p + ' (must be batch-relative)');
   if (path.isAbsolute(p) || /^[A-Za-z]:/.test(p)) throw new Error('invalid writeTo path: ' + p + ' (must be batch-relative, no absolute path)');
@@ -49,7 +37,6 @@ function assertSafeRelative(p) {
   return segs;
 }
 
-// 事件关键字段摘要（markdown 时间线表用；未知事件回退 JSON 截断）
 function summaryOf(e) {
   if (e.type === EVT.EVT_MEMBER_SETTLED) return (e.from ?? '') + ' -> ' + (e.to ?? '') + (e.note ? ' | ' + e.note : '');
   if (e.type === EVT.EVT_LANE_SKIPPED || e.type === EVT.EVT_LANE_NEEDHUMAN) return e.note ?? '';
@@ -73,8 +60,6 @@ function summaryOf(e) {
 function matchEvent(e, args) {
   if (args.lane && e.lane !== args.lane) return false;
   if (args.type && !String(e.type ?? '').startsWith(args.type)) return false;
-  // 【A1-P2-05 · 2026-10-22】`since` = **开区间下界**（严格大于），向 `:142` 描述「仅返回该时刻之后的事件」对齐。
-  //   原 `<`（保留等于边界）= 闭区间 ⇒ 以「上批最后一条 ts」作游标的增量轮询会**反复读回边界事件**。
   //   **不得**用「把描述改成含边界」来消解此处差异（那会把缺陷合法化）；`e.ts` 不可解析 ⇒ NaN 比较为 false ⇒ 保留（不变）。
   if (args.since && Date.parse(e.ts) <= Date.parse(args.since)) return false;
   return true;
@@ -88,7 +73,6 @@ function filterDesc(args) {
   return conds.length ? conds.join('; ') : '无';
 }
 
-// markdown 可审计报告：批次头 + 时间线表 + 尾部汇总（终态计数/门禁清单/资产归档清单）
 function buildReport(batch, sessionId, filtered, args) {
   const lines = [];
   lines.push('# 事件日志导出报告');
@@ -133,10 +117,8 @@ function buildReport(batch, sessionId, filtered, args) {
 
 export function createLogTools(ctx, deps) {
   const config = deps?.config ?? {};
-  // logs 注册表默认关：readCapability 合并 default {enabled:false}——未配置/disabled → 零注册；
-  //   显式 logs.enabled=true（patch 全开）→ 注册 log_export。
   if (readCapability(config, 'logs')?.enabled !== true) return [];
-  const { root, store, resolveBatchSession } = deps; // resolveBatchSession：批归属会话 resolver（e4-session-bind 注入单点；缺省 undefined ⇒ 原三级回落）
+  const { root, store, resolveBatchSession } = deps;
 
   return [
     defineTool({
@@ -162,26 +144,10 @@ export function createLogTools(ctx, deps) {
           if (args.writeTo) {
             const segs = assertSafeRelative(args.writeTo);
             const artifactsDir = artifactsDirOf(root, sessionId, args.batchId);
-            // 【Leader 直做 · F2 AC-4/R-9（e2-containment 交接项）】写面归属改经**单点**判据
-            //   （`lib/state/batch-paths.js` 写面单点：词法 + realpath 解权双档、fail-closed）。原实现只有词法
-            //   `startsWith` 判据 ⇒ 根内 junction/软链指向根外时判「在根内」，随后 `writeFileSync` 跟随软链
-            //   把报告写到根外（AC-4/R-9 的 fail-open 面）。
-            //   失败文案 `writeTo escapes artifacts dir: <abs>` 由单点原样抛出（调用方可见文案逐字未变）。
             const dest = resolveWriteTargetIn(artifactsDir, path.join(artifactsDir, ...segs));
             fs.mkdirSync(path.dirname(dest), { recursive: true });
-            // 【F2-G10 · TOCTOU-RESIDUAL】首判 → 写入之间可被替换（判据与 syscall 之间存在 I/O）。复判收窄的是一条
-            //   **具体**路径：首判时中间段尚不存在（由本次 `mkdirSync` 创建）⇒ 解权档只能落到「最近既有祖先」；
-            //   复判时该段已存在 ⇒ 解权档走到它本体，`mkdir` 期间/之后被换成 junction 的情形在此暴露。
-            //   窗口因此从「首判 → 写入（含 `mkdirSync` 的整段 I/O）」收窄为「复判 → `openSync`」之间的**一次**
-            //   syscall 间隙。残余（**未闭合**，本注释与任何产物均不声称消除）：该间隙内祖先段被替换为
-            //   junction/软链，仍可把本次写入重定向到产物根外。触发条件 = 攻击者在复判与 `openSync` 之间抢到
-            //   一次目录替换（同批 `claimAsset` 写面同族、同威胁模型）。彻底闭合需 `openat(dirfd, …)` /
             //   `O_NOFOLLOW` 语义（Node 跨平台不可用：Windows 无 openat，且 junction 是目录重解析点、不受
-            //   `O_NOFOLLOW` 约束）或对写路径加锁（本批非目标，K-1 已否决）⇒ 此处**只登记残余，不宣称根治**。
-            //   可接受性论证：重定向需与引擎**同用户**且能建 junction/软链的本地进程 —— 该主体已持与引擎相同的
-            //   写权限，重定向不扩大其能力面 ⇒ **不构成提权**；仅影响「产物落点归属」这一审计面的准确性。
             resolveWriteTargetIn(artifactsDir, dest);
-            // 一次性 fd：复判与落盘之间只留一次 `openSync`（路径解析仅此一次，写完立刻关闭）；'w' 保持既有覆盖语义。
             const fd = fs.openSync(dest, 'w');
             try {
               fs.writeFileSync(fd, out.report, 'utf8');

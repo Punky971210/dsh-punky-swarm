@@ -15,12 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { isGovernancePrimitive } from './decisions.js';
-// 默认值：
-//   enabled: true（可显式关闭）；rules: []（空表=零拦截）；defaults.deny: 'DENY'（fail-closed 兜底）；
-//   flags: { pause: false, narrow: false, defer: false }（原语开关默认关 → P3/P4/P5 回退 DENY）
-// escalation 默认：enabled:false（出厂零行为）/ threshold:3（与 failed-escalate 同值不同键）/
-//   windowMs:600000（10 分钟滚动窗）/ primitives:['DENY','NARROW']（DEFER/PAUSE 默认不计可显式扩入）
-// as const：'DENY'/true/false 字面量派生（deny: 'DENY' 绑定 GovernancePrimitive 防漂移，纯类型层校验）
 const GOVERNANCE_DEFAULTS_RAW = {
     enabled: true,
     rules: [],
@@ -43,9 +37,6 @@ export const GOVERNANCE_DEFAULTS = Object.freeze({
         primitives: Object.freeze([...GOVERNANCE_DEFAULTS_RAW.escalation.primitives]),
     }),
 });
-// ── 规则表校验纯函数（零 IO；resolve 与 preset-loader 共用，供单测直引）──
-// 规则 match.op 合法值域 + violations.category 合法值域（对齐 types.ts Rule/Violation 契约，
-// 与 classify.ts 消费面一致——非法 op/category 预设文件装载期早失败，见 validatePresetRules）
 const RULE_MATCH_OPS = ['eq', 'gt', 'gte', 'lt', 'lte', 'in', 'regex'];
 const VIOLATION_CATEGORIES = ['hard', 'pausable', 'narrowable', 'soft', 'manual_review', 'ftra', 'unknown'];
 // 全表规则 id 唯一性校验（preset×preset / preset×inline / inline 内自重复 + 空/非 string id
@@ -73,16 +64,7 @@ export function validateRuleTable(rules) {
     }
     return { ok: errors.length === 0, errors };
 }
-// ── 第三类判定面（工具黑名单）校验纯函数（零 IO；preset-loader 与 resolve 共用，供单测直引）──
-// 行为面合法值域（**2026-09-26 扩面**：原仅 `file-write`；新增 `tool-disabled` / `wait-sleep`，
-//   用于「禁用 wait_agent 工具 + sleep 能力」——用户裁决 2026-09-26：避免 Agent 滥用等待功能）。
-//   未知值**装载期早失败**（下方 :148 拒绝）；判定内核侧对未知行为 **fail-closed 命中**
-//   （2026-09-15 B1 修订：此前返回 hit:false = fail-open，条目在册却被静默绕过）
-//   ⇒ 双保险：装载层拒绝坏资产、运行期不误放行。
 export const TOOL_BAN_BEHAVIORS = ['file-write', 'tool-disabled', 'wait-sleep'];
-// 工具黑名单条目形状校验（preset 文件与 inline 共用）：条目须为对象；id / code / message / tool
-//   须为非空 string（编号红线：无来源编号禁止）；behavior ∈ TOOL_BAN_BEHAVIORS；
-//   category 可选且须 ∈ VIOLATION_CATEGORIES（缺省由判定内核取 'hard'）。
 export function validateToolBanEntries(entries) {
     const errors = [];
     if (!Array.isArray(entries))
@@ -108,9 +90,6 @@ export function validateToolBanEntries(entries) {
     }
     return { ok: errors.length === 0, errors };
 }
-// 工具黑名单全表 id 唯一性校验（preset×preset / preset×inline / inline 内自重复 + 空/非 string id
-//   → ok:false + 错误文案含重复 id 与次数）：与 validateRuleTable 同纪律（引擎 violations 不去重，
-//   重复 id 同命中会双倍收据文案，故装载层拒绝——宁空勿半，绝不部分武装）。
 export function validateToolBanTable(entries) {
     const errors = [];
     const seen = new Map();
@@ -133,12 +112,6 @@ export function validateToolBanTable(entries) {
     }
     return { ok: errors.length === 0, errors };
 }
-// 预设文件形状校验（preset-loader 装载 preset 文件时执行——受控资产早失败）：
-//   顶层 rules 数组；每条 id 非空 string / tools 可选（元素 string；内容规则显式白名单属语义约束
-//   由 preset-rules 静态回归保证，不在此拒绝）/ match 对象（path 可选 string 以 / 开头或空、op 合法或缺省、
-//   value/pattern 可选）/ violations 非空（code 非空 string、category 合法、message string、path 可选 string）/
-//   narrow 可选数组（path 非空 string）；文件内 id 唯一；op==='regex' → pattern 非空且可编译。
-//   （inline 规则形状沿现状宽容——不在此校验，仅 preset 文件受控资产早失败；唯一性对合并全表由 resolve 做。）
 export function validatePresetRules(rules) {
     const errors = [];
     if (!Array.isArray(rules)) {
@@ -233,10 +206,6 @@ export function validatePresetRules(rules) {
     }
     return { ok: errors.length === 0, errors };
 }
-// escalation 校验回退：
-//   threshold 非法（非整数 / <1）→ 回退默认 3；windowMs 非法（非数 / <1000）→ 回退默认 600000；
-//   primitives 仅接受 DENY/NARROW/DEFER/PAUSE（REQUIRE_APPROVAL 与状态门收据不可配入——非法值剔除，
-//   剔空 → 回退默认 ['DENY','NARROW'] + warn 留痕（有 logger 时）。enabled 仅显式 true 才开（默认关）。
 function resolveEscalationConfig(raw, warn) {
     const e = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
     const d = GOVERNANCE_DEFAULTS.escalation;
@@ -262,7 +231,7 @@ function resolveEscalationConfig(raw, warn) {
         primitives = e.primitives.filter((p) => ESCALATION_PRIMITIVES.includes(String(p)));
     }
     if (!primitives.length)
-        primitives = [...d.primitives]; // 未配置 / 全非法 → 回退默认
+        primitives = [...d.primitives];
     return {
         enabled: e.enabled === true,
         threshold,
@@ -270,10 +239,6 @@ function resolveEscalationConfig(raw, warn) {
         primitives,
     };
 }
-// preset 引用归一（纯函数）：undefined → null（未配置）；**string[] 数组 = 唯一合法形态（多选）**；
-//   其余形态（单值字符串 / 数字 / 对象 / 数组内非 string / 空串 / 空数组）→ errors（装载失败由 resolve 回退空表 + warn）。
-// `preset` 的**单值字符串形态（单选遗产）已废除**——护栏配置一律多选 / 数组；
-//   旧写法 `preset: "l1-sensitive"` 判形态非法（回退空表 + warn），请改 `preset: ["l1-sensitive"]`。
 function normalizePresetRefs(preset) {
     const errors = [];
     if (preset === undefined)
@@ -306,11 +271,6 @@ export function resolveGovernanceConfig(config, opts) {
     const presetBanTable = opts?.presetBanTable;
     const d = (c.defaults && typeof c.defaults === 'object' && !Array.isArray(c.defaults)) ? c.defaults : {};
     const f = (c.flags && typeof c.flags === 'object' && !Array.isArray(c.flags)) ? c.flags : {};
-    // preset 装载分支（preset 展开序 → inline rules 在后；全表唯一性校验；失败回退空表+warn）：
-    //   - 无 preset 键 → 完全沿现状（c.rules 直传/默认[]——零行为差强保证）；
-    //   - preset 引用存在 → 归一/查表展开/拼接 inline → validateRuleTable；
-    //     任一错误（类型非法/未知 id/重复 id/空 id）→ 回退 rules:[] + warn 逐条（宁空勿半、不 throw）。
-    //   resolved 快照只存展开后 rules（不存引用原值）→ remount JSON 比较器零改动感知生效差异。
     let rules;
     let toolBan;
     if (c.preset !== undefined) {
@@ -324,13 +284,10 @@ export function resolveGovernanceConfig(config, opts) {
                 const foundBan = presetBanTable?.[ref];
                 const hasRules = Array.isArray(found);
                 const hasBan = Array.isArray(foundBan);
-                // 缺 table（接线漏注入）或查无（两类判定面皆无）→ 未知 id 装载失败（出厂/缺省表不识别任何引用）
                 if (!hasRules && !hasBan) {
                     errs.push(`governance.hook.preset: 未知 preset id '${ref}'（注册 id 枚举：l1-sensitive / l2-resource / l3-tool-ban / l5-wait-ban；组合请用数组引用或直接写 inline rules / inline toolBan）`);
                 }
                 else {
-                    // preset 引用同时展开**两类判定面**：l1-sensitive / l2-resource = 参数规则；
-                    //   l3-tool-ban = 工具黑名单（第三类，条目进 mergedBan）
                     if (hasRules)
                         merged.push(...found);
                     if (hasBan)
@@ -341,18 +298,7 @@ export function resolveGovernanceConfig(config, opts) {
         const inline = Array.isArray(c.rules) ? c.rules : [];
         const inlineBan = Array.isArray(c.toolBan) ? c.toolBan : [];
         const finalBan = [...mergedBan, ...inlineBan];
-        // ⚠ 形状校验（2026-09-26 对称化修复）：此前本分支**只校验 id 唯一**（validateToolBanTable），
-        //   而 `else`（无 preset）分支两者都校验 ⇒ **inline 坏条目在 preset 分支下被静默武装**：
-        //   缺 code/message/tool 时拒绝文案 code=undefined、未知 behavior 永不命中（fail-open）；
-        //   与 `else` 分支注释声称的「现接同一校验器」**不符**。现补**同一校验器**，两侧对称。
         const final = [...merged, ...inline];
-        // ── 【2026-09-27 修 · R2-α 面间独立】两个判定面**各清各的**（用户裁 α）──────────────
-        //   修前：本分支把「rules 面坏」与「toolBan 面坏」合并判定（任一坏 ⇒ **两表全清**），
-        //     而 `else` 分支是**面间独立**的 ⇒ **两分支行为不对称**（gap-list `e2-R3-03` CASE_E 实证：
-        //     有效的 toolBan 会被无关的 rules 错误静默清空 ⇒ 与 `config.ts:157` 自述
-        //     「防『以为武装实则裸奔』」**反向**）。
-        //   修后：**唯一跨面连带的只剩 `errs`（preset 引用本身非法）** —— 那时**两面都不可信**，
-        //     清两表是对的；其余情况**面间不连坐**。
         const vBanEntries = validateToolBanEntries(finalBan);
         const vBan = validateToolBanTable(finalBan);
         if (errs.length > 0) {
@@ -362,7 +308,6 @@ export function resolveGovernanceConfig(config, opts) {
             toolBan = [];
         }
         else {
-            // ① toolBan 面（独立判定）
             if (vBanEntries.ok && vBan.ok) {
                 toolBan = finalBan;
             }
@@ -373,7 +318,6 @@ export function resolveGovernanceConfig(config, opts) {
                     warn?.(`[governance] preset 装载失败（toolBan）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
                 toolBan = [];
             }
-            // ② rules 面（独立判定；**形状 + id 唯一**双检 —— 2026-09-27 用户裁 B：inline 与 preset 两面同严）
             const vShape = validatePresetRules(final);
             const v = validateRuleTable(final);
             if (vShape.ok && v.ok) {
@@ -389,16 +333,6 @@ export function resolveGovernanceConfig(config, opts) {
         }
     }
     else {
-        // ── 【2026-09-27 修 · R1a】inline rules 补 `validateRuleTable`（id 唯一）──────────────
-        //   修前：本分支 rules **零校验**（直赋）⇒ **重复 id 直通内核**（gap-list `e2-R3-03` CASE_A 实证：
-        //     `no_preset` 下重复 id 被武装、warns=0），与 `config.ts:104-105` 自述「故装载层拒绝」**不符**。
-        //   修后：与 `preset` 分支**用同一套 id 唯一校验**（`validateRuleTable`）；
-        //     ⚠ **形状校验仍不施加** —— `validatePresetRules:141` 注释明说「inline 规则形状沿现状宽容」，
-        //     属**有意设计**（受控资产早失败 vs 热加载通道宽容），本次**不改**（R1b 不动）。
-        // 【2026-09-27 用户裁 B · 两面同严】inline 通道的 rules 面**也走形状校验**（`validatePresetRules`），
-        //   与 inline toolBan 面（走 `validateToolBanEntries`）**口径一致**；`validatePresetRules:141` 原注释
-        //   「inline 规则形状沿现状宽容」**已作废**（那是本改动前的旧口径）——现两面同规则：
-        //   **preset 文件 = 形状 + id（装载期全检）；inline = 形状 + id（resolve 期全检）；判定面统一 fail-closed 兜底。**
         const inlineRules = Array.isArray(c.rules) ? c.rules : [...GOVERNANCE_DEFAULTS.rules];
         const vRulesShape = validatePresetRules(inlineRules);
         const vRulesTable = validateRuleTable(inlineRules);
@@ -412,14 +346,6 @@ export function resolveGovernanceConfig(config, opts) {
                 warn?.(`[governance] inline rules 装载失败（热加载通道 governance.hook.rules）：${e}；回退空表（宁空勿半——修正重复 id 后热更重挂生效）`);
             rules = [];
         }
-        // 第三类判定面 inline 通道（**热加载主干**）：runtime.json 写 governance.hook.toolBan →
-        //   本快照变化即触发 dispose+重挂（remount JSON 比较），免重启生效、无需 preset 装载。
-        //   ⚠ 形状校验（2026-09-15 B1 修复，fail-open → fail-closed）：本通道此前**直赋** c.toolBan
-        //   （零校验），与 preset 通道（preset-loader 装载期走 validateToolBanEntries）不对称——
-        //   坏条目（缺 code/message/tool、未知 behavior）被静默武装进内核：拒绝文案 code=undefined、
-        //   未知 behavior 永不命中（fail-open）。现接**同一校验器**（形状 + 全表 id 唯一），
-        //   坏条目 ⇒ warn 逐条**指名条目索引与原因** + 回退空表（宁空勿半，与 preset 分支同纪律：
-        //   绝不让半截表武装进内核）；空表/合法表零行为差（出厂 [] 与在册条目照旧生效）。
         const inlineBan = Array.isArray(c.toolBan) ? c.toolBan : [...GOVERNANCE_DEFAULTS.toolBan];
         const vBan = validateToolBanEntries(inlineBan);
         const uBan = validateToolBanTable(inlineBan);
@@ -435,13 +361,9 @@ export function resolveGovernanceConfig(config, opts) {
         }
     }
     return {
-        // 缺省 = GOVERNANCE_DEFAULTS.enabled(true)，显式 enabled:false 才关（对齐 resolveWatchConfig 注释）
         enabled: c.enabled !== false,
         rules,
         toolBan,
-        // fail-closed 兜底：仅接受合法原语，否则 DENY；
-        // 「兜底不可 ALLOW」——fail-closed 纪律（unknown → DENY 绝不 ALLOW）：不允许把兜底配置成放行，
-        //   defaults.deny==='ALLOW' → resolve 回退 DENY（推荐处置：回退+注释；classify 侧另有双保险防御）
         defaults: {
             deny: (isGovernancePrimitive(d.deny) && d.deny !== 'ALLOW') ? d.deny : GOVERNANCE_DEFAULTS.defaults.deny,
         },
@@ -450,7 +372,6 @@ export function resolveGovernanceConfig(config, opts) {
             narrow: f.narrow === true,
             defer: f.defer === true,
         },
-        // escalation 段：并入 resolved 快照 → remount JSON 比较感知任一子键变化（默认关形态）
         escalation: resolveEscalationConfig(c.escalation, warn),
     };
 }

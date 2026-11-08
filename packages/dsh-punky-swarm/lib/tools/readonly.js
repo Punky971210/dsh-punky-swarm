@@ -17,59 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { stripStreamMerges, segmentCommands } from '../shell-text.js';
 
-// 只读 shell 判定（难度门禁「只读侦察面」的判定内核）
-//
-// 目的：难度路由门禁原先把 shell 类工具（pwsh/bash）一刀切当执行型 ⇒ 主 Agent 在评估前
-//   **跑不了任何侦察命令**（列目录、git status、读文件都得先编一个档位），只能在零信息下评档，
-//   于是保守取 C → 建批错派。本模块把「只读命令」从执行型里摘出来，让评估发生在侦察之后。
-//
-// 形态（对标梁神模式的两阶段锚定）：未评估态只放行**只读面**（read/glob/grep + 只读 shell 命令），
-//   评估写入后回到全工具面。只读命令不是「执行型动作」，故**任何评估状态下都放行**，且**不计数**。
-//   ✅ 活体实测（2026-09-16，N12 改字）：该判定**已恢复生效**——成因即「guard 阶段的 `arguments` 与执行期不同源」，
-//   由 `commandOf()` 兼容取值修好（对象 / JSON 字符串 / 多键名三种承载）。复验读数：同一条纯只读命令后
-//   `execToolCount` **未增长**，且 guard 侧 `readonly-shape` 取证日志**零输出**（即判定为只读、未走非只读分支）。
-//   【2026-09-16 用户裁决】`execToolCount` / `lastAssign.execCallsSince` **仅作观察提示**，不再是档位/过期依据
-//   （见 lib/state/store.js stale() 注释）；本判定仍决定「是否计入执行型动作」这一观察量。
-//
-// 判定链（默认拒绝 / fail-closed）：
-//   ⓪ 空 / 非字符串 / **引号未闭合** → 非只读（无法静态定位边界）；
-//   ① 预处理：**引号掩码**（把 `"…"` / `'…'` 字面量替成 `__Q__`，使引号内的 `>`、`|`、`;`、
-//      命令名不参与判定——修「引号内 `|` 被误当管道分段、引号内 `>` 被误当重定向」的误拒）、
-//      剥离流合并 `2>&1` / `2>$null`（只合并流、不落盘，不算写）；
-//   ② **全串**写指示符（重定向、危险动词前缀 Set-/New-/Remove-/Out-…、`-OutFile`、find 写侧旗标）→ 非只读；
-//   ②′ **原文** find 段复扫写侧旗标：掩码会把 `find . "-fprint" o.txt` 的旗标 token 一并抹成 `__Q__`
-//       （掩码是修「引号内 `|`/`>` 误判」的代价）⇒ 对原文按同一套分隔符切段、**仅段首为 find 的段**复扫；
 //       作用域收窄的理由 = 只读检索里的同名文本（`grep -rn "-delete" lib`）不得被误拒；
-//   ③ 按 `;` `&&` `||` `|` 换行**分段**（引号已掩码 ⇒ 引号内分隔符不再误分段），逐段判定，任一段非只读 → 整条非只读；
-//   ④ 段内取**命令位首 token**（先剥赋值前缀 `$x = ` / `x=`，再跳过 `(` `&` `.` 包裹）：
-//        · 命中写命令名（rm/npm/curl/git 写子命令/eval…）→ 非只读；
-//        · `git` 先剥只读前缀选项（`-C <dir>` / `--no-pager` / `-P` / `--paginate`）再判子命令 + 参数；
-//        · 命中只读白名单（Get-ChildItem/Get-Content/git status…）→ 只读；
-//        · 其余一律非只读（默认拒绝）。
-//
-// ⚠ 边界声明（明示，勿误读）：这是**启发式**判定，**不是沙箱**——shell 可经别名、脚本文件、
-//   转义参数、编码方式绕过；本模块只收敛「无意识地用写入命令做侦察」这一主路径，靠
-//   「默认拒绝 + 写指示符优先 + 逐段判定」把误放压到最小，**不承诺**等价于 OS 级隔离。
-//   要强隔离请走内核级只读工具位（另案）。
 
-// shell 类工具（判定只作用于这两种；其余执行型工具行为零变化）
 export const SHELL_TOOLS = ['pwsh', 'bash'];
 
-// 引号字面量掩码（替代符刻意选无语义 token：不会被写指示符命中，也不会被当命令名）
 const QUOTE_MASK = '__Q__';
-// 段内赋值的环境前缀（PowerShell `$x = ` / POSIX `x=`）：只剥前缀，右侧照原判定
 const ASSIGN_RE = /^\s*(?:\$[A-Za-z_][\w]*|[A-Za-z_][\w]*)\s*=\s*/;
-// git 只读前缀选项（改工作目录 / 不分页）：剥掉后按子命令判定
 const GIT_PREFIX_RE = /^(?:-C\s+(?:__Q__|\S+)|--no-pager|-P|--paginate)\s+/i;
 
-// find 写侧旗标族（`-fprint*`（含 `-fprint0`）/ `-fprintf` / `-fls` / `-exec*` / `-ok*` / `-delete`）**单表单源**，
-//   两处消费：② GLOBAL_DENY（掩码后全串）与 ②′ findWriteFlagInRaw（原文 find 段）。
-//   前导类 `[\s("']` 同时覆盖「空格分隔」与「被引号包裹」两种写法——在掩码后的文本里引号已消失，
-//   退化为 `\s`；在原文扫描里则拦下 `find . "-fprint" o.txt` 这类借引号掩码逃逸的形态。
-//   ⚠ 只列**写盘/执行**旗标：`-print` / `-print0` / `-printf`（仅 stdout）不在其列，只读用法照旧放行。
 const FIND_WRITE_FLAG_RE = /[\s("']-(?:fprint\d*|fprintf|fls|exec|execdir|delete|ok|okdir|fdelete)\b/i;
 
-// ①② 全串写指示符：出现在命令任意位置（引号外）即判非只读
 const GLOBAL_DENY = [
   [/>/, '含重定向（> / >>）'],
   [/\$\(/, '含命令替换 $()，无法静态判定'],
@@ -178,12 +135,8 @@ function secondToken(seg) {
   return (m?.[1] ?? '').toLowerCase();
 }
 
-// ②′ 原文 find 段复扫写侧旗标（补引号掩码的失敏面）：掩码后的文本里引号已消失，
-//   `find . "-fprint" o.txt` 的旗标 token 无从识别 ⇒ 对**原文**按同一套分隔符切段、
-//   只对段首为 `find` 的段（剥赋值前缀后判定，口径同 judgeSegment）复扫。
 //   只判 find 段 = 有意收窄：只读检索里的同名文本（`grep -rn "-delete" lib`）不得被误拒。
 //   已知误拒边界（落在 fail-closed 侧，接受）：`find . -name "-delete"`（把被引号包裹的**旗标名**
-//   当字面文件名检索）会判非只读；需检索该字面名时改用前导非引号的写法（如 `find . -name '*-delete*'`）。
 function findWriteFlagInRaw(command) {
   for (const raw of segmentCommands(command)) {
     const seg = raw.replace(ASSIGN_RE, '').trim();
@@ -195,11 +148,9 @@ function findWriteFlagInRaw(command) {
   return null;
 }
 
-// ④ 单段判定：返回 null = 只读；返回字符串 = 非只读原因
 function judgeSegment(raw) {
   let seg = raw.trim();
   if (seg.length === 0) return null;
-  // 赋值前缀：只剥前缀，右侧照原判定（`$x = rm -rf y` 的右侧仍会被拒）
   const afterAssign = seg.replace(ASSIGN_RE, '');
   if (afterAssign !== seg) {
     seg = afterAssign.trim();
@@ -208,7 +159,6 @@ function judgeSegment(raw) {
   for (const [re, why] of GLOBAL_DENY) {
     if (re.test(seg)) return why + '（' + String(re) + '）';
   }
-  // 解释器/运行时的显式版本查询：整段两词形式，且段内无其它 token
   const head = headToken(seg);
   const second = secondToken(seg);
   if (second && TWO_WORD_READ_ONLY.has(head + ' ' + second)) {
@@ -218,7 +168,6 @@ function judgeSegment(raw) {
   if (HEAD_DENY_EXACT.has(head)) return '段首命令不在只读面（写/执行类）: ' + head;
   if (head === 'git') {
     let rest = seg.replace(/^[&.(]*\s*["']?git["']?\s*/, '').trim();
-    // 剥离只读前缀选项（-C <dir> / --no-pager / -P / --paginate）
     for (;;) {
       const mm = rest.match(GIT_PREFIX_RE);
       if (!mm) break;
@@ -235,7 +184,6 @@ function judgeSegment(raw) {
   return '段首命令不在只读白名单: ' + (head || '(empty)');
 }
 
-// 命令级判定：{ readonly, reason, segment? }
 export function judgeShellCommand(command) {
   if (typeof command !== 'string' || command.trim().length === 0) {
     return { readonly: false, reason: '命令为空或非字符串（fail-closed）' };
@@ -246,7 +194,6 @@ export function judgeShellCommand(command) {
   for (const [re, why] of GLOBAL_DENY) {
     if (re.test(text)) return { readonly: false, reason: why + '（' + String(re) + '）' };
   }
-  // ②′ 掩码后的文本看不到引号内的旗标 ⇒ 对原文的 find 段复扫一次（口径与收窄理由见 findWriteFlagInRaw）
   const rawFind = findWriteFlagInRaw(command);
   if (rawFind) return { readonly: false, reason: rawFind };
   for (const seg of segmentCommands(text)) {
@@ -256,13 +203,7 @@ export function judgeShellCommand(command) {
   return { readonly: true, reason: '全部段均为只读命令' };
 }
 
-// guard 入口：仅判 shell 类工具的只读性（其余工具走既有名单语义）
-// D-6（2026-09-16 取证 + 加固）：活体实测「只读 pwsh 每次仍 +1 计数」⇒ 疑 guard 时刻的
-//   `execution.arguments` 与执行期不同源（宿主在另一阶段才 snapshot 参数，见
-//   `dsh-tools/lib/types/index.js:804-808`）。两种成因都会让 `judgeShellCommand(undefined)`
 //   走 fail-closed 判为**非只读**：① `arguments` 整体是 **JSON 字符串**；② 命令文本挂在**别的键名**下。
-//   故此处双管：(a) `commandOf` 兼容取值；(b) `lib/tools/core.js` guard 侧加**常驻形状取证**日志，
-//   下一轮重启即可按日志定案（是形状不符还是另有其因）。
 /** 从工具参数里取出 shell 命令文本（兼容对象 / JSON 字符串 / 多键名）。 */
 export function commandOf(args) {
   if (typeof args === 'string') {
@@ -271,7 +212,7 @@ export function commandOf(args) {
       try {
         const parsed = JSON.parse(t);
         if (parsed && typeof parsed.command === 'string') return parsed.command;
-      } catch { /* 非 JSON ⇒ 当作裸命令文本 */ }
+      } catch {  }
     }
     return args;
   }

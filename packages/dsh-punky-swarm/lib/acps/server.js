@@ -15,20 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 文件 server：ACPs 对外 mTLS 服务端点（lib/acps 域）
-// 契约：
 //   - 独立 HTTPS 监听器（node:https + node:tls，零新依赖），默认端口 9443、绑定 127.0.0.1（config 可配）；
-//   - TLS：minVersion TLSv1.3 + requestCert + rejectUnauthorized（=CERT_REQUIRED + TLSv1_3 语义，
-//     对齐 registry-server/app/main_mtls.py:14-30）；devInsecure 仅显式开发开关（默认 false）；
-//   - 客户端证书 CN 提取 → req.peerAic（对齐 registry-server/app/core/peer_cert.py:18-38）；
-//     受保护端点 AIC 格式校验（复用 lib/aip/identity.js validateAic，对齐 api_atr.py:82-88）；
-//   - 端点：POST /acps/rpc（AIP JSON-RPC，对齐 acps-sdk aip_rpc_model.py:15-57 +
-//     aip_base_model.py TaskCommand/TaskResult 形态）、GET /.well-known/acs.json（ACS 直取，
-//     复用 lib/aip/agent-descriptor.js，对齐 beijing_food/acs.json:15-40）、GET /health
-//     （对齐 demo-partner/partners/main.py:110-121）；
-//   - 路径前缀 /acps/*——与既有 /api/dsh-punky-swarm/*、/.well-known/aip 不冲突；
-//   - 默认关：装配层 enabled=false 时不实例化本模块（零运行时路径）。
-// 纯工厂 + 纯函数，模块顶层零副作用。
 
 import https from 'node:https';
 import { X509Certificate } from 'node:crypto';
@@ -40,16 +27,12 @@ import { DEFAULT_ASSEMBLY } from '../assembly.js';
 import { engineVersion } from '../aip/tool-descriptor.js';
 import { ensureAcpsCerts } from './certs.js';
 import { AIP_COMMAND_TYPES as TASK_COMMAND_TYPES, TASK_STATES } from '../comms/aip-format.js';
-// JSON 响应写端单点（(lib-root) 中立件；与 lib/api.js 同源）
 import { sendJson } from '../json-response.js';
 
-// ── AIP RPC 常量（对齐参考实现 aip_base_model.py:23-49 / aip_rpc_model.py:15-57）──
 export const JSONRPC_VERSION = '2.0';
 const RPC_METHOD = 'rpc';
-// TaskCommandType 枚举 / TaskState 枚举：单一源 = lib/comms/aip-format.js（re-export 别名，禁止再自持定义）
 export { TASK_COMMAND_TYPES, TASK_STATES };
 
-// JSON-RPC 2.0 标准错误码（JSON-RPC 2.0 规范；参考实现 JSONRPCError 形态 aip_rpc_model.py:24-29）
 const RPC_ERRORS = Object.freeze({
   PARSE: { code: -32700, message: 'Parse error' },
   INVALID_REQUEST: { code: -32600, message: 'Invalid Request' },
@@ -58,13 +41,6 @@ const RPC_ERRORS = Object.freeze({
   INTERNAL: { code: -32603, message: 'Internal error' },
 });
 
-/**
- * 解析并校验 AIP JSON-RPC 请求信封（aip_rpc_model.py:15-21,41-51 语义）
- * @param {any} body 已解析的请求体
- * @returns {{ ok: true, request: object, command: object } | { ok: false, error: { code, message, data? } }}
- * 校验链：jsonrpc==="2.0" → method==="rpc" → params.command（TaskCommand）存在且
- * type==="task-command" → command.command ∈ TaskCommandType 枚举（aip_base_model.py:154-164）。
- */
 export function parseRpcRequest(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, error: { ...RPC_ERRORS.INVALID_REQUEST, data: 'body must be a JSON object' } };
@@ -88,9 +64,6 @@ export function parseRpcRequest(body) {
   return { ok: true, request: body, command };
 }
 
-/**
- * JSON-RPC 响应信封（aip_rpc_model.py:32-38,54-57：result 或 error 二选一）
- */
 export function rpcResponse(id, result, error) {
   const out = { jsonrpc: JSONRPC_VERSION, id: id ?? null };
   if (error) out.error = error;
@@ -98,14 +71,6 @@ export function rpcResponse(id, result, error) {
   return out;
 }
 
-/**
- * 默认 RPC handler：TaskCommand → TaskResult（state=accepted，TaskState 链首环）
- * 对齐 aip_base_model.py:167-181（TaskResult: type/taskId/status{state,stateChangedAt}）。
- * 端点载体与消息形态校验；桥接注入自实现把 command 转 mailbox。
- * @param {object} command TaskCommand
- * @param {object} [ctx] { peerAic? }
- * @returns {object} TaskResult
- */
 export function defaultRpcHandler(command, ctx = {}) {
   const now = new Date().toISOString();
   const taskId = typeof command?.taskId === 'string' && command.taskId.length > 0
@@ -124,12 +89,6 @@ export function defaultRpcHandler(command, ctx = {}) {
   return result;
 }
 
-/**
- * ACS 直取内容生成（/.well-known/acs.json）——复用 lib/aip/agent-descriptor.js（ACS 14 必填键），
- * 对齐 beijing_food/acs.json:15-40（securitySchemes.mutualTLS + endPoints JSONRPC + certificate.altNames.dns）。
- * @param {object} config resolveAcpsConfig 输出（endpoint: { aic, host, port }）
- * @param {object} [opts] { assembly?, engineInfo? }（测试可注入）
- */
 export function buildAcs(config = {}, opts = {}) {
   const endpoint = config?.endpoint ?? {};
   const host = endpoint.host ?? '127.0.0.1';
@@ -140,8 +99,6 @@ export function buildAcs(config = {}, opts = {}) {
     ...engineInfo,
     version: engineInfo.version ?? engineVersion(),
     aic: endpoint.aic ?? engineInfo.aic ?? `${assembly.team}.plan.coordinator`, // 派生占位；V3 注册后经 config 覆盖
-    // 对齐参考实现 demo acs.json（beijing_food/acs.json:15-40）：
-    // securitySchemes.mutualTLS + endPoints[{url, transport:'JSONRPC', security:[{mtls:[]}]}] + certificate.altNames.dns
     securitySchemes: {
       mtls: { type: 'mutualTLS', description: '智能体间mTLS双向认证' },
     },
@@ -155,7 +112,6 @@ export function buildAcs(config = {}, opts = {}) {
   });
 }
 
-// 请求体读取（与 lib/api.js readJsonBody 同形态：兼容流式 req 与预置 body）
 function readBody(req) {
   if (req && typeof req.body === 'string') return Promise.resolve(req.body ? JSON.parse(req.body) : {});
   if (req && req.body && typeof req.body === 'object') return Promise.resolve(req.body);
@@ -172,20 +128,10 @@ function readBody(req) {
   return Promise.resolve({});
 }
 
-/**
- * 创建 ACPs 对外 mTLS 服务端点（纯工厂，不自动 listen）
- * @param {object} opts { config, logger?, acsProvider?, rpcHandler?, healthProvider?, certDir? }
- *   config = resolveAcpsConfig 输出（endpoint: { port, host, cert, key, ca, certDir, minVersion, devInsecure, aic }）
- *   acsProvider 缺省 = buildAcs(config)；rpcHandler 缺省 = defaultRpcHandler；
- *   healthProvider 缺省 = { agent, status:'online', tasks:{active:0}, groups:{active:0} }（partners/main.py:110-121 形态）
- * @returns {{ server: import('node:https').Server, listen(port?), close(), address(), getPeerAic(req) }}
- *   证书缺失/不可用时返回 { error }（装配层告警并保持禁用，不阻塞主进程）
- */
 export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler, healthProvider, certDir } = {}) {
   const endpoint = config?.endpoint ?? {};
   const agentName = endpoint.agentName ?? 'dsh-punky-swarm';
 
-  // ── 证书加载（cert/key/ca 三路径；缺省从 certDir 自动生成——幂等）──
   let tls;
   try {
     const dir = certDir ?? endpoint.certDir;
@@ -201,10 +147,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
     } else {
       tls = { cert: readFileSync(endpoint.cert), key: readFileSync(endpoint.key), ca: readFileSync(ca) };
     }
-    // 【ACPS-03】有效期 fail-closed：过期/未生效证书若继续 listen，症状是「起服成功 + 零 warn + 全部握手
-    //   CERT_HAS_EXPIRED」——静默假可用。此处直接产出 error ⇒ 走 lib/index.js 既有「warn + 保持禁用」路径。
-    //   Node 24 的 X509Certificate 无「一次性有效期校验」方法（实测调用抛 TypeError），故用
-    //   validFromDate/validToDate（二者均为 Date）。
     const now = Date.now();
     const requireValid = (pemBuf, what) => {
       const x = new X509Certificate(pemBuf);
@@ -222,7 +164,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
   }
 
   const devInsecure = endpoint.devInsecure === true;
-  // 显式降级说明（每次起服一条）：devInsecure 放宽的是「证书属性校验」，不是「信任锚」。
   if (devInsecure) {
     logger?.warn?.('[dsh-punky-swarm] acps endpoint: devInsecure=true（仅开发档）——降级范围明确为：'
       + '① TLS 层验签关闭（rejectUnauthorized=false ⇒ 握手不再校验对端证书链/属性/EKU/有效期，证书错误不再断连）；'
@@ -230,16 +171,8 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       + '（no-peer-certificate / peer-cert-not-anchored）；'
       + '③ 未放宽项：peer CN 仍须为合法 AIC（/acps/rpc 400 语义不变）、证书有效期与信任锚不放宽。生产禁止开启');
   }
-  // 【ACPS-02】devInsecure 只放宽 TLS 层验签，**不放宽信任锚**：TLS 层 rejectUnauthorized=false 后应用层
   //   必须自行把对端证书链锚定到配置 ca，否则攻击者 CA 签发的合法格式证书即 fail-open。
-  //   判据实测可判别：伪造证书 checkIssued=false/verify=false；同 CA 证书 true/true。
-  // 【L2 · 批 punky-acps-closeout-20261023 / lane c4-acps04】`endpoint.ca` 可能是**多 CA bundle**
-  //   （单文件内含多张 PEM）。实测 `new X509Certificate(多张 PEM)` **不抛错、而是静默取首张** ⇒
-  //   旧实现只锚首张，bundle 首张不是签发者时**合法对端被 403**（误杀，安全信号被噪声淹没）。
-  //   改为逐张解析 + 逐张匹配：命中任一即通过，全不命中才 403。
-  //   devInsecure=false 时 caAnchor === null ⇒ 零额外解析、零行为变更。
   function parseTrustAnchors(pemOrBuf) {
-    // PEM 多段切分；非 PEM（如 DER）无 BEGIN/END 块 ⇒ 兜底单张原样解析（不缩窄既有可解析面）
     const pem = Buffer.isBuffer(pemOrBuf) ? pemOrBuf.toString('utf8') : String(pemOrBuf ?? '');
     const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
     return (blocks.length ? blocks : [pemOrBuf]).map((b) => new X509Certificate(b));
@@ -250,10 +183,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
     let peer = null;
     try { peer = req.socket?.getPeerX509Certificate?.() ?? null; } catch { peer = null; }
     if (!peer) return { reason: 'no-peer-certificate' };
-    // 逐张匹配 bundle 里的 CA：`checkIssued` 的语义即「本张 CA 是否签发了该对端」（issuer/subject 匹配 +
-    //   签名验），命中任一即通过；全不命中才 403。
-    //   为何不用 DN 字符串直接比对：真实 CA 的 RDN 字符串化顺序可能与 Node 的 `issuer` 输出不一致 ⇒ 会误杀
-    //   合法对端（比只看首张更隐蔽）。判定统一以 `checkIssued` + `verify` 双真为准：issuer 字段说谎者 verify 不过。
     const anchored = caAnchor.some((ca) => {
       try { return peer.checkIssued(ca) && peer.verify(ca.publicKey); } catch { return false; }
     });
@@ -274,7 +203,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
     });
   });
 
-  // 客户端证书 CN 提取（peer_cert.py:18-38：握手证书 subject.CN = 对端 AIC）
   function getPeerAic(req) {
     try {
       const peer = req.socket?.getPeerCertificate?.();
@@ -287,7 +215,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
   async function handleRequest(req, res) {
     const peerAic = getPeerAic(req);
     req.peerAic = peerAic; // 注入请求级身份
-    // 【ACPS-02】devInsecure 单一闸口：/acs.json、/health、/acps/rpc 一律先过信任锚校验（403 明文拒绝）
     const anchorFail = peerAnchorFail(req);
     if (anchorFail) {
       logger?.warn?.('[dsh-punky-swarm] acps endpoint: devInsecure peer rejected (' + anchorFail.reason + ')');
@@ -306,7 +233,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       return sendJson(res, 200, health);
     }
     if (req.method === 'POST' && url === '/acps/rpc') {
-      // 应用层身份校验（TLS 通过后）：peer CN 须为合法 AIC 格式（api_atr.py:82-88 validate_aic 400 语义）
       if (!peerAic || !validateAic(peerAic)) {
         return sendJson(res, 400, rpcResponse(null, null, { code: 40001, message: 'Invalid client certificate identity: peer CN must be a valid AIC', data: { peerAic: peerAic ?? null } }));
       }
@@ -318,7 +244,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       }
       const parsed = parseRpcRequest(body);
       if (!parsed.ok) {
-        // JSON-RPC 消息结构非法 → 应用层 400 + JSON-RPC error body（参考实现 pydantic 校验 422 语义映射，允许 4xx）
         return sendJson(res, 400, rpcResponse(body?.id ?? null, null, parsed.error));
       }
       const handler = rpcHandler ?? defaultRpcHandler;
@@ -332,7 +257,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
   return {
     server,
     getPeerAic,
-    // listen：port 覆盖 config（测试用 0=临时端口）；返回 promise（error 事件拒绝）
     listen(port) {
       const p = port ?? endpoint.port ?? 9443;
       return new Promise((resolve, reject) => {
@@ -347,7 +271,6 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       return new Promise((resolve) => {
         if (!server.listening) return resolve();
         server.close(() => resolve());
-        // 长连接兜底
         server.closeAllConnections?.();
       });
     },

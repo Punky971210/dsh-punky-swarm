@@ -17,8 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { classifyViolation } from './classify.js';
 import { computeNarrowedParams } from './narrow.js';
 import { matchToolBan } from './tool-ban.js';
-// ── Rule.match 匹配语义 ──
-// 递归深度相等（纯 JSON 数据；处理对象/数组/原始值，键序不敏感）
 function deepEqual(a, b) {
     if (Object.is(a, b))
         return true;
@@ -47,8 +45,6 @@ function deepEqual(a, b) {
         return false;
     return ak.every((k) => Object.prototype.hasOwnProperty.call(bo, k) && deepEqual(ao[k], bo[k]));
 }
-// JSON Pointer 取值（匹配语义）：pointer 缺省（undefined/''）= 匹配整个 arguments；
-// 解析失败/目标不存在 → { found:false }（规则不命中，不抛错）。
 function resolveParam(obj, pointer) {
     if (pointer === undefined || pointer === '')
         return { found: true, value: obj };
@@ -67,7 +63,6 @@ function resolveParam(obj, pointer) {
     }
     return { found: true, value: cur };
 }
-// 单规则命中判定：tools 白名单（缺省=全工具）+ match（path/op/pattern/value）
 function ruleMatches(rule, exec) {
     if (Array.isArray(rule.tools) && rule.tools.length > 0 && !rule.tools.includes(exec.name)) {
         return false;
@@ -75,8 +70,8 @@ function ruleMatches(rule, exec) {
     const m = rule.match ?? {};
     const { found, value: target } = resolveParam(exec.arguments, m.path);
     if (!found)
-        return false; // path 不存在 → 不命中
-    const op = m.op ?? 'eq'; // op 缺省 = 'eq'
+        return false;
+    const op = m.op ?? 'eq';
     switch (op) {
         case 'eq':
             return deepEqual(target, m.value);
@@ -91,7 +86,6 @@ function ruleMatches(rule, exec) {
         case 'in':
             return Array.isArray(m.value) && m.value.includes(target);
         case 'regex': {
-            // regex 对 path 值（pattern 优先；value 为字符串时作兜底 pattern）
             const pat = typeof m.pattern === 'string' && m.pattern.length > 0
                 ? m.pattern
                 : (typeof m.value === 'string' ? m.value : null);
@@ -101,14 +95,13 @@ function ruleMatches(rule, exec) {
                 return new RegExp(pat).test(typeof target === 'string' ? target : String(target));
             }
             catch {
-                return false; // 非法正则 → 不命中
+                return false;
             }
         }
         default:
             return false;
     }
 }
-// 保序去重（多规则命中 ruleRefs 收集，去重保序以实现为准）
 function dedupe(ids) {
     const seen = new Set();
     const out = [];
@@ -120,17 +113,11 @@ function dedupe(ids) {
     }
     return out;
 }
-// 深拷贝（防宿主冻结对象污染——HTYPES ToolExecutionInput.arguments 为 frozen readonly）
 function deepClone(v) {
     return structuredClone(v);
 }
 export function createGovernanceKernel(config) {
     return {
-        // 同步、确定性、零 IO：rules 匹配（Rule.match）→ 收集 violations + narrow bounds → classifyViolation → KernelDecision
-        // 组合序：命中规则收集 violations 时同步收集 narrow bounds（显式字段）；
-        //   classify 后——primitive==='NARROW'（flag.narrow=true）必填 narrowedParams；
-        //   primitive==='DENY' 且 violations 含 narrowable（flag-off 回退，或多违规 hard 优先）亦填充
-        //   （决策留痕：deny 同时携带钳制结果作模型修正依据——收据携带 narrowedParams，语义增强）。
         decide(exec) {
             const banEntries = Array.isArray(config.toolBan) ? config.toolBan : [];
             if ((!Array.isArray(config.rules) || config.rules.length === 0) && banEntries.length === 0) {
@@ -139,7 +126,6 @@ export function createGovernanceKernel(config) {
             const violations = [];
             const hitIds = [];
             const narrowBounds = [];
-            // 第三类判定面（工具黑名单）：工具级命中先行收集（与下面参数规则同列汇入 → 同一 classify 裁决）
             const ban = matchToolBan(banEntries, exec);
             for (const v of ban.violations)
                 violations.push(v);
@@ -150,7 +136,6 @@ export function createGovernanceKernel(config) {
                     hitIds.push(rule.id);
                     for (const v of rule.violations)
                         violations.push(v);
-                    // 收集命中规则显式 narrow bounds（旧规则无 narrow 字段 → 零 bounds 不钳制）
                     if (Array.isArray(rule.narrow)) {
                         for (const b of rule.narrow) {
                             if (b && typeof b.path === 'string')
@@ -175,8 +160,6 @@ export function createGovernanceKernel(config) {
                 reason: cls.reason,
                 ruleRefs: dedupe(hitIds),
             };
-            // NARROW 运行期接线：窄域违规（narrowable）且收集到 bounds 时计算钳制结果——
-            //   NARROW（flag.on）必填；DENY 含 narrowable（flag-off 回退 / hard 多违规）亦填充（修正依据）。
             const hasNarrowable = violations.some((v) => v.category === 'narrowable');
             if (narrowBounds.length > 0 && (cls.primitive === 'NARROW' || (cls.primitive === 'DENY' && hasNarrowable))) {
                 decision.narrowedParams = computeNarrowedParams(exec.arguments, narrowBounds);
@@ -188,12 +171,10 @@ export function createGovernanceKernel(config) {
         },
     };
 }
-// ── 收据构造（纯函数实用：attemptedParams 深拷贝防冻结对象污染）──
-// 非严格确定性实用函数：含 ts(new Date) + receiptId(crypto.randomUUID)，均为标准库，零 IO 零外部依赖。
 export function createRefusalReceipt(input) {
     const { tool, callId, sessionId, decision, attemptedParams } = input;
     const receipt = {
-        receiptId: globalThis.crypto.randomUUID(), // node≥19 WebCrypto（标准库内建）
+        receiptId: globalThis.crypto.randomUUID(),
         ts: new Date().toISOString(),
         tool,
         callId,

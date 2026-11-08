@@ -15,36 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/sig-fingerprint.js —— sig 任务内容指纹（N3-②）
-//
-// 定位（规格来源 = `docs/sig-fingerprint-design-2026-09-22.md` §1/§2 + 用户 D-sig-1..4 四项裁定）：
-//   · **形式**：`WaveTask.sig` = 单任务内容指纹，随 wavePlan 持久化、可选字段、**不参与任何门禁判定**
-//     （风格同既有 `owner` 可选字段）；
-//   · **哈希构成**（D-sig-1 裁定 = **不含 `assemblyRef`**，只含任务信息）：
-//     `sha256(canonicalJSON({ id, layer, role, deps, produce, outputs, cmd }))` 截 **16 hex**（D-sig-3 裁定）。
-//     规范形态复用包内既有惯例（先例 = `lib/verify/selector.js` 的 `canonicalizeArgs` + `createHash('sha256')`；
-//     另见 `lib/assembly/snapshot.js` 的 sha256 惯例）：对象键递归排序、**数组保序**（`deps` 顺序 = 声明顺序，
-//     是语义面而非噪声）、`undefined`/`null` 空值在规范形态里**一致落为 `null`**（不落 `undefined`：
-//     后者会被键排序剔键 ⇒ 「未写 layer」与「显式 layer:null」曾产生两个不同哈希）。
-//   · **计算点唯一纪律**（D-sig-4 裁定）：唯一计算入口 = `buildWavePlan`（建批全量算）；
-//     `addPoolTasks` 追加任务经同一次 `buildWavePlan` 重归一化 ⇒ 新任务补算、既有任务输入不变 ⇒ sig 不变；
-//     `addTaskEdges` 加边经同一次重归一化 ⇒ 受影响任务（deps 变化）重算、**无关任务 sig 不变**；
-//     已派发（`owner` 非空）任务在 `buildWavePlan` 内**冻结**（读旧 sig 原样落盘，见 `lib/wave-plan.ts`）。
-//   · **判等面已退役**（用户裁决 Q-C = 乙 · 批 `punky-engine-fix-20261106` lane `e2-fix-b3`）：
-//     原「同批次内存在 sig 相同且状态 ∈ {running, review, merged} 的其他 lane ⇒ 落一条留痕事件」
-//     这条判等路径**整面删除**（删净 = 引用与定义一起消失，不是「名字没了但判等逻辑还在」）。
-//     根因（已实核）：哈希输入**含 `id`**（`canonicalTaskForSig` 首键）而判等循环又**跳过同 `id`**
-//     ⇒ 候选集结构性恒空 ⇒ 留痕事件**永不触发** —— 属「声明了一个不生效的判据」
-//     （既有测试靠手工注入同 `sig` 才造出事件）。删净后 `sig` 只回答一个问题：
-//     **「这条 lane 的持久字段长什么样」**（内容锚定 + 可重算校验），**不回答**「是否重复」。
-//     `GateErrorCode` union 不因此新增/删除任何码。
-//     **判红**（防判等面以别的形式装回来）：出现以 `sig` 为键的判重（含 `Map`/`Set` 按 sig 去重）。
-//     注：本注释刻意**不写出**被删符号名与事件码字面量 —— 验收项要求 `lib test` 内该族名字**零命中**。
-//
-// 零依赖纪律：本模块**只 import node:crypto**——
-//   它被 `lib/wave-plan.ts`（TS 源码）与 `lib/state/store.js`（手写 JS）**共同** import，
-//   故必须保持零本包运行期依赖（避免循环：store ← wave-plan 已在既有导入图内）。
-// 事件常量不在此 import：本模块**只产/只读 sig**，不登记任何事件码、不构造任何事件载荷。
 
 import { createHash } from 'node:crypto';
 
@@ -117,17 +87,4 @@ export function sigOf(task) {
   return typeof raw === 'string' && SIG_PATTERN.test(raw) ? raw : null;
 }
 
-// ── 判等面（原 N3-② 消费点）**已整面退役** ────────────────────────────────────────────────
-//
-// 删除清单（批 `punky-engine-fix-20261106` lane `e2-fix-b3`，用户裁决 Q-C = 乙）：
-//   原 5 个判等符号（1 个状态白名单常量 + 4 个函数：判等 / 去重键 / 事件载荷 / 判定）
-//   —— 连同其下游接线（`lib/state/store/events.js` 的判定包装、`lib/state/store/member.js`
-//   的 `sigDup` 消费块、`lib/state/event-types.js` 的事件码常量）一并删净。
-//   删净判据：**引用与定义一起消失**，不是「名字没了但判等逻辑还在」。
-//   本注释刻意**不写出**被删符号名与事件码字面量：验收项要求该族名字在 `lib test` 内**零命中**
-//   （`grep` 会把注释一并计入）⇒ 用「原 5 个判等符号」指代，具体名单见
-//   `exec/e2-b3.md` 的删除面清单（产物面，不在被 grep 的 `lib`/`test` 内）。
-//
-// 保留并**加强**的一面（这才是 `sig` 在真用的一面）：哈希计算 + 读口径单点，
-//   二者共同支撑「落盘 `sig` 可由持久字段**重算**并比对一致」（可重算校验由四个测试文件覆盖）。
 

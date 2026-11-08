@@ -15,22 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// roster 面：**内建职位表** ＋ **宿主名册对账**（纯函数，零 I/O、零 ctx 依赖）。
-//
-// 定位：本仓此前只有「宿主名册里有没有某个约定名」的**单点判定**（`lib/tools/host-surface.js`
-//   的 Manager 在册读端）。此面把「本仓认为该有哪些席位」与「宿主实际给了哪些席位」的**差集**
-//   显式化，供读端与测试共用同一套判据（禁第二套对账实现）。
-//
-// 三集合语义（与 `reconcileRoster` 返回键一一对应）：
-//   · `matched`     = 两侧都有 ⇒ 已落实的席位；
-//   · `builtinOnly` = 内建有、宿主无 ⇒ **宿主名册缺位**（读端据此回显「在册为否」）；
-//   · `hostOnly`    = 宿主有、内建无 ⇒ **未知席位**（不阻断，只回显，防静默）。
-//
-// 纪律（本面刻意保持极薄）：
-//   · **纯函数**：同一入参恒得同一出参；不读文件、不取服务、不打日志。
-//   · **不持有第二真源**：本表是「本仓内建职位」的唯一登记位；宿主名册仍是成员身份的运行时真源，
-//     本函数只做**对账视图**，不缓存、不落盘、不裁决成员状态。
-//   · **对外部框架零依赖**：本文件不出现任何外部团队框架的标识符（用户口径：不考虑外部框架适配）。
 
 /**
  * 内建职位表：本仓**自己认为**的席位全集（元素为字符串职位名）。
@@ -49,10 +33,6 @@ export const BUILTIN_ROLES = [
   'tester',        // ① exec 层席位
   'reviewer',      // ① exec 层席位
   'supervisor',    // ① audit 层席位
-  // G03（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：旧 camelCase 名 → **`doc-manager`** 统一命名（G03）。
-  //   依据：本仓其余三面均为 kebab —— `lib/wave-plan.js` 的 `VALID_ROLES`、
-  //   `lib/assembly/schema.js` 的 `REQUIRED_ROLES`、`lib/assembly/defaults.js` 的席位表。
-  //   不统一则跨面 `reconcileRoster` 比对时「旧 camelCase 名 ≠ `doc-manager`」⇒ **恒误判该席两边各缺**。
   'doc-manager',   // ① audit 层席位（软件团队文档管理）
   // ② 通用位
   'manager',       // ② 集群治理 Manager 约定席（`host-surface` 的在册判据锚点）

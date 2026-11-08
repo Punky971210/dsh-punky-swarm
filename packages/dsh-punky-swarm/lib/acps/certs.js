@@ -18,13 +18,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 文件 certs：ACPs mTLS 证书材料（lib/acps 域）
 // 契约：CAI 自签（node:crypto 自签 X.509，零新依赖）；文件三路径（cert/key/ca 三路径
 //       config 可配，默认 acps 数据目录）；TLS 语义对齐参考实现
-//       registry-server/app/main_mtls.py:14-30（cert/key/ca 三件套 + CERT_REQUIRED + TLSv1_3）。
-// 说明：lib/aip/identity.js 的 issueCredential 产出 JSON CAI（cn/san/签名载荷），非 X.509 DER/PEM，
-//   不能直接喂 node:https TLS 上下文——本模块用 node:crypto（generateKeyPairSync + createSign）
-//   直接编码 X.509 证书（ASN.1 DER 手工编码，纯内建能力），签名算法 ECDSA P-256
-//   （对齐 identity.js DEFAULT_SIGN_ALGORITHM = 'ecdsa-p256'）。CAI 语义对齐（identity.js:24-27）：
-//   CN=AIC、SAN=URI:acps://{AIC}、extendedKeyUsage 分用途（serverAuth/clientAuth）。
-// 私钥文件权限注意：写文件 mode 0o600；数据目录默认 <root>/acps/certs（引擎根内，不落工作区根）。
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -160,7 +153,6 @@ function derExtendedKeyUsage(usages) {
   return derSeq(...usages.map((u) => derOid(oids[u])));
 }
 
-// ── 密钥对 ──
 
 function generateKeyPair() {
   return crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -168,8 +160,6 @@ function generateKeyPair() {
 
 // ── X.509 证书生成（node:crypto 原生：手动 ASN.1 DER 编码 + ECDSA P-256 签名）──
 // opts: { cn, issuerCn, signerPrivateKey, altNames, days, isCa, usages, serial }
-//   issuerCn/signerPrivateKey 缺省 = 自签（issuer=subject，用自身私钥）；
-//   提供时 = CA 签发（issuer=CA CN，用 CA 私钥签名）——X.509 标准签发结构。
 function createX509({
   cn, issuerCn, signerPrivateKey, altNames = [], days = 365, isCa = false, usages = ['serverAuth'], serial,
 } = {}) {
@@ -202,7 +192,6 @@ function createX509({
   const signer = crypto.createSign('sha256');
   signer.update(tbs);
   const sig = signer.sign(signKey);
-  // ECDSA 签名（DER 编码）→ SEQUENCE(INTEGER r, INTEGER s)
   const rLen = sig.readUInt8(3);
   const rStart = 4;
   const r = sig.subarray(rStart, rStart + rLen);
@@ -221,7 +210,6 @@ function createX509({
   return { certPem, keyPem, certDer, notBefore, notAfter };
 }
 
-// ── 对外 API ──
 
 // CA 自签证书（信任锚）：CN=caCn，basicConstraints CA:true + keyUsage keyCertSign|cRLSign
 export function generateCaCert({ cn = 'dsh-punky-swarm CA', days = 3650 } = {}) {
@@ -229,12 +217,10 @@ export function generateCaCert({ cn = 'dsh-punky-swarm CA', days = 3650 } = {}) 
 }
 
 // 用 CA 签发实体证书（mTLS 服务端/客户端）：CN=cn，SAN 含 URI:acps://{aic}（CAI 语义对齐）
-// usages: ['serverAuth'] / ['clientAuth'] / 两者
 export function issueCert({ caCertPem, caKeyPem, cn, aic, altNames = [], days = 365, usages = ['clientAuth'] }) {
   if (typeof caCertPem !== 'string' || typeof caKeyPem !== 'string') {
     throw new Error('issueCert: caCertPem and caKeyPem are required');
   }
-  // 从 CA 证书解析 issuer CN（X509Certificate.subject → "CN=xxx"）
   let issuerCn;
   try {
     const caCert = new crypto.X509Certificate(caCertPem);
@@ -257,10 +243,6 @@ export function issueCert({ caCertPem, caKeyPem, cn, aic, altNames = [], days = 
   });
 }
 
-// ── 文件管理（cert/key/ca 三路径 config 可配，默认 acps 数据目录）──
-// ensureAcpsCerts({ dir, aic })：幂等——目录已有 ca.pem/ca.key/server.pem/server.key 则复用；
-//   缺则生成落盘。返回 { certFile, keyFile, caFile, caCertPem, certPem }（TLS 上下文 + 联测用）。
-// 目录结构：<dir>/ca.pem + ca.key（自签 CA）、<dir>/server.pem + server.key（CA 签发服务端证书）。
 export function ensureAcpsCerts({ dir, aic = '1.2.156.3088.1.0001.00001.000000.000000.ROOT' } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const caFile = join(dir, 'ca.pem');

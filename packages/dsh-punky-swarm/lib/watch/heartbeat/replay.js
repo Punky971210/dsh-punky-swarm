@@ -15,8 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// W1-① 重放/恢复**周期兜底**档（独立于 longrun 档开关）
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉，代码与本注释逐字搬移）。
 import { replayBatch } from '../../engine/replay.js';
 
 // ── W1-① 重放/恢复：**周期兜底**（本 tick 涉及的全部 `running` 批） ─────────────────────
@@ -68,10 +66,6 @@ export async function replayTick(cx, rows = null) {
   return { replayed, batches: hits };
 }
 
-// 扫描行 → 目标清单：**选取规则与原实现逐字同源**（前 REPLAY_MAX_SESSIONS 个会话 / 仅 `running` 批 /
-//   至多 REPLAY_MAX_BATCHES 条；会话序与批序 = 行序 = `listSessions()`→`listBatches()` 序）。
-//   `row.batch` 为空（phase 预筛命中终态/planning，或不存在/损坏）时用 `row.phase` 兜底判相位；
-//   两者都不为 `running` ⇒ 与原 `readBatch()?.phase === 'running'` 判据等价。
 function replayTargetsOfRows(rows) {
   const targets = [];
   let sessions = 0;

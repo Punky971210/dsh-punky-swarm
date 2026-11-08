@@ -15,30 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// verify/mount.js —— verify 引擎级接线（集成注意项 1 收口）
-// index.js 的可测缝：capabilities.verify.enabled 门控挂 installEvidenceCapture（tools/post-execute 证据捕获），
-//   返回 { installed, count, dispose }；enabled=false 零运行时开销；ctx.on 缺失静默降级（宿主能力缺失不炸）。
-// 边界：createCompletionGate 与 audit lane 显式 DI 消费路径一字不动（gate.js 零改动）——本文件只做引擎级捕获装配，
-//   裁决/拦截语义仍在 gate.js（advisory 只记录 / enforce 拦截），捕获侧只落 blob + ledger。
-// 本文件与 lib/state/gates.js（批次内层间门禁）零耦合——不 import 亦不被其
-//   import；verify/gate.js 的 createCompletionGate / evaluateAcEvidence 消费点 = audit lane 显式 DI 注入
-//   （{acList, ledger, readBlob}）+ 装配层门控（index.js mountVerify 挂捕获 hook；assembly/schema.js verify
-//   键注册表 consumers 标注），无共享调用路径，无需改动任何调用代码。
 import { installEvidenceCapture } from './evidence.js';
-// resolveVerifyConfig/VERIFY_DEFAULTS 统一归口 lib/schema.js（注册表 default：
-//   同款实现已在装配 schema 侧落地，本文件不再自包含双实现——语义一致，消费路径单点，防未来字段漂移）
 import { VERIFY_DEFAULTS, resolveVerifyConfig } from '../schema.js';
 export { VERIFY_DEFAULTS, resolveVerifyConfig };
 
-// 引擎级捕获挂载（index.js apply 内调用）：
-//   enabled=true + ctx.on 可用 → installEvidenceCapture 订阅 tools/post-execute（pass-through 不断链）→ installed:true；
-//   enabled=false（显式关闭——verify 出厂默认开，resolveVerifyConfig 缺省 enabled=true）→ installed:false / reason:'disabled'，不注册任何监听，零副作用；
-//   ctx.on 缺失 → installed:false / reason:'ctx.on unavailable'，静默降级不 throw。
 export function mountVerify(ctx, { root, config, logger } = {}) {
   const cfg = resolveVerifyConfig(config);
   const log = logger ?? ctx?.logger ?? null;
-  // 诚实面（A1-P2-11）：`mode:'enforce'` **未接线** —— `verify/gate.js` 的 `createCompletionGate`
-  //   无生产消费点（唯一 import 方是测试的显式 DI），装配侧只挂证据捕获 hook、**从不读 mode**
   //   ⇒ 配 enforce 实际按 advisory 生效。本处**必须早于任何 inert 提前返回**，否则 `ctx.on` 缺失时
   //   该真相永不可见。语义边界：只多一条日志，**判定路径零改动**（接线/退役取向见 docs/governance-technical.md）。
   if (cfg.enabled === true && cfg.mode === 'enforce') {
@@ -48,18 +31,12 @@ export function mountVerify(ctx, { root, config, logger } = {}) {
       + 'Set mode="advisory" to silence this warning; see docs/governance-technical.md '
       + '(wiring vs retirement is an open decision).');
   }
-  // G01 #4/#5（批 `punky-g1-gapfix-2026-10-29` · lane `e1-fix`）：定义点补稳定回显键（`inert` 布尔键，值 true）。
-  //   既有字段逐项保留：`installed` / `reason` / **`mode`** / `count()` / `dispose()`。
   const inert = (reason) => ({ installed: false, inert: true, reason, mode: cfg.mode, count: () => 0, dispose() {} });
   if (cfg.enabled !== true) {
-    // #4 策略停用（**生产可达**）：用户显式关 `capabilities.verify.enabled` ⇒ 这是**策略**不是故障，
-    //   ⇒ 一行 `info`（本处原先零日志，故这是**新增**的；与 `info` 分级口径一致，禁降格为 warn）。
     log?.info?.('[dsh-punky-swarm] verify mount disabled (capabilities.verify.enabled === false)：'
       + 'post-execute 证据捕获未装配；mode=' + cfg.mode);
     return inert('disabled');
   }
-  // #5 能力闸（**防御纵深 · 生产不可达**）：`root` 由 `apply(ctx, { root })` 给、`ctx.on` 由宿主提供
-  //   ⇒ **零日志新增**，只靠 `inert:true` 可辨。
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');
   const cap = installEvidenceCapture(ctx, { root, enabled: true });
   if (cap.installed) {

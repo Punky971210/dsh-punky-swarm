@@ -24,13 +24,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
 import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 
-// ── 能力注册表（13 键：aip/identity/discovery/verify/watch/worktree/budget/injectBudget/trajectory/acps/auditlog/logs/topic）──
-// path = config 取值路径；default = 缺省值（9 键默认开——aip/discovery/verify/watch/worktree/budget/injectBudget/trajectory/auditlog；
-//   显式 enabled:false 可逐键关闭；4 键默认关——identity/acps/logs/topic，需显式开启）；
-// consumers = 既有消费点（键路径一致性依据）
-// identity 键：身份体系默认关——config.aip.identity.enabled === true 时
-//   调用方才激活 lib/aip/identity.js 模块 API（AIC 身份码注册 + CAI 证书发行 + 签名 + 信任链验证）；
-//   默认关 → 零开销零破坏；不注册新治理工具（**21 工具契约**：2026-09-15 增 `lane_dispatch`），身份能力经模块 API 暴露。
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
   // acps 键：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥。
@@ -101,14 +94,6 @@ export function readCapability(config, key) {
   return deepMerge(entry.default, val);
 }
 
-// ── C-5 · 坏配置加载期 fail-closed（消除静默降级）────────────────────────────
-// 存在理由：`capabilities.injectBudget` 的五个阈值此前**无任何校验** ⇒ `runtime.json` 写
-//   `{enabled:true,totalBytes:-1}` 会**通过白名单后静默降级**（`inject-budget.js` 的「无可用阈值 ⇒ 零动作」
-//   是**契约**，故不会报错，只会静默地把整条预算关掉）⇒ 本组校验把该形态改为**可见的拒绝**。
-// 语义边界（**不得混淆**）：本组只管「**坏配置**」；`inject-budget.js` 中「未超限 / 开关关 / 无可用阈值 ⇒
-//   返回入参原值本身、零省略」是**文档化契约**（`:165` 逐字），**不是**本组要消除的对象 —— 该件一字不动。
-//
-// 五个阈值字段（**唯一字段清单**；禁第二套字面量表）。
 export const INJECT_BUDGET_LIMIT_FIELDS = Object.freeze([
   'perItemBytes',
   'perBlockBytes',
@@ -155,7 +140,6 @@ export function validateCapabilities(config = {}) {
   const errors = [];
   const c = config.capabilities ?? {};
 
-  // DEP-1 verify：mode ∈ {advisory, enforce}（createCompletionGate 静默回退，统一校验兜底）
   if (c.verify?.enabled === true && c.verify.mode !== undefined && !['advisory', 'enforce'].includes(c.verify.mode)) {
     errors.push('DEP-1: capabilities.verify.mode must be advisory or enforce (got ' + JSON.stringify(c.verify.mode) + ')');
   }
@@ -183,16 +167,6 @@ export function validateCapabilities(config = {}) {
     }
   }
 
-  // DEP-6（包内写作 `DEP-N`）：injectBudget 五阈值在 `enabled === true` 时须为**有限正数**。
-  //   落点理由：该键此前**零校验** ⇒ `totalBytes:-1` 一类坏值通过白名单后被**静默降级**（无任何报错）。
-  //   与 DEP-1..DEP-5 **同形**：仅显式 `enabled === true` 时校验值、字段缺省不误伤、文案 `DEP-6: …(got …)`。
-  //
-  // ⚠ **调用门不得写成 `c.injectBudget?.enabled === true`**（本 lane 自测抓出的真实缺陷，见 progress 03）：
-  //   非对象形态（`injectBudget: 5`）取 `?.enabled` 得 `undefined` ⇒ 门为假 ⇒ **判定点根本看不到它**
-  //   ⇒ 「坏配置被静默吞掉」的原病照旧（`5` 经 `deepMerge` 后同样让预算静默失效）。
-  //   ⇒ 门只按「**是否显式声明**」开：`!== undefined` 即交判定点；`enabled !== true` 的**零校验**语义
-  //     由判定点自己实现（`injectBudgetValueErrors`），**既不误伤禁用态、也不漏放非对象**。
-  //   `null` 不入判定点：`deepMerge(default, null)` 回落到注册表默认（预算照常生效）⇒ 无静默危害，不拒。
   if (c.injectBudget !== undefined) {
     errors.push(...injectBudgetValueErrors(c.injectBudget));
   }
@@ -206,14 +180,6 @@ export function validateCapabilities(config = {}) {
   return { errors };
 }
 
-// ── 完整性断言（三视图，入测试门禁）──
-// 【C1 判读（N2 第二批，docs/c1-wiring-audit-2026-09-22.md）】原 `validateAssembly`（纯形状校验）已删：
-//   生产零调用 + 测试自产自销；形状判定真源 = 本函数视图 1（严格覆盖且更强：+技能可解析性 +REQUIRED_ROLES
-//   反向对齐）。**校验器：当前唯一消费者 = `test/assembly-schema.test.js`（14 调用点）**；lib 生产路径零调用，`audit-blind-review.js:37` 仅注释提及）
-// 视图 1 正向：装配表自洽（∀ (layer, role)：skills[role] 非空字符串数组且每个 skill 可解析）
-// 视图 2 反向：software-team 装配表 7 角色（manager 显式豁免）全部出现且映射非空
-// 视图 3 扩展：extensions.blindReview.enabled=true 时三角色映射非空 + 六模板键齐备
-// skillCatalog：{ has(name) -> bool }；生产传 ~/.agents/skills/<name>/SKILL.md 存在性解析器，测试传 fixture
 export function assertAssemblyCompleteness(assembly, skillCatalog) {
   if (typeof skillCatalog?.has !== 'function') {
     throw new TypeError('assertAssemblyCompleteness requires skillCatalog.has(name) — production: ~/.agents/skills/<name>/SKILL.md resolver; test: fixture');

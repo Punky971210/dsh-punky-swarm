@@ -15,25 +15,16 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 治理内核组合根：规则匹配 → 违规收集 → classifyViolation → KernelDecision（同步、确定性、零 IO）。
-// 空 rules + 空 toolBan → { primitive:'ALLOW', priority:-1, reason:'', ruleRefs:[] }。
-// 第三类判定面（工具黑名单）：toolBan 条目经 matchToolBan 判定（工具名 + 行为面），
-//   命中的违规与参数规则命中**同列汇入** violations/ruleRefs → 同一 classify 统一裁决（零分类器改动，
-//   收据 / 事件桥接 / 拒绝可见性链路天然复用）。
 // 零依赖纪律：本文件不 import 任何外部包/宿主模块——仅本目录相对导入；
 //   randomUUID 用全局 crypto（node≥19 WebCrypto，标准库内建，非外部包）；
 //   deepEqual 自实现递归（避免 node:util import 触发零依赖 grep 审计）。
-// NARROW 运行期接线——decide 组合序在规则命中收集 violations 时同步收集
-//   命中规则的 narrow bounds（Rule.narrow）；classify 产出后按契约计算 narrowedParams（见 decide）。
 
 import type { GovernanceConfig, KernelDecision, RefusalReceipt, Rule, Violation } from './types.js';
 import { classifyViolation } from './classify.js';
 import { computeNarrowedParams, type NarrowBounds } from './narrow.js';
 import { matchToolBan } from './tool-ban.js';
 
-// ── Rule.match 匹配语义 ──
 
-// 递归深度相等（纯 JSON 数据；处理对象/数组/原始值，键序不敏感）
 function deepEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== typeof b) return false;
@@ -56,8 +47,6 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return ak.every((k) => Object.prototype.hasOwnProperty.call(bo, k) && deepEqual(ao[k], bo[k]));
 }
 
-// JSON Pointer 取值（匹配语义）：pointer 缺省（undefined/''）= 匹配整个 arguments；
-// 解析失败/目标不存在 → { found:false }（规则不命中，不抛错）。
 function resolveParam(obj: unknown, pointer: string | undefined): { found: boolean; value: unknown } {
   if (pointer === undefined || pointer === '') return { found: true, value: obj };
   if (typeof pointer !== 'string' || !pointer.startsWith('/')) return { found: false, value: undefined };
@@ -73,15 +62,14 @@ function resolveParam(obj: unknown, pointer: string | undefined): { found: boole
   return { found: true, value: cur };
 }
 
-// 单规则命中判定：tools 白名单（缺省=全工具）+ match（path/op/pattern/value）
 function ruleMatches(rule: Rule, exec: { name: string; arguments: unknown }): boolean {
   if (Array.isArray(rule.tools) && rule.tools.length > 0 && !rule.tools.includes(exec.name)) {
     return false;
   }
   const m = rule.match ?? {};
   const { found, value: target } = resolveParam(exec.arguments, m.path);
-  if (!found) return false; // path 不存在 → 不命中
-  const op = m.op ?? 'eq';  // op 缺省 = 'eq'
+  if (!found) return false;
+  const op = m.op ?? 'eq';
   switch (op) {
     case 'eq':
       return deepEqual(target, m.value);
@@ -96,7 +84,6 @@ function ruleMatches(rule: Rule, exec: { name: string; arguments: unknown }): bo
     case 'in':
       return Array.isArray(m.value) && m.value.includes(target);
     case 'regex': {
-      // regex 对 path 值（pattern 优先；value 为字符串时作兜底 pattern）
       const pat = typeof m.pattern === 'string' && m.pattern.length > 0
         ? m.pattern
         : (typeof m.value === 'string' ? m.value : null);
@@ -104,7 +91,7 @@ function ruleMatches(rule: Rule, exec: { name: string; arguments: unknown }): bo
       try {
         return new RegExp(pat).test(typeof target === 'string' ? target : String(target));
       } catch {
-        return false; // 非法正则 → 不命中
+        return false;
       }
     }
     default:
@@ -112,7 +99,6 @@ function ruleMatches(rule: Rule, exec: { name: string; arguments: unknown }): bo
   }
 }
 
-// 保序去重（多规则命中 ruleRefs 收集，去重保序以实现为准）
 function dedupe(ids: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -125,12 +111,10 @@ function dedupe(ids: string[]): string[] {
   return out;
 }
 
-// 深拷贝（防宿主冻结对象污染——HTYPES ToolExecutionInput.arguments 为 frozen readonly）
 function deepClone<T>(v: T): T {
   return structuredClone(v);
 }
 
-// ── 组合根 ──
 
 export interface GovernanceKernel {
   decide(exec: { name: string; arguments: unknown }): KernelDecision;
@@ -139,11 +123,6 @@ export interface GovernanceKernel {
 
 export function createGovernanceKernel(config: GovernanceConfig): GovernanceKernel {
   return {
-    // 同步、确定性、零 IO：rules 匹配（Rule.match）→ 收集 violations + narrow bounds → classifyViolation → KernelDecision
-    // 组合序：命中规则收集 violations 时同步收集 narrow bounds（显式字段）；
-    //   classify 后——primitive==='NARROW'（flag.narrow=true）必填 narrowedParams；
-    //   primitive==='DENY' 且 violations 含 narrowable（flag-off 回退，或多违规 hard 优先）亦填充
-    //   （决策留痕：deny 同时携带钳制结果作模型修正依据——收据携带 narrowedParams，语义增强）。
     decide(exec) {
       const banEntries = Array.isArray(config.toolBan) ? config.toolBan : [];
       if ((!Array.isArray(config.rules) || config.rules.length === 0) && banEntries.length === 0) {
@@ -152,7 +131,6 @@ export function createGovernanceKernel(config: GovernanceConfig): GovernanceKern
       const violations: Violation[] = [];
       const hitIds: string[] = [];
       const narrowBounds: NarrowBounds[] = [];
-      // 第三类判定面（工具黑名单）：工具级命中先行收集（与下面参数规则同列汇入 → 同一 classify 裁决）
       const ban = matchToolBan(banEntries, exec);
       for (const v of ban.violations) violations.push(v);
       for (const id of ban.ruleRefs) hitIds.push(id);
@@ -160,7 +138,6 @@ export function createGovernanceKernel(config: GovernanceConfig): GovernanceKern
         if (ruleMatches(rule, exec)) {
           hitIds.push(rule.id);
           for (const v of rule.violations) violations.push(v);
-          // 收集命中规则显式 narrow bounds（旧规则无 narrow 字段 → 零 bounds 不钳制）
           if (Array.isArray(rule.narrow)) {
             for (const b of rule.narrow) {
               if (b && typeof b.path === 'string') narrowBounds.push(b);
@@ -184,8 +161,6 @@ export function createGovernanceKernel(config: GovernanceConfig): GovernanceKern
         reason: cls.reason,
         ruleRefs: dedupe(hitIds),
       };
-      // NARROW 运行期接线：窄域违规（narrowable）且收集到 bounds 时计算钳制结果——
-      //   NARROW（flag.on）必填；DENY 含 narrowable（flag-off 回退 / hard 多违规）亦填充（修正依据）。
       const hasNarrowable = violations.some((v) => v.category === 'narrowable');
       if (narrowBounds.length > 0 && (cls.primitive === 'NARROW' || (cls.primitive === 'DENY' && hasNarrowable))) {
         decision.narrowedParams = computeNarrowedParams(exec.arguments, narrowBounds);
@@ -198,8 +173,6 @@ export function createGovernanceKernel(config: GovernanceConfig): GovernanceKern
   };
 }
 
-// ── 收据构造（纯函数实用：attemptedParams 深拷贝防冻结对象污染）──
-// 非严格确定性实用函数：含 ts(new Date) + receiptId(crypto.randomUUID)，均为标准库，零 IO 零外部依赖。
 export function createRefusalReceipt(input: {
   tool: string;
   callId: string;
@@ -209,7 +182,7 @@ export function createRefusalReceipt(input: {
 }): RefusalReceipt {
   const { tool, callId, sessionId, decision, attemptedParams } = input;
   const receipt: RefusalReceipt = {
-    receiptId: globalThis.crypto.randomUUID(), // node≥19 WebCrypto（标准库内建）
+    receiptId: globalThis.crypto.randomUUID(),
     ts: new Date().toISOString(),
     tool,
     callId,

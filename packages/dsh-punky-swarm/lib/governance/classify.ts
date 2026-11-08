@@ -15,22 +15,17 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 违规分类器：六分路 P0-P6 + 兜底，判定顺序 P0→P1→P2→P3→P4→P5→P6→兜底，
 // 任一档命中即停（取最高优先级）。fail-closed 纪律：检出违规但无法归类（unknown）→ 兜底原语，绝不 ALLOW。
-// 逐档映射（违规类型 → 处置原语，见下）。纯函数、零依赖、确定性（无 IO/时间/随机）。
-// 兜底从硬编码 DENY 改为读取 config.defaults.deny（kernel 经 ClassifyInput.defaults
-//   传入，死配置修复）；「兜底不可 ALLOW」双保险——defaults.deny 若为 ALLOW 回退 DENY（config resolve 已先校验，
-//   classify 侧防御兜底，fail-closed 纪律）。
 
 import type { GovernancePrimitive, GovernanceConfig, Violation, ViolationCategory } from './types.js';
 
 export interface ClassifyInput {
   tool: string;
   params: unknown;
-  violations: Violation[];          // kernel 规则命中收集（可能 0..n；0 → ALLOW 前置短路，不进分类器）
-  confidence?: number;              // 软违规置信度（0-1；缺省 undefined → 按 0 处理）
-  flags: GovernanceConfig['flags']; // 原语开关（pause/narrow/defer）
-  defaults?: GovernanceConfig['defaults']; // fail-closed 兜底配置（kernel 传入 config.defaults；缺省=DENY）
+  violations: Violation[];
+  confidence?: number;
+  flags: GovernanceConfig['flags'];
+  defaults?: GovernanceConfig['defaults'];
 }
 
 export interface ClassifyOutput {
@@ -39,13 +34,10 @@ export interface ClassifyOutput {
   reason: string;
 }
 
-// FRIA 阈值：soft + confidence ≥ 0.70 → P6 REQUIRE_APPROVAL（FRIA_ZONE_DEFER(0.70)）
 const FRIA_CONFIDENCE_THRESHOLD = 0.70;
 
-// 兜底档 priority（P0-P6 之外的最高档号 7；判定顺序最后）
 const FALLBACK_PRIORITY = 7;
 
-// 命中档位 reason 拼装：取该类别全部违规的 message，join '; '（溯源 ruleRefs 由 kernel 层收集）。
 function messagesOf(violations: Violation[], category: ViolationCategory): string {
   const msgs = violations.filter((v) => v.category === category).map((v) => v.message);
   return msgs.length > 0 ? msgs.join('; ') : category;
@@ -57,46 +49,35 @@ export function classifyViolation(input: ClassifyInput): ClassifyOutput {
   const hasHard = has('hard');
   const conf = typeof input.confidence === 'number' && Number.isFinite(input.confidence)
     ? input.confidence
-    : 0; // 缺省 undefined → 按 0 处理
+    : 0;
 
-  // P0：ftra（边界 HITL）→ REQUIRE_APPROVAL
   if (has('ftra')) {
     return { primitive: 'REQUIRE_APPROVAL', priority: 0, reason: `[P0] 边界人工介入（ftra）: ${messagesOf(violations, 'ftra')}` };
   }
-  // P1：manual_review 且无硬违 → REQUIRE_APPROVAL（有 hard 时 P2 先行）
   if (has('manual_review') && !hasHard) {
     return { primitive: 'REQUIRE_APPROVAL', priority: 1, reason: `[P1] 需人工复核（manual_review）: ${messagesOf(violations, 'manual_review')}` };
   }
-  // P2：hard 硬违 → DENY
   if (hasHard) {
     return { primitive: 'DENY', priority: 2, reason: `[P2] 硬性违规（hard）: ${messagesOf(violations, 'hard')}` };
   }
-  // P3：pausable → flag.pause ? PAUSE : DENY（flag 默认 false → 回退 DENY）
   if (has('pausable')) {
     return flags.pause
       ? { primitive: 'PAUSE', priority: 3, reason: `[P3] 暂停执行（pausable）: ${messagesOf(violations, 'pausable')}` }
       : { primitive: 'DENY', priority: 3, reason: `[P3] 可暂停违规（pausable，flag 未开启）回退拒绝: ${messagesOf(violations, 'pausable')}` };
   }
-  // P4：narrowable → flag.narrow ? NARROW : DENY（flag 默认 false → 回退 DENY；
-  //     NARROW 完整语义含 narrowedParams 钳制指引，指引构造归 kernel/wiring 层）
   if (has('narrowable')) {
     return flags.narrow
       ? { primitive: 'NARROW', priority: 4, reason: `[P4] 参数收窄（narrowable）: ${messagesOf(violations, 'narrowable')}` }
       : { primitive: 'DENY', priority: 4, reason: `[P4] 可收窄违规（narrowable，flag 未开启）回退拒绝（含收窄指引语义）: ${messagesOf(violations, 'narrowable')}` };
   }
-  // P5：soft + confidence < 0.70 → flag.defer ? DEFER : DENY（flag 默认 false → 回退 DENY）
   if (has('soft') && conf < FRIA_CONFIDENCE_THRESHOLD) {
     return flags.defer
       ? { primitive: 'DEFER', priority: 5, reason: `[P5] 软违规延后（soft, confidence=${conf.toFixed(2)}）: ${messagesOf(violations, 'soft')}` }
       : { primitive: 'DENY', priority: 5, reason: `[P5] 软违规（soft, confidence=${conf.toFixed(2)}，flag 未开启）回退拒绝: ${messagesOf(violations, 'soft')}` };
   }
-  // P6：soft + confidence ≥ 0.70 → REQUIRE_APPROVAL
   if (has('soft') && conf >= FRIA_CONFIDENCE_THRESHOLD) {
     return { primitive: 'REQUIRE_APPROVAL', priority: 6, reason: `[P6] 软违规置信达标转人工审批（soft, confidence=${conf.toFixed(2)}）: ${messagesOf(violations, 'soft')}` };
   }
-  // 兜底：unknown / 未分类违规 → defaults.deny（读配置真实生效，缺省=DENY）；
-  // fail-closed 纪律：绝不 ALLOW——「兜底不可 ALLOW」双保险：defaults.deny==='ALLOW' → 回退 DENY
-  //   （config resolve 已先回退，此处 classify 防御兜底，保证纯函数层语义独立成立）
   const unclassified = violations.filter((v) => v.category === 'unknown' || v.category === undefined);
   const unclassifiedMsgs = unclassified.length > 0
     ? unclassified.map((v) => v.message).join('; ')

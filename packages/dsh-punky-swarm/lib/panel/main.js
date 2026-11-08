@@ -157,10 +157,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const [, setThemeTick] = useState(0);
       const sid = sessionId || '';
 
-      // 跟随 web UI 主题（body[data-ds-dark-theme]）切换兜底色板并重渲染
-      // 【波 A · A-2】原实现只在「属性变化 / matchMedia 变化」时调用 apply ⇒ 段求值早于 body 就绪时，
-      //   兜底色板会一直停在初始档。两处补齐：① mount 立即探测一次；② 观察点从 body 换成
-      //   documentElement（恒存在）+ subtree —— body 未就绪时旧写法根本不注册 observer，此后永不跟随。
       useEffect(() => {
         const apply = () => {
           const t = detectTheme();
@@ -187,9 +183,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         };
       }, []);
 
-      // SSE 列表流：EventSource 主通道 + 3s 轮询降级兜底（保留既有轮询路径不删）。
-      // 收到 batch 信号 → eventCount 去重（旧于当前忽略）→ 重跑既有聚合；onerror / 15s 无心跳 → 回退轮询；
-      // 重连成功（EventSource 自动重连 / 心跳恢复）→ 停轮询回 SSE。
       useEffect(() => {
         let alive = true;
         let es = null;

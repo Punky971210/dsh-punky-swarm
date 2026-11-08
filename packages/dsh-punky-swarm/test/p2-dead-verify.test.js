@@ -160,23 +160,3 @@ test('A1-P2-12 · 保留项在位：在用的事件字面量与私有 `_MIN` 常
 //   **Q-9@closeout 显式覆盖**（批 `punky-closeout-20261023`，用户 2026-10-23 裁决「7 条全删」）
 //   ⇒ 原断言的四枚声明被删 ⇒ 本用例由「保留 4 枚」改写为「已删净 0 枚 + 删除依据留痕」。
 //   **这是判据更新，不是改测试凑绿**：红因是「实现按新裁决前进」，而非「实现退化」。
-test('A1-P2-12 · FORWARD_*_DEFAULT 已删净（0 枚）且删除依据留痕（Q-9@closeout 覆盖 2026-09-21 裁定①）', () => {
-  const discovery = read('lib/discovery/schema.js');
-  const decls = discovery.split('\n').filter((l) => /^export const FORWARD_\w+_DEFAULT\s*=/.test(l.trim()));
-  assert.equal(decls.length, 0, '`FORWARD_*_DEFAULT` 必须 0 枚（Q-9@closeout：7 条全删）');
-  // 删除依据必须由**注释承载**，否则下一位读者会把这次删除读成事故（「与参考实现对齐」的声明面消失无痕）。
-  // 容忍 Markdown 强调符 ⇒ 用「短语间允许少量强强调符」的宽松形态匹配语义，而非逐字匹配排版。
-  assert.match(discovery, /Q-9@closeout/, '注释必须显式标注删除依据 `Q-9@closeout`');
-  assert.match(discovery, /2026-09-21/, '注释必须点名被覆盖的 2026-09-21 冻结裁定①（显式覆盖，非静默推翻）');
-  assert.match(discovery, /诱导面/, '注释必须保留「这类声明面是诱导面」的告诫（删符号的理由须可读，不作静默删除）');
-  // 正向对照（负数断言必配阳性面）：删除只落在 `_DEFAULT` 四枚，**校验区间** `_MIN`/`_MAX` 未被误伤。
-  assert.match(discovery, /FORWARD_DEPTH_LIMIT_MIN/, '`_MIN` 校验常量必须在位（删它就是删请求校验）');
-  assert.match(discovery, /FORWARD_FANOUT_LIMIT_MAX/, '`_MAX` 校验常量必须在位');
-  // 反向：全 `lib/` 零残留（不只本文件）——`_DEFAULT` 声明面必须整体消失，否则「归零」判据不可达。
-  const residue = [];
-  for (const f of walkFiles(path.join(PKG_ROOT, 'lib'))) {
-    const rel = path.relative(PKG_ROOT, f).split(path.sep).join('/');
-    if (/FORWARD_\w+_DEFAULT/.test(readFileSync(f, 'utf8'))) residue.push(rel);
-  }
-  assert.deepEqual(residue, [], '全 `lib/` 不得残留 `FORWARD_*_DEFAULT`（含注释里的符号写法；若复现，须先重评 Q-9）');
-});

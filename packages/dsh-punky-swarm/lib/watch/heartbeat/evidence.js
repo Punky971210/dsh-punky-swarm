@@ -15,10 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// U-4 **证据通道**（盲跑判据 BR-2 的唯一可判定来源）
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉，代码逐字搬移）：
-//   原 `createLaneHeartbeat` 闭包内的 `resolvableArtifact` / `recordConsumeObservation` / `consumeCtxOf`
-//   三个函数集中本文件；台账挂在内存 entry 上（随 entry 生命周期存活，**不新增真源**）。
 import { statSync } from 'node:fs';
 import { resolveArtifact } from './context.js';
 import { laneConsumePathsOf } from './primitives.js';

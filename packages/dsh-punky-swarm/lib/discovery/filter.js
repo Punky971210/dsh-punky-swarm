@@ -15,16 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// ADP 过滤条件引擎（DiscoveryFilter → 布尔）：独立模块，核心无感知。
-// 语义对齐 06-ACPs-spec-ADP §4.2.2：{ field, op, value } 条件数组 + groups 嵌套 + logic(and/or/not)。
 // 数组字段：条件应用于每个元素，任意元素满足即匹配（FilterCondition.field 注释语义）。
-// 运算符：35 个 FilterOperator 全集（eq/ne/exists/gt/gte/lt/lte/between/in/nin/contains/…/hasAllKeys）。
-// 纯函数，零依赖。
 
 import { FILTER_OPERATORS } from './schema.js';
 
-// ── 字段路径解析：点号分隔；数组字段逐元素取值（任意元素满足即匹配）──
-// 返回候选值数组（可能为空）。对对象路径逐级下钻，遇数组则展平。
 export function resolveField(record, field) {
   if (typeof field !== 'string' || field.length === 0) return [];
   const segs = field.split('.').filter((s) => s.length > 0);
@@ -34,7 +28,6 @@ export function resolveField(record, field) {
     for (const node of current) {
       if (node === null || node === undefined) continue;
       if (Array.isArray(node)) {
-        // 数组字段：逐元素取 seg（如 skills.tags → 每个 skill 的 tags）
         for (const item of node) {
           if (item !== null && item !== undefined && typeof item === 'object' && seg in item) next.push(item[seg]);
         }
@@ -53,7 +46,6 @@ export function resolveField(record, field) {
   return current;
 }
 
-// ── 单值 vs 运算符（大小写不敏感为默认，Cs 变体大小写敏感）──
 function isCs(op) {
   return typeof op === 'string' && op.endsWith('Cs');
 }
@@ -67,16 +59,10 @@ function norm(v, cs) {
 }
 
 function compareValues(a, b) {
-  // 数值优先；否则字符串字典序（版本号场景）
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b));
 }
 
-// ── 数组语义：候选值数组上应用运算符，任意一个满足即匹配（hasAllKeys 除外：需全键）──
-// op 对 value 的语义按参考实现 operators 表：
-//   eq/ne/gt/gte/lt/lte/between/in/nin/contains/notContains/startsWith/endsWith/exists 作用于候选值
-//   anyOf/allOf/noneOf/size* 作用于「数组字段的整体」（候选值为数组时）
-//   hasKey/hasNoKey/hasAnyKey/hasAllKeys 作用于「对象字段」（候选值为对象时）
 export function matchOp(op, candidates, value) {
   const cs = isCs(op);
   const b = baseOp(op);
@@ -88,7 +74,6 @@ export function matchOp(op, candidates, value) {
     case 'ne':
       return vals.every((v) => norm(v, cs) !== norm(value, cs));
     case 'exists':
-      // value=true：字段存在且非空；value=false：字段不存在或为空
       return value === true ? vals.length > 0 : vals.length === 0;
     case 'gt':
       return vals.some((v) => compareValues(v, value) > 0);
@@ -118,7 +103,6 @@ export function matchOp(op, candidates, value) {
       return vals.some((v) => norm(String(v ?? ''), cs).startsWith(norm(String(value ?? ''), cs)));
     case 'endsWith':
       return vals.some((v) => norm(String(v ?? ''), cs).endsWith(norm(String(value ?? ''), cs)));
-    // ── 数组集合运算：候选值数组（可能是数组字段的整体）──
     case 'anyOf': {
       const list = Array.isArray(value) ? value : [value];
       const flat = candidates.flat(Infinity);
@@ -150,7 +134,6 @@ export function matchOp(op, candidates, value) {
       if (b === 'sizeLt') return len < n;
       return len <= n;
     }
-    // ── Map/对象键检查 ──
     case 'hasKey': {
       const keys = Array.isArray(value) ? value : [value];
       return vals.some((v) => v !== null && typeof v === 'object' && !Array.isArray(v) && keys.every((k) => k in v));
@@ -172,7 +155,6 @@ export function matchOp(op, candidates, value) {
   }
 }
 
-// ── 单条件求值 ──
 export function matchCondition(record, condition) {
   if (!condition || typeof condition !== 'object') return false;
   if (typeof condition.field !== 'string' || !FILTER_OPERATORS.includes(condition.op)) return false;
@@ -180,7 +162,6 @@ export function matchCondition(record, condition) {
   return matchOp(condition.op, candidates, condition.value);
 }
 
-// ── DiscoveryFilter 递归求值（conditions + groups + logic and/or/not）──
 export function evaluateFilter(record, filter) {
   if (!filter || typeof filter !== 'object') return true; // 无 filter = 不约束
   const logic = filter.logic ?? 'and';

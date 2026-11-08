@@ -15,25 +15,20 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// NARROW 参数钳制：JSON Pointer 只读钳制，返回深拷贝 + 变更明细。
-// 移植 _compute_narrowed_params 语义。
-// 纯函数、零依赖、确定性；安全默认：未知 path 跳过不抛错、形状/类型不变、深拷贝不改输入。
 
 export interface NarrowBounds {
-  path: string;              // JSON Pointer（如 '/amount'、'/params/scope'）
-  max?: number; min?: number; // 数值钳制
-  enum?: unknown[];          // 枚举收敛
-  pattern?: string;          // 字符串正则收敛
+  path: string;
+  max?: number; min?: number;
+  enum?: unknown[];
+  pattern?: string;
 }
 
 export interface NarrowResult {
-  narrowed: unknown;         // 钳制后参数（深拷贝，形状不变——只改叶值）
-  clamped: Array<{ path: string; from: unknown; to: unknown }>; // 变更明细（审计）
-  changed: boolean;          // 是否有实际钳制（值发生变化）
+  narrowed: unknown;
+  clamped: Array<{ path: string; from: unknown; to: unknown }>;
+  changed: boolean;
 }
 
-// JSON Pointer 解析：'/a/b' → ['a','b']；'/' → []（根，不钳制）；支持 ~0(~) / ~1(/) 转义；
-// 非法（非字符串/不以 '/' 开头/空串）→ null（跳过该 bounds，不抛错）。
 function parseJsonPointer(pointer: string): string[] | null {
   if (typeof pointer !== 'string' || pointer.length === 0) return null;
   if (pointer === '/') return [];
@@ -44,8 +39,6 @@ function parseJsonPointer(pointer: string): string[] | null {
     .map((t) => t.replace(/~1/g, '/').replace(/~0/g, '~'));
 }
 
-// 沿 token 链寻址（在 deep clone 后的 narrowed 上操作）；目标不存在/父级非对象 → null（跳过）。
-// 返回 { parent, key, value }：parent 为持有目标值的容器（写回点），key 为属性名（数组索引数字化为 number）。
 function locate(
   obj: unknown,
   tokens: string[],
@@ -61,11 +54,10 @@ function locate(
     if (i === tokens.length - 1) return { parent: container, key, value: container[key] };
     cur = container[key];
   }
-  return null; // tokens 为空（根指针 '/'）→ 不钳制根
+  return null;
 }
 
 function deepClone<T>(v: T): T {
-  // engines node>=22 → structuredClone 可用；参数为纯 JSON 数据（宿主 ToolExecutionInput.arguments）。
   return structuredClone(v);
 }
 
@@ -84,40 +76,37 @@ export function computeNarrowedParams(params: unknown, bounds: NarrowBounds[]): 
     const tokens = parseJsonPointer(b.path);
     if (tokens === null || tokens.length === 0) continue;
     const hit = locate(narrowed, tokens);
-    if (hit === null) continue; // 未知 path → 跳过该 bounds，不抛错不修改
+    if (hit === null) continue;
 
     const raw = hit.value;
     let to: unknown = raw;
     let clampedByPattern = false;
 
-    // 数值钳制：超 max 钳到 max、低于 min 钳到 min（仅当值为 number 时）
     if (typeof raw === 'number') {
       if (typeof b.max === 'number' && (raw as number) > b.max) to = b.max;
       else if (typeof b.min === 'number' && (raw as number) < b.min) to = b.min;
     }
-    // enum 收敛：enum 不含当前值 → 取 enum 首值（取首并记 clamped）
     if (Array.isArray(b.enum) && b.enum.length > 0 && !b.enum.includes(raw)) {
       to = b.enum[0];
     }
-    // pattern：字符串正则收敛——不匹配 → 保留原值 + clamped 记录（不截断，避免语义破坏）
     if (typeof b.pattern === 'string' && b.pattern.length > 0) {
       let re: RegExp | null = null;
-      try { re = new RegExp(b.pattern); } catch { re = null; } // 非法正则 → 跳过 pattern
+      try { re = new RegExp(b.pattern); } catch { re = null; }
       if (re !== null) {
         const s = typeof raw === 'string' ? raw : String(raw);
         if (!re.test(s)) {
-          to = raw; // 保留原值（不截断）
+          to = raw;
           clampedByPattern = true;
         }
       }
     }
 
     if (to !== raw) {
-      hit.parent[hit.key] = to; // 仅叶值替换，形状/类型不变
+      hit.parent[hit.key] = to;
       clamped.push({ path: b.path, from: raw, to });
       changed = true;
     } else if (clampedByPattern) {
-      clamped.push({ path: b.path, from: raw, to: raw }); // pattern 不匹配审计记录（from===to）
+      clamped.push({ path: b.path, from: raw, to: raw });
     }
   }
 

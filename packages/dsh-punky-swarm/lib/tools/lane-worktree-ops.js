@@ -15,18 +15,15 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// ---- lane worktree 物理层：路径布局 / 仓库初始化 / git 原语（零 ctx·store·defineTool 依赖）----
 import fs from 'node:fs';
 import path from 'node:path';
 import * as lock from '../lock.js';
-import { SAFE_ID } from '../state/constants.js'; // 单点（原定义迁出）
+import { SAFE_ID } from '../state/constants.js';
 import { runGit } from './git-utils.js';
-// ---- 常量 ----
-const RESERVED_LANE = new Set(['_repo', 'orch']); // 与引擎目录布局冲突的 laneId 保留字
+const RESERVED_LANE = new Set(['_repo', 'orch']);
 export const ORCH_BRANCH = 'punky/orch';
-const MERGE_WAIT_MS = 60_000; // 同批次 merge 串行化等待上限（serializedMerge 纪律）
+const MERGE_WAIT_MS = 60_000;
 
-// ---- 引擎状态根内布局（worktree 根 = <root>/sessions/<sessionId>/worktrees/<batchId>/<laneId>）----
 function batchWtRoot(root, sessionId, batchId) { return path.join(root, 'sessions', sessionId, 'worktrees', batchId); }
 function mainRepoDir(root, sessionId, batchId) { return path.join(batchWtRoot(root, sessionId, batchId), '_repo'); }
 export function orchDirOf(root, sessionId, batchId) { return path.join(batchWtRoot(root, sessionId, batchId), 'orch'); }
@@ -34,11 +31,9 @@ export function laneDirOf(root, sessionId, batchId, laneId) { return path.join(b
 function mergeLockFile(root, sessionId, batchId) { return path.join(batchWtRoot(root, sessionId, batchId), '.merge.lock'); }
 export const laneBranch = (laneId) => 'punky/' + laneId;
 
-// 路径归一化（Windows）：git worktree porcelain 输出长路径名，而 os.tmpdir()/TEMP 可能是 8.3 短名
-// （如 ADMINI~1）——realpathSync.native 展开短名到规范长路径，保证注册 worktree 匹配可靠
 export function normPath(p) {
   let abs = path.resolve(p);
-  try { abs = fs.realpathSync.native(abs); } catch { /* 路径不存在等 → 保持原样 */ }
+  try { abs = fs.realpathSync.native(abs); } catch {  }
   return abs.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
@@ -49,7 +44,6 @@ export function validateIds(sessionId, batchId, laneId) {
   if (RESERVED_LANE.has(laneId)) throw new Error('laneId conflicts with engine layout: ' + laneId);
 }
 
-// git 身份兜底：全局/本地均无身份时回退 punky/punky@localhost
 function ensureGitIdentity(repo) {
   const name = runGit(repo, ['config', 'user.name']);
   const email = runGit(repo, ['config', 'user.email']);
@@ -57,7 +51,6 @@ function ensureGitIdentity(repo) {
   if (!email.ok || !email.stdout) runGit(repo, ['config', 'user.email', 'punky@localhost']);
 }
 
-// 主仓库初始化（幂等）：git init + 种子提交（worktree add 需要已存在的 HEAD 提交）
 export function ensureRepo(root, sessionId, batchId) {
   const repo = mainRepoDir(root, sessionId, batchId);
   if (!fs.existsSync(path.join(repo, 'HEAD'))) {
@@ -83,18 +76,16 @@ export function listWorktrees(repo) {
   return paths;
 }
 
-export const countBaseFiles = (dir) => { const r = runGit(dir, ['ls-files']); return r.ok ? r.stdout.split('\n').filter(Boolean).length : 0; }; // 基线受控文件数（`isolated` 判据的一半）：0 ⇒ 基线为空集（隔离未生效）
+export const countBaseFiles = (dir) => { const r = runGit(dir, ['ls-files']); return r.ok ? r.stdout.split('\n').filter(Boolean).length : 0; };
 
-// 清理残留 worktree 目录：已注册 → worktree remove --force；孤儿目录 → rm -rf；再 prune
 function removeWorktreeDir(repo, dir) {
   if (listWorktrees(repo).includes(normPath(dir))) {
-    runGit(repo, ['worktree', 'remove', '--force', dir]); // 失败（锁定等）不抛，下面 rm 兜底
+    runGit(repo, ['worktree', 'remove', '--force', dir]);
   }
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   runGit(repo, ['worktree', 'prune']);
 }
 
-// worktree 操作失败冒泡：message 含 op + path + 原 message，挂 err.worktreeOp 四字段；五值穷尽（禁 other/unknown 兜底）
 const WORKTREE_OPS = Object.freeze(['list', 'remove', 'add-branch', 'add-existing-branch', 'show-ref']);
 const gitFailureOf = (r) => ({ message: String(r?.stderr ?? '').trim() || ('git exit ' + String(r?.code)), code: r?.code });
 function worktreeOpError(op, dir, e) {

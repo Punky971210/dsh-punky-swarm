@@ -111,18 +111,6 @@ export function createApi(ctx, deps) {
         for (const lane of Object.keys(b.lanes)) {
           upgrades[lane] = (laneAttempts[lane] ?? 0) >= 3 && (b.lanes[lane] === 'review' || b.lanes[lane] === 'failed');
         }
-        // 面板读端增量（冻结节拍 §2.1，**纯加法**：既有键语义/形状零改动，旧客户端零感知）：
-        //   danglingLanes / handoffs / manager / assembly / teamAsset / smoke。
-        //   取值纪律 = 「零新真源」：只从 ① 批次 JSON 字段 或 ② 既有单点纯函数取得——
-        //     · danglingLanesOf  = batch_status.danglingLanes 的同一实现（lib/state/dangling.js）
-        //     · smokeOf          = 门禁侧同源判据（lib/state/gates.ts#smokeOf）
-        // 【2026-09-27 · 批 3 D-4 删净】原「链回显投影」（`lib/assembly/chain.js` 的两个纯函数）**已删除**：
-        //   链声明面与回显面全量退役（不做冻结兼容读）⇒ 两读端（本文件 / 工具面 `lib/tools/core.js`）**同口径**，
-        //   原「两读端口径分裂」缺口（`exec/consumers.md` §6.1 R-2）随之闭合。运行期 DAG 真源 =
-        //   批次 `wavePlan[].tasks[].deps` + `batch.handoffs`（逐边取件见 `handoff_view`）。
-        //   条件键与 batch_status 同款（无值不写键）；handoffs 恒在场（空对象 = 该批无 deps ⇒ 未交接门恒放行）。
-        //   明确不做（登记见冻结节拍 §2.4）：lanesState（= lanes 同值键）、managerRoster（需 live agent）、
-        //   gates{strength}（= lanesGate[<任一 lane>].gateStrength 已有）、watch/handoffGate/declaration。
         const danglingLanes = danglingLanesOf(b);
         sendJson(res, 200, {
           batchId: b.batchId, session, phase: b.phase, concurrency: b.concurrency,
@@ -137,22 +125,9 @@ export function createApi(ctx, deps) {
           handoffs: b.handoffs ?? {},
           ...(b.manager ? { manager: b.manager } : {}),
           ...(b.assembly ? { assembly: b.assembly } : {}),
-          // 【历史兼容读 · 零发射点，新批不再产】该键自批 3 起**建批侧已停写**（工具面回显同批删净），
-          //   但**存量批 JSON 真值里仍可能带它**（读取侧零迁移）⇒ 本行按「读得到就原样回显、读不到不写键」
-          //   处置，**不解析、不回写、不参与任何门禁判定**。
-          //   Q-1 裁决 = **双侧同保留**（此处 + 面板同源读点）：删读端 = 主动丢历史可复盘面；该键**零发射点**
-          //   ⇒ 不存在「写了不生效」的静默面风险。**禁为求绿删本行或删面板侧断言**。
           ...(b.teamAsset ? { teamAsset: b.teamAsset } : {}),
           ...(smokeOf(b) ? { smoke: true } : {}),
-          // 【TD-21 / N-13，2026-09-18 清理波已落地】批级一次扫描（原「逐 lane N 次整批读盘」已收敛）：
-          //   `store.gateStatusMapOfBatch` 一次读批 → `{lane: gateView}`，键序/形状/取值与改前逐 lane 展开
-          //   `Object.fromEntries(Object.keys(b.lanes).map(...))` **逐字一致**（回归锁 test/api-batch-keys.test.js
-          //   的 P-2 深比较全等 + P-3 读计数）；handler 自身 :96 的 readBatch 仍不可消除（按 AC-07 双口径计的
-          //   「+1」）。逐 lane 兼容外壳 `store.gateStatus` 保留（`gate_status` 工具面 lib/tools/core.js 零改动）。
           lanesGate: store.gateStatusMapOfBatch(session, batchId),
-          // 【B-1 · 计划变更可见性】`planRevision` 此前**不在帧内** ⇒ 面板对「计划被改过」零感知。
-          //   取值纪律同上「零新真源」：只读批次 JSON 字段（`b` 已在手 ⇒ 零额外读盘）。沿用工具面既有
-          //   读数约定 `?? 1`（未发生过 `plan.mutated` 的批次 = 初始版本 1），不另立默认值口径。
           planRevision: b.planRevision ?? 1,
           // 【B-2 · 池化渲染读端】pool = 未派发任务视图（`owner == null`）+ 逐条可派发性/blockers。
           //   判据**单点**在 `lib/tools/task-tools.js#poolViewOf`（与 `task_pool` 工具面同一实现，见文件头

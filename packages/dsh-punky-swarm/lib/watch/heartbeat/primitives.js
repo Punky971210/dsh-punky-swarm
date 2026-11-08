@@ -15,16 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// watch 心跳域**纯函数与常量单点**（【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉）：
-//   原 `lib/watch/lane-heartbeat.js` 顶层的私有常量与私有纯函数集中本文件，`lane-heartbeat.js` 主体与
-//   `heartbeat/*` 各探针档**共用同一份**（禁第二份）。本文件**不持有任何实例状态**（无闭包、无模块级单例）
-//   ⇒ 不构成新真源；常量字面值/判据**逐字搬移**（行为零变更）。
-// 环依赖说明（A1-P2-01 补丁② 改写，**旧口径已作废**）：
-//   本文件位于 `watch/heartbeat/` 的**残余 8 模块 SCC1**（见下「残余环登记」）；它对聚合器的依赖已收窄到
-//   **只剩 `stintRunningSinceOf` 一个函数声明**（ESM 实例化期即初始化，本文件顶层不调用它 ⇒ 无 TDZ）。
-//   两个状态谓词（`laneStateOf` / `isScannedLaneState`）**直连真源** `../../state/lane-state.js`
-//   （`lane-heartbeat.js` 只是它们的再导出点 ⇒ 原来那条「经聚合器取谓词」的边是多余的中转，
-//   `watch -> state` 已在 arch 白名单）。
 import { findTask } from '../../state/task-utils.js'; // 单点（原本地定义删除）
 import * as EVT from '../../state/event-types.js';
 import { laneStateOf, isScannedLaneState } from '../../state/lane-state.js'; // 谓词真源（不走聚合器中转）

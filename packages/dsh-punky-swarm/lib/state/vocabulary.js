@@ -15,53 +15,26 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// lib/state/vocabulary.js —— R1「契约三小件」·词表真源唯一读端
 // ─────────────────────────────────────────────────────────────────────────────
-// 定位：`lib/state/vocabulary.json`（词表真源）的**唯一读端**（纯函数 + 单例缓存）。
 // 语义：登记义务——**新增**的 `GATE_*` 码 / `reason` token 必须先入表（`enabled:true`）再落代码；
-//   未登记的新 token 由门禁面拒 `GATE_TOKEN_UNKNOWN`。「存量不追溯」由**词表内容**承载
-//   （现役码逐条登记在册），**不**由批次年龄分支承载（不设 env 阀 / 不做按批龄分流）。
-//   ⚠ 空表口径（2026-10-24 订正，取代此前含糊的旧表述）：**空表 ⇒ 全部 token 未登记 ⇒ 全拒**，
-//     即 `entries: []` 时任何声明都命中不了词条，判定面据此走**拒绝**分支（`gateCodeKnown` /
-//     `reasonTokenKnown` 恒 `known:false`）。**空表不是放行**。与「词表不可用」是相反两档，禁互读：
-//       ① 词表**不可用**（缺文件 / 坏 JSON / schema 不过）⇒ fail-open：放行 + `GATE_VOCAB_INVALID` 告警；
-//       ② 词表**可用但该 token 未登记**（含空表情形）⇒ 拒 `GATE_TOKEN_UNKNOWN`；
-//       ③ 词条在册但 `enabled:false` ⇒ 放行 + `restated:true` 告警（禁用≠删除）。
-//
-// 读取器冻结契约 4 条（blueprint §2.1(e)，逐条实现）：
-//   1. fail-closed：缺失 / JSON 坏 / schema 不过 ⇒ `loadVocabulary().ok === false`，**且不抛**
-//      （调用方降级告警 + 留痕，不得因此拒批；加载失败 **不等于**「无词表则任意码合法」）；
-//   2. 零缓存穿透：单例缓存 key = 绝对路径 + mtimeNs + size ⇒ 改文件即时生效、不需重启；
-//   3. 禁用不等于删除：`tokensOfKind` / `*Known` 的索引**包含** `enabled:false` 的词条
-//      ⇒ 历史产物仍解析通过；「停用」只对新写点生效（`restated:true` 是给调用方的告警位）；
-//   4. 零副作用：**不写盘、不发事件、不改任何状态**（本文件只调 `fs.statSync` / `fs.readFileSync` /
-//      `fs.existsSync` 三个只读 API）。
-//
-// 依赖纪律（防环）：**只依赖 `node:fs` / `node:path` / `node:url`**——不得 import `gates.ts` / `store.js`。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** 词表在包内的相对路径（冻结；单一真源，禁在别处硬编码）。 */
 export const VOCABULARY_REL = 'lib/state/vocabulary.json';
 
-/** 冻结的 6 个词条分类（blueprint §2.1(b) `kind` 枚举）。 */
 export const VOCABULARY_KINDS = Object.freeze(['gate', 'event', 'reason', 'role', 'section', 'element']);
 
-/** 冻结的版本锚（`$schema` 恒此字面量）。 */
 const VOCABULARY_SCHEMA = 'dsh-punky-swarm/vocabulary@1';
 
-/** 包根（本文件位于 `<pkg>/lib/state/`）——缺省 root。 */
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-// ── 字段形态（冻结 regex）────────────────────────────────────────────────────
-const ID_RE = /^[a-z][a-z0-9-]*$/;                      // id：kebab-case
-const CODE_RE = /^[A-Za-z][A-Za-z0-9_.:-]*$/;           // code：机器码原文
-const VERSION_RE = /^v?\d+\.\d+\.\d+$/;                 // since / deprecatedIn：引入版本口径
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;                  // meta.updated：YYYY-MM-DD
+const ID_RE = /^[a-z][a-z0-9-]*$/;
+const CODE_RE = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
+const VERSION_RE = /^v?\d+\.\d+\.\d+$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const LABEL_MAX = 40;
 
-// ── 单例缓存：key = 绝对路径 + mtimeNs + size（同 flows.js:66 `CACHE` 形）────────
 const CACHE = new Map();
 
 function rootOf(opts) {
@@ -78,7 +51,6 @@ function vocabularyAbsPath(opts = {}) {
   return path.join(rootOf(opts), ...VOCABULARY_REL.split('/'));
 }
 
-/** 读文件指纹（mtimeNs 取纳秒级，防同毫秒内两次写盘被误判「未变」）。失败 ⇒ null。 */
 function fingerprintOf(abs) {
   try {
     const st = fs.statSync(abs, { bigint: true });

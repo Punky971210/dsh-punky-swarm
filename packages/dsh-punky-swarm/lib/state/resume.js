@@ -16,88 +16,43 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // lib/state/resume.js — 断点续跑骨架（增强恢复落地后回填实现）
-//
-// 职责（断点续跑：执行模型改变——与增强恢复的"执行模型不变"互补）：
-//   状态重建接口 —— 恢复 running/review（而非一律 idle）+ config.resume.enabled 开关（默认关）
-//   断点指针语义 —— laneProgress 步骤进度（schema-v3.js 可选字段；本文件提供读写/清退接口骨架）
-//   worker 任务包契约断点续跑 —— 【已删】原「resume 章节占位骨架」（连同其待回填清单常量）
-//     随批 `punky-closeout-20261023`（裁决 Q-9@closeout）删除：B1 实测内外皆零引用；
-//     续跑面实际由 `lane_checkpoint`（progress）+ `lane_checkpoint_status` 承担，本文件不再提供占位章节。
-//     ⚠ 本注释刻意**不裸写被删符号名**：机检判据是「全仓零命中」，裸写会让判据恒假红
-//     （同仓 `p2-dead-verify` 的 `.join('_')` 与 `f3-anchors` 的 `anchorParts()` 是同一纪律）。
-//
-// 纪律：
-//   - 默认关：config.resume.enabled !== true → recoverBatches() 原样委托 store.recoverBatches()（零行为变化）
-//   - 不新增成员态：恢复对象仅 running/review（crash 中断的 in-flight lane）；failed/conflict/skipped
-//     不参与任何恢复，失败是裁决结果不是中断，不复活
-//   - 恢复不走 setMember：直接保留状态 + 事件留痕，不重验 entry gate/condition（恢复不是新派发）
-//   - 不提供批次内自动续跑：重做仍开新批次
-//
-// 边界：本文件只读 store 公共面（listSessions/listBatches/readBatch/appendEvent），
-// 不触碰 store.js recoverBatches 主体与 lane-tools.js 契约边界。
-// 已接线：index.js 启动恢复改调本文件 recoverBatches（restoreRunning 按 config.resume.enabled）；
-//   laneProgress 写点经 lane-tools.js lane_checkpoint（progress 携带时调 store.updateLaneProgress，
-//   内部 laneProgressWrite 纯函数合并）+ 结算终态清退经 store.setMember（laneProgressClear）。
 import * as schema from '../schema.js';
-// findTask 单点：收敛至 task-utils.js（overBudgetOf 原内联同构遍历删除）
 import { findTask } from './task-utils.js';
-// 事件字面量改引 EVT 常量单点（system.recovered/system.restored 双写法 + over-budget 读端）
 import * as EVT from './event-types.js';
-// 成员终态单点（Node 端权威 = constants.js）：早退补写的「非终态守卫」取用面
 import { TERMINAL } from './constants.js';
 
-// ── config.resume 开关（默认关，零运行时开销，行为不变）──
 const RESUME_DEFAULTS = Object.freeze({ enabled: false });
 
 export function resolveResumeConfig(config) {
   const c = config?.resume ?? {};
-  // resume 键不在 CAPABILITY_REGISTRY（config.resume.* 顶层域，非 capabilities.*）——
-  // 缺省关语义即严格判等（RESUME_DEFAULTS.enabled=false），无需 readCapability（无 entry 返回 undefined）
   return { enabled: c.enabled === true };
 }
 
-// ── 状态重建接口 ──
-// 单一入口扩展：签名与 store.recoverBatches 同构，加可选 restoreRunning。
-//   restoreRunning 缺省 false → 原样委托 store.recoverBatches()（默认路径零改动；detail 增强经 store 生效，不受本模块影响）
-//   restoreRunning === true → restoreBatches()（running→running / review→review 原地保留）
-// 幂等与安全：同一恢复调用内每 lane 二选一（restore 与 recover 互斥，由本布尔分支保证）。
-// 接线点：index.js 启动恢复处 `resume.recoverBatches(store, { restoreRunning: resumeCfg.enabled })`，
-//   返回数组形态与 store.recoverBatches 一致（.length 兼容既有 `if (r.length)` 日志）。
 export function recoverBatches(store, { restoreRunning = false } = {}) {
   if (restoreRunning !== true) return store.recoverBatches();
   return restoreBatches(store);
 }
 
-// 独立恢复入口（语义更清晰）：只处理非终态批次的 running/review lane——
-// 原地保留状态（不落 setMember，不重验 entry gate/condition）+ 事件留痕，返回 'sessionId/batchId' 数组。
-// 骨架已实现：状态保留 + system.recovered{detail[].restored=true} / system.restored 事件留痕。
-// （增强恢复落地后回填，均只读探测，不改产物）：produced 证据（gateStatus outputsMissing/produceMissing 反推）、
-//   lastActiveAt（batch.events 该 lane 最近事件 ts，回退 updatedAt）、progress（laneProgress[lane] 合并）。
 export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = {}) {
   const restored = [];
   for (const sessionId of store.listSessions()) {
     for (const batchId of store.listBatches(sessionId)) {
       const batch = store.readBatch(sessionId, batchId);
-      if (!batch || schema.isBatchTerminal(batch.phase)) continue; // 终态批次跳过
+      if (!batch || schema.isBatchTerminal(batch.phase)) continue;
       const detail = [];
       for (const [lane, state] of Object.entries(batch.lanes ?? {})) {
-        if (state !== 'running' && state !== 'review') continue; // 仅 crash 中断的 in-flight lane
+        if (state !== 'running' && state !== 'review') continue;
         detail.push({
           lane,
           from: state,
-          to: state, // 原地保留（恢复 running/review 而非一律 idle）
-          restored: true, // 恢复标记（与 gate_status 面板展示的衔接）
-          // produced（已产出产物清单，复用 gate 语义只读探测）、
-          // lastActiveAt（上次活动时间，batch.events 该 lane 最近事件 ts → 回退 batch.updatedAt）、
-          // progress（laneProgress[lane] 断点指针）
+          to: state,
+          restored: true,
         });
       }
       if (detail.length) {
-        // 事件留痕：appendEvent 只追加事件 + updatedAt，不改 lanes——恢复路径不落 setMember（gate 交互设计）
-        // system.recovered（recover 语义）+ eventType 缺省 system.restored（restore 语义）均引 EVT 常量
         store.appendEvent(sessionId, batchId, EVT.EVT_SYSTEM_RECOVERED, {
           batchId, sessionId,
-          recoveredLanes: detail.map((d) => d.lane), // 保留既有字段（batch-store.test.js 断言其存在，向后兼容）
+          recoveredLanes: detail.map((d) => d.lane),
           detail,
           restored: true,
         });
@@ -110,21 +65,15 @@ export function restoreBatches(store, { eventType = EVT.EVT_SYSTEM_RESTORED } = 
       }
     }
   }
-  return restored; // 与 recoverBatches 同形态（数组，.length 兼容 index.js 日志）
+  return restored;
 }
 
-// ── 断点指针语义（laneProgress，schema-v3.js 可选字段）──
-// 纯函数：操作 batch 对象，不落盘（写入/清退由 B 的 lane_checkpoint / 结算路径调用本接口后交 store 原子写）
 
-// 读：无进度记录 → null（缺省 undefined 语义，读兼容）
-//   【批 `punky-checkpoint-wire-20261106` · lane `e2-status`】加 `export`：`lane_checkpoint_status` 的
 //   fallback（事件面为空时回落指针）必须**复用本单点**读取，禁在工具层重写 `batch?.laneProgress?.[lane]` 访问式。
-//   函数体逐字不动。
 export function laneProgressRead(batch, lane) {
   return batch?.laneProgress?.[lane] ?? null;
 }
 
-// 值级校验：status ∈ running|review（与成员态对齐）；step/total 正整数且 step ≤ total
 export function isValidLaneProgress(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
   if (p.status !== 'running' && p.status !== 'review') return false;
@@ -133,8 +82,6 @@ export function isValidLaneProgress(p) {
   return true;
 }
 
-// 写：返回新 batch（不突变入参）。lane_checkpoint 携带 progress 时调用，
-//   更新 laneProgress[lane]（断点指针：lane 执行到第 N 步，新 worker 从 N+1 继续），随后交 store 原子写。
 export function laneProgressWrite(batch, lane, progress) {
   if (!isValidLaneProgress(progress)) {
     throw new Error('invalid laneProgress: ' + JSON.stringify(progress) + ' (expect { step, total, status: running|review, updatedAt? })');
@@ -148,8 +95,6 @@ export function laneProgressWrite(batch, lane, progress) {
   };
 }
 
-// 清：lane 结算（merged/failed/skipped/conflict）时删除该 lane 指针，不残留脏指针；
-//   批次 complete 后整块随批次归档（archive 已覆盖）。返回新 batch；无指针则原样返回。
 export function laneProgressClear(batch, lane) {
   if (!batch?.laneProgress?.[lane]) return batch;
   const lp = { ...batch.laneProgress };
@@ -157,69 +102,43 @@ export function laneProgressClear(batch, lane) {
   return { ...batch, laneProgress: Object.keys(lp).length ? lp : undefined };
 }
 
-// ── 步数预算（超限判定，纯函数；接线在 lane-tools.js lane_checkpoint）──
-// 设计：任务建批时声明 checkpoint:{steps}（总步数预算，wave-plan.js normalizeResumeContract
-//   校验正整数或 null 后透传进 wavePlan）；lane_checkpoint 携带 progress 时判定
-//   progress.total > checkpoint.steps → 超限。判定只发信号不硬杀：接线层命中且事件流无该 lane
-//   的 lane.over-budget → appendEvent（幂等），转 review/stalled 由 Manager/Leader 裁决。
-// 返回 { over, budget }：budget = 任务声明的步数上限（未声明 = null）；over = total 是否超限。
-//   B-不变量：未声明 checkpoint.steps（budget=null）零感知——任意 progress 返回 { over:false, budget:null }。
-// 任务定位语义与 store/machine/gates/lane-heartbeat 一致：wavePlan[].tasks 按 id 匹配
-// （改调 task-utils.findTask，删除原内联同构遍历）。
 export function overBudgetOf(batch, lane, progress) {
   const task = findTask(batch, lane);
   const budget = task?.checkpoint?.steps ?? null;
-  if (budget === null) return { over: false, budget: null }; // 未声明 → 零感知
+  if (budget === null) return { over: false, budget: null };
   const total = progress?.total;
   if (Number.isInteger(total) && total > budget) return { over: true, budget };
   return { over: false, budget };
 }
 
-// B-幂等判据：事件流已存在该 lane 的 lane.over-budget → true（接线层据此避免重复 appendEvent；
-//   同 lane 超限事件只发一次，重复 progress 调用不重复发）
 export function hasOverBudgetEvent(batch, lane) {
   return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_OVER_BUDGET && e.lane === lane);
 }
 
-// ── checkpoint 清单对齐（纯函数；接线在 lane-tools.js lane_checkpoint）─────────────────────────
-// 判据（**唯一口径**，批 `punky-checkpoint-align-20261102` 裁决）：
-//   预期值 = `task.checkpoints.items.length`；`progress.total ≠ 该值` ⇒ 未对齐。
-// ⚠ **`checkpoint.steps` 不参与**本判定 —— 它是**运行时上界**（`overBudgetOf` 已管 `total > steps`）。
-//   拿 steps 当预期会造**假警示**（`steps:10` + `items:3` 是合法组合，成员照任务包建议填 `total:3`
-//   ⇒ 若按 steps 判就是 3≠10 的误报）⇒ 误报会训练成员忽略警示，**比不报更有害**。
-// 收窄三档（防误报）：
-//   · `items.length > 0` ⇒ 判「等于」；
-//   · **仅 `steps` 无 `items`** ⇒ **不判**（超界归 `overBudgetOf`）；
-//   · 两者皆无 ⇒ 零感知。
-// 返回 `{ mismatch, declared, actual }`；`declared` = items.length（无清单时 null），`actual` = total（无则 null）。
 export function checkpointTotalMismatchOf(batch, lane, progress) {
   const task = findTask(batch, lane);
   const items = task?.checkpoints?.items;
   const declared = Array.isArray(items) && items.length > 0 ? items.length : null;
-  if (declared === null) return { mismatch: false, declared: null, actual: null }; // 无清单 → 零感知（不判）
+  if (declared === null) return { mismatch: false, declared: null, actual: null };
   const total = progress?.total;
-  if (!Number.isInteger(total)) return { mismatch: false, declared, actual: null }; // 未带 total → 不判
+  if (!Number.isInteger(total)) return { mismatch: false, declared, actual: null };
   return { mismatch: total !== declared, declared, actual: total };
 }
 
-// 幂等判据（照 `hasOverBudgetEvent` 同形）：事件流已有该 lane 的本类事件 ⇒ true，接线层据此不重复 appendEvent。
 export function hasCheckpointTotalMismatchEvent(batch, lane) {
   return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_CHECKPOINT_TOTAL_MISMATCH && e.lane === lane);
 }
 
-// 接线薄壳（**让 lane-tools 只增 1 行**，守住其「逻辑行净增 ≤10」回归护栏）：
-//   判定 → 未记过则 appendEvent → 任何异常只 `logger.warn`（**绝不阻断 checkpoint**）。
-//   把 payload 组装与 fail-safe 收在这里，是因为 lane-tools.js 有行数护栏，而本模块没有。
 export function recordCheckpointTotalMismatch(store, sessionId, batchId, batch, lane, progress, logger = null) {
   try {
     const mm = checkpointTotalMismatchOf(batch, lane, progress);
     if (!mm.mismatch || hasCheckpointTotalMismatchEvent(batch, lane)) return false;
     store.appendEvent(sessionId, batchId, EVT.EVT_LANE_CHECKPOINT_TOTAL_MISMATCH, {
       lane,
-      declared: mm.declared,        // = checkpoints.items.length（唯一口径）
-      actual: mm.actual,            // = progress.total
+      declared: mm.declared,
+      actual: mm.actual,
       step: progress?.step ?? null,
-      source: 'checkpoints.items',  // 固定串：将来若加第二来源，audit 可区分
+      source: 'checkpoints.items',
     });
     return true;
   } catch (e) {
@@ -228,17 +147,6 @@ export function recordCheckpointTotalMismatch(store, sessionId, batchId, batch, 
   }
 }
 
-// ── 早退补写薄壳（接线在 lane-tools.js `lane_checkpoint` 的 `if (!r.ok)` 分支）───────────────
-// 缺陷（批 `punky-quality-a-20261106` · A2）：`doCheckpoint` 在 lane worktree 缺失时返 `{ok:false}`，
-//   而原 `if (!r.ok) return r;` 早于 lane-tools 的 `laneProgress` 写入块 ⇒ 无 worktree 批
-//   （leader-direct 形态）里断点指针**永不落盘**，崩溃后新 worker 无法跳过已完成步骤
-//   （`lane_checkpoint_status` 恒 latest=none ⇒ 重复劳动）。
-// 收窄边界（**不放宽任何判据，只让指针可达**）：
-//   · **只**写断点指针 `{...progress, status:'running'}`（`updateLaneProgress` 只写字段、不触状态机）；
-//   · **不落** `total_mismatch` / `over_budget` —— 两条事件的语义前提是「确有 checkpoint」，无提交时落即
-//     假留痕，而误报会训练成员忽略警示（见本文件 :184）⇒ 它们仍绑定提交成功路径，本壳不接；
-//   · **终态守卫**：lane 已 merged/failed/skipped/conflict ⇒ 不写（防指针与成员态语义打架）；
-//   · 任何异常只 `logger.warn`，**绝不阻断** checkpoint 返回值（与 lane-tools 调用点同纪律）。
 export function recordEarlyExitProgress(store, sessionId, batchId, batch, lane, progress, logger = null) {
   if (!progress) return false;
   try {

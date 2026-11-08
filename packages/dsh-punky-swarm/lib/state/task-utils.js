@@ -16,11 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // lib/state/task-utils.js —— 任务定位纯函数单点（替代多处同构遍历）
-// 零依赖设计：不 import 任何模块，杜绝循环依赖（原各文件自持实现的根因：
-//   gates.js「避免 machine→gates 依赖」/ machine.js「自持只读实现」等注释）。
-// 防御取最全形态：batch?.wavePlan ?? [] + w.tasks ?? []（容缺省与空数组），
-// null 元素 / 非数组 tasks 跳过，找到即返回（等价 resume 版提前 break）。
-// 消费方：gates.js / machine.js / store.js / lane-heartbeat.js / resume.js（见各文件 import）。
 
 /**
  * 在 wavePlan 中按 lane id 定位任务（语义：遍历 wavePlan[].tasks 按 t.id === lane 匹配）。
@@ -33,7 +28,7 @@ export function findTask(batch, lane) {
   for (const w of batch.wavePlan ?? []) {
     if (!w || !Array.isArray(w.tasks)) continue;
     for (const t of w.tasks) {
-      if (t && t.id === lane) return t; // 找到即返回（提前返回语义，等价 resume 版 break）
+      if (t && t.id === lane) return t;
     }
   }
   return null;

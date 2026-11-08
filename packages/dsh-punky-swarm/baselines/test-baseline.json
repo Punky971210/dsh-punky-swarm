@@ -649,11 +649,11 @@
       "todos": 0
     },
     "test/f2-dispatch-desc-and-docs.test.js": {
-      "asserts": 53,
-      "blankLines": 30,
-      "lines": 354,
+      "asserts": 35,
+      "blankLines": 22,
+      "lines": 263,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 3,
       "todos": 0
     },
     "test/f2-lane-claim-warn.test.js": {
@@ -678,14 +678,6 @@
       "lines": 108,
       "tautologies": 0,
       "tests": 2,
-      "todos": 0
-    },
-    "test/f3-anchors.test.js": {
-      "asserts": 28,
-      "blankLines": 21,
-      "lines": 278,
-      "tautologies": 0,
-      "tests": 9,
       "todos": 0
     },
     "test/f3-claim-writeface.test.js": {
@@ -1112,14 +1104,6 @@
       "tests": 10,
       "todos": 0
     },
-    "test/housekeeping-h2.test.js": {
-      "asserts": 17,
-      "blankLines": 14,
-      "lines": 98,
-      "tautologies": 0,
-      "tests": 4,
-      "todos": 0
-    },
     "test/housekeeping-h4.test.js": {
       "asserts": 20,
       "blankLines": 27,
@@ -1257,11 +1241,11 @@
       "todos": 0
     },
     "test/lane-wake-autodispatch.test.js": {
-      "asserts": 55,
-      "blankLines": 42,
-      "lines": 454,
+      "asserts": 52,
+      "blankLines": 41,
+      "lines": 441,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 11,
       "todos": 0
     },
     "test/legacy-fix.test.js": {
@@ -1393,11 +1377,11 @@
       "todos": 0
     },
     "test/merge-agent.test.js": {
-      "asserts": 50,
-      "blankLines": 24,
-      "lines": 292,
+      "asserts": 45,
+      "blankLines": 23,
+      "lines": 250,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 10,
       "todos": 0
     },
     "test/mode-gate.test.js": {
@@ -1441,11 +1425,11 @@
       "todos": 0
     },
     "test/p2-dead-verify.test.js": {
-      "asserts": 30,
-      "blankLines": 20,
-      "lines": 183,
+      "asserts": 23,
+      "blankLines": 19,
+      "lines": 162,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 7,
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
@@ -1504,14 +1488,6 @@
       "tests": 4,
       "todos": 0
     },
-    "test/persona-and-sink-notes.test.js": {
-      "asserts": 8,
-      "blankLines": 11,
-      "lines": 72,
-      "tautologies": 0,
-      "tests": 2,
-      "todos": 0
-    },
     "test/phase-reason.test.js": {
       "asserts": 33,
       "blankLines": 26,
@@ -1537,11 +1513,11 @@
       "todos": 0
     },
     "test/preflight-packet.test.js": {
-      "asserts": 72,
-      "blankLines": 32,
-      "lines": 368,
+      "asserts": 68,
+      "blankLines": 31,
+      "lines": 352,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 13,
       "todos": 0
     },
     "test/preflight-report.test.js": {
@@ -2137,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T04:41:14Z",
+  "generatedAt": "2026-11-08T05:14:22Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2148,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B2-b2 F2-6 允许名单移除已删的 budget.test.js（refactor/quality-20261108）",
+  "reason": "B3 注释收敛：删除断言注释文本的实现锁测试（f3-anchors/persona-sink/housekeeping-h2 整文件 + 5 文件单用例）（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 12182,
-    "blankLines": 6860,
-    "files": 267,
-    "lines": 72582,
+    "asserts": 12092,
+    "blankLines": 6802,
+    "files": 264,
+    "lines": 71951,
     "tautologies": 0,
-    "tests": 2545,
+    "tests": 2523,
     "todos": 0
   }
 }

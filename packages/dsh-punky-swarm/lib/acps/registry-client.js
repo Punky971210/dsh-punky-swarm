@@ -15,25 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// registry-client：半自动注册客户端（registry-server 对接）
-// EAB macKey 本地加密存证（AES-256-GCM）。审计：注册需用户凭据（EAB 要求用户拥有 active AIC），
-// 人工审核不得自动化跳过。
-// 约束：零新 node_modules 依赖——HTTP 用 node:http/https、加密用 node:crypto。
-// 默认关：acps.registry.enabled=false；装配仅建客户端实例，不自动发起注册
-// （注册需用户凭据、人工审核不自动化跳过——半自动注册，动作由用户显式触发）。
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
 
-// ── 配置键默认值（装配契约：acps.registry，默认关）──
-// url：registry public 面 API 基址（默认 http://localhost:9001/api/v1；
-//   传 {origin} 或 {origin}/api/v1 均可，本模块自动规整 apiBase/atrBase）
-// username/password：registry 用户凭据（config/env 注入，不硬编码、不落仓库）
-// eabKey：EAB macKey 本地加密密钥（hex 32B / urlsafe-base64 43-44 字符 / 任意字符串经 sha256 派生 32B；
-//   缺省 null = 禁用加密存证能力，requestEab 仅返回明文凭据由调用方自存，不落盘）
-// token：可选预置 Bearer token（跳过 login；与 username/password 二选一）
-// timeoutMs / rejectUnauthorized：HTTP 层参数（默认 10s / 校验 TLS 证书）
 export const REGISTRY_DEFAULTS = Object.freeze({
   enabled: false,
   url: null,
@@ -45,10 +31,6 @@ export const REGISTRY_DEFAULTS = Object.freeze({
   rejectUnauthorized: true,
 });
 
-// 注册请求结构（对齐参考实现 AgentCreate schema：registry-server/app/agent/schema.py:14-30）
-//   AgentCreate = { name, version, description?, logo_url?, acs?, is_ontology? }
-//   用户侧 upsert 载荷构造见 commands.py:382-391（name/version 取自 ACS 必填文本字段，
-//   description 可选、is_ontology 布尔、acs 原样嵌入）。
 export function buildRegistrationPayload(acs, opts = {}) {
   if (!acs || typeof acs !== 'object') {
     throw new TypeError('buildRegistrationPayload: acs must be an object');
@@ -75,8 +57,6 @@ export function buildRegistrationPayload(acs, opts = {}) {
   return payload;
 }
 
-// 错误类：对齐参考实现 RegistryClientError 语义（registry/client.py:116-142、170-183）——
-//   携带 status_code 与 payload；消息优先取 payload.error.message / detail / title / message。
 export class RegistryClientError extends Error {
   constructor(message, { status = null, payload = null, errorName = null } = {}) {
     super(message);
@@ -110,8 +90,6 @@ function parseUrl(base) {
   }
 }
 
-// atrBase 推导（对齐 acps-cli config.py:29-35 _infer_default_atr_base_url）：
-//   apiBase 形如 {origin}/api/v1 或 {origin} → 统一 {origin}/acps-atr-v2
 export function deriveAtrBaseUrl(apiBaseUrl) {
   const parsed = parseUrl(apiBaseUrl);
   if (!parsed) return null;
@@ -122,9 +100,6 @@ export function deriveAtrBaseUrl(apiBaseUrl) {
   return parsed.toString().replace(/\/+$/, '');
 }
 
-// 配置解析：acps.registry 键（默认关）
-//   enabled=true 且 url 可解析 → 返回启用配置；否则 enabled=false（装配短路，零路径）。
-//   enabled=true 但缺 url → 返回 enabled=false 并携带 reason（供日志告警，不抛错不炸宿主）。
 export function resolveRegistryConfig(config) {
   const c = config?.acps?.registry ?? {};
   const resolved = {
@@ -156,33 +131,19 @@ export function resolveRegistryConfig(config) {
   };
 }
 
-// ── EAB macKey 本地加密存证（Node 侧 AES-256-GCM）──
-// 参考实现服务端用 SM4-CBC 加密 mac_key 后入库（registry-server/app/core/crypto.py:46-53 sm4_encrypt、
-//   app/eab/service.py:63 sm4_encrypt(mac_key, settings.sm4_encryption_key)）；node:crypto 无 SM4 原语，
-//   AES-256-GCM（node:crypto 内建，零新依赖）。差异标注：
-//   - 算法不同：SM4-CBC（对称分组 128bit，PKCS#7）↔ AES-256-GCM（AEAD，密文+认证标签）；
-//   - 存储形态不同：参考实现 iv+密文 urlsafe-base64 拼接（crypto.py:53），本实现 iv+tag+密文 base64
-//     信封对象；
-//   - 不跨节点互操作：SM4 仅 registry 服务端内部存储（消费端 acme.py 收的是明文 macKey），
-//     本加密仅插件本地存证用途，不参与任何跨节点协议（README 标注见 exec/registry.md）。
-// 安全语义：AES-256-GCM 随机 12B IV + 16B auth tag；keyId/macKey 均不落明文（整体加密进 ct）。
 
 function normalizeEabKey(keyInput) {
   if (typeof keyInput !== 'string' || !keyInput) {
     throw new RegistryClientError('EAB encryption key is required (acps.registry.eabKey)', { errorName: 'EAB_KEY_MISSING' });
   }
   const trimmed = keyInput.trim();
-  // hex 32B（64 hex chars）
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return Buffer.from(trimmed, 'hex');
-  // urlsafe-base64 32B（43-44 chars，无 padding 或带 padding）
   if (/^[A-Za-z0-9_-]{43}=?$/.test(trimmed)) {
     try {
       return Buffer.from(trimmed.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
     } catch {
-      // fallthrough 到 sha256 派生
     }
   }
-  // 其余字符串：sha256 派生 32B（确定性，非密码学 KDF——密钥本身来自 config/env，非用户口令）
   return crypto.createHash('sha256').update(trimmed, 'utf8').digest();
 }
 
@@ -190,7 +151,6 @@ function b64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// 加密 EAB 凭据（keyId/macKey 不落明文）→ 信封对象 { v, alg, aic, expiresAt, iv, tag, ct }
 export function encryptEabCredential(credential, keyInput) {
   if (!credential || typeof credential !== 'object') {
     throw new RegistryClientError('encryptEabCredential: credential must be an object', { errorName: 'EAB_CREDENTIAL_INVALID' });
@@ -218,11 +178,6 @@ export function encryptEabCredential(credential, keyInput) {
 }
 
 
-// ── HTTP 层（node:http/https 内建，零新依赖）──
-// 对齐参考实现 RegistryApiClient._request 语义（client.py:63-142）：
-//   - 非 2xx → RegistryClientError（status + payload）
-//   - 204/空响应 → {}
-//   - JSON 解析失败 → RegistryClientError
 function httpRequest(method, url, { headers = {}, body = null, timeoutMs = 10000, rejectUnauthorized = true } = {}) {
   return new Promise((resolve, reject) => {
     let parsed;
@@ -293,15 +248,8 @@ function httpRequest(method, url, { headers = {}, body = null, timeoutMs = 10000
   });
 }
 
-// ── RegistryClient：半自动注册客户端 ──
-// 方法与参考实现 acps-cli RegistryApiClient / commands 编排对齐（见文件头映射）。
-// 半自动语义（V3）：login/upsert/submit/requestEab 均为显式动作；本体注册需人工审核
-// （submit 后由 registry staff 审批，服务端在审批通过时分配权威 AIC——service_command.py:368-369），
-// 本客户端不模拟、不绕过、不自动重试审核；checkAgent 供轮询审批状态。
 export class RegistryClient {
   constructor(config) {
-    // 支持两种输入形态：原始插件 config（{ acps: { registry: {...} } }）或
-    // resolveRegistryConfig 已解析配置（含 enabled/apiBaseUrl/atrBaseUrl 平铺键）
     const resolved = (config && config.acps && config.acps.registry) ? resolveRegistryConfig(config) : config;
     if (!resolved || resolved.enabled !== true) {
       throw new RegistryClientError('acps.registry is disabled (acps.registry.enabled=true and registry.url required)', {
@@ -356,7 +304,6 @@ export class RegistryClient {
     return data;
   }
 
-  // 登录（对齐 client.py:185-195：POST /auth/login，form username/password → {access_token,...}）
   async login() {
     const { username, password } = this.config;
     if (!username || !password) {
@@ -372,11 +319,9 @@ export class RegistryClient {
     return result;
   }
 
-  // 当前用户 Agent 列表（对齐 client.py:275-300 list_my_agents：GET /agent/client + 查询参数）
   async listMyAgents({ pageNum = 1, pageSize = 100, statuses = [], name = null, version = null, aic = null, isDeleted = false } = {}) {
     const params = new URLSearchParams({ page_num: String(pageNum), page_size: String(pageSize) });
     if (Array.isArray(statuses) && statuses.length) {
-      // 对齐参考实现 list_my_agents（client.py:286-288）：statuses 列表 → 重复 query 键（FastAPI list 参数）
       for (const s of statuses) params.append('statuses', String(s));
     }
     if (name) params.append('name', name);
@@ -390,7 +335,6 @@ export class RegistryClient {
     return result;
   }
 
-  // 按 AIC / name+version 定位本人 Agent（对齐 commands.py:133-142 _resolve_agent_from_acs）
   async findMyAgent({ aic = null, name = null, version = null } = {}) {
     if (aic) {
       const byAic = await this.listMyAgents({ aic: aic.trim().toUpperCase() });
@@ -405,8 +349,6 @@ export class RegistryClient {
     return null;
   }
 
-  // 创建/更新 Agent（对齐 commands.py upsert_agent 361-414 + schema.py AgentCreate 14-30）：
-  //   按 name+version 查已有 → 有则 PUT 更新，无则 POST 创建；返回 { action:'created'|'updated', agent }
   async upsertAgent(acs, opts = {}) {
     const payload = buildRegistrationPayload(acs, opts);
     const existing = await this.findMyAgent({ name: payload.name, version: payload.version });
@@ -418,14 +360,11 @@ export class RegistryClient {
     return { action: 'created', agent };
   }
 
-  // 提交人工审核（对齐 client.py:314-318 + commands.py submit 417-438；V3：审核不自动化跳过）
   async submitAgent(agentId) {
     const agent = await this._request('POST', `/agent/client/${agentId}/submit`, { auth: true });
     return agent;
   }
 
-  // 注册状态查询（对齐 commands.py check 507-541 _derive_agent_status 157-165）：
-  //   返回 { status, agent? }，status ∈ draft/pending/approved/rejected/unknown/missing
   async checkAgent(acs) {
     const payload = buildRegistrationPayload(acs, {});
     const agent = await this.findMyAgent({ aic: typeof acs.aic === 'string' ? acs.aic : null, name: payload.name, version: payload.version });
@@ -440,9 +379,6 @@ export class RegistryClient {
     return { status, agent };
   }
 
-  // 获取 EAB 凭据（对齐 eab/api.py:43-59 + client.py:438-447：POST {atrBase}/eab/{aic}，JWT）
-  //   返回 { keyId, macKey, aic, expiresAt }；V3 语义：仅限本人 active AIC（service.py:51-55），
-  //   403 = 非本人/非 active。
   async requestEab(aic) {
     if (!aic || typeof aic !== 'string' || !aic.trim()) {
       throw new RegistryClientError('requestEab requires aic', { errorName: 'AIC_REQUIRED' });
@@ -457,7 +393,6 @@ export class RegistryClient {
     return result;
   }
 
-  // EAB 凭据 → AES-GCM 加密信封（keyId/macKey 不落明文）
   encryptEab(credential) {
     if (!this.config.eabKey) {
       throw new RegistryClientError('acps.registry.eabKey is not configured; cannot encrypt EAB credential', {
@@ -467,8 +402,6 @@ export class RegistryClient {
     return encryptEabCredential(credential, this.config.eabKey);
   }
 
-  // 公开 ACS 查询（对齐 api_atr.py:118-188 get_agent_acs_by_aic：GET {atrBase}/acs/{aic}，
-  //   非 active → 403；用于 V3 存证验证）
   async queryAcs(aic) {
     if (!aic || typeof aic !== 'string' || !aic.trim()) {
       throw new RegistryClientError('queryAcs requires aic', { errorName: 'AIC_REQUIRED' });
@@ -480,7 +413,6 @@ export class RegistryClient {
   }
 }
 
-// 工厂：配置 → RegistryClient（装配用；enabled=false 返回 null——短路零路径）
 export function createRegistryClient(config) {
   const resolved = resolveRegistryConfig(config);
   if (!resolved.enabled) return null;

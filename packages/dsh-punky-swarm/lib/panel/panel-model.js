@@ -147,8 +147,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return null;
     }
 
-    // 事件 type → 人话 key / 类别 / 高亮级；未知 type ⇒ key:null（渲染层回退原始 type，禁伪人话）。
-    // 规则表按序首命中；`raw` 恒为原始 type（「原始 type」开关与工程师排查用）。
     const EVENT_VIEW_RULES = [
       { re: /^member\.settled$/, key: 'event.member.settled', category: 'member', severity: 'info' },
       { re: /^member\.dispatch$/, key: 'event.member.dispatched', category: 'member', severity: 'info' },
@@ -163,8 +161,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       { re: /^lane\.binding_gap$/, key: 'event.member.binding', category: 'member', severity: 'warn' },
       { re: /^human\.decision$/, key: 'event.member.decision', category: 'member', severity: 'info' },
       { re: /^asset\.claimed$/, key: 'event.member.claimed', category: 'member', severity: 'none' },
-      // 【B-5】出池留痕（`member.js` 派发时写 `{lane, owner, from}`）此前无人话规则 ⇒ 回退裸 type。
-      //   归 member 面（语义 = 派发/归属），与上方 `member.dispatch` 同族但**不同源**（后者是引擎自派事件）。
       { re: /^task\.owner\.assigned$/, key: 'event.member.assigned', category: 'member', severity: 'info' },
       { re: /^lane\.handoff\.gap$/, key: 'event.handoff.gap', category: 'handoff', severity: 'error' },
       { re: /^lane\.handoff$/, key: 'event.handoff.submitted', category: 'handoff', severity: 'info' },
@@ -180,17 +176,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       { re: /^gate\./, key: 'event.gate.blocked', category: 'gate', severity: 'error' },
       { re: /^governance\./, key: 'event.governance', category: 'gate', severity: 'warn' },
       { re: /^auto\.settle\./, key: 'event.chain.settle', category: 'chain', severity: 'info' },
-      // 【B-5】图变更留痕（`batch_tasks_add` / `task_update` 各写一条，`plan-mutate.js`）此前无规则
-      //   ⇒ 面板显示裸 type。归 phase 面：它是**批级计划状态**变更（非某 lane 的成员状态），且事件不带 lane。
       { re: /^plan\.mutated$/, key: 'event.plan.mutated', category: 'phase', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
       { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
-      // 【2026-09-28 · 批 `cleanup-tail-20260927` E-4｜2026-09-29 批 `cleanup-settle-20260929` G-1 改写】原
-      //   **已退役事件**（码值入退役锁）的 phase 分类器**已删**：该事件常量零发射点且已随批删净 ⇒ 分类器
-      //   为**死分类器**；其配套 locale 键（`lib/panel/locales.js` zh/en 各一条）同批删除。
-      //   ⚠ 本注释**禁**再写该码值的**正则源码形态**（分隔符前带反斜杠）—— 那是逐字匹配的盲区（转义变体
-      //   漏网，本会话已复发 2 次）；归一化守卫见 `test/hygiene-comment-literals.test.js`（判据 G-1）。
       { re: /^batch\.smoke$/, key: 'event.phase.smoke', category: 'phase', severity: 'none' },
       { re: /^batch\.abort_dangling$/, key: 'event.phase.dangling', category: 'phase', severity: 'warn' },
       { re: /^batch\.(failed-escalate|governance-escalate)$/, key: 'event.phase.escalate', category: 'phase', severity: 'error' },

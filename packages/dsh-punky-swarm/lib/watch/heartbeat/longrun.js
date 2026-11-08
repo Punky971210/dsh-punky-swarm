@@ -15,10 +15,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// longrun 档（超时重派探针）：候选产出 / 消费超时 / 扫描准入 / 只读查询
-//   （【2026-10-02 · 内务批 波 2】随 `createLaneHeartbeat` 巨型函数拆分下沉，代码逐字搬移）。
-//   判据本体（`judgeLongrun` / 盲跑 `blindRunVerdict`）仍在 `../lane-heartbeat.js`（导出面不动），
-//   本文件只承载「闭包内」的候选投递与扫描编排（环依赖为**函数声明**，运行期调用安全）。
 import * as schema from '../../schema.js';
 import * as EVT from '../../state/event-types.js';
 import {
@@ -151,16 +147,6 @@ export function emitUnconsumed(cx, sessionId, batchId, batch, lane, nowTs) {
     });
   } catch { /* 批次终态/不存在 → 静默 */ }
 }
-// longrun 扫描档（状态面扩面后的准入矩阵，§1.2）：
-//   批次 {running, paused} 扫；批次 {planning} 不扫成员（只许登记）；批次终态 {aborted, complete} 整批跳过
-//   （悬挂视图由只读查询面恒显，探针侧**不产任何候选/不写任何事件**——终态批不可再写）。
-//   lane 侧：**非终态全集合** {pending, running, review, idle} 各走自身判据（一态一判据）；终态 lane 跳过。
-//   僵尸批次（末事件早于 staleBatchMs）整批跳过——其 running 是历史残留，扫描只产噪音；
-//   阈值 0 = 显式关闭过滤（逃生阀）。过滤只作用本档，不影响 stalled 档与批次状态
-//   （**悬挂视图不受该过滤**——终态批天然「末事件早于 24h」，沿用会让该视图自我抹掉）。
-//   ★ P1：扫描面改由**单趟全库扫描行**（`scan.js`）驱动——`rows` 缺省时自行扫描（独立调用方零破坏）。
-//     跳过判据**一字未改**（本函数内三道 guard 逐字保留）：预筛行（batch 为 null = phase 命中
-//     planning/complete/aborted）与原「读整批 → 判终态/planning → continue」等价。
 export function longrunScan(cx, nowTs, rows = null) {
   const list = rows ?? scanBatchesOnce(cx);
   for (const row of list) {

@@ -15,35 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// ============================================================
-// SSE hub（面板推送）
-//
-// 职责：会话级订阅集合 + 三路触发源（① topic 事件（enabled 时 attachTopic 接线）
-//   ② fs.watch <root>/sessions/<sid> 批次/mailbox 目录（防抖 300ms）
-//   ③ 10s 心跳帧（event: heartbeat + 注释帧 : ping 保活））
-// 推送粒度：只推轻量摘要 { sessionId, batchId, eventCount, updatedAt }，
-//   客户端收到信号后回拉既有只读 API 取全量——正确性由回拉兜底，本模块零快照逻辑。
-//
-// 简化标注（逐项落地）：
-//   1. 多路复用通道协议 → 不做：单流 + event: batch|mailbox|heartbeat 类型区分
-//      （面板只读监控两种事件，单流足够）
-//   2. 断线指数退避重连 → 不做：依赖 EventSource 自动重连 + 客户端回退轮询
-//   3. 服务端背压/流控队列 → 不做：write 失败即断开该订阅者（客户端重连）
-//   4. 事件级增量快照 → 不做：推送信号 + 客户端回拉全量（服务端无快照逻辑）
-//   5. 鉴权/会话扩展 → 不做：沿用既有 /api 会话语义（session query 参数）
-//
-// 零新依赖：node:fs watch + 宿主注入的 node:http ServerResponse（writeHead/write）
-//   + 浏览器内置 EventSource（客户端侧）。无独立配置键：随 webServer 挂载，
-//   降级回轮询即运行时自适配开关。
-// ============================================================
 
 import { watch } from 'node:fs';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { subscribeTopicPrefix } from '../comms/topic.js';
-// 读端容忍 BOM：批 JSON 可能被外部工具（PowerShell `Set-Content -Encoding UTF8`）写带 U+FEFF，
-//   readFileSync 不剥 BOM → JSON.parse 抛 SyntaxError 被 catch 吞成 null（静默计数失效）。
-//   复用 hot/config-watch.js 既有 stripBom（与 webui/runtime-config.js#readOverlay 同一单一实现，禁第三份副本）。
 import { stripBom } from '../hot/config-watch.js';
 
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
@@ -123,7 +99,6 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
     try { res.write(chunk); return true; } catch { return false; }
   }
 
-  // 推送单帧；write 失败 → 断开该订阅者（客户端自动重连/回退轮询）
   function push(s, res, event, data) {
     if (!writeRes(res, frame(event, data))) {
       detach(res);

@@ -58,7 +58,6 @@ const BREAKER_PROBE_INTERVAL = 1000;
 const MAX_SINK_ERROR_RECORDS = 3;
 /** 诊断面 lastError 截断长度 */
 const MAX_ERROR_CHARS = 500;
-/** 【2026-10-23 · 批 punky-logfix-20261023/Q-19b】进程生命周期内 stderr 告警**硬上限**（首失败 1 + 断路器跳闸 1） */
 const MAX_STDERR_NOTICES = 2;
 /** 同上：stderr 告警行内 error 截断长度（不引 MAX_ERROR_CHARS=500，避免单行过长刷屏） */
 const MAX_STDERR_ERROR_CHARS = 200;
@@ -289,15 +288,6 @@ function fallbackFormat(args) {
   return format;
 }
 
-/**
- * 内核 `Logger.format` 的安全包装。
- *
- * **实测缺陷**：内核 `Logger.format` 的 `%o/%O` 格式化器直接
- * `JSON.stringify(value)` 且**无 try 保护**（cordis `lib/index.js:405/441`）——传入循环引用 / BigInt 实参时
- * 从 `Logger.format` 抛出，异常会穿到 `ctx.logger.*` 调用点，与 L6「绝不 rethrow」的口径锚点冲突。
- * 故此处把渲染**整体**包进 try：成功用内核渲染结果（与宿主日志逐字一致）；失败降级为本地同源渲染，
- * 行本身照常落盘（可观测），异常不外抛。
- */
 function safeFormat(message, rawArgs) {
   try {
     return Logger.format({ colors: false, maxLength: 10240 }, { ...message, args: rawArgs });
@@ -478,15 +468,6 @@ function parseSegmentName(name) {
   return { day: m[1], segment: m[2] ? Number(m[2]) : 0 };
 }
 
-/**
- * 保留天数清理的 cutoff 日期：以 `baseToday`（本地日历日 `YYYY-MM-DD`）为基准回退 `keepDays` 天。
- *
- * 【批次 `punky-guidance-teams-20261025` · lane c7-cutoff-param】基准日**必须由入参给定**，
- * 不再读真实时钟：否则 `pruneByAge` 的第 3 参 `today` 只能构造「当日」判等，cutoff 恒锚定真实
- * 今天的相对位置 ⇒ **无法把 cutoff 挪到任意历史日期**（零点前后成不可判定窗口，测试只能靠
- * 「真实时钟 ≫ 字面日」白捡结论）。
- * 未导出：外部注入点 = `pruneByAge` 第 3 参；导出即新增公开面。
- */
 function todayCutoffDay(keepDays, baseToday) {
   return localDateKey(new Date(Date.parse(baseToday + 'T00:00:00') - keepDays * DAY_MS));
 }
@@ -554,10 +535,6 @@ export function pruneByAge(sinkDir, keepDays, today = localDateKey(new Date()), 
  */
 function scanSinkDir(sinkDir, logger) {
   let names;
-  // 【sink 三态（批 `punky-presmoke-2026-10-31`）】**不存在** = 正常（首启尚未建目录）⇒ `null` 且**无 warn**；
-  //   **不可读**（权限/句柄/IO 错）= 事故 ⇒ `warn` 后 `null`（清理会静默失效 ⇒ 日志无界增长）；
-  //   **正常** ⇒ 无 warn。⚠ 两者返回同为 `null`，**区分靠 warn**（返回形状是本函数既有契约，
-  //   改成结构化返回值会波及 `pruneByTotal` 的所有调用方 ⇒ 本批不做，登记为形状变更候选）。
   if (!fs.existsSync(sinkDir)) return null; // 不存在：正常态，零 warn
   try { names = fs.readdirSync(sinkDir); } catch (e) {
     (typeof logger !== 'undefined' ? logger : undefined)?.warn?.('[dsh-punky-swarm] sink-dir-unreadable: '
@@ -726,20 +703,6 @@ function stdoutWrite(rec) {
   }
 }
 
-/**
- * stderr 告警单点（【2026-10-23 · 批 punky-logfix-20261023/Q-19b】用户裁决：降级路径最后一跳必须可见）。
- *
- * 契约：
- * - **硬上限**：进程生命周期最多 MAX_STDERR_NOTICES 条（首失败 1 + 断路器跳闸 1）；
- * - **幂等**：同一 key 只发一次（上限 + 键去重双保险）；
- * - **不自噬**：stderr 自身写失败一律吞掉 —— 不产生新记录、不改任何计数、不向上冒泡；
- * - **不越界**：只写 `process.stderr`（宿主协议面走 stdout，此处绝不触碰）、不落 sink（sink 已不可写）、
- *   不进聚合窗口、不新增事件码。
- *
- * 行格式契约（audit 可据此 grep，不依赖中文）：`[punky-auditlog] ` + **单行**正文 + `\n`。
- * 单行由本函数**兜底**：正文内的换行与其后缩进一律折叠为一个空格 —— `lastError` 带栈时
- * （`recordError` 存的是 `error.stack`）若不折叠，一条告警会被行计数读成多行（实测：8 次失败读成 3 行）。
- */
 function noticeStderr(key, body) {
   if (state.stderrNotices >= MAX_STDERR_NOTICES) return;
   if (state.stderrNoticedKeys.includes(key)) return;
@@ -799,10 +762,6 @@ function shouldSkipByBreaker() {
   return true;
 }
 
-/**
- * 接管既有分卷（「只 append、永不改写」，单调不回退）：
- * 启动时若当日主卷+分卷已存在，从最大序号续写；进程内 segment 只增不减。
- */
 function takeoverExistingSegment(day) {
   const mainBytes = fileBytesOrNull(segmentPath(day, 0));
   if (mainBytes === null) {
@@ -812,7 +771,6 @@ function takeoverExistingSegment(day) {
     state.segment = 0;
     state.segmentBytes = mainBytes;
   }
-  // 探测既有分卷上界（接管语义：从已存在的分卷续写、不回退；无既有分卷时 maxSegmentSeen = 1）
   state.maxSegmentSeen = 1;
   for (let i = 1; i <= MAX_ROTATE_ATTEMPTS; i++) {
     const bytes = fileBytesOrNull(segmentPath(day, i));
@@ -1019,8 +977,6 @@ export function mountAuditLog(ctx, opts = {}) {
     // 【sink 三态】挂载期本次调用作用域内 logger 可得（`:965 const logger = ctx?.root?.logger ?? ctx?.logger`）⇒ 真传
     const pruned = pruneByTotal(state.sinkDir, c.maxTotalBytes, { pruneStray: c.pruneStray, logger });
     state.strays = pruned.strays;                 // 【D-16-②】诊断面读数（挂载期实测；含是否 opt-in）
-    // 【D-16-②】stray 外显面：**挂载期一条 warn**（`warn` 通道，不走 stderr —— MAX_STDERR_NOTICES=2
-    // 是硬契约，`test/auditlog-sink-stderr.test.js` AC-3 断言「恰 2 行」）。无 stray ⇒ 零新增输出。
     if (pruned.strays.count > 0) {
       warn('capabilities.auditlog: sink 目录含 ' + pruned.strays.count + ' 个非分卷名文件（stray，'
         + pruned.strays.bytes + ' 字节，已计入总量上限）：' + pruned.strays.names.join(', ')
