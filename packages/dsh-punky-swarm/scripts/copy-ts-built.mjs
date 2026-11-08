@@ -51,10 +51,6 @@ const files = [
   // 【P2 · arch-context】架构上下文注入件（`lib/engine/arch-context.ts`）：.ts 源 → 同目录 .js/.d.ts 回拷。
   //   漏本行 ⇒ lib 下无该模块 ⇒ `dispatch.js` 的 import 运行期 `ERR_MODULE_NOT_FOUND`。
   'engine/arch-context.js', 'engine/arch-context.d.ts',
-  // 【2026-10-29 · G0 冻结件 · lane first-increment】端口纯类型骨架（`lib/ports.ts`）：.ts 源 → 同目录 .js/.d.ts 回拷。
-  //   当前 `lib/ports.ts` 零运行期 import、且尚未被任何模块 import（只写类型不接线）；本行是**前向保险**——
-  //   后续阶段一旦接线，漏登记即「.tsbuild 里有、运行期 ERR_MODULE_NOT_FOUND」（同 `rule-propagation.ts` 的 RED 先例）。
-  'ports.js', 'ports.d.ts',
 ];
 
 for (const f of files) {

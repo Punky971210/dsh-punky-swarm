@@ -361,11 +361,11 @@
       "todos": 0
     },
     "test/cancel-result-three-state.test.js": {
-      "asserts": 15,
-      "blankLines": 11,
-      "lines": 80,
+      "asserts": 13,
+      "blankLines": 10,
+      "lines": 72,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 7,
       "todos": 0
     },
     "test/chain-v2-pairing.test.js": {
@@ -774,30 +774,6 @@
       "lines": 191,
       "tautologies": 0,
       "tests": 3,
-      "todos": 0
-    },
-    "test/g2-bus-falsify.test.js": {
-      "asserts": 54,
-      "blankLines": 35,
-      "lines": 308,
-      "tautologies": 0,
-      "tests": 10,
-      "todos": 0
-    },
-    "test/g2-harden-latch.test.js": {
-      "asserts": 24,
-      "blankLines": 16,
-      "lines": 157,
-      "tautologies": 0,
-      "tests": 5,
-      "todos": 0
-    },
-    "test/g2-ports-contract.test.js": {
-      "asserts": 23,
-      "blankLines": 26,
-      "lines": 210,
-      "tautologies": 0,
-      "tests": 6,
       "todos": 0
     },
     "test/g2-t4-stop-reason-source.test.js": {
@@ -1721,11 +1697,11 @@
       "todos": 0
     },
     "test/roster-self-held.test.js": {
-      "asserts": 42,
-      "blankLines": 40,
-      "lines": 320,
+      "asserts": 35,
+      "blankLines": 30,
+      "lines": 219,
       "tautologies": 0,
-      "tests": 11,
+      "tests": 7,
       "todos": 0
     },
     "test/roster-source-face.test.js": {
@@ -2177,7 +2153,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T04:17:53Z",
+  "generatedAt": "2026-11-08T04:36:35Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,15 +2164,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B2-a 删除零消费者抽象 make-tool / engine-events 及其行为测试（重构批 refactor/quality-20261108）",
+  "reason": "B2-b1 删 ports/bus 后清理依赖测试（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 12374,
-    "blankLines": 6993,
-    "files": 272,
-    "lines": 73724,
+    "asserts": 12264,
+    "blankLines": 6905,
+    "files": 269,
+    "lines": 72940,
     "tautologies": 0,
-    "tests": 2589,
+    "tests": 2563,
     "todos": 0
   }
 }

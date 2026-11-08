@@ -58,14 +58,6 @@ test('V-6 ★fail-closed 关键点：宿主返回 undefined / null / 垃圾值 �
   }
 });
 
-test('V-7 null 适配器（bus）也必须显式三态、不得返 undefined（源码守卫）', () => {
-  const src = fs.readFileSync(fileURLToPath(new URL('../lib/bus/index.js', import.meta.url)), 'utf8');
-  assert.equal(/cancel:\s*async\s*\(\)\s*=>\s*\{\s*\}/.test(src), false,
-    'null 适配器的 cancel **不得**仍是空函数体（那会返回 undefined ⇒ 契约违背）');
-  assert.match(src, /cancel:\s*async\s*\(\)\s*=>\s*\(\s*\{\s*outcome:\s*'skipped'/,
-    'null 适配器必须显式返回 skip 三态（无运行时 ⇒ 无对象可取消，但不是「已停」）');
-});
-
 test('V-8 变异（改回恒 void）：不可识别形态会退化成 undefined ⇒ 本文件的 V-6 必红', async () => {
   // 变异体 = 契约修复前的行为：把宿主返回**原样透出**（`Promise<void>` 语义）
   const voidAdapter = async (cancelImpl) => cancelImpl();
