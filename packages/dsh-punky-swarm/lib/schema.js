@@ -21,8 +21,7 @@ export const MEMBER_STATES = [
 ];
 // 批次阶段：planning -> running -> paused -> aborted | complete
 export const BATCH_PHASES = ['planning', 'running', 'paused', 'aborted', 'complete'];
-export const SETTLE_STATES = ['merged', 'failed', 'skipped'];
-export const MEMBER_TRANSITIONS = {
+export const SETTLE_STATES = ['merged', 'failed', 'skipped'];export const MEMBER_TRANSITIONS = {
     pending: ['running', 'failed', 'skipped'],
     running: ['review', 'failed', 'skipped'],
     review: ['merged', 'conflict', 'failed'], // 返工边（`review → running`）已于 2026-09-21 去除（K3）：失败即终态，返工 = gap-list + 新任务批次
@@ -32,6 +31,15 @@ export const MEMBER_TRANSITIONS = {
     skipped: [],
     conflict: [],
 };
+// 工具面枚举**只从这里派生**（`member_settle` / `member_set_status` 的参数 enum 不得手抄第二份）：
+//   终态 = 迁移表里无出边的态（排除恢复专用 `idle`）；可设非终态 = 有出边且非 `idle` 的态。
+//   顺序取迁移表声明序 ⇒ 参数枚举跨版本稳定。
+export const TERMINAL_MEMBER_STATES = Object.freeze(
+    Object.keys(MEMBER_TRANSITIONS).filter((s) => MEMBER_TRANSITIONS[s].length === 0 && s !== 'idle'),
+);
+export const SETTABLE_MEMBER_STATES = Object.freeze(
+    Object.keys(MEMBER_TRANSITIONS).filter((s) => MEMBER_TRANSITIONS[s].length > 0 && s !== 'idle'),
+);
 // 恢复/回收专用「入 idle」边 `RECOVERY_IDLE_FROM`（**刻意不入 MEMBER_TRANSITIONS**）：
 //   棘轮地板不得放宽（machine-rules 的 allowRelax 逃生门只管「收紧」，默认表一放就不可回收）；
 //   且 test/outcome-typing.test.js 显式断言 canTransitionMember('running','idle') === false。

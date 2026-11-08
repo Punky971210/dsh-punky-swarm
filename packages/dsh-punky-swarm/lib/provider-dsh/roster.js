@@ -30,17 +30,6 @@ const idOfRow = (row) => (row && typeof row === 'object')
   ? (typeof row.id === 'string' ? row.id : (typeof row.sessionId === 'string' ? row.sessionId : null))
   : null;
 
-export function anchorOf(spawnResult) {
-  if (!spawnResult || typeof spawnResult !== 'object') return { seatId: null, anchorKind: null };
-  for (const key of ['subagentId', 'id', 'sessionId']) {
-    const v = spawnResult[key];
-    if (typeof v === 'string' && v.length > 0) return { seatId: v, anchorKind: 'subagent-id' };
-  }
-  const name = nameOfRow(spawnResult);
-  if (typeof name === 'string' && name.length > 0) return { seatId: name, anchorKind: 'agent-team-name' };
-  return { seatId: null, anchorKind: null };
-}
-
 /**
  * @param {object} ctx   插件上下文（**只在本文件被用来取宿主服务**）
  * @param {object} [agent] 查询凭据（宿主 `listMembers(agent)` 要求「live Team member 的 agent」）

@@ -182,14 +182,12 @@ export function installDifficultyGuard(ctx, deps) {
           tier: g?.lastAssign?.difficulty ?? null,
           toolName: execution.name,
           argsText: textOfDispatchArgs(execution.arguments),
-          config: readLiveConfig(deps),
           handleCheck: (t) => {
             const h = parseLaneHandleFromText(t);
             return h ? verifyLaneHandle(h.token, { batchId: h.batchId, lane: h.lane }) : { ok: false, reason: 'no-handle' };
           },
         });
-        if (dec.denyReason) reason = dec.denyReason;
-        else if (dec.warnNote) ctx.logger?.warn?.('[dsh-punky-swarm] ' + dec.warnNote);
+        if (dec.warnNote) ctx.logger?.warn?.('[dsh-punky-swarm] ' + dec.warnNote);
       }
       //   位置纪律：本条 `return` 必须早于**任何** store 写（下方 `bumpExecCount` 就是 store 写 ⇒
       //   拒时不得执行）⇒ 「拒 = 零预写」由**行序**即成立，不是靠事后回滚或调用方自觉。

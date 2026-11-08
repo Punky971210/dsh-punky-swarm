@@ -585,9 +585,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 215,
+      "asserts": 207,
       "blankLines": 57,
-      "lines": 878,
+      "lines": 861,
       "tautologies": 0,
       "tests": 42,
       "todos": 0
@@ -1729,11 +1729,11 @@
       "todos": 0
     },
     "test/settle-decoupled.test.js": {
-      "asserts": 20,
-      "blankLines": 9,
-      "lines": 103,
+      "asserts": 11,
+      "blankLines": 12,
+      "lines": 90,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 4,
       "todos": 0
     },
     "test/shell-text.test.js": {
@@ -1785,9 +1785,9 @@
       "todos": 0
     },
     "test/suite-consistency-and-hot.test.js": {
-      "asserts": 44,
-      "blankLines": 21,
-      "lines": 387,
+      "asserts": 43,
+      "blankLines": 20,
+      "lines": 381,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -2129,7 +2129,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T09:33:10Z",
+  "generatedAt": "2026-11-08T09:38:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2140,15 +2140,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/③ 交接收口：gate-artifact-containment 的 stub store 补 handoffRecordVerdict（真实 store 的判据由 handoff-single-source 覆盖）",
+  "reason": "B4/④ 成员管理批：删 dispatch.gate 零行为开关与 denyReason 空槽；删 anchorOf；成员态 enum 从迁移表派生；settle.js 内联进 member_settle",
   "schema": 1,
   "totals": {
-    "asserts": 11942,
-    "blankLines": 6778,
+    "asserts": 11924,
+    "blankLines": 6780,
     "files": 266,
-    "lines": 71519,
+    "lines": 71483,
     "tautologies": 0,
-    "tests": 2494,
+    "tests": 2493,
     "todos": 0
   }
 }

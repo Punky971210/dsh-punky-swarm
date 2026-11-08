@@ -20,8 +20,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, assertMemberActionTierC, readLiveConfig, lockPath, ownerOfExec } from './tier-gate.js';
 import { dispatchBindingDecision } from '../verify/binding.js';
-import { settleDecoupled } from '../engine/settle.js';
 import * as lock from '../lock.js';
+import { TERMINAL_MEMBER_STATES, SETTABLE_MEMBER_STATES } from '../schema.js';
 import {
   dispatchLaneCore,
 } from '../engine/dispatch.js';
@@ -67,7 +67,7 @@ export function buildLaneTools(cx) {
     defineTool({
       name: "member_settle",
       description: "成员结算：running->review->merged/failed/skipped/conflict，限该批 owner 或已登记 Manager。merged 前验 Tier3（plan 契约、exec outputs、audit produce、targets 落盘）；audit lane 产物含独立行 needHuman: true 时 merged 的 note 须带 human:<裁决人>:<时间>:<结论>，缺则拒 GATE_NEEDHUMAN_PENDING（conflict 驳回不强制）；exec 层可声明 gate: <命令>（exit 0 通过）。audit lane 不自动结算 ⇒ 先 member_set_status(review) 再调本工具；完成判定靠三查（batch_status、log_export、产物根 glob）。abort 批 danglingLanes 属预期残留。失败必带 GATE_* 码。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":["merged","failed","skipped","conflict"]},"note":{"type":"string","description":"简短备注（只留元数据，不复制正文）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":TERMINAL_MEMBER_STATES},"note":{"type":"string","description":"简短备注（只留元数据，不复制正文）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' settled -> ' + value.status),
@@ -82,16 +82,16 @@ export function buildLaneTools(cx) {
           where: 'member_settle(lane=' + args.lane + ')',
         });
         if (!bindingOfSettle.ok) throw new Error(bindingOfSettle.reason);
-        const settleOutcome = settleDecoupled({
-          store,
-          sessionId,
-          batchId: args.batchId,
-          lane: args.lane,
-          status: args.status,
-          note: args.note ?? null,
-          settle: (b) => store.batchSettled(b),
-        });
-        return { batchId: args.batchId, lane: args.lane, status: settleOutcome.batch.lanes[args.lane], settled: settleOutcome.settled };
+        // 状态推进与「批是否收口」解耦：**结算旁挂失败不得阻塞状态推进**。
+        const before = store.readBatch(sessionId, args.batchId);
+        if (before && before.lanes && before.lanes[args.lane] === args.status) {
+          // 幂等：同态重复结算 ⇒ 零写（不重复落事件、不抖动相位）
+          return { batchId: args.batchId, lane: args.lane, status: args.status, settled: true };
+        }
+        const settledBatch = store.setMember(sessionId, args.batchId, args.lane, args.status, args.note ?? null);
+        let settled = false;
+        try { settled = store.batchSettled(settledBatch) !== false; } catch { settled = false; }
+        return { batchId: args.batchId, lane: args.lane, status: settledBatch.lanes[args.lane], settled };
       },
     }),
   ];
@@ -137,7 +137,7 @@ export function buildMemberStatusTools(cx) {
     defineTool({
       name: "member_set_status",
       description: '成员状态操作（非终态）：pending->running（派发）、running->review（提交评审）、idle->running（恢复重派）；闭集不含 idle（该态只能经恢复/回收单点进入）。限该批 owner 或已登记 Manager。running 可带 exempt。终态结算用 member_settle。',
-      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":["pending","running","review"],"description":"目标成员态（闭集不含 idle：该态只能经恢复/回收单点进入，设置必被状态机拒）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 豁免（仅 status=running 可带）：type=ai-render|large-download|dep-install|none（档位 8/6/4/4）；multiplier [1,100]；stalled 缺省 true","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true,"enum":SETTABLE_MEMBER_STATES,"description":"目标成员态（闭集不含 idle：该态只能经恢复/回收单点进入，设置必被状态机拒）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"exempt":{"type":"object","additionalProperties":false,"description":"longrun 豁免（仅 status=running 可带）：type=ai-render|large-download|dep-install|none（档位 8/6/4/4）；multiplier [1,100]；stalled 缺省 true","properties":{"type":{"type":"string","required":true,"enum":["ai-render","large-download","dep-install","none"]},"multiplier":{"type":"number"},"stalled":{"type":"boolean"}}}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"status":{"type":"string","required":true},"settled":{"type":"boolean","required":true}}},
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' status -> ' + value.status),

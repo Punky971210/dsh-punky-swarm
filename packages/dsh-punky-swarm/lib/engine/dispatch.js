@@ -876,16 +876,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   return { ...base, spawned: true, workerSessionId };
 }
 
-export function readGateMode(config) {
-  return 'warn';
-}
-
-export function configuredGateMode(config) {
-  const m = config?.dispatch?.gate;
-  return typeof m === 'string' && m.length > 0 ? m : null;
-}
-
-
+// C 档无句柄派发：**只有一档生效 = 留痕不拦**（`enforce` 拒态已随码删除，勿回加）。
+//   原 `config.dispatch.gate` 键已删：它只改留痕文案、从不改变判定 ⇒ 零行为开关 + 误导性观测面。
 export function laneBindingOf(store, sessionId, logger) {
   if (!sessionId || !store || typeof store.listAllBatches !== 'function') return null;
   let all = [];
@@ -925,21 +917,17 @@ export { mailboxRootOf } from '../mailbox-paths.js';
 
 export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inbox' });
 
-export function evaluateTierCDispatch({ tier, toolName, argsText, config, handleCheck }) {
-  const mode = readGateMode(config);
-  const configuredMode = configuredGateMode(config);
+export function evaluateTierCDispatch({ tier, toolName, argsText, handleCheck }) {
   const isDispatchTool = toolName === 'subagent' || toolName === 'subagent_fork';
   if (!isDispatchTool || tier !== 'C') {
-    return { applies: false, ok: true, mode, configuredMode, handleReason: null, denyReason: null, warnNote: null };
+    return { applies: false, ok: true, handleReason: null, warnNote: null };
   }
   const r = typeof handleCheck === 'function' ? handleCheck(argsText) : { ok: false, reason: 'no-handle-check' };
-  if (r.ok) return { applies: true, ok: true, mode, configuredMode, handleReason: null, denyReason: null, warnNote: null };
+  if (r.ok) return { applies: true, ok: true, handleReason: null, warnNote: null };
   const handleReason = r.reason ?? 'invalid-handle';
   return {
-    applies: true, ok: true, mode, configuredMode, handleReason, denyReason: null,
-    warnNote: 'dispatch without valid lane handle under tier C（生效档=' + mode
-      + (configuredMode === null ? '' : '，配置写的是 ' + configuredMode)
-      + '；留痕不拦，`enforce` 拒态已随码删除且**勿回加**）'
+    applies: true, ok: true, handleReason,
+    warnNote: 'dispatch without valid lane handle under tier C（留痕不拦；`enforce` 拒态已随码删除且**勿回加**）'
       + ' · tool=' + toolName + ' · handle=' + handleReason
       + ' —— 仍建议：先 `lane_dispatch({ batchId, lane })` 取句柄并把 `firstLine` 写入子代理任务包首行。',
   };

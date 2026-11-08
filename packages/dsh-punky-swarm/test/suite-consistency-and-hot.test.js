@@ -148,11 +148,10 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_D
   assert.equal(MODE_GATED_TOOLS.includes('asset_claim'), false, 'asset_claim 撤模式门是放开成员面的前置 ⇒ 不得入 modeGate 集');
 });
 
-// ── SC-2 热更真生效（N2/H3） ────────────────────────────────────────────────
-// 【gate-lite 第二批 · B（2026-09-17 用户裁决）】**拒态已删**：原 `GATE_SUBAGENT_OUTSIDE_LANES`
-//   不再存在 ⇒ 本用例断言面由「enforce 无重启即拦」翻转为「**两档皆不拦，热更只影响留痕文案**」
-//   （结构保留：同一 guard / 同一 tools 实例下切快照即生效，不重建、不重启）。
-test('SC-2 dispatch.gate 热更：同一工具面下 warn → enforce 均不拦（拒态已删），留痕随快照即时刷新', async () => {
+// ── SC-2 派发留痕门接线 ─────────────────────────────────────────────────────
+// `config.dispatch.gate` 键已删（零行为开关：只改留痕文案、从不改变判定）。本用例保留其**接线断言**
+//   （同一 guard / 同一 tools 实例、拒绝面为空、留痕必发），并证明写该键不再影响任何判定。
+test('SC-2 C 档无句柄派发：guard 已接线且只留痕不拦（gate 档位键已删，写它也无效）', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-sc2-'));
   const store = createStore(root);
   const warns = [];
@@ -182,15 +181,10 @@ test('SC-2 dispatch.gate 热更：同一工具面下 warn → enforce 均不拦�
   assert.equal(ctx.__guard(exec('subagent')), undefined, 'warn 模式不得拦');
   assert.ok(warns.some((w) => /dispatch without valid lane handle/.test(w)), '必须留痕');
 
-  // ② 仅切热更快照 ⇒ enforce 下**同样不拦**（原码已删）；留痕仍逐次产出（可观测，不静默）
+  // ② 热更快照里写 gate 也不改变判定（该键已不被读 ⇒ 无可切换的档位）
   live.dispatch.gate = 'enforce';
-  const reason = ctx.__guard(exec('subagent'));
-  assert.equal(reason, undefined, 'enforce 不再是拒因（码已删）：实际=' + String(reason));
+  assert.equal(ctx.__guard(exec('subagent')), undefined, '写 `dispatch.gate` 不再影响判定（键已删）');
   assert.ok(warns.some((w) => /dispatch without valid lane handle/.test(w)), '留痕照旧（非静默放行）');
-
-  // ③ 切回 warn ⇒ 恢复放行（热更双向）
-  live.dispatch.gate = 'warn';
-  assert.equal(ctx.__guard(exec('subagent')), undefined);
   void by;
 });
 

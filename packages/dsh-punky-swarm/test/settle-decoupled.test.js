@@ -5,98 +5,85 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// test/settle-decoupled.test.js —— **I-12 验收**：结算与状态推进**解耦**（结算失败不阻塞推进）。
-//
-// 文件名按计划 T-cmd 原文（`node --test test/settle-decoupled.test.js`）。
-// 判据源：`plan/p1-pack.md` I-12 ＋ `e2-settle` handoff 断言基线。
-//
-// ⚠ **本文件最容易做反的一条**：正确语义是「**结算失败 ⇒ 状态仍推进**」；
-//   「结算失败 ⇒ 状态不变」是**要消除的反语义**。另：把**推进**错误也吞掉属「过度解耦」，比耦合更危险
-//   （状态没推进，调用方却收到成功）⇒ 必须照旧向上抛。
-//
-// 可红形态：
-//   S1 若结算抛错也向上抛 ⇒ S1 红；
-//   S2 若结算抛错时 `stateAdvanced` 仍 false / 状态回滚 ⇒ S2 红；
-//   S3 若把 `setMember` 的错误也吞掉（过度解耦）⇒ S3 红；
-//   S4 若不幂等 ⇒ S4 红（回调被调用 2 次）。
+// 结算与状态推进解耦（原 `lib/engine/settle.js` 已内联进 `member_settle`，本文件改为**工具面判据**）：
+//   S1 阳性对照：结算成功 ⇒ settled:true 且状态已推进
+//   S2【最关键】结算旁挂 throw ⇒ ①工具不抛 ②状态仍推进 ③settled:false
+//   S3【防过度解耦】`setMember` 抛 ⇒ **照旧向上抛**（解耦只针对「批收口」这一旁挂，不针对状态写）
+//   S4 幂等：同态重复结算 ⇒ 零写、settled:true、不再调 setMember
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { settleDecoupled, SETTLE_FAILED } from '../lib/engine/settle.js';
+import { buildLaneTools } from '../lib/tools/member-tools.js';
 
-/** 内存 store（真语义：写后读回；可注入 setMember 异常）。 */
-function memStore({ lanes = { e1: 'review' }, throwOnSetMember = null } = {}) {
-  const state = { batchId: 'b-set', lanes: { ...lanes } };
-  const calls = [];
-  return {
-    calls,
-    state,
-    readBatch: (sessionId, batchId) => (batchId === state.batchId ? { ...state, lanes: { ...state.lanes } } : null),
-    setMember(sessionId, batchId, lane, status, note) {
-      calls.push({ lane, status, note });
-      if (throwOnSetMember) throw throwOnSetMember;
-      state.lanes[lane] = status;
-      return { ...state, lanes: { ...state.lanes } };
+const SID = 'sess-settle';
+const BID = 'b-settle';
+const EXEC = { agent: { session: { id: SID } } };
+
+/** 最小 stub store：只提供 member_settle 走到的面（治理档位 / 读批 / 写成员 / 批收口）。 */
+function makeHarness({ laneStatus = 'review', throwOn = null } = {}) {
+  const calls = { setMember: 0, batchSettled: 0 };
+  let batch = {
+    batchId: BID, sessionId: SID, phase: 'running',
+    lanes: { e1: laneStatus }, events: [], handoffs: {},
+  };
+  const store = {
+    readGovernance: () => ({ lastAssign: { difficulty: 'C' } }),
+    readBatch: () => batch,
+    artifactsDirOf: () => '/tmp/punky-settle-artifacts',
+    setMember: (sid, bid, lane, status, note) => {
+      calls.setMember += 1;
+      if (throwOn === 'setMember') throw new Error('GATE_MEMBER_REQUIRES_C: stub 拒写');
+      batch = { ...batch, lanes: { ...batch.lanes, [lane]: status }, events: [...batch.events, { type: 'member.status', lane, status }] };
+      return batch;
+    },
+    batchSettled: (b) => {
+      calls.batchSettled += 1;
+      if (throwOn === 'batchSettled') throw new Error('settle hook 崩了');
+      return b.lanes.e1 === 'merged';
     },
   };
+  const tools = buildLaneTools({ ctx: {}, deps: {}, store, root: '/tmp/punky-settle' });
+  const settle = tools.find((t) => t.name === 'member_settle');
+  return { store, calls, settle, batchOf: () => batch };
 }
 
-test('S1 结算成功（阳性对照）：stateAdvanced:true、settled:true、状态已推进', () => {
-  const store = memStore();
-  const r = settleDecoupled({ store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged', settle: () => true });
-  assert.equal(r.stateAdvanced, true);
-  assert.equal(r.settled, true);
-  assert.equal(r.settleError, undefined, '成功路径不得有 settleError');
-  assert.equal(r.batch.lanes.e1, 'merged', '返回视图已推进');
-  assert.equal(store.state.lanes.e1, 'merged', 'store 内部持久态也已推进（硬证据）');
+const settleArgs = (status) => ({ batchId: BID, lane: 'e1', status, note: 'n1' });
+
+test('S1 结算成功（阳性对照）：settled:true、状态已推进', async () => {
+  const h = makeHarness();
+  const out = await h.settle.execute(settleArgs('merged'), EXEC);
+  assert.equal(out.status, 'merged');
+  assert.equal(out.settled, true);
+  assert.equal(h.calls.setMember, 1, '状态写一次');
 });
 
-test('S2【最关键】结算回调 throw ⇒ ①不抛 ②stateAdvanced:true ③视图 merged ④持久态 merged ⑤settleError 前缀 ⑥settled:false', () => {
-  const store = memStore();
-  let thrown = null;
-  let r = null;
-  try {
-    r = settleDecoupled({
-      store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged',
-      settle: () => { throw new Error('sink down'); },
-    });
-  } catch (e) { thrown = e; }
-  assert.equal(thrown, null, '① 结算失败**绝不向上抛**（否则调用方看到一个已推进却被报错的状态）');
-  assert.equal(r.stateAdvanced, true, '② 状态推进是事实：stateAdvanced 仍为 true');
-  assert.equal(r.batch.lanes.e1, 'merged', '③ 返回视图里的 lane 态已是目标态');
-  assert.equal(store.state.lanes.e1, 'merged', '④ **store 内部持久态也是 merged**（硬证据，不是只在返回值里）');
-  assert.equal(String(r.settleError).startsWith(SETTLE_FAILED), true,
-    '⑤ settleError 必须以 ' + SETTLE_FAILED + ' 开头；实际=' + r.settleError);
-  assert.equal(String(r.settleError).includes('sink down'), true, '失败原因须可读（含原 message）');
-  assert.equal(r.settled, false, '⑥ 结算确实没成功 ⇒ settled:false');
+test('S2【最关键】结算旁挂 throw ⇒ 工具不抛、状态仍推进、settled:false', async () => {
+  const h = makeHarness({ throwOn: 'batchSettled' });
+  let out;
+  await assert.doesNotReject(async () => { out = await h.settle.execute(settleArgs('merged'), EXEC); }, '结算旁挂失败不得上抛');
+  assert.equal(out.status, 'merged', '状态仍推进（解耦的核心）');
+  assert.equal(out.settled, false, '批未收口 ⇒ settled:false（不假装成功）');
+  assert.equal(h.batchOf().lanes.e1, 'merged', '持久态已推进');
 });
 
-test('S3【防过度解耦】`setMember` 抛 GATE_MEMBER_REQUIRES_C ⇒ **照旧向上抛**', () => {
-  const store = memStore({ throwOnSetMember: new Error('GATE_MEMBER_REQUIRES_C: e1') });
-  assert.throws(
-    () => settleDecoupled({ store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged', settle: () => true }),
-    /GATE_MEMBER_REQUIRES_C/,
-    '**推进**失败必须冒泡（吞掉它 = 状态没推进却收到成功，比耦合更危险）',
-  );
+test('S3【防过度解耦】`setMember` 抛 ⇒ 照旧向上抛', async () => {
+  const h = makeHarness({ throwOn: 'setMember' });
+  await assert.rejects(() => h.settle.execute(settleArgs('merged'), EXEC), /GATE_MEMBER_REQUIRES_C/, '状态写失败必须可见');
 });
 
-test('S4 幂等：同 tuple 两次 ⇒ 第二次 repeated:true 且结算回调**精确调用 1 次**', () => {
-  const store = memStore();
-  let settleCalls = 0;
-  const settle = () => { settleCalls += 1; return true; };
-  const first = settleDecoupled({ store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged', settle });
-  const second = settleDecoupled({ store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged', settle });
-  assert.equal(first.repeated, undefined, '首次不得标 repeated');
-  assert.equal(second.repeated, true, '第二次必须标 repeated:true（已是目标态）');
-  assert.equal(second.stateAdvanced, false, '重复路径不得再推进');
-  assert.equal(settleCalls, 1, '结算回调必须**精确调用 1 次**（不是 <=1）；实际=' + settleCalls);
-});
-
-test('S5 未提供 settle（缺省）⇒ 视为未结算但状态推进（不因缺结算而停步）', () => {
-  const store = memStore();
-  const r = settleDecoupled({ store, sessionId: 's', batchId: 'b-set', lane: 'e1', status: 'merged' });
-  assert.equal(r.stateAdvanced, true, '缺省 settle 也必须推进状态');
-  assert.equal(r.settled, false, '未提供结算 ⇒ settled:false');
-  assert.equal(store.state.lanes.e1, 'merged', '持久态已推进');
+test('S4 幂等：同态重复结算 ⇒ 零写、settled:true、不再调 setMember', async () => {
+  const h = makeHarness({ laneStatus: 'merged' });
+  const out = await h.settle.execute(settleArgs('merged'), EXEC);
+  assert.equal(out.settled, true);
+  assert.equal(out.status, 'merged');
+  assert.equal(h.calls.setMember, 0, '同态重复不得重写（零事件、零相位抖动）');
 });

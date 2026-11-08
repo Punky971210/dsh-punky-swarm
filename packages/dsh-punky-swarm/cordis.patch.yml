@@ -29,8 +29,8 @@
           gate: ['punky-preset', 'jiufeng']
         # 派发套件（C/E 阶段）：引擎自派（lane_dispatch → ctx.subagents.startContinuable）所用宿主
         #   subagent provider 名。宿主默认 provider = `spawn`（dsh-base 挂载 dsh-subagent-spawn-in-process,
-        #   providerName: spawn）；`gate` 缺省 `'warn'`（只留痕不拦）——切 `enforce` 的前提是模式跟随已活体验证通过，
-        #   否则非白名单模式的 `subagent` 派发会被 `GATE_SUBAGENT_OUTSIDE_LANES` 卡死。
+        #   providerName: spawn）。**无 `gate` 档位键**：C 档无句柄派发恒为「留痕不拦」，
+        #   `enforce` 拒态随码删除（历史码 `GATE_SUBAGENT_OUTSIDE_LANES` 勿回加）。
         dispatch:
           provider: spawn
         # 能力补全装配（默认全开——AIP 为主线 + 治理能力全开；显式 enabled:false 可逐键关闭）
