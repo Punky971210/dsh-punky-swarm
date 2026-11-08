@@ -248,9 +248,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         (ta && ta.team ? ta.team : '-')
         + (ta && ta.assetHash ? ' · ' + String(ta.assetHash).slice(0, 8) : '')
         + (ta && ta.ok === false ? ' · !' + String(ta.severity || 'gap') : ''));
-      push('assembly.orchestration', asm && asm.managerPlan ? asm.managerPlan : null);
       push('assembly.auditLane', asm && asm.auditLane ? asm.auditLane : null);
-      push('assembly.manager', d.manager && d.manager.agentId ? d.manager.agentId : tt('assembly.managerNone'));
       push('concurrency', d.concurrency != null ? tt('concurrency') + ' ' + d.concurrency : null);
       if (gs) push('assembly.gates', gs.level + ' · ' + (gs.lanes ? ('plan ' + gs.lanes.plan + ' / exec ' + gs.lanes.exec + ' / audit ' + gs.lanes.audit) : '') + ((gs.escapes || []).length ? ' · escape ' + gs.escapes.length : '') + ((gs.degrades || []).length ? ' · degrade ' + gs.degrades.length : ''));
       if (d.smoke) push('assembly.smoke', tt('assembly.smoke'));
@@ -259,7 +257,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         React.createElement(SectionTitle, null, tt('assembly.title')),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 10 } },
           items.map((it, i) => React.createElement('span', { key: i, style: { fontSize: 10.5, color: T.text2 } },
-            // 【波 A · A-1】键名（团队/编排/验收 lane/Manager 登记/门禁）是可读字段名：值常为 mono 编码串，
+            // 【波 A · A-1】键名（团队/验收 lane/门禁）是可读字段名：值常为 mono 编码串，
             //   离开键名不可解读 ⇒ 上调次级文本（值本身同层，故此处无层级差）。
             React.createElement('span', { style: { color: T.text2 } }, tt(it.k) + ' '),
             React.createElement('span', { style: { fontFamily: T.mono } }, it.v)

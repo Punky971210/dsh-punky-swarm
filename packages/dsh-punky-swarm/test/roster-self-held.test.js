@@ -56,10 +56,11 @@ async function loadRoster() {
 
 const asArray = (v) => (Array.isArray(v) ? v : []);
 
-/** 内建职位表的**期望名集合**（批 `punky-g1-gapfix-2026-10-29` §2.4(a)，9 名显式枚举；`docManager` 已统一为 `doc-manager`）。
+/** 内建职位表的**期望名集合**（批 `punky-g1-gapfix-2026-10-29` §2.4(a)，8 名显式枚举；`docManager` 已统一为 `doc-manager`；
+ *  `manager` 随 Manager 整层删除于 2026-11-08 摘除——它不再是任何层的席位名）。
  *  纪律：这是**独立侧常量名单**（不是从 `BUILTIN_ROLES` 反推），否则等于「枚举 == 枚举」自证。 */
 const EXPECTED_BUILTIN_ROLES = [
-  'coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager', 'manager', 'lead',
+  'coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager', 'lead',
 ];
 
 /** 内建职位表的**集合相等**判据（抽成函数 ⇒ 可对「注入第 10 项」的输入复用，证明判据有杀伤力）。 */
@@ -67,12 +68,12 @@ function assertBuiltinRoleSet(actual) {
   assert.deepEqual(
     [...asArray(actual)].sort(),
     [...EXPECTED_BUILTIN_ROLES].sort(),
-    'BUILTIN_ROLES 必须**逐名等于** 9 席期望集合（集合相等；注入第 10 项 / 改名 / 缺席 均应判红）',
+    'BUILTIN_ROLES 必须**逐名等于** 8 席期望集合（集合相等；注入第 9 项 / 改名 / 缺席 均应判红）',
   );
 }
 
 // ── ① AC-11 + AC-10：导出面**恰好**两项 ｜ 内建职位表**集合相等** ｜ 空名册行为断言 ──────────
-test('R1 AC-11 导出面恰好两项 + 内建职位表集合相等（9 席显式判定，非计数断言）', async () => {
+test('R1 AC-11 导出面恰好两项 + 内建职位表集合相等（8 席显式判定，非计数断言）', async () => {
   const mod = await loadRoster();
   assert.deepEqual(
     Object.keys(mod).sort(),

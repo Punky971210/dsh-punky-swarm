@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // C+ 档装配门禁补测（e2-gate-tester，spec §7 矩阵）——roles 语义延伸（T8 语义补强）：
 //   - e1 合并文件 assembly-gate.test.js（23 用例）已覆盖 T1-T10/T12（含层错配纯函数+execute）；
-//   - 本文件只补 e1 未覆盖的 roles 语义面：合法角色全集（VALID_ROLES 8 + 盲审扩展 3）零误报、
+//   - 本文件只补 e1 未覆盖的 roles 语义面：合法角色全集（VALID_ROLES 7 + 盲审扩展 3）零误报、
 //     全表大小写变体（词法判定大小写不敏感 + 原样透传）、execute 层扩展角色混合大小写持久化；
 //   - T11 全量回归、T13 roles 文档核验（audit 侧记录）结论见 exec/test-report.md，非本文件断言。
 // 消费构建产物：lib/wave-plan.js（.ts 源码改后须 npm run build 再生再测）+ createTools harness。

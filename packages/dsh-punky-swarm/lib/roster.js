@@ -22,8 +22,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
  * 分组（改动须同步 `tests` 的对账用例与 `references/` 的团队指引）：
  *   ① 软件团队 7 角色（plan `coordinator`·`designer` ／ exec `coder`·`tester`·`reviewer`
  *      ／ audit `supervisor`·`doc-manager`）；
- *   ② 通用位：`manager`（集群治理 Manager 约定席——`host-surface` 的在册判据锚点）、
- *      `lead`（官方名册常驻领队伪行，非可派席位，进表以避免被误报为「未知席位」）。
+ *   ② 通用位：`lead`（官方名册常驻领队伪行，非可派席位，进表以避免被误报为「未知席位」）。
  */
 export const BUILTIN_ROLES = [
   // ① 软件团队 7 角色（plan 2 ／ exec 3 ／ audit 2）
@@ -35,7 +34,6 @@ export const BUILTIN_ROLES = [
   'supervisor',    // ① audit 层席位
   'doc-manager',   // ① audit 层席位（软件团队文档管理）
   // ② 通用位
-  'manager',       // ② 集群治理 Manager 约定席（`host-surface` 的在册判据锚点）
   'lead',          // ② 官方名册常驻领队伪行（非可派席位；进表以避免被误报「未知席位」）
 ];
 

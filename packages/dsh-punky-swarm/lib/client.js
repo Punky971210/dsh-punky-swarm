@@ -184,7 +184,6 @@ window.__ModuleLoader__.load({
       { re: /^gate\.needhuman_blocked$/, key: 'event.gate.needhuman', category: 'gate', severity: 'warn' },
       { re: /^gate\.escape$/, key: 'event.gate.escape', category: 'gate', severity: 'warn' },
       { re: /^gate\.degrade$/, key: 'event.gate.degrade', category: 'gate', severity: 'warn' },
-      { re: /^gate\.manager_/, key: 'event.gate.manager', category: 'gate', severity: 'warn' },
       { re: /^gate\.role_/, key: 'event.gate.role', category: 'gate', severity: 'error' },
       { re: /^gate\.target/, key: 'event.gate.target', category: 'gate', severity: 'warn' },
       { re: /^gate\.(passed|exit)$/, key: 'event.gate.passed', category: 'gate', severity: 'info' },
@@ -194,7 +193,6 @@ window.__ModuleLoader__.load({
       { re: /^plan\.mutated$/, key: 'event.plan.mutated', category: 'phase', severity: 'info' },
       { re: /^batch\.created$/, key: 'event.phase.created', category: 'phase', severity: 'none' },
       { re: /^batch\.phase$/, key: 'event.phase.changed', category: 'phase', severity: 'info' },
-      { re: /^batch\.manager\.raised$/, key: 'event.phase.manager', category: 'phase', severity: 'info' },
       { re: /^batch\.smoke$/, key: 'event.phase.smoke', category: 'phase', severity: 'none' },
       { re: /^batch\.abort_dangling$/, key: 'event.phase.dangling', category: 'phase', severity: 'warn' },
       { re: /^batch\.(failed-escalate|governance-escalate)$/, key: 'event.phase.escalate', category: 'phase', severity: 'error' },
@@ -438,11 +436,7 @@ window.__ModuleLoader__.load({
       "handoff.unlock": "上游交接解锁后可派发",
       "assembly.title": "装配与门禁",
       "assembly.team": "团队",
-      "assembly.orchestration": "编排",
       "assembly.auditLane": "验收 lane",
-      "assembly.manager": "Manager 登记",
-      "assembly.managerNone": "未登记",
-      "assembly.managerHint": "在册校验属工具面",
       "assembly.gates": "门禁",
       "assembly.smoke": "冒烟批",
       "focus.title": "当前关注",
@@ -511,7 +505,6 @@ window.__ModuleLoader__.load({
       "event.gate.needhuman": "等你裁决",
       "event.gate.escape": "门禁逃逸",
       "event.gate.degrade": "门禁降级",
-      "event.gate.manager": "编排缺口",
       "event.gate.role": "角色不合规",
       "event.gate.target": "目标校验",
       "event.governance": "护栏拒绝",
@@ -520,7 +513,6 @@ window.__ModuleLoader__.load({
       // 【B-5】图变更留痕（`plan.mutated`）的人话键
       "event.plan.mutated": "计划变更",
       "event.phase.changed": "相位变更",
-      "event.phase.manager": "Manager 已拉起",
       "event.phase.smoke": "冒烟批",
       "event.phase.dangling": "悬挂成员告警",
       "event.phase.escalate": "违规升级",
@@ -596,7 +588,7 @@ window.__ModuleLoader__.load({
       "gov.watch.title": "Lane 过期检测",
       "gov.watch.desc": "开启后扫描运行中的子任务，连续无活动按档位追问并标记 stalled；关闭后停止扫描",
       "gov.watch.longrun.title": "长跑超时重派探针",
-      "gov.watch.longrun.desc": "运行超时长阈值且窗口内无 checkpoint/活动的 lane 将产出重派候选，由 Manager/Leader 半自动裁决重派",
+      "gov.watch.longrun.desc": "运行超时长阈值且窗口内无 checkpoint/活动的 lane 将产出重派候选，由 Leader 半自动裁决重派",
       "gov.watch.longrun.maxDuration": "超时窗口（分钟）",
       "gov.watch.longrun.noProgress": "无进展窗口（分钟）"
     };
@@ -663,11 +655,7 @@ window.__ModuleLoader__.load({
       "handoff.unlock": "dispatchable once the upstream handoff lands",
       "assembly.title": "Assembly & gates",
       "assembly.team": "team",
-      "assembly.orchestration": "orchestration",
       "assembly.auditLane": "audit lane",
-      "assembly.manager": "Manager registered",
-      "assembly.managerNone": "not registered",
-      "assembly.managerHint": "roster check belongs to the tool surface",
       "assembly.gates": "gates",
       "assembly.smoke": "smoke batch",
       "focus.title": "In focus",
@@ -731,7 +719,6 @@ window.__ModuleLoader__.load({
       "event.gate.needhuman": "needs your decision",
       "event.gate.escape": "gate escape",
       "event.gate.degrade": "gate degraded",
-      "event.gate.manager": "orchestration gap",
       "event.gate.role": "role invalid",
       "event.gate.target": "target check",
       "event.governance": "guardrail refusal",
@@ -739,7 +726,6 @@ window.__ModuleLoader__.load({
       "event.phase.created": "batch created",
       "event.plan.mutated": "plan changed",
       "event.phase.changed": "phase changed",
-      "event.phase.manager": "manager raised",
       "event.phase.smoke": "smoke batch",
       "event.phase.dangling": "dangling lanes warning",
       "event.phase.escalate": "escalation",
@@ -813,7 +799,7 @@ window.__ModuleLoader__.load({
       "gov.watch.title": "Lane expiry watch",
       "gov.watch.desc": "Scans running lanes and probes lanes idle past backoff tiers until stalled; off stops scanning",
       "gov.watch.longrun.title": "Long-run timeout probe",
-      "gov.watch.longrun.desc": "Emits a redispatch candidate for lanes past the duration threshold with no recent checkpoint/activity; Manager/Leader decide",
+      "gov.watch.longrun.desc": "Emits a redispatch candidate for lanes past the duration threshold with no recent checkpoint/activity; Leader decides",
       "gov.watch.longrun.maxDuration": "Timeout window (min)",
       "gov.watch.longrun.noProgress": "No-progress window (min)"
     };
@@ -1384,9 +1370,7 @@ window.__ModuleLoader__.load({
         (ta && ta.team ? ta.team : '-')
         + (ta && ta.assetHash ? ' · ' + String(ta.assetHash).slice(0, 8) : '')
         + (ta && ta.ok === false ? ' · !' + String(ta.severity || 'gap') : ''));
-      push('assembly.orchestration', asm && asm.managerPlan ? asm.managerPlan : null);
       push('assembly.auditLane', asm && asm.auditLane ? asm.auditLane : null);
-      push('assembly.manager', d.manager && d.manager.agentId ? d.manager.agentId : tt('assembly.managerNone'));
       push('concurrency', d.concurrency != null ? tt('concurrency') + ' ' + d.concurrency : null);
       if (gs) push('assembly.gates', gs.level + ' · ' + (gs.lanes ? ('plan ' + gs.lanes.plan + ' / exec ' + gs.lanes.exec + ' / audit ' + gs.lanes.audit) : '') + ((gs.escapes || []).length ? ' · escape ' + gs.escapes.length : '') + ((gs.degrades || []).length ? ' · degrade ' + gs.degrades.length : ''));
       if (d.smoke) push('assembly.smoke', tt('assembly.smoke'));
@@ -1395,7 +1379,7 @@ window.__ModuleLoader__.load({
         React.createElement(SectionTitle, null, tt('assembly.title')),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 10 } },
           items.map((it, i) => React.createElement('span', { key: i, style: { fontSize: 10.5, color: T.text2 } },
-            // 【波 A · A-1】键名（团队/编排/验收 lane/Manager 登记/门禁）是可读字段名：值常为 mono 编码串，
+            // 【波 A · A-1】键名（团队/验收 lane/门禁）是可读字段名：值常为 mono 编码串，
             //   离开键名不可解读 ⇒ 上调次级文本（值本身同层，故此处无层级差）。
             React.createElement('span', { style: { color: T.text2 } }, tt(it.k) + ' '),
             React.createElement('span', { style: { fontFamily: T.mono } }, it.v)

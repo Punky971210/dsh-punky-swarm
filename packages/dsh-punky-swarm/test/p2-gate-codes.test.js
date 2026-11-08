@@ -18,8 +18,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // punky-fix-p2-20261023 · c3 `A1-P2-13` 四码可证伪用例（tester 落）。
 //
 // ── 三档分治（禁「补一条假覆盖」）──────────────────────────────────────────────────────
-//   ① `GATE_ROLE_MANAGER_AS_LANE` —— **production-path**：走真实建批入口 `buildWavePlan`，
-//      批次照建（warnings 非阻断），同形阳性对照把 `role` 换成 `coder` 即不命中。
+//   ① `GATE_ROLE_MANAGER_AS_LANE` —— **已退役（2026-11-08）**：Manager 整层删除、`manager` 摘出
+//      `VALID_ROLES` ⇒ 该码失去发射位。原 production-path 用例改写为**退役锁**：同输入改为落
+//      `GATE_ROLE_INVALID`（批次照建），并锁住「专属码不再出现」这一面。
 //   ② `GATE_ARTIFACT_MISSING` —— **sentinel-rewrite**：它是出口门的**内部哨兵**，外显形态是
 //      `GATE_EXIT_MISSING_<LAYER>`。断言对象 = 外显形态（断言哨兵本体 = 断言一个非契约名）。
 //   ③ `GATE_NO_DECLARATION` —— **internal-only**：`presenceJudge` 的内部 code，生产路径被出口门的
@@ -81,35 +82,41 @@ function batchWith(basePlan, tasks, extra = {}) {
 /** 满足 plan 契约门（六个裸标题）的 spec 正文。 */
 const SPEC_OK = '# spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n## 约束\n- y\n';
 
-// ── ① 生产可达档 ─────────────────────────────────────────────────────────────────────
-test('A1-P2-13 / production-path · GATE_ROLE_MANAGER_AS_LANE：C 类批 + role=manager ⇒ warnings 含该码**且批次照建**', () => {
+// ── ① 已退役码的替换面（2026-11-08 · Manager 整层删除）────────────────────────────────
+//   `GATE_ROLE_MANAGER_AS_LANE` 随 Manager 角色整体退场：`manager` 已从 `VALID_ROLES` 摘除，
+//   旧的「专属语义错位提示」失去前提（不再有「是否为引擎层角色」的合法声明面）。
+//   现在声明 `role:'manager'` 等价于任何未知角色 ⇒ 走 `GATE_ROLE_INVALID`（告警、不拒），与
+//   其它非法词同一判据，不再有专属码。本组把替换面锁住（退役锁，非补覆盖）。
+test('A1-P2-13【退役锁】· C 类批 + role=manager ⇒ 走 GATE_ROLE_INVALID，专属码不再存在，批次照建', () => {
   const plan = buildWavePlan({ batchId: 'b-role-manager', tasks: THREE_TIER('manager') });
   const codes = plan.warnings.map((w) => w.code);
-  assert.ok(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), 'C 类批 + manager 角色必须产出该告警码；实得 ' + JSON.stringify(codes));
+  assert.equal(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), false, '专属码已随 Manager 层删除；实得 ' + JSON.stringify(codes));
+  assert.ok(codes.includes('GATE_ROLE_INVALID'), 'manager 已非合法角色 ⇒ 必须走通用非法角色告警；实得 ' + JSON.stringify(codes));
   // 「照建」= 非阻断：产物齐全（含 wavePlan 拓扑）
   // 期望值来自**输入侧**（THREE_TIER 声明三层 ⇒ wave 序号 1/2/3），非按 plan 自身推导
   assert.deepEqual(plan.wavePlan.map((w) => w.wave), [1, 2, 3], '批次必须照建（warnings 不阻断）：wave 序号集合 = 输入声明的 1/2/3（实测 ' + JSON.stringify(plan.wavePlan.map((w) => w.wave)) + '）');
   assert.equal(plan.batchId, 'b-role-manager');
   // 告警载荷可核（供审计定位）
-  const hit = plan.warnings.find((w) => w.code === 'GATE_ROLE_MANAGER_AS_LANE');
+  const hit = plan.warnings.find((w) => w.code === 'GATE_ROLE_INVALID');
   assert.equal(hit.task, 'e1', '必须定位到具体 lane');
   assert.equal(hit.role, 'manager');
-  assert.equal(hit.layer, 'exec');
 });
 
-test('A1-P2-13 / production-path · 同输入阳性对照：role=coder ⇒ 不含该码（其余完全相同）', () => {
+test('A1-P2-13 · 同输入阳性对照：role=coder ⇒ 两码皆不命中（其余完全相同）', () => {
   const plan = buildWavePlan({ batchId: 'b-role-coder', tasks: THREE_TIER('coder') });
   const codes = plan.warnings.map((w) => w.code);
   assert.equal(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), false, '换成 coder 后不得命中；实得 ' + JSON.stringify(codes));
+  assert.equal(codes.includes('GATE_ROLE_INVALID'), false, '合法角色不得命中非法告警；实得 ' + JSON.stringify(codes));
   assert.deepEqual(plan.wavePlan.map((w) => w.wave), [1, 2, 3], '对照批同样照建：wave 序号集合 = 1/2/3（实测 ' + JSON.stringify(plan.wavePlan.map((w) => w.wave)) + '）');
 });
 
-test('A1-P2-13 / production-path · C 类前置真的在起作用：单 lane 批 + role=manager ⇒ 不产该码', () => {
-  // `collectRoleCompletenessWarnings` 在 `isCClassBatch` 为 false 时整体早退
+test('A1-P2-13 · 角色校验不看 C 类前置：单 lane 批 + role=manager 同样只产 GATE_ROLE_INVALID', () => {
+  // 旧专属码在 `collectRoleCompletenessWarnings`（C 类才检查）；摘除后判据回到 buildWavePlan 主循环 ⇒ 单 lane 批也告警
   const plan = buildWavePlan({ batchId: 'b-role-single', tasks: [{ id: 'l1', role: 'manager', cmd: 'x' }] });
   const codes = plan.warnings.map((w) => w.code);
   assert.equal(codes.includes('GATE_ROLE_MANAGER_AS_LANE'), false,
-    '单 lane 批不是 C 类形态 ⇒ 该码不该无条件 push；实得 ' + JSON.stringify(codes));
+    '单 lane 批不再有专属码可命中；实得 ' + JSON.stringify(codes));
+  assert.ok(codes.includes('GATE_ROLE_INVALID'), '单 lane 批同样走通用非法角色告警；实得 ' + JSON.stringify(codes));
 });
 
 // ── ② 哨兵重写档（EXEC / AUDIT）──────────────────────────────────────────────────────

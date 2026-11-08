@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { topoWaves, buildWavePlan, validateWavePlan, normalizeResumeContract, resumeClauseFor, RESUME_CLAUSE, normalizeRole, defaultRoleForLayer, VALID_ROLES, isCClassBatch, collectRoleCompletenessWarnings, normalizeTargetsContract } from '../lib/wave-plan.js';
+import { topoWaves, buildWavePlan, validateWavePlan, normalizeResumeContract, resumeClauseFor, RESUME_CLAUSE, normalizeRole, defaultRoleForLayer, VALID_ROLES, isCClassBatch, normalizeTargetsContract } from '../lib/wave-plan.js';
 
 test('topoWaves layers independent tasks into same wave', () => {
   const { waves } = topoWaves([
@@ -164,7 +164,6 @@ test('C 类形态判定：多 wave / 多 lane / 跨 layer 依赖任一命中即 
   assert.equal(isCClassBatch([{ id: 'a' }, { id: 'b' }], [['a', 'b']]), true, 'lane 数 >1 → C 类');
   assert.equal(isCClassBatch([{ id: 'a' }, { id: 'b', deps: ['a'] }], [['a'], ['b']]), true, 'wave 数 >1 → C 类');
   assert.equal(isCClassBatch([{ id: 'p', layer: 'plan' }, { id: 'e', layer: 'exec', deps: ['p'] }], [['p'], ['e']]), true, '跨 layer 依赖 → C 类');
-  assert.deepEqual(collectRoleCompletenessWarnings([{ id: 'a' }], [['a']]), [], '非 C 类形态零告警');
 });
 
 // ── 已删（2026-09-26 · Q-8-C 全链删除）：原 test「C 类三层批次缺 plan 层 designer/coordinator → GATE_RO…」
