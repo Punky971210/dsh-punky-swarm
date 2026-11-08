@@ -29,15 +29,6 @@ import { managerRosterOf, managerSeatFaceOf } from './host-surface.js';
 //   以**纯数据**（`string[]`）传入建批函数；本 import 即该读取的唯一来源（provider 侧 `RosterSource`
 //   的 DSH 实现，归属声明见 `lib/provider-dsh/roster.js:18-37`）。
 import { createRosterPort } from '../provider-dsh/roster.js';
-// 【批 `preset-per-role-20261108`】建批期「role ↔ preset 覆盖面」预检所需三个**单点**：
-//   · `presetIdForRoleOf` = preset id 解析（与派发路径**同一函数**，禁在本文件另写形态判定）；
-//   · `deriveDenyTools` = 「该角色不该拿的工具」反推（与派发闸 `askToolFace.deny` **同一实现**）；
-//   · `resolveRoleRef` / `roleCorpusRoot` = role 语料解析（同上，唯一解析单点）。
-//   ⚠ 复用而非重写：本预检必须与真实派发闸**同判据**，否则会出现「建批说能派、派发被拒」的假绿
-//     （或反之假红）。判据源 = `lib/engine/dispatch.js` 的 `presetFor`（`deny ∩ covers`）。
-//   ⚠ 依赖方向：`lib/engine/**` 不在 `lib/provider-dsh/**` 棘轮面内（后者才是受限方向），
-//     本 import 与上方 `provider-dsh/roster.js` 那条（棘轮白名单内）无关。
-import { presetIdForRoleOf, deriveDenyTools, resolveRoleRef, roleCorpusRoot } from '../engine/dispatch.js';
 // 事件字面量改引 EVT 常量单点（gate.role_* 发端）
 import * as EVT from '../state/event-types.js';
 
@@ -57,14 +48,6 @@ const WARN_EVENT_OF = {
   //   `GATE_ROLE_MANAGER_AS_LANE`）⇒ 该键**恒不命中**；映射行与其事件常量（`lib/state/event-types.js`）
   //   同批删除，全仓 `lib/**` 零残留（含注释）。下方在役映射**逐字保留**。
   GATE_COMPLETE_OUTCOMES_EMPTY: EVT.EVT_GATE_COMPLETE_OUTCOMES_EMPTY,
-  // 【批 `preset-per-role-20261108`】建批期「role ↔ preset 覆盖面」冲突（非拒观察面）
-  //   ⚠ 码名用 `WARN_` 前缀而**非** `GATE_`：`GateErrorCode` union 是**冻结面**
-  //     （`test/gate-lane-snapshot.test.js` 的 `P2-1` 用 `EXPECTED_GATE_CODES` 硬锁 62 个码，
-  //     要求「集合身份不变」）⇒ 新增观察码一律不得进 union、不得进词表。
-  //     既有同族先例 = `WARN_ROSTER_UNKNOWN`（`WARN_SILENT_CODES` 内，也是 `WARN_` 前缀）。
-  //     本码与它的差别：本码**要发事件**（下一条映射），故落 `WARN_EVENT_OF` 而非 `WARN_SILENT_CODES`
-  //     （两集合相斥，判据 `E1-R8`）。
-  WARN_ROLE_PRESET_MISMATCH: EVT.EVT_GATE_ROLE_PRESET_MISMATCH,
 };
 
 // 建批期**只留 `warnings[]`、不落任何事件**的告警码（批 `punky-engine-fix2-20261106` · D-2=乙 裁决）：
@@ -185,60 +168,6 @@ export function buildWavePlanTools(cx) {
         //   【2026-09-27 · team-asset 全量退役】原来源 ②（资产面「尽力」解析缺口）与 ③（`chain` 声明非法）
         //   随资产面/链面删除 ⇒ **已无发射点**；仅保留 ① 这一条通道。
         plan.warnings.push(...asm.warnings);
-        // ── 【批 `preset-per-role-20261108`】建批期「role ↔ preset 覆盖面」预检（**非拒观察面**）──────
-        //   判据（与派发闸 `presetFor` **同一实现**，非另写一份）：把 `deriveDenyTools(role.tools.allow)`
-        //   与 `presetCoverage[presetId].tools` 求交，相交非空 ⇒ 该 role 的 lane 在 `lane_dispatch` 时
-        //   必被 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` 拒派（`activation` 形态无 `toolFilter` ⇒
-        //   收窄只能靠 preset 的固定面）。
-        //   **为什么在建批期报**：Leader 的决策点在「建批」而不是「派发」—— 等派发才撞，等于让 Leader
-        //   先写完全部 lane 契约再发现一半派不出去（本会话实测踩过：designer 撞 `pwsh`）。
-        //   **不拒建批**：preset 覆盖率是**宿主配置态**（`config.dispatch.presetCoverage` 可热更），
-        //   环境一变就能派，与批次本身是否合法无关 ⇒ 走 `GATE_ROLE_INVALID` 同款 warning 语义。
-        //   零 throw（全软）：本检失败只降级为空告警 + 一条 warn 留痕，绝不影响建批。
-        const presetMismatchWarnings = (() => {
-          try {
-            const live = readLiveConfig(deps);
-            const coverage = live?.dispatch?.presetCoverage;
-            if (coverage === null || typeof coverage !== 'object' || Array.isArray(coverage)) return [];
-            const seen = new Set();
-            const out = [];
-            for (const t of plan.wavePlan.flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []))) {
-              const role = typeof t.role === 'string' ? t.role.trim() : '';
-              if (!role) continue;
-              const presetId = presetIdForRoleOf(live, role);
-              if (!presetId) continue;
-              const entry = coverage[presetId];
-              const tools = entry !== null && typeof entry === 'object' && Array.isArray(entry.tools) ? entry.tools : null;
-              // 无覆盖声明 ⇒ 派发闸走「只有 id 无见证」分支（那不是本预检的判据面）⇒ 跳过
-              if (tools === null || tools.length === 0) continue;
-              const roleData = resolveRoleRef(role, { root: roleCorpusRoot() });
-              const deny = deriveDenyTools(roleData?.tools?.allow, { root: roleCorpusRoot() });
-              const clash = deny.filter((x) => tools.includes(x));
-              if (clash.length === 0) continue;
-              // 同 (role, preset, 冲突集) 只报一条：20 条 coder lane 不该刷 20 条同样的话
-              const key = role + '|' + presetId + '|' + clash.join(',');
-              if (seen.has(key)) continue;
-              seen.add(key);
-              out.push({
-                // ⚠ `WARN_` 前缀（非 `GATE_`）：union 是冻结面，观察码不得进（见 `WARN_EVENT_OF` 处注释）
-                code: 'WARN_ROLE_PRESET_MISMATCH',
-                task: t.id,
-                role,
-                layer: t.layer ?? null,
-                // 复用 `missing` 槽承载冲突工具名：载荷形态零增删（`:208` 的 7 键不变），
-                //   且语义同族（都是「该 role 面里缺/撞的东西」）。
-                missing: clash.join(','),
-                basis: 'preset=' + presetId,
-              });
-            }
-            return out;
-          } catch (e) {
-            ctx.logger?.warn?.('[dsh-punky-swarm] wave_plan: role↔preset 覆盖面预检失败 ⇒ 跳过（不阻断建批）：'
-              + String(e?.message ?? e));
-            return [];
-          }
-        })();
-        plan.warnings.push(...presetMismatchWarnings);
         const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined, ...(channelDecl.declared ? { channel: channelDecl.channel } : {}) });
         // **冒烟/探针批**留痕（显式豁免键）——建批成功当刻落一条
         //   `batch.smoke` 事件（常量登记于 `lib/state/event-types.js`）⇒ 门禁读端（`lib/state/gates.ts#smokeOf`）

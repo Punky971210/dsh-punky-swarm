@@ -251,16 +251,6 @@ export const EVT_GATE_ROLE_INVALID = 'gate.role_invalid';
 //   未来把每个告警码都映射到专用类型属后续批，本任务不做。
 export const EVT_GATE_COMPLETE_OUTCOMES_EMPTY = 'gate.complete_outcomes_empty';
 
-// 【批 `preset-per-role-20261108`】建批期「role ↔ preset 覆盖面」预检的留痕事件（**非拒观察面**）。
-// 语义：某 lane 的 role 与当前 `config.dispatch.presetCoverage[<presetId>].tools` **相交**
-//   ⇒ 该 role 的 lane 在 `lane_dispatch` 时必被 `GATE_DISPATCH_CAPABILITY_UNAVAILABLE` 拒派
-//   （`activation` 形态无 `toolFilter` ⇒ 收窄只能靠 preset 固定面 ⇒ 冲突即不可派）。
-// 为什么建批期就报而不是派发时：Leader 的决策点在「建批」，等派发才撞等于让 Leader 先写完
-//   全部 lane 契约、再发现其中一半派不出去。**不拒建批**：preset 覆盖率是**宿主配置态**，
-//   环境变了就能派，与批次本身是否合法无关（与 `GATE_ROLE_INVALID` 同 warning 语义）。
-// 读端：`wave_plan` 返回值 `warnings[]`（Leader 立即可见）+ 本事件（`log_export` 的 `gate.` 前缀自动收录）。
-export const EVT_GATE_ROLE_PRESET_MISMATCH = 'gate.role_preset_mismatch';
-
 // B2（蓝图 §8⑤ 运行期**首触校验**，批 `core-debt-parallel-20260915` · lane e1）：团队资产**未声明**某检查项
 //   ⇒ 引擎缺省接管时**首次触发**落本事件 + 一次告警（`logger.warn`，与事件同源一次）。
 // 口径（规格 §1.1 R-1..R-6，逐条）：
