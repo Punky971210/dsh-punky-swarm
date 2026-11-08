@@ -1013,6 +1013,25 @@ export function composeWorkerPrompt({
   L.push(...String(preflightBlock).split('\n'));
   L.push('');
   L.push('## 纪律');
+  // ── 【批 `toolface-as-prompt-20261108`】角色工具面（**prompt 层约束**）───────────────────────────
+  //   为什么在这里：`activation` 形态下宿主 `request` 不含 `toolFilter`（`provider-dsh/agent.js:455`）
+  //   ⇒ 引擎**无法按次裁剪**工具面。角色边界（`role.tools.allow`）因此改由本段**主动注入**：
+  //   不靠 preset 的固定组合去碰运气（那会让 preset 面 ⊋ 角色面的角色永久派不出去，实测
+  //   designer/doc-manager 撞 pwsh），改为「派发时就说清边界」。判据与理由详见 `dispatchLaneCore`
+  //   的 `askToolFace` 注释块（两类边界：治理工具=必须技术禁 / 角色工具面=指令约束）。
+  //   ⚠ 位置 = `## 纪律` **首行**：与其余纪律同属「动手前最后读到的内容」，且排在规则编号列表之前
+  //     （先看到面，再读细则）。
+  //   ⚠ 缺省（role 未声明 `tools.allow`）⇒ **不出本行**：不猜、不代造默认面（没声明就是没声明）。
+  //   ⚠ 只有 `roleData` 在场才渲染（`roleData` 为空时该 lane 本就没有角色面可谈）。
+  const roleAllowFace = listOf(roleData?.tools?.allow)
+    .filter((x) => typeof x === 'string' && x.trim() !== '')
+    .map((x) => x.trim());
+  if (roleAllowFace.length > 0) {
+    L.push('本 lane 的角色工具面：' + roleAllowFace.map((t) => '`' + t + '`').join(' / ')
+      + '。**只使用这些工具**；越界即违规（会被产物审计与纪律核查发现）。');
+    L.push('（治理类工具 ' + SUITE_DENY_TOOLS.length + ' 件已由引擎在 preset 面**技术禁用**；'
+      + '其余角色边界靠本条约束 —— 引擎不为角色面提供技术沙箱。）');
+  }
   // 【2026-09-27 · 规则编号动态化】原为**字面 1..6**（第 6 条按层裁剪）⇒ 新增规则会撞号。
   //   改为**计数器**逐条编号：规则文本逐字不变，仅编号由 `rule()` 递增产出（缺规则也不会跳号）。
   let ruleNo = 0;
@@ -1249,9 +1268,24 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
   //   不是「两处各判」（那会漂移）。`denyDropped`（宿主未知工具名的自愈）只影响**实际请求**，
   //   故 ask 侧的 deny 是**超集** ⇒ 判定更严 ⇒ fail-closed，方向正确。
   const denyAllForAsk = [...new Set([...SUITE_DENY_TOOLS, ...(liveConfig?.dispatch?.denyTools ?? [])])];
-  const askToolFace = {
-    deny: [...new Set([...denyAllForAsk, ...deriveDenyTools(roleData?.tools?.allow, { root: roleCorpusRoot() })])],
-  };
+  // ── 【批 `toolface-as-prompt-20261108`】`ask.toolFace.deny` **只含「必须技术禁」的治理工具** ──────
+  //   两类边界必须分开，混在一起是此前的设计错误：
+  //     ① **治理工具**（`SUITE_DENY_TOOLS` 17 件 + `config.dispatch.denyTools`）= **必须技术禁**：
+  //        worker 一旦拿到 `member_settle` / `wave_plan` / `spawn_teammate`，治理即崩塌
+  //        （成员能自己结算、自己建批、自己拉席位）⇒ 这类**只能**靠 preset 面排除，硬要求。
+  //     ② **角色工具面**（`deriveDenyTools(role.tools.allow)` 的反推产物）= **角色边界**，不是安全边界：
+  //        它回答「这个角色该不该用命令行」，而不是「用了会不会毁治理」。
+  //   原实现把 ② 也塞进 `deny` ⇒ 在 `activation` 形态下（`request` 无 `toolFilter`，收窄只能靠
+  //   preset 固定面）产生一个**不可能满足的要求**：只要 preset 面 ⊋ 某角色面，该角色就永久派不出去
+  //   —— 实测 `designer` / `doc-manager` 撞 `pwsh`（`presetCoverage['punky-preset'].tools` 含 pwsh，
+  //   而这两个角色的 `tools.allow` 不含）⇒ plan 层结构性不可自派，Leader 只能自己干。
+  //   **修法（用户裁决：不在宿主加 preset，改由派发时主动注入 prompt）**：② 从 `deny` 移除，
+  //   改经 `composeWorkerPrompt` 的 `## 工具面` 段**以指令形式注入任务包**（见该函数）。
+  //   与 `## 纪律` 段同款治理：本引擎的「禁 git 写」「写盘只用 edit/write」「断言前先核」全部是指令
+  //   约束而非技术沙箱 —— 角色工具面本就属于这一类，把它拔高成 preset 硬要求是本末倒置。
+  //   ⚠ 保留 `buildStartRequest` 的 `derivedDeny` 不动：那是 `request` 形态（宿主支持 toolFilter 时）
+  //     的**实际请求面**，那里技术禁得掉就禁，属纯收益；本处只改**闸的判据输入**。
+  const askToolFace = { deny: denyAllForAsk };
   // 本次派发要求的**人格**（与 `buildStartRequest` 的 `effectivePersona` 同源）：
   //   显式配置优先，缺省由 role 派生 —— 两者只要有一个非空，就是「本次有收窄需求」。
   const askPersona = liveConfig?.dispatch?.persona !== undefined
