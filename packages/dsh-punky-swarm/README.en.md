@@ -2,7 +2,7 @@
 
 > **A cluster-governance plugin + engine for DeepSeek Harness (dsh)** — it decomposes "large module development" into a three-layer **plan → exec → audit** DAG, with **gates / state machine / blackboard / settlement**, so multi-member work is **dispatchable, auditable and recoverable**.
 > **Version baseline: `0.5.0` = the new baseline** — the team-asset (`team-asset`) and `chain` declaration faces have been **fully retired**; `team` is now an **optional free-form label** (never parsed, never validated, never blocks batch creation).
-> **Supported hosts (target line)**: `@deepseek-ai/dsh` **`0.2.0-rc.1`** — **`0.1.7` is legacy-compatible only and is no longer verified** (its behaviour is no longer a support claim; the **`peerDependencies` ranges are unchanged** — kept permissive, **nothing actively refuses an install**, so a 0.1.7 host can still be installed; retirement means **no longer verified**, **not refused**) ⇒ see the **target-line support matrix (single line)** and the upstream pinning in **§3.2**.
+> **Supported host**: `@deepseek-ai/dsh` **`0.2.x`** (wide declaration; no pinned rc). Prerelease hosts need an exemption in the plugin manager.
 
 ---
 
@@ -37,65 +37,42 @@ VERSION=$(node -p "require('./package.json').version")   # version comes from pa
 pnpm pack                 # ⇒ dsh-punky-swarm-$VERSION.tgz
 ```
 
-**Step 2 — the single install command** (dev / offline; on a clean `DSH_HOME` one command installs everything):
+**Step 2 — the single install command** (dev / offline; one command on a clean `DSH_HOME`):
 
-First read the **host rc** (referred to below as `<HOST_RC>`; example value on this machine: `0.2.0-rc.1` — always use your own host's output):
-
-```bash
-dsh --version
-```
+Upstream packages use the **wide declaration** (`0.2.x`, same line as the host):
 
 ```bash
-dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz @deepseek-ai/dsh-experimental-agent-team-profile@<HOST_RC> @deepseek-ai/dsh-agent-preset@<HOST_RC>
+dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
+  @deepseek-ai/dsh-experimental-agent-team-profile@0.2.x \
+  @deepseek-ai/dsh-agent-preset@0.2.x
 ```
 
-**Three hard requirements (do not skip)**:
+**Three requirements**:
 
-1. **List both upstream packages explicitly, and pin both to the host rc**: `<HOST_RC>` comes from the `dsh --version` above (e.g. host `0.2.0-rc.1` ⇒ write `@0.2.0-rc.1` in both places). **Why a caret is wrong and one hard-coded rc is also wrong** — see §3.1 (getting this wrong makes the **mode face vanish silently**).
-2. **No bare spec, no tag-style spec**: a spec with no version is **rejected outright** by the compatibility gate (see the `latest` trap in §4); using a dist-tag instead of a version **switches lines silently** as upstream publishes (the `next` tag now points at the **target line**) ⇒ **always write `<HOST_RC>` as an exact version** (the **target line** looks like `0.2.0-rc.x`; the legacy line `0.1.7-rc.x` is **history only and no longer verified**).
-3. **The explicit spec cannot be omitted**: this package's `dependencies` key has been **removed entirely** ⇒ the upstream packages are **provided by the install command only** (the package carries **no** upstream version range); the profile's `dsh.profile.bundles` **only registers newly added top-level dependencies** ⇒ **transitive dependencies never become a profile layer** ⇒ the command **must** spell out the full package name + version.
+1. **List both upstream packages explicitly**: this package removed its `dependencies` key entirely ⇒ upstream packages come only from the command.
+2. **Use the wide declaration `0.2.x`, never a pinned rc**: a pinned rc breaks on the next host upgrade (semver prerelease rules do not match across patch versions).
+3. **The explicit specs are not optional**: the profile's `dsh.profile.bundles` only records newly added top-level dependencies ⇒ transitive deps never become a profile layer.
 
-### 3.1 Why the spec must be pinned to the host rc (**never a caret, never one hard-coded rc**)
+**Notes**:
 
-- **① A prerelease caret floats silently**: `^0.2.0-rc.1` **includes** `0.2.0-rc.2`, and the package manager picks the **highest satisfying version** ⇒ you think you installed rc.1 but you actually get **rc.2**. **The dependency-declaration layer cannot express "same rc as the host"** — which is exactly why this constraint lives in the **command**.
-- **② The mode-registration package is exactly coupled to the host registry**: `@deepseek-ai/dsh-agent-preset@0.2.0-rc.2` pins `@deepseek-ai/dsh-agent-preset-registry@0.2.0-rc.2` in `peerDependencies`, while an rc.1 host ships `…-preset-registry@0.2.0-rc.1` ⇒ **version mismatch** ⇒ at startup the engine **disables the row**: `preset-minimal` / `preset-cordis` / **`dsh-agent-preset-punky`** ⇒ **the mode face vanishes silently** (per-entry fail-soft: the process still starts and writes only one stderr line `disabling profile plugin row …`; **no UI hint**).
-- **③ One hard-coded rc is equally wrong**: on an rc.1 host it reproduces the chain above, and on an rc.2 host pinning rc.1 does the same ⇒ **the only self-consistent form = read the host rc from `dsh --version` and pin both upstream packages to it** (that is what makes "all four on one rc" true; **never hard-code any rc into a template**).
-- **④ This package's `dependencies` no longer carries any `-profile` entry at all** (the key was **removed entirely** ⇒ the command owns it, which **eliminates the "two families coexisting" condition**), which is **even less** a reason to omit the spec (see requirement 3); `@deepseek-ai/dsh-agent-preset` is likewise **not** in `dependencies` — precisely because of the floating chain above (its peer is exactly coupled to the host registry).
-
-**Additional notes**:
-
-- Use an **absolute path** for `<ABSOLUTE_PATH>` (`dsh plugin` uses `process.cwd()` as pnpm's cwd, so relative paths are easy to get wrong).
-- On a clean `DSH_HOME` the command **auto-initializes the `web` profile**; no manual setup needed first.
-
-### 3.2 Target-line support matrix (single line) (host × upstream pinning)
-
-| Host line | Supported | The **exact suffix** for both specs in the command | Install-command shape | Proven / not yet proven |
-|---|---|---|---|---|
-| **Legacy line** `0.1.7-rc.2` | ⚪ **legacy-compatible (no longer verified)** | `@deepseek-ai/dsh-experimental-agent-team-profile@0.1.7-rc.2` + `@deepseek-ai/dsh-agent-preset@0.1.7-rc.2` | **Still the same single command** (§3 Step 2): replace both `<HOST_RC>` with `0.1.7-rc.2` | **Historical record (it was run; resolution layer + runtime)**: the upstream packages are **provided by the command only** (this package's `dependencies` key was removed entirely); the **three resolution probes** give `distinct=1` — once for the **target line** (`0.2.0-rc.1`) and once for the **legacy line** (`0.1.7-rc.2`) — plus **zero hits for all four packages when no spec is passed** (the **precondition for the two families coexisting is eliminated**); the `@deepseek-ai/dsh-*` ranges in `peerDependencies` pass on all three versions (the kernel compatibility gate reads only those); the workflow row is a **single row** with identical id/name in both copies (guarded by an in-repo consistency test). **Historical record (it was run)**: the **legacy line** `0.1.7-rc.2` was exercised on a **real isolated instance** `D:\dsh\iso-0.1.7-rc.2` (a genuine rc.2 kernel) — **3/3 GREEN**, with the three faces / workflow / port / sentinel all passing; **the only uncovered item = an in-place boot on a real pre-existing profile** (readings in the batch artifact `exec/verify-fix.md`, **that conclusion has not landed ⇒ registered as pending re-check**, see §9) |
-| **Target line** `0.2.0-rc.1` | **✓ (the only target row)** | `@deepseek-ai/dsh-experimental-agent-team-profile@0.2.0-rc.1` + `@deepseek-ai/dsh-agent-preset@0.2.0-rc.1` | Same as above: replace with `0.2.0-rc.1` | **Proven (resolution layer)**: the upstream packages are **provided by the command only** (same as above); the resolution probe gives **`distinct=1` on the target line** (before the fix, the union range produced **both families in one lock** — **negative case on record**); this machine has the isolated carrier `D:\dsh\iso-0.2.0-rc.1`. **Runtime**: batch 6 observed **install-layer non-determinism** on this line (9 runs, 6 red on identical input: **form A** — exactly one of the three sub-packages falling back to the legacy line, silently disabling its row; **form B** — the whole install failing with `status=1`); this batch **eliminates form A's precondition at the resolution layer**, while **form B is environment / package-manager side and is not promised as fixed** (it is only required to **fail loudly**) ⇒ **target-line** runtime readings live in `exec/verify-fix.md` (**pending re-check**) |
-| Reference · `0.1.7-rc.1` | ⚪ **not a target line** | Same shape (pin `0.1.7-rc.1`) | Same as above | Only a **stand-in for the legacy line** (what this machine's CLI actually ships); it is **not** a target row here — **only the `0.2.0-rc.1` row is authoritative** |
-
-> **Shared prerequisite**: `@deepseek-ai/dsh-workflow-ptc` comes **from the kernel** (all three kernels `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1` depend on it) ⇒ **nothing extra to install** (see §4). — ⚠ **all three versions are history** (an objective dependency fact, **not a support claim**); **the target line is `0.2.0-rc.1`**.
-> **Declaration-face convention**: this table is the **human-readable** declaration face; the **machine-readable** one is the range of the `@deepseek-ai/dsh-*` entries in this package's `peerDependencies` (the kernel compatibility gate reads **only** that; **unchanged in this batch**). **The upstream packages are not provided by this package**: its `dependencies` key has been **removed entirely** ⇒ they come **only from the install command's explicit specs** (`<HOST_RC>`). **No `compatibility.json` exists in this package and none should be added** — in DSH that filename means a **profile-level exemption table** (it lives in the profile directory), so putting one in a package has **no consumer**.
+- `<ABSOLUTE_PATH>` must be absolute (`dsh plugin` uses `process.cwd()` as pnpm cwd; relative paths are error-prone).
+- On a clean `DSH_HOME` the command auto-initializes the `web` profile.
 
 ---
 
 ## 4. Upstream dependency / prerequisite (two explicit specs)
 
-The **two upstream packages** in the install command (see §3), with their roles and where they are declared:
-
-| Package | Role | Declared in |
+| Package | Role | Declared where |
 |---|---|---|
-| `@deepseek-ai/dsh-experimental-agent-team-profile` | **Aggregate bundle**: installing it brings in `-agent-team` / `-client-ui-agent-team` / `-tool-agent-team` — the **source of the** `spawn_teammate` / `team_task_*` / `send_message` / `wait_agent` / `list_agents` / `interrupt_agent` **tool surface** | **Command only** (**no longer in `dependencies`** — that key was removed entirely, so the command owns it) |
-| `@deepseek-ai/dsh-agent-preset` | **The mode-registration plugin itself** (the `dsh-agent-preset-punky` row in `cordis.patch.yml` names it) — without it, face ② **vanishes silently** | **Command only** (**removed from `dependencies`**: its prerelease caret floats to the highest rc, and its peer is **exactly coupled** to the host registry ⇒ floating means row-disabled; see §3.1) |
+| `@deepseek-ai/dsh-experimental-agent-team-profile` | **Aggregate bundle**: pulls in `-agent-team` / `-client-ui-agent-team` / `-tool-agent-team` (source of `spawn_teammate` / `team_task_*` / `send_message` / `wait_agent` / `list_agents` / `interrupt_agent`) | Explicit in the command only |
+| `@deepseek-ai/dsh-agent-preset` | **Preset-registration plugin** (`dsh-agent-preset-punky` row uses it as `name`) | Explicit in the command only |
 
-- **As long as the host has the official dsh packages it just works** — no separate manual install is needed (the command already carries the specs).
-- ⚠ **The `latest` trap (hard)**: that team profile package has `dist-tags.latest = 0.1.5-alpha.2`, which is **incompatible** with the `0.1.7` line ⇒ **a bare install (no version/tag) is rejected outright by the compatibility gate** (engine wording: `an incompatible version is never installed`). The same applies to `@deepseek-ai/dsh-agent-preset` (`latest = 0.1.7-alpha.1`).
-- **Keep all four on one rc**: all four (the two explicit specs plus the sub-packages pulled in by `-profile`) should stay on **one rc line** (= the host rc; the **target line** is shaped like `0.2.0-rc.x`, while the legacy line `0.1.7-rc.x` is **history only and no longer verified**); **do not mix rc versions**.
-- **`workflow-ptc` comes from the kernel (the **target line and the legacy line share one source** ⇒ nothing extra to install)**: `@deepseek-ai/dsh-base` depends on `@deepseek-ai/dsh-workflow-ptc` on **all three** of `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1` (**a historical fact**) ⇒ you do **not** need to install any workflow package, and you must **not** add the old pusher row back (see the prohibitions in §9).
-- **The two faces of the adaptation declaration**: **machine-readable** = the range of the `@deepseek-ai/dsh-*` entries in `peerDependencies` above (the **only** face the kernel compatibility gate reads; **that range is unchanged in this batch** — kept permissive, **nothing actively refuses an install**; retirement means **no longer verified**, **not refused**); **human-readable** = the §3.2 **target-line support matrix (single line)**. ⇒ **No new in-package declaration artifact is introduced** (no `compatibility.json`, no invented fields — the kernel reads **neither**).
-- **This package's dependency declaration for the team service (batch `decl-face-and-logging-20260930`, 2026-09-30)**: the engine consumes the host team service **`agentTeams`** (`ctx.get('agentTeams')` → `listMembers`, the source of truth for the Manager roster check) ⇒ that dependency is declared **on the assembly face** (the probe row `inject: [agentTeams]` in `cordis.patch.yml`) and is **never** put into `dependencies` (batch-7 invariant: that key was removed entirely; the upstream packages come only from the explicit specs on the install command). When the service is missing, that row goes **pending** (a **loud** startup audit: `pending (waiting for service: agentTeams)`), while the **sibling engine row and preset row stay alive** (the host is per-entry fail-soft).
-- **`engines.dsh`: deliberately NOT written this round (a zero-effect documentation face)** — consumer evidence: `evaluatePluginCompatibility` (the `dsh-app-boot` compatibility gate) reads **only `peerDependencies`**, and only entries prefixed `@deepseek-ai/dsh` / `@deepseek-ai/dsh-` ⇒ **`engines.dsh` is consumed by no gate**; and `package.json` **cannot carry comments**, so writing it would easily be misread as an enforced constraint ⇒ this package **does not write that field**; kernel compatibility is carried **only by `peerDependencies` plus the §3.2 target-line matrix** (the field is neither mandatory nor part of any rejection or validation).
+- **Works as long as the host ships the official dsh packages** — upstream packages are provided only by the install command.
+- **Version policy (wide declaration)**: this package keeps only `0.2.x` for `@deepseek-ai/dsh-tools` in `peerDependencies`; no specific rc is pinned.
+  - Under standard semver `0.2.x` does **not** match prerelease hosts (e.g. `0.2.2-rc.1`) ⇒ allow/exempt them in the plugin manager.
+- **`workflow-ptc` is provided by the kernel** (`@deepseek-ai/dsh-base` depends on it) ⇒ no extra install; **do not** re-add the legacy workflow row (see §9).
+- **`engines.dsh` is not written**: the compatibility gate reads only `peerDependencies` (the `@deepseek-ai/dsh*` prefix); that field has zero effect.
+- **Team-service dependency**: the engine consumes the host `agentTeams` service; the declaration lives on the assembly face (`cordis.patch.yml` probe row `inject: [agentTeams]`), not in `dependencies`. When missing, that row goes pending (loud at boot) while the engine and preset rows survive.
 
 ---
 
@@ -184,10 +161,8 @@ Alternatively drop the package from the profile's `dsh.profile.bundles` and rest
 
 ## 9. Known boundaries (stated honestly)
 
-- A failed install only produces a **stderr warning** (the engine is **per-entry fail-soft**, and neither of this plugin's two rows is on the required-startup list) ⇒ the mode may end up **silently unmounted**. **Use the self-check script in §5 to verify actively.**
-- Preset sub-entries mount during **session assembly** (not during startup auditing) ⇒ a bad sub-entry only affects **that preset's agent composition**, and it too only leaves a stderr line.
-- The `latest` tag is incompatible with the `0.1.7` line (§4) ⇒ **always pin the version explicitly**.
-- **Why one workflow row covers both the target and the legacy line, and what is forbidden**: the basis is that **all three** kernels `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1` depend on `@deepseek-ai/dsh-workflow-ptc` ⇒ **a single row is the target-line answer** (it holds for the legacy line too, without becoming a support claim). **Prohibitions**: ① **never** add the old pusher row back (the **worker-thread** package under `@deepseek-ai/dsh-workflow-…`) — it would create a **guaranteed-failing row on the target or the legacy line**, and the legacy line risks **double mounting**; ② **never** add a `!!js` **version-conditional row** — the kernel exposes **no host-version variable** ⇒ such a condition is **unreachable**, and a bad expression just produces a new warning.
-- **The legacy line was run (a historical record; no longer verified)**: the legacy line `0.1.7-rc.2` was exercised on a **real isolated instance** `D:\dsh\iso-0.1.7-rc.2` (**3/3 GREEN**, with the three faces / workflow / port / sentinel all passing) — **that record is history and is not a current support claim**; **the only uncovered item (kept) = an in-place boot on a real pre-existing profile** (an isolated run ≠ upgrading a live profile in place; runtime readings in the batch artifact `exec/verify-fix.md` — **that conclusion has not landed ⇒ registered as pending re-check**).
-- **Target-line install-layer non-determinism (found in batch 6 / fixed in this batch)**: on identical input the target line once went **9 runs, 6 red** — **form A** (exactly one of the three sub-packages falling back to the legacy line ⇒ that row **silently disabled**) and **form B** (the whole install failing with `status=1`); this batch **eliminates form A's precondition at the resolution layer** (the package no longer declares any upstream range ⇒ there is **no old version to fall back to** on a target-line host), while **form B is environment / package-manager side and is not promised as fixed** (only required to **fail loudly** with `status=1` + a diagnostics path) ⇒ **target-line** runtime readings belong to `exec/verify-fix.md` (**pending re-check**).
-- **Tag-style specs switch lines silently** (§3.2 / §4): `latest` and dist-tags (such as `next`) may point at a **non-target line** ⇒ **always write an exact version**.
+- Install failure **only lands as a stderr warning** (per-entry fail-soft: neither plugin row is on the required boot list) ⇒ the preset may be **silently unmounted**. **Use the self-check script in §5 to verify** proactively.
+- Preset sub-items mount **at session-assembly time** (not at boot audit) ⇒ a broken sub-item only affects that preset's agent composition, again leaving only stderr.
+- **Version policy**: wide declaration `0.2.x`; prerelease hosts (`0.2.x-rc.y`) do not match under standard semver — grant an exemption in the plugin manager.
+- **workflow face**: `@deepseek-ai/dsh-workflow-ptc` is provided by the kernel, one row is enough. **Forbidden**: ① re-adding the legacy worker-thread workflow row (adds a guaranteed-failing row); ② adding `!!js` version-conditional rows (the kernel exposes no host-version variable ⇒ unreachable).
+- **After a host upgrade**: if the plugin row is skipped by the compatibility gate (stderr: `skipping profile bundle`), check whether the `peerDependencies` wide declaration still covers the host major line, or explicitly allow that version in the plugin manager.
