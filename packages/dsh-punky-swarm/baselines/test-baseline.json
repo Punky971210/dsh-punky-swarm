@@ -89,11 +89,11 @@
       "todos": 0
     },
     "test/agent-descriptor.test.js": {
-      "asserts": 31,
-      "blankLines": 19,
-      "lines": 139,
+      "asserts": 34,
+      "blankLines": 20,
+      "lines": 150,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 6,
       "todos": 0
     },
     "test/agent-team-probe.test.js": {
@@ -537,11 +537,11 @@
       "todos": 0
     },
     "test/discovery.test.js": {
-      "asserts": 111,
-      "blankLines": 36,
-      "lines": 359,
+      "asserts": 118,
+      "blankLines": 40,
+      "lines": 397,
       "tautologies": 0,
-      "tests": 26,
+      "tests": 28,
       "todos": 0
     },
     "test/dispatch-events-single-source.test.js": {
@@ -2105,7 +2105,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T10:51:30Z",
+  "generatedAt": "2026-11-08T11:24:49Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2116,15 +2116,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "M5 指引清理：删 references/manager.md（preset 五件→四件）、discipline/README/skills 同步收口",
+  "reason": "⑧-3 单一构造点 + 补 get()；⑧-2 filter 改用描述符合成记录（新增 3 条判据）",
   "schema": 1,
   "totals": {
-    "asserts": 11764,
-    "blankLines": 6698,
+    "asserts": 11774,
+    "blankLines": 6703,
     "files": 263,
-    "lines": 70658,
+    "lines": 70707,
     "tautologies": 0,
-    "tests": 2464,
+    "tests": 2467,
     "todos": 0
   }
 }

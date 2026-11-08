@@ -34,13 +34,14 @@ function toAgentSkill(skill) {
   };
 }
 
-function buildAcsView(entry) {
+/** filter 的合成记录：**描述符全字段 ∪ 条目级四键**（`aic`/`active`/`kind`/`skills`）。
+ *  单点构造（此前是 `buildAcsView`，只留了六键 ⇒ 描述符其余字段不可过滤）。 */
+function filterRecordOf(entry) {
   return {
+    ...(entry.acs && typeof entry.acs === 'object' ? entry.acs : {}),
     aic: entry.aic,
     active: entry.active,
-    name: entry.name,
-    description: entry.description,
-    version: entry.version,
+    kind: entry.kind,
     skills: entry.skills,
   };
 }
@@ -69,7 +70,6 @@ export function createDiscoveryService({ catalog, agentDescriptors = [], config 
       kind: 'tool',
     };
     entry.active = isNodeActive(entry, nodes);
-    entry.acsView = buildAcsView(entry);
     entries.push(entry);
   }
 
@@ -85,7 +85,6 @@ export function createDiscoveryService({ catalog, agentDescriptors = [], config 
       kind: 'agent',
     };
     entry.active = isNodeActive(entry, nodes);
-    entry.acsView = buildAcsView(entry);
     entries.push(entry);
   }
 
@@ -124,8 +123,14 @@ export function createDiscoveryService({ catalog, agentDescriptors = [], config 
 
   function applyFilterAndActive(request, scored) {
     const activeOnly = scored.filter((e) => e.entry.active === true);
+    // 【⑧-2 · 2026-11-08 裁决甲】filter 作用于**完整描述符**，不是压缩视图。
+    //   旧实现压成 `acsView = {aic,active,name,description,version,skills}` ⇒ 工具描述符的
+    //   `toolId`/`inputParam`/`outputParam`、席位描述符的 `provider`/`endPoints`/`protocolVersion`
+    //   与 `kind` 全部不可过滤（外部按这些字段查会「查不到但确实存在」）。
+    //   合成口径 = **描述符全字段 ∪ 条目级四键**（`aic`/`active`/`kind`/`skills`）：后四键只有条目
+    //   才有（工具描述符用 `toolId` 不用 `aic`），去掉它们会让 `field:'aic'` 这类既有查询反向失效。
     const filtered = request.filter
-      ? activeOnly.filter((e) => evaluateFilter(e.entry.acsView, request.filter))
+      ? activeOnly.filter((e) => evaluateFilter(filterRecordOf(e.entry), request.filter))
       : activeOnly;
     return filtered;
   }

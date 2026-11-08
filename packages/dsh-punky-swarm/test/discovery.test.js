@@ -213,6 +213,44 @@ test('discover filtered：只按 filter 过滤，query 被忽略', () => {
   assert.ok(hits.every((h) => h.aic === 'punky-preset.exec.coder'));
 });
 
+// ── 【⑧-2 · 2026-11-08 裁决甲】filter 作用于**完整描述符**，不再只看压缩视图 ──────────
+//   旧实现把条目压成 `acsView = {aic,active,name,description,version,skills}` 再交给
+//   `evaluateFilter` ⇒ 工具描述符的 `toolId`/`inputParam`/`outputParam`、席位描述符的
+//   `provider`/`endPoints`/`protocolVersion`、以及 `kind` 全部不可过滤。
+test('discover filtered：可达工具描述符字段（toolId / inputParam）——旧压缩视图下恒不命中', () => {
+  const svc = makeService();
+  const byToolId = svc.discover({
+    type: 'filtered',
+    filter: { conditions: [{ field: 'toolId', op: 'contains', value: 'wave_plan' }] },
+  });
+  const toolHits = byToolId.result.agents[0].agentSkills;
+  assert.ok(toolHits.length >= 1, '按 toolId 过滤必须命中 wave_plan（压缩视图无 toolId ⇒ 恒空）');
+  assert.ok(toolHits.every((h) => h.aic.endsWith('wave_plan')), '只应命中 wave_plan，实得 ' + JSON.stringify(toolHits.map((h) => h.aic)));
+
+  const byParam = svc.discover({
+    type: 'filtered',
+    filter: { conditions: [{ field: 'inputParam.required', op: 'contains', value: 'batchId' }] },
+  });
+  const paramHits = byParam.result.agents[0].agentSkills;
+  assert.ok(paramHits.length >= 1, '按 inputParam.required 过滤必须命中（压缩视图无 inputParam ⇒ 恒空）');
+  assert.ok(paramHits.every((h) => h.aic.endsWith('wave_plan')), '只有 wave_plan 声明 batchId 必填，实得 ' + JSON.stringify(paramHits.map((h) => h.aic)));
+});
+
+test('discover filtered：条目级四键仍可达（aic / kind）——合成记录不得反向丢掉既有可查字段', () => {
+  const svc = makeService();
+  const byAic = svc.discover({
+    type: 'filtered',
+    filter: { conditions: [{ field: 'aic', op: 'contains', value: 'wave_plan' }] },
+  });
+  assert.ok(byAic.result.agents[0].agentSkills.length >= 1,
+    '`aic` 是工具条目的既有可查键（工具描述符只有 toolId，靠条目级合成补上）；丢了就是反向回归');
+
+  const byKind = svc.discover({ type: 'filtered', filter: { conditions: [{ field: 'kind', op: 'eq', value: 'agent' }] } });
+  const kindHits = byKind.result.agents[0].agentSkills;
+  assert.ok(kindHits.length >= 1, '`kind` 必须可过滤（此前只在条目上、不在视图里）');
+  assert.ok(kindHits.every((h) => h.aic.startsWith('punky-preset.')), 'kind=agent 只应命中席位条目，实得 ' + JSON.stringify(kindHits.map((h) => h.aic)));
+});
+
 test('discover trending：随机打散返回 ≤ limit', () => {
   const svc = makeService();
   const r = svc.discover({ type: 'trending', limit: 2 });

@@ -76,6 +76,17 @@ test('目录：buildAgentCatalog 只读快照（list 拷贝 / descriptors 冻结
   assert.ok(Object.isFrozen(cat.descriptors));
 });
 
+// 【⑧-3 · 2026-11-08 裁决甲】目录接口与 `buildToolCatalog` 对齐：补 `get(name)`。
+//   此前工具目录能按名取、席位目录只能全量列，调用方被迫各自 `find`（同一语义两套写法）。
+test('目录：buildAgentCatalog.get(name) 与 buildToolCatalog 同形（命中 → 描述符 / 未命中 → null）', () => {
+  const cat = buildAgentCatalog(DEFAULT_ASSEMBLY, fixedEngine);
+  const first = cat.list()[0];
+  const hit = cat.get(first.name);
+  assert.equal(hit?.name, first.name, 'get(name) 须命中同名描述符');
+  assert.deepEqual(hit, first, '取回的必须是同一份描述符（不是投影副本）');
+  assert.equal(cat.get('no-such-seat'), null, '未命中返回 null（与工具目录同形）');
+});
+
 // —— 接线层（register.js）——
 ;
 

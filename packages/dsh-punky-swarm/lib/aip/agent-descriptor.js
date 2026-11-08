@@ -97,6 +97,11 @@ export function buildAgentCatalog(assembly, engineInfo = {}) {
     list() {
       return descriptors.slice();
     },
+    // 【⑧-3 · 2026-11-08】接口与 `buildToolCatalog` 对齐（后者有 `get(name)`）——
+    //   两套目录此前一个能按名取、一个只能全量列，调用方被迫各自 find。
+    get(name) {
+      return descriptors.find((d) => d.name === name) ?? null;
+    },
   };
 }
 

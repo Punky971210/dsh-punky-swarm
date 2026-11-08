@@ -325,7 +325,14 @@ const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
     const discoveryCfg = resolveDiscoveryConfig(config);
     let discovery = null;
     if (discoveryCfg.enabled) {
-      const agentDescriptors = buildAgentDescriptors(DEFAULT_ASSEMBLY, { version: engineVersion() });
+      // 【⑧-3 · 2026-11-08 裁决甲】agent 目录**单一构造点** = `tools.agentCatalog`（`tools/register.js:63`
+      //   用 `resolveAssembly(aip.team ?? 'punky-preset', config.assembly)` + 9 个 engineInfo 键构建）。
+      //   此前这里**另建一次** `buildAgentDescriptors(DEFAULT_ASSEMBLY, {version})` ⇒ 配置了
+      //   `aip.team` / `config.assembly` 时 `/agents` 与 `/discover` 会报**不同团队/不同席位集**。
+      //   回落分支只在 `aip.enabled=false`（目录不构建）时生效：保持既有降级语义（有席位、无工具）。
+      const agentDescriptors = tools.agentCatalog
+        ? tools.agentCatalog.list()
+        : buildAgentDescriptors(DEFAULT_ASSEMBLY, { version: engineVersion() });
       discovery = createDiscoveryService({ catalog: tools.catalog, agentDescriptors, config: discoveryCfg });
       ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
     }
