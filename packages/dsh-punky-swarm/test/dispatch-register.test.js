@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 派发登记点测试（写侧登记：member_set_status running 意图 → subagent post-execute → member.dispatch 落批）。
 // 覆盖：R1 提取纯函数（结构化 result 各形态）；R2 真实登记路径（member_set_status running 意图 → subagent
-// post-execute → member.dispatch 事件落批 + dispatchIndex 可查）；非 Manager 派发不登记（无登记静默降级语义）；
+// post-execute → member.dispatch 事件落批 + dispatchIndex 可查）；无派发意图（Leader 直派）不登记（无登记静默降级语义）；
 // R4 send_message 唤醒已退役（S2 one-shot 化）：退役透传零登记；R4b 提取失败 ⇒ 显式降级告警（T-14/G-10#3，载体迁移到 subagent）；R5 装配层端到端（apply 真实装配：登记 → 归属命中 → escalation
 // 计数 → paused——读侧骨架零改动生效）；R6 装配注入 resolveBatchContext 显式路径（不经 member_set_status）。
 // 标注（如实）：governance-escalate.test.js 原用 member.dispatch 直写模拟「映射命中」前置——
@@ -89,27 +89,27 @@ test('R1: extractWorkerSessionId——subagent continuable 取 subagentId；back
 // ── R2：真实登记路径（member_set_status running 意图 → subagent post-execute → member.dispatch 事件落批 + dispatchIndex 可查）──
 test('R2: installDispatchRegistration——member_set_status(running) 意图 → subagent post-execute → member.dispatch 事件落批、dispatchIndex 映射可查', async () => {
   const root = tempRoot('punky-dr2-');
-  // 拓扑对齐：Manager 会话 = 批会话（member_set_status 未显式 session 时 sessionOf 回退 exec.agent.session.id，
-  // 与 member_set_status 工具自身 setMember 定位同源——批文件须在 Manager 会话下）
-  const aux = seedRunning(root, 'mgr-s', 'b-r2');
+  // 拓扑对齐：批 owner 会话 = 批会话（member_set_status 未显式 session 时 sessionOf 回退 exec.agent.session.id，
+  // 与 member_set_status 工具自身 setMember 定位同源——批文件须在批 owner 会话下）
+  const aux = seedRunning(root, 'own-s', 'b-r2');
   const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   assert.equal(reg.installed, true);
   assert.ok(ctx.listeners.has('tools/post-execute'), 'post listener 已挂载');
   try {
-    // ① Manager 会话先 member_set_status(running)（0g 时序：先置 running 再派发 worker）
-    const mgrExec = execOf('member_set_status', { batchId: 'b-r2', lane: 'l1', status: 'running' }, 'mgr-s');
+    // ① 批 owner 会话先 member_set_status(running)（0g 时序：先置 running 再派发 worker）
+    const mgrExec = execOf('member_set_status', { batchId: 'b-r2', lane: 'l1', status: 'running' }, 'own-s');
     await dispatchPostAll(ctx, mgrExec, { isError: false, value: { batchId: 'b-r2', lane: 'l1', status: 'running' } });
-    // ② Manager 会话 subagent 派发 worker → post-execute 返回 childId
-    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r2a'));
-    const b = aux.readBatch('mgr-s', 'b-r2');
+    // ② 批 owner 会话 subagent 派发 worker → post-execute 返回 childId
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'own-s'), subagentResult('ws-r2a'));
+    const b = aux.readBatch('own-s', 'b-r2');
     const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
     assert.deepEqual(dis.map((e) => e.workerSessionId), ['ws-r2a'], 'member.dispatch 恰 1 条（身份 = workerSessionId 集合；期望取自本用例 subagentResult(ws-r2a) 入参）');
     assert.equal(dis[0].workerSessionId, 'ws-r2a');
     assert.equal(dis[0].lane, 'l1');
     // dispatchIndex 可查（与读侧骨架同一 Map，登记后立即命中）
-    assert.deepEqual(index.get('ws-r2a'), { sessionId: 'mgr-s', batchId: 'b-r2', lane: 'l1' });
+    assert.deepEqual(index.get('ws-r2a'), { sessionId: 'own-s', batchId: 'b-r2', lane: 'l1' });
     assert.equal(reg.count(), 1);
     assert.equal(reg.pendingIntents().length, 0, '意图已消费（一次 running → 一次派发登记）');
   } finally {
@@ -117,7 +117,7 @@ test('R2: installDispatchRegistration——member_set_status(running) 意图 →
   }
 });
 
-// R2-b：意图 sessionId 显式指向批所在会话（Manager 会话 ≠ 批会话时，member_set_status 带 args.session）
+// R2-b：意图 sessionId 显式指向批所在会话（派发会话 ≠ 批会话时，member_set_status 带 args.session）
 test('R2b: member_set_status 显式 session 指向批会话 → 事件落对批、映射正确', async () => {
   const root = tempRoot('punky-dr2b-');
   const aux = seedRunning(root, 'sess-b', 'b-r2b');
@@ -125,8 +125,8 @@ test('R2b: member_set_status 显式 session 指向批会话 → 事件落对批�
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
-    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r2b', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
-    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r2b'));
+    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r2b', lane: 'l1', status: 'running' }, 'own-s'), { isError: false, value: {} });
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'own-s'), subagentResult('ws-r2b'));
     const b = aux.readBatch('sess-b', 'b-r2b');
     // 【U-7】拆「存在性 + 上界」两条（用户裁决：不做 `===1` 形式断言）
   assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
@@ -139,15 +139,15 @@ test('R2b: member_set_status 显式 session 指向批会话 → 事件落对批�
   }
 });
 
-// ── R3：非 Manager 派发不登记（T16 语义：无 member_set_status 意图 → 零 member.dispatch、零副作用）──
-test('R3: 未取到批上下文（无 member_set_status 意图，非 Manager 派发）→ 不登记（T16 静默降级）', async () => {
+// ── R3：无派发意图不登记（T16 语义：无 member_set_status 意图 → 零 member.dispatch、零副作用）──
+test('R3: 未取到批上下文（无 member_set_status 意图，Leader 直派）→ 不登记（T16 静默降级）', async () => {
   const root = tempRoot('punky-dr3-');
   const aux = seedRunning(root, 'sess-b', 'b-r3');
   const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
-    // 无前置 member_set_status(running)：Leader 直接 subagent（研究派发等非 Manager 场景）
+    // 无前置 member_set_status(running)：Leader 直接 subagent（研究派发等无意图场景）
     await dispatchPostAll(ctx, execOf('subagent', {}, 'leader-s'), subagentResult('ws-r3'));
     const b = aux.readBatch('sess-b', 'b-r3');
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, '零 member.dispatch（T16）');
@@ -173,11 +173,11 @@ test('R4: send_message 已退役出观察名单 → 零登记零告警（透传�
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
     // spawn 登记 ws-r4（在役路径不变）
-    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r4', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
-    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r4'));
+    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r4', lane: 'l1', status: 'running' }, 'own-s'), { isError: false, value: {} });
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'own-s'), subagentResult('ws-r4'));
     // 退役后的 send_message（两种键名形态）→ 不在观察名单 ⇒ 透传，零新增登记
-    await dispatchPostAll(ctx, execOf('send_message', { agent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm2' } });
-    await dispatchPostAll(ctx, execOf('send_message', { subagent_id: 'ws-r4', message: 'wake' }, 'mgr-s'), { isError: false, value: { messageId: 'm3' } });
+    await dispatchPostAll(ctx, execOf('send_message', { agent_id: 'ws-r4', message: 'wake' }, 'own-s'), { isError: false, value: { messageId: 'm2' } });
+    await dispatchPostAll(ctx, execOf('send_message', { subagent_id: 'ws-r4', message: 'wake' }, 'own-s'), { isError: false, value: { messageId: 'm3' } });
     const b = aux.readBatch('sess-b', 'b-r4');
     // 【U-7 · B 档】拆「存在性 + 上界」两条
   assert.ok(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH && e.workerSessionId === 'ws-r4').length >= 1,
@@ -202,9 +202,9 @@ test('R4b: 派发工具提取失败（subagent 载荷无会话 id）⇒ 显式�
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
     // 前置意图在场（否则「不登记」会被 T16 意图缺失掩盖，测不到提取失败这一因）
-    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r4b', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
+    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r4b', lane: 'l1', status: 'running' }, 'own-s'), { isError: false, value: {} });
     // 载荷无任何会话 id 键 ⇒ 提取不到
-    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), { isError: false, value: {} });
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'own-s'), { isError: false, value: {} });
     const b = aux.readBatch('sess-b', 'b-r4b');
     assert.equal(b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 0, '提取不到 ⇒ 零伪登记');
     assert.equal(index.size, 0, 'dispatchIndex 无映射');
@@ -232,10 +232,10 @@ test('R5: apply 装配端到端——真实登记路径（member_set_status runn
     governance: { hook: { enabled: true, rules: [RULE_RM_RF], escalation: { enabled: true, threshold: 3 } } },
   });
   try {
-    // ① Manager ctx：member_set_status(running)（意图指向 sess-b/b-r5/l1）
-    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r5', lane: 'l1', status: 'running' }, 'mgr-s'), { isError: false, value: {} });
-    // ② Manager ctx：subagent 派发 worker → 登记 ws-r5
-    await dispatchPostAll(ctx, execOf('subagent', {}, 'mgr-s'), subagentResult('ws-r5'));
+    // ① 批 owner ctx：member_set_status(running)（意图指向 sess-b/b-r5/l1）
+    await dispatchPostAll(ctx, execOf('member_set_status', { session: 'sess-b', batchId: 'b-r5', lane: 'l1', status: 'running' }, 'own-s'), { isError: false, value: {} });
+    // ② 批 owner ctx：subagent 派发 worker → 登记 ws-r5
+    await dispatchPostAll(ctx, execOf('subagent', {}, 'own-s'), subagentResult('ws-r5'));
     const b0 = aux.readBatch('sess-b', 'b-r5');
     // 【U-7 · B 档】拆「存在性 + 上界」两条
   assert.ok(b0.events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length >= 1,
@@ -336,24 +336,24 @@ test('R11: createCoreTools 暴露 lane_dispatch（参数含 batchId/lane；与 m
 test('R10: 任务包含句柄 ⇒ 依句柄 (batchId, lane) 精确登记；并行两条 lane 全登记；句柄重放不登记', async () => {
   __resetLaneHandles();
   const root = tempRoot('punky-dr10-');
-  const aux = seedRunning(root, 'mgr-s', 'b-r10', ['l1', 'l2']);
+  const aux = seedRunning(root, 'own-s', 'b-r10', ['l1', 'l2']);
   const ctx = assemblyCtxHostFull();
   const index = new Map();
   const reg = installDispatchRegistration(ctx, { store: createStore(root), dispatchIndex: index, config: {}, logger: ctx.logger });
   try {
-    const h1 = issueLaneHandle({ batchId: 'b-r10', lane: 'l1', sessionId: 'mgr-s' });
-    const h2 = issueLaneHandle({ batchId: 'b-r10', lane: 'l2', sessionId: 'mgr-s' });
+    const h1 = issueLaneHandle({ batchId: 'b-r10', lane: 'l1', sessionId: 'own-s' });
+    const h2 = issueLaneHandle({ batchId: 'b-r10', lane: 'l2', sessionId: 'own-s' });
     // 派发 A：prompt 首行带 l1 句柄；派发 B：description 带 l2 句柄（同一会话、同一波）
-    await dispatchPostAll(ctx, execOf('subagent', { prompt: '任务包\n' + h1.firstLine }, 'mgr-s'), subagentResult('ws-l1'));
-    await dispatchPostAll(ctx, execOf('subagent', { description: h2.firstLine }, 'mgr-s'), subagentResult('ws-l2'));
-    const b = aux.readBatch('mgr-s', 'b-r10');
+    await dispatchPostAll(ctx, execOf('subagent', { prompt: '任务包\n' + h1.firstLine }, 'own-s'), subagentResult('ws-l1'));
+    await dispatchPostAll(ctx, execOf('subagent', { description: h2.firstLine }, 'own-s'), subagentResult('ws-l2'));
+    const b = aux.readBatch('own-s', 'b-r10');
     const dis = b.events.filter((e) => e.type === EVT_MEMBER_DISPATCH);
     assert.deepEqual(dis.map((e) => e.workerSessionId).sort(), ['ws-l1', 'ws-l2'], '两条 lane 均登记（身份 = 两个 workerSessionId；期望取自两次派发各自的 subagentResult 入参）');
-    assert.deepEqual(index.get('ws-l1'), { sessionId: 'mgr-s', batchId: 'b-r10', lane: 'l1' });
-    assert.deepEqual(index.get('ws-l2'), { sessionId: 'mgr-s', batchId: 'b-r10', lane: 'l2' });
+    assert.deepEqual(index.get('ws-l1'), { sessionId: 'own-s', batchId: 'b-r10', lane: 'l1' });
+    assert.deepEqual(index.get('ws-l2'), { sessionId: 'own-s', batchId: 'b-r10', lane: 'l2' });
     // 句柄一次性 ⇒ 重放同一句柄不新增登记（且不回退意图路径）
-    await dispatchPostAll(ctx, execOf('subagent', { prompt: h1.firstLine }, 'mgr-s'), subagentResult('ws-replay'));
-    assert.equal(aux.readBatch('mgr-s', 'b-r10').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 2, '重放不新增');
+    await dispatchPostAll(ctx, execOf('subagent', { prompt: h1.firstLine }, 'own-s'), subagentResult('ws-replay'));
+    assert.equal(aux.readBatch('own-s', 'b-r10').events.filter((e) => e.type === EVT_MEMBER_DISPATCH).length, 2, '重放不新增');
     assert.ok(ctx.calls.warn.some((w) => w.includes('lane handle rejected')), '被拒句柄留痕 warn（handle-consumed）');
   } finally {
     reg.dispose();
