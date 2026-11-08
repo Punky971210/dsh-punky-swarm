@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 import * as schema from '../../schema.js';
-import { exemptClearedAtOf, isDanglingLane, laneStateOf } from '../lane-heartbeat.js';
+import { exemptClearedAtOf } from './verdict.js'; // ⑨-2：判定原语真源
+import { isDanglingLane, laneStateOf } from '../../state/lane-state.js'; // 谓词真源（不经门面中转）
 import {
   STATE_WINDOW_KEY,
   stateAnchorOf, batchPausedAnchorOf,

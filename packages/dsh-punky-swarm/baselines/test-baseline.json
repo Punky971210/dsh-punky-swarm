@@ -609,9 +609,9 @@
       "todos": 0
     },
     "test/esm-first-eval.test.js": {
-      "asserts": 24,
-      "blankLines": 31,
-      "lines": 427,
+      "asserts": 25,
+      "blankLines": 33,
+      "lines": 418,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T20:00:20Z",
+  "generatedAt": "2026-11-08T21:11:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,13 +2124,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑤-1 裁决乙：任务包文案按形态如实区分 + 双面锁",
+  "reason": "⑨-2 拆环：lane-heartbeat 拆 verdict/judge，环归零，ESM 环守卫显式升级",
   "schema": 1,
   "totals": {
-    "asserts": 11846,
-    "blankLines": 6738,
+    "asserts": 11847,
+    "blankLines": 6740,
     "files": 264,
-    "lines": 71130,
+    "lines": 71121,
     "tautologies": 0,
     "tests": 2485,
     "todos": 0

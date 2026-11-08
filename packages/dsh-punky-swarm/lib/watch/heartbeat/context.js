@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { mailboxRootOf as mailboxRootOfAt } from '../../mailbox-paths.js'; // mailbox 落盘根单点（A1-P2-10）
 import { resolveArtifactIn, engineRootOf } from '../../state/batch-paths.js'; // 产物声明路径解析单点（WD-3b P6；逃逸 ⇒ throw）＋引擎根推导单点（A2-G08）
 import { resolveWatchConfig } from '../../schema.js';
-import { lastProgressTsOf, resolveLongrunConfig, buildSchedule } from '../lane-heartbeat.js';
+import { lastProgressTsOf, resolveLongrunConfig, buildSchedule } from './verdict.js'; // ⑨-2：判定原语真源（原经门面二传手）
 
 export function createHeartbeatContext({ store, mailbox, config, root, now, liveConfig, logger }) {
   const cfg = resolveWatchConfig(config);
@@ -64,7 +64,7 @@ export function resolveArtifact(cx, sessionId, batchId, rel) {
 // 该 lane 在引擎产物根下的目录 = <artifacts>/<batchId>/<lane>（progress 快照与 lane 产物同源落盘约定；
 //   实测即 <artifacts>/<batchId>/<lane>/progress/NN-*.md）。
 //   用原始 laneId 拼接：sanitize 只做 mailbox 路径安全，产物路径须与 worker 实际落盘逐字一致。
-export function laneProgressDirOf(cx, sessionId, batchId, lane) {
+function laneProgressDirOf(cx, sessionId, batchId, lane) {
   return join(cx.store.artifactsDirOf(sessionId, batchId), lane);
 }
 // 进度快照信号的**扫描面收窄**（两条，二者互补，只增不减信号面）：

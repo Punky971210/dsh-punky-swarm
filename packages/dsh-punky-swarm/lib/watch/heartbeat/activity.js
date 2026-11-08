@@ -65,7 +65,7 @@ export function laneEventActivity(batch, lane, sinceTs, laneState = null) {
   return false;
 }
 // ② outbox：该 lane outbox 目录出现未 ack 消息
-export function outboxActivity(cx, sessionId, batchId, lane) {
+function outboxActivity(cx, sessionId, batchId, lane) {
   try {
     return cx.mailbox.readUnacked(mailboxRootOf(cx, sessionId, batchId), { type: 'outbox', lane }).length > 0;
   } catch { return false; }
@@ -90,7 +90,7 @@ export function artifactActivity(cx, sessionId, batchId, batch, lane, sinceTs) {
 //    故本信号按「快照落入 noProgressWindowMs 窗内」判活跃——与 longrun 档的 checkpoint 新鲜度同口径；
 //    参考下界取 min(lastSeenTs, nowTs - 窗)，使「窗内新写」与「窗内但早于基线」两种情形都算活跃。
 //    停止写快照 → 超窗即回到原判据，stalled 照常触发（探针不被稀释）。
-export function progressActivity(cx, sessionId, batchId, lane, sinceTs, nowTs, windowMs) {
+function progressActivity(cx, sessionId, batchId, lane, sinceTs, nowTs, windowMs) {
   const m = progressSnapshotTsOf(cx, sessionId, batchId, lane);
   if (m === null) return false;
   const windowStart = nowTs - windowMs;

@@ -18,7 +18,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { findTask } from '../../state/task-utils.js'; // 单点（原本地定义删除）
 import * as EVT from '../../state/event-types.js';
 import { laneStateOf, isScannedLaneState } from '../../state/lane-state.js'; // 谓词真源（不走聚合器中转）
-import { stintRunningSinceOf } from '../lane-heartbeat.js'; // 函数声明：实例化期即初始化 ⇒ 无 TDZ
 // A1-P2-01 补丁①：`reason` 常量与 `STATE_WINDOW_KEY` 已下沉到**零依赖叶子** `./reasons.js`
 //   （TDZ 根因：`heartbeat/notice.js` 在模块顶层读这些 `const`，而本文件位于 9 模块环内）。
 //   此处**保形再导出**（导出面冻结：`lane-heartbeat.js` / `state-surface.js` 等既有消费点逐字不动）。
@@ -82,6 +81,20 @@ function laneConsumePathsOf(batch, lane) {
   const t = findTask(batch, lane);
   if (!t) return []; // wavePlan 缺该项 ⇒ 零观测面（BR-1/BR-3 反例；不存在即「不可判」而非「可判为真」）
   return Array.isArray(t.consume) ? t.consume.filter((p) => typeof p === 'string' && p) : [];
+}
+
+// 【⑨-2】纯事件流读取：最近一次 `member.dispatch` 或 `member.settled(running)` 的时刻。
+//   为何住在 primitives 而非 verdict：它是「纯事件流读取原语」，verdict / judge / 本文件都要用；
+//   若放在 verdict 层，primitives → verdict → primitives 会形成环（实测踩中过）。
+export function stintRunningSinceOf(batch, lane) {
+  const evs = batch?.events ?? [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const e = evs[i];
+    if (e?.lane !== lane) continue;
+    if (e.type === EVT.EVT_MEMBER_DISPATCH) return parseEvTs(e);
+    if (e.type === EVT.EVT_MEMBER_SETTLED && e.to === 'running') return parseEvTs(e);
+  }
+  return null;
 }
 
 export {

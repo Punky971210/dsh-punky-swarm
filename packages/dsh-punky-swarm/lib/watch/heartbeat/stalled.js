@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import * as schema from '../../schema.js';
 import * as EVT from '../../state/event-types.js';
-import { bindingGapOf, laneStateOf, stintRunningSinceOf } from '../lane-heartbeat.js';
+import { bindingGapOf } from './verdict.js'; // ⑨-2：判定原语真源
+import { stintRunningSinceOf } from './primitives.js'; // 纯事件流读取原语（⑨-2 下沉）
+import { laneStateOf } from '../../state/lane-state.js'; // 谓词真源（不经门面中转）
 import { laneExemptOf, laneKeyOf, mailboxRootOf } from './context.js';
 import {
   baselineTs, batchEntryIndex, freshEntry, hasActivity, markStalled, pendingProbe, probeText, resetEntry,
@@ -47,7 +49,7 @@ export function probeTick(cx) {
 }
 
 // stalled 档扫描主体（P1：改由扫描行驱动，逐字搬移原 `probeTick` 内层循环；判定与顺序零变更）。
-export function stalledScan(cx, nowTs, rows) {
+function stalledScan(cx, nowTs, rows) {
   // 预筛跳过批的条目前缀索引（惰性建立：无预筛批时零成本）
   let entryIndex = null;
   for (const row of rows) {

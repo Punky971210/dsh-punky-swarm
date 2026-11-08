@@ -81,8 +81,23 @@ const FIRST_EVAL_BASELINE = Object.freeze([
   'lib/state/gates.js',
   'lib/wave-plan.js',
 ]);
-/** 残余环的冻结成员集（8 模块，排序后比较；与 `sccCount/memberCount` 断言互补）。 */
-const RESIDUAL_SCC = Object.freeze([
+// ── 【⑨-2 · 2026-11-09 显式升级：残余环已归零】────────────────────────────────────────
+// 本 guard 原本冻结「1 个 SCC / 8 模块 / 24 条环内边 / 1 条外部入边」——那 8 个成员**全部在 watch 域**。
+// ⑨-2 把它们拆掉了：判定原语下沉 `heartbeat/verdict.js`、判定本体下沉 `heartbeat/judge.js`、
+// `laneStateOf` 等谓词直连真源 `state/lane-state.js`，`lane-heartbeat.js` 只留装配与 re-export。
+// ⇒ 全仓静态 ESM 环数 = 0（实测）。
+// 按本文件头「长期防线」的升级协议：**成员集/边集变化必须由本 guard 显式升级**，故三张冻结表翻为空，
+// 并把原 8 个成员另存为 `FORMER_SCC_MEMBERS` —— 它们是 TDZ 风险集中区，首求值清单必须继续覆盖
+// （否则「从清单里删掉一个环成员」这类退化就失去了判据，见 A2-G14 ③ R6 构造）。
+/** 残余环的冻结成员集（⑨-2 之后为空：全仓无环）。 */
+const RESIDUAL_SCC = Object.freeze([]);
+
+/** 残余环的 SCC 个数（⑨-2 之后为 0；与成员集断言互补）。 */
+const RESIDUAL_SCC_COUNT = 0;
+
+/** ⑨-2 拆环**之前**的环成员（8 模块，已排序）。它们不是环成员了，但仍是 TDZ 风险集中区：
+ *  首求值清单必须继续覆盖它们 —— 这是「清单缩水」判据在无环世界里的等价落点。 */
+const FORMER_SCC_MEMBERS = Object.freeze([
   'watch/heartbeat/activity.js',
   'watch/heartbeat/context.js',
   'watch/heartbeat/evidence.js',
@@ -100,42 +115,12 @@ const RESIDUAL_SCC = Object.freeze([
 //   `KNOWN_DYNAMIC_EDGES`  = 全 lib 中**动态 import** 形态的已知边（证动态分支不是死码）
 // 冻结值来源：本文件落地时对 `9aba643`+本批工作树的实测（边集 24 / 入边 3 / 动态边 1）。
 // 改这些常量 = 显式声明「环的形状变了」，必须在 commit message 写明理由（见规格 R-H）。
-const RESIDUAL_SCC_EDGES = Object.freeze([
-  'watch/heartbeat/activity.js -> watch/heartbeat/context.js',
-  'watch/heartbeat/context.js -> watch/lane-heartbeat.js',
-  'watch/heartbeat/evidence.js -> watch/heartbeat/context.js',
-  'watch/heartbeat/evidence.js -> watch/heartbeat/primitives.js',
-  'watch/heartbeat/longrun.js -> watch/heartbeat/activity.js',
-  'watch/heartbeat/longrun.js -> watch/heartbeat/context.js',
-  'watch/heartbeat/longrun.js -> watch/heartbeat/evidence.js',
-  'watch/heartbeat/longrun.js -> watch/heartbeat/primitives.js',
-  'watch/heartbeat/longrun.js -> watch/lane-heartbeat.js',
-  'watch/heartbeat/primitives.js -> watch/lane-heartbeat.js',
-  'watch/heartbeat/stalled.js -> watch/heartbeat/activity.js',
-  'watch/heartbeat/stalled.js -> watch/heartbeat/context.js',
-  'watch/heartbeat/stalled.js -> watch/heartbeat/evidence.js',
-  'watch/heartbeat/stalled.js -> watch/heartbeat/longrun.js',
-  'watch/heartbeat/stalled.js -> watch/lane-heartbeat.js',
-  'watch/heartbeat/state-surface.js -> watch/heartbeat/activity.js',
-  'watch/heartbeat/state-surface.js -> watch/heartbeat/context.js',
-  'watch/heartbeat/state-surface.js -> watch/heartbeat/primitives.js',
-  'watch/heartbeat/state-surface.js -> watch/lane-heartbeat.js',
-  'watch/lane-heartbeat.js -> watch/heartbeat/context.js',
-  'watch/lane-heartbeat.js -> watch/heartbeat/longrun.js',
-  'watch/lane-heartbeat.js -> watch/heartbeat/primitives.js',
-  'watch/lane-heartbeat.js -> watch/heartbeat/stalled.js',
-  'watch/lane-heartbeat.js -> watch/heartbeat/state-surface.js',
-]);
+const RESIDUAL_SCC_EDGES = Object.freeze([]); // ⑨-2：环已归零 ⇒ 环内诱导边集为空
 
 /** 环的冻结外部入边（非成员 → 成员；「叶子反向 import 聚合器」即在此面红）。 */
-const RESIDUAL_SCC_INBOUND = Object.freeze([
-  'index.js -> watch/lane-heartbeat.js',
-  // 【S-2 解环波前 · 2026-10-31】原冻结边 `tools/query-tools.js -> watch/lane-heartbeat.js`
-  //   已被 S-2 消除：`query-tools.js` 改为直取真源 `state/lane-state.js`，不再经转发单。
-  //   ★ 本冻结断言**恰好抓到了这条边的消失** —— 证明它作为「叶子反向 import 聚合器」的
-  //   对账面是有效的（不是空判据）。删边是预期波前，不是回归。
-
-]); // B1：去 tools/lane-tools.js -> watch/lane-heartbeat.js（守卫式加载随工具组装段删除）
+const RESIDUAL_SCC_INBOUND = Object.freeze([]); // ⑨-2：环已归零 ⇒ 「外部入边」概念随之失效
+// 历史（保留供复核）：本表曾冻结 `index.js -> watch/lane-heartbeat.js` 与（更早已消除的）
+//   `tools/query-tools.js -> watch/lane-heartbeat.js`；S-2 解环波与 B1 各消掉一条，⑨-2 消掉最后一组环。
 
 /** 已知动态 import 边（全 lib 唯一一处：`lib/tools/lane-tools.js` 的 `await import('../watch/lane-heartbeat.js')`）。 */
 const KNOWN_DYNAMIC_EDGES = Object.freeze([]); // B1：全 lib 已无动态 import 边（唯一一处随工具组装段删除）
@@ -300,16 +285,17 @@ test('A1-P2-01 / AC-8 · 冷加载冒烟：包入口 import 成功且 inject 声
     'inject 必须由**单一来源标识符**驱动（键集是装配面契约，须单点；禁在手写数组字面量里逐键枚举）；实际=' + JSON.stringify(injectDeclLine));
 });
 
-test('A1-P2-01 / AC-8 · 静态 ESM 环：SCC 数 = 1、成员 = 8、成员集逐项冻结（BEFORE = 2 SCC / 13 模块）', () => {
+test('A1-P2-01 / AC-8 · 静态 ESM 环：全仓 SCC 数 = 0（BEFORE = 2 SCC / 13 模块 → 1 SCC / 8 → **0**）', () => {
   const { names, graph } = buildGraph();
   const sccs = tarjanScc(graph);
-  assert.equal(sccs.length, 1, 'BEFORE 有 2 个 SCC（SCC2 已由 handoffGate* 下沉切断）；AFTER 必须恰 1 个');
-  const members = sccs[0].map((i) => names[i]).sort();
+  assert.equal(sccs.length, RESIDUAL_SCC_COUNT,
+    '⑨-2 之后全仓必须无环（0 个 >1 的 SCC）；环一旦回来，本条与下一行成员集断言都会点名');
+  const members = sccs.flatMap((s) => s.map((i) => names[i])).sort();
   // 【删计数】原 `members.length === 8` 与下一行 `deepEqual(members, RESIDUAL_SCC.sort())` **完全冗余**
   //   （同集合必同规模）。更强断言 = 下一行：集合身份相等且能点名差集。
   //   ⇒ 删计数不削弱鉴别力：成员增/减仍由下一行红（态② 已实跑取证）。
   assert.deepEqual(members, [...RESIDUAL_SCC].sort(),
-    '残余环成员集冻结：新增/消失任何成员都必须由本 guard 显式升级（触发条件见文件头三条）');
+    '无环时成员集为空；新增/消失任何环成员都必须由本 guard 显式升级（触发条件见文件头三条）');
 });
 
 test('A1-P2-01 / REVERSE · SCC2 四模块两两不成环（证明 handoffGate* 下沉真的切断了环，而非巧合）', () => {
@@ -347,7 +333,7 @@ test('A1-P2-01 / REVERSE · SCC2 四模块两两不成环（证明 handoffGate* 
 // 既有 4 例守的是「成员集 + 首求值」，本组补的是**结构侧的边集与覆盖面**。三例各自带
 // **可达的失败构造**（$TEMP 整包副本内做，仓库零改动），逐条写在用例注释里 —— 禁止恒真断言。
 
-test('A2-G14 ① · 环边集冻结：诱导子图 24 条 + 外部入边 3 条逐条比对（新增返边必红）', () => {
+test('A2-G14 ① · 环边集冻结：诱导子图 0 条 + 外部入边 0 条（⑨-2 归零；新增任何返边必红）', () => {
   // 反向构造（在 `$TEMP` 的**整包副本**内改，真仓零改动；跑法见本批 exec/test-report-house.md）：
   //   R1｜`lib/watch/heartbeat/activity.js` 追加 `import './evidence.js';`（成员间新边、成员集不变）
   //       ⇒ **本条红**；而「成员集断言」（成员仍 8）仍绿 ⇒ 证本条抓的是既有断言看不见的新维度。
@@ -357,8 +343,8 @@ test('A2-G14 ① · 环边集冻结：诱导子图 24 条 + 外部入边 3 条�
   //       （证「没红」不是因为断言恒真）。
   const { names, graph, edges } = buildGraphWithDynamic();
   const sccs = tarjanScc(graph);
-  assert.equal(sccs.length, 1, '前置：残余环必须恰 1 个 SCC（成员集另由 AC-8 例独立钉住）');
-  const members = new Set(sccs[0].map((i) => names[i]));
+  assert.equal(sccs.length, RESIDUAL_SCC_COUNT, '前置：全仓无环（⑨-2 升级；成员集另由 AC-8 例独立钉住）');
+  const members = new Set(sccs.flatMap((s) => s.map((i) => names[i])));
   const pairs = (pred) => [...new Set(edges.filter(pred).map((e) => e.from + ' -> ' + e.to))].sort();
 
   assert.deepEqual(
@@ -393,16 +379,15 @@ test('A2-G14 ② · 动态 import 边纳入：静态扫不到的 `import(…)` �
     [...KNOWN_DYNAMIC_EDGES].sort(),
     '动态分支必须补上静态正则漏掉的那些边（本仓唯一一处：tools/lane-tools.js 的 await import(../watch/lane-heartbeat.js)）',
   );
-  // 动态边的落点是「环成员」⇒ 它确实落在本 guard 的判定面上（而不是无关模块之间的边）
-  assert.ok(
-    RESIDUAL_SCC.includes('watch/lane-heartbeat.js'),
-    '动态边的目标必须是环内聚合器（否则该边不影响 TDZ 面，本条应改成不同的构造）',
-  );
+  // 【⑨-2 升级】原断言「动态边的落点必须是环内聚合器」在环归零后失去对象（已知动态边现为空集）。
+  //   等价落点 = 「不得出现未登记的动态边」（上方 deepEqual 已钉住）+「两种口径 SCC 数一致」（下方）。
+  assert.deepEqual([...KNOWN_DYNAMIC_EDGES], [],
+    '本仓已无动态 import 边；一旦新增必须登记到 KNOWN_DYNAMIC_EDGES（否则上方 onlyDynamic 断言会红）');
   // 含动态边后 SCC 结构不得变化（若变化说明动态分支把不存在的环算了进来 ⇒ 假红）
   assert.equal(tarjanScc(dyn.graph).length, tarjanScc(stat.graph).length, '含动态边的 SCC 数必须与静态口径一致');
 });
 
-test('A2-G14 ③ · 首求值清单覆盖环成员全集：清单 ⊇ SCC 成员（清单缩水 / 新成员漏登记必红）', () => {
+test('A2-G14 ③ · 首求值清单覆盖：清单 ⊇ 拆环前成员（⑨-2 后仍须覆盖 TDZ 集中区；缩水必红）', () => {
   // 反向构造（`$TEMP` 整包副本内）：
   //   R6｜把 `FIRST_EVAL_MODULES` 里的 `'lib/watch/heartbeat/activity.js'` 换成
   //       `'lib/mailbox-paths.js'`（**长度仍 14** ⇒ AC-8 例的长度/必含项断言仍绿）
@@ -411,16 +396,22 @@ test('A2-G14 ③ · 首求值清单覆盖环成员全集：清单 ⊇ SCC 成员
   //       （新成员漏进首求值清单的形态）。
   const { names, graph } = buildGraph();
   const sccs = tarjanScc(graph);
-  assert.equal(sccs.length, 1, '前置：残余环必须恰 1 个 SCC');
-  const members = sccs[0].map((i) => names[i]);
+  assert.equal(sccs.length, RESIDUAL_SCC_COUNT, '前置：全仓无环（⑨-2 升级）');
+  const members = sccs.flatMap((s) => s.map((i) => names[i]));
   const missing = members.filter((m) => !FIRST_EVAL_MODULES.includes('lib/' + m));
   assert.deepEqual(missing, [], '环成员必须全部出现在首求值清单内（清单缩水 ⇒ 少一个可触发入口的护栏）');
 
-  // 反向自证：清单里「指向环成员」的条目必须恰等于成员集（防用无关模块凑覆盖数）
+  // 【⑨-2 升级】环归零后「清单 ⊇ 环成员」会退化为空判据 ⇒ 判据面换成「清单 ⊇ 拆环前的环成员」
+  //   （FORMER_SCC_MEMBERS = TDZ 风险集中区）。R6 构造（从清单删掉一个 watch 入口）在本行仍判红。
+  const uncovered = FORMER_SCC_MEMBERS.filter((m) => !FIRST_EVAL_MODULES.includes('lib/' + m));
+  assert.deepEqual(uncovered, [],
+    '拆环前的 8 个环成员必须继续留在首求值清单内（TDZ 风险集中区；清单缩水在此点名）');
+
+  // 反向自证（保留）：清单里「指向现役环成员」的条目必须恰等于成员集（当前两侧皆空 ⇒ 恒等成立）
   const covered = FIRST_EVAL_MODULES.filter((p) => p.startsWith('lib/') && RESIDUAL_SCC.includes(p.slice('lib/'.length)));
   assert.deepEqual(
     covered.slice().sort(),
     [...RESIDUAL_SCC].map((m) => 'lib/' + m).sort(),
-    '清单对环成员的覆盖必须逐项相等（既不许缺，也不许用清单外成员冒充）',
+    '清单对现役环成员的覆盖必须逐项相等（既不许缺，也不许用清单外成员冒充）',
   );
 });

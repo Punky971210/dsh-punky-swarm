@@ -18,9 +18,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import * as schema from '../../schema.js';
 import * as EVT from '../../state/event-types.js';
 import {
-  exemptClearedAtOf, hasLongrunCandidate, hasLongrunUnconsumed, isStaleBatch, judgeLongrun,
-  laneStateOf, longrunCandidateOf, stintRunningSinceOf,
-} from '../lane-heartbeat.js';
+  exemptClearedAtOf, hasLongrunCandidate, hasLongrunUnconsumed, isStaleBatch,
+  longrunCandidateOf,
+} from './verdict.js'; // ⑨-2：判定原语真源（原经门面二传手 ⇒ 与门面互 import）
+import { judgeLongrun } from './judge.js'; // ⑨-2：判定本体
+import { laneStateOf } from '../../state/lane-state.js'; // 谓词真源（不经门面中转）
+import { stintRunningSinceOf } from './primitives.js'; // 纯事件流读取原语（⑨-2 下沉）
 import { isScannedLaneState } from './primitives.js';
 import { scanBatchesOnce } from './scan.js';
 import { laneExemptOf, laneKeyOf, mailboxRootOf, progressSnapshotTsOf } from './context.js';
@@ -35,7 +38,7 @@ import { emitNotice } from './notice.js';
 // （事件失败 → 不写消息；消息失败仅 warn 语义静默——事件为唯一事实源，面板/Leader 可查）。
 // 两条投递**各自 ackId 独立**，事件载荷锚定 broadcast 那条（锚 inbox 会把
 //   「Leader 忙」误判成「无人消费」）。
-export function emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs) {
+function emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs) {
   const entry = cx.state.get(laneKeyOf(sessionId, batchId, lane));
   const verdict = judgeLongrun({
     batch, lane, nowTs,
