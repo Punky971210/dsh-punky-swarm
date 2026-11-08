@@ -54,13 +54,16 @@ test('P1 拒态逐字节（D-2 策略放宽）：抛 deny-zero-write:，且 sha2
   const bed = bedOf('p1');
   // 【白盒构造的理由（写进判据）】I-26 的**被测对象就是 store 层那道守卫**（`assertBatchWriteAllowed`）：
   //   公开工具只写相位、不带 `policy` ⇒ 造不出「策略放宽」；而**为测试给生产加一个「可写 policy」入口
-  //   等于扩大攻击面**（那条入口自己还得再过门禁）。故直接用 store 的白盒写入口 `commitBatchLocked`
-  //   （= `withBatchRowLock` → `commitBatch` → CAS → assertBatchWriteAllowed → atomicWrite）驱动 D-2。
+  //   等于扩大攻击面**（那条入口自己还得再过门禁）。故直接用 store 的白盒写入口 `commitBatch`
+  //   （= CAS → IMM/交接校验 → `assertBatchWriteAllowed` → `atomicWrite`）驱动 D-2。
+  //   【②-丙 裁决 2026-11-09】原入口 `commitBatchLocked`（= `withBatchRowLock` 串行 + `commitBatch`）已删：
+  //   26 个写点的包裹函数全部同步，单线程下一次读-改-写整体原子 ⇒ 进程内串行器对 CAS 无额外保护。
+  //   本用例需要的判据面与之完全一致，故改用 `commitBatch`；`await` 保留（同步返回，await 无副作用）。
   //   注意：**不去结算 audit lane 换终态**（那会污染真实批状态）。
   const strict = { allowed: ['run-1'], denied: ['evil'], limits: { hops: 3 } };
   const b0 = JSON.parse(fs.readFileSync(bed.file, 'utf8'));
   b0.policy = strict;
-  await bed.store.commitBatchLocked('sess-i26', 'b-i26', b0); // 首次写：盘上无 policy ⇒ D-2 不触发（合法）
+  await bed.store.commitBatch('sess-i26', 'b-i26', b0); // 首次写：盘上无 policy ⇒ D-2 不触发（合法）
 
   const onDisk = JSON.parse(fs.readFileSync(bed.file, 'utf8'));
   assert.deepEqual(onDisk.policy, strict, '前置：严格策略必须**真的落盘**（读回确认，防「场景没触发」）');
@@ -71,7 +74,7 @@ test('P1 拒态逐字节（D-2 策略放宽）：抛 deny-zero-write:，且 sha2
   loosened.policy = { allowed: ['run-1', 'evil'], denied: ['evil'], limits: { hops: 3 } };
   let thrown = null;
   try {
-    await bed.store.commitBatchLocked('sess-i26', 'b-i26', loosened);
+    await bed.store.commitBatch('sess-i26', 'b-i26', loosened);
   } catch (e) { thrown = e; }
   assert.ok(thrown, '策略放宽必须被拒（D-2）');
   assert.equal(String(thrown.message).startsWith('deny-zero-write:'), true,

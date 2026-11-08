@@ -515,7 +515,7 @@
     "test/deny-zero-write.test.js": {
       "asserts": 12,
       "blankLines": 11,
-      "lines": 106,
+      "lines": 109,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T17:46:06Z",
+  "generatedAt": "2026-11-08T18:22:17Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,13 +2124,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "FIX-3 静态锁改按 sink 模块组核（⑨-3 拆分的连带项）",
+  "reason": "②-丙：删 withBatchRowLock/commitBatchLocked 死码，deny-zero-write 改用 commitBatch",
   "schema": 1,
   "totals": {
     "asserts": 11838,
     "blankLines": 6737,
     "files": 264,
-    "lines": 71091,
+    "lines": 71094,
     "tautologies": 0,
     "tests": 2484,
     "todos": 0

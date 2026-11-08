@@ -220,7 +220,7 @@ function composeStore(cx) {
   const {
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
-    commitBatchLocked,
+    commitBatch,
     addPoolTasks, addTaskEdges,
     recordHandoff, recordHandoffAccept, recordGovernanceRefusal,
     readChains, updateChains, updateLaneProgress,
@@ -253,9 +253,12 @@ function composeStore(cx) {
   };
 
   return {
-    withBatchRowLock,
+    // 【②-丙 裁决】白盒写入口：原 `commitBatchLocked`（= `withBatchRowLock` 串行 + `commitBatch`）已删除。
+    //   理由：26 个写点的包裹函数**全部同步**，一次「读-改-写」在单线程下整体原子 ⇒ 进程内串行器
+    //   提供不了 CAS 之外的保护；它也不做跨进程互斥（只是 promise 链）。故直接暴露 `commitBatch`
+    //   （CAS → IMM/交接校验 → `assertBatchWriteAllowed` → `atomicWrite`，判据面一个不少）。
     readBatchMap,
-    commitBatchLocked,
+    commitBatch,
     createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
     setMember, setPhase, appendEvent, claimAsset,
     addPoolTasks,
@@ -305,24 +308,6 @@ function stampGateLaneSnapshot(batch) {
   }
 }
 
-const batchRowChains = new Map();
-
-/**
- * 同 (sessionId, batchId) 串行执行 `fn`。
- * @param {string} sessionId
- * @param {string} batchId
- * @param {() => any} fn 临界区（同步或异步均可）
- * @returns {Promise<any>} `fn()` 的结果；**`fn` 抛错则原样抛给调用方**（不被链吞掉）
- */
-function withBatchRowLock(sessionId, batchId, fn) {
-  const key = String(sessionId) + '::' + String(batchId);
-  const prior = batchRowChains.get(key) ?? Promise.resolve();
-  const result = prior.then(() => fn());
-  const tail = result.then(() => {}, () => {});
-  batchRowChains.set(key, tail);
-  tail.then(() => { if (batchRowChains.get(key) === tail) batchRowChains.delete(key); });
-  return result;
-}
 
 export function createStore(root, { rules, logger, onStateChange, readConfig, revRaceHook } = {}) {
   const sessionsDir = path.join(root, 'sessions');
@@ -334,7 +319,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
   const archive = createArchive(root, { commitBatch });
 
   const cx = { root, sessionsDir, legacyDir, gates, corruptRegistry, log, ratchet, archive,
-    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch, commitBatchLocked,
+    onStateChange, atomicWrite, resolveGateEventTypes, appendGatePayloadEvents, commitBatch,
     revRaceHook };
   Object.assign(cx, buildPaths(cx));
   const { batchFile } = cx;
@@ -464,12 +449,6 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     // 回写**先于**落盘（契约 ③）：即便 `atomicWrite` 抛（重试耗尽 / 不可重试码），调用方对象已带新 rev
     batch[BATCH_REV_KEY] = actual + 1;
     atomicWrite(batchFile(sessionId, batchId), batch);
-  }
-  async function commitBatchLocked(sessionId, batchId, batch) {
-    return withBatchRowLock(sessionId, batchId, () => {
-      commitBatch(sessionId, batchId, batch);
-      return batch;
-    });
   }
   return composeStore(cx);
 }
