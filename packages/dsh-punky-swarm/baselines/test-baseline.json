@@ -1265,11 +1265,11 @@
       "todos": 0
     },
     "test/lane-session-bind.test.js": {
-      "asserts": 115,
-      "blankLines": 43,
-      "lines": 693,
+      "asserts": 121,
+      "blankLines": 44,
+      "lines": 716,
       "tautologies": 0,
-      "tests": 14,
+      "tests": 15,
       "todos": 0
     },
     "test/lane-wake-autodispatch.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T18:30:38Z",
+  "generatedAt": "2026-11-08T20:00:20Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑤E：dispatch.js 拆 7 模块，6 处静态锁改按模块组核",
+  "reason": "⑤-1 裁决乙：任务包文案按形态如实区分 + 双面锁",
   "schema": 1,
   "totals": {
-    "asserts": 11840,
-    "blankLines": 6737,
+    "asserts": 11846,
+    "blankLines": 6738,
     "files": 264,
-    "lines": 71107,
+    "lines": 71130,
     "tautologies": 0,
-    "tests": 2484,
+    "tests": 2485,
     "todos": 0
   }
 }

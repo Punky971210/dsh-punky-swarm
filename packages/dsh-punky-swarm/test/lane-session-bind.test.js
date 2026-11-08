@@ -487,6 +487,29 @@ test('AC-6 任务包双保险：composeWorkerPrompt 明写批归属会话 + sess
   assert.match(dispatchSrc, /batchSessionId:\s*sessionId/, 'dispatchLaneCore 须把落点会话（= 批归属会话）传进任务包');
 });
 
+// ══ ⑤-1 治理工具「禁用」声明的**形态诚实性**（裁决乙 2026-11-09）═════════════════════════════
+// 背景：原文案一律写「已由引擎在 preset 面技术禁用」。但 `activation` 形态**不承载 toolFilter**
+//   （`provider-dsh/agent.js` 的 startActivation 分支只注入 agentPreset，且**不校验其内容**），
+//   该声明在该形态下是假声明 —— 属治理可信度问题。裁决乙 = 改文案为如实陈述，补端口另立宿主需求。
+// 本锁两面：① 行为面要求按形态分别陈述；② 静态面禁止旧假声明回流。
+test('⑤-1 任务包纪律段：治理工具禁用声明按形态如实区分（activation 不得写成「已技术禁用」）', async () => {
+  const { composeWorkerPrompt } = await import('../lib/engine/dispatch.js');
+  const text = composeWorkerPrompt({
+    batchId: 'b-copy-honest', lane: 'l1', cmd: 'c', layer: 'exec',
+    role: 'coder', roleTeam: 'software-team',
+    consume: [], produce: [], outputs: [], firstLine: 'HANDLE',
+  });
+  const line = text.split('\n').find((l) => l.includes('治理类工具')) ?? '';
+  assert.ok(line, '任务包须含治理工具声明行（否则本判据无对象）');
+  assert.match(line, /start/, '须点名 `start` 形态');
+  assert.match(line, /activation/, '须点名 `activation` 形态（原「一律技术禁用」在该形态为假声明）');
+  assert.match(line, /不校验其内容/, '须明说引擎**不校验** agentPreset 内容是否真的排除了这些工具');
+  assert.match(line, /拒派/, '须写明不可核时拒派（不以弱换强）');
+  // 反证（静态面）：旧的一句式假声明不得回流
+  assert.equal(/已由引擎在 preset 面\*\*技术禁用\*\*/.test(readSrc('lib/engine/dispatch-taskpack.js')), false,
+    '旧文案「已由引擎在 preset 面技术禁用」不得回流 —— activation 形态没有这个机制');
+});
+
 // ══ 覆盖面自证：本 lane 覆盖的治理工具清单（防「改了 A 漏了 B」）═════════════════════════
 test('覆盖面：任务包点名的治理工具均消费 resolver（注册表 + 调用点双读）', () => {
   const expected = {

@@ -164,7 +164,13 @@ export function composeWorkerPrompt({
   if (roleAllowFace.length > 0) {
     L.push('本 lane 的角色工具面：' + roleAllowFace.map((t) => '`' + t + '`').join(' / ')
       + '。**只使用这些工具**；越界即违规（会被产物审计与纪律核查发现）。');
-    L.push('（治理类工具 ' + SUITE_DENY_TOOLS.length + ' 件已由引擎在 preset 面**技术禁用**；'
+    // 【⑤-1 · 裁决乙 2026-11-09】原文案写「已由引擎在 preset 面技术禁用」，对 `activation` 形态是**假声明**：
+    //   该形态不承载 toolFilter（`provider-dsh/agent.js` 的 startActivation 分支只注入 agentPreset），
+    //   引擎**不校验 preset 内容是否真的排除了这些工具**，只核「可解析且可核收窄」，不可核即拒派。
+    //   ⇒ 按两形态分别如实陈述；真正补端口（让 activation 也承载 toolFilter）已登记为宿主需求，不在本批。
+    L.push('（治理类工具 ' + SUITE_DENY_TOOLS.length + ' 件：`start` 形态由引擎注入 toolFilter **技术禁用**；'
+      + '`activation` 形态改由 `agentPreset` 承载 —— 引擎只核 preset 可解析且可核收窄，'
+      + '**不校验其内容是否真的排除了这些工具**，不可核即拒派（不以弱换强）。'
       + '其余角色边界靠本条约束 —— 引擎不为角色面提供技术沙箱。）');
   }
   let ruleNo = 0;
