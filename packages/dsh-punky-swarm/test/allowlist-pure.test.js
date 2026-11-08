@@ -19,6 +19,7 @@ import {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ALLOWLIST_SRC = join(ROOT, 'lib', 'governance', 'allowlist.js');
 const TIER_GATE_SRC = join(ROOT, 'lib', 'tools', 'tier-gate.js');
+const WIRING_SRC = join(ROOT, 'lib', 'governance', 'wiring.js');
 
 /** 递归收集 lib/ 下的 .js（用于「定义只此一处」的仓级判定）。 */
 function jsFilesUnder(dir) {
@@ -60,19 +61,26 @@ test('I-24-2 零隐式取值：不读盘 / 不读环境 / 不取时钟 / 不用�
   assert.deepEqual(after, before, '环境变化不得影响判定（证明没读环境）');
 });
 
-test('I-24-3 单点判定：decide 定义仅 1 处；tier-gate 只调用、无内联匹配或摘要重写', () => {
+test('I-24-3 单点判定：decide 定义仅 1 处；判据落点 = wiring（⑥-2 起）、无内联匹配或摘要重写', () => {
   const definers = jsFilesUnder(join(ROOT, 'lib')).filter((p) => /^(export )?function decide\b/m.test(readFileSync(p, 'utf8')));
   // 路径归一化（Windows 反斜杠 ⇒ 断言面向逻辑路径，不面向平台分隔符）
   assert.deepEqual(definers.map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/')), ['lib/governance/allowlist.js'],
     'decide 定义必须只此一处（第二份判定即第二真源）');
 
-  const gate = readFileSync(TIER_GATE_SRC, 'utf8');
-  assert.ok(gate.includes('decideAllowlist('), 'tier-gate 必须实际调用纯函数');
-  assert.equal(/allowlist[A-Za-z]*\.(includes|some|filter)/.test(gate), false, 'tier-gate 内不得内联白名单匹配');
-  assert.equal(/\.includes\(allowlist/.test(gate), false, 'tier-gate 内不得自写命中判断');
-  assert.ok(/^import \{[^}]*canonicalDigest[^}]*\} from '\.\.\/governance\/allowlist\.js';$/m.test(gate),
+  // 【⑥-2 · 2026-11-08 裁决丙】判据落点从 `tools/tier-gate.js` 迁到 `governance/wiring.js`
+  //   （只有 hook 能产真正的审批态）。断言随之改指新落点 —— 若谁把判定搬回工具层，这里立刻红。
+  const wiring = readFileSync(WIRING_SRC, 'utf8');
+  assert.ok(wiring.includes('decideAllowlist('), 'wiring 必须实际调用纯函数（判据唯一落点）');
+  assert.equal(/allowlist[A-Za-z]*\.(includes|some|filter)/.test(wiring), false, 'wiring 内不得内联白名单匹配');
+  assert.equal(/\.includes\(allowlist/.test(wiring), false, 'wiring 内不得自写命中判断');
+  assert.ok(/^import \{[^}]*canonicalDigest[^}]*\} from '\.\/allowlist\.js';$/m.test(wiring),
     '摘要必须从单点模块 import（禁自造第二份摘要）');
-  assert.equal(/^(export )?function canonicalDigest\b/m.test(gate), false, 'tier-gate 内不得再定义摘要函数');
+  assert.equal(/^(export )?function canonicalDigest\b/m.test(wiring), false, 'wiring 内不得再定义摘要函数');
+
+  // 反向：工具层不得再持有判据（搬迁的防回生面）
+  const gate = readFileSync(TIER_GATE_SRC, 'utf8');
+  assert.equal(/decideAllowlist|canonicalDigest/.test(gate), false,
+    'tier-gate 不得再引 allowlist 判据（⑥-2 起判据归 wiring；回迁即双真源）');
 });
 
 test('I-24-4 canonicalDigest 敏感性（方向正确）：键序无关、类型与数组顺序敏感', () => {

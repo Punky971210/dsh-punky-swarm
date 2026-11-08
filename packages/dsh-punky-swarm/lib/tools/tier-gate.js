@@ -25,17 +25,7 @@ import {
   modeActiveFor, presetOfSession, MODE_INACTIVE_CODE,
 } from '../engine/dispatch.js';
 import { parseLaneHandleFromText, verifyLaneHandle, textOfDispatchArgs } from '../bridge/lane-handle.js';
-import { decide as decideAllowlist, canonicalDigest } from '../governance/allowlist.js';
-import { classifyDenial } from '../governance/denial.js';
 import { recordGuardRefusal } from '../governance/guard-receipt.js';
-
-export const ASK_REQUIRED_409 = 'approval-needed-409:';
-export const ASK_APPROVAL_ARGS_MISMATCH = 'approval-args-mismatch:';
-
-const denialTextOf = (denial) => {
-  const { errorFamily, errorCode, action } = classifyDenial(denial);
-  return denial.message + ' [errorFamily=' + errorFamily + ' errorCode=' + errorCode + ' repair=' + action + ']';
-};
 
 export const ownerOfExec = (exec) => exec?.agent?.id ?? exec?.agent?.agentId ?? exec?.agent?.session?.id ?? null;
 
@@ -188,43 +178,10 @@ export function installDifficultyGuard(ctx, deps) {
       }
       //   位置纪律：本条 `return` 必须早于**任何** store 写（下方 `bumpExecCount` 就是 store 写 ⇒
       //   拒时不得执行）⇒ 「拒 = 零预写」由**行序**即成立，不是靠事后回滚或调用方自觉。
-      const allowlistConfig = config?.tools?.allowlist;
-      if (!reason && Array.isArray(allowlistConfig)) {
-        const fullArgs = execution.arguments ?? {};
-        const approval = fullArgs.approval && typeof fullArgs.approval === 'object' ? fullArgs.approval : null;
-        const businessArgs = { ...fullArgs };
-        delete businessArgs.approval;
-        const argsDigest = canonicalDigest(businessArgs);
-        if (approval !== null && approval.digest !== argsDigest) {
-          reason = denialTextOf({
-            errorFamily: 'approval',
-            errorCode: 'approval-args-mismatch',
-            message: ASK_APPROVAL_ARGS_MISMATCH + ' ' + execution.name,
-          });
-        }
-        if (!reason) {
-          const allowDec = decideAllowlist({
-            toolName: execution.name,
-            args: businessArgs,
-            allowlist: allowlistConfig,
-            // 票据与参数同源（digest 相符）才算"已批准"⇒ 走 allow；否则交回 decide 判 ask
-            facts: { approval: approval !== null && approval.digest === argsDigest },
-          });
-          if (allowDec.decision === 'ask') {
-            reason = denialTextOf({
-              errorFamily: 'approval',
-              errorCode: 'approval-needed',
-              message: ASK_REQUIRED_409 + ' ' + execution.name,
-            });
-          } else if (allowDec.decision !== 'allow') {
-            reason = denialTextOf({
-              errorFamily: 'allowlist',
-              errorCode: 'allowlist-not-permitted',
-              message: allowDec.reason,
-            });
-          }
-        }
-      }
+      //   【⑥-2 · 2026-11-08 裁决丙】原 `tools.allowlist` 判定块（含 `ASK_REQUIRED_409` /
+      //   `approval-needed-409:` / `approval-args-mismatch:` 两个前缀）**已整体迁出**，归
+      //   `governance/wiring.js` 的 pre-execute hook —— 理由：本通道只能返回拒绝串，产不出审批态，
+      //   两套「要人批准」并存会让模型看到两种回执。现全套件只有一套 ask（`REQUIRE_APPROVAL`）。
       if (reason) {
         // 【⑥-1 · 2026-11-08 裁决乙1b】守卫拒绝留痕：收据（与 governance hook 同一 schema，可
         //   `verifyRefusals` 校验）+ 拒因事件流。观察者纪律：永不抛、不改变裁决；**不**接升级链

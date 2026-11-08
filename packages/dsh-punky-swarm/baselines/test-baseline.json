@@ -113,9 +113,9 @@
       "todos": 0
     },
     "test/allowlist-pure.test.js": {
-      "asserts": 28,
-      "blankLines": 16,
-      "lines": 123,
+      "asserts": 29,
+      "blankLines": 17,
+      "lines": 131,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -177,11 +177,11 @@
       "todos": 0
     },
     "test/ask-first-is-deny.test.js": {
-      "asserts": 24,
-      "blankLines": 18,
-      "lines": 120,
+      "asserts": 28,
+      "blankLines": 20,
+      "lines": 168,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 8,
       "todos": 0
     },
     "test/assembly-gate-extra.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T11:41:46Z",
+  "generatedAt": "2026-11-08T11:49:08Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑥-3 收据链尾缓存 + ⑥-1 守卫通道留痕（新增 C1-C3 与 guard-receipt 6 条）",
+  "reason": "⑥-2 丙：allowlist 判据从 tier-gate 迁入 wiring hook，两套人工闸合并为一套（测试改驱动面 + 退役锁）",
   "schema": 1,
   "totals": {
-    "asserts": 11812,
-    "blankLines": 6724,
+    "asserts": 11817,
+    "blankLines": 6727,
     "files": 264,
-    "lines": 70887,
+    "lines": 70943,
     "tautologies": 0,
-    "tests": 2476,
+    "tests": 2479,
     "todos": 0
   }
 }

@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   难度门禁只可能收紧不可能被本 hook 放行绕过。
 //   flag-off 折叠 DENY 无状态副作用；禁 setInterval/禁端点（契约束维持）。
 import { createGovernanceKernel, createRefusalReceipt, primitiveToPreDecision, resolveGovernanceConfig } from './index.js';
+import { decide as decideAllowlist, canonicalDigest } from './allowlist.js';
 import { writeRefusal, patchRefusalAsk } from './receipt-store.js';
 import { readSessionState, setDeferred, setPaused } from './state-store.js';
 
@@ -87,13 +88,21 @@ function formatDecision(d) {
   return reason;
 }
 
-export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable, presetBanTable } = {}) {
+export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable, presetBanTable, allowlistScope } = {}) {
   const log = logger ?? ctx?.logger ?? null;
   const cfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, {
     presetTable,
     presetBanTable,
     warn: (m) => log?.warn?.('[governance] ' + m),
   });
+  // 【⑥-2 · 2026-11-08 裁决丙「两套人工闸合并为一个 ask」】allowlist 判据归属本 hook。
+  //   为什么必须在这里：`tools.guard()` **只能返回拒绝串**，产不出真正的审批态；
+  //   而 `REQUIRE_APPROVAL` 的收据 `ask` 块 + 宿主 `serviceAsk` + 事后回填都长在本 hook 上。
+  //   ⇒ allowlist 从工具层（tier-gate）搬到这里，与内核规则**共用同一套 ask 机制**。
+  //   作用域不变：只对 `allowlistScope`（= `config.escalation.execTools`，缺省 EXEC_TOOLS）里的
+  //   工具生效 —— 沿用原实现「只治理执行型工具」的边界，不扩大到治理工具面。
+  const allowlistCfg = Array.isArray(config?.tools?.allowlist) ? config.tools.allowlist : null;
+  const allowScope = Array.isArray(allowlistScope) && allowlistScope.length > 0 ? allowlistScope : null;
   const inert = (reason, level = 'warn') => {
     try {
       const line = '[governance] inert(' + level + '): ' + reason;
@@ -110,6 +119,43 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
   const pendingAsks = new Map();
 
   const sessionIdOf = (exec) => exec?.agent?.session?.id ?? 'cli';
+
+  const ALLOWLIST_RULE_REF = 'tools.allowlist';
+
+  /** allowlist 判定 → 治理原语（`null` = 不适用/已批准；否则 DENY / REQUIRE_APPROVAL）。 */
+  function allowlistDecisionOf(exec) {
+    if (allowlistCfg === null) return null;                       // 未配置 ⇒ 整段关闭（旧行为）
+    if (allowScope !== null && !allowScope.includes(exec?.name)) return null; // 只治理执行型工具
+    const full = exec?.arguments && typeof exec.arguments === 'object' && !Array.isArray(exec.arguments)
+      ? exec.arguments : {};
+    const business = { ...full };
+    delete business.approval;                                     // 控制位不参与摘要（否则永远不匹配）
+    const digest = canonicalDigest(business);
+    const approval = full.approval && typeof full.approval === 'object' ? full.approval : null;
+    if (approval !== null && approval.digest !== digest) {
+      return {
+        primitive: 'DENY', priority: 4, ruleRefs: [ALLOWLIST_RULE_REF],
+        reason: 'approval-args-mismatch: ' + exec.name
+          + '（批准票据与本轮参数摘要不一致；票据须等于当前参数的 canonicalDigest，含控制位除外的全部参数）',
+      };
+    }
+    const dec = decideAllowlist({
+      toolName: exec.name,
+      args: business,
+      allowlist: allowlistCfg,
+      // 票据与参数同源（digest 相符）才算「已批准」
+      facts: { approval: approval !== null && approval.digest === digest },
+    });
+    if (dec.decision === 'allow') return null;
+    if (dec.decision === 'ask') {
+      return {
+        primitive: 'REQUIRE_APPROVAL', priority: 3, ruleRefs: [ALLOWLIST_RULE_REF],
+        reason: dec.reason + '（tools.allowlist 声明该调用需人工批准；批准票据 digest 须为 ' + digest
+          + '，与票据同参重发即放行）',
+      };
+    }
+    return { primitive: 'DENY', priority: 4, ruleRefs: [ALLOWLIST_RULE_REF], reason: dec.reason };
+  }
 
   const pre = async (exec, next) => {
     const sessionId = sessionIdOf(exec);
@@ -156,7 +202,10 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
       }
       return { kind: 'deny', reason: formatDecision(gateDecision) };
     }
-    const d = kernel.decide({ name: exec.name, arguments: exec.arguments });
+    const kernelDecision = kernel.decide({ name: exec.name, arguments: exec.arguments });
+    // 【⑥-2 裁决丙】内核放行后再评 allowlist；内核已拒则以内核为准（不叠加两条拒因）。
+    const allowDecision = kernelDecision.primitive === 'ALLOW' ? allowlistDecisionOf(exec) : null;
+    const d = allowDecision ?? kernelDecision;
     if (d.primitive === 'ALLOW') return next();
     let deferMeta;
     let pauseMeta;

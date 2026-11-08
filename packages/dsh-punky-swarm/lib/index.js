@@ -24,6 +24,7 @@ import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
 import { createTools } from './tools/register.js';
+import { EXEC_TOOLS } from './tools/core.js';
 import { wakeLeaderForReport } from './tools/swarm-comms.js';
 import { poolViewOf } from './tools/task-tools.js';
 import { createApi } from './api.js';
@@ -716,7 +717,7 @@ const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge
     .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));
   // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
   let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable });
+  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable, allowlistScope: config?.escalation?.execTools ?? EXEC_TOOLS });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
@@ -742,7 +743,7 @@ const createGovernanceRemounter = ({ ctx, store, root, refusalEventBridge, prese
     if (JSON.stringify(govCfg) === JSON.stringify(readInstalled())) return false;
     const wasInstalled = readHook()?.installed === true;
     readHook()?.dispose?.();
-    writeHook(installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable }));
+    writeHook(installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable, allowlistScope: nextConfig?.escalation?.execTools ?? EXEC_TOOLS }));
     writeInstalled(govCfg);
     const nowInstalled = readHook()?.installed === true;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled
