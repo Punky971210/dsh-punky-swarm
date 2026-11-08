@@ -23,7 +23,7 @@ import * as machine from '../machine.js';
 import * as EVT from '../event-types.js';
 import { laneProgressClear } from '../resume.js';
 import { EXEMPT_GATE_CODES, normalizeExemptPayload } from '../lane-exempt.js';
-import { countConsecutiveFailedSettles } from './events.js';
+import { countConsecutiveFailedSettles, laneHandoffGapPayload } from './events.js';
 const EVT_LANE_EXEMPT_INHERITED = EVT.EVT_LANE_EXEMPT_INHERITED;
 
 export function buildMember(cx) {
@@ -83,7 +83,9 @@ export function buildMember(cx) {
       if (!g.ok) {
         const detail = (g.missing && g.missing.length) ? g.missing : (g.problems ?? []);
         if (g.code === 'GATE_HANDOFF_MISSING') {
-          batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, { lane, code: g.code, missing: g.missing ?? [], ...(g.problems ? { problems: g.problems } : {}) }));
+          batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
+            lane, code: g.code, missing: g.missing, problems: g.problems,
+          })));
         } else {
           batch.events.push(newEvent(EVT.EVT_GATE_ENTRY_MISSING, { lane, missing: g.missing ?? [], ...(g.problems ? { problems: g.problems } : {}) }));
         }
@@ -92,10 +94,10 @@ export function buildMember(cx) {
         throw new Error(g.code + (detail.length ? ': ' + detail.join(', ') : ''));
       }
       if (g.handoffLegacy === true) {
-        batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, {
-          lane, code: 'GATE_HANDOFF_LEGACY_PASSTHROUGH', legacy: true, missing: [],
+        batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
+          lane, code: 'GATE_HANDOFF_LEGACY_PASSTHROUGH', legacy: true,
           problems: ['本批无 `batch.handoffs` 字段（存量批）⇒ 未交接门整体放行；本 lane 开工**未**受交接约束（裁决 ①=B：不静默、不砸存量）'],
-        }));
+        })));
       }
       if (exempt != null) {
         exemptGrant = normalizeExemptPayload(exempt);

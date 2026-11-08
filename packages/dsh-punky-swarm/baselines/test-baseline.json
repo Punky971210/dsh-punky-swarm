@@ -779,7 +779,7 @@
     "test/gate-artifact-containment.test.js": {
       "asserts": 44,
       "blankLines": 25,
-      "lines": 302,
+      "lines": 318,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1078,6 +1078,14 @@
       "lines": 452,
       "tautologies": 0,
       "tests": 15,
+      "todos": 0
+    },
+    "test/handoff-single-source.test.js": {
+      "asserts": 25,
+      "blankLines": 22,
+      "lines": 182,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/home-isolation.test.js": {
@@ -2121,7 +2129,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T09:24:02Z",
+  "generatedAt": "2026-11-08T09:33:10Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2132,15 +2140,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/⑦ 产物验收面退役（收尾）：测试面同步删 DEP-1 用例/verify.mode 断言/blobs 断言",
+  "reason": "B4/③ 交接收口：gate-artifact-containment 的 stub store 补 handoffRecordVerdict（真实 store 的判据由 handoff-single-source 覆盖）",
   "schema": 1,
   "totals": {
-    "asserts": 11917,
-    "blankLines": 6756,
-    "files": 265,
-    "lines": 71321,
+    "asserts": 11942,
+    "blankLines": 6778,
+    "files": 266,
+    "lines": 71519,
     "tautologies": 0,
-    "tests": 2490,
+    "tests": 2494,
     "todos": 0
   }
 }

@@ -26,6 +26,7 @@ import { humanEvidenceOf } from '../constants.js';
 import { findTask } from '../task-utils.js';
 import { declaredArtifactsOf } from '../../wave-plan.js';
 import { resolveArtifactIn } from '../batch-paths.js';
+import { laneHandoffGapPayload } from './events.js';
 
 const RULE_PROPAGATION_MODULE = '../rule-propagation.js';
 const MEMORY_STALE_MANIFEST_FILE = 'memory-stale-recommended.json';
@@ -236,14 +237,14 @@ export function buildMemberGates(cx) {
   if (nh.declared) batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note }));
   const shg = gates.checkSettleHandoffGate(sessionId, batchId, batch, lane, note);
   if (shg.legacy === true) {
-    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, {
-      lane, code: 'GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH', legacy: true, missing: [],
+    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
+      lane, code: 'GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH', legacy: true,
       problems: ['本批无 `batch.handoffs` 字段（存量批）⇒ 出口侧交接门放行；本 lane 结算**未**受交接约束（不静默、不砸存量）'],
-    }));
+    })));
   } else if (!shg.ok) {
-    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, {
-      lane, code: shg.code, missing: shg.missing ?? [], ...(shg.problems ? { problems: shg.problems } : {}),
-    }));
+    batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
+      lane, code: shg.code, missing: shg.missing, problems: shg.problems,
+    })));
     batch.updatedAt = new Date().toISOString();
     commitBatch(sessionId, batchId, batch);
     throw new Error(shg.code + ': ' + (shg.missing ?? []).join(', ') + (shg.problems?.length ? ' ——' + shg.problems[0] : ''));

@@ -18,17 +18,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import * as schema from '../../schema.js';
 import * as EVT from '../event-types.js';
+import { pendingHandoffRecordOf } from './handoff.js';
 
 export function buildHandoffAccept(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
 
   function acceptRecordOf(from, to, batchId, ts) {
-    return {
-      from, to, batch: batchId, step: null,
-      artifacts: [], contract: { consumedFrom: from, assertions: [] },
-      status: 'pending', ts, officialTaskId: null,
-      source: 'accept', acceptedBy: { lane: to, ts },
-    };
+    // 与建批/改计划同一个形态工厂：收件只多 source / acceptedBy 两个显式键
+    return pendingHandoffRecordOf({ from, to, batchId, ts, source: 'accept', acceptedBy: { lane: to, ts } });
   }
 
   function recordHandoffAccept(sessionId, batchId, { from, to, reason = null, author = null } = {}) {

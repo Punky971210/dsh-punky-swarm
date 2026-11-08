@@ -28,6 +28,7 @@ import { laneProgressWrite } from '../resume.js';
 import { isAbsPath } from '../constants.js';
 import * as EVT from '../event-types.js';
 import { resolveWriteTargetIn } from '../batch-paths.js';
+import { pendingHandoffRecordOf } from './handoff.js';
 
 /** `asset_claim` 的 rev 冲突重试上限（**有界**；仅对 `BATCH_VERSION_CONFLICT` 重试，其它错误立即上抛）。 */
 const REV_RETRY_MAX = 3;
@@ -74,11 +75,7 @@ export function buildBatch(cx) {
         if (deps.length === 0) continue;
         const list = [];
         for (const from of deps) {
-          list.push({
-            from, to: t.id, batch: batchId, step: null,
-            artifacts: [], contract: { consumedFrom: from, assertions: [] },
-            status: 'pending', ts: batch.createdAt, officialTaskId: null,
-          });
+          list.push(pendingHandoffRecordOf({ from, to: t.id, batchId, ts: batch.createdAt }));
         }
         batch.handoffs[t.id] = list;
       }

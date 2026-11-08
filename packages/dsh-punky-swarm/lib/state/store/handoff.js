@@ -18,6 +18,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import * as EVT from '../event-types.js';
 import * as schema from '../../schema.js';
+import { laneHandoffGapPayload } from './events.js';
+
+/** 交接记录的**唯一形态**（建批播种 / 计划变更补种 / 收件补边三处写点共用）。
+ *  基础 9 键固定；收件通道只多 `source` / `acceptedBy` 两个显式可选键。 */
+export function pendingHandoffRecordOf({ from, to, batchId, ts, source = null, acceptedBy = null }) {
+  const rec = {
+    from, to, batch: batchId, step: null,
+    artifacts: [], contract: { consumedFrom: from, assertions: [] },
+    status: 'pending', ts, officialTaskId: null,
+  };
+  if (source !== null) rec.source = source;
+  if (acceptedBy !== null) rec.acceptedBy = acceptedBy;
+  return rec;
+}
 
 export function buildHandoff(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
@@ -72,9 +86,9 @@ export function buildHandoff(cx) {
     const fail = (problems, missing, { code = HANDOFF_MISSING, callerRole = null, write = true } = {}) => {
       const r = { ok: false, code, problems, missing };
       if (write) {
-        batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, {
-          lane: to ?? null, code, ...(callerRole ? { callerRole } : {}), missing, problems,
-        }));
+        batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
+          lane: to ?? null, code, callerRole, missing, problems,
+        })));
         batch.updatedAt = new Date().toISOString();
         commitBatch(sessionId, batchId, batch);
       }

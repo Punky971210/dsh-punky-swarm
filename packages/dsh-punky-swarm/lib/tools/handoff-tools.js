@@ -21,11 +21,12 @@ import * as EVT from '../state/event-types.js';
 import { presenceJudge, declaredKindOf } from '../state/gates.js';
 import { resolveArtifactIn } from '../state/batch-paths.js';
 import * as lock from '../lock.js';
-import { lockPath } from './tier-gate.js';
+import { lockPath, readLiveConfig } from './tier-gate.js';
 import { handoffCallerIdentityOf } from './host-surface.js';
 import { dispatchBindingDecision } from '../verify/binding.js';
 import { readCapability } from '../assembly/schema.js';
 import { applyInjectionBudget } from '../comms/inject-budget.js';
+import { laneHandoffGapPayload } from '../state/store/events.js';
 
 function budgetAssertionsOf(assertions, thresholds) {
   const omissions = [];
@@ -44,7 +45,7 @@ function budgetAssertionsOf(assertions, thresholds) {
 }
 
 export function buildHandoffTools(cx) {
-  const { ctx, store, root, config = {}, deps = {} } = cx;
+  const { ctx, store, root, deps = {} } = cx;
   const { resolveBatchSession } = deps;
   return [
     defineTool({
@@ -97,10 +98,10 @@ export function buildHandoffTools(cx) {
           rOverwrite = r.overwrite === true;
           rPreviousAssertions = Array.isArray(r.previousAssertions) ? r.previousAssertions : [];
         } else {
-          store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_HANDOFF_GAP, {
+          store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({
             lane: args.to, code: 'GATE_HANDOFF_ARTIFACT_MISSING', missing: missingArtifacts,
             problems: missingArtifacts.map((p) => '交接产物不在场：' + p),
-          });
+          }));
           throw new Error('GATE_HANDOFF_ARTIFACT_MISSING: 交接产物不在场（' + missingArtifacts.join(', ')
             + '）——请先落盘产物（批次产物根：' + dir + '）再提交交接。'
             + '（口径：本码 = **缺产物**；`GATE_HANDOFF_MISSING` 现专指**缺边**——入边未声明/未提交。）');
@@ -154,21 +155,19 @@ export function buildHandoffTools(cx) {
         const map = (b.handoffs && typeof b.handoffs === 'object' && !Array.isArray(b.handoffs)) ? b.handoffs : null;
         const legacy = map === null;
         const dir = store.artifactsDirOf(sessionId, args.batchId);
-        const deps = (() => {
-          for (const w of b.wavePlan ?? []) for (const t of w.tasks ?? []) if (t && t.id === args.lane) return Array.isArray(t.deps) ? t.deps : [];
-          return [];
-        })();
-        //   在视图**结构性不可见**（实测：门禁 2 边 vs 视图 1 边、`blocking:[]`、`ready:true` —— `L-AC-9` fail）。
-        const laneTask = (() => {
-          for (const w of b.wavePlan ?? []) for (const t of w.tasks ?? []) if (t && t.id === args.lane) return t;
-          return null;
-        })();
+        // 一次建表：deps 读取与逐边上游查找共用同一份索引（原实现三处全扫 wavePlan ⇒ O(E·T)）
+        const taskById = new Map();
+        for (const w of b.wavePlan ?? []) for (const t of w.tasks ?? []) if (t && typeof t.id === 'string') taskById.set(t.id, t);
+        const laneTask = taskById.get(args.lane) ?? null;
+        const deps = laneTask && Array.isArray(laneTask.deps) ? laneTask.deps : [];
         const declared = store.declaredInboundEdgesOf(b, args.lane, laneTask);
         const sourceOf = new Map((declared.sources ?? []).map((s) => [s.from, s.source]));
         const edges = declared.edges.map((from) => {
-          const t = (() => { for (const w of b.wavePlan ?? []) for (const x of w.tasks ?? []) if (x && x.id === from) return x; return null; })();
+          const t = taskById.get(from) ?? null;
           const upstreamDeclared = t ? [...(Array.isArray(t.produce) ? t.produce : []), ...(Array.isArray(t.outputs) ? t.outputs : [])] : [];
           const rec = (map && Array.isArray(map[args.lane])) ? map[args.lane].find((r) => r && r.from === from) ?? null : null;
+          // 缺口清单**只由门禁函数给出**（同一函数实例）：视图自拼会与门禁漂移 —— 曾漏 `contract.consumedFrom`
+          const vr = store.handoffRecordVerdict(sessionId, args.batchId, laneTask?.layer ?? null, rec, from, args.lane);
           // 产物在场判定与 entry 门**同判据**（同一解析规则 + 同一「文件且非空」语义）——下游据此判断**能不能稳定取件**
           const arts = (rec && Array.isArray(rec.artifacts)) ? rec.artifacts : [];
           const artifactViews = arts.map((p) => {
@@ -192,20 +191,14 @@ export function buildHandoffTools(cx) {
             consumedFrom: (rec && rec.contract) ? (rec.contract.consumedFrom ?? null) : null,
             officialTaskId: rec ? (rec.officialTaskId ?? null) : null,
             upstreamDeclared,
-            gap: [
-              ...(s === 'undeclared' ? ['edge:' + from + '->' + args.lane + ' (无交接声明)'] : []),
-              ...(s === 'pending' ? ['edge:' + from + '->' + args.lane + ' (未交接)'] : []),
-              //   否则取件面与门禁面的缺口清单会漂移（登记：理想是直接复用门函数判定，属后续收口项）
-              ...(rec && arts.length === 0 ? ['edge:' + from + '->' + args.lane + ' (artifacts 空)'] : []),
-              ...artifactViews.filter((a) => !a.readable).map((a) => a.path + ' (missing)'),
-              ...(rec && (!rec.contract || !Array.isArray(rec.contract.assertions) || rec.contract.assertions.length === 0) ? ['contract.assertions@' + from + '->' + args.lane] : []),
-            ],
+            gap: vr.missing,
           };
         });
         const blocking = edges.flatMap((e) => e.gap);
         const pending = edges.filter((e) => e.status !== 'submitted').map((e) => e.from + '->' + args.lane);
         const ready = legacy ? true : blocking.length === 0;
-        const injectCfg = readCapability(config, 'injectBudget');
+        // 读热快照（与 dispatch/query 同源）：装配期 `cx.config` 是冻结值 ⇒ runtime.json 改预算后本工具不生效
+        const injectCfg = readCapability(readLiveConfig(deps), 'injectBudget');
         if (injectCfg?.enabled === true) {
           const omissions = [];
           for (const e of edges) {

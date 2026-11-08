@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import * as schema from '../../schema.js';
 import * as EVT from '../event-types.js';
 import { buildWavePlan, LAYERS } from '../../wave-plan.js';
+import { pendingHandoffRecordOf } from './handoff.js';
 
 export function buildPlanMutate(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
@@ -79,11 +80,7 @@ export function buildPlanMutate(cx) {
       lanes[id] = 'pending';
       const deps = Array.isArray(t.deps) ? t.deps.filter((d) => typeof d === 'string' && d.length > 0) : [];
       if (deps.length === 0) continue;
-      handoffs[id] = deps.map((from) => ({
-        from, to: id, batch: batchId, step: null,
-        artifacts: [], contract: { consumedFrom: from, assertions: [] },
-        status: 'pending', ts, officialTaskId: null,
-      }));
+      handoffs[id] = deps.map((from) => pendingHandoffRecordOf({ from, to: id, batchId, ts }));
       for (const from of deps) declared.push({ from, to: id });
     }
     const revision = (batch.planRevision ?? 0) + 1;
@@ -197,11 +194,7 @@ export function buildPlanMutate(cx) {
       }
       for (const from of deps) {
         if (seenFrom.has(from)) continue;
-        retain.push({
-          from, to: p.id, batch: batchId, step: null,
-          artifacts: [], contract: { consumedFrom: from, assertions: [] },
-          status: 'pending', ts, officialTaskId: null,
-        });
+        retain.push(pendingHandoffRecordOf({ from, to: p.id, batchId, ts }));
       }
       const acceptBefore = prev.filter((r) => r && r.source === 'accept').length;
       const acceptAfter = retain.filter((r) => r && r.source === 'accept').length;

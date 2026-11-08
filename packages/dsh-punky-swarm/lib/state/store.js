@@ -223,7 +223,6 @@ function composeStore(cx) {
     commitBatchLocked,
     addPoolTasks, addTaskEdges,
     recordHandoff, recordHandoffAccept, markManagerRaised, recordGovernanceRefusal,
-    declaredInboundEdgesOf,
     readChains, updateChains, updateLaneProgress,
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, artifactsDirOf,
@@ -263,8 +262,9 @@ function composeStore(cx) {
     addTaskEdges,
     recordHandoff,
     recordHandoffAccept,
-    //   `handoff_accept` 声明的入边在视图**结构性不可见** ⇒ 视图与门禁口径分叉，`L-AC-9` fail）。
+    // 交接面两个判定单点**直接透出 gates 的同一函数实例**（视图与门禁不得各写一份）
     declaredInboundEdgesOf: gates.declaredInboundEdgesOf,
+    handoffRecordVerdict: gates.handoffRecordVerdict,
     markManagerRaised,
     recordGovernanceRefusal,
     readChains, updateChains, updateLaneProgress,

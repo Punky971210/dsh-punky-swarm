@@ -30,6 +30,20 @@ export function pickPayload(keys, src) {
   }
   return out;
 }
+
+/** `lane.handoff.gap` 的**唯一载荷形态**：五个发射点共用（禁各点自行拼装 ⇒ 键集不得漂移）。
+ *  `callerRole` / `legacy` 是显式可选位，其余四键恒定。 */
+export function laneHandoffGapPayload({ lane = null, code, missing = [], problems = [], callerRole = null, legacy = false } = {}) {
+  const payload = {
+    lane,
+    code,
+    missing: Array.isArray(missing) ? missing : [],
+    problems: Array.isArray(problems) ? problems : [],
+  };
+  if (callerRole) payload.callerRole = callerRole;
+  if (legacy === true) payload.legacy = true;
+  return payload;
+}
 export function gateEscapeEvents(res, lane) {
   if (!res || typeof res !== 'object') return [];
   const raw = [

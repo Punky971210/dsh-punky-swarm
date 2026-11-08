@@ -45,6 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { resolveArtifactIn } from '../lib/state/batch-paths.js';
+import { presenceJudge, declaredKindOf } from '../lib/state/gates.js';
 import { detectGate, detectNeedHuman, detectGateOff, detectScriptAnchors } from '../lib/state/gates/detect.js';
 import { resolveArtifact } from '../lib/watch/heartbeat/context.js';
 import { artifactActivity } from '../lib/watch/heartbeat/activity.js';
@@ -237,6 +238,21 @@ function makeHandoffHarness({ batch }) {
     appendEvent: (sid, bid, type, payload) => events.push({ type, payload }),
     recordHandoff: (sid, bid, rec) => { recorded.push(rec); return { ok: true, overwrite: false, previousAssertions: [] }; },
     declaredInboundEdgesOf: () => ({ edges: ['p1'], sources: [{ from: 'p1', source: 'deps' }] }),
+    // 最小 stub：只复算「产物在场」一项（本用例唯一关心的缺口面）；status / consumedFrom / assertions
+    //   三项判定由 test/handoff-single-source.test.js 用**真实 store** 覆盖。
+    handoffRecordVerdict: (_sid, _bid, _layer, rec) => {
+      const arts = Array.isArray(rec?.artifacts) ? rec.artifacts : [];
+      const missing = [];
+      for (const p of arts) {
+        let abs = null;
+        try { abs = resolveArtifactIn(dir, p); } catch { abs = null; }
+        const v = presenceJudge({
+          mode: 'runtime', declared: [p], declaredKind: declaredKindOf(p), abs, artifactsRoot: dir,
+        });
+        if (!v.ok) missing.push(p + ' (missing)');
+      }
+      return { ok: missing.length === 0, missing, problems: [], pending: rec?.status !== 'submitted' };
+    },
   };
   const tools = buildHandoffTools({ ctx: {}, store, root, config: {}, deps: {} });
   const byName = (n) => tools.find((t) => t.name === n);
