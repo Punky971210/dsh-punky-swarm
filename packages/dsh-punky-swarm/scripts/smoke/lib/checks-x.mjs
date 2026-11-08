@@ -142,7 +142,9 @@ function h12(sm) {
   expect(probe2.length === 1 && probe2[0].stale === false, '阴性对照失败：js 比 ts 新却仍判 stale');
 
   const pairs = stalePairsIn(path.join(sm.repoRoot, 'lib'));
-  expect(pairs.length > 0, '阳性对照失败：lib/ 下找不到任何 ts/js 配对（判据空跑 = 假绿）');
+  // TS 双载体已取消（B1 批）：lib/ 下无 .ts 源时本判据不适用。
+  //   阳性/阴性对照已在上面用合成夹具独立跑过 ⇒ 判据本身仍可达，不是「空跑假绿」。
+  if (pairs.length === 0) return 'lib/ 下无 .ts 源（TS 双载体已取消）⇒ 构建新鲜度判据不适用';
   const stale = pairs.filter((p) => p.stale);
   if (stale.length === 0) return '配对 ' + pairs.length + ' 组全部新鲜（mtime(js) ≥ mtime(ts)）';
   const detail = stale.slice(0, 5).map((p) => path.relative(sm.repoRoot, p.js).split(path.sep).join('/')
