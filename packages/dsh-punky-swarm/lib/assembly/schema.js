@@ -59,7 +59,6 @@ export const CAPABILITY_REGISTRY = [
 export const EXCLUSIONS = [];
 
 // ── 反向断言权威表（对齐 software-team skill 装配表 8 角色）──
-// manager 显式豁免：Leader 直系拉起、不经 wavePlan lane 角色池，不登记于装配表 roles
 export const REQUIRED_ROLES = ['coordinator', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'];
 
 // ── 盲审扩展 ──
@@ -205,7 +204,7 @@ export function assertAssemblyCompleteness(assembly, skillCatalog) {
     }
   }
 
-  // 视图 2：反向对齐 software-team 手册表（manager 豁免）
+  // 视图 2：反向对齐 software-team 手册表
   for (const role of REQUIRED_ROLES) {
     if (!roleSkills.has(role)) {
       missing.push('required role "' + role + '" not present in assembly roles');

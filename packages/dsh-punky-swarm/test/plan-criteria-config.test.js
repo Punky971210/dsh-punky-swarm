@@ -33,7 +33,7 @@ import { createStore } from '../lib/state/store.js';
 //   已删（**本体已删除**，A-5/A-6/A-9 实测 0 命中 ⇒ 该 import 是文件级 ESM 缺符号的直接根因）；
 //   原 `import { writeTempTeam } from './helpers/team-fixture.mjs'` 亦删（真实骨架已删，T-4/A-9）。
 import { clearFlowCache, ENGINE_BASELINE_CRITERIA_SECTION, ENGINE_BASELINE_PLAN_SECTIONS } from '../lib/assembly/flows.js';
-import { assessC, registerManager, seedArtifactFile } from './helpers/gate-fixture.mjs';
+import { assessC, seedArtifactFile } from './helpers/gate-fixture.mjs';
 // 【2026-09-27 批 3 · T-15/D-6 归因】`writeTempTeam` 导入已随 C2–C6 五例删除（真实骨架已删）。
 
 const SESS = { agent: { session: { id: 'sess-acfg' } } };

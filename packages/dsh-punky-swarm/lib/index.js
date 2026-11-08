@@ -686,7 +686,7 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
         }
         if (replayed > 0) {
           ctx.logger?.info?.('[dsh-punky-swarm] replay(装配期)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
-            + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
+            + '）—— 重放只落「待派清单」，真派仍由 Leader 在工具面执行');
         }
       })();
     }

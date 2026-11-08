@@ -9,7 +9,7 @@
 ## 一、这是什么
 
 - **引擎面**：`wave_plan`（按依赖 DAG 分层为 waves，**建批后不中途重算**）→ `lane_dispatch` / `member_status`（派发）→ `handoff_submit`（逐边交接）→ `member_settle`（结算）；辅以 `gate_status`（门禁态）、`log_export`（事件导出）。`lane_heartbeat` / `lane_longrun` **已于 G3 B1 删除**（原属停维面：维护冻结、功能保留不续维，2026-10-09 用户裁定；现无工具入口，其事件面改由 `batch_status` / `log_export` 读取）。
-- **治理纪律**：**27 条 / 9 组**（评估派发 / 批与交接 / 运行模式 / 审计验收 / 结算 / 恢复监管 / 输出·能力·指引 / 两方向·编号 / 执行前经验检索），细则见 `references/discipline.md`；Manager 侧通用定义见 `references/manager.md`。
+- **治理纪律**：**27 条 / 9 组**（评估派发 / 批与交接 / 运行模式 / 审计验收 / 结算 / 恢复监管 / 输出·能力·指引 / 两方向·编号 / 执行前经验检索），细则见 `references/discipline.md`。
 - **它治的是什么**：一批 Agent 一起干活时的四类事故 —— 上游产物没齐就开工、跑几小时一崩全丢、几个成员同时写同一份文件、拦了却说不清为什么。工具本身没坏，缺的是流程上的闸口；闸口装进引擎后，纪律成为机器判据，而不是各成员的自觉。
 - **`0.5.0` 新基线**：团队资产与 `chain` 声明面退役后，**装配按「引擎基线 + 成员槽位 + 指引」**；运行期 DAG 真源 = 批次 `lanes[].deps` + `handoffs`。
 
@@ -20,7 +20,7 @@
 | 面 | 载体 | 落点 / 说明 |
 |---|---|---|
 | ① **插件**（核心） | `lib/**` + `cordis.patch.yml` **两行** | **引擎行** `dsh-punky-swarm`（状态机 / 面板 / HTTP / 门禁引擎；**不注册治理工具**）+ **preset 注册行** `dsh-agent-preset-punky`（0.1.7 起 preset **必须**由插件行注册，不再扫描预设目录）。<br>**治理工具**（27 件）由预设组合里的 `punky-provider` 行注册 ⇒ 只有 `punky-preset` 会话（含其派生 worker）在工具目录里看得到，其它模式零污染（装配隔离，2026-11-08） |
-| ② **模式与指引**（核心） | `@deepseek-ai/dsh-agent-preset` 注册的 **`punky-preset`（蟛蜞模式）** | `references/discipline.md` / `references/manager.md` 由启动期 `syncAssets()` **幂等同步**到 `<home>/.dsh/.agent-presets/punky-preset/` |
+| ② **模式与指引**（核心） | `@deepseek-ai/dsh-agent-preset` 注册的 **`punky-preset`（蟛蜞模式）** | `references/discipline.md` 由启动期 `syncAssets()` **幂等同步**到 `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **团队技能指针**（附加） | `skills/` **5 个目录** | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ 同步落点 `<home>/.agents/skills/<name>/` |
 
 > **能力层（software-team）**：`skills/software-team/references/engineering/spec-contract.md` 现为**蟛蜞适配层**（六态证据 → `gate_status`/`verdict` 映射 / `SUMMARY:` 机读行落地 / S-10 缺口留档）；**规格结构与机械规则原文以仓内 vendor 原件为准**（见下条），由 `SKILL.md` 的角色必读表按角色挂载。
@@ -155,7 +155,6 @@ dsh plugin --profile web remove dsh-punky-swarm
 | 文档 | 内容 |
 |---|---|
 | `references/discipline.md` | 治理纪律细则（码表 / 语义 / 边界 / 操作序列） |
-| `references/manager.md` | Manager 通用定义（行为层） |
 | `docs/engine-intro.md` | 引擎内部说明 |
 | `skills/software-team/references/engineering/spec-contract.md` | software-team 能力层：**规格契约细则**（机械规则 / 六态证据 / 机读行 / 需求编号；SpecLang `b3ee6ee` 提炼引用，recommend 语义非装配） |
 

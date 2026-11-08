@@ -30,11 +30,11 @@ import { emitNotice } from './notice.js';
 
 // 候选产出（动作即止）：① 事件流留痕（载荷携带 broadcast 那条的 ackId 供消费判据用）
 // ② mailbox broadcast 直写（Leader 兜底路径读 broadcast——纪律 0f 口径）
-// ③ 同投 supervisor/inbox（Manager 通道；实测该通道可达——实测两次 stalled 追问经它送达）。
+// ③ 同投 supervisor/inbox（Leader 收件箱通道；实测该通道可达——实测两次 stalled 追问经它送达）。
 // 事件流去重（同 stint 已产 → skip）覆盖同 tick/多次 tick/引擎重启恢复三种情形；先事件后消息
 // （事件失败 → 不写消息；消息失败仅 warn 语义静默——事件为唯一事实源，面板/Leader 可查）。
 // 两条投递**各自 ackId 独立**，事件载荷锚定 broadcast 那条（锚 inbox 会把
-//   「Manager 忙」误判成「无人消费」）。
+//   「Leader 忙」误判成「无人消费」）。
 export function emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs) {
   const entry = cx.state.get(laneKeyOf(sessionId, batchId, lane));
   const verdict = judgeLongrun({
@@ -153,7 +153,7 @@ export function longrunScan(cx, nowTs, rows = null) {
     const { sessionId, batchId, batch } = row;
     if (!batch) continue; // phase 预筛命中（终态/planning）⇒ 与原「读后判终态/planning → 整批跳过」等价
     if (schema.isBatchTerminal(batch.phase)) continue; // 终态批：只出悬挂视图，不产候选、不写事件
-    if (batch.phase === 'planning') continue; // planning：只许 Manager 登记，不扫成员判据
+    if (batch.phase === 'planning') continue; // planning：只推相位，不扫成员判据
     if (isStaleBatch(batch, nowTs, cx.lrCfg.staleBatchMs)) continue; // 僵尸批跳过
     for (const lane of Object.keys(batch.lanes ?? {})) {
       if (!isScannedLaneState(batch, lane)) continue; // 非终态全集合；终态 lane 不扫

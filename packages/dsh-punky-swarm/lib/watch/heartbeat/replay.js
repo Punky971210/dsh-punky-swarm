@@ -25,9 +25,9 @@ import { replayBatch } from '../../engine/replay.js';
 //
 // ★ 语义边界（**必须与原纪律并读，不得混同**）：
 //   心跳既有的 stalled / longrun / binding-gap 三档是「**只标记不自动处置**」——它们只产候选/留痕，
-//   成员状态与批次相位**一律不动**（Manager/Leader 人审）。本档**不是**自动处置：
+//   成员状态与批次相位**一律不动**（Leader 人审）。本档**不是**自动处置：
 //   `replayBatch` 固定 `noDispatch: true` ⇒ 只**补一条链推进决策**（落 `chain.step{dispatch.mode:'manual-pending'}`），
-//   **不派发**、**不改相位**、**不改任何成员状态**（真派仍归 Leader/Manager，与 S12 裁决一致）。
+//   **不派发**、**不改相位**、**不改任何成员状态**（真派仍归 Leader，与 S12 裁决一致）。
 //   两者同处一 tick 但**互不影响**：本档不读也不写心跳 state 表，三档的判据/阈值/输出一字未改。
 //   边界自证：本档命中时批相位恒为 `running`（`replayBatch` 内的相位闸），故不可能与
 //   「终态批只出悬挂视图」「paused 批次档」等路径交叉。
@@ -59,7 +59,7 @@ export async function replayTick(cx, rows = null) {
       //   便于两条路径在同一日志面上辨认来源。logger 缺省（测试/旧调用方）⇒ 静默，不 throw。
       try {
         cx.logger?.info?.('[dsh-punky-swarm] replay(心跳)：补链推进决策 ' + replayed + ' 处（' + hits.join(',')
-          + '）—— 重放只落「待派清单」，真派仍由 Leader/Manager 在工具面执行');
+          + '）—— 重放只落「待派清单」，真派仍由 Leader 在工具面执行');
       } catch { /* 日志失败不影响补决策已落盘的事实 */ }
     }
   } catch { /* 扫描面失败不影响心跳 */ }

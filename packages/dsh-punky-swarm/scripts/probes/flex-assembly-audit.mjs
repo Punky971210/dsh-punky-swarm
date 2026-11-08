@@ -75,7 +75,7 @@ function build(root, team, asset, tag, { taskList = null, write = true } = {}) {
   const vocab = roles.ok ? unionRoleVocabulary(roles) : [];
   const asmResolved = resolveAssembly(team, null, { root });
   const allRoles = [...new Set(Object.values(asset.layers ?? {}).flatMap((l) => l.roles ?? []))];
-  const asm = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'p1', roles: allRoles }, vocab);
+  const asm = normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 'p1', roles: allRoles }, vocab);
   const plan = buildWavePlan({ batchId: 'probe-' + team, tasks, concurrency: 3, team, assembly: asmResolved ?? undefined, teamsRoot: root });
   const gate = assemblyGate(plan.wavePlan.flatMap((w) => w.tasks), asm.decl);
   const codes = plan.warnings.map((w) => w.code + (w.role ? ':' + w.role : '') + (w.missing ? ':' + w.missing : ''));

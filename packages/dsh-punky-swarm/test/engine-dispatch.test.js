@@ -268,7 +268,7 @@ test('R2 swarm_report：绑定成员 ⇒ 事件 swarm.report + Leader 通道（b
   assert.ok(fs.existsSync(path.join(boxRoot, 'broadcast')), 'Leader 通道（broadcast）有落盘');
 });
 
-test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + Manager 通道（supervisor/inbox）双留痕', async () => {
+test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + owner 收件箱（supervisor/inbox）双留痕', async () => {
   const root = tempRoot('punky-edr3-');
   const store = seedBatch(root, 'sess-c', 'b-r3');
   store.appendEvent('sess-c', 'b-r3', EVT_MEMBER_DISPATCH, { lane: 'l1', workerSessionId: 'ws-w2' });
@@ -282,8 +282,8 @@ test('R3 swarm_cc：绑定成员 ⇒ 事件 swarm.cc + Manager 通道（supervis
     'swarm.cc 至少 1 条（存在性）');
   assert.ok(store.readBatch('sess-c', 'b-r3').events.filter((e) => e.type === EVT_SWARM_CC).length <= 1,
     'swarm.cc 不得重复（上界 1）');
-  assert.equal(REPORT_CHANNEL.manager, 'inbox');
-  assert.ok(fs.existsSync(path.join(mailboxRootOf(root, 'sess-c', 'b-r3'), 'supervisor', 'inbox')), 'Manager 通道（supervisor/inbox）有落盘');
+  assert.equal(REPORT_CHANNEL.owner, 'inbox');
+  assert.ok(fs.existsSync(path.join(mailboxRootOf(root, 'sess-c', 'b-r3'), 'supervisor', 'inbox')), 'owner 收件箱（supervisor/inbox）有落盘');
 });
 
 // gate-lite Q-G2（2026-09-17 用户裁决「**删除这一项**」）：身份门已删 ⇒ 未绑定**不再拒**。

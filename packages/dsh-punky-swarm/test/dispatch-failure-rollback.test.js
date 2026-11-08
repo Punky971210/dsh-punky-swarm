@@ -28,7 +28,7 @@ import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
 import { workerSessionIdOf } from '../lib/engine/dispatch.js';
-import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
 // G7 下沉（2026-09-22）：harness 体迁入 helpers/dispatch-fixture.mjs；本文件一行适配（id 沿用原值）。

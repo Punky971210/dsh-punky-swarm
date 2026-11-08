@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 退役码登记锁（N2 收口 · G3 合并，2026-09-22；2026-09-27 补登 GATE_SKILL_MISSING + teamsRoot 两码；
 //   2026-09-27 批 3 补登 team-asset 全族 19 项 ⇒ 11 + 19 = 30；
-//   2026-09-28 批 4 补登「团队资产解析」事件码 1 项 ⇒ 30 + 1 = **31**）：
+//   2026-09-28 批 4 补登「团队资产解析」事件码 1 项 ⇒ 30 + 1 = **31**；
+//   2026-11-08 Manager 整层删除补登 3 项（专属告警 / 在册缺口事件 / 拉起事件）⇒ 现 **35**）：
 //   数据源 = docs/gate-code-classification-2026-09-22.md C 类（码已退役、无任何拒态来源）。
 //   单表遍历断言 lib/** 零字面量命中 —— 取代此前散布在 gate-lite-batch2 / concurrency-gate /
 //   governance / writing-team-asset 四处的手写「已删零命中」变体（激进删除批 2，用户裁定）。
@@ -84,6 +85,9 @@ const RETIRED_CODES = [
   //     该常量成为「定义在、零发射点」的死常量；本批按 Q-2 红线「要么接线、要么标废」**删净**
   //     其常量本体与全部读端（面板分类器 / locale 键 `event.phase.team` / 事件类型联合成员）⇒ 码面入锁防回生。
   'batch.team-asset.resolved', 'GATE_DISPATCH_CAPABILITY_MISSING', // 后者 = W4 `codename` 改名退役（MISSING→UNAVAILABLE，不可逆；同批零字面量已实测；锁面排 *.d.ts ⇒ 锁外行靠 census 清单）
+  //   · 【2026-11-08 补登 · Manager 角色整层删除】三码：专属告警码（`manager` 已摘出 `VALID_ROLES`
+  //     ⇒ 改走通用 `GATE_ROLE_INVALID`）+ 建批期在册缺口事件 + 拉起事件。三者在 `lib/**` 已实测零命中。
+  'GATE_ROLE_MANAGER_AS_LANE', 'gate.manager_roster_gap', 'batch.manager.raised',
 ];
 
 function libSources(dir, out = []) {

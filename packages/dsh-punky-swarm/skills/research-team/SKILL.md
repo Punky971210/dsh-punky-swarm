@@ -29,14 +29,14 @@ triggers:
 > **装配面已退役声明**：团队资产装配方案**已整体退役**（2026-09-27 用户裁决 ＋ 批 `retire-team-chain-20260927` 清尾，**进退役锁**）——引擎**不再解析**任何团队资产，`team` 退为可选自由标签。
 > **现行装配面** = **引擎基线（引擎基础角色集与缺省门禁）＋ 成员槽位（roster / lane 角色）＋ 指引（本团队 skill 与 persona 纪律）**；本技能**不承载、也不指向**装配数据。
 > 本技能只写**用途、职责与纪律**，避免"技能与引擎两处各写一份"造成漂移（口径同 `skills/software-team/SKILL.md` 的团队资产退役说明）。
-> 行为层（persona 纪律 0–10、三层门禁 Tier3、Manager 定义）由 dsh-punky-swarm 承担，本技能不重复。
+> 行为层（persona 纪律 0–10、三层门禁 Tier3）由 dsh-punky-swarm 承担，本技能不重复。
 
 ## 团队用途（何时加载）
 
 | 场景 | 本技能给什么 |
 |---|---|
 | Leader 选团队建批（`wave_plan({team:'research-team'})`） | 该团队的层归属、角色集、粒度口径与产物契约 |
-| Leader / Manager 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
+| Leader 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
 | 调研任务收口 | 判据来源：plan 的调研判据 → exec 的逐条溯源 → audit 的独立核查 |
 | 排查"角色缺操作手册" | 技能映射的**读端位置**与当前取值（真源在团队资产，不在本文件） |
 
@@ -93,7 +93,7 @@ triggers:
 | 场景 | 本技能给什么 |
 |---|---|
 | Leader 选团队建批（`wave_plan({team})`） | 层归属、角色集与产物契约的**读解**（真源是资产，不是本文件） |
-| Leader / Manager 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
+| Leader 派发 worker | 目标角色的职责边界、可用/禁用动作、成功标准与期望输出格式 |
 | worker 收工自检 | 产物落点与门禁要求（产物契约 + 交接件） |
 | 排查「角色缺操作手册」 | 技能映射的读端位置与当前取值 |
 
@@ -116,7 +116,7 @@ triggers:
 - **lane id 纪律**：须逐字等于资产 `branches[].id`，否则链推进落 `no-lane-for-step`。
 - **交接顺序**：产出后**先 `handoff_submit`、再发 `settle-request`**（顺序反了 auto-settle 判 `GATE_HANDOFF_MISSING` 并使批暂停）。
 - **exec ↔ plan 依赖（**三道门**）**：**exec 分支之间无 `deps`**（可高并发并行、lane 数不限），但**每个 exec lane 必须消费 plan 产物**——由引擎在建批期强制：`flows.exec.consumes_required_per_lane: ["plan/"]`（**逐 lane**，任一 exec lane 缺该前缀 ⇒ 拒建批 `GATE_EXEC_INPUT_MISSING`）＋ `flows.exec.consumes_required: ["plan/"]`（**批级**覆盖）；另 `GATE_ORPHAN_PRODUCT` 保证 plan 产物不被孤儿化（plan 层硬拒），entry 门 `GATE_ENTRY_MISSING` 保证声明的 consume **逐个在场**后才派发。⇒ **exec 形态自由（无 deps），但与 plan 的依赖是硬门禁**；lane 间真实依赖由建批 `tasks[].deps` 声明。
-- **通信**：`swarm_report` 回 Leader、`swarm_cc` 抄送 Manager（**只写元数据**，不复制正文；原 `mailbox_send` 传递通道已于 G3 B1 删除）。
+- **通信**：`swarm_report` 回 Leader；`swarm_cc` 抄送 Leader（**只写元数据**，不复制正文；原 `mailbox_send` 传递通道已于 G3 B1 删除）。
 - **进度**：每完成一子步骤落 `<lane>/progress/NN-<slug>.md`（**lane 域**，勿落层域）。
 - **长程**：longrun 豁免由 Leader **派发时附带**，成员不得自改。
 - **止轮与收口**：需止住自动推进用 `batch_control(pause)`（非终态、可逆）；**先了结成员态（`member_settle`）→ 再迁相位到终态**（写成员态属 C 档动作）。

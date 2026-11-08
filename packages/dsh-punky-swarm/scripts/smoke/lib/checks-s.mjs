@@ -104,8 +104,9 @@ async function h07(sm) {
   try {
     const wavePlan = mount.tools.get('wave_plan');
     const tasks = threeTierTasks();
-    // leader-direct：本批不登记 Manager，让 entry 门的 Manager 前置不成为归因噪音
-    await wavePlan.execute({ batchId: sm.h07BatchId, tasks, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' }, session: sm.session });    const before = sm.batchOf(sm.h07BatchId);
+    // 【2026-11-08】`assembly.managerPlan` 随 Manager 层删除 ⇒ 装配声明只剩 `auditLane`（本批无登记前置）。
+    await wavePlan.execute({ batchId: sm.h07BatchId, tasks, assembly: { auditLane: 'a1' }, session: sm.session });
+    const before = sm.batchOf(sm.h07BatchId);
     expect(before && before.lanes.e1 === 'pending', '阳性对照失败：' + sm.h07BatchId + '.e1 初始态不是 pending');
 
     // 【2026-11-07 修 · 假红②】拒派语义已从 **throw 改为返回**（D-1 批 `punky-d1d2-impl-20261103`

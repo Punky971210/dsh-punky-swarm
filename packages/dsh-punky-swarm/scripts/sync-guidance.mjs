@@ -6,12 +6,12 @@
 //   **不产出「校验通过/不通过」结论**——需要核对时直接看两份文件，或看本脚本的回显。
 //
 // 复制面（两个 live 根，互不相同，勿混）：
-//   ① 注入面六件 → `<profile>/.dsh/.agent-presets/punky-preset/`（可用 `--live=` 覆盖）
+//   ① 注入面五件 → `<profile>/.dsh/.agent-presets/punky-preset/`（可用 `--live=` 覆盖）
 //   ② skills 整树  → `<profile>/.agents/skills/`（可用 `--skills-live=` 覆盖；`--no-skills` 跳过）
 //
 // 用法：
-//   node scripts/sync-guidance.mjs                 # 六件 + skills 全同步
-//   node scripts/sync-guidance.mjs --no-skills     # 只同步六件
+//   node scripts/sync-guidance.mjs                 # 五件 + skills 全同步
+//   node scripts/sync-guidance.mjs --no-skills     # 只同步五件
 //   node scripts/sync-guidance.mjs --dry-run       # 只列将复制/跳过，不落盘
 //
 // 退出码（与仓内其他脚本同约定）：0 = 全成功（含全部跳过）；1 = 有复制失败；2 = 参数错误 / 源缺失。
@@ -28,11 +28,10 @@ const ROOT = path.resolve(HERE, '..');
 const PRESET_REL = path.join('presets', 'punky-preset');
 const SKILLS_REL = 'skills';
 
-/** 注入面六件（相对 preset 根）。 */
+/** 注入面五件（相对 preset 根）。 */
 const SYNC_FILES = [
   'agent.cordis.yml',
   path.join('references', 'discipline.md'),
-  path.join('references', 'manager.md'),
   'preset.yml',
   'asset-manifest.json',
   'cordis.patch.yml',

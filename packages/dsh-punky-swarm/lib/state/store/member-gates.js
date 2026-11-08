@@ -319,9 +319,9 @@ export function buildMemberGates(cx) {
             phase: to,
             generatedAt: new Date().toISOString(),
             manifestPath,
-            executor: 'leader-or-manager',
+            executor: 'leader',
             reversible: true,
-            actionNote: 'action 仅为建议；实际 memory_archive / memory_forget 由 Leader/Manager 执行，两者均可逆（不删）',
+            actionNote: 'action 仅为建议；实际 memory_archive / memory_forget 由 Leader 执行，两者均可逆（不删）',
             items,
             propagation,
           }, null, 2) + '\n', 'utf8');
@@ -340,7 +340,7 @@ export function buildMemberGates(cx) {
           manifest: manifestPath,
           manifestWritten: memoryStale.written,
           ...(memoryStale.writeError ? { manifestError: memoryStale.writeError } : {}),
-          executor: 'leader-or-manager',
+          executor: 'leader',
           reversible: true,
           ...(propagation ? { propagationAffected: propagation.affected, propagationVersion: propagation.version } : {}),
         }));

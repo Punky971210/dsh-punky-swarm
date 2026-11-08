@@ -53,7 +53,7 @@
           #   longrun 子键（长跑档探针，出厂默认开）：running lane 持续超
           #   maxDurationMs（默认 1200000=20min）且近 noProgressWindowMs（默认 300000=5min）无新 checkpoint
           #   且无活动（严格 AND）→ 同 tick 产 lane.longrun.candidate 事件 + mailbox broadcast 候选通知
-          #   Manager 裁决（探针只标记不改 lane 状态；长程探针工具并列注册，enabled=false 不注册、
+          #   Leader 裁决（探针只标记不改 lane 状态；长程探针工具并列注册，enabled=false 不注册、
           #   **该探针工具已于 G3 B1 删除**；tick 不判、零事件零消息零行为变化）。
           watch:
             enabled: true

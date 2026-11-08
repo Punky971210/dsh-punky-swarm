@@ -1627,7 +1627,7 @@
     "test/retired-codes-lock.test.js": {
       "asserts": 2,
       "blankLines": 9,
-      "lines": 112,
+      "lines": 116,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1763,7 +1763,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 43,
       "blankLines": 20,
-      "lines": 381,
+      "lines": 380,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -2105,7 +2105,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T10:43:30Z",
+  "generatedAt": "2026-11-08T10:51:30Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2116,13 +2116,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "M4 角色表：manager 摘出 VALID_ROLES/BUILTIN_ROLES，GATE_ROLE_MANAGER_AS_LANE 及其收集函数退役（弃 verify 式空壳）",
+  "reason": "M5 指引清理：删 references/manager.md（preset 五件→四件）、discipline/README/skills 同步收口",
   "schema": 1,
   "totals": {
     "asserts": 11764,
     "blankLines": 6698,
     "files": 263,
-    "lines": 70655,
+    "lines": 70658,
     "tautologies": 0,
     "tests": 2464,
     "todos": 0

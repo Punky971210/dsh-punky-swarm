@@ -1,6 +1,6 @@
 # video-team 工作流蓝图（蟛蜞模式）
 
-> 说明：**Manager 为引擎层角色（Leader 直属、团队无关）**，**不属本团队角色集**——本团队满配 **7 席**。Manager 是任务第一对接点：**exec 层 lane 数≥3 的三层批** running 后、**首个 exec lane 派发前**强制拉起并 `batch_phase` **登记**；`managerPlan` **缺省 `raise`**，**需 Leader 直驱时必须在建批 `assembly` 显式声明 `managerPlan:'leader-direct'`**（显式出口，缺省不是直驱）。
+> 说明：**Leader 为批 owner**（负责任务派发、指派与结算写入），本团队满配 **7 席**。**exec 层 lane 数≥3 的三层批**由 Leader 统一派发。
 > 粗拆由 Leader 人工对接；`coordinator` 按触发装配（exec 层 lane 数≥3 或需细拆产物时 plan 层建 role=coordinator lane）。
 
 ## 一、角色 DAG（谁产出 → 谁消费 → 谁验证）
@@ -8,7 +8,6 @@
 ```mermaid
 graph TD
     L[Leader 组织层]
-    MA[Manager 引擎层角色 · 团队无关]
     subgraph 任务层🎯（本团队 2 角色）
         CO[coordinator]
         DE[designer]
@@ -36,7 +35,7 @@ graph TD
     SV -->|acceptance-report + gap-list.json + 复盘归档| L
 ```
 
-> **节点归属（D-1 口径）**：DAG 中 `L`（Leader）与 `MA`（Manager）为**引擎/组织层节点**，**不属本团队角色集**——`MA` 由引擎包定义（Leader 直属、团队无关）；**任务层 / 执行层 / 审计层三个 subgraph 内的 7 个节点才是本团队角色**（2 + 4 + 1 = 7）。
+> **节点归属（D-1 口径）**：DAG 中 `L`（Leader）为**组织层节点**，**不属本团队角色集**；**任务层 / 执行层 / 审计层三个 subgraph 内的 7 个节点才是本团队角色**（2 + 4 + 1 = 7）。
 > 「**池**」：**仅 Agent-team 方案使用**；「池」是**声明面**（可多实例并行），引擎无校验，**不承载分配语义**——席位不足时须**登记复用**，不得把「池」当成已存在的席位。
 
 ## 二、核心流转（10 步）

@@ -18,5 +18,5 @@
 
 ## 权限边界（注入用）
 - 可执行：read/glob/grep/pwsh/skill/write
-- 禁止：改业务源码；改 `references/comfyui/recipes/` 只读参考树；跳过门禁直接派发（派发权在 Manager/Leader）
+- 禁止：改业务源码；改 `references/comfyui/recipes/` 只读参考树；跳过门禁直接派发（派发权在 Leader）
 - 约束：按真实用户行为操作；产物落盘引擎产物根（`<artifacts>/<batchId>/`）；诚实披露（失败/异常如实记录）；回执简短结构化（对比表/清单）。

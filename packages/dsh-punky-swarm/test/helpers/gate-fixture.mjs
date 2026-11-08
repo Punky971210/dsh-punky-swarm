@@ -148,15 +148,13 @@ export function runLane(store, session, batchId, lane) {
   store.setMember(session, batchId, lane, 'merged');
 }
 
-// ── G1 / G2 门禁种子（2026-09-14 新增）────────────────────────────────────────
-// 背景：引擎新增两道门禁后，既有 fixture 的会话**缺「已评估为 C 档」的治理状态**、批次**缺 Manager 登记**，
-//   于是既有用例在真正的被判面（role/assembly/presence/entry…）之前就被新门拦下。本模块把两个前置
-//   抽成同一套种子函数，供各套件复用：
+// ── G1 / G2 门禁种子（2026-09-14 新增；2026-11-08 G2 面随 Manager 层删除）────────────
+// 背景：引擎新增两道门禁后，既有 fixture 的会话**缺「已评估为 C 档」的治理状态**，于是既有用例在真
+//   正被判面（role/assembly/presence/entry…）之前就被新门拦下。本模块把前置抽成种子函数供各套件复用：
 //     · G1（`lib/tools/core.js` 的 `assertMemberActionTierC`）：`wave_plan` / `member_set_status` / `member_settle`
 //       只允许出现在 **C 档**会话 ⇒ 未评估一律拒 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`；
-//     · G2（`lib/state/gates.ts` entry 门）：声明 `assembly.managerPlan === 'raise'`（**引擎缺省**）的批，
-//       首个 **exec** 层派发前必须已登记 Manager ⇒ 否则拒 `「未拉起 Manager」码(已删)`（lane 处于 `idle`
-//       的恢复路径由 `reject()` 降级为告警放行）。
+//     · G2（原「未拉起 Manager 即拒派」）**已整条退役**：独立 Manager 角色删除、调度真源 = 任务黑板
+//       ⇒ 建批后可直接派 exec，无需任何登记种子（原 `registerManager` no-op 垫片已随调用点清零删除）。
 // 纪律（本组 helper 的硬要求）：**走与真实工具相同的写入路径/同一函数**，不手写裸 JSON 绕过校验——
 //   · `assessC` 用 `store.writeGovernance`（`assign_check` 的同一写入函数，同一 `lastAssign` 形状）；
 
@@ -176,12 +174,6 @@ export function assessC(store, session, { rationale = 'fixture：建批/成员�
     history: [...(prev.history ?? []), entry],
   });
   return next.lastAssign;
-}
-
-/** G2 种子：登记该批的 Manager —— Manager 角色已整体删除（调度真源 = 任务黑板），本函数仅为**遗留调用点**
- *  提供 no-op 兼容（返回 null），待调用点清零后一并删除。 */
-export function registerManager() {
-  return null;
 }
 
 // ── 【F3 收敛】跨套件原语（夹具审计 §3.3「必合档」；2026-09-21）─────────────────────────

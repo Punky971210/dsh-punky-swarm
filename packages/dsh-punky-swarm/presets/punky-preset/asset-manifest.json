@@ -4,7 +4,7 @@
   "assets": [
     {
       "rel": "presets/punky-preset",
-      "note": "蟛蜞模式预设本体（persona 纪律、preset.yml、agent.cordis.yml、references/manager.md、NOTICE、本清单）",
+      "note": "蟛蜞模式预设本体（persona 纪律、preset.yml、agent.cordis.yml、references/discipline.md、NOTICE、本清单）",
       "target": { "root": "preset", "subpath": "punky-preset" }
     },
     {

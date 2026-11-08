@@ -29,7 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //      `patch: entry "<…agent-team…>" not found` ⇒ **任一命中即团队面缺失**。
 //   ③ 会话期功能面：组合树 dump 中**逐包锚定**核对团队四包行是否在场（整行锚定，**禁子串**），
 //      并列出该面应提供的工具名；工具名的**会话级**在场与否**不能静态判定** ⇒ 固定标注 `sessionProbe`。
-//   ④ 引擎读端：日志中 `managerRoster` 的 `service-unavailable` 口径命中数。
+//   ④ 引擎读端（2026-11-08 起不再有 `managerRoster` 面）：团队面缺失的引擎读端判据 = `swarm.cc` / 长跑候选的投递是否可达；静态机检不覆盖，标 `sessionProbe`。
 //
 // 口径（沿用本仓模板 `scripts/id-anchor-count.mjs` 的三条，取用不得改宽；批 `mcheck-improvements-20261001` 增补）：
 //   ① **锚定匹配（整行锚定，禁子串）** —— **兼容两种书写形态的并集**：

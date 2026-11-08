@@ -155,7 +155,7 @@ export function probeText(cx, lane, batchId, missed) {
   }
   // 轻量追问模板：≤5 句、含 lane 标识、不调工具、不复盘全部历史
   return [
-    `Manager 心跳：lane「${lane}」（批次 ${batchId}）已连续 ${missed} 拍无活动信号。`,
+    `长跑心跳：lane「${lane}」（批次 ${batchId}）已连续 ${missed} 拍无活动信号。`,
     '请用 ≤3 句汇报当前进度或阻塞点（走 outbox）。',
     '不调工具、不复盘全部历史。',
     '本消息为自动追问，任何活动即重置计时。',

@@ -41,12 +41,12 @@ triggers:
 
 ## 团队定位
 
-本技能是**团队层指引**，与软件工程团队 `software-team` 平级：二者共享引擎通用治理语义（persona 纪律 0–10、三层门禁 Tier3、Manager 通用定义见 `presets/punky-preset/references/manager.md`），差异只在**团队自身的角色编制、粒度口径与能力层装配**。
+本技能是**团队层指引**，与软件工程团队 `software-team` 平级：二者共享引擎通用治理语义（persona 纪律 0–10、三层门禁 Tier3），差异只在**团队自身的角色编制、粒度口径与能力层装配**。
 
 | 项 | 设计团队（本技能） | 软件工程团队（`software-team`） |
 |---|---|---|
-| 层数编制 | **3 层 4 角色**（plan 1 / exec 2 / audit 1） | 3 层 7 角色 + 引擎层 Manager |
-| 角色 | `design-planner` / `workflow-builder` / `producer` / `workflow-auditor` | coordinator / designer / coder / tester / reviewer / supervisor / doc-manager + 引擎层 Manager |
+| 层数编制 | **3 层 4 角色**（plan 1 / exec 2 / audit 1） | 3 层 7 角色 |
+| 角色 | `design-planner` / `workflow-builder` / `producer` / `workflow-auditor` | coordinator / designer / coder / tester / reviewer / supervisor / doc-manager |
 | 粒度口径 | 配方与契约粒度（配方卡 / 参数槽 schema / 交付契约） | API 粒度（细拆为接口级任务） |
 | 能力层 | ComfyUI **Layer A** 配方驱动（`references/comfyui/`） | dev-* / review* / doc* 操作手册映射 |
 | 产物契约 | 沿用 `plan/` `exec/` `audit/`（**不新增产物类型**） | 同左 |
@@ -145,14 +145,13 @@ triggers:
 1. **查装配**：装配面**已退役**（无资产文件）⇒ 角色集回落**引擎基础集**；本团队的角色编制与产物契约以本文件「三层职责与产物契约」一节为准。
 2. **查角色**：读本文件「三层职责与产物契约」；基础角色另有 `references/roles/<role>.md`（Persona / 职责与产出 / 权限边界 / 协作方式）。
 3. **查能力层**：读本文件 §Layer A（迁入副本）与 `references/comfyui/recipes/<配方>/*.md` 配方卡。
-4. **建批**：Leader/Manager 按资产装配面派 lane —— plan 层 `design-planner`、exec 层 `workflow-builder`、audit 层 `workflow-auditor`；生产另开批次派 `producer` 并 `consume` 两个 audit 产物。角色边界要点内联进 `task.cmd`。
+4. **建批**：Leader 按资产装配面派 lane —— plan 层 `design-planner`、exec 层 `workflow-builder`、audit 层 `workflow-auditor`；生产另开批次派 `producer` 并 `consume` 两个 audit 产物。角色边界要点内联进 `task.cmd`。
 5. **纪律**：引擎通用治理纪律见 persona（纪律 0–10）；本团队差异仅「粒度口径 = 配方/契约粒度」与「生产另开新批次」两条。
 
 ## 边界
 
 - 本技能**不含**操作流程手册本体（用 spec-writing / interaction-design-principles 等能力层）与运行时调度（用 dsh-punky-swarm 工具）。
 - 本技能**不承载**装配数据：装配面**已整体退役**（**进退役锁**）⇒ **无资产文件**；**现行装配面 = 引擎基线 ＋ 成员槽位 ＋ 本指引**。
-- 本技能**不承载** Manager 通用定义（落点 `presets/punky-preset/references/manager.md`）。
 - 本技能**不复制** Layer B（`expert/`）任何文件，只写引用指针。
 - 角色职责与产物契约**以本文件「三层职责与产物契约」为准**（装配面已退役 ⇒ 无资产文件可为准）。
 
@@ -252,6 +251,6 @@ triggers:
 - **lane id 纪律**：须逐字等于资产 `branches[].id`，否则链推进落 `no-lane-for-step`。
 - **交接顺序**：产出后**先 `handoff_submit`、再发 `settle-request`**（顺序反了 auto-settle 判 `GATE_HANDOFF_MISSING` 并使批暂停）。
 - **exec ↔ plan 依赖（**三道门**）**：**exec 分支之间无 `deps`**（可高并发并行、lane 数不限），但**每个 exec lane 必须消费 plan 产物**——由引擎在建批期强制：`flows.exec.consumes_required_per_lane: ["plan/"]`（**逐 lane**，任一 exec lane 缺该前缀 ⇒ 拒建批 `GATE_EXEC_INPUT_MISSING`）＋ `flows.exec.consumes_required: ["plan/"]`（**批级**覆盖）；另 `GATE_ORPHAN_PRODUCT` 保证 plan 产物不被孤儿化（plan 层硬拒），entry 门 `GATE_ENTRY_MISSING` 保证声明的 consume **逐个在场**后才派发。⇒ **exec 形态自由（无 deps），但与 plan 的依赖是硬门禁**；lane 间真实依赖由建批 `tasks[].deps` 声明。
-- **通信**：`swarm_report` 回 Leader、`swarm_cc` 抄送 Manager（**只写元数据**，不复制正文；原 `mailbox_send` 传递通道已于 G3 B1 删除）。
+- **通信**：`swarm_report` 回 Leader；`swarm_cc` 抄送 Leader（**只写元数据**，不复制正文；原 `mailbox_send` 传递通道已于 G3 B1 删除）。
 - **进度**：每完成一子步骤落 `<lane>/progress/NN-<slug>.md`（**lane 域**，勿落层域）。
 - **止轮与收口**：需止住自动推进用 `batch_control(pause)`（非终态、可逆）；**先了结成员态（`member_settle`）→ 再迁相位到终态**（写成员态属 C 档动作）。

@@ -9,7 +9,7 @@
 ## 1. What this is
 
 - **Engine surface**: `wave_plan` (layer tasks into waves by dependency DAG, **never recomputed mid-batch**) → `lane_dispatch` / `member_status` (dispatch) → `handoff_submit` (per-edge handoff) → `member_settle` (settlement); plus `gate_status` (gate state) and `log_export` (event export). `lane_heartbeat` / `lane_longrun` were **deleted in G3 B1** (previously maintenance-frozen: surface kept, no longer maintained; user ruling 2026-10-09). No tool entry remains — their event surface is now read via `batch_status` / `log_export`.
-- **Governance rules**: **27 items in 9 groups** (difficulty routing / handoff & batch / run modes / audit & acceptance / settlement / recovery & supervision / output · capability · guidance / two-direction spec · numbering / knowledge-first pre-check). Details in `references/discipline.md`; the Manager-side definition is `references/manager.md`.
+- **Governance rules**: **27 items in 9 groups** (difficulty routing / handoff & batch / run modes / audit & acceptance / settlement / recovery & supervision / output · capability · guidance / two-direction spec · numbering / knowledge-first pre-check). Details in `references/discipline.md`.
 - **What it fixes**: four failure modes of running a team of agents — a downstream lane starting before its upstream artifacts exist, hours of work lost to a single crash, several members writing the same file at once, and a rejection nobody can explain. The tools were never the problem; what is missing is a gate in the flow. Once the gates live inside the engine, discipline becomes a machine criterion instead of each member's self-restraint.
 - **The `0.5.0` baseline**: with the team-asset and `chain` declaration faces retired, **assembly follows "engine baseline + member slots + guidance"**, and the runtime DAG source of truth is the batch's `lanes[].deps` + `handoffs`.
 
@@ -20,7 +20,7 @@
 | Face | Carrier | Landing point / notes |
 |---|---|---|
 | ① **Plugin** (core) | `lib/**` + **two rows** in `cordis.patch.yml` | the **engine row** `dsh-punky-swarm` (state machine / panel / HTTP / gate engine; it registers **no governance tools**) and the **preset-registration row** `dsh-agent-preset-punky` (since 0.1.7 a preset **must** be registered by a plugin row; the preset directory is no longer scanned).<br>The **governance tools** (27) are registered by the `punky-provider` row inside the preset composition ⇒ only `punky-preset` sessions (and the workers they spawn) see them in the tool catalog; other modes are untouched (assembly isolation, 2026-11-08) |
-| ② **Mode & guidance** (core) | **`punky-preset`** registered through `@deepseek-ai/dsh-agent-preset` | `references/discipline.md` / `references/manager.md` are **idempotently synced** by `syncAssets()` at startup into `<home>/.dsh/.agent-presets/punky-preset/` |
+| ② **Mode & guidance** (core) | **`punky-preset`** registered through `@deepseek-ai/dsh-agent-preset` | `references/discipline.md` is **idempotently synced** by `syncAssets()` at startup into `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **Team skill pointers** (extra) | the **5 directories** under `skills/` | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ synced to `<home>/.agents/skills/<name>/` |
 
 > **Capability layer (software-team)**: `skills/software-team/references/engineering/spec-contract.md` is now the **Punky adapter layer** (six-state evidence → `gate_status`/`verdict` mapping / where the `SUMMARY:` machine-readable line lands / the S-10 gap record); **the authoritative text for spec structure and mechanical rules is the vendored original inside this repo** (next paragraph), mounted per role by the role-to-reading table in `SKILL.md`.
@@ -155,7 +155,6 @@ Alternatively drop the package from the profile's `dsh.profile.bundles` and rest
 | Document | Contents |
 |---|---|
 | `references/discipline.md` | Governance rule details (code tables / semantics / boundaries / operation sequences) |
-| `references/manager.md` | Generic Manager definition (behaviour layer) |
 | `docs/engine-intro.md` | Engine internals |
 | `skills/software-team/references/engineering/spec-contract.md` | software-team capability layer: the **spec-contract rules** (mechanical rules / six-state evidence / machine-readable report line / requirement IDs; distilled reference from SpecLang `b3ee6ee`, recommend semantics, not assembly) |
 

@@ -25,11 +25,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, listFiles, pwshJson, sha256File, skip } from './support.mjs';
 
-/** 与 `sync-guidance.mjs` 同一份五件清单（repo ↔ live 内容应一致）。 */
+/** 与 `sync-guidance.mjs` 同一份四件清单（repo ↔ live 内容应一致）。 */
 const SYNC_FILES = [
   'agent.cordis.yml',
   path.join('references', 'discipline.md'),
-  path.join('references', 'manager.md'),
   'preset.yml',
   'asset-manifest.json',
 ];
@@ -159,7 +158,7 @@ function h12(sm) {
     + ' —— 修法固定：`npm run build`（或显式 --allow-stale-build 记为 SKIP）');
 }
 
-// ── H-13 真实 home 下的准则面五件同 sha · SKIP-able ─────────────────────────────
+// ── H-13 真实 home 下的准则面四件同 sha · SKIP-able ─────────────────────────────
 
 function h13(sm) {
   if (sm.noLive) skip('--no-live：跳过真实 home 准则面（repo↔live 面），不算 pass');
@@ -167,7 +166,7 @@ function h13(sm) {
   if (!fs.existsSync(liveDir)) skip('真实 home 无 live preset 目录（' + liveDir + '）⇒ 双层面不可判，不算 pass');
   const repoDir = path.join(sm.repoRoot, 'presets', 'punky-preset');
 
-  // ── 阳性对照：探针能读到 repo 侧五件（缺一件说明本判据的分母就不对）──
+  // ── 阳性对照：探针能读到 repo 侧四件（缺一件说明本判据的分母就不对）──
   for (const rel of SYNC_FILES) {
     expect(fs.existsSync(path.join(repoDir, rel)), '阳性对照失败：repo 侧缺 ' + rel + '（判据分母不全）');
   }
@@ -187,8 +186,8 @@ function h13(sm) {
     if (a !== b) problems.push(rel + '：sha 不同（repo=' + a.slice(0, 12) + ' live=' + b.slice(0, 12) + '）');
     rows.push(rel + '=' + a.slice(0, 12));
   }
-  expect(problems.length === 0, 'guidance 双层面漂移（repo ↔ live 五件必须同 sha）：\n  ' + problems.join('\n  '));
-  return '五件同 sha（' + rows.join(' · ') + '）· live=' + liveDir;
+  expect(problems.length === 0, 'guidance 双层面漂移（repo ↔ live 四件必须同 sha）：\n  ' + problems.join('\n  '));
+  return '四件同 sha（' + rows.join(' · ') + '）· live=' + liveDir;
 }
 
 // ── H-14 活体宿主新鲜度（时间序推断）· SKIP-able ───────────────────────────────
@@ -282,7 +281,7 @@ export function buildX(sm) {
   return [
     { id: 'H-11', title: '零消费点三条抽样（逐行分类，禁命中计数）', run: () => h11(sm) },
     { id: 'H-12', title: '构建新鲜度 mtime(js) ≥ mtime(ts)（--allow-stale-build ⇒ SKIP）', run: () => h12(sm) },
-    { id: 'H-13', title: '真实 home 准则面五件同 sha · SKIP-able', run: () => h13(sm) },
+    { id: 'H-13', title: '真实 home 准则面四件同 sha · SKIP-able', run: () => h13(sm) },
     { id: 'H-14', title: '活体宿主新鲜度（时间序推断，非内容比对）· SKIP-able', run: () => h14(sm) },
   ];
 }

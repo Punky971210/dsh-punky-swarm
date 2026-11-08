@@ -3,14 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { createTools } from '../../lib/tools/register.js';
 import { createStore } from '../../lib/state/store.js';
-import { threeTierTasks, seedArtifacts, assessC, registerManager } from './gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assessC } from './gate-fixture.mjs';
 import { withDefaultTeam } from './skill-paths.mjs';
 
 /**
  * dispatch 面测试统一 harness（G7 下沉，2026-09-22：dispatch-failure-rollback /
  * dispatch-prompt-compose 两份同形单轴变体合并；调用侧一行适配，调用点零改动）。
  * 装配序：tmp 根 → store → ctx（start 桩可注入，默认自足桩）→ createTools → C 档评估
- * → wave_plan（三层批 + auditLane）→ running → registerManager → 产物播种。
+ * → wave_plan（三层批 + auditLane）→ running → 产物播种。
  * @param {object} [o]
  * @param {string} [o.SID]      会话 id（各测试文件保持原值）
  * @param {string} [o.batchId]  批次 id（同上）
@@ -47,7 +47,6 @@ export async function makeDispatchHarness({ SID = 'sess-dfx', batchId = 'b-dfx',
   if (taskExtra) for (const t of tasks) Object.assign(t, taskExtra);
   await by.wave_plan.execute({ batchId, tasks, assembly: { auditLane: 'a1' } }, exec);
   await by.batch_phase.execute({ batchId, phase: 'running' }, exec);
-  registerManager(store, SID, batchId, 'mgr-1');
   seedArtifacts(root, SID, batchId, ['e1'], { planProduct: 'plan/spec.md' });
   return { by, exec, store, captured, root, SID, batchId };
 }

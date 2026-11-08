@@ -229,7 +229,7 @@ test('C1【RED-6 正向】aborted 收口 ⇒ 清单含该批派生记忆条目�
   assert.equal(evs[0].count, m.json.items.length);
   assert.deepEqual(evs[0].lanes, m.json.items.map((it) => it.lane));
   assert.equal(evs[0].reversible, true);
-  assert.equal(evs[0].executor, 'leader-or-manager', '执行权归 Leader/Manager（引擎不自动执行）');
+  assert.equal(evs[0].executor, 'leader', '执行权归 Leader（引擎不自动执行）');
 });
 
 test('C2【RED-6 反向 / 可逆性】清单自带执行权与可逆面 ⇒ 无不可逆残留；重入幂等', async () => {
@@ -242,7 +242,7 @@ test('C2【RED-6 反向 / 可逆性】清单自带执行权与可逆面 ⇒ 无�
   const m1 = manifestOf(store, 'b-rev');
   // ① 可逆面登记在**产物本体**（不只注释）：executor + reversible + actionNote
   assert.equal(m1.json.reversible, true, '批级可逆标记');
-  assert.equal(m1.json.executor, 'leader-or-manager', '执行权归 Leader/Manager');
+  assert.equal(m1.json.executor, 'leader', '执行权归 Leader');
   assert.match(String(m1.json.actionNote), /可逆|不删/, 'actionNote 须写明可逆与不删');
   assert.equal(m1.json.items.every((it) => it.reversible === true), true, '逐条可逆');
   assert.equal(m1.json.items.every((it) => it.action === 'archive' || it.action === 'forget'), true, 'action 仅在可逆族内');

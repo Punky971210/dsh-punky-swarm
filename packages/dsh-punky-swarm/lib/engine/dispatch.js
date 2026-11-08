@@ -915,7 +915,7 @@ export function laneBindingOf(store, sessionId, logger) {
 
 export { mailboxRootOf } from '../mailbox-paths.js';
 
-export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', manager: 'inbox' });
+export const REPORT_CHANNEL = Object.freeze({ leader: 'broadcast', owner: 'inbox' });
 
 export function evaluateTierCDispatch({ tier, toolName, argsText, handleCheck }) {
   const isDispatchTool = toolName === 'subagent' || toolName === 'subagent_fork';

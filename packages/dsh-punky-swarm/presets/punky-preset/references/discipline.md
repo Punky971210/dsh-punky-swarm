@@ -1,7 +1,6 @@
 # 治理纪律细则（persona 下沉目标）
 
 > **定位**：本文件是 `presets/punky-preset/agent.cordis.yml` persona 纪律块（`0` / `0a`–`0j` / `1`–`10`）的**细则下沉目标**——persona 保留「一句纪律 + 触发条件 + 指针」，**全部细节**（码表、语义、边界条件、操作序列）落在这里。
-> 非行为层文档：行为层的 Manager 通用定义在 `presets/punky-preset/references/manager.md`；本文件只承载纪律细节。
 > 引用约定（2026-09-24 二分，M-10）：交叉引用**分两类**——① **行为层指针**（纪律 / 角色 / 码表 / 手册）走**包内**相对路径（`presets/punky-preset/references/*`）；② **蓝图 / 规格真源**写在**工作区绝对路径**（本仓存在两处 `docs/` 树，蓝图真源在工作区树：`D:\AI_Workspace\DSH\DSH\docs\**`，引擎包内 `packages/dsh-punky-swarm/docs/**` 为包内视图）。§11 的运行模式读端即属第 ② 类。
 
 ---
@@ -20,7 +19,7 @@
 | **C** | 集群 `wave_plan` 建批 | **判据（最高优先级）：明确多线并行**（≥2 条可并行推进的任务线）**或 多依赖**（任务间存在依赖链、需 DAG 分层 / 多波次） |
 | **D** | 集群 **team 方案** | **固定任务形态**（角色与流程可预见）⇒ 用 **team 席位**（durable 席位 + 事件队列交接）。**与 C 同属建批档**（同受 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`），差异在**交接机制**而非难度；细则见 §0p 十四 |
 
-- **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）；**`managerPlan` 默认 `raise`**，确需 Leader 直驱才显式写 `leader-direct`。
+- **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）。
 - **判据必填（供审计）**：`assign_check({ difficulty, rationale, scope: "full" })` —— `rationale` **≥12 字**且写明**定档依据 + 已完成的只读侦察证据**；落 `governance.json` 的 `lastAssign` 与 `history` **双留痕**。
 - **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 须给 `deviation` 结构化字段（`feature`/`counterpoint`/`direction`）：**`feature`=引用具体特征面、`counterpoint`=例外/反例、`direction`=偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。**D 档偏离口径（2026-10-11 批 `d-override-fix-20261011`）**：D 不参与难度轴（`derived` 仍只取 `A`/`B`/`C`），引擎另设**独立通道轴** `derivedChannel`（`durableSeats:true` ⇒ `team`；否则 `dispatch`）。**D 的正当形态** = `difficulty:'D'` **且** `durableSeats:true`（通道轴 = `team`）⇒ **回归常规路径**（`override:false` / `overrideKind:null`），其 `rationale` **不需要**引用 A/B/C 特征词；**声明 D 而通道未落实**（未声明 `durableSeats` ⇒ 通道轴 = `dispatch`）⇒ 改走**同一 `deviation` 结构化字段**（`feature`=引用通道/特征面、`counterpoint`=为何 durable 而非 subagent、`direction`=通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺任一即拒（仍用 `GATE_DIFFICULTY_MISMATCH`，文案说「**通道偏离**」并逐项列缺）；**即使解释通过**，**建批面仍须** `channel:'team'` 或 `'mixed'`（否则拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`）。
 - **偏离三要素只有唯一入口 `deviation`（防回生）**：`tier`（难度轴）与 `channel`（通道轴）两种偏离**共用同一形状** `{ feature, counterpoint, direction }`——三个子键 `trim()` 后各须 ≥4 字、禁纯空白、含未知子键即拒；要素由**结构化字段**承载，**禁**按偏离种类另立字段（如 `tierDeviation` / `channelDeviation`），也**禁**回退到「从 `rationale` 自由文本正则提取要素」的旧形态。`rationale` 本身仍只写判据正文（≥12 字），不承担要素载体。
@@ -41,7 +40,7 @@
 - **输出格式**：每回合文本输出 `[难度评估: A|B|C|D + 一句理由 + 执行主体]`。
 - **落点**：调用 `assign_check({ difficulty, rationale, scope: "full" })` 写入治理状态；**旧记录（有 `form` 无 `difficulty`）按未评估处理**，升级后须重评一次（宁严勿松）。
 - **门禁**：判 C/D 而未建批前，**禁止**任何执行型动作。
-- **档位 × 工具面一致性（G1，用户裁决）**：档位不只约束 Leader 自己的执行面——**建批与成员面工具一律要求当前会话已写入 `difficulty: 'C'` 或 `'D'`**（两枚码：`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`，判定与内核符号见附录 A.3.1）；**「未评估」与 A/B 同罚**（宁严勿松）。用户口径：**成员协作只有一条轨道 = 建批 → 拉起 Manager → 派发**，不存在「低档位也能派成员」的旁路。**收窄口径（2026-09-15 用户裁决 Q2=B：「成员仅会话，不可写状态」）**：**取消父档继承**——建批**只认本会话自己的 C/D 档**（worker / Manager 子会话一律建不了批；B 档仅承载单个「单步独立任务」，不进 `wave_plan`）；成员状态**仅 `调用方会话自己 C 档（Leader）` 或 `该批已登记的 Manager 会话`（`batch.manager.agentId`，宿主口径 = Manager 会话 id）可写**，其余子会话（含 C 档父会话下的 exec worker）一律拒——判据落**调用方**而非批归属会话，故「worker 借用 C 档批会话的 `session` 参数借道」同样被拒。
+- **档位 × 工具面一致性（G1，用户裁决）**：档位不只约束 Leader 自己的执行面——**建批与成员面工具一律要求当前会话已写入 `difficulty: 'C'` 或 `'D'`**（两枚码：`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`，判定与内核符号见附录 A.3.1）；**「未评估」与 A/B 同罚**（宁严勿松）。用户口径：**成员协作只有一条轨道 = 建批 → 派发**，不存在「低档位也能派成员」的旁路。**收窄口径（2026-09-15 用户裁决 Q2=B：「成员仅会话，不可写状态」）**：**取消父档继承**——建批**只认本会话自己的 C/D 档**（worker 子会话一律建不了批；B 档仅承载单个「单步独立任务」，不进 `wave_plan`）；成员状态**仅 `调用方会话自己的 C 档（Leader）` 可写**，其余子会话（含 C 档父会话下的 exec worker）一律拒——判据落**调用方**而非批归属会话，故「worker 借用 C 档批会话的 `session` 参数借道」同样被拒。
 
 ## §0a 会话显式化（session-compat）
 
@@ -57,9 +56,7 @@
 ### 一、Tier3 分层与契约时点
 
 - **终态冻结**：批次一旦进入 `complete` / `aborted`（终态），**任何成员迁移一律拒**（`GATE_BATCH_TERMINAL`）——不得再出现「成员又被改写成 running」这类自相矛盾状态。**返工边已去除（K3，2026-09-21）**：`lib/schema.js` 的 `MEMBER_TRANSITIONS` 现为 `review: ['merged','conflict','failed']`（**无 `running`**）⇒ 失败 / 冲突 lane 即**终态**，返工 = **gap-list + 新任务批次**，不是原地改状态。
-- **Manager 在册缺口的留痕面**：现役口径 = **建批期官方 roster 承抽**——声明（或缺省归一为）`managerPlan:'raise'` 的批，`wave_plan` 建批时读官方 roster（`ctx.get('agentTeams')` → `listMembers`）；roster 可读而**无约定名 `manager` 成员** ⇒ 落**观察事件** `gate.manager_roster_gap`（**非拒态**、不改相位），并把「声明值 × roster 事实」**双面回显**（`wave_plan.managerRoster` / `batch_status.managerRoster`）。声明 `leader-direct` 的批**不触发**。读端据此判「**默认拉起是否落实**」。
-
-- **拉起时序**：引擎侧**无派发面硬门**（原「未登记 Manager 即拒派」的码已退役、`lib/**` 零命中）⇒ 现行三条：① **`managerPlan` 缺省仍为 `raise`**（随 `batch.assembly` 持久化、`gate_status` 可读 ⇒ 引擎可核事实）；② 未登记 Manager **不拦派发**，缺口只落 `gate.manager_roster_gap` 观察事件；③ `batch_phase({ batchId, manager:{ agentId } })` 的 `manager` 载荷降级为 **legacy 登记面**（写批字段 + `batch.manager.raised`，幂等；**不构成在册判据**）。⇒ 「先拉起再派 exec」的约束力**自引擎门降为纪律**（0f / 0g 原文存档于工作区 `reports/onto-suspended-items-snapshot-20260926.md` §三）。
+- **拉起时序不存在（2026-11-08 裁决）**：独立 Manager 角色整层删除、调度真源 = **任务黑板**（`batch.lanes` / `batch.wavePlan` / `batch.handoffs`）⇒ **无「先拉起再派」的时序约束**——Leader 是批 owner，直接按黑板派发 / 指派 / 结算写入。
 - 委派前用 `assign_check({ difficulty, rationale, scope: "full" })` **主动写入**难度 A/B/C/D（档位定义与判据契约见 §0；**D 档的通道轴 `derivedChannel`**、偏离字段 `deviation`（`feature`/`counterpoint`/`direction`）与其正当形态亦见 §0）；**C / D 类必须 `wave_plan` 建批**。
 - 三层批次按 **plan → exec → audit** 分层，门禁在三个时点把关：
 
@@ -75,12 +72,11 @@
 ### 二、批次装配声明（三层批必填；2026-09-14 **扩面**）
 
 - **强制面（2026-09-14 扩面）**：必备判定 = `requiresAssemblyDecl(tasks)`（三层批形态 **且含 audit 层 lane**）。因引擎另有不变量「含 exec 层的三层批必须有 audit lane」（`validateLayerContract`），该判定**等价于所有可建的三层批**；唯一例外是无 audit 层的三层形态（如 plan-only）。
-- **唯一生效形态 = `wave_plan` 顶层入参**：`wave_plan({ batchId, tasks, team?, assembly: { auditLane, managerPlan?, coordinatorLane?, roles? } })`——**`team` 现为可选自由标签**（2026-09-27 裁决：不传 / 空白 ⇒ 无标签，批次照常落盘；**不解析、不校验、不拒建批**；详见 §0b 四）。**`auditLane` 必填**（须指向本批 audit 层 lane）；**`managerPlan` 缺省 `raise`**（省略即建批即拉起 Manager；需 Leader 直驱才**显式**写 `leader-direct`）。引擎在建批时刻（`createBatch` 之前）静态校验该入参——缺则**拒建批** `GATE_ROLE_ASSEMBLY_MISSING`；结构非法 / 悬空 lane id 拒建批 `GATE_ASSEMBLY_INVALID`；`roles` 词法非法仅告警 `GATE_ROLE_INVALID`（**告警不阻断建批**）。
-- **可核性**：归一化后的 `managerPlan` 随批持久化（`batch.assembly`，`gate_status` 可读），收口告警按**声明**触发（见 §0b 一）⇒「默认 raise」是**引擎可核事实**。
-- 该批的 plan lane 产物**必须**含**角色装配声明**，内容三要素：
-  1. **Manager 拉起计划**（何时拉 / 注入内容）；
-  2. **Coordinator lane 分配**（未建 coordinator lane 则写理由）；
-  3. **audit 角色分配**（lead 按**指引 + 成员槽位**分配；默认单 audit 角色，双角色为**显式选项**）。
+- **唯一生效形态 = `wave_plan` 顶层入参**：`wave_plan({ batchId, tasks, team?, assembly: { auditLane, coordinatorLane?, roles? } })`——**`team` 现为可选自由标签**（2026-09-27 裁决：不传 / 空白 ⇒ 无标签，批次照常落盘；**不解析、不校验、不拒建批**；详见 §0b 四）。**`auditLane` 必填**（须指向本批 audit 层 lane）。引擎在建批时刻（`createBatch` 之前）静态校验该入参——缺则**拒建批** `GATE_ROLE_ASSEMBLY_MISSING`；结构非法 / 悬空 lane id 拒建批 `GATE_ASSEMBLY_INVALID`；`roles` 词法非法仅告警 `GATE_ROLE_INVALID`（**告警不阻断建批**）。
+- **可核性**：归一化后的 `assembly` 随批持久化（`batch.assembly`，`gate_status` 可读）⇒ 装配声明是**引擎可核事实**。
+- 该批的 plan lane 产物**必须**含**角色装配声明**，内容两要素：
+  1. **Coordinator lane 分配**（未建 coordinator lane 则写理由）；
+  2. **audit 角色分配**（lead 按**指引 + 成员槽位**分配；默认单 audit 角色，双角色为**显式选项**）。
 - **载体**：`plan/assembly-statement.md`，或 spec 内 `## 角色装配声明` 章节（推荐独立文件）。
 - **契约地位**：该声明文件是**人可读的载体**，引擎侧的强制点是**上面那条入参校验**，**不读** plan 产物内容（只交文档、不传 `assembly` 入参 → 建批被拒）⇒ 二者**同时**满足：入参给全 + 文档落盘（可选地把文档声明为 plan `produce` 与 exec `consume`，用 Tier3 契约把「文档齐备」变成门禁）。
 
@@ -93,12 +89,10 @@
 
 ## §0c 职责分工
 
-- **Manager = 引擎层功能角色**（不属任一层、**不占 lane**，归属见存档件 §三 的 0g 三）：只**代劳指挥**——收发消息（`mailbox` 元数据）、读任务状态（`batch_status` / `gate_status`）、**建议**指派（空闲节点发现）；**不产 plan 产物、不得充当 plan 层牵头**（牵头集见存档件 §三 的 0g 三）。
-- **派发与结算写入默认方 = Leader**：worker 由 Leader 以 depth-1 subagent 派发；`member_set_status` / `member_settle` 默认 Leader 写入——Manager 负**判读 + 建议**，仅在 Leader 明确授权时代为写入。
-- **DAG 状态全员只读**；**指派写权**归 Manager / Leader。
+- **Leader = 唯一指挥与写权默认方**（2026-11-08 裁决：独立 Manager 角色整层删除，不再有代劳指挥席）：派发 worker（depth-1 subagent 或 durable 席位 `send_message`）、读任务状态（`batch_status` / `gate_status`）、指派、结算写入，均由 Leader 直接承担。
+- **DAG 状态全员只读**；**指派与结算写权归 Leader**。
 - **粗拆**由 Leader 对接用户后产出模块清单（决策包）；**Coordinator 不再粗拆**，只按**团队层 skill 声明的粒度口径**细拆（粒度口径由团队 skill 声明；**资产面已退役**，不再有资产侧声明位）。
 - **D 档（team 方向）下的执行主体（2026-10-01 补）**：**worker = durable 席位**（Leader 按团队层 skill 角色槽位 `spawn_teammate` 逐个拉起）；**派活 / 唤醒 = `send_message`**（**不是** `subagent`、**不是** `lane_dispatch`）；**席位侧无治理写权**。lane 状态与相位**仍走引擎**（`member_set_status` / `member_settle` / `batch_phase`）——**两账本并列、不互替**（分工铁律见 **§0p 十四**）。
-- **Manager 在册真源 = 引擎自建表（防回生）**：唯一在册真源 = `batch_phase` 的 `manager` 载荷写入的批次字段 `managerSeat`（`source:'engine-registry'`）；宿主 roster（**无论哪个宿主、以何形态取到**）**仅用于对账、不得作为权威** ⇒ roster 是否可读、名册里有没有叫 `manager` 的成员，**均不构成**在册判据。
 - **「拆父任务」语义不存在（防回生）**：plan 层的调查摸底 / 拆分**本身即独立任务**（其产物由下游 exec / audit 层 `consume`）⇒ **禁**引入父子任务树、**禁**把 plan lane 的产出记账成「某父任务的子节点」；`batch_tasks_add` 的追加语义 = **池内新增任务**，不是「拆父」。
 
 ## §0d 记忆语义
@@ -107,7 +101,7 @@
 - 记忆沉淀**优先** dsh 开放记忆工具（`dsh-mneme`）；`Mnemopi` 仅作**旧环境降级路径**，不强制依赖。
 - **批收口的溯源留痕（2026-10-13 新增）**：批收口（`complete` **与** `aborted` 均触发）时，产出「**待抑制清单 ＋ 留痕事件**」：清单落**批次产物根**，条目形如 `{ batchId, lane, state, source: 'batch:<id>/lane:<id>', action, reversible: true }`。
 - **约定式写入规范**：记忆写入时 `source` **宜**带 `batch:<batchId>/lane:<laneId>`（**约定**，不是引擎强约束）。
-- **抑制动作**：`action` 只作**建议**，**执行权归 Leader / Manager**，由其在记忆工具面执行**可逆**抑制（archive / forget 均可逆）；**引擎侧一律不自动化** —— 引擎**取不到**记忆工具面，写成直调即**不可达的强耦合**。
+- **抑制动作**：`action` 只作**建议**，**执行权归 Leader**，由其在记忆工具面执行**可逆**抑制（archive / forget 均可逆）；**引擎侧一律不自动化** —— 引擎**取不到**记忆工具面，写成直调即**不可达的强耦合**。
 
 ## §0u 执行前经验检索（knowledge-first，2026-10-07 用户裁决）
 
@@ -167,7 +161,7 @@
 ### 五、自定义团队的角色声明（实证口径，2026-09-14 订正）
 
 - **角色词法集 = 引擎基础集（2026-09-27 本批订正：资产声明面已整体退役）**：`task.role` 与 `assembly.roles` 按「引擎基础集（8）∪ 装配扩展（盲审三角色）」判定——**资产各层声明角色（`layers[*].roles`）与 `roles.extra` 两路读端已删净**（`resolveTeamRoles` / `unionRoleVocabulary` 随本批删除 ⇒ 建批 `extraRoles` **恒空**）；自定义角色名 ⇒ 只落 `GATE_ROLE_INVALID` **告警**（**非拒态**）。
-- **牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——**资产侧扩展牵头角色声明位早已不存在**（`roles.plan_leads` / `roles.audit_leads` 随 2026-09-26 裁决 Q-8=C 全链删除）；**牵头角色 ≠ Manager**（见存档件 §三 的 0g 三）。
+- **牵头集 = 引擎基础集**：`designer` / `coordinator`（plan）与 `supervisor` / `doc-manager`（audit）——**资产侧扩展牵头角色声明位早已不存在**（`roles.plan_leads` / `roles.audit_leads` 随 2026-09-26 裁决 Q-8=C 全链删除）。
   - 2026-09-14 前的旧口径（**已作废**）：`extra` 只读 `roles.extra`，且「角色写进 layers 却没抄进 `roles.extra`」的团队每个自定义角色被判 `GATE_ROLE_INVALID`（实测 5 条非法告警 + 2 条缺牵头告警）。
 - **历史**：旧口径（资产声明面 / 链声明面 / 角色词法旧读端）已随退役面删净，本节只保留现役口径；逐条沿革与旧文见 `CHANGELOG.md` 与 `git log`。
 
@@ -184,7 +178,7 @@
   - **脚本落在 lane 工作树 / 产物根内 ⇒ 告警**（**不拒**）—— 这是「位置约束」的**降级处置**。
   - **位置约束本批不做（如实）**：全仓**无引擎强制的 lane 写域**（探针：`writeForbidden|写域|writeScope|forbiddenPaths|checkWriteScope` 命中**全为注释**）⇒ 「脚本必须在 X 之外」**没有可判的 X**；硬凑只会得到**可被绕过的假约束**。**真正的信任边界 = 谁能给出锚定值**。
   - **反例（可达）**：lane 在其 cwd 放 `scripts/check.sh`、产物声明 `gate: bash scripts/check.sh` ⇒ 旧行为下 lane **先改脚本使其恒 `exit 0`** ⇒ 命令门被**自我满足**；加锚定后 ⇒ 被堵。
-- **批次「Manager 是否真拉起」的留痕方式**：拉起 Manager 后**应**调 `batch_phase({ batchId, manager: { agentId, note? } })` 登记（**可单独调用、不带 `phase`**）——写批次字段 `manager={agentId,raisedAt}` + `batch.manager.raised` 事件，`batch_status` / `log_export` 可查。**相位口径（D-1 订正，2026-09-27，真源 = `lib/tools/core.js` 的 `batch_phase` 载荷说明）**：**任意相位均可登记（含终态；幂等）**；**空 / 缺 `agentId` ⇒ 不写记录、不抛错**（返 `null`，调用方按「既无 phase 又无 manager」如实报错）。**旧文「须在 `phase=running` 时登记」与工具面事实矛盾，已作废**（该函数**不再按 phase / agentId 拒绝**）。**局限（如实）**：登记是**显式声明**，`complete` 门禁**不校验**该字段（旧批次无此字段也照常收口）；**且该登记不构成「在册判据」**——**在册以官方 roster 为准**（`ctx.get('agentTeams')` → `listMembers`，经 `wave_plan` / `batch_status` 的 `managerRoster` 回显，见 §0b 一），本登记仅为 **legacy 留痕入口**。⇒ 「是否真拉起」的可核性来自 **roster 回显**，**不来自本字段**，它**不是**自动强制（旧文「升级为可核事实」的表述据此收窄）。
+- **批次已无「Manager 拉起登记」面（2026-11-08 裁决）**：`batch_phase` 的 `manager` 载荷、批次字段 `managerSeat`、`batch.manager.raised` 事件随独立 Manager 角色整层删除；`batch_phase` 现只承载**相位推进**（`phase` 必填）。批次进度真源 = 任务黑板（`batch.lanes` / `handoffs`）与 `gate_status`。
 
 ## §0k audit 职责与收敛口径（用户裁决 A）
 
@@ -309,7 +303,7 @@
 
 - **现役唯一实现 = 宿主 subagent seam**（`config.dispatch.provider`；`lib/engine/dispatch.js` 走 `rt.start`）。
 - **B 方案（`provider:'agent-team'` 分支）作废**、**C 方案（`member_settle` 镜像双写官方板）不做**——前者会把官方板 8 项缺陷引入治理链，后者会把实验性契约拖进治理面。
-- 引擎与官方 Agent Teams 今日只有两处**读 / 登记面**：① Manager 在册承抽的 **roster 读端**（`ctx.get('agentTeams')` → `listMembers`）；② durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）。
+- 引擎与官方 Agent Teams 今日只有一处**读 / 登记面**：durable 会话控制面（`wait_agent` 等）的**成员 deny 登记**（`lib/engine/suite.js`）。
 - **口径纪律**：`officialTaskId` 一类「双写」字段在本引擎**未接线**——无消费点、无校验、无判定；任何回显**不得**读作「已双写」。
 
 ### 四、三通道分治（一任务一通道，不混用）
@@ -339,7 +333,7 @@
 
 | 层 | 判据 | 现状 |
 |---|---|---|
-| **Layer 1** | 调用方限**该批 owner** 或**该批已登记 Manager** | ✅ 在役（`lane_dispatch` / `member_*` / `batch_phase`） |
+| **Layer 1** | 调用方限**该批 owner** | ✅ 在役（`lane_dispatch` / `member_*` / `batch_phase`） |
 | **Layer 2** | **角色 / lane 粒度**：只写"**属于自己的待交接内容**" | ⚠ **未接线**（缺口已登记，见 §0p 七） |
 
 **Layer 2 的两种写法（两通道不共用）**：
@@ -352,7 +346,7 @@
 - **⚠ 时序硬性步骤：先 `handoff_submit`，后 `swarm_report`** —— 反序会触发 `GATE_HANDOFF_MISSING` 并**停轮**（已**三次**独立踩坑实证）。
 - **回报可达性（2026-09-24 用户裁决 S-3）**：`send_message` **对成员已放开** ⇒ worker 可**直接推**给 Lead（`target='lead'`）；`interrupt_agent` / `list_agents` / `wait_agent` **维持 deny**。这是**判据边界修正**而非回退 S2——S2 原判据「one-shot **无唤醒对象**」对「**唤 Lead**」不成立（**Lead 是 durable 的，且正是要通知的对象**）。**成员不得互唤**（指引约束）。
   - **⚠ 范围口径（2026-10-01 补，A9）**：上文 `deny` **仅对席位面成立** —— **席位面 deny、Leader 面在册**（三者为 Leader 治理工具）。**成员侧清单**（与本节 §八 工具面对齐）：**可用** = `handoff_submit` / `handoff_view` / `task_pool` / `swarm_report` / `send_message` / `member_settle`；**不可用** = `spawn_teammate` / `interrupt_agent` / `list_agents` / `wait_agent` / `wave_plan` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `assign_check`。
-- **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner/Manager 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ 原 `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）—— **该工具已于 G3 B1 删除，此缺口随之消失**；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
+- **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ 原 `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）—— **该工具已于 G3 B1 删除，此缺口随之消失**；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
 
 ### 八、**roster 席位工具面**（只留交接必需，不给 Leader 治理工具）
 
@@ -460,7 +454,7 @@
 
 **④ Q1 ↔ Q2 消解（防同页矛盾）**：叙事「team 为**主流方向**」＋ 机制「**不设机械默认**」⇒ 统一口径 = 「**D 为常用档 / 主流方向 / 由评估选档 / 非机械默认**」；**两通道保持并列** —— 任一通道**都不得被写成「机械默认」**（**⛔ 措辞禁令 C-3**：默认值类写法**一律禁用**，三种禁用写法**只作反模式登记**、**正文不得复用**）。
 
-**⑤ 降级口径（显式，禁静默）**：**团队面缺失时**（四层机检任一命中：声明集 vs 实装集**差集非空** / 启动日志报服务缺失 / 会话面**缺 `spawn_teammate` 等** / `managerRoster.reason === 'service-unavailable'`）⇒ **回退 subagent 通道并留痕**（**禁静默降级**）。
+**⑤ 降级口径（显式，禁静默）**：**团队面缺失时**（三层机检任一命中：声明集 vs 实装集**差集非空** / 启动日志报服务缺失 / 会话面**缺 `spawn_teammate` 等**）⇒ **回退 subagent 通道并留痕**（**禁静默降级**）。
 
 **⑥ 反例与正解**
 
@@ -490,7 +484,7 @@
 
 - 同 wave **并行**派发 subagent。
 - 写同一 lane 前用 **`lane_claim`** 拿单写者锁（冲突先拒绝，必要时 `wait` / `force`），用完 **`lane_release`**。
-- 同 wave 多 lane 写**同一物理资源域**时，先取**域级物理隔离单元**（与 `lane_claim` 逻辑单写者锁**互补不可替代**），并把路径**注入任务包**；同批合并**串行化**；冲突**保留现场**由 Manager / Leader 裁决。
+- 同 wave 多 lane 写**同一物理资源域**时，先取**域级物理隔离单元**（与 `lane_claim` 逻辑单写者锁**互补不可替代**），并把路径**注入任务包**；同批合并**串行化**；冲突**保留现场**由 Leader 裁决。
 - **物理隔离单元工具面（G-10 补名）**：`lane_worktree_create`（为 lane 建独立 git worktree 作 cwd 契约，幂等）／`lane_worktree_merge`（把 lane 分支并回集成分支，**串行化**；冲突保留现场、不自动处置）。域级隔离与 `lane_claim` 的分工不变：前者管**物理文件树 / 分支**，后者管**批次状态 / 产物写入**。
 - **隔离生效的判据（2026-10-13 补充）**：worktree 是否**真的隔离了东西**，**以引擎回执的 `isolated` 字段为准**（`lane_worktree_create` 返回面，**已落地并入库于 `a4a2779`**），**不以"创建成功"为准** —— 创建成功只证目录 / 分支已建，**不证基线非空**；引擎的单一判定位 = `isolated = baseFiles > 0 ∧ worktree 注册命中`（`baseFiles` = 该 worktree 内 `git ls-files` 的受控文件数）。
 - **回执无该字段时的兜底（同源口径，非第二套判据）**：直接取该 worktree 内 **`git ls-files` 计数 > 0** 判定 —— 该计数**就是 `baseFiles`**，故两者**同源、可互验**；计数为 `0` ⇒ **基线为空集 ⇒ 判「未隔离」**，**不得**以「命令成功 / 目录已建」折算为已隔离（引擎侧对该形态的判定见 `lib/tools/lane-tools.js` 的单一判定位注释：「空 seed 形态恒 false」）。
@@ -499,9 +493,9 @@
 
 ## §4 黑板通信
 
-- 跨上下文用成员**回报通道**（`swarm_report` 成员→Leader、`swarm_cc` 成员→Manager）：`inbox` = 派发指令、`outbox` = 成员回执、`broadcast` = 广播（三层语义保留，但 **`mailbox_send` / `mailbox_read` / `mailbox_ack` 三工具已于 G3 B1 删除**，无工具入口）。**成员→Leader 的回执入口 = `swarm_report`**（引擎套件、在册；`swarm_cc` 为成员→Manager 的抄送入口）——**G-05 订正**：旧文写的 `report` 在**本部署不存在**（宿主安装面无 `subagent-report` 包；成员回执的现役通道就是 `swarm_report`）。**`leader-direct` 批（无 Manager）：成员回执只走 `swarm_report`→Leader（单通道），`outbox` 不写**（写了无消费者）。
+- 跨上下文用成员**回报通道**（`swarm_report` 成员→Leader 广播、`swarm_cc` 成员→Leader 收件箱）：`inbox` = 派发指令、`outbox` = 成员回执、`broadcast` = 广播（三层语义保留，但 **`mailbox_send` / `mailbox_read` / `mailbox_ack` 三工具已于 G3 B1 删除**，无工具入口）。**成员→Leader 的回执入口 = `swarm_report`**（引擎套件、在册；`swarm_cc` 为同一 Leader 的**抄送**入口，走 `inbox`）——**G-05 订正**：旧文写的 `report` 在**本部署不存在**（宿主安装面无 `subagent-report` 包；成员回执的现役通道就是 `swarm_report`）。**成员回执不动 `outbox`**（无消费者）。
 - **只写元数据，不复制正文**。
-- **集群内部同步只有套件通道（防回生）**：成员→Leader 用 `swarm_report`、成员→Manager 用 `swarm_cc`，事件面落 `swarm.report` / `swarm.cc`；**禁**另起第二通道转述同一批集群内部同步（`mailbox_*` 三件已删、无工具入口；通用通信工具**不得**当第二通道用）。
+- **集群内部同步只有套件通道（防回生）**：成员→Leader 的**广播**通道用 `swarm_report`、**收件箱**通道用 `swarm_cc`，事件面落 `swarm.report` / `swarm.cc`；**禁**另起第二通道转述同一批集群内部同步（`mailbox_*` 三件已删、无工具入口；通用通信工具**不得**当第二通道用）。
 
 ## §0m 派发套件（2026-09-16 落地：**派发收进引擎**）
 
@@ -511,7 +505,7 @@
 - **引擎自派**：`lane_dispatch` 置 `running` 后由引擎在工具流水线内调 `ctx.subagents.startContinuable`（`exec.agent` 作 parent）⇒ ① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具）——**准确表述 = 「按次收窄，收窄面以实测为准」**，**禁**写「deny 名单 ⇒ 成员会话里不出现」这类全称断言（2026-09-24 实测：治理与派发面已不见，但 `send_message` / `interrupt_agent` / `list_agents` / `wait_agent` 四件仍可见且可达）；② `label=punky-swarm:<batchId>:<lane>`（**第二绑定键**，可从子会话事件反解析）；③ 成功后**引擎直写** `member.dispatch`（**唯一写路径**，不依赖事后观察）。逐条实测读数见 `CHANGELOG.md`。
 - **能力位前置**：provider 不支持 `toolFilter`/`depthLimit`，或未配 `config.dispatch.provider` ⇒ **拒派**（不以弱换强）；宿主无 `ctx.subagents` ⇒ 降级为「**仅发句柄**」并显式说明（不静默）。
 - **门禁（软启用；M-03 订正：`enforce` 分支已无对象，2026-09-24）**：`config.dispatch.gate` 缺省 `'warn'`（C 档无句柄派发**只留痕不拦**，防自锁）；**`'enforce'` 不再可产拒态**——拒态码 `GATE_SUBAGENT_OUTSIDE_LANES（**已删，`lib/**` 零命中**）` **已退役**（`lib/**` 内**零命中**；退役码锁 `test/retired-codes-lock.test.js` 登记，事由「gate-lite 第二批 · B：官方 profile 已 disable 宿主派发工具」）⇒ 切 `enforce` 是**无判据的操作面**（历史注记，不构成现役约束）。**B 档单步子代理不受限**；A 档由既有门禁 3 拒。
-- **成员侧通信**：`swarm_report`（→Leader）/`swarm_cc`（→Manager）为**套件通信入口**；身份由 `member.dispatch` **best-effort 反查绑定**——**未绑定不再拒**（gate-lite Q-G2 · 2026-09-17 用户裁决「删除这一项」：官方 Team 成员天然无 lane 绑定属**常态**，原 `GATE_SWARM_UNBOUND_REPORT（**已删，`lib/**` 零命中**）` 硬门已删）；未绑定时消息照发（批次键 `(unbound)`）、事件按「批次可否解析」如实落/不落，回显 `unbound` / `eventWritten` / `notice`；参数只给「类型 + 摘要 + 产物路径」，**不复制正文**。
+- **成员侧通信**：`swarm_report`（→Leader 广播）/`swarm_cc`（→Leader 收件箱）为**套件通信入口**；身份由 `member.dispatch` **best-effort 反查绑定**——**未绑定不再拒**（gate-lite Q-G2 · 2026-09-17 用户裁决「删除这一项」：官方 Team 成员天然无 lane 绑定属**常态**，原 `GATE_SWARM_UNBOUND_REPORT（**已删，`lib/**` 零命中**）` 硬门已删）；未绑定时消息照发（批次键 `(unbound)`）、事件按「批次可否解析」如实落/不落，回显 `unbound` / `eventWritten` / `notice`；参数只给「类型 + 摘要 + 产物路径」，**不复制正文**。
 - **绑定缺口观测**：心跳档族新增 `lane.binding_gap`（running 无 dispatch / 句柄超 TTL 未消费），**只标记不处置**；**不新增 mailbox box**（三个既有 box 的计数契约不可挪用：inbox=追问、broadcast=长跑候选、outbox=lane 活动信号）。
 - **任务包书写规范（D-8，2026-09-16）**：**不要**在 lane 的 `cmd` 里手写 `[role=…]`/`[skills=…]` 前缀——**引擎会自动注入**；手写会出现重复前缀（实测已见 `"[role=designer] [role=designer] …"`），污染任务包与审计面。leader 补充要点走 `lane_dispatch` 的 `prompt`，不重复写契约（角色/层/consume/produce/outputs 由引擎从 wavePlan 注入）。
 - **成员侧口径（D-7 订正，2026-09-24）**：被收窄的工具在成员侧**准确表述 = 「按次收窄，收窄面以实测为准」**——① 旧文「`tools_search`/`tools_schema` 走**目录面**仍能查到全量定义」**不成立**：该两件在本部署**不存在**（宿主安装面零文件命中，见 §0l），故**无目录面**可走；② 验证某工具在成员侧是否可用，用 **实调回执形态**判（`unknown global tools` = 不可用；领域错误 = 可用，见 §0l 表第 ③ 行）；③ 验收断言**不得**写「工具不存在 / 不可见」这类全称命题（2026-09-24 实测已见 4 件 S2 家族工具仍在成员会话可见且可达）。
@@ -528,7 +522,7 @@
 - **语义**：插件的治理面**跟随模式**——`config.modes.gate`（agent preset 白名单；**本机部署**在 `cordis.patch.yml` 写 `['punky-preset','jiufeng']`；**包缺省 = 未配置 = 全模式生效**）名单内的会话才启用难度门禁 / G1 档位门禁 / 套件工具；**名单外模式零介入**（门禁全放行、**不计数**、不写任何治理状态）。
 - **绑定口径（2026-09-16 裁决）**：引擎与门禁**有且只有绑定蟛蜞模式**：①`agentPreset === 'punky-preset'` 启用；②`jiufeng` 是**同一模式的旧 id 别名**（过渡期保留，待旧会话自然消亡后从白名单与 `~/.dsh/.agent-presets/` 一并移除）；③**其它 preset（standard/minimal/ptc/cordis/liangshen…）不启用**；④**无 `agentPreset` 的会话不启用**（fail-open 为**明写红线**，不加日志噪音）；⑤子会话（`delegationDepth>0` / `parentSession`）**继承父会话模式**（实证：成员会话 header 沿用父 preset，16/16 采样）。
 - **热更**：`modes` 与 `dispatch` 已入 `ALLOWED_TOP_KEYS` ⇒ 写 `<engineRoot>/config/runtime.json` 的 `{ "modes": { "gate": [...] } }` **即热生效，无需重启**；`null` = 回到旧行为（全模式生效），`[]` = 显式停用。
-- **子会话继承**：Manager / worker 会话模式随父（`delegationDepth>0` 或 `parentSession`）⇒ **结算面不被非白名单误锁**。
+- **子会话继承**：worker 会话模式随父（`delegationDepth>0` 或 `parentSession`）⇒ **结算面不被非白名单误锁**。
 - **拒态码**：名单外模式调套件写面工具 → `GATE_MODE_INACTIVE`（先于 G1，报「本模式未启用蟛蜞治理」，不报蟛蜞内部档位语义）。
 - **零介入面 = 注册表 modeGate 集**（单点真源，不靠人肉同步）：受模式门约束的工具 = `lib/engine/suite.js` 的 `SUITE_TOOLS.filter(t => t.modeGate)`（再导出为 `MODE_GATED_TOOLS`，**现 11 件**：`assign_check` / `wave_plan` / `member_set_status` / `member_settle` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `lane_release` / `batch_tasks_add` / `task_update`——**G-07 订正：由 9 件改为 12 件**，补入 `batch_control` / `batch_tasks_add` / `task_update`；**2026-10-24 按代码实测重算：`asset_claim` 已改 `modeGate:false` 并移出 ⇒ 12 → 11**；**条目数以 `lib/engine/suite.js` 的 `entry()` 表 `modeGate:true` 为准**）——各件 `execute` **首行**落 `assertModeActive`（或经 `assertMemberActionTierC` 链式覆盖），故名单外模式**零治理写入**（不计数、不落锁、不写 `lastAssign`）；覆盖面与实现面的双向一致由 `test/suite-consistency-and-hot.test.js` SC-1/SC-4 + `test/mode-gate.test.js` T3 锁定。
 - **别名过渡**：`jiufeng` 为**旧 preset id**，留在名单里只为既有会话（header 已记 `agentPreset: jiufeng`）续跑不中断；**新会话一律 `punky-preset`**。
@@ -610,16 +604,16 @@
 - **RED→GREEN**：冒烟须作**中间 checkpoint**（先搭会失败的冒烟再实现），**禁止攒批到终验**一次性暴露批量错误。
 - 批外 A/B 级 dev 同适用（DoD 必写宿主冒烟命令）；audit 验收加「**契约对照**」项（核对摸底产物先于首编辑、宿主冒烟 gate 已执行，缺证据打回）。
 
-## §11 运行模式：星型直驱（leader-direct star，2026-09-17 用户裁决）
+## §11 运行模式：星型直驱（leader-direct star；2026-09-17 用户裁决 · 2026-11-08 起为**唯一模式**）
 
-- **适用**：`assembly.managerPlan='leader-direct'` 的批（Manager 线**暂缓期**；用户裁决「暂时忽略 Manager，暂时用星型跑引擎」）。
+- **适用**：**全部批次**（原触发键 `assembly.managerPlan='leader-direct'` 已随 Manager 层删除 ⇒ 本模式不再是「一种可选模式」，而是引擎的常态：Leader 是唯一派发者）。
 - **R-1 结算即派**：任一 lane `merged` ⇒ **立即派其下游 lane**（本模式下 Leader 是唯一派发者），**不得**先做 Leader 复核、**不得**等整批。判据：上游 `member.settled` 与下游 `lane.dispatch` 的时间差 **≤ 1 个回合**，且上游交接已 `submitted`。与 §5「审计时点（完成即审，不等同批）」同源，是其在星型模式下的**动作化**。
 - **R-2 复核并行**：Leader 独立复核与 audit lane **并行**；默认**抽查**（关键指纹 / 冲突读数 / 抽样复算），**不重复全量重跑**（除自报与 audit 读数冲突）。复核服务于**终门禁综合**，**不构成派发前置闸门**。
 - **R-3 单点派发**：本模式下 **Leader 是唯一派发者**；lane 之间只以 **handoff** 传递产物，「入边交接 submitted」是下游开工的硬前提（缺口 = `GATE_HANDOFF_MISSING`）。
 - **R-4 星型 ≠ 无链（2026-09-24 订正；2026-09-27 本批补记）**：**`chain` 声明面已整体退役删净**（进退役锁：八条静态校验 / `lib/assembly/chain.js` 投影函数 / `chain.step` 回显 / `lib/engine/chain-runner.js` 全删）；**DAG 真源 = `lanes[].deps` + `handoffs`**（逐边取件用 `handoff_view`，判定单点 `lib/state/gates.js` 的 `handoffRecordVerdictOf`）。
   - **lane 命名纪律：整条作废（2026-09-18 Q-A=C）**。原纪律「lane id **必须逐字等于**资产 `branches[].id`，否则落 `no-lane-for-step`」——① 链运行期推进早已退役（无消费方）；② **其载体（资产 `branches[]` 与 `chainStepForLane` / `chainLanesOfStep` / `chainNextOf` 等符号）亦已随本批删净** ⇒ **lane id 完全自由命名**（唯一硬约束：与 `deps` / `handoffs` 中引用的 id **逐字一致**）。
 - **R-5 监管二源**：判 lane 停滞须**二源共振**（文件时效 + 官方/子会话活动）；`<lane>/progress/*` 与工作区文件 mtime 属**单源**，只报数**不动作**；**误报不得触发 interrupt / 重派**（重派会丢在制改动）。
-- **R-6 模式可退出**：需真推进 / 代管调度时切 `raise` 并拉起 Manager；或待 **M3**（推进改挂 `lane.handoff`，入边齐 ⇒ 自动派下游）落地后回到自动派发。**下游自动化 = M3，不是改门禁。**
+- **R-6 已撤销（2026-11-08）**：原「需真推进 / 代管调度时切 `raise` 并拉起 Manager」的退出路径随 Manager 层删除而失去对象；本模式即唯一模式，**无模式切换面**。下游自动派发（M3：推进挂 `lane.handoff`，入边齐即派）早已落地，见 R-3 的 handoff 硬前提。
 - **已知缺口（登记，不阻塞）**：W-11 官方成员无 lane 绑定（watch 看不见）｜W-13 `<lane>/progress/*` **写端落点与读端契约错位（写端错位）**，**非读端缺失**——读端 `laneProgressDirOf` 早已按 **lane id** 拼接，历史误报 `longrun.candidate` 的成因是写端落在层域（`<layer>/progress/`）⇒ 快照不可见，须手工 ack｜成员会话工具面不含 `assign_check` / `gate_status`（成员侧难度无法落机位）｜**无自动派发 ⇒ 强依赖 Leader 在场**。
 - **读端**：运行模式唯一读端 = 工作区 `docs/run-mode-star-leader-direct-20260917.md`（含评估 J-1..J-4 与示例批设计）；本节为其**行为约束版**（随指引注入）。
 - **§11 之 D 档版（team 方向 · 席位；2026-10-01 补，A7）**：与 R-1..R-6 **同源**（**Leader 是唯一派发者**），差异只在**执行主体的生命周期通道**：
@@ -644,8 +638,8 @@
 ## §13 指引维护（Guidance maintenance）
 
 - **双层结构**：`agent.cordis.yml` = **注入面**（每会话必进系统提示，只放规范句 + `#§X` 指针）｜`references/discipline.md` = **正文**（按需读，放细则/码表/证据）。**正文小节可多于注入面**（详情面小节按需读，不强制在注入面出现）。
-- **双副本纪律**：preset 五件（`agent.cordis.yml` / `references/discipline.md` / `references/manager.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）与 **live**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**必须同 sha256**；改一份即改另一份。
-- **同步命令（只复制，不判定）**：`node scripts/sync-guidance.mjs` —— 把 repo 侧 preset 五件与 `skills/**` 整树复制到 live（内容相同即跳过、幂等）；`--no-skills` 只同步五件、`--dry-run` 只列将复制什么、`--live=` / `--skills-live=` 覆盖落点。**本仓不再有「必须 exit 0 才算收口」的指引门**（2026-10-28 用户裁决：指引维护不常做，不需要绑测试脚本锚定）——改完跑一次复制即可，是否同步到位直接看两份文件。
+- **双副本纪律**：preset 四件（`agent.cordis.yml` / `references/discipline.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）与 **live**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**必须同 sha256**；改一份即改另一份。
+- **同步命令（只复制，不判定）**：`node scripts/sync-guidance.mjs` —— 把 repo 侧 preset 四件与 `skills/**` 整树复制到 live（内容相同即跳过、幂等）；`--no-skills` 只同步五件、`--dry-run` 只列将复制什么、`--live=` / `--skills-live=` 覆盖落点。**本仓不再有「必须 exit 0 才算收口」的指引门**（2026-10-28 用户裁决：指引维护不常做，不需要绑测试脚本锚定）——改完跑一次复制即可，是否同步到位直接看两份文件。
 - **归属原则（2026-10-21 用户裁决；**人工自维护约定，不设机器门禁**）**：**工具能力归工具定义**（`lib/tools/*.js` 的 description：参数、取值域、拒码语义、状态机）；**引擎调度指引与主 Agent 操作规范归 preset**（persona 注入面：何时必须调、顺序、红线）。persona 里不复写工具能力细节，只留操作规范 ＋ `#§X` 指针。
 - **persona 有两份定义（**自维护**，靠人工保证同源）**：`cordis.patch.yml`（插件 patch，**boot 期由 loader 组合进 profile ⇒ 实际注入源**）与 `presets/punky-preset/agent.cordis.yml`（preset 分发面）是同一份 persona 的两份定义，**改一份即改另一份**。历史事实：两份曾长期分叉（patch 缺 `0i`、§0 为旧短版）而无人发现 ⇒ **改动时两份同时改是本条的落点**（不新增脚本判据）。
 - **反例（本规则的由来）**：2026-09-17 新增 §11/§12 时只写了正文、漏了注入面 ⇒ 新规则「写了但注入不到」，下一会话的 Leader 看不到。**该校验器已于 2026-10-28 退役** ⇒ 同类漂移现在只能靠人读，改注入面时请自行对照正文小节。
@@ -1019,7 +1013,7 @@
 
 | 码 | 触发条件 | 处置 |
 |---|---|---|
-| `GATE_ROLE_ASSEMBLY_MISSING` | 三层批未携带批次级装配声明 `assembly`（缺 `managerPlan` / `auditLane`） | **拒建批** |
+| `GATE_ROLE_ASSEMBLY_MISSING` | 三层批未携带批次级装配声明 `assembly`（缺 `auditLane`） | **拒建批** |
 | `GATE_ASSEMBLY_INVALID` | 装配声明**结构非法**，或 `coordinatorLane` / `auditLane` **悬空**（lane id 不存在），或层错配（`auditLane` 非 audit 层） | **拒建批** |
 | `GATE_ROLE_INVALID` | `roles` 词条**词法非法** | **告警，不阻断** |
 | `GATE_BATCH_REQUIRES_C` | 当前会话**未评估**或档位 A / B 时调用 `wave_plan`（内核 `core.js#assertMemberActionTierC`） | **拒**（不落批） |

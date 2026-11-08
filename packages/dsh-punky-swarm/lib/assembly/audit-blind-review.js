@@ -31,7 +31,7 @@ export const BLIND_REVIEW_SKILLS = {
 };
 
 
-// ── 六任务契约模板（键名固定，供 assertAssemblyCompleteness 扩展视图与 Leader/Manager 建批取用）──
+// ── 六任务契约模板（键名固定，供 assertAssemblyCompleteness 扩展视图与 Leader 建批取用）──
 const T_BUNDLE = `材料包准备（bundle，防评价污染）：
 - 事实摘录段：仅摘录 exec 产物事实，每条标注出处（file:line）；锚定对照声明前置（对照同 X 分锚定）；
 - 禁评价词（好/差/优雅/低劣等主观词一律禁止——事实层与评价层分离是盲审有效性关键）；
@@ -64,9 +64,9 @@ const T_CHECKLIST = `材料完整性分级（checklist）：
 
 const T_CONFIG = {
   panelistCount: 2,     // 评委数默认 2（关键 lane 才启用、默认单审，防流程膨胀）
-  threshold: 3.5,       // 评分阈值（如 rubric 均分 ≥3.5 为通过线，Leader/Manager 可按项目覆写）
+  threshold: 3.5,       // 评分阈值（如 rubric 均分 ≥3.5 为通过线，Leader 可按项目覆写）
   criticRequired: true, // critic 默认必跑（三态决议兜底；显式 false 可跳过，不建议）
-  note: 'config 为建批默认值；Leader/Manager 经 buildAuditLaneSpec 覆写（panelistCount/threshold/criticRequired）',
+  note: 'config 为建批默认值；Leader 经 buildAuditLaneSpec 覆写（panelistCount/threshold/criticRequired）',
 };
 
 export const BLIND_REVIEW_TEMPLATES = Object.freeze({
@@ -103,7 +103,7 @@ export function applyAssemblyExtensions(assembly, extensions) {
   return out;
 }
 
-// ── 盲审子 lane 任务包骨架（Leader/Manager 建批用）──
+// ── 盲审子 lane 任务包骨架（Leader 建批用）──
 // 返回 { config, templates, tasks }：tasks 可直接喂 buildWavePlan（固定 DAG：panelist×N → aggregate → critic；
 // aggregate deps=全部 panelist、critic deps=全部 panelist + aggregate——等待边与消费边一致，满足 consume×deps 对称门）；
 // consume/produce 契约 + 模板引用齐备，不预写实现（0e）。

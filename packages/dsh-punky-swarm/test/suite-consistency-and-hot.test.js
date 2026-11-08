@@ -38,7 +38,7 @@ import { SHELL_TOOLS } from '../lib/tools/readonly.js';
 import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from '../lib/engine/dispatch.js';
 import { SUITE_TOOLS } from '../lib/engine/suite.js';
 import { pendingHandles, __resetLaneHandles } from '../lib/bridge/lane-handle.js';
-import { threeTierTasks, seedArtifacts, assessC, registerManager } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
 // 【P1 同步】`team` 现为必填且必须解析到资产 ⇒ 本套件建批统一补 software-team。
@@ -205,7 +205,6 @@ test('SC-3 派发失败 ⇒ lane 置 failed 且**无残留句柄**（无幽灵 t
   assessC(store, SID, { rationale: 'fixture：三层批建批前置评估（多线并行 ⇒ C 档）' });
   await by.wave_plan.execute({ batchId: 'b-sc3', tasks: threeTierTasks(['e1'], { auditId: 'a1' }), assembly: { auditLane: 'a1' } }, exec);
   await by.batch_phase.execute({ batchId: 'b-sc3', phase: 'running' }, exec);
-  registerManager(store, SID, 'b-sc3', 'mgr-1');
   seedArtifacts(root, SID, 'b-sc3', ['e1'], { planProduct: 'plan/spec.md' });
 
   await assert.rejects(() => by.lane_dispatch.execute({ batchId: 'b-sc3', lane: 'e1' }, exec), /GATE_DISPATCH_FAILED/);

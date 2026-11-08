@@ -103,15 +103,15 @@ export function buildSwarmTools(cx) {
     }),
     defineTool({
       name: "swarm_cc",
-      description: '成员 → Manager 抄送（异常 / 待裁决 / 长跑候选）。身份 best-effort 解析，未绑定不拒：消息照发，解析到批次才落事件，回显 unbound/eventWritten/notice。参数最小化，不复制正文；留痕双写 swarm.cc + Manager 通道。',
+      description: '成员 → 批 owner 抄送（异常 / 待裁决 / 长跑候选）。身份 best-effort 解析，未绑定不拒：消息照发，解析到批次才落事件，回显 unbound/eventWritten/notice。参数最小化，不复制正文；留痕双写 swarm.cc + owner 收件箱。',
       parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"type":{"type":"string","required":true,"enum":["anomaly","decision-request","longrun-candidate"]},"summary":{"type":"string","required":true,"description":"一句话摘要（元数据，勿贴正文）"},"artifactPath":{"type":"string","description":"产物相对路径（可选）"},"batchId":{"type":"string","description":"可选：目标批次（仅在无 member.dispatch 绑定时自报归属）"},"lane":{"type":"string","description":"可选：目标 lane（同上；缺省占位 (unbound)）"}},
       output: {
         schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"type":{"type":"string","required":true},"delivered":{"type":"boolean","required":true},"unbound":{"type":"boolean"},"eventWritten":{"type":"boolean"},"notice":{"type":"string"}}},
-        render: (_args, v) => TEXT_OUTPUT('swarm.cc → Manager（' + v.batchId + '/' + v.lane + '，' + v.type + '）' + (v.unbound ? ' [unbound: best-effort]' : '')),
+        render: (_args, v) => TEXT_OUTPUT('swarm.cc → owner（' + v.batchId + '/' + v.lane + '，' + v.type + '）' + (v.unbound ? ' [unbound: best-effort]' : '')),
       },
       async execute(args, exec) {
         const tgt = reportTargetOf(store, exec, args, ctx?.logger);
-        const delivered = deliverSwarmMessage(root, tgt, REPORT_CHANNEL.manager, args, args.type);
+        const delivered = deliverSwarmMessage(root, tgt, REPORT_CHANNEL.owner, args, args.type);
         const eventWritten = appendSwarmEventOf(store, tgt, EVT.EVT_SWARM_CC, args.type);
         return {
           batchId: tgt.batchId ?? UNBOUND_BATCH_KEY, lane: tgt.lane, type: args.type, delivered,

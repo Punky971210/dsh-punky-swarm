@@ -103,7 +103,7 @@ export function buildExit(cx) {
             return { ok: true, declared: true, path: det.path, evidence, ...(cmNeedhuman ?? {}) };
         return {
             ok: false, code: 'GATE_NEEDHUMAN_PENDING', declared: true, path: det.path,
-            message: 'audit lane 声明 needHuman，须 Manager 转达人工裁决（merged 需 note 含 human: 证据 / conflict 驳回）',
+            message: 'audit lane 声明 needHuman，须 Leader 转达人工裁决（merged 需 note 含 human: 证据 / conflict 驳回）',
         };
     }
     return { checkExitGate, checkNeedHumanGate };

@@ -344,7 +344,7 @@ function blindRunVerdict({
 //   candidate = state==='running' ∧ batch.phase==='running' ∧ !僵尸批次 ∧
 //               durationMs > effectiveMaxDurationMs（严格 >；effective = maxDurationMs × 豁免倍率）∧
 //               !checkpointFresh ∧ !activityFresh（三窗均严格 <）
-// 载荷携带原始 fresh 值供 Manager 复核（若后续需改 OR 语义，纯函数单点即可）。
+// 载荷携带原始 fresh 值供 Leader 复核（若后续需改 OR 语义，纯函数单点即可）。
 export function judgeLongrun({
   batch, lane, nowTs,
   maxDurationMs = LONGRUN_DEFAULTS.maxDurationMs,
