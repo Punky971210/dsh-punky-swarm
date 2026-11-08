@@ -20,6 +20,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   事后**无法**补出「当时是谁被派发的这条 lane」——证据面已经脏了，只能整批作废重跑。
 //   所以判据的位置不是"在哪判最方便"，而是"必须在任何写入之前"。
 
+import { expectedWorkerSessionOf, workerLanesOf } from '../state/dispatch-events.js';
+
 export const BINDING_MISMATCH = 'binding-mismatch:';
 
 export function bindingDecision({ expected, actual, where } = {}) {
@@ -30,28 +32,6 @@ export function bindingDecision({ expected, actual, where } = {}) {
   if (exp === act) return { ok: true };
   const at = typeof where === 'string' && where.length > 0 ? where : 'dispatch-input';
   return { ok: false, reason: BINDING_MISMATCH + ' ' + at + '（expected ' + exp + ' / actual ' + act + '）' };
-}
-
-export function expectedWorkerSessionOf(batch, lane) {
-  const events = Array.isArray(batch?.events) ? batch.events : [];
-  if (typeof lane !== 'string' || lane.length === 0) return null;
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const ev = events[i];
-    if (ev && ev.type === 'member.dispatch' && ev.lane === lane && typeof ev.workerSessionId === 'string' && ev.workerSessionId.length > 0) {
-      return ev.workerSessionId;
-    }
-  }
-  return null;
-}
-
-export function workerLanesOf(batch, sessionId) {
-  const events = Array.isArray(batch?.events) ? batch.events : [];
-  if (typeof sessionId !== 'string' || sessionId.length === 0) return [];
-  const lanes = new Set();
-  for (const ev of events) {
-    if (ev && ev.type === 'member.dispatch' && ev.workerSessionId === sessionId && typeof ev.lane === 'string') lanes.add(ev.lane);
-  }
-  return [...lanes];
 }
 
 export function dispatchBindingDecision({ batch, lane, caller, where } = {}) {

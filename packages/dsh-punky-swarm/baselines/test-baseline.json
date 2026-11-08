@@ -347,7 +347,7 @@
     "test/binding-mismatch.test.js": {
       "asserts": 20,
       "blankLines": 11,
-      "lines": 108,
+      "lines": 110,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -542,6 +542,14 @@
       "lines": 359,
       "tautologies": 0,
       "tests": 26,
+      "todos": 0
+    },
+    "test/dispatch-events-single-source.test.js": {
+      "asserts": 20,
+      "blankLines": 11,
+      "lines": 79,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/dispatch-failure-rollback.test.js": {
@@ -2129,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T09:38:49Z",
+  "generatedAt": "2026-11-08T09:43:21Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2140,15 +2148,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/④ 成员管理批：删 dispatch.gate 零行为开关与 denyReason 空槽；删 anchorOf；成员态 enum 从迁移表派生；settle.js 内联进 member_settle",
+  "reason": "B4/④ F①：member.dispatch 读取单点化（state/dispatch-events.js）+ 收窄判据单实现（narrowingDecisionOf）",
   "schema": 1,
   "totals": {
-    "asserts": 11924,
-    "blankLines": 6780,
-    "files": 266,
-    "lines": 71483,
+    "asserts": 11944,
+    "blankLines": 6791,
+    "files": 267,
+    "lines": 71564,
     "tautologies": 0,
-    "tests": 2493,
+    "tests": 2498,
     "todos": 0
   }
 }

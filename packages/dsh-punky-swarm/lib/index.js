@@ -57,6 +57,7 @@ import { mountVerify } from './verify/mount.js';
 import { installGovernanceHook } from './governance/wiring.js';
 // 【L-1 · 随 P2 引入】governance 增量冲刷单点：用于插件卸载/热重载时闭合「未落盘计数」窗口
 import { flushDirtyGovernance } from './state/store/governance.js';
+import { dispatchRecordsOf } from './state/dispatch-events.js';
 // governance 键热更：applyConfigChange ⑤ 经 resolveGovernanceConfig 归一比较 governance.hook
 //   生效变化（enabled/rules/flags/defaults）→ dispose + 重挂（对齐 verifyMount 模式，不引入 updateConfig API）
 import { resolveGovernanceConfig } from './governance/config.js';
@@ -549,11 +550,9 @@ const createDispatchIndexRebuilder = ({ store, dispatchIndex }) => {
     for (const { sessionId, batchId } of store.listAllBatches()) {
       const batch = store.readBatch(sessionId, batchId);
       if (!batch?.events) continue;
-      for (const ev of batch.events) {
-        if (ev.type === 'member.dispatch' && ev.workerSessionId && ev.lane) {
-          dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
-          n++;
-        }
+      for (const ev of dispatchRecordsOf(batch.events)) {
+        dispatchIndex.set(ev.workerSessionId, dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev)));
+        n++;
       }
     }
     return n;

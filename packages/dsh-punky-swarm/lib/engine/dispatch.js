@@ -28,7 +28,7 @@ import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from './suite.js';
 export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS };
 import { readCapability } from '../assembly/schema.js';
-import { expectedWorkerSessionOf } from '../verify/binding.js';
+import { expectedWorkerSessionOf, firstDispatchOfSession } from '../state/dispatch-events.js';
 import { applyInjectionBudget } from '../comms/inject-budget.js';
 import { resumeClauseFor } from '../wave-plan.js';
 
@@ -897,17 +897,17 @@ export function laneBindingOf(store, sessionId, logger) {
         + '（' + String(e?.message ?? e) + '）⇒ 跳过该批继续；这是**读失败**，不是「批不存在」');
       continue;
     }
-    for (const ev of b?.events ?? []) {
-      if (ev?.type === 'member.dispatch' && ev.workerSessionId === sessionId && ev.lane) {
-        const bind = { sessionId: ownerSession, batchId, lane: ev.lane };
-        const owner = ownerSessionIdOf(ev);
-        if (owner) {
-          Object.defineProperty(bind, 'ownerSessionId', {
-            value: owner, enumerable: false, writable: true, configurable: true,
-          });
-        }
-        return bind;
+    // 「首个命中」口径（与派发绑定的「最近一次」不同口径，见 state/dispatch-events.js 说明）
+    const hit = firstDispatchOfSession(b, sessionId);
+    if (hit) {
+      const bind = { sessionId: ownerSession, batchId, lane: hit.lane };
+      const owner = ownerSessionIdOf(hit);
+      if (owner) {
+        Object.defineProperty(bind, 'ownerSessionId', {
+          value: owner, enumerable: false, writable: true, configurable: true,
+        });
       }
+      return bind;
     }
   }
   return null;

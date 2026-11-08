@@ -26,6 +26,7 @@ import {
 // 层判定单点（**不新造第二套遍历**）：`findTask` 即「按 id 在 `batch.wavePlan[].tasks` 里定位任务」的
 // 唯一实现（`lib/state/task-utils.js`，零依赖）；本模块只读它的 `layer` 字段。
 import { findTask } from '../state/task-utils.js';
+import { firstDispatchOfSession } from '../state/dispatch-events.js';
 
 const settleBounded = createBoundedExec();
 const boundedBegun = new Set();
@@ -240,12 +241,11 @@ async function onSubagentEnd(info, { store, dispatchIndex, ctx, root, liveConfig
       try {
         for (const { sessionId, batchId } of store.listAllBatches()) {
           const b = store.readBatch(sessionId, batchId);
-          for (const ev of b?.events ?? []) {
-            if (ev?.type === 'member.dispatch' && ev.workerSessionId === id && ev.lane) {
-              hit = dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev));
-              if (dispatchIndex instanceof Map) dispatchIndex.set(id, hit);
-              break;
-            }
+          // 「首个命中」口径（跨批：先枚举到的批优先）
+          const ev = firstDispatchOfSession(b, id);
+          if (ev) {
+            hit = dispatchIndexEntryOf(sessionId, batchId, ev.lane, ownerSessionIdOf(ev));
+            if (dispatchIndex instanceof Map) dispatchIndex.set(id, hit);
           }
           if (hit) break;
         }

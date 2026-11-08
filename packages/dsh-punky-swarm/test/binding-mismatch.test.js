@@ -28,8 +28,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  bindingDecision, dispatchBindingDecision, expectedWorkerSessionOf, workerLanesOf, BINDING_MISMATCH,
+  bindingDecision, dispatchBindingDecision, BINDING_MISMATCH,
 } from '../lib/verify/binding.js';
+// 「member.dispatch 事件怎么读」的唯一真源已收进 state/dispatch-events.js（口径显式化）
+import { expectedWorkerSessionOf, workerLanesOf } from '../lib/state/dispatch-events.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');

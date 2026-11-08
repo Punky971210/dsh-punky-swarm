@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import * as EVT from '../event-types.js';
 import * as schema from '../../schema.js';
 import { laneHandoffGapPayload } from './events.js';
+import { workerLanesOf } from '../dispatch-events.js';
 
 /** 交接记录的**唯一形态**（建批播种 / 计划变更补种 / 收件补边三处写点共用）。
  *  基础 9 键固定；收件通道只多 `source` / `acceptedBy` 两个显式可选键。 */
@@ -52,12 +53,7 @@ export function buildHandoff(cx) {
       : [];
     if (callerSessionId && callerSessionId === batch.sessionId) return { ok: true, role: 'owner' };
     if (callerSessionId && batch.manager && batch.manager.agentId === callerSessionId) return { ok: true, role: 'manager' };
-    const dispatchLanes = [];
-    for (const ev of batch.events ?? []) {
-      if (ev && ev.type === 'member.dispatch' && ev.workerSessionId === callerSessionId && ev.lane) {
-        if (!dispatchLanes.includes(ev.lane)) dispatchLanes.push(ev.lane);
-      }
-    }
+    const dispatchLanes = workerLanesOf(batch, callerSessionId);
     if (dispatchLanes.length) {
       if (!from) return { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };
       return dispatchLanes.includes(from) ? { ok: true, role: 'dispatch' } : { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };

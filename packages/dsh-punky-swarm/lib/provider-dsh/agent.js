@@ -105,6 +105,26 @@ export function createAgentPort(ctx, opts = {}) {
       : (witnessOf(undefined)?.hasWitness ? 'preset' : 'none');
   const depthVia = subagentChannel.available ? (capsKnown && caps.depthLimit === false ? 'none' : 'request') : 'none';
 
+  // 「本次 ask 的收窄是否可核」的**唯一判据实现**：`canNarrow`（写前拒）与 `spawn`（边界兜底）都调它，
+  //   两处调用是同一判定的两个时点（写前给可读拒因；边界再核，防调用方绕过 canNarrow）。
+  const narrowingDecisionOf = (ask = {}) => {
+    if (!available) return { narrowable: false, preset: null, reason: 'ctx.subagents 无可用启动入口' };
+    if (!needNarrowOf(ask)) return { narrowable: true, preset: witnessOf(ask)?.preset ?? null, reason: null };
+    if (form === 'start') return { narrowable: true, preset: null, reason: null };
+    const w = witnessOf(ask);
+    if (!w || !w.hasWitness) {
+      return { narrowable: false, preset: w?.preset ?? null, reason: '未解析出收窄见证 {preset, covers}' };
+    }
+    if (!w.covers || w.covers.length === 0) {
+      return { narrowable: false, preset: w.preset, reason: '收窄见证声明为空集（空集与任何集交集恒空 ⇒ 判据退化为恒真）' };
+    }
+    const deny = Array.isArray(ask?.toolFace?.deny) ? ask.toolFace.deny : [];
+    if (deny.some((t) => w.covers.includes(t))) {
+      return { narrowable: false, preset: w.preset, reason: '本次要禁的工具落在该 preset 已声明的覆盖面内' };
+    }
+    return { narrowable: true, preset: w.preset, reason: null };
+  };
+
   // 语义（用户裁决）：`push_execute(spec, options?)` = **按 `ExecSpec` 把一个 lane 任务推给一个成员执行**。
   const pickChannelOf = (spec) => {
     const facts = agentChannelFactsOf(ctx);
@@ -185,14 +205,7 @@ export function createAgentPort(ctx, opts = {}) {
     personaVia: narrowVia,
     depthVia,
     canNarrow(ask = {}) {
-      if (!available) return false;
-      if (!needNarrowOf(ask)) return true;
-      if (form === 'start') return true;
-      const w = witnessOf(ask);
-      if (!w || !w.hasWitness) return false;
-      if (!w.covers || w.covers.length === 0) return false;
-      const deny = Array.isArray(ask?.toolFace?.deny) ? ask.toolFace.deny : [];
-      return !deny.some((t) => w.covers.includes(t));
+      return narrowingDecisionOf(ask).narrowable;
     },
     async spawn({ provider, label, prompt, parent, signal, role, toolFace, persona, maxDepth, cwd } = {}) {
       if (!available) throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents 无可用启动入口（既无 startActivation 也无 start）');
@@ -216,12 +229,14 @@ export function createAgentPort(ctx, opts = {}) {
         return { run, form, narrowVia, depthVia, preset: null };
       }
 
-      const witness = witnessOf({ role, toolFace, persona });
-      const preset = witness?.preset ?? null;
-      if (typeof preset !== 'string' || preset.length === 0) {
+      // 边界兜底：与 `canNarrow` **同一判据**再核一次（防调用方绕过写前拒）
+      const narrow = narrowingDecisionOf({ role, toolFace, persona });
+      const preset = narrow.preset;
+      if (!narrow.narrowable || typeof preset !== 'string' || preset.length === 0) {
         throw new Error(HOST_PORT_UNSUPPORTED + ' startActivation 形态不承载 toolFilter/persona，'
-          + '且未能解析出 agentPreset（宿主会按父会话 composition 组子会话 ⇒ worker 拿到未收窄工具面）'
-          + ' ⇒ 拒派（不以弱换强）：role=' + String(role ?? '(未声明)'));
+          + '且未能解析出可核收窄的 agentPreset（宿主会按父会话 composition 组子会话 ⇒ worker 拿到未收窄工具面）'
+          + ' ⇒ 拒派（不以弱换强）：role=' + String(role ?? '(未声明)')
+          + '；成因=' + String(narrow.reason ?? 'preset 缺失'));
       }
       const request = {
         parent,
