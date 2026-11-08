@@ -546,7 +546,7 @@ test('T-9b 【L-AC-11/L-AC-15】写点 A（引擎自派唯一写路径）：载�
   } finally { __resetLaneHandles(); }
 });
 
-test('T-9c 【约束 C-2】唯一解析单点：字段名只在 `lib/engine/dispatch.js` 内解析；三读点共用该单点', async () => {
+test('T-9c 【约束 C-2】唯一解析单点：字段名只在派发模块组内解析（落在 dispatch-bind.js）；三读点共用该单点', async () => {
   const mod = await import('../lib/engine/dispatch.js');
   reading('T-9c 单点导出', {
     ownerSessionIdOf: typeof mod.ownerSessionIdOf,
@@ -578,7 +578,8 @@ test('T-9c 【约束 C-2】唯一解析单点：字段名只在 `lib/engine/disp
     '`lib/index.js` 的两读点（重建 + 唤醒本体）经单点取值');
   assert.ok(read('lib/engine/auto-settle.js').includes('ownerSessionIdOf('), '`auto-settle.js` 的惰性重建经单点取值（W-4）');
   assert.ok(read('lib/bridge/dispatch-register.js').includes('ownerSessionIdOfExec('), '`dispatch-register.js` 的写点经写侧单点取值');
-  assert.ok(read('lib/engine/dispatch.js').includes('ownerSessionIdOfExec('), '`dispatch.js` 的写点经同一写侧单点取值');
+  // ⑤E：`dispatch.js` 拆为 7 模块后，身份/绑定层的取值单点住在 `dispatch-bind.js`。
+  assert.ok(read('lib/engine/dispatch-bind.js').includes('ownerSessionIdOfExec('), '`dispatch-bind.js` 的写点经同一写侧单点取值');
   for (const rel of ['lib/index.js', 'lib/engine/auto-settle.js', 'lib/bridge/dispatch-register.js']) {
     assert.ok(read(rel).includes('dispatchIndexEntryOf('), rel + ' 的索引写入经**同一**值构造单点（形状与附加读数两处口径都不许分叉）');
   }

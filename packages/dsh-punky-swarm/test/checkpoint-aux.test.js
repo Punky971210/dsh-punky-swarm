@@ -238,8 +238,13 @@ test('CA-9 [E4-K9] fail-safe：渲染抛错 ⇒ 跳过该段 + 一行 logger.war
 // 预算面与源级守卫（E4-K10）
 // ═════════════════════════════════════════════════════════════════════════════
 
-test('CA-10 [E4-K10] 不加注入预算面：`taskpack.checkpoints` 在整个派发模块与 preflight 侧均零出现', () => {
-  const src = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'engine', 'dispatch.js'), 'utf8');
+test('CA-10 [E4-K10] 不加注入预算面：`taskpack.checkpoints` 在整个派发模块组里零出现', () => {
+  // ⑤E：`dispatch.js` 已按职责拆为 7 模块（dispatch.js 门面 + 6 职责件）
+  //   ⇒ 判据面从「单文件」改为「模块组」：语义不变（整个派发面都不许出现该预算面），且覆盖面更严。
+  const dir = path.join(PKG_ROOT, 'lib', 'engine');
+  const group = fs.readdirSync(dir).filter((f) => /^dispatch(-[\w-]+)?\.js$/.test(f)).sort();
+  assert.ok(group.length >= 7, '夹具前提：派发模块组须至少 7 件（否则「全组扫描」会因空集假绿）；实际=' + group.length);
+  const src = group.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   assert.equal(/taskpack\.checkpoints/.test(src), false,
     '本批不给 checkpoint 段加注入预算面（新增面须另案裁决）');
   // 正向对照：既有四个面仍在（防「删错面」冒充通过）

@@ -727,7 +727,12 @@ test('RO-16 L-AC-1①②：`renderRoleGuide` 单点导出 ＋ `appendRoleSection
   assert.equal(typeof renderRoleGuide, 'function', 'D-0：纯渲染单点须导出自 lib/engine/dispatch.js');
   // 裸标题原文口径（与 L-AC-6 的可达构造一致）：注释里复写标题原文同样计入命中。
   const RAW = [ROLE_SECTION_TITLES.responsibilities, ROLE_SECTION_TITLES.authorities, ROLE_SECTION_TITLES.deliverables];
-  const src = fs.readFileSync(path.join(roleCorpusRoot(), 'lib', 'engine', 'dispatch.js'), 'utf8');
+  // ⑤E：`dispatch.js` 已按职责拆为 7 模块 ⇒ 在**模块组**上核，并要求该声明在组内**恰 1 处**（比原单文件更严）。
+  const engineDir = path.join(roleCorpusRoot(), 'lib', 'engine');
+  const groupFiles = fs.readdirSync(engineDir).filter((f) => /^dispatch(-[\w-]+)?\.js$/.test(f)).sort();
+  const src = groupFiles.map((f) => fs.readFileSync(path.join(engineDir, f), 'utf8')).join('\n');
+  const declCount = (src.match(/export\s+function\s+renderRoleGuide\s*\(/g) ?? []).length;
+  assert.equal(declCount, 1, 'D-0：`renderRoleGuide` 在派发模块组内须**恰 1 处**具名导出声明（实际 ' + declCount + ' 处）');
   // 【B-08 · 按审核终判把「arity 快照」改为「**签名身份**」（本批 A 档唯一真·可改的一条）】
   //   原 `renderRoleGuide.length === 1` 是 **arity 快照**：新增**可选**入参属正常演化，
   //   而它又表达不出真正的契约「只吃**已解析**的 role 对象」（`(id)` 的 arity 同样是 1 ⇒ 原断言放过）。

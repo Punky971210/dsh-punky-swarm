@@ -196,7 +196,7 @@ export const WHITELIST = [
   { file: 'mcp/data-plane-server.js', symbol: 'createToolsPort', class: 'A1', reason: '纯依赖 ctx；模块已有 deps 参数（installMcpDataPlane(ctx, deps)）⇒ 可改注入优先，本批不改' },
   { file: 'mcp/data-plane-server.js', symbol: 'createHttpPort', class: 'A1', reason: '同上（同一模块的 HTTP 面直构点）' },
   // ── A3（显式例外：需 per-call 参数 或 属注册动作现场）────────────────────
-  { file: 'engine/dispatch.js', symbol: 'createAgentPort', class: 'A3', reason: 'agentPort 需 per-call presetFor（热更配置）⇒ 结构不可预装配' },
+  { file: 'engine/dispatch-core.js', symbol: 'createAgentPort', class: 'A3', reason: 'agentPort 需 per-call presetFor（热更配置）⇒ 结构不可预装配；⑤E 拆分后由 dispatch-core.js 持有' },
   { file: 'tools/host-surface.js', symbol: 'createRosterPort', class: 'A3', reason: 'rosterPort 需 per-call agent 凭据（exec.agent）⇒ 不可预装配' },
   // 【2026-11-06 新增 · 批 punky-engine-fix2-20261106 · F-8 返工】用户口径：「roster 不是加载时读的，
   //   是实时读的，provider 只是给入口」⇒ 本处与上面 `tools/host-surface.js` 那条**同 class 同理由**，

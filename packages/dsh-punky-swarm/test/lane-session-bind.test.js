@@ -444,12 +444,13 @@ test('AC-5 单点：worker→批 反查只经 dispatchIndex（禁建第二套索
   const mapCtor = libJs.filter((p) => /dispatchIndex\s*=\s*new Map\(/.test(fs.readFileSync(p, 'utf8'))).map(rel);
   assert.deepEqual(mapCtor, ['lib/index.js'], 'dispatchIndex 的 Map 构造须恰 1 处（装配层）');
   // ② 索引**读**点：`dispatchIndex.get(...)` 的消费面（本 lane 新增 batchSessionIdOfWorker 为其一）
+  // ⑤E：`dispatch.js` 拆为 7 模块后，反查实现落在 `dispatch-bind.js`（身份/绑定层）。
   const readers = libJs.filter((p) => /dispatchIndex[^\n]*\.get\(/.test(fs.readFileSync(p, 'utf8'))).map(rel).sort();
-  assert.deepEqual(readers, ['lib/engine/auto-settle.js', 'lib/engine/dispatch.js', 'lib/index.js'].sort(),
+  assert.deepEqual(readers, ['lib/engine/auto-settle.js', 'lib/engine/dispatch-bind.js', 'lib/index.js'].sort(),
     'worker→批 反查文件集须恰为这三件（新增第二套索引会让本断言变红）');
-  // ③ 反查单点：本 lane 的新函数定义恰 1 处，且**只**在 dispatch.js
+  // ③ 反查单点：本 lane 的新函数定义恰 1 处，且**只**在 dispatch-bind.js
   const definers = libJs.filter((p) => /export function batchSessionIdOfWorker\(/.test(fs.readFileSync(p, 'utf8'))).map(rel);
-  assert.deepEqual(definers, ['lib/engine/dispatch.js'], '反查单点须恰 1 处');
+  assert.deepEqual(definers, ['lib/engine/dispatch-bind.js'], '反查单点须恰 1 处');
   // ④ `sessionOf` 的 resolver 注入面**不**自持索引（只转发注入函数）
   const shared = readSrc('lib/tools/shared.js');
   assert.equal(/dispatchIndex|new Map\(/.test(shared), false, 'shared.js 不得接触任何索引');
@@ -481,7 +482,8 @@ test('AC-6 任务包双保险：composeWorkerPrompt 明写批归属会话 + sess
   assert.equal(/批归属会话/.test(composeWorkerPrompt({ ...base, batchSessionId: '' })), false);
   assert.equal(/批归属会话/.test(composeWorkerPrompt({ ...base, batchSessionId: null })), false);
   // ⑤ 生产接线可核：`dispatchLaneCore` 的 composeWorkerPrompt 调用点传了 batchSessionId
-  const dispatchSrc = readSrc('lib/engine/dispatch.js');
+  // ⑤E：`dispatchLaneCore` 现在住在 `dispatch-core.js`（派发执行层）。
+  const dispatchSrc = readSrc('lib/engine/dispatch-core.js');
   assert.match(dispatchSrc, /batchSessionId:\s*sessionId/, 'dispatchLaneCore 须把落点会话（= 批归属会话）传进任务包');
 });
 

@@ -393,9 +393,9 @@
       "todos": 0
     },
     "test/checkpoint-aux.test.js": {
-      "asserts": 38,
+      "asserts": 39,
       "blankLines": 25,
-      "lines": 250,
+      "lines": 255,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -593,9 +593,9 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 207,
+      "asserts": 208,
       "blankLines": 57,
-      "lines": 861,
+      "lines": 866,
       "tautologies": 0,
       "tests": 42,
       "todos": 0
@@ -1267,7 +1267,7 @@
     "test/lane-session-bind.test.js": {
       "asserts": 115,
       "blankLines": 43,
-      "lines": 691,
+      "lines": 693,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
@@ -1779,7 +1779,7 @@
     "test/swarm-wake-addressing.test.js": {
       "asserts": 108,
       "blankLines": 54,
-      "lines": 758,
+      "lines": 759,
       "tautologies": 0,
       "tests": 19,
       "todos": 0
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T18:22:17Z",
+  "generatedAt": "2026-11-08T18:30:38Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,13 +2124,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "②-丙：删 withBatchRowLock/commitBatchLocked 死码，deny-zero-write 改用 commitBatch",
+  "reason": "⑤E：dispatch.js 拆 7 模块，6 处静态锁改按模块组核",
   "schema": 1,
   "totals": {
-    "asserts": 11838,
+    "asserts": 11840,
     "blankLines": 6737,
     "files": 264,
-    "lines": 71094,
+    "lines": 71107,
     "tautologies": 0,
     "tests": 2484,
     "todos": 0
