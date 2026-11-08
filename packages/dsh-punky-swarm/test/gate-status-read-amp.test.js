@@ -41,7 +41,7 @@ function makeBatch(batchId, laneIds) {
     },
   ];
   const plan = buildWavePlan({ batchId, team: 'software-team', tasks });
-  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1', managerPlan: 'leader-direct' } });
+  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1' } });
   return store.readBatch(S, batchId);
 }
 
@@ -141,6 +141,6 @@ test('G5P1-4 单 lane 路径语义不变（含不在 batch.lanes 的任意 id）
 
 test('G5P1-5 manager / assembly 回显未受影响', async () => {
   const out = await gateStatusTool.execute({ batchId: 'b-five', session: S }, {});
-  assert.deepEqual(out.assembly, { auditLane: 'a1', managerPlan: 'leader-direct' }, 'assembly 回显须保持');
+  assert.deepEqual(out.assembly, { auditLane: 'a1' }, 'assembly 回显须保持');
   assert.ok(!('manager' in out), '本批未登记 manager ⇒ 不得出现 manager 键（条件键语义）');
 });

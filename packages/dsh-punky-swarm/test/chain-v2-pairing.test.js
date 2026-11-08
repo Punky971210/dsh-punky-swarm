@@ -122,7 +122,7 @@ async function mkBatch(h, batchId) {
     // 【M0′-① 联动（2026-09-17 批 `handoff-consolidation-m0m1-20260917`）】原为 `leader-direct`；
     //   该形态自 M0′-① 起链推进**全程 no-op**（引擎无自派能力的形态由 Leader 直驱）⇒ 本套件断言
     //   「运行期 DAG 真源 = `lanes[].deps`（分支配对/去屏障）」必须取非 leader-direct 形态（`raise` = 缺省）。
-    assembly: { managerPlan: 'raise', auditLane: 'accept_lane' },
+    assembly: { auditLane: 'accept_lane' },
   }, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
 }

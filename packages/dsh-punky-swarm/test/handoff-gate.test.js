@@ -83,7 +83,7 @@ const eventsOf = (store, batchId) => (store.readBatch(SESSION, batchId)?.events 
 
 /** 建批 + 武装（推进链/门禁的武装前提 = 相位 running）。 */
 async function mkBatch(h, batchId, { smoke } = {}) {
-  const args = { batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: tasks(), assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } };
+  const args = { batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: tasks(), assembly: { auditLane: 'a1' } };
   if (smoke === true) args.smoke = true;
   const out = await h.byName.wave_plan.execute(args, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
@@ -233,7 +233,7 @@ test('P1-H3 建批期拒：deps 入边的上游未声明交付产物（无交接
     );
     assert.equal(fs.existsSync(batchFileOf(h.root, 'h3')), false, '拒后**零批次 JSON 落盘**');
     // 对照：同形 tasks 但上游声明交付产物 ⇒ 建批成功（证 H3 拒的是缺口本身，不是环境）
-    const okOut = await h.byName.wave_plan.execute({ batchId: 'h3-ok', team: TEAM, teamsRoot: h.teamsRoot, tasks: tasks(), assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, SESS);
+    const okOut = await h.byName.wave_plan.execute({ batchId: 'h3-ok', team: TEAM, teamsRoot: h.teamsRoot, tasks: tasks(), assembly: { auditLane: 'a1' } }, SESS);
     assert.ok(okOut.lanes.p1 === 'pending');
     // 建批期意图声明已种：e1 的入边一条（pending），e2 的入边一条
     const b = h.store.readBatch(SESSION, 'h3-ok');

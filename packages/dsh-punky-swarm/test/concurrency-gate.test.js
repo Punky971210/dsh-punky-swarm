@@ -243,9 +243,9 @@ test('T5【退役锁 · Q-B】leader-direct 批零限流（与 assembly.managerP
   const root = tempRoot('punky-cg-t5-');
   const store = seedBatch(root, SID, 'b-t5', ['l1', 'l2'], {
     concurrency: 1,
-    assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
+    assembly: { auditLane: 'a1' },
   });
-  assert.equal(store.readBatch(SID, 'b-t5').assembly.managerPlan, 'leader-direct', '前置：本批确为 leader-direct');
+  assert.equal(store.readBatch(SID, 'b-t5').assembly.managerPlan, undefined, '前置：assembly.managerPlan 键已随 Manager 层删除');
   const spawned = [];
   const by = toolsFor(store, root, mkCtx(fakeRuntime(spawned)));
   const exec = { agent: { session: { id: SID } } };

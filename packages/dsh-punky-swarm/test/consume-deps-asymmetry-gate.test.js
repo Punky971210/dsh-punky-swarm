@@ -122,7 +122,7 @@ function toolHarness(root, sessionId) {
   return { store, by, exec };
 }
 
-const ASSEMBLY = { auditLane: 'a1', managerPlan: 'leader-direct' };
+const ASSEMBLY = { auditLane: 'a1' };
 const eventsOf = (store, sessionId, batchId, type) => (store.readBatch(sessionId, batchId)?.events ?? []).filter((e) => e && e.type === type);
 
 // ── A-1 域 A 拒态（audit 面：上游非 plan 被审计 lane 消费而缺边）────────────────────
@@ -181,7 +181,7 @@ test('A-3 对照放行：两例同形补边后建批成功、wave 数 = 3、观�
   const root = tempRoot();
   const { store, by, exec } = toolHarness(root, SID);
   for (const [bid, tasks, auditLane] of [['b-cdg-ok1', a1Compliant(), 'aL'], ['b-cdg-ok2', a2Compliant(), 'a1']]) {
-    await by.wave_plan.execute({ batchId: bid, tasks, assembly: { auditLane, managerPlan: 'leader-direct' } }, exec);
+    await by.wave_plan.execute({ batchId: bid, tasks, assembly: { auditLane } }, exec);
     const b = store.readBatch(SID, bid);
     assert.ok(b, bid + '：批次 JSON 已落盘');
     assert.ok(['planning', 'running'].includes(b.phase), bid + '：phase ∈ {planning, running}，实为 ' + b.phase);

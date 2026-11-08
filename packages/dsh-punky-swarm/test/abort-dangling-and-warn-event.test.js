@@ -87,7 +87,7 @@ function tasks3() {
 
 const LAYOUT_TEAM = 'software-team';
 const LAYOUT_TASKS = tasks3();
-const LAYOUT_ASM = { auditLane: 'a1', managerPlan: 'leader-direct' };
+const LAYOUT_ASM = { auditLane: 'a1' };
 
 async function makeBatch(byName, root, batchId, over = {}) {
   const out = await byName.wave_plan.execute({

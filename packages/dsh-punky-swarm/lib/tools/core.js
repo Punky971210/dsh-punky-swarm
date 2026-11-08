@@ -48,26 +48,19 @@ function buildPhaseTools(cx) {
   return [
     defineTool({
       name: "batch_phase",
-      description: "阶段迁移 planning->running->paused->aborted|complete（终态拒写）；complete 前置 audit 层验收齐备。可选 manager={agentId,note?} 只登记不改阶段（写 managerSeat，真源即此表，宿主 roster 仅对账；空 agentId 不写记录）。批次按会话隔离；reason 缺省 manual:batch_phase:<phase>。",
-      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"phase":{"type":"string","enum":["running","paused","aborted","complete"]},"reason":{"type":"string","description":"相位迁移事由（写入 batch.phase 事件；缺省 manual:batch_phase:<phase>）"},"manager":{"type":"object","description":"在册登记载荷 {agentId, note?}：任意 phase 均可登记（幂等）；空/缺 agentId ⇒ 不写记录并回 null。即写入册真源 batch.managerSeat，宿主 roster 仅对账","additionalProperties":false,"properties":{"agentId":{"type":"string"},"note":{"type":"string"}}},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
+      description: "阶段迁移 planning->running->paused->aborted|complete（终态拒写）；complete 前置 audit 层验收齐备。批次按会话隔离；reason 缺省 manual:batch_phase:<phase>。",
+      parameters: {sourceRunId:{"type":"string","description":"来源 run（缺省取 agent.session.id），缺失即拒"},"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true,"enum":["running","paused","aborted","complete"]},"reason":{"type":"string","description":"相位迁移事由（写入 batch.phase 事件；缺省 manual:batch_phase:<phase>）"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"manager":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}}}},
-        render: (_args, value) => TEXT_OUTPUT((value.manager ? ('batch ' + value.batchId + ' manager.raised -> ' + value.manager.agentId) : ('batch ' + value.batchId + ' phase -> ' + value.phase))
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"phase":{"type":"string","required":true},"danglingLanes":{"type":"array","items":{"type":"string"}}}},
+        render: (_args, value) => TEXT_OUTPUT('batch ' + value.batchId + ' phase -> ' + value.phase
           + (value.danglingLanes?.length ? '; dangling lanes: ' + value.danglingLanes.length : '')),
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '批次阶段迁移（batch_phase）');
         const sessionId = sessionOf(args, exec);
-        const manager = args.manager ? store.markManagerRaised(sessionId, args.batchId, args.manager) : undefined;
-        if (!args.phase) {
-          if (!manager) throw new Error('batch_phase requires "phase" or "manager"');
-          const cur = store.readBatch(sessionId, args.batchId);
-          return { batchId: args.batchId, phase: cur ? cur.phase : 'unknown', manager };
-        }
         const b = store.setPhase(sessionId, args.batchId, args.phase, { reason: args.reason ?? ('manual:batch_phase:' + args.phase) });
         if (b.phase === 'complete' || b.phase === 'aborted') clearPendingBatch(store, sessionId);
         const out = { batchId: args.batchId, phase: b.phase };
-        if (manager) out.manager = manager;
         //   不得因此新增事件）；无悬挂成员（全终态）的批 ⇒ **不落事件、不写 `danglingLanes` 键**（反例锁）。
         const dg = warnAbortDangling(store, sessionId, args.batchId, b);
         if (dg) out.danglingLanes = dg.danglingLanes;

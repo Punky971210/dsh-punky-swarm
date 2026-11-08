@@ -60,7 +60,7 @@ function seed(lane = 'l1') {
         { id: 'a1', layer: 'audit', consume: ['plan/spec.md', 'exec/x.md'], produce: ['audit/a1.md'], outputs: ['audit/a1.md'], deps: [lane] },
       ],
     }),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   });
   // 成员写面档位判据落在**调用方会话** ⇒ 必须先写 C 档治理记录（否则先撞 GATE_MEMBER_REQUIRES_C）
   store.writeGovernance(sess, { lastAssign: { form: 'C', difficulty: 'C', rationale: 'S-3 形态成对覆盖夹具（C 档派发）', at: new Date().toISOString() } });

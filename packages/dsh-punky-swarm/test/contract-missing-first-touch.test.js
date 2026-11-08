@@ -327,7 +327,7 @@ test('B2-DoD：真实工具面触发落盘 + 只读 gate_status 工具面负控�
     ],
     // assembly 必填（含 audit 层的三层批经工具面建批须带批次级装配声明）；
     //   managerPlan 显式 leader-direct ⇒ 探针不依赖 Manager 登记即可派 exec（去噪：只测契约缺声明面）
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   }, SESS);
   await byName.batch_phase.execute({ batchId: 'b2-probe', phase: 'running' }, SESS);
   for (const rel of ['plan/spec.md', 'exec/e1.md', 'audit/a1.md']) {

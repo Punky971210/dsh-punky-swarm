@@ -159,11 +159,9 @@ export function isCPlusBatch(tasks) {
     const threeTier = tasks.some((t) => t.layer != null && LAYERS.includes(t.layer));
     return threeTier && countExecLanes(tasks) >= 3;
 }
-// 装配声明必备判定（Manager 见批即默认 raise，且该默认必须**可核**）：
-//   三层批形态（任一 task 声明 layer）**且含 audit 层 lane** → 建批必须携带批次级装配声明。
-//   为什么是这两个条件：① 声明里的 `auditLane` 必须指向 audit 层 lane ⇒ 「含 audit lane」是该声明可成立的前提；
-//   ② 只有声明落盘后，`managerPlan`（**缺省 raise**）才成为引擎侧可核事实——收口告警按**声明**触发（见 state/store.js），
-//      读端因此能区分「默认 raise 未登记 Manager」与「显式 leader-direct」，消除原先的可核性空洞。
+// 装配声明必备判定（三层批含 audit lane ⇒ 建批必须携带批次级装配声明）：
+//   ① 声明里的 `auditLane` 必须指向 audit 层 lane ⇒「含 audit lane」是该声明可成立的前提；
+//   ② 调度真源是任务黑板（`batch.lanes` / `batch.wavePlan`），声明只承载「验收 lane 是谁」这一事实。
 //   不强制的形态：generic 批（无 layer 声明）与无 audit 层的批（零感知，与既有行为兼容）。
 //   注：`isCPlusBatch`（exec≥3）保留为**集群规模**口径（既有读端/测试仍用），不再是装配强制的唯一触发条件。
 export function requiresAssemblyDecl(tasks) {
@@ -173,7 +171,7 @@ export function requiresAssemblyDecl(tasks) {
 }
 // assembly 归一化/校验（纯函数，导出供工具与测试共用）：input 缺省/undefined → { decl: null, warnings: [] }
 // （非 C+ 批零感知）；结构非法 → throw 'GATE_ASSEMBLY_INVALID: assembly.<field> ...'（fail-closed 拒建批）——
-//   非对象 / managerPlan 非枚举 / auditLane、coordinatorLane 非非空字符串；
+//   非对象 / auditLane、coordinatorLane 非非空字符串；
 // roles 词法非法（词条非字符串、或不在合法角色集合 VALID_ROLES∪扩展）→ warnings（GATE_ROLE_INVALID，
 //   软告警不阻断建批；事件经既有 gate.role_invalid 通道留痕）。归一化 decl 供 createBatch 持久化（batch JSON 顶层可选字段）。
 // 复核补齐：assembly.roles 的词法判定**曾**接受团队声明的角色
@@ -184,20 +182,15 @@ export function normalizeAssemblyDecl(input, extraRoles = null) {
     if (input == null)
         return { decl: null, warnings: [] };
     if (typeof input !== 'object' || Array.isArray(input)) {
-        throw new Error('GATE_ASSEMBLY_INVALID: assembly must be an object { managerPlan, auditLane, coordinatorLane?, roles? } (got: ' + (Array.isArray(input) ? 'array' : typeof input) + ')');
+        throw new Error('GATE_ASSEMBLY_INVALID: assembly must be an object { auditLane, coordinatorLane?, roles? } (got: ' + (Array.isArray(input) ? 'array' : typeof input) + ')');
     }
     const raw = input;
     const warnings = [];
-    const mpRaw = raw.managerPlan ?? 'raise'; // 缺省 = raise（2026-09-14 用户裁决「Manager 见批即默认」；leader-direct 须显式写出）
-    if (mpRaw !== 'raise' && mpRaw !== 'leader-direct') {
-        throw new Error('GATE_ASSEMBLY_INVALID: assembly.managerPlan must be one of raise|leader-direct (got: ' + String(mpRaw) + ')');
-    }
-    const managerPlan = mpRaw; // 上方双字面量守卫已把 mpRaw 收窄为合法枚举 ⇒ 无需断言
     const auditLane = raw.auditLane;
     if (typeof auditLane !== 'string' || !auditLane.trim()) {
         throw new Error('GATE_ASSEMBLY_INVALID: assembly.auditLane must be a non-empty string (audit lane id, got: ' + String(auditLane) + ')');
     }
-    const decl = { managerPlan, auditLane: auditLane.trim() };
+    const decl = { auditLane: auditLane.trim() };
     const coordinatorLane = raw.coordinatorLane;
     if (coordinatorLane != null) {
         if (typeof coordinatorLane !== 'string' || !coordinatorLane.trim()) {
@@ -328,7 +321,7 @@ export function assemblyGate(tasks, decl) {
     if (decl == null) {
         return {
             code: 'GATE_ROLE_ASSEMBLY_MISSING',
-            message: "three-tier batch with an audit lane requires an assembly declaration — pass assembly: { managerPlan?: 'raise'|'leader-direct' (default raise), auditLane: '<audit lane id>' }",
+            message: "three-tier batch with an audit lane requires an assembly declaration — pass assembly: { auditLane: '<audit lane id>', coordinatorLane?, roles? }",
         };
     }
     return 'ok';

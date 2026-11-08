@@ -55,7 +55,7 @@ test('HOST-SIG 宿主链路：真实 wave_plan 工具建批 ⇒ 落盘 tasks[].s
     batchId: 'b-sig-host',
     team: 'engine-team',
     session: SID,
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
     tasks: [
       { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
       { id: 'e1', layer: 'exec', role: 'coder', deps: ['p1'], consume: ['plan/spec.md'], outputs: ['exec/e1.md'], cmd: 'run' },

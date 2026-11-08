@@ -55,7 +55,7 @@ function makeBatch(batchId, laneIds) {
     },
   ];
   const plan = buildWavePlan({ batchId, team: 'software-team', tasks });
-  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1', managerPlan: 'leader-direct' } });
+  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1' } });
   return store.readBatch(S, batchId);
 }
 

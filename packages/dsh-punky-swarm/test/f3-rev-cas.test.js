@@ -199,12 +199,12 @@ test('T-1/AC-3 旧文件（无 __rev）仍可写：undefined → 1 → 2，全�
 });
 
 // ── 同一逻辑动作内两次 commit 不自冲突 ────────────────────────────────────────
-test('T-1 同一逻辑动作内两次 commit 不自冲突（batch_phase 形态：markManagerRaised → setPhase）', () => {
+test('T-1 同一逻辑动作内两次 commit 不自冲突（appendEvent → setPhase）', () => {
   const root = tempRoot('f3-rev-multi-');
   const store = createStore(root);
   store.createBatch(S, { batchId: 'b-multi', wavePlan: planOf('b-multi'), phase: 'planning' });
   assert.equal(diskRev(root, 'b-multi'), 1);
-  store.markManagerRaised(S, 'b-multi', { agentId: 'mgr-1' }); // 第 1 次写
+  store.appendEvent(S, 'b-multi', 'probe.multi', {}); // 第 1 次写
   assert.equal(diskRev(root, 'b-multi'), 2);
   store.setPhase(S, 'b-multi', 'running'); // 第 2 次写（各自 readBatch ⇒ 拿到新鲜 rev）
   assert.equal(diskRev(root, 'b-multi'), 3, '第二次写必须成功（自冲突 = 回写缺失的直接症状）');

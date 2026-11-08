@@ -49,7 +49,7 @@ function seed() {
         { id: 'a1', layer: 'audit', consume: ['plan/spec.md', 'exec/e1.md'], produce: ['audit/a1.md'], outputs: ['audit/a1.md'], deps: ['e1'] },
       ],
     }),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   });
   store.appendEvent(SESS, BATCH, 'member.dispatch', { lane: 'e1', workerSessionId: 'sess-worker-t1' });
   const dir = path.join(root, 'sessions', SESS, 'artifacts', BATCH);

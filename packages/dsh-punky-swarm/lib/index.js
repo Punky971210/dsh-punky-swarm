@@ -44,7 +44,6 @@ import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilit
 //   方向 = 引擎 → provider 端口（J6：宿主差异只在 provider 内）；本文件不再读任何宿主服务名。
 import { createToolsPort } from './provider-dsh/tools-http.js';
 import { createAgentPort, agentChannelFactsOf } from './provider-dsh/agent.js';
-import { rosterTableReadyOf } from './tools/host-surface.js';
 import { createDiscoveryService } from './discovery/service.js';
 import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
@@ -1084,9 +1083,6 @@ export const apply = (ctx, config = {}) => {
     toolSurface: createToolsPort(ctx),
     httpSurface: createHttpPort(ctx),
     agentRuntime: agentPortForCapability,
-    // B 段：第 4 面（名册读取）。roster **不属于** `agentRuntime.channels` —— 读名册与派成员是两个动作。
-    // Q-E=乙：可用性判**自建表机制就绪**（与宿主有没有团队服务**无关**）⇒ 正常装配下恒 `available:true`。
-    rosterSource: rosterTableReadyOf(store),
   };
   const agentChannels = agentChannelFactsOf(ctx);
   rt.capabilities = capabilityReport({

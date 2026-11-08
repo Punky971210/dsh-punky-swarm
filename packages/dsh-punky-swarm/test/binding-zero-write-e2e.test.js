@@ -54,7 +54,7 @@ function bedOf(tag) {
     },
   ];
   const plan = buildWavePlan({ batchId, team: 'software-team', tasks });
-  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1', managerPlan: 'leader-direct' } });
+  store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1' } });
 
   // 产物种子：lane 迁移有 entry 门（GATE_ENTRY_MISSING: plan/spec.md）⇒ 必须先落下游要消费的产物
   seedArtifacts(root, S, batchId, ['e1', 'a1']);

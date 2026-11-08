@@ -63,11 +63,10 @@ function cplusTasks(execN, { coordinator = false } = {}) {
 }
 
 // §3.2 合规 assembly 值对象（DSL 编译断言与 core.js wave_plan 参数同形态；required 编译收集为布尔）。
-// 2026-09-14：`managerPlan` 由必填改为**可选**（引擎缺省 = raise，leader-direct 须显式写出）⇒ required 仅 auditLane。
+// 2026-11-08：`managerPlan` 随 Manager 角色整体删除 ⇒ 仅剩 auditLane（required）+ 两个可选键。
 const ASSEMBLY_VALUE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    managerPlan: { type: 'string', enum: ['raise', 'leader-direct'], description: '编排牵头形态（缺省 = raise）' },
     auditLane: { type: 'string', required: true, description: '验收归属 lane id' },
     coordinatorLane: { type: 'string', description: '可选' },
     roles: { type: 'array', items: { type: 'string' }, description: '可选' },
@@ -103,32 +102,21 @@ test('T1 纯函数：三层批（含 audit 层）缺 assembly → GATE_ROLE_ASSE
   assert.notEqual(r, 'ok');
   assert.equal(r.code, 'GATE_ROLE_ASSEMBLY_MISSING');
   assert.match(r.message, /three-tier batch with an audit lane requires an assembly declaration/);
-  assert.match(r.message, /pass assembly: \{ managerPlan\?: 'raise'\|'leader-direct' \(default raise\), auditLane: '<audit lane id>' \}/);
+  assert.match(r.message, /pass assembly: \{ auditLane: '<audit lane id>'/);
 });
 
-test('T2/T3 纯函数：C+ 带合规 assembly（raise/leader-direct + auditLane + coordinatorLane/roles）→ ok + 归一化', () => {
-  for (const managerPlan of ['raise', 'leader-direct']) {
-    const tasks = cplusTasks(3, { coordinator: true });
-    const { decl } = normalizeAssemblyDecl({ managerPlan, auditLane: 'a1', coordinatorLane: 'c1', roles: ['designer', 'coder', 'supervisor'] });
-    assert.equal(assemblyGate(tasks, decl), 'ok');
-  }
+test('T2/T3 纯函数：C+ 带合规 assembly（auditLane + coordinatorLane/roles）→ ok + 归一化', () => {
+  const tasks = cplusTasks(3, { coordinator: true });
+  const { decl } = normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 'c1', roles: ['designer', 'coder', 'supervisor'] });
+  assert.equal(assemblyGate(tasks, decl), 'ok');
 });
 
 test('normalizeAssemblyDecl：缺省/undefined → { decl: null, warnings: [] }；roles 合法大小写不敏感', () => {
   assert.deepEqual(normalizeAssemblyDecl(undefined), { decl: null, warnings: [] });
   assert.deepEqual(normalizeAssemblyDecl(null), { decl: null, warnings: [] });
-  const { decl, warnings } = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: ['Designer', 'Coder'] });
+  const { decl, warnings } = normalizeAssemblyDecl({ auditLane: 'a1', roles: ['Designer', 'Coder'] });
   assert.equal(warnings.length, 0);
-  assert.deepEqual(decl, { managerPlan: 'raise', auditLane: 'a1', roles: ['Designer', 'Coder'] }); // 词条大小写原样透传（词法判定不敏感）
-});
-
-test('managerPlan 缺省 = raise（2026-09-14 用户裁决「Manager 见批即默认」）；非法值仍拒', () => {
-  const { decl, warnings } = normalizeAssemblyDecl({ auditLane: 'a1' });
-  assert.equal(decl.managerPlan, 'raise', '省略 managerPlan ⇒ 引擎归一化为 raise（可核事实）');
-  assert.deepEqual(warnings, []);
-  assert.equal(normalizeAssemblyDecl({ managerPlan: 'leader-direct', auditLane: 'a1' }).decl.managerPlan, 'leader-direct', '显式 leader-direct 保留');
-  assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'bogus', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct \(got: bogus\)/);
-  assert.throws(() => normalizeAssemblyDecl({ managerPlan: '', auditLane: 'a1' }), /assembly\.managerPlan must be one of raise\|leader-direct/);
+  assert.deepEqual(decl, { auditLane: 'a1', roles: ['Designer', 'Coder'] }); // 词条大小写原样透传（词法判定不敏感）
 });
 
 test('T4 纯函数：必备判定按「含 audit 层」而非 exec 条数（扩面后口径）', () => {
@@ -147,38 +135,37 @@ test('T5 纯函数：generic 批（无 layer）缺 assembly / 带 assembly → o
   const generic = [{ id: 'x' }, { id: 'y', deps: ['x'] }];
   assert.equal(isCPlusBatch(generic), false);
   assert.equal(assemblyGate(generic, null), 'ok');
-  const { decl } = normalizeAssemblyDecl({ managerPlan: 'leader-direct', auditLane: 'x' });
+  const { decl } = normalizeAssemblyDecl({ auditLane: 'x' });
   assert.equal(assemblyGate(generic, decl), 'ok');
 });
 
 test('T6 纯函数：assembly 结构非法 → GATE_ASSEMBLY_INVALID throw（fail-closed）', () => {
   assert.throws(() => normalizeAssemblyDecl('raise'), /GATE_ASSEMBLY_INVALID: assembly must be an object/);
   assert.throws(() => normalizeAssemblyDecl([]), /GATE_ASSEMBLY_INVALID: assembly must be an object/);
-  assert.throws(() => normalizeAssemblyDecl({}), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/); // managerPlan 现缺省 raise ⇒ 缺 auditLane 仍拒
-  assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'bogus', auditLane: 'a1' }), /GATE_ASSEMBLY_INVALID: assembly\.managerPlan must be one of raise\|leader-direct \(got: bogus\)/);
-  assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
-  assert.throws(() => normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane must be a non-empty string/);
+  assert.throws(() => normalizeAssemblyDecl({}), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
+  assert.throws(() => normalizeAssemblyDecl({ auditLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
+  assert.throws(() => normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 7 }), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane must be a non-empty string/);
 });
 
 test('T7 纯函数：auditLane/coordinatorLane 悬空 lane id → GATE_ASSEMBLY_INVALID throw', () => {
   const tasks = cplusTasks(3);
-  const d1 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'nope' }).decl;
+  const d1 = normalizeAssemblyDecl({ auditLane: 'nope' }).decl;
   assert.throws(() => assemblyGate(tasks, d1), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "nope" does not match any task id/);
-  const d2 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'nope' }).decl;
+  const d2 = normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 'nope' }).decl;
   assert.throws(() => assemblyGate(tasks, d2), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "nope" does not match any task id/);
 });
 
 test('T12 纯函数：层错配拒建批（auditLane 非 audit 层 / coordinatorLane 非 plan 层 → GATE_ASSEMBLY_INVALID，spec §3.3/§3.5 结构前置）', () => {
   const tasks = cplusTasks(3); // p1=plan / e1..e3=exec / a1=audit
   // auditLane 指向 plan 层 / exec 层 lane
-  const dPlan = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'p1' }).decl;
+  const dPlan = normalizeAssemblyDecl({ auditLane: 'p1' }).decl;
   assert.throws(() => assemblyGate(tasks, dPlan), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "p1" must reference an audit-layer lane \(found layer: plan\)/);
-  const dExec = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'e1' }).decl;
+  const dExec = normalizeAssemblyDecl({ auditLane: 'e1' }).decl;
   assert.throws(() => assemblyGate(tasks, dExec), /must reference an audit-layer lane \(found layer: exec\)/);
   // coordinatorLane 指向 audit 层 / exec 层 lane（auditLane 合规为 audit 层 a1）
-  const dCoordAudit = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'a1' }).decl;
+  const dCoordAudit = normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 'a1' }).decl;
   assert.throws(() => assemblyGate(tasks, dCoordAudit), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "a1" must reference a plan-layer lane \(found layer: audit\)/);
-  const dCoordExec = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'e2' }).decl;
+  const dCoordExec = normalizeAssemblyDecl({ auditLane: 'a1', coordinatorLane: 'e2' }).decl;
   assert.throws(() => assemblyGate(tasks, dCoordExec), /must reference a plan-layer lane \(found layer: exec\)/);
   // 层归属不限于 C+：三层批 exec=2（<3）携带 assembly 层错配同样拒（fail-closed，§3.3 行无条件）
   assert.throws(() => assemblyGate(cplusTasks(2), dPlan), /assembly\.auditLane "p1" must reference an audit-layer lane/);
@@ -186,22 +173,22 @@ test('T12 纯函数：层错配拒建批（auditLane 非 audit 层 / coordinator
 });
 
 test('T8 纯函数：roles 词法非法 → GATE_ROLE_INVALID 告警（不 throw），批次仍可建', () => {
-  const r1 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: ['designer', 'bogus-role'] });
+  const r1 = normalizeAssemblyDecl({ auditLane: 'a1', roles: ['designer', 'bogus-role'] });
 assert.deepEqual(r1.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], '非法 roles 的告警码身份集合须恰为 GATE_ROLE_INVALID');
   assert.equal(r1.warnings[0].code, 'GATE_ROLE_INVALID');
   assert.match(r1.warnings[0].message, /assembly\.roles entry "bogus-role" is not a valid role/);
   assert.deepEqual(r1.decl.roles, ['designer']); // 非法词条剔除，合法保留
   assert.equal(assemblyGate(cplusTasks(3), r1.decl), 'ok');
   // 非字符串词条 / roles 非数组 → 告警
-  const r2 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: ['coder', 42] });
+  const r2 = normalizeAssemblyDecl({ auditLane: 'a1', roles: ['coder', 42] });
 assert.deepEqual(r2.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], '非法词条的告警码身份集合须恰为 GATE_ROLE_INVALID');
-  const r3 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: 'coder' });
+  const r3 = normalizeAssemblyDecl({ auditLane: 'a1', roles: 'coder' });
 assert.deepEqual(r3.warnings.map((w) => w.code), ['GATE_ROLE_INVALID'], 'roles 非数组的告警码身份集合须恰为 GATE_ROLE_INVALID');
   assert.match(r3.warnings[0].message, /assembly\.roles must be an array of role strings/);
   // 合法角色集合包含装配扩展（盲审三角色），不误报
   const ext = [...ROLE_WHITELIST].find((r) => !['coordinator', 'manager', 'designer', 'coder', 'tester', 'reviewer', 'supervisor', 'doc-manager'].includes(r));
   assert.ok(ext, 'ROLE_WHITELIST 含扩展角色');
-  const r4 = normalizeAssemblyDecl({ managerPlan: 'raise', auditLane: 'a1', roles: [ext] });
+  const r4 = normalizeAssemblyDecl({ auditLane: 'a1', roles: [ext] });
   assert.deepEqual(r4.warnings, []);
 });
 
@@ -229,7 +216,7 @@ test('T1 execute：三层批（含 audit 层）缺 assembly → reject（GATE_RO
 
 test('T2 execute：C+ 带合规 assembly → 通过 + batch JSON 顶层 assembly 持久化 + 返回含 assembly + warnings 无新增', async () => {
   const { root, store, byName } = makeHarness();
-  const decl = { managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'c1', roles: ['designer', 'coder', 'supervisor'] };
+  const decl = { auditLane: 'a1', coordinatorLane: 'c1', roles: ['designer', 'coder', 'supervisor'] };
   const out = await byName.wave_plan.execute({ batchId: 'cpa-t2', tasks: cplusTasks(3, { coordinator: true }), assembly: decl }, SESS);
   assert.equal(out.batchId, 'cpa-t2');
   assert.deepEqual(out.assembly, decl, '返回含归一化 assembly 视图');
@@ -247,8 +234,8 @@ test('T2 execute：C+ 带合规 assembly → 通过 + batch JSON 顶层 assembly
 
 test('T3 execute：C+ 带 leader-direct → 通过（枚举两值皆合法）', async () => {
   const { byName } = makeHarness();
-  const out = await byName.wave_plan.execute({ batchId: 'cpa-t3', tasks: cplusTasks(3), assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, SESS);
-  assert.deepEqual(out.assembly, { managerPlan: 'leader-direct', auditLane: 'a1' });
+  const out = await byName.wave_plan.execute({ batchId: 'cpa-t3', tasks: cplusTasks(3), assembly: { auditLane: 'a1' } }, SESS);
+  assert.deepEqual(out.assembly, { auditLane: 'a1' });
 });
 
 test('T4 execute：三层批（含 audit 层）缺 assembly → 拒建批（扩面口径）；无 audit 层的三层批=唯一不强制形态', async () => {
@@ -273,21 +260,21 @@ test('T5 execute：generic 批无 assembly 通过；带 assembly 亦通过（仅
   assert.equal('assembly' in g1, false);
   const raw1 = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-t5a'), 'utf8'));
   assert.equal('assembly' in raw1, false);
-  const g2 = await byName.wave_plan.execute({ batchId: 'cpa-t5b', tasks: [{ id: 'x' }, { id: 'y' }], assembly: { managerPlan: 'leader-direct', auditLane: 'x' } }, SESS);
-  assert.deepEqual(g2.assembly, { managerPlan: 'leader-direct', auditLane: 'x' });
+  const g2 = await byName.wave_plan.execute({ batchId: 'cpa-t5b', tasks: [{ id: 'x' }, { id: 'y' }], assembly: { auditLane: 'x' } }, SESS);
+  assert.deepEqual(g2.assembly, { auditLane: 'x' });
   const raw2 = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-t5b'), 'utf8'));
-  assert.deepEqual(raw2.assembly, { managerPlan: 'leader-direct', auditLane: 'x' });
+  assert.deepEqual(raw2.assembly, { auditLane: 'x' });
 });
 
 test('T6 execute：assembly 结构非法 → 拒建批（arg 校验宿主等价 ToolArgsError + 内部 fail-closed GATE_ASSEMBLY_INVALID），批次不落盘', async () => {
   const { root, byName } = makeHarness();
   // 宿主路径：defineTool 编译参数 DSL 后，execute 前 arg 校验即拒（与真宿主同一条校验路径——结构非法不进 execute）
   await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6a', tasks: cplusTasks(3), assembly: 'raise' }, SESS), /invalid arguments: "assembly" must be an object/);
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6b', tasks: cplusTasks(3), assembly: { managerPlan: 'bogus', auditLane: 'a1' } }, SESS), /invalid arguments: "assembly\.managerPlan" must be one of \["raise","leader-direct"\]/);
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6c', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 7 } }, SESS), /invalid arguments: "assembly\.auditLane" must be a string/);
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6d', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'a1', zzz: 1 } }, SESS), /invalid arguments: "assembly\.zzz" is not a declared property/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6b', tasks: cplusTasks(3), assembly: { auditLane: ['a1'] } }, SESS), /invalid arguments: "assembly\.auditLane" must be a string/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6c', tasks: cplusTasks(3), assembly: { auditLane: 7 } }, SESS), /invalid arguments: "assembly\.auditLane" must be a string/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6d', tasks: cplusTasks(3), assembly: { auditLane: 'a1', zzz: 1 } }, SESS), /invalid arguments: "assembly\.zzz" is not a declared property/);
   // 内部 fail-closed 路径：DSL 无法表达的形态（空/空白 auditLane 通过 arg 校验）→ execute 内 normalizeAssemblyDecl 抛 GATE_ASSEMBLY_INVALID
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6e', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: '' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t6e', tasks: cplusTasks(3), assembly: { auditLane: '' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane must be a non-empty string/);
   for (const id of ['cpa-t6a', 'cpa-t6b', 'cpa-t6c', 'cpa-t6e']) {
     assert.equal(fs.existsSync(batchFileOf(root, 'sess-cpa', id)), false, '拒建批：' + id + ' 无批次 JSON 落盘');
   }
@@ -295,15 +282,15 @@ test('T6 execute：assembly 结构非法 → 拒建批（arg 校验宿主等价 
 
 test('T7 execute：assembly 悬空 lane id → reject（GATE_ASSEMBLY_INVALID）', async () => {
   const { root, byName } = makeHarness();
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t7', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'no-such-lane' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "no-such-lane" does not match any task id/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t7', tasks: cplusTasks(3), assembly: { auditLane: 'no-such-lane' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "no-such-lane" does not match any task id/);
   assert.equal(fs.existsSync(batchFileOf(root, 'sess-cpa', 'cpa-t7')), false);
 });
 
 test('T12 execute：层错配（auditLane 非 audit 层 / coordinatorLane 非 plan 层）→ 拒建批（GATE_ASSEMBLY_INVALID），批次不落盘', async () => {
   const { root, byName } = makeHarness();
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12a', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'p1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "p1" must reference an audit-layer lane \(found layer: plan\)/);
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12b', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'e1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "e1" must reference a plan-layer lane \(found layer: exec\)/);
-  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12c', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'a1', coordinatorLane: 'a1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "a1" must reference a plan-layer lane \(found layer: audit\)/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12a', tasks: cplusTasks(3), assembly: { auditLane: 'p1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.auditLane "p1" must reference an audit-layer lane \(found layer: plan\)/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12b', tasks: cplusTasks(3), assembly: { auditLane: 'a1', coordinatorLane: 'e1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "e1" must reference a plan-layer lane \(found layer: exec\)/);
+  await assert.rejects(() => byName.wave_plan.execute({ batchId: 'cpa-t12c', tasks: cplusTasks(3), assembly: { auditLane: 'a1', coordinatorLane: 'a1' } }, SESS), /GATE_ASSEMBLY_INVALID: assembly\.coordinatorLane "a1" must reference a plan-layer lane \(found layer: audit\)/);
   for (const id of ['cpa-t12a', 'cpa-t12b', 'cpa-t12c']) {
     assert.equal(fs.existsSync(batchFileOf(root, 'sess-cpa', id)), false, '层错配拒建批：' + id + ' 无批次 JSON 落盘');
   }
@@ -311,7 +298,7 @@ test('T12 execute：层错配（auditLane 非 audit 层 / coordinatorLane 非 pl
 
 test('T8 execute：roles 词条非法 → 告警（GATE_ROLE_INVALID warning + gate.role_invalid 事件），批次照建', async () => {
   const { root, byName } = makeHarness();
-  const out = await byName.wave_plan.execute({ batchId: 'cpa-t8', tasks: cplusTasks(3), assembly: { managerPlan: 'raise', auditLane: 'a1', roles: ['coder', 'bogus-role'] } }, SESS);
+  const out = await byName.wave_plan.execute({ batchId: 'cpa-t8', tasks: cplusTasks(3), assembly: { auditLane: 'a1', roles: ['coder', 'bogus-role'] } }, SESS);
   assert.ok(out.lanes.a1 === 'pending', '批次照建');
   assert.ok(out.warnings.some((w) => w.code === 'GATE_ROLE_INVALID' && /bogus-role/.test(w.message)), 'roles 告警并入返回 warnings');
   const raw = JSON.parse(fs.readFileSync(batchFileOf(root, 'sess-cpa', 'cpa-t8'), 'utf8'));

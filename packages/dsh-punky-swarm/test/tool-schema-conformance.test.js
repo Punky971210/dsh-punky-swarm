@@ -67,7 +67,6 @@ async function makeHarness() {
       assembly: { auditLane: auditId }, concurrency: 3,
     }, EXEC);
     await byName.batch_phase.execute({ batchId, phase: 'running' }, EXEC);
-    await byName.batch_phase.execute({ batchId, manager: { agentId: 'mgr-census' } }, EXEC);
     seedArtifacts(root, SESSION, batchId, lanes === 2 ? ['e1'] : ['x1']);
   };
   await mk('census-1', 2);

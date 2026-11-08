@@ -99,7 +99,7 @@ function seedArtifact(h, batchId, rel, body = 'out') {
 }
 
 async function mkBatch(h, batchId, { smoke = false, tasks = tasksChain() } = {}) {
-  const args = { batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks, assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } };
+  const args = { batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks, assembly: { auditLane: 'a1' } };
   if (smoke) args.smoke = true;
   const out = await h.byName.wave_plan.execute(args, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
@@ -237,7 +237,7 @@ test('P2-6 策略态回显 + P2-B 标注：batch_status 给出 handoffGate 实�
       '出口门策略态须二值可辨：' + JSON.stringify(st.handoffGate));
     assert.equal(st.stateSource, 'engine', 'P2-B：引擎侧成员态投影须标 source=engine');
     assert.equal(st.memberStatesLegacy, true, 'P2-B：八态须标 legacy（真源 = 官方 roster 5 态）');
-    assert.equal(st.managerRoster?.source, 'engine-registry', 'R-1：顶层 source = 在册真源标签（引擎自建表）；成员态标注见 stateSource/memberStatesLegacy');
+    // Manager/Roster 面已整体删除（调度真源 = 任务黑板）⇒ 不再有顶层 managerRoster 回显
     // 未开启时 `settle` 必须是 observation（缺省关 = 策略，非隐形）
     assert.equal(st.handoffGate.enabled, false, '前置：本进程未择入 ⇒ enabled=false');
     assert.equal(st.handoffGate.settle, 'observation', '未开启 ⇒ 出口门为观察态（不拦）');
@@ -268,6 +268,5 @@ test('P2-7 新增回显字段的 schema 一致性：batch_status 单批形态与
     assert.equal(typeof single.handoffGate, 'object', 'handoffGate 须为 object');
     assert.equal(typeof single.handoffGate.enabled, 'boolean', 'handoffGate.enabled 须为 boolean');
     assert.equal(typeof single.handoffGate.source, 'string', 'handoffGate.source 须为 string');
-    assert.equal(typeof single.managerRoster?.source, 'string', 'managerRoster.source 须为 string（roster 面标注）');
   } finally { cleanup(h); }
 });

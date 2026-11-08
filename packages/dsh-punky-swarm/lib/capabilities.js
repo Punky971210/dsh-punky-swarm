@@ -18,14 +18,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { CAPABILITY_REGISTRY, readCapability } from './assembly/schema.js';
 
-export const HOST_FACE_KEYS = ['toolSurface', 'httpSurface', 'agentRuntime', 'rosterSource'];
+export const HOST_FACE_KEYS = ['toolSurface', 'httpSurface', 'agentRuntime'];
 
 /**
  * 各面**`available:false` 时的成因词**覆盖（缺省 = `'face-unavailable: <面名>'`）。
  *
- * **Q-E=乙 后本表为空**：原先 `rosterSource` 复用 `'service-unavailable'`（因为那时它探宿主团队服务）；
- *   现在该面判**自建表就绪**（`lib/tools/host-surface.js#rosterTableReadyOf`），成因由端口自己给
- *   （`'roster-table-unwired: …'`），端口成因**优先** ⇒ 此覆盖不再需要，留空表作为将来的扩展位。
+ * **Q-E=乙 后本表为空**：成因一律由端口自己给，本表留空作为将来的扩展位。
  */
 const FACE_UNAVAILABLE_REASON = {};
 

@@ -287,7 +287,7 @@ test('T-W4 装配声明静态回显（2026-09-27 批 3 反转）：`assembly.cha
 test('T-W3 人话映射：≥12 类事件返回 locale key；未知 type ⇒ key:null（不伪人话）', () => {
   const types = [
     'member.settled', 'member.dispatch', 'gate.exit_blocked', 'gate.needhuman_blocked', 'gate.passed',
-    'lane.handoff', 'lane.handoff.gap', 'batch.created', 'batch.phase', 'batch.manager.raised',
+    'lane.handoff', 'lane.handoff.gap', 'batch.created', 'batch.phase',
     'lane.needhuman', 'lane.stalled', 'swarm.report', 'governance.refusal',
     'auto.settle.triggered', 'worktree.created',
   ];
@@ -468,7 +468,7 @@ test('T-P1 面板消费的服务端键在 panel 段内全部有读取点（无�
   //   原清单 8 键含 `teamAsset` / `chain`。两键已分别随 **T-7**（资产回显面删除）与 **D-4**（链回显面删净）
   //   从服务端删净 ⇒ 真值反转：由「**必须有**读点」改为「**不得有**读点」（严格缺席判定）。
   //   断言强度不减：正向 6 键逐一在场 + 负向 2 键逐一缺席（原 8 条正向 → 现 6 正向 + 2 负向，条数不变）。
-  for (const key of ['danglingLanes', 'handoffs', 'teamAsset', 'assembly', 'manager', 'smoke', 'lanesGate']) {
+  for (const key of ['danglingLanes', 'handoffs', 'teamAsset', 'assembly', 'smoke', 'lanesGate']) {
     assert.ok(detail.indexOf(key) >= 0, 'panel 段未消费服务端键: ' + key);
   }
   // `teamAsset` **仍在**必检清单内：其面板读点未删（`lib/api.js:133` 的历史兼容读端与面板读法成对，

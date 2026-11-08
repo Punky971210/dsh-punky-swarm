@@ -26,7 +26,6 @@ export const EVT_BATCH_PHASE = 'batch.phase';
 export const EVT_BATCH_FAILED_ESCALATE = 'batch.failed-escalate';
 //   载荷：`{ danglingLanes: [laneId...], count }`（载荷键纪律：`type` 键承载**事件名**，载荷**不得**占用它）。
 export const EVT_BATCH_ABORT_DANGLING = 'batch.abort_dangling';
-export const EVT_BATCH_MANAGER_RAISED = 'batch.manager.raised';
 //   载荷：`{ batchId }`（载荷键纪律：`type` 键承载事件名，载荷不得占用）。
 export const EVT_BATCH_SMOKE = 'batch.smoke';
 export const EVT_ARCHIVE_FAILED = 'archive.failed';
@@ -46,7 +45,6 @@ export const EVT_LANE_STALLED = 'lane.stalled';
 export const EVT_LANE_LONGRUN_CANDIDATE = 'lane.longrun.candidate';
 // **不得**用 readUnacked——ack 默认删原消息文件，会把「已消费」读成「不存在」→ 永久误报）→ 产本事件。
 export const EVT_LANE_LONGRUN_UNCONSUMED = 'lane.longrun.unconsumed';
-export const EVT_GATE_MANAGER_ROSTER_GAP = 'gate.manager_roster_gap';
 // 载荷键纪律：`newEvent(type, fields)` 的 `type` 键承载**事件名**（本文件常量），载荷字段**不得**占用它——
 export const EVT_LANE_EXEMPT_GRANTED = 'lane.exempt.granted';
 //  `exemptClearedAtOf` 按同一字面量反查 ⇒ 改值即静默断链，属红线）。

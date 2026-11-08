@@ -52,7 +52,6 @@ export function buildHandoff(cx) {
       ? raw.rosterNames.filter((n) => typeof n === 'string' && n.trim().length).map((n) => n.trim())
       : [];
     if (callerSessionId && callerSessionId === batch.sessionId) return { ok: true, role: 'owner' };
-    if (callerSessionId && batch.manager && batch.manager.agentId === callerSessionId) return { ok: true, role: 'manager' };
     const dispatchLanes = workerLanesOf(batch, callerSessionId);
     if (dispatchLanes.length) {
       if (!from) return { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };
@@ -70,7 +69,7 @@ export function buildHandoff(cx) {
       if (!from) return { ok: false, role: 'roster', allowedFrom: rosterLanes };
       return rosterLanes.includes(from) ? { ok: true, role: 'roster' } : { ok: false, role: 'roster', allowedFrom: rosterLanes };
     }
-    return { ok: false, role: 'unresolved', allowedFrom: [], resolution: 'no-owner/manager/dispatch/roster match' };
+    return { ok: false, role: 'unresolved', allowedFrom: [], resolution: 'no-owner/dispatch/roster match' };
   }
   function recordHandoff(sessionId, batchId, { from, to, artifacts, assertions, officialTaskId = null, overwrite = false, caller = null } = {}) {
     const batch = readBatch(sessionId, batchId);
@@ -94,7 +93,7 @@ export function buildHandoff(cx) {
     if (!auth.ok) {
       if (auth.role === 'unresolved') {
         return fail(
-          ['调用方身份不可解析（既非批 owner / 已登记 Manager，又无 member.dispatch 绑定、无 lane.roster 命中）⇒ fail-closed 拒（不猜、不静默）'],
+          ['调用方身份不可解析（既非批 owner，又无 member.dispatch 绑定、无 lane.roster 命中）⇒ fail-closed 拒（不猜、不静默）'],
           ['caller-identity'],
           { code: HANDOFF_IDENTITY_UNKNOWN, callerRole: 'unresolved', write: false },
         );

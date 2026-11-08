@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 归属（J6 / R-2 三层职责）：宿主服务名只允许出现在**本目录**；引擎只向适配层要「名册功能」，
 //   不得知道宿主服务叫什么、以何形态取到。
 //   · `read()`          → 成员清单，**仅用于与内建职位名表对账**，不得作为在册权威
-//                        （在册真源 = 引擎自建表 `batch.managerSeat`，`source:'engine-registry'`）；
+//    （宿主名册只用于身份读端；引擎侧不再维护任何席位登记表）
 import { serviceOf } from './tools-http.js';
 
 export const ROSTER_QUERY_FAILED = 'roster-query-failed:';

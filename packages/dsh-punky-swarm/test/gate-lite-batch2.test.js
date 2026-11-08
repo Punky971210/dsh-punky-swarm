@@ -15,131 +15,18 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// gate-lite 第二批：A2（Manager 承抽官方 roster 的**读端**）+ C（删 `「团队资产缺失」码(已删)` 死码）
-//   + E（三处写域外残留清理）。
-//
-// 覆盖：
-//   T1/T2（A2 读端 · 四级可辨）：`ctx.get('agentTeams')` 命中且 roster 有约定名 `manager` ⇒ `inRoster:true`；
-//        roster 可读但无该成员 ⇒ `inRoster:false` **且落 1 条 `gate.manager_roster_gap`**（本批事实）；
-//        service 不可用 ⇒ `reason:'service-unavailable'`（基线态，回显承担可读性、不落事件）；
-//        调用抛错 ⇒ `reason:'not-a-team-member: …'`（异常态，回显、不落事件）。
-//   T3（A2 读端 · batch_status）：`managerRoster` 与 legacy `batch.manager` 并列回显（新批以 roster 为准，旧批字段可读）。
-//   T4（C 防回生）：`code: '「团队资产缺失」码(已删)'` 的**生产形态**只允许出现在 `lib/assembly/flows.js`
-//        （写域外仅存的一处 legacy escalation 载荷）——若在建批告警发射面（`lib/tools/**`）重现 ⇒ 本断言红。
-//   T5（E①/E②）：`lib/engine/dispatch.js` 不再导出 `UNBOUND_REPORT_CODE`；枚举/生成物不再含
-//        `'GATE_SWARM_UNBOUND_REPORT'`（生产形态 `| '…'`）。
-//   T6（E③）：`presets/punky-preset/references/discipline.md` 不再有「未绑定即拒」旧口径。
+// gate-lite 第二批：仅剩 E③（`presets/punky-preset/references/discipline.md` 旧口径文本订正）。
+//   【2026-11-08 裁撤】A2（Manager 承抽官方 roster 的读端）四条用例随「独立 Manager 成员」整层删除一并移除：
+//   被测面 `wave_plan.managerPlan` / `wave_plan.managerRoster` / `batch_status.managerRoster` /
+//   事件 `gate.manager_roster_gap` 均已不存在；随之失去用途的夹具（rosterService / threeTier / buildBatch /
+//   makeHarness / mkCtx）同期清除，保留 `scan` 辅助函数与 T6。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTools } from '../lib/tools/register.js';
-import { createStore } from '../lib/state/store.js';
-import * as EVT from '../lib/state/event-types.js';
-import { assessC } from './helpers/gate-fixture.mjs';
-// 【2026-09-27 批 3 · T-15/D-6 归因（去退役前置）】原 `import { writeTempTeam } from './helpers/team-fixture.mjs'`
-//   已删：该夹具读包内真实骨架 `presets/<team>/team-asset.{json,yml}`，5 件资产已删（T-4/A-9）⇒ 调用即抛；
-//   且 `teamsRoot` 参数本身已退役（D-3，`wave_plan.parameters` 删除）。A2 roster 读端命题与团队资产**无关**
-//   ⇒ 处置 = 去掉退役前置（不再造根、不再传 `teamsRoot`），**断言一字未动**。
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SESS = { agent: { session: { id: 'sess-b2' } } };
-const SID = SESS.agent.session.id;
-
-function mkCtx(rosterService) {
-  const ctx = { tools: { register() {}, guard() {} }, logger: { warn() {}, info() {}, error() {} } };
-  if (rosterService !== undefined) ctx.get = () => rosterService;
-  return ctx;
-}
-
-function makeHarness(prefix, rosterService) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const store = createStore(root);
-  const ctx = mkCtx(rosterService);
-  const tools = createTools(ctx, { store, root });
-  const byName = Object.fromEntries(tools.tools.map((t) => [t.name, t]));
-  assessC(store, SID, { rationale: 'fixture：gate-lite 第二批 A2 roster 读端套件（三层批 ⇒ C 档）' });
-  return { root, store, byName };
-}
-
-
-// 三层批（含 audit lane）⇒ assembly 必备 ⇒ `managerPlan` 缺省 `raise` ⇒ 触发 A2 消费点
-const threeTier = () => [
-  { id: 'p1', layer: 'plan', role: 'designer', produce: ['plan/spec.md'], cmd: 'spec' },
-  { id: 'e1', layer: 'exec', role: 'coder', consume: ['plan/spec.md'], outputs: ['exec/e1/o.md'], deps: ['p1'], cmd: 'code' },
-  { id: 'a1', layer: 'audit', role: 'supervisor', consume: ['plan/spec.md', 'exec/e1/o.md'], produce: ['audit/a.md'], deps: ['e1'], cmd: 'accept' },
-];
-
-async function buildBatch(byName, batchId) {
-  return await byName.wave_plan.execute({
-    batchId, team: 'probe-team', tasks: threeTier(), assembly: { auditLane: 'a1' },
-  }, SESS);
-}
-
-const rosterService = (names) => ({ listMembers: () => names.map((n, i) => ({ id: 'sess-' + i, name: n, role: n === 'lead' ? 'lead' : 'teammate', status: 'running' })) });
-
-test('T1 A2：roster 命中约定名 manager ⇒ inRoster:true 且不落 gap 事件', async () => {
-  const { store, byName } = makeHarness('punky-b2-t1-', rosterService(['lead', 'manager']));
-  const out = await buildBatch(byName, 'b2-ok');
-  assert.equal(out.managerPlan, 'raise', 'assembly.managerPlan 缺省 raise 随返回值回显');
-  assert.equal(out.managerRoster.ok, true);
-  assert.equal(out.managerRoster.source, 'roster');
-  assert.equal(out.managerRoster.inRoster, true, '约定名 manager 在册');
-  assert.equal(out.managerRoster.rosterName, 'manager');
-  assert.equal(out.managerRoster.member.name, 'manager');
-  const evs = store.readBatch(SID, 'b2-ok').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP);
-  assert.equal(evs.length, 0, '在册 ⇒ 不落 gate.manager_roster_gap');
-});
-
-test('T2 A2：roster 可读但无 manager ⇒ inRoster:false + 落 1 条 gate.manager_roster_gap（可核事实，非拒态）', async () => {
-  const { store, byName } = makeHarness('punky-b2-t2-', rosterService(['lead', 'worker']));
-  const out = await buildBatch(byName, 'b2-gap');
-  assert.equal(out.managerRoster.ok, true);
-  assert.equal(out.managerRoster.inRoster, false, '无约定名 manager');
-  assert.equal(out.managerRoster.member, null);
-  const evs = store.readBatch(SID, 'b2-gap').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP);
-  assert.deepEqual(evs.map((e) => e.type), [EVT.EVT_GATE_MANAGER_ROSTER_GAP],
-    '声明 raise 而 roster 无 Manager ⇒ 留痕须恰为该事件一条（实际: ' + JSON.stringify(evs.map((e) => e.type)) + '）');
-  assert.equal(evs[0].rosterName, 'manager');
-  assert.equal(evs[0].managerPlan, 'raise');
-  assert.equal(EVT.EVT_GATE_MANAGER_ROSTER_GAP, 'gate.manager_roster_gap', '事件字面量（单点常量）');
-});
-
-test('T2b A2 降级：service 不可用 ⇒ service-unavailable（基线态，不落事件）；调用抛错 ⇒ not-a-team-member（异常态，不落事件）', async () => {
-  // ① ctx 无 get（非官方宿主 / 单测 mock）：基线态 —— 回显承担可读性，不落批次事件
-  const noSvc = makeHarness('punky-b2-t2b1-', undefined);
-  const o1 = await buildBatch(noSvc.byName, 'b2-nosvc');
-  assert.equal(o1.managerRoster.ok, false);
-  assert.equal(o1.managerRoster.reason, 'service-unavailable');
-  assert.equal(noSvc.store.readBatch(SID, 'b2-nosvc').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP).length, 0);
-  // ② service 在册但调用抛错（调用方非 Team 成员）：异常态 —— 回显 reason，同样不落批次事件
-  const throwing = { listMembers: () => { throw new Error('not a team member'); } };
-  const thr = makeHarness('punky-b2-t2b2-', throwing);
-  const o2 = await buildBatch(thr.byName, 'b2-throw');
-  assert.equal(o2.managerRoster.ok, false);
-  assert.match(o2.managerRoster.reason, /^not-a-team-member:/);
-  assert.equal(thr.store.readBatch(SID, 'b2-throw').events.filter((e) => e.type === EVT.EVT_GATE_MANAGER_ROSTER_GAP).length, 0);
-});
-
-test('T3 A2 读端：batch_status 回显 managerRoster（roster 优先）与 legacy batch.manager 并列', async () => {
-  const { store, byName } = makeHarness('punky-b2-t3-', rosterService(['lead']));
-  store.createBatch(SID, { batchId: 'b2-view', wavePlan: { schema: 1, team: 'probe-team', concurrency: 1, wavePlan: [{ wave: 1, tasks: [{ id: 'p1' }] }] } });
-  const v0 = await byName.batch_status.execute({ batchId: 'b2-view' }, SESS);
-  assert.ok(v0.managerRoster, 'managerRoster 键恒在（读端可核，不是隐性判定）');
-  assert.equal(v0.managerRoster.roster.ok, true);
-  assert.equal(v0.managerRoster.roster.inRoster, false, 'roster 只有 lead ⇒ 不在册');
-  assert.equal(v0.managerRoster.managerPlan, null, '无 assembly ⇒ managerPlan null');
-  assert.equal(v0.managerRoster.legacy, null, '未登记 ⇒ legacy 为 null');
-
-  // legacy 登记路径（旧批/离线写入）仍可用 ⇒ 读端并列回显；R1-3 起**在册判定读引擎自建表**（legacy 写入同样入表）
-  store.markManagerRaised(SID, 'b2-view', { agentId: 'mgr-legacy' });
-  const v1 = await byName.batch_status.execute({ batchId: 'b2-view' }, SESS);
-  assert.equal(v1.managerRoster.legacy.agentId, 'mgr-legacy', 'legacy 字段可读（兼容面）');
-  assert.equal(v1.managerRoster.roster.inRoster, true, 'R1-3 翻转：读引擎自建表（markManagerRaised 同时写 managerSeat）⇒ 表在册即算在册；roster 无 manager 分支不再参与判定');
-  assert.equal(v1.manager.agentId, 'mgr-legacy', '既有 batch.manager 回显逐字不变');
-});
 
 // ── 静态面（防回生 / 残留清理）────────────────────────────────────────────
 function scan(dir, re, exts = ['.js', '.ts']) {

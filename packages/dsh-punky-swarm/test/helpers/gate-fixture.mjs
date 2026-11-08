@@ -159,7 +159,6 @@ export function runLane(store, session, batchId, lane) {
 //       的恢复路径由 `reject()` 降级为告警放行）。
 // 纪律（本组 helper 的硬要求）：**走与真实工具相同的写入路径/同一函数**，不手写裸 JSON 绕过校验——
 //   · `assessC` 用 `store.writeGovernance`（`assign_check` 的同一写入函数，同一 `lastAssign` 形状）；
-//   · `registerManager` 直接委托 `store.markManagerRaised`（`batch_phase({manager})` 的唯一入口）。
 
 /** G1 种子：把会话治理状态写成「已评估为 C 档」（等价 `assign_check({difficulty:'C', ...})` 的落盘形态）。
  *  【本批 `d-override-fix-20261011` · AC-6】新增 `derivedChannel` / `overrideKind` 两键 ⇒ 与引擎实际落盘形态
@@ -179,9 +178,10 @@ export function assessC(store, session, { rationale = 'fixture：建批/成员�
   return next.lastAssign;
 }
 
-/** G2 种子：登记该批的 Manager（委托 `store.markManagerRaised`，与 `batch_phase({manager})` 同一入口）。 */
-export function registerManager(store, session, batchId, agentId = 'mgr-1', note = undefined) {
-  return store.markManagerRaised(session, batchId, note ? { agentId, note } : { agentId });
+/** G2 种子：登记该批的 Manager —— Manager 角色已整体删除（调度真源 = 任务黑板），本函数仅为**遗留调用点**
+ *  提供 no-op 兼容（返回 null），待调用点清零后一并删除。 */
+export function registerManager() {
+  return null;
 }
 
 // ── 【F3 收敛】跨套件原语（夹具审计 §3.3「必合档」；2026-09-21）─────────────────────────

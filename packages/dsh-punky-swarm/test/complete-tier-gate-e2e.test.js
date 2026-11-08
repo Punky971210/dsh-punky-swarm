@@ -98,7 +98,7 @@ function seedTierFiles(root, batchId) {
 async function buildRunningBatch(byName, root, batchId, tasks) {
   const out = await byName.wave_plan.execute({
     batchId, team: TEAM, tasks,
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   }, SESS);
   assert.equal(out.batchId, batchId, '建批成功（夹具前提；失败则本用例的拒因不可归因）');
   await byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
@@ -156,7 +156,7 @@ test('R3-1-A2：对偶——有 exec 必有 audit 在**建批期**先拦（主�
   await assert.rejects(
     () => byName.wave_plan.execute({
       batchId, team: TEAM, tasks: tasksNoAudit,
-      assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+      assembly: { auditLane: 'a1' },
     }, SESS),
     /three-tier: exec layers require at least one audit lane/,
     '建批期即拒（`lib/wave-plan.ts` validateLayerContract）⇒ A1 的形态不可能由正常建批产生',

@@ -96,7 +96,7 @@ const eventsOf = (store, batchId) => (store.readBatch(SESSION, batchId)?.events 
 function mkBatch(h, batchId, { rosterOf } = {}) {
   const plan = buildWavePlan({
     batchId, tasks: tasks({ rosterOf }), team: TEAM,
-    assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
+    assembly: { auditLane: 'a1' },
   });
   h.store.createBatch(SESSION, { batchId, wavePlan: plan, teamsRoot: h.teamsRoot });
   return plan;

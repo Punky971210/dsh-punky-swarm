@@ -193,11 +193,11 @@
       "todos": 0
     },
     "test/assembly-gate.test.js": {
-      "asserts": 92,
-      "blankLines": 39,
-      "lines": 363,
+      "asserts": 86,
+      "blankLines": 38,
+      "lines": 350,
       "tautologies": 0,
-      "tests": 23,
+      "tests": 22,
       "todos": 0
     },
     "test/assembly-refinements.test.js": {
@@ -841,11 +841,11 @@
       "todos": 0
     },
     "test/gate-lite-batch2.test.js": {
-      "asserts": 30,
-      "blankLines": 20,
-      "lines": 165,
+      "asserts": 2,
+      "blankLines": 9,
+      "lines": 52,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 1,
       "todos": 0
     },
     "test/gate-lite-smoke.test.js": {
@@ -1057,11 +1057,11 @@
       "todos": 0
     },
     "test/governance.test.js": {
-      "asserts": 254,
-      "blankLines": 54,
-      "lines": 868,
+      "asserts": 226,
+      "blankLines": 53,
+      "lines": 790,
       "tautologies": 0,
-      "tests": 33,
+      "tests": 32,
       "todos": 0
     },
     "test/handoff-authz.test.js": {
@@ -1336,30 +1336,6 @@
       "tests": 3,
       "todos": 0
     },
-    "test/manager-seat-face.test.js": {
-      "asserts": 23,
-      "blankLines": 19,
-      "lines": 155,
-      "tautologies": 0,
-      "tests": 6,
-      "todos": 0
-    },
-    "test/manager-seat-inroster.test.js": {
-      "asserts": 20,
-      "blankLines": 12,
-      "lines": 108,
-      "tautologies": 0,
-      "tests": 6,
-      "todos": 0
-    },
-    "test/manager-seat.test.js": {
-      "asserts": 34,
-      "blankLines": 27,
-      "lines": 193,
-      "tautologies": 0,
-      "tests": 7,
-      "todos": 0
-    },
     "test/mcp-data-plane.test.js": {
       "asserts": 71,
       "blankLines": 42,
@@ -1465,9 +1441,9 @@
       "todos": 0
     },
     "test/p2-settle-handoff.test.js": {
-      "asserts": 36,
+      "asserts": 34,
       "blankLines": 23,
-      "lines": 274,
+      "lines": 273,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -1696,14 +1672,6 @@
       "tests": 7,
       "todos": 0
     },
-    "test/roster-source-face.test.js": {
-      "asserts": 14,
-      "blankLines": 14,
-      "lines": 94,
-      "tautologies": 0,
-      "tests": 4,
-      "todos": 0
-    },
     "test/roster-unknown.test.js": {
       "asserts": 33,
       "blankLines": 28,
@@ -1867,17 +1835,17 @@
     "test/tool-schema-conformance.test.js": {
       "asserts": 18,
       "blankLines": 23,
-      "lines": 397,
+      "lines": 396,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
     },
     "test/tools.test.js": {
-      "asserts": 133,
-      "blankLines": 52,
-      "lines": 662,
+      "asserts": 108,
+      "blankLines": 44,
+      "lines": 500,
       "tautologies": 0,
-      "tests": 28,
+      "tests": 23,
       "todos": 0
     },
     "test/topic-attach.test.js": {
@@ -2137,7 +2105,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T10:08:47Z",
+  "generatedAt": "2026-11-08T10:24:57Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2148,15 +2116,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/①-3+①-4：删 agent 端口四个零调用透传方法（send/wait/list/interrupt）；tools-http 三层探针收敛为 probeTool 单面",
+  "reason": "Manager 角色整层删除（M1+M2）：写点/权限/装配声明/在册核验/能力面/输出面；删 4 个 Manager 专属测试文件、A2 与 G2 用例块、批量摘 managerPlan 夹具",
   "schema": 1,
   "totals": {
-    "asserts": 11943,
-    "blankLines": 6791,
-    "files": 267,
-    "lines": 71566,
+    "asserts": 11763,
+    "blankLines": 6698,
+    "files": 263,
+    "lines": 70648,
     "tautologies": 0,
-    "tests": 2498,
+    "tests": 2464,
     "todos": 0
   }
 }

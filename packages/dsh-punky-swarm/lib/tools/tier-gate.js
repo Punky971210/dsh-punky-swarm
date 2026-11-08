@@ -53,16 +53,12 @@ export function assertMemberActionTierC(store, sessionId, exec, action, opts = {
   const caller = exec?.agent?.session?.id ?? null;
   const own = tierOf(caller ?? sessionId);                  // 判据落在**调用方**，不落批归属会话（否则 worker 借 C 档批会话绕过）
   if (own === 'C' || own === 'D') return;
-  const batchId = opts.batchId ?? null;
-  if (action !== 'batch' && batchId) {
-    const b = store.readBatch(sessionId, batchId);
-    if (b && b.manager && caller && b.manager.agentId === caller) return;
-  }
   throw new Error(code + ': ' + what + ' 只允许出现在 **C 档**会话（本会话档位 = ' + String(own ?? '未评估')
     + (caller && caller !== sessionId ? '，批归属会话 = ' + sessionId : '') + '）——'
-    + '成员协作只有一条轨道：Leader 先 assign_check({ difficulty: "C" 或 "D", rationale }) 再 wave_plan 建批 → **建批即拉起 Manager** → '
-    + '由 Manager/Leader 按批内流程派发与结算。**成员仅作为会话存在，不可写成员状态**（2026-09-15 用户裁决 Q2=B）；'
-    + 'A/B 档 subagent 仅限「不占主上下文的调研」或「已明确上下文的单步派发」，不得承担成员施工、不得建批、不得写成员状态。');
+    + '成员协作只有一条轨道：Leader 先 assign_check({ difficulty: "C" 或 "D", rationale }) 再 wave_plan 建批 → '
+    + '按批内流程派发与结算（调度真源 = 任务黑板 `batch.lanes` / `batch.wavePlan`）。**成员仅作为会话存在，不可写成员状态**'
+    + '（2026-09-15 用户裁决 Q2=B）；A/B 档 subagent 仅限「不占主上下文的调研」或「已明确上下文的单步派发」，'
+    + '不得承担成员施工、不得建批、不得写成员状态。');
 }
 
 export function readLiveConfig(deps) {

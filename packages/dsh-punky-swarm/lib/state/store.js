@@ -222,7 +222,7 @@ function composeStore(cx) {
     setMember, setPhase, appendEvent, claimAsset,
     commitBatchLocked,
     addPoolTasks, addTaskEdges,
-    recordHandoff, recordHandoffAccept, markManagerRaised, recordGovernanceRefusal,
+    recordHandoff, recordHandoffAccept, recordGovernanceRefusal,
     readChains, updateChains, updateLaneProgress,
     batchSettled, batchAutoReleaseable,
     recoverBatches, recycleStalledLane, migrateLegacy, batchFile, artifactsDirOf,
@@ -265,7 +265,7 @@ function composeStore(cx) {
     // 交接面两个判定单点**直接透出 gates 的同一函数实例**（视图与门禁不得各写一份）
     declaredInboundEdgesOf: gates.declaredInboundEdgesOf,
     handoffRecordVerdict: gates.handoffRecordVerdict,
-    markManagerRaised,
+    recordGovernanceRefusal,
     recordGovernanceRefusal,
     readChains, updateChains, updateLaneProgress,
     batchSettled, batchAutoReleaseable,

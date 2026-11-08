@@ -22,7 +22,6 @@ import { readLiveConfig } from './tier-gate.js';
 import { handoffGateStateOf } from '../wave-plan.js';
 //   否则「同一 lane 的 state」会在工具面与探针面分裂（U-5 边界；依赖方向单向：core → watch，无环）。
 import { laneStateOf, isDanglingLane } from '../state/lane-state.js';
-import { managerViewOf, managerSeatFaceOf } from './host-surface.js';
 import * as EVT from '../state/event-types.js';
 import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt } from '../engine/dispatch.js';
 //   **不 re-export**）⇒ 必须从真源取，从 `dispatch.js` 取会得 `undefined`（调用期 TypeError）。
@@ -45,7 +44,7 @@ export function buildBatchStatusTools(cx) {
           const hgTxt = hg ? ' handoffGate=entry:' + (hg.entry === 'enforced' ? 'on' : 'off') + '/settle:' + (hg.settle === 'enforced' ? 'on' : 'off') + '(src:' + String(hg.source ?? 'default') + ')' : '';
           const stateTxt = value.stateSource ? ' state=' + String(value.stateSource) + (value.memberStatesLegacy ? '(legacy)' : '') : '';
           return value.batchId
-            ? TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.manager ? ' manager=' + value.manager.agentId : '') + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''))
+            ? TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''))
             : TEXT_OUTPUT('batches: ' + (value.batches ?? []).length + stateTxt + hgTxt);
         },
       },
@@ -80,8 +79,6 @@ export function buildBatchStatusTools(cx) {
         }
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
-        const managerView = managerViewOf(ctx, exec, b);
-        const managerSeatFace = managerSeatFaceOf(b, managerView.roster);
         const VIEW_TERMINAL = new Set(['merged', 'failed', 'skipped']);
         const viewAppliedOf = (requested) => (requested === 'active' ? 'active' : 'full');
         const wavePlanOf = (batch, applied) => {
@@ -92,7 +89,7 @@ export function buildBatchStatusTools(cx) {
             .filter((w) => w.tasks.length > 0);
         };
         const viewApplied = viewAppliedOf(args.view);
-        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(b.manager ? { manager: b.manager } : {}), managerRoster: { ...managerView, source: 'engine-registry', ...managerSeatFace }, ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied };
+        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied };
       },
     }),
   ];
@@ -104,18 +101,17 @@ export function buildGateTools(cx) {
   return [
     defineTool({
       name: "gate_status",
-      description: "查询批次/lane 的门禁状态：layer、consume/produce/outputs 缺失清单、plan 契约问题，以及批次级装配声明与 Manager 拉起登记。不传 lane 时按全部 lane 逐个投影；对不在 wavePlan.tasks 内的 lane id 返回 gates:'orphan'（layer:null），该读数是损坏/悬空 lane 的显式标记。本工具不定义批级聚合（批级汇总读 batch_status）。",
+      description: "查询批次/lane 的门禁状态：layer、consume/produce/outputs 缺失清单、plan 契约问题，以及批次级装配声明。不传 lane 时按全部 lane 逐个投影；对不在 wavePlan.tasks 内的 lane id 返回 gates:'orphan'（layer:null），该读数是损坏/悬空 lane 的显式标记。本工具不定义批级聚合（批级汇总读 batch_status）。",
       parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","description":"lane ID；缺省列出全部"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"lanes":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"manager":{"type":"object","additionalProperties":true},"assembly":{"type":"object","additionalProperties":true}}},
-        render: (_args, value) => TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)' + (value.assembly ? ' · assembly' : '') + (value.manager ? ' · manager=' + value.manager.agentId : '')),
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"lanes":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true}}},
+        render: (_args, value) => TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)' + (value.assembly ? ' · assembly' : '')),
       },
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         const batch = store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);
         const extras = {
-          ...(batch.manager ? { manager: batch.manager } : {}),
           ...(batch.assembly ? { assembly: batch.assembly } : {}),
         };
         if (args.lane) {

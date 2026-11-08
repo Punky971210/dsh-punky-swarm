@@ -56,7 +56,7 @@ function seed(tag = 'punky-dgate-') {
         { id: 'a1', layer: 'audit', consume: ['plan/spec.md', 'exec/x.md'], produce: ['audit/a1.md'], outputs: ['audit/a1.md'], deps: ['l1'] },
       ],
     }),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   });
   // 成员写面档位判据落在**调用方会话** ⇒ 必须先写 C 档治理记录
   store.writeGovernance(sess, {

@@ -67,7 +67,7 @@ async function loadCapabilities() {
 // 能力面读 `rt` 的**端口位**（W4 起 `capabilityReport` 判**端口 `available`**，不再读宿主 ctx 属性）。
 //   `ports: null` ⇒ **未探明**；`available:false` ⇒ 该宿主**拿不到该功能**（正常降级形态）。
 const facePorts = (available = true, only = null) =>
-  Object.fromEntries((only ?? ['toolSurface', 'httpSurface', 'agentRuntime', 'rosterSource']).map((k) => [k, { available }]));
+  Object.fromEntries((only ?? ['toolSurface', 'httpSurface', 'agentRuntime']).map((k) => [k, { available }]));
 /** 内核端口在位事实（W4 起 fail-closed 面 = 这里）。 */
 const kernelFacts = (over = {}) => ({ runtime: true, audit: true, ...over });
 
@@ -109,8 +109,8 @@ test('C1 无 agentTeams 能力仍可建批派发：建批 + 派发成功，且�
   assert.deepEqual([...ENGINE_INJECTIONS], [], '引擎插件行 inject 必须为空（J4\u0027-a）');
   assert.deepEqual(
     [...HOST_FACE_KEYS].sort(),
-    ['agentRuntime', 'httpSurface', 'rosterSource', 'toolSurface'],
-    '功能面键必须逐字为四面（宿主中立词表；AC-9b + rosterSource 扩面）',
+    ['agentRuntime', 'httpSurface', 'toolSurface'],
+    '功能面键必须逐字为三面（宿主中立词表；第 4 面 rosterSource 已随 Manager 席位删除）',
   );
   // 扩面**不得**顺手把 `agentRuntime` 拆成两个面（H1：面仍是一个；C/D 两档只在 `.channels` 里表达）。
   //   —— 这条是本命题的**反向锁**：只锁「四面」会漏掉「拆成五面（agentRuntimeC/agentRuntimeD）」的错解。

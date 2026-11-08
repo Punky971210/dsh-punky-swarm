@@ -104,7 +104,7 @@ const seedArtifact = (h, batchId, rel, body = 'out') => {
   fs.writeFileSync(abs, body, 'utf8');
 };
 async function mkBatch(h, batchId) {
-  const out = await h.byName.wave_plan.execute({ batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: tasksChain(), assembly: { managerPlan: 'leader-direct', auditLane: 'a1' } }, SESS);
+  const out = await h.byName.wave_plan.execute({ batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: tasksChain(), assembly: { auditLane: 'a1' } }, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
   return out;
 }

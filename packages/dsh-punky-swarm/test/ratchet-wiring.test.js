@@ -98,7 +98,7 @@ try {
   const RAW = process.env.PUNKY_PROBE_RATCHET;
   // leader-direct：退出 G2（raise 缺省）「未登记 Manager 不得派 exec」的前置门，使基线拒因**唯一**
   //   落在 entry 门的 consume 缺件上（可区分性不被另一道门噪化）
-  const ASM = { managerPlan: 'leader-direct', auditLane: 'a1' };
+  const ASM = { auditLane: 'a1' };
 
   const captured = [];
   const routes = [];

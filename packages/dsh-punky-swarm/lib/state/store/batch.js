@@ -112,29 +112,6 @@ export function buildBatch(cx) {
     return corruptRegistry.isCorrupt(sessionId, batchId);
   }
 
-  function markManagerRaised(sessionId, batchId, payload = {}) {
-    const batch = readBatch(sessionId, batchId);
-    if (!batch) throw new Error('batch not found: ' + batchId);
-    const agentId = typeof payload.agentId === 'string' ? payload.agentId.trim() : '';
-    if (!agentId) return null;
-    // 【字段命名（禁改）】**不得**叫 `builtinRoster` / `engineRoster`：仓内「内建 roster」已有所指
-    //   = `lib/roster.js#BUILTIN_ROLES` 那张**静态职位名表**（本仓认为该有哪些席位），
-    //   与本表的**席位登记**（谁真的在座）**不同源、不同写入者、不同生命周期**——
-    //   前者是常量、零写入；后者由本函数写、随批落盘。同名字段会让读端把两者当一件事。
-    const sameSeat = Boolean(batch.managerSeat) && batch.managerSeat.seatId === agentId;
-    const sameLegacy = Boolean(batch.manager) && batch.manager.agentId === agentId;
-    if (sameSeat && sameLegacy) return batch.manager;
-    const note = typeof payload.note === 'string' && payload.note.trim() ? payload.note.trim() : undefined;
-    const at = new Date().toISOString();
-    batch.managerSeat = { seatId: agentId, role: 'manager', source: 'engine-registry', registeredAt: at, registeredBy: 'batch_phase' };
-    if (!sameLegacy) batch.manager = note ? { agentId, raisedAt: at, note } : { agentId, raisedAt: at };
-    batch.events.push(newEvent(EVT.EVT_BATCH_MANAGER_RAISED, note ? { agentId, note } : { agentId }));
-    batch.updatedAt = at;
-    commitBatch(sessionId, batchId, batch);
-    emitStateChange({ type: EVT.EVT_BATCH_MANAGER_RAISED, sessionId, batchId, agentId });
-    return batch.manager;
-  }
-
   function appendEvent(sessionId, batchId, type, fields = {}) {
     const batch = readBatch(sessionId, batchId);
     if (!batch) throw new Error('batch not found: ' + batchId);
@@ -221,5 +198,5 @@ export function buildBatch(cx) {
     return batch.phase === 'running' && lanes.every((s) => s === 'merged');
   }
 
-  return { createBatch, readBatchResult, readBatch, isCorrupt, markManagerRaised, appendEvent, readChains, updateChains, updateLaneProgress, claimAsset, batchSettled, batchAutoReleaseable };
+  return { createBatch, readBatchResult, readBatch, isCorrupt, appendEvent, readChains, updateChains, updateLaneProgress, claimAsset, batchSettled, batchAutoReleaseable };
 }

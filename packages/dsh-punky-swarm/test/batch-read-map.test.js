@@ -67,7 +67,7 @@ function makeBed(laneIds = ['e1', 'e2', 'e3']) {
   const batches = [];
   for (const batchId of ['b-one', 'b-two', 'b-three']) {
     const plan = buildWavePlan({ batchId, team: 'software-team', tasks });
-    store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1', managerPlan: 'leader-direct' } });
+    store.createBatch(S, { batchId, wavePlan: plan, assembly: { auditLane: 'a1' } });
     batches.push(batchId);
   }
   const ctx = { tools: { register() {}, guard() {} }, logger: { info() {}, warn() {}, error() {}, debug() {} } };

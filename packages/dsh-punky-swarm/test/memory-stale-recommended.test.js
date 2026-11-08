@@ -66,7 +66,7 @@ async function makeBatch(byName, root, batchId, lanes = ['e1']) {
   const out = await byName.wave_plan.execute({
     batchId,
     tasks: threeTierTasks(lanes, { auditId: 'a1' }),
-    assembly: { auditLane: 'a1', managerPlan: 'leader-direct' },
+    assembly: { auditLane: 'a1' },
   }, SESS);
   seedArtifacts(root, SESS_ID, batchId, lanes);
   return out;

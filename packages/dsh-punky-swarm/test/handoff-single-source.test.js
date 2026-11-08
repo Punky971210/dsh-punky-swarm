@@ -64,7 +64,7 @@ function makeHarness() {
 async function mkBatch(h, batchId) {
   await h.byName.wave_plan.execute({
     batchId, team: TEAM, teamsRoot: h.teamsRoot, tasks: tasks(),
-    assembly: { managerPlan: 'leader-direct', auditLane: 'a1' },
+    assembly: { auditLane: 'a1' },
   }, SESS);
   await h.byName.batch_phase.execute({ batchId, phase: 'running' }, SESS);
 }

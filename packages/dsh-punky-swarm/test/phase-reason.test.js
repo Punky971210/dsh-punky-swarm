@@ -82,7 +82,7 @@ const TASKS = () => ([
 ]);
 /** 含 audit 层的三层批必带装配声明；用**缺省 `raise`** 形态（`leader-direct` 在 M0′-① 后链推进全程
  *  no-op ⇒ 本套件的「链停轮写 reason」判据必须在非 leader-direct 批上取）。 */
-const ASSEMBLY = { managerPlan: 'raise', auditLane: 'audit' };
+const ASSEMBLY = { auditLane: 'audit' };
 
 /** 建批夹具：临时 `teamsRoot` + 真工具注册面（`logs` 打开 ⇒ `log_export` 在册）。
  *  ⚠ **刻意不声明 assembly**：`managerPlan:'leader-direct'` 的批在 M0′-① 后链推进**全程 no-op**

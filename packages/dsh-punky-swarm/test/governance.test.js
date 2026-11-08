@@ -26,7 +26,7 @@ import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 // W7F-FU-U1：治理落盘的**显式冲刷入口**（与 `lib/index.js` disposer 同一单点）
 import { flushDirtyGovernance } from '../lib/state/store/governance.js';
-import { threeTierTasks, seedArtifacts, runLane, registerManager, tempRoot } from './helpers/gate-fixture.mjs';
+import { threeTierTasks, seedArtifacts, runLane, tempRoot } from './helpers/gate-fixture.mjs';
 import { withDefaultTeam } from './helpers/skill-paths.mjs';
 
 // 【P1 同步 · 前置】本套件建批统一补 `software-team`（见各 harness 的 withDefaultTeam）。
@@ -156,80 +156,6 @@ test('assign_check: escalationHint 当 execToolCount>=5 且无活跃批次', asy
   assert.ok(r.escalationHint.includes('多线并行'));
   assert.ok(r.escalationHint.includes('多依赖'));
   assert.equal(r.escalationHint.includes('必须 wave_plan 建批'), false);
-});
-
-// Manager 拉起留痕：把「C+ 批是否真拉起 Manager」从自述旁证升级为治理层可核事实
-test('batch_phase: manager 拉起登记（批字段 + 事件 + 三重门禁）', async () => {
-  await byName.wave_plan.execute({ batchId: 'b-mgr', tasks: [{ id: 'a' }] }, AC_SESS);
-  const call = (args) => byName.batch_phase.execute(args, AC_SESS);
-  // 门禁①：**本断言由本批新语义替代（旧口径：planning 期登记被拒 「Manager 相位非法」码(已删)）**。
-  //   C-1 决议：准入从 `phase === 'running'` 改为「批次非终态」（planning/running/paused 可登记），
-  //   对齐用户口径「建批即拉起，不绑定 running」。落点 lib/state/store.js:573-575（writer = e2）。
-  //   断言面：登记成功、**不改批次阶段**、写批字段 + 恰一条 batch.manager.raised 事件。
-  const r0 = await call({ batchId: 'b-mgr', manager: { agentId: 'mgr-1' } });
-  assert.equal(r0.phase, 'planning', 'C-1：planning 期可登记，且仅登记不改阶段');
-  assert.equal(r0.manager.agentId, 'mgr-1');
-  const b0 = toolsStore.readBatch('sess-ac', 'b-mgr');
-  assert.equal(b0.phase, 'planning', 'C-1：登记不得顺带迁移批次阶段');
-  assert.equal(b0.manager.agentId, 'mgr-1');
-  // 【U-7】拆「存在性 + 上界」两条
-  assert.ok(b0.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
-    'manager.raised 至少 1 条（存在性）');
-  assert.ok(b0.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
-    'manager.raised 不得重复（上界 1）');
-  await call({ batchId: 'b-mgr', phase: 'running' });
-  // 门禁②：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转** —— 原断言
-  //   `assert.rejects(/「Manager agentId 必填」码(已删)/)` 对应码已删 ⇒ 空/空白 agentId **不再报门禁错**：
-  //   语义 = 「不写垃圾记录 + 单独调用时走既有显式报错分支（`requires "phase" or "manager"`）」，即**不静默 no-op**。
-  await assert.rejects(() => call({ batchId: 'b-mgr', manager: {} }), /requires "phase" or "manager"/,
-    '空 agentId ⇒ 不写记录；无 phase 的单独调用如实报错（不静默）');
-  await assert.rejects(() => call({ batchId: 'b-mgr', manager: { agentId: '   ' } }), /requires "phase" or "manager"/,
-    '空白 agentId（trim 后为空）同判');
-  const bEmpty = toolsStore.readBatch('sess-ac', 'b-mgr');
-  assert.equal(bEmpty.manager.agentId, 'mgr-1', '结构断言保留：空登记**不覆盖**既有 manager 字段（不写垃圾）');
-  // 【U-7 · B 档】拆「存在性 + 上界」两条（空登记不新增 ⇒ 仍应 ≥1 且 ≤1）
-  assert.ok(bEmpty.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
-    '空登记场景下 manager.raised 至少 1 条（存在性）');
-  assert.ok(bEmpty.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
-    '空登记不新增 manager.raised 事件（上界 1）');
-  // 正常登记：单独调用（不传 phase）→ 不改阶段，写批字段 + 事件
-  const r = await call({ batchId: 'b-mgr', manager: { agentId: 'mgr-1', note: 'C+' } });
-  assert.equal(r.phase, 'running');
-  assert.equal(r.manager.agentId, 'mgr-1');
-  const b = toolsStore.readBatch('sess-ac', 'b-mgr');
-  assert.equal(b.phase, 'running');
-  assert.equal(b.manager.agentId, 'mgr-1');
-  assert.ok(b.manager.raisedAt);
-  // 【U-7】拆「存在性 + 上界」两条
-  assert.ok(b.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
-    'manager.raised 至少 1 条（存在性）');
-  assert.ok(b.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
-    'manager.raised 不得重复（上界 1）');
-  assert.equal(b.events.find((e) => e.type === 'batch.manager.raised').agentId, 'mgr-1');
-  // 阶段迁移与登记同一次调用；**同 agentId 幂等** ⇒ 不重复写事件（仍为 1 条）
-  await call({ batchId: 'b-mgr', phase: 'paused', manager: { agentId: 'mgr-1' } });
-  const b2 = toolsStore.readBatch('sess-ac', 'b-mgr');
-  assert.equal(b2.phase, 'paused');
-  // 【U-7 · B 档】拆「存在性 + 上界」两条（幂等 ⇒ 仍应 ≥1 且 ≤1）
-  assert.ok(b2.events.filter((e) => e.type === 'batch.manager.raised').length >= 1,
-    '重复登记后 manager.raised 至少 1 条（存在性）');
-  assert.ok(b2.events.filter((e) => e.type === 'batch.manager.raised').length <= 1,
-    '同 agentId 重复登记幂等：不产重复事件（上界 1）');
-  // 门禁③：【gate-lite 第二批 · A（2026-09-17 用户裁决「全删」）】**翻转为放行** —— 原断言
-  //   `assert.rejects(… /「Manager 终态」码(已删)/ 且非 PHASE_INVALID…)` 两码已删 ⇒ 终态批**亦可登记事实**
-  //   （在册判定的新真源 = 官方 roster；legacy 字段仅作观察面）。
-  //   保留原结构断言：登记**不改批次阶段**、幂等（不重复写事件）。
-  await call({ batchId: 'b-mgr', phase: 'aborted' });
-  assert.equal(toolsStore.readBatch('sess-ac', 'b-mgr').phase, 'aborted', '前置：批已终态');
-  const rTerm = await call({ batchId: 'b-mgr', manager: { agentId: 'mgr-2' } });
-  assert.equal(rTerm.manager.agentId, 'mgr-2', '终态批登记不再拒（码已删），返回登记事实');
-  const bTerm = toolsStore.readBatch('sess-ac', 'b-mgr');
-  assert.equal(bTerm.phase, 'aborted', '结构断言保留：登记不改批次阶段（终态仍终态）');
-  assert.equal(bTerm.events.filter((e) => e.type === 'batch.manager.raised').length, 2,
-    '换 agentId ⇒ 恰一条新事件（mgr-1 + mgr-2 = 2；同 agentId 幂等已在上一条断言）');
-  assert.equal(bTerm.manager.agentId, 'mgr-2', 'legacy 字段改写为最新登记值（终态批亦允许）');
-  // 既无 phase 又无 manager → 明确报错（不静默 no-op）
-  await assert.rejects(() => call({ batchId: 'b-mgr' }), /requires "phase" or "manager"/);
 });
 
 // A1：终态批次冻结——complete / aborted 之后任何成员迁移一律拒（防「已收口批次被改写成 running」）
@@ -429,10 +355,6 @@ test('wave_plan 建批清 pendingBatch；batch_phase complete/aborted 兜底清�
   //   ⇒ 改**合规三层批**（工具面须带批次级 assembly 声明）+ 声明产物在场 + 全 lane 结算后方可 complete。
   await by.wave_plan.execute({ batchId: 'b-wp', tasks: threeTierTasks(['t1']), assembly: { auditLane: 'a1' } }, EXEC);
   assert.equal(st.readGovernance('sess-wp').pendingBatch, false); // 建批解锁
-  // G2 前置（2026-09-14 新门禁）：含 exec 层且声明（缺省归一化）`managerPlan: 'raise'` 的批，**收口/派发前**
-  //   须先登记 Manager（否则 entry 门先返 「未拉起 Manager」码(已删)）。本用例被检面是 complete 兜底清锁，
-  //   故先按引擎规定路径登记 Manager，保持被检面不变。
-  registerManager(st, 'sess-wp', 'b-wp', 'mgr-wp');
   seedArtifacts(root, 'sess-wp', 'b-wp', ['t1']);
   await by.batch_phase.execute({ batchId: 'b-wp', phase: 'running' }, EXEC);
   for (const lane of ['p1', 't1', 'a1']) runLane(st, 'sess-wp', 'b-wp', lane);

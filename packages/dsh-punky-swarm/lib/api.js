@@ -123,7 +123,6 @@ export function createApi(ctx, deps) {
           upgrades,
           danglingLanes,
           handoffs: b.handoffs ?? {},
-          ...(b.manager ? { manager: b.manager } : {}),
           ...(b.assembly ? { assembly: b.assembly } : {}),
           ...(b.teamAsset ? { teamAsset: b.teamAsset } : {}),
           ...(smokeOf(b) ? { smoke: true } : {}),
