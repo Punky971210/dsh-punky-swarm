@@ -999,6 +999,17 @@ const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSin
   rt.hotConfig.start();
   reconcileBootOverlay({ rt, remountGovernanceHook, remountWatchEngine, remountAutoSettle });
 };
+// ── 装配根纪律（①-1-6 裁决甲 2026-11-09：**不做 MOUNTS 表**，只立两条防退化约束）──────────────
+// 现状（实测）：本文件已是「一挂载面一具名工厂」形态 —— 26 个具名工厂，`if (cfg.enabled)` 等
+//   条件判定全部在**工厂体内**（24 处），本函数内**一处挂载条件都没有**（仅 2 处告警分支）。
+//   本函数只剩 119 行**有序 + 携数据**的编排（28 个工厂调用，形参 2–12 个）。
+//   ⇒ 再套一层「表驱动」要额外表达顺序 / 每步产出 / 依赖注入三件事，行数不降而可读性更差，故撤销。
+// 以下两条是**约束**（不是建议），违反任一都会让本文件重新长成单体：
+//   ① **顺序约束**：装配顺序承载语义（例：`重建索引` 必须先于 `轨迹挂载`，见下方 S-1 注释；
+//      `createDispatchIndexRebuilder` 的求值点早于 TDZ 相关声明亦然）。新增步骤必须在注释里写明
+//      前置依赖；**不得**为「看起来更整齐」而重排既有调用。
+//   ② **工厂约束**：新挂载面必须做成具名工厂（形参显式声明依赖），**不得在本函数内联展开**。
+//      若某步确实需要表驱动，须先证明它既无顺序依赖也无跨步数据流 —— 本文件当前没有这样的步。
 export const apply = (ctx, config = {}) => {
   const rawRoot = config.root ?? '~/.dsh/punky-preset';
   const root = rawRoot.startsWith('~') ? join(homedir(), rawRoot.slice(1)) : rawRoot;
