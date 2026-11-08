@@ -314,3 +314,62 @@ test('⑤-2 语义保持：去重前后两套词表不变（关键写形态与�
   assert.equal(judgeFileWriteCommand('find . -fprint out.txt').hit, false, 'find 宽旗标是已知边界');
   assert.equal(judgeFileWriteCommand('node -e "writeFileSync"').hit, false, '解释器内联写是已知边界');
 });
+
+// ── 【⑨-3 · 2026-11-09】auditlog sink 拆分后的结构锁 ────────────────────────────────────
+//   背景：`lib/auditlog/sink.js` 曾 1,044 行、12 个分节耦合在一个文件。核实拆分方案时实测出一个
+//   **真环**：聚合节要用写入节的 `writeLine`，而写入节里的 `export()` 又要用聚合节的
+//   `ingestAggregate` —— 按「写入+诊断+导出」原样切会得到 `sink-aggregate ⇄ sink-write` 循环 import。
+//   故把 `export()` 上移到门面 `sink.js`，落成 7 层严格顺层：
+//     state → format → retention → diag → write → aggregate → sink.js
+//   本锁钉三件事：① 体量回不去单体；② 不得出现逆层引用（逆层即环）；③ 对外导出面逐名零改。
+const SINK_LAYER = [
+  'sink-state.js',
+  'sink-format.js',
+  'sink-retention.js',
+  'sink-diag.js',
+  'sink-write.js',
+  'sink-aggregate.js',
+  'sink.js',
+];
+const SINK_PUBLIC = [
+  'AGGREGATE_MAX_WINDOW_MS',
+  'AGGREGATE_WINDOW_MS',
+  'MAX_LINE_BYTES',
+  'MAX_LONG_ARG_CHARS',
+  'aggregateKey',
+  'auditlogStats',
+  'buildRow',
+  'exportMessage',
+  'flushDiagnostics',
+  'mountAuditLog',
+  'pruneByAge',
+  'pruneByTotal',
+];
+
+test('⑨-3 sink 拆分：7 模块俱在、单文件 ≤300 行、无逆层引用', () => {
+  const dir = path.join(PKG_ROOT, 'lib/auditlog');
+  for (const f of SINK_LAYER) {
+    const p = path.join(dir, f);
+    assert.ok(existsSync(p), '缺少模块 ' + f);
+    const lines = readFileSync(p, 'utf8').split('\n').length;
+    assert.ok(lines <= 300, f + ' 已达 ' + lines + ' 行 —— 超过 300 行上限（单体回潮）');
+  }
+
+  const idx = new Map(SINK_LAYER.map((f, i) => [f, i]));
+  for (let i = 0; i < SINK_LAYER.length; i += 1) {
+    const src = readFileSync(path.join(dir, SINK_LAYER[i]), 'utf8');
+    for (const m of src.matchAll(/from '\.\/(sink[\w-]*\.js)'/g)) {
+      const to = m[1];
+      assert.ok(idx.has(to), SINK_LAYER[i] + ' import 了层序外的模块 ' + to);
+      assert.ok(
+        idx.get(to) < i,
+        SINK_LAYER[i] + ' import 了同层或更高层的 ' + to + ' —— 逆层即环（原方案正是在这里成环）',
+      );
+    }
+  }
+});
+
+test('⑨-3 sink 拆分：对外导出面与拆分前逐名一致（消费者零改动）', async () => {
+  const mod = await import('../lib/auditlog/sink.js');
+  assert.deepEqual(Object.keys(mod).sort(), SINK_PUBLIC);
+});

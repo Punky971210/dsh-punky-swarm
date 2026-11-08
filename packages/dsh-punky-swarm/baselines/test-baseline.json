@@ -1186,8 +1186,8 @@
     },
     "test/inject-budget.test.js": {
       "asserts": 102,
-      "blankLines": 75,
-      "lines": 715,
+      "blankLines": 77,
+      "lines": 735,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -1457,11 +1457,11 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 40,
-      "blankLines": 25,
-      "lines": 317,
+      "asserts": 45,
+      "blankLines": 29,
+      "lines": 376,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 11,
       "todos": 0
     },
     "test/p2-state-single.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T17:31:30Z",
+  "generatedAt": "2026-11-08T17:46:06Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑧-4：discovery 夹具改真实 builder 产物，删 service.js 两处死回退，新增夹具形状锁",
+  "reason": "FIX-3 静态锁改按 sink 模块组核（⑨-3 拆分的连带项）",
   "schema": 1,
   "totals": {
-    "asserts": 11833,
-    "blankLines": 6731,
+    "asserts": 11838,
+    "blankLines": 6737,
     "files": 264,
-    "lines": 71012,
+    "lines": 71091,
     "tautologies": 0,
-    "tests": 2482,
+    "tests": 2484,
     "todos": 0
   }
 }

@@ -353,15 +353,35 @@ test('[FIX-2] 边界夹具自证：恰等于阈值 与 阈值+1 的字节差恒�
   assert.equal(Buffer.byteLength(totalOver, 'utf8') - Buffer.byteLength(totalAt, 'utf8'), 1);
 });
 
-test('[FIX-3] 同源锁**静态**前提：sink.js 源码导出常量 32768 且冻结 totalBytes 与之同值', () => {
-  const sinkSrc = readSource(FILES.sink);
-  assert.ok(/export const MAX_LINE_BYTES = 32768;/.test(sinkSrc),
-    '`' + SINK_REL + '` 须**导出**常量 `MAX_LINE_BYTES = 32768`（位宽同源的可核前提）');
+test('[FIX-3] 同源锁**静态**前提：sink 模块组导出常量 32768 且冻结 totalBytes 与之同值', () => {
+  // ⑨-3：sink 已由单文件拆为 7 模块（state → format → retention → diag → write → aggregate → sink 门面）。
+  // 本条判据是「位宽同源 + truncateUtf8 私有」，与文件布局无关 ⇒ 改为在**整个 sink 模块组**上核，
+  // 并且比原先更严：不再只要求「某文件里有」，而是要求组内**恰一处**声明（两处即为第二真源）。
+  const SINK_MODULES = [
+    'sink.js',
+    'sink-state.js',
+    'sink-format.js',
+    'sink-retention.js',
+    'sink-diag.js',
+    'sink-write.js',
+    'sink-aggregate.js',
+  ];
+  const group = SINK_MODULES.map((f) => readSource('lib/auditlog/' + f));
+  const groupText = group.join('\n');
+  const where = (src) => SINK_MODULES[group.indexOf(src)];
+
+  const lineHits = group.filter((src) => /export const MAX_LINE_BYTES = 32768;/.test(src));
+  assert.equal(lineHits.length, 1,
+    '位宽常量 `MAX_LINE_BYTES = 32768` 须在 sink 模块组内**恰一处**导出声明（位宽同源的可核前提），实际 '
+      + lineHits.length + ' 处' + (lineHits.length ? '：' + lineHits.map(where).join(', ') : ''));
   assert.equal(FROZEN_THRESHOLDS.totalBytes, 32768, '冻结 totalBytes 须为 32768');
+
   // 附：truncateUtf8 私有的自证（包内「不可复用」结论的依据，AC-24 类锚点）
-  const truncDecl = sinkSrc.match(/^function truncateUtf8\(/m);
-  assert.ok(truncDecl, '`truncateUtf8` 须为模块私有（`function truncateUtf8(` 行首声明）');
-  assert.ok(!/^export function truncateUtf8\(/m.test(sinkSrc),
+  const truncHits = group.filter((src) => /^function truncateUtf8\(/m.test(src));
+  assert.equal(truncHits.length, 1,
+    '`truncateUtf8` 须在 sink 模块组内**恰一处**模块私有声明（`function truncateUtf8(` 行首），实际 '
+      + truncHits.length + ' 处');
+  assert.ok(!/^export function truncateUtf8\(/m.test(groupText),
     '`truncateUtf8` **不得**被导出（导出即越界 + 使 e2 写域变 9 件）');
 });
 
