@@ -15,7 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// 服务端权威语义：裁决侧按 identity+tool+argsHash 全等绑定，模型提交值一律忽略（不参与匹配）。
+// 参数规范形 + 稳定短哈希：证据行按「工具名 + 规范化入参」定键，
+//   同一入参无论键序如何都落到同一个 `selectorKey`（台账据此可去重、可对照）。
 import { createHash } from 'node:crypto';
 
 export function canonicalizeArgs(value) {
@@ -33,51 +34,4 @@ export function canonicalizeArgs(value) {
 
 export function stableHash(value) {
   return createHash('sha256').update(JSON.stringify(canonicalizeArgs(value))).digest('hex').slice(0, 12);
-}
-
-export function freezeSelector({ acId, tool, args = {} }) {
-  if (typeof acId !== 'string' || !acId.length) throw new Error('freezeSelector: acId required');
-  if (typeof tool !== 'string' || !tool.length) throw new Error('freezeSelector: tool required');
-  const canonical = canonicalizeArgs(args);
-  const argsHash = stableHash({ tool, args: canonical });
-  const selectorRef = acId + ':' + argsHash;
-  return { acId, tool, args: canonical, argsHash, selectorRef };
-}
-
-export function createSelectorRegistry() {
-  const byAc = new Map();   // acId -> frozen selector
-  const byKey = new Map();  // argsHash -> acId（exact-only 全等身份，无模糊匹配）
-
-  return {
-    bindSelector(acId, selector) {
-      if (byAc.has(acId)) throw new Error('duplicate AC binding: ' + acId);
-      if (!selector || typeof selector.tool !== 'string') throw new Error('bindSelector: tool required for ' + acId);
-      const frozen = freezeSelector({ acId, tool: selector.tool, args: selector.args ?? {} });
-      if (byKey.has(frozen.argsHash)) {
-        throw new Error('duplicate selector: ' + frozen.argsHash + ' already bound to AC ' + byKey.get(frozen.argsHash));
-      }
-      byKey.set(frozen.argsHash, acId);
-      byAc.set(acId, frozen);
-      return frozen;
-    },
-
-    bindAll(acList = []) {
-      if (!Array.isArray(acList)) throw new Error('bindAll: acList must be an array');
-      return acList.map((ac) => this.bindSelector(ac.id, { tool: ac.tool, args: ac.args }));
-    },
-
-    has(acId) { return byAc.has(acId); },
-    get(acId) { return byAc.get(acId) ?? null; },
-    size() { return byAc.size; },
-    list() { return [...byAc.values()]; },
-    clear() { byAc.clear(); byKey.clear(); },
-
-    match(tool, args) {
-      const key = stableHash({ tool, args: canonicalizeArgs(args) });
-      return byKey.get(key) ?? null;
-    },
-    matchByKey(argsHash) {
-      return typeof argsHash === 'string' ? (byKey.get(argsHash) ?? null) : null;
-    },
-  };
 }

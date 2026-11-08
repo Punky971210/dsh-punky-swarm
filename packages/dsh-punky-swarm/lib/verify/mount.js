@@ -19,28 +19,21 @@ import { installEvidenceCapture } from './evidence.js';
 import { VERIFY_DEFAULTS, resolveVerifyConfig } from '../schema.js';
 export { VERIFY_DEFAULTS, resolveVerifyConfig };
 
+/** 证据捕获挂载：`capabilities.verify.enabled`（缺省开）门控；`enabled=false` 不挂 hook、零运行时开销。
+ *  宿主缺 `ctx.on` 或未给 `root` ⇒ 静默降级（可判定，不抛宿主原生错）。 */
 export function mountVerify(ctx, { root, config, logger } = {}) {
   const cfg = resolveVerifyConfig(config);
   const log = logger ?? ctx?.logger ?? null;
-  //   ⇒ 配 enforce 实际按 advisory 生效。本处**必须早于任何 inert 提前返回**，否则 `ctx.on` 缺失时
-  //   该真相永不可见。语义边界：只多一条日志，**判定路径零改动**（接线/退役取向见 docs/governance-technical.md）。
-  if (cfg.enabled === true && cfg.mode === 'enforce') {
-    log?.warn?.('[dsh-punky-swarm] capabilities.verify.mode="enforce" is NOT wired（未接线）: '
-      + 'createCompletionGate has no production consumer — only evidence capture is mounted, '
-      + 'and it never reads `mode` ⇒ enforce is inert, the verdict runs as advisory. '
-      + 'Set mode="advisory" to silence this warning; see docs/governance-technical.md '
-      + '(wiring vs retirement is an open decision).');
-  }
-  const inert = (reason) => ({ installed: false, inert: true, reason, mode: cfg.mode, count: () => 0, dispose() {} });
+  const inert = (reason) => ({ installed: false, inert: true, reason, count: () => 0, dispose() {} });
   if (cfg.enabled !== true) {
     log?.info?.('[dsh-punky-swarm] verify mount disabled (capabilities.verify.enabled === false)：'
-      + 'post-execute 证据捕获未装配；mode=' + cfg.mode);
+      + 'post-execute 证据捕获未装配');
     return inert('disabled');
   }
   if (!root || typeof ctx?.on !== 'function') return inert('ctx.on unavailable');
   const cap = installEvidenceCapture(ctx, { root, enabled: true });
   if (cap.installed) {
-    log?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted (mode=' + cfg.mode + ')');
+    log?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
   }
-  return { installed: cap.installed, count: cap.count, mode: cfg.mode, dispose() { cap.dispose(); } };
+  return { installed: cap.installed, count: cap.count, dispose() { cap.dispose(); } };
 }

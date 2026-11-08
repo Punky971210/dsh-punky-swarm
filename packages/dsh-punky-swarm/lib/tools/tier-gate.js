@@ -26,7 +26,7 @@ import {
 } from '../engine/dispatch.js';
 import { parseLaneHandleFromText, verifyLaneHandle, textOfDispatchArgs } from '../bridge/lane-handle.js';
 import { decide as decideAllowlist, canonicalDigest } from '../governance/allowlist.js';
-import { classifyDenial } from '../verify/evidence.js';
+import { classifyDenial } from '../governance/denial.js';
 
 export const ASK_REQUIRED_409 = 'approval-needed-409:';
 export const ASK_APPROVAL_ARGS_MISMATCH = 'approval-args-mismatch:';

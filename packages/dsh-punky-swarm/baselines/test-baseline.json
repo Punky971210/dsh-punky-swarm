@@ -209,11 +209,11 @@
       "todos": 0
     },
     "test/assembly-schema.test.js": {
-      "asserts": 65,
-      "blankLines": 37,
-      "lines": 345,
+      "asserts": 63,
+      "blankLines": 36,
+      "lines": 338,
       "tautologies": 0,
-      "tests": 25,
+      "tests": 24,
       "todos": 0
     },
     "test/assets.test.js": {
@@ -1257,9 +1257,9 @@
       "todos": 0
     },
     "test/legacy-fix.test.js": {
-      "asserts": 20,
+      "asserts": 19,
       "blankLines": 16,
-      "lines": 162,
+      "lines": 156,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1430,14 +1430,6 @@
       "lines": 479,
       "tautologies": 0,
       "tests": 22,
-      "todos": 0
-    },
-    "test/p2-dead-verify.test.js": {
-      "asserts": 23,
-      "blankLines": 19,
-      "lines": 162,
-      "tautologies": 0,
-      "tests": 7,
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
@@ -1849,11 +1841,11 @@
       "todos": 0
     },
     "test/tool-face-ledger.test.js": {
-      "asserts": 30,
-      "blankLines": 33,
-      "lines": 288,
+      "asserts": 27,
+      "blankLines": 32,
+      "lines": 269,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 8,
       "todos": 0
     },
     "test/tool-schema-conformance.test.js": {
@@ -1929,9 +1921,9 @@
       "todos": 0
     },
     "test/verify-mount.test.js": {
-      "asserts": 55,
-      "blankLines": 25,
-      "lines": 214,
+      "asserts": 37,
+      "blankLines": 19,
+      "lines": 170,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -2129,7 +2121,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T08:58:00Z",
+  "generatedAt": "2026-11-08T09:24:02Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2140,15 +2132,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 isolation-livefix-20261108：活体实测两处回归的回归锁（门禁死锁 / MCP 路由未回收）",
+  "reason": "B4/⑦ 产物验收面退役（收尾）：测试面同步删 DEP-1 用例/verify.mode 断言/blobs 断言",
   "schema": 1,
   "totals": {
-    "asserts": 11964,
-    "blankLines": 6783,
-    "files": 266,
-    "lines": 71559,
+    "asserts": 11917,
+    "blankLines": 6756,
+    "files": 265,
+    "lines": 71321,
     "tautologies": 0,
-    "tests": 2499,
+    "tests": 2490,
     "todos": 0
   }
 }

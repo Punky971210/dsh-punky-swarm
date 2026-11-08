@@ -74,16 +74,16 @@ function freshRoot() {
 }
 
 test('T4.1 warn 触发：非法组合 → apply 后 logger.warn 含错误文本（逐条）', () => {
-  // DEP-1：verify enabled=true + mode 非法
+  // DEP-5：watch.maxMissed 必须 >= 1
   const ctx = makeCtx();
   const disposer = apply(ctx, {
     root: freshRoot(),
-    capabilities: { verify: { enabled: true, mode: 'bogus' } },
+    capabilities: { watch: { enabled: true, maxMissed: 0 } },
   });
   const warns = ctx.calls.warn;
   assert.ok(
-    warns.some((w) => w.includes('[dsh-punky-swarm] config: ') && w.includes('DEP-1')),
-    'warn 含前缀 + DEP-1 错误文本（实际: ' + JSON.stringify(warns) + '）',
+    warns.some((w) => w.includes('[dsh-punky-swarm] config: ') && w.includes('DEP-5')),
+    'warn 含前缀 + DEP-5 错误文本（实际: ' + JSON.stringify(warns) + '）',
   );
 
   // DEP-2：trajectory autoFail=true 无 enabled（多错误逐条 warn）
@@ -103,10 +103,10 @@ test('T4.2 不炸宿主：非法配置 apply 正常返回 disposer、不 throw',
     disposer = apply(ctx, {
       root: freshRoot(),
       capabilities: {
-        verify: { enabled: true, mode: 'bogus' },
+        watch: { enabled: true, maxMissed: 0 },
       },
     });
-  }, '非法配置（DEP-1）apply 不 throw');
+  }, '非法配置（DEP-5）apply 不 throw');
   assert.equal(typeof disposer, 'function', 'disposer 正常产出');
   assert.doesNotThrow(() => disposer(), 'disposer 可安全调用（幂等清理）');
 });
@@ -116,9 +116,9 @@ test('T4.3 缺省零 warn：空/缺省 config 零 warn；默认关能力不触�
   apply(ctx, { root: freshRoot() });
   assert.equal(ctx.calls.warn.length, 0, '缺省 config → 零 warn');
 
-  // 禁用能力（verify.mode 非法但 enabled 非 true）→ validateCapabilities 零报错 → 零 warn
+  // 禁用能力（watch.maxMissed 非法但能力未启用）→ validateCapabilities 零报错 → 零 warn
   const ctx2 = makeCtx();
-  apply(ctx2, { root: freshRoot(), capabilities: { verify: { mode: 'bogus' } } });
+  apply(ctx2, { root: freshRoot(), capabilities: { watch: { enabled: false, maxMissed: 0 } } });
   assert.equal(ctx2.calls.warn.length, 0, '禁用能力零校验零 warn');
 
   // 全缺省（config 不传，走默认 {}）
@@ -139,23 +139,17 @@ test('T4.5 合并生效：mount.js 不再定义本地 resolveVerifyConfig/VERIFY
 
 test('T4.6 语义不变：mount.js 与 lib/schema.js 同一 resolveVerifyConfig（同源引用 + 边界行为一致）', () => {
   assert.equal(mountMod.resolveVerifyConfig, schemaResolve, 'mount.js re-export 即 lib/schema.js 原函数');
-  // 边界抽查（与 verify-mount.test.js 既有用例同断言值）：缺省默认开（等价 readCapability 合并）/ enforce / 非法 mode 回退 advisory
-  assert.deepEqual(mountMod.resolveVerifyConfig({}), { enabled: true, mode: 'advisory' });
-  assert.deepEqual(mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false, mode: 'advisory' });
+  // 边界抽查：缺省默认开 / 显式关才关
+  assert.deepEqual(mountMod.resolveVerifyConfig({}), { enabled: true });
+  assert.deepEqual(mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: false } } }), { enabled: false });
   assert.deepEqual(
-    mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: true, mode: 'enforce' } } }),
-    { enabled: true, mode: 'enforce' },
-  );
-  assert.deepEqual(
-    mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: true, mode: 'weird' } } }),
-    { enabled: true, mode: 'advisory' },
-    '非法 mode 回退 advisory（gate 同语义）',
+    mountMod.resolveVerifyConfig({ capabilities: { verify: { enabled: true } } }),
+    { enabled: true },
   );
 });
 
-test('T4.7 无越界：index.js 的 verify 挂载调用点原样保留（不触碰 gate.js/evidence.js）', () => {
+test('T4.7 无越界：index.js 的 verify 挂载调用点原样保留（不触碰 evidence.js）', () => {
   const src = fs.readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
   assert.ok(src.includes('mountVerify(ctx, { root, config })'), 'mountVerify 挂载调用点未动');
-  // 本 lane 改动文件白名单：只允许 index.js / verify/mount.js（源码面），gate.js / evidence.js 不在其列
-  assert.ok(!src.includes('installEvidenceCapture('), 'index.js 无直接证据捕获调用（挂载经 mountVerify 单一接缝，注释提及不属调用）');
+  assert.ok(!src.includes('installEvidenceCapture('), 'index.js 无直接证据捕获调用（挂载经 mountVerify 单一接缝）');
 });

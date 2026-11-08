@@ -103,7 +103,7 @@ test('registry defaults align with lib/schema.js defaults', () => {
   assert.equal(byKey.trajectory, TRAJECTORY_DEFAULTS);
   assert.equal(byKey.verify, VERIFY_DEFAULTS);
   assert.equal(byKey.discovery, DISCOVERY_DEFAULTS);
-  assert.equal(VERIFY_DEFAULTS.mode, 'advisory');
+  assert.equal(VERIFY_DEFAULTS.enabled, true);
   assert.equal(DISCOVERY_DEFAULTS.enabled, true);
 });
 
@@ -129,9 +129,9 @@ test('EXCLUSIONS is an empty reserved table (no natural mutex today)', () => {
 });
 
 test('readCapability reads by path with default merge', () => {
-  const cfg = { capabilities: { verify: { enabled: true, mode: 'enforce' } } };
-  assert.deepEqual(readCapability(cfg, 'verify'), { enabled: true, mode: 'enforce' });
-  assert.deepEqual(readCapability({}, 'verify'), { enabled: true, mode: 'advisory' });
+  const cfg = { capabilities: { verify: { enabled: true } } };
+  assert.deepEqual(readCapability(cfg, 'verify'), { enabled: true });
+  assert.deepEqual(readCapability({}, 'verify'), { enabled: true });
   assert.deepEqual(readCapability({ aip: { enabled: true } }, 'aip'), { enabled: true });
   assert.deepEqual(readCapability({}, 'aip'), { enabled: true }); // 缺省默认开启（与 CAPABILITY_REGISTRY 默认一致）
   assert.equal(readCapability({}, 'nope'), undefined);
@@ -143,20 +143,13 @@ test('validateCapabilities: enabled-all legitimate combo yields zero errors', ()
   const allOn = {
     aip: { enabled: true },
     capabilities: {
-      verify: { enabled: true, mode: 'enforce' },
+      verify: { enabled: true },
       watch: { enabled: true, maxMissed: 3, scanIntervalMinutes: 1 },
       worktree: { enabled: true },
       trajectory: { enabled: true, autoFail: true, poll: { enabled: false, baseUrl: null } },
     },
   };
   assert.deepEqual(validateCapabilities(allOn).errors, []);
-});
-
-test('validateCapabilities DEP-1: verify.mode must be advisory|enforce', () => {
-  const bad = { capabilities: { verify: { enabled: true, mode: 'bogus' } } };
-  const { errors } = validateCapabilities(bad);
-assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-1'], '错误码身份集合须恰为 DEP-1（非法 mode 的唯一违例）');
-  assert.match(errors[0], /DEP-1/);
 });
 
 test('validateCapabilities DEP-2: trajectory.autoFail=true requires enabled=true', () => {

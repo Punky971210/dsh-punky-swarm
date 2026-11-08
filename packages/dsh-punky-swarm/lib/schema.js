@@ -122,21 +122,17 @@ export function resolveWatchConfig(config) {
             : WATCH_DEFAULTS.probeTemplate,
     };
 }
-// ── capabilities.verify：验收证据（lib/verify/evidence.js + lib/verify/gate.js）──
-// enabled=true（默认）捕获 hook 挂载；
-//   mode=advisory（默认）只记录不拦截；**mode=enforce 的裁决侧未接线**（createCompletionGate 无生产消费点）
-//   ⇒ 实际按 advisory 生效，装配面只输出一条 warn 说明未接线（A1-P2-11）；接线 or 退役属待裁决 followup。
-// as const：mode 字面量派生返回类型（'advisory'|'enforce'），纯类型层、运行期等价。
+// ── capabilities.verify：验收证据捕获（`lib/verify/evidence.js`，台账落 `<root>/verify/`）──
+// enabled=true（默认）挂 post-execute 捕获 hook；显式 enabled:false 才关（关 = 零运行时开销）。
+// 裁决侧（AC × 台账 → 三态）**已退役**：无生产消费点，重新接线属功能立项，不在重构范围。
 export const VERIFY_DEFAULTS = Object.freeze({
     enabled: true,
-    mode: 'advisory',
 });
 export function resolveVerifyConfig(config) {
     const c = config?.capabilities?.verify ?? {};
     return {
         // 等价默认合并：缺省 = VERIFY_DEFAULTS.enabled(true)，显式 enabled:false 才关（同 resolveWatchConfig 注释）
         enabled: c.enabled !== false,
-        mode: c.mode === 'enforce' ? 'enforce' : VERIFY_DEFAULTS.mode,
     };
 }
 // ── autoSettle：**判定式**（本函数）+ **投影**（`autoSettleSwitchOf` 紧随其后）两个单点 ──

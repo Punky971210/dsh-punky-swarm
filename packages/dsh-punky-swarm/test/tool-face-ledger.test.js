@@ -120,13 +120,6 @@ function guardRules() {
   return readJson(GUARD_ASSET).toolBan ?? [];
 }
 
-// ── `CONTROL_PLANE_TOOLS`（D-3 的文件级事实，只读；C-11 禁改 lib）───────────────
-function controlPlaneTools() {
-  const m = readText('lib/verify/evidence.js').match(/CONTROL_PLANE_TOOLS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
-  assert.ok(m, 'lib/verify/evidence.js 须含 `CONTROL_PLANE_TOOLS = new Set([...])` 定义');
-  return new Set([...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
-}
-
 // ── `diffToolFace` 载入（AC-7 的可复用前提）────────────────────────────────────
 async function loadDiffToolFace() {
   const file = path.join(ROOT, DIFF_SCRIPT);
@@ -261,20 +254,8 @@ test('AC-12/AC-16④-3 护栏③：护栏资产 sha256 与本批开工时一致�
   );
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// AC-17：D-3 的事实面 —— `CONTROL_PLANE_TOOLS ∩ DELETED_5` 逐名（名字出现点 ≠ 注册点）
-// ═════════════════════════════════════════════════════════════════════════════
-test('AC-17 CONTROL_PLANE_TOOLS ∩ DELETED_5 = 4 名（lane_longrun 不在其中）', () => {
-  const controlPlane = controlPlaneTools();
-  const hit = DELETED_5.filter((name) => controlPlane.has(name));
-  // 这是**事实钉**：删除落地批必须同步该名单。B1 落地后 e1 已把五名从 CONTROL_PLANE_TOOLS 移除 ⇒
-  //   本钉的期望从「交集 = 4 名」改为「交集 = ∅ **且** 五名逐个缺席」（更强的正向判据：
-  //   任何人把已删工具重新写回该名单都会立刻红，而不是仅仅「数量不对」）。
-  assert.deepEqual(new Set(hit), new Set([]), 'CONTROL_PLANE_TOOLS ∩ DELETED_5 必须为空集（五名已随 B1 移出）');
-  for (const name of DELETED_5) {
-    assert.equal(controlPlane.has(name), false, 'CONTROL_PLANE_TOOLS 不得再含已删工具 ' + name);
-  }
-});
+// AC-17：`CONTROL_PLANE_TOOLS` 已随证据面退役（零行为死码：其键集与 KIND_BY_TOOL 交集为空），
+//   该事实钉的主题消失 ⇒ 用例删除，不再以源码文本锚定名单。
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 交叉核对：本文件独立复算的 S1 vs 脚本暴露的 s1（不一致 ⇒ 口径分叉，属缺陷）

@@ -34,7 +34,7 @@ export function createTools(ctx, deps) {
   // MCP 数据面（`/mcp` 路由）的 disposer **必须挂到本 fiber**：宿主 `webServer.register()` 的路由
   //   不随插件卸载自动摘除 ⇒ 热重载/开关插件时第二次注册直接炸
   //   `webserver: duplicate exact route "/mcp"`（2026-11-08 活体实测：插件管理器关→开即复现）。
-  //   `ctx.effect` 随 fiber 卸载执行，与 verify/governance 的挂载纪律同款。
+  //   `ctx.effect` 随 fiber 卸载执行；`verify`/`governance` 的挂载各走自己的 dispose 面，不经 `ctx.effect`。
   const mcpPlaneDispose = installMcpDataPlane(ctx, deps);
   if (typeof mcpPlaneDispose === 'function' && typeof ctx?.effect === 'function') {
     ctx.effect(() => mcpPlaneDispose, 'dsh-punky-swarm: mcp data plane');

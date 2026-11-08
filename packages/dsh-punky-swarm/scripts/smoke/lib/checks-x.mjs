@@ -97,6 +97,9 @@ function h11(sm) {
 
   const real = classifyLines(lines);
   const problems = [];
+  if (fs.existsSync(path.join(sm.repoRoot, 'lib', 'verify', 'gate.js'))) {
+    problems.push('lib/verify/gate.js 仍存在：裁决侧已退役（无生产消费点），回流即状态漂移');
+  }
   if (real.importVerifyGate.length !== 0) problems.push('lib/ 下仍有 `verify/gate` import：' + real.importVerifyGate.length + ' 处 → ' + real.importVerifyGate.slice(0, 3).join(' | '));
   if (real.identitySameLine.length !== 0) problems.push("`'identity'` 与 readCapability 同行出现：" + real.identitySameLine.length + ' 处 → ' + real.identitySameLine.slice(0, 3).join(' | '));
   if (real.completionGateCalls.length !== 0) problems.push('createCompletionGate 可执行调用：' + real.completionGateCalls.length + ' 处 → ' + real.completionGateCalls.slice(0, 3).join(' | '));

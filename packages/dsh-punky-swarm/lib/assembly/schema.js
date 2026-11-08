@@ -32,7 +32,7 @@ export const CAPABILITY_REGISTRY = [
   { key: 'acps', path: ['acps'], default: ACPS_DEFAULTS, consumers: ['index.js acps endpoint 装配 + lib/acps/server.js'] },
   { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
   { key: 'discovery', path: ['capabilities', 'discovery'], default: DISCOVERY_DEFAULTS, consumers: ['index.js discovery 服务装配 + api.js /discover + /.well-known/aip 端点'] },
-  { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook（只做证据捕获）', 'verify/gate.js createCompletionGate（仅测试 DI；生产未接线 ⇒ mode=enforce 不拦截）'] },
+  { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook（只做证据捕获落台账）'] },
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
   // injectBudget 键：注入面字节预算（四层：每源软上限 / 总量硬上限 / head-tail 截断 / 显式省略标记）。
@@ -140,11 +140,7 @@ export function validateCapabilities(config = {}) {
   const errors = [];
   const c = config.capabilities ?? {};
 
-  if (c.verify?.enabled === true && c.verify.mode !== undefined && !['advisory', 'enforce'].includes(c.verify.mode)) {
-    errors.push('DEP-1: capabilities.verify.mode must be advisory or enforce (got ' + JSON.stringify(c.verify.mode) + ')');
-  }
-
-  // DEP-2 trajectory：autoFail === true ⇒ enabled === true（autoFail 无 enabled 无意义）
+  // DEP-1 trajectory：autoFail === true ⇒ enabled === true（autoFail 无 enabled 无意义）
   if (c.trajectory?.autoFail === true && c.trajectory.enabled !== true) {
     errors.push('DEP-2: capabilities.trajectory.autoFail=true requires enabled=true');
   }

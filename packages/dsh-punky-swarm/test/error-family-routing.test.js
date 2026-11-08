@@ -20,7 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   repairActionOf, classifyDenial, ERROR_FAMILY_UNMAPPED,
-} from '../lib/verify/evidence.js';
+} from '../lib/governance/denial.js';
 
 test('E1 同族同动作：approval 的两个 code ⇒ 动作 **deepEqual 相同**，且都等于 repairActionOf(approval)', () => {
   const a1 = classifyDenial({ errorFamily: 'approval', errorCode: 'approval-needed' });

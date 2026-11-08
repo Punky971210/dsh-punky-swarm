@@ -485,16 +485,6 @@ const installAcpsEndpoint = ({ ctx, config, root, bridge }) => {
   }
   return acpsEndpoint;
 };
-const installVerifyCapture = ({ ctx, config, root }) => {
-  // verify 引擎级捕获（verify-report 集成注意项 1 接线）：capabilities.verify.enabled 门控挂
-  // installEvidenceCapture（tools/post-execute 证据捕获，blob + ledger 落 <root>/verify/）。verify 出厂默认开（resolveVerifyConfig 缺省 enabled=true）；仅显式 enabled=false 才
-  // 不挂 hook、零运行时开销；ctx.on 缺失静默降级。createCompletionGate 与 audit lane DI 消费路径一字不动（gate.js 零改动）。
-  let verifyMount = mountVerify(ctx, { root, config });
-  if (verifyMount.installed) {
-    ctx.logger?.info?.('[dsh-punky-swarm] verify capability enabled: post-execute evidence capture mounted');
-  }
-  return verifyMount;
-};
 const createRefusalEventBridge = ({ ctx, root, store, dispatchIndex, rebuildIndex, getGovernanceInstalledCfg }) => {
   // 工具调用级护栏（governance hook）：governance.hook.enabled 缺省 true——
   // 订阅宿主 tools/pre-execute + tools/post-execute；rules 空表=零拦截（decide 恒 ALLOW，行为不变）。
@@ -1065,7 +1055,7 @@ export const apply = (ctx, config = {}) => {
   const bridge = mountAcpsBridge({ ctx, config, root });
   const registryClient = installRegistryClient({ ctx, config });
   rt.acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
-  rt.verifyMount = installVerifyCapture({ ctx, config, root });
+  rt.verifyMount = mountVerify(ctx, { root, config });
   const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => rt.governanceInstalledCfg });
   rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
   rt.autoSettle = installAutoSettleMainPath({ ctx, config, store, dispatchIndex, root });

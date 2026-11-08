@@ -82,21 +82,13 @@
   外加 **14 个模块的首求值清单**（独立进程 `import()`，任一 TDZ 即红）。清单**不得缩减** ——
   缩一个就少一个可触发入口的护栏；改环必须**显式声明**冻结表变更（不允许为迁就实现而改表）。
 
-## 二、两项未验（证据级别为静态，`verified=false`）
+## 二、未验清单（证据级别为静态，`verified=false`）
 
-### 未验 5 · `capabilities.verify.mode = 'enforce'` 的 warn（现网恒 `mode=advisory`）
+### 未验 5 ·（已关闭）`capabilities.verify.mode = 'enforce'` 的未接线窗口
 
-- **窗口大小**（验证窗口）：装配面到判定面之间的**语义落差**永久存在 —— 配 `enforce` 与配 `advisory`
-  在运行期**行为相同**（`createCompletionGate` 无生产消费点，装配侧只挂证据捕获 hook、**从不读 `mode`**）。
-  锚点符号：`lib/verify/mount.js` 的 `mountVerify` 的 enforce 告警分支。
-- **触发条件**：用户显式把 `capabilities.verify.mode` 配成 `'enforce'`。
-- **为何不修（平台限制）**：接线 = 改**门禁链**（属功能变更，不是内务）；本轮裁决 `Q-2@closeout`
-  明确「维持现状：只保证配 enforce 时 warn 可见」。且 `verify/gate.js` 的接线 or 退役本身**仍是未决项**，
-  在没有该裁决前接线等于替用户拍板。
-- **当前缓解**：① `mountVerify` 在**任何 inert 提前返回之前**主动 `warn`，说明 enforce **未接线**、
-  实际按 advisory 生效，并指出静音路径（改 `advisory`）与决策文档锚点 —— 该 warn 位置是刻意的：
-  放在 inert 返回之后，`ctx.on` 缺失时这条真相就永不可见；② 判定路径**零改动**（只多一条日志）；
-  ③ 离线冒烟覆盖 `enabled/mode` 组合，使「warn 是否出现」可回归。
+- **关闭方式**：裁决「退役」——`capabilities.verify.mode` 键已删、`lib/verify/gate.js` 与 `selector` 注册表已删、
+  `mountVerify` 不再有 enforce 告警分支。窗口随"开关本身不存在"而消失，不再存在"配了 enforce 却按 advisory 生效"的语义落差。
+- **重开条件**：若要恢复 AC 三态裁决，属**功能立项**（须动门禁链并新增配置键），不是内务。
 
 ### 未验 6 · `inject` 缺服务时的真实失败形态（整块 pending）
 
@@ -139,5 +131,5 @@
 | 2 | TOCTOU（`writeTo`） | 读 `lib/tools/log-tools.js` 的 `writeTo` 分支注释（窗口描述 + 威胁模型）；根内/根外行为面：`resolveWriteTargetIn` 的双档判据用例 |
 | 3 | `claimAsset` 孤儿 | 读 `lib/state/store/batch.js` 的 `claimAsset`（`copy` 在循环外 + 重试语义）；可判性：产物在场 vs 事件流的比对 |
 | 4 | 残余 SCC1 | `node --test test/esm-first-eval.test.js` ⇒ **7/7 pass**（该文件当前 7 条用例；「4/4」是只冻结 SCC 成员、尚未加冻三张边表之前的旧读数 —— 2026-10-23 实测更正）；冻结表数值（24 边 / 3 入边 / 14 模块）以该文件为准 |
-| 5 | `verify.enforce` | 配置 `capabilities.verify.mode='enforce'` 后启动，观察 `mountVerify` 的 warn；`grep -c 'is NOT wired' lib/verify/mount.js` |
+| 5 | `verify.enforce`（已关闭） | `grep -c 'is NOT wired' lib/verify/mount.js` ⇒ **0**；`test -f lib/verify/gate.js` ⇒ 不存在（退役后无 enforce 面可复核） |
 | 6 | `inject` pending | 读 `lib/index.js` 的 `inject` 声明上方注释（硬依赖理由 + 降级路径 + 证据级别）；四态冒烟在 `test/**` |
