@@ -1355,7 +1355,7 @@
     "test/manager-seat.test.js": {
       "asserts": 34,
       "blankLines": 27,
-      "lines": 192,
+      "lines": 193,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -2137,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T09:43:21Z",
+  "generatedAt": "2026-11-08T09:58:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2148,13 +2148,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/④ F①：member.dispatch 读取单点化（state/dispatch-events.js）+ 收窄判据单实现（narrowingDecisionOf）",
+  "reason": "B4/① 宿主适配面：删零引用安装 CLI(install.js 207 行)；MERGE_STATE_SOURCE/MEMBER_STATES_LEGACY 恒等常量内联",
   "schema": 1,
   "totals": {
     "asserts": 11944,
     "blankLines": 6791,
     "files": 267,
-    "lines": 71564,
+    "lines": 71565,
     "tautologies": 0,
     "tests": 2498,
     "todos": 0

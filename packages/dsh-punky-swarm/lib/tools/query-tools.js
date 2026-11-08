@@ -22,7 +22,7 @@ import { readLiveConfig } from './tier-gate.js';
 import { handoffGateStateOf } from '../wave-plan.js';
 //   否则「同一 lane 的 state」会在工具面与探针面分裂（U-5 边界；依赖方向单向：core → watch，无环）。
 import { laneStateOf, isDanglingLane } from '../state/lane-state.js';
-import { managerViewOf, managerSeatFaceOf, MERGE_STATE_SOURCE, MEMBER_STATES_LEGACY } from './host-surface.js';
+import { managerViewOf, managerSeatFaceOf } from './host-surface.js';
 import * as EVT from '../state/event-types.js';
 import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt } from '../engine/dispatch.js';
 //   **不 re-export**）⇒ 必须从真源取，从 `dispatch.js` 取会得 `undefined`（调用期 TypeError）。
@@ -60,7 +60,9 @@ export function buildBatchStatusTools(cx) {
         const smokeOf = (b) => (b?.events ?? []).some((e) => e && e.type === EVT.EVT_BATCH_SMOKE);
         //    （改了会把「服务不可用」与「非成员」压成同一形态，降级不可辨）。
         //    （`runtime|env|default`）；渲染面同样显示（缺省关是策略、**不得隐形**）。
-        const stateAnnotation = { stateSource: MERGE_STATE_SOURCE.engine, memberStatesLegacy: MEMBER_STATES_LEGACY };
+        // 输出面的「这个字段是哪来的」自述：engine = 引擎状态机为真源；memberStatesLegacy = 成员态仍是引擎内置闭集
+  //   （曾以 `MERGE_STATE_SOURCE` / `MEMBER_STATES_LEGACY` 两个常量导出承载，实为恒等映射与恒真布尔 ⇒ 内联）
+  const stateAnnotation = { stateSource: 'engine', memberStatesLegacy: true };
         const hgState = handoffGateStateOf(readLiveConfig(deps));
         const handoffGateView = {
           enabled: hgState.entry || hgState.settle,

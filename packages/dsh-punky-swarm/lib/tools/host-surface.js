@@ -122,9 +122,3 @@ export function handoffCallerIdentityOf(ctx, exec, args) {
   } catch {  }
   return { source: 'handoff-caller-identity', sessionId, rosterNames };
 }
-
-export const MERGE_STATE_SOURCE = {
-  engine: 'engine',
-  roster: 'roster',
-};
-export const MEMBER_STATES_LEGACY = true;

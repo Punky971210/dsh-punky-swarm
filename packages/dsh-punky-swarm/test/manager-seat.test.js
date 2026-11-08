@@ -161,8 +161,9 @@ test('M-6 判别子恒定：source 恒 engine-registry（≠ roster）；legacy 
   const b = store.readBatch(SID, id);
 
   assert.equal(b.managerSeat.source, 'engine-registry');
-  // ⚠ 两个 `source` 是**不同语义位**：表行 source = 在册真源出处；MERGE_STATE_SOURCE.roster = 成员态真源。
-  //   串用会让 batch_status 宣称「在册真源 = 宿主 roster」，与 R-1 直接相反。
+  // ⚠ 两个 `source` 是**不同语义位**：表行 source = 在册真源出处；`batch_status.stateAnnotation.stateSource`
+  //   只声明「引擎状态机为真源」（引擎内置成员态闭集，不存在 roster 档位）。串用会让 batch_status 宣称
+  //   「在册真源 = 宿主 roster」，与 R-1 直接相反。
   assert.notEqual(b.managerSeat.source, 'roster', '在册真源 ≠ 宿主 roster（两处 source 不得互相赋值）');
   assert.deepEqual(Object.keys(b.manager).sort(), ['agentId', 'note', 'raisedAt'], 'legacy 形态只多 note，键名逐字不变');
   assert.equal(b.manager.note, '带备注');
