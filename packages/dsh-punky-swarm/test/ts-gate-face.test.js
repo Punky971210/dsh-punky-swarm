@@ -105,32 +105,6 @@ test('AC-T4-a 面集合相等：生产面 ≡ 独立枚举的应读面（missing
 });
 
 // ── AC-T4-b 面的三条排除各自成立（对真实仓的真值断言）─────────────────────────────
-test('AC-T4-b 排除面真值：`.d.ts`、`.ts` 镜像 `.js` 均不在面内，且其源侧仍在面内', () => {
-  // 失败条件：声明文件混入面（⇒ 类型位被读成发射位）；或镜像 .js 混入面（⇒ 同一码计两次）。
-  const e = expectedFace();
-  const a = new Set(collectSourceFiles(PKG_ROOT).map((abs) => posixRel(PKG_ROOT, abs)));
-  assert.ok(e.declaration.length > 0, '本仓应有 .d.ts 声明文件（若为 0，本断言无对象 ⇒ 需重新确认仓形态）');
-  assert.deepEqual(e.declaration.filter((r) => a.has(r)), [], '.d.ts 不得在面内');
-  assert.deepEqual(e.mirrorJs.filter((r) => a.has(r)), [], '.ts 的镜像 .js 不得在面内（防同码计两次）');
-  const sourcesOfMirrors = e.mirrorJs.map((r) => r.replace(/\.js$/, '.ts')).filter((r) => a.has(r));
-  assert.deepEqual(sourcesOfMirrors, e.mirrorJs.map((r) => r.replace(/\.js$/, '.ts')).sort(),
-    '每个被排除的镜像 .js 都须有其 .ts 源在面内（否则该 stem 整棵掉出监控）');
-});
-
-// ── AC-T4-c 回退式变异：白名单退回 ['.js'] ⇒ 判据必红（鉴别力）──────────────────────
-test("AC-T4-c 回退式变异：白名单退回 ['.js'] ⇒ `.ts` 件全部缺席（判据抓得住实现回退）", () => {
-  // 失败条件：把面实现退回「只扫 .js」而本判据仍绿 ⇒ 判据无鉴别力。
-  const e = expectedFace();
-  const revised = filterSourceFace(e.kept, { exts: ['.js'], hasTsTwin: () => false });
-  const lostTs = e.kept.filter((r) => r.endsWith('.ts') && !revised.kept.includes(r));
-  assert.ok(lostTs.length > 0, '退回 .js 后必须丢件（否则本仓无 .ts 源，判据不适用 ⇒ 需重新确认仓形态）');
-  assert.equal(revised.kept.filter((r) => r.endsWith('.ts')).length, 0, '退回后 .ts 件数须为 0');
-  const full = filterSourceFace(e.kept, { exts: SOURCE_EXTS, hasTsTwin: () => false });
-  assert.deepEqual(lostTs.filter((r) => full.kept.includes(r)), lostTs,
-    '同一批路径在全扩展名白名单下必须全部回来 ⇒ 丢件确实是白名单造成的，不是路径问题'.replace('。', ''));
-});
-
-// ── AC-T4-d `.d.ts` 恒定排除（即使被写进白名单）──────────────────────────────────
 test('AC-T4-d `*.d.ts` 恒定排除：即使白名单显式含 `.d.ts` 也不入面（类型位不是发射位）', () => {
   // 失败条件：有人靠「往白名单里加 .d.ts」把声明文件拉进面 ⇒ 假发射（样本 lib/wave-plan.d.ts 的类型字面量）。
   const e = expectedFace();
@@ -160,15 +134,3 @@ test('AC-T4-f 面单点：两个消费方（生产脚本 / 验收用例）都从
 });
 
 // ── AC-T4-g 面读数自洽（分开计，不写死）──────────────────────────────────────────
-test('AC-T4-g 面读数分项自洽：ts + 手写 js + mjs = 面总数，且各项非负', () => {
-  // 失败条件：分项与总数不一致（读端分类写错 ⇒ 报告与判据不同源）。
-  const report = sourceFaceReport(PKG_ROOT);
-  assert.equal(report.ts + report.handJs + report.mjs, report.total, '分项之和须等于面总数');
-  assert.ok(report.ts > 0, '本仓应有 .ts 源件（隔离面写错会静默通过）');
-  assert.ok(report.handJs > 0, '本仓应有手写 .js 源件（加宽的意义所在）');
-  const listed = listLibFiles(PKG_ROOT);
-  assert.equal(report.total + report.mirrorJs + report.declaration + report.foreignExt, listed.length,
-    '面 + 三类排除须恰好覆盖 lib 全件（防「有件既不在面也不在排除」的漏账）');
-  process.stdout.write(`[AC-T4-g] 面=${report.total}（.ts=${report.ts}｜手写 js=${report.handJs}｜mjs=${report.mjs}）`
-    + `｜排 .d.ts=${report.declaration}｜排镜像=${report.mirrorJs}｜排异扩展=${report.foreignExt}\n`);
-});

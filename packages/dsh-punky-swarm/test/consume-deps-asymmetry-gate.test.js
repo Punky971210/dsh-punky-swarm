@@ -282,29 +282,3 @@ test('A-7 重归一化：追加违例 lane ⇒ 拒 + 批文件字节级不变；
 });
 
 // ── A-10 `ts ↔ js` 双面对齐 ─────────────────────────────────────────────────
-test('A-10 双面对齐：`.ts` 源与 `.js` 产物 的 throw / 标识符计数相等，`.d.ts` 同批', () => {
-  const read = (rel) => fs.readFileSync(path.join(PKG_ROOT, rel), 'utf8');
-  const ts = read('lib/wave-plan.ts');
-  const js = read('lib/wave-plan.js');
-  const THROW_RE = new RegExp("throw new Error\\('" + NEW_GATE, 'g');
-  assert.equal(hitsOf(ts, THROW_RE), 1, '`.ts` 内新门 throw 命中数 = 1（单点判定）');
-  assert.equal(hitsOf(js, THROW_RE), 1, '`.js` 产物同判据命中数 = 1（两侧相等）');
-  assert.equal(hitsOf(ts, /consumeDepsAsymmetry/g) >= 1, true, '`.ts` 内 consumeDepsAsymmetry 标识符 ≥ 1');
-  assert.equal(hitsOf(js, /consumeDepsAsymmetry/g) >= 1, true, '`.js` 内 consumeDepsAsymmetry 标识符 ≥ 1');
-  // 事件常量单点（`lib/state/event-types.js` 为手写源，无 .ts 对侧）+ 工具面引用 + 字面量
-  const evtTypes = read('lib/state/event-types.js');
-  const tools = read('lib/tools/wave-plan-tools.js');
-  assert.equal(hitsOf(evtTypes, /export const EVT_GATE_CONSUME_DEPS_ASYMMETRY = 'gate\.consume_deps_asymmetry';/g), 1, '事件常量定义恰 1 处');
-  assert.equal(hitsOf(evtTypes, new RegExp("'" + NEW_EVT + "'", 'g')), 1, '事件字面量恰 1 处');
-  assert.equal(hitsOf(tools, /EVT\.EVT_GATE_CONSUME_DEPS_ASYMMETRY/g), 1, '工具面写端引用恰 1 处');
-  assert.equal(hitsOf(tools, /consumeDepsAsymmetry/g) >= 1, true, '工具面回显键 ≥ 1 处');
-  // 拒码登记：源 + 构建产物同批
-  assert.equal(hitsOf(read('lib/types/contracts.ts'), new RegExp("'" + NEW_GATE + "'", 'g')), 1, 'contracts.ts 登记恰 1 处');
-  assert.equal(hitsOf(read('lib/types/contracts.d.ts'), new RegExp("'" + NEW_GATE + "'", 'g')), 1, 'contracts.d.ts（构建产物）同批登记恰 1 处');
-  // lib/** 其余文件零 throw 命中（无第二实现）；WORD_RE 为**非全局**（逐文件 fresh 匹配，无 lastIndex 状态）
-  const WORD_RE = new RegExp("throw new Error\\('" + NEW_GATE);
-  const others = fs.readdirSync(path.join(PKG_ROOT, 'lib'), { recursive: true })
-    .map(String).filter((f) => /\.(js|ts)$/.test(f) && !/^wave-plan\.(ts|js)$/.test(f))
-    .filter((f) => WORD_RE.test(fs.readFileSync(path.join(PKG_ROOT, 'lib', f), 'utf8')));
-  assert.deepEqual(others, [], 'lib/** 其余文件零新门 throw（无第二实现）');
-});

@@ -83,7 +83,7 @@ function seedVocab(pkg, entries) {
   fs.writeFileSync(abs, JSON.stringify({
     $schema: 'dsh-punky-swarm/vocabulary@1',
     meta: { version: 1, updated: '2026-09-19', counts: { gateCodes: 86, reasonTokens: 45 } },
-    sources: [{ id: 'gate-entry', path: 'lib/state/gates.ts', line: 598, note: 'GATE_* 拒码面（Entry 门）' }],
+    sources: [{ id: 'gate-entry', path: 'lib/state/gates.js', line: 30, note: 'GATE_* 拒码面（Entry 门）' }],
     entries,
   }, null, 2), 'utf8');
   return abs;
@@ -365,38 +365,6 @@ test('#6 词表不可用 ⇒ `loaded:false`（version/source 为 null），**其
 // ═══════════════════════════════════════════════════════════════════════════════
 // U-2 严格生效（源码级回归锁）+ 契约码面 + 生成物同批
 // ═══════════════════════════════════════════════════════════════════════════════
-
-test('U-2 严格生效：无 env 关阀 / 无按批龄分流分支（源码级）', () => {
-  const src = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'state', 'gates.ts'), 'utf8');
-  assert.equal(/PUNKY_R1_VOCAB|VOCAB_ENABLED/.test(src), false, '不得引入 env 默认关阀');
-  assert.equal(/createdAt\s*[<>]/.test(src), false, '不得引入按批次创建时间的分流分支');
-  // 说明：`batch.createdAt` 在 R1 **之前**即有一处既有用途（`laneStartedAt` 的防御性回落：
-  //   「无可用事件 → 回退 batch.createdAt」），它不是分流门、本批不改；本用例只锁「新增分流」两种签名。
-  //   P5 的完整机检原始读数（含该既有命中）见 `exec/gate-layer.md`。
-  const hits = src.split('\n').filter((l) => l.includes('batch.createdAt'));
-  assert.ok(hits.length >= 1, '既有防御性回落须仍在场（防误删既有码）');
-  assert.equal(hits.length, 2, '既有命中数须恒为 2（1 注释 + 1 return）——任一新增即拒：' + JSON.stringify(hits));
-});
-
-test('契约码面：`GateErrorCode` 新增 2 条，源与生成物同批', () => {
-  const ts = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'types', 'contracts.ts'), 'utf8');
-  const union = ts.match(/export type GateErrorCode =([\s\S]*?);/);
-  assert.ok(union, '须找到 GateErrorCode 联合类型');
-  assert.ok(union[1].includes("'GATE_TOKEN_UNKNOWN'"), 'TS 源须登记 GATE_TOKEN_UNKNOWN');
-  assert.ok(union[1].includes("'GATE_VOCAB_INVALID'"), 'TS 源须登记 GATE_VOCAB_INVALID');
-  const dts = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'types', 'contracts.d.ts'), 'utf8');
-  assert.ok(dts.includes("'GATE_TOKEN_UNKNOWN'") && dts.includes("'GATE_VOCAB_INVALID'"), '生成物 contracts.d.ts 须同批（禁只改源）');
-});
-
-test('P11 生成物同批：gates.js / gates.d.ts 含本批新增符号；`.tsbuild` 不得留盘', () => {
-  assert.equal(fs.existsSync(path.join(PKG_ROOT, '.tsbuild')), false, '.tsbuild 不得留盘（受控编译后须清）');
-  const js = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'state', 'gates.js'), 'utf8');
-  assert.ok(js.includes('detectPendingMarker'), 'gates.js 须含新纯函数');
-  assert.ok(js.includes('GATE_TOKEN_UNKNOWN'), 'gates.js 须含新拒码字面量');
-  assert.ok(js.includes(VOCABULARY_REL), 'gates.js 须经词表读端（import 同源）');
-  const dts = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'state', 'gates.d.ts'), 'utf8');
-  assert.ok(dts.includes('detectPendingMarker'), 'gates.d.ts 须同步（禁手改，须经 tsc）');
-});
 
 test('词表读端契约自证：夹具词表本身须 schema 自洽（防「用坏夹具测出假绿」）', () => {
   const pkg = mkPkg();

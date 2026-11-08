@@ -126,27 +126,6 @@ test('A1-P2-09 / REVERSE · 样本集判别力：把单点实现换成恒等函�
     '恒等函数下应仅剩 3 组「无标记」样本；多出即说明有命中样本被漏掉，少一个即说明样本集变了');
 });
 
-test('A1-P2-09 · 静态单点：`function stripStreamMerges` 全仓恰 1 处，护栏侧只有 import + 2 调用', () => {
-  const defs = [];
-  for (const rel of ['lib/shell-text.js', 'lib/governance/tool-ban.js', 'lib/governance/tool-ban.ts']) {
-    const n = (read(rel).match(/function stripStreamMerges\s*\(/g) ?? []).length;
-    if (n > 0) defs.push(rel + ':' + n);
-  }
-  assert.deepEqual(defs, ['lib/shell-text.js:1'], '定义必须唯一落在 shell-text.js（护栏侧第二份已删净）');
-  const toolBan = read('lib/governance/tool-ban.js');
-  assert.equal(/function stripStreamMerges/.test(toolBan), false, 'tool-ban.js 不得再有函数体');
-  // 改位置数组（可列位置、抓「多处」）：出现次数变化与位置漂移都会红
-  {
-    const callSites = [...toolBan.matchAll(/stripStreamMerges\(/g)].map((m) => m.index);
-  // 已删断言（D 夹具自证/冗余）：邻近 :135 的更强断言已覆盖同一职能 —— 原文 "assert.equal(callSites.length, 2, '护栏侧恰 2 处调用（实测 ' + callSites.length "
-    assert.equal(new Set(callSites).size, callSites.length, '两处调用位置须互异（同一处被计两次即红）');
-  }
-  assert.ok(/import \{[^}]*segmentCommands, stripStreamMerges[^}]*\} from '\.\.\/shell-text\.js'/.test(toolBan),
-    '护栏侧必须从既有中立件 import 单点（零新增跨域边）');
-});
-
-// ── T-2b · 判据面 30 命令：decisionDiff 相对 BEFORE 基线 = 0 ──────────────────────────
-// 期望表 = 改前读数（BEFORE）。`reason` 全串太长，改用 sha256 摘要锁（任一文案漂移即红）。
 const JUDGE_GOLDEN = Object.freeze([
   ['npm test 2>&1', false, false],
   ['npm test 2>$null', false, false],

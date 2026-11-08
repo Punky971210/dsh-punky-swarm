@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
+
+// @ts-check
 import { isAbsPath } from '../constants.js';
 import { sessionDirOf, artifactsDirOf as artifactsDirOfAt, batchFilePathOf } from '../batch-paths.js';
 import { flowOf, consumeFieldOf } from '../../assembly/flows.js';

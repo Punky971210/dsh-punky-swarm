@@ -205,53 +205,6 @@ test('RU-4 dispatch 批（零条 lane 写 roster）⇒ 零 roster 告警且零 '
 // ═══════════════════════════════════════════════════════════════════════════════
 // RU-5（**反转**）· `hostRoster` 出现在建批面 + `lib/wave-plan.ts` **代码面零 ctx** + basis 并集声明
 // ═══════════════════════════════════════════════════════════════════════════════
-test('RU-5 WARN_ROSTER_UNKNOWN 不进 GateErrorCode union；hostRoster 出现在建批面，且 lib/wave-plan.ts 代码面零 ctx', () => {
-  const contractsSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/types/contracts.ts'), 'utf8');
-  const unionStart = contractsSrc.indexOf('export type GateErrorCode');
-  assert.notEqual(unionStart, -1, 'GateErrorCode union 须仍在 lib/types/contracts.ts');
-  const unionBlock = contractsSrc.slice(unionStart, contractsSrc.indexOf(';', unionStart));
-  assert.equal(unionBlock.includes(ROSTER_UNKNOWN), false,
-    ROSTER_UNKNOWN + ' 是**告警名**不是拒码 —— 一旦进 GateErrorCode union，test/gate-lane-snapshot.test.js 的精确集合断言必红，'
-    + '且语义从「只告警」漂移成「可拒」');
-
-  const planSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/wave-plan.ts'), 'utf8');
-  const toolSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/tools/wave-plan-tools.js'), 'utf8');
-
-  // ① 反转点之一：`hostRoster` **必须**出现在建批面（旧断言要求「零出现」已被推翻）
-  assert.equal(planSrc.includes('hostRoster'), true,
-    '建批函数须接收 hostRoster 纯数据形参（基准 = BUILTIN_ROLES ∪ 宿主 roster 的入口）');
-  assert.equal(toolSrc.includes('hostRoster'), true,
-    'lib/tools/wave-plan-tools.js 的 planArgs 须把 hostRoster 透传给 buildWavePlan（唯一接线点）');
-  // ② 接线用的是 provider 名册单点，不是自建宿主读取
-  assert.equal(toolSrc.includes('createRosterPort'), true,
-    '宿主 roster 读取须走 provider 名册单点 createRosterPort（lib/provider-dsh/roster.js）');
-  // ③ 基准文案可核（`E2-F5`）
-  assert.equal(planSrc.includes("'BUILTIN_ROLES+hostRoster'"), true,
-    "载荷 basis 须为 'BUILTIN_ROLES+hostRoster'（不再是只 BUILTIN_ROLES）");
-  assert.equal(planSrc.includes('BUILTIN_ROLES'), true,
-    'lib/wave-plan.ts 须直接引用 BUILTIN_ROLES（并集的左半，单一来源 = lib/roster.js:44）');
-  // ④ 不得借用 reconcileRoster 当判据（它是对账语义，`S3-2` 明令）。
-  //    口径：判**代码行**（注释里可以出现该名字作为「为什么不借用」的说明 —— 上一版裸 `includes`
-  //    会把我方注释算成违规，是自造假红）。
-  // ⑤ **代码面零 `ctx`**（`E2-F10`：buildWavePlan 至今零 ctx 纯函数）。
-  //    口径说明：本文件既有注释里本来就有「零 ctx 纯函数」这类**说明性文字** ⇒ 判据取「非注释行零命中」，
-  //    不是裸 grep 计数（裸计数会把既有注释算成违规）。`exec` 不作判据：它是 `layer` 字面量
-  //    （`LAYERS = ['plan','exec','audit']`），裸 `exec` 命中无判别力。
-  const nonCommentLines = planSrc.split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))
-    .map((line) => line.replace(/\/\/.*$/, '')); // 去掉行尾注释后再判
-  assert.deepEqual(nonCommentLines.filter((line) => line.includes('reconcileRoster')), [],
-    '并集须用 Set 单点构造；**代码行**借用 reconcileRoster（对账三集合）等于让读端二次解释 ⇒ 判红');
-  assert.deepEqual(nonCommentLines.filter((line) => /\bctx\b/.test(line)), [],
-    'lib/wave-plan.ts 的**代码行**不得出现 ctx（零 ctx 纯函数；出现即证明有人把 ctx 传进了建批函数）');
-  assert.deepEqual(planSrc.match(/\bagent\b/g) ?? [], [],
-    'lib/wave-plan.ts 不得出现 agent（宿主凭据属调用方，不得下渗到纯函数）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RU-6（**新增**）· 正例：宿主 roster 提供成员名 ⇒ 这些成员名零告警
-// ═══════════════════════════════════════════════════════════════════════════════
 test('RU-6 正例：hostRoster 含成员名 ⇒ 这些成员名零 roster 告警（并集生效）', () => {
   const plan = buildWavePlan({
     batchId: 'ru6',

@@ -68,7 +68,7 @@ function seedVocab(entries, metaOverride = {}) {
       updated: '2026-09-19',
       counts: { gateCodes: 86, reasonTokens: 45, ...metaOverride },
     },
-    sources: [{ id: 'gate-entry', path: 'lib/state/gates.ts', line: 598, note: 'GATE_* 拒码面（Entry 门）' }],
+    sources: [{ id: 'gate-entry', path: 'lib/state/gates.js', line: 30, note: 'GATE_* 拒码面（Entry 门）' }],
     entries,
   };
   const abs = path.join(root, VOCABULARY_REL);
@@ -350,7 +350,7 @@ function docOf(entries) {
   return {
     $schema: 'dsh-punky-swarm/vocabulary@1',
     meta: { version: 1, updated: '2026-09-19', counts: { gateCodes: 86, reasonTokens: 45 } },
-    sources: [{ id: 'gate-entry', path: 'lib/state/gates.ts', line: 598, note: 'GATE_* 拒码面（Entry 门）' }],
+    sources: [{ id: 'gate-entry', path: 'lib/state/gates.js', line: 30, note: 'GATE_* 拒码面（Entry 门）' }],
     entries,
   };
 }

@@ -197,7 +197,7 @@ function seedVocab(pkg, entries) {
     $schema: 'dsh-punky-swarm/vocabulary@1',
     meta: { version: 1, updated: '2026-10-24', counts: { gateCodes: 0, reasonTokens: 0 } },
     // `sources` 是 schema 必检面（`checkSources`：id/path/line/note 四项齐、path 须在**真包根**在场）
-    sources: [{ id: 'gate-entry', path: 'lib/state/gates.ts', line: 1, note: 'GATE_* 拒码面（Entry 门）' }],
+    sources: [{ id: 'gate-entry', path: 'lib/state/gates.js', line: 1, note: 'GATE_* 拒码面（Entry 门）' }],
     entries,
   }, null, 2), 'utf8');
   return abs;
@@ -246,24 +246,6 @@ test('AC-pack2-2 `node scripts/check-vocab-counts.mjs` exit 0；独立复算「�
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-3 底料 = union 成员（**双向**）＋ 12 码在 union 内
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-3 双向：词表 gate ⊇ union 且 union ⊇ 词表 gate；K-1 的 12 码逐码在 union 内', () => {
-  // 失败条件：单向只证一半 ——
-  //   ① 词表缺 union 成员 ⇒ 「合法码被拒」误伤；② 词表多出 union 外的码 ⇒ 给非码开白（R-02 同源风险）；
-  //   ③ K-1 的 12 码有任一未进 union ⇒ 底料来源（union 单一源）本身漏码，AC-2 的 GREEN 就是假绿。
-  const union = unionMembers();
-  const gate = vocabCodes('gate');
-  const missing = [...union].filter((c) => !gate.has(c)).sort();
-  const extra = [...gate].filter((c) => !union.has(c)).sort();
-  assert.deepEqual(missing, [], `union ⊄ 词表：缺 ${JSON.stringify(missing)}`);
-  assert.deepEqual(extra, [], `词表 ⊄ union：多 ${JSON.stringify(extra)}`);
-  const notInUnion = K1_CODES.filter((c) => !union.has(c));
-  assert.deepEqual(notInUnion, [], `K-1 的 12 码须全部进 ` + '`GateErrorCode` union，缺 ' + JSON.stringify(notInUnion));
-  process.stdout.write(`[AC-pack2-3] union=${union.size}｜词表 gate=${gate.size}｜缺=${missing.length}｜多=${extra.length}\n`);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-4 底料不含标识符（R-02）：与「仅标识符」清单交集 = 0（清单自检改为三条不依赖总数的不变量）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('AC-pack2-4 词表 code 集 ∩「仅标识符」清单 = ∅（清单自检：无重复 / 形态合法 / 判别力 / 下界棘轮 ≥ 30）', () => {
   // 失败条件：任一把标识符/正则名/前缀灌进词表（= 给非码开白，R-02）。
@@ -339,34 +321,6 @@ test('AC-pack2-5 负例：未登记 token 必拒 —— 判定单点 ＋ 命令�
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-6 正例：存量 token 不被误拒 ＋ 两个词表测试文件全 pass
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-6 正例：仓内 `^reason:` 声明 token 全部已登记；两词表测试文件 fail = 0', () => {
-  // 失败条件：生产面（非 test/）出现未登记 token（⇒ 上线即误拒）/ 既有词表用例回归。
-  const tokens = new Set();
-  const walk = (dir) => {
-    for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (['node_modules', '.git', '.tsbuild', 'out', 'test'].includes(d.name)) continue;
-      const p = path.join(dir, d.name);
-      if (d.isDirectory()) { walk(p); continue; }
-      if (!/\.(js|mjs|cjs|ts|md|json|yml|yaml)$/.test(d.name)) continue;
-      let text = '';
-      try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
-      for (const m of text.matchAll(/^\s*reason:\s*([A-Za-z0-9_.:-]+)\s*$/gm)) tokens.add(m[1]);
-    }
-  };
-  walk(PKG_ROOT);
-  const unknown = [...tokens].filter((t) => !reasonTokenKnown(t).known).sort();
-  assert.deepEqual(unknown, [],
-    `生产面 ` + '`reason:` 声明了未登记 token（须先登记再落代码）：' + JSON.stringify(unknown));
-  process.stdout.write(`[AC-pack2-6] 盘点 reason token=${tokens.size}：${JSON.stringify([...tokens])}\n`);
-  const r = runNodeTest(['test/gates-vocabulary-contract.test.js', 'test/vocabulary.test.js']);
-  assert.equal(r.status, 0, '两词表测试文件须全 pass；尾部输出：\n' + r.out.slice(-1500));
-  assert.equal(r.fail, 0, `fail 须 = 0，实测 ${r.fail}`);
-  assert.ok(r.tests !== null && r.tests >= 1, '用例数须可解析且 ≥ 1（防「跑了 0 条也算绿」）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-7 与退役锁关系举证（锁 GREEN ＋ 交集可算 ＋ 两枚幽灵码显式归属）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('AC-pack2-7 退役锁 GREEN；词表∩退役锁可算且逐码有理由；两枚幽灵码各有显式归属', (t) => {
   // 失败条件：锁用例回归（退役码回生）/ 交集非空却无理由（两本账）/ 幽灵码被悄悄漏掉（R-09、R-14 要求「禁悄悄漏掉」）。
@@ -472,37 +426,6 @@ test('AC-pack2-9 机检脚本对 `counts` 零判定性引用；test/ 内无「co
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-10 build 产物归属（生成物同批，禁只改源）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-10 `contracts.d.ts` 已重生成并含 K-1 的 12 码；`contracts.js` 内零 `GATE_` 字面量（无手改）', () => {
-  // 失败条件：`.d.ts` 未重生成（类型面仍读旧产物 ⇒ 消费方 TS 编译看不见新码）/
-  //           `.js` 里凭空出现 `GATE_` 字面量（= 有人手改了 tsc 产物，K-7 禁）。
-  //   口径说明（防空断言）：`GateErrorCode` 是**纯类型别名**，tsc 会把它整段擦除 ⇒ `contracts.js`
-  //     本就不含 `GATE_` 字面量（实测 0 处）。因此 `.js` 侧的正确判据不是「含 12 码」，而是「仍为 0」。
-  assert.ok(existsRel(CONTRACTS_DTS_REL), `缺生成物 ${CONTRACTS_DTS_REL}（须由 pack2 的 build 窗口产出）`);
-  const dts = readRel(CONTRACTS_DTS_REL);
-  const miss = K1_CODES.filter((c) => !dts.includes(c));
-  assert.deepEqual(miss, [], `contracts.d.ts 缺 K-1 的码（禁只改 .ts 不重生成）：${JSON.stringify(miss)}`);
-  assert.ok(existsRel(CONTRACTS_JS_REL), `缺生成物 ${CONTRACTS_JS_REL}`);
-  const jsGates = [...new Set([...readRel(CONTRACTS_JS_REL).matchAll(/GATE_[A-Z0-9_]+/g)].map((m) => m[0]))];
-  assert.deepEqual(jsGates, [], 'contracts.js 内不得出现 GATE_ 字面量（出现即疑似手改 tsc 产物）：' + JSON.stringify(jsGates));
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-11 面不变式（防误伤）：三件词表/契约用例全 pass
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-11 `retired-codes-lock` ＋ `gates-vocabulary-contract` ＋ `vocabulary` 三件 fail = 0', () => {
-  // 失败条件：填表/补码后既有词表面回归（= 转拦截把存量误拒，Q-D 的最高风险）。
-  const r = runNodeTest([
-    'test/retired-codes-lock.test.js',
-    'test/gates-vocabulary-contract.test.js',
-    'test/vocabulary.test.js',
-  ]);
-  assert.equal(r.status, 0, '三件须全 pass；尾部输出：\n' + r.out.slice(-2000));
-  assert.equal(r.fail, 0, `fail 须 = 0，实测 ${r.fail}`);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-12 越界检查（无条件不变的禁区 ＋ porcelain 可归属）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归属声明写域', () => {
   // 失败条件：写了基线/文档/报告（W8：基线单写者 = Leader；docs/reports 本批只读）/

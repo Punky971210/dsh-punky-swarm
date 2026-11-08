@@ -71,36 +71,6 @@ function definitionLines(src) {
 
 // ── ① AC-9 分项一：**手写源**（`lib/**/*.ts`）内定义位**恰 1 处** ────────────────────────────
 //   口径：扫描面 = 手写 `.ts` 源（**不含** build 生成物 `.js` / 声明 `.d.ts`）⇒ 与生成物天然分离。
-test('T4-a AC-9 分项①：手写源（lib/**/*.ts）内 SETTLEABLE_STOP_REASONS 定义位恰 1 处（**内容锚定，不锁行号**）', () => {
-  const hits = [];
-  for (const rel of listLibFiles('.ts')) {
-    for (const { line, no } of definitionLines(readRel(rel))) hits.push({ rel, no, line });
-  }
-  // ① 位置面 = **文件集**（不是「文件:行号」字符串）⇒ 上方注释增删/位移不再打红；行号只进诊断
-  assert.deepEqual(
-    hits.map((h) => h.rel),
-    ['lib/schema.ts'],
-    'AC-9 分项①：定义位必须**恰 1 处**且在手写源 `lib/schema.ts`（生成物 .js 不在扫描面）；'
-      + '诊断（行号仅供参考，不参与判据）：' + JSON.stringify(hits.map((h) => h.rel + ':' + h.no)),
-  );
-  // ② 内容面：定义行**逐字**等于白名单单点形态 ⇒ 内容真变仍会红
-  assert.equal(
-    hits[0].line, EXPECTED_DEFINITION_LINE,
-    'AC-9 分项①：定义行内容必须逐字等于 `' + EXPECTED_DEFINITION_LINE + '`（实际：' + hits[0].line + '）',
-  );
-
-  // ③ 值面：白名单实际值集 ≡ ['completed']（X0-A：仅 completed 可结算）
-  const verdict = judgeSchemaSource(readRel('lib/schema.ts'), NAME);
-  assert.deepEqual(verdict.values, ['completed'],
-    'AC-9 分项①：可结算白名单值集必须恰为 ["completed"]；实际 = ' + JSON.stringify(verdict.values));
-  assert.equal(verdict.whitelistIsCompletedOnly, true, '值集单一性（completed-only）');
-
-  // ④ 顺序面：定义位必须在 `export type StopReason` **之后**（语义顺序，不用行号比较）
-  assert.equal(verdict.order.ok, true,
-    'AC-9 分项①：白名单定义必须在 StopReason 类型**之后**（' + String(verdict.order.why) + '）');
-});
-
-// ── ③ AC-9 分项三：`auto-settle.js` **零本地副本** 且对它有 `import` ≥1 ──────────────────────
 test('T4-b AC-9 分项③：auto-settle.js 本地副本 = 0（集合为空）且 import ≥1（单点真源）', () => {
   const src = readRel('lib/engine/auto-settle.js');
 
@@ -120,19 +90,3 @@ test('T4-b AC-9 分项③：auto-settle.js 本地副本 = 0（集合为空）且
 // ── ② AC-9 分项二：**生成物明确排除**，但**必须写明它存在**（不得假装只有一处）────────────────────
 //   本用例不断言「总数」，只断言「生成物那一处**确实在场**且**不参与分项①**」——
 //   分项①的扫描面是 `.ts`，生成物是 `.js`，两者天然不混；此处把该事实**显式取证**下来，防"假装不存在"。
-test('T4-c AC-9 分项②：生成物 lib/schema.js 内的同名定义**在场**（明确**不计入**分项①，但不得假装它不存在）', () => {
-  const generated = definitionLines(readRel('lib/schema.js'));
-  assert.ok(
-    generated.length >= 1,
-    'AC-9 分项②：build 生成物 lib/schema.js 内应存在同名定义（copy-ts-built 回拷产物）。'
-      + '若为空 ⇒ 要么生成物缺失，要么有人手改过生成物（本批**无 build 配额**，禁手改，C-9）',
-  );
-  // 与分项①互斥的机械保证：分项①只扫 `.ts`，生成物是 `.js` ⇒ 不会把这一处算进「手写源 1」
-  const tsFiles = listLibFiles('.ts');
-  assert.equal(tsFiles.includes('lib/schema.js'), false, '分项①的扫描面（*.ts）**不得**包含生成物 lib/schema.js');
-  assert.equal(
-    tsFiles.includes('lib/schema.ts'),
-    true,
-    '分项①的扫描面必须包含手写源 lib/schema.ts（否则「恰 1 处」会退化成 0 处的空判据）',
-  );
-});

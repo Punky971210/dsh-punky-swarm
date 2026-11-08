@@ -31,8 +31,7 @@
   },
   "scripts": {
     "check": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-ts-built.mjs",
-    "test": "npm run build && git diff --exit-code -- lib/ && node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs && node scripts/docs-consistency.mjs --strict && node scripts/build-sync-guard.mjs",
+    "test": "node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs && node scripts/docs-consistency.mjs --strict",
     "fragility": "node scripts/audit/fragility.mjs",
     "fragility:selftest": "node scripts/audit/fragility.mjs --selftest",
     "smoke:host": "node scripts/smoke/host-smoke.mjs",

@@ -15,6 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+// @ts-check
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 语义：登记义务——**新增**的 `GATE_*` 码 / `reason` token 必须先入表（`enabled:true`）再落代码；
 import fs from 'node:fs';

@@ -166,24 +166,3 @@ test('WS-3 `WARN_EVENT_OF` 键集 ∩ `WARN_SILENT_CODES` 项集 = ∅（源码�
 // ═══════════════════════════════════════════════════════════════════════════════
 // WS-4 · 码名不入 `GATE_` 家族（E1-R5 的源码面锁：不登记词表 + 过 AC-pack2-2）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('WS-4 源码面：`lib/wave-plan.ts` 内 `code: \'GATE_ROSTER_UNKNOWN\'` 零命中；词表与 GateErrorCode union 均不含该码', () => {
-  const planSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/wave-plan.ts'), 'utf8');
-  // `check-vocab-counts.mjs` 的发射码扫描面只认 `code: 'GATE_…'` ⇒ 该形态零命中是 AC-pack2-2 绿的机制
-  const gateFormLeaks = [...planSrc.matchAll(/code\s*:\s*'(GATE_ROSTER_UNKNOWN)'/g)].map((m) => m[1]);
-  assert.deepEqual(gateFormLeaks, [], '告警码不得以 `code: \'GATE_…\'` 形态出现在 lib/wave-plan.ts'
-    + '（check-vocab-counts 的发射码扫描面只认该形态 ⇒ 会报缺口 AC-pack2-2 红）；实测=' + JSON.stringify(gateFormLeaks));
-  assert.equal(planSrc.includes('WARN_ROSTER_UNKNOWN'), true, '源码单点须改用 `WARN_ROSTER_UNKNOWN`（D-2=乙 落地形态）');
-
-  // 词表零登记（用户已裁：不登记词表）
-  const vocabSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/state/vocabulary.json'), 'utf8');
-  const vocabLeaks = ROSTER_UNKNOWN_NAMES.filter((n) => vocabSrc.includes(n));
-  assert.deepEqual(vocabLeaks, [], '该告警码不得登记进 lib/state/vocabulary.json；实测=' + JSON.stringify(vocabLeaks));
-
-  // 不进 GateErrorCode union（与 RU-5 同址锁，但用源码面判据而非依赖那一用例在场）
-  const contractsSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib/types/contracts.ts'), 'utf8');
-  const unionStart = contractsSrc.indexOf('export type GateErrorCode');
-  assert.notEqual(unionStart, -1, 'GateErrorCode union 须仍在 lib/types/contracts.ts');
-  const unionBlock = contractsSrc.slice(unionStart, contractsSrc.indexOf(';', unionStart));
-  const unionLeaks = ROSTER_UNKNOWN_NAMES.filter((n) => unionBlock.includes(n));
-  assert.deepEqual(unionLeaks, [], '该告警码不是拒码，不得进 GateErrorCode union；实测=' + JSON.stringify(unionLeaks));
-});

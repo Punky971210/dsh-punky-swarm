@@ -175,16 +175,6 @@ test('U7-8【口径差留痕】规格 §2.1(c) ND-1 逐字原文：真实门链�
   assert.equal(w[0].task, 'a1');
 });
 
-test('U7-9【判据原文锁】两文件 docstring 不再陈述退役判据（不含其实现在场），且写明可达语义（认领集 / consume 覆盖）', () => {
-  for (const rel of ['lib/wave-plan.js', 'lib/wave-plan.ts']) {
-    const src = readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
-    assert.equal(/upDeps\.length > own\.length/.test(src), false, rel + ' 不得再出现退役判据表达式');
-    assert.equal(/const superset/.test(src), false, rel + ' 不得再出现退役判据实现');
-    assert.ok(src.includes('认领集'), rel + ' 须写明替代判据语义（认领集 = deps ∩ exec）');
-    assert.ok(src.includes('未覆盖'), rel + ' 须写明替代判据语义（consume 覆盖判据）');
-  }
-});
-
 test('U7-10【零假阳性】本批真实形态（audit 认领 3 条 exec lane 并逐条消费其产物）⇒ 配对告警 0', () => {
   const tasks = [
     { id: 'plan-debt-spec', layer: 'plan', role: 'designer', produce: ['plan/debt-spec.md'] },

@@ -157,13 +157,6 @@ function scan(dir, re, exts = ['.js', '.ts']) {
 // 【N2 收口 · G3 合并（2026-09-22）】原 T4「GATE_TEAM_ASSET_MISSING 防回生」与 T5 的枚举零命中断言
 //   已合并至 test/retired-codes-lock.test.js（退役码单表锁）；T5 仅保留 d.ts 同步检查（生成物独有维度）。
 
-test('T5 E①/E②：dispatch.js 不再导出 UNBOUND_REPORT_CODE；生成物 .d.ts 不再含该码', () => {
-  const dispatchSrc = fs.readFileSync(path.join(PKG, 'lib/engine/dispatch.js'), 'utf8');
-  assert.ok(!/export const UNBOUND_REPORT_CODE/.test(dispatchSrc), '死导出已删');
-  const dtsSrc = fs.readFileSync(path.join(PKG, 'lib/types/contracts.d.ts'), 'utf8');
-  assert.ok(!/'GATE_SWARM_UNBOUND_REPORT'/.test(dtsSrc), '枚举成员已删（生成物，重建后同步）');
-});
-
 test('T6 E③：discipline.md 旧口径文本已订正（不再出现「未绑定即拒」）', () => {
   const src = fs.readFileSync(path.join(PKG, 'presets/punky-preset/references/discipline.md'), 'utf8');
   assert.ok(!/未绑定即拒/.test(src), '旧口径文本须已订正');

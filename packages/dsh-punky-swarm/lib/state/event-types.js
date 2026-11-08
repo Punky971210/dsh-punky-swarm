@@ -15,6 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+// @ts-check
+
 // lib/state/event-types.js —— 批次事件 type 常量单点：newEvent 调用与事件推导一律引用本模块常量，禁止裸字面量。
 // 零依赖纯常量模块：不 import 任何本包模块（避免循环依赖）。
 // 纪律：新增事件类型须在本文件登记常量后于调用点引用，禁止散布裸字面量。

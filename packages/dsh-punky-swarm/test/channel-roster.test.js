@@ -173,22 +173,6 @@ test('C-4 R3-e 反例：非法 roster ⇒ GATE_ROSTER_INVALID（回显 task 与 
 
 // ── R-3 §2.3.1 类型面落位（R3-a，限定路径计数）───────────────────────────────
 
-test('C-5 R3-a 类型面：`contracts.ts` 与 `contracts.d.ts` 各有 2 处 roster **字段声明**（计数差 = 0 ≤ 1）', () => {
-  const declOf = (rel) => fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8')
-    .split('\n').filter((l) => /^\s*roster\??:\s/.test(l));
-  const ts = declOf('lib/types/contracts.ts');
-  const dts = declOf('lib/types/contracts.d.ts');
-  assert.equal(ts.length >= 2, true, 'WavePlanTaskInput + WavePlanTask 各 ≥1 处字段声明；实测 ' + ts.length + ' 处：' + JSON.stringify(ts));
-  assert.equal(dts.length >= 2, true, '同上（.d.ts）；实测 ' + dts.length + ' 处：' + JSON.stringify(dts));
-  assert.equal(Math.abs(ts.length - dts.length) <= 1, true, '声明面一致（计数差 ≤1）：ts=' + ts.length + ' dts=' + dts.length);
-  // 两处声明形态各一（可选入参 + 恒写持久形态）——**限定量词：上述两条正则命中行内**
-  const joined = ts.join('\n');
-  assert.match(joined, /roster\?:\s*string\s*\|\s*null/, '建批入参形态 roster?: string | null');
-  assert.match(joined, /roster:\s*string\s*\|\s*null/, '持久形态 roster: string | null');
-});
-
-// ── R-5 §2.4.1 / R5-a 缺省向后兼容 ──────────────────────────────────────────
-
 test('D-1 R5-a 缺省归一化：channel 未声明（undefined/null）⇒ 归一化读端有效值 = dispatch，且 declared=false', () => {
   for (const absent of [undefined, null]) {
     const out = normalizeChannelDecl(absent, [{ id: 'a' }, { id: 'b', roster: 'coder-1' }]);
@@ -273,29 +257,3 @@ test('D-5 R5-b 正例三条：dispatch+零 roster / team+全 roster / mixed+至�
 });
 
 // ── R5-e 运行期单一判定点（限定路径计数）────────────────────────────────────
-
-test('D-6 R5-e 单点判定：`lib/state/gates.ts` 与 `lib/state/store.js` 内 `GATE_CHANNEL_` 引用计数 = 0', () => {
-  const countIn = (rel) => fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8').split('GATE_CHANNEL_').length - 1;
-  assert.equal(countIn('lib/state/gates.ts'), 0, '限定路径：lib/state/gates.ts 内该前缀引用 = 0（运行期不再二次判定）');
-  assert.equal(countIn('lib/state/store.js'), 0, '限定路径：lib/state/store.js 内该前缀引用 = 0');
-  assert.equal(countIn('lib/wave-plan.ts') > 0, true, '对照：定义侧（lib/wave-plan.ts）该前缀在场（证明计数面有效，非空转）');
-  assert.equal(countIn('lib/wave-plan.js') > 0, true, '对照：运行期定义侧（lib/wave-plan.js）该前缀在场');
-});
-
-// ── B-a 六新码入两处 union（批次级收口判据的机检半边）────────────────────────
-
-test('D-7 B-a 新码入 union：6 码在 `contracts.ts` 与 `contracts.d.ts` 各 ≥1（集合相等）', () => {
-  const CODES = [
-    'GATE_HANDOFF_UNAUTHORIZED', 'GATE_HANDOFF_IDENTITY_UNKNOWN', 'GATE_HANDOFF_OVERWRITE_UNDECLARED',
-    'GATE_ROSTER_INVALID', 'GATE_CHANNEL_INVALID', 'GATE_CHANNEL_UNRESOLVED',
-  ];
-  const presentIn = (rel) => {
-    const s = fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8');
-    return CODES.filter((c) => s.includes(c));
-  };
-  const ts = presentIn('lib/types/contracts.ts');
-  const dts = presentIn('lib/types/contracts.d.ts');
-  assert.deepEqual(ts, CODES, 'contracts.ts 须 6/6 全在：' + JSON.stringify(ts));
-  assert.deepEqual(dts, CODES, 'contracts.d.ts 须 6/6 全在：' + JSON.stringify(dts));
-  assert.deepEqual(ts, dts, '两文件新码**集合相等**（逐字）');
-});

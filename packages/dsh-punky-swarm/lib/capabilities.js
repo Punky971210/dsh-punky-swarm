@@ -15,6 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+
 import { CAPABILITY_REGISTRY, readCapability } from './assembly/schema.js';
 
 export const HOST_FACE_KEYS = ['toolSurface', 'httpSurface', 'agentRuntime', 'rosterSource'];

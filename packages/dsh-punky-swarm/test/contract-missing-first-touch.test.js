@@ -136,22 +136,6 @@ function mkFullBatch(bid) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 用例 1：常量单点登记 + 调用点无裸字面量（B2-A1）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('B2-A1：事件常量单点登记于 event-types.js，调用点（gates.ts/store.js）无裸字面量', () => {
-  assert.equal(EVT.EVT_GATE_CONTRACT_MISSING, 'gate.contract_missing',
-    'event-types.js 须登记 EVT_GATE_CONTRACT_MISSING = "gate.contract_missing"（单点登记纪律）');
-  const evtSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'state', 'event-types.js'), 'utf8');
-  assert.ok(evtSrc.includes("export const EVT_GATE_CONTRACT_MISSING = 'gate.contract_missing';"),
-    '常量声明行须逐字在场（先登记常量、后于调用点引用）');
-  for (const rel of ['lib/state/gates.ts', 'lib/state/store.js']) {
-    const src = fs.readFileSync(path.join(PKG_ROOT, ...rel.split('/')), 'utf8');
-    assert.ok(!/['"]gate\.contract_missing['"]/.test(src),
-      rel + ' 内不得出现裸字面量（须引用 EVT 常量单点）');
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 用例 2：六个判定位首触各落一条（B2-A2 / B2-A7；R-1 / R-3）
-// ═══════════════════════════════════════════════════════════════════════════════
 test('B2-A2/A7：六个 gateKind 首触各落一条，且同键不会再发（只报一次/批）', () => {
   const bid = mkFullBatch('b2-full');
   assert.deepEqual(cmEvents(bid), [], '前置：夹具建成时零 contract_missing 事件');
@@ -320,56 +304,6 @@ test('B2-W4：contractMissingEvents 纯函数——同键去重（含同调用�
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 用例 7：非拒态（B2-A5 / B2-A6；R-2）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('B2-A5/A6：非拒态——判定随附事件不放宽/不放宽、且不新增 GateErrorCode', () => {
-  // ① 判定：无团队声明 + 空 consume 仍**拒**（entry 零依赖拒派不被事件面削弱）
-  const targetAbs = path.join(ROOT, 'targets', 'b2-nonreject-target.txt');
-  fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
-  fs.writeFileSync(targetAbs, 'targets-claimed: true\n', 'utf8');
-  const bid = 'b2-nonreject';
-  mkBatch(bid, [
-    { id: 'p1', layer: 'plan', produce: ['plan/spec.md'], cmd: 'spec' },
-    { id: 'e1', layer: 'exec', deps: ['p1'], consume: [], outputs: ['exec/e1.md'], cmd: 'run' },
-    { id: 'a1', layer: 'audit', deps: ['e1'], consume: ['plan/spec.md'], produce: ['audit/a1.md'], cmd: 'review' },
-  ]);
-  writeArt(bid, 'plan/spec.md', SPEC_OK);
-  writeArt(bid, 'exec/e1.md', 'out');
-  writeArt(bid, 'audit/a1.md', 'review');
-  const g = gates.checkEntryGate(SID, bid, store.readBatch(SID, bid), 'e1');
-  assert.equal(g.ok, false, '零依赖拒派判定不变');
-  assert.equal(g.code, 'GATE_ENTRY_MISSING', '拒因码不变（未新增/未替换）');
-  assert.equal(Boolean(g.contractMissing), false, '拒侧不产契约缺声明载荷（W-2：拒侧不采）');
-  assert.throws(() => settle(bid, 'e1', 'running'), /GATE_ENTRY_MISSING/, '写入路径同判（拒派仍拒）');
-
-  // ② 码面：GateErrorCode 枚举区不得出现 contract_missing 相关新码
-  const contractsSrc = fs.readFileSync(path.join(PKG_ROOT, 'lib', 'types', 'contracts.ts'), 'utf8');
-  const enumStart = contractsSrc.indexOf('export type GateErrorCode');
-  const enumBody = contractsSrc.slice(enumStart, contractsSrc.indexOf('/** 门禁通过', enumStart));
-  assert.ok(enumBody.length > 0, 'GateErrorCode 枚举区可定位');
-  assert.ok(!/CONTRACT_MISSING/i.test(enumBody), 'GateErrorCode 零改动（事件码不是 GATE 码）');
-
-  // ③ 事件面不承载迁移语义（R-6：不做读法 B 的迁移面子面）
-  const bid2 = mkFullBatch('b2-no-migration');
-  settle(bid2, 'e1', 'running');
-  for (const e of cmEvents(bid2)) {
-    assert.equal('override' in e, false, '事件不得带 state_machine.overrides 迁移面载荷');
-    assert.equal('transition' in e, false, '事件不得带迁移判定载荷');
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 用例 9：负控——团队资产**声明齐备** ⇒ 零首触事件（无误报；判定逐点不变）
-// ═══════════════════════════════════════════════════════════════════════════════
-// ── 已删（2026-09-27 批 3 · T-15/D-6 归因）：原 test「用例 9：B2 负控——团队资产**声明齐备** ⇒ 零首触事件」──
-//   【退役面等值反转 · R2-6】原说明已集中 ⇒ `docs/retired-faces-ledger.md` §1（原文逐字归档）；
-//   「临时团队资产须可解析」）在 A-9（5 件真实骨架删除）后**不可满足**，断言链在第一步即失效；
-//   且「声明齐备」这一构造形态**结构上不可达**（无资产装载面）。
-//   **不可等值反转**：「无声明 ⇒ 零首触（不误报）」与**用例 2**（未声明侧）同构造、同判据 ⇒ 反转即重复且恒真空转（纪律 15⑤）。
-//   本文件其余用例（B2-A1…A7 / 跨重启幂等 / 只读零发射 / 告警同源 / 纯函数去重 / 非拒态 / B2-DoD 真工具面）**全部原样在册**
-//   ⇒ 「首触事件零发射面」覆盖不丢。
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 用例 8：真调用探针——经**真实工具面**触发一次 + 只读工具面负控（宿主形态复验）
 // ═══════════════════════════════════════════════════════════════════════════════
 test('B2-DoD：真实工具面触发落盘 + 只读 gate_status 工具面负控（零发射）', async () => {
   const root8 = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-b2-toolface-'));

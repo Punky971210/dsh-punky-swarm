@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
+
+// @ts-check
 // lib/types/guards.ts —— 类型守卫（批 `punky-type-assert-purge-20261103` · lane `impl`）
 //
 // 存在理由：`wave-plan.ts` 里有 6 处 `as string[]` 断言，形态都是

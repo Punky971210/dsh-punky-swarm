@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
+
+// @ts-check
 // MachineRules：状态迁移规则表（棘轮形式化）
 // 棘轮语义：默认规则 = 现行强约束（行为不变）；配置覆盖只许删（收紧）不许增（放宽）——
 //   覆盖表出现默认表中不存在的迁移 → loadRules throw（启动即失败，fail-closed，棘轮不可绕过）；

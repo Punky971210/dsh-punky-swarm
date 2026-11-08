@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
+
+// @ts-check
 // Gates：Tier3 层间门禁——entry（consume 前置）/ exit（outputs/produce 前置 + Plan 契约 checkPlanContract）/ complete（audit 验收前置）
 // ⚠ 本文件（`gates.ts`）与 `gates/**/*.ts` 是**手写源**；对应 `gates.js` / `gates.d.ts`（及 `gates/**` 产物）
 //   由 `tsc -p tsconfig.build.json` + `scripts/copy-ts-built.mjs` 生成 ⇒ **只改 `.ts`**

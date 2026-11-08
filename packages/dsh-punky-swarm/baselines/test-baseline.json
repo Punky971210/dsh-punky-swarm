@@ -25,11 +25,11 @@
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
-      "asserts": 50,
-      "blankLines": 40,
-      "lines": 590,
+      "asserts": 37,
+      "blankLines": 36,
+      "lines": 513,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 8,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
@@ -273,11 +273,11 @@
       "todos": 0
     },
     "test/auditlog-sinkfid.test.js": {
-      "asserts": 70,
-      "blankLines": 40,
-      "lines": 483,
+      "asserts": 57,
+      "blankLines": 37,
+      "lines": 440,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 6,
       "todos": 0
     },
     "test/auditlog.test.js": {
@@ -369,11 +369,11 @@
       "todos": 0
     },
     "test/channel-roster.test.js": {
-      "asserts": 54,
-      "blankLines": 32,
-      "lines": 302,
+      "asserts": 42,
+      "blankLines": 27,
+      "lines": 260,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 9,
       "todos": 0
     },
     "test/check-spec-accounting.test.js": {
@@ -465,11 +465,11 @@
       "todos": 0
     },
     "test/consume-deps-asymmetry-gate.test.js": {
-      "asserts": 60,
-      "blankLines": 26,
-      "lines": 311,
+      "asserts": 49,
+      "blankLines": 25,
+      "lines": 284,
       "tautologies": 0,
-      "tests": 12,
+      "tests": 11,
       "todos": 0
     },
     "test/contract-liveness.test.js": {
@@ -481,11 +481,11 @@
       "todos": 0
     },
     "test/contract-missing-first-touch.test.js": {
-      "asserts": 47,
-      "blankLines": 33,
-      "lines": 429,
+      "asserts": 36,
+      "blankLines": 28,
+      "lines": 363,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 6,
       "todos": 0
     },
     "test/contract.test.js": {
@@ -761,11 +761,11 @@
       "todos": 0
     },
     "test/g2-t4-stop-reason-source.test.js": {
-      "asserts": 11,
-      "blankLines": 16,
-      "lines": 139,
+      "asserts": 3,
+      "blankLines": 12,
+      "lines": 92,
       "tautologies": 0,
-      "tests": 3,
+      "tests": 1,
       "todos": 0
     },
     "test/gate-artifact-containment.test.js": {
@@ -809,27 +809,27 @@
       "todos": 0
     },
     "test/gate-hardening-red.test.js": {
-      "asserts": 66,
-      "blankLines": 130,
-      "lines": 1204,
+      "asserts": 59,
+      "blankLines": 126,
+      "lines": 1144,
       "tautologies": 0,
-      "tests": 37,
+      "tests": 36,
       "todos": 0
     },
     "test/gate-lane-snapshot.test.js": {
-      "asserts": 33,
-      "blankLines": 42,
-      "lines": 330,
+      "asserts": 30,
+      "blankLines": 39,
+      "lines": 287,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 8,
       "todos": 0
     },
     "test/gate-lite-batch2.test.js": {
-      "asserts": 32,
-      "blankLines": 21,
-      "lines": 172,
+      "asserts": 30,
+      "blankLines": 20,
+      "lines": 165,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 5,
       "todos": 0
     },
     "test/gate-lite-smoke.test.js": {
@@ -881,11 +881,11 @@
       "todos": 0
     },
     "test/gates-vocabulary-contract.test.js": {
-      "asserts": 51,
-      "blankLines": 50,
-      "lines": 406,
+      "asserts": 38,
+      "blankLines": 47,
+      "lines": 374,
       "tautologies": 0,
-      "tests": 21,
+      "tests": 18,
       "todos": 0
     },
     "test/gates.test.js": {
@@ -1025,11 +1025,11 @@
       "todos": 0
     },
     "test/governance-toolban.test.js": {
-      "asserts": 114,
-      "blankLines": 49,
-      "lines": 546,
+      "asserts": 99,
+      "blankLines": 43,
+      "lines": 470,
       "tautologies": 0,
-      "tests": 25,
+      "tests": 24,
       "todos": 0
     },
     "test/governance-wiring.test.js": {
@@ -1457,11 +1457,11 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 33,
-      "blankLines": 23,
-      "lines": 293,
+      "asserts": 29,
+      "blankLines": 22,
+      "lines": 272,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 7,
       "todos": 0
     },
     "test/p2-state-single.test.js": {
@@ -1681,11 +1681,11 @@
       "todos": 0
     },
     "test/roster-unknown.test.js": {
-      "asserts": 43,
-      "blankLines": 31,
-      "lines": 319,
+      "asserts": 33,
+      "blankLines": 28,
+      "lines": 272,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 6,
       "todos": 0
     },
     "test/rule-propagation.test.js": {
@@ -1897,11 +1897,11 @@
       "todos": 0
     },
     "test/ts-gate-face.test.js": {
-      "asserts": 22,
-      "blankLines": 17,
-      "lines": 175,
+      "asserts": 11,
+      "blankLines": 14,
+      "lines": 136,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 4,
       "todos": 0
     },
     "test/types-guards.test.js": {
@@ -1953,11 +1953,11 @@
       "todos": 0
     },
     "test/warn-silent-codes.test.js": {
-      "asserts": 19,
-      "blankLines": 30,
-      "lines": 190,
+      "asserts": 14,
+      "blankLines": 27,
+      "lines": 168,
       "tautologies": 0,
-      "tests": 4,
+      "tests": 3,
       "todos": 0
     },
     "test/watch-bootoverlay.test.js": {
@@ -2041,11 +2041,11 @@
       "todos": 0
     },
     "test/wave-plan-pairing.test.js": {
-      "asserts": 36,
-      "blankLines": 21,
-      "lines": 204,
+      "asserts": 32,
+      "blankLines": 20,
+      "lines": 194,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 8,
       "todos": 0
     },
     "test/wave-plan.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T05:14:22Z",
+  "generatedAt": "2026-11-08T05:42:30Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B3 注释收敛：删除断言注释文本的实现锁测试（f3-anchors/persona-sink/housekeeping-h2 整文件 + 5 文件单用例）（refactor/quality-20261108）",
+  "reason": "B1 恢复 p2-single-point 共享常量（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 12092,
-    "blankLines": 6802,
+    "asserts": 11950,
+    "blankLines": 6752,
     "files": 264,
-    "lines": 71951,
+    "lines": 71292,
     "tautologies": 0,
-    "tests": 2523,
+    "tests": 2496,
     "todos": 0
   }
 }

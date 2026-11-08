@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
+
+// @ts-check
 import fs from 'node:fs';
 import path from 'node:path';
 const EMPTY_REASON_RE = /^empty-reason:[ \t]*(\S[^\n]*)$/m;

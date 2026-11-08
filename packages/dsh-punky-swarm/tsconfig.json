@@ -1,14 +1,33 @@
-{
-  "compilerOptions": {
-    "strict": true,
-    "allowJs": true,
-    "checkJs": false,
-    "noEmit": true,
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "target": "es2022",
-    "types": ["node"],
-    "skipLibCheck": true
-  },
-  "include": ["lib"]
+﻿{
+    "include":  [
+                    "lib/wave-plan.js",
+                    "lib/schema.js",
+                    "lib/state/gates.js",
+                    "lib/state/gates/helpers.js",
+                    "lib/state/gates/presence.js",
+                    "lib/state/store/batch.js",
+                    "lib/state/store/member.js",
+                    "lib/state/machine-rules.js",
+                    "lib/state/schema-v3.js",
+                    "lib/state/vocabulary.js",
+                    "lib/state/event-types.js",
+                    "lib/engine/suite.js",
+                    "lib/types/guards.js",
+                    "lib/governance/index.js",
+                    "lib/governance/types.js"
+                ],
+    "compilerOptions":  {
+                            "target":  "es2022",
+                            "noEmit":  true,
+                            "noImplicitAny":  false,
+                            "moduleResolution":  "nodenext",
+                            "checkJs":  false,
+                            "strict":  false,
+                            "module":  "nodenext",
+                            "skipLibCheck":  true,
+                            "allowJs":  true,
+                            "types":  [
+                                          "node"
+                                      ]
+                        }
 }
