@@ -128,19 +128,20 @@ test('H2 非 AbortSignal（{} / null / 数字）⇒ 拒；而 **signal-like `{ab
   assert.equal(h.executed.at(-1).signal, signalLike, '原样透传 signal-like');
 });
 
-// ── H3 getTool / hasTool：未注册 ⇒ null / false（不抛） ────────────────────────────
-test('H3 getTool 未注册 ⇒ null；hasTool 同形；工具面缺失 ⇒ 两者皆降级不抛', () => {
+// ── H3 probeTool 三态：present / absent / errored 可辨（唯一查询面） ────────────────
+test('H3 probeTool 三态：已注册 ⇒ present+definition；未注册 ⇒ absent；查询抛 ⇒ errored；工具面缺失 ⇒ absent 不抛', () => {
   const h = ctxOf();
   const port = createToolsPort(h.ctx);
-  assert.equal(port.getTool('known')?.name, 'known', '已注册 ⇒ 返回定义');
-  assert.equal(port.getTool('nope'), null, '未注册 ⇒ **null**（C-3 约定，不抛）');
-  assert.equal(port.hasTool('known'), true);
-  assert.equal(port.hasTool('nope'), false);
-  // 对照：ctx 无 tools ⇒ available:false，各方法降级
+  const hit = port.probeTool('known');
+  assert.equal(hit.state, 'present', '已注册 ⇒ present');
+  assert.equal(hit.definition?.name, 'known', 'present 态携带定义（调用方自行取用）');
+  assert.equal(port.probeTool('nope').state, 'absent', '未注册 ⇒ absent（不抛）');
+  // 对照：ctx 无 tools ⇒ available:false，探针降级为 absent(port-unavailable)，不抛
   const bare = createToolsPort({});
   assert.equal(bare.available, false, '无 ctx.tools ⇒ available:false');
-  assert.equal(bare.getTool('known'), null, '不可用时 getTool ⇒ null（不抛）');
-  assert.equal(bare.hasTool('known'), false);
+  const bareProbe = bare.probeTool('known');
+  assert.equal(bareProbe.state, 'absent', '不可用时 probeTool ⇒ absent（不抛）');
+  assert.equal(bareProbe.reason, 'port-unavailable', '降级成因可辨');
 });
 
 // ── H4 ★ 反向约束：lib/ 内除适配层（host-ports，未来 provider-dsh）外，`ctx.tools.` / `ctx.webServer.` = 0 ──

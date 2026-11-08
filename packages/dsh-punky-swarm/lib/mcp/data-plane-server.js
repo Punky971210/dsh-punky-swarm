@@ -76,7 +76,7 @@ export function callableToolNamesOf(ctx, suite = SUITE_TOOLS) {
   return declared.filter((name) => {
     if (hostProvided.has(name)) return true; // 求交豁免（策略）：本仓不注册属正常
     try {
-      return createToolsPort(ctx).hasTool(name);
+      return createToolsPort(ctx).probeTool(name).state === 'present';
     } catch { return false; }
   });
 }
@@ -126,10 +126,11 @@ export function installMcpDataPlane(ctx, deps = {}) {
   const logger = deps.logger ?? ctx?.logger ?? null;
   const declaredCount = exposedToolNamesOf().length;
 
-  /** 注册表视图里的工具定义（取不到 ⇒ null，**不抛**）。 */
+  /** 注册表视图里的工具定义（取不到 ⇒ null，**不抛**；`errored` 与「无定义」在此同归 null）。 */
   const definitionOf = (name) => {
     try {
-      return createToolsPort(ctx).getTool(name);
+      const probed = createToolsPort(ctx).probeTool(name);
+      return probed.state === 'present' ? probed.definition : null;
     } catch { return null; }
   };
 

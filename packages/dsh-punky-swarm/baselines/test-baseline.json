@@ -1105,9 +1105,9 @@
       "todos": 0
     },
     "test/host-ports.test.js": {
-      "asserts": 58,
+      "asserts": 57,
       "blankLines": 19,
-      "lines": 307,
+      "lines": 308,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2137,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T09:58:31Z",
+  "generatedAt": "2026-11-08T10:08:47Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2148,13 +2148,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B4/① 宿主适配面：删零引用安装 CLI(install.js 207 行)；MERGE_STATE_SOURCE/MEMBER_STATES_LEGACY 恒等常量内联",
+  "reason": "B4/①-3+①-4：删 agent 端口四个零调用透传方法（send/wait/list/interrupt）；tools-http 三层探针收敛为 probeTool 单面",
   "schema": 1,
   "totals": {
-    "asserts": 11944,
+    "asserts": 11943,
     "blankLines": 6791,
     "files": 267,
-    "lines": 71565,
+    "lines": 71566,
     "tautologies": 0,
     "tests": 2498,
     "todos": 0

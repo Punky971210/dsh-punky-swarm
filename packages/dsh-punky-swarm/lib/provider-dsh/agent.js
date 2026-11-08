@@ -250,16 +250,6 @@ export function createAgentPort(ctx, opts = {}) {
       return { run, form, narrowVia, depthVia, preset };
     },
 
-    async send(...args) {
-      if (typeof rt?.send !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.send 不可用');
-      return rt.send(...args);
-    },
-    async wait(...args) {
-      if (typeof rt?.await !== 'function' && typeof rt?.wait !== 'function') {
-        throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.await 不可用');
-      }
-      return (rt.await ?? rt.wait).apply(rt, args);
-    },
     async cancel(...args) {
       if (typeof rt?.cancel !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.cancel 不可用');
       const raw = await rt.cancel(...args);
@@ -272,14 +262,6 @@ export function createAgentPort(ctx, opts = {}) {
       if (raw === true) return { outcome: 'cancelled' };
       if (raw === false) return { outcome: 'skipped', reason: 'host-reported-not-cancelled' };
       return { outcome: 'rejected', reason: 'host-return-unrecognized' };
-    },
-    list(...args) {
-      if (typeof rt?.list !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.list 不可用');
-      return rt.list(...args);
-    },
-    interrupt(...args) {
-      if (typeof rt?.interrupt !== 'function') throw new Error(HOST_PORT_UNSUPPORTED + ' ctx.subagents.interrupt 不可用');
-      return rt.interrupt(...args);
     },
 
     notifyLeader({ sessionId, message } = {}) {

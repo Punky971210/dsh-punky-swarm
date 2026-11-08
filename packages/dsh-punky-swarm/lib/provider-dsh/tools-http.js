@@ -37,7 +37,7 @@ const isAbortSignalLike = (signal) => Boolean(signal)
 
 /**
  * @param {object} ctx 插件上下文（只在这里被读；调用方拿不到它）
- * @returns {{available:boolean, hasTool:Function, getTool:Function, registerTool:Function, installGuard:Function, invokeTool:Function}}
+ * @returns {{available:boolean, probeTool:Function, toolVisibilityFor:Function, registerTool:Function, installGuard:Function, invokeTool:Function}}
  */
 export function createToolsPort(ctx) {
   const tools = serviceOf(ctx, 'tools');
@@ -46,12 +46,9 @@ export function createToolsPort(ctx) {
   return {
     available,
 
-    hasTool(name) {
-      const probed = this.probeTool(name);
-      if (probed.state === 'errored') throw new Error(probed.reason);
-      return probed.state === 'present';
-    },
-
+    /** 注册表三态探针（**唯一查询面**）：`present` / `absent` / `errored`。
+     *  「有/无定义」由调用方按 `state` 自行取——不再另设 `hasTool` / `getTool` 两套薄封装
+     *  （二者都只是本函数加一次分支，且 `errored` 的处理在三处已各写一遍）。 */
     probeTool(name) {
       if (!available || typeof tools.get !== 'function') return { state: 'absent', reason: 'port-unavailable' };
       try {
@@ -60,12 +57,6 @@ export function createToolsPort(ctx) {
       } catch (e) {
         return { state: 'errored', reason: HOST_PORT_QUERY_FAILED + ' ' + String(e?.message ?? e) };
       }
-    },
-
-    getTool(name) {
-      const probed = this.probeTool(name);
-      if (probed.state === 'errored') throw new Error(probed.reason); // 查询失败 ⇒ 抛，禁返 null
-      return probed.state === 'present' ? probed.definition : null;
     },
 
     /**
