@@ -537,11 +537,11 @@
       "todos": 0
     },
     "test/discovery.test.js": {
-      "asserts": 118,
-      "blankLines": 40,
-      "lines": 397,
+      "asserts": 123,
+      "blankLines": 41,
+      "lines": 421,
       "tautologies": 0,
-      "tests": 28,
+      "tests": 29,
       "todos": 0
     },
     "test/dispatch-events-single-source.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T17:27:47Z",
+  "generatedAt": "2026-11-08T17:31:30Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑤-2 乙：分词辅助（maskQuoted/headToken/ASSIGN_RE/QUOTE_MASK）单点化到 shell-text.js，词表不动；新增 2 条单点/语义判据",
+  "reason": "⑧-4：discovery 夹具改真实 builder 产物，删 service.js 两处死回退，新增夹具形状锁",
   "schema": 1,
   "totals": {
-    "asserts": 11828,
-    "blankLines": 6730,
+    "asserts": 11833,
+    "blankLines": 6731,
     "files": 264,
-    "lines": 70988,
+    "lines": 71012,
     "tautologies": 0,
-    "tests": 2481,
+    "tests": 2482,
     "todos": 0
   }
 }

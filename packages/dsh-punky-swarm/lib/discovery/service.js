@@ -26,7 +26,7 @@ const LOCAL_SERVER_AIC = 'AIC-DS-A'; // 参考实现 _build_response 默认 forw
 
 function toAgentSkill(skill) {
   return {
-    id: skill.skillId ?? skill.id ?? '',
+    id: skill.id ?? '',
     name: skill.name ?? '',
     description: skill.description ?? '',
     version: skill.version ?? '',
@@ -76,7 +76,7 @@ export function createDiscoveryService({ catalog, agentDescriptors = [], config 
   for (const d of agentDescriptors) {
     const skills = Array.isArray(d.skills) ? d.skills.map(toAgentSkill) : [];
     const entry = {
-      aic: d.agentId ?? d.aic ?? '',
+      aic: d.aic ?? '',
       name: d.name ?? '',
       description: d.description ?? '',
       version: d.version ?? '',

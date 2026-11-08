@@ -31,6 +31,7 @@ import {
 } from '../lib/discovery/schema.js';
 import { resolveField, matchOp, matchCondition, evaluateFilter } from '../lib/discovery/filter.js';
 import { buildToolCatalog } from '../lib/aip/tool-descriptor.js';
+import { buildAgentDescriptor } from '../lib/aip/agent-descriptor.js';
 
 // ── fixture：工具目录（3 工具）+ 智能体目录（2 描述）──
 const TOOLS = [
@@ -38,15 +39,21 @@ const TOOLS = [
   { name: 'batch_status', description: '查询批次状态（唯一事实源）', parameters: {}, output: { schema: { type: 'object' } } },
   { name: 'member_settle', description: '成员结算：按状态机迁移', parameters: {}, output: { schema: { type: 'object' } } },
 ];
+// 【⑧-4 · 2026-11-09】夹具改用**真实 builder 产物**（`buildAgentDescriptor`），不再手写描述符。
+//   此前夹具自造 `agentId` / `skills[].skillId` 两个键 —— 而 `lib/aip/**` **从不产出**它们
+//   （真实键是 `aic` 与 `skills[].id`）⇒ 夹具形状 ≠ 生产形状，`service.js` 里为迁就夹具
+//   留了两处死回退（`d.agentId ?? d.aic`、`skill.skillId ?? skill.id`）。本批把夹具摆正、
+//   回退随之删除（判据见文件末尾「夹具形状」一条）。
+const FIXTURE_ASSEMBLY = {
+  team: 'punky-preset',
+  layers: {
+    exec: { roles: ['coder'], skills: { coder: ['dev-coder'] } },
+    audit: { roles: ['reviewer'], skills: { reviewer: ['code-review'] } },
+  },
+};
 const AGENT_DESCRIPTORS = [
-  {
-    agentId: 'punky-preset.exec.coder', name: 'coder', description: 'spec 驱动编码+自检',
-    version: '1.0.0', skills: [{ skillId: 'dsh.skill.dev-coder', name: 'dev-coder', description: '编码', version: '1.0.0', triggerConditions: [] }],
-  },
-  {
-    agentId: 'punky-preset.audit.reviewer', name: 'reviewer', description: '评审验收',
-    version: '1.0.0', skills: [{ skillId: 'dsh.skill.code-review', name: 'code-review-guideline', description: '代码审查', version: '1.0.0', triggerConditions: [] }],
-  },
+  buildAgentDescriptor(FIXTURE_ASSEMBLY, 'exec', 'coder', { version: '1.0.0' }),
+  buildAgentDescriptor(FIXTURE_ASSEMBLY, 'audit', 'reviewer', { version: '1.0.0' }),
 ];
 
 function makeService(config = {}, extra = {}) {
@@ -394,4 +401,21 @@ test('端点：GET /.well-known/aip 返回预置信息（200）', async () => {
 test('successResponse / failureResponse：result 与 error 互斥形态', () => {
   assert.deepEqual(successResponse({ a: 1 }), { result: { a: 1 } });
   assert.deepEqual(failureResponse(50001, 'InternalError', 'x'), { error: { code: 50001, message: 'InternalError', data: 'x' } });
+});
+
+// ── 【⑧-4 · 2026-11-09】夹具形状锁：不得再自造真实 builder 不产出的键 ────────────────
+//   这两键（`agentId` / `skills[].skillId`）在 `lib/aip/**` 零产出（真实键 = `aic` / `skills[].id`）；
+//   它们曾让「夹具形状 ≠ 生产形状」，并逼出 `service.js` 的两处死回退。回退已删，本锁防回生。
+test('【⑧-4】夹具即真实 builder 产物：无 agentId / 无 skills[].skillId（自造键零容忍）', () => {
+  for (const d of AGENT_DESCRIPTORS) {
+    assert.equal('agentId' in d, false, '真实描述符的键是 aic，不是 agentId：' + d.name);
+    for (const s of d.skills) {
+      assert.equal('skillId' in s, false, '真实技能描述符的键是 id，不是 skillId：' + d.name);
+      assert.equal(typeof s.id, 'string', '技能 id 必在场（builder 派生 `dsh.skill.<name>`）');
+    }
+    assert.equal(typeof d.aic, 'string', '席位描述符必带 aic');
+  }
+  // 与生产同源再证一次：同一装配再 build 一遍，键集与夹具逐个相等（防手改夹具）
+  const fresh = buildAgentDescriptor(FIXTURE_ASSEMBLY, 'exec', 'coder', { version: '1.0.0' });
+  assert.deepEqual(Object.keys(AGENT_DESCRIPTORS[0]).sort(), Object.keys(fresh).sort());
 });
