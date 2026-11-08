@@ -207,6 +207,7 @@ const satisfiesRange = (version, range) => range.split('||')
 /** 改前 range（六段，逐字取自 8d7815b 的 package.json）。 */
 const RANGE_BEFORE = '^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.5-rc.1 || ^0.1.6-alpha.1 || ^0.1.7-rc.1 || ^0.2.0-rc.1';
 const ADDED_SEGMENT = '^0.2.1-rc.2';
+const ADDED_SEGMENT_2 = '^0.2.2-rc.1';
 
 test('A1-P2-03 · 判定器自校验：复现改前 range 的真值表（该表由 exec 层用真 semver 取得）⇒ 判定器可信', () => {
   // 真值来源：exec 层用真 `semver.satisfies` 对改前 range 的实测（0.2.1-rc.2 = false 即 R-10 的 BEFORE 读数）。
@@ -223,13 +224,14 @@ test('A1-P2-03 · 判定器自校验：复现改前 range 的真值表（该表�
   }
 });
 
-test('A1-P2-03 / AC-10 · 改后矩阵：0.2.1-rc.2 / rc.3 / 0.2.1 / 0.2.2 = true，0.3.0-rc.1 = false（上界不外溢）', () => {
+test('A1-P2-03 / AC-10 · 改后矩阵：0.2.1-rc.2 / rc.3 / 0.2.1 / 0.2.2 / 0.2.2-rc.1 = true，0.3.0-rc.1 = false（上界不外溢）', () => {
   const range = PKG.peerDependencies['@deepseek-ai/dsh-tools'];
   const expected = {
     '0.2.1-rc.2': true,
     '0.2.1-rc.3': true,
     '0.2.1': true,
     '0.2.2': true,
+    '0.2.2-rc.1': true,
     '0.3.0-rc.1': false,
   };
   for (const [v, exp] of Object.entries(expected)) {
@@ -241,11 +243,11 @@ test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且改后 = 改前六段 +
   const peer = PKG.peerDependencies['@deepseek-ai/dsh-tools'];
   const dev = PKG.devDependencies['@deepseek-ai/dsh-tools'];
   assert.equal(peer, dev, 'peerDependencies 与 devDependencies 的 range 必须逐字一致（两处须同步）');
-  assert.equal(peer, RANGE_BEFORE + ' || ' + ADDED_SEGMENT, '改后 range 必须是「原六段 + 追加一段」的形态');
+  assert.equal(peer, RANGE_BEFORE + ' || ' + ADDED_SEGMENT + ' || ' + ADDED_SEGMENT_2, '改后 range 必须是「原六段 + 追加两段」的形态');
   const segments = peer.split('||').map((s) => s.trim());
   // P4-b 不可改造（Leader 裁定）：期望值来自**版本范围字符串清单**（元素即原文）；
   // map 出身份即原文 = 第二真源 ⇒ 归 P4-b。保留计数。
-  assert.equal(segments.length, 7, '段数 6 → 7（只准加，不准改写既有段）');
+  assert.equal(segments.length, 8, '段数 6 → 8（只准加，不准改写既有段）');
   assert.equal(segments.slice(0, 6).join(' || '), RANGE_BEFORE, '原六段逐字保留且顺序不变');
   // 单调性：改前能过的版本改后仍然能过
   for (const v of ['0.1.0-rc.6', '0.1.1-rc.2', '0.1.5-rc.1', '0.1.6-alpha.1', '0.1.7-rc.1', '0.2.0-rc.1']) {
@@ -259,7 +261,8 @@ test('A1-P2-03 / AC-10 · package.json 文本面：新增段恰出现 1 次、�
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  assert.equal((text.match(/\^0\.2\.1-rc\.2/g) ?? []).length, 2, '新增段在文件内出现 2 次（peer + dev）');
+  assert.equal((text.match(/\^0\.2\.1-rc\.2/g) ?? []).length, 2, '0.2.1 段在文件内出现 2 次（peer + dev）');
+  assert.equal((text.match(/\^0\.2\.2-rc\.1/g) ?? []).length, 2, '0.2.2-rc.1 段在文件内出现 2 次（peer + dev）');
   // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
   // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
   // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。

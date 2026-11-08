@@ -1433,9 +1433,9 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 30,
+      "asserts": 31,
       "blankLines": 29,
-      "lines": 286,
+      "lines": 289,
       "tautologies": 0,
       "tests": 9,
       "todos": 0
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T05:42:30Z",
+  "generatedAt": "2026-11-08T07:32:02Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,13 +2124,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B1 恢复 p2-single-point 共享常量（refactor/quality-20261108）",
+  "reason": "peer 范围补 0.2.2-rc.1 + 测试矩阵补覆盖（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 11950,
+    "asserts": 11951,
     "blankLines": 6752,
     "files": 264,
-    "lines": 71292,
+    "lines": 71295,
     "tautologies": 0,
     "tests": 2496,
     "todos": 0
