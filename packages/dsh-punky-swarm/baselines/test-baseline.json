@@ -1360,14 +1360,6 @@
       "tests": 3,
       "todos": 0
     },
-    "test/maketool-prevalidate.test.js": {
-      "asserts": 20,
-      "blankLines": 15,
-      "lines": 133,
-      "tautologies": 0,
-      "tests": 6,
-      "todos": 0
-    },
     "test/manager-seat-face.test.js": {
       "asserts": 23,
       "blankLines": 19,
@@ -1662,14 +1654,6 @@
       "lines": 92,
       "tautologies": 0,
       "tests": 6,
-      "todos": 0
-    },
-    "test/replay-no-rerun.test.js": {
-      "asserts": 24,
-      "blankLines": 13,
-      "lines": 95,
-      "tautologies": 0,
-      "tests": 5,
       "todos": 0
     },
     "test/replay-recovery.test.js": {
@@ -2193,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-07T12:50:03Z",
+  "generatedAt": "2026-11-08T04:17:53Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2204,15 +2188,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": null,
+  "reason": "B2-a 删除零消费者抽象 make-tool / engine-events 及其行为测试（重构批 refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 12418,
-    "blankLines": 7021,
-    "files": 274,
-    "lines": 73952,
+    "asserts": 12374,
+    "blankLines": 6993,
+    "files": 272,
+    "lines": 73724,
     "tautologies": 0,
-    "tests": 2600,
+    "tests": 2589,
     "todos": 0
   }
 }
