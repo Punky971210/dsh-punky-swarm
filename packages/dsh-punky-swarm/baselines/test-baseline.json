@@ -1433,11 +1433,11 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 31,
-      "blankLines": 29,
-      "lines": 289,
+      "asserts": 25,
+      "blankLines": 28,
+      "lines": 254,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 7,
       "todos": 0
     },
     "test/p2-gate-codes.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T07:32:02Z",
+  "generatedAt": "2026-11-08T07:47:12Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "peer 范围补 0.2.2-rc.1 + 测试矩阵补覆盖（refactor/quality-20261108）",
+  "reason": "宽声明改造：package.json 0.2.x + p2-deps-compat 重写（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 11951,
-    "blankLines": 6752,
+    "asserts": 11945,
+    "blankLines": 6751,
     "files": 264,
-    "lines": 71295,
+    "lines": 71260,
     "tautologies": 0,
-    "tests": 2496,
+    "tests": 2494,
     "todos": 0
   }
 }

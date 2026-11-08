@@ -199,75 +199,40 @@ function satisfiesCaret(version, atom) {
   return true;
 }
 
+/** `M.m.x` 段：按前两段相等判定（预发布版一律 false，与标准 semver 一致）。 */
+function satisfiesXRange(version, atom) {
+  const m = /^(\d+)\.(\d+)\.x$/.exec(atom);
+  if (!m) return null;
+  const v = parseVer(version);
+  return v.nums[0] === Number(m[1]) && v.nums[1] === Number(m[2]) && v.pre === null;
+}
+
 const satisfiesRange = (version, range) => range.split('||')
   .map((s) => s.trim())
   .filter(Boolean)
-  .some((atom) => satisfiesCaret(version, atom));
+  .some((atom) => {
+    const x = satisfiesXRange(version, atom);
+    return x === null ? satisfiesCaret(version, atom) : x;
+  });
 
-/** 改前 range（六段，逐字取自 8d7815b 的 package.json）。 */
-const RANGE_BEFORE = '^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.5-rc.1 || ^0.1.6-alpha.1 || ^0.1.7-rc.1 || ^0.2.0-rc.1';
-const ADDED_SEGMENT = '^0.2.1-rc.2';
-const ADDED_SEGMENT_2 = '^0.2.2-rc.1';
+/** 宽声明（用户裁决：全仓不钉 DSH 版本，仅保留宽声明）。 */
+const RANGE_WIDE = '0.2.x';
 
-test('A1-P2-03 · 判定器自校验：复现改前 range 的真值表（该表由 exec 层用真 semver 取得）⇒ 判定器可信', () => {
-  // 真值来源：exec 层用真 `semver.satisfies` 对改前 range 的实测（0.2.1-rc.2 = false 即 R-10 的 BEFORE 读数）。
-  const truthBefore = {
-    '0.2.0-rc.1': true,
-    '0.2.1-rc.2': false,   // ← R-10：这一段是**新增**的，改前不满足
-    '0.2.1': true,
-    '0.2.2': true,
-    '0.3.0-rc.1': false,
-  };
-  for (const [v, expected] of Object.entries(truthBefore)) {
-    assert.equal(satisfiesRange(v, RANGE_BEFORE), expected,
-      '自校验失败：' + v + ' 在改前 range 上应为 ' + expected + '（否则本文件内嵌判定器不可信）');
-  }
-});
-
-test('A1-P2-03 / AC-10 · 改后矩阵：0.2.1-rc.2 / rc.3 / 0.2.1 / 0.2.2 / 0.2.2-rc.1 = true，0.3.0-rc.1 = false（上界不外溢）', () => {
+test('A1-P2-03 / AC-10 · 宽声明：range 恰为 0.2.x，覆盖 0.2.0/0.2.1/0.2.2，不外溢 0.3.0 / 0.1.x', () => {
   const range = PKG.peerDependencies['@deepseek-ai/dsh-tools'];
-  const expected = {
-    '0.2.1-rc.2': true,
-    '0.2.1-rc.3': true,
-    '0.2.1': true,
-    '0.2.2': true,
-    '0.2.2-rc.1': true,
-    '0.3.0-rc.1': false,
-  };
+  assert.equal(range, RANGE_WIDE, 'peer range 必须是宽声明 ' + RANGE_WIDE);
+  const expected = { '0.2.0': true, '0.2.1': true, '0.2.2': true, '0.3.0': false, '0.1.7': false };
   for (const [v, exp] of Object.entries(expected)) {
-    assert.equal(satisfiesRange(v, range), exp, v + ' 在改后 range 上应为 ' + exp);
+    assert.equal(satisfiesRange(v, range), exp, v + ' 在宽声明上应为 ' + exp);
   }
 });
 
-test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且改后 = 改前六段 + 追加一段（纯加段，既有组合全部仍满足）', () => {
+test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且 package.json 不再出现任何 rc 精确版本字面量', () => {
   const peer = PKG.peerDependencies['@deepseek-ai/dsh-tools'];
   const dev = PKG.devDependencies['@deepseek-ai/dsh-tools'];
-  assert.equal(peer, dev, 'peerDependencies 与 devDependencies 的 range 必须逐字一致（两处须同步）');
-  assert.equal(peer, RANGE_BEFORE + ' || ' + ADDED_SEGMENT + ' || ' + ADDED_SEGMENT_2, '改后 range 必须是「原六段 + 追加两段」的形态');
-  const segments = peer.split('||').map((s) => s.trim());
-  // P4-b 不可改造（Leader 裁定）：期望值来自**版本范围字符串清单**（元素即原文）；
-  // map 出身份即原文 = 第二真源 ⇒ 归 P4-b。保留计数。
-  assert.equal(segments.length, 8, '段数 6 → 8（只准加，不准改写既有段）');
-  assert.equal(segments.slice(0, 6).join(' || '), RANGE_BEFORE, '原六段逐字保留且顺序不变');
-  // 单调性：改前能过的版本改后仍然能过
-  for (const v of ['0.1.0-rc.6', '0.1.1-rc.2', '0.1.5-rc.1', '0.1.6-alpha.1', '0.1.7-rc.1', '0.2.0-rc.1']) {
-    assert.equal(satisfiesRange(v, peer), true, '既有段覆盖的版本必须仍然满足：' + v);
-  }
-});
-
-test('A1-P2-03 / AC-10 · package.json 文本面：新增段恰出现 1 次、原末段出现 2 次（peer + dev）', () => {
+  assert.equal(peer, dev, 'peerDependencies 与 devDependencies 的 range 必须逐字一致');
   const text = read('package.json');
-  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  assert.equal((text.match(/\^0\.2\.1-rc\.2/g) ?? []).length, 2, '0.2.1 段在文件内出现 2 次（peer + dev）');
-  assert.equal((text.match(/\^0\.2\.2-rc\.1/g) ?? []).length, 2, '0.2.2-rc.1 段在文件内出现 2 次（peer + dev）');
-  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  // P4-b 不可改造（Leader 裁定）：期望值来自**版本号字面量在文本中的出现次数**，元素即原文、无身份面 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  assert.equal((text.match(/\^0\.2\.0-rc\.1/g) ?? []).length, 2, '原末段仍在两处（既有六段未被改写）');
+  assert.equal(/\d+\.\d+\.\d+-rc\.\d+/.test(text), false, 'package.json 不得再出现 rc 精确版本字面量');
 });
 
 test('A1-P2-03 · 同提交披露：docs/upstream-defects.md 含三要素（版本 / startActivation / 拒派码）', (t) => {

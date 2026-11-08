@@ -99,7 +99,7 @@ function syntheticInstalledHome() {
     private: true,
     dependencies: {
       'dsh-punky-swarm': 'file:./dsh-punky-swarm-0.5.0.tgz',
-      '@deepseek-ai/dsh-experimental-agent-team-profile': '0.1.7-rc.2',
+      '@deepseek-ai/dsh-experimental-agent-team-profile': '0.2.x',
     },
     dsh: { profile: { bundles: ['dsh-punky-swarm', '@deepseek-ai/dsh-experimental-agent-team-profile'] } },
   }, null, 2) + '\n', 'utf8');

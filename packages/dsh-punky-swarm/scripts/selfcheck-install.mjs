@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // selfcheck-install.mjs —— 安装三面**只读自检**（批 onekey-install-20260927 · lane exec-smoke · I-6）
 //
-// 为什么需要它（判据源 `plan/install-spec.md` §问题 §四）：DSH 0.1.7-rc.x 对非必需条目是
+// 为什么需要它（判据源 `plan/install-spec.md` §问题 §四）：DSH 0.2.x 对非必需条目是
 //   **per-entry fail-soft**（`exec/failsoft.md` §一 实测）——某一行坏只落 stderr warning，**进程照起**。
 //   于是「模式静默消失」无人察觉。本入口把三面状态变成**可主动查询的事实**。
 //
