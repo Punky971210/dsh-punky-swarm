@@ -200,6 +200,14 @@
       "tests": 23,
       "todos": 0
     },
+    "test/assembly-refinements.test.js": {
+      "asserts": 5,
+      "blankLines": 12,
+      "lines": 121,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
     "test/assembly-schema.test.js": {
       "asserts": 65,
       "blankLines": 37,
@@ -2121,7 +2129,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T08:49:56Z",
+  "generatedAt": "2026-11-08T08:58:00Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2132,15 +2140,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 lock-resolve-20261108：依赖声明面/安装面分离（peer 宽声明 + dev 可解析 rc 下界），p2-deps-compat 判据反转 + 补 dsh-app-boot / dsh-system-prompt 声明；package-lock 重生成",
+  "reason": "批 isolation-livefix-20261108：活体实测两处回归的回归锁（门禁死锁 / MCP 路由未回收）",
   "schema": 1,
   "totals": {
-    "asserts": 11959,
-    "blankLines": 6771,
-    "files": 265,
-    "lines": 71438,
+    "asserts": 11964,
+    "blankLines": 6783,
+    "files": 266,
+    "lines": 71559,
     "tautologies": 0,
-    "tests": 2496,
+    "tests": 2499,
     "todos": 0
   }
 }

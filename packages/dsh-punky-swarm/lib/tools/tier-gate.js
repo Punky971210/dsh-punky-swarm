@@ -112,8 +112,9 @@ export function lockPath(root, sessionId, batchId, lane) { return join(root, 'se
 
 export function installDifficultyGuard(ctx, deps) {
   const { store, config = {} } = deps;
+  const port = createToolsPort(ctx);
   {
-    createToolsPort(ctx).installGuard((execution) => {
+    port.installGuard((execution) => {
       const header = execution?.agent?.session?.header;
       if (header && (header.delegationDepth > 0 || header.parentSession)) return undefined;
       const sessionId = execution?.arguments?.session ?? execution?.agent?.session?.id;
@@ -121,6 +122,15 @@ export function installDifficultyGuard(ctx, deps) {
       if (!modeActiveFor(readLiveConfig(deps), execution, (m) => {
         if (shouldNoteModeInactive(sessionId)) ctx.logger?.warn?.('[dsh-punky-swarm] ' + m);
       })) return undefined;
+      // 【装配隔离配套 · 2026-11-08 活体实测死锁】门禁只对**能看到治理工具面**的会话生效。
+      //   工具面已改为装配隔离（只在 punky-preset 的 scope 层注册），而本门按**会话 header 的 preset id**
+      //   判定 —— 两者可能不一致：会话若在工具面注册**之前**创建、或 preset 重挂换代（老会话链到旧
+      //   generation），header 仍写 `punky-preset` ⇒ 门禁照旧生效，但该会话看不到 `assign_check`，
+      //   于是「被拦 + 无工具可解套」= 死锁（实测：宿主 pwsh / edit 全被本门拒绝）。
+      //   判据取**真实注册表**（调用方 agent 视角）三态：`absent` 才放宽（该会话确实无法评估）；
+      //   `visible` 走下面原文分支一字不动；`unknown`（夹具 / 无真注册表）**保留旧行为** ——
+      //   否则测试与半装配宿主里的门禁会被静默关掉。
+      if (port.toolVisibilityFor(execution?.agent, 'assign_check') === 'absent') return undefined;
       const execTools = config?.escalation?.execTools ?? EXEC_TOOLS;
       //     「评估→被拦→无法评估」死循环（worker 被派发后须先读状态再干活，读状态不能被门禁卡死）。
       if (!execTools.includes(execution.name)) return undefined;

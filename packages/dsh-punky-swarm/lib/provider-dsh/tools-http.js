@@ -68,6 +68,30 @@ export function createToolsPort(ctx) {
       return probed.state === 'present' ? probed.definition : null;
     },
 
+    /**
+     * 某 agent **视角**的工具可见性三态（宿主注册表按 scope 分层，`get(name, scope)` 的 scope = agent）。
+     *
+     * 为什么需要它（2026-11-08 活体实测死锁）：治理工具面已改为**装配隔离**（只注册在 punky-preset 的
+     *   scope 层），而执行时模式门 `modes.gate` 按**会话 header 的 preset id** 判定 —— 两者可能不一致：
+     *   会话若在工具面注册**之前**创建、或 preset 重挂换代（老会话链到旧 generation），
+     *   header 仍写 `punky-preset` ⇒ 门禁照旧生效，但该会话**看不到 `assign_check`**，
+     *   于是「被拦 + 无工具可解套」= 死锁（实测：宿主 shell/edit 全被 difficulty 门拒绝）。
+     *   ⇒ 门禁必须自己以**真实注册表**为准判「这个会话能不能照做」，不能只看 header。
+     *
+     * 三态而非布尔：`unknown`（端口不可用 / 查询抛错 / 无 `tools.get`）必须**保留旧行为**——
+     *   夹具与半装配宿主里没有真注册表，据此放宽等于把门禁关掉；只有注册表**明确报告缺席**才放宽。
+     *
+     * @param {object|undefined} agent 调用方 agent（即 scope）；undefined = 全局视图
+     * @param {string} name 工具名
+     * @returns {'visible'|'absent'|'unknown'}
+     */
+    toolVisibilityFor(agent, name) {
+      if (!available || typeof tools.get !== 'function') return 'unknown';
+      try {
+        return tools.get(name, agent) != null ? 'visible' : 'absent';
+      } catch { return 'unknown'; }
+    },
+
     registerTool(toolDef) {
       if (!available || typeof tools.register !== 'function') return false;
       tools.register(toolDef);
