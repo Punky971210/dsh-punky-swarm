@@ -269,3 +269,48 @@ test('A1-P2-10 · 静态单点：`function mailboxRootOf` 全仓恰 1 处；三�
   assert.equal(/path\.join\(|'sessions'/.test(ctxSrc.split('export const mailboxRootOf')[1]?.split(';')[0] ?? ''),
     false, '④ 包装体内不得持有第二份路径拼接知识（只读 cx.engineRoot + 守卫 + 委托）');
 });
+
+// ── 【⑤-2 · 2026-11-09 裁决乙「只消重复、词表不动」】引号掩码 / 段首词 单点化 ──────────
+//   背景：`lib/tools/readonly.js` 与 `lib/governance/tool-ban.js` 曾**逐字各存一份**
+//   `QUOTE_MASK` / `ASSIGN_RE` / `maskQuoted` / `headToken`（分词主体已单点在 `shell-text.js`，
+//   但这四个没进去）。本批只搬实现、不动任何词表 —— 判据据此分两面：
+//     ① 单点面：`shell-text.js` 恰好定义一次；两个调用方都 import、且不再本地定义。
+//     ② 语义面：词表**不得**因此变化（两文件的写面/只读面词表保持原样，用「关键条目仍在」验证）。
+test('⑤-2 分词辅助单点：maskQuoted/headToken/ASSIGN_RE 只在 shell-text.js 定义一次，两处引用', () => {
+  const shell = read('lib/shell-text.js');
+  for (const name of ['QUOTE_MASK', 'ASSIGN_RE', 'maskQuoted', 'headToken']) {
+    assert.ok(new RegExp('export (function|const) ' + name + '\\b').test(shell), 'shell-text.js 必须导出 ' + name);
+  }
+
+  const consumers = ['lib/tools/readonly.js', 'lib/governance/tool-ban.js'];
+  for (const rel of consumers) {
+    const src = read(rel);
+    // ① 本地不得再定义（function 声明形态 / const 常量形态都算）
+    for (const name of ['maskQuoted', 'headToken']) {
+      assert.equal(new RegExp('function ' + name + '\\s*\\(').test(src), false,
+        rel + ' 不得再本地定义 ' + name + '（第二份分词 = 第二真源）');
+    }
+    for (const name of ['QUOTE_MASK', 'ASSIGN_RE']) {
+      assert.equal(new RegExp('const ' + name + '\\s*=').test(src), false,
+        rel + ' 不得再本地定义 ' + name + '（应 import 自 shell-text.js）');
+    }
+    // ② 必须真的从单点 import（不是复制后改引用）
+    assert.ok(/from '\.\.\/(?:\.\.\/)?shell-text\.js'/.test(src), rel + ' 必须从 shell-text.js 取分词辅助');
+    assert.ok(/import \{[^}]*maskQuoted[^}]*\}/.test(src) && /import \{[^}]*headToken[^}]*\}/.test(src),
+      rel + ' 必须 import maskQuoted 与 headToken');
+  }
+});
+
+test('⑤-2 语义保持：去重前后两套词表不变（关键写形态与只读放行仍然成立）', async () => {
+  const { judgeShellCommand } = await import('../lib/tools/readonly.js');
+  const { judgeFileWriteCommand } = await import('../lib/governance/tool-ban.js');
+  // 只读面：典型只读仍放行；执行/写类仍判非只读
+  assert.equal(judgeShellCommand('ls -la').readonly, true);
+  assert.equal(judgeShellCommand('npm install').readonly, false);
+  // 写面：典型写仍命中；执行类仍不误判为写（词表宽窄是设计选择，本批不动）
+  assert.equal(judgeFileWriteCommand('Set-Content -Path a -Value x').hit, true);
+  assert.equal(judgeFileWriteCommand('npm install').hit, false);
+  // 已知边界（裁决：不做启发式）——钉住现状，避免以后被误当「已覆盖」
+  assert.equal(judgeFileWriteCommand('find . -fprint out.txt').hit, false, 'find 宽旗标是已知边界');
+  assert.equal(judgeFileWriteCommand('node -e "writeFileSync"').hit, false, '解释器内联写是已知边界');
+});

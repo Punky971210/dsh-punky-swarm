@@ -1457,11 +1457,11 @@
       "todos": 0
     },
     "test/p2-single-point.test.js": {
-      "asserts": 29,
-      "blankLines": 22,
-      "lines": 272,
+      "asserts": 40,
+      "blankLines": 25,
+      "lines": 317,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 9,
       "todos": 0
     },
     "test/p2-state-single.test.js": {
@@ -2113,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T11:49:08Z",
+  "generatedAt": "2026-11-08T17:27:47Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑥-2 丙：allowlist 判据从 tier-gate 迁入 wiring hook，两套人工闸合并为一套（测试改驱动面 + 退役锁）",
+  "reason": "⑤-2 乙：分词辅助（maskQuoted/headToken/ASSIGN_RE/QUOTE_MASK）单点化到 shell-text.js，词表不动；新增 2 条单点/语义判据",
   "schema": 1,
   "totals": {
-    "asserts": 11817,
-    "blankLines": 6727,
+    "asserts": 11828,
+    "blankLines": 6730,
     "files": 264,
-    "lines": 70943,
+    "lines": 70988,
     "tautologies": 0,
-    "tests": 2479,
+    "tests": 2481,
     "todos": 0
   }
 }

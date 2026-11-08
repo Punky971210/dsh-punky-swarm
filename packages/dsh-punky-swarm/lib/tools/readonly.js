@@ -15,14 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { stripStreamMerges, segmentCommands } from '../shell-text.js';
+import { stripStreamMerges, segmentCommands, ASSIGN_RE, maskQuoted, headToken } from '../shell-text.js';
 
 //       作用域收窄的理由 = 只读检索里的同名文本（`grep -rn "-delete" lib`）不得被误拒；
 
 export const SHELL_TOOLS = ['pwsh', 'bash'];
 
-const QUOTE_MASK = '__Q__';
-const ASSIGN_RE = /^\s*(?:\$[A-Za-z_][\w]*|[A-Za-z_][\w]*)\s*=\s*/;
 const GIT_PREFIX_RE = /^(?:-C\s+(?:__Q__|\S+)|--no-pager|-P|--paginate)\s+/i;
 
 const FIND_WRITE_FLAG_RE = /[\s("']-(?:fprint\d*|fprintf|fls|exec|execdir|delete|ok|okdir|fdelete)\b/i;
@@ -105,31 +103,11 @@ const GIT_SUB_ALLOW = new Map([
   ['submodule', /^\s*(?:status\b.*|summary\b.*)?\s*$/],
 ]);
 
-// ① 引号掩码：把 `"…"` / `'…'` 字面量替成 QUOTE_MASK（一处字面量 → 一个掩码 token）。
-//   引号未闭合 → ok:false（fail-closed：边界不明，拒绝判定为只读）。
-function maskQuoted(text) {
-  let out = '';
-  let quote = null;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === quote) { quote = null; out += QUOTE_MASK; }
-      continue;
-    }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    out += ch;
-  }
-  if (quote) return { ok: false, masked: '' };
-  return { ok: true, masked: out };
-}
+// ① 引号掩码 / 段首 token：单点在 `lib/shell-text.js`（⑤-2 去重；与 tool-ban 共用同一实现）
 
 // ① 流合并不算写：`2>&1` / `2>$null` 只合并或丢弃流，不落盘（实现单点 = lib/shell-text.js）
 
-// ④ 段首 token（跳过 `(` `&` `.` 包裹；引号字面量已掩码，故 `["']?` 只为兜底）
-function headToken(seg) {
-  const m = seg.match(/^[&.(]*\s*["']?([^\s"']+)/);
-  return (m?.[1] ?? '').toLowerCase();
-}
+// ④ 段首第二词（`git --version` 这类两词白名单用）
 function secondToken(seg) {
   const m = seg.match(/^[&.(]*\s*["']?[^\s"']+["']?\s+(--?[A-Za-z][A-Za-z-]*)/);
   return (m?.[1] ?? '').toLowerCase();

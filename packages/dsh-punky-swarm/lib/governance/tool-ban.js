@@ -15,9 +15,18 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { TOOL_BAN_BEHAVIORS } from './config.js';
-import { segmentCommands, stripStreamMerges } from '../shell-text.js';
-const QUOTE_MASK = '__Q__';
-const ASSIGN_RE = /^\s*(?:\$[A-Za-z_][\w]*|[A-Za-z_][\w]*)\s*=\s*/;
+import { segmentCommands, stripStreamMerges, ASSIGN_RE, maskQuoted, headToken } from '../shell-text.js';
+// ── 已知边界（⑤-2 · 2026-11-09 裁决乙「只消重复、词表不动」+ 解释器内联写不做启发式）────────
+//   本判定的语义 = **「这条命令是不是在写文件」**（窄），与 `lib/tools/readonly.js` 的
+//   「这条命令有没有任何副作用」（宽）**不是同一个判定** ⇒ 词表宽窄差异是设计选择，不是漂移。
+//   实测（`punky-recon-20261108/probe-5-2-readonly-vs-toolban.mjs`，46 样本）：
+//     · 危险组合「本判定判写 ∧ readonly 判只读」= **0**（只读旁路漏不出本判定认得的写）；
+//     · 本判定不认的两类**文件写**（已知边界，故意不补）：
+//       ① `find` 宽旗标：`-fprint/-fprintf/-fls/-ok/-okdir`（只认 `-exec/-execdir/-delete/-fdelete`）；
+//       ② 内层命令：`cmd /c copy a b`（写命令不在段首，不做递归展开）；
+//       ③ 解释器内联写：`node -e "...writeFileSync..."` / `python -c "open(...,'w')"`。
+//   为什么不补 ③：文本启发式天然漏判（换行/拼接/变量）且易误伤，做它等于给一个"看起来在拦"的假面；
+//   这三类仍被 readonly 挡在**只读旁路**之外（不能借此绕过难度门），只是 `file-write` 禁令不命中。
 const WRITE_CMDLET_RE = /(?<![\w-])(?:set|add|clear|new|remove|move|copy|rename|out|tee|export)-(?:content|item|itemproperty|file|object|csv|clixml|certificate|pfxcertificate)(?![\w-])/i;
 const OUTFILE_RE = /(?<![\w-])-outfile\b/i;
 const FIND_WRITE_RE = /\s-(?:exec|execdir|delete|fdelete)\b/i;
@@ -67,32 +76,7 @@ export function judgeWaitSleepCommand(command) {
 export const WRITE_CHANNEL_HINT = '；文件写请改用 edit / write / str-replace-editor 等在册工具（护栏写通道路由：shell 写盘易破坏文件编码头）';
 export const UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX = '行为面未实现或非法：';
 export const UNKNOWN_VIOLATION_CODE = 'unknown';
-function maskQuoted(text) {
-    let out = '';
-    let quote = null;
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        if (quote) {
-            if (ch === quote) {
-                quote = null;
-                out += QUOTE_MASK;
-            }
-            continue;
-        }
-        if (ch === '"' || ch === "'") {
-            quote = ch;
-            continue;
-        }
-        out += ch;
-    }
-    if (quote)
-        return { ok: false, masked: '' };
-    return { ok: true, masked: out };
-}
-function headToken(seg) {
-    const m = seg.match(/^[&.(]*\s*["']?([^\s"']+)/);
-    return (m?.[1] ?? '').toLowerCase();
-}
+// 引号掩码 / 段首 token：单点在 `lib/shell-text.js`（⑤-2 去重后两处共用同一实现）
 export function judgeFileWriteCommand(command) {
     if (typeof command !== 'string' || command.trim().length === 0) {
         return { hit: false, reason: '命令为空或非字符串（无写动作可判）' };

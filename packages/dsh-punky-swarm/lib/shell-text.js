@@ -31,3 +31,37 @@ export function segmentCommands(text) {
   if (typeof text !== 'string') return [];
   return text.split(/;|&&|\|\||\||&|\r?\n/);
 }
+
+// ── ③ 引号掩码 / 段首词 / 赋值前缀（⑤-2 · 2026-11-09 裁决乙「只消重复、词表不动」）────────
+//   三件此前在 `lib/tools/readonly.js` 与 `lib/governance/tool-ban.js` 里**逐字各存一份**
+//   （`QUOTE_MASK` / `ASSIGN_RE` / `maskQuoted` / `headToken`）⇒ 收敛于此，两处引用。
+//   ⚠ 只搬实现，**不动任何词表**：两套判定的**用途不同**（只读放行 vs 文件写禁令），
+//     词表宽窄差异是设计选择，不是漂移（实测「tool-ban 判写 ∧ readonly 判只读」的危险组合 = 0）。
+//     已知边界见 `lib/governance/tool-ban.js` 头注。
+//   ⚠ `lib/state/command-exec.js` 里另有一份**故意不同**的掩码（未闭合引号**不 fail-closed**，
+//     而是补掩码继续判）——那是命令 gate 的既有边界语义，本批**不并入**（并进去等于改它的失败模式）。
+export const QUOTE_MASK = '__Q__';
+export const ASSIGN_RE = /^\s*(?:\$[A-Za-z_][\w]*|[A-Za-z_][\w]*)\s*=\s*/;
+
+/** 引号掩码：把 `"…"` / `'…'` 字面量替成一个掩码 token。引号未闭合 ⇒ `ok:false`（fail-closed）。 */
+export function maskQuoted(text) {
+  let out = '';
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) { quote = null; out += QUOTE_MASK; }
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    out += ch;
+  }
+  if (quote) return { ok: false, masked: '' };
+  return { ok: true, masked: out };
+}
+
+/** 段首 token（跳过 `(` `&` `.` 包裹；掩码后引号字面量已成 token）——小写。 */
+export function headToken(seg) {
+  const m = seg.match(/^[&.(]*\s*["']?([^\s"']+)/);
+  return (m?.[1] ?? '').toLowerCase();
+}
