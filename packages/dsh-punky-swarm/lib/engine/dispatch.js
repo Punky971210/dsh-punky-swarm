@@ -1216,6 +1216,49 @@ function trackOneShotRun(workerSessionId, run, warn) {
 //   本参数**在签名内**；唯一调用点 `lib/tools/member-tools.js` 的 `dispatchLaneCore({ ..., dispatchIndex: deps?.dispatchIndex })`
 //   **已传**，`lib/index.js` 的 `installTools` deps 面亦**已注入**同一 Map 引用
 //   （按符号检索 `dispatchIndex`，勿写死行号 —— 本批另一 lane 正在 `lib/index.js` 并行改动）。
+/** 从 `config.dispatch.agentPreset` 解析**本次（本角色）**要用的 preset id。
+ *
+ *  ## 两种声明形态（②为纯加法：字符串形态**零行为变化**）
+ *   ① **字符串** `'<id>'`——全局单一面（现状，所有角色共用同一 preset）；
+ *   ② **对象** `{ default?: '<id>', <roleId>?: '<id>' }`——按角色取：
+ *      命中 `decl[role]` 用它，否则回落 `decl.default`，都没有 ⇒ `null`。
+ *
+ *  ## 为什么需要 ②（这不是便利性，是结构必需）
+ *  本宿主是 `activation` 形态 ⇒ `request` **不含** `toolFilter`（`provider-dsh/agent.js:455`）
+ *  ⇒ 引擎**无法按次裁剪**工具面，收窄只能靠 preset 的**固定组合**。而 `deriveDenyTools(role.allow)`
+ *  是 **per-role** 的（反推「该角色不该拿的工具」）⇒ 只要 preset 的固定面里有任何一个工具不被
+ *  某角色允许，`deny ∩ covers ≠ ∅` ⇒ 该角色的 lane **永远**派不出去（引擎拒派是对的：放行即越权）。
+ *
+ *  实测冲突（`presetCoverage['punky-preset'].tools = [read,glob,grep,pwsh,skill,write]`）：
+ *   coder / coordinator / reviewer / supervisor / tester 全覆盖；**designer 与 doc-manager
+ *   因 `pwsh` 冲突** ⇒ plan 层两个角色结构性不可自派。② 让「给不同角色配不同窄 preset」成为可能，
+ *   是同时保住「不放宽角色权限」与「plan 层能派出去」的唯一形态。
+ *
+ *  ## 纪律
+ *  · 解析不出 ⇒ `null`（调用方按「无见证」处置，**禁伪造**一个看似可用的 id）；
+ *  · 本函数**只解析 id**，不读 `presetCoverage`、不判相交（那是 `presetFor` 的活）——
+ *    两个单点各管一段，禁合并（合并后「配了但没覆盖声明」与「没配」两档会压成同一形态）。
+ * @param {object|null|undefined} config 热更快照（`liveConfig`）
+ * @param {string|null|undefined} role 本次 lane 的裸 role 名
+ * @returns {string|null} preset id 或 `null`
+ */
+export function presetIdForRoleOf(config, role) {
+  const decl = config?.dispatch?.agentPreset;
+  if (typeof decl === 'string') {
+    const s = decl.trim();
+    return s.length > 0 ? s : null;
+  }
+  if (decl === null || typeof decl !== 'object' || Array.isArray(decl)) return null;
+  const r = typeof role === 'string' ? role.trim() : '';
+  // 命中该角色专用 preset（先于 default：专用面优先于兜底面）
+  if (r && Object.prototype.hasOwnProperty.call(decl, r)) {
+    const own = decl[r];
+    if (typeof own === 'string' && own.trim().length > 0) return own.trim();
+  }
+  const fallback = decl.default;
+  return typeof fallback === 'string' && fallback.trim().length > 0 ? fallback.trim() : null;
+}
+
 export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt, dispatchIndex }) {
   // ⓿ 【2026-10-22 · A1-P1-01；2026-10-31 · e3-agentport 端口面改造】宿主**能力位前置**。
   //   位置**硬要求**：必须早于 ① `store.setMember(...,'running')` 与 ② 句柄发放（与下方 role 前置拒派同族）
@@ -1270,10 +1313,9 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //     必须禁掉的 ⇒ 它**无法**覆盖本次请求 ⇒ 返回 `null`（而不是给出一个「能收窄」的假事实）。
     //     这条使不同 `ask` 得到不同解析结果（RL-2 区分力），解析器不再是「忽略入参的闭包」。
     presetFor: (ask) => {
-      const presetId = typeof liveConfig?.dispatch?.agentPreset === 'string'
-        && liveConfig.dispatch.agentPreset.length > 0
-        ? liveConfig.dispatch.agentPreset
-        : null;
+      // 【批 `preset-per-role-20261108`】**按角色**解析 preset id（字符串形态零行为变化）。
+      //   形态判据与理由见模块级 `presetIdForRoleOf` 的注释块（含「为何 per-role 是结构必需」）。
+      const presetId = presetIdForRoleOf(liveConfig, ask?.role);
       if (!presetId) return null;
       const coverage = liveConfig?.dispatch?.presetCoverage;
       const entry = coverage !== null && typeof coverage === 'object' ? coverage[presetId] : null;
@@ -1296,8 +1338,11 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     //   ① 未配置 preset ⇒ **逐字保留**原文案（`test/f1-dispatch-activation-gate.test.js` 对该文案逐词冻结）；
     //   ② 已配置但**无法核实**覆盖（无 `presetCoverage` / 覆盖为空 / 覆盖与本次 deny 相交）
     //      ⇒ 用真读数文案（只讲「见证不可得」，不再宣称「未配置」）。
-    const presetConfigured = typeof liveConfig?.dispatch?.agentPreset === 'string'
-      && liveConfig.dispatch.agentPreset.length > 0;
+    // 【批 `preset-per-role-20261108`】「配了没配」的判据**与解析同源**（`presetIdForRoleOf`）：
+    //   对象形态（per-role 映射）下若仍按「必须是字符串」判，会被误判成「未配置」而走分支①的旧文案
+    //   （宣称「未配置 agentPreset」）——那是**假读数**：明明配了，只是本次 role 没解析出来。
+    //   同源后两档语义仍然可分：① 整体未配（任何 role 都解析不出）② 配了但本次收窄不可核。
+    const presetConfigured = presetIdForRoleOf(liveConfig, laneTask?.role) !== null;
     // 【D-1 · 批 `punky-d1d2-impl-20261103`】**拒派从 throw 改为返回**（统一返回形状 · 方案乙）：
     //   本闸位于 `store.setMember(…,'running')` 与 `issueLaneHandle(...)` **之前** ⇒ 此刻**没有 `base`、没有句柄**。
     //   故本路径**手写字段**（不含 token/firstLine/ttlMs）——「无句柄」是**事实**而非妥协：

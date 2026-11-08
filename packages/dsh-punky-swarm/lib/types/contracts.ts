@@ -607,6 +607,14 @@ export type GateErrorCode =
   | 'GATE_ROLE_ASSEMBLY_MISSING'     // 含 audit 层的三层批缺 `assembly` 声明 ⇒ 拒建批（GATE_ROLE_ASSEMBLY_MISSING）
   | 'GATE_ROLE_INVALID'             // `roles` 词法非法 ⇒ **告警**（批次照建；与拒态分码，防「告警被读成拒」）
   | 'GATE_ROLE_MANAGER_AS_LANE'     // Manager 被登记为普通 lane ⇒ **告警**（角色完整性，非拒态）
+  // 【批 `preset-per-role-20261108`】建批期「role ↔ preset 覆盖面」冲突 ⇒ **告警**。
+  //   ⚠ **不进本 union**：union 是**冻结面**（`test/gate-lane-snapshot.test.js` 的 `P2-1` 用
+  //     `EXPECTED_GATE_CODES` 硬锁 62 个码，要求「集合身份不变」）⇒ 新增观察码一律用 `WARN_` 前缀
+  //     且不进 union/词表（同族先例 = 那个「未知席位」告警码：同为 `WARN_` 前缀、且在静默集内）。
+  //     ⚠ 本注释**刻意不写出**该先例码的字面量：`test/warn-silent-codes.test.js` 的 `WS-4` 用
+  //     `unionBlock.includes(<该码名>)`（纯字符串包含、注释也算）判「它不得进 union」⇒ 写出来即判红。
+  //   `WARN_ROLE_PRESET_MISMATCH` 的发射位 = `lib/tools/wave-plan-tools.js#presetMismatchWarnings`
+  //   （`code:` 字面量），事件 = `gate.role_preset_mismatch`（`WARN_EVENT_OF` 映射，非静默集）。
   //   · 建批期**配对基数漂移**（写端 `lib/wave-plan.ts#validateLayerContract`）
   | 'GATE_PAIRING_CARDINALITY_DRIFT'
   // ── 手写 `.js` 发射码**补登记**（2026-11-01 · 批 `punky-adapter-split-20261031` / lane `w4-codename`）──
