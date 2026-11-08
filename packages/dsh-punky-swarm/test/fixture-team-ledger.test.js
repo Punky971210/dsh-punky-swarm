@@ -72,7 +72,6 @@ const WITH_DEFAULT_TEAM_ALLOWLIST = [
   'assembly-gate-extra.test.js',
   'assembly-gate.test.js',
   'batch-control.test.js',
-  'budget.test.js',
   // consume-deps-guard-20261004（2026-10-04）：新门测试面——建批是**手段**，被检面是 `consume` × `deps`
   //   不对称门（`GATE_CONSUME_DEPS_ASYMMETRY` / `gate.consume_deps_asymmetry`），非 team 标签门禁 ⇒ 登记。
   'consume-deps-asymmetry-gate.test.js',

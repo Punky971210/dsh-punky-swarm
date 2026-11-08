@@ -104,10 +104,9 @@ test('T4.2 不炸宿主：非法配置 apply 正常返回 disposer、不 throw',
       root: freshRoot(),
       capabilities: {
         verify: { enabled: true, mode: 'bogus' },
-        budget: { enabled: true, maxChainHops: -1 },
       },
     });
-  }, '非法配置（DEP-1 + DEP-4）apply 不 throw');
+  }, '非法配置（DEP-1）apply 不 throw');
   assert.equal(typeof disposer, 'function', 'disposer 正常产出');
   assert.doesNotThrow(() => disposer(), 'disposer 可安全调用（幂等清理）');
 });

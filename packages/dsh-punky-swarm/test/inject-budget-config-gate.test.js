@@ -125,14 +125,11 @@ test('[T-3] 热更通道矩阵：五字段 × 五坏值 ⇒ 逐格 ok:false', ()
   assert.equal(checked, 25, '热更矩阵格数须为 25');
 });
 
-test('[AC-25] DEP-6 报错形态与 DEP-1..DEP-5 **同形**（前缀 + got 渲染）', () => {
+test('[AC-25] DEP-6 报错形态（前缀 + got 渲染）', () => {
   const dep6 = validateCapabilities(capsWith({ enabled: true, headBytes: 0 })).errors[0];
-  const dep4 = validateCapabilities({ capabilities: { budget: { enabled: true, maxChainHops: 0 } } }).errors[0];
-  assert.match(dep4, /^DEP-4: /);
   assert.match(dep6, /^DEP-6: /);
   // 两族形态：`DEP-<n>: capabilities.<键>.<字段> must be ... (got <JSON>)`
   assert.match(dep6, /^DEP-6: capabilities\.injectBudget\.[A-Za-z]+ must be .+ \(got .+\)$/);
-  assert.match(dep4, /^DEP-4: capabilities\.budget\.[A-Za-z]+ must be .+ \(got .+\)$/);
 });
 
 test('[扩展·登记] 非对象 injectBudget（5 / "on" / true）⇒ 拒（超出包内字面冻结范围的扩展）', () => {
@@ -186,8 +183,6 @@ test('[零回归·防越界] 其他 capabilities 键的**部分覆盖层**不得
   const partial = { capabilities: { trajectory: { autoFail: true } } };
   assert.equal(validateOverlay(partial).ok, true,
     '部分覆盖层不得被误拒（本 lane 不得扩面），实得 ' + JSON.stringify(validateOverlay(partial)));
-  assert.deepEqual(validateOverlay({ capabilities: { budget: { maxChainHops: 4 } } }).errors, [],
-    'budget 部分覆盖层亦不得被误拒');
   assert.equal(validateOverlay({ capabilities: { injectBudget: { enabled: true } } }).ok, true,
     'injectBudget 只写 enabled 的覆盖层合法（字段缺省不误伤）');
 });

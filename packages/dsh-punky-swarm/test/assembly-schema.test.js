@@ -55,10 +55,10 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 
 // ── 注册表完整性（A1.1/A1.2）──
 
-test('CAPABILITY_REGISTRY registers all 13 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog；L2 注入预算新增 injectBudget）', () => {
+test('CAPABILITY_REGISTRY registers all 12 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog；L2 注入预算新增 injectBudget）', () => {
   assert.deepEqual(
     new Set(CAPABILITY_REGISTRY.map((e) => e.key)),
-    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'budget', 'injectBudget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
+    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'injectBudget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
   );
 });
 
@@ -78,12 +78,11 @@ test('registry paths match existing consumer key paths', () => {
   assert.deepEqual(byKey.verify, ['capabilities', 'verify']);
   assert.deepEqual(byKey.watch, ['capabilities', 'watch']);
   assert.deepEqual(byKey.worktree, ['capabilities', 'worktree']);
-  assert.deepEqual(byKey.budget, ['capabilities', 'budget']);
   assert.deepEqual(byKey.trajectory, ['capabilities', 'trajectory']);
 });
 
 test('all registry defaults are ON by default except identity/acps/logs/topic (off — 默认关能力)', () => {
-  // 口径：8 键默认开（aip/discovery/verify/watch/worktree/budget/injectBudget/trajectory）+ 4 键默认关；
+  // 口径：7 键默认开（aip/discovery/verify/watch/worktree/injectBudget/trajectory）+ 4 键默认关；
   // identity 例外：身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）；
   // acps 例外：ACPs 通讯能力默认关（显式开启——对外 mTLS 端点/内部桥均默认不激活，安全默认）；
   // logs 例外：日志导出默认关，patch 显式 logs.enabled:true 开启；
@@ -109,7 +108,7 @@ test('registry defaults align with lib/schema.js defaults', () => {
 });
 
 test('cordis.patch.yml aligns with registry defaults (all capabilities ON)', () => {
-  for (const key of ['aip', 'trajectory', 'budget', 'watch', 'worktree']) {
+  for (const key of ['aip', 'trajectory', 'watch', 'worktree']) {
     const re = new RegExp(key + ':\n\\s+enabled: true');
     assert.match(patchYml, re, key + ' must be enabled: true in patch.yml');
   }
@@ -133,8 +132,6 @@ test('readCapability reads by path with default merge', () => {
   const cfg = { capabilities: { verify: { enabled: true, mode: 'enforce' } } };
   assert.deepEqual(readCapability(cfg, 'verify'), { enabled: true, mode: 'enforce' });
   assert.deepEqual(readCapability({}, 'verify'), { enabled: true, mode: 'advisory' });
-  const budgetOnly = { capabilities: { budget: { enabled: true } } };
-  assert.deepEqual(readCapability(budgetOnly, 'budget'), { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 });
   assert.deepEqual(readCapability({ aip: { enabled: true } }, 'aip'), { enabled: true });
   assert.deepEqual(readCapability({}, 'aip'), { enabled: true }); // 缺省默认开启（与 CAPABILITY_REGISTRY 默认一致）
   assert.equal(readCapability({}, 'nope'), undefined);
@@ -149,7 +146,6 @@ test('validateCapabilities: enabled-all legitimate combo yields zero errors', ()
       verify: { enabled: true, mode: 'enforce' },
       watch: { enabled: true, maxMissed: 3, scanIntervalMinutes: 1 },
       worktree: { enabled: true },
-      budget: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 },
       trajectory: { enabled: true, autoFail: true, poll: { enabled: false, baseUrl: null } },
     },
   };
@@ -180,17 +176,6 @@ assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-3'], '�
   assert.deepEqual(ok.errors, []);
 });
 
-test('validateCapabilities DEP-4: budget chain params must be positive integers', () => {
-  for (const budget of [
-    { enabled: true, maxChainHops: 0 },
-    { enabled: true, maxChainRoundTrips: 1.5 },
-  ]) {
-    const { errors } = validateCapabilities({ capabilities: { budget } });
-assert.deepEqual(errors.map((e) => String(e).match(/DEP-\d+/)[0]), ['DEP-4'], '错误码身份集合须恰为 DEP-4（非法 budget 的唯一违例）');
-    assert.match(errors[0], /DEP-4/);
-  }
-});
-
 test('validateCapabilities DEP-5: watch params bounds', () => {
   for (const watch of [
     { enabled: true, maxMissed: 0 },
@@ -207,7 +192,6 @@ test('validateCapabilities: disabled capability illegal values are ignored (zero
     capabilities: {
       verify: { enabled: false, mode: 'bogus' },
       watch: { enabled: false, maxMissed: 0, scanIntervalMinutes: 0 },
-      budget: { enabled: false, maxChainHops: 0 },
     },
   };
   assert.deepEqual(validateCapabilities(disabled).errors, []);

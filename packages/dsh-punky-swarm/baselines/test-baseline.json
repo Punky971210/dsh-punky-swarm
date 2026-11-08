@@ -201,11 +201,11 @@
       "todos": 0
     },
     "test/assembly-schema.test.js": {
-      "asserts": 69,
-      "blankLines": 38,
-      "lines": 361,
+      "asserts": 65,
+      "blankLines": 37,
+      "lines": 345,
       "tautologies": 0,
-      "tests": 26,
+      "tests": 25,
       "todos": 0
     },
     "test/assets.test.js": {
@@ -350,14 +350,6 @@
       "lines": 136,
       "tautologies": 0,
       "tests": 4,
-      "todos": 0
-    },
-    "test/budget.test.js": {
-      "asserts": 45,
-      "blankLines": 24,
-      "lines": 199,
-      "tautologies": 0,
-      "tests": 10,
       "todos": 0
     },
     "test/cancel-result-three-state.test.js": {
@@ -739,7 +731,7 @@
     "test/fixture-team-ledger.test.js": {
       "asserts": 10,
       "blankLines": 23,
-      "lines": 223,
+      "lines": 222,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1169,9 +1161,9 @@
       "todos": 0
     },
     "test/inject-budget-config-gate.test.js": {
-      "asserts": 47,
+      "asserts": 44,
       "blankLines": 26,
-      "lines": 229,
+      "lines": 224,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1275,7 +1267,7 @@
     "test/legacy-fix.test.js": {
       "asserts": 20,
       "blankLines": 16,
-      "lines": 163,
+      "lines": 162,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1728,14 +1720,6 @@
       "tests": 13,
       "todos": 0
     },
-    "test/run-scoped-cred-expiry.test.js": {
-      "asserts": 30,
-      "blankLines": 20,
-      "lines": 136,
-      "tautologies": 0,
-      "tests": 7,
-      "todos": 0
-    },
     "test/s2-prime-wake-probe.test.js": {
       "asserts": 27,
       "blankLines": 28,
@@ -2153,7 +2137,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T04:36:35Z",
+  "generatedAt": "2026-11-08T04:41:14Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2164,15 +2148,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B2-b1 删 ports/bus 后清理依赖测试（refactor/quality-20261108）",
+  "reason": "B2-b2 F2-6 允许名单移除已删的 budget.test.js（refactor/quality-20261108）",
   "schema": 1,
   "totals": {
-    "asserts": 12264,
-    "blankLines": 6905,
-    "files": 269,
-    "lines": 72940,
+    "asserts": 12182,
+    "blankLines": 6860,
+    "files": 267,
+    "lines": 72582,
     "tautologies": 0,
-    "tests": 2563,
+    "tests": 2545,
     "todos": 0
   }
 }

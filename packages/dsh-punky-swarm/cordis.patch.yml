@@ -39,13 +39,6 @@
             enabled: true
             autoFail: false
             failConfidence: 0.85
-          # mailbox 环防护（budget）：enabled=true 时 outbox/broadcast 发送前经 checkBudget——
-          #   maxChainHops（链跳数上限）/maxChainRoundTrips（有序对往返上限）可配；inbox（Leader→worker 下行派发）永不受限；
-          #   显式 enabled:false 可关闭（关闭时现有 mailbox 调用零感知：不声明 meta.chain = 恒新链，不被拒）。
-          budget:
-            enabled: true
-            maxChainHops: 4
-            maxChainRoundTrips: 2
           # lane 过期检测（watch/heartbeat）：enabled=true 时挂 watchdog 定时器并注册心跳探针工具——
           #   （该探针工具已于 G3 B1 删除，本组不再注册；`stalled` 事件面仍由 batch_status / log_export 可读）
           #   intervalsMinutes 退避档位（分钟，默认 [10,20,30]，冷场越久追问间隔越长）；maxMissed 硬停拍数

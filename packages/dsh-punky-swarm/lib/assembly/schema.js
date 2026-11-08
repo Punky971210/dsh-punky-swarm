@@ -42,7 +42,6 @@ export const CAPABILITY_REGISTRY = [
   { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook（只做证据捕获）', 'verify/gate.js createCompletionGate（仅测试 DI；生产未接线 ⇒ mode=enforce 不拦截）'] },
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },
   { key: 'worktree', path: ['capabilities', 'worktree'], default: { enabled: true, mergeAgent: { enabled: false, model: null, timeoutMs: 600000 } }, consumers: ['tools/lane-tools.js 三工具注册'] },
-  { key: 'budget', path: ['capabilities', 'budget'], default: { enabled: true, maxChainHops: 4, maxChainRoundTrips: 2 }, consumers: ['comms/budget.js + mailbox-tools.js 发送检查'] },
   // injectBudget 键：注入面字节预算（四层：每源软上限 / 总量硬上限 / head-tail 截断 / 显式省略标记）。
   //   与上一行 budget 键**语义正交、互不复用**：budget = mailbox 链环防护（hop/round-trip），本键 = 注入文本字节上限。
   //   默认开 ⇒ 与「零回归靠未超限不动作、不靠默认关」的取值口径一致（无需进测试 OFF_KEYS）。
@@ -171,15 +170,6 @@ export function validateCapabilities(config = {}) {
     const baseUrl = c.trajectory.poll.baseUrl;
     if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
       errors.push('DEP-3: capabilities.trajectory.poll.enabled=true requires non-empty poll.baseUrl');
-    }
-  }
-
-  // DEP-4 budget：maxChainHops / maxChainRoundTrips 为正整数（显式声明时；环防护参数合法性）
-  if (c.budget?.enabled === true) {
-    for (const field of ['maxChainHops', 'maxChainRoundTrips']) {
-      if (c.budget[field] !== undefined && (!Number.isInteger(c.budget[field]) || c.budget[field] < 1)) {
-        errors.push('DEP-4: capabilities.budget.' + field + ' must be a positive integer (got ' + JSON.stringify(c.budget[field]) + ')');
-      }
     }
   }
 
