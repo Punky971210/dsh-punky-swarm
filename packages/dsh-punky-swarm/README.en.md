@@ -69,7 +69,7 @@ dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
 
 - **Works as long as the host ships the official dsh packages** — upstream packages are provided only by the install command.
 - **Version policy (wide declaration)**: this package keeps only `0.2.x` for `@deepseek-ai/dsh-tools` in `peerDependencies`; no specific rc is pinned.
-  - Under standard semver `0.2.x` does **not** match prerelease hosts (e.g. `0.2.2-rc.1`) ⇒ allow/exempt them in the plugin manager.
+  - Under standard semver `0.2.x` does **not** match prerelease hosts (e.g. `0.2.x-rc.y`) ⇒ allow/exempt them in the plugin manager.
 - **`workflow-ptc` is provided by the kernel** (`@deepseek-ai/dsh-base` depends on it) ⇒ no extra install; **do not** re-add the legacy workflow row (see §9).
 - **`engines.dsh` is not written**: the compatibility gate reads only `peerDependencies` (the `@deepseek-ai/dsh*` prefix); that field has zero effect.
 - **Team-service dependency**: the engine consumes the host `agentTeams` service; the declaration lives on the assembly face (`cordis.patch.yml` probe row `inject: [agentTeams]`), not in `dependencies`. When missing, that row goes pending (loud at boot) while the engine and preset rows survive.

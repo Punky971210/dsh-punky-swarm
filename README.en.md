@@ -95,6 +95,6 @@ After the restart the swarm panel appears in the session area and the team skill
 
 **Version**: single source `packages/dsh-punky-swarm/package.json` (see `CHANGELOG.md`). **Test baseline**: 204 test files / 2,147 tests / 10,560 assertions / 0 tautological (single source `baselines/test-baseline.json`).
 
-**Peer dependencies**: `@deepseek-ai/dsh-tools` (^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.5-rc.1 || ^0.1.6-alpha.1 || ^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.2) and `@deepseek-ai/cordis` (^4.0.1); zero third-party runtime dependencies. **Boundaries**: in-process on a single machine — no distributed sync, no cost control, no model routing, zero cloud dependency, no network exposure by default; failure is terminal and nothing auto-resumes.
+**Peer dependencies**: `@deepseek-ai/dsh-tools`（`0.2.x` 宽声明） and `@deepseek-ai/cordis` (^4.0.1); zero third-party runtime dependencies. **Boundaries**: in-process on a single machine — no distributed sync, no cost control, no model routing, zero cloud dependency, no network exposure by default; failure is terminal and nothing auto-resumes.
 
 **License**: GNU AGPL v3 (AGPL-3.0-only) as the sole license. Under [AGPL-3.0](LICENSE) you may use, modify and distribute freely, including commercially; if you offer the modified software over a network, you must publish your changes.

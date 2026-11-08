@@ -95,6 +95,6 @@ dsh web restart
 
 **版本**单一真源 `packages/dsh-punky-swarm/package.json`（变更见 `CHANGELOG.md`）。**测试基线**：204 个测试文件 / 2,147 个测试 / 10,560 条断言 / 0 条恒真（单一真源 `baselines/test-baseline.json`）。
 
-**peer 依赖**：`@deepseek-ai/dsh-tools`（^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.5-rc.1 || ^0.1.6-alpha.1 || ^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.2）与 `@deepseek-ai/cordis`（^4.0.1）；零第三方运行时依赖。**边界**：单机进程内治理，无分布式同步、无成本控制、无模型路由，零云依赖、默认零网络暴露；失败即终态，不自动续跑。
+**peer 依赖**：`@deepseek-ai/dsh-tools`（`0.2.x` 宽声明）与 `@deepseek-ai/cordis`（^4.0.1）；零第三方运行时依赖。**边界**：单机进程内治理，无分布式同步、无成本控制、无模型路由，零云依赖、默认零网络暴露；失败即终态，不自动续跑。
 
 **许可**：GNU AGPL v3（AGPL-3.0-only）为唯一许可；遵守 [AGPL-3.0](LICENSE) 可自由使用、修改、分发（含商用），修改后经网络提供服务须公开修改内容。

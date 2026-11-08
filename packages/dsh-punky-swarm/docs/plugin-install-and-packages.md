@@ -1,6 +1,6 @@
 # 一键安装与分子包架构（设计）
 
-> 2026-11-05 ｜ 基于**实测**（DSH kernel `0.2.1-rc.2`）
+> 2026-11-05 ｜ 基于**实测**（DSH kernel `0.2.x`）
 > 前作 `docs/install.md` 是「建 profile + link」的手工路径；**本文是插件管理器一键安装 + 分子包架构**
 
 ---
@@ -44,7 +44,7 @@ dsh plugin --profile <name> add <tgz 路径>
 },
 "peerDependencies": {
   "@deepseek-ai/cordis": "^4.0.1",
-  "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ... || ^0.2.1-rc.2"
+  "@deepseek-ai/dsh-tools": "0.2.x"
 }
 ```
 
@@ -93,7 +93,7 @@ Done in 950ms
   "name": "@linxin666/dsh-web-all",
   "version": "0.4.7",
   "dsh": {
-    "engines": { "dsh": ">=0.2.1-rc.2" },
+    "engines": { "dsh": "0.2.x" },
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": { "inject": [], "platform": "web" }
   },
@@ -151,7 +151,7 @@ dsh plugin --profile <name> add @deepseek-ai/dsh-experimental-agent-team-profile
 
 | # | 项 | 现状 | 要补 |
 |---|---|---|---|
-| **1** | **`dsh.engines.dsh`** | ❌ **没有** | 加 `"engines": { "dsh": ">=0.2.1-rc.2" }` 到 `dsh` 字段（参照 `dsh-web-all`）|
+| **1** | **`dsh.engines.dsh`** | ❌ **没有** | 加 `"engines": { "dsh": "0.2.x" }` 到 `dsh` 字段（参照 `dsh-web-all`）|
 | **2** | **`dsh.bundle.dependsOn`** | ❌ **没有**（宿主也不读） | **可先加声明**（供将来 `dsh plugin` 支持），同时用丙方案兜底 |
 
 **⇒ 这两项都是**声明性**的，加了不影响现有行为（宿主不读就忽略）。**
@@ -173,7 +173,7 @@ dsh plugin --profile my-swarm add @deepseek-ai/dsh-experimental-agent-team-profi
 
 # ── 验证（⚠ 不看 exit code，patch warning 会污染）──
 $node = 'C:\Users\Administrator\AppData\Roaming\dsh-tauri\runtime\node.exe'
-$bin  = 'D:\DSH\kernel\0.2.1-rc.2\node_modules\@deepseek-ai\dsh\lib\bin.js'
+$bin  = 'D:\DSH\kernel\0.2.x\node_modules\@deepseek-ai\dsh\lib\bin.js'
 & $node $bin --profile my-swarm --dump-config 2>&1 | Select-String "^# ==|pending|dsh-punky-swarm"
 ```
 

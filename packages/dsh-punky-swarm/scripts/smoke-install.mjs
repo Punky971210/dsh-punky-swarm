@@ -102,22 +102,10 @@ const TEAM_FAMILY = [
 ];
 
 /**
- * 团队包 spec 的**钉法**（I-1(b) / D-9 / D-10）。
- *
- * ⚠ 实测偏离登记（D-13，交 Leader 裁）：判据源 I-1(b) 逐字要求 spec 紧跟 `@0.1.7-rc.2` 或 `@next`；
- *   但 **D-9 同时要求「团队包四件必须同 rc，禁混用」**，而「同 rc」的基准 = **宿主 CLI 的 rc**
- *   （本机实测 `dsh --version` = `0.1.7-rc.1`）。实测后果（本 lane 首跑取证）：在 rc.1 宿主上装 rc.2 团队包，
- *   启动期 `@deepseek-ai/dsh-app-boot` 会把两行 **`disabling profile plugin row`**：
- *     · `dsh-agent-preset-punky`（`@deepseek-ai/dsh-agent-preset@0.1.7-rc.2` 需 `…preset-registry@0.1.7-rc.2`）
- *     · `ui-agent-team`（`…client-ui-agent-team@0.1.7-rc.2` 的一组 `0.1.7-rc.2` peer）
- *   ⇒ 面② 的「模式行注册成功」**在 rc.1 宿主上不成立**（fail-soft ⇒ 进程照起、模式面静默消失）。
- *   ⇒ 本脚本据此把 spec 做成**可参数化**：缺省 = **跟随宿主 rc**（`--team-spec` 可显式覆盖为 rc.2 / next 复现该偏离）。
- *   两种钉法都在 `exec/smoke.md` 留读数；**判据源措辞是否需按 D-9 收窄为「与宿主同 rc 或 @next」由 Leader 裁**。
+ * 团队包 spec：宽声明 `0.2.x`（不钉具体 rc）。
  */
-function defaultTeamSpec(hostVersion) {
-  const v = String(hostVersion ?? '').trim();
-  if (/^\d+\.\d+\.\d+-rc\.\d+$/.test(v)) return TEAM_PROFILE_PKG + '@' + v;
-  return TEAM_PROFILE_PKG + '@next';
+function defaultTeamSpec(_hostVersion) {
+  return TEAM_PROFILE_PKG + '@0.2.x';
 }
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
@@ -132,8 +120,7 @@ function parseArgs(argv) {
     if (a === '--boot-timeout') { out.bootTimeout = Number(argv[i + 1] ?? 90000); i += 1; continue; }
     if (a === '--pack-dir') { out.packDir = String(argv[i + 1] ?? ''); i += 1; continue; }
     if (a === '--team-spec') { out.teamSpec = String(argv[i + 1] ?? ''); i += 1; continue; }
-    // `--line <label>`：双线验证用的**产物标签**（仅回显/入摘要，不参与判定）——
-    //   批 dualline-compat-20260927 · C-6 要求「两线各一次运行」可区分（如 `0.2.0-rc.1` / `0.1.7-rc.2`）。
+    // `--line <label>`：验证批次用的**产物标签**（仅回显/入摘要，不参与判定）。
     if (a === '--line') { out.line = String(argv[i + 1] ?? ''); i += 1; continue; }
     // `--extra-spec <spec>`（可重复）：诊断用 —— 追加**顶层** profile 依赖 spec。
     //   实测用途：把「宿主同 rc 的模式注册包」提到 profile 顶层，验证 `row-disabled:dsh-agent-preset-punky`
@@ -144,30 +131,24 @@ function parseArgs(argv) {
 }
 
 /**
- * C-6(c) 判据面：workflow 行**单行两线通吃** —— `--dump-config` / 真启动文本中
+ * C-6(c) 判据面：workflow 行**单行通吃** —— `--dump-config` / 真启动文本中
  *  ① 该行在场（`workflow-ptc`）；② 该行**无**失败诊断（激活审计族 + 行级禁用族，同 `activationDiagnosticsOf`）。
- * 依据（判据源 §二 纠正后的实测）：`@deepseek-ai/dsh-base` 在 `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1`
- *   **三版全部**依赖 `@deepseek-ai/dsh-workflow-ptc`（无任何一版依赖旧推进器包）⇒ 单行即双线正解。
+ * 依据：`@deepseek-ai/dsh-base` 依赖 `@deepseek-ai/dsh-workflow-ptc`（不依赖旧推进器包）⇒ 单行即正解。
  */
 const WORKFLOW_ROW_ID = 'workflow-ptc';
 
 /**
- * 面② 的**根因**（本 lane 实测，两臂复现）：
- *   本引擎 `package.json` 的 `dependencies` 声明 `"@deepseek-ai/dsh-agent-preset": "^0.1.7-rc.1"`。
- *   `^0.1.7-rc.1` 的语义 = `>=0.1.7-rc.1 <0.2.0`（prerelease 限同 `[0,1,7]` 元组）⇒ **`0.1.7-rc.2` 满足且更高**
- *   ⇒ pnpm 按「满足 range 的最高版」解析 ⇒ 实装 `@deepseek-ai/dsh-agent-preset@0.1.7-rc.2`
- *   ⇒ 该版 peer 钉 `@deepseek-ai/dsh-agent-preset-registry@0.1.7-rc.2` ⇒ **与宿主 CLI `0.1.7-rc.1` 不兼容**
- *   ⇒ app-boot 直接 `disabling profile plugin row` 三行：`preset-minimal` / `preset-cordis` / **`dsh-agent-preset-punky`**。
- *   ⇒ **与团队包 spec 的 rc 无关**（rc.1 与 rc.2 两臂同fail）——根因在**本包依赖 range 的解析结果**。
- *   用 `--extra-spec @deepseek-ai/dsh-agent-preset@<宿主rc>` 把该包提到 profile **顶层**（顶层版本优先生效）
- *   即可验证修复方向；本轮实测该臂 **面② 转绿**（读数见 `exec/smoke.md`）。
+ * 面② 的**根因**（历史实测，保留结论）：
+ *   上游版本解析结果与宿主不是同一线时，app-boot 会 `disabling profile plugin row` 三行
+ *   （`preset-minimal` / `preset-cordis` / `dsh-agent-preset-punky`）⇒ 模式面静默消失。
+ *   用 `--extra-spec @deepseek-ai/dsh-agent-preset@<宿主同线>` 把该包提到 profile **顶层**
+ *   （顶层版本优先生效）即可验证修复方向。
  */
-
 /**
  * 启动期诊断判据（**两族措辞都要抓**，缺一即假绿）：
  *   · 激活审计族：`did not activate` / `waiting for services: agentPresets`；
- *   · **行级禁用族**：`disabling profile plugin row "<id>"`（实测形态：rc 不匹配时 app-boot 直接停用该行）。
- * 首跑实测教训：只抓第一族会让「rc.2 行被禁用」冒充通过（假绿）⇒ 两族并列断言。
+ *   · **行级禁用族**：`disabling profile plugin row "<id>"`（实测形态：版本不匹配时 app-boot 直接停用该行）。
+ * 首跑实测教训：只抓第一族会让「被禁用的行」冒充通过（假绿）⇒ 两族并列断言。
  */
 function activationDiagnosticsOf(text, rowId) {
   const hits = [];
@@ -504,7 +485,7 @@ async function main() {
     //   为什么必须真启动：`activation audit` **只在 boot 产生**（D-12）⇒ 只跑 `--dump-config` 覆盖不到本子项。
     //   为什么必须**全局**扫描：逐行断言（面①/面②/workflow）只覆盖已知名字的三行；两线适配的真实风险是
     //   「**上游团队行的版本错配**」⇒ 只查三行会让「其它团队行被静默停用」冒充通过（批 6 假绿）。
-    //   干净 home + 宿主同线 spec 下应为 **0 行**；宿主异线（0.2.0 宿主 + `@0.1.7-rc.2`）应为 **>0**。
+    //   干净 home + 宿主同线（0.2.x）下应为 **0 行**；宿主异线（其它主版本）应为 **>0**。
     const disabledRows = disabledRowsOf(bootText);
     check('F-1(b) 真启动面 profile 零行禁用（原 C-6 全局判据升格）', disabledRows.length === 0,
       'disabled_count=' + String(disabledRows.length) + ' disabled=' + JSON.stringify(disabledRows));

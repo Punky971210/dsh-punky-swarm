@@ -69,7 +69,7 @@ dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
 
 - **只要宿主装有 dsh 官方包即可用** —— 上游包只由安装命令的显式 spec 提供。
 - **版本策略（宽声明）**：本包 `peerDependencies` 对 `@deepseek-ai/dsh-tools` 只保留 `0.2.x`，不钉任何具体 rc。
-  - 标准 semver 下 `0.2.x` **不匹配** prerelease 宿主（如 `0.2.2-rc.1`）⇒ prerelease 宿主请在插件管理器里允许/豁免。
+  - 标准 semver 下 `0.2.x` **不匹配** prerelease 宿主（如 `0.2.x-rc.y`）⇒ prerelease 宿主请在插件管理器里允许/豁免。
 - **`workflow-ptc` 由内核提供**（`@deepseek-ai/dsh-base` 依赖它）⇒ 无需额外安装；**禁**自行回加旧推进器行（见 §九）。
 - **`engines.dsh` 不落**：内核兼容门只读 `peerDependencies`（`@deepseek-ai/dsh*` 前缀），该字段零效力。
 - **本包对团队服务的依赖声明**：引擎消费宿主服务 `agentTeams`，声明落在装配面（`cordis.patch.yml` 的探针行 `inject: [agentTeams]`），不进 `dependencies`。缺该服务时该行进入 pending（启动审计响亮），同级引擎行与模式行照常存活。

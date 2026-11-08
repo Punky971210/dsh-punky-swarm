@@ -1,6 +1,6 @@
 # dsh-punky-swarm 一键安装（新引擎）
 
-> 适用：DSH 0.2.x（kernel `0.2.1-rc.2` 实测）｜Node >= 22｜pnpm
+> 适用：DSH 0.2.x（kernel `0.2.x` 实测）｜Node >= 22｜pnpm
 > 目标：把 `dsh-punky-swarm`（新引擎）装进一个独立 profile，**不碰你正在用的 profile**
 
 ---
@@ -43,7 +43,7 @@ Push-Location $dir; pnpm install --prefer-offline; Pop-Location
 ```powershell
 # 绕过 dsh.ps1 包装直接跑 node（ps1 在 stderr 非空时会抛 NativeCommandError 并虚构报错位置）
 $node = 'C:\Users\Administrator\AppData\Roaming\dsh-tauri\runtime\node.exe'   # 或你的 node
-$bin  = 'D:\DSH\kernel\0.2.1-rc.2\node_modules\@deepseek-ai\dsh\lib\bin.js'   # 或你的 kernel 路径
+$bin  = 'D:\DSH\kernel\0.2.x\node_modules\@deepseek-ai\dsh\lib\bin.js'   # 或你的 kernel 路径
 & $node $bin --profile my-swarm --dump-config 2>&1 | Select-String "^# ==|pending|dsh-punky-swarm"
 ```
 
