@@ -227,12 +227,38 @@ test('A1-P2-03 / AC-10 · 宽声明：range 恰为 0.2.x，覆盖 0.2.0/0.2.1/0.
   }
 });
 
-test('A1-P2-03 / AC-10 · 两处 range 逐字一致，且 package.json 不再出现任何 rc 精确版本字面量', () => {
+test('A1-P2-03 / AC-10 · 声明面与安装面分离：peer = 宽声明 0.2.x，dev = 可解析的 rc 下界', () => {
+  // 【2026-11-08 实测 registry· 判据反转】上一版要求 peer 与 dev **逐字一致**且全仓零 rc 字面量。
+  //   那是**装不上**的形态：`@deepseek-ai/dsh-tools` 在 registry 上**零个稳定版**（全是 -rc / -alpha），
+  //   而标准 semver 的 `0.2.x` 匹配不到任何预发布版：
+  //     npm view '@deepseek-ai/dsh-tools@0.2.x' version  ⇒ could not be found（ETARGET）
+  //     npm view '@deepseek-ai/dsh-tools@>=0.2.0-0 <0.3.0-0' version ⇒ 只有 0.2.0-rc.1 / 0.2.0-rc.2
+  //     （semver 预发布门：只有比较子同 [maj,min,pat] 元组时才放行预发布）
+  //   ⇒ 两类 range 语义不同、**刻意不相等**：
+  //     · peer = `0.2.x` 宽声明 = 「宿主需在 0.2 线」的**对外声明**（配 peerDependenciesMeta.optional，
+  //       让 npm 7+ 别把它当安装闸）；
+  //     · dev = `^0.2.2-rc.1` = **安装面事实**（`npm ci` 必须真能解析出包）。
   const peer = PKG.peerDependencies['@deepseek-ai/dsh-tools'];
   const dev = PKG.devDependencies['@deepseek-ai/dsh-tools'];
-  assert.equal(peer, dev, 'peerDependencies 与 devDependencies 的 range 必须逐字一致');
-  const text = read('package.json');
-  assert.equal(/\d+\.\d+\.\d+-rc\.\d+/.test(text), false, 'package.json 不得再出现 rc 精确版本字面量');
+  assert.equal(peer, RANGE_WIDE, 'peer 必须保持宽声明 ' + RANGE_WIDE + '（对外声明宿主需求）');
+  assert.match(dev, /^\^\d+\.\d+\.\d+-rc\.\d+$/, 'dev 面必须给可解析的 rc 下界（形如 ^0.2.2-rc.1），实得 ' + String(dev));
+  assert.notEqual(peer, dev, 'peer（宽声明）与 dev（安装面）语义不同：再次写成一样即回到「装不上」的形态');
+
+  // 同线约束：dev 面每一条宿主包都必须落在 0.2 线（可安装不得变成「随便装」）。
+  //   名单 = 本包**直接 import** 的全部宿主包（`lib/` `test/` `scripts/` 合起来实测只有这几个）。
+  for (const name of [
+    '@deepseek-ai/dsh-tools',
+    '@deepseek-ai/dsh-scope',
+    '@deepseek-ai/dsh-app-boot',
+    '@deepseek-ai/dsh-system-prompt',
+  ]) {
+    const range = String(PKG.devDependencies[name] ?? '');
+    assert.match(range, /^\^0\.2\.\d+-rc\.\d+$/, name + ' 的 dev range 必须可解析且落在 0.2 线，实得 ' + JSON.stringify(range));
+  }
+
+  // peer 必须标 optional：否则 npm 7+ 会把 `0.2.x` 当安装闸 ⇒ 解析不到即 ETARGET（安装面必修的第二半）
+  assert.equal(PKG.peerDependenciesMeta?.['@deepseek-ai/dsh-tools']?.optional, true,
+    'peerDependenciesMeta 必须把 @deepseek-ai/dsh-tools 标为 optional');
 });
 
 test('A1-P2-03 · 同提交披露：docs/upstream-defects.md 含三要素（版本 / startActivation / 拒派码）', (t) => {

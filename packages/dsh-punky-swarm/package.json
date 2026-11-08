@@ -53,6 +53,11 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-tools": "0.2.x"
   },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -72,8 +77,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-scope": "0.2.x",
-    "@deepseek-ai/dsh-tools": "0.2.x",
+    "@deepseek-ai/dsh-app-boot": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.2.2-rc.1",
     "@types/node": "^26.4.0",
     "typescript": "^5.9.3"
   }

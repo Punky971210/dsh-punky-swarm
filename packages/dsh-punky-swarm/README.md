@@ -39,18 +39,18 @@ pnpm pack                 # ⇒ dsh-punky-swarm-$VERSION.tgz
 
 **Step 2 —— 唯一安装命令**（dev / 离线环境；干净 `DSH_HOME` 上一条命令装齐）：
 
-上游两件包用**宽声明**（`0.2.x`，与宿主同线）：
+上游两件包用 **`@next` dist-tag**（始终指向当前 0.2 线，不钉具体 rc）：
 
 ```bash
 dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
-  @deepseek-ai/dsh-experimental-agent-team-profile@0.2.x \
-  @deepseek-ai/dsh-agent-preset@0.2.x
+  @deepseek-ai/dsh-experimental-agent-team-profile@next \
+  @deepseek-ai/dsh-agent-preset@next
 ```
 
 **三条要求**：
 
 1. **两件上游包都要显式列出**：本包 `dependencies` 键已整体移除 ⇒ 上游包只由命令提供。
-2. **用宽声明 `0.2.x`，不钉精确 rc**：精确 rc 会随宿主升级失效（semver 的 prerelease 规则跨 patch 不匹配）。
+2. **用 `@next`，不钉精确 rc**：registry 上这些包**没有稳定版**（全是 `-rc` / `-alpha`），实测 `@0.2.x` 直接 `could not be found` ⇒ `0.2.x` 这种宽声明**在安装命令里用不了**；`@next` 是「跟随 0.2 线」的可执行写法，且不钉具体 rc。
 3. **显式列出 spec 不可省**：profile 的 `dsh.profile.bundles` 只登记新增的 top-level 依赖 ⇒ transitive 依赖不会成为 profile layer。
 
 **补充说明**：
@@ -68,7 +68,9 @@ dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
 | `@deepseek-ai/dsh-agent-preset` | **模式注册插件本体**（`cordis.patch.yml` 的 `dsh-agent-preset-punky` 行以它为 `name`）| 仅命令显式列出 |
 
 - **只要宿主装有 dsh 官方包即可用** —— 上游包只由安装命令的显式 spec 提供。
-- **版本策略（宽声明）**：本包 `peerDependencies` 对 `@deepseek-ai/dsh-tools` 只保留 `0.2.x`，不钉任何具体 rc。
+- **版本策略：声明面与安装面分离**
+  - `peerDependencies` = **宽声明 `0.2.x`**（对外声明「宿主需在 0.2 线」），并配 `peerDependenciesMeta.optional` —— 否则 npm 7+ 会把它当安装闸。
+  - `devDependencies` = **`^0.2.2-rc.1`**（`dsh-tools` / `dsh-scope` / `dsh-app-boot`）：registry 上零稳定版，实测 `npm view '@deepseek-ai/dsh-tools@0.2.x' version` ⇒ `could not be found`（`>=0.2.0-0 <0.3.0-0` 也只命中 `0.2.0-rc.x`）⇒ 安装面必须给可解析的 rc 下界，否则 `npm ci` 必失败。
   - 标准 semver 下 `0.2.x` **不匹配** prerelease 宿主（如 `0.2.x-rc.y`）⇒ prerelease 宿主请在插件管理器里允许/豁免。
 - **`workflow-ptc` 由内核提供**（`@deepseek-ai/dsh-base` 依赖它）⇒ 无需额外安装；**禁**自行回加旧推进器行（见 §九）。
 - **`engines.dsh` 不落**：内核兼容门只读 `peerDependencies`（`@deepseek-ai/dsh*` 前缀），该字段零效力。
@@ -163,6 +165,6 @@ dsh plugin --profile web remove dsh-punky-swarm
 
 - 安装失败**只落 stderr warning**（引擎按 **per-entry fail-soft**：本插件两行**都不在**必需启动清单内）⇒ 模式可能**静默未挂载**。**请用 §五 的自检脚本主动核**。
 - 预设子项在**会话装配期**挂载（不经启动期审计）⇒ 某一子项异常**只影响该 preset 的 agent 组合**，同样只留 stderr。
-- **版本策略**：宽声明 `0.2.x`；prerelease 宿主（`0.2.x-rc.y`）标准 semver 不匹配，需在插件管理器里豁免。
+- **版本策略**：`peerDependencies` 宽声明 `0.2.x`（**声明面**）+ `devDependencies` `^0.2.2-rc.1`（**安装面**，registry 无稳定版）；prerelease 宿主（`0.2.x-rc.y`）标准 semver 不匹配，需在插件管理器里豁免。
 - **workflow 面**：`@deepseek-ai/dsh-workflow-ptc` 由内核提供，单行即可。**禁项**：① 禁回加旧推进器行（`@deepseek-ai/dsh-workflow-…` worker-thread 包，会新增必失败行）；② 禁新增 `!!js` 版本条件行（内核无宿主版本变量 ⇒ 条件行不可达）。
 - **宿主升级后**：若插件行被兼容门跳过（stderr 出现 `skipping profile bundle`），检查 `peerDependencies` 宽声明是否仍覆盖宿主主版本，或在插件管理器里显式允许该版本。

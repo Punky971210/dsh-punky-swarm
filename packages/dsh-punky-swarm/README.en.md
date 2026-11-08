@@ -39,18 +39,18 @@ pnpm pack                 # ⇒ dsh-punky-swarm-$VERSION.tgz
 
 **Step 2 — the single install command** (dev / offline; one command on a clean `DSH_HOME`):
 
-Upstream packages use the **wide declaration** (`0.2.x`, same line as the host):
+Upstream packages use the **`@next` dist-tag** (always the current 0.2 line, no pinned rc):
 
 ```bash
 dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
-  @deepseek-ai/dsh-experimental-agent-team-profile@0.2.x \
-  @deepseek-ai/dsh-agent-preset@0.2.x
+  @deepseek-ai/dsh-experimental-agent-team-profile@next \
+  @deepseek-ai/dsh-agent-preset@next
 ```
 
 **Three requirements**:
 
 1. **List both upstream packages explicitly**: this package removed its `dependencies` key entirely ⇒ upstream packages come only from the command.
-2. **Use the wide declaration `0.2.x`, never a pinned rc**: a pinned rc breaks on the next host upgrade (semver prerelease rules do not match across patch versions).
+2. **Use `@next`, never a pinned rc**: these packages publish **no stable version** (only `-rc` / `-alpha`); measured `@0.2.x` ⇒ `could not be found`, so a wide `0.2.x` **cannot be used in an install command**. `@next` is the executable form of "follow the 0.2 line" and pins no specific rc.
 3. **The explicit specs are not optional**: the profile's `dsh.profile.bundles` only records newly added top-level dependencies ⇒ transitive deps never become a profile layer.
 
 **Notes**:
@@ -68,7 +68,9 @@ dsh plugin --profile web add <ABSOLUTE_PATH>/dsh-punky-swarm-$VERSION.tgz \
 | `@deepseek-ai/dsh-agent-preset` | **Preset-registration plugin** (`dsh-agent-preset-punky` row uses it as `name`) | Explicit in the command only |
 
 - **Works as long as the host ships the official dsh packages** — upstream packages are provided only by the install command.
-- **Version policy (wide declaration)**: this package keeps only `0.2.x` for `@deepseek-ai/dsh-tools` in `peerDependencies`; no specific rc is pinned.
+- **Version policy: declaration face vs install face**
+  - `peerDependencies` = **wide declaration `0.2.x`** (the claim "host must be on the 0.2 line"), paired with `peerDependenciesMeta.optional` — otherwise npm 7+ treats it as an install gate.
+  - `devDependencies` = **`^0.2.2-rc.1`** (`dsh-tools` / `dsh-scope` / `dsh-app-boot`): no stable release exists, measured `npm view '@deepseek-ai/dsh-tools@0.2.x' version` ⇒ `could not be found` (`>=0.2.0-0 <0.3.0-0` only matches `0.2.0-rc.x`) ⇒ the install face needs a resolvable rc lower bound or `npm ci` always fails.
   - Under standard semver `0.2.x` does **not** match prerelease hosts (e.g. `0.2.x-rc.y`) ⇒ allow/exempt them in the plugin manager.
 - **`workflow-ptc` is provided by the kernel** (`@deepseek-ai/dsh-base` depends on it) ⇒ no extra install; **do not** re-add the legacy workflow row (see §9).
 - **`engines.dsh` is not written**: the compatibility gate reads only `peerDependencies` (the `@deepseek-ai/dsh*` prefix); that field has zero effect.
@@ -163,6 +165,6 @@ Alternatively drop the package from the profile's `dsh.profile.bundles` and rest
 
 - Install failure **only lands as a stderr warning** (per-entry fail-soft: neither plugin row is on the required boot list) ⇒ the preset may be **silently unmounted**. **Use the self-check script in §5 to verify** proactively.
 - Preset sub-items mount **at session-assembly time** (not at boot audit) ⇒ a broken sub-item only affects that preset's agent composition, again leaving only stderr.
-- **Version policy**: wide declaration `0.2.x`; prerelease hosts (`0.2.x-rc.y`) do not match under standard semver — grant an exemption in the plugin manager.
+- **Version policy**: `peerDependencies` wide declaration `0.2.x` (**declaration face**) + `devDependencies` `^0.2.2-rc.1` (**install face**, no stable release exists); prerelease hosts (`0.2.x-rc.y`) do not match under standard semver — grant an exemption in the plugin manager.
 - **workflow face**: `@deepseek-ai/dsh-workflow-ptc` is provided by the kernel, one row is enough. **Forbidden**: ① re-adding the legacy worker-thread workflow row (adds a guaranteed-failing row); ② adding `!!js` version-conditional rows (the kernel exposes no host-version variable ⇒ unreachable).
 - **After a host upgrade**: if the plugin row is skipped by the compatibility gate (stderr: `skipping profile bundle`), check whether the `peerDependencies` wide declaration still covers the host major line, or explicitly allow that version in the plugin manager.

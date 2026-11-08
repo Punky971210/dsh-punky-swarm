@@ -45,8 +45,22 @@ dsh plugin --profile <name> add <tgz 路径>
 "peerDependencies": {
   "@deepseek-ai/cordis": "^4.0.1",
   "@deepseek-ai/dsh-tools": "0.2.x"
+},
+"peerDependenciesMeta": {
+  "@deepseek-ai/dsh-tools": { "optional": true }
+},
+"devDependencies": {
+  "@deepseek-ai/dsh-app-boot": "^0.2.2-rc.1",
+  "@deepseek-ai/dsh-scope": "^0.2.2-rc.1",
+  "@deepseek-ai/dsh-tools": "^0.2.2-rc.1"
 }
 ```
+
+> **为什么 peer 宽、dev 窄**（2026-11-08 实测）：`@deepseek-ai/dsh-*` 在 registry 上**零个稳定版**，
+> 标准 semver 的 `0.2.x` 一个预发布版也匹配不到（`npm view '@deepseek-ai/dsh-tools@0.2.x' version`
+> ⇒ `could not be found`）⇒ **安装面**（`devDependencies`）必须给可解析的 rc 下界，否则 `npm ci` 必失败；
+> **声明面**（`peerDependencies`）保持宽声明表达「宿主需在 0.2 线」，并用
+> `peerDependenciesMeta.optional` 让 npm 7+ 不把它当安装闸。
 
 ---
 

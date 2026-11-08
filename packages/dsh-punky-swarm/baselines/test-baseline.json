@@ -1433,9 +1433,9 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 25,
-      "blankLines": 28,
-      "lines": 254,
+      "asserts": 28,
+      "blankLines": 30,
+      "lines": 280,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -2121,7 +2121,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T08:12:40Z",
+  "generatedAt": "2026-11-08T08:49:56Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2132,13 +2132,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "批 preset-iso-20261108：丙装配隔离——新增宿主分层回归用例（preset-tool-scope），g10/ratchet 夹具补 provide + 显式挂工具面",
+  "reason": "批 lock-resolve-20261108：依赖声明面/安装面分离（peer 宽声明 + dev 可解析 rc 下界），p2-deps-compat 判据反转 + 补 dsh-app-boot / dsh-system-prompt 声明；package-lock 重生成",
   "schema": 1,
   "totals": {
-    "asserts": 11956,
-    "blankLines": 6769,
+    "asserts": 11959,
+    "blankLines": 6771,
     "files": 265,
-    "lines": 71412,
+    "lines": 71438,
     "tautologies": 0,
     "tests": 2496,
     "todos": 0
