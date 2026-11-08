@@ -256,6 +256,9 @@ export function makeAssemblyCtx({ exporter = true } = {}) {
     webServer: { register: (r) => { routes.push(r); return () => {}; } },
     emit: () => {},
     get: () => undefined,
+    // 【丙 · 装配隔离】引擎行只 `provide('punkySwarmTools', …)`，注册交给预设组合里的 provider 行。
+    //   夹具不是真 cordis ⇒ 自备 `provide` 的最简落地（宿主里由 cordis 反射层提供）。
+    provide(name, value) { ctx[name] = value; },
     on(event, fn) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event).add(fn);

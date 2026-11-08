@@ -1036,7 +1036,23 @@ export const apply = (ctx, config = {}) => {
   // 批归属会话解析索引（读侧骨架）：声明须早于 `createTools` 求值点（TDZ）；仍是同一个 Map，由下方启动重建/登记点热更新填充
   const dispatchIndex = new Map();
   const tools = installTools({ ctx, config, store, root, readConfig, heartbeat: rt.heartbeat, heartbeatRef: rt.heartbeatRef, dispatchIndex });
-  tools.register();
+  // ── 工具面注册点：**不在本行**（丙 · 装配隔离，2026-11-08 用户裁决）──────────────────────────
+  // 宿主的工具注册表按 scope 分层：`tools.register()` 落入**调用方 ctx** 所属的 scope 层
+  //   （`@deepseek-ai/dsh-tools` 的 `register()` → `ScopedLayers.effect(scopeOf(ctx))`），
+  //   preset 组合里注册的是**祖先层贡献**，只对该 preset 选出的 agent 及其派生 worker 可见。
+  // ⇒ 本行只建目录（AIP `/tools`、ADP `/discover` 要读）+ 把工具集挂成服务，
+  //   注册动作由预设组合里的 `dsh-punky-swarm/provider-dsh` 行以自己的 ctx 执行。
+  //   取证与消费面影响见 `host-contract-preset-tool-scope.md`（本批 lane 产物）。
+  tools.buildCatalog();
+  try {
+    ctx.provide?.('punkySwarmTools', {
+      registerTools: (targetCtx) => tools.register(targetCtx ?? ctx),
+      toolNames: tools.tools.map((t) => t.name),
+    });
+  } catch (e) {
+    // 同名服务已在本 scope 提供（热重载残留）⇒ 不阻断装配，响亮留痕：工具面将缺席。
+    ctx.logger?.warn?.('[dsh-punky-swarm] punkySwarmTools provide failed: ' + String(e?.message ?? e));
+  }
   rt.watchTimer = installWatchdog({ ctx, watchCfg: watchRuntime.watchCfg, heartbeatRef: rt.heartbeatRef, heartbeat: rt.heartbeat });
   const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => rt.watchInstalledCfg, getGovernanceInstalledCfg: () => rt.governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
   ({ apiDispose: rt.apiDispose, panelStream: rt.panelStream } = web);

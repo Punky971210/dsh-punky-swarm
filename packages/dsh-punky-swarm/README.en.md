@@ -19,7 +19,7 @@
 
 | Face | Carrier | Landing point / notes |
 |---|---|---|
-| ① **Plugin** (core) | `lib/**` + **two rows** in `cordis.patch.yml` | the **engine row** `dsh-punky-swarm` (governance tools + panel) and the **preset-registration row** `dsh-agent-preset-punky` (since 0.1.7 a preset **must** be registered by a plugin row; the preset directory is no longer scanned) |
+| ① **Plugin** (core) | `lib/**` + **two rows** in `cordis.patch.yml` | the **engine row** `dsh-punky-swarm` (state machine / panel / HTTP / gate engine; it registers **no governance tools**) and the **preset-registration row** `dsh-agent-preset-punky` (since 0.1.7 a preset **must** be registered by a plugin row; the preset directory is no longer scanned).<br>The **governance tools** (27) are registered by the `punky-provider` row inside the preset composition ⇒ only `punky-preset` sessions (and the workers they spawn) see them in the tool catalog; other modes are untouched (assembly isolation, 2026-11-08) |
 | ② **Mode & guidance** (core) | **`punky-preset`** registered through `@deepseek-ai/dsh-agent-preset` | `references/discipline.md` / `references/manager.md` are **idempotently synced** by `syncAssets()` at startup into `<home>/.dsh/.agent-presets/punky-preset/` |
 | ③ **Team skill pointers** (extra) | the **5 directories** under `skills/` | `design-team` / `research-team` / `software-team` / `video-team` / `writing-team` ⇒ synced to `<home>/.agents/skills/<name>/` |
 

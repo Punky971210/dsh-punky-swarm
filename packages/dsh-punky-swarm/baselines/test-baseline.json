@@ -747,7 +747,7 @@
     "test/g10-host-smoke.test.js": {
       "asserts": 12,
       "blankLines": 12,
-      "lines": 116,
+      "lines": 122,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1536,6 +1536,14 @@
       "tests": 13,
       "todos": 0
     },
+    "test/preset-tool-scope.test.js": {
+      "asserts": 11,
+      "blankLines": 18,
+      "lines": 137,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
     "test/prune-verify.test.js": {
       "asserts": 1,
       "blankLines": 9,
@@ -1555,7 +1563,7 @@
     "test/ratchet-wiring.test.js": {
       "asserts": 35,
       "blankLines": 28,
-      "lines": 329,
+      "lines": 338,
       "tautologies": 0,
       "tests": 7,
       "todos": 0
@@ -2113,7 +2121,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T07:47:12Z",
+  "generatedAt": "2026-11-08T08:12:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2132,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "宽声明改造：package.json 0.2.x + p2-deps-compat 重写（refactor/quality-20261108）",
+  "reason": "批 preset-iso-20261108：丙装配隔离——新增宿主分层回归用例（preset-tool-scope），g10/ratchet 夹具补 provide + 显式挂工具面",
   "schema": 1,
   "totals": {
-    "asserts": 11945,
-    "blankLines": 6751,
-    "files": 264,
-    "lines": 71260,
+    "asserts": 11956,
+    "blankLines": 6769,
+    "files": 265,
+    "lines": 71412,
     "tautologies": 0,
-    "tests": 2494,
+    "tests": 2496,
     "todos": 0
   }
 }

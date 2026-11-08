@@ -109,6 +109,9 @@ try {
   const ctx = {
     logger: { info() {}, warn() {}, error() {} },
     tools: { register(t) { captured.push(t); } },
+    // 丙 · 装配隔离（2026-11-08）：引擎行不再注册工具，改 provide 工具集；注册由预设行的 provider 执行。
+    //   夹具不是真 cordis ⇒ 自备 provide 的最简落地（宿主里由 cordis 提供）。
+    provide(name, value) { ctx[name] = value; },
     emit() {},
     on() { return () => {}; },
     webServer: { register(r) { routes.push(r); return () => {}; } },
@@ -125,7 +128,13 @@ try {
     out.applyThrew = true;
     out.applyMessage = String(e && e.message);
   }
-  out.toolCount = captured.length;
+  if (!out.applyThrew) {
+    // 丙 · 装配隔离：引擎行只 provide 工具集，注册由预设组合里的 provider 行以自己的 ctx 执行。
+    //   本探针等价于宿主里 punky-preset 的那一行。
+    const { apply: mountToolFace } = await import(asUrl(path.join(path.dirname(process.env.PUNKY_PROBE_INDEX), 'provider-dsh', 'index.js')));
+    mountToolFace(ctx);
+    out.toolCount = captured.length;
+  }
   if (!out.applyThrew) {
     // 造数据 store（**不带 rules**：只用于播种批次/治理，与工具 store 经文件交换；不构成被检面）
     const aux = createStore(ROOT);

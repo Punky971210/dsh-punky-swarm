@@ -41,29 +41,44 @@ export function createTools(ctx, deps) {
   ];
 
   // 生成器只读遍历 tools，不替换、不包装任何已注册工具对象（红线：既有工具契约不变）。
-  const aipCfg = readCapability(deps?.config, 'aip');
-  const aipEnabled = aipCfg?.enabled === true;
+  const aipEnabled = readCapability(deps?.config, 'aip')?.enabled === true;
   let catalog = null;
   let agentCatalog = null;
 
-  const register = () => {
-    for (const t of tools) createToolsPort(ctx).registerTool(t);
-    if (aipEnabled) {
-      catalog = buildToolCatalog(tools, { version: engineVersion(), config: deps?.config });
-      const aipCfg = deps?.config?.aip ?? {};
-      const assembly = resolveAssembly(aipCfg.team ?? 'punky-preset', deps?.config?.assembly) ?? DEFAULT_ASSEMBLY;
-      const { owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes } = aipCfg;
-      agentCatalog = buildAgentCatalog(assembly, {
-        version: engineVersion(),
-        generatedAt: new Date().toISOString(),
-        owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes,
-      });
-    }
+  /** 生成 AIP 目录（幂等）。**不绑在注册上**：引擎要在挂 `/tools`、`/discover` 前就读到它，
+   *  而注册已移到 preset 行（丙：装配隔离）——目录与注册时序解耦，谁先谁后都不影响读数。 */
+  const buildCatalog = () => {
+    if (!aipEnabled || catalog !== null) return catalog;
+    catalog = buildToolCatalog(tools, { version: engineVersion(), config: deps?.config });
+    const aipCfg = deps?.config?.aip ?? {};
+    const assembly = resolveAssembly(aipCfg.team ?? 'punky-preset', deps?.config?.assembly) ?? DEFAULT_ASSEMBLY;
+    const { owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes } = aipCfg;
+    agentCatalog = buildAgentCatalog(assembly, {
+      version: engineVersion(),
+      generatedAt: new Date().toISOString(),
+      owner, skillMeta, endPoints, securitySchemes, capabilities, defaultInputModes, defaultOutputModes,
+    });
+    return catalog;
+  };
+
+  /**
+   * 注册到**目标 ctx 所属的 scope 层**。
+   *
+   * 宿主语义（`@deepseek-ai/dsh-tools`）：`tools.register()` 落入**调用方** ctx 的 scope 层，
+   *   不是进程全局 ⇒ 传 preset 组合里那一行的 ctx，工具就只对该 preset 的 agent（及其派生 worker）可见。
+   * 缺省目标 = 构造本工具集时的 ctx（同进程单 scope 用法与单测）；生产由 preset 行显式传自己的 ctx。
+   *
+   * @param {object} [targetCtx] 承接注册的 ctx（决定工具落在哪个 scope 层）
+   */
+  const register = (targetCtx = ctx) => {
+    buildCatalog();
+    for (const t of tools) createToolsPort(targetCtx).registerTool(t);
   };
 
   return {
     tools,
     register,
+    buildCatalog,
     get catalog() { return catalog; },
     get agentCatalog() { return agentCatalog; },
     // api.js 只读端点消费（缺省传入时端点不附投影，既有行为不变；红线：不改 mailbox 存储）

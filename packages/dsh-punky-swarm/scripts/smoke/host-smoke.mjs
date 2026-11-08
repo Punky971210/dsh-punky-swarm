@@ -237,6 +237,9 @@ async function runMain() {
   //       无 preset 见证 ⇒ 不可收窄），而这正是 H-07 主判据（activation 形态 ⇒ 拒派）的**同一机制**
   //       ⇒ 阳性对照与主判据同源，比原来的「形态字符串比对」更强（不依赖内部形态值）。
   const agentMod = await import(pathToFileURL(path.join(entryBase, 'provider-dsh', 'agent.js')).href);
+  // 【丙 · 装配隔离】治理工具面的注册点在预设组合的 `punky-provider` 行（引擎行只 provide 工具集）。
+  //   冒烟要在 `mount()` 里补这一步，否则读数恒 0（假红），且验证不到真实注册路径。
+  const toolFaceMod = await import(pathToFileURL(path.join(entryBase, 'provider-dsh', 'index.js')).href);
   const tierGate = await import(pathToFileURL(path.join(entryBase, 'tools', 'tier-gate.js')).href);
 
   const store = createStore(engineRoot);
@@ -278,6 +281,8 @@ async function runMain() {
       const ctx = makeAssemblyCtx();
       if (subagents) ctx.subagents = subagents;
       const disposer = mod.apply(ctx, { root: engineRoot, ...config });
+      // 丙 · 装配隔离：引擎行不注册工具，注册由预设组合里那一行执行——冒烟里以同一入口补上。
+      toolFaceMod.apply(ctx);
       return { ctx, disposer, registered: ctx.registered, tools: toolIndex(ctx.registered) };
     },
     /** 生产面后置快照（H-04 用；惰性 + 缓存）。 */

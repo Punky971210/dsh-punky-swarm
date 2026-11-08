@@ -116,7 +116,7 @@ dsh --profile my-swarm "跑一下测试"
 | **4** | `dsh.ps1` 报 `app-boot/index.js:4000` | **假象**（ps1 在 stderr 非空时抛 `NativeCommandError`）⇒ **绕过 ps1 直接跑 `node bin.js`** |
 | **5** | headless 报 `MISSING_CREDENTIAL` | **headless 不读 `~/.dsh/.credentials.yaml`** ⇒ 需 `$env:DEEPSEEK_API_KEY` |
 | **6** | `cordis.patch.yml` 报 `patch: entry "xxx" not found` | 该 profile 缺那个 entry ⇒ **改 `- insert:` + 缩进列表**（不是「`name` 无 `id`」）|
-| **7** | `wave_plan` 报 `GATE_MODE_INACTIVE` | profile 的 preset 未记录 ⇒ 在 profile 的 `cordis.patch.yml` 加 `modes.gate: null` |
+| **7** | 工具目录里**没有** `wave_plan` / `member_settle` 等治理工具 | 治理工具自 2026-11-08 起**只在 `punky-preset` 组合里注册**（装配隔离）⇒ ① 确认 `dsh-agent-preset-punky` 行在场（`preset` 未注册则整组工具不存在）；② 会话确实选用 `punky-preset`；③ 若 preset 行显示 pending，查它等的服务 `punkySwarmTools`（需引擎行 `dsh-punky-swarm` 先装载）。<br>**旧症状**（`wave_plan` 在册但报 `GATE_MODE_INACTIVE`）仍可能出现在把 preset id 改名的场景：此时把新 id 加进 `modes.gate`。 |
 | **8** | 新建 profile 前端报「无法保存确认状态」 | **onboarding 依赖的插件生态缺失**（desktop 有 31 bundle + 6 目录）⇒ **建议用 `desktop` 的 bundles 全集而非最小集**，或直接用 `smoke-engine`（headless）|
 
 ---

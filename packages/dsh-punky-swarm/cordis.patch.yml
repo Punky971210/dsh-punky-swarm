@@ -13,8 +13,14 @@
         # toolVersion 可选覆盖引擎版本。关闭（false）则零运行时开销，行为与既有版本完全一致。
         aip:
           enabled: true
-        # 模式跟随（2026-09-16 用户裁决：**全局装载、不全局生效**）：蟛蜞治理（难度门禁 / G1 档位门禁 /
-        #   套件工具）只在这些 agent preset 的会话里生效；**名单外模式门禁全放行且不计数**（其他模式零影响）。
+        # 模式跟随（2026-09-16 裁决「全局装载、不全局生效」→ **2026-11-08 起升级为装配隔离**）：
+        #   隔离分两层，二者互补：
+        #   ① **可见性层（装配隔离，丙）**：治理工具只在 `punky-preset` 组合里注册 ⇒ 落在该 preset 的
+        #      scope 层，只有选用它的 agent（及派生 worker）在工具目录里看得到。见下方「provider 行已移入
+        #      预设组合」段。**这一层才是「其它模式零污染」的主判据**。
+        #   ② **执行时层（本键）**：难度门禁 / G1 档位门禁 / 子代理派发门这类**宿主工具**上的治理，
+        #      仍按 preset id 白名单判定；**名单外模式门禁全放行且不计数**。工具面搬走后本层不失效——
+        #      它管的是 pwsh/subagent 等宿主工具，不是本包自己的工具。
         #   `jiufeng` 为**旧 preset id 的过渡别名**（改名前的会话 header 已记该值）——保留以保证既有会话
         #   续跑且治理不中断；待存量会话结束后于下个大版本移除。
         #   热更：<root>/config/runtime.json 写 {"modes":{"gate":[...]}} 即生效、无需重启；
@@ -116,44 +122,19 @@
               pause: false     # 原语开关（feature-flag 式；默认关 → 该原语回退 DENY）
               narrow: false
               defer: false
-    # ------------------------------------------------------------
-    # DSH provider 行（批 `punky-adapter-split-20261031` · lane `w2-provider-skeleton`）
-    #
-    # 为什么单独成行：用户裁决 R-2 定「宿主差异只许在 provider 包内」。宿主三件服务名
-    #   （`tools` / `webServer` / `subagents`）从此**只在本行**声明；引擎行与适配层内不得再出现。
-    #
-    # ⚠ `name` **必须是 exports 子路径**（`dsh-punky-swarm/provider-dsh`），**不是文件路径**：
-    #   loader 按 exports 解析；写成 `./lib/provider-dsh/index.js` 会卡在解析错误上
-    #   （`criteria-v4.md` 的 **M-8** 专门纠正过这一点）。解析目标 =
-    #   `package.json` 的 `exports['./provider-dsh']` → `./lib/provider-dsh/index.js`。
-    #
-    # ⚠ 依赖声明的**唯一落点在本行**：`lib/provider-dsh/index.js` 刻意**不导出**同名数组
-    #   （同一条声明写在两处 = 两个真源）。
-    #   ⚠ **反例已下线**（批 `punky-align-residual-20261102`）：任何「**可选服务**进 `inject`」的装配行
-    #     都属 IL-3/AC-9 违例 —— `agentTeams` 即此类（非 team 宿主不提供）⇒ 已收敛为 provider 加载期
-    #     **一次性 `info` 探测**（`lib/provider-dsh/index.js#apply`），**不再**占用装配面任何一行。
-    #
-    # ── 【IL-3 修复 · 批 `punky-adapter-split-20261031` · lane `provider-face-fix`】────────────────
-    #   **本行只声明「恒在服务」**：`tools` / `subagents` —— 两者由 `@deepseek-ai/dsh-base` 提供，
-    #     所有受支持 profile 都从 base 派生 ⇒ 恒在。
-    #   **可选服务不进 `inject`**：`webServer` 只有 web/desktop 系 profile 才有（headless 无）。
-    #     若写进 inject，在 headless 上本行**必 pending** —— cordis 4.0.5 的 inject **无 optional 位**
-    #     （`Inject.resolve()` 归一化为同一映射 + `Fiber` 构造时逐键 `_checkImpl`）。
-    #     可选服务的取用面 = `serviceOf(ctx, 'webServer')`（`lib/provider-dsh/tools-http.js`）：
-    #     **裸读优先 → 抛出则回落 `ctx.get(name)`**（cordis「不声明也能读」通道）⇒ 缺服务时**降级、不 pending**。
-    #   ⇒ 判据（`criteria-v4.md` AC-9 / M-1）：**provider 行 `inject` 内可选服务 = 0**。
-    #
-    # ⚠ 与引擎行的关系（**W4 已落地，不再是「并存过渡态」**）：引擎 `lib/index.js` 现为
-    #   `export const inject = ENGINE_INJECTIONS;`（= `[]`）⇒ 引擎行零宿主依赖、任何宿主都不 pending；
-    #   宿主服务名从此**只**出现在本行（provider 行）与 `lib/provider-dsh/**` 内。
-    #
-    # ⚠ 与上头「引擎主体行不得自身声明依赖」的纪律**不冲突**：那条是为避免**引擎**在缺面时
-    #   整体 pending（灾难性）。本行是 provider，缺**恒在**服务时 pending 是正确的响亮信号 ——
-    #   且引擎核心功能不受影响（per-entry fail-soft）。这正是「功能不可用由 provider 在加载时报告」的落点。
-    # ------------------------------------------------------------
-    - id: dsh-punky-swarm-provider-dsh
-      name: 'dsh-punky-swarm/provider-dsh'
-      inject: [tools, subagents]
+    # ── DSH provider 行：**已移入预设组合**（丙 · 装配隔离，2026-11-08 用户裁决）────────────
+    # 原 `- id: dsh-punky-swarm-provider-dsh` 行曾插在此处（全局装配）。现改挂在
+    #   `dsh-agent-preset-punky.config.plugins`（= `presets/punky-preset/agent.cordis.yml`）里：
+    #   宿主工具注册表按 scope 分层，`ctx.tools.register()` 落入**调用方 ctx** 所属的 scope 层
+    #   ⇒ 只有该 preset 选出的 agent（及其派生 worker）看得到治理工具，其它模式工具目录零污染，
+    #   不再靠执行时门禁 `modes.gate` 兜底。取证见 lane 产物 `host-contract-preset-tool-scope.md`。
+    # 仍成立的三条约束（勿因搬家而丢）：
+    #   ① `name` **必须是 exports 子路径**（`dsh-punky-swarm/provider-dsh`），**不是文件路径** ——
+    #      loader 按 exports 解析：`package.json` `exports['./provider-dsh']` → `./lib/provider-dsh/index.js`。
+    #   ② 依赖声明的**唯一落点在那行**：`lib/provider-dsh/index.js` 刻意**不导出**同名数组（同一声明写两处 = 两个真源）。
+    #   ③ **可选服务不进 `inject`**：`webServer` 在 headless 缺席（写进去必 pending）；`agentTeams` 仍走
+    #      provider 加载期一次性 `info` 探测，不占装配面任何一行。cordis 4.0.5 的 inject 无 optional 位
+    #      （`Inject.resolve()` 归一化 + `Fiber` 逐键 `_checkImpl`）。
 # ============================================================
 # ============================================================
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）
@@ -209,6 +190,16 @@
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
               maxBytes: 65536
+
+          # ── 蟛蜞治理工具面（丙 · 装配隔离，2026-11-08 用户裁决）─────────────────────────────
+          # 治理工具**只在本 preset 的 scope 层**注册 ⇒ 只有选用 punky-preset 的 agent（及其派生
+          # worker，经 composeFrom 继承）看得到；其它模式工具目录零污染。
+          # 本行与 `presets/punky-preset/agent.cordis.yml` 的同名行是**双副本**，由
+          # `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+          # `punkySwarmTools` 由引擎行 provide；缺它 ⇒ 本行 pending（不导致 preset 挂载失败）。
+          - id: punky-provider
+            name: 'dsh-punky-swarm/provider-dsh'
+            inject: [tools, subagents, punkySwarmTools]
 
           # ── shell ───────────────────────────────────────────────────────────────────
 

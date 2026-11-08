@@ -34,6 +34,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { apply } from '../lib/index.js';
+// 【丙 · 装配隔离】工具面注册由预设组合里的 provider 行执行（引擎行只 provide 工具集）
+import { apply as mountToolFace } from '../lib/provider-dsh/index.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { assemblyCtxWeb, tempRoot, writeRuntime } from './helpers/gate-fixture.mjs';
 
@@ -47,9 +49,13 @@ function mountPlugin() {
   const { ctx, routes } = assemblyCtxWeb();
   const registered = [];
   ctx.tools = { register: (t) => registered.push(t) };
+  // 夹具不是真 cordis ⇒ 自备 `provide` 落地（宿主里由 `@deepseek-ai/cordis` 提供）。
+  // 随后显式挂工具面 = 等价于宿主里 `punky-preset` 组合中的 `punky-provider` 行。
+  ctx.provide = (name, value) => { ctx[name] = value; };
   // `apply()` 需要 `deps.store` 才能拿回批次写入口：插件内部 `createStore` 后经 tools 层暴露；
   //   此处从工具面**反射**取不到 ⇒ 改为装载后直接按插件同一构造参数自建 store（同一 `root`，同一代码路径）。
   const disposer = apply(ctx, { root });
+  mountToolFace(ctx);
   return { root, ctx, routes, registered, disposer };
 }
 
