@@ -27,6 +27,7 @@ import {
 import { parseLaneHandleFromText, verifyLaneHandle, textOfDispatchArgs } from '../bridge/lane-handle.js';
 import { decide as decideAllowlist, canonicalDigest } from '../governance/allowlist.js';
 import { classifyDenial } from '../governance/denial.js';
+import { recordGuardRefusal } from '../governance/guard-receipt.js';
 
 export const ASK_REQUIRED_409 = 'approval-needed-409:';
 export const ASK_APPROVAL_ARGS_MISMATCH = 'approval-args-mismatch:';
@@ -107,7 +108,7 @@ export function lockPath(root, sessionId, batchId, lane) { return join(root, 'se
 
 
 export function installDifficultyGuard(ctx, deps) {
-  const { store, config = {} } = deps;
+  const { store, config = {}, root } = deps;
   const port = createToolsPort(ctx);
   {
     port.installGuard((execution) => {
@@ -224,7 +225,13 @@ export function installDifficultyGuard(ctx, deps) {
           }
         }
       }
-      if (reason) return reason;
+      if (reason) {
+        // 【⑥-1 · 2026-11-08 裁决乙1b】守卫拒绝留痕：收据（与 governance hook 同一 schema，可
+        //   `verifyRefusals` 校验）+ 拒因事件流。观察者纪律：永不抛、不改变裁决；**不**接升级链
+        //   （否则「连撞 3 次难度门 ⇒ 批 pause」会成为新的暂停路径，属语义变更而非留痕补齐）。
+        recordGuardRefusal(root, execution, { reason, log: ctx.logger });
+        return reason;
+      }
       store.bumpExecCount(sessionId);
       return reason;
     });

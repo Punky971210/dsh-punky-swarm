@@ -1025,11 +1025,11 @@
       "todos": 0
     },
     "test/governance-receipt-anchor.test.js": {
-      "asserts": 49,
-      "blankLines": 14,
-      "lines": 209,
+      "asserts": 55,
+      "blankLines": 18,
+      "lines": 252,
       "tautologies": 0,
-      "tests": 6,
+      "tests": 9,
       "todos": 0
     },
     "test/governance-state.test.js": {
@@ -1062,6 +1062,14 @@
       "lines": 790,
       "tautologies": 0,
       "tests": 32,
+      "todos": 0
+    },
+    "test/guard-receipt.test.js": {
+      "asserts": 32,
+      "blankLines": 17,
+      "lines": 137,
+      "tautologies": 0,
+      "tests": 6,
       "todos": 0
     },
     "test/handoff-authz.test.js": {
@@ -2105,7 +2113,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T11:24:49Z",
+  "generatedAt": "2026-11-08T11:41:46Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2116,15 +2124,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑧-3 单一构造点 + 补 get()；⑧-2 filter 改用描述符合成记录（新增 3 条判据）",
+  "reason": "⑥-3 收据链尾缓存 + ⑥-1 守卫通道留痕（新增 C1-C3 与 guard-receipt 6 条）",
   "schema": 1,
   "totals": {
-    "asserts": 11774,
-    "blankLines": 6703,
-    "files": 263,
-    "lines": 70707,
+    "asserts": 11812,
+    "blankLines": 6724,
+    "files": 264,
+    "lines": 70887,
     "tautologies": 0,
-    "tests": 2467,
+    "tests": 2476,
     "todos": 0
   }
 }

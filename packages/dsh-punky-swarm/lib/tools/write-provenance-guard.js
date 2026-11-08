@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `batchId`/`laneId` 在场也不能当溯源证据：它们是**执行位置**，不是**来源**。
 import { SUITE_TOOLS } from '../engine/suite.js';
 import { createToolsPort } from '../provider-dsh/tools-http.js';
+import { recordGuardRefusal, GUARD_SOURCE } from '../governance/guard-receipt.js';
 
 export const HOST_EXEMPT = Object.freeze([
   'subagent',
@@ -67,9 +68,19 @@ export function writeProvenanceDecision(execution) {
  * @returns {boolean} 本次是否真的注册了（幂等 ⇒ 重复调用返回 false）
  */
 export function installWriteProvenanceGuard(ctx, deps = {}) {
-  void deps;
   if (installedOn.has(ctx)) return false;
-  const installed = createToolsPort(ctx).installGuard((execution) => writeProvenanceDecision(execution));
+  const installed = createToolsPort(ctx).installGuard((execution) => {
+    const decision = writeProvenanceDecision(execution);
+    // 【⑥-1 · 2026-11-08 裁决乙1b】守卫拒绝留痕（收据 + 事件流；不接升级链、不改变裁决）。
+    if (decision !== undefined) {
+      recordGuardRefusal(deps?.root, execution, {
+        reason: decision,
+        source: GUARD_SOURCE.PROVENANCE,
+        log: ctx?.logger,
+      });
+    }
+    return decision;
+  });
   if (!installed) return false; // 工具面不可用 / 宿主无 guard 面 ⇒ 静默不注册（原语义逐字保留）
   installedOn.add(ctx);
   return true;

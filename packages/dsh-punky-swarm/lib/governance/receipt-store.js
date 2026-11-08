@@ -92,6 +92,38 @@ function chainTail(dir) {
   return null;
 }
 
+// ── 【⑥-3 · 2026-11-08 裁决甲】链尾缓存：把「每次写都重读全目录」降到 O(1) ──────────────
+//   为什么必须做（实测）：`chainTail` 走 `readDirReceipts`，即**每次都读+parse 目录下全部收据**
+//   （为了算锚链前驱）⇒ 单次写入 3.6ms@5 条 / 23.9ms@100 条 / 44.1ms@115 条，随收据数劣化。
+//   收据写入在工具护栏路径上（每次拒绝一次），这个劣化会直接变成护栏延迟。
+//   失效判据（不是"信任缓存"）：缓存键 = 收据目录，附 **目录 mtimeMs** 快照 —— 任何新增/重写
+//   文件都会改目录 mtime（含**其它进程**写入、`patchRefusalAsk` 的改写）⇒ 命中即复用、漂移即重建。
+//   单进程假设之外的场景由这条 mtime 判据兜住；`verifyRefusals` 始终全量重算，不受缓存影响。
+const chainTailCache = new Map();
+
+function cachedChainTail(dir) {
+  let st;
+  try {
+    st = fs.statSync(dir);
+  } catch {
+    return null; // 目录不存在 = 无链尾（写入前会 mkdir）
+  }
+  const hit = chainTailCache.get(dir);
+  if (hit && hit.dirMtimeMs === st.mtimeMs) return hit.tail;
+  const tail = chainTail(dir);
+  chainTailCache.set(dir, { tail, dirMtimeMs: st.mtimeMs });
+  return tail;
+}
+
+function primeChainTailCache(dir, receipt) {
+  try {
+    const st = fs.statSync(dir);
+    chainTailCache.set(dir, { tail: receipt ?? null, dirMtimeMs: st.mtimeMs });
+  } catch {
+    chainTailCache.delete(dir); // 取不到 mtime ⇒ 不缓存（下次重建）
+  }
+}
+
 // ts 唯一化守卫（链序确定性）：本收据链序键若不严格大于链尾（同 ms 碰撞且 receiptId 更小 /
 //   时钟回拨），把 ts nudge 到链尾 ts +1ms——保证链序 = 严格 ts 序（verify 同序重算不误报）。
 function ensureStrictTsAfterTail(receipt, tail) {
@@ -113,7 +145,7 @@ export function writeRefusal(root, receipt) {
   const sessionId = receipt.sessionId ?? 'cli';
   const dir = refusalDirOf(root, sessionId);
   fs.mkdirSync(dir, { recursive: true });
-  const tail = chainTail(dir);
+  const tail = cachedChainTail(dir); // 【⑥-3】O(1) 命中（目录 mtime 漂移时自动重建）
   ensureStrictTsAfterTail(receipt, tail);
   receipt.anchor = makeAnchor(receipt, tail?.anchor?.hash ?? null);
   const file = path.join(dir, receipt.receiptId + '.json');
@@ -128,6 +160,7 @@ export function writeRefusal(root, receipt) {
     try { fs.unlinkSync(tmp); } catch {  }
     throw new Error('refusal write failed (fail closed): ' + receipt.receiptId + ' — ' + String(e?.message ?? e));
   }
+  primeChainTailCache(dir, receipt); // 新收据即新链尾（rename 后目录 mtime 已更新）
   appendLedger(root, sessionId, receipt);
   return file;
 }
@@ -244,5 +277,9 @@ export function patchRefusalAsk(root, sessionId, receiptId, outcome) {
     }
     appendLedger(root, sessionId, updated);
   }
+  // 【⑥-3】patch 会改写本条并级联重算后继锚 ⇒ 链尾可能变化：**主动失效缓存**（下次写入重建）。
+  //   这里刻意不做「重算后 prime」——patch 本身已经是 O(N) 的全量遍历，省这一次重建没有收益，
+  //   而缓存一步错算会让后续锚链整条断（不可逆的审计损伤），宁保守。
+  chainTailCache.delete(dir);
   return file;
 }

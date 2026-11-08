@@ -206,3 +206,46 @@ test('H6 deleted middle receipt: verify detects missing link at successor', () =
   assert.deepEqual(vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).sort(), ['h6-r1', 'h6-r3'].sort(),
     '现存锚定收据集须恰为 h6-r1/h6-r3（实际: [' + vr.receipts.filter((x) => x.anchored).map((x) => x.receiptId).join(', ') + ']）');
 });
+
+// ── 【⑥-3 · 2026-11-08 裁决甲】链尾缓存 ─────────────────────────────────────────────
+//   背景：`writeRefusal` 每次都经 `chainTail` → `readDirReceipts` 把目录下全部收据读一遍
+//   （为算锚链前驱）⇒ 实测 3.6ms@5 / 23.9ms@100 / 44.1ms@115，而护栏每次拒绝都走一次。
+//   缓存口径 = 「链尾 + 该目录 mtimeMs 快照」，任何目录内容变化都会让 mtime 漂移 ⇒ 自动重建。
+
+test('C1 缓存下锚链仍完整：连续写 50 条 ⇒ verifyRefusals().ok（缓存不得改变链序语义）', () => {
+  const root = tempRoot('gov-c1-');
+  const base = Date.parse('2026-09-01T00:00:00.000Z');
+  for (let i = 0; i < 50; i++) {
+    writeRefusal(root, receiptOf('c1-r' + i, new Date(base + i * 1000).toISOString()));
+  }
+  const vr = verifyRefusals(root, 'sess-h');
+  assert.equal(vr.ok, true, '50 条连续写入后锚链必须完整（brokenAt=' + String(vr.brokenAt) + '）');
+  assert.equal(vr.receipts.filter((x) => x.anchored).length, 50, '50 条全部锚定');
+});
+
+test('C2 缓存按目录 mtime 失效：外部进程写入后，下一条必须锚到外部那条（否则链断）', () => {
+  const root = tempRoot('gov-c2-');
+  const dir = refusalDirOf(root, 'sess-h');
+  writeRefusal(root, receiptOf('c2-r1', '2026-09-02T00:00:00.000Z')); // 触发缓存 priming
+  // 模拟「另一个进程」直接落一条合法收据（绕过 writeRefusal ⇒ 只改目录 mtime，不改本进程缓存）
+  const r1 = readReceipt(root, 'sess-h', 'c2-r1');
+  const external = receiptOf('c2-ext', '2026-09-02T00:00:01.000Z');
+  external.anchor = makeAnchor(external, r1.anchor.hash);
+  fs.writeFileSync(path.join(dir, 'c2-ext.json'), JSON.stringify(external, null, 2), 'utf8');
+  writeRefusal(root, receiptOf('c2-r3', '2026-09-02T00:00:02.000Z'));
+  const r3 = readReceipt(root, 'sess-h', 'c2-r3');
+  assert.equal(r3.anchor.prevHash, external.anchor.hash,
+    '缓存未按 mtime 失效时 r3 会锚到 c2-r1（跳过外部那条）⇒ 链断；实际 prevHash=' + r3.anchor.prevHash);
+  const vr = verifyRefusals(root, 'sess-h');
+  assert.equal(vr.ok, true, '三节点链必须可验证（c2-r1 → c2-ext → c2-r3），brokenAt=' + String(vr.brokenAt));
+});
+
+test('C3 缓存命中不重扫目录：primed 之后再写一条，readdirSync 调用数为 0', (t) => {
+  const root = tempRoot('gov-c3-');
+  writeRefusal(root, receiptOf('c3-r1', '2026-09-03T00:00:00.000Z')); // priming（首次允许全量）
+  const spy = t.mock.method(fs, 'readdirSync');
+  writeRefusal(root, receiptOf('c3-r2', '2026-09-03T00:00:01.000Z'));
+  assert.equal(spy.mock.callCount(), 0,
+    '缓存命中时不得重新扫描收据目录（O(N) → O(1) 的判据；实测调用 ' + spy.mock.callCount() + ' 次）');
+  assert.equal(verifyRefusals(root, 'sess-h').ok, true, '旁路：链仍完整');
+});
