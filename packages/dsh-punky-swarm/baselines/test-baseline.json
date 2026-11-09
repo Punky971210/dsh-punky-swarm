@@ -361,19 +361,19 @@
       "todos": 0
     },
     "test/binding-zero-write-e2e.test.js": {
-      "asserts": 14,
+      "asserts": 17,
       "blankLines": 15,
-      "lines": 136,
+      "lines": 150,
       "tautologies": 0,
       "tests": 4,
       "todos": 0
     },
     "test/boot-assets-deferred.test.js": {
-      "asserts": 23,
+      "asserts": 13,
       "blankLines": 13,
       "lines": 123,
       "tautologies": 0,
-      "tests": 2,
+      "tests": 1,
       "todos": 0
     },
     "test/cancel-result-three-state.test.js": {
@@ -1153,9 +1153,9 @@
       "todos": 0
     },
     "test/hot-config.test.js": {
-      "asserts": 42,
+      "asserts": 43,
       "blankLines": 19,
-      "lines": 208,
+      "lines": 213,
       "tautologies": 0,
       "tests": 10,
       "todos": 0
@@ -1289,9 +1289,9 @@
       "todos": 0
     },
     "test/lane-session-bind.test.js": {
-      "asserts": 124,
+      "asserts": 123,
       "blankLines": 44,
-      "lines": 722,
+      "lines": 731,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -2129,9 +2129,9 @@
       "todos": 0
     },
     "test/webui-runtime-config.test.js": {
-      "asserts": 225,
+      "asserts": 228,
       "blankLines": 47,
-      "lines": 679,
+      "lines": 689,
       "tautologies": 0,
       "tests": 36,
       "todos": 0
@@ -2169,7 +2169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T16:56:40Z",
+  "generatedAt": "2026-11-09T18:28:01Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2180,15 +2180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "L-6 golden prompt baselines resync (+115B from N-5 qualifier); comment lines added",
+  "reason": "punky-prerelease-scan 收口：e6 改造 5 条锁旧契约用例(asserts +6/lines +38) + Leader 删 AC-4/AC-6 子进程探针用例并加真实主目录硬守卫(asserts -10/tests -1)；全写者已停写",
   "schema": 1,
   "totals": {
-    "asserts": 12069,
+    "asserts": 12065,
     "blankLines": 6856,
     "files": 271,
-    "lines": 72686,
+    "lines": 72724,
     "tautologies": 0,
-    "tests": 2517,
+    "tests": 2516,
     "todos": 0
   }
 }

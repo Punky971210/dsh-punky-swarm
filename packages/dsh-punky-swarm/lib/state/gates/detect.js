@@ -34,31 +34,43 @@ export function contractMissingPayload(gateKind, layer, source, degradeKind, deg
     };
 }
 export const TARGETS_CLAIMED_RE = /^targets-claimed:\s*true$/m;
+// needHuman 声明检测（**单点**；三处消费点共用）。
+// N-02 / RQ-9：`unreadable` = 「**不可判读**」（路径不可解析 / 目录 / 0 字节 / 读不出）——它
+//   **不等于**「未声明 needHuman」。改前这两种情况都返回 `declared:false`，于是「产物此刻读不到」
+//   被静默读成「无需人工裁决」，验收门 fail-open（`member_settle(merged)` 直接放行）。
+//   现由消费点 `gates/exit.js#checkNeedHumanGate` 据此**显式拒**（并保留 human 证据逃生通道）。
+//   可达形态实证：目录型产物（带尾斜杠声明 ⇒ presence 判「存在且非空」放行）内含 `needHuman: true`
+//   时，改前永久不可见；0 字节形态则更早被 presence 门拦（O-4.2）。
 export function detectNeedHuman(artifactsDir, producePaths) {
     if (!Array.isArray(producePaths) || producePaths.length === 0)
-        return { declared: false, path: null };
+        return { declared: false, path: null, unreadable: [] };
+    const unreadable = [];
     for (const p of producePaths) {
         let abs;
         try {
             abs = resolveArtifactIn(artifactsDir, p);
         }
         catch {
+            unreadable.push(p);
             continue;
         }
         let content;
         try {
             const st = fs.statSync(abs);
-            if (st.isDirectory() || st.size === 0)
+            if (st.isDirectory() || st.size === 0) {
+                unreadable.push(p);
                 continue;
+            }
             content = fs.readFileSync(abs, 'utf8');
         }
         catch {
+            unreadable.push(p);
             continue;
         }
         if (/^needHuman:\s*true$/m.test(content))
-            return { declared: true, path: p };
+            return { declared: true, path: p, unreadable };
     }
-    return { declared: false, path: null };
+    return { declared: false, path: null, unreadable };
 }
 export function detectPendingMarker(content, literal) {
     if (typeof content !== 'string' || content.length === 0

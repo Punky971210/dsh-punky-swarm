@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive } from './tier-gate.js';
+import { assertNotSentinelSessionArg } from '../state/session-authority.js';
 
 /** 难度档位序（rank）：D=4 > C=3 > B=2 > A=1 > 未知/缺失=0 —— **全仓唯一 rank 真源**（模块级单点导出）。
  *  P-2：D 最强（D 蕴含 C 全部 + team 通道）。 */
@@ -31,6 +32,7 @@ export const accessTierRank = (t) => ((t === 'C' || t === 'D') ? 3 : t === 'B' ?
 
 export function buildAssignTools(cx) {
   const { deps, store } = cx;
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "assign_check",
@@ -51,7 +53,12 @@ export function buildAssignTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '难度评估（assign_check）');
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'assign_check');                       // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);            // D-02/RQ-2
+        //   注：本站点（D-04 站点 1/2：difficulty / scope）**不落** `authorizeBatchWrite`：
+        //   `session` 在本工具的语义是「评估落点（会话 id 或**命名黑板**）」，且跨会话写入是
+        //   **显式设计**的双向镜像（`mirror` / `mirroredTo`，见 `governance.test.js:431/454` 锁定用例），
+        //   没有「他人批次」这个被判对象。判据与残余风险见台账 D-04 站点台账。
         const difficulty = args.difficulty;
         if (!['A', 'B', 'C', 'D'].includes(difficulty)) {
           throw new Error('GATE_DIFFICULTY_INVALID: difficulty 必填且只能是 A|B|C|D（收到 ' + JSON.stringify(difficulty ?? null) + '）——'

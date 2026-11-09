@@ -122,14 +122,28 @@ test('Q4-3 拒的可审计性：拒因回显 expected / actual 两个身份（�
   assert.equal(msg.includes(WORKER_A1), true, '须含 actual（冒名方）：' + msg.slice(0, 200));
 });
 
-test('Q4-4 治理面**不误伤**：非任何 lane 的 worker（Leader 会话）结算本 lane ⇒ 放行', async () => {
+test('Q4-4 治理面**不误伤**：批归属会话（Leader）结算本 lane ⇒ 放行；陌生会话带 session 覆写 ⇒ 拒且零写入', async () => {
   const bed = bedOf('gov');
-  // 治理面调用方：不是任何 lane 的 worker ⇒ 绑定判定放行（否则正常结算被误杀）
-  bed.store.writeGovernance('sess-leader', {
-    lastAssign: { form: 'C', difficulty: 'C', rationale: 'I-04 治理面放行夹具', at: new Date().toISOString() },
-  });
+  // 【批 `punky-prerelease-scan` · lane `e1-session-plane` · **D-01 已修 ⇒ 契约变更，非回归**】
+  //   旧断言把「陌生会话 `sess-leader` + 显式 `session:S` 覆写」当作**治理面放行**——那正是 D-01 的
+  //   越权原语（与 AC-10 的攻击面逐字同形）；AC-10 落地后二者不可能同时成立。
+  //   治理面的正确含义 = **批归属会话本身**（本夹具 `S = 'sess-bzw'`），不是「任意非 worker 会话」。
+  //   「不误伤」的检测力照旧保留：归属会话必须放行、且必须**真写入**（sha 变化）。
+  // 坑①延伸：档位判据落在**调用方** ⇒ 两个调用方各写一条 C 档记录（否则先撞 GATE_MEMBER_REQUIRES_C，
+  //   测不到本用例要测的那道门）。
+  for (const sid of [S, 'sess-stranger']) {
+    bed.store.writeGovernance(sid, {
+      lastAssign: { form: 'C', difficulty: 'C', rationale: 'I-04 治理面放行夹具', at: new Date().toISOString() },
+    });
+  }
   const before = { sha: sha256Of(bed.file) };
-  const out = await bed.settle('sess-leader');
+  const out = await bed.settle(S);                        // 归属会话 ⇒ 放行
   assert.equal(out.settled !== undefined, true, '治理面调用必须放行（不得因绑定误拦）');
   assert.notEqual(sha256Of(bed.file), before.sha, '治理面放行 ⇒ 真写入（sha 变化）');
+  // 反向锁（与 AC-10 / RQ-1 同形）：陌生会话带 `session:S` ⇒ 属主门拒且零写入
+  const shaAfter = sha256Of(bed.file);
+  const revAfter = revOf(bed.file);
+  await assert.rejects(() => bed.settle('sess-stranger'), /GATE_SESSION_UNAUTHORIZED/);
+  assert.equal(sha256Of(bed.file), shaAfter, '属主门拒 ⇒ 零写入（sha256 逐位不变）');
+  assert.equal(revOf(bed.file), revAfter, '属主门拒 ⇒ __rev 不变');
 });

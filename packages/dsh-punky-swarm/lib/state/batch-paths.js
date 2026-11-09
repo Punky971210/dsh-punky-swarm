@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   `state/archive.js`、`state/store/paths.js`、`state/gates/helpers.ts`、`tools/log-tools.js`
 import fs from 'node:fs';
 import path from 'node:path';
-import { SESSION_RE } from './constants.js';
+import { assertSafeId } from './constants.js';
 // 根内判据**复用**（D 轨 WD-3a）：`presence.ts` 的根内判定是唯一实现，禁止在此复制第二份
 import { isInsideRoot, isInsideRootResolved } from './gates/presence.js';
 
@@ -26,18 +26,23 @@ export function engineRootOf(sessionsDir) {
   return sessionsDir ? path.dirname(sessionsDir) : null;
 }
 
+// 【D-09 / RQ-3】三个路径组件的构造全部经同一校验器（`assertSafeId`，constants.js 单点）。
+//   纵深防御（RQ-4）：除正则外，构造结果还必须仍在 `sessions/` 内 —— 正则漏掉的形态（将来放宽、
+//   或 Win32 归一化差异）由这条兜底；两者皆过才返回路径，**禁静默回落**。
 export function sessionDirOf(sessionsDir, sessionId) {
-  if (!SESSION_RE.test(sessionId)) throw new Error('invalid sessionId: ' + sessionId);
-  return path.join(sessionsDir, sessionId);
+  const dir = path.join(sessionsDir, assertSafeId(sessionId, 'sessionId'));
+  if (!isInsideRoot(dir, sessionsDir)) {
+    throw new Error('invalid sessionId（逃出 sessions 根）: ' + JSON.stringify(sessionId));
+  }
+  return dir;
 }
 
 export function artifactsDirOf(sessionsDir, sessionId, batchId) {
-  return path.join(sessionDirOf(sessionsDir, sessionId), 'artifacts', batchId);
+  return path.join(sessionDirOf(sessionsDir, sessionId), 'artifacts', assertSafeId(batchId, 'batchId'));
 }
 
 export function batchFilePathOf(sessionsDir, sessionId, batchId) {
-  if (!SESSION_RE.test(batchId)) throw new Error('invalid batchId');
-  return path.join(sessionDirOf(sessionsDir, sessionId), 'batches', batchId + '.json');
+  return path.join(sessionDirOf(sessionsDir, sessionId), 'batches', assertSafeId(batchId, 'batchId') + '.json');
 }
 
 export function isArtifactInRoot(artifactsRoot, absPath) {

@@ -161,6 +161,12 @@ export function mountAuditLog(ctx, opts = {}) {
     return { mounted: false, reason: 'exporter-register-failed' };
   }
   void disposer;
+  // 【N-07】注册成功即计数 +1（可观测面）。**不改 disposer 语义**：上面 `void disposer` 保持
+  //   「绝不调用」的已登记取舍（L5），本行只让「有没有堆积」可读。
+  //   实测判据（3 轮 remount 后应为 1）：`exec/data-plane/probe/n07-auditlog-exporter-lifecycle.mjs`
+  //   ⇒ 现状 perRound=[1,1,1]（F9 守卫在 sink-state.js，模块重求值不重置）⇒ 未泄漏；
+  //   泄漏的可达前提 = 宿主对**整条模块图**退缓存 + 复用同一 logger 对象（跨进程不可能满足）。
+  state.exportersRegistered += 1;
 
   try { fs.mkdirSync(state.sinkDir, { recursive: true }); } catch (error) { recordError(error); }
   try { fs.mkdirSync(state.diagnosticsDir, { recursive: true }); } catch (error) { recordError(error); }
@@ -209,6 +215,8 @@ export function flushDiagnostics(note) {
 export function auditlogStats() {
   return {
     mounted: state.mounted,
+    // 【N-07】已注册 exporter 条数（新增键，既有键语义/顺序零改）：3 轮 remount 后应为 1
+    exportersRegistered: state.exportersRegistered,
     sinkDir: state.sinkDir,
     diagnosticsDir: state.diagnosticsDir,
     filename: state.filename,

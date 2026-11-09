@@ -115,28 +115,55 @@ const ALLOWED_CAPS_KEYS = new Set(
 
 // 覆盖层校验（纯函数，单测面）：返回 { ok, errors }
 export function validateOverlay(overlay) {
-  const errors = [];
+  const split = splitOverlay(overlay);
+  return split.fatal
+    ? { ok: false, errors: ['runtime overlay must be a JSON object'] }
+    : { ok: split.rejected.length === 0, errors: split.rejected.map((r) => r.reason) };
+}
+
+// 覆盖层**逐键**拆分（纯函数，单测面）：{ accepted, rejected:[{key,reason}], fatal }
+// ── 为什么必须逐键（P0 · D-07 修复，判据源 RQ-7 / AC-13）────────────────────────
+// 「整份接受或整份拒绝」的后果不是「配置没生效」而是**静默 fail-open**：坏键 ⇒ 整份被拒 ⇒
+//   `publishRuntimeSnapshot` 不执行 ⇒ `CURRENT_SNAPSHOT` 恒 `null` ⇒ `readRuntimeSnapshot({})` = `{}`
+//   ⇒ `gates.*` 全部解析为**缺省关**（交接门 / 结算门 / targets 门同时静默失效），唯一信号是一行 warn；
+//   且写通道对整份 overlay 跑同一校验 ⇒ 用户**无法经面板修掉自己写坏的那个键**（只能手改文件）。
+// 口径：坏键**只废该键**（进 `rejected` 供日志点名），其余合法键照常生效；
+//   `capabilities` 段按**子键**粒度裁剪（一个坏子键不得连带废掉整段能力开关）。
+// `fatal` = overlay 根本不是对象（形态错）⇒ 无「逐键」可言，调用方须保持旧快照。
+/** @returns {{accepted: Record<string, unknown>, rejected: Array<{key: string, reason: string}>, fatal: boolean}} */
+export function splitOverlay(overlay) {
+  const rejected = [];
   if (overlay === null || typeof overlay !== 'object' || Array.isArray(overlay)) {
-    return { ok: false, errors: ['runtime overlay must be a JSON object'] };
+    return { accepted: {}, rejected: [], fatal: true };
   }
+  const accepted = {};
   for (const [k, v] of Object.entries(overlay)) {
     if (!ALLOWED_TOP_KEYS.has(k)) {
-      errors.push('unknown top-level key: ' + k + ' (allowed: ' + [...ALLOWED_TOP_KEYS].join(', ') + ')');
+      rejected.push({ key: k, reason: 'unknown top-level key: ' + k + ' (allowed: ' + [...ALLOWED_TOP_KEYS].join(', ') + ')' });
       continue;
     }
     if (k === 'capabilities' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      const kept = {};
       for (const ck of Object.keys(v)) {
         if (!ALLOWED_CAPS_KEYS.has(ck)) {
-          errors.push('unknown capabilities key: ' + ck + ' (allowed: ' + [...ALLOWED_CAPS_KEYS].join(', ') + ')');
+          rejected.push({ key: k + '.' + ck, reason: 'unknown capabilities key: ' + ck + ' (allowed: ' + [...ALLOWED_CAPS_KEYS].join(', ') + ')' });
           continue;
         }
         if (ck === 'injectBudget') {
-          errors.push(...injectBudgetValueErrors(v[ck]));
+          const errs = injectBudgetValueErrors(v[ck]);
+          if (errs.length > 0) {
+            rejected.push({ key: k + '.' + ck, reason: errs.join('; ') });
+            continue;
+          }
         }
+        kept[ck] = v[ck];
       }
+      accepted[k] = kept;
+      continue;
     }
+    accepted[k] = v;
   }
-  return { ok: errors.length === 0, errors };
+  return { accepted, rejected, fatal: false };
 }
 
 function sleep(ms) {
@@ -210,13 +237,19 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
       log?.warn?.('[dsh-punky-swarm] runtime.json read failed (keep previous snapshot): ' + String(e?.message ?? e));
       return { ok: false, reason: 'read-failed' };
     }
-    const v = validateOverlay(nextOverlay);
-    if (!v.ok) {
-      log?.warn?.('[dsh-punky-swarm] runtime.json overlay rejected (keep previous snapshot): ' + v.errors.join('; '));
-      return { ok: false, reason: 'invalid-overlay', errors: v.errors };
+    const split = splitOverlay(nextOverlay);
+    if (split.fatal) {
+      log?.warn?.('[dsh-punky-swarm] runtime.json overlay rejected (keep previous snapshot): runtime overlay must be a JSON object');
+      return { ok: false, reason: 'invalid-overlay', errors: ['runtime overlay must be a JSON object'] };
     }
-    overlay = nextOverlay;
-    return { ok: true, ...mergeAndNotify(nextOverlay) };
+    // 逐键生效（D-07）：坏键只废该键并**点名**留在日志里，合法键照常生效
+    if (split.rejected.length > 0) {
+      log?.warn?.('[dsh-punky-swarm] runtime.json overlay partially applied — ignored keys: '
+        + split.rejected.map((r) => r.key).join(', ')
+        + '（原因：' + split.rejected.map((r) => r.reason).join('; ') + '；其余合法键已生效）');
+    }
+    overlay = split.accepted;
+    return { ok: true, ignored: split.rejected, ...mergeAndNotify(split.accepted) };
   }
 
   async function handleFsChange() {
@@ -285,17 +318,19 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
     if (fs.existsSync(runtimeFile)) {
       try {
         const init = parseJsonText(fs.readFileSync(runtimeFile, 'utf8'));
-        if (init !== null && typeof init === 'object' && !Array.isArray(init)) {
-          const v = validateOverlay(init);
-          if (v.ok) {
-            overlay = init;
-            snapshot = deepMerge(config, init);
-            publishRuntimeSnapshot(snapshot); // `task-27`：启动期初始 overlay 生效即发布（工具/门禁均可读）
-          } else {
-            log?.warn?.('[dsh-punky-swarm] runtime.json initial overlay rejected (use static config): ' + v.errors.join('; '));
-          }
-        } else {
+        const split = splitOverlay(init);
+        if (split.fatal) {
           log?.warn?.('[dsh-punky-swarm] runtime.json initial overlay must be a JSON object (use static config)');
+        } else {
+          // 逐键生效（D-07）：坏键只废该键且**点名**进启动日志；合法键照常发布快照
+          if (split.rejected.length > 0) {
+            log?.warn?.('[dsh-punky-swarm] runtime.json initial overlay partially applied — ignored keys: '
+              + split.rejected.map((r) => r.key).join(', ')
+              + '（原因：' + split.rejected.map((r) => r.reason).join('; ') + '；其余合法键已生效）');
+          }
+          overlay = split.accepted;
+          snapshot = deepMerge(config, split.accepted);
+          publishRuntimeSnapshot(snapshot); // `task-27`：启动期初始 overlay 生效即发布（工具/门禁均可读）
         }
       } catch (e) {
         log?.warn?.('[dsh-punky-swarm] runtime.json initial read failed (use static config): ' + String(e?.message ?? e));

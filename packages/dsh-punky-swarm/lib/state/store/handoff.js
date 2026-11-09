@@ -20,6 +20,7 @@ import * as EVT from '../event-types.js';
 import * as schema from '../../schema.js';
 import { laneHandoffGapPayload } from './events.js';
 import { workerLanesOf } from '../dispatch-events.js';
+import { isBatchOwner } from '../session-authority.js';
 
 /** 交接记录的**唯一形态**（建批播种 / 计划变更补种 / 收件补边三处写点共用）。
  *  基础 9 键固定；收件通道只多 `source` / `acceptedBy` 两个显式可选键。 */
@@ -51,7 +52,9 @@ export function buildHandoff(cx) {
     const rosterNames = Array.isArray(raw.rosterNames)
       ? raw.rosterNames.filter((n) => typeof n === 'string' && n.trim().length).map((n) => n.trim())
       : [];
-    if (callerSessionId && callerSessionId === batch.sessionId) return { ok: true, role: 'owner' };
+    //   owner 档的比较**收敛到 `state/session-authority.js#isBatchOwner`**（RQ-1「禁第二套判据」：
+    //   本文件曾是全仓唯一的属主比较点，现在由单点持有，交接面只是它的一个消费方）。
+    if (isBatchOwner(batch, callerSessionId)) return { ok: true, role: 'owner' };
     const dispatchLanes = workerLanesOf(batch, callerSessionId);
     if (dispatchLanes.length) {
       if (!from) return { ok: false, role: 'dispatch', allowedFrom: dispatchLanes };

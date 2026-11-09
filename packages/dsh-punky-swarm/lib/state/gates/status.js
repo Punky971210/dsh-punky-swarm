@@ -19,7 +19,7 @@ import { taskOf } from './detect.js';
 import * as EVT from '../event-types.js';
 import fs from 'node:fs';
 export function buildStatus(cx) {
-    const { batchFile, checkPlanContract, completeOutcomesOf, consumeFieldNameOf, flowsOf, laneStartedAt, layersOf, orphanProductsOf, presenceOfArtifact, readBatch, unwiredEntriesOf, vocabOpts, vocabularyViewOf } = cx;
+    const { batchFile, checkPlanContract, completeOutcomesOf, consumeFieldNameOf, flowsOf, laneStartedAt, layersOf, orphanProductsOf, presenceOfArtifact, readBatch, unwiredEntriesOf, vocabOpts, vocabularyViewOf, gateEnv } = cx;
     function gateStrengthOf(batch) {
         const layers = layersOf(batch);
         const flows = flowsOf(batch).flows;
@@ -40,7 +40,8 @@ export function buildStatus(cx) {
             disabled.push('gate_command@team-asset');
         if (ef && ef.targets === false)
             disabled.push('targets@team-asset');
-        if (String(process.env.GATE_ENABLED).toLowerCase() === 'false')
+        // env 阀经单点取判定投影（RQ-8 / N-06）：本文件**不再**直接读环境
+        if (gateEnv().allGatesDisabled)
             disabled.push('all-gates@env');
         const evs = (batch.events ?? []);
         const escapes = evs.filter((e) => e && e.type === EVT.EVT_GATE_ESCAPE).map((e) => ({ kind: typeof e.kind === 'string' ? e.kind : null }));

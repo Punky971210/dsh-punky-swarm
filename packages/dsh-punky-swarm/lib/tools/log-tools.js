@@ -20,7 +20,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
-import { SAFE_ID, TERMINAL } from '../state/constants.js';
+import { isSafeId, TERMINAL } from '../state/constants.js';
+import { assertNotSentinelSessionArg, authorizeBatchWrite } from '../state/session-authority.js';
 import { readCapability } from '../assembly/schema.js';
 import { artifactsDirOf as artifactsDirOfAt, resolveWriteTargetIn } from '../state/batch-paths.js';
 import * as EVT from '../state/event-types.js';
@@ -130,9 +131,15 @@ export function createLogTools(ctx, deps) {
         render: (_args, value) => TEXT_OUTPUT('log_export: ' + value.exported + '/' + value.eventCount + ' events' + (value.writtenTo ? ' -> ' + value.writtenTo : '')),
       },
       async execute(args, exec) {
+        assertNotSentinelSessionArg(args, 'log_export');                          // D-03/RQ-5
         const sessionId = sessionOf(args, exec, resolveBatchSession);
-        if (!SAFE_ID.test(sessionId)) throw new Error('invalid session: ' + sessionId);
-        if (!SAFE_ID.test(args.batchId)) throw new Error('invalid batchId: ' + args.batchId);
+        //   D-01/D-04 站点 9（`format=markdown` + `writeTo` 决定落盘动作）：**落盘分支**要过属主门；
+        //   纯读面（json / 不写盘）不动 —— 读投影不构成越权写，且 `batch_status` 等读族的既有语义不在此处改。
+        if (args.writeTo) {
+          authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'log_export(writeTo)' });
+        }
+        if (!isSafeId(sessionId)) throw new Error('invalid session: ' + sessionId);
+        if (!isSafeId(args.batchId)) throw new Error('invalid batchId: ' + args.batchId);
         if (args.since != null && !Number.isFinite(Date.parse(args.since))) throw new Error('invalid since: ' + args.since + ' (must be ISO timestamp)');
         const batch = store.readBatch(sessionId, args.batchId);
         if (!batch) throw new Error('batch not found: ' + args.batchId);

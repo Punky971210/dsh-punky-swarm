@@ -18,9 +18,10 @@ import { flowOf, enabledByFlag, flagOf } from '../../assembly/flows.js';
 import { taskOf, smokeOf, contractMissingPayload, TARGETS_CLAIMED_RE } from './detect.js';
 import fs from 'node:fs';
 export function buildTargets(cx) {
-    const { flowsOf, laneStartedAt } = cx;
+    const { flowsOf, laneStartedAt, gateEnv } = cx;
     function checkTargetsGate(sessionId, batchId, batch, lane) {
-        if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+        // env 阀经单点取判定投影（RQ-8 / N-06）：本文件**不再**直接读环境
+        if (gateEnv().allGatesDisabled) {
             return {
                 ok: true, declared: false,
                 escape: {
@@ -51,7 +52,7 @@ export function buildTargets(cx) {
         const startAt = laneStartedAt(batch, lane);
         const startMs = Date.parse(startAt);
         const markerMode = (typeof t.targetsMarker === 'string' && t.targetsMarker.length > 0)
-            || String(process.env.GATE_TARGETS_MODE).toLowerCase() === 'marker';
+            || gateEnv().targetsMarkerMode;
         const noChange = t.targetsNoChange === true;
         const modeOf = () => (noChange ? 'no-change' : (markerMode ? 'marker' : 'mtime'));
         const missing = [];

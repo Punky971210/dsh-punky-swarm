@@ -123,6 +123,34 @@ function main() {
   const liveRoot = args.live ?? path.join(home, '.dsh', '.agent-presets', 'punky-preset');
   const skillsLive = args.skillsLive ?? path.join(home, '.agents', 'skills');
 
+  // ── 真实主目录守卫（P1，2026-11-10 事故后补）────────────────────────────────
+  //   本脚本的写入面就是 live 注入面与技能树，误跑会**覆盖真机内容**；而同族的
+  //   `scripts/probe-assets-defer.mjs`（已删）与 `test/boot-assets-deferred.test.js`（已加守卫）
+  //   已因「默认落点解析到真实 home 且无守卫」造成过一次真实删除事故（01:51 删 ~/.agents/skills）。
+  //   真源 = `os.userInfo().homedir`（系统账户 API，不受 USERPROFILE/HOME 改写影响，
+  //   与 `test/helpers/isolated-home.preload.mjs:57-58` 同源）。
+  //   ⇒ 默认落点落在真实主目录时**必须显式 `--allow-real-home`**；否则拒跑（exit 2，零写入）。
+  //   显式 `--live=` / `--skills-live=` 指向非真实目录时不触发本守卫（测试与冒烟照常）。
+  if (!process.argv.includes('--allow-real-home')) {
+    let realHome = '';
+    try { realHome = os.userInfo().homedir; } catch { realHome = ''; }
+    if (realHome) {
+      const underReal = (p) => {
+        const rel = path.relative(realHome, path.resolve(p));
+        return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+      };
+      const risky = [liveRoot, ...(args.noSkills ? [] : [skillsLive])].filter(underReal);
+      if (risky.length > 0) {
+        console.error(
+          '拒绝：默认落点解析到**真实用户主目录**（' + realHome + '）：\n  ' + risky.join('\n  ')
+          + '\n如需写入真实面，显式加 `--allow-real-home`；或改用 `--live=<dir>` / `--skills-live=<dir>`'
+          + ' 指向临时目录（测试/冒烟/探针一律这样跑）。',
+        );
+        return 2;
+      }
+    }
+  }
+
   const result = { copied: [], skipped: [], failed: [] };
   const presetRoot = path.join(ROOT, PRESET_REL);
 

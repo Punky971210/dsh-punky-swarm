@@ -564,20 +564,30 @@ test('watch写-6 顶层白名单：governance/capabilities 之外顶层键 → u
   assert.equal(firstError(notObj).code, 'invalid-value');
 });
 
-test('watch写-7 validateOverlay 兜底：base 含 watcher 非法顶层键（手工坏文件）→ 500 overlay-rejected，不回写不覆盖', () => {
+test('watch写-7 逐键兜底：base 含非法顶层键（手工坏文件）→ 写入成功并剔除坏键（不再整份 500）', () => {
   const root = freshRoot();
   const dir = path.join(root, 'config');
   fs.mkdirSync(dir, { recursive: true });
-  // 手工 base 含 validateOverlay 拒绝的未知顶层键（watcher 合法面之外，仅 commitOverlay 全量兜底能拦）
+  // 手工 base 含 splitOverlay 拒绝的未知顶层键（watcher 合法面之外）
   const baseRaw = JSON.stringify({ capabilities: { discovery: { enabled: true } }, ghostTop: { x: 1 } }, null, 2);
   fs.writeFileSync(path.join(dir, 'runtime.json'), baseRaw, 'utf8');
   const svc = createRuntimeConfigService({ root });
   const out = svc.writeWatch({ capabilities: { watch: { enabled: false } } });
-  assert.equal(out.ok, false);
-  assert.equal(out.status, 500);
-  assert.match(out.error, /overlay-rejected/);
-  assert.equal(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'), baseRaw, '兜底失败不回写不覆盖');
+  // 【批 `punky-prerelease-scan` · lane `e3-gate-config-plane` · **D-07 已修 ⇒ 契约变更，非回归**】
+  //   旧契约「base 有坏键 ⇒ 整份 500 overlay-rejected、不回写」已废止（AC-13 / RQ-7）：
+  //   盘上**既有**坏键不再整份拦（那会让用户无法经面板修掉自己写坏的键），改为写回时按合法键重建。
+  assert.equal(out.ok, true, '既有坏键不再整份拒（逐键，AC-13 ①）');
+  const after = JSON.parse(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'));
+  assert.equal('ghostTop' in after, false, '坏键在写回时被剔除（可核，AC-13 ①）');
+  assert.equal(after.capabilities.discovery.enabled, true, '其余合法段原样保留');
+  assert.equal(after.capabilities.watch.enabled, false, '本次写入生效');
   assert.equal(fs.existsSync(path.join(dir, '.runtime.json.tmp')), false, 'tmp 不残留');
+  // 反向锁（防「逐键」被读成「放行任何输入」）：**本次写入段**的非法值仍 fail-closed（400，不落盘）
+  const shaBefore = fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8');
+  const bad = svc.writeWatch({ capabilities: { watch: { enabled: 'yes' } } });
+  assert.equal(bad.ok, false, '本次写入段的非法值仍须拒（逐键 ≠ 放宽）');
+  assert.equal(bad.status, 400);
+  assert.equal(fs.readFileSync(path.join(dir, 'runtime.json'), 'utf8'), shaBefore, '拒 ⇒ 不落盘（坏值不回国）');
 });
 
 test('watch写-8 坏 base JSON → 500 unreadable 不回写（与 governance 写通道同口径）', () => {

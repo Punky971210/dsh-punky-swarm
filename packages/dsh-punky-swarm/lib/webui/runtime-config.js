@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import fs from 'node:fs';
 import { join } from 'node:path';
-import { validateOverlay, stripBom } from '../hot/config-watch.js';
+import { splitOverlay, stripBom } from '../hot/config-watch.js';
 import { PRESET_IDS } from '../governance/preset-loader.js';
 
 // 受控表单 escalation.primitives 合法值域 = 引擎 resolve 合法域（governance/config.js resolveEscalationConfig
@@ -316,18 +316,27 @@ export function createRuntimeConfigService({ root, logger } = {}) {
     return parsed;
   }
 
-  // 写通道公共落盘段：validateOverlay(全量) 兜底（写入必被 watcher 接受，失败 500 不落盘）→
-  //   同目录 tmp + rename 原子写（rename 需同卷原子；watch 只看到完整文件）
-  function commitOverlay(overlay) {
-    const gate = validateOverlay(overlay);
-    if (!gate.ok) {
-      return { ok: false, status: 500, error: 'overlay-rejected: ' + gate.errors.join('; ') };
+  // 写通道公共落盘段：**逐键**兜底（D-07 / RQ-7）→ 同目录 tmp + rename 原子写
+  //   （rename 需同卷原子；watch 只看到完整文件）
+  // 口径（与 `lib/hot/config-watch.js#splitOverlay` 同一判据，禁第二套）：
+  //   · 本次写入**触及**的段（`touched` 前缀）逐条严判 —— 自己写坏的值一律 500 不落盘（fail-closed 不减）；
+  //   · 盘上**既有**的坏键（非本次写入）不再整份 500：写回时按合法键重建 ⇒ 顺手修复，
+  //     用户得以经面板修掉历史坏键（改前只能手改文件，D-07 的第二条不可恢复面）。
+  function commitOverlay(overlay, touched) {
+    const split = splitOverlay(overlay);
+    if (split.fatal) {
+      return { ok: false, status: 500, error: 'overlay-rejected: runtime overlay must be a JSON object' };
+    }
+    const prefixes = Array.isArray(touched) ? touched.filter((t) => typeof t === 'string' && t.length > 0) : [];
+    const ours = split.rejected.filter((r) => prefixes.some((t) => r.key === t || r.key.startsWith(t + '.')));
+    if (ours.length > 0) {
+      return { ok: false, status: 500, error: 'overlay-rejected: ' + ours.map((r) => r.reason).join('; ') };
     }
     fs.mkdirSync(configDir, { recursive: true });
     const tmp = join(configDir, '.runtime.json.tmp');
-    fs.writeFileSync(tmp, JSON.stringify(overlay, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(split.accepted, null, 2) + '\n', 'utf8');
     fs.renameSync(tmp, runtimeFile);
-    return { ok: true };
+    return { ok: true, dropped: split.rejected.map((r) => r.key) };
   }
 
   // 保存 governance 受控字段集：{ ok:true, written } | { ok:false, status:400|500, errors|error }
@@ -345,7 +354,7 @@ export function createRuntimeConfigService({ root, logger } = {}) {
 
     // 读-改-写保留：仅替换 governance 段（hook 内非表单键经 mergeGovernance 展开原样保留）
     const mergedGov = mergeGovernance(curGov, payload.governance);
-    const r = commitOverlay({ ...overlay, governance: mergedGov });
+    const r = commitOverlay({ ...overlay, governance: mergedGov }, ['governance']);
     if (!r.ok) return r;
     return { ok: true, written: mergedGov };
   }
@@ -431,7 +440,10 @@ export function createRuntimeConfigService({ root, logger } = {}) {
       written.capabilities = nextCap;
     }
 
-    const r = commitOverlay(nextOverlay);
+    const r = commitOverlay(nextOverlay, [
+      ...('governance' in payload ? ['governance'] : []),
+      ...(capRequested ? ['capabilities.watch'] : []),
+    ]);
     if (!r.ok) return r;
     return { ok: true, written };
   }

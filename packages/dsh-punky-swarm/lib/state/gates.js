@@ -65,6 +65,10 @@ import { buildComplete } from './gates/complete.js';
 import { buildStatus } from './gates/status.js';
 import { buildHandoff } from './gates/handoff.js';
 import { declaredKindOf, emptyReasonOf, substantiveContentOf } from './gates/presence.js';
+// 【RQ-8 / N-06 · env 阀单点】门禁环境阀的唯一读点（`lib/state/gates/env-gate.js`）。
+//   收敛前 `process.env.GATE_*` 散在 3 个 builder（command / status / targets）共 5 处 ⇒ 无法审计
+//   「有几处在看环境」。收敛后**只**经 `gateEnv()` 取判定投影；优先级与理由见该文件头注释。
+import { gateEnvOf } from './gates/env-gate.js';
 // 【A1-P1-03 · F2】根内判据改经「存在驱动」单点（词法必过 + 已落盘追加解权）；依赖方向
 //   `gates.ts → batch-paths.js → gates/presence.js`，无环（`gates/detect.ts` 早已同向导入）。
 import { isArtifactInRoot } from './batch-paths.js';
@@ -72,6 +76,8 @@ import { detectReasonTokens } from './gates/reason-vocabulary.js';
 // 再导出（**外部导出面逐字不变**：这些符号原本直接定义于本文件，拆分后由本文件转发）——
 export { smokeOf, detectNeedHuman, detectPendingMarker, detectGate, TARGETS_CLAIMED_RE, GATE_LINE_RE, GATE_EMPTY_LINE_RE } from './gates/detect.js';
 export { declaredKindOf };
+// env 阀单点**对外可读**（同一实现转出，非第二套）：供探针/审计直接核「环境阀此刻的判定投影」。
+export { gateEnvOf };
 // ─────────────────────────────────────────────────────────────────────────────
 // R1 §2.4 #2/#5 ·「reason 词表」判据族 —— **单点实现**（entry 门 E1 与命令门 C3 共用，禁两套口径）
 //   声明面（冻结，规格 §3 M-2）：产物内**行首锚定的独立行** `reason: <token>`。
@@ -303,7 +309,7 @@ export function createGates(root, opts = {}) {
     // ── 波 4：闭包上下文 `cx`（每 createGates 实例一份；禁提升为模块级单例）──
     // 断言依据：`GatesCx` 的基础槽位在本语句后立即由 `Object.assign` 补齐（builder 槽位由 `assembleGates` 逐次并入）。
     const cx = {};
-    Object.assign(cx, { root, sessionsDir, vocabOpts, readCfg, flowsOf, laneStartedAt, presenceJudge, reasonVocabularyVerdict, vocabularyViewOf });
+    Object.assign(cx, { root, sessionsDir, vocabOpts, readCfg, flowsOf, laneStartedAt, presenceJudge, reasonVocabularyVerdict, vocabularyViewOf, gateEnv: gateEnvOf });
     const parts = assembleGates(cx);
     // 【G-10 修复 · lane `e3-toolface`】「已声明入边」与「单条交接判定」两个单点**透出给读端**（唯一读端 = `lib/tools/handoff-tools.js#handoff_view`）：
     //   取的是 `assembleGates` 首行 `Object.assign(cx, buildHelpers(cx))` 装进 `cx` 的**同一个函数实例**

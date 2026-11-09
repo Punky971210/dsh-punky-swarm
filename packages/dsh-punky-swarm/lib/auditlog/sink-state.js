@@ -23,6 +23,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 export const state = {
   mounted: false,              // F9：单实例单挂载
+  // 【N-07】已成功注册的 exporter 条数（只增计数；既有键的语义/顺序零改）。
+  //   用途：把「热重载是否堆积 exporter」从静态推断变成可读读数。
+  //   判据/读数见 `exec/data-plane/probe/n07-auditlog-exporter-lifecycle.mjs`（3 轮 remount 后应为 1）。
+  exportersRegistered: 0,
   cfg: null,                   // resolveAuditLogConfig 结果快照（挂载期一次性解析）
   sinkDir: '',
   diagnosticsDir: '',

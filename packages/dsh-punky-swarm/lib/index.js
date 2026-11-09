@@ -509,7 +509,16 @@ const bindHttpSurfaceDeferred = ({
     let mcpRouteDispose = null;
     const early = typeof mcpPlaneOf === 'function' ? mcpPlaneOf() : null;
     const earlyInstalled = Boolean(early) && early.installed === true;
-    if (!(adoptEarlyMcp && earlyInstalled)) {
+    if (adoptEarlyMcp && earlyInstalled) {
+      // 【D-05 缺口修复 · AC-16】早装的 `/mcp` 路由**由本层接管**。
+      //   此前该分支只跳过重装、`mcpRouteDispose` 保持 null ⇒ 下面的聚合释放（:522-528）**不会**摘它
+      //   ⇒ `release('webServer gone')` 之后路由仍活 → 同一 webServer 实例再 provide 即撞宿主
+      //   `webserver: duplicate exact route "/mcp"`（探针实测见 `probe/p2-adopt-same-object.mjs`），
+      //   且抛出点在**步骤 ①** ⇒ 步骤 ② 的 `/api` 族 + SSE hub 从未执行 ⇒ 整个 HTTP 面装不回来。
+      //   接管后由聚合释放摘除；该 disposer 亦挂在 `ctx.effect`，两者共享 `tools/register.js` 的
+      //   一次性守卫 ⇒ 卸载时只真正摘一次（否则「disposer 调用次数」会虚高，破坏 AC-16 的相等判据）。
+      mcpRouteDispose = early;
+    } else {
       const dispose = installMcpDataPlane(ctx, { logger: ctx.logger });
       if (dispose && dispose.installed === true) mcpRouteDispose = dispose;
       else ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /mcp 重试挂载未成功（注册被拒 ⇒ installed=false，保持未挂载）');
@@ -540,9 +549,17 @@ const bindHttpSurfaceDeferred = ({
     try {
       const off = ctx.on('internal/service', (serviceName, value) => {
         if (serviceName !== 'webServer') return;
-        // 「服务消失」= 注销路径先 delete 再 notify ⇒ value 取不到（undefined）
-        if (value === undefined) { release('webServer gone'); return; }
-        mount('internal/service');
+        // 【异常隔离 · 跨插件爆面】宿主 `events.emit` 对监听器**无异常隔离**
+        //   （cordis `src/events.ts:203-206` 直接 `Reflect.apply` 循环，不 try/不 allSettled）⇒ 本处抛出会
+        //   沿 `reflect.notify`（`src/reflect.ts:352`）回到 provider 的 provide/释放链（`:308-313`），
+        //   把**宿主 webServer 插件自身的装载/卸载**拖挂。插件面故障必须就地收敛并留 warn（禁空 catch，N-08）。
+        try {
+          // 「服务消失」= 注销路径先 delete 再 notify ⇒ value 取不到（undefined）
+          if (value === undefined) release('webServer gone');
+          else mount('internal/service');
+        } catch (e) {
+          ctx.logger?.warn?.('[dsh-punky-swarm] http surface: internal/service 处理失败（已就地收敛，不外溢）: ' + String(e?.message ?? e));
+        }
       });
       if (typeof off === 'function') unsubscribe = off;
     } catch (e) {

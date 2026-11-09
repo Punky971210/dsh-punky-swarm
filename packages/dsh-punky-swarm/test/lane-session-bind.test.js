@@ -99,10 +99,15 @@ function makeTools(store, root, extraDeps = {}) {
 // （某残留文件被补齐三参）都会让清单失配、假红。本批改为**派生清单**：扫 `lib/tools/**` 现算。
 //
 // 权威读数（本轮只读扫描；`sessionOf` 两参 = 未接线，三参 = 已接线；**注释内出现不计**）：
-//   · **已接线、零两参**（8 件）：asset/handoff/lane/log/mailbox/member/query/shared ⇒ 要求「**零**两参」。
-//   · **混合既有形态**（1 件）：`task-tools.js`（三参 ×1 + 两参 ×2，其两参点属写域外存量）
+//   【批 `punky-prerelease-scan` · lane `e1-session-plane` · D-02 已修后重算】三参调用点 = 24 个、
+//   两参调用点 = **0** 个 ⇒ 分布为：**已接线、零两参 11 件**（asset/assign/core/handoff/lane-worktree-tools/
+//   log/member/query/shared/task-tools/wave-plan-tools）；**混合 0 件**；**未接线 0 件**（残留集为空）。
+//   下表 Q-C 段落里的「8 / 1 / 3」是 **D-02 修复前**的历史读数，保留作「为什么派生」的动因留档，
+//   **不再是当前事实**；现事实由 Q-C 用例 ②/④/⑤ 三行断言（期望空集）锁住。
+//   · 历史：已接线、零两参（8 件）：asset/handoff/lane/log/mailbox/member/query/shared ⇒ 要求「**零**两参」。
+//   · 历史：混合既有形态（1 件）：`task-tools.js`（三参 ×1 + 两参 ×2，其两参点属写域外存量）
 //     ⇒ 文件级一刀切会把**既有事实**判红 = 另一种假红 ⇒ 只锁**调用点数**（新增一个未接线点即红）。
-//   · **未接线**（3 件）：assign-tools(1) / core(2) / wave-plan-tools(1) ⇒ 派生残留集。
+//   · 历史：未接线（3 件）：assign-tools(1) / core(2) / wave-plan-tools(1) ⇒ 派生残留集。
 //   · e7 旧清单第 4 项 `tier-gate.js` **只在注释里**写过 `sessionOf(args, exec)` ⇒ 按代码面它**不是**残留
 //     （＝冻结清单与代码事实脱节的又一例证；由 Q-C 用例 §③ 留档）。
 //
@@ -116,7 +121,10 @@ function makeTools(store, root, extraDeps = {}) {
 //   ④ 分区自洽：接线集 ∪ 残留集 = 全部含 `sessionOf` 调用的文件（见 Q-C 用例 §⑥）。
 //   ⚠ 一切计数都在**去注释**后的代码视图上做（注释/文档里写的调用形态不得被计入——
 //      否则注释里的 `sessionOf(args, exec)` 会把「已接线」文件误判成残留：`tier-gate.js` 即实测一例）。
-/** 混合文件的**既有**两参调用点数（登记既有事实；未在册者按 0 严判）。 */
+/** 混合文件的**既有**两参调用点数（登记既有事实；未在册者按 0 严判）。
+ *  【D-02 已修】真实仓已无混合件（`mixed` 现算为 []），本表自此**只作沙箱反证用例的对照值**
+ *  （`asIsMixed` 用 `mixedToolsJs` 造「三参 ×1 + 两参 ×2」并期待「恰好等于在册点数 ⇒ 不判红」）。
+ *  真实仓的「零混合」由 Q-C 用例 ④ 的 `mixed === []` 独立锁住 —— 本表**不再**是真实仓的放行额度。 */
 const MIXED_LEGACY_TWO_ARG = Object.freeze({ 'task-tools.js': 2 });
 
 function toolsJsOf(toolsDir) {
@@ -550,10 +558,12 @@ test('覆盖面：任务包点名的治理工具均消费 resolver（注册表 +
   const inventory = toolsJsOf(path.join(PKG, 'lib', 'tools'));
   assert.deepEqual(detectorViolationsOf(inventory), [], '已接线文件不得回退两参 / 残留件不得引用 resolver 面');
   const residual = twoArgResidualOf(inventory);
-  assert.equal(residual.length, 3, '残留文件数（现算）：' + residual.join(', '));
-  for (const f of ['assign-tools.js', 'core.js', 'wave-plan-tools.js']) {
-    assert.equal(residual.includes(f), true, '残留集须含（既有未接线件）：' + f);
-  }
+  // 【批 `punky-prerelease-scan` · lane `e1-session-plane` · **D-02 已修 ⇒ 契约变更，非回归**】
+  //   旧期望（残留文件数 = 3，且须含 assign-tools/core/wave-plan-tools）锁的是 **D-02 未修** 的旧契约；
+  //   e1 把 24 个 `sessionOf` 调用点全部绑上第三参（AC-08：两参命中 = 0）后，派生残留集合法清空。
+  //   **检测力不削弱**：上一行 `detectorViolationsOf(inventory)` 仍要求「已接线文件不得回退两参」，
+  //   下面两条阴性面（已接线件不得进残留集）照旧——任何一件回退两参都会判红。
+  assert.deepEqual(residual, [], '残留文件数（现算）必须为 0（D-02 / AC-08）：' + residual.join(', '));
   for (const f of ['query-tools.js', 'tier-gate.js', 'task-tools.js']) {
     assert.equal(residual.includes(f), false, '不得进残留集（已接线 / 混合形态）：' + f);
   }
@@ -690,8 +700,10 @@ test('Q-C 派生化：残留清单现算（旧硬编码清单已失配）+ 检�
   // ① 检测力：任一「已接线文件内新增两参调用点」/「残留文件引用 resolver 面」即红
   assert.deepEqual(detectorViolationsOf(inventory), [], '已接线文件不得回退两参 / 残留件不得引用 resolver 面');
   // ② 派生残留集：只有两参、零三参（现算，非清单）
-  assert.deepEqual(residual, ['assign-tools.js', 'core.js', 'wave-plan-tools.js']);
-  assert.equal(residual.length, 3, '残留文件数（现算）：' + residual.join(', '));
+  //   【批 `punky-prerelease-scan` · e1-session-plane · D-02 已修 ⇒ 契约变更】旧期望
+  //   `['assign-tools.js','core.js','wave-plan-tools.js']` 锁的是修复前的事实；24/24 三参后合法清空。
+  assert.deepEqual(residual, [], '残留文件集（现算）须为空（D-02 / AC-08）：' + residual.join(', '));
+  assert.equal(residual.length, 0, '残留文件数（现算）：' + residual.join(', '));
   // ③ **去过严侧**取证（两条）：旧硬编码清单的两项都不再是残留
   assert.equal(residual.includes('query-tools.js'), false, 'query-tools.js 已三参接线 ⇒ 旧清单第 1 项失配');
   assert.equal(residual.includes('tier-gate.js'), false, 'tier-gate.js 的两参只在**注释**里 ⇒ 旧清单第 4 项亦失配（去掉过严侧误报）');
@@ -699,19 +711,16 @@ test('Q-C 派生化：残留清单现算（旧硬编码清单已失配）+ 检�
   const wired = wiredFilesOf(inventory);
   const mixed = wired.filter((f) => twoArgCallCount(inventory.find((x) => x.file === f).src) > 0);
   const pureWired = wired.filter((f) => !mixed.includes(f));
-  assert.deepEqual(mixed, Object.keys(MIXED_LEGACY_TWO_ARG).sort(), '混合既有形态件须与在册登记逐字一致');
-  // 【2026-10-30 G3 B1】原「pureWired.length === 8」是**派生集的计数硬编码**；B1 删掉 lib/tools/mailbox-tools.js 后
-  //   该派生集合法缩小一件 ⇒ 改为**集合式判据**（更强，且不再随文件增删而假红；C-7「主判为集合关系」）：
-  // 【批 `punky-lane-tools-split-20261106b`】拆三文件后本集合**只换 1 项**（规模仍 7）：
-  //   契约层 `lane-worktree-tools.js` 承接 4 个工具的三参 `sessionOf` ⇒ 进 pureWired；
-  //   基座 `lane-tools.js` 与物理层 `lane-worktree-ops.js` 的三参计数均为 0（`wiredFilesOf` 以
-  //   `thirdArgCallCount > 0` 过滤）⇒ 二者**不入** wired/pureWired/residual 任何集合，误加成 8 项必红。
-  assert.deepEqual(pureWired.slice().sort(), ['asset-tools.js', 'handoff-tools.js', 'lane-worktree-tools.js', 'log-tools.js', 'member-tools.js', 'query-tools.js', 'shared.js'], '已接线且零两参的文件集（现算）');
-  assert.equal(wired.length, pureWired.length + Object.keys(MIXED_LEGACY_TWO_ARG).length, '已接线文件数 = 纯已接线 + 在册混合件');
+  // 【D-02 已修】`mixed` 如实为**空**：仓内再无「三参 + 两参混用」件（`task-tools.js` 已补齐）；
+  //   `MIXED_LEGACY_TWO_ARG` 那份在册点数自此**只服务下方沙箱反证用例**（`asIsMixed` 的对照值），
+  //   不再描述真实仓 —— 真实仓的「零混合」由本行独立锁住（回退即 mixed 非空 ⇒ 判红）。
+  assert.deepEqual(mixed, [], '真实仓：D-02 后已无混合既有形态件（在册表仅服务沙箱反证）：' + mixed.join(', '));
+  assert.deepEqual(pureWired.slice().sort(), ['asset-tools.js', 'assign-tools.js', 'core.js', 'handoff-tools.js', 'lane-worktree-tools.js', 'log-tools.js', 'member-tools.js', 'query-tools.js', 'shared.js', 'task-tools.js', 'wave-plan-tools.js'], '已接线且零两参的文件集（现算，11 件 = 三参 24 个调用点的全部落点）');
+  // 已接线文件数 = 纯已接线 + 混合件（**现算**，不再拿在册表长度当加数——D-02 后两者已不等）
+  assert.equal(wired.length, pureWired.length + mixed.length, '已接线文件数 = 纯已接线 + 混合件（现算）');
   // ⑤ 未接线调用点**计数**留档（新增未接线调用点会让本行数字变 ⇒ 审计可见）
-  assert.deepEqual(unwiredCallSitesOf(inventory), [
-    'assign-tools.js x1', 'core.js x2', 'task-tools.js x2', 'wave-plan-tools.js x1',
-  ]);
+  //   【D-02 已修】未接线调用点如实清零；本行仍是「新增未接线点必红」的核对面（期望值 = 空集）。
+  assert.deepEqual(unwiredCallSitesOf(inventory), [], '未接线调用点须为 0（D-02 / AC-08）');
   // ⑥ 分区完备：已接线集 ∪ 残留集 = 全部含 `sessionOf` 调用的文件（集合相等、互斥无重复）
   const declare = inventory
     .filter((f) => twoArgCallCount(f.src) > 0 || thirdArgCallCount(f.src) > 0)

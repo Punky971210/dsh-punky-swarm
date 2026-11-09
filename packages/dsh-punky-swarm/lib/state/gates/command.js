@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 export function buildCommand(cx) {
-    const { artifactsDirOf, flowsOf, reasonVocabularyVerdict, sessionDir, vocabOpts } = cx;
+    const { artifactsDirOf, flowsOf, reasonVocabularyVerdict, sessionDir, vocabOpts, gateEnv } = cx;
     function commandRoots(sessionId, batchId, lane) {
         const wt = path.join(sessionDir(sessionId), 'worktrees', batchId, lane);
         let cwd = null;
@@ -31,7 +31,8 @@ export function buildCommand(cx) {
                 cwd = wt;
         }
         catch { }
-        const repoRoot = process.env.GATE_REPO_ROOT;
+        // env 阀经单点取判定投影（RQ-8 / N-06）：本文件**不再**直接读环境
+        const repoRoot = gateEnv().repoRoot;
         if (cwd === null && repoRoot) {
             try {
                 if (fs.statSync(repoRoot).isDirectory())
@@ -128,7 +129,7 @@ export function buildCommand(cx) {
         return { warnings, reject };
     }
     function checkCommandGate(sessionId, batchId, batch, lane, deps = {}) {
-        if (String(process.env.GATE_ENABLED).toLowerCase() === 'false') {
+        if (gateEnv().allGatesDisabled) {
             return {
                 ok: true, declared: false,
                 escape: {

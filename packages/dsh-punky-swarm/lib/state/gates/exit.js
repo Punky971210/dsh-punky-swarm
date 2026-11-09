@@ -96,8 +96,28 @@ export function buildExit(cx) {
             };
         }
         const det = detectNeedHuman(artifactsDirOf(sessionId, batchId), fields);
-        if (!det.declared)
+        if (!det.declared) {
+            // N-02 / RQ-9：产物**不可判读**（目录 / 0 字节 / 读不出）≠「未声明 needHuman」。
+            //   静默判「无需人工裁决」= 验收门上的 fail-open（`member_settle(merged)` 被放行）
+            //   ⇒ 改**显式拒**（码沿用人工闸既有拒码 `GATE_NEEDHUMAN_PENDING`，不新造码）。
+            //   逃生通道与「已声明」完全一致：note 含 `human:<裁决人>:<时间>:<结论>` 即放行并留痕。
+            const unreadable = Array.isArray(det.unreadable) ? det.unreadable : [];
+            if (unreadable.length > 0) {
+                const evidenceOfUnreadable = humanEvidenceOf(note);
+                if (evidenceOfUnreadable) {
+                    return {
+                        ok: true, declared: false, path: unreadable[0], unreadable, evidence: evidenceOfUnreadable,
+                        ...(cmNeedhuman ?? {}),
+                    };
+                }
+                return {
+                    ok: false, code: 'GATE_NEEDHUMAN_PENDING', declared: false, path: null, unreadable,
+                    message: 'audit lane 的声明产物**不可判读**（目录 / 0 字节 / 读不出）：' + unreadable.join(', ')
+                        + ' ⇒ 无法确认 needHuman 声明，按待人工裁决拒（merged 需 note 含 human: 证据 / conflict 驳回）',
+                };
+            }
             return { ok: true, declared: false, path: null, ...(cmNeedhuman ?? {}) };
+        }
         const evidence = humanEvidenceOf(note);
         if (evidence)
             return { ok: true, declared: true, path: det.path, evidence, ...(cmNeedhuman ?? {}) };

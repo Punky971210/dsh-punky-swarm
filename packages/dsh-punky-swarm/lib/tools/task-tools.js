@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, ownerOfExec, readLiveConfig } from './tier-gate.js';
+import { assertNotSentinelSessionArg, authorizeBatchWrite } from '../state/session-authority.js';
 import { handoffGateEnabledOf } from '../wave-plan.js';
 import { isMemberTerminal } from '../schema.js';
 
@@ -90,7 +91,9 @@ export function buildTaskTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '池内追加任务（batch_tasks_add）');
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'batch_tasks_add');                    // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);            // D-02/RQ-2
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'batch_tasks_add' }); // D-01
         const list = Array.isArray(args.tasks) ? args.tasks : [];
         const b = store.addPoolTasks(sessionId, args.batchId, list, {
           reason: args.reason ?? null,
@@ -118,7 +121,9 @@ export function buildTaskTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '池内任务加边（task_update）');
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'task_update');                        // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);            // D-02/RQ-2
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'task_update' }); // D-01
         const list = Array.isArray(args.edges) ? args.edges : [];
         const b = store.addTaskEdges(sessionId, args.batchId, list, {
           reason: args.reason ?? null,

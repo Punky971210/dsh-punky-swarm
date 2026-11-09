@@ -25,6 +25,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, clearPendingBatch } from './tier-gate.js';
+import { assertNotSentinelSessionArg, authorizeBatchWrite } from '../state/session-authority.js';
 import { warnAbortDangling, danglingLanesOf } from '../state/dangling.js';
 import { previewBatchControl } from '../engine/tree-control.js';
 
@@ -45,6 +46,7 @@ export { CARD_FIELDS, buildConfirmCard } from '../engine/confirm-card.js';
 
 function buildPhaseTools(cx) {
   const { deps, store } = cx;
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "batch_phase",
@@ -57,7 +59,9 @@ function buildPhaseTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '批次阶段迁移（batch_phase）');
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'batch_phase');                       // D-03/RQ-5：显式 session 不得取哨兵
+        const sessionId = sessionOf(args, exec, resolveBatchSession);           // D-02/RQ-2：绑齐派发绑定级
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'batch_phase' }); // D-01/D-04 站点3
         const b = store.setPhase(sessionId, args.batchId, args.phase, { reason: args.reason ?? ('manual:batch_phase:' + args.phase) });
         if (b.phase === 'complete' || b.phase === 'aborted') clearPendingBatch(store, sessionId);
         const out = { batchId: args.batchId, phase: b.phase };
@@ -83,11 +87,14 @@ function buildPhaseTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, '批次干预（batch_control）');
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'batch_control');                     // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);           // D-02/RQ-2
         const action = args.action;
         if (!['pause', 'resume', 'abort'].includes(action)) {
           throw new Error('GATE_BATCH_CONTROL_ACTION_INVALID: batch_control action 只允许 pause|resume|abort（收到 ' + JSON.stringify(action ?? null) + '）');
         }
+        //   站点4（`action` 取值即改相位，含不可逆 abort）：值域判定之后、**任何写之前**过属主门。
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'batch_control(' + action + ')' });
         const cur = store.readBatch(sessionId, args.batchId);
         if (!cur) throw new Error('batch not found: ' + args.batchId);
         if (args.preview === true) {

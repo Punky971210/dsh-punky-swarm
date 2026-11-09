@@ -37,8 +37,25 @@ export function createTools(ctx, deps) {
   //   不随插件卸载自动摘除 ⇒ 热重载/开关插件时第二次注册直接炸
   //   `webserver: duplicate exact route "/mcp"`（2026-11-08 活体实测：插件管理器关→开即复现）。
   //   `ctx.effect` 随 fiber 卸载执行；`verify`/`governance` 的挂载各走自己的 dispose 面，不经 `ctx.effect`。
-  const mcpPlaneDispose = installMcpDataPlane(ctx, deps);
-  if (typeof mcpPlaneDispose === 'function' && typeof ctx?.effect === 'function') {
+  // 【exactly-once（批 `punky-prerelease-scan` · D-05 / AC-16）】本 disposer 有**两个持有者**：
+  //   下面的 `ctx.effect`（fiber 卸载面）与 `lib/index.js#bindHttpSurfaceDeferred` 的聚合释放
+  //   （`mount()` 的 adopt 分支会把它接管为 `/mcp` 路由的持有者，见 `index.js:512`）。
+  //   宿主 `webserver.register` 的 disposer 是 `table.delete(path)`（重复调用本身无害），但「调用次数」
+  //   是本批的验收读数（`register('/mcp') === dispose('/mcp')`）⇒ 在**创建点**收敛为一次性，
+  //   两个持有者共享同一包装对象（`mcpPlaneOf()` 透传的就是它 ⇒ 接管方拿到的必然是包装，绕不过守卫）。
+  //   `installed` 原样透传：`index.js:511` 的 adopt 判据读的就是它，语义一字不改。
+  const mcpPlaneRaw = installMcpDataPlane(ctx, deps);
+  const mcpPlaneDispose = (() => {
+    let spent = false;
+    const guarded = () => {
+      if (spent) return;
+      spent = true;
+      mcpPlaneRaw();
+    };
+    guarded.installed = mcpPlaneRaw.installed;
+    return guarded;
+  })();
+  if (typeof ctx?.effect === 'function') {
     ctx.effect(() => mcpPlaneDispose, 'dsh-punky-swarm: mcp data plane');
   }
   // ── 入口 B：MCP 面**自建** loopback 监听（L1 模式：不依赖宿主 webServer / gateway 策略）─────────────

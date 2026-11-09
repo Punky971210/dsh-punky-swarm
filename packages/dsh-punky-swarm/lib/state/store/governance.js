@@ -41,10 +41,36 @@ const govFlushers = new Map();
 let govFlushTimer = null;
 let govExitBound = false;
 
+// ── 【N-03】落盘失败 / 读档损坏的**显式信号面**（判据 RQ-11：不得 `catch {}` 后当成成功）──
+//   原实现两处吞错（`flushDirtyGovernance` 的 `catch {}`、定时器的 `catch {}`）与读坏回落
+//   （`readGovernanceDisk` 的 `catch { return govDefaults() }`）把失败变成**零信息**：工具回成功、
+//   盘上没数据、日志无痕。本改**只加信号**、不改行为（pending 仍保留待重试 / 读坏仍回默认），
+//   并留只读投影 `governanceFlushStatus()` 供探针与诊断面消费。
+const govSignals = { flushAttempts: 0, flushFailures: 0, corruptReads: 0, lastError: null, lastAt: null };
+const govCorruptNoted = new Set();
+let govWarn = (m) => { if (typeof console?.warn === 'function') console.warn('[dsh-punky-swarm] ' + m); };
+
+/** 注入告警通道（装配期由 `buildGovernance` 接到 store 的 logger；未注入时走 `console.warn`）。 */
+export function setGovernanceWarn(fn) { if (typeof fn === 'function') govWarn = fn; }
+
+/** 只读信号投影：`{flushAttempts, flushFailures, corruptReads, lastError, lastAt}`。 */
+export function governanceFlushStatus() { return { ...govSignals }; }
+
+function noteGovernanceSignal(kind, error, detail = '') {
+  govSignals.lastError = String((error && error.message) || error);
+  govSignals.lastAt = new Date().toISOString();
+  govWarn(kind + (detail ? '（' + detail + '）' : '') + '：' + govSignals.lastError);
+}
+
 export function flushDirtyGovernance() {
   for (const flush of [...govFlushers.values()]) {
-    try { flush(); } catch { }
+    govSignals.flushAttempts += 1;
+    try { flush(); } catch (error) {
+      govSignals.flushFailures += 1;
+      noteGovernanceSignal('governance 刷盘失败，pending 保留待下次重试', error);
+    }
   }
+  return governanceFlushStatus();
 }
 
 function bindExecFlushHooks() {
@@ -54,13 +80,20 @@ function bindExecFlushHooks() {
   }
   if (govFlushTimer) return;
   govFlushTimer = setInterval(() => {
-    try { flushDirtyGovernance(); } catch { }
+    try { flushDirtyGovernance(); } catch (error) {
+      govSignals.flushFailures += 1;
+      noteGovernanceSignal('governance 定时刷盘异常', error);
+    }
   }, EXEC_FLUSH_INTERVAL_MS);
   govFlushTimer.unref?.();
 }
 
 export function buildGovernance(cx) {
   const { readBatch, newEvent, commitBatch, escalatePausedWrite, emitStateChange, ratchet, sessionDir, atomicWrite, listBatches } = cx;
+
+  // 【N-03】把 store 的 logger 接到告警通道（`createStore` 的 `log = logger ?? console`）：
+  //   生产宿主走宿主 logger（可被审计面收走），探针/测试未注入时回落 `console.warn`。
+  if (typeof cx.log?.warn === 'function') setGovernanceWarn((m) => cx.log.warn('[dsh-punky-swarm] ' + m));
 
   function recordGovernanceRefusal(sessionId, batchId, { lane, receiptId, primitive, ruleRefs, tool, escalation = {} } = {}) {
     if (escalation.enabled !== true) return null;
@@ -148,7 +181,17 @@ export function buildGovernance(cx) {
     const file = governanceFile(sessionId);
     if (!fs.existsSync(file)) return govDefaults();
     try { return { ...govDefaults(), ...JSON.parse(fs.readFileSync(file, 'utf8')) }; }
-    catch { return govDefaults(); }
+    catch (error) {
+      //   【N-03】读坏不再「零信号回落默认」：回落行为保留（一个坏档不该打挂整条链），但必须留痕。
+      //   去噪：每个文件每进程只报一行（该函数在热路径上，逐次报会刷屏）；文件名用 basename，
+      //   不外泄绝对路径（错误信息泄露面见 exec/data-plane/report.md L-05）。
+      govSignals.corruptReads += 1;
+      if (!govCorruptNoted.has(file)) {
+        govCorruptNoted.add(file);
+        noteGovernanceSignal('governance.json 读坏，已按默认值继续（可能丢 lastAssign/pendingBatch/mirror）', error, path.basename(file));
+      }
+      return govDefaults();
+    }
   }
   function readGovernance(sessionId) {
     const disk = readGovernanceBounded(sessionId);

@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { join } from 'node:path';
 import { createToolsPort } from '../provider-dsh/tools-http.js';
 import { isReadOnlyShellCall, SHELL_TOOLS } from './readonly.js';
+import { assertSafeId } from '../state/constants.js';
 import * as schema from '../schema.js';
 import {
   labelOf, evaluateTierCDispatch,
@@ -94,7 +95,15 @@ export function clearPendingBatch(store, sessionId) {
   }
 }
 
-export function lockPath(root, sessionId, batchId, lane) { return join(root, 'sessions', sessionId, '.locks', batchId + '.' + lane + '.lock'); }
+// 【N-01 / D-09 / RQ-3】lockPath 曾是**唯一跳过**路径校验器的裸 join：
+//   而 `lib/lock.js#acquire` 先 `mkdirSync(dirname,{recursive:true})` 再 `openSync(...,'wx')`
+//   ⇒ `session='../../../../<任意目录>'`（或 `lane`/`batchId` 含 `..`）即可在任意位置建目录并落锁文件。
+//   现行：三段全部经 constants.js 的**同一**校验器（禁复制第二份判据），且校验调用与本行同一个表达式
+//   （保证「校验与使用之间没有旁路」）。
+export function lockPath(root, sessionId, batchId, lane) {
+  return join(root, 'sessions', assertSafeId(sessionId, 'sessionId'), '.locks',
+    assertSafeId(batchId, 'batchId') + '.' + assertSafeId(lane, 'lane') + '.lock');
+}
 
 
 export function installDifficultyGuard(ctx, deps) {

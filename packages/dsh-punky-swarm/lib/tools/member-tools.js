@@ -19,6 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertModeActive, assertMemberActionTierC, readLiveConfig, lockPath, ownerOfExec } from './tier-gate.js';
+import { assertNotSentinelSessionArg, authorizeBatchWrite } from '../state/session-authority.js';
 import { dispatchBindingDecision } from '../verify/binding.js';
 import * as lock from '../lock.js';
 import { TERMINAL_MEMBER_STATES, SETTABLE_MEMBER_STATES } from '../schema.js';
@@ -40,7 +41,10 @@ export function buildLaneTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, 'lane 锁认领（lane_claim）'); // 模式门（E 阶段）：非生效模式不得落锁（零治理写入），先于取锁
+        assertNotSentinelSessionArg(args, 'lane_claim');                          // D-03/RQ-5
         const sessionId = sessionOf(args, exec, resolveBatchSession);
+        //   D-01/D-04：加锁是**写盘**动作（`lock.acquire` 先 mkdir 再 open），故属主门必须在取锁之前。
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'lane_claim' });
         //   （接管了他人的单写者锁），生产路径必须留一行日志，否则「接管可审计」只存在于返回载荷里。
         const warn = (m) => { try { ctx?.logger?.warn?.(m); } catch {  } };
         const r = await lock.acquire(lockPath(root, sessionId, args.batchId, args.lane), { waitMs: args.waitMs ?? 0, force: args.force === true, warn });
@@ -61,7 +65,10 @@ export function buildLaneTools(cx) {
       },
       async execute(args, exec) {
         assertModeActive(deps, exec, 'lane 锁释放（lane_release）');
-        return lock.release(lockPath(root, sessionOf(args, exec, resolveBatchSession), args.batchId, args.lane), args.token);
+        assertNotSentinelSessionArg(args, 'lane_release');                        // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'lane_release' }); // D-01
+        return lock.release(lockPath(root, sessionId, args.batchId, args.lane), args.token);
       },
     }),
     defineTool({
@@ -73,8 +80,11 @@ export function buildLaneTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' settled -> ' + value.status),
       },
       async execute(args, exec) {
+        assertNotSentinelSessionArg(args, 'member_settle');                       // D-03/RQ-5
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps);
+        //   D-01/D-04 站点：结算是最强写面（终态不可逆）⇒ 属主门先于任何读-判-写。
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'member_settle(' + args.lane + ')' });
         const bindingOfSettle = dispatchBindingDecision({
           batch: store.readBatch(sessionId, args.batchId),
           lane: args.lane,
@@ -116,8 +126,11 @@ export function buildDispatchTools(cx) {
           + '\n' + value.firstLine),
       },
       async execute(args, exec) {
+        assertNotSentinelSessionArg(args, 'lane_dispatch');                       // D-03/RQ-5
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps);
+        //   D-01/D-04（`exempt.type` 长跑档位 + 派发即写成员状态）：属主门先于派发。
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'lane_dispatch(' + args.lane + ')' });
         return await dispatchLaneCore({
           ctx, store, root, liveConfig: readLiveConfig(deps), exec, sessionId,
           dispatchIndex: deps?.dispatchIndex,
@@ -143,8 +156,11 @@ export function buildMemberStatusTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('member ' + value.lane + ' status -> ' + value.status),
       },
       async execute(args, exec) {
+        assertNotSentinelSessionArg(args, 'member_set_status');                   // D-03/RQ-5
         const sessionId = sessionOf(args, exec, resolveBatchSession);
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps);
+        //   D-01/D-04 站点 5/6/7（`status` 状态机 / `exempt.type` 长跑档位）：属主门先于任何状态写。
+        authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'member_set_status(' + String(args.status) + ')' });
         //   **不再做容量准入**（高并发不得被限流），`running` 迁移一律照常放行；本文件对该符号**零引用**。
         const b = store.setMember(sessionId, args.batchId, args.lane, args.status, null, args.exempt, ownerOfExec(exec));
         return { batchId: args.batchId, lane: args.lane, status: b.lanes[args.lane], settled: store.batchSettled(b) };

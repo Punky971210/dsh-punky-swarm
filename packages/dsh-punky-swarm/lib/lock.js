@@ -97,7 +97,25 @@ function reclaimStaleTicket(ticketPath, lockPath, expectedFence, ticketTtlMs) {
   return { reclaimed: true, ageMs };
 }
 
+// 【N-01 · 纵深防御，**不改锁语义**】`acquire` 是全仓**唯一**对 lockPath 做 `mkdirSync` 的入口：
+//   `fs.mkdirSync(path.dirname(lockPath), { recursive: true })` + `openSync(lockPath,'wx')`
+//   ⇒ 一条含 `..` 的 lockPath 就能在 `sessions/` 之外**建目录 + 落锁文件**（实测：`<root>/.locks/…`）。
+//   上游 `lib/tools/tier-gate.js#lockPath` 已按组件逐个校验（RQ-3 单点）；本函数做**第二道形态兜底**，
+//   保证「即使将来有人绕过 lockPath 直接调 acquire」也不会逃出根：判据只看路径**段**，不解释语义。
+//   只在校验通过后才 mkdir —— 拒绝路径**零落盘**。token / fence / 接管 / fail-closed 语义一律不动。
+function assertLockPathShape(lockPath) {
+  if (typeof lockPath !== 'string' || lockPath.length === 0 || lockPath.includes('\u0000')) {
+    throw new Error('invalid lockPath: ' + JSON.stringify(lockPath === undefined ? null : lockPath));
+  }
+  const segments = lockPath.split(/[\\/]+/);
+  if (segments.some((s) => s === '..' || s === '.')) {
+    throw new Error('invalid lockPath（路径穿越段，拒于 mkdir 之前）: ' + lockPath);
+  }
+  return lockPath;
+}
+
 export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false, warn = null, ticketTtlMs = 30000 } = {}) {
+  assertLockPathShape(lockPath);
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + Math.max(0, waitMs);
   let takeoverAttempted = false;

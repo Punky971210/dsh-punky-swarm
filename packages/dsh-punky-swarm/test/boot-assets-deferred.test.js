@@ -48,6 +48,18 @@ const countAssetLogs = (calls) => [...calls.info, ...calls.warn].filter((l) => A
 const sha256Of = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 
 test('AC-3 真 apply()：同步段内零资产写入，首个 tick 内完整同步一次（逐字节一致）', async () => {
+  // ── 真实主目录硬守卫（P0 安全，2026-11-10 事故后补）────────────────────────
+  //   本用例会 `rm -rf` 两个落点。它们由 `os.homedir()` 派生 ⇒ **未加载
+  //   `test/helpers/isolated-home.preload.mjs` 时指向真实用户主目录**，
+  //   历史事故即由此发生（一次抹掉 ~/.agents/skills 与 ~/.dsh/.agent-presets/punky-preset）。
+  //   真源 = `os.userInfo().homedir`（系统账户 API，不受 USERPROFILE/HOME 改写影响）。
+  //   ⇒ 两者相等即「隔离未生效」，必须拒跑，不许靠调用方「记得带 preload」。
+  assert.notEqual(
+    path.resolve(os.homedir()),
+    path.resolve(os.userInfo().homedir),
+    '拒绝在真实主目录上执行：本用例会删除 ' + PRESET_DIR + ' 与 ' + SKILLS_DIR
+      + '。请以 `node --import ./test/helpers/isolated-home.preload.mjs --test test/boot-assets-deferred.test.js` 运行。',
+  );
   // ── 冷态构造（不是假设）──
   for (const p of [PRESET_DIR, SKILLS_DIR]) fs.rmSync(p, { recursive: true, force: true });
   assert.equal(fs.existsSync(PRESET_DIR), false, '前置：预设落点必须不存在');
@@ -97,26 +109,14 @@ test('AC-3 真 apply()：同步段内零资产写入，首个 tick 内完整同�
   }
 });
 
-test('AC-4/AC-6 子进程探针：tick 前 dispose 留 warn + 两进程补同步 + 异常态日志不丢', () => {
-  const probe = fileURLToPath(new URL('../scripts/probe-assets-defer.mjs', import.meta.url));
-  const r = spawnSync(process.execPath, [probe], { encoding: 'utf8', timeout: 240000 });
-  assert.equal(r.status, 0, '探针必须 exit 0（stderr: ' + String(r.stderr).slice(-1500) + '）');
-  let out = null;
-  try { out = JSON.parse(r.stdout); } catch { out = null; }
-  assert.ok(out, '探针必须输出 JSON 读数（实际 stdout 尾部: ' + String(r.stdout).slice(-800) + '）');
+// ── AC-4 / AC-6 子进程面：**已随 `scripts/probe-assets-defer.mjs` 一并移除**（2026-11-10）──
+// 移除原因（P0 安全）：该探针的 `wipeAssets()` 会 `rm -rf <home>/.agents/skills` 与
+//   `<home>/.dsh/.agent-presets/punky-preset`，而准入只校验 `--home` 非空、**不校验它是不是真实主目录**
+//   ⇒ 2026-11-10 01:51 抹掉真机技能树（两目标 CreationTime 同被重置为 01:53:13，签名吻合）。
+// 覆盖缺口（登记 F-13，非静默降级 —— 不写假绿断言）：
+//   · AC-4①「tick 前 dispose ⇒ 目标目录仍未创建 + `asset sync skipped` warn」
+//   · AC-4②「两个独立进程 ⇒ 进程一跳过、进程二补齐」（只能跨进程验证，进程内必假绿）
+//   · AC-6「异常态 `asset sync failed: <asset>: <err>` 不丢」
+// 补回方式（待排期）：子进程探针改为 mkdtemp 临时 home + USERPROFILE/HOME/DSH_HOME 三变量隔离，
+//   并在探针与调用侧**双向**拒绝 `home === os.userInfo().homedir`。
 
-  // AC-3（探针侧复证：冷态构造 + 首 tick 后字节一致）
-  assert.equal(out.ac3.pass, true, 'AC-3：' + JSON.stringify(out.ac3));
-  // AC-4①：tick 前 dispose ⇒ 目录仍未创建 + `asset sync skipped` warn（不静默）
-  assert.equal(out.ac4EarlyDispose.pass, true, 'AC-4①：' + JSON.stringify(out.ac4EarlyDispose));
-  assert.ok((out.ac4EarlyDispose.child?.disposedEarly?.skippedWarn ?? []).some((l) => String(l).includes('asset sync skipped')),
-    'AC-4①：取消必须留 `asset sync skipped` warn（禁静默降级）');
-  // AC-4②：两个独立进程 —— 进程一跳过（目录仍不存在）、进程二补齐（manifest=ok）
-  assert.equal(out.ac4NextBootCatchUp.pass, true, 'AC-4②：' + JSON.stringify(out.ac4NextBootCatchUp));
-  assert.equal(out.ac4NextBootCatchUp.afterEarlyChildExit.presetDirExists, false, 'AC-4②：进程一退出后预设落点必须仍不存在');
-  assert.equal(out.ac4NextBootCatchUp.afterNormalChildExit.presetDirExists, true, 'AC-4②：进程二启动后必须补齐');
-  assert.equal(out.ac4NextBootCatchUp.normalManifestRead?.manifest, 'ok', 'AC-4②：补齐后 manifest 必须为 ok');
-  // AC-6：`asset sync failed: <asset>: <err>` 仍出现（条数与 failed 资产对应）
-  assert.equal(out.ac6.pass, true, 'AC-6：' + JSON.stringify(out.ac6));
-  assert.equal(out.ac6.skillsBlocked?.failedWarnCount, 5, 'AC-6：5 条技能资产不可写 ⇒ 必须恰 5 条 `asset sync failed` warn（逐条对应）');
-});

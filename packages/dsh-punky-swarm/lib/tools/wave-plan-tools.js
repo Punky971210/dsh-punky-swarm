@@ -22,6 +22,7 @@ import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, n
 import { resolveAssembly } from '../assembly.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertMemberActionTierC, readLiveConfig, clearPendingBatch } from './tier-gate.js';
+import { assertNotSentinelSessionArg } from '../state/session-authority.js';
 import { createRosterPort } from '../provider-dsh/roster.js';
 import * as EVT from '../state/event-types.js';
 
@@ -34,6 +35,7 @@ const WARN_SILENT_CODES = new Set(['WARN_ROSTER_UNKNOWN']);
 
 export function buildWavePlanTools(cx) {
   const { ctx, deps, store, config } = cx;
+  const { resolveBatchSession } = deps ?? {};
   return [
     defineTool({
       name: "wave_plan",      description: "把任务按 DAG 依赖分层为 waves 并持久化为批次（建批即固定，不重算）。任务可声明 layer(plan/exec/audit)/consume/produce/outputs/role/skills，建批时做三层契约静态校验。含 audit 层的三层批必填 assembly（字段表见该参数）。team 为纯归类标签（不解析、不校验、不拒建批）；skills 解析不到也不拒建批。批次绑定当前会话；产物根 = <~/.dsh/punky-preset>/sessions/<sessionId>/artifacts/<batchId>/，consume/produce/outputs 相对此根。运行期 DAG 真源 = lanes[].deps + handoffs。装配门只在工具面生效（直调 buildWavePlan 不走该门；该有意差异登记于 plan/techdebt-design.md §3）。失败必带 GATE_* 码。",
@@ -43,7 +45,11 @@ export function buildWavePlanTools(cx) {
         render: (_args, value) => TEXT_OUTPUT('wavePlan created: ' + value.batchId + ' @' + value.sessionId + ' (' + value.wavePlan.length + ' waves)' + (value.smoke ? '; SMOKE (产物契约类门已豁免)' : '') + (value.warnings?.length ? '; role warnings: ' + value.warnings.length : '')),
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec);
+        assertNotSentinelSessionArg(args, 'wave_plan');                          // D-03/RQ-5
+        const sessionId = sessionOf(args, exec, resolveBatchSession);            // D-02/RQ-2
+        //   注：wave_plan 做的是「在指定会话/命名黑板里**新建**批」，没有既有批可做属主比对
+        //   （`governance.test.js:414` 锁定「Leader 向命名会话 deploy-x 建批」为合法正向路径），
+        //   故本站点不落 `authorizeBatchWrite` —— 判据见台账 D-04 站点台账。
         assertMemberActionTierC(store, sessionId, exec, 'batch', {}, deps);
         const teamName = typeof args.team === 'string' && args.team.trim().length > 0 ? args.team.trim() : null;
         const assembly = resolveAssembly(teamName, config.assembly);

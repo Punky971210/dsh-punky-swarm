@@ -82,7 +82,7 @@ test('H2 覆盖既有路径生效：reload 应用 capabilities.trajectory.enable
   watcher.dispose();
 });
 
-test('H3 未知顶层键被拒：保持旧快照不广播（契约验收④）', async () => {
+test('H3 未知顶层键被忽略（逐键）：坏键不入快照、不广播；合法键照常生效', async () => {
   const root = tmpRoot();
   const cfg = staticConfig();
   const events = [];
@@ -90,16 +90,21 @@ test('H3 未知顶层键被拒：保持旧快照不广播（契约验收④）',
   watcher.start();
   writeRuntime(root, { capabilitiesx: { enabled: true } });
   const r = await watcher.reload();
-  assert.equal(r.ok, false);
-  assert.equal(r.reason, 'invalid-overlay');
-  assert.ok(r.errors[0].includes('unknown top-level key: capabilitiesx'), '拒绝未知顶层键: ' + r.errors[0]);
-  assert.deepEqual(events, [], '不广播');
-  assert.deepEqual(watcher.readSnapshot(), cfg, '快照不变');
-  // 未知 capabilities 子键同样被拒
+  // 【批 `punky-prerelease-scan` · lane `e3-gate-config-plane` · **D-07 已修 ⇒ 契约变更，非回归**】
+  //   旧契约「未知顶层键 ⇒ 整份 `invalid-overlay` 拒」已废止（AC-13 / RQ-7）：整份拒的后果不是
+  //   「配置没生效」而是**静默 fail-open**（快照恒缺省 ⇒ 门禁全部解析为缺省关，且用户无法经面板修坏键）。
+  //   新口径 = 坏键**只废该键**并点名，合法键照常生效。
+  assert.equal(r.ok, true, '逐键口径：坏键不整份拒（AC-13 ①）');
+  assert.deepEqual(r.ignored.map((x) => x.key), ['capabilitiesx'], '被忽略的键须逐条点名（AC-13 ②）');
+  assert.ok(r.ignored[0].reason.includes('unknown top-level key: capabilitiesx'), '原因须可读：' + r.ignored[0].reason);
+  assert.deepEqual(events, [], '坏键不广播');
+  assert.deepEqual(watcher.readSnapshot(), cfg, '快照不受坏键污染（本条是本用例的**安全主断言**，逐键后仍保留）');
+  // 未知 capabilities 子键：只废该子键，其余子键照常生效（段级不得连带整段失效）
   writeRuntime(root, { capabilities: { topicx: { enabled: true } } });
   const r2 = await watcher.reload();
-  assert.equal(r2.ok, false);
-  assert.ok(r2.errors[0].includes('unknown capabilities key: topicx'));
+  assert.equal(r2.ok, true, '坏子键同样逐键处理');
+  assert.deepEqual(r2.ignored.map((x) => x.key), ['capabilities.topicx'], '子键粒度点名');
+  assert.deepEqual(watcher.readSnapshot(), cfg, '坏子键不得污染快照（其余 capabilities 子键原样）');
   watcher.dispose();
 });
 
