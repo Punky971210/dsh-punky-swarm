@@ -137,4 +137,25 @@ curl -s -X POST http://127.0.0.1:3918/mcp \
 ```
 
 ⚠ 服务是否存活**只认直接请求**：`Get-NetTCPConnection` / `netstat` 过滤都出现过假阴性
-（端口在听却读成没听），不可作为否定证据。
+（端口在听却读成没听），不可作为否定证据。**实测已第 3 次复现**：`Get-NetTCPConnection -LocalPort 3918`
+返回空，而同一时刻 `POST /mcp` 返回 200（Electron 子进程持有监听套接字，进程归属查询对不上）。
+
+## 4. 验证记录（重启后活体，2026-11-09 22:02）
+
+宿主 pid `30724`（`DSH NEXT`，启动 21:59:11；上一轮为 30856）⇒ 确认加载的是本轮提交后的代码。
+端点 `POST http://127.0.0.1:3918/mcp` 直接请求 200。
+
+| 项 | 读数 | 结论 |
+|---|---|---|
+| `initialize` | `instructions` 504 字符，含「除 batch_status 外均需 session」与 `limit:0`；协议版本仍 `2025-06-18` | ✅ G-4 |
+| `tools/list` | 7 件条目键 = `{name, description, inputSchema, title, annotations}`；`readOnlyHint` = 5 true / 2 false | ✅ G-4 |
+| `batch_status {}` | `batches: 50/511 (最近活跃, limit=50)`；`sessionScope:'all'` / `total:511` / `limitApplied:50`；**59.1ms**（改前同口径 1412ms，−95.8%） | ✅ G-3 + G-1 判据 |
+| `batch_status {session}` | 4 批；`sessionScope:'session'`；**4.6ms** | ✅ 未回归 |
+| `batch_status {limit:0}` | 511 批全量；**264.8ms**（改前 1412ms，−81.2%） | ✅ 显式全量仍可用 |
+| `structuredContent` | 存在，且与 `value` **逐字节同一份** | ✅ G-2 |
+
+⇒ **AC-16（批 `punky-coldstart-session-20261109` 的 F-A1-06）闭合**：判据成立为
+`sessionScope:'all'` + `total:511`（`batches` 只回最近活跃 50 件，不再全量）。
+
+另：本次重启**未产生新的诊断转储**（`dsh-desktop-next-diagnostics-*.json` 最新仍是上一轮那份），
+⇒ 未触发启动超时转储。精确启动耗时需宿主侧日志，本次未取。
