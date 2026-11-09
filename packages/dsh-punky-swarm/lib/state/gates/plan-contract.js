@@ -80,8 +80,28 @@ export function buildPlanContract(cx) {
                 problems.push(p + ' unreadable');
                 continue;
             }
-            if (requiredSections.some((s) => sectionLineHit(content, s)))
+            // R-1（批 `punky-gate-fix` / lane `e2-plan-tighten`；判据源 §修复 3 · AC-9）：
+            //   六裸标题**全需**。修前为 `requiredSections.some(...)` ⇒ **六缺五也放行**（fail-open），
+            //   且 `*spec.md` 另有一条 `content.includes(s)` 的**子串特权**分支（`### 概述` / ` ## 概述` /
+            //   `> ## 概述` / 围栏内标题皆算命中）。现两处统一为 `sectionLineHit`（行首锚 + 整行 + 尾随空白
+            //   容忍，`presence.js:37-42` 的**匹配器本体不改**），特权分支整块删除。
+            //   `sectionsMissed.length === 0` ≡ 原语 `requiredSections.every((s) => sectionLineHit(content, s))`
+            //   ——单遍求值即可同时供判定与逐章诊断，不重复跑正则。
+            const sectionsMissed = requiredSections.filter((s) => !sectionLineHit(content, s));
+            if (sectionsMissed.length === 0)
                 criteriaHit = true;
+            else if (!contract && p.endsWith('.md')) {
+                // 逐章诊断：无团队契约声明时（生产常态 —— `flows.js:54-65` 硬编码 `flows:null`
+                // ⇒ 上文 `contract` 恒为 `null`）由本处点名缺哪几章。
+                // 契约在场时逐章诊断已由 `sectionProblemsOf`（`flows.js:308-315`）承担，此处不重复报。
+                //
+                // **口径收紧到 `.md`（有意，非疏漏）**：六裸标题是 **Markdown 标题**规格，只对**判据源/文档类**
+                // 产物成立。数据件（`*.json` / `*.txt` / …）若也逐章报缺，会把「合规 md 判据源 + 合法 json 数据件」
+                // 这种正常声明组合打成拒（`punky-gate-fix/e2-plan-tighten/probe/probe-overreach.mjs` 的 B/C 例实测），
+                // 属**超出 AC-9 的打回面扩张**。非 .md 件仍受各自专项检查（`.json` ⇒ 下文 `JSON.parse`）。
+                for (const s of sectionsMissed)
+                    problems.push(p + ' lacks "' + s + '"');
+            }
             if (contract) {
                 for (const prob of sectionProblemsOf(p, content, contract))
                     problems.push(prob);
@@ -92,12 +112,6 @@ export function buildPlanContract(cx) {
                 for (const ss of declaredSubsections) {
                     if (!sectionLineHit(content, ss))
                         problems.push(p + ' lacks subsection "' + ss + '"');
-                }
-            }
-            else if (p.endsWith('spec.md')) {
-                for (const s of ENGINE_BASELINE_PLAN_SECTIONS) {
-                    if (!content.includes(s))
-                        problems.push(p + ' lacks "' + s + '"');
                 }
             }
             if (p.endsWith('.json')) {

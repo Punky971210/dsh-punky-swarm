@@ -145,10 +145,16 @@ async function makeBed(config = {}) {
 }
 
 /** 假 req（Readable + socket.remoteAddress + method）；假 res 收集 statusCode/body。 */
-function reqOf(body, { method = 'POST', remoteAddress = '127.0.0.1' } = {}) {
+// 【QA-01 · 桩真实性】真实 Node `IncomingMessage` **恒带** `headers`，HTTP/1.1 请求**恒带** `Host`
+//   （RFC 9110 §7.2 必需字段）；MCP 面另要求 `application/json`。缺这两项时 QA-01 护栏
+//   （`isTrustedConfigRequest`：`host === undefined ⇒ false`）与 content-type 门会把假 req 拒成
+//   `-32600 untrusted origin` / HTTP 415 —— 那是**桩失真**（真实 HTTP 客户端到不了该形态）。
+//   补头**不是**放宽断言：本文件零行 assert 改动。
+function reqOf(body, { method = 'POST', remoteAddress = '127.0.0.1', headers = { host: '127.0.0.1:3918', 'content-type': 'application/json' } } = {}) {
   const stream = Readable.from([Buffer.from(body, 'utf8')]);
   stream.method = method;
   stream.socket = { remoteAddress };
+  stream.headers = { ...headers };
   return stream;
 }
 function resOf() {

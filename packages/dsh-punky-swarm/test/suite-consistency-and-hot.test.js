@@ -47,7 +47,10 @@ const SID = 'sess-sc';
 
 // ── SC-1 套件一致性（全量，批 `suite-registry-20260916`） ──────────────────────
 // 断言的**事实源是注册表**（`lib/engine/suite.js` 的 `SUITE_TOOLS`），不是人肉清单：
-//   · deny：表内 `memberDeny` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**17 项**，2026-09-27 三项放开后；
+//   · deny：表内 `memberDeny` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**18 项**；
+//     【2026-11-10 变更登记 · 批 `punky-gate-fix` / QA-02】`lane_worktree_merge` 由 `memberDeny:false` 改 `true`
+//     ⇒ 冻结现值 **17 → 18 项**（关闭「成员自合并 worktree、绕过 `member_settle` Tier3」的旁路）。此项为**插入**、
+//     既有 17 项相对顺序逐字不变。2026-09-27 三项放开后的 17 项基线；
 //     批 `suite-registry-20260916` 时为 **14 项** = 既有 13 项**相对顺序逐字不变**
 //     ——P3a control lane 的 `batch_control` 紧跟 `batch_phase` 之后插入（相位工具相邻，见下方 LEGACY 注释））、不含 `mcp__*`；
 //   · 模式门：表内 `modeGate` 派生集 ≡ `dispatch.js` 再导出 ≡ 冻结现值（**11 项**，2026-09-27 三项放开后；
@@ -72,6 +75,10 @@ const FROZEN_DENY = [
   ...LEGACY_DENY.slice(0, BATCH_CONTROL_INSERT_AT),
   'batch_control',
   ...LEGACY_DENY.slice(BATCH_CONTROL_INSERT_AT),
+  // 【2026-11-10 · 批 `punky-gate-fix` / QA-02】`lane_worktree_merge` 入 deny：成员自合并 worktree 会绕过
+  //   `member_settle` 的 Tier3 前置（并在成功后 `worktree.remove --force` 抹掉审计现场）⇒ 属治理/派发面，
+  //   与 `lane_worktree_create` 的「成员可建」口径不同（建 = 生产动作，合并 = 收口动作，须 Leader 侧）。
+  'lane_worktree_merge',
   // N1-R4-1c：图变更写入口 ⇒ 成员不得改图（与 batch_control 同为人工/治理面）
   'batch_tasks_add',
   // N1-R4-2：池内任务**加边**（图变更写入口 #2）⇒ 同上（成员不得改图）
@@ -86,7 +93,7 @@ const FROZEN_DENY = [
   ...HOST_CONTINUATION_SUBSET,
 ];
 /** P3a 之后新增的 deny 项（用于「旧 13 项相对顺序逐字不变」的过滤判据）。 */
-const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
+const POST_LEGACY_DENY_ADDED = ['batch_control', 'batch_tasks_add', 'task_update', 'lane_worktree_merge', 'interrupt_agent', 'list_agents', 'wait_agent', 'spawn_teammate'];
 const FROZEN_MODE_GATED = [
   'assign_check', 'wave_plan', 'member_set_status', 'member_settle', 'batch_phase',
   'lane_dispatch', 'lane_claim', 'lane_release',
@@ -119,7 +126,7 @@ test('SC-1 套件一致性（全量）：deny ≡ 注册表派生（' + FROZEN_D
   }
   // ③ deny 面：注册表派生 ≡ 再导出 ≡ 现值（**前 10 项**顺序逐字不变 + P3a 追加项）
   const derivedDeny = SUITE_TOOLS.filter((t) => t.memberDeny).map((t) => t.name);
-  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（17 项：冻结前缀 10 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + S2 宿主连续控制族 3 件（send_message 已放开）+ AG-20 spawn_teammate 1 件；task-22 后 handoff_submit 不入 deny；2026-09-27 三项全放后 gate_status/artifact_types/asset_claim 均已移出）');
+  assert.deepEqual([...SUITE_DENY_TOOLS], FROZEN_DENY, '成员 deny 必须是精确集合（18 项：冻结前缀 10 项相对顺序不变 + P3a batch_control + R4 两件图写入口 batch_tasks_add/task_update + QA-02 lane_worktree_merge + S2 宿主连续控制族 3 件（send_message 已放开）+ AG-20 spawn_teammate 1 件；task-22 后 handoff_submit 不入 deny；2026-09-27 三项全放后 gate_status/artifact_types/asset_claim 均已移出）');
   assert.deepEqual([...SUITE_DENY_TOOLS].filter((n) => !POST_LEGACY_DENY_ADDED.includes(n)), LEGACY_DENY,
     '去掉 P3a 之后追加的项后必须**逐字等于** `LEGACY_DENY`（2026-09-27 三项放开后为 10 项）序列（新项只允许追加，不得重排/删项）');
   assert.equal([...SUITE_DENY_TOOLS].indexOf('batch_control'), BATCH_CONTROL_INSERT_AT,

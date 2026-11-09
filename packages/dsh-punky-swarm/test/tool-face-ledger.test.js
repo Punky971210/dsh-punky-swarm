@@ -46,7 +46,12 @@ const readJson = (rel) => JSON.parse(readText(rel));
 const sha256Of = (rel) => createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
 
 // ── 集合常量（与任务包 §2.4 逐字同源；集合，非计数）────────────────────────────
-const DELETED_5 = ['mailbox_send', 'mailbox_read', 'mailbox_ack', 'lane_heartbeat', 'lane_longrun'];
+// 【R-2 移出 · 2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】原 `DELETED_5` 常量随
+//   `AC-16③` 整例删除而**孤儿化**，一并删除。该 5 名的唯一用途是「与 `docs/tool-face-ledger.md` 的
+//   『处置』列比对」= **文档内容判定**（用户裁决：测试链只绑代码）。
+//   **代码面替代守卫在场**：「5 名不得回生」由两侧夹住 —— ① `AC-6/AC-16①` 的 `diffToolFace`
+//   D1（`S1∖S2` 须恰为 8 名基线集合）：任何一名回生即令差集变化 ⇒ 红；
+//   ② `test/tools.test.js` 的 `TOOL_NAMES` 冻结名单精确相等（D3）。
 // 【M1】取值来源改为**单点**（`lib/governance/host-tools.js`），顺序与原字面量一致：
 //   原顺序 = [log_export, subagent, subagent_fork, send_message, interrupt_agent, list_agents, wait_agent, spawn_teammate]
 //   ⚠ 断言意图逐字不变（仍是「suite 独有的这 8 件」），只是不再手写第二份名单。
@@ -63,7 +68,6 @@ const SUITE_ONLY_BASELINE = [CONDITIONAL_REGISTRATION[0], ...HOST_PROVIDED_TOOLS
 //        以 §2.2 为准，并记入包缺口）⇒ 冻结 sha 随之更新；若将来再变而**无授权依据**，本判据仍会红。
 const GUARD_ASSET_SHA_AT_START = 'f79cc9c6305fb9703f326f882d9ddf6038ab02a8c505e1366b24b643dad30410';
 const GUARD_ASSET = 'presets/hook-rules/l5-wait-ban.json';
-const LEDGER = 'docs/tool-face-ledger.md';
 const DIFF_SCRIPT = 'scripts/tool-face-diff.mjs';
 
 // ── S1：源码全集（任务包 §2.4 规定的抽取正则：`/^\s{2}entry\('([a-z_]+)'/gm`）──────
@@ -80,40 +84,11 @@ function frozenToolNames() {
   return new Set([...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
 }
 
-// ── ledger 解析：按「表头同时含 `工具名` 与 `处置`」定位表（不写死节号/列位置）──────
-function splitRowCells(line) {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('|')) return null;
-  return trimmed.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-}
-
-function ledgerRows() {
-  const lines = readText(LEDGER).split(/\r?\n/);
-  let headerAt = -1;
-  let header = null;
-  for (let i = 0; i < lines.length; i++) {
-    const cells = splitRowCells(lines[i]);
-    if (cells && cells.includes('工具名') && cells.includes('处置')) { headerAt = i; header = cells; break; }
-  }
-  assert.ok(
-    headerAt >= 0,
-    'ledger 的 §2 逐名表头（同时含「工具名」与「处置」两列）缺失 ⇒ 待 e1 按任务包 §2.2 重排权威账后复查',
-  );
-  const rows = new Map();
-  for (let i = headerAt + 1; i < lines.length; i++) {
-    const cells = splitRowCells(lines[i]);
-    if (!cells) { if (rows.size > 0) break; continue; } // 表体结束
-    const name = (cells[0] ?? '').replace(/[`*]/g, '').trim();
-    if (!/^[a-z][a-z_0-9]*$/.test(name)) continue; // 跳过 `|---|` 分隔行与说明行
-    rows.set(name, { cells, header });
-  }
-  return rows;
-}
-
-function cellOf(row, label) {
-  const idx = row.header.findIndex((c) => c.includes(label));
-  return idx < 0 ? null : (row.cells[idx] ?? '');
-}
+// ── ledger 解析（`splitRowCells` / `ledgerRows` / `cellOf`）── 【R-2 整块删除】──────────────
+//   【2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】三个函数唯一的使用者是
+//   `AC-16②` / `AC-16③` 两例；随其删除而**整块孤儿化** ⇒ 一并删除（连同 `LEDGER` 路径常量）。
+//   删的是死链，**不动任何活断言**：`sourceToolNames` / `frozenToolNames` / `guardRules` /
+//   `loadDiffToolFace` 全部保留（`AC-7`、`AC-6/AC-16①`、`AC-12/AC-16④-*` 仍在用）。
 
 // ── 护栏资产（只读 JSON；C-2 禁改它）────────────────────────────────────────────
 function guardRules() {
@@ -182,46 +157,23 @@ test('AC-6/AC-16① 双向差集空：current 与 after-delete 两投影 ok，fo
 // ═════════════════════════════════════════════════════════════════════════════
 // AC-16②：口径一致性 —— ledger ↔ 源码 双向存在性
 // ═════════════════════════════════════════════════════════════════════════════
-test('AC-16② 口径一致性：S1 ∖ ledger = ∅；且 ledger 每名可溯源到源码或标「非工具」', () => {
-  const s1 = sourceToolNames();
-  const rows = ledgerRows();
-
-  const missingRows = [...s1].filter((name) => !rows.has(name));
-  assert.deepEqual(missingRows, [], 'S1（源码全集）中未在 ledger 逐名表立行的工具名');
-
-  const untraceable = [...rows.keys()].filter((name) => {
-    if (s1.has(name)) return false;
-    const disposition = cellOf(rows.get(name), '处置');
-    // 【2026-10-30 G3 B1】终止态新增「删」：B1 删掉 5 件后，它们在 S1（源码全集）里自然消失，
-    //   而 ledger 处置 = 「删」（由 AC-16③ 逐名钉住）⇒ 这是**合法终止态**，不是「不可溯源」。
-    //   判据未放松：仍要求每个非 S1 行**必须**有显式处置（非工具 | 删），空处置依旧红。
-    if (!disposition) return true;
-    return !(disposition.includes('非工具') || disposition.includes('删'));
-  });
-  assert.deepEqual(
-    untraceable, [],
-    'ledger 中既未出现在 `lib/engine/suite.js` 的 entry(...) 里、也未把处置标为「非工具」的名字',
-  );
-});
+// 【R-2 移出 · 2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】原用例
+//   `AC-16② 口径一致性：S1 ∖ ledger = ∅；且 ledger 每名可溯源到源码或标「非工具」`
+//   （§2.3-A `#2`，原 `:185-205`）**整例删除**。判定对象 = `docs/tool-face-ledger.md` 的表格正文
+//   = **文档内容一致性**（用户裁决：测试链只绑代码）。
+//   守卫去向：**代码面已有更强承接** —— `AC-6/AC-16①`（`diffToolFace` 的 D1/D2/D3 三向差集）与
+//   `test/tools.test.js:70-71` 的「注册名集精确等于 `TOOL_NAMES`」共同覆盖「源码全集口径」。
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AC-16③：删除面 —— 5 名处置 = 删，且不在「保留」集
 // ═════════════════════════════════════════════════════════════════════════════
-test('AC-16③ 删除面：5 个已裁删除名在 ledger 处置为「删」且不属于保留集', () => {
-  const rows = ledgerRows();
-  for (const name of DELETED_5) {
-    assert.ok(rows.has(name), `已裁删除名须在 ledger 逐名表有行 ⇒ ${name}`);
-    const disposition = cellOf(rows.get(name), '处置');
-    assert.ok(disposition !== null, `ledger 逐名表须有「处置」列 ⇒ ${name}`);
-    assert.ok(disposition.includes('删'), `处置须为「删」⇒ ${name}（实际="${disposition}"）`);
-    assert.equal(/保留/.test(disposition), false, `处置不得同时含「保留」⇒ ${name}（实际="${disposition}"）`);
-  }
-
-  const kept = new Set(
-    [...rows.entries()].filter(([, row]) => /保留/.test(cellOf(row, '处置') ?? '')).map(([name]) => name),
-  );
-  assert.deepEqual([...DELETED_5].filter((n) => kept.has(n)), [], 'DELETED_5 ∩ 保留集 必须为空');
-});
+// 【R-2 移出 · 2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】原用例
+//   `AC-16③ 删除面：5 个已裁删除名在 ledger 处置为「删」且不属于保留集`
+//   （§2.3-A `#3`，原 `:210-224`）**整例删除**。判定对象 = ledger 表格的「处置」列
+//   = **文档内容一致性**（用户裁决：测试链只绑代码）。
+//   守卫去向：**代码面已有更强承接** —— 「5 名不得回生」由 ① `AC-6/AC-16①` 的 `diffToolFace`
+//   D1（`S1∖S2` 须恰为 8 名基线集合：任一名回生即令差集变化 ⇒ 红）与
+//   ② `test/tools.test.js` 的 `TOOL_NAMES` 冻结名单精确相等（D3）两侧夹住。
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AC-12 / AC-16④：护栏面三条（任务包 §2.9 修正版；**不是**「两集合无交集」）

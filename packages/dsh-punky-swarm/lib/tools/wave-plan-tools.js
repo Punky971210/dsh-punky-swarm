@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 建批工具面（自 `lib/tools/core.js` **原样搬移**）：wave_plan。
 //   PR-8 硬编码文件面 `lib/tools/core.js` 且要求「须至少一处 setPhase 调用点」，测试不得修改 ⇒ 该两件不迁出。
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, normalizeChannelDecl, handoffGateEnabledOf, consumeDepsAsymmetryOf } from '../wave-plan.js';
+import { buildWavePlan, validateWavePlan, normalizeAssemblyDecl, assemblyGate, normalizeChannelDecl, handoffGateEnabledOf, handoffGateStateOf, consumeDepsAsymmetryOf } from '../wave-plan.js';
 import { resolveAssembly } from '../assembly.js';
 import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import { assertMemberActionTierC, readLiveConfig, clearPendingBatch } from './tier-gate.js';
@@ -81,7 +81,7 @@ export function buildWavePlanTools(cx) {
         if (asmGate !== 'ok') throw new Error(asmGate.code + ': ' + asmGate.message);
 
         plan.warnings.push(...asm.warnings);
-        const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined, ...(channelDecl.declared ? { channel: channelDecl.channel } : {}) });
+        const batch = store.createBatch(sessionId, { batchId: plan.batchId, wavePlan: plan, concurrency: plan.concurrency, assembly: asm.decl ?? undefined, ...(channelDecl.declared ? { channel: channelDecl.channel } : {}), handoffGate: handoffGateStateOf(readLiveConfig(deps)) });
         if (smoke) store.appendEvent(sessionId, plan.batchId, EVT.EVT_BATCH_SMOKE, { batchId: plan.batchId });
         const observedAsymmetry = smoke
           ? []

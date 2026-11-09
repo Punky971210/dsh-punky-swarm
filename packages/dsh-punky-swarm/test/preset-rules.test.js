@@ -393,33 +393,12 @@ test('R-4 大小写：Password=/password= 与 sk-/SK- 变体命中一致', () =>
   }
 });
 
-// ── T-3 V9 审阅清单一致性：README 逐条表条目标识集 == L1 12 ∪ L2 6 ∪ L3 1 ∪ L5 3（JSON 解析对照）──
-// 载体（决策包第五节）：presets/hook-rules/README.md「逐条审阅清单」四表（L1 12 行 + L2 6 行 + L3 1 行 + L5 3 行），
-// 每行首列 = 条目 id（L1-[A-Z]\d{2} / L2-R\d{2} / L3-W\d{2} / L5-W\d{2}）；compose 组合项已废除（README 仅留废除声明，不列正文）。
-test('V9 README 逐条审阅清单：表条目标识集 == l1-sensitive 12 ∪ l2-resource 6 ∪ l3-tool-ban 1 ∪ l5-wait-ban 3；compose 废除声明在档', () => {
-  const readme = readFileSync(join(presetsDir, 'README.md'), 'utf8');
-  assert.ok(!readme.startsWith('\uFEFF'), 'README 不应含 UTF-8 BOM');
-  // 表数据行 = 行首 '| ' + 规范条目 id（仅清单表以 id 为首列；文件/内容表首列为反引号文件名不命中）
-  const tableIds = [];
-  for (const line of readme.split('\n')) {
-    const m = /^\|\s*(L1-[A-Z]\d{2}|L2-R\d{2}|L3-W\d{2}|L5-W\d{2})\s*\|/.exec(line);
-    if (m) tableIds.push(m[1]);
-  }
-  const expected = [...L1.rules, ...L2.rules, ...L3.toolBan, ...L5.toolBan].map((r) => r.id).sort();
-  // 数量 → 两条并存（不可只留一条）：
-  //   ① 无重复行：原 `tableIds.length === 22` 的真正职能是「防重复行」，而下一行用 `new Set` 去重后**看不见重复**
-  //      ⇒ 去重集合相等在「多写了重复行」时仍绿（规格 §3 那类假绿）。故显式断「无重复 id」。
-  //   ② 集合身份相等（下一行）：README 表 id 集 == 四文件 id 集，漏行/超集/改 id 均拒绝。
-  //   ⇒ ①+② 合起来把「恰好这么多行」锁住，**且不再需要魔数 22**（合法新增一条规则时两断言随源文件同步变绿）。
-  assert.deepEqual(tableIds.filter((id, i, a) => a.indexOf(id) !== i), [], 'README 逐条表不得出现重复 id 行（重复行/漏行都拒绝）');
-  assert.deepEqual([...new Set(tableIds)].sort(), expected,
-    'README 逐条表条目标识集须与 l1/l2/l3 JSON 完全一致（漏行/超集/改 id 均拒绝）');
-  // 表头字段契约（rule id / preset 归属 / … / violation message）在档（用户可逐条审阅的载体存在）
-  assert.match(readme, /^\|\s*rule id\s*\|\s*preset 归属\s*\|/m, '清单表头含 rule id + preset 归属 列');
-  assert.ok(readme.includes('violation message'), '清单表头含 violation message 列');
-  // L3 表头（第三类判定面的字段契约：条目 id / behavior / 触发 tool / 判据摘要）
-  assert.match(readme, /^\|\s*条目 id\s*\|\s*preset 归属\s*\|\s*行为面（behavior）\s*\|/m, 'L3 表头含条目 id + 行为面 列');
-  assert.ok(readme.includes('判据摘要'), 'L3 表头含判据摘要 列');
-  // compose 废除声明（2026-09-14：compose 组合项已从注册表删除，README 须显式声明废除，不留误导性等价说明）
-  assert.ok(readme.includes('compose') && readme.includes('废除'), 'README 含 compose 废除声明');
-});
+// ── T-3 V9 审阅清单一致性 —— 【R-2 整例删除，2026-11-09】─────────────────────────────
+//   原判据：`presets/hook-rules/README.md`「逐条审阅清单」四表的条目 id 集 == `l1-sensitive`(12)
+//   ∪ `l2-resource`(6) ∪ `l3-tool-ban`(1) ∪ `l5-wait-ban`(3) 的 JSON id 集，外加表头字段与
+//   compose 废除声明在场（`§2.3-A #5`，原 `:399-425`）。
+//   **删除依据**：判定对象是 README 的**正文表格内容** = 文档内容一致性；用户裁决（2026-11-09）
+//   「**测试链只绑代码、不绑文档**」，文档由项目内人工维护。
+//   **守卫去向**：README↔JSON 的同步这一条**接受失守**（它本就是「文档跟代码走」的软约束）；
+//   JSON 侧结构由本文件的 `P-1` / `P-1b` / `P-2` / `P-2b` / `P-3` 继续守（形状、正则可编译、
+//   档分布、id 全局唯一），规则命中行为由 `F-01..F-15` / `R-1..R-4` 守 ⇒ 代码面判据零损失。

@@ -44,7 +44,12 @@ import { RESUME_CLAUSE, normalizeCheckpoints } from '../lib/wave-plan.js';
 //   实测 `composeWorkerPrompt` 返回值，`sha256(utf8)` = 下列常量（1905 B / 21 行）。
 // 复算（审计可独立复跑）：同一 fixture 重算必须**逐字符相等**。
 const BASELINE_HEAD = 'bf061aa';
-const NEUTRAL_SHA256 = 'e4555c844a3f55363aa914edbc562360bbc2d0fc514ea166700d14d6080efd3c';
+// 【Leader L-6 · 2026-11-10】随 N-5 授权改动同步重冻（**冻结值同步，非放宽断言**）：
+//   批次 punky-gate-fix 的 e5 在 `lib/engine/dispatch-taskpack.js:183` 为交接门陈述加限定语
+//   ⇒ `composeWorkerPrompt` +115 B ⇒ 1905 → 2020 B、sha256 随变（行数仍 21）。
+//   取法同上（`git show HEAD:./…:183` 已核 HEAD 为无定语旧串）；重采探针见
+//   `artifacts/punky-gate-fix/e6-suite-refreeze/probe/golden-refreeze.mjs`。
+const NEUTRAL_SHA256 = 'c011f1241fd50c8d5a6203cff508721ed238adc0759e79cef256bccf68612a75';
 
 // E-CK6 的「未声明」形态：`role: null`（不触 role 语料库，跨机稳定）、`preflight` 缺省（走警示行）、
 //   `checkpoints` / `resume` / `injectBudget` / `archContext` 皆缺省 ⇒ 正是判据要求的「未声明」。
@@ -108,7 +113,7 @@ test('E-CK6 不回归：未声明 `checkpoints` 且 `resume !== true` ⇒ prompt
   assert.equal(sha256(text), NEUTRAL_SHA256,
     '零回归基线（HEAD ' + BASELINE_HEAD + ' 改前实测）必须逐字符相等；'
     + '若不相等 ⇒ 条件段的空行/文本泄漏进了缺省路径');
-  assert.equal(Buffer.byteLength(text, 'utf8'), 1905, '字节数须与改前一致（1905 B）');
+  assert.equal(Buffer.byteLength(text, 'utf8'), 2020, '字节数须与重冻后基线一致（2020 B；L-6 随 N-5 限定语 +115）');
 });
 
 test('R-4 派发路径：`WavePlanTask.resume === true` ⇒ 引擎自派的任务包真带条款（另一侧无）', async () => {

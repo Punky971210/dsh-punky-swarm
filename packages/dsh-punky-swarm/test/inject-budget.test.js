@@ -267,8 +267,14 @@ function stripComments(src) {
  * 采集方式＝临时副本注入探针直接打印实测三值，采集后删除副本（不动本文件的测量逻辑）。
  */
 const GOLDEN_COMPOSE = Object.freeze({
-  bytes: 2428,
-  sha256: 'cc2c3cc6e37356fb190a0de6cf63d74c0811140206ebaf211484588d663a10d6',
+  // 【Leader L-6 · 2026-11-10】随 N-5 授权改动同步重冻（**冻结值同步，非放宽断言**）：
+  //   批次 punky-gate-fix 的 e5 在 `lib/engine/dispatch-taskpack.js:183` 为交接门陈述加限定语
+  //   ⇒ `composeWorkerPrompt` +115 B ⇒ bytes 2428 → 2543、sha256 随变；lines 仍 40（未增删行）。
+  //   取法：`git show HEAD:./lib/engine/dispatch-taskpack.js:183` 已核 HEAD 为无定语的旧串，
+  //   故 HEAD 上本件为绿、该红确属授权改动的必然传导。重采探针见
+  //   `artifacts/punky-gate-fix/e6-suite-refreeze/probe/golden-refreeze.mjs`（只读，可复跑）。
+  bytes: 2543,
+  sha256: '9a0abb1663ae3799da4381f816e80f8db5fb1f13fe3c5adf3c48cbc6349f578d',
   lines: 40,
 });
 

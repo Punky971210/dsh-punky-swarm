@@ -122,7 +122,7 @@ wave3: [audit：supervisor 逐条对账 + 独立复现 + gap-list + 复盘归档
 
 | 通道 | 用途 | 铁律 |
 |---|---|---|
-| `handoff_submit` | **交接面**（上游 → 下游） | 下游 `handoff_view` 报 `READY` 才开工；缺交接下游拒 `GATE_HANDOFF_MISSING` |
+| `handoff_submit` | **交接面**（上游 → 下游） | 下游 `handoff_view` 报 `READY` 才开工；缺交接下游拒 `GATE_HANDOFF_MISSING`（**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**） |
 | `swarm_report` | **审计面**（成员 → Leader，留痕） | **必须带 `batchId`**；报 `unbound` 属预期 |
 | `send_message` | **唤醒面**（唯一真推送） | 只发前者 ⇒ 留痕不唤醒；只发后者 ⇒ 唤醒不留痕 ⇒ **成员回报 = 双写** |
 

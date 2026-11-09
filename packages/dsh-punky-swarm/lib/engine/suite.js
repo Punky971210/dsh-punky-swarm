@@ -43,7 +43,7 @@ export const SUITE_TOOLS = Object.freeze([
   entry('swarm_report', 'comms', false, false, true),
   entry('swarm_cc', 'comms', false, false, true),
   entry('lane_worktree_create', 'dispatch', false, false, true),
-  entry('lane_worktree_merge', 'dispatch', false, false, true),
+  entry('lane_worktree_merge', 'dispatch', false, true, true),
   entry('lane_checkpoint', 'dispatch', false, false, true),
   entry('handoff_submit', 'blackboard', false, false, true),
   entry('handoff_view', 'blackboard', false, false, false),

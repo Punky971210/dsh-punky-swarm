@@ -41,20 +41,31 @@ export function buildBatchStatusTools(cx) {
       description: "查询批次状态（唯一事实源）。不传 batchId 则列批次：未解析到调用方会话（如 MCP 直连）⇒ 列全部会话、每批带 sessionId 且标 sessionScope:'all'，显式 session 仍优先。多批按最近活跃排序，limit 缺省 50（0=不限；点名 ids/batchId 不受限）。单批返回 phase/lanes/派生态/wavePlan 与事件摘要；view 只裁 wavePlan（缺省 full）。",
       parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"limit":{"type":"integer","description":"多批读面条数上限（只作用于「列全部」的两条分支：全会话并集 / 单会话列表）：缺省 50，按批文件 mtime 降序取最近活跃的前 N 件；传 0 = 不限（全量，成本随批数线性增长，511 批实测约 770ms）；`ids` / `batchId` 显式点名不受限（点名即全给）。负数回落缺省 50；小数 / 字符串 / null 等非整数由宿主参数校验直接拒绝（`INVALID_ARGS`）—— 两者都不静默当作「不限」，也不静默截断成 0 件。生效上限经返回体 limitApplied 回显（0 = 未裁剪），裁剪前总数经 total 回显 —— 裁剪不冒充全量。"},"view":{"type":"json","description":"读面裁剪视图，三枚举 summary|active|full，**缺省 full**（不裁剪：返回体与不传该参数时逐字一致，零回归）。active 只裁 wavePlan —— 只保留 status 不属于 merged/failed/skipped 的 lane 对应任务（任务 id 不在 lanes 表内视为非终态、保留），过滤后为空的波条目丢弃、wave 序号不重编号；lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动。summary 本批等价 full（不引入第三语义）。**非法值回落 full 且不抛错**（空串 / 大小写不符 / null / 数字 / 对象等），生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源。view 仅作用于单批投影（多批列表读面不含 wavePlan，故其返回体不回显 viewApplied）。"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"sessionScope":{"type":"string"},"total":{"type":"integer"},"limitApplied":{"type":"integer"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"sessionScope":{"type":"string"},"total":{"type":"integer"},"limitApplied":{"type":"integer"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"handoffGateAtPlan":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
         render: (_args, value) => {
           const hg = value.handoffGate ?? null;
           const hgTxt = hg ? ' handoffGate=entry:' + (hg.entry === 'enforced' ? 'on' : 'off') + '/settle:' + (hg.settle === 'enforced' ? 'on' : 'off') + '(src:' + String(hg.source ?? 'default') + ')' : '';
           const stateTxt = value.stateSource ? ' state=' + String(value.stateSource) + (value.memberStatesLegacy ? '(legacy)' : '') : '';
+          //   【N-6 · 2026-11-10】**双读路径并置**：`handoffGate` = 运行时态（live 配置/env 现解析），
+          //     `handoffGateAtPlan` = 建批期落盘的**批内真值**。两者不一致时追加 `⚠ drift` ——
+          //     缺任一侧就观察不到背离（B-3）。**只回显、不改判据、不 warn**（用户 Q4 裁决）。
+          //     ⚠ 旧批无该键 ⇒ 渲染成 `absent`，**不得**渲染成 `entry:off`（缺记录 ≠ 记录为关）。
+          const atPlan = value.handoffGateAtPlan ?? null;
+          const hgLineOf = (h) => 'entry:' + (h.entry === 'enforced' ? 'on' : 'off') + '/settle:' + (h.settle === 'enforced' ? 'on' : 'off') + '(src:' + String(h.source ?? 'default') + ')';
+          const atPlanTxt = value.batchId
+            ? ' handoffGateAtPlan=' + (atPlan ? hgLineOf(atPlan) : 'absent(本批无建批期真值)')
+            : '';
+          const driftTxt = (hg && atPlan && (hg.entry !== atPlan.entry || hg.settle !== atPlan.settle || hg.source !== atPlan.source))
+            ? ' ⚠ drift(批内真值≠运行时态)' : '';
           if (value.batchId) {
-            return TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''));
+            return TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + atPlanTxt + driftTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''));
           }
           // 裁剪必须可见：`50/511 (最近活跃, limit=50)` 读作「盘上共 511 件，这里是最近活跃前 50」，
           //   不与「真的只有 50 件」混淆（与单批视图 `viewApplied` 同一纪律：裁剪不冒充全量）。
           const shown = (value.batches ?? []).length;
           const clipped = typeof value.total === 'number' && value.total > shown;
           const totalTxt = clipped ? '/' + value.total + ' (最近活跃, limit=' + value.limitApplied + ')' : '';
-          return TEXT_OUTPUT('batches: ' + shown + totalTxt + stateTxt + hgTxt);
+          return TEXT_OUTPUT('batches: ' + shown + totalTxt + stateTxt + hgTxt + atPlanTxt);
         },
       },
       async execute(args, exec) {
@@ -83,11 +94,22 @@ export function buildBatchStatusTools(cx) {
           ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation,
         });
         const hgState = handoffGateStateOf(readLiveConfig(deps));
-        const handoffGateView = {
-          enabled: hgState.entry || hgState.settle,
-          entry: hgState.entry ? 'enforced' : 'observation',
-          settle: hgState.settle ? 'enforced' : 'observation',
-          source: hgState.source,
+        //   【N-6 · 2026-11-10】两个 handoffGate 视图（运行时态 / 批内真值）走**同一映射单点**：
+        //     词表必须逐字段可比，否则「两者是否不一致」无从判 —— 那正是 B-3 双读路径背离的可观察面前提。
+        //     ⚠ 本映射只负责**呈现**，不参与门判据 —— 门判据唯一解析点仍是 `handoffGateStateOf`。
+        const hgViewOf = (st) => ({
+          enabled: !!(st.entry || st.settle),
+          entry: st.entry ? 'enforced' : 'observation',
+          settle: st.settle ? 'enforced' : 'observation',
+          source: st.source,
+        });
+        const handoffGateView = hgViewOf(hgState);
+        //   批内真值（建批期落盘的 `batch.handoffGate`）：缺键（旧批）⇒ **不写键**（条件键惯用法，与 `smoke` 同款），
+        //     且**不冒充「记录为关」** —— 「无记录」与「记录为关」在渲染面必须可辨（见 render 的 `absent` 分支）。
+        const batchTruthOf = (batch) => {
+          const raw = batch?.handoffGate;
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+          return { handoffGateAtPlan: hgViewOf(raw) };
         };
         // 【B-2 列表分支边界（AC-11）】`source==='fallback'` **且**无 `batchId` ⇒ 全会话并集：
         //   · `ids` 语义 = 「在全部会话里找这些 id」，`ids: []` 仍等同缺省（列全部，同 Q2A-4 口径）；
@@ -148,7 +170,7 @@ export function buildBatchStatusTools(cx) {
             .filter((w) => w.tasks.length > 0);
         };
         const viewApplied = viewAppliedOf(args.view);
-        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied, sessionScope: 'session' };
+        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, ...batchTruthOf(b), eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied, sessionScope: 'session' };
       },
     }),
   ];

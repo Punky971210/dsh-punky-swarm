@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { flowOf, entryRequiresOf, globMatchesPath, ENGINE_BASELINE_CRITERIA_SECTION } from '../../assembly/flows.js';
 import { taskOf, smokeOf, contractMissingPayload } from './detect.js';
+import { sectionLineHit } from './presence.js';
 import { reasonVocabularyNote } from './reason-vocabulary.js';
 import { handoffGateEnabledOf } from '../handoff-gate.js';
 import fs from 'node:fs';
@@ -142,9 +143,13 @@ export function buildEntry(cx) {
                 : ENGINE_BASELINE_CRITERIA_SECTION;
             const problems = [];
             let okAnchor = false;
+            // R-1（批 `punky-gate-fix` / lane `e2-plan-tighten`；判据源 §修复 3 · AC-10/AC-11）：
+            //   修前 `.includes(criteriaSection)` 是**子串**判据 ⇒ `### 验收标准`、行内提及皆命中，
+            //   与同一门下方 `:163` 的文案「**行首恰为该串**，非 `###`、无编号前缀」**自相矛盾**。
+            //   现改走 `presence.js:37-42` 的 `sectionLineHit`（行首锚 + 整行；**匹配器本体不改**）⇒ 判据与文案同源。
             for (const p of anchors) {
                 try {
-                    if (fs.readFileSync(resolveArtifactIn(artifactsDirOf(sessionId, batchId), p), 'utf8').includes(criteriaSection)) {
+                    if (sectionLineHit(fs.readFileSync(resolveArtifactIn(artifactsDirOf(sessionId, batchId), p), 'utf8'), criteriaSection)) {
                         okAnchor = true;
                         break;
                     }
@@ -160,7 +165,8 @@ export function buildEntry(cx) {
                     problems: [
                         ...problems,
                         '【怎么做】audit lane 的判据源只能是 **plan 层产物**（本 lane `consume` 里 `plan/` 前缀的件），'
-                            + '其正文须含裸标题行 `' + criteriaSection + '`（**行首恰为该串**，非 `###`、无编号前缀）。'
+                            + '其正文须含裸标题行 `' + criteriaSection + '`（**行首恰为该串**，非 `###`、无编号前缀；'
+                            + '**代码围栏内的标题同样计** —— 本门只判行首形态，不判代码块上下文）。'
                             + ' plan 产物缺它 ⇒ **回 plan 层补该标题**（内容可空），**不得在本 lane 自造判据**。',
                     ],
                 });

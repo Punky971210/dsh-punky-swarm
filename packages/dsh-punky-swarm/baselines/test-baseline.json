@@ -17,11 +17,11 @@
       "todos": 0
     },
     "test/accept-pack1-guidance.test.js": {
-      "asserts": 16,
-      "blankLines": 23,
-      "lines": 256,
+      "asserts": 3,
+      "blankLines": 10,
+      "lines": 112,
       "tautologies": 0,
-      "tests": 5,
+      "tests": 1,
       "todos": 0
     },
     "test/accept-pack2-vocabulary.test.js": {
@@ -33,11 +33,11 @@
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 45,
-      "blankLines": 37,
-      "lines": 501,
+      "asserts": 20,
+      "blankLines": 30,
+      "lines": 387,
       "tautologies": 0,
-      "tests": 17,
+      "tests": 9,
       "todos": 0
     },
     "test/acps-cert-failclosed.test.js": {
@@ -384,6 +384,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/capabilities-contract.test.js": {
+      "asserts": 11,
+      "blankLines": 10,
+      "lines": 150,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
     "test/chain-v2-pairing.test.js": {
       "asserts": 20,
       "blankLines": 19,
@@ -419,7 +427,7 @@
     "test/checkpoint-resume-wire.test.js": {
       "asserts": 18,
       "blankLines": 15,
-      "lines": 134,
+      "lines": 139,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -611,7 +619,7 @@
     "test/engine-dispatch.test.js": {
       "asserts": 208,
       "blankLines": 57,
-      "lines": 866,
+      "lines": 867,
       "tautologies": 0,
       "tests": 42,
       "todos": 0
@@ -817,9 +825,9 @@
       "todos": 0
     },
     "test/gate-criteria-parity-r33.test.js": {
-      "asserts": 15,
+      "asserts": 19,
       "blankLines": 19,
-      "lines": 171,
+      "lines": 178,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -856,20 +864,20 @@
       "tests": 8,
       "todos": 0
     },
-    "test/gate-lite-batch2.test.js": {
-      "asserts": 2,
-      "blankLines": 9,
-      "lines": 52,
-      "tautologies": 0,
-      "tests": 1,
-      "todos": 0
-    },
     "test/gate-lite-smoke.test.js": {
       "asserts": 19,
       "blankLines": 19,
       "lines": 154,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/gate-plan-six-sections.test.js": {
+      "asserts": 13,
+      "blankLines": 24,
+      "lines": 175,
+      "tautologies": 0,
+      "tests": 5,
       "todos": 0
     },
     "test/gate-reject-to-member.test.js": {
@@ -1163,7 +1171,7 @@
     "test/http-deferred-bind.test.js": {
       "asserts": 59,
       "blankLines": 32,
-      "lines": 365,
+      "lines": 371,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1211,7 +1219,7 @@
     "test/inject-budget.test.js": {
       "asserts": 102,
       "blankLines": 77,
-      "lines": 735,
+      "lines": 741,
       "tautologies": 0,
       "tests": 31,
       "todos": 0
@@ -1233,19 +1241,11 @@
       "todos": 0
     },
     "test/integration-comfyui-glue.test.js": {
-      "asserts": 7,
-      "blankLines": 14,
-      "lines": 121,
+      "asserts": 4,
+      "blankLines": 13,
+      "lines": 113,
       "tautologies": 0,
-      "tests": 3,
-      "todos": 0
-    },
-    "test/judging-guidance.test.js": {
-      "asserts": 38,
-      "blankLines": 53,
-      "lines": 319,
-      "tautologies": 0,
-      "tests": 9,
+      "tests": 2,
       "todos": 0
     },
     "test/judging-toolcount.test.js": {
@@ -1371,7 +1371,7 @@
     "test/mcp-data-plane.test.js": {
       "asserts": 71,
       "blankLines": 42,
-      "lines": 512,
+      "lines": 518,
       "tautologies": 0,
       "tests": 12,
       "todos": 0
@@ -1379,7 +1379,7 @@
     "test/mcp-loopback.test.js": {
       "asserts": 84,
       "blankLines": 50,
-      "lines": 572,
+      "lines": 576,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1387,7 +1387,7 @@
     "test/mcp-spec-metadata.test.js": {
       "asserts": 29,
       "blankLines": 12,
-      "lines": 155,
+      "lines": 159,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1395,7 +1395,7 @@
     "test/mcp-structured-content.test.js": {
       "asserts": 15,
       "blankLines": 11,
-      "lines": 156,
+      "lines": 160,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1403,7 +1403,7 @@
     "test/mcp-tool-probe-tristate.test.js": {
       "asserts": 18,
       "blankLines": 14,
-      "lines": 151,
+      "lines": 155,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1481,11 +1481,11 @@
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
-      "asserts": 28,
+      "asserts": 26,
       "blankLines": 30,
-      "lines": 280,
+      "lines": 271,
       "tautologies": 0,
-      "tests": 7,
+      "tests": 6,
       "todos": 0
     },
     "test/p2-gate-codes.test.js": {
@@ -1577,11 +1577,11 @@
       "todos": 0
     },
     "test/preset-rules.test.js": {
-      "asserts": 69,
+      "asserts": 61,
       "blankLines": 40,
-      "lines": 426,
+      "lines": 405,
       "tautologies": 0,
-      "tests": 13,
+      "tests": 12,
       "todos": 0
     },
     "test/preset-tool-scope.test.js": {
@@ -1827,7 +1827,7 @@
     "test/suite-consistency-and-hot.test.js": {
       "asserts": 43,
       "blankLines": 20,
-      "lines": 380,
+      "lines": 387,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1889,11 +1889,11 @@
       "todos": 0
     },
     "test/tool-face-ledger.test.js": {
-      "asserts": 27,
-      "blankLines": 32,
-      "lines": 269,
+      "asserts": 19,
+      "blankLines": 27,
+      "lines": 221,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 6,
       "todos": 0
     },
     "test/tool-schema-conformance.test.js": {
@@ -2169,7 +2169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T13:50:11Z",
+  "generatedAt": "2026-11-09T16:56:40Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2180,15 +2180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "MCP 规范元数据：tools/list 补 title+annotations（只读/写/幂等/开放世界四维提示）、initialize 补 instructions（面向模型的用法指导，兼作 G-1 会话缺口的文档级补偿）、handoff 三件补 batchId 描述、batch_status description 瘦身 911→约 190 字符；新增 test/mcp-spec-metadata.test.js（5 例）",
+  "reason": "L-6 golden prompt baselines resync (+115B from N-5 qualifier); comment lines added",
   "schema": 1,
   "totals": {
-    "asserts": 12140,
-    "blankLines": 6910,
+    "asserts": 12069,
+    "blankLines": 6856,
     "files": 271,
-    "lines": 73022,
+    "lines": 72686,
     "tautologies": 0,
-    "tests": 2537,
+    "tests": 2517,
     "todos": 0
   }
 }

@@ -41,11 +41,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //        · 代码围栏内 `` ```\n## 验收标准\n``` ``                ⇒ entry 门**放行**
 //        · 编号变体   `## 5. 验收标准`                            ⇒ entry 门**拒**（子串不匹配的副作用，非判据使然）
 //
-//      ⇒ 用例 2/3/5 是**绊线**：断言的是**当前**（宽松）行为，并在断言消息里标注「已登记缺口」。
+//      ⇒ 用例 2/3/5 曾是**绊线**：断言**当前**（宽松）行为，并在断言消息里标注「已登记缺口」。
 //         **解冻后改判据**（`includes` → `sectionLineHit`）时这些断言**必然转红** ⇒ 提示改判，不会静默漂移。
 //
-// 纪律（本波）：**纯增量**——零生产代码改动（`lib/**` 零 diff）、零解冻、零门禁行为变更。
-//   全部断言走 **store / buildWavePlan 真实调用**（即生产门禁路径），不白盒直调 `createGates`。
+// 【2026-11-10 · N-4 解冻翻账（批 `punky-gate-fix` / lane `e2-plan-tighten`）】
+//   绊线已按判据源 AC-12 解冻：`lib/state/gates/plan-contract.js:83` 的 `some` → `every`、
+//   `:97-102` 的 `*spec.md` 特权分支整块删除、`lib/state/gates/entry.js:147` 的 `.includes(...)` → `sectionLineHit`。
+//   ⇒ 本条**不是新增断言，是绊线翻转**（原断言正向锁定了缺陷行为）：
+//     · 用例 **2**（行内提及）：`assert.equal(err,null)` ⇒ **翻转**为「拒 + 断言 `GATE_AUDIT_CRITERIA_MISSING`」。
+//     · 用例 **5**（plan 门行内提及）：`assert.equal(passed,null)` ⇒ **翻转**为「拒 + 断言 `GATE_PLAN_CONTRACT`」。
+//     · 用例 **3**（代码围栏内标题）：**保留放行**——N-3 裁决（甲）明确「围栏内 `## 验收标准` 算命中」，
+//       该放行是**期望行为**、不是缺口 ⇒ 只把措辞从「已登记缺口」改为「N-3 裁决：期望命中」。
+//
+// 纪律（本波起）：判据改动须由判据源（`plan/fix-plan.md` §修复 3）驱动并留痕；
+//   全部断言仍走 **store / buildWavePlan 真实调用**（即生产门禁路径），不白盒直调 `createGates`。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -122,23 +131,21 @@ test('R3-3 · 勘误锁：同一内容下 entry 判据来源门与 plan 契约�
     '拒因须点名缺的那一章（实证：两处判的是不同集合，非同一判据的两份实现）');
 });
 
-// ── 2. entry 门：判据用子串匹配，行内提及亦命中（绊线）─────────────────────────
-test('R3-3 · 绊线：entry 判据来源门用 `includes` ⇒ 行内提及 `## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准` 即算命中（当前放行；登记缺口，非期望行为）', () => {
+// ── 2. entry 门：判据用子串匹配，行内提及亦命中（绊线 · N-4 已翻转为「拒」）──────
+test('R3-3 · 正锁（N-4 翻转）：entry 判据来源门拒行内提及（`includes` ⇒ `sectionLineHit`）', () => {
   const inline = '# Spec\n本文件不设该章，详见 ## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准 一节\n## 约束\n- none\n';
   const err = dispatchAudit('b-r33-inline', inline);
-  assert.equal(err, null,
-    '【绊线 · 已登记缺口】`gates.ts:903` 按**子串**判据 ⇒ 正文提及即命中。'
-    + '注释/`discipline.md:228` 宣称的是**裸标题行**（`sectionLineHit`）；一旦解冻收紧，本断言须改为「拒 GATE_AUDIT_CRITERIA_MISSING」。'
-    + '实际：' + String(err && err.message));
+  assert.ok(err, '行内提及 `## 验收标准 一节` 不得顶用（修前 `includes` 放行 = 缺陷）');
+  assert.match(String(err.message), /GATE_AUDIT_CRITERIA_MISSING/, '实际：' + String(err.message));
+  assert.match(String(err.message), /lacks "## 验收标准"/, '拒因须点名缺的判据章。实际：' + String(err.message));
 });
 
-// ── 3. entry 门：代码围栏内的标题行同样命中（绊线）────────────────────────────
-test('R3-3 · 绊线：entry 判据来源门对**代码围栏内**的标题行同样命中（当前放行；登记缺口）', () => {
+// ── 3. entry 门：代码围栏内的标题行同样命中（**期望行为** · N-3 裁决甲）──────────
+test('R3-3 · 断言（N-3 裁决：围栏内标题算命中，期望）entry 判据来源门对代码围栏内的标题行命中 ⇒ 放行', () => {
   const fenced = '# Spec\n```\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n```\n## 约束\n- none\n';
   const err = dispatchAudit('b-r33-fence', fenced);
   assert.equal(err, null,
-    '【绊线 · 已登记缺口】子串匹配不区分上下文 ⇒ 围栏内示例文本即顶用。'
-    + '`sectionLineHit` 同样拦不住本形态（它只锚行首/整行）⇒ 解冻时须一并决定「围栏内是否算命中」。'
+    'N-3 裁决（甲）：`sectionLineHit` 只判行首形态、不判代码块上下文 ⇒ 围栏内标题**算命中**（期望，非缺口）。'
     + '实际：' + String(err && err.message));
 });
 
@@ -151,13 +158,13 @@ test('R3-3 · 正锁：entry 判据来源门拒编号变体 `## 5. 验收标准`
   assert.match(String(err.message), /lacks "## 验收标准"/, '实际：' + String(err.message));
 });
 
-// ── 5. plan 契约门：同一缺陷形态 + 两章都要（绊线 + 正锁）──────────────────────
-test('R3-3 · 绊线 + 正锁：plan 契约门同用 `includes`（行内提及放行 / 缺章必拒）', () => {
+// ── 5. plan 契约门：同一缺陷形态（绊线 · N-4 已翻转为「拒」）+ 六章全需（正锁）──────
+test('R3-3 · 正锁（N-4 翻转）：plan 契约门拒行内提及，且六章全需（缺章必拒）', () => {
   const inline = '# Spec\n见 ## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准 说明\n## 约束\n- none\n';
   const passed = settlePlan('b-r33-plan-inline', inline);
-  assert.equal(passed, null,
-    '【绊线 · 已登记缺口】`gates.ts:994` 与 `:903` 共享同一缺陷形态（子串匹配）。'
-    + '一旦解冻收紧，本断言须改为「拒 GATE_PLAN_CONTRACT」。实际：' + String(passed && passed.message));
+  assert.ok(passed, '行内提及 `见 ## 概述` 不得顶用（修前 `includes` 放行 = 缺陷）');
+  assert.match(String(passed.message), /GATE_PLAN_CONTRACT/, '实际：' + String(passed.message));
+  assert.match(String(passed.message), /lacks "## 概述"/, '拒因须点名被变形的章。实际：' + String(passed.message));
 
   const missing = settlePlan('b-r33-plan-missing', '# Spec\n## 概述\n- x\n## 问题\n- x\n## 方案\n- x\n## 需求\n- x\n## 验收标准\n- x\n');
   assert.ok(missing, '两章判据：缺 `## 约束` 必拒');

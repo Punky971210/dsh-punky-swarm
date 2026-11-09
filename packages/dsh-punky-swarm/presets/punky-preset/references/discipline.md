@@ -278,7 +278,7 @@
 |---|---|---|---|
 | 成员生命周期（roster） | **官方** | `spawn_teammate` / `list_agents` / `send_message` / `interrupt_agent`（**4 件**） | durable 成员（跨轮存活、可再唤起、活性可查）是官方**唯一**且真实的优势；onto 侧只有引擎自派的 **one-shot worker**（无唤醒 / 续聊对象；原 `lane_heartbeat` 是 **lane 级**而非会话成员级 —— **该工具已于 G3 B1 删除**） |
 | 任务真源 | **蟛蜞自建** | `wave_plan` / `task_pool` / `batch_tasks_add` / `task_update` / `lane_dispatch` | 批次 JSON **单落盘点**（`commitBatch` 统一落盘）＋**单次文件写原子性**；⚠ **「单写者」是协议/纪律要求、非引擎强制**（`lane_claim` 是逻辑锁，**不被 store 写路径调用** —— 见 §3 与 §0j 六）；派发写 `owner`、结算写终态、`auto-settle` 消费事件（**推进者是引擎，不是 Leader 手动）** |
-| 交接 | **蟛蜞自建** | `handoff_submit`（**逐件校验在场** + `assertions`）/ `handoff_view`（含 `readable` 回显） | 入边 `submitted` 是下游开工**硬前提**（`GATE_HANDOFF_MISSING`，§5 / §11 R-3） |
+| 交接 | **蟛蜞自建** | `handoff_submit`（**逐件校验在场** + `assertions`）/ `handoff_view`（含 `readable` 回显） | 入边 `submitted` 是下游开工**硬前提**（`GATE_HANDOFF_MISSING`，§5 / §11 R-3；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**） |
 | 结算 / 留痕 | **蟛蜞自建** | `member_settle` / `log_export` / `swarm_report`（**mailbox 三工具已于 G3 B1 删除**） | 事件流可导出（`log_export`），门禁与三契面在册 |
 
 ### 二、官方 `team_task_*` 五件**不进治理真源**（理由，逐条实测）
@@ -343,7 +343,7 @@
 ### 七、**席位任务包 · 回报时序 · 未接线缺口**
 
 - **席位任务包须携带**：**`batchId`**（定位批——**查阅入口一律用 `batchId`**，不新造按 taskId/sig 反查的入口）＋ **本 lane 的 `sig`**（**任务包指纹**，`sha256(canonicalJSON({id,layer,role,deps,produce,outputs,cmd}))[:16]`，用于身份识别与对账；**不作查找键**）。
-- **⚠ 时序硬性步骤：先 `handoff_submit`，后 `swarm_report`** —— 反序会触发 `GATE_HANDOFF_MISSING` 并**停轮**（已**三次**独立踩坑实证）。
+- **⚠ 时序硬性步骤：先 `handoff_submit`，后 `swarm_report`** —— 反序会触发 `GATE_HANDOFF_MISSING` 并**停轮**（已**三次**独立踩坑实证）——**但仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**。
 - **回报可达性（2026-09-24 用户裁决 S-3）**：`send_message` **对成员已放开** ⇒ worker 可**直接推**给 Lead（`target='lead'`）；`interrupt_agent` / `list_agents` / `wait_agent` **维持 deny**。这是**判据边界修正**而非回退 S2——S2 原判据「one-shot **无唤醒对象**」对「**唤 Lead**」不成立（**Lead 是 durable 的，且正是要通知的对象**）。**成员不得互唤**（指引约束）。
   - **⚠ 范围口径（2026-10-01 补，A9）**：上文 `deny` **仅对席位面成立** —— **席位面 deny、Leader 面在册**（三者为 Leader 治理工具）。**成员侧清单**（与本节 §八 工具面对齐）：**可用** = `handoff_submit` / `handoff_view` / `task_pool` / `swarm_report` / `send_message` / `member_settle`；**不可用** = `spawn_teammate` / `interrupt_agent` / `list_agents` / `wait_agent` / `wave_plan` / `batch_phase` / `batch_control` / `lane_dispatch` / `lane_claim` / `assign_check`。
 - **未接线缺口（登记，待修）**：① `handoff_submit` **无写权校验**（非 owner 亦可写，Layer 2 缺失）；② 其语义为**覆盖式**（同边重交会**静默覆盖**既有 `assertions`）⇒ 建议改为"覆盖需显式声明 + 旧值留痕"；③ 原 `mailbox_read` 对**不存在的批次**返回成功态 `0 unacked`（假阴性）—— **该工具已于 G3 B1 删除，此缺口随之消失**；④ `batch_status` 面「不存在」与「不可见」**逐字相同**。
@@ -399,7 +399,7 @@
 
 | 项 | 口径 |
 |---|---|
-| **事件流优先** | agent-team 方向的**交接真源 = 批事件流**：`handoff_submit` **一次原子写**（= 单次文件写的原子性；⚠ **并发写者之间无排队/重试语义** —— 见 §3）同时落 `batch.handoffs` 与 `lane.handoff` 事件；可审计导出走 `log_export`。下游开工**硬前提** = 该入边 `handoff_view` 报 `submitted`；缺失即 `GATE_HANDOFF_MISSING`（**引擎 entry 门，非纪律**） |
+| **事件流优先** | agent-team 方向的**交接真源 = 批事件流**：`handoff_submit` **一次原子写**（= 单次文件写的原子性；⚠ **并发写者之间无排队/重试语义** —— 见 §3）同时落 `batch.handoffs` 与 `lane.handoff` 事件；可审计导出走 `log_export`。下游开工**硬前提** = 该入边 `handoff_view` 报 `submitted`；缺失即 `GATE_HANDOFF_MISSING`（**引擎 entry 门，非纪律**；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**） |
 | **mailbox 搁置** | **搁置范围仅限**「把官方 mailbox（`wait_agent` 等）或蟛蜞 `mailbox_*` 用作 agent-team 方向的**交接 / 唤醒通道**」。`mailbox_*` 工具面**维持现状不动**——存档件 §三 的 0f（longrun 候选）与 0i（消费留痕，**未 ack 即未消费**）的既有纪律**不因本裁决改变** |
 | **`send_message` 已落规格（2026-10-01 Q3=A 定案）** | **`send_message` = D 档派活 / 唤醒的唯一正式通道** —— **Leader→席位**（派活 / 唤醒 / 通知收工）与**席位→Lead**（回报）**双向**；席位**不得互唤**（指引约束）。**Leader 面在册 / 席位面 deny** 的工具：`interrupt_agent` / `list_agents` / `wait_agent`（**成员侧可用/不可用清单见本节 §七**）。已知事实：S-3 已对成员放开 `send_message`（可推 Lead） |
 
@@ -463,7 +463,7 @@
 - **反例 3（以官方工具替代引擎结算）**：席位完成后不调 `member_settle`、只 `send_message` 报捷 ⇒ **批永挂 `running`**（audit 层 lane **不自动结算**）。**正解**：成员**自发 `handoff_submit`**，Leader 显式 `member_set_status(review)` → `member_settle(merged)`。
 - **反例 4（Q1 ↔ Q2 同页矛盾）**：一处写「team 为**主流方向**」、另一处又把它写成**默认值** ⇒ **自相矛盾**且撞 C-3 禁令。**正解**：**统一口径**「常用档 / 主流方向 / **由评估选档** / 非机械默认」，两通道**并列**。
 - **反例 5（席位超限硬拉 / 复用不登记）**：`maxMembers` 已满仍继续 `spawn_teammate` ⇒ **拒**；或复用而不登记 ⇒ **lane 记录与实际执行者不符**（审计无法对账）。**正解**：**合规复用 ＋ 登记**（登记件写明复用原因 / 被复用席位 / 原 lane）并**在 lane 记录注明实际执行者**。
-- **反例 6（结算时序倒置 / 漏结算）**：成员不 `handoff_submit` 就报捷，或 Leader 只 `swarm_report` 不 `member_settle` ⇒ **`GATE_HANDOFF_MISSING`**（入边未齐）/ **批永挂 `running`**。**正解**：**先 `handoff_submit`、后 `swarm_report`**，再 `member_set_status(review)` → `member_settle(merged)` → `batch_phase(complete)`。
+- **反例 6（结算时序倒置 / 漏结算）**：成员不 `handoff_submit` 就报捷，或 Leader 只 `swarm_report` 不 `member_settle` ⇒ **`GATE_HANDOFF_MISSING`**（入边未齐；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）/ **批永挂 `running`**。**正解**：**先 `handoff_submit`、后 `swarm_report`**，再 `member_set_status(review)` → `member_settle(merged)` → `batch_phase(complete)`。
 - **反例 7（把固定任务判成 B 档）**：「固定任务（角色 / 流程可预见）用 B 档裸 `subagent` 跑」⇒ 与「team 为主流方向」**冲突**，且**无席位生命周期、无 lane 账本**。**正解**：**固定任务 ⇒ D 档（team 席位）**；B 档**仅限**两类（不占主上下文的调研 / 已明确上下文的单步派发）。
 - **反例 8（把 Leader 治理工具当席位可用）**：给席位任务包写「自己 `interrupt_agent` / `list_agents` 自查」⇒ **席位面 deny、必失败**。**正解**：按**成员侧清单**派活（可用 = 交接 / 回报 / `member_settle`）；治理工具**留在 Leader 面**。
 
@@ -541,7 +541,7 @@
 - **建批拒态两段式（排查必先分段）**：段一 = **宿主参数面**（进 `execute` 之前按 schema 拒；文案由宿主生成、**不带** `GATE_*`；今日可触发键只剩 `batchId` / `tasks`）；段二 = **业务构造期面**（`store.createBatch` 之前；**首行原样透出引擎码**，可照码自救：`GATE_ROLE_ASSEMBLY_MISSING` / `GATE_ASSEMBLY_INVALID` / `GATE_AUDIT_INPUT_MISSING`）。两段之后都是「**零批次 JSON 落盘** + `pendingBatch` 保留」，补声明可重试。
 - **`batch.phase` 事件的 `reason`**：暂停类必须带 source 前缀（`auto-settle:<判据码>` / `manual:batch_phase[:<phase>]` / `manual:batch_control.<action>`；存量 `failed-escalate` / `governance-escalate` 不动），空/空白不写该键；读端渲染 `<from> -> <to> | <reason>` —— 「为何不推进」的唯一解释入口是 `log_export` markdown。
 - **产物类型注册表不绑定任何团队模板（防回生）**：`artifact_types` 是**引擎通用任务治理**的只读注册表（产物类型 → 层 / 目录前缀约定），**不绑定任何团队模板**、不读团队资产、不随某团队的层 / 角色定义变化 ⇒ 新增或改产物类型时**禁**把它挂回装配数据面。
-- **`handoff_accept` 只补入边声明，不改拓扑真源（防回生）**：它仅在下游**自己的入边表**（`batch.handoffs[to]`）补一条与建批期同形态的 `pending` 声明条，**不写 `deps`**、不动 `wavePlan` / `waves` / `orderOf`（拓扑真源**零变更**）；声明一旦存在，上游就**必须交**（缺交拒 `GATE_HANDOFF_MISSING` 并落 `lane.handoff.gap`）⇒ 该动作是**净收紧**，**不得**被读作「放宽校验」或「补边捷径」。
+- **`handoff_accept` 只补入边声明，不改拓扑真源（防回生）**：它仅在下游**自己的入边表**（`batch.handoffs[to]`）补一条与建批期同形态的 `pending` 声明条，**不写 `deps`**、不动 `wavePlan` / `waves` / `orderOf`（拓扑真源**零变更**）；声明一旦存在，上游就**必须交**（缺交拒 `GATE_HANDOFF_MISSING` 并落 `lane.handoff.gap`；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）⇒ 该动作是**净收紧**，**不得**被读作「放宽校验」或「补边捷径」。
 - **技能名可解析性不参与建批判定（防回生）**：技能进任务包是 **recommend 式、非装配式**——技能名解析不到 ⇒ **建批照常落盘、无告警**；`skills` 面**不设门禁**，**禁**以「技能不可解析」拒建批 / 拒派，也**禁**为它新加告警级留痕。
 - **`chain` 声明面与回显面已全量退役（实现删除事实，防回生）**：`batch_status.chain`、建批期链静态校验、`chain.step` 常量与链推进器**已在实现中删净**（非仅文档标注）⇒ **禁**重新引入 `chain` 声明入参 / 回显字段 / 链校验码；运行期 DAG 真源**只有** `lanes[].deps` + `handoffs`。
 
@@ -559,7 +559,7 @@
 - 成员完成 / 失败用 `member_settle` 结算（`member.settled`）；只做**异常判断与简短处置**，不转述完整消息（省 token）。
 - **终门禁综合**：**不拼接**成员输出——先**消重**、**标注冲突**、**核证据**再下结论；分歧**不掩盖**、**不以投票了事**。
 - **审计时点（完成即审，不等同批）**：exec lane `merged` 后立即开其 audit lane（可并行），不得等同批其他 lane/批收口。单 lane 审计 ⊥ 跨 lane 聚合（gap-list / 回归 / 消重 = Leader 终门禁），后者不构成前者延期理由；已完结批可另开审计批（plan+exec 占位满足 `consumes_required`）。反例：压到最后一波。**星型直驱下该条的落实 = §11 R-1（结算即派）+ R-2（复核并行，不得挡在派发前）。**
-- **交接门工具面（G-10 补名）**：lane 间产物传递用 **`handoff_submit`**（`{batchId, from, to, artifacts[], assertions[]}`——`artifacts` **逐个必须在场**，缺则拒并落 `lane.handoff.gap` 事件；提交成功即尝试把 `from` 释放 / `to` 获取的写权一并转移）与 **`handoff_view`**（读端：逐边列 `submitted`/`pending`、解析后**绝对路径 + 是否可读**、上游 `assertions`、`blocking` 缺口）。**下游开工硬前提 = 其入边 `submitted`**（缺 ⇒ entry 门拒 `GATE_HANDOFF_MISSING`，§11 R-3）；存量无 `batch.handoffs` 的历史批回 `legacy:true`（放行 + 留痕）。
+- **交接门工具面（G-10 补名）**：lane 间产物传递用 **`handoff_submit`**（`{batchId, from, to, artifacts[], assertions[]}`——`artifacts` **逐个必须在场**，缺则拒并落 `lane.handoff.gap` 事件；提交成功即尝试把 `from` 释放 / `to` 获取的写权一并转移）与 **`handoff_view`**（读端：逐边列 `submitted`/`pending`、解析后**绝对路径 + 是否可读**、上游 `assertions`、`blocking` 缺口）。**下游开工硬前提 = 其入边 `submitted`**（缺 ⇒ entry 门拒 `GATE_HANDOFF_MISSING`，§11 R-3；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）；存量无 `batch.handoffs` 的历史批回 `legacy:true`（放行 + 留痕）。
 
 ## §6 门禁
 
@@ -609,7 +609,7 @@
 - **适用**：**全部批次**（原触发键 `assembly.managerPlan='leader-direct'` 已随 Manager 层删除 ⇒ 本模式不再是「一种可选模式」，而是引擎的常态：Leader 是唯一派发者）。
 - **R-1 结算即派**：任一 lane `merged` ⇒ **立即派其下游 lane**（本模式下 Leader 是唯一派发者），**不得**先做 Leader 复核、**不得**等整批。判据：上游 `member.settled` 与下游 `lane.dispatch` 的时间差 **≤ 1 个回合**，且上游交接已 `submitted`。与 §5「审计时点（完成即审，不等同批）」同源，是其在星型模式下的**动作化**。
 - **R-2 复核并行**：Leader 独立复核与 audit lane **并行**；默认**抽查**（关键指纹 / 冲突读数 / 抽样复算），**不重复全量重跑**（除自报与 audit 读数冲突）。复核服务于**终门禁综合**，**不构成派发前置闸门**。
-- **R-3 单点派发**：本模式下 **Leader 是唯一派发者**；lane 之间只以 **handoff** 传递产物，「入边交接 submitted」是下游开工的硬前提（缺口 = `GATE_HANDOFF_MISSING`）。
+- **R-3 单点派发**：本模式下 **Leader 是唯一派发者**；lane 之间只以 **handoff** 传递产物，「入边交接 submitted」是下游开工的硬前提（缺口 = `GATE_HANDOFF_MISSING`；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）。
 - **R-4 星型 ≠ 无链（2026-09-24 订正；2026-09-27 本批补记）**：**`chain` 声明面已整体退役删净**（进退役锁：八条静态校验 / `lib/assembly/chain.js` 投影函数 / `chain.step` 回显 / `lib/engine/chain-runner.js` 全删）；**DAG 真源 = `lanes[].deps` + `handoffs`**（逐边取件用 `handoff_view`，判定单点 `lib/state/gates.js` 的 `handoffRecordVerdictOf`）。
   - **lane 命名纪律：整条作废（2026-09-18 Q-A=C）**。原纪律「lane id **必须逐字等于**资产 `branches[].id`，否则落 `no-lane-for-step`」——① 链运行期推进早已退役（无消费方）；② **其载体（资产 `branches[]` 与 `chainStepForLane` / `chainLanesOfStep` / `chainNextOf` 等符号）亦已随本批删净** ⇒ **lane id 完全自由命名**（唯一硬约束：与 `deps` / `handoffs` 中引用的 id **逐字一致**）。
 - **R-5 监管二源**：判 lane 停滞须**二源共振**（文件时效 + 官方/子会话活动）；`<lane>/progress/*` 与工作区文件 mtime 属**单源**，只报数**不动作**；**误报不得触发 interrupt / 重派**（重派会丢在制改动）。
@@ -619,7 +619,7 @@
 - **§11 之 D 档版（team 方向 · 席位；2026-10-01 补，A7）**：与 R-1..R-6 **同源**（**Leader 是唯一派发者**），差异只在**执行主体的生命周期通道**：
   1. **席位复用**：同类型多实例池（`maxMembers` 实测 **8** 席；超限 ⇒ **合规复用 + 登记**，见 §0p 五）；
   2. **派活 / 唤醒 = `send_message`**（**唯一正式通道**；**不是** `lane_dispatch` / `subagent`）；
-  3. **入边 `submitted` 仍是下游开工硬前提**（`handoff_submit` 由**成员自交**，Leader 可代交；缺口 = `GATE_HANDOFF_MISSING`）——R-3 原样适用；
+  3. **入边 `submitted` 仍是下游开工硬前提**（`handoff_submit` 由**成员自交**，Leader 可代交；缺口 = `GATE_HANDOFF_MISSING`；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）——R-3 原样适用；
   4. **结算时序**：成员 `handoff_submit` → Leader `member_set_status(review)` → `member_settle(merged)`；**audit 层 lane 必须显式结算**（§0p 九 / §0t M-1）；全批终态后 `batch_phase(complete)`。
 
 ## §12 audit 非盲审：判据源硬门与建批规范（2026-09-17 用户口径 + 实测）
@@ -854,7 +854,7 @@
 **承接 `### 15.8`** 三件套；本条**补的是批次拓扑 / 交接面**的纪律（与 §15.6 批边界归属、§11 R-3 单点派发互补）。
 
 - **规则**：**建批后追加 lane**（修复 / 补做）时，**同批**做两步并留痕：① 更新目标 **audit lane 的 `consume`**（纳入追加产物的逐条路径）；② 声明**追加 lane → audit** 的**入边**（`deps`）；追加 lane 的任务包**必须**写明「**出边目标 ＋ 纳管动作**」。
-- **反例**：本会话实测 **同一批内 3 次追加、0 条规则** ⇒ 追加 lane 的产物**既无 DAG 出边、也不在 audit 的 `consume` 内** ⇒ 该 lane 完成时 `handoff_submit` 被 **`GATE_HANDOFF_MISSING`** 拒（**边不在建批期声明中**），且**其修复成果不被 audit 覆盖** —— **成果在场、验收面缺位**（最坏形态：**看起来做完了，实际没人验**）。
+- **反例**：本会话实测 **同一批内 3 次追加、0 条规则** ⇒ 追加 lane 的产物**既无 DAG 出边、也不在 audit 的 `consume` 内** ⇒ 该 lane 完成时 `handoff_submit` 被 **`GATE_HANDOFF_MISSING`** 拒（**边不在建批期声明中**；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**），且**其修复成果不被 audit 覆盖** —— **成果在场、验收面缺位**（最坏形态：**看起来做完了，实际没人验**）。
 - **正解写法**：追加 lane 时**同批**执行两步 —— ① audit 的 `consume` **加入** `<追加产物路径>`；② 声明 `追加 lane → audit` 边并**在产物留痕**；判据 = 「**audit 的 `consume` 逐条含追加 lane 的 `produce` 路径**」（**肯定式**：命中条数 = `produce` 条数）。
 
 ### 15.13 预算式必须含**墙钟维度**（不只 token 轮次）
@@ -1028,7 +1028,7 @@
 | `GATE_ENTRY_MISSING` | exec 派发前 lane 的 `consume` 产物缺失 | **拒派**（lane 留 pending） |
 | ~~`GATE_EXEC_INPUT_MISSING`~~ | **已删净（2026-09-27 批 `retire-team-chain-20260927`）**——原判据**全部取自团队资产声明**（`flows.exec.consumes_required` / `consumes_required_per_lane` 的层前缀覆盖）⇒ 随资产面删净（`lib/**` 零字面量含注释；**不在退役锁登记范围**内——锁只覆盖 `TEAM_ASSET_*` 全族 + `teamsRoot` 族） | **exec 输入面的一般纪律不变**：exec lane 的 `consume` 仍受 **entry 门 `GATE_ENTRY_MISSING`** 强制（引擎默认面） |
 | `GATE_HANDOFF_ARTIFACT_MISSING` | **缺产物**：`handoff_submit` 时声明的 `artifacts` 有不在场件（或逃逸产物根） | **拒提交**（缺口同时落 `lane.handoff.gap` 事件） |
-| `GATE_HANDOFF_MISSING` | **缺边**：下游 lane **入边交接未 `submitted`**（建批期 `deps` 已声明，但上游未 `handoff_submit`）｜结算时该交未交｜建批期 `deps` 无交接声明来源 | **拒派 / 拒结算 / 拒建批**（缺口同时落 `lane.handoff.gap` 事件；存量无 `batch.handoffs` 的历史批走 `legacy` 放行 + 留痕） |
+| `GATE_HANDOFF_MISSING` | **缺边**：下游 lane **入边交接未 `submitted`**（建批期 `deps` 已声明，但上游未 `handoff_submit`）｜结算时该交未交｜建批期 `deps` 无交接声明来源 | **拒派 / 拒结算 / 拒建批**（**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**；缺口同时落 `lane.handoff.gap` 事件；存量无 `batch.handoffs` 的历史批走 `legacy` 放行 + 留痕） |
 | `GATE_TARGET_MISSING` | lane 声明 `targets`，merged 前某 target **未落盘** | **拒 merged** |
 | `GATE_TARGET_UNCHANGED` | 声明的 target 已落盘但**未变更** | **拒 merged** |
 | `GATE_PLAN_CONTRACT` | plan 层 spec 缺必填裸标题（`## 验收标准` / `## 约束`，**逐字**匹配） | **拒 merged** |

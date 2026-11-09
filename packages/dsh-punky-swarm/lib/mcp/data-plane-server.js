@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 import { sendJson } from '../json-response.js';
+import { isTrustedConfigRequest } from '../webui/config-trust.js';
 import { createToolsPort, createHttpPort } from '../provider-dsh/tools-http.js';
 import { SUITE_TOOLS, RESIDENT_TOOL_NAMES } from '../engine/suite.js';
 import { HOST_INTERSECT_EXEMPT } from '../governance/host-tools.js';
@@ -227,6 +228,14 @@ export function mcpInternalErrorFrame(message) {
 export function createMcpHandler(ctx, deps = {}) {
   const logger = deps.logger ?? ctx?.logger ?? null;
 
+  // 【QA-01 · 跨站信任判据的 host 白名单】取值形态与 WebUI 写端点完全同形（`lib/api.js:253`
+  //   `const trustedHosts = Array.isArray(cfgEp.trustedHosts) ? cfgEp.trustedHosts : []`）。
+  //   出厂 `[]` = loopback-only：loopback 分类已由下方 handler 首行 `isLoopback` 前置保证，
+  //   本判据在其**之上**补「sec-fetch-site ≠ cross-site」+「Origin 存在时 origin.host === Host」两层。
+  //   ⚠ 全仓 `trustedHosts` 唯一另外出现处 = `lib/api.js:253`，**无配置文件字段**（grep 已核：
+  //   `config-trust.js` 之外仅 api.js 的注入位）⇒ 此处缺省空集即当前唯一正确形态，接入点留在 deps。
+  const trustedHosts = Array.isArray(deps.trustedHosts) ? deps.trustedHosts : [];
+
   /** 注册表视图里的工具定义（取不到 ⇒ null，**不抛**；`errored` 与「无定义」在此同归 null）。 */
   const definitionOf = (name) => {
     try {
@@ -343,9 +352,31 @@ export function createMcpHandler(ctx, deps = {}) {
       logger?.warn?.('[mcp] rejected non-loopback request from ' + String(req?.socket?.remoteAddress));
       return sendJson(res, 200, rpcError(null, -32600, 'invalid request: loopback only'));
     }
+    // ── 【QA-01】来源可信判据（跨站 / DNS-rebinding 面）──────────────────────────────
+    //   判据本体**复用** `lib/webui/config-trust.js:53-61` 的 `isTrustedConfigRequest`（与宿主 /api
+    //   面、本仓 WebUI 写端点同一函数）：Host 必须 loopback/trustedHosts → `sec-fetch-site` 非
+    //   `cross-site` → `Origin` 存在时 `origin.host === Host`。**禁在此重写、禁收紧放宽、禁加参数。**
+    //   位置：loopback 之后、POST-only 之前 —— 跨站请求**不进入** `frameResultOf` ⇒ **零工具派发**；
+    //   被拒时沿用既有错误帧形态（`sendJson(200, rpcError(null, -32600, …))`，与上方 loopback 拒同形，
+    //   **不造新码**）。
+    //   ⚠ Q3 已接受边界：`config-trust.js:60` 为 `origin === undefined ⇒ return true` ⇒ 同机**非浏览器**
+    //   进程（不带 Origin / Sec-Fetch-Site）修复后**仍可通过**。这不是漏修，是用户裁决接受的边界；
+    //   更硬的进程级凭据形态（用户 Q3 明确本批不做）列入 followup，登记在 `exec/mcp-trust.md`。
+    if (!isTrustedConfigRequest(req, trustedHosts)) {
+      // 留痕用 debug 而非 warn：本批 Q4 裁决「`lib/**` 内零新增 logger.warn」（批级判据作用于全 lib diff）。
+      logger?.debug?.('[mcp] rejected untrusted origin request（host=' + String(req?.headers?.host) + '）');
+      return sendJson(res, 200, rpcError(null, -32600, 'invalid request: untrusted origin'));
+    }
     // ── 只开 POST（本面只做请求-响应；流式/SSE 不在本批）────────────────────────────
     if (String(req?.method ?? '').toUpperCase() !== 'POST') {
       return sendJson(res, 200, rpcError(null, -32600, 'invalid request: POST only'));
+    }
+    // ── 【QA-01】媒体类型门：MCP over HTTP 要求 `application/json` ⇒ 否则 **HTTP 415** ──────
+    //   放 POST-only 之后、读体之前（HTTP 层拒绝，不解析 body）。`charset=utf-8` 等参数形态按
+    //   子串包含放行（`application/json; charset=utf-8` 合规）。帧形状仍用既有 `rpcError`（不造新码）。
+    if (String(req?.headers?.['content-type'] ?? '').toLowerCase().indexOf('application/json') < 0) {
+      logger?.debug?.('[mcp] rejected non-json content-type: ' + String(req?.headers?.['content-type']));
+      return sendJson(res, 415, rpcError(null, -32600, 'invalid request: content-type must be application/json'));
     }
     let frame;
     try {

@@ -18,6 +18,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // scripts/docs-consistency.mjs —— 文档一致性守卫（批 `punky-three-tasks-20261103` · lane `impl-doc`）
 //
+// ⚠ **【2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】本脚本已退出 `npm test` 链**
+//   （R-2「测试链只绑代码」用户裁决；`package.json` 的 `scripts.test` 尾节点已摘除）。
+//   它现在只是**按需人工工具**，不再是门禁 —— 任何「本脚本绿了所以链是绿的」的推论都不成立。
+//   其中**代码面**的两条判据（`A-1` / `A-1·语义`，读 `lib/capabilities.js` 的 `degraded` 计数）
+//   已在摘链**之前**迁出为独立测试 `test/capabilities-contract.test.js`（先迁后删，禁净损失）；
+//   其余 7 条（`A-2` + `C×6`）读的是 `drift-audit.md` 等**文档内容**，按 R-2 口径不进测试链，
+//   需要时人工跑本脚本即可（本文件保留 A-1/A-2/C 全部判据，不作删减）。
+//
 // 三条判据（spec §3.1，**只读、零依赖、不写任何文件**）：
 //   A · 旧词归零   A-1 `lib/capabilities.js` 的 `degraded` 计数 = **1**（且该行含「已废除」）
 //                  A-2 `plan/drift-audit.md` 的失效句式 `/仍写[\s\S]{0,20}degraded|HEAD 仍/g` = **0**

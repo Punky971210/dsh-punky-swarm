@@ -223,6 +223,10 @@ test('AC-4 双入口同一装配床：宿主路由 /mcp 与自建端口 /mcp 的
     const bodyText = JSON.stringify(rpcFrame('tools/list', {}, 11));
     const reqA = {
       method: 'POST', url: MCP_PATH, socket: { remoteAddress: '127.0.0.1' },
+      // 【QA-01 · 桩真实性】真实 `IncomingMessage` 恒带 `headers`，HTTP/1.1 恒带 `Host`（RFC 9110 §7.2），
+      //   MCP 面另要求 `application/json`。缺这两项会被 QA-01 信任护栏/content-type 门拒成 -32600/415
+      //   —— 那是桩失真（入口 B 走真 socket，天然带头；入口 A 的假 req 必须同形）。补头零行 assert 改动。
+      headers: { host: '127.0.0.1:' + bed.port, 'content-type': 'application/json' },
       on(event, cb) {
         if (event === 'data') cb(Buffer.from(bodyText, 'utf8'));
         if (event === 'end') cb();

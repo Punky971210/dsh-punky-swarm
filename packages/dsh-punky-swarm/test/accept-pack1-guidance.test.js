@@ -18,93 +18,44 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // test/accept-pack1-guidance.test.js —— 批 `punky-iter-a-20261024` · **pack1 验收套件**（lane `t1-tests`）
 // ─────────────────────────────────────────────────────────────────────────────
 // 判据来源 = `plan/p2-taskpack-1.md` 的 `## 验收标准`（AC-1..AC-12），**逐条一对一**编号 `AC-pack1-N`。
-// 与 coder 的 `test/guidance-id-coverage.test.js` 分工：那是**实现侧**的单文件回归（判据自身有没有牙），
-//   本件是**验收侧**的独立探针（规格条目有没有兑现），两者同源不同向、可互相证伪。
+//
+// ⚠ 【R-2 移出登记 · 2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】
+//   用户裁决：**测试链只绑代码、不绑文档**（2026-11-09）；注入面（`presets/**`、`skills/**`）按**丙案**
+//   只保留两条硬断言（① frontmatter 合法；② `references` 引用的文件确实存在），其余结构完整性断言
+//   随文档内容一致性校验一并移出。据此本件**移出 4 例**，仅保留唯一的**常驻不变量**用例 `AC-pack1-12`：
+//
+//   | 原用例 | 上批编号/原行 | 判定对象 | 守卫去向 |
+//   |---|---|---|---|
+//   | `AC-pack1-2` §0i/§0s/§0t 小节在场且 id 不重复 | §2.3-C `#19`（原 `:144-153`） | `discipline.md` 正文小节标题 | **接受失守**（小节结构由人工维护）；丙案①「frontmatter 合法」不覆盖 `.md` 小节齐备 |
+//   | `AC-pack1-6` 注入面条目 vs 正文 24 字窗命中 = 0 | §2.3-C `#20`（原 `:158-182`） | 两件文档的文本重合率 | **接受失守**（属「文案与正文职责边界」，非可机检注入契约） |
+//   | `AC-pack1-7` §0k 含 `SUMMARY:` 机读行 + 4 档强度 | §2.3-C `#21`（原 `:187-209`） | `discipline.md` §0k 正文 | **接受失守**；机读契约的下游解析器另有 `gate-*`/`judging` 面用例（已随 R-2 一并移出）⇒ 登记 followup |
+//   | `AC-pack1-10` §0f/§0g/§0h 悬空引用 = 0 | §2.3-C `#22`（原 `:214-230`） | `discipline.md` **内部小节号**是否仍有定义 | **接受失守** |
+//
+//   **`#22` 的归类更正（H-05，勿沿用旧理由）**：原判据比对的是 `discipline.md` 的**内部小节号**
+//   `§0f/§0g/§0h` 是否仍有定义面，**不是**「引用的文件是否存在」⇒ 不属丙案硬断言②（文件存在性），
+//   故归**移出**，不得再以「引用可达 ⇒ 保留」为理由留在链上。
 //
 // 只读纪律：
-//   · 本件不写目标仓任何文件（读文本 + 只读命令 `spawnSync`）；负例副本一律落 `os.tmpdir()`。
+//   · 本件不写目标仓任何文件（读文本 + 只读命令 `spawnSync`）。
 //   · **禁跑** `npm run build` / `npm test`（首段 build 会重写全量 `lib/**` = pack2 的独占窗口）。
 //   · 执行方式：`node --test test/accept-pack1-guidance.test.js`
 //
 // 四态纪律：每条用例正文首行写明**失败条件**；报告侧四态（通过/失败/跳过/未验证）逐位留档，
 //   跳过只用于「并行窗口内结构性不可判」，**不折算**为通过。
-//
-// 时点纪律：`AC-pack1-1` 的「改前 RED」是**时点读数**（正文补齐前才存在），本件只能断言其**机制可达**
-//   （负例 N1），真实改前读数须由 exec 报告原样贴出（我方已独立取得，见 exec/t1-test-suite.md §二）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
-const BASELINE = 'bfb9b0c';
-const DISCIPLINE_REL = 'presets/punky-preset/references/discipline.md';
-const GUIDANCE_REL = 'presets/punky-preset/agent.cordis.yml';
-const CODER_TEST_REL = 'test/guidance-id-coverage.test.js';
-const BATCH_ARTIFACTS = process.env.PUNKY_BATCH_ARTIFACTS
-  ?? path.join('C:\\', 'Users', 'Administrator', '.dsh', 'punky-preset', 'sessions',
-    'aa_8dbc24d193cde729_sess_Io1QHlQjQQDFxw', 'artifacts', 'punky-iter-a-20261024');
-
-const TMP = [];
-test.after(() => { for (const d of TMP) fs.rmSync(d, { recursive: true, force: true }); });
-
-const absOf = (rel) => path.join(PKG_ROOT, ...rel.split('/'));
-const readRel = (rel) => fs.readFileSync(absOf(rel), 'utf8');
-const normWs = (s) => s.replace(/\s+/g, ' ').trim();
-
-// 【T-4 死码已删（批 `punky-g1-tail-2026-10-29` · lane `t1-test`）】
-//   原「子进程 env 剥离辅助函数」连同其上方 3 行说明注释整块删除（该函数用于剥掉 `NODE_TEST_*` 注入变量）。
-//   该死码**预先存在**（非本批造成）：上一批删掉本文件两个 spawn 包装函数后，它的唯一使用者即消失，
-//   此后无任何调用点（实测按该函数名 grep 仅命中定义行）⇒ 属既存死码清尾。
-//   ⚠ 本文件 `inlineEntriesOf` 同源副本与其**活断言**未动（它们是 T-3(a) 指引句的事实基，C-8 禁动）。
-
-// 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
-//   原「已退役脚本的路径常量」与两个为 spawn 它而写的包装函数（一为直接 spawn、一为 JSON 版）整链删除：
-//   两个包装函数在本文件**均无调用点**（实测 grep 仅命中定义与彼此调用）⇒ 路径常量随之无活引用。
-//   删的是死链，**不动任何活断言**（C-6）。G04② 历史注释保留（见下方一行），标「已废」。
-
-/** 与实现同源的注入面条目解析（`scripts/check-guidance-sync.mjs#inlineEntriesOf`，缩进 ≥6）。（已废：该脚本已退役，本行仅存历史） */
-function inlineEntriesOf(text) {
-  const out = [];
-  for (const line of text.split(/\r?\n/)) {
-    const m = /^\s{6,}([0-9]{1,2}[a-z]?)\.\s+(\S.*)$/.exec(line);
-    if (!m) continue;
-    out.push({ id: m[1], text: m[2], pointers: [...m[2].matchAll(/#§([0-9]+[a-z]?)/g)].map((x) => x[1]) });
-  }
-  return out;
-}
-
-const SECTION_RE = /^## §([0-9]+[a-z]?)\s/;
-
-/** 取 `## §<id> ` 小节（body 不含标题行、止于下一条 h2/h1）。 */
-function sectionOf(text, id) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((l) => {
-    const m = SECTION_RE.exec(l);
-    return m !== null && m[1] === id;
-  });
-  if (start < 0) return null;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^#{1,2}\s/.test(lines[i])) { end = i; break; }
-  }
-  return { heading: lines[start], body: lines.slice(start + 1, end).join('\n').trimEnd() };
-}
-
-/** 归一后「长度 24 的滑窗」在对方文本中出现的个数（AC-6 的可跑算法）。 */
-function windowHits(subject, corpus, size = 24) {
-  const a = normWs(subject);
-  const b = normWs(corpus);
-  const hits = [];
-  for (let i = 0; i + size <= a.length; i += 1) {
-    const w = a.slice(i, i + size);
-    if (b.includes(w)) hits.push(w);
-  }
-  return hits;
-}
+// 【R-2 · 2026-11-09】随上述 4 例删除而**孤儿化**的常量/辅助函数已一并删除（只清理本次改动造成的死码）：
+//   `DISCIPLINE_REL` / `GUIDANCE_REL` / `BATCH_ARTIFACTS` / `absOf` / `readRel` / `normWs` /
+//   `SECTION_RE` / `sectionOf` / `windowHits` / `inlineEntriesOf` / `TMP` + `test.after`（负例夹具早已删除，
+//   该钩子恒空转）/ `fs` 导入。
+//   另删两处**历史遗留死码**（本文件内零调用点，且目标件已不存在）：`BASELINE`（`'bfb9b0c'`）与
+//   `CODER_TEST_REL`（指向 `test/guidance-id-coverage.test.js`，该件**不在盘**）。
 
 /** porcelain 路径（`XY <path>`：状态位恰 2 字符 + 1 空格；**不得先 trim**，否则首行状态位被吃掉）。 */
 function porcelainPaths() {
@@ -133,101 +84,6 @@ const FORBIDDEN_ZONES = [
  *  否则 `e2-1` / `e2-13`（基线 ≡ 实测树）会红。此处放行**单文件**，不放行目录：
  *  `baselines/` 下新增其它文件仍判越界。 */
 const BASELINE_REFRESH_ALLOWED = /^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/;
-
-// 【G04③ 死码已删】原「负例临时根夹具」整函数删除：
-//   该夹具在本文件**无任何调用点**（实测 grep 仅命中定义），其体内复制已退役脚本的一行是死引用 ⇒ 随链删除。
-//   `TMP` / `test.after` 保留（活钩子，不属本类）。
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-2 三新节在场且标题以 `## §` 起（唯一性用守恒式，不断条数）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-2 三新节 §0i/§0s/§0t 在场且小节标题 id 不重复', () => {
-  // 失败条件：任一新节缺失、重复，或写成 `### §0i` / `**§0i**` 等非 `## ` 形态
-  //           （标题形态变了，判据 ②/③/②b 的解析器都读不到 ⇒ 静默失效）。
-  // 判据形态：存在性（缺哪节点名哪节）＋ 守恒式（id 无重复）——不锚定条数。
-  const body = readRel(DISCIPLINE_REL);
-  const ids = (body.match(/^## §[0-9]{1,2}[a-z]?/gm) ?? []).map((h) => h.slice(4).trim());
-  const missing = ['0i', '0s', '0t'].filter((id) => !ids.includes(id));
-  assert.deepEqual(missing, [], '三新节须各以 `## §<id> ` 形态在场，缺：' + JSON.stringify(missing));
-  assert.deepEqual(ids, [...new Set(ids)], '小节标题 id 不得重复（重复会让解析器只读第一个 ⇒ 静默失效）');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-6 注意事项面不复制操作原文（Q-B）：最长公共窗口 = 0 且每节 ≥ 120 字
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-6 注入面条目与对应正文小节：24 字窗命中 = 0，且每节正文 ≥ 120 字', () => {
-  // 失败条件：任一节出现 ≥24 字的连续公共串（= 把操作面整句抄进正文，Q-B 硬阈值被破），
-  //           或任一节正文 < 120 字（= 用一行抄过去再改名绕过阈值）。
-  // 已解绑 §0t：其「何时必须做」于 2026-10-28 迁入 `member_settle` 工具定义（Q-3），
-  //   注入面不再有条目 ⇒ 只核仍留在注入面的两节（§0i / §0s）。
-  const body = readRel(DISCIPLINE_REL);
-  const entries = new Map(inlineEntriesOf(readRel(GUIDANCE_REL)).map((e) => [e.id, e.text]));
-  const report = [];
-  for (const id of ['0i', '0s']) {
-    const sec = sectionOf(body, id);
-    assert.ok(sec, `§${id} 小节缺失（无法核 AC-6）`);
-    const entryText = entries.get(id);
-    assert.ok(entryText, `注入面缺条目 ${id}（无法核 AC-6）`);
-    const hits = windowHits(sec.body, entryText, 24);
-    const len = [...normWs(sec.body)].length;
-    report.push(`§${id}: 正文长度=${len}｜24 字窗命中=${hits.length}${hits.length ? ' → ' + JSON.stringify(hits.slice(0, 3)) : ''}`);
-    assert.deepEqual(hits, [], `§${id} 与注入面条目存在 ≥24 字连续公共串（Q-B 阈值被破）：${JSON.stringify(hits.slice(0, 3))}`);
-    // 【TR2 出清 · 2026-11-01】原第 171 行的 `assert.ok(len >= 120, …)` 已删：变异实测
-    //   「删掉 §0i 全部判定条件、换成 200+ 字无关散文」⇒ 长度 141 ⇒ 该断言**仍绿**（J-1：只数长度、不保护语义）；
-    //   而「压成 17 字但语义完整」⇒ **变红**（J-2：测的是篇幅）。
-    //   ⇒ 篇幅断言无鉴别力，删除；**`hits`（≥24 字公共串）那条保留**（K 不得删）——它才是本节真正的判据。
-    //   `len` 仅保留在 `report` 输出里作**观测值**，不再作为断言。
-  }
-  process.stdout.write('[AC-pack1-6] ' + report.join(' ； ') + '\n');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-7 §0k 含机读行与 4 档强度，且未新增 verdict 值
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-7 §0k 有 `SUMMARY:` 机读行 ＋ 4 档强度，且 `{pass, fail, skip}` 未被改写、强度未进 verdict', () => {
-  // 失败条件：§0k 无 `SUMMARY:` 行 / 缺任一顿（PROVED·SEMI_PROVED·VIOLATED·UNKNOWN）/
-  //           `pass, fail, skip` 表述被改坏（下游 verdict 白名单会失配）/ 强度被写成 verdict 的取值。
-  const body = readRel(DISCIPLINE_REL);
-  const sec = sectionOf(body, '0k');
-  assert.ok(sec, '§0k 小节缺失');
-  assert.ok((sec.body.match(/SUMMARY:/g) ?? []).length >= 1, '§0k 须含 ≥1 处 `SUMMARY:` 机读结论行');
-  for (const tier of ['PROVED', 'SEMI_PROVED', 'VIOLATED', 'UNKNOWN']) {
-    const n = (sec.body.match(new RegExp('\\b' + tier + '\\b', 'g')) ?? []).length;
-    assert.ok(n >= 1, `§0k 须含强度档 \`${tier}\`（实测 ${n}）`);
-  }
-  assert.ok(body.includes('pass, fail, skip'),
-    '`verdict ∈ {pass, fail, skip}` 表述须仍在场且未被改写（Q-C 禁区：强度不是 verdict）');
-  // 禁区（赋值形态）：整篇禁 `verdict: 'PROVED'` / `verdict = PROVED` 之类
-  const assign = body.match(/verdict\s*[:=∈]\s*['"`]?\s*(?:SEMI_PROVED|PROVED|VIOLATED|UNKNOWN)/g) ?? [];
-  assert.deepEqual(assign, [], '禁把强度写进 verdict 取值位：' + JSON.stringify(assign));
-  // 同行邻域：允许「禁把 PROVED 写进 verdict」这类**禁令句**，但不允许非禁令句共现
-  const cooc = body.split(/\r?\n/)
-    .filter((l) => /\b(?:SEMI_PROVED|PROVED|VIOLATED|UNKNOWN)\b/.test(l) && l.includes('verdict'));
-  const notProhibition = cooc.filter((l) => !/(禁|不得|不是|非|勿)/.test(l));
-  assert.deepEqual(notProhibition, [],
-    '强度与 verdict 同行出现时必须是否禁令句（否则易被读成 verdict 取值）：' + JSON.stringify(notProhibition));
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-10 R-11 悬空引用清理（命中 = 0，或逐处登记）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack1-10 R-11：`§0f/§0g/§0h` 悬空引用 = 0，或每处均在 exec/e1-disc.md 逐条登记', () => {
-  // 失败条件：仍有悬空引用且报告未逐处登记（「部分登记」= 按 AC 判红）——
-  //           指到不存在的节会让读者/审计找不到定义面，比悬空更糟的是「改指了别的现役小节」。
-  const body = readRel(DISCIPLINE_REL);
-  const hits = [...body.matchAll(/§0([fgh])\b/g)].map((m) => '§0' + m[1]);
-  if (hits.length === 0) return;
-  const reportPath = path.join(BATCH_ARTIFACTS, 'exec', 'e1-disc.md');
-  assert.ok(fs.existsSync(reportPath),
-    `仍有 ${hits.length} 处 §0f/g/h 引用（${JSON.stringify(hits)}），但报告 ${reportPath} 不存在 ⇒ 无法核「逐处登记」`);
-  const report = fs.readFileSync(reportPath, 'utf8');
-  const perToken = (t) => (report.match(new RegExp(t + '(?![0-9a-z])', 'g')) ?? []).length;
-  for (const t of new Set(hits)) {
-    const need = hits.filter((x) => x === t).length;
-    const got = perToken(t);
-    assert.ok(got >= need, `${t} 正文命中 ${need} 处，报告仅登记 ${got} 处（禁「部分登记」）`);
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-12 禁区黑名单（W8：baselines/docs/reports 单写者 = Leader）

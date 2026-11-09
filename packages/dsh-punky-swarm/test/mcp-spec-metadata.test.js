@@ -43,11 +43,15 @@ const READ_ONLY_EXPECTED = Object.freeze([
 const WRITE_EXPECTED = Object.freeze(['handoff_submit', 'handoff_accept']);
 
 /** 最小 HTTP 桩：走 handler 的真实 readBody / isLoopback / sendJson 路径。 */
+// 【QA-01 · 桩真实性】真实 `IncomingMessage` 恒带 `headers`，HTTP/1.1 恒带 `Host`（RFC 9110 §7.2），
+//    MCP 面另要求 `application/json`。缺这两项会被 QA-01 护栏/content-type 门拒成 -32600/415
+//    —— 那是桩失真，不是合法请求形态。补头零行 assert 改动。
 function driveCall(handler, body) {
   return new Promise((resolve, reject) => {
     const req = Readable.from([Buffer.from(JSON.stringify(body), 'utf8')]);
     req.method = 'POST';
     req.socket = { remoteAddress: '127.0.0.1' };
+    req.headers = { host: '127.0.0.1:3918', 'content-type': 'application/json' };
     const chunks = [];
     let status = 0;
     const res = {

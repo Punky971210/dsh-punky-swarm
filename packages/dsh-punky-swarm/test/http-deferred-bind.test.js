@@ -120,6 +120,12 @@ function reqOf(body) {
   const stream = Readable.from([Buffer.from(body, 'utf8')]);
   stream.method = 'POST';
   stream.socket = { remoteAddress: '127.0.0.1' };
+  // 【Leader L-2 · 2026-11-10】补真实请求头：HTTP/1.1 的 `Host` 是强制头（RFC 9110 §7.2），
+  //   `content-type: application/json` 是 MCP over HTTP 的媒体类型要求。缺头的假 req 属**桩失真**：
+  //   QA-01 在 `createMcpHandler` 首段加了来源可信判据（`isTrustedConfigRequest` 要求 Host 可解析），
+  //   缺头会被正确拒为 `-32600 untrusted origin`，从而误伤本文件的 `initialize` 断言。
+  //   补头**不是放宽断言**：本文件零行 assert 改动；补头后的请求仍受 `sec-fetch-site`/`Origin` 判据约束。
+  stream.headers = { host: '127.0.0.1:3918', 'content-type': 'application/json' };
   return stream;
 }
 function resOf() {

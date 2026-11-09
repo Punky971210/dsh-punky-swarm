@@ -31,7 +31,7 @@
   },
   "scripts": {
     "check": "tsc -p tsconfig.json",
-    "test": "node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs && node scripts/docs-consistency.mjs --strict",
+    "test": "node --import ./test/helpers/isolated-home.preload.mjs --test test/*.test.js && node scripts/evidence-guard.mjs",
     "fragility": "node scripts/audit/fragility.mjs",
     "fragility:selftest": "node scripts/audit/fragility.mjs --selftest",
     "smoke:host": "node scripts/smoke/host-smoke.mjs",

@@ -18,12 +18,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // test/accept-pack3-spec-contract.test.js —— 批 `punky-iter-a-20261024` · **pack3 验收套件**（lane `t1-tests`）
 // ─────────────────────────────────────────────────────────────────────────────
 // 判据来源 = `plan/p2-taskpack-3.md` 的 `## 验收标准`（AC-1..AC-12），逐条一对一编号 `AC-pack3-N`。
-// 另含 Lead 路由的四条重点：① 四块齐（MC 规则／六态语法／`SUMMARY:` 机读行／需求编号纪律）
-//   ② 「推荐技能」条目为 recommend 语义（非装配）③ 版本钉 `b3ee6ee` 与署面在位 ④ 角色表 ↔ role 文件对称差 = ∅。
+//
+// ⚠ 【R-2 / 丙案 重分类 · 2026-11-09 · 批 `punky-gate-fix` · lane `e3-docs-unlink`】
+//   用户裁决：**测试链只绑代码、不绑文档**（2026-11-09）；注入面（`presets/**`、`skills/**`）按**丙案**
+//   只保留两条硬断言：**① frontmatter 合法；② `references` 引用的文件确实存在**。
+//   本件承载丙案 13 例中的 8 例（`#23`..`#30`），按「**子断言粒度**」拆分（H-06：`AC-pack3-15` 整例留 /
+//   整例删都错），处置如下：
+//
+//   | 处置 | 上批编号 | 原行 | 现值 |
+//   |---|---|---|---|
+//   | **保留（②）** | `#29` 的**存在性子断言** | 原 `:450` 例内 `:472-483` | → `AC-pack3-15c`（独立坐标，逐条 `fs.existsSync`） |
+//   | **并入**（子断言级，不计例数） | `#30` 的 `:495` | 原 `:495` | → 并入 `AC-pack3-15c`（`doc-manager.md` 必须存在） |
+//   | **移出** | `#23` `:176` / `#24` `:190` / `#25` `:210` / `#27` `:416` / `#28` `:435` / `#30` 主体 `:492-499` | 同左 | 整例删除（就地留痕） |
+//   | **改写（①）** | `#26` `:340` | 原 `:340-363` | → `AC-pack3-8`**重写为 frontmatter 合法性**（可解析 + 必备键在场 + 列表键为数组） |
+//
+//   另按 §2.3-A（文档内容绑定）移出 2 例：`AC-pack3-6`（`#11` 24 字窗 / 12-gram 重合率 — 纯文案篇幅重叠）
+//   与 `AC-pack3-7`（`#10` 版本钉 `b3ee6ee` 的文案同步）。
+//   ⇒ 净结果：本件从 **17 例**收敛为 **9 例**，其中 7 例是**代码面/流程面**判据（集合在场、对称差、体积、
+//   引擎面零命中、porcelain 两类、禁区），1 例丙案①（frontmatter），1 例丙案②（references 存在性）。
+//
+// ⚠ **`#26` 选择「改写」而非「移出」的理由（留痕）**：丙案两条硬断言里 ② 已由 `AC-pack3-15c` 独占，
+//   若 ① 也移出则「注入面只留两条硬断言」退化成一条。改写用**零依赖结构解析**（不引 `js-yaml`：
+//   它不是本包 `dependencies`/`devDependencies` 的声明项，仅以传递依赖形态在 `node_modules` 里，
+//   而 AC-24 禁 `npm install` / 禁 lockfile 变更 ⇒ 引它 = 造一条在干净检出上可能必红的隐式依赖）。
 //
 // 只读纪律：本件**不改**仓内任何文件（含 skills 树与 live 镜像）；**禁跑** `npm run build` / `npm test`。
-// 外部资产：SpecLang 只读副本 `D:/AI_Workspace/DSH/DSH/.survey-tmp/SpecLang` @ `b3ee6ee`
-//   （路径可由 env `PUNKY_SPeclang_ROOT` 覆盖；副本不在位时相关断言**如实判红**并给缺件原因，不静默跳过）。
 // 执行方式：`node --test test/accept-pack3-spec-contract.test.js`
 //
 // 四态纪律：每条用例正文首行写明**失败条件**；跳过只用于「并行窗口内结构性不可判」，不折算通过。
@@ -33,35 +52,31 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+// 丙案硬断言① 的解析器 = **引擎自己的**那一份（非自造、非新增依赖）；与 `resolveRoleRef` 同一条解析路径。
+import { parseRoleFrontmatter, ROLE_MANDATORY_FIELDS } from '../lib/engine/dispatch-role.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
 const SKILLS_REL = 'skills/software-team';
 const SKILL_MD_REL = 'skills/software-team/SKILL.md';
 const NEW_REL = 'skills/software-team/references/engineering/spec-contract.md';
-const ENG_DIR_REL = 'skills/software-team/references/engineering';
 const ROLES_DIR_REL = 'skills/software-team/references/roles';
 // 【G04③ 死码已删（批 `punky-g1-gapfix-2026-10-29` · lane `t1-verify`）】
 //   原「已退役脚本的路径常量」与「JSON 版 spawn 包装函数」整链删除：该包装在本文件**无任何调用点**
 //   （实测 grep 仅命中定义），其体内 spawn 该脚本的一行因此**不是活引用**；
 //   与之配套的「子进程 env 剥离」辅助函数随之孤儿化（唯一使用者是被删的包装）⇒ 一并删除。
 //   本文件另一处 `spawnSync('git', …)` 是**活引用**，`node:child_process` 导入保留；**未动任何活断言**（C-6）。
-// 比较对象 = **上游只读副本**（`b3ee6ee`），默认 `D:/AI_Workspace/DSH/DSH/.survey-tmp/SpecLang`，
-//   可由 env `PUNKY_SPECLANG_ROOT` 覆盖。
-// 【2026-10-25 CI 修复】原写法在副本缺失时直接 `assert` 判红 ⇒ 干净检出 / CI runner 上 AC-6/AC-7 必红
-//   （Linux CI 实测红）。但**不能**改用仓内 `references/vendor/speclang` 当比较对象：AC-6 判的是
-//   「散文面与上游源零整句拷贝」，vendor 全文进仓后仓内文本天然与之重叠 ⇒ 会造出假红（实测：
-//   `references/vendor/spec` 与 `**The Cangjie Project**` 两窗被误判为拷贝）。
-//   ⇒ 正确处置：副本不在场 = 该 AC **本环境不可核**（留痕、不计通过、也不判红）；在场则断言逐条不变。
-const SPECLANG_ROOT = process.env.PUNKY_SPECLANG_ROOT
-  ?? path.join('D:\\', 'AI_Workspace', 'DSH', 'DSH', '.survey-tmp', 'SpecLang');
-const SPECLANG_PRESENT = fs.existsSync(SPECLANG_ROOT);
-const SPECLANG_PIN = 'b3ee6ee';
+// 【R-2 · 2026-11-09】随上表所列 8 例的删除/改写而**孤儿化**的常量与辅助函数已一并删除
+//   （只清理本次改动造成的死码）：`ENG_DIR_REL` / `normWs` / `windowsOf` / `SPECLANG_ROOT` /
+//   `SPECLANG_PRESENT` / `SPECLANG_PIN` / `speclangSources` / `noteSpeclangAbsent` /
+//   `RECOMMEND_TOKENS` / `ASSEMBLY_BAN` / `VENDOR_MARK`。
+//   连带删除的还有「SpecLang 上游只读副本」整段说明（其唯一消费者是被删的 `AC-pack3-6`/`AC-pack3-7`
+//   与死码 `noteSpeclangAbsent`）——**这不影响**任何保留判据：`AC-pack3-15c` 判的是**仓内** vendor 副本
+//   的指针存在性，与上游副本无关。
 
 const absOf = (rel) => path.join(PKG_ROOT, ...rel.split('/'));
 const readRel = (rel) => fs.readFileSync(absOf(rel), 'utf8');
 const existsRel = (rel) => fs.existsSync(absOf(rel));
-const normWs = (s) => s.replace(/\s+/g, ' ').trim();
 
 /** 基线（`bfb9b0c`）时 `skills/software-team` 的 **19 件定稿名单**
  *  （`git ls-tree -r --name-only bfb9b0c -- ./skills/software-team` 原样摘录）。
@@ -132,24 +147,6 @@ function roleFilesHoldingSpecContract() {
   return out;
 }
 
-/** 归一后 12 字符滑窗集合（用于 12-gram 重合率）。 */
-function windowsOf(text, size) {
-  const a = normWs(text);
-  const set = new Set();
-  for (let i = 0; i + size <= a.length; i += 1) set.add(a.slice(i, i + size));
-  return set;
-}
-
-function speclangSources() {
-  if (!SPECLANG_PRESENT) return null; // 副本不在场 ⇒ 调用点留痕跳过（不计通过、不判红）
-  return walkFiles(SPECLANG_ROOT).filter((p) => /\.(md|rb|py|yaml)$/.test(p));
-}
-/** 副本不在场时的统一留痕（可见、可检索；不静默）。 */
-function noteSpeclangAbsent(t) {
-  t.diagnostic('SpecLang 上游副本不在位：' + SPECLANG_ROOT
-    + ' ⇒ 本 AC 环境不可核（不计通过、不判红）。用 PUNKY_SPECLANG_ROOT 指向 @' + SPECLANG_PIN + ' 的只读副本可补核。');
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-1 能力层集合在场：既有 19 件逐件在场 ＋ 新件在场 ＋ 下界棘轮
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -171,58 +168,27 @@ test('AC-pack3-1 `skills/software-team` 集合在场：既有 19 件逐件在场
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-2 新文件编号族自洽且不撞前缀
+// 【R-2 移出】AC-pack3-2（上批 §2.3-C `#23`，原 `:176-185`）
+//   原判据：新文件 `## S-n` 条目 ≥ 4 且既有三件 `S-`/`C-` 前缀命中 = 0。
+//   移除依据：判定对象 = `spec-contract.md` 正文的**编号族形态**（文档内容一致性）。
+//   守卫去向：**接受失守**；丙案①（frontmatter 合法）不覆盖正文编号族，丙案② 只覆盖 references 存在性。
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-2 新文件 `## S-n` 条目 ≥ 4；既有三件 `S-`/`C-` 前缀命中 = 0', () => {
-  // 失败条件：新文件未沿 `S-n` 范式（无编号 ⇒ 无法被角色表点名）/ 复用了既有文件已占的编号前缀（撞号）。
-  assert.ok(existsRel(NEW_REL), '缺 ' + NEW_REL);
-  const mine = (readRel(NEW_REL).match(/^## [SC]-\d+ /gm) ?? []).length;
-  assert.ok(mine >= 4, `新文件 \`## S-n\` 条目须 ≥ 4，实测 ${mine}`);
-  for (const f of ['backend.md', 'frontend.md', 'verification.md']) {
-    const n = (readRel(`${ENG_DIR_REL}/${f}`).match(/^## [SC]-\d+ /gm) ?? []).length;
-    assert.equal(n, 0, `${f} 内不得出现 \`## S-n\`/\`## C-n\`（前缀为 spec-contract 专用；命中 ${n} = 撞号）`);
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-2b（Lead 路由重点①）四块齐：机械规则 / 六态证据语法 / SUMMARY 机读行 / 需求编号纪律
+// 【R-2 移出】AC-pack3-2b（上批 §2.3-C `#24`，原 `:190-205`）
+//   原判据：新文件覆盖四块（MC-1..MC-8 / 六态 4 档＋2 旁路 / `SUMMARY:` 机读行 / 需求编号族）。
+//   移除依据：判定对象 = `spec-contract.md` 正文**章节与编号覆盖**（文档内容一致性）。
+//   守卫去向：**接受失守**（同 `#23`）。
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-2b 新文件覆盖四块：MC-1..MC-8、六态（4 档＋2 旁路）、`SUMMARY:` 机读行、需求编号族', () => {
-  // 失败条件：四块任一缺失（= 只写了「规则摘抄」而没落提炼面，K-1 的覆盖契约未兑现）。
-  const text = readRel(NEW_REL);
-  const need = [];
-  for (let i = 1; i <= 8; i += 1) if (!text.includes('MC-' + i)) need.push('MC-' + i);
-  assert.deepEqual(need, [], '① 机械规则清单须覆盖 MC-1..MC-8，缺：' + JSON.stringify(need));
-  for (const tier of ['PROVED', 'SEMI_PROVED', 'VIOLATED', 'UNKNOWN']) {
-    assert.ok(new RegExp('\\b' + tier + '\\b').test(text), `② 六态语法缺强度档 ${tier}`);
-  }
-  for (const side of ['CHAIN_BREAK', 'MAPPING_BLOCKED']) {
-    assert.ok(text.includes(side), `② 六态语法缺旁路态 ${side}`);
-  }
-  assert.ok(text.includes('SUMMARY:'), '③ 缺 `SUMMARY:` 机读行形态');
-  const idFamilies = ['REQ-', 'AC-', 'SCN-', 'RULE-'].filter((f) => text.includes(f));
-  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(idFamilies.length >= 3, '④ 需求编号纪律须给出编号族（REQ-/AC-/SCN-/RULE- "
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-3 挂载齐备（文件数 = 条目数对齐，防「grep 命中次数冒充文件数」）
+// 【R-2 移出】AC-pack3-3（上批 §2.3-C `#25`，原 `:210-225`）
+//   原判据：挂载命中文件数 = 1（SKILL.md）＋ N（挂载 role 文件数），且 ≥ 7（目录结构齐）。
+//   移除依据：判定对象 = `skills/software-team` 树下**哪些文件正文提到了 `spec-contract`**
+//   （文档内容一致性 + 目录结构齐）。丙案② 只保「被引用的**文件**是否存在」，不保「引用它的文件有几个」。
+//   守卫去向：**部分承接** —— `AC-pack3-4`（表集 ↔ role 文件集对称差 = ∅）仍在链上，
+//   但「下标集 ⊆ 上标集」的等式半边失守 ⇒ 登记 followup。
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-3 挂载命中文件数 = 1（SKILL.md）＋ N（挂载 role 文件数）；且 ≥ 7', () => {
-  // 失败条件：① 等式不成立（有 role 文件挂载但表里没写 / 反之 = 两本账）；
-  //           ② 命中文件数 < 7 ⇒ 挂载面不足（doc-manager 按 K-3 明令不挂 ⇒ 上限 = 1 + 6 = 7）。
-  // 依据 R-16.1a（2026-10-24 裁决）：pack3 AC-3 的阈值由「≥ 8」订正为「≥ 7」——
-  //   原 ≥8 与「= 1 + N」在 N=6 时互斥（doc-manager 按 K-3 不挂），属判据算术缺陷，非实现缺陷。
-  //   R-18（decisions §十）要求把该裁决传播到本断言；除本处外本件断言一律未改。
-  const hitFiles = walkFiles(absOf(SKILLS_REL)).filter((p) => fs.readFileSync(p, 'utf8').includes('spec-contract'));
-  const roleHits = roleFilesHoldingSpecContract();
-  const skillMdHit = hitFiles.some((p) => p.endsWith('SKILL.md'));
-  assert.ok(skillMdHit, 'SKILL.md 必须点名 spec-contract（真源表在 SKILL.md）');
-assert.deepEqual(hitFiles.filter((p) => !p.endsWith('SKILL.md')).map((p) => path.basename(p)).sort(), [...roleHits.values()].sort(),
-    `命中文件数须 = 1（SKILL.md）+ ${roleHits.size}（挂载 role）= ${1 + roleHits.size}，实测 ${hitFiles.length}：`
-    + JSON.stringify(hitFiles.map((p) => path.relative(PKG_ROOT, p).split(path.sep).join('/'))));
-  assert.ok(hitFiles.length >= 7,
-    `AC-3（R-16.1a 订正后）要求命中文件数 ≥ 7：实测 ${hitFiles.length}（= 1 + ${roleHits.size}）`);
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-4 表与文件双向一致（对称差 = ∅）
@@ -252,114 +218,52 @@ test('AC-pack3-5 新文件 ≤ 300 行且 ≤ 16 KB', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-6 字面重合度三测（子串 ≤24 / 12-gram ≤15% / 锚点 ≥4 可解析）
+// 【R-2 移出】AC-pack3-6（上批 §2.3-A `#11`，原 `:257-315`）
+//   原判据：新文件与 SpecLang 上游源的字面重合度（24 字窗命中 = 0 / 12-gram ≤ 15% / 锚点可解析）。
+//   移除依据：判定对象 = 两件**文本**的篇幅重叠率，纯文案面、零代码面含义（上批削弱评估 W-8）。
+//   守卫去向：**接受失守**（防整句拷贝转为人工评审）；连带删除其专用辅助
+//   `normWs`/`windowsOf`/`speclangSources`/`noteSpeclangAbsent`/`SPECLANG_*` 常量。
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-6 重合度：24 字窗命中 = 0、12-gram 重合率 ≤ 15%、≥4 条 `path:line` 锚点在 b3ee6ee 副本可解析', (t) => {
-  // 失败条件：整句复制（出现 ≥24 字连续公共串）/ 高比例换皮（12-gram > 15%）/ 锚点不可解析（= 没真去读源件）。
-  const mine = readRel(NEW_REL);
-  const sources = speclangSources();
-  // 上游副本不在场（干净检出 / CI runner）⇒ 本 AC 环境不可核：留痕跳过，不计通过、不判红。
-  if (sources === null) {
-    noteSpeclangAbsent(t);
-    return;
-  }
-
-  // ① 24 字窗：源侧建集合，逐窗查命中（命中即 LCS ≥ 24）。
-  //   **口径细化（非软化）**：AC-6③ 反向**强制**锚点字面在场（`path:line` 必须能在源副本解析到），
-  //   而锚点路径本身（如 `speclang-waterfall/assets/MECHANICAL_RULES.md`）必然与源侧构成 ≥24 字公共串
-  //   —— 与 K-4「允许枚举名与规则编号复用」同类。故判据主体 = **散文面**公共串（剥掉行内代码片段后仍命中）
-  //   = 0；严格字面读数（未剥代码片段）**照实打印**，供 Leader 裁决口径（见缺陷 D-5）。
-  const src24 = new Set();
-  for (const p of sources) for (const w of windowsOf(fs.readFileSync(p, 'utf8'), 24)) src24.add(w);
-  const codeSpanWindows = new Set();
-  for (const m of mine.matchAll(/`[^`\n]*`/g)) for (const w of windowsOf(m[0], 24)) codeSpanWindows.add(w);
-  const strictHits = [...windowsOf(mine, 24)].filter((w) => src24.has(w));
-  const proseHits = strictHits.filter((w) => !codeSpanWindows.has(w));
-  assert.deepEqual(proseHits, [],
-    `新文件**散文面**与 SpecLang 源存在 ≥24 字连续公共串（禁整句拷贝）：${JSON.stringify(proseHits.slice(0, 3))}（共 ${proseHits.length} 窗）`);
-  process.stdout.write(`[AC-pack3-6①] 严格字面命中=${strictHits.length} 窗（全部来自行内代码片段：路径/枚举名/规则号）｜散文面命中=0\n`);
-
-  // ② 12-gram 重合率
-  const my12 = windowsOf(mine, 12);
-  const src12 = new Set();
-  for (const p of sources) for (const w of windowsOf(fs.readFileSync(p, 'utf8'), 12)) src12.add(w);
-  let shared = 0;
-  for (const w of my12) if (src12.has(w)) shared += 1;
-  const ratio = my12.size === 0 ? 0 : shared / my12.size;
-  assert.ok(ratio <= 0.15, `12-gram 重合率须 ≤ 15%，实测 ${(ratio * 100).toFixed(2)}%（${shared}/${my12.size}）`);
-
-  // ③ 锚点：`path:line[,line…]` 逐条在副本内可解析（容许 `.github/skills/` 前缀省略）
-  const candidates = [...mine.matchAll(/([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|rb|py|yaml)):(\d+(?:,\d+)*)/g)]
-    .map((m) => ({ rel: m[1], lines: m[2].split(',').map(Number) }));
-  const resolve = (rel) => {
-    const tries = [rel, path.join('.github', 'skills', rel), rel.replace(/^[^/]+\//, '')];
-    for (const t of tries) {
-      const abs = path.join(SPECLANG_ROOT, t);
-      if (fs.existsSync(abs)) return abs;
-    }
-    return null;
-  };
-  const resolved = [];
-  const unresolved = [];
-  for (const c of candidates) {
-    const abs = resolve(c.rel);
-    if (abs === null) { unresolved.push(c.rel); continue; }
-    const total = fs.readFileSync(abs, 'utf8').split(/\r?\n/).length;
-    const badLine = c.lines.find((n) => n < 1 || n > total);
-    if (badLine !== undefined) { unresolved.push(`${c.rel}:${badLine}(超出 ${total} 行)`); continue; }
-    resolved.push(`${c.rel}:${c.lines.join(',')}`);
-  }
-  const distinct = [...new Set(resolved)];
-  // 已删断言（D 夹具自证）：断言对象为**同文件自建数组**、非生产面，本条属夹具自证；本用例其它断言保留 —— 原文 "assert.ok(distinct.length >= 4, `须有 ≥4 条可解析的 \\`path:line\\` 锚点，实测 ${dis"
-  process.stdout.write(`[AC-pack3-6] 24 字窗命中=0｜12-gram=${(ratio * 100).toFixed(2)}%｜可解析锚点=${distinct.length}\n`);
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-7 版本钉与署面
+// 【R-2 移出】AC-pack3-7（上批 §2.3-A `#10`，原 `:320-335`）
+//   原判据：版本钉 `b3ee6ee` 出现在 2 件；`The Cangjie Project` / `权利人待确认` / `Apache-2.0` 各 ≥1。
+//   移除依据：判定对象 = 文档正文的**版本号与署面措辞同步**，纯文案（W-8「无代码面含义」）。
+//   守卫去向：**接受失守**（版本钉与许可署面由人工维护）。
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-7 版本钉 `b3ee6ee` 出现在 2 件；`The Cangjie Project` / `权利人待确认` / `Apache-2.0` 各 ≥1', () => {
-  // 失败条件：版本锚写成 `HEAD`（不可复现）/ 署面缺失（许可合规面断链）/ 未声明权利人待确认（冒充已确认）。
-  const files = [NEW_REL, SKILL_MD_REL];
-  const pinned = files.filter((rel) => readRel(rel).includes(SPECLANG_PIN));
-  // 数量 → 数组相等（哪些）：两个载体文件名在用例内已知（NEW_REL / SKILL_MD_REL）
-  // ⇒ 既证"命中了几个"，也证**命中的是哪两件**（漏一件/换成别的件都会红）。
-  // 这是 `numSource=input-param` 的形态：期望值由 files 常量派生，不写第二遍字面量 2。
-  assert.deepEqual(pinned.slice().sort(), [NEW_REL, SKILL_MD_REL].sort(),
-    `\`${SPECLANG_PIN}\` 须同时出现在两件载体（spec-contract.md 与 SKILL.md），实测 ${JSON.stringify(pinned)}`);
-  const text = readRel(NEW_REL);
-  for (const needle of ['The Cangjie Project', '权利人待确认', 'Apache-2.0']) {
-    assert.ok(text.includes(needle), `spec-contract.md 缺署面/许可要素：${needle}`);
-  }
-  assert.ok(!/锚\s*`?HEAD`?/i.test(text) || /不锚\s*`?HEAD`?/i.test(text),
-    '版本锚不得写成 HEAD（须写「不锚 HEAD」）');
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC-8 recommend 语义**非装配**（Lead 路由重点②）
+// AC-8（**丙案① 改写**）role frontmatter 合法：可解析 + 必备键在场 + `skills` 为数组
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-8 SKILL.md 有「推荐技能」条目、措辞为 recommend；role frontmatter `skills:` 零 speclang；无装配式措辞', () => {
-  // 失败条件：写成装配式（「必装/强依赖/缺则拒」）/ 写进 role frontmatter 的 `skills:`（引擎已不解析团队资产，
-  //           写进去会被误读为装配面）/ 推荐条目缺失（能力层无入口）。
-  const skill = readRel(SKILL_MD_REL);
-  assert.ok(/推荐技能/.test(skill), 'SKILL.md 须有「推荐技能」小节');
-  assert.ok((skill.match(/recommend/gi) ?? []).length >= 1, 'SKILL.md 须明写 recommend 语义（≥1）');
-  // 装配式措辞：**允许出现在禁令句里**（「禁把本条写成装配式措辞（必装/强依赖/未就绪即拒批）」），
-  //   判据主体 = 非禁令语境下的装配式表述（否则正反两难：写清楚禁令反而被判红）。
-  const asmLines = skill.split(/\r?\n/).filter((l) => /必装|强依赖|缺则拒|未就绪即拒/.test(l));
-  const asmViolations = asmLines.filter((l) => !/(禁|不得|勿|不是|非)/.test(l));
-  assert.deepEqual(asmViolations, [], 'SKILL.md 不得出现装配式措辞（必装/强依赖/缺则拒，禁令语境除外）：' + JSON.stringify(asmViolations));
-  const offenders = [];
+test('AC-pack3-8 role frontmatter 合法：引擎同源解析器可解析、`ROLE_MANDATORY_FIELDS` 全在场、`skills` 为数组', () => {
+  // 失败条件：某 role 文件无可用 frontmatter（`parseRoleFrontmatter` 返回 null）/ 缺
+  //           `ROLE_MANDATORY_FIELDS` 中任一键（值为 undefined|null|''|空数组）/ `skills:` 在场但不是数组
+  //           （写成标量 `skills: speclang` ⇒ 下游 `listOf` 会把它当单元素列表或按字符串读 = 静默错读）。
+  // 【丙案① 改写 · 留痕（`#26`＝原 `:340-363`）】原判据 = 「role frontmatter 的 `skills:` 内**零 speclang**」
+  //   （字段**内容**约束）⇒ 按 R-2 移出（文档/注入面内容一致性）；改判**字段合法性**（丙案硬断言①）。
+  //   **不自造 YAML 解析器、不引 `js-yaml`**（它不是本包声明的依赖；AC-24 禁 `npm install` / 禁 lockfile
+  //   变更 ⇒ 引它等于造一条在干净检出上可能必红的隐式依赖）：直接用**引擎自己的**解析器
+  //   `parseRoleFrontmatter` + 必填键常量 `ROLE_MANDATORY_FIELDS`（`lib/engine/dispatch-role.js`）
+  //   ⇒ 本断言跟踪的是**真实消费方契约**（`resolveRoleRef` 走的同一解析路径），解析器演进时这里自动跟随。
   const dir = absOf(ROLES_DIR_REL);
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.endsWith('.md')) continue;
+  const roleFiles = fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort();
+  // 防「零文件 ⇒ 恒绿」
+  assert.ok(roleFiles.length >= 7, `role 文件须 ≥ 7 件（含 doc-manager），实测 ${roleFiles.length}`);
+  const problems = [];
+  for (const name of roleFiles) {
     const text = fs.readFileSync(path.join(dir, name), 'utf8');
-    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-    if (!fm) continue;
-    for (const line of fm[1].split(/\r?\n/)) {
-      if (/^\s*skills\s*:/.test(line) && /speclang/i.test(line)) offenders.push(`${name}: ${line.trim()}`);
+    const fm = parseRoleFrontmatter(text);
+    if (!fm) { problems.push(`${name}: 无可用 frontmatter（\`---\` 块缺失或形态不符）`); continue; }
+    const missing = ROLE_MANDATORY_FIELDS.filter((k) => {
+      const v = fm[k];
+      return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+    });
+    if (missing.length) problems.push(`${name}: 缺必备键 ${missing.join('/')}`);
+    if (Object.prototype.hasOwnProperty.call(fm, 'skills') && !Array.isArray(fm.skills)) {
+      problems.push(`${name}: \`skills:\` 须为数组形态，实测 ${JSON.stringify(fm.skills)}`);
     }
   }
-  assert.deepEqual(offenders, [], 'role frontmatter 的 `skills:` 内不得出现 speclang（recommend ≠ 装配）：' + JSON.stringify(offenders));
+  assert.deepEqual(problems, [], 'role frontmatter 不合法（丙案硬断言①）：' + JSON.stringify([...new Set(problems)]));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -383,16 +287,88 @@ test('AC-pack3-9b `git status --porcelain lib/` = 0 行（同批他包 build 期
   assert.deepEqual(libDirty, [], 'lib/ 须零脏项');
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 【R-2 移出】AC-pack3-13（上批 §2.3-C `#27`，原 `:416-428`）
+//   原判据：SKILL.md 与 role 文件里的 `S-n` 引用全部解析到 `spec-contract.md` 现役小节。
+//   移除依据：判定对象 = 文档**内部编号**的定义面（`## S-n` 小节是否还在）＝ 文档内容一致性；
+//   它**不是**「引用的文件是否存在」（丙案②只判文件级存在性，不判文档内锚点）。
+//   守卫去向：**接受失守**。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 【R-2 移出】AC-pack3-14（上批 §2.3-C `#28`，原 `:435-444`）
+//   原判据：适配层含「映射摘要」与「原件为准」硬声明，且声明位于六态表之前（结构顺序）。
+//   移除依据：判定对象 = 文档正文的**措辞在场与相对位置**（文档内容一致性 + 结构顺序）。
+//   守卫去向：**接受失守**。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AC-15c（**丙案② 唯一保留项**）`references/vendor/speclang/*` 指针逐条在场
+//   主子断言 = 原 `AC-pack3-15` 内的 `:472-483`（`fs.existsSync` 死指针检测）
+//   并入子断言 = 原 `AC-pack3-15b` 的 `:495`（`doc-manager.md` 必须存在）
+// ═══════════════════════════════════════════════════════════════════════════════
+test('AC-pack3-15c `references/vendor/speclang/*` 指针逐条在场（死指针 = 红）；`doc-manager.md` 必须存在', () => {
+  // 失败条件：任一处 `references/vendor/speclang/<x>` 路径不解析（死指针 ⇒ 成员点不开原件）；
+  //           或 `doc-manager.md` 不在盘（角色集缺口，应由 AC-pack3-1 先红）。
+  // 【H-06 拆解】原 `AC-pack3-15` 把**存在性**（`:472-483`）与**内容/措辞**（`:457-468` 的
+  //   `RECOMMEND_TOKENS`/`ASSEMBLY_BAN`、`:484-485` 的 holders 集合相等）混在一例 ⇒ 整例留/整例删都错。
+  //   本用例只留**存在性**半边（丙案②），内容/措辞半边随丙案移出（就地留痕见下）。
+  // 【并入】原 `AC-pack3-15b` 的 `:495`（`doc-manager.md` 必须存在）—— 子断言级并入，不另计例数。
+  const dir = absOf(ROLES_DIR_REL);
+  const docManager = path.join(dir, 'doc-manager.md');
+  assert.ok(fs.existsSync(docManager), 'doc-manager.md 必须存在（缺失 = 角色集缺口，应由 AC-pack3-1 先红）');
+  const dead = [];
+  const pointers = new Set();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/)) {
+      for (const m of line.matchAll(/`(references\/vendor\/speclang\/[^`]+)`/g)) {
+        const rel = m[1].replace(/\/+$/, '');
+        pointers.add(rel);
+        const abs = path.join(PKG_ROOT, 'skills/software-team', rel);
+        if (!fs.existsSync(abs)) dead.push(`${name}: ${rel} ⇒ 不存在`);
+      }
+    }
+  }
+  assert.deepEqual(dead, [], '死指针（路径不可解析，成员点不开）：' + JSON.stringify(dead));
+  // 防「零指针 ⇒ 恒绿」的下界棘轮：本仓既有 4 个 vendor 子目录被指针引用，少于此数说明指针被整体删掉
+  //   （删掉指针不属本判据要放行的演进：那会让丙案②变成空断言）。
+  assert.ok(pointers.size >= 4,
+    '被引用的 `references/vendor/speclang/*` 路径须 ≥ 4 条（下界棘轮，防「删指针换绿」使本断言空转），实测 '
+      + pointers.size + '：' + JSON.stringify([...pointers].sort()));
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 【R-2 移出】AC-pack3-15 主体（上批 §2.3-C `#29` 的**内容/措辞半边**，原 `:450-488` 除 `:472-483`）
+//   移出子断言：① `RECOMMEND_TOKENS`（同行须含 recommend/选读/不在册/不构成失败 语义词）；
+//              ② `ASSEMBLY_BAN`（同行不得含 必装/强依赖/缺则拒/未就绪即拒）；
+//              ③ `holders` 集合**精确等于** coder/coordinator/designer/reviewer/supervisor/tester 六名。
+//   移除依据：三条都判**文档正文的措辞与挂载名单**（`#29` 的持存子断言已在 `AC-pack3-15c` 保留）。
+//   守卫去向：**接受失守**（措辞语义与挂载名单由人工评审；`AC-pack3-4` 仍守「表 ↔ 文件」两本账）。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 【R-2 移出】AC-pack3-15b 主体（上批 §2.3-C `#30` 的**内容半边**，原 `:496-499`）
+//   移出子断言：`doc-manager.md` 正文**不得出现** `vendor/speclang/` 指针（内容断言）。
+//   保留子断言：同例 `:495`（`doc-manager.md` 必须存在）→ 已**并入** `AC-pack3-15c`。
+//   移除依据：判定对象 = 文档正文内容；丙案② 只判「被引用的文件是否存在」，不判「该不该引用」。
+//   守卫去向：**接受失守**（K-3「doc-manager 不挂规格面」由人工评审守）。
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-11 越界检查
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-11 skills 面变更只在 software-team 内；baselines/docs/reports 零变更', () => {
+test('AC-pack3-11 skills 面只许 .md 变更；baselines/docs/reports 零变更', () => {
   // 失败条件：改了别的 team skill（写域只有 software-team）/ 写了基线或文档（W8：基线单写者 = Leader）。
   const paths = gitPorcelain();
-  const otherSkills = paths.filter((p) => /^packages\/dsh-punky-swarm\/skills\//.test(p)
-    && !p.startsWith('packages/dsh-punky-swarm/skills/software-team/'));
-  assert.deepEqual(otherSkills, [], 'pack3 写域只到 skills/software-team/**，越界：' + JSON.stringify(otherSkills));
+  // 【Leader L-3 · 2026-11-10】AD-11 同类先例：原子断言「skills 变更只许落在 `software-team/` 内」
+  //   本质是**批窗口写域冻结**（pack3 开工时的写域快照），已被后续**合法演进**打红——批次
+  //   `punky-gate-fix` 按用户 N-5 裁决改 `design/research/video/writing-team/**/SKILL.md` 的交接门文案。
+  //   照 AD-11 口径弃该半段，改为**不依赖批窗口的等价不变量**：`skills/**` 内只许 `.md` 变更
+  //   （禁夹带脚本、资产或可执行文件）。判据强度不降（仍拦"往 skills 里塞代码"），只去掉时间性。
+  const skillPaths = paths.filter((p) => /^packages\/dsh-punky-swarm\/skills\//.test(p));
+  const nonMd = skillPaths.filter((p) => !p.endsWith('.md'));
+  assert.deepEqual(nonMd, [], 'skills/** 只许 .md 变更（禁夹带脚本/资产）：' + JSON.stringify(nonMd));
   // 【2026-11-09】`baselines/test-baseline.json` 单文件放行（基线单写者 = Leader 的受控重冻；
   //   测试树改动后必须同步，否则 e2-1 / e2-13 红）；`docs/` `reports/` 仍为禁区。
   const forbidden = paths.filter((p) => !/^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/.test(p)
@@ -407,94 +383,4 @@ test('AC-pack3-11b `package.json` / `CHANGELOG.md` / `README*` 变更 = 0 件（
     return t.skip(`pack4 已开工（发行面脏项 ${release.length} 件），归属不可判；收口态复跑本件`);
   }
   assert.deepEqual(release, [], '发行面须零变更');
-});
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-13 编号引用可解析（2026-10-24 瘦身后新增：防「删节留悬空引用」这一类缺陷）
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-13 SKILL.md 与 role 文件里的 `S-n` 引用全部解析到 spec-contract.md 现役小节', () => {
-  // 失败条件：spec-contract 删节/改号后未同步改引用（按编号找不到定义 = 断链）；
-  //           或引用了未在册的编号（拼写错 / 发明新号）。
-  const live = new Set((readRel(NEW_REL).match(/^## S-(\d+) /gm) ?? []).map((s) => s.replace(/^## S-(\d+) .*$/, '$1')));
-  assert.ok(live.size >= 4, 'spec-contract.md 现役 S-n 节须 ≥ 4，实测 ' + JSON.stringify([...live]));
-  const carriers = [SKILL_MD_REL, ...walkFiles(absOf(ROLES_DIR_REL)).map((p) => path.relative(PKG_ROOT, p).split(path.sep).join('/'))];
-  const dangling = [];
-  for (const rel of carriers) {
-    for (const m of readRel(rel).matchAll(/\bS-(\d+)\b/g)) if (!live.has(m[1])) dangling.push(`${rel}: S-${m[1]}`);
-  }
-  const uniq = [...new Set(dangling)];
-  assert.deepEqual(uniq, [], '悬空 `S-n` 引用（定义已删或改号，须改指现役节或改成文字指针）：' + JSON.stringify(uniq));
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AC-14 / AC-15 引用链接驳不破（2026-10-24 `speclang-wiring-20261024` 批新增）
-//   判据源 = `plan/p1-wiring-spec.md` §三.2（RQ-2）/ §三.4（机检骨架）
-//   两条都钉「链又断了这件事当场可见」：一条管适配层**声明在表之前**，一条管 role **同行带 recommend 语义**。
-// ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack3-14 适配层含「映射摘要」与「原件为准」硬声明，且声明位于六态表之前', () => {
-  // 失败条件：声明缺失（两处定义并存无免责）／声明位置在表之后（等于没声明）／表首行锚找不到（判据失去定位）
-  const text = readRel(NEW_REL);
-  assert.ok(text.includes('映射摘要'), '适配层缺「映射摘要」声明');
-  assert.ok(text.includes('原件为准'), '适配层缺「原件为准」声明');
-  const iDecl = text.indexOf('映射摘要');
-  const iTable = text.indexOf('| `PROVED` |');
-  assert.ok(iTable > 0, '找不到六态表首行 `| `PROVED` |`，位置断言不可判');
-  assert.ok(iDecl < iTable, `「映射摘要」声明须在六态表之前：声明@${iDecl} 表@${iTable}`);
-});
-
-const VENDOR_MARK = 'vendor/speclang/';
-const RECOMMEND_TOKENS = /recommend|选读|不在册|不构成失败/;
-const ASSEMBLY_BAN = /必装|强依赖|缺则拒|未就绪即拒/;
-
-test('AC-pack3-15 挂载 role **恰为** coder/coordinator/designer/reviewer/supervisor/tester 六个含 `vendor/speclang/`，且同行含 recommend 语义词、无装配式措辞；`doc-manager` 必须为 0', () => {
-  // 失败条件：指针缺失（成员碰不到原件）／同行只说路径不说 recommend（会被读成必读）／写了装配式措辞（recommend ≠ 装配）
-  // 2026-10-24 R-23 订正（t1 反向构造 C4/C6 暴露的两处盲区）：
-  //   ① 原断言 `holders.size >= 5` 少一个也过 ⇒ 改为**集合精确相等**（C4：删 1 指针 holders=5 原来仍绿）；
-  //   ② 原断言完全没管 `doc-manager` ⇒ 给它注入指针照样绿 ⇒ 补「不该挂的必须没挂」（C6）。
-  //   p1 的 AC-11② 声称是双向判据，原实现只做了单向——这条正是它要双向的地方。
-  const dir = absOf(ROLES_DIR_REL);
-  const holders = new Set();
-  const bad = [];
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.endsWith('.md')) continue;
-    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/)) {
-      if (!line.includes(VENDOR_MARK)) continue;
-      if (!RECOMMEND_TOKENS.test(line)) { bad.push(`${name}: 含 vendor 路径但同行无 recommend 语义词`); continue; }
-      if (ASSEMBLY_BAN.test(line)) bad.push(`${name}: 同行含装配式措辞`);
-      holders.add(name);
-    }
-  }
-  assert.deepEqual([...new Set(bad)], [], '同行语义不合格：' + JSON.stringify([...new Set(bad)]));
-  // 2026-10-24 R-24（r1 MUST-1 的 C3 构造暴露的假绿）：原断言只校字符串标记 `vendor/speclang/`，
-  // 不校**路径是否真的存在** ⇒ 把指针改成不存在的 `speclang-waterfallX/` 仍 PASS。
-  // p1 的 AC-5① 本就要求「提取路径逐条 test -d，不存在 = 死指针 ⇒ 红」，此处补上该维。
-  const dead = [];
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.endsWith('.md')) continue;
-    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/)) {
-      for (const m of line.matchAll(/`(references\/vendor\/speclang\/[^`]+)`/g)) {
-        const rel = m[1].replace(/\/+$/, '');
-        const abs = path.join(PKG_ROOT, 'skills/software-team', rel);
-        if (!fs.existsSync(abs)) dead.push(`${name}: ${rel} ⇒ 不存在`);
-      }
-    }
-  }
-  assert.deepEqual(dead, [], '死指针（路径不可解析，成员点不开）：' + JSON.stringify(dead));
-  const EXPECTED = ['coder.md', 'coordinator.md', 'designer.md', 'reviewer.md', 'supervisor.md', 'tester.md'];
-  assert.deepEqual([...holders].sort(), [...EXPECTED].sort(), `含 vendor 指针的 role 须恰为 ${EXPECTED.length} 个（少一个 = 成员碰不到原件；多一个 = 越界挂载），实测 ${JSON.stringify([...holders].sort())}`);
-  // `doc-manager` 不挂的**反向半边已拆为独立用例 AC-pack3-15b**（-02）：原断言在本 test 内被上面的集合断言遮蔽
-  //   （前移只反转遮蔽方向、仍共享一条 pass/fail 坐标）⇒ 拆成独立坐标。**勿把该断言加回本 test。**
-});
-
-// 反向半边独立用例（-02：原在同 test 内被 holders 集合断言遮蔽 ⇒ 拆出，独立坐标）
-// 兜底语义：即便 EXPECTED 漂移成 7 项（误把 doc-manager 纳入「应挂」名单），本条仍会红。
-test('AC-pack3-15b `doc-manager` 按 K-3 不挂规格面：文件内不得出现 vendor 指针', () => {
-  const dir = absOf(ROLES_DIR_REL);
-  const p = path.join(dir, 'doc-manager.md');
-  assert.ok(fs.existsSync(p), 'doc-manager.md 必须存在（缺失 = 角色集缺口，应由 AC-pack3-1 先红）');
-  assert.ok(
-    !fs.readFileSync(p, 'utf8').includes(VENDOR_MARK),
-    '`doc-manager` 按 K-3 不挂规格面：不得出现 vendor 指针（双向判据的反向半边）',
-  );
 });

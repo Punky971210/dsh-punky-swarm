@@ -37,7 +37,7 @@ export function buildBatch(cx) {
   const { batchFile, artifactsDirOf, corruptRegistry, log, commitBatch, newEvent, emitStateChange } = cx;
 
 
-  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, channel }) {
+  function createBatch(sessionId, { batchId, wavePlan, concurrency = 5, phase = 'planning', assembly, channel, handoffGate }) {
     //   本函数**只落盘**归一化结果，不做任何判定（单点判定 = `lib/wave-plan.ts#normalizeChannelDecl`，
     //   由建批路径 `lib/tools/core.js` 在 `createBatch` 之前调用并 throw）。
     schema.assertBatchPhase(phase);
@@ -62,6 +62,12 @@ export function buildBatch(cx) {
       archived: false,
       ...(assembly !== undefined ? { assembly } : {}),
       ...(channel !== undefined ? { channel } : {}),
+      // 【Leader L-5 · 2026-11-10】N-6 批内真值：建批期把交接门**实际生效值**落到批 JSON，
+      //   供事后回答「建批时门开还是关」（`batch_status` 与运行时态并排显示，drift 可见）。
+      //   口径约束：① 真值由调用方经 `handoffGateStateOf` 单点解析后**传入**，store 只落盘、
+      //   不解析策略（store 层零 config 读端，禁反向依赖 tools/层）；② 旧批无此键 ⇒ 调用方不传
+      //   ⇒ 不写键，向后兼容（`batch_status` 渲染 `absent`，不冒充 `entry:off`）。
+      ...(handoffGate !== undefined ? { handoffGate } : {}),
       events: [
         newEvent(EVT.EVT_BATCH_CREATED, { batchId, sessionId }),
       ],

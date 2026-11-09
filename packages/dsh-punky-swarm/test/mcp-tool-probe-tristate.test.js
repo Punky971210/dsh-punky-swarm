@@ -61,6 +61,10 @@ function reqOf(body) {
   const stream = Readable.from([Buffer.from(body, 'utf8')]);
   stream.method = 'POST';
   stream.socket = { remoteAddress: '127.0.0.1' }; // 坑①：缺它会被 loopback 守卫拦成 -32600
+  // 坑②·【QA-01 桩真实性】真实 `IncomingMessage` 恒带 `headers`，HTTP/1.1 恒带 `Host`（RFC 9110 §7.2），
+  //    MCP 面另要求 `application/json`。缺这两项会被 QA-01 信任护栏/content-type 门拒成 -32600/415
+  //    —— 那是桩失真，不是合法请求形态。补头零行 assert 改动。
+  stream.headers = { host: '127.0.0.1:3918', 'content-type': 'application/json' };
   return stream;
 }
 function resOf() {
