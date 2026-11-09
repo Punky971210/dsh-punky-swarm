@@ -1384,6 +1384,14 @@
       "tests": 15,
       "todos": 0
     },
+    "test/mcp-spec-metadata.test.js": {
+      "asserts": 29,
+      "blankLines": 12,
+      "lines": 155,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/mcp-structured-content.test.js": {
       "asserts": 15,
       "blankLines": 11,
@@ -2161,7 +2169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T13:40:55Z",
+  "generatedAt": "2026-11-09T13:50:11Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2172,15 +2180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "MCP 结构化输出：value 提升为标准 structuredContent（保留 value 兼容；不声明 outputSchema、不向 content 追加 JSON）；新增 test/mcp-structured-content.test.js（5 例）与 docs/mcp-data-plane.md（含 G-1 会话解析缺口留档）",
+  "reason": "MCP 规范元数据：tools/list 补 title+annotations（只读/写/幂等/开放世界四维提示）、initialize 补 instructions（面向模型的用法指导，兼作 G-1 会话缺口的文档级补偿）、handoff 三件补 batchId 描述、batch_status description 瘦身 911→约 190 字符；新增 test/mcp-spec-metadata.test.js（5 例）",
   "schema": 1,
   "totals": {
-    "asserts": 12111,
-    "blankLines": 6898,
-    "files": 270,
-    "lines": 72867,
+    "asserts": 12140,
+    "blankLines": 6910,
+    "files": 271,
+    "lines": 73022,
     "tautologies": 0,
-    "tests": 2532,
+    "tests": 2537,
     "todos": 0
   }
 }

@@ -25,6 +25,59 @@ export const MCP_PROTOCOL_VERSION = '2025-06-18';
 /** 服务器自述（`initialize` 回包用）。 */
 export const MCP_SERVER_INFO = Object.freeze({ name: 'dsh-punky-swarm-data-plane', version: '1.0.0' });
 
+/**
+ * 面向**模型**的服务器级指导（`InitializeResult.instructions`，2025-06-18 起合规）。
+ * 客户端会把它放进 system prompt。
+ *
+ * 为什么值得有：本面的概念密度高（batch / lane / handoff / 门禁 / 缺口清单），外部模型没有任何
+ *   线索；而单工具的 `description` 只能描述**自己**，说不清「先读什么、再写什么」的用法顺序。
+ * 它同时是**会话解析缺口（G-1，docs/mcp-data-plane.md）的文档级补偿**：明确告知
+ *   「除 batch_status 外都需显式 session」，让外部模型不至于反复撞 `batch not found`。
+ * 措辞刻意避开内部黑话（不提 lane 状态机、GATE_* 码、wavePlan），只讲怎么用。
+ */
+export const MCP_INSTRUCTIONS = [
+  '任务黑板服务器：管理多智能体任务的治理状态（批次、任务、交接）。',
+  '概念：batch = 一次任务的治理单元；lane = 一个角色的一次执行；handoff = 上游 lane 向下游交付产物与断言。',
+  '用法：① 先用 batch_status 列可用批次（按最近活跃排序；返回条数少于 total 即已裁剪，要全量传 limit:0）；',
+  '② 用 task_pool 查某批还有哪些任务未派发；③ 用 taskpack_for 取某 lane 的完整任务包；',
+  '④ 用 handoff_view 读交接状态，用 handoff_submit 提交上游交接，用 handoff_accept 接受后置入边。',
+  '注意：黑板按会话隔离 —— 除 batch_status 外，其余工具均需显式传 session（外部客户端不知道 session 时，先用 batch_status 的返回体查出所属会话）。',
+  '写操作受门禁校验：缺前置产物或断言不全会被拒并返回缺口清单，按提示补齐后再提交。',
+].join(' ');
+
+/** MCP 显示名（规范优先级：`title` → `annotations.title` → `name`）。仅 MCP 面使用，不改工具定义本身。 */
+export const MCP_TOOL_TITLES = Object.freeze({
+  batch_status: 'Batch Status',
+  handoff_view: 'Handoff View',
+  task_pool: 'Task Pool',
+  taskpack_for: 'Task Pack',
+  role_guide: 'Role Guide',
+  handoff_submit: 'Handoff Submit',
+  handoff_accept: 'Handoff Accept',
+});
+
+/**
+ * 工具行为提示（MCP `ToolAnnotations`）。规范明确这些只是 **hint**：
+ *   "Clients should never make tool decisions based on ToolAnnotations received from untrusted servers."
+ * 但主流客户端确实用 `readOnlyHint` 判断能否自动批准 —— 而此前 7 件全部缺失，
+ *   于是「读黑板」与「写黑板」在客户端眼里是同一类动作（对 `handoff_submit` 也自动批准）。
+ *
+ * 取值纪律：**只设我们有把握的维度**。`destructiveHint` 仅在非只读工具上给（只读时规范说该字段无意义）。
+ * 为什么不改宿主 `defineTool`：它不接受这些字段；且 MCP 面元数据本就该由本面维护（不跨包改）。
+ */
+const READ_ONLY_HINTS = Object.freeze({ readOnlyHint: true, idempotentHint: true, openWorldHint: false });
+export const MCP_TOOL_ANNOTATIONS = Object.freeze({
+  batch_status: READ_ONLY_HINTS,
+  handoff_view: READ_ONLY_HINTS,
+  task_pool: READ_ONLY_HINTS,
+  taskpack_for: READ_ONLY_HINTS,
+  role_guide: READ_ONLY_HINTS,
+  // 写面：只追加、不删改已有入边（destructiveHint:false）；但 `overwrite:true` 可替换既有入边 ⇒ 非幂等
+  handoff_submit: Object.freeze({ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }),
+  // 写面：二次提交幂等（响应体带 `idempotent` 标记）；不破坏已有数据
+  handoff_accept: Object.freeze({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }),
+});
+
 /** 数据面路径（复用宿主 webServer，不新起端口）。 */
 export const MCP_PATH = '/mcp';
 
@@ -181,7 +234,9 @@ export function createMcpHandler(ctx, deps = {}) {
     } catch { return null; }
   };
 
-  /** 单件 `tools/list` 条目（`inputSchema` 取注册表视图的 parameters；缺失给最小 object 形状）。 */
+  /** 单件 `tools/list` 条目（`inputSchema` 取注册表视图的 parameters；缺失给最小 object 形状）。
+   *  `title` / `annotations` 由**本面**补：宿主 `defineTool` 的定义里没有这两项，
+   *  而它们是 MCP 客户端识别「显示名」与「能否自动批准」的唯一依据。 */
   const listItemOf = (name) => {
     const def = definitionOf(name);
     const params = def && typeof def.parameters === 'object' && def.parameters !== null ? def.parameters : null;
@@ -191,6 +246,8 @@ export function createMcpHandler(ctx, deps = {}) {
         ? def.description
         : (name + '（数据面工具）'),
       inputSchema: params ?? { type: 'object', properties: {} },
+      ...(MCP_TOOL_TITLES[name] ? { title: MCP_TOOL_TITLES[name] } : {}),
+      ...(MCP_TOOL_ANNOTATIONS[name] ? { annotations: MCP_TOOL_ANNOTATIONS[name] } : {}),
     };
   };
 
@@ -202,6 +259,9 @@ export function createMcpHandler(ctx, deps = {}) {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { ...MCP_SERVER_INFO },
+        // 2025-06-18 的 `InitializeResult` 支持 `instructions`（面向模型、客户端放进 system prompt）。
+        //   本面概念密度高，没有它外部模型只能靠 description 试错；同时它是 G-1 会话缺口的文档级补偿。
+        instructions: MCP_INSTRUCTIONS,
       };
     },
     'tools/list'() {
