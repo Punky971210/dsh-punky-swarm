@@ -211,9 +211,9 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
     ['hotConfig', 'lastRatchetJson', 'topicAttachUn', 'topicRuntime', 'trajectory', 'verifyMount'].sort(),
     '⓪②③④ 静态写集须 == 6 项（实测 ' + JSON.stringify(hotWrites) + '）');
 
-  // ⑤ 全文 `rt.<field> =` 写点总数（回归锚；`impl-w7f.md §3` 报 34，本件独立复算）
+  // ⑤ 全文 `rt.<field> =` 写点总数（回归锚；`impl-w7f.md §3` 报 34，本件独立复算。35 → 40：批 `punky-boot-httpfix-20261109b` / lane E1 的 HTTP 面延迟绑定净增 5 处，逐项见该 lane 的 `exec/http-deferred-bind/notice.md` AC-5）
   const allWrites = [...INDEX_SRC.matchAll(/\brt\.[A-Za-z_$][\w$]*\s*=/g)].length;
-  assert.equal(allWrites, 35, '全文 rt.* 赋值须恰 35 处（实测 ' + allWrites + '）');
+  assert.equal(allWrites, 40, '全文 rt.* 赋值须恰 40 处（实测 ' + allWrites + '）');
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════

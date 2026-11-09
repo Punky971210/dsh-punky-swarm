@@ -289,6 +289,34 @@ export function resolveAcpsConfig(config) {
         },
     };
 }
+// ── config.mcp：MCP 面（入口 A 宿主路由 `POST /mcp` / 入口 B 自建 loopback 监听）──
+// 【2026-11-09 · 批 `punky-mcp-l1-wiring` · 判据源 §3.4 + Leader 裁决 A-1/A-3】
+//   · **静态配置**：`mcp` 键**不在** `lib/hot/config-watch.js` 的 ALLOWED_TOP_KEYS 内 ⇒ 从 runtime.json
+//     覆盖会被判 `unknown top-level key` 并**静默保持旧快照**（C-7/RK-6）。改端口**必须重启**——
+//     这也正是「端口恒等、不自动迁移」成立的前提。
+//   · `loopback.enabled` 默认 **true**（用户要它可用；显式 `false` 才关）。
+//   · `loopback.port` **恒等使用**：冲突**不迁移 / 不扫描 +1..+9 / 不回落 0**（A-1 否决顺序扫描）。
+//     MCP 客户端配置是一次填写、长期使用的稳定契约 ⇒ 冲突是确定性故障，应显式报错而非自愈。
+//   · `loopback.host` **不可配**：恒 `127.0.0.1`（C-3，安全面不让配通配地址）；若用户写了别的值，
+//     归一化时记为 `rejectedHost`，由装配侧**显式 warn**（不静默丢弃）。
+// 消费方：`lib/tools/register.js#createTools`（唯一创建点）→ `lib/mcp/loopback-listener.js`（入口 B）。
+export const MCP_LOOPBACK_DEFAULTS = Object.freeze({
+    enabled: true,   // 入口 B 总开关（默认开；显式 false 关）
+    port: 3918,      // 恒等使用（冲突 ⇒ installed=false + warn，不迁移）
+    host: '127.0.0.1', // 硬钉，不可配（C-3）
+});
+export function resolveMcpLoopbackConfig(config) {
+    const m = (config?.mcp && typeof config.mcp === 'object' && !Array.isArray(config.mcp)) ? config.mcp : {};
+    const l = (m.loopback && typeof m.loopback === 'object' && !Array.isArray(m.loopback)) ? m.loopback : {};
+    const requestedHost = typeof l.host === 'string' && l.host.length > 0 ? l.host : null;
+    return {
+        enabled: l.enabled !== false, // 默认开：只有显式 false 才关
+        port: Number.isInteger(Number(l.port)) && Number(l.port) > 0 ? Number(l.port) : MCP_LOOPBACK_DEFAULTS.port,
+        // host 不参与取值；仅当配置显式给出**非本机回环**值时登记被拒原值，交给装配侧留痕
+        host: MCP_LOOPBACK_DEFAULTS.host,
+        rejectedHost: requestedHost !== null && requestedHost !== MCP_LOOPBACK_DEFAULTS.host ? requestedHost : null,
+    };
+}
 // ── capabilities.auditlog：审计日志 sink（lib/auditlog/*）──
 // **默认值单点仍是 `AUDITLOG_DEFAULTS`**（lib/auditlog/config.js，本文件**不复制任何数值**）。
 // 此处只登记「哪些键可配」这一**结构事实**（schema 面的可配键清单），用途有两条：

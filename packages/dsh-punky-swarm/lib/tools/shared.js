@@ -21,12 +21,39 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 export const TEXT_OUTPUT = (text) => [{ type: 'text', text }];
 
-export function sessionOf(args, exec, resolveBatchSession) {
-  if (args && typeof args.session === 'string' && args.session.length) return args.session;
+/**
+ * 会话回落**来源单点**（B-1）：与 `sessionOf` 逐级同序同判据，额外回报命中的那一级。
+ *
+ * `source ∈ {'arg','bound','agent','fallback'}`：
+ *   · `arg`      —— `args.session` 非空字符串（**优先级最高，首行短路**，C-9）；
+ *   · `bound`    —— `resolveBatchSession(exec)` 返回非空字符串（派发绑定）；
+ *   · `agent`    —— `exec.agent.session.id` 在场（宿主内 agent 调用）；
+ *   · `fallback` —— 三者皆无（MCP 直连等无调用方会话的入口）⇒ `sessionId` 仍是哨兵 `'cli'`（B-3 不改）。
+ *
+ * 为什么要它：`'cli'` 是「**没有调用方会话**」的哨兵，却被 `batch_status` 的列表读面当成真实会话读盘
+ *   ⇒ MCP 面恒空。**只把这一处**从「拿哨兵当会话」升级为「哨兵 ⇒ 全会话」，不改 `sessionOf` 的全局回落
+ *   （17 个调用点 + 写族 + 7 件常驻面的错误形态都不动）。
+ *
+ * 语义等价（AC-9）：`sessionOf(...) === sessionOfResolved(...).sessionId` 对同一输入逐例相等。
+ *   末级刻意写成 `!== undefined && !== null` 而非「非空串」，与 `exec?.agent?.session?.id ?? 'cli'`
+ *   的 `??` 语义**逐字等价**（空串在场时也不回落 —— 保持既有行为零变化）。
+ */
+export function sessionOfResolved(args, exec, resolveBatchSession) {
+  if (args && typeof args.session === 'string' && args.session.length) {
+    return { sessionId: args.session, source: 'arg' };
+  }
   if (typeof resolveBatchSession === 'function') {
     let bound = null;
     try { bound = resolveBatchSession(exec); } catch { bound = null; }
-    if (typeof bound === 'string' && bound.length) return bound;
+    if (typeof bound === 'string' && bound.length) return { sessionId: bound, source: 'bound' };
   }
-  return exec?.agent?.session?.id ?? 'cli';
+  const agentSessionId = exec?.agent?.session?.id;
+  if (agentSessionId !== undefined && agentSessionId !== null) {
+    return { sessionId: agentSessionId, source: 'agent' };
+  }
+  return { sessionId: 'cli', source: 'fallback' };
+}
+
+export function sessionOf(args, exec, resolveBatchSession) {
+  return sessionOfResolved(args, exec, resolveBatchSession).sessionId;
 }

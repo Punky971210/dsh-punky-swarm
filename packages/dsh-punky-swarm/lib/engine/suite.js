@@ -38,7 +38,7 @@ export const SUITE_TOOLS = Object.freeze([
   entry('subagent', 'dispatch', false, true, true),
   entry('subagent_fork', 'dispatch', false, true, true),
   entry('batch_status', 'blackboard', false, false, false),
-  entry('log_export', 'blackboard', false, false, false),
+  entry('log_export', 'blackboard', false, false, true),
   entry('lane_checkpoint_status', 'read', false, false, false),
   entry('swarm_report', 'comms', false, false, true),
   entry('swarm_cc', 'comms', false, false, true),
@@ -72,3 +72,32 @@ function modeGateTools() {
 
 export const SUITE_DENY_TOOLS = Object.freeze(memberDenyTools());
 export const MODE_GATED_TOOLS = Object.freeze(modeGateTools());
+
+// ── MCP 常驻面（2026-11-09 用户裁决：MCP 数据面常驻为「通用任务黑板」）─────────────────────
+//   逐件裁定（取证见 punky-recon/survey/mcp-resident-tool-triage.md）：
+//     保留 = 纯读黑板/交接 + 交接事实写入（均无模式门、靠 `args.session` 可工作）；
+//     排除 = 门禁投影（gate_status）/ 静态元数据（artifact_types）/ 审计导出（log_export）/
+//            宿主成员面（list_agents / wait_agent，硬依赖 exec.agent）/ 会话内专用（lane_checkpoint_status）/
+//            产物归位（asset_claim，MCP 不作为产出方）。
+//   ⚠ 必须**显式名单**：排除项横跨 blackboard/read 两族且含宿主面，kind 派生表达不了逐件取舍；
+//     名单漂移由 `validateResidentTools()` 机检（成员必须都在 SUITE_TOOLS 内）。
+export const RESIDENT_TOOL_NAMES = Object.freeze([
+  'batch_status',
+  'handoff_view',
+  'task_pool',
+  'taskpack_for',
+  'role_guide',
+  'handoff_submit',
+  'handoff_accept',
+]);
+
+/** 常驻名单自检：成员必须是 suite 内真实工具名（防手抄漂移 / 防改名后静默丢件）。 */
+export function validateResidentTools() {
+  const known = new Set(SUITE_TOOLS.map((t) => t.name));
+  return RESIDENT_TOOL_NAMES.filter((n) => !known.has(n));
+}
+
+/** 常驻补给：preset 行只注册补集（否则同层重名抛错，且根层已被常驻件占用）。 */
+export function governedToolNames() {
+  return SUITE_TOOLS.map((t) => t.name).filter((n) => !RESIDENT_TOOL_NAMES.includes(n));
+}

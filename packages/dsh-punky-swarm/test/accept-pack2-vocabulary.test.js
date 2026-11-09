@@ -482,7 +482,10 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     //   判据 = 除该文件外任何未知路径仍必须判越界（已用「临时未知文件」反例验证过）。
     { face: '注入面',     prefix: 'packages/dsh-punky-swarm/cordis.patch.yml' },
   ];
-  const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
+  // 【2026-11-09】`package-lock.json` 补入发行面：本轮把 devDeps 实装到 0.2.2-rc.1
+  //   （`npm install` 会重写锁文件），而锁文件与 `package.json` 同属发行面元数据。
+  //   与「注入面」不同：它不携带任何装配语义，不构成越界。
+  const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|package-lock\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
   // 长前缀优先：**显式按字面前缀长度降序排序**，不依赖书写顺序（防后人插队改变语义）。
   const FACE_ORDER = [...FACE_RULES].sort((a, b) => b.prefix.length - a.prefix.length);
   const KNOWN_FACES = [...FACE_RULES.map((r) => r.face), '发行面'];
@@ -501,7 +504,12 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     if (p.includes(' -> ')) p = p.split(' -> ').pop();
     return p.replace(/^"|"$/g, '');
   });
-  const forbidden = paths.filter((p) => /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
+  // 【2026-11-09】`baselines/test-baseline.json` 是「基线单写者 = Leader」的受控重冻产物：
+  //   测试树改动后必须同步重冻（否则 e2-1 / e2-13 红）⇒ 单文件放行，`docs/` `reports/` 与
+  //   baselines 下的其它文件仍是禁区。
+  const BASELINE_REFRESH_ALLOWED = /^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/;
+  const forbidden = paths.filter((p) => !BASELINE_REFRESH_ALLOWED.test(p)
+    && /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
   assert.deepEqual(forbidden, [], '禁区内出现变更（baselines/docs/reports 本批只读）：' + JSON.stringify(forbidden));
   const unrouted = paths.filter((p) => classifyFace(p) === null);
   assert.deepEqual(

@@ -393,7 +393,10 @@ test('AC-pack3-11 skills 面变更只在 software-team 内；baselines/docs/repo
   const otherSkills = paths.filter((p) => /^packages\/dsh-punky-swarm\/skills\//.test(p)
     && !p.startsWith('packages/dsh-punky-swarm/skills/software-team/'));
   assert.deepEqual(otherSkills, [], 'pack3 写域只到 skills/software-team/**，越界：' + JSON.stringify(otherSkills));
-  const forbidden = paths.filter((p) => /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
+  // 【2026-11-09】`baselines/test-baseline.json` 单文件放行（基线单写者 = Leader 的受控重冻；
+  //   测试树改动后必须同步，否则 e2-1 / e2-13 红）；`docs/` `reports/` 仍为禁区。
+  const forbidden = paths.filter((p) => !/^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/.test(p)
+    && /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
   assert.deepEqual(forbidden, [], '禁区内出现变更（baselines/docs/reports 本批只读）：' + JSON.stringify(forbidden));
 });
 

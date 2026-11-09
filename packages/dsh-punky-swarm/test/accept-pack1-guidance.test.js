@@ -128,6 +128,11 @@ const FORBIDDEN_ZONES = [
   /^packages\/dsh-punky-swarm\/docs\//,
   /^packages\/dsh-punky-swarm\/reports\//,
 ];
+/** 禁区内的**唯一**合法例外（2026-11-09）：`baselines/test-baseline.json` 是「基线单写者 = Leader」
+ *  的受控产物，测试树改动后**必须**同步重冻（`node scripts/baseline-snapshot.mjs --reason "<事由>"`），
+ *  否则 `e2-1` / `e2-13`（基线 ≡ 实测树）会红。此处放行**单文件**，不放行目录：
+ *  `baselines/` 下新增其它文件仍判越界。 */
+const BASELINE_REFRESH_ALLOWED = /^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/;
 
 // 【G04③ 死码已删】原「负例临时根夹具」整函数删除：
 //   该夹具在本文件**无任何调用点**（实测 grep 仅命中定义），其体内复制已退役脚本的一行是死引用 ⇒ 随链删除。
@@ -244,7 +249,7 @@ test('AC-pack1-12 禁区（baselines/docs/reports）不得出现未提交变更'
   //   任何「自某历史 base 起禁区内零提交」的提交面断言 ⇒ 下一次合法重冻即**永久必红**，
   //   与本批要修的 C-1②（历史状态冻结）同病。工作树面则常驻可判：合法重冻必以**提交**形态落盘，
   //   不进工作树面 ⇒ 该判据不会因流程内动作变红。
-  const forbiddenDirty = porcelainPaths().filter((p) => FORBIDDEN_ZONES.some((re) => re.test(p)));
+  const forbiddenDirty = porcelainPaths().filter((p) => !BASELINE_REFRESH_ALLOWED.test(p) && FORBIDDEN_ZONES.some((re) => re.test(p)));
   assert.deepEqual(forbiddenDirty, [], '禁区（baselines/docs/reports）不得出现未提交变更（W8：基线单写者 = Leader）：'
     + JSON.stringify(forbiddenDirty));
 });

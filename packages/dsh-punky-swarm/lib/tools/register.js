@@ -19,7 +19,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { createCoreTools, installDifficultyGuard } from './core.js';
 import { createToolsPort } from '../provider-dsh/tools-http.js';
 import { installWriteProvenanceGuard } from './write-provenance-guard.js';
-import { installMcpDataPlane } from '../mcp/data-plane-server.js';
+import { installMcpDataPlane, createMcpHandler, MCP_PATH } from '../mcp/data-plane-server.js';
+import { installMcpLoopback } from '../mcp/loopback-listener.js';
+import { resolveMcpLoopbackConfig } from '../schema.js';
 import { createLaneTools } from './lane-tools.js';
 import { createLogTools } from './log-tools.js';
 import { buildToolCatalog, engineVersion } from '../aip/tool-descriptor.js';
@@ -39,6 +41,32 @@ export function createTools(ctx, deps) {
   if (typeof mcpPlaneDispose === 'function' && typeof ctx?.effect === 'function') {
     ctx.effect(() => mcpPlaneDispose, 'dsh-punky-swarm: mcp data plane');
   }
+  // ── 入口 B：MCP 面**自建** loopback 监听（L1 模式：不依赖宿主 webServer / gateway 策略）─────────────
+  //   归属纪律（R-8）：**唯一创建点 = 本函数**，**唯一释放点 = `ctx.effect`**。
+  //   ⚠ 不得放进 `lib/index.js` 的 http surface `mount()`（那里以 `webServer.available` 早退 ⇒ 把入口 B
+  //     拖回宿主依赖，废掉 L1）；也不得放进上面刚调用的 `installMcpDataPlane`（同样 early-return）。
+  //   handler 复用 `createMcpHandler`（与入口 A 同一工厂，禁第二套实现）；入口 B **不看** webServer 是否可用。
+  //   无 `ctx.effect` ⇒ 没有释放保证 ⇒ **宁可不建监听器**，也不留孤儿（孤儿 ⇒ 下次装配 EADDRINUSE）。
+  const mcpLoopback = (() => {
+    const loopbackConfig = resolveMcpLoopbackConfig(deps?.config);
+    if (!loopbackConfig.enabled) {
+      (deps?.logger ?? ctx?.logger)?.debug?.('[mcp] loopback disabled by config.mcp.loopback.enabled=false');
+      return null;
+    }
+    if (typeof ctx?.effect !== 'function') {
+      (deps?.logger ?? ctx?.logger)?.debug?.('[mcp] loopback skipped：ctx.effect 不可用（无释放保证 ⇒ 不建监听器）');
+      return null;
+    }
+    const { handler } = createMcpHandler(ctx, deps);
+    const listener = installMcpLoopback({
+      handler,
+      path: MCP_PATH,
+      config: loopbackConfig,
+      logger: deps?.logger ?? ctx?.logger ?? null,
+    });
+    ctx.effect(() => listener, 'dsh-punky-swarm: mcp loopback listener');
+    return listener;
+  })();
   //   ⚠ `deps.dispatchIndex` 不可序列化（Map 实例）⇒ 只走 JS 侧装配（`lib/index.js` 直传），yml 静态块不适用；
   const tools = [
     ...createCoreTools(ctx, deps),
@@ -73,19 +101,41 @@ export function createTools(ctx, deps) {
    *
    * 宿主语义（`@deepseek-ai/dsh-tools`）：`tools.register()` 落入**调用方** ctx 的 scope 层，
    *   不是进程全局 ⇒ 传 preset 组合里那一行的 ctx，工具就只对该 preset 的 agent（及其派生 worker）可见。
-   * 缺省目标 = 构造本工具集时的 ctx（同进程单 scope 用法与单测）；生产由 preset 行显式传自己的 ctx。
+   * 缺省目标 = 构造本工具集时的 ctx（同进程单 scope 用法与单测）。
    *
    * @param {object} [targetCtx] 承接注册的 ctx（决定工具落在哪个 scope 层）
+   * @param {{only?: string[]}} [options] `only` = 只注册名单里的名字（缺省全量）
+   * @returns {() => void} 聚合 disposer —— **必须挂到 ctx.effect**，否则热重载对同层重复注册会抛
+   *   `tool "X" is already registered`（宿主 tools/index.js:385）。
    */
-  const register = (targetCtx = ctx) => {
+  const register = (targetCtx = ctx, { only } = {}) => {
     buildCatalog();
-    for (const t of tools) createToolsPort(targetCtx).registerTool(t);
+    const allow = Array.isArray(only) ? new Set(only) : null;
+    const disposers = [];
+    for (const t of tools) {
+      if (allow && !allow.has(t.name)) continue;
+      const d = createToolsPort(targetCtx).registerTool(t);
+      if (typeof d === 'function') disposers.push(d);
+    }
+    return () => {
+      for (const d of disposers) {
+        try { d(); } catch { /* 已释放 / 宿主已卸载：幂等 */ }
+      }
+    };
   };
 
   return {
     tools,
     register,
     buildCatalog,
+    // 【方案 A · 延迟绑定】`/mcp` 的「是否已有真实挂载」判定口（消费方 = `lib/index.js#bindHttpSurfaceDeferred`）：
+    //   本函数开头的 `installMcpDataPlane` 可能**早退**（`webServer` 尚未就绪 ⇒ 返回 `installed === false`
+    //   的 no-op disposer），那次尝试**不构成持有者**；延迟装配据此判断要不要重试挂载（禁双挂）。
+    //   `installed` 是 `data-plane-server.js:266/277` 的既有两态标志，本处只透传、不新造标记。
+    mcpPlaneDispose,
+    // 【入口 B · 可观测面】自建 loopback 监听器的 disposer（未装 / 关闭 / 无 `ctx.effect` 时为 `null`）。
+    //   测试与验收据此取 `.ready`（含 installed/port/error）、`.server`（listening / hasRef 读数）。
+    mcpLoopback,
     get catalog() { return catalog; },
     get agentCatalog() { return agentCatalog; },
     // api.js 只读端点消费（缺省传入时端点不附投影，既有行为不变；红线：不改 mailbox 存储）

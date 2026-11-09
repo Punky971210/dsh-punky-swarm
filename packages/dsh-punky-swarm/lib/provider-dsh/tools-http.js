@@ -83,10 +83,16 @@ export function createToolsPort(ctx) {
       } catch { return 'unknown'; }
     },
 
+    /**
+     * 注册到本端口 ctx 所属的 scope 层。
+     * **返回宿主 `register()` 的 disposer**（宿主可能返回 undefined ⇒ 回落 true）。
+     * 调用方必须保留它并在 `ctx.effect` 上释放：否则插件关→开会对同层重复注册，
+     * 宿主抛 `tool "X" is already registered`（宿主 tools/index.js:385）。
+     */
     registerTool(toolDef) {
       if (!available || typeof tools.register !== 'function') return false;
-      tools.register(toolDef);
-      return true;
+      const dispose = tools.register(toolDef);
+      return typeof dispose === 'function' ? dispose : true;
     },
 
     installGuard(guardFn) {
@@ -104,15 +110,24 @@ export function createToolsPort(ctx) {
       if (!available || typeof tools.execute !== 'function') {
         throw new Error(HOST_PORT_INVALID + ' ctx.tools.execute 不可用');
       }
-      const exec = {
-        callId: typeof correlation === 'string' && correlation.length > 0
-          ? correlation
-          : 'port-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
-        name,
-        arguments: args,
-        signal,
-      };
-      return tools.execute(exec);
+      const callId = typeof correlation === 'string' && correlation.length > 0
+        ? correlation
+        : 'port-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      // 【宿主契约 · 0.2.2-rc.1 起 execute 为**批式**（本仓必须照此调用）】
+      //   入参：`{ calls: [{ id, name, arguments }], signal, agent?, log?, toolSet? }`
+      //   返回：`{ results: [{ callId, result }], additionalContexts, concluded }`
+      //   单条 call 的 `result` 形状 = `{ content, isError }`（pipeline.js:29/33/55，BatchSettlement.result :236-253）。
+      //   ⚠ 旧单 exec 形态（`{callId,name,arguments,signal}`）在新宿主里取 `calls === undefined` ⇒
+      //     `toolCalls.map` 原生 TypeError（发生在任何 name 解析之前）⇒ 本方法此前在全宿主不可用。
+      //   ⚠ 不保留旧形态回退：旧宿主对批式输入会静默按 unknown tool 返回，无可靠异常可判 ⇒
+      //     双形态探测不可信（会把真错误误读为版本差异）。运行时下限随宿主 0.2.2-rc.1。
+      const batch = { calls: [{ id: callId, name, arguments: args }], signal };
+      const out = await tools.execute(batch);
+      if (out && Array.isArray(out.results)) {
+        const first = out.results[0];
+        return first ? first.result : { content: [], isError: true };
+      }
+      return out;
     },
   };
 }

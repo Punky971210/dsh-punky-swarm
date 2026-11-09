@@ -53,7 +53,13 @@ const dFixtureOf = (targetId) => {
   let members = [{ name: 'someone-else', id: 'sess-other' }];
   const ctx = hostCtxOf({
     tools: {
-      execute: async (args) => { calls.push(args); return { isError: false }; },
+      // 【0.2.2-rc.1 批式契约】`execute({ calls:[{id,name,arguments}], signal })` ⇒ 桩需解包首条 call，
+      //   返回 `{ results:[{callId,result}] }`；`calls` 记录仍保留「工具名 + 参数」的调用证据。
+      execute: async (input) => {
+        const call = input?.calls?.[0] ?? {};
+        calls.push({ name: call.name, arguments: call.arguments });
+        return { results: [{ callId: call.id, result: { isError: false } }] };
+      },
     },
     agentTeams: { listMembers: () => members },
   });
@@ -108,7 +114,12 @@ test('②-2′ 不可确认 ≠ 失败：`PUSH_UNCONFIRMED` 不得与 `PUSH_FAIL
   // 失败对照：工具返回 `isError:true` ⇒ 走 `PUSH_FAILED`（同族返回，不抛）
   //   ⚠ 与「工具面**抛错**」要分开：抛错走 `host-port-query-failed`（**抛出**，非返回）。
   const ctxFail = hostCtxOf({
-    tools: { execute: async () => ({ isError: true, content: [{ type: 'text', text: 'boom' }] }) },
+    tools: {
+      execute: async (input) => {
+        const call = input?.calls?.[0] ?? {};
+        return { results: [{ callId: call.id, result: { isError: true, content: [{ type: 'text', text: 'boom' }] } }] };
+      },
+    },
     agentTeams: { listMembers: () => [] },
   });
   const failed = await createAgentPort(ctxFail, {}).push_execute(execSpecOf('a1'), { agent: { id: 'leader-agent' } });
@@ -137,7 +148,13 @@ test('②-5′ D 档可用性判据 = `tools` 面（`probeTool(' + "'spawn_teamm
   //   「把 port-unavailable 读成 absent」的旧判据（已被用户裁决否掉）。
   //   ⇒ 补 `get: () => null`（端口据此给出**无 reason 的** `{state:'absent'}`），断言与期望值**一字未改**。
   const ctxAbsent = hostCtxOf({
-    tools: { execute: async () => ({ isError: false }), get: () => null },
+    tools: {
+      execute: async (input) => {
+        const call = input?.calls?.[0] ?? {};
+        return { results: [{ callId: call.id, result: { isError: false } }] };
+      },
+      get: () => null,
+    },
     agentTeams: { listMembers: () => [] },
   });
   await assert.rejects(

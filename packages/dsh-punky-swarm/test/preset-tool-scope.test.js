@@ -43,6 +43,7 @@ import { createScope, scopeOf } from '@deepseek-ai/dsh-scope';
 
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
+import { RESIDENT_TOOL_NAMES, governedToolNames } from '../lib/engine/suite.js';
 import { apply as mountToolFace } from '../lib/provider-dsh/index.js';
 
 /** 最小宿主：真实 `tools` 注册表（`ToolRuntime`）+ 它要求的 `systemPrompt` 面。 */
@@ -76,25 +77,35 @@ test('丙 · 治理工具只在 punky-preset 的 scope 链上可见（真实注�
     const names = toolkit.tools.map((t) => t.name);
     assert.ok(names.length > 0, '工具集必须非空（否则本件是空转）');
 
-    // 等价引擎行（`lib/index.js`）：只 provide 工具集，不注册任何工具。
+    // 【2026-11-09 分层注册】引擎行把**常驻黑板 7 件**注册到自己的 ctx（= global 层）：
+    //   global 是每个 scope 视图的无条件起点 ⇒ ① MCP（无 agent）读得到；② preset agent 经祖先链看得到。
+    const resident = [...RESIDENT_TOOL_NAMES];
+    const governed = governedToolNames();
+    assert.ok(resident.length > 0 && governed.length > 0, '前置：常驻集与治理补集都必须非空');
+
+    toolkit.register(ctx, { only: resident });
+
+    // 等价引擎行（`lib/index.js`）：把工具集挂成服务（供 preset 行注册补集）。
     ctx.provide('punkySwarmTools', {
-      registerTools: (targetCtx) => toolkit.register(targetCtx),
+      registerTools: (targetCtx, options) => toolkit.register(targetCtx ?? ctx, options),
       toolNames: names,
     });
 
-    // ① 引擎行之后：全局视图零本仓工具
-    assert.deepEqual(names.filter((n) => registry.get(n) !== undefined), [],
-      '引擎行不得把治理工具注册到全局层（丙的起点）');
+    // ① 引擎行之后：global 层 = 常驻 7 件；治理补集**不得**进 global
+    assert.deepEqual(resident.filter((n) => registry.get(n) === undefined), [],
+      '常驻黑板必须落在 global 层（MCP 数据面靠它）');
+    assert.deepEqual(governed.filter((n) => registry.get(n) !== undefined), [],
+      '治理工具不得进 global 层（装配隔离的起点）');
 
-    // 等价预设组合里的 `punky-provider` 行：以自己的 scope ctx 注册
+    // 等价预设组合里的 `punky-provider` 行：以自己的 scope ctx 注册**补集**
     const presetScope = createScope(ctx, {});
     const presetKey = scopeOf(presetScope.ctx);
     assert.notEqual(presetKey, undefined, '预设 scope ctx 必须带 scope 标签（否则注册会落到全局）');
     mountToolFace(presetScope.ctx);
 
-    // ② 该 scope 看得见全部
+    // ② 该 scope 看得见全部（常驻 7 + 治理 28 = 全集）
     assert.deepEqual(names.filter((n) => registry.get(n, presetKey) === undefined), [],
-      '预设 scope 必须看得见全部治理工具');
+      '预设 scope 必须看得见全部治理工具（global 常驻 + 本层补集）');
 
     // ③ 子 scope（派生 worker 的继承路径）同样看得见
     const workerScope = createScope(ctx, {}, { parent: presetKey });
@@ -102,15 +113,19 @@ test('丙 · 治理工具只在 punky-preset 的 scope 链上可见（真实注�
     assert.deepEqual(names.filter((n) => registry.get(n, workerKey) === undefined), [],
       '子 scope 必须继承预设层的工具（worker 靠 composeFrom 走这条链）');
 
-    // ④ 兄弟 scope 与全局视图看不见（隔离成立）
+    // ④ 兄弟 scope 与全局视图：只见常驻 7，不见治理补集（隔离成立 + 黑板通用化）
     const siblingScope = createScope(ctx, {});
     const siblingKey = scopeOf(siblingScope.ctx);
-    assert.deepEqual(names.filter((n) => registry.get(n, siblingKey) !== undefined), [],
+    assert.deepEqual(governed.filter((n) => registry.get(n, siblingKey) !== undefined), [],
       '兄弟 scope 不得看见治理工具（其它模式零污染）');
-    assert.deepEqual(names.filter((n) => registry.get(n) !== undefined), [],
+    assert.deepEqual(resident.filter((n) => registry.get(n, siblingKey) === undefined), [],
+      '兄弟 scope 必须看见常驻黑板（通用任务黑板）');
+    assert.deepEqual(governed.filter((n) => registry.get(n) !== undefined), [],
       '全局视图不得看见治理工具');
+    assert.deepEqual(resident.filter((n) => registry.get(n) === undefined), [],
+      '全局视图必须看见常驻黑板（MCP 数据面的全部依据）');
 
-    // ⑤ 反向对照：全局注册的合成工具对所有 scope 可见 ⇒ ④ 不是「注册表坏了」
+    // ⑤ 反向对照：另注册一个全局合成工具 ⇒ 所有 scope 可见 ⇒ ④ 不是「注册表坏了」
     ctx.tools.register(syntheticTool('scope_probe_global'));
     assert.ok(registry.get('scope_probe_global'), '全局注册的工具全局可见');
     assert.ok(registry.get('scope_probe_global', siblingKey), '全局注册的工具对兄弟 scope 可见');

@@ -589,6 +589,12 @@ before(async () => {
   };
   const { apply } = await import(INDEX_URL);
   apply(ctx, {});
+  // 【冷启动瘦身 · 资产同步延迟化（批 punky-coldstart-session-20261109）】`syncAssets()` 已移出
+  //   `apply()` 同步段，改由 apply 返回后的**首个 tick**（setImmediate）执行 ⇒ 本节拍若仍在此刻取
+  //   指纹与日志，会漏掉全部资产写点与 `asset synced` 行（G3/D3/D11/D14-a 的假红）。
+  //   ⇒ 显式等一个 tick，把「apply 之后」统一定义为「延迟同步落盘之后」。判据强度不变：
+  //     等 tick **不会**让越界写落进隔离根（取消/失败路径另有 warn，见 exec/coldstart-session/notice.md）。
+  await new Promise((r) => setImmediate(r));
   state.applied = true;
   state.logs = calls;
   state.isolatedAfter = fingerprint(ISOLATED);
@@ -915,6 +921,9 @@ const logger = { info: (...a) => calls.info.push(a.join(' ')), warn: (...a) => c
 const ctx = { logger, root: { logger }, tools: { register() {} }, subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] }, webServer: { register: () => () => {}, dispose() {} } }; // 2026-10-31 遗留收口：apply 装配需三件宿主键齐备（同 before() 的补桩；否则子进程直接抛 capability-missing，探针拿不到元数据）
 const mod = await import(${JSON.stringify(indexUrl)});
 mod.apply(ctx, {});
+// 冷启动瘦身：资产同步已改为 apply 返回后首个 tick 执行 ⇒ 本探针必须在 tick 之后再取文件面读数，
+// 否则「资产已同步」恒假（探针缺陷，不是产品读数）。
+await new Promise((r) => setImmediate(r));
 const norm = (p) => { let o = String(p); try { o = fs.realpathSync.native(o); } catch {} return o.toLowerCase(); };
 const isUnder = (p, r) => { const a = norm(p); const b = norm(r); return a === b || a.startsWith(b.endsWith(path.sep) ? b : b + path.sep); };
 const sink = path.join(sentinel, '.dsh', 'logs', 'punky-swarm');
@@ -949,6 +958,8 @@ const logger = { info: (...a) => calls.info.push(a.join(' ')), warn: (...a) => c
 const ctx = { logger, root: { logger }, tools: { register() {} }, subagents: { start: async () => ({}), startActivation: async () => ({}), listMembers: async () => [] }, webServer: { register: () => () => {}, dispose() {} } }; // 2026-10-31 遗留收口：apply 装配需三件宿主键齐备（同 before() 的补桩；否则子进程直接抛 capability-missing，探针拿不到元数据）
 const mod = await import(${JSON.stringify(indexUrl)});
 mod.apply(ctx, {});
+// 冷启动瘦身：资产同步在首个 tick 内完成 ⇒ 写点探针必须等一个 tick 再枚举文件面。
+await new Promise((r) => setImmediate(r));
 function walk(root) { const out = []; const st = [root]; while (st.length) { const d = st.pop(); let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) st.push(p); else if (e.isFile()) out.push(p); } } return out; }
 const report = {
   claimedRoot: claimed, actualRoot: actual, homedir: os.homedir(),

@@ -404,23 +404,29 @@ test('AC-4 零依赖红线：lib/tools/shared.js 无任何 import/require/动态
   assert.match(src, /typeof resolveBatchSession === 'function'/, 'resolver 须为注入函数（非模块级索引）');
 });
 
-test('AC-4b 回落顺序单点：`sessionOf` 定义恰 1 处，且顺序 = 显式 → resolver → 执行会话 → cli', () => {
+test('AC-4b 回落顺序单点：`sessionOfResolved` 定义恰 1 处、`sessionOf` 纯委托，且顺序 = 显式 → resolver → 执行会话 → cli', () => {
   const src = readSrc('lib/tools/shared.js');
-  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；改 identity 无处可取 ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
-  // map 出身份即原文 = 第二真源，matchAll 位置仍是运行时。保留计数。
-  assert.equal((src.match(/export function sessionOf\(/g) ?? []).length, 1, 'sessionOf 定义须恰 1 处（禁第二套回落顺序）');
-  const body = src.slice(src.indexOf('export function sessionOf('));
+  // 【冷启动瘦身批 `punky-coldstart-session-20261109` · B-1】回落逻辑的**单点**从 `sessionOf` 下沉到
+  //   `sessionOfResolved`（后者额外回报命中的来源级 `{sessionId, source}`，供 `batch_status` 判断
+  //   「是否落在哨兵 `cli`」）；`sessionOf` 变为**纯委托**（一行）。判据强度不变，只把「源码形态的
+  //   唯一定义点」指向新的单点：
+  //     ① `sessionOfResolved` 恰 1 处定义（禁第二套回落顺序）；
+  //     ② `sessionOf` 恰 1 处定义，且**只做委托**（不得自带第二套顺序 / 再调 resolver）；
+  //     ③ 顺序 = 显式 → resolver → 执行会话 → cli，在新单点内逐字可核。
+  assert.equal((src.match(/export function sessionOfResolved\(/g) ?? []).length, 1,
+    'sessionOfResolved 定义须恰 1 处（禁第二套回落顺序）');
+  assert.equal((src.match(/export function sessionOf\(/g) ?? []).length, 1, 'sessionOf 定义须恰 1 处');
+  const delegate = src.slice(src.indexOf('export function sessionOf('));
+  assert.match(delegate, /sessionOfResolved\(args, exec, resolveBatchSession\)\.sessionId/,
+    'sessionOf 必须纯委托 sessionOfResolved（禁自带第二套顺序）');
+  assert.equal(delegate.includes('resolveBatchSession(exec)'), false,
+    'sessionOf 内不得再出现 resolver 调用（逻辑已单点下沉）');
+  const body = src.slice(src.indexOf('export function sessionOfResolved('));
   const idx = (needle) => body.indexOf(needle);
   const iExplicit = idx('args.session');
   const iResolver = idx('resolveBatchSession(exec)');
   const iExec = idx('exec?.agent?.session?.id');
-  const iCli = idx("?? 'cli'");
+  const iCli = idx("sessionId: 'cli'");
   assert.ok(iExplicit > 0 && iResolver > iExplicit, '顺序：显式值须先于 resolver');
   assert.ok(iExec > iResolver, '顺序：resolver 须先于执行会话回落');
   assert.ok(iCli > iExec, "顺序：'cli' 兜底须在最后");

@@ -11,7 +11,7 @@
     "test/ac16-push-unconfirmed.test.js": {
       "asserts": 16,
       "blankLines": 16,
-      "lines": 149,
+      "lines": 166,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -19,7 +19,7 @@
     "test/accept-pack1-guidance.test.js": {
       "asserts": 16,
       "blankLines": 23,
-      "lines": 251,
+      "lines": 256,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -27,7 +27,7 @@
     "test/accept-pack2-vocabulary.test.js": {
       "asserts": 37,
       "blankLines": 36,
-      "lines": 513,
+      "lines": 521,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -35,7 +35,7 @@
     "test/accept-pack3-spec-contract.test.js": {
       "asserts": 45,
       "blankLines": 37,
-      "lines": 498,
+      "lines": 501,
       "tautologies": 0,
       "tests": 17,
       "todos": 0
@@ -360,6 +360,14 @@
       "tests": 4,
       "todos": 0
     },
+    "test/boot-assets-deferred.test.js": {
+      "asserts": 23,
+      "blankLines": 13,
+      "lines": 123,
+      "tautologies": 0,
+      "tests": 2,
+      "todos": 0
+    },
     "test/cancel-result-three-state.test.js": {
       "asserts": 13,
       "blankLines": 10,
@@ -531,7 +539,7 @@
     "test/dgate-reachable.test.js": {
       "asserts": 14,
       "blankLines": 20,
-      "lines": 178,
+      "lines": 180,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -1107,7 +1115,7 @@
     "test/home-isolation.test.js": {
       "asserts": 241,
       "blankLines": 183,
-      "lines": 2206,
+      "lines": 2217,
       "tautologies": 0,
       "tests": 32,
       "todos": 0
@@ -1115,7 +1123,7 @@
     "test/host-ports.test.js": {
       "asserts": 57,
       "blankLines": 19,
-      "lines": 308,
+      "lines": 314,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -1142,6 +1150,14 @@
       "lines": 188,
       "tautologies": 0,
       "tests": 6,
+      "todos": 0
+    },
+    "test/http-deferred-bind.test.js": {
+      "asserts": 59,
+      "blankLines": 32,
+      "lines": 365,
+      "tautologies": 0,
+      "tests": 8,
       "todos": 0
     },
     "test/http-route-match.test.js": {
@@ -1265,9 +1281,9 @@
       "todos": 0
     },
     "test/lane-session-bind.test.js": {
-      "asserts": 121,
+      "asserts": 124,
       "blankLines": 44,
-      "lines": 716,
+      "lines": 722,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1347,9 +1363,17 @@
     "test/mcp-data-plane.test.js": {
       "asserts": 71,
       "blankLines": 42,
-      "lines": 480,
+      "lines": 512,
       "tautologies": 0,
       "tests": 12,
+      "todos": 0
+    },
+    "test/mcp-loopback.test.js": {
+      "asserts": 84,
+      "blankLines": 50,
+      "lines": 572,
+      "tautologies": 0,
+      "tests": 15,
       "todos": 0
     },
     "test/mcp-tool-probe-tristate.test.js": {
@@ -1537,9 +1561,9 @@
       "todos": 0
     },
     "test/preset-tool-scope.test.js": {
-      "asserts": 11,
-      "blankLines": 18,
-      "lines": 137,
+      "asserts": 15,
+      "blankLines": 20,
+      "lines": 152,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -1710,6 +1734,14 @@
       "lines": 69,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/session-fallback.test.js": {
+      "asserts": 45,
+      "blankLines": 27,
+      "lines": 240,
+      "tautologies": 0,
+      "tests": 9,
       "todos": 0
     },
     "test/settle-decoupled.test.js": {
@@ -2107,13 +2139,13 @@
     "test/write-provenance.test.js": {
       "asserts": 46,
       "blankLines": 29,
-      "lines": 275,
+      "lines": 284,
       "tautologies": 0,
       "tests": 14,
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-08T21:11:06Z",
+  "generatedAt": "2026-11-09T12:54:04Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2124,15 +2156,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "⑨-2 拆环：lane-heartbeat 拆 verdict/judge，环归零，ESM 环守卫显式升级",
+  "reason": "punky-coldstart-session-20261109: syncAssets 延迟化（新增 test/boot-assets-deferred.test.js 2 例）+ batch_status fallback 全会话（新增 test/session-fallback.test.js 9 例）；既有测试适配延迟时序：test/home-isolation.test.js lines+11（apply 后等首 tick）、test/lane-session-bind.test.js asserts+3 lines+6（单点下沉到 sessionOfResolved 后改指新单点并加严）",
   "schema": 1,
   "totals": {
-    "asserts": 11847,
-    "blankLines": 6740,
-    "files": 264,
-    "lines": 71121,
+    "asserts": 12065,
+    "blankLines": 6864,
+    "files": 268,
+    "lines": 72535,
     "tautologies": 0,
-    "tests": 2485,
+    "tests": 2519,
     "todos": 0
   }
 }

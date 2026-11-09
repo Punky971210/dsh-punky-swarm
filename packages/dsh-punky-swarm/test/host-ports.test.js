@@ -40,7 +40,13 @@ function ctxOf(overrides = {}) {
     get: (name) => (name === 'known' ? { name: 'known' } : null),
     register: (def) => { registered.push(def); },
     guard: () => {},
-    execute: async (exec) => { executed.push(exec); return { ok: true, name: exec.name, hadSignal: typeof exec?.signal?.aborted === 'boolean' }; },
+    // 【0.2.2-rc.1 批式契约】桩按真实形状解包首条 call，返回 `{ results:[{callId,result}] }`；
+    //   `executed` 记 `{ call, signal }` 供「拒在调用前 / signal 原样透传」两类断言使用。
+    execute: async (input) => {
+      const call = input?.calls?.[0] ?? {};
+      executed.push({ call, signal: input?.signal });
+      return { results: [{ callId: call.id, result: { ok: true, name: call.name, hadSignal: typeof input?.signal?.aborted === 'boolean' } }] };
+    },
   };
   return {
     registered,

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // 只读查询投影工具面（自 `lib/tools/core.js` **原样搬移**）：batch_status / gate_status。
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { TEXT_OUTPUT, sessionOf } from './shared.js';
+import { TEXT_OUTPUT, sessionOf, sessionOfResolved } from './shared.js';
 import { readLiveConfig } from './tier-gate.js';
 import { handoffGateStateOf } from '../wave-plan.js';
 //   否则「同一 lane 的 state」会在工具面与探针面分裂（U-5 边界；依赖方向单向：core → watch，无环）。
@@ -35,10 +35,10 @@ export function buildBatchStatusTools(cx) {
   return [
     defineTool({
       name: "batch_status",
-      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。读面裁剪参数 view ∈ summary|active|full，**缺省 full**（不裁剪，返回体与不传该参数时逐字一致）：active 只裁 wavePlan（只保留 status 不属于 merged/failed/skipped 的 lane 对应任务；过滤后为空的波条目丢弃、wave 序号不重编号），lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动；summary 本批等价 full（不引入第三语义）；非法值（空串 / 大小写不符 / 非字符串等）回落 full 且不抛错。生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源；view 仅作用于单批投影（多批列表读面不含 wavePlan）。",
+      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。**未解析到调用方会话（如 MCP 直连）⇒ 列全部会话，每批带 sessionId（顶层 sessionScope:'all'）；显式 session 仍优先（sessionScope:'session'）。**运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。读面裁剪参数 view ∈ summary|active|full，**缺省 full**（不裁剪，返回体与不传该参数时逐字一致）：active 只裁 wavePlan（只保留 status 不属于 merged/failed/skipped 的 lane 对应任务；过滤后为空的波条目丢弃、wave 序号不重编号），lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动；summary 本批等价 full（不引入第三语义）；非法值（空串 / 大小写不符 / 非字符串等）回落 full 且不抛错。生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源；view 仅作用于单批投影（多批列表读面不含 wavePlan）。",
       parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"view":{"type":"json","description":"读面裁剪视图，三枚举 summary|active|full，**缺省 full**（不裁剪：返回体与不传该参数时逐字一致，零回归）。active 只裁 wavePlan —— 只保留 status 不属于 merged/failed/skipped 的 lane 对应任务（任务 id 不在 lanes 表内视为非终态、保留），过滤后为空的波条目丢弃、wave 序号不重编号；lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动。summary 本批等价 full（不引入第三语义）。**非法值回落 full 且不抛错**（空串 / 大小写不符 / null / 数字 / 对象等），生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源。view 仅作用于单批投影（多批列表读面不含 wavePlan，故其返回体不回显 viewApplied）。"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"sessionScope":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
         render: (_args, value) => {
           const hg = value.handoffGate ?? null;
           const hgTxt = hg ? ' handoffGate=entry:' + (hg.entry === 'enforced' ? 'on' : 'off') + '/settle:' + (hg.settle === 'enforced' ? 'on' : 'off') + '(src:' + String(hg.source ?? 'default') + ')' : '';
@@ -49,7 +49,11 @@ export function buildBatchStatusTools(cx) {
         },
       },
       async execute(args, exec) {
-        const sessionId = sessionOf(args, exec, resolveBatchSession);
+        // 【B-1/B-2 · 会话可见性】回落来源单点化：`source === 'fallback'` 才把「列表读面」升级为全会话。
+        //   显式 `args.session`（`source==='arg'`）仍是**首行短路**的最高优先级（C-9，AC-12 反向锁）；
+        //   `bound`（派发绑定）/`agent`（宿主内调用）两态行为与改前逐字相同。
+        const resolved = sessionOfResolved(args, exec, resolveBatchSession);
+        const sessionId = resolved.sessionId;
         const derivedOf = (b) => {
           const laneIds = Object.keys(b.lanes ?? {});
           const lanesState = {};
@@ -62,6 +66,13 @@ export function buildBatchStatusTools(cx) {
         // 输出面的「这个字段是哪来的」自述：engine = 引擎状态机为真源；memberStatesLegacy = 成员态仍是引擎内置闭集
   //   （曾以 `MERGE_STATE_SOURCE` / `MEMBER_STATES_LEGACY` 两个常量导出承载，实为恒等映射与恒真布尔 ⇒ 内联）
   const stateAnnotation = { stateSource: 'engine', memberStatesLegacy: true };
+        // 【B-2 · 唯一一份列表投影】单会话列表与「全会话并集」共用本函数 ⇒ 两处元素形状**逐字段相等**
+        //   （AC-10 判据「同一投影，不造第二套」由此结构性成立，不靠两个分支各写一遍）。
+        //   `sessionIdOfBatch`：单会话路径 = 本次解析出的会话（与改前逐字相同）；并集路径 = 该批**自身**所属会话。
+        const listProjection = (b, sessionIdOfBatch, batchIdOfBatch) => ({
+          batchId: batchIdOfBatch, sessionId: sessionIdOfBatch, phase: b.phase, lanes: b.lanes,
+          ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation,
+        });
         const hgState = handoffGateStateOf(readLiveConfig(deps));
         const handoffGateView = {
           enabled: hgState.entry || hgState.settle,
@@ -69,13 +80,28 @@ export function buildBatchStatusTools(cx) {
           settle: hgState.settle ? 'enforced' : 'observation',
           source: hgState.source,
         };
+        // 【B-2 列表分支边界（AC-11）】`source==='fallback'` **且**无 `batchId` ⇒ 全会话并集：
+        //   · `ids` 语义 = 「在全部会话里找这些 id」，`ids: []` 仍等同缺省（列全部，同 Q2A-4 口径）；
+        //   · 顶层 `sessionScope:'all'` 是**唯一判别位**（此时 `sessionId` 仍回显哨兵 `'cli'`，不代表读面范围）；
+        //   · `batchId` 分支**不进这里**（见下方单批路径）——避免把一次 typing 错误放大成跨会话存在性探测。
+        //   · `view` 不参与：多批列表读面本就不含 `wavePlan`（与既有口径一致）。
+        if (resolved.source === 'fallback' && !args.batchId) {
+          const wantIds = Array.isArray(args.ids) && args.ids.length > 0 ? new Set(args.ids) : null;
+          const batches = [];
+          for (const own of store.listAllBatches()) {
+            if (wantIds && !wantIds.has(own.batchId)) continue;
+            const b = store.readBatch(own.sessionId, own.batchId);
+            if (b) batches.push(listProjection(b, own.sessionId, own.batchId));
+          }
+          return { sessionId, batches, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'all' };
+        }
         if (!args.batchId && Array.isArray(args.ids) && args.ids.length > 0) {
           const map = store.readBatchMap(sessionId, args.ids);
-          return { sessionId, batches: [...map].map(([id, b]) => ({ batchId: id, sessionId, phase: b.phase, lanes: b.lanes, ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation })), ...stateAnnotation, handoffGate: handoffGateView };
+          return { sessionId, batches: [...map].map(([id, b]) => listProjection(b, sessionId, id)), ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
         }
         if (!args.batchId) {
           const map = store.readBatchMap(sessionId);
-          return { sessionId, batches: [...map].map(([id, b]) => ({ batchId: id, sessionId, phase: b.phase, lanes: b.lanes, ...derivedOf(b), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation })), ...stateAnnotation, handoffGate: handoffGateView };
+          return { sessionId, batches: [...map].map(([id, b]) => listProjection(b, sessionId, id)), ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
         }
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
@@ -89,7 +115,7 @@ export function buildBatchStatusTools(cx) {
             .filter((w) => w.tasks.length > 0);
         };
         const viewApplied = viewAppliedOf(args.view);
-        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied };
+        return { batchId: b.batchId, sessionId, phase: b.phase, concurrency: b.concurrency, lanes: b.lanes, ...derivedOf(b), wavePlan: wavePlanOf(b, viewApplied), ...(smokeOf(b) ? { smoke: true } : {}), ...stateAnnotation, handoffGate: handoffGateView, eventCount: b.events.length, recentEvents: b.events.slice(-20), settled: store.batchSettled(b), viewApplied, sessionScope: 'session' };
       },
     }),
   ];

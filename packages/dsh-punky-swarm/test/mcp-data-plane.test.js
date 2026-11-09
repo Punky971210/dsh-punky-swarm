@@ -26,6 +26,7 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { Context } from '@deepseek-ai/cordis';
 import { ToolRuntime } from '@deepseek-ai/dsh-tools';
+import { apply as mountNativeExecutor } from '@deepseek-ai/dsh-tool-executor-native';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/state/../wave-plan.js';
 import { createTools } from '../lib/tools/register.js';
@@ -40,19 +41,28 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');
 
 // ── 测试侧唯一手写冻结基准（**不在生产代码里**；对账基准，非第二真源；禁改成派生）──────────
-//   ⚠ 口径 = **可调面**（`callableToolNamesOf(ctx)` = 声明 ∩ 实际注册面，宿主件豁免），
-//     不是「静态声明面」。实测三口径：声明 20 ／ 缺省可调 **19**（`log_export` 条件注册、`logs` 默认关）／
-//     `capabilities.logs.enabled=true` 可调 **20**（含）。⇒ 两态都要测（缺省态单独测会掩盖开关）。
-//     【2026-11-07 · G-2】+1 = `taskpack_for`（只读，kind=read ⇒ 进暴露族）⇒ 缺省 20 / 全开 21。
+//   【2026-11-09 常驻面收窄】口径分两层，**不可混用**：
+//     ① 声明面 `exposedToolNamesOf()` = kind ∈ EXPOSED_KINDS 的 21 件（仅作对照，**不是**可调面）；
+//     ② 可调面 `callableToolNamesOf(ctx)` = **常驻名单 7 件** ∩ 注册面（`lib/engine/suite.js` RESIDENT_TOOL_NAMES）。
+//   ⚠ 历史口径（声明 20 / 缺省可调 19 / 全开 20）已作废：`log_export` 不在常驻集 ⇒ `logs` 开关
+//     不再影响 MCP 面；两态**必须相等**（差集为空），否则说明常驻集混入了条件注册件。
 const EXPECTED_EXPOSED_DECLARED = Object.freeze([
   'artifact_types', 'asset_claim', 'batch_control', 'batch_phase', 'batch_status',
   'batch_tasks_add', 'gate_status', 'handoff_accept', 'handoff_submit', 'handoff_view',
   'lane_checkpoint_status', 'list_agents', 'log_export', 'member_settle', 'member_set_status',
   'role_guide', 'task_pool', 'task_update', 'taskpack_for', 'wait_agent', 'wave_plan',
 ]);
-const EXPECTED_EXPOSED_DEFAULT = Object.freeze(EXPECTED_EXPOSED_DECLARED.filter((n) => n !== 'log_export'));
-const EXPECTED_EXPOSED_LOGS_ON = Object.freeze([...EXPECTED_EXPOSED_DECLARED]);
-const MUST_NOT_EXPOSE = Object.freeze(['lane_dispatch', 'subagent', 'swarm_report']);
+/** 常驻可调面（MCP `tools/list` 的唯一判据主体；与 `RESIDENT_TOOL_NAMES` 逐名一致）。 */
+const EXPECTED_RESIDENT = Object.freeze([
+  'batch_status', 'handoff_view', 'task_pool', 'taskpack_for', 'role_guide',
+  'handoff_submit', 'handoff_accept',
+]);
+const MUST_NOT_EXPOSE = Object.freeze([
+  'lane_dispatch', 'subagent', 'swarm_report',
+  // 2026-11-09 逐件裁定的排除项（门禁投影 / 静态元数据 / 审计导出 / 宿主成员面 / 会话内专用 / 产物归位）
+  'gate_status', 'artifact_types', 'log_export', 'list_agents', 'wait_agent',
+  'lane_checkpoint_status', 'asset_claim',
+]);
 
 // ── 装配床：真 store（临时目录）+ 真 createTools + 真 ToolRuntime（含两守卫）+ MCP 挂载 ────────
 async function makeBed(config = {}) {
@@ -76,7 +86,11 @@ async function makeBed(config = {}) {
 
   const app = new Context();
   app.systemPrompt = { tools() {}, section() {} };
-  const rt = new ToolRuntime(app, { mode: 'native', maxParallelSubCalls: 4 });
+  const rt = new ToolRuntime(app, { maxParallelSubCalls: 4 });
+  // 【0.2.2-rc.1 契约】`mode` 选项已从 ToolRuntime 移除（宿主 `mode: z.never().description("Removed.
+  //   Mount a native or PTC tool executor instead.")`）⇒ 执行器必须**显式挂载**；不挂则任何 tools/call
+  //   都返回 `The selected tool executor is unavailable...`（那是床的缺口，不是工具失败）。
+  mountNativeExecutor(app);
   const executed = new Map();
   for (const d of defs) {
     rt.register({
@@ -89,6 +103,9 @@ async function makeBed(config = {}) {
         // 业务错夹具：`batch_phase` 收到**不存在的批** ⇒ 抛错（真实语义 = 「批必须存在」；
         //   与 G5 的样例一致，且它恒在可调面内，不受 `logs` 开关影响）
         if (d.name === 'batch_phase' && String(args?.batchId ?? '') === 'no-such-batch') throw new Error('batch not found: no-such-batch');
+        // 【2026-11-09 常驻面收窄后】`batch_phase` 已不在 MCP 常驻集 ⇒ G5 的业务错样例改用它：
+        //   `handoff_submit`（常驻写工具，桩按 `to==='boom'` 制造业务失败）。
+        if (d.name === 'handoff_submit' && String(args?.to ?? '') === 'boom') throw new Error('fixture business failure');
         // 备用的「必然业务失败」样例（logs 打开时也可用）：`log_export` + `batchId:'boom'`
         if (d.name === 'log_export' && String(args?.batchId ?? '') === 'boom') throw new Error('fixture business failure');
         return { ok: true, name: d.name };
@@ -155,45 +172,45 @@ const callFrame = (name, args, id = 1) => ({ jsonrpc: '2.0', id, method: 'tools/
 //   ⚠ 为什么两条都要：**「集合相等」在两个集合都错的时候仍然相等** —— 旧的
 //     「声明 20 ≡ 手抄期望 20」之所以绿，正是因为两边都基于静态声明、同错相消（`log_export` 实际调不通却被掩盖）。
 //     性质式（∀ 宣告名 ⇒ 不得 unknown tool）会随**注册面真实性**一起变化，不会被两边同错骗过。
-test('G1a 交集式：可调面（declared ∩ 注册面，宿主件豁免）≡ 精确值 —— logs 关 19 / 开 20（两态）', async () => {
-  // ── 态①：缺省（logs 默认关 ⇒ 无 log_export）──
+test('G1a 交集式：可调面 ≡ 常驻 7 件（logs 开关不影响 MCP 面，两态差集为空）', async () => {
+  // ── 态①：缺省（logs 默认关）──
   const off = await makeBed({});
   try {
     const derived = exposedToolNamesOf(); // 生产侧**声明**面（供对照，不作判据主体）
-    assert.deepEqual([...derived].sort(), [...EXPECTED_EXPOSED_DECLARED].sort(), '声明面 ≡ 手写基准（20 名）');
+    assert.deepEqual([...derived].sort(), [...EXPECTED_EXPOSED_DECLARED].sort(), '声明面 ≡ 手写基准（21 名，仅对照）');
     assert.deepEqual([...derived].sort(), SUITE_TOOLS.filter((t) => EXPOSED_KINDS.includes(t.kind)).map((t) => t.name).sort(),
       '声明面必须是「kind ∈ 暴露族」的现场过滤（禁手抄名单）');
 
-    const callable = callableToolNamesOf(off.ctx); // **复用 lib 导出**：与实现同源，不在 test 里重写求交
-    assert.deepEqual([...callable].sort(), [...EXPECTED_EXPOSED_DEFAULT].sort(),
-      '缺省可调面必须**精确为 19 件**（`log_export` 条件注册、logs 关 ⇒ 不可调；不是 >=15 之类的宽口径）');
-    assert.equal(callable.includes('log_export'), false, 'logs 关 ⇒ `log_export` **不得**出现在可调面');
+    const callable = callableToolNamesOf(off.ctx); // **复用 lib 导出**：与实现同源
+    assert.deepEqual([...callable].sort(), [...EXPECTED_RESIDENT].sort(),
+      '可调面必须**精确等于常驻名单 7 件**（不是声明面的宽口径）');
+    for (const n of MUST_NOT_EXPOSE) assert.equal(callable.includes(n), false, n + ' 不得出现在可调面');
 
     const r = await rpc(off.handler, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
     const listed = r.json.result.tools.map((t) => t.name).sort();
     assert.deepEqual(listed, [...callable].sort(), 'tools/list 名集 ≡ 可调面（不是声明面）');
     for (const t of r.json.result.tools) assert.equal(t.inputSchema.type, 'object', t.name + '：inputSchema.type 必须 object');
-    for (const n of MUST_NOT_EXPOSE) assert.equal(listed.includes(n), false, n + ' 不得出现在暴露面');
 
-    // 注入两态（集合式）：基准塞 lane_dispatch ⇒ 与可调面不等 ⇒ 红形态成立
-    const injected = [...EXPECTED_EXPOSED_DEFAULT, 'lane_dispatch'].sort();
+    // 注入（集合式）：塞常驻外名字 ⇒ 与可调面不等 ⇒ 红形态成立
+    const injected = [...EXPECTED_RESIDENT, 'lane_dispatch'].sort();
     assert.notDeepEqual(injected, [...callable].sort(), '注入 lane_dispatch 后必须与可调面不等（否则对撞形同虚设）');
-    assert.deepEqual([...EXPECTED_EXPOSED_DEFAULT].sort(), [...callable].sort(), '还原基准后必须重新相等');
+    assert.deepEqual([...EXPECTED_RESIDENT].sort(), [...callable].sort(), '还原基准后必须重新相等');
   } finally { off.dispose(); }
 
-  // ── 态②：logs 开（`capabilities.logs.enabled=true` ⇒ 含 log_export）──
+  // ── 态②：logs 开 —— 常驻面不含条件注册件 ⇒ 两态必须相等 ──
   const on = await makeBed({ capabilities: { logs: { enabled: true } } });
   try {
-    const callable = callableToolNamesOf(on.ctx);
-    assert.deepEqual([...callable].sort(), [...EXPECTED_EXPOSED_LOGS_ON].sort(),
-      'logs 开 ⇒ 可调面必须**精确为 20 件**（含 log_export）');
-    assert.equal(callable.includes('log_export'), true, 'logs 开 ⇒ `log_export` 必须可调（证明 logs 是真开关，不是装样子）');
-    const r = await rpc(on.handler, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
-    const listed = r.json.result.tools.map((t) => t.name).sort();
-    assert.deepEqual(listed, [...callable].sort(), 'logs 开时 tools/list 名集 ≡ 可调面（20）');
-    // 两态差集必须恰为 {log_export}（开关只影响这一件）
-    const offNames = EXPECTED_EXPOSED_DEFAULT;
-    assert.deepEqual(listed.filter((n) => !offNames.includes(n)), ['log_export'], '两态差集必须恰为 log_export');
+    const callableOn = callableToolNamesOf(on.ctx);
+    assert.deepEqual([...callableOn].sort(), [...EXPECTED_RESIDENT].sort(),
+      'logs 开 ⇒ 可调面不变（log_export 不在常驻集；常驻面不得混入条件注册件）');
+    assert.equal(callableOn.includes('log_export'), false, 'log_export 不得因 logs 开关而进入常驻面');
+    const listedOn = (await rpc(on.handler, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).json.result.tools.map((t) => t.name).sort();
+    assert.deepEqual(listedOn, [...callableOn].sort(), 'logs 开时 tools/list 名集 ≡ 可调面');
+    const off2 = await makeBed({});
+    try {
+      const offNames = callableToolNamesOf(off2.ctx);
+      assert.deepEqual(listedOn.filter((n) => !offNames.includes(n)), [], '两态差集必须为空（常驻面无开关项）');
+    } finally { off2.dispose(); }
   } finally { on.dispose(); }
 });
 
@@ -215,9 +232,19 @@ test('G1b 性质式：∀ name ∈ tools/list ⇒ 调用**不得**返回 unknown
 
 // ══ G2 薄包装机核（源码两面 grep：import = 0、判据/策略码 = 0；唯一派发点）══════════════════
 test('G2 薄包装机核：state/(store|gates) import = 0；判据/策略码 = 0；.execute( 恰 1 处且为 ctx.tools.execute(', () => {
+  // 【2026-11-09 · 批 `punky-mcp-l1-wiring` · **扫描面收窄，不是放宽**】
+  //   本批按判据源 §3.2 在 `lib/mcp/` 下新增 `loopback-listener.js`（入口 B 的自建 `node:http` 监听）。
+  //   下面两条 `listen(` / `createServer(` 计数 = 0 的判据，其**结构性前提**是「本目录只有协议面」——
+  //   新增监听器后该前提不再成立，笼统扫全目录只会得到一条「必红但无意义」的断言。
+  //   ⇒ 协议面判据只扫**其余文件**（原判据方向/阈值逐条不变）；新文件的对应约束改由**更强**的补偿判据承担：
+  //     `test/mcp-loopback.test.js` 的「C-1/C-2 静态面」（零协议 token / 禁 node:fs / 协议帧单点构造）
+  //     与「R-8 单创建点」（全仓仅 register.js 一处 installMcpLoopback + lib/index.js 零涉及）。
+  const LISTENER_FILE = 'loopback-listener.js';
   const files = fs.readdirSync(path.join(PKG, 'lib/mcp')).filter((f) => f.endsWith('.js')).map((f) => path.join(PKG, 'lib/mcp', f));
   assert.ok(files.length >= 1, '前置：lib/mcp 下至少一个 .js');
-  const srcAll = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+  // 防「幽灵豁免」：被豁免的文件必须真的在场（否则本收窄会演变成无声放宽）
+  assert.ok(files.some((f) => path.basename(f) === LISTENER_FILE), '前置：入口 B 监听器文件必须在场（' + LISTENER_FILE + '）');
+  const srcAll = files.filter((f) => path.basename(f) !== LISTENER_FILE).map((f) => fs.readFileSync(f, 'utf8')).join('\n');
 
   const stateImports = [...srcAll.matchAll(/from\s+['"][^'"]*state\/(store|gates)(\.[cm]?js)?['"]/g)].map((m) => m[0]);
   assert.deepEqual(stateImports, [], 'lib/mcp/** 不得 import state/store 或 state/gates（薄包装不看状态机）');
@@ -252,27 +279,28 @@ test('G2 薄包装机核：state/(store|gates) import = 0；判据/策略码 = 0
 test('G3 缺 L1 ⇒ 拒（isError + source-run-id-missing: + 工具体未执行）', async () => {
   const bed = await makeBed();
   try {
-    const before = bed.executed.get('batch_phase') ?? 0;
-    const r = await rpc(bed.handler, callFrame('batch_phase', { batchId: 'b-mcp-t1', phase: 'running', session: 'sess-mcp-t1' }));
+    // 【2026-11-09】样例改用 `handoff_submit`（常驻 7 件内的写工具）：`batch_phase` 已不在 MCP 常驻面 ⇒ 会被 -32601 拦在工具层之前。
+    const before = bed.executed.get('handoff_submit') ?? 0;
+    const r = await rpc(bed.handler, callFrame('handoff_submit', { batchId: 'b-mcp-t1', from: 'e1', to: 'a1', artifacts: ['x'], assertions: ['y'], session: 'sess-mcp-t1' }));
     assert.equal(r.json.error, undefined, '工具**业务/守卫拒**不得走 error 帧（P-5 分层）');
     assert.equal(r.json.result.isError, true, '缺 L1 ⇒ isError:true');
     const text = r.json.result.content[0].text;
     assert.ok(text.includes('source-run-id-missing:'), 'text 必须含 source-run-id-missing:；实际=' + text);
-    assert.equal(bed.executed.get('batch_phase') ?? 0, before, '工具体**不得执行**（计数器不变）');
+    assert.equal(bed.executed.get('handoff_submit') ?? 0, before, '工具体**不得执行**（计数器不变）');
   } finally { bed.dispose(); }
 });
 
 test('G3b 【硬契约】**只塞 arguments.session 冒充**、不带 sourceRunId ⇒ 仍须拒（session ≠ run 身份）', async () => {
   const bed = await makeBed();
   try {
-    const before = bed.executed.get('batch_phase') ?? 0;
-    const r = await rpc(bed.handler, callFrame('batch_phase', { batchId: 'b-mcp-t1', phase: 'running', session: 'sess-impersonate' }));
+    const before = bed.executed.get('handoff_submit') ?? 0;
+    const r = await rpc(bed.handler, callFrame('handoff_submit', { batchId: 'b-mcp-t1', from: 'e1', to: 'a1', artifacts: ['x'], assertions: ['y'], session: 'sess-impersonate' }));
     assert.equal(r.json.result.isError, true, '仅 arguments.session 不得被当作 L1/L2 证据 ⇒ 必须拒');
     const text = r.json.result.content[0].text;
-    assert.ok(text.includes('source-run-id-missing: batch_phase'), '拒因须指名；实际=' + text);
-    assert.equal(bed.executed.get('batch_phase') ?? 0, before, '工具体不得执行');
+    assert.ok(text.includes('source-run-id-missing: handoff_submit'), '拒因须指名；实际=' + text);
+    assert.equal(bed.executed.get('handoff_submit') ?? 0, before, '工具体不得执行');
     // 反向对照：同一请求**加上** L1 ⇒ 才允许
-    const ok = await rpc(bed.handler, callFrame('batch_phase', { batchId: 'b-mcp-t1', phase: 'running', session: 'sess-impersonate', sourceRunId: 'run-x' }, 2));
+    const ok = await rpc(bed.handler, callFrame('handoff_submit', { batchId: 'b-mcp-t1', from: 'e1', to: 'a1', artifacts: ['x'], assertions: ['y'], session: 'sess-impersonate', sourceRunId: 'run-x' }, 2));
     assert.notEqual(ok.json.result?.isError, true, '带 L1 ⇒ 不得 isError（证明上一条不是恒拒）');
   } finally { bed.dispose(); }
 });
@@ -281,13 +309,13 @@ test('G3b 【硬契约】**只塞 arguments.session 冒充**、不带 sourceRunI
 test('G4 带 L1 ⇒ 正常执行（阳性对照；写操作只落在临时批）', async () => {
   const bed = await makeBed();
   try {
-    const before = bed.executed.get('batch_phase') ?? 0;
-    const r = await rpc(bed.handler, callFrame('batch_phase', { batchId: 'b-mcp-t1', phase: 'running', sourceRunId: 'run-x' }));
+    const before = bed.executed.get('handoff_submit') ?? 0;
+    const r = await rpc(bed.handler, callFrame('handoff_submit', { batchId: 'b-mcp-t1', from: 'e1', to: 'a1', artifacts: ['x'], assertions: ['y'], sourceRunId: 'run-x' }));
     assert.equal(r.json.error, undefined, '不得是协议错误帧');
     assert.notEqual(r.json.result?.isError, true, '带 L1 ⇒ 不得 isError');
     assert.deepEqual(r.json.result.content[0].type, 'text', 'CallToolResult.content[0].type === text');
     assert.equal(typeof r.json.result.content[0].text, 'string', 'text 必须是 string（MCP CallToolResult 形状）');
-    assert.equal(bed.executed.get('batch_phase') ?? 0, before + 1, '工具体必须真被执行（1 次）');
+    assert.equal(bed.executed.get('handoff_submit') ?? 0, before + 1, '工具体必须真被执行（1 次）');
     // 隔离自证：写只落在临时批
     assert.equal(bed.store.readBatch('sess-mcp-t1', 'b-mcp-t1').phase, 'planning', '桩定义不写批（写操作只在真宿主运行时才会改批；本用例证明隔离面）');
   } finally { bed.dispose(); }
@@ -310,11 +338,11 @@ test('G5 协议分层：未知方法 -32601 / 畸形帧 -32600 / 解析错 -3270
     assert.equal(unexposed.json.error?.code, -32601, '未暴露工具 ⇒ -32601（不落工具层）；实际=' + JSON.stringify(unexposed.json));
     assert.equal(bed.executed.get('lane_dispatch') ?? 0, 0, '未暴露工具**不得**被执行');
 
-    // 业务错：选 **`batch_phase` + 不存在的批** —— 理由（换掉原先的 log_export）：
-    //   ① `batch_phase` **恒在缺省可调面内**（不受 `logs` 开关影响，稳定性最好）；
-    //   ② 它的真实业务语义就是「批必须存在」⇒ 传 `batchId:'no-such-batch'` 必业务失败（此处桩按同一语义抛错）；
+    // 业务错：选 **`handoff_submit` + `to:'boom'`** —— 理由（换掉原先的 batch_phase）：
+    //   ① `handoff_submit` **在 MCP 常驻面内**（`batch_phase` 已不在，会被 -32601 拦在工具层之前）；
+    //   ② 它是常驻写工具（受 L1 守卫），带 sourceRunId 后能真到工具体；
     //   ③ 断言目标仍是 MCP 层的 **P-5 分层**：业务失败 ⇒ `result.isError`（模型可读并可自恢复），**不是** error 帧。
-    const biz = await rpc(bed.handler, callFrame('batch_phase', { batchId: 'no-such-batch', phase: 'running', sourceRunId: 'run-x' }, 6));
+    const biz = await rpc(bed.handler, callFrame('handoff_submit', { batchId: 'b-mcp-t1', from: 'e1', to: 'boom', artifacts: ['x'], assertions: ['y'], sourceRunId: 'run-x' }, 6));
     if (biz.json.error === undefined) {
       assert.equal(biz.json.result.isError, true, '业务错 ⇒ result.isError:true');
       assert.equal(typeof biz.json.result.content[0].text, 'string', '业务错必须带上可读 text（模型可自恢复）');
@@ -464,7 +492,7 @@ test('G9 【核心回归锁】真 tools/call 响应不含 ERR_INVALID_ARG_TYPE /
   } finally { bed.dispose(); }
 });
 
-test('G9b 变异必红：替身在 execute 侧**吞掉 signal**（模拟改前接线）⇒ 同一断言必红', async () => {
+test('G9b 变异必红：替身在 execute 侧吞掉 signal ⇒ 调用必须失败（0.2.2 包装为 ToolBatchExecutionError）', async () => {
   const bed = await makeBed();
   try {
     // 变异点必须在 execute 侧：端口层已校调用方传的 signal，所以复发形态是「signal 没送到宿主」
@@ -472,8 +500,12 @@ test('G9b 变异必红：替身在 execute 侧**吞掉 signal**（模拟改前�
     bed.ctx.tools.execute = async (exec) => realExecute({ ...exec, signal: undefined });
     const r = await rpc(bed.handler, callFrame('batch_status', { batchId: 'b-mcp-t1', sourceRunId: 'run-x' }, 32));
     const text = JSON.stringify(r.json ?? null);
-    let red = false;
-    try { assertNoSignalTypeError(text, '变异：signal 被吞'); } catch { red = true; }
-    assert.equal(red, true, 'signal 被吞时该断言**必须红**（否则回归锁形同虚设）；实际响应=' + text.slice(0, 240));
+    // 【0.2.2-rc.1 契约变化】宿主把 signal 缺失统一包成 `ToolBatchExecutionError`（"Tool batch execution failed"），
+    //   不再冒出原生 `ERR_INVALID_ARG_TYPE` / `signals[0] is not of type AbortSignal` 文本。
+    //   ⇒ 回归锁的**可红形态**改为「该变异必须让调用失败」；G9 正向仍要求响应不含三种原生 signal 模式
+    //     （一旦宿主回到直抛形态，正向锁照样生效）。
+    const failed = r.json?.result?.isError === true
+      || /Tool batch execution failed|ERR_INVALID_ARG_TYPE|signals\[0\] is not of type AbortSignal|reading 'aborted'/.test(text);
+    assert.equal(failed, true, 'signal 被吞时调用必须失败（否则回归锁形同虚设）；实际响应=' + text.slice(0, 240));
   } finally { bed.dispose(); }
 });

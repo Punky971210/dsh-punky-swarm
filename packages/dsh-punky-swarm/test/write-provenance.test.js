@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
 import { ToolRuntime } from '@deepseek-ai/dsh-tools';
+import { apply as mountNativeExecutor } from '@deepseek-ai/dsh-tool-executor-native';
 import { SUITE_TOOLS } from '../lib/engine/suite.js';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
@@ -42,7 +43,7 @@ import {
 const EXPECTED_WRITE_FAMILY = Object.freeze([
   'asset_claim', 'assign_check', 'batch_control', 'batch_phase', 'batch_tasks_add',
   'handoff_accept', 'handoff_submit', 'lane_checkpoint', 'lane_claim', 'lane_dispatch',
-  'lane_release', 'lane_worktree_create', 'lane_worktree_merge', 'member_settle', 'member_set_status',
+  'lane_release', 'lane_worktree_create', 'lane_worktree_merge', 'log_export', 'member_settle', 'member_set_status',
   'swarm_cc', 'swarm_report', 'task_update', 'wave_plan',
 ]);
 
@@ -55,7 +56,10 @@ const WRITE_IN_REPO = Object.freeze(
 function runtimeWith(guardFn, toolNames) {
   const app = new Context();
   app.systemPrompt = { tools() {}, section() {} };
-  const rt = new ToolRuntime(app, { mode: 'native', maxParallelSubCalls: 4 });
+  const rt = new ToolRuntime(app, { maxParallelSubCalls: 4 });
+  // 【0.2.2-rc.1】`mode` 选项已移除 ⇒ 执行器必须显式挂载，否则每次 execute 都是
+  //   `The selected tool executor is unavailable...`（那是床的缺口，不是守卫行为）。
+  mountNativeExecutor(app);
   const calls = new Map(toolNames.map((n) => [n, 0]));
   for (const name of toolNames) {
     rt.register({
@@ -73,14 +77,17 @@ function runtimeWith(guardFn, toolNames) {
 let callSeq = 0;
 async function dispatch(rt, calls, { name, args = {}, agent, callId }) {
   const before = calls.get(name) ?? 0;
-  const out = await rt.execute({
-    callId: callId ?? 'call-' + (callSeq += 1),
-    name,
-    arguments: args,
-    agent,
+  // 【0.2.2-rc.1 批式契约】`execute({ calls:[{id,name,arguments}], signal, agent? })`
+  //   返回 `{ results:[{callId,result}], ... }` ⇒ 本床把单条 result 解包回旧调用形态，
+  //   下游断言（isError / error.message / content）保持不变。
+  const batch = {
+    calls: [{ id: callId ?? 'call-' + (callSeq += 1), name, arguments: args }],
     signal: new AbortController().signal,
-  });
-  return { executed: (calls.get(name) ?? 0) - before, out };
+  };
+  if (agent !== undefined) batch.agent = agent;
+  const out = await rt.execute(batch);
+  const result = out && Array.isArray(out.results) ? (out.results[0]?.result ?? null) : out;
+  return { executed: (calls.get(name) ?? 0) - before, out: result };
 }
 
 const realGuard = (execution) => writeProvenanceDecision(execution);
@@ -90,7 +97,9 @@ test('A1 集合式：{t | t.write ∧ 本仓定义} ⊆ {t | parameters.properti
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-wp-a1-'));
   const store = createStore(root);
   const ctx = { tools: { register: () => {} }, logger: console };
-  const made = createTools(ctx, { store, root, config: {} }).tools ?? [];
+  // 【2026-11-09】`log_export` 已入写族（write 位订正）且是**条件注册**（logs 缺省关）⇒ 本件必须用
+  //   全开配置构造工具集，否则 `made` 里没有它，会误判成「写族缺 sourceRunId 声明」。
+  const made = createTools(ctx, { store, root, config: { capabilities: { logs: { enabled: true } } } }).tools ?? [];
   assert.ok(made.length > 0, '前置：本仓工具注册面不得为空');
 
   const declared = new Set(

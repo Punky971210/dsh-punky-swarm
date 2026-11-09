@@ -80,6 +80,7 @@
     "@deepseek-ai/dsh-app-boot": "^0.2.2-rc.1",
     "@deepseek-ai/dsh-scope": "^0.2.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-executor-native": "^0.2.2-rc.1",
     "@deepseek-ai/dsh-tools": "^0.2.2-rc.1",
     "@types/node": "^26.4.0",
     "typescript": "^5.9.3"

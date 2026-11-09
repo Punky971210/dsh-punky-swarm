@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 import { serviceOf } from './tools-http.js';
+import { governedToolNames } from '../engine/suite.js';
 
 
 export const name = 'dsh-punky-swarm-provider-dsh';
@@ -41,7 +42,10 @@ export function apply(ctx) {
     ctx?.logger?.warn?.('[dsh-punky-swarm] governance tool face absent: punkySwarmTools service unavailable（引擎行未提供工具集）');
     return;
   }
-  toolkit.registerTools(ctx);
+  // 【分层注册 · 2026-11-09】常驻黑板 7 件已由引擎行注册到 global 层（MCP 可见面，`RESIDENT_TOOL_NAMES`）；
+  //   本行只注册**补集**（治理写/派发/门禁投影等）⇒ 该 preset 的 agent 视角 = global(7) + 本层(28) = 35 件，
+  //   与既有一致；同层不重名（宿主 register 对同名抛错）。
+  toolkit.registerTools(ctx, { only: governedToolNames() });
   ctx?.logger?.info?.('[dsh-punky-swarm] governance tool face mounted into preset scope: '
-    + toolkit.toolNames.length + ' tools（仅 punky-preset 会话可见）');
+    + toolkit.toolNames.length + ' tools（仅 punky-preset 会话可见；常驻黑板 7 件在 global 层）');
 }

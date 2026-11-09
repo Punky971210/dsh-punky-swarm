@@ -24,6 +24,10 @@ import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
 import { createTools } from './tools/register.js';
+// 【方案 A · 延迟绑定】`/mcp` 的唯一延迟入口要**重试挂载**它：`createTools` 里那次尝试早于
+//   `webServer` 就绪（`lib/tools/register.js:38`），早退时返回 `installed=false` 的 no-op disposer。
+import { installMcpDataPlane } from './mcp/data-plane-server.js';
+import { RESIDENT_TOOL_NAMES } from './engine/suite.js';
 import { EXEC_TOOLS } from './tools/core.js';
 import { wakeLeaderForReport } from './tools/swarm-comms.js';
 import { poolViewOf } from './tools/task-tools.js';
@@ -98,6 +102,8 @@ import { mountAuditLog } from './auditlog/sink.js';
 //   + try 语义，且 provider 行自身持有 `inject: [tools, webServer, subagents]` ⇒ 不依赖引擎行。
 //   依赖方向：引擎 → provider 端口（J6：宿主差异只在 provider 内）。
 import { createHttpPort } from './provider-dsh/tools-http.js';
+// 【方案 A · AC-8】能力报告的宿主面读数是快照 ⇒ 延迟装配后就地刷新（纯函数，独立可测）
+import { refreshFaceReading } from './host-face-reading.js';
 
 export const name = 'dsh-punky-swarm';
 // ── `inject` 声明面：**W4 起为空**（J4'-a：引擎插件行 `inject` ∩ 宿主服务名 = ∅）──────────────────
@@ -170,17 +176,46 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
       ctx.logger?.warn?.('[dsh-punky-swarm] legacy migration failed: ' + String(e));
     }
     // 资产同步：预设（~/.dsh/.agent-presets/punky-preset）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
-    try {
-      const { results, manifest } = syncAssets()
-      for (const r of results) {
-        if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);
-        else if (r.status === 'failed') ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + r.asset + ': ' + r.error);
+    //
+    // 【冷启动瘦身 · 方案 A】`syncAssets()` **移出 apply() 同步段**：改由 apply 返回后的首个 tick（setImmediate）执行。
+    //   实测依据（`scripts/probe-boot-cost.mjs --assets=inline|deferred`，读数与命令原文见 `exec/coldstart-session/notice.md`）：
+    //   S7（syncAssets）是本段第二大单项（冷态读数见 notice §改动前归因）。
+    //   ⚠ **口径变更**（与下方 mailbox sweep 的 B-1 同源）：改造后 `engine root` 与 `asset synced` / `asset sync failed`
+    //   **跨 tick** ⇒ 不得再用这两类日志之差当「apply 同步耗时」（会低估）；同步耗时以探针读数为准。
+    //   语义不变：启动后**仍完整执行一次**资产同步（成功/失败日志一条不增一条不减，AC-6）；`syncDir` 幂等，
+    //     已 `current` 的状态零写盘。`lib/assets.js` **一行未改**（本改动只挪调用点，AC-5）。
+    //   已知代价（显式登记，非静默降级）：进程若在首个 tick 前被 dispose/退出，则**本次同步取消** ——
+    //     必须落一条 warn（下方 disposer 内）；可接受：资产是**供给性**（非事务性）且幂等，下次启动补同步；
+    //     原同步实现同样不保证「同步完才退出」（进程可在 cpSync 中途被杀）。
+    //   条件先判后调度（C-1）：`if (!recoveredThisProcess)` 在本同步段求值，回调内**不得**再判
+    //     （紧随的第二个同名块会把该位置 true ⇒ 搬进回调就恒假 ⇒ 静默永不同步）。
+    //   作用域外撤（C-2）：句柄 + 回调首行清句柄 + `ctx.effect` 取消，与 `mailbox sweep on start (deferred)` 逐字同形。
+    let assetSyncHandle = null;
+    const syncAssetsOnce = () => {
+      assetSyncHandle = null;
+      try {
+        const { results, manifest } = syncAssets()
+        for (const r of results) {
+          if (r.status === 'synced') ctx.logger?.info?.('[dsh-punky-swarm] asset synced: ' + r.asset);
+          else if (r.status === 'failed') ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + r.asset + ': ' + r.error);
+        }
+        if (manifest !== 'ok') {
+          ctx.logger?.warn?.('[dsh-punky-swarm] asset manifest 不可用（' + manifest + '），已回退内置默认资产表；用户机实装面可能与包内清单声明不一致')
+        }
+      } catch (e) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + String(e));
       }
-      if (manifest !== 'ok') {
-        ctx.logger?.warn?.('[dsh-punky-swarm] asset manifest 不可用（' + manifest + '），已回退内置默认资产表；用户机实装面可能与包内清单声明不一致')
-      }
-    } catch (e) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] asset sync failed: ' + String(e));
+    };
+    assetSyncHandle = setImmediate(syncAssetsOnce);
+    if (typeof ctx.effect === 'function') {
+      ctx.effect(() => () => {
+        if (assetSyncHandle) {
+          clearImmediate(assetSyncHandle);
+          assetSyncHandle = null;
+          // 取消**不得静默**（AC-4①）：tick 之前被撤 ⇒ 本次未同步，必须可观测。
+          ctx.logger?.warn?.('[dsh-punky-swarm] asset sync skipped: deferred task cancelled before first tick（本次未同步；下次启动补同步）');
+        }
+      }, 'dsh-punky-swarm: asset sync (deferred)');
     }
   }
 
@@ -225,14 +260,36 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
       return agg;
     };
     if (mailCfg.sweepOnStart !== false) {
-      try {
-        const agg = sweepAllMailboxes();
-        if (agg.scanned || agg.removed || agg.quarantined || agg.failed) {
-          ctx.logger?.info?.('[dsh-punky-swarm] mailbox sweep on start: scanned=' + agg.scanned
-            + ' removed=' + agg.removed + ' quarantined=' + agg.quarantined + ' failed=' + agg.failed);
+      // 【B-1 · boot-slim】启动清扫**移出 apply() 同步段**：改由 apply 返回后的首个 tick（setImmediate）执行。
+      //   实测依据（`scripts/probe-boot-cost.mjs`，读数与命令原文见 `exec/boot-slim/notice.md`）：
+      //   本段在「`engine root` → `mailbox sweep on start`」桶内占 **72.88%**（成对实验中载）/ 冷态首访 **64.86%** / 热态 **53.4–74.4%**，
+      //   是该桶最大单项；移出后 apply 同步耗时实测下降 **73.73%**（中载 2674.853 → 702.628ms）
+      //   / **53.4%**（轻载 971.173 → 452.4ms），两档均满足 AC-2 的 ≥50%。
+      //   ⚠ 口径变更：改造后 `engine root` 与 `mailbox sweep on start` **跨 tick** ⇒ 不得再用这两条日志之差
+      //   当「apply 同步耗时」（会低估）；同步耗时以 `exec/boot-slim/notice.md` 的探针读数为准。
+      //   **实现零改动**：`sweepAllMailboxes` 仍是同步全量扫（见上方同名定义），本改动只挪调用点。
+      //   语义不变：启动后仍全量清扫一次，幂等可重入（sweep 无状态）；日志与四计数口径逐字保留（AC-3/AC-5）。
+      //   已知代价（显式登记，非静默降级）：进程若在首个 tick 前退出，则本次清扫丢失 ——
+      //   可接受：sweep 幂等，下次启动补扫；且原同步实现同样不保证「扫完才退出」。
+      //   作用域外撤：插件在 tick 之前被 dispose 时取消，避免 dispose 后仍写 mailbox 目录。
+      let sweepOnStartHandle = null;
+      const sweepOnce = () => {
+        sweepOnStartHandle = null;
+        try {
+          const agg = sweepAllMailboxes();
+          if (agg.scanned || agg.removed || agg.quarantined || agg.failed) {
+            ctx.logger?.info?.('[dsh-punky-swarm] mailbox sweep on start: scanned=' + agg.scanned
+              + ' removed=' + agg.removed + ' quarantined=' + agg.quarantined + ' failed=' + agg.failed);
+          }
+        } catch (e) {
+          ctx.logger?.warn?.('[dsh-punky-swarm] mailbox sweep on start failed: ' + String(e));
         }
-      } catch (e) {
-        ctx.logger?.warn?.('[dsh-punky-swarm] mailbox sweep on start failed: ' + String(e));
+      };
+      sweepOnStartHandle = setImmediate(sweepOnce);
+      if (typeof ctx.effect === 'function') {
+        ctx.effect(() => () => {
+          if (sweepOnStartHandle) { clearImmediate(sweepOnStartHandle); sweepOnStartHandle = null; }
+        }, 'dsh-punky-swarm: mailbox sweep on start (deferred)');
       }
     }
     // 周期 sweep（默认 0=关，零隐式行为）：显式配置 sweepIntervalMs>0 才挂 setInterval（unref + dispose 清理）
@@ -312,16 +369,28 @@ const installWatchdog = ({ ctx, watchCfg, heartbeatRef, heartbeat }) => {
   }
   return watchTimer;
 };
-const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
+// ── HTTP 面装配（方案 A · 延迟绑定）─────────────────────────────────────────────────────
+// 【历史缺陷（实测，非推断）】原 `installWebSurface` 在 apply 同步段一次性判定
+//   `createHttpPort(ctx).available`。桌面宿主里 `webServer` **晚于**本插件装配约 10.6s 就绪
+//   （成功那次 boot：`governance tool face mounted` 00:42:32.184 → `dsh web: http://127.0.0.1:59312/`
+//   00:42:42.843）⇒ 该判定恒 false ⇒ `/api`、`/discover` 静默全缺席；`/mcp` 因跳过点在
+//   `lib/mcp/data-plane-server.js:263-269` 也同样恒早退（boot 日志 `[mcp] data plane mounted` 0 次）。
+// 【现形态（用户裁决 = 方案 A）】**不改** `cordis.patch.yml` 的 inject（宿主 cordis 的 inject 无
+//   optional 位 ⇒ 硬注入会让 headless 宿主整块 pending），改为监听宿主 `internal/service` 服务注册
+//   事件：`webServer` 就绪后再装配、消失即释放。契约依据（宿主 cordis `lib/index.js` 4.x）：
+//     · 事件名 `internal/service`；监听器实收 `(name, value)`（`dispatch` 先 shift 掉 self 与事件名）；
+//     · 「服务消失」= 注销路径**先 delete 再 notify** ⇒ `value === undefined`；
+//     · **事件发射段与 inject 无关**（只有 inject-refresh 段看 inject）⇒ 监听该事件不需要 inject 声明；
+//     · `Fiber._updateState` 在 fiber 进出 ready 时对本 fiber 已 provide 的服务补发 notify ⇒ 不漏通知。
+//   仍保留「注册监听后立即主动探测一次」作双保险（覆盖「监听注册晚于服务提供」的次序竞态）。
+//
+// 拆分（R-1/R-2）：`createHttpSurface` = 纯装配工厂；`bindHttpSurfaceDeferred` = **唯一**延迟入口。
+//   `createHttpSurface` 的前置契约 = 调用方已确认 `createHttpPort(ctx).available === true`
+//   （可装配性判定只允许出现在延迟入口一处，否则就是「第二套分支」）。
+const createHttpSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
   let apiDispose = null;
   let panelStream = null;
-  // 【W4 · S-2 站点①】原为 `if (ctx.webServer)`（裸读宿主服务名；且注释自述「在本宿主契约下不可达」
-  //   因 `webServer` 曾是 inject 硬依赖）。W4 起引擎行 `inject` 将清空 ⇒ 该裸读会**直接抛**
-  //   `cannot get property "webServer" without inject`，故必须先改成**功能面读数**。
-  //   判据语义不变：仍是「**HTTP 功能拿不拿得到**」，由 provider 端口回答（host 差异关在 provider 内）。
-  //   ⚠ 这**不是**「改成恒 false」：可用的宿主上 `createHttpPort(ctx).available === true`，下方整段照常装配。
-  if (createHttpPort(ctx).available) {
-    // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
+  // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
     // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
     const discoveryCfg = resolveDiscoveryConfig(config);
     let discovery = null;
@@ -384,8 +453,116 @@ const installWebSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
     // SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
     //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源（下方 topic 运行时装配分支与热更新通道对称接线）；
     //   topic 关闭时 hub 仍装配（fs.watch 与心跳通道不变），attachTopic 零调用零路径。
-  }
   return { apiDispose, panelStream };
+};
+
+// ── 延迟绑定入口（唯一）──────────────────────────────────────────────────────────────────
+// 职责：宿主 `internal/service` 事件驱动「装配 / 释放」两态，并以 apply 末尾的一次主动探测兜住
+//   「监听注册晚于服务提供」的次序竞态（双保险之一）。
+// 持有面（D1 单一持有）：`/api`（含 `/discover`、`/.well-known/aip`）、SSE hub、`/mcp` 三者的
+//   路由 disposer **只**由本工厂的聚合释放持有；`createTools` 里那次早退的 no-op disposer 不算持有者。
+// 幂等（D4）：`mounted !== null` 单点表达「已装配」——**不新增 rt 字段**（rt 字段集已被
+//   `test/w7f-rt-write-surface.test.js` 冻结，新增字段会破坏该冻结面）。
+const bindHttpSurfaceDeferred = ({
+  ctx, config, store, root, tools, rt,
+  getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog,
+  mcpPlaneOf, syncConsumers,
+}) => {
+  // 已装配面（非空 = 已装配；唯一持有者是 `mounted.dispose` —— 一次性聚合释放器）
+  let mounted = null;
+  // 首轮：若 `createTools` 那次尝试**已真装上**（宿主先起 webServer 后加载插件，如热重载），
+  //   则本路径不再挂第二个 ⇒ 禁双挂。释放过一轮后置 false：旧 disposer 指向的 webServer 实例已消失。
+  let adoptEarlyMcp = true;
+  const surfaceDeps = { ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog };
+
+  /** 释放面：一次性聚合释放（逆序 `/api` → SSE hub → `/mcp`）+ 清 rt 读位。幂等（`mounted` 置空后零操作）。 */
+  const release = (reason) => {
+    if (!mounted) return false;
+    const aggregate = mounted.dispose;
+    mounted = null;
+    // D1 单一持有：三条路由面的 disposer 全部由这一个聚合函数持有，本处是它的**唯一**调用点之一
+    //   （另一处 = `rt.apiDispose`，它指向同一个聚合函数，自带一次性守卫 ⇒ 不会重复摘路由）。
+    aggregate();
+    // rt 读位回落到「未装配」态：否则热更 topic 通道会往**已释放**的 hub 上接线（attachTopic 在
+    //   disposed hub 上返回 no-op ⇒ topicAttachUn 被一个空函数占位 ⇒ 重挂后静默丢线）。
+    if (rt.topicAttachUn) { try { rt.topicAttachUn(); } catch { /* 已随 hub 释放 */ } rt.topicAttachUn = null; }
+    rt.panelStream = null;
+    // 旧 webServer 实例已消失 ⇒ 早装 disposer 指向的路由面不再有效，下一轮必须自己挂
+    adoptEarlyMcp = false;
+    syncConsumers?.();
+    if (reason !== 'plugin unload') ctx.logger?.info?.('[dsh-punky-swarm] http surface released: ' + reason);
+    return true;
+  };
+
+  /** 装配面（幂等）：`mounted` 已非空即 no-op。 */
+  const mount = (reason) => {
+    if (mounted) {
+      ctx.logger?.debug?.('[dsh-punky-swarm] http surface mounted already（跳过重复装配，trigger=' + reason + '）');
+      return false;
+    }
+    if (!createHttpPort(ctx).available) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] http surface: webServer 在读时刻不可用（保持延迟态，trigger=' + reason + '）');
+      return false;
+    }
+    // ① `/mcp` 重试挂载：早退的 no-op disposer（`installed === false`）不构成持有者 ⇒ 这里拿到的才是
+    //    唯一持有者。判据用既有 `installed` 标志（`data-plane-server.js:266/277`），不新造标记。
+    let mcpRouteDispose = null;
+    const early = typeof mcpPlaneOf === 'function' ? mcpPlaneOf() : null;
+    const earlyInstalled = Boolean(early) && early.installed === true;
+    if (!(adoptEarlyMcp && earlyInstalled)) {
+      const dispose = installMcpDataPlane(ctx, { logger: ctx.logger });
+      if (dispose && dispose.installed === true) mcpRouteDispose = dispose;
+      else ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /mcp 重试挂载未成功（注册被拒 ⇒ installed=false，保持未挂载）');
+    }
+    // ② `/api`（含 `/discover`、`/.well-known/aip`）＋ ③ SSE hub
+    const surface = createHttpSurface(surfaceDeps);
+    // 聚合释放器：一次性守卫，逆序释放。它同时是 `rt.apiDispose` 的持有者 ——
+    //   `releaseAll` 在插件卸载时还会再调一次 `rt.apiDispose?.()`，一次性守卫保证**不会重复摘路由**。
+    let spent = false;
+    const dispose = () => {
+      if (spent) return;
+      spent = true;
+      try { surface?.apiDispose?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /api dispose failed: ' + String(e?.message ?? e)); }
+      try { surface?.panelStream?.dispose(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: stream hub dispose failed: ' + String(e?.message ?? e)); }
+      try { mcpRouteDispose?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /mcp dispose failed: ' + String(e?.message ?? e)); }
+    };
+    mounted = { dispose };
+    rt.apiDispose = dispose;
+    rt.panelStream = surface.panelStream;
+    // ④ 装配后补接线：topic 接线（AC-7）与能力读数刷新（AC-8）只能在此刻求值（`rt` 读位刚回填）
+    try { syncConsumers?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: post-mount wiring failed: ' + String(e?.message ?? e)); }
+    return true;
+  };
+
+  // 双保险之二：监听宿主服务注册事件（**不需要** inject 声明，依据见上方契约注）。
+  let unsubscribe = () => {};
+  if (typeof ctx.on === 'function') {
+    try {
+      const off = ctx.on('internal/service', (serviceName, value) => {
+        if (serviceName !== 'webServer') return;
+        // 「服务消失」= 注销路径先 delete 再 notify ⇒ value 取不到（undefined）
+        if (value === undefined) { release('webServer gone'); return; }
+        mount('internal/service');
+      });
+      if (typeof off === 'function') unsubscribe = off;
+    } catch (e) {
+      ctx.logger?.warn?.('[dsh-punky-swarm] http surface: internal/service 订阅失败（降级为仅主动探测）：' + String(e?.message ?? e));
+    }
+  }
+
+  // 双保险之一：注册监听后**立即主动探测一次**
+  if (createHttpPort(ctx).available) mount('probe');
+  else ctx.logger?.info?.('[dsh-punky-swarm] http surface deferred: webServer unavailable in this host');
+
+  return {
+    mount,
+    release,
+    /** 插件卸载：释放已装配的面并退订（幂等）。 */
+    close() {
+      release('plugin unload');
+      try { unsubscribe(); } catch { /* 已随 fiber 退订 */ }
+    },
+  };
 };
 const installTrajectoryBridge = ({ ctx, config, store, dispatchIndex = null }) => {
   // 诊断桥接（trajectory）：订阅 trajectory 异常 → sessionId→lane 映射 → notify（默认 notify-only）。
@@ -702,7 +879,8 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
 };
 
 // ── W7e E1：governance 装载面（preset 双表 + 注册目录元数据 + hook 安装）下沉为顶层工厂 ──
-//   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / installWebSurface 的惰性 getter）。
+//   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / HTTP 面装配的惰性 getter——
+//   后者现由 `bindHttpSurfaceDeferred` 承载，`presets: () => getPresetCatalog()` 等仍是惰性求值）。
 const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge }) => {
   const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
   const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
@@ -1051,9 +1229,20 @@ export const apply = (ctx, config = {}) => {
   //   注册动作由预设组合里的 `dsh-punky-swarm/provider-dsh` 行以自己的 ctx 执行。
   //   取证与消费面影响见 `host-contract-preset-tool-scope.md`（本批 lane 产物）。
   tools.buildCatalog();
+  // ── MCP 常驻面（2026-11-09 用户裁决）：黑板 7 件注册到**引擎行根 ctx**（宿主 global 层）──────
+  //   global 是每个 scope 视图的**无条件起点**（宿主 dsh-tools index.js:480）⇒
+  //     ① MCP（无 agent）的 get/execute 直接命中 ⇒ `/mcp` 不再是空数据面；
+  //     ② 各 preset 的 agent 经祖先链仍看得见（preset 行只注册补集 ⇒ 同层不重名）；
+  //     ③ 兄弟 scope 与其它模式**只看到这 7 件**（= 用户要的「通用任务黑板」）；
+  //     ④ 注册 disposer 必须挂 `ctx.effect`：热重载不释放 ⇒ 同层重名抛 `tool "X" is already registered`。
+  //   常驻集定义见 `lib/engine/suite.js` 的 RESIDENT_TOOL_NAMES（逐件裁定，非 kind 派生）。
+  const disposeResident = tools.register(ctx, { only: RESIDENT_TOOL_NAMES });
+  if (typeof disposeResident === 'function' && typeof ctx.effect === 'function') {
+    ctx.effect(() => disposeResident, 'dsh-punky-swarm: resident tool face (MCP)');
+  }
   try {
     ctx.provide?.('punkySwarmTools', {
-      registerTools: (targetCtx) => tools.register(targetCtx ?? ctx),
+      registerTools: (targetCtx, options) => tools.register(targetCtx ?? ctx, options),
       toolNames: tools.tools.map((t) => t.name),
     });
   } catch (e) {
@@ -1061,14 +1250,46 @@ export const apply = (ctx, config = {}) => {
     ctx.logger?.warn?.('[dsh-punky-swarm] punkySwarmTools provide failed: ' + String(e?.message ?? e));
   }
   rt.watchTimer = installWatchdog({ ctx, watchCfg: watchRuntime.watchCfg, heartbeatRef: rt.heartbeatRef, heartbeat: rt.heartbeat });
-  const web = installWebSurface({ ctx, config, store, root, tools, getWatchInstalledCfg: () => rt.watchInstalledCfg, getGovernanceInstalledCfg: () => rt.governanceInstalledCfg, getPresetCatalog: () => presetCatalog });
-  ({ apiDispose: rt.apiDispose, panelStream: rt.panelStream } = web);
   // 【S-1 时序】索引重建**必须先于**轨迹挂载：轨迹的 rebuildFromEvents 会直接取用该索引，
   //   若索引还没建（空 Map），轨迹映射会变空 ⇒ 行为降级。故此处把重建对提升到挂载之前。
   const rebuildDispatchIndex = createDispatchIndexRebuilder({ store, dispatchIndex });
   rebuildDispatchIndex(); // 启动重建（幂等；装配期一次）
   rt.trajectory = installTrajectoryBridge({ ctx, config, store, dispatchIndex });
   ({ topicRuntime: rt.topicRuntime, topicAttachUn: rt.topicAttachUn } = installTopicRuntime({ ctx, config, root, topicSink, panelStream: rt.panelStream, topicAttachUn: rt.topicAttachUn }));
+  // ── HTTP 面（方案 A · 延迟绑定）：装配点**后移到 topic 运行时之后**─────────────────────────
+  //   顺序依据（对判据源 S2.1 的**唯一**调整，理由可判）：AC-7 的补接线回调要读 `rt.topicRuntime`，
+  //   而后者在本行才由 `installTopicRuntime` 写入 ⇒ 若仍按旧位置（`installWatchdog` 之后）调用延迟入口，
+  //   则 webServer 已就绪的那种宿主里 probe 会在 topicRuntime 就绪**之前**装配完成，topic 接线仍会丢一次。
+  //   其余装配面无顺序依赖：本段的产物（路由 / hub）只有 HTTP 请求时才被消费，且 `getPresetCatalog`
+  //   等全部是惰性 getter（见 `createHttpSurface` 内注释）。
+  //   ⚠ 与旧 `installWebSurface` 的返回值语义**不完全等价**：`rt.apiDispose` / `rt.panelStream` 由延迟入口
+  //    在装配完成时回填（可能晚于本行）⇒ 任何消费方一律**读时求值**，禁在本同步段缓存布尔/引用。
+  const syncHttpSurfaceConsumers = () => {
+    // AC-7：`installTopicRuntime` 在 `panelStream === null` 时跳过 `attachTopic('swarm.')`
+    //   （`if (panelStream && !topicAttachUn)`，:436）⇒ 延迟装配后必须补接，否则 topic 事件**静默丢线且不报错**。
+    //   与热更通道（`applyConfigChange ③`）逐字同式，幂等：已接线不重复订阅。
+    if (rt.topicRuntime && rt.panelStream && !rt.topicAttachUn) {
+      rt.topicAttachUn = rt.panelStream.attachTopic('swarm.');
+      ctx.logger?.info?.('[dsh-punky-swarm] http surface: topic wiring attached（延迟装配后补接线）');
+    }
+    // AC-8：`rt.capabilities` 的 `host[].httpSurface` 是 apply 时刻快照（`ports.httpSurface` 只求值一次）
+    //   ⇒ 装配/释放后就地刷新该面读数 + 派生 `unavailable`。刷新逻辑是纯函数（`lib/host-face-reading.js`），
+    //   独立成模块以便单测直接驱动（`lib/capabilities.js` 的导出面被 C7 用例冻结，禁增删）。
+    const refreshed = refreshFaceReading(rt.capabilities, 'httpSurface', createHttpPort(ctx).available === true);
+    if (refreshed) {
+      ctx.logger?.info?.('[dsh-punky-swarm] http surface: capability reading refreshed (httpSurface.available='
+        + (createHttpPort(ctx).available === true) + ')');
+    }
+  };
+  const httpSurface = bindHttpSurfaceDeferred({
+    ctx, config, store, root, tools, rt,
+    getWatchInstalledCfg: () => rt.watchInstalledCfg,
+    getGovernanceInstalledCfg: () => rt.governanceInstalledCfg,
+    getPresetCatalog: () => presetCatalog,
+    // `/mcp` 早到的那次尝试（`createTools` 内）的返回：`installed === false` 的 no-op 不构成持有者
+    mcpPlaneOf: () => tools.mcpPlaneDispose,
+    syncConsumers: syncHttpSurfaceConsumers,
+  });
   const bridge = mountAcpsBridge({ ctx, config, root });
   const registryClient = installRegistryClient({ ctx, config });
   rt.acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
@@ -1127,5 +1348,8 @@ export const apply = (ctx, config = {}) => {
   // 红线（C-2）：`assertRequired` 只读 `report.kernel`，是 fail-closed 的**全部**意义（不再读宿主能力）。
   assertRequired(rt.capabilities);
 
-  return () => releaseAll(rt);
+  // 释放顺序：延迟入口先释放（`/api` → hub → `/mcp`）并退订 `internal/service`；`releaseAll` 随后
+  //   收其余资源。延迟入口释放后已把 `rt.apiDispose` / `rt.panelStream` / `rt.topicAttachUn` 置空
+  //   ⇒ `releaseAll` 对这三项为零操作（`releaseAll` 的置空写集不变，仍恰 5 项）。
+  return () => { httpSurface.close(); releaseAll(rt); };
 };

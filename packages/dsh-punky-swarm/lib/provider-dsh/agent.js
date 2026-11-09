@@ -176,7 +176,20 @@ export function createAgentPort(ctx, opts = {}) {
     };
     let r = null;
     try {
-      r = await toolFace.execute({ name: 'spawn_teammate', arguments: args });
+      // 【宿主契约 · 批式 execute（0.2.2-rc.1 起）】与 `tools-http.js` 的 `invokeTool` 同源：
+      //   单 exec 形态在新宿主取 `calls === undefined` ⇒ `toolCalls.map` 原生 TypeError（派发永不成立）。
+      //   `signal` 必填（宿主直接读 `signal.aborted`）：优先取调用方 signal，缺省给永不 abort 的控制信号
+      //   （team 推送是「发出去即完成」的短动作，无连接级取消面可接）。
+      const signal = options?.signal ?? new AbortController().signal;
+      const out = await toolFace.execute({
+        calls: [{
+          id: 'push-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+          name: 'spawn_teammate',
+          arguments: args,
+        }],
+        signal,
+      });
+      r = out && Array.isArray(out.results) ? (out.results[0]?.result ?? null) : out;
     } catch (e) {
       throw new Error(HOST_PORT_QUERY_FAILED + ' push_execute(D) 调用面失败: ' + String(e?.message ?? e));
     }

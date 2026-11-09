@@ -90,9 +90,11 @@ function hostCtxOf({ rosterRows = () => [] } = {}) {
     logger: SILENT,
     tools: {
       register() {},
-      execute: async (req) => {
-        toolCalls.push({ name: req?.name, args: req?.arguments });
-        return { isError: false, content: [{ type: 'text', text: 'spawned' }] };
+      // 【0.2.2-rc.1 批式契约】解包首条 call 记录调用证据，返回 `{ results:[{callId,result}] }`。
+      execute: async (input) => {
+        const call = input?.calls?.[0] ?? {};
+        toolCalls.push({ name: call.name, args: call.arguments });
+        return { results: [{ callId: call.id, result: { isError: false, content: [{ type: 'text', text: 'spawned' }] } }] };
       },
     },
     subagents: { start: async () => ({ id: 'ws-c', result: Promise.resolve({ output: [], stopReason: 'completed' }) }) },

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { sendJson } from '../json-response.js';
 import { createToolsPort, createHttpPort } from '../provider-dsh/tools-http.js';
-import { SUITE_TOOLS } from '../engine/suite.js';
+import { SUITE_TOOLS, RESIDENT_TOOL_NAMES } from '../engine/suite.js';
 import { HOST_INTERSECT_EXEMPT } from '../governance/host-tools.js';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -70,11 +70,18 @@ export function exposedToolNamesOf(suite = SUITE_TOOLS) {
  * **豁免子集（策略）**，不是「宿主提供全集（事实 7 件）」——若误用全集，会把 `subagent` 等
  * 未注册件一并豁免，等于放宽「能宣告必须真能调到」。故改为 `HOST_INTERSECT_EXEMPT`。
  */
-export function callableToolNamesOf(ctx, suite = SUITE_TOOLS) {
-  const declared = exposedToolNamesOf(suite);
+export function callableToolNamesOf(ctx, declaredNames = RESIDENT_TOOL_NAMES) {
+  // 【2026-11-09 常驻面收窄】声明基准从「kind ∈ EXPOSED_KINDS 的 21 件」改为**显式常驻名单 7 件**
+  //   （`lib/engine/suite.js` 的 RESIDENT_TOOL_NAMES）。两个理由：
+  //     ① 排除项横跨 blackboard/read 两族（gate_status/artifact_types/log_export 在族内、lane_checkpoint_status 在 read）
+  //        ⇒ kind 派生无法表达逐件取舍；
+  //     ② 宿主面 `list_agents`/`wait_agent` 若仍走 `HOST_INTERSECT_EXEMPT` 豁免，会被**无条件宣告**，
+  //        而宿主对二者硬要求 `exec.agent` ⇒ MCP 通道结构性调不通 = 假契约（违反下方 :60-62 的判据原则）。
+  //   `hostProvided` 仍参与判断（名单命中时豁免求交），但常驻集不含宿主件 ⇒ 当前恒不命中；
+  //   保留它以不破坏「宿主提供面如何豁免」这一既有策略表达。
   const hostProvided = new Set(HOST_INTERSECT_EXEMPT);
-  return declared.filter((name) => {
-    if (hostProvided.has(name)) return true; // 求交豁免（策略）：本仓不注册属正常
+  return declaredNames.filter((name) => {
+    if (hostProvided.has(name)) return true;
     try {
       return createToolsPort(ctx).probeTool(name).state === 'present';
     } catch { return false; }
@@ -116,15 +123,30 @@ function callResultOf(raw) {
 }
 
 /**
- * 安装 MCP 数据面。
- *
- * @param {object} ctx 宿主上下文（需 `webServer.register` / `tools.get` / `tools.execute`）
- * @param {object} deps 可选 `{ logger }`
- * @returns {() => void} disposer（注销路由）
+ * 降级兜底错误帧（**单点构造**）：入口 B 的外层 `catch` 复用本函数，禁在监听器里再写一份帧字面量
+ * （C-2：协议面只有一处构造点）。仅在 handler 自身 reject 的**不可达常态**下使用（R-5）。
  */
-export function installMcpDataPlane(ctx, deps = {}) {
+export function mcpInternalErrorFrame(message) {
+  return rpcError(null, -32603, message ?? 'internal error');
+}
+
+/**
+ * MCP 协议面工厂 —— **两入口共用的唯一逻辑源**（C-2 禁第二套实现）。
+ *
+ * 【2026-11-09 · 批 `punky-mcp-l1-wiring` · 判据源 §3.1】从 `installMcpDataPlane` 抽出。抽出的**唯一理由**：
+ *   入口 B（`lib/mcp/loopback-listener.js` 自建 `node:http`）必须与入口 A（宿主 `webServer` 路由）共用同一份
+ *   协议逻辑，而 `installMcpDataPlane` 在 `createHttpPort(ctx).available === false` 时**早退**（见下方
+ *   `notMounted`）—— 若把入口 B 装在它内部，宿主 webServer 缺席时入口 B 也一并消失，恰好废掉 L1 模式
+ *   唯一的价值场景（webServer 缺席仍可用 = AC-10）。
+ *   ⇒ 本工厂**不接触 webServer**（不出现宿主 webServer 服务取件形态，全部经 `createHttpPort` 端口层）；
+ *     装配点在各自入口：A = `installMcpDataPlane`（下方）；B = `lib/tools/register.js#createTools`。
+ *
+ * @param {object} ctx 宿主上下文（需 `tools.get` / `tools.execute`；**不需要** `webServer`）
+ * @param {object} deps 可选 `{ logger }`
+ * @returns {{ handler: (req: object, res: object) => Promise<unknown> }} 纯 `node:http` 签名的 handler
+ */
+export function createMcpHandler(ctx, deps = {}) {
   const logger = deps.logger ?? ctx?.logger ?? null;
-  const declaredCount = exposedToolNamesOf().length;
 
   /** 注册表视图里的工具定义（取不到 ⇒ null，**不抛**；`errored` 与「无定义」在此同归 null）。 */
   const definitionOf = (name) => {
@@ -252,6 +274,24 @@ export function installMcpDataPlane(ctx, deps = {}) {
     if (out === null) { res.statusCode = 202; res.end(); return undefined; }
     return sendJson(res, 200, out);
   };
+
+  return { handler };
+}
+
+/**
+ * 安装 MCP 数据面（入口 A：宿主 `webServer` 路由 `POST /mcp`）。
+ *
+ * 对外返回契约与 `installed` 语义**逐字不变**（R-1/R-12）：`!available` ⇒ `installed=false` 的 no-op disposer；
+ *   `mountRoute` 返回的 disposer 非函数 ⇒ `installed=false`（第三态，见文末）。
+ *
+ * @param {object} ctx 宿主上下文（需 `webServer.register` / `tools.get` / `tools.execute`）
+ * @param {object} deps 可选 `{ logger }`
+ * @returns {() => void} disposer（注销路由）
+ */
+export function installMcpDataPlane(ctx, deps = {}) {
+  const logger = deps.logger ?? ctx?.logger ?? null;
+  const declaredCount = RESIDENT_TOOL_NAMES.length;
+  const { handler } = createMcpHandler(ctx, deps);
 
   const httpPort = createHttpPort(ctx);
   if (!httpPort.available) {
