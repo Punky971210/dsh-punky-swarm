@@ -1384,6 +1384,14 @@
       "tests": 15,
       "todos": 0
     },
+    "test/mcp-structured-content.test.js": {
+      "asserts": 15,
+      "blankLines": 11,
+      "lines": 156,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/mcp-tool-probe-tristate.test.js": {
       "asserts": 18,
       "blankLines": 14,
@@ -2153,7 +2161,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T13:27:45Z",
+  "generatedAt": "2026-11-09T13:40:55Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2164,15 +2172,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "A 项：batch_status 多批读面加 limit（缺省 50）+ 按批文件 mtime 最近活跃排序；store 新增 recentBatches；新增 test/batch-status-limit.test.js（8 例）与 scripts/probe-batch-status-budget.mjs",
+  "reason": "MCP 结构化输出：value 提升为标准 structuredContent（保留 value 兼容；不声明 outputSchema、不向 content 追加 JSON）；新增 test/mcp-structured-content.test.js（5 例）与 docs/mcp-data-plane.md（含 G-1 会话解析缺口留档）",
   "schema": 1,
   "totals": {
-    "asserts": 12096,
-    "blankLines": 6887,
-    "files": 269,
-    "lines": 72711,
+    "asserts": 12111,
+    "blankLines": 6898,
+    "files": 270,
+    "lines": 72867,
     "tautologies": 0,
-    "tests": 2527,
+    "tests": 2532,
     "todos": 0
   }
 }

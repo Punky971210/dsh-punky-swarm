@@ -115,9 +115,34 @@ const rpcResult = (id, result) => ({ jsonrpc: '2.0', id: id ?? null, result });
 /** JSON-RPC 错误帧（协议面错误；工具业务错**不**走这里 —— 见 P-5 分层）。 */
 const rpcError = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-/** 工具结果 → MCP `CallToolResult`。宿主已产出 `{content,isError}` 时原样透传，否则包成 text 项。 */
+/**
+ * 结构化输出提升：宿主 `tools.execute` 把工具的**原始返回值**放在自定义字段 `value` 上，
+ * 而 MCP 2025-06-18 的标准字段是 `structuredContent`（JSON **object**）。
+ * 标准客户端（Claude Desktop / codex 等）只认 `structuredContent`，读不到 `value`
+ * ⇒ 修复前所有工具在它们眼里只有 `content` 里那一行 render 摘要（数据面实际不可用）。
+ *
+ * 三条刻意的边界（均为显式决策，非遗漏）：
+ *   ① **不声明 `Tool.outputSchema`**。规范规定：工具一旦声明 outputSchema，`structuredContent`
+ *      即变为**必填且必须匹配该 schema**，客户端会校验并在不匹配时报错。7 个常驻工具的
+ *      `output.schema` 与真实返回体是否逐字段一致，是**另一件事**；与该修复捆在一起会把
+ *      「补一个标准字段」变成「可能让现有调用变红」。未声明时 `structuredContent` 是可选字段，
+ *      客户端当数据处理、不校验 ⇒ 本改动是纯增量。
+ *   ② **不在 `content` 里追加序列化 JSON**（规范只是 SHOULD）。`content` 会整段进模型上下文；
+ *      511 批场景追加 JSON 等于把全量数据灌进 prompt。`structuredContent` 已是标准通路。
+ *      该偏离连同理由记录在 `docs/mcp-data-plane.md`。
+ *   ③ **保留 `value` 原字段**。旧消费方（含本仓自己的探针）已按 `value` 读，删掉即破坏兼容。
+ *
+ * @param {object} raw 宿主回包 `{content, isError, value?}`
+ * @returns {object} 需要并入结果的字段（非 object 的 `value` 一律不提升：数组/标量不合规范）
+ */
+function structuredContentOf(raw) {
+  const v = raw?.value;
+  return (v !== null && typeof v === 'object' && !Array.isArray(v)) ? { structuredContent: v } : {};
+}
+
+/** 工具结果 → MCP `CallToolResult`。宿主已产出 `{content,isError}` 时原样透传并补标准结构化字段，否则包成 text 项。 */
 function callResultOf(raw) {
-  if (raw && typeof raw === 'object' && Array.isArray(raw.content)) return raw;
+  if (raw && typeof raw === 'object' && Array.isArray(raw.content)) return { ...raw, ...structuredContentOf(raw) };
   const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? null);
   return { content: [{ type: 'text', text }], isError: false };
 }
