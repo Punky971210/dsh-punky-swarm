@@ -29,23 +29,32 @@ import { renderArchContext } from '../engine/arch-context.js';
 //   `role_guide` 与引擎自派路径必须过**同一份** `capabilities.injectBudget`（同一取值单点
 import { readCapability } from '../assembly/schema.js';
 
+/** 多批读面缺省条数上限（语义见 `batch_status` 的 `limit` 参数说明）。传 0 才表示不限。 */
+const BATCH_LIST_LIMIT_DEFAULT = 50;
+
 export function buildBatchStatusTools(cx) {
   const { ctx, deps, store } = cx;
   const { resolveBatchSession } = deps;
   return [
     defineTool({
       name: "batch_status",
-      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。**未解析到调用方会话（如 MCP 直连）⇒ 列全部会话，每批带 sessionId（顶层 sessionScope:'all'）；显式 session 仍优先（sessionScope:'session'）。**运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。读面裁剪参数 view ∈ summary|active|full，**缺省 full**（不裁剪，返回体与不传该参数时逐字一致）：active 只裁 wavePlan（只保留 status 不属于 merged/failed/skipped 的 lane 对应任务；过滤后为空的波条目丢弃、wave 序号不重编号），lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动；summary 本批等价 full（不引入第三语义）；非法值（空串 / 大小写不符 / 非字符串等）回落 full 且不抛错。生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源；view 仅作用于单批投影（多批列表读面不含 wavePlan）。",
-      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"view":{"type":"json","description":"读面裁剪视图，三枚举 summary|active|full，**缺省 full**（不裁剪：返回体与不传该参数时逐字一致，零回归）。active 只裁 wavePlan —— 只保留 status 不属于 merged/failed/skipped 的 lane 对应任务（任务 id 不在 lanes 表内视为非终态、保留），过滤后为空的波条目丢弃、wave 序号不重编号；lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动。summary 本批等价 full（不引入第三语义）。**非法值回落 full 且不抛错**（空串 / 大小写不符 / null / 数字 / 对象等），生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源。view 仅作用于单批投影（多批列表读面不含 wavePlan，故其返回体不回显 viewApplied）。"}},
+      description: "查询批次状态（唯一事实源）：phase/lanes/wavePlan/事件摘要 + 派生视图 lanesState（lane→成员态）/danglingLanes（批次已终态而成员非终态的 lane，恒显）。不传 batchId 则列当前会话全部批次，可用 session 指定会话。**未解析到调用方会话（如 MCP 直连）⇒ 列全部会话，每批带 sessionId（顶层 sessionScope:'all'）；显式 session 仍优先（sessionScope:'session'）。**运行期 DAG 真源 = 批次 lanes[].deps + handoffs（逐边取件见 handoff_view），chain 回显只是建批期投影，不是运行期真源。读面裁剪参数 view ∈ summary|active|full，**缺省 full**（不裁剪，返回体与不传该参数时逐字一致）：active 只裁 wavePlan（只保留 status 不属于 merged/failed/skipped 的 lane 对应任务；过滤后为空的波条目丢弃、wave 序号不重编号），lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动；summary 本批等价 full（不引入第三语义）；非法值（空串 / 大小写不符 / 非字符串等）回落 full 且不抛错。生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源；view 仅作用于单批投影（多批列表读面不含 wavePlan）。**多批读面按「最近活跃」降序（批文件 mtime）且受 limit 约束**：缺省 50（MCP 直连不会主动传 limit，而 511 批全量投影既慢又撑爆消费方上下文），传 0 = 不限；`ids` / `batchId` 显式点名不受限。total 恒回显裁剪前总数、limitApplied 回显生效上限（0 = 未裁剪）——裁剪不冒充全量。",
+      parameters: {"batchId":{"type":"string","description":"批次 ID；缺省时列出该会话全部"},"ids":{"type":"array","items":{"type":"string"},"description":"批量读面：给批次 ID 清单时只读这些批（≥2 件不扫目录），恰 1 件透传；与 batchId 同给时 batchId 优先"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"},"limit":{"type":"integer","description":"多批读面条数上限（只作用于「列全部」的两条分支：全会话并集 / 单会话列表）：缺省 50，按批文件 mtime 降序取最近活跃的前 N 件；传 0 = 不限（全量，成本随批数线性增长，511 批实测约 770ms）；`ids` / `batchId` 显式点名不受限（点名即全给）。负数回落缺省 50；小数 / 字符串 / null 等非整数由宿主参数校验直接拒绝（`INVALID_ARGS`）—— 两者都不静默当作「不限」，也不静默截断成 0 件。生效上限经返回体 limitApplied 回显（0 = 未裁剪），裁剪前总数经 total 回显 —— 裁剪不冒充全量。"},"view":{"type":"json","description":"读面裁剪视图，三枚举 summary|active|full，**缺省 full**（不裁剪：返回体与不传该参数时逐字一致，零回归）。active 只裁 wavePlan —— 只保留 status 不属于 merged/failed/skipped 的 lane 对应任务（任务 id 不在 lanes 表内视为非终态、保留），过滤后为空的波条目丢弃、wave 序号不重编号；lanes/lanesState/danglingLanes/eventCount/settled/handoffGate/recentEvents 一律不动。summary 本批等价 full（不引入第三语义）。**非法值回落 full 且不抛错**（空串 / 大小写不符 / null / 数字 / 对象等），生效视图经返回体 viewApplied（'full'|'active'）回显 —— 回显生效值而非请求值，裁剪视图不冒充全量事实源。view 仅作用于单批投影（多批列表读面不含 wavePlan，故其返回体不回显 viewApplied）。"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"sessionScope":{"type":"string"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string"},"phase":{"type":"string"},"concurrency":{"type":"integer"},"lanes":{"type":"object","additionalProperties":true},"lanesState":{"type":"object","additionalProperties":true},"danglingLanes":{"type":"array","items":{"type":"string"}},"wavePlan":{"type":"array","items":{"type":"object","additionalProperties":true}},"smoke":{"type":"boolean"},"eventCount":{"type":"integer"},"recentEvents":{"type":"array","items":{"type":"object","additionalProperties":true}},"settled":{"type":"boolean"},"sessionId":{"type":"string"},"sessionScope":{"type":"string"},"total":{"type":"integer"},"limitApplied":{"type":"integer"},"batches":{"type":"array","items":{"type":"object","additionalProperties":true}},"stateSource":{"type":"string"},"memberStatesLegacy":{"type":"boolean"},"handoffGate":{"type":"object","additionalProperties":true},"viewApplied":{"type":"string"}}},
         render: (_args, value) => {
           const hg = value.handoffGate ?? null;
           const hgTxt = hg ? ' handoffGate=entry:' + (hg.entry === 'enforced' ? 'on' : 'off') + '/settle:' + (hg.settle === 'enforced' ? 'on' : 'off') + '(src:' + String(hg.source ?? 'default') + ')' : '';
           const stateTxt = value.stateSource ? ' state=' + String(value.stateSource) + (value.memberStatesLegacy ? '(legacy)' : '') : '';
-          return value.batchId
-            ? TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''))
-            : TEXT_OUTPUT('batches: ' + (value.batches ?? []).length + stateTxt + hgTxt);
+          if (value.batchId) {
+            return TEXT_OUTPUT('batch ' + value.batchId + ' phase=' + value.phase + ' settled=' + value.settled + (value.smoke ? ' SMOKE(产物契约类门豁免)' : '') + stateTxt + hgTxt + ((value.danglingLanes ?? []).length ? ' ⚠ dangling=' + value.danglingLanes.length : ''));
+          }
+          // 裁剪必须可见：`50/511 (最近活跃, limit=50)` 读作「盘上共 511 件，这里是最近活跃前 50」，
+          //   不与「真的只有 50 件」混淆（与单批视图 `viewApplied` 同一纪律：裁剪不冒充全量）。
+          const shown = (value.batches ?? []).length;
+          const clipped = typeof value.total === 'number' && value.total > shown;
+          const totalTxt = clipped ? '/' + value.total + ' (最近活跃, limit=' + value.limitApplied + ')' : '';
+          return TEXT_OUTPUT('batches: ' + shown + totalTxt + stateTxt + hgTxt);
         },
       },
       async execute(args, exec) {
@@ -85,23 +94,47 @@ export function buildBatchStatusTools(cx) {
         //   · 顶层 `sessionScope:'all'` 是**唯一判别位**（此时 `sessionId` 仍回显哨兵 `'cli'`，不代表读面范围）；
         //   · `batchId` 分支**不进这里**（见下方单批路径）——避免把一次 typing 错误放大成跨会话存在性探测。
         //   · `view` 不参与：多批列表读面本就不含 `wavePlan`（与既有口径一致）。
+        // 【A 项 · 多批读面预算】`limit` 只作用于「列全部」的两条分支（全会话并集 / 单会话列表）：
+        //   `ids` 与 `batchId` 是**显式点名** ⇒ 不受限（裁剪会把「我要的这几件」静默变成「其中一部分」）。
+        //   缺省 50：MCP 直连（Claude Desktop 等）不会主动传 limit，而 511 批全量投影既慢又撑爆消费方上下文。
+        //   负数（合法整数但语义非法）回落缺省、不抛错；小数 / 字符串 / null 到不了这里 ——
+        //   宿主 `dsh-tools` 的参数校验先以 `INVALID_ARGS` 拒掉（实测，见 L-5 测试）。
+        //   ⇒ 两个「非法」入口都必须收口到「可见的默认预算」，不得静默变成「不限」或「0 件」。
+        const limitOf = (raw) => (Number.isInteger(raw) && raw >= 0 ? raw : BATCH_LIST_LIMIT_DEFAULT);
         if (resolved.source === 'fallback' && !args.batchId) {
           const wantIds = Array.isArray(args.ids) && args.ids.length > 0 ? new Set(args.ids) : null;
+          if (wantIds) {
+            // 显式 id 清单：在**全部会话**里找这些 id（不排序、不裁剪 —— 点名即全给；Q2A-2/AC-10 口径不变）
+            const batches = [];
+            for (const own of store.listAllBatches()) {
+              if (!wantIds.has(own.batchId)) continue;
+              const b = store.readBatch(own.sessionId, own.batchId);
+              if (b) batches.push(listProjection(b, own.sessionId, own.batchId));
+            }
+            return { sessionId, batches, total: batches.length, limitApplied: 0, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'all' };
+          }
+          const limit = limitOf(args.limit);
+          const { total, items } = store.recentBatches({ limit });
           const batches = [];
-          for (const own of store.listAllBatches()) {
-            if (wantIds && !wantIds.has(own.batchId)) continue;
+          for (const own of items) {
             const b = store.readBatch(own.sessionId, own.batchId);
             if (b) batches.push(listProjection(b, own.sessionId, own.batchId));
           }
-          return { sessionId, batches, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'all' };
+          return { sessionId, batches, total, limitApplied: limit, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'all' };
         }
         if (!args.batchId && Array.isArray(args.ids) && args.ids.length > 0) {
           const map = store.readBatchMap(sessionId, args.ids);
-          return { sessionId, batches: [...map].map(([id, b]) => listProjection(b, sessionId, id)), ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
+          return { sessionId, batches: [...map].map(([id, b]) => listProjection(b, sessionId, id)), total: map.size, limitApplied: 0, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
         }
         if (!args.batchId) {
-          const map = store.readBatchMap(sessionId);
-          return { sessionId, batches: [...map].map(([id, b]) => listProjection(b, sessionId, id)), ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
+          const limit = limitOf(args.limit);
+          const { total, items } = store.recentBatches({ sessionId, limit });
+          const batches = [];
+          for (const own of items) {
+            const b = store.readBatch(sessionId, own.batchId);
+            if (b) batches.push(listProjection(b, sessionId, own.batchId));
+          }
+          return { sessionId, batches, total, limitApplied: limit, ...stateAnnotation, handoffGate: handoffGateView, sessionScope: 'session' };
         }
         const b = store.readBatch(sessionId, args.batchId);
         if (!b) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);

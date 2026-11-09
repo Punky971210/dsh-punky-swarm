@@ -218,7 +218,7 @@ function batchVersionConflictOf(batchId, expected, actual) {
 
 function composeStore(cx) {
   const {
-    createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
+    createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches, recentBatches,
     setMember, setPhase, appendEvent, claimAsset,
     commitBatch,
     addPoolTasks, addTaskEdges,
@@ -259,7 +259,7 @@ function composeStore(cx) {
     //   （CAS → IMM/交接校验 → `assertBatchWriteAllowed` → `atomicWrite`，判据面一个不少）。
     readBatchMap,
     commitBatch,
-    createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches,
+    createBatch, readBatch, readBatchResult, isCorrupt, listBatches, listSessions, listAllBatches, recentBatches,
     setMember, setPhase, appendEvent, claimAsset,
     addPoolTasks,
     addTaskEdges,

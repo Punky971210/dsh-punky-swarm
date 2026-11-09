@@ -336,6 +336,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/batch-status-limit.test.js": {
+      "asserts": 31,
+      "blankLines": 23,
+      "lines": 176,
+      "tautologies": 0,
+      "tests": 8,
+      "todos": 0
+    },
     "test/batch-store.test.js": {
       "asserts": 86,
       "blankLines": 28,
@@ -2145,7 +2153,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T12:54:04Z",
+  "generatedAt": "2026-11-09T13:27:45Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2156,15 +2164,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-coldstart-session-20261109: syncAssets 延迟化（新增 test/boot-assets-deferred.test.js 2 例）+ batch_status fallback 全会话（新增 test/session-fallback.test.js 9 例）；既有测试适配延迟时序：test/home-isolation.test.js lines+11（apply 后等首 tick）、test/lane-session-bind.test.js asserts+3 lines+6（单点下沉到 sessionOfResolved 后改指新单点并加严）",
+  "reason": "A 项：batch_status 多批读面加 limit（缺省 50）+ 按批文件 mtime 最近活跃排序；store 新增 recentBatches；新增 test/batch-status-limit.test.js（8 例）与 scripts/probe-batch-status-budget.mjs",
   "schema": 1,
   "totals": {
-    "asserts": 12065,
-    "blankLines": 6864,
-    "files": 268,
-    "lines": 72535,
+    "asserts": 12096,
+    "blankLines": 6887,
+    "files": 269,
+    "lines": 72711,
     "tautologies": 0,
-    "tests": 2519,
+    "tests": 2527,
     "todos": 0
   }
 }
