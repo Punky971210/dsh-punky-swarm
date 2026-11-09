@@ -41,6 +41,7 @@ export const MCP_INSTRUCTIONS = [
   '用法：① 先用 batch_status 列可用批次（按最近活跃排序；返回条数少于 total 即已裁剪，要全量传 limit:0）；',
   '② 用 task_pool 查某批还有哪些任务未派发；③ 用 taskpack_for 取某 lane 的完整任务包；',
   '④ 用 handoff_view 读交接状态，用 handoff_submit 提交上游交接，用 handoff_accept 接受后置入边。',
+  '批次拓扑的真源 = 各 lane 的 deps 声明 + 已提交的 handoff 记录（逐边取件见 handoff_view）。',
   '注意：黑板按会话隔离 —— 除 batch_status 外，其余工具均需显式传 session（外部客户端不知道 session 时，先用 batch_status 的返回体查出所属会话）。',
   '写操作受门禁校验：缺前置产物或断言不全会被拒并返回缺口清单，按提示补齐后再提交。',
 ].join(' ');

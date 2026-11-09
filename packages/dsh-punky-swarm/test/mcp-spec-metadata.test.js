@@ -144,10 +144,10 @@ test('M-5 batch_status description 已瘦身，且保留 session-fallback 的两
   const tools = buildBatchStatusTools({ ctx: {}, deps: { resolveBatchSession: () => 'cli' }, store: {} });
   const def = tools.find((t) => t.name === 'batch_status');
   assert.ok(def, '必须能构造出 batch_status');
-  // ⚠ 长度上限是**决策断言**（用户裁决「大幅缩短」，目标 200 字符量级），不是风格洁癖：
-  //   上限给到 320 留余量，避免措辞微调就红；同时防止回弹到 900+ 字符。
-  assert.ok(String(def.description).length < 320,
-    'batch_status.description 必须已瘦身（实测 ' + String(def.description).length + ' 字符，上限 320）');
+  // ⚠ 长度上限是**决策断言**（用户裁决「压到 200 字符以内，细节移交 instructions」），不是风格洁癖：
+  //   上限 220 = 200 目标 + 20 余量，避免措辞微调就红，同时防止回弹到 900+ 或半途的 299。
+  assert.ok(String(def.description).length <= 220,
+    'batch_status.description 必须压到 200 字符量级（实测 ' + String(def.description).length + ' 字符，上限 220）');
   // 这两条是 test/session-fallback.test.js:214-215 的既有关键契约，瘦身不得吞掉
   assert.match(String(def.description), /未解析到调用方会话/, '必须保留「未解析到调用方会话」');
   assert.match(String(def.description), /显式 session 仍优先/, '必须保留「显式 session 仍优先」');
