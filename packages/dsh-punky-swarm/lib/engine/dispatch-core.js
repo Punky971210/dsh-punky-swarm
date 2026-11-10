@@ -36,7 +36,15 @@ export function buildStartRequest({
 }) {
   const roleData = resolveRoleRef(role, { root: roleRoot ?? roleCorpusRoot(), team: roleTeam });
   const effectivePersona = persona !== undefined ? persona : personaOfRole(roleData);
-  const derivedDeny = deriveDenyTools(roleData?.tools?.allow, { root: roleRoot ?? roleCorpusRoot() });
+  // 【R-3 · deny 纯单据化（2026-11-10 裁决）】收窄**只**由显式 deny 单据决定
+  //   = `SUITE_DENY_TOOLS`（治理套件，唯一持有者 = `suite.js`）∪ `config.dispatch.denyTools`（用户点名单件）。
+  //   role frontmatter 的 `tools.allow` **降级为意图声明**：缺省**不**据此反推 deny 补集。
+  //   旧行为（本批停用）：`deriveDenyTools(allow)` = 「全部 role 的 allow 并集 − 本 role 的 allow」，
+  //   会把 `edit` / `memory_search` / `memory_save` / `web_search` 等从成员面剜掉（见判据源 §P-1 / §P-5）。
+  //   逃生阀：role 显式声明 `tools.deny_derived: true` 时才走 legacy 反推（本批已把 21 份 role 该位全置 `false`）。
+  const derivedDeny = roleData?.tools?.deny_derived === true
+    ? deriveDenyTools(roleData?.tools?.allow, { root: roleRoot ?? roleCorpusRoot() })
+    : [];
   return {
     label: labelOf(batchId, lane),
     signal: signal ?? new AbortController().signal,

@@ -31,7 +31,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, skill, write, edit, memory_search]
-  deny_derived: true
+  deny_derived: false
 skills: [software-team, spec-writing]
 discipline_refs: [0c, 0e, 9, 14]
 ---

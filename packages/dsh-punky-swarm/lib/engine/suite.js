@@ -70,6 +70,9 @@ function modeGateTools() {
   return SUITE_TOOLS.filter((t) => t.modeGate).map((t) => t.name);
 }
 
+// 【R-3 · deny 纯单据化】本表 = 治理套件收窄的**唯一持有者**。
+//   成员面收窄只走两张显式单据：本表 ∪ `config.dispatch.denyTools`（用户点名单件追加）。
+//   ⇒ **不**在此另立缺省值、**不**把 role 的 `tools.allow` 反推成 deny 补集（第二真源 ⇒ 表演进时静默漂移）。
 export const SUITE_DENY_TOOLS = Object.freeze(memberDenyTools());
 export const MODE_GATED_TOOLS = Object.freeze(modeGateTools());
 

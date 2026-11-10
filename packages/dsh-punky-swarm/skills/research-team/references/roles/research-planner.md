@@ -28,7 +28,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, write, edit, skill]
-  deny_derived: true
+  deny_derived: false
 skills: [research-team, spec-writing]
 discipline_refs: [0c, 9, 14]
 ---

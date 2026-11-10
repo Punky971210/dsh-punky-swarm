@@ -29,7 +29,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, pwsh, web_search, skill, write]
-  deny_derived: true
+  deny_derived: false
 skills: [research-team]
 discipline_refs: [0k, 12]
 ---

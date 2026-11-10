@@ -134,6 +134,18 @@
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 
+# ── MCP / knowledge base ────────────────────────────────────────────────────
+
+# 组合面打开（2026-11-10 用户裁决）：成员工具面**广度由本组合面决定**，不再由任何名单裁剪。
+# `weknora` 是外部 bundle（自带 `cordis.patch.yml`，见 V-3 探针），此处只引用其包行，
+# **不复制**它的 config 缺省 —— 缺省由该 bundle 自己的 patch 提供，双写即两真源。
+# 双副本一致性：本行与 `cordis.patch.yml` 的 `dsh-agent-preset-punky.config.plugins` 内同名行
+# 由 `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+# 收窄面**不动**：`weknora_*` 不进 `SUITE_DENY_TOOLS`、不进 `config.dispatch.denyTools`、
+# 不进任何 role 的 `tools.allow`（会污染 `roleToolVocabulary()` 并经 `deriveDenyTools` 反禁其它角色）。
+- id: weknora
+  name: '@wxg-prc-cpg/dsh-weknora'
+
 # ── goals ───────────────────────────────────────────────────────────────────
 
 # Only the model-facing tool. The goal SERVICE, its session driver, and the

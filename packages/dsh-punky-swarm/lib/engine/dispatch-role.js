@@ -216,6 +216,9 @@ export function roleToolVocabulary({ root = roleCorpusRoot(), fsImpl = fs, warn 
   return vocab;
 }
 
+// 【legacy · R-3】意图声明降级前的反推实现：**派发主路径缺省不再调用本函数**
+//   （`dispatch-core.js` 仅当 role 显式声明 `tools.deny_derived: true` 时才回退到它；缺省 false ⇒ 不反推）。
+//   保留导出 = 单测面 + 存量调用点零断链（`dispatch.js` 仍转出，`test/engine-dispatch.test.js` 仍直调）。
 export function deriveDenyTools(allow, opts = {}) {
   const list = (Array.isArray(allow) ? allow : [])
     .filter((t) => typeof t === 'string' && t.trim() !== '')

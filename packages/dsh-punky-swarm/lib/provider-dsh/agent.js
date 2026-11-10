@@ -107,6 +107,13 @@ export function createAgentPort(ctx, opts = {}) {
 
   // 「本次 ask 的收窄是否可核」的**唯一判据实现**：`canNarrow`（写前拒）与 `spawn`（边界兜底）都调它，
   //   两处调用是同一判定的两个时点（写前给可读拒因；边界再核，防调用方绕过 canNarrow）。
+  //   ⚠ **见证 ≠ 白名单**（2026-11-10 工具面开放批，S-3 改法②）：`witness = {preset, covers}` 的 `covers`
+  //     只表示「该 preset 实际拿到过这些工具」，用于判定「本次 deny 是否与既有覆盖面相交」（相交 ⇒ 拒派，
+  //     因为那样的收窄不可核）；它**不构造** `toolFilter`，也**不限制**成员可见的工具面。
+  //     实际可见面 = 组合面产出（`cordis.patch.yml` / preset 的 plugins 行）− deny 单据（`SUITE_DENY_TOOLS`
+  //     ∪ `config.dispatch.denyTools` ∪ 角色 `deny_derived` 位为 true 时的反推）。
+  //     配置项 `config.dispatch.presetCoverage[<id>].tools` 同样只是该见证的**声明位**，不是工具白名单；
+  //     `docs/install.md` 里的填法示例值取自 coordinator 的 roleAllow，**不可**当作成员实际工具面读。
   const narrowingDecisionOf = (ask = {}) => {
     if (!available) return { narrowable: false, preset: null, reason: 'ctx.subagents 无可用启动入口' };
     if (!needNarrowOf(ask)) return { narrowable: true, preset: witnessOf(ask)?.preset ?? null, reason: null };

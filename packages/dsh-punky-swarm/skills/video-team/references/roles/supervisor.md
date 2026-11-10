@@ -32,7 +32,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, pwsh, skill, write]
-  deny_derived: true
+  deny_derived: false
 skills: [video-team]
 discipline_refs: [C-13, C-14, C-23, C-24]
 ---

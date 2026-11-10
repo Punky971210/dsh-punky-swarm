@@ -97,12 +97,22 @@ dsh --profile my-swarm "跑一下测试"
 | **`agentPreset`** | `dispatch.js:1171` 返回 `mode:'rejected'`（收窄不可核）|
 | **`presetCoverage[<id>].tools`** | `presetFor` 返回**裸字符串** ⇒ 无见证 ⇒ 拒派 |
 
-**⚠ 关键约束**：**`tools` 必须是 `roleAllow` 的子集。**
+**⚠ 语义（2026-11-10 裁决固化）：`presetCoverage[<presetId>].tools` 是「收窄见证」。**
 
-因为 `deny`（本次要禁的）= `17 个治理工具` ∪ `deriveDenyTools(roleAllow)`，而 `deriveDenyTools` 返回「工具词汇表 **减去** `roleAllow`」⇒ **`tools` 里只要有任何一个不在 `roleAllow` 里的工具，就必然落进 `deny` ⇒ 拒派。**
+它是**收窄见证清单（witness）**，唯一用途 = 让派发面核对「本次要禁的工具是否落在该 preset 声称的覆盖面内」：
 
-**实测例**：`coordinator` 的 `roleAllow = [read, glob, grep, pwsh, skill, write]`（**不含 `edit`**）。
-初配 `tools = [read, write, edit, glob, grep, pwsh]` ⇒ **被拒**（`edit` 落进 `deny`）；改成与 `roleAllow` 一致 ⇒ **通过**。
+- **不定义成员工具面** —— 成员实际可见工具 = **preset 组合面产出 − deny 单据**（`SUITE_DENY_TOOLS` ∪ `config.dispatch.denyTools`）；
+- **不参与** `toolFilter` 的构造（真正落地的是 deny 集；本键只喂「本次收窄是否可核」这一个判据）；
+- **不是白名单**，也不裁剪 preset 组合面（组合面由 `cordis.patch.yml` / `agent.cordis.yml` 决定）。
+
+⇒ **见证 ≠ 白名单**。它只有三条约束（均已实现）：① **非空**（空集与任何集交集恒空 ⇒ 判据退化为恒真 ⇒ 拒派）；
+② 与本次 `deny` 集**不相交**（任一命中 ⇒ 判「解析不出可用 preset」⇒ 拒派）；
+③ **不得**为「让门过」而把它缩成某个角色的 `tools.allow` 值（那是**意图声明**，不是工具面事实）。
+
+**填法**：写该 preset 组合面**实际可能产出**的工具名集合即可；**禁止**把它当工具面清单维护。
+（上文 JSON 里的 6 件只是见证**示例值**，不是成员工具面枚举 —— 别抄成「成员只有这 6 件」。）
+role 侧自 2026-11-10 起**不再**用 `tools.allow` 反推 deny 补集（`tools.deny_derived` 缺省 `false`），
+故「初配见证被拒」的旧机型（`edit` 落进 `deny` 之类）已不复存在。
 
 ---
 

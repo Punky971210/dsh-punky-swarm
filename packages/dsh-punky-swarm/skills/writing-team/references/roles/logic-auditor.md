@@ -30,7 +30,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, write, skill]
-  deny_derived: true
+  deny_derived: false
 skills: [writing-team]
 discipline_refs: [0k, 12]
 ---

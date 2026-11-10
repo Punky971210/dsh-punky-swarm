@@ -30,7 +30,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, write, web_search, skill]
-  deny_derived: true
+  deny_derived: false
 skills: [writing-team, event-authenticity-check]
 discipline_refs: [0k, 12]
 ---

@@ -162,8 +162,15 @@ export function composeWorkerPrompt({
     .filter((x) => typeof x === 'string' && x.trim() !== '')
     .map((x) => x.trim());
   if (roleAllowFace.length > 0) {
-    L.push('本 lane 的角色工具面：' + roleAllowFace.map((t) => '`' + t + '`').join(' / ')
-      + '。**只使用这些工具**；越界即违规（会被产物审计与纪律核查发现）。');
+    // 【R-11 · 2026-11-10】原文案把 `tools.allow`（**意图声明**）渲染成**可执行约束**（逐字旧文案见判据源 §P-1）——
+    //   那是**假声明**：`tools.allow` 不产生任何技术限制，成员实际可见工具 = preset 组合面产出 − deny 单据。
+    //   三个害处：① 假声明；② 诱使成员放弃实机自证（本批 7 条 lane 全部据此不查库）；③ 与下方纪律 3
+    //   「断言『没有某工具/技能』前先实机核」自相矛盾。⇒ 改口径为「意图声明（**非**可见面保证）」+ 实机自证指引。
+    L.push('本 lane 角色的**工具面意图声明**（role frontmatter `tools.allow`）：'
+      + roleAllowFace.map((t) => '`' + t + '`').join(' / ') + '。');
+    L.push('⚠ 这**不是**实际可见面的保证 —— 实际可见工具 = **preset 组合面产出 − deny 单据**'
+      + '（`SUITE_DENY_TOOLS` ∪ `config.dispatch.denyTools`）。'
+      + '**判断某工具在不在，禁凭本行断言：须按名直调看回执，或按协议面读工具目录实机自证。**');
     // 【⑤-1 · 裁决乙 2026-11-09】原文案写「已由引擎在 preset 面技术禁用」，对 `activation` 形态是**假声明**：
     //   该形态不承载 toolFilter（`provider-dsh/agent.js` 的 startActivation 分支只注入 agentPreset），
     //   引擎**不校验 preset 内容是否真的排除了这些工具**，只核「可解析且可核收窄」，不可核即拒派。

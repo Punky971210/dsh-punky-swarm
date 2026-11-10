@@ -26,7 +26,7 @@ acceptance_hints:
 
 tools:
   allow: [read, glob, grep, write, skill, memory_save, memory_search]
-  deny_derived: true
+  deny_derived: false
 skills: [software-team]
 discipline_refs: [0d]
 ---
