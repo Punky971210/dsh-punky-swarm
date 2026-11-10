@@ -450,5 +450,17 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     batch[BATCH_REV_KEY] = actual + 1;
     atomicWrite(batchFile(sessionId, batchId), batch);
   }
-  return composeStore(cx);
+  // 【B-05】实例级 dispose（幂等）：摘掉本实例在 governance 模块级刷盘表里的全部条目，并在**最后**一个
+  //   实例退出时清掉进程级刷盘定时器。供装配层 `releaseAll` 在「已尽力落盘」之后调用 ——
+  //   热重载后旧实例不再被模块表/定时器持有，也不再向旧 root 落盘（否则 = 数据双写 + 实例不可回收）。
+  //   新增键：不改 composeStore 既有键集（契约 §与消费方（宿主）的契约面）。
+  let disposed = false;
+  const store = composeStore(cx);
+  store.dispose = () => {
+    if (disposed) return false;
+    disposed = true;
+    if (typeof cx.disposeGovernance === 'function') cx.disposeGovernance();
+    return true;
+  };
+  return store;
 }

@@ -40,6 +40,9 @@ const govSnapshot = new Map();
 const govFlushers = new Map();
 let govFlushTimer = null;
 let govExitBound = false;
+// 【B-05】存活实例前缀集合：定时器是**进程级唯一**的，而实例归属是 `govKeyPrefix`。
+//   只有集合清空（最后一个实例也 dispose）才允许清定时器 —— 否则会误杀同进程新实例的定时器。
+const govLivePrefixes = new Set();
 
 // ── 【N-03】落盘失败 / 读档损坏的**显式信号面**（判据 RQ-11：不得 `catch {}` 后当成成功）──
 //   原实现两处吞错（`flushDirtyGovernance` 的 `catch {}`、定时器的 `catch {}`）与读坏回落
@@ -150,6 +153,8 @@ export function buildGovernance(cx) {
   }
   const govKeyPrefix = 'gov#' + (++govStoreSeq) + '|';
   const govKeyOf = (sessionId) => govKeyPrefix + governanceFile(sessionId);
+  // 【B-05】登记本实例存活（装配点）；与下方 disposeGovernance 的摘除配对。
+  govLivePrefixes.add(govKeyPrefix);
 
   function mergeExecPending(base, pend) {
     const next = { ...base };
@@ -252,5 +257,33 @@ export function buildGovernance(cx) {
     });
   }
 
-  return { recordGovernanceRefusal, govDefaults, governanceFile, readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch };
+  /**
+   * 【B-05】实例级 dispose（幂等）：按本实例 `govKeyPrefix` 前缀从三张模块级表里摘掉**本实例**的全部条目，
+   *   并从存活集合移除；**仅当存活集合为空**才 `clearInterval` 并置 `govFlushTimer = null`。
+   *
+   * 为什么必须先「尽力落盘」再调本函数（调用方 = `lib/index.js` 的 `releaseAll`）：前缀删表会连
+   *   本实例的 `govPending`（未落盘增量）一起摘掉 —— 顺序颠倒就是**静默丢数据**。
+   * 为什么只删本实例前缀：同进程可能并存多个 store（热重载交替期 / 双装配），全局清表会把**新实例**的
+   *   未落盘增量一起丢掉（契约 §语义口径冻结 B-05 明禁）。
+   * 定时器代际：全空后置 `null` ⇒ 新实例再次 `bumpExecCount` 时由 `bindExecFlushHooks` 重建，
+   *   旧定时器不会与新实例共用；`process.once('exit')` 绑定保持进程级唯一（`govExitBound` 不动）。
+   */
+  let govDisposed = false;
+  function disposeGovernance() {
+    if (govDisposed) return false;
+    govDisposed = true;
+    for (const table of [govPending, govSnapshot, govFlushers]) {
+      for (const key of [...table.keys()]) {
+        if (key.startsWith(govKeyPrefix)) table.delete(key);
+      }
+    }
+    govLivePrefixes.delete(govKeyPrefix);
+    if (govLivePrefixes.size === 0 && govFlushTimer) {
+      clearInterval(govFlushTimer);
+      govFlushTimer = null;
+    }
+    return true;
+  }
+
+  return { recordGovernanceRefusal, govDefaults, governanceFile, readGovernance, writeGovernance, bumpExecCount, stale, hasActiveBatch, disposeGovernance };
 }

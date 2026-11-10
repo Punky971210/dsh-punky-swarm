@@ -18,20 +18,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // scripts/replay-verify.mjs —— 事件重放校验腿的 **CLI 薄壳**（唯一写盘点）
 // ─────────────────────────────────────────────────────────────────────────────
-// 【只做什么】读批 → 调纯函数裁决 → 落**诊断产物** → 打印摘要。**恒 exit 0**。
+// 【只做什么】读批 → 调纯函数裁决 → 落**诊断产物** → 打印摘要。
 // 【不做什么（硬约束）】不写批次 JSON、不写事件流、不改任何状态文件、不新增批次 JSON 顶层键、
 //   不发射事件、不新增 `GATE_*` 拒码、不阻断任何 merged —— 差异只作观察，落诊断产物供取证。
 // 【读批单点】一律走 `createStore(root).readBatch(session, batch)`（禁另写一套 JSON 读法）。
 // 【只读性自证】读批前后各取一次状态文件快照 `{sha256, mtimeMs, size}`，逐项相等才置
-//   `stateFileDigest.unchanged = true`；不等则置 `false` 并在 stdout 告警（**仍 exit 0**）。
+//   `stateFileDigest.unchanged = true`；不等则置 `false` 并在 stdout 告警（不改态；退出码随 `verdict.ok` 走）。
 // 【落点】`<artifactsDirOf(session,batch)>/<out>/<batchId>.json`（默认 `<out>` = `replay-verify`）。
 //
 // 用法：
 //   node scripts/replay-verify.mjs --session <sessionId> --batch <batchId>
 //        [--root <engineRoot>] [--out <artifactsSubDir>] [--json] [--help|-h]
-//   退出码：恒 0（含批不存在 / 状态文件变更告警等一切非致命情形）。
+//   退出码（唯一契约，供自动化判读）：
+//     0 = `--help`/`-h`，或执行成功且 `verdict.ok === true`
+//     2 = 参数错误（未知参数 / 缺 `--session` / 缺 `--batch`），或 `batch-missing` / `batch-unreadable`
+//         （输入缺失/不可读；不落盘）
+//     3 = 执行成功但 `verdict.ok === false`（lane/phase 差异、`degraded`）
+//     1 = 运行异常（`catch`）
+//   只读性告警（`unchanged === false`）不单独占码，随 `verdict.ok` 走。
 //   退化面（`events` 缺失 / 非数组 / 空）⇒ 诊断产物 `ok=false` + `degraded:'no-events'`，
-//     **仍 exit 0**、仍不改任何状态（`ok=false` 只表「无可比证据」，不是新增阻断面）。
+//     退出码 **3**、仍不改任何状态（`ok=false` 只表「无可比证据」，不是新增阻断面）。
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -58,7 +64,8 @@ const USAGE = [
   '  --out <dir>           诊断子目录（缺省 replay-verify），相对批次产物根',
   '  --json                诊断 JSON 也打到 stdout',
   '  --help, -h            打印本用法（零副作用）',
-  '  口径：只读校验，恒 exit 0；差异落诊断产物，不改任何状态。',
+  '  退出码：0 = 零差异（或 --help）；2 = 参数错误 / 批缺失 / 批不可读；3 = 有差异或 degraded；1 = 运行异常。',
+  '  口径：只读校验；差异落诊断产物，不改任何状态。',
   '',
 ].join('\n');
 
@@ -158,12 +165,12 @@ function printSummary(res) {
   if (res.status === 'batch-missing') {
     p('[replay-verify] 批不存在：' + res.session + '/' + res.batch);
     p('[replay-verify] 期望路径：' + res.batchFile);
-    p('[replay-verify] 未落盘、未改任何状态；exit 0');
+    p('[replay-verify] 未落盘、未改任何状态；exit 2');
     return;
   }
   if (res.status === 'batch-unreadable') {
     p('[replay-verify] 批不可读（损坏隔离 / 读取失败）：' + res.session + '/' + res.batch);
-    p('[replay-verify] 未落盘、未改任何状态；exit 0');
+    p('[replay-verify] 未落盘、未改任何状态；exit 2');
     return;
   }
   const v = res.verdict;
@@ -180,8 +187,20 @@ function printSummary(res) {
   p('[replay-verify] 诊断产物已写入：' + res.outFile);
   p('[replay-verify] stateFileDigest.unchanged=' + res.unchanged);
   if (!res.unchanged) {
-    p('[replay-verify] ⚠ 告警：状态文件在本次读取前后快照不一致（sha256/mtimeMs/size 至少一项变化）—— 只告警，不改态，exit 0');
+    p('[replay-verify] ⚠ 告警：状态文件在本次读取前后快照不一致（sha256/mtimeMs/size 至少一项变化）—— 只告警，不改态；退出码随 verdict.ok');
   }
+}
+
+/**
+ * 结果面 → 退出码（唯一契约；见文件头退出码表）。
+ * `batch-missing` / `batch-unreadable` = 输入缺失/不可读 ⇒ 2；其余非 ok 状态同样按输入面判 2（fail-closed）。
+ * 执行成功时按 `verdict.ok`：`true` ⇒ 0，`false`（差异 / degraded）⇒ 3。
+ * @param {{status: string, verdict: object|null}} res
+ */
+function exitCodeOf(res) {
+  if (res.status === 'batch-missing' || res.status === 'batch-unreadable') return 2;
+  if (res.status !== 'ok' || res.verdict === null || res.verdict === undefined) return 2;
+  return res.verdict.ok === true ? 0 : 3;
 }
 
 function main() {
@@ -190,18 +209,18 @@ function main() {
   if (args.error) {
     process.stderr.write('[replay-verify] 参数错误：' + args.error + '\n');
     process.stderr.write(USAGE);
-    process.exit(0); // 恒 exit 0：参数错误也不以非零码拒态（只告警）
+    process.exit(2); // 参数错误 = 用法错误 ⇒ 非零码（自动化可判读）
   }
   let res;
   try {
     res = runReplayVerify(args);
   } catch (err) {
-    process.stderr.write('[replay-verify] 运行异常（只告警、不改态）：' + ((err && err.message) || err) + '\n');
-    process.exit(0);
+    process.stderr.write('[replay-verify] 运行异常（不改态）：' + ((err && err.message) || err) + '\n');
+    process.exit(1);
   }
   printSummary(res);
   if (args.json && res.artifact !== undefined) process.stdout.write(JSON.stringify(res.artifact, null, 2) + '\n');
-  process.exit(0);
+  process.exit(exitCodeOf(res));
 }
 
 // 仅在被当作入口执行时跑 main（被 import 时不产生副作用 —— 供端到端单测直调 runReplayVerify）

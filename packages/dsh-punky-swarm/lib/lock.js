@@ -123,8 +123,23 @@ export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false
     const token = randomUUID();
     try {
       const fd = fs.openSync(lockPath, 'wx');
-      fs.writeSync(fd, JSON.stringify({ token, ts: Date.now(), pid: process.pid, fence: 1 }));
-      fs.closeSync(fd);
+      // 【B-03 根因修复】`openSync(...,'wx')` 已成功 ⇒ 该文件是**本进程本次新建**。原实现里
+      //   `writeSync` 一旦抛错（ENOSPC / 半写 / 同步异常），盘上就留下空或半截文件：它 parse 不动
+      //   ⇒ force 接管与 release 双双 `lock-unparseable` ⇒ 该 lane 锁**永久不可解**；且同路径 fd
+      //   从未 close（泄漏）。这里把 write 单列一层 try / finally：finally 是**唯一 close 点**
+      //   （成功与失败都关，杜绝泄漏）；写失败 ⇒ close 之后 unlink 本次新建的残骸
+      //   （`'wx'` 保证它不可能是任何对手的锁），异常随后自然上抛 —— 不吞异常、不留半截文件。
+      let lockWritten = false;
+      try {
+        fs.writeSync(fd, JSON.stringify({ token, ts: Date.now(), pid: process.pid, fence: 1 }));
+        lockWritten = true;
+      } finally {
+        try { fs.closeSync(fd); } catch {}
+        if (!lockWritten) {
+          // 失败分支：先关 fd（上一行）再清残骸 —— Windows 上先关再删才稳定
+          try { fs.unlinkSync(lockPath); } catch {}
+        }
+      }
       return { ok: true, token, lockPath, fence: 1 };
     } catch (e) {
       if (e?.code !== 'EEXIST') throw e;
@@ -148,7 +163,16 @@ export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false
       }
       // 条件① 旧锁可解析
       const cur = lockRecordOrNull(raw);
-      if (cur === null) return { ok: false, conflict: true, lockPath, reason: REASON_UNPARSEABLE };
+      if (cur === null) {
+        // 【B-03 提示面】返回体键值与形态**逐字不变**（`f2:118-125`、`f3:90-100` 钉死）；只在返回前
+        //   补一条**带锁路径全文**的修复指引 —— 否则调用方只拿到一个 reason 字面量，无路可走。
+        if (typeof warn === 'function') {
+          warn('[dsh-punky-swarm] lane lock 不可解析（' + REASON_UNPARSEABLE + '）⇒ 拒接管、零删除：' + lockPath
+            + ' · 修复：先调 repairUnparseableLock(' + JSON.stringify(lockPath)
+            + ') 把残骸移存为 .broken-*（内容零丢失），再重试 acquire');
+        }
+        return { ok: false, conflict: true, lockPath, reason: REASON_UNPARSEABLE };
+      }
       // 条件② 旧格式（缺 token / 缺 fence）⇒ 拒接管，零删除零写入零票号
       if (!isWellFormedLock(cur)) return { ok: false, conflict: true, lockPath, reason: REASON_LEGACY };
 
@@ -250,7 +274,8 @@ export async function acquire(lockPath, { waitMs = 0, pollMs = 50, force = false
   }
 }
 
-export function release(lockPath, token) {
+// 【B-03 提示面】第 3 参可选（向后兼容：全仓既有调用点均为 2 参）。
+export function release(lockPath, token, { warn = null } = {}) {
   // 顺序硬要求：token 合法性判定**早于任何读/删**（缺省即拒，杜绝「先读到锁再短路」的越权路径）
   if (typeof token !== 'string' || token.length === 0) return { ok: false, reason: REASON_TOKEN_REQUIRED };
   let raw;
@@ -261,7 +286,15 @@ export function release(lockPath, token) {
     throw e;
   }
   const cur = lockRecordOrNull(raw);
-  if (cur === null) return { ok: false, reason: REASON_UNPARSEABLE }; // 零删除
+  if (cur === null) {
+    // 【B-03 提示面】返回体 `{ok:false, reason:'lock-unparseable'}` 逐字不变；只补带路径的修复指引。
+    if (typeof warn === 'function') {
+      warn('[dsh-punky-swarm] lane lock 不可解析（' + REASON_UNPARSEABLE + '）⇒ 拒释放、零删除：' + lockPath
+        + ' · 修复：先调 repairUnparseableLock(' + JSON.stringify(lockPath)
+        + ') 把残骸移存为 .broken-*（内容零丢失），再由持有者重试 release 或重新 acquire');
+    }
+    return { ok: false, reason: REASON_UNPARSEABLE }; // 零删除
+  }
   if (!isWellFormedLock(cur)) return { ok: false, reason: REASON_LEGACY }; // 旧格式无法证明持有权 ⇒ fail-closed
   // 仅当持有者 token 匹配时释放（防 force 接管后误释放）；字面量 `token-mismatch` 冻结
   if (cur.token !== token) return { ok: false, reason: 'token-mismatch' };
@@ -272,6 +305,31 @@ export function release(lockPath, token) {
     throw e;
   }
   return { ok: true };
+}
+
+// 【B-03 修复面】显式修复入口（**新增而非放宽**）：把**不可解析**的锁文件 `rename` 到
+//   `<lockPath>.broken-<ISO>`（内容零丢失），之后下一次 `acquire` 即可重建锁。
+//   纪律：**不自动调用** —— `acquire(force)` / `release` 对 unparseable 的拒绝与返回值逐字不变
+//   （`test/f2-lock-takeover.test.js:107`/`:118-125`、`test/f3-lane-claim-reason.test.js:90-100` 钉死），
+//   修复必须由调用方显式发起（或手工删文件）；本函数**幂等**：文件可解析（含 legacy 形态）⇒ 零副作用。
+export function repairUnparseableLock(lockPath, { warn = null } = {}) {
+  // 复用 acquire 的同一条形态单点（`:106-115`，其语义不动）：拒绝 `..` / `.` / NUL，拒绝路径零落盘。
+  //   本函数是全仓**第二条**会动 lockPath 的路径（rename），没有这道兜底就会变成「任意文件搬运」原语。
+  assertLockPathShape(lockPath);
+  let raw;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8');
+  } catch (e) {
+    if (e?.code === 'ENOENT') return { ok: false, reason: 'lock-missing' }; // 没有残骸可修
+    throw e;
+  }
+  if (lockRecordOrNull(raw) !== null) return { ok: false, reason: 'not-unparseable' }; // 幂等：可解析即不动
+  // ISO 时间戳含 `:`（Windows 文件名非法）⇒ 换成 `-`，仍可读且毫秒级唯一
+  const parked = lockPath + '.broken-' + new Date().toISOString().replace(/[:.]/g, '-');
+  fs.renameSync(lockPath, parked); // 移动而非删除：残骸内容逐字保留，供事后取证
+  const hint = '已移存不可解析锁到 ' + parked + '；下次 acquire 将重建';
+  if (typeof warn === 'function') warn('[dsh-punky-swarm] lane lock 修复：' + lockPath + ' ⇒ ' + parked);
+  return { ok: true, repaired: true, parked, hint };
 }
 
 export function isLocked(lockPath) {

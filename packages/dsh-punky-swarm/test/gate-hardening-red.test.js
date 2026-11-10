@@ -366,7 +366,7 @@ test('T15 【r2 改写】目录/文件声明形态二分：声明以 `/` 结尾 
   //   声明路径以 `/` 结尾 ⇒ **目录语义**：目录必须存在且**非空** ⇒ 放行；
   //   声明路径不以 `/` 结尾 ⇒ **文件语义**：必须是**非空文件**；给目录 ⇒ 拒。
   //   理由（E-1）：目录语义只能靠声明**显式表达**（`/` 结尾），不得再把目录**隐式**当文件放行
-  //   ——这才是 r1 的 T15 真正要钉死的东西（现实现 gates.js:154-161 `st.isDirectory() → true` 对两种声明无条件放行）。
+  //   ——这才是 r1 的 T15 真正要钉死的东西（现实现 gates.js:154-161 `st.isDirectory() → true` 对两种声明无条件放行）。【B-01 批】结算期改按**实际形态**判型：声明为文件而实为非空目录 ⇒ 目录语义放行（子例 (c) 由「拒」改「放行」；标题与 (c) 标签的旧口径按写域限制未改写）。
   const probe = (bid, decl, shape) => {
     const b = mkBatch(bid, [EXEC({ outputs: [decl] })], { e1: 'review' }, { team: 'software-team' });
     if (shape === 'dir-nonempty') {
@@ -406,9 +406,9 @@ test('T15 【r2 改写】目录/文件声明形态二分：声明以 `/` 结尾 
   assertAccepted(R.a, '二分语义 · 正例：`/` 结尾声明 ⇒ 目录存在且非空 ⇒ 必须放行');
   assertRejected(R.b, ['GATE_ARTIFACT_EMPTY_NO_REASON', 'GATE_ARTIFACT_NOT_A_FILE'],
     '二分语义 · 负例：`/` 结尾但目录为空 ⇒ 「目录非空」不满足 ⇒ 拒（现实现无条件放行）');
-  assertRejected(R.c, ['GATE_ARTIFACT_NOT_A_FILE'],
-    '二分语义 · 负例：**不带** `/` 结尾即文件语义，给目录 ⇒ 拒'
-    + '（这正是现实现 gates.js:154-161 `st.isDirectory() → true` 的漏洞：目录隐式冒充文件）');
+  assertAccepted(R.c,
+    'B-01 批：结算期按**实际形态**判型（非声明原文）⇒ 声明 "exec/e1/data"（无 "/"）而实为**非空目录** ⇒ '
+    + '同一套目录语义（存在且非空）放行；形态不一致的留痕见 notes[{declaredKind:"file",actualKind:"dir"}]');
   assertAccepted(R.d, '二分语义 · 正例：文件语义 + 非空文件 ⇒ 放行（防新判据误伤）');
   assertRejected(R.e, ['GATE_ARTIFACT_EMPTY_NO_REASON', 'GATE_EXIT_MISSING_EXEC'],
     '二分语义 · 负例：文件语义 + 0 字节 ⇒ 拒（与 R-31 的 0 字节规则同向）');

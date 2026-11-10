@@ -77,6 +77,9 @@ export function buildLifecycle(cx) {
   function recoverBatches() {
     const recovered = [];
     const corrupt = [];
+    // B-02 逐批隔离的记账面：一条坏批（写盘失败 / 权限错）只跳过它自己并在此留痕，
+    //   不得让整趟恢复中断——否则后续批次的成员态永久滞留 running/review。
+    const unhandled = [];
     for (const sessionId of listSessions()) {
       for (const batchId of listBatches(sessionId)) {
         const batch = readBatch(sessionId, batchId);
@@ -85,27 +88,41 @@ export function buildLifecycle(cx) {
           continue;
         }
         if (schema.isBatchTerminal(batch.phase)) continue;
-        const recoveredLanes = [];
-        const detail = [];
-        for (const [lane, state] of Object.entries(batch.lanes)) {
-          if (state === 'running' || state === 'review') {
-            const from = laneIdleOnRecovery(batch, lane);
-            recoveredLanes.push(lane);
-            detail.push({ lane, from, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane), outcome: 'crashed' });
+        // 单批处理体整体失败隔离（B-02）：commitBatch 抛错时盘上 JSON 保持原样
+        //   ⇒ 坏批既不删也不改相位，仅「跳过 + 记账」，本趟继续扫后续批次。
+        try {
+          const recoveredLanes = [];
+          const detail = [];
+          for (const [lane, state] of Object.entries(batch.lanes)) {
+            if (state === 'running' || state === 'review') {
+              const from = laneIdleOnRecovery(batch, lane);
+              recoveredLanes.push(lane);
+              detail.push({ lane, from, lastActiveAt: lastActiveAtOf(batch, lane), produced: producedOf(sessionId, batchId, batch, lane), outcome: 'crashed' });
+            }
           }
-        }
-        if (recoveredLanes.length > 0) {
-          for (const lane of recoveredLanes) {
-            try { fs.rmSync(path.join(sessionsDir, sessionId, '.locks', batchId + '.' + lane + '.lock'), { force: true }); } catch { }
+          if (recoveredLanes.length > 0) {
+            for (const lane of recoveredLanes) {
+              try {
+                fs.rmSync(path.join(sessionsDir, sessionId, '.locks', batchId + '.' + lane + '.lock'), { force: true });
+              } catch (e) {
+                // 锁清退失败同样不得静默（原 `catch {}` 会把失败彻底吞掉）：
+                //   只记账不抛——本批成员态仍按恢复处理，残留锁的收口属 B-03 的显式修复入口。
+                unhandled.push({ sessionId, batchId, error: 'lock-remove: ' + String(e) });
+              }
+            }
+            batch.events.push(newEvent(EVT.EVT_SYSTEM_RECOVERED, { batchId, sessionId, recoveredLanes, detail }));
+            batch.updatedAt = new Date().toISOString();
+            commitBatch(sessionId, batchId, batch);
+            recovered.push(sessionId + '/' + batchId);
           }
-          batch.events.push(newEvent(EVT.EVT_SYSTEM_RECOVERED, { batchId, sessionId, recoveredLanes, detail }));
-          batch.updatedAt = new Date().toISOString();
-          commitBatch(sessionId, batchId, batch);
-          recovered.push(sessionId + '/' + batchId);
+        } catch (e) {
+          unhandled.push({ sessionId, batchId, error: String(e) });
+          continue;
         }
       }
     }
     recovered.corrupt = corrupt;
+    recovered.unhandled = unhandled;
     if (corrupt.length) {
       log.warn?.('[dsh-punky-swarm] recovery skipped ' + corrupt.length + ' corrupt batch(es): ' + corrupt.join(', '));
     }

@@ -19,7 +19,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stripStreamMerges, segmentCommands } from '../shell-text.js';
+
+// B-04：Windows `.cmd/.bat` 的同步进程树守卫入口（职责与退出码契约见该文件头注释）。
+const TREE_GUARD = fileURLToPath(new URL('./command-tree-guard.mjs', import.meta.url));
 
 function envNumber(name, def) {
   const v = Number(process.env[name]);
@@ -180,6 +184,13 @@ export function truncateOutput(buf, maxBytes) {
   return { output: s.slice(0, maxBytes), truncated: true };
 }
 
+/** 取首行（去 CR）：给 launcher 的 `TREE-GUARD-SPAWN-FAIL:` marker 定界。 */
+function firstLineOf(text) {
+  const s = String(text ?? '');
+  const at = s.indexOf('\n');
+  return (at === -1 ? s : s.slice(0, at)).replace(/\r$/, '');
+}
+
 function execOnce(command, { cwd, timeoutMs, env, maxOutputBytes }) {
   const start = Date.now();
   const maxBuffer = Math.max(1024 * 1024, maxOutputBytes + 4096);
@@ -199,20 +210,40 @@ function execOnce(command, { cwd, timeoutMs, env, maxOutputBytes }) {
     file = process.env.ComSpec || 'cmd.exe';
     args = ['/d', '/s', '/c', command];
   }
+  // B-04：`spawnSync` 的 `killSignal` 只作用于**直接子进程**（cmd.exe），`.cmd/.bat` 里真正干活的
+  // 孙进程会成孤儿继续写盘（引擎已报 GATE_EXIT_TIMEOUT 之后仍与重试实例并发写同一产物）。
+  // 故 `.cmd/.bat` 回落分支改走**同步 launcher**：内核内部 `spawn` 拿得到活 pid，超时用
+  // `taskkill /F /T /PID` 杀整棵树。父层仍是 `spawnSync` ⇒ `runCommand` 的同步面不变。
+  // 非 batch 分支（`node -e …` 直连）路径与选项逐字不变。
+  const viaTreeGuard = process.platform === 'win32' && batch !== null;
+  if (viaTreeGuard) {
+    file = process.execPath;
+    args = [TREE_GUARD, '--timeoutMs=' + timeoutMs, '--', command];
+  }
   const r = spawnSync(file, args, {
     cwd,
     env,
     shell: false,
     windowsHide: true,
-    timeout: timeoutMs,
+    // launcher 路径下 +5000 只作 launcher 自身卡死的兜底：正常超时由 launcher 内部计时并以 124 收口。
+    timeout: viaTreeGuard ? timeoutMs + 5000 : timeoutMs,
     killSignal: 'SIGTERM',
     maxBuffer,
     encoding: 'utf8',
   });
   const durationMs = Date.now() - start;
-  const timedOut = r.error && (r.error.code === 'ETIMEDOUT' || r.signal === 'SIGTERM');
+  // B-04：launcher 以 124 报「已杀整棵树」的超时；其余分支语义（含 ETIMEDOUT/SIGTERM）不变。
+  const timedOut = (r.error && (r.error.code === 'ETIMEDOUT' || r.signal === 'SIGTERM')) || r.status === 124;
   const raw = String(r.stdout ?? '') + String(r.stderr ?? '');
   const { output, truncated } = truncateOutput(raw, maxOutputBytes);
+  // B-04：launcher 的 spawn 失败以 126 ＋ stderr 首行 marker 表达 —— 与 spawn 级异常同归类。
+  const firstLine = firstLineOf(r.stderr);
+  if (r.status === 126 || firstLine.startsWith('TREE-GUARD-SPAWN-FAIL:')) {
+    return {
+      ok: false, exitCode: r.status ?? null, output, durationMs, timedOut: false, forbidden: false, truncated,
+      error: 'GATE_EXIT_SPAWN_FAIL: ' + (firstLine.length > 0 ? firstLine : 'launcher 报 spawn 失败（无 stderr）'),
+    };
+  }
   if (r.error && !timedOut) {
     // spawn 异常（cwd 无效、shell 不可用、输出超 maxBuffer 等）——声明不可执行语义
     return { ok: false, exitCode: r.status ?? null, output, durationMs, timedOut: false, forbidden: false, truncated, error: 'GATE_EXIT_SPAWN_FAIL: ' + (r.error.message ?? String(r.error)) };

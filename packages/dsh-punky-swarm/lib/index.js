@@ -225,7 +225,6 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
   //   开启 → restoreBatches()（running/review 原地保留 + system.restored 事件）。返回数组形态
   //   .length/.corrupt 兼容既有日志消费。
   if (!recoveredThisProcess) {
-    recoveredThisProcess = true;
     try {
       const resumeCfg = resolveResumeConfig(config);
       const r = resumeRecoverBatches(store, { restoreRunning: resumeCfg.enabled });
@@ -234,6 +233,16 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
       if (Array.isArray(r.corrupt) && r.corrupt.length) {
         ctx.logger?.warn?.('[dsh-punky-swarm] isolated ' + r.corrupt.length + ' corrupt batch(es): ' + r.corrupt.join(', ') + '（人工修复/删除后 clearCorruptMark）');
       }
+      // 逐批隔离汇总（B-02）：坏批只「跳过 + 记账」，不阻断其余批次的恢复——此处必须留痕，
+      //   否则被跳过的批次成员态滞留 running/review 而启动日志一片安静（静默降级）。
+      if (Array.isArray(r.unhandled) && r.unhandled.length) {
+        ctx.logger?.warn?.('[dsh-punky-swarm] skipped ' + r.unhandled.length + ' unrecoverable batch(es): '
+          + r.unhandled.map((u) => u.sessionId + '/' + u.batchId).join(', ')
+          + '（错误：' + r.unhandled.map((u) => u.error).join(' | ') + '）');
+      }
+      // 一次性标记**后置**（B-02）：整趟恢复成功后置位；上面 catch 分支不置位
+      //   ⇒ 本进程本次装配失败后，下一次装配仍可重试（原实现置位在前 ⇒ 同进程永久不再重试）。
+      recoveredThisProcess = true;
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] recovery failed: ' + String(e));
     }
@@ -1031,6 +1040,13 @@ const createReadConfig = ({ config, rt }) => () => {
   }
 };
 
+// 【B-05】`rt` → store 实例弱引用表：`releaseAll(rt)` 要真正摘掉本实例的 governance 刷盘表项与定时器，
+//   而 `releaseAll` 的签名/体内写集被 `test/w7f-rt-write-surface.test.js` 冻结
+//   （`:193` 冻结了该工厂的箭头体字面量、`:194-197` 写集恰 5 项置空、`:215-216` 全文 `rt.* =` 恰 40 处、
+//   `:151-156` `createRuntimeState` base 键集恰 20）⇒ **不得**改签名、不得新增 rt 字段/写点。
+//   故以弱引用表把装配期的 store 交给释放面：零 rt 写点、零字段集变化，实例隔离（键是 rt 本身，不跨实例串）。
+const storeOfRt = new WeakMap();
+
 // 释放面（W7f #9）：读 rt 的 15 个资源字段 + flush；幂等（置 null 的 5 项二次调用零操作）。
 const releaseAll = (rt) => {
   rt.hotConfig?.dispose();
@@ -1052,6 +1068,11 @@ const releaseAll = (rt) => {
   //   中 exit 只覆盖进程退出，**不覆盖「插件卸载而宿主继续运行」**的场景 ⇒ 此处补一次显式冲刷。
   //   幂等；零脏会话时为空操作（不产生 I/O、不挂钩子）。
   try { flushDirtyGovernance(); } catch {}
+  // 【B-05】顺序不可倒：先尽力落盘（上一行），再摘实例 —— 反过来会把本实例未落盘增量随表项一起丢掉。
+  //   幂等（`store.dispose` 二次调用零操作）；未登记（早期装配失败）时零操作。
+  //   效果：清 `govPending/govSnapshot/govFlushers` 里**本实例前缀**的条目；仅当无其它存活实例才清 30s 定时器。
+  const engineStore = storeOfRt.get(rt);
+  try { engineStore?.dispose?.(); } catch {}
   if (rt.acpsEndpoint) { rt.acpsEndpoint.close().catch(() => {}); rt.acpsEndpoint = null; }
 };
 
@@ -1230,6 +1251,7 @@ export const apply = (ctx, config = {}) => {
   warnGateEscapeValve(ctx);
   const rtOnWrite = (() => { try { return typeof ctx?.rtWriteLog?.push === 'function' ? (k) => ctx.rtWriteLog.push(k) : null; } catch { return null; } })();
   const rt = createRuntimeState(rtOnWrite);
+  storeOfRt.set(rt, store); // 【B-05】登记本实例，供 `releaseAll` 摘 governance 刷盘表项（见 storeOfRt 定义处）
 
   rt.sweepTimer = installStartupRecovery({ ctx, config, store, root });
   const watchRuntime = installWatchRuntime({ ctx, config, store, root });

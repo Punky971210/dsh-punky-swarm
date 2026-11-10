@@ -226,10 +226,23 @@ export function presenceJudge(input = {}) {
             }
             continue;
         }
-        // 文件语义（R-1）：须为**非空普通文件**；给目录 ⇒ 拒
+        // 文件语义（R-1）＋ B-01：判型来源 = **实际形态**（声明原文只落留痕，不再是判据）——
+        //   声明=file 而实为非空目录 ⇒ 走 :209-227 同一套目录语义放行；空目录仍拒
+        //   `GATE_ARTIFACT_EMPTY_NO_REASON`；其余（含 0 字节 ⇒ MISSING）走现文件语义，一字不变。
         if (st.isDirectory()) {
-            problems.push(decl + ' is a directory (declared as file)');
-            code = code ?? 'GATE_ARTIFACT_NOT_A_FILE';
+            // 命中此处 `kind` 必为 'file'（`kind==='dir'` 已在 :227 continue）⇒ 形态不一致：留痕，不新增顶层键
+            notes.push({ artifact: decl, declaredKind: 'file', actualKind: 'dir', basis: 'actual-form' });
+            let entries = [];
+            try {
+                entries = fs.readdirSync(abs);
+            }
+            catch {
+                entries = [];
+            }
+            if (entries.length === 0) {
+                problems.push(decl + ' empty directory (no entries, no empty-reason)');
+                code = code ?? 'GATE_ARTIFACT_EMPTY_NO_REASON';
+            }
             continue;
         }
         if (st.size === 0) {
