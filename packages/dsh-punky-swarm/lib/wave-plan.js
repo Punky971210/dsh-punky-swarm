@@ -538,6 +538,12 @@ export function normalizeCheckpoints(raw) {
         return null; // 任何异常 ⇒ 视同未声明（不阻断建批）
     }
 }
+// `tasks[].subtasks` 归一化**入口别名**（批 `punky-checkpoint-enforce-20261112` · lane e1-schema）：
+//   `subtasks` 与 `checkpoints` **同形同语义**（id 必填唯一 / target 必填非绝对路径 / rounds 默认 1 /
+//   ctxBudget 可选 / 零 throw / 幂等），故**只许别名、不许第二份实现**（单点纪律 spec §RQ-3-1、X-8）。
+//   ⚠ 写法上刻意**不带调用括号** ⇒ 不增加 `normalizeCheckpoints` 的调用式字面计数（spec V-1 以该计数作结构不变量探针）；
+//     若写成包装函数，V-1 的探针读数就会因包装多一处而失真。
+export const normalizeSubtasks = normalizeCheckpoints;
 // 开工前必做 · 四段声明归一化（P0-1；与 `targetsContract` / `roster` 同族「可选字段 + 归一化恒写」惯用法）。
 //   口径（判据源 §A.2 六条，逐条对码）：
 //     ① 缺省 / `null` / 非 plain object / 数组 ⇒ `null`（= **未声明** ⇒ 渲染面走警示行，不静默）；
@@ -1225,6 +1231,13 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
             //   **交叉扩面已删除**：`checkpoints` / `contract` 现已在 `WavePlanTaskInput` 正式声明
             //   ⇒ 直接读 `t.*`，不再需要任何断言（断言只减不增）。
             const checkpointsRef = normalizeCheckpoints(t.checkpoints); // 未声明 ⇒ null ⇒ **不写键**
+            // 【批 `punky-checkpoint-enforce-20261112` · lane e1-schema】`subtasks`（checkpoint **强制面**）：
+            //   结构与 `checkpoints` 逐字段同形 ⇒ 归一化**复用同一单点**（本行即 V-1 要求的第 2 处调用点，
+            //   禁在本文件内另起去重集 / `isAbsPath` items 循环 —— spec §RQ-3-1 / X-8）。
+            //   零 throw（全软）：坏项丢弃、不拒建批、不打门禁码；幂等由 `normalizeCheckpoints` 的
+            //   `{items:[…]}` 原样返回分支（:474-476）保证 ⇒ `addPoolTasks`/`addTaskEdges` 重归一化
+            //   不会触发 IMM-2/3「字段被改写」双拒（spec V-2 / V-5）。
+            const subtasksRef = normalizeCheckpoints(t.subtasks); // 未声明 ⇒ null ⇒ **不写键**
             const contractRef = (() => {
                 if (t.contract == null)
                     return null; // 缺省 ⇒ 不写键（读取方按 null 处理，兼容存量批）
@@ -1250,6 +1263,11 @@ export function buildWavePlan({ batchId, tasks, concurrency = 5, team, assembly,
                 // 【pk-impl】`checkpoints`：**缺省不写键**（存量批零感知，不照 `normalizeResumeContract`
                 //   的「恒写 null」）；已声明 ⇒ 写归一结果（`items` 可能为空 ⇒ 渲染层给一行降级警示）。
                 ...(checkpointsRef !== null ? { checkpoints: checkpointsRef } : {}),
+                // 【批 `punky-checkpoint-enforce-20261112` · lane e1-schema】`subtasks` **必须显式落盘**：
+                //   漏了这一行 ⇒ 归一结果在持久化时被白名单丢弃 ⇒ 方言判定恒 `legacy`（`'subtasks' in task`
+                //   恒 false）⇒ 强制面形同未声明。缺省**不写键**（存量批零感知：未声明的任务上
+                //   `'subtasks' in task === false`，spec V-4 逐字可核）。
+                ...(subtasksRef !== null ? { subtasks: subtasksRef } : {}),
                 // 【pk-impl · R-4】**`tasks[].contract` 真落盘**：缺省不写键；非法在上方 `contractRef` 处
                 //   fail-closed 抛（普通 Error）。
                 ...(contractRef !== null ? { contract: contractRef } : {}),

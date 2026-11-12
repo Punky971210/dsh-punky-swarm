@@ -107,3 +107,15 @@ export const EVT_PLAN_MUTATED = 'plan.mutated';
 export const EVT_GATE_CONSUME_DEPS_ASYMMETRY = 'gate.consume_deps_asymmetry';
 
 export const EVT_PREFLIGHT_REPORT_MISSING = 'gate.preflight.report.missing';
+
+// ── batch `punky-checkpoint-enforce-20261112` · checkpoint 强制化（四码三码 + 一处建批告警）─────────
+// 登记纪律：新增事件名先在此登记常量，调用点一律引用本常量（禁散布裸字面量）；载荷字段**不得**占用
+//   `type` 键（`type` 承载事件名，占用即失名 —— 见上方同款约定）。
+// 发射位：EVT_GATE_CHECKPOINTS_REQUIRED / EVT_GATE_CHECKPOINTS_INCOMPLETE / EVT_WORKTREE_AUTOCREATE_FAILED
+//   由 e2-gate 的门与自动建 worktree 模块发射；EVT_BATCH_CHECKPOINT_DIALECT_LEGACY 由 e1-schema 在
+//   `wave_plan` 建批后扫（只落事件，**不拒建批**）。
+export const EVT_GATE_CHECKPOINTS_REQUIRED = 'gate.checkpoints.required';
+export const EVT_GATE_CHECKPOINTS_INCOMPLETE = 'gate.checkpoints.incomplete';
+export const EVT_WORKTREE_AUTOCREATE_FAILED = 'worktree.autocreate.failed';
+//   载荷：`{ lane: string|null, declared: string[] }`（lane=null ⇒ 批级告警；declared = 声明了 checkpoints 的 lane 列表）
+export const EVT_BATCH_CHECKPOINT_DIALECT_LEGACY = 'batch.checkpoint.dialect.legacy';

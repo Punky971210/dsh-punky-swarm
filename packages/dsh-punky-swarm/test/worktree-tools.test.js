@@ -213,8 +213,8 @@ test('T4 串行化：merge 队列锁等待 + 与 lane_claim 并存', async () =>
   assert.equal(fs.existsSync(path.join(orchPath(root, 'b-wt4'), 'f.txt')), true);
 });
 
-test('T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起', async () => {
-  const { root, byName } = setup();
+test('T5 git 依赖：git 不可用 → create 清晰报错不挂起；checkpoint 降级留痕（B1/V-23，不再 fake no-op）', async () => {
+  const { store, byName } = setup();
   await byName.wave_plan.execute({ batchId: 'b-wt5', tasks: [{ id: 'l1' }] }, EXEC_SESS);
   const prev = process.env.DSH_GIT_BIN;
   process.env.DSH_GIT_BIN = 'git-definitely-not-installed-xyz';
@@ -222,9 +222,10 @@ test('T5 git 依赖：git 不可用 → 工具返回清晰错误不挂起', asyn
     const r = await byName.lane_worktree_create.execute({ batchId: 'b-wt5', laneId: 'l1' }, EXEC_SESS);
     assert.equal(r.ok, false);
     assert.ok(r.error && r.error.includes('git'), '清晰错误含 git 提示: ' + (r.error ?? ''));
+    // B1/V-23（裁决 Q3=A）：强制对象是留痕不是 git ⇒ git 不可用不再当失败，落 `worktree.checkpoint`（commit=null）照算完成。
     const c = await byName.lane_checkpoint.execute({ batchId: 'b-wt5', laneId: 'l1', message: 'x' }, EXEC_SESS);
-    assert.equal(c.ok, false);
-    assert.ok(c.error && c.error.includes('git'));
+    assert.deepEqual({ ok: c.ok, committed: c.committed, commit: c.commit, mode: c.mode }, { ok: true, committed: false, commit: null, mode: 'no-git' }, '实测=' + JSON.stringify(c));
+    assert.deepEqual((store.readBatch('sess-wt', 'b-wt5')?.events ?? []).filter((e) => e.type === 'worktree.checkpoint' && e.lane === 'l1').map((e) => e.commit), [null], '须落恰 1 条 commit:null 事件');
   } finally {
     if (prev === undefined) delete process.env.DSH_GIT_BIN; else process.env.DSH_GIT_BIN = prev;
   }
@@ -373,35 +374,34 @@ test('T8 L5 可判定：reason 枚举穷尽三分支 + isolated/baseFiles 单一
 //   成员忽略警示（`lib/state/resume.js:184`「比不报更有害」）⇒ 它们仍绑定提交成功路径。
 // 本用例证四件：① 无 worktree + 带 progress ⇒ 指针落盘（**改前此断言为红**）② 事件面零新增
 //   ③ 不带 progress ⇒ 不虚增 ④ lane 已终态 ⇒ 不补写。
-test('T9 A2 早退不丢断点指针：无 worktree 时 laneProgress 仍落盘 / 事件面零新增 / 无 progress 不虚增 / 终态不补写', async () => {
+test('T9 A2 早退不丢断点指针：无 worktree 时 laneProgress 仍落盘 / 降级留痕恰 1 条（commit:null）且无误导事件 / 无 progress 不虚增 / 终态不补写', async () => {
   const { root, store, byName } = setup();
   const lpOf = (batchId, laneId) => store.readBatch('sess-wt', batchId)?.laneProgress?.[laneId];
   const eventTypesOf = (batchId) => (store.readBatch('sess-wt', batchId)?.events ?? []).map((e) => e.type);
 
-  // ① 正例：无 worktree + 带 progress ⇒ ok:false，但断点指针已落
+  // ① 正例：无 worktree + 带 progress ⇒ 指针已落；B1/V-21 后 `ok` 变 true（降级留痕算完成），指针仍走同一单点
   await byName.wave_plan.execute({ batchId: 'b-wt9', tasks: [{ id: 'l1' }] }, EXEC_SESS);
   assert.equal(fs.existsSync(lanePath(root, 'b-wt9', 'l1')), false, '构造前提：本批**不**建 lane worktree');
   const r1 = await byName.lane_checkpoint.execute(
     { batchId: 'b-wt9', laneId: 'l1', message: 'early-exit', progress: { step: 1, total: 3 } }, EXEC_SESS);
-  assert.equal(r1.ok, false, '前提：无 worktree ⇒ doCheckpoint 早退（ok:false）');
-  assert.ok(String(r1.reason ?? '').includes('worktree'), '早退理由仍指向 lane_worktree_create，实测=' + JSON.stringify(r1.reason));
+  assert.deepEqual({ ok: r1.ok, committed: r1.committed, commit: r1.commit, mode: r1.mode }, { ok: true, committed: false, commit: null, mode: 'no-worktree' }, '无 worktree ⇒ 降级留痕，实测=' + JSON.stringify(r1));
+  assert.ok(String(r1.reason ?? '').includes('worktree'), '降级理由仍指向 lane worktree，实测=' + JSON.stringify(r1.reason));
   const lp1 = lpOf('b-wt9', 'l1');
   assert.ok(lp1, '早退前必须补写断点指针（改前此处 laneProgress 为 undefined ⇒ 本断言即红）');
-  assert.deepEqual({ step: lp1.step, total: lp1.total, status: lp1.status }, { step: 1, total: 3, status: 'running' },
-    '断点指针载荷 = progress + status:running，实测=' + JSON.stringify(lp1));
+  assert.deepEqual({ step: lp1.step, total: lp1.total, status: lp1.status }, { step: 1, total: 3, status: 'running' }, '断点指针载荷 = progress + status:running，实测=' + JSON.stringify(lp1));
   assert.equal(typeof lp1.updatedAt, 'string', '指针带 updatedAt（laneProgressWrite 补齐）');
 
-  // ② 事件面零新增（判据**未被放宽**：无提交 ⇒ 不落 checkpoint 事件、不判超限、不判清单对齐）
+  // ② 事件面：B1 后**恰 1 条**降级事件（commit:null + mode），但不落 total_mismatch / over-budget（语义前提是「确有提交」）
   const ev9 = eventTypesOf('b-wt9');
-  assert.deepEqual(ev9.filter((t) => t === 'worktree.checkpoint'), [],
-    '无提交 ⇒ 不得落 worktree.checkpoint：实测事件=' + JSON.stringify(ev9));
+  assert.deepEqual((store.readBatch('sess-wt', 'b-wt9')?.events ?? []).filter((e) => e.type === 'worktree.checkpoint').map((e) => [e.commit, e.mode]),
+    [[null, 'no-worktree']], '降级留痕须落恰 1 条 worktree.checkpoint 且 commit:null + mode：实测事件=' + JSON.stringify(ev9));
   assert.deepEqual(ev9.filter((t) => t === 'lane.over-budget' || t === 'lane.checkpoint.total_mismatch'), [],
     '早退分支不得落 total_mismatch / over-budget（误报比不报更有害）：实测事件=' + JSON.stringify(ev9));
 
   // ③ 反例：无 worktree + **不带** progress ⇒ laneProgress 不得凭空出现
   await byName.wave_plan.execute({ batchId: 'b-wt9b', tasks: [{ id: 'l1' }] }, EXEC_SESS);
   const r2 = await byName.lane_checkpoint.execute({ batchId: 'b-wt9b', laneId: 'l1', message: 'no-progress' }, EXEC_SESS);
-  assert.equal(r2.ok, false);
+  assert.equal(r2.ok, true);
   assert.equal(lpOf('b-wt9b', 'l1'), undefined, '不传 progress ⇒ 断点指针不得凭空虚增');
 
   // ④ 终态守卫：lane 已终态（skipped）⇒ 不补写（防指针与成员态语义打架）
@@ -409,6 +409,6 @@ test('T9 A2 早退不丢断点指针：无 worktree 时 laneProgress 仍落盘 /
   store.setMember('sess-wt', 'b-wt9c', 'l1', 'skipped');
   const r3 = await byName.lane_checkpoint.execute(
     { batchId: 'b-wt9c', laneId: 'l1', message: 'terminal', progress: { step: 2, total: 3 } }, EXEC_SESS);
-  assert.equal(r3.ok, false);
+  assert.equal(r3.ok, true);
   assert.equal(lpOf('b-wt9c', 'l1'), undefined, 'lane 已终态 ⇒ 不补写指针（成员态是终态的单一事实源）');
 });

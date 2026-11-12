@@ -64,6 +64,11 @@ import { buildTargets } from './gates/targets.js';
 import { buildComplete } from './gates/complete.js';
 import { buildStatus } from './gates/status.js';
 import { buildHandoff } from './gates/handoff.js';
+// 【批 `punky-checkpoint-enforce-20261112` · lane `e2-gate`】checkpoint 强制化门族（G1 派发门 / G2 结算门）。
+//   本 builder **只 import `./gates/detect.js`**（叶），判据原料（方言/声明/覆盖/取源）由调用方按 `prims` 注入
+//   —— 理由见该文件头注：本仓 `test/esm-first-eval.test.js` 断言全仓静态 ESM SCC 数 === 0，
+//   而 `gates.js → resume.js → wave-plan.js → gates.js` 会成环（`wave-plan.js:45` 已 import 本文件）。
+import { buildCheckpoints } from './gates/checkpoints.js';
 import { declaredKindOf, emptyReasonOf, substantiveContentOf } from './gates/presence.js';
 // 【RQ-8 / N-06 · env 阀单点】门禁环境阀的唯一读点（`lib/state/gates/env-gate.js`）。
 //   收敛前 `process.env.GATE_*` 散在 3 个 builder（command / status / targets）共 5 处 ⇒ 无法审计
@@ -353,10 +358,13 @@ function assembleGates(cx) {
     Object.assign(cx, s);
     const f = buildHandoff(cx);
     Object.assign(cx, f);
-    return { ...e, ...p, ...x, ...c, ...t, ...m, ...s, ...f };
+    // checkpoint 强制化门族（G1 / G2）：纯判定，零写盘零事件（事件由 store 层调用方发射）。
+    const cp = buildCheckpoints(cx);
+    Object.assign(cx, cp);
+    return { ...e, ...p, ...x, ...c, ...t, ...m, ...s, ...f, ...cp };
 }
 /** 导出面装配（原 `return {...}` 字面量逐字保留于下方；键序即对外契约）。 */
 function composeGates(parts) {
     // TD-21 / N-13：`gateStatus`（兼容外壳）+ 两个批级入口（`gateStatusOfBatch` / `gateStatusMapOfBatch`）同面导出。
-    return { checkEntryGate: parts.checkEntryGate, checkPlanContract: parts.checkPlanContract, checkExitGate: parts.checkExitGate, checkNeedHumanGate: parts.checkNeedHumanGate, checkCommandGate: parts.checkCommandGate, checkTargetsGate: parts.checkTargetsGate, checkCompleteGate: parts.checkCompleteGate, checkSettleHandoffGate: parts.checkSettleHandoffGate, gateStatus: parts.gateStatus, gateStatusOfBatch: parts.gateStatusOfBatch, gateStatusMapOfBatch: parts.gateStatusMapOfBatch, teamAssetViewOf: parts.teamAssetViewOf, presenceJudge };
+    return { checkEntryGate: parts.checkEntryGate, checkPlanContract: parts.checkPlanContract, checkExitGate: parts.checkExitGate, checkNeedHumanGate: parts.checkNeedHumanGate, checkCommandGate: parts.checkCommandGate, checkTargetsGate: parts.checkTargetsGate, checkCompleteGate: parts.checkCompleteGate, checkSettleHandoffGate: parts.checkSettleHandoffGate, gateStatus: parts.gateStatus, gateStatusOfBatch: parts.gateStatusOfBatch, gateStatusMapOfBatch: parts.gateStatusMapOfBatch, teamAssetViewOf: parts.teamAssetViewOf, presenceJudge, checkCheckpointsDispatchGate: parts.checkCheckpointsDispatchGate, checkCheckpointsSettleGate: parts.checkCheckpointsSettleGate };
 }

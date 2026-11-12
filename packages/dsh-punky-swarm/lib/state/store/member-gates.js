@@ -181,7 +181,7 @@ export function detectPreflightReport(artifactsDir, paths) {
 export function buildMemberGates(cx) {
   const { gates, readBatch, newEvent, emitStateChange, makeContractMissingSink, archive, ratchet, commitBatch, artifactsDirOf, log } = cx;
 
-  function runMergedGateChain(batch, { sessionId, batchId, lane, note, collect, emitContractMissing }) {
+  function runMergedGateChain(batch, { sessionId, batchId, lane, note, collect, emitContractMissing, checkpointPrimitives = null }) {
   const g = gates.checkExitGate(sessionId, batchId, batch, lane);
   if (g.ok) collect('degrade', g);
   emitContractMissing(g);
@@ -235,6 +235,24 @@ export function buildMemberGates(cx) {
     throw new Error(nh.code + ': ' + nh.message);
   }
   if (nh.declared) batch.events.push(newEvent(EVT.EVT_HUMAN_DECISION, { lane, note }));
+  // ── G2 · 结算门（spec §R-5 表 G2；码 `GATE_CHECKPOINTS_INCOMPLETE`）──────────────────────────────
+  //   门序：**needHuman 之后、settleHandoff 之前**（spec §约束 9：先暴露自身产物面，再暴露交接面）。
+  //   本门只判 merged 链（本函数唯一语义）⇒ 判据①「to==='merged'」由调用位置结构性保证。
+  //   拒绝后果：落 `gate.checkpoints.incomplete`（含**有序** missing id 数组 + declared/sequential 读数）
+  //   + `commitBatch`，再 throw；lane 保持 `review`（本处不写 `batch.lanes[lane]`）。
+  const ck = gates.checkCheckpointsSettleGate(sessionId, batchId, batch, lane, checkpointPrimitives);
+  if (!ck.ok) {
+    batch.events.push(newEvent(EVT.EVT_GATE_CHECKPOINTS_INCOMPLETE, {
+      lane,
+      code: ck.code,
+      missing: ck.missing ?? [],
+      declared: ck.declared ?? [],
+      sequential: ck.sequential === true,
+    }));
+    batch.updatedAt = new Date().toISOString();
+    commitBatch(sessionId, batchId, batch);
+    throw new Error(ck.code + ': ' + (ck.problems ?? []).join('；'));
+  }
   const shg = gates.checkSettleHandoffGate(sessionId, batchId, batch, lane, note);
   if (shg.legacy === true) {
     batch.events.push(newEvent(EVT.EVT_LANE_HANDOFF_GAP, laneHandoffGapPayload({

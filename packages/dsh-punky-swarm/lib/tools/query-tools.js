@@ -270,6 +270,9 @@ export function buildTaskpackTools(cx) {
           context: laneTask.context ?? null,
           preflight: laneTask.preflight ?? null,
           checkpoints: laneTask.checkpoints ?? null,
+          //   `subtasks` 同为任务包入参（spec §R-4）：本处与 `dispatch-core.js` 自派档必须成对透传，
+          //   漏一处即两档任务包不一致（本文件 :269 注释已明写该纪律）。
+          subtasks: laneTask.subtasks ?? null,
           resume: laneTask.resume === true,
           logger: ctx?.logger ?? null,
         });
@@ -285,6 +288,9 @@ export function buildTaskpackTools(cx) {
             outputs: laneTask.outputs ?? [],
             hasCheckpoints: laneTask.checkpoints != null,
             checkpoints: laneTask.checkpoints ?? null,
+            //   读面透出（键只增不改，spec §4.1-5）：`subtasks` 是 checkpoint 强制面的声明体。
+            hasSubtasks: laneTask.subtasks != null,
+            subtasks: laneTask.subtasks ?? null,
             context: laneTask.context ?? null,
             preflight: laneTask.preflight ?? null,
             resume: laneTask.resume === true,

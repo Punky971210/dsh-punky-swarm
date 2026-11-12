@@ -187,6 +187,7 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     preflight: laneTask?.preflight ?? null,
     context: laneTask?.context ?? null,
     checkpoints: laneTask?.checkpoints ?? null,
+    subtasks: laneTask?.subtasks ?? null,
     resume: laneTask?.resume === true,
     logger: ctx?.logger ?? null,
   });

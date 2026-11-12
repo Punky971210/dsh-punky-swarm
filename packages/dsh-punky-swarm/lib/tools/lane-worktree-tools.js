@@ -83,6 +83,7 @@ export function worktreeToolCheckpoint(ctx, deps) {
       batchId: { type: 'string', required: true, description: '批次 ID' },
       laneId: { type: 'string', required: true, description: 'lane 任务 ID' },
       message: { type: 'string', required: true, description: 'checkpoint 提交说明' },
+      subtaskId: { type: 'string', description: 'subtask 标识（可选；批 punky-checkpoint-enforce-20261112）：声明了 subtasks 的 exec lane 应逐项带上 —— 结算门（GATE_CHECKPOINTS_INCOMPLETE）按事件面显式 `subtask` 字段核覆盖；无 worktree / 无 git 的降级路径同样落此字段' },
       progress: {
         type: 'object',
         additionalProperties: false,
@@ -96,15 +97,21 @@ export function worktreeToolCheckpoint(ctx, deps) {
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
-        ok: { type: 'boolean', required: true }, committed: { type: 'boolean' }, commit: { type: 'string' },
+        ok: { type: 'boolean', required: true }, committed: { type: 'boolean' },
+        // 【B1】无 worktree / 无 git 的降级留痕路径 `commit = null`（前提③：强制对象是留痕，不是 git）
+        commit: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        mode: { type: 'string', enum: ['no-worktree', 'no-git'], description: '降级留痕成因（仅 ok:true 且 committed:false 时给）：no-worktree = lane worktree 不在场｜no-git = git 不可用' },
         reason: { type: 'string' }, worktree: { type: 'string' }, message: { type: 'string' },
         error: { type: 'string' },
       } },
-      render: (_args, v) => TEXT_OUTPUT(v.committed ? 'checkpoint: ' + v.commit : 'checkpoint: no-op (' + (v.reason ?? '') + ')'),
+      // 【B1】渲染不再把「无 worktree 降级留痕」说成 `no-op`（spec V-22「渲染不撒谎」）
+      render: (_args, v) => TEXT_OUTPUT(v.committed
+        ? 'checkpoint: ' + v.commit
+        : (v.mode
+          ? 'checkpoint: recorded (no worktree · ' + v.mode + ') — commit=null，事件已留痕，照算完成'
+          : 'checkpoint: no-op (' + (v.reason ?? '') + ')')),
     },
     async execute(args, exec) {
-      const probe = gitProbe();
-      if (!probe.ok) return { ok: false, error: 'git 不可用：' + probe.error + '（lane_checkpoint 需要 git；请安装并加入 PATH，或设 DSH_GIT_BIN）' };
       if (typeof args.message !== 'string' || !args.message.trim()) throw new Error('message required');
       // progress 校验（fail-closed：step/total 正整数且 step ≤ total；不传 = null = 现状）
       let progress = null;
@@ -121,11 +128,54 @@ export function worktreeToolCheckpoint(ctx, deps) {
       const batch = store.readBatch(sessionId, args.batchId);
       if (!batch) throw new Error('batch not found: ' + args.batchId + ' @' + sessionId);
       if (!(args.laneId in batch.lanes)) throw new Error('unknown lane: ' + args.laneId + ' @' + args.batchId);
-      const r = doCheckpoint(root, sessionId, args.batchId, args.laneId, args.message.trim(), progress);
-      if (!r.ok) { recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger); return r; }
-      if (r.committed) {
-        const evt = { lane: args.laneId, commit: r.commit, message: r.message };
+      const subtaskId = typeof args.subtaskId === 'string' && args.subtaskId.trim() ? args.subtaskId.trim() : null;
+      // ── B1 · 无 worktree / git 不可用 ⇒ **降级留痕**，不再 fake no-op ────────────────────────────
+      //   用户裁决 Q3=A + spec §R-5 B1：强制对象是**留痕**，不是 **git**（只读/审核 lane 与无 git 宿主都必须能留痕）。
+      //   命中面（两条，缺一不降级）：
+      //     · git 探针失败 ⇒ `mode:'no-git'`（原来是顶部直接 `return {ok:false,error}`，连 lane 都不读）；
+      //     · `doCheckpoint` 返回 `ok:false` 且 reason 以 `lane worktree not found` 开头 ⇒ `mode:'no-worktree'`。
+      //   两条都落 `worktree.checkpoint`（`commit:null` + `mode` + 可选 `step/total/subtask`），返回 `ok:true, committed:false`。
+      //   其它 `ok:false`（如 `git status` 真失败）仍按既有失败路径走 `recordEarlyExitProgress`，行为零变化。
+      const probe = gitProbe();
+      let checkpointResult = null;
+      let degradeMode = null;
+      if (!probe.ok) {
+        degradeMode = 'no-git';
+      } else {
+        checkpointResult = doCheckpoint(root, sessionId, args.batchId, args.laneId, args.message.trim(), progress);
+        if (checkpointResult.ok === false && /^lane worktree not found/.test(String(checkpointResult.reason ?? ''))) {
+          degradeMode = 'no-worktree';
+        }
+      }
+      if (degradeMode !== null) {
+        const evt = { lane: args.laneId, commit: null, message: args.message.trim(), mode: degradeMode };
         if (progress) { evt.step = progress.step; evt.total = progress.total; }
+        if (subtaskId) evt.subtask = subtaskId;
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
+        if (degradeMode === 'no-git') {
+          ctx.logger?.warn?.('[lane-checkpoint] git 不可用（' + String(probe.error ?? '') + '）⇒ 记 worktree.checkpoint（commit=null, mode=no-git），不阻断');
+        }
+        // 断点指针仍走**既有单点** `recordEarlyExitProgress`（内含终态守卫：lane 已终态不补写 ——
+        //   与批 `punky-quality-a-20261106` T9 ④ 的判据同源，B1 不放开这道守卫）。
+        // 降级路径**不落** `total_mismatch` / `over-budget`：二者语义绑「确有提交」，本路径无 commit
+        //   ⇒ 照旧不落（T9 ② 的误报纪律，本批零改动）。
+        recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger);
+        const dir = laneDirOf(root, sessionId, args.batchId, args.laneId);
+        return {
+          ok: true, committed: false, commit: null, mode: degradeMode,
+          message: args.message.trim(),
+          reason: degradeMode === 'no-git' ? 'git unavailable' : 'lane worktree not found',
+          ...(fs.existsSync(dir) ? { worktree: dir } : {}),
+        };
+      }
+      if (!checkpointResult.ok) {
+        recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger);
+        return checkpointResult;
+      }
+      if (checkpointResult.committed) {
+        const evt = { lane: args.laneId, commit: checkpointResult.commit, message: checkpointResult.message };
+        if (progress) { evt.step = progress.step; evt.total = progress.total; }
+        if (subtaskId) evt.subtask = subtaskId;
         store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
       }
       if (progress) {
@@ -136,7 +186,7 @@ export function worktreeToolCheckpoint(ctx, deps) {
           store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }
       }
-      return r;
+      return checkpointResult;
     },
   });
 }

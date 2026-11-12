@@ -89,7 +89,29 @@ export function checkpointsOf(task) {
   }
 }
 
+// 【批 `punky-checkpoint-enforce-20261112` · lane e1-schema】`subtasks` 与 `checkpoints` **同形**读取器。
+//   只为读面同构（两处调用方可按同一形状传参）；**归一化不在此做**（单点仍在 `wave-plan.js`）。
+export function subtasksOf(task) {
+  try {
+    const st = task?.subtasks;
+    if (st == null) return null;
+    return { items: Array.isArray(st?.items) ? st.items : [] };
+  } catch {
+    return null;
+  }
+}
+
 const CP_AUX_ABSENT_LINE = '  - ⚠ 本 checkpoint 未声明 skills / kb / mcp / checklist 四段（建议性：开工前自行判断；不阻断）';
+//   强制档专用**同一条警示**：去掉「建议性」措辞 —— 强制档里出现「建议」会让 spec V-11 的
+//   「强制档对『建议』逐字零命中」判据打红（建议档仍用上一行的原句，逐字不改）。
+const CP_AUX_ABSENT_LINE_STRICT = '  - ⚠ 本 checkpoint 未声明 skills / kb / mcp / checklist 四段（不阻断）';
+
+const CP_TITLE_SUGGEST = '## checkpoint 计划';
+const CP_TITLE_STRICT = '## checkpoint 计划（强制）';
+
+//   双声明（同 lane 同时声明 `checkpoints` 与 `subtasks`）时**取代说明**：由组装侧（`composeWorkerPrompt`）
+//   前置在本块首行 —— 只有那里同时看得到两个声明面（渲染函数只收最终生效的那一份）。
+export const CP_SUPERSEDED_LINE = '> 本 lane 的 checkpoints 已被 subtasks 取代（subtasks 优先）';
 
 function checkpointAuxLinesOf(it) {
   const strs = (v) => listOf(v).filter((x) => typeof x === 'string' && x.trim() !== '');
@@ -106,8 +128,14 @@ function checkpointAuxLinesOf(it) {
   return L;
 }
 
-export function renderCheckpointsBlock(checkpoints) {
+//   **双档渲染**（批 `punky-checkpoint-enforce-20261112`）：第二参数缺省 = `{ layer:null, dialect:'legacy' }`
+//   ⇒ **既有单参调用零破坏**（建议档逐字沿用 HEAD 文案，spec V-12 以 sha256 字节级锁定）。
+//   · 强制档：`layer==='exec' && dialect==='subtasks'` —— 措辞改为可执行要求（无「建议 / 由你自己填 /
+//     引擎不与」三处自我弱化，spec V-11）；
+//   · 建议档：其余**全部**情形（含 legacy 批的 exec lane、含 `layer≠'exec'` 的新方言 lane）。
+export function renderCheckpointsBlock(checkpoints, { layer = null, dialect = 'legacy' } = {}) {
   if (checkpoints == null) return '';
+  const strict = layer === 'exec' && dialect === 'subtasks';
   //   ⚠ **禁**在本文件另写一份逐项归一（`seen.has` / `isAbsPath` / 自建 items 循环）：抄一份就有一份漂移面。
   let declared = null;
   try {
@@ -117,6 +145,12 @@ export function renderCheckpointsBlock(checkpoints) {
   }
   const items = Array.isArray(declared?.items) ? declared.items : [];
   if (items.length === 0) {
+    if (strict) {
+      //   强制档的空声明不能写成「自行调用」：新方言批的空 subtasks 由派发门直接拒派（GATE_CHECKPOINTS_REQUIRED）。
+      return CP_TITLE_STRICT + '\n'
+        + '> ⚠ 本任务声明了 `subtasks`，但归一化后为空（缺 `id` / `id` 重复 / `target` 为绝对路径的项会被丢弃）'
+        + ' ⇒ 本 lane 无可用 checkpoint 计划，**派发门将拒派**（`GATE_CHECKPOINTS_REQUIRED`）。';
+    }
     const discardedAll = (() => {
       try {
         return Array.isArray(checkpoints)
@@ -125,14 +159,29 @@ export function renderCheckpointsBlock(checkpoints) {
         return false;
       }
     })();
-    return '## checkpoint 计划\n' + (discardedAll
+    return CP_TITLE_SUGGEST + '\n' + (discardedAll
       ? '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（成因②：声明了项，但全部在归一化中被丢弃 —— 缺 `id` / `id` 重复 / `target` 为绝对路径的项会被丢弃）'
       : '> ⚠ 本任务声明了 `checkpoints`，但归一化后为空（成因①：原始没有任何可归一的一项 —— 声明为空，或形态既非数组也非 `{items:[…]}`）')
       + ' ⇒ 本 lane 无 checkpoint 计划；如需留痕请自行调用 `lane_checkpoint`。';
   }
-  const lines = ['## checkpoint 计划'];
-  lines.push('本 lane 共 ' + items.length + ' 个 checkpoint；建议 `lane_checkpoint(progress:{step,total:' + items.length + '})`'
-    + '（`total` 由你自己填，引擎不与本行的 ' + items.length + ' 比对）。');
+  const lines = [strict ? CP_TITLE_STRICT : CP_TITLE_SUGGEST];
+  if (strict) {
+    //   强制档四行固定（spec §R-3）：逐项核 / 调用形态（total 由引擎给定）/ 无 worktree 照算 / 未覆盖点名。
+    lines.push('本 lane 共 ' + items.length + ' 个 checkpoint —— 结算门按 `subtaskId` 逐项核，未逐项留痕即拒 settle'
+      + '（`GATE_CHECKPOINTS_INCOMPLETE`）。');
+    lines.push('必须按**声明序**逐项调用 `lane_checkpoint({ batchId, laneId, message, progress:{ step, total: '
+      + items.length + ' }, subtaskId: "<id>" })`：'
+      + 'total 必须等于 ' + items.length + '（由引擎给定 = subtasks.length；引擎按 ' + items.length
+      + ' 比对，不等即留痕 `lane.checkpoint.total.mismatch`）。');
+    lines.push('不得自建进度规划：动作必须落在**当前 subtask** 内，越界先回报'
+      + '（禁把多个 subtask 的动作揉进一次 checkpoint）。');
+    lines.push('本 lane 若无 worktree（或 git 不可用）：同一调用仍会记 `worktree.checkpoint` 事件（`commit=null`），照算完成。');
+    lines.push('未覆盖的 subtask id 会被结算门点名（缺失清单 = 声明序里未留痕的 id）。');
+  } else {
+    lines.push('本 lane 共 ' + items.length + ' 个 checkpoint；建议 `lane_checkpoint(progress:{step,total:' + items.length + '})`'
+      + '（`total` 由你自己填，引擎不与本行的 ' + items.length + ' 比对）。');
+  }
+  const auxAbsentLine = strict ? CP_AUX_ABSENT_LINE_STRICT : CP_AUX_ABSENT_LINE;
   for (const it of items) {
     const target = typeof it?.target === 'string' && it.target ? it.target : '（未声明目标）';
     const rounds = Number.isInteger(it?.rounds) && it.rounds >= 1 ? it.rounds : 1;
@@ -145,7 +194,7 @@ export function renderCheckpointsBlock(checkpoints) {
       + (extra.length > 0 ? '（' + extra.join('；') + '）' : ''));
     const aux = checkpointAuxLinesOf(it);
     if (aux.length > 0) lines.push(...aux);
-    else lines.push(CP_AUX_ABSENT_LINE);
+    else lines.push(auxAbsentLine);
   }
   return lines.join('\n');
 }

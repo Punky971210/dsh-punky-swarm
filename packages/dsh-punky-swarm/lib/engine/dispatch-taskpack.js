@@ -25,7 +25,7 @@ import { applyInjectionBudget } from '../comms/inject-budget.js';
 import { resumeClauseFor } from '../wave-plan.js';
 import { ROLE_SECTION_TITLES, roleCorpusRoot, resolveRoleRef, listOf } from './dispatch-role.js';
 import { labelOf } from './dispatch-bind.js';
-import { renderCheckpointsBlock, renderPreflightBlock } from './dispatch-preflight.js';
+import { renderCheckpointsBlock, renderPreflightBlock, CP_SUPERSEDED_LINE } from './dispatch-preflight.js';
 
 export function renderRoleGuide(roleData) {
   const L = [];
@@ -79,6 +79,11 @@ export function composeWorkerPrompt({
   singleArtifactWrite = false,
   roleRoot, roleTeam,
   checkpoints = null,
+  // 【批 `punky-checkpoint-enforce-20261112` · lane e1-schema】`subtasks`（checkpoint 强制面）。
+  //   ⚠ 两处调用方（`dispatch-core.js` 自派档 / `query-tools.js` 取件档）**各只透传本参数一行**，
+  //     方言回落与「subtasks 优先」判据**只在本函数决定一次**（spec §R-4「单侧决定」）——
+  //     否则同一 lane 在两档的任务包会不一致（V-13）。
+  subtasks = null,
   context = null,
   resume = false,
   injectBudget = null,
@@ -137,7 +142,15 @@ export function composeWorkerPrompt({
   }
   let checkpointsBlock = '';
   try {
-    checkpointsBlock = renderCheckpointsBlock(checkpoints);
+    //   方言**单侧决定**：声明了 `subtasks` ⇒ `'subtasks'`（强制档），否则 `'legacy'`（建议档，存量逐字不变）。
+    //   渲染源也在此决定：有 `subtasks` 就用它，否则回退既有 `checkpoints`（spec §R-3 / §R-4）。
+    const dialect = subtasks != null ? 'subtasks' : 'legacy';
+    checkpointsBlock = renderCheckpointsBlock(subtasks ?? checkpoints, { layer, dialect });
+    //   双声明（同 lane 同时声明两者）⇒ 渲染块**首行**注明 checkspoints 已被取代（spec §4.2 第 3 行）。
+    //   只有本层同时看得到两份声明面，故取代说明落在这里、而不是渲染函数里。
+    if (checkpointsBlock && subtasks != null && checkpoints != null) {
+      checkpointsBlock = CP_SUPERSEDED_LINE + '\n' + checkpointsBlock;
+    }
   } catch (e) {
     try {
       logger?.warn?.('[dsh-punky-swarm] composeWorkerPrompt: checkpoint 计划段渲染失败 ⇒ 跳过该段（不阻断派发）：'

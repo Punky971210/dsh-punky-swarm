@@ -26,6 +26,10 @@ import { TERMINAL_MEMBER_STATES, SETTABLE_MEMBER_STATES } from '../schema.js';
 import {
   dispatchLaneCore,
 } from '../engine/dispatch.js';
+// 【批 `punky-checkpoint-enforce-20261112` · lane `e2-gate`】A1：exec + subtasks 方言的 lane 派发前自动建 worktree。
+//   失败**告警不拒派**（spec §R-5 A1 / §X-6：拒态会让非 git 宿主完全不可派）；且调用点在
+//   `dispatchLaneCore` 之前 ⇒ 天然早于 `store.setMember(running)`，无状态可回滚。
+import { maybeAutoCreateWorktree } from '../engine/dispatch-autoworktree.js';
 
 export function buildLaneTools(cx) {
   const { ctx, deps, store, root } = cx;
@@ -131,6 +135,18 @@ export function buildDispatchTools(cx) {
         assertMemberActionTierC(store, sessionId, exec, 'member', { batchId: args.batchId }, deps);
         //   D-01/D-04（`exempt.type` 长跑档位 + 派发即写成员状态）：属主门先于派发。
         authorizeBatchWrite({ store, sessionId, batchId: args.batchId, exec, where: 'lane_dispatch(' + args.lane + ')' });
+        // ── A1 · 自动建 lane worktree（spec §R-5 A1）────────────────────────────────────────────
+        //   前置：`store.readBatch` 之后、`dispatchLaneCore`（其内部 `setMember(running)`）之前。
+        //   触发面与单点 git 实现全在 `maybeAutoCreateWorktree` 内（本处只做取 task + 传上下文）；
+        //   返回面恒 `{attempted, ok}` 且本函数**恒不抛** ⇒ 失败不改变派发准入（告警级，非拒态）。
+        const autoCtx = store.readBatch(sessionId, args.batchId);
+        const autoTask = (Array.isArray(autoCtx?.wavePlan) ? autoCtx.wavePlan : [])
+          .flatMap((w) => (Array.isArray(w?.tasks) ? w.tasks : []))
+          .find((t) => t && t.id === args.lane) ?? null;
+        maybeAutoCreateWorktree({
+          root, sessionId, batchId: args.batchId, lane: args.lane,
+          laneTask: autoTask, batch: autoCtx, store, logger: ctx?.logger ?? null,
+        });
         return await dispatchLaneCore({
           ctx, store, root, liveConfig: readLiveConfig(deps), exec, sessionId,
           dispatchIndex: deps?.dispatchIndex,

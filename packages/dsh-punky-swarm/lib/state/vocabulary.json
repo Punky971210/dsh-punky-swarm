@@ -2,8 +2,8 @@
   "$schema": "dsh-punky-swarm/vocabulary@1",
   "meta": {
     "version": 1,
-    "updated": "2026-11-01",
-    "counts": { "gateCodes": 63, "reasonTokens": 0 }
+    "updated": "2026-11-12",
+    "counts": { "gateCodes": 64, "reasonTokens": 0 }
   },
   "sources": [
     {
@@ -80,6 +80,9 @@
     { "id": "gate-dispatch-provider-invalid", "code": "GATE_DISPATCH_PROVIDER_INVALID", "label": "派发：provider 不可解析", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/engine/dispatch.js#mapSpawnError（code:）" },
     { "id": "gate-handoff-artifact-missing", "code": "GATE_HANDOFF_ARTIFACT_MISSING", "label": "交接门：交付产物不在场", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/tools/handoff-tools.js#handoff_submit（code: / throw）" },
     { "id": "gate-handoff-legacy-passthrough", "code": "GATE_HANDOFF_LEGACY_PASSTHROUGH", "label": "交接门：legacy 直通档", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/member.js（code:）" },
-    { "id": "gate-handoff-settle-legacy-passthrough", "code": "GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH", "label": "交接门：结算面 legacy 直通档", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/member-gates.js（code:）" }
+    { "id": "gate-handoff-settle-legacy-passthrough", "code": "GATE_HANDOFF_SETTLE_LEGACY_PASSTHROUGH", "label": "交接门：结算面 legacy 直通档", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/store/member-gates.js（code:）" },
+    { "id": "gate-checkpoints-required", "code": "GATE_CHECKPOINTS_REQUIRED", "label": "checkpoint 派发门：exec lane 无 subtasks（拒派）", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/gates/checkpoints.js#checkCheckpointsDispatchGate（code:）← 事件由 lib/state/store/member.js#setMember 落 gate.checkpoints.required 后 throw；零状态变更（lane 保持 pending）" },
+    { "id": "gate-checkpoints-incomplete", "code": "GATE_CHECKPOINTS_INCOMPLETE", "label": "checkpoint 结算门：subtasks 未逐项留痕（拒 settle）", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/state/gates/checkpoints.js#checkCheckpointsSettleGate（code:）← 事件由 lib/state/store/member-gates.js#runMergedGateChain 落 gate.checkpoints.incomplete（missing 为声明序有序 id）后 throw；lane 保持 review" },
+    { "id": "gate-worktree-autocreate-failed", "code": "GATE_WORKTREE_AUTOCREATE_FAILED", "label": "checkpoint 强制化：自动建 worktree 失败（告警）", "kind": "gate", "enabled": true, "since": "0.5.6", "deprecatedIn": null, "replacedBy": null, "note": "发射位（手写 .js，非 .ts 面）：lib/engine/dispatch-autoworktree.js#maybeAutoCreateWorktree（worktree.autocreate.failed 载荷 code:）；告警级 —— 不改变派发准入，checkpoint 转走 commit=null 降级留痕" }
   ]
 }

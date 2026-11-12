@@ -22,6 +22,17 @@ import * as schema from '../../schema.js';
 import * as machine from '../machine.js';
 import * as EVT from '../event-types.js';
 import { laneProgressClear } from '../resume.js';
+// 【批 `punky-checkpoint-enforce-20261112` · lane `e2-gate`】G1 派发门的判据原料（**参数注入**，非门内 import）。
+//   方向 = store → resume（既有分层）；门模块 `state/gates/checkpoints.js` 只判不遍历，
+//   因为 `gates.js → resume.js → wave-plan.js → gates.js` 会破 `esm-first-eval` 的「全仓无环」不变量。
+//   单点实现仍在 `state/resume.js`（spec §R-2 三函数的唯一实现处）。
+import { dialectOf as checkpointDialectOf, declaredSubtasksOf as checkpointDeclaredOf, coveredSubtasksOf as checkpointCoveredOf, latestCheckpointOf } from '../resume.js';
+const CHECKPOINT_PRIMITIVES = Object.freeze({
+  dialectOf: checkpointDialectOf,
+  declaredSubtasksOf: checkpointDeclaredOf,
+  coveredSubtasksOf: checkpointCoveredOf,
+  latestCheckpointOf,
+});
 import { EXEMPT_GATE_CODES, normalizeExemptPayload } from '../lane-exempt.js';
 import { countConsecutiveFailedSettles, laneHandoffGapPayload } from './events.js';
 const EVT_LANE_EXEMPT_INHERITED = EVT.EVT_LANE_EXEMPT_INHERITED;
@@ -99,6 +110,20 @@ export function buildMember(cx) {
           problems: ['本批无 `batch.handoffs` 字段（存量批）⇒ 未交接门整体放行；本 lane 开工**未**受交接约束（裁决 ①=B：不静默、不砸存量）'],
         })));
       }
+      // ── G1 · 派发门（spec §R-5 表 G1；码 `GATE_CHECKPOINTS_REQUIRED`）──────────────────────────
+      //   门序：**entry 门之后**（避免两个码同时出现，spec §约束 9）。判据全在门内（layer / 方言 / from /
+      //   smoke / 归一后为空），本处只负责「落事件 + commitBatch + throw」这三件**调用方**职责（门是纯判定）。
+      //   零状态变更口径：lane 仍 pending、无句柄、无 `member.dispatch`、批相位不变 —— 本处不做任何
+      //   `applyMemberTransition` / `setMember` 写入（既有行零改动）。
+      const ck = gates.checkCheckpointsDispatchGate(sessionId, batchId, batch, lane, CHECKPOINT_PRIMITIVES);
+      if (!ck.ok) {
+        batch.events.push(newEvent(EVT.EVT_GATE_CHECKPOINTS_REQUIRED, {
+          lane, code: ck.code, declared: false, dialect: ck.dialect ?? 'subtasks',
+        }));
+        batch.updatedAt = new Date().toISOString();
+        commitBatch(sessionId, batchId, batch);
+        throw new Error(ck.code + ': ' + (ck.problems ?? []).join('；'));
+      }
       if (exempt != null) {
         exemptGrant = normalizeExemptPayload(exempt);
       }
@@ -111,7 +136,7 @@ export function buildMember(cx) {
     }
 
     if (to === 'merged') {
-      runMergedGateChain(batch, { sessionId, batchId, lane, note, collect, emitContractMissing });
+      runMergedGateChain(batch, { sessionId, batchId, lane, note, collect, emitContractMissing, checkpointPrimitives: CHECKPOINT_PRIMITIVES });
     }
 
     if (schema.isMemberTerminal(to)) {
