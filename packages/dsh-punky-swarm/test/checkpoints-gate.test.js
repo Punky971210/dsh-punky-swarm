@@ -44,7 +44,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
 import { createGates } from '../lib/state/gates.js';
-import { dialectOf, declaredSubtasksOf, coveredSubtasksOf, latestCheckpointOf } from '../lib/state/resume.js';
+import { dialectOf, dialectOfLane, declaredSubtasksOf, coveredSubtasksOf, latestCheckpointOf } from '../lib/state/resume.js';
 import { threeTierTasks, seedArtifacts, assessC } from './helpers/gate-fixture.mjs';
 
 const SAVED_HANDOFF_ENV = process.env.PSWARM_HANDOFF_GATE;
@@ -56,7 +56,9 @@ after(() => {
 
 const SID = 'sess-ckpt-gate';
 const EXEC = { agent: { session: { id: SID } } };
-const PRIMS = { dialectOf, declaredSubtasksOf, coveredSubtasksOf, latestCheckpointOf };
+//   ⚠ `dialectOfLane` **必须**在表上：`primsReadyOf` 对缺键 fail-closed ⇒ 漏补会让本套件 10 例门
+//   全部 `skipped:'no-checkpoint-primitives'` **假绿**（spec §范围 #10 / C-11 / D-3）。
+const PRIMS = { dialectOf, dialectOfLane, declaredSubtasksOf, coveredSubtasksOf, latestCheckpointOf };
 
 /** 门级判据原料（`createGates` 只用来取两道纯判定门；本文件用它做「非工具面」的层/态豁免断言）。 */
 const gates = createGates(fs.mkdtempSync(path.join(os.tmpdir(), 'punky-ckptgate-gates-')));

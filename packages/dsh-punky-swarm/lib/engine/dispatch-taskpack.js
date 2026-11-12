@@ -84,6 +84,12 @@ export function composeWorkerPrompt({
   //     方言回落与「subtasks 优先」判据**只在本函数决定一次**（spec §R-4「单侧决定」）——
   //     否则同一 lane 在两档的任务包会不一致（V-13）。
   subtasks = null,
+  // 【批 `punky-ckpt-followup-20261112` · lane e1-impl · s1】lane 级方言（由两个生产入口各自
+  //   用**已读到的** batch 调 `dialectOfLane(batch, lane)` 算好传入）。本函数**不再自判方言**：
+  //   判据只剩 `lib/state/resume.js` 一份（门与渲染同源，G-04 分叉收口）。
+  //   缺省 `null` 仅为**单测/直调老调用方**（`lib/engine/dispatch.js` 对外导出本函数）零破坏；
+  //   生产两入口必须显式传值（`test/dispatch-prompt-compose` 与 V-4 的四行锁）。
+  checkpointDialect = null,
   context = null,
   resume = false,
   injectBudget = null,
@@ -142,9 +148,10 @@ export function composeWorkerPrompt({
   }
   let checkpointsBlock = '';
   try {
-    //   方言**单侧决定**：声明了 `subtasks` ⇒ `'subtasks'`（强制档），否则 `'legacy'`（建议档，存量逐字不变）。
-    //   渲染源也在此决定：有 `subtasks` 就用它，否则回退既有 `checkpoints`（spec §R-3 / §R-4）。
-    const dialect = subtasks != null ? 'subtasks' : 'legacy';
+    //   方言取源**单侧决定**：优先用调用方传入的 lane 级判决（与门同源）；缺省才回落既有三元
+    //   （仅供单测/直调老调用方零破坏）。渲染源也在此决定：有 `subtasks` 就用它，
+    //   否则回退既有 `checkpoints`（spec §R-3 / §R-4）。
+    const dialect = checkpointDialect ?? (subtasks != null ? 'subtasks' : 'legacy');
     checkpointsBlock = renderCheckpointsBlock(subtasks ?? checkpoints, { layer, dialect });
     //   双声明（同 lane 同时声明两者）⇒ 渲染块**首行**注明 checkspoints 已被取代（spec §4.2 第 3 行）。
     //   只有本层同时看得到两份声明面，故取代说明落在这里、而不是渲染函数里。

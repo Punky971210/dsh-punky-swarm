@@ -197,6 +197,26 @@ export function dialectOf(batch) {
 }
 
 /**
+ * lane 级方言判决：lane 自身含 `subtasks` 键 ⇒ `'subtasks'`；否则回落批级 {@link dialectOf}。
+ *   ⚠ **数学上恒等于批级判决**：`findTask` 与 `flatTasksOf` 遍历同一个 `wavePlan[].tasks[]` 集合
+ *     ⇒ 本函数**不引入新语义**。它的价值是给消费面一个**命名接缝**：渲染的两个入口与两道门
+ *     一律调本函数，禁任何一侧再写 `subtasks != null ? … : …` 的第二份判据（那份分叉就是 G-04）。
+ *   ⚠ **禁止**把回落分支换成 lane 级硬编码 `LEGACY_DIALECT`：lane 无 `subtasks` 键、而批内**另有**
+ *     lane 有键时，这样做会精确复活「渲染判 legacy / 门判 subtasks」的分叉。
+ *     `test/dialect-lane-single-point.test.js` 把该等价不变量锁死（V-3 防复发）。
+ *   判据是「**键在场**」（`'subtasks' in t`），与批级同口径：声明了但归一后 `items:[]` 仍算新方言。
+ *   纯读、零副作用（不改 `batch`、不写 store）。
+ * @param {object} batch 已读批次对象（本函数**不改它**）
+ * @param {string} lane
+ * @returns {'subtasks'|'legacy'}
+ */
+export function dialectOfLane(batch, lane) {
+  const t = findTask(batch, lane);
+  if (t && 'subtasks' in t) return SUBTASKS_DIALECT;
+  return dialectOf(batch);
+}
+
+/**
  * 最新进度取源（**逐字复用** `lib/tools/lane-worktree-tools.js` `lane_checkpoint_status` 的优先序）：
  *   ① 事件面倒序取最近一条同时带整数 `step`/`total` 的 `worktree.checkpoint` ⇒ `source:'event'`；
  *   ② 事件面无此类 ⇒ 回落 `laneProgressRead` ⇒ `source:'laneProgress'`；

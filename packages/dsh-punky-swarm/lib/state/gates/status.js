@@ -18,8 +18,43 @@ import { flowOf, produceFieldsOf, entryRequiresOf } from '../../assembly/flows.j
 import { taskOf } from './detect.js';
 import * as EVT from '../event-types.js';
 import fs from 'node:fs';
+
+/**
+ * subtask 计数：把「本 lane 声明的 subtask 项数」与「已覆盖的项数」压成一对数字，供 `gate_status` 的
+ * lane 行透出（批 `punky-ckpt-followup-20261112` · lane `e1-impl` · s2，闭合 G-06/U-3）。
+ *
+ * 值域（spec RQ-B2 / C-3）：
+ *   · 原料缺失 或 方言 `legacy` ⇒ `{declared: null, covered: null}`（**禁 0**：
+ *     `0` 与「声明了 0 项」不可区分，会把 G1 拒派的形状误读成「已声明但没做」）；
+ *   · 方言 `subtasks` ⇒ 整数，且 `0 ≤ covered ≤ declared`（`declared === 0` 正是 G1 要拒的形状，**必须能读出来**）。
+ * 覆盖口径**逐条对齐 G2 判据⑥**（spec RQ-B3）：`sequential === true` ⇒ 视作全数覆盖；
+ *   否则 `covered = |declared ∩ 事件面显式 ids|`（未声明的 id 不计入）。
+ *
+ * ⚠ 本函数是两键的**唯一计算处**（读面单点）：工具层 `lib/tools/query-tools.js` 只透出、不再遍历
+ *   批对象/事件流（spec RQ-B1 / C-10：`execute` 内禁出现 `declaredSubtasksOf(` / `coveredSubtasksOf(`）。
+ * ⚠ 判据原料走 **DI 缝**（`cx.checkpointPrimitives`）而**不是** `import '../resume.js'` —— 后者会
+ *   形成 `gates.js → resume.js → wave-plan.js → gates.js` 环，破 `esm-first-eval` 全仓无环不变量（C-1）。
+ * @param {object} batch 已读批次对象（纯读，不改）
+ * @param {string} lane
+ * @param {{dialectOfLane?:Function, declaredSubtasksOf?:Function, coveredSubtasksOf?:Function}|null} prims
+ * @returns {{declared: number|null, covered: number|null}}
+ */
+function subtaskCountsOf(batch, lane, prims) {
+    if (!prims || typeof prims.dialectOfLane !== 'function'
+        || typeof prims.declaredSubtasksOf !== 'function'
+        || typeof prims.coveredSubtasksOf !== 'function')
+        return { declared: null, covered: null };
+    if (prims.dialectOfLane(batch, lane) !== 'subtasks')
+        return { declared: null, covered: null };
+    const declared = prims.declaredSubtasksOf(batch, lane);
+    const cov = prims.coveredSubtasksOf(batch, lane);
+    const covered = cov.sequential === true
+        ? declared.length
+        : declared.filter((id) => cov.ids.has(id)).length;
+    return { declared: declared.length, covered };
+}
 export function buildStatus(cx) {
-    const { batchFile, checkPlanContract, completeOutcomesOf, consumeFieldNameOf, flowsOf, laneStartedAt, layersOf, orphanProductsOf, presenceOfArtifact, readBatch, unwiredEntriesOf, vocabOpts, vocabularyViewOf, gateEnv } = cx;
+    const { batchFile, checkPlanContract, completeOutcomesOf, consumeFieldNameOf, flowsOf, laneStartedAt, layersOf, orphanProductsOf, presenceOfArtifact, readBatch, unwiredEntriesOf, vocabOpts, vocabularyViewOf, gateEnv, checkpointPrimitives } = cx;
     function gateStrengthOf(batch) {
         const layers = layersOf(batch);
         const flows = flowsOf(batch).flows;
@@ -77,7 +112,7 @@ export function buildStatus(cx) {
         const batch = readBatch(sessionId, batchId);
         if (!batch) {
             if (fs.existsSync(batchFile(sessionId, batchId))) {
-                return { lane, layer: null, state: null, team: null, corrupt: true, consume: [], produce: [], outputs: [], consumeMissing: [], outputsMissing: [], produceMissing: [], contractProblems: null, targets: [], targetsMissing: [], targetsUnchanged: [] };
+                return { lane, layer: null, state: null, team: null, corrupt: true, consume: [], produce: [], outputs: [], consumeMissing: [], outputsMissing: [], produceMissing: [], contractProblems: null, targets: [], targetsMissing: [], targetsUnchanged: [], subtasksDeclared: null, subtasksCovered: null };
             }
             throw new Error('batch not found: ' + batchId);
         }
@@ -90,6 +125,7 @@ export function buildStatus(cx) {
                 lane, layer: null, state: batch.lanes[lane], gates: 'orphan', team: batch.team,
                 consume: [], produce: [], outputs: [], consumeMissing: [], outputsMissing: [], produceMissing: [],
                 contractProblems: null, targets: [], targetsMissing: [], targetsUnchanged: [],
+                subtasksDeclared: null, subtasksCovered: null,
                 gateStrength: gateStrengthOf(batch),
                 vocabulary: vocabularyViewOf(vocabOpts),
             };
@@ -119,6 +155,7 @@ export function buildStatus(cx) {
             const mtimeMs = new Date(st.mtime).getTime();
             return !(Number.isFinite(mtimeMs) && Number.isFinite(startMs) && mtimeMs > startMs);
         });
+        const counts = subtaskCountsOf(batch, lane, checkpointPrimitives);
         return {
             lane, layer: t.layer ?? null, state: batch.lanes[lane], team: batch.team,
             gates: t.layer ? 'in-plan' : 'no-layer',
@@ -126,6 +163,7 @@ export function buildStatus(cx) {
             consumeMissing: missing('consume'), outputsMissing: missing('outputs'), produceMissing: missing('produce'),
             contractProblems: contract && !contract.ok ? contract.problems : null,
             targets, targetsMissing, targetsUnchanged,
+            subtasksDeclared: counts.declared, subtasksCovered: counts.covered,
             gateStrength: gateStrengthOf(batch),
             vocabulary: vocabularyViewOf(vocabOpts),
         };

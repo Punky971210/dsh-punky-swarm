@@ -41,7 +41,7 @@ import { buildHandoffAccept } from './store/handoff-accept.js';
 import { buildLifecycle } from './store/lifecycle.js';
 import { buildMemberGates } from './store/member-gates.js';
 import { buildMemberExempt } from './store/member-exempt.js';
-import { buildMember } from './store/member.js';
+import { buildMember, CHECKPOINT_PRIMITIVES } from './store/member.js';
 import { buildGovernance } from './store/governance.js';
 import { gateEscapeEvents, gateDegradeEvents, contractMissingEvents, countConsecutiveFailedSettles } from './store/events.js';
 export { gateEscapeEvents, contractMissingEvents, countConsecutiveFailedSettles };
@@ -312,7 +312,13 @@ function stampGateLaneSnapshot(batch) {
 export function createStore(root, { rules, logger, onStateChange, readConfig, revRaceHook } = {}) {
   const sessionsDir = path.join(root, 'sessions');
   const legacyDir = path.join(root, 'batches');
-  const gates = createGates(root, typeof readConfig === 'function' ? { readConfig } : {});
+  // 【批 `punky-ckpt-followup-20261112` · lane `e1-impl` · s2】checkpoint 判据原料经 DI 缝注入 `createGates`
+  //   ⇒ 投影单点（`gates/status.js` 的 subtask 计数）与门族（`gates/checkpoints.js`）**共用同一个 frozen 对象**
+  //   （`store/member.js` 的 `CHECKPOINT_PRIMITIVES`），禁第二份表；也避免 `gates → resume` 成环（C-1）。
+  const gates = createGates(root, {
+    ...(typeof readConfig === 'function' ? { readConfig } : {}),
+    checkpointPrimitives: CHECKPOINT_PRIMITIVES,
+  });
   const corruptRegistry = createCorruptRegistry(root);
   const log = logger ?? console;
   const ratchet = rules ?? loadRules();

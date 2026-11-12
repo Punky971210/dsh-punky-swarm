@@ -324,10 +324,18 @@ export function createGates(root, opts = {}) {
     //   团队资产不再被解析 ⇒ `flowsForBatch` 恒回「无声明」⇒ 读端一律走**引擎基线**（tighten-only 缺省）。
     //   形参 `flowsRoot` **保形保留**（DI 缝，测试签名零变化）；现已不被读，也不得据此恢复读盘。
     const flowsOf = (batch) => flowsForBatch(batch);
+    // 【批 `punky-ckpt-followup-20261112` · lane `e1-impl` · s2】checkpoint 判据原料的 **DI 缝**。
+    //   投影单点（`gates/status.js` 的 subtask 计数）需要 `dialectOfLane` / `declaredSubtasksOf` /
+    //   `coveredSubtasksOf`，但**不得** `import '../resume.js'`：`lib/wave-plan.js:45` 已 import
+    //   `./state/gates.js`，而 `resume.js → wave-plan.js` ⇒ 直接 import 会成
+    //   `gates.js → resume.js → wave-plan.js → gates.js` 一环，破 `esm-first-eval` 的「全仓无环」不变量（spec C-1）。
+    //   故与门族 `checkpoints.js` 同款：由**调用方**（`state/store.js`）注入**同一个 frozen 对象**
+    //   （`store/member.js` 的 `CHECKPOINT_PRIMITIVES`），禁第二份表。
+    const checkpointPrimitives = (opts && opts.checkpointPrimitives) || null;
     // ── 波 4：闭包上下文 `cx`（每 createGates 实例一份；禁提升为模块级单例）──
     // 断言依据：`GatesCx` 的基础槽位在本语句后立即由 `Object.assign` 补齐（builder 槽位由 `assembleGates` 逐次并入）。
     const cx = {};
-    Object.assign(cx, { root, sessionsDir, vocabOpts, readCfg, flowsOf, laneStartedAt, presenceJudge, reasonVocabularyVerdict, vocabularyViewOf, gateEnv: gateEnvOf });
+    Object.assign(cx, { root, sessionsDir, vocabOpts, readCfg, flowsOf, laneStartedAt, presenceJudge, reasonVocabularyVerdict, vocabularyViewOf, gateEnv: gateEnvOf, checkpointPrimitives });
     const parts = assembleGates(cx);
     // 【G-10 修复 · lane `e3-toolface`】「已声明入边」与「单条交接判定」两个单点**透出给读端**（唯一读端 = `lib/tools/handoff-tools.js#handoff_view`）：
     //   取的是 `assembleGates` 首行 `Object.assign(cx, buildHelpers(cx))` 装进 `cx` 的**同一个函数实例**

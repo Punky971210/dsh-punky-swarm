@@ -29,6 +29,8 @@ import { expectedWorkerSessionOf } from '../state/dispatch-events.js';
 import { roleCorpusRoot, resolveRoleRef, deriveDenyTools, personaOfRole } from './dispatch-role.js';
 import { ownerOfExec, labelOf, ownerSessionIdOfExec, dispatchIndexEntryOf } from './dispatch-bind.js';
 import { composeWorkerPrompt } from './dispatch-taskpack.js';
+// lane 级方言判决单点（与 G1/G2 门共用同一实现；禁在本文件另写 `subtasks != null` 判据）。
+import { dialectOfLane } from '../state/resume.js';
 
 export function buildStartRequest({
   batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, role, roleRoot, roleTeam,
@@ -106,8 +108,12 @@ function trackOneShotRun(workerSessionId, run, warn) {
 // ── 派发核心（**唯一实现**：工具面与链引擎共用，禁第二套） ──────────────────────
 export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, sessionId, batchId, lane, leaderPrompt = '', exempt, dispatchIndex }) {
   let laneTask = null;
+  //   批对象**只在本 try 内读一次**：`wavePlan` 供 lane 定位，`batch` 供 lane 级方言判决
+  //   （`dialectOfLane`）复用 —— 禁为方言再读一次批文件（spec §S-2 / C-9 / V-14 读放大锁）。
+  let batch = null;
   try {
-    const wp = store.readBatch(sessionId, batchId)?.wavePlan ?? [];
+    batch = store.readBatch(sessionId, batchId);
+    const wp = batch?.wavePlan ?? [];
     const flat = Array.isArray(wp) ? wp.flatMap((w) => w?.tasks ?? []) : (wp.tasks ?? []);
     laneTask = flat.find((t) => t && t.id === lane) ?? null;
   } catch { laneTask = null; }
@@ -188,6 +194,8 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     context: laneTask?.context ?? null,
     checkpoints: laneTask?.checkpoints ?? null,
     subtasks: laneTask?.subtasks ?? null,
+    //   自派档入口：方言由**同一份**单点判决算出（与 G1/G2 门同源），复用上面已读的 batch。
+    checkpointDialect: batch ? dialectOfLane(batch, lane) : null,
     resume: laneTask?.resume === true,
     logger: ctx?.logger ?? null,
   });

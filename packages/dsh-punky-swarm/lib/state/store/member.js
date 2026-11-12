@@ -26,9 +26,15 @@ import { laneProgressClear } from '../resume.js';
 //   方向 = store → resume（既有分层）；门模块 `state/gates/checkpoints.js` 只判不遍历，
 //   因为 `gates.js → resume.js → wave-plan.js → gates.js` 会破 `esm-first-eval` 的「全仓无环」不变量。
 //   单点实现仍在 `state/resume.js`（spec §R-2 三函数的唯一实现处）。
-import { dialectOf as checkpointDialectOf, declaredSubtasksOf as checkpointDeclaredOf, coveredSubtasksOf as checkpointCoveredOf, latestCheckpointOf } from '../resume.js';
-const CHECKPOINT_PRIMITIVES = Object.freeze({
+import { dialectOf as checkpointDialectOf, dialectOfLane as checkpointDialectLaneOf, declaredSubtasksOf as checkpointDeclaredOf, coveredSubtasksOf as checkpointCoveredOf, latestCheckpointOf } from '../resume.js';
+// 【批 `punky-ckpt-followup-20261112` · lane `e1-impl` · s1/s2】
+//   `dialectOfLane` 进本表 = 门（G1/G2）与投影（`gates/status.js`）**共用同一份判据原料**。
+//   `dialectOf` 键**保留**（既有读端不断裂），但门与渲染一律不再直接消费它（spec V-5/V-6）。
+//   `export`：`state/store.js` 把它经 DI 缝注入 `createGates(root,{checkpointPrimitives})`
+//   ⇒ 投影单点复用**同一个 frozen 对象**，**禁第二份表**（spec §S-5 / RQ-A5 / C-2）。
+export const CHECKPOINT_PRIMITIVES = Object.freeze({
   dialectOf: checkpointDialectOf,
+  dialectOfLane: checkpointDialectLaneOf,
   declaredSubtasksOf: checkpointDeclaredOf,
   coveredSubtasksOf: checkpointCoveredOf,
   latestCheckpointOf,

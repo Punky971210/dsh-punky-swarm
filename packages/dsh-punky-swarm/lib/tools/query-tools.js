@@ -26,6 +26,8 @@ import * as EVT from '../state/event-types.js';
 import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt } from '../engine/dispatch.js';
 //   **不 re-export**）⇒ 必须从真源取，从 `dispatch.js` 取会得 `undefined`（调用期 TypeError）。
 import { renderArchContext } from '../engine/arch-context.js';
+//   lane 级方言判决单点（与自派档、G1/G2 门共用同一实现；禁在工具层另写判据）。
+import { dialectOfLane } from '../state/resume.js';
 //   `role_guide` 与引擎自派路径必须过**同一份** `capabilities.injectBudget`（同一取值单点
 import { readCapability } from '../assembly/schema.js';
 
@@ -179,14 +181,32 @@ export function buildBatchStatusTools(cx) {
 export function buildGateTools(cx) {
   const { store, deps } = cx;
   const { resolveBatchSession } = deps;
+  /**
+   * render 用的 subtask 计数段：**只读投影产出的两键、不做任何计算**（计算单点在 `gates/status.js`）。
+   *   逐 lane 输出一次 `<lane>=<covered>/<declared>`；`null`（legacy / corrupt / orphan）的 lane **零输出**；
+   *   批内无非 null lane ⇒ 返回空串（render 便不追加 ` · subtasks ` 段，存量批输出逐字不变）。
+   *   两键在此**只做比较与拼接**，工具层零遍历批对象/事件流（C-10）。
+   */
+  function subtaskReadingsOf(lanes) {
+    return (Array.isArray(lanes) ? lanes : []).filter((l) => l && l.subtasksDeclared !== null && l.subtasksDeclared !== undefined).map((l) => l.lane + '=' + l.subtasksCovered + '/' + l.subtasksDeclared).join(', ');
+  }
   return [
     defineTool({
       name: "gate_status",
       description: "查询批次/lane 的门禁状态：layer、consume/produce/outputs 缺失清单、plan 契约问题，以及批次级装配声明。不传 lane 时按全部 lane 逐个投影；对不在 wavePlan.tasks 内的 lane id 返回 gates:'orphan'（layer:null），该读数是损坏/悬空 lane 的显式标记。本工具不定义批级聚合（批级汇总读 batch_status）。",
       parameters: {"batchId":{"type":"string","required":true},"lane":{"type":"string","description":"lane ID；缺省列出全部"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"lanes":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true}},"assembly":{"type":"object","additionalProperties":true}}},
-        render: (_args, value) => TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)' + (value.assembly ? ' · assembly' : '')),
+        // 【批 `punky-ckpt-followup-20261112` · lane `e1-impl` · s2】lane 行追加 subtask 计数面（闭合 G-06/U-3）。
+        //   `required:true` 是**结构性锁**：`test/tool-schema-conformance.test.js` 普查「成功返回值必须满足
+        //   自身 output.schema」⇒ 投影三分支（corrupt / orphan / 正常）漏任一支都会被该套件机械捕获（D-4）。
+        //   值域：legacy / corrupt / orphan ⇒ `null`（**禁 0**：0 与「声明了 0 项」不可区分，C-3）；subtasks 方言 ⇒ 整数。
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"sessionId":{"type":"string","required":true},"lanes":{"type":"array","required":true,"items":{"type":"object","additionalProperties":true,"properties":{"subtasksDeclared":{"oneOf":[{"type":"integer"},{"type":"null"}],"required":true},"subtasksCovered":{"oneOf":[{"type":"integer"},{"type":"null"}],"required":true}}}},"assembly":{"type":"object","additionalProperties":true}}},
+        render: (_args, value) => {
+          const subtaskReadings = subtaskReadingsOf(value.lanes);
+          return TEXT_OUTPUT('gate status: ' + value.lanes.length + ' lane(s)'
+            + (value.assembly ? ' · assembly' : '')
+            + (subtaskReadings ? ' · subtasks ' + subtaskReadings : ''));
+        },
       },
       async execute(args, exec) {
         const sessionId = sessionOf(args, exec, resolveBatchSession);
@@ -273,6 +293,8 @@ export function buildTaskpackTools(cx) {
           //   `subtasks` 同为任务包入参（spec §R-4）：本处与 `dispatch-core.js` 自派档必须成对透传，
           //   漏一处即两档任务包不一致（本文件 :269 注释已明写该纪律）。
           subtasks: laneTask.subtasks ?? null,
+          //   取件档入口：方言同源（复用本 execute 已读的 `b`，禁再读一次批文件）。
+          checkpointDialect: dialectOfLane(b, lane),
           resume: laneTask.resume === true,
           logger: ctx?.logger ?? null,
         });
