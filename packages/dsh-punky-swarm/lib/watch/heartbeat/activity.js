@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 import { statSync } from 'node:fs';
 import * as EVT from '../../state/event-types.js';
 import { findTask } from '../../state/task-utils.js';
-import { resolveArtifact, mailboxRootOf, progressSnapshotTsOf, laneKeyOf } from './context.js';
+import { resolveArtifact, mailboxRootForContext, progressSnapshotTsOf, laneKeyOf } from './context.js';
 
 export function freshEntry(nowTs) {
   return {
@@ -67,7 +67,7 @@ export function laneEventActivity(batch, lane, sinceTs, laneState = null) {
 // ② outbox：该 lane outbox 目录出现未 ack 消息
 function outboxActivity(cx, sessionId, batchId, lane) {
   try {
-    return cx.mailbox.readUnacked(mailboxRootOf(cx, sessionId, batchId), { type: 'outbox', lane }).length > 0;
+    return cx.mailbox.readUnacked(mailboxRootForContext(cx, sessionId, batchId), { type: 'outbox', lane }).length > 0;
   } catch { return false; }
 }
 // ③ 产物 mtime：artifacts/<batchId>/ 下该 lane 声明产物（outputs/produce）mtime 变化
@@ -135,7 +135,7 @@ export function baselineTs(cx, sessionId, batchId, batch, lane, nowTs) {
 // 追问 ts 早于最近一次活动 → 视为已被活动满足的陈旧追问，不再当作未答拍（活动后 reset 语义）
 export function pendingProbe(cx, sessionId, batchId, lane, sinceTs) {
   try {
-    const items = cx.mailbox.readUnacked(mailboxRootOf(cx, sessionId, batchId), { type: 'inbox' });
+    const items = cx.mailbox.readUnacked(mailboxRootForContext(cx, sessionId, batchId), { type: 'inbox' });
     for (const it of items) {
       if (it.message?.kind !== 'probe' || it.message?.lane !== lane) continue;
       const ts = Date.parse(it.ts ?? '');

@@ -180,7 +180,7 @@ test('A1-P2-09 / R-3 判据面 · 命令的 hit 与 reason 相对改前基线 de
     'reason 文案相对改前基线必须零差（摘要不符 = 判定语义漂移，须逐条比对）');
 });
 
-// ── T-2c · mailboxRootOf：四路同路径 + 边界收严 ──────────────────────────────────────
+// ── T-2c · mailbox 根：四路同路径 + 边界收严（④ 改名后 watch 侧导出名 = `mailboxRootForContext`）──────
 const MB_ROOT = path.join(os.tmpdir(), 'p2-mb-engine-root');
 const MB_SID = 'sess-x';
 const MB_BID = 'batch-y';
@@ -192,7 +192,7 @@ test('A1-P2-10 · 四路同路径：①②④ 直调 + ③ 端到端落盘，`pa
   // ② engine 域（保形再导出；导出名/参数个数不变）
   assert.equal(path.resolve(dispatchMailbox.mailboxRootOf(MB_ROOT, MB_SID, MB_BID)), expected, '② engine/dispatch');
   // ④ watch 域（cx 形态签名保形，内部守卫 + 委托）
-  assert.equal(path.resolve(heartbeatContext.mailboxRootOf({ engineRoot: MB_ROOT }, MB_SID, MB_BID)), expected, '④ watch/heartbeat/context');
+  assert.equal(path.resolve(heartbeatContext.mailboxRootForContext({ engineRoot: MB_ROOT }, MB_SID, MB_BID)), expected, '④ watch/heartbeat/context');
   assert.equal(path.resolve(singlePointMailboxRootOf(MB_ROOT, MB_SID, MB_BID)), expected, '单点本体');
 
   // ③ bridge/trajectory：无外部可见面（局部闭包已删）⇒ 走**端到端落盘**证据
@@ -246,11 +246,11 @@ test('A1-P2-10 · 边界收严：root 为 null/undefined/空串 ⇒ throw（fail
       'root=' + JSON.stringify(bad) + ' 必须 throw（原 dispatch 实装会静默产出无根路径）');
   }
   // 四路的包装层各自的守卫文案（只有 ④ 自持守卫，其余两路委托单点）
-  assert.throws(() => heartbeatContext.mailboxRootOf({}, MB_SID, MB_BID), /lane-heartbeat: no root/);
+  assert.throws(() => heartbeatContext.mailboxRootForContext({}, MB_SID, MB_BID), /lane-heartbeat: no root/);
   assert.equal(typeof dispatchMailbox.mailboxRootOf(MB_ROOT, MB_SID, MB_BID), 'string', '正例必须是字符串');
 });
 
-test('A1-P2-10 · 静态单点：`function mailboxRootOf` 全仓恰 1 处；三处导出面保形（名字/参数个数不变）', () => {
+test('A1-P2-10 · 静态单点：`function mailboxRootOf` 全仓恰 1 处；导出面保形（参数个数不变；④ 后 watch 侧名 = `mailboxRootForContext`）', () => {
   const defs = [];
   for (const rel of ['lib/mailbox-paths.js', 'lib/comms/mailbox-paths.js', 'lib/engine/dispatch.js',
     'lib/bridge/trajectory.js', 'lib/watch/heartbeat/context.js']) {
@@ -261,12 +261,12 @@ test('A1-P2-10 · 静态单点：`function mailboxRootOf` 全仓恰 1 处；三�
   assert.equal(singlePointMailboxRootOf.length, 3, '单点参数个数 = 3（root, sessionId, batchId）');
   assert.equal(commsMailbox.mailboxRootOf.length, 3, '① 导出面保形：参数个数不变');
   assert.equal(dispatchMailbox.mailboxRootOf.length, 3, '② 导出面保形：参数个数不变');
-  assert.equal(heartbeatContext.mailboxRootOf.length, 3, '④ 导出面保形：参数个数不变');
+  assert.equal(heartbeatContext.mailboxRootForContext.length, 3, '④ 导出面保形：参数个数不变');
   // ④ 用 const 箭头（使「函数声明形态」定义数恰 1），且体内只做守卫 + 委托
   const ctxSrc = read('lib/watch/heartbeat/context.js');
-  assert.ok(/export const mailboxRootOf = \(cx, sessionId, batchId\) =>/.test(ctxSrc),
+  assert.ok(/export const mailboxRootForContext = \(cx, sessionId, batchId\) =>/.test(ctxSrc),
     '④ 必须是 const 箭头包装（否则 function 形态定义数 = 2，AC-4 #1 不可机检）');
-  assert.equal(/path\.join\(|'sessions'/.test(ctxSrc.split('export const mailboxRootOf')[1]?.split(';')[0] ?? ''),
+  assert.equal(/path\.join\(|'sessions'/.test(ctxSrc.split('export const mailboxRootForContext')[1]?.split(';')[0] ?? ''),
     false, '④ 包装体内不得持有第二份路径拼接知识（只读 cx.engineRoot + 守卫 + 委托）');
 });
 

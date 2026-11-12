@@ -43,12 +43,13 @@ export function createHeartbeatContext({ store, mailbox, config, root, now, live
   };
 }
 
-// 批次邮箱根：**守卫 + 委托**（A1-P2-10）。导出名 / 参数个数 / 返回语义与守卫文案逐字不变
-//   （三个消费方 `heartbeat/{activity,longrun,stalled}.js` 零改动）；派生式本身已收成 `(lib-root)` 单点
-//   `lib/mailbox-paths.js::mailboxRootOf`——本处不再持有第二份路径拼接。
+// 批次邮箱根：**守卫 + 委托**（A1-P2-10）。参数个数 / 返回语义 / 守卫文案 / 委托目标逐字不变。
+//
+// 【④ 同名不同物改名】本包装与 `lib/mailbox-paths.js` 的**路径拼接单点**（同名单点本体）曾共用一名却两义：
+// 派生式本身已收成 `(lib-root)` 单点 `lib/mailbox-paths.js::mailboxRootOf`——本处不再持有第二份路径拼接。
 // 形态说明：用 `const` 箭头而非函数声明，使全仓「函数声明形态」的 mailboxRootOf 定义数恰为 1（即单点）；
 //   本处只是包装（读 `cx.engineRoot` + 守卫），不构成第二份派生。
-export const mailboxRootOf = (cx, sessionId, batchId) => {
+export const mailboxRootForContext = (cx, sessionId, batchId) => {
   if (!cx.engineRoot) throw new Error('lane-heartbeat: no root (pass deps.root or store.sessionsDir)');
   return mailboxRootOfAt(cx.engineRoot, sessionId, batchId);
 };

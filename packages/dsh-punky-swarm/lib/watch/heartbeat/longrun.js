@@ -26,7 +26,7 @@ import { laneStateOf } from '../../state/lane-state.js'; // 谓词真源（不�
 import { stintRunningSinceOf } from './primitives.js'; // 纯事件流读取原语（⑨-2 下沉）
 import { isScannedLaneState } from './primitives.js';
 import { scanBatchesOnce } from './scan.js';
-import { laneExemptOf, laneKeyOf, mailboxRootOf, progressSnapshotTsOf } from './context.js';
+import { laneExemptOf, laneKeyOf, mailboxRootForContext, progressSnapshotTsOf } from './context.js';
 import { longrunLastActivityAt } from './activity.js';
 import { consumeCtxOf } from './evidence.js';
 import { emitNotice } from './notice.js';
@@ -92,7 +92,7 @@ function emitLongrunCandidate(cx, sessionId, batchId, batch, lane, nowTs) {
     progressFresh: verdict.progressFresh,
     exemptClearedAt: verdict.exemptClearedAt,
   };
-  const root = mailboxRootOf(cx, sessionId, batchId);
+  const root = mailboxRootForContext(cx, sessionId, batchId);
   let broadcastAckId = null;
   // 消费判据的「句柄」= broadcast 那条的 ackId。先投递（拿 ackId）后落事件——事件载荷因此一次写全
   //   （避免「先写事件再补 ackId」的两次写盘）；反序的唯一代价是「消息已成而事件写失败」，
@@ -134,7 +134,7 @@ export function emitUnconsumed(cx, sessionId, batchId, batch, lane, nowTs) {
   const elapsedMs = nowTs - emittedAt;
   if (!(elapsedMs > cx.lrCfg.unconsumedTimeoutMs)) return;
   let acked = false;
-  try { acked = cx.mailbox.isAcked(mailboxRootOf(cx, sessionId, batchId), { type: 'broadcast' }, cand.ackId); }
+  try { acked = cx.mailbox.isAcked(mailboxRootForContext(cx, sessionId, batchId), { type: 'broadcast' }, cand.ackId); }
   catch { return; /* 判据不可得 → 本轮不判（保守：宁可晚报也不误报） */ }
   if (acked) return;
   if (hasLongrunUnconsumed(batch, lane, runningSinceTs)) return; // 单次纪律

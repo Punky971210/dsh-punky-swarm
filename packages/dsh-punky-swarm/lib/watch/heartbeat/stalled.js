@@ -20,7 +20,7 @@ import * as EVT from '../../state/event-types.js';
 import { bindingGapOf } from './verdict.js'; // ⑨-2：判定原语真源
 import { stintRunningSinceOf } from './primitives.js'; // 纯事件流读取原语（⑨-2 下沉）
 import { laneStateOf } from '../../state/lane-state.js'; // 谓词真源（不经门面中转）
-import { laneExemptOf, laneKeyOf, mailboxRootOf } from './context.js';
+import { laneExemptOf, laneKeyOf, mailboxRootForContext } from './context.js';
 import {
   baselineTs, batchEntryIndex, freshEntry, hasActivity, markStalled, pendingProbe, probeText, resetEntry,
   touchBatchEntries, touchBatchEntriesByPrefix,
@@ -119,7 +119,7 @@ function stalledScan(cx, nowTs, rows) {
       // 一拍 = 一次追问轮次；同 lane 至多 1 条 pending（W1），pending 存在则这一拍=已发未答
       const pending = pendingProbe(cx, sessionId, batchId, lane, entry.lastActivityAt);
       if (!pending) {
-        const r = cx.mailbox.send(mailboxRootOf(cx, sessionId, batchId), { type: 'inbox' }, {
+        const r = cx.mailbox.send(mailboxRootForContext(cx, sessionId, batchId), { type: 'inbox' }, {
           kind: 'probe',
           lane,
           batchId,
