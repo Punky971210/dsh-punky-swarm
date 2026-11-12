@@ -298,6 +298,9 @@ test('settle-gate-exempt [V-20] skipped / failed / conflict 三次结算均不�
 
 // ══ V-24 自动建 worktree：触发与失败面（`autoworktree`）════════════════════════════════════════
 test('autoworktree [V-24] 成功 ⇒ 恰 1 条 worktree.created(auto:true)；git 不可用 ⇒ 1 条 worktree.autocreate.failed 且派发继续', async () => {
+  // B-1 修复后（用户裁 R2）：自动建为**显式 opt-in**（env `PUNKY_AUTOWORKTREE=1`）⇒ 本用例显式开启。
+  const prevOptIn = process.env.PUNKY_AUTOWORKTREE;
+  process.env.PUNKY_AUTOWORKTREE = '1';
   // ① 成功面
   const h = await mkHarness({ batchId: 'b-v24a', tasks: tasksWith({ e1: AB }) });
   const d = await h.by.lane_dispatch.execute({ batchId: 'b-v24a', lane: 'e1' }, EXEC);
@@ -325,6 +328,33 @@ test('autoworktree [V-24] 成功 ⇒ 恰 1 条 worktree.created(auto:true)；git
   }
   // 失败点必须早于 `setMember(running)` ⇒ lane 已 running 说明「失败没回滚任何状态」，且无 worktree.created
   assert.equal(ofType(hf.store, 'b-v24f', 'worktree.created').length, 0, '失败路径不得落 worktree.created');
+  if (prevOptIn === undefined) delete process.env.PUNKY_AUTOWORKTREE; else process.env.PUNKY_AUTOWORKTREE = prevOptIn;
+});
+
+// ══ V-24b 自动建默认关闭（B-1 修复 · 用户裁 R2）════════════════════════════════════════════════
+test('autoworktree [V-24b] 未 opt-in ⇒ 不建 worktree、零 worktree.* 事件、派发继续（不再造合成空仓）', async () => {
+  const prevOptIn = process.env.PUNKY_AUTOWORKTREE;
+  delete process.env.PUNKY_AUTOWORKTREE;
+  try {
+    const h = await mkHarness({ batchId: 'b-v24off', tasks: tasksWith({ e1: AB }) });
+    const d = await h.by.lane_dispatch.execute({ batchId: 'b-v24off', lane: 'e1' }, EXEC);
+    assert.equal(d.status, 'running', '未 opt-in 不得影响派发（实测 ' + JSON.stringify(d) + '）');
+    assert.deepEqual(worktreeEvents(h.store, 'b-v24off').map((e) => e.type), [],
+      '默认关闭时不得落任何 worktree.* 事件（含 created / autocreate.failed）');
+    // 直接单点核 `skipped` 口径（触发面第 ④ 条）
+    const { maybeAutoCreateWorktree } = await import('../lib/engine/dispatch-autoworktree.js');
+    const skippedRes = maybeAutoCreateWorktree({
+      root: fs.mkdtempSync(path.join(os.tmpdir(), 'punky-autowt-off-')),
+      sessionId: SID, batchId: 'b-v24off', lane: 'e1',
+      laneTask: { id: 'e1', layer: 'exec' },
+      batch: { wavePlan: [{ tasks: [{ id: 'e1', layer: 'exec', subtasks: { items: [{ id: 's1', target: 'x' }] } }] }] },
+      store: { appendEvent: () => { throw new Error('不得落事件'); } },
+    });
+    assert.equal(skippedRes.skipped, 'opt-in-off', '未 opt-in 须报 skipped=opt-in-off（实测 ' + JSON.stringify(skippedRes) + '）');
+    assert.equal(skippedRes.attempted, false, '跳过面 attempted 必须为 false');
+  } finally {
+    if (prevOptIn === undefined) delete process.env.PUNKY_AUTOWORKTREE; else process.env.PUNKY_AUTOWORKTREE = prevOptIn;
+  }
 });
 
 // ══ V-25 不误触（`autoworktree-skip`）══════════════════════════════════════════════════════════

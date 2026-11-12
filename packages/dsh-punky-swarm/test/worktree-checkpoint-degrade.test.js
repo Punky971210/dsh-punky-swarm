@@ -127,3 +127,32 @@ test('no-git-degrade [V-23] DSH_GIT_BIN 无效 ⇒ ok:true + mode:no-git + 事�
   const m = await h.by.member_settle.execute({ batchId: 'b-v23', lane: 'e1', status: 'merged' }, EXEC);
   assert.equal(m.status, 'merged', 'no-git 降级留痕照算完成 ⇒ 结算门必须放行（前提③）');
 });
+
+// ══ B-2 worktree 在场但零变更 ⇒ 仍留痕（`no-change-event`）══════════════════════════════════════
+// 反例如何能红：把 `lane-worktree-tools.js` 的 `if (committed) {…}` 还原成单分支（B-2 修复前形态）
+//   ⇒ 本用例「事件新增恰 1 条」与 `mode==='no-change'`、`subtask` 三处同时必红。
+test('no-change-event [B-2] worktree 在场、零变更 ⇒ ok:true + commit:null + mode:no-change + 事件带 subtask', async (t) => {
+  const h = await mkHarness({ batchId: 'b-b2', subtasks: [{ id: 'a', target: 'exec/a.md' }, { id: 'b', target: 'exec/b.md' }] });
+  await h.by.member_set_status.execute({ batchId: 'b-b2', lane: 'e1', status: 'running' }, EXEC);
+  let wt = null;
+  try {
+    wt = await h.by.lane_worktree_create.execute({ batchId: 'b-b2', laneId: 'e1' }, EXEC);
+  } catch (e) {
+    t.skip('本机 git 不可用，跳过（该面由 V-23 的 no-git 降级覆盖）：' + String(e?.message ?? e));
+    return;
+  }
+  assert.equal(wt?.ok, true, '前置：worktree 须建成，实测 ' + JSON.stringify(wt));
+  // 不做任何改动 ⇒ `git status --porcelain` 为空 ⇒ doCheckpoint 返回 committed:false（零变更分支）
+  const before = checkpointsOf(h.store, 'b-b2', 'e1').length;
+  const c = await h.by.lane_checkpoint.execute({ batchId: 'b-b2', laneId: 'e1', message: '零变更留痕', progress: { step: 1, total: 2 }, subtaskId: 'a' }, EXEC);
+  assert.equal(c.ok, true, '零变更必须 ok:true，实测 ' + JSON.stringify(c));
+  assert.equal(c.committed, false, '零变更不得有 commit');
+  assert.equal(c.mode, 'no-change', '成因须为 no-change（与 no-worktree / no-git 区分），实测 ' + JSON.stringify(c.mode));
+  const after = checkpointsOf(h.store, 'b-b2', 'e1');
+  assert.equal(after.length - before, 1, 'B-2 修复后零变更也须新增**恰 1 条** worktree.checkpoint 事件（修复前为 0）');
+  const evt = after[after.length - 1];
+  assert.equal(evt.commit, null, '零变更事件 commit 必须为 null');
+  assert.equal(evt.mode, 'no-change', '零变更事件须带 mode=no-change');
+  assert.equal(evt.step, 1, '零变更事件须带 progress.step');
+  assert.equal(evt.subtask, 'a', '零变更事件须带 subtask（G2 显式覆盖按它判）');
+});

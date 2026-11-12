@@ -56,6 +56,15 @@ export function maybeAutoCreateWorktree({ root, sessionId, batchId, lane, laneTa
   if ((laneTask?.layer ?? null) !== 'exec') return { attempted: false, ok: true, skipped: 'layer-not-exec' };
   if (dialectOf(batch) !== SUBTASKS_DIALECT) return { attempted: false, ok: true, skipped: 'legacy-dialect' };
   if (declaredSubtasksOf(batch, lane).length === 0) return { attempted: false, ok: true, skipped: 'no-subtasks' };
+  // ④ **显式 opt-in 门（批 `punky-ckpt-followup-20261112` · blocking B-1 修复 · 用户裁 R2）**：
+  //   `ensureRepo` 造的是 `git init` 出来的**独立空仓**（`_repo` + `orch` + lane 分支），
+  //   而现实里的 exec lane 直接在**真实工作副本**改代码（spec `## 写域` 所指的项目仓）。
+  //   两者不连通 ⇒ 空仓永远零变更 ⇒ `lane_checkpoint` 恒走 no-op 分支、逐项留痕丢失。
+  //   R2 = 承认现状：自动建默认**关闭**，只有显式 opt-in（env `PUNKY_AUTOWORKTREE=1`）才建；
+  //   无 worktree 时 B1 的降级留痕（`commit=null` + `mode` + `subtask`）足以承担「强制对象是留痕」。
+  //   注：这是**触发面收敛**，不改 `lane-worktree-ops` 的 git 语义（R1「clone 真实仓」未采纳）。
+  const optIn = String(process.env.PUNKY_AUTOWORKTREE ?? '').trim() === '1';
+  if (!optIn) return { attempted: false, ok: true, skipped: 'opt-in-off' };
   try {
     ensureRepo(root, sessionId, batchId);
     const { orch } = ensureOrch(root, sessionId, batchId);

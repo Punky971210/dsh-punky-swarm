@@ -177,6 +177,20 @@ export function worktreeToolCheckpoint(ctx, deps) {
         if (progress) { evt.step = progress.step; evt.total = progress.total; }
         if (subtaskId) evt.subtask = subtaskId;
         store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
+      } else {
+        // ── B-2 修复（批 `punky-ckpt-followup-20261112` · blocking B-2）────────────────────────────
+        //   「worktree **在场**但零变更」原先在这里直接落到 `:181`，**既不落事件也不带 `subtask`**
+        //   ⇒ 逐项留痕（显式覆盖面 `coveredSubtasksOf().ids`）在「lane 直接改真实工作副本」的现状下不可达，
+        //      G2 只剩序贯覆盖可用。
+        //   现在与 `no-worktree` / `no-git` 两条降级同形：同样落 `worktree.checkpoint`（`commit:null`），
+        //   但用 `mode:'no-change'` 区分成因（worktree 在、只是没有 diff），并带 `step/total/subtask`。
+        const evt = { lane: args.laneId, commit: null, message: args.message.trim(), mode: 'no-change' };
+        if (progress) { evt.step = progress.step; evt.total = progress.total; }
+        if (subtaskId) evt.subtask = subtaskId;
+        store.appendEvent(sessionId, args.batchId, EVT.EVT_WORKTREE_CHECKPOINT, evt);
+        // 返回值同步补 `commit:null` + `mode`：与两条降级路径同形，调用方（含渲染面）才分得清成因。
+        //   ⚠ 保留 `reason`（`no changes (no-op)`）不动 —— 渲染面对「真零变更」仍渲染 no-op（V-22 对照组）。
+        checkpointResult = { ...checkpointResult, commit: null, mode: 'no-change' };
       }
       if (progress) {
         try { store.updateLaneProgress(sessionId, args.batchId, args.laneId, { ...progress, status: 'running' }); }
