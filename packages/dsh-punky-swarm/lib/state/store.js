@@ -36,7 +36,7 @@ import { buildPaths } from './store/paths.js';
 import { buildEvents } from './store/events.js';
 import { buildBatch } from './store/batch.js';
 import { buildPlanMutate } from './store/plan-mutate.js';
-import { buildHandoff } from './store/handoff.js';
+import { buildHandoffRecord } from './store/handoff.js'; // ④ 改名：与 `gates/handoff.js` 的判定构建（同名不同物）区分
 import { buildHandoffAccept } from './store/handoff-accept.js';
 import { buildLifecycle } from './store/lifecycle.js';
 import { buildMemberGates } from './store/member-gates.js';
@@ -323,7 +323,7 @@ export function createStore(root, { rules, logger, onStateChange, readConfig, re
     revRaceHook };
   Object.assign(cx, buildPaths(cx));
   const { batchFile } = cx;
-  for (const build of [buildEvents, buildBatch, buildPlanMutate, buildHandoff, buildHandoffAccept, buildLifecycle,
+  for (const build of [buildEvents, buildBatch, buildPlanMutate, buildHandoffRecord, buildHandoffAccept, buildLifecycle,
     buildMemberExempt, buildMemberGates, buildMember, buildGovernance]) Object.assign(cx, build(cx));
 
   //   `deps` 只读；**未派发**任务的追加 / 加边**仍允许**，但图变更必须在**同一次落盘**内留 `plan.mutated`

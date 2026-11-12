@@ -91,12 +91,15 @@ export const EXPOSED_KINDS = Object.freeze(['blackboard', 'read']);
 
 // 【M1 · `:56` 删除本地定义】原处手写 `Object.freeze(['list_agents','wait_agent'])`（2 件的
 //   **求交豁免子集**，却顶着「宿主提供」的名字）⇒ 已下沉到 `lib/governance/host-tools.js` 的
-//   `HOST_INTERSECT_EXEMPT`（策略语义），本处仅保留**同名再导出**以不破外部消费面。
+//   `HOST_INTERSECT_EXEMPT`（策略语义），本处仅保留**再导出**以不破外部消费面。
 //   ⚠ 再导出**取值 = HOST_INTERSECT_EXEMPT（2 件）**，不是 7 件事实集：本符号的**既有消费方**
-//   （如 `test/mcp-data-plane.test.js:102` 按它建宿主桩）依赖的是「2 件豁免子集」这一行为；
+//   （如 `test/mcp-data-plane.test.js:120` 按它建宿主桩）依赖的是「2 件豁免子集」这一行为；
 //   若换成 7 件全集，桩循环会静默从 2 次变 7 次（**行为变更藏在一个改名里**，正是本批要治的病）。
-/** @deprecated **名字骗人**：语义 = **求交豁免子集**（2 件），非「宿主提供全集（7 件）」。新代码请直接用 `HOST_INTERSECT_EXEMPT` / `HOST_PROVIDED_TOOLS`。 */
-export const HOST_PROVIDED_TOOLS = HOST_INTERSECT_EXEMPT;
+// 【④ 同名不同物改名】原导出名与 `lib/governance/host-tools.js` 的**同名 7 件全集**一名两义 ⇒
+//   本处改 `HOST_INTERSECT_EXEMPT_SUBSET`（「求交豁免子集」口径显式进名，用途词区分）。
+//   两张名单**都不删、不合并**：governance 侧仍是 7 件事实集，本处仍是 `HOST_INTERSECT_EXEMPT`（2 件策略集）。
+/** @deprecated 语义 = **求交豁免子集**（2 件），非「宿主提供全集（7 件）」。新代码请直接用 `HOST_INTERSECT_EXEMPT`。 */
+export const HOST_INTERSECT_EXEMPT_SUBSET = HOST_INTERSECT_EXEMPT;
 
 const MAX_BODY_BYTES = 1 << 20; // 1 MiB：单帧上限（超限按畸形帧处理，不无限缓冲）
 
@@ -121,7 +124,7 @@ export function exposedToolNamesOf(suite = SUITE_TOOLS) {
  *
  * **求交豁免**（`HOST_INTERSECT_EXEMPT`）：这 2 件不参与求交 —— 它们是宿主 Team 面只读件，
  * 本仓不注册它们属正常形态，且本仓无法自证其在真宿主的可见性（登记未验证）。
- * ⚠ **M1 语义更正**：本行原写 `HOST_PROVIDED_TOOLS`（那曾是个 2 件数组）；求交需要的从来是
+ * ⚠ **M1 语义更正**：本行原写一个 2 件数组（旧别名，④ 已改名为 `HOST_INTERSECT_EXEMPT_SUBSET`）；求交需要的从来是
  * **豁免子集（策略）**，不是「宿主提供全集（事实 7 件）」——若误用全集，会把 `subagent` 等
  * 未注册件一并豁免，等于放宽「能宣告必须真能调到」。故改为 `HOST_INTERSECT_EXEMPT`。
  */
@@ -149,8 +152,11 @@ function isLoopback(req) {
   return typeof addr === 'string' && LOOPBACK_ADDRESSES.includes(addr);
 }
 
-/** 读请求体（UTF-8；超限截断并抛，由调用方转畸形帧）。 */
-function readBody(req) {
+/** 读请求体（UTF-8；超限截断并抛，由调用方转畸形帧）。
+ *  【④ 同名不同物改名】本函数与 `lib/acps/server.js` 的同名实现曾撞名（两个独立 HTTP 服务各一份）
+ *  ⇒ 本处改 `readDataPlaneRequestBody`（数据面）；ACPS 侧改 `readAcpsRequestBody`。两侧独立、**禁合并**
+ *  （返回形态不同：本处只拼 Buffer，ACPS 侧还吃 `req.body` 预解析）。旧名与依据见 map.json G4-7。 */
+function readDataPlaneRequestBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -380,7 +386,7 @@ export function createMcpHandler(ctx, deps = {}) {
     }
     let frame;
     try {
-      const text = await readBody(req);
+      const text = await readDataPlaneRequestBody(req);
       frame = JSON.parse(text);
     } catch (e) {
       // 帧无法解析 ⇒ -32700（解析错误）/ 超限按畸形帧 -32600

@@ -35,7 +35,10 @@ export function pendingHandoffRecordOf({ from, to, batchId, ts, source = null, a
   return rec;
 }
 
-export function buildHandoff(cx) {
+// 【④ 同名不同物改名】本函数是**落盘记录**构建（131 行，写 `batch.handoffs`），与
+//   `lib/state/gates/handoff.js` 的**判定**构建（66 行）曾同名不同物 ⇒ 改 `buildHandoffRecord`。
+//   判定侧保留原名（消费方 `state/gates.js`）。两侧各自独立、**禁合并**（旧名与依据见 map.json G4-10）。
+export function buildHandoffRecord(cx) {
   const { readBatch, newEvent, commitBatch } = cx;
 
   const HANDOFF_MISSING = 'GATE_HANDOFF_MISSING';

@@ -179,14 +179,16 @@ export function createMemoryStore() {
   };
 }
 
-function generateKeyPair(algorithm) {
+// 【④ 同名不同物改名】本函数（按 `algorithm` 分支）与 `lib/acps/certs.js` 的无参同名函数曾共用一名
+//   但签名不同 ⇒ 本处改 `generateIdentityKeyPair`（身份面），两侧独立、**禁合并**（见 map.json G4-8）。
+function generateIdentityKeyPair(algorithm) {
   if (algorithm === 'ecdsa-p256') {
     return crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   }
   if (algorithm === 'rsa-2048') {
     return crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   }
-  throw new Error('generateKeyPair: unsupported algorithm ' + JSON.stringify(algorithm));
+  throw new Error('generateIdentityKeyPair: unsupported algorithm ' + JSON.stringify(algorithm));
 }
 
 
@@ -229,7 +231,7 @@ export async function issueCredential(identity, claims = {}, opts = {}) {
 
   const algorithm = opts.algorithm ?? DEFAULT_SIGN_ALGORITHM;
   if (!SIGN_ALGORITHMS[algorithm]) throw new Error('issueCredential: unsupported algorithm ' + JSON.stringify(algorithm));
-  const { publicKey, privateKey } = generateKeyPair(algorithm);
+  const { publicKey, privateKey } = generateIdentityKeyPair(algorithm);
 
   const usage = claims.usage === 'serverAuth' ? 'serverAuth' : 'clientAuth'; // 分用途签发
   const validityDays = Math.min(

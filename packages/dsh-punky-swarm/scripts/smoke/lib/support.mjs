@@ -75,10 +75,6 @@ export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-export function readJsonOrNull(file) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
-}
-
 /** 递归枚举常规文件（跳过符号链接指向的目录 → 不跟随，防环形）。 */
 export function listFiles(root, { maxEntries = 20000 } = {}) {
   const out = [];

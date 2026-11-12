@@ -26,7 +26,10 @@ import { readCapability } from '../assembly/schema.js';
 import { artifactsDirOf as artifactsDirOfAt, resolveWriteTargetIn } from '../state/batch-paths.js';
 import * as EVT from '../state/event-types.js';
 
-function artifactsDirOf(root, sessionId, batchId) {
+// 【④ 同名不同物改名】本包装（入参是**引擎根**，内部补 `sessions` 段）与 `lib/state/batch-paths.js`
+//   的**路径拼接单点**（入参直接是 `sessionsDir`）曾同名不同参 ⇒ 本处改 `artifactsDirForRoot`
+//   （`ForRoot` 入口口径）；两侧各自独立、**禁合并**（旧名与依据见 map.json G4-5）。
+function artifactsDirForRoot(root, sessionId, batchId) {
   return artifactsDirOfAt(path.join(root, 'sessions'), sessionId, batchId);
 }
 
@@ -150,7 +153,7 @@ export function createLogTools(ctx, deps) {
           out.report = buildReport(batch, sessionId, filtered, args);
           if (args.writeTo) {
             const segs = assertSafeRelative(args.writeTo);
-            const artifactsDir = artifactsDirOf(root, sessionId, args.batchId);
+            const artifactsDir = artifactsDirForRoot(root, sessionId, args.batchId);
             const dest = resolveWriteTargetIn(artifactsDir, path.join(artifactsDir, ...segs));
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             //   `O_NOFOLLOW` 语义（Node 跨平台不可用：Windows 无 openat，且 junction 是目录重解析点、不受

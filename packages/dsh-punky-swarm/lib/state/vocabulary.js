@@ -160,7 +160,7 @@ export function reasonTokenKnown(token, opts = {}) {
 // ── 内部一致性自检（schema + 唯一性 + deprecatedIn/enabled 一致性）────────────
 
 const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
-const isNonEmptyString = (v) => typeof v === 'string' && v.trim() !== '';
+const isNonBlankString = (v) => typeof v === 'string' && v.trim() !== '';
 
 function checkSources(sources, repoRoot, problems) {
   if (!Array.isArray(sources) || sources.length === 0) {
@@ -171,36 +171,36 @@ function checkSources(sources, repoRoot, problems) {
   for (const [i, s] of sources.entries()) {
     const at = `sources[${i}]`;
     if (!isPlainObject(s)) { problems.push(`${at} 须为对象`); continue; }
-    if (!isNonEmptyString(s.id)) problems.push(`${at}.id 必填（非空字符串）`);
+    if (!isNonBlankString(s.id)) problems.push(`${at}.id 必填（非空字符串）`);
     else if (!ID_RE.test(s.id)) problems.push(`${at}.id 须为 kebab-case：${s.id}`);
     else if (seen.has(s.id)) problems.push(`${at}.id 重复：${s.id}`);
     else seen.add(s.id);
-    if (!isNonEmptyString(s.path)) problems.push(`${at}.path 必填（包根相对路径）`);
+    if (!isNonBlankString(s.path)) problems.push(`${at}.path 必填（包根相对路径）`);
     else if (!fs.existsSync(path.join(repoRoot, s.path))) problems.push(`${at}.path 证据锚不在场：${s.path}`);
     if (typeof s.line !== 'number' || !Number.isInteger(s.line) || s.line < 1) problems.push(`${at}.line 必填（1-based 整数）`);
-    if (!isNonEmptyString(s.note)) problems.push(`${at}.note 必填（非空）`);
+    if (!isNonBlankString(s.note)) problems.push(`${at}.note 必填（非空）`);
   }
 }
 
 function checkEntryShape(e, at, problems) {
   if (!isPlainObject(e)) { problems.push(`${at} 须为对象`); return false; }
-  if (!isNonEmptyString(e.id)) problems.push(`${at}.id 必填（非空字符串）`);
+  if (!isNonBlankString(e.id)) problems.push(`${at}.id 必填（非空字符串）`);
   else if (!ID_RE.test(e.id)) problems.push(`${at}.id 须为 kebab-case：${e.id}`);
-  if (!isNonEmptyString(e.code)) problems.push(`${at}.code 必填（非空字符串）`);
+  if (!isNonBlankString(e.code)) problems.push(`${at}.code 必填（非空字符串）`);
   else if (!CODE_RE.test(e.code)) problems.push(`${at}.code 形态不合法：${e.code}`);
-  if (!isNonEmptyString(e.label)) problems.push(`${at}.label 必填（非空）`);
+  if (!isNonBlankString(e.label)) problems.push(`${at}.label 必填（非空）`);
   else if (e.label.length > LABEL_MAX) problems.push(`${at}.label 超长（>${LABEL_MAX} 字）：${e.label.length}`);
   if (typeof e.kind !== 'string' || !VOCABULARY_KINDS.includes(e.kind)) {
     problems.push(`${at}.kind 须 ∈ ${VOCABULARY_KINDS.join('|')}（实得：${JSON.stringify(e.kind)}）`);
   }
   if (typeof e.enabled !== 'boolean') problems.push(`${at}.enabled 必填（布尔）`);
-  if (!isNonEmptyString(e.since)) problems.push(`${at}.since 必填（非空字符串）`);
+  if (!isNonBlankString(e.since)) problems.push(`${at}.since 必填（非空字符串）`);
   else if (!VERSION_RE.test(e.since)) problems.push(`${at}.since 须为版本号：${e.since}`);
-  if (e.deprecatedIn !== null && !isNonEmptyString(e.deprecatedIn)) problems.push(`${at}.deprecatedIn 必填（版本号或 null）`);
+  if (e.deprecatedIn !== null && !isNonBlankString(e.deprecatedIn)) problems.push(`${at}.deprecatedIn 必填（版本号或 null）`);
   else if (typeof e.deprecatedIn === 'string' && !VERSION_RE.test(e.deprecatedIn)) problems.push(`${at}.deprecatedIn 须为版本号：${e.deprecatedIn}`);
-  if (e.replacedBy !== null && !isNonEmptyString(e.replacedBy)) problems.push(`${at}.replacedBy 必填（id 或 null）`);
+  if (e.replacedBy !== null && !isNonBlankString(e.replacedBy)) problems.push(`${at}.replacedBy 必填（id 或 null）`);
   else if (typeof e.replacedBy === 'string' && !ID_RE.test(e.replacedBy)) problems.push(`${at}.replacedBy 须为 id 形态：${e.replacedBy}`);
-  if (e.note !== undefined && !isNonEmptyString(e.note)) problems.push(`${at}.note 若在场须非空`);
+  if (e.note !== undefined && !isNonBlankString(e.note)) problems.push(`${at}.note 若在场须非空`);
   // 「停用而非删除」一致性：enabled:false ⇒ 必须有停用版本
   if (e.enabled === false && e.deprecatedIn == null) {
     problems.push(`${at} enabled:false 时 deprecatedIn 必须非 null（停用而非删除：登记停用版本）`);
@@ -231,7 +231,7 @@ export function validateVocabulary(doc) {
     if (typeof meta.version !== 'number' || !Number.isInteger(meta.version) || meta.version < 1) {
       problems.push('meta.version 必填（≥1 整数）');
     }
-    if (!isNonEmptyString(meta.updated) || !DATE_RE.test(meta.updated)) problems.push('meta.updated 必填（YYYY-MM-DD）');
+    if (!isNonBlankString(meta.updated) || !DATE_RE.test(meta.updated)) problems.push('meta.updated 必填（YYYY-MM-DD）');
     // `meta.counts` 口径（2026-10-24 订正 · 声明值而非实测判据）：
     //   两键 = **本表条目数**的声明值（口径 = 本文件 `entries` 按 `kind` 计数），用于人读与形状自检；
     //   **不是运行时判据**：本读端只校验「≥0 整数」形状（见下），**任何代码/测试都不得把声明值与

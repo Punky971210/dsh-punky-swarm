@@ -264,17 +264,6 @@ export class RegistryClient {
     this.rejectUnauthorized = resolved.rejectUnauthorized !== false;
   }
 
-  get hasToken() {
-    return Boolean(this._token);
-  }
-
-  _authHeaders() {
-    if (!this._token) {
-      throw new RegistryClientError('No access token found, run login() first', { errorName: 'NO_TOKEN' });
-    }
-    return { Authorization: `Bearer ${this._token}` };
-  }
-
   async _request(method, path, { auth = false, body = null, json = null, form = null, baseUrl = null } = {}) {
     const targetBase = baseUrl ?? this.apiBaseUrl;
     const url = `${targetBase}${path}`;
@@ -347,36 +336,6 @@ export class RegistryClient {
       }
     }
     return null;
-  }
-
-  async upsertAgent(acs, opts = {}) {
-    const payload = buildRegistrationPayload(acs, opts);
-    const existing = await this.findMyAgent({ name: payload.name, version: payload.version });
-    if (existing && existing.id) {
-      const agent = await this._request('PUT', `/agent/client/${existing.id}`, { auth: true, json: payload });
-      return { action: 'updated', agent };
-    }
-    const agent = await this._request('POST', '/agent/client', { auth: true, json: payload });
-    return { action: 'created', agent };
-  }
-
-  async submitAgent(agentId) {
-    const agent = await this._request('POST', `/agent/client/${agentId}/submit`, { auth: true });
-    return agent;
-  }
-
-  async checkAgent(acs) {
-    const payload = buildRegistrationPayload(acs, {});
-    const agent = await this.findMyAgent({ aic: typeof acs.aic === 'string' ? acs.aic : null, name: payload.name, version: payload.version });
-    if (!agent) return { status: 'missing', agent: null };
-    const approvalStatus = String(agent.approval_status ?? '').toUpperCase();
-    let status;
-    if (approvalStatus === 'APPROVED' && agent.aic) status = 'approved';
-    else if (approvalStatus === 'PENDING') status = 'pending';
-    else if (approvalStatus === 'DRAFT') status = 'draft';
-    else if (approvalStatus === 'REJECTED') status = 'rejected';
-    else status = approvalStatus.toLowerCase() || 'unknown';
-    return { status, agent };
   }
 
   async requestEab(aic) {

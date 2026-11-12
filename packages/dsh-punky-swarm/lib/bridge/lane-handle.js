@@ -29,14 +29,17 @@ function newToken() {
   return randomBytes(8).toString('hex');
 }
 
-export function firstLineOf(batchId, lane, token) {
+// 【④ 同名不同物改名】本函数拼「派发句柄首行」`[swarm-lane:…]`，与 `lib/state/command-exec.js` 的
+//   「取命令输出首行」取值函数曾同名不同义 ⇒ 本处（更窄、消费者仅本文件）改 `laneHandleFirstLine`；
+//   `command-exec.js` 一侧**保留原名且本 lane 不动该文件**。**禁合并**（旧名与依据见 map.json G4-9）。
+export function laneHandleFirstLine(batchId, lane, token) {
   return '[' + 'swarm-lane:' + batchId + '/' + lane + '#' + token + ']';
 }
 
 export function issueLaneHandle({ batchId, lane, sessionId, now = Date.now() }) {
   const token = newToken();
   handles.set(token, { batchId, lane, sessionId: sessionId ?? null, at: now, used: false });
-  return { token, firstLine: firstLineOf(batchId, lane, token), ttlMs: LANE_HANDLE_TTL_MS, at: now };
+  return { token, firstLine: laneHandleFirstLine(batchId, lane, token), ttlMs: LANE_HANDLE_TTL_MS, at: now };
 }
 
 export function parseLaneHandleFromText(text) {

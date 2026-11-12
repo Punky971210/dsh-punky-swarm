@@ -25,7 +25,11 @@ export const HOST_FACE_KEYS = ['toolSurface', 'httpSurface', 'agentRuntime'];
  *
  * **Q-E=乙 后本表为空**：成因一律由端口自己给，本表留空作为将来的扩展位。
  */
-const FACE_UNAVAILABLE_REASON = {};
+// 【④ 同名不同物改名】本表与 `lib/host-face-reading.js` 的**同名函数**曾共用一名却两义：
+//   本处是「成因词覆盖表（查表）」，那边是「按面键生成缺省成因串」。按「谁更窄谁改名」，本表带 **BY_KEY**
+//   查表口径（`FACE_PROBE_REASON_BY_KEY`），函数侧带 `…Of(` 生成口径（`faceUnavailableReasonOf`）。
+//   两处**禁合并**（语义不同）；旧名与依据见批产物 `exec/rename/map.json` G4-2。
+const FACE_PROBE_REASON_BY_KEY = {};
 
 /**
  * 引擎插件行的 `inject` 声明面：**W4 起为空**（J4'-a）。
@@ -169,7 +173,7 @@ export function capabilityReport(rt = {}) {
     : null;
 
   const host = HOST_FACE_KEYS.map((key) => {
-    const probe = faceProbeOf(ports, key, FACE_UNAVAILABLE_REASON[key] ?? null);
+    const probe = faceProbeOf(ports, key, FACE_PROBE_REASON_BY_KEY[key] ?? null);
     // 通道维度**只**属 `agentRuntime`（同一动作「触达成员」的两条路）；其余面 `channels:null`
     //   —— 用 `null` 而非 `{}`：空对象会被读成「有通道对象但一个通道都没有」。
     if (key !== 'agentRuntime') {

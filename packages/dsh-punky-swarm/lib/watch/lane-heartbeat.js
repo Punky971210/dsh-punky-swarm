@@ -18,7 +18,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // watch 域 · 门面与装配：`createLaneHeartbeat`（唯一对外构造入口）+ 对外 re-export。
 // 判定逻辑已下沉 `heartbeat/verdict.js` / `heartbeat/judge.js`（⑨-2：拆掉 5 个循环 import）。
 
-import * as schema from '../schema.js';
 import { createHeartbeatContext } from './heartbeat/context.js';
 import { probeTick } from './heartbeat/stalled.js';
 import { longrunStatusOf } from './heartbeat/longrun.js';
@@ -38,13 +37,6 @@ export function createLaneHeartbeat({ store, mailbox, config, root, now, liveCon
   function longrunStatus(sessionId, batchId, lane, nowTs) { return longrunStatusOf(cx, sessionId, batchId, lane, nowTs); }
   function replayInFlight() { return replayInFlightOf(cx); }
   return { tick, status, reset, dispose, longrunStatus, replayInFlight };
-}
-
-function laneIdsFor(batch, only) {
-  const all = Object.keys(batch.lanes ?? {});
-  if (only) return [only];
-  if (schema.isBatchTerminal(batch.phase)) return all;
-  return all.filter((l) => !schema.isMemberTerminal(batch.lanes[l]));
 }
 
 // ── 对外导出面：拆分前即这 20 个，语义/名称零改（消费者零改动的唯一前提）──

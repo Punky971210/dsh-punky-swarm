@@ -58,14 +58,14 @@ const seedMailbox = (root) => {
 
 const main = async () => {
   const { apply } = await import('../lib/index.js');
-  const { assemblyCtxEffect } = await import('../test/helpers/gate-fixture.mjs');
+  const { makeEffectCtx } = await import('./lib/probe-ctx.mjs');
 
   const root = fs.mkdtempSync(join(tmpdir(), 'punky-sweep-defer-'));
   const seededMailbox = seedMailbox(root);
   // 隔离审计面：mountAuditLog 读 process.env（apply 不传 env）⇒ 在任何 apply 之前设好
   process.env.PUNKY_AUDITLOG_SINK_DIR = join(root, 'audit-sink');
 
-  const { ctx } = assemblyCtxEffect();
+  const { ctx } = makeEffectCtx();
   // 夹具的 logger 缺 `exporter`，而 mountAuditLog 的身份判定要求它是函数（lib/auditlog/sink.js:139）
   // ⇒ 补齐该位，否则 `audit log sink mounted` 恒缺席（AC-5 的读数就成了夹具缺陷，不是产品读数）。
   ctx.logger.exporter = () => () => {};

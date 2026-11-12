@@ -193,7 +193,7 @@ test('AC-3 非 loopback 源拒绝：handler 首行 isLoopback 判定（伪造 re
     method: 'POST',
     url: MCP_PATH,
     socket: { remoteAddress: '10.0.0.1' },
-    on() {}, // 本路径在 readBody 之前就返回 ⇒ 不需要真流
+    on() {}, // 本路径在 readDataPlaneRequestBody 之前就返回 ⇒ 不需要真流
   };
   await handler(req, res);
   const json = JSON.parse(res.body);

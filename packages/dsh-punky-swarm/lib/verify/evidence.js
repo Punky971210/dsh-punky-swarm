@@ -71,13 +71,15 @@ function deriveEvidence(exec, result) {
   };
 }
 
-function ledgerFileOf(root, sessionId) {
+// 【④ 同名不同物改名】本函数与 `lib/governance/receipt-store.js` 的同名函数曾共用一名但落点不同。
+//   本处落 `verify/ledger-<sid>.jsonl` ⇒ 改 `verifyLedgerFileOf`；两侧各自独立、**禁合并**（依据见 map.json G4-3）。
+function verifyLedgerFileOf(root, sessionId) {
   if (!SESSION_RE.test(String(sessionId))) throw new Error('invalid sessionId: ' + sessionId);
   return path.join(root, 'verify', 'ledger-' + sessionId + '.jsonl');
 }
 
 export function appendLedger(root, sessionId, entry) {
-  const file = ledgerFileOf(root, sessionId);
+  const file = verifyLedgerFileOf(root, sessionId);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
 }

@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { createMcpHandler } from '../lib/mcp/data-plane-server.js';
 
-/** 最小 HTTP 桩：走 handler 的**真实** readBody / isLoopback / sendJson 路径（经内网回环地址）。 */
+/** 最小 HTTP 桩：走 handler 的**真实** readDataPlaneRequestBody / isLoopback / sendJson 路径（经内网回环地址）。 */
 // 【QA-01 · 桩真实性】真实 `IncomingMessage` 恒带 `headers`，HTTP/1.1 恒带 `Host`（RFC 9110 §7.2），
 //    MCP 面另要求 `application/json`。缺这两项会被 QA-01 护栏/content-type 门拒成 -32600/415
 //    —— 那是桩失真，不是合法请求形态。补头零行 assert 改动。

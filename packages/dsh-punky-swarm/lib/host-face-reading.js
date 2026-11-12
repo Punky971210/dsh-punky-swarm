@@ -30,7 +30,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   （AC-8 的**行为**证据），而 `lib/capabilities.js` 的导出面已被既有 C7 用例逐字冻结为六项（禁增删）。
 
 /** 面的缺省不可用成因词（与 `lib/capabilities.js#faceProbeOf` 的回落词同形）。 */
-const FACE_UNAVAILABLE_REASON = (faceKey) => 'face-unavailable: ' + faceKey;
+// 【④ 同名不同物改名】本函数与 `lib/capabilities.js` 的**同名空表**曾共用一名却两义：
+//   本处是「按面键生成缺省成因串（函数）」，那边是「成因词覆盖表（查表）」。本处带 `…Of(` 生成口径
+//   （`faceUnavailableReasonOf`），表侧带 **BY_KEY** 查表口径。两处**禁合并**（旧名与依据见 map.json G4-2）。
+const faceUnavailableReasonOf = (faceKey) => 'face-unavailable: ' + faceKey;
 
 /**
  * 就地刷新能力报告中某个宿主面的可用性读数（并把派生的 `unavailable` 集合重算一致）。
@@ -55,7 +58,7 @@ export function refreshFaceReading(report, faceKey, available) {
   face.available = available;
   face.reason = available === true
     ? null
-    : (typeof face.reason === 'string' && face.reason.length > 0 ? face.reason : FACE_UNAVAILABLE_REASON(faceKey));
+    : (typeof face.reason === 'string' && face.reason.length > 0 ? face.reason : faceUnavailableReasonOf(faceKey));
   report.unavailable = report.host.filter((h) => h && h.available === false).map((h) => h.key);
   return true;
 }

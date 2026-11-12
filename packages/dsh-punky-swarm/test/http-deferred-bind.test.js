@@ -115,7 +115,7 @@ function serviceGone(ctx) {
   serviceEvent(ctx, undefined);
 }
 
-// ── MCP 协议面驱动（真实 handler，假 req/res 走同一 readBody/sendJson 路径）──────────────────
+// ── MCP 协议面驱动（真实 handler，假 req/res 走同一 readDataPlaneRequestBody/sendJson 路径）────────
 function reqOf(body) {
   const stream = Readable.from([Buffer.from(body, 'utf8')]);
   stream.method = 'POST';

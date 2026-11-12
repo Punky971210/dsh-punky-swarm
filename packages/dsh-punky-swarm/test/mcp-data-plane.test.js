@@ -15,7 +15,7 @@ License, or (at your option) any later version.
 //   （`fs.mkdtemp` + `createStore`），绝不碰仓库内/真实批；写工具（如 `batch_phase`）只在临时批上执行。
 //
 // ⚠ 证据面：`npm run check` 对 `.js` 无证据力 ⇒ 行为证据全部来自**真实调用**：
-//   `installMcpDataPlane` 的 handler 被真实驱动（假 req/res 走**同一** `readBody/sendJson` 路径），
+//   `installMcpDataPlane` 的 handler 被真实驱动（假 req/res 走**同一** `readDataPlaneRequestBody/sendJson` 路径），
 //   `ctx.tools.execute` 接到**真** `@deepseek-ai/dsh-tools` `ToolRuntime`（含真难度门禁 + 真溯源守卫）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +33,7 @@ import { createTools } from '../lib/tools/register.js';
 import { SUITE_TOOLS } from '../lib/engine/suite.js';
 import { installWriteProvenanceGuard, writeProvenanceDecision } from '../lib/tools/write-provenance-guard.js';
 import {
-  installMcpDataPlane, exposedToolNamesOf, callableToolNamesOf, HOST_PROVIDED_TOOLS,
+  installMcpDataPlane, exposedToolNamesOf, callableToolNamesOf, HOST_INTERSECT_EXEMPT_SUBSET,
   MCP_PROTOCOL_VERSION, MCP_PATH, LOOPBACK_ADDRESSES, EXPOSED_KINDS,
 } from '../lib/mcp/data-plane-server.js';
 
@@ -112,12 +112,12 @@ async function makeBed(config = {}) {
       },
     });
   }
-  // ② 宿主桩：`HOST_PROVIDED_TOOLS` 在生产里由**宿主**注册（不在本仓 `createTools` 面内）。
+  // ② 宿主桩：`HOST_INTERSECT_EXEMPT_SUBSET` 在生产里由**宿主**注册（不在本仓 `createTools` 面内）。
   //   本床只装本仓工具；若不补宿主桩，「宣告即可达」性质断言会把**宿主件**误判成 unknown tool
   //   —— 那是**床的缺口**，不是产品缺口。故按「宿主确实提供它们」补最小桩。
   //   注意：它们**不进** `ctx.tools.get`（`byName` 只来自本仓 createTools）⇒ G1a 的可调面求交仍把
-  //   `HOST_PROVIDED_TOOLS` 当豁免项，与生产口径完全一致。
-  for (const hostName of HOST_PROVIDED_TOOLS) {
+  //   `HOST_INTERSECT_EXEMPT_SUBSET` 当豁免项，与生产口径完全一致。
+  for (const hostName of HOST_INTERSECT_EXEMPT_SUBSET) {
     rt.register({
       name: hostName,
       description: '宿主动作桩：' + hostName,

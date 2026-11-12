@@ -112,7 +112,10 @@ export function buildAcs(config = {}, opts = {}) {
   });
 }
 
-function readBody(req) {
+// 【④ 同名不同物改名】本函数与 `lib/mcp/data-plane-server.js` 的同名实现曾撞名（两个独立 HTTP
+//   服务各一份，未见同源）⇒ 本处改 `readAcpsRequestBody`（ACPS 面）；数据面侧改 `readDataPlaneRequestBody`。
+//   两侧独立、**禁合并**（返回形态不同：本处吃 `req.body` 预解析 + JSON.parse，那边只拼 Buffer）。
+function readAcpsRequestBody(req) {
   if (req && typeof req.body === 'string') return Promise.resolve(req.body ? JSON.parse(req.body) : {});
   if (req && req.body && typeof req.body === 'object') return Promise.resolve(req.body);
   if (req && typeof req.on === 'function') {
@@ -238,7 +241,7 @@ export function createAcpsServer({ config = {}, logger, acsProvider, rpcHandler,
       }
       let body;
       try {
-        body = await readBody(req);
+        body = await readAcpsRequestBody(req);
       } catch {
         return sendJson(res, 400, rpcResponse(null, null, { ...RPC_ERRORS.PARSE, data: 'invalid JSON body' }));
       }

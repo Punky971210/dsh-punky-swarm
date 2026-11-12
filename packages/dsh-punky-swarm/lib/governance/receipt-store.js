@@ -26,7 +26,10 @@ export function refusalDirOf(root, sessionId) {
   return path.join(root, 'governance', 'refusals', sid);
 }
 
-function ledgerFileOf(root, sessionId) {
+// 【④ 同名不同物改名】本函数与 `lib/verify/evidence.js` 的同名函数曾共用一名但落点不同
+//   （本处 `governance/refusals/ledger-<sid>.jsonl`；那边 `verify/ledger-<sid>.jsonl`）。按「谁更窄谁改名」
+//   本处改 `refusalsLedgerFileOf`（带域前缀），两侧各自独立、**禁合并**（旧名与依据见 map.json G4-3）。
+function refusalsLedgerFileOf(root, sessionId) {
   const sid = String(sessionId ?? 'cli');
   if (!SESSION_RE.test(sid)) throw new Error('invalid sessionId: ' + sessionId);
   return path.join(root, 'governance', 'refusals', 'ledger-' + sid + '.jsonl');
@@ -176,7 +179,7 @@ function verifyAnchorConsistent(r) {
 }
 
 function appendLedger(root, sessionId, entry) {
-  const file = ledgerFileOf(root, sessionId);
+  const file = refusalsLedgerFileOf(root, sessionId);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
 }

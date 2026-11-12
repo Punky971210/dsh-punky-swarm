@@ -154,7 +154,9 @@ function derExtendedKeyUsage(usages) {
 }
 
 
-function generateKeyPair() {
+// 【④ 同名不同物改名】本函数（无参，固定 EC P-256）与 `lib/aip/identity.js` 的同名函数（按 `algorithm`
+//   分支）曾共用一名但签名不同 ⇒ 本处改 `generateCertKeyPair`（证书面），两侧独立、**禁合并**（见 map.json G4-8）。
+function generateCertKeyPair() {
   return crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 }
 
@@ -164,7 +166,7 @@ function createX509({
   cn, issuerCn, signerPrivateKey, altNames = [], days = 365, isCa = false, usages = ['serverAuth'], serial,
 } = {}) {
   if (typeof cn !== 'string' || cn.length === 0) throw new Error('createX509: cn is required');
-  const { publicKey, privateKey } = generateKeyPair();
+  const { publicKey, privateKey } = generateCertKeyPair();
   const notBefore = new Date(Date.now() - 60_000); // 1 分钟回拨容忍
   const notAfter = new Date(notBefore.getTime() + days * 24 * 60 * 60 * 1000);
   const serialNum = serial ?? crypto.randomBytes(16).readBigUInt64BE(0);
