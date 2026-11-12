@@ -251,7 +251,11 @@ export function buildTaskpackTools(cx) {
           throw new Error('taskpack_for: lane "' + lane + '" 不在批 ' + batchId
             + ' 的 wavePlan 内（现有：' + flat.map((t) => String(t?.id)).join(' / ') + '）');
         }
-        const roleData = resolveRoleRef(laneTask.role, { team: b.team ?? undefined });
+        // role 解析**不得绑定 `batch.team`**：任务包内容来自批次黑板（lane.role / cmd / 契约 / 产物），
+        // 而 `wave_plan.team` 是自由标签（「不解析、不校验、不拒建批」）。一旦拿它当角色目录名用，
+        // team 取任意标签（如 `punky`）就零命中抛 GATE_ROLE_UNRESOLVED，造成同一 lane
+        // 「引擎能派发、取件口取不到」的分叉 —— 引擎自派路径（dispatch-core）本就不带 team。
+        const roleData = resolveRoleRef(laneTask.role, { warn: (m) => ctx?.logger?.warn?.(m) });
         const text = composeWorkerPrompt({
           batchId, lane, cmd: laneTask.cmd, layer: laneTask.layer, role: roleData,
           consume: laneTask.consume ?? [], produce: laneTask.produce ?? [], outputs: laneTask.outputs ?? [],
