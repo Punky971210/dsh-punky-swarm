@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 判据源：`plan/checkpoint-enforce-spec.md`
 //   · §D 门（e2）：V-14 派发门拒绝+零状态变更 / V-15 派发门豁免面 / V-16 结算门拒绝+保持 review /
-//     V-17 结算门放行（显式覆盖）/ V-18 结算门放行（序贯覆盖）/ V-19 取源优先序 / V-20 结算门豁免面
+//     V-17 结算门放行（显式覆盖）/ V-18 结算门拒绝（序贯覆盖已废）/ V-19 取源优先序 / V-20 结算门豁免面
 //   · §F 自动建 worktree：V-24 触发与失败面 / V-25 不误触
 //   · §B V-8 存量零拦截（e1 的 `exec/schema/report.md` §未达成 U-2 显式转交本 lane 承接）
 //
@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   · V-14 把门写成「总是拒」⇒ V-8 / V-15 / V-24 必红；把门写成「总是放行」⇒ V-14 必红；
 //   · V-16 不落事件 / 不 `commitBatch` ⇒ 事件面断言红；在拒绝前写 `batch.lanes[lane]` ⇒ 「保持 review」红；
 //   · V-17 只认序贯覆盖（不认显式 subtask）⇒ 本用例（两条事件均无 step/total）必红；
-//   · V-18 只认显式覆盖（不认序贯）⇒ 本用例（唯一事件无 subtaskId）必红；
+//   · V-18 若把序贯通道加回（末项进度即算覆盖）⇒ 本用例（唯一事件无 subtaskId，断言**必拒**）必红；
 //   · V-19 两处合并取数 / 回落优先序写反 ⇒ `source` 与 `latest` 双向断言必红；
 //   · V-24 失败改成拒派（X-6 明禁）⇒「派发继续（lanes[lane]==='running'）」红；
 //   · V-25 只按 layer 判触发、不看方言/声明 ⇒ plan/audit/legacy/空声明四条中必有一条出现 `worktree.*` 事件。
@@ -218,7 +218,13 @@ test('settle-gate-reject [V-16] 声明 2 项但只留痕 1 项 ⇒ 拒 GATE_CHEC
   assert.equal(evts.length, 1, '须恰落 1 条 gate.checkpoints.incomplete');
   assert.deepEqual(evts[0].missing, ['b'], 'missing 必须**按声明序**只点名未留痕项，实测 ' + JSON.stringify(evts[0].missing));
   assert.deepEqual(evts[0].declared, ['a', 'b'], '事件须带完整声明面（有序）');
-  assert.equal(evts[0].sequential, false, '本形态不是序贯覆盖');
+  // AC-3（批 `punky-g2-closeout-20261113` · C1/H3=A）：门写入的载荷键集固定 `{lane, code, missing, declared}`，
+  //   **无序贯读数** —— 原断言 `evts[0].sequential === false` 随「序贯覆盖」通道整体删除而失效（成因见 D-2 台账）。
+  //   `ts`/`type` 是 `newEvent` 的公共头（`store/events.js:105`），`lanes` 是落盘前统一追加的 lane 态戳记
+  //   （`store.js:297-307 stampGateLaneSnapshot`，只对 `gate.*` 事件补键）⇒ 二者不属于门载荷。
+  const gatePayloadKeys = Object.keys(evts[0]).filter((k) => !['ts', 'type', 'lanes'].includes(k)).sort();
+  assert.deepEqual(gatePayloadKeys, ['code', 'declared', 'lane', 'missing'],
+    '拒绝事件载荷须恰为四键（无序贯读数）；实测=' + JSON.stringify(Object.keys(evts[0])));
   assert.equal(evts[0].code, 'GATE_CHECKPOINTS_INCOMPLETE');
 });
 
@@ -237,18 +243,31 @@ test('settle-gate-pass-explicit [V-17] 2 项 + 2 条显式 subtask 事件（均�
   assert.equal(ofType(h.store, 'b-v17', 'gate.checkpoints.incomplete').length, 0, '放行路径不得落拒码事件');
 });
 
-// ══ V-18 结算门放行（序贯覆盖；`settle-gate-pass-sequential`）══════════════════════════════════
-test('settle-gate-pass-sequential [V-18] 2 项 + 1 条 progress{step:2,total:2}（无 subtaskId）⇒ merged 放行', async () => {
+// ══ V-18 结算门拒绝（序贯覆盖已废；`settle-gate-pass-sequential`）══════════════════════════════
+//   批 `punky-g2-closeout-20261113`（裁定 H3=A）：本用例原为「序贯覆盖放行」的**正例**，是 G-03 后门的断言化锁。
+//   序贯通道删除后它必然反转 ⇒ 改写为「单次报末项必须被拒」的判据（断言强度不降：原断「放行」→ 现断「拒绝」）。
+test('settle-gate-pass-sequential [V-18] 2 项 + 1 条 progress{step:2,total:2}（无 subtaskId）⇒ 拒 GATE_CHECKPOINTS_INCOMPLETE', async () => {
   const h = await mkHarness({ batchId: 'b-v18', tasks: tasksWith({ e1: AB }) });
   await h.by.member_set_status.execute({ batchId: 'b-v18', lane: 'e1', status: 'running' }, EXEC);
   await h.by.lane_checkpoint.execute({ batchId: 'b-v18', laneId: 'e1', message: '走到末项', progress: { step: 2, total: 2 } }, EXEC);
   const batch = h.store.readBatch(SID, 'b-v18');
   assert.deepEqual(coveredSubtasksOf(batch, 'e1').ids.size, 0, '前置：显式覆盖为空（没有任何 subtask 字段）');
-  assert.equal(coveredSubtasksOf(batch, 'e1').sequential, true, '前置：序贯覆盖成立（total===2 且 step>=2）');
+  assert.deepEqual(Object.keys(coveredSubtasksOf(batch, 'e1')), ['ids'],
+    'AC-1：覆盖原料键集恰为 [ids] —— 序贯读数已随通道删除，实测=' + JSON.stringify(Object.keys(coveredSubtasksOf(batch, 'e1'))));
+  assert.deepEqual(latestCheckpointOf(batch, 'e1')?.latest, { step: 2, total: 2 },
+    '前置：进度确实走到末项（total===2 且 step>=2）—— 旧判据在这一形态下会放行');
   await h.by.member_set_status.execute({ batchId: 'b-v18', lane: 'e1', status: 'review' }, EXEC);
-  const m = await h.by.member_settle.execute({ batchId: 'b-v18', lane: 'e1', status: 'merged' }, EXEC);
-  assert.equal(m.status, 'merged', '序贯覆盖成立 ⇒ 必须放行');
-  assert.equal(ofType(h.store, 'b-v18', 'gate.checkpoints.incomplete').length, 0, '放行路径不得落拒码事件');
+  await assert.rejects(
+    () => h.by.member_settle.execute({ batchId: 'b-v18', lane: 'e1', status: 'merged' }, EXEC),
+    (e) => {
+      assert.match(String(e.message), /^GATE_CHECKPOINTS_INCOMPLETE/,
+        '单次报末项不得再放行（序贯覆盖已废）：' + e.message);
+      return true;
+    },
+  );
+  const evts = ofType(h.store, 'b-v18', 'gate.checkpoints.incomplete');
+  assert.deepEqual(evts[0].missing, ['a', 'b'], 'missing 须按声明序全列（无任何逐项留痕）');
+  assert.equal(h.store.readBatch(SID, 'b-v18').lanes.e1, 'review', '拒后 lane 必须保持 review');
 });
 
 // ══ V-19 取源优先序（`latest-source-precedence`）════════════════════════════════════════════════

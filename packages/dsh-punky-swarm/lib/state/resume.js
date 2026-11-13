@@ -117,9 +117,25 @@ export function hasOverBudgetEvent(batch, lane) {
   return (batch?.events ?? []).some((e) => e.type === EVT.EVT_LANE_OVER_BUDGET && e.lane === lane);
 }
 
+/**
+ * `total` 比对取源（**方言感知**，批 `punky-g2-closeout-20261113` · C2 / 偏差 D-5）。
+ *   · 取源一律走 `normalizeCheckpoints` 单点（本文件 :24 已 import，零新依赖）：
+ *     裸数组形态（`subtasks:[{id}]`）也归一到 `{items:[…]}` —— 直写 `?.items` 会静默不判（D-5 实测）；
+ *   · `??` 语义：`subtasks` 键在场（含归一后为空）⇒ 以它为准，**不**回落 `checkpoints`（方言判据是「键在场」）；
+ *   · 已落盘的 `{items:[…]}` 形态由 `normalizeCheckpoints` 的幂等分支原样返回（B-6）⇒ legacy 批读数逐字不变。
+ */
+function checkpointDeclaredItemsOf(task) {
+  return normalizeCheckpoints(task?.subtasks ?? task?.checkpoints)?.items;
+}
+
+/** 事件 `source` 标签（审计面）：`subtasks` 键在场 ⇒ `'subtasks.items'`；回落 legacy ⇒ `'checkpoints.items'`。 */
+function checkpointDeclaredSourceOf(task) {
+  return task?.subtasks != null ? 'subtasks.items' : 'checkpoints.items';
+}
+
 export function checkpointTotalMismatchOf(batch, lane, progress) {
   const task = findTask(batch, lane);
-  const items = task?.checkpoints?.items;
+  const items = checkpointDeclaredItemsOf(task);
   const declared = Array.isArray(items) && items.length > 0 ? items.length : null;
   if (declared === null) return { mismatch: false, declared: null, actual: null };
   const total = progress?.total;
@@ -140,7 +156,7 @@ export function recordCheckpointTotalMismatch(store, sessionId, batchId, batch, 
       declared: mm.declared,
       actual: mm.actual,
       step: progress?.step ?? null,
-      source: 'checkpoints.items',
+      source: checkpointDeclaredSourceOf(findTask(batch, lane)),
     });
     return true;
   } catch (e) {
@@ -251,11 +267,12 @@ export function declaredSubtasksOf(batch, lane) {
 }
 
 /**
- * 已被事件覆盖的 subtask 面（结算门 G2 的达标判据原料）。
- *   · `ids` = 事件面**显式** `subtask` 字段集合（`worktree.checkpoint` 事件，B1 降级路径也落该字段）；
- *   · `sequential` = 序贯覆盖：最新进度 `total === 声明长度` 且 `step >= 声明长度`
- *     （成员没写 `subtaskId`、但确实按 `step/total` 走到末项 ⇒ 照算覆盖）。
- *   两条判据为 **∨** 关系（spec §R-5 G2 判据⑥），本函数只出原料，不做裁决。
+ * 已被事件覆盖的 subtask 面（结算门 G2 的**唯一**达标判据原料）。
+ *   · `ids` = 事件面**显式** `subtask` 字段集合（`worktree.checkpoint` 事件，B1 降级路径也落该字段）。
+ *   ⚠ 批 `punky-g2-closeout-20261113`（裁定 H3=A）**废除了「序贯覆盖」通道**：本函数曾另出一个布尔读数，
+ *     判据为「最新进度 `total === 声明长度` 且 `step >= 声明长度`」，与显式 `ids` 取 **∨**；
+ *     该后门让「成员不写 `subtaskId`、只单次报到末项」也能过结算门，逐项留痕形同虚设 ⇒ 整条通道删除。
+ *   ⚠ 现在达标**只能**靠显式 `ids`（`declared ⊆ ids`）；本函数只出原料，不做裁决。
  */
 export function coveredSubtasksOf(batch, lane) {
   const ids = new Set();
@@ -264,9 +281,5 @@ export function coveredSubtasksOf(batch, lane) {
     const id = typeof e.subtask === 'string' ? e.subtask.trim() : '';
     if (id) ids.add(id);
   }
-  const declared = declaredSubtasksOf(batch, lane);
-  const latest = latestCheckpointOf(batch, lane)?.latest ?? null;
-  const sequential = declared.length > 0 && latest !== null
-    && latest.total === declared.length && latest.step >= declared.length;
-  return { ids, sequential };
+  return { ids };
 }

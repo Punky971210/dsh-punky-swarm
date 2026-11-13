@@ -19,8 +19,9 @@ import fs from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { TEXT_OUTPUT, sessionOf } from './shared.js'; // 共享辅助直引零依赖 shared.js（不再经 core.js）
 import { resolveMergeConflict } from './merge-agent.js';
-import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, laneProgressRead, recordEarlyExitProgress } from '../state/resume.js';
+import { overBudgetOf, hasOverBudgetEvent, recordCheckpointTotalMismatch, laneProgressWrite, laneProgressRead, recordEarlyExitProgress, dialectOfLane, declaredSubtasksOf, coveredSubtasksOf } from '../state/resume.js';
 import * as EVT from '../state/event-types.js';
+import { TERMINAL } from '../state/constants.js';
 import { runGit } from './git-utils.js';
 import { ORCH_BRANCH, orchDirOf, laneDirOf, laneBranch, normPath, validateIds, ensureRepo, listWorktrees, countBaseFiles, ensureOrch, createLaneWorktree, doCheckpoint, doMerge } from './lane-worktree-ops.js';
 
@@ -71,6 +72,46 @@ export function worktreeToolCreate(ctx, deps) {
       return { ok: true, worktree: dir, branch, orchBranch: ORCH_BRANCH, reused, base: base.ok ? base.stdout : null, sessionId, reason, isolated, baseFiles };
     },
   });
+}
+
+// ── C3 · checkpoint 软提示（批 `punky-g2-closeout-20261113` · spec §需求 C3 · 裁定 H4=A）────────────────
+//   问题（spec N-3）：覆盖读数过去只在结算门（`GATE_CHECKPOINTS_INCOMPLETE`）点名 —— 成员到结算才知道漏项，
+//   中途零反馈。本函数把「已覆盖 / 未覆盖」落成软提示事件（常量 `EVT_LANE_CHECKPOINT_SUBTASK_HINT`），给成员一条**不阻断**的读数。
+//   语义纪律（逐条，缺一即违约）：
+//     · **不 throw / 不改回执 `ok` / 不影响 `committed`** —— 整段 `try/catch` 吞掉，失败只 `logger?.warn`；
+//     · **只对 subtasks 方言**（`dialectOfLane` 是方言单点，禁在此另写 `subtasks != null` 判据 —— spec K-2）
+//       且**声明非空**才落；`smoke` 批不在本判据内（spec §支持矩阵 该行为「建议」，本批按任务包契约逐字取三条件）；
+//     · **终态 lane 不落**（`TERMINAL`，与 `recordEarlyExitProgress` 的同源守卫同口径）；
+//     · **覆盖读数必须并入本次 `subtaskId`**（spec K-5 / D-4）：`batch` 是 `execute` 开头的读盘**快照**，
+//       `store.appendEvent` 不回写它 ⇒ 直接用快照算会**少算刚落的这一项**，软提示会永远显示「刚做完的还没做」；
+//     · **去重按集合**（spec R-3 不刷屏）：同 lane 上一条同类事件的 `remaining` 集合与本条相同 ⇒ 不重复落。
+// @returns {boolean} 是否真的落了事件（仅供自检/探针读；调用方**不得**据此改回执）
+function emitSubtaskCoverageHint(store, sessionId, batchId, batch, laneId, subtaskId, progress, logger = null) {
+  try {
+    if (dialectOfLane(batch, laneId) !== 'subtasks') return false;
+    const declared = declaredSubtasksOf(batch, laneId);
+    if (declared.length === 0) return false;
+    if (TERMINAL.includes(batch?.lanes?.[laneId])) return false;
+    const covered = [...new Set([...coveredSubtasksOf(batch, laneId).ids, ...(subtaskId ? [subtaskId] : [])])];
+    const remaining = declared.filter((id) => !covered.includes(id));
+    // 去重键 = `remaining` 的**集合**（排序后拼接），不看调用次数、不看 `covered` 长度
+    const setKey = (ids) => [...ids].sort().join('\u0000');
+    const prev = [...(batch?.events ?? [])].reverse()
+      .find((e) => e && e.type === EVT.EVT_LANE_CHECKPOINT_SUBTASK_HINT && e.lane === laneId);
+    if (prev && Array.isArray(prev.remaining) && setKey(prev.remaining) === setKey(remaining)) return false;
+    store.appendEvent(sessionId, batchId, EVT.EVT_LANE_CHECKPOINT_SUBTASK_HINT, {
+      lane: laneId,
+      subtask: subtaskId ?? null,
+      covered,
+      remaining,
+      step: progress?.step ?? null,
+      total: progress?.total ?? null,
+    });
+    return true;
+  } catch (e) {
+    logger?.warn?.('[lane-checkpoint] subtask-hint 留痕失败（不阻断）: ' + String(e?.message ?? e));
+    return false;
+  }
 }
 
 export function worktreeToolCheckpoint(ctx, deps) {
@@ -164,6 +205,8 @@ export function worktreeToolCheckpoint(ctx, deps) {
         // 降级路径**不落** `total_mismatch` / `over-budget`：二者语义绑「确有提交」，本路径无 commit
         //   ⇒ 照旧不落（T9 ② 的误报纪律，本批零改动）。
         recordEarlyExitProgress(store, sessionId, args.batchId, batch, args.laneId, progress, ctx.logger);
+        // C3 · 软提示：降级路径同样**已落** `worktree.checkpoint`（带 `subtask`）⇒ 覆盖读数照发一条（不阻断）。
+        emitSubtaskCoverageHint(store, sessionId, args.batchId, batch, args.laneId, subtaskId, progress, ctx.logger);
         const dir = laneDirOf(root, sessionId, args.batchId, args.laneId);
         return {
           ok: true, committed: false, commit: null, mode: degradeMode,
@@ -204,6 +247,9 @@ export function worktreeToolCheckpoint(ctx, deps) {
           store.appendEvent(sessionId, args.batchId, EVT.EVT_LANE_OVER_BUDGET, { lane: args.laneId, step: progress.step, total: progress.total, budget: b.budget });
         }
       }
+      // C3 · 软提示（spec §需求 C3 落点 2）：事件已落、progress/subtaskId 已解析之后判定；**不 throw / 不改
+      //   回执 `ok` / 不阻断** —— 本行是纯观测，返回值不外泄到回执。
+      emitSubtaskCoverageHint(store, sessionId, args.batchId, batch, args.laneId, subtaskId, progress, ctx.logger);
       return checkpointResult;
     },
   });

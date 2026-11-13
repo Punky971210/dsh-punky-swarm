@@ -238,7 +238,7 @@ export function buildMemberGates(cx) {
   // ── G2 · 结算门（spec §R-5 表 G2；码 `GATE_CHECKPOINTS_INCOMPLETE`）──────────────────────────────
   //   门序：**needHuman 之后、settleHandoff 之前**（spec §约束 9：先暴露自身产物面，再暴露交接面）。
   //   本门只判 merged 链（本函数唯一语义）⇒ 判据①「to==='merged'」由调用位置结构性保证。
-  //   拒绝后果：落 `gate.checkpoints.incomplete`（含**有序** missing id 数组 + declared/sequential 读数）
+  //   拒绝后果：落 `gate.checkpoints.incomplete`（含**有序** missing id 数组 + declared 声明面，键集固定四键）
   //   + `commitBatch`，再 throw；lane 保持 `review`（本处不写 `batch.lanes[lane]`）。
   const ck = gates.checkCheckpointsSettleGate(sessionId, batchId, batch, lane, checkpointPrimitives);
   if (!ck.ok) {
@@ -247,7 +247,6 @@ export function buildMemberGates(cx) {
       code: ck.code,
       missing: ck.missing ?? [],
       declared: ck.declared ?? [],
-      sequential: ck.sequential === true,
     }));
     batch.updatedAt = new Date().toISOString();
     commitBatch(sessionId, batchId, batch);

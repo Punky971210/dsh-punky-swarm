@@ -19,11 +19,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 判据源：`plan/ckpt-followup-spec.md`
 //   · V-11 两键值语义六例（含 legacy 恒 `null` **≠ 0**）
-//   · V-12 覆盖口径与 G2 判据⑥同源（含序贯覆盖）
+//   · V-12 覆盖口径与 G2 判据⑤同源（序贯通道已按批 `punky-g2-closeout-20261113` H3=A 废除）
 //
 // 反例如何能红（防假绿）：
 //   · 把 legacy / corrupt / orphan 的 `null` 写成 `0` ⇒ V-11 第 4/5/6 例的 `notEqual(v, 0)` 必红；
-//   · 覆盖口径只算显式 `ids`、不看 `sequential` ⇒ V-12 例 b 的 `covered === 2` 必红（读面会谎报「未覆盖」）；
+//   · 覆盖口径若把「末项进度」当全数覆盖（序贯通道复活）⇒ V-12 例 b 的 `covered === 0` / `G2 拒` 必红；
 //   · 覆盖口径把未声明 id 计入 ⇒ V-12 例 c 的 `covered === 0` 必红；
 //   · 投影三分支漏一支（D-4）⇒ 对应例取不到键 ⇒ 必红（另有 `tool-schema-conformance` 的结构性锁）。
 import test from 'node:test';
@@ -148,8 +148,8 @@ test('V-11 两键值语义六例：subtasks 计数精确、legacy/corrupt/orphan
   }
 });
 
-// ══ V-12 覆盖口径与 G2 判据⑥同源（含序贯）════════════════════════════════════════════════════════
-test('V-12 覆盖口径与 G2 同源：显式 1/2 拒、序贯 2/2 放行、未声明 id 不计入', async () => {
+// ══ V-12 覆盖口径与 G2 判据⑤同源（序贯通道已废）══════════════════════════════════════════════════
+test('V-12 覆盖口径与 G2 同源：显式 1/2 拒、末项进度 0/2 仍拒、未声明 id 不计入', async () => {
   // 例 a：声明 ['s1','s2']，仅留痕 s1 ⇒ covered=1 ∧ G2 拒且 missing=['s2']
   {
     const h = await mkBatch({ batchId: 'b-v12-a', byLane: { e1: AB } });
@@ -165,17 +165,20 @@ test('V-12 覆盖口径与 G2 同源：显式 1/2 拒、序贯 2/2 放行、未�
     fs.rmSync(h.root, { recursive: true, force: true });
   }
 
-  // 例 b：同上但留痕 progress{step:2,total:2} 且**无** `subtask` 字段（序贯覆盖）⇒ covered=2 ∧ G2 放行
+  // 例 b：同上但留痕 progress{step:2,total:2} 且**无** `subtask` 字段（原「序贯覆盖」形态）
+  //   批 `punky-g2-closeout-20261113`（H3=A）废除序贯通道 ⇒ 本形态**不再算覆盖**：
+  //   读面 covered 必须只数显式 ids（= 0），且 G2 必须拒（原断言为 covered===2 / ok===true / sequential===true）。
   {
     const h = await mkBatch({ batchId: 'b-v12-b', byLane: { e1: AB } });
     appendCheckpoint(h.store, 'b-v12-b', { step: 2, total: 2 });
     const c = countsOf(h.store, 'b-v12-b', 'e1');
     const batch = h.store.readBatch(SID, 'b-v12-b');
     const g2 = h.gates.checkCheckpointsSettleGate(SID, 'b-v12-b', batch, 'e1', CHECKPOINT_PRIMITIVES);
-    assert.equal(c.covered, 2, '例b covered 须 === 2（序贯覆盖必须可见，否则读面谎报未覆盖）');
-    assert.equal(g2.ok, true, '例b G2 须放行');
-    assert.equal(g2.sequential, true, '例b G2 须标 sequential:true');
-    assert.equal(c.covered, c.declared, '例b 同源判据：covered === declared ⇔ 门放行（两条断言缺一即红）');
+    assert.equal(c.covered, 0, '例b covered 须 === 0（序贯通道已废 ⇒ 末项进度不得冒充逐项留痕）');
+    assert.equal(g2.ok, false, '例b G2 须拒（原为放行）');
+    assert.deepEqual(g2.missing, ['s1', 's2'], '例b missing 须按声明序全列');
+    assert.equal('sequential' in g2, false, '例b G2 返回体不得再带序贯读数（AC-3 键集收口）');
+    assert.ok(c.covered < c.declared, '例b 同源判据：covered < declared ⇔ 门拒（与例a 同口径）');
     fs.rmSync(h.root, { recursive: true, force: true });
   }
 

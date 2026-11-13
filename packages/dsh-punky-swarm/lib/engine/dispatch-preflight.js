@@ -169,17 +169,26 @@ export function renderCheckpointsBlock(checkpoints, { layer = null, dialect = 'l
   }
   const lines = [strict ? CP_TITLE_STRICT : CP_TITLE_SUGGEST];
   if (strict) {
-    //   强制档四行固定（spec §R-3）：逐项核 / 调用形态（total 由引擎给定）/ 无 worktree 照算 / 未覆盖点名。
+    //   强制档固定段（spec §R-3）：逐项核 / 调用形态（total 由引擎给定）/ 无 worktree 照算 / 未覆盖点名 / 软提示。
+    //   批 `punky-g2-closeout-20261113`（C5 · N-1/N-4/N-5 收口）：**每一句可执行承诺都必须能在
+    //   `lib/state/gates/checkpoints.js#checkCheckpointsSettleGate` 或该链路的判据里找到对应 if**；
+    //   反之每条拒绝路径都要在本段有说明（双向可追溯）。禁词 `建议` / `由你自己填` / `引擎不与` 一律不得出现
+    //   （`test/checkpoint-render.test.js` 的 V-11 锁死）；建议档（下方 else）**逐字不动**（V-12 sha256 锁）。
     lines.push('本 lane 共 ' + items.length + ' 个 checkpoint —— 结算门按 `subtaskId` 逐项核，未逐项留痕即拒 settle'
-      + '（`GATE_CHECKPOINTS_INCOMPLETE`）。');
+      + '（`GATE_CHECKPOINTS_INCOMPLETE`）。**单次报到末项不算覆盖**：不带 `subtaskId` 的调用一律不计入覆盖面'
+      + '（该后门已废）。');
     lines.push('必须按**声明序**逐项调用 `lane_checkpoint({ batchId, laneId, message, progress:{ step, total: '
       + items.length + ' }, subtaskId: "<id>" })`：'
       + 'total 必须等于 ' + items.length + '（由引擎给定 = subtasks.length；引擎按 ' + items.length
-      + ' 比对，不等即留痕 `lane.checkpoint.total.mismatch`）。');
+      + ' 比对，不等即留痕 `lane.checkpoint.total.mismatch`）。'
+      + '（边界：legacy 方言 lane 不走强制档、不渲染本段，其结算门也不核逐项留痕；'
+      + '而该 total 比对在新旧两种方言下都会留痕。）');
     lines.push('不得自建进度规划：动作必须落在**当前 subtask** 内，越界先回报'
       + '（禁把多个 subtask 的动作揉进一次 checkpoint）。');
     lines.push('本 lane 若无 worktree（或 git 不可用）：同一调用仍会记 `worktree.checkpoint` 事件（`commit=null`），照算完成。');
     lines.push('未覆盖的 subtask id 会被结算门点名（缺失清单 = 声明序里未留痕的 id）。');
+    lines.push('每次 checkpoint 都会落一条覆盖读数事件（常量 `EVT_LANE_CHECKPOINT_SUBTASK_HINT`，事件名定义见 `lib/state/event-types.js`；'
+      + '读数 `covered` / `remaining`；同 `remaining` 不重复落，**不阻断**、且不改回执）—— 结算前可按它自查还差哪几项。');
   } else {
     lines.push('本 lane 共 ' + items.length + ' 个 checkpoint；建议 `lane_checkpoint(progress:{step,total:' + items.length + '})`'
       + '（`total` 由你自己填，引擎不与本行的 ' + items.length + ' 比对）。');

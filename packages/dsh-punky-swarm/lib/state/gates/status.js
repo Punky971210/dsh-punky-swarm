@@ -27,8 +27,9 @@ import fs from 'node:fs';
  *   · 原料缺失 或 方言 `legacy` ⇒ `{declared: null, covered: null}`（**禁 0**：
  *     `0` 与「声明了 0 项」不可区分，会把 G1 拒派的形状误读成「已声明但没做」）；
  *   · 方言 `subtasks` ⇒ 整数，且 `0 ≤ covered ≤ declared`（`declared === 0` 正是 G1 要拒的形状，**必须能读出来**）。
- * 覆盖口径**逐条对齐 G2 判据⑥**（spec RQ-B3）：`sequential === true` ⇒ 视作全数覆盖；
- *   否则 `covered = |declared ∩ 事件面显式 ids|`（未声明的 id 不计入）。
+ * 覆盖口径**逐条对齐 G2 判据⑤**（spec RQ-B3；批 `punky-g2-closeout-20261113` 裁定 H3=A）：
+ *   `covered = |declared ∩ 事件面显式 ids|`（未声明的 id 不计入）。
+ *   「序贯覆盖」特例已废除 —— 不再有「最新进度走到末项即视作全数覆盖」的第二算式。
  *
  * ⚠ 本函数是两键的**唯一计算处**（读面单点）：工具层 `lib/tools/query-tools.js` 只透出、不再遍历
  *   批对象/事件流（spec RQ-B1 / C-10：`execute` 内禁出现 `declaredSubtasksOf(` / `coveredSubtasksOf(`）。
@@ -48,9 +49,7 @@ function subtaskCountsOf(batch, lane, prims) {
         return { declared: null, covered: null };
     const declared = prims.declaredSubtasksOf(batch, lane);
     const cov = prims.coveredSubtasksOf(batch, lane);
-    const covered = cov.sequential === true
-        ? declared.length
-        : declared.filter((id) => cov.ids.has(id)).length;
+    const covered = declared.filter((id) => cov.ids.has(id)).length;
     return { declared: declared.length, covered };
 }
 export function buildStatus(cx) {

@@ -52,6 +52,14 @@ export const EVT_LANE_EXEMPT_INHERITED = 'lane.exempt.inherited';
 export const EVT_LANE_EXEMPT_CLEARED = 'lane.exempt.cleared';
 export const EVT_LANE_OVER_BUDGET = 'lane.over-budget';
 export const EVT_LANE_CHECKPOINT_TOTAL_MISMATCH = 'lane.checkpoint.total.mismatch';
+// 批 `punky-g2-closeout-20261113` · 裁定 H4=A（软提示专用载体；对应 spec §需求 C3）：
+//   发射位：`lib/tools/lane-worktree-tools.js#lane_checkpoint` —— 单点实现 `emitSubtaskCoverageHint`，
+//     在「`worktree.checkpoint` 事件已落」的两条出口各调一次（正常路径 + `no-worktree` / `no-git` 降级路径）。
+//   载荷：`{ lane: string, subtask: string|null, covered: string[], remaining: string[],
+//     step: number|null, total: number|null }`（载荷键纪律：`type` 键承载**事件名**，载荷字段**不得**占用它）。
+//   语义：**软提示，不阻断** —— 不 throw、不改回执 `ok`、不影响 `committed`；仅
+//     `dialectOfLane === 'subtasks'` 且声明非空且 lane 非终态时落；同 lane 的 `remaining` 集合未变则不重复落。
+export const EVT_LANE_CHECKPOINT_SUBTASK_HINT = 'lane.checkpoint.subtask-hint';
 export const EVT_BUDGET_REJECTED = 'budget.rejected';
 // inject.omitted 与上方两枚**语义正交、不得混用**：上方两枚分别属「步数预算」与「mailbox 链环防护」
 export const EVT_INJECT_OMITTED = 'inject.omitted';

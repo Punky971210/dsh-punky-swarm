@@ -20,6 +20,7 @@ import { TEXT_OUTPUT, sessionOf } from './shared.js';
 import * as EVT from '../state/event-types.js';
 import { presenceJudge, declaredKindOf } from '../state/gates.js';
 import { resolveArtifactIn } from '../state/batch-paths.js';
+import { normalizeCheckpoints } from '../wave-plan.js';
 import * as lock from '../lock.js';
 import { lockPath, readLiveConfig } from './tier-gate.js';
 import { handoffCallerIdentityOf } from './host-surface.js';
@@ -42,6 +43,47 @@ function budgetAssertionsOf(assertions, thresholds) {
   if (block.omissions.length === 0) return { assertions: perItem, omissions };
   const piece = block.text.split(' | ');
   return { assertions: piece.length > 0 ? piece : perItem, omissions };
+}
+
+/**
+ * subtask 产物展示读数（G4=C ＋ H2=A：**只展示、不校验**）。
+ *
+ * 取源与判据（三处单一事实源，均不自写第二份）：
+ *   · 声明面：`normalizeCheckpoints`（= `subtasks` 的**唯一归一实现**，与 `resume.js#declaredSubtasksOf`
+ *     同一单点）⇒ `id` / `outputs` 的归一语义与建批、渲染、门禁三面**同源**；本函数不做任何二次归一。
+ *   · 方言面：判据是「**该 lane 的 `subtasks` 键在场**」（与 `dialectOfLane` 的 lane 分支同一判据）。
+ *     ⚠ 此处**不调** `dialectOfLane`：它的回落分支判的是**批级**方言（批内任一 lane 有键即为新方言），
+ *     而本字段的需求是「**本 lane** 是否声明了 subtasks」—— 混合方言批里未声明的 lane 必须**缺席该键**
+ *     （任务契约③：禁返回 `[]` 冒充「已声明 0 项」）。
+ *   · 在场面：逐件复用 `resolveArtifactIn` + `presenceJudge`（与 `handoff_view` 的 artifactViews 同一对
+ *     判据函数）⇒ `presenceJudge` 内部**逐件 `fs.statSync`** ＋ 批次产物根包含性判定，
+ *     故 `present` 反映磁盘事实，**不由 `outputs.length` 反推**。
+ *
+ * ⚠ 只读契约：不写 store、不落事件、不进任何门禁判据；**更不接入 `handoff_submit` 的 artifacts 校验**
+ *   （H2=A：交接提交的在场判据与错误码 `GATE_HANDOFF_ARTIFACT_MISSING` 逐字不变）。
+ * @param {object|null} laneTask 已从同一份 `taskById` 索引取出的 lane 任务对象
+ * @param {string} dir 批次产物根
+ * @returns {Array<{id: string, outputs: string[], present: boolean[]}>|null} 未声明 ⇒ `null`（调用方据此**不写键**）
+ */
+function subtaskOutputViewsOf(laneTask, dir) {
+  if (!laneTask || !('subtasks' in laneTask)) return null;
+  const items = normalizeCheckpoints(laneTask.subtasks)?.items ?? [];
+  return items.map((it) => {
+    const outputs = Array.isArray(it.outputs) ? it.outputs : [];
+    const present = outputs.map((p) => {
+      let abs = null;
+      try { abs = resolveArtifactIn(dir, p); } catch { abs = null; }
+      const v = presenceJudge({
+        mode: 'runtime',
+        declared: [p],
+        declaredKind: declaredKindOf(p),
+        abs,
+        artifactsRoot: dir,
+      });
+      return v.ok === true;
+    });
+    return { id: it.id, outputs, present };
+  });
 }
 
 export function buildHandoffTools(cx) {
@@ -127,7 +169,7 @@ export function buildHandoffTools(cx) {
       description: "交接门（只读）：列出该 lane 的已声明入边（deps ∪ 经 handoff_accept 接受的入边），与 entry/出口门同源。每条回显上游 lane、状态（submitted/pending）、来源 source（deps/accept）、交付产物绝对路径 + 是否可读、上游 assertions；另给上游 produce∪outputs 清单。blocking 与 pending 分列。存量批回 legacy:true（门放行）。零写入；officialTaskId 同属未启用面，不得读作已双写。",
       parameters: {"batchId":{"type":"string","required":true,"description":"批次 ID"},"lane":{"type":"string","required":true,"description":"下游 lane id"},"session":{"type":"string","description":"批次归属会话（缺省=当前执行会话）"}},
       output: {
-        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"legacy":{"type":"boolean"},"ready":{"type":"boolean","required":true},"deps":{"type":"array","items":{"type":"string"}},"edges":{"type":"array","items":{"type":"object","additionalProperties":true}},"pending":{"type":"array","items":{"type":"string"}},"blocking":{"type":"array","items":{"type":"string"}},"omissions":{"type":"array","items":{"type":"object","additionalProperties":true}}}},
+        schema: {"type":"object","additionalProperties":false,"properties":{"batchId":{"type":"string","required":true},"lane":{"type":"string","required":true},"legacy":{"type":"boolean"},"ready":{"type":"boolean","required":true},"deps":{"type":"array","items":{"type":"string"}},"edges":{"type":"array","items":{"type":"object","additionalProperties":true}},"pending":{"type":"array","items":{"type":"string"}},"blocking":{"type":"array","items":{"type":"string"}},"omissions":{"type":"array","items":{"type":"object","additionalProperties":true}},"subtaskOutputs":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"outputs":{"type":"array","items":{"type":"string"}},"present":{"type":"array","items":{"type":"boolean"}}}}}}},
         render: (_args, value) => {
           const lines = ['handoff ' + value.lane + ': ' + (value.ready ? 'READY' : 'BLOCKED')
             + ' (edges=' + (value.edges ?? []).length + (value.legacy ? ', legacy-batch' : '') + ')'];
@@ -139,6 +181,19 @@ export function buildHandoffTools(cx) {
               : '（空）'));
             const asrt = e.assertions ?? [];
             lines.push('    assertions: ' + (asrt.length ? asrt.join(' | ') : '（空）'));
+          }
+          // subtask 产物展示行（G4=C：让下游在交接视图里看得见本 lane 声明的产物面）。
+          //   键缺席 ⇒ 整行不渲染（未声明 subtasks 的 lane 保持既有回执逐字不变）。
+          if (Array.isArray(value.subtaskOutputs)) {
+            const rows = value.subtaskOutputs.map((s) => {
+              const outs = s.outputs ?? [];
+              const flags = s.present ?? [];
+              const body = outs.length
+                ? outs.map((p, i) => String(p) + (flags[i] === true ? ' (ok)' : ' (MISSING)')).join(', ')
+                : '（未声明 outputs）';
+              return String(s.id) + ' → ' + body;
+            });
+            lines.push('  subtask 产物: ' + (rows.length ? rows.join(' | ') : '（已声明 0 项）'));
           }
           if ((value.pending ?? []).length) lines.push('  pending: ' + value.pending.join(', '));
           if ((value.blocking ?? []).length) lines.push('  缺口: ' + value.blocking.join(', '));
@@ -159,6 +214,8 @@ export function buildHandoffTools(cx) {
         const taskById = new Map();
         for (const w of b.wavePlan ?? []) for (const t of w.tasks ?? []) if (t && typeof t.id === 'string') taskById.set(t.id, t);
         const laneTask = taskById.get(args.lane) ?? null;
+        // subtask 产物展示读数（G4=C ＋ H2=A：只展示、不校验）。未声明 ⇒ `null` ⇒ 返回体**不写该键**。
+        const subtaskOutputs = subtaskOutputViewsOf(laneTask, dir);
         const deps = laneTask && Array.isArray(laneTask.deps) ? laneTask.deps : [];
         const declared = store.declaredInboundEdgesOf(b, args.lane, laneTask);
         const sourceOf = new Map((declared.sources ?? []).map((s) => [s.from, s.source]));
@@ -206,9 +263,9 @@ export function buildHandoffTools(cx) {
             e.assertions = bud.assertions;
             omissions.push(...bud.omissions);
           }
-          return { batchId: args.batchId, lane: args.lane, legacy, ready, deps, edges, pending, blocking, omissions };
+          return { batchId: args.batchId, lane: args.lane, legacy, ready, deps, edges, pending, blocking, omissions, ...(subtaskOutputs === null ? {} : { subtaskOutputs }) };
         }
-        return { batchId: args.batchId, lane: args.lane, legacy, ready, deps, edges, pending, blocking, omissions: [] };
+        return { batchId: args.batchId, lane: args.lane, legacy, ready, deps, edges, pending, blocking, omissions: [], ...(subtaskOutputs === null ? {} : { subtaskOutputs }) };
       },
     }),
     //   结构性拿不到声明位（它恒落声明序末尾，不可能成为既有下游的 `deps`）⇒ 其产物进不了既有 audit lane

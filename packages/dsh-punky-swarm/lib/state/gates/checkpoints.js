@@ -104,8 +104,10 @@ export function buildCheckpoints(_cx) {
    *  判据（全部满足才拒）：
    *    ① `layer === 'exec'`；② **lane 级**方言 `subtasks`（`dialectOfLane`，与渲染入口同源）；③ 非 smoke 批；
    *    ④ `declared.length > 0`（=0 直接放行：门序被绕过时不重复告警，与 G1 分工）；
-   *    ⑤ 达标 = **显式覆盖**（`declared ⊆ coveredSubtasksOf().ids`）**∨** **序贯覆盖**（`covered.sequential`）
-   *  @returns {{ok:boolean, lane:string, code?:string, declared:string[], missing?:string[], sequential:boolean, ...}}
+   *    ⑤ 达标 = **显式覆盖**（`declared ⊆ coveredSubtasksOf().ids`）——**唯一**判据；
+   *       「序贯覆盖」放行通道已按批 `punky-g2-closeout-20261113` 裁定 H3=A **整体废除**
+   *       （旧判据「最新进度 `total === 声明数 && step >= 声明数`」让单次报末项即可绕过逐项留痕）。
+   *  @returns {{ok:boolean, lane:string, code?:string, declared:string[], missing?:string[], covered?:string[], ...}}
    */
   function checkCheckpointsSettleGate(sessionId, batchId, batch, lane, prims = null) {
     if (!primsReadyOf(prims)) {
@@ -122,14 +124,11 @@ export function buildCheckpoints(_cx) {
     if (declared.length === 0) return { ok: true, lane, dialect, declared, skipped: 'nothing-declared' };
     const covered = prims.coveredSubtasksOf(batch, lane);
     const coveredIds = [...covered.ids];
-    // 判据⑥·显式覆盖：声明序里每一项都被事件面 `subtask` 字段点名过。
+    // 判据⑤·**唯一**达标面：声明序里每一项都被事件面 `subtask` 字段点名过（`declared ⊆ ids`）。
+    //   ⚠ 「序贯覆盖」放行分支已删除（H3=A）：它把「单次报到末项、不写 subtaskId」也算覆盖 ⇒ 逐项留痕形同虚设。
     const missing = declared.filter((id) => !covered.ids.has(id));
     if (missing.length === 0) {
-      return { ok: true, lane, dialect, declared, missing: [], sequential: covered.sequential === true, covered: coveredIds };
-    }
-    // 判据⑥·序贯覆盖：成员没写 `subtaskId`，但最新进度走到末项（`total === 声明数 && step >= 声明数`）⇒ 照算覆盖。
-    if (covered.sequential === true) {
-      return { ok: true, lane, dialect, declared, missing: [], sequential: true, covered: coveredIds };
+      return { ok: true, lane, dialect, declared, missing: [], covered: coveredIds };
     }
     const latest = prims.latestCheckpointOf(batch, lane);
     return {
@@ -139,14 +138,13 @@ export function buildCheckpoints(_cx) {
       dialect,
       declared,
       missing,
-      sequential: false,
       covered: coveredIds,
       latest: latest ? latest.latest : null,
       latestSource: latest ? latest.source : null,
       problems: [
         '本 lane 声明了 ' + declared.length + " 个 checkpoint（['" + declared.join("', '") + "']），未逐项留痕",
         '缺失（按**声明序**）：[' + missing.map((id) => "'" + id + "'").join(', ') + ']',
-        '达标判据 = 显式覆盖（`lane_checkpoint({..., subtaskId})` 逐个点名）∨ 序贯覆盖（最新 `progress.total === ' + declared.length + '` 且 `step >= ' + declared.length + '`）',
+        '达标判据 = 显式覆盖（`lane_checkpoint({..., subtaskId})` 逐个点名；「序贯覆盖」通道已废除 ⇒ 单次报到末项**不算**覆盖）',
       ],
     };
   }
