@@ -266,8 +266,18 @@
           # `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
           # 收窄面**不动**：`weknora_*` 不进 `SUITE_DENY_TOOLS`、不进 `config.dispatch.denyTools`、
           # 不进任何 role 的 `tools.allow`（会污染 `roleToolVocabulary()` 并经 `deriveDenyTools` 反禁其它角色）。
-          - id: weknora
-            name: '@wxg-prc-cpg/dsh-weknora'
+          #
+          # ⚠ 2026-11-13 双挂载实测（Leader 诊断，用户裁「先尝试消除双挂载，密钥不入 profile」）：
+          #   本段（`dsh-agent-preset-punky.config.plugins`）与 `presets/punky-preset/agent.cordis.yml` 是**两份真源**，
+          #   各自被 `agent-preset-registry` 挂一次；加上 profile 的 `dsh.profile.bundles[]` 那份，宿主日志出两条注册：
+          #     include:weknora                        → http://127.0.0.1:8080/api/v1（bundle，读到 env）
+          #     include:agent-preset-registry:weknora  → http://localhost:8080/api/v1（preset 行，无 config ⇒ 插件缺省）
+          #   上面「缺省由 bundle 自己的 patch 提供」的假设**不成立**：preset 内这一行是**独立实例**，不继承 bundle patch
+          #   的 config ⇒ 默认 baseUrl + 无 apiKey ⇒ 本会话命中的正是这份 ⇒ `weknora_*` 全部 HTTP 401。
+          #   处置：两份真源里的该行**同时**注释掉，只保留 bundle 那份（读 `WEKNORA_BASE_URL`/`WEKNORA_API_KEY` env）。
+          #   回滚：恢复本行与 `presets/punky-preset/agent.cordis.yml` 的同名行。
+          # - id: weknora
+          #   name: '@wxg-prc-cpg/dsh-weknora'
 
           # ── goals ───────────────────────────────────────────────────────────────────
 
