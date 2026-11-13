@@ -1,0 +1,86 @@
+{
+  "name": "dsh-punky-swarm",
+  "version": "0.6.0",
+  "type": "module",
+  "description": "dsh-punky-swarm — dsh 插件（DeepSeek Harness）· punky 署名 · 集群治理（swarm governance）引擎：单机多子 agent 治理，wavePlan 三层 DAG + 引擎级门禁（Entry / Plan Contract / Exit / Complete）+ 状态机 + 单写者锁 + 会话隔离 + 国标 AIP 兼容 + 全能力治理增强。附蟛蜞模式预设与 software-team 角色指引。",
+  "license": "AGPL-3.0-only",
+  "icon": "./packages/dsh-punky-swarm/puncat.jpg",
+  "main": "./packages/dsh-punky-swarm/lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./packages/dsh-punky-swarm/lib/index.js"
+    },
+    "./client": "./packages/dsh-punky-swarm/lib/client.js",
+    "./provider-dsh": "./packages/dsh-punky-swarm/lib/provider-dsh/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "packages/dsh-punky-swarm/lib",
+    "packages/dsh-punky-swarm/presets",
+    "packages/dsh-punky-swarm/skills",
+    "packages/dsh-punky-swarm/cordis.patch.yml",
+    "packages/dsh-punky-swarm/puncat.jpg",
+    "packages/dsh-punky-swarm/icon.svg",
+    "packages/dsh-punky-swarm/LICENSE",
+    "packages/dsh-punky-swarm/README.md",
+    "packages/dsh-punky-swarm/CHANGELOG.md",
+    "packages/dsh-punky-swarm/package.json",
+    "packages/dsh-punky-swarm/scripts",
+    "!packages/dsh-punky-swarm/scripts/audit/out"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "tsc -p packages/dsh-punky-swarm/tsconfig.json",
+    "test": "node --import ./packages/dsh-punky-swarm/test/helpers/isolated-home.preload.mjs --test packages/dsh-punky-swarm/test/*.test.js && node packages/dsh-punky-swarm/scripts/evidence-guard.mjs",
+    "fragility": "node packages/dsh-punky-swarm/scripts/audit/fragility.mjs",
+    "fragility:selftest": "node packages/dsh-punky-swarm/scripts/audit/fragility.mjs --selftest",
+    "smoke:host": "node packages/dsh-punky-swarm/scripts/smoke/host-smoke.mjs",
+    "quantity:scan": "node packages/dsh-punky-swarm/scripts/neighbor-scan.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "multi-agent",
+    "swarm",
+    "cluster",
+    "governance",
+    "orchestration",
+    "tier3",
+    "gates"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-tools": "0.2.x"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.1-rc.2"
+    },
+    "bundle": {
+      "patch": "./packages/dsh-punky-swarm/cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Punky971210/dsh-punky-swarm.git"
+  }
+}
