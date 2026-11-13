@@ -44,8 +44,18 @@ export function normPath(p) {
 /** 面快照四字段全等（green 判据的唯一实现）。 */
 export const sameFace = (x, y) => !!x && !!y && x.exists === y.exists && x.count === y.count && x.sumBytes === y.sumBytes && x.digest === y.digest;
 
-/** 路径键归一化**单点**：Windows 的 path.sep 是反斜杠，而面相对键统一用 posix（`/`）。 */
-export const toPosix = (p) => String(p).split(path.sep).join('/');
+/**
+ * 路径键归一化**单点**：面相对键统一用 posix（`/`）形态。
+ *
+ * ⚠ 2026-11-14 修正（批 `punky-g2-closeout-20261113` 收口期）：原实现是
+ *   `String(p).split(path.sep).join('/')` —— 它按**当前平台**分隔符切分，于是在
+ *   Windows 上能把 `punky-preset\agent.cordis.yml` 转成 posix，而在 **Linux/CI 上
+ *   `path.sep === '/'` ⇒ 反斜杠不被切分 ⇒ 原样返回反斜杠键**。
+ *   `home-isolation.test.js#D13-2b` 正是用「含反斜杠的键」验证自防御查找必命中
+ *   ⇒ 在 ubuntu-latest 上必然 miss（本地 Windows 恒绿，故长期未被发现）。
+ *   ⇒ 改为**无条件把所有反斜杠替换为正斜杠**：语义就是「归一成 posix」，与平台无关。
+ */
+export const toPosix = (p) => String(p).replace(/\\/g, '/');
 
 /** G1 谓词：homedir 必须等于声明的隔离根，且不等于真实 home。 */
 export function g1Verdict(homedirValue, sentinelValue, realHomeValue) {
