@@ -496,14 +496,9 @@ test('AC-6 任务包双保险：composeWorkerPrompt 明写批归属会话 + sess
   assert.equal(/批归属会话/.test(composeWorkerPrompt({ ...base, batchSessionId: '' })), false);
   assert.equal(/批归属会话/.test(composeWorkerPrompt({ ...base, batchSessionId: null })), false);
   // ⑤ 生产接线可核：`dispatchLaneCore` 的 composeWorkerPrompt 调用点传了 batchSessionId
-  // ⑤E：`dispatchLaneCore` 现在住在 `dispatch-core.js`（派发执行层）。
-  // ⑤F（批 `punky-taskpack-cohesion-20261113`）：任务包入参改为**单点组装** `taskpackInputOf` ——
-  //   `batchSessionId` 由单点统一置为 `sessionId`，入口侧只需把 `sessionId` 传进单点。
-  //   语义锚不变（落点会话 = 批归属会话），断言仍防「入口漏传落点会话」这一类回归，只是位置换到新单点。
-  const dispatchSrc = readSrc('lib/engine/dispatch-core.js');
-  assert.match(dispatchSrc, /taskpackInputOf\(\{[\s\S]*?\bsessionId\b/, 'dispatchLaneCore 须把落点会话（= 批归属会话）传进任务包入参单点');
-  const taskpackSrc = readSrc('lib/engine/dispatch-taskpack.js');
-  assert.match(taskpackSrc, /batchSessionId:\s*sessionId/, '入参单点须把 sessionId 落成 batchSessionId（批归属会话行）');
+  // ⑤E/⑤F：`dispatchLaneCore` 住 `dispatch-core.js`；批 `punky-taskpack-cohesion` 起由入参单点落值。
+  const dispatchSrc = readSrc('lib/engine/dispatch-core.js') + readSrc('lib/engine/dispatch-taskpack.js');
+  assert.match(dispatchSrc, /taskpackInputOf\(\{[\s\S]*?\bsessionId\b[\s\S]*?batchSessionId:\s*sessionId/, 'dispatchLaneCore 须把落点会话（= 批归属会话）传进任务包，而单点须落 batchSessionId');
 });
 
 // ══ ⑤-1 治理工具「禁用」声明的**形态诚实性**（裁决乙 2026-11-09）═════════════════════════════
