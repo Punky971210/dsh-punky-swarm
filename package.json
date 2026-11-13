@@ -20,11 +20,9 @@
     "packages/dsh-punky-swarm/skills",
     "packages/dsh-punky-swarm/cordis.patch.yml",
     "packages/dsh-punky-swarm/puncat.jpg",
-    "packages/dsh-punky-swarm/icon.svg",
     "packages/dsh-punky-swarm/LICENSE",
     "packages/dsh-punky-swarm/README.md",
     "packages/dsh-punky-swarm/CHANGELOG.md",
-    "packages/dsh-punky-swarm/package.json",
     "packages/dsh-punky-swarm/scripts",
     "!packages/dsh-punky-swarm/scripts/audit/out"
   ],
@@ -32,12 +30,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "tsc -p packages/dsh-punky-swarm/tsconfig.json",
-    "test": "node --import ./packages/dsh-punky-swarm/test/helpers/isolated-home.preload.mjs --test packages/dsh-punky-swarm/test/*.test.js && node packages/dsh-punky-swarm/scripts/evidence-guard.mjs",
-    "fragility": "node packages/dsh-punky-swarm/scripts/audit/fragility.mjs",
-    "fragility:selftest": "node packages/dsh-punky-swarm/scripts/audit/fragility.mjs --selftest",
-    "smoke:host": "node packages/dsh-punky-swarm/scripts/smoke/host-smoke.mjs",
-    "quantity:scan": "node packages/dsh-punky-swarm/scripts/neighbor-scan.mjs"
+    "check": "tsc -p ./packages/dsh-punky-swarm/tsconfig.json",
+    "test": "node --import ./packages/dsh-punky-swarm/test/helpers/isolated-home.preload.mjs --test ./packages/dsh-punky-swarm/test/*.test.js && node ./packages/dsh-punky-swarm/scripts/evidence-guard.mjs",
+    "fragility": "node ./packages/dsh-punky-swarm/scripts/audit/fragility.mjs",
+    "fragility:selftest": "node ./packages/dsh-punky-swarm/scripts/audit/fragility.mjs --selftest",
+    "smoke:host": "node ./packages/dsh-punky-swarm/scripts/smoke/host-smoke.mjs",
+    "quantity:scan": "node ./packages/dsh-punky-swarm/scripts/neighbor-scan.mjs"
   },
   "keywords": [
     "dsh",

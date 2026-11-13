@@ -40,6 +40,13 @@ jobs:
           mkdir -p "$HOME/.agents/skills/ci-seed" "$HOME/.dsh/.agent-presets/punky-preset"
           printf 'seed\n' > "$HOME/.agents/skills/ci-seed/SKILL.md"
           printf 'seed\n' > "$HOME/.dsh/.agent-presets/punky-preset/ci-seed.md"
+      # R2 · 根 package.json 是**派生层**（真源 = packages/dsh-punky-swarm/package.json）。
+      #   守护理由：发布形态 C 让仓库根即可被 `dsh plugin add "git+https://…#<tag>"` 直接装成包
+      #   ⇒ 根那份是安装入口，写错了使用者立刻装不上，而它不在包目录里、`npm test` 覆盖不到。
+      #   本步只比对不写盘；漂移时打印前 20 行差异并 exit 1（修法：node scripts/gen-root-pkg.mjs）。
+      #   放在 install 之前：脚本只用 node 内置模块，无需 node_modules。
+      - name: Check root package.json in sync
+        run: node scripts/gen-root-pkg.mjs --check
       - name: Run tests
         working-directory: packages/dsh-punky-swarm
         run: npm test
