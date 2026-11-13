@@ -20,7 +20,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 派发面 · 派发执行：启动请求构造、spawn 错误映射、one-shot 追踪、`dispatchLaneCore`。
 
 import { issueLaneHandle, consumeLaneHandle } from '../bridge/lane-handle.js';
-import { renderArchContext } from './arch-context.js';
 import { createAgentPort } from '../provider-dsh/agent.js';
 import { EVT_MEMBER_DISPATCH } from '../state/event-types.js';
 import { SUITE_DENY_TOOLS } from './suite.js';
@@ -28,9 +27,9 @@ import { readCapability } from '../assembly/schema.js';
 import { expectedWorkerSessionOf } from '../state/dispatch-events.js';
 import { roleCorpusRoot, resolveRoleRef, deriveDenyTools, personaOfRole } from './dispatch-role.js';
 import { ownerOfExec, labelOf, ownerSessionIdOfExec, dispatchIndexEntryOf } from './dispatch-bind.js';
-import { composeWorkerPrompt } from './dispatch-taskpack.js';
-// lane 级方言判决单点（与 G1/G2 门共用同一实现；禁在本文件另写 `subtasks != null` 判据）。
-import { dialectOfLane } from '../state/resume.js';
+import { composeWorkerPrompt, taskpackInputOf } from './dispatch-taskpack.js';
+// lane 级方言判决已随「任务包入参单点组装」移入 `taskpackInputOf`（与 G1/G2 门共用同一实现
+// `dialectOfLane`）；本文件**不得**再另写 `subtasks != null` 判据，也禁为方言再读一次批文件。
 
 export function buildStartRequest({
   batchId, lane, parent, prompt, denyTools = SUITE_DENY_TOOLS, extraDeny = [], persona, role, roleRoot, roleTeam,
@@ -182,23 +181,13 @@ export async function dispatchLaneCore({ ctx, store, root, liveConfig, exec, ses
     return { ...base, spawned: false, mode: 'degraded', spawnNote: '未配置 config.dispatch.provider ⇒ 仅发句柄（补配置后重派，或用 firstLine 直派）' };
   }
   const injectBudget = readCapability(liveConfig, 'injectBudget');
-  const prompt = composeWorkerPrompt({
-    batchId, lane, cmd: laneTask?.cmd, layer: laneTask?.layer, role: roleData,
-    consume: laneTask?.consume ?? [], produce: laneTask?.produce ?? [], outputs: laneTask?.outputs ?? [],
-    firstLine: h.firstLine, leaderPrompt, artifactsRoot,
-    batchSessionId: sessionId,
-    singleArtifactWrite: laneTask?.singleArtifactWrite === true,
-    injectBudget,
-    archContext: renderArchContext({ targets: laneTask?.targets ?? null }),
-    preflight: laneTask?.preflight ?? null,
-    context: laneTask?.context ?? null,
-    checkpoints: laneTask?.checkpoints ?? null,
-    subtasks: laneTask?.subtasks ?? null,
-    //   自派档入口：方言由**同一份**单点判决算出（与 G1/G2 门同源），复用上面已读的 batch。
-    checkpointDialect: batch ? dialectOfLane(batch, lane) : null,
-    resume: laneTask?.resume === true,
+  // 任务包入参**单点组装**（见 `taskpackInputOf` 头注释）：本入口只提供四项入口特有值与已解析 role；
+  //   lane 黑板 → 任务包的映射、方言判决、archContext 生成全部在单点内完成 ⇒ 与取件档逐字同源。
+  const prompt = composeWorkerPrompt(taskpackInputOf({
+    batchId, lane, laneTask, batch, sessionId, roleData,
+    firstLine: h.firstLine, leaderPrompt, artifactsRoot, injectBudget,
     logger: ctx?.logger ?? null,
-  });
+  }));
   let start = null;
   try {
     if (!exec?.agent) throw new Error('缺少调用方 Agent —— 派发必须在工具流水线内调用（exec.agent 决定子会话挂载点）');

@@ -72,6 +72,8 @@ export {
   composeWorkerPrompt,
   memberDispatchBudgetKeyOf,
   renderRoleGuide,
+  // 任务包入参单点组装（两个生产入口共用；`query-tools` 的 `taskpack_for` 经本 barrel 取件）。
+  taskpackInputOf,
 } from './dispatch-taskpack.js';
 export { mailboxRootOf } from '../mailbox-paths.js';
 export { SUITE_DENY_TOOLS, MODE_GATED_TOOLS } from './suite.js';

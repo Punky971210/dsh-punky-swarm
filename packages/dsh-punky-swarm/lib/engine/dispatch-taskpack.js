@@ -26,6 +26,71 @@ import { resumeClauseFor } from '../wave-plan.js';
 import { ROLE_SECTION_TITLES, roleCorpusRoot, resolveRoleRef, listOf } from './dispatch-role.js';
 import { labelOf } from './dispatch-bind.js';
 import { renderCheckpointsBlock, renderPreflightBlock, CP_SUPERSEDED_LINE } from './dispatch-preflight.js';
+import { renderArchContext } from './arch-context.js';
+import { dialectOfLane } from '../state/resume.js';
+
+/**
+ * 任务包入参**单点组装**（批 `punky-taskpack-cohesion-20261113`）。
+ *
+ * 为什么要有它：`composeWorkerPrompt` 的入参有 14 项来自 lane 黑板（cmd/layer/契约/产物/
+ * checkpoints/subtasks/context/preflight/targets/resume/…），原先由**两个生产入口各自手抄一遍**：
+ *   · 入口 A = `lib/engine/dispatch-core.js`（引擎自派）
+ *   · 入口 B = `lib/tools/query-tools.js` 的 `taskpack_for`（人工取件）
+ * 手抄面已经三次翻车（`team` 误绑定、`subtasks` 漏传、`checkpointDialect` 漏传），每次都会让
+ * 「同一 lane 两档任务包不一致」。本函数把「lane 黑板 → composeWorkerPrompt 入参」的映射收敛成
+ * **唯一一份**，两个入口只负责传**入口特有**的四项（firstLine / leaderPrompt / artifactsRoot /
+ * injectBudget）与已解析的 role。
+ *
+ * 方言仍走单点：`dialectOfLane(batch, lane)`（与 G1/G2 门同源）；`batch` 缺省为 null 时回落
+ * `null`（`composeWorkerPrompt` 内既有兼容三元兜底，仅供单测/直调老调用方）。
+ *
+ * @param {object} input
+ * @param {string} input.batchId
+ * @param {string} input.lane
+ * @param {object|null} [input.laneTask] 该 lane 的 wavePlan task（黑板真源）
+ * @param {object|null} [input.batch]    已读批次（方言判决用；禁为方言再读一次批文件）
+ * @param {string|null} [input.sessionId] 批归属会话（渲染「批归属会话」行）
+ * @param {object|null} [input.roleData] 已解析的 role（入口自行解析，两档解析口径各自负责）
+ * @param {string|null} [input.role]     未解析时的 role 引用（直调老调用方）
+ * @param {string|undefined} [input.firstLine] 自派档的首行（取件档为 undefined）
+ * @param {string} [input.leaderPrompt]
+ * @param {string|undefined} [input.artifactsRoot]
+ * @param {object|null} [input.injectBudget]
+ * @param {object|null} [input.logger]
+ * @returns {object} 可直接展开进 `composeWorkerPrompt(...)` 的入参对象
+ */
+export function taskpackInputOf({
+  batchId, lane, laneTask = null, batch = null, sessionId = null,
+  roleData = null, role = null,
+  firstLine = undefined, leaderPrompt = '', artifactsRoot = undefined,
+  injectBudget = null, logger = null,
+} = {}) {
+  const t = laneTask ?? {};
+  return {
+    batchId, lane,
+    cmd: t.cmd,
+    layer: t.layer,
+    role: roleData ?? role,
+    consume: t.consume ?? [],
+    produce: t.produce ?? [],
+    outputs: t.outputs ?? [],
+    firstLine,
+    leaderPrompt,
+    artifactsRoot,
+    batchSessionId: sessionId,
+    singleArtifactWrite: t.singleArtifactWrite === true,
+    injectBudget,
+    archContext: renderArchContext({ targets: t.targets ?? null }),
+    preflight: t.preflight ?? null,
+    context: t.context ?? null,
+    checkpoints: t.checkpoints ?? null,
+    subtasks: t.subtasks ?? null,
+    //   方言：与门（G1/G2）同一份判决函数；batch 缺省 ⇒ null ⇒ composeWorkerPrompt 内兼容三元兜底。
+    checkpointDialect: batch ? dialectOfLane(batch, lane) : null,
+    resume: t.resume === true,
+    logger,
+  };
+}
 
 export function renderRoleGuide(roleData) {
   const L = [];
@@ -148,9 +213,12 @@ export function composeWorkerPrompt({
   }
   let checkpointsBlock = '';
   try {
-    //   方言取源**单侧决定**：优先用调用方传入的 lane 级判决（与门同源）；缺省才回落既有三元
-    //   （仅供单测/直调老调用方零破坏）。渲染源也在此决定：有 `subtasks` 就用它，
-    //   否则回退既有 `checkpoints`（spec §R-3 / §R-4）。
+    //   方言取源**单侧决定**：入参 `checkpointDialect` 由 `taskpackInputOf` 用 `dialectOfLane(batch, lane)`
+    //   算好传入（与 G1/G2 门同一实现）；本文件**不自判方言**。
+    //   ⚠ 右侧三元 `(subtasks != null ? 'subtasks' : 'legacy')` 是**兼容兜底**：只在调用方不传
+    //   `checkpointDialect`（单测直调 / 老调用方）时命中。两个生产入口经 `taskpackInputOf` 后
+    //   **恒传显式值** ⇒ 该分支在活体路径上不可达；删除会破坏直调方零兜底，故保留并在此标注。
+    //   渲染源同时决定：有 `subtasks` 就用它，否则回退既有 `checkpoints`（spec §R-3 / §R-4）。
     const dialect = checkpointDialect ?? (subtasks != null ? 'subtasks' : 'legacy');
     checkpointsBlock = renderCheckpointsBlock(subtasks ?? checkpoints, { layer, dialect });
     //   双声明（同 lane 同时声明两者）⇒ 渲染块**首行**注明 checkspoints 已被取代（spec §4.2 第 3 行）。

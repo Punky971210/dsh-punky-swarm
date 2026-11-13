@@ -23,11 +23,10 @@ import { handoffGateStateOf } from '../wave-plan.js';
 //   否则「同一 lane 的 state」会在工具面与探针面分裂（U-5 边界；依赖方向单向：core → watch，无环）。
 import { laneStateOf, isDanglingLane } from '../state/lane-state.js';
 import * as EVT from '../state/event-types.js';
-import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt } from '../engine/dispatch.js';
-//   **不 re-export**）⇒ 必须从真源取，从 `dispatch.js` 取会得 `undefined`（调用期 TypeError）。
-import { renderArchContext } from '../engine/arch-context.js';
-//   lane 级方言判决单点（与自派档、G1/G2 门共用同一实现；禁在工具层另写判据）。
-import { dialectOfLane } from '../state/resume.js';
+import { renderRoleGuide, resolveRoleRef, ROLE_UNRESOLVED_CODE, renderPreflightBlock, composeWorkerPrompt, taskpackInputOf } from '../engine/dispatch.js';
+//   `renderArchContext` 与 lane 级方言 `dialectOfLane` **本层不再使用**：两者随「任务包入参单点组装」
+//   移入 `taskpackInputOf`（`lib/engine/dispatch-taskpack.js`，经 barrel 再导出）。工具层禁再各自算一遍，
+//   否则同一 lane 在两档的任务包会分叉（本文件历史上已因漏传 `subtasks` 翻车一次）。
 //   `role_guide` 与引擎自派路径必须过**同一份** `capabilities.injectBudget`（同一取值单点
 import { readCapability } from '../assembly/schema.js';
 
@@ -276,28 +275,17 @@ export function buildTaskpackTools(cx) {
         // team 取任意标签（如 `punky`）就零命中抛 GATE_ROLE_UNRESOLVED，造成同一 lane
         // 「引擎能派发、取件口取不到」的分叉 —— 引擎自派路径（dispatch-core）本就不带 team。
         const roleData = resolveRoleRef(laneTask.role, { warn: (m) => ctx?.logger?.warn?.(m) });
-        const text = composeWorkerPrompt({
-          batchId, lane, cmd: laneTask.cmd, layer: laneTask.layer, role: roleData,
-          consume: laneTask.consume ?? [], produce: laneTask.produce ?? [], outputs: laneTask.outputs ?? [],
+        // 任务包入参**单点组装**（与 `dispatch-core.js` 自派档同一函数）：本入口只提供入口特有值
+        //   （firstLine=undefined / leaderPrompt 取参数 / artifactsRoot 取 store / injectBudget 取 live config）
+        //   与已解析 role；lane 黑板→任务包的映射与方言判决都在 `taskpackInputOf` 内完成 ⇒ 两档逐字同源。
+        const text = composeWorkerPrompt(taskpackInputOf({
+          batchId, lane, laneTask, batch: b, sessionId, roleData,
           firstLine: undefined,
           leaderPrompt: typeof args?.leaderPrompt === 'string' ? args.leaderPrompt : '',
           artifactsRoot: store.artifactsDirOf(sessionId, batchId),
-          batchSessionId: sessionId,
-          singleArtifactWrite: laneTask.singleArtifactWrite === true,
           injectBudget: readCapability(readLiveConfig(deps), 'injectBudget'),
-          archContext: renderArchContext({ targets: laneTask.targets ?? null }),
-          //   `composeWorkerPrompt`）⇒ 本参数必须一并透传，否则同一 lane 在两档的任务包会不一致。
-          context: laneTask.context ?? null,
-          preflight: laneTask.preflight ?? null,
-          checkpoints: laneTask.checkpoints ?? null,
-          //   `subtasks` 同为任务包入参（spec §R-4）：本处与 `dispatch-core.js` 自派档必须成对透传，
-          //   漏一处即两档任务包不一致（本文件 :269 注释已明写该纪律）。
-          subtasks: laneTask.subtasks ?? null,
-          //   取件档入口：方言同源（复用本 execute 已读的 `b`，禁再读一次批文件）。
-          checkpointDialect: dialectOfLane(b, lane),
-          resume: laneTask.resume === true,
           logger: ctx?.logger ?? null,
-        });
+        }));
         return {
           batchId, lane,
           role: String(laneTask.role ?? ''),

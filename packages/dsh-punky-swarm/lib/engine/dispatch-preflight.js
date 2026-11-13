@@ -91,6 +91,9 @@ export function checkpointsOf(task) {
 
 // 【批 `punky-checkpoint-enforce-20261112` · lane e1-schema】`subtasks` 与 `checkpoints` **同形**读取器。
 //   只为读面同构（两处调用方可按同一形状传参）；**归一化不在此做**（单点仍在 `wave-plan.js`）。
+//   ⚠ **仅测试消费**（`test/checkpoint-render.test.js`）：生产面零调用 —— 生产面由
+//   `taskpackInputOf` → `composeWorkerPrompt` 直传 `subtasks`，不需要这层同形包装。
+//   保留理由：它是「两档形状一致」断言的落点；后续清理时**勿据此判死码**。
 export function subtasksOf(task) {
   try {
     const st = task?.subtasks;
