@@ -424,12 +424,28 @@
       "tests": 10,
       "todos": 0
     },
+    "test/checkpoint-render.test.js": {
+      "asserts": 33,
+      "blankLines": 22,
+      "lines": 195,
+      "tautologies": 0,
+      "tests": 5,
+      "todos": 0
+    },
     "test/checkpoint-resume-wire.test.js": {
       "asserts": 18,
       "blankLines": 15,
       "lines": 139,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/checkpoints-gate.test.js": {
+      "asserts": 79,
+      "blankLines": 34,
+      "lines": 401,
+      "tautologies": 0,
+      "tests": 11,
       "todos": 0
     },
     "test/client-sync.test.js": {
@@ -441,11 +457,11 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 111,
-      "blankLines": 48,
-      "lines": 486,
+      "asserts": 137,
+      "blankLines": 52,
+      "lines": 595,
       "tautologies": 0,
-      "tests": 33,
+      "tests": 37,
       "todos": 0
     },
     "test/command-script-anchor.test.js": {
@@ -558,6 +574,14 @@
       "lines": 180,
       "tautologies": 0,
       "tests": 3,
+      "todos": 0
+    },
+    "test/dialect-lane-single-point.test.js": {
+      "asserts": 14,
+      "blankLines": 16,
+      "lines": 174,
+      "tautologies": 0,
+      "tests": 4,
       "todos": 0
     },
     "test/discovery.test.js": {
@@ -800,6 +824,14 @@
       "tests": 3,
       "todos": 0
     },
+    "test/g2-subtask-closeout.test.js": {
+      "asserts": 53,
+      "blankLines": 51,
+      "lines": 375,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
     "test/g2-t4-stop-reason-source.test.js": {
       "asserts": 3,
       "blankLines": 12,
@@ -902,6 +934,14 @@
       "lines": 147,
       "tautologies": 0,
       "tests": 5,
+      "todos": 0
+    },
+    "test/gate-status-subtasks.test.js": {
+      "asserts": 34,
+      "blankLines": 20,
+      "lines": 211,
+      "tautologies": 0,
+      "tests": 3,
       "todos": 0
     },
     "test/gate-techdebt-red.test.js": {
@@ -1378,8 +1418,8 @@
     },
     "test/mcp-loopback.test.js": {
       "asserts": 84,
-      "blankLines": 50,
-      "lines": 576,
+      "blankLines": 51,
+      "lines": 611,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1856,6 +1896,14 @@
       "tests": 7,
       "todos": 0
     },
+    "test/taskpack-single-source.test.js": {
+      "asserts": 10,
+      "blankLines": 15,
+      "lines": 116,
+      "tautologies": 0,
+      "tests": 3,
+      "todos": 0
+    },
     "test/team-label-optional.test.js": {
       "asserts": 15,
       "blankLines": 13,
@@ -2104,6 +2152,14 @@
       "tests": 8,
       "todos": 0
     },
+    "test/wave-plan-subtasks.test.js": {
+      "asserts": 34,
+      "blankLines": 32,
+      "lines": 265,
+      "tautologies": 0,
+      "tests": 7,
+      "todos": 0
+    },
     "test/wave-plan.test.js": {
       "asserts": 72,
       "blankLines": 34,
@@ -2144,6 +2200,14 @@
       "tests": 20,
       "todos": 0
     },
+    "test/worktree-checkpoint-degrade.test.js": {
+      "asserts": 31,
+      "blankLines": 13,
+      "lines": 163,
+      "tautologies": 0,
+      "tests": 4,
+      "todos": 0
+    },
     "test/worktree-merge-fail-escapes.test.js": {
       "asserts": 16,
       "blankLines": 11,
@@ -2169,7 +2233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-09T18:28:01Z",
+  "generatedAt": "2026-11-13T16:02:54Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2180,15 +2244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "punky-prerelease-scan 收口：e6 改造 5 条锁旧契约用例(asserts +6/lines +38) + Leader 删 AC-4/AC-6 子进程探针用例并加真实主目录硬守卫(asserts -10/tests -1)；全写者已停写",
+  "reason": "F-04 子项B 收口：test/mcp-loopback.test.js +35 行（postJsonOf 连接级退避重试；lines 576->611 / blankLines 50->51，唯一 changed）；同时纳入 8 个此前未进基线的新增用例文件（checkpoints-gate / gate-status-subtasks / g2-subtask-closeout / worktree-checkpoint-degrade / checkpoint-render / taskpack-single-source / wave-plan-subtasks / dialect-lane-single-point，均属 added 档）；对端 2026-11-11 WRITE_HEADS 状态已在基线内，本次未变",
   "schema": 1,
   "totals": {
-    "asserts": 12065,
-    "blankLines": 6856,
-    "files": 271,
-    "lines": 72724,
+    "asserts": 12379,
+    "blankLines": 7064,
+    "files": 279,
+    "lines": 74768,
     "tautologies": 0,
-    "tests": 2516,
+    "tests": 2566,
     "todos": 0
   }
 }

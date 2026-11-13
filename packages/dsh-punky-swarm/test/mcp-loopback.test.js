@@ -80,7 +80,16 @@ function makeToolsStub(names = RESIDENT_TOOL_NAMES) {
   };
 }
 
-/** 自由端口（先 bind 0 取号再释放；仅测试取号，**不是**生产端口策略）。 */
+/**
+ * 自由端口（先 bind 0 取号再释放；仅测试取号，**不是**生产端口策略）。
+ *
+ * ⚠ 为什么**不**改成「高位随机区间试 bind」（F-04 子项 B 曾这么改又回退，留证据防复发）：
+ *   探针实测 `listen(0)` 由 OS 的 ephemeral 分配器**顺序递增**发号 —— 连续 20 次得
+ *   40997 / 40998 / … / 41006，重复数 0 ⇒ OS 分配器**保证**不重复；
+ *   改成随机区间反而是靠运气避撞（每次约 1/区间宽度，40 次尝试内仍有碰撞可能），
+ *   把「冲突概率 0」换成「很小但非 0」。
+ *   ⇒ F-04 子项 B 的真因**不是**端口号复用，修复只在 `postJsonOf` 的连接级退避重试。
+ */
 async function freePortOf() {
   const srv = net.createServer();
   await new Promise((resolve) => srv.listen(0, MCP_LOOPBACK_HOST, resolve));
@@ -104,16 +113,42 @@ async function portFreeOf(port) {
   });
 }
 
+/**
+ * POST/GET 一个 JSON-RPC 帧（R1 · 连接级退避重试）。
+ *
+ * ⚠ 重试**只**覆盖「连接建立失败」（`fetch` throw，如 ECONNREFUSED / ECONNRESET）：
+ *   一旦拿到 `res`，任何 HTTP 层结果（含 4xx/5xx 与畸形 JSON）都原样返回给断言 ——
+ *   不重试、不改判据 ⇒ 不会把真实行为缺陷洗成绿。
+ * ⚠ 每次重试都打 warning：重试本身必须可见，否则等同于静默掩盖。
+ * ⚠ 重试耗尽后仍 `throw` 最后一次错误 ⇒ 该用例照旧变红，不存在「假绿」通道。
+ */
+const POST_RETRY_DELAYS_MS = [20, 50];
+
 async function postJsonOf(port, body, { routePath = MCP_PATH, method = 'POST' } = {}) {
-  const res = await fetch(`http://${MCP_LOOPBACK_HOST}:${port}${routePath}`, {
+  const url = `http://${MCP_LOOPBACK_HOST}:${port}${routePath}`;
+  const init = {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: method === 'POST' ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
-  });
-  const text = await res.text();
-  let json = null;
-  try { json = text.length > 0 ? JSON.parse(text) : null; } catch { json = null; }
-  return { status: res.status, text, json };
+  };
+  let lastErr = null;
+  for (let attempt = 0; attempt <= POST_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      const text = await res.text();
+      let json = null;
+      try { json = text.length > 0 ? JSON.parse(text) : null; } catch { json = null; }
+      return { status: res.status, text, json };
+    } catch (e) {
+      lastErr = e;
+      const delay = POST_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) break;
+      process.emitWarning('[mcp-loopback.test] postJsonOf 连接失败，' + delay + 'ms 后重试 #' + (attempt + 1)
+        + '（' + String(e?.code ?? '') + ' / ' + String(e?.message ?? e) + '）');
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
 }
 
 const rpcFrame = (method, params, id = 1) => ({ jsonrpc: '2.0', id, method, params });
