@@ -1,3 +1,21 @@
+# ⚠⚠ 本文件**不是运行时真源（inert）** —— 改它不改变任何运行行为。⚠⚠
+#
+# 运行时插件清单的唯一真源 = 包根 `cordis.patch.yml` 的
+#   `dsh-agent-preset-punky.config.plugins` 内联段（0.1.7 起 `agent-preset-registry`
+#   不再扫描目录，由 `@deepseek-ai/dsh-agent-preset` 的 `Service.init → agentPresets.register()`
+#   注册该内联段）。
+#
+# 本文件的实际用途只有两条，都是**非装配面**：
+#   ① 人类可读镜像：与上面那段内联 plugins 内容等价（当前 29 行 = 17 直属 + 12 嵌套）；
+#   ② 资产同步源：`lib/assets.js` 的 `presets/punky-preset → ~/.dsh/.agent-presets/punky-preset`
+#      把本目录整树复制到 live（`syncAssets()` 幂等）。live 副本同样**不参与装配**。
+#
+# 手工维护纪律（无自动比对；曾声称存在的 `test/patch-preset-duplicate-consistency.test.js`
+# **并不存在**，漂移不会被任何测试拦住）：
+#   增删/改动插件行时，必须**同时**改 `cordis.patch.yml` 的内联段（生效）与本文件（镜像）；
+#   只改本文件 = 白改（2026-11-13 weknora 双挂载事故就是这么产生的：preset 侧那份是独立实例、
+#   不继承 bundle patch 的 config，于是拿到插件缺省值并覆盖了正确配置）。
+#
 # The `standard` agent preset: the full coding agent, mounted once per process.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
@@ -140,7 +158,7 @@
 # `weknora` 是外部 bundle（自带 `cordis.patch.yml`，见 V-3 探针），此处只引用其包行，
 # **不复制**它的 config 缺省 —— 缺省由该 bundle 自己的 patch 提供，双写即两真源。
 # 双副本一致性：本行与 `cordis.patch.yml` 的 `dsh-agent-preset-punky.config.plugins` 内同名行
-# 由 `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+# **无自动比对**（该测试不存在），改本段/本行时必须手动同步另一处副本。
 # 收窄面**不动**：`weknora_*` 不进 `SUITE_DENY_TOOLS`、不进 `config.dispatch.denyTools`、
 # 不进任何 role 的 `tools.allow`（会污染 `roleToolVocabulary()` 并经 `deriveDenyTools` 反禁其它角色）。
 #
@@ -288,8 +306,8 @@
     # `@deepseek-ai/dsh-base` 依赖本包
     #   ⇒ 本行**不需要**按宿主版本分支（内核**无**宿主版本变量 ⇒ 条件行不可达；见批 6 取证 §二/§四）。
     # **禁**回加旧推进器行：那会在两线之一新增**必失败行**，且旧线存在同服务**双挂载**风险。
-    # 双副本一致性（本行 ↔ `cordis.patch.yml` 的 `dsh-agent-preset-punky.config.plugins`）由
-    #   `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+    # 双副本（本行 ↔ `cordis.patch.yml` 的 `dsh-agent-preset-punky.config.plugins`）：**无自动比对**
+    #   （该测试不存在），且**本文件不生效** —— 生效的是 `cordis.patch.yml` 那段，改这里只同步镜像。
     - id: workflow-ptc
       name: '@deepseek-ai/dsh-workflow-ptc'
       config:

@@ -140,7 +140,14 @@
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）
 # 0.1.7 起 dsh-agent-preset-registry 不再扫描 ~/.dsh/.agent-presets 目录，
 # 必须由 @deepseek-ai/dsh-agent-preset 插件行注册（Service.init -> agentPresets.register）。
-# plugins 内容 = dsh-punky-swarm/presets/punky-preset/agent.cordis.yml（AGENT-PLANE 组合）。
+#
+# ✅ **本段 `config.plugins`（下面 300 余行）是运行时插件清单的唯一真源** —— 改这里才生效。
+# ⚠ `presets/punky-preset/agent.cordis.yml` 与 `~/.dsh/.agent-presets/punky-preset/` 都是**不生效的副本**
+#   （前者是资产同步源 + 人类可读镜像，后者由 `syncAssets()` 从前者复制）。只改那两处 = 白改。
+# ⚠ **无自动比对**：两处曾有注释宣称「由 `test/patch-preset-duplicate-consistency.test.js` 机检」，
+#   该测试**不存在**；增删插件行必须**手动**同时改本段与 `presets/punky-preset/agent.cordis.yml`。
+#   事故参照（2026-11-13 weknora）：preset 侧那份被当成有效行，导致同名插件挂载两次，
+#   生效的是 preset 那份（插件缺省值、无 apiKey）⇒ 全部 401。
 # ============================================================
 - insert:
     - id: dsh-agent-preset-punky
@@ -196,8 +203,9 @@
           # ── 蟛蜞治理工具面（丙 · 装配隔离，2026-11-08 用户裁决）─────────────────────────────
           # 治理工具**只在本 preset 的 scope 层**注册 ⇒ 只有选用 punky-preset 的 agent（及其派生
           # worker，经 composeFrom 继承）看得到；其它模式工具目录零污染。
-          # 本行与 `presets/punky-preset/agent.cordis.yml` 的同名行是**双副本**，由
-          # `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+          # 本行与 `presets/punky-preset/agent.cordis.yml` 的同名行是**双副本**；
+          # **无自动比对**（曾宣称存在的 `test/patch-preset-duplicate-consistency.test.js` 并不存在）
+          # ⇒ 只有这一段（`cordis.patch.yml` 内联段）生效，改插件行必须手动同步那份镜像。
           # `punkySwarmTools` 由引擎行 provide；缺它 ⇒ 本行 pending（不导致 preset 挂载失败）。
           - id: punky-provider
             name: 'dsh-punky-swarm/provider-dsh'
@@ -262,8 +270,8 @@
           # 组合面打开（2026-11-10 用户裁决）：成员工具面**广度由本组合面决定**，不再由任何名单裁剪。
           # `weknora` 是外部 bundle（自带 `cordis.patch.yml`，见 V-3 探针），此处只引用其包行，
           # **不复制**它的 config 缺省 —— 缺省由该 bundle 自己的 patch 提供，双写即两真源。
-          # 双副本一致性：本行与 `presets/punky-preset/agent.cordis.yml` 的同名行由
-          # `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+          # **无自动比对**（曾宣称的 `test/patch-preset-duplicate-consistency.test.js` 并不存在）
+          # ⇒ 改本行必须手动同步 `presets/punky-preset/agent.cordis.yml` 的镜像行。
           # 收窄面**不动**：`weknora_*` 不进 `SUITE_DENY_TOOLS`、不进 `config.dispatch.denyTools`、
           # 不进任何 role 的 `tools.allow`（会污染 `roleToolVocabulary()` 并经 `deriveDenyTools` 反禁其它角色）。
           #
@@ -412,8 +420,8 @@
               # `@deepseek-ai/dsh-base` 依赖本包
               #   ⇒ 本行**不需要**按宿主版本分支（内核**无**宿主版本变量 ⇒ 条件行不可达；见批 6 取证 §二/§四）。
               # **禁**回加旧推进器行：那会在两线之一新增**必失败行**，且旧线存在同服务**双挂载**风险。
-              # 双副本一致性（本行 ↔ `presets/punky-preset/agent.cordis.yml` 的同一行）由
-              #   `test/patch-preset-duplicate-consistency.test.js` 机检（漂移即红）。
+              # 双副本（本行 ↔ `presets/punky-preset/agent.cordis.yml` 同一行）：**无自动比对**
+              #   （该测试不存在）⇒ 改本行须手动同步镜像。
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'
                 config:

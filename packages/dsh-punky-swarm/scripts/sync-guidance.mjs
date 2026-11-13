@@ -40,6 +40,13 @@ const SYNC_FILES = [
 // 源根例外：`cordis.patch.yml` 是 **bundle patch 片段**，位于**包根**而非 `presets/punky-preset/` 内；
 //   落点口径**不变**（仍落 live 根，见 USAGE「注入面 → <live>」）⇒ 只换源侧根，目标侧不动。
 //   反例（禁）：若把它当 preset 包内文件，`copyIfChanged` 会报「源缺失」⇒ 退出码 1（W-7 的实质风险）。
+//
+// ⚠ **inert 声明（2026-11-13 核查）**：本数组里 `agent.cordis.yml` 与 `cordis.patch.yml` 复制到 live 后
+//   **都不参与装配** —— 运行时插件清单的唯一真源是**包根** `cordis.patch.yml` 的
+//   `dsh-agent-preset-punky.config.plugins` 内联段（0.1.7 起 registry 不再扫描 `~/.dsh/.agent-presets`）。
+//   live 侧这两件只当**人类可读副本 / 资产同步产物**。
+//   ⇒ 改插件面请改**包根 `cordis.patch.yml`**；改 live 或 `presets/punky-preset/agent.cordis.yml` 一律白改
+//   （2026-11-13 weknora 双挂载事故即由此产生）。此处保留复制行为只为安装面完整，勿据此推断生效性。
 const ROOT_SOURCED = new Set(['cordis.patch.yml']);
 
 const SKILL_IGNORE_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
