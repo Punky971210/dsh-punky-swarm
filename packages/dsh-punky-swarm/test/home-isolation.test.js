@@ -1544,7 +1544,13 @@ test('D13 第四通道 + 读数接通：映射成功未命中要可见，summary
 
   // ── D13-2 可复跑的旧查找反事实（照 oldIsoRelToFaceBuggy 的范式）──
   const diffSet = new Set([posixKey]);
-  const backendKey = path.join('punky-preset', 'agent.cordis.yml');   // 反斜杠用 path.join 造，不手写字面量
+  // ⚠ 必须用 **win32 语义**造键（2026-11-14 修 · 批 `punky-g2-closeout-20261113` 收口期）：
+  //   原写法 `path.join(...)` 取**当前平台**分隔符 —— 在 Windows 上产出 `punky-preset\agent.cordis.yml`
+  //   （与 posixKey 不同，前置断言通过），但在 **Linux/CI 上产出 `punky-preset/agent.cordis.yml`
+  //   （与 posixKey 相同）⇒ 下一行 `assert.equal(backendKey === posixKey, false)` 必失败**
+  //   ⇒ 本用例在 ubuntu-latest 上恒红（本地 Windows 恒绿，这正是它长期未被发现的原因）。
+  //   改用 `path.win32.join` 后：任何平台都产出反斜杠键，且仍不手写转义字面量。
+  const backendKey = path.win32.join('punky-preset', 'agent.cordis.yml'); // 明确 win32 语义 ⇒ 平台无关的反斜杠键
   const oldLookup = (set, rel) => set.has(rel);                        // 修复前的查找
   const newLookup = (set, rel) => set.has(rel) || set.has(toPosix(rel)); // 修复后的自防御
   assert.equal(backendKey === posixKey, false, 'D13-2 前置：构造键必须真的含分隔符（实测 ' + JSON.stringify(backendKey) + '）');

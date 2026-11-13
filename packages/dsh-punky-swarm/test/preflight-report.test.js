@@ -249,7 +249,15 @@ test('AC-R11 0 字节与目录形态跳过（检测器级）＋ lane 级仍被 e
   writeArt('b-r11', 'exec/e1.md', FULL);
   store.setMember(S, 'b-r11', 'e1', 'running');
   store.setMember(S, 'b-r11', 'e1', 'review');
-  assert.throws(() => store.setMember(S, 'b-r11', 'e1', 'merged'), /GATE_ARTIFACT_(MISSING|NOT_A_FILE)/);
+  // 拒码口径（2026-11-14 修 · 批 `punky-g2-closeout-20261113` 收口期）：
+  //   本条意图是「0 字节 / 空目录声明进 exec 产物 ⇒ **被 exit 门硬拒**」，不锁具体拒码。
+  //   `presenceJudge` 后来把「空 + 无 reason 行」细化为 `GATE_ARTIFACT_EMPTY_NO_REASON`
+  //   （比 MISSING / NOT_A_FILE 更精确：件在场、是文件，但空且未声明 empty-reason）
+  //   ⇒ 原正则只认 MISSING|NOT_A_FILE 会让本用例在**产品码细化之后恒红**（AC-R11 长期基线红即此）。
+  //   故放行三个拒码；「是否硬拒」这一断言强度不变（仍是 assert.throws）。
+  assert.throws(() => store.setMember(S, 'b-r11', 'e1', 'merged'),
+    /GATE_ARTIFACT_(MISSING|NOT_A_FILE|EMPTY_NO_REASON)/,
+    '0 字节 / 空目录声明进 exec 产物 ⇒ exit 门必须硬拒（码可为 MISSING / NOT_A_FILE / EMPTY_NO_REASON）');
   assert.equal(eventsOf('b-r11').length, 0);
 });
 

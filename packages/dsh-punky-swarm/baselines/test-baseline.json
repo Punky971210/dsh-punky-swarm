@@ -1171,7 +1171,7 @@
     "test/home-isolation.test.js": {
       "asserts": 241,
       "blankLines": 183,
-      "lines": 2217,
+      "lines": 2223,
       "tautologies": 0,
       "tests": 32,
       "todos": 0
@@ -1611,7 +1611,7 @@
     "test/preflight-report.test.js": {
       "asserts": 61,
       "blankLines": 30,
-      "lines": 328,
+      "lines": 336,
       "tautologies": 0,
       "tests": 16,
       "todos": 0
@@ -2233,7 +2233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-13T17:30:24Z",
+  "generatedAt": "2026-11-13T17:34:18Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2244,13 +2244,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "测试改写（显式更新通道）：gate-techdebt-red.test.js#assertRevivalOf 不再用 assert.equal(revival,true) 表达『前提未成立』—— 该断言在每条 todo 回调里必然失败：本地单文件跑被 node 的 todo 语义吸收（fail=0），而全量跑（CI）会被计入 failing tests（R-16/R-17，CI fail=2）⇒ CI 永久红。防护已由 forward-todo-lock.test.js 的 L6 升格门承担（assert.equal(revival,false) ⇒ 前提成立而未转正即红）。故删该断言（asserts -1）、改 console.log 提示（lines +14）。防护未降级。",
+  "reason": "测试修正（显式更新通道，两处平台/口径缺陷）：(1) home-isolation.test.js#D13-2 前置键改用 path.win32.join —— 原 path.join 取当前平台分隔符，在 ubuntu-latest 上产出正斜杠键与 posixKey 相等 ⇒ 前置断言恒失败（本地 Windows 恒绿，故长期未被发现）；(2) preflight-report.test.js#AC-R11 允许 GATE_ARTIFACT_EMPTY_NO_REASON —— presenceJudge 已把『空+无 reason』细化为该码，原正则只认 MISSING|NOT_A_FILE 会让用例在产品码细化后恒红；断言强度不变（仍 assert.throws）。",
   "schema": 1,
   "totals": {
     "asserts": 12352,
     "blankLines": 7060,
     "files": 279,
-    "lines": 74673,
+    "lines": 74687,
     "tautologies": 0,
     "tests": 2562,
     "todos": 0
