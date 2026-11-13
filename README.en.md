@@ -15,14 +15,15 @@
 
 ## Highlights
 
+- **Members hand over artifacts, not messages** — everything a member delivers is stat-checked for presence. "I sent it to you" does not count; the file being there does.
 - **Four gates, nothing half-done passes** — upstream artifacts before dispatch, plan structure before merge, artifacts on disk before settlement, finished acceptance before close.
 - **Criteria fixed before work starts** — acceptance criteria live in the plan layer and the audit checks them item by item; an agent can submit, but **cannot write its own settlement**.
 - **Run mode assigned by task profile** — small jobs are done directly, without governance overhead; multi-step work takes the pipeline, and nothing starts without a batch.
-- **A checkpoint per step** — an interruption resumes from the last checkpoint instead of restarting.
-- **One writer per lane at a time** — isolated worktrees; conflicts are neither auto-merged nor silently overwritten.
+- **A checkpoint per step** — an interruption resumes from the last checkpoint instead of restarting; finished steps are not redone.
+- **One writer per lane at a time** — isolated worktrees; conflicts are neither auto-merged nor silently overwritten, the scene is kept for a human ruling.
 - **Complex long tasks must open a batch** — acting without one is refused by the engine, and gradings expire so nobody drifts into unplanned work.
-- **Denials are legible** — a rejected call says which rule stopped it and comes with a tamper-evident receipt.
-- **Everything on the record** — state, handoffs, settlements and gate decisions land in an event stream that can be replayed and exported.
+- **Denials are legible** — a rejected call says which rule stopped it and comes with a tamper-evident receipt, not a generic refusal.
+- **Everything on the record** — state, handoffs, settlements and gate decisions land in an event stream that can be replayed and exported; the read-only panel shows it all at a glance.
 
 ## Why it is needed
 
@@ -38,23 +39,13 @@ Most multi-agent products stall on one invisible line: **they give you capabilit
 | Target drift | requirements quietly change mid-conversation and nobody notices | target fixed before work starts; a created batch is never recomputed |
 | Vague asks | all you can say is "write me a plan" | grade first, layer by dependency, every track declares its deliverable |
 
-## Rails set at the tool-call level
+## Why it can only be done this way
 
-An agent going off track cannot be cured by more capability. It is cured by discipline — the way walking is wired into the spinal cord rather than occupying the brain. **Whether a task completes depends not on how smart the agent is right now, but on whether a process is holding it up.**
+Interop protocols (MCP / ACP) solve reachability: find each other, hand over tasks — at best a chat room. **A real pipeline does not grow out of interop; it grows out of acceptance.** Such a check has one place to grow: **inside the host's execution loop**, because only the loop knows what was missing before a call, what it produced, and who is waiting on it. If the host opens no more than external protocols, discipline has to be bolted on outside the engine; if it opens the loop itself, discipline can live inside and become instinct.
 
-So judgement is taken out of the agent's hands: contracts are fixed before work starts (what this step delivers, what counts as complete), each step is accepted before the next opens, and the check sits on the tool-call path rather than in the agent's conscience.
-
-This can only live at **the layer where the host opens its execution loop**. If the host opens no more than external protocols, discipline has to be bolted on outside the engine; if it opens the loop itself, discipline can live inside and become instinct.
+So judgement is taken out of the agent's hands: contracts are fixed before work starts (what this step delivers, what counts as complete), and each step is accepted before the next opens — the check sits on the tool-call path rather than in the agent's conscience. The way walking is wired into the spinal cord rather than occupying the brain: **whether a task completes depends not on how smart the agent is right now, but on whether a process is holding it up.**
 
 Three parts make it up: **engine** for capability (grading, sequencing, gates, locks, checkpoints, guardrails, read-only panel), **mode** for behaviour (roles, discipline, boot guidance), **guidance** for usage (role manuals, artifact formats, templates). All three ship together — install it and you have a runnable team.
-
-## Discipline lives inside the engine, not beside the protocol
-
-Interop protocols (MCP / ACP) solve reachability: find each other, hand over tasks — at best a chat room. **A real pipeline does not grow out of interop; it grows out of acceptance.** The rear foot may not move until the front foot is planted.
-
-Such a check has one place to grow: inside the host's execution loop, because only the loop knows what was missing before a call, what it produced, and who is waiting on it. **"The agent remembers to do it" and "the engine must verify it" are two kinds of governance** — this engine picks the second.
-
-The market splits roughly three ways: **single-agent coding products** (get one agent to finish a job; multi-track work and artifact contracts are not in their design), **multi-agent orchestration frameworks** (get several agents talking in a topology; the criteria stay with the caller), and **judgement-engineering approaches** (gates and reviewers, but a single line). The first lacks orchestration, the second lacks gates, the third has only one line — this engine puts all three in one place.
 
 ## What you get
 
@@ -83,18 +74,16 @@ Few people satisfy all three. But if you do, there is no second option on the ma
 Requires DeepSeek Harness (dsh) and Node.js ≥ 22.
 
 ```sh
-dsh plugin add dsh-punky-swarm
+dsh plugin add "git+https://github.com/Punky971210/dsh-punky-swarm.git#v0.6.0"
 dsh web restart
 ```
 
-> Alternative: `npm install -g dsh-punky-swarm`, then `dsh plugin --profile <profile> add dsh-punky-swarm`. For development, point `link:` at the local package directory.
-
 After the restart the swarm panel appears in the session area and the team skills sync into your user directory — installed and ready, no extra configuration.
 
-## Compatibility and license
+> Development: point `link:` at the local package directory so edits take effect immediately.
 
-**Version**: single source `packages/dsh-punky-swarm/package.json` (see `CHANGELOG.md`). **Test baseline**: 204 test files / 2,147 tests / 10,560 assertions / 0 tautological (single source `baselines/test-baseline.json`).
+## License and boundaries
 
-**Peer dependencies**: `@deepseek-ai/dsh-tools`（`0.2.x` 宽声明） and `@deepseek-ai/cordis` (^4.0.1); zero third-party runtime dependencies. **Boundaries**: in-process on a single machine — no distributed sync, no cost control, no model routing, zero cloud dependency, no network exposure by default; failure is terminal and nothing auto-resumes.
-
-**License**: GNU AGPL v3 (AGPL-3.0-only) as the sole license. Under [AGPL-3.0](LICENSE) you may use, modify and distribute freely, including commercially; if you offer the modified software over a network, you must publish your changes.
+- **License**: [AGPL-3.0](LICENSE) as the sole license. Under it you may use, modify and distribute freely, including commercially; if you offer the modified software over a network, you must publish your changes.
+- **Dependencies**: zero third-party runtime dependencies; only the host-provided `@deepseek-ai/dsh-tools` and `@deepseek-ai/cordis`.
+- **Boundaries**: in-process governance on a single machine — no distributed sync, no cost control, no model routing, zero cloud dependency, no network exposure by default; failure is terminal and nothing auto-resumes.
