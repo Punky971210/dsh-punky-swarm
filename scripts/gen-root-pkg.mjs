@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /*
 Copyright (C) 2025-2026 Punky
 
@@ -92,6 +92,14 @@ function buildRootPkg(src) {
   const scriptsOut = {};
   for (const [key, value] of Object.entries(src.scripts ?? {})) scriptsOut[key] = prefixedScript(value);
 
+  // files 白名单：包内 files 逐项加前缀，并**强制补内层 package.json**。
+  //   为什么必须补：`npm publish` 时 package.json 由 npm 自动包含，包内 files 不写也有；
+  //   但 C 方案是「pnpm 按**根** package.json 的 files 从仓库树过滤后才装」⇒ 根 files 若不列
+  //   内层 package.json，装出来就没有它。而 `lib/aip/tool-descriptor.js:22` 恰恰用
+  //   `new URL('../../package.json', import.meta.url)` 读它取版本 ⇒ 缺了就抛 ENOENT。
+  //   实测证据：漏补时装出内层 9 项、独缺 package.json；补回后 10 项齐。
+  const filesOut = [...new Set([...(src.files ?? []).map((f) => barePrefixed(f)), PKG_DIR + 'package.json'])];
+
   return {
     name: src.name,
     version: src.version,
@@ -101,7 +109,7 @@ function buildRootPkg(src) {
     icon: relPrefixed(src.icon),
     main: relPrefixed(src.main),
     exports: exportsOut,
-    files: (src.files ?? []).map((f) => barePrefixed(f)),
+    files: filesOut,
     engines: src.engines,
     scripts: scriptsOut,
     keywords: src.keywords,
