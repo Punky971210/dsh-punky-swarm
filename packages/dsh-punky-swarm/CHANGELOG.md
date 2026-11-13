@@ -1,4 +1,17 @@
-## 未发布（unreleased）
+## 0.6.0（2026-11-14）
+
+### checkpoint 判据收口（**行为破坏性变更**）：废除序贯覆盖 / total 方言感知 / 软提示事件
+
+批 `punky-g2-closeout-20261113`（aborted，audit reject 留档）+ 复核批 `punky-g2-reverify-20261113`（complete，approve）。
+
+- **废除「序贯覆盖」通道（破坏性）**：G2 结算门原允许「单次报到末项」顶替逐项留痕（`total === 声明数 && step >= 声明数` 即放行），可被一行调用绕过。现只认显式 `lane_checkpoint({ subtaskId })` 覆盖，未逐项留痕即拒 `GATE_CHECKPOINTS_INCOMPLETE`。**仅影响 subtasks 方言批**；legacy 方言（无 `subtasks` 键）判定逐字不变。
+- **`total.mismatch` 方言感知**：取源由 `task.checkpoints.items` 改为 `(task.subtasks ?? task.checkpoints)?.items`，修复「subtasks 方言下 total 填错不留痕」的空承诺；`source` 区分 `subtasks.items` / `checkpoints.items`。
+- **新增软提示事件 `lane.checkpoint.subtask-hint`**：每次 checkpoint 落一条覆盖读数（`covered` / `remaining` 按声明序），不阻断、不改返回值；终态 lane 不落，`remaining` 未变化不重复落。
+- **`handoff_view` 增加 `subtaskOutputs`**：逐 subtask 展示 `outputs` 与逐件在场读数（**只展示**，不参与 `handoff_submit` 的 artifacts 校验）。
+- **强制档文案与判据对齐**：`## checkpoint 计划（强制）` 段每句可执行承诺都能在门内找到对应判据；建议档（legacy）渲染逐字节未变。
+- **`test/mcp-loopback.test.js`**：`postJsonOf` 对连接级失败退避重试 2 次并留 warning（F-04）；基线随之重冻（files 271→279 / tests 2520→2566 / asserts 12091→12379，asserts 只升不降、tautologies 0→0）。
+
+**验证**：全量 2610 / 2600 / 1（失败集仅既有红 `AC-R11`）；新增 9 例含真 RED（HEAD 上 fail 5）；机械不变量 V-2 / V-3 / V-4 / V-6 全过；活体冒烟三判据通过（单次报末项被拒 / 逐项留痕放行 / 软提示 `covered` 递增）。
 
 ### 「旧码/新码」裁决要点入册：以新码为准，接受新架构不兼容旧批次（2026-11-06 用户裁决）
 
