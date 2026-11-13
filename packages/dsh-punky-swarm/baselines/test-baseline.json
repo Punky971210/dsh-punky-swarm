@@ -457,11 +457,11 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 137,
-      "blankLines": 52,
-      "lines": 595,
+      "asserts": 111,
+      "blankLines": 48,
+      "lines": 486,
       "tautologies": 0,
-      "tests": 37,
+      "tests": 33,
       "todos": 0
     },
     "test/command-script-anchor.test.js": {
@@ -2233,7 +2233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-13T16:02:54Z",
+  "generatedAt": "2026-11-13T17:25:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2244,15 +2244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "F-04 子项B 收口：test/mcp-loopback.test.js +35 行（postJsonOf 连接级退避重试；lines 576->611 / blankLines 50->51，唯一 changed）；同时纳入 8 个此前未进基线的新增用例文件（checkpoints-gate / gate-status-subtasks / g2-subtask-closeout / worktree-checkpoint-degrade / checkpoint-render / taskpack-single-source / wave-plan-subtasks / dialect-lane-single-point，均属 added 档）；对端 2026-11-11 WRITE_HEADS 状态已在基线内，本次未变",
+  "reason": "修正 276c78e 的基线虚高：该次重冻扫的是主工作区（含对端未提交的 command-exec.test.js WIP，+4 tests/+26 asserts/+109 lines），而 CI 按已提交内容核对 => S3b-S9-C6 / GAP-S2-C5 / R3-1-C 三个基线对账断言在 CI 上判 delta=-26。本次在干净 HEAD worktree 重扫，按已提交事实重冻。",
   "schema": 1,
   "totals": {
-    "asserts": 12379,
-    "blankLines": 7064,
+    "asserts": 12353,
+    "blankLines": 7060,
     "files": 279,
-    "lines": 74768,
+    "lines": 74659,
     "tautologies": 0,
-    "tests": 2566,
+    "tests": 2562,
     "todos": 0
   }
 }
