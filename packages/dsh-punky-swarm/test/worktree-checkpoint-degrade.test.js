@@ -155,4 +155,8 @@ test('no-change-event [B-2] worktree 在场、零变更 ⇒ ok:true + commit:nul
   assert.equal(evt.mode, 'no-change', '零变更事件须带 mode=no-change');
   assert.equal(evt.step, 1, '零变更事件须带 progress.step');
   assert.equal(evt.subtask, 'a', '零变更事件须带 subtask（G2 显式覆盖按它判）');
+  // 渲染面：`no-change` 与 `no-worktree` 必须分得清（否则又把「有 worktree」说成「无 worktree」）
+  const text = renderOf(h.by.lane_checkpoint, { batchId: 'b-b2', laneId: 'e1', message: 'x' }, c);
+  assert.ok(text.includes('no diff'), 'no-change 渲染须说明「无 diff」，实测：' + JSON.stringify(text));
+  assert.equal(text.includes('no worktree'), false, 'no-change 不得渲染成 no worktree');
 });

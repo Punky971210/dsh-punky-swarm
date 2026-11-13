@@ -100,16 +100,20 @@ export function worktreeToolCheckpoint(ctx, deps) {
         ok: { type: 'boolean', required: true }, committed: { type: 'boolean' },
         // 【B1】无 worktree / 无 git 的降级留痕路径 `commit = null`（前提③：强制对象是留痕，不是 git）
         commit: { oneOf: [{ type: 'string' }, { type: 'null' }] },
-        mode: { type: 'string', enum: ['no-worktree', 'no-git'], description: '降级留痕成因（仅 ok:true 且 committed:false 时给）：no-worktree = lane worktree 不在场｜no-git = git 不可用' },
+        mode: { type: 'string', enum: ['no-worktree', 'no-git', 'no-change'], description: '留痕成因（仅 ok:true 且 committed:false 时给）：no-worktree = lane worktree 不在场｜no-git = git 不可用｜no-change = worktree 在场但零变更（B-2：照算完成，事件带 subtask）' },
         reason: { type: 'string' }, worktree: { type: 'string' }, message: { type: 'string' },
         error: { type: 'string' },
       } },
       // 【B1】渲染不再把「无 worktree 降级留痕」说成 `no-op`（spec V-22「渲染不撒谎」）
+      // 【B-2】`no-change` 与 `no-worktree` 语义不同：前者 worktree **在场**、只是没有 diff
+      //   ⇒ 渲染必须区分，否则又把「有 worktree」说成「无 worktree」。
       render: (_args, v) => TEXT_OUTPUT(v.committed
         ? 'checkpoint: ' + v.commit
-        : (v.mode
-          ? 'checkpoint: recorded (no worktree · ' + v.mode + ') — commit=null，事件已留痕，照算完成'
-          : 'checkpoint: no-op (' + (v.reason ?? '') + ')')),
+        : (v.mode === 'no-change'
+          ? 'checkpoint: recorded (no diff · no-change) — commit=null，事件已留痕，照算完成'
+          : (v.mode
+            ? 'checkpoint: recorded (no worktree · ' + v.mode + ') — commit=null，事件已留痕，照算完成'
+            : 'checkpoint: no-op (' + (v.reason ?? '') + ')'))),
     },
     async execute(args, exec) {
       if (typeof args.message !== 'string' || !args.message.trim()) throw new Error('message required');
