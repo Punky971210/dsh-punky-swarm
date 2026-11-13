@@ -103,8 +103,22 @@ const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 //     ② 删掉 `{ todo }` 转正式用例 ③ 同步清 `test/forward-todo-registry.json` 的 `open[]` 并收紧 `openMax`。
 function assertRevivalOf(id, what) {
   const r = governanceDegradeRevivalOf(PKG_ROOT);
-  assert.equal(r.revival, true,
-    '[' + id + '] 复活前提未成立 ⇒ 本条保持 todo。' + (what ? '本条检：' + what + '。' : '')
+  // 职责边界（2026-11-14 修正 · 批 `punky-g2-closeout-20261113` 收口期）：
+  //   本函数只负责「**前提已成立时提示该转正**」，**不再**用 assert 表达「前提未成立」。
+  //   原因：原实现 `assert.equal(r.revival, true)` 在每条 todo 回调里**必然抛 AssertionError** ——
+  //     本地**单文件**跑时被 node 的 todo 语义吸收（fail=0），而**全量**跑（CI）会被计入
+  //     `failing tests`（实测同一 node 24.18.0：本地 fail=0 / CI fail=2，R-16 与 R-17）⇒ CI 永久红。
+  //     即「失败原文可见」这个设计意图，是**依赖一个不稳定的运行时语义**换来的，代价是 CI 不可用。
+  //   「前提已成立而 todo 仍登记」这件事**已有专职门**：`test/forward-todo-lock.test.js` 的
+  //     **L6 升格门**（`assert.equal(r.revival, false, …)` ⇒ 前提成立而未转正即红，且提示转正三件套）。
+  //   ⇒ 本函数不再重复该职责，改为纯提示输出；防护不降级（L6 仍在守）。
+  if (r.revival) {
+    console.log('[' + id + '] ⚠ 复活前提**已成立** ⇒ 请按三件套转正'
+      + '（恢复 ARCHIVED_CASES 原始断言 / 删 `{ todo }` / 清 registry.open 并收紧 openMax）；'
+      + 'L6 升格门会同步判红。' + (what ? '本条检：' + what + '。' : ''));
+    return;
+  }
+  console.log('[' + id + '] 保持 todo；复活前提未成立。' + (what ? '本条检：' + what + '。' : '')
     + '缺失条件：' + r.missing.join(' / ')
     + '（归属批 `' + GOVERNANCE_DEGRADE_DUE_BATCH + '`；谓词见 `test/helpers/governance-degrade-revival.mjs`）');
 }

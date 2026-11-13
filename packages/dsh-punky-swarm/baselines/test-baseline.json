@@ -945,9 +945,9 @@
       "todos": 0
     },
     "test/gate-techdebt-red.test.js": {
-      "asserts": 100,
+      "asserts": 99,
       "blankLines": 77,
-      "lines": 1094,
+      "lines": 1108,
       "tautologies": 0,
       "tests": 39,
       "todos": 0
@@ -2233,7 +2233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-13T17:25:31Z",
+  "generatedAt": "2026-11-13T17:30:24Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2244,13 +2244,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "修正 276c78e 的基线虚高：该次重冻扫的是主工作区（含对端未提交的 command-exec.test.js WIP，+4 tests/+26 asserts/+109 lines），而 CI 按已提交内容核对 => S3b-S9-C6 / GAP-S2-C5 / R3-1-C 三个基线对账断言在 CI 上判 delta=-26。本次在干净 HEAD worktree 重扫，按已提交事实重冻。",
+  "reason": "测试改写（显式更新通道）：gate-techdebt-red.test.js#assertRevivalOf 不再用 assert.equal(revival,true) 表达『前提未成立』—— 该断言在每条 todo 回调里必然失败：本地单文件跑被 node 的 todo 语义吸收（fail=0），而全量跑（CI）会被计入 failing tests（R-16/R-17，CI fail=2）⇒ CI 永久红。防护已由 forward-todo-lock.test.js 的 L6 升格门承担（assert.equal(revival,false) ⇒ 前提成立而未转正即红）。故删该断言（asserts -1）、改 console.log 提示（lines +14）。防护未降级。",
   "schema": 1,
   "totals": {
-    "asserts": 12353,
+    "asserts": 12352,
     "blankLines": 7060,
     "files": 279,
-    "lines": 74659,
+    "lines": 74673,
     "tautologies": 0,
     "tests": 2562,
     "todos": 0
