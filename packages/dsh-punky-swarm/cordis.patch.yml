@@ -2,8 +2,6 @@
 # 声明面注记（2026-09-30 批 decl-face-and-logging-20260930）：
 #   ① 本包对宿主团队服务 `agentTeams` 的依赖**只在此装配面声明**（下方 ① 块的探针行 `inject: [agentTeams]`），
 #      **不进 `dependencies`**（批 7 不变量）；缺该服务 ⇒ 该行 pending（启动审计响亮）。
-#   ② `engines.dsh` = **零效力的文档位**（无消费者；兼容门只读 `peerDependencies`）⇒ 本包**刻意不写**该字段
-#      （`package.json` 无法就地注释，写入易被误读为会被执行的约束）；详见 README §四。
 - insert:
     - id: dsh-punky-swarm
       name: 'dsh-punky-swarm'
