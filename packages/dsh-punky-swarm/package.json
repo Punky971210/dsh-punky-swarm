@@ -50,15 +50,21 @@
     "gates"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis": ">=4.0.1",
     "@deepseek-ai/dsh-tools": "0.2.x"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-tools": {
       "optional": true
     }
   },
   "dsh": {
+    "engines": {
+      "dsh": ">=0.2.1-rc.2"
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     },

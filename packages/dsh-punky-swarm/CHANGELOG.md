@@ -10,6 +10,7 @@
 - **`handoff_view` 增加 `subtaskOutputs`**：逐 subtask 展示 `outputs` 与逐件在场读数（**只展示**，不参与 `handoff_submit` 的 artifacts 校验）。
 - **强制档文案与判据对齐**：`## checkpoint 计划（强制）` 段每句可执行承诺都能在门内找到对应判据；建议档（legacy）渲染逐字节未变。
 - **`test/mcp-loopback.test.js`**：`postJsonOf` 对连接级失败退避重试 2 次并留 warning（F-04）；基线随之重冻（files 271→279 / tests 2520→2566 / asserts 12091→12379，asserts 只升不降、tautologies 0→0）。
+- **安装面补齐（支持 git 地址安装）**：`dsh.engines.dsh` 补 `">=0.2.1-rc.2"`（照 `@linxin666/dsh-web-all` 的形态）；`peerDependencies["@deepseek-ai/cordis"]` 由 `^4.0.1` 放宽为 `>=4.0.1` 并标 `peerDependenciesMeta.optional = true`。理由两条：① DSH 兼容门只判 `@deepseek-ai/dsh` 与 `dsh-*` 前缀，`cordis` 不参与 ⇒ 宽声明不影响装载；② pnpm 的 `autoInstallPeers` 在 `cordis` 非 optional 时会从 registry 装**第二份**，与宿主 junction 提供的实例冲突（实测 lockfile 出现 `(@deepseek-ai/cordis@4.1.0)`）。
 
 **验证**：全量 2610 / 2600 / 1（失败集仅既有红 `AC-R11`）；新增 9 例含真 RED（HEAD 上 fail 5）；机械不变量 V-2 / V-3 / V-4 / V-6 全过；活体冒烟三判据通过（单次报末项被拒 / 逐项留痕放行 / 软提示 `covered` 递增）。
 
