@@ -37,7 +37,7 @@ dsh plugin --profile <name> add <tgz 路径>
 
 **引擎包已具备的条件**（`packages/dsh-punky-swarm/package.json`）：
 ```json
-"files": ["lib","presets","skills","cordis.patch.yml","puncat.jpg","LICENSE","README.md","CHANGELOG.md","scripts","!scripts/audit/out"],
+"files": ["lib","presets","skills","cordis.patch.yml","puncat.jpg","LICENSE","README.md","scripts","!scripts/audit/out"],
 "dsh": {
   "bundle": { "patch": "./cordis.patch.yml" },
   "client": { "inject": ["@deepseek-ai/dsh-client-locale","@deepseek-ai/dsh-client-runtime","@deepseek-ai/dsh-client-ui-conversation"], "platform": "web" }
