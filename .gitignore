@@ -35,7 +35,7 @@ docs/
 !docs/
 docs/*
 CONTRIBUTING.md
-# root CHANGELOG.md maintained in-repo (0.4.0+, not packaged); package CHANGELOG.md ships with the repo
+# CHANGELOG 单点：仅仓库根 CHANGELOG.md（0.4.0+，不入 npm 包）；包内不维护第二份
 
 # user-local decisions (not uploaded)
 **/docs/decisions/
