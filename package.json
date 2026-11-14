@@ -22,7 +22,6 @@
     "packages/dsh-punky-swarm/puncat.jpg",
     "packages/dsh-punky-swarm/LICENSE",
     "packages/dsh-punky-swarm/README.md",
-    "packages/dsh-punky-swarm/CHANGELOG.md",
     "packages/dsh-punky-swarm/scripts",
     "!packages/dsh-punky-swarm/scripts/audit/out",
     "packages/dsh-punky-swarm/package.json"

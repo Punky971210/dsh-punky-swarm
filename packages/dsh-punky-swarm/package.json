@@ -22,7 +22,6 @@
     "puncat.jpg",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md",
     "scripts",
     "!scripts/audit/out"
   ],

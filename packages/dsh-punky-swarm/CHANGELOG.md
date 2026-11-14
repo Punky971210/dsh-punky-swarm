@@ -1,26 +1,16 @@
 ## 0.6.0（2026-11-14）
 
-### checkpoint 判据收口（**行为破坏性变更**）：废除序贯覆盖 / total 方言感知 / 软提示事件
+### checkpoint 判据收口（行为破坏性变更）
 
-批 `punky-g2-closeout-20261113`（aborted，audit reject 留档）+ 复核批 `punky-g2-reverify-20261113`（complete，approve）。
+- **废除「序贯覆盖」通道（破坏性）**：结算门此前允许「单次报到末项」顶替逐项留痕；现只认显式 `subtaskId` 覆盖，未逐项留痕即拒。仅影响使用 `subtasks` 的批次，既有（legacy）批次判定不变。
+- **`total.mismatch` 覆盖 `subtasks` 批次**：此前只对 `checkpoints` 校验，`subtasks` 下 total 填错不留痕。
+- **新增事件 `lane.checkpoint.subtask-hint`**：每次 checkpoint 记录覆盖读数（`covered` / `remaining` 按声明序），不阻断调用。
+- **`handoff_view` 增加 `subtaskOutputs`**：逐 subtask 展示 `outputs` 与在场读数（只展示，不参与 `handoff_submit` 校验）。
+- **任务包 `## checkpoint 计划（强制）` 段与门判据对齐**；建议档渲染逐字节不变。
+- **连接级失败退避重试**：`postJsonOf` 对偶发连接失败重试 2 次并留 warning。
+- **安装面补齐（支持 git 地址安装）**：`dsh.engines.dsh` 声明 `">=0.2.1-rc.2"`；`@deepseek-ai/cordis` peer 由 `^4.0.1` 放宽为 `>=4.0.1` 并标为 optional，避免 pnpm 装入第二份实例。
 
-- **废除「序贯覆盖」通道（破坏性）**：G2 结算门原允许「单次报到末项」顶替逐项留痕（`total === 声明数 && step >= 声明数` 即放行），可被一行调用绕过。现只认显式 `lane_checkpoint({ subtaskId })` 覆盖，未逐项留痕即拒 `GATE_CHECKPOINTS_INCOMPLETE`。**仅影响 subtasks 方言批**；legacy 方言（无 `subtasks` 键）判定逐字不变。
-- **`total.mismatch` 方言感知**：取源由 `task.checkpoints.items` 改为 `(task.subtasks ?? task.checkpoints)?.items`，修复「subtasks 方言下 total 填错不留痕」的空承诺；`source` 区分 `subtasks.items` / `checkpoints.items`。
-- **新增软提示事件 `lane.checkpoint.subtask-hint`**：每次 checkpoint 落一条覆盖读数（`covered` / `remaining` 按声明序），不阻断、不改返回值；终态 lane 不落，`remaining` 未变化不重复落。
-- **`handoff_view` 增加 `subtaskOutputs`**：逐 subtask 展示 `outputs` 与逐件在场读数（**只展示**，不参与 `handoff_submit` 的 artifacts 校验）。
-- **强制档文案与判据对齐**：`## checkpoint 计划（强制）` 段每句可执行承诺都能在门内找到对应判据；建议档（legacy）渲染逐字节未变。
-- **`test/mcp-loopback.test.js`**：`postJsonOf` 对连接级失败退避重试 2 次并留 warning（F-04）；基线随之重冻（files 271→279 / tests 2520→2566 / asserts 12091→12379，asserts 只升不降、tautologies 0→0）。
-- **安装面补齐（支持 git 地址安装）**：`dsh.engines.dsh` 补 `">=0.2.1-rc.2"`（照 `@linxin666/dsh-web-all` 的形态）；`peerDependencies["@deepseek-ai/cordis"]` 由 `^4.0.1` 放宽为 `>=4.0.1` 并标 `peerDependenciesMeta.optional = true`。理由两条：① DSH 兼容门只判 `@deepseek-ai/dsh` 与 `dsh-*` 前缀，`cordis` 不参与 ⇒ 宽声明不影响装载；② pnpm 的 `autoInstallPeers` 在 `cordis` 非 optional 时会从 registry 装**第二份**，与宿主 junction 提供的实例冲突（实测 lockfile 出现 `(@deepseek-ai/cordis@4.1.0)`）。
-
-**验证**：全量 2610 / 2600 / 1（失败集仅既有红 `AC-R11`）；新增 9 例含真 RED（HEAD 上 fail 5）；机械不变量 V-2 / V-3 / V-4 / V-6 全过；活体冒烟三判据通过（单次报末项被拒 / 逐项留痕放行 / 软提示 `covered` 递增）。
-
-### 「旧码/新码」裁决要点入册：以新码为准，接受新架构不兼容旧批次（2026-11-06 用户裁决）
-
-批 `punky-quality-a-20261106` 收 `Q-3` 的**裁决要点**。**纯裁决留痕**——不改引擎判定面（门禁族、状态机、黑板真源均未动）。
-
-- **旧码不与新码共存，以新码为准**（**2026-11-06 用户裁决**）：新架构不提供「旧码 + 新码并存」的兼容面，同一语义只留一套写法；旧码一律按新码口径改写，不设双码过渡分支。
-- **接受新架构不兼容旧批次**：不提供迁移层 / 兼容层，不为旧批数据补逐字段适配；旧批数据仍按既有兜底分支（`{ type: string; [k: string]: unknown }`）可读，是可读性兜底而非兼容承诺。
-- **落点说明（`Q-3` 的「删除」动作无可删对象）**：该裁决原登记于 `lib/tools/handoff-tools.js`（拒码拆分，**防翻案锚点，不在本次改动面**）；`presets/punky-preset/references/discipline.md` 内**无对应原文**（`:176` 是进程粒度生效面说明、`:1072` 是 verdict↔lane 终态分叉登记，均非兼容策略）⇒ 本次只落要点入 CHANGELOG，**不删改 `discipline.md`**（无对象可删，动了反而制造漂移）。
+**兼容性**：不提供兼容层与迁移脚本；使用 `subtasks` 的批次按新口径逐项调用即可。
 
 ## 0.5.6（2026-10-25）
 
