@@ -1,16 +1,14 @@
 ## 0.6.0（2026-11-14）
 
-### checkpoint 判据收口（行为破坏性变更）
+### checkpoint 改为逐项留痕（破坏性变更）
 
-- **废除「序贯覆盖」通道（破坏性）**：结算门此前允许「单次报到末项」顶替逐项留痕；现只认显式 `subtaskId` 覆盖，未逐项留痕即拒。仅影响使用 `subtasks` 的批次，既有（legacy）批次判定不变。
-- **`total.mismatch` 覆盖 `subtasks` 批次**：此前只对 `checkpoints` 校验，`subtasks` 下 total 填错不留痕。
-- **新增事件 `lane.checkpoint.subtask-hint`**：每次 checkpoint 记录覆盖读数（`covered` / `remaining` 按声明序），不阻断调用。
-- **`handoff_view` 增加 `subtaskOutputs`**：逐 subtask 展示 `outputs` 与在场读数（只展示，不参与 `handoff_submit` 校验）。
-- **任务包 `## checkpoint 计划（强制）` 段与门判据对齐**；建议档渲染逐字节不变。
-- **连接级失败退避重试**：`postJsonOf` 对偶发连接失败重试 2 次并留 warning。
-- **安装面补齐（支持 git 地址安装）**：`dsh.engines.dsh` 声明 `">=0.2.1-rc.2"`；`@deepseek-ai/cordis` peer 由 `^4.0.1` 放宽为 `>=4.0.1` 并标为 optional，避免 pnpm 装入第二份实例。
-
-**兼容性**：不提供兼容层与迁移脚本；使用 `subtasks` 的批次按新口径逐项调用即可。
+- **checkpoint 逐项留痕**：使用 `subtasks` 的批次需按 subtask 逐个调用 `lane_checkpoint`。
+- **`total` 校验覆盖 `subtasks` 批次**。
+- **新增事件 `lane.checkpoint.subtask-hint`**。
+- **`handoff_view` 输出 `subtaskOutputs`**。
+- **任务包的 checkpoint 计划段同步更新**。
+- **连接偶发失败自动重试 2 次**。
+- **支持 git 地址安装**：`dsh.engines.dsh` 声明 `">=0.2.1-rc.2"`，`@deepseek-ai/cordis` peer 标为 optional。
 
 ## 0.5.6（2026-10-25）
 
