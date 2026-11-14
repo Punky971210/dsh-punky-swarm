@@ -324,8 +324,11 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
   }
   return sweepTimer;
 };
-const installTools = ({ ctx, config, store, root, readConfig, heartbeat, heartbeatRef, dispatchIndex }) => {
-  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat, getHeartbeat: () => heartbeatRef.current,
+// 【死注入清理】原 `getHeartbeat: () => heartbeatRef.current` 已删：唯一消费方 `lane_heartbeat` / `lane_longrun`
+//   已于 G3/B1 删除（见 `index.js:343` 注释），`createTools` 及其下各 install* 面零解构/零读取（全包 grep 实证）。
+//   `heartbeat` 本体保留：watchdog timer（`index.js:371` / `:997`）仍经 `heartbeatRef.current` 取值。
+const installTools = ({ ctx, config, store, root, readConfig, heartbeat, dispatchIndex }) => {
+  const tools = createTools(ctx, { store, root, config, readConfig, heartbeat,
     dispatchIndex, // 【本批 C】工具 deps 面透传同一 Map 引用（lane_dispatch 自派写点用；register.js → member-tools.js）
     // 修复① 兜底：miss ⇒ 扫事件流反查 + 回填同一 dispatchIndex（值经 dispatchIndexEntryOf 单点）
     // 【U-b】真传 logger（只加这一个实参）：不传则 `laneBindingOf` 的两态在该路径仍静默。
@@ -1259,7 +1262,7 @@ export const apply = (ctx, config = {}) => {
   const readConfig = createReadConfig({ config, rt });
   // 批归属会话解析索引（读侧骨架）：声明须早于 `createTools` 求值点（TDZ）；仍是同一个 Map，由下方启动重建/登记点热更新填充
   const dispatchIndex = new Map();
-  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat: rt.heartbeat, heartbeatRef: rt.heartbeatRef, dispatchIndex });
+  const tools = installTools({ ctx, config, store, root, readConfig, heartbeat: rt.heartbeat, dispatchIndex });
   // ── 工具面注册点：**不在本行**（丙 · 装配隔离，2026-11-08 用户裁决）──────────────────────────
   // 宿主的工具注册表按 scope 分层：`tools.register()` 落入**调用方 ctx** 所属的 scope 层
   //   （`@deepseek-ai/dsh-tools` 的 `register()` → `ScopedLayers.effect(scopeOf(ctx))`），

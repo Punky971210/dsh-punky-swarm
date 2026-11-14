@@ -20,7 +20,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripStreamMerges, segmentCommands } from '../shell-text.js';
+// 分词 / 掩码单点：`lib/shell-text.js`（五符号为一组，本地**不再自建**任何一份；`QUOTE_MASK` 与
+// `maskQuoted` 同源，禁止在本地另立同名常量）。
+import { stripStreamMerges, segmentCommands, QUOTE_MASK, maskQuoted, headToken } from '../shell-text.js';
+// 写告示表定义单点在 `lib/shell-text.js`：此处按**原符号名**别名引用（别名即该 `Set` 实例）。
+// 【2026-11-11 两表独立】本侧取**窄表** `WRITE_HEADS_COMMAND_GATE`（8 项，语义 = 「是否破坏性写操作」）；
+//   工具面取**宽表** `WRITE_HEADS_FILE_BAN`（44 项，语义 = 「这条命令是否会写盘」）。
+//   两表**禁合并**：本面刻意窄于工具面，合并会把 8 项拉到 44 项、混淆语义域（见 shell-text.js ④ 段头注）。
+import { WRITE_HEADS_COMMAND_GATE as WRITE_HEADS, WRITE_CMDLET_RE_COMMAND_GATE as WRITE_CMDLET_RE } from '../shell-text.js';
 
 // B-04：Windows `.cmd/.bat` 的同步进程树守卫入口（职责与退出码契约见该文件头注释）。
 const TREE_GUARD = fileURLToPath(new URL('./command-tree-guard.mjs', import.meta.url));
@@ -69,40 +76,15 @@ function forbiddenReFromEnv() {
 
 const WRITE_REDIRECT_RE = /(?<![=\-])>>?/;
 
-const WRITE_CMDLET_RE =
-  /(?<![\w-])(?:set-content|add-content|out-file|new-item|remove-item|move-item|copy-item|export-csv)(?![\w-])/i;
-
 const WRITE_OUTFILE_RE = /(?<![\w-])-outfile\b/i;
 const WRITE_FIND_EXEC_RE = /(?<![\w-])-exec(?:dir)?\b/i;
 
-const WRITE_HEADS = new Set(['rm', 'mv', 'cp', 'del', 'mkdir', 'touch', 'tee', 'chmod']);
-
-const QUOTE_MASK = '__Q__';
-
-
-function maskQuoted(text) {
-  let out = '';
-  let quote = null;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === quote) { quote = null; out += QUOTE_MASK; }
-      continue;
-    }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    out += ch;
-  }
-  if (quote) out += QUOTE_MASK;
-  return out;
-}
-
-function headToken(seg) {
-  const m = seg.match(/^[&.(]*\s*([^\s]+)/);
-  return (m?.[1] ?? '').toLowerCase();
-}
-
 function matchWritePath(command) {
-  const text = maskQuoted(stripStreamMerges(command));
+  const masked = maskQuoted(stripStreamMerges(command));
+  // 判定期 fail-closed：引号未闭合 ⇒ 命令边界不明，直接按「含写动作」拒绝（零执行、零重试）。
+  // 注：执行期另有 `splitCommandArgs().unclosed` 兜底；本行把拒绝通道前移到判定期，错误码走 `GATE_EXIT_FORBIDDEN`。
+  if (!masked.ok) return '含未闭合引号，命令边界不明（fail-closed 按写文件处理）';
+  const text = masked.masked;
   if (WRITE_REDIRECT_RE.test(text)) return '含重定向（> / >>）';
   if (WRITE_CMDLET_RE.test(text)) return '含写文件 cmdlet';
   if (WRITE_OUTFILE_RE.test(text)) return '含落盘参数 -OutFile';
@@ -134,8 +116,11 @@ const SHELL_META_WIN_RE = /\^|%[^%\s]+%/;
 /** 元字符判定（**剥引号后**）：返回命中依据；无命中返回 null。 */
 function matchShellMeta(command) {
   const masked = maskQuoted(command);
-  if (SHELL_META_RE.test(masked)) return '含 shell 元字符（| & ; < > 反引号 $() ${ 换行）';
-  if (process.platform === 'win32' && SHELL_META_WIN_RE.test(masked)) return '含 Windows 元字符（^ / %VAR%）';
+  // 类型闭合：未闭合引号已在 `matchesForbidden → matchWritePath` 判定期 fail-closed 拒绝，
+  // 故此分支在当前调用序下不可达；保留同一 fail-closed 方向，避免日后调整调用序时静默放行。
+  if (!masked.ok) return '含未闭合引号，命令边界不明（fail-closed 按元字符面拒绝）';
+  if (SHELL_META_RE.test(masked.masked)) return '含 shell 元字符（| & ; < > 反引号 $() ${ 换行）';
+  if (process.platform === 'win32' && SHELL_META_WIN_RE.test(masked.masked)) return '含 Windows 元字符（^ / %VAR%）';
   return null;
 }
 

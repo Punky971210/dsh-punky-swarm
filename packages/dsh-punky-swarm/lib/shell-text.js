@@ -38,8 +38,9 @@ export function segmentCommands(text) {
 //   ⚠ 只搬实现，**不动任何词表**：两套判定的**用途不同**（只读放行 vs 文件写禁令），
 //     词表宽窄差异是设计选择，不是漂移（实测「tool-ban 判写 ∧ readonly 判只读」的危险组合 = 0）。
 //     已知边界见 `lib/governance/tool-ban.js` 头注。
-//   ⚠ `lib/state/command-exec.js` 里另有一份**故意不同**的掩码（未闭合引号**不 fail-closed**，
-//     而是补掩码继续判）——那是命令 gate 的既有边界语义，本批**不并入**（并进去等于改它的失败模式）。
+//   ⚠ `lib/state/command-exec.js` 原先另有一份掩码：未闭合引号上**补掩码继续判**（与本件的 fail-closed 相反）。
+//     2026-11-11 起两处共用本件的同一 `maskQuoted` ⇒ 未闭合引号在**判定期**即 fail-closed 拒绝
+//     （拒绝码 `GATE_EXIT_FORBIDDEN`，零执行零重试），命令 gate 面与工具面同源同向。
 export const QUOTE_MASK = '__Q__';
 export const ASSIGN_RE = /^\s*(?:\$[A-Za-z_][\w]*|[A-Za-z_][\w]*)\s*=\s*/;
 
@@ -65,3 +66,29 @@ export function headToken(seg) {
   const m = seg.match(/^[&.(]*\s*["']?([^\s"']+)/);
   return (m?.[1] ?? '').toLowerCase();
 }
+
+// ── ④ 写告示表（宽/窄两套值面，各自独立、**禁合并**）· 2026-11-11 ─────────────────────────────
+//   两套值面服务**不同语义域**，宽窄差异是设计选择、不是漂移：
+//     · 宽表 `WRITE_HEADS_FILE_BAN`（44 项）= 工具面 file-write 禁令，判「这条命令是否会写盘」
+//       ⇒ 宁可误拦，粒度粗；
+//     · 窄表 `WRITE_HEADS_COMMAND_GATE`（8 项）= 命令 gate 写判定，判「是否属破坏性写操作」
+//       ⇒ 要精确，不把改属性 / 复制类命令一律拒。
+//   合并两表 ⇒ gate 面从 8 项跳到 44 项 = 混淆语义域（改一处会连带影响另一面），故**禁止合并**。
+//   两侧各持一份、各自演进；消费者以 `import { … as <原符号名> }` 别名引用，判定体零改动。
+//   ⚠ `WRITE_CMDLET_RE` 同理宽/窄两份（12 类 vs 7 类正则），同样禁合并。
+export const WRITE_CMDLET_RE_FILE_BAN = /(?<![\w-])(?:set|add|clear|new|remove|move|copy|rename|out|tee|export)-(?:content|item|itemproperty|file|object|csv|clixml|certificate|pfxcertificate)(?![\w-])/i;
+export const WRITE_CMDLET_RE_COMMAND_GATE = /(?<![\w-])(?:set-content|add-content|out-file|new-item|remove-item|move-item|copy-item|export-csv)(?![\w-])/i;
+// 宽表：工具面 file-write 禁令（44 项）
+export const WRITE_HEADS_FILE_BAN = new Set([
+    'rm', 'rmdir', 'rd', 'del', 'erase', 'mv', 'move', 'cp', 'copy', 'xcopy', 'robocopy',
+    'mkdir', 'md', 'touch', 'tee', 'truncate', 'chmod', 'chown', 'chgrp', 'ln', 'dd',
+    'attrib', 'icacls', 'cacls', 'takeown', 'ren', 'rename',
+    'set-content', 'add-content', 'clear-content', 'set-item', 'set-itemproperty',
+    'new-item', 'new-itemproperty', 'remove-item', 'remove-itemproperty',
+    'move-item', 'copy-item', 'rename-item', 'set-acl',
+    'out-file', 'tee-object', 'export-csv', 'export-clixml',
+]);
+// 窄表：命令 gate 写判定（8 项，**禁与宽表合并** —— 语义域不同）
+export const WRITE_HEADS_COMMAND_GATE = new Set([
+    'rm', 'mv', 'cp', 'del', 'mkdir', 'touch', 'tee', 'chmod',
+]);

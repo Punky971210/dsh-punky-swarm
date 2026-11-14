@@ -457,11 +457,11 @@
       "todos": 0
     },
     "test/command-exec.test.js": {
-      "asserts": 111,
-      "blankLines": 48,
-      "lines": 486,
+      "asserts": 139,
+      "blankLines": 52,
+      "lines": 605,
       "tautologies": 0,
-      "tests": 33,
+      "tests": 37,
       "todos": 0
     },
     "test/command-script-anchor.test.js": {
@@ -2233,7 +2233,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-13T17:34:18Z",
+  "generatedAt": "2026-11-14T06:30:01Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2244,15 +2244,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "测试修正（显式更新通道，两处平台/口径缺陷）：(1) home-isolation.test.js#D13-2 前置键改用 path.win32.join —— 原 path.join 取当前平台分隔符，在 ubuntu-latest 上产出正斜杠键与 posixKey 相等 ⇒ 前置断言恒失败（本地 Windows 恒绿，故长期未被发现）；(2) preflight-report.test.js#AC-R11 允许 GATE_ARTIFACT_EMPTY_NO_REASON —— presenceJudge 已把『空+无 reason』细化为该码，原正则只认 MISSING|NOT_A_FILE 会让用例在产品码细化后恒红；断言强度不变（仍 assert.throws）。",
+  "reason": "WRITE_HEADS 两表独立最终态：宽 44（工具面）/ 窄 8（命令 gate）各自 new Set、禁合并；D1-A15③ 并存断言、D1-A16 分域实证；dd of=/dev/sda 回 gap 候选（gate 面按设计放行，工具面仍拦）",
   "schema": 1,
   "totals": {
-    "asserts": 12352,
-    "blankLines": 7060,
+    "asserts": 12380,
+    "blankLines": 7064,
     "files": 279,
-    "lines": 74687,
+    "lines": 74806,
     "tautologies": 0,
-    "tests": 2562,
+    "tests": 2566,
     "todos": 0
   }
 }

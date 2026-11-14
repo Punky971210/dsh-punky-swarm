@@ -16,6 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { TOOL_BAN_BEHAVIORS } from './config.js';
 import { segmentCommands, stripStreamMerges, ASSIGN_RE, maskQuoted, headToken } from '../shell-text.js';
+// 写告示表定义单点在 `lib/shell-text.js`：此处按**原符号名**别名引用（别名即该 `Set` 实例）。
+// 【2026-11-11 两表独立】本侧取**宽表** `WRITE_HEADS_FILE_BAN`（44 项，语义 = 「这条命令是否会写盘」）；
+//   命令 gate 侧取**窄表** `WRITE_HEADS_COMMAND_GATE`（8 项，语义 = 「是否破坏性写操作」）。
+//   两表**禁合并**：语义域不同，合并会把 gate 面从 8 项拉到 44 项、混淆分域（见 shell-text.js ④ 段头注）。
+import { WRITE_HEADS_FILE_BAN as WRITE_HEADS, WRITE_CMDLET_RE_FILE_BAN as WRITE_CMDLET_RE } from '../shell-text.js';
 // ── 已知边界（⑤-2 · 2026-11-09 裁决乙「只消重复、词表不动」+ 解释器内联写不做启发式）────────
 //   本判定的语义 = **「这条命令是不是在写文件」**（窄），与 `lib/tools/readonly.js` 的
 //   「这条命令有没有任何副作用」（宽）**不是同一个判定** ⇒ 词表宽窄差异是设计选择，不是漂移。
@@ -27,7 +32,6 @@ import { segmentCommands, stripStreamMerges, ASSIGN_RE, maskQuoted, headToken } 
 //       ③ 解释器内联写：`node -e "...writeFileSync..."` / `python -c "open(...,'w')"`。
 //   为什么不补 ③：文本启发式天然漏判（换行/拼接/变量）且易误伤，做它等于给一个"看起来在拦"的假面；
 //   这三类仍被 readonly 挡在**只读旁路**之外（不能借此绕过难度门），只是 `file-write` 禁令不命中。
-const WRITE_CMDLET_RE = /(?<![\w-])(?:set|add|clear|new|remove|move|copy|rename|out|tee|export)-(?:content|item|itemproperty|file|object|csv|clixml|certificate|pfxcertificate)(?![\w-])/i;
 const OUTFILE_RE = /(?<![\w-])-outfile\b/i;
 const FIND_WRITE_RE = /\s-(?:exec|execdir|delete|fdelete)\b/i;
 const GLOBAL_WRITE = [
@@ -36,15 +40,6 @@ const GLOBAL_WRITE = [
     [OUTFILE_RE, '含落盘参数 -OutFile'],
     [FIND_WRITE_RE, '含 find 的写侧动作（-exec / -delete）'],
 ];
-const WRITE_HEADS = new Set([
-    'rm', 'rmdir', 'rd', 'del', 'erase', 'mv', 'move', 'cp', 'copy', 'xcopy', 'robocopy',
-    'mkdir', 'md', 'touch', 'tee', 'truncate', 'chmod', 'chown', 'chgrp', 'ln', 'dd',
-    'attrib', 'icacls', 'cacls', 'takeown', 'ren', 'rename',
-    'set-content', 'add-content', 'clear-content', 'set-item', 'set-itemproperty',
-    'new-item', 'new-itemproperty', 'remove-item', 'remove-itemproperty',
-    'move-item', 'copy-item', 'rename-item', 'set-acl',
-    'out-file', 'tee-object', 'export-csv', 'export-clixml',
-]);
 const WAIT_SLEEP_HEADS = new Set([
     'start-sleep', 'sleep', 'wait-event', 'wait-process', 'wait-job', 'wait-service',
     'wait', 'timeout',

