@@ -1,12 +1,103 @@
 
-## 未发布（Unreleased）
+# Changelog
+
+按版本倒序记录变更。变更日志允许描述技术细节（模块、字段、事件、拒码、脚本）；内部批次编号、裁决过程与验证读数不入本文件。
+
+## 0.6.0（2026-11-14）
+
+### checkpoint 改为逐项留痕（破坏性变更）
+
+- **checkpoint 逐项留痕**：使用 `subtasks` 的批次需按 subtask 逐个调用 `lane_checkpoint`；结算门只认显式 `subtaskId` 覆盖，不再接受「单次报到末项」代表全量。
+- **`total.mismatch` 覆盖两种方言**：`checkpoints` 与 `subtasks` 两种声明均校验 total。
+- **新增事件 `lane.checkpoint.subtask-hint`**：每次 checkpoint 落 `covered` / `remaining`（按声明序）。
+- **`handoff_view` 输出 `subtaskOutputs`**：逐项 `outputs` 与在场情况（只读展示）。
+- **任务包 `## checkpoint 计划（强制）` 段与门判据对齐**。
+- **MCP 连接级失败退避重试**：`postJsonOf` 对偶发连接失败重试 2 次并落 warning。
+- **安装面**：`dsh.engines.dsh` 声明 `>=0.2.1-rc.2`；`@deepseek-ai/cordis` peer 放宽为 `>=4.0.1` 并标 optional；仓库根可直接以 git 地址安装（无需子目录参数）。
+
+## 0.5.6（2026-10-25）
+
+### 写域判据改目录约定分类器；断言遮蔽拆牙；基线新鲜度门；CI 双矩阵转绿
+
+- **`PACK_DOMAINS` 由批次清单改目录约定分类器**：`FACE_RULES` 六面 + `RELEASE_RE` + `classifyFace`，按前缀长度显式降序匹配；`git status` 采样改 `-uall`（未跟踪文件亦纳入）。
+- **断言遮蔽拆牙**：`pack3-15` 的集合相等断言旁拆出独立 `pack3-15b`（`doc-manager` 指针必须为 0），两断言各自可红。
+- **基线新鲜度门**：`test/test-baseline.test.js` 新增 `freshnessDrift` / `baselineTotalsDrift` 与三条用例，负例走内存副本。
+- **CI 修复**：恢复 `.gitignore` 明文要求保留的 `docs/integrations/comfyui-glue{,.en}.md`；5 条依赖开发机的用例改缺位留痕（不计通过、不判红）；`actions/checkout` 改 `fetch-depth: 0`；测试临时根由硬编码盘符改 `os.tmpdir()`。
+
+## 0.5.5（2026-10-25）
+
+### software-team 接上「角色 → 适配层 → vendor 原件」引用链
+
+- **6 个 role 各增 1 行 vendor 指针**：`coder` / `coordinator` / `designer` / `reviewer` / `supervisor` / `tester`；`doc-manager` 不挂。
+- **适配层优先序落硬声明**：`spec-contract.md` 六态表之前声明「本表为映射摘要，不一致一律以 vendor 原件为准」。
+- **机检**：`AC-pack3-14`（声明行位置在六态表之前）、`AC-pack3-15`（含 vendor 指针的 role 集合精确相等为 6、`doc-manager` 为 0、每条指针路径 `existsSync` 为真）。
+
+## 0.5.4（2026-10-24）
+
+### vendor 引入 SpecLang 四技能原文；新增 node 薄壳；适配层降级
+
+- **vendor 落点**：新增 `skills/software-team/references/vendor/speclang/`，共 29 件（27 件上游资产 + `LICENSE` 副本 + `NOTICE.md`），逐件 sha256 与上游全等。
+- **node 薄壳**：新增 `scripts/speclang-validate.mjs`——`ruby` 可用则原样透传退出码与 argv；不可用 `exit 2` + 明写 UNKNOWN；原件缺失 `exit 2` + 缺失绝对路径；`-h/--help` 为 `exit 0`。
+- **适配层降级**：`references/engineering/spec-contract.md` 改为蟛蜞适配层（六态 → `gate_status` / `verdict` 映射、`SUMMARY:` 落地、S-10 缺口留档），`S-6` / `S-7` / `S-8` / `S-10` 编号保留。
+
+## 0.5.3（2026-10-24）
+
+### 纪律补三节；注入面新增判据②b；受控词表由空表转真拦截
+
+- **纪律正文补三节**：`references/discipline.md` 新增 `## §0i` 执行形态 / `## §0s` 编号规范 / `## §0t` 完成发现；`§0k` 增 `SUMMARY:` 机读结论行与四档证据强度（`PROVED` / `SEMI_PROVED` / `VIOLATED` / `UNKNOWN`）。
+- **判据②b 上岗（行为变更）**：注入面每条目须在正文有对应 `## §X`，零白名单、零豁免；同时删除自足条目放宽面。新增 `test/guidance-id-coverage.test.js`。
+- **受控词表转真拦截**：`lib/state/vocabulary.json` 由 `entries: []` 填为 51 条真值（`kind=gate`）；新增 `scripts/check-vocab-counts.mjs`；`test/vocabulary.test.js` 的 A3 改为「必须非空 + 唯一 + `kind=gate`」。
+
+## 0.5.2（2026-10-21）
+
+### 结构优化：`apply` 873 → 51 行 + 八项单点化收敛
+
+- **入口瘦身**：`apply` 873 → 51 行，顶层工厂 0 → 30，运行期真源收拢为 `createRuntimeState`（20 字段）。
+- **单点化**：`sendJson` / `packageRoot` / `stripStreamMerges` 三处重复实现合一；产物路径函数收敛到 `lib/state/batch-paths.js`；命令分段器收敛到 `lib/shell-text.js#segmentCommands`（生产代码正则字面量只剩 1 处）。
+- **架构真源与越界门**：新增 `.punky/arch.yml` 与 `scripts/arch-check.mjs` 棘轮门（禁止新增跨域依赖），`arch-context` 在派发期注入架构上下文。
+- **安全面收口到 fail-closed 单点**：产物声明路径解析、产物读面 5 点、人工闸 `human:` 证据判定、handoff 在场与可读。
+- **测试债补齐**：测试文件 166 → 171，新增 5 件安全面用例，每条「返回空 / 被拒 / 不抛」断言配同输入阳性对照。
+- **写序列可观测化**：`createRuntimeState(onWrite)` 在注入 `ctx.rtWriteLog` 时记录字段写入序列，未注入时返回纯对象（生产路径零开销）。
+- **指引层去重**：persona 注入面 6442 → 5858 字符；`cordis.patch.yml` 与 `presets/punky-preset/agent.cordis.yml` 两份定义对齐为 27 条、逐条差异 0；模板变量白名单约束（本内核只注册 `provider` / `model`）。
+
+## 0.5.1（2026-10-14）
+
+### 发布面落版与判据尺子固化
+
+- **版本史落版**：原「未发布」段体落为 `## 0.5.0（2026-10-12）`，版本行置 `0.5.1`。
+- **注释订正**：`lib/sig-fingerprint.js` 改指 `lib/types/contracts.ts` 的 union 为唯一真源，不再写死拒码数量。
+- **判据尺子固化**：新增 `scripts/audit/tool-face-count.mjs`（按块解析 + 四口径阶梯 + 三态退出码），修正原命令只覆盖双引号导致的 26 ≠ 32。
+- **锚点类文档入库**：`docs/` 54 件逐件 `git add -f`（禁通配）。
+- **新增技能**：`skills/video-team/`（三层 7 角色 + 宪法 6 章 + 模板 6 件 + 密度机检）。
+
+## 0.5.0（2026-10-12）
+
+### 累积收口（2026-09-12 → 2026-10-12）
+
+- **抄规格体系 P0/P1/P2 三波次**：L1 事件重放校验腿、L2 上下文注入预算、L3 测试证据自证、L5 隔离可判定、L6 宿主兼容第三维、L7 写路径原子性、L4 规则变更传播、L8 判据脚本信任模型、L9 记忆溯源、C-5 坏配置 fail-closed；新增拒码 `GATE_SCRIPT_CHANGED`，新建 `lib/comms/inject-budget.js` 与 `lib/state/rule-propagation.ts`。
+- **指引同步改造**：规格口径落 `references/discipline.md`（判据类入 `### 15.16`–`### 15.20`），移除注入面 `0i` 行。
+- **D 档偏离语义双轴修复**：难度轴 `derived`（五布尔 + `fixedRole` + `durableSeats`）与通道轴 `derivedChannel`（`durableSeats ? 'team' : 'dispatch'`）独立推导，`D` 不入难度轴。
+- **难度门禁 v3**：取消默认档，增只读侦察面；`execToolCount` 降为纯观察面，不再作为升档与过期依据。
+- **G1「档位 × 工具面」与 G2「建批即拉起」硬门禁**：成员面动作只认 C 档；三层批建批即拉起编排角色。
+- **团队资产必填化**：`team` 必填、构造期拒绝、废弃 `generic`；`DEFAULT_ASSEMBLY` 仅保留兼容导出。
+- **禁止成员嵌套派发**：`subagent` / `subagent_fork` 入成员 deny 列表。
+- **派发套件活体修复**：`inject` 漏声明 `subagents`、`startContinuable` 的 `signal` 契约；任务包补齐 `cmd` 携带。
+- **`jiufeng` → `punky-preset` 改名**：preset id / 目录、引擎数据根缺省、装配命名空间三处同改；旧根保留为历史归档，不迁移、不桥接。
+- **legacy 完全清退**：缺声明的回落通道删除，不兼容旧批次。
+- **`idle` 语义纠正**：回到字面意义的空闲态，仅经恢复 / 回收单点进入。
+- **单选遗产清除**：`preset` 一律多选 / 数组；`compose` 组合项删除，注册项 4 → 3；治理配置面板同步。
+- **cage 护栏第三类「工具黑名单」**：写通道路由，规则可热加载。
+- **团队装配扩充**：新增 `design-team` / `research-team` / `writing-team`；`jiufeng` 团队装配退役，装配数据唯一来源改为团队资产 `presets/<team>/team-asset.{json,yml}`。
+- **交接语义归并**：M0′ 三小项 + M1 删除步级条件边 `on`；`chain` 事件驱动自动推进接线。
+- **审计日志**：默认开、可显式关闭、带轮转与体积上限、零远程上报。
+- **清理与结项**：`pkg-hashes.txt` 重算与交付副本核对、冗余声明退役与死码清理、集群监控面板按引擎现状重构。
 
 ### 团队更名登记：jiufeng-team → software-team
 
-- 登记条目（可追溯硬项）：原名 `jiufeng-team` → 新名 `software-team`；日期 **2026-09-12**；原因：引擎/团队分层改造，团队技能名与团队定位对齐（「蟛蜞模式」为引擎侧治理模式名，软件工程角色指引归团队层，原「蟛蜞模式指引层」名不副实）。
-- 影响面：技能目录 `packages/dsh-punky-swarm/skills/jiufeng-team/` → `skills/software-team/`（18 文件，文件集合与 8 角色文件名不变）；技能同步任务 `lib/assets.js:85` 与关联测试 `test/assets.test.js` 同步改名；`SKILL.md` frontmatter `name:`、自引用与 `cmd` 示例改名，description 定位由「蟛蜞模式指引层」改为「软件工程团队」；`package.json` description、包内 `docs/single-machine-capabilities.md`/`.en.md` 同步改名；部署副本目标路径随之变为 `~/.agents/skills/software-team`（管理式同步单向复制，旧副本目录清理归冒烟批次 R-1 断言）。
+- 更名：原名 `jiufeng-team` → 新名 `software-team`；日期 **2026-09-12**。
+- 影响面：技能目录 `packages/dsh-punky-swarm/skills/jiufeng-team/` → `skills/software-team/`（18 文件，文件集合与 8 角色文件名不变）；技能同步任务 `lib/assets.js:85` 与关联测试 `test/assets.test.js` 同步改名；`SKILL.md` frontmatter `name:`、自引用与 `cmd` 示例改名，description 定位由「蟛蜞模式指引层」改为「软件工程团队」；`package.json` description、包内 `docs/single-machine-capabilities.md`/`.en.md` 同步改名；部署副本目标路径随之变为 `~/.agents/skills/software-team`（管理式同步单向复制）。
 - 不改动面：`presets/jiufeng/`（preset id/目录名）、装配命名空间键 `jiufeng`（`DEFAULT_ASSEMBLY.team`、`aip.team`）、引擎数据根 `~/.dsh/jiufeng`、`VALID_ROLES`/`REQUIRED_ROLES` 值。
-- 历史行不改：本文件既有 `jiufeng-team` 记载（历史事实行）原样保留，本次仅**追加**本登记块（可追溯性:更名注记行 → CHANGELOG → 批次产物三向对应）。
+- 历史行不改：本文件既有 `jiufeng-team` 记载（历史事实行）原样保留。
 
 ## 0.4.4（2026-09-08）
 
@@ -176,9 +267,6 @@
 - jiufeng-team SKILL.md：移除"降级判定优先"判定策略（路由归 Punky Swarm 模式），改造为 C 类触发后的执行机制 + 任务包最小结构模板（两副本同步）
 - 资产同步 syncAssets 幂等（预设/技能字节一致跳过，mtime 容差）
 - 单测 68->93（governance 15 + asset/config 5 + 扩 5）
-# Changelog
-
-本项目尚未发布；以下按时间线记录 0.1.0 未发布期间的主要变更。
 
 ## 0.1.0（未发布）
 
