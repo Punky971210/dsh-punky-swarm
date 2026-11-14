@@ -265,11 +265,11 @@
       "todos": 0
     },
     "test/baseline-snapshot-cli.test.js": {
-      "asserts": 39,
-      "blankLines": 21,
-      "lines": 216,
+      "asserts": 45,
+      "blankLines": 24,
+      "lines": 240,
       "tautologies": 0,
-      "tests": 8,
+      "tests": 9,
       "todos": 0
     },
     "test/batch-control.test.js": {
@@ -1857,9 +1857,9 @@
       "todos": 0
     },
     "test/test-baseline.test.js": {
-      "asserts": 99,
+      "asserts": 101,
       "blankLines": 45,
-      "lines": 604,
+      "lines": 611,
       "tautologies": 0,
       "tests": 23,
       "todos": 0
@@ -2177,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-14T09:33:31Z",
+  "generatedAt": "2026-11-14T11:19:42Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,15 +2188,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "P0 端口化 X-7：stream.js 读盘收口到 batchFeed 端口（唯一读实现 lib/state/batch-feed.js），S19 静态面等值反转（禁第二读者回生 + stripBom 单点复用改核读实现侧）；asserts 71->73 / lines 378->389 仅本文件",
+  "reason": "B-13 修复：tests 下降纳入判红（core ok 加 curTests>=baseTests + CLI RED 腿）+ 新增 cli-9 退出码回归锁 + e2-3 口径改为判红",
   "schema": 1,
   "totals": {
-    "asserts": 11873,
-    "blankLines": 6835,
+    "asserts": 11881,
+    "blankLines": 6838,
     "files": 272,
-    "lines": 72518,
+    "lines": 72549,
     "tautologies": 0,
-    "tests": 2459,
+    "tests": 2460,
     "todos": 0
   }
 }

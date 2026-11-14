@@ -434,12 +434,16 @@ export function diffBaseline(before, after) {
 /**
  * 校验：把「当前扫描结果」与基线对照。
  *
- * 判红口径（规格 §2.2「断言数下降即红」+ 本 lane B5「等价替换即红」）：
+ * 判红口径（规格 §2.2「断言数下降即红」+ 本 lane B5「等价替换即红」+ B-13「用例数下降即红」）：
  *   - **断言总数**低于基线 ⇒ `ok:false`（本次交付/重构确实少了一条断言，不论发生在哪个文件）；
  *   - **恒真形态命中数**高于基线 ⇒ `ok:false`（等价替换绕过：调用数不变，但把断言写成了恒真）；
- *   - 用例数/`test.todo` 数下降只进 `warnings`（合法重构会合并/拆分用例，硬红会误报）；
+ *   - **用例总数**低于基线 ⇒ `ok:false`（B-13 修复：原口径只把它塞进 `warnings` ⇒ 退出码仍 0，
+ *     「删掉一整份用例文件」也拦不住，验收判据「tests 不得减少」因此没有机械强制力。
+ *     合法的用例合并/拆分是**总数不变**的重排（跨文件此消彼长），总数真掉了就必须走显式更新通道说明事由）；
+ *   - `test.todo` 数下降只进 `warnings`（todo 转真用例、或删一条 todo，都不改变实际断言覆盖）；
  *   - 文件新增/重命名不算红（**理由**：文件名是组织方式不是覆盖度；拆文件后断言总数不变 ⇒ 不该红）。
- * 逐文件 delta 一并返回，供调用方打印「谁少了多少 / 谁新增了恒真断言」。
+ * 逐文件 delta 一并返回，供调用方打印「谁少了多少 / 谁新增了恒真断言」；逐文件「用例数下降」仍进
+ * `warnings`，但当总数已持平/上升时它只作**定位**线索，不重复置红。
  */
 export function compareBaseline(baseline, current) {
   const diff = diffBaseline(baseline, current);
@@ -456,7 +460,7 @@ export function compareBaseline(baseline, current) {
     if ((d.delta.todos ?? 0) < 0) warnings.push(`${d.file}: test.todo 数 ${d.delta.todos}`);
   }
   return {
-    ok: curAsserts >= baseAsserts && curTaut <= baseTaut,
+    ok: curAsserts >= baseAsserts && curTaut <= baseTaut && curTests >= baseTests,
     asserts: { baseline: baseAsserts, current: curAsserts, delta: curAsserts - baseAsserts },
     tautologies: { baseline: baseTaut, current: curTaut, delta: curTaut - baseTaut },
     tests: { baseline: baseTests, current: curTests, delta: curTests - baseTests },

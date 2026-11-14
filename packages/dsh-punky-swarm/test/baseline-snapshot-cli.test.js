@@ -213,3 +213,27 @@ test('cli-8 护栏：仓库 `baselines/test-baseline.json` 全程未被本用例
   const now = sha16(fs.readFileSync(path.join(ROOT, BASELINE_REL)));
   assert.equal(now, REAL_BASELINE_SHA, '真基线 sha256 与本用例启动时一致（夹具隔离生效）');
 });
+
+// ── 6. B-13：用例数下降必须置红（退出码面，非仅告警） ────────────────────
+// 缺陷（B-13 修复前）：`--check` 只对「断言数下降 / 恒真形态上升」置红，「用例数下降」只进 warnings
+//   ⇒ 退出码仍 0，「删掉整份用例文件」等于零漂移，验收判据「tests 不得减少」没有机械强制力。
+// 本用例锁**退出码**（CLI 层，比对内核 `cmp.ok` 更贴近验收现场），并带零漂移对照组防「脚本恒红」。
+test('cli-9 B-13：只删 tests 不删 asserts ⇒ `--check` exit 1；零漂移对照组 exit 0', () => {
+  withFixture((tmp) => {
+    const fixture = path.join(tmp, 'test', 'fixture.test.js');
+    const head = ["import test from 'node:test';", "import assert from 'node:assert/strict';"];
+
+    // 对照组：未改动 ⇒ exit 0（证明下面的 exit 1 来自删除动作，而不是本脚本对任何输入都红）
+    const clean = runCli(tmp, ['--check']);
+    assert.equal(clean.status, 0, `零漂移必须 exit 0；stderr=${clean.stderr}`);
+
+    // 反例：把该文件的 `test(` 退成 `test.todo(`，**断言留在原地** ⇒ tests 1→0，asserts 1→1。
+    fs.writeFileSync(fixture, [...head, "test.todo('fixture');", 'assert.equal(1, 1);', ''].join('\n'), 'utf8');
+    const r = runCli(tmp, ['--check']);
+    assert.equal(r.status, 1, `用例数下降必须 exit 1（B-13）；stdout=${r.stdout}`);
+    assert.match(r.stdout, /tests 1 -> 0 \(-1\)/, 'stdout 读数如实给出用例缺口');
+    assert.match(r.stdout, /asserts 1 -> 1 \(0\)/, '断言数未变——正是原口径的盲区');
+    assert.match(r.stderr, /RED：用例数低于基线/, 'stderr 点名 RED 事由');
+    assert.match(r.stderr, /test\/fixture\.test\.js/, 'stderr 点名到掉用例的文件');
+  });
+});

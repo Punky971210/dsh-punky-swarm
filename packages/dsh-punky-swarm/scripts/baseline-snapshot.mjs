@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
 // 用法（**参数面 fail-closed**，见 §参数校验）：
 //   node scripts/baseline-snapshot.mjs                 # 生成/覆盖基线
-//   node scripts/baseline-snapshot.mjs --check         # 只读对照：断言数下降 或 恒真形态命中数上升 ⇒ exit 1（不写盘）
+//   node scripts/baseline-snapshot.mjs --check         # 只读对照：断言数下降 / 用例数下降 / 恒真形态命中数上升 ⇒ exit 1（不写盘）
 //   node scripts/baseline-snapshot.mjs --reason "..."  # 覆盖时记录本次生成事由（留痕）
 //   node scripts/baseline-snapshot.mjs --help | -h     # 打印用法（零副作用：不扫描、不写盘）
 //
@@ -37,9 +37,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // **exit 2、绝不进入重写分支**；未知 flag 一律「拒绝 + 用法提示」，**不得**静默降级为无参。
 // 判定发生在**任何扫描/写盘之前**，故失败路径对仓库零副作用。
 //
-// 判红两条腿（批次 `engine-review-fix-a-20260915` · lane e6 补第二条）：
+// 判红三条腿（批次 `engine-review-fix-a-20260915` · lane e6 补第二条；B-13 补第三条）：
 //   ① 断言调用数下降 ⇒ 兜「删断言」；
-//   ② **恒真形态**命中数上升 ⇒ 兜「等价替换」（`assert.equal(x, 期望)` → `assert.ok(true)`，调用数不变）。
+//   ② **恒真形态**命中数上升 ⇒ 兜「等价替换」（`assert.equal(x, 期望)` → `assert.ok(true)`，调用数不变）；
+//   ③ **用例数**下降 ⇒ 兜「删用例文件」（原口径只进 warnings、退出码仍 0，故「删掉整份用例文件」
+//      在 `--check` 面前等于零漂移；B-13 修复把它提到与 ① 同档）。
 //
 // 纪律：本脚本输出**UTF-8 无 BOM + LF**；键排序保证两次生成在同一源码下逐字节一致
 // （唯一例外是 `generatedAt` 时间戳，故校验用例只比数值、不比时间戳）。
@@ -88,7 +90,7 @@ function formatDelta(n) {
 /** 用法文本（`--help` 走 stdout 且 exit 0；参数错误走 stderr 且 exit 2）。 */
 const USAGE = `用法：
   node scripts/baseline-snapshot.mjs                    生成/覆盖基线（记 \`reason: null\`）
-  node scripts/baseline-snapshot.mjs --check            只读对照（不写盘；断言数下降 / 恒真形态上升 ⇒ exit 1）
+  node scripts/baseline-snapshot.mjs --check            只读对照（不写盘；断言数下降 / 用例数下降 / 恒真形态上升 ⇒ exit 1）
   node scripts/baseline-snapshot.mjs --reason "<事由>"  覆盖时记录本次生成事由（留痕；事由不得为空）
   node scripts/baseline-snapshot.mjs --help | -h        打印本用法（零副作用）
 
@@ -208,6 +210,16 @@ function main(argv) {
   if (!cmp.ok) {
     if (cmp.asserts.delta < 0) {
       process.stderr.write('[baseline] RED：断言调用数低于基线（禁止静默删断言；确需变更请走显式更新通道）\n');
+    }
+    if (cmp.tests.delta < 0) {
+      process.stderr.write(
+        '[baseline] RED：用例数低于基线（B-13：禁止静默删用例 / 删整份用例文件——合法的用例合并或拆分' +
+          '是总数不变的重排；确需变更请走显式更新通道）\n',
+      );
+      for (const f of cmp.filesChanged) {
+        if ((f.delta?.tests ?? 0) >= 0) continue;
+        process.stderr.write(`[baseline]   ${f.file}  用例数 ${formatDelta(f.delta.tests)}\n`);
+      }
     }
     if (cmp.tautologies.delta > 0) {
       process.stderr.write(

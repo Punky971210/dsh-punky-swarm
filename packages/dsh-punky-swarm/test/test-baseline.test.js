@@ -230,7 +230,12 @@ test('e2-2 判红：断言总数低于基线 ⇒ ok:false，且逐文件 diff �
 });
 
 // ── 3. 误报边界（规格 §2.3）：合法重构不误红 ────────────────────────────
-test('e2-3 误报边界：用例合并（tests/test.todo 减少、断言总数不变）只告警不判红', () => {
+// 【B-13 修复，2026-11-14】本用例原断言「用例数下降只告警不判红」——该口径使「tests 不得减少」
+//   这条验收判据没有机械强制力：`--check` 对「只删 tests 不删 asserts」零红、退出码 0，
+//   删掉整份用例文件也拦不住。现将用例总数纳入与断言总数同档的判据（见 compareBaseline 注释）；
+//   合法重构（合并/拆分用例）表现为**总数不变**的重排，故总量判据不误报。
+//   `test.todo` 数下降**仍只告警**（todo 转真用例或删一条 todo 都不改变实际断言覆盖）。
+test('e2-3 判红口径（B-13）：用例数低于基线 ⇒ 判红；test.todo 下降仍只告警', () => {
   const current = syntheticBaseline({ files: 1, tests: 4, todos: 0, asserts: 10, lines: 40, blankLines: 0 }, {
     'test/merged.test.js': { tests: 4, todos: 0, asserts: 10, lines: 40, blankLines: 0 },
   });
@@ -238,12 +243,14 @@ test('e2-3 误报边界：用例合并（tests/test.todo 减少、断言总数�
     'test/merged.test.js': { tests: 12, todos: 2, asserts: 10, lines: 90, blankLines: 5 },
   });
   const cmp = compareBaseline(baseline, current);
-  assert.equal(cmp.ok, true, '用例数 / test.todo 下降而断言总数不变 ⇒ 不判红（合并用例是合法重构）');
+  assert.equal(cmp.ok, false, '用例数低于基线 ⇒ 判红（B-13：「tests 不得减少」须有机械强制力）');
+  assert.equal(cmp.tests.delta, -8, '用例数缺口如实给出');
+  assert.equal(cmp.asserts.delta, 0, '断言总数不变——这正是原口径的盲区（只掉用例也必红）');
   const warningKind = (w) => (w.includes('用例数') ? 'tests' : w.includes('test.todo') ? 'todos' : 'other');
   assert.deepEqual(
     cmp.warnings.map(warningKind).sort(),
     ['tests', 'todos'],
-    '仍如实列告警（可见但不阻断）：恰「用例数」与「test.todo」各一条，不混入第三类、不重复',
+    '仍如实列告警（定位用、不替代判红）：恰「用例数」与「test.todo」各一条，不混入第三类、不重复',
   );
   assert.ok(cmp.warnings.some((w) => w.includes('用例数')));
   assert.ok(cmp.warnings.some((w) => w.includes('test.todo')));
