@@ -24,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { DEFAULT_ASSEMBLY } from '../lib/assembly.js';
 import { buildSkillDescriptor, buildAgentDescriptor, buildAgentDescriptors, buildAgentCatalog, ACS_OPTIONAL_FIELDS, ACS_SKILL_OPTIONAL_FIELDS, ACS_PROTOCOL_VERSION } from '../lib/aip/agent-descriptor.js';
 

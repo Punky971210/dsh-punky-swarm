@@ -17,22 +17,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // dsh-punky-swarm 只读治理 API：batches / batch / mailbox / locks / stream（全部按 session 隔离）
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { createHttpPort } from './provider-dsh/tools-http.js';
+import { createHttpPort } from '../provider-dsh/tools-http.js';
 import { join } from 'node:path';
-import * as mailbox from './comms/mailbox.js';
-import { createStreamHub } from './panel/stream.js';
-// 面板读端增量（冻结节拍 §2.1）：三处投影一律复用**既有单点纯函数**（禁在 api.js 复制第二份判定）
-import { danglingLanesOf } from './state/dangling.js';
-import { smokeOf } from './state/gates.js';
-// 池视图投影（B-2）：判据单点在 `task-tools.js#poolViewOf`（与 `task_pool` 工具面**同一函数**）——
-//   api.js 只 import 调用，**不得**在此重写一份等价的 owner/blocker 判定（否则两个读端各自解释池）。
-import { poolViewOf } from './tools/task-tools.js';
+import * as mailbox from '../comms/mailbox.js';
+import { createStreamHub } from './stream.js';
+// 面板读端增量（冻结节拍 §2.1）：三处判据投影**一律经端口取**（L1 拆分后墙内禁直取核心模块）——
+//   唯一来源 = `corePort('store').project`（契约 §S-4.2：三函数与核心实现**同一引用**）；
+//   禁在此重写一份等价的判定（否则两个读端各自解释池 / 冒烟 / 悬挂）。
+//   无装配夹具（单测直调 `createApi`）可经 `deps.project` 注入同一函数引用；两者皆缺 ⇒ 端口 fail-closed 抛错。
+import { corePort } from '../core-ports.js';
 // 事件读端字面量收敛：EVT 常量单源 lib/state/event-types.js
-import * as EVT from './state/event-types.js';
+import * as EVT from '../state/event-types.js';
 // WebUI 治理配置写通道：/config 端点 trusted 判定（自复刻宿主 /api
 //   护栏语义，宿主未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
 import { isTrustedConfigRequest } from './webui/config-trust.js';
-// JSON 响应写端单点（(lib-root) 中立件；ACPs 端点移除后为唯一实现）
+// JSON 响应写端单点（(panel-root) 中立件；ACPs 端点移除后为唯一实现）
 import { sendJson } from './json-response.js';
 
 function q(url) {
@@ -41,6 +40,11 @@ function q(url) {
 
 export function createApi(ctx, deps) {
   const { store, root, catalog, agentCatalog, aipFormat, discovery } = deps;
+  // 判据三纯函数（`danglingLanesOf` / `smokeOf` / `poolViewOf`）的**唯一来源**：
+  //   装配态 = `corePort('store').project`（契约 §S-4.2，三函数与核心实现同一引用）；
+  //   单测直调本工厂时经 `deps.project` 注入**同一函数引用**（不是复制品）。
+  //   两者皆缺 ⇒ `corePort` 按端口纪律 fail-closed 抛 `PORT_NOT_READY`（禁静默走空分支）。
+  const projectOf = () => deps.project ?? corePort('store').project;
   const disposers = [];
   // 裸取 `ctx.webServer`：`webServer` 是插件 `inject` 的**硬依赖**（宿主 cordis 4.0.5 的 inject 无 optional 位）
   //   ⇒ 该服务必然在场，本行不会拿到 `undefined`；缺服务的真实形态是插件整块 pending（本文件不被加载）。
@@ -97,6 +101,7 @@ export function createApi(ctx, deps) {
         if (!session) return sendJson(res, 400, { error: 'session required' });
         const b = store.readBatch(session, batchId);
         if (!b) return sendJson(res, 404, { error: 'batch-not-found' });
+        const project = projectOf(); // 三判据投影：一次求值，三处共用（同源引用，非拷贝）
         // 每 lane attempt（review->running 返工计数）与升级标记（>=3）由事件推导
         //   【B-9 · T-2=① 登记为**历史兼容读**】该迁移（review → running）已自迁移表删除 ⇒ **新批不可达**；
         //   本段只为**存量批**保留可复盘面（删读端 = 主动丢历史，与下方 teamAsset 历史兼容读同一条纪律）。
@@ -111,7 +116,7 @@ export function createApi(ctx, deps) {
         for (const lane of Object.keys(b.lanes)) {
           upgrades[lane] = (laneAttempts[lane] ?? 0) >= 3 && (b.lanes[lane] === 'review' || b.lanes[lane] === 'failed');
         }
-        const danglingLanes = danglingLanesOf(b);
+        const danglingLanes = project.danglingLanesOf(b);
         sendJson(res, 200, {
           batchId: b.batchId, session, phase: b.phase, concurrency: b.concurrency,
           lanes: b.lanes, wavePlan: b.wavePlan,
@@ -125,13 +130,13 @@ export function createApi(ctx, deps) {
           handoffs: b.handoffs ?? {},
           ...(b.assembly ? { assembly: b.assembly } : {}),
           ...(b.teamAsset ? { teamAsset: b.teamAsset } : {}),
-          ...(smokeOf(b) ? { smoke: true } : {}),
+          ...(project.smokeOf(b) ? { smoke: true } : {}),
           lanesGate: store.gateStatusMapOfBatch(session, batchId),
           planRevision: b.planRevision ?? 1,
           // 【B-2 · 池化渲染读端】pool = 未派发任务视图（`owner == null`）+ 逐条可派发性/blockers。
           //   判据**单点**在 `lib/tools/task-tools.js#poolViewOf`（与 `task_pool` 工具面同一实现，见文件头
           //   import 注释）——本处只调用，**不复制**等价判定。恒在场（空池 = 0/0/[]），与 `handoffs` 同款。
-          pool: poolViewOf(b),
+          pool: project.poolViewOf(b),
           // 装配注入 aipFormat 时附 ACPs Session 投影（纯函数，不改存储；缺省不附 → 既有响应不变）
           ...(aipFormat ? { aipSession: aipFormat.toAipSession(b) } : {}),
         });

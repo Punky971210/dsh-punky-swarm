@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { buildToolDescriptor, buildToolCatalog, toToolId, engineVersion } from '../lib/aip/tool-descriptor.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-aip-'));

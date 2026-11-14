@@ -66,8 +66,8 @@
     },
     "test/aip-format.test.js": {
       "asserts": 56,
-      "blankLines": 17,
-      "lines": 218,
+      "blankLines": 18,
+      "lines": 225,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -82,8 +82,8 @@
     },
     "test/api-batch-keys.test.js": {
       "asserts": 29,
-      "blankLines": 19,
-      "lines": 206,
+      "blankLines": 20,
+      "lines": 213,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -99,15 +99,15 @@
     "test/api-evt.test.js": {
       "asserts": 4,
       "blankLines": 7,
-      "lines": 37,
+      "lines": 38,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
     },
     "test/api.test.js": {
       "asserts": 47,
-      "blankLines": 23,
-      "lines": 202,
+      "blankLines": 24,
+      "lines": 209,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -163,7 +163,7 @@
     "test/assembly-refinements.test.js": {
       "asserts": 5,
       "blankLines": 12,
-      "lines": 121,
+      "lines": 125,
       "tautologies": 0,
       "tests": 3,
       "todos": 0
@@ -227,7 +227,7 @@
     "test/auditlog-mount.test.js": {
       "asserts": 203,
       "blankLines": 70,
-      "lines": 855,
+      "lines": 865,
       "tautologies": 0,
       "tests": 20,
       "todos": 0
@@ -523,7 +523,7 @@
     "test/deps-direction.test.js": {
       "asserts": 18,
       "blankLines": 24,
-      "lines": 301,
+      "lines": 303,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -771,7 +771,7 @@
     "test/g10-host-smoke.test.js": {
       "asserts": 12,
       "blankLines": 12,
-      "lines": 122,
+      "lines": 130,
       "tautologies": 0,
       "tests": 2,
       "todos": 0
@@ -939,7 +939,7 @@
     "test/governance-bootoverlay.test.js": {
       "asserts": 8,
       "blankLines": 11,
-      "lines": 85,
+      "lines": 87,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1171,7 +1171,7 @@
     "test/http-deferred-bind.test.js": {
       "asserts": 59,
       "blankLines": 32,
-      "lines": 371,
+      "lines": 373,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -1371,7 +1371,7 @@
     "test/mcp-loopback.test.js": {
       "asserts": 84,
       "blankLines": 51,
-      "lines": 611,
+      "lines": 633,
       "tautologies": 0,
       "tests": 15,
       "todos": 0
@@ -1467,7 +1467,7 @@
     "test/p2-deps-compat.test.js": {
       "asserts": 26,
       "blankLines": 30,
-      "lines": 271,
+      "lines": 275,
       "tautologies": 0,
       "tests": 6,
       "todos": 0
@@ -1979,7 +1979,7 @@
     "test/w7e-remount-surface.test.js": {
       "asserts": 37,
       "blankLines": 29,
-      "lines": 287,
+      "lines": 289,
       "tautologies": 0,
       "tests": 5,
       "todos": 0
@@ -1987,7 +1987,7 @@
     "test/w7f-rt-write-surface.test.js": {
       "asserts": 75,
       "blankLines": 45,
-      "lines": 544,
+      "lines": 546,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2011,7 +2011,7 @@
     "test/watch-bootoverlay.test.js": {
       "asserts": 24,
       "blankLines": 18,
-      "lines": 207,
+      "lines": 209,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -2027,7 +2027,7 @@
     "test/watch-hotconfig.test.js": {
       "asserts": 60,
       "blankLines": 31,
-      "lines": 456,
+      "lines": 458,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
@@ -2177,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-14T11:19:42Z",
+  "generatedAt": "2026-11-14T12:14:26Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,13 +2188,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "B-13 修复：tests 下降纳入判红（core ok 加 curTests>=baseTests + CLI RED 腿）+ 新增 cli-9 退出码回归锁 + e2-3 口径改为判红",
+  "reason": "L1 面板拆分（批 punky-panel-split-20261114）：9 文件迁入 lib/panel/** + 新增 panel/index.js·surface.js + test/helpers/panel-row.mjs 两行装配夹具 + 结构性测试路径改写 ⇒ 按新 test/ 树与断言面重冻（第二冻：补回 assembly-refinements 的 /api 与 /mcp 同边断言，维持断言总数不降）",
   "schema": 1,
   "totals": {
     "asserts": 11881,
-    "blankLines": 6838,
+    "blankLines": 6841,
     "files": 272,
-    "lines": 72549,
+    "lines": 72633,
     "tautologies": 0,
     "tests": 2460,
     "todos": 0

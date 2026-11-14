@@ -24,9 +24,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
-import { createRuntimeConfigService } from '../lib/webui/runtime-config.js';
+import { createRuntimeConfigService } from '../lib/panel/webui/runtime-config.js';
 
 // 【2026-10-25 CI 修复】原为硬编码 `D:\dsh\_tmp\dsh-tmp`：在 posix 上它是**相对路径**
 //   （冒号与反斜杠都是普通字符）⇒ 临时目录落进**仓库内**（`packages/dsh-punky-swarm/D:\dsh\...`），

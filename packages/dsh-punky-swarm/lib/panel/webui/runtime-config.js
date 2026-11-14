@@ -17,8 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import fs from 'node:fs';
 import { join } from 'node:path';
-import { splitOverlay, stripBom } from '../hot/config-watch.js';
-import { PRESET_IDS } from '../governance/preset-loader.js';
+// L1 拆分后缀：本文件在 `lib/panel/webui/` ⇒ 墙外共享叶子一律 `../../`。
+//   ⚠ 这两条是契约 §S-4.1 的 **B 档叶子**（带债务号，只许减不许增）：
+//     D-1 `hot/config-watch.js` 只取 `splitOverlay`/`stripBom` 两个纯工具（与 watcher 生命周期无关）；
+//     D-2 `governance/preset-loader.js` 只取 `PRESET_IDS` 纯常量。
+//     后续批把它们提纯到无副作用的常量/纯函数模块后，这两条边即可删除。
+import { splitOverlay, stripBom } from '../../hot/config-watch.js';
+import { PRESET_IDS } from '../../governance/preset-loader.js';
 
 // 受控表单 escalation.primitives 合法值域 = 引擎 resolve 合法域（governance/config.js resolveEscalationConfig
 //   ——DENY/NARROW/DEFER/PAUSE；REQUIRE_APPROVAL 与状态门收据不可配入，config.js resolve 红线）。

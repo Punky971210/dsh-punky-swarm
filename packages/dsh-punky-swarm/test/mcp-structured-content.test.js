@@ -27,7 +27,7 @@ License, or (at your option) any later version.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { createMcpHandler } from '../lib/mcp/data-plane-server.js';
+import { createMcpHandler } from '../lib/panel/mcp/data-plane-server.js';
 
 /** 最小 HTTP 桩：走 handler 的**真实** readDataPlaneRequestBody / isLoopback / sendJson 路径（经内网回环地址）。 */
 // 【QA-01 · 桩真实性】真实 `IncomingMessage` 恒带 `headers`，HTTP/1.1 恒带 `Host`（RFC 9110 §7.2），

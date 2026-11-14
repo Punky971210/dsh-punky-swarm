@@ -29,12 +29,18 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   createMcpHandler, installMcpDataPlane, mcpInternalErrorFrame, MCP_PATH, MCP_SERVER_INFO,
-} from '../lib/mcp/data-plane-server.js';
-import { installMcpLoopback, MCP_LOOPBACK_HOST } from '../lib/mcp/loopback-listener.js';
+} from '../lib/panel/mcp/data-plane-server.js';
+import { installMcpLoopback, MCP_LOOPBACK_HOST } from '../lib/panel/mcp/loopback-listener.js';
 import { MCP_LOOPBACK_DEFAULTS, resolveMcpLoopbackConfig } from '../lib/schema.js';
 import { RESIDENT_TOOL_NAMES } from '../lib/engine/suite.js';
 import { createStore } from '../lib/state/store.js';
 import { createTools } from '../lib/tools/register.js';
+// 【L1 拆分后】入口 B 的唯一创建点从 `lib/tools/register.js#createTools` 迁到 `lib/panel/index.js#apply`
+//   （契约 §S-3.3 红线：**不得**放进 `build()` —— 那里以 `webServer.available` 早退，会把入口 B 拖回宿主依赖）。
+//   ⇒ AC-10 两条用例改按**panel 行**驱动；配置来源 = `corePort('config')`（契约 C-4 单源），
+//      夹具按 `lib/core-ports.js` 头注的③号口径显式登记一个假实现。
+import { apply as applyPanelRow } from '../lib/panel/index.js';
+import { registerCorePort, unregisterCorePort } from '../lib/core-ports.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');
@@ -389,9 +395,8 @@ test('AC-9 ③ 入口 A 缺席（route 注册失败路径）时入口 B 的 disp
 });
 
 // ══ L1 本质判据（AC-10 · 未过则本批不算达成 L1）══════════════════════════════════════════
-test('AC-10 webServer 缺席：入口 A 不装（installed=false），入口 B 仍监听并可完成 initialize + tools/list', async () => {
+test('AC-10 webServer 缺席：入口 A 不装，入口 B 仍监听并可完成 initialize + tools/list', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-mcp-lb-l1-'));
-  const store = createStore(root);
   const logger = makeLogger();
   const port = await freePortOf();
   const effects = [];
@@ -402,14 +407,20 @@ test('AC-10 webServer 缺席：入口 A 不装（installed=false），入口 B �
     effect(fn, label) { effects.push({ fn, label }); },
   };
   const config = { mcp: { loopback: { port } } };
+  registerCorePort('config', { read: () => config }); // 契约 C-4：配置唯一源 = corePort('config')
   try {
-    const toolkit = createTools(ctx, { store, root, config });
-    assert.ok(toolkit.mcpLoopback, 'createTools 必须产出入口 B 的 disposer（唯一创建点 = register.js#createTools）');
-    const settled = await toolkit.mcpLoopback.ready;
+    applyPanelRow(ctx, {});
+    // 入口 B 的唯一创建点 = `lib/panel/index.js#apply`，唯一释放点 = 它登记的那条 `ctx.effect`。
+    const lbEffect = effects.find((e) => /loopback listener/.test(String(e.label)));
+    assert.ok(lbEffect, 'panel 行必须把入口 B 监听器登记为 ctx.effect（唯一创建点 = lib/panel/index.js#apply）');
+    const listener = lbEffect.fn();
+    assert.equal(typeof listener, 'function', 'ctx.effect 工厂必须返回监听器 disposer');
+    const settled = await listener.ready;
     assert.equal(settled.installed, true, 'webServer 缺席时入口 B 必须仍然装得上；settled=' + JSON.stringify(settled));
 
-    // 入口 A 的语义不变：webServer 缺席 ⇒ installed=false（既有行为零回归）
-    assert.equal(toolkit.mcpPlaneDispose.installed, false, '入口 A 仍按既有语义早退');
+    // 入口 A 的语义不变（webServer 缺席 ⇒ installed=false）由本文件上方的直接调用用例覆盖：
+    //   panel 行在 webServer 缺席时根本走不到 `build()`（core 的 `mount()` 在 available 检查处早退）⇒
+    //   此处不再断言 `mcpPlaneDispose`（该返回字段已随拆分从 `createTools` 删除）。
 
     const init = await postJsonOf(port, rpcFrame('initialize', {}));
     assert.equal(init.json.result.serverInfo.name, 'dsh-punky-swarm-data-plane', 'L1：webServer 缺席仍可 initialize');
@@ -422,22 +433,26 @@ test('AC-10 webServer 缺席：入口 A 不装（installed=false），入口 B �
       const d = fn();
       if (typeof d === 'function') d();
     }
-    await toolkit.mcpLoopback.closed;
+    await listener.closed;
     assert.equal(await portFreeOf(port), true, '插件卸载后监听必须关闭（无孤儿）');
   } finally {
+    unregisterCorePort('config');
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('AC-10 补：无 ctx.effect ⇒ 不建监听器（无释放保证 ⇒ 宁可不装，防孤儿）', () => {
+test('AC-10 补：无 ctx.effect ⇒ 不建监听器（无释放保证 ⇒ 宁可不装，防孤儿）', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-mcp-lb-noeffect-'));
+  const port = await freePortOf();
+  registerCorePort('config', { read: () => ({ mcp: { loopback: { port } } }) });
   try {
     const logger = makeLogger();
     const ctx = { logger, tools: { ...makeToolsStub(), register: () => () => {}, guard: () => {} } };
-    const toolkit = createTools(ctx, { store: createStore(root), root, config: { mcp: { loopback: { port: 3918 } } } });
-    assert.equal(toolkit.mcpLoopback, null, '无 ctx.effect ⇒ mcpLoopback 必须为 null');
+    applyPanelRow(ctx, {});
     assert.match(logger.all(), /loopback skipped/, '必须留 debug 痕迹（禁静默不装）');
+    assert.equal(await portFreeOf(port), true, '无 ctx.effect ⇒ 端口不得被占用（确实没建监听器）');
   } finally {
+    unregisterCorePort('config');
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -499,7 +514,7 @@ test('AC-13 unref 生效：listening 期间句柄不持引用，且进程能自�
     assert.equal(hasRef, false, 'unref 后 handle 不得持引用；实际 _handle.hasRef()=' + String(hasRef));
 
     // 行为面：子进程装上真监听后脚本结束 ⇒ 必须自行退出（不因该句柄滞留）
-    const moduleUrl = pathToFileURL(path.join(PKG, 'lib/mcp/loopback-listener.js')).href;
+    const moduleUrl = pathToFileURL(path.join(PKG, 'lib/panel/mcp/loopback-listener.js')).href;
     const childCode = [
       `const net = await import('node:net');`,
       `const { installMcpLoopback } = await import(${JSON.stringify(moduleUrl)});`,
@@ -563,7 +578,7 @@ test('配置关闭面：enabled=false ⇒ 不起监听（notInstalled 同形，�
 
 // ══ 静态判据（C-1 零新依赖 / C-2 禁第二套实现 / R-8 单创建点）═══════════════════════════
 test('C-1/C-2 静态面：监听器只依赖 node:http；零协议逻辑 token；禁 node:fs；协议帧单点构造', () => {
-  const src = fs.readFileSync(path.join(PKG, 'lib/mcp/loopback-listener.js'), 'utf8');
+  const src = fs.readFileSync(path.join(PKG, 'lib/panel/mcp/loopback-listener.js'), 'utf8');
   const imports = [...src.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(imports.sort(), ['./data-plane-server.js', '../json-response.js', 'node:http'].sort(),
     'C-1：只允许 node:http + 两个仓内窄件（不新增依赖、不引 node:fs）');
@@ -581,13 +596,13 @@ test('C-1/C-2 静态面：监听器只依赖 node:http；零协议逻辑 token�
   assert.deepEqual(hits, [], 'C-2：监听器内不得出现协议逻辑 token；命中=' + JSON.stringify(hits));
 
   // 帧单点：降级帧只能由 data-plane-server 构造
-  const proto = fs.readFileSync(path.join(PKG, 'lib/mcp/data-plane-server.js'), 'utf8');
+  const proto = fs.readFileSync(path.join(PKG, 'lib/panel/mcp/data-plane-server.js'), 'utf8');
   assert.match(proto, /export function mcpInternalErrorFrame/, '降级帧构造点必须在协议面');
   assert.equal(mcpInternalErrorFrame('x').error.code, -32603);
   assert.equal(mcpInternalErrorFrame('x').jsonrpc, '2.0');
 });
 
-test('R-8 单创建点：installMcpLoopback 全仓仅 1 处调用（register.js），且 lib/index.js 不涉及', () => {
+test('R-8 单创建点：installMcpLoopback 全仓仅 1 处调用（lib/panel/index.js），且 core 不涉及', () => {
   const libFiles = [];
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -597,14 +612,21 @@ test('R-8 单创建点：installMcpLoopback 全仓仅 1 处调用（register.js�
     }
   };
   walk(path.join(PKG, 'lib'));
+  // 定义面 = `lib/panel/mcp/loopback-listener.js`；唯一调用点 = `lib/panel/index.js`（L1 拆分后归属）。
+  const DEFINITION = 'lib/panel/mcp/loopback-listener.js';
+  const ONLY_CALLER = 'lib/panel/index.js';
   const callSites = libFiles
     .map((f) => ({ rel: path.relative(PKG, f).split(path.sep).join('/'), src: fs.readFileSync(f, 'utf8') }))
-    .filter(({ rel }) => rel !== 'lib/mcp/loopback-listener.js' && rel !== 'lib/tools/register.js')
+    .filter(({ rel }) => rel !== DEFINITION && rel !== ONLY_CALLER)
     .filter(({ src }) => /\binstallMcpLoopback\s*\(/.test(src))
     .map(({ rel }) => rel);
-  assert.deepEqual(callSites, [], '入口 B 的调用点只许在 lib/tools/register.js；越界点=' + JSON.stringify(callSites));
+  assert.deepEqual(callSites, [], '入口 B 的调用点只许在 ' + ONLY_CALLER + '；越界点=' + JSON.stringify(callSites));
 
-  const indexSrc = fs.readFileSync(path.join(PKG, 'lib/index.js'), 'utf8');
-  assert.equal(/installMcpLoopback|loopback-listener/.test(indexSrc), false,
-    'R-8：不得放进 lib/index.js（http surface mount() 以 webServer.available 早退 ⇒ 会把入口 B 拖回宿主依赖）');
+  // 入口 B 不得回到 core：`lib/index.js`（http surface 生命周期）与 `lib/tools/register.js`（工具面装配）
+  //   原本是旧归属，两边都必须零涉及 —— 否则 host webServer 缺席时入口 B 会随之消失（L1 价值归零）。
+  for (const rel of ['lib/index.js', 'lib/tools/register.js']) {
+    const src = fs.readFileSync(path.join(PKG, rel), 'utf8');
+    assert.equal(/installMcpLoopback|loopback-listener/.test(src), false,
+      'R-8：' + rel + ' 不得涉及入口 B（webServer.available 早退会把入口 B 拖回宿主依赖）');
+  }
 });

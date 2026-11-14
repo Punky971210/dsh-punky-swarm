@@ -23,8 +23,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/webui/runtime-config.js';
-import { createApi } from '../lib/api.js';
+import { validateGovernancePayload, validateWatchPayload, createRuntimeConfigService } from '../lib/panel/webui/runtime-config.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 
 // 【2026-10-25 CI 修复】同 api-config.test.js：硬编码 `D:\dsh\_tmp\dsh-tmp` 在 posix 上是相对路径，

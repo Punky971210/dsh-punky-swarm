@@ -26,19 +26,25 @@ import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫
 // 【P0 端口化】core 端口注册表（X-1 … X-7 的唯一登记面）：
 //   登记段 = X-2 `store`（本文件 `createEngineStore`）、X-4 `presets`、X-5 `toolFace`；
 //   消费侧 = X-4 的 HTTP 注入 getter（读 `corePort('presets').list()`）。X-1 `config` 自登记在 `hot/config-watch.js`。
-import { corePort, registerCorePort, unregisterCorePort } from './core-ports.js';
+import { corePort, hasCorePort, registerCorePort, unregisterCorePort } from './core-ports.js';
+// L1 拆分（批 `punky-panel-split-20261114`）后的**静态依赖面**：本文件不再静态 import `lib/panel/**`。
+//   HTTP 面装配体（`/api` 12 路由 + `/mcp` 入口 A + 发现服务 + `/config` 写通道 + SSE hub）已整体迁到
+//   `lib/panel/surface.js`，经 **第 8 个端口键 `panelSurface`**（`corePort('panelSurface').build(deps)`）取用；
+//   入口 B（MCP 自建 loopback）迁到 `lib/panel/index.js#apply`。
+//   ⇒ 「core 保生命周期、panel 供装配体」：生命周期（`internal/service` 订阅 / `mounted` 幂等 / 聚合释放时机 /
+//   `httpSurface` 端口状态机）全在本文件，装配体全在墙内 —— 这是拆分的全部意义，禁在 core 留第二份副本。
 // 【P0 端口化 · X-7】批次文件读面的**唯一**实现：装配根把它登记成 `batchFeed` 端口，
 //   `panel/stream.js`（SSE 摘要）与 `watch/heartbeat/scan.js`（512B 预筛）都经端口读盘 ⇒ 不再各读一套。
 import { createBatchFeed } from './state/batch-feed.js';
 import { createTools } from './tools/register.js';
-// 【方案 A · 延迟绑定】`/mcp` 的唯一延迟入口要**重试挂载**它：`createTools` 里那次尝试早于
-//   `webServer` 就绪（`lib/tools/register.js:38`），早退时返回 `installed=false` 的 no-op disposer。
-import { installMcpDataPlane } from './mcp/data-plane-server.js';
 import { RESIDENT_TOOL_NAMES, governedToolNames } from './engine/suite.js';
 import { EXEC_TOOLS } from './tools/core.js';
 import { wakeLeaderForReport } from './tools/swarm-comms.js';
+// 判据三纯函数（`danglingLanesOf` / `smokeOf` / `poolViewOf`）：**实现体不改**，本文件只把它们登记进
+//   `store` 端口的 `project` 组（契约 §S-4.2）⇒ 面板读端经端口取同一引用，不再直取核心模块。
 import { poolViewOf } from './tools/task-tools.js';
-import { createApi } from './api.js';
+import { danglingLanesOf } from './state/dangling.js';
+import { smokeOf } from './state/gates.js';
 import { syncAssets } from './assets.js';
 import { createTrajectoryBridge, isTrajectoryEnabled } from './bridge/trajectory.js';
 import { installDispatchRegistration } from './bridge/dispatch-register.js'; // 派发写侧登记点（见 bridge/dispatch-register.js）
@@ -49,14 +55,13 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf } from './schema.js';
+import { resolveWatchConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
 // 【W4 · D-2/D-3】功能面探活所需的端口实例：由装配根在此**建一次**，供 `capabilityReport({ ports })` 读 `available`。
 //   方向 = 引擎 → provider 端口（J6：宿主差异只在 provider 内）；本文件不再读任何宿主服务名。
 import { createToolsPort } from './provider-dsh/tools-http.js';
 import { createAgentPort, agentChannelFactsOf } from './provider-dsh/agent.js';
-import { createDiscoveryService } from './discovery/service.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
@@ -74,10 +79,6 @@ import { resolveGovernanceConfig } from './governance/config.js';
 // preset 装载：governance.hook.preset 引用键 → boot 装载一次 table 注入 resolve
 //   presetTable——preset 文件 = 发布资产语义，热更只管引用启停、不重读文件）
 import { loadPresetTable, PRESET_IDS } from './governance/preset-loader.js';
-// WebUI 治理配置写通道：createApi configEndpoints 注入面——
-//   runtimeConfig 服务实例（<root>/config/runtime.json 写通道）+ trustedHosts（出厂 []）+ applied/presets
-//   getters（延迟引用装配后初始化绑定，HTTP 请求时求值无 TDZ——见 createApi 调用点注释）
-import { createRuntimeConfigService } from './webui/runtime-config.js';
 // 双层桥接事件流：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
 //   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移）
 import { appendRefusalEvent } from './governance/receipt-store.js';
@@ -86,9 +87,6 @@ import * as mailbox from './comms/mailbox.js';
 import { createConfigWatcher, CONFIG_CHANGED_EVENT } from './hot/config-watch.js';
 // topic 运行时（lib/comms/topic-runtime.js）：装配面 start/stop（与 trajectory 桥同形）+ 状态事件发布接线
 import { createTopicRuntime } from './comms/topic-runtime.js';
-// SSE hub（lib/panel/stream.js）由装配层创建注入 api.js（deps.panelStream），
-//   topic.enabled 时经 hub.attachTopic('swarm.') 订阅低延迟触发源（subscribeTopicPrefix → parseTopicIds → notifyAll）
-import { createStreamHub } from './panel/stream.js';
 // 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
 import { recoverBatches as resumeRecoverBatches, resolveResumeConfig, laneProgressRead } from './state/resume.js';
@@ -206,6 +204,15 @@ const createStorePort = ({ store, stateSubs, logger }) => {
     },
     // 实例级幂等 dispose（转发 store.dispose；**不**搬运 store 内部结构）
     dispose: () => store.dispose(),
+    // ── 契约 §S-4.2 · 判据派生面（本批新增的**唯一**端口组）──────────────────────────────────
+    //   三函数**不是 store 的方法**而是派生判定 ⇒ 另立组，不破 P0·X-2 对 `read`/`write` 键集的冻结。
+    //   三处一律**同一函数引用**（禁包装、禁重写判定）：面板读端据此渲染 danglingLanes / smoke / pool，
+    //   与 `task_pool` 工具面、门禁结算**共用同一实现**（拆封后仍是一个真源）。
+    project: {
+      danglingLanesOf, // ← lib/state/dangling.js
+      smokeOf,         // ← lib/state/gates.js
+      poolViewOf,      // ← lib/tools/task-tools.js
+    },
   };
 };
 
@@ -538,58 +545,37 @@ const installWatchdog = ({ ctx, watchCfg, heartbeatRef, heartbeat }) => {
 //     · `Fiber._updateState` 在 fiber 进出 ready 时对本 fiber 已 provide 的服务补发 notify ⇒ 不漏通知。
 //   仍保留「注册监听后立即主动探测一次」作双保险（覆盖「监听注册晚于服务提供」的次序竞态）。
 //
-// 拆分（R-1/R-2）：`createHttpSurface` = 纯装配工厂；`bindHttpSurfaceDeferred` = **唯一**延迟入口。
-//   `createHttpSurface` 的前置契约 = 调用方已确认 `createHttpPort(ctx).available === true`
-//   （可装配性判定只允许出现在延迟入口一处，否则就是「第二套分支」）。
-const createHttpSurface = ({ ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog }) => {
-  let apiDispose = null;
-  let panelStream = null;
-  // 发现服务（ADP）：capabilities.discovery.enabled（默认开）时装配——
-    // 消费 tool-descriptor catalog（tools.catalog，aip.enabled 时非空）+ agent-descriptor 目录（DEFAULT_ASSEMBLY 派生）
-    const discoveryCfg = resolveDiscoveryConfig(config);
-    let discovery = null;
-    if (discoveryCfg.enabled) {
-      // 【⑧-3 · 2026-11-08 裁决甲】agent 目录**单一构造点** = `tools.agentCatalog`（`tools/register.js:63`
-      //   用 `resolveAssembly(aip.team ?? 'punky-preset', config.assembly)` + 9 个 engineInfo 键构建）。
-      //   此前这里**另建一次** `buildAgentDescriptors(DEFAULT_ASSEMBLY, {version})` ⇒ 配置了
-      //   `aip.team` / `config.assembly` 时 `/agents` 与 `/discover` 会报**不同团队/不同席位集**。
-      //   回落分支只在 `aip.enabled=false`（目录不构建）时生效：保持既有降级语义（有席位、无工具）。
-      const agentDescriptors = tools.agentCatalog
-        ? tools.agentCatalog.list()
-        : buildAgentDescriptors(DEFAULT_ASSEMBLY, { version: engineVersion() });
-      discovery = createDiscoveryService({ catalog: tools.catalog, agentDescriptors, config: discoveryCfg });
-      ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
+// 拆分（L1 · 批 `punky-panel-split-20261114`）：装配体整体迁入 `lib/panel/surface.js#createPanelSurfaceBuilder`
+//   （`createApi` / `createDiscoveryService` / `createStreamHub` / `createRuntimeConfigService` / `/mcp` 入口 A
+//   全在墙内 `lib/panel/**`）。本文件**只留一个薄取件口** `buildSurface`（禁在 core 留第二份副本 = 两真源）：
+//     · `corePort('panelSurface')` **每次 mount 求值一次**（禁缓存 builder 引用 —— panel 行晚于 engine 行 apply，
+//       装配期缓存会把「晚登记」永久判成「缺席」）；
+//     · builder 缺席 ⇒ **warn 一次 + 返回 null**（`mounted` 保持 null、`mount()` 返回 false）。
+//       「面板静默少一半面」是本批最危险的失败形态 ⇒ **禁止**静默返回 true 或静默跳过。
+//     · `deps` = 冻结 7 键（契约 §S-3.2）；`agentDescriptors` 的回落分支**留在 core**
+//       （含 `DEFAULT_ASSEMBLY` / `engineVersion`），不把装配根常量拖进墙内。
+let panelBuilderAbsentWarned = false;
+const buildSurface = ({ ctx, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg }) => {
+  if (!hasCorePort('panelSurface')) {
+    if (!panelBuilderAbsentWarned) {
+      panelBuilderAbsentWarned = true;
+      ctx?.logger?.warn?.('[dsh-punky-swarm] http surface: panelSurface builder absent（/api + /mcp + SSE 未装配）；'
+        + '面板行（dsh-punky-swarm/panel）尚未 apply 或未装 —— 本面保持未装配态，不静默通过');
     }
-
-    // SSE hub 装配层创建注入——先建 hub 再传 deps.panelStream，
-    //   dispose 归属本层（api.js 自建者 dispose；注入时 api.js 不 push disposer）。
-    //   hub 随 webServer 挂载（无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源
-    panelStream = createStreamHub({ root, logger: ctx.logger });
-    // WebUI 治理配置写通道：configEndpoints 注入面——
-    //   runtimeConfig = <root>/config/runtime.json 写通道服务实例；trustedHosts 出厂 []（loopback-only，
-    //   非 loopback 部署需把宿主 trustedHosts 镜像进插件 config.trustedHosts——文档化运维要求）；
-    //   applied/presets = 延迟 getter：governanceInstalledCfg/presetCatalog 在本函数体后段（preset 装载
-    //   之后）才初始化——getter 只在 HTTP 请求时求值，彼时已绑定，无 TDZ。
-    apiDispose = createApi(ctx, {
-      store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat,
-      discovery, panelStream,
-      configEndpoints: {
-        runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
-        trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
-        applied: () => getGovernanceInstalledCfg(),
-        // watch 生效快照 getter：watchInstalledCfg 初始化于上方 watch 引擎装配
-        //   （早于本 createApi 调用）——惰性 getter 与 applied 同法，HTTP 请求时求值无 TDZ。
-        //   生效快照随比较集扩展自动携带 longrun 阈值（maxDurationMs/noProgressWindowMs）
-        //   → GET /config applied.watch 即面板回显与 watchSig 确认轮询的完整数据源（无需装配侧再加工）
-        appliedWatch: () => getWatchInstalledCfg(),
-        presets: () => getPresetCatalog(),
-      },
-    }).dispose;
-
-    // SSE hub 装配层创建注入（上方 createStreamHub + deps.panelStream），
-    //   topic.enabled 时经 attachTopic('swarm.') 订阅低延迟触发源（下方 topic 运行时装配分支与热更新通道对称接线）；
-    //   topic 关闭时 hub 仍装配（fs.watch 与心跳通道不变），attachTopic 零调用零路径。
-  return { apiDispose, panelStream };
+    return null;
+  }
+  const agentDescriptors = tools.agentCatalog
+    ? tools.agentCatalog.list()
+    : buildAgentDescriptors(DEFAULT_ASSEMBLY, { version: engineVersion() });
+  return corePort('panelSurface').build({
+    root,
+    catalog: tools.catalog,
+    agentCatalog: tools.agentCatalog,
+    agentDescriptors,
+    aipFormat: tools.aipFormat,
+    getWatchInstalledCfg,
+    getGovernanceInstalledCfg,
+  });
 };
 
 // ── 延迟绑定入口（唯一）──────────────────────────────────────────────────────────────────
@@ -601,15 +587,14 @@ const createHttpSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
 //   `test/w7f-rt-write-surface.test.js` 冻结，新增字段会破坏该冻结面）。
 const bindHttpSurfaceDeferred = ({
   ctx, config, store, root, tools, rt,
-  getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog,
-  mcpPlaneOf, syncConsumers,
+  getWatchInstalledCfg, getGovernanceInstalledCfg,
+  syncConsumers,
 }) => {
   // 已装配面（非空 = 已装配；唯一持有者是 `mounted.dispose` —— 一次性聚合释放器）
   let mounted = null;
-  // 首轮：若 `createTools` 那次尝试**已真装上**（宿主先起 webServer 后加载插件，如热重载），
-  //   则本路径不再挂第二个 ⇒ 禁双挂。释放过一轮后置 false：旧 disposer 指向的 webServer 实例已消失。
-  let adoptEarlyMcp = true;
-  const surfaceDeps = { ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog };
+  // 取件参数：`config`/`store` 不再是装配体的直接依赖（panel 侧经 `corePort('config')` / `store.read` 取），
+  //   但 `root` 与两个惰性 getter 仍由装配根提供（契约 §S-3.2 冻结 7 键的其中三个来源）。
+  const surfaceDeps = { ctx, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg };
   // 【P0 端口化 · X-6】端口状态面（**闭包**，不进 `rt`：`rt` 字段集被 `test/w7f-rt-write-surface.test.js` 冻结 19 项）。
   //   `surfaceSubs` = 多播订阅集（N 个消费者走同一个 Set；禁各自直挂钩宿主 internal/service 事件 ⇒ 那是 N 份竞态）。
   //   `lastReason` = 最近一次**真实**状态迁移的触发因（`probe` / `internal/service` / `ensure` / 释放因）。
@@ -640,8 +625,8 @@ const bindHttpSurfaceDeferred = ({
     //   disposed hub 上返回 no-op ⇒ topicAttachUn 被一个空函数占位 ⇒ 重挂后静默丢线）。
     if (rt.topicAttachUn) { try { rt.topicAttachUn(); } catch { /* 已随 hub 释放 */ } rt.topicAttachUn = null; }
     rt.panelStream = null;
-    // 旧 webServer 实例已消失 ⇒ 早装 disposer 指向的路由面不再有效，下一轮必须自己挂
-    adoptEarlyMcp = false;
+    // 旧 webServer 实例已消失 ⇒ panel 侧聚合释放已把 `/mcp` 路由摘掉并清空持有者
+    //   （`lib/panel/surface.js#createPanelSurfaceBuilder` 的 `mcpRouteHolder`）⇒ 下一轮必真装，不会双挂。
     syncConsumers?.();
     if (reason !== 'plugin unload') ctx.logger?.info?.('[dsh-punky-swarm] http surface released: ' + reason);
     publishSurfaceState(reason); // 【X-6】状态迁移多播（端口订阅者）
@@ -655,40 +640,27 @@ const bindHttpSurfaceDeferred = ({
       return false;
     }
     if (!createHttpPort(ctx).available) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] http surface: webServer 在读时刻不可用（保持延迟态，trigger=' + reason + '）');
+      // 【L1 拆分后 · 日志级别订正】「webServer 尚未就绪」是**方案 A 的前提状态**（正常延迟态），不是故障。
+      //   ⚠ 该分支在拆分前**实际不可达**（两个调用点各自先判 `available`：`mount('probe')` 有守卫、
+      //   `internal/service` 分支只在 `value !== undefined` 时调）；拆分后 panel 行的 `ensure()` 会主动催挂，
+      //   使这条分支成为**每台 webServer 晚就绪的宿主（含桌面宿主）启动时必走一次**的路径
+      //   ⇒ 沿用 warn 会在每次启动刷一条假警报（把正常延迟态报成异常）。
+      //   ⇒ 降为 info：返回值语义一字不改（仍 `return false`、`mounted` 保持 null —— **不是**降级放行）。
+      ctx.logger?.info?.('[dsh-punky-swarm] http surface: webServer 在读时刻不可用（保持延迟态，trigger=' + reason + '）');
       return false;
     }
-    // ① `/mcp` 重试挂载：早退的 no-op disposer（`installed === false`）不构成持有者 ⇒ 这里拿到的才是
-    //    唯一持有者。判据用既有 `installed` 标志（`data-plane-server.js:266/277`），不新造标记。
-    let mcpRouteDispose = null;
-    const early = typeof mcpPlaneOf === 'function' ? mcpPlaneOf() : null;
-    const earlyInstalled = Boolean(early) && early.installed === true;
-    if (adoptEarlyMcp && earlyInstalled) {
-      // 【D-05 缺口修复 · AC-16】早装的 `/mcp` 路由**由本层接管**。
-      //   此前该分支只跳过重装、`mcpRouteDispose` 保持 null ⇒ 下面的聚合释放（:522-528）**不会**摘它
-      //   ⇒ `release('webServer gone')` 之后路由仍活 → 同一 webServer 实例再 provide 即撞宿主
-      //   `webserver: duplicate exact route "/mcp"`（探针实测见 `probe/p2-adopt-same-object.mjs`），
-      //   且抛出点在**步骤 ①** ⇒ 步骤 ② 的 `/api` 族 + SSE hub 从未执行 ⇒ 整个 HTTP 面装不回来。
-      //   接管后由聚合释放摘除；该 disposer 亦挂在 `ctx.effect`，两者共享 `tools/register.js` 的
-      //   一次性守卫 ⇒ 卸载时只真正摘一次（否则「disposer 调用次数」会虚高，破坏 AC-16 的相等判据）。
-      mcpRouteDispose = early;
-    } else {
-      const dispose = installMcpDataPlane(ctx, { logger: ctx.logger });
-      if (dispose && dispose.installed === true) mcpRouteDispose = dispose;
-      else ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /mcp 重试挂载未成功（注册被拒 ⇒ installed=false，保持未挂载）');
+    // ①②③ `/mcp`（入口 A）＋ `/api`（含 `/discover`、`/.well-known/aip`）＋ SSE hub：
+    //   三者**整体**由 panel 的 `build(deps)` 装配并交回一个**一次性聚合释放器**（逆序 `/api` → hub → `/mcp`）。
+    //   为什么必须整体同边（契约 P-3）：`/mcp` 的路由创建点若分居两侧，同一实例会注册两次 ⇒ 宿主抛
+    //   `webserver: duplicate exact route "/mcp"`；D-05/AC-16 的 adopt-or-install 语义已随入口 A 一起
+    //   搬进 `lib/panel/surface.js`（`installed === false` 不构成持有者）。
+    const surface = buildSurface(surfaceDeps);
+    if (!surface) {
+      // fail-loud（契约 §S-2.4 步骤 1）：builder 缺席 ⇒ 保持未装配。**不**静默返回 true。
+      return false;
     }
-    // ② `/api`（含 `/discover`、`/.well-known/aip`）＋ ③ SSE hub
-    const surface = createHttpSurface(surfaceDeps);
-    // 聚合释放器：一次性守卫，逆序释放。它同时是 `rt.apiDispose` 的持有者 ——
-    //   `releaseAll` 在插件卸载时还会再调一次 `rt.apiDispose?.()`，一次性守卫保证**不会重复摘路由**。
-    let spent = false;
-    const dispose = () => {
-      if (spent) return;
-      spent = true;
-      try { surface?.apiDispose?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /api dispose failed: ' + String(e?.message ?? e)); }
-      try { surface?.panelStream?.dispose(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: stream hub dispose failed: ' + String(e?.message ?? e)); }
-      try { mcpRouteDispose?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: /mcp dispose failed: ' + String(e?.message ?? e)); }
-    };
+    // 聚合释放器由 panel 持有（`surface.dispose`，自带一次性守卫）；本层只把它挂成唯一持有者并回填 rt 读位。
+    const dispose = surface.dispose;
     mounted = { dispose };
     rt.apiDispose = dispose;
     rt.panelStream = surface.panelStream;
@@ -1004,7 +976,7 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
 
 // ── W7e E1：governance 装载面（preset 双表 + 注册目录元数据 + hook 安装）下沉为顶层工厂 ──
 //   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / HTTP 面装配的惰性 getter——
-//   后者现由 `bindHttpSurfaceDeferred` 承载，`presets: () => getPresetCatalog()` 等仍是惰性求值）。
+//   后者现由 `bindHttpSurfaceDeferred` 承载，`presets: () => corePort('presets').list()` 等仍是惰性求值）。
 const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge }) => {
   const governanceWarn = (m) => ctx.logger?.warn?.('[governance] ' + m);
   const { table: presetTable, banTable: presetBanTable, errors: presetErrors } = loadPresetTable();
@@ -1428,8 +1400,8 @@ export const apply = (ctx, config = {}) => {
   //   顺序依据（对判据源 S2.1 的**唯一**调整，理由可判）：AC-7 的补接线回调要读 `rt.topicRuntime`，
   //   而后者在本行才由 `installTopicRuntime` 写入 ⇒ 若仍按旧位置（`installWatchdog` 之后）调用延迟入口，
   //   则 webServer 已就绪的那种宿主里 probe 会在 topicRuntime 就绪**之前**装配完成，topic 接线仍会丢一次。
-  //   其余装配面无顺序依赖：本段的产物（路由 / hub）只有 HTTP 请求时才被消费，且 `getPresetCatalog`
-  //   等全部是惰性 getter（见 `createHttpSurface` 内注释）。
+  //   其余装配面无顺序依赖：本段的产物（路由 / hub）只有 HTTP 请求时才被消费，且 `presets` /
+  //   `applied` 等全部是惰性 getter（见 `lib/panel/surface.js` 内注释）。
   //   ⚠ 与旧 `installWebSurface` 的返回值语义**不完全等价**：`rt.apiDispose` / `rt.panelStream` 由延迟入口
   //    在装配完成时回填（可能晚于本行）⇒ 任何消费方一律**读时求值**，禁在本同步段缓存布尔/引用。
   const syncHttpSurfaceConsumers = () => {
@@ -1453,12 +1425,9 @@ export const apply = (ctx, config = {}) => {
     ctx, config, store, root, tools, rt,
     getWatchInstalledCfg: () => rt.watchInstalledCfg,
     getGovernanceInstalledCfg: () => rt.governanceInstalledCfg,
-    // 【P0 端口化 · X-4】HTTP 注入面形状不变（仍是 getter），实现改为读 `presets` 端口：
-    //   延迟求值语义逐字保留 —— 本行在 `presetCatalog`（:1340 解构）之前执行，此刻端口尚未登记，
-    //   故**只在 HTTP 请求时**求值（与改造前闭包 getter 同一时序，不引入装配顺序依赖）。
-    getPresetCatalog: () => corePort('presets').list(),
-    // `/mcp` 早到的那次尝试（`createTools` 内）的返回：`installed === false` 的 no-op 不构成持有者
-    mcpPlaneOf: () => tools.mcpPlaneDispose,
+    // 【P0 端口化 · X-4】`presets` 的 HTTP 注入面（`configEndpoints.presets`）已随装配体迁入墙内，
+    //   由 `lib/panel/surface.js` 在**请求时**读 `corePort('presets').list()` —— 与改造前闭包 getter
+    //   同一时序（端口在装配后段才登记，故禁在装配期求值），不引入装配顺序依赖。
     syncConsumers: syncHttpSurfaceConsumers,
   });
   // ── P0 端口化 · X-3 · hooks 端口登记（键 `hooks`）────────────────────────────────────────

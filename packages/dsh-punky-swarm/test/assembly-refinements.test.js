@@ -37,6 +37,7 @@ import path from 'node:path';
 
 import { createTools } from '../lib/tools/register.js';
 import { createStore } from '../lib/state/store.js';
+import { applyEngineAndPanel } from './helpers/panel-row.mjs';
 
 const MODE = 'punky-preset';
 
@@ -88,11 +89,15 @@ test('回归① 反向对照：看得到 assign_check ⇒ 未评估照旧拒（�
   }
 });
 
-test('回归②：MCP 数据面路由 disposer 必须登记为 ctx.effect（否则插件重载报 duplicate route）', () => {
+test('回归②：MCP 数据面路由 disposer 必须随插件卸载执行（否则插件重载报 duplicate route）', () => {
+  // 【L1 拆分后归属变更（批 punky-panel-split-20261114）】`/mcp` 路由的**创建点**从 `createTools`（core）
+  //   迁到 `lib/panel/surface.js#build`；**释放点**从「`ctx.effect`」迁到「panel 的聚合释放器」
+  //   （由 core 的 `mounted.dispose` 唯一调用，见契约 §S-3.3）。原断言「登记为 ctx.effect」只是当年
+  //   达成该实质的手段；手段随归属迁移而变，**实质不变**：
+  //     卸载后 `/mcp` 必须真的从宿主注册表消失，否则重载时宿主报 `webserver: duplicate exact route "/mcp"`。
+  //   故本用例改走**真实装配形态**（engine 行 → panel 行）并按实质断言。
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-mcp-dispose-'));
-  const store = createStore(root);
   const routes = [];
-  const effects = [];
   const ctx = {
     logger: { info() {}, warn() {}, debug() {}, error() {} },
     tools: { register() {}, guard() { return () => {}; } },
@@ -102,18 +107,17 @@ test('回归②：MCP 数据面路由 disposer 必须登记为 ctx.effect（否�
         return () => { const i = routes.indexOf(route); if (i >= 0) routes.splice(i, 1); };
       },
     },
-    effect(callback) {
-      const dispose = callback();
-      if (typeof dispose === 'function') effects.push(dispose);
-      return () => {};
-    },
   };
   try {
-    createTools(ctx, { store, root });
-    assert.equal(routes.length, 1, 'MCP 数据面路由应已挂载（/mcp）');
-    assert.equal(effects.length > 0, true, '路由 disposer 必须登记为 ctx.effect（随 fiber 卸载执行）');
-    for (const dispose of effects) dispose();
-    assert.equal(routes.length, 0, '卸载后路由必须被摘除——否则重载时宿主报 duplicate exact route "/mcp"');
+    const dispose = applyEngineAndPanel(ctx, { root });
+    const mcpRoutes = () => routes.filter((r) => r.path === '/mcp');
+    assert.equal(mcpRoutes().length, 1, 'MCP 数据面路由应已挂载（/mcp，恰 1 条；实测 ' + routes.map((r) => r.path).join(',') + '）');
+    // 整体同边（契约 P-3）：`/api` 前缀兜底路由必须与 `/mcp` 在同一侧装配 —— 分居两侧正是
+    //   `duplicate exact route` 与「面板少一半面」两种事故的来源，故在此一并锁定。
+    assert.equal(routes.filter((r) => r.path === '/api/dsh-punky-swarm' && r.kind === 'prefix').length, 1,
+      '/api 前缀兜底路由必须与 /mcp 同边装配（实测 ' + routes.map((r) => (r.kind ?? 'exact') + ':' + r.path).join(',') + '）');
+    dispose();
+    assert.equal(mcpRoutes().length, 0, '卸载后路由必须被摘除——否则重载时宿主报 duplicate exact route "/mcp"');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

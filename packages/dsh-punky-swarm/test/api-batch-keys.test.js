@@ -31,10 +31,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import * as aipFormat from '../lib/comms/aip-format.js';
+// 【L1 拆分后】判据三纯函数装配态走 `corePort('store').project`；本夹具直调 `createApi`（无装配）⇒
+//   显式注入**同一函数引用**（与 `lib/index.js#createStorePort` 的 `project` 组同源，非复制实现）。
+import { danglingLanesOf } from '../lib/state/dangling.js';
+import { smokeOf } from '../lib/state/gates.js';
+import { poolViewOf } from '../lib/tools/task-tools.js';
+
+const project = { danglingLanesOf, smokeOf, poolViewOf };
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-batch-keys-'));
 const store = createStore(root);
@@ -67,7 +74,7 @@ const batchOne = makeBatch('b-one', BATCH_ONE_LANES);
 
 const routes = [];
 const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
-const api = createApi(ctx, { store, root, aipFormat });
+const api = createApi(ctx, { store, root, aipFormat, project });
 const batchRoute = routes.find((x) => x.path === '/api/dsh-punky-swarm/batch');
 
 function invokeBatch(batchId) {

@@ -33,7 +33,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { apply } from '../lib/index.js';
+// 【L1 拆分后】`apply` 语义升级为「宿主真实装配形态」= engine 行 → panel 行两行齐备（见 helper 头注）：
+//   只 apply engine 行拿不到 `/api` 与 `/mcp`（core 按契约 §S-2.4 步骤 1 fail-loud）。
+import { applyEngineAndPanel as apply } from './helpers/panel-row.mjs';
 // 【丙 · 装配隔离】工具面注册由预设组合里的 provider 行执行（引擎行只 provide 工具集）
 import { apply as mountToolFace } from '../lib/provider-dsh/index.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
@@ -67,7 +69,13 @@ test('L-AC-10③ 宿主级加载：插件经真实入口 apply() 装载成功，
     assert.ok(names.includes('handoff_submit'), 'P1 交接门提交工具必须在册：' + names.join(','));
     assert.ok(names.includes('handoff_view'), 'P1 交接门读端工具必须在册');
     assert.equal(new Set(names).size, names.length, '工具名不得重复注册');
-    assert.ok(m.ctx.calls.warn.length === 0, '装载期零 warn（真实加载链路干净）：' + m.ctx.calls.warn.join(' || '));
+    // 【L1 拆分后】engine 行 apply 时的 `mount('probe')` 若已见 webServer，会按契约 §S-2.4 步骤 1 报一次
+    //   「panelSurface builder absent」——这是**行序决定的必然**（panel 行此刻尚未 apply），不是装配缺陷。
+    //   真实桌面宿主里 webServer 晚到约 10.6s ⇒ 该分支不可达、零 warn 仍成立。
+    //   故按「契约规定的唯一例外」白名单化：**其余任何 warn 仍然判红**。
+    const CONTRACT_WARN = /http surface: panelSurface builder absent/;
+    const unexpectedWarns = m.ctx.calls.warn.filter((w) => !CONTRACT_WARN.test(String(w)));
+    assert.deepEqual(unexpectedWarns, [], '装载期零 warn（真实加载链路干净）：' + unexpectedWarns.join(' || '));
   } finally {
     m.disposer?.();
   }

@@ -31,11 +31,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { toAipMessage, toAipTask, toAipSession, toAipDataItems, AIP_COMMAND_TYPES } from '../lib/comms/aip-format.js';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import * as mailbox from '../lib/comms/mailbox.js';
 import * as aipFormat from '../lib/comms/aip-format.js';
+// 【L1 拆分后】判据三纯函数装配态走 `corePort('store').project`；本夹具直调 `createApi`（无装配）⇒
+//   显式注入**同一函数引用**（与 `lib/index.js#createStorePort` 的 `project` 组同源，非复制实现）。
+import { danglingLanesOf } from '../lib/state/dangling.js';
+import { smokeOf } from '../lib/state/gates.js';
+import { poolViewOf } from '../lib/tools/task-tools.js';
+
+const project = { danglingLanesOf, smokeOf, poolViewOf };
 
 // ---------- toAipMessage：ACPs Message 结构 ----------
 test('toAipMessage maps mailbox inbox payload to ACPs Message (leader→worker)', () => {
@@ -181,7 +188,7 @@ test('api wiring: aipFormat injected → /mailbox items carry aip projection; ab
   const mk = (deps) => {
     const routes = [];
     const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
-    const api = createApi(ctx, { store, root, ...deps });
+    const api = createApi(ctx, { store, root, ...deps, project });
     const invoke = (route, url) => {
       let status = 0, body = null;
       const res = { writeHead(s) { status = s; }, end(b) { body = JSON.parse(b); } };

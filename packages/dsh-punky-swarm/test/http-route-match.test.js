@@ -35,7 +35,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 import { createHttpPort } from '../lib/provider-dsh/tools-http.js';
 

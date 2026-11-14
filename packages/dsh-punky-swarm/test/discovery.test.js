@@ -22,14 +22,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
-import { createDiscoveryService } from '../lib/discovery/service.js';
+import { createDiscoveryService } from '../lib/panel/discovery/service.js';
 import {
   QUERY_TYPES, FILTER_OPERATORS, ADP_ERROR,
   validateDiscoveryRequest, validateFilterShape, normalizeLimit, successResponse, failureResponse,
-} from '../lib/discovery/schema.js';
-import { resolveField, matchOp, matchCondition, evaluateFilter } from '../lib/discovery/filter.js';
+} from '../lib/panel/discovery/schema.js';
+import { resolveField, matchOp, matchCondition, evaluateFilter } from '../lib/panel/discovery/filter.js';
 import { buildToolCatalog } from '../lib/aip/tool-descriptor.js';
 import { buildAgentDescriptor } from '../lib/aip/agent-descriptor.js';
 

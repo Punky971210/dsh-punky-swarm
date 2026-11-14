@@ -1071,7 +1071,7 @@ const SELFTEST_SAMPLES = [
     family: 'F-path',
     file: 'test/api-evt.test.js',
     expectSeverity: 'P1',
-    text: "const apiSrc = fs.readFileSync(new URL('../lib/api.js', import.meta.url), 'utf8');",
+    text: "const apiSrc = fs.readFileSync(new URL('../lib/panel/api.js', import.meta.url), 'utf8');",
   },
   {
     id: 'SP-2',

@@ -21,7 +21,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const apiSrc = fs.readFileSync(new URL('../lib/api.js', import.meta.url), 'utf8');
+const apiSrc = fs.readFileSync(new URL('../lib/panel/api.js', import.meta.url), 'utf8');
 
 test('api.js:86 收敛：无裸 member.settled 字面量 + EVT 常量引用 + 常量源 import', () => {
   // 裸字面量断言（允许出现在注释/说明文字，但事件比较处不得有字符串字面量比较）
@@ -29,7 +29,8 @@ test('api.js:86 收敛：无裸 member.settled 字面量 + EVT 常量引用 + �
   assert.deepEqual(bareComparisons, [], '事件读端无裸字面量比较（实际: ' + JSON.stringify(bareComparisons) + '）');
   // EVT 常量引用
   assert.ok(apiSrc.includes('EVT.EVT_MEMBER_SETTLED'), 'api.js 引用 EVT.EVT_MEMBER_SETTLED');
-  assert.ok(apiSrc.includes("from './state/event-types.js'"), '常量源 import 存在');
+  // L1 拆分（批 punky-panel-split-20261114）后 api.js 在 `lib/panel/api.js` ⇒ 常量源相对路径多一层 `../`。
+  assert.ok(apiSrc.includes("from '../state/event-types.js'"), '常量源 import 存在');
   // 常量源定义一致性（事实源 = store.js 域常量）
   const evtSrc = fs.readFileSync(new URL('../lib/state/event-types.js', import.meta.url), 'utf8');
   assert.ok(evtSrc.includes("export const EVT_MEMBER_SETTLED = 'member.settled';"), 'event-types.js 定义 member.settled 常量');

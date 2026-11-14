@@ -53,7 +53,7 @@ function fakeLogger() {
 }
 
 // ── 留痕统计面：**按主题收窄**（精确化，非放宽）────────────────────────────────────────────
-//   `logger.warn` 是**全局通道**：任何模块（如 `lib/mcp/data-plane-server.js` 的挂载告警）都可能写一条，
+//   `logger.warn` 是**全局通道**：任何模块（如 `lib/panel/mcp/data-plane-server.js` 的挂载告警）都可能写一条，
 //   用「任何 warn 的条数」当判据会被无关告警打穿（实测：MCP 未挂载时多发一条 ⇒ 首建被误计为留痕）。
 //   谓词 = **本插件前缀 + `lane lock` 主体**：lane 锁留痕由 lane-lock 单点产出，文案固定
 //   `[dsh-punky-swarm] lane lock 接管：<lock 路径> · fence N→M`；两者同时命中才算本主题

@@ -192,9 +192,11 @@ export function diffAgainstWhitelist(found, whitelist) {
  */
 export const WHITELIST = [
   // ── A1（可改，本批不改；β 落地后应删这几条）────────────────────────────
-  { file: 'api.js', symbol: 'createHttpPort', class: 'A1', reason: '纯依赖 ctx 的工厂；本模块已有 deps 注入面（createApi(ctx, deps)）⇒ 可改「注入优先 + 回落直构」，本批不改' },
-  { file: 'mcp/data-plane-server.js', symbol: 'createToolsPort', class: 'A1', reason: '纯依赖 ctx；模块已有 deps 参数（installMcpDataPlane(ctx, deps)）⇒ 可改注入优先，本批不改' },
-  { file: 'mcp/data-plane-server.js', symbol: 'createHttpPort', class: 'A1', reason: '同上（同一模块的 HTTP 面直构点）' },
+  // 【L1 拆分后】三条 A1 的 `file` 键随文件迁移改名（`api.js` → `panel/api.js`、`mcp/**` → `panel/mcp/**`）；
+  //   条目数、class 构成与 reason 均不变 —— 棘轮防的是「无意新增依赖」，搬家不是新增。
+  { file: 'panel/api.js', symbol: 'createHttpPort', class: 'A1', reason: '纯依赖 ctx 的工厂；本模块已有 deps 注入面（createApi(ctx, deps)）⇒ 可改「注入优先 + 回落直构」，本批不改' },
+  { file: 'panel/mcp/data-plane-server.js', symbol: 'createToolsPort', class: 'A1', reason: '纯依赖 ctx；模块已有 deps 参数（installMcpDataPlane(ctx, deps)）⇒ 可改注入优先，本批不改' },
+  { file: 'panel/mcp/data-plane-server.js', symbol: 'createHttpPort', class: 'A1', reason: '同上（同一模块的 HTTP 面直构点）' },
   // ── A3（显式例外：需 per-call 参数 或 属注册动作现场）────────────────────
   { file: 'engine/dispatch-core.js', symbol: 'createAgentPort', class: 'A3', reason: 'agentPort 需 per-call presetFor（热更配置）⇒ 结构不可预装配；⑤E 拆分后由 dispatch-core.js 持有' },
   { file: 'tools/host-surface.js', symbol: 'createRosterPort', class: 'A3', reason: 'rosterPort 需 per-call agent 凭据（exec.agent）⇒ 不可预装配' },

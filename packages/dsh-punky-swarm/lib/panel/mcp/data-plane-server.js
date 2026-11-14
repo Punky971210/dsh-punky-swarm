@@ -15,11 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
+// L1 拆分（批 punky-panel-split-20261114）后的相对路径：本文件在 `lib/panel/mcp/`，
+//   同墙件（`json-response` / `webui/config-trust`）保持 `../`；墙外共享叶子（`provider-dsh/**`、
+//   `engine/suite`、`governance/host-tools`）一律 `../../` —— 见契约 §S-4.1 PEER_LEAVES。
 import { sendJson } from '../json-response.js';
 import { isTrustedConfigRequest } from '../webui/config-trust.js';
-import { createToolsPort, createHttpPort } from '../provider-dsh/tools-http.js';
-import { SUITE_TOOLS, RESIDENT_TOOL_NAMES } from '../engine/suite.js';
-import { HOST_INTERSECT_EXEMPT } from '../governance/host-tools.js';
+import { createToolsPort, createHttpPort } from '../../provider-dsh/tools-http.js';
+import { SUITE_TOOLS, RESIDENT_TOOL_NAMES } from '../../engine/suite.js';
+import { HOST_INTERSECT_EXEMPT } from '../../governance/host-tools.js';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
 

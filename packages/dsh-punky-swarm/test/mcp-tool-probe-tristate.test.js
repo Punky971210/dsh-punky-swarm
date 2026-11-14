@@ -26,7 +26,7 @@ License, or (at your option) any later version.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { installMcpDataPlane } from '../lib/mcp/data-plane-server.js';
+import { installMcpDataPlane } from '../lib/panel/mcp/data-plane-server.js';
 import { HOST_PORT_QUERY_FAILED } from '../lib/provider-dsh/tools-http.js';
 
 const TOOL = 'batch_status'; // 暴露族内的只读工具（blackboard/read 面）

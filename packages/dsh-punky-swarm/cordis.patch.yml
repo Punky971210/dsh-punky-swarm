@@ -133,6 +133,16 @@
     #   ③ **可选服务不进 `inject`**：`webServer` 在 headless 缺席（写进去必 pending）；`agentTeams` 仍走
     #      provider 加载期一次性 `info` 探测，不占装配面任何一行。cordis 4.0.5 的 inject 无 optional 位
     #      （`Inject.resolve()` 归一化 + `Fiber` 逐键 `_checkImpl`）。
+    # ── 面板 L1 行：面板服务器侧（HTTP 12 路由 / MCP 入口 A+B / 发现服务 / `/config` 写通道 / SSE hub）──
+    # 层位 = **宿主层**（与上面 engine 行同列表 ⇒ 同一 global scope），不是 preset 层。
+    #   判定（`plan/panel-split-spec.md` §S-2.3）：面板 UI 是全局的（`dsh.client` 单对象 ⇒ 任何会话都看到这一页），
+    #   数据面若挂 preset 层则其它会话的面板页永远空白且不报错（fail-open）；且入口 B 的生命周期不得随预设组合。
+    # 本行**不写 config:**（配置唯一源 = engine 行的 config，经 `corePort('config').read()` 取；C-4 单源）。
+    # 本行**不写 inject**（硬 inject 会让 headless 宿主整块 pending ⇒ 入口 B 的 L1 价值归零；见 C-6）。
+    # 本行**不写 disabled**（默认全开；要关就整行删/注释，不留「看起来在跑」的半开态）。
+    # 行序硬约束：**必须在本列表内、engine 行之后**（否则 `corePort(...)` 首次取件即抛 PORT_NOT_READY）。
+    - id: dsh-punky-panel
+      name: 'dsh-punky-swarm/panel'
 # ============================================================
 # ============================================================
 # 0.1.7 preset 注册：punky-preset（蟛蜞模式）

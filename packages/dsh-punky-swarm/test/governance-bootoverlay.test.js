@@ -30,7 +30,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apply } from '../lib/index.js';
+// 【L1 拆分后】`apply` 语义升级为「宿主真实装配形态」= engine 行 → panel 行两行齐备（见 helper 头注）：
+//   只 apply engine 行拿不到 `/api` 与 `/mcp`（core 按契约 §S-2.4 步骤 1 fail-loud）。
+import { applyEngineAndPanel as apply } from './helpers/panel-row.mjs';
 import { writeRuntime, assemblyCtxHostFull } from './helpers/gate-fixture.mjs';
 
 // ── 装配级 fake ctx：`assemblyCtxHostFull()` 基线 + `preCount()`（取自 'helpers/gate-fixture.mjs'；F4 收敛，原 11 份同名副本）

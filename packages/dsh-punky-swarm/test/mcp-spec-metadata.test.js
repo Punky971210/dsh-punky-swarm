@@ -33,7 +33,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import {
   createMcpHandler, MCP_INSTRUCTIONS, MCP_TOOL_TITLES, MCP_TOOL_ANNOTATIONS,
-} from '../lib/mcp/data-plane-server.js';
+} from '../lib/panel/mcp/data-plane-server.js';
 import { RESIDENT_TOOL_NAMES } from '../lib/engine/suite.js';
 import { buildBatchStatusTools } from '../lib/tools/query-tools.js';
 

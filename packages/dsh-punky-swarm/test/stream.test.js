@@ -26,7 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStreamHub, hasShortNameSegment } from '../lib/panel/stream.js';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 import { emitTopic } from '../lib/comms/topic.js';
 

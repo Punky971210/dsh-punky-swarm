@@ -97,14 +97,17 @@ test('A1-P2-02 / AC-9 · 运行期 inject 面：**空声明**（J4\u0027-a），
 test('A1-P2-02 / R-9 · 裸访问计数（排除纯注释行）：index 的 ctx.webServer = 0、api = 0、dispatch 的 ctx.subagents = 0（W4 三处残余触达全部清零）', () => {
   // 【host-ports 批语义订正】`lib/api.js` 已改走端口面 `mountRoute` ⇒ 裸访问应为 **0**
   //   （这正是本批目标：引擎不再直接摸宿主面）。【W4 `codename`】`dispatch.js` 降级文案去宿主名 ⇒ 由 **1 → 0**（不变量 = 不得增加）。
+  // 【L1 拆分后（批 punky-panel-split-20261114）】`lib/api.js` 整体迁到 `lib/panel/api.js` ⇒
+  //   **现读取新路径、基线仍读旧路径**（基线锚 8d7815b，那是当年做本对拍时的现场；路径名是历史事实，不改写）。
+  //   两路径分开给出：第 4 元素 = 基线路径（缺省同现路径）。
   const probes = [
     ['lib/index.js', 'ctx.webServer', 0],
-    ['lib/api.js', 'ctx.webServer', 0],
+    ['lib/panel/api.js', 'ctx.webServer', 0, 'lib/api.js'],
     ['lib/engine/dispatch.js', 'ctx.subagents', 0],
   ];
-  for (const [rel, token, expect] of probes) {
-    const before = readAtBaseHead(rel);
-    assert.ok(before, '基线文件必须可读：' + rel);
+  for (const [rel, token, expect, baseRel = rel] of probes) {
+    const before = readAtBaseHead(baseRel);
+    assert.ok(before, '基线文件必须可读：' + baseRel);
     const afterCount = bareAccessLineCount(read(rel), token);
     const beforeCount = bareAccessLineCount(before, token);
     assert.equal(afterCount, expect, rel + ' 的 ' + token + ' 裸访问应为 ' + expect + ' 处（本批目标：api.js 归零）');
@@ -128,7 +131,8 @@ test('A1-P2-02 / AC-9 · 注释锚点在位且可核：引用宿主符号 Inject
   assert.equal(PENDING_CONTEXT.test(SHUFFLED_SAMPLE), false, '鉴别力自检：词序打散也必须判否（锚的是整句短语）');
   assert.match(indexSrc, /不可达/, '必须写明两处缺服务守卫在当前契约下不可达');
   // 防第二真源：api.js 只指路，不复制 index.js 的全文（用 index.js 的独有长句作哨兵）
-  const apiSrc = read('lib/api.js');
+  // 【L1 拆分后】读端路径随文件迁到 `lib/panel/api.js`（判据不变：仍须带 inject 指路注释、仍不得复制全文）。
+  const apiSrc = read('lib/panel/api.js');
   assert.match(apiSrc, /inject/, 'api.js 必须有指路注释');
   assert.equal(apiSrc.includes('21 个治理工具'), false,
     'api.js 不得复制 index.js 的注释全文（防第二真源）；只允许指路');

@@ -20,12 +20,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createApi } from '../lib/api.js';
+import { createApi } from '../lib/panel/api.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { buildToolCatalog } from '../lib/aip/tool-descriptor.js';
 import * as mailbox from '../lib/comms/mailbox.js';
+// 【L1 拆分后】判据三纯函数在装配态走 `corePort('store').project`；本夹具直调 `createApi`（无装配），
+//   故显式注入**同一函数引用**（不是复制实现）——与 `lib/index.js#createStorePort` 的 `project` 组同源。
+import { danglingLanesOf } from '../lib/state/dangling.js';
+import { smokeOf } from '../lib/state/gates.js';
+import { poolViewOf } from '../lib/tools/task-tools.js';
 import { seedArtifacts, runLane } from './helpers/gate-fixture.mjs';
+
+const project = { danglingLanesOf, smokeOf, poolViewOf };
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-'));
 const store = createStore(root);
@@ -52,7 +59,7 @@ store.createBatch('sess-other', { batchId: 'b-api', wavePlan: p2, phase: 'runnin
 
 const routes = [];
 const ctx = { webServer: { register: (r) => { routes.push(r); return () => {}; } } };
-const api = createApi(ctx, { store, root });
+const api = createApi(ctx, { store, root, project });
 
 function invoke(route, url) {
   let status = 0, body = null;

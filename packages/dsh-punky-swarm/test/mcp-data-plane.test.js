@@ -35,7 +35,7 @@ import { installWriteProvenanceGuard, writeProvenanceDecision } from '../lib/too
 import {
   installMcpDataPlane, exposedToolNamesOf, callableToolNamesOf, HOST_INTERSECT_EXEMPT_SUBSET,
   MCP_PROTOCOL_VERSION, MCP_PATH, LOOPBACK_ADDRESSES, EXPOSED_KINDS,
-} from '../lib/mcp/data-plane-server.js';
+} from '../lib/panel/mcp/data-plane-server.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');
@@ -239,45 +239,45 @@ test('G1b 性质式：∀ name ∈ tools/list ⇒ 调用**不得**返回 unknown
 // ══ G2 薄包装机核（源码两面 grep：import = 0、判据/策略码 = 0；唯一派发点）══════════════════
 test('G2 薄包装机核：state/(store|gates) import = 0；判据/策略码 = 0；.execute( 恰 1 处且为 ctx.tools.execute(', () => {
   // 【2026-11-09 · 批 `punky-mcp-l1-wiring` · **扫描面收窄，不是放宽**】
-  //   本批按判据源 §3.2 在 `lib/mcp/` 下新增 `loopback-listener.js`（入口 B 的自建 `node:http` 监听）。
+  //   本批按判据源 §3.2 在 `lib/panel/mcp/` 下新增 `loopback-listener.js`（入口 B 的自建 `node:http` 监听）。
   //   下面两条 `listen(` / `createServer(` 计数 = 0 的判据，其**结构性前提**是「本目录只有协议面」——
   //   新增监听器后该前提不再成立，笼统扫全目录只会得到一条「必红但无意义」的断言。
   //   ⇒ 协议面判据只扫**其余文件**（原判据方向/阈值逐条不变）；新文件的对应约束改由**更强**的补偿判据承担：
   //     `test/mcp-loopback.test.js` 的「C-1/C-2 静态面」（零协议 token / 禁 node:fs / 协议帧单点构造）
   //     与「R-8 单创建点」（全仓仅 register.js 一处 installMcpLoopback + lib/index.js 零涉及）。
   const LISTENER_FILE = 'loopback-listener.js';
-  const files = fs.readdirSync(path.join(PKG, 'lib/mcp')).filter((f) => f.endsWith('.js')).map((f) => path.join(PKG, 'lib/mcp', f));
-  assert.ok(files.length >= 1, '前置：lib/mcp 下至少一个 .js');
+  const files = fs.readdirSync(path.join(PKG, 'lib/panel/mcp')).filter((f) => f.endsWith('.js')).map((f) => path.join(PKG, 'lib/panel/mcp', f));
+  assert.ok(files.length >= 1, '前置：lib/panel/mcp 下至少一个 .js');
   // 防「幽灵豁免」：被豁免的文件必须真的在场（否则本收窄会演变成无声放宽）
   assert.ok(files.some((f) => path.basename(f) === LISTENER_FILE), '前置：入口 B 监听器文件必须在场（' + LISTENER_FILE + '）');
   const srcAll = files.filter((f) => path.basename(f) !== LISTENER_FILE).map((f) => fs.readFileSync(f, 'utf8')).join('\n');
 
   const stateImports = [...srcAll.matchAll(/from\s+['"][^'"]*state\/(store|gates)(\.[cm]?js)?['"]/g)].map((m) => m[0]);
-  assert.deepEqual(stateImports, [], 'lib/mcp/** 不得 import state/store 或 state/gates（薄包装不看状态机）');
+  assert.deepEqual(stateImports, [], 'lib/panel/mcp/** 不得 import state/store 或 state/gates（薄包装不看状态机）');
 
   const policy = ['gateDecision', 'judge', 'matchToolBan', 'assertModeActive', 'canSettle', 'SUITE_DENY_TOOLS', 'MODE_GATED_TOOLS'];
   const hits = policy.filter((token) => new RegExp('\\b' + token + '\\b').test(srcAll));
-  assert.deepEqual(hits, [], 'lib/mcp/** 不得出现判据/策略码（本层不做决策，只转发）');
+  assert.deepEqual(hits, [], 'lib/panel/mcp/** 不得出现判据/策略码（本层不做决策，只转发）');
 
   // 【G5 收口 · 适配面下沉后的判据订正】派发从「直调 ctx.tools.execute」下沉到**端口层**
   //   `lib/host-ports/`（用户裁定的设计纲：宿主差异全部关在适配层内）⇒ 唯一派发点的**形态**变了，
   //   但「只有一处派发、且走可核的端口方法」这条**判据不变**。禁令也同步收紧：本层**不得直触** `ctx.tools.*`。
   // 【TR3 ③ 已出清】原第三条正则 `/ctx\.tools\./ = false` 已删 —— 其保护面（lib/ 内除端口层与 bus 外
   //   不得直触宿主面）现由 `test/host-ports.test.js:110-123` 的 H4 反向约束承担：**读文件扫描、含注释/日志、
-  //   豁免 lib/host-ports/ 与 lib/bus/**，扫描面比本条只扫 lib/mcp 更宽**。
+  //   豁免 lib/host-ports/ 与 lib/bus/**，扫描面比本条只扫 lib/panel/mcp 更宽**。
   //   替代有效性的证明（实测）：向副本包的 `lib/api.js` 注入 `ctx.tools.execute` ⇒ H4 变红，
   //   断言原文 `宿主面必须**只在端口层**被触达（适配面单点）；越界点=["lib/api.js:400 → ctx.tools."]`。
   // 【①② 保留（无替代保护面）】下面两条正则**不得删**：`.execute(`=0 与「唯一派发点恰 1 处」在其余测试中
   //   **没有同口径的替代扫描** ⇒ 删了就是不可逆的判据净损失（K-2）。
   const executes = [...srcAll.matchAll(/\.execute\(/g)];
-  assert.equal(executes.length, 0, 'lib/mcp/** 内不得再直调 .execute(（派发已下沉到端口层）');
+  assert.equal(executes.length, 0, 'lib/panel/mcp/** 内不得再直调 .execute(（派发已下沉到端口层）');
   assert.equal((srcAll.match(/createToolsPort\(ctx\)\.invokeTool\(/g) ?? []).length, 1,
     '唯一派发点必须是 `createToolsPort(ctx).invokeTool(`（恰 1 处 ⇒ 单点、可核、走宿主链路 + guard）');
   const directObjExec = [...srcAll.matchAll(/\b(tool|definition|def|t)\.execute\(/g)].map((m) => m[0]);
   assert.deepEqual(directObjExec, [], '禁止直调工具对象 .execute(（会绕过守卫）');
   assert.equal((srcAll.match(/listen\(/g) ?? []).length, 0, '不得 listen(（不新起端口）');
   assert.equal((srcAll.match(/createServer\(/g) ?? []).length, 0, '不得 createServer(（复用 webServer）');
-  assert.equal(/ctx\.webServer\./.test(srcAll), false, 'lib/mcp/** 不得直触 `ctx.webServer.`（同上，经 createHttpPort）');
+  assert.equal(/ctx\.webServer\./.test(srcAll), false, 'lib/panel/mcp/** 不得直触 `ctx.webServer.`（同上，经 createHttpPort）');
   assert.ok((srcAll.match(/remoteAddress/g) ?? []).length >= 1, '必须有 remoteAddress 判定（loopback 校验）');
 });
 

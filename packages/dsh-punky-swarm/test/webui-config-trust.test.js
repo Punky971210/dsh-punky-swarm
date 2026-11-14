@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   → Origin 存在时 origin.host === Host 的 host（缺省通过）。复刻不放宽不收紧。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isTrustedConfigRequest } from '../lib/webui/config-trust.js';
+import { isTrustedConfigRequest } from '../lib/panel/webui/config-trust.js';
 
 // 判定封装：headers = { host, 'sec-fetch-site'?, origin? }（Node http 头键小写形态）
 const trust = (headers, trustedHosts) => isTrustedConfigRequest({ headers }, trustedHosts);

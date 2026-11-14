@@ -40,7 +40,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { apply } from '../lib/index.js';
+// 【L1 拆分后】`apply` 语义升级为「宿主真实装配形态」= engine 行 → panel 行两行齐备（见 helper 头注）：
+//   `rt.apiDispose` / `rt.panelStream` 由 panel 的 `build()` 回填（只 apply engine 行时 HTTP 面按契约 fail-loud 不装，两个字段不写）。
+import { applyEngineAndPanel as apply } from './helpers/panel-row.mjs';
 import { createStore } from '../lib/state/store.js';
 import { writeRuntime, assemblyCtxEffect } from './helpers/gate-fixture.mjs';
 
