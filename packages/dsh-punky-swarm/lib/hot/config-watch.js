@@ -60,13 +60,13 @@ function parseJsonText(text) {
   return JSON.parse(stripBom(text));
 }
 
-// 允许的 runtime.json 顶层键：注册表能力根（aip/acps/capabilities）+ 插件消费的非能力配置段
+// 允许的 runtime.json 顶层键：注册表能力根（aip/capabilities）+ 插件消费的非能力配置段
 // （mailbox/resume/ratchet/escalation/governance——governance 纳入热更：
 //   子键覆盖由 deepMerge 传播，仅顶层校验，与 mailbox 等非能力段同口径；装配侧 applyConfigChange
 //   消费 governance 变化做 dispose+重挂）。
 // 热更新只做值传播、只覆盖既有 schema 路径——拒绝未知顶层键防拼写漂移产生幽灵配置
 export const ALLOWED_TOP_KEYS = new Set([
-  'aip', 'acps', 'capabilities',
+  'aip', 'capabilities',
   'mailbox', 'resume', 'ratchet', 'escalation', 'governance',
   // modes（模式跟随）：`modes.gate` 白名单 = 哪些 agent preset 启用蟛蜞治理。
   //   纳入热更 ⇒ 切模式/改白名单**无需重启**（guard 与套件工具读的是热更快照）。

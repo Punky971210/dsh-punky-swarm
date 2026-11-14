@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
 // 缺省装配数据单点已迁出（W5/R-9）：`lib/assembly/defaults.js`；本文件**保形再导出**，
-//   消费方（`lib/acps/server.js` / `lib/tools/register.js` / `lib/index.js`）一行不改。
+//   消费方（`lib/tools/register.js` / `lib/index.js`）一行不改。
 //   语义注释与常量内容随迁（逐字未改）。
 export { DEFAULT_ASSEMBLY } from './assembly/defaults.js';
 

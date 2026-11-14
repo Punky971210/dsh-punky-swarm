@@ -32,7 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 盲区纪律（d1 §3 / impl §9，**不得越界写成序列断言**）：
 //   · B-2 `heartbeatRef.current`（对象属性写）与 B-3 `topicSink.emit`（调用非赋值）⇒ 走 L2，不进序列；
 //   · B-1/B-7：序列只有字段名 ⇒ **一次只改一个分支**（跨分支拼接不可归因）；
-//   · B-5 `acpsEndpoint.close()` 异步（R-a）⇒ 不作序列断言。
+//   · B-5 原 `acpsEndpoint.close()`（异步，R-a）已随 ACPs 面移除（2026-11-14）⇒ 该盲区条目失效。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -51,35 +51,36 @@ const INDEX_SRC = fs.readFileSync(INDEX_JS, 'utf8');
 const CONFIG_PATH = '/api/dsh-punky-swarm/config';
 const TRUSTED_HEADERS = { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:3080' };
 
-// ── rt 冻结字段集（plan/scope.md §3.1，20 项；集合相等判据）────────────────────────────
-const RT_FIELDS_20 = [
+// ── rt 冻结字段集（plan/scope.md §3.1，19 项；集合相等判据）────────────────────────────
+//   原 20 项；ACPs 面整体移除（2026-11-14）连带删掉 `acpsEndpoint` 字段 ⇒ 19 项（判据本身不放宽）。
+const RT_FIELDS_19 = [
   'hotConfig', 'watchTimer', 'sweepTimer', 'heartbeat', 'heartbeatRef',
   'watchInstalledCfg', 'apiDispose', 'trajectory', 'topicRuntime', 'topicAttachUn',
   'panelStream', 'verifyMount', 'governanceHook', 'governanceInstalledCfg',
-  'dispatchReg', 'autoSettle', 'autoSettleEnabled', 'laneWake', 'acpsEndpoint',
+  'dispatchReg', 'autoSettle', 'autoSettleEnabled', 'laneWake',
   'lastRatchetJson',
 ];
 
-// 【2026-10-31 遗留收口 · 冻结滞后修正】**装配写集** = 上表 20 项 + `capabilities`（共 21）。
+// 【2026-10-31 遗留收口 · 冻结滞后修正】**装配写集** = 上表 19 项 + `capabilities`（共 20）。
 //
 // 为什么两个常量而不是改上表：上表服务的是**两条不同判据** ——
 //   · `T-1 ①` = `createRuntimeState` 的 **base 字面量键集**（`capabilities` 不在 base 里，运行期才赋值）；
 //   · `T-2b/T-3b/T-4b` = **装配完成后**实际写到的字段集（含 `capabilities`）。
-//   把上表改成 21 会让 `T-1 ①` 直接红（base 字面量确实只有 20 个键）。
+//   把上表改成 20 会让 `T-1 ①` 直接红（base 字面量确实只有 19 个键）。
 //
 // 由来（既有欠债，非本轮引入）：G1 declare 批在 `lib/index.js` 装配末尾新增
 //   `rt.capabilities = capabilityReport(...)` 作为「缺能力可见」的**主回显面**
 //   （该批的 AC-5 / C6b / C7 用例都断言它在场），但**未同步更新本文件的冻结数**
-//   ⇒ 全文 `rt.*` 赋值实测 35 处（本表 20 个字段贡献 34 处）与冻结 34 不符、装配写集实测 21 项与冻结 20 不符。
+//   ⇒ 全文 `rt.*` 赋值实测 35 处（当时本表 20 个字段贡献 34 处）与冻结 34 不符、装配写集实测 21 项与冻结 20 不符。
 //   逐字段核对（`grep -oE "rt\.[a-zA-Z]+ =" lib/index.js | sort | uniq -c`）确认**多出的唯一非 base 字段就是
 //   `capabilities`**，无其他漂移 ⇒ 属**冻结滞后**，不是新增缺陷。修正方式 = 冻结数跟上实现，判据本身不放宽。
-const RT_FIELDS_ASSEMBLED_21 = [...RT_FIELDS_20, 'capabilities'];
+const RT_FIELDS_ASSEMBLED_20 = [...RT_FIELDS_19, 'capabilities'];
 
 // ── 八写集冻结集（p1 §3.2 可判核心 + dispose；②③④ 见 T-3 的 log-level 段）───────────
 const WRITE_SETS = {
   '⑤ governance': ['governanceHook', 'governanceInstalledCfg'],
   '⑥ autoSettle': ['autoSettle', 'laneWake', 'autoSettleEnabled'],
-  'dispose': ['watchTimer', 'sweepTimer', 'topicAttachUn', 'panelStream', 'acpsEndpoint'],
+  'dispose': ['watchTimer', 'sweepTimer', 'topicAttachUn', 'panelStream'],
 };
 
 function freshRoot() {
@@ -143,7 +144,7 @@ const takeSeq = (ctx) => (ctx.rtWriteLog ?? []).splice(0);
 //   阳性对照：字段集非空 + 每个扫描窗口内 `rt.*` 写点计数 > 0（否则「集合相等」在没扫到任何东西时也成立）。
 // ══════════════════════════════════════════════════════════════════════════════════════
 test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相等、apply 内旧 let 残留 0', () => {
-  // ① `createRuntimeState` 的 base 字面量键集 == 20 项冻结集
+  // ① `createRuntimeState` 的 base 字面量键集 == 19 项冻结集
   const baseStart = INDEX_SRC.indexOf('const createRuntimeState = (onWrite) => {');
   assert.ok(baseStart > 0, '阳性前置：createRuntimeState 定义须在场');
   const baseSeg = INDEX_SRC.slice(baseStart, baseStart + 1200);
@@ -151,9 +152,9 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   const keys = [...baseObj.matchAll(/([A-Za-z_$][\w$]*)\s*:\s*null/g)].map((m) => m[1]);
   // 已删断言（D 夹具自证/冗余）：邻近 :141 的更强断言已覆盖同一职能 —— 原文 "assert.ok(keys.length > 0, '阳性前置：base 字面量须能扫出键（否则「集合相等」空转）');"
   // 【删计数】原 `keys.length === 20` 与下一行**集合相等完全冗余**（同集合必同规模）。
-  //   更强断言 = 下一行 `deepEqual(keys.sort(), RT_FIELDS_20.sort())`：集合身份相等且能点名差集。
+  //   更强断言 = 下一行 `deepEqual(keys.sort(), RT_FIELDS_19.sort())`：集合身份相等且能点名差集。
   //   ⇒ 删计数不削弱鉴别力：漏一字段仍由下一行红（态② 已实跑取证）。
-  assert.deepEqual([...keys].sort(), [...RT_FIELDS_20].sort(), 'rt 字段集须与冻结 20 项集合相等');
+  assert.deepEqual([...keys].sort(), [...RT_FIELDS_19].sort(), 'rt 字段集须与冻结 19 项集合相等');
 
   // ② seam 四要素（d1 §5 接口约定硬要求）
   // P4-b 不可改造（Leader 裁定）：期望值来自**源码形态**（"唯一实现/单点定义"契约），匹配结果只有次数、无身份面；无处可取 identity ⇒ 归 P4-b。
@@ -168,7 +169,7 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   // ③ apply 内旧 `let <句柄>` 残留 == 0（AC-2；B-4 的兜底）
   const applyStart = INDEX_SRC.indexOf('export const apply = (ctx, config = {}) => {');
   const applySrc = INDEX_SRC.slice(applyStart);
-  const HANDLES = RT_FIELDS_20.filter((f) => f !== 'hotConfig' && f !== 'heartbeatRef'); // heartbeatRef 不是 let 句柄
+  const HANDLES = RT_FIELDS_19.filter((f) => f !== 'hotConfig' && f !== 'heartbeatRef'); // heartbeatRef 不是 let 句柄
   const residual = HANDLES.filter((h) => new RegExp('let\\s+' + h + '\\b').test(applySrc));
   assert.deepEqual(residual, [], 'apply 内旧 let 句柄残留须为 0（实测 ' + JSON.stringify(residual) + '）');
 
@@ -194,7 +195,7 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
   const relWrites = uniq(writesIn(rel));
   assert.ok(relWrites.length > 0, '阳性前置：releaseAll 内须扫出写点');
   assert.deepEqual(relWrites, [...WRITE_SETS.dispose].sort(),
-    'dispose 静态写集须 == 5 项置空（实测 ' + JSON.stringify(relWrites) + '）');
+    'dispose 静态写集须 == 4 项置空（实测 ' + JSON.stringify(relWrites) + '）');
 
   const remount = fnBody('const mountRemounters = (');
   const remountWrites = uniq(writesIn(remount));
@@ -211,9 +212,9 @@ test('T-1 L1 静态写集：rt 字段集恰 20、八写集与冻结集集合相�
     ['hotConfig', 'lastRatchetJson', 'topicAttachUn', 'topicRuntime', 'trajectory', 'verifyMount'].sort(),
     '⓪②③④ 静态写集须 == 6 项（实测 ' + JSON.stringify(hotWrites) + '）');
 
-  // ⑤ 全文 `rt.<field> =` 写点总数（回归锚；`impl-w7f.md §3` 报 34，本件独立复算。35 → 40：批 `punky-boot-httpfix-20261109b` / lane E1 的 HTTP 面延迟绑定净增 5 处，逐项见该 lane 的 `exec/http-deferred-bind/notice.md` AC-5）
+  // ⑤ 全文 `rt.<field> =` 写点总数（回归锚；`impl-w7f.md §3` 报 34，本件独立复算。35 → 40：批 `punky-boot-httpfix-20261109b` / lane E1 的 HTTP 面延迟绑定净增 5 处，逐项见该 lane 的 `exec/http-deferred-bind/notice.md` AC-5。40 → 38：ACPs 面移除（2026-11-14）摘掉 `rt.acpsEndpoint` 两个写点——装配赋值 1 处 + dispose 置空 1 处）
   const allWrites = [...INDEX_SRC.matchAll(/\brt\.[A-Za-z_$][\w$]*\s*=/g)].length;
-  assert.equal(allWrites, 40, '全文 rt.* 赋值须恰 40 处（实测 ' + allWrites + '）');
+  assert.equal(allWrites, 38, '全文 rt.* 赋值须恰 38 处（实测 ' + allWrites + '）');
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════
@@ -254,9 +255,9 @@ test('T-2 L2 痕迹：释放账目 1/2/1 → 0/0/0、dispose 后热更不再触�
     assert.equal(ctx.listeners.get('subagent/end')?.size ?? 0, 0, '② dispose 后 subagent/end 订阅须为 0');
     assert.equal(live.size, 0, '② dispose 后活定时器须为 0（实测 ' + live.size + '）');
     const disposeSeq = takeSeq(ctx);
-    assert.ok(disposeSeq.length > 0, '② dispose 须产生写（阳性：否则「⊆ 5 项」空转）');
+    assert.ok(disposeSeq.length > 0, '② dispose 须产生写（阳性：否则「⊆ 4 项」空转）');
     const foreign = disposeSeq.filter((k) => !WRITE_SETS.dispose.includes(k));
-    assert.deepEqual(foreign, [], '② dispose 写集须 ⊆ 5 项置空（实测外来项 ' + JSON.stringify(foreign) + '）');
+    assert.deepEqual(foreign, [], '② dispose 写集须 ⊆ 4 项置空（实测外来项 ' + JSON.stringify(foreign) + '）');
 
     // ③ dispose 后热更不再触发（P-7 阴性侧；阳性 = ①的 2/2）
     const govBefore = govRemountLines(ctx.calls).length;
@@ -288,15 +289,15 @@ test('T-2b P-8 实例隔离：两次 apply 各自独立 rt，互不影响（一�
     // 阳性：两笔装配都写满了 20 字段（各自 sink 独立、互不污染）
     // ── 假绿修复（超出假红范围但同源）────────────────────────────────────────
     // 原断「rtWriteLog 恰 20 次」只数条数、不看内容 ⇒「重复写某字段 + 漏写另一字段」时**仍绿**。
-    // 改断「实际写到的字段集 == 冻结 21 项」：漏写字段必红并点名，重复写由 `Set` 归并后仍能判出缺失。
+    // 改断「实际写到的字段集 == 冻结 20 项」：漏写字段必红并点名，重复写由 `Set` 归并后仍能判出缺失。
     const writtenA = [...new Set(a.ctx.rtWriteLog)].sort();
     const writtenB = [...new Set(b.ctx.rtWriteLog)].sort();
-    const missingA = [...RT_FIELDS_20].filter((f) => !writtenA.includes(f)).sort();
-    const missingB = [...RT_FIELDS_20].filter((f) => !writtenB.includes(f)).sort();
+    const missingA = [...RT_FIELDS_19].filter((f) => !writtenA.includes(f)).sort();
+    const missingB = [...RT_FIELDS_19].filter((f) => !writtenB.includes(f)).sort();
     assert.deepEqual(missingA, [], 'P-8 阳性：A 实例装配期**未写**的 rt 字段（点名）：' + JSON.stringify(missingA));
     assert.deepEqual(missingB, [], 'P-8 阳性：B 实例装配期**未写**的 rt 字段（点名）：' + JSON.stringify(missingB));
-    assert.deepEqual(writtenA, [...RT_FIELDS_ASSEMBLED_21].sort(), 'P-8 阳性：A 实例装配写的字段集须 == 冻结 21 项（写「条数」不作判据）');
-    assert.deepEqual(writtenB, [...RT_FIELDS_ASSEMBLED_21].sort(), 'P-8 阳性：B 实例装配写的字段集须 == 冻结 21 项（写「条数」不作判据）');
+    assert.deepEqual(writtenA, [...RT_FIELDS_ASSEMBLED_20].sort(), 'P-8 阳性：A 实例装配写的字段集须 == 冻结 20 项（写「条数」不作判据）');
+    assert.deepEqual(writtenB, [...RT_FIELDS_ASSEMBLED_20].sort(), 'P-8 阳性：B 实例装配写的字段集须 == 冻结 20 项（写「条数」不作判据）');
     takeSeq(a.ctx); takeSeq(b.ctx);
     // 变更 A ⇒ 只有 A 的 sink 增长
     writeRuntimeJson(rootA, { capabilities: { watch: { scanIntervalMinutes: 4 } } });
@@ -474,8 +475,8 @@ test('T-3b boot 对账零写（阳性 = overlay 有差异时必多写）', async
   try {
     // 同源构造差值（取代字面 20）：真源 = 字段清单规模 ⇒「写数 == 字段数」≡ 每字段恰 1 次 + 对账零额外写
     // （`:447` 的重复写检查与本行合用即等价于「恰一次/字段」，但不再把 20 写死）
-    assert.equal(same.ctx.rtWriteLog.length, RT_FIELDS_ASSEMBLED_21.length,
-      'boot 对账零写：一致 overlay 下装配写数须 == 字段数 ' + RT_FIELDS_ASSEMBLED_21.length
+    assert.equal(same.ctx.rtWriteLog.length, RT_FIELDS_ASSEMBLED_20.length,
+      'boot 对账零写：一致 overlay 下装配写数须 == 字段数 ' + RT_FIELDS_ASSEMBLED_20.length
       + '（实测 ' + same.ctx.rtWriteLog.length + '；多于字段数 = 对账多写了）');
     const dup = same.ctx.rtWriteLog.filter((k, i, arr) => arr.indexOf(k) !== i);
     assert.deepEqual(dup, [], '装配期每个字段须只写 1 次（实测重复 ' + JSON.stringify(dup) + '）');
@@ -532,10 +533,10 @@ test('T-4b D-1 回归：cordis 式「未声明属性即抛」的 ctx ⇒ 取值�
   const d2 = apply(sinkCtx, { root: root2 });
   try {
     // 同源构造差值 + 写集自比（取代字面 20）：注入 sink 后装配须把**每个字段各写 1 次**
-    assert.equal(sinkCtx.rtWriteLog.length, RT_FIELDS_ASSEMBLED_21.length,
-      '阳性对照：注入 sink 后装配写数须 == 字段数 ' + RT_FIELDS_ASSEMBLED_21.length + '（实测 ' + sinkCtx.rtWriteLog.length + '）');
-    assert.deepEqual([...new Set(sinkCtx.rtWriteLog)].sort(), [...RT_FIELDS_ASSEMBLED_21].sort(),
-      '阳性对照：写到的字段集须 == 冻结 21 项（实测 ' + JSON.stringify([...new Set(sinkCtx.rtWriteLog)].sort()) + '）');
+    assert.equal(sinkCtx.rtWriteLog.length, RT_FIELDS_ASSEMBLED_20.length,
+      '阳性对照：注入 sink 后装配写数须 == 字段数 ' + RT_FIELDS_ASSEMBLED_20.length + '（实测 ' + sinkCtx.rtWriteLog.length + '）');
+    assert.deepEqual([...new Set(sinkCtx.rtWriteLog)].sort(), [...RT_FIELDS_ASSEMBLED_20].sort(),
+      '阳性对照：写到的字段集须 == 冻结 20 项（实测 ' + JSON.stringify([...new Set(sinkCtx.rtWriteLog)].sort()) + '）');
   } finally {
     d2();
   }

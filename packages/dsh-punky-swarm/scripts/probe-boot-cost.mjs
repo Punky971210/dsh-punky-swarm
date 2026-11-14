@@ -181,12 +181,12 @@ const main = async () => {
   record('S4', 'createEngineStore（= createStore + loadRules）', 'index.js:1034→:152-162', s4.ms);
 
   // ═══ S5：createRuntimeState —— index.js:1038 ═══
-  //   源：index.js:810-820 的模块私有 const（未 export）⇒ 逐字复制（基对象 21 字段；无 sink ⇒ 纯对象）
+  //   源：index.js 的模块私有 const（未 export）⇒ 逐字复制（基对象 19 字段；无 sink ⇒ 纯对象）
   const s5 = timed(() => ({
     hotConfig: null, watchTimer: null, sweepTimer: null, heartbeat: null, heartbeatRef: null,
     watchInstalledCfg: null, apiDispose: null, trajectory: null, topicRuntime: null, topicAttachUn: null,
     panelStream: null, verifyMount: null, governanceHook: null, governanceInstalledCfg: null,
-    dispatchReg: null, autoSettle: null, autoSettleEnabled: null, laneWake: null, acpsEndpoint: null,
+    dispatchReg: null, autoSettle: null, autoSettleEnabled: null, laneWake: null,
     lastRatchetJson: null,
   }));
   record('S5', 'createRuntimeState（纯对象，无 sink）', 'index.js:1038→:810-820', s5.ms,

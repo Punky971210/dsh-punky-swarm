@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // mailbox 落盘根的**单一派生点**（`(lib-root)` 中立件，A1-P2-10）。
 //
 // 为什么落 `(lib-root)` 而**不落** `lib/comms/`：`.punky/arch.yml` 的 `allowed` 含
-//   `engine -> comms` / `(lib-root) -> comms` / `comms -> (lib-root)` / `tools -> comms` / `panel -> comms` / `acps -> comms`，
+//   `engine -> comms` / `(lib-root) -> comms` / `comms -> (lib-root)` / `tools -> comms` / `panel -> comms`，
 //   但**不含** `watch -> comms` 与 `bridge -> comms` ⇒ 放 `comms/` 会让 `watch/heartbeat/context.js` 与
 //   `bridge/trajectory.js` 各新增一条越界边、直接破棘轮（该白名单改动须 Leader 审核）。
 //   而 `watch` / `bridge` / `engine` / `comms` 四个消费域到 `(lib-root)` 的四对**均已在册** ⇒ 零白名单变更。

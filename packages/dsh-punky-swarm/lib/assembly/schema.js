@@ -21,16 +21,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 校验语义：validateCapabilities 仅对显式 enabled 的非法组合报错（fail-closed 在测试/装配验收层）；
 //   引擎启动侧只 warn 不炸宿主（配置错误不破坏可用性，与「默认关零破坏」一致）。
 
-import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS, ACPS_DEFAULTS } from '../schema.js';
+import { WATCH_DEFAULTS, TRAJECTORY_DEFAULTS, VERIFY_DEFAULTS, DISCOVERY_DEFAULTS } from '../schema.js';
 import { AUDITLOG_DEFAULTS } from '../auditlog/config.js';
 
 export const CAPABILITY_REGISTRY = [
   { key: 'aip', path: ['aip'], default: { enabled: true }, consumers: ['tools/register.js catalog + api.js /tools 端点'] },
-  // acps 键：ACPs 通讯能力——对外 mTLS 服务端点 + 内部桥。
-  // 默认关：acps.enabled 与 acps.endpoint.enabled 均 false 时零加载零监听（config 短路）；显式开启才
-  //   index.js 实例化 createAcpsServer（lib/acps/server.js + certs.js，node:https/tls/crypto 原生，零新依赖）。
-  { key: 'acps', path: ['acps'], default: ACPS_DEFAULTS, consumers: ['index.js acps endpoint 装配 + lib/acps/server.js'] },
-  { key: 'identity', path: ['aip', 'identity'], default: { enabled: false }, consumers: ['lib/aip/identity.js 模块 API（AIC/CAI/sign/verifyTrustChain）'] },
   { key: 'discovery', path: ['capabilities', 'discovery'], default: DISCOVERY_DEFAULTS, consumers: ['index.js discovery 服务装配 + api.js /discover + /.well-known/aip 端点'] },
   { key: 'verify', path: ['capabilities', 'verify'], default: VERIFY_DEFAULTS, consumers: ['index.js mountVerify 捕获 hook（只做证据捕获落台账）'] },
   { key: 'watch', path: ['capabilities', 'watch'], default: WATCH_DEFAULTS, consumers: ['index.js watchdog + watch/lane-heartbeat.js'] },

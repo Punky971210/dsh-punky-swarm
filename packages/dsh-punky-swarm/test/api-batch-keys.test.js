@@ -34,7 +34,7 @@ import path from 'node:path';
 import { createApi } from '../lib/api.js';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
-import * as aipFormat from '../lib/comms/acps-bridge.js';
+import * as aipFormat from '../lib/comms/aip-format.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'punky-api-batch-keys-'));
 const store = createStore(root);

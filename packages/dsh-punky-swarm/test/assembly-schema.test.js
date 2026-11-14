@@ -55,10 +55,10 @@ const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
 
 // ── 注册表完整性（A1.1/A1.2）──
 
-test('CAPABILITY_REGISTRY registers all 12 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog；L2 注入预算新增 injectBudget）', () => {
+test('CAPABILITY_REGISTRY registers all 10 capability keys（P1-01/03 新增 logs/topic；punky-auditlog-impl-m1 新增 auditlog；L2 注入预算新增 injectBudget；ACPs 面移除后删 acps/identity 两键）', () => {
   assert.deepEqual(
     new Set(CAPABILITY_REGISTRY.map((e) => e.key)),
-    new Set(['aip', 'identity', 'discovery', 'verify', 'watch', 'worktree', 'injectBudget', 'trajectory', 'acps', 'logs', 'topic', 'auditlog']),
+    new Set(['aip', 'discovery', 'verify', 'watch', 'worktree', 'injectBudget', 'trajectory', 'logs', 'topic', 'auditlog']),
   );
 });
 
@@ -73,7 +73,6 @@ test('auditlog registry entry points at capabilities.auditlog and defaults to en
 test('registry paths match existing consumer key paths', () => {
   const byKey = Object.fromEntries(CAPABILITY_REGISTRY.map((e) => [e.key, e.path]));
   assert.deepEqual(byKey.aip, ['aip']);
-  assert.deepEqual(byKey.identity, ['aip', 'identity']); // aip-gb-fix exec-identity：P2/P3 身份体系（默认关）
   assert.deepEqual(byKey.discovery, ['capabilities', 'discovery']);
   assert.deepEqual(byKey.verify, ['capabilities', 'verify']);
   assert.deepEqual(byKey.watch, ['capabilities', 'watch']);
@@ -81,13 +80,12 @@ test('registry paths match existing consumer key paths', () => {
   assert.deepEqual(byKey.trajectory, ['capabilities', 'trajectory']);
 });
 
-test('all registry defaults are ON by default except identity/acps/logs/topic (off — 默认关能力)', () => {
-  // 口径：7 键默认开（aip/discovery/verify/watch/worktree/injectBudget/trajectory）+ 4 键默认关；
-  // identity 例外：身份体系默认关（config.aip.identity.enabled===true 才激活，零开销零破坏）；
-  // acps 例外：ACPs 通讯能力默认关（显式开启——对外 mTLS 端点/内部桥均默认不激活，安全默认）；
+test('all registry defaults are ON by default except logs/topic (off — 默认关能力)', () => {
+  // 口径：8 键默认开（aip/discovery/verify/watch/worktree/injectBudget/trajectory/auditlog）+ 2 键默认关；
+  //   ACPs 面移除（2026-11-14）后 `identity` / `acps` 两键已随能力一起删除，此前的「4 键默认关」现为 2 键。
   // logs 例外：日志导出默认关，patch 显式 logs.enabled:true 开启；
   // topic 例外：comms/topic.js 预留模块默认关，接线预留。
-  const OFF_KEYS = new Set(['identity', 'acps', 'logs', 'topic']);
+  const OFF_KEYS = new Set(['logs', 'topic']);
   for (const entry of CAPABILITY_REGISTRY) {
     if (OFF_KEYS.has(entry.key)) {
       assert.equal(entry.default.enabled, false, entry.key + ' default must be disabled (默认关)');

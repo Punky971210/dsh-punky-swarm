@@ -153,9 +153,9 @@ function isLoopback(req) {
 }
 
 /** 读请求体（UTF-8；超限截断并抛，由调用方转畸形帧）。
- *  【④ 同名不同物改名】本函数与 `lib/acps/server.js` 的同名实现曾撞名（两个独立 HTTP 服务各一份）
- *  ⇒ 本处改 `readDataPlaneRequestBody`（数据面）；ACPS 侧改 `readAcpsRequestBody`。两侧独立、**禁合并**
- *  （返回形态不同：本处只拼 Buffer，ACPS 侧还吃 `req.body` 预解析）。旧名与依据见 map.json G4-7。 */
+ *  【④ 同名不同物改名】本函数曾与已移除的 ACPs 端点（`lib/acps/server.js`，2026-11-14 删除）的同名实现
+ *  撞名（两个独立 HTTP 服务各一份）⇒ 本处改名 `readDataPlaneRequestBody`（数据面），ACPs 侧曾改
+ *  `readAcpsRequestBody`。既然 ACPs 侧已不存在，本改名仍保留（旧名与依据见 map.json G4-7；不复活旧名）。 */
 function readDataPlaneRequestBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;

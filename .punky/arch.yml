@@ -34,7 +34,6 @@ domains:
   governance: "治理规则（hook-rules / preset-loader / tool-ban）"
   panel: "Web UI 面板后端（gov-config 等）"
   webui: "Web UI 装配"
-  acps: "ACPS 协议族"
   aip: "AIP 身份与能力"
   hot: "热更快照"
   verify: "校验"
@@ -45,7 +44,7 @@ domains:
 # ── 规则 ───────────────────────────────────────────────────────────────────────
 rules:
   mode: ratchet
-  # 允许的域→域依赖（= 实测现状基线，63 对；格式 "<from> -> <to>"）
+  # 允许的域→域依赖（= 实测现状基线，58 对；格式 "<from> -> <to>"）
   allowed:
     - "state -> (lib-root)"
     - "state -> assembly"
@@ -61,13 +60,11 @@ rules:
     - "(lib-root) -> comms"
     - "(lib-root) -> tools"
     - "(lib-root) -> governance"
-    - "acps -> aip"
     - "engine -> state"
     - "governance -> state"
     - "governance -> (lib-root)"
     - "(lib-root) -> engine"
     - "(lib-root) -> assembly"
-    - "(lib-root) -> acps"
     - "(lib-root) -> panel"
     - "(lib-root) -> webui"
     - "bridge -> state"
@@ -79,9 +76,6 @@ rules:
     - "state -> hot"
     - "tools -> watch"
     - "tools -> aip"
-    - "acps -> discovery"
-    - "acps -> (lib-root)"
-    - "acps -> comms"
     - "assembly -> (lib-root)"
     - "assembly -> auditlog"
     - "bridge -> engine"
@@ -123,8 +117,6 @@ rules:
       counts: { "(lib-root) -> tools": 4, "tools -> (lib-root)": 10 }
     - pair: ["(lib-root)", "comms"]
       counts: { "(lib-root) -> comms": 4, "comms -> (lib-root)": 1 }
-    - pair: ["(lib-root)", "acps"]
-      counts: { "(lib-root) -> acps": 3, "acps -> (lib-root)": 1 }
     - pair: ["(lib-root)", "assembly"]
       counts: { "(lib-root) -> assembly": 3, "assembly -> (lib-root)": 1 }
     - pair: ["(lib-root)", "engine"]

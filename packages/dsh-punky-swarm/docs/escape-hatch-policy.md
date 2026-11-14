@@ -36,7 +36,7 @@
 | # | 门槛 | 机核方式（期望读数） |
 |---|---|---|
 | **A-1** | **判据先行**：该通道对应的判据条目必须**先**存在于判据真源，且本政策同步更新 | `grep -rn "<通道名>" lib/state/gates/ \| wc -l` ≥ 1（**先落判据，后写通道**） |
-| **A-2** | **入口归一**：通道必须注册在既有 `ctx.webServer.register` 面并落 `/api` 前缀，且只接受 JSON body；**不得**新起监听 | `grep -rnE "\.listen\(\|createServer\(" lib/ \| wc -l` **不增长**（当前 = 3，全部在 `lib/acps/server.js`，见 §6）；且不出现 `path:` 不以 `/api` 开头的**写**入口 |
+| **A-2** | **入口归一**：通道必须注册在既有 `ctx.webServer.register` 面并落 `/api` 前缀，且只接受 JSON body；**不得**新起监听 | `grep -rnE "\.listen\(\|createServer\(" lib/ \| wc -l` **不增长**（当前 = 2，全部在 `lib/mcp/loopback-listener.js`，见 §6）；且不出现 `path:` 不以 `/api` 开头的**写**入口 |
 | **A-3** | **不得自建第二套判据**：通道内不得实现判据/策略（只能调用判据真源） | `grep -cE "gateDecision\|judge\|matchToolBan" <新文件>` = **0**（且其调用必须落在 `lib/state/gates/**` 或既有 `ctx.tools.guard` 链路） |
 
 > 三条门槛的**目的**是让"新增"这件事必须**付出可见成本**（先写判据、复用入口、不自造策略），而不是禁止一切演进。
@@ -60,15 +60,16 @@ grep -rniE "escape.?hatch" docs/ --exclude=escape-hatch-policy.md | wc -l
 grep -rn "ctx\.tools\.execute(" lib/ | wc -l
 # ④ 正面证据：无绕过注册表的直调（期望 0）
 grep -rnE "(tool|definition|def)\.execute\(" lib/ | wc -l
-# ⑤ 监听面清点（当前 3，全部在 lib/acps/server.js；一旦增长须解释新入口）
+# ⑤ 监听面清点（当前 2，全部在 lib/mcp/loopback-listener.js；一旦增长须解释新入口）
 grep -rnE "\.listen\(|createServer\(" lib/ | wc -l
 ```
 
-**读数（HEAD `dc75bc5` 实测）**：① **0** ｜ ② **0** ｜ ③ **1**（`lib/mcp/data-plane-server.js:183`）｜ ④ **0** ｜ ⑤ **3**。
+**读数（HEAD `dc75bc5` 实测）**：① **0** ｜ ② **0** ｜ ③ **1**（`lib/mcp/data-plane-server.js:183`）｜ ④ **0** ｜ ⑤ **2**（ACPs 面移除后由 3 降为 2，见下方说明）。
 
 > ⚠ **方法学声明（必读）**：上面的 ① 是「**这个词不存在**」的证据，**不是**「**已收敛/无等价旁路**」的证据 —— 0 命中只能否定"有个叫 escape hatch 的东西"，不能否定"有个不叫这个名字的旁路"。
 > 因此"无等价旁路"必须靠 ③④⑤ 三条**结构证据**支撑：派发点唯一、无直调工具对象、监听面可清点。
-> 并且 ⑤ 的 **3 个监听点不是 0**：`lib/acps/server.js:262`（`https.createServer`）＋ `:343`（`server.listen`，缺省绑 `127.0.0.1`）由 `lib/index.js:485` 调用 —— 这是**ACPS 专用协议端点**，其 URL 集是**固定三项**（`GET /.well-known/acs.json`、`GET /health`、`POST /acps/rpc`，见 `lib/acps/server.js:296-308`），并启用 mTLS（`requestCert` / `rejectUnauthorized`，见 `:268`）⇒ **不是"任意 URL ＋ 任意 body 直通"**。它的存在被如实登记在此，而不是被"本仓无逃生舱"一句话掩盖。
+> 并且 ⑤ 的 **2 个监听点不是 0**：`lib/mcp/loopback-listener.js:95`（`http.createServer`）＋ `:155`（`server.listen`，恒绑 `MCP_LOOPBACK_HOST = 127.0.0.1`）—— 这是**MCP 专用 loopback 端点**，只接受单一路径（非 `path` 即 404，见 `:99-101`）＋ JSON body，且端口冲突不迁移不自愈 ⇒ **不是"任意 URL ＋ 任意 body 直通"**。它的存在被如实登记在此，而不是被"本仓无逃生舱"一句话掩盖。
+> 【已移除（2026-11-14）】⑤ 原为 **3** 个监听点，另 1 项属 ACPs 对外 mTLS 端点（`lib/acps/server.js`：`https.createServer` + `server.listen`，由 `lib/index.js` 调用，URL 集固定为 `GET /.well-known/acs.json` / `GET /health` / `POST /acps/rpc`）。ACPs 面整体删除后该端点不复存在，读数随之由 3 降为 2；上述历史留档以备回溯。
 
 ## 7. 与蓝图的关系
 

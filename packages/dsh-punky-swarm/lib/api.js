@@ -32,7 +32,7 @@ import * as EVT from './state/event-types.js';
 // WebUI 治理配置写通道：/config 端点 trusted 判定（自复刻宿主 /api
 //   护栏语义，宿主未导出故复刻——插件 exact 路由不经宿主护栏，写端点须自理，见 config-trust.js）
 import { isTrustedConfigRequest } from './webui/config-trust.js';
-// JSON 响应写端单点（(lib-root) 中立件；与 lib/acps/server.js 同源）
+// JSON 响应写端单点（(lib-root) 中立件；ACPs 端点移除后为唯一实现）
 import { sendJson } from './json-response.js';
 
 function q(url) {

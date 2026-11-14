@@ -213,7 +213,7 @@
 ### 产品化双语文档分层
 
 - 文档分层：产品化双语发布文档与内部技术开发文档分流（包级 README / README.en 产品化）。
-- 随包分发双语主题文档：governance-boundaries / governance-technical / guardrails-hook / single-machine-capabilities / aip-compliance / acps-communication 中英 12 文件（npm files 白名单）。
+- 随包分发双语主题文档：governance-boundaries / governance-technical / guardrails-hook / single-machine-capabilities / aip-compliance / acps-communication（已移除：ACPs 面整体删除，2026-11-14）中英 12 文件（npm files 白名单）。
 
 ## 0.3.2（2026-08-22）
 

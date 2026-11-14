@@ -101,7 +101,7 @@ export function installMcpLoopback({ handler, path: routePath, config, logger } 
       return sendJson(res, 404, { error: 'not-found', path: url, hint: 'MCP loopback 只接受 ' + routePath });
     }
     // ── 异常兜底（R-5 / AC-11 ①）：handler 是 `async`，裸 `createServer` 下 reject 会升级为**进程级**
-    //    `unhandledRejection`（照 `lib/acps/server.js:199-204` 的 `.catch` 范式）。此处本地兜死，绝不上抛。
+    //    `unhandledRejection`（`.catch` 兜底范式）。此处本地兜死，绝不上抛。
     return Promise.resolve()
       .then(() => handler(req, res))
       .catch((e) => {
@@ -114,7 +114,7 @@ export function installMcpLoopback({ handler, path: routePath, config, logger } 
       });
   });
 
-  // ── 畸形 HTTP（非法请求行等）**不得**断进程（AC-11 ②）：照 acps 的 clientError 纪律，销毁该连接即可。
+  // ── 畸形 HTTP（非法请求行等）**不得**断进程（AC-11 ②）：`clientError` 落地纪律 = 销毁该连接即可。
   server.on('clientError', (err, socket) => {
     log?.debug?.('[mcp] loopback clientError: ' + String(err?.code ?? err?.message ?? err));
     try { socket?.destroy?.(); } catch { /* 已断 */ }
@@ -176,7 +176,7 @@ export function installMcpLoopback({ handler, path: routePath, config, logger } 
     if (!server.listening) { resolveClosed(); return; } // 幂等（R-7 / AC-6）：已关、从未开、绑定失败 ⇒ 零副作用
     try {
       server.close(() => { resolveClosed(); log?.debug?.('[mcp] loopback listener closed'); });
-      // keep-alive 连接会挂住 close（RK-4）⇒ 照 `lib/acps/server.js:274` 断掉全部连接
+      // keep-alive 连接会挂住 close（RK-4）⇒ 断掉全部连接
       server.closeAllConnections?.();
     } catch (e) {
       log?.warn?.('[mcp] loopback dispose failed: ' + String(e?.message ?? e));

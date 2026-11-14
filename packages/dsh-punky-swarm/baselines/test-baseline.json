@@ -40,46 +40,6 @@
       "tests": 9,
       "todos": 0
     },
-    "test/acps-cert-failclosed.test.js": {
-      "asserts": 49,
-      "blankLines": 31,
-      "lines": 329,
-      "tautologies": 0,
-      "tests": 11,
-      "todos": 0
-    },
-    "test/acps-discovery-client.test.js": {
-      "asserts": 69,
-      "blankLines": 31,
-      "lines": 299,
-      "tautologies": 0,
-      "tests": 23,
-      "todos": 0
-    },
-    "test/acps-inbound-bound.test.js": {
-      "asserts": 82,
-      "blankLines": 37,
-      "lines": 339,
-      "tautologies": 0,
-      "tests": 14,
-      "todos": 0
-    },
-    "test/acps-registry.test.js": {
-      "asserts": 49,
-      "blankLines": 22,
-      "lines": 285,
-      "tautologies": 0,
-      "tests": 9,
-      "todos": 0
-    },
-    "test/acps-server.test.js": {
-      "asserts": 59,
-      "blankLines": 36,
-      "lines": 301,
-      "tautologies": 0,
-      "tests": 18,
-      "todos": 0
-    },
     "test/agent-channels.test.js": {
       "asserts": 35,
       "blankLines": 20,
@@ -209,9 +169,9 @@
       "todos": 0
     },
     "test/assembly-schema.test.js": {
-      "asserts": 63,
+      "asserts": 62,
       "blankLines": 36,
-      "lines": 338,
+      "lines": 336,
       "tautologies": 0,
       "tests": 24,
       "todos": 0
@@ -1232,14 +1192,6 @@
       "tests": 1,
       "todos": 0
     },
-    "test/identity.test.js": {
-      "asserts": 82,
-      "blankLines": 36,
-      "lines": 266,
-      "tautologies": 0,
-      "tests": 10,
-      "todos": 0
-    },
     "test/import-only-ring.test.js": {
       "asserts": 8,
       "blankLines": 9,
@@ -1510,14 +1462,6 @@
       "lines": 215,
       "tautologies": 0,
       "tests": 7,
-      "todos": 0
-    },
-    "test/p2-bridge.test.js": {
-      "asserts": 118,
-      "blankLines": 36,
-      "lines": 479,
-      "tautologies": 0,
-      "tests": 22,
       "todos": 0
     },
     "test/p2-deps-compat.test.js": {
@@ -2043,7 +1987,7 @@
     "test/w7f-rt-write-surface.test.js": {
       "asserts": 75,
       "blankLines": 45,
-      "lines": 543,
+      "lines": 544,
       "tautologies": 0,
       "tests": 11,
       "todos": 0
@@ -2233,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-14T06:30:01Z",
+  "generatedAt": "2026-11-14T07:54:26Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2244,15 +2188,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "WRITE_HEADS 两表独立最终态：宽 44（工具面）/ 窄 8（命令 gate）各自 new Set、禁合并；D1-A15③ 并存断言、D1-A16 分域实证；dd of=/dev/sda 回 gap 候选（gate 面按设计放行，工具面仍拦）",
+  "reason": "删除整个 ACPs 面 + aip/identity.js：git rm lib/acps/{server,certs,registry-client,discovery-client}.js、lib/comms/acps-bridge.js、lib/aip/identity.js 及 7 个对应测试（acps-*×5、identity、p2-bridge 整文件）；装配/schema/能力注册表/热更白名单同步摘除 acps 与 identity 键，w7f rt 冻结面 acpsEndpoint 随之 20→19 字段、写点 40→38，assembly-schema 能力键 12→10",
   "schema": 1,
   "totals": {
-    "asserts": 12380,
-    "blankLines": 7064,
-    "files": 279,
-    "lines": 74806,
+    "asserts": 11871,
+    "blankLines": 6835,
+    "files": 272,
+    "lines": 72507,
     "tautologies": 0,
-    "tests": 2566,
+    "tests": 2459,
     "todos": 0
   }
 }

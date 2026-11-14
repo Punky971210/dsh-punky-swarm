@@ -80,7 +80,7 @@ const EX_RULE_ADMIN_APPROVAL = {
 test('T1 ALLOWED_TOP_KEYS 含 governance（热更白名单，harden-plan §5.4 A.1）', () => {
   assert.equal(ALLOWED_TOP_KEYS.has('governance'), true, 'governance 顶层键已纳入 runtime.json 白名单');
   // 既有键不被破坏（回归）
-  for (const k of ['aip', 'acps', 'capabilities', 'mailbox', 'resume', 'ratchet', 'escalation']) {
+  for (const k of ['aip', 'capabilities', 'mailbox', 'resume', 'ratchet', 'escalation']) {
     assert.equal(ALLOWED_TOP_KEYS.has(k), true, '既有顶层键保留: ' + k);
   }
 });

@@ -42,7 +42,7 @@ import { installAutoSettle, AUTO_SETTLE_SUBAGENT_END } from './engine/auto-settl
 import { ownerSessionIdOf, wakeAddressOf, dispatchIndexEntryOf, batchSessionIdOfWorker, batchSessionIdOfWorkerResolved } from './engine/dispatch.js';
 import { replayBatch } from './engine/replay.js'; // W1-① 重放/恢复（启动期有界扫描）
 import { createLaneHeartbeat, resolveLongrunConfig } from './watch/lane-heartbeat.js';
-import { resolveWatchConfig, resolveDiscoveryConfig, resolveAcpsDiscoveryConfig, resolveAcpsConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf, resolveBridgeConfig } from './schema.js';
+import { resolveWatchConfig, resolveDiscoveryConfig, resolveVerifyConfig, autoSettleEnabledOf, autoSettleSwitchOf } from './schema.js';
 import { validateCapabilities, readCapability } from './assembly/schema.js';
 import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilities.js';
 // 【W4 · D-2/D-3】功能面探活所需的端口实例：由装配根在此**建一次**，供 `capabilityReport({ ports })` 读 `available`。
@@ -50,7 +50,6 @@ import { ENGINE_INJECTIONS, capabilityReport, assertRequired } from './capabilit
 import { createToolsPort } from './provider-dsh/tools-http.js';
 import { createAgentPort, agentChannelFactsOf } from './provider-dsh/agent.js';
 import { createDiscoveryService } from './discovery/service.js';
-import { createAcpsDiscoveryClient } from './acps/discovery-client.js';
 import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
@@ -75,10 +74,6 @@ import { createRuntimeConfigService } from './webui/runtime-config.js';
 // 双层桥接事件流：收据事件 → 批级事件流文件（governance/events/refusal-<sessionId>.jsonl，
 //   零依赖 node:fs 追加；仅事件可见性，不触发批级状态迁移）
 import { appendRefusalEvent } from './governance/receipt-store.js';
-// 【ACPS-04】createEndpointRpcHandler 不再由本文件直调（选择逻辑已收口到 selectRpcHandler 单点）
-import { mountBridge, selectRpcHandler } from './comms/acps-bridge.js';
-import { createRegistryClient, resolveRegistryConfig } from './acps/registry-client.js';
-import { createAcpsServer } from './acps/server.js';
 import * as mailbox from './comms/mailbox.js';
 // 热更新运行时（lib/hot/config-watch.js）：<root>/config/runtime.json watch → deepMerge 快照 → config.changed 广播
 import { createConfigWatcher, CONFIG_CHANGED_EVENT } from './hot/config-watch.js';
@@ -419,24 +414,6 @@ const createHttpSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
       ctx.logger?.info?.('[dsh-punky-swarm] discovery capability enabled: POST /discover + /.well-known/aip mounted (' + discovery.stats().entries + ' entries)');
     }
 
-    // 外部 ADP 发现客户端（acps.discovery，默认关——显式开启）：
-    // 装配在 webServer 域（与本地 discovery service 同域，scope=local/both 依赖其实例）；
-    // enabled=false 不创建实例，零运行时路径（无网络/定时器）。消费方：经 api 上下文 acpsDiscovery 取用
-    // mini-ADSP 仅预留签名（createMiniAdsp），endpoint 就绪前不实现。
-    const acpsDiscoveryCfg = resolveAcpsDiscoveryConfig(config);
-    let acpsDiscoveryClient = null;
-    if (acpsDiscoveryCfg.enabled) {
-      acpsDiscoveryClient = createAcpsDiscoveryClient({
-        baseUrl: acpsDiscoveryCfg.baseUrl,
-        timeout: acpsDiscoveryCfg.timeout,
-        limit: acpsDiscoveryCfg.limit,
-        scope: acpsDiscoveryCfg.scope,
-        localService: discovery,
-      });
-      ctx.logger?.info?.('[dsh-punky-swarm] acps discovery client enabled: scope=' + acpsDiscoveryCfg.scope
-        + ' baseUrl=' + (acpsDiscoveryCfg.baseUrl || '(unset)') + ' (external ADP /discover)');
-    }
-
     // SSE hub 装配层创建注入——先建 hub 再传 deps.panelStream，
     //   dispose 归属本层（api.js 自建者 dispose；注入时 api.js 不 push disposer）。
     //   hub 随 webServer 挂载（无独立配置键）；topic.enabled 时经 attachTopic('swarm.') 接线触发源
@@ -448,7 +425,7 @@ const createHttpSurface = ({ ctx, config, store, root, tools, getWatchInstalledC
     //   之后）才初始化——getter 只在 HTTP 请求时求值，彼时已绑定，无 TDZ。
     apiDispose = createApi(ctx, {
       store, root, catalog: tools.catalog, agentCatalog: tools.agentCatalog, aipFormat: tools.aipFormat,
-      discovery, acpsDiscovery: acpsDiscoveryClient, panelStream,
+      discovery, panelStream,
       configEndpoints: {
         runtimeConfig: createRuntimeConfigService({ root, logger: ctx.logger }),
         trustedHosts: Array.isArray(config?.trustedHosts) ? config.trustedHosts : [],
@@ -612,7 +589,7 @@ const installTrajectoryBridge = ({ ctx, config, store, dispatchIndex = null }) =
 const installTopicRuntime = ({ ctx, config, root, topicSink, panelStream, topicAttachUn }) => {
   // topic 运行时装配（默认关——readCapability 缺省合并 {enabled:false}；显式 capabilities.topic.enabled:true 开启）：
   // enabled 时创建运行时（start/stop 与 trajectory 桥同形）+ 接线状态事件发布（store.setMember/setPhase 调用点埋点）；
-  // 关闭时零挂载零路径（与 acps/bridge config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
+  // 关闭时零挂载零路径（config 短路同构）。trajectory 桥 broadcast 直走不变，topic.enabled 时仅镜像（并存不替换）。
   // 热更新（config.changed）可实时启停本运行时（见下方 applyConfigChange）。
   let topicRuntime = null;
   if (readCapability(config, 'topic')?.enabled) {
@@ -625,79 +602,6 @@ const installTopicRuntime = ({ ctx, config, root, topicSink, panelStream, topicA
     ctx.logger?.info?.('[dsh-punky-swarm] topic capability enabled: topic runtime started (swarm.<type>.<sid>.<bid>)');
   }
   return { topicRuntime, topicAttachUn };
-};
-const mountAcpsBridge = ({ ctx, config, root }) => {
-  // 内部 ACPs 桥接（config.acps.bridge，默认关）：enabled=false 时 mountBridge 短路返回 null——
-  // 不实例化、零运行时路径（config 短路）；outbound=mailbox→ACPs 投影/投递，inbound 默认关：
-  // 外部写 mailbox 需显式 acps.bridge.inbound=true。/rpc 监听与对外投递由 endpoint 侧承担。
-  const bridge = mountBridge(config, { root, mailbox, logger: ctx.logger });
-  if (bridge) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.bridge enabled: in-process bridge mounted (inbound='
-      + (config?.acps?.bridge?.inbound === true) + ')');
-  }
-  return bridge;
-};
-const installRegistryClient = ({ ctx, config }) => {
-  // 半自动注册客户端（config.acps.registry）：默认关——enabled=true 且
-  // registry.url 配置时创建 RegistryClient 实例（能力装配，不自动发起注册——V3 人工审核不自动化
-  // 跳过，注册动作由用户经脚本/工具显式触发：login→upsert→submit→人工审批→requestEab）。
-  // enabled=false / 缺 url 时短路：不建实例、零网络、零运行时路径。
-  const registryCfg = resolveRegistryConfig(config);
-  const registryClient = registryCfg.enabled ? createRegistryClient(registryCfg) : null;
-  if (registryCfg.enabled && !registryClient) {
-    ctx.logger?.warn?.('[dsh-punky-swarm] acps.registry: ' + (registryCfg.reason ?? 'unable to create client'));
-  } else if (registryClient) {
-    ctx.logger?.info?.('[dsh-punky-swarm] acps.registry enabled: semi-automatic registration client ready ('
-      + registryCfg.apiBaseUrl + ')');
-  }
-  return registryClient;
-};
-const installAcpsEndpoint = ({ ctx, config, root, bridge }) => {
-  // ACPs 对外 mTLS 服务端点：acps.enabled && acps.endpoint.enabled 双真才装配——
-  // 默认双关 = 零加载零监听零定时器（config 短路，关闭时无运行时路径）。
-  // 证书缺失/不可用 → 启动告警并保持禁用，不阻塞主进程。
-  // 与既有端点零冲突：对外独立 9443 监听 + /acps/* 前缀，/api/dsh-punky-swarm/* 与 /.well-known/aip 一字不动。
-  const acpsCfg = resolveAcpsConfig(config);
-  let acpsEndpoint = null;
-  if (acpsCfg.enabled && acpsCfg.endpoint?.enabled) {
-    try {
-      const endpointCfg = {
-        ...acpsCfg,
-        endpoint: {
-          ...acpsCfg.endpoint,
-          certDir: acpsCfg.endpoint.certDir ?? join(root, 'acps', 'certs'), // 默认数据目录（引擎根内）
-        },
-      };
-      // /acps/rpc → bridge inbound 接线——endpoint 收到 TaskCommand 交 bridge.handleInbound
-      // （经 mailbox 公共接口原子写 inbox；inbound 门控保持：bridge.inbound=false → INBOUND_DISABLED 拒绝，
-      //  /rpc 回 TaskResult rejected 不落 mailbox）。
-      // 【ACPS-04】bridge 未装配时不再无条件回 accepted：声明了 acps.bridge.inbound=true ⇒ 显式
-      //   rejected INBOUND_UNAVAILABLE + 一次 warn；未声明 ⇒ 保持既有「独立 accepted」向后兼容（逐字不变）。
-      // 选择逻辑单一实现 = acps-bridge.js#selectRpcHandler（本处只做调用，禁第二套分支）。
-      const rpcHandler = selectRpcHandler({
-        bridge,
-        inboundRequested: resolveBridgeConfig(config).inbound,
-        logger: ctx.logger,
-      });
-      acpsEndpoint = createAcpsServer({ config: endpointCfg, logger: ctx.logger, rpcHandler });
-      if (acpsEndpoint.error) {
-        ctx.logger?.warn?.('[dsh-punky-swarm] ' + acpsEndpoint.error + '（acps endpoint 保持禁用）');
-        acpsEndpoint = null;
-      } else {
-        acpsEndpoint.listen().then((addr) => {
-          ctx.logger?.info?.('[dsh-punky-swarm] acps endpoint enabled: mTLS listener https://' + addr.address + ':' + addr.port
-            + ' (TLSv1.3 + CERT_REQUIRED, devInsecure=' + endpointCfg.endpoint.devInsecure + ')');
-        }).catch((e) => {
-          ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint listen failed: ' + String(e) + '（保持禁用）');
-          acpsEndpoint = null;
-        });
-      }
-    } catch (e) {
-      ctx.logger?.warn?.('[dsh-punky-swarm] acps endpoint disabled: ' + String(e.message));
-      acpsEndpoint = null;
-    }
-  }
-  return acpsEndpoint;
 };
 const createRefusalEventBridge = ({ ctx, root, store, dispatchIndex, rebuildIndex, getGovernanceInstalledCfg }) => {
   // 工具调用级护栏（governance hook）：governance.hook.enabled 缺省 true——
@@ -1012,13 +916,14 @@ const createWatchRemounter = ({ ctx, config, store, mailbox, root, heartbeatRef,
 };
 // ── d1 seam：`rt` 的唯一创建点（W7f）────────────────────────────────────────────────
 //   无 sink ⇒ 返回纯对象（生产零 Proxy/零 trap，与手写字面量同构）；注入 sink ⇒ Proxy set trap 记字段名，
-//   供测试断言「某分支只写了哪些字段」（单写 vs 双写可区分性 = L3）。字段集 **冻结 20 项**（p1 §3.1）。
+//   供测试断言「某分支只写了哪些字段」（单写 vs 双写可区分性 = L3）。字段集 **冻结 19 项**（p1 §3.1；
+//   原 20 项，ACPs 面移除后 `acpsEndpoint` 随之删除 ⇒ 19）。
 const createRuntimeState = (onWrite) => {
   const base = {
     hotConfig: null, watchTimer: null, sweepTimer: null, heartbeat: null, heartbeatRef: null,
     watchInstalledCfg: null, apiDispose: null, trajectory: null, topicRuntime: null, topicAttachUn: null,
     panelStream: null, verifyMount: null, governanceHook: null, governanceInstalledCfg: null,
-    dispatchReg: null, autoSettle: null, autoSettleEnabled: null, laneWake: null, acpsEndpoint: null,
+    dispatchReg: null, autoSettle: null, autoSettleEnabled: null, laneWake: null,
     lastRatchetJson: null,
   };
   if (typeof onWrite !== 'function') return base;
@@ -1076,7 +981,6 @@ const releaseAll = (rt) => {
   //   效果：清 `govPending/govSnapshot/govFlushers` 里**本实例前缀**的条目；仅当无其它存活实例才清 30s 定时器。
   const engineStore = storeOfRt.get(rt);
   try { engineStore?.dispose?.(); } catch {}
-  if (rt.acpsEndpoint) { rt.acpsEndpoint.close().catch(() => {}); rt.acpsEndpoint = null; }
 };
 
 // boot 对账（W7f #8）：watcher.start() 应用初始 runtime.json overlay 但不广播（重启语义）——若启动时
@@ -1146,7 +1050,7 @@ const createAutoSettleRemounter = ({ ctx, store, dispatchIndex, root, rt, instal
 // 生效语义：只影响被覆盖键的后续读取；不写静态文件、不改变 cordis.patch.yml 读取结果；
 //   缺省 {} → 快照 = 静态 config 原样（零行为变化）；判定语义双套保留、热更新只做值传播
 // 生效范围：trajectory 桥 start/stop、watch watchdog 启停、topic 运行时启停、verify 挂载（可选）
-//   对外能力（acps/bridge/acps.discovery/identity）不纳入热切
+//   其余能力键为重启生效面（runtime.json 白名单见 lib/hot/config-watch.js#ALLOWED_TOP_KEYS）
 // 写集：⓪{lastRatchetJson} ②{trajectory} ③{topicRuntime, topicAttachUn} ④{verifyMount}（①⑤⑥ 在各自 remount 内）
 const mountHotConfigRuntime = ({ ctx, config, store, mailbox, root, rt, topicSink, remountWatchEngine, remountGovernanceHook, remountAutoSettle }) => {
   // ratchet 热更守卫的基线：与 createStore 注入所用的同一份 config 对齐（装配期生效的棘轮表）
@@ -1332,9 +1236,6 @@ export const apply = (ctx, config = {}) => {
     mcpPlaneOf: () => tools.mcpPlaneDispose,
     syncConsumers: syncHttpSurfaceConsumers,
   });
-  const bridge = mountAcpsBridge({ ctx, config, root });
-  const registryClient = installRegistryClient({ ctx, config });
-  rt.acpsEndpoint = installAcpsEndpoint({ ctx, config, root, bridge });
   rt.verifyMount = mountVerify(ctx, { root, config });
   const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => rt.governanceInstalledCfg });
   rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
