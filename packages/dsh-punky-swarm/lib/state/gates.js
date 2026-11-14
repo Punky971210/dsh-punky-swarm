@@ -53,6 +53,9 @@ import { VOCABULARY_REL, loadVocabulary, reasonTokenKnown } from './vocabulary.j
 import * as EVT from './event-types.js';
 // 热配置**模块级生效快照**（未注入 readConfig 时的读端；与 `lib/hot/config-watch.js` 的 watcher 同一次写入）
 import { readRuntimeSnapshot } from '../hot/config-watch.js';
+// 【X-1】热更快照的**唯一读面** = core 端口 `config`（由 `hot/config-watch.js#start` 自登记）。
+//   本文件只在「端口未装（夹具/早期装配）」时回落模块级快照 —— 禁第二条读盘/读文件的路径。
+import { corePort } from '../core-ports.js';
 export { isAbsPath };
 // ── 波 4 拆分面（builder / 纯叶 / 类型单点；**单向依赖**：本文件 → 子文件，子文件不反向 import 本文件）──
 import { buildHelpers } from './gates/helpers.js';
@@ -314,11 +317,18 @@ export function createGates(root, opts = {}) {
     const vocabOpts = { root: vocabularyRoot };
     // 热配置读取器（`task-27`）：门开关策略**只在门禁侧解析一次**（单一解析点 `handoffGateEnabledOf`）。
     //   优先用装配点注入的 `readConfig`（工具面同源热更快照）；未注入（单测直建 store / 早期装配）⇒ 读
-    //   `lib/hot/config-watch.js` 的**模块级生效快照**（与 watcher 同一次写入，非第二套读路径）；
-    //   两者皆空 ⇒ 解析点顺次回落 env → 缺省关（既有行为零变化）。
+    //   【X-1 · 2026-11-14】core 端口 `config`（与装配注入**同源**：端口 read() 与 watcher.readSnapshot() 同一引用）；
+    //   端口未装（纯夹具：没人 start watcher）⇒ 回落模块级的生效快照（与 watcher 同一次写入，
+    //   非第二套读路径）。两者皆空 ⇒ 解析点顺次回落 env → 缺省关（既有行为零变化）。
     const readCfg = (opts && typeof opts.readConfig === 'function')
         ? opts.readConfig
-        : () => readRuntimeSnapshot({});
+        : () => {
+            try {
+                return corePort('config').read();
+            } catch {
+                return readRuntimeSnapshot({});
+            }
+        };
     // 声明解析（【2026-09-27 · team-asset 全量退役】资产根面已不存在）：
     //   原优先级 ① 批次级 `teamsRoot`（临时团队资产）→ ② DI 缝 `flowsRoot` → ③ 包根 三态**全部作废**：
     //   团队资产不再被解析 ⇒ `flowsForBatch` 恒回「无声明」⇒ 读端一律走**引擎基线**（tighten-only 缺省）。

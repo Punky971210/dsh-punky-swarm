@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from 'node:fs';
+import { batchFeedOf } from '../../state/batch-feed.js';
 
 const PHASE_PROBE_BYTES = 512;
 const PHASE_RE = /"phase"\s*:\s*"(planning|running|paused|complete|aborted)"/;
@@ -54,21 +54,17 @@ function probeBatch(cx, sessionId, batchId) {
   return { sessionId, batchId, phase: batch ? batch.phase : null, batch: batch ?? null };
 }
 
+// 【P0 端口化 · X-7】读盘单入口 = `corePort('batchFeed')`（生产；由 core 装配根登记，唯一实现 =
+//   `lib/state/batch-feed.js`）。端口缺席 / 绑的是别的 root（心跳夹具直建 store、不经 apply）⇒
+//   `batchFeedOf` 用**同一实现**就地构造（同路径单点：有 store 走 `store.batchFile`，否则 `batchFilePathOf`）。
+//   **N-4 逐行保留**：512B head 预筛 + 4 态不 parse 的判定仍在本文件上（端口只供字节，不供判定）。
+const feedOf = (cx) => batchFeedOf({ root: cx?.engineRoot ?? null, store: cx?.store ?? null, logger: cx?.logger ?? null });
+
 function readHead(cx, sessionId, batchId) {
-  let fd = null;
-  try {
-    fd = fs.openSync(cx.store.batchFile(sessionId, batchId), 'r');
-    const buf = Buffer.allocUnsafe(PHASE_PROBE_BYTES);
-    const n = fs.readSync(fd, buf, 0, PHASE_PROBE_BYTES, 0);
-    return buf.toString('utf8', 0, n);
-  } catch {
-    return null;
-  } finally {
-    if (fd !== null) { try { fs.closeSync(fd); } catch { /* 关闭失败不掩盖读取结果 */ } }
-  }
+  return feedOf(cx).readHead(sessionId, batchId, PHASE_PROBE_BYTES);
 }
 function readText(cx, sessionId, batchId) {
-  try { return fs.readFileSync(cx.store.batchFile(sessionId, batchId), 'utf8'); } catch { return null; }
+  return feedOf(cx).readText(sessionId, batchId);
 }
 
 function topLevelPhaseOf(head) {

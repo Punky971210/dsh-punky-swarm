@@ -22,6 +22,20 @@ import { createGovernanceKernel, createRefusalReceipt, primitiveToPreDecision, r
 import { decide as decideAllowlist, canonicalDigest } from './allowlist.js';
 import { writeRefusal, patchRefusalAsk } from './receipt-store.js';
 import { readSessionState, setDeferred, setPaused } from './state-store.js';
+import { corePort, hasCorePort } from '../core-ports.js';
+
+// 【P0 端口化 · X-3】订阅唯一入口 = `corePort('hooks')`（冻结节序 verify=10 / dispatch=20 / governance=30，
+//   契约与 `waterfall` 语义见 `lib/index.js#createHooksPort`）。
+//   职责边界（禁跨职责）：本订阅者是三订阅者中**唯一可决策**的一个（`pre` 可返回拒绝决策），
+//   `post` 只回填 ask outcome。
+//   端口缺席 / 绑的不是本 ctx（无装配夹具直调本工厂）⇒ 回落同一条总线直挂（同一 listener，非同构第二实现）。
+function registerHook(ctx, phase, name, listener, order) {
+  const port = hasCorePort('hooks') ? corePort('hooks') : null;
+  if (port?.owns?.(ctx) === true) {
+    return phase === 'pre' ? port.preExecute(name, listener, { order }) : port.postExecute(name, listener, { order });
+  }
+  return ctx.on(phase === 'pre' ? 'tools/pre-execute' : 'tools/post-execute', listener);
+}
 
 const PRESET_OF_RULE_PREFIX = [
   ['L1-', 'l1-sensitive'],
@@ -315,8 +329,8 @@ export function installGovernanceHook(ctx, { store, root, config, logger, onRefu
     return next();
   };
 
-  const disposePre = ctx.on('tools/pre-execute', pre);
-  const disposePost = ctx.on('tools/post-execute', post);
+  const disposePre = registerHook(ctx, 'pre', 'governance', pre, 30);
+  const disposePost = registerHook(ctx, 'post', 'governance', post, 30);
   let disposed = false;
   return {
     installed: true,

@@ -23,11 +23,18 @@ import fs from 'node:fs';
 import { createStore } from './state/store.js';
 import { loadRules } from './state/machine-rules.js'; // 棘轮规则表（config.ratchet）装配期解析——见下方 createStore 注入点
 import { ratchetHotGuard } from './hot/config-watch.js'; // ratchet 热更守卫（重启生效面：只校验+告警，不应用）——见 applyConfigChange ⑥
+// 【P0 端口化】core 端口注册表（X-1 … X-7 的唯一登记面）：
+//   登记段 = X-2 `store`（本文件 `createEngineStore`）、X-4 `presets`、X-5 `toolFace`；
+//   消费侧 = X-4 的 HTTP 注入 getter（读 `corePort('presets').list()`）。X-1 `config` 自登记在 `hot/config-watch.js`。
+import { corePort, registerCorePort, unregisterCorePort } from './core-ports.js';
+// 【P0 端口化 · X-7】批次文件读面的**唯一**实现：装配根把它登记成 `batchFeed` 端口，
+//   `panel/stream.js`（SSE 摘要）与 `watch/heartbeat/scan.js`（512B 预筛）都经端口读盘 ⇒ 不再各读一套。
+import { createBatchFeed } from './state/batch-feed.js';
 import { createTools } from './tools/register.js';
 // 【方案 A · 延迟绑定】`/mcp` 的唯一延迟入口要**重试挂载**它：`createTools` 里那次尝试早于
 //   `webServer` 就绪（`lib/tools/register.js:38`），早退时返回 `installed=false` 的 no-op disposer。
 import { installMcpDataPlane } from './mcp/data-plane-server.js';
-import { RESIDENT_TOOL_NAMES } from './engine/suite.js';
+import { RESIDENT_TOOL_NAMES, governedToolNames } from './engine/suite.js';
 import { EXEC_TOOLS } from './tools/core.js';
 import { wakeLeaderForReport } from './tools/swarm-comms.js';
 import { poolViewOf } from './tools/task-tools.js';
@@ -84,7 +91,7 @@ import { createTopicRuntime } from './comms/topic-runtime.js';
 import { createStreamHub } from './panel/stream.js';
 // 接线：启动恢复经 resume 模块（恢复 running/review 而非一律 idle；config.resume.enabled 缺省关 →
 //   内部原样委托 store.recoverBatches()，零行为变化）
-import { recoverBatches as resumeRecoverBatches, resolveResumeConfig } from './state/resume.js';
+import { recoverBatches as resumeRecoverBatches, resolveResumeConfig, laneProgressRead } from './state/resume.js';
 import { createWakeQueue } from './state/wake-queue.js';
 // 审计日志 sink（lib/auditlog/）：进程级 cordis logger exporter——默认开、可显式关闭、按日分卷 + 体积上限、
 //   零远程上报。挂载点见下方 apply() 内注释（必须在 validateCapabilities warn / GATE_ENABLED warn / syncAssets
@@ -149,16 +156,156 @@ const mountStartupPrelude = ({ ctx, config, root }) => {
   //   （`mounted:true` 或**策略性关闭** `reason:'disabled'` 都算「已交代」；只有 `no-logger` 等真装配缺陷才算缺）。
   return auditMount;
 };
+// ── P0 端口化 · X-2 · 批状态与事件流端口（键 `store`）──────────────────────────────────────
+// 面三分（**禁合并成平铺对象** —— read/write 两侧权限不同，平铺后「谁在写」无法机检）：
+//   · `read`       = 只读面（不增删键、逐名等于 `state/store.js#composeStore` 的同名键）
+//   · `write`      = 写面（全部校验仍在 store 内：CAS / IMM / 交接完整性 / 写前拒 —— 端口只转发同一函数实例）
+//   · `checkpoint` = checkpoint 面（`updateLaneProgress` 与 write 面**同一引用**；`laneProgressOf` 复用
+//     `state/resume.js#laneProgressRead` 单点读取式，**禁**在别处重写 `batch?.laneProgress?.[lane]`）
+// 名单 = 现场实测的 `composeStore` 44 键（25 读 + 19 写）+ `dispose` = 45 键；漏一个即由下方覆盖自检点名。
+const STORE_PORT_READ_NAMES = Object.freeze([
+  'readBatch', 'readBatchResult', 'readBatchMap', 'isCorrupt', 'listBatches', 'listSessions', 'listAllBatches',
+  'recentBatches', 'batchFile', 'sessionsDir', 'artifactsDirOf', 'gateStatus', 'gateStatusOfBatch',
+  'gateStatusMapOfBatch', 'declaredInboundEdgesOf', 'handoffRecordVerdict', 'readChains', 'readGovernance',
+  'governanceFile', 'teamAssetViewOf', 'batchSettled', 'batchAutoReleaseable', 'hasActiveBatch', 'stale',
+  'corruptRegistry',
+]);
+const STORE_PORT_WRITE_NAMES = Object.freeze([
+  'commitBatch', 'createBatch', 'setMember', 'setPhase', 'appendEvent', 'addPoolTasks', 'addTaskEdges',
+  'recordHandoff', 'recordHandoffAccept', 'recordGovernanceRefusal', 'claimAsset', 'updateChains',
+  'updateLaneProgress', 'writeGovernance', 'bumpExecCount', 'recoverBatches', 'recycleStalledLane', 'migrateLegacy',
+  'archive',
+]);
+
+const createStorePort = ({ store, stateSubs, logger }) => {
+  const read = {};
+  for (const name of STORE_PORT_READ_NAMES) read[name] = store[name];
+  const write = {};
+  for (const name of STORE_PORT_WRITE_NAMES) write[name] = store[name];
+  // 覆盖自检（装配期一次）：store 的每个自有键必须落进 read ∪ write ∪ ['dispose']。
+  //   缺键 = 端口面偷偷收窄（消费方看不到的能力），必须**响亮留痕**；本批实测 missing = 0（V-6）。
+  const covered = new Set([...STORE_PORT_READ_NAMES, ...STORE_PORT_WRITE_NAMES, 'dispose']);
+  const missing = Object.keys(store).filter((name) => !covered.has(name));
+  if (missing.length > 0) {
+    logger?.warn?.('[dsh-punky-swarm] store port coverage gap（端口面缺键，读端将看不到）: ' + missing.join(', '));
+  }
+  return {
+    read,
+    write,
+    checkpoint: {
+      // 与 write 面**同一函数引用**（契约 X-2「零行为变化的证明方法 · 5」：checkpoint 面同源）
+      updateLaneProgress: write.updateLaneProgress,
+      // 进度断点读取：复用 `laneProgressRead` 单点（禁第二访问式）
+      laneProgressOf: (sessionId, batchId, lane) => laneProgressRead(read.readBatch(sessionId, batchId), lane),
+    },
+    // **多播**：N 个订阅方互不覆盖（`createStore` 的 onStateChange 仍是单槽入参，见下方实参处）
+    onStateChange: (cb) => {
+      if (typeof cb !== 'function') throw new TypeError('store port onStateChange expects a function (got: ' + String(cb) + ')');
+      stateSubs.add(cb);
+      return () => stateSubs.delete(cb);
+    },
+    // 实例级幂等 dispose（转发 store.dispose；**不**搬运 store 内部结构）
+    dispose: () => store.dispose(),
+  };
+};
+
 const createEngineStore = ({ ctx, config, root }) => {
   // topic 发布钩子容器：store 状态事件 → topic 运行时（装配点写入 emit；默认关零路径）
   const topicSink = { emit: null };
+  // 【X-2】状态变更多播：`createStore` 的 `onStateChange` 入参**保持单函数**（`state/store.js` 签名冻结），
+  //   多播落在**实参处**，既有 topicSink 是第一个订阅方 ⇒ 单订阅方时行为与原实现逐字同效，
+  //   第二个订阅方（端口消费方）不再静默覆盖第一个。
+  const stateSubs = new Set();
+  stateSubs.add((ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } });
   const store = createStore(root, {
     rules: loadRules(config),
     // topic 发布钩子（store 状态事件 → topic 运行时）：topic 默认关 → emit=null → 零行为变化；
     // enabled 时装配点注入 emitTopic 发布（setMember/setPhase 调用点埋点，appendEvent 闭包不可外部 wrap）
-    onStateChange: (ev) => { try { topicSink.emit?.(ev); } catch { /* 隔离：topic 发布失败不阻断状态机 */ } },
+    onStateChange: (ev) => {
+      for (const cb of stateSubs) {
+        try { cb(ev); } catch { /* 隔离：单个订阅方失败不阻断其余（与既有 topic 隔离同口径） */ }
+      }
+    },
   });
+  // 登记端口：只由 core 装配根写。同进程重建（热重载 / 多夹具）⇒ 先摘后登，不抛 DUPLICATE_CORE_PORT。
+  unregisterCorePort('store');
+  registerCorePort('store', createStorePort({ store, stateSubs, logger: ctx?.logger }));
   return { store, topicSink };
+};
+// ── P0 端口化 · X-3 · hooks 端口（键 `hooks`）──────────────────────────────────────────────────
+// 契约（`plan/port-spec.md` §X-3，冻结）：`tools/pre-execute` + `tools/post-execute` 的订阅**唯一入口**。
+//   ① **序表冻结**（数字 = 宿主回调序）：`verify: 10` / `dispatch: 20` / `governance: 30`。
+//      `registered()` 按 (order, seq) 升序返回 ⇒ `post` 序列恒为 `verify → dispatch → governance`（与改造前逐名一致）。
+//   ② `name` 必填且**同相位**唯一（`pre:governance` 与 `post:governance` 是两条，跨相位不算重名）；
+//      同相位重名 ⇒ 抛 `DUPLICATE_HOOK_SUBSCRIBER`（防热重载双挂 ⇒ 同一次工具调用落两遍账）。
+//   ③ **cordis `waterfall` 语义**（宿主义务，端口不改写）：宿主按**注册序**逐个 shift，listener 必须
+//      `return next()` 才把调用交给下一个订阅者；**不调 `next()` 即断链**（下游永远收不到调用）。
+//      ⇒ 端口只做「登记 + 序核对 + 退订转发」，**不**把订阅者串成一个自造分发链（那会另造一套 chain 语义）；
+//      每个订阅者仍是宿主总线上的独立 listener，`next()` 链由宿主自己 shift。
+//   ④ **职责不重叠**（禁跨职责）：`verify` = 只写 `verify/ledger-<sid>.jsonl`（不读批、不决策）｜
+//      `dispatch` = 只读登记 `member.dispatch` 映射（不写批状态）｜`governance` = **唯一可决策者**
+//      （pre 可返回拒绝决策），post 只回填 ask outcome。
+// 新增订阅者（含未来子插件）必须：走 `corePort('hooks')` + 显式写 `{ order }`（与冻结表逐位相等，不等即抛）；
+//   **禁**各自 `ctx.on('tools/post-execute')`（否则序不可机检、重名不可发现）。
+const HOOK_ORDER = Object.freeze({ verify: 10, dispatch: 20, governance: 30 });
+const createHooksPort = ({ ctx, logger }) => {
+  const entries = [];
+  let seq = 0;
+  const register = (phase, event, name, fn, order) => {
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new TypeError('hooks ' + phase + 'Execute: name 必填（非空字符串），收到 ' + String(name));
+    }
+    if (typeof fn !== 'function') throw new TypeError('hooks ' + phase + 'Execute(' + name + '): fn 必须是函数');
+    if (typeof order !== 'number' || !Number.isFinite(order)) {
+      throw new TypeError('hooks ' + phase + 'Execute(' + name + '): 必须显式声明数字 order（冻结表 '
+        + JSON.stringify(HOOK_ORDER) + '）——序是契约，禁按调用点省略');
+    }
+    const canonical = HOOK_ORDER[name];
+    if (canonical !== undefined && order !== canonical) {
+      const err = new Error('hooks ' + phase + 'Execute(' + name + '): order=' + order
+        + ' 与冻结序表 ' + canonical + ' 不一致（序是契约，禁按调用点改写）');
+      err.code = 'HOOK_ORDER_MISMATCH';
+      err.subscriber = name; err.expected = canonical; err.received = order;
+      throw err;
+    }
+    if (entries.some((e) => e.phase === phase && e.name === name)) {
+      const err = new Error('duplicate hooks subscriber: ' + phase + ':' + name
+        + ' —— 同相位同名只允许登记一次（热重载 / 重挂前须先调用上一个 disposer）');
+      err.code = 'DUPLICATE_HOOK_SUBSCRIBER';
+      err.subscriber = phase + ':' + name;
+      throw err;
+    }
+    // 声明序 vs 实际注册序：宿主按**注册序**回调 ⇒ order 更小者后登记时，实际回调序已偏离契约序。
+    const drift = entries.filter((e) => e.phase === phase && e.order > order).map((e) => e.name + '(' + e.order + ')');
+    const dispose = ctx.on(event, fn);
+    seq += 1;
+    const entry = { phase, name, order, seq };
+    entries.push(entry);
+    if (drift.length > 0) {
+      // 不静默、也不抛：**热重挂**（applyConfigChange ④ 的 verify 重挂 / governance 热切）本就会合法地把
+      //   订阅者重新追加到尾部。此处把「声明序 vs 实际序」的偏离落痕，并暴露在 `registered()` 的 `seq` 上
+      //   （契约序 = **装配期**序，不是运行期不变式）。
+      logger?.info?.('[dsh-punky-swarm] hooks order drift: ' + phase + ':' + name + '(order=' + order + ', seq=' + seq
+        + ') 登记晚于 ' + drift.join(', ') + ' —— 宿主按注册序回调，实际序与声明序不一致（契约序 = 装配期序）');
+    }
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      const at = entries.indexOf(entry);
+      if (at >= 0) entries.splice(at, 1);
+      if (typeof dispose === 'function') dispose();
+    };
+  };
+  return {
+    preExecute: (name, fn, opts = {}) => register('pre', 'tools/pre-execute', name, fn, opts?.order),
+    postExecute: (name, fn, opts = {}) => register('post', 'tools/post-execute', name, fn, opts?.order),
+    /** 诊断 / 机检面（只读）：按声明序返回，`seq` = 实际注册序（两者不一致即契约序漂移）。 */
+    registered: () => entries.slice().sort((a, b) => a.order - b.order || a.seq - b.seq).map((e) => ({ ...e })),
+    /** 非契约面（身份守卫，与 `presets` 的 `source`/`derivedAt` 同族）：消费侧据此判定「端口绑的是不是我的 ctx」——
+     *  无装配夹具（同进程多伪 ctx 直调 install*）下，避免把 listener 挂到另一个 ctx 上。 */
+    owns: (targetCtx) => targetCtx === ctx,
+  };
 };
 const installStartupRecovery = ({ ctx, config, store, root }) => {
   let sweepTimer = null;
@@ -463,6 +610,23 @@ const bindHttpSurfaceDeferred = ({
   //   则本路径不再挂第二个 ⇒ 禁双挂。释放过一轮后置 false：旧 disposer 指向的 webServer 实例已消失。
   let adoptEarlyMcp = true;
   const surfaceDeps = { ctx, config, store, root, tools, getWatchInstalledCfg, getGovernanceInstalledCfg, getPresetCatalog };
+  // 【P0 端口化 · X-6】端口状态面（**闭包**，不进 `rt`：`rt` 字段集被 `test/w7f-rt-write-surface.test.js` 冻结 19 项）。
+  //   `surfaceSubs` = 多播订阅集（N 个消费者走同一个 Set；禁各自直挂钩宿主 internal/service 事件 ⇒ 那是 N 份竞态）。
+  //   `lastReason` = 最近一次**真实**状态迁移的触发因（`probe` / `internal/service` / `ensure` / 释放因）。
+  const surfaceSubs = new Set();
+  let lastReason = null;
+  const publishSurfaceState = (reason) => {
+    lastReason = reason;
+    const snap = { mounted: mounted !== null, reason };
+    for (const cb of [...surfaceSubs]) {
+      try {
+        cb(snap);
+      } catch (e) {
+        // 订阅方故障就地收敛（与宿主监听隔离同口径）：一个消费者失败不得打断装配/释放主线。
+        ctx.logger?.warn?.('[dsh-punky-swarm] http surface: subscriber failed (isolated): ' + String(e?.message ?? e));
+      }
+    }
+  };
 
   /** 释放面：一次性聚合释放（逆序 `/api` → SSE hub → `/mcp`）+ 清 rt 读位。幂等（`mounted` 置空后零操作）。 */
   const release = (reason) => {
@@ -480,6 +644,7 @@ const bindHttpSurfaceDeferred = ({
     adoptEarlyMcp = false;
     syncConsumers?.();
     if (reason !== 'plugin unload') ctx.logger?.info?.('[dsh-punky-swarm] http surface released: ' + reason);
+    publishSurfaceState(reason); // 【X-6】状态迁移多播（端口订阅者）
     return true;
   };
 
@@ -529,8 +694,34 @@ const bindHttpSurfaceDeferred = ({
     rt.panelStream = surface.panelStream;
     // ④ 装配后补接线：topic 接线（AC-7）与能力读数刷新（AC-8）只能在此刻求值（`rt` 读位刚回填）
     try { syncConsumers?.(); } catch (e) { ctx.logger?.warn?.('[dsh-punky-swarm] http surface: post-mount wiring failed: ' + String(e?.message ?? e)); }
+    publishSurfaceState(reason); // 【X-6】状态迁移多播（端口订阅者）
     return true;
   };
+
+  // ── P0 端口化 · X-6 · 端口实例（`corePort('httpSurface')` 的**唯一外部句柄**）──────────────
+  //   身份约束（D1 单一持有，禁破）：`mounted.dispose` 仍是**唯一**聚合释放器（逆序 `/api` → hub → `/mcp`）；
+  //     本端口只是它的**外部句柄**，**不新增第二个聚合释放器**（`:472-473` 注释的 D1 单一持有不许破）。
+  //   多播（必需）：N 个消费者 `subscribe(cb)` 走**同一个 Set**（`cb({mounted, reason})`，退订 = 返回值）；
+  //     **禁**各自直挂钩宿主 internal/service 事件 —— 那是 N 份竞态。宿主事件的**原始语义**
+  //     （`value === undefined` = 服务消失）仍只有 core 这 1 个订阅点懂（V-14 计数 == 1 不变）。
+  //   不落 `rt`：`rt` 字段集被 `test/w7f-rt-write-surface.test.js` 冻结（K-2）。
+  //   `ensure()` = 幂等 `mount('ensure')`，供**晚到**消费者催挂；`state()` 只读。
+  //   不随 `close()` 摘除：端口是 core 的常驻句柄（晚到消费者仍应能 `state()` / `ensure()` 看到「未装配」）。
+  const surfacePort = {
+    state: () => ({ mounted: mounted !== null, reason: lastReason }),
+    mount,
+    release,
+    ensure: () => { mount('ensure'); },
+    subscribe: (cb) => {
+      if (typeof cb !== 'function') {
+        throw new TypeError('httpSurface.subscribe expects a function (got: ' + String(cb) + ')');
+      }
+      surfaceSubs.add(cb);
+      return () => surfaceSubs.delete(cb);
+    },
+  };
+  unregisterCorePort('httpSurface');
+  registerCorePort('httpSurface', surfacePort);
 
   // 双保险之二：监听宿主服务注册事件（**不需要** inject 声明，依据见上方契约注）。
   let unsubscribe = () => {};
@@ -1154,6 +1345,14 @@ export const apply = (ctx, config = {}) => {
   }
   const auditMount = mountStartupPrelude({ ctx, config, root });
   const { store, topicSink } = createEngineStore({ ctx, config, root });
+  // ── P0 端口化 · X-7 · 批次文件读面端口（键 `batchFeed`）────────────────────────────────────
+  //   读者收口：`panel/stream.js`（SSE 摘要 `eventCount`）与 `watch/heartbeat/scan.js`（512B phase 预筛 + 全文）
+  //   一律经本端口读盘 ⇒ 全仓只有**一份**读实现（`lib/state/batch-feed.js`），路径单一真源 = `store.batchFile`。
+  //   读盘语义不变（K-1 红线）：`readEventCount` 仍是**盘上真相**（禁内存计数）；`fs.watch` + 8.3 短路径
+  //   stat 轮询 + `closeWatcher` 延迟关闭逐行保留 —— 进程内信号只作补充，不替代文件监视。
+  //   先摘后登：同进程重建（热重载 / 多夹具）不抛 `DUPLICATE_CORE_PORT`（与 `store` / `toolFace` 同口径）。
+  unregisterCorePort('batchFeed');
+  registerCorePort('batchFeed', createBatchFeed({ root, store, logger: ctx?.logger }));
 
   warnGateEscapeValve(ctx);
   const rtOnWrite = (() => { try { return typeof ctx?.rtWriteLog?.push === 'function' ? (k) => ctx.rtWriteLog.push(k) : null; } catch { return null; } })();
@@ -1182,7 +1381,30 @@ export const apply = (ctx, config = {}) => {
   //     ③ 兄弟 scope 与其它模式**只看到这 7 件**（= 用户要的「通用任务黑板」）；
   //     ④ 注册 disposer 必须挂 `ctx.effect`：热重载不释放 ⇒ 同层重名抛 `tool "X" is already registered`。
   //   常驻集定义见 `lib/engine/suite.js` 的 RESIDENT_TOOL_NAMES（逐件裁定，非 kind 派生）。
-  const disposeResident = tools.register(ctx, { only: RESIDENT_TOOL_NAMES });
+  // ── P0 端口化 · X-5 · 常驻工具面端口（键 `toolFace`）─────────────────────────────────────
+  //   为什么端口化：名单（`suite.js`）与注册点（下面这一处）本来都在 core，但**归属没有声明**——
+  //     未来面板/watcher 子插件若也注册一次，同层重名抛 `tool "X" is already registered`，
+  //     或 sibling scope 的数据面变空。端口把它变成显式声明：常驻面**只**由引擎行根 ctx 注册一次，
+  //     其余行**禁**再注册（只可经 `corePort('toolFace').residentNames()` 读名单）。
+  //   幂等：`residentFace` 是**本端口实例**内的单槽（不是模块级单例）——`tools` 是每次 apply 的产物，
+  //     模块级单例会让热重载后的第二次 apply 静默跳过注册 ⇒ `/mcp` 变空数据面。二次调用返回**同一** disposer。
+  //   登记：`unregisterCorePort` + `registerCorePort` = 同进程重建（热重载 / 多夹具）先摘后登，
+  //     与 `createEngineStore` 的 `store` 键同口径（否则第二个 `apply()` 抛 `DUPLICATE_CORE_PORT`）。
+  let residentFace = null;
+  unregisterCorePort('toolFace');
+  registerCorePort('toolFace', {
+    // 只读拷贝：外部改动不得穿透到 `suite.js` 的冻结名单
+    residentNames: () => RESIDENT_TOOL_NAMES.slice(),
+    governedNames: () => governedToolNames(),
+    registered: () => residentFace !== null,
+    registerResident: (targetCtx) => {
+      if (residentFace) return residentFace.dispose;
+      const dispose = tools.register(targetCtx ?? ctx, { only: RESIDENT_TOOL_NAMES });
+      residentFace = { dispose };
+      return dispose;
+    },
+  });
+  const disposeResident = corePort('toolFace').registerResident(ctx);
   if (typeof disposeResident === 'function' && typeof ctx.effect === 'function') {
     ctx.effect(() => disposeResident, 'dsh-punky-swarm: resident tool face (MCP)');
   }
@@ -1231,11 +1453,22 @@ export const apply = (ctx, config = {}) => {
     ctx, config, store, root, tools, rt,
     getWatchInstalledCfg: () => rt.watchInstalledCfg,
     getGovernanceInstalledCfg: () => rt.governanceInstalledCfg,
-    getPresetCatalog: () => presetCatalog,
+    // 【P0 端口化 · X-4】HTTP 注入面形状不变（仍是 getter），实现改为读 `presets` 端口：
+    //   延迟求值语义逐字保留 —— 本行在 `presetCatalog`（:1340 解构）之前执行，此刻端口尚未登记，
+    //   故**只在 HTTP 请求时**求值（与改造前闭包 getter 同一时序，不引入装配顺序依赖）。
+    getPresetCatalog: () => corePort('presets').list(),
     // `/mcp` 早到的那次尝试（`createTools` 内）的返回：`installed === false` 的 no-op 不构成持有者
     mcpPlaneOf: () => tools.mcpPlaneDispose,
     syncConsumers: syncHttpSurfaceConsumers,
   });
+  // ── P0 端口化 · X-3 · hooks 端口登记（键 `hooks`）────────────────────────────────────────
+  //   唯一写者 = core 装配根（本行）；三订阅者在各自工厂内**读**端口并显式声明 `{ order }`：
+  //     `mountVerify`（verify，:下两行之后）→ `mountDispatchRegistration` → `installGovernanceSurface`
+  //     = 10 → 20 → 30，与改造前的**装配序逐名一致**（端口不改行为，只把隐式序变成可机检声明）。
+  //   端口缺席 = 无装配夹具直调（21 个测试文件不经 `apply()`）⇒ 各工厂回落同一条总线直挂（同一 listener）。
+  //   先摘后登：同进程重建（热重载 / 多夹具）不抛 `DUPLICATE_CORE_PORT`。
+  unregisterCorePort('hooks');
+  registerCorePort('hooks', createHooksPort({ ctx, logger: ctx?.logger }));
   rt.verifyMount = mountVerify(ctx, { root, config });
   const refusalEventBridge = createRefusalEventBridge({ ctx, root, store, dispatchIndex, rebuildIndex: () => rebuildDispatchIndex(), getGovernanceInstalledCfg: () => rt.governanceInstalledCfg });
   rt.dispatchReg = mountDispatchRegistration({ ctx, config, store, dispatchIndex });
@@ -1246,6 +1479,14 @@ export const apply = (ctx, config = {}) => {
 
   replayStartupGaps({ ctx, config, store, root });
   const { governanceWarn, presetTable, presetBanTable, presetCatalog, installedCfg, hook } = installGovernanceSurface({ ctx, config, store, root, refusalEventBridge });
+  // ── P0 端口化 · X-4 · `presetCatalog` 单点端口（键 `presets`）─────────────────────────────
+  //   构造点**不搬**（仍在 `installGovernanceSurface` 体内，见上）：装配序不得重排。
+  //   本段只把「已构造好的那份值」显式登记为进程内单点 ⇒ 面板 / 护栏 / 未来子插件取同一引用，
+  //   不再各自 `loadPresetTable()`，也不必连工厂一起要（消除靠闭包传染的隐式单点）。
+  //   `list()` 与改造前逐元素相等（`id` + `count`，顺序 = `PRESET_IDS`）；`derivedAt` 仅诊断用、不参与判等。
+  //   先摘后登：同进程重建（热重载 / 多夹具）不抛 `DUPLICATE_CORE_PORT`（与 `store` / `toolFace` 同口径）。
+  unregisterCorePort('presets');
+  registerCorePort('presets', { list: () => presetCatalog, source: 'loadPresetTable', derivedAt: new Date().toISOString() });
   rt.governanceInstalledCfg = installedCfg;
   rt.governanceHook = hook;
   const { remountGovernanceHook, remountWatchEngine } = mountRemounters({ ctx, config, store, root, mailbox, refusalEventBridge, presetTable, presetBanTable, governanceWarn, rt });

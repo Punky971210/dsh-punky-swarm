@@ -17,10 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
 import { watch } from 'node:fs';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { subscribeTopicPrefix } from '../comms/topic.js';
-import { stripBom } from '../hot/config-watch.js';
+// 【P0 端口化 · X-7】批次文件读面的单入口：生产 = `corePort('batchFeed')`（由 core 装配根登记，
+//   唯一实现 = `lib/state/batch-feed.js`）；端口缺席（纯 hub 夹具 / api.js 回落建点）⇒ 同一实现就地构造。
+//   ⇒ 本文件不再自建批路径、不再自 parse —— 「第二读者」收口在此。
+import { batchFeedOf } from '../state/batch-feed.js';
 
 const MAX_CONNS_PER_SESSION = 8; // 每会话连接数上限（防多标签页风暴）
 const HEARTBEAT_MS = 10_000;     // 心跳帧周期（10s，对齐触发源③）
@@ -74,15 +77,15 @@ export function createStreamHub({ root, logger, heartbeatMs = HEARTBEAT_MS, debo
 
   const log = (msg) => { try { logger?.info?.('[dsh-punky-swarm/stream] ' + msg); } catch {} };
 
-  // eventCount 只读最小读取（物理事实源 = 批次 JSON 的 events 字段）——非快照逻辑，仅计数
+  // eventCount 只读最小读取（物理事实源 = 批次 JSON 的 events 字段）——非快照逻辑，仅计数。
+  // 【P0 端口化 · X-7】读盘收口：本文件原有的「自建批路径 + 直接读文件 + BOM 剥除后 parse」整段已删，
+  //   改走 `batchFeedOf(...).readEventCount(...)`（生产 = `corePort('batchFeed')`，唯一实现
+  //   = `lib/state/batch-feed.js`；路径单一真源 = `store.batchFile`）。
+  //   **语义不变（K-1 红线）**：仍是**盘上真相**（外部手改 / 跨进程写可见），文件不在 / 坏 JSON ⇒ null；
+  //   `events` 是空数组 ⇒ 0（「空」与「读失败」严格可分）。进程内信号只作补充，不参与本计数。
   function readEventCount(sessionId, batchId) {
     if (!root || !batchId) return null;
-    try {
-      const f = join(root, 'sessions', sessionId, 'batches', batchId + '.json');
-      if (!existsSync(f)) return null;
-      const b = JSON.parse(stripBom(readFileSync(f, 'utf8')));
-      return Array.isArray(b.events) ? b.events.length : null;
-    } catch { return null; }
+    return batchFeedOf({ root, logger }).readEventCount(sessionId, batchId);
   }
 
   function sessionOf(sessionId) {

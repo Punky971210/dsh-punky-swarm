@@ -20,6 +20,7 @@ import { ownerSessionIdOfExec, dispatchIndexEntryOf } from '../engine/dispatch.j
 import { sessionOf } from '../tools/shared.js'; // 会话解析与 swarm 工具同源（args.session ?? exec.agent.session.id）
 import { parseLaneHandleFromText, consumeLaneHandle, textOfDispatchArgs } from './lane-handle.js'; // 派发句柄（C 档唯一凭证）
 import { createRosterPort } from '../provider-dsh/roster.js';
+import { corePort, hasCorePort } from '../core-ports.js';
 
 export const DEFAULT_DISPATCH_TOOLS = ['subagent', 'subagent_fork', 'spawn_teammate'];
 
@@ -176,7 +177,7 @@ export function installDispatchRegistration(ctx, deps = {}) {
     }
     return next(); // pass-through：恒透传（观察者纪律）
   };
-  const dispose = ctx.on('tools/post-execute', listener);
+  const dispose = registerPostExecute(ctx, 'dispatch', listener, 20);
   return {
     installed: true,
     count: () => registered,
@@ -185,4 +186,15 @@ export function installDispatchRegistration(ctx, deps = {}) {
       .map((v) => ({ caller: s, ...v }))),
     dispose() { try { if (typeof dispose === 'function') dispose(); } catch { /* 幂等 */ } },
   };
+}
+
+// 【P0 端口化 · X-3】订阅唯一入口 = `corePort('hooks')`（冻结节序 verify=10 / dispatch=20 / governance=30，
+//   契约与 `waterfall` 语义见 `lib/index.js#createHooksPort`）。本订阅者职责**只**读登记 `member.dispatch`
+//   映射 + 留痕 warn（不写批状态），且末尾 `next()` 调用一处不少 —— 不调 next 即断链。
+//   端口缺席 / 绑的不是本 ctx（无装配夹具直调本工厂）⇒ 回落同一条总线直挂（同一 listener，非同构第二实现）。
+function registerPostExecute(ctx, name, listener, order) {
+  const port = hasCorePort('hooks') ? corePort('hooks') : null;
+  return port?.owns?.(ctx) === true
+    ? port.postExecute(name, listener, { order })
+    : ctx.on('tools/post-execute', listener);
 }

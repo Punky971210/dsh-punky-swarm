@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalizeArgs, stableHash } from './selector.js';
 import { SESSION_RE } from '../state/constants.js';
+import { corePort, hasCorePort } from '../core-ports.js';
 
 // 只收「可复核产物」四类：命令输出 / 文件存在 / 定位引用 / 文件改动。
 //   未列入者（控制面、治理面、纯查询）不产证据 —— 本表就是唯一判据，不另设排除名单。
@@ -104,6 +105,17 @@ export function installEvidenceCapture(ctx, opts = {}) {
     }
     return next(); // pass-through：不断链（下游决策原样透传）
   };
-  const dispose = ctx.on('tools/post-execute', listener);
+  const dispose = registerPostExecute(ctx, 'verify', listener, 10);
   return { dispose, count: () => captured, installed: true };
+}
+
+// 【P0 端口化 · X-3】订阅唯一入口 = `corePort('hooks')`（冻结节序 verify=10 / dispatch=20 / governance=30，
+//   契约与 `waterfall` 语义见 `lib/index.js#createHooksPort`）。本订阅者职责**只**写 ledger（不读批、不决策），
+//   且末尾 `next()` 调用一处不少 —— 不调 next 即断链。
+//   端口缺席 / 绑的不是本 ctx（无装配夹具直调本工厂）⇒ 回落同一条总线直挂（同一 listener，非同构第二实现）。
+function registerPostExecute(ctx, name, listener, order) {
+  const port = hasCorePort('hooks') ? corePort('hooks') : null;
+  return port?.owns?.(ctx) === true
+    ? port.postExecute(name, listener, { order })
+    : ctx.on('tools/post-execute', listener);
 }

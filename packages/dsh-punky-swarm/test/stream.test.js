@@ -372,6 +372,17 @@ test('S19 静态（AC-4）：命名 stripBom 定义仍恰 1 处；stream.js 无�
   const src = fs.readFileSync(new URL('../lib/panel/stream.js', import.meta.url), 'utf8');
   assert.equal(src.includes('\\uFEFF'), false, 'stream.js 无 uFEFF 字面量内联');
   assert.equal(/charCodeAt\s*\(\s*0\s*\)/.test(src), false, 'stream.js 无 charCodeAt(0) 内联判断');
-  assert.ok(src.includes("import { stripBom } from '../hot/config-watch.js'"), '唯一新增是复用 import');
-  assert.ok(src.includes("JSON.parse(stripBom(readFileSync(f, 'utf8')))"), '读路径经 stripBom');
+  // 【2026-11-14 · P0 端口化 X-7 等值反转（面仍在、强度不减）】原断言锁的是 stream.js **自己**读盘后
+  //   `JSON.parse(stripBom(readFileSync(...)))` —— 那正是「第二读者」本体。读路收口到
+  //   `corePort('batchFeed')`（唯一实现 `lib/state/batch-feed.js`）后，stream.js 不再持读盘/parse/BOM 剥除，
+  //   故断言反转为「**禁回生**第二条读路径」，并把 stripBom 单点复用改到读实现侧核：
+  //   ① stream.js 出现 readFileSync / JSON.parse / stripBom 任一 ⇒ 红（第二读者回生）；
+  //   ② 读路必须经端口面 `batchFeedOf`；
+  //   ③ 读实现侧仍只复用唯一 stripBom 定义（禁第二份副本）。
+  assert.equal(/readFileSync|JSON\.parse|stripBom/.test(src), false,
+    'stream.js 禁再持读盘/parse/BOM 剥除（读路已收口 batchFeed 端口；回生即红）');
+  assert.ok(src.includes('batchFeedOf'), '读路须经端口面 batchFeedOf（禁自建读路径）');
+  const feedSrc = fs.readFileSync(new URL('../lib/state/batch-feed.js', import.meta.url), 'utf8');
+  assert.ok(feedSrc.includes("import { stripBom } from '../hot/config-watch.js'"), '唯一新增是复用 import（读实现侧）');
+  assert.ok(/JSON\.parse\(stripBom\(/.test(feedSrc), '读路径经 stripBom');
 });

@@ -38,6 +38,8 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 import { deepMerge, CAPABILITY_REGISTRY, injectBudgetValueErrors } from '../assembly/schema.js';
 import { loadRules } from '../state/machine-rules.js';
+// 【X-1 · 端口化】快照读面收敛为**一个端口**：端口 `config` 由本模块 `start()` 自登记（**不改 lib/index.js**）。
+import { registerCorePort, unregisterCorePort, corePort } from '../core-ports.js';
 
 // cordis 总线事件名（config.changed 广播契约；装配侧 ctx.emit 用）
 export const CONFIG_CHANGED_EVENT = 'dsh-punky-swarm/config.changed';
@@ -204,6 +206,36 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
   let watchRetryTimer = null;  // 退避重试定时器
   let started = false;
   let disposed = false;
+  // 【X-1】多播订阅面：`onChange` 仍是**单槽**入参（装配侧一个回调，签名不动）；
+  //   端口 `subscribe(cb)` 的订阅方走这里 ⇒ N 个订阅方互不覆盖（同 `X-2 onStateChange` 的多播口径）。
+  const subscribers = new Set();
+  // 【X-1】端口实现（`corePort('config')` 的返回面，逐名见契约 X-1「目标接口」）：
+  //   `read()` 与 `readSnapshot()` **读同一个闭包变量** ⇒ 与 watcher 快照恒等（同引用，非深拷贝）。
+  const portApi = {
+    read: () => snapshot,
+    readSnapshot: () => snapshot,
+    runtimeFile: () => runtimeFile,
+    subscribe: (cb) => {
+      if (typeof cb !== 'function') throw new TypeError('config port subscribe expects a function (got: ' + String(cb) + ')');
+      subscribers.add(cb);
+      return () => subscribers.delete(cb);
+    },
+    reload,
+    eventName: CONFIG_CHANGED_EVENT,
+  };
+
+  /** 【X-1】自登记：后 start 的实例**接管**端口（先摘后登）——热重载 / 同进程多夹具都不抛 `DUPLICATE_CORE_PORT`。 */
+  function claimConfigPort() {
+    unregisterCorePort('config');
+    registerCorePort('config', portApi);
+  }
+
+  /** 【X-1】摘下端口：**仅当仍由本实例持有**（否则会把后来接管者的端口摘掉）。 */
+  function releaseConfigPort() {
+    try {
+      if (corePort('config') === portApi) unregisterCorePort('config');
+    } catch { /* 未登记（从未 start / 已被接管后摘除）⇒ 零操作 */ }
+  }
 
   function mergeAndNotify(nextOverlay) {
     const next = deepMerge(config, nextOverlay);
@@ -217,10 +249,19 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
     snapshot = next;
     publishRuntimeSnapshot(snapshot); // `task-27`：门开关的模块级只读投影（与 snapshot 同一次写入）
     for (const k of changed) {
+      const payload = { key: k, value: next[k], config: next };
       try {
-        onChange?.({ key: k, value: next[k], config: next });
+        onChange?.(payload);
       } catch (e) {
         log?.warn?.('[dsh-punky-swarm] hot config onChange failed: ' + String(e?.message ?? e));
+      }
+      // 【X-1】端口订阅方：逐个隔离（任一订阅方抛错不影响 onChange 主线与其余订阅方）
+      for (const sub of subscribers) {
+        try {
+          sub(payload);
+        } catch (e) {
+          log?.warn?.('[dsh-punky-swarm] hot config subscriber failed: ' + String(e?.message ?? e));
+        }
       }
     }
     log?.info?.('[dsh-punky-swarm] runtime config applied: ' + changed.join(', ') + '（热更新叠加，静态配置零改动）');
@@ -336,6 +377,9 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
         log?.warn?.('[dsh-punky-swarm] runtime.json initial read failed (use static config): ' + String(e?.message ?? e));
       }
     }
+    // 【X-1】自登记端口：**在初始 overlay 生效之后**（端口 read() 必须已等于生效快照，不得先登记后合并）。
+    //   本项只改「谁读快照」，`ensureWatching`（文件级 watch + 存在性轮询 + 退避重试）**逐行未动**。
+    claimConfigPort();
     // 文件级 watch（实施回注：本环境目录级 watch 触发 libuv 断言崩溃，改直 watch 文件）+ 存在性轮询 bootstrap
     if (useWatcher && typeof watchImpl === 'function') {
       ensureWatching();
@@ -355,6 +399,8 @@ export function createConfigWatcher({ root, config, onChange, logger, debounceMs
   function dispose() {
     disposed = true;
     stop();
+    // 【X-1】摘端口（仅当仍由本实例持有）：端口在场 ⇔ 有一个已 start 的 watcher，避免读到已释放实例的陈旧快照。
+    releaseConfigPort();
   }
 
   function readSnapshot() {

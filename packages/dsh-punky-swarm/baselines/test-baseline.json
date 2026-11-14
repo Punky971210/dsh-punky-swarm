@@ -1801,9 +1801,9 @@
       "todos": 0
     },
     "test/stream.test.js": {
-      "asserts": 71,
+      "asserts": 73,
       "blankLines": 29,
-      "lines": 378,
+      "lines": 389,
       "tautologies": 0,
       "tests": 18,
       "todos": 0
@@ -2177,7 +2177,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-14T07:54:26Z",
+  "generatedAt": "2026-11-14T09:33:31Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,13 +2188,13 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "删除整个 ACPs 面 + aip/identity.js：git rm lib/acps/{server,certs,registry-client,discovery-client}.js、lib/comms/acps-bridge.js、lib/aip/identity.js 及 7 个对应测试（acps-*×5、identity、p2-bridge 整文件）；装配/schema/能力注册表/热更白名单同步摘除 acps 与 identity 键，w7f rt 冻结面 acpsEndpoint 随之 20→19 字段、写点 40→38，assembly-schema 能力键 12→10",
+  "reason": "P0 端口化 X-7：stream.js 读盘收口到 batchFeed 端口（唯一读实现 lib/state/batch-feed.js），S19 静态面等值反转（禁第二读者回生 + stripBom 单点复用改核读实现侧）；asserts 71->73 / lines 378->389 仅本文件",
   "schema": 1,
   "totals": {
-    "asserts": 11871,
+    "asserts": 11873,
     "blankLines": 6835,
     "files": 272,
-    "lines": 72507,
+    "lines": 72518,
     "tautologies": 0,
     "tests": 2459,
     "todos": 0
