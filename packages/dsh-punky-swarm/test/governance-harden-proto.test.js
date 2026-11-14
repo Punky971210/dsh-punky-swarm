@@ -36,10 +36,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
 import { writeRefusal, readRefusals, verifyRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { makeAnchor } from '../lib/governance/hash-utils.js';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { writeRuntime, assemblyCtxHostFull, tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';
 // F3：本文件的 fake ctx 需非缺省的 warn/error 形态 ⇒ 一行适配（调用点不变）。

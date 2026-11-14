@@ -66,10 +66,12 @@ import { buildAgentDescriptors } from './aip/agent-descriptor.js';
 import { engineVersion } from './aip/tool-descriptor.js';
 import { DEFAULT_ASSEMBLY } from './assembly.js';
 import { mountVerify } from './verify/mount.js';
-// 工具调用级护栏（governance hook）：lib/governance/wiring.js 订阅宿主
-// tools/pre-execute + tools/post-execute（双阶段零宿主改造）——6 原语纯函数内核裁决 +
-// 拒绝收据落盘（receipt-store.js）；装配对齐 mountVerify 模式。
-import { installGovernanceHook } from './governance/wiring.js';
+// 工具调用级护栏（governance hook）：实现已在**独立子插件行** `lib/guard/**`（`name: 'dsh-punky-swarm/guard'`，
+// 宿主层 patch 行 `id: dsh-punky-guard`），由它订阅宿主 tools/pre-execute + tools/post-execute
+// （双阶段零宿主改造）——6 原语纯函数内核裁决 + 拒绝收据落盘（core 的 `receipt-store.js`）。
+// 【L1 拆分 · 批 punky-guard-split-20261114】本文件**不再静态 import 护栏实现**：经第 9 端口键 `guard`
+//   取件（`mountGuard`）。护栏行卸载 ⇒ 端口缺席 ⇒ 工具护栏不装配（**响亮**留痕，见 `mountGuard`）。
+//   反向依赖（墙 → core）只允许走 §S-5.2 的冻结叶子清单。
 // 【L-1 · 随 P2 引入】governance 增量冲刷单点：用于插件卸载/热重载时闭合「未落盘计数」窗口
 import { flushDirtyGovernance } from './state/store/governance.js';
 import { dispatchRecordsOf } from './state/dispatch-events.js';
@@ -254,11 +256,64 @@ const createEngineStore = ({ ctx, config, root }) => {
 //      （pre 可返回拒绝决策），post 只回填 ask outcome。
 // 新增订阅者（含未来子插件）必须：走 `corePort('hooks')` + 显式写 `{ order }`（与冻结表逐位相等，不等即抛）；
 //   **禁**各自 `ctx.on('tools/post-execute')`（否则序不可机检、重名不可发现）。
+// 【批 `punky-guard-split-20261114` · lane e1 · 契约 §S-4】**子插件等已登记消费方同样受上一条约束**：
+//   `registerConsumer(ctx, { id })` 登记自己的 ctx 后，`owns(ctx)` 即 true ⇒ 该 ctx 的订阅走端口分支，
+//   于是序表 / 同相位重名 / 漂移留痕三校验对子插件**一样生效**（不是「装上了就有序」，是「登记了才校验」）。
+//   未登记 ctx 与端口缺席仍走调用方自己的回落 `ctx.on`（既有 21 个无装配直调夹具零改动）。
 const HOOK_ORDER = Object.freeze({ verify: 10, dispatch: 20, governance: 30 });
+// 归属常量：装配根 ctx（引擎行自己）登记的条目 = `'assembly'`；已登记消费方登记 = 其 `id`。
+const HOOK_CONSUMER_ASSEMBLY = 'assembly';
 const createHooksPort = ({ ctx, logger }) => {
   const entries = [];
+  // ── 消费方 ctx 登记表（契约 §S-4.2 本批唯一扩展面）───────────────────────────────────────
+  //   `Map` 插入序 = 登记序（`consumers()` 原样按此序带出）；键 = **ctx 身份**（对象引用）。
+  //
+  //   ⚠ **登记生命周期 = 消费方行的 `apply` → 它的 disposer，不是单次 `mount`**（契约 §S-4.4）：
+  //     配置热切会让消费方句柄 `dispose()` 后**原地重挂**（ctx 不变）。若把注销塞进 `handle.dispose()`，
+  //     remount 之后 `owns(consumerCtx)` 变回 false ⇒ **静默回落** `ctx.on`：护栏照跑、冒烟看不出来，
+  //     而序表校验已经悄悄失效（本批最贵的一种静默失败）。⇒ 注销只由**行卸载**（消费方自己的
+  //     disposer）发起；`registerConsumer` 幂等 ⇒ remount 不累积登记。
+  //   注销**只摘登记表**：宿主总线上的 listener 归 `handle.dispose()`（消费方）与宿主 ctx 卸载，
+  //   两条路径互不代偿 —— 本表不代它摘 listener，也不替它补摘。
+  const consumerByCtx = new Map();
+  // 归属通道（`entries.consumer` 怎么定）：`owns(<已登记消费方 ctx>)` 武装**下一条** `register()` 的
+  //   consumer；消费一次即清，`owns(<装配 ctx>)` / `owns(<未登记 ctx>)` / `releaseConsumer` 也清。
+  //   为什么不以「调用方新增传参」作唯一通道：三个订阅者的 `registerHook` / `registerPostExecute` 形状
+  //   属 P0·X-3 冻结面（`{ order }`），归属若强依赖新参数，漏传就是**静默**标错来源；而 `owns(ctx)`
+  //   本就是每次登记前的**紧邻**调用（`guard/wiring.js:34` / `verify/evidence.js:117` /
+  //   `bridge/dispatch-register.js:196`）⇒ 由它承载归属不需要改调用方一行。显式 `opts.consumer`
+  //   仍可覆盖（显式优先），供「不经 `owns` 预判」的新订阅方使用。
+  let pendingConsumer = null;
   let seq = 0;
-  const register = (phase, event, name, fn, order) => {
+  const consumerOfId = (id) => {
+    for (const rec of consumerByCtx.values()) if (rec.id === id) return rec;
+    return null;
+  };
+  const duplicateConsumerError = (id) => {
+    const err = new Error('duplicate hooks consumer: ' + id
+      + ' —— 同一个 id 只允许绑定一个 ctx（两个 ctx 同时自称同一消费方 = 双挂 ⇒ 同一次调用落两遍账；'
+      + '热重载 / 重挂前须先调用上一次的 disposer）');
+    err.code = 'DUPLICATE_HOOK_CONSUMER';
+    err.id = id;
+    return err;
+  };
+  /** 归属判定：显式 `opts.consumer` > `owns()` 武装 > 装配根。显式值必须在册（登记了才校验）。 */
+  const attributeOf = (explicit, armed) => {
+    if (explicit !== undefined) {
+      if (typeof explicit !== 'string' || explicit.trim() === '') {
+        throw new TypeError('hooks Execute: opts.consumer 若给出必须是非空字符串，收到 ' + String(explicit));
+      }
+      if (consumerOfId(explicit) === null) {
+        throw new TypeError('hooks Execute: consumer=' + explicit
+          + ' 未登记（须先 corePort(\'hooks\').registerConsumer(ctx, { id: \'' + explicit + '\' }) 再注册订阅）');
+      }
+      return explicit;
+    }
+    return armed ?? HOOK_CONSUMER_ASSEMBLY;
+  };
+  // 三校验点（order 必填数字 / 冻结序表一致 / 同相位同名唯一）**仍在端口内部**，与 ctx 无关
+  //   ⇒ 已登记消费方走端口分支时同样受约束（契约 §S-4.3 规则 5）。
+  const register = (phase, event, name, fn, order, consumer) => {
     if (typeof name !== 'string' || name.trim() === '') {
       throw new TypeError('hooks ' + phase + 'Execute: name 必填（非空字符串），收到 ' + String(name));
     }
@@ -286,7 +341,7 @@ const createHooksPort = ({ ctx, logger }) => {
     const drift = entries.filter((e) => e.phase === phase && e.order > order).map((e) => e.name + '(' + e.order + ')');
     const dispose = ctx.on(event, fn);
     seq += 1;
-    const entry = { phase, name, order, seq };
+    const entry = { phase, name, order, seq, consumer };
     entries.push(entry);
     if (drift.length > 0) {
       // 不静默、也不抛：**热重挂**（applyConfigChange ④ 的 verify 重挂 / governance 热切）本就会合法地把
@@ -304,14 +359,69 @@ const createHooksPort = ({ ctx, logger }) => {
       if (typeof dispose === 'function') dispose();
     };
   };
+  /** 注销消费方登记（幂等）：未登记 ⇒ `false`；只摘登记表，不动宿主 listener（见上方登记表注释）。 */
+  const releaseConsumer = (targetCtx) => {
+    if (targetCtx == null || !consumerByCtx.has(targetCtx)) return false;
+    consumerByCtx.delete(targetCtx);
+    // 保守清空归属：已注销方不得把自己的 id 漏给下一条登记（漏给 = 诊断面说谎）
+    pendingConsumer = null;
+    return true;
+  };
+  /** 一次订阅 = 「取归属（一次性）→ 进 register 的三校验」。归属无论登记成败都被消耗，不跨条泄漏。 */
+  const subscribe = (phase, event, name, fn, opts = {}) => {
+    const armed = pendingConsumer;
+    pendingConsumer = null;
+    return register(phase, event, name, fn, opts?.order, attributeOf(opts?.consumer, armed));
+  };
   return {
-    preExecute: (name, fn, opts = {}) => register('pre', 'tools/pre-execute', name, fn, opts?.order),
-    postExecute: (name, fn, opts = {}) => register('post', 'tools/post-execute', name, fn, opts?.order),
-    /** 诊断 / 机检面（只读）：按声明序返回，`seq` = 实际注册序（两者不一致即契约序漂移）。 */
+    preExecute: (name, fn, opts = {}) => subscribe('pre', 'tools/pre-execute', name, fn, opts),
+    postExecute: (name, fn, opts = {}) => subscribe('post', 'tools/post-execute', name, fn, opts),
+    /** 诊断 / 机检面（只读）：按声明序返回，`seq` = 实际注册序（两者不一致即契约序漂移）；
+     *  `consumer` = 归属（`'assembly'` 或已登记消费方的 `id`，可由它定位「谁在什么时候插了一条」）。 */
     registered: () => entries.slice().sort((a, b) => a.order - b.order || a.seq - b.seq).map((e) => ({ ...e })),
+    /** 消费方登记面：把「允许走端口分支的 ctx」登记进本端口（幂等）。
+     *  - **同 ctx + 同 id** ⇒ 幂等：返回**同一个** disposer，`consumers().length` 不变（热重载 / 多夹具重挂不累积）；
+     *  - **同 id 另 ctx / 同 ctx 另 id** ⇒ 抛 `DUPLICATE_HOOK_CONSUMER`（`err.id` 回显）——
+     *    两个 ctx 同时自称同一消费方 = 双挂（`DUPLICATE_HOOK_SUBSCRIBER` 只挡同相位同名，挡不住跨 ctx）；
+     *  - `id` 必填非空 string（归属与机检都靠它，缺了就没有可读的来源）。
+     *  ⚠ 注销时机 = 消费方**行卸载**（§S-4.4）：登记可在行 apply 内做一次，也可在 mount 内做（靠上面的
+     *    幂等），但**绝不可**在 `handle.dispose()` 里 `releaseConsumer` —— 热切 remount 后 `owns` 会变 false
+     *    ⇒ 静默回落（护栏仍在跑、冒烟看不出来，序表校验已失效）。 */
+    registerConsumer: (targetCtx, opts = {}) => {
+      const id = opts?.id;
+      if (typeof id !== 'string' || id.trim() === '') {
+        throw new TypeError('hooks registerConsumer: id 必填（非空字符串），收到 ' + String(id));
+      }
+      if (targetCtx == null) {
+        throw new TypeError('hooks registerConsumer: targetCtx 必填（消费方自己的 ctx 对象），收到 ' + String(targetCtx));
+      }
+      const mine = consumerByCtx.get(targetCtx);
+      if (mine !== undefined) {
+        if (mine.id === id) return mine.dispose; // 幂等：同一 disposer（dispose 一次即摘净）
+        throw duplicateConsumerError(id);
+      }
+      if (consumerOfId(id) !== null) throw duplicateConsumerError(id);
+      const rec = { id, registeredAt: new Date().toISOString(), dispose: null };
+      // 世代守卫：只摘**自己这一代**的登记。行卸载晚到时（注销 → 重挂 → 旧 disposer 才被调用），
+      //   旧 disposer 必须 no-op —— 否则它会把新世代刚登记的消费方一并摘掉（= 静默回落）。
+      rec.dispose = () => (consumerByCtx.get(targetCtx) === rec ? releaseConsumer(targetCtx) : false);
+      consumerByCtx.set(targetCtx, rec);
+      return rec.dispose;
+    },
+    releaseConsumer,
+    /** 诊断 / 机检面（只读）：按登记序返回 `{ id, registeredAt }`（不含 ctx 引用，不外泄宿主对象）。 */
+    consumers: () => [...consumerByCtx.values()].map((rec) => ({ id: rec.id, registeredAt: rec.registeredAt })),
     /** 非契约面（身份守卫，与 `presets` 的 `source`/`derivedAt` 同族）：消费侧据此判定「端口绑的是不是我的 ctx」——
-     *  无装配夹具（同进程多伪 ctx 直调 install*）下，避免把 listener 挂到另一个 ctx 上。 */
-    owns: (targetCtx) => targetCtx === ctx,
+     *  无装配夹具（同进程多伪 ctx 直调 install*）下，避免把 listener 挂到另一个 ctx 上。
+     *  §S-4.2 新语义：`owns(c) === (c === assemblyCtx) || consumers.has(c)`（登记过即 true）；
+     *  `undefined` / `null` / 任意伪对象 ⇒ `false` 且**不抛**（既有夹具大量无装配直调，不得因改造而红）。 */
+    owns: (targetCtx) => {
+      if (targetCtx == null) { pendingConsumer = null; return false; }
+      if (targetCtx === ctx) { pendingConsumer = null; return true; }
+      const rec = consumerByCtx.get(targetCtx);
+      pendingConsumer = rec !== undefined ? rec.id : null;
+      return rec !== undefined;
+    },
   };
 };
 const installStartupRecovery = ({ ctx, config, store, root }) => {
@@ -974,6 +1084,30 @@ const replayStartupGaps = ({ ctx, config, store, root }) => {
   } catch { /* 启动期扫描失败不影响插件装载 */ }
 };
 
+// ── 【L1 拆分 · 批 punky-guard-split-20261114】guard 端口取件适配器（契约 §S-3.3）──────────────────
+//   护栏实现已搬进独立子插件行（`lib/guard/**`，`exports['./guard']`），core **不再静态 import** 它
+//   （§S-6 #1）⇒ 两处调用点（初始装配 `:1104` / 热切重挂 `:1130`）统一经第 9 端口键 `guard` 取件。
+//   入参**显式**（不用闭包隐性单点）：`cfgIn` = 本次生效的 config 快照、`resolvedCfg` = core 已解析的治理
+//   配置（契约 C-6 一次解析 ⇒ 墙内不再二次解析，避免 `governance.hook.*` 非法配置的 warn 变两条）、
+//   `root` = 装配期解析的落盘根（契约 §S-3.2 未列此键，属**只增**扩展 E-1：热更 overlay 改 `root` 时
+//   重挂必须仍写同一目录，否则收据三面静默分叉）、`eventBridge` = 拒因事件桥（升级链留 core）。
+//   端口缺席 = 护栏行被删/注释（**有意关闭**）或排在引擎行之后（行序写反）⇒ 响亮 warn，**不静默降级**。
+const mountGuard = ({ cfgIn, resolvedCfg, root, eventBridge, allowlistScope, log }) => {
+  if (!hasCorePort('guard')) {
+    log?.warn?.('[dsh-punky-swarm] guard 行缺席 ⇒ 工具护栏未装配'
+      + '（tools/pre-execute 无 governance 订阅者；规则不生效，护栏面 = 零拦截）'
+      + ' —— 检查 cordis.patch.yml 是否含 id: dsh-punky-guard 且排在引擎行**之前**');
+    return { installed: false, inert: true, reason: 'guard-row-absent', level: 'warn', refusals: { count: () => 0 }, dispose() {} };
+  }
+  return corePort('guard').mount({
+    config: cfgIn,
+    resolvedCfg,
+    root,
+    allowlistScope,
+    onRefusal: eventBridge,
+  });
+};
+
 // ── W7e E1：governance 装载面（preset 双表 + 注册目录元数据 + hook 安装）下沉为顶层工厂 ──
 //   装配顺序不变：仍在 apply 原位调用（晚于 refusalEventBridge / HTTP 面装配的惰性 getter——
 //   后者现由 `bindHttpSurfaceDeferred` 承载，`presets: () => corePort('presets').list()` 等仍是惰性求值）。
@@ -990,8 +1124,17 @@ const installGovernanceSurface = ({ ctx, config, store, root, refusalEventBridge
     .filter((id) => Array.isArray(presetTable[id]) || Array.isArray(presetBanTable[id]))
     .map((id) => ({ id, count: (presetTable[id]?.length ?? 0) + (presetBanTable[id]?.length ?? 0) }));
   // 当前已挂载 hook 的解析配置快照（热更比对基准；静态 config 缺省 = resolveGovernanceConfig 全默认）
+  // 【契约 C-6】本快照即 `resolvedCfg`：core 解析**一次**，同时供「热更比对基准」与「护栏 mount 入参」，
+  //   墙内不再解析第二次（原实现是两处各解析一次 —— 非法配置会 warn 两条）。
   let governanceInstalledCfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, { presetTable, presetBanTable, warn: governanceWarn });
-  let governanceHook = installGovernanceHook(ctx, { store, root, config, onRefusal: refusalEventBridge, presetTable, presetBanTable, allowlistScope: config?.escalation?.execTools ?? EXEC_TOOLS });
+  let governanceHook = mountGuard({
+    cfgIn: config,
+    resolvedCfg: governanceInstalledCfg,
+    root,
+    eventBridge: refusalEventBridge,
+    allowlistScope: config?.escalation?.execTools ?? EXEC_TOOLS,
+    log: ctx.logger,
+  });
   if (governanceHook.installed) {
     ctx.logger?.info?.('[dsh-punky-swarm] governance hook enabled: tools/pre-execute + post-execute mounted (6 原语内核，rules 空表=零拦截；refusal 事件桥接 refusal-<sessionId>.jsonl'
       + (governanceInstalledCfg.escalation?.enabled === true ? '；escalation 违规计数升级已开启' : '；escalation 默认关（违规计数升级零路径）') + ')');
@@ -1017,7 +1160,14 @@ const createGovernanceRemounter = ({ ctx, store, root, refusalEventBridge, prese
     if (JSON.stringify(govCfg) === JSON.stringify(readInstalled())) return false;
     const wasInstalled = readHook()?.installed === true;
     readHook()?.dispose?.();
-    writeHook(installGovernanceHook(ctx, { store, root, config: nextConfig, onRefusal: refusalEventBridge, presetTable, presetBanTable, allowlistScope: nextConfig?.escalation?.execTools ?? EXEC_TOOLS }));
+    writeHook(mountGuard({
+      cfgIn: nextConfig,
+      resolvedCfg: govCfg, // 同一份解析结果（C-6）：热更比对基准与 mount 入参共用，墙内不再二次解析
+      root,
+      eventBridge: refusalEventBridge,
+      allowlistScope: nextConfig?.escalation?.execTools ?? EXEC_TOOLS,
+      log: ctx.logger,
+    }));
     writeInstalled(govCfg);
     const nowInstalled = readHook()?.installed === true;
     ctx.logger?.info?.('[dsh-punky-swarm] hot config: governance hook ' + (nowInstalled

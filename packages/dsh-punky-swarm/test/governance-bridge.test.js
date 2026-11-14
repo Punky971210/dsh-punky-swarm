@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
 import { readRefusals, appendRefusalEvent, eventStreamFileOf } from '../lib/governance/receipt-store.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx as makeFakeCtx } from './helpers/gate-fixture.mjs';

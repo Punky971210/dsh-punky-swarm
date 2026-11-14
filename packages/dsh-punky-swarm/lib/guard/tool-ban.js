@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
-import { TOOL_BAN_BEHAVIORS } from './config.js';
+import { TOOL_BAN_BEHAVIORS } from '../governance/config.js';
 import { segmentCommands, stripStreamMerges, ASSIGN_RE, maskQuoted, headToken } from '../shell-text.js';
 // 写告示表定义单点在 `lib/shell-text.js`：此处按**原符号名**别名引用（别名即该 `Set` 实例）。
 // 【2026-11-11 两表独立】本侧取**宽表** `WRITE_HEADS_FILE_BAN`（44 项，语义 = 「这条命令是否会写盘」）；

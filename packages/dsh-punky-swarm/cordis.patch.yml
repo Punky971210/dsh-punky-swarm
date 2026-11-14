@@ -3,6 +3,21 @@
 #   ① 本包对宿主团队服务 `agentTeams` 的依赖**只在此装配面声明**（下方 ① 块的探针行 `inject: [agentTeams]`），
 #      **不进 `dependencies`**（批 7 不变量）；缺该服务 ⇒ 该行 pending（启动审计响亮）。
 - insert:
+    # ── 工具护栏 L1 行：tools/pre-execute + tools/post-execute 的 governance 订阅者 ──────────────
+    #    实现 = `lib/guard/**`（6 原语内核 / 三档 tool-ban / allowlist 人工闸 / 收据面），`exports['./guard']`。
+    # 层位 = **宿主层**（与下面 engine 行同一 insert 列表 ⇒ 同一 global scope），**不是** preset 层。
+    #   判定（`plan/guard-split-spec.md` §S-2.3，V-8 实测）：`tools/pre-execute` 受 `scopeTarget` 过滤 ⇒
+    #   挂 preset 层的订阅者对**未绑 preset 的 agent 静默漏收**（fail-open），而日志照样打印 mounted。
+    #   护栏漏拦 = 事故且不可见 ⇒ 唯一可行形态是宿主层行。
+    # 行序硬约束：**必须排在本列表内、engine 行之前**（与上面 panel 行相反）——
+    #   core 在装配期（`installGovernanceSurface`）**同步**消费 `corePort('guard')`；端口晚一步就位，
+    #   core 只能走「端口缺席 ⇒ 零拦截」降级路 = **漏拦**，而写反不报错、只多一条 warn（契约 C-1 / §S-2.4）。
+    # 本行**不写 config:**（配置唯一源 = engine 行的静态快照，经 `mount()` 入参取得；C-4 / N-12 单源）——
+    #   写第二份 ⇒ 引擎行快照缺 governance ⇒ `resolveGovernanceConfig({})` ⇒ rules/toolBan 空表 ⇒ 恒 ALLOW。
+    # 本行**不写 inject**（宿主 cordis 4.0.5 无 optional 位；本行对宿主能力的全部需求经 `corePort` 端口层取得）。
+    # 本行**不写 disabled**（默认全开；要关就整行删/注释，不留「看起来在跑」的半开态）。
+    - id: dsh-punky-guard
+      name: 'dsh-punky-swarm/guard'
     - id: dsh-punky-swarm
       name: 'dsh-punky-swarm'
       config:

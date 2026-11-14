@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyViolation } from '../lib/governance/classify.js';
+import { classifyViolation } from '../lib/guard/classify.js';
 
 const FLAGS_OFF = { pause: false, narrow: false, defer: false };
 const FLAGS_ON = { pause: true, narrow: true, defer: true };

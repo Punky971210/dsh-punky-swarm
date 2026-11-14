@@ -24,7 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCommand, truncateOutput, matchesForbidden, DEFAULT_FORBIDDEN_PATTERNS } from '../lib/state/command-exec.js';
 // D1 交叉核对用：L3 工具黑名单的权威判定内核（`gate:` 面与工具面须同判同一批写盘路径）
-import { judgeFileWriteCommand } from '../lib/governance/tool-ban.js';
+import { judgeFileWriteCommand } from '../lib/guard/tool-ban.js';
 // D1-A15/A16 用：写告示表单点真源（并集合并后两侧必须是**同一 Set 实例**，只有 import 才判得出对象同一性）
 import * as shellText from '../lib/shell-text.js';
 // D1-A12 用：基线护栏的**同一份**词法口径（`scripts/` 为 .mjs 共享内核，非 tsc 产物，可直接 import）
@@ -396,7 +396,7 @@ test('D1-A15：分词辅助与写告示表单点归属（command-exec / tool-ban
   for (const name of ['WRITE_HEADS_FILE_BAN', 'WRITE_HEADS_COMMAND_GATE', 'WRITE_CMDLET_RE_FILE_BAN', 'WRITE_CMDLET_RE_COMMAND_GATE']) {
     assert.ok(new RegExp('export const ' + name + '\\b').test(shell), 'shell-text.js 必须定义 ' + name);
   }
-  for (const rel of ['state/command-exec.js', 'governance/tool-ban.js']) {
+  for (const rel of ['state/command-exec.js', 'guard/tool-ban.js']) {
     const src = readLib(rel);
     // ① 本地不得再定义（function 声明 / const 常量两种形态都算）
     for (const name of ['maskQuoted', 'headToken']) {

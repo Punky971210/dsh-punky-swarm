@@ -30,9 +30,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
-import { readSessionState, setDeferred, setPaused, stateFileOf, DEFER_RETRY_MS, PAUSE_WINDOW_MS } from '../lib/governance/state-store.js';
+import { readSessionState, setDeferred, setPaused, stateFileOf, DEFER_RETRY_MS, PAUSE_WINDOW_MS } from '../lib/guard/state-store.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 import { fakeCtx } from './helpers/gate-fixture.mjs';
 

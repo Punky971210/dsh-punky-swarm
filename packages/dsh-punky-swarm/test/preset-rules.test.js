@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createGovernanceKernel } from '../lib/governance/kernel.js';
+import { createGovernanceKernel } from '../lib/guard/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

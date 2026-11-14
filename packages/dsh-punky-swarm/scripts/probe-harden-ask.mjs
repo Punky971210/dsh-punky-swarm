@@ -30,7 +30,7 @@ import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
 import { readRefusals, verifyRefusals } from '../lib/governance/receipt-store.js';
 
 const hostVersion = (() => {

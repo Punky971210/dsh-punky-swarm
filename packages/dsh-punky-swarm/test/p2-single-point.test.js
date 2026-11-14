@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { stripStreamMerges } from '../lib/shell-text.js';
-import { judgeFileWriteCommand, judgeWaitSleepCommand } from '../lib/governance/tool-ban.js';
+import { judgeFileWriteCommand, judgeWaitSleepCommand } from '../lib/guard/tool-ban.js';
 import * as commsMailbox from '../lib/comms/mailbox-paths.js';
 import * as dispatchMailbox from '../lib/engine/dispatch.js';
 import * as heartbeatContext from '../lib/watch/heartbeat/context.js';
@@ -282,7 +282,7 @@ test('⑤-2 分词辅助单点：maskQuoted/headToken/ASSIGN_RE 只在 shell-tex
     assert.ok(new RegExp('export (function|const) ' + name + '\\b').test(shell), 'shell-text.js 必须导出 ' + name);
   }
 
-  const consumers = ['lib/tools/readonly.js', 'lib/governance/tool-ban.js'];
+  const consumers = ['lib/tools/readonly.js', 'lib/guard/tool-ban.js'];
   for (const rel of consumers) {
     const src = read(rel);
     // ① 本地不得再定义（function 声明形态 / const 常量形态都算）
@@ -303,7 +303,7 @@ test('⑤-2 分词辅助单点：maskQuoted/headToken/ASSIGN_RE 只在 shell-tex
 
 test('⑤-2 语义保持：去重前后两套词表不变（关键写形态与只读放行仍然成立）', async () => {
   const { judgeShellCommand } = await import('../lib/tools/readonly.js');
-  const { judgeFileWriteCommand } = await import('../lib/governance/tool-ban.js');
+  const { judgeFileWriteCommand } = await import('../lib/guard/tool-ban.js');
   // 只读面：典型只读仍放行；执行/写类仍判非只读
   assert.equal(judgeShellCommand('ls -la').readonly, true);
   assert.equal(judgeShellCommand('npm install').readonly, false);

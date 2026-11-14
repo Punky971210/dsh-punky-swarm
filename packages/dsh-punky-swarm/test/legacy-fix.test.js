@@ -31,7 +31,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { resolveVerifyConfig as schemaResolve } from '../lib/schema.js';
 import * as mountMod from '../lib/verify/mount.js';
 

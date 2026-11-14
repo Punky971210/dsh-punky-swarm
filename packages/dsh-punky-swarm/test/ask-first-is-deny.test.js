@@ -35,8 +35,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installGovernanceHook } from '../lib/governance/wiring.js';
-import { canonicalDigest, ALLOWLIST_DENIED } from '../lib/governance/allowlist.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
+import { canonicalDigest, ALLOWLIST_DENIED } from '../lib/guard/allowlist.js';
 import { readRefusals, refusalDirOf } from '../lib/governance/receipt-store.js';
 import { tempRoot } from './helpers/gate-fixture.mjs';
 

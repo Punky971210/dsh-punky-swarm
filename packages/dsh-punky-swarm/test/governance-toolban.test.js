@@ -26,12 +26,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import {
   judgeFileWriteCommand, judgeWaitSleepCommand, matchToolBan, WRITE_CHANNEL_HINT,
   UNIMPLEMENTED_BEHAVIOR_REASON_PREFIX, UNKNOWN_VIOLATION_CODE,
-} from '../lib/governance/tool-ban.js';
-import { createGovernanceKernel } from '../lib/governance/kernel.js';
+} from '../lib/guard/tool-ban.js';
+import { createGovernanceKernel } from '../lib/guard/kernel.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { loadPresetTable } from '../lib/governance/preset-loader.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';

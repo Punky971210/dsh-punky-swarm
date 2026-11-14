@@ -18,9 +18,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 // 事件序不变量：pre→execute→post→result；本 wiring 不调用 ctx.emit 篡改事件流；
 //   难度门禁只可能收紧不可能被本 hook 放行绕过。
 //   flag-off 折叠 DENY 无状态副作用；禁 setInterval/禁端点（契约束维持）。
-import { createGovernanceKernel, createRefusalReceipt, primitiveToPreDecision, resolveGovernanceConfig } from './index.js';
+// 【L1 拆分 · 批 punky-guard-split-20261114】原 `./index.js` 桶文件已删除（契约 §S-1.2 #10）：
+//   墙内取**具体模块**，跨墙只取 core 的冻结叶子（§S-5.2 PEER_LEAVES），不得再出现桶。
+//   四个符号的去向逐条：
+//     · `createGovernanceKernel`   → 本墙内 `./kernel.js`（6 原语判定内核随墙搬）
+//     · `createRefusalReceipt`     → `../governance/receipt-model.js`（core；A/B/C 三通道共用同一 schema，§P-6）
+//     · `primitiveToPreDecision`   → `../governance/decisions.js`（core 叶子；`config.js` 也依赖它 ⇒ 留 core）
+//     · `resolveGovernanceConfig`  → `../governance/config.js`（core；`preset-loader.js` 依赖它 ⇒ 留 core）
+import { createGovernanceKernel } from './kernel.js';
+import { createRefusalReceipt } from '../governance/receipt-model.js';
+import { primitiveToPreDecision } from '../governance/decisions.js';
+import { resolveGovernanceConfig } from '../governance/config.js';
 import { decide as decideAllowlist, canonicalDigest } from './allowlist.js';
-import { writeRefusal, patchRefusalAsk } from './receipt-store.js';
+import { writeRefusal, patchRefusalAsk } from '../governance/receipt-store.js';
 import { readSessionState, setDeferred, setPaused } from './state-store.js';
 import { corePort, hasCorePort } from '../core-ports.js';
 
@@ -102,9 +112,13 @@ function formatDecision(d) {
   return reason;
 }
 
-export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable, presetBanTable, allowlistScope } = {}) {
+export function installGovernanceHook(ctx, { store, root, config, logger, onRefusal, presetTable, presetBanTable, allowlistScope, resolvedCfg } = {}) {
   const log = logger ?? ctx?.logger ?? null;
-  const cfg = resolveGovernanceConfig(config?.governance?.hook ?? {}, {
+  // 【契约 C-6 · 一次解析】装配路径（经 `corePort('guard').mount()`）由 core 解析好 `resolvedCfg` 传入 ⇒
+  //   墙内**不再解析第二次**（二次解析会把 `governance.hook.*` 非法配置的 warn 变两条 = 日志悄悄变，V-22 禁止类）。
+  //   回落分支的服务对象只有「不经端口的直调」：单测夹具、决策矩阵探针、`npm run` 探针脚本 ——
+  //   它们既没有 core 的 `presetTable`（自身装载）也没有 `resolvedCfg`，故此处保留解析，语义逐字不变。
+  const cfg = resolvedCfg ?? resolveGovernanceConfig(config?.governance?.hook ?? {}, {
     presetTable,
     presetBanTable,
     warn: (m) => log?.warn?.('[governance] ' + m),

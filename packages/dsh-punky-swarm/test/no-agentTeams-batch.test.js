@@ -41,8 +41,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { createStore } from '../lib/state/store.js';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
-import { apply } from '../lib/index.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { assemblyCtx, tempRoot } from './helpers/gate-fixture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

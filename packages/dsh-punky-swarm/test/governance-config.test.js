@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveGovernanceConfig, GOVERNANCE_DEFAULTS } from '../lib/governance/config.js';
-import { createGovernanceKernel } from '../lib/governance/kernel.js';
+import { createGovernanceKernel } from '../lib/guard/kernel.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const patchYml = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8').replace(/\r\n/g, '\n');

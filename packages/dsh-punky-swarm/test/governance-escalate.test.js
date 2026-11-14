@@ -123,7 +123,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_BATCH_PHASE, EVT_BATCH_GOVERNANCE_ESCALATE, EVT_BATCH_FAILED_ESCALATE } from '../lib/state/event-types.js';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { eventStreamFileOf } from '../lib/governance/receipt-store.js';
 import { resolveGovernanceConfig } from '../lib/governance/config.js';
 import { createTopicRuntime } from '../lib/comms/topic-runtime.js';

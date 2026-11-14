@@ -36,7 +36,7 @@ const PKG_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const PRUNED = [
   ['lib/engine/dispatch.js', 'parseLabel'],
   ['lib/bridge/lane-handle.js', 'sweepExpiredHandles'],
-  ['lib/governance/state-store.js', 'clearSessionState'],
+  ['lib/guard/state-store.js', 'clearSessionState'],
   // 【判读更正（2026-09-22；2026-10-23 批 punky-logfix-20261023 二次更正）】
   //   DEFAULT_ESCALATION_WINDOW_MS（escalation.js 同文件默认参数消费，生产在役）与
   //   auditlogStats（**探针真依赖**：test/auditlog-mount.test.js 解构导入并在多场景断言）已从删除清单移出并恢复。

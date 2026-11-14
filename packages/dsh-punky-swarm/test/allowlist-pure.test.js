@@ -14,12 +14,12 @@ import { fileURLToPath } from 'node:url';
 
 import {
   decide, canonicalDigest, ALLOWLIST_DENIED, ASK_REQUIRED,
-} from '../lib/governance/allowlist.js';
+} from '../lib/guard/allowlist.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const ALLOWLIST_SRC = join(ROOT, 'lib', 'governance', 'allowlist.js');
+const ALLOWLIST_SRC = join(ROOT, 'lib', 'guard', 'allowlist.js');
 const TIER_GATE_SRC = join(ROOT, 'lib', 'tools', 'tier-gate.js');
-const WIRING_SRC = join(ROOT, 'lib', 'governance', 'wiring.js');
+const WIRING_SRC = join(ROOT, 'lib', 'guard', 'wiring.js');
 
 /** 递归收集 lib/ 下的 .js（用于「定义只此一处」的仓级判定）。 */
 function jsFilesUnder(dir) {
@@ -64,7 +64,7 @@ test('I-24-2 零隐式取值：不读盘 / 不读环境 / 不取时钟 / 不用�
 test('I-24-3 单点判定：decide 定义仅 1 处；判据落点 = wiring（⑥-2 起）、无内联匹配或摘要重写', () => {
   const definers = jsFilesUnder(join(ROOT, 'lib')).filter((p) => /^(export )?function decide\b/m.test(readFileSync(p, 'utf8')));
   // 路径归一化（Windows 反斜杠 ⇒ 断言面向逻辑路径，不面向平台分隔符）
-  assert.deepEqual(definers.map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/')), ['lib/governance/allowlist.js'],
+  assert.deepEqual(definers.map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/')), ['lib/guard/allowlist.js'],
     'decide 定义必须只此一处（第二份判定即第二真源）');
 
   // 【⑥-2 · 2026-11-08 裁决丙】判据落点从 `tools/tier-gate.js` 迁到 `governance/wiring.js`

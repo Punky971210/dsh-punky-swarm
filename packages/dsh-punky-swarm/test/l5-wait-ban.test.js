@@ -27,7 +27,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   （源实现：tool-ban.ts:98-133 judgeWaitSleepCommand / :156-178 judgeBehavior / :181-209 matchToolBan）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { judgeWaitSleepCommand, matchToolBan } from '../lib/governance/tool-ban.js';
+import { judgeWaitSleepCommand, matchToolBan } from '../lib/guard/tool-ban.js';
 import { TOOL_BAN_BEHAVIORS } from '../lib/governance/config.js';
 
 // 最小黑名单条目（形状与 presets/hook-rules/l5-wait-ban.json 同构）

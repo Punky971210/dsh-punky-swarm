@@ -37,7 +37,7 @@ export function segmentCommands(text) {
 //   （`QUOTE_MASK` / `ASSIGN_RE` / `maskQuoted` / `headToken`）⇒ 收敛于此，两处引用。
 //   ⚠ 只搬实现，**不动任何词表**：两套判定的**用途不同**（只读放行 vs 文件写禁令），
 //     词表宽窄差异是设计选择，不是漂移（实测「tool-ban 判写 ∧ readonly 判只读」的危险组合 = 0）。
-//     已知边界见 `lib/governance/tool-ban.js` 头注。
+//     已知边界见 `lib/guard/tool-ban.js` 头注（L1 拆分后判据随护栏行搬进 `lib/guard/**`）。
 //   ⚠ `lib/state/command-exec.js` 原先另有一份掩码：未闭合引号上**补掩码继续判**（与本件的 fail-closed 相反）。
 //     2026-11-11 起两处共用本件的同一 `maskQuoted` ⇒ 未闭合引号在**判定期**即 fail-closed 拒绝
 //     （拒绝码 `GATE_EXIT_FORBIDDEN`，零执行零重试），命令 gate 面与工具面同源同向。

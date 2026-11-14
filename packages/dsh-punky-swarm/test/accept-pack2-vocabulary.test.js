@@ -485,7 +485,7 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
   // 【2026-11-09】`package-lock.json` 补入发行面：本轮把 devDeps 实装到 0.2.2-rc.1
   //   （`npm install` 会重写锁文件），而锁文件与 `package.json` 同属发行面元数据。
   //   与「注入面」不同：它不携带任何装配语义，不构成越界。
-  const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|package-lock\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
+  const RELEASE_RE = /^(packages\/dsh-punky-swarm\/)?(package\.json|package-lock\.json|tsconfig\.json|CHANGELOG\.md|README\.md|README\.en\.md)$/;
   // 长前缀优先：**显式按字面前缀长度降序排序**，不依赖书写顺序（防后人插队改变语义）。
   const FACE_ORDER = [...FACE_RULES].sort((a, b) => b.prefix.length - a.prefix.length);
   const KNOWN_FACES = [...FACE_RULES.map((r) => r.face), '发行面'];

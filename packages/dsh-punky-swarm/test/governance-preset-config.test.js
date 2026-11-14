@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCALATE, EVT_BATCH_PHASE } from '../lib/state/event-types.js';

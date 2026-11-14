@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //     B 工具面 guard 通道（`tools/tier-gate.js#installDifficultyGuard`：模式门/难度门/D 通道/
 //       allowlist/只读 shell；注册经 `lib/provider-dsh/` 端口，本层不直触宿主服务名）
 //     C 工具面 guard 通道（`tools/write-provenance-guard.js`：写族须带来源）
-//   只有 A 写收据（`writeRefusal` 的调用点全在 `governance/wiring.js`）⇒ B/C 的拒绝在
+//   只有 A 写收据（`writeRefusal` 的调用点全在 `guard/wiring.js`，L1 拆分后归护栏行）⇒ B/C 的拒绝在
 //   `readRefusals` / 拒因事件流 / 面板事件面**完全不可见**。
 //
 //   本模块 = B/C 的**同一个**留痕入口（单点，两处各自手写会立刻漂移）：
@@ -33,7 +33,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   留痕（乙1b），不批升级（乙2）。
 //
 //   成本（⑥-3 落地后实测）：链式收据 ~1.5ms/次（链尾缓存已把 O(N) 降到 O(1)）+ 事件流 0.2ms。
-import { createRefusalReceipt } from './kernel.js';
+// 【L1 拆分 · 批 punky-guard-split-20261114】收据模型自 `kernel.js` 逐字抽到 `receipt-model.js`
+//   （契约 §S-1.4 / §P-5）：`kernel.js` 随判定链搬进墙内（`lib/guard/kernel.js`），而本文件（B/C 通道留 core）
+//   必须与 A 通道**共用同一份**字段装配 ⇒ 从新的 core 落点取。墙/端口边界见 `lib/guard/index.js` 头注释。
+import { createRefusalReceipt } from './receipt-model.js';
 import { writeRefusal, appendRefusalEvent } from './receipt-store.js';
 
 /** 守卫拒绝的来源标识（写进 `ruleRefs` 与 `receipt.source`，供审计定位是哪条通道）。 */

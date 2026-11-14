@@ -26,7 +26,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installGovernanceHook } from '../lib/governance/wiring.js';
+import { installGovernanceHook } from '../lib/guard/wiring.js';
 import { readRefusals } from '../lib/governance/receipt-store.js';
 import { fakeCtx } from './helpers/gate-fixture.mjs';
 

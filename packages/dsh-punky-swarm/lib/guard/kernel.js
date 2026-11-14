@@ -113,9 +113,14 @@ function dedupe(ids) {
     }
     return out;
 }
-function deepClone(v) {
-    return structuredClone(v);
-}
+// 【L1 拆分 · 批 punky-guard-split-20261114】收据模型（`createRefusalReceipt` + 其 `deepClone` 助手）
+//   已**逐字**抽到 core 的 `lib/governance/receipt-model.js`（契约 §S-1.4 / §P-5），本文件按原样再导出 ⇒
+//   「kernel 的定义面」对既有消费者零变化（`test/governance-kernel.test.js` 一字不改）。
+//   为什么必须留 core：A 通道（本墙，写收据）/ B、C 通道（core 的 `tools/tier-gate.js` 与
+//   `tools/write-provenance-guard.js`）**共用同一 schema**，两处必须是**同一份**字段装配，才能被
+//   `verifyRefusals` 统一校验（§P-6）；core 侧从 `./receipt-model.js` 直取，不经本墙（否则成 core→墙 边）。
+export { createRefusalReceipt } from '../governance/receipt-model.js';
+
 export function createGovernanceKernel(config) {
     return {
         decide(exec) {
@@ -170,25 +175,4 @@ export function createGovernanceKernel(config) {
             return config;
         },
     };
-}
-export function createRefusalReceipt(input) {
-    const { tool, callId, sessionId, decision, attemptedParams } = input;
-    const receipt = {
-        receiptId: globalThis.crypto.randomUUID(),
-        ts: new Date().toISOString(),
-        tool,
-        callId,
-        sessionId: sessionId ?? null,
-        decision: {
-            primitive: decision.primitive,
-            priority: decision.priority,
-            reason: decision.reason,
-        },
-        attemptedParams: deepClone(attemptedParams),
-        ruleRefs: [...decision.ruleRefs],
-    };
-    if (decision.narrowedParams !== undefined) {
-        receipt.narrowedParams = deepClone(decision.narrowedParams);
-    }
-    return receipt;
 }

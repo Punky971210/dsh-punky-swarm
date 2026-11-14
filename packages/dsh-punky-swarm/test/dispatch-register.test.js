@@ -31,7 +31,7 @@ import path from 'node:path';
 import { createStore } from '../lib/state/store.js';
 import { buildWavePlan } from '../lib/wave-plan.js';
 import { EVT_MEMBER_DISPATCH, EVT_GOVERNANCE_REFUSAL, EVT_BATCH_GOVERNANCE_ESCALATE } from '../lib/state/event-types.js';
-import { apply } from '../lib/index.js';
+import { applyPatchRows as apply } from './helpers/panel-row.mjs';
 import { installDispatchRegistration, extractWorkerSessionId, DEFAULT_DISPATCH_TOOLS } from '../lib/bridge/dispatch-register.js';
 import { createCoreTools } from '../lib/tools/core.js';
 import { issueLaneHandle, parseLaneHandleFromText, verifyLaneHandle, consumeLaneHandle, pendingHandles, textOfDispatchArgs, LANE_HANDLE_TTL_MS, __resetLaneHandles } from '../lib/bridge/lane-handle.js';

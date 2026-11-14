@@ -19,7 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeNarrowedParams } from '../lib/governance/narrow.js';
+import { computeNarrowedParams } from '../lib/guard/narrow.js';
 
 // U3-1 数值 max 钳制
 test('U3-1 numeric max clamp', () => {

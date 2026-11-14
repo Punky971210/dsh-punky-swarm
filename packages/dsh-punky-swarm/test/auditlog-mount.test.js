@@ -403,11 +403,11 @@ test('T-B1 默认开：apply() 后 sink 挂载、目录存在、warn/info 落盘
   // ⇒ 不再写死 2：本模块 exporter 数变化时该式自动跟随，只有「内置 buffer 缺失」或「本模块漏注册」才红。
   assert.equal(r.exportersSize, ourExporters(r).length + 1 /* 内置 buffer */,
     'exporter 数 = 本模块注册数 + 内置 buffer 1（实际: ' + r.exportersSize + '）');
-  // 【L1 拆分后】探针的 ctx 预先 provide 了 `webServer`（与真实宿主同形），因而 engine 行 apply 时的
-  //   `mount('probe')` 会走到契约 §S-2.4 步骤 1 的 fail-loud：报一次「panelSurface builder absent」。
-  //   这是**行序决定的必然**（panel 行此刻尚未 apply），不是装配缺陷；真实桌面宿主里 webServer 晚到
-  //   约 10.6s ⇒ 该分支不可达、零 warn 仍成立。故按「契约规定的唯一例外」白名单化：其余 warn 仍判红。
-  const CONTRACT_WARN = /http surface: panelSurface builder absent/;
+  // 【L1 拆分后】探针只 apply 引擎行 ⇒ 两处「**行序决定的必然**」warn（panel / guard 行此刻未 apply；真实宿主
+  //   里它们是独立两行）：① engine 行 `mount('probe')` 的 §S-2.4 步骤 1 fail-loud「panelSurface builder
+  //   absent」（桌面宿主 webServer 晚到约 10.6s ⇒ 不可达）；② 装配期「guard 行缺席 ⇒ 工具护栏未装配」
+  //   （缺席必响亮由 V-10 专项夹具独立守）。两者与被测 auditlog 面无因果 ⇒ 白名单化；其余 warn 仍判红。
+  const CONTRACT_WARN = /http surface: panelSurface builder absent|guard 行缺席/;
   const unexpectedWarns = r.engineWarnCalls.filter((w) => !CONTRACT_WARN.test(String(w)));
   assert.deepEqual(unexpectedWarns, [], '缺省 config → apply() 零 warn（门禁反向约束；实际: ' + JSON.stringify(unexpectedWarns) + '）');
   const warn = r.rows.find((x) => x.level === 'warn' && x.msg.includes('GATE_ENABLED=false'));
@@ -448,7 +448,7 @@ test('T-B2b 关闭态（config capabilities.auditlog.enabled=false，无 env）�
   assert.equal(r.sinkDirExists, false, 'config 关闭 → 零目录');
   // 同 T-B1：契约 §S-2.4 步骤 1 的 panelSurface fail-loud 由**行序**决定（探针预 provide webServer ⇒
   //   engine 行 apply 时 panel 行必然尚未 apply），与被测的 auditlog 关闭态无关 ⇒ 白名单化后仍判「零 warn」。
-  const CONTRACT_WARN_B2 = /http surface: panelSurface builder absent/;
+  const CONTRACT_WARN_B2 = /http surface: panelSurface builder absent|guard 行缺席/;
   const unexpectedWarnsB2 = r.engineWarnCalls.filter((w) => !CONTRACT_WARN_B2.test(String(w)));
   assert.deepEqual(unexpectedWarnsB2, [], 'config 关闭 → 零 warn（禁用能力零校验零 warn；实际: ' + JSON.stringify(unexpectedWarnsB2) + '）');
 });

@@ -21,7 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGovernanceKernel, createRefusalReceipt } from '../lib/governance/kernel.js';
+import { createGovernanceKernel, createRefusalReceipt } from '../lib/guard/kernel.js';
 
 const DEFAULT_FLAGS = { pause: false, narrow: false, defer: false };
 
