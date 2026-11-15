@@ -14,11 +14,12 @@
 
 | 档 | 执行主体 | 判据 |
 |---|---|---|
-| **A** | Leader 直做 | 单线程（无并行任务线、无依赖链）、低风险、可自验；零治理开销 |
-| **B** | 单个 subagent | **仅限两类**：① 需独立子代理做**不占主 Agent 上下文**的调研（查代码 / 读大文档 / 跑探针）；② **已明确上下文、可简单派发**的单步任务。**⚠ 固定任务形态（角色与流程可预见）不属 B 档** ⇒ 其执行主体 = **team 席位**（**D 档**，见 §0p 十四） |
-| **C** | 集群 `wave_plan` 建批 | **判据（最高优先级）：明确多线并行**（≥2 条可并行推进的任务线）**或 多依赖**（任务间存在依赖链、需 DAG 分层 / 多波次） |
-| **D** | 集群 **team 方案** | **固定任务形态**（角色与流程可预见）⇒ 用 **team 席位**（durable 席位 + 事件队列交接）。**与 C 同属建批档**（同受 `GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`），差异在**交接机制**而非难度；细则见 §0p 十四 |
+| **A** | Leader 直做 | 单线程（无并行任务线、无依赖链）、低风险、可自验 |
+| **B** | 单个 subagent | **仅限两类**：① 需独立子代理做**不占主上下文**的调研；② **已明确上下文、可简单派发**的单步任务。**固定任务形态不属 B** |
+| **C** | 集群 `wave_plan` 建批 | **多线并行（≥2 条可并行推进的任务线）或多依赖（任务间存在依赖链、需 DAG 分层）**——**唯一建批判据，与通道无关** |
+| **D** | 集群 · 建批 + team 通道 | **不是难度档**，而是「建批 + team 通道」的**组合标记**。D ≡ 「C 的建批判据已成立」+「通道选择为 team（durable 席位 + 事件队列交接）」。判 D 的前提是已判 C |
 
+- **两轴关系（2026-11-15 用户裁决 · 两轴分离）**：**难度轴只回答「要不要建批」；通道轴只回答「dispatch 还是 team」。D 是对后者的标记，不得倒推为难度上升。**
 - **C+ 档已撤销（2026-09-14 用户裁决）**：难度枚举为 `A|B|C|D`（**D 于 2026-10-01 裁决 Q-3=B 入册引擎枚举**）。原由 C+ 承载的装配要求改为**建批参数要求**（与难度档解耦）：**三层批**建批必须传 `assembly`（缺则拒建批 `GATE_ROLE_ASSEMBLY_MISSING`）。
 - **判据必填（供审计）**：`assign_check({ difficulty, rationale, scope: "full" })` —— `rationale` **≥12 字**且写明**定档依据 + 已完成的只读侦察证据**；落 `governance.json` 的 `lastAssign` 与 `history` **双留痕**。
 - **交叉校验 + 有解释的偏离（2026-09-14 用户裁决 B）**：布尔特征（`parallel` / `multiRole` / `gate` / `recoverable` / `needIsolation`）**降为校验输入**；引擎由它们算出 `derived`（任一 C 判据 → `C`；否则 `needIsolation` → `B`；否则 `A`）。`difficulty` 仍由 Leader **主动写入**：**相等 → 常规放行**（`override:false`）；**不等 → 有解释才放行**（`override:true`，随 `lastAssign` + `history` 落盘供审计）。「解释」= `rationale` 须给 `deviation` 结构化字段（`feature`/`counterpoint`/`direction`）：**`feature`=引用具体特征面、`counterpoint`=例外/反例、`direction`=偏离方向与上限**；缺任一即拒 `GATE_DIFFICULTY_MISMATCH`（消息列出缺项）。**合法偏离示例**：声明 C 而四项判据全 `false`（「三条修正线虽串行但耗时长」+ 明确上限）；**不合法**的仍是**无解释的错派**（含单线程随手报 C）。**D 档偏离口径（2026-10-11 批 `d-override-fix-20261011`）**：D 不参与难度轴（`derived` 仍只取 `A`/`B`/`C`），引擎另设**独立通道轴** `derivedChannel`（`durableSeats:true` ⇒ `team`；否则 `dispatch`）。**D 的正当形态** = `difficulty:'D'` **且** `durableSeats:true`（通道轴 = `team`）⇒ **回归常规路径**（`override:false` / `overrideKind:null`），其 `rationale` **不需要**引用 A/B/C 特征词；**声明 D 而通道未落实**（未声明 `durableSeats` ⇒ 通道轴 = `dispatch`）⇒ 改走**同一 `deviation` 结构化字段**（`feature`=引用通道/特征面、`counterpoint`=为何 durable 而非 subagent、`direction`=通道方向与上限：不泛化为全批、team 面缺失须显式降级），缺任一即拒（仍用 `GATE_DIFFICULTY_MISMATCH`，文案说「**通道偏离**」并逐项列缺）；**即使解释通过**，**建批面仍须** `channel:'team'` 或 `'mixed'`（否则拒 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`）。
@@ -28,11 +29,11 @@
   ```js
   assign_check({
     difficulty: 'D', durableSeats: true, needIsolation: true, scope: 'full',
-    rationale: '固定任务形态（角色与流程可预见）：plan/exec/audit 三层席位分工固定 ⇒ 用 durable 席位 + 事件队列交接（team 通道）；相比自派 subagent，需跨轮存活与名册对账；通道上限 = 仅本批，team 面缺失则显式降级为 C 并留痕。',
+    rationale: '通道轴 = team：需 durable 席位（跨轮存活 / 可再唤起 / 名册对账）+ 事件队列交接；建批判据 = 三条修正线可并行（≥2 条任务线）。通道上限 = 仅本批；team 面缺失则显式降级为 C（difficulty 改 C）并留痕。',
   })
   ```
 
-  （`durableSeats:true` 使通道轴 = `team` ⇒ 常规路径；模板句只描述**通道形态与上限**，**不**引用 `parallel` / `multiRole` / `gate` / `recoverable` 等特征词。）
+  （`durableSeats:true` 使通道轴 = `team` ⇒ **常规路径**（`override:false` / `overrideKind:null`）。模板句两段式——**先写通道依据**（durable 席位的三条判据 ＋ 事件队列交接），**再写建批判据**（≥2 条可并行任务线）：**先判要不要建批、再判通道**；**不得把通道理由写成难度理由**，也不得据此把 D 倒推为难度上升。）
 - **评估对象**：用户请求的**完整目标任务**（`scope=full`，含未来步骤），**非**本轮动作。
 - **并发度优先（最高优先级判据）**：**单线程任务一律不建批**——同一回合内的多步串行**亦属单线程**；`execToolCount` 只是弱旁证，不构成理由（`escalationHint` 与本条同源）。
 - **B 档边界**：需主 Agent 上下文才能继续、或需来回对话澄清者**不得**降 B（那是 A 直做）。
@@ -68,6 +69,7 @@
 
 - 门禁态用 `gate_status` 查；**失败 lane 为终态**，重做 = **重开新批次**（裁决操作见 §6）。
 - **plan 契约标题逐字匹配**：spec 必含裸标题 `## 验收标准` 与 `## 约束`（编号变体拒 `GATE_PLAN_CONTRACT`）。
+- **checkpoint 规则详见 §0x**：exec 层 `subtasks` 声明与逐项 `lane_checkpoint` 留痕、结算门均在 §0x；**建批期不校验**，本节不重复。
 
 ### 二、批次装配声明（三层批必填；2026-09-14 **扩面**）
 
@@ -315,8 +317,8 @@
 | **裸 subagent**（B 档） | 简单 / 单步，**不进批** | Leader `subagent` | **无**（不进批次黑板） |
 
 - **硬口径**：**一个任务只走一条通道**；三通道**彼此不互通**（含与 B 档裸 subagent），不存在「同一 lane 既可由席位也可由 dispatch worker 执行」的混用形态。
-- ⚠ **时效（2026-10-28 用户口径）**：**引擎自派当前不可用** ⇒ `dispatch` 通道**暂不可达**，侧边任务走 **team 或裸 subagent**；`member.dispatch` / 句柄面按历史读，恢复自派后再启用。
-- **主流方向**：**team 为主**；**团队面缺失时**须走**显式降级**（回退 subagent 并留痕，**禁静默降级**）；选档口径见 §0p 十一 与 §0p 十四。
+- **历史状态（2026-11-15 实测已恢复可用）**：引擎自派（`lane_dispatch`）经验证可用、`dispatch` 通道**可达**；本行保留沿革，不得再据此声称 dispatch 不可达。**原时效注记（2026-10-28 用户口径，仅作沿革保留，已于 2026-11-15 失效）**：届时该链路停摆 ⇒ `dispatch` 通道不可用，侧边任务改走 **team 或裸 subagent**，`member.dispatch` / 句柄面按历史读、恢复后启用。
+- **通道选取以两步判定树为准**（第一步难度轴判要不要建批，第二步通道轴判 dispatch/team）；**team 不是默认方向**；team 的判定为**两分支**：① 需 durable 席位（跨轮存活 / 可再唤起 / 名册对账）；**或** ② 角色与流程固定且可预见**且**有 roster 对应 ⇒ team。**判不准时取 dispatch**。**优先级**：若任务被判定为「一次性 / 无续跑 / 轻量」，即使满足第二分支也应优先走 dispatch；team 通道仅留给「需 durable 席位」或「第二分支 **且** 有 roster 对应 **且** 需跨轮续跑」的情形。**分层口径**：`fixedRole` **只**影响难度轴的机械推导（`derived`），**不参与通道轴判定**；**D 从不由 `derived` 产出**（`derived` 取值域 = A / B / C，D 只由 Leader 显式声明并体现在声明值与通道轴，同 §0p 十四）。**团队面缺失时**须走**显式降级**（回退 subagent 并留痕，**禁静默降级**）；选档口径见 §0p 十一 与 §0p 十四。
 
 ### 五、**team 通道语义**（席位怎么派、怎么接活、怎么回报）
 
@@ -375,23 +377,23 @@
 | **推进方式** | **引擎自动派发**（派发即写 `owner`；结算由 `auto-settle` 消费事件判定） | **由事件队列进行交接**（`handoff_submit` → `batch.handoffs` + `lane.handoff`；入边 `submitted` 为下游开工硬前提） |
 | **共用面** | **只共用 `wave_plan` 黑板的模式**（Q-3）——批次 JSON **单落盘点**（口径同 §230 行）＋三层（plan/exec/audit）+ 依赖 DAG + 产物契约 + 门禁语义，两方向**同源** | 同左（**不做**第二套建批面；**不新造** team 专用建批工具 / 自有黑板） |
 | **写黑板字段** | `owner`（批 owner 会话；公共池归属声明面，**不参与门禁**）+ **`member.dispatch{ workerSessionId, lane }`**（引擎自动写） | **`roster` 成员名**（= **R-3** 已落字段；真源恒 `wavePlan.tasks[].roster`）；与 `owner` **并存、互不替代**（Q-2，零新造字段） |
-| **选型判据** | **仅当命中「一次性 / 无 lane / 无交接 / 需上下文隔离」**（需**灵活分配、较轻量**、迭代频繁、粒度细、无跨轮续跑需求）**⇒ 才走 dispatch** | **常用档 = team（由评估选档、非默认）**：**固定工作**（角色与流程可预见；需 durable 席位 / 跨轮续跑 / 长任务） |
+| **选型判据（本行判通道，不判建批）** | **仅当命中「一次性 / 无 lane / 无交接 / 需上下文隔离」**（需**灵活分配、较轻量**、迭代频繁、粒度细、无跨轮续跑需求）**⇒ 才走 dispatch**；**判不准时取 dispatch** | **需 durable 席位**（跨轮续跑 / 可再唤起 / 名册对账）**或**角色与流程固定且可预见且有 roster 对应 ⇒ team；**非机械默认**，不参与难度判定 |
 | **语义 / 功能** | **相互隔离**（含与 B 档裸 subagent 不互通） | **相互隔离**；**不混用**（一批一方向，Q-4） |
 | **provider 分离** | **不做**（C1 正式裁决） | **不做** —— `provider:'agent-team'` 分支方案**作废** |
 | **选型主体** | **Leader 自行判断**（**由评估选档；偏离须留痕**） | 同左 |
 
-### 十一、选型判据（Leader 自行判断）
+### 十一、C vs D 通道判定树（Leader 自行判断；**本组只判通道，不判建批**）
 
-**Leader 选型 4 条（Q-4 落地形态，逐条照判）**：
+> **前置（两轴分离，2026-11-15 用户裁决）**：本组**只回答「dispatch 还是 team」**。**要不要建批**由 §0 档位表的难度轴先行判定——**难度轴只回答「要不要建批」；通道轴只回答「dispatch 还是 team」**，两条轴**不得互相倒推**。
 
-1. 任务是否**固定可预见**（角色 / 流程定死、有官方 roster 对应成员类型）⇒ **是则 team**；
-2. 是否需要 **durable 席位**（跨轮续跑、可再唤起、活性可查）⇒ **是则 team**；
-3. **仅当命中「一次性 / 无 lane / 无交接 / 需上下文隔离」**（即需**灵活分配、粒度细、较轻量**、一次性执行即可）**⇒ 才走 dispatch（`subagent`）**；其余**常用档 = team，由评估选档**；
-4. 判不准时按 Q-3 先建 `wave_plan` 批，**批级**声明 `channel`（`dispatch` | `team`），**一批不改向**。
+**第一步（难度轴）**：多线并行 或 多依赖 ⇒ 建批（C）；否则 ⇒ A 或 B。
 
+**第二步（通道轴，仅在建批后）**：需要 durable 席位（跨轮续跑、可再唤起、活性可查）**或**角色与流程固定且可预见且有 roster 对应 ⇒ **team（D）**；一次性、轻量、无跨轮续跑需求 ⇒ **dispatch（C）**；**判不准时取 dispatch**（零席位运维成本，且 worker 可追溯）。
+
+- **两通道机读形态差异**：dispatch（C）= `lane_dispatch` + `member.dispatch{workerSessionId}`；team（D）= `spawn_teammate` + `tasks[].roster`。
 - **批级 `channel` 声明面（R-5）用法**：`channel` 是**批级**声明（非 lane 级），建批时定死；`dispatch` ⇒ 该批 lane **零条**带 `roster`；`team` ⇒ 该批**每条** lane 均带 `roster`——这是「**不混用**」的机读形态（同 `docs/b5-teammate-seat-design-v1-2026-09-25.md` V9）。
 - **⚠ Q-4 张力登记（不得掩盖）**：引擎 `channel` 枚举含 **`mixed`**，且 `mixed` 在引擎内**合法**；**用户 Q-4 = 不能混用** ⇒ **指引口径 = 建批只取 `dispatch` 或 `team`，`mixed` 不作为建议形态**。引擎「**允许**」≠ 指引「**推荐**」；若实际出现 `mixed`，**须由 Leader 显式裁认留痕**，且不得据此改写 Q-4 口径。本项**不改引擎**（本批零引擎改造）。
-- **口径边界**：选型只决定「**一批走哪条方向**」，不改变两方向**共用 `wave_plan` 黑板**的事实（Q-3）；team 方向**不新造建批面**。
+- **口径边界**：选型只决定「**一批走哪条方向**」，不改变两方向**共用 `wave_plan` 黑板**的事实（Q-3）；team 方向**不新造建批面**；通道选型**不改变难度档**（D 只在「已判 C」之后作为 team 通道的标记出现）。
 
 ### 十二、事件流口径（Q-1）
 
@@ -415,17 +417,17 @@
 | **黑板谁写** | **Leader 写**黑板；**引擎自动派发** | **Leader 拉起后写黑板通知成员**；**由事件队列进行交接** |
 | **黑板锚点字段** | `owner` + `member.dispatch{workerSessionId, lane}`（引擎写） | **`roster` 成员名**（Leader 拉起时写） |
 | **交接通道** | `handoff_submit` → `handoff_view`（入边 `submitted` 是硬前提） | 同左（事件流为真源） |
-| **选型判据** | **需灵活分配、较轻量的工作** | **固定工作**（如 software 口径固定 7 角色 + leader） |
+| **选型判据（本行判通道，不判建批）** | **仅当命中「一次性 / 无 lane / 无交接 / 需上下文隔离」**（灵活分配、粒度细、较轻量、一次性执行即可）⇒ 才走 dispatch；**判不准时取 dispatch** | **需 durable 席位**（跨轮续跑 / 可再唤起 / 名册对账）**或**角色与流程固定且可预见且有 roster 对应（如 software 口径 7 角色 + leader）⇒ team |
 
 - **共用与不混用**：**共用 `wave_plan` 建批**，但**每批任务写各自的 `wave_plan` 给单独方向的成员使用**；**不做 provider 分离方案**（历史上 §11 已正式废弃 B1–B3 与 fork 方案；`tasks[].officialTaskId` 与 `dispatch.provider:'fork'` 为**永不实施**项）。
-- **选型归 Leader 自判**（C2：agent-team 包启用时**优先** agent-team；两族工具当前**共存**，非互斥）。
+- **选型归 Leader 自判**：按 §0p 十一 判定树两步走（**先判要不要建批，再判通道**）；两族工具当前**共存**、非互斥；**不设机械默认**，**判不准时取 dispatch**。
 - **Q-1 落点**（见本节 §三）：事件流优先｜mailbox 搁置｜`send_message` 视为**已开放的汇报通道**。
 - **团队装配口径（2026-09-27 裁决 ＋ 本批清尾）**：**`team-asset` 装配方案已整体退役（进退役锁）** ⇒ **只按成员槽位 + 指引（团队层 skill ／ 本指引）装配**；**不存在「校验资产合规」这一步**（资产面已删净，无对象可校验、亦无 `warnings` 出口）。
 - **`team` 参数现为可选自由标签**（2026-09-27 裁决；详见 **§0b 四** 与 **§0o**）：**不传 / 空白 ⇒ 无标签，批次照常落盘**（旧文「仍必填」**已作废**）；**不解析、不校验、不拒建批，不参与** flows / `criteria_from` / snapshot / `roles` 任何解析。**选型（仅建议）**：按任务领域就近自取语义化标签（`software-team` / `design-team` / `research-team` / `writing-team`）——**选错 / 不选均零后果**。
 
-### 十四、**D 档（引擎指引档位：team 方案 · 与 C 档隔离）**（2026-10-01 用户 Q5=自定义 裁决）
+### 十四、**D 档（team 通道档：建批 + team 通道 · 不是难度档）**（2026-10-01 用户 Q5=自定义 裁决；2026-11-15 两轴分离裁决订正）
 
-> **一句话**：**D 档 = 集群治理档位，用 team 方案（durable 席位 ＋ 事件队列交接），与 C 档（引擎自派 subagent worker）隔离；复用 `batch` 与 `wave_plan`；引擎层如实写入 `D`（枚举 A\|B\|C\|D，2026-10-01 起），通道面以 `channel:'team'` 或 `'mixed'` 声明。**
+> **一句话**：**D = 「C 的建批判据已成立」+「通道选择为 team（durable 席位 ＋ 事件队列交接）」的组合标记，不是难度档**；与 C（引擎自派 `lane_dispatch` worker）的差异**只在交接机制**，复用同一 `batch` 与 `wave_plan`；`difficulty:'D'` 的作用 = **把通道绑死**，通道面以 `channel:'team'` 声明（`'mixed'` 引擎合法但**指引不推荐**，见 §0p 十一 Q-4 张力登记）。
 
 **① 九要素（逐条）**
 
@@ -436,9 +438,9 @@
 | **逐个 `spawn_teammate`** | Leader 侧**逐个**拉起（`name` / `description` / `prompt`）；**`name` 与 `tasks[].roster` 不再要求逐字一致** |
 | **写黑板 `wave_plan`** | **复用**既有 `batch` 与 `wave_plan`（**与 C 档同一黑板形态**）；`tasks[].roster` 写成员名作**声明** |
 | **团队自流转** | 派活 = `send_message`；交接 = `handoff_submit`（**成员自交**；Leader 可代交）；结算见 ③ 分工铁律 |
-| **与 C 档隔离** | **C 档** = 引擎**自派 subagent worker**（`lane_dispatch` / `member.dispatch`）；**D 档** = Leader **`spawn_teammate` 拉起 durable 席位**（写 `roster`）⇒ **两档语义与写黑板字段均不同；一批一档，不混用** |
+| **与 C 档隔离** | **C 档** = 引擎**自派 subagent worker**（`lane_dispatch` / `member.dispatch`）；**D 档** = Leader **`spawn_teammate` 拉起 durable 席位**（写 `roster`）⇒ **两档的差异只在通道（席位 vs 自派 worker）与写黑板字段，难度语义相同；一批一档，不混用** |
 | **复用 batch / wave_plan** | （**复用 `batch` 与 `wave_plan`**）**D 档不新黑板**：`wave_plan` / `batch_status` / `handoff_submit` / `batch_phase` **原样复用** |
-| **引擎层如实写入 `D`**（**D ≡ 建批档 + team 通道**） | `assign_check` 枚举 = A\|B\|C\|D（引擎实现，2026-10-01 起）；`wave_plan` / `member_set_status` / `member_settle` 三面均认 `C` **或** `D`（`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C` 对两档同判）；D 的正当形态由 `durableSeats:true` 给出（通道轴 `derivedChannel='team'`）⇒ `override:false`；通道未落实 ⇒ 拒（assign 面 `GATE_DIFFICULTY_MISMATCH` 通道支 / 建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`） |
+| **D 的正当形态（通道轴机读，不是难度档）** | `assign_check` 的 `difficulty` 枚举含 `D`，但 **`D` 不参与难度推导**（`derived` 只取 `A`/`B`/`C`）；`D` 的作用 = **把通道绑死**。`wave_plan` / `member_set_status` / `member_settle` 三面对 `C`/`D` **同判**（`GATE_BATCH_REQUIRES_C` / `GATE_MEMBER_REQUIRES_C`）；正当形态 = `durableSeats:true` ⇒ 通道轴 `derivedChannel='team'` ⇒ `override:false`；通道未落实 ⇒ 拒（assign 面 `GATE_DIFFICULTY_MISMATCH` 通道支 / 建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`） |
 | **后续项** | 枚举已扩（2026-10-01 落地）；通道轴与 D 的机械判据已落（2026-10-11 批 `d-override-fix-20261011`：`derivedChannel` / `overrideKind` / guard 硬消费 / 建批面拒）。**仍留后续项**：装配-roster 自动化（现仍需 Leader 手工 `spawn_teammate` + `roster` 声明） |
 
 - **难度轴推导 D 不入（防回生）**：难度轴的机械推导 `derived` 取值域 = `A` / `B` / `C` 三档，**永不为 D**；`durableSeats:true` 只把**通道轴** `derivedChannel` 推成 `team`，与难度轴**解耦** ⇒ D **只**由 Leader 主动声明并体现在声明值与通道轴 / `override` 位上，**禁**把 D 塞回难度轴推导、**禁**让 `derived` 产出 D。
@@ -452,7 +454,7 @@
 
 **③ 分工铁律（Q3=A）**：**官方工具管「人」｜引擎 `member_*` 管「lane」** —— 两账本**并列**、**不互替**（**禁**「以官方工具替代 `member_*`」，亦**禁**反向）。team 通道**不豁免**引擎结算（§0p 九 / §0t M-1）。
 
-**④ Q1 ↔ Q2 消解（防同页矛盾）**：叙事「team 为**主流方向**」＋ 机制「**不设机械默认**」⇒ 统一口径 = 「**D 为常用档 / 主流方向 / 由评估选档 / 非机械默认**」；**两通道保持并列** —— 任一通道**都不得被写成「机械默认」**（**⛔ 措辞禁令 C-3**：默认值类写法**一律禁用**，三种禁用写法**只作反模式登记**、**正文不得复用**）。
+**④ Q1 ↔ Q2 消解（防同页矛盾）**：叙事「team 为**主流方向**」＋ 机制「**不设机械默认**」⇒ 统一口径 = 「**team 是通道轴上的常用形态之一；由评估选通道、非机械默认；判不准时取 dispatch**」；**两通道保持并列** —— 任一通道**都不得被写成「机械默认」**（**⛔ 措辞禁令 C-3**：默认值类写法**一律禁用**，三种禁用写法**只作反模式登记**、**正文不得复用**）。
 
 **⑤ 降级口径（显式，禁静默）**：**团队面缺失时**（三层机检任一命中：声明集 vs 实装集**差集非空** / 启动日志报服务缺失 / 会话面**缺 `spawn_teammate` 等**）⇒ **回退 subagent 通道并留痕**（**禁静默降级**）。
 
@@ -461,10 +463,10 @@
 - **反例 1（写 `D` 却不给通道面）**：声明 `difficulty:'D'`、却**不声明** `durableSeats` 且建批 `channel` 为 `dispatch` / 未声明 ⇒ **必拒**（建批面 `GATE_DIFFICULTY_CHANNEL_UNRESOLVED`；执行型工具面 guard 亦拒同码）。**正解**：**两条出口** —— ① 保持 `D` 并 `durableSeats:true` + `channel:'team'` 或 `'mixed'`（每条 lane 写非空 roster）；② **显式降级为 `C`** 并在 `rationale` 写明降级原因（**禁静默降级**，同源本节 ⑤）。
 - **反例 2（两档混用）**：同一批既 `spawn_teammate` 拉起席位、又 `lane_dispatch` 派 subagent worker ⇒ **违反「一批一档」**（写黑板字段冲突：`roster` ↔ `member.dispatch`）。**正解**：**一批一档**；**换档 = 另开批**。
 - **反例 3（以官方工具替代引擎结算）**：席位完成后不调 `member_settle`、只 `send_message` 报捷 ⇒ **批永挂 `running`**（audit 层 lane **不自动结算**）。**正解**：成员**自发 `handoff_submit`**，Leader 显式 `member_set_status(review)` → `member_settle(merged)`。
-- **反例 4（Q1 ↔ Q2 同页矛盾）**：一处写「team 为**主流方向**」、另一处又把它写成**默认值** ⇒ **自相矛盾**且撞 C-3 禁令。**正解**：**统一口径**「常用档 / 主流方向 / **由评估选档** / 非机械默认」，两通道**并列**。
+- **反例 4（Q1 ↔ Q2 同页矛盾）**：一处写「team 为**主流方向**」、另一处又把它写成**默认值** ⇒ **自相矛盾**且撞 C-3 禁令。**正解**：**统一口径**「team 是通道轴上的**常用形态之一** / **由评估选通道** / 非机械默认 / **判不准时取 dispatch**」，两通道**并列**。
 - **反例 5（席位超限硬拉 / 复用不登记）**：`maxMembers` 已满仍继续 `spawn_teammate` ⇒ **拒**；或复用而不登记 ⇒ **lane 记录与实际执行者不符**（审计无法对账）。**正解**：**合规复用 ＋ 登记**（登记件写明复用原因 / 被复用席位 / 原 lane）并**在 lane 记录注明实际执行者**。
 - **反例 6（结算时序倒置 / 漏结算）**：成员不 `handoff_submit` 就报捷，或 Leader 只 `swarm_report` 不 `member_settle` ⇒ **`GATE_HANDOFF_MISSING`**（入边未齐；**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**）/ **批永挂 `running`**。**正解**：**先 `handoff_submit`、后 `swarm_report`**，再 `member_set_status(review)` → `member_settle(merged)` → `batch_phase(complete)`。
-- **反例 7（把固定任务判成 B 档）**：「固定任务（角色 / 流程可预见）用 B 档裸 `subagent` 跑」⇒ 与「team 为主流方向」**冲突**，且**无席位生命周期、无 lane 账本**。**正解**：**固定任务 ⇒ D 档（team 席位）**；B 档**仅限**两类（不占主上下文的调研 / 已明确上下文的单步派发）。
+- **反例 7（把通道判据当难度档用）**：「角色 / 流程固定且可预见 ⇒ 必判 D 档」⇒ **倒果为因**：D 只是「建批 + team 通道」的组合标记，固定形态**既不构成建批判据**（建批只看多线并行 / 多依赖），**也不等于自动走 team**（一次性 / 轻量仍可 dispatch）。**正解**：**先判要不要建批（难度轴），再判通道（第二步）**；判不准时取 dispatch。
 - **反例 8（把 Leader 治理工具当席位可用）**：给席位任务包写「自己 `interrupt_agent` / `list_agents` 自查」⇒ **席位面 deny、必失败**。**正解**：按**成员侧清单**派活（可用 = 交接 / 回报 / `member_settle`）；治理工具**留在 Leader 面**。
 
 ## §1 任务指派
@@ -499,7 +501,7 @@
 
 ## §0m 派发套件（2026-09-16 落地：**派发收进引擎**）
 
-> ⚠ **时效（2026-10-28 用户口径）**：**引擎自派当前不可用** ⇒ 本节的句柄与自派链路**暂不可达**；C/D 档派发走 team 通道或（C 档）人工直派。链路恢复后本节即时生效——**描述保留，按期实现读**。
+> **历史状态（2026-11-15 实测已恢复可用）**：引擎自派（`lane_dispatch`）经验证可用、dispatch 通道可达；本行保留沿革，不得再据此声称 dispatch 不可达。**原时效注记（2026-10-28 用户口径，仅作沿革保留，已于 2026-11-15 失效）**：届时本节的句柄与自派链路不可用；C/D 档派发走 team 通道或（C 档）人工直派——**描述保留，按现役实现读**。
 
 - **唯一凭证**：C 档派发须携 **lane 句柄**——`lane_dispatch({ batchId, lane })` 发放（**一次性 / TTL 30min**），返回 `firstLine`（形如 `[swarm-lane:<batchId>/<lane>#<token>]`），**原样写入子代理任务包首行**（引擎只读 `exec.arguments`、不注入参数）。
 - **引擎自派**：`lane_dispatch` 置 `running` 后由引擎在工具流水线内调 `ctx.subagents.startContinuable`（`exec.agent` 作 parent）⇒ ① **按次收窄成员工具面**（`toolFilter.deny` 套件外治理工具）——**准确表述 = 「按次收窄，收窄面以实测为准」**，**禁**写「deny 名单 ⇒ 成员会话里不出现」这类全称断言（2026-09-24 实测：治理与派发面已不见，但 `send_message` / `interrupt_agent` / `list_agents` / `wait_agent` 四件仍可见且可达）；② `label=punky-swarm:<batchId>:<lane>`（**第二绑定键**，可从子会话事件反解析）；③ 成功后**引擎直写** `member.dispatch`（**唯一写路径**，不依赖事后观察）。逐条实测读数见 `CHANGELOG.md`。
@@ -638,8 +640,8 @@
 ## §13 指引维护（Guidance maintenance）
 
 - **双层结构**：`agent.cordis.yml` = **注入面**（每会话必进系统提示，只放规范句 + `#§X` 指针）｜`references/discipline.md` = **正文**（按需读，放细则/码表/证据）。**正文小节可多于注入面**（详情面小节按需读，不强制在注入面出现）。
-- **双副本纪律**：preset 四件（`agent.cordis.yml` / `references/discipline.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）与 **live**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**必须同 sha256**；改一份即改另一份。
-- **同步命令（只复制，不判定）**：`node scripts/sync-guidance.mjs` —— 把 repo 侧 preset 四件与 `skills/**` 整树复制到 live（内容相同即跳过、幂等）；`--no-skills` 只同步五件、`--dry-run` 只列将复制什么、`--live=` / `--skills-live=` 覆盖落点。**本仓不再有「必须 exit 0 才算收口」的指引门**（2026-10-28 用户裁决：指引维护不常做，不需要绑测试脚本锚定）——改完跑一次复制即可，是否同步到位直接看两份文件。
+- **双副本纪律（2026-11-15 订正）**：preset 四件（`agent.cordis.yml` / `references/discipline.md` / `preset.yml` / `asset-manifest.json`）在 **repo**（`presets/punky-preset/**`）内**自洽一致**；**live 副本**（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**不参与装配** ⇒ 它与 repo **不同步不影响生效**，**不再要求「repo 与 live 同 sha256」**（旧表述已成空话，见下条）。改 repo 一份即改 repo 内其余受影响份。
+- **同步口径（手工维护，2026-11-15 用户裁决）**：**`sync-guidance.mjs` 已弃用**（「手动维护足够」），**不要再跑**；改注入面后**手工同步两侧** —— 包根 `cordis.patch.yml` 为**生效面**（boot 期由 loader 组合进 profile）、`presets/punky-preset/agent.cordis.yml` 为**镜像面**，两者必须**逐字同文**。live 副本（`%USERPROFILE%\.dsh\.agent-presets\punky-preset\**`）**不参与装配**，改它不影响生效。**本仓不再有「必须 exit 0 才算收口」的指引门**（2026-10-28 用户裁决：指引维护不常做，不需要绑测试脚本锚定）——是否同步到位直接看两份文件。
 - **归属原则（2026-10-21 用户裁决；**人工自维护约定，不设机器门禁**）**：**工具能力归工具定义**（`lib/tools/*.js` 的 description：参数、取值域、拒码语义、状态机）；**引擎调度指引与主 Agent 操作规范归 preset**（persona 注入面：何时必须调、顺序、红线）。persona 里不复写工具能力细节，只留操作规范 ＋ `#§X` 指针。
 - **persona 有两份定义（**自维护**，靠人工保证同源）**：`cordis.patch.yml`（插件 patch，**boot 期由 loader 组合进 profile ⇒ 实际注入源**）与 `presets/punky-preset/agent.cordis.yml`（preset 分发面）是同一份 persona 的两份定义，**改一份即改另一份**。历史事实：两份曾长期分叉（patch 缺 `0i`、§0 为旧短版）而无人发现 ⇒ **改动时两份同时改是本条的落点**（不新增脚本判据）。
 - **反例（本规则的由来）**：2026-09-17 新增 §11/§12 时只写了正文、漏了注入面 ⇒ 新规则「写了但注入不到」，下一会话的 Leader 看不到。**该校验器已于 2026-10-28 退役** ⇒ 同类漂移现在只能靠人读，改注入面时请自行对照正文小节。
@@ -1024,7 +1026,7 @@
 
 ### 二、现存实现（本仓已落地，改脚本时不得绕开或弱化）
 
-`scripts/sync-guidance.mjs:126-152` 是本节的标准形态：
+`scripts/sync-guidance.mjs:126-152` 是本节的标准形态（该脚本作为**动作**已弃用（2026-11-15 用户裁「手动维护足够」）；此处仅作 §0w 守卫范式引用，勿再调用）：
 
 | 面 | 实现 | 为什么这么写 |
 |---|---|---|
@@ -1041,7 +1043,40 @@
 - [ ] ③ 拒跑给**非 0 退出码**（参数 / 环境错误用 `2`），并在 stderr **点名具体路径**
 - [ ] ④ 我本次验证用的是**临时目录**（`--live=` / `--skills-live=`），命令记录里**没有** `--allow-real-home`
 
-**反例（真实踩过）**：同步动作若直接跑 `node scripts/sync-guidance.mjs`，默认落 `<home>/.dsh/.agent-presets/punky-preset` 与 `<home>/.agents/skills` ⇒ 命中 `:143` 的拒跑分支，**exit 2、零写入**；正确跑法 = `--no-skills --live=<tmpA> --skills-live=<tmpB>`。
+**反例（真实踩过）**：同步动作若直接跑 `sync-guidance.mjs`，默认落 `<home>/.dsh/.agent-presets/punky-preset` 与 `<home>/.agents/skills` ⇒ 命中 `:143` 的拒跑分支，**exit 2、零写入**。**该脚本已弃用**（2026-11-15 用户裁「手动维护足够」）⇒ **不要再调用**；反例保留只为说明「默认落点解析到真实 home」这一 0w 风险的成因。
+
+---
+
+## §0x 任务包与 checkpoint 交接
+
+> **编号定义面**：本节是 **`0x`** 的唯一权威定义面；persona 注入面只留「一句纪律 ＋ 指针」。
+> **实现单点（本节只陈述口径，不另写判据副本）**：两门判据本体 = `lib/state/gates/checkpoints.js`（G1 判定函数 `checkCheckpointsDispatchGate` `:71`、发射点 `:89`；G2 判定函数 `checkCheckpointsSettleGate` `:112`、发射点 `:137`）；方言与声明取值 = `lib/state/resume.js`（`dialectOf` / `dialectOfLane`，`:208-233`）。
+
+- **规则（一句一判）**：**exec 层 lane 的 `subtasks` 规划在建成批之前定稿；worker 每完成一项就点名留痕一次；两枚既有门分别在派发与结算拦缺项。建批期不校验 checkpoint。**
+
+**① 8 条（逐条照判）**
+
+1) **规划归属**：**subtask 规划属 plan 层职责**（plan 层的职责边界 = lane 分轨之后的 subtask 规划）；**档位表 / 判定树 / 本规则属 Leader 职责** —— plan 层不得重写、不得另立一套，exec 层不得自行增删判据。
+2) **写入时点**：因 `wave_plan` 建批即固定、`subtasks` 建批后无工具可改（`task_update` 只加边不删边、`batch_tasks_add` 只增不改），而 plan-only 批又按 `GATE_ORPHAN_PRODUCT`（`lib/wave-plan.js:697`）不可先行产出 ⇒ **实操形态 = 分轨规划在建批时由 Leader 代 plan 层完成，plan lane 在批内校验与细化**。
+3) **字段形状**：`subtasks: [{ id, target, acceptance, outputs?, rounds?, ctxBudget? }]`；`id` lane 内唯一且非空，`target` **非绝对路径**（绝对路径项被丢弃，等同未声明）；归一单点 = `normalizeCheckpoints`（别名 `normalizeSubtasks`，`lib/wave-plan.js`），**禁第二份归一实现**。
+4) **执行（逐项留痕）**：每个 subtask 完成 ⇒ **一次** `lane_checkpoint({ batchId, laneId, message, subtaskId: '<该 subtask 的 id>' })`；`progress={step,total}` 的 `total` 与 `subtasks.length` 对齐（不是预算轮次）；事件 `worktree.checkpoint` 须带该 `subtaskId`；**无 worktree / 无 git 的降级路径同样必须带 `subtaskId`**（降级不得成为免留痕通道）；一子步骤一 checkpoint，**禁攒批**。
+5) **门禁（均为既有门，本批不新增任何码）**：G1 派发门 `GATE_CHECKPOINTS_REQUIRED`（exec 层 + lane 级方言 = `subtasks` + 非 smoke ⇒ 声明缺失**拒派**，lane 留 `pending`）；G2 结算门 `GATE_CHECKPOINTS_INCOMPLETE`（`declared ⊆ covered.ids` 才放行，缺项**按声明序**点名，lane 留 `review`）。**两门判据本体一字不改**；「序贯覆盖」通道已废除（单次报到末项但未点名 `subtaskId` ⇒ **不算覆盖**）。
+6) **豁免（逐项列名，禁扩大解释）**：`layer === 'plan'`；`layer === 'audit'`；`smoke: true` 批。**`layer` 为空的 generic lane 与存量 `legacy` 方言批不在强制面内**（显式登记的残留面，不因本规则回收）。
+7) **建批期不校验 checkpoint**：**不因 exec 层缺 `subtasks` 拒建批，不设建批期门，不新增任何门禁码**。机制事实：`lib/tools/wave-plan-tools.js:92-105` 对整批无 `subtasks` 键**只落一条告警事件、不拒建批**；且建批后 `subtasks` 面无写入口（`task_update` 只加边、`batch_tasks_add` 只增不改）⇒ **规划必须在建批前完成**，漏项只在首次派发（G1）或结算（G2）暴露。
+8) **方言机制单点**：批内**任一** task 含 `subtasks` 键 ⇒ 整批 `subtasks` 方言（`lib/state/resume.js:208-233`）；lane 方言 = 该 lane 含该键，否则回落批方言（`dialectOfLane`，同源单点）。**禁在别处另写 `subtasks != null` 判据**，也**禁**把 `checkpoints` 当别名（它不改变方言、不触发 G1/G2 ⇒ 两套方言复活）。
+
+**② 自检（复制进检查表逐项打勾）**
+
+- [ ] ① 本 lane 声明的每个 subtask 都**各自**调过一次 `lane_checkpoint(subtaskId=<原声明 id>)`，未重编 id
+- [ ] ② `progress.total` = 本 lane 声明的 subtask 条数（不是预算轮次）
+- [ ] ③ 无 worktree / 无 git 时，checkpoint 仍带 `subtaskId`
+- [ ] ④ 未新增任何 `GATE_*` 码，也未宣称「建批期会校验 checkpoint」
+
+**③ 反例与正解**
+
+- **反例 1（单次报到末项冒充逐项覆盖）**：只在最后调一次 `lane_checkpoint(progress={step:N,total:N})` 而不带 `subtaskId` ⇒ **不算覆盖** ⇒ 结算被 `GATE_CHECKPOINTS_INCOMPLETE` 拒。**正解**：逐项点名，`subtaskId` 用**原声明 id**。
+- **反例 2（把 checkpoint 当自动续跑开关）**：以为 `lane_checkpoint` 会触发自动推进 / 自动续跑 ⇒ checkpoint 只做**物理留存 ＋ 门禁**，不触发续跑。
+- **反例 3（指望建批期拦下漏项）**：`subtasks` 写空壳就建批、等门来拦 ⇒ **建批期不校验**，空壳只在派发期（G1）或结算期（G2）暴露。**正解**：建批前一次写全。
 
 ---
 
@@ -1101,6 +1136,8 @@
 | `GATE_HANDOFF_MISSING` | **缺边**：下游 lane **入边交接未 `submitted`**（建批期 `deps` 已声明，但上游未 `handoff_submit`）｜结算时该交未交｜建批期 `deps` 无交接声明来源 | **拒派 / 拒结算 / 拒建批**（**仅当 `gates.handoff.entry` 开启（runtime `gates.handoff.*` 或 env `PSWARM_HANDOFF_GATE`）时拦截**；缺口同时落 `lane.handoff.gap` 事件；存量无 `batch.handoffs` 的历史批走 `legacy` 放行 + 留痕） |
 | `GATE_TARGET_MISSING` | lane 声明 `targets`，merged 前某 target **未落盘** | **拒 merged** |
 | `GATE_TARGET_UNCHANGED` | 声明的 target 已落盘但**未变更** | **拒 merged** |
+| `GATE_CHECKPOINTS_REQUIRED` | **派发期**：exec 层 lane（`layer==='exec'`）+ lane 级方言 = `subtasks` + 非 smoke，而 `subtasks` 声明项为空（键不在场 / 归一后 `items:[]`）。**建批期不校验**——建批不因缺 `subtasks` 拒，`lib/tools/wave-plan-tools.js:92-105` 只落一条告警事件 | **拒派**（lane 留 `pending`）；判据 `lib/state/gates/checkpoints.js:71`、发射点 `:89` |
+| `GATE_CHECKPOINTS_INCOMPLETE` | **结算期**：`member_settle(merged)` 前，lane 声明的 subtask **未被 `lane_checkpoint(subtaskId)` 逐项显式覆盖**（`declared ⊄ covered.ids`；单次报到末项不算覆盖——序贯覆盖通道已废除） | **拒 merged**（lane 留 `review`；载荷 `problems` 按**声明序**列出缺失项）；判据 `lib/state/gates/checkpoints.js:112`、发射点 `:137` |
 | `GATE_PLAN_CONTRACT` | plan 层 spec 缺必填裸标题（`## 验收标准` / `## 约束`，**逐字**匹配） | **拒 merged** |
 | `GATE_NEEDHUMAN_PENDING` | 产物含独立行 `needHuman: true`，而 merged 的 note **缺**人工裁决证据（`human:<裁决人>:<时间>:<结论>`） | **拒 merged**（转人工闸） |
 | `GATE_EXIT_PENDING_AUDIT` | 批次 `complete` 前 audit 层验收未完成 | **拒 complete** |
