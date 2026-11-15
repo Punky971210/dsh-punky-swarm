@@ -104,6 +104,13 @@ async function h02(sm) {
   const mount = sm.mount({}, { subagents: { start: async () => ({ result: Promise.resolve({}) }) } });
   try {
     expect(typeof mount.disposer === 'function', 'apply() 未返回 disposer（不可回收 ⇒ 卸载不幂等）');
+    // ⚠ **已知常红（pre-existing，2026-11-15 登记；用户裁决「不动行为，仅留痕」）**：本断言在
+    //   **HEAD 干净态即失败** —— 对照组实测（`git stash` 全部改动后跑同一探针）同样报 H-02 FAIL，
+    //   故非任何一批引入的回归。根因：下面 `sm.mount({}, …)` 用**空 patch 裸装载**，不带
+    //   `cordis.patch.yml` 的 `dsh-punky-guard`（`:19-20`）/ `dsh-punky-panel`（`:159-160`）两行
+    //   ⇒ 引擎自身必然报两条 warn：「panelSurface builder absent」与「guard 行缺席 ⇒ 工具护栏未装配」。
+    //   属**判据（零 warn）与裸配置语义（无子插件行）的固有冲突**。
+    //   **不把它加白名单**：那两条 warn 实质在报「护栏面 = 零拦截」，白名单化等于把该警告消声。
     expect(mount.ctx.calls.warn.length === 0,
       '装载期 ctx.logger.warn 非零：' + JSON.stringify(mount.ctx.calls.warn).slice(0, 600));
     expect(mount.registered.length > 0, '工具面零注册（装配面被改坏）');
