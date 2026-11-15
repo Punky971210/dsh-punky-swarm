@@ -159,7 +159,20 @@ function h12(sm) {
 
 // ── H-14 活体宿主新鲜度（时间序推断）· SKIP-able ───────────────────────────────
 
-const LIVE_CMD = /dsh-punky-swarm|profiles[\\/]desktop|DSH Desktop\.exe/i;
+// 宿主进程识别（**2026-11-15 修正：原判据恒假绿**）：
+//   ⚠ 原 `LIVE_CMD = /dsh-punky-swarm|profiles[\\/]desktop|DSH Desktop\.exe/i` 有两个致命缺陷 ——
+//     ① `dsh-punky-swarm` 会命中**本探针自己 spawn 的隔离子进程**：它的 CommandLine 恰是
+//        `.../packages/dsh-punky-swarm/scripts/smoke/host-smoke.mjs` ⇒ 唯一候选永远是「刚启动的自己」，
+//        启动时间必然最新 ⇒ **H-14 恒 PASS**。而旧代码只排除了 `process.pid`（父进程），没排除子进程。
+//     ② `profiles[\\/]desktop` 在本机**不匹配**：实测宿主 profile 目录是 `.dsh/profiles/next`。
+//   ⇒ 改为「按进程名认宿主 ＋ 按负特征排除非宿主」。实测真宿主两类都命中：
+//      · 主进程 `"D:\DSH NEXT\DSH NEXT.exe"`（无参数）；
+//      · host 进程 `... --expose-internals ... app.asar\lib\host.js ... .dsh\profiles\next ...`。
+//   而下列都会**被排除**：Electron 的 `--type=renderer|gpu|utility|crashpad` 子进程、
+//   `dsh-subprocess-local/runner.js`（DSH 每次执行工具命令时起的子进程，名字同样是 DSH NEXT.exe）、
+//   以及 smoke 自身（`scripts/smoke/` / `isolate.preload.mjs`）。
+const HOST_NAME = /^DSH.*\.exe$/i;
+const NOT_HOST = /--type=|dsh-subprocess-local|[\\/]runner\.js|scripts[\\/]smoke[\\/]|isolate\.preload\.mjs/i;
 
 const ENUM_SCRIPT = [
   "$ErrorActionPreference='Stop';",
@@ -207,7 +220,8 @@ function compareFreshness(candidates, newestMs) {
 }
 
 function h14(sm) {
-  const tag = '（**时间序推断，不是内容比对**：判据 = 活体进程启动时间 vs 部署面最新 mtime；'
+  const tag = '（**时间序推断，不是内容比对**：判据 = 宿主进程启动时间 vs 部署面最新 mtime；'
+    + '候选 = 进程名匹配 /^DSH.*\\.exe$/ 且排除 Electron --type= 子进程 / dsh-subprocess-local runner.js / smoke 自身；'
     + '不证明进程内已加载模块内容 ≡ 盘上内容 —— 见本文件头边界声明）';
   if (sm.noLive) skip('--no-live：跳过活体宿主枚举' + tag);
   if (process.platform !== 'win32') skip('非 Windows（' + process.platform + '）⇒ 进程枚举判据不适用' + tag);
@@ -232,14 +246,17 @@ function h14(sm) {
   const candidates = (enumerated.rows ?? []).filter((row) => {
     if (!row) return false;
     if (Number(row.ProcessId) === process.pid) return false;
-    return LIVE_CMD.test(String(row.CommandLine ?? '')) || LIVE_CMD.test(String(row.Name ?? ''));
+    if (!HOST_NAME.test(String(row.Name ?? ''))) return false;
+    return !NOT_HOST.test(String(row.CommandLine ?? ''));
   });
-  if (candidates.length === 0) skip('枚举不到命中「desktop profile / 本插件」的活体进程（0 候选）⇒ 活体面不可判' + tag);
+  if (candidates.length === 0) skip('枚举不到宿主进程（0 候选；判据 = 进程名匹配 ' + HOST_NAME.source
+    + ' 且 CommandLine 不含 --type= / runner.js / smoke 特征）⇒ 活体面不可判' + tag);
 
   const verdict = compareFreshness(candidates, surface.newestMs);
   expect(verdict.stale.length === 0, '**宿主在跑旧代码**（改完没重启）：\n  ' + verdict.stale.join('\n  ')
-    + '\n  ⇒ 处置：重启 DSH Desktop 后复跑本冒烟' + tag);
-  return '候选进程 ' + candidates.length + ' 个全部晚于部署面最新改动（' + surface.newestPath + ' @ '
+    + '\n  ⇒ 处置：重启宿主（本机进程名 DSH NEXT.exe）后复跑本冒烟' + tag);
+  return '候选宿主进程 ' + candidates.length + ' 个（pid ' + candidates.map((r) => String(r.ProcessId)).join(',')
+    + '）全部晚于部署面最新改动（' + surface.newestPath + ' @ '
     + new Date(surface.newestMs).toISOString() + '）· 扫描 ' + surface.count + ' 文件'
     + (verdict.unknown.length ? ' · 启动时间不可解析 ' + verdict.unknown.length + ' 个（已单列，不计入判据）' : '') + tag;
 }
