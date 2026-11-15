@@ -39,7 +39,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 //   --stamp <path>        另存一份 stamp 到指定路径（缺省只写 <隔离根>/stamp.json）
 //   --keep                保留隔离根并打印路径（此时 ③ 守卫面仍须成立，② 清理降级为 SKIP 并单列）
 //   --allow-stale-build   H-12「改 .ts 未 build」降级为 SKIP（**不算 pass**）
-//   --no-live             H-13 / H-14 进 SKIP（隔离进程内真实 home / 活体进程不可判）
+//   --no-live             H-14 进 SKIP（隔离进程内活体进程不可判；H-13 已于 2026-11-15 删除）
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -67,7 +67,7 @@ const USAGE = [
   '  --stamp <path>        另存一份 stamp 到指定路径',
   '  --keep                保留隔离根并打印路径',
   '  --allow-stale-build   H-12 构建新鲜度违规降级为 SKIP（不算 pass）',
-  '  --no-live             H-13 / H-14 进 SKIP',
+  '  --no-live             H-14 进 SKIP（H-13 已于 2026-11-15 删除）',
   '',
   '退出码：0 全过（脏树不阻断，只记 stamp）/ 1 有 FAIL / 2 用法或隔离前置失败 / 3 有 SKIP（或用 --strict-dirty 且树脏）',
 ].join('\n');
@@ -118,7 +118,7 @@ export function decideExit(state = {}) {
   return 0;
 }
 
-/** M-01：退出码四档逐条对照（**元层自检**，不属 D-1 的 14 项；它证明 `0` 档可达、`1` 优先于 `3`）。 */
+/** M-01：退出码四档逐条对照（**元层自检**，不属 D-1 的 13 项；它证明 `0` 档可达、`1` 优先于 `3`）。 */
 function metaExitCheck() {
   const cases = [
     { label: '全绿干净树', state: { fails: 0, skips: 0, dirty: false }, want: 0 },
@@ -177,7 +177,7 @@ function sleepSync(ms) {
   try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* 退化：不睡 */ }
 }
 
-// ── 子进程（已隔离）：跑完 14 项 + 元层自检 + 隔离后置自检 ─────────────────────
+// ── 子进程（已隔离）：跑完 13 项 + 元层自检 + 隔离后置自检 ─────────────────────
 
 async function runMain() {
   const args = parseArgs(process.argv.slice(2));
@@ -296,7 +296,7 @@ async function runMain() {
   // `lockPath(root, sessionId, batchId, lane)` —— 单点引用（不在此手拼路径）
   sm.lockPathOf = (batchId, lane) => tierGate.lockPath(engineRoot, session, batchId, lane);
 
-  // ── 跑 14 项（M-01 元层自检先跑：它证明退出码四档都可达）──
+  // ── 跑 13 项（M-01 元层自检先跑：它证明退出码四档都可达）──
   const results = [];
   const record = async (id, title, run, group) => {
     const started = Date.now();
@@ -314,7 +314,7 @@ async function runMain() {
     }
   };
 
-  await record('M-01', '退出码裁决四档自检（元层，不属 14 项；证明 0 档可达 + 1 优先于 3）', metaExitCheck, 'M');
+  await record('M-01', '退出码裁决四档自检（元层，不属 13 项；证明 0 档可达 + 1 优先于 3）', metaExitCheck, 'M');
   for (const item of [...buildK(sm), ...buildS(sm), ...buildX(sm)]) await record(item.id, item.title, item.run, item.id.slice(0, 1));
 
   const checks = results.filter((r) => r.group !== 'M');
@@ -398,7 +398,7 @@ function renderReport(stamp, results, isolation) {
   }
   lines.push('');
   lines.push('── 汇总 ──');
-  lines.push('14 项：PASS ' + stamp.counts.pass + ' · SKIP ' + stamp.counts.skip + ' · FAIL ' + stamp.counts.fail
+  lines.push(stamp.counts.total + ' 项：PASS ' + stamp.counts.pass + ' · SKIP ' + stamp.counts.skip + ' · FAIL ' + stamp.counts.fail
     + '（共 ' + stamp.counts.total + '）· 元层 M-01：' + (stamp.checks.find((c) => c.id === 'M-01')?.status ?? '?'));
   if (stamp.skip.length) lines.push('SKIP 清单（**不算 pass**）：' + stamp.skip.map((s) => s.id).join(', '));
   if (stamp.fail.length) lines.push('FAIL 清单：' + stamp.fail.map((s) => s.id).join(', '));

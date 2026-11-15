@@ -15,7 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 
-// X 组 · 只读仓面 + 真机面：H-11 … H-14（部分 SKIP-able；SKIP 单列、不算 pass）。
+// X 组 · 只读仓面 + 真机面：H-11 / H-12 / H-14（部分 SKIP-able；SKIP 单列、不算 pass）。
+//
+// **H-13 已删除（2026-11-15 用户裁决：「测试件不再检验文档，手动维护文档」）**。原判据是「真实 home 下
+//   repo ↔ live 四件同 sha256」——它要求 repo 与 `~/.dsh/.agent-presets/punky-preset` 逐字节相同，但
+//   live 副本**不参与装配**（生效面是包根 `cordis.patch.yml`），且 §13 已声明不再要求同步 ⇒ 该判据在
+//   HEAD 干净态即**必然常红**（对照组实测：stash 全部改动后同探针仍报 H-13 FAIL），属已死判据。
+//   文档面（注入面 / 正文 / skills）一律**人工维护**，不设机检——本裁决与 2026-10-28「指引维护不常做、
+//   不需要绑测试脚本锚定」同源。留空号不重编（H-14 编号保持不变，避免下游引用漂移）。
 //
 // ⚠ **边界声明（必须随读数一起传播）**：H-14 的「改完忘了重启」判据 = **活体进程启动时间 vs 部署面最新
 //   mtime** ⇒ 这是**时间序推断，不是内容比对**。它能检出「进程早于改动」，不能证明「进程内加载的模块内容
@@ -23,15 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, listFiles, pwshJson, sha256File, skip } from './support.mjs';
-
-/** 与 `sync-guidance.mjs` 同一份四件清单（repo ↔ live 内容应一致）。 */
-const SYNC_FILES = [
-  'agent.cordis.yml',
-  path.join('references', 'discipline.md'),
-  'preset.yml',
-  'asset-manifest.json',
-];
+import { expect, listFiles, pwshJson, skip } from './support.mjs';
 
 // ── H-11 零消费点三条抽样（逐行分类，禁用命中计数）─────────────────────────────
 
@@ -158,38 +157,6 @@ function h12(sm) {
     + ' —— 修法固定：`npm run build`（或显式 --allow-stale-build 记为 SKIP）');
 }
 
-// ── H-13 真实 home 下的准则面四件同 sha · SKIP-able ─────────────────────────────
-
-function h13(sm) {
-  if (sm.noLive) skip('--no-live：跳过真实 home 准则面（repo↔live 面），不算 pass');
-  const liveDir = path.join(sm.realHome, '.dsh', '.agent-presets', 'punky-preset');
-  if (!fs.existsSync(liveDir)) skip('真实 home 无 live preset 目录（' + liveDir + '）⇒ 双层面不可判，不算 pass');
-  const repoDir = path.join(sm.repoRoot, 'presets', 'punky-preset');
-
-  // ── 阳性对照：探针能读到 repo 侧四件（缺一件说明本判据的分母就不对）──
-  for (const rel of SYNC_FILES) {
-    expect(fs.existsSync(path.join(repoDir, rel)), '阳性对照失败：repo 侧缺 ' + rel + '（判据分母不全）');
-  }
-  // ── 阴性对照：不存在的相对路径必须判为「缺」──
-  let absentDetected = false;
-  try { sha256File(path.join(liveDir, 'agent.smoke-absent.yml')); } catch { absentDetected = true; }
-  expect(absentDetected, '阴性对照失败：不存在的 live 文件被判为可读');
-
-  const rows = [];
-  const problems = [];
-  for (const rel of SYNC_FILES) {
-    const repoAbs = path.join(repoDir, rel);
-    const liveAbs = path.join(liveDir, rel);
-    if (!fs.existsSync(liveAbs)) { problems.push(rel + '：live 侧缺失（asset 同步未落 / 被删）'); continue; }
-    const a = sha256File(repoAbs);
-    const b = sha256File(liveAbs);
-    if (a !== b) problems.push(rel + '：sha 不同（repo=' + a.slice(0, 12) + ' live=' + b.slice(0, 12) + '）');
-    rows.push(rel + '=' + a.slice(0, 12));
-  }
-  expect(problems.length === 0, 'guidance 双层面漂移（repo ↔ live 四件必须同 sha）：\n  ' + problems.join('\n  '));
-  return '四件同 sha（' + rows.join(' · ') + '）· live=' + liveDir;
-}
-
 // ── H-14 活体宿主新鲜度（时间序推断）· SKIP-able ───────────────────────────────
 
 const LIVE_CMD = /dsh-punky-swarm|profiles[\\/]desktop|DSH Desktop\.exe/i;
@@ -281,7 +248,6 @@ export function buildX(sm) {
   return [
     { id: 'H-11', title: '零消费点三条抽样（逐行分类，禁命中计数）', run: () => h11(sm) },
     { id: 'H-12', title: '构建新鲜度 mtime(js) ≥ mtime(ts)（--allow-stale-build ⇒ SKIP）', run: () => h12(sm) },
-    { id: 'H-13', title: '真实 home 准则面四件同 sha · SKIP-able', run: () => h13(sm) },
     { id: 'H-14', title: '活体宿主新鲜度（时间序推断，非内容比对）· SKIP-able', run: () => h14(sm) },
   ];
 }

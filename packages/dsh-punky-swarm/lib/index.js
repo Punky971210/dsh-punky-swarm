@@ -434,10 +434,12 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
     } catch (e) {
       ctx.logger?.warn?.('[dsh-punky-swarm] legacy migration failed: ' + String(e));
     }
-    // 资产同步：预设（~/.dsh/.agent-presets/punky-preset）与技能（~/.agents/skills/software-team），幂等，参照 dsh-liangshen
+    // 资产同步：预设（~/.dsh/.agent-presets/punky-preset）与技能（~/.agents/skills/<team>，共 5 个团队：
+    //   software / design / research / writing / video，清单见 lib/assets.js DEFAULT_ASSETS），幂等，参照 dsh-liangshen
     //
     // 【冷启动瘦身 · 方案 A】`syncAssets()` **移出 apply() 同步段**：改由 apply 返回后的首个 tick（setImmediate）执行。
-    //   实测依据（`scripts/probe-boot-cost.mjs --assets=inline|deferred`，读数与命令原文见 `exec/coldstart-session/notice.md`）：
+    //   实测依据（归档探针 `scripts/_archive/scripts-cleanup-20261115/probe-boot-cost.mjs --assets=inline|deferred`，
+    //     读数与命令原文见 `exec/coldstart-session/notice.md`；探针 2026-11-15 归档，需复跑时按 README 恢复）：
     //   S7（syncAssets）是本段第二大单项（冷态读数见 notice §改动前归因）。
     //   ⚠ **口径变更**（与下方 mailbox sweep 的 B-1 同源）：改造后 `engine root` 与 `asset synced` / `asset sync failed`
     //   **跨 tick** ⇒ 不得再用这两类日志之差当「apply 同步耗时」（会低估）；同步耗时以探针读数为准。
@@ -529,7 +531,8 @@ const installStartupRecovery = ({ ctx, config, store, root }) => {
     };
     if (mailCfg.sweepOnStart !== false) {
       // 【B-1 · boot-slim】启动清扫**移出 apply() 同步段**：改由 apply 返回后的首个 tick（setImmediate）执行。
-      //   实测依据（`scripts/probe-boot-cost.mjs`，读数与命令原文见 `exec/boot-slim/notice.md`）：
+      //   实测依据（归档探针 `scripts/_archive/scripts-cleanup-20261115/probe-boot-cost.mjs`，
+      //     读数与命令原文见 `exec/boot-slim/notice.md`；探针 2026-11-15 归档，需复跑时按 README 恢复）：
       //   本段在「`engine root` → `mailbox sweep on start`」桶内占 **72.88%**（成对实验中载）/ 冷态首访 **64.86%** / 热态 **53.4–74.4%**，
       //   是该桶最大单项；移出后 apply 同步耗时实测下降 **73.73%**（中载 2674.853 → 702.628ms）
       //   / **53.4%**（轻载 971.173 → 452.4ms），两档均满足 AC-2 的 ≥50%。
