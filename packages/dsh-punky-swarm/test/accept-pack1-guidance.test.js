@@ -91,6 +91,10 @@ const BASELINE_REFRESH_ALLOWED = /^packages\/dsh-punky-swarm\/baselines\/test-ba
 test('AC-pack1-12 禁区（baselines/docs/reports）不得出现未提交变更', () => {
   // 已解绑：原「五件 repo↔live 同 sha256」由校验器承载；该校验器于 2026-10-28 退役（用户裁决：
   //   指引维护不常做、不需要绑测试锚定），该面改由 `scripts/sync-guidance.mjs` 的复制动作承担（无判定结论）。
+  //   ⚠ 2026-11-15 更新：`sync-guidance.mjs` 已**弃用并归档**至
+  //     `scripts/_archive/scripts-cleanup-20261115/sync-guidance.mjs`（用户裁「手动维护足够」）。
+  //     注入面现由「手工同步两侧」维护：包根 `cordis.patch.yml` 为生效面、`presets/punky-preset/agent.cordis.yml`
+  //     为镜像面，两者须逐字同文；改注入面后需重启宿主才生效。
   //   保留的是**常驻不变量**：禁区目录不得出现在未提交变更里（W8：基线单写者 = Leader）。
 
   // 【AD-11（本批替换）】原 `PACK_DOMAINS` 冻结 `punky-iter-a-20261024` 那五个**历史批名**的写域，

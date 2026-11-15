@@ -19,7 +19,7 @@
     "test/accept-pack1-guidance.test.js": {
       "asserts": 3,
       "blankLines": 10,
-      "lines": 112,
+      "lines": 116,
       "tautologies": 0,
       "tests": 1,
       "todos": 0
@@ -1136,6 +1136,14 @@
       "tests": 32,
       "todos": 0
     },
+    "test/hooks-multictx.test.js": {
+      "asserts": 75,
+      "blankLines": 39,
+      "lines": 284,
+      "tautologies": 0,
+      "tests": 9,
+      "todos": 0
+    },
     "test/host-ports.test.js": {
       "asserts": 57,
       "blankLines": 19,
@@ -2177,7 +2185,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-14T12:14:26Z",
+  "generatedAt": "2026-11-15T10:03:44Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2188,15 +2196,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "L1 面板拆分（批 punky-panel-split-20261114）：9 文件迁入 lib/panel/** + 新增 panel/index.js·surface.js + test/helpers/panel-row.mjs 两行装配夹具 + 结构性测试路径改写 ⇒ 按新 test/ 树与断言面重冻（第二冻：补回 assembly-refinements 的 /api 与 /mcp 同边断言，维持断言总数不降）",
+  "reason": "scripts 归档清理：accept-pack1-guidance.test.js 注释更新（sync-guidance 弃用归档），行数 112→116",
   "schema": 1,
   "totals": {
-    "asserts": 11881,
-    "blankLines": 6841,
-    "files": 272,
-    "lines": 72633,
+    "asserts": 11956,
+    "blankLines": 6880,
+    "files": 273,
+    "lines": 72921,
     "tautologies": 0,
-    "tests": 2460,
+    "tests": 2469,
     "todos": 0
   }
 }
