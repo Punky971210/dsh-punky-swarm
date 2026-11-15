@@ -4,8 +4,10 @@
 > 这些文件已从 `scripts/` 移出。运行期真源见包根 `cordis.patch.yml`；在役脚本见 `scripts/`。
 > 本目录内容若与在役实现不一致，**以 `scripts/` 与包根 `cordis.patch.yml` 为准**。
 >
-> ⚠ 原先打算放在 `docs/archive/`，但 `test/accept-pack1-guidance.test.js` 的 `AC-pack1-12` 把
-> `baselines/**docs**/reports` 列为**禁区**（不得出现未提交变更）⇒ 改放 `scripts/_archive/`。
+> ⚠ 原先打算放在 `docs/archive/`，但当时 `test/accept-pack1-guidance.test.js` 的 `AC-pack1-12` 把
+> `baselines/**`、`docs/**`、`reports/**` 列为**禁区**（不得出现未提交变更）⇒ 改放 `scripts/_archive/`。
+> **2026-11-15 补记**：该判据（连同整个 `accept-pack1-guidance.test.js`）已按「测试件不再检验文档」裁决删除
+> ⇒ 上述禁区现**无机检**，由人工把关；本次归档位置保持 `scripts/_archive/` 不变（语义上更贴合，且不必再挪）。
 
 ## 为什么归档
 

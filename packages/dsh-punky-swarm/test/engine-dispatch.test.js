@@ -670,27 +670,15 @@ test('RO-12 L-AC-5/L-AC-6：三要素齐备（形态 ≥18 ＋ must_contain 43/4
   assert.equal(skillHit, skillTotal, 'R-4a：skills 逐条命中 ' + skillHit + '/' + skillTotal);
 });
 
-test('RO-13 L-AC-8：十件语料去路径化（frontmatter path: 0 / form: 18 / 全文产物前缀 0 / must_contain 18）', () => {
-  // 拆段拼接构造产物前缀 token：避免本断言自身的源码文本构成「仍保留路径」的假样本。
-  const artefactPrefix = ['artifacts', '<batchId>'].join('/');
-  let files = 0, pathKey = 0, formKey = 0, mustKey = 0, artefact = 0;
-  for (const id of ROLE_IDS) {
-    const src = resolveRoleRef(id).source;
-    assert.equal(typeof src, 'string', id + ' · source 须为语料文件绝对路径');
-    files++;
-    const text = fs.readFileSync(src, 'utf8');
-    const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
-    pathKey += (head.match(/path:/g) ?? []).length;
-    formKey += (head.match(/form:/g) ?? []).length;
-    mustKey += (head.match(/must_contain:/g) ?? []).length;
-    artefact += text.split(artefactPrefix).length - 1;
-  }
-  assert.equal(files, 10, 'R-5 面内文件数 = 10（7 件 software-team ＋ 3 件 research-team）');
-  assert.equal(pathKey, 0, 'R-5：frontmatter path: 须归零');
-  assert.equal(formKey, 18, 'R-5：frontmatter form: 须为 18 条');
-  assert.equal(artefact, 0, 'R-5：全文产物前缀须归零（正文同步去路径化）');
-  assert.equal(mustKey, 18, 'R-5：must_contain 键 18 —— 语义面零丢失');
-});
+// ═══════════════════════════════════════════════════════════════════════════════
+// 【2026-11-15 用户裁决「测试件不再检验文档，手动维护文档」· 删除 RO-13】
+//   原判据：直接 `fs.readFileSync(resolveRoleRef(id).source)` 读 **10 件 role 语料 `.md` 源文件**，
+//   断言其 frontmatter `path:` 计数 = 0 / `form:` = 18 / 全文产物前缀 = 0 / `must_contain` 键 = 18。
+//   判定对象 = 语料文件**正文字面**（纯文档内容）⇒ 按裁决删除，文档由人工维护。
+//   注：**RO-11 / RO-12 保留** —— 它们断言的是 `composeWorkerPrompt` **渲染产物**（任务包文本）里
+//   交付要求段的结构完整性，判定对象是引擎输出而非文档源文件，属代码面。
+// ═══════════════════════════════════════════════════════════════════════════════
+
 
 test('RO-14 L-AC-7③：双通道写死 —— role 语料 skills 不回填装配前缀通道', () => {
   assert.equal(assembleCmd('designer', null, 'c'), '[role=designer] c', 'R-4b：null ⇒ 无 skills 前缀段');

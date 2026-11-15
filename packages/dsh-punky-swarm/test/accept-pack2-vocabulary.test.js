@@ -427,11 +427,23 @@ test('AC-pack2-9 机检脚本对 `counts` 零判定性引用；test/ 内无「co
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC-10 build 产物归属（生成物同批，禁只改源）
 // ═══════════════════════════════════════════════════════════════════════════════
-test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归属声明写域', () => {
-  // 失败条件：写了基线/文档/报告（W8：基线单写者 = Leader；docs/reports 本批只读）/
-  //           出现无法归属声明写域的脏项（越界，须 Leader 裁）。
+// ═══════════════════════════════════════════════════════════════════════════════
+// AC-10 porcelain 每行可归属声明写域
+//
+// 【2026-11-15 用户裁决「测试件不再检验文档，手动维护文档」· 本例**只删文档守卫半边**，留痕如下】
+//   原判据两半：① `baselines/ docs/ reports/` 零变更（**文档目录守卫**）→ **已删**（见函数体内留痕）；
+//   ② 每行脏项须落在已知面内（`FACE_RULES` 前缀分类 + `RELEASE_RE` 发行面）→ **保留**。
+//   保留理由：② 的判定对象是「这条脏项**摆在哪个目录**」，不读任何文档内容，也不针对文档目录
+//   （它覆盖 lib/ scripts/ test/ skills/ presets/ baselines/ 与发行面元数据）—— 那是通用写域治理，
+//   不属「检验文档」。若按字面把整例删掉，会连带丢掉「脏项落在无法归属的未知路径」这条唯一告警。
+//   ⇒ 只清文档守卫，不删通用判据。（若日后判定 ② 也应删，删整例即可，勿只删其中的文档相关前缀。）
+// ═══════════════════════════════════════════════════════════════════════════════
+test('AC-pack2-12 porcelain 每行可归属声明写域（文档目录守卫半段已于 2026-11-15 按裁决移除）', () => {
+
+  // 失败条件：出现无法归属声明写域的脏项（脏项落在任何已知面之外 ⇒ 越界，须 Leader 裁）。
+  //   （原「写了基线/文档/报告」半段已于 2026-11-15 按「测试件不再检验文档」裁决移除，见上方留痕。）
   //   注：`presets/**` `skills/**` `package.json` 等**同批他包**会合法变更 ⇒ 本件不用它们判 pack2 越界，
-  //   改用「联合写域可归属」＋「四包都不碰的绝对禁区」，以免并行窗口假红。
+  //   改用「联合写域可归属」，以免并行窗口假红。
   // 目录约定分类器（R-27 根治，取代原 `PACK_DOMAINS` 批次清单）
   // 判据面 = 「脏项是否落在某个**已知面**内」。**不判**「归属哪一批 / 哪一 lane」——
   //   跨批归属由 audit / handoff 承载（本判据不承担，也不应承担：它没有批次账本可读）。
@@ -442,16 +454,16 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
   //   收紧 0 类。这不是回归，是换机制的必然结果——那 6 类在老表下红的唯一原因是「还没人改过、
   //   所以没被塞进清单」，属**待发假红**）。各类的兜底在右：
   //   ① `presets/**`（含**注入面** `agent.cordis.yml`）→ 指引面放行。兜底：改动必然进 porcelain 并
-  //      暴露在 audit 面；注入面另有 repo↔live 一致性门（`AC-pack1-12` / `AC-pack3-10`）。
+  //      暴露在 audit 面；注入面另有「手工同步两侧」纪律（2026-11-15 起无机检，见 `SKILL.md` 注入面声明纪律）。
   //   ② `scripts/**` 任意新脚本 → 引擎脚本面放行（旧表只放行 2 个精确文件）。兜底：脚本是引擎可执行面，
   //      任何脚本改动都会进 review/audit 证据面；**本判据不再承担「脚本白名单」职责**。
   //   ③ `skills/<其他 team>/**` → 能力层放行。兜底：`check-guidance-sync` 校 repo↔live 逐字节。（已废：该脚本已退役，本行仅存历史）
   //   ④ `test/helpers/**`、`test/nested/**` → 测试面放行（旧 `test-maintenance` 只放行单层 `test/<x>.test.js`）。
   //      兜底：新增/删除 test 文件仍撞 `baselines/test-baseline.json` 计数棘轮。
-  //   ⑤ `baselines/**` → 分类器判「基线面」放行，**唯一拦住它的是下方 `forbidden`**（r1 反向构造已证该行承重：
-  //      停用它 ⇒ 脏基线变绿）。⇒ **`forbidden` 是独立第二防线，勿当死代码删**。
-  // ⑥ 已知盲区：包内 `docs/**` 被 `.gitignore:50` 整体忽略 ⇒ 变更**不进** `git status` ⇒ 本判据与
-  //   `forbidden` 都**结构上收不到**该路径（非本批引入，改 `--ignored` 会拖入 49 件既有 docs 致恒红）。
+  //   ⑤ `baselines/**` → 分类器判「基线面」放行；原「下方 `forbidden` 是独立第二防线」已于 2026-11-15
+  //      随文档守卫一并移除 ⇒ 现**无**机检兜底（`baselines/**` 单写者 = Leader 仍是纪律，靠人工守）。
+  // ⑥ 已知盲区：包内 `docs/**` 被 `.gitignore:50` 整体忽略 ⇒ 变更**不进** `git status` ⇒ 本判据
+  //   **结构上收不到**该路径（非本批引入，改 `--ignored` 会拖入 49 件既有 docs 致恒红）。
   const FACE_RULES = [
     { face: '能力层',     prefix: 'packages/dsh-punky-swarm/skills/' },
     { face: '测试面',     prefix: 'packages/dsh-punky-swarm/test/' },
@@ -462,7 +474,7 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     //   依据：改 `presets/…/references/discipline.md` 在 `punky-iter-a-20261024` 是**合法批次动作**；
     //   若按越界处理，新判据会对合法动作**恒红**，而补救方式是「Leader 显式裁 ＋ 加一行规则」——
     //   那正是本判据要根治的「每批塞一条」。⇒ 视为常规面，不再需要每次开闸。
-    //   `docs/` `reports/` **仍维持越界**（这两处确实从不该改，且由下方 `forbidden` 禁区额外兜底）。
+    //   `docs/` `reports/` 的「脏写」自 2026-11-15 起**已无机检**（原下方 `forbidden` 禁区已按裁决移除），改由人工把关。
     { face: '指引面',     prefix: 'packages/dsh-punky-swarm/presets/' },
     // 2026-11-01 Lead 裁定（窄规则，必须**窄到文件**）：`cordis.patch.yml` 是**注入面副本之一**，
     //   与 `presets/punky-preset/agent.cordis.yml` 同族（两者都由脚本同步进宿主 preset）。
@@ -504,13 +516,11 @@ test('AC-pack2-12 `baselines/ docs/ reports/` 零变更；porcelain 每行可归
     if (p.includes(' -> ')) p = p.split(' -> ').pop();
     return p.replace(/^"|"$/g, '');
   });
-  // 【2026-11-09】`baselines/test-baseline.json` 是「基线单写者 = Leader」的受控重冻产物：
-  //   测试树改动后必须同步重冻（否则 e2-1 / e2-13 红）⇒ 单文件放行，`docs/` `reports/` 与
-  //   baselines 下的其它文件仍是禁区。
-  const BASELINE_REFRESH_ALLOWED = /^packages\/dsh-punky-swarm\/baselines\/test-baseline\.json$/;
-  const forbidden = paths.filter((p) => !BASELINE_REFRESH_ALLOWED.test(p)
-    && /^packages\/dsh-punky-swarm\/(baselines|docs|reports)\//.test(p));
-  assert.deepEqual(forbidden, [], '禁区内出现变更（baselines/docs/reports 本批只读）：' + JSON.stringify(forbidden));
+  // 【2026-11-15 裁决删除 · 文档目录守卫半段】此处原有 `BASELINE_REFRESH_ALLOWED` 单文件放行
+  //   ＋ `forbidden` 断言（`baselines/ docs/ reports/` 零未提交变更，`baselines/test-baseline.json`
+  //   作为「基线单写者 = Leader」的受控重冻例外）。判定对象 = **文档/基线目录是否被脏写**，
+  //   按「测试件不再检验文档」一并移除：这两处的维护改由人工把关（`baselines/**` 单写者 = Leader
+  //   仍是**纪律**，只是不再有机检兜底）。
   const unrouted = paths.filter((p) => classifyFace(p) === null);
   assert.deepEqual(
     unrouted,

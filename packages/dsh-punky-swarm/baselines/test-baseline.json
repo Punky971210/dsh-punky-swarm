@@ -16,28 +16,20 @@
       "tests": 6,
       "todos": 0
     },
-    "test/accept-pack1-guidance.test.js": {
-      "asserts": 3,
-      "blankLines": 10,
-      "lines": 116,
-      "tautologies": 0,
-      "tests": 1,
-      "todos": 0
-    },
     "test/accept-pack2-vocabulary.test.js": {
-      "asserts": 37,
-      "blankLines": 36,
-      "lines": 521,
+      "asserts": 36,
+      "blankLines": 37,
+      "lines": 531,
       "tautologies": 0,
       "tests": 8,
       "todos": 0
     },
     "test/accept-pack3-spec-contract.test.js": {
-      "asserts": 20,
-      "blankLines": 30,
-      "lines": 387,
+      "asserts": 4,
+      "blankLines": 11,
+      "lines": 105,
       "tautologies": 0,
-      "tests": 9,
+      "tests": 2,
       "todos": 0
     },
     "test/agent-channels.test.js": {
@@ -601,11 +593,11 @@
       "todos": 0
     },
     "test/engine-dispatch.test.js": {
-      "asserts": 208,
-      "blankLines": 57,
-      "lines": 867,
+      "asserts": 202,
+      "blankLines": 58,
+      "lines": 855,
       "tautologies": 0,
-      "tests": 42,
+      "tests": 41,
       "todos": 0
     },
     "test/error-family-routing.test.js": {
@@ -1520,14 +1512,6 @@
       "tests": 23,
       "todos": 0
     },
-    "test/patch-preset-duplicate-consistency.test.js": {
-      "asserts": 21,
-      "blankLines": 20,
-      "lines": 195,
-      "tautologies": 0,
-      "tests": 4,
-      "todos": 0
-    },
     "test/phase-reason.test.js": {
       "asserts": 33,
       "blankLines": 26,
@@ -2185,7 +2169,7 @@
       "todos": 0
     }
   },
-  "generatedAt": "2026-11-15T10:03:44Z",
+  "generatedAt": "2026-11-15T11:14:41Z",
   "generatedBy": "scripts/baseline-snapshot.mjs",
   "kind": "test-baseline",
   "metricSemantics": {
@@ -2196,15 +2180,15 @@
     "tests": "top-level `test(` call sites in code region (test.todo excluded)",
     "todos": "`test.todo(` call sites in code region"
   },
-  "reason": "scripts 归档清理：accept-pack1-guidance.test.js 注释更新（sync-guidance 弃用归档），行数 112→116",
+  "reason": "2026-11-15 用户裁决「测试件不再检验文档」全库推广：删 accept-pack1-guidance.test.js 与 patch-preset-duplicate-consistency.test.js 两件、删 accept-pack3 7 例 / engine-dispatch RO-13 / accept-pack2-12 文档守卫半段",
   "schema": 1,
   "totals": {
-    "asserts": 11956,
-    "blankLines": 6880,
-    "files": 273,
-    "lines": 72921,
+    "asserts": 11909,
+    "blankLines": 6833,
+    "files": 271,
+    "lines": 72326,
     "tautologies": 0,
-    "tests": 2469,
+    "tests": 2456,
     "todos": 0
   }
 }
