@@ -3,6 +3,25 @@
 
 按版本倒序记录变更。变更日志允许描述技术细节（模块、字段、事件、拒码、脚本）；内部批次编号、裁决过程与验证读数不入本文件。
 
+## 0.6.1（2026-11-15）
+
+### 移除 ACPs 面；core 端口化；面板与护栏拆为独立子插件入口
+
+- **移除 ACPs 面**：删除 `lib/acps/{certs,discovery-client,registry-client,server}.js`、`lib/aip/identity.js`、`lib/comms/acps-bridge.js` 与 `lib/governance/index.js`；`lib/index.js` 不再装配 ACPs server / registry / bridge，`resolveAcpsConfig` / `resolveAcpsDiscoveryConfig` / `resolveBridgeConfig` 等配置键随之下线。对应测试件同步删除（`acps-cert-failclosed` / `acps-discovery-client` / `acps-inbound-bound` / `acps-registry` / `acps-server` / `identity` / `p2-bridge`）。
+- **core 端口化（P0）**：新增 `lib/core-ports.js`，把跨行共享的 core 能力收成注册表（`registerCorePort` / `corePort` / `hasCorePort` / `unregisterCorePort`），X-1..X-7 七项单点化落地；`lib/governance/*` 整体迁至 `lib/guard/*`（kernel / classify / denial / narrow / allowlist / tool-ban / state-store / wiring / types），并新增 `lib/governance/receipt-model.js`。
+- **面板拆为独立子插件入口**：`package.json` 新增导出 `./panel`；`lib/mcp/*`、`lib/webui/*`、`lib/discovery/*`、`lib/api.js`、`lib/json-response.js` 迁入 `lib/panel/*`，新增 `lib/panel/index.js` 与 `lib/panel/surface.js`。
+- **工具护栏拆为独立子插件入口**：`package.json` 新增导出 `./guard`（`lib/guard/index.js`）；护栏行缺席时工具护栏不装配，并响亮留痕（不再静默通过）。
+- **写域判据两表独立**：`WRITE_HEADS` 宽 / 窄两张表拆开并禁止合并（合并会让宽表语义被窄表覆盖）；摘除 `getHeartbeat` 死注入。
+- **引擎与工具面**：
+  - `baseline --check` 修复 B-13 缺陷：**用例数下降**现在与断言数下降同档置红（此前只进 warnings、退出码仍 0，等于「删掉整份用例文件」在门禁前零漂移）。
+  - 新增 `lib/state/batch-feed.js`。
+  - `assign_check` 档位语义明确为两轴：难度轴只判「要不要建批」（C = 多线并行或多依赖），通道轴判 dispatch / team；D 为「建批 + team 通道」组合标记，不再作难度判据。
+- **脚本与测试面**：
+  - 归档 10 个冗余 / 一次性脚本至 `scripts/_archive/scripts-cleanup-20261115/`（`sync-guidance` / `pkg-hashes` / `docs-consistency` 三项冗余，加 `probe-boot-cost` 等 7 个一次性探针）。
+  - 测试链改为只绑代码、不绑文档：删除 13 个「判定对象 = 文档」的用例（`accept-pack1-guidance` 与 `patch-preset-duplicate-consistency` 两件整体删除；`accept-pack3-spec-contract` 9→2 例；`engine-dispatch` 的 RO-13；`accept-pack2-vocabulary` 的文档目录守卫半段）。
+  - `scripts/smoke` 删除已死的 H-13 判据（校验一个已声明不参与装配的 live 副本），项数 14→13；修正 H-14 恒假绿——候选进程误把探针自身 spawn 的子进程当作宿主，改按进程名认宿主并排除 Electron `--type=` 子进程 / `dsh-subprocess-local` runner / 冒烟自身。
+  - 测试基线重冻：files 279→271、tests 2562→2456、asserts 12352→11909、lines 74687→72326。
+
 ## 0.6.0（2026-11-14）
 
 ### checkpoint 改为逐项留痕（破坏性变更）
